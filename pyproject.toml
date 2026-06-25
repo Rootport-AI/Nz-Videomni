@@ -1,0 +1,36 @@
+[project]
+name = "ltx-aviutl2-bridge"
+version = "0.4.0"
+description = "LTX 2.3 video generation backend (FastAPI + Gradio) for 16GB VRAM. Phase 1: T2V + minimal I2V."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+
+# Phase 1: FastAPI side dependencies ONLY.
+# torch / ltx-pipelines are intentionally NOT listed here.
+# The official LTX-2.3 stack is installed separately (see README / spec 2.5)
+# and invoked only from services/ltx_runner.py.
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "gradio>=4.44",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "pyyaml>=6.0",
+    "pillow>=10.2",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.uv]
+# Keep everything project-local. Never install into the system Python.
+package = false

@@ -1,0 +1,25 @@
+# Environment isolation — never commit the local interpreter / venv
+.venv/
+.python/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Runtime data
+outputs/*
+!outputs/.gitkeep
+uploads/*
+!uploads/.gitkeep
+logs/*
+!logs/.gitkeep
+models/*
+!models/.gitkeep
+
+# Official LTX-2 repo if cloned adjacent
+LTX-2/
+
+# uv
+uv.lock

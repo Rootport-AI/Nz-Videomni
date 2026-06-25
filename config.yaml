@@ -1,0 +1,86 @@
+server:
+  host: "127.0.0.1"
+  port: 18620
+  allow_all_cors: false
+  api_key: null
+  log_dir: "./logs"
+
+model:
+  # Phase 1 では公式LTX-2リポジトリ/パッケージ側のロード方法に合わせる。
+  checkpoint_dir: "./models"
+  checkpoint_name: "ltx-2.3-22b-distilled"
+  text_encoder: "google/gemma-2-2b-it"
+  pipeline_type: "distilled"
+  auto_load_on_generate: true
+  reload_interval: 0
+
+vram:
+  # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。
+  low_vram_mode: true
+  low_vram_profile: "16gb_safe"
+
+  # Phase 1 baseline。公式APIで利用できる範囲で有効化する。
+  fp8_transformer: true
+  cpu_offload_text_encoder: true
+  vae_tiling: true
+
+  # Phase 2 以降の高度な独自最適化。Phase 1 では無効。
+  attention_tiling: false
+  attention_tile_size: null
+  block_swap: false
+  block_swap_blocks_on_gpu: null
+
+  # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。
+  allow_disable_low_vram: true
+
+generation_presets:
+  smoke_test:
+    width: 384
+    height: 224
+    crop_output: null
+    num_frames: 17
+  phase1_default:
+    width: 512
+    height: 288
+    crop_output: null
+    num_frames: 49
+  phase1_target:
+    width: 960
+    height: 544
+    crop_output:
+      width: 960
+      height: 540
+    num_frames: 121
+
+generation_defaults:
+  # Gradio/API の初期値。まず16GBで通しやすい軽量設定にする。
+  width: 512
+  height: 288
+  crop_output: null
+  num_frames: 49
+  frame_rate: 24.0
+  num_inference_steps: 8
+  guidance_scale: 1.0
+  seed: -1
+  pipeline: "distilled"
+  conditioning_images: []
+
+upload:
+  dir: "./uploads"
+  max_image_size_mb: 20
+  allowed_image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
+  normalize_to_png: true
+
+limits:
+  max_width: 1920
+  max_height: 1088
+  max_num_frames: 257
+  max_conditioning_images_phase1: 1
+  phase1_max_concurrent_jobs: 1
+  low_vram_disabled_required: false
+
+output:
+  dir: "./outputs"
+  format: "mp4"
+  save_metadata_json: true
+  keep_raw_frames: false

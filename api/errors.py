@@ -1,0 +1,87 @@
+"""Custom API errors and error codes (spec ch.17).
+
+All domain errors raise :class:`APIError`, which is translated to the spec's
+error envelope by an exception handler registered in ``main.py``::
+
+    {"error": {"code": ..., "message": ..., "job_id": ..., "detail": ...}}
+"""
+
+from __future__ import annotations
+
+
+class APIError(Exception):
+    """A domain error carrying an HTTP status and a stable error ``code``."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int,
+        *,
+        job_id: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.job_id = job_id
+        self.detail = detail
+
+    def to_envelope(self) -> dict:
+        error: dict = {"code": self.code, "message": self.message}
+        if self.job_id is not None:
+            error["job_id"] = self.job_id
+        if self.detail is not None:
+            error["detail"] = self.detail
+        return {"error": error}
+
+
+# --- factory helpers for the spec's named error codes (spec 17.3) ---
+
+
+def job_busy(detail: str | None = None) -> APIError:
+    return APIError(
+        "JOB_BUSY",
+        "A job is already running (Phase 1 allows one concurrent job)",
+        409,
+        detail=detail,
+    )
+
+
+def upload_invalid_type(detail: str | None = None) -> APIError:
+    return APIError("UPLOAD_INVALID_TYPE", "Unsupported image format", 400, detail=detail)
+
+
+def upload_too_large(detail: str | None = None) -> APIError:
+    return APIError("UPLOAD_TOO_LARGE", "Image file size exceeds the limit", 400, detail=detail)
+
+
+def image_not_found(image_id: str) -> APIError:
+    return APIError("IMAGE_NOT_FOUND", f"image_id not found: {image_id}", 404)
+
+
+def job_not_found(job_id: str) -> APIError:
+    return APIError("JOB_NOT_FOUND", f"job not found: {job_id}", 404, job_id=job_id)
+
+
+def video_not_ready(job_id: str) -> APIError:
+    return APIError("VIDEO_NOT_READY", "Video is not ready yet", 409, job_id=job_id)
+
+
+def pipeline_load_failed(detail: str | None = None) -> APIError:
+    return APIError("PIPELINE_LOAD_FAILED", "Failed to load the pipeline", 503, detail=detail)
+
+
+def gpu_oom(job_id: str | None = None, detail: str | None = None) -> APIError:
+    return APIError(
+        "GPU_OOM",
+        "CUDA out of memory during generation",
+        503,
+        job_id=job_id,
+        detail=detail or "Try smaller resolution or fewer frames.",
+    )
+
+
+def generation_failed(job_id: str | None = None, detail: str | None = None) -> APIError:
+    return APIError("GENERATION_FAILED", "Generation failed", 503, job_id=job_id, detail=detail)

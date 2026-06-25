@@ -1,0 +1,176 @@
+"""LTX-AviUtl2-Bridge — FastAPI entrypoint (spec 3 / 4 / 12.4).
+
+Boots the FastAPI app, applies CLI overrides, registers the API router under
+/api/v1, mounts the Gradio test UI at /ui, and configures CORS + logging.
+
+Environment isolation (spec 2.5): this process never touches the system Python.
+Run it via ``run.ps1`` or the project venv's interpreter.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+import socket
+from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from api.context import RuntimeInfo, build_context
+from api.errors import APIError
+from api.router import api_router
+from config import load_config
+
+logger = logging.getLogger("ltx")
+
+LOCALHOST_CORS_REGEX = r"^http://(127\.0\.0\.1|localhost)(:\d+)?$"
+
+
+def configure_logging(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    handlers.append(logging.FileHandler(log_dir / "server.log", encoding="utf-8"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+    )
+
+
+def build_app(args: argparse.Namespace) -> FastAPI:
+    config = load_config(args.config)
+
+    # Apply CLI overrides on top of config.yaml.
+    if args.port is not None:
+        config.server.port = args.port
+    if args.allow_all_cors:
+        config.server.allow_all_cors = True
+    if args.api_key is not None:
+        config.server.api_key = args.api_key
+
+    host = "0.0.0.0" if args.listen else config.server.host
+
+    configure_logging(config.log_dir)
+
+    if not os.environ.get("PYTORCH_CUDA_ALLOC_CONF"):
+        logger.warning(
+            "PYTORCH_CUDA_ALLOC_CONF is not set. "
+            'Consider $env:PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" to reduce OOM.'
+        )
+
+    app = FastAPI(title="LTX-AviUtl2-Bridge", version="0.4.0")
+
+    runtime = RuntimeInfo(
+        host=host,
+        port=config.server.port,
+        listen=args.listen,
+        api_key=config.server.api_key,
+    )
+    app.state.context = build_context(config, runtime)
+
+    # CORS (spec 3.1 / 3.2)
+    if config.server.allow_all_cors:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=LOCALHOST_CORS_REGEX,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    register_exception_handlers(app)
+    app.include_router(api_router, prefix="/api/v1")
+    mount_gradio(app, runtime)
+
+    return app
+
+
+def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(APIError)
+    async def _api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content=exc.to_envelope())
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        # Keep FastAPI's 422 but wrap in our error envelope shape. exc.errors()
+        # can carry a non-serializable ctx (the raised ValueError); keep only
+        # JSON-safe fields.
+        detail = [
+            {"loc": list(e.get("loc", [])), "msg": str(e.get("msg", "")), "type": str(e.get("type", ""))}
+            for e in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Request validation failed",
+                    "detail": detail,
+                }
+            },
+        )
+
+
+def mount_gradio(app: FastAPI, runtime: RuntimeInfo) -> None:
+    if os.environ.get("LTX_DISABLE_GRADIO"):
+        logger.info("Gradio UI disabled via LTX_DISABLE_GRADIO")
+        return
+    try:
+        import gradio as gr
+
+        from gradio_ui import build_ui
+
+        base_url = f"http://127.0.0.1:{runtime.port}"
+        blocks = build_ui(base_url, api_key=runtime.api_key)
+        gr.mount_gradio_app(app, blocks, path="/ui")
+    except Exception:
+        logger.exception("Failed to mount Gradio UI; continuing with API only")
+
+
+def local_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="LTX-AviUtl2-Bridge backend")
+    parser.add_argument("--listen", action="store_true", help="bind 0.0.0.0 (home LAN)")
+    parser.add_argument("--port", type=int, default=None, help="override server port")
+    parser.add_argument("--api-key", type=str, default=None, help="require Bearer api-key")
+    parser.add_argument("--allow-all-cors", action="store_true", help="allow all CORS origins")
+    parser.add_argument("--config", type=str, default=None, help="path to config.yaml")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    app = build_app(args)
+    runtime: RuntimeInfo = app.state.context.runtime
+
+    if args.listen:
+        logger.warning("--listen enabled: server is reachable on your LAN (no internet exposure intended).")
+        logger.warning("UI: http://%s:%d/ui", local_ip(), runtime.port)
+    logger.info("Starting server on %s:%d  (UI: http://127.0.0.1:%d/ui)", runtime.host, runtime.port, runtime.port)
+
+    uvicorn.run(app, host=runtime.host, port=runtime.port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

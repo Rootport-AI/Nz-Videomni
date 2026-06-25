@@ -52,7 +52,8 @@ Write-Host "  2. Created a READ token at https://huggingface.co/settings/tokens"
 Write-Host ""
 
 # Interactive: prompts for the token (input hidden), does NOT touch git creds.
-& $hf auth login
+# --force overwrites any existing (possibly stale/invalidated) stored token.
+& $hf auth login --force
 
 Write-Host "`nVerifying..." -ForegroundColor Cyan
 & $hf auth whoami

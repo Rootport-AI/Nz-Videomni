@@ -298,6 +298,28 @@ READMEには、この環境分離手順を「セットアップ」の最初に�
 - 将来的にはGPU世代の自動判定（`nvidia-smi` / compute capability）で適切なbackendを選ぶよう改修する。Phase 1では手動指定でよい。
 - 別世代のユーザーがクローンしても、**コード変更なしに `-GpuArch` の指定だけ**でインストールできることを要件とする。
 
+#### ⚠️ Windowsでのxformers（重要な実装上の制約）
+
+公式の `uv sync --extra xformers` は **Linux前提**である。LTX-2 が lock で固定する xformers は
+`0.0.33+5d4b92a5.d20251029`（cu129 dev）で **Linuxホイールしか存在しない**ため、**Windowsでは
+`--extra xformers` が失敗する**（`-SkipDownload` 検証で確認済み）。Windowsでの方針:
+
+1. **xformers をソースビルド**する（本プロジェクトの採用方針）。`scripts/build_xformers.ps1` が
+   torch2.7 / cu129 / py3.12 / Ada(sm_89) 向けに、LTXがpinするcommitをMSVC + CUDA Toolkit 12.9 で
+   コンパイルし、wheel を `wheels/`（**Git LFS**管理）へ出力する。`install_ltx.ps1` はWindowsでは
+   素の `uv sync --frozen`（torch取得）の後、この wheel を導入する。
+   - ビルド前提: VS の C++ ツールチェーン（MSVC）, CUDA Toolkit 12.9。これらはシステムの開発ツールであり
+     Python隔離ルールには抵触しない（`nvcc` はビルド時のみ、実行時はtorch同梱ランタイム）。
+   - ⚠️ CUDA 12.9 は VS 2026 既定MSVC(v14.5x)を未サポート（公式はCUDA 13.2+）。VS 2026では MSVC v143
+     （v14.44）コンポーネントを追加し、build_xformers.ps1 が `-vcvars_ver=14.44` で選択する。CUDAはtorch
+     一致のため12.9固定（13.xへ上げない）。
+   - Ada(sm_89) は枯れたアーキのためビルドは比較的容易（WindowsのMSVCビルド既知問題はSM90/Blackwell固有）。
+2. 代替として、**WSL2 + Ubuntu** なら公式どおり `--extra xformers`（Linuxホイール）が使える。
+3. xformersを使わない場合、**PyTorch SDPA** が memory-efficient/flash-2 を内包しVRAM効果はほぼ同等
+   （fallback。`fp8-cast`併用で16GBの現実解になり得る）。
+
+上表の「Ada=`uv sync --extra xformers`」は**Linux基準**の記載であり、Windowsでは上記1を用いる。
+
 #### モデル構成（LTX-2.3で必要な重みは3点）
 
 `Lightricks/LTX-2.3` リポジトリと外部Gemmaを組み合わせる。最小構成は以下の3点。

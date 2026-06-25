@@ -256,7 +256,51 @@ python -m ltx_pipelines.distilled \
   --prompt "..." [--image first_frame.png] --output-path out.mp4
 ```
 
-### 7.3 ランナーの差し替え
+### 7.3 Windows: xformers をソースビルド（初回のみ）
+
+LTX-2 が固定する xformers（cu129 devビルド）は **Linuxホイールのみ**で Windows に入りません。
+そこで **torch2.7 / cu129 / Windows / py3.12 / Ada(sm_89)** 向けに**自前ビルド**し、生成 wheel を
+`wheels/`（**Git LFS**管理）に置きます。一度ビルドすれば、他のクローンは `install_ltx.ps1` が
+その wheel を自動導入するだけで済みます。
+
+> PyTorch 2.x の SDPA は xformers の memory-efficient/flash-2 を内包するため、wheel が無くても
+> SDPA フォールバックで動作はします。xformers を使う場合のみ本ビルドが必要です。
+
+**前提ツール（システムの開発ツール。Python隔離ルールには非抵触）**
+
+⚠️ **CUDA 12.9 は Visual Studio 2026 の既定MSVC(v14.5x)を未サポート**（公式対応はCUDA 13.2+）。
+VS 2026を使う場合は **MSVC v143（VS 2022相当, v14.44）コンポーネントを追加**し、ビルド時にそれを選ぶ
+（`build_xformers.ps1` が `-vcvars_ver=14.44` で自動選択）。CUDAはtorch一致のため **12.9固定**。
+
+- VS 2026（IDE）に C++ を入れる場合（GUI推奨・確実）:
+  1. Visual Studio Installer →「C++によるデスクトップ開発」ワークロードを選択
+  2.「個別のコンポーネント」タブ → `v143` で検索 →
+     **「MSVC v143 - VS 2022 C++ x64/x86 ビルド ツール (v14.44)」** と Windows 11 SDK をチェック
+- winget で（IDEのワークロード追加。コンポーネントIDはGUIで確認推奨）:
+  ```powershell
+  winget install --id Microsoft.VisualStudio.2026.Community -e `
+    --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.v143.x86.x64 --includeRecommended"
+  ```
+- CUDA Toolkit 12.9（torchのcu129に一致。`winget show` で正確な版を確認）:
+  ```powershell
+  winget show Nvidia.CUDA --versions
+  winget install --id Nvidia.CUDA --version 12.9.1
+  ```
+
+**ビルド & 配布**
+```powershell
+./scripts/install_ltx.ps1 -SkipDownload     # 先に torch2.7+cu129 を vendor/LTX-2/.venv へ
+./scripts/build_xformers.ps1 -Install        # ビルド→wheels/へ出力→LTX venvへ導入（30–90分）
+
+# 生成 wheel を Git LFS でコミット（他クローンはこれを再利用）
+git add wheels/xformers-*.whl .gitattributes
+git commit -m "Add prebuilt xformers wheel (torch2.7/cu129/win/py312, sm_89)"
+```
+
+ビルドスクリプトは MSVC（vcvars64）と CUDA 12.9 を自動設定し、`TORCH_CUDA_ARCH_LIST=8.9` /
+`--no-build-isolation` で LTX が pin する commit をビルドします。
+
+### 7.4 ランナーの差し替え
 
 1. `install_ltx.ps1` が出力したパスを `config.yaml` の
    `model.checkpoint_path` / `spatial_upsampler_path` / `gemma_root` に設定。

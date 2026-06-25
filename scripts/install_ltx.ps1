@@ -140,18 +140,43 @@ if (-not $SkipClone) {
 }
 
 # --- 2) uv sync + attention backend (per GPU generation) ----------------------
+# The official cu129 xformers wheel is Linux-only. On Windows we therefore sync
+# the base stack (torch 2.7+cu129) WITHOUT the xformers extra, then install a
+# prebuilt xformers wheel from wheels/ (Git LFS), compiled by build_xformers.ps1.
 if (-not $SkipSync) {
+    $onWindows = -not ($IsLinux -or $IsMacOS)
+    $venvPy = "$ProjectRoot\$LtxDir\.venv\Scripts\python.exe"
     Push-Location $LtxDir
     try {
         if ($GpuArch -eq "blackwell") {
             Write-Step "uv sync --frozen  (Blackwell: + flash-attn-4)"
             uv sync --frozen
+            if ($LASTEXITCODE -ne 0) { throw "uv sync failed." }
             Write-Host "Installing flash-attn-4==4.0.0b9 (Blackwell attention backend)..."
             uv pip install 'flash-attn-4==4.0.0b9'
-        } else {
-            # ada / ampere / hopper -> xformers extra (from the pytorch cu129 index)
-            Write-Step "uv sync --frozen --extra xformers  ($GpuArch attention backend)"
+        }
+        elseif ($onWindows) {
+            Write-Step "uv sync --frozen  (Windows: base stack, torch 2.7+cu129)"
+            uv sync --frozen
+            if ($LASTEXITCODE -ne 0) { throw "uv sync failed." }
+
+            $wheel = Get-ChildItem "$ProjectRoot\wheels" -Filter "xformers-*.whl" -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime | Select-Object -Last 1
+            if ($wheel) {
+                Write-Step "Installing prebuilt xformers wheel: $($wheel.Name)"
+                uv pip install --python $venvPy $wheel.FullName
+                if ($LASTEXITCODE -ne 0) { throw "xformers wheel install failed." }
+            } else {
+                Write-Warning "No xformers wheel found in wheels/."
+                Write-Warning "Build it once with:  ./scripts/build_xformers.ps1 -Install"
+                Write-Warning "(Until then LTX falls back to PyTorch SDPA.)"
+            }
+        }
+        else {
+            # Linux/macOS: official xformers wheels exist on the cu129 index.
+            Write-Step "uv sync --frozen --extra xformers  ($GpuArch, official wheels)"
             uv sync --frozen --extra xformers
+            if ($LASTEXITCODE -ne 0) { throw "uv sync failed." }
         }
     } finally {
         Pop-Location
@@ -163,13 +188,19 @@ if (-not $SkipDownload) {
     Write-Step "Downloading $ModelRepo -> $ModelsDir"
     New-Item -ItemType Directory -Force -Path $ModelsDir | Out-Null
 
-    $includeArgs = @()
-    foreach ($pat in $Include) { $includeArgs += @("--include", $pat) }
+    # Single --include with ALL patterns. `hf download --include` is nargs="*",
+    # so repeating the flag (--include A --include B) makes argparse keep only the
+    # LAST group, silently dropping every earlier file (the 46GB distilled was lost
+    # this way). One flag + multiple values fetches them all.
+    $includeArgs = @("--include") + $Include
 
-    # Use LTX-2's venv (has huggingface_hub) via `uv run --directory`.
-    & uv run --directory $LtxDir hf download $ModelRepo `
-        @includeArgs `
-        --local-dir (Resolve-Path $ModelsDir)
+    # Call the venv's hf.exe DIRECTLY (not `uv run`). `uv run` first does an implicit
+    # `uv sync`, which on Windows would revert the manually-installed torch
+    # 2.9.1+cu128 back to the locked CPU wheel (and start building tensorrt), and on
+    # interrupt leaves orphan child processes holding .cache/*.lock files that block
+    # the next download. HF_HOME is set in-project above, so hf.exe inherits it.
+    $hfExe = Join-Path $ProjectRoot "$LtxDir\.venv\Scripts\hf.exe"
+    & $hfExe download $ModelRepo @includeArgs --local-dir (Resolve-Path $ModelsDir)
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "hf download failed. Check the include patterns against the repo's file list:"
         Write-Warning "  https://huggingface.co/$ModelRepo/tree/main"
@@ -188,7 +219,7 @@ if (-not $SkipDownload) {
         New-Item -ItemType Directory -Force -Path $GemmaDir | Out-Null
         $gemmaArgs = @($GemmaRepo, "--local-dir", (Resolve-Path $GemmaDir))
         if ($HfToken) { $gemmaArgs += @("--token", $HfToken) }
-        & uv run --directory $LtxDir hf download @gemmaArgs
+        & $hfExe download @gemmaArgs   # direct hf.exe (see note above; $hfExe defined in step 3)
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Gemma download failed (likely 401/license). Did you accept the license and run scripts/hf_login.ps1?"
             throw "Gemma download failed."

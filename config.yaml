@@ -23,9 +23,10 @@ model:
   #     google/gemma-3-12b-it-qat-q4_0-unquantized（gated）を別途取得する
   #     （install_ltx.ps1 -WithGemma）。
   ltx_repo_dir: "./vendor/LTX-2"
-  checkpoint_path: null            # 例: ./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors
-  spatial_upsampler_path: null     # 例: ./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
-  gemma_root: null                 # 例: ./models/gemma-3-12b-it-qat
+  # 相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。install_ltx.ps1が固定の相対位置にDLするため全環境で有効。
+  checkpoint_path: "./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"
+  spatial_upsampler_path: "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
+  gemma_root: "./models/gemma-3-12b-it-qat"
   quantization: "fp8-cast"         # fp8-cast | none
 
 vram:

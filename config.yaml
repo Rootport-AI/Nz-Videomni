@@ -14,6 +14,18 @@ model:
   auto_load_on_generate: true
   reload_interval: 0
 
+  # Step 7（実LTX）用ランタイムパス。scripts/install_ltx.ps1 が設定する。
+  # services/ltx_runner.py のみが参照する。未インストール時は null のまま。
+  # 構成: distilled checkpoint + spatial upscaler + Gemma の3点。
+  #   - VAE は checkpoint(.safetensors) に同梱（別ファイル不要）。
+  #   - Gemma(text encoder) は LTX-2.3 リポジトリに含まれず、google/gemma-2-2b-it
+  #     （gated）を別途取得する（install_ltx.ps1 -WithGemma）。
+  ltx_repo_dir: "./vendor/LTX-2"
+  checkpoint_path: null            # 例: ./models/ltx-2.3/ltx-2.3-22b-distilled.safetensors
+  spatial_upsampler_path: null     # 例: ./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors
+  gemma_root: null                 # 例: ./models/gemma-2-2b-it
+  quantization: "fp8-cast"         # fp8-cast | none
+
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。
   low_vram_mode: true

@@ -1,0 +1,31 @@
+# =============================================================================
+# Backend (FastAPI side) dependencies ONLY.
+#
+# This mirrors [project].dependencies in pyproject.toml for users who prefer
+# pip over uv. Install into a PROJECT-LOCAL venv (never the system Python):
+#
+#     python -m venv .venv
+#     .venv\Scripts\pip install -r requirements.txt
+#
+# NOTE: The LTX inference stack (torch ~=2.7 on CUDA 12.9, ltx-core,
+# ltx-pipelines, and the GPU-generation-specific attention backend) is NOT
+# listed here. It is installed separately by scripts/install_ltx.ps1 because:
+#   - torch/xformers come from the PyTorch cu129 wheel index, and
+#   - the attention backend differs per GPU generation
+#       * Ada Lovelace / Ampere / Hopper -> xformers   (uv sync --extra xformers)
+#       * Blackwell                      -> flash-attn-4==4.0.0b9
+# See README "7. LTX 2.3 のインストール".
+# =============================================================================
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+gradio>=4.44
+pydantic>=2.6
+pydantic-settings>=2.2
+pyyaml>=6.0
+pillow>=10.2
+python-multipart>=0.0.9
+httpx>=0.27
+
+# dev / test
+pytest>=8.0

@@ -166,9 +166,11 @@ AviUtl2フロントエンドはPhase 5で別プロジェクト相当として実
 | GPU | NVIDIA CUDA GPU / VRAM 16GB | 主要開発環境 |
 | RAM | 32GB以上推奨 | CPU offload / block swap 検証に必要 |
 | 空きディスク | 160GB以上推奨 | モデル、出力動画、中間ファイル用 |
-| Python | 3.12系 | 公式LTX-2環境に合わせる |
-| CUDA | 12.8系を優先 | PyTorch 2.7系との整合性を優先 |
-| PyTorch | 2.7系を優先 | 公式LTX-2環境に合わせる |
+| Python | 3.12系 | 公式LTX-2環境に合わせる（要件は `>=3.10`） |
+| CUDA | **12.9（cu129）** | 公式LTX-2のPyTorch wheel indexがcu129。詳細は「2.6」参照 |
+| PyTorch | `torch ~=2.7` | 公式LTX-2環境に合わせる。詳細は「2.6」参照 |
+| NVIDIAドライバ | CUDA 12.9対応版（Windows目安 R576+） | cu129 wheel実行要件 |
+| GPU世代別attention | Ada/Ampere/Hopper=xformers、Blackwell=flash-attn-4 | 詳細は「2.6」参照 |
 | パッケージ管理 | uv 推奨 | 公式LTX-2のセットアップ方針に合わせる |
 | 動画エンコード | ffmpeg を PATH に通す | MP4保存・クロップ用 |
 
@@ -264,6 +266,64 @@ ltx-aviutl2-bridge/
 ```
 
 READMEには、この環境分離手順を「セットアップ」の最初に明記する。
+
+### 2.6 LTX依存関係とGPU世代間の互換性（重要）
+
+公式LTX-2スタックの依存は固定されており、GPU世代によって一部だけ差し替えが必要になる。  
+これらは `requirements.txt`（本プロジェクトのFastAPI側のみ）と `scripts/install_ltx.ps1`（LTXスタック）に分離して管理し、**世代差はインストールスクリプトの引数だけで吸収できる**ようにする。
+
+#### 公式LTX-2の固定値（要調査・更新時は再確認すること）
+
+| 項目 | 値 | 出典 |
+|------|----|------|
+| Python | `>=3.10`（本プロジェクトは 3.12 を使用） | `packages/ltx-core/pyproject.toml` |
+| PyTorch | `torch ~=2.7` + `torchaudio` | 同上 |
+| wheel index | **PyTorch cu129（CUDA 12.9）** | `[[tool.uv.index]] .../whl/cu129` |
+| NVIDIAドライバ | CUDA 12.9 対応版（Windows 目安 **R576+**） | cu129 wheel 実行要件 |
+| セットアップ | `uv sync --frozen`（LTX-2リポジトリ内） | 公式README |
+| FP8 | `fp8-cast` は **bf16 checkpoint** 用 / `fp8-scaled-mm` は fp8 checkpoint 用 | 公式README |
+
+#### GPU世代差（唯一の分岐点 = attention backend）
+
+| GPU世代 | 代表例（compute capability） | attention backend | インストール方法 |
+|---------|------------------------------|-------------------|------------------|
+| **Ada Lovelace** | RTX 40系 / L40 / L4（sm_89） | xformers | `uv sync --frozen --extra xformers` |
+| Ampere | RTX 30系 / A100 / A6000（sm_80/86） | xformers | `uv sync --frozen --extra xformers` |
+| Hopper | H100 / H200（sm_90） | xformers | `uv sync --frozen --extra xformers` |
+| Blackwell | RTX 50系 / B200（sm_100/120） | flash-attn-4 | `uv sync --frozen` + `uv pip install 'flash-attn-4==4.0.0b9'` |
+
+- **本プロジェクトの主要開発環境（VRAM 16GB機）は Ada Lovelace 世代**であり、`--extra xformers` を既定とする。
+- Ada Lovelace は FP8（E4M3/E5M2）tensor core を備えるため、`fp8-cast`（bf16 checkpoint前提）で動作する。
+- `scripts/install_ltx.ps1 -GpuArch {ada|ampere|hopper|blackwell}` で世代を選択する。既定は `ada`。
+- 将来的にはGPU世代の自動判定（`nvidia-smi` / compute capability）で適切なbackendを選ぶよう改修する。Phase 1では手動指定でよい。
+- 別世代のユーザーがクローンしても、**コード変更なしに `-GpuArch` の指定だけ**でインストールできることを要件とする。
+
+#### モデル構成（LTX-2.3で必要な重みは3点）
+
+`Lightricks/LTX-2.3` リポジトリと外部Gemmaを組み合わせる。最小構成は以下の3点。
+
+| 要素 | 入手元 | 別途DL | 備考 |
+|------|--------|--------|------|
+| distilled checkpoint | `ltx-2.3-22b-distilled.safetensors`（LTX-2.3） | ○ | `--checkpoint-path`。8 steps/CFG=1。bf16 → 実行時 `fp8-cast` |
+| **VAE** | 上記checkpointに**同梱** | ✕ | 別ファイル/別フォルダは存在しない（`--vae-path` フラグも無い） |
+| spatial upsampler | `ltx-2.3-spatial-upscaler-x2-*.safetensors`（LTX-2.3） | ○ | `--spatial-upsampler-path`。distilledは2段階生成 |
+| text encoder (Gemma) | `google/gemma-2-2b-it`（**gated**・別リポジトリ） | ○ | `--gemma-root`。LTX-2.3には含まれない |
+
+- ファイル名の注意: リポジトリ表記は `upscaler`、CLIフラグは `--spatial-upsampler-path`（綴り違い）。
+- `*distilled*` のような広いglobは dev / distilled-1.1 / LoRA（各々数十GBの22Bファイル）まで巻き込むため、`install_ltx.ps1` の取得対象は**正確なファイル名で指定**する。
+- 公式CLI例:
+  ```bash
+  python -m ltx_pipelines.distilled \
+    --checkpoint-path models/ltx-2.3/ltx-2.3-22b-distilled.safetensors \
+    --spatial-upsampler-path models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors \
+    --gemma-root models/gemma-2-2b-it \
+    --quantization fp8-cast --prompt "..." [--image first.png] --output-path out.mp4
+  ```
+
+#### インストール責務の分離
+
+- `requirements.txt` … 本プロジェクトのFastAPI側依存のみ（`torch` / `ltx-pipelines` を**含めない**）。uvを使わないユーザーのpipフォールバック兼ドキュメント。
+- `scripts/install_ltx.ps1` … 公式LTX-2の clone・`uv sync`（世代別attention backend含む）・LTX-2.3重み（checkpoint + spatial upsampler、任意でGemma）のダウンロードを、すべてプロジェクト配下（`vendor/LTX-2`, `models/`）に閉じ込めて実行する。重いデータは `.gitignore` で必ず除外する。
 
 ---
 

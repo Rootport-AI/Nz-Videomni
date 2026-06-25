@@ -18,8 +18,31 @@ logs/*
 models/*
 !models/.gitkeep
 
-# Official LTX-2 repo if cloned adjacent
+# ---------------------------------------------------------------------------
+# Heavy LTX data — MUST NEVER reach the GitHub repo.
+# These are installed locally by scripts/install_ltx.ps1.
+# ---------------------------------------------------------------------------
+
+# Cloned official LTX-2 repository (+ its own .venv) and any vendored code
+vendor/
 LTX-2/
 
-# uv
+# Model weights / large binary artifacts (safety net regardless of location)
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.gguf
+*.onnx
+*.npz
+*.tar
+*.zip
+
+# HuggingFace / torch caches if redirected into the project
+.hf_cache/
+.cache/
+hf_home/
+
+# uv lockfile (resolved per-machine here)
 uv.lock

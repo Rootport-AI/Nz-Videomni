@@ -35,6 +35,14 @@ class ModelConfig(BaseModel):
     auto_load_on_generate: bool = True
     reload_interval: int = 0
 
+    # Step 7 (real LTX) runtime paths. Populated by scripts/install_ltx.ps1 and
+    # consumed only by services/ltx_runner.py. None until the model is installed.
+    ltx_repo_dir: str = "./vendor/LTX-2"
+    checkpoint_path: str | None = None
+    spatial_upsampler_path: str | None = None
+    gemma_root: str | None = None
+    quantization: str = "fp8-cast"  # "fp8-cast" | "none"
+
 
 class VramConfig(BaseModel):
     low_vram_mode: bool = True

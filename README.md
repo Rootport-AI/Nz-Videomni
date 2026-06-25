@@ -44,8 +44,11 @@ uv sync --extra dev
 
 これで `.venv/`（仮想環境）と `.python/`（uv管理のPython 3.12）がプロジェクト内に作成されます。
 
-> **注**: `pyproject.toml` には FastAPI 側の依存のみ定義しています（`torch` / `ltx-pipelines` は含みません）。
-> 公式 LTX スタックは Step 7 で別途導入します。
+> **注**: `pyproject.toml`（および pip 用の [`requirements.txt`](requirements.txt)）には FastAPI 側の依存のみ定義しています
+> （`torch` / `ltx-pipelines` は含みません）。公式 LTX スタックは GPU 世代依存のため Step 7 の
+> [`scripts/install_ltx.ps1`](scripts/install_ltx.ps1) で別途導入します。
+>
+> uv を使わない場合の pip フォールバック: `python -m venv .venv; .venv\Scripts\pip install -r requirements.txt`
 
 ---
 
@@ -159,19 +162,89 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 ---
 
-## 7. LTX 実体への差し替え (Step 7)
+## 7. LTX 2.3 のインストール & 実体への差し替え (Step 7)
 
-実モデルで動かす際は、システムを汚さない原則を保ったまま以下を行います。
+実モデルで動かす際も、**システムを汚さない原則**（すべてプロジェクト内）を保ちます。
+重いデータ（公式リポジトリ・モデルウェイト）は `.gitignore` 済みで **GitHub には絶対に入りません**
+（`vendor/`, `models/*`, `*.safetensors` などを除外）。
 
-1. 公式リポジトリを隣接配置し、その場で（プロジェクト管理下の venv に）セットアップ:
-   ```powershell
-   git clone https://github.com/Lightricks/LTX-2.git
-   cd LTX-2; uv sync --frozen   # ここでも .venv はこのディレクトリ専用
-   ```
-2. LTX-2.3 モデルウェイトを取得: <https://huggingface.co/Lightricks/LTX-2.3>（`ltx-2.3-22b-distilled`）。
-3. [`services/ltx_runner.py`](services/ltx_runner.py) の `load()` / `_render_frames()` を、公式 `DistilledPipeline`
-   （`QuantizationPolicy.fp8_cast()`, text encoder CPU offload, VAE tiling）呼び出しへ置換。
-4. **API・スキーマ・ジョブ層・出力構造は変更しない。**
+### 7.0 依存関係（公式LTX-2の固定値）
+
+| 項目 | 値 | 備考 |
+|------|----|------|
+| Python | `>=3.10`（当方は 3.12） | `ltx-core` requires-python |
+| PyTorch | `torch ~=2.7` + `torchaudio` | PyTorch **cu129（CUDA 12.9）** wheel index |
+| NVIDIA ドライバ | CUDA 12.9 対応版（Windows 目安 **R576+**） | 古いと cu129 wheel が動かない |
+| attention backend | **GPU世代依存**（下表） | ここだけが世代差の調整点 |
+| FP8 | `fp8-cast`（bf16 checkpoint用） | Ada は FP8 tensor core 対応 |
+
+**必要なモデルは3点**（VAEはcheckpointに同梱で別途不要）
+
+| 要素 | 入手元 | 別途DL |
+|------|--------|--------|
+| distilled checkpoint（VAE同梱） | `ltx-2.3-22b-distilled.safetensors` | ○ |
+| spatial upsampler | `ltx-2.3-spatial-upscaler-x2-*.safetensors` | ○ |
+| text encoder (Gemma) | `google/gemma-2-2b-it`（**gated**） | ○（`-WithGemma`） |
+
+**attention backend（唯一のGPU世代依存）**
+
+| GPU世代 | 代表例 (compute cap.) | バックエンド | スクリプト指定 |
+|---------|----------------------|-------------|----------------|
+| **Ada Lovelace** | RTX 40系 / L40 / L4 (sm_89) | xformers | `-GpuArch ada`（**既定・本機**） |
+| Ampere | RTX 30系 / A100 / A6000 (sm_80/86) | xformers | `-GpuArch ampere` |
+| Hopper | H100 / H200 (sm_90) | xformers | `-GpuArch hopper` |
+| Blackwell | RTX 50系 / B200 (sm_100/120) | flash-attn-4 | `-GpuArch blackwell` |
+
+> **本機は Ada Lovelace 世代**なので既定のままでOKです。別世代のユーザーは `-GpuArch` を変えるだけ（コード修正不要）。
+
+### 7.1 インストールスクリプト（推奨）
+
+```powershell
+# 1) 公式LTX-2を vendor/LTX-2 に clone + uv sync(+xformers)、LTX-2.3重みを models/ltx-2.3 へ
+./scripts/install_ltx.ps1                       # Ada Lovelace（本機）
+
+# 別世代の例
+./scripts/install_ltx.ps1 -GpuArch blackwell    # RTX 50系（flash-attn-4）
+
+# Gemma text encoder も取得（gated: 事前にHFでライセンス承諾＋トークン）
+./scripts/install_ltx.ps1 -WithGemma -HfToken hf_xxx
+
+# clone と uv sync だけ（ダウンロードは後で）
+./scripts/install_ltx.ps1 -SkipDownload
+```
+
+スクリプトの動作:
+1. `vendor/LTX-2`（gitignore済み）へ公式リポジトリを clone
+2. その中で `uv sync --frozen`（Ada/Ampere/Hopperは `--extra xformers`、Blackwellは `flash-attn-4`）
+   → **LTX-2専用の `.venv`**（システム非汚染、torch は cu129 から）
+3. `Lightricks/LTX-2.3` の重みを `models/ltx-2.3` へダウンロード
+4. （任意）gated な `google/gemma-2-2b-it` を `models/gemma-2-2b-it` へ
+5. `config.yaml` の `model:` に貼る**実パスを表示**し `models/INSTALLED_PATHS.txt` に保存
+
+> 将来的に GPU 世代の自動判定を追加予定ですが、現時点では `-GpuArch` の手動指定です。
+
+> **重要**: `Lightricks/LTX-2.3` の正確なファイル名はリポジトリ更新で変わり得ます。
+> ダウンロード対象が合わない場合は <https://huggingface.co/Lightricks/LTX-2.3/tree/main> を確認し、
+> `-Include "<glob>"` で調整してください。
+
+公式CLIの生成コマンド（参考）:
+```bash
+python -m ltx_pipelines.distilled \
+  --checkpoint-path models/ltx-2.3/<distilled>.safetensors \
+  --spatial-upsampler-path models/ltx-2.3/<upsampler>.safetensors \
+  --gemma-root models/gemma-2-2b-it \
+  --quantization fp8-cast \
+  --prompt "..." [--image first_frame.png] --output-path out.mp4
+```
+
+### 7.2 ランナーの差し替え
+
+1. `install_ltx.ps1` が出力したパスを `config.yaml` の
+   `model.checkpoint_path` / `spatial_upsampler_path` / `gemma_root` に設定。
+2. [`services/ltx_runner.py`](services/ltx_runner.py) の `load()` / `_render_frames()` を、公式
+   `DistilledPipeline`（`QuantizationPolicy.fp8_cast()` / text encoder CPU offload / VAE tiling）
+   呼び出しへ置換（docstring にスケルトンあり）。
+3. **API・スキーマ・ジョブ層・出力構造は変更しない。**
 
 検証順序（付録B）: モデルロード → `smoke_test`(384x224/17) → `phase1_default`(512x288/49) →
 `phase1_default` I2V → `phase1_target`(960x544/121, crop 960x540)。peak VRAM と生成時間は

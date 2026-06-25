@@ -302,23 +302,52 @@ READMEには、この環境分離手順を「セットアップ」の最初に�
 
 `Lightricks/LTX-2.3` リポジトリと外部Gemmaを組み合わせる。最小構成は以下の3点。
 
-| 要素 | 入手元 | 別途DL | 備考 |
-|------|--------|--------|------|
-| distilled checkpoint | `ltx-2.3-22b-distilled.safetensors`（LTX-2.3） | ○ | `--checkpoint-path`。8 steps/CFG=1。bf16 → 実行時 `fp8-cast` |
-| **VAE** | 上記checkpointに**同梱** | ✕ | 別ファイル/別フォルダは存在しない（`--vae-path` フラグも無い） |
-| spatial upsampler | `ltx-2.3-spatial-upscaler-x2-*.safetensors`（LTX-2.3） | ○ | `--spatial-upsampler-path`。distilledは2段階生成 |
-| text encoder (Gemma) | `google/gemma-2-2b-it`（**gated**・別リポジトリ） | ○ | `--gemma-root`。LTX-2.3には含まれない |
+現行公式README(v1.1)の推奨セット。概算サイズ合計 約70GB。
+
+| 要素 | 入手元 | 別途DL | 概算 | 備考 |
+|------|--------|--------|------|------|
+| distilled checkpoint | `ltx-2.3-22b-distilled-1.1.safetensors`（LTX-2.3） | ○ | 約46GB | `--checkpoint-path`。8 steps/CFG=1。bf16 → 実行時 `fp8-cast` |
+| **VAE** | 上記checkpointに**同梱** | ✕ | — | 別ファイル/別フォルダは存在しない（`--vae-path` フラグも無い） |
+| spatial upsampler | `ltx-2.3-spatial-upscaler-x2-1.1.safetensors`（LTX-2.3） | ○ | 約1GB | `--spatial-upsampler-path`。distilledは2段階生成 |
+| text encoder (Gemma) | `google/gemma-3-12b-it-qat-q4_0-unquantized`（**gated**・別リポジトリ） | ○ | 約25GB | `--gemma-root`。LTX-2.3には含まれない。**Gemma 2 ではなく Gemma 3** |
 
 - ファイル名の注意: リポジトリ表記は `upscaler`、CLIフラグは `--spatial-upsampler-path`（綴り違い）。
-- `*distilled*` のような広いglobは dev / distilled-1.1 / LoRA（各々数十GBの22Bファイル）まで巻き込むため、`install_ltx.ps1` の取得対象は**正確なファイル名で指定**する。
+- バージョンは揃える（checkpoint 1.1 ↔ upscaler 1.1）。`*distilled*` のような広いglobは dev / 旧版 / LoRA（各々数十GBの22Bファイル）まで巻き込むため、`install_ltx.ps1` の取得対象は**正確なファイル名で指定**する。
 - 公式CLI例:
   ```bash
   python -m ltx_pipelines.distilled \
-    --checkpoint-path models/ltx-2.3/ltx-2.3-22b-distilled.safetensors \
-    --spatial-upsampler-path models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors \
-    --gemma-root models/gemma-2-2b-it \
+    --checkpoint-path models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors \
+    --spatial-upsampler-path models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors \
+    --gemma-root models/gemma-3-12b-it-qat \
     --quantization fp8-cast --prompt "..." [--image first.png] --output-path out.mp4
   ```
+
+#### キャッシュもプロジェクト内へ隔離（任意だが推奨）
+
+システムPythonは汚さないが、uv/HuggingFace の既定キャッシュはユーザープロファイル配下
+（uvは `%LOCALAPPDATA%\uv\cache`、HFは `%USERPROFILE%\.cache\huggingface`）に作られる。
+厳密に全部プロジェクト内へ閉じ込め、空き容量の大きいドライブ（例: S:）へ寄せるには、実行前に
+プロセススコープで設定する（`install_ltx.ps1` は未設定時にプロジェクト内を既定にする）。
+
+```powershell
+$env:UV_CACHE_DIR = "$PWD\.uv_cache"
+$env:HF_HOME      = "$PWD\hf_home"
+```
+
+これらと `.python` / `.venv` / `vendor/` / `models/` / `hf_home/` / `.uv_cache/` はすべて `.gitignore` 済み。
+
+#### HuggingFace 認証（gated Gemma 3）の方針
+
+Gemma 3 は gated のため、ダウンロード前に認証が必要。トークンはシステムに残さず、
+プロジェクト内 `hf_home/`（gitignore済み）に保存する。手順は以下のいずれか。
+
+- **推奨（手作業・一度だけ）**: ブラウザでライセンス承認＋READトークン作成後、
+  `scripts/hf_login.ps1` を実行（`HF_HOME` をプロジェクトに向けて `hf auth login`）。
+  以後 `install_ltx.ps1 -WithGemma` は **トークン引数なし**で動く（保存済みログインを再利用）。
+- **代替（一時）**: `$env:HF_TOKEN = "hf_..."` をプロセス内に設定して実行。
+
+`install_ltx.ps1` のトークン優先順位は `-HfToken` > `$env:HF_TOKEN` > 保存済みログイン。
+いずれも無い場合、gated ダウンロードは 401 で失敗する。
 
 #### インストール責務の分離
 

@@ -30,7 +30,7 @@ class ServerConfig(BaseModel):
 class ModelConfig(BaseModel):
     checkpoint_dir: str = "./models"
     checkpoint_name: str = "ltx-2.3-22b-distilled"
-    text_encoder: str = "google/gemma-2-2b-it"
+    text_encoder: str = "google/gemma-3-12b-it-qat-q4_0-unquantized"
     pipeline_type: str = "distilled"
     auto_load_on_generate: bool = True
     reload_interval: int = 0

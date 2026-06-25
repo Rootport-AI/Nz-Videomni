@@ -39,10 +39,11 @@ LTX-2/
 *.tar
 *.zip
 
-# HuggingFace / torch caches if redirected into the project
+# HuggingFace / uv / torch caches redirected into the project (install_ltx.ps1)
 .hf_cache/
 .cache/
 hf_home/
+.uv_cache/
 
 # uv lockfile (resolved per-machine here)
 uv.lock

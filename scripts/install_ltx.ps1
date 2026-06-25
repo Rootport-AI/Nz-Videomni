@@ -35,8 +35,14 @@
     `--quantization fp8-cast` path (for bf16 checkpoints) is supported.
 
 .NOTES
+    Model set (current official v1.1, ~70GB total on disk):
+      - ltx-2.3-22b-distilled-1.1.safetensors        (~46GB, VAE bundled inside)
+      - ltx-2.3-spatial-upscaler-x2-1.1.safetensors  (~1GB)
+      - google/gemma-3-12b-it-qat-q4_0-unquantized   (~25GB, GATED text encoder)
     The gated Gemma encoder requires accepting the license at
-    huggingface.co/google/gemma-2-2b-it and passing -HfToken (or $env:HF_TOKEN).
+    huggingface.co/google/gemma-3-12b-it-qat-q4_0-unquantized and passing
+    -HfToken (or $env:HF_TOKEN). Put models on a drive with enough free space
+    (e.g. keep this project on S:); the uv/HF caches also stay in-project.
 
 .EXAMPLE
     ./scripts/install_ltx.ps1                          # Ada Lovelace (this machine)
@@ -51,19 +57,19 @@ param(
     [string] $GpuArch = "ada",
     [string] $LtxDir = "vendor/LTX-2",
     [string] $ModelsDir = "models/ltx-2.3",
-    [string] $GemmaDir = "models/gemma-2-2b-it",
+    [string] $GemmaDir = "models/gemma-3-12b-it-qat",
     [string] $ModelRepo = "Lightricks/LTX-2.3",
+    # Gemma text encoder repo. Current official LTX-2 README uses Gemma 3 (12B,
+    # QAT q4_0 unquantized), NOT gemma-2-2b-it. Gated -> needs license + HF token.
+    [string] $GemmaRepo = "google/gemma-3-12b-it-qat-q4_0-unquantized",
     # EXACT files to fetch (verified against the repo's file list). We pin precise
-    # names because broad globs like *distilled* would also pull the dev model,
-    # the distilled-1.1 model and LoRAs — each a multi-GB 22B file.
-    #   - main distilled checkpoint (VAE is bundled INSIDE this file)
-    #   - one spatial upscaler (note: repo spells it "upscaler"; the CLI flag is
-    #     --spatial-upsampler-path)
-    # Other variants (dev, distilled-1.1, LoRAs, x1.5 / temporal upscalers) are
-    # optional — add them to -Include if needed.
+    # names because broad globs like *distilled* would also pull the dev model and
+    # the LoRAs — each a multi-GB 22B file. These match the CURRENT official README
+    # recommendation (v1.1). VAE is bundled INSIDE the checkpoint (no --vae-path).
+    # Note: repo spells it "upscaler"; the CLI flag is --spatial-upsampler-path.
     [string[]] $Include = @(
-        "ltx-2.3-22b-distilled.safetensors",
-        "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+        "ltx-2.3-22b-distilled-1.1.safetensors",
+        "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
     ),
     [switch] $WithGemma,
     [string] $HfToken = $env:HF_TOKEN,
@@ -76,8 +82,13 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 Set-Location $ProjectRoot
 
-# --- Environment isolation: keep uv-managed Python inside the project ---------
+# --- Environment isolation: keep EVERYTHING inside the project ----------------
+# uv-managed Python, the uv download cache, and the HuggingFace cache all stay
+# under this directory (process-scoped; we never set persistent system vars).
+# Override by exporting these before running if you want them elsewhere.
 $env:UV_PYTHON_INSTALL_DIR = "$ProjectRoot\.python"
+if (-not $env:UV_CACHE_DIR) { $env:UV_CACHE_DIR = "$ProjectRoot\.uv_cache" }
+if (-not $env:HF_HOME) { $env:HF_HOME = "$ProjectRoot\hf_home" }
 
 function Write-Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
 function Require-Cmd($name) {
@@ -95,6 +106,11 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 Write-Host "git : $((Get-Command git).Source)"
 Write-Host "uv  : $((Get-Command uv).Source)"
 Write-Host "GPU target architecture: $GpuArch"
+Write-Host "UV_CACHE_DIR : $env:UV_CACHE_DIR"
+Write-Host "HF_HOME      : $env:HF_HOME"
+if ($WithGemma -and -not $HfToken) {
+    Write-Warning "HF_TOKEN not set but -WithGemma requested. Gemma is gated; set `$env:HF_TOKEN or pass -HfToken."
+}
 
 # Informational GPU detection (does not block).
 $smi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
@@ -162,15 +178,21 @@ if (-not $SkipDownload) {
 
     # --- 4) Gemma text encoder (gated) ---------------------------------------
     if ($WithGemma) {
-        Write-Step "Downloading gated google/gemma-2-2b-it -> $GemmaDir"
+        Write-Step "Downloading gated $GemmaRepo -> $GemmaDir"
+        # Auth precedence: explicit -HfToken > $env:HF_TOKEN > a prior
+        # `hf auth login` (scripts/hf_login.ps1) stored under HF_HOME. If none of
+        # these exist, hf download will fail with a 401 — run hf_login.ps1 first.
         if (-not $HfToken) {
-            throw "Gemma is gated. Accept the license at https://huggingface.co/google/gemma-2-2b-it then pass -HfToken or set `$env:HF_TOKEN."
+            Write-Host "No -HfToken given; relying on a prior 'hf auth login' (scripts/hf_login.ps1) or `$env:HF_TOKEN." -ForegroundColor Yellow
         }
         New-Item -ItemType Directory -Force -Path $GemmaDir | Out-Null
-        & uv run --directory $LtxDir hf download google/gemma-2-2b-it `
-            --local-dir (Resolve-Path $GemmaDir) `
-            --token $HfToken
-        if ($LASTEXITCODE -ne 0) { throw "Gemma download failed." }
+        $gemmaArgs = @($GemmaRepo, "--local-dir", (Resolve-Path $GemmaDir))
+        if ($HfToken) { $gemmaArgs += @("--token", $HfToken) }
+        & uv run --directory $LtxDir hf download @gemmaArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Gemma download failed (likely 401/license). Did you accept the license and run scripts/hf_login.ps1?"
+            throw "Gemma download failed."
+        }
     } else {
         Write-Host "`n(Skipping Gemma. Re-run with -WithGemma -HfToken <token> when ready.)" -ForegroundColor Yellow
     }

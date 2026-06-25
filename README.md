@@ -178,13 +178,13 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | attention backend | **GPU世代依存**（下表） | ここだけが世代差の調整点 |
 | FP8 | `fp8-cast`（bf16 checkpoint用） | Ada は FP8 tensor core 対応 |
 
-**必要なモデルは3点**（VAEはcheckpointに同梱で別途不要）
+**必要なモデルは3点**（VAEはcheckpointに同梱で別途不要。現行公式 v1.1。合計 約70GB）
 
-| 要素 | 入手元 | 別途DL |
-|------|--------|--------|
-| distilled checkpoint（VAE同梱） | `ltx-2.3-22b-distilled.safetensors` | ○ |
-| spatial upsampler | `ltx-2.3-spatial-upscaler-x2-*.safetensors` | ○ |
-| text encoder (Gemma) | `google/gemma-2-2b-it`（**gated**） | ○（`-WithGemma`） |
+| 要素 | 入手元 | 概算 | 別途DL |
+|------|--------|------|--------|
+| distilled checkpoint（VAE同梱） | `ltx-2.3-22b-distilled-1.1.safetensors` | 約46GB | ○ |
+| spatial upsampler | `ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | 約1GB | ○ |
+| text encoder (Gemma 3) | `google/gemma-3-12b-it-qat-q4_0-unquantized`（**gated**） | 約25GB | ○（`-WithGemma`） |
 
 **attention backend（唯一のGPU世代依存）**
 
@@ -197,7 +197,25 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 > **本機は Ada Lovelace 世代**なので既定のままでOKです。別世代のユーザーは `-GpuArch` を変えるだけ（コード修正不要）。
 
-### 7.1 インストールスクリプト（推奨）
+### 7.1 HuggingFace 認証（Gemma 3 は gated・手作業で先に）
+
+Gemma 3 はライセンス承認が必要な gated モデルです。**インストール前に一度だけ**認証します。
+トークンはプロジェクト内 `hf_home/`（gitignore済み）に保存され、システムを汚しません。
+
+```powershell
+# (任意・推奨) uv/HF キャッシュもプロジェクト内へ隔離し、空き容量の大きいドライブへ
+$env:UV_CACHE_DIR = "$PWD\.uv_cache"
+$env:HF_HOME      = "$PWD\hf_home"
+
+# ブラウザで一度だけ: ライセンス承認 + READトークン作成
+#   https://huggingface.co/google/gemma-3-12b-it-qat-q4_0-unquantized
+#   https://huggingface.co/settings/tokens
+./scripts/hf_login.ps1          # hf auth login（トークン貼り付け）→ hf_home に保存
+```
+
+> 代替: ログインせず一時的に `$env:HF_TOKEN = "hf_..."` をセットしてもOK（プロセス内のみ）。
+
+### 7.2 インストールスクリプト
 
 ```powershell
 # 1) 公式LTX-2を vendor/LTX-2 に clone + uv sync(+xformers)、LTX-2.3重みを models/ltx-2.3 へ
@@ -206,8 +224,8 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 # 別世代の例
 ./scripts/install_ltx.ps1 -GpuArch blackwell    # RTX 50系（flash-attn-4）
 
-# Gemma text encoder も取得（gated: 事前にHFでライセンス承諾＋トークン）
-./scripts/install_ltx.ps1 -WithGemma -HfToken hf_xxx
+# Gemma text encoder も取得（事前に ./scripts/hf_login.ps1 で認証済みなら -HfToken 不要）
+./scripts/install_ltx.ps1 -WithGemma
 
 # clone と uv sync だけ（ダウンロードは後で）
 ./scripts/install_ltx.ps1 -SkipDownload
@@ -218,8 +236,9 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 2. その中で `uv sync --frozen`（Ada/Ampere/Hopperは `--extra xformers`、Blackwellは `flash-attn-4`）
    → **LTX-2専用の `.venv`**（システム非汚染、torch は cu129 から）
 3. `Lightricks/LTX-2.3` の重みを `models/ltx-2.3` へダウンロード
-4. （任意）gated な `google/gemma-2-2b-it` を `models/gemma-2-2b-it` へ
+4. （`-WithGemma`時）gated な `google/gemma-3-12b-it-qat-q4_0-unquantized` を `models/gemma-3-12b-it-qat` へ
 5. `config.yaml` の `model:` に貼る**実パスを表示**し `models/INSTALLED_PATHS.txt` に保存
+   （`UV_CACHE_DIR`/`HF_HOME` 未設定なら、uv/HFキャッシュもプロジェクト内 `.uv_cache`/`hf_home` を既定使用）
 
 > 将来的に GPU 世代の自動判定を追加予定ですが、現時点では `-GpuArch` の手動指定です。
 
@@ -230,14 +249,14 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 公式CLIの生成コマンド（参考）:
 ```bash
 python -m ltx_pipelines.distilled \
-  --checkpoint-path models/ltx-2.3/<distilled>.safetensors \
-  --spatial-upsampler-path models/ltx-2.3/<upsampler>.safetensors \
-  --gemma-root models/gemma-2-2b-it \
+  --checkpoint-path models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors \
+  --spatial-upsampler-path models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors \
+  --gemma-root models/gemma-3-12b-it-qat \
   --quantization fp8-cast \
   --prompt "..." [--image first_frame.png] --output-path out.mp4
 ```
 
-### 7.2 ランナーの差し替え
+### 7.3 ランナーの差し替え
 
 1. `install_ltx.ps1` が出力したパスを `config.yaml` の
    `model.checkpoint_path` / `spatial_upsampler_path` / `gemma_root` に設定。

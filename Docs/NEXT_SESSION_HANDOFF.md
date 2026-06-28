@@ -2,6 +2,12 @@
 
 最終更新: 2026-06-28 / 想定読者: 次セッションでコード改修を行うエージェント
 
+> ⚠️ **方針更新（2026-06-28 後半）**: 本書のうち「Gemma の扱い」「移植の細部」は更新されました。最新の方針・比較・参照URL
+> は **[DESIGN_COMPARISON_and_direction.md](DESIGN_COMPARISON_and_direction.md)**、実機検証の経緯は **[VERIFICATION_LOG.md](VERIFICATION_LOG.md)** を参照（こちらが最新の真実）。
+> 要点: フォークの GGUF transformer は実証済（dequant 4件＋loader を修正、有意映像を生成）。残課題は Gemma を
+> **FP4 量子化で GPU 推論**（コミュニティ標準）に載せる一点＝局所修正で 16GB 達成見込み。CPU bf16 エンコードは
+> この機(i7-13700/AVX2)で地雷につき撤回。本書の env 手順・凍結API・検証手順は引き続き有効。
+
 > このセッションの成果 = **土台づくりと実証**。コード改修（フォーク手法を我々の backend へ移植）は**このドキュメントを起点に次セッションで行う**。
 > 全経緯は計画書 `~/.claude/plans/playful-napping-scone.md`、要約は memory `[[ltx-bridge-project]]` / `[[ltx-desktop-lowvram-fork]]`。
 

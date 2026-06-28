@@ -1,5 +1,11 @@
 # 開発ノート — LTX 2.3 を 16GB VRAM で動かす
 
+> ⚠️ **状態（2026-06-28 後日追記）**: 本書の中心戦略「公式 `ltx_pipelines` の block streaming(`--offload cpu`)＋`fp8-cast`」は
+> **破棄**された（本機 16GB Windows で 22B safetensors バルクロード中に native crash）。現行は**フォークの GGUF transformer
+> ＋block-swap＋GGUF Q4 Gemma**方式で 16GB E2E 達成済み。最新の正本は [NEXT_SESSION_HANDOFF.md](NEXT_SESSION_HANDOFF.md) /
+> [VERIFICATION_LOG.md](VERIFICATION_LOG.md)。**ただし以下の事実は今も有効**: torch 2.9.1+cu128、attention は SDPA(=Ada では
+> FlashAttention-2)で十分、xformers は任意、16GB の律速は重み転送(PCIe)。
+
 最終更新: 2026-06-26
 
 本機: RTX 4070 Ti SUPER (16GB, Ada Lovelace / sm_89) / System RAM 63.8GB / PCIe 4.0 ×16

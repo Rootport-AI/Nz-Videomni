@@ -50,7 +50,25 @@
       "WebFetch(domain:note.com)",
       "WebFetch(domain:ltxworkflow.com)",
       "Bash(xargs grep -l \"gguf_transformer_path\\\\|gguf_per_layer_quant\")",
-      "Bash(grep -iA2 -B2 \"ltx\\\\|rev\\\\|git\")"
+      "Bash(grep -iA2 -B2 \"ltx\\\\|rev\\\\|git\")",
+      "PowerShell($ErrorActionPreference='Stop'; try { \\(gh --version\\) } catch { \"no gh\" })",
+      "WebFetch(domain:www.nemovideo.com)",
+      "WebFetch(domain:nathan.sapwell.net)",
+      "Bash([ -f \"$PYBIN\" ])",
+      "Bash(s:/OriginalApps/12_Nz-LTX23-backend/vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe -c 'import huggingface_hub, gguf; print\\('\\\\''hub'\\\\'', huggingface_hub.__version__\\); print\\('\\\\''gguf'\\\\'', gguf.__version__ if hasattr\\(gguf,'\\\\''__version__'\\\\''\\) else '\\\\''n/a'\\\\''\\)')",
+      "Bash(\"s:/OriginalApps/12_Nz-LTX23-backend/vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe\" -)",
+      "Bash(.venv/Scripts/python.exe -c \"import services.gemma_gguf_quant_service as m; print\\('OK import'\\); print\\('service:', m.GemmaGGUFQuantLoaderService\\); print\\('loader:', m.GemmaGGUFQuantStateDictLoader\\); print\\('GEMMA3_SD_MAP keys:', len\\(m.GEMMA3_SD_MAP\\)\\); print\\('sd_map_replace:', m.sd_map_replace\\({'blk.0.attn_q.weight':1,'output_norm.weight':2,'token_embd.weight':3}, m.GEMMA3_SD_MAP\\)\\); print\\('to_ltx q_proj:', m._to_ltx_key\\('model.layers.0.self_attn.q_proj.weight'\\)\\); print\\('to_ltx embed:', m._to_ltx_key\\('model.embed_tokens.weight'\\)\\); print\\('to_ltx norm:', m._to_ltx_key\\('model.norm.weight'\\)\\); print\\('is_quant q:', m._is_quantizable_linear\\('model.model.language_model.layers.0.self_attn.q_proj.weight'\\)\\); print\\('is_quant down:', m._is_quantizable_linear\\('model.model.language_model.layers.0.mlp.down_proj.weight'\\)\\); print\\('is_norm_or_embed embed:', m._is_norm_or_embed\\('model.model.language_model.embed_tokens.weight'\\)\\); print\\('is_norm_or_embed inln:', m._is_norm_or_embed\\('model.model.language_model.layers.0.input_layernorm.weight'\\)\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('services/fast_video_pipeline/ltx_fast_video_pipeline.py'\\).read\\(\\)\\); print\\('pipeline syntax OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import services.gemma_gguf_quant_service; print\\('gemma service import OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -m py_compile services/fast_video_pipeline/ltx_fast_video_pipeline.py)",
+      "Bash(.venv/Scripts/python.exe -m py_compile services/gemma_gguf_quant_service.py)",
+      "Bash(.venv/Scripts/python.exe -c \"import gguf; print\\('gguf lib OK', getattr\\(gguf,'__version__','?'\\)\\)\")",
+      "Bash([ -f \"$TARGET\" ])",
+      "Bash(break)",
+      "Bash(s:/OriginalApps/12_Nz-LTX23-backend/vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe -)",
+      "Bash(\"./.venv/Scripts/python.exe\" \"s:/OriginalApps/12_Nz-LTX23-backend/outputs/verify_gemma_gguf/stage_a.py\")",
+      "Bash(\"./.venv/Scripts/python.exe\" \"s:/OriginalApps/12_Nz-LTX23-backend/outputs/verify_gemma_gguf/stage_a4.py\")",
+      "Bash(xargs grep -l \"def upsample_video\")"
     ]
   }
 }

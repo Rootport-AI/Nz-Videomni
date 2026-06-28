@@ -7,8 +7,14 @@ LTX 2.3 動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動
 [`LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`](LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md) を参照してください。
 
 > **Phase 1 の現状**: LTX 公式パイプライン呼び出しは [`services/ltx_runner.py`](services/ltx_runner.py) に隔離されており、
-> 現在は **モック実装**（合成クリップを生成）です。GPU / モデルウェイトが無くても API・ジョブ管理・Gradio・テストまで完全に疎通します。
-> 実モデルへの差し替えは下記「LTX 実体への差し替え (Step 7)」を参照。
+> 我々の backend が呼ぶ既定はまだ **モック実装**（合成クリップ）です。GPU / モデルウェイトが無くても API・ジョブ管理・Gradio・テストまで完全に疎通します。
+>
+> ⚠️ **重要（2026-06-28 追記・本 README は一部 pre-pivot のまま）**: 実エンジンの方針は変わりました。公式 `ltx_pipelines` は
+> 本機(16GB Windows)で native crash するため**不採用**で、現行は **低VRAMフォーク（GGUF transformer＋block-swap＋GGUF Q4 Gemma）**
+> 方式に pivot し、**フォーク env スパイクで 16GB E2E T2V 生成に成功済み**です。我々の backend への取り込み（`_RealBackend` 実体化）は
+> **Phase 5** で実施予定で、その完了後に本 §7「Step 7」と解像度制約（現行の正しい契約は **÷64**。L102 の「÷32」は旧記述）を含め
+> README を全面改訂します。**現時点の正本**は [`Docs/NEXT_SESSION_HANDOFF.md`](Docs/NEXT_SESSION_HANDOFF.md) と
+> [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) を参照してください。下記 §7 は旧（公式パイプライン）手順です。
 
 ---
 

@@ -68,7 +68,15 @@
       "Bash(s:/OriginalApps/12_Nz-LTX23-backend/vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe -)",
       "Bash(\"./.venv/Scripts/python.exe\" \"s:/OriginalApps/12_Nz-LTX23-backend/outputs/verify_gemma_gguf/stage_a.py\")",
       "Bash(\"./.venv/Scripts/python.exe\" \"s:/OriginalApps/12_Nz-LTX23-backend/outputs/verify_gemma_gguf/stage_a4.py\")",
-      "Bash(xargs grep -l \"def upsample_video\")"
+      "Bash(xargs grep -l \"def upsample_video\")",
+      "Read(//c/Users/phenotype nezu/.claude/plans/**)",
+      "Bash(LTX_DISABLE_GRADIO=1 ./.venv/Scripts/python.exe -c \"import services.ltx_runner; import services.low_vram; import config; print\\('IMPORT_OK'\\)\")",
+      "Bash(LTX_DISABLE_GRADIO=1 ./.venv/Scripts/python.exe -m pytest -q)",
+      "Bash(LTX_DISABLE_GRADIO=1 ./.venv/Scripts/python.exe -m pytest)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile vendor/LTX-Desktop-LOW-VRAM/backend/_ltx_worker.py services/ltx_runner.py services/low_vram.py config.py)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git --no-pager diff -- config.py services/low_vram.py services/ltx_runner.py)"
     ]
   }
 }

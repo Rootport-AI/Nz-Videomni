@@ -44,6 +44,15 @@ class ModelConfig(BaseModel):
     quantization: str = "fp8-cast"  # "fp8-cast" | "none"
     backend: str = "auto"  # "auto" | "mock" | "real"
 
+    # Phase 5 (real GGUF engine) runtime paths. Consumed only by the
+    # subprocess-worker real backend in services/ltx_runner.py. Defaults are the
+    # spike-proven 16GB recipe (Q4_K_M transformer + Q4_K_M GGUF Gemma on GPU).
+    gguf_transformer_path: str = "./models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+    gguf_gemma_path: str = "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
+    fork_backend_dir: str = "./vendor/LTX-Desktop-LOW-VRAM/backend"
+    fork_python: str = "./vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe"
+    gguf_per_layer_quant: bool = True
+
 
 class VramConfig(BaseModel):
     low_vram_mode: bool = True
@@ -55,6 +64,10 @@ class VramConfig(BaseModel):
     attention_tile_size: int | None = None
     block_swap: bool = False
     block_swap_blocks_on_gpu: int | None = None
+    # VAE tiling sizes for the real GGUF engine (0 -> engine default, proven to
+    # fit 16GB at small resolutions). Consumed by the subprocess worker.
+    vae_spatial_tile_size: int = 0
+    vae_temporal_tile_size: int = 0
     allow_disable_low_vram: bool = True
 
 

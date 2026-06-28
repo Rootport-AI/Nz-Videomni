@@ -15,6 +15,20 @@ from dataclasses import dataclass, asdict
 from config import AppConfig
 
 
+# Keys that form the frozen GET /status ``vram_optimization`` contract (spec
+# 7.4). New internal fields (block_swap_blocks_on_gpu, vae_*_tile_size) must NOT
+# leak into this block, so status_block() filters to exactly these.
+_STATUS_KEYS = (
+    "low_vram_mode",
+    "low_vram_profile",
+    "fp8_transformer",
+    "cpu_offload_text_encoder",
+    "vae_tiling",
+    "attention_tiling",
+    "block_swap",
+)
+
+
 @dataclass
 class LowVramSettings:
     low_vram_mode: bool
@@ -24,13 +38,18 @@ class LowVramSettings:
     vae_tiling: bool
     attention_tiling: bool
     block_swap: bool
+    # Internal knobs for the real GGUF engine (NOT part of status/metadata
+    # contracts). Read directly by services.ltx_runner._RealBackend.
+    block_swap_blocks_on_gpu: int | None = None
+    vae_spatial_tile_size: int = 0
+    vae_temporal_tile_size: int = 0
 
     def as_dict(self) -> dict:
         return asdict(self)
 
     def status_block(self, *, low_vram_disabled_required: bool) -> dict:
         """The ``vram_optimization`` block for GET /status (spec 7.4)."""
-        data = self.as_dict()
+        data = {k: getattr(self, k) for k in _STATUS_KEYS}
         data["low_vram_disabled_required"] = low_vram_disabled_required
         return data
 
@@ -56,6 +75,9 @@ def build_low_vram_settings(config: AppConfig) -> LowVramSettings:
         vae_tiling=v.vae_tiling,
         attention_tiling=v.attention_tiling,
         block_swap=v.block_swap,
+        block_swap_blocks_on_gpu=v.block_swap_blocks_on_gpu,
+        vae_spatial_tile_size=v.vae_spatial_tile_size,
+        vae_temporal_tile_size=v.vae_temporal_tile_size,
     )
 
 

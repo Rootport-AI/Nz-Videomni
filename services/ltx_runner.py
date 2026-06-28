@@ -5,21 +5,25 @@ Two backends live behind one facade (:class:`LTXRunner`):
 * ``_MockBackend`` — renders a short synthetic clip with PIL and encodes it to
   ``output.mp4`` with no GPU and no model weights. Used for tests and GPU-less
   development. This is the original Phase-1 implementation, kept intact.
-* ``_RealBackend`` — drives the official two-stage ``DistilledPipeline`` (FP8
-  cast, CPU offload, VAE tiling) and encodes the returned tensor iterator via
-  the official ``encode_video``.
+* ``_RealBackend`` — Phase 5 (Approach W): manages a persistent subprocess
+  worker (``_ltx_worker.py``) that runs inside the FORK venv where the proven
+  GGUF low-VRAM engine lives. It builds the model once, then serves jobs over a
+  small JSON-lines protocol; the engine writes ``output.mp4`` directly to the
+  shared output dir. This backend NEVER imports torch / ltx_* itself — those
+  packages exist only in the fork venv, not the app venv.
 
 Backend selection (``LTXRunner.load``):
 
 * ``config.model.backend == "mock"`` -> always mock.
-* ``config.model.backend == "real"`` -> always real (RuntimeError if the real
-  stack / model weights are unavailable).
-* ``config.model.backend == "auto"`` (default) -> real when the model paths
-  exist *and* torch+CUDA+``ltx_pipelines`` import successfully, else mock.
+* ``config.model.backend == "real"`` -> always real (RuntimeError if the fork
+  python / worker / model weights are unavailable).
+* ``config.model.backend == "auto"`` (default) -> real when the fork python,
+  worker script and all model paths exist, else mock.
 
-IMPORTANT: torch / ltx_pipelines / ltx_core are imported lazily *inside methods*
-only. ``import services.ltx_runner`` must keep working in the app ``.venv`` that
-has no torch installed (the mock test path depends on this).
+IMPORTANT: torch / ltx_pipelines / ltx_core are NEVER imported in this file.
+``import services.ltx_runner`` must keep working in the app ``.venv`` that has no
+torch installed (the mock test path depends on this); the real backend defers
+all engine work to the subprocess worker.
 
 Everything outside this file — request schema, job layer, output layout — is
 unchanged. Only ``GenerationOutcome.backend`` differs between backends.
@@ -27,9 +31,13 @@ unchanged. Only ``GenerationOutcome.backend`` differs between backends.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
+import os
 import random
+import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -144,29 +152,33 @@ class LTXRunner:
         return _MockBackend(self.config, self.low_vram)
 
     def _real_available(self) -> bool:
-        """True only if model weights exist AND torch+CUDA+ltx_pipelines import.
+        """True only if the fork python, worker script and all 5 model paths exist.
 
-        Any failure is swallowed -> False (so 'auto' falls back to mock and
-        ``import services.ltx_runner`` stays safe in a torch-less venv).
+        Deliberately does NOT import torch / ltx_* (those live only in the fork
+        venv, not the app venv). Any failure/missing is swallowed -> False (so
+        'auto' falls back to mock and ``import services.ltx_runner`` stays safe
+        in the torch-less app venv).
         """
         model = self.config.model
         try:
-            paths = [
+            required = [
+                model.fork_python,
                 model.checkpoint_path,
                 model.spatial_upsampler_path,
                 model.gemma_root,
+                model.gguf_transformer_path,
+                model.gguf_gemma_path,
             ]
-            if any(not p for p in paths):
+            if any(not p for p in required):
                 return False
-            for p in paths:
+            for p in required:
                 if not self.config._abs(p).exists():
                     return False
-            import torch  # type: ignore  # noqa: PLC0415
-
-            if not torch.cuda.is_available():
+            if not model.fork_backend_dir:
                 return False
-            import ltx_pipelines  # type: ignore  # noqa: F401,PLC0415
-
+            worker = self.config._abs(model.fork_backend_dir) / "_ltx_worker.py"
+            if not worker.exists():
+                return False
             return True
         except Exception:
             return False
@@ -325,168 +337,32 @@ class _MockBackend:
 
 
 class _RealBackend:
-    """Official two-stage ``DistilledPipeline`` backend.
+    """Real GGUF low-VRAM backend via a persistent subprocess worker (Phase 5).
 
-    All torch / ltx imports are local to methods so this class can be defined and
-    referenced in a torch-less environment; it is only instantiated when the real
-    stack is actually available.
+    This class NEVER imports torch / ltx_* (they live only in the fork venv). It
+    spawns ``_ltx_worker.py`` in the fork venv, loads the model once, and serves
+    jobs over a JSON-lines protocol framed by the ``@@LTX@@`` prefix. The worker
+    writes ``output.mp4`` directly to the shared output dir; only small control
+    JSON crosses the pipe. ``self.pipeline`` is retained (always None) only for
+    the back-compat ``LTXRunner.pipeline`` attribute.
     """
+
+    # Protocol frame prefix; must match _ltx_worker.PREFIX.
+    _PREFIX = "@@LTX@@"
+    _LOAD_TIMEOUT_S = 600.0
+    _SHUTDOWN_TIMEOUT_S = 30.0
 
     def __init__(self, config: AppConfig, low_vram: LowVramSettings):
         self.config = config
         self.low_vram = low_vram
-        self.pipeline = None  # DistilledPipeline instance once loaded
+        self.pipeline = None  # back-compat attribute; always None for this backend
+        self._proc: subprocess.Popen | None = None
+        self._lock = threading.Lock()
+        self._log_path: Path | None = None
 
     @property
     def loaded(self) -> bool:
-        return self.pipeline is not None
-
-    def load(self) -> None:
-        if self.pipeline is not None:
-            return
-
-        from ltx_pipelines.distilled import DistilledPipeline  # noqa: PLC0415
-        from ltx_pipelines.utils.types import OffloadMode  # noqa: PLC0415
-        from ltx_pipelines.utils.quantization_factory import QuantizationKind  # noqa: PLC0415
-
-        model = self.config.model
-        ckpt = self._require_path(model.checkpoint_path, "checkpoint_path")
-        upsampler = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
-        gemma = self._require_path(model.gemma_root, "gemma_root")
-
-        offload_mode = OffloadMode.CPU if self.low_vram.low_vram_mode else OffloadMode.NONE
-
-        quant = None
-        if self.low_vram.fp8_transformer and model.quantization not in (None, "", "none"):
-            quant = QuantizationKind(model.quantization).to_policy(checkpoint_path=ckpt)
-
-        logger.info(
-            "Loading pipeline (REAL DistilledPipeline). offload=%s quant=%s ckpt=%s",
-            offload_mode,
-            model.quantization if quant is not None else None,
-            ckpt,
-        )
-
-        self.pipeline = DistilledPipeline(
-            distilled_checkpoint_path=ckpt,
-            gemma_root=gemma,
-            spatial_upsampler_path=upsampler,
-            loras=[],
-            quantization=quant,
-            compilation_config=None,
-            offload_mode=offload_mode,
-        )
-
-    def unload(self) -> None:
-        if self.pipeline is None:
-            return
-        logger.info("Unloading pipeline (REAL).")
-        self.pipeline = None
-        safe_memory_cleanup()
-
-    def generate(
-        self,
-        request: GenerateRequest,
-        output_dir: Path,
-        progress_callback: ProgressCallback | None = None,
-        conditioning_image_paths: list[Path] | None = None,
-    ) -> GenerationOutcome:
-        import random as _random  # noqa: PLC0415
-        import torch  # noqa: PLC0415
-
-        from ltx_pipelines.utils.args import ImageConditioningInput  # noqa: PLC0415
-        from ltx_core.model.video_vae import (  # noqa: PLC0415
-            TilingConfig,
-            get_video_chunks_number,
-        )
-        from ltx_pipelines.utils.media_io import encode_video  # noqa: PLC0415
-
-        if self.pipeline is None:
-            self.load()
-
-        conditioning_image_paths = conditioning_image_paths or []
-        mode = request.generation_mode
-
-        with torch.inference_mode():
-            seed = request.seed if request.seed >= 0 else _random.randint(0, 2**31 - 1)
-
-            gpu_info.reset_peak_vram()
-            if progress_callback:
-                progress_callback(None, None, 0.05)
-
-            # Image conditioning: minimal Phase-1 I2V (one image, frame_idx=0).
-            images: list = []
-            if mode == "i2v" and conditioning_image_paths:
-                ci = request.conditioning_images[0]
-                images = [
-                    ImageConditioningInput(
-                        path=str(conditioning_image_paths[0]),
-                        frame_idx=0,
-                        strength=ci.strength,
-                        crf=(ci.crf if ci.crf is not None else 33),
-                    )
-                ]
-
-            tiling = TilingConfig.default() if self.low_vram.vae_tiling else None
-
-            video_iter, _audio = self.pipeline(
-                prompt=request.prompt,
-                seed=seed,
-                height=request.height,
-                width=request.width,
-                num_frames=request.num_frames,
-                frame_rate=request.frame_rate,
-                images=images,
-                tiling_config=tiling,
-                enhance_prompt=False,
-            )
-
-            if progress_callback:
-                progress_callback(None, None, 0.90)
-
-            output_path = output_dir / "output.mp4"
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            chunks = get_video_chunks_number(request.num_frames, tiling)
-
-            if request.crop_output is not None:
-                # Encode at generation size, then center-crop to the final size.
-                tmp = output_dir / "_full.mp4"
-                encode_video(
-                    video=video_iter,
-                    fps=int(request.frame_rate),
-                    audio=None,
-                    output_path=str(tmp),
-                    video_chunks_number=chunks,
-                )
-                video_io.crop_mp4(
-                    tmp,
-                    output_path,
-                    request.crop_output.width,
-                    request.crop_output.height,
-                )
-                tmp.unlink(missing_ok=True)
-            else:
-                encode_video(
-                    video=video_iter,
-                    fps=int(request.frame_rate),
-                    audio=None,
-                    output_path=str(output_path),
-                    video_chunks_number=chunks,
-                )
-
-            peak = gpu_info.peak_vram_mb()
-            if progress_callback:
-                progress_callback(None, None, 1.0)
-
-        safe_memory_cleanup()
-
-        return GenerationOutcome(
-            output_path=output_path,
-            seed_used=seed,
-            peak_vram_mb=peak,
-            generation_mode=mode,
-            backend=REAL_BACKEND,
-        )
+        return self._proc is not None and self._proc.poll() is None
 
     # --------------------------------------------------------------- helpers
 
@@ -497,6 +373,298 @@ class _RealBackend:
         if not resolved.exists():
             raise RuntimeError(f"model.{label} not found: {resolved}")
         return str(resolved)
+
+    def _stderr_tail(self, n: int = 2000) -> str:
+        """Best-effort tail of the worker stderr log (for error messages)."""
+        if self._log_path is None:
+            return ""
+        try:
+            data = self._log_path.read_text(encoding="utf-8", errors="replace")
+            return data[-n:]
+        except Exception:
+            return ""
+
+    def _send(self, msg: dict) -> None:
+        assert self._proc is not None and self._proc.stdin is not None
+        self._proc.stdin.write(json.dumps(msg, separators=(",", ":")) + "\n")
+        self._proc.stdin.flush()
+
+    def _read_event(self, timeout: float | None = None) -> dict:
+        """Block-read worker stdout until a framed ``@@LTX@@`` JSON line.
+
+        Non-prefixed lines (library / tqdm noise that leaked to stdout) are
+        ignored. EOF / dead process raises RuntimeError with the stderr tail.
+        A timeout (when given) is enforced via a watchdog thread that kills the
+        worker so the blocked readline returns.
+        """
+        assert self._proc is not None and self._proc.stdout is not None
+        timer: threading.Timer | None = None
+        timed_out = {"v": False}
+        if timeout is not None:
+            def _kill_on_timeout() -> None:
+                timed_out["v"] = True
+                self._kill()
+            timer = threading.Timer(timeout, _kill_on_timeout)
+            timer.daemon = True
+            timer.start()
+        try:
+            for raw in self._proc.stdout:
+                line = raw.strip()
+                if not line.startswith(self._PREFIX):
+                    continue  # ignore library/tqdm stdout noise
+                try:
+                    return json.loads(line[len(self._PREFIX):])
+                except Exception:
+                    continue
+            # EOF on stdout -> process ended without a terminal event.
+            if timed_out["v"]:
+                raise RuntimeError(
+                    f"LTX worker timed out after {timeout:.0f}s: {self._stderr_tail()}"
+                )
+            raise RuntimeError("LTX worker died: " + self._stderr_tail())
+        finally:
+            if timer is not None:
+                timer.cancel()
+
+    def _kill(self) -> None:
+        proc = self._proc
+        if proc is None:
+            return
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ load
+
+    def load(self) -> None:
+        if self.loaded:
+            return
+
+        model = self.config.model
+
+        # Resolve + validate the fork python, worker script, and 5 model paths.
+        fork_python = self._require_path(model.fork_python, "fork_python")
+        if not model.fork_backend_dir:
+            raise RuntimeError("model.fork_backend_dir is not configured (required for the real backend).")
+        fork_backend_dir = self.config._abs(model.fork_backend_dir)
+        if not fork_backend_dir.exists():
+            raise RuntimeError(f"model.fork_backend_dir not found: {fork_backend_dir}")
+        worker = fork_backend_dir / "_ltx_worker.py"
+        if not worker.exists():
+            raise RuntimeError(f"LTX worker script not found: {worker}")
+
+        checkpoint_path = self._require_path(model.checkpoint_path, "checkpoint_path")
+        upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
+        gemma_root = self._require_path(model.gemma_root, "gemma_root")
+        gguf_transformer_path = self._require_path(model.gguf_transformer_path, "gguf_transformer_path")
+        gguf_gemma_path = self._require_path(model.gguf_gemma_path, "gguf_gemma_path")
+
+        # Child env: inherit, force the 16GB-load-bearing CUDA + compile knobs,
+        # unbuffered IO, and CLEAR PYTHONPATH so the app's top-level `services`
+        # package can't shadow the fork's same-named package.
+        env = dict(os.environ)
+        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        env["TORCH_COMPILE_DISABLE"] = "1"
+        env["PYTHONUNBUFFERED"] = "1"
+        env.pop("PYTHONPATH", None)
+
+        # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
+        # the worker emits lots of tqdm/log output while we block on stdout).
+        log_dir = self.config.log_dir
+        log_dir.mkdir(parents=True, exist_ok=True)
+        self._log_path = log_dir / "ltx_worker.log"
+
+        knobs = {
+            "gguf_per_layer_quant": bool(model.gguf_per_layer_quant),
+            "block_swap_blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or 8,
+            "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
+            "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
+        }
+        logger.info(
+            "Loading pipeline (REAL worker). python=%s backend_dir=%s block_swap=%s ckpt=%s",
+            fork_python,
+            fork_backend_dir,
+            knobs["block_swap_blocks_on_gpu"],
+            checkpoint_path,
+        )
+
+        log_fh = open(self._log_path, "a", encoding="utf-8")
+        try:
+            self._proc = subprocess.Popen(
+                [fork_python, "-u", "_ltx_worker.py"],
+                cwd=str(fork_backend_dir),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=log_fh,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+                env=env,
+            )
+        except Exception as exc:
+            log_fh.close()
+            self._proc = None
+            raise RuntimeError(f"failed to launch LTX worker: {exc!r}") from exc
+
+        try:
+            self._send(
+                {
+                    "op": "load",
+                    "checkpoint_path": checkpoint_path,
+                    "gemma_root": gemma_root,
+                    "upsampler_path": upsampler_path,
+                    "gguf_transformer_path": gguf_transformer_path,
+                    "gguf_gemma_path": gguf_gemma_path,
+                    **knobs,
+                }
+            )
+            event = self._read_event(timeout=self._LOAD_TIMEOUT_S)
+        except Exception:
+            self._kill()
+            self._proc = None
+            raise
+
+        kind = event.get("event")
+        if kind == "ready":
+            logger.info("LTX worker ready.")
+            return
+        if kind == "error":
+            detail = event.get("detail", "")
+            self._kill()
+            self._proc = None
+            raise RuntimeError(f"LTX worker failed to load: {detail}")
+        # Unexpected terminal event.
+        self._kill()
+        self._proc = None
+        raise RuntimeError(f"LTX worker returned unexpected event during load: {event!r}")
+
+    def unload(self) -> None:
+        proc = self._proc
+        if proc is None:
+            return
+        logger.info("Unloading pipeline (REAL worker).")
+        try:
+            if proc.poll() is None and proc.stdin is not None:
+                try:
+                    self._send({"op": "shutdown"})
+                except Exception:
+                    pass
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+            try:
+                proc.wait(timeout=self._SHUTDOWN_TIMEOUT_S)
+            except Exception:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                except Exception:
+                    self._kill()
+        finally:
+            self._proc = None
+            self.pipeline = None
+            safe_memory_cleanup()
+
+    # -------------------------------------------------------------- generate
+
+    def generate(
+        self,
+        request: GenerateRequest,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        conditioning_image_paths: list[Path] | None = None,
+    ) -> GenerationOutcome:
+        if not self.loaded:
+            self.load()
+
+        conditioning_image_paths = conditioning_image_paths or []
+        mode = request.generation_mode
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.mp4"
+
+        # Resolve the seed IN THE PARENT so seed_used is deterministic regardless
+        # of the worker.
+        seed = request.seed if request.seed >= 0 else random.randint(0, 2**31 - 1)
+
+        # Image conditioning: minimal Phase-1 I2V (one image, frame_idx=0). The
+        # fork's ImageConditioningInput has NO crf -> drop it.
+        images: list[dict] = []
+        if mode == "i2v" and conditioning_image_paths:
+            ci = request.conditioning_images[0]
+            images = [
+                {
+                    "path": str(conditioning_image_paths[0]),
+                    "frame_idx": 0,
+                    "strength": ci.strength,
+                }
+            ]
+
+        # crop_output: have the worker write the full-size mp4 to a temp file,
+        # then center-crop into output.mp4 with the existing ffmpeg helper.
+        if request.crop_output is not None:
+            target = output_dir / "_full.mp4"
+        else:
+            target = output_path
+
+        if progress_callback:
+            progress_callback(None, None, 0.05)
+
+        # Serialize the stdin/stdout exchange (single-job server, but be safe).
+        with self._lock:
+            try:
+                self._send(
+                    {
+                        "op": "generate",
+                        "prompt": request.prompt,
+                        "seed": seed,
+                        "height": request.height,
+                        "width": request.width,
+                        "num_frames": request.num_frames,
+                        "frame_rate": request.frame_rate,
+                        "num_steps": request.num_inference_steps,
+                        "images": images,
+                        "output_path": str(target),
+                    }
+                )
+            except Exception as exc:
+                raise RuntimeError("LTX worker died: " + self._stderr_tail()) from exc
+            event = self._read_event()
+
+        kind = event.get("event")
+        if kind == "error":
+            raise RuntimeError(event.get("detail", "LTX worker generation failed"))
+        if kind != "done":
+            raise RuntimeError(f"LTX worker returned unexpected event: {event!r}")
+
+        if request.crop_output is not None:
+            video_io.crop_mp4(
+                target,
+                output_path,
+                request.crop_output.width,
+                request.crop_output.height,
+            )
+            target.unlink(missing_ok=True)
+
+        if not output_path.exists() or output_path.stat().st_size <= 0:
+            raise RuntimeError(f"LTX worker produced no/empty output: {output_path}")
+
+        if progress_callback:
+            progress_callback(None, None, 0.90)
+            progress_callback(None, None, 1.0)
+
+        seed_used = event.get("seed_used", seed)
+        peak_vram_mb = event.get("peak_vram_mb")
+
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=seed_used,
+            peak_vram_mb=peak_vram_mb,
+            generation_mode=mode,
+            backend=REAL_BACKEND,
+        )
 
 
 def _hue_gradient(w: int, h: int, hue: int) -> Image.Image:

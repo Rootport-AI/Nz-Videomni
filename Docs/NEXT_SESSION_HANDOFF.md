@@ -86,6 +86,7 @@ Phase 5(A) で「配線」は終わったが、**"16GB に本当に収まる" �
 - **ユーザー方針＝これは「Phase 5(B) スケールアップ（1280×768 → crop 720p）」と一つの同じ仕事**。スケールアップ用の denoise-stage VRAM 技法（block_swap 深度を bs4/bs2 へ／VAE・attention タイリング／解像度依存の sequential・streaming）を適用すれば、**現状の 384x256 の shared 溢れも一緒に解消**する見込み。
 - **着手の起点＝先行事例の denoise-stage 技法を調査・複製**（独自発明しない、[[research-prior-art-first]]）: フォークの `vendor/.../backend/services/block_swap_service.py` 等、および ComfyUI-GGUF / ComfyUI カスタムノード・ワークフローの解像度対応技法。これらは**まだ我々の backend に反映していない**。
 - 計測は perf-counter の "Shared Usage" サンプリングで（§5。worker の `max_memory_allocated` では溢れを検知できない＝§4）。
+- **重要・過去ログの読み替え**: VERIFICATION_LOG §2.3 で **bs4 が crash** したのは、当時 Gemma が bf16 で ~17.7GB を共有メモリへ溢れさせ、その圧迫下で遅延ローダが access violation した（バグ#5）ため。**この前提は Phase 4/5(A) の GGUF Q4 Gemma 化で既に解消済**＝「bs4 は落ちる」は**もう当てはまらない**。よって Phase 5(B) は bs8→bs6→bs4→bs2 を**クリーンに再計測**してよい（各深度で dedicated/shared 両ピーク＋wall-clock を §5 のサンプラで測り、溢れ消失と速度のバランス点を探す）。
 
 ## 4. 既知の残課題（Phase 5(B) の中核 ＋ 後で）
 - **★【最優先・真の 16GB fit】denoise フェーズの shared 溢れ**。これはもはや「block_swap の小ノブ」の後回し課題ではなく、**残った主タスク**であり、上記 **Phase 5(B) スケールアップ（1280×768→crop）と同一の作業**（§3c）。384x256 でもユーザーがタスクマネージャで shared 溢れを目視確認済。**注意: worker が報告する `torch.cuda.max_memory_allocated`（T2V 16913 / I2V 17989 MB）は dedicated と WDDM shared を区別できず、この溢れを検知できない** → 検知には perf-counter の "Shared Usage" 直接サンプリングが要る（§5）。フォーク `block_swap_service.py` 等・ComfyUI-GGUF の denoise-stage 技法を複製して詰める。

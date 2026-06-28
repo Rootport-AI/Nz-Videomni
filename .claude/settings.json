@@ -76,7 +76,9 @@
       "Bash(./.venv/Scripts/python.exe -m py_compile vendor/LTX-Desktop-LOW-VRAM/backend/_ltx_worker.py services/ltx_runner.py services/low_vram.py config.py)",
       "Bash(git check-ignore *)",
       "Bash(echo \"exit=$?\")",
-      "Bash(git --no-pager diff -- config.py services/low_vram.py services/ltx_runner.py)"
+      "Bash(git --no-pager diff -- config.py services/low_vram.py services/ltx_runner.py)",
+      "Bash(git --no-pager log --oneline -6)",
+      "Bash(git --no-pager diff --stat HEAD -- config.py services/low_vram.py services/ltx_runner.py)"
     ]
   }
 }

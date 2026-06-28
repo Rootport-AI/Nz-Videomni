@@ -208,8 +208,9 @@ bs8 完走ログ（`gpu_mem_bs8.log`＋スパイクのフェーズ print）を w
       フェーズログ突き合わせで 17.7GB 溢れの主因フェーズを特定（analysis-only, 新規実行なし）。
 - [ ] レバー選択（§2.4）: Gemma q4化/層ストリーム（最有力）／VAE tiling／(補助)Q3_K_M。**ユーザー判断待ち**。
 - [ ] バグ#5（遅延ローダ access violation）: footprint 削減で解消するか再確認（メモリ圧迫起因の仮説検証）。
-- [ ] 上記で 16GB 内・共有溢れ無し完走を確認後: フォークエンジンを `services/lowvram/` へ取り込み、
-      `_RealBackend` 差し替え（Phase B）。
+- [x] フォークエンジンの取り込み＋`_RealBackend` 差し替え＝**Phase 5(A) 完了**（§6）。ただし方式は当初想定の
+      `services/lowvram/` への取込みではなく **Approach W＝フォークを常駐サブプロセスワーカー `_ltx_worker.py`
+      で呼ぶ**（venv 分離＋`services` 名前衝突回避）。**残＝真の 16GB 収容（denoise の共有溢れ解消）＝Phase 5(B)＝§6.4／handoff §3c**。
 
 ---
 
@@ -238,7 +239,7 @@ bs8 完走ログ（`gpu_mem_bs8.log`＋スパイクのフェーズ print）を w
 | VAE | 6.3GB | ~0 | 余裕 |
 出力妥当: luma 170.6→175.1 滑らか・**プロンプト追従（赤い車/海岸/夕日）**。
 
-**結論**: 「16GB で LTX-2.3 を動かす」の支配的ボトルネック（Gemma bf16 溢れ）は**解消**。残課題は denoise の shared 3.6GB（block_swap 深度の小課題）のみ。次=Phase 5（`services/lowvram/` 取込み＋`_RealBackend` 差替え、要承認）。計画書 `~/.claude/plans/nifty-beaming-puzzle.md`。
+**結論**: 「16GB で LTX-2.3 を動かす」の支配的ボトルネック（Gemma bf16 溢れ）は**解消**。残課題は denoise の shared ~3.6GB。計画書 `~/.claude/plans/nifty-beaming-puzzle.md`（＝§5＝Phase 4 の計画・歴史的参照）。※その後 **Phase 5(A) を Approach W（常駐サブプロセスワーカー）で実施・実機検証済＝§6**（当初の "`services/lowvram/` へ取込み" 案は不採用）。なお denoise の shared ~3.6GB は「小課題」ではなく、ユーザー目視（384x256 でも溢れ）を踏まえ **真の 16GB fit の中核**として **Phase 5(B)** で扱う（§6.4／handoff §3c）。
 
 ---
 

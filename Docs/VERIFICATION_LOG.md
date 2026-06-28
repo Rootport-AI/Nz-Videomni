@@ -239,3 +239,41 @@ bs8 完走ログ（`gpu_mem_bs8.log`＋スパイクのフェーズ print）を w
 出力妥当: luma 170.6→175.1 滑らか・**プロンプト追従（赤い車/海岸/夕日）**。
 
 **結論**: 「16GB で LTX-2.3 を動かす」の支配的ボトルネック（Gemma bf16 溢れ）は**解消**。残課題は denoise の shared 3.6GB（block_swap 深度の小課題）のみ。次=Phase 5（`services/lowvram/` 取込み＋`_RealBackend` 差替え、要承認）。計画書 `~/.claude/plans/nifty-beaming-puzzle.md`。
+
+---
+
+## 6. Phase 5(A) 配線・実機検証 — 凍結API が実エンジンで動いた (Approach W, 2026-06-28)
+
+§5 の実証済みエンジンを、我々の**凍結 REST API** から実際に配信できるようにした（"配線 first"）。凍結境界は不変のまま、`services/ltx_runner.py` の `_RealBackend`（従来は公式 `DistilledPipeline` 直叩き＝本機で native crash する死に筋）を実体化。計画書 `~/.claude/plans/a-witty-kazoo.md`。
+
+### 6.1 アーキテクチャ＝Approach W（常駐サブプロセスワーカー）＋採用理由
+- **構成**: `_RealBackend` は、フォーク `vendor/LTX-Desktop-LOW-VRAM/backend/_ltx_worker.py` を**フォーク env** で**常駐プロセス**として起動する。worker はモデルを**1度だけ**構築し、以後ジョブを JSON-lines プロトコル（行は `@@LTX@@` でフレーミング）で受け付ける。エンジンが `output.mp4` を共有 output dir へ直接書く。**app `.venv` は torch/engine を一切 import しない**。
+- **なぜ Approach W か**（旧ハンドオフの「`services/lowvram/` へコピー」案でも in-process 案でもなく）:
+  - エンジンは torch＋ltx_core@`00dc53d`＋gguf を要し、それらは**フォーク env にしか無い**（app `.venv` には torch すら無い）。
+  - さらに app とフォークは**双方ともトップレベルに `services` という同名パッケージ**を持ち、フォーク側 `__init__` が ~18 の torch 依存モジュールを eager import する → **同一インタプリタで共存不可**（import 衝突）。
+  - 二プロセス分離なら衝突を完全に回避でき（**rename 不要**）、**検証済みのフォークコードを無改変で**使える。
+
+### 6.2 ファイル変更（凍結境界は不変）
+- **`services/ltx_runner.py`**: `_RealBackend` を作り替え（公式 DistilledPipeline → 常駐 worker spawn＋JSON-lines プロトコル）。`_real_available()` も変更＝**ltx_pipelines/torch を import しない**。代わりに `fork_python`＋worker スクリプト＋モデルパス5個の存在のみをチェック。
+- **新規 `vendor/LTX-Desktop-LOW-VRAM/backend/_ltx_worker.py`**: モデルを1度構築して常駐し、ジョブを使い回す worker 本体。
+- **`config.py`**: `model.{gguf_transformer_path, gguf_gemma_path, fork_backend_dir, fork_python, gguf_per_layer_quant}` ＋ `vram.{vae_spatial_tile_size, vae_temporal_tile_size}` を追加。
+- **`services/low_vram.py`**: 新ノブをマッピング。`status_block()`/`metadata_block()` のキー形は**凍結のまま**（新しい内部フィールドが GET /status 契約へ漏れないよう、明示的な **7-key タプル**へ射影）。
+- **凍結境界 intact**: `pipeline_manager.py` / `api/models.py` / `main.py` / `run.ps1` / `tests/` / `_MockBackend` / `LTXRunner` public / `GenerationOutcome` / `ProgressCallback` は**すべて不変**。**mock pytest は緑のまま（13 passed）**。
+
+### 6.3 実機検証（実 `LTXRunner.generate` 経路, 16GB GPU でサブエージェントが実行）
+| 検証 | 結果 | dims/frames | wall | backend / mode |
+|---|---|---|---|---|
+| T2V 384x256/9 | **PASS** | h264 384x256 9f | **~207s**（初回 worker spawn＋モデルロード込み） | `ltx-distilled` / t2v |
+| 最小 I2V 384x256/9 | **PASS** | h264 384x256 9f | **~214s** | `ltx-distilled` / i2v |
+
+- **常駐ワーカー再利用を実証**: worker ログに `PIPELINE_CREATED_OK` が**ちょうど1回**、`GENERATED_OK` が**2回**＝モデルは1度だけロードし両ジョブを使い回した。
+- **OOM リカバリ経路（コード確認で確定）**: worker エラーに "out of memory" を含む場合、`pipeline_manager._is_oom` → `_cleanup_after_error()` → `runner.unload()`（worker を kill）→ 次ジョブで fresh に再ロード。
+
+### 6.4 VRAM の正確な状況（訂正）
+**★ "16GB に収まった" とは書かないこと。** 重要な訂正:
+- worker が報告する `peak_vram_mb`＝`torch.cuda.max_memory_allocated` は **16913（T2V）/ 17989（I2V）MB**。**この指標は dedicated（専用VRAM）と WDDM shared（共有メモリ）を区別できず、したがって shared への溢れを検知できない。**
+- **ユーザーが Windows タスクマネージャで目視確認**: **384x256 でも、denoise ステージで相当量のデータが SHARED GPU メモリへ溢れる**（WDDM が system RAM へページング）。これは §5 の "denoise shared ~3.6GB @bs8" と整合する既知挙動。**ハード OOM しないのは WDDM が溢れ分を system RAM へ逃がすからで（＝遅さの源）、"真の 16GB fit" はまだ未達。**
+- 溢れの検知には perf-counter の **"Shared Usage" サンプリング**が要る（§2.2／§5）。`max_memory_allocated` だけでは見逃す。
+- **残作業の再フレーム（ユーザー方針）**: 「真に 16GB に収める」＝この denoise-stage の shared 溢れを解消することであり、**Phase 5(B) スケールアップ（1280×768 → crop 720p）と一つの同じ仕事**。フォーク（`block_swap_service.py` 等）と ComfyUI カスタムノード/ワークフローが持つ denoise-stage の VRAM 技法（より深い block_swap 深度 bs4/bs2、VAE/attention タイリング、解像度依存の sequential/streaming）を**我々の backend はまだ反映していない**。これらスケールアップ技法を適用すれば、**現状の 384x256 の shared 溢れも一緒に解消**する見込み。Phase 5(B) はこれら実証済み denoise-stage 技法をフォーク／ComfyUI-GGUF から**調査・複製**することから始める。
+
+**次=Phase 5(B)**（真の 16GB fit＝denoise shared 溢れ解消＝1280×768 スケールアップ）。計画書 `~/.claude/plans/a-witty-kazoo.md`、引継ぎ [NEXT_SESSION_HANDOFF.md](NEXT_SESSION_HANDOFF.md) §3c/§4。

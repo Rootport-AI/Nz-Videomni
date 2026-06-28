@@ -28,6 +28,7 @@ model:
   spatial_upsampler_path: "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
   gemma_root: "./models/gemma-3-12b-it-qat"
   quantization: "fp8-cast"         # fp8-cast | none
+  backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
 
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。
@@ -48,29 +49,30 @@ vram:
   # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。
   allow_disable_low_vram: true
 
+# 生成サイズ(width/height)は必ず64の倍数(two-stage distilled)。最終表示サイズは crop_output で。
 generation_presets:
   smoke_test:
     width: 384
-    height: 224
+    height: 256
     crop_output: null
     num_frames: 17
   phase1_default:
     width: 512
-    height: 288
+    height: 320
     crop_output: null
     num_frames: 49
   phase1_target:
     width: 960
-    height: 544
+    height: 576
     crop_output:
       width: 960
       height: 540
     num_frames: 121
 
 generation_defaults:
-  # Gradio/API の初期値。まず16GBで通しやすい軽量設定にする。
+  # Gradio/API の初期値。まず16GBで通しやすい軽量設定にする。width/height は64の倍数。
   width: 512
-  height: 288
+  height: 320
   crop_output: null
   num_frames: 49
   frame_rate: 24.0

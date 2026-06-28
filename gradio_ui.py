@@ -18,11 +18,11 @@ from pathlib import Path
 import gradio as gr
 import httpx
 
-# Presets (spec 11 generation_presets)
+# Presets (spec 11 generation_presets). width/height は64の倍数(two-stage distilled)。
 PRESETS: dict[str, dict] = {
-    "smoke_test": {"width": 384, "height": 224, "num_frames": 17, "crop_w": 0, "crop_h": 0},
-    "phase1_default": {"width": 512, "height": 288, "num_frames": 49, "crop_w": 0, "crop_h": 0},
-    "phase1_target": {"width": 960, "height": 544, "num_frames": 121, "crop_w": 960, "crop_h": 540},
+    "smoke_test": {"width": 384, "height": 256, "num_frames": 17, "crop_w": 0, "crop_h": 0},
+    "phase1_default": {"width": 512, "height": 320, "num_frames": 49, "crop_w": 0, "crop_h": 0},
+    "phase1_target": {"width": 960, "height": 576, "num_frames": 121, "crop_w": 960, "crop_h": 540},
 }
 
 
@@ -147,8 +147,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 strength = gr.Slider(0.0, 1.0, value=0.8, step=0.05, label="image strength")
                 preset = gr.Dropdown(list(PRESETS.keys()), value="phase1_default", label="preset")
                 with gr.Row():
-                    width = gr.Number(value=512, label="width (×32)", precision=0)
-                    height = gr.Number(value=288, label="height (×32)", precision=0)
+                    width = gr.Number(value=512, label="width (×64)", precision=0)
+                    height = gr.Number(value=320, label="height (×64)", precision=0)
                 with gr.Row():
                     crop_w = gr.Number(value=0, label="crop width (0=none)", precision=0)
                     crop_h = gr.Number(value=0, label="crop height (0=none)", precision=0)

@@ -30,6 +30,7 @@ def _make_args(config_path: str) -> argparse.Namespace:
 def client(tmp_path):
     cfg = {
         "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {"backend": "mock"},  # deterministic: tests never hit the real pipeline
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
     }

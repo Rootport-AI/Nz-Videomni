@@ -39,7 +39,7 @@ def test_t2v_smoke_generation(client):
         "prompt": "A red ball rolling on a white floor",
         "negative_prompt": "blurry, low quality",
         "width": 384,
-        "height": 224,
+        "height": 256,
         "num_frames": 17,
         "frame_rate": 24.0,
         "num_inference_steps": 8,
@@ -82,7 +82,7 @@ def test_i2v_smoke_generation(client, png_bytes):
         "prompt": "The scene slowly comes alive, subtle camera movement",
         "negative_prompt": "blurry",
         "width": 384,
-        "height": 224,
+        "height": 256,
         "num_frames": 17,
         "frame_rate": 24.0,
         "num_inference_steps": 8,
@@ -109,7 +109,7 @@ def test_generate_with_unknown_image_404(client):
     payload = {
         "prompt": "x",
         "width": 384,
-        "height": 224,
+        "height": 256,
         "num_frames": 17,
         "num_inference_steps": 8,
         "guidance_scale": 1.0,
@@ -126,13 +126,13 @@ def test_job_busy_returns_409(client):
     from api.models import GenerateRequest
 
     ctx = client.app_context
-    active = GenerateRequest(prompt="busy", width=384, height=224, num_frames=17)
+    active = GenerateRequest(prompt="busy", width=384, height=256, num_frames=17)
     ctx.job_store.create(active)  # status defaults to queued -> active
 
     payload = {
         "prompt": "second",
         "width": 384,
-        "height": 224,
+        "height": 256,
         "num_frames": 17,
         "num_inference_steps": 8,
         "guidance_scale": 1.0,

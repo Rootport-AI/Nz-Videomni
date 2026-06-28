@@ -90,6 +90,37 @@ def encode_frames_to_mp4(
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def crop_mp4(input_path: Path, output_path: Path, width: int, height: int) -> Path:
+    """Center-crop an existing MP4 to ``width`` x ``height`` via ffmpeg.
+
+    Used by the real LTX backend: the pipeline encodes at the (multiple-of-64)
+    generation size, then this re-encodes a centered crop to the requested final
+    display size. Reuses the same crop filter as :func:`encode_frames_to_mp4`.
+    Returns ``output_path``.
+    """
+    exe = ffmpeg_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    vf = f"crop={width}:{height}:(in_w-{width})/2:(in_h-{height})/2"
+    cmd = [
+        exe,
+        "-y",
+        "-i",
+        str(input_path),
+        "-vf",
+        vf,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffmpeg crop failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+    return output_path
+
+
 def probe_resolution(path: Path) -> tuple[int, int] | None:
     """Return (width, height) of the first video stream, via ffprobe if present."""
     exe = shutil.which("ffprobe")

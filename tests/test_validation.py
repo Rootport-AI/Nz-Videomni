@@ -11,14 +11,22 @@ BASE = {
 }
 
 
-def test_width_not_multiple_of_32(client):
-    r = client.post("/api/v1/generate", json={**BASE, "width": 1080, "height": 544, "num_frames": 121})
+def test_width_not_multiple_of_64(client):
+    # 544 is a multiple of 32 but NOT 64 -> rejected (two-stage distilled needs ÷64).
+    r = client.post("/api/v1/generate", json={**BASE, "width": 544, "height": 512, "num_frames": 121})
     assert r.status_code == 422
-    assert "multiple of 32" in r.text
+    assert "multiple of 64" in r.text
+
+
+def test_height_not_multiple_of_64(client):
+    # 288 (the old phase1_default height) is ÷32 but not ÷64 -> rejected.
+    r = client.post("/api/v1/generate", json={**BASE, "width": 512, "height": 288, "num_frames": 49})
+    assert r.status_code == 422
+    assert "multiple of 64" in r.text
 
 
 def test_num_frames_not_8n_plus_1(client):
-    r = client.post("/api/v1/generate", json={**BASE, "width": 960, "height": 544, "num_frames": 120})
+    r = client.post("/api/v1/generate", json={**BASE, "width": 960, "height": 576, "num_frames": 120})
     assert r.status_code == 422
     assert "8n+1" in r.text
 
@@ -29,7 +37,7 @@ def test_too_many_conditioning_images(client):
         json={
             **BASE,
             "width": 512,
-            "height": 288,
+            "height": 320,
             "num_frames": 49,
             "conditioning_images": [
                 {"image_id": "image-a", "frame_idx": 0, "strength": 0.8},
@@ -47,7 +55,7 @@ def test_frame_idx_must_be_zero(client):
         json={
             **BASE,
             "width": 512,
-            "height": 288,
+            "height": 320,
             "num_frames": 49,
             "conditioning_images": [{"image_id": "image-a", "frame_idx": 8, "strength": 0.8}],
         },
@@ -59,7 +67,7 @@ def test_frame_idx_must_be_zero(client):
 def test_distilled_requires_8_steps(client):
     r = client.post(
         "/api/v1/generate",
-        json={**BASE, "width": 512, "height": 288, "num_frames": 49, "num_inference_steps": 20},
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49, "num_inference_steps": 20},
     )
     assert r.status_code == 422
     assert "num_inference_steps=8" in r.text

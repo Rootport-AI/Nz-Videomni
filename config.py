@@ -42,6 +42,7 @@ class ModelConfig(BaseModel):
     spatial_upsampler_path: str | None = None
     gemma_root: str | None = None
     quantization: str = "fp8-cast"  # "fp8-cast" | "none"
+    backend: str = "auto"  # "auto" | "mock" | "real"
 
 
 class VramConfig(BaseModel):

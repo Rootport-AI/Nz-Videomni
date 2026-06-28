@@ -3,6 +3,13 @@
 These are FROZEN as the final-form API for Phase 1 so that future frontends
 (AviUtl2, DaVinci Resolve) and later phases do not break. Do not relax the
 validators here without revisiting the spec.
+
+Resolution note: ``width``/``height`` are the *generation* size and must be a
+multiple of **64** — the two-stage distilled pipeline generates stage-1 at half
+resolution then 2x-upsamples, so the requested size must be divisible by 64
+(``ltx_pipelines`` ``assert_resolution(is_two_stage=True)``). This is a
+deliberate tightening from the earlier 32 rule (the mock never enforced it). Any
+non-64 final display size (e.g. 960x540) is obtained via ``crop_output``.
 """
 
 from __future__ import annotations
@@ -29,9 +36,9 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
     negative_prompt: str = ""
 
-    # 内部生成サイズ。必ず32の倍数。
+    # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
-    height: int = Field(288, ge=128, le=4096)
+    height: int = Field(320, ge=128, le=4096)
 
     # 最終MP4のクロップサイズ。None ならクロップしない。
     crop_output: CropOutput | None = None
@@ -48,10 +55,10 @@ class GenerateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
-        if self.width % 32 != 0:
-            raise ValueError("width must be a multiple of 32")
-        if self.height % 32 != 0:
-            raise ValueError("height must be a multiple of 32")
+        if self.width % 64 != 0:
+            raise ValueError("width must be a multiple of 64")
+        if self.height % 64 != 0:
+            raise ValueError("height must be a multiple of 64")
         if (self.num_frames - 1) % 8 != 0:
             raise ValueError("num_frames must be 8n+1")
         if self.crop_output is not None:

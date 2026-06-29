@@ -1,9 +1,10 @@
 # 次セッション引き継ぎ書 — LTX 2.3 を 16GB で動かす
 
-最終更新: 2026-06-29（Path B＝component-files 実装・Phase 4 実機まで完了／per-job リーク露呈・その診断が次の最優先）/ 想定読者: 次セッションのエージェント
+最終更新: 2026-06-30（**残課題A＝per-job リークを診断確定→修正→6ジョブ実機検証 PASS。フォーク backend を版管理化（commit 済）。次の一手＝音声 Phase 1 実機確認**）/ 想定読者: 次セッションのエージェント
 
 > **このドキュメントが現時点の最新・正本（handoff）です。まず §0 と「★残課題サマリ」を読めば、現状と次の一手が分かる。**
-> 設計判断の根拠と実機検証の全経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**最新＝§9.6（Path B=component-files 実装＋Phase 4 実機：warmup crash 解消／per-job リーク露呈）。次セッションはまず §0 末尾の ▶▶▶ と §9→§9.6 を読め**、
+> **【リポジトリ状態 2026-06-30】** フォーク `vendor/LTX-Desktop-LOW-VRAM/backend/` の **.py ソース 169ファイルが版管理対象になった**（commit `4ea5c4b` "Vender"、origin/main 同期済）。`.gitignore` を negation ブロックに変更し backend ソースのみ追跡（`.venv`/weights/フロントエンド/`uv.lock` は除外維持）。フォーク自身の `.git` は **`.git_fork_disabled` にリネームして無効化**（境界を外しファイル追跡を可能にするため・42MB・削除可）。出典は `vendor/LTX-Desktop-LOW-VRAM/backend/VENDOR_NOTICE.md`。**＝以後エンジン改変は通常の git で commit できる**（以前は vendor/ 丸ごと ignore でエンジン全体が版管理外だった）。
+> 設計判断の根拠と実機検証の全経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**最新＝§9.7（per-job リーク診断確定＋修正＋検証 PASS＝残課題A 完全解決）。次セッションはまず §0 末尾の ▶▶▶ と §9.7 を読め**、§9.6＝Path B component-files、
 > §6＝Phase 5(A) 配線、§5＝Gemma GGUF）が一次情報。実装計画は `~/.claude/plans/frolicking-tumbling-hennessy.md`。
 > 要約は memory `[[ltx-bridge-project]]` / `[[ltx-desktop-lowvram-fork]]`。⚠️ 古い記述が残るドキュメント（後述 §6）に惑わされないこと。
 
@@ -40,8 +41,10 @@
 Phase 5(B)＝**denoise 工程の VRAM 低減は達成・実装済**（empty_cache fix／§7.5・§7.8、shared 計測で検証）。
 以下がオープン項目。優先度はユーザー判断。
 
-### 【残課題A】worker 再利用の native crash（production 信頼性ブロッカー・最重要候補）
+### 【残課題A】worker 再利用の native crash → ✅ 解決済（2026-06-30・VERIFICATION_LOG §9.7）
 
+> **✅ 【2026-06-30 解決】残課題A は完全解決した。** 真因＝`BlockSwapService._installed_transformers` が毎 generate の transformer を保持し続け解放しない（registry HIT・キャッシュ非汚染を計装で実証、仮説b/c は棄却）。修正2点（フォーク製品コード・凍結境界外・版管理済）＝① `block_swap_service.py install()` で append 前に `_installed_transformers.clear()`（keep-latest）② `_ltx_worker.py _do_generate()` の `_emit("done")` 直後に `gc.collect(); torch.cuda.empty_cache()`。6ジョブ実機検証 PASS（旧 job5 crash 点突破・`installed_transformers` 1 で一定・床/denoise/commit 平坦・出力 mp4 が修正前と SHA256 バイト一致・mock 13 緑）。詳細＝VERIFICATION_LOG §9.7。**以下（旧）は診断確定前の歴史的記録。**
+>
 > **【2026-06-29 全面更新・正本＝VERIFICATION_LOG §8】** 以下の「真因＝mmap 反復ロードの native 破損」「修正方向＝非mmap」は
 > **誤診で棄却済み**。実機計測（§8.8）で **真因＝Windows commit（仮想メモリ）枯渇**と確定した。要旨：
 > - distilled は各 generate で **全 submodel（Gemma/VAE/transformer）を毎回ディスクから再構築**。Windows では safetensors の

@@ -109,10 +109,16 @@ def crop_mp4(input_path: Path, output_path: Path, width: int, height: int) -> Pa
         str(input_path),
         "-vf",
         vf,
+        "-map",
+        "0:v",
+        "-map",
+        "0:a?",
         "-c:v",
         "libx264",
         "-pix_fmt",
         "yuv420p",
+        "-c:a",
+        "copy",
         str(output_path),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)

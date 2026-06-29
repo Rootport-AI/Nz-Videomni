@@ -460,6 +460,26 @@ class _RealBackend:
         gguf_transformer_path = self._require_path(model.gguf_transformer_path, "gguf_transformer_path")
         gguf_gemma_path = self._require_path(model.gguf_gemma_path, "gguf_gemma_path")
 
+        # Phase 1 component-file re-sourcing. Resolve the 3 standalone paths to
+        # project-rooted absolutes (text projection is plumbed but NOT wired —
+        # Phase 2). Validated only when the gate is on so a missing component file
+        # cannot break the monolith path.
+        use_component_files = bool(self.config.vram.use_component_files)
+        if use_component_files:
+            component_video_vae_path = self._require_path(
+                model.component_video_vae_path, "component_video_vae_path"
+            )
+            component_audio_vae_path = self._require_path(
+                model.component_audio_vae_path, "component_audio_vae_path"
+            )
+            component_text_projection_path = self._require_path(
+                model.component_text_projection_path, "component_text_projection_path"
+            )
+        else:
+            component_video_vae_path = str(self.config._abs(model.component_video_vae_path))
+            component_audio_vae_path = str(self.config._abs(model.component_audio_vae_path))
+            component_text_projection_path = str(self.config._abs(model.component_text_projection_path))
+
         # Child env: inherit, force the 16GB-load-bearing CUDA + compile knobs,
         # unbuffered IO, and CLEAR PYTHONPATH so the app's top-level `services`
         # package can't shadow the fork's same-named package.
@@ -468,6 +488,8 @@ class _RealBackend:
         env["TORCH_COMPILE_DISABLE"] = "1"
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
+        # Phase 1 gate: the worker reads LTX_COMPONENT_FILES (mirrors LTX_KEEP_RESIDENT).
+        env["LTX_COMPONENT_FILES"] = "1" if use_component_files else "0"
 
         # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
         # the worker emits lots of tqdm/log output while we block on stdout).
@@ -516,6 +538,10 @@ class _RealBackend:
                     "upsampler_path": upsampler_path,
                     "gguf_transformer_path": gguf_transformer_path,
                     "gguf_gemma_path": gguf_gemma_path,
+                    # Phase 1 component-file paths (gate via LTX_COMPONENT_FILES env).
+                    "component_video_vae_path": component_video_vae_path,
+                    "component_audio_vae_path": component_audio_vae_path,
+                    "component_text_projection_path": component_text_projection_path,
                     **knobs,
                 }
             )

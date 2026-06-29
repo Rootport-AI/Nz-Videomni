@@ -278,3 +278,343 @@ bs8 完走ログ（`gpu_mem_bs8.log`＋スパイクのフェーズ print）を w
 - **残作業の再フレーム（ユーザー方針）**: 「真に 16GB に収める」＝この denoise-stage の shared 溢れを解消することであり、**Phase 5(B) スケールアップ（1280×768 → crop 720p）と一つの同じ仕事**。フォーク（`block_swap_service.py` 等）と ComfyUI カスタムノード/ワークフローが持つ denoise-stage の VRAM 技法（より深い block_swap 深度 bs4/bs2、VAE/attention タイリング、解像度依存の sequential/streaming）を**我々の backend はまだ反映していない**。これらスケールアップ技法を適用すれば、**現状の 384x256 の shared 溢れも一緒に解消**する見込み。Phase 5(B) はこれら実証済み denoise-stage 技法をフォーク／ComfyUI-GGUF から**調査・複製**することから始める。
 
 **次=Phase 5(B)**（真の 16GB fit＝denoise shared 溢れ解消＝1280×768 スケールアップ）。計画書 `~/.claude/plans/a-witty-kazoo.md`、引継ぎ [NEXT_SESSION_HANDOFF.md](NEXT_SESSION_HANDOFF.md) §3c/§4。
+
+---
+
+## 7. Phase 5(B) — 384x256 denoise 溢れの真因特定と修正確定（調査→診断→実測, 2026-06-28〜29）
+
+§6.4 の「denoise が 384x256 でも shared へ ~3.6GB 溢れる」を、**調査（ソース）→診断（フェーズ別4指標）→対策の実測確認**の順で解決した（計画書 `~/.claude/plans/frolicking-tumbling-hennessy.md`）。**実コード・凍結層は不変**、全計測は throwaway スパイク（`outputs/phase5b_diag/`）＋ `_gpu_mem_sampler.ps1`。
+
+### 7.1 ステップ1＝先行事例調査の結論（当初4候補の希望判定）
+- **384x256 では当初候補はほぼ無効**：~190 トークンで attention/FFN 活性は単桁〜数十MB＝3.6GB を活性で説明不能。
+  - FFN チャンキング／attention tiling は**高解像度（スケールアップ）専用のレバー**。attention tiling は worker 未配線（`attention_tile_size` 未送）。VAE tiling は denoise 無関係。block-swap 深度は ~0.8GB の小利得のみ。
+  - FFN チャンキング複製元・変換を特定（RandomInternetPreson `tensor_parallel_v3.py` の `ChunkedFFN.forward`／`num_chunks=8`／`torch.cat(dim=1)`、フック点 `ltx_core/.../feed_forward.py:FeedForward.forward`）＝スケールアップ局面で利用。
+- ComfyUI #11726 の「活性支配」は **1080p アップスケール段**の OOM＝384x256 とは別レジーム。
+
+### 7.2 ステップ2 診断 A＝フェーズ別4指標（bs8・baseline, expandable_segments:True）
+torch `allocated/reserved/max_alloc`（スパイク内）＋ perf-counter `dedicated/shared`（サンプラ）を境界ごとに突き合わせ:
+
+| フェーズ | alloc | reserved | max_alloc | perf_ded | perf_shr |
+|---|---|---|---|---|---|
+| idle | 0 | 2 | 0 | 590 | 693 |
+| Gemma encode+cleanup 後 | 21.1 | **104** | 15102 | 15867 | — |
+| denoise stage1 前 | 1448.8 | **17452** | 16913 | 15952 | 3788 |
+| denoise stage1 後 | 1705.6 | **18732** | 5159 | — | 3848 |
+| 全体ピーク | — | — | — | 15988 | **3969** |
+
+**判定**：
+- **H1（Gemma 未解放）棄却**：encode+cleanup 後 alloc=21MB/reserved=104MB＝torch は Gemma を完全解放。
+- **H3（実常駐）棄却**：denoise の live は alloc ~1.4–1.7GB、stage1 の max_alloc も 5.2GB のみ。
+- **H2 確定（Windows 固有）**：denoise の live 5.2GB に対し **reserved 18.7GB（3.6倍）＝アロケータ断片化/居座り**。
+  起点は **Gemma 解放後（reserved 104）→ denoise 前（reserved 17452）の急増＝transformer ロード時**。block-swap が
+  GGUF transformer(16.5GB) を一旦 GPU に丸ごと載せ（peak 16913）→ブロックを CPU 退避するが、**`expandable_segments`
+  が本機 Windows で no-op（`UserWarning: not supported on this platform`）のため空いた ~16GB セグメントがキャッシュに
+  居座り**、16GB カードを超えて WDDM shared へ ~3.8GB 溢れる。
+
+### 7.3 ステップ2 対策スイープ（denoise shared ピークで評価, baseline=3969MB）
+| 構成 | reserved（fix後） | denoise ded ピーク | **denoise shared ピーク** | 生成時間 | 溢れ解消 |
+|---|---|---|---|---|---|
+| baseline | 17452→18732 | 15988 | 3969 | 210.9s | ✗ |
+| `max_split_size_mb:512` | 18732 | 15904 | 3785 | 188.0s | ✗（≈baseline） |
+| `max_split_size_mb:256` | 18732 | 15917 | 3743 | 188.9s | ✗（≈baseline） |
+| `gc_threshold:0.6,max_split:256` | 18732 | 15917 | 3774 | 190.5s | ✗（≈baseline） |
+| `backend:cudaMallocAsync` | 16736 | 15954 | 1805 | 124.6s | △（大幅減・残る） |
+| **EC＝denoise 直前 `empty_cache()`** | **17452→1508** | **6438** | **742（ambient）** | **114.9s** | **✓ 完全消失** |
+| block_swap=4 | 18732 | 15904 | 3869 | 201.4s | ✗（≈baseline） |
+
+- 出力は**全構成バイト単位同一**（43706B, h264 384x256 9f, seed=10 決定論）＝メモリ挙動のみ変化・画は不変。
+- **`max_split`/`gc_threshold` は Windows で無効（死枝）**。**block-swap 深度はレバーではない**（bs4≈baseline＝溢れは断片化で
+  あり常駐重みでない裏付け）。`cudaMallocAsync` は改善するが単体では溢れ残存（任意の補助）。
+- **診断 B の教訓**：当初の `empty_cache()` テストは Gemma 直後（reserved 既に 104）で無効だった＝**置き場所が誤り**。
+  正しくは **transformer ロード後・denoise 直前**。
+- **計測運用の改善（恒久原則化）**：C1 が baseline と同値になった時点で死枝と判断・停止すべきだった
+  （max_split で約15分浪費）→ サブエージェントに「異常値/baseline 一致で即報告・続行判断」プロトコルを課す（memory `[[delegation-early-stop-protocol]]`）。
+
+### 7.4 結論と確定した対策
+- **真の対策＝transformer ロード後・最初の denoise 直前に `gc.collect(); torch.cuda.empty_cache()` を1回**。
+  reserved 17452→1508MB に即落ち（alloc 1448 不変＝解放分は空セグメント）→ denoise が dedicated **6438MB に収容**、
+  shared **742MB＝ambient**、**生成 210.9→114.9s（−46%）**。**＝denoise 工程の持続的 shared 溢れ（激遅化の主因）を解消（shared も計測確認）。※「全工程 16GB 内」ではない＝Gemma encode/transformer load は依然 ~2–2.5GB を shared へ一時溢れ（§7.9）**。
+- **実装先（次＝ステップ3, 要承認）**：`create()` は遅延ロード＝transformer ロードは初回 `generate()` 内で起きるため、
+  real worker `vendor/.../backend/_ltx_worker.py` の bootstrap monkeypatch で `ltx_pipelines.distilled.denoise_audio_video`
+  をラップし初回 denoise 前に `empty_cache()` を入れるのが凍結境界を侵さずクリーン（worker は既に同種 monkeypatch 流儀）。
+  併用候補：子 env に `PYTORCH_CUDA_ALLOC_CONF=backend:cudaMallocAsync`（任意）。`max_split`/block-swap 深度は不採用。
+- **スケールアップへの留保**：本fixは「居座り解放」であり高解像度でも有効だが、**1280×768 では denoise の活性自体が
+  増える**ため、本fix単体では不足し §7.1 の活性軸技法（attention tiling／FFN チャンキング）が別途必要になる見込み。
+- **アーティファクト**：`outputs/phase5b_diag/`（`diag_sweep.py`、`phase_timeline_{C1..C4,EC,BS4}.json`、
+  `gpu_mem_{...}.log`、`timing_{...}.txt`、`diag_{...}.mp4`）。crash なし。
+
+### 7.5 ステップ3 実装＋実機検証（empty_cache を worker へ実装, 2026-06-29）
+- **実装**：`_ltx_worker.py` に `import gc` ＋ `ltx_pipelines.distilled.denoise_audio_video` のラッパ
+  （各 denoise 直前に `gc.collect(); torch.cuda.empty_cache()`）。**凍結境界・status/metadata 不変・mock pytest 13 passed**。
+- **実機検証（凍結 `LTXRunner.generate` 経路, perf-counter）**：
+  - **T2V 384x256/9 PASS**：denoise shared **~997MB(ambient)**・dedicated 6446MB・wall 121s ＝ EC スパイク再現。ffprobe h264 384x256 9f。
+  - **I2V 384x256/9（fresh worker）PASS**：denoise shared **~963–988MB(ambient)**・dedicated ~6.1–6.8GB・wall 118.9s。ffprobe OK。
+- **評価＝採用**：denoise 溢れ解消・−42〜46%・crash 中立。**384x256 の denoise 持続溢れ解消・実装済み（shared 検証済。ただし load/encode の一時 shared 溢れ ~2–2.5GB は残＝§7.9）**。
+
+### 7.6 ★別件で判明した production ブロッカー：worker 再利用（2ジョブ目）の native crash（bug#5 系・Phase 5B 起因ではない）
+- **症状**：常駐 worker の **2ジョブ目以降の generate 冒頭で access violation（exit 139）**。最初の実機検証で reused worker の T2V→I2V の I2V が無言で死亡。
+- **対照実験（`reuse_loop.py`：1 パイプラインを再利用し `T2V,I2V,I2V,T2V,I2V` をループ・fix 有/無）で empty_cache を完全 exonerate**：
+  fix 有(2a)・無(2b) **両方が job2(I2V) の同一命令で crash**（job1 は両方 pass）。→ empty_cache は原因でも悪化要因でもない。
+- **真因（faulthandler C-level traceback）＝per-job の Gemma テキストエンコーダ再ロード**：
+  `gemma_gguf_quant_service.py:286`（base Gemma safetensors を CPU 再ロード）→ `sft_loader.py:36` の
+  `f.get_tensor(name).to(device, non_blocking=True, copy=False)` → torch storage `__getitem__` で access violation。
+  **§1.1 バグ#5（mmap-backed safetensors への CUDA 後 `non_blocking=True,copy=False`）と同一系**。distilled は各 generate で
+  text encoder を `del→rebuild` するため、**再利用 worker は2ジョブ目で必ず Gemma を再 mmap ロード→このバグを踏む**。
+  Phase 5A の「reused T2V→I2V 両 PASS」は非決定的な幸運（本対照では baseline も job2 で crash）。**OOM ではない**（crash 時 shared ambient）。
+- **位置づけ**：Phase 5(B)（denoise VRAM）とは**独立の別タスク**だが、Approach W（常駐 worker・多ジョブ）の **production 信頼性ブロッカー**。
+- **修正方向（未着手・要承認）**：(i) base Gemma state_dict をジョブ間でキャッシュ/常駐し再 mmap を避ける、または
+  (ii) §1.1 バグ#5 で設計済の「`non_blocking`/`copy=False` 除去の可搬 monkeypatch」を
+  **`gemma_gguf_quant_service` の base ローダ経路にも**適用（バグ#5 は「🔄適用中」のままで本経路は未カバーだった疑い）。
+- アーティファクト：`outputs/phase5b_diag/reuse_loop.py`、`gpu_mem_reuse_{A2a,B2b}.log`、`reuse_{A2a,B2b}.stderr.log`（faulthandler 全文）。
+
+### 7.7 ステップ4 試行＝失敗：sft_loader safe-patch では再利用 crash は消えない（真因はより深い, 2026-06-29）
+既存 `sft_loader_safe_patch`（`SafetensorsStateDictLoader.load` を CPU 先読み＋`copy=True` 化）を `_ltx_worker.py` に
+配線（`apply_sft_loader_safe_patch()`・mock pytest 13 passed・empty_cache fix 併存・worker ログに install 確認）。
+だが **5ジョブ reuse テストは job1 で crash・未完走＝FAIL**。
+- **faulthandler（patch 適用下でも crash）**：fault は patch 後の `.to(copy=True)` ではなく、**上流の
+  `f.get_tensor(name)` が mmap を materialize する `torch/storage.py:470 __getitem__` で発生**。patch は転送 semantics を
+  変えるだけで **mmap read 自体の fault を防げない**。Gemma base load は元々 `device="cpu"`（`gemma_gguf_quant_service.py:286`）で
+  `non_blocking` は既に no-op、patch の実効デルタ（copy=True）はこの crash に無関係。
+- **crash site は複数・非決定的**：safetensors mmap read（`sft_loader`）だけでなく **GGUF dequant
+  `gguf_quant_service.py:402 _dequant_q6_k`** でも発生。job index も 1/2/3 とばらつく（バグ#5 access-violation 系）。
+  **共通項＝per-job の Gemma テキストエンコーダ全再構築**（`distilled.py:96 __call__`→`patched_text_encoder`→
+  base safetensors 再 mmap＋GGUF Gemma 再 dequant、毎 `_run_inference`）。この反復重ロードが断続的に native 破損。
+- **未試行のローダ修正(b)** `safetensors.torch.load_file(..., backend="pread")`（mmap 不使用）は mmap read site には
+  効く見込みだが **GGUF dequant site はカバーしない**ため単独では不十分。
+- **真の修正方向（再評価・要研究＋計画）＝per-job 再構築をやめ Gemma をジョブ間キャッシュ**（両 crash site を同時除去）。
+  ただし **VRAM 常駐は 16GB fit と非両立**なので、ロード済み Gemma を **CPU RAM にキャッシュ**し encode 時のみ GPU へ、の形が要る。
+- **empty_cache denoise fix は影響なし＝維持**（reuse でも denoise 到達時は毎回 reserved 17452→1508 等・shared ambient 再確認）。
+- worker の safe-patch 配線は **fix にならないため撤去済み（ユーザー決定 2026-06-29）**。worker は検証済み empty_cache fix のみ
+  保持（`import gc`＋denoise monkeypatch 健在、mock pytest 13 passed）。`services/sft_loader_safe_patch.py` 自体は温存
+  （将来の本修正で再利用可）。
+- アーティファクト：`reuse_*.stderr.log`（faulthandler 全文 3 site）、`gpu_mem_step4_reuse.log`。
+
+### 7.8 Phase 5(B) クローズ（2026-06-29）
+- **Phase 5(B)＝denoise VRAM 低減：完了**。成果＝`_ltx_worker.py` の pre-denoise `empty_cache` monkeypatch（§7.5）。
+  384x256 で denoise shared 溢れ消失（3969→742MB ambient）・生成 −46%・T2V/初回I2V 実機検証・mock pytest 13 passed・
+  凍結境界不変。384x256 で **denoise 工程の持続的 shared 溢れを解消**（shared 検証済）。**※全工程 16GB 内ではない＝load/encode の一時溢れ ~2–2.5GB は残（§7.9）**。
+- **次セッションの2大オープン項目**：(1) **再利用 crash の本修正**＝per-job の Gemma テキストエンコーダ全再構築を廃し
+  **ジョブ間 CPU キャッシュ**（§7.6/§7.7、両 crash site 除去・VRAM 非両立に注意、要 research＋計画）。(2) **スケールアップ
+  1280×768→720p クロップ**（活性軸＝attention tiling 配線＋FFN チャンキング移植、§7.1）。empty_cache fix は高解像度でも有効。
+
+### 7.9 ★訂正：fit は「denoise 工程」限定。load/encode は依然 shared へ ~2–2.5GB 一時溢れ（2026-06-29 ユーザー指摘で精査）
+EC run を perf-counter `shared` とフェーズ境界で時間相関（`gpu_mem_EC.log`＋`phase_timeline_EC.json`、`empty_cache` fix 適用下）:
+| フェーズ | dedicated_max (MB) | shared_max (MB) |
+|---|---|---|
+| Gemma encode | 15874 | 2039 |
+| transformer load | 15948 | **2457（全体ピーク）** |
+| **denoise stage1** | 6272 | **742（ambient）** |
+| **denoise stage2** | 6438 | **741（ambient）** |
+| VAE/done | 6437 | 740 |
+
+- **検証は dedicated 単独ではなく shared も記録していた**（ゆえに denoise=ambient と言える）＝計測は片手落ちではない。
+- だが **empty_cache fix が解消したのは denoise 工程の持続的 shared 溢れ（baseline 3969→742MB）のみ**。
+  **Gemma encode（shared ~2.0GB）と transformer load（shared ~2.5GB）の各フェーズは依然 dedicated ~15.9GB＋shared
+  ~2–2.5GB＝16GB を一時超過**（ユーザーのタスクマネージャ目視と一致）。global shared ピークは baseline 3969→2457 に
+  下がったが **ゼロではない**。
+- よって **「真の16GB fit（全工程で共有ゼロ）」は未達**。本 fix の正しい主張＝**denoise 工程（生成時間の大半・激遅化の
+  主因）の持続的溢れを解消し、denoise を ~6.4GB dedicated／shared ambient に収めた**（−46%）。
+- **残課題（load/encode の一時 spill）**：transformer は block-swap が**一旦 full-GPU ロード(peak max_alloc 16913)→退避**
+  するため load 時に 16GB 超過（直接 CPU ロードにすれば回避可）。Gemma encode は ~15.1GB で本質的にタイト（§5）。
+  いずれも「再利用 crash 修正（Gemma ロード経路の作り替え）」「スケールアップ」と併せて扱うのが自然。
+
+---
+
+## 8. 残課題A（worker 再利用 crash）の本修正トライ → ★真因の再フレーム（2026-06-29 後半）
+
+§7.6/§7.7 の「再利用 crash（exit-139）」の本修正に着手。2つの修正案を実機検証で**いずれも棄却**し、その過程で **crash の真因理解が「safetensors mmap ハンドルのバグ」から「Windows WDDM の near-full-VRAM/commit 圧迫由来の native 0xC0000005」へ大きく転換**した。**この §8 が残課題A に関する最新理解の正本**（§1.1 バグ#5・§7.6/§7.7 の「mmap が真因」という旧フレームを**上書き**する）。実コード・凍結層は不変、検証は throwaway スパイク（`outputs/phase5b_diag/`）。計測は `_gpu_mem_sampler.ps1`（dedicated/shared）＋ reuse_loop の `@@JOB@@`/marks。
+
+### 8.1 試行1＝完全 non-mmap（whole-file `load(bytes)`）→ 棄却
+- ユーザー方針「safetensors と GGUF dequant の両方を完全 non-mmap 化」に沿い、ComfyUI `--disable-mmap` 流の
+  **ファイル全体を RAM へ読み `safetensors.torch.load(bytes)`** を `sft_loader_safe_patch.py` に実装（`safe_open`/`get_tensor` 不使用）。
+  GGUF read も `np.array(tensor.data, copy=True)` で owned 化。
+- **実機 reuse_loop で FAIL（job1 で死亡）**。真因＝**同じ `SafetensorsStateDictLoader.load` が 46GB の distilled
+  チェックポイント（VAE/video_encoder）も読む共有ローダ**で、whole-file 読みが (a) **46GB を Python bytes 化→MemoryError**、
+  (b) `load(bytes)` がバッファを zero-copy alias→`del data` で **pyo3 panic「deallocated bytearray … exported buffers」**。
+  → **whole-file 非mmap はこのコードベースと構造的に非両立**。撤去し known-good へ復帰。
+- 付随確定：installed **safetensors は 0.7.0**（`backend="pread"` は 0.8.0 以降＝**当該方針の前提が誤り**）。
+
+### 8.2 試行2＝Gemma ジョブ間 CPU キャッシュ（Approach A）→ 棄却・むしろ逆効果
+- `GemmaGGUFQuantStateDictLoader.load` を worker monkeypatch でラップし、merged Gemma state_dict を **CPU RAM に単一キャッシュ**
+  （job1=MISS で CPU build→保存、job2+=HIT で disk/dequant skip→per-job `.to(GPU)`）。`services/gemma_sd_cache.py` に
+  importable 化し worker＋reuse_loop（`CACHE=1`）が同一コードを適用。mock pytest 13 passed。
+- **実機 FAIL かつ逆効果**：`CACHE=1` は **job1 で即 crash**（safetensors VAE load `sft_loader.py:36`）。対照の
+  `CACHE=0`(known-good) は **job1・job2 PASS、job3 で crash**（GGUF dequant `gguf_quant_service.py:406 _dequant_q6_k`）。
+  → cache は crash を**早めた**（~12GB の常駐 CPU キャッシュ＋開いた mmap が **committed memory を押し上げた**疑い＝§8.3 機構）。撤去し known-good へ復帰。
+
+### 8.3 ★真因の再フレーム（WEB 調査＋実機データで確定）：mmap バグではなく VRAM/commit 圧迫
+- **crash は非決定的**：site が run ごとに変わる（job1 で safetensors VAE / job3 で GGUF dequant）、job 番号もバラバラ。
+  かつ **GGUF read は既に owned copy（非mmap）なのに `_dequant_q6_k` で落ちる**＝**mmap エイリアスでは説明不能**。
+- **旧フレーム棄却（先行事例で裏取り）**：safetensors **#164 はファイルロック問題で crash ではなく、PR #166 で解決済**。
+  ComfyUI **`--disable-mmap` は 0xC0000005 を直さない**と明示報告（#13220/#10896）。「バグ#5＝mmap ハンドル」は**誤診**。
+- **確定した機構（PROVEN・出典）**：Windows **WDDM** では near-full VRAM での確保/転送が **clean な CUDA OOM ではなく
+  native 0xC0000005** に化ける。pytorch **#178892**（16GB/WDDM、maintainer が **WDDM TDR** を指摘、**「VRAM が変動する
+  小モデルで頻発」＝per-job 再構築 churn と符合**）、ComfyUI **#8298**（PyTorch は使用量の **1.5–1.7倍を commit**し、
+  **物理 RAM が空いていても committed が上限到達で crash**）。crash は **(i) VRAM レール(TDR)** か **(ii) commit 上限枯渇** の
+  どちらか（両者とも同じ 0xC0000005）。
+
+### 8.4 本機環境の実測（proven レバーの突き合わせ）
+| 項目 | 実測 | 判定 |
+|---|---|---|
+| NVIDIA ドライバ | **581.57 / CUDA 13.0**（cu128 要件 ≥570.65） | ✅ 十分。**除外** |
+| ページファイル | C: 17GB(system) ＋ S: Initial 32GB/Max 64GB（計 ~81GB）。**S: PeakUsage 65533＝上限張り付き** | △ 大きいが Initial=32・**過去に commit 逼迫の痕跡** |
+| RAM | 64GB（アイドル free 53GB） | 潤沢 |
+- research の定番 proven fix のうち**ドライバは空振り**、**ページファイルは大きいが commit 逼迫の痕跡あり**（#8298 機構と符合）。
+
+### 8.5 レバー scorecard（先行事例の実証強度・2026-06-29）
+- **PROVEN/cheap**：ドライバ≥570.65（本機✅）、ページファイル拡大（commit 枯渇に効く・要再起動）。
+- **PLAUSIBLE・最高 payoff**：**per-job の全 submodel 再構築をやめ、一度 CPU RAM に載せ GPU へストリーム**（CPU offload）。
+  trigger が「再ロード×圧迫」＋ComfyUI Dynamic VRAM の設計が支持。ただし *この native crash を消した* 直接事例は無し（gap）。
+  ※ Approach A の失敗は「やり方」次第＝commit を増やさない形が必須。
+- **UNVERIFIED**：**load 前 `empty_cache` で 0xC0000005 を防いだ先行事例はゼロ**（OOM/断片化の文脈のみ）。補助どまり。
+- **CONTESTED**：アロケータ（`--disable-cuda-malloc`/native は #9505 で効くが #9084 で逆に crash 誘発／cudaMallocAsync は
+  我々の denoise では spill 減）。load フェーズの勝者は不明＝**本機で実測要**。`expandable_segments` は Windows で no-op。
+
+### 8.6 現在のコード状態（known-good）
+- worker `_ltx_worker.py`：**pre-denoise `empty_cache` monkeypatch のみ**（Phase 5B fix）。gemma cache も sft patch も**未配線**。
+- 温存（dormant）：`services/gemma_sd_cache.py`、`services/sft_loader_safe_patch.py`（現状 non-mmap 版・未配線）。
+- 残す軽微改善：GGUF read の `np.array(..., copy=True)`（無害）。reuse_loop の `CACHE=1`/`SAFE=1` トグル（既定 off）。
+- mock pytest 13 passed・凍結境界不変。
+
+### 8.7 次アクション（要・計測先行）
+- **commit+VRAM 切り分け run**：reuse_loop を回しつつ `\Memory\Committed Bytes`/`Commit Limit` と VRAM dedicated/shared を
+  同時サンプリングし、**crash 瞬間に commit が上限到達しているか**を見て **(i)VRAM レール vs (ii)commit 枯渇** を確定。
+  → commit 枯渇なら**ページファイル拡大**、VRAM レールなら**churn 低減＋アロケータ実測**。empty_cache は機構確定後の補助。
+- アーティファクト：`outputs/phase5b_diag/`（`run_cacheA.*`/`run_knowngood.*`/`gpu_mem_*.log`/`reuse_marks_*.json`/`reuse_loop.py`）。
+
+### 8.8 ★commit+VRAM 切り分け診断＝crash は commit（仮想メモリ）枯渇で確定（2026-06-29）
+instrumented run（`CACHE=0 EC=1 BS=8`、VRAM サンプラ＋新規 `_commit_sampler.ps1` で `\Memory\Committed Bytes`/`Commit Limit` を 0.5s 記録）。
+job1,2 PASS、**job3 で crash**（faulthandler＝GGUF dequant `gguf_quant_service.py:406 _dequant_q6_k` ← `_load_gguf_gemma`
+← per-job Gemma 再構築 `distilled.py:96`）。
+
+| crash 瞬間(12:18:54–12:19:05) | 値 | 上限 | % |
+|---|---|---|---|
+| **Committed（仮想メモリ）** | **159,467 MB** | 160,329 MB | **99.46%＝枯渇** |
+| Dedicated VRAM | 9,562 MB | 16,384 | 58%（**無関係**） |
+| Shared VRAM | 444 MB | — | ambient |
+
+- **commit の per-job 軌跡（leak ではなく transient スパイク）**：idle ~30GB(20%) → **各 per-job 再構築で ~125GB の commit
+  スパイク**（job1 127GB/88.8% 生存、job2 148GB/**99.3% 危機一髪**＝OS が pagefile 拡張で回避、job3 155.7GB/**99.5%**→
+  拡張 race 敗北で crash）→ 各ジョブ後に解放（job1後37%/job2後47%/crash後20%）。**累積 leak ではない**。
+- run 中に **commit limit が 146→160GB へ OS 自動拡大**（pagefile を能動拡張するも job3 で間に合わず）。
+- VRAM レール(16,049MB)は **job2 denoise 中に一瞬**触れただけ＝crash とは無関係。
+- 機構＝**ComfyUI #8298**「PyTorch は使用量の 1.5–1.7倍を over-commit、物理 RAM/VRAM が空でも committed が上限到達で
+  native 0xC0000005」と一致。**ディスク 70GB のモデルに対し ~125GB commit＝~1.8倍の過剰**。
+- **★結論：crash は commit（仮想メモリ）枯渇。VRAM 系レバー（empty_cache 等）は的外れ。** §8.3 の「圧迫由来」を commit 側に精密化。
+- **★ユーザー方針（次の調査）**：200GB ページファイル要求はリリース不可、先行事例（低VRAMフォーク/ComfyUI）はそんな空き容量を
+  要さない＝**我々のコードが過剰 commit している**と見るべき。「**なぜ per-job 再構築が ~125GB commit するか**」を
+  **仮説→WEB/コード裏取り→実験スコープ確定**の順で解明（手当たり次第の実験は禁止）。ページファイル拡大は band-aid として保留。
+- 本機ディスク：C: 20GB空き / S: 184GB / D: 932GB / F: 2.4TB（大ページファイルは F:/D: なら可能だが band-aid）。
+- アーティファクト：`outputs/phase5b_diag/`（`run_commitdiag.*`/`commit_mem_commitdiag.log`/`gpu_mem_commitdiag.log`/`_commit_sampler.ps1`）。
+- **計測委譲の教訓（再発）**：バックグラウンドのテスト担当が Monitor を armed して return し最終相関を上げない事象が3回。
+  対策＝長い run は「プロセス終了まで自実行内で block＋同一ターンでレポート」を課す、or サブエージェントは run/サンプラ起動のみ・
+  相関は監督がログから実施（今回有効だったパターン）。`[[delegation-early-stop-protocol]]` に追補。
+
+### 8.9 ★過剰 commit の真因究明（仮説→WEB/コード裏取り, 2026-06-29）＝我々のコードが過剰 materialize
+**根本機構**（InvokeAI #7563 / ComfyUI #8298）：Windows は全 committed 仮想メモリに物理 backing（RAM/pagefile）必須。
+safetensors ロードは (1) **mmap がファイルサイズ分の commit を予約**（safe_open 時点・重み読む前から）＋(2) **get_tensor が
+anonymous コピーを materialize＝もう一度ファイルサイズ分** → **ピークでモデルサイズの 2×**（mmap 参照が切れるまで共存）。
+＋CUDA/WDDM sysmem fallback の commit 上乗せ。→ **ディスク 70GB × 2× × per-job 全 submodel 再構築 ＝ ~125GB**。
+先行事例が 200GB を要さないのは、この 2× と per-job 再構築を回避しているから。
+
+**我々の具体的な過剰 commit（コード読解・file:line・深刻度順）**：
+1. **★最大の無駄＝bf16 Gemma を毎ジョブ読んで即削除**：`gemma_gguf_quant_service.py:286` の base ロードが key-ops
+   （`encoder_configurator.py:116` `AV_GEMMA_TEXT_ENCODER_KEY_OPS`）で **`language_model.*`（~24GB bf16 Gemma 本体）を
+   materialize** → **L311-312 で削除→GGUF で置換**。我々は GGUF Gemma を使うのに使わない bf16 を毎ジョブ読んで捨てている。
+   **読まずにスキップ可・数値不変**＝最も明白なバグ。
+2. **per-job 再構築 churn**：`ModelLedger`＝`DummyRegistry`（無キャッシュ）で毎 generate 全 submodel 再構築。フォーク自身の
+   `StateDictRegistry`（load once/keep resident）が**存在するのに未配線**。
+3. **我々が足した `copy=True`（§8 GGUF mmap 回避用）が 17.76GB transformer＋7.3GB Gemma GGUF を毎ジョブ完全 anonymous commit**
+   （皮肉にも先の修正が commit を悪化）。
+4. **H5**：video_encoder＋transformer が両 stage 共存（`distilled.py` L188-189 まで解放されず）＝commit ピークが max でなく sum。
+
+**commit 削減の先行事例レバー（VRAM でなく commit に効く）**：`backend="pread"`（非mmap, 要 safetensors≥0.8.0・本機 0.7.0）／
+**load-once-resident（StateDictRegistry 配線）**／low_cpu_mem_usage(accelerate meta-device, PR#10604)／direct-to-CUDA ロード／
+NVIDIA "Prefer No Sysmem Fallback"。**★罠：cpu_offload・VAE tiling・fp8 は VRAM のみ削減で commit には無効**（lever を誤らない）。
+
+**実験スコープ（段階・各段で commit 計測・過剰実装回避・要承認）**：
+- **Stage 1**：base read で削除される `language_model.*`（bf16 ~24GB）を**読み込み時点でスキップ**（数値不変）。最優先・低リスク。
+- **Stage 2（必要なら）**：mmap 2× 削減＝`copy=True` 見直し／direct-to-device／pread。
+- **Stage 3（なお必要なら）**：`StateDictRegistry` 配線で load-once/keep-resident（spike を sum→max）。
+- 出典：InvokeAI #7563（根本）, ComfyUI #8298/#2288, safetensors `backend=pread`, diffusers low_cpu_mem_usage(PR#10604), MS WDDM commit。
+
+### 8.10 Stage 1 実装＋commit 計測（2026-06-29）：実改善だが不十分
+- **実装**：`gemma_gguf_quant_service.py` で base ロードの sd_ops を `_SkipGemmaLMSDOps` でラップし、削除される `language_model.model.*`
+  （bf16 ~24GB、qat 5シャード由来）を**読み込み時点でスキップ**。target_vocab=262208 はヘッダ読みで保存。**skip-set≡delete-set を実データで証明
+  （survivors 701 が new/old 完全一致）＝数値不変**。mock pytest 13 passed・scope は GGUF base ロードのみ。
+- **計測（reuse_loop CACHE=0 EC=1 BS=8、commit+VRAM サンプラ）**：
+
+  | job | Stage1 commit ピーク | pre-fix baseline | 差 |
+  |---|---|---|---|
+  | 1 t2v | 117.5GB/80.1% | 127GB/88.8% | −9.5GB |
+  | 2 i2v | 132.2GB/92.2% | 148GB/99.3% | −15.8GB |
+  | 3 i2v | 153.6GB/99.3%→**CRASH** | 155.7GB/99.5%→CRASH | −2.1GB |
+
+- **結果：per-job commit スパイクは確かに低下（−10〜16GB）＝bf16 Gemma reload が主要因の1つと確認。だが job3 でまた crash**
+  （commit 99.3%、limit が 146→160GB 自動拡大しても追いつかず）。crash site は今回 **VAE/video_encoder の safetensors load
+  `sft_loader.py:36`**（非決定的だが常に commit 枯渇）。VRAM は無関係（crash 時 commit が要因）。
+- **含意**：1ピース削っても、**per-job 再構築が ~70GB を毎ジョブ re-mmap＋re-materialize（mmap は読む量に関係なくファイル
+  サイズ分 commit を予約＝InvokeAI #7563）**という構造が支配的。決定的 fix は **per-job 再構築自体を無くす load-once/keep-resident
+  （Stage 3、フォークの未配線 `StateDictRegistry`）**。Stage 2(pread) は mmap 予約の半分を消すが safetensors 0.8.0 要・部分的。
+- **計測委譲の改善が奏功**：「プロセス終了まで block＋同一ターン報告・Monitor 禁止」を課したテスト担当が正常に相関報告（3連続失敗を解消）。
+- アーティファクト：`outputs/phase5b_diag/`（`run_stage1.*`/`commit_mem_stage1.log`/`gpu_mem_stage1.log`/`reuse_marks_stage1.json`）。
+
+### 8.11 ★Stage 3 設計ブリーフ（load-once/keep-resident via StateDictRegistry, 2026-06-29・read-only 調査・★次セッションの実装対象）
+- **機構**：`StateDictRegistry`（`registry.py:49-84`）は **CPU の生 state_dict をキャッシュ**（key＝resolved paths＋sd_ops.name）。
+  HIT 時は `SingleGPUModelBuilder.load_sd`（`single_gpu_model_builder.py:71-75`）が `model_loader.load` を**呼ばない**＝
+  disk read＋materialize（mmap/get_tensor/GGUF `np.array(copy=True)`）が**完全スキップ**＝per-job commit スパイクの源を断つ。
+  現状 `DummyRegistry`（無キャッシュ）が既定で、どの pipeline も `registry=` を渡していないだけ（**未配線**・実装は存在し export 済）。
+- **配線 seam（lib 編集不要・推奨）**：`ltx_fast_video_pipeline.py:137`（DistilledPipeline 構築直後・**service install 前**）で
+  `reg=StateDictRegistry(); self.pipeline.model_ledger.registry=reg; self.pipeline.model_ledger.build_model_builders()`。
+  `_target_device()`（`model_ledger.py:178-182`）が自動で CPU に切替→transformer/VAE/audio/upsampler が CPU-resident キャッシュ化。
+- **必須の追加修正1点（Gemma）**：`patched_text_encoder`（`gemma_gguf_quant_service.py:903-906`）は `device=ledger_device=GPU` 直書きで
+  `_target_device()` を無視→そのままだと Gemma キャッシュが **GPU テンソルを pin→16GB fit 破壊**。registry 有効時は **CPU build** へ変更要。
+- **commit 試算**：steady CPU-resident ≈ transformer 17.8GB＋Gemma ~11GB＋VAE/audio/upsampler ~3GB ＋ idle ~30GB ≈ **~62GB**
+  （上限 146GB の十分下）。per-job スパイク（~125GB）は **job1 warmup の一度きり**になり、job2+ は HIT で平坦化。
+- **以前の Gemma cache 失敗（§8.2）との差**：あれは Gemma だけ常駐（+12GB）で他 submodel は毎ジョブ再 materialize＝スパイクに上積み（悪化）。
+  **full registry は `_target_device` 系の全 load を一括置換**＝残留 materialize なし。
+- **VRAM 中立**：HIT は CPU dict を返し build の `.to(cuda)` は out-of-place＝毎 generate に新規 GPU 配置・cache CPU テンソル不変。
+  block_swap/`del transformer;del video_encoder`（distilled.py:188-189）/empty_cache 不変。fork は registry 再利用を**既に設計**
+  （`apply_loras` の `destination_sd` ガード `single_gpu_model_builder.py:113`・`_target_device` CPU/GPU 切替が証拠）。
+- **GGUF/quant 互換**：`GGMLQuantizedTensor` は CPU キャッシュ可（`.to` out-of-place で subclass/`_ggml_type`/`_float_shape` 保持）。
+  cache dict の in-place 変異なし（dtype=None は read のみ／LoRA 経路は registry 非Dummy 時 `destination_sd=None` で fresh dict）。
+- **十分性**：steady は decisive（job3 crash の源＝VAE/transformer 反復 reload が HIT 化）。**warmup（job1）は一度だけ ~125GB スパイク残**
+  （job1 は 88.8% で通過実績＝多分十分、足りなければ pread/sequential empty_cache を併用）。
+- **要・小確認（実装時に計測で潰す）**：①registry 有効時に Gemma cache が CPU か ②job2 で cache テンソルの device/attrs 不変か ③warmup スパイクが上限内か ④reuse_loop で全5ジョブ完走・commit が steady ~62GB・出力不変・mock 13。
+- **実装規模**：`ltx_fast_video_pipeline.__init__` に ~4行＋Gemma を `_target_device()` 準拠にする1修正。Stage 1（bf16 Gemma skip）は warmup 軽減として併存。
+
+---
+
+## 9. ★残課題A の解決方針確定 — モノリス廃止＝コンポーネント・ファイル分離（Path B）＋音声 Phase 1 格上げ（2026-06-29 さらに後半）
+
+§8.11 の Stage 3（StateDictRegistry 配線）を実装し実機検証したところ、**steady は bounded だが job1 warmup で commit 152.4GB/99.27% に達し native crash**（video_encoder の safetensors load）。§8.11 が留保していた「warmup が上限内か」が**否**と判明。これを受け、Web×コードの多角リサーチ（3エージェント・出典付き）で**真の解決方針が確定**した。**この §9 が残課題A の最新・正本**（§8 の「Stage 3 単独で解決」見込みを上書き）。
+
+### 9.1 なぜ現状は ~200GB のディスク空きを要求してしまうか（200GB 制約の root cause）
+- 我々は VAE/audio/projection を **46GB のモノリシック distilled チェックポイント**から、Gemma 基底を **24GB の qat safetensors** から読む。Windows の safetensors **mmap は読む量に関係なくファイルサイズ分の commit（仮想メモリ）を予約**（InvokeAI #7563）＋get_tensor で materialize＝**2×**。per-job 再構築（DummyRegistry）が毎ジョブ ~70GB を re-mmap＋re-materialize → **commit ~125–152GB スパイク** → 上限到達で exit-139（§8.8/§8.9/§8.10、Stage3 warmup も同 152GB）。
+- これを crash させず通すには commit 上限（RAM＋ページファイル）が ~152GB 超必要 → 64GB RAM なら **~90–128GB のページファイル＝~200GB 近いディスク空き**を要求。**ユーザー方針によりリリース不可**（memory [[no-large-pagefile-disk-requirement]]）。**VRAM は無関係**（crash 時 dedicated 9–16GB・shared ambient）。
+
+### 9.2 なぜモノリス廃止＝小分けファイルへ切替えるか（Path B 採用理由）
+- **proven な ComfyUI 16GB レシピは RAM≥32GB・巨大ページファイル無しで動く**。理由＝**小さな単体ファイルだけを読む**（GGUF/fp8 transformer＋FP4/GGUF Gemma＋単体 Video VAE 1.45GB＋Audio VAE 365MB＋text projection 2.31GB）。**46GB モノリスを一切開かない**ので mmap 予約が小さく commit が bounded。
+- リサーチ（ファイルヘッダ実測）で、これら**単体ファイルは実在・DL 可（Kijai/LTX2.3_comfy, Comfy-Org/ltx-2）・ltx_core のキーとほぼ一致**（audio VAE/vocoder/projection は完全一致、video VAE のみ `vae.` プレフィックス SDOps が要る）。**モノリス＋qat から読む全テンソルに単体の代替先があり、モノリスは回避可能**。
+- 切替えは**ローダ（ModelLedger の各 builder の読み込み元）差し替えのみ**で、**凍結 FastAPI も推論パイプライン（GGUF transformer＋block_swap＋Gemma＋denoise）も無改変**。結果＝commit bounded・~30GB フットプリント（ComfyUI 同等）・**巨大 DL/ページファイル不要**・**DL も ~5GB の小ファイルが 70GB のモノリスを置換して縮む**。
+- **棄却した代替**：①pread 非mmap（safetensors 0.8.0 が3週間前リリースで未枯れ・効果は RSS 実測のみで Windows committed-bytes 未確認・当の InvokeAI も採らずページファイルに逃げた・46GB DL を残す＝製品的に劣る）②公式 layer-streaming（pin rev に不在・GGUF と非互換で GGUF を捨てる羽目・`--offload cpu` は 36GB を pinned host RAM に常駐で commit 悪化）③ComfyUI 本体へ移行（凍結 API/可搬性が無い）。**＝大 pivot は不要、ローダのファイルソーシングだけ proven に寄せる**のが正解。
+- **唯一の新規実装＝connector 供給**：text encoder が要求する `{video,audio}_embeddings_connector.*`（258テンソル）は単体 projection ファイルに無く、**transformer ファイル（＝我々の GGUF）内**にある。供給方式は別途調査・選択肢提示の上で決定（実装前に承認）。
+
+### 9.3 なぜ音声生成を Phase 1 に格上げするか
+- 音声経路をエンド・ツー・エンド調査した結果、**フォークは既に音声を joint 生成し output.mp4 へ mux 済み**だと判明：DistilledPipeline が `video/audio_context` 二系統で常時 audio を生成し `Audio(waveform, sampling_rate)` を返す → `LTXFastVideoPipeline.generate()` が audio VAE+vocoder で decode し **PyAV で AAC トラックとして mp4 に mux**。worker が書く mp4 に**既に音声が入っている**。**ネイティブ音声は純 torch・WSL 非依存**（WSL 依存は別物の外部 TTS/Foley）。
+- 音声が失われるのは**我々の `crop_mp4` 再エンコードだけ**（`-c:a`/`-map` 欠落）。crop 無しの出力は**今日すでに音声付き**。
+- 有効化の労力＝**LIGHT**：音声 VAE 系 builder を単体ファイルに向ける（Path B で実質タダ・`per_channel_statistics` キー同梱だけ要確認）＋`crop_mp4` に音声保持（~1行）＋任意の非破壊メタ追記。**最大コストは VRAM/品質検証**（本機 16GB で未検証＝フォークの未踏路。decode VRAM・metallic アーティファクト有無を実測）。
+- Path B のローダ刷新が**どのみち音声 builder を触る**ので、後で再着手するより**今 Phase 1 に畳む**方が安い＝格上げ。
+
+### 9.4 確定した次の作業（Path B ＋ 音声 Phase 1）
+1. 小ファイル DL（~4GB、46GB＋24GB モノリス置換）。2. ModelLedger ソース差し替え（VAE/audio/projection→単体）。3. **connector 供給（方式は選択肢提示→承認）**。4. `crop_mp4` 音声保持。5. config 追加。6. Stage 3 registry は実装済（モノリス除去で warmup が bounded 化）。検証＝mock 13／reuse_loop で commit bounded・全5完走・出力等価＋音声／VRAM fit。副次＝24GB qat は vision_tower/multi_modal_projector 専用で T2V/最小I2V では未使用の公算→落とせれば commit 追加削減（要確認）。**ページファイル拡大／逐次 warmup は不要に（モノリス除去が根本解）**。
+
+### 9.5 connector 供給の事実調査と決定（Option A＝GGUF transformer から読む, 2026-06-29）
+モノリス廃止で text encoder に再供給が要る survivors＝**258個の `embeddings_processor.{video,audio}_connector.*` ＋ 4個の `feature_extractor.{video,audio}_aggregate_embed.*`**（`gemma_gguf_quant_service.py:38-44,184-187`）。read-only 調査の事実：
+- **258 connector は我々の GGUF transformer 内に F32/BF16（非量子化）で存在**（video=73 F32+56 BF16、audio 同）→ 再供給は**コピー＋bf16 キャストのみ・dequant 不要**（`_dequant_to_bf16` の float 分岐で対応可）。
+- connector は **GemmaTextEncoder の `embeddings_processor` に attach**（`encoder_configurator.py:111-114`、encode 時・transient）。transformer モデル `LTXModel` に connector submodule は無く、**transformer GGUF ローダは 258 を読むが捨てている**（`gguf_quant_service.py:557-594`、孤児リード）＝再供給は重複でなく唯一の生きた供給先。
+- bf16 抽出時 ~3.85GB。**エコシステムに 258 connector の単体ファイルは無い**（`..._embeddings_connectors.safetensors` は中身が 4 aggregate_embed のみ＝上流 ComfyUI commit f266b8d で connector を diffusion model 側へ移動）。**proven スタックは connector を transformer ファイル内に保持＝我々の GGUF と同じ供給元**。
+- 4 aggregate_embed は単体 projection `ltx-2.3_text_projection_bf16.safetensors`(2.31GB) が供給。
+- **決定＝Option A**（ユーザー承認 2026-06-29）：connector を **transformer GGUF から読み**（先行事例と同じ供給元）、キー remap（`{video,audio}_embeddings_connector.*`→`embeddings_processor.{video,audio}_connector.*`）して text-encoder マージへ注入。理由＝(1) prior-art の供給元に倣う、(2) de-risk 済みパイプラインが今使うのと同一テンソルを**読み出し元だけ**替える＝挙動不変で正しさのリスク最小（適用箇所＝text encoder は無改変）。出力等価を検証で担保。
+- 棄却：B（単体ファイル抽出＝前例なき成果物の新造・正しさは A と同じで部品増）、C（モノリス残置＝目的に反）、D（エコシステム単体ファイルは connector を含まず）。
+- 参照：`encoder_configurator.py:111-114`／`gguf_quant_service.py:557-594`／`gemma_gguf_quant_service.py:38-44,184-187,614-620`。

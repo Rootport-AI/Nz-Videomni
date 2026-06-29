@@ -53,6 +53,14 @@ class ModelConfig(BaseModel):
     fork_python: str = "./vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
 
+    # Component-file re-sourcing (Phase 1): standalone small files replacing the
+    # 46GB monolith for VAE/audio (and, later, text projection). Resolved via
+    # AppConfig._abs (relative -> project-rooted absolute). Consumed by the real
+    # worker / reuse harness only when vram.use_component_files is True.
+    component_video_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"
+    component_audio_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
+    component_text_projection_path: str = "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
+
 
 class VramConfig(BaseModel):
     low_vram_mode: bool = True
@@ -69,6 +77,10 @@ class VramConfig(BaseModel):
     vae_spatial_tile_size: int = 0
     vae_temporal_tile_size: int = 0
     allow_disable_low_vram: bool = True
+    # Phase 1 gate: re-source VIDEO VAE + AUDIO VAE/vocoder from standalone
+    # component files (model.component_*_path) instead of the 46GB monolith.
+    # Off by default; flip to True to exercise the component-file path.
+    use_component_files: bool = False
 
 
 class CropOutputPreset(BaseModel):

@@ -618,3 +618,61 @@ NVIDIA "Prefer No Sysmem Fallback"。**★罠：cpu_offload・VAE tiling・fp8 �
 - **決定＝Option A**（ユーザー承認 2026-06-29）：connector を **transformer GGUF から読み**（先行事例と同じ供給元）、キー remap（`{video,audio}_embeddings_connector.*`→`embeddings_processor.{video,audio}_connector.*`）して text-encoder マージへ注入。理由＝(1) prior-art の供給元に倣う、(2) de-risk 済みパイプラインが今使うのと同一テンソルを**読み出し元だけ**替える＝挙動不変で正しさのリスク最小（適用箇所＝text encoder は無改変）。出力等価を検証で担保。
 - 棄却：B（単体ファイル抽出＝前例なき成果物の新造・正しさは A と同じで部品増）、C（モノリス残置＝目的に反）、D（エコシステム単体ファイルは connector を含まず）。
 - 参照：`encoder_configurator.py:111-114`／`gguf_quant_service.py:557-594`／`gemma_gguf_quant_service.py:38-44,184-187,614-620`。
+
+### 9.6 Path B 実装＋Phase 4 実機結果（component-files が warmup crash 解消・per-job リーク露呈, 2026-06-29 さらに後半）
+**実装（Phase 0-3, gate=`use_component_files`／env `LTX_COMPONENT_FILES`）**：
+- 小ファイル DL（`models/ltx-2.3-components/`・project-local hf_home）：video VAE `vae/LTX23_video_vae_bf16.safetensors`(1.45GB)／audio VAE+vocoder `vae/LTX23_audio_vae_bf16.safetensors`(365MB)／text projection `text_encoders/ltx-2.3_text_projection_bf16.safetensors`(2.31GB)。
+- `_install_component_sources()`（`ltx_fast_video_pipeline.py`、registry 配線後・GGUF install 前）：VAE builder→video VAE＋`vae.` 前置 SDOps チェーン、audio/vocoder builder→audio VAE（remap 不要）。
+- text encoder（`gemma_gguf_quant_service.py` 改修・Option A）：4 aggregate_embed を projection ファイルから、258 connector を GGUF transformer から `model.diffusion_model.*_embeddings_connector.*`＋bf16 で注入。
+- `crop_mp4`（`services/video_io.py`）：`-map 0:v -map 0:a? -c:a copy` で音声保持（Phase 1 音声）。
+- config 追加：`model.component_{video_vae,audio_vae,text_projection}_path`＋`vram.use_component_files`。worker は env `LTX_COMPONENT_FILES`（既定0）。reuse_loop ハーネスも配線。
+- **等価性（GPU なし実証）**：VAE/audio ビルダ最終キー＝モノリスと完全一致／**connector 258/258 ビット一致（max abs diff 0.0）**＋aggregate_embed 4/4 一致／マージ後キー完全一致（701）／mock pytest 13 passed。**use_component_files=ON でモノリス(46GB)はどのビルダからも開かれない**ことを検証。OFF 経路は不変。
+
+**Phase 4 実機（reuse_loop, `LTX_KEEP_RESIDENT=1 LTX_COMPONENT_FILES=1 EC=1 BS=8`, 5 jobs, 終了まで block＋同一ターン報告）**：
+| job | 結果 |
+|---|---|
+| 1 t2v | PASS 111.9s |
+| 2 i2v | PASS 95.6s |
+| 3 i2v | PASS 111.5s |
+| 4 t2v | PASS 132.0s |
+| 5 i2v | **CRASH**（native, `block_swap_service.py:86` `module.to` via `patched_transformer`） |
+- denoise dedicated VRAM が **15.1→18.3GB と毎ジョブ単調増加**、commit が **160.5GB/100%**（上限 ~160GB 自動拡大）まで**ジョブ毎にラチェット**→job5 で枯渇 crash。
+- **結論**：**component-files が warmup commit-exhaustion を解消（以前 job1 即死＝0 generates → 今回 4 実生成）＝Path B の中核は成功**。だが**別の per-job リーク**が露呈：commit・VRAM が generate ごとに増加（ディスク再 mmap でなく per-generate 確保の解放漏れ）。**registry（Stage 3）だけでは commit が平坦化しない**ことも判明。
+- progression（reuse 検証3パス）：Stage3(registry のみ)→Gemma device bug 発見・修正／Stage3b→job1 で 46GB モノリス mmap crash 152GB／**PhaseB(component-files)→4 generates・job5 で per-job リーク crash 160GB**。
+- **リーク root-cause は未確定（前セッションでコード read が permission バグで拒否され診断ブロック）**。仮説：(a) block_swap pinned バッファ蓄積（crash site 一致・有力）、(b) registry 非HIT で毎ジョブ再 materialize、(c) per-generate GPU モデル解放漏れ。**次セッションの最優先＝この per-job リークの診断→修正**。
+- 残：per-job リーク（最優先）／qat-drop（24GB・分析上 T2V/最小I2V で安全・未実装・`_return_model` meta 短絡対応要）／音声 ffprobe 確認・VAE ビット一致確認（未取得・ログ/4 mp4 はディスク保全）。
+- アーティファクト：`outputs/phase5b_diag/`（`commit_mem_phaseB.log`/`gpu_mem_phaseB.log`/`reuse_phaseB.stderr.log`/`reuse_marks_PHASEB.json`/`reuse_PHASEB_job{1..4}_*.mp4`）。
+
+### 9.7 ★per-job リークの診断確定＋修正＋実機検証 PASS（2026-06-30）＝残課題A 完全解決
+§9.6 が残した per-job リークを、**read-only 並列診断（仮説 a/b/c 切り分け）→ 非破壊・計装run で按分実測 → 標的2パッチ → 6ジョブ実機検証**の順で解決した。**この §9.7 が残課題A の最終結論**。
+
+**診断（4並列 read-only サブエージェント＋ログ法医学）**：
+- **registry（Stage 3 keep-resident）は HIT している＝仮説b は棄却**。builders は `single_gpu_model_builder.load_sd`→`registry.get` を通り、キーは `sha256(resolved_paths + sd_ops.name)` で安定、ジョブ間で clear されない（`registry.py:49-84`）。
+- **transient 解放漏れの素朴版＝仮説c も否定**。denoise working-set は毎ジョブ一定（torch 床にのみ蓄積）。
+- **真因＝block_swap 保持（仮説a）**。`BlockSwapService` は常駐単一インスタンスで、`install()` が毎 generate で再構築される transformer を `_installed_transformers` に append し（`block_swap_service.py:92`）`uninstall()` を一度も呼ばない。`patched_transformer()`（`ltx_fast_video_pipeline.py:485-490`）が毎ジョブ新 transformer を建てる（`model_ledger.transformer()` は明示的に非キャッシュ）ため、末尾 `del transformer` はこの list 参照のため効かず、過去ジョブ transformer が GC されない。
+
+**計装run で按分を実測確定（非破壊 monkeypatch、`reuse_loop_diag.py`、KEEP_RESIDENT=1 COMPONENT_FILES=1 EC=1 BS=8、4ジョブ）**：
+- `len(_installed_transformers)` が **1→2→3→4**＝毎ジョブ +1 で累積（リークの直接証拠）。
+- registry キャッシュ7エントリは **全ジョブ通じて安定・全て CPU のまま**＝**in-place `.to` がキャッシュを CUDA 汚染する説（当初の C 仮説）は REFUTE**。`.to`/`_apply` は `param.data` を新テンソルに差し替えるだけでキャッシュ本体の CPU テンソルは温存される。→ **`model_ledger.py` の in-place `.to` を out-of-place 化するパッチは不要**（vendored `.venv` を触らずに済む）。
+- registry MISS は warmup の7回のみ・job1-4 は 100% HIT。CPU キャッシュ総量 ~32.3GB を一度だけ add。
+- **両軸の整合**：leaked transformer は自身の block を保持し、block_swap が大半を `block.to("cpu")` で退避＝**新規 CPU コピー ~18-20GB（§9.6 の commit +18GB/job）＋GPU 窓 ~1GB（VRAM 床 +~1076MB/job）**。両者は同一の leaked transformer で説明でき、`installed_transformers` 1→2→3→4 が決定的証拠。
+
+**適用パッチ（2点・いずれもフォーク製品コード＝`vendor/.../backend/`、`.venv` 配下でない＝持続的・凍結境界外）**：
+1. **`services/block_swap_service.py` `install()`**：`self._installed_transformers.append(transformer)`（旧 L92）の直前に `self._installed_transformers.clear()` を追加（keep-latest 化）。前ジョブ transformer（pipeline が既に `del` 済）を list から外して GC 可能にする。`uninstall()` は本経路で未使用なので clear は安全。
+2. **`_ltx_worker.py` `_do_generate()`**：`_emit("done", ...)`（L195）直後に `gc.collect(); torch.cuda.empty_cache()` を追加。leaked transformer は `swapped_forward` クロージャの参照循環を持つため、参照を外しても回収には gc が要る（`gc`/`torch` は既存 import）。
+- ※ これらは vendored（gitignore 配下）に在る。vendor/ 再生成時は本 §9.7 の通り再適用すること。
+
+**実機検証 PASS（6ジョブ、旧 job5 crash 点を越える、`DIAG_TAG=VERIFY` 同条件）**：
+| 指標 | 修正前 | 修正後 |
+|---|---|---|
+| 完走 | job5 で native crash | **全6 pass・exit 0** |
+| `installed_transformers` | 1→2→3→4 | **1 で一定** |
+| torch alloc 床 @JOB DONE | +~1076MB/job | **平坦 1082→1085MB（ジッタのみ）** |
+| denoise dedicated peak | 15.1→18.3GB | **~16.18GB 定常** |
+| commit @JOB DONE | +18GB/job→160.5GB/100% crash | **平坦 ~82%（93GB 前後）** |
+| registry キャッシュ | — | 7エントリ全 CPU 安定・MISS は warmup の7のみ |
+| 出力 mp4（job1-4） | — | **PHASEB と SHA256 バイト一致**（計算不変・メモリ寿命のみ修正） |
+
+mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファクト：`outputs/phase5b_diag/`（`reuse_loop_diag.py`／`diag_probe_{LEAKDIAG,VERIFY}.json`／`reg_events_*.json`／`reuse_marks_VERIFY.json`／`commit_mem_VERIFY.log`／`gpu_mem_VERIFY.log`／`reuse_VERIFY_job{1..6}_*.mp4`）。
+
+**残課題A（worker 再利用 crash）はこれで完全解決**。残るオープン項目＝音声 Phase 1 の実機確認（ffprobe で AAC トラック有無・decode VRAM・metallic アーティファクト）／qat-drop(24GB)／720p スケールアップ（残課題C）。

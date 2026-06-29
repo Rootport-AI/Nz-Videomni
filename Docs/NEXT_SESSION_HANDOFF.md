@@ -1,9 +1,9 @@
 # 次セッション引き継ぎ書 — LTX 2.3 を 16GB で動かす
 
-最終更新: 2026-06-29（Phase 5(B) denoise VRAM 低減 完了・クローズ後に改訂）/ 想定読者: 次セッションのエージェント
+最終更新: 2026-06-29（Path B＝component-files 実装・Phase 4 実機まで完了／per-job リーク露呈・その診断が次の最優先）/ 想定読者: 次セッションのエージェント
 
 > **このドキュメントが現時点の最新・正本（handoff）です。まず §0 と「★残課題サマリ」を読めば、現状と次の一手が分かる。**
-> 設計判断の根拠と実機検証の全経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**最新 §7＝Phase 5(B) 調査→診断→実装→検証→残課題**、
+> 設計判断の根拠と実機検証の全経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**最新＝§9.6（Path B=component-files 実装＋Phase 4 実機：warmup crash 解消／per-job リーク露呈）。次セッションはまず §0 末尾の ▶▶▶ と §9→§9.6 を読め**、
 > §6＝Phase 5(A) 配線、§5＝Gemma GGUF）が一次情報。実装計画は `~/.claude/plans/frolicking-tumbling-hennessy.md`。
 > 要約は memory `[[ltx-bridge-project]]` / `[[ltx-desktop-lowvram-fork]]`。⚠️ 古い記述が残るドキュメント（後述 §6）に惑わされないこと。
 
@@ -21,14 +21,19 @@
   一時溢れ＝下記【残課題B】）。詳細＝VERIFICATION_LOG §7。
 - **⚠️ 別件の production ブロッカー（Phase 5B 起因でない既存バグ#5系）＝worker 再利用 crash**：常駐 worker の**2ジョブ目以降**で
   native access violation（exit 139）。詳細・修正方針は下記「★残課題サマリ【残課題A】」。
-- **▶ 次セッションはここから（2026-06-29 更新・最重要）**：**残課題A の真因が判明し理解が一新された。最新は
+- **▶（超過 → 最新は §0 末尾の ▶▶▶／VERIFICATION_LOG §9.6）旧・起点メモ＝Stage 3**：**残課題A の真因が判明し理解が一新された。最新は
   [VERIFICATION_LOG.md](VERIFICATION_LOG.md) §8（特に §8.3 真因再フレーム・§8.8 commit 確定・§8.9 過剰commit究明・§8.10 Stage1・
   §8.11 Stage3 設計）。** 要点：**再利用 crash は「safetensors mmap ハンドルのバグ」ではなく「Windows commit（仮想メモリ）
   枯渇」**（per-job の全 submodel 再構築が ~70GB のモデルを毎ジョブ re-mmap＋re-materialize＝~125GB commit スパイク→
   上限到達で native 0xC0000005）。**VRAM レバー（empty_cache 等）も非mmap 化も的外れと実証済**。**次の作業＝Stage 3 ＝
   load-once/keep-resident（フォークの未配線 `StateDictRegistry` を配線）を §8.11 の設計ブリーフどおり実装・検証**。
   Stage 1（捨てる bf16 Gemma 24GB を読まずスキップ）は実装済・併存。詳細・着手手順は下記【残課題A】（更新済）と §8.11。
-- **▶▶ 最新の正本（2026-06-29 さらに後半・最重要）＝VERIFICATION_LOG §9**：Stage 3（StateDictRegistry）は実装したが **job1 warmup が commit 152GB/99% で crash**（§8.11 が留保したリスクが顕在化）。リサーチで**真の解決＝モノリス廃止＝コンポーネント・ファイル分離（Path B）**と確定：VAE/audio/projection を 46GB モノリス＋24GB qat でなく **ComfyUI 同様の小単体ファイル**（Video VAE 1.45GB／Audio VAE 365MB／text projection 2.31GB）から読む＝commit bounded・RAM~32GB・巨大ページファイル/DL 不要・凍結API＋パイプライン無改変。**音声は既にフォークが mp4 へ mux 済みと判明→Phase 1 へ格上げ**（`crop_mp4` の音声保持修正だけ要）。唯一の新規実装＝connector 供給（方式選択中）。詳細・理由・棄却した代替（pread/公式streaming/ComfyUI移行）は **§9** が正本。
+- **▶▶（超過 → 最新は §0 末尾の ▶▶▶／VERIFICATION_LOG §9.6）§9 方針メモ＝Path B 決定**：Stage 3（StateDictRegistry）は実装したが **job1 warmup が commit 152GB/99% で crash**（§8.11 が留保したリスクが顕在化）。リサーチで**真の解決＝モノリス廃止＝コンポーネント・ファイル分離（Path B）**と確定：VAE/audio/projection を 46GB モノリス＋24GB qat でなく **ComfyUI 同様の小単体ファイル**（Video VAE 1.45GB／Audio VAE 365MB／text projection 2.31GB）から読む＝commit bounded・RAM~32GB・巨大ページファイル/DL 不要・凍結API＋パイプライン無改変。**音声は既にフォークが mp4 へ mux 済みと判明→Phase 1 へ格上げ**（`crop_mp4` の音声保持修正だけ要）。唯一の新規実装＝connector 供給（方式選択中）。詳細・理由・棄却した代替（pread/公式streaming/ComfyUI移行）は **§9** が正本。
+- **▶▶▶ 最新の正本・次セッションの起点（2026-06-30 最終・最重要）＝VERIFICATION_LOG §9.7：残課題A（worker 再利用 crash／per-job リーク）は完全解決**。経緯：Path B（component-files）が §9.6 で warmup crash を解消したが job5 で別の per-job リークが露呈（commit・VRAM が generate 毎に単調増加→160.5GB/100% native crash、`block_swap_service.py:86`）。§9.7 で **read-only 並列診断→非破壊・計装run で按分実測→標的2パッチ→6ジョブ実機検証 PASS** により解決：
+  - **真因＝`BlockSwapService._installed_transformers` が毎 generate の transformer を append し続け解放しない**（仮説a 確定）。registry は HIT・キャッシュ汚染なし（仮説b/c・in-place .to 説は実測で棄却）。計装で `installed_transformers` 1→2→3→4 を直接観測。leaked transformer の CPU 退避ブロック=commit +18GB/job、GPU 窓=VRAM 床 +1GB/job、で両軸を単一原因に統合。
+  - **修正（フォーク製品コード・凍結境界外・persistent）**：①`block_swap_service.py install()` で append 前に `_installed_transformers.clear()`（keep-latest）②`_ltx_worker.py _do_generate()` の `_emit("done")` 直後に `gc.collect(); torch.cuda.empty_cache()`。**`model_ledger.py` の in-place `.to` 改修は不要**（キャッシュ非汚染を実測確認＝vendored `.venv` 不触）。
+  - **検証 PASS**：6ジョブ全完走（旧 job5 crash 点突破）、`installed_transformers` 1 で一定、torch 床・denoise peak・commit すべて平坦、**出力 mp4 が修正前と SHA256 バイト一致**（計算不変）、mock 13 緑。詳細＝§9.7。
+  - **次の一手＝音声 Phase 1 の実機確認**（ffprobe で mp4 の AAC トラック有無・decode VRAM・metallic アーティファクト）、次いで qat-drop(24GB)／720p スケールアップ（残課題C）。gate＝env `LTX_COMPONENT_FILES=1`＋`LTX_KEEP_RESIDENT=1`。
 
 ## ★残課題サマリ（次セッション向け・2026-06-29 時点）
 

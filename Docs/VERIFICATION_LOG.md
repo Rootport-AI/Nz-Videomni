@@ -759,3 +759,43 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 - (a) GPU サンプラ `_gpu_mem_sampler.ps1` は Get-Counter ベースで実効間隔 ~2秒（`-IntervalSec 0.25` を渡しても短縮されない）。decode 窓 ~2秒に有効サンプルが実質1点のみで、2秒未満の瞬間ピークは未捕捉。ただし decode の ~2.7GB という余裕（16GB まで +13GB 超）から、この限界は結論に影響しない。真の 0.25s 採取が要れば NVML/`nvidia-smi --loop-ms` 方式への置換が必要（未実施）。
 - (b) 検証は 384×256/~1.1秒の小クリップのみ。高解像度・長尺の音声挙動はスコープ外＝**残課題C（スケールアップ）**。
 - (c) transformer は Q4_K_M 量子化でフル bf16 公式とビット一致ではないが聴感良好。
+
+---
+
+## 11. ★`--te-offload`（Gemma text-encode ピーク低減）の実装＋A/B 実機検証 PASS（2026-07-01）
+
+残課題B（load/encode の一時 shared 溢れ／§7.9）のうち **Gemma text-encode ピーク（peak ①）** を下げる機能 `--te-offload` を実装し、A/B で実機検証した。**この §11 が te-offload の最終結論。**
+
+### 11.1 機能と機構
+- **`--te-offload` 起動フラグ（既定 ON、`--no-te-offload` で無効化）**。Gemma テキストエンコーダを CPU オフロード・モードで動かす。
+- **機構＝逐次 per-layer ストリーミング（full-CPU-encode ではない）**：GGUF 量子化された Gemma decoder 48 層を **CPU 常駐**のまま保持し、text-encode forward 中に GPU へ **2層ずつストリーム**する。**compute は GPU に留まる**。実証済み BlockSwapService のスライディングウィンドウ方式を Gemma の decoder 層へ適応し、GGML バッファ対応化（GGUF 量子化重みは parameter でなく buffer）したもの。
+- **monolith-free / component-file 不変条件を保持**：ストリームするのは GGUF 量子化層のみで、**24GB bf16 モノリスの再 materialize は無い**（以前棄却した「full CPU encode」経路を採らなかった理由＝§2.10/§8 の commit 枯渇回避）。
+
+### 11.2 配線（次セッションが追えるよう entrypoint を記録）
+`main.py`（argparse `BooleanOptionalAction --te-offload`）→ `config.vram.te_offload_text_encoder`（既定 True・`config.py`＋`config.yaml`）→ `services/low_vram.py` の内部ノブ（凍結 `_STATUS_KEYS` には**入れない**）→ env `LTX_TE_OFFLOAD`（1/0、`services/ltx_runner.py` で設定）→ `vendor/LTX-Desktop-LOW-VRAM/backend/_ltx_worker.py` で読取 → `LTXFastVideoPipeline.create(te_offload_text_encoder=)` → `_install_gemma_gguf(te_offload=)` → `GemmaGGUFQuantLoaderService(layer_offload=)` ＋ 新規 `vendor/LTX-Desktop-LOW-VRAM/backend/services/gemma_layer_offload_service.py`（`GemmaLayerOffloadService`, `layers_on_gpu=2`）。
+
+### 11.3 A/B 実機検証（512×320 / 49f / 8 steps / seed=12345・distilled）
+| 指標 | OFF（`--no-te-offload`） | ON（既定） |
+|---|---|---|
+| encode-phase Dedicated peak | 15,839 MB | **10,540 MB**（粗 ~2s サンプラ＝下限） |
+| encode-phase WDDM Shared spill | 1,616 MB | **0 MB（baseline）** |
+| 全体 worker `peak_vram_mb` | 16,944 | 16,944（**不変**） |
+| wall-clock | 135.1s | 117.1s |
+| 出力 | valid mp4 | valid mp4・**OFF とバイト一致** |
+
+- **encode ピーク低減 −5,299 MB（−33%）／encode 時の shared 溢れ消失／wall-clock ペナルティ無し／出力同一。**
+
+### 11.4 720p ON スモーク
+- 1280×768 / 121f / seed=12345：完走・valid mp4（~1.26MB）・**168.2s**・`peak_vram_mb` 16,944・encode-phase Dedicated ~10,467 MB / spill 無し。
+- **→ encode ピークが解像度・フレーム数に非依存である**ことを確認（§5/RESOLUTION_DURATION_CAPABILITY §1 の「天井＝固定費」と整合、その固定費を te-offload が下げた形）。
+
+### 11.5 ★スコープ注意（次セッションが誤解しないよう明記）
+- **全体ジョブ `peak_vram_mb` は両モードとも 16,944 で不変**＝**16GB の天井は denoise / transformer-load 段（peak ②）で決まり、`--te-offload` はそこに触れない**。te-offload が下げるのは **Gemma text-encode ピーク（peak ①）** のみで、encode 時の shared 溢れを消すだけ。**peak ② の低減は将来課題**（§7.9 の「transformer を直接 CPU ロード」と地続き）。2つのピークは逐次で、その max がジョブ天井を決めるという前セッションの所見（§7.9）どおり。
+
+### 11.6 チューニングレバー
+- `GemmaLayerOffloadService(layers_on_gpu=2)`：**1 に下げると encode ピークがさらに下がる**／3-4 に上げるとピークと速度をトレード。**現状ハードコード**（`config.yaml` 未露出）。露出は任意の将来課題。
+
+### 11.7 テスト
+- mock pytest **13 passed**（`tests/conftest.py` の `_make_args` フィクスチャに `te_offload=None` を追加＝parse_args 既定をミラー。GET /status `vram_optimization` 契約テストも緑）。
+
+**commit**：`96f41c4`（main・push 済）。

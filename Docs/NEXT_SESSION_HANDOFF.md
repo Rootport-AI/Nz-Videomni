@@ -9,6 +9,7 @@
 ### 何ができるようになったか（実機検証済）
 - **720p 級（1280×768 を生成→任意で 1280×720 にクロップ）の T2V が本番 API 経路で完走**。生成 ~167–171秒（RTX 4070 Ti SUPER 16GB）。job `684393c6`（crop なし 1280×768 配信）/ `5a3540ba`（crop 1280×720）で ffprobe 確認。OOM なし。
 - **連続生成（マルチジョブ）が commit 枯渇クラッシュせず完走**。720p×3本連続・384×256×3本連続いずれも全 PASS（実測）。→ 将来の「5秒クリップを繋いで 20秒動画」（終了フレーム→次の開始フレームの I2V 連結）の土台ができた。
+- **✅ `--te-offload`（既定 ON）＝Gemma text-encode ピーク低減 DONE・A/B 実機検証済（2026-07-01）**。機構＝逐次 per-layer ストリーミング（GGUF Gemma 48 層を CPU 常駐→2層ずつ GPU へ・compute は GPU）。encode-phase Dedicated ピークを 15,839→10,540 MB（−33%）に下げ encode 時の shared 溢れを消去・wall-clock ペナルティ無し・出力 OFF とバイト一致（512×320/49f A/B）。720p ON スモークも完走（168.2s）。**toggle＝`--no-te-offload` で無効化**。詳細＝VERIFICATION_LOG §11、commit `96f41c4`。**★スコープ注意：全体ジョブ `peak_vram_mb` は両モード 16,944 で不変＝16GB 天井は denoise/transformer-load 段（peak ②）が決め、te-offload は触れない**（残課題B の Gemma encode 側＝peak ① だけ解消、transformer load 側＝peak ② は残）。
 
 ### 確定した本番デフォルト設定（2点・いずれも検証済・コミット対象）
 1. **`services/ltx_runner.py`** worker env に `env.setdefault("LTX_KEEP_RESIDENT","0")` ＝ **keep_resident OFF が既定**（明示 env は尊重）。理由＝keep_resident=True だと 720p で Gemma を CPU ビルド→out-of-place `.to(cuda)` 移動する瞬間二重在が 16GB マージンを超え **native crash**（traceback 無し、text-encode 中）。=0 で直接 cuda ビルドになり回避。`LTXFastVideoPipeline.create()` の既定は False（`ltx_fast_video_pipeline.py:75`）。
@@ -30,8 +31,10 @@
 ### 残課題（ディレクトリ掃除を除く・優先度はユーザー判断）
 > ※開発段階のゴミ（`outputs/` のテスト出力、未追跡の診断スクリプト等）の**ディレクトリ掃除は、専任の次セッションに方法ごと委ねる**ため、ここには残課題として載せない（ユーザー指示・2026-06-30）。
 
-- **【B】load/encode の一時 shared 溢れ（~2.6GB、解像度非依存）**＝「全工程 16GB 内」未達。生成本体（denoise）は ~6–8GB で余裕だが、Gemma encode/transformer load の瞬間に dedicated ~15.9GB＋shared ~2–2.6GB。実用は完走するが「真の fit」は未達。詳細は下記【残課題B】＋ VERIFICATION_LOG §7.9。
+- **【B】load/encode の一時 shared 溢れ**＝「全工程 16GB 内」未達。**↳ うち Gemma encode 側（peak ①）は `--te-offload`（既定 ON, 2026-07-01）で解消済**（encode Dedicated 15.9→10.5GB・encode 時 shared 溢れ 0、VERIFICATION_LOG §11）。**残るのは transformer load 側（peak ②）**＝block-swap が一旦 full-GPU ロード（peak max_alloc 16,944）→退避するため load 時に 16GB 超過。これが全体ジョブ天井を決める（te-offload では下がらない）。修正方向＝transformer ブロックを直接 CPU ロード（full-GPU を経由しない）。詳細は下記【残課題B】＋ VERIFICATION_LOG §7.9/§11。
 - **【最適化】keep_resident=1 を 720p で使えるようにする恒久修正**＝Gemma の out-of-place `.to(cuda)` 移動を in-place 化／CPU 側を移動前解放。成功すれば keep=1（§9.7 で 6ジョブ flat・高速・gen 時間漸増なし・commit より低い）と 720p を両立。長尺連結や速度が要件化した時の本命。
+- **【残課題B の本丸＝peak ② 低減】**transformer load 段の一時 shared 溢れ（block-swap の full-GPU ロード→退避）を消す＝**全体ジョブ天井（peak_vram_mb 16,944）を下げる唯一のレバー**。Gemma 側（peak ①）は te-offload で済んだので、ここが「真の 16GB fit」の残りの一手。
+- **【任意・te-offload チューニング露出】**`GemmaLayerOffloadService(layers_on_gpu=2)` は現状ハードコード（`config.yaml` 未露出）。1 に下げると encode ピークさらに低下／3-4 で速度トレード。露出は任意の将来作業（VERIFICATION_LOG §11.6）。
 - **【連続生成の上限確認】**keep=0 での gen 時間漸増が、連結機能の実本数（5s→20s＝4本以上）で許容範囲かを、その実装時により長い連続で再計測。
 - **【公開フットプリント削減】**comp=1/GGUF 経路で **モノリス 43GB＋qat 重み 22.7GB が実行時に本当に開かれないか**をコード/ログで検証→不要なら required から外す（DL させない/削除可に）。落とせばディスク要求 ~28GB で先行事例並み。[[no-large-pagefile-disk-requirement]] の達成。
 - **【未検証パス】**新デフォルト（comp=1/keep=0）での **I2V のマルチジョブ・音声付き連続生成は未検証**（今回は T2V マルチジョブのみ実測）。連結機能は I2V 連続なので、実装前にここを検証。

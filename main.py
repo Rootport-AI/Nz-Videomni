@@ -54,6 +54,8 @@ def build_app(args: argparse.Namespace) -> FastAPI:
         config.server.api_key = args.api_key
     if args.te_offload is not None:
         config.vram.te_offload_text_encoder = args.te_offload
+    if args.dit_cpu_load is not None:
+        config.vram.dit_cpu_load = args.dit_cpu_load
 
     host = "0.0.0.0" if args.listen else config.server.host
 
@@ -163,6 +165,12 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="CPU-offload (sequential per-layer stream) the Gemma text encoder during encode (default: config / ON)",
+    )
+    parser.add_argument(
+        "--dit-cpu-load",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Build the DiT (transformer) on CPU and stream blocks to GPU during denoise, avoiding the ~16.9GB load-time GPU spike (default: config / ON)",
     )
     return parser.parse_args()
 

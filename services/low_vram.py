@@ -47,6 +47,11 @@ class LowVramSettings:
     # GGUF Gemma during text-encode. Read by services.ltx_runner._RealBackend
     # (emitted as LTX_TE_OFFLOAD). NOT part of status/metadata contracts.
     te_offload_text_encoder: bool = False
+    # Internal knob (like the above): build the DiT (transformer) on CPU and move
+    # only non-block submodules to GPU, removing the ~16.9GB load-time GPU spike.
+    # Read by services.ltx_runner._RealBackend (emitted as LTX_DIT_CPU_LOAD). NOT
+    # part of status/metadata contracts.
+    dit_cpu_load: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -83,6 +88,7 @@ def build_low_vram_settings(config: AppConfig) -> LowVramSettings:
         vae_spatial_tile_size=v.vae_spatial_tile_size,
         vae_temporal_tile_size=v.vae_temporal_tile_size,
         te_offload_text_encoder=v.te_offload_text_encoder,
+        dit_cpu_load=v.dit_cpu_load,
     )
 
 

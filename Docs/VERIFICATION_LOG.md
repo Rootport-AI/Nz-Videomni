@@ -799,3 +799,44 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 - mock pytest **13 passed**（`tests/conftest.py` の `_make_args` フィクスチャに `te_offload=None` を追加＝parse_args 既定をミラー。GET /status `vram_optimization` 契約テストも緑）。
 
 **commit**：`96f41c4`（main・push 済）。
+
+---
+
+## 12. ★`--dit-cpu-load`（transformer ロード時 GPU スパイク除去）の実装＋A/B 実機検証 PASS（2026-07-01）
+
+残課題B（load/encode の一時 shared 溢れ／§7.9）のうち、§11 で残した **transformer（DiT）ロード段（peak ②）の一過性 GPU スパイク** を除去する機能 `--dit-cpu-load` を実装し、A/B で実機検証した。**この §12 が dit-cpu-load の最終結論。**
+
+### 12.1 機能と機構
+- **`--dit-cpu-load` 起動フラグ（既定 ON、`--no-dit-cpu-load` で無効化）**。transformer ロード時の一過性 ~16.9GB GPU スパイクを除去する。
+- **従来の挙動**：block-swap は、凍結 `ModelLedger.transformer()` が **48 個の GGUF transformer ブロックを一旦すべて GPU に materialize（~16.9GB）してから** CPU へ退避していた。この「一旦 full-GPU ロード→退避」がジョブ天井（peak ②）を作っていた（§7.9）。
+- **新挙動**：transformer を **直接 CPU RAM 上に構築**し、**block 以外の submodule のみ** GPU へ移す。ブロックは CPU に留め、既存の `BlockSwapService` が denoise 窓ごとに CPU↔GPU ストリーム（**この機構は不変**）。**compute は GPU に留まり・出力はバイト単位で同一**。full-model の GPU materialization が無くなるためスパイクが消える。
+- **実装＝独立サービス＋最小配線**（§11 の `--te-offload` と同じ流儀）：新規 `vendor/LTX-Desktop-LOW-VRAM/backend/services/dit_cpu_load_service.py`（`DitCpuLoadService`）＋最小配線。
+  - **build-on-CPU 機構**：`ltx_fast_video_pipeline.py::_install_block_swap` の `patched_transformer` 内で、凍結 `ModelLedger.transformer()` 呼び出しの周囲だけ `ledger.device = torch.device("cpu")` に一時設定（try/finally で復元）。これにより `_target_device()` も末尾の `.to(self.device)` も CPU に解決され、**full-model の GPU materialization（＝スパイク）が起きない**。`.venv` 凍結の `ltx_core`/`ltx_pipelines` は**改変しない**。
+  - **`DitCpuLoadService`**：non-block の leaf テンソルのみを、モジュール単位の `recurse=False` walk（`_parameters`/`_buffers`）で GPU へ移す。LTXModel に直付けの `scale_shift_table`/`audio_scale_shift_table` を拾い、block サブツリーは決して巻き込まない。GGML uint8 buffer は `tensor.to`（`GGMLQuantizedTensor.to()` を尊重）で移動。block の同定は `BlockSwapService._get_blocks()` を単一ソースとして用い、ストリーミングフックと食い違わない。**ガード**：`blocks_on_gpu >= total`（swap 実質 OFF）なら全部を GPU に移す（OFF 等価）。
+
+### 12.2 配線（次セッションが追えるよう entrypoint を記録）
+`--te-offload` と同一の経路をミラー：
+`main.py`（argparse `BooleanOptionalAction --dit-cpu-load`・既定 None ＋ `build_app` override）→ `config.py` `VramConfig.dit_cpu_load: bool = True` → `config.yaml` `vram.dit_cpu_load: true` → `services/low_vram.py`（`LowVramSettings.dit_cpu_load`・`build_low_vram_settings` でコピー・凍結 `_STATUS_KEYS` には**入れない**）→ `services/ltx_runner.py` で env `LTX_DIT_CPU_LOAD`（1/0）→ `vendor/LTX-Desktop-LOW-VRAM/backend/_ltx_worker.py` で読取（既定 "1"）→ `LTXFastVideoPipeline.create(dit_cpu_load=)`。`tests/conftest.py::_make_args` に `dit_cpu_load=None` を追加。`run.ps1` にフラグを記載。
+
+### 12.3 A/B 実機検証（512×320 / 49f / 8 steps / seed=12345・distilled）
+`dit_cpu_load` のみを切り替え、他のノブは本番同等（GGUF transformer+Gemma、block_swap_blocks_on_gpu=8、vae 512/64、component_files ON、keep_resident OFF、te_offload ON）。
+| 指標 | OFF（`--no-dit-cpu-load`） | ON（既定） |
+|---|---|---|
+| transformer-load Dedicated peak | 15,815 MB | **1,444 MB**（−14.4 GB） |
+| denoise Dedicated peak | 6,558 MB | 6,558 MB（不変） |
+| 全体 Shared peak | 2,612 MB | **419 MB**（溢れ消失） |
+| wall-clock | 109.40 s | 102.41 s（退行なし） |
+| 出力 SHA256 | 9E058F6E…（113,329 B） | 9E058F6E…（**同一・バイト一致**） |
+
+- **transformer-load ピーク低減 −14.4 GB／load 時の shared 溢れ消失／wall-clock ペナルティ無し／出力同一。**
+- **裏付け（torch `max_memory_allocated`）**：OFF は denoise 直前に **16,944 MB** へ跳ね上がる（＝§7.9 で記録したジョブ天井＝peak ②）。ON はその跳ね上がりが消え、te-offload 済 text-encode ピーク **9,165 MB** を一度も超えない。⇒ **このサイズでは全体ジョブ天井が 16,944 → ~9.2GB に低下**（peak ② が除去され、残る天井 = peak ① text-encode＝既に te-offload で低減済）。
+
+### 12.4 720p ON スモーク
+- 1280×768 / 121f / 8 steps / seed=12345、`dit_cpu_load=True`（既定）：完走・OOM 無し・**156.0 s**・Dedicated peak 14,611 MB（16 GB 内）・Shared 427 MB（溢れ無し）・valid mp4（1280×768/121f・音声あり・5.04 s・1.20 MB）。
+
+### 12.5 ★スコープ注意（次セッションが誤解しないよう明記）
+- 除去したのは **peak ② のうち「transformer-LOAD materialization スパイク」成分のみ**。**denoise stage2（peak ② の denoise 成分）はトークン数に比例して依然成長する**（`RESOLUTION_DURATION_CAPABILITY.md §2` の den2 推定表は**不変**）。大解像度・長尺では den2 が天井へ近づく軸が別途残る。
+- 一方このサイズ（512×320）では、load スパイクが消えたことで **全体ジョブ天井が 16,944 → ~9.2GB** に下がった（peak ② 除去・残る天井は peak ① text-encode）。**§11 の te-offload（peak ① 低減）と本 §12（peak ② の load-spike 除去）で、load/encode フェーズは 16GB 内に収まる**。残る可変軸は高トークン時の denoise stage2 のみ。
+
+### 12.6 テスト
+- mock pytest **13 passed**（app `.venv`・torch 非依存・凍結経路不変。`tests/conftest.py::_make_args` に `dit_cpu_load=None` を追加＝parse_args 既定をミラー）。

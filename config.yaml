@@ -39,6 +39,7 @@ vram:
   fp8_transformer: true
   cpu_offload_text_encoder: true
   te_offload_text_encoder: true   # 逐次レイヤーCPUオフロード（GGUF Gemma）。encode peak ~15GB→数GB。compute は GPU 維持。
+  dit_cpu_load: true              # transformer を CPU 構築し非ブロックのみ GPU へ。ロード時 GPU スパイク ~16.9GB を除去。
   vae_tiling: true
 
   # Phase 2 以降の高度な独自最適化。Phase 1 では無効。

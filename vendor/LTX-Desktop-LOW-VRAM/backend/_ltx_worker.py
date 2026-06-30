@@ -145,6 +145,11 @@ def _do_load(msg: dict) -> None:
         # peak to a few GB). Default ON when the env var is ABSENT; LTX_TE_OFFLOAD=0
         # reproduces today's all-layers-GPU-resident behavior.
         te_offload_text_encoder=(os.environ.get("LTX_TE_OFFLOAD", "1") == "1"),
+        # DiT CPU-resident build: build the transformer on CPU and move only the
+        # non-block submodules to GPU, eliminating the ~16.9 GB load-time GPU
+        # spike. Default ON when the env var is ABSENT; LTX_DIT_CPU_LOAD=0
+        # reproduces today's build-on-GPU-then-evict behavior.
+        dit_cpu_load=(os.environ.get("LTX_DIT_CPU_LOAD", "1") == "1"),
         # Phase 1: re-source VIDEO VAE + AUDIO VAE/vocoder from standalone files
         # (gate via LTX_COMPONENT_FILES, default OFF). Text projection path is
         # passed through but NOT wired (Phase 2).

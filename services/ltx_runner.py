@@ -502,6 +502,10 @@ class _RealBackend:
         # keeps the 48 Gemma decoder layers CPU-resident, streaming them to GPU
         # per layer. Compute stays on GPU (only PCIe transfer overhead).
         env["LTX_TE_OFFLOAD"] = "1" if self.low_vram.te_offload_text_encoder else "0"
+        # Build the DiT (transformer) on CPU and move only non-block submodules to
+        # GPU, removing the ~16.9GB load-time GPU spike. On by default; the worker
+        # reads this and keeps the blocks CPU-resident for block-swap streaming.
+        env["LTX_DIT_CPU_LOAD"] = "1" if self.low_vram.dit_cpu_load else "0"
 
         # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
         # the worker emits lots of tqdm/log output while we block on stdout).

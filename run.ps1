@@ -9,6 +9,8 @@
 #   ./run.ps1                 # localhost only, port 18620
 #   ./run.ps1 --listen        # bind 0.0.0.0 (home LAN)
 #   ./run.ps1 --port 19000
+#   ./run.ps1 --dit-cpu-load     # build the DiT on CPU, stream blocks to GPU (default ON)
+#   ./run.ps1 --no-dit-cpu-load  # build the DiT on GPU then evict (today's behavior; reintroduces the ~16.9GB load spike)
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $Args

@@ -27,6 +27,8 @@
 - 唯一スケールするのは **denoise stage2**（フル解像度の再デノイズ）。これが尺・解像度（＝トークン数）に比例して増える。
 
 > **★追記（2026-07-01）：`--te-offload`（既定 ON）が Gemma text-encode ピークを ~10.5GB に低減。** 逐次 per-layer ストリーミング（GGUF Gemma 48 層を CPU 常駐→2層ずつ GPU へ）で、この **Gemma text-encode ピーク（peak ①）を 15,839→10,540 MB（−33%）に下げ、encode 時の shared 溢れも消去**（512×320/49f A/B 実測。VERIFICATION_LOG §11）。**ただし本表の能力上限は不変**：ジョブ全体の天井は **denoise stage2（peak ②）** で決まり、te-offload は peak ① のみを下げる（全体 `peak_vram_mb` は両モードとも 16,944 で不変）。よって §2 の den2 推定式・§3 の実測値・§8.4 の「溢れない尺上限」はすべて**そのまま有効**（den2 は te-offload の影響を受けない）。本書の測定値は変更しない。
+>
+> **★追記（2026-07-01）：`--dit-cpu-load`（既定 ON）が transformer ロード時の一過性 GPU スパイク（~16.9GB）を除去。** 従来は block-swap が GGUF transformer の 48 ブロックを一旦 full-GPU に materialize（~16.9GB）してから CPU 退避していた＝これが「ロード固定費」の主要因。本機能は transformer を**直接 CPU 構築**し block 以外のみ GPU へ移すことで、この **LOAD 時 materialization スパイクを除去**（transformer-load Dedicated 15,815→1,444 MB＝−14.4GB・512×320/49f A/B 実測。compute は GPU・出力バイト一致。VERIFICATION_LOG §12）。これにより**小〜中サイズでは全体ジョブ天井がもはや transformer-load スパイクで決まらなくなる**（512×320 で whole-job ceiling が torch `max_memory_allocated` 16,944→~9.2GB）。**ただし §0 の能力表・§2 の den2 推定式・§3 の実測値はすべて不変**：dit-cpu-load が消すのは固定 LOAD スパイクのみで、**解像度・尺にスケールする denoise stage2（den2）の活性成長には影響しない**（den2 こそが大解像度・長尺での真の制約軸）。本書の測定値は変更しない。
 
 ---
 

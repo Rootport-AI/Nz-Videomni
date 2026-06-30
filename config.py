@@ -71,6 +71,10 @@ class VramConfig(BaseModel):
     # (caps the ~15GB encode peak to ~a few GB; compute stays on GPU). Wired to
     # the real worker via LTX_TE_OFFLOAD. Default ON.
     te_offload_text_encoder: bool = True
+    # Build the DiT (transformer) on CPU and move only non-block submodules to
+    # GPU, eliminating the ~16.9GB load-time GPU spike. Wired to the real worker
+    # via LTX_DIT_CPU_LOAD. Default ON.
+    dit_cpu_load: bool = True
     vae_tiling: bool = True
     attention_tiling: bool = False
     attention_tile_size: int | None = None

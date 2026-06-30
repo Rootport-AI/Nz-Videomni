@@ -78,6 +78,7 @@ class LTXFastVideoPipeline:
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
         te_offload_text_encoder: bool = True,
+        dit_cpu_load: bool = True,
     ) -> "LTXFastVideoPipeline":
         return LTXFastVideoPipeline(
             checkpoint_path=checkpoint_path,
@@ -102,6 +103,7 @@ class LTXFastVideoPipeline:
             component_audio_vae_path=component_audio_vae_path,
             component_text_projection_path=component_text_projection_path,
             te_offload_text_encoder=te_offload_text_encoder,
+            dit_cpu_load=dit_cpu_load,
         )
 
     def __init__(
@@ -128,6 +130,7 @@ class LTXFastVideoPipeline:
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
         te_offload_text_encoder: bool = True,
+        dit_cpu_load: bool = True,
     ) -> None:
         from ltx_core.quantization import QuantizationPolicy
         from ltx_pipelines.distilled import DistilledPipeline
@@ -149,6 +152,12 @@ class LTXFastVideoPipeline:
         # CPU->GPU per window during encode (caps the ~15 GB encode peak). Default ON;
         # when OFF the Gemma layers are all GPU-resident (today's exact behavior).
         self._te_offload_text_encoder = te_offload_text_encoder
+        # DiT CPU-resident build: build the transformer directly on CPU RAM and
+        # move only non-block submodules to GPU, eliminating the ~16.9 GB load-time
+        # GPU spike. Blocks stay on CPU for the existing block-swap streaming.
+        # Default ON; when OFF the transformer is built on GPU then evicted
+        # (today's exact behavior).
+        self._dit_cpu_load = dit_cpu_load
 
         # FP8: use setting OR auto-detect CUDA support.
         # The pipeline (transformer/VAE) always runs on device (video GPU, cuda:0).
@@ -486,6 +495,7 @@ class LTXFastVideoPipeline:
     def _install_block_swap(self, blocks_on_gpu: int) -> None:
         try:
             from services.block_swap_service import BlockSwapService
+            from services.dit_cpu_load_service import DitCpuLoadService
             service = BlockSwapService(
                 blocks_on_gpu=blocks_on_gpu,
                 device=self._transformer_device,
@@ -493,9 +503,17 @@ class LTXFastVideoPipeline:
             # Wrap model_ledger.transformer() persistently so block swap is
             # re-installed on every build (model_ledger never caches the model).
             original_transformer = self.pipeline.model_ledger.transformer
+            ledger = self.pipeline.model_ledger
+            # DiT CPU-resident builder (default ON): builds on CPU to avoid the
+            # load-time GPU spike, then moves only non-block tensors to GPU.
+            dit_service = DitCpuLoadService(self._transformer_device, service)
 
             def patched_transformer() -> torch.nn.Module:
-                t = original_transformer()
+                if not self._dit_cpu_load:
+                    t = original_transformer()
+                    service.install(t)
+                    return t
+                t = dit_service.build_cpu_resident(ledger, original_transformer)
                 service.install(t)
                 return t
 

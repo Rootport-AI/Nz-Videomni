@@ -329,6 +329,29 @@ keep=0 は毎ジョブ全 submodel を再 materialize するため、§8 の com
 - mock pytest 13 passed 維持（config 変更後）。アーティファクト＝`outputs/run720p*`・`outputs/multijob_*`（テスト出力・サンプラ CSV・段境界 JSON）。
 - ※ディレクトリ掃除は専任の次セッションへ委譲（残課題から除外・ユーザー指示）。
 
+### 10.6 解像度×尺の上限スイープ（2026-06-30 後半・1080p/1440p/4K）
+直接ハーネス `scratchpad/gen_one.py`（本番同等＝comp=1/keep=0/bs8/vae512-64、API の÷64・解像度制限をバイパス）で、GPU+commit+段境界 VRAM を採取しながら昇順生成。
+- **天井＝ロード時 Gemma encode max_alloc 15,098MB（解像度・尺に完全非依存の固定費）**。生成（denoise/upsample/VAE）は天井に対し余裕＝ユーザー仮説どおり。
+- **denoise stage2 max_alloc ≈ 5,085MB + 0.175MB/token**（token=(W/32)(H/32)(1+(F-1)/8)。4点フィット＝1080p/1440p/4K の25f＋720p/121f アンカー。高トークン側で実測+3%上振れ）。**VAE decode は ~1.9GB 横ばい**（空間/時間タイル512/64で解像度・尺非依存）。
+
+| 解像度(生成÷64) | 25f(≈1s) | **5秒(121f)** | 確認した実用上限 | 備考 |
+|---|---|---|---|---|
+| 1080p 1920×1088 | ✅ den2 6.5GB | **✅ den2 10.8GB / 4.3分** | ~9秒 | 余裕 |
+| 1440p 2560×1472 | ✅ den2 7.6GB | **✅ den2 15.9GB / 11分** | ~5秒 | 限界点（den2が天井超→shared溢れ2.8GB・激遅化） |
+| 4K 3840×2176 | ✅ den2 10.8GB | ❌（推定~49f=2s が上限） | ~2秒（49f,den2 15.5GB,8.7分） | — |
+- **結論：16GB で 5秒動画は 1080p・1440p で実現可能、4K は ~2秒まで。** den2 が天井（~15.1GB）を超えると WDDM shared へ溢れて完走するが激遅。表示解像度へは crop（1088→1080 等）。AviUtl2 UI の解像度/尺の上限はこの実測表が根拠。アーティファクト＝`outputs/bigres_*`・`outputs/verify_*`（mp4＋sampler CSV＋段境界 JSON）。
+
+#### 10.6.1 1080p 長尺の追い込み（音声付き・発話プロンプト）
+1080p(1920×1088)で 9s/10s/11s を昇順生成（joint audio 自動・AAC/48kHz/stereo）:
+| 尺 | フレーム | 結果 | den2 max_alloc | shared peak | commit% | 時間 |
+|---|---|---|---|---|---|---|
+| 9秒 | 217f | ✅ OK | 15,539MB | 2,462MB | 58% | 9.1分 |
+| 10秒 | 241f | ✅ OK | 16,815MB | 3,892MB | 63% | 11.3分 |
+| 11秒 | 265f | ✅ OK | 18,093MB | 5,506MB | 60% | 14.9分 |
+- **den2 は物理 VRAM(16,376MB)を超えても完走**＝超過分は WDDM shared(commit 余裕60%)へ。**ハードOOMの壁は未到達**。1080p の上限は OOM でなく **速度（shared paging で ~+3〜4分/秒）**で決まる＝11秒は確実、12秒以降は1本20分超で実用性低下。
+- 高トークン側フィット `den2 ≈ 10,796 + 0.194×(token − 32,640)` が ±1% で的中（9s予測15,555/実測15,539、10s予測16,745/実測16,815、11s予測17,934/実測18,093）。
+- 音声は `LTXFastVideoPipeline.create()/generate()` 既定で生成（gen_one.py 直接経路でも AAC track 確認）。発話内容はモデル生成のベストエフォート（要・聴取確認）。アーティファクト＝`outputs/long_1080p_{9s,10s,11s}/`。
+
 ### 7.2 ステップ2 診断 A＝フェーズ別4指標（bs8・baseline, expandable_segments:True）
 torch `allocated/reserved/max_alloc`（スパイク内）＋ perf-counter `dedicated/shared`（サンプラ）を境界ごとに突き合わせ:
 

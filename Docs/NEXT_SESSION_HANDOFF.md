@@ -39,7 +39,8 @@
 - **【真の目的】AviUtl2 拡張機能との統合**（上記マイルストーン2）。
 
 ### 一次情報のポインタ
-- 技術記録＝**VERIFICATION_LOG §10**（720p 二段達成・keep_resident 原因/修正・component_files マルチジョブ修正・commit/ディスク実測）。
+- **解像度×尺の能力リファレンス＝Docs/RESOLUTION_DURATION_CAPABILITY.md**（16GB でどの解像度/尺まで作れるか・den2 推定式・生成時間・AviUtl2 UI 含意の正本）。
+- 技術記録＝**VERIFICATION_LOG §10**（720p 二段達成・keep_resident 原因/修正・component_files マルチジョブ修正・commit/ディスク実測・§10.6 解像度×尺スイープ）。
 - スケールアップ調査の正本＝Docs/SCALEUP_16GB_RESEARCH.md（✅達成バナー追記済）。
 - 設定知識＝Docs/LTX23_REFERENCE.md。memory `[[720p-16gb-verified]]` / `[[ltx-bridge-project]]`。
 

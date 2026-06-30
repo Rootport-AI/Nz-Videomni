@@ -99,7 +99,12 @@
       "Bash(./.venv/Scripts/python.exe -c \"import psutil; vm=psutil.virtual_memory\\(\\); print\\('RAM total %.1f GB avail %.1f GB used %.1f%%'%\\(vm.total/1e9, vm.available/1e9, vm.percent\\)\\)\")",
       "Bash(powershell -Command '$os=Get-CimInstance Win32_OperatingSystem; '\\\\''{0:N1} GB total, {1:N1} GB free'\\\\'' -f \\($os.TotalVisibleMemorySize/1MB\\),\\($os.FreePhysicalMemory/1MB\\)')",
       "Bash(nvidia-smi --query-gpu=memory.used,memory.total --format=csv)",
-      "Bash(wmic process *)"
+      "Bash(wmic process *)",
+      "Bash(python \"C:/Users/PHENOT~1/AppData/Local/Temp/claude/s--OriginalApps-12-Nz-LTX23-backend/578eb422-9612-4c52-852b-4c119a9f70f7/scratchpad/extract_peaks.py\")",
+      "PowerShell(Head -30)",
+      "WebFetch(domain:www.vgoodslab.com)",
+      "WebFetch(domain:dev.to)",
+      "Read(//c/Users/phenotype nezu/.claude/**)"
     ]
   }
 }

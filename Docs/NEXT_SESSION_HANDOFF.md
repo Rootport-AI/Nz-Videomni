@@ -1,12 +1,27 @@
 # 次セッション引き継ぎ書 — LTX 2.3 を 16GB で動かす
 
-最終更新: 2026-06-30（**残課題A＝per-job リークを診断確定→修正→6ジョブ実機検証 PASS。フォーク backend を版管理化（commit 済）。次の一手＝音声 Phase 1 実機確認**）/ 想定読者: 次セッションのエージェント
+最終更新: 2026-06-30（**残課題A＝per-job リークを診断確定→修正→6ジョブ実機検証 PASS。フォーク backend を版管理化（commit 済）。音声 Phase 1 実機確認 PASS（✅DONE）。次の一手＝qat-drop(24GB削減)／720p スケールアップ（残課題C）**）/ 想定読者: 次セッションのエージェント
 
 > **このドキュメントが現時点の最新・正本（handoff）です。まず §0 と「★残課題サマリ」を読めば、現状と次の一手が分かる。**
 > **【リポジトリ状態 2026-06-30】** フォーク `vendor/LTX-Desktop-LOW-VRAM/backend/` の **.py ソース 169ファイルが版管理対象になった**（commit `4ea5c4b` "Vender"、origin/main 同期済）。`.gitignore` を negation ブロックに変更し backend ソースのみ追跡（`.venv`/weights/フロントエンド/`uv.lock` は除外維持）。フォーク自身の `.git` は **`.git_fork_disabled` にリネームして無効化**（境界を外しファイル追跡を可能にするため・42MB・削除可）。出典は `vendor/LTX-Desktop-LOW-VRAM/backend/VENDOR_NOTICE.md`。**＝以後エンジン改変は通常の git で commit できる**（以前は vendor/ 丸ごと ignore でエンジン全体が版管理外だった）。
 > 設計判断の根拠と実機検証の全経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**最新＝§9.7（per-job リーク診断確定＋修正＋検証 PASS＝残課題A 完全解決）。次セッションはまず §0 末尾の ▶▶▶ と §9.7 を読め**、§9.6＝Path B component-files、
 > §6＝Phase 5(A) 配線、§5＝Gemma GGUF）が一次情報。実装計画は `~/.claude/plans/frolicking-tumbling-hennessy.md`。
 > 要約は memory `[[ltx-bridge-project]]` / `[[ltx-desktop-lowvram-fork]]`。⚠️ 古い記述が残るドキュメント（後述 §6）に惑わされないこと。
+
+---
+
+## 次セッション開始点（2026-06-30 更新）
+
+- **完了**: 音声 Phase 1 実機確認 **✅PASS**（VERIFICATION_LOG §9.8）。16GB 高解像度スケールアップの調査を **`Docs/SCALEUP_16GB_RESEARCH.md`** に集約（正本）。残課題A（worker 再利用 crash）も解決済（§9.7）。
+- **最初に読むべき**: **`Docs/SCALEUP_16GB_RESEARCH.md`**（720pレバー棚卸し＋コミュニティ実証レシピ＋真の難所3点）。要点＝**720pレバーの 4/5 は我々のフォークに既に配線済・既定OFF**（二段パイプライン / attention tiling=`attention_tile_size` / VAE 空間タイル / VAE 時間タイル / block-swap）。**未実装は FFN チャンキングのみで、それは主に長尺向け＝1280×720 の空間スケールには非必須**。
+- **次の一手（推奨A・GPU不要から着手）＝720pスケールアップ**:
+  - **Step 1（読解のみ・GPU不要）**: 公式 `ti2vid_two_stages.py`（`vendor/LTX-2/packages/ltx-pipelines/.../ti2vid_two_stages.py`）を精読し、(1) 難所①「stage1→stage2 の VRAM 遷移＝両段を同時保持するか／段間で latent 保存＋モデルアンロードが要るか」、(2) `LTXFastVideoPipeline.create()` の VRAM ノブ（`attention_tile_size` / `vae_spatial_tile_size` / `vae_temporal_tile_size` / `block_swap_blocks_on_gpu`）が **両ステージに効くか** を確定する。
+  - **Step 2**: SCALEUP doc §5 の推奨レシピで **計装つき 1 本だけ生成**（dedicated＋shared 両監視・既存 `_gpu_mem_sampler.ps1` 併走・フォーク venv のみ）→ 収まるか／どこでスパイクするか実測。
+  - **Step 3（必要時のみ）**: block-swap 深度調整 or 段間アンロード実装。FFN チャンキングは将来の長尺対応で初めて検討。
+- **真の難所3点（先行事例に答えが無い・SCALEUP §4）**: (1) 段間(stage1→stage2)遷移スパイク (2) 22B の block-swap 深度 (3) tiling＋GGUF＋block-swap の共存性。
+- **代替B**: qat-drop（24GB 削減）。
+- **目標解像度＝1280×720 で充分**（より大きいサイズ・長尺の情報は SCALEUP doc 付録に保全）。
+- **作業原則の念押し**: 監督役＝編集/テスト/生成はサブエージェントへ委譲、本体 Python 不可触・生成はフォーク venv のみ、**いきなり 720p 生成や闇雲なスイープをしない**（先行事例レシピを写す＋最小再現確認＝[[research-prior-art-first]]）。
 
 ---
 
@@ -34,7 +49,7 @@
   - **真因＝`BlockSwapService._installed_transformers` が毎 generate の transformer を append し続け解放しない**（仮説a 確定）。registry は HIT・キャッシュ汚染なし（仮説b/c・in-place .to 説は実測で棄却）。計装で `installed_transformers` 1→2→3→4 を直接観測。leaked transformer の CPU 退避ブロック=commit +18GB/job、GPU 窓=VRAM 床 +1GB/job、で両軸を単一原因に統合。
   - **修正（フォーク製品コード・凍結境界外・persistent）**：①`block_swap_service.py install()` で append 前に `_installed_transformers.clear()`（keep-latest）②`_ltx_worker.py _do_generate()` の `_emit("done")` 直後に `gc.collect(); torch.cuda.empty_cache()`。**`model_ledger.py` の in-place `.to` 改修は不要**（キャッシュ非汚染を実測確認＝vendored `.venv` 不触）。
   - **検証 PASS**：6ジョブ全完走（旧 job5 crash 点突破）、`installed_transformers` 1 で一定、torch 床・denoise peak・commit すべて平坦、**出力 mp4 が修正前と SHA256 バイト一致**（計算不変）、mock 13 緑。詳細＝§9.7。
-  - **次の一手＝音声 Phase 1 の実機確認**（ffprobe で mp4 の AAC トラック有無・decode VRAM・metallic アーティファクト）、次いで qat-drop(24GB)／720p スケールアップ（残課題C）。gate＝env `LTX_COMPONENT_FILES=1`＋`LTX_KEEP_RESIDENT=1`。
+  - **音声 Phase 1 の実機確認は ✅DONE（2026-06-30 PASS、VERIFICATION_LOG §9.8 参照）**＝native joint audio が 16GB で効果音/音楽/発話を生成・AAC mux・decode VRAM 余裕（dedicated ~2.7GB）・crop 音声保持を確認済。**次の一手＝qat-drop(24GB削減)／720p スケールアップ（残課題C）**。gate＝env `LTX_COMPONENT_FILES=1`＋`LTX_KEEP_RESIDENT=1`。
 
 ## ★残課題サマリ（次セッション向け・2026-06-29 時点）
 
@@ -95,6 +110,8 @@ Phase 5(B)＝**denoise 工程の VRAM 低減は達成・実装済**（empty_cach
   地続き。詳細 §7.9。
 
 ### 【残課題C】スケールアップ 1280×768→720p クロップ（本来の機能目標）
+- → 詳細調査は Docs/SCALEUP_16GB_RESEARCH.md に集約（レバー棚卸し＋コミュニティレシピ＋真の難所3点）
+- ★訂正(2026-06-30)：以下「修正方向」の **「attention tiling 配線（未配線）」前提は古い**。SCALEUP doc で判明＝attention tiling は既に実装済（`attention_tile_service.py`・`attention_tile_size`、既定OFF）。VAE 空間/時間タイル・二段・block-swap も配線済。**未実装は FFN チャンキングのみ（主に長尺向け・1280×720 には非必須）**。真の難所は移植でなく (1)段間遷移スパイク (2)22B block-swap 深度 (3)tiling＋GGUF＋block-swap 共存。**目標は 1280×720 で充分**。次の一手の手順は本書冒頭「次セッション開始点」＋ SCALEUP doc §5/§6 を参照。
 - 384x256 の denoise は解消済だが **production ターゲットは 720p**。高解像度では denoise の**アクティベーションが支配的**に
   なる（384x256 で効かなかった活性軸技法が高解像度で本命）。
 - **修正方向**：**attention tiling 配線**（`attention_tile_size`＝フォークに実装済・我々の worker/config で未配線）＋

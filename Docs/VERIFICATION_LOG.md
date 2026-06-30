@@ -676,3 +676,25 @@ NVIDIA "Prefer No Sysmem Fallback"。**★罠：cpu_offload・VAE tiling・fp8 �
 mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファクト：`outputs/phase5b_diag/`（`reuse_loop_diag.py`／`diag_probe_{LEAKDIAG,VERIFY}.json`／`reg_events_*.json`／`reuse_marks_VERIFY.json`／`commit_mem_VERIFY.log`／`gpu_mem_VERIFY.log`／`reuse_VERIFY_job{1..6}_*.mp4`）。
 
 **残課題A（worker 再利用 crash）はこれで完全解決**。残るオープン項目＝音声 Phase 1 の実機確認（ffprobe で AAC トラック有無・decode VRAM・metallic アーティファクト）／qat-drop(24GB)／720p スケールアップ（残課題C）。
+
+### 9.8 音声 Phase 1 実機確認（2026-06-30 PASS）
+
+§9.3 で Phase 1 へ格上げした native joint audio を、本機 16GB で実機確認した。**結論＝PASS**。この §9.8 が音声 Phase 1 の最終結論。
+
+**結論**：LTX-2.3 の native joint audio は 16GB 実機で正常動作する。効果音・音楽・**セリフ(発話)**のすべてを生成でき、AAC として mp4 に mux され、16GB に余裕で収まる。**Phase 1 audio は PASS**。
+
+**AAC 実在（客観・ffprobe）**：保全済み `outputs/phase5b_diag/reuse_VERIFY_job{1..6}.mp4` の**全6本に AAC/48kHz/ステレオ音声トラック**が存在。音声長 1.090s vs 映像長 1.125s（1フレーム差でほぼ一致）。映像は H.264 384×256/9f。
+
+**crop 音声保持**：`services/video_io.py` の `crop_mp4`（L105-123、`-map 0:v -map 0:a? -c:a copy`）で job6 を 320×192 にクロップ → AAC がストリームコピーで**無劣化保持**されることを ffprobe で確認。
+
+**decode VRAM（実測）**：単発ジョブの decode 区間 peak ＝ dedicated ~2.7GB / shared ~0.5GB。6ジョブ VERIFY 実行では decode ~6.3GB（次ジョブのプリロード混入）。いずれも denoise（~14.3〜15.3GB）・全体ピーク（モデルロード時 ~15.9GB）より**大幅に低く、音声デコードは VRAM のボトルネックでない**。16GB 安全。
+
+**主観確認（ユーザー）**：
+- T2V job6＝赤い車＋楽しげな音楽＋タイヤ/エンジン音（内容追従）。
+- I2V job2＝映像はほぼ同じだが別の音楽/エンジン音（画像条件付き経路でも joint audio が機能・音声は毎回生成される本物）。
+- 新規 T2V 発話テスト `outputs/phase5b_diag/reuse_hello_job1_t2v.mp4`（プロンプトで人物が "Hello" と発話）→ ユーザーが再生し**明瞭に "Hello" と聞こえることを確認**。
+
+**注意/限界**：
+- (a) GPU サンプラ `_gpu_mem_sampler.ps1` は Get-Counter ベースで実効間隔 ~2秒（`-IntervalSec 0.25` を渡しても短縮されない）。decode 窓 ~2秒に有効サンプルが実質1点のみで、2秒未満の瞬間ピークは未捕捉。ただし decode の ~2.7GB という余裕（16GB まで +13GB 超）から、この限界は結論に影響しない。真の 0.25s 採取が要れば NVML/`nvidia-smi --loop-ms` 方式への置換が必要（未実施）。
+- (b) 検証は 384×256/~1.1秒の小クリップのみ。高解像度・長尺の音声挙動はスコープ外＝**残課題C（スケールアップ）**。
+- (c) transformer は Q4_K_M 量子化でフル bf16 公式とビット一致ではないが聴感良好。

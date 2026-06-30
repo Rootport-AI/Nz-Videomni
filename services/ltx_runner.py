@@ -497,6 +497,11 @@ class _RealBackend:
         # single-job local server does not need cross-job weight reuse, so default
         # to 0; an explicit LTX_KEEP_RESIDENT in the environment still wins.
         env.setdefault("LTX_KEEP_RESIDENT", "0")
+        # Sequential per-layer CPU offload of the GGUF Gemma during text-encode
+        # (caps the ~15GB encode peak). On by default; the worker reads this and
+        # keeps the 48 Gemma decoder layers CPU-resident, streaming them to GPU
+        # per layer. Compute stays on GPU (only PCIe transfer overhead).
+        env["LTX_TE_OFFLOAD"] = "1" if self.low_vram.te_offload_text_encoder else "0"
 
         # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
         # the worker emits lots of tqdm/log output while we block on stdout).

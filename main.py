@@ -52,6 +52,8 @@ def build_app(args: argparse.Namespace) -> FastAPI:
         config.server.allow_all_cors = True
     if args.api_key is not None:
         config.server.api_key = args.api_key
+    if args.te_offload is not None:
+        config.vram.te_offload_text_encoder = args.te_offload
 
     host = "0.0.0.0" if args.listen else config.server.host
 
@@ -156,6 +158,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-key", type=str, default=None, help="require Bearer api-key")
     parser.add_argument("--allow-all-cors", action="store_true", help="allow all CORS origins")
     parser.add_argument("--config", type=str, default=None, help="path to config.yaml")
+    parser.add_argument(
+        "--te-offload",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="CPU-offload (sequential per-layer stream) the Gemma text encoder during encode (default: config / ON)",
+    )
     return parser.parse_args()
 
 

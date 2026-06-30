@@ -140,6 +140,11 @@ def _do_load(msg: dict) -> None:
         # the resident worker; the reuse_loop spike toggles LTX_KEEP_RESIDENT=0 for an
         # A/B baseline against the per-job-rebuild known-good.
         keep_resident_weights=(os.environ.get("LTX_KEEP_RESIDENT", "1") == "1"),
+        # TE per-layer CPU offload: stream the GGUF-quantized Gemma decoder layers
+        # CPU->GPU one window at a time during text-encode (caps the ~15 GB encode
+        # peak to a few GB). Default ON when the env var is ABSENT; LTX_TE_OFFLOAD=0
+        # reproduces today's all-layers-GPU-resident behavior.
+        te_offload_text_encoder=(os.environ.get("LTX_TE_OFFLOAD", "1") == "1"),
         # Phase 1: re-source VIDEO VAE + AUDIO VAE/vocoder from standalone files
         # (gate via LTX_COMPONENT_FILES, default OFF). Text projection path is
         # passed through but NOT wired (Phase 2).

@@ -22,7 +22,8 @@ import main  # noqa: E402  (import after env set)
 
 def _make_args(config_path: str) -> argparse.Namespace:
     return argparse.Namespace(
-        listen=False, port=None, api_key=None, allow_all_cors=False, config=config_path
+        listen=False, port=None, api_key=None, allow_all_cors=False, config=config_path,
+        te_offload=None,
     )
 
 

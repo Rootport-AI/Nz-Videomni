@@ -67,6 +67,10 @@ class VramConfig(BaseModel):
     low_vram_profile: str = "16gb_safe"
     fp8_transformer: bool = True
     cpu_offload_text_encoder: bool = True
+    # Sequential per-layer CPU offload of the GGUF Gemma during text-encode
+    # (caps the ~15GB encode peak to ~a few GB; compute stays on GPU). Wired to
+    # the real worker via LTX_TE_OFFLOAD. Default ON.
+    te_offload_text_encoder: bool = True
     vae_tiling: bool = True
     attention_tiling: bool = False
     attention_tile_size: int | None = None

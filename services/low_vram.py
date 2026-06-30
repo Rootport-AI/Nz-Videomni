@@ -43,6 +43,10 @@ class LowVramSettings:
     block_swap_blocks_on_gpu: int | None = None
     vae_spatial_tile_size: int = 0
     vae_temporal_tile_size: int = 0
+    # Internal knob (like the above): sequential per-layer CPU offload of the
+    # GGUF Gemma during text-encode. Read by services.ltx_runner._RealBackend
+    # (emitted as LTX_TE_OFFLOAD). NOT part of status/metadata contracts.
+    te_offload_text_encoder: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -78,6 +82,7 @@ def build_low_vram_settings(config: AppConfig) -> LowVramSettings:
         block_swap_blocks_on_gpu=v.block_swap_blocks_on_gpu,
         vae_spatial_tile_size=v.vae_spatial_tile_size,
         vae_temporal_tile_size=v.vae_temporal_tile_size,
+        te_offload_text_encoder=v.te_offload_text_encoder,
     )
 
 

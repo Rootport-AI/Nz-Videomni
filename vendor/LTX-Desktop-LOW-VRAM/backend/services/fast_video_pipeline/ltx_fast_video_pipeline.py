@@ -77,6 +77,7 @@ class LTXFastVideoPipeline:
         component_video_vae_path: str = "",
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
+        te_offload_text_encoder: bool = True,
     ) -> "LTXFastVideoPipeline":
         return LTXFastVideoPipeline(
             checkpoint_path=checkpoint_path,
@@ -100,6 +101,7 @@ class LTXFastVideoPipeline:
             component_video_vae_path=component_video_vae_path,
             component_audio_vae_path=component_audio_vae_path,
             component_text_projection_path=component_text_projection_path,
+            te_offload_text_encoder=te_offload_text_encoder,
         )
 
     def __init__(
@@ -125,6 +127,7 @@ class LTXFastVideoPipeline:
         component_video_vae_path: str = "",
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
+        te_offload_text_encoder: bool = True,
     ) -> None:
         from ltx_core.quantization import QuantizationPolicy
         from ltx_pipelines.distilled import DistilledPipeline
@@ -142,6 +145,10 @@ class LTXFastVideoPipeline:
         self._component_video_vae_path = component_video_vae_path
         self._component_audio_vae_path = component_audio_vae_path
         self._component_text_projection_path = component_text_projection_path
+        # TE per-layer offload: stream the GGUF-quantized Gemma decoder layers
+        # CPU->GPU per window during encode (caps the ~15 GB encode peak). Default ON;
+        # when OFF the Gemma layers are all GPU-resident (today's exact behavior).
+        self._te_offload_text_encoder = te_offload_text_encoder
 
         # FP8: use setting OR auto-detect CUDA support.
         # The pipeline (transformer/VAE) always runs on device (video GPU, cuda:0).
@@ -223,6 +230,7 @@ class LTXFastVideoPipeline:
                 connector_gguf_path=(
                     gguf_transformer_path if _gemma_component else None
                 ),
+                te_offload=self._te_offload_text_encoder,
             )
 
         # ── Install CPU text encoder (keep 24GB bf16 Gemma off the GPU) ──
@@ -392,6 +400,7 @@ class LTXFastVideoPipeline:
         gguf_path: str,
         component_text_projection_path: str | None = None,
         connector_gguf_path: str | None = None,
+        te_offload: bool = True,
     ) -> None:
         """Load the Gemma-3 text encoder from a quantized GGUF, per-layer dequant.
 
@@ -411,6 +420,7 @@ class LTXFastVideoPipeline:
                 gguf_path=gguf_path,
                 component_text_projection_path=component_text_projection_path,
                 connector_gguf_path=connector_gguf_path,
+                layer_offload=te_offload,
             )
             service.install(self.pipeline.model_ledger)
             if component_text_projection_path and connector_gguf_path:

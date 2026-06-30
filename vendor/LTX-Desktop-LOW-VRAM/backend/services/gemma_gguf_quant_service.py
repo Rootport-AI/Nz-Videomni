@@ -325,6 +325,7 @@ class GemmaGGUFQuantStateDictLoader:
         embed_cpu_offload: bool = True,
         connector_gguf_path: str | None = None,
         connector_sd_ops: Any = None,
+        layer_offload: bool = False,
     ) -> None:
         self.gguf_path = gguf_path
         # The original SafetensorsModelStateDictLoader from the text_encoder_builder.
@@ -354,6 +355,13 @@ class GemmaGGUFQuantStateDictLoader:
         # otherwise drag the embedding onto the GPU. See GemmaGGUFQuantLoaderService.
         self.embed_cpu_offload = embed_cpu_offload
         self.held_embed_cpu: torch.Tensor | None = None
+        # VRAM (Lever — TE per-layer offload): when True, the per-layer GGUF Gemma
+        # decoder weights (and the per-layer norms) under ``...language_model.layers.``
+        # are left on CPU rather than moved to ``target_device`` during the GGUF load.
+        # They are then streamed to the GPU one window at a time during the encode
+        # forward by GemmaLayerOffloadService, capping the ~15 GB encode peak. When
+        # False this is a no-op (all layers GPU-resident, today's exact behavior).
+        self.layer_offload = layer_offload
 
     def metadata(self, path: str) -> dict:
         # Config still comes from the distilled checkpoint metadata (it carries the
@@ -558,22 +566,42 @@ class GemmaGGUFQuantStateDictLoader:
         # sd_map_replace operates on KEYS only; carry the payload tuples as values.
         remapped = sd_map_replace(raw_entries, GEMMA3_SD_MAP)
 
+        # CPU device used to hold the offloaded per-layer tensors back (TE offload).
+        cpu_device_off = torch.device("cpu")
+
         out: dict[str, torch.Tensor] = {}
         n_quant = 0
         n_norm = 0
         n_embed = 0
+        n_cpu_layer = 0
         for hf_key, (raw_flat, ggml_type, float_shape) in remapped.items():
             ltx_key = _to_ltx_key(hf_key)
             if ltx_key is None:
                 continue
 
+            # ── TE per-layer offload ──────────────────────────────────────────────
+            # When layer_offload is on, the per-layer Gemma decoder tensors (the
+            # quantized Linears AND the per-layer norms) stay on CPU; only this
+            # ``...language_model.layers.*`` keyset is held back. The final
+            # ``language_model.norm.weight``, rotary buffers, embeddings (Lever 3),
+            # and all LTX-side connector/base weights still go to target_device as
+            # today. GemmaLayerOffloadService streams these CPU layers to the GPU per
+            # window during encode. ``key_device`` is the device THIS key lands on.
+            is_offloaded_layer = (
+                self.layer_offload and ".language_model.layers." in ltx_key
+            )
+            key_device = cpu_device_off if is_offloaded_layer else target_device
+            if is_offloaded_layer:
+                n_cpu_layer += 1
+
             if _is_norm_or_embed(ltx_key):
                 is_norm = any(ltx_key.endswith(suf) for suf in _NORM_SUFFIXES)
                 if is_norm:
-                    # Norms are tiny (3840 elems); dequantize directly on the target
-                    # device. Apply the RMSNorm +1 correction AFTER dequant:
+                    # Norms are tiny (3840 elems); dequantize directly on the key's
+                    # device (CPU when this is an offloaded per-layer norm, else
+                    # target_device). Apply the RMSNorm +1 correction AFTER dequant:
                     # llama.cpp baked (1 + w); HF re-adds 1 -> subtract here.
-                    deq = _dequant_to_bf16(raw_flat, ggml_type, float_shape, target_device)
+                    deq = _dequant_to_bf16(raw_flat, ggml_type, float_shape, key_device)
                     deq = (deq.float() - 1.0).to(torch.bfloat16)
                     n_norm += 1
                     out[ltx_key] = deq
@@ -629,26 +657,36 @@ class GemmaGGUFQuantStateDictLoader:
             if _is_quantizable_linear(ltx_key):
                 if ggml_type in _FLOAT_GGML_TYPES:
                     # A Linear weight stored unquantized in the GGUF — keep bf16.
+                    # On key_device (CPU when this is an offloaded per-layer Linear).
                     out[ltx_key] = _dequant_to_bf16(
-                        raw_flat, ggml_type, float_shape, target_device
+                        raw_flat, ggml_type, float_shape, key_device
                     )
                 else:
                     qt = GGMLQuantizedTensor(raw_flat, ggml_type, float_shape)
-                    if target_device.type != "cpu":
-                        qt = qt.to(target_device, non_blocking=True)
+                    # Move to GPU only when this key is NOT an offloaded per-layer
+                    # weight; offloaded layer weights stay on CPU (key_device==cpu)
+                    # and are streamed to the GPU per window during encode.
+                    if key_device.type != "cpu":
+                        qt = qt.to(key_device, non_blocking=True)
                     out[ltx_key] = qt
                     n_quant += 1
                 continue
 
-            # Any other Gemma weight (e.g. biases if present) -> plain bf16.
-            out[ltx_key] = _dequant_to_bf16(raw_flat, ggml_type, float_shape, target_device)
+            # Any other Gemma weight (e.g. biases if present) -> plain bf16 on the
+            # key's device (CPU when this is an offloaded per-layer weight).
+            out[ltx_key] = _dequant_to_bf16(raw_flat, ggml_type, float_shape, key_device)
 
         logger.info(
             "Gemma GGUF tensors mapped: %d quantized Linear, %d dequantized norms "
-            "(+1 corrected), %d embeddings",
+            "(+1 corrected), %d embeddings%s",
             n_quant,
             n_norm,
             n_embed,
+            (
+                f"; {n_cpu_layer} per-layer tensors held on CPU (TE offload)"
+                if self.layer_offload
+                else ""
+            ),
         )
         return out
 
@@ -998,6 +1036,7 @@ class GemmaGGUFQuantLoaderService:
         gguf_path: str,
         component_text_projection_path: str | None = None,
         connector_gguf_path: str | None = None,
+        layer_offload: bool = False,
     ) -> None:
         self.gguf_path = gguf_path
         # ── Phase 2 (component files), both must be set to enable the monolith drop ──
@@ -1008,6 +1047,11 @@ class GemmaGGUFQuantLoaderService:
         #   unchanged monolith path (monolith still in model_path).
         self.component_text_projection_path = component_text_projection_path
         self.connector_gguf_path = connector_gguf_path
+        # When True, keep the 48 GGUF-quantized Gemma decoder layers CPU-resident and
+        # stream them to the GPU one window at a time during the encode forward
+        # (GemmaLayerOffloadService), capping the ~15 GB encode peak. When False the
+        # decoder layers are all GPU-resident (today's exact behavior).
+        self.layer_offload = layer_offload
 
     def install(self, model_ledger: Any) -> None:
         if not Path(self.gguf_path).exists():
@@ -1082,6 +1126,7 @@ class GemmaGGUFQuantLoaderService:
             embed_cpu_offload=True,
             connector_gguf_path=connector_gguf_path,
             connector_sd_ops=connector_sd_ops,
+            layer_offload=self.layer_offload,
         )
 
         # 2. Add our per-layer dequant module_ops AFTER the existing Gemma module
@@ -1133,9 +1178,27 @@ class GemmaGGUFQuantLoaderService:
             # GGMLQuantizedTensor.to override is out-of-place and preserves subclass +
             # _ggml_type/_float_shape attrs.
             if build_device != ledger_device:
-                model = model._apply(
-                    lambda t: t if t.device.type == "meta" else t.to(ledger_device)
-                )
+                # TE per-layer offload caveat: in offload mode the
+                # ``language_model.layers.*`` GGUF buffers are deliberately held on
+                # CPU (loader left them there) so GemmaLayerOffloadService can stream
+                # them per window. This keep-resident GPU-move would drag them all
+                # back onto the GPU, defeating the offload. Production runs with
+                # keep-resident OFF (build_device == ledger_device), so this branch
+                # is skipped there and the offload path is correct. To make the
+                # keep-resident + offload combo correct too, we skip the move for
+                # tensors already on CPU when layer_offload is on (the CPU-held layer
+                # buffers); the GPU-resident kept tensors (connectors / final norm /
+                # rotary) still move as before. Non-offload mode is unchanged.
+                if gemma_loader_ref.layer_offload:
+                    model = model._apply(
+                        lambda t: t
+                        if t.device.type in ("meta", "cpu")
+                        else t.to(ledger_device)
+                    )
+                else:
+                    model = model._apply(
+                        lambda t: t if t.device.type == "meta" else t.to(ledger_device)
+                    )
 
             # (Lever 3) Wire the held-back CPU token embedding + CPU-lookup forward.
             # The builder left embed_tokens.weight on the meta device (we kept it out
@@ -1146,6 +1209,44 @@ class GemmaGGUFQuantLoaderService:
                 _install_cpu_embed_offload(model, gemma_loader_ref.held_embed_cpu)
 
             model = model.eval()
+
+            # (TE per-layer offload) Stream the GGUF-quantized Gemma decoder layers
+            # CPU->GPU one window at a time during encode, capping the ~15 GB encode
+            # peak. The loader already left the ``language_model.layers.*`` buffers on
+            # CPU; here we patch each decoder layer's forward with the sliding-window
+            # swap. Compute device = the language-model final norm weight device
+            # (matches Lever-3's compute_dev). No-op + safe if the layer container
+            # can't be located.
+            if gemma_loader_ref.layer_offload:
+                from services.gemma_layer_offload_service import (
+                    GemmaLayerOffloadService,
+                )
+
+                # outer = Gemma3ForConditionalGeneration; outer.model = Gemma3Model;
+                # .language_model = Gemma3TextModel (.layers / .norm).
+                outer = getattr(model, "model", None)
+                inner = getattr(outer, "model", None) if outer is not None else None
+                lang = (
+                    getattr(inner, "language_model", None)
+                    if inner is not None
+                    else None
+                )
+                compute_dev = None
+                if lang is not None and getattr(lang, "norm", None) is not None:
+                    compute_dev = lang.norm.weight.device
+                if compute_dev is None:
+                    compute_dev = ledger_device
+                offload_service = GemmaLayerOffloadService(
+                    layers_on_gpu=2, compute_device=compute_dev
+                )
+                # Install on the inner Gemma model holding language_model.layers.
+                offload_service.install(inner if inner is not None else model)
+                logger.info(
+                    "Gemma GGUF (TE offload): installed per-layer CPU->GPU streaming "
+                    "(layers_on_gpu=2, compute_device=%s)",
+                    compute_dev,
+                )
+
             n_quant = sum(
                 1
                 for buf in model.buffers()

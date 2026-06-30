@@ -38,6 +38,7 @@ vram:
   # Phase 1 baseline。公式APIで利用できる範囲で有効化する。
   fp8_transformer: true
   cpu_offload_text_encoder: true
+  te_offload_text_encoder: true   # 逐次レイヤーCPUオフロード（GGUF Gemma）。encode peak ~15GB→数GB。compute は GPU 維持。
   vae_tiling: true
 
   # Phase 2 以降の高度な独自最適化。Phase 1 では無効。

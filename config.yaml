@@ -43,8 +43,18 @@ vram:
   # Phase 2 以降の高度な独自最適化。Phase 1 では無効。
   attention_tiling: false
   attention_tile_size: null
-  block_swap: false
-  block_swap_blocks_on_gpu: null
+  block_swap: true
+  block_swap_blocks_on_gpu: 8
+  # VAE tiling sizes for the real GGUF engine（720p を 16GB に収めるため）。
+  # config.py VramConfig が両フィールドを保持（vae_spatial_tile_size /
+  # vae_temporal_tile_size, int, default 0）。
+  vae_spatial_tile_size: 512
+  vae_temporal_tile_size: 64
+
+  # Path B: VAE/audio/text-projection を 46GB モノリスでなく小単体ファイルから読む。
+  # keep_resident=0（ジョブ毎再materialize）でも commit を束縛し、マルチジョブ連続
+  # 生成の commit 枯渇 native crash を防ぐ（§9.6 / §8）。720p+連続生成の両立に必須。
+  use_component_files: true
 
   # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。
   allow_disable_low_vram: true

@@ -291,6 +291,44 @@ bs8 完走ログ（`gpu_mem_bs8.log`＋スパイクのフェーズ print）を w
   - FFN チャンキング複製元・変換を特定（RandomInternetPreson `tensor_parallel_v3.py` の `ChunkedFFN.forward`／`num_chunks=8`／`torch.cat(dim=1)`、フック点 `ltx_core/.../feed_forward.py:FeedForward.forward`）＝スケールアップ局面で利用。
 - ComfyUI #11726 の「活性支配」は **1080p アップスケール段**の OOM＝384x256 とは別レジーム。
 
+---
+
+## 10. ★720p 達成 & 連続生成の commit 枯渇を解決（2026-06-30 後半）＝残課題C 完了
+
+本セッションで残課題C（720p スケールアップ）を達成し、さらに新デフォルトがマルチジョブ連続生成で commit 枯渇しないことを実測確定した。GPU(dedicated/shared)＋system commit を両監視。
+
+### 10.1 720p 二段の実機到達
+- **本番経路は公式 `DistilledPipeline` の二段**（stage1=半解像度 W/2,H/2 生成→spatial upscaler×2→stage2=フル解像度 refine）をフォーク `LTXFastVideoPipeline` がラップ。段間は `gpu_model` が各段終了時にモデルを `meta` 退避で即解放＝**両段同時 GPU 滞在なし**（doc の「難所①段間スパイク」は構造的に緩和済）。VRAM ノブ（block_swap/vae tile/fp8/GGUF）は両段に適用。
+- **計装1本（直接スクリプト `vendor/.../backend/_run720p_instrumented.py`、雛形=diag_sweep.py＋本番ワーカーの pre-denoise empty_cache fix を再現）**：1280×768/121f/8step を **169秒**で完走。段境界 max_alloc＝denoise stage1 ~5.8GB / stage2 ~7.7GB（大余裕）。唯一のスパイクは `before denoise stage1`（reserved 17.4GB→empty_cache で 1.5GB に即解放）。
+- **本番 API 経路**：`POST /api/v1/generate` で 1280×768/121f を **167–171秒**完走、crop_output で 1280×720 配信。ffprobe で解像度/121f/5.04s 確認（job `684393c6`=768 無 crop, `5a3540ba`=720 crop）。
+
+### 10.2 keep_resident=True が 720p 単発を native crash させる（原因＋修正）
+- **症状**：本番 API（keep_resident=True 既定）が 720p の Gemma text-encode 中に native crash（traceback 無し、dedicated ~15.86GB で即死）。直接スクリプト（keep 未指定＝既定 False）は同条件で完走。
+- **原因（read-only コード調査・確信度高）**：keep_resident=True→`ModelLedger._target_device()`=CPU（`model_ledger.py:178-182`）→GGUF Gemma を **CPU ビルド→`model._apply(t.to(cuda))` で out-of-place にモデル全体を GPU コピー**（`gemma_gguf_quant_service.py:1135-1138`）＝CPU重み＋新規GPU重みの瞬間二重在が薄い16GBマージンを超過。keep=False は cuda 直接ビルドで二重在なし。`create()` 既定 False（`ltx_fast_video_pipeline.py:75`）。`embed_tokens.weight` の "Uninitialized parameters" は正常ログ（red herring）。
+- **検証**：`LTX_KEEP_RESIDENT=0`（env は `ltx_runner.py:486` `env=dict(os.environ)` で worker へ伝播）で本番 API が完走（171.5秒、ded 15977/shr 2589）＝主因確定。
+- **修正（採用）**：`services/ltx_runner.py` worker env に `env.setdefault("LTX_KEEP_RESIDENT","0")`（明示 env 尊重）。
+
+### 10.3 マルチジョブ連続：comp=0 は commit 枯渇再発、comp=1 で解消（実測）
+keep=0 は毎ジョブ全 submodel を再 materialize するため、§8 の commit 枯渇機構が再発しうる。3本連続で検証：
+
+| 設定 | 結果 | committed ピーク | commit% | 備考 |
+|---|---|---|---|---|
+| comp=0/keep=0（旧既定）@384×256 | **job3 で native crash** | 135GB | **99.2%** | Gemma 再構築点で死＝§8.10 を §9.7 修正後も再現（別機構＝毎ジョブ再materialize） |
+| comp=1/keep=0 @384×256 | **3本全完走** | 102GB | 89.5% | 46GB モノリス不使用で commit 束縛 |
+| comp=1/keep=0 @1280×768/121f | **3本全完走** | 102.6GB | 90.3% | 実ターゲットで PASS・commit はジョブ間で累積せず横ばい |
+- **採用**：`config.yaml` vram `use_component_files: true`（Path B）。＋`block_swap_blocks_on_gpu:8`/`vae_spatial:512`/`vae_temporal:64` 明示。
+- 留意（非致命）：keep=0 は gen 時間が漸増（720p で 168→181→209秒/3本、+24%）。commit 横ばいゆえ暴走せず＝アロケータ断片化等の性能ナンス。長尺連結を多数本回す段で問題化したら keep=1＋Gemma 移動 in-place 化の恒久最適化（§9.7 の高速 flat 経路と 720p を両立）。
+
+### 10.4 マシンスペック（公開時見積り・先行事例比較）
+- **commit（仮想メモリ＝物理RAM＋ページファイル）ピーク ~102GB**。本機 RAM64GB＋pagefile48GB＝上限~112GB で 90% 着地。先行事例 ComfyUI 16GB レシピも「RAM32GB＋swap64GB」相当（§91）＝**ほぼ同等・極端でない**。旧懸念の ~200GB は 46GB モノリス＋二重 materialize の悪い経路で、comp=1 で回避済。keep=0 が commit をやや押し上げ（keep=1 の §9.7 実測は ~93GB flat）。
+- **ディスク（モデル）**：実行に要るのは ~28GB（GGUF transformer 16.54＋GGUF Gemma 6.8＋components 3.85＋upscaler 0.93＋設定）＝ComfyUI GGUF 構成（~25–30GB）と同等。現状 `models/` は 93.83GB だが **モノリス 42.98GB＋qat 重み 22.74GB（計 ~66GB）は comp=1/GGUF 経路では不要候補**（要・読み込み検証→落とせば公開フットプリント先行事例並み＝[[no-large-pagefile-disk-requirement]] 達成）。
+
+### 10.5 状態と残課題（掃除を除く）
+- **残課題C 完了。次＝Gradio 手動検証→AviUtl2 拡張統合**（本来の目的）。
+- 未解決：【B】load/encode 一時 shared 溢れ ~2.6GB（§7.9）／【最適化】keep=1 を 720p で使う Gemma 移動 in-place 化／【連続上限】keep=0 の gen 漸増を連結実本数で再計測／【footprint】モノリス＋qat 不使用の確定→削減／【未検証】comp=1/keep=0 での I2V マルチジョブ・音声連続／【D】README/spec 改訂。
+- mock pytest 13 passed 維持（config 変更後）。アーティファクト＝`outputs/run720p*`・`outputs/multijob_*`（テスト出力・サンプラ CSV・段境界 JSON）。
+- ※ディレクトリ掃除は専任の次セッションへ委譲（残課題から除外・ユーザー指示）。
+
 ### 7.2 ステップ2 診断 A＝フェーズ別4指標（bs8・baseline, expandable_segments:True）
 torch `allocated/reserved/max_alloc`（スパイク内）＋ perf-counter `dedicated/shared`（サンプラ）を境界ごとに突き合わせ:
 

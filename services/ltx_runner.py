@@ -490,6 +490,13 @@ class _RealBackend:
         env.pop("PYTHONPATH", None)
         # Phase 1 gate: the worker reads LTX_COMPONENT_FILES (mirrors LTX_KEEP_RESIDENT).
         env["LTX_COMPONENT_FILES"] = "1" if use_component_files else "0"
+        # Default keep-resident-weights OFF. At 720p the keep-resident path builds
+        # Gemma on CPU then does an out-of-place .to(cuda) move (momentary
+        # double-residence) that overruns the 16GB card and hard-crashes the
+        # worker (native, no traceback) during text-encode. This single-user /
+        # single-job local server does not need cross-job weight reuse, so default
+        # to 0; an explicit LTX_KEEP_RESIDENT in the environment still wins.
+        env.setdefault("LTX_KEEP_RESIDENT", "0")
 
         # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
         # the worker emits lots of tqdm/log output while we block on stdout).

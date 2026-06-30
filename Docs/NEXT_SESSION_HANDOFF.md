@@ -1,5 +1,52 @@
 # 次セッション引き継ぎ書 — LTX 2.3 を 16GB で動かす
 
+---
+
+## ▶▶▶▶ 最新の正本（2026-06-30 後半・このセクションを最初に読む）＝720p 達成 & 連続生成の commit 枯渇を解決
+
+**＝残課題C（720p スケールアップ）完了。本来の機能（16GB で 720p 動画生成）が、先行事例と遜色ないマシンスペックで実現した。** 次は検証用 Gradio GUI での手動動作確認 →（本来の目的）**AviUtl2 拡張機能からこの API を叩く統合**。
+
+### 何ができるようになったか（実機検証済）
+- **720p 級（1280×768 を生成→任意で 1280×720 にクロップ）の T2V が本番 API 経路で完走**。生成 ~167–171秒（RTX 4070 Ti SUPER 16GB）。job `684393c6`（crop なし 1280×768 配信）/ `5a3540ba`（crop 1280×720）で ffprobe 確認。OOM なし。
+- **連続生成（マルチジョブ）が commit 枯渇クラッシュせず完走**。720p×3本連続・384×256×3本連続いずれも全 PASS（実測）。→ 将来の「5秒クリップを繋いで 20秒動画」（終了フレーム→次の開始フレームの I2V 連結）の土台ができた。
+
+### 確定した本番デフォルト設定（2点・いずれも検証済・コミット対象）
+1. **`services/ltx_runner.py`** worker env に `env.setdefault("LTX_KEEP_RESIDENT","0")` ＝ **keep_resident OFF が既定**（明示 env は尊重）。理由＝keep_resident=True だと 720p で Gemma を CPU ビルド→out-of-place `.to(cuda)` 移動する瞬間二重在が 16GB マージンを超え **native crash**（traceback 無し、text-encode 中）。=0 で直接 cuda ビルドになり回避。`LTXFastVideoPipeline.create()` の既定は False（`ltx_fast_video_pipeline.py:75`）。
+2. **`config.yaml`** vram に `use_component_files: true`（Path B）＋ `block_swap_blocks_on_gpu: 8` / `vae_spatial_tile_size: 512` / `vae_temporal_tile_size: 64`。理由＝comp=1 が VAE/audio/projection を 46GB モノリスでなく小ファイルから読み、**毎ジョブ再 materialize の commit を束縛**。これが連続生成の鍵。
+
+### なぜこの設定か（実測根拠・GPU＋system commit 両監視）
+- **comp=0/keep=0（旧既定）はマルチジョブで残課題A の機構（§8 commit 枯渇）が再発**＝3本連続@384 の job3 で commit **99.2%（135GB）→ Gemma 再構築で native crash**。§9.7 のリーク修正では治らない別機構（毎ジョブ再 materialize）と実証。
+- **comp=1 にすると 46GB モノリスを使わず commit が ~90%（102GB）に束縛**＝384/720p とも3本連続 PASS（crash 消滅・commit はジョブ間で累積せず横ばい）。
+- 留意（非致命）：keep=0 は毎回再 materialize するため **gen 時間が漸増**（720p で 168→209秒/3本、+24%。アロケータ断片化等）。commit は横ばいなので暴走しない。**長尺連結を多数本回す段で問題化したら、keep=1 を維持したまま Gemma 移動を in-place 化する恒久最適化に着手**（§9.7 の高速 flat 経路＝keep=1 と 720p を両立させる）。
+
+### マシンスペック（公開時の見積り・先行事例と比較）
+- 「commit ~102GB」は **ディスクでなく仮想メモリ予約（物理RAM＋ページファイル）** のピーク。先行事例 ComfyUI 16GB レシピも「RAM32GB＋swap64GB」相当（§91）＝**ほぼ同等で極端でない**（旧懸念の ~200GB は 46GB モノリス＋二重 materialize の悪い経路の話で、comp=1 で回避済）。本機は RAM64GB＋pagefile48GB＝commit 上限 ~112GB で 90% 着地。
+- **実行に本当に要るモデルは ~28GB**（GGUF transformer 16.5＋GGUF Gemma 6.8＋components 3.85＋upscaler 0.93＋設定）＝ComfyUI GGUF 構成（~25–30GB）と同等。現状 `models/` は 93.83GB あるが、**モノリス 43GB＋qat 重み 22.7GB（計 ~66GB）は今の comp=1/GGUF 経路では不要候補**（落とせば公開フットプリントが先行事例並み。要・読み込み検証→下記残課題）。
+
+### 次のマイルストーン
+1. **検証用 Gradio GUI でユーザーが手動動作確認**（UI が 720p/crop トグル/T2V/I2V を出せるか要確認）。
+2. （本来の目的）**AviUtl2 拡張機能 → このバックエンド API（FastAPI, port 18620, `/api/v1/*`）統合**。
+
+### 残課題（ディレクトリ掃除を除く・優先度はユーザー判断）
+> ※開発段階のゴミ（`outputs/` のテスト出力、未追跡の診断スクリプト等）の**ディレクトリ掃除は、専任の次セッションに方法ごと委ねる**ため、ここには残課題として載せない（ユーザー指示・2026-06-30）。
+
+- **【B】load/encode の一時 shared 溢れ（~2.6GB、解像度非依存）**＝「全工程 16GB 内」未達。生成本体（denoise）は ~6–8GB で余裕だが、Gemma encode/transformer load の瞬間に dedicated ~15.9GB＋shared ~2–2.6GB。実用は完走するが「真の fit」は未達。詳細は下記【残課題B】＋ VERIFICATION_LOG §7.9。
+- **【最適化】keep_resident=1 を 720p で使えるようにする恒久修正**＝Gemma の out-of-place `.to(cuda)` 移動を in-place 化／CPU 側を移動前解放。成功すれば keep=1（§9.7 で 6ジョブ flat・高速・gen 時間漸増なし・commit より低い）と 720p を両立。長尺連結や速度が要件化した時の本命。
+- **【連続生成の上限確認】**keep=0 での gen 時間漸増が、連結機能の実本数（5s→20s＝4本以上）で許容範囲かを、その実装時により長い連続で再計測。
+- **【公開フットプリント削減】**comp=1/GGUF 経路で **モノリス 43GB＋qat 重み 22.7GB が実行時に本当に開かれないか**をコード/ログで検証→不要なら required から外す（DL させない/削除可に）。落とせばディスク要求 ~28GB で先行事例並み。[[no-large-pagefile-disk-requirement]] の達成。
+- **【未検証パス】**新デフォルト（comp=1/keep=0）での **I2V のマルチジョブ・音声付き連続生成は未検証**（今回は T2V マルチジョブのみ実測）。連結機能は I2V 連続なので、実装前にここを検証。
+- **【D】README / `LTX23_Backend_Specification_v04…` の全面改訂**＝pre-pivot のまま。アーキテクチャが固まった今が改訂の好機（残課題サマリ末尾参照）。
+- **【真の目的】AviUtl2 拡張機能との統合**（上記マイルストーン2）。
+
+### 一次情報のポインタ
+- 技術記録＝**VERIFICATION_LOG §10**（720p 二段達成・keep_resident 原因/修正・component_files マルチジョブ修正・commit/ディスク実測）。
+- スケールアップ調査の正本＝Docs/SCALEUP_16GB_RESEARCH.md（✅達成バナー追記済）。
+- 設定知識＝Docs/LTX23_REFERENCE.md。memory `[[720p-16gb-verified]]` / `[[ltx-bridge-project]]`。
+
+**（以下は本セクションより前の歴史的経緯。残課題A〜D の元記述・Phase 5 配線記録等は参照用に温存。最新は上記 ▶▶▶▶ が正。）**
+
+---
+
 最終更新: 2026-06-30（**残課題A＝per-job リークを診断確定→修正→6ジョブ実機検証 PASS。フォーク backend を版管理化（commit 済）。音声 Phase 1 実機確認 PASS（✅DONE）。次の一手＝qat-drop(24GB削減)／720p スケールアップ（残課題C）**）/ 想定読者: 次セッションのエージェント
 
 > **このドキュメントが現時点の最新・正本（handoff）です。まず §0 と「★残課題サマリ」を読めば、現状と次の一手が分かる。**
@@ -109,7 +156,8 @@ Phase 5(B)＝**denoise 工程の VRAM 低減は達成・実装済**（empty_cach
 - **修正方向**：transformer ブロックを**直接 CPU ロード**（full-GPU を経由しない）。Gemma 側は残課題A の load-path 作り替えと
   地続き。詳細 §7.9。
 
-### 【残課題C】スケールアップ 1280×768→720p クロップ（本来の機能目標）
+### 【残課題C】スケールアップ 1280×768→720p クロップ（本来の機能目標）→ ✅ 完了（2026-06-30 後半・冒頭 ▶▶▶▶ と VERIFICATION_LOG §10 が最新）
+> ✅ **達成**：1280×768/121f を本番 API で完走（~167–171秒・16GB）、crop で 1280×720 配信、連続3本も commit 枯渇せず PASS。レシピ＝comp=1（Path B）＋keep_resident=0＋bs=8＋vae 512/64。真の難所3点の実測結果は冒頭 ▶▶▶▶／§10 参照。以下（旧）は着手前の調査メモ。
 - → 詳細調査は Docs/SCALEUP_16GB_RESEARCH.md に集約（レバー棚卸し＋コミュニティレシピ＋真の難所3点）
 - ★訂正(2026-06-30)：以下「修正方向」の **「attention tiling 配線（未配線）」前提は古い**。SCALEUP doc で判明＝attention tiling は既に実装済（`attention_tile_service.py`・`attention_tile_size`、既定OFF）。VAE 空間/時間タイル・二段・block-swap も配線済。**未実装は FFN チャンキングのみ（主に長尺向け・1280×720 には非必須）**。真の難所は移植でなく (1)段間遷移スパイク (2)22B block-swap 深度 (3)tiling＋GGUF＋block-swap 共存。**目標は 1280×720 で充分**。次の一手の手順は本書冒頭「次セッション開始点」＋ SCALEUP doc §5/§6 を参照。
 - 384x256 の denoise は解消済だが **production ターゲットは 720p**。高解像度では denoise の**アクティベーションが支配的**に

@@ -1,5 +1,10 @@
 # 16GB 高解像度スケールアップ調査 — VRAM 16GB で高解像度生成を実現するための調査結果集
 
+> ## ✅ 達成（2026-06-30 後半）
+> **このスケールアップ（残課題C＝720p）は完了した。** 1280×768/121f を本番 API で ~167–171秒で完走（16GB・OOM なし）、crop で 1280×720 配信、**連続3本も commit 枯渇せず PASS**。採用レシピ＝**use_component_files=true（Path B）＋ LTX_KEEP_RESIDENT=0 ＋ block_swap_blocks_on_gpu=8 ＋ vae_spatial_tile_size=512 ＋ vae_temporal_tile_size=64**。
+> 真の難所3点の実測結論：①段間遷移＝フォークは meta 退避で両段同時滞在なし＝非問題化。②block-swap 深度＝bs=8 で denoise ~6–8GB の大余裕（深掘り不要）。③共存性＝tiling＋GGUF＋block-swap＋component-files が 720p で同時に正常動作を実機確認。
+> 詳細・原因分析（keep_resident の Gemma out-of-place 移動 crash、comp=1 による commit 束縛、マシンスペック比較）は **VERIFICATION_LOG §10** と **NEXT_SESSION_HANDOFF.md 冒頭 ▶▶▶▶**。以下（本バナー以降）は着手前の調査記録（有効・参照用）。
+
 作成日: 2026-06-30
 
 **位置づけ**: VRAM 16GB で高解像度生成を実現するための調査結果集（先行事例レシピ＋我々のコードのレバー棚卸し）。**16GB対応の最大の難所に関する正本**。

@@ -10,8 +10,8 @@ language model) on the meta device. The LTX text encoder, however, only ever
 consumes ``language_model``'s hidden states (``GemmaTextEncoder.precompute`` runs
 the model with ``output_hidden_states=True`` and throws the logits away).
 
-Under the QAT ``gemma_root`` reclamation (candidate A) the Gemma weights are no
-longer read from ``model*.safetensors`` — they come from the Q4_K_M GGUF, which
+Under the QAT ``gemma_root`` reclamation the Gemma weights are no longer read from
+``model*.safetensors`` — they come from the Q4_K_M GGUF, which
 carries ONLY the language model. The vision_tower / multi_modal_projector then have
 no weights and stay on the meta device. That is fatal for the multimodal build:
 ``model.device`` is ``next(model.parameters()).device`` (transformers

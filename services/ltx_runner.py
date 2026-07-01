@@ -161,7 +161,7 @@ class LTXRunner:
         payload field (the wheel's lazy builders receive it but the GGUF/component
         installs replace every loader), so it is deliberately NOT gated here. The
         (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
-        with gemma_root=None so the wheel's weight glob is bypassed (candidate A),
+        with gemma_root=None so the wheel's weight glob is bypassed,
         but the engine still loads the tokenizer/processor module_ops from this dir,
         so a missing dir must fail fast in the app layer rather than crash deep in
         the encode path. The load-bearing files are the tokenizer gemma_root, the
@@ -482,7 +482,7 @@ class _RealBackend:
         checkpoint_path = str(self.config._abs(model.checkpoint_path)) if model.checkpoint_path else ""
         # gemma_root (tokenizer-only ~40MB) IS load-bearing: DistilledPipeline is
         # built with gemma_root=None so the wheel's weight glob (model*.safetensors)
-        # is bypassed (candidate A), but the engine loads the tokenizer/processor
+        # is bypassed, but the engine loads the tokenizer/processor
         # module_ops from this dir (tokenizer.model + preprocessor_config.json), so a
         # missing dir must fail fast here rather than crash deep in the encode path.
         # Forwarded to the worker as a payload field exactly as before.

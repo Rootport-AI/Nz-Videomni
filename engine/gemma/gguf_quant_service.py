@@ -191,8 +191,10 @@ _LTX_LM_HEAD_KEY = "model.lm_head.weight"
 # No other original prefix maps into _LTX_LM_PREFIX or _LTX_LM_HEAD_KEY, and this
 # prefix maps into nothing else. Therefore skipping every ORIGINAL key under this
 # prefix at read time yields a base state_dict byte-identical to the prior
-# read-then-delete result (the survivors — feature_extractor / connectors /
-# vision_tower / multi_modal_projector — come from other prefixes and are kept).
+# read-then-delete result (the survivors — feature_extractor / connectors — come
+# from other prefixes and are kept). TEXT-ONLY: there is no vision_tower /
+# multi_modal_projector survivor set here — the text model has no such modules and
+# the QAT shards that carried those keys are no longer read (gemma_root reclamation).
 _ORIG_GEMMA_LM_PREFIX = "language_model.model."
 
 
@@ -237,8 +239,8 @@ def _read_target_vocab_from_header(path: str | list[str]) -> int | None:
     real 262144 rows; the merge zero-pads up to this target (see the caller).
 
     Formerly this was read from the base ``language_model.model.embed_tokens.weight``
-    header. Under the QAT gemma_root reclamation (candidate A) the Gemma shards are
-    no longer in model_path, so that tensor is absent from every path here — the
+    header. Under the QAT gemma_root reclamation the Gemma shards are no longer in
+    model_path, so that tensor is absent from every path here — the
     header probe would return None and DISABLE the required embedding padding.
     Instead we source the value directly from the wheel's Gemma config
     (GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size == 262208), which is exactly the
@@ -413,8 +415,9 @@ class GemmaGGUFQuantStateDictLoader:
         # skips its get_tensor copy entirely (never materialized, never committed).
         # This is byte-identical to the prior read-then-delete: the skipped set equals
         # exactly the keys formerly deleted at the strip step (see _SkipGemmaLMSDOps /
-        # _ORIG_GEMMA_LM_PREFIX). Survivors (feature_extractor / connectors /
-        # vision_tower / multi_modal_projector) are kept unchanged.
+        # _ORIG_GEMMA_LM_PREFIX). Survivors (feature_extractor / connectors) are kept
+        # unchanged. TEXT-ONLY: no vision_tower / multi_modal_projector survivors — the
+        # text model lacks those modules and their QAT-shard source is no longer read.
         cpu_device = torch.device("cpu")
         base = self._base_loader.load(path, sd_ops=_SkipGemmaLMSDOps(sd_ops), device=cpu_device)
         base_sd: dict[str, torch.Tensor] = dict(base.sd)
@@ -460,8 +463,10 @@ class GemmaGGUFQuantStateDictLoader:
             )
 
         # ── 2b. Move the KEPT (non-Gemma, LTX-side) tensors to target_device ──────
-        # These are the small feature_extractor / connector / vision_tower weights
-        # (~3 GB total). They MUST end up on cuda: SingleGPUModelBuilder._return_model
+        # These are the small feature_extractor / connector weights (TEXT-ONLY has no
+        # vision_tower / multi_modal_projector weights — those modules do not exist in
+        # Gemma3ForCausalLM). They MUST end up on cuda:
+        # SingleGPUModelBuilder._return_model
         # only does a final meta_model.to(device) when NO param/buffer is left on the
         # meta device — but our GGMLQuantizedTensor buffers and assign=True loading
         # can leave that final move unreached/partial. So we move kept tensors here
@@ -1062,8 +1067,8 @@ class GemmaGGUFQuantLoaderService:
         layer_offload: bool = False,
     ) -> None:
         self.gguf_path = gguf_path
-        # QAT gemma_root reclamation (candidate A): the (tokenizer-only) gemma_root
-        # dir. DistilledPipeline is now built with gemma_root=None, so the wheel does
+        # QAT gemma_root reclamation: the (tokenizer-only) gemma_root dir.
+        # DistilledPipeline is now built with gemma_root=None, so the wheel does
         # NOT create model_ledger.text_encoder_builder; install() rebuilds it here
         # (Gemma shards excluded) and loads the tokenizer/processor module_ops from
         # this dir (module_ops_from_gemma_root globs only tokenizer.model +
@@ -1088,7 +1093,7 @@ class GemmaGGUFQuantLoaderService:
 
         Faithful port of the wheel's Gemma block (ltx_pipelines/utils/model_ledger.py
         build_model_builders, the ``if self.gemma_root_path is not None:`` body) with
-        two deliberate changes for the QAT reclamation (candidate A):
+        three deliberate changes for the QAT reclamation:
 
           1. module_ops come from the tokenizer-only gemma_root dir
              (``self.gemma_tokenizer_root``). module_ops_from_gemma_root globs only
@@ -1154,8 +1159,8 @@ class GemmaGGUFQuantLoaderService:
         if not Path(self.gguf_path).exists():
             raise FileNotFoundError(f"Gemma GGUF file not found: {self.gguf_path}")
 
-        # QAT gemma_root reclamation (candidate A): DistilledPipeline is built with
-        # gemma_root=None, so the wheel's build_model_builders() never created the
+        # QAT gemma_root reclamation: DistilledPipeline is built with gemma_root=None,
+        # so the wheel's build_model_builders() never created the
         # text_encoder_builder (it skips model_ledger.py:158-169). Rebuild it here —
         # a faithful port of that wheel block with Gemma shards EXCLUDED (weights come
         # from the GGUF below, not from `model*.safetensors`) AND the model class
@@ -1173,11 +1178,11 @@ class GemmaGGUFQuantLoaderService:
         builder = model_ledger.text_encoder_builder
 
         # ── Phase 2: component-files mode (drop the 46GB monolith) ────────────────
-        # Post-reclamation (candidate A) our rebuilt builder.model_path is a single
-        # entry (checkpoint_path=MONOLITH,) — the Gemma qat shards are gone (weights
-        # come from the GGUF; vision_tower / multi_modal_projector stay meta). The
-        # monolith placeholder contributes EXACTLY two survivor sets to the text
-        # encoder:
+        # Post-reclamation our rebuilt builder.model_path is a single entry
+        # (checkpoint_path=MONOLITH,) — the Gemma qat shards are gone (the Gemma LM
+        # weights come from the GGUF; the text-only Gemma3ForCausalLM has no
+        # vision_tower / multi_modal_projector at all). The monolith placeholder
+        # contributes EXACTLY two survivor sets to the text encoder:
         #   * 4   text_embedding_projection.*aggregate_embed.*  -> from projection file
         #   * 258 model.diffusion_model.*embeddings_connector.*  -> injected from GGUF
         # So when both component paths are present we (a) swap the monolith for the

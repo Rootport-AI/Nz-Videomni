@@ -8,7 +8,7 @@ server:
 model:
   # 本番経路は GGUF 量子化トランスフォーマー + 小単体 component ファイル
   # （VAE / audio / text-projection）+ GGUF Gemma。43GB モノリスと QAT Gemma の
-  # 実読み込みは廃止済み。QAT gemma_root は候補A（重み glob バイパス）で
+  # 実読み込みは廃止済み。QAT gemma_root は重み glob バイパス（gemma_root=None 構築）で
   # tokenizer 群のみ必要になった（下記 checkpoint_path / gemma_root のインライン注記参照）。
   checkpoint_dir: "./models"
   checkpoint_name: "ltx-2.3-22b-distilled-1.1"
@@ -28,8 +28,9 @@ model:
   checkpoint_path: "./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"
   spatial_upsampler_path: "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
   # GGUF Gemma 経路では tokenizer 群のみ必要。DistilledPipeline を gemma_root=None で
-  # 構築し wheel の重み glob（model*.safetensors）を候補A でバイパス済 → 重み・vision は
-  # 非ロード。engine 側が shard 抜き builder を組み直し、tokenizer/processor の
+  # 構築し wheel の重み glob（model*.safetensors）をバイパス済 → Gemma LM 重みは GGUF 供給、
+  # text-only（Gemma3ForCausalLM）なので vision 構造は存在しない。engine 側が shard 抜き
+  # builder を組み直し、tokenizer/processor の
   # module_ops をこの dir から読む（tokenizer.model + preprocessor_config.json のみ glob）。
   # 実体は ~40MB の tokenizer-only dir（22.7GB QAT dir は後工程で回収予定）。
   gemma_root: "./models/gemma-3-12b-it-tokenizer"

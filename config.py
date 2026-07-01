@@ -46,7 +46,7 @@ class ModelConfig(BaseModel):
     spatial_upsampler_path: str | None = None
     # tokenizer-only dir (~40MB). The GGUF Gemma path needs only the tokenizer/
     # processor files: DistilledPipeline is built with gemma_root=None so the wheel's
-    # weight glob (model*.safetensors) is bypassed (candidate A) and the engine
+    # weight glob (model*.safetensors) is bypassed and the engine
     # rebuilds a shard-less text-encoder builder, loading tokenizer/processor
     # module_ops from this dir (globs only tokenizer.model + preprocessor_config.json).
     # The directory must still exist (gated below) -- it is the tokenizer source, not

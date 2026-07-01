@@ -139,8 +139,8 @@ class LTXFastVideoPipeline:
         # The pipeline (transformer/VAE) always runs on device (video GPU, cuda:0).
         use_fp8 = use_fp8_transformer or device_supports_fp8(device)
 
-        # QAT gemma_root reclamation (candidate A): pass gemma_root=None so the
-        # wheel's ModelLedger.build_model_builders() skips its Gemma block entirely
+        # QAT gemma_root reclamation: pass gemma_root=None so the wheel's
+        # ModelLedger.build_model_builders() skips its Gemma block entirely
         # (model_ledger.py:158-169) — no `model*.safetensors` glob, no shard paths in
         # model_path, no `text_encoder_builder`. We rebuild that builder ourselves in
         # _install_gemma_gguf without any Gemma shards (weights come from the GGUF).

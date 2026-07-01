@@ -21,6 +21,8 @@
   gemma_root は ~40MB tokenizer-only dir（`models/gemma-3-12b-it-tokenizer/`）。**models/ 50.9GB→28.15GB**。full-QAT baseline と
   **バイト完全一致**（T2V `23844b4e…6bb7bf` / 最小I2V `a511eda4…c217`・3経路）・peak_vram 8440・退行なし。詳細＝**§14** ／
   `Docs/QAT_RECLAMATION_RESEARCH.md` 冒頭 ✅RESOLVED バナー。commit `93696b4`→`694ca54`→main マージ `826e76f`。
+- **★今回 I2V マルチジョブ＋音声 検証済（2026-07-02）＝§10.5【最重要】クローズ**: production default（comp=1/keep=0）連続 I2V＋音声を直接ハーネス（I2V×4 @384）＋本番API（I2V×3 @512×320）両経路で PASS（両経路 peak_vram 一致）。詳細＝**VERIFICATION_LOG §10.7**。
+- **★今回 install スクリプト全面書き換え（2026-07-02）**: `scripts/install_ltx.ps1` を冪等クリーンインストーラ化（両venv・現行~28GBセットのみDL[リポID暗号確認済]・GpuArch自動判定・PASS/MISSING表・INSTALLED_PATHS再生成）＋`build_xformers.ps1` の CUDA_PATH/.venv-engine/12.8 修正。本機で冪等スキップ実行検証（exit 0・全PASS・smoke 7）。**※要確認**: attention 実装が上記 install 互換メモ③「xformers/flash-attn は足さない（SDPA維持）」と不整合（下記参照）。**本セッションの全変更は未コミット（作業ツリー）**。
 
 ### 凍結してある契約・構成（壊さない）
 - **凍結 API 契約（不変）**: ÷64 解像度（`api/models.py`）・8n+1 フレーム・T2V/最小I2V・`GET /status` の `vram_optimization`
@@ -68,7 +70,7 @@
 ### Phase 1 ＝ 最小バックエンド（T2V＋最小I2V＋音声＋16GB fit＋720p）
 - **✅ done**: 凍結 REST API（÷64・8n+1・T2V/最小I2V）・単一ジョブ管理・Low VRAM baseline・**720p(1280×768→crop720) T2V/I2V**・**音声 joint 生成**（§9.8 PASS）・~28GB モデル構成・mock pytest。16GB fit（下記注記の意味で）。
 - **⚠️ 残課題（Phase 2 前に）**:
-  - **(b) I2V マルチジョブ＋音声連続生成の検証【最重要】** — 今回は T2V マルチジョブのみ実測。**Phase 2 のクリップ連結の前提**。keep=0 の gen 時間漸増が実本数（4本以上）で許容範囲かの再計測も兼ねる。
+  - **(b) I2V マルチジョブ＋音声連続生成の検証【✅ 2026-07-02 PASS＝VERIFICATION_LOG §10.7】** — 直接ハーネス I2V×4 @384＋本番API I2V×3 @512×320 の両経路 PASS（commit 86%・installed_tf=1・VRAM定常~9.5GB・全出力 AAC・両経路の peak_vram 一致）。keep=0 の gen 漸増は4本で ~115→134s（許容範囲）。**Phase 2 クリップ連結の前提クリア。**
   - (a) 検証用 **Gradio GUI 手動確認**（UI で T2V/I2V/720p/crop トグルが出せるか）。
   - (c) **README/spec の全面改訂**（spec 本文は pre-pivot のまま・~90KB）。
   - (d) **dead-code 整理**（text-only 化で no-op 化した `_SkipGemmaLMSDOps` 等・意図的温存分）。
@@ -221,7 +223,7 @@ Stage 5（本ドキュメント改訂）は未 commit（監督確認待ち）。
 - **【任意・te-offload チューニング露出】**`GemmaLayerOffloadService(layers_on_gpu=2)` は現状ハードコード（`config.yaml` 未露出）。1 に下げると encode ピークさらに低下／3-4 で速度トレード。露出は任意の将来作業（VERIFICATION_LOG §11.6）。
 - **【連続生成の上限確認】**keep=0 での gen 時間漸増が、連結機能の実本数（5s→20s＝4本以上）で許容範囲かを、その実装時により長い連続で再計測。
 - **【公開フットプリント削減】**comp=1/GGUF 経路で **モノリス 43GB＋qat 重み 22.7GB が実行時に本当に開かれないか**をコード/ログで検証→不要なら required から外す（DL させない/削除可に）。落とせばディスク要求 ~28GB で先行事例並み。[[no-large-pagefile-disk-requirement]] の達成。
-- **【未検証パス】**新デフォルト（comp=1/keep=0）での **I2V のマルチジョブ・音声付き連続生成は未検証**（今回は T2V マルチジョブのみ実測）。連結機能は I2V 連続なので、実装前にここを検証。
+- **【✅ 検証済 2026-07-02＝VERIFICATION_LOG §10.7】**新デフォルト（comp=1/keep=0）での **I2V マルチジョブ・音声付き連続生成を実機 PASS**（直接ハーネス I2V×4 @384＋本番API I2V×3 @512×320 の両経路）。連結機能の前提クリア。
 - **【D】README / `LTX23_Backend_Specification_v04…` の全面改訂**＝pre-pivot のまま。アーキテクチャが固まった今が改訂の好機（残課題サマリ末尾参照）。
 - **【真の目的】AviUtl2 拡張機能との統合**（上記マイルストーン2）。
 

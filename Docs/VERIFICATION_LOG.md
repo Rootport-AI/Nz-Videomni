@@ -325,7 +325,7 @@ keep=0 は毎ジョブ全 submodel を再 materialize するため、§8 の com
 
 ### 10.5 状態と残課題（掃除を除く）
 - **残課題C 完了。次＝Gradio 手動検証→AviUtl2 拡張統合**（本来の目的）。
-- 未解決：【B】load/encode 一時 shared 溢れ ~2.6GB（§7.9）／【最適化】keep=1 を 720p で使う Gemma 移動 in-place 化／【連続上限】keep=0 の gen 漸増を連結実本数で再計測／【footprint】モノリス＋qat 不使用の確定→削減／【未検証】comp=1/keep=0 での I2V マルチジョブ・音声連続／【D】README/spec 改訂。
+- 未解決：【B】load/encode 一時 shared 溢れ ~2.6GB（§7.9）／【最適化】keep=1 を 720p で使う Gemma 移動 in-place 化／【連続上限】keep=0 の gen 漸増を連結実本数で再計測／【footprint】モノリス＋qat 不使用の確定→削減／【✅済 §10.7（2026-07-02 PASS）】comp=1/keep=0 での I2V マルチジョブ・音声連続／【D】README/spec 改訂。
 - mock pytest 13 passed 維持（config 変更後）。アーティファクト＝`outputs/run720p*`・`outputs/multijob_*`（テスト出力・サンプラ CSV・段境界 JSON）。
 - ※ディレクトリ掃除は専任の次セッションへ委譲（残課題から除外・ユーザー指示）。
 
@@ -759,6 +759,43 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 - (a) GPU サンプラ `_gpu_mem_sampler.ps1` は Get-Counter ベースで実効間隔 ~2秒（`-IntervalSec 0.25` を渡しても短縮されない）。decode 窓 ~2秒に有効サンプルが実質1点のみで、2秒未満の瞬間ピークは未捕捉。ただし decode の ~2.7GB という余裕（16GB まで +13GB 超）から、この限界は結論に影響しない。真の 0.25s 採取が要れば NVML/`nvidia-smi --loop-ms` 方式への置換が必要（未実施）。
 - (b) 検証は 384×256/~1.1秒の小クリップのみ。高解像度・長尺の音声挙動はスコープ外＝**残課題C（スケールアップ）**。
 - (c) transformer は Q4_K_M 量子化でフル bf16 公式とビット一致ではないが聴感良好。
+
+---
+
+### 10.7 comp=1/keep=0 I2V 連続＋音声 実機検証 PASS（2026-07-02）＝§10.5【未検証】クローズ
+
+§10.3 は comp=1/keep=0 マルチジョブを **T2V のみ**実測、§9.7/§9.8 の I2V 含む reuse は **keep=1**（再利用crash診断経路）だった。本節は残る穴＝**production default（keep=0/comp=1/bs8/vae512-64/te-offload/dit-cpu-load）での連続 I2V＋音声**を、①直接ハーネス と ②本番API経路 の両方で実測し **PASS**。
+
+**手法**：① `outputs/phaseB_i2v_audio/i2v_audio_loop.py`（`reuse_loop_diag.py` を first-party `engine/` へ再ポイント。create() は `engine/worker.py` を鏡写し＝gemma_root=tokenizer-only, vae512/64, comp=1, keep=0, te_offload/dit_cpu_load=env）で連続 I2V×4 @384×256/9f、commit+GPU サンプラ併走。② `run.ps1` 起動の本番 FastAPI に `POST /api/v1/generate` で I2V×3 @512×320/49f を逐次投入（各 completed を待って次＝single-job 409 guard 経由）。両者 keep_resident=0（既定）・音声は distilled pipeline が自動生成。
+
+**① 直接ハーネス I2V×4 @384×256/9f**：
+
+| job | result | wall | denoise dedicated peak | installed_transformers | 出力 |
+|---|---|---|---|---|---|
+| 1 | pass | 115.2s | 8,441MB | 1 | aac48k + h264 384×256/9f |
+| 2 | pass | 128.8s | 9,527MB | 1 | 同上 |
+| 3 | pass | 134.6s | 9,523MB | 1 | 同上 |
+| 4 | pass | 132.4s | 9,520MB | 1 | 同上 |
+
+- PIPELINE_CREATED_OK→4/4 pass→RUN_DONE_ALL_JOBS、harness exit 0。
+- **commit peak 86.0%**（committed 87.9GB / limit 102GB）＝§9.7(82%)/§10.3(89.5%)と整合、95%未満で横ばい（ジョブ間累積なし）。
+- **installed_transformers=1 を全4ジョブ維持**（§9.7 リーク修正の不変条件＝リーク無し）。denoise dedicated peak は job1=8.4GB(初回)以降 ~9.5GB 定常（漸増なし）、GPU memory.used max 12.0GB（<16GB）。
+- 全4本 ffprobe＝aac/48kHz + h264 384×256/9f（音声≈53フレーム/1.1s、§9.8 と同傾向）。
+- 注1：wall は `CUDA_LAUNCH_BLOCKING=1` 込みで本番速度ではない（native fault pinpoint 用）。注2：`_diag_probe` の cache-device 監査は first-party の DummyRegistry に `_state_dicts` が無く N/A（無害）。リーク判定は installed_transformers で直接取得済。注3：初回ランは launcher の `2>&1｜Tee`＋`$ErrorAction=Stop` が torch の pynvml FutureWarning(stderr) で中断＝PS5.1 の既知落とし穴。`Start-Process` の OS レベル redirect に修正して再走（エンジンは無関係）。
+
+**② 本番API I2V×3 @512×320/49f（run.ps1・REAL worker 自動選択）**：
+
+| job_id | HTTP | status | gen | 出力 |
+|---|---|---|---|---|
+| ca6515ea | 202 | completed | 129.2s | aac48k/2ch + h264 512×320/49f |
+| 65e87d28 | 202 | completed | 120.5s | 同上 |
+| 7727dd03 | 202 | completed | 133.0s | 同上 |
+
+- `logs/ltx_worker.log`：`GENERATED_OK peak_vram_mb=8440 / 9525 / 9522`＝①の denoise peak とほぼ一致＝**両経路の強い相互検証**。GENERATE_FAILED/access-violation/OOM 無し（ログ内の唯一の GENERATE_FAILED は過去セッション由来）。
+- app層＝`pipeline_manager` の between-job `safe_memory_cleanup()`＋metadata書出し＋single-job 409 guard＋常駐worker再利用（@@LTX@@）を通し3本連続クリーン。後片付けでポート解放・python残留なし。
+- client側の一過性エラー（job1&2 の PS5.1 `Invoke-WebRequest` -1、job3初回の curl クォート由来 422）は駆動側の問題でサーバ実欠陥ではない（422 は入力検証が正しく効いた証拠）。
+
+**結論**：§10.5 の【未検証】comp=1/keep=0 I2V マルチジョブ・音声連続 を **CLOSE**。Phase 2「5秒クリップの I2V 連結（終了フレーム→次開始フレーム）」の前提が両経路で満たされた。アーティファクト＝`outputs/phaseB_i2v_audio/`（`i2v_audio_loop.py`・`run_i2v_audio.ps1`・`reuse_I2VAUD_job{1..4}_i2v.mp4`・`diag_probe`/`reuse_marks`/`commit_mem`/`gpu_mem`_I2VAUD.*）／本番出力＝`outputs/<job_id>/output.mp4`。
 
 ---
 

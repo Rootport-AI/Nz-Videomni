@@ -2,6 +2,39 @@
 
 ---
 
+## ▶▶▶▶▶ post-refactor ステータス（2026-07-01・branch `refactor/engine-firstparty-cleanup`・最初に読む）
+
+**de-fork リファクタが完了した。** このハンドオフの**以降の記述の多くは de-fork 前（2026-06-30）に書かれており、
+`vendor/LTX-Desktop-LOW-VRAM/backend/`・`_ltx_worker.py`・「フォーク env / フォーク venv」を前提とする部分は陳腐化している。**
+現行の正確な構成は `README.md` / `engine/` / `config.yaml` / `engine/VENDOR_NOTICE.md` を参照すること（歴史記録として本書の旧節は温存）。
+
+### 何が変わったか
+- **エンジンを first-party 化**: 旧・同梱フォーク `vendor/LTX-Desktop-LOW-VRAM` の backend ソースを **`engine/`**（project root
+  直下・git 追跡）へ採用・再編。`engine/{worker,api_types,lora_types,pipeline,gguf,gemma,transformer}`。**アルゴリズムは不変**
+  （配置・import・パッケージ名・デッド枝削除のみ）。旧フォークツリー（frontend/electron 含む）は**完全削除**。上流 `vendor/LTX-2` は温存。
+  - 起動は `python -m engine.worker`（`cwd=root`, `PYTHONPATH=root`）。`_ltx_worker.py` は `engine/worker.py` に相当。
+- **torch venv を移設**: 旧フォーク配下の `.venv` → **`./.venv-engine`**（gitignore）。app は torch 無し `./.venv`。config は
+  `engine_python: "./.venv-engine/Scripts/python.exe"` / `engine_dir: "./engine"`（相対）。
+- **43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors` を物理削除**（rename test で「GGUF+component 経路は非 open」を実証）。
+  `checkpoint_path` は reference-only フィールドとして温存。**QAT Gemma dir は construction-required で温存**（wheel が build 時に
+  `tokenizer.model`+`model*.safetensors` を glob。重みは非読み）。
+- **設定後始末**: 未使用 `quantization` を削除。`fp8_transformer`/`cpu_offload_text_encoder` は**凍結 `GET /status` 契約**のため保持
+  （worker 非伝播）。`uv.lock` 消失を `engine/venv-engine.freeze.txt`＋`engine/engine-venv-pyproject.toml` で穴埋め。
+- **凍結 API 契約は不変**: ÷64 解像度・8n+1 フレーム・T2V/最小I2V・`GET /status` の `vram_optimization`・`metadata.json` スキーマ・
+  limits/presets はすべて保全。
+
+### 検証（全段 SHA256 一致）
+Stage 0–4 で「出力 mp4 の SHA256 がリファクタ前ベースラインとバイト完全一致」を各段で確認（挙動不変・別プロセス再起動でも決定的）。
+baseline(seed=12345, "a calm ocean wave rolling onto a sandy beach at sunset, cinematic"): 512×320/49f=`23844b4e…6bb7bf`、
+1280×768/49f=`4feea65f…3768da`、peak_vram_mb=9164。詳細は `Docs/VERIFICATION_LOG.md` §13。
+
+### commit 列（`refactor/engine-firstparty-cleanup`）
+`d0d3df5` Stage 1（フォーク delete-set 削除）→ `1bf4163` Stage 2a（engine/ へ relocate）→ `c6ff5a4` Stage 2b（venv 移設＋フォークツリー削除）
+→ `4639008` Stage 3a（デッド枝刈り＋モノリス fail-fast＋存在チェック再配線）→ `35c3be5` Stage 4（config 後始末・reproducibility 復元）。
+Stage 5（本ドキュメント改訂）は未 commit（監督確認待ち）。
+
+---
+
 ## ▶▶▶▶ 最新の正本（2026-06-30 後半・このセクションを最初に読む）＝720p 達成 & 連続生成の commit 枯渇を解決
 
 **＝残課題C（720p スケールアップ）完了。本来の機能（16GB で 720p 動画生成）が、先行事例と遜色ないマシンスペックで実現した。** 次は検証用 Gradio GUI での手動動作確認 →（本来の目的）**AviUtl2 拡張機能からこの API を叩く統合**。

@@ -6,11 +6,12 @@ Two backends live behind one facade (:class:`LTXRunner`):
   ``output.mp4`` with no GPU and no model weights. Used for tests and GPU-less
   development. This is the original Phase-1 implementation, kept intact.
 * ``_RealBackend`` — Phase 5 (Approach W): manages a persistent subprocess
-  worker (``_ltx_worker.py``) that runs inside the FORK venv where the proven
-  GGUF low-VRAM engine lives. It builds the model once, then serves jobs over a
-  small JSON-lines protocol; the engine writes ``output.mp4`` directly to the
-  shared output dir. This backend NEVER imports torch / ltx_* itself — those
-  packages exist only in the fork venv, not the app venv.
+  worker (``engine.worker``, launched as ``python -m engine.worker``) that runs
+  inside the engine venv where the proven GGUF low-VRAM engine lives. It builds
+  the model once, then serves jobs over a small JSON-lines protocol; the engine
+  writes ``output.mp4`` directly to the shared output dir. This backend NEVER
+  imports torch / ltx_* itself — those packages exist only in the engine venv,
+  not the app venv.
 
 Backend selection (``LTXRunner.load``):
 
@@ -152,9 +153,21 @@ class LTXRunner:
         return _MockBackend(self.config, self.low_vram)
 
     def _real_available(self) -> bool:
-        """True only if the fork python, worker script and all 5 model paths exist.
+        """True only if the engine python, worker script and every file the real
+        GGUF + component-file path actually loads are present.
 
-        Deliberately does NOT import torch / ltx_* (those live only in the fork
+        The GGUF + component-file recipe never opens the 43GB monolith
+        (``checkpoint_path``): it is passed to the worker as a reference-only
+        payload field (the wheel's lazy builders receive it but the GGUF/component
+        installs replace every loader), so it is deliberately NOT gated here. The
+        22.7GB QAT ``gemma_root`` IS gated: the wheel globs its ``tokenizer.model``
+        and ``model*.safetensors`` at build time, so a missing dir must fail fast in
+        the app layer rather than crash deep in the wheel. The load-bearing files
+        are the QAT gemma_root, the GGUF transformer/Gemma, the spatial upsampler,
+        and the 3 standalone component files (use_component_files is fixed True in
+        config.yaml).
+
+        Deliberately does NOT import torch / ltx_* (those live only in the engine
         venv, not the app venv). Any failure/missing is swallowed -> False (so
         'auto' falls back to mock and ``import services.ltx_runner`` stays safe
         in the torch-less app venv).
@@ -162,21 +175,23 @@ class LTXRunner:
         model = self.config.model
         try:
             required = [
-                model.fork_python,
-                model.checkpoint_path,
-                model.spatial_upsampler_path,
+                model.engine_python,
                 model.gemma_root,
+                model.spatial_upsampler_path,
                 model.gguf_transformer_path,
                 model.gguf_gemma_path,
+                model.component_video_vae_path,
+                model.component_audio_vae_path,
+                model.component_text_projection_path,
             ]
             if any(not p for p in required):
                 return False
             for p in required:
                 if not self.config._abs(p).exists():
                     return False
-            if not model.fork_backend_dir:
+            if not model.engine_dir:
                 return False
-            worker = self.config._abs(model.fork_backend_dir) / "_ltx_worker.py"
+            worker = self.config._abs(model.engine_dir) / "worker.py"
             if not worker.exists():
                 return False
             return True
@@ -339,15 +354,16 @@ class _MockBackend:
 class _RealBackend:
     """Real GGUF low-VRAM backend via a persistent subprocess worker (Phase 5).
 
-    This class NEVER imports torch / ltx_* (they live only in the fork venv). It
-    spawns ``_ltx_worker.py`` in the fork venv, loads the model once, and serves
-    jobs over a JSON-lines protocol framed by the ``@@LTX@@`` prefix. The worker
+    This class NEVER imports torch / ltx_* (they live only in the engine venv).
+    It spawns ``engine.worker`` (``python -m engine.worker``) in the engine venv,
+    loads the model once, and serves jobs over a JSON-lines protocol framed by
+    the ``@@LTX@@`` prefix. The worker
     writes ``output.mp4`` directly to the shared output dir; only small control
     JSON crosses the pipe. ``self.pipeline`` is retained (always None) only for
     the back-compat ``LTXRunner.pipeline`` attribute.
     """
 
-    # Protocol frame prefix; must match _ltx_worker.PREFIX.
+    # Protocol frame prefix; must match engine.worker.PREFIX.
     _PREFIX = "@@LTX@@"
     _LOAD_TIMEOUT_S = 600.0
     _SHUTDOWN_TIMEOUT_S = 30.0
@@ -443,51 +459,60 @@ class _RealBackend:
 
         model = self.config.model
 
-        # Resolve + validate the fork python, worker script, and 5 model paths.
-        fork_python = self._require_path(model.fork_python, "fork_python")
-        if not model.fork_backend_dir:
-            raise RuntimeError("model.fork_backend_dir is not configured (required for the real backend).")
-        fork_backend_dir = self.config._abs(model.fork_backend_dir)
-        if not fork_backend_dir.exists():
-            raise RuntimeError(f"model.fork_backend_dir not found: {fork_backend_dir}")
-        worker = fork_backend_dir / "_ltx_worker.py"
+        # Resolve + validate the engine python, worker script, and 5 model paths.
+        engine_python = self._require_path(model.engine_python, "engine_python")
+        if not model.engine_dir:
+            raise RuntimeError("model.engine_dir is not configured (required for the real backend).")
+        engine_dir = self.config._abs(model.engine_dir)
+        if not engine_dir.exists():
+            raise RuntimeError(f"model.engine_dir not found: {engine_dir}")
+        worker = engine_dir / "worker.py"
         if not worker.exists():
             raise RuntimeError(f"LTX worker script not found: {worker}")
+        # The worker is launched as `python -m engine.worker`, so its imports
+        # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
+        project_root = self.config._abs(".")
 
-        checkpoint_path = self._require_path(model.checkpoint_path, "checkpoint_path")
-        upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
+        # checkpoint_path (43GB monolith) is reference-only: the GGUF + component-file
+        # path never opens it. It is still forwarded to the worker as a payload field
+        # (the wheel's lazy builders expect it), so resolve to a project-rooted
+        # absolute WITHOUT an existence check — it may be physically absent while the
+        # real path still works.
+        checkpoint_path = str(self.config._abs(model.checkpoint_path)) if model.checkpoint_path else ""
+        # gemma_root (22.7GB QAT Gemma) IS load-bearing: the wheel globs its
+        # tokenizer.model + model*.safetensors at build time, so a missing dir must
+        # fail fast here rather than crash deep in the wheel. Forwarded to the worker
+        # as a payload field exactly as before.
         gemma_root = self._require_path(model.gemma_root, "gemma_root")
+
+        upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
         gguf_transformer_path = self._require_path(model.gguf_transformer_path, "gguf_transformer_path")
         gguf_gemma_path = self._require_path(model.gguf_gemma_path, "gguf_gemma_path")
 
-        # Phase 1 component-file re-sourcing. Resolve the 3 standalone paths to
-        # project-rooted absolutes (text projection is plumbed but NOT wired —
-        # Phase 2). Validated only when the gate is on so a missing component file
-        # cannot break the monolith path.
+        # Component-file re-sourcing. Fixed on in config.yaml; the 3 standalone
+        # files replace the monolith for VAE/audio (+ text projection connectors),
+        # so they are load-bearing and always validated for existence.
         use_component_files = bool(self.config.vram.use_component_files)
-        if use_component_files:
-            component_video_vae_path = self._require_path(
-                model.component_video_vae_path, "component_video_vae_path"
-            )
-            component_audio_vae_path = self._require_path(
-                model.component_audio_vae_path, "component_audio_vae_path"
-            )
-            component_text_projection_path = self._require_path(
-                model.component_text_projection_path, "component_text_projection_path"
-            )
-        else:
-            component_video_vae_path = str(self.config._abs(model.component_video_vae_path))
-            component_audio_vae_path = str(self.config._abs(model.component_audio_vae_path))
-            component_text_projection_path = str(self.config._abs(model.component_text_projection_path))
+        component_video_vae_path = self._require_path(
+            model.component_video_vae_path, "component_video_vae_path"
+        )
+        component_audio_vae_path = self._require_path(
+            model.component_audio_vae_path, "component_audio_vae_path"
+        )
+        component_text_projection_path = self._require_path(
+            model.component_text_projection_path, "component_text_projection_path"
+        )
 
         # Child env: inherit, force the 16GB-load-bearing CUDA + compile knobs,
-        # unbuffered IO, and CLEAR PYTHONPATH so the app's top-level `services`
-        # package can't shadow the fork's same-named package.
+        # unbuffered IO, and set PYTHONPATH to the project root so the worker's
+        # `engine.*` package (and the venv-installed ltx_core/ltx_pipelines)
+        # resolve when launched as `python -m engine.worker`.
         env = dict(os.environ)
         env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         env["TORCH_COMPILE_DISABLE"] = "1"
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
+        env["PYTHONPATH"] = str(project_root)
         # Phase 1 gate: the worker reads LTX_COMPONENT_FILES (mirrors LTX_KEEP_RESIDENT).
         env["LTX_COMPONENT_FILES"] = "1" if use_component_files else "0"
         # Default keep-resident-weights OFF. At 720p the keep-resident path builds
@@ -520,9 +545,9 @@ class _RealBackend:
             "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
         }
         logger.info(
-            "Loading pipeline (REAL worker). python=%s backend_dir=%s block_swap=%s ckpt=%s",
-            fork_python,
-            fork_backend_dir,
+            "Loading pipeline (REAL worker). python=%s engine_dir=%s block_swap=%s ckpt=%s",
+            engine_python,
+            engine_dir,
             knobs["block_swap_blocks_on_gpu"],
             checkpoint_path,
         )
@@ -530,8 +555,8 @@ class _RealBackend:
         log_fh = open(self._log_path, "a", encoding="utf-8")
         try:
             self._proc = subprocess.Popen(
-                [fork_python, "-u", "_ltx_worker.py"],
-                cwd=str(fork_backend_dir),
+                [engine_python, "-u", "-m", "engine.worker"],
+                cwd=str(project_root),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=log_fh,

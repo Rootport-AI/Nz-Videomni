@@ -8,6 +8,22 @@
 
 ---
 
+> **⚠️ 実装ステータス注記（2026-07-01・branch `refactor/engine-firstparty-cleanup` 反映）**
+>
+> 本仕様書は **API 契約（凍結層）の正本**です。以下は Phase 1 実装完了後の実態に合わせて訂正済み:
+> - **解像度契約は ÷64**（two-stage distilled。旧 v0.4 の「÷32」表記は誤りで、実装 `api/models.py` は ÷64。全て統一済み）。
+> - **実エンジンは公式 `DistilledPipeline`＋fp8-cast＋xformers ではない**。本機(16GB/Windows)で公式ローダが native crash するため、
+>   **first-party の `engine/` パッケージ（GGUF 量子化 transformer + block-swap + GGUF Gemma 逐次オフロード + DiT CPU 構築 +
+>   VAE タイリング + component-file 経路）** に pivot 済み。アプリ(`./.venv`, torch 無し)が別 venv(`./.venv-engine`, torch+cu128)の
+>   `python -m engine.worker` を subprocess 起動し JSON-lines で駆動する。
+> - **凍結 API 契約（÷64・8n+1・T2V/最小I2V・`GET /status` の `vram_optimization`・`metadata.json` スキーマ・limits/presets）は不変**。
+>
+> 現行アーキテクチャ・起動手順・16GB 技術の一次情報は `README.md` / `engine/` / `config.yaml` / `Docs/VERIFICATION_LOG.md` /
+> `engine/VENDOR_NOTICE.md`。以降の各章のうち「アーキテクチャ(4章)」「LTX依存関係(2.6)」「Low VRAM 戦略(0.2 / 13章)」「ltx_runner
+> インターフェース(9.4)」「config.yaml(11章)」は post-refactor 実態に合わせた注記/訂正を入れてあるが、細部の一次情報は上記実ファイルを見ること。
+
+---
+
 ## 0. AIエージェントへの実装指示
 
 この仕様書をAIコーディングエージェントに渡す場合は、まず **Phase 1のみ** を実装すること。  
@@ -35,6 +51,13 @@ AviUtl2フロントエンドは、バックエンドAPIが安定してから、�
 - README にセットアップ手順、起動手順、制限事項、16GB向け最小生成テストを書く
 
 ### 0.2 Phase 1 で実装する Low VRAM baseline
+
+> **【post-refactor 訂正 2026-07-01】** この 0.2 は「公式パイプライン＋fp8-cast で扱いやすい範囲だけ」という
+> **当初計画**の記述で、実態と異なる。公式ローダが本機で crash したため、**実際の 16GB 達成手段は first-party `engine/` の
+> GGUF 量子化 transformer + block-swap（GPU 常駐 8 ブロック）+ GGUF Gemma の逐次 per-layer CPU オフロード（`--te-offload`）+
+> DiT の CPU 構築（`--dit-cpu-load`）+ VAE タイリング + component-file 経路**（下記「実装しないもの」に挙げた技法の多くを、
+> 独自グローバルモンキーパッチではなく `engine/transformer/`・`engine/gemma/` の独立サービスとして採用した）。詳細は
+> `Docs/VERIFICATION_LOG.md` §11–§12 と `README.md` §3。凍結 API 契約（÷64・8n+1・`vram_optimization` スキーマ）は不変。以下は当初計画の記録。
 
 Phase 1では、低VRAM対応を「後回し」にしない。  
 ただし、壊れやすい独自パッチを一気に移植するのではなく、公式パイプラインやPyTorchの標準機能で扱いやすい範囲を **Low VRAM baseline** として実装する。
@@ -90,14 +113,14 @@ Phase 1で対応するI2Vは、以下の **最小I2V** のみとする。
 - 外部API仕様は Phase 1 から最終形に寄せる。あとでAviUtl2/DaVinci Resolve側の通信仕様を壊さないため。
 - LTX公式パイプライン呼び出しは `services/ltx_runner.py` に閉じ込める。API層やジョブ管理層に公式パッケージの細部を漏らさない。
 - Low VRAM mode はグローバル設定で管理し、`GenerateRequest` には原則として含めない。
-- 幅・高さは32の倍数のみ許可する。
+- 幅・高さは**64の倍数**のみ許可する（two-stage distilled: stage1 を半解像度で生成し x2 アップサンプルするため。実装は `api/models.py`）。
 - フレーム数は `8n+1` のみ許可する。
 - Distilled pipeline のデフォルトは `num_inference_steps=8`、`guidance_scale=1.0` とする。
-- Phase 1の最小疎通テストは `384x224 / 17 frames` とする。
-- Phase 1のGradio/APIデフォルトは `512x288 / 49 frames` とする。
-- Phase 1の目標プリセットは `960x544 / 121 frames / crop 960x540` とする。
+- Phase 1の最小疎通テストは `384x256 / 17 frames` とする。
+- Phase 1のGradio/APIデフォルトは `512x320 / 49 frames` とする。
+- Phase 1の目標プリセットは `960x576 / 121 frames / crop 960x540` とする。
 - 画像なしならT2V、`conditioning_images` が1件なら最小I2Vとして処理する。
-- 1080p相当の最終出力が必要な場合、内部では `1920x1088` のように32倍数へパディングし、最終エンコード時に `1920x1080` へクロップする。
+- 1080p相当の最終出力が必要な場合、内部では `1920x1088` のように64倍数へパディングし、最終エンコード時に `1920x1080` へクロップする。
 - `low_vram_mode=false` は高VRAM環境・クラウド・将来検証用の任意オプションであり、16GB環境の受け入れ条件に含めない。
 
 ## 1. プロジェクト概要
@@ -269,8 +292,21 @@ READMEには、この環境分離手順を「セットアップ」の最初に�
 
 ### 2.6 LTX依存関係とGPU世代間の互換性（重要）
 
+> **【post-refactor 訂正 2026-07-01】** 本節は「公式 `ltx_pipelines` を `install_ltx.ps1` で入れ、cu129 + xformers +
+> fp8-cast で動かす」という**当初計画**の記述。実態は異なる:
+> - **実行 venv は `./.venv-engine`**（fork 撤去時に退避）で、**torch は 2.9.1+cu128（cu129 ではない）**。依存の正本は
+>   `engine/engine-venv-pyproject.toml` と `engine/venv-engine.freeze.txt`（→ `engine/VENDOR_NOTICE.md`）。`ltx-core`/`ltx-pipelines`/
+>   `diffusers` は **git direct-url install（rev `00dc53d` 等）**で PyPI ではない。
+> - **attention backend は SDPA**（Ada + torch 2.9 では実体が FlashAttention-2）。**xformers は未ビルド・任意**。
+> - **量子化は fp8-cast ではなく GGUF Q4_K_M**（transformer / Gemma とも）。`config.vram.fp8_transformer` は
+>   凍結 `GET /status` 契約に出力されるだけで worker へは伝播しない（下記 13章・11章の注記参照）。
+> - **モデルは 46GB モノリスではなく GGUF + 小単体 component ファイル**（README §1 の表）。43GB モノリスは物理削除済み。
+>
+> 以下の「公式固定値」「install_ltx.ps1」「xformers ソースビルド」等は、上流参照用 `vendor/LTX-2` クローンに関する**参考記述**
+> として残す（実行経路ではない）。実行経路の一次情報は `README.md` §1 / `engine/VENDOR_NOTICE.md`。
+
 公式LTX-2スタックの依存は固定されており、GPU世代によって一部だけ差し替えが必要になる。  
-これらは `requirements.txt`（本プロジェクトのFastAPI側のみ）と `scripts/install_ltx.ps1`（LTXスタック）に分離して管理し、**世代差はインストールスクリプトの引数だけで吸収できる**ようにする。
+これらは `requirements.txt`（本プロジェクトのFastAPI側のみ）と `scripts/install_ltx.ps1`（上流 `vendor/LTX-2` 参照用スタック）に分離して管理し、**世代差はインストールスクリプトの引数だけで吸収できる**ようにする。
 
 #### 公式LTX-2の固定値（要調査・更新時は再確認すること）
 
@@ -427,6 +463,11 @@ python main.py --listen --port 19000
 
 ## 4. アーキテクチャ
 
+> **【post-refactor 訂正 2026-07-01】** 下図はアプリ内部の論理構成として有効だが、**実エンジンはアプリと同一プロセスではなく別
+> プロセス**。`services/ltx_runner.py` の `_RealBackend` が `./.venv-engine`（torch+cu128）の `python -m engine.worker` を
+> **subprocess** 起動し、JSON-lines（`@@LTX@@` フレーム）で駆動する。アプリ(`./.venv`)は torch/LTX を一切 import しない。
+> `_MockBackend`（合成クリップ・GPU 不要）はアプリ内で動きテスト経路を担う。全体像は `README.md` §3。
+
 ### 4.1 全体構成
 
 ```text
@@ -462,16 +503,13 @@ python main.py --listen --port 19000
 │  └───────────────────────────┬───────────────────┘   │
 │                              │                        │
 │  ┌───────────────────────────▼───────────────────┐   │
-│  │ services/ltx_runner.py                         │   │
-│  │ Official LTX pipelines adapter                 │   │
-│  │ T2V / minimal I2V normalization                │   │
-│  └───────────────────────────┬───────────────────┘   │
-│                              │                        │
-│                     ┌────────▼────────┐               │
-│                     │  GPU / CPU RAM  │               │
-│                     └─────────────────┘               │
-└──────────────────────────────────────────────────────┘
-
+│  │ services/ltx_runner.py  （唯一の LTX 接点）      │   │
+│  │  _MockBackend  (合成クリップ・GPU 不要)          │   │
+│  │  _RealBackend  ── subprocess.Popen ────────────┼───┼──▶ engine worker
+│  │  T2V / minimal I2V normalization               │   │   (別プロセス・./.venv-engine)
+│  └────────────────────────────────────────────────┘   │   python -m engine.worker
+└──────────────────────────────────────────────────────┘   JSON-lines @@LTX@@
+                                                            → output.mp4 直接書込
 Phase 5以降でAviUtl2フロントエンドを追加する。追加後もバックエンドAPIは変更しない。
 ```
 
@@ -481,14 +519,13 @@ Phase 5以降でAviUtl2フロントエンドを追加する。追加後もバッ
 |---------|------|-------|------|
 | Webフレームワーク | FastAPI | 1 | REST API、OpenAPI、自動docs、非同期対応 |
 | テストUI | Gradio | 1 | Pythonだけで検証UIを作れる |
-| 推論 | 公式 `ltx-pipelines` | 1 | LTX 2.3対応の中心 |
+| 推論エンジン | first-party `engine/`（`ltx_core`/`ltx_pipelines`@`00dc53d` をラップ） | 1 | GGUF 低VRAM 経路。別プロセス(`./.venv-engine`)で subprocess 駆動 |
 | ジョブ管理 | in-memory JobStore | 1 | 最小実装。1ジョブのみ |
 | 画像アップロード | local UploadStore | 1 | 最小I2V用。画像1枚を保存・正規化 |
 | ジョブキュー | `asyncio.Queue` | 3 | 複数ジョブ管理 |
 | 動画エンコード | ffmpeg subprocess | 1 | MP4出力・クロップ・メタデータ処理 |
-| 設定 | YAML + Pydantic Settings | 1 | 明示的な設定管理 |
-| Low VRAM baseline | FP8 / CPU offload / VAE tiling可能なら有効 | 1 | 16GB開発環境での最小動作 |
-| 高度な低VRAM | Attention tiling / BlockSwap / 独自VAE tiling | 2 | 960x544/121安定化・VRAM削減 |
+| 設定 | YAML + Pydantic | 1 | 明示的な設定管理 |
+| 16GB 低VRAM（実装済） | GGUF Q4_K_M + block-swap + GGUF Gemma 逐次オフロード + DiT CPU 構築 + VAE タイリング + component-file | 1 | `engine/` の独立サービス群。512×320 で peak ~9.2GB・720p 実証済み |
 
 ### 4.3 ディレクトリ構成
 
@@ -512,27 +549,41 @@ ltx-aviutl2-bridge/
 │   └── pipeline.py                 # load/unload
 │
 ├── services/
-│   ├── __init__.py
+│   ├── __init__.py                 # 空（refactor 後: engine の delete-set を import しない）
 │   ├── job_store.py                # Phase 1: in-memory job管理
 │   ├── upload_store.py             # Phase 1: I2V用画像保存・正規化
 │   ├── pipeline_manager.py         # load/unload/auto-load
-│   ├── ltx_runner.py               # 公式ltx-pipelines呼び出しアダプタ
+│   ├── ltx_runner.py               # 唯一の LTX 接点。_MockBackend / _RealBackend(subprocess)
 │   ├── video_io.py                 # ffmpeg encode/crop, metadata保存
 │   ├── gpu_info.py                 # VRAM情報取得
-│   ├── low_vram.py                 # Phase 1: FP8/CPU offload等のbaseline設定
-│   └── vram/                       # Phase 2以降: 高度な独自最適化
-│       ├── block_swap.py
-│       ├── attention_tile.py
-│       ├── vae_tile.py
-│       └── fp8.py
+│   └── low_vram.py                 # Low VRAM 設定 + 凍結 _STATUS_KEYS(vram_optimization)
 │
+├── engine/                         # first-party 実エンジン（別 venv で subprocess 起動）
+│   ├── __init__.py                 # 空
+│   ├── worker.py                   # python -m engine.worker のエントリ（JSON-lines）
+│   ├── api_types.py                # ImageConditioningInput 等
+│   ├── lora_types.py               # LoraEntry
+│   ├── VENDOR_NOTICE.md            # provenance（LTX-2/LTX-Desktop 由来・再現手順）
+│   ├── engine-venv-pyproject.toml  # .venv-engine 依存 spec（torch cu128 + git rev）
+│   ├── venv-engine.freeze.txt      # .venv-engine の name==version スナップショット
+│   ├── pipeline/                   # fast_video_pipeline.py / common.py / utils.py
+│   ├── gguf/                       # quant_service.py / loader_service.py
+│   ├── gemma/                      # gguf_quant_service.py / layer_offload_service.py
+│   └── transformer/                # block_swap_service.py / dit_cpu_load_service.py
+│
+├── vendor/
+│   └── LTX-2/                      # 上流 reference（gitignore・実行経路ではない）
 ├── outputs/
 │   └── .gitkeep
 ├── uploads/
 │   └── .gitkeep                    # Phase 1: I2V用画像保存
-└── models/
-    └── .gitkeep                    # 必要に応じてモデル配置
+└── models/                         # GGUF + component ファイル（gitignore・README §1 参照）
+    └── .gitkeep
 ```
+
+> **注（refactor 2026-07-01）**: 旧仕様の `services/vram/{block_swap,attention_tile,vae_tile,fp8}.py` は作らなかった。
+> 低VRAM 最適化は上記 `engine/{transformer,gemma,gguf,pipeline}/` の独立サービスとして実装済み。`./.venv`（app・torch 無し）と
+> `./.venv-engine`（engine・torch+cu128）の 2venv 構成。
 
 ---
 
@@ -612,9 +663,9 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
     negative_prompt: str = ""
 
-    # LTXに渡す内部生成サイズ。必ず32の倍数。
+    # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
-    height: int = Field(288, ge=128, le=4096)
+    height: int = Field(320, ge=128, le=4096)
 
     # 最終MP4のクロップサイズ。Noneならクロップしない。
     crop_output: CropOutput | None = None
@@ -631,10 +682,10 @@ class GenerateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_ltx_constraints(self):
-        if self.width % 32 != 0:
-            raise ValueError("width must be a multiple of 32")
-        if self.height % 32 != 0:
-            raise ValueError("height must be a multiple of 32")
+        if self.width % 64 != 0:
+            raise ValueError("width must be a multiple of 64")
+        if self.height % 64 != 0:
+            raise ValueError("height must be a multiple of 64")
         if (self.num_frames - 1) % 8 != 0:
             raise ValueError("num_frames must be 8n+1")
         if self.crop_output is not None:
@@ -1046,7 +1097,15 @@ Phase 3で正確なステップコールバックへ改善する。
 
 ### 9.4 ltx_runner.py のインターフェース
 
-公式 `ltx-pipelines` の実際のAPIは変わる可能性があるため、依存をこのファイルに閉じ込める。
+LTX 内部依存をこのファイルに閉じ込める。**唯一の LTX 接点**であり、real backend も torch/LTX を import しない
+（実生成は subprocess worker `engine.worker` に委譲）。
+
+> **【post-refactor 訂正 2026-07-01】** 実装の契約はこの旧スケルトンより広い。実際は
+> `LTXRunner(config, low_vram)`、`generate(request, output_dir, progress_callback=None, conditioning_image_paths=None) -> GenerationOutcome`
+> （`GenerationOutcome(output_path, seed_used, peak_vram_mb, generation_mode, backend)`・`output_path` は必ず `output_dir/"output.mp4"`）。
+> backend は `config.model.backend`（`auto`/`mock`/`real`）で選択し、`_MockBackend`（合成クリップ）と `_RealBackend`（subprocess
+> worker）の 2 実装を持つ。`metadata.json` は呼び出し元 `pipeline_manager` が書く（runner は `output.mp4` のみ）。以下は当初の簡略
+> スケルトン（歴史的）。実コードは `services/ltx_runner.py` を参照。
 
 ```python
 from pathlib import Path
@@ -1163,8 +1222,8 @@ outputs/
 
 ### 10.3 クロップ仕様
 
-LTXに渡す内部生成サイズは32の倍数である必要がある。  
-一方、AviUtl2素材としては `1920x1080` や `960x540` のような一般的な解像度が望ましい。  
+LTXに渡す内部生成サイズは64の倍数である必要がある。  
+一方、AviUtl2素材としては `1920x1080` や `960x540`、`1280x720` のような一般的な解像度が望ましい。  
 そのため、`crop_output` が指定された場合は、ffmpegで中央クロップする。
 
 例:
@@ -1185,6 +1244,22 @@ ffmpeg -i input.mp4 -vf "crop=960:540:(in_w-960)/2:(in_h-540)/2" -c:v libx264 -p
 
 ## 11. config.yaml
 
+> **【post-refactor 訂正 2026-07-01】** 下記は当初の骨子で、実 `config.yaml` はこれより広い（GGUF/component/engine パス、
+> `te_offload_text_encoder`、`dit_cpu_load`、`vae_*_tile_size`、`use_component_files` 等）。実ファイルの正本は
+> リポジトリの `config.yaml`（型は `config.py`）。特に:
+> - `model.text_encoder` は **`google/gemma-3-12b-it-qat-q4_0-unquantized`**（Gemma 2 ではない）。
+> - `model.checkpoint_path` は **reference-only**（43GB モノリスは削除済み・非 open）。`model.gemma_root` は
+>   **construction-required**（wheel が build 時に glob。重みは非読み）。
+> - `vram.fp8_transformer` / `vram.cpu_offload_text_encoder` は **凍結 `GET /status` 契約に出力される**ため保持するが、
+>   worker へは伝播しない（fp8 は runtime の `device_supports_fp8` 自動判定、CPU text-encode は別フィールド
+>   `te_offload_text_encoder`＋env `LTX_TE_OFFLOAD` で駆動）。
+> - `vram.block_swap` / `block_swap_blocks_on_gpu`(=8) / `vae_spatial_tile_size`(=512) / `vae_temporal_tile_size`(=64) /
+>   `use_component_files`(=true) は **本番で有効**（16GB レシピ）。
+> - 生成サイズ(width/height)は **÷64**。presets は `smoke_test 384x256/17`・`phase1_default 512x320/49`・
+>   `phase1_target 960x576/121→crop 960x540`。
+>
+> 以下は当初骨子（歴史的・実値は `config.yaml`）。
+
 ```yaml
 server:
   host: "127.0.0.1"
@@ -1194,56 +1269,65 @@ server:
   log_dir: "./logs"
 
 model:
-  # Phase 1では公式LTX-2リポジトリ/パッケージ側のロード方法に合わせる。
   checkpoint_dir: "./models"
-  checkpoint_name: "ltx-2.3-22b-distilled"
-  text_encoder: "google/gemma-2-2b-it"
+  checkpoint_name: "ltx-2.3-22b-distilled-1.1"
+  text_encoder: "google/gemma-3-12b-it-qat-q4_0-unquantized"
   pipeline_type: "distilled"
   auto_load_on_generate: true
   reload_interval: 0
+  # 実 config.yaml はこの後に gguf_transformer_path / gguf_gemma_path /
+  # component_*_path / engine_dir / engine_python / checkpoint_path(reference-only) /
+  # gemma_root(construction-required) 等を持つ。詳細は config.yaml / config.py。
 
 vram:
   # Phase 1から有効。主要開発環境がVRAM 16GBであるため。
   low_vram_mode: true
   low_vram_profile: "16gb_safe"
 
-  # Phase 1 baseline。公式APIで利用できる範囲で有効化する。
+  # 凍結 GET /status 契約に出力（worker へは非伝播。上記注記参照）。
   fp8_transformer: true
   cpu_offload_text_encoder: true
   vae_tiling: true
 
-  # Phase 2以降の高度な独自最適化。Phase 1では無効。
+  # 本番で有効な 16GB レシピ（worker が読む）。
+  te_offload_text_encoder: true   # GGUF Gemma 逐次 per-layer CPU オフロード
+  dit_cpu_load: true              # DiT を CPU 構築しロード時 GPU スパイクを除去
+  block_swap: true
+  block_swap_blocks_on_gpu: 8
+  vae_spatial_tile_size: 512
+  vae_temporal_tile_size: 64
+  use_component_files: true       # 46GB モノリスでなく小単体ファイルから VAE/audio を読む
+
   attention_tiling: false
   attention_tile_size: null
-  block_swap: false
-  block_swap_blocks_on_gpu: null
 
   # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。
   allow_disable_low_vram: true
 
+# 生成サイズは必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
 generation_presets:
   smoke_test:
     width: 384
-    height: 224
+    height: 256
     crop_output: null
     num_frames: 17
   phase1_default:
     width: 512
-    height: 288
+    height: 320
     crop_output: null
     num_frames: 49
   phase1_target:
     width: 960
-    height: 544
+    height: 576
     crop_output:
       width: 960
       height: 540
     num_frames: 121
 
 generation_defaults:
-  # Gradio/APIの初期値。まず16GBで通しやすい軽量設定にする。
+  # Gradio/APIの初期値。まず16GBで通しやすい軽量設定にする。width/height は64の倍数。
   width: 512
-  height: 288
+  height: 320
   crop_output: null
   num_frames: 49
   frame_rate: 24.0
@@ -1348,6 +1432,18 @@ app = gr.mount_gradio_app(app, gradio_app, path="/ui")
 
 ## 13. 低VRAM戦略（Phase 1から）
 
+> **【post-refactor 訂正 2026-07-01】** 本章は「公式 API の範囲＋fp8 で軽く動かし、BlockSwap 等は Phase 2」という**当初計画**。
+> 実際は 16GB 達成に BlockSwap・GGUF・逐次オフロード・DiT CPU 構築が **Phase 1 時点で必要かつ実装済み**（`engine/` の独立
+> サービス群で、グローバルモンキーパッチではない）。13.4 の "FP8Service / VAETileService" 等は作らず、下記に置換された:
+> - **`engine/gguf/`**: GGUF Q4_K_M dequant/loader（transformer）。
+> - **`engine/gemma/`**: GGUF Q4_K_M Gemma + `GemmaLayerOffloadService`（逐次 per-layer CPU オフロード＝`--te-offload`）。
+> - **`engine/transformer/`**: `BlockSwapService`（GPU 常駐 8 ブロック）+ `DitCpuLoadService`（DiT CPU 構築＝`--dit-cpu-load`）。
+> - **VAE タイリング**（`vae_spatial_tile_size`/`vae_temporal_tile_size`）+ **component-file 経路**（`use_component_files`）。
+>
+> `fp8_transformer` / `cpu_offload_text_encoder` は**凍結 `GET /status` 契約のフィールドとして保持**するが worker へは非伝播
+> （11章の注記参照）。13.5 の記録項目は凍結 `vram_optimization` キー（`services/low_vram.py` の `_STATUS_KEYS`）と一致＝**不変**。
+> 詳細は `Docs/VERIFICATION_LOG.md` §11–§12。以下は当初計画の記録。
+
 ### 13.1 基本方針
 
 Phase 1から `low_vram_mode=true` を標準にする。  
@@ -1371,11 +1467,12 @@ Phase 2では、16GBで `960x544 / 121 frames / crop 960x540` をより安定さ
 
 ### 13.2 検証プリセット
 
-| プリセット | 内部サイズ | 最終出力 | フレーム数 | 位置づけ |
+| プリセット | 内部サイズ(÷64) | 最終出力 | フレーム数 | 位置づけ |
 |------------|------------|----------|------------|----------|
-| `smoke_test` | `384x224` | `384x224` | `17` | モデルロード後の最小疎通 |
-| `phase1_default` | `512x288` | `512x288` | `49` | Phase 1の標準テスト |
-| `phase1_target` | `960x544` | `960x540` | `121` | 16GBで狙う実用寄り目標 |
+| `smoke_test` | `384x256` | `384x256` | `17` | モデルロード後の最小疎通 |
+| `phase1_default` | `512x320` | `512x320` | `49` | Phase 1の標準テスト |
+| `phase1_target` | `960x576` | `960x540` | `121` | 16GBで狙う実用寄り目標 |
+| `720p`（実証済） | `1280x768` | `1280x720` | `~49–121` | 720p 級。1280×768 生成→上下12pxクロップ |
 | `1080p_internal` | `1920x1088` | `1920x1080` | `121` | Phase 4以降。16GBでは必須にしない |
 
 ### 13.3 `low_vram_mode=false` の扱い
@@ -1715,7 +1812,7 @@ FastAPIの標準エラーに加えて、独自エラーでは以下を返す。
 
 | code | HTTP | 意味 |
 |------|------|------|
-| `INVALID_RESOLUTION` | 400 | 幅・高さが32の倍数ではない |
+| `INVALID_RESOLUTION` | 400 | 幅・高さが64の倍数ではない |
 | `INVALID_FRAME_COUNT` | 400 | フレーム数が8n+1ではない |
 | `JOB_BUSY` | 409 | Phase 1で実行中ジョブがある |
 | `UPLOAD_INVALID_TYPE` | 400 | 非対応の画像形式 |
@@ -1747,7 +1844,7 @@ curl http://127.0.0.1:18620/api/v1/status
 
 ### 18.2 バリデーションテスト
 
-幅が32の倍数でない場合:
+幅が64の倍数でない場合:
 
 ```json
 {
@@ -1761,7 +1858,7 @@ curl http://127.0.0.1:18620/api/v1/status
 期待:
 
 - HTTP 422 または 400
-- `width must be a multiple of 32` 相当のメッセージ
+- `width must be a multiple of 64` 相当のメッセージ
 
 フレーム数が `8n+1` でない場合:
 
@@ -1991,12 +2088,12 @@ curl http://127.0.0.1:18620/api/v1/status
 
 ## 付録A: LTX制約事項
 
-- 幅・高さは32の倍数にする
+- 幅・高さは**64の倍数**にする（two-stage distilled。実装 `api/models.py`）
 - フレーム数は `8n+1` にする。例: `9, 17, 25, 33, ... 121`
 - DistilledモデルはPhase 1では `8 steps / CFG=1.0` に固定する
 - Phase 1のI2Vは画像1枚・開始フレーム・`frame_idx=0` のみ対応する
 - プロンプトは英語推奨
-- 1080pジャストのように32の倍数ではないサイズは、内部生成サイズをパディングし、最終出力時にクロップする
+- 1080pジャストや720pジャストのように64の倍数ではないサイズは、内部生成サイズ（例 `1920x1088` / `1280x768`）で生成し、最終出力時に `crop_output` でクロップする
 
 ## 付録B: 16GB VRAM検証方針
 

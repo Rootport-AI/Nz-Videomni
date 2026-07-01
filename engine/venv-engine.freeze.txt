@@ -1,0 +1,89 @@
+# Dependency snapshot of .venv-engine (first-party engine worker interpreter).
+#
+# WHY: the fork tree that held uv.lock was deleted in Stage 2b, so this file
+# is the reproducibility record for the known-good engine venv (Critic C).
+# Rebuild reference: engine/engine-venv-pyproject.toml (the resolved lock is gone).
+#
+# METHOD: generated via importlib.metadata (enumerating installed *.dist-info in
+# .venv-engine/Lib/site-packages). `pip` and `uv` are BOTH absent from this
+# uv-built venv, so `pip freeze` / `uv pip freeze` were not available; the
+# dist-info enumeration is the exact-installed equivalent (name==version).
+# Interpreter: CPython 3.12.9  (.venv-engine/Scripts/python.exe)
+# Captured: 2026-07-01
+#
+# NOTE: three distributions are git direct-url installs (NOT PyPI); their
+# lines below are bare 'name==version' pins, so the exact source revs are
+# recorded here for reproducibility (see engine-venv-pyproject.toml sources):
+#   diffusers: git+https://github.com/huggingface/diffusers.git @ 01de02e8b4f2cc91df4f3e91cb6535ebcbeb490c
+#   ltx-core: git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-core @ 00dc53d3f81c405932f9f16d9c57557de411e702
+#   ltx-pipelines: git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-pipelines @ 00dc53d3f81c405932f9f16d9c57557de411e702
+#
+accelerate==1.12.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+av==16.1.0
+certifi==2026.1.4
+charset-normalizer==3.4.4
+click==8.3.1
+colorama==0.4.6
+diffusers==0.37.0.dev0
+einops==0.8.2
+fastapi==0.129.0
+filelock==3.24.2
+fsspec==2026.2.0
+ftfy==6.3.1
+gguf==0.18.0
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.7.1
+httpx==0.28.1
+huggingface_hub==0.36.2
+idna==3.11
+ImageIO==2.37.2
+imageio-ffmpeg==0.6.0
+importlib_metadata==8.7.1
+Jinja2==3.1.6
+ltx-core==1.0.0
+ltx-pipelines==1.0.0
+MarkupSafe==3.0.3
+mpmath==1.3.0
+networkx==3.6.1
+numpy==2.4.2
+nvidia-ml-py==13.590.48
+opencv-python-headless==4.13.0.92
+packaging==26.0
+peft==0.18.1
+pillow==12.1.1
+protobuf==6.33.5
+psutil==7.2.2
+pydantic==2.12.5
+pydantic_core==2.41.5
+pynvml==13.0.1
+python-dotenv==1.2.1
+python-multipart==0.0.22
+PyYAML==6.0.3
+regex==2026.1.15
+requests==2.32.5
+safetensors==0.7.0
+sageattention==1.0.6
+scipy==1.17.0
+sentencepiece==0.2.1
+setuptools==82.0.0
+starlette==0.52.1
+sympy==1.14.0
+tokenizers==0.22.2
+torch==2.9.1+cu128
+torchaudio==2.9.1+cu128
+torchvision==0.24.1+cu128
+tqdm==4.67.3
+transformers==4.57.6
+triton-windows==3.6.0.post25
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+urllib3==2.6.3
+uvicorn==0.41.0
+watchfiles==1.1.1
+wcwidth==0.6.0
+websockets==16.0
+zipp==3.23.0

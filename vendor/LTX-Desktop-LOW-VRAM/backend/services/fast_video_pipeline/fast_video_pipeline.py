@@ -8,7 +8,7 @@ from api_types import ImageConditioningInput
 
 if TYPE_CHECKING:
     import torch
-    from services.lora_service import LoraEntry
+    from services.lora_types import LoraEntry
 
 
 class FastVideoPipeline(Protocol):

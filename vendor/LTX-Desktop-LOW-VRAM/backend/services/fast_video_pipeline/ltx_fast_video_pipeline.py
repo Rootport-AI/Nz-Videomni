@@ -9,7 +9,7 @@ from typing import Final, cast
 import torch
 
 from api_types import ImageConditioningInput
-from services.lora_service import LoraEntry
+from services.lora_types import LoraEntry
 from services.ltx_pipeline_common import default_tiling_config, encode_video_output, video_chunks_number
 from services.services_utils import AudioOrNone, TilingConfigType, device_supports_fp8
 

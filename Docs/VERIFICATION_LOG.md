@@ -840,3 +840,44 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 
 ### 12.6 テスト
 - mock pytest **13 passed**（app `.venv`・torch 非依存・凍結経路不変。`tests/conftest.py::_make_args` に `dit_cpu_load=None` を追加＝parse_args 既定をミラー）。
+
+---
+
+## 13. ★de-fork リファクタ（Stage 0–4）検証サマリ（2026-07-01・branch `refactor/engine-firstparty-cleanup`）
+
+同梱フォークからの脱却（first-party `engine/` 化）と 43GB モノリス削除を、各段で「出力 mp4 の SHA256 がリファクタ前
+ベースラインとバイト完全一致」を確認しながら実施した。**挙動不変（決定性あり・別プロセス再起動でも一致）**。
+
+### 13.1 ベースライン（Stage 0）
+- 固定 seed=12345 / prompt "a calm ocean wave rolling onto a sandy beach at sunset, cinematic" / distilled / 8 steps。
+- **512×320/49f SHA256=`23844b4e…6bb7bf`**、**1280×768/49f SHA256=`4feea65f…3768da`**、**peak_vram_mb=9164**。
+- worker kill→再起動を挟む2回生成でバイト一致を実測 → 以降のゲートを「output.mp4 SHA256 一致 + ffprobe(dims/fps/codec) +
+  peak_vram_mb」に確定。
+
+### 13.2 各段の結果（全段 SHA256 一致 PASS）
+| Stage | commit | 内容 | 検証 |
+|---|---|---|---|
+| 1 | `d0d3df5` | フォーク未使用 142 ファイル削除（`services/__init__.py` 空化→`interfaces.py`削除→delete-set、`LoraEntry`→`lora_types.py`） | SHA256 一致・mock pytest 緑 |
+| 2a | `1bf4163` | keep-set を `engine/{worker,api_types,lora_types,pipeline,gguf,gemma,transformer}` へ git mv＋import 全置換。worker 起動を `python -m engine.worker`（cwd=root, PYTHONPATH=root）化。grep ゲート「engine 内に非engine first-party import ゼロ」 | SHA256 一致・grep ゼロ |
+| 2b | `c6ff5a4` | torch venv を `./.venv-engine` へ move。`vendor/LTX-Desktop-LOW-VRAM/` 完全削除（frontend/electron 含む）。`VENDOR_NOTICE.md`/pyproject を `engine/` へ退避。`vendor/LTX-2`（上流）温存 | SHA256 一致（削除後含め計3回）・worker スモーク ready |
+| 3a | `4639008` | 残デッド枝刈り（cpu_text_encode 枝・pre-quantized FP8 枝）。`use_component_files` else 分岐削除。モノリス/QAT 存在チェックを rename test 結果に合わせ再配線＋component/GGUF 必須アサート | SHA256 一致・T2V/最小I2V 完走 |
+| 4 | `35c3be5` | 未使用 `quantization` 削除。`fp8_transformer`/`cpu_offload_text_encoder` は凍結 `GET /status` 契約のため保持（worker 非伝播の注記化）。`checkpoint_path`(reference-only)/`gemma_root`(construction-required) 注記。`uv.lock` 消失を `engine/venv-engine.freeze.txt`＋`engine/engine-venv-pyproject.toml` で穴埋め | mock pytest 13 passed |
+
+### 13.3 モノリス/QAT の rename test（Stage 3）
+- **43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors`**: リネーム退避しても load 通過＋生成 SHA256 一致 →
+  **GGUF+component 経路は非 open と実証** → 物理削除（~43GB 回収）。`checkpoint_path` はフィールドとして温存（worker payload
+  の DistilledPipeline シグネチャ用・非 open）。
+- **QAT Gemma dir `models/gemma-3-12b-it-qat/`**: wheel の `ModelLedger.build_model_builders()` が build 時に
+  `tokenizer.model`+`model*.safetensors` を glob するため **削除不可（construction-required）** → 温存。重みは runtime に
+  読まれない（GGUF Gemma が供給）。`services/ltx_runner.py` は `gemma_root` を存在必須（fail-fast）、`checkpoint_path` を
+  非存在許容（reference-only）に再配線済み。
+
+### 13.4 凍結 API 契約の保全
+÷64 解像度（`api/models.py`）・8n+1 フレーム・T2V/最小I2V・`GET /status` の `vram_optimization`（`services/low_vram.py`
+`_STATUS_KEYS`）・`metadata.json` スキーマ・limits/generation_presets はすべて**不変**。Stage 5（ドキュメント改訂）でも
+これらは変更していない。
+
+### 13.5 Stage 5（ドキュメント改訂・本エントリ含む）
+`README.md` 全面改訂（2venv・engine/ アーキ・subprocess worker・GGUF+component・凍結 API・16GB 検証コマンド）／
+`LTX23_Backend_Specification_v04…md` の陳腐化章に post-refactor 注記＋「÷32」→「÷64」統一（凍結契約は保全）／
+`Docs/NEXT_SESSION_HANDOFF.md` 冒頭に post-refactor ステータス節を追加（歴史記録は温存）。**未 commit**（監督確認待ち）。

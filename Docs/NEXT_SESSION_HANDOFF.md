@@ -33,8 +33,36 @@
   (~3.9GB)＋spatial upsampler(~0.95GB)＋tokenizer-only gemma_root(~40MB)。43GB モノリス・QAT dir は**削除済**。
 
 ### リポジトリ状態
-- branch `main`（QAT 回収まで `--no-ff` マージ済）。**ローカルが `origin/main` より 3 commit 先行**（`93696b4`/`694ca54`/`826e76f`）＝
-  push は未実施（メニュー参照）。作業ツリー clean。
+- branch `main`（de-fork〜QAT 回収まで `--no-ff` マージ済）。**ローカルが `origin/main` より先行（未 push）**＝本セッションの
+  各 commit（QAT 回収 text-only Gemma・docs・実測 caps・API 尺緩和 257→481・本追記）はローカルのみ。作業ツリー clean。push はメニュー参照。
+
+---
+
+## フェーズ別ロードマップ（2026-07-01・Phase 1 残 / Phase 2 / Phase 5）
+
+> **開発フェーズの正本サマリ。** 出典＝spec `LTX23_Backend_Specification_v04…md §0.1/0.2/0.3/1.3/5.2`・`config.yaml` vram 節・`VERIFICATION_LOG §9.8`。
+> **自然な順（規定はしない）**: 長尺動画への道＝Phase 2 の「クリップ連結（複数キーフレーム/終了フレーム I2V）」。その**Phase 1 側の前提が下記 (b) I2V 連続＋音声の検証**。→「(b) を片付けてから Phase 2 連結」が筋（優先順位は担当者＋ユーザーで決定）。
+
+### Phase 1 ＝ 最小バックエンド（T2V＋最小I2V＋音声＋16GB fit＋720p）
+- **✅ done**: 凍結 REST API（÷64・8n+1・T2V/最小I2V）・単一ジョブ管理・Low VRAM baseline・**720p(1280×768→crop720) T2V/I2V**・**音声 joint 生成**（§9.8 PASS）・~28GB モデル構成・mock pytest。16GB fit（下記注記の意味で）。
+- **⚠️ 残課題（Phase 2 前に）**:
+  - **(b) I2V マルチジョブ＋音声連続生成の検証【最重要】** — 今回は T2V マルチジョブのみ実測。**Phase 2 のクリップ連結の前提**。keep=0 の gen 時間漸増が実本数（4本以上）で許容範囲かの再計測も兼ねる。
+  - (a) 検証用 **Gradio GUI 手動確認**（UI で T2V/I2V/720p/crop トグルが出せるか）。
+  - (c) **README/spec の全面改訂**（spec 本文は pre-pivot のまま・~90KB）。
+  - (d) **dead-code 整理**（text-only 化で no-op 化した `_SkipGemmaLMSDOps` 等・意図的温存分）。
+  - (e) **load/encode の一時 shared 溢れ**（~2–2.5GB）。
+- **注記「16GB fit」の意味**: ＝**ハード OOM しない**（溢れ＝system RAM へページングで激遅だが完走）の意。「全工程が dedicated 16GB 内」は**未達**（既知・別軸＝den2 の解像度×尺スケーリング。§8.4/§8.6）。
+
+### Phase 2 以降 ＝ spec §0.3「Phase 1 で実装しない」群
+- **最適化（高解像度・長尺・品質）**: attention tiling・FFN チャンキング・latent spatial upscaler で 1080p 化・Gemma Q6_K 品質バンプ。
+- **高度な条件付け（＝長尺の本命）**: IC-LoRA（depth/pose/edge/canny/参照動画）・V2V・**複数キーフレーム I2V／終了フレーム conditioning（＝クリップ連結で長尺）**・プロンプト強化（enhance_i2v・要 vision 再導入 [[qat-reclamation-textonly-gemma]]）。
+- **本番インフラ**: 本格ジョブキュー（Phase 1 は in-memory 単一）・永続 DB・認証・インターネット公開・動画アップロード。
+- **Phase 2 エンドポイント**（spec §5.2）: `PUT /api/v1/config`・`GET /api/v1/jobs/{id}/preview`・`POST /api/v1/upload/video`・`POST /api/v1/upload/image/keyframes`。
+
+### Phase 5 ＝ AviUtl2 統合（本来の最終目的・別プロジェクト）
+- spec §0.1/1.3: **API 安定後の「半ば独立した後続プロジェクト」**。REST API は AviUtl2 専用にしない（DaVinci Resolve 等の別フロントエンドも想定）。＝Phase 2 ではない。
+
+> **↓下記「次の一手メニュー」は上記フェーズの具体タスク（順序規定なし）。**
 
 ---
 

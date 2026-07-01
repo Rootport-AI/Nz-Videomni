@@ -10,8 +10,8 @@ crosses the pipe.
 Bootstrap mirrors outputs/phase4_gguf_gemma/run_t2v_bs8.py VERBATIM (proven to
 run on this Windows + 16GB box):
   * TORCH_COMPILE_DISABLE=1 set before importing torch.
-  * chdir(BACKEND) + sys.path.insert(0, BACKEND) so the fork's own
-    `services.*` / `ltx_pipelines.*` / `api_types` packages import.
+  * chdir(ROOT) + sys.path.insert(0, ROOT) so the first-party `engine.*` package
+    (and the venv-installed `ltx_core` / `ltx_pipelines`) import.
   * `import ltx_core.loader` BEFORE the pipeline import (rev-00dc53d circular
     import gotcha — required).
 
@@ -36,15 +36,18 @@ import sys
 import json
 import gc
 import traceback
+from pathlib import Path
 
 os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
 
-# import cwd = backend: make the impl 'services'/'ltx_pipelines'/'api_types'
-# packages importable (mirrors run_t2v_bs8.py).
-BACKEND = os.path.dirname(os.path.abspath(__file__))
-os.chdir(BACKEND)
-if BACKEND not in sys.path:
-    sys.path.insert(0, BACKEND)
+# import cwd = project root: make the first-party `engine.*` package (and the
+# venv-installed `ltx_core`/`ltx_pipelines`) importable. Launched as
+# `python -m engine.worker` with PYTHONPATH=<root>, but we also insert the root
+# on sys.path + chdir(ROOT) here so a bare `python engine/worker.py` still works
+# (mirrors the pre-relocation chdir/sys.path bootstrap).
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
 
 # Unique frame prefix for every protocol line the parent parses.
 PREFIX = "@@LTX@@"
@@ -84,10 +87,10 @@ torch.cuda.synchronize(DEV)
 torch.cuda.reset_peak_memory_stats(DEV)
 
 # Engine imports AFTER ltx_core.loader pre-warm + CUDA init.
-from services.fast_video_pipeline.ltx_fast_video_pipeline import (  # noqa: E402
+from engine.pipeline.fast_video_pipeline import (  # noqa: E402
     LTXFastVideoPipeline,
 )
-from api_types import ImageConditioningInput  # noqa: E402
+from engine.api_types import ImageConditioningInput  # noqa: E402
 
 _log("imported LTXFastVideoPipeline + ImageConditioningInput")
 

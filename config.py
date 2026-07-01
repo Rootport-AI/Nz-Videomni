@@ -49,8 +49,11 @@ class ModelConfig(BaseModel):
     # spike-proven 16GB recipe (Q4_K_M transformer + Q4_K_M GGUF Gemma on GPU).
     gguf_transformer_path: str = "./models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
     gguf_gemma_path: str = "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
-    fork_backend_dir: str = "./vendor/LTX-Desktop-LOW-VRAM/backend"
-    fork_python: str = "./vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe"
+    engine_dir: str = "./engine"
+    # Interpreter that runs the first-party engine worker (torch + cu128 + ltx_core
+    # / ltx_pipelines + gguf). Still the vendored fork venv for now; relocation of
+    # the venv itself is a later stage.
+    engine_python: str = "./vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
 
     # Component-file re-sourcing (Phase 1): standalone small files replacing the

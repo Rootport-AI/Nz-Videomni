@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from api_types import ImageConditioningInput
-from services.services_utils import AudioOrNone, TilingConfigType, device_supports_fp8, sync_device
+from engine.api_types import ImageConditioningInput
+from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8, sync_device
 
 if TYPE_CHECKING:
     from ltx_core.components.guiders import MultiModalGuiderParams

@@ -98,7 +98,7 @@ class BlockSwapService:
         # blocks), ratcheting to the job-5 native crash. Keep ONLY the current
         # transformer so the prior one becomes collectable (gc.collect() breaks
         # its swapped_forward reference cycles; see the between-job cleanup in
-        # _ltx_worker._do_generate).
+        # engine.worker._do_generate).
         self._installed_transformers.clear()
         self._installed_transformers.append(transformer)
 

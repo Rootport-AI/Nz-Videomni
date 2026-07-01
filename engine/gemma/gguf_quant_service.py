@@ -71,7 +71,7 @@ import torch
 
 # Reuse the bit-exact-verified quant kernels + per-layer Linear forward machinery
 # from the transformer service. Do NOT duplicate the dequant math.
-from services.gguf_quant_service import (
+from engine.gguf.quant_service import (
     GGMLQuantizedTensor,
     _GGML_BF16,
     _GGML_F16,
@@ -817,7 +817,7 @@ def _safe_numel(t: torch.Tensor) -> int:
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Reuse the transformer service's per-Linear patch (buffer swap + dequant forward).
-from services.gguf_quant_service import _patch_linear_for_ggml_dequant  # noqa: E402
+from engine.gguf.quant_service import _patch_linear_for_ggml_dequant  # noqa: E402
 
 
 def _patch_gemma_skip_full_logits(model: torch.nn.Module) -> None:
@@ -1218,7 +1218,7 @@ class GemmaGGUFQuantLoaderService:
             # (matches Lever-3's compute_dev). No-op + safe if the layer container
             # can't be located.
             if gemma_loader_ref.layer_offload:
-                from services.gemma_layer_offload_service import (
+                from engine.gemma.layer_offload_service import (
                     GemmaLayerOffloadService,
                 )
 

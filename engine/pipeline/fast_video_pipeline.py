@@ -8,10 +8,10 @@ from typing import Final, cast
 
 import torch
 
-from api_types import ImageConditioningInput
-from services.lora_types import LoraEntry
-from services.ltx_pipeline_common import default_tiling_config, encode_video_output, video_chunks_number
-from services.services_utils import AudioOrNone, TilingConfigType, device_supports_fp8
+from engine.api_types import ImageConditioningInput
+from engine.lora_types import LoraEntry
+from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
+from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 
 
 class _CPUTextEncoderWrapper:
@@ -252,13 +252,13 @@ class LTXFastVideoPipeline:
         if block_swap_blocks_on_gpu > 0:
             self._install_block_swap(block_swap_blocks_on_gpu)
 
-        # ── Install attention tiling ──
-        if attention_tile_size > 0:
-            self._install_attention_tiling(attention_tile_size)
-
-        # ── Apply LoRAs ──
-        if loras:
-            self._install_loras(loras)
+        # NOTE: attention-tiling and LoRA install branches (guarded by
+        # attention_tile_size > 0 / loras) were removed during the engine
+        # relocation: their services (AttentionTileService / LoraService) are not
+        # part of the first-party engine keep-set, the worker never enables these
+        # guards (both default off), and the current T2V/GGUF path never reaches
+        # them. The `attention_tile_size` and `loras` constructor parameters are
+        # retained (signature unchanged) but are now no-ops.
 
     def _install_pre_quantized_transformer(self, fp8_path: str) -> None:
         """Replace the transformer builder with a pre-quantized FP8 file loader.
@@ -381,7 +381,7 @@ class LTXFastVideoPipeline:
     def _install_gguf(self, gguf_path: str, per_layer_quant: bool = True) -> None:
         try:
             if per_layer_quant:
-                from services.gguf_quant_service import GGUFQuantLoaderService
+                from engine.gguf.quant_service import GGUFQuantLoaderService
                 service = GGUFQuantLoaderService(gguf_path=gguf_path)
                 service.install(self.pipeline.model_ledger)
                 self._gguf_service = service
@@ -390,7 +390,7 @@ class LTXFastVideoPipeline:
                     "GGUF per-layer quant installed: weights stay compressed in VRAM (%s)", gguf_path
                 )
             else:
-                from services.gguf_loader_service import GGUFLoaderService
+                from engine.gguf.loader_service import GGUFLoaderService
                 service = GGUFLoaderService(gguf_path=gguf_path)
                 service.install(self.pipeline.model_ledger)
                 self._gguf_service = service
@@ -424,7 +424,7 @@ class LTXFastVideoPipeline:
         transformer_builder. On failure, falls back to the stock GPU text encoder.
         """
         try:
-            from services.gemma_gguf_quant_service import GemmaGGUFQuantLoaderService
+            from engine.gemma.gguf_quant_service import GemmaGGUFQuantLoaderService
             service = GemmaGGUFQuantLoaderService(
                 gguf_path=gguf_path,
                 component_text_projection_path=component_text_projection_path,
@@ -494,8 +494,8 @@ class LTXFastVideoPipeline:
 
     def _install_block_swap(self, blocks_on_gpu: int) -> None:
         try:
-            from services.block_swap_service import BlockSwapService
-            from services.dit_cpu_load_service import DitCpuLoadService
+            from engine.transformer.block_swap_service import BlockSwapService
+            from engine.transformer.dit_cpu_load_service import DitCpuLoadService
             service = BlockSwapService(
                 blocks_on_gpu=blocks_on_gpu,
                 device=self._transformer_device,
@@ -528,49 +528,6 @@ class LTXFastVideoPipeline:
             logging.getLogger(__name__).warning(
                 "BlockSwap install failed (%s)", exc
             )
-
-    def _install_attention_tiling(self, tile_size: int) -> None:
-        try:
-            from services.attention_tile_service import AttentionTileService
-            service = AttentionTileService(tile_size=tile_size)
-            service.install()
-            self._attention_tile_service = service
-            import logging
-            logging.getLogger(__name__).info(
-                "AttentionTiling installed: tile_size=%d", tile_size
-            )
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "AttentionTiling install failed (%s)", exc
-            )
-
-    def _install_loras(self, entries: list[LoraEntry]) -> None:
-        import logging
-        _log = logging.getLogger(__name__)
-        try:
-            from services.lora_service import LoraService
-            service = LoraService(device=self._transformer_device)
-            loaded = service.load_loras(entries)
-            if not loaded:
-                _log.warning("No LoRAs were successfully loaded")
-                return
-
-            # Wrap model_ledger.transformer() persistently so LoRA hooks are
-            # re-applied on every build (model_ledger never caches the model).
-            # At this point model_ledger.transformer may already be wrapped by
-            # _install_block_swap, so we chain on top of that.
-            _original_transformer_fn = self.pipeline.model_ledger.transformer
-
-            def _transformer_with_loras() -> torch.nn.Module:
-                t = _original_transformer_fn()
-                service.apply_hooks_to_transformer(t, loaded)
-                return t
-
-            self.pipeline.model_ledger.transformer = _transformer_with_loras
-            _log.info("LoRAs applied: %d loaded", len(loaded))
-        except Exception as exc:
-            _log.warning("LoRA install failed (%s)", exc)
 
     @staticmethod
     def _make_sigma_subset(num_steps: int) -> list[float]:

@@ -9,8 +9,10 @@
 ## TL;DR
 - `models/gemma-3-12b-it-qat/`（22.7GB）は、**重みバイトが production 経路で読まれていない**（GGUF Gemma が LM 重みを供給、wheel の `_SkipGemmaLMSDOps` が `language_model.model.*` を全 skip）。
 - QAT dir が「構築時に必須」なのは、wheel が **①実トークナイザ群（GGUFからは供給不可）② `preprocessor_config.json` ③ 有効な `model*.safetensors`**（glob＋safe_open で触られる）を要求するため。ただし shard から**実際に読まれるのは shard#1 の vision_tower/multi_modal_projector＋embed_tokens ヘッダのみ**、残り(~19.4GB)は非read。
-- **回収は偽ファイル無しで可能**。既定＝**案A: 実際に読まれるテンソルだけ本物の小ファイルに抽出**（既存 component-files＝monolithから VAE/text_projection を抽出したのと同型・**byte一致は構造的に保証**・コード変更なし）→ gemma_root ~3GB・**~19.7GB回収**。追加＝**案B: loader を小パッチして重みファイル要求自体を消す**（既存の wheel monkeypatch と同流儀）→ gemma_root ~40MB・**~22.7GB回収**（vision_tower が未使用かの確認1回）。
-- 「空/ダミー safetensors で読んだフリをして glob を通す」案は**不採用**（使わないデータのための偽ファイル＝本末転倒。案Aが"本物の最小抽出"で上位互換）。
+- **本リファクタの目的は「スパゲッティ/設計の不合理の解消・保守性」であって"動けばいい"ではない**（それなら旧コードでも動く）。よって**要求の根を断つ案Bを本筋**とする。
+- **本筋＝案B: loader を小パッチし、重みファイル要求そのものを消す**（既存の wheel monkeypatch＝denoise と同流儀）。gemma_root は tokenizer のみ ~40MB、偽ファイルも死蔵ロードも無し、コードが「LM=GGUF/vision=不要/tokenizerだけ要る」と正直に表現される＝保守性向上。**~22.7GB回収**。確認は「vision_tower 未使用か」を生成1回で判定するだけ（未使用の公算大）。
+- **保険＝案A: 実際に読まれるテンソルだけ本物の小ファイルに抽出**（component-files 同型・byte一致構造保証・コード変更なし）→ gemma_root ~3GB・~19.7GB回収。案Bの確認で万一 vision_tower が使われていた/patchが脆い場合の fallback。使わない vision_tower を温存する冗長さが残り設計的には案Bに劣る。
+- 「空/ダミー safetensors で読んだフリ」は**不採用**（偽ファイル＝本末転倒）。
 
 ---
 
@@ -48,29 +50,26 @@ self.text_encoder_builder = Builder(model_path=(checkpoint, *weight_paths), ...)
 - **(b) tokenizer/config を GGUF から供給**: **不可**。GGUF はトークナイザを内蔵するが Gemma では transformers が **Unigram で誤構築（正: BPE）**＆ **gemma3 GGUF 直ロード未サポート**（transformers [#41494](https://github.com/huggingface/transformers/issues/41494), [#37002](https://github.com/huggingface/transformers/issues/37002)）。実 `tokenizer.model` が常に必須。config だけは wheel 内蔵で既に不要化済。
 - **(c) GGUF時に text_encoder builder 構築を skip**: ltx_core に専用APIなし。ModelLedger 構築を丸ごとバイパスする必要＝**高侵襲・上流追従が重い**。非推奨。
 
-## 5. 推奨アプローチ（偽ファイルは使わない）
-**「読んだフリの空/ダミー safetensors」は不採用**（使わないデータのための偽ファイル＝本末転倒）。真っ当な2案:
+## 5. 推奨アプローチ（本筋＝案B・保険＝案A）
+本リファクタの目的は設計の合理性・保守性の回復。"動けばいい"なら旧スパゲッティでも動く。よって**要求の根を断つ案Bを本筋**とし、案Aは fallback。（「空/ダミー safetensors で読んだフリ」は偽ファイルゆえ不採用。）
 
-### 案A（既定）— 実際に読まれるテンソルだけ本物の小ファイルに抽出。コード変更なし・byte一致保証
-wheel が shard から本当に読むのは **shard#1 の `vision_tower.*`＋`multi_modal_projector.*`（＋`embed_tokens.weight` のヘッダ）だけ**。これを **1つの本物の小 safetensors に抽出**する（＝このプロジェクトが 46GB monolith から VAE/text_projection を抜き出した既存 "component files" と同型。偽物ではなく正規の抜き出し）。
-- 新 gemma_root＝tokenizer群(~40MB)＋`preprocessor_config.json`＋この抽出ファイル（名前は `model*.safetensors` に一致させ glob を満たす）。
-- 読み込まれるテンソルが現状と**同一**ゆえ、**出力バイト一致は構造的に保証**（"動けばいい"の実験ではなく、抽出が正しいことの確認のみ）。
-- gemma_root ≈ **~3GB**（うち embed_tokens ~2GB）、**~19.7GB 回収**。**wheel 書き換え不要・純データ準備＋config パス変更のみ。**
+### 案B（本筋）— loader を小パッチし、重みファイル要求そのものを消す
+**根本原因**: wheel が GGUF 前提でないため、①構築時に重みファイルの存在を要求し、②使わない vision_tower を読み込む。本プロジェクトは既に wheel を monkeypatch 済（denoise の gc/empty_cache）＝レシピに手を入れるのは前例ある手法。同流儀で **GGUF Gemma 時に Gemma builder の重み glob/ロードをバイパス**する。
+- 結果、gemma_root は **tokenizer群 ~40MB だけ**で成立（偽ファイルも重みも無し）。config が「実体の無いモデルdir」を指す不自然さも消え、コードが「LM=GGUF／vision=不要／tokenizerだけ要る」と**正直に表現される＝保守性向上**（＝本リファクタの本旨）。
+- 実装で要るもの: (i) 重み glob（`find_matching_file(model*.safetensors)`）を GGUF時に回避、(ii) vocab shape（embed_tokens ヘッダ, §2）を GGUF or 既知定数(vocab=262208)から供給し `_read_target_vocab_from_header` 依存を外す、(iii) vision_tower/mm_projector を読み込まない（meta 残置）。**patch はできるだけ我々の `_install_gemma_gguf` 境界に局所化**し、共有ユーティリティ（`find_matching_file`）の広域 patch は避ける（builder を我々が用意 or gemma builder 構築を局所介入）。
+- **確認1回**: 生成 → baseline と byte一致（＋vision欠落でcrashしない）→ **vision_tower 未使用が確定＝~22.7GB 回収**。不一致なら vision 使用→案Aへ。
+- **正直な代償**: wheel 内部（rev 00dc53d に pin 済）への monkeypatch ゆえ上流更新時の追随点が増える。ただし既存 denoise patch と同種＆pin 済で、意図の明確な小 patch は「不要な3GB＋中身の無いモデルdir」を残すより保守的に健全。
 
-### 案B（追加最適化）— loader を小パッチして重みファイル要求自体を消す。フル22.7GB回収
-本プロジェクトは既に wheel を monkeypatch している（denoise の gc/empty_cache）。同じ流儀で、GGUF Gemma 時に text-encoder の重み glob/ロードを**バイパスするピンポイントパッチ**を当てれば、gemma_root は **tokenizer群 ~40MB だけ**で足り、抽出ファイルすら不要。
-- ただし案Aと違い shard#1 の vision_tower 等を**捨てる**ので、**それらが T2V/最小I2V で未使用か**を生成1回で確認（未使用の公算大＝LTX-2 は vision_tower を text→video に使わない、§3）。
-- vocab shape（embed_tokens ヘッダ, §2）を GGUF から取る／読み飛ばす小改修も要る。**~22.7GB 回収**。
+### 案A（保険）— 実際に読まれるテンソルだけ本物の小ファイルに抽出
+案Bの確認で vision_tower が使われていた場合、または wheel patch が想定外に脆い場合の **fallback**。wheel が読む `vision_tower.*`＋`multi_modal_projector.*`＋`embed_tokens.weight` を1つの本物 safetensors に抽出（46GB monolith→VAE/text_projection 抽出と同型の component-files 手法・偽物でない）。gemma_root ~3GB・~19.7GB回収・コード変更なし・byte一致は構造保証。ただし**使わない vision_tower を温存する冗長さが残り、設計的には案Bに劣る**。
 
-- **実装レバー**: 案A＝純データ準備でコード不変（glob は本物の抽出ファイル1つで満たされる）。案B＝`_install_gemma_gguf`（`gguf_quant_service.py`）近辺で glob/builder を介入（既存 `dc_replace(builder, model_path=...)` L1138-1143 と同系統の patch。glob は `__init__` で先に走るので、`find_matching_file`/`build_model_builders` を patch する必要あり）。
-
-## 6. 次セッションの実装ステップ（案A 既定）
-1. baseline 再確認（現状 22.7GB版）: 512×320/49f/8steps/seed=12345/T2V, prompt `a calm ocean wave rolling onto a sandy beach at sunset, cinematic` → SHA256 `23844b4e…6bb7bf`（[[engine-firstparty-refactor]]）。
-2. **wheel が gemma_root から実際に読むテンソルを抽出**: shard 群を `safe_open` し、`_SkipGemmaLMSDOps` が skip しないキー＝`vision_tower.*`＋`multi_modal_projector.*`＋`embed_tokens.weight`（vocab shape 用）だけを `get_tensor`→`save_file` で1ファイル `model.safetensors` に抽出。抽出対象キーは `engine/gemma/gguf_quant_service.py` の AV key-ops / skip ロジックを見て正確に列挙する。
-3. 新 dir（例 `models/gemma-3-12b-it-min/`）に tokenizer群＋`preprocessor_config.json`（＋`processor_config.json` 等の小物）＋抽出 `model.safetensors` を配置。`config.yaml: gemma_root` をそこへ向ける。
-4. **実機検証**: 1ジョブ生成 → SHA256 が baseline 一致（＋/status・metadata 不変・OOM無し）。抽出が正しければ一致は保証＝ここは確認。
-5. 一致後、元 QAT dir(22.7GB) を物理削除（models/ は git外・復旧は再DL、premise 3 バックアップ前提）＝**~19.7GB 回収**。
-6. （任意・追加~3GB＝案B）抽出ファイルから vision_tower/mm_projector を抜いた版でも byte一致するか確認（§3 の「survivor 未使用か」判定）。未使用なら gemma_root を tokenizer のみ ~40MB に縮小し、glob/vocab の小パッチを当てて残り~3GB も回収。
+## 6. 次セッションの実装ステップ（本筋＝案B）
+1. baseline 再確認: 512×320/49f/8steps/seed=12345/T2V, prompt `a calm ocean wave rolling onto a sandy beach at sunset, cinematic` → SHA256 `23844b4e…6bb7bf`（[[engine-firstparty-refactor]]）。
+2. **重み要求のバイパス実装**（`engine/gemma/gguf_quant_service.py` / `engine/pipeline/fast_video_pipeline.py` 近辺・我々の境界に局所化）: GGUF Gemma 時に (i) `find_matching_file(gemma_root,"model*.safetensors")` の glob を回避（gemma builder を我々が用意 or 該当 glob を局所介入）、(ii) vocab shape を GGUF/既知定数(262208)から供給して `_read_target_vocab_from_header` の shard 依存を外す、(iii) vision_tower/mm_projector を読み込まない（meta 残置・`_return_model` の meta 許容に乗る）。
+3. gemma_root を **tokenizer群＋`preprocessor_config.json` だけの ~40MB dir**（例 `models/gemma-3-12b-it-tokenizer/`）にし `config.yaml: gemma_root` を向ける。
+4. **実機検証**: 生成 → SHA256 が baseline 一致（＋/status・metadata 不変・OOM無し・vision欠落でcrashしない）を確認。一致＝vision_tower 未使用が確定。
+5. 一致後、元 QAT dir(22.7GB) 物理削除＝**~22.7GB 回収**（models/ は git外・復旧は再DL、premise 3 バックアップ前提）。
+6. **不一致だった場合のみ案A へ切替**（vision_tower 等を本物抽出した ~3GB gemma_root、~19.7GB回収）＝設計的には劣るが安全網。
 
 ## 7. 参照
 **wheel 一次ソース**（`.venv-engine/Lib/site-packages/`）:

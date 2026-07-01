@@ -44,14 +44,15 @@
 
 > 本セッション終盤の「spec 全面改訂」に向けたユーザー対話の結論。**次セッションはここから。** 下の「フェーズ別ロードマップ」の Phase 2/5 枠は本節で **early-integration に是正**されている（本節が正）。
 
-### 次セッションの着手（ユーザー指定）
-- **install スクリプト作成 ＋ Phase 1 残「マルチジョブ対応」をまとめて着手**（install は軽いので1本化）。
-  - **「マルチジョブ」＝ 単一ユーザーの逐次連続生成**（**I2V＋音声の連続生成を検証**。T2V マルチジョブは実測済）＝Phase 2「クリップ連結」の前提。**※「複数人同時利用」ではない**（それは削除＝下記スコープ）。
-  - **install スクリプト** ＝ 実 stack（uv + cu128 + engine freeze＝README §1 の手順）をスクリプト化 ＋ 下記 gotcha をコメントで明記。stale な `scripts/install_ltx.ps1` は置換/是正。
+### 次セッションの着手 ＝ spec 全面改訂（install＋マルチジョブは本セッションで完了）
+> **▶ 2026-07-02 更新**: 下の「install＋マルチジョブ」は**本セッションで完了済**。**次セッションの着手＝spec 全面改訂**（指針＝下記「spec 全面改訂の方針（合意済）」§、Phase 1 残(c)）。**ここから始める**（~90KB・章立てレベル＝中〜大。安全策＝目次提案→ユーザー承認→本文の段階実施）。
+- **✅ 完了（2026-07-02・commit `3c008c7`・push無し）**:
+  - **install スクリプト全面書き換え**: `scripts/install_ltx.ps1` を冪等クリーンインストーラ化（両venv・現行~28GBのみDL[リポID暗号確認]・GpuArch自動判定・PASS/MISSING表・INSTALLED_PATHS再生成）＋`build_xformers.ps1` 是正（CUDA_PATH/.venv-engine/12.8）。本機で冪等スキップ実行 exit0/全PASS・mock smoke 7。
+  - **Phase 1 残「マルチジョブ」＝I2V＋音声 連続を両経路で実機 PASS**（直接ハーネス I2V×4 @384＋本番API I2V×3 @512×320・**VERIFICATION_LOG §10.7**）。※マルチジョブ＝単一ユーザー逐次連続（複数人同時ではない＝削除済スコープ）。**Phase 2 クリップ連結の前提クリア。**
 
 ### install 互換メモ（調査済 2026-07-02・再調査不要）
 - **stack は世代跨ぎで可搬**: `torch 2.9.1+cu128`(stable) が arch_list に **sm_80/86(Ampere)・sm_89(Ada)・sm_100/sm_120(Blackwell)** を同梱／attention＝**SDPA**（xformers/flash-attn 未使用）／GGUF dequant＝**pure-torch**／fp8 本番未使用 → **Ampere/Ada/Blackwell 現 pin のまま動く見込み**（nightly も source build も不要）。ユーザーはビルド済みコンポーネント不要。
-- **install に書く gotcha 3点**: ①**torch は必ず cu128 index から**（素の `pip install torch` は CPU/旧CUDA→Blackwell "no kernel image"）②既存 `install_ltx.ps1` は **stale**（旧 torch2.7/cu129/xformers/flash-attn-4 前提）＝**README §1 が実手順の正** ③**Blackwell は R570+ ドライバのみ**・**xformers/flash-attn/sageattention は足さない**（SDPA 維持・足すと逆に詰まる）。導通1行: `python -c "import torch;print(torch.cuda.is_available(),torch.cuda.get_arch_list())"`。
+- **install に書く gotcha 3点**: ①**torch は必ず cu128 index から**（素の `pip install torch` は CPU/旧CUDA→Blackwell "no kernel image"）②`install_ltx.ps1` は **2026-07-02 に全面書き換え済＝現行の正**（旧記述「stale・torch2.7/cu129/xformers/flash-attn-4」はもう当てはまらない。README §1 手順を自動化＋本メモ③準拠＝SDPA・xformers/flash-attn 自動導入せず・Blackwell は SDPA 固定・xformers は wheel 在れば任意） ③**Blackwell は R570+ ドライバのみ**・**xformers/flash-attn/sageattention は足さない**（SDPA 維持・足すと逆に詰まる）。導通1行: `python -c "import torch;print(torch.cuda.is_available(),torch.cuda.get_arch_list())"`。
 
 ### spec 全面改訂の方針（合意済・未着手＝Phase 1 残(c)・spec はバックアップ済ゆえ自由に改訂可）
 - **Phase 構造を early-integration に是正**: **Phase 1**(最小バックエンド, ほぼ done) → **Phase 2 ＝ AviUtl2 拡張機能（＝ゴール・まず「動くツール」を得る）** → **Phase 3+ ＝ 育てる**（長尺クリップ連結 → IC-LoRA/V2V/プロンプト強化・希望次第）。方針＝「機能を固めてから統合」でなく「**早く統合して使いながら育てる**」。

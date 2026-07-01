@@ -108,7 +108,8 @@
       "Bash(python \"C:/Users/PHENOT~1/AppData/Local/Temp/claude/s--OriginalApps-12-Nz-LTX23-backend/894028a3-9933-452c-b668-4d3d07dc20ba/scratchpad/extract.py\")",
       "Bash(python -c ' *)",
       "PowerShell(nvidia-smi --query-gpu=name,memory.total,memory.used,driver_version --format=csv)",
-      "PowerShell(powershell -ExecutionPolicy Bypass -File \"vendor/LTX-Desktop-LOW-VRAM/backend/_gpu_mem_sampler.ps1\" -OutFile \"outputs/gpu_mem_verify720p.log\" -IntervalSec 0.5 -MaxSeconds 1200)"
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"vendor/LTX-Desktop-LOW-VRAM/backend/_gpu_mem_sampler.ps1\" -OutFile \"outputs/gpu_mem_verify720p.log\" -IntervalSec 0.5 -MaxSeconds 1200)",
+      "PowerShell($o='S:\\\\OriginalApps\\\\12_Nz-LTX23-backend\\\\outputs\\\\phaseB_i2v_audio'; Get-ChildItem $o -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object LastWriteTime, @{n='KB';e={[math]::Round\\($_.Length/1KB,1\\)}}, Name | Format-Table -AutoSize; Write-Output \"--- now: $\\(Get-Date -Format 'HH:mm:ss'\\) ---\"; $p=Get-Process python -ErrorAction SilentlyContinue; if\\($p\\){Write-Output \"python running: PID $\\($p.Id -join ','\\)\"}else{Write-Output \"no python process\"})"
     ]
   }
 }

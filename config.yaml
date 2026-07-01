@@ -32,7 +32,7 @@ model:
   # text-only（Gemma3ForCausalLM）なので vision 構造は存在しない。engine 側が shard 抜き
   # builder を組み直し、tokenizer/processor の
   # module_ops をこの dir から読む（tokenizer.model + preprocessor_config.json のみ glob）。
-  # 実体は ~40MB の tokenizer-only dir（22.7GB QAT dir は後工程で回収予定）。
+  # 実体は ~40MB の tokenizer-only dir（旧 22.7GB QAT dir は回収済＝物理削除, merge 826e76f）。
   gemma_root: "./models/gemma-3-12b-it-tokenizer"
   backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
 

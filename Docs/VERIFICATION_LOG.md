@@ -881,3 +881,57 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 `README.md` 全面改訂（2venv・engine/ アーキ・subprocess worker・GGUF+component・凍結 API・16GB 検証コマンド）／
 `LTX23_Backend_Specification_v04…md` の陳腐化章に post-refactor 注記＋「÷32」→「÷64」統一（凍結契約は保全）／
 `Docs/NEXT_SESSION_HANDOFF.md` 冒頭に post-refactor ステータス節を追加（歴史記録は温存）。**未 commit**（監督確認待ち）。
+
+---
+
+## 14. ★QAT gemma_root 22.7GB 回収（text-only Gemma 化）検証 PASS（2026-07-01・branch `refactor/qat-reclamation`）
+
+de-fork リファクタ（§13）では「wheel が build 時に `tokenizer.model`+`model*.safetensors` を glob するため QAT dir は
+construction-required で削除不可」として温存していた（§13.3）。本エントリはその **前提を根本から覆し 22.7GB を回収**した記録。
+**解＝Gemma を text-only（`Gemma3ForCausalLM`・vision 無し）で構築**。full-QAT baseline と **出力 mp4 バイト完全一致**を確認済み。
+
+> **本節は、§8/§9.7/§10.5/§10.6 で "残課題" として挙がっていた「qat-drop（24GB 削減）」および「models/ 93.83GB→フットプリント削減」を CLOSED にする**（実測 models/ 28.15GB）。旧節のそれらの記述は当時の時系列ログとして温存（追記型ログのため個別書換えせず、本注記で closed を明示）。
+
+### 14.1 根因と解（なぜ QAT dir が要らなくなったか）
+- **根因**: LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の hidden_states しか使わないのに、wheel は
+  **vision_tower＋multi_modal_projector 込みのフルのマルチモーダル `Gemma3ForConditionalGeneration`** を構築していた。vision は
+  最初から死蔵重みで、QAT shard#1（vision/mm_projector 439テンソル）がそれを供給し「construction-required」を作っていた。
+- **解**: 新規 `engine/gemma/text_encoder_configurator.py` で **text-only `Gemma3ForCausalLM` を構築**（我々の seam で wheel の
+  `model_class_configurator` を差し替え・**wheel フォーク不要**）。vision 構造そのものが消え、shard を glob/`safe_open` する
+  必要も無くなった。gemma_root は ~40MB の **tokenizer-only dir**（`models/gemma-3-12b-it-tokenizer/`）に差し替え、QAT dir は
+  **物理削除**。**models/ 50.9GB→28.15GB**（実測 30,227,833,513 bytes・GGUF 先行事例並み）。
+- 事前調査＝`Docs/QAT_RECLAMATION_RESEARCH.md`（冒頭 ✅RESOLVED バナー）。当初案（案B=loader パッチ／案A=vision 抽出）は
+  「マルチモーダルを保ったまま重みロードを避ける」前提だったが、実装時に上記のより深い根因が判明し不要化した。
+
+### 14.2 途中の学び（device 周り・非自明）
+1. **素朴な shardless 化は crash**: vision を meta 残置すると `self.model.device`（=最初の param の device, transformers
+   `get_parameter_device`）が meta → `precompute` が input_ids を meta 上に生成 → crash。
+2. **text-only では別の device 衝突**: CPU-offload した embed（text-only の最初の param）で `.device` が cpu → `precompute` が
+   attention_mask を cpu 生成 → cuda の hidden_states と `feature_extractor.py:78`（`torch.where`）で衝突。
+3. **修正＝`.device` を compute device に override**: `_ComputeDeviceGemma3ForCausalLM` サブクラスで `.device` を
+   **final-norm（`model.norm.weight`）の device** として報告（＝`_cpu_embed_forward` の compute_dev と同一・常に GPU 常駐）。
+   マルチモーダル baseline は vision(cuda) が**偶然の device アンカー**だった＝それを text-only 用に明示復元。embed の実 device
+   （CPU offload）は不変ゆえ **numerics はバイト不変**。
+- スコープ確認（text-only で失うもの）: IC-LoRA・i2v 画像条件・audio・enhance_t2v は全て VAE/text ベースで **vision 非依存**。
+  唯一 `enhance_i2v`（入力画像を VLM に見せる画像プロンプト補強）だけ vision 使用だが `enhance_prompt` は既定 OFF・未配線・
+  Phase1 外（ComfyUI-LTXVideo も同機能を Florence-2 で代替）。ComfyUI 先行事例も text-only Gemma。将来 enhance_i2v を使うなら
+  vision 再導入が別途必要。
+
+### 14.3 実機検証（全て byte-match・3経路）
+- 固定 seed=12345 / prompt "a calm ocean wave rolling onto a sandy beach at sunset, cinematic" / distilled / 8 steps。
+- **T2V 512×320/49f SHA256=`23844b4eebd107ccba8c5534eb65bab86575cca0b9050cb6c7e680a4506bb7bf`** ＝ §13 の full-QAT baseline
+  `23844b4e…6bb7bf` と**完全一致**。
+- **最小I2V SHA256=`a511eda431cf0d0942cee97fa130f45e55fc3236833cbf9ea743ea7f4715c217`** ＝ full-QAT baseline と**完全一致**。
+- **3経路**: ① QAT dir 在（tokenizer-only 差替前）の T2V ② 同 I2V ③ QAT dir 不在（tokenizer-only dir へ rename）の T2V＝
+  rename-test。いずれも上記 SHA と一致 → **重みバイトは元から非寄与＝vision 未使用が実証**され、QAT dir 物理削除を確定。
+- **peak_vram_mb=8440**（§13 baseline 9164 より微減・退行なし）。mock pytest **13 passed**。
+
+### 14.4 温存した意図的 no-op（dead-code 候補・今回は削除せず）
+- `engine/gemma/gguf_quant_service.py:201` `_SkipGemmaLMSDOps` … text-only 化で shard が消え no-op だが belt-and-suspenders で温存。
+- 同 `:234` `_read_target_vocab_from_header(path)` の `path` 引数 … 未使用だが signature 互換のため温存。
+- これらの整理は次セッションの「dead-code 整理」候補（HANDOFF のメニュー参照）。
+
+### 14.5 commit
+- `93696b4` feat(engine): text-only Gemma text encoder（実装＋回収）→ `694ca54` docs+chore（コメント polish＋QAT 調査 docs）→
+  main へ `--no-ff` マージ `826e76f`。branch `refactor/qat-reclamation`。**config.yaml / config.py / services/ltx_runner.py の
+  gemma_root 注記も併せて更新済**（`gemma_root: ./models/gemma-3-12b-it-tokenizer`）。

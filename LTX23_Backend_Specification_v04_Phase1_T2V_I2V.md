@@ -8,7 +8,7 @@
 
 ---
 
-> **⚠️ 実装ステータス注記（2026-07-01・branch `refactor/engine-firstparty-cleanup` 反映）**
+> **⚠️ 実装ステータス注記（2026-07-01・de-fork＋QAT 回収まで反映）**
 >
 > 本仕様書は **API 契約（凍結層）の正本**です。以下は Phase 1 実装完了後の実態に合わせて訂正済み:
 > - **解像度契約は ÷64**（two-stage distilled。旧 v0.4 の「÷32」表記は誤りで、実装 `api/models.py` は ÷64。全て統一済み）。
@@ -16,6 +16,9 @@
 >   **first-party の `engine/` パッケージ（GGUF 量子化 transformer + block-swap + GGUF Gemma 逐次オフロード + DiT CPU 構築 +
 >   VAE タイリング + component-file 経路）** に pivot 済み。アプリ(`./.venv`, torch 無し)が別 venv(`./.venv-engine`, torch+cu128)の
 >   `python -m engine.worker` を subprocess 起動し JSON-lines で駆動する。
+> - **Gemma は text-only（`Gemma3ForCausalLM`・vision 無し）で構築**（`engine/gemma/text_encoder_configurator.py`）＝2.6 章の
+>   「Gemma root 約25GB」は公式 QAT dir の話で、**本実装では不要**（`gemma_root` は ~40MB tokenizer-only dir・22.7GB QAT dir 削除済）。
+>   43GB モノリスも削除済み。**実行に要るモデルは合計 ~28GB**（`models/` 実測 28.15GB。詳細＝`Docs/VERIFICATION_LOG.md` §13/§14）。
 > - **凍結 API 契約（÷64・8n+1・T2V/最小I2V・`GET /status` の `vram_optimization`・`metadata.json` スキーマ・limits/presets）は不変**。
 >
 > 現行アーキテクチャ・起動手順・16GB 技術の一次情報は `README.md` / `engine/` / `config.yaml` / `Docs/VERIFICATION_LOG.md` /
@@ -1247,9 +1250,11 @@ ffmpeg -i input.mp4 -vf "crop=960:540:(in_w-960)/2:(in_h-540)/2" -c:v libx264 -p
 > **【post-refactor 訂正 2026-07-01】** 下記は当初の骨子で、実 `config.yaml` はこれより広い（GGUF/component/engine パス、
 > `te_offload_text_encoder`、`dit_cpu_load`、`vae_*_tile_size`、`use_component_files` 等）。実ファイルの正本は
 > リポジトリの `config.yaml`（型は `config.py`）。特に:
-> - `model.text_encoder` は **`google/gemma-3-12b-it-qat-q4_0-unquantized`**（Gemma 2 ではない）。
-> - `model.checkpoint_path` は **reference-only**（43GB モノリスは削除済み・非 open）。`model.gemma_root` は
->   **construction-required**（wheel が build 時に glob。重みは非読み）。
+> - `model.text_encoder` は **`google/gemma-3-12b-it-qat-q4_0-unquantized`**（Gemma 2 ではない）＝設定文字列。実体は
+>   **GGUF Gemma（Q4_K_M）を text-only（`Gemma3ForCausalLM`・vision 無し）で構築**（`engine/gemma/text_encoder_configurator.py`）。
+> - `model.checkpoint_path` は **reference-only**（43GB モノリスは削除済み・非 open）。`model.gemma_root` は現在
+>   **`./models/gemma-3-12b-it-tokenizer`**（~40MB の tokenizer/preprocessor のみ・重みは非含）。**旧 22.7GB の QAT dir は
+>   text-only Gemma 化により物理削除済**（`Docs/VERIFICATION_LOG.md` §14。旧記述の「construction-required で温存」はもう当てはまらない）。
 > - `vram.fp8_transformer` / `vram.cpu_offload_text_encoder` は **凍結 `GET /status` 契約に出力される**ため保持するが、
 >   worker へは伝播しない（fp8 は runtime の `device_supports_fp8` 自動判定、CPU text-encode は別フィールド
 >   `te_offload_text_encoder`＋env `LTX_TE_OFFLOAD` で駆動）。
@@ -1277,7 +1282,7 @@ model:
   reload_interval: 0
   # 実 config.yaml はこの後に gguf_transformer_path / gguf_gemma_path /
   # component_*_path / engine_dir / engine_python / checkpoint_path(reference-only) /
-  # gemma_root(construction-required) 等を持つ。詳細は config.yaml / config.py。
+  # gemma_root(=./models/gemma-3-12b-it-tokenizer, tokenizer-only ~40MB) 等を持つ。詳細は config.yaml / config.py。
 
 vram:
   # Phase 1から有効。主要開発環境がVRAM 16GBであるため。

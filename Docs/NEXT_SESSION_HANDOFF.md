@@ -2,6 +2,100 @@
 
 ---
 
+## ▶▶▶▶▶▶ 現状ステータス（2026-07-01・**次セッションはまずここを読む**）
+
+> **この節が最新の正本サマリ。** 以下の各▶節は古い順に温存した歴史記録なので、食い違ったら**本節が正**。
+> **次の一手は下の「次の一手メニュー」から、担当者＋ユーザーで優先順位を議論して決める前提**（規定の順序は無い）。
+
+### いま完了していること（全体像）
+- **de-fork リファクタ済**: エンジンは first-party の **`engine/`** パッケージ（旧・同梱フォークは削除・上流 `vendor/LTX-2` のみ温存）。
+  起動＝`python -m engine.worker`（別プロセス・別venv）。詳細＝§13 / `engine/VENDOR_NOTICE.md`。
+- **720p 達成**: 1280×768 二段を本番 API 経路で完走→任意で 1280×720 クロップ（~167–171秒 / RTX 4070 Ti SUPER 16GB）。連続
+  マルチジョブも commit 枯渇せず PASS（レシピ＝comp=1 / keep_resident=0 / bs=8 / vae 512-64）。詳細＝§10。
+- **load/encode の 16GB fit 済**: `--te-offload`（Gemma encode ピーク低減・既定 ON, §11）＋ `--dit-cpu-load`（transformer load
+  スパイク除去・既定 ON, §12）で、512×320 の whole-job ceiling 16,944→~9.2GB。残るのは den2 の解像度・尺スケーリング軸のみ。
+- **音声 Phase1 済**: native joint audio が 16GB で効果音/音楽/発話を生成・AAC mux・crop 音声保持を実機確認（§9.8）。
+- **reuse-crash（残課題A）解決済**: BlockSwapService の per-job transformer 保持リークを keep-latest clear＋between-job gc で修正、
+  6ジョブ実機 PASS・出力バイト一致（§9.7）。
+- **★今回 QAT 回収済（2026-07-01）**: Gemma を **text-only（`Gemma3ForCausalLM`）** 化し、22.7GB の QAT dir を物理削除。
+  gemma_root は ~40MB tokenizer-only dir（`models/gemma-3-12b-it-tokenizer/`）。**models/ 50.9GB→28.15GB**。full-QAT baseline と
+  **バイト完全一致**（T2V `23844b4e…6bb7bf` / 最小I2V `a511eda4…c217`・3経路）・peak_vram 8440・退行なし。詳細＝**§14** ／
+  `Docs/QAT_RECLAMATION_RESEARCH.md` 冒頭 ✅RESOLVED バナー。commit `93696b4`→`694ca54`→main マージ `826e76f`。
+
+### 凍結してある契約・構成（壊さない）
+- **凍結 API 契約（不変）**: ÷64 解像度（`api/models.py`）・8n+1 フレーム・T2V/最小I2V・`GET /status` の `vram_optimization`
+  （`services/low_vram.py` `_STATUS_KEYS`）・`metadata.json` スキーマ・limits/generation_presets。
+- **2プロセス・2venv 構成**: app＝`./.venv`（torch 無し・FastAPI/Gradio/mock backend）／engine＝`./.venv-engine`（torch 2.9.1+cu128＋
+  `ltx_core`/`ltx_pipelines`@`00dc53d`＋`gguf`）。両者を同一インタプリタで共存させない。
+- **本番 env 要点**: `LTX_KEEP_RESIDENT=0` 既定（keep=1 だと 720p の Gemma 移動で native crash・§10.2）／`use_component_files: true`
+  （Path B・46GB モノリス非経由で commit 束縛）／`te_offload_text_encoder`・`dit_cpu_load` 既定 ON。設定は `config.yaml` が正。
+- **本番モデル（実行に要る ~28GB）**: GGUF transformer(Q4_K_M ~17GB)＋GGUF Gemma(Q4_K_M ~7.3GB)＋component VAE/audio/projection
+  (~3.9GB)＋spatial upsampler(~0.95GB)＋tokenizer-only gemma_root(~40MB)。43GB モノリス・QAT dir は**削除済**。
+
+### リポジトリ状態
+- branch `main`（QAT 回収まで `--no-ff` マージ済）。**ローカルが `origin/main` より 3 commit 先行**（`93696b4`/`694ca54`/`826e76f`）＝
+  push は未実施（メニュー参照）。作業ツリー clean。
+
+---
+
+## 次の一手メニュー（**順序は規定しない**・担当者＋ユーザーで優先順位を議論して決める）
+
+> **次セッションはこのメニューから優先順位を議論して選ぶところから再開する。** 以下は「◯◯せよ」という指示ではなく、
+> 各候補に「何を・なぜ・依存/前提・粗い規模感」を添えた**選択肢**。相互依存に注意して順序はその場で決める。
+
+- **検証用 Gradio GUI の手動動作確認**
+  - 何を: `/ui`（Gradio）で 720p / crop トグル / T2V / 最小I2V を人が実際に出せるか確認。
+  - なぜ: API は疎通済みだが GUI 経由の end-to-end は未確認。AviUtl2 統合前の最短の現物確認。
+  - 依存/前提: 実 backend＋GPU。規模＝小（生成数本＋目視）。
+
+- **（本来の目的）AviUtl2 拡張機能 ↔ 本 API 統合**
+  - 何を: AviUtl2 拡張から本バックエンド（FastAPI, port 18620, `/api/v1/*`）を叩く連携を作る。
+  - なぜ: このプロジェクトの最終目的。API は汎用設計で既に安定。
+  - 依存/前提: 上の Gradio 手動確認で現物が固まっていると安全。規模＝大（別プロジェクト級・仕様書 0 章の想定）。
+
+- **keep_resident=1 を 720p でも使える恒久最適化**
+  - 何を: Gemma の out-of-place `.to(cuda)` 移動を in-place 化／移動前 CPU 解放し、keep=1 と 720p を両立。
+  - なぜ: keep=0 は毎ジョブ再 materialize で gen 時間が漸増（720p で +24%）。長尺連結・速度が要件化した時の本命（§9.7 の高速 flat 経路）。
+  - 依存/前提: 独立（信頼性ブロッカーではない・現状 keep=0 で安定）。規模＝中。
+
+- **I2V マルチジョブ＋音声連続生成の検証**
+  - 何を: 新デフォルト（comp=1 / keep=0）で **I2V の連続生成・音声付き**を実測（今回の実測は T2V マルチジョブのみ）。
+  - なぜ: 「5秒クリップを繋いで長尺」（終了フレーム→次の開始フレームの I2V 連結）の前提。連結は I2V 連続なのでここが未検証だと着手できない。
+  - 依存/前提: 独立。keep=0 の gen 時間漸増が実本数（4本以上）で許容範囲かの再計測も兼ねる。規模＝中。
+
+- **README / spec の全面改訂**
+  - 何を: `README.md` と `LTX23_Backend_Specification_v04…md` を現アーキで整理。
+  - なぜ: 両者とも de-fork Stage 5 で post-refactor 注記＋要点訂正は入れたが、spec 本文は依然 pre-pivot 構成（fp8-cast/公式パイプライン
+    前提の章立て）。QAT 回収でモデル構成も変わった（tokenizer-only gemma_root）。**現状に反する箇所は本セッションで最小是正済**（下記
+    「今セッションで是正した doc」）だが、章立てレベルの全面改訂は未了。
+  - 依存/前提: 独立。規模＝中〜大（spec は ~90KB）。
+
+- **dead-code 整理**
+  - 何を: text-only 化で no-op 化した `_SkipGemmaLMSDOps`（`engine/gemma/gguf_quant_service.py:201`）・未使用 `path` 引数
+    `_read_target_vocab_from_header`（同 :234）・その他 de-fork の残滓を整理。
+  - なぜ: 保守性。ただし belt-and-suspenders / signature 互換で**意図的に温存**したものなので、消す前に §14.4 の意図を確認。
+  - 依存/前提: **コード編集（本タスクはドキュメントのみ）**。規模＝小。byte-match ゲートで退行確認。
+
+- **開発ゴミ掃除（方法ごと次セッションへ委譲・ユーザー指示 2026-06-30）**
+  - 何を: `outputs/` のテスト出力・未追跡の診断スクリプト（`_gpu_mem_sampler.ps1` 系のログ等）の整理。
+  - なぜ: 公開前の後片付け。**掃除の方法自体をユーザーと相談してから**（何を残すか判断が要る）。
+  - 依存/前提: 独立。規模＝小〜中。
+
+- **`origin/main` への push**
+  - 何を: ローカル先行 3 commit（`93696b4`/`694ca54`/`826e76f`＋本ドキュメント群の commit）を push。
+  - なぜ: リモート同期。ローカルが先行している。
+  - 依存/前提: **本ドキュメント整備の監督確認＋commit が先**（本セッションは commit しない）。規模＝小。
+
+### 今セッションで是正した doc（QAT 回収の反映・上記メニューの前提）
+- `Docs/VERIFICATION_LOG.md`: **§14 を追加**（text-only Gemma・byte-match 3経路・device override 経緯・peak_vram 8440・commit）。
+- 本書冒頭: 本「現状ステータス」＋「次の一手メニュー」を追加（以降の▶節＝歴史記録は温存）。
+- `README.md` / `LTX23_Backend_Specification_v04…md`: QAT dir → tokenizer-only gemma_root＋text-only Gemma への**最小是正**
+  （全面改訂はメニュー候補）。
+- `Docs/QAT_RECLAMATION_RESEARCH.md` は既に ✅RESOLVED バナー付きで最新（追加編集不要）。
+- `config.yaml` の `gemma_root` インラインコメントも監督が是正済（「後工程で回収予定」→「回収済＝物理削除」）＝VERIFICATION_LOG §14.5 と一致。
+
+---
+
 ## ▶▶▶▶▶ post-refactor ステータス（2026-07-01・branch `refactor/engine-firstparty-cleanup`・最初に読む）
 
 **de-fork リファクタが完了した。** このハンドオフの**以降の記述の多くは de-fork 前（2026-06-30）に書かれており、
@@ -20,8 +114,8 @@
   - **✅ QAT Gemma dir 22.7GB は回収済（2026-07-01・text-only Gemma 化）**。当初は「wheel が build 時に tokenizer.model+model*.safetensors を
     glob するため construction-required で温存」だったが、**Gemma を text-only（`Gemma3ForCausalLM`・vision 無し）で構築**するよう作り替え、
     vision 構造ごと不要化。gemma_root は ~40MB の tokenizer-only dir（`models/gemma-3-12b-it-tokenizer/`）に差し替え、QAT dir は物理削除
-    （models/ 50.9GB→28.2GB）。full-QAT baseline とバイト一致・peak_vram 微減・退行なし。詳細＝`Docs/QAT_RECLAMATION_RESEARCH.md` 冒頭
-    ✅RESOLVED バナー、commit `93696b4`（branch `refactor/qat-reclamation`・未マージ）。
+    （models/ 50.9GB→28.15GB）。full-QAT baseline とバイト一致・peak_vram 微減・退行なし。詳細＝**§14** ／`Docs/QAT_RECLAMATION_RESEARCH.md`
+    冒頭 ✅RESOLVED バナー、commit `93696b4`→`694ca54`→**main へ `--no-ff` マージ済 `826e76f`**（branch `refactor/qat-reclamation`）。
 - **設定後始末**: 未使用 `quantization` を削除。`fp8_transformer`/`cpu_offload_text_encoder` は**凍結 `GET /status` 契約**のため保持
   （worker 非伝播）。`uv.lock` 消失を `engine/venv-engine.freeze.txt`＋`engine/engine-venv-pyproject.toml` で穴埋め。
 - **凍結 API 契約は不変**: ÷64 解像度・8n+1 フレーム・T2V/最小I2V・`GET /status` の `vram_optimization`・`metadata.json` スキーマ・
@@ -39,9 +133,12 @@ Stage 5（本ドキュメント改訂）は未 commit（監督確認待ち）。
 
 ---
 
-## ▶▶▶▶ 最新の正本（2026-06-30 後半・このセクションを最初に読む）＝720p 達成 & 連続生成の commit 枯渇を解決
+## ▶▶▶▶ （歴史）720p 達成 & 連続生成の commit 枯渇を解決（2026-06-30 後半）
 
-**＝残課題C（720p スケールアップ）完了。本来の機能（16GB で 720p 動画生成）が、先行事例と遜色ないマシンスペックで実現した。** 次は検証用 Gradio GUI での手動動作確認 →（本来の目的）**AviUtl2 拡張機能からこの API を叩く統合**。
+> **【超過】この節の「最初に読む／次は◯◯」は当時のもの。最新の現状と次の一手は冒頭「現状ステータス」＋「次の一手メニュー」が正。**
+> 720p・連続生成の技術記録として温存。
+
+**＝残課題C（720p スケールアップ）完了。本来の機能（16GB で 720p 動画生成）が、先行事例と遜色ないマシンスペックで実現した。** （当時の次の一手＝検証用 Gradio GUI 手動確認 →（本来の目的）AviUtl2 統合。→現在はメニュー化。）
 
 ### 何ができるようになったか（実機検証済）
 - **720p 級（1280×768 を生成→任意で 1280×720 にクロップ）の T2V が本番 API 経路で完走**。生成 ~167–171秒（RTX 4070 Ti SUPER 16GB）。job `684393c6`（crop なし 1280×768 配信）/ `5a3540ba`（crop 1280×720）で ffprobe 確認。OOM なし。
@@ -59,7 +156,7 @@ Stage 5（本ドキュメント改訂）は未 commit（監督確認待ち）。
 
 ### マシンスペック（公開時の見積り・先行事例と比較）
 - 「commit ~102GB」は **ディスクでなく仮想メモリ予約（物理RAM＋ページファイル）** のピーク。先行事例 ComfyUI 16GB レシピも「RAM32GB＋swap64GB」相当（§91）＝**ほぼ同等で極端でない**（旧懸念の ~200GB は 46GB モノリス＋二重 materialize の悪い経路の話で、comp=1 で回避済）。本機は RAM64GB＋pagefile48GB＝commit 上限 ~112GB で 90% 着地。
-- **実行に本当に要るモデルは ~28GB**（GGUF transformer 16.5＋GGUF Gemma 6.8＋components 3.85＋upscaler 0.93＋設定）＝ComfyUI GGUF 構成（~25–30GB）と同等。現状 `models/` は 93.83GB あるが、**モノリス 43GB＋qat 重み 22.7GB（計 ~66GB）は今の comp=1/GGUF 経路では不要候補**（落とせば公開フットプリントが先行事例並み。要・読み込み検証→下記残課題）。
+- **実行に本当に要るモデルは ~28GB**（GGUF transformer 16.5＋GGUF Gemma 6.8＋components 3.85＋upscaler 0.93＋設定）＝ComfyUI GGUF 構成（~25–30GB）と同等。~~現状 `models/` は 93.83GB あるが、**モノリス 43GB＋qat 重み 22.7GB（計 ~66GB）は今の comp=1/GGUF 経路では不要候補**~~ → **【是正 2026-07-01】モノリス 43GB は de-fork（§13.3）で、qat 重み 22.7GB は今回の QAT 回収（§14）で共に削除済。`models/` は現在 28.15GB で先行事例並みが達成済。**
 
 ### 次のマイルストーン
 1. **検証用 Gradio GUI でユーザーが手動動作確認**（UI が 720p/crop トグル/T2V/I2V を出せるか要確認）。
@@ -88,9 +185,12 @@ Stage 5（本ドキュメント改訂）は未 commit（監督確認待ち）。
 
 ---
 
-最終更新: 2026-06-30（**残課題A＝per-job リークを診断確定→修正→6ジョブ実機検証 PASS。フォーク backend を版管理化（commit 済）。音声 Phase 1 実機確認 PASS（✅DONE）。次の一手＝qat-drop(24GB削減)／720p スケールアップ（残課題C）**）/ 想定読者: 次セッションのエージェント
+> **【超過】以下の「最終更新 2026-06-30」ブロックは歴史記録。当時「次の一手」に挙げた qat-drop(24GB削減) も 720p スケールアップ
+> （残課題C）も**いずれも✅完了済**（QAT 回収＝§14／720p＝§10）。現状と次の一手は冒頭「現状ステータス」＋「次の一手メニュー」が正。**
 
-> **このドキュメントが現時点の最新・正本（handoff）です。まず §0 と「★残課題サマリ」を読めば、現状と次の一手が分かる。**
+最終更新: 2026-06-30（**残課題A＝per-job リークを診断確定→修正→6ジョブ実機検証 PASS。フォーク backend を版管理化（commit 済）。音声 Phase 1 実機確認 PASS（✅DONE）。当時の次の一手＝qat-drop(24GB削減)／720p スケールアップ（残課題C）＝いずれも現在✅完了**）/ 想定読者: 次セッションのエージェント
+
+> **（歴史）当時このブロックが最新・正本でした。まず §0 と「★残課題サマリ」を…と案内していたが、現在の最新・正本は冒頭「現状ステータス」節。**
 > **【リポジトリ状態 2026-06-30】** フォーク `vendor/LTX-Desktop-LOW-VRAM/backend/` の **.py ソース 169ファイルが版管理対象になった**（commit `4ea5c4b` "Vender"、origin/main 同期済）。`.gitignore` を negation ブロックに変更し backend ソースのみ追跡（`.venv`/weights/フロントエンド/`uv.lock` は除外維持）。フォーク自身の `.git` は **`.git_fork_disabled` にリネームして無効化**（境界を外しファイル追跡を可能にするため・42MB・削除可）。出典は `vendor/LTX-Desktop-LOW-VRAM/backend/VENDOR_NOTICE.md`。**＝以後エンジン改変は通常の git で commit できる**（以前は vendor/ 丸ごと ignore でエンジン全体が版管理外だった）。
 > 設計判断の根拠と実機検証の全経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**最新＝§9.7（per-job リーク診断確定＋修正＋検証 PASS＝残課題A 完全解決）。次セッションはまず §0 末尾の ▶▶▶ と §9.7 を読め**、§9.6＝Path B component-files、
 > §6＝Phase 5(A) 配線、§5＝Gemma GGUF）が一次情報。実装計画は `~/.claude/plans/frolicking-tumbling-hennessy.md`。
@@ -313,6 +413,14 @@ Phase 5(A) で「配線」は終わったが、**"16GB に本当に収まる" �
 - E2E スパイク: `outputs/phase4_gguf_gemma/`（runner・perf log・出力 mp4・contact_grid・GIF）。フォーク最小呼び出し雛形 `vendor/.../backend/_spike_gguf_min.py`。
 
 ## 6. ドキュメントの正本/古い注意（重要）
+> **【更新 2026-07-01】この §6 は Phase 5(A) 当時の版。最新の「正本」ポインタは以下に更新済:**
+> - **現状の正本＝本書冒頭「現状ステータス」節＋「次の一手メニュー」**（この §6 より上位）。
+> - **技術検証の正本＝[VERIFICATION_LOG.md](VERIFICATION_LOG.md)**：最新は **§14（QAT 回収・text-only Gemma）**／§13（de-fork）／
+>   §12（dit-cpu-load）／§11（te-offload）／§10（720p・連続生成）／§9.7（reuse-crash 解決）。
+> - **README.md / `LTX23_Backend_Specification_v04…md` は post-refactor 反映済**（de-fork Stage 5＋本セッションの QAT 是正）＝
+>   下記「古い」欄の「pre-pivot のまま」はもう当てはまらない（章立て全面改訂だけが未了＝メニュー候補）。
+>
+> 以下（旧）は Phase 5(A) 当時の記述。歴史参照用に温存。
 - **正本**: 本書（handoff）／[VERIFICATION_LOG.md](VERIFICATION_LOG.md)（**§6＝Phase 5(A) 配線・実機検証が最新**、§5＝Gemma GGUF）／計画書 `a-witty-kazoo.md`／memory。本書と VERIFICATION_LOG は **Phase 5(A) の状態を反映済**。
 - **LTX 2.3 一般リファレンス（参照URL付き基礎知識）**: [LTX23_REFERENCE.md](LTX23_REFERENCE.md) — 解像度契約(÷32/÷64・2段)・VAE 32×圧縮とトークン数・VRAMスケーリング(重み支配)・16GBレシピ・720pの作り方(1280×768→crop)。タスク非依存の事実集。
 - **古い・歴史的（鵜呑み禁止）**:

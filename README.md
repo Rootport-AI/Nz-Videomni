@@ -81,14 +81,17 @@ provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR
 | GGUF Gemma (Q4_K_M) | `models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | text encoder（GPU 推論・逐次オフロード） |
 | component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | 46GB モノリスを置換する小単体ファイル |
 | spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | 2段生成の x2 アップサンプラ |
-| QAT Gemma dir | `models/gemma-3-12b-it-qat/` | 存在必須 | **construction-required**（wheel が build 時に `tokenizer.model`+`model*.safetensors` を glob。**重みは読まれない**） |
+| Gemma tokenizer dir (`gemma_root`) | `models/gemma-3-12b-it-tokenizer/` | ~40MB | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
 
-> **削除済み（2026-07-01 の refactor）**: 43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors` は物理削除しました。
+> **削除済み（2026-07-01 の refactor）**: (1) 43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors` を物理削除。
 > `config.model.checkpoint_path` はフィールドとしては残りますが **reference-only**（worker payload に載るが GGUF+component
-> 経路では一切開かれない・rename test で実証済み）。QAT Gemma dir は上記のとおり construction-required で温存です。
+> 経路では一切開かれない・rename test で実証済み）。(2) **22.7GB の QAT Gemma dir `models/gemma-3-12b-it-qat/` も物理削除**。
+> Gemma を **text-only（`Gemma3ForCausalLM`・vision 無し）** で構築するよう作り替えたため（`engine/gemma/text_encoder_configurator.py`）、
+> wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は上記 ~40MB の tokenizer-only dir で足ります。full-QAT
+> baseline と出力バイト一致で検証済み（`Docs/VERIFICATION_LOG.md` §14）。
 >
-> 実行に本当に要るモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + QAT dir）で、ComfyUI の
-> GGUF 16GB レシピと同等のフットプリントです。
+> 実行に本当に要るモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + tokenizer dir。実測 `models/` 全体
+> 28.15GB）で、ComfyUI の GGUF 16GB レシピと同等のフットプリントです。
 
 backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「`./.venv-engine` の python・
 `engine/worker.py`・上記ロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です

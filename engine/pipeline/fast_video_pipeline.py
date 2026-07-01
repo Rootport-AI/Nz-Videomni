@@ -14,43 +14,6 @@ from engine.pipeline.common import default_tiling_config, encode_video_output, v
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 
 
-class _CPUTextEncoderWrapper:
-    """Thin wrapper that runs a CPU-resident Gemma encoder and returns the
-    resulting embeddings on the GPU.
-
-    `encode_text` calls `text_encoder(prompt)` and unpacks the result as
-    `v_context, a_context, _ = text_encoder(prompt)`. The wrapped GemmaTextEncoder
-    runs entirely on CPU (its forward dispatches to `self.model.device`); we cast
-    only the small GemmaEncoderOutput tensors (video/audio encodings + mask) to
-    (gpu_device, out_dtype) so the GPU transformer receives them in the expected
-    bf16/cuda form. Heavy Gemma weights never touch the GPU.
-    """
-
-    def __init__(self, encoder: torch.nn.Module, gpu_device: torch.device, out_dtype: torch.dtype) -> None:
-        self._encoder = encoder
-        self._gpu_device = gpu_device
-        self._out_dtype = out_dtype
-
-    def _to_gpu(self, t: "torch.Tensor | None") -> "torch.Tensor | None":
-        if t is None:
-            return None
-        # Floating-point embeddings → bf16; keep integer/bool masks in their
-        # own dtype, only move the device.
-        if t.is_floating_point():
-            return t.to(device=self._gpu_device, dtype=self._out_dtype)
-        return t.to(device=self._gpu_device)
-
-    def __call__(self, prompt: str):
-        out = self._encoder(prompt)  # GemmaEncoderOutput(video, audio, mask) on CPU
-        video_enc, audio_enc, mask = out
-        return (self._to_gpu(video_enc), self._to_gpu(audio_enc), self._to_gpu(mask))
-
-    def __getattr__(self, name: str):
-        # Delegate any other attribute access (e.g. tokenizer/processor used by
-        # optional prompt-enhancement paths) to the underlying encoder.
-        return getattr(self._encoder, name)
-
-
 class LTXFastVideoPipeline:
     pipeline_kind: Final = "fast"
 
@@ -68,9 +31,7 @@ class LTXFastVideoPipeline:
         gguf_per_layer_quant: bool = True,
         vae_spatial_tile_size: int = 0,
         vae_temporal_tile_size: int = 0,
-        pre_quantized_transformer_path: str = "",
         loras: list[LoraEntry] | None = None,
-        cpu_text_encode: bool = False,
         gguf_gemma_path: str = "",
         keep_resident_weights: bool = False,
         use_component_files: bool = False,
@@ -93,9 +54,7 @@ class LTXFastVideoPipeline:
             gguf_per_layer_quant=gguf_per_layer_quant,
             vae_spatial_tile_size=vae_spatial_tile_size,
             vae_temporal_tile_size=vae_temporal_tile_size,
-            pre_quantized_transformer_path=pre_quantized_transformer_path,
             loras=loras,
-            cpu_text_encode=cpu_text_encode,
             gguf_gemma_path=gguf_gemma_path,
             keep_resident_weights=keep_resident_weights,
             use_component_files=use_component_files,
@@ -120,9 +79,7 @@ class LTXFastVideoPipeline:
         gguf_per_layer_quant: bool = True,
         vae_spatial_tile_size: int = 0,
         vae_temporal_tile_size: int = 0,
-        pre_quantized_transformer_path: str = "",
         loras: list[LoraEntry] | None = None,
-        cpu_text_encode: bool = False,
         gguf_gemma_path: str = "",
         keep_resident_weights: bool = False,
         use_component_files: bool = False,
@@ -134,6 +91,25 @@ class LTXFastVideoPipeline:
     ) -> None:
         from ltx_core.quantization import QuantizationPolicy
         from ltx_pipelines.distilled import DistilledPipeline
+
+        # ── Fail-fast: this GGUF + component-file path must NOT silently fall
+        # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
+        # standalone sources are all present BEFORE constructing DistilledPipeline
+        # (whose lazy builders would otherwise glob the monolith on build()).
+        _required = {
+            "component_video_vae_path": component_video_vae_path,
+            "component_audio_vae_path": component_audio_vae_path,
+            "component_text_projection_path": component_text_projection_path,
+            "gguf_transformer_path": gguf_transformer_path,
+            "gguf_gemma_path": gguf_gemma_path,
+        }
+        _missing = [name for name, val in _required.items() if not val]
+        if _missing:
+            raise RuntimeError(
+                "LTXFastVideoPipeline requires the GGUF + component-file sources "
+                "(the monolith/QAT path is retired); missing/empty: "
+                + ", ".join(_missing)
+            )
 
         # Transformer device defaults to primary device if not set.
         self._transformer_device = transformer_device or device
@@ -196,28 +172,14 @@ class LTXFastVideoPipeline:
         if use_component_files and component_video_vae_path and component_audio_vae_path:
             self._install_component_sources(component_video_vae_path, component_audio_vae_path)
 
-        # ── Swap in pre-quantized FP8 transformer (faster load, no on-the-fly downcast) ──
-        # Skip if GGUF is configured — GGUF provides its own transformer weights.
-        if use_fp8 and pre_quantized_transformer_path and os.path.exists(pre_quantized_transformer_path) and not gguf_transformer_path:
-            self._install_pre_quantized_transformer(pre_quantized_transformer_path)
-
         # ── Install GGUF loader (replaces transformer weights source) ──
         if gguf_transformer_path:
             self._install_gguf(gguf_transformer_path, per_layer_quant=gguf_per_layer_quant)
 
         # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
-        # Mutually exclusive with cpu_text_encode: both target model_ledger.text_encoder.
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
-        # faster than CPU encode while still fitting the 16GB card. Prefer GGUF if both
-        # are requested.
-        if gguf_gemma_path and cpu_text_encode:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Both gguf_gemma_path and cpu_text_encode set — preferring GGUF "
-                "(per-layer quant on GPU); ignoring cpu_text_encode."
-            )
-            cpu_text_encode = False
-
+        # fits the 16GB card. This is the only text-encoder path (the CPU text-encode
+        # branch was removed as dead: the worker never requested it).
         if gguf_gemma_path:
             # Phase 2: when component files are enabled (and the connector GGUF +
             # projection file are present), re-source the Gemma text encoder's
@@ -242,12 +204,6 @@ class LTXFastVideoPipeline:
                 te_offload=self._te_offload_text_encoder,
             )
 
-        # ── Install CPU text encoder (keep 24GB bf16 Gemma off the GPU) ──
-        # Wraps model_ledger.text_encoder; independent of the transformer
-        # wrappers below (block_swap/LoRA), so it composes without conflict.
-        if cpu_text_encode:
-            self._install_cpu_text_encoder()
-
         # ── Install block swapping ──
         if block_swap_blocks_on_gpu > 0:
             self._install_block_swap(block_swap_blocks_on_gpu)
@@ -259,38 +215,6 @@ class LTXFastVideoPipeline:
         # guards (both default off), and the current T2V/GGUF path never reaches
         # them. The `attention_tile_size` and `loras` constructor parameters are
         # retained (signature unchanged) but are now no-ops.
-
-    def _install_pre_quantized_transformer(self, fp8_path: str) -> None:
-        """Replace the transformer builder with a pre-quantized FP8 file loader.
-
-        The pre-quantized file contains LTXModel state dict (velocity_model keys,
-        already renamed, already fp8).  No ComfyUI renaming or fp8 downcast needed —
-        only UPCAST_DURING_INFERENCE to patch nn.Linear.forward at inference time.
-        """
-        try:
-            from ltx_core.loader.single_gpu_model_builder import SingleGPUModelBuilder
-            from ltx_core.model.transformer import LTXModelConfigurator
-            from ltx_core.quantization import QuantizationPolicy, UPCAST_DURING_INFERENCE
-            import logging
-            _log = logging.getLogger(__name__)
-
-            ledger = self.pipeline.model_ledger
-            ledger.transformer_builder = SingleGPUModelBuilder(
-                model_class_configurator=LTXModelConfigurator,
-                model_path=fp8_path,
-                model_sd_ops=None,  # keys already in LTX format, no renaming needed
-                registry=ledger.registry,
-            )
-            ledger.quantization = QuantizationPolicy(
-                sd_ops=None,           # already fp8, no downcast needed
-                module_ops=(UPCAST_DURING_INFERENCE,),
-            )
-            _log.info("Pre-quantized FP8 transformer installed from %s", fp8_path)
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Pre-quantized FP8 install failed (%s) — falling back to on-the-fly fp8_cast", exc
-            )
 
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
@@ -449,47 +373,6 @@ class LTXFastVideoPipeline:
             import logging
             logging.getLogger(__name__).warning(
                 "Gemma GGUF install failed (%s) — falling back to stock GPU text encoder", exc
-            )
-
-    def _install_cpu_text_encoder(self) -> None:
-        """Run the ~24GB bf16 Gemma text encoder on CPU, keeping it off the GPU.
-
-        The stock ModelLedger.text_encoder() does
-            text_encoder_builder.build(device=cuda, dtype=bf16).to(cuda)
-        which loads the full Gemma3 model onto the 16GB GPU and forces a ~17.7GB
-        WDDM spillover into shared system RAM during text encoding.
-
-        Here we wrap model_ledger.text_encoder so the encoder is built on CPU
-        (bf16, no quantization → ~24.4GB RAM, well within the 47GB free) and the
-        final `.to(cuda)` is skipped. Gemma's forward then runs on CPU, and only
-        the small GemmaEncoderOutput embeddings are cast to (cuda, bf16) for the
-        GPU transformer. The downstream `del text_encoder; cleanup_memory()` in
-        DistilledPipeline.__call__ still frees the CPU weights normally.
-        """
-        try:
-            ledger = self.pipeline.model_ledger
-            gpu_device = self._transformer_device
-            dtype = ledger.dtype  # bf16
-
-            def cpu_text_encoder():
-                # Build Gemma directly on CPU/bf16. Do NOT call the stock
-                # ledger.text_encoder(), whose trailing .to(self.device) would
-                # move the 24GB model onto the GPU.
-                enc = ledger.text_encoder_builder.build(
-                    device=torch.device("cpu"), dtype=dtype
-                ).eval()
-                return _CPUTextEncoderWrapper(enc, gpu_device=gpu_device, out_dtype=dtype)
-
-            ledger.text_encoder = cpu_text_encoder  # type: ignore[method-assign]
-            import logging
-            logging.getLogger(__name__).info(
-                "CPU text encoder installed: Gemma runs on CPU (bf16), embeddings cast to %s/%s",
-                gpu_device, dtype,
-            )
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "CPU text encoder install failed (%s) — falling back to GPU text encode", exc
             )
 
     def _install_block_swap(self, blocks_on_gpu: int) -> None:

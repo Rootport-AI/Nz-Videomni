@@ -153,7 +153,19 @@ class LTXRunner:
         return _MockBackend(self.config, self.low_vram)
 
     def _real_available(self) -> bool:
-        """True only if the engine python, worker script and all 5 model paths exist.
+        """True only if the engine python, worker script and every file the real
+        GGUF + component-file path actually loads are present.
+
+        The GGUF + component-file recipe never opens the 43GB monolith
+        (``checkpoint_path``): it is passed to the worker as a reference-only
+        payload field (the wheel's lazy builders receive it but the GGUF/component
+        installs replace every loader), so it is deliberately NOT gated here. The
+        22.7GB QAT ``gemma_root`` IS gated: the wheel globs its ``tokenizer.model``
+        and ``model*.safetensors`` at build time, so a missing dir must fail fast in
+        the app layer rather than crash deep in the wheel. The load-bearing files
+        are the QAT gemma_root, the GGUF transformer/Gemma, the spatial upsampler,
+        and the 3 standalone component files (use_component_files is fixed True in
+        config.yaml).
 
         Deliberately does NOT import torch / ltx_* (those live only in the engine
         venv, not the app venv). Any failure/missing is swallowed -> False (so
@@ -164,11 +176,13 @@ class LTXRunner:
         try:
             required = [
                 model.engine_python,
-                model.checkpoint_path,
-                model.spatial_upsampler_path,
                 model.gemma_root,
+                model.spatial_upsampler_path,
                 model.gguf_transformer_path,
                 model.gguf_gemma_path,
+                model.component_video_vae_path,
+                model.component_audio_vae_path,
+                model.component_text_projection_path,
             ]
             if any(not p for p in required):
                 return False
@@ -459,31 +473,35 @@ class _RealBackend:
         # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
         project_root = self.config._abs(".")
 
-        checkpoint_path = self._require_path(model.checkpoint_path, "checkpoint_path")
-        upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
+        # checkpoint_path (43GB monolith) is reference-only: the GGUF + component-file
+        # path never opens it. It is still forwarded to the worker as a payload field
+        # (the wheel's lazy builders expect it), so resolve to a project-rooted
+        # absolute WITHOUT an existence check — it may be physically absent while the
+        # real path still works.
+        checkpoint_path = str(self.config._abs(model.checkpoint_path)) if model.checkpoint_path else ""
+        # gemma_root (22.7GB QAT Gemma) IS load-bearing: the wheel globs its
+        # tokenizer.model + model*.safetensors at build time, so a missing dir must
+        # fail fast here rather than crash deep in the wheel. Forwarded to the worker
+        # as a payload field exactly as before.
         gemma_root = self._require_path(model.gemma_root, "gemma_root")
+
+        upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
         gguf_transformer_path = self._require_path(model.gguf_transformer_path, "gguf_transformer_path")
         gguf_gemma_path = self._require_path(model.gguf_gemma_path, "gguf_gemma_path")
 
-        # Phase 1 component-file re-sourcing. Resolve the 3 standalone paths to
-        # project-rooted absolutes (text projection is plumbed but NOT wired —
-        # Phase 2). Validated only when the gate is on so a missing component file
-        # cannot break the monolith path.
+        # Component-file re-sourcing. Fixed on in config.yaml; the 3 standalone
+        # files replace the monolith for VAE/audio (+ text projection connectors),
+        # so they are load-bearing and always validated for existence.
         use_component_files = bool(self.config.vram.use_component_files)
-        if use_component_files:
-            component_video_vae_path = self._require_path(
-                model.component_video_vae_path, "component_video_vae_path"
-            )
-            component_audio_vae_path = self._require_path(
-                model.component_audio_vae_path, "component_audio_vae_path"
-            )
-            component_text_projection_path = self._require_path(
-                model.component_text_projection_path, "component_text_projection_path"
-            )
-        else:
-            component_video_vae_path = str(self.config._abs(model.component_video_vae_path))
-            component_audio_vae_path = str(self.config._abs(model.component_audio_vae_path))
-            component_text_projection_path = str(self.config._abs(model.component_text_projection_path))
+        component_video_vae_path = self._require_path(
+            model.component_video_vae_path, "component_video_vae_path"
+        )
+        component_audio_vae_path = self._require_path(
+            model.component_audio_vae_path, "component_audio_vae_path"
+        )
+        component_text_projection_path = self._require_path(
+            model.component_text_projection_path, "component_text_projection_path"
+        )
 
         # Child env: inherit, force the 16GB-load-bearing CUDA + compile knobs,
         # unbuffered IO, and set PYTHONPATH to the project root so the worker's

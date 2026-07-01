@@ -53,7 +53,7 @@ class ModelConfig(BaseModel):
     # Interpreter that runs the first-party engine worker (torch + cu128 + ltx_core
     # / ltx_pipelines + gguf). Still the vendored fork venv for now; relocation of
     # the venv itself is a later stage.
-    engine_python: str = "./vendor/LTX-Desktop-LOW-VRAM/backend/.venv/Scripts/python.exe"
+    engine_python: str = "./.venv-engine/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
 
     # Component-file re-sourcing (Phase 1): standalone small files replacing the

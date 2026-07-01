@@ -1,5 +1,6 @@
 # Environment isolation — never commit the local interpreter / venv
 .venv/
+.venv-engine/
 .python/
 
 # Python

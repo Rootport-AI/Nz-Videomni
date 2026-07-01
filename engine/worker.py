@@ -1,7 +1,7 @@
 """Persistent LTX-2.3 generation worker (Phase 5, Approach W).
 
-Runs inside the FORK venv (vendor/LTX-Desktop-LOW-VRAM/backend/.venv), which is
-the only environment that has torch + ltx_core/ltx_pipelines@00dc53d + gguf. The
+Runs inside the engine venv (.venv-engine), which is the only environment that
+has torch + ltx_core/ltx_pipelines@00dc53d + gguf. The
 app process (FastAPI, its own torch-less .venv) spawns ONE of these per loaded
 model and talks to it over a tiny JSON-lines protocol on stdin/stdout. The mp4 is
 written by the engine directly to a shared-disk path; only small control JSON

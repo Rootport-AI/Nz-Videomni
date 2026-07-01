@@ -190,9 +190,9 @@ AviUtl2フロントエンドはPhase 5で別プロジェクト相当として実
 | RAM | 32GB以上推奨 | CPU offload / block swap 検証に必要 |
 | 空きディスク | 160GB以上推奨 | モデル、出力動画、中間ファイル用 |
 | Python | 3.12系 | 公式LTX-2環境に合わせる（要件は `>=3.10`） |
-| CUDA | **12.9（cu129）** | 公式LTX-2のPyTorch wheel indexがcu129。詳細は「2.6」参照 |
-| PyTorch | `torch ~=2.7` | 公式LTX-2環境に合わせる。詳細は「2.6」参照 |
-| NVIDIAドライバ | CUDA 12.9対応版（Windows目安 R576+） | cu129 wheel実行要件 |
+| CUDA | **12.8（cu128）** | 実行 venv `.venv-engine` の torch は cu128 build。詳細は「2.6」参照 |
+| PyTorch | `torch 2.9.1+cu128` | 実体（`engine/venv-engine.freeze.txt`）。詳細は「2.6」参照 |
+| NVIDIAドライバ | CUDA 12.8対応版 | cu128 wheel実行要件 |
 | GPU世代別attention | Ada/Ampere/Hopper=xformers、Blackwell=flash-attn-4 | 詳細は「2.6」参照 |
 | パッケージ管理 | uv 推奨 | 公式LTX-2のセットアップ方針に合わせる |
 | 動画エンコード | ffmpeg を PATH に通す | MP4保存・クロップ用 |
@@ -208,8 +208,8 @@ AviUtl2フロントエンドはPhase 5で別プロジェクト相当として実
 - FP8 checkpoint / FP8 transformer を優先する
 - text encoder CPU offload を有効にする
 - 公式APIで使えるVAE tiling等は有効にする
-- 最初は `384x224 / 17 frames` で疎通確認する
-- 次に `512x288 / 49 frames` をPhase 1標準プリセットにする
+- 最初は `384x256 / 17 frames` で疎通確認する
+- 次に `512x320 / 49 frames` をPhase 1標準プリセットにする
 - 最後に `960x544 / 121 frames / crop 960x540` をPhase 1目標プリセットとして試す
 
 `low_vram_mode=false` は、24GB以上のGPU、RTX 6000系、クラウドGPUなどで確認するための任意オプションとする。  
@@ -313,9 +313,9 @@ READMEには、この環境分離手順を「セットアップ」の最初に�
 | 項目 | 値 | 出典 |
 |------|----|------|
 | Python | `>=3.10`（本プロジェクトは 3.12 を使用） | `packages/ltx-core/pyproject.toml` |
-| PyTorch | `torch ~=2.7` + `torchaudio` | 同上 |
-| wheel index | **PyTorch cu129（CUDA 12.9）** | `[[tool.uv.index]] .../whl/cu129` |
-| NVIDIAドライバ | CUDA 12.9 対応版（Windows 目安 **R576+**） | cu129 wheel 実行要件 |
+| PyTorch | `torch 2.9.1+cu128` + `torchaudio`（実体） | `engine/venv-engine.freeze.txt`（上流は `~=2.7` を宣言するが実行 venv は 2.9.1） |
+| wheel index | **PyTorch cu128（CUDA 12.8）** | `engine/engine-venv-pyproject.toml` の `[[tool.uv.index]] .../whl/cu128`（上流の cu129 ではなく本機に合わせ cu128） |
+| NVIDIAドライバ | CUDA 12.8 対応版 | cu128 wheel 実行要件 |
 | セットアップ | `uv sync --frozen`（LTX-2リポジトリ内） | 公式README |
 | FP8 | `fp8-cast` は **bf16 checkpoint** 用 / `fp8-scaled-mm` は fp8 checkpoint 用 | 公式README |
 
@@ -816,7 +816,7 @@ Phase 1で実装する。最小I2V用の画像をアップロードし、`image_
   "prompt": "A flowing river in a forest at golden hour, cinematic, high detail",
   "negative_prompt": "blurry, low quality, distorted",
   "width": 512,
-  "height": 288,
+  "height": 320,
   "crop_output": null,
   "num_frames": 49,
   "frame_rate": 24.0,
@@ -835,7 +835,7 @@ Phase 1で実装する。最小I2V用の画像をアップロードし、`image_
   "prompt": "The character slowly turns their head, cinematic, high detail",
   "negative_prompt": "blurry, low quality, distorted",
   "width": 512,
-  "height": 288,
+  "height": 320,
   "crop_output": null,
   "num_frames": 49,
   "frame_rate": 24.0,
@@ -906,7 +906,7 @@ Phase 4以降で使う想定。Phase 1ではVRAM不足の可能性が高いた�
     "prompt": "A flowing river in a forest at golden hour, cinematic, high detail",
     "negative_prompt": "blurry, low quality, distorted",
     "width": 512,
-    "height": 288,
+    "height": 320,
     "crop_output": null,
     "num_frames": 49,
     "frame_rate": 24.0,
@@ -937,7 +937,7 @@ Phase 4以降で使う想定。Phase 1ではVRAM不足の可能性が高いた�
     "prompt": "A flowing river in a forest at golden hour, cinematic, high detail",
     "negative_prompt": "blurry, low quality, distorted",
     "width": 512,
-    "height": 288,
+    "height": 320,
     "crop_output": null,
     "num_frames": 49,
     "frame_rate": 24.0,
@@ -950,7 +950,7 @@ Phase 4以降で使う想定。Phase 1ではVRAM不足の可能性が高いた�
   "result": {
     "video_url": "/api/v1/jobs/a1b2c3d4-e5f6-7890-abcd-ef1234567890/video",
     "duration_seconds": 2.04,
-    "resolution": "512x288",
+    "resolution": "512x320",
     "file_size_bytes": 4523008,
     "generation_time_seconds": 72.4,
     "seed_used": 42,
@@ -1183,7 +1183,7 @@ outputs/
     "prompt": "A flowing river in a forest at golden hour, cinematic, high detail",
     "negative_prompt": "blurry, low quality, distorted",
     "width": 512,
-    "height": 288,
+    "height": 320,
     "crop_output": null,
     "num_frames": 49,
     "frame_rate": 24.0,
@@ -1198,7 +1198,7 @@ outputs/
   "generation_time_seconds": 72.4,
   "output": {
     "path": "outputs/a1b2c3d4-e5f6-7890-abcd-ef1234567890/output.mp4",
-    "resolution": "512x288",
+    "resolution": "512x320",
     "duration_seconds": 2.04,
     "frame_rate": 24.0,
     "file_size_bytes": 4523008
@@ -1368,7 +1368,7 @@ output:
 - ネガティブプロンプト入力
 - 任意の入力画像アップロード
 - 画像strength指定。デフォルト `0.8`
-- 幅・高さ入力。デフォルト `512x288`
+- 幅・高さ入力。デフォルト `512x320`
 - 最終クロップサイズ入力。デフォルト `null`
 - フレーム数選択。デフォルト `49`
 - プリセット選択: `smoke_test`, `phase1_default`, `phase1_target`
@@ -1682,8 +1682,8 @@ Phase 1のI2V制約:
 - `low_vram_mode=true` でモデルロードに成功する
 - Gradio UIから画像なしでT2V生成できる
 - Gradio UIから画像1枚ありで最小I2V生成できる
-- `smoke_test` つまり `384x224 / 17 frames / 8 steps / CFG=1.0` でT2V生成できる
-- `phase1_default` つまり `512x288 / 49 frames / 8 steps / CFG=1.0` でT2V生成できる
+- `smoke_test` つまり `384x256 / 17 frames / 8 steps / CFG=1.0` でT2V生成できる
+- `phase1_default` つまり `512x320 / 49 frames / 8 steps / CFG=1.0` でT2V生成できる
 - `phase1_default` で最小I2V生成できる
 - `outputs/{job_id}/output.mp4` が作成される
 - `metadata.json` に `generation_mode`, `conditioning_images`, `peak_vram_mb`, `generation_time_seconds`, `seed_used`, `low_vram_mode` が保存される
@@ -1882,7 +1882,7 @@ Phase 1で複数画像が指定された場合:
 {
   "prompt": "test",
   "width": 512,
-  "height": 288,
+  "height": 320,
   "num_frames": 49,
   "conditioning_images": [
     {"image_id": "image-a", "frame_idx": 0, "strength": 0.8},
@@ -1902,7 +1902,7 @@ Phase 1で `frame_idx=0` 以外が指定された場合:
 {
   "prompt": "test",
   "width": 512,
-  "height": 288,
+  "height": 320,
   "num_frames": 49,
   "conditioning_images": [
     {"image_id": "image-a", "frame_idx": 8, "strength": 0.8}
@@ -1948,7 +1948,7 @@ curl http://127.0.0.1:18620/api/v1/status
   "prompt": "A red ball rolling on a white floor",
   "negative_prompt": "blurry, low quality",
   "width": 384,
-  "height": 224,
+  "height": 256,
   "crop_output": null,
   "num_frames": 17,
   "frame_rate": 24.0,
@@ -1976,7 +1976,7 @@ curl http://127.0.0.1:18620/api/v1/status
   "prompt": "A calm river flowing through a forest, cinematic, high detail",
   "negative_prompt": "blurry, low quality",
   "width": 512,
-  "height": 288,
+  "height": 320,
   "crop_output": null,
   "num_frames": 49,
   "frame_rate": 24.0,
@@ -2002,7 +2002,7 @@ curl http://127.0.0.1:18620/api/v1/status
   "prompt": "The scene slowly comes alive, subtle camera movement, cinematic",
   "negative_prompt": "blurry, low quality",
   "width": 512,
-  "height": 288,
+  "height": 320,
   "crop_output": null,
   "num_frames": 49,
   "frame_rate": 24.0,
@@ -2103,9 +2103,9 @@ curl http://127.0.0.1:18620/api/v1/status
 検証順序:
 
 1. モデルロードのみ
-2. `smoke_test`: `384x224 / 17 frames`
-3. `phase1_default`: `512x288 / 49 frames`
-4. `phase1_default` I2V: `512x288 / 49 frames` + 画像1枚
+2. `smoke_test`: `384x256 / 17 frames`
+3. `phase1_default`: `512x320 / 49 frames`
+4. `phase1_default` I2V: `512x320 / 49 frames` + 画像1枚
 5. `phase1_target`: `960x544 / 121 frames / crop 960x540`
 6. 任意: `low_vram_mode=false` の `smoke_test`
 
@@ -2142,9 +2142,9 @@ API仕様、出力ディレクトリ構造、GenerateRequestのバリデーシ�
 Phase 1では conditioning_images は最大1件、frame_idx は0固定です。
 
 Phase 1の必須テストは以下です。
-- smoke_test T2V: 384x224 / 17 frames
-- phase1_default T2V: 512x288 / 49 frames
-- phase1_default I2V: 512x288 / 49 frames + 画像1枚
+- smoke_test T2V: 384x256 / 17 frames
+- phase1_default T2V: 512x320 / 49 frames
+- phase1_default I2V: 512x320 / 49 frames + 画像1枚
 
 BlockSwap、AttentionTileの独自パッチ、複数キーフレームI2V、V2V、IC-LoRA、AviUtl2プラグイン、DaVinci Resolveフロントエンド、1080pアップスケールはまだ実装しないでください。
 low_vram_mode=false は任意検証であり、16GB環境で失敗してもPhase 1失敗扱いにしないでください。

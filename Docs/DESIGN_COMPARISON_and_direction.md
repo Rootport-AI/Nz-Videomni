@@ -1,5 +1,12 @@
 # 設計比較と次セッション方針 — 現状コード vs LTX-Desktop-LOW-VRAM fork
 
+> # ⚠️ SUPERSEDED (2026-07-01)
+> **本文は de-fork リファクタ*前*の比較・方針記録。** フォークエンジンの採用/Phase B は既に**完了**した
+> （低VRAMエンジンを first-party `engine/` へ自前化・`vendor/LTX-Desktop-LOW-VRAM` 削除・merge `a857a3b`）。
+> 以下 §1–7 は当時の検討記録であり、**現行の作業指示ではない**（「fork engine を採用し Phase B を完遂せよ」は
+> 読み違い＝もう済んでいる）。現状は `README.md` / `Docs/NEXT_SESSION_HANDOFF.md` / `Docs/QAT_RECLAMATION_RESEARCH.md`
+> を参照。本文は歴史記録として温存する。
+
 > ⚠️ **状態（2026-06-28 後日追記）**: 本書の「§5 推奨＝fp4_mixed Gemma」は**不採用**となった。fp4_mixed は ComfyUI 密結合
 > （`comfy-kitchen` 必須・高速 FP4 カーネルは torch cu130+ 前提、本機は cu128）と判明し、代わりに **GGUF Q4_K_M Gemma を
 > 我々の bit-exact dequant エンジンで GPU 推論**する方式を採用→**16GB E2E 達成済み**。最新の正本は

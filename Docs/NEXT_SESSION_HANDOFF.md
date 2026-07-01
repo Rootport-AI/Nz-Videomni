@@ -18,6 +18,8 @@
 - **43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors` を物理削除**（rename test で「GGUF+component 経路は非 open」を実証）。
   `checkpoint_path` は reference-only フィールドとして温存。**QAT Gemma dir は construction-required で温存**（wheel が build 時に
   `tokenizer.model`+`model*.safetensors` を glob。重みは非読み）。
+  - QAT 22.7GB は現状**温存**だが、回収の事前調査・実装方針（本筋＝案B: loader パッチで重み要求そのものを消す）は
+    `Docs/QAT_RECLAMATION_RESEARCH.md` 参照。
 - **設定後始末**: 未使用 `quantization` を削除。`fp8_transformer`/`cpu_offload_text_encoder` は**凍結 `GET /status` 契約**のため保持
   （worker 非伝播）。`uv.lock` 消失を `engine/venv-engine.freeze.txt`＋`engine/engine-venv-pyproject.toml` で穴埋め。
 - **凍結 API 契約は不変**: ÷64 解像度・8n+1 フレーム・T2V/最小I2V・`GET /status` の `vram_optimization`・`metadata.json` スキーマ・

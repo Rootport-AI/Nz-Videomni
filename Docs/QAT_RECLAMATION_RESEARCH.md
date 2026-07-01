@@ -8,7 +8,7 @@
 
 ## TL;DR
 - `models/gemma-3-12b-it-qat/`（22.7GB）は、**重みバイトが production 経路で読まれていない**（GGUF Gemma が LM 重みを供給、wheel の `_SkipGemmaLMSDOps` が `language_model.model.*` を全 skip）。
-- QAT dir が「構築時に必須」なのは、wheel が **①実トークナイザ群（GGUFからは供給不可）② `preprocessor_config.json` ③ 有効な `model*.safetensors`**（glob＋safe_open で触られる）を要求するため。ただし shard から**実際に読まれるのは shard#1 の vision_tower/multi_modal_projector＋embed_tokens ヘッダのみ**、残り(~19.4GB)は非read。
+- QAT dir が「構築時に必須」なのは、wheel が **①実トークナイザ群（GGUFからは供給不可）② `preprocessor_config.json` ③ 有効な `model*.safetensors`**（glob＋safe_open で触られる）を要求するため。ただし shard から**実際に読まれるのは shard#1 の vision_tower/multi_modal_projector＋embed_tokens ヘッダのみ**、残り(~18.1GiB / ~19.4GB)は非read。
 - **本リファクタの目的は「スパゲッティ/設計の不合理の解消・保守性」であって"動けばいい"ではない**（それなら旧コードでも動く）。よって**要求の根を断つ案Bを本筋**とする。
 - **本筋＝案B: loader を小パッチし、重みファイル要求そのものを消す**（既存の wheel monkeypatch＝denoise と同流儀）。gemma_root は tokenizer のみ ~40MB、偽ファイルも死蔵ロードも無し、コードが「LM=GGUF/vision=不要/tokenizerだけ要る」と正直に表現される＝保守性向上。**~22.7GB回収**。確認は「vision_tower 未使用か」を生成1回で判定するだけ（未使用の公算大）。
 - **保険＝案A: 実際に読まれるテンソルだけ本物の小ファイルに抽出**（component-files 同型・byte一致構造保証・コード変更なし）→ gemma_root ~3GB・~19.7GB回収。案Bの確認で万一 vision_tower が使われていた/patchが脆い場合の fallback。使わない vision_tower を温存する冗長さが残り設計的には案Bに劣る。
@@ -37,10 +37,15 @@ self.text_encoder_builder = Builder(model_path=(checkpoint, *weight_paths), ...)
 
 **`model*.safetensors` は「有効ファイルの存在」が必要、中身の扱いが唯一の論点**:
 - glob(`find_matching_file`) は最初の1個で親フォルダを取るだけ。`rglob` が全 `*.safetensors` を `model_path` に列挙 → `safe_open` で全部開く。
-- **shard #2〜#5（~19.4GB）**: 中身は全て `language_model.model.*`＝全 skip（実コードシミュレーションで read=0 確認）。→ **中身不要**。
-- **shard #1（4.98GB）**: `vision_tower.*`(437)＋`multi_modal_projector.*`(2)＝**439テンソルが実際に read される**（skip対象外、`model.model.vision_tower.*` 等にマップ）＋ `embed_tokens.weight` の**ヘッダ（shape）**が `_read_target_vocab_from_header`（`gguf_quant_service.py:224-243`）で読まれる。
+- **shard #2〜#5（~18.1GiB / ~19.4GB）**: 中身は全て `language_model.model.*`＝全 skip（実コードシミュレーションで read=0 確認）。→ **中身不要**。
+- **shard #1（~4.6GiB / 4.98GB）**: `vision_tower.*`(437)＋`multi_modal_projector.*`(2)＝**439テンソルが実際に read される**（skip対象外、`model.model.vision_tower.*` 等にマップ）＋ `embed_tokens.weight` の**ヘッダ（shape）**が `_read_target_vocab_from_header`（`gguf_quant_service.py:224-243`）で読まれる。
 
 ## 3. ★唯一の未確定点＝回収量を決める分岐（要 実機A/B 1回）
+> **※用語の別次元に注意**: §2 の「shard#1 の vision_tower/multi_modal_projector が read される」は、構築時に
+> `safe_open`＋`get_tensor` で **model へ物理ロードされる**の意（＝メモリに載る）。本節（§3）の「未使用の公算」は、
+> その載ったテンソルが **T2V/最小I2V の出力に寄与するか（機能的使用）**という**別次元**の話。案B の byte一致テストが
+> 判定するのは後者（機能的に使われているか＝出力が変わるか）であって、前者（構築時 read の有無）ではない。
+
 **vision_tower / multi_modal_projector（shard#1 の survivor）は T2V/最小I2V で実際に使われるか？**
 - 状況証拠は「**未使用**」寄り: web証言「LTX-2 は vision tower 重みを使わない」、既存メモリ [[scaleup-16gb-research]]/VERIFICATION_LOG §9「24GB qat は vision_tower/multi_modal_projector 専用で T2V/最小I2V では未使用の公算」。
 - ただし R1 は「構築時に**読み込まれ model に載る**」ことを実証（使用/未使用は別問題）。
@@ -86,7 +91,7 @@ self.text_encoder_builder = Builder(model_path=(checkpoint, *weight_paths), ...)
 - `engine/gemma/gguf_quant_service.py`（`_SkipGemmaLMSDOps` L191-221、`_read_target_vocab_from_header` L224-243、`dc_replace(model_path=...)` L1138-1143、survivor=vision/mm_projector は QAT由来と明記 L37-43,171-188）
 - `services/ltx_runner.py:160-186,482-486`（gemma_root ゲート＝存在必須・重み非読込の注記）
 - `config.py`（gemma_root 注記）/ `config.yaml:29-32`（`gemma_root: ./models/gemma-3-12b-it-qat`）
-- 実dir `models/gemma-3-12b-it-qat/`（shard#1=4.98GB に vision/mm_projector 全部・embed header／#2〜5=~19.4GB は language_model のみ・非read／小物 ~40MB）
+- 実dir `models/gemma-3-12b-it-qat/`（shard#1=~4.6GiB(4.98GB) に vision/mm_projector 全部・embed header／#2〜5=~18.1GiB(~19.4GB) は language_model のみ・非read／小物 ~40MB。合計 22.7GiB）
 
 **外部**:
 - transformers [#41494](https://github.com/huggingface/transformers/issues/41494)（Gemma GGUF tokenizer 誤構築）, [#37002](https://github.com/huggingface/transformers/issues/37002)（gemma3 GGUF 未サポート）

@@ -38,9 +38,31 @@
 
 ---
 
-## フェーズ別ロードマップ（2026-07-01・Phase 1 残 / Phase 2 / Phase 5）
+## ★次セッション着手予定 ＋ 設計対話の決定（2026-07-02・最優先で読む）
 
-> **開発フェーズの正本サマリ。** 出典＝spec `LTX23_Backend_Specification_v04…md §0.1/0.2/0.3/1.3/5.2`・`config.yaml` vram 節・`VERIFICATION_LOG §9.8`。
+> 本セッション終盤の「spec 全面改訂」に向けたユーザー対話の結論。**次セッションはここから。** 下の「フェーズ別ロードマップ」の Phase 2/5 枠は本節で **early-integration に是正**されている（本節が正）。
+
+### 次セッションの着手（ユーザー指定）
+- **install スクリプト作成 ＋ Phase 1 残「マルチジョブ対応」をまとめて着手**（install は軽いので1本化）。
+  - **「マルチジョブ」＝ 単一ユーザーの逐次連続生成**（**I2V＋音声の連続生成を検証**。T2V マルチジョブは実測済）＝Phase 2「クリップ連結」の前提。**※「複数人同時利用」ではない**（それは削除＝下記スコープ）。
+  - **install スクリプト** ＝ 実 stack（uv + cu128 + engine freeze＝README §1 の手順）をスクリプト化 ＋ 下記 gotcha をコメントで明記。stale な `scripts/install_ltx.ps1` は置換/是正。
+
+### install 互換メモ（調査済 2026-07-02・再調査不要）
+- **stack は世代跨ぎで可搬**: `torch 2.9.1+cu128`(stable) が arch_list に **sm_80/86(Ampere)・sm_89(Ada)・sm_100/sm_120(Blackwell)** を同梱／attention＝**SDPA**（xformers/flash-attn 未使用）／GGUF dequant＝**pure-torch**／fp8 本番未使用 → **Ampere/Ada/Blackwell 現 pin のまま動く見込み**（nightly も source build も不要）。ユーザーはビルド済みコンポーネント不要。
+- **install に書く gotcha 3点**: ①**torch は必ず cu128 index から**（素の `pip install torch` は CPU/旧CUDA→Blackwell "no kernel image"）②既存 `install_ltx.ps1` は **stale**（旧 torch2.7/cu129/xformers/flash-attn-4 前提）＝**README §1 が実手順の正** ③**Blackwell は R570+ ドライバのみ**・**xformers/flash-attn/sageattention は足さない**（SDPA 維持・足すと逆に詰まる）。導通1行: `python -c "import torch;print(torch.cuda.is_available(),torch.cuda.get_arch_list())"`。
+
+### spec 全面改訂の方針（合意済・未着手＝Phase 1 残(c)・spec はバックアップ済ゆえ自由に改訂可）
+- **Phase 構造を early-integration に是正**: **Phase 1**(最小バックエンド, ほぼ done) → **Phase 2 ＝ AviUtl2 拡張機能（＝ゴール・まず「動くツール」を得る）** → **Phase 3+ ＝ 育てる**（長尺クリップ連結 → IC-LoRA/V2V/プロンプト強化・希望次第）。方針＝「機能を固めてから統合」でなく「**早く統合して使いながら育てる**」。
+- **削除**: ①**1080p アップスケール「機能」**（＝ユーザーが外部ツールで行う想定を当時のエージェントが「本システムに AI upscale を組み込む」と誤解して機能化していた → 削除。**※内部二段 upsampler は生成そのものの仕組みなので残す**）②**多人数インフラ**（同時ジョブキュー/認証/インターネット公開＝**単一ユーザーなので不要**。現状の「1ジョブ＋busy 409」は正しい設計）。
+- **再分類**: 旧 Phase 2 の低VRAM最適化（block-swap/VAE tiling/te-offload/dit-cpu-load/component-files）は 16GB fit のため**既に実装済 → done**（＝「Phase 2 に実装済みのものがある」の正体）。
+- **spec の役割**: 設計の正本＋ゴール（AviUtl2 で LTX 2.3 を動かす拡張機能）への道筋を、**粗い粒度・広い視点**で書く。実装細部は handoff/VERIFICATION_LOG/RESOLUTION_DURATION が担う（粒度が違う）。
+
+---
+
+## フェーズ別ロードマップ（2026-07-01・旧枠・上の「設計対話の決定」が正）
+
+> **▶ 2026-07-02 更新**: 下記 Phase 2/5 の枠組みは上の「設計対話の決定」で **early-integration（Phase 2＝AviUtl2 統合）**に是正され、1080p-upscale「機能」・多人数インフラは削除。以下は spec 全面改訂で置換予定の旧枠（Phase 1 の done/残の記述は引き続き有効）。
+> **開発フェーズの正本サマリ（旧枠）。** 出典＝spec `LTX23_Backend_Specification_v04…md §0.1/0.2/0.3/1.3/5.2`・`config.yaml` vram 節・`VERIFICATION_LOG §9.8`。
 > **自然な順（規定はしない）**: 長尺動画への道＝Phase 2 の「クリップ連結（複数キーフレーム/終了フレーム I2V）」。その**Phase 1 側の前提が下記 (b) I2V 連続＋音声の検証**。→「(b) を片付けてから Phase 2 連結」が筋（優先順位は担当者＋ユーザーで決定）。
 
 ### Phase 1 ＝ 最小バックエンド（T2V＋最小I2V＋音声＋16GB fit＋720p）

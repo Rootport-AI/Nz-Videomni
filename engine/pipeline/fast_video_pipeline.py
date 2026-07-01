@@ -139,9 +139,18 @@ class LTXFastVideoPipeline:
         # The pipeline (transformer/VAE) always runs on device (video GPU, cuda:0).
         use_fp8 = use_fp8_transformer or device_supports_fp8(device)
 
+        # QAT gemma_root reclamation (candidate A): pass gemma_root=None so the
+        # wheel's ModelLedger.build_model_builders() skips its Gemma block entirely
+        # (model_ledger.py:158-169) — no `model*.safetensors` glob, no shard paths in
+        # model_path, no `text_encoder_builder`. We rebuild that builder ourselves in
+        # _install_gemma_gguf without any Gemma shards (weights come from the GGUF).
+        # The gemma_root dir now only needs the tokenizer files (~40MB), which we
+        # still hand to the Gemma install below so its module_ops can load the
+        # tokenizer/processor. Keep the original path (do NOT drop it).
+        self._gemma_tokenizer_root = gemma_root
         self.pipeline = DistilledPipeline(
             distilled_checkpoint_path=checkpoint_path,
-            gemma_root=cast(str, gemma_root),
+            gemma_root=None,
             spatial_upsampler_path=upsampler_path,
             loras=[],
             device=device,
@@ -195,6 +204,7 @@ class LTXFastVideoPipeline:
             )
             self._install_gemma_gguf(
                 gguf_gemma_path,
+                gemma_tokenizer_root=self._gemma_tokenizer_root,
                 component_text_projection_path=(
                     component_text_projection_path if _gemma_component else None
                 ),
@@ -331,6 +341,7 @@ class LTXFastVideoPipeline:
     def _install_gemma_gguf(
         self,
         gguf_path: str,
+        gemma_tokenizer_root: str | None = None,
         component_text_projection_path: str | None = None,
         connector_gguf_path: str | None = None,
         te_offload: bool = True,
@@ -346,11 +357,17 @@ class LTXFastVideoPipeline:
 
         Mirrors _install_gguf but targets text_encoder_builder instead of
         transformer_builder. On failure, falls back to the stock GPU text encoder.
+
+        ``gemma_tokenizer_root`` is the (tokenizer-only) gemma_root dir. Because we
+        now build DistilledPipeline with gemma_root=None, the wheel does not create
+        the text_encoder_builder; the service rebuilds it (shards excluded) and needs
+        this dir to load the tokenizer/processor module_ops.
         """
         try:
             from engine.gemma.gguf_quant_service import GemmaGGUFQuantLoaderService
             service = GemmaGGUFQuantLoaderService(
                 gguf_path=gguf_path,
+                gemma_tokenizer_root=gemma_tokenizer_root,
                 component_text_projection_path=component_text_projection_path,
                 connector_gguf_path=connector_gguf_path,
                 layer_offload=te_offload,

@@ -32,7 +32,9 @@ Key differences vs the transformer GGUF service
    the model keys exactly (gguf_quant_service.py ~L587). That is FALSE for Gemma:
    GGUF uses llama.cpp names (``blk.N.attn_q.weight`` ...) that must be remapped
    to HF names (``model.layers.N.self_attn.q_proj.weight`` ...) and then prefixed
-   to the LTX-nested location (``model.model.language_model.layers.N....``).
+   to the LTX-nested location (``model.model.layers.N....`` — the TEXT-ONLY
+   Gemma3ForCausalLM namespace; the old multimodal build nested these one level
+   deeper under ``model.model.language_model.layers.N...``).
 
 2. MERGE, NOT REPLACE-ALL. The text encoder's state_dict mixes Gemma transformer
    weights (from the GGUF) with LTX-side weights that are NOT in the GGUF:
@@ -140,7 +142,7 @@ _NORM_SUFFIXES = (
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# LTX prefix adaptation
+# LTX prefix adaptation  (TEXT-ONLY namespace — Gemma3ForCausalLM)
 #
 # After the city96 gemma3 remap, keys are plain HF Gemma3 names, e.g.
 #   model.layers.0.self_attn.q_proj.weight
@@ -148,38 +150,44 @@ _NORM_SUFFIXES = (
 #   model.norm.weight
 #   lm_head.weight
 #
-# In the LTX stack the GemmaTextEncoder nests the HF model as
-#   GemmaTextEncoder.model            (Gemma3ForConditionalGeneration)
-#     .model                          (Gemma3Model)
-#       .language_model               (Gemma3TextModel)  -> layers / embed_tokens / norm
+# QAT reclamation: the GemmaTextEncoder now nests a TEXT-ONLY Gemma3ForCausalLM
+# (built by engine.gemma.text_encoder_configurator) instead of the multimodal
+# Gemma3ForConditionalGeneration, so the ``language_model.`` level is gone:
+#   GemmaTextEncoder.model            (Gemma3ForCausalLM)
+#     .model                          (Gemma3TextModel)  -> layers / embed_tokens / norm
 #   GemmaTextEncoder.model.lm_head    (nn.Linear, tied to embed_tokens)
 #
-# This matches ltx_core's AV_GEMMA_TEXT_ENCODER_KEY_OPS, which maps the original
+# This matches TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS, which maps the original
 # safetensors keys via:
-#   language_model.model.* -> model.model.language_model.*
-# and duplicates embed_tokens.weight onto model.lm_head.weight.
+#   language_model.model.* -> model.model.*        (was model.model.language_model.*)
+# and duplicates embed_tokens.weight onto model.lm_head.weight (unchanged — lm_head
+# lives at the same location in both model classes).
 # Confirmed in:
-#   ltx_core/text_encoders/gemma/encoders/encoder_configurator.py
-#   transformers/models/gemma3/modeling_gemma3.py (module attribute names)
+#   engine/gemma/text_encoder_configurator.py
+#   transformers/models/gemma3/modeling_gemma3.py (Gemma3ForCausalLM attribute names)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Where the Gemma3TextModel (layers/embed_tokens/norm) lives inside GemmaTextEncoder.
-_LTX_LM_PREFIX = "model.model.language_model."
-# Where lm_head lives inside GemmaTextEncoder (Gemma3ForConditionalGeneration.lm_head).
+# TEXT-ONLY: one level shallower than the multimodal build (no ``language_model.``).
+_LTX_LM_PREFIX = "model.model."
+# Where lm_head lives inside GemmaTextEncoder (Gemma3ForCausalLM.lm_head) — SAME as
+# the multimodal build; lm_head is not nested under the language model in either.
 _LTX_LM_HEAD_KEY = "model.lm_head.weight"
 
 # ── Commit-reduction (Stage 1): skip the bf16 Gemma LM at READ time ───────────
 # The base safetensors load used to materialize the FULL ~24 GB bf16 Gemma
 # language model into committed CPU RAM (one get_tensor copy per tensor) and then
-# DELETE every ``model.model.language_model.*`` key (plus the tied
-# ``model.lm_head.weight``) immediately afterward, because the GGUF supplies the
-# compressed replacement. Those copies are pure waste (committed, then freed).
+# DELETE every ``model.model.*`` Gemma-LM key (plus the tied ``model.lm_head.weight``)
+# immediately afterward, because the GGUF supplies the compressed replacement. Those
+# copies are pure waste (committed, then freed).
 #
-# Both deleted remapped key sets originate, via AV_GEMMA_TEXT_ENCODER_KEY_OPS,
-# EXCLUSIVELY from original safetensors keys under this prefix:
-#   AV ops:  "language_model.model." -> "model.model.language_model."   (-> _LTX_LM_PREFIX)
-#   AV kv-op: language_model.model.embed_tokens.weight ALSO duplicated to
-#             "model.lm_head.weight" (= _LTX_LM_HEAD_KEY)
+# Both deleted remapped key sets originate, via TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS,
+# EXCLUSIVELY from original safetensors keys under this prefix (the ORIGINAL
+# safetensors key form is unchanged by the text-only switch — only the ops' TARGET
+# namespace lost the ``language_model.`` level):
+#   ops:    "language_model.model." -> "model.model."   (-> _LTX_LM_PREFIX)
+#   kv-op:  language_model.model.embed_tokens.weight ALSO duplicated to
+#           "model.lm_head.weight" (= _LTX_LM_HEAD_KEY)
 # No other original prefix maps into _LTX_LM_PREFIX or _LTX_LM_HEAD_KEY, and this
 # prefix maps into nothing else. Therefore skipping every ORIGINAL key under this
 # prefix at read time yields a base state_dict byte-identical to the prior
@@ -222,25 +230,24 @@ class _SkipGemmaLMSDOps:
 
 
 def _read_target_vocab_from_header(path: str | list[str]) -> int | None:
-    """Read the padded vocab size from the safetensors HEADER (no materialization).
+    """Return the padded (target) Gemma vocab size — the wheel config constant.
 
-    Previously taken from the materialized base embedding shape; since that tensor
-    is now skipped at read, we read just its shape via ``get_slice().get_shape()``
-    (header-only, no commit). Returns None if the embedding is not found.
+    The LTX Gemma3 meta model sizes embed_tokens (and the tied lm_head) to the
+    padded vocab (262208 = 262144 + 64 padding rows), while the GGUF ships only the
+    real 262144 rows; the merge zero-pads up to this target (see the caller).
+
+    Formerly this was read from the base ``language_model.model.embed_tokens.weight``
+    header. Under the QAT gemma_root reclamation (candidate A) the Gemma shards are
+    no longer in model_path, so that tensor is absent from every path here — the
+    header probe would return None and DISABLE the required embedding padding.
+    Instead we source the value directly from the wheel's Gemma config
+    (GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size == 262208), which is exactly the
+    padded size the meta model is built with — byte-identical to the value the header
+    probe used to return. ``path`` is retained for signature compatibility (unused).
     """
-    import safetensors
+    from ltx_core.text_encoders.gemma.config import GEMMA3_CONFIG_FOR_LTX
 
-    orig_embed_key = _ORIG_GEMMA_LM_PREFIX + "embed_tokens.weight"
-    paths = path if isinstance(path, list) else [path]
-    for shard_path in paths:
-        try:
-            with safetensors.safe_open(shard_path, framework="pt", device="cpu") as f:
-                if orig_embed_key in f.keys():
-                    shape = f.get_slice(orig_embed_key).get_shape()
-                    return int(shape[0])
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("Gemma GGUF: header vocab probe failed for %s: %s", shard_path, exc)
-    return None
+    return int(GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size)
 
 
 def _to_ltx_key(hf_key: str) -> str | None:
@@ -304,9 +311,9 @@ class GemmaGGUFQuantStateDictLoader:
     Steps:
       1. Delegate to the original SafetensorsModelStateDictLoader to load the full
          bf16 state_dict (Gemma transformer + feature_extractor + connectors),
-         applying the LTX key remap (AV_GEMMA_TEXT_ENCODER_KEY_OPS) as usual.
-      2. Drop every Gemma language-model key (``model.model.language_model.*``)
-         from that dict — those are the ~24 GB bf16 weights we are replacing.
+         applying the LTX key remap (TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS) as usual.
+      2. Drop every Gemma language-model key (``model.model.*``, the text-only
+         namespace) from that dict — the ~24 GB bf16 weights we are replacing.
       3. Read the Gemma GGUF, remap gemma3 keys -> HF -> LTX-nested prefix, apply
          the RMSNorm +1 correction, dequantize embed/norm to bf16, and wrap the
          decoder Linear weights as GGMLQuantizedTensor.
@@ -356,7 +363,7 @@ class GemmaGGUFQuantStateDictLoader:
         self.embed_cpu_offload = embed_cpu_offload
         self.held_embed_cpu: torch.Tensor | None = None
         # VRAM (Lever — TE per-layer offload): when True, the per-layer GGUF Gemma
-        # decoder weights (and the per-layer norms) under ``...language_model.layers.``
+        # decoder weights (and the per-layer norms) under ``model.model.layers.``
         # are left on CPU rather than moved to ``target_device`` during the GGUF load.
         # They are then streamed to the GPU one window at a time during the encode
         # forward by GemmaLayerOffloadService, capping the ~15 GB encode peak. When
@@ -378,19 +385,19 @@ class GemmaGGUFQuantStateDictLoader:
 
         target_device = device or torch.device("cpu")
 
-        # ── 2a. Capture the TARGET vocab size from the HEADER (no materialization) ─
+        # ── 2a. Capture the TARGET (padded) vocab size from the wheel Gemma config ─
         # The LTX Gemma3 meta model's embed_tokens (and tied lm_head) is sized to the
         # padded vocab (262208 = 262144 + 64 padding-token rows), but the GGUF ships
         # only the real 262144 rows. We must zero-pad the GGUF embedding up to this
-        # target, or load_state_dict raises a size mismatch. We used to read this from
-        # the materialized base embedding; since that tensor is now SKIPPED at read
-        # (commit reduction below), read its shape from the safetensors header instead
-        # (get_slice().get_shape() — header-only, no commit). Identical value (262208);
-        # falls back to None (no padding) if the base embedding is somehow absent.
+        # target, or load_state_dict raises a size mismatch. This value comes from
+        # GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size (see _read_target_vocab_from_
+        # header) — the same size the meta model is built with, and byte-identical to
+        # the value the former base-embedding-header probe returned (the Gemma shards
+        # that carried that header are no longer in model_path post-reclamation).
         target_vocab: int | None = _read_target_vocab_from_header(path)
         if target_vocab is not None:
             logger.info(
-                "Gemma GGUF merge: target (padded) vocab size from base embedding header = %d",
+                "Gemma GGUF merge: target (padded) vocab size from Gemma config = %d",
                 target_vocab,
             )
 
@@ -582,13 +589,16 @@ class GemmaGGUFQuantStateDictLoader:
             # ── TE per-layer offload ──────────────────────────────────────────────
             # When layer_offload is on, the per-layer Gemma decoder tensors (the
             # quantized Linears AND the per-layer norms) stay on CPU; only this
-            # ``...language_model.layers.*`` keyset is held back. The final
-            # ``language_model.norm.weight``, rotary buffers, embeddings (Lever 3),
+            # ``model.model.layers.*`` keyset is held back. The final
+            # ``model.model.norm.weight``, rotary buffers, embeddings (Lever 3),
             # and all LTX-side connector/base weights still go to target_device as
             # today. GemmaLayerOffloadService streams these CPU layers to the GPU per
             # window during encode. ``key_device`` is the device THIS key lands on.
+            # TEXT-ONLY namespace: decoder layers are at ``model.model.layers.N...``
+            # (== _LTX_LM_PREFIX + "layers."), one level shallower than the multimodal
+            # build's ``...language_model.layers.``.
             is_offloaded_layer = (
-                self.layer_offload and ".language_model.layers." in ltx_key
+                self.layer_offload and (_LTX_LM_PREFIX + "layers.") in ltx_key
             )
             key_device = cpu_device_off if is_offloaded_layer else target_device
             if is_offloaded_layer:
@@ -827,9 +837,10 @@ def _patch_gemma_skip_full_logits(model: torch.nn.Module) -> None:
     ---------------
     ``GemmaTextEncoder.precompute`` calls ``self.model(input_ids=...,
     output_hidden_states=True)`` and consumes ONLY ``outputs.hidden_states`` — the
-    ``logits`` are discarded. But ``Gemma3ForConditionalGeneration.forward``
-    unconditionally runs ``self.lm_head(hidden_states[:, slice_indices, :])`` with
-    the default ``logits_to_keep=0`` (-> the FULL sequence). At the encoder's fixed
+    ``logits`` are discarded. But ``Gemma3ForCausalLM.forward`` (the outer HF model,
+    == ``GemmaTextEncoder.model``) unconditionally runs
+    ``self.lm_head(hidden_states[:, slice_indices, :])`` with the default
+    ``logits_to_keep=0`` (-> the FULL sequence). At the encoder's fixed
     seq-len of 1024 and the 262208-row vocab that materializes a
     ``[1, 1024, 262208]`` logits tensor (~0.5 GB) plus its matmul intermediates,
     spiking forward-pass VRAM by ~2.4 GB — enough to push the steady ~15 GB build
@@ -898,8 +909,14 @@ def _patch_gemma_for_ggml_dequant(model: torch.nn.Module) -> torch.nn.Module:
         leaf = name.rsplit(".", 1)[-1]
         if leaf not in _TARGET_LEAF_NAMES:
             continue
-        # Only patch Linears inside the Gemma language model.
-        if "language_model" not in name:
+        # Only patch Linears inside the Gemma decoder stack. TEXT-ONLY namespace:
+        # the Gemma3TextModel decoder layers live at ``model.model.layers.N...`` (the
+        # multimodal build had them one level deeper under ``...language_model...``,
+        # hence the old ``"language_model" in name`` guard). Verified that no other
+        # module in the text encoder uses these leaf names — the connectors use
+        # to_q/to_k/to_v and the feed-forward uses proj — so this subtree match is
+        # exact (48 layers x 7 = 336 Linears).
+        if not name.startswith("model.model.layers."):
             continue
         _patch_linear_for_ggml_dequant(module)
         count += 1
@@ -928,26 +945,32 @@ def _install_cpu_embed_offload(text_encoder: Any, embed_cpu: torch.Tensor) -> No
     Steps:
       1. Assign ``embed_cpu`` to the (currently meta) ``embed_tokens.weight`` and
          re-tie ``lm_head.weight`` to the SAME CPU storage (0 extra bytes).
-      2. Replace the outer Gemma3ForConditionalGeneration.forward with a wrapper
-         that:
+      2. Replace the outer Gemma3ForCausalLM.forward with a wrapper that:
            - runs the token-embedding lookup ON CPU (``embed_tokens`` applies
              Gemma's sqrt(hidden) scaling in its own forward), then moves ONLY the
              small [B,T,3840] bf16 hidden tensor to the GPU,
-           - runs the decoder stack on the GPU via the inner Gemma3Model with
+           - runs the decoder stack on the GPU via the inner Gemma3TextModel with
              ``inputs_embeds`` (so the GPU never touches the 1.9 GB embedding),
            - computes logits with the tied CPU lm_head on just the last
              ``logits_to_keep`` tokens (tiny; encode discards them, generate only
              needs the last token), returning logits on the compute device.
 
+    TEXT-ONLY namespace: the outer is a Gemma3ForCausalLM whose ``.model`` IS the
+    Gemma3TextModel (``.embed_tokens`` / ``.norm`` / ``.layers``) — there is no
+    intermediate Gemma3Model and no ``.language_model`` attribute (that was the
+    multimodal nesting). The wrapper returns a plain ``CausalLMOutputWithPast`` (the
+    class Gemma3ForCausalLM.forward natively returns), not the multimodal
+    ``Gemma3CausalLMOutputWithPast``.
+
     Numerically identical to the on-GPU embedding: same weights, same scaling, same
     decoder math — only the embedding lookup's device differs (CPU vs GPU), and the
     lookup is an exact gather. Verified: video/audio encoding std unchanged.
     """
-    from transformers.models.gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast
+    from transformers.modeling_outputs import CausalLMOutputWithPast
 
-    outer = text_encoder.model  # Gemma3ForConditionalGeneration
-    inner = outer.model  # Gemma3Model (decoder stack + norm, on the GPU)
-    lang = inner.language_model  # Gemma3TextModel (.embed_tokens, .norm)
+    outer = text_encoder.model  # Gemma3ForCausalLM
+    inner = outer.model  # Gemma3TextModel (decoder stack + norm + embed_tokens, on GPU)
+    lang = inner  # the Gemma3TextModel IS the language model (.embed_tokens, .norm)
 
     with torch.no_grad():
         embed_param = torch.nn.Parameter(embed_cpu, requires_grad=False)
@@ -996,13 +1019,12 @@ def _install_cpu_embed_offload(text_encoder: Any, embed_cpu: torch.Tensor) -> No
         sl = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         last = hidden_states[:, sl, :].to(embed_dev)
         logits = torch.nn.functional.linear(last, outer.lm_head.weight).to(compute_dev)
-        return Gemma3CausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=None,
             logits=logits,
             past_key_values=out.past_key_values,
             hidden_states=out.hidden_states,
             attentions=out.attentions,
-            image_hidden_states=None,
         )
 
     outer.forward = _cpu_embed_forward  # type: ignore[method-assign]
@@ -1034,11 +1056,19 @@ class GemmaGGUFQuantLoaderService:
     def __init__(
         self,
         gguf_path: str,
+        gemma_tokenizer_root: str | None = None,
         component_text_projection_path: str | None = None,
         connector_gguf_path: str | None = None,
         layer_offload: bool = False,
     ) -> None:
         self.gguf_path = gguf_path
+        # QAT gemma_root reclamation (candidate A): the (tokenizer-only) gemma_root
+        # dir. DistilledPipeline is now built with gemma_root=None, so the wheel does
+        # NOT create model_ledger.text_encoder_builder; install() rebuilds it here
+        # (Gemma shards excluded) and loads the tokenizer/processor module_ops from
+        # this dir (module_ops_from_gemma_root globs only tokenizer.model +
+        # preprocessor_config.json, ~40MB — no model*.safetensors).
+        self.gemma_tokenizer_root = gemma_tokenizer_root
         # ── Phase 2 (component files), both must be set to enable the monolith drop ──
         # component_text_projection_path: standalone bf16 file with the 4 aggregate_
         #   embed survivors; replaces the 46GB monolith as the text-encoder base path.
@@ -1053,16 +1083,87 @@ class GemmaGGUFQuantLoaderService:
         # decoder layers are all GPU-resident (today's exact behavior).
         self.layer_offload = layer_offload
 
+    def _build_shardless_text_encoder_builder(self, model_ledger: Any) -> None:
+        """Rebuild ``model_ledger.text_encoder_builder`` WITHOUT any Gemma shards.
+
+        Faithful port of the wheel's Gemma block (ltx_pipelines/utils/model_ledger.py
+        build_model_builders, the ``if self.gemma_root_path is not None:`` body) with
+        two deliberate changes for the QAT reclamation (candidate A):
+
+          1. module_ops come from the tokenizer-only gemma_root dir
+             (``self.gemma_tokenizer_root``). module_ops_from_gemma_root globs only
+             tokenizer.model + preprocessor_config.json (present, ~40MB), NOT
+             model*.safetensors.
+          2. model_path is SHARDLESS: ``(str(checkpoint_path),)`` — just the
+             checkpoint placeholder, no ``*weight_paths``. The wheel used
+             ``(str(checkpoint_path), *rglob("*.safetensors"))``; dropping the shards
+             means the Gemma language-model weights are never read from disk (the GGUF
+             supplies them). Keeping the checkpoint at model_path[0] also lets the
+             Phase-2 component-mode guard below (mp_tuple[0] == checkpoint) still pass,
+             after which ``new_model_path = (proj, *mp_tuple[1:]) == (proj,)`` — so the
+             projection file is the ONLY safetensors opened at build.
+          3. TEXT-ONLY model class: the configurator/key-ops/module-ops come from
+             engine.gemma.text_encoder_configurator (a faithful text-only port), which
+             builds ``Gemma3ForCausalLM`` (no vision_tower / multi_modal_projector) so
+             there is nothing left to strand on meta. This is what fixes the
+             ``model.device == meta`` crash the multimodal build hit when its
+             (weightless, GGUF-absent) vision_tower stayed on the meta device: the
+             text model's first parameter is the language embedding, which always gets
+             a real weight. Only the held_embed_cpu path (Lever 3) intentionally leaves
+             embed_tokens on meta until it is assigned on CPU post-build.
+
+        Everything else (Builder factory, registry, tokenizer/processor module_ops via
+        the wheel's ``module_ops_from_gemma_root``) is identical to the wheel; only the
+        model class + its key-ops/create_and_populate change (see the text-only module).
+        """
+        from ltx_core.loader.single_gpu_model_builder import SingleGPUModelBuilder as Builder
+        # Tokenizer/processor module_ops are model-class INDEPENDENT — reuse the wheel's.
+        from ltx_core.text_encoders.gemma import module_ops_from_gemma_root
+
+        # TEXT-ONLY configurator + key-ops + create_and_populate (our seam, faithful
+        # port of the wheel's multimodal ones rebuilt around Gemma3ForCausalLM).
+        from engine.gemma.text_encoder_configurator import (
+            TEXT_ONLY_GEMMA_MODEL_OPS,
+            TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS,
+            TextOnlyGemmaTextEncoderConfigurator,
+        )
+
+        if not self.gemma_tokenizer_root:
+            raise RuntimeError(
+                "Gemma GGUF install: gemma_root=None was passed to DistilledPipeline "
+                "AND no gemma_tokenizer_root was supplied — cannot build the text "
+                "encoder (need the tokenizer dir for module_ops)."
+            )
+
+        module_ops = module_ops_from_gemma_root(self.gemma_tokenizer_root)
+        model_ledger.text_encoder_builder = Builder(
+            model_path=(str(model_ledger.checkpoint_path),),
+            model_class_configurator=TextOnlyGemmaTextEncoderConfigurator,
+            model_sd_ops=TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS,
+            registry=model_ledger.registry,
+            module_ops=(TEXT_ONLY_GEMMA_MODEL_OPS, *module_ops),
+        )
+        logger.info(
+            "Gemma GGUF: rebuilt shardless TEXT-ONLY text_encoder_builder "
+            "(Gemma3ForCausalLM; model_path=(%s,), tokenizer/processor ops <- %s)",
+            model_ledger.checkpoint_path,
+            self.gemma_tokenizer_root,
+        )
+
     def install(self, model_ledger: Any) -> None:
         if not Path(self.gguf_path).exists():
             raise FileNotFoundError(f"Gemma GGUF file not found: {self.gguf_path}")
 
+        # QAT gemma_root reclamation (candidate A): DistilledPipeline is built with
+        # gemma_root=None, so the wheel's build_model_builders() never created the
+        # text_encoder_builder (it skips model_ledger.py:158-169). Rebuild it here —
+        # a faithful port of that wheel block with Gemma shards EXCLUDED (weights come
+        # from the GGUF below, not from `model*.safetensors`) AND the model class
+        # switched to the text-only Gemma3ForCausalLM. This restores a GemmaTextEncoder
+        # builder over TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS with TEXT_ONLY_GEMMA_MODEL_OPS
+        # + tokenizer/processor module_ops (see _build_shardless_text_encoder_builder).
         if not hasattr(model_ledger, "text_encoder_builder"):
-            logger.warning(
-                "ModelLedger has no text_encoder_builder — Gemma GGUF install skipped "
-                "(was a gemma_root provided?)"
-            )
-            return
+            self._build_shardless_text_encoder_builder(model_ledger)
 
         # Warm-import guard: import ltx_core.loader before our tensor-subclass
         # quantization touches the build path (mirrors the transformer service,
@@ -1072,16 +1173,20 @@ class GemmaGGUFQuantLoaderService:
         builder = model_ledger.text_encoder_builder
 
         # ── Phase 2: component-files mode (drop the 46GB monolith) ────────────────
-        # The text_encoder_builder.model_path is (checkpoint_path=MONOLITH, *qat_shards).
-        # The monolith contributes EXACTLY two survivor sets to the text encoder:
+        # Post-reclamation (candidate A) our rebuilt builder.model_path is a single
+        # entry (checkpoint_path=MONOLITH,) — the Gemma qat shards are gone (weights
+        # come from the GGUF; vision_tower / multi_modal_projector stay meta). The
+        # monolith placeholder contributes EXACTLY two survivor sets to the text
+        # encoder:
         #   * 4   text_embedding_projection.*aggregate_embed.*  -> from projection file
         #   * 258 model.diffusion_model.*embeddings_connector.*  -> injected from GGUF
-        # (vision_tower / multi_modal_projector / Gemma LM all come from the qat shards,
-        # NOT the monolith — confirmed by header inspection). So when both component
-        # paths are present we (a) swap the monolith for the standalone projection file
-        # in model_path (aggregate_embed source), and (b) hand the connector GGUF +
-        # AV ops to the loader for connector injection. With either path absent we keep
-        # the monolith in model_path and inject nothing (unchanged behavior).
+        # So when both component paths are present we (a) swap the monolith for the
+        # standalone projection file in model_path (aggregate_embed source), and
+        # (b) hand the connector GGUF + AV ops to the loader for connector injection.
+        # With mp_tuple == (monolith,), new_model_path == (proj,) — the projection
+        # file is the ONLY safetensors opened at build. With either component path
+        # absent we keep the monolith placeholder and inject nothing (but note: the
+        # monolith is physically deleted, so component mode is the production path).
         new_model_path = builder.model_path
         connector_gguf_path: str | None = None
         connector_sd_ops: Any = None
@@ -1109,7 +1214,9 @@ class GemmaGGUFQuantLoaderService:
                 )
             new_model_path = (proj, *mp_tuple[1:])
             connector_gguf_path = conn
-            connector_sd_ops = builder.model_sd_ops  # AV_GEMMA_TEXT_ENCODER_KEY_OPS
+            # TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS; the feature_extractor/connector
+            # key-op groups it uses for injection are byte-identical to the wheel's.
+            connector_sd_ops = builder.model_sd_ops
             logger.info(
                 "Gemma component-files: dropping monolith from text encoder model_path; "
                 "aggregate_embed <- %s ; connectors <- GGUF %s",
@@ -1130,10 +1237,10 @@ class GemmaGGUFQuantLoaderService:
         )
 
         # 2. Add our per-layer dequant module_ops AFTER the existing Gemma module
-        #    ops (GEMMA_MODEL_OPS + tokenizer/processor loads). Ordering matters:
-        #    GEMMA_MODEL_OPS.create_and_populate registers rope/embed-scale buffers
-        #    on the meta model and must run before our Linear-buffer swap — but our
-        #    op only swaps Linear.weight, so either order is safe. We append.
+        #    ops (TEXT_ONLY_GEMMA_MODEL_OPS + tokenizer/processor loads). Ordering
+        #    matters: TEXT_ONLY_GEMMA_MODEL_OPS.create_and_populate registers rope/
+        #    embed-scale buffers on the meta model and must run before our Linear-buffer
+        #    swap — but our op only swaps Linear.weight, so either order is safe. Append.
         ggml_module_ops = _make_gemma_ggml_quant_module_ops()
         new_builder = dc_replace(
             builder,
@@ -1179,7 +1286,7 @@ class GemmaGGUFQuantLoaderService:
             # _ggml_type/_float_shape attrs.
             if build_device != ledger_device:
                 # TE per-layer offload caveat: in offload mode the
-                # ``language_model.layers.*`` GGUF buffers are deliberately held on
+                # ``model.model.layers.*`` GGUF buffers are deliberately held on
                 # CPU (loader left them there) so GemmaLayerOffloadService can stream
                 # them per window. This keep-resident GPU-move would drag them all
                 # back onto the GPU, defeating the offload. Production runs with
@@ -1212,7 +1319,7 @@ class GemmaGGUFQuantLoaderService:
 
             # (TE per-layer offload) Stream the GGUF-quantized Gemma decoder layers
             # CPU->GPU one window at a time during encode, capping the ~15 GB encode
-            # peak. The loader already left the ``language_model.layers.*`` buffers on
+            # peak. The loader already left the ``model.model.layers.*`` buffers on
             # CPU; here we patch each decoder layer's forward with the sliding-window
             # swap. Compute device = the language-model final norm weight device
             # (matches Lever-3's compute_dev). No-op + safe if the layer container
@@ -1222,15 +1329,11 @@ class GemmaGGUFQuantLoaderService:
                     GemmaLayerOffloadService,
                 )
 
-                # outer = Gemma3ForConditionalGeneration; outer.model = Gemma3Model;
-                # .language_model = Gemma3TextModel (.layers / .norm).
+                # TEXT-ONLY: outer = Gemma3ForCausalLM; outer.model = Gemma3TextModel,
+                # which holds .layers / .norm directly (it IS the language model — no
+                # intermediate Gemma3Model, no .language_model attribute).
                 outer = getattr(model, "model", None)
-                inner = getattr(outer, "model", None) if outer is not None else None
-                lang = (
-                    getattr(inner, "language_model", None)
-                    if inner is not None
-                    else None
-                )
+                lang = getattr(outer, "model", None) if outer is not None else None
                 compute_dev = None
                 if lang is not None and getattr(lang, "norm", None) is not None:
                     compute_dev = lang.norm.weight.device
@@ -1239,8 +1342,8 @@ class GemmaGGUFQuantLoaderService:
                 offload_service = GemmaLayerOffloadService(
                     layers_on_gpu=2, compute_device=compute_dev
                 )
-                # Install on the inner Gemma model holding language_model.layers.
-                offload_service.install(inner if inner is not None else model)
+                # Install on the Gemma3TextModel holding the decoder .layers.
+                offload_service.install(lang if lang is not None else model)
                 logger.info(
                     "Gemma GGUF (TE offload): installed per-layer CPU->GPU streaming "
                     "(layers_on_gpu=2, compute_device=%s)",

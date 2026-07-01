@@ -37,11 +37,18 @@ class ModelConfig(BaseModel):
 
     # Step 7 (real LTX) runtime paths. Populated by scripts/install_ltx.ps1 and
     # consumed only by services/ltx_runner.py. None until the model is installed.
-    ltx_repo_dir: str = "./vendor/LTX-2"
+    ltx_repo_dir: str = "./vendor/LTX-2"  # reference only (upstream LTX-2 clone).
+    # reference-only. The 43GB monolith it named was physically deleted in
+    # Stage 3; the GGUF + component-file path never opens it (proven by a rename
+    # test: load still passed). Kept because it is still passed in the worker
+    # payload for the DistilledPipeline signature (path stored, not read).
     checkpoint_path: str | None = None
     spatial_upsampler_path: str | None = None
+    # construction-required. The LTX wheel globs tokenizer.model + model*.safetensors
+    # from this QAT dir at *build* time, so the directory must exist -- but the
+    # weights are never read (the GGUF Gemma supplies them at runtime). Do not
+    # delete the dir; it is not a loaded checkpoint.
     gemma_root: str | None = None
-    quantization: str = "fp8-cast"  # "fp8-cast" | "none"
     backend: str = "auto"  # "auto" | "mock" | "real"
 
     # Phase 5 (real GGUF engine) runtime paths. Consumed only by the
@@ -49,10 +56,13 @@ class ModelConfig(BaseModel):
     # spike-proven 16GB recipe (Q4_K_M transformer + Q4_K_M GGUF Gemma on GPU).
     gguf_transformer_path: str = "./models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
     gguf_gemma_path: str = "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
+    # First-party engine package (project root ./engine). ltx_runner launches
+    # `python -m engine.worker` with this on PYTHONPATH.
     engine_dir: str = "./engine"
     # Interpreter that runs the first-party engine worker (torch + cu128 + ltx_core
-    # / ltx_pipelines + gguf). Still the vendored fork venv for now; relocation of
-    # the venv itself is a later stage.
+    # / ltx_pipelines + gguf). The dedicated ./.venv-engine, relocated out of the
+    # (now-deleted) fork tree in Stage 2b. Separate from the app's torch-free
+    # ./.venv. Dependency snapshot: engine/venv-engine.freeze.txt.
     engine_python: str = "./.venv-engine/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
 
@@ -68,6 +78,12 @@ class ModelConfig(BaseModel):
 class VramConfig(BaseModel):
     low_vram_mode: bool = True
     low_vram_profile: str = "16gb_safe"
+    # fp8_transformer / cpu_offload_text_encoder: FROZEN API CONTRACT. Both are
+    # emitted by services/low_vram.py (_STATUS_KEYS + metadata_block) into
+    # GET /status and metadata.json, so they must NOT be removed. Neither is
+    # propagated to the worker payload: fp8 is chosen at runtime by
+    # device_supports_fp8 auto-detection, and CPU text-encode offload is driven
+    # by the separate te_offload_text_encoder field (LTX_TE_OFFLOAD env) below.
     fp8_transformer: bool = True
     cpu_offload_text_encoder: bool = True
     # Sequential per-layer CPU offload of the GGUF Gemma during text-encode

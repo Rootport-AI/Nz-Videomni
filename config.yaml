@@ -6,8 +6,9 @@ server:
   log_dir: "./logs"
 
 model:
-  # Phase 1 では公式LTX-2リポジトリ/パッケージ側のロード方法に合わせる。
-  # 現行公式(v1.1)推奨: distilled-1.1 + spatial-upscaler-x2-1.1 + Gemma 3。
+  # 本番経路は GGUF 量子化トランスフォーマー + 小単体 component ファイル
+  # （VAE / audio / text-projection）+ GGUF Gemma。43GB モノリスと QAT Gemma の
+  # 実読み込みは廃止済み（下記 checkpoint_path / gemma_root のインライン注記参照）。
   checkpoint_dir: "./models"
   checkpoint_name: "ltx-2.3-22b-distilled-1.1"
   text_encoder: "google/gemma-3-12b-it-qat-q4_0-unquantized"
@@ -15,19 +16,20 @@ model:
   auto_load_on_generate: true
   reload_interval: 0
 
-  # Step 7（実LTX）用ランタイムパス。scripts/install_ltx.ps1 が設定する。
-  # services/ltx_runner.py のみが参照する。未インストール時は null のまま。
-  # 構成: distilled checkpoint + spatial upscaler + Gemma の3点。
-  #   - VAE は checkpoint(.safetensors) に同梱（別ファイル不要）。
-  #   - Gemma(text encoder) は LTX-2.3 リポジトリに含まれず、
-  #     google/gemma-3-12b-it-qat-q4_0-unquantized（gated）を別途取得する
-  #     （install_ltx.ps1 -WithGemma）。
-  ltx_repo_dir: "./vendor/LTX-2"
-  # 相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。install_ltx.ps1が固定の相対位置にDLするため全環境で有効。
+  # ランタイムパス。services/ltx_runner.py（→ engine worker payload）のみが参照。
+  # これらは DistilledPipeline 構築のために worker payload に載るが、GGUF +
+  # component 経路では重みとして開かれない（下記インライン注記の通り）。
+  # 相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
+  ltx_repo_dir: "./vendor/LTX-2"   # reference only（上流LTX-2クローン）。
+  # reference-only。43GB モノリスは Stage3 で物理削除済み。worker payload には
+  # 渡すが GGUF + component 経路では一切開かれない（rename test で実証）。
+  # DistilledPipeline のシグネチャ用に保持。
   checkpoint_path: "./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"
   spatial_upsampler_path: "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
+  # construction-required。wheel が build 時に tokenizer.model + model*.safetensors を
+  # このQAT dirから glob するため dir は存在必須。ただし重みは読まれない
+  # （GGUF Gemma が runtime に供給）。ロード済み checkpoint ではない＝削除不可。
   gemma_root: "./models/gemma-3-12b-it-qat"
-  quantization: "fp8-cast"         # fp8-cast | none
   backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
 
 vram:
@@ -35,7 +37,10 @@ vram:
   low_vram_mode: true
   low_vram_profile: "16gb_safe"
 
-  # Phase 1 baseline。公式APIで利用できる範囲で有効化する。
+  # fp8_transformer / cpu_offload_text_encoder は凍結API契約。
+  # services/low_vram.py 経由で GET /status・metadata.json に出力されるため保持必須。
+  # ただし worker へは非伝播: fp8 は runtime の device_supports_fp8 自動判定、
+  # CPU text-encode オフロードは別フィールド te_offload_text_encoder（LTX_TE_OFFLOAD）で駆動。
   fp8_transformer: true
   cpu_offload_text_encoder: true
   te_offload_text_encoder: true   # 逐次レイヤーCPUオフロード（GGUF Gemma）。encode peak ~15GB→数GB。compute は GPU 維持。

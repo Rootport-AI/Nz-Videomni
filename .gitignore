@@ -24,17 +24,12 @@ models/*
 # These are installed locally by scripts/install_ltx.ps1.
 # ---------------------------------------------------------------------------
 
-# Vendored code is ignored EXCEPT the patched low-VRAM fork's backend SOURCE,
-# so our engine patches (Approach W worker, GGUF Gemma, block-swap, component-
-# files, the per-job leak fix, etc.) are version-controlled. Heavy/generated
-# content inside it is still excluded by the global rules above (.venv/,
-# __pycache__/, *.py[cod], *.safetensors, *.gguf, uv.lock, ...). The official
-# LTX-2 clone (vendor/LTX-2) stays ignored = re-cloneable upstream reference.
-# Provenance + patch list: vendor/LTX-Desktop-LOW-VRAM/backend/VENDOR_NOTICE.md.
+# The engine is now first-party (project-root ./engine, git-tracked); the
+# low-VRAM fork tree was removed in Stage 2b, so no vendor negation is needed.
+# Everything under vendor/ stays ignored. The official LTX-2 clone
+# (vendor/LTX-2) is a re-cloneable upstream reference kept out of the repo.
+# Engine provenance: engine/VENDOR_NOTICE.md.
 vendor/*
-!vendor/LTX-Desktop-LOW-VRAM/
-vendor/LTX-Desktop-LOW-VRAM/*
-!vendor/LTX-Desktop-LOW-VRAM/backend/
 LTX-2/
 
 # Model weights / large binary artifacts (safety net regardless of location)

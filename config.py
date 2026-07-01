@@ -44,10 +44,13 @@ class ModelConfig(BaseModel):
     # payload for the DistilledPipeline signature (path stored, not read).
     checkpoint_path: str | None = None
     spatial_upsampler_path: str | None = None
-    # construction-required. The LTX wheel globs tokenizer.model + model*.safetensors
-    # from this QAT dir at *build* time, so the directory must exist -- but the
-    # weights are never read (the GGUF Gemma supplies them at runtime). Do not
-    # delete the dir; it is not a loaded checkpoint.
+    # tokenizer-only dir (~40MB). The GGUF Gemma path needs only the tokenizer/
+    # processor files: DistilledPipeline is built with gemma_root=None so the wheel's
+    # weight glob (model*.safetensors) is bypassed and the engine
+    # rebuilds a shard-less text-encoder builder, loading tokenizer/processor
+    # module_ops from this dir (globs only tokenizer.model + preprocessor_config.json).
+    # The directory must still exist (gated below) -- it is the tokenizer source, not
+    # a loaded weight checkpoint.
     gemma_root: str | None = None
     backend: str = "auto"  # "auto" | "mock" | "real"
 

@@ -160,12 +160,13 @@ class LTXRunner:
         (``checkpoint_path``): it is passed to the worker as a reference-only
         payload field (the wheel's lazy builders receive it but the GGUF/component
         installs replace every loader), so it is deliberately NOT gated here. The
-        22.7GB QAT ``gemma_root`` IS gated: the wheel globs its ``tokenizer.model``
-        and ``model*.safetensors`` at build time, so a missing dir must fail fast in
-        the app layer rather than crash deep in the wheel. The load-bearing files
-        are the QAT gemma_root, the GGUF transformer/Gemma, the spatial upsampler,
-        and the 3 standalone component files (use_component_files is fixed True in
-        config.yaml).
+        (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
+        with gemma_root=None so the wheel's weight glob is bypassed,
+        but the engine still loads the tokenizer/processor module_ops from this dir,
+        so a missing dir must fail fast in the app layer rather than crash deep in
+        the encode path. The load-bearing files are the tokenizer gemma_root, the
+        GGUF transformer/Gemma, the spatial upsampler, and the 3 standalone component
+        files (use_component_files is fixed True in config.yaml).
 
         Deliberately does NOT import torch / ltx_* (those live only in the engine
         venv, not the app venv). Any failure/missing is swallowed -> False (so
@@ -479,10 +480,12 @@ class _RealBackend:
         # absolute WITHOUT an existence check — it may be physically absent while the
         # real path still works.
         checkpoint_path = str(self.config._abs(model.checkpoint_path)) if model.checkpoint_path else ""
-        # gemma_root (22.7GB QAT Gemma) IS load-bearing: the wheel globs its
-        # tokenizer.model + model*.safetensors at build time, so a missing dir must
-        # fail fast here rather than crash deep in the wheel. Forwarded to the worker
-        # as a payload field exactly as before.
+        # gemma_root (tokenizer-only ~40MB) IS load-bearing: DistilledPipeline is
+        # built with gemma_root=None so the wheel's weight glob (model*.safetensors)
+        # is bypassed, but the engine loads the tokenizer/processor
+        # module_ops from this dir (tokenizer.model + preprocessor_config.json), so a
+        # missing dir must fail fast here rather than crash deep in the encode path.
+        # Forwarded to the worker as a payload field exactly as before.
         gemma_root = self._require_path(model.gemma_root, "gemma_root")
 
         upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")

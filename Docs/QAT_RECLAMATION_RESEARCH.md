@@ -1,5 +1,12 @@
 # QAT gemma_root 22.7GB 回収 — 事前調査（次セッションの実装用）
 
+> ## ✅ RESOLVED (2026-07-01) — 実装は本書の案A/案B **ではなく**、より根本的な **text-only Gemma** で決着
+> **22.7GB 回収 DONE（models/ 50.9GB→28.2GB）。** 本調査は「マルチモーダル `Gemma3ForConditionalGeneration` を保ったまま重みロードを回避する」前提（案B=loader パッチ／案A=vision 実抽出）だったが、実装時に **より深い根因** が判明した：**我々は `language_model` の hidden_states しか使わないのに、wheel が vision_tower＋multi_modal_projector 込みのフルのマルチモーダルモデルを構築していた**（vision は最初から死蔵重み・QAT shard がそれを供給し隠していた）。
+> - **採用解＝text-only `Gemma3ForCausalLM` を構築**（新規 `engine/gemma/text_encoder_configurator.py`・我々の seam・wheel フォーク不要）。vision 構造そのものが消え、placeholder も dead weight も QAT dir も不要化。gemma_root は ~40MB の tokenizer-only dir（`models/gemma-3-12b-it-tokenizer/`）、QAT dir は物理削除。
+> - **検証**: full-QAT baseline と **バイト完全一致**（T2V `23844b4e…6bb7bf`／最小I2V `a511eda4…c217`・QAT 在/不在の3経路）、peak_vram 8440MB（<baseline 9164）、退行なし。commit `93696b4`（branch `refactor/qat-reclamation`・未マージ）。
+> - **途中の学び（重要）**: (1) 素朴な shardless 化は vision meta→`self.model.device`（=最初の param の device, transformers `get_parameter_device`）meta→`precompute` が input_ids を meta 生成→crash。(2) text-only では CPU-offload した embed が最初の param→device=cpu→attention_mask cpu が cuda hidden と衝突→**`.device` を compute device(final-norm) に override して解消**（マルチモーダルは vision(cuda) が偶然の device アンカーだった）。(3) リスク調査で **IC-LoRA/i2v/audio/enhance_t2v は全て vision 非依存**、唯一 `enhance_i2v`（画像プロンプト補強・既定OFF・未配線・Phase1外／ComfyUI は Florence-2 で代替）だけ vision 使用と確定。ComfyUI 先行事例も text-only Gemma。
+> - **以下（本文）は着手前の調査記録**（案A/案B の詳細）。歴史参照用に温存。
+
 作成: 2026-07-01（de-fork リファクタ完了直後、branch は main へマージ済 `a857a3b`）。
 本ドキュメントは **調査結果と実装方針の引き継ぎ**。実装は次セッション（コンテクスト刷新後）。
 調査は3並列サブエージェント（web検索＋wheel一次ソース読解、一部は実コードでシミュレーション）による。**憶測でなく wheel rev `00dc53d` の実ソースで裏取り済み**。

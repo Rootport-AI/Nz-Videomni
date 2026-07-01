@@ -31,6 +31,25 @@ def test_num_frames_not_8n_plus_1(client):
     assert "8n+1" in r.text
 
 
+def test_num_frames_at_cap_accepted(client):
+    # 481 = 8*60+1 = 20s@24fps: new cap, 8n+1 -> accepted (202, async job).
+    r = client.post("/api/v1/generate", json={**BASE, "width": 512, "height": 320, "num_frames": 481})
+    assert r.status_code == 202
+
+
+def test_num_frames_above_cap_rejected(client):
+    # 489 = 8*61+1: valid 8n+1 but > 481 cap -> rejected by the le= bound.
+    r = client.post("/api/v1/generate", json={**BASE, "width": 512, "height": 320, "num_frames": 489})
+    assert r.status_code == 422
+
+
+def test_num_frames_within_cap_but_not_8n_plus_1_rejected(client):
+    # 480 <= 481 cap but not 8n+1 -> still rejected.
+    r = client.post("/api/v1/generate", json={**BASE, "width": 512, "height": 320, "num_frames": 480})
+    assert r.status_code == 422
+    assert "8n+1" in r.text
+
+
 def test_too_many_conditioning_images(client):
     r = client.post(
         "/api/v1/generate",

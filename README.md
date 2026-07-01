@@ -198,7 +198,12 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 ### 凍結 API 契約（付録A・変更しない）
 - 幅・高さは **64の倍数**（two-stage distilled は stage1 を半解像度で生成し x2 アップサンプルするため ÷64。
   検証は [`api/models.py`](api/models.py) の `GenerateRequest` validator）。
-- フレーム数は **8n+1**（9, 17, 25, … 121）。
+- フレーム数は **8n+1**（9, 17, 25, … 121）。尺 cap は **20s（481f=8×60+1）@24fps** まで許容
+  （旧 257f/10.67s から緩和）。溢れ/低速/非実用は**クライアント UI 警告に委ねる**方針で、
+  解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames`
+  （720p:257 / 1080p:153 / 1440p:81）に露出する。これを超えると shared へ溢れ ~2-4x 低速化
+  （OOM せず）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨。
+  閾値の正本は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6。
 - Distilled は **8 steps / CFG=1.0** 固定。
 - 最小I2V は **画像1枚・`frame_idx=0` 固定**（画像なし=T2V、1枚=I2V）。
 - `crop_output` を指定すると、任意の非64サイズ（例 960×540, 1280×720）を中央クロップで得ます。

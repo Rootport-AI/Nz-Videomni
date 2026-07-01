@@ -673,7 +673,7 @@ class GenerateRequest(BaseModel):
     # 最終MP4のクロップサイズ。Noneならクロップしない。
     crop_output: CropOutput | None = None
 
-    num_frames: int = Field(49, ge=9, le=257)
+    num_frames: int = Field(49, ge=9, le=481)  # 20s(481f=8×60+1)まで許容。溢れ/低速はクライアント警告に委ねる（RESOLUTION_DURATION_CAPABILITY.md §8.4/§8.6）。
     frame_rate: float = Field(24.0, ge=1.0, le=60.0)
     num_inference_steps: int = Field(8, ge=1, le=100)
     guidance_scale: float = Field(1.0, ge=0.0, le=20.0)
@@ -1351,10 +1351,14 @@ upload:
 limits:
   max_width: 1920
   max_height: 1088
-  max_num_frames: 257
+  max_num_frames: 481        # 20s@24fps。溢れ/低速はクライアント警告に委ねる（§8.4/§8.6）。
   max_conditioning_images_phase1: 1
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
+  spill_free_frames:         # 16GB 実測(§8.4)。超えると溢れ~2-4x低速(OOMせず)→UI警告用
+    "1280x768": 257          # 720p
+    "1920x1088": 153         # 1080p
+    "2560x1472": 81          # 1440p
 
 output:
   dir: "./outputs"

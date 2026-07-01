@@ -176,7 +176,7 @@ Stage 5（本ドキュメント改訂）は未 commit（監督確認待ち）。
 - **【真の目的】AviUtl2 拡張機能との統合**（上記マイルストーン2）。
 
 ### 一次情報のポインタ
-- **解像度×尺の能力リファレンス＝Docs/RESOLUTION_DURATION_CAPABILITY.md**（16GB でどの解像度/尺まで作れるか・den2 推定式・生成時間・AviUtl2 UI 含意の正本）。
+- **解像度×尺の能力リファレンス＝Docs/RESOLUTION_DURATION_CAPABILITY.md**（16GB でどの解像度/尺まで作れるか・den2 推定式・生成時間・AviUtl2 UI 含意の正本）。API の尺 cap は §8.4/§8.6 を根拠に **257f→481f(20s)** へ緩和済み（溢れ/低速はクライアント警告に委ねる方針。解像度別 spill-free = 720p:257 / 1080p:153 / 1440p:81 を `/api/v1/config` の `limits.spill_free_frames` に露出。1080p 長尺は非実用/commit リスク → 720p 生成＋外部 upscale 推奨）。
 - 技術記録＝**VERIFICATION_LOG §10**（720p 二段達成・keep_resident 原因/修正・component_files マルチジョブ修正・commit/ディスク実測・§10.6 解像度×尺スイープ）。
 - スケールアップ調査の正本＝Docs/SCALEUP_16GB_RESEARCH.md（✅達成バナー追記済）。
 - 設定知識＝Docs/LTX23_REFERENCE.md。memory `[[720p-16gb-verified]]` / `[[ltx-bridge-project]]`。

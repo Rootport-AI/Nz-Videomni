@@ -43,7 +43,10 @@ class GenerateRequest(BaseModel):
     # 最終MP4のクロップサイズ。None ならクロップしない。
     crop_output: CropOutput | None = None
 
-    num_frames: int = Field(49, ge=9, le=257)
+    # 尺 cap は 20s(481f=8×60+1)@24fps まで許容。溢れ/低速/非実用は
+    # クライアント UI 警告に委ねる（解像度別 spill-free は /config の
+    # limits.spill_free_frames、実測根拠は RESOLUTION_DURATION_CAPABILITY.md §8.4/§8.6）。
+    num_frames: int = Field(49, ge=9, le=481)
     frame_rate: float = Field(24.0, ge=1.0, le=60.0)
     num_inference_steps: int = Field(8, ge=1, le=100)
     guidance_scale: float = Field(1.0, ge=0.0, le=20.0)

@@ -112,10 +112,14 @@ upload:
 limits:
   max_width: 1920
   max_height: 1088
-  max_num_frames: 257
+  max_num_frames: 481        # 20s@24fps(481=8×60+1)。溢れ/低速/非実用はクライアント警告に委ねる（§8.4/§8.6）。
   max_conditioning_images_phase1: 1
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
+  spill_free_frames:         # 16GB 実測(§8.4)。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告
+    "1280x768": 257          # 720p（実用快適上限）
+    "1920x1088": 153         # 1080p（20s は非実用~40分→720p生成+外部upscale 推奨）
+    "2560x1472": 81          # 1440p
 
 output:
   dir: "./outputs"

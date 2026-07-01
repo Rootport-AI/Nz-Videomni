@@ -150,10 +150,14 @@ class UploadConfig(BaseModel):
 class LimitsConfig(BaseModel):
     max_width: int = 1920
     max_height: int = 1088
-    max_num_frames: int = 257
+    max_num_frames: int = 481
     max_conditioning_images_phase1: int = 1
     phase1_max_concurrent_jobs: int = 1
     low_vram_disabled_required: bool = False
+    # 解像度別 spill-free フレーム数（16GB 実測, §8.4）。API は 481f まで受けるが、
+    # これを超えると shared へ溢れ ~2-4x 低速化（OOM せず）→ クライアント UI で警告する。
+    # キーは "WxH" 生成サイズ文字列（client が引きやすい形式）。
+    spill_free_frames: dict[str, int] = Field(default_factory=dict)
 
 
 class OutputConfig(BaseModel):

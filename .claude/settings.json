@@ -106,7 +106,9 @@
       "WebFetch(domain:dev.to)",
       "Read(//c/Users/phenotype nezu/.claude/**)",
       "Bash(python \"C:/Users/PHENOT~1/AppData/Local/Temp/claude/s--OriginalApps-12-Nz-LTX23-backend/894028a3-9933-452c-b668-4d3d07dc20ba/scratchpad/extract.py\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "PowerShell(nvidia-smi --query-gpu=name,memory.total,memory.used,driver_version --format=csv)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"vendor/LTX-Desktop-LOW-VRAM/backend/_gpu_mem_sampler.ps1\" -OutFile \"outputs/gpu_mem_verify720p.log\" -IntervalSec 0.5 -MaxSeconds 1200)"
     ]
   }
 }

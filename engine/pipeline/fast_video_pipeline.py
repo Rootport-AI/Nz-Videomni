@@ -9,7 +9,6 @@ from typing import Final, cast
 import torch
 
 from engine.api_types import ImageConditioningInput
-from engine.lora_types import LoraEntry
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 
@@ -25,13 +24,11 @@ class LTXFastVideoPipeline:
         device: torch.device,
         transformer_device: torch.device | None = None,
         block_swap_blocks_on_gpu: int = 0,
-        attention_tile_size: int = 0,
         use_fp8_transformer: bool = False,
         gguf_transformer_path: str = "",
         gguf_per_layer_quant: bool = True,
         vae_spatial_tile_size: int = 0,
         vae_temporal_tile_size: int = 0,
-        loras: list[LoraEntry] | None = None,
         gguf_gemma_path: str = "",
         keep_resident_weights: bool = False,
         use_component_files: bool = False,
@@ -48,13 +45,11 @@ class LTXFastVideoPipeline:
             device=device,
             transformer_device=transformer_device,
             block_swap_blocks_on_gpu=block_swap_blocks_on_gpu,
-            attention_tile_size=attention_tile_size,
             use_fp8_transformer=use_fp8_transformer,
             gguf_transformer_path=gguf_transformer_path,
             gguf_per_layer_quant=gguf_per_layer_quant,
             vae_spatial_tile_size=vae_spatial_tile_size,
             vae_temporal_tile_size=vae_temporal_tile_size,
-            loras=loras,
             gguf_gemma_path=gguf_gemma_path,
             keep_resident_weights=keep_resident_weights,
             use_component_files=use_component_files,
@@ -73,13 +68,11 @@ class LTXFastVideoPipeline:
         device: torch.device,
         transformer_device: torch.device | None = None,
         block_swap_blocks_on_gpu: int = 0,
-        attention_tile_size: int = 0,
         use_fp8_transformer: bool = False,
         gguf_transformer_path: str = "",
         gguf_per_layer_quant: bool = True,
         vae_spatial_tile_size: int = 0,
         vae_temporal_tile_size: int = 0,
-        loras: list[LoraEntry] | None = None,
         gguf_gemma_path: str = "",
         keep_resident_weights: bool = False,
         use_component_files: bool = False,
@@ -114,7 +107,6 @@ class LTXFastVideoPipeline:
         # Transformer device defaults to primary device if not set.
         self._transformer_device = transformer_device or device
         self._block_swap_blocks_on_gpu = block_swap_blocks_on_gpu
-        self._attention_tile_size = attention_tile_size
         self._gguf_transformer_path = gguf_transformer_path
         self._gguf_per_layer_quant = gguf_per_layer_quant
         self._vae_spatial_tile_size = vae_spatial_tile_size
@@ -223,8 +215,8 @@ class LTXFastVideoPipeline:
         # relocation: their services (AttentionTileService / LoraService) are not
         # part of the first-party engine keep-set, the worker never enables these
         # guards (both default off), and the current T2V/GGUF path never reaches
-        # them. The `attention_tile_size` and `loras` constructor parameters are
-        # retained (signature unchanged) but are now no-ops.
+        # them. The now-dead `attention_tile_size` and `loras` constructor
+        # parameters (no caller ever passed them) have also been removed.
 
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.

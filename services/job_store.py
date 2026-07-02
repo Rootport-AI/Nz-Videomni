@@ -12,7 +12,13 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from api.models import GenerateRequest, JobResponse, JobResult, JobStatus
+from api.models import (
+    GenerateChainRequest,
+    GenerateRequest,
+    JobResponse,
+    JobResult,
+    JobStatus,
+)
 
 
 def now_iso() -> str:
@@ -21,9 +27,18 @@ def now_iso() -> str:
 
 
 class JobRecord:
-    def __init__(self, job_id: str, request: GenerateRequest):
+    def __init__(
+        self,
+        job_id: str,
+        request: GenerateRequest,
+        chain_request: GenerateChainRequest | None = None,
+    ):
         self.job_id = job_id
+        # ``request`` is always a GenerateRequest so the JobResponse contract is
+        # unchanged. For a chain job it is the clip-0 request (representative);
+        # ``chain_request`` carries the full multi-clip spec for the orchestrator.
         self.request = request
+        self.chain_request = chain_request
         self.status: JobStatus = JobStatus.queued
         self.progress: float = 0.0
         self.current_step: int | None = None
@@ -76,6 +91,27 @@ class JobStore:
             if any(r.is_active for r in self._jobs.values()):
                 return None
             record = JobRecord(str(uuid.uuid4()), request)
+            self._jobs[record.job_id] = record
+            return record
+
+    def create_chain_if_idle(
+        self, chain_request: GenerateChainRequest
+    ) -> JobRecord | None:
+        """Atomically create a chain job only if none is active (single-job guard).
+
+        Stores the clip-0 :class:`GenerateRequest` as the record's ``request``
+        (keeps the JobResponse contract intact) and the full
+        :class:`GenerateChainRequest` as ``chain_request`` for the orchestrator.
+        Returns ``None`` if a job is already queued/running (respond 409).
+        """
+        with self._lock:
+            if any(r.is_active for r in self._jobs.values()):
+                return None
+            record = JobRecord(
+                str(uuid.uuid4()),
+                chain_request.to_clip_request(0),
+                chain_request=chain_request,
+            )
             self._jobs[record.job_id] = record
             return record
 

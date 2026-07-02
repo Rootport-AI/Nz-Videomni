@@ -1,8 +1,12 @@
 """Pydantic schemas — the external API contract (spec ch.6).
 
-These are FROZEN as the final-form API for Phase 1 so that future frontends
-(AviUtl2, DaVinci Resolve) and later phases do not break. Do not relax the
-validators here without revisiting the spec.
+Conditioning is now Phase-3 UNFROZEN: multiple keyframes (cap 5), arbitrary
+``frame_idx`` (snapped server-side to a multiple of 8 and clamped into range),
+and per-item ``strength``. ``num_pixel_frames`` and reference-video conditioning
+remain out of scope. The OTHER constraints stay FROZEN as the final-form API so
+that future frontends (AviUtl2, DaVinci Resolve) and later phases do not break:
+÷64 generation resolution, 8n+1 frame counts, and the distilled 8-step / CFG=1.0
+requirement. Do not relax those validators without revisiting the spec.
 
 Resolution note: ``width``/``height`` are the *generation* size and must be a
 multiple of **64** — the two-stage distilled pipeline generates stage-1 at half
@@ -27,7 +31,7 @@ class CropOutput(BaseModel):
 
 class ConditioningImage(BaseModel):
     image_id: str
-    frame_idx: int = 0
+    frame_idx: int = Field(0, ge=0)
     strength: float = Field(0.8, ge=0.0, le=1.0)
     crf: int | None = None
 
@@ -53,7 +57,8 @@ class GenerateRequest(BaseModel):
     seed: int = -1
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
 
-    # 空配列なら T2V。1件なら Phase 1 最小 I2V。
+    # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap 5）。
+    # 各 frame_idx は validator で 8 の倍数へスナップ＋範囲クランプされる。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -79,13 +84,17 @@ class GenerateRequest(BaseModel):
                     "distilled pipeline requires guidance_scale=1.0 in Phase 1"
                 )
 
-        # Phase 1 最小 I2V 制約。
-        if len(self.conditioning_images) > 1:
-            raise ValueError("Phase 1 supports at most one conditioning image")
-        if self.conditioning_images:
-            image = self.conditioning_images[0]
-            if image.frame_idx != 0:
-                raise ValueError("Phase 1 supports only frame_idx=0 for I2V")
+        # Conditioning (Phase 3): multi-keyframe I2V, cap 5.
+        if len(self.conditioning_images) > 5:
+            raise ValueError("at most 5 conditioning images are supported")
+        # frame_idx is a pixel-frame RoPE offset; the temporal VAE factor is 8, so
+        # the aligned keyframe grid is {0, 8, ..., num_frames-1}. Snap to the
+        # nearest multiple of 8 and clamp into [0, num_frames-1] (num_frames-1 is
+        # always 8n so it stays on-grid). Snapping is a safety net — the UI is
+        # expected to enforce the grid. The ÷64 rule is spatial-only and unrelated.
+        for image in self.conditioning_images:
+            snapped = round(image.frame_idx / 8) * 8
+            image.frame_idx = max(0, min(snapped, self.num_frames - 1))
         return self
 
     @property

@@ -174,64 +174,7 @@ _LTX_LM_PREFIX = "model.model."
 # the multimodal build; lm_head is not nested under the language model in either.
 _LTX_LM_HEAD_KEY = "model.lm_head.weight"
 
-# ── Commit-reduction (Stage 1): skip the bf16 Gemma LM at READ time ───────────
-# The base safetensors load used to materialize the FULL ~24 GB bf16 Gemma
-# language model into committed CPU RAM (one get_tensor copy per tensor) and then
-# DELETE every ``model.model.*`` Gemma-LM key (plus the tied ``model.lm_head.weight``)
-# immediately afterward, because the GGUF supplies the compressed replacement. Those
-# copies are pure waste (committed, then freed).
-#
-# Both deleted remapped key sets originate, via TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS,
-# EXCLUSIVELY from original safetensors keys under this prefix (the ORIGINAL
-# safetensors key form is unchanged by the text-only switch — only the ops' TARGET
-# namespace lost the ``language_model.`` level):
-#   ops:    "language_model.model." -> "model.model."   (-> _LTX_LM_PREFIX)
-#   kv-op:  language_model.model.embed_tokens.weight ALSO duplicated to
-#           "model.lm_head.weight" (= _LTX_LM_HEAD_KEY)
-# No other original prefix maps into _LTX_LM_PREFIX or _LTX_LM_HEAD_KEY, and this
-# prefix maps into nothing else. Therefore skipping every ORIGINAL key under this
-# prefix at read time yields a base state_dict byte-identical to the prior
-# read-then-delete result (the survivors — feature_extractor / connectors — come
-# from other prefixes and are kept). TEXT-ONLY: there is no vision_tower /
-# multi_modal_projector survivor set here — the text model has no such modules and
-# the QAT shards that carried those keys are no longer read (gemma_root reclamation).
-_ORIG_GEMMA_LM_PREFIX = "language_model.model."
-
-
-class _SkipGemmaLMSDOps:
-    """Duck-typed SDOps proxy that drops the bf16 Gemma LM keys at READ time.
-
-    Wraps the real key-ops (e.g. AV_GEMMA_TEXT_ENCODER_KEY_OPS) and delegates
-    everything, except it returns ``None`` from ``apply_to_key`` for any ORIGINAL
-    safetensors key under ``_ORIG_GEMMA_LM_PREFIX``. ``SafetensorsStateDictLoader``
-    does ``if expected_name is None: continue`` (sft_loader.py), so those tensors
-    are never ``get_tensor``-copied -> never materialized -> never committed.
-
-    Scoped to the GGUF-Gemma base load only; the shared AV ops object is unchanged.
-    """
-
-    def __init__(self, inner: Any) -> None:
-        self._inner = inner
-
-    def apply_to_key(self, key: str) -> str | None:
-        if key.startswith(_ORIG_GEMMA_LM_PREFIX):
-            # Skip the read entirely (this is exactly the set deleted post-load).
-            return None
-        if self._inner is None:
-            return key
-        return self._inner.apply_to_key(key)
-
-    def apply_to_key_value(self, key: str, value: Any) -> Any:
-        # Only ever called for kept keys (apply_to_key already returned non-None),
-        # so the LM keys never reach here. Delegate verbatim for the survivors.
-        if self._inner is None:
-            from ltx_core.loader.sd_ops import KeyValueOperationResult
-
-            return [KeyValueOperationResult(key, value)]
-        return self._inner.apply_to_key_value(key, value)
-
-
-def _read_target_vocab_from_header(path: str | list[str]) -> int | None:
+def _read_target_vocab_from_header() -> int | None:
     """Return the padded (target) Gemma vocab size — the wheel config constant.
 
     The LTX Gemma3 meta model sizes embed_tokens (and the tied lm_head) to the
@@ -245,7 +188,7 @@ def _read_target_vocab_from_header(path: str | list[str]) -> int | None:
     Instead we source the value directly from the wheel's Gemma config
     (GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size == 262208), which is exactly the
     padded size the meta model is built with — byte-identical to the value the header
-    probe used to return. ``path`` is retained for signature compatibility (unused).
+    probe used to return.
     """
     from ltx_core.text_encoders.gemma.config import GEMMA3_CONFIG_FOR_LTX
 
@@ -396,7 +339,7 @@ class GemmaGGUFQuantStateDictLoader:
         # header) — the same size the meta model is built with, and byte-identical to
         # the value the former base-embedding-header probe returned (the Gemma shards
         # that carried that header are no longer in model_path post-reclamation).
-        target_vocab: int | None = _read_target_vocab_from_header(path)
+        target_vocab: int | None = _read_target_vocab_from_header()
         if target_vocab is not None:
             logger.info(
                 "Gemma GGUF merge: target (padded) vocab size from Gemma config = %d",
@@ -409,30 +352,15 @@ class GemmaGGUFQuantStateDictLoader:
         # to cuda. The base safetensors contain the FULL ~24 GB bf16 Gemma language
         # model, which we replace with the compressed GGUF below.
         #
-        # COMMIT REDUCTION (Stage 1): rather than read those ~24 GB into committed CPU
-        # RAM and delete them, we wrap sd_ops in _SkipGemmaLMSDOps so every original
-        # ``language_model.model.*`` key returns None from apply_to_key -> the loader
-        # skips its get_tensor copy entirely (never materialized, never committed).
-        # This is byte-identical to the prior read-then-delete: the skipped set equals
-        # exactly the keys formerly deleted at the strip step (see _SkipGemmaLMSDOps /
-        # _ORIG_GEMMA_LM_PREFIX). Survivors (feature_extractor / connectors) are kept
-        # unchanged. TEXT-ONLY: no vision_tower / multi_modal_projector survivors — the
-        # text model lacks those modules and their QAT-shard source is no longer read.
+        # COMMIT REDUCTION (Stage 1): under QAT gemma_root reclamation the Gemma
+        # shards are no longer in model_path, so the base safetensors load carries NO
+        # ``language_model.model.*`` Gemma-LM keys at all — there is nothing to skip or
+        # strip. Survivors (feature_extractor / connectors) are the only tensors kept.
+        # TEXT-ONLY: no vision_tower / multi_modal_projector survivors — the text model
+        # lacks those modules and their QAT-shard source is no longer read.
         cpu_device = torch.device("cpu")
-        base = self._base_loader.load(path, sd_ops=_SkipGemmaLMSDOps(sd_ops), device=cpu_device)
+        base = self._base_loader.load(path, sd_ops=sd_ops, device=cpu_device)
         base_sd: dict[str, torch.Tensor] = dict(base.sd)
-
-        n_base = len(base_sd)
-
-        # ── 2. Defensive strip (now a no-op): the bf16 Gemma LM keys were already ──
-        #   skipped at read above, so these deletions normally remove nothing. Kept
-        #   as belt-and-suspenders in case an upstream key-op ever emits an LM key.
-        for k in [k for k in base_sd if k.startswith(_LTX_LM_PREFIX)]:
-            del base_sd[k]
-        # Also drop the tied lm_head if present — GGUF supplies embed_tokens and
-        # lm_head is tied; we re-tie below from the dequantized embedding.
-        base_sd.pop(_LTX_LM_HEAD_KEY, None)
-        n_stripped = n_base - len(base_sd)
 
         # ── 2a-inject. (Phase 2) Inject the embeddings connectors from the GGUF ───
         # When the monolith has been dropped from model_path (component-files mode),
@@ -478,10 +406,9 @@ class GemmaGGUFQuantStateDictLoader:
 
         logger.info(
             "Gemma GGUF merge: kept %d non-Gemma safetensors tensors (feature_extractor / "
-            "connectors) on %s, stripped %d bf16 Gemma tensors (freed in CPU RAM) for GGUF overlay",
+            "connectors) on %s for GGUF overlay",
             len(base_sd),
             target_device,
-            n_stripped,
         )
 
         # ── 3. Read GGUF, remap, correct, (de)quantize ───────────────────────────

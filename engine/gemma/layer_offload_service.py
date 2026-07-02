@@ -28,7 +28,7 @@ preserves the dequant metadata (``_ggml_type`` / ``_float_shape``).
 Usage
 -----
     service = GemmaLayerOffloadService(layers_on_gpu=2, compute_device=dev)
-    service.install(inner_gemma_model)   # the module holding language_model.layers
+    service.install(inner_gemma_model)   # the module holding the decoder .layers
     service.uninstall(inner_gemma_model) # optional, restore original forwards
 """
 
@@ -87,10 +87,11 @@ class GemmaLayerOffloadService:
         """Patch the Gemma decoder layers with sliding-window swap wrappers.
 
         ``text_encoder_model`` should be the module that holds the decoder
-        ``language_model.layers`` ModuleList (the inner Gemma model / a parent of
-        it). The layer-container lookup is robust: it tries the documented nesting
-        and falls back to the largest ModuleList of decoder layers. No-op (warn +
-        return) if the layer container cannot be located.
+        ``.layers`` ModuleList (the inner Gemma3TextModel / a parent of it; under
+        the text-only build this is at ``model.model.layers``). The layer-container
+        lookup is robust: it tries the documented nesting and falls back to the
+        largest ModuleList of decoder layers. No-op (warn + return) if the layer
+        container cannot be located.
         """
         if self.layers_on_gpu <= 0:
             logger.info("GemmaLayerOffload disabled (layers_on_gpu=%d)", self.layers_on_gpu)
@@ -173,11 +174,16 @@ class GemmaLayerOffloadService:
     ) -> tuple[list[nn.Module], nn.Module | None]:
         """Locate the 48-layer Gemma decoder ModuleList (robust lookup).
 
-        Documented nesting (verified against modeling_gemma3 + the GGUF key remap
-        ``model.model.language_model.layers.N...``):
-            text_encoder.model            (Gemma3ForConditionalGeneration)
-              .model                      (Gemma3Model)
-                .language_model           (Gemma3TextModel) -> .layers / .norm
+        Current nesting (TEXT-ONLY, after QAT gemma_root reclamation — the encoder
+        now holds a Gemma3ForCausalLM, so the ``language_model.`` level is gone;
+        verified against modeling_gemma3 + the GGUF key remap
+        ``model.model.layers.N...``):
+            text_encoder.model            (Gemma3ForCausalLM)
+              .model                      (Gemma3TextModel) -> .layers / .norm
+
+        The probing below still also checks the older multimodal nesting
+        (``text_encoder.model.model.language_model``, from the retired
+        Gemma3ForConditionalGeneration build) as a harmless fallback.
 
         ``text_encoder_model`` may be passed in at any of these levels, so we probe
         a few candidate roots. Returns ``(layers, lang_module)`` where
@@ -193,13 +199,14 @@ class GemmaLayerOffloadService:
 
         m = text_encoder_model
         _add(m)
-        # text_encoder.model -> Gemma3ForConditionalGeneration
+        # text_encoder.model -> Gemma3ForCausalLM (was Gemma3ForConditionalGeneration)
         outer = getattr(m, "model", None)
         _add(outer)
-        # .model.model -> Gemma3Model
+        # .model.model -> Gemma3TextModel (text-only) / Gemma3Model (old multimodal)
         inner = getattr(outer, "model", None) if outer is not None else None
         _add(inner)
-        # .model.model.language_model -> Gemma3TextModel
+        # Old multimodal fallback: .model.model.language_model -> Gemma3TextModel
+        # (absent on the text-only build; harmless when missing).
         for parent in (m, outer, inner):
             lang = getattr(parent, "language_model", None) if parent is not None else None
             _add(lang)

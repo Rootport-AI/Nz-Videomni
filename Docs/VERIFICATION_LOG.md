@@ -963,12 +963,71 @@ construction-required で削除不可」として温存していた（§13.3）�
   rename-test。いずれも上記 SHA と一致 → **重みバイトは元から非寄与＝vision 未使用が実証**され、QAT dir 物理削除を確定。
 - **peak_vram_mb=8440**（§13 baseline 9164 より微減・退行なし）。mock pytest **13 passed**。
 
-### 14.4 温存した意図的 no-op（dead-code 候補・今回は削除せず）
-- `engine/gemma/gguf_quant_service.py:201` `_SkipGemmaLMSDOps` … text-only 化で shard が消え no-op だが belt-and-suspenders で温存。
-- 同 `:234` `_read_target_vocab_from_header(path)` の `path` 引数 … 未使用だが signature 互換のため温存。
-- これらの整理は次セッションの「dead-code 整理」候補（HANDOFF のメニュー参照）。
+### 14.4 温存した意図的 no-op（dead-code 候補）→ ✅ §16 で除去済（2026-07-02）
+- `engine/gemma/gguf_quant_service.py:201` `_SkipGemmaLMSDOps` … text-only 化で shard が消え no-op だが belt-and-suspenders で温存していた。
+- 同 `:234` `_read_target_vocab_from_header(path)` の `path` 引数 … 未使用だが signature 互換のため温存していた。
+- **↳ これらは §16 の dead-code 整理で byte-match ゲート付きで除去済み。**
 
 ### 14.5 commit
 - `93696b4` feat(engine): text-only Gemma text encoder（実装＋回収）→ `694ca54` docs+chore（コメント polish＋QAT 調査 docs）→
   main へ `--no-ff` マージ `826e76f`。branch `refactor/qat-reclamation`。**config.yaml / config.py / services/ltx_runner.py の
   gemma_root 注記も併せて更新済**（`gemma_root: ./models/gemma-3-12b-it-tokenizer`）。
+
+---
+
+## 15. ★keep=1 常駐モード新設 ＝ 調査完了につき CLOSE（2026-07-02・コード読解＋Web リサーチ）
+
+**結論: 当初構想の keep=1（＝GGUF モデルをジョブ間 GPU 常駐させ「毎ジョブ再ビルドによる gen 時間漸増」を消す）は、16GB では原理的に non-viable。しかも狙った利得は既存経路（`--dit-cpu-load` / `--te-offload` ＋ OS の RAM/mmap キャッシュ）で概ね捕捉済み。よって本タスクは「新規実装せず・調査結論を記録して close」とする。** 現行の既定 `LTX_KEEP_RESIDENT=0`（keep=0）は不変。将来の必要が生じたら §15.4 の道筋（GPU 常駐ではなく層ストリーミング）で再着手する。
+
+> 本節は HANDOFF「次の一手メニュー」「Phase 1 やることリスト」の keep_resident 恒久化項目と、`NEXT_SESSION_WORKORDER.md` タスク③ をクローズする。
+
+### 15.1 コード読解で確定した機構（read-only・確信度高）
+- keep=1 経路: `engine/pipeline/fast_video_pipeline.py:170-173` が `StateDictRegistry`（**凍結 wheel `ltx_core`**）を有効化 → `ModelLedger._target_device()`（**凍結 wheel `ltx_pipelines/utils/model_ledger.py`**）が CPU を返す → `engine/gemma/gguf_quant_service.py:1280` が CPU ビルド → `:1305-1313` で `model._apply(lambda t: t.to(cuda))` により GPU へ **out-of-place** コピー。
+- `GGMLQuantizedTensor.to()`（`engine/gguf/quant_service.py:471-487・first-party`）は subclass メタ（`_ggml_type`/`_float_shape`）を保つため意図的に out-of-place（reconstruct）。
+- **移動の駆動部（`_target_device` / `StateDictRegistry`）は凍結 wheel 側**＝我々の seam から単純に in-place へ差し替えられない。
+- te-offload ON 時、移動 lambda は **CPU/meta テンソルをスキップ**（`:1304-1309`, `t if t.device.type in ("meta","cpu") else t.to(...)`）＝全層バルク移動を部分的に回避する分岐が既にある。
+
+### 15.2 Web リサーチによる仮説検証（一次情報つき）
+- **H1 CONFIRMED**: 低VRAM コミュニティ（ComfyUI native / ComfyUI-GGUF / kijai wrappers）で「モデルを GPU 常駐」は **HIGH_VRAM＝24GB+ 専用**。8–16GB は「**CPU RAM を正本キャッシュ→毎ジョブ/毎レイヤー GPU へストリーミング**」が標準（ComfyUI NORMAL/LOW_VRAM）。我々の keep=1 は「CPU 正本」という常駐位置は既に正しく、欠陥は **バルク `.to(cuda)` だけ**。
+  - city96/ComfyUI-GGUF は `GGMLTensor`（＝我々の `GGMLQuantizedTensor` と同型）を CPU/mmap 常駐させ `patch_weight_to_device` / `forward_ggml_cast_weights` で**層単位 JIT 移動**、バルク移動は一切しない。推論後は GPU 側を解放し CPU 正本のみ残す。
+  - ComfyUI "Dynamic VRAM"（2025）は**まさにこの double-residency spike の解消**が目的で、解は「virtual allocation＋層単位 fault」＝ストリーミングであって GPU 常駐ではない。LTX-2 native でも sampler 間でテンソル未解放だと "doubling memory" で OOM する事例（ComfyUI issue #11726）＝我々の観測と同型。
+- **H2 一部REFUTED＋一部CONFIRMED**: `nn.Module._apply` は param を**1個ずつ**移動し（`param.data = fn(param)` or `torch.utils.swap_tensors`）、瞬間オーバーヘッドは**約1パラメータ分**でモデル全体の 2× ではない → §10.2 の「out-of-place 移動が二重在を生む」という因果説明は**不正確**。真の spike 源は「**CPU 正本を保持したまま GPU にもフルコピーを持つ定常状態の加算メモリ**」（CUDA context だけで 1–2GB、HF accelerate も同旨）。CPU↔CUDA 間に真の zero-copy 移動は存在しない（`swap_tensors` も dest 確保は避けられない）。
+- **H3/H4 CONFIRMED**: {CPU キャッシュ保持・単一コピー・subclass メタ保持} は**論理的に同時成立不可**。「CPU キャッシュ保持」が「単一コピー」を禁ずる。ピークを下げる唯一のレバーは「**GPU へ移す集合を小さくし残りを層ストリーミング**」＝我々の `--dit-cpu-load` / per-layer offload が既に実装している方式。ComfyUI-GGUF も同じ理由でフル常駐設計を採らない。
+
+### 15.3 close 判断の根拠（利得が既に捕捉済み）
+- 消したい「gen 時間漸増」は実測 720p T2V×3 で 168→209s（+24%）・I2V×4@384 で ~115→134s（+~20%）＝**実在するが bounded・crash せず**（§10.3/§10.7）。
+- リサーチにより、この漸増の**大半（disk→RAM の cold load ~20–30s）は OS の RAM/mmap キャッシュが既に吸収**。GPU 常駐が追加で節約するのは RAM→GPU コピー分のみで、その代償が double-alloc crash＝**16GB では割に合わない**（H1/H2）。
+- 残る漸増主因はアロケータ断片化（§10 で特定・§7.3 で `max_split`/`gc_threshold` は Windows 死枝と実証）＋毎ジョブ dequant。これらは GPU 常駐では解けない別軸。
+- ∴ **当初構想の keep=1 は「16GB で誤ったターゲット」**。単一ユーザー逐次運用（クリップ連結含む）では現行 keep=0 で十分（§10.7 で I2V×4＋音声 連続 PASS 済）。
+
+### 15.4 将来やるなら（Phase 3・GPU 常駐ではなく層ストリーミング）
+もし長尺連結で漸増が実害化したら、**opt-in の「CPU 正本温存＋GPU は限定サブセット＋残りを層ストリーミング」**（＝ComfyUI-GGUF / HF accelerate 方式）で再着手する。これは既存の `--dit-cpu-load` / te-offload 経路の延長で、フル GPU 常駐（crash 源）を避ける唯一の 16GB fit 経路。断片化緩和（`expandable_segments` 等）も別レバーとして併検討。**いずれも計測前提**（`torch.cuda.max_memory_allocated` ＋ WDDM Dedicated/Shared ＋ committed bytes）。
+
+### 15.5 一次情報
+- コード: `engine/pipeline/fast_video_pipeline.py:170-173` / `engine/gemma/gguf_quant_service.py:1280,1304-1313` / `engine/gguf/quant_service.py:471-487`。
+- Web（主要）: DeepWiki ComfyUI-GGUF 3.1/3.3・ComfyUI model loading 2.3／blog.comfy.org "Dynamic VRAM"／kijai WanVideoWrapper block-swap（DeepWiki 6.2）／ComfyUI issues #11726・#12330／PyTorch docs `nn.Module.to`/`_apply`・`torch.utils.swap_tensors`／HF accelerate big-model-inference。
+- 関連: §10.2（keep=1 720p native crash の初出観測・te-offload 導入前）・§10.3/§10.7（keep=0 連続 PASS）・§11（te-offload）・§12（dit-cpu-load）・memory `[[720p-16gb-verified]]`。
+
+---
+
+## 16. ★dead-code 整理（text-only 化・de-fork の残 no-op 除去）検証 PASS（2026-07-02・branch `chore/phase1-residual-cleanup`）
+
+**§14.4 で「belt-and-suspenders / signature 互換で温存」としていた no-op と、de-fork で機能が消えた署名パラメータを、全て byte-match ゲート付きで除去した。** T2V/最小I2V とも §14.3 baseline と**バイト完全一致**・pytest 緑・退行なし。
+
+### 16.1 除去内容（4 コミット・各コミット後に T2V byte-match ゲート）
+| commit | 対象 | 内容 |
+|---|---|---|
+| `be15887` | #1+#3 | `engine/gemma/gguf_quant_service.py`: `_SkipGemmaLMSDOps` クラス全削除＋その唯一の instantiation を素の `sd_ops` に戻す／defensive strip ループ削除（`n_stripped`/`n_base`・ログ行も整理）／orphan `_ORIG_GEMMA_LM_PREFIX` 定数も除去。#1 と #3 は依存ペアのため 1 コミット。 |
+| `473ac85` | #2 | 同ファイル: `_read_target_vocab_from_header` の未使用 `path` 引数を def・唯一の呼び出し元(`:399`)・docstring から除去。 |
+| `fa5dd83` | #4 | `engine/pipeline/fast_video_pipeline.py`: no-op 署名パラメータ `attention_tile_size`/`loras` を `create()`/`__init__` 署名・create() forwarding・`self._attention_tile_size` 代入から除去（`DistilledPipeline(..., loras=[])` の定数は保持）。NOTE docstring 更新＋未使用の `LoraEntry` import 除去。**呼び出し元ゼロを事前確認**（唯一の caller `engine/worker.py:131` は明示指定せず）。 |
+| `bc5b3c1` | #5 | `engine/gemma/layer_offload_service.py`: text-only `Gemma3ForCausalLM` を反映する docstring/コメント明確化（削除でなく更新）。`text_encoder_configurator.py` は multimodal 対比が意図的に正しいため不変。cosmetic・ゲート不要。 |
+
+### 16.2 退行確認ゲート（§13.2/§14.3 と同一手法）
+- baseline（seed=12345 / "a calm ocean wave…" / distilled 8 steps / 512×320 / 49f）:
+  - **T2V SHA256 `23844b4e…6bb7bf`** … 各コミット後（be15887/473ac85/fa5dd83）で計測、**全て一致 PASS**。
+  - **最小I2V SHA256 `a511eda4…c217`** … 最終確認で**一致 PASS**。
+- **peak_vram_mb=8440**（§14.3 と同値・退行なし）。**mock pytest 16 passed**（`LTX_DISABLE_GRADIO=1 ./.venv/Scripts/python.exe -m pytest -q`）。
+- 触っていない DO-NOT-TOUCH: RMSNorm `+1` 補正（city96 verbatim・必須）／`multi_modal_guider_factory_denoising_func`（video+audio 用・text-only でも使用）。
+
+### 16.3 事前調査
+read-only 調査で 5 候補（#1-#5）を検証し、#4 の呼び出し元ゼロ（worker/config/API/services 全走査）・#1/#3 の依存関係・DO-NOT-TOUCH 2 件を確定してから着手（アノマリー無し）。WORKORDER① の削除計画に準拠。

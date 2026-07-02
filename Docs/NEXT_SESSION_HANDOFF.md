@@ -74,7 +74,7 @@
 - [x] (d) dead-code 整理 ＝ **done（2026-07-02・byte-match PASS）**。`_SkipGemmaLMSDOps`＋defensive strip／`_read_target_vocab_from_header(path)` 未使用引数／`attention_tile_size`・`loras` no-op 署名パラメータ（＋orphan `_ORIG_GEMMA_LM_PREFIX`/`LoraEntry` import）を除去。T2V `23844b4e…`／I2V `a511eda4…` バイト一致・peak_vram 8440・pytest 16 passed。commit `be15887`→`473ac85`→`fa5dd83`→`bc5b3c1`（branch `chore/phase1-residual-cleanup`）。詳細＝`VERIFICATION_LOG §16`・WORKORDER①
 - [x] (e) load/encode の一時 shared 溢れ最適化 ＝ **done（ユーザー確認 2026-07-02）**。§11 te-offload／§12 dit-cpu-load で load/encode の一時溢れは実質解消。残る shared 溢れは高トークン denoise stage2＝**解像度×尺の能力限界（バグでない・`RESOLUTION_DURATION_CAPABILITY.md §8` が正本）**であり、本タスクの対象外。
 - [x] **keep=1 常駐モードの新設 ＝ 調査完了につき CLOSE（2026-07-02）**＝当初構想（フル GPU 常駐で gen 漸増解消）は 16GB で原理的 non-viable・利得も既存経路（dit-cpu-load/te-offload＋OS RAM キャッシュ）で捕捉済み。既定 keep=0 不変。**詳細＝`VERIFICATION_LOG.md §15`（仮説 H1–H4 検証・コード読解＋Web リサーチ）**。将来 Phase3 の長尺連結で漸増が実害化したら GPU 常駐でなく §15.4「CPU 正本温存＋層ストリーミング」で再着手・WORKORDER③(closed)
-- [ ] 開発ゴミ掃除（`outputs/`~127MB 等はフェーズA低リスク／phase5b_diag・vram_sweep・hf_home は要判断・**方法はユーザーと相談**・`.venv`等の環境本体は掃除対象外）＝小〜中・WORKORDER④
+- [~] 開発ゴミ掃除 ＝ **一部done・残はユーザー手動キュレーションへ委譲（2026-07-02 決定）**。①`.claude/settings.json` の `Bash(git clean *)` 許可は**削除済**（commit `efb406e`・誤発火リスク断ち）。②`outputs/`（~127MB）は**生成時間・VRAM 溢れの一次情報**でドキュメントの根拠のため**今回は削除せず**、後日ユーザーが手動整理。uploads/・logs/ も同性質（`logs/ltx_worker.log`＝peak_vram 一次ソース [README §216]）で保全。③`__pycache__`(108)/`.pytest_cache` は純粋な再生成物で任意消去可（`find . -type d -name __pycache__ -not -path './.venv*' -not -path './.uv_cache*'` 等）。`.venv`/`.uv_cache` 等の環境本体は掃除対象外・WORKORDER④
 
 ### Phase 2 ＝ AviUtl2 拡張機能 統合（ゴール・早期統合）　※未着手
 

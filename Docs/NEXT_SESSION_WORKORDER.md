@@ -112,7 +112,14 @@ keep=1 → `ModelLedger._target_device()` が CPU → GGUF Gemma を **CPU ビ�
 
 ---
 
-## タスク④ 開発ゴミ掃除
+## タスク④ 開発ゴミ掃除 ＝ 一部done・残はユーザー手動キュレーションへ委譲（2026-07-02）
+
+> **確定（2026-07-02・ドライラン提示後のユーザー決定）**:
+> - ✅ **`.claude/settings.json` の `Bash(git clean *)` 許可は削除済**（commit `efb406e`）。
+> - **`outputs/` は削除しない**＝生成時間・VRAM 溢れの**一次情報**でドキュメント（VERIFICATION_LOG / RESOLUTION_DURATION）の根拠。後日ユーザーが手動整理する。`uploads/`・`logs/` も同性質（`logs/ltx_worker.log`＝peak_vram 一次ソース）ゆえ保全。
+> - `__pycache__`(108)/`.pytest_cache` は純粋な再生成物で任意消去可（今回は未実施）。
+> - ドライラン実測（参考）: outputs/ の非.py 全ファイル＝304 files / 105.6MB。保全すべき .py ハーネスは 16 本（うち `outputs/qat_reclaim_verify_textonly/run_verify.py` は byte-match ゲート本体）。
+> ↓以下は当時の調査メモ（背景・温存）。
 
 **目的**: リポジトリの散らかりを整理。 **前提**: **掃除方法（削除スクリプト/手動/段階）はユーザーと相談してから**（ユーザー指示 2026-06-30）。
 

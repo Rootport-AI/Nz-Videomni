@@ -85,13 +85,21 @@
 - [ ] （前提）Phase 1 (a) Gradio 手動確認で現物を固めてから着手
 - [ ] （横展開・任意）DaVinci Resolve スクリプト MVP（localhost 生成 → Media Pool 追加 →（任意）Timeline Append）
 
-### Phase 3+ ＝ 育てる（統合後・希望次第）　※未着手
+### Phase 3 ＝ LTX-Desktop 生成パリティ（2026-07-02 再編・spec §13.4 が正）
 
-- [ ] 長尺化＝**クリップ連結**（終了フレーム→次クリップ開始フレームの I2V 連結／複数キーフレーム I2V）※前提の I2V 連続＋音声は §10.7 でクリア済
-- [ ] IC-LoRA（depth/pose/edge/canny/参照動画）
-- [ ] V2V
-- [ ] プロンプト強化（enhance_i2v・要 vision 再導入 [[qat-reclamation-textonly-gemma]]）
-- [ ] （最適化・任意）attention tiling／FFN チャンキング／Gemma Q6_K 品質バンプ
+> **北極星＝公式 LTX-Desktop（Lightricks）の「AI 生成機能」パリティ**。編集/エンコード/タイムラインは AviUtl2 が担う。調査で判明＝**LTX-Desktop 生成機能の大半は下層（engine/wheel）が既に対応済みで、塞いでいるのは我々の凍結 API だけ**。
+
+- [ ] **★次セッションの主作業＝凍結 API の「解凍」（条件付け露出）**: 多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength。engine 内で完結見込み（新パイプライン不要）。**詳細ワークオーダー＝[`PHASE3_API_UNFREEZE_WORKORDER.md`](PHASE3_API_UNFREEZE_WORKORDER.md)**（変更面・技術リスク＝二段の条件付け再注入・検証計画・要ユーザー確認のAPIスキーマ形状を整理済）。
+- [ ] クリップ連結の生成プリミティブ（ブックエンド I2V＋自己回帰 extend）＝上記 API の上で。配置は AviUtl2 側。プロンプトは「グローバル基底＋クリップ毎 override」（text-only 伝播）。
+- [ ] **Gap Fill／Retake**（＝LTX-Desktop の連続性プリミティブ・**大規模ゆえ次セッションでは着手しない**）。Retake=`TemporalRegionMask`/`RetakePipeline`、Gap Fill=近傍条件の間埋め。
+- [ ] その他パリティ（段階的）: 生成キュー／延長尺(〜30s)／text-only プロンプト強化／STG・sigma schedule・denoise loop・negative・seed lock 露出／空間アップスケーラのユーザー操作露出／**LoRA・attention tiling 再導入**（de-fork で削除済）。
+
+### Phase 4 ＝ 高度な条件付け（LTX-Desktop 未提供・パリティ対象外）※未着手
+- [ ] IC-LoRA（Union/Motion Track/Pose/Camera/Detailer/HDR/Lip-Dub）
+- [ ] V2V（`ICLoraPipeline` 経由）・audio-to-video（A2Vid）・時間アップスケーラ
+
+### 将来課題（現行計画から除外・spec §13.4c）
+- [ ] **VLM(vision) 再導入**＝enhance_i2v・フレームを見た Gap Fill 提案。QAT text-only 化 [[qat-reclamation-textonly-gemma]] を巻き戻すため今回計画外。要件化時に別途判断。text-only プロンプト強化は Phase 3 内。
 
 > **やらない（削除済みスコープ）**: ①1080p アップスケール「機能」（＝外部ツール推奨。ただし内部二段 upsampler は生成の仕組みなので残す）／②多人数インフラ（本格ジョブキュー・認証必須・インターネット公開・永続 DB＝単一ユーザー想定で不要）。詳細は spec §13.5。
 

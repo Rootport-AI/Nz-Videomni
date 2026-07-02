@@ -30,6 +30,36 @@ class ImageConditioningInput(NamedTuple):
     strength: float
 
 
+# ── Phase 3 slice-2 — clip-concatenation / latent-level extend protocol ──────
+# Optional fields on the worker "generate" op (all default to a NON-extend,
+# byte-identical-to-today run when absent). The worker parses these off the raw
+# JSON msg with safe defaults; on "done" it emits `carry_latent_path` when a
+# carry tail was persisted. Kept back-compatible: existing single-generate
+# clients send none of these and get the frozen contract.
+EXTEND_OVERLAP_FRAMES_DEFAULT: int = 2       # K latent frames of overlap
+EXTEND_OVERLAP_STRENGTH_DEFAULT: float = 0.5  # 1.0 -> hard freeze; 0.5 soft (prior-art)
+
+
+class GenerateExtendParams(TypedDict, total=False):
+    """Extend-related keys on the worker `generate` op (all optional).
+
+    * prev_clip_latent_path: torch.save'd carry tail from the previous clip; when
+      set, injected at Stage 1 so continuity propagates through the two-stage
+      distilled flow. Absent -> first clip / no seed.
+    * overlap_frames: K (latent frames) to soften/freeze at Stage-1 head.
+    * overlap_strength: in [0,1]; overlap-frame denoise_mask = 1.0 - strength.
+    * carry_latent_out_path: when set, the engine persists this clip's Stage-1
+      tail there (torch.save) and the worker echoes it as `carry_latent_path`.
+    TODO(phase3): adain_ref_latent_path (AdaIN drift-suppression) + linear
+    crossfade + Stage-2 overlap freezing are LATER phases — not wired here.
+    """
+
+    prev_clip_latent_path: str
+    overlap_frames: int
+    overlap_strength: float
+    carry_latent_out_path: str
+
+
 # ============================================================
 # TypedDicts for module-level state globals
 # ============================================================

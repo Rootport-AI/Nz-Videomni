@@ -20,14 +20,16 @@ Protocol (one JSON object per line; parent -> worker):
    gguf_transformer_path, gguf_gemma_path, gguf_per_layer_quant,
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size}
   {"op": "generate", prompt, seed, height, width, num_frames, frame_rate,
-   num_steps, images:[{path,frame_idx,strength}...], output_path}
+   num_steps, images:[{path,frame_idx,strength}...], output_path,
+   # Phase 3 slice-2 clip-concat (all optional; absent -> stock generate):
+   prev_clip_latent_path?, carry_latent_out_path?, overlap_frames?, overlap_strength?}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
 ignored by the parent. Every protocol line: @@LTX@@<compact-json>, flushed. All
 other logging goes to STDERR.
   @@LTX@@{"event":"ready"}
-  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...}
+  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...[,"carry_latent_path":...]}
   @@LTX@@{"event":"error","detail":...}
 """
 
@@ -183,9 +185,27 @@ def _do_generate(msg: dict) -> None:
         for i in msg.get("images", [])
     ]
 
+    # Phase 3 slice-2 — clip-concatenation / latent-level extend (optional).
+    # All keys absent -> byte-identical-to-today generate (extend path dormant).
+    from engine.api_types import (
+        EXTEND_OVERLAP_FRAMES_DEFAULT,
+        EXTEND_OVERLAP_STRENGTH_DEFAULT,
+    )
+
+    prev_clip_latent_path = msg.get("prev_clip_latent_path") or None
+    carry_latent_out_path = msg.get("carry_latent_out_path") or None
+    overlap_frames = int(msg.get("overlap_frames", EXTEND_OVERLAP_FRAMES_DEFAULT))
+    overlap_strength = float(msg.get("overlap_strength", EXTEND_OVERLAP_STRENGTH_DEFAULT))
+    extend_active = bool(prev_clip_latent_path) or bool(carry_latent_out_path)
+
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)}"
+        + (
+            f" | extend: prev={prev_clip_latent_path} out={carry_latent_out_path} "
+            f"K={overlap_frames} strength={overlap_strength}"
+            if extend_active else ""
+        )
     )
     _PIPE.generate(
         prompt=msg["prompt"],
@@ -197,6 +217,10 @@ def _do_generate(msg: dict) -> None:
         images=images,
         output_path=output_path,
         num_steps=int(msg["num_steps"]),
+        prev_clip_latent_path=prev_clip_latent_path,
+        overlap_frames=overlap_frames,
+        overlap_strength=overlap_strength,
+        carry_latent_out_path=carry_latent_out_path,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
@@ -205,7 +229,12 @@ def _do_generate(msg: dict) -> None:
         raise RuntimeError(f"engine produced no/empty output: {output_path}")
 
     _log(f"GENERATED_OK peak_vram_mb={peak} -> {output_path}")
-    _emit("done", seed_used=seed, peak_vram_mb=int(peak))
+    done_fields: dict = {"seed_used": seed, "peak_vram_mb": int(peak)}
+    # Echo the persisted Stage-1 carry tail so the app-side chain orchestrator
+    # can feed it into the next clip's prev_clip_latent_path.
+    if carry_latent_out_path and os.path.exists(carry_latent_out_path):
+        done_fields["carry_latent_path"] = carry_latent_out_path
+    _emit("done", **done_fields)
 
     # Resident-reuse: free the just-finished job's transient allocations before
     # the next job. The block-swap transformer carries reference cycles

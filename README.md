@@ -4,7 +4,7 @@ LTX 2.3 動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動
 最終的には AviUtl2 / DaVinci Resolve などの薄いフロントエンドから利用しますが、API は汎用設計です。
 
 これは **Phase 1**（T2V + 最小I2V を同一MVP）の実装です。API 契約・スキーマの詳細仕様は
-[`LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`](LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md) を参照してください。
+[`LTX23_Backend_Specification.md`](LTX23_Backend_Specification.md) を参照してください。
 
 > **現状（2026-07-01）**: 実エンジンは **first-party の `engine/` パッケージ**（GGUF 量子化トランスフォーマー + block-swap +
 > GGUF Gemma 逐次オフロード + DiT CPU 構築 + VAE タイリング）で、**RTX 4070 Ti SUPER 16GB 実機で 720p 級（1280×768→クロップ）

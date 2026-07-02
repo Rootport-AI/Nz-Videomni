@@ -40,6 +40,62 @@
 
 ---
 
+## ✅ Phase 1〜3 やることリスト（チェックリスト・2026-07-02）
+
+> Phase 構造は spec `LTX23_Backend_Specification.md` §13（early-integration 是正）と本書「設計対話の決定」が正。
+> `[x]`＝実装/検証済（done）、`[ ]`＝未了。数値・検証の一次情報は各 §ポインタ（VERIFICATION_LOG / RESOLUTION_DURATION）。
+
+### Phase 1 ＝ 最小バックエンド（T2V＋最小I2V＋音声＋16GB fit＋720p）
+
+**コア（done）**
+- [x] 2プロセス・2venv アーキ（app `./.venv` torch無し／engine `./.venv-engine` torch2.9.1+cu128）
+- [x] subprocess worker ＋ JSON-lines(`@@LTX@@`) プロトコル
+- [x] 凍結 REST API（10 エンドポイント・全 `/api/v1`）
+- [x] Pydantic スキーマ＆バリデータ（÷64／8n+1／distilled 8step・CFG1.0／最小I2V frame_idx0／conditioning≤1）
+- [x] 単一ジョブ管理（in-memory・実行中は busy 409）
+- [x] backend 選択 auto/mock/real（`_real_available`）
+- [x] T2V 生成
+- [x] 最小 I2V（画像1枚・frame_idx0）
+- [x] native joint audio（AAC/48kHz/stereo・crop 後も保持）＝§9.8
+- [x] 16GB fit 一式: block-swap(8/48)／GGUF Q4_K_M transformer／GGUF Q4_K_M Gemma／te-offload／dit-cpu-load／VAE tiling／component-files
+- [x] 720p 実証（1280×768→crop 1280×720・~167–171s）＝§10
+- [x] マルチジョブ連続（comp=1/keep=0・T2V×3 ＆ I2V×3＋音声 両経路 PASS）＝§10.7
+- [x] ~28GB モデル構成（GGUF transformer＋GGUF Gemma＋component＋upsampler＋tokenizer-only gemma_root）
+- [x] QAT 回収（text-only Gemma・22.7GB dir 削除・byte 一致）＝§14
+- [x] de-fork（engine first-party 化）＝§13／43GB モノリス削除（checkpoint_path は reference-only 化）
+- [x] mock backend ＋ pytest（GPU 無し疎通）
+- [x] install_ltx.ps1 冪等クリーンインストーラ化／build_xformers.ps1 是正
+- [x] Gradio 検証 UI 実装（`/ui`）
+- [x] **spec 全面改訂（`LTX23_Backend_Specification.md` v0.5）＝旧残(c) 完了**（2026-07-02・README 参照更新・旧 v04 削除・commit/push 済）
+
+**残（Phase 2 前後で片付ける・優先度はユーザー判断）**
+- [ ] (a) Gradio GUI **手動動作確認**（`/ui` で T2V/I2V/720p/crop トグルの end-to-end 目視）＝小・実 backend＋GPU
+- [ ] (d) dead-code 整理（text-only 化で no-op 化した `_SkipGemmaLMSDOps` 等・意図的温存分）＝小・**コード編集**・要 §14.4 意図確認
+- [ ] (e) load/encode の一時 shared 溢れ（~2–2.5GB）最適化＝中・信頼性ブロッカーではない
+- [ ] keep_resident=1 を 720p でも使える恒久最適化（keep=0 の gen 時間漸増を解消）＝中・独立・任意
+- [ ] 開発ゴミ掃除（`outputs/` テスト出力・未追跡診断スクリプト等・**方法はユーザーと相談**）＝小〜中
+
+### Phase 2 ＝ AviUtl2 拡張機能 統合（ゴール・早期統合）　※未着手
+
+- [ ] 実装言語決定（C++ `.aux2` DLL ／ C# Native AOT DLL）
+- [ ] AviUtl2 拡張の HTTP クライアント実装（`/api/v1/*` を叩く薄いクライアント）
+- [ ] upload → generate → poll(jobs) → video 取得 の疎通
+- [ ] 生成 MP4 のタイムライン配置
+- [ ] （前提）Phase 1 (a) Gradio 手動確認で現物を固めてから着手
+- [ ] （横展開・任意）DaVinci Resolve スクリプト MVP（localhost 生成 → Media Pool 追加 →（任意）Timeline Append）
+
+### Phase 3+ ＝ 育てる（統合後・希望次第）　※未着手
+
+- [ ] 長尺化＝**クリップ連結**（終了フレーム→次クリップ開始フレームの I2V 連結／複数キーフレーム I2V）※前提の I2V 連続＋音声は §10.7 でクリア済
+- [ ] IC-LoRA（depth/pose/edge/canny/参照動画）
+- [ ] V2V
+- [ ] プロンプト強化（enhance_i2v・要 vision 再導入 [[qat-reclamation-textonly-gemma]]）
+- [ ] （最適化・任意）attention tiling／FFN チャンキング／Gemma Q6_K 品質バンプ
+
+> **やらない（削除済みスコープ）**: ①1080p アップスケール「機能」（＝外部ツール推奨。ただし内部二段 upsampler は生成の仕組みなので残す）／②多人数インフラ（本格ジョブキュー・認証必須・インターネット公開・永続 DB＝単一ユーザー想定で不要）。詳細は spec §13.5。
+
+---
+
 ## ★次セッション着手予定 ＋ 設計対話の決定（2026-07-02・最優先で読む）
 
 > 本セッション終盤の「spec 全面改訂」に向けたユーザー対話の結論。**次セッションはここから。** 下の「フェーズ別ロードマップ」の Phase 2/5 枠は本節で **early-integration に是正**されている（本節が正）。

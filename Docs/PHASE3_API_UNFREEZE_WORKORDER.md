@@ -1,5 +1,9 @@
 # 次セッション ワークオーダー — Phase 3 スライス1「凍結 API の解凍（条件付け露出）」
 
+> **▶▶▶ 実施済み（2026-07-02・branch `feature/phase3-api-unfreeze-conditioning`・未 merge）＝正本は [`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)。**
+> 多キーフレーム／任意 frame_idx／first+last／per-item strength／cap5 を実装・**客観検証 PASS**（回帰 byte-match＋新経路スモーク＋VRAM 16GB fit）。**目視品質のみ PENDING**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md)。
+> **★本 WORKORDER の重大な前提誤り（下記 §2/§3）**: 「下層対応済み・`combined_image_conditionings` が振り分け・**engine 不可触**」は**誤り**だった。当該調査が vendor ミラー（別リビジョン）を読み、実際に動く first-party `engine/`＋インストール済み wheel を読まなかったため。**実機は `image_conditionings_by_replacing_latent` 一本でピクセル frame_idx を latent idx と誤用**→ frame_idx>0 でクラッシュ。修正＝engine の既存 monkeypatch で**公式ハイブリッド（idx0=置換 / idx>0=guide）を自前再現**（wheel 更新なし）。詳細・教訓は §17。以下の本文は着手時の計画（歴史）として温存。
+
 - 作成: 2026-07-02
 - 対象: 次セッション担当者
 - 上位: [`../LTX23_Backend_Specification.md` §13.4](../LTX23_Backend_Specification.md)（Phase 3＝LTX-Desktop 生成パリティ）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)／[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)

@@ -1031,3 +1031,56 @@ construction-required で削除不可」として温存していた（§13.3）�
 
 ### 16.3 事前調査
 read-only 調査で 5 候補（#1-#5）を検証し、#4 の呼び出し元ゼロ（worker/config/API/services 全走査）・#1/#3 の依存関係・DO-NOT-TOUCH 2 件を確定してから着手（アノマリー無し）。WORKORDER① の削除計画に準拠。
+
+---
+
+## 17. ★Phase 3 スライス1「凍結 API の解凍」＝多キーフレーム条件付け 実装＋客観検証 PASS（2026-07-02・branch `feature/phase3-api-unfreeze-conditioning`・**目視品質は PENDING**）
+
+**凍結 API を解凍し、多キーフレーム／任意 frame_idx／first+last ブックエンド／per-item strength／件数上限5 を露出した。** 客観検証（回帰 byte-match＋新経路の機能/VRAM スモーク）は全 PASS。**目視品質判断（受け入れ基準の目視項目）はユーザー外出のため後日**（レシピ＝`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`）。**本ブランチは未 merge・未 push。**
+
+### 17.1 ★重要な前提訂正（WORKORDER の誤りを実機が是正）
+- WORKORDER §2/§3 は「下層は対応済み・`combined_image_conditionings` が frame_idx==0→LatentIndex / >0→KeyframeIndex に振り分け・**engine 不可触で API 表層のみ**」と想定していた。**これは誤り**だった。原因＝当該調査が**vendor ミラー（`vendor/LTX-2`＝新しい別リビジョン）の `distilled.py` を読み、実際に動く first-party `engine/`＋インストール済み wheel を読んでいなかった**。
+- **実機の真実**（GPU クラッシュ＋再調査で確定）: engine は**インストール済み wheel の `ltx_pipelines.distilled.DistilledPipeline`** を呼ぶ。これは全画像を module-global `image_conditionings_by_replacing_latent` → `VideoConditionByLatentIndex(latent_idx=img.frame_idx)` で処理し、**ピクセル frame_idx を latent インデックスと誤用**（÷8 変換なし）。`combined_image_conditionings` は**インストール済み wheel に存在しない**（vendor ミラーのみ）。
+- frame_idx==0 は両インデックス空間で 0 に一致するため単一 I2V では露見せず、byte-match も通っていた（バグ潜伏）。
+
+### 17.2 スモークが捕捉した実欠陥（"成功前提" の前に客観チェックを走らせた成果）
+- mock 緑＋回帰 byte-match PASS の後、**新経路の客観スモーク**（frame_idx=48／num_frames=49）が **denoise 到達前にクラッシュ**:
+  `RuntimeError: expanded size (0) must match existing size (40) at latent_cond.py:40 (VideoConditionByLatentIndex.apply_to)`。
+  latent 7 枚（idx 0..6）に対し latent_idx=48 が溢れ、対象スライスが size-0 に。OOM ではない論理エラー。
+
+### 17.3 修正＝公式ハイブリッド（wheel 更新なし）＝ LTX-Desktop パリティ
+- 先行事例調査（LTX-Desktop OSS＋ComfyUI-LTXVideo `LTXVAddGuide`＋LTX-2 公式）で確定: 公式機構は**ハイブリッド** `frame_idx==0→VideoConditionByLatentIndex(ハード置換)` / `>0→VideoConditionByKeyframeIndex(guide 追記・ピクセル RoPE オフセット・÷8 なし)`。LTX-Desktop は条件付け数学を持たず LTX-2 に委譲＝**「本家の実装」＝我々が持つ LTX-2 コアそのもの**。
+- **インストール済み wheel に部品が全て存在**: `image_conditionings_by_replacing_latent`（置換）・`image_conditionings_by_adding_guiding_latent`（guide 追記, `VideoConditionByKeyframeIndex` を構築）・両クラス。欠けるのは 30 行のルーターのみ → **自前で再現**。
+- 実装（commit `5033385`, `engine/pipeline/fast_video_pipeline.py` `_run_inference` の既存 monkeypatch ブロック内）: `_orig_replace` を捕捉し、`_hybrid_image_conditionings` を定義（images を frame_idx で分割→ idx==0 は `_orig_replace`、idx>0 は `_orig_add_guide` に委譲→ list 連結）。module-global `image_conditionings_by_replacing_latent` を try 前に rebind、finally で復元（既存の sigma/euler patch と同一パターン＝LOAD_GLOBAL）。**両 stage が自動的にハイブリッドを拾う（Stage 2 再注入維持）**。**÷8 変換は一切追加せず**（クラッシュ根因は「置換経路にピクセル idx」＝idx>0 を guide 経路へ回せば解消）。
+- **設計不変条件**: idx==0 画像＋T2V は `_orig_replace` に素通し＝**byte 同一性維持**。`api/models.py` のスナップ（8 の倍数）・`services/ltx_runner.py` は不変。
+- 非本番の一段経路 `engine/pipeline/common.py` `DistilledNativePipeline`（`worker.py` 参照ゼロ）は同根バグを持つが NOTE コメントのみ（本番化時にハイブリッド必須と明記）。
+
+### 17.4 API 表層の変更（commit `1602245`・先行）
+- `api/models.py`: 検証 `len>1 拒否`＋`frame_idx≠0 拒否` を撤廃 →`cap>5 拒否`＋各 frame_idx を**最寄りの 8 の倍数へスナップ＋[0, num_frames-1] クランプ**（`round(f/8)*8`）。`frame_idx: Field(0, ge=0)`。docstring/コメントを「conditioning は Phase-3 解凍・他は凍結維持」に更新。
+- `services/ltx_runner.py`: 全画像を `zip(conditioning_images, cond_paths)` でパススルー（スナップ済 frame_idx＋strength・crf は従来通りドロップ）。
+- `config.py`/`config.yaml`: `max_conditioning_images_phase1(=1)` → `max_conditioning_images(=5)`＋`conditioning_frame_idx_multiple(=8)`（/config で広告）。
+- テスト（`tests/test_validation.py`）: cap=6 拒否／5件・3件受理（実アップロード）／frame_idx=10 受理＋純モデル snap 数学（10→8, 24→24, 100→48 クランプ, 0→0）。**mock 19 passed**。
+
+### 17.5 客観検証結果（全 PASS・real backend `ltx-distilled`）
+- **回帰 byte-match**（不変経路が壊れていないか＝ハイブリッド idx==0 分岐の忠実性）:
+  - T2V `23844b4e…6bb7bf` 一致 ✅／最小 I2V `a511eda4…c217` 一致 ✅（peak_vram 8440・§14.3/§16 と同値）。**回帰なし**。
+- **新経路スモーク**（`outputs/phase3_multikey_smoke/run_smoke.py`）:
+  - bookend（first@0 s0.8＋last@48 s0.7）: 完走 ✅・peak_vram **8440**・99.8s・512×320/49f。
+  - multikey3（@0/24/48）: 完走 ✅・peak_vram **8440**・96.6s・512×320/49f。
+  - 以前のクラッシュ消失。**VRAM は単一画像と同一（多キーフレームのデルタ 0）・16GB に ~48% 余裕・溢れ/OOM なし**。
+
+### 17.6 未了・要フォロー（次セッション/ユーザー）
+- **【目視・ユーザー】受け入れ基準の目視項目**: ①末尾 frame_idx が実際に末尾を固定するか ②first+last が両端尊重の中間補間か（strength 調整込み）③多キーフレームが各指定位置を反映するか。レシピ＝`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`。
+- **【パリティ改良】frame_idx グリッド `8n+1`**: ✅**実施済み（§17.8・commit `d7a56b1`）**＝公式 ComfyUI/LTX-2 格子へ整合。
+- **【merge 判断・ユーザー】**: 目視 OK 後に `feature/phase3-api-unfreeze-conditioning`（commit `1602245`→`5033385`）を main へ。
+- **num_pixel_frames／reference-video 条件付けは今回スコープ外**（将来）。
+
+### 17.7 監督ノート（プロセス学習）
+- 教訓: **go/no-go 調査に vendor ミラーではなく engine 実経路を読ませるべきだった**。前提の裏取りは「実際に import/実行されるコード」で行う。スモークを "成功前提" の前に走らせたことで、目視不可の欠陥（クラッシュ）を早期捕捉できた（[[dont-overanchor-on-context]]／[[delegation-early-stop-protocol]] の実践）。
+
+### 17.8 ★frame_idx グリッドを公式 `8n+1` へ整合（2026-07-02・commit `d7a56b1`・ユーザー指示「公式寄りで NG リスクをさらに下げる」）
+- **動機**: engine の guide 経路（`VideoConditionByKeyframeIndex`）は `frame_idx` を**生のピクセル RoPE オフセット**（`positions[:,0] += frame_idx`・÷8 なし・`keyframe_cond.py:43`）として使う。ゆえにキーフレームは latent フレーム開始ピクセル＝`8n+1` 格子に載せるのが公式（ComfyUI `LTXVAddGuide.get_latent_index`＝`(f-1)//8*8+1`）。旧「8 の倍数」は最大 7px off-grid ＝微妙な劣化要因。
+- **変更**（`api/models.py` validator）: idx==0 は**不変**（`continue`＝先頭フレーム latent-replace・byte 安全）。idx>0 は `snapped=(f-1)//8*8+1; frame_idx=max(1, min(snapped, num_frames-8))`（num_frames=8m+1 の最終 latent 開始＝num_frames-8。49→41）。`config.py`/`config.yaml` の広告は `conditioning_frame_idx_multiple=8`＋`conditioning_keyframe_grid_offset=1` に更新。テスト（snap 数学）更新・**mock 19 passed**。**設計＝UI は自然値（48 等）を送り、サーバーが公式位置（41）へ整える**（＝当初ユーザーが望んだサーバー側スナップの完成形）。
+- **GPU 再検証（real `ltx-distilled`）**: **回帰 byte-match 維持**（T2V `23844b4e…`／単一 I2V `a511eda4…` 一致・idx==0 無傷）。**スモーク新位置で完走**＝bookend 0/**41**（48→41）・multikey3 0/**17**/**41**（24→17, 48→41）・両者 512×320/49f・**peak_vram 8440**（単一画像と同値・16GB に ~51% 余裕・溢れ/OOM なし）。
+- **注記**: マシン上に ComfyUI `nodes_lt.py` 実ソースが無く式のバイトレベル確認は未（wheel の生ピクセル semantics ＋先の Web 調査の `get_latent_index` 記述と整合的なので採用）。もし目視で旧グリッドの方が良ければ当該 3 行を戻すだけで比較可。
+- commit 列（branch `feature/phase3-api-unfreeze-conditioning`・未 merge）: `1602245`(API 表層・当初 8 の倍数)→`5033385`(engine ハイブリッド)→`d7a56b1`(**8n+1 整合＝最新**)。

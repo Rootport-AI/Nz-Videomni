@@ -176,6 +176,15 @@ class DistilledNativePipeline:
             )
 
         output_shape = VideoPixelShape(batch=1, frames=num_frames, width=width, height=height, fps=frame_rate)
+        # NOTE (latent-index bug): image_conditionings_by_replacing_latent builds
+        # VideoConditionByLatentIndex(latent_idx=img.frame_idx) for EVERY image,
+        # treating our PIXEL frame_idx as a LATENT index.  For frame_idx > 0 this
+        # overflows the latent token buffer and crashes (same root cause fixed in
+        # LTXFastVideoPipeline._run_inference via the keyframe hybrid).  This
+        # DistilledNativePipeline is NOT on the production path (worker.py uses
+        # only LTXFastVideoPipeline), so it is left as-is; if this one-stage path
+        # is ever put into production it MUST adopt the same hybrid routing
+        # (idx == 0 → replace, idx > 0 → image_conditionings_by_adding_guiding_latent).
         conditionings = image_conditionings_by_replacing_latent(
             images=[_LtxImageInput(img.path, img.frame_idx, img.strength) for img in images],
             height=output_shape.height,

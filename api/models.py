@@ -1,8 +1,12 @@
 """Pydantic schemas — the external API contract (spec ch.6).
 
-These are FROZEN as the final-form API for Phase 1 so that future frontends
-(AviUtl2, DaVinci Resolve) and later phases do not break. Do not relax the
-validators here without revisiting the spec.
+Conditioning is now Phase-3 UNFROZEN: multiple keyframes (cap 5), arbitrary
+``frame_idx`` (snapped server-side to the official ``0``-or-``8n+1`` latent grid
+and clamped into range), and per-item ``strength``. ``num_pixel_frames`` and reference-video conditioning
+remain out of scope. The OTHER constraints stay FROZEN as the final-form API so
+that future frontends (AviUtl2, DaVinci Resolve) and later phases do not break:
+÷64 generation resolution, 8n+1 frame counts, and the distilled 8-step / CFG=1.0
+requirement. Do not relax those validators without revisiting the spec.
 
 Resolution note: ``width``/``height`` are the *generation* size and must be a
 multiple of **64** — the two-stage distilled pipeline generates stage-1 at half
@@ -27,7 +31,7 @@ class CropOutput(BaseModel):
 
 class ConditioningImage(BaseModel):
     image_id: str
-    frame_idx: int = 0
+    frame_idx: int = Field(0, ge=0)
     strength: float = Field(0.8, ge=0.0, le=1.0)
     crf: int | None = None
 
@@ -53,7 +57,8 @@ class GenerateRequest(BaseModel):
     seed: int = -1
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
 
-    # 空配列なら T2V。1件なら Phase 1 最小 I2V。
+    # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap 5）。
+    # 各 frame_idx は validator で 0-or-8n+1 グリッドへスナップ＋範囲クランプされる。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -79,13 +84,26 @@ class GenerateRequest(BaseModel):
                     "distilled pipeline requires guidance_scale=1.0 in Phase 1"
                 )
 
-        # Phase 1 最小 I2V 制約。
-        if len(self.conditioning_images) > 1:
-            raise ValueError("Phase 1 supports at most one conditioning image")
-        if self.conditioning_images:
-            image = self.conditioning_images[0]
-            if image.frame_idx != 0:
-                raise ValueError("Phase 1 supports only frame_idx=0 for I2V")
+        # Conditioning (Phase 3): multi-keyframe I2V, cap 5.
+        if len(self.conditioning_images) > 5:
+            raise ValueError("at most 5 conditioning images are supported")
+        # frame_idx is fed to the engine's guide path (VideoConditionByKeyframeIndex)
+        # as a RAW PIXEL RoPE offset (positions[:,0] += frame_idx, no ÷8), so it must
+        # be a latent-aligned pixel. Two on-grid cases, per the official LTX-2 /
+        # ComfyUI (LTXVAddGuide) convention:
+        #   * frame_idx == 0  -> start frame, routed to the latent-replace path;
+        #     left byte-identical (the engine also special-cases idx==0 causal_fix).
+        #   * frame_idx  > 0  -> a keyframe/guide that must sit on a latent-frame
+        #     START pixel = the 8n+1 grid. Snap via (f-1)//8*8+1 (ComfyUI
+        #     get_latent_index) and clamp to [1, num_frames-8] — for num_frames=8m+1
+        #     the last latent-frame start is num_frames-8 (e.g. 49 -> 41).
+        # Snapping is a safety net — the UI may still send natural values. The ÷64
+        # rule is spatial-only and unrelated.
+        for image in self.conditioning_images:
+            if image.frame_idx == 0:
+                continue  # latent-replace path (start frame); byte-identical to today
+            snapped = (image.frame_idx - 1) // 8 * 8 + 1
+            image.frame_idx = max(1, min(snapped, self.num_frames - 8))
         return self
 
     @property

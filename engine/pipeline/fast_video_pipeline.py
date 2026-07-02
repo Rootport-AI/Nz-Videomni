@@ -547,6 +547,48 @@ class LTXFastVideoPipeline:
         _orig_simple = _distilled_mod.simple_denoising_func
         _orig_euler = _distilled_mod.euler_denoising_loop
 
+        # ── Keyframe conditioning hybrid ──────────────────────────────────────
+        # The installed wheel's DistilledPipeline builds image conditionings for
+        # BOTH stages via the module-global image_conditionings_by_replacing_latent,
+        # which constructs VideoConditionByLatentIndex(latent_idx=img.frame_idx)
+        # for EVERY image — treating our PIXEL frame_idx as a LATENT index.  For
+        # frame_idx > 0 that overflows the latent token buffer and crashes
+        # (RuntimeError: expanded size (0) must match existing size (40) at
+        # latent_cond.py:40).  frame_idx == 0 coincides in both index spaces, so
+        # single-image I2V worked and masked the bug.
+        #
+        # This replicates Lightricks' `combined_image_conditionings` (absent in
+        # the installed wheel) WITHOUT a wheel upgrade: route per-image by
+        # frame_idx — idx == 0 → latent REPLACE (the existing helper, unchanged);
+        # idx > 0 → keyframe/guide APPEND via image_conditionings_by_adding_guiding_latent,
+        # which builds VideoConditionByKeyframeIndex(frame_idx=img.frame_idx) as a
+        # PIXEL RoPE offset (no ÷8).  frame_idx is passed through as-is (already
+        # snapped to a multiple of 8 by the API validator).  Both Stage 1 and
+        # Stage 2 pick this up because DistilledPipeline reads the module-global
+        # name — the same LOAD_GLOBAL mechanism as DISTILLED_SIGMA_VALUES above.
+        #
+        # DESIGN INVARIANT: images with frame_idx == 0 (and T2V with no images)
+        # go through _orig_replace exactly as before → byte-identical to today.
+        _orig_replace = _distilled_mod.image_conditionings_by_replacing_latent
+        # The guide helper is NOT imported into distilled.py's namespace, so we
+        # reference it from the helpers module (its canonical home).  Both helpers
+        # share the identical signature (images, height, width, video_encoder,
+        # dtype, device) and both return list[ConditioningItem], so delegation +
+        # list concatenation is exact.
+        from ltx_pipelines.utils.helpers import (
+            image_conditionings_by_adding_guiding_latent as _orig_add_guide,
+        )
+
+        def _hybrid_image_conditionings(images: list, *args: object, **kwargs: object) -> list:
+            replace_imgs = [im for im in images if im.frame_idx == 0]
+            guide_imgs = [im for im in images if im.frame_idx > 0]
+            conds: list = []
+            if replace_imgs:
+                conds += _orig_replace(replace_imgs, *args, **kwargs)
+            if guide_imgs:
+                conds += _orig_add_guide(guide_imgs, *args, **kwargs)
+            return conds
+
         # ── Sigma schedule ───────────────────────────────────────────────────
         if sigma_schedule == "linear":
             _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_linear_sigmas(num_steps)  # type: ignore[attr-defined]
@@ -608,6 +650,11 @@ class LTXFastVideoPipeline:
 
             _distilled_mod.euler_denoising_loop = _res2s_as_euler  # type: ignore[attr-defined]
 
+        # ── Keyframe conditioning hybrid rebind ───────────────────────────────
+        # Rebind the module-global so both Stage 1 and Stage 2 route non-zero
+        # frame_idx images to the keyframe/guide helper (restored in finally).
+        _distilled_mod.image_conditionings_by_replacing_latent = _hybrid_image_conditionings  # type: ignore[attr-defined]
+
         try:
             return self.pipeline(
                 prompt=prompt,
@@ -629,6 +676,7 @@ class LTXFastVideoPipeline:
             _distilled_mod.DISTILLED_SIGMA_VALUES = _orig_sigmas
             _distilled_mod.simple_denoising_func = _orig_simple
             _distilled_mod.euler_denoising_loop = _orig_euler
+            _distilled_mod.image_conditionings_by_replacing_latent = _orig_replace  # type: ignore[attr-defined]
 
     @torch.inference_mode()
     def generate(

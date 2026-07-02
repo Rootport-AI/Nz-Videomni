@@ -151,7 +151,13 @@ class LimitsConfig(BaseModel):
     max_width: int = 1920
     max_height: int = 1088
     max_num_frames: int = 481
-    max_conditioning_images_phase1: int = 1
+    max_conditioning_images: int = 5
+    # frame_idx grid advertised via /config so clients can build the UI grid.
+    # Keyframes snap to the latent-frame-START grid: frame_idx 0 is the start-frame
+    # (latent-replace path); every OTHER keyframe sits on offset + multiple*n, i.e.
+    # the 8n+1 pixels (1, 9, 17, ...). Server snap: (f-1)//8*8+1 clamped in-range.
+    conditioning_frame_idx_multiple: int = 8
+    conditioning_keyframe_grid_offset: int = 1
     phase1_max_concurrent_jobs: int = 1
     low_vram_disabled_required: bool = False
     # 解像度別 spill-free フレーム数（16GB 実測, §8.4）。API は 481f まで受けるが、

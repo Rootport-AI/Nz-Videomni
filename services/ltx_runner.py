@@ -659,17 +659,15 @@ class _RealBackend:
         # of the worker.
         seed = request.seed if request.seed >= 0 else random.randint(0, 2**31 - 1)
 
-        # Image conditioning: minimal Phase-1 I2V (one image, frame_idx=0). The
-        # fork's ImageConditioningInput has NO crf -> drop it.
+        # Image conditioning: multi-keyframe I2V. frame_idx is already snapped to
+        # a multiple of 8 and clamped in the validator (api/models.py). cond_paths
+        # are built by pipeline_manager in the same order as conditioning_images.
+        # The engine's ImageConditioningInput has NO crf -> drop it.
         images: list[dict] = []
         if mode == "i2v" and conditioning_image_paths:
-            ci = request.conditioning_images[0]
             images = [
-                {
-                    "path": str(conditioning_image_paths[0]),
-                    "frame_idx": 0,
-                    "strength": ci.strength,
-                }
+                {"path": str(path), "frame_idx": ci.frame_idx, "strength": ci.strength}
+                for ci, path in zip(request.conditioning_images, conditioning_image_paths)
             ]
 
         # crop_output: have the worker write the full-size mp4 to a temp file,

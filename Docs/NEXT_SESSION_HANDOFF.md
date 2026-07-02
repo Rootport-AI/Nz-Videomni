@@ -89,7 +89,7 @@
 
 > **北極星＝公式 LTX-Desktop（Lightricks）の「AI 生成機能」パリティ**。編集/エンコード/タイムラインは AviUtl2 が担う。調査で判明＝**LTX-Desktop 生成機能の大半は下層（engine/wheel）が既に対応済みで、塞いでいるのは我々の凍結 API だけ**。
 
-- [ ] **★次セッションの主作業＝凍結 API の「解凍」（条件付け露出）**: 多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength。engine 内で完結見込み（新パイプライン不要）。**詳細ワークオーダー＝[`PHASE3_API_UNFREEZE_WORKORDER.md`](PHASE3_API_UNFREEZE_WORKORDER.md)**（変更面・技術リスク＝二段の条件付け再注入・検証計画・要ユーザー確認のAPIスキーマ形状を整理済）。
+- [~] **★凍結 API の「解凍」（条件付け露出）＝実装＋客観検証 PASS・目視のみ PENDING（2026-07-02・branch `feature/phase3-api-unfreeze-conditioning`・未 merge）**: 多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength・cap5 を露出。**engine 内で完結**したが「API 表層のみ／engine 不可触」の当初想定は**誤り**で、実際は engine の条件付け経路に**公式ハイブリッド（idx0=置換 / idx>0=guide）を monkeypatch で自前再現**する必要があった（インストール済み wheel に `combined_image_conditionings` が無い・wheel 更新は回避）。回帰 byte-match（T2V/単一 I2V バイト一致）＋新経路スモーク（bookend/multikey3 完走）＋VRAM 8440MB（多キーフレームでもデルタ0）全 PASS。**残＝目視品質判断（ユーザー）＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md)→OK なら merge**。正本＝[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)。commit `1602245`(API 表層)→`5033385`(engine ハイブリッド)。num_pixel_frames／reference-video は今回スコープ外（将来）。
 - [ ] クリップ連結の生成プリミティブ（ブックエンド I2V＋自己回帰 extend）＝上記 API の上で。配置は AviUtl2 側。プロンプトは「グローバル基底＋クリップ毎 override」（text-only 伝播）。
 - [ ] **Gap Fill／Retake**（＝LTX-Desktop の連続性プリミティブ・**大規模ゆえ次セッションでは着手しない**）。Retake=`TemporalRegionMask`/`RetakePipeline`、Gap Fill=近傍条件の間埋め。
 - [ ] その他パリティ（段階的）: 生成キュー／延長尺(〜30s)／text-only プロンプト強化／STG・sigma schedule・denoise loop・negative・seed lock 露出／空間アップスケーラのユーザー操作露出／**LoRA・attention tiling 再導入**（de-fork で削除済）。

@@ -113,7 +113,12 @@ limits:
   max_width: 1920
   max_height: 1088
   max_num_frames: 481        # 20s@24fps(481=8×60+1)。溢れ/低速/非実用はクライアント警告に委ねる（§8.4/§8.6）。
-  max_conditioning_images_phase1: 1
+  max_conditioning_images: 5
+  # /config で公開：キーフレームのlatent-frame-startグリッド。frame_idx 0=先頭フレーム
+  # (latent-replace)。それ以外は offset + multiple*n = 8n+1 (1,9,17,…) にスナップ。
+  # サーバー snap: (f-1)//8*8+1 を範囲クランプ。
+  conditioning_frame_idx_multiple: 8
+  conditioning_keyframe_grid_offset: 1
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
   spill_free_frames:         # 16GB 実測(§8.4)。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告

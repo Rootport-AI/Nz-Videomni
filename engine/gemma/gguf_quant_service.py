@@ -174,7 +174,7 @@ _LTX_LM_PREFIX = "model.model."
 # the multimodal build; lm_head is not nested under the language model in either.
 _LTX_LM_HEAD_KEY = "model.lm_head.weight"
 
-def _read_target_vocab_from_header(path: str | list[str]) -> int | None:
+def _read_target_vocab_from_header() -> int | None:
     """Return the padded (target) Gemma vocab size — the wheel config constant.
 
     The LTX Gemma3 meta model sizes embed_tokens (and the tied lm_head) to the
@@ -188,7 +188,7 @@ def _read_target_vocab_from_header(path: str | list[str]) -> int | None:
     Instead we source the value directly from the wheel's Gemma config
     (GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size == 262208), which is exactly the
     padded size the meta model is built with — byte-identical to the value the header
-    probe used to return. ``path`` is retained for signature compatibility (unused).
+    probe used to return.
     """
     from ltx_core.text_encoders.gemma.config import GEMMA3_CONFIG_FOR_LTX
 
@@ -339,7 +339,7 @@ class GemmaGGUFQuantStateDictLoader:
         # header) — the same size the meta model is built with, and byte-identical to
         # the value the former base-embedding-header probe returned (the Gemma shards
         # that carried that header are no longer in model_path post-reclamation).
-        target_vocab: int | None = _read_target_vocab_from_header(path)
+        target_vocab: int | None = _read_target_vocab_from_header()
         if target_vocab is not None:
             logger.info(
                 "Gemma GGUF merge: target (padded) vocab size from Gemma config = %d",

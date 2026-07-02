@@ -1,5 +1,8 @@
 # Phase 3 スライス2「クリップ連結（生成プリミティブ）」設計 — リサーチ結論＋実装計画
 
+> ## ⚠️ 2026-07-03 訂正バナー（最初に読む）
+> **本文書の「スパイク✅GO」「フェーズ2/3✅ 全ゲートPASS」は "配管が動く" の意味であり、映像の連続性は達成していない。** ユーザー目視（2026-07-03）でクリップ境界が hard cut・音声も断絶＝**連結は機能未達**と判明。監督が境界フレームの実映像を目視せず配管チェックのみで PASS 判定していた検証手法の欠陥が原因。**現状・根本原因・修正方針の正本は [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)。** 以下の設計/計画は「latent-extend という方針で配管を組んだ記録」として温存するが、そのまま完成扱いにしないこと。
+
 - 作成: 2026-07-02（監督＋ユーザー合意）
 - 上位: [`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)（§1 リサーチ指示・§2 スコープ分岐）／[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)（スライス1）
 - スコープ確定（ユーザー・2026-07-02）: **最初から厚版（latent 連続）**。薄版（pixel bookend）は decode→再encode 往復で latent 文脈が劣化するため不採用。

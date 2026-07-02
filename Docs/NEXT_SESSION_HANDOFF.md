@@ -2,6 +2,23 @@
 
 ---
 
+## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03・**次セッションはまずここ**）
+
+> **本ブロックが最新の正本。** 下の 2026-07-01 以前の▶節は歴史記録。
+
+### Phase 3 スライス2「クリップ連結」＝配管は通ったが映像連続性は未達（機能未達）
+- branch **`feature/phase3-clip-concat`**（未 merge・未 push）に実装済: chain エンドポイント＋engine latent-extend 配線（commit `760a283`→`9fb7111`→`5e73e47`）。
+- **配管（byte-match 回帰・mock pytest 31・VRAM<16GB・carry 伝播）は全 PASS。だが実映像はクリップ境界で hard cut・音声も断絶＝連結は失敗**（ユーザー目視 2026-07-03）。
+- **監督の検証手法に欠陥**: テンソル一致/byte-match/VRAM という配管チェックだけで各フェーズを"PASS"とし、**境界フレームの実映像を一度も目視していなかった**。
+- 根本原因・修正方針候補（B 素朴I2V連結／C 長い単一クリップ／A 本格latent-extend修復／D 連続性検証ハーネス先行）・現物パスは **正本＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（冒頭に訂正バナー）。VERIFICATION_LOG §18。
+- **次セッションのタスク＝詳しい症状分析＋修正計画の立案**（ユーザー指示 2026-07-03）。まず STATUS を読む。
+
+### Phase 3 スライス1「キーフレーム条件付け」＝main 入り済だが目視サインオフは未了
+- 機能は main 入り済（merge `7f31935`）。だが目視は**まだ有効に実施されていない**: 監督が目視用に提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモーク出力で**全キーフレームに同一の合成テスト画像**を使っており無効（青い長方形になった理由）。
+- **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先 `visual_bookend/`・`visual_multikey/`）。
+
+---
+
 ## ▶▶▶▶▶▶ 現状ステータス（2026-07-01・**次セッションはまずここを読む**）
 
 > **この節が最新の正本サマリ。** 以下の各▶節は古い順に温存した歴史記録なので、食い違ったら**本節が正**。
@@ -90,7 +107,8 @@
 > **北極星＝公式 LTX-Desktop（Lightricks）の「AI 生成機能」パリティ**。編集/エンコード/タイムラインは AviUtl2 が担う。調査で判明＝**LTX-Desktop 生成機能の大半は下層（engine/wheel）が既に対応済みで、塞いでいるのは我々の凍結 API だけ**。
 
 - [x] **★スライス1＝凍結 API の「解凍」（条件付け露出）＝実装＋客観検証 PASS・main merge 済（2026-07-02・merge `7f31935`・push 済）。目視品質のみ PENDING**: 多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength・cap5 を露出。**engine 内で完結**したが「API 表層のみ／engine 不可触」の当初想定は**誤り**で、実際は engine の条件付け経路に**公式ハイブリッド（idx0=置換 / idx>0=guide）を monkeypatch で自前再現**する必要があった（インストール済み wheel に `combined_image_conditionings` が無い・wheel 更新は回避）。frame_idx は公式 `8n+1` latent 格子へスナップ（ComfyUI `LTXVAddGuide` 準拠）。回帰 byte-match（T2V/単一 I2V バイト一致）＋新経路スモーク（bookend 0/41・multikey3 0/17/41 完走）＋VRAM 8440MB（多キーフレームでもデルタ0）全 PASS。**残＝目視品質判断（ユーザー）＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md)。merge 済ゆえ不足時は追いコミットで調整（strength/グリッド）**。正本＝[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)。commit `1602245`→`5033385`→`d7a56b1`→docs `0854f8d`→merge `7f31935`。num_pixel_frames／reference-video は今回スコープ外（将来）。
-- [ ] **★スライス2（次セッションの主作業）＝クリップ連結（生成プリミティブ）**: ブックエンド I2V＋自己回帰 extend で長尺化。配置は AviUtl2 側（フロント repo 未整備ゆえ本スライスは**バックエンド完結**）。**入口＝リサーチ**: LTX 2.3 の extend は「末尾ピクセルから生成」ではなく**末尾フレームの潜在テンソルの"文脈"から生成**する性質＝この**latent 文脈の扱い**を基礎機能まで掘って確定してから厚薄スコープを決める（手当たり次第禁止）。プロンプトは「グローバル基底＋クリップ毎 override」（text-only 伝播）。**詳細ワークオーダー＝[`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)**。
+  - **⚠️ 2026-07-03 訂正**: 目視は**まだ有効に実施されていない**。監督が提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモークで**全キーフレームに同一の合成画像**を使い無効。**有効な目視＝`run_visual.py` を異なる実画像で**（→`visual_bookend/`・`visual_multikey/`）。
+- [~] **★スライス2＝クリップ連結（生成プリミティブ）＝配管実装済だが映像連続性は未達（機能未達・2026-07-03）**: branch `feature/phase3-clip-concat`（未 merge・commit `760a283`→`9fb7111`→`5e73e47`）。chain エンドポイント＋engine latent-extend 配線の配管は全ゲート PASS だが、**実映像はクリップ境界で hard cut・音声も断絶**。監督が境界フレームの実映像を目視せず配管チェックのみで PASS 判定していた欠陥。**次セッションの主作業＝詳しい症状分析＋修正計画立案**。**正本＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**（根本原因・修正方針候補 B/C/A/D・現物パス）。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（訂正バナー付）・[`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)・[`VERIFICATION_LOG.md` §18](VERIFICATION_LOG.md)。
 - [ ] **Gap Fill／Retake**（＝LTX-Desktop の連続性プリミティブ・**大規模ゆえ次セッションでは着手しない**）。Retake=`TemporalRegionMask`/`RetakePipeline`、Gap Fill=近傍条件の間埋め。
 - [ ] その他パリティ（段階的）: 生成キュー／延長尺(〜30s)／text-only プロンプト強化／STG・sigma schedule・denoise loop・negative・seed lock 露出／空間アップスケーラのユーザー操作露出／**LoRA・attention tiling 再導入**（de-fork で削除済）。
 

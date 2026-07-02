@@ -1084,3 +1084,29 @@ read-only 調査で 5 候補（#1-#5）を検証し、#4 の呼び出し元ゼ�
 - **GPU 再検証（real `ltx-distilled`）**: **回帰 byte-match 維持**（T2V `23844b4e…`／単一 I2V `a511eda4…` 一致・idx==0 無傷）。**スモーク新位置で完走**＝bookend 0/**41**（48→41）・multikey3 0/**17**/**41**（24→17, 48→41）・両者 512×320/49f・**peak_vram 8440**（単一画像と同値・16GB に ~51% 余裕・溢れ/OOM なし）。
 - **注記**: マシン上に ComfyUI `nodes_lt.py` 実ソースが無く式のバイトレベル確認は未（wheel の生ピクセル semantics ＋先の Web 調査の `get_latent_index` 記述と整合的なので採用）。もし目視で旧グリッドの方が良ければ当該 3 行を戻すだけで比較可。
 - commit 列（branch `feature/phase3-api-unfreeze-conditioning`・未 merge）: `1602245`(API 表層・当初 8 の倍数)→`5033385`(engine ハイブリッド)→`d7a56b1`(**8n+1 整合＝最新**)。
+
+---
+
+## 18. ★Phase 3 スライス2「クリップ連結」＝配管 客観 PASS だが**映像連続性は FAIL**（2026-07-03・branch `feature/phase3-clip-concat`・**機能未達**）
+
+> **この節が本スライスの正本記録。** 実装/設計の詳細は [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)（現状正本）／[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)。
+
+### 18.1 やったこと（配管）
+研究（native extend は ComfyUI ノード層・wheel 非搭載）→スコープ厚版確定→スパイク（stage1 latent seed+mask 凍結）→engine 配線（`9fb7111`）→chain エンドポイント+オーケストレーション+concat（`5e73e47`）。branch `feature/phase3-clip-concat`・未 merge・未 push。
+
+### 18.2 客観 PASS（＝配管が動く）
+- 回帰 byte-match: T2V `23844b4e…`／I2V `a511eda4…` 不変（extend keys 不在時 payload byte 一致）。
+- スパイク: overlap 凍結 max_abs_diff=0.0・新フレーム生成あり・arm/disarm リーク無し（normal→extend→normal 一致）。
+- mock pytest 31（19+chain 12）・VRAM 9526–9990MB<16GB・4clip で carry が clip0→1→2→3 伝播。
+
+### 18.3 ★目視 FAIL（＝機能の本体が未達・ユーザー 2026-07-03）
+- 2clip は frame24→25、4clip は 49→50/89→90/129→130 で**hard cut・音声も断絶**。クリップ内は滑らかだが**境界で完全不連続**（各クリップが「同じ被写体の独立シーン」）。
+- 根本原因（read-only 調査2本＋監督訂正）: ①**二段ミスマッチ**（carry=stage1 低解像度 latent／表示=stage2 refine後・refine は各clip独立）②**carry 弱すぎ短すぎ**（K=2/soft0.5・ComfyUI は overlap~24・単段）③**overlap を concat で trim 破棄**④**音声は各clip独立生成**⑤**AdaIN/CF/stage2 凍結が未実装**。→ 現アーキでは連続性は原理的に出ない。
+- ※初回 agent 分析の「stage2 は fresh noise で stage1 を無視」は**誤り**。`distilled.py:155-185` で stage2 は `initial_video_latent=upscale(stage1)` を refine（監督訂正）。
+
+### 18.4 ★監督ノート（検証手法の欠陥＝最重要教訓）
+- **テンソル一致・byte-match・VRAM は "配管が動く/壊れない" の検証であって、"映像が連続して見えるか" を全く検証していなかった。** スパイクの "GO"・各フェーズの "PASS" は配管の PASS に過ぎず、監督は**デコード後の境界フレームを一度も目視していなかった**。
+- **是正（次セッションの前提）**: 実装より先に「境界フレームを目視/画素差分する連続性検証ハーネス」を用意する（方針 D）。生成系タスクでは客観 PASS ≠ 目視 OK。§17.7 の「実経路で裏取り」に加え、**"最終成果物（映像/音声）そのものを見る"** をゲートに含める。
+
+### 18.5 次アクション
+詳しい症状分析＋修正計画立案は次セッション（ユーザー指示）。方針候補＝B(素朴 I2V 連結)／C(長い単一クリップ)／A(本格 latent-extend 修復)／D(連続性検証先行)＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)。

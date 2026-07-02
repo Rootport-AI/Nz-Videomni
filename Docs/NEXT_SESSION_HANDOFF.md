@@ -35,8 +35,8 @@
   (~3.9GB)＋spatial upsampler(~0.95GB)＋tokenizer-only gemma_root(~40MB)。43GB モノリス・QAT dir は**削除済**。
 
 ### リポジトリ状態
-- branch `main`（de-fork〜QAT 回収まで `--no-ff` マージ済）。**ローカルが `origin/main` より先行（未 push）**＝本セッションの
-  各 commit（QAT 回収 text-only Gemma・docs・実測 caps・API 尺緩和 257→481・本追記）はローカルのみ。作業ツリー clean。push はメニュー参照。
+- branch `main`。**QAT 回収〜spec 全面改訂（`LTX23_Backend_Specification.md` v0.5）＋Phase 1〜3 チェックリストまで、2026-07-02 にユーザーが commit＆push 済**（`origin/main` 同期済）。
+- **未コミット（作業ツリー）**: 本セッションで整理した引き継ぎ文書＝[`NEXT_SESSION_WORKORDER.md`](NEXT_SESSION_WORKORDER.md) 新規＋本書の当該追記。次のコミットで拾う。
 
 ---
 
@@ -69,11 +69,12 @@
 - [x] **spec 全面改訂（`LTX23_Backend_Specification.md` v0.5）＝旧残(c) 完了**（2026-07-02・README 参照更新・旧 v04 削除・commit/push 済）
 
 **残（Phase 2 前後で片付ける・優先度はユーザー判断）**
-- [ ] (a) Gradio GUI **手動動作確認**（`/ui` で T2V/I2V/720p/crop トグルの end-to-end 目視）＝小・実 backend＋GPU
-- [ ] (d) dead-code 整理（text-only 化で no-op 化した `_SkipGemmaLMSDOps` 等・意図的温存分）＝小・**コード編集**・要 §14.4 意図確認
-- [ ] (e) load/encode の一時 shared 溢れ（~2–2.5GB）最適化＝中・信頼性ブロッカーではない
-- [ ] keep_resident=1 を 720p でも使える恒久最適化（keep=0 の gen 時間漸増を解消）＝中・独立・任意
-- [ ] 開発ゴミ掃除（`outputs/` テスト出力・未追跡診断スクリプト等・**方法はユーザーと相談**）＝小〜中
+> **次セッションで着手する 4 件（Gradio 手動確認を除く d/e/keep/掃除）は詳細ワークオーダー [`NEXT_SESSION_WORKORDER.md`](NEXT_SESSION_WORKORDER.md) を必ず読む**（根本原因・該当コード行・byte-match ゲート・要ユーザー確認点を整理済）。
+- [ ] (a) Gradio GUI **手動動作確認**（`/ui` で T2V/I2V/720p/crop トグルの end-to-end 目視）＝小・実 backend＋GPU ※今回スコープ外
+- [ ] (d) dead-code 整理（`_SkipGemmaLMSDOps`:201-231／`path` 引数:234+399 が高確度・byte-match ゲート）＝小・**コード編集**・WORKORDER①
+- [x] (e) load/encode の一時 shared 溢れ最適化 ＝ **done（ユーザー確認 2026-07-02）**。§11 te-offload／§12 dit-cpu-load で load/encode の一時溢れは実質解消。残る shared 溢れは高トークン denoise stage2＝**解像度×尺の能力限界（バグでない・`RESOLUTION_DURATION_CAPABILITY.md §8` が正本）**であり、本タスクの対象外。
+- [ ] **keep=1 常駐モードの新設（opt-in・keep=0 既定は不変）**＝720p でも crash しない keep=1 経路を用意し連続生成の gen 時間漸増(+~20%)を解消。将来のクリップ連結(Phase 3)への先行投資（＝Phase 1 のうちに片付けたい）。**次セッションで read-only 実現可能性調査から着手**（out-of-place 移動が first-party `engine/` 内か wheel 側かの切り分け＝実装可否の分水嶺）・WORKORDER③
+- [ ] 開発ゴミ掃除（`outputs/`~127MB 等はフェーズA低リスク／phase5b_diag・vram_sweep・hf_home は要判断・**方法はユーザーと相談**・`.venv`等の環境本体は掃除対象外）＝小〜中・WORKORDER④
 
 ### Phase 2 ＝ AviUtl2 拡張機能 統合（ゴール・早期統合）　※未着手
 
@@ -100,8 +101,11 @@
 
 > 本セッション終盤の「spec 全面改訂」に向けたユーザー対話の結論。**次セッションはここから。** 下の「フェーズ別ロードマップ」の Phase 2/5 枠は本節で **early-integration に是正**されている（本節が正）。
 
-### 次セッションの着手 ＝ spec 全面改訂（install＋マルチジョブは本セッションで完了）
-> **▶ 2026-07-02 更新**: 下の「install＋マルチジョブ」は**本セッションで完了済**。**次セッションの着手＝spec 全面改訂**（指針＝下記「spec 全面改訂の方針（合意済）」§、Phase 1 残(c)）。**ここから始める**（~90KB・章立てレベル＝中〜大。安全策＝目次提案→ユーザー承認→本文の段階実施）。
+### 次セッションの着手 ＝ Phase 1 残 4 件（Gradio 手動確認を除く）
+> **▶ 2026-07-02 最新更新**: **spec 全面改訂（`LTX23_Backend_Specification.md` v0.5）は完了・push 済**（旧残(c) クローズ）。
+> **次セッションの着手＝Phase 1 残の 4 件＝①dead-code 整理 ②shared 溢れ最適化(e) ③keep_resident 恒久化 ④開発ゴミ掃除**（Gradio 手動確認は今回スコープ外）。
+> **着手前に必ず [`NEXT_SESSION_WORKORDER.md`](NEXT_SESSION_WORKORDER.md) を読む**（各タスクの根本原因・該当コード行・byte-match ゲート・“誤認防止サマリ”＝特に **(e) は §11/§12 で実質解消済み＝新規実装不要**、③は vendor wheel 凍結で in-place 化に制約・計測前提、を整理済）。
+> ↓下記「install＋マルチジョブ」「spec 全面改訂の方針」は完了/背景として温存（歴史記録）。
 - **✅ 完了（2026-07-02・commit `3c008c7`・push無し）**:
   - **install スクリプト全面書き換え**: `scripts/install_ltx.ps1` を冪等クリーンインストーラ化（両venv・現行~28GBのみDL[リポID暗号確認]・GpuArch自動判定・PASS/MISSING表・INSTALLED_PATHS再生成）＋`build_xformers.ps1` 是正（CUDA_PATH/.venv-engine/12.8）。本機で冪等スキップ実行 exit0/全PASS・mock smoke 7。
   - **Phase 1 残「マルチジョブ」＝I2V＋音声 連続を両経路で実機 PASS**（直接ハーネス I2V×4 @384＋本番API I2V×3 @512×320・**VERIFICATION_LOG §10.7**）。※マルチジョブ＝単一ユーザー逐次連続（複数人同時ではない＝削除済スコープ）。**Phase 2 クリップ連結の前提クリア。**
@@ -172,7 +176,7 @@
   - なぜ: 「5秒クリップを繋いで長尺」（終了フレーム→次の開始フレームの I2V 連結）の前提。連結は I2V 連続なのでここが未検証だと着手できない。
   - 依存/前提: 独立。keep=0 の gen 時間漸増が実本数（4本以上）で許容範囲かの再計測も兼ねる。規模＝中。
 
-- **README / spec の全面改訂**
+- **README / spec の全面改訂** ✅**完了（2026-07-02・push 済）**＝`LTX23_Backend_Specification.md` v0.5 に全面改訂・旧 v04 削除・README 参照更新。以下は当時の記述（歴史）。
   - 何を: `README.md` と `LTX23_Backend_Specification_v04…md` を現アーキで整理。
   - なぜ: 両者とも de-fork Stage 5 で post-refactor 注記＋要点訂正は入れたが、spec 本文は依然 pre-pivot 構成（fp8-cast/公式パイプライン
     前提の章立て）。QAT 回収でモデル構成も変わった（tokenizer-only gemma_root）。**現状に反する箇所は本セッションで最小是正済**（下記
@@ -190,10 +194,10 @@
   - なぜ: 公開前の後片付け。**掃除の方法自体をユーザーと相談してから**（何を残すか判断が要る）。
   - 依存/前提: 独立。規模＝小〜中。
 
-- **`origin/main` への push**
-  - 何を: ローカル先行 3 commit（`93696b4`/`694ca54`/`826e76f`＋本ドキュメント群の commit）を push。
-  - なぜ: リモート同期。ローカルが先行している。
-  - 依存/前提: **本ドキュメント整備の監督確認＋commit が先**（本セッションは commit しない）。規模＝小。
+- **`origin/main` への push** ✅**完了（2026-07-02・ユーザー実施）**＝spec 改訂までを commit＆push・`origin/main` 同期済。※本セッション整理の WORKORDER＋handoff 追記は未コミット（次コミットで拾う）。
+  - 何を: ローカル先行 commit 群を push。
+  - なぜ: リモート同期。
+  - 依存/前提: ドキュメント整備の確認＋commit が先。規模＝小。
 
 ### 今セッションで是正した doc（QAT 回収の反映・上記メニューの前提）
 - `Docs/VERIFICATION_LOG.md`: **§14 を追加**（text-only Gemma・byte-match 3経路・device override 経緯・peak_vram 8440・commit）。

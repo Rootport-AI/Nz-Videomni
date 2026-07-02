@@ -1,8 +1,8 @@
 """Pydantic schemas — the external API contract (spec ch.6).
 
 Conditioning is now Phase-3 UNFROZEN: multiple keyframes (cap 5), arbitrary
-``frame_idx`` (snapped server-side to a multiple of 8 and clamped into range),
-and per-item ``strength``. ``num_pixel_frames`` and reference-video conditioning
+``frame_idx`` (snapped server-side to the official ``0``-or-``8n+1`` latent grid
+and clamped into range), and per-item ``strength``. ``num_pixel_frames`` and reference-video conditioning
 remain out of scope. The OTHER constraints stay FROZEN as the final-form API so
 that future frontends (AviUtl2, DaVinci Resolve) and later phases do not break:
 ÷64 generation resolution, 8n+1 frame counts, and the distilled 8-step / CFG=1.0
@@ -58,7 +58,7 @@ class GenerateRequest(BaseModel):
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
 
     # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap 5）。
-    # 各 frame_idx は validator で 8 の倍数へスナップ＋範囲クランプされる。
+    # 各 frame_idx は validator で 0-or-8n+1 グリッドへスナップ＋範囲クランプされる。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -87,14 +87,23 @@ class GenerateRequest(BaseModel):
         # Conditioning (Phase 3): multi-keyframe I2V, cap 5.
         if len(self.conditioning_images) > 5:
             raise ValueError("at most 5 conditioning images are supported")
-        # frame_idx is a pixel-frame RoPE offset; the temporal VAE factor is 8, so
-        # the aligned keyframe grid is {0, 8, ..., num_frames-1}. Snap to the
-        # nearest multiple of 8 and clamp into [0, num_frames-1] (num_frames-1 is
-        # always 8n so it stays on-grid). Snapping is a safety net — the UI is
-        # expected to enforce the grid. The ÷64 rule is spatial-only and unrelated.
+        # frame_idx is fed to the engine's guide path (VideoConditionByKeyframeIndex)
+        # as a RAW PIXEL RoPE offset (positions[:,0] += frame_idx, no ÷8), so it must
+        # be a latent-aligned pixel. Two on-grid cases, per the official LTX-2 /
+        # ComfyUI (LTXVAddGuide) convention:
+        #   * frame_idx == 0  -> start frame, routed to the latent-replace path;
+        #     left byte-identical (the engine also special-cases idx==0 causal_fix).
+        #   * frame_idx  > 0  -> a keyframe/guide that must sit on a latent-frame
+        #     START pixel = the 8n+1 grid. Snap via (f-1)//8*8+1 (ComfyUI
+        #     get_latent_index) and clamp to [1, num_frames-8] — for num_frames=8m+1
+        #     the last latent-frame start is num_frames-8 (e.g. 49 -> 41).
+        # Snapping is a safety net — the UI may still send natural values. The ÷64
+        # rule is spatial-only and unrelated.
         for image in self.conditioning_images:
-            snapped = round(image.frame_idx / 8) * 8
-            image.frame_idx = max(0, min(snapped, self.num_frames - 1))
+            if image.frame_idx == 0:
+                continue  # latent-replace path (start frame); byte-identical to today
+            snapped = (image.frame_idx - 1) // 8 * 8 + 1
+            image.frame_idx = max(1, min(snapped, self.num_frames - 8))
         return self
 
     @property

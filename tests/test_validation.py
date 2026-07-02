@@ -116,7 +116,7 @@ def test_multi_keyframe_accepted(client, png_bytes):
 
 def test_frame_idx_nonzero_accepted_and_snapped(client, png_bytes):
     # A single image with a non-zero, off-grid frame_idx is now ACCEPTED
-    # (server snaps it to the nearest multiple of 8) rather than rejected.
+    # (server snaps it to the 8n+1 latent-frame-start grid) rather than rejected.
     iid = _upload(client, png_bytes)
     r = client.post(
         "/api/v1/generate",
@@ -132,9 +132,11 @@ def test_frame_idx_nonzero_accepted_and_snapped(client, png_bytes):
 
 
 def test_frame_idx_snap_and_clamp_math():
-    # Pure-model unit test of the snap+clamp math, no HTTP layer.
-    # Values chosen to be unambiguous under Python's banker's rounding of round():
-    #   10/8=1.25 -> round=1 -> 8 ; 24/8=3.0 -> 24 ; 100 clamps to num_frames-1=48 ; 0 stays 0.
+    # Pure-model unit test of the official snap+clamp math, no HTTP layer.
+    # frame_idx 0 stays 0 (latent-replace start frame). Every other keyframe snaps
+    # to the 8n+1 latent-frame-START grid via (f-1)//8*8+1, then clamps to
+    # [1, num_frames-8] (num_frames=49 -> last start = 41). Matches ComfyUI
+    # LTXVAddGuide.get_latent_index. Each value hand-verified.
     from api.models import ConditioningImage, GenerateRequest
 
     def snapped(idx: int, num_frames: int = 49) -> int:
@@ -150,10 +152,14 @@ def test_frame_idx_snap_and_clamp_math():
         )
         return req.conditioning_images[0].frame_idx
 
-    assert snapped(10) == 8
-    assert snapped(24) == 24
-    assert snapped(100, num_frames=49) == 48  # clamped to num_frames-1
-    assert snapped(0) == 0
+    assert snapped(0) == 0  # start frame, unchanged (latent-replace path)
+    assert snapped(1) == 1  # (0)//8*8+1
+    assert snapped(8) == 1  # (7)//8*8+1 -> last-latent-start below 8
+    assert snapped(10) == 9  # (9)//8*8+1
+    assert snapped(16) == 9  # (15)//8*8+1
+    assert snapped(24) == 17  # (23)//8*8+1
+    assert snapped(48) == 41  # (47)//8*8+1 = last start pixel for num_frames=49
+    assert snapped(100, num_frames=49) == 41  # snap 97 clamped to num_frames-8=41
 
 
 def test_distilled_requires_8_steps(client):

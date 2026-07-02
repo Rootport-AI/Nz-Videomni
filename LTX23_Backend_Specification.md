@@ -1100,12 +1100,30 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 
 **このプロジェクトの最終目的**（§14）。汎用 REST API は既に安定しているため、機能を足す前に**まず AviUtl2 拡張から本 API を叩いて「動くツール」を得る**。統合しながら Phase 3 以降で育てる。
 
-### 13.4 Phase 3 以降 — 育てる
+### 13.4 Phase 3 — LTX-Desktop 生成パリティ（育てる）
 
-統合後に、実運用しながら段階的に拡張する（希望に応じて）。
+**Phase 3 の北極星＝公式 [LTX-Desktop](https://github.com/Lightricks/LTX-Desktop)（Lightricks・Apache-2.0・LTX-2.3 と同時リリース）の「AI 生成機能」パリティ。** 動画編集・エンコード・タイムライン配置は AviUtl2 が担うので、拡張機能側は **LTX-Desktop が持つ生成系機能をすべて出せる**ことを目標にする（編集系は対象外）。我々のバックエンドは元々 LTX-Desktop の低VRAM フォーク（*Kandyman-iac* fork）由来で、アーキも同型（FastAPI backend ＋ 別フロント）＝**フロントを AviUtl2 拡張に差し替え、バックエンドの露出を LTX-Desktop に揃える**構図。
 
-1. **長尺化のためのクリップ連結**: 複数キーフレーム I2V／終了フレーム conditioning（＝5秒クリップの終了フレームを次クリップの開始フレームにして繋ぐ）。Phase 1 のマルチジョブ＋I2V 連続検証が前提で、これは既にクリア済み。
-2. **高度な条件付け**: IC-LoRA（depth/pose/edge/canny/参照動画）・V2V・プロンプト強化（enhance_i2v。vision 再導入を要する）。
+> **重要な調査結論（2026-07-02・`Docs/NEXT_SESSION_WORKORDER.md` に詳細）**: LTX-Desktop の生成機能の**大半は下層（我々の `engine`／凍結 wheel `ltx_core`/`ltx_pipelines`）が既に対応済み**で、露出を塞いでいるのは**我々の Phase 1 凍結 API だけ**。キーフレーム／first+last／任意 frame_idx／複数条件／strength は wheel の `VideoConditionByKeyframeIndex`/`VideoConditionByLatentIndex`/`VideoConditionByReferenceLatent` が既にサポートし、`combined_image_conditionings` が frame_idx で自動振り分けする。
+
+**Phase 3 の作業（優先順）:**
+
+1. **凍結 API の「解凍」＝条件付けの露出（★次セッションの主作業・低リスク）**: `api/models.py` の 2 検証（`len(conditioning_images) ≤ 1`／`frame_idx == 0` 強制）と `services/ltx_runner.py` の frame_idx ハードコードを緩和し、**多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength** を露出する。これで長尺化の土台（クリップ連結・キーフレーム制御）が現物化する。engine 内で完結する見込み（新パイプライン不要）。制約＝frame_idx は8の倍数／`[0, num_frames)`・8n+1 フレーム不変・latent 1枚≒pixel 8枚。**要確認事項＝二段パイプラインで条件付けが Stage 1/Stage 2 双方に効くか**（LTX-2 は upscale 段で再注入しないと詳細が失われると報告）。契約変更なので `GET /status`・limits・`metadata.json`・mock pytest も併せて更新。
+2. **クリップ連結（生成プリミティブ）**: 上記 API の上で、ブックエンド I2V（前クリップ終了＝次クリップ開始の共有境界）と自己回帰 extend を提供。タイムライン配置は AviUtl2 側。プロンプトは「グローバル基底＋クリップ毎 override」を UX 指針とする（text-only プロンプト伝播は可）。
+3. **Gap Fill ／ Retake（大規模・後続セッション）**: LTX-Desktop の連続性プリミティブ。Gap Fill＝近傍フレーム条件の間埋め、Retake＝`TemporalRegionMask` による領域再生成（`RetakePipeline`）。**規模が大きいので次セッションでは着手しない。**
+4. **その他パリティ項目（段階的）**: 生成キュー（逐次・cancel）／延長尺（〜30s）／プロンプト強化（**text-only 版のみ**＝T2V 用）／STG・sigma schedule・denoise loop・negative・seed lock 等の露出／空間アップスケーラのユーザー操作露出／LoRA 再導入（de-fork で削除済のため）／attention tiling 再導入。
+
+### 13.4b Phase 4 — 高度な条件付け（IC-LoRA / V2V）
+
+**LTX-Desktop 自身が UI で提供していない**（モデルは可能だがアプリ未提供・フォークも roadmap 止まり）ため、生成パリティの対象外として **Phase 4 に切り出す**。
+
+- **IC-LoRA**（Union Control / Motion Track / Pose / Camera / Detailer / HDR / Lip-Dub 等）
+- **V2V**（`ICLoraPipeline` 経由）
+- **audio-to-video（A2Vid）／時間アップスケーラ**等の別パイプライン系も、必要になった時点で Phase 4 で検討。
+
+### 13.4c 将来課題（現行の開発計画からは除外）
+
+- **VLM（vision）再導入**: `enhance_i2v`（入力画像を見たプロンプト補強）や「近傍フレームを見た Gap Fill プロンプト提案」は Gemma の vision が必要。我々は QAT 回収で **text-only Gemma 化**（vision 除去・22.7GB 削減、`Docs/VERIFICATION_LOG.md §14`）しており、vision 再導入はこの最適化を巻き戻す。**今回の開発計画からは外す**。将来これらの機能が要件化したときに、別途 vision を再導入する判断を行う（＝本項は将来課題としての記録）。text-only で可能なプロンプト強化（T2V 用の言い換え）は Phase 3 の範囲内。
 
 ### 13.5 削除スコープ（旧 v04 から外すもの・理由付き）
 

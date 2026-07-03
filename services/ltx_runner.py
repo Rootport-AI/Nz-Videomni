@@ -69,10 +69,6 @@ class GenerationOutcome:
     peak_vram_mb: int | None
     generation_mode: str  # "t2v" | "i2v" | "chain"
     backend: str = MOCK_BACKEND
-    # Phase 3 slice-2 clip-concat (OLD per-clip path): the persisted Stage-1
-    # carry tail for this clip. Retained for back-compat; the WP4 chain path does
-    # not use it.
-    carry_latent_path: Path | None = None
     # Phase 3 WP4 masked AV-latent chain: junction pixel-frame indices + full
     # geometry (from chain_math / the engine). None for single-clip generate.
     chain_metadata: dict | None = None
@@ -127,11 +123,6 @@ class LTXRunner:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        *,
-        prev_clip_latent_path: Path | None = None,
-        overlap_frames: int = 2,
-        overlap_strength: float = 0.5,
-        carry_latent_out_path: Path | None = None,
     ) -> GenerationOutcome:
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -141,10 +132,6 @@ class LTXRunner:
             output_dir=output_dir,
             progress_callback=progress_callback,
             conditioning_image_paths=conditioning_image_paths,
-            prev_clip_latent_path=prev_clip_latent_path,
-            overlap_frames=overlap_frames,
-            overlap_strength=overlap_strength,
-            carry_latent_out_path=carry_latent_out_path,
         )
 
     def generate_chain(
@@ -276,22 +263,11 @@ class _MockBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        *,
-        prev_clip_latent_path: Path | None = None,
-        overlap_frames: int = 2,
-        overlap_strength: float = 0.5,
-        carry_latent_out_path: Path | None = None,
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
 
         ``conditioning_images`` empty -> T2V; one entry -> minimal I2V using the
         resolved image path as the start frame (frame_idx=0, Phase 1).
-
-        Phase 3 clip-concat: the extend params are accepted for parity with the
-        real backend. The mock does not do latent continuity, but when
-        ``carry_latent_out_path`` is set it writes a small dummy carry file and
-        surfaces it on the outcome so the chain orchestrator is testable without
-        a GPU.
         """
         if not self._loaded:
             self.load()
@@ -335,24 +311,6 @@ class _MockBackend:
 
         peak = gpu_info.peak_vram_mb()
 
-        # Phase 3 clip-concat: emit a dummy carry-latent so the chain
-        # orchestrator can thread clip N -> clip N+1 under the mock backend.
-        carry_out: Path | None = None
-        if carry_latent_out_path is not None:
-            carry_out = Path(carry_latent_out_path)
-            carry_out.parent.mkdir(parents=True, exist_ok=True)
-            carry_out.write_text(
-                json.dumps(
-                    {
-                        "mock_carry": True,
-                        "seed": seed,
-                        "overlap_frames": int(overlap_frames),
-                        "num_frames": request.num_frames,
-                    }
-                ),
-                encoding="utf-8",
-            )
-
         if progress_callback:
             progress_callback(request.num_inference_steps, request.num_inference_steps, 1.0)
         safe_memory_cleanup()
@@ -363,7 +321,6 @@ class _MockBackend:
             peak_vram_mb=peak,
             generation_mode=mode,
             backend=MOCK_BACKEND,
-            carry_latent_path=carry_out,
         )
 
     def generate_chain(
@@ -802,11 +759,6 @@ class _RealBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        *,
-        prev_clip_latent_path: Path | None = None,
-        overlap_frames: int = 2,
-        overlap_strength: float = 0.5,
-        carry_latent_out_path: Path | None = None,
     ) -> GenerationOutcome:
         if not self.loaded:
             self.load()
@@ -842,9 +794,6 @@ class _RealBackend:
         if progress_callback:
             progress_callback(None, None, 0.05)
 
-        # Phase 3 clip-concat: only ADD the extend keys when this is a chain clip.
-        # When both prev/out are absent the payload is byte-identical to today's
-        # single-generate op (guarantees the frozen regression stays unchanged).
         payload: dict = {
             "op": "generate",
             "prompt": request.prompt,
@@ -857,13 +806,6 @@ class _RealBackend:
             "images": images,
             "output_path": str(target),
         }
-        if prev_clip_latent_path is not None or carry_latent_out_path is not None:
-            if prev_clip_latent_path is not None:
-                payload["prev_clip_latent_path"] = str(prev_clip_latent_path)
-            if carry_latent_out_path is not None:
-                payload["carry_latent_out_path"] = str(carry_latent_out_path)
-            payload["overlap_frames"] = int(overlap_frames)
-            payload["overlap_strength"] = float(overlap_strength)
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         with self._lock:
@@ -897,7 +839,6 @@ class _RealBackend:
 
         seed_used = event.get("seed_used", seed)
         peak_vram_mb = event.get("peak_vram_mb")
-        carry_path = event.get("carry_latent_path")
 
         return GenerationOutcome(
             output_path=output_path,
@@ -905,7 +846,6 @@ class _RealBackend:
             peak_vram_mb=peak_vram_mb,
             generation_mode=mode,
             backend=REAL_BACKEND,
-            carry_latent_path=Path(carry_path) if carry_path else None,
         )
 
     def generate_chain(

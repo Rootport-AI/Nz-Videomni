@@ -177,21 +177,13 @@ def concat_mp4s(
     output_path: Path,
     frame_rate: float,
     *,
-    trim_leading_pixels_per_nonfirst_clip: int = 0,
     crop: tuple[int, int] | None = None,
 ) -> Path:
-    """Concatenate clip mp4s into one continuous timeline (Phase 3 clip-concat).
-
-    Each clip after the first has its leading ``trim_leading_pixels_per_nonfirst_clip``
-    PIXEL frames dropped — those frames are the frozen overlap (the previous
-    clip's tail re-used at this clip's head), so dropping them yields a seamless
-    continuation. The trim count is derived from the K latent overlap frames
-    under the causal VAE temporal mapping (latent frame 0 -> 1 pixel, each
-    subsequent latent frame -> 8 pixels): ``1 + (K-1)*8``.
+    """Concatenate clip mp4s into one continuous timeline.
 
     Audio is carried through when every clip has an audio stream. ``crop`` applies
     a centered crop to the final output (applied once, here). Robust to a single
-    clip (trim/concat is a no-op copy+optional crop). Re-encodes (fine for the
+    clip (concat is a no-op copy+optional crop). Re-encodes (fine for the
     single-user local server). Returns ``output_path``.
     """
     exe = ffmpeg_path()
@@ -201,8 +193,8 @@ def concat_mp4s(
 
     with_audio = all(has_audio_stream(p) for p in clip_paths)
 
-    # Build a filter graph: for each input, optionally trim the leading N frames
-    # of every non-first clip, then concat the (video[, audio]) segments.
+    # Build a filter graph: reset each segment's PTS, then concat the
+    # (video[, audio]) segments.
     inputs: list[str] = []
     for p in clip_paths:
         inputs += ["-i", str(p)]
@@ -212,26 +204,11 @@ def concat_mp4s(
     n = len(clip_paths)
     for i in range(n):
         vlabel = f"v{i}"
-        trim_frames = trim_leading_pixels_per_nonfirst_clip if i > 0 else 0
-        if trim_frames > 0:
-            # Drop the first ``trim_frames`` frames, then reset PTS so concat sees
-            # a contiguous, zero-based timeline for this segment.
-            parts.append(
-                f"[{i}:v]select='gte(n,{trim_frames})',setpts=PTS-STARTPTS[{vlabel}]"
-            )
-        else:
-            parts.append(f"[{i}:v]setpts=PTS-STARTPTS[{vlabel}]")
+        parts.append(f"[{i}:v]setpts=PTS-STARTPTS[{vlabel}]")
         concat_labels.append(f"[{vlabel}]")
         if with_audio:
             alabel = f"a{i}"
-            if trim_frames > 0:
-                # Trim the matching leading audio by time = frames / fps.
-                start_t = trim_frames / float(frame_rate)
-                parts.append(
-                    f"[{i}:a]atrim=start={start_t:.6f},asetpts=PTS-STARTPTS[{alabel}]"
-                )
-            else:
-                parts.append(f"[{i}:a]asetpts=PTS-STARTPTS[{alabel}]")
+            parts.append(f"[{i}:a]asetpts=PTS-STARTPTS[{alabel}]")
             concat_labels.append(f"[{alabel}]")
 
     concat_v = "".join(concat_labels)

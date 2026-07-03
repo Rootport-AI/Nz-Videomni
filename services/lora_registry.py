@@ -32,6 +32,19 @@ class LoraRegistry:
     def names(self) -> list[str]:
         return sorted(self.registry)
 
+    def preprocess_for(self, name: str) -> str:
+        """Return the ``preprocess`` kind for a registered ``name`` (no file check).
+
+        ``"none"`` for legacy string entries or an unknown name; the
+        ``IcLoraEntry.preprocess`` value for dict entries. Used for metadata
+        annotation (``pipeline_manager._write_metadata``), where the name has
+        already been resolved successfully by the time the job completes.
+        """
+        entry = self.registry.get(name)
+        if entry is None or isinstance(entry, str):
+            return "none"
+        return entry.preprocess
+
     def resolve(self, name: str, strength: float) -> tuple[Path, float, str]:
         """Resolve ``name`` -> ``(safetensors_path, strength, preprocess)``.
 

@@ -433,7 +433,17 @@ class PipelineManager:
         # fields also appear inside the frozen-additive ``request`` dump.)
         if req.loras:
             metadata["ic_lora"] = {
-                "loras": [{"name": spec.name, "strength": spec.strength} for spec in req.loras],
+                # Phase C: additive ``preprocess`` field (control-signal kind per
+                # adapter). Existing ``name``/``strength``/``reference_video_id``
+                # keys are unchanged so Phase B metadata parsers keep working.
+                "loras": [
+                    {
+                        "name": spec.name,
+                        "strength": spec.strength,
+                        "preprocess": self.lora_registry.preprocess_for(spec.name),
+                    }
+                    for spec in req.loras
+                ],
                 "reference_video_id": req.reference_video_id,
             }
         video_io.save_metadata(metadata_path, metadata)

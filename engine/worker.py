@@ -21,9 +21,11 @@ Protocol (one JSON object per line; parent -> worker):
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size}
   {"op": "generate", prompt, seed, height, width, num_frames, frame_rate,
    num_steps, images:[{path,frame_idx,strength}...], output_path,
-   # Phase B IC-LoRA (forward-time weight patch); loras always present (may be []),
-   # reference_video null unless a Pixel-Spatial-Upscaler reference is supplied:
-   loras:[{path,strength}...], reference_video:{path,strength}|null}
+   # Phase B/C IC-LoRA (forward-time weight patch); loras always present (may be []),
+   # reference_video null unless a reference is supplied. preprocess (Phase C):
+   # "none" -> raw reference used as-is (Phase B); "canny"/... -> converted to a
+   # control-signal video via engine/preprocess/, path swapped to it:
+   loras:[{path,strength}...], reference_video:{path,strength,preprocess}|null}
   # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
@@ -199,9 +201,35 @@ def _do_generate(msg: dict) -> None:
         (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
     ]
     ref = msg.get("reference_video")
-    ic_reference = (
-        (str(ref["path"]), float(ref.get("strength", 1.0))) if ref else None
-    )
+    ic_reference = None
+    if ref:
+        ref_path = str(ref["path"])
+        ref_strength = float(ref.get("strength", 1.0))
+        # Phase C: control adapters (Union-Control) need the raw reference video
+        # converted to a control signal (edge map / skeleton). ``preprocess`` is
+        # "none" for Phase B reference adapters (Pixel-Spatial-Upscaler) -> the
+        # raw video is used as-is and cv2 is never imported. Any other value ->
+        # convert and swap ``ic_reference`` to the control video path. An unknown
+        # value fails the job loud (``get_processor`` raises).
+        preprocess = ref.get("preprocess", "none")
+        if preprocess and preprocess != "none":
+            import time
+
+            from engine.preprocess import get_processor, preprocess_video
+
+            processor = get_processor(preprocess)
+            control_path = os.path.join(
+                os.path.dirname(output_path), f"control_{preprocess}.mp4"
+            )
+            t0 = time.perf_counter()
+            n_frames = preprocess_video(Path(ref_path), Path(control_path), processor)
+            elapsed = time.perf_counter() - t0
+            _log(
+                f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
+                f"frames={n_frames} elapsed={elapsed:.2f}"
+            )
+            ref_path = control_path
+        ic_reference = (ref_path, ref_strength)
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "

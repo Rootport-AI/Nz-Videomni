@@ -985,6 +985,43 @@ class LTXFastVideoPipeline:
         torch.cuda.empty_cache()
 
     @torch.inference_mode()
+    def generate_chain(
+        self,
+        clips: "list",
+        width: int,
+        height: int,
+        frame_rate: float,
+        num_steps: int,
+        seed: int,
+        overlap_frames: int,
+        overlap_strength: float,
+        output_path: str,
+        progress=None,
+    ) -> dict:
+        """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
+
+        Delegates to :func:`engine.pipeline.chain_pipeline.run_chain`, which
+        reuses THIS pipeline's ledger/components/low-VRAM machinery. ``clips`` is
+        a list of ``ChainClipSpec`` (prompt already resolved, images built).
+        Returns metadata incl. segment/tile junction pixel-frame indices.
+        """
+        from engine.pipeline.chain_pipeline import run_chain
+
+        return run_chain(
+            self,
+            clips=clips,
+            width=width,
+            height=height,
+            frame_rate=frame_rate,
+            num_steps=num_steps,
+            seed=seed,
+            overlap_frames=overlap_frames,
+            overlap_strength=overlap_strength,
+            output_path=output_path,
+            progress=progress,
+        )
+
+    @torch.inference_mode()
     def warmup(self, output_path: str) -> None:
         warmup_frames = 9
         tiling_config = default_tiling_config()

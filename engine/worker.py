@@ -23,6 +23,10 @@ Protocol (one JSON object per line; parent -> worker):
    num_steps, images:[{path,frame_idx,strength}...], output_path,
    # Phase 3 slice-2 clip-concat (all optional; absent -> stock generate):
    prev_clip_latent_path?, carry_latent_out_path?, overlap_frames?, overlap_strength?}
+  # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
+  {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
+   overlap_frames, overlap_strength, output_path,
+   clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...]}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
@@ -246,6 +250,67 @@ def _do_generate(msg: dict) -> None:
     torch.cuda.empty_cache()
 
 
+def _do_generate_chain(msg: dict) -> None:
+    """Run one masked AV-latent clip chain; ONE mp4 written to output_path.
+
+    Emits ``progress`` events (stage1 per segment, tile per stage-2 tile, decode)
+    and a terminal ``done`` with the peak VRAM + full junction metadata (segment
+    seams AND tile seams) for the review harness.
+    """
+    assert _PIPE is not None, "generate_chain before load"
+    from engine.pipeline.chain_pipeline import ChainClipSpec
+
+    output_path = msg["output_path"]
+    seed = int(msg["seed"])
+    torch.cuda.reset_peak_memory_stats(DEV)
+
+    clips = [
+        ChainClipSpec(
+            prompt=c["prompt"],
+            num_frames=int(c["num_frames"]),
+            images=[
+                ImageConditioningInput(
+                    path=i["path"], frame_idx=int(i["frame_idx"]), strength=float(i["strength"])
+                )
+                for i in c.get("images", [])
+            ],
+        )
+        for c in msg["clips"]
+    ]
+
+    _log(
+        f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
+        f"frames={[c.num_frames for c in clips]} seed={seed} "
+        f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')}"
+    )
+
+    def _progress(stage: str, index: int, total: int) -> None:
+        _emit("progress", stage=stage, index=int(index), total=int(total))
+
+    meta = _PIPE.generate_chain(
+        clips=clips,
+        width=int(msg["width"]),
+        height=int(msg["height"]),
+        frame_rate=msg["frame_rate"],
+        num_steps=int(msg["num_steps"]),
+        seed=seed,
+        overlap_frames=int(msg["overlap_frames"]),
+        overlap_strength=float(msg["overlap_strength"]),
+        output_path=output_path,
+        progress=_progress,
+    )
+
+    peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
+    if not os.path.exists(output_path) or os.path.getsize(output_path) <= 0:
+        raise RuntimeError(f"engine produced no/empty chain output: {output_path}")
+
+    _log(f"CHAIN_OK peak_vram_mb={peak} -> {output_path}")
+    _emit("done", seed_used=seed, peak_vram_mb=int(peak), chain=meta)
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 def _shutdown() -> None:
     """Best-effort free + sync, then exit 0."""
     global _PIPE
@@ -297,6 +362,13 @@ def main() -> None:
                 _do_generate(msg)
             except BaseException as exc:  # noqa: BLE001 - keep serving on error
                 _log("GENERATE_FAILED")
+                _emit("error", detail=_detail(exc))
+            continue
+        if op == "generate_chain":
+            try:
+                _do_generate_chain(msg)
+            except BaseException as exc:  # noqa: BLE001 - keep serving on error
+                _log("GENERATE_CHAIN_FAILED")
                 _emit("error", detail=_detail(exc))
             continue
         if op == "shutdown":

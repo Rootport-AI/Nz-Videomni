@@ -30,9 +30,9 @@
 ### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`）
 - **成立**: Pixel-Spatial-Upscaler x2 アダプタを bf16パス忠実dequant＋engine側fuse-at-load＋参照動画条件付けで配線し実機スパイクPASS。回帰（LoRA off時の本番per-layer経路）はbyte-match完全一致・pytest 41 green。commit `bbcd82f`（spike wiring）→`016f442`（fp32 fuse化・19分→33秒）。
 - **正本＝[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)**。詳細ゲート数値＝[`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)。着手前サーベイ＝[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
-- **唯一の未消化ゲート＝ユーザー目視**: `outputs/ic_lora_phaseA/spike.mp4` vs `outputs/ic_lora_phaseA/base.mp4`（送付済み・回答PENDING）。
+- **唯一の未消化「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` は main 未マージ・4コミット先行。次セッション冒頭でユーザーに一言確認して実行）。目視サインオフ（`spike.mp4` vs `base.mp4`）はユーザーが**fix-later方針で承認済み**＝Phase B着手のブロッカーではない（回答到着次第、必要なら追いコミット対応）。
 
-### ★次セッションのスコープ候補＝IC-LoRA Phase B（open decisions のみ・詳細計画は次セッションで）
+### ★次セッションのスコープ候補＝IC-LoRA Phase B（Phase A/BはIC-LoRA機能内のサブフェーズ呼称。全体ロードマップのPhase 1〜4とは別軸）（open decisions のみ・詳細計画は次セッションで）
 - **本実装の機構選定**: bf16 full-dequant fuseはスパイク専用でRAM 54-57GB消費（32GB RAM級マシンでは非現実的）。候補＝①per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン・rank64の追加演算<1%・将来の8GB VRAM対応に直結）②事前fuse済みチェックポイント派生（CPU融合→再量子化GGUF保存→本番per-layer経路で最速推論。融合器は実装済み`_fuse_ic_loras`が部品として流用可）。**ユーザー指示(2026-07-03): 現行bf16融合経路は廃止せず既存フラグでユーザー選択可能なまま温存**（開発/oracle照合/パリティ検証用。ただし実測でdenoise約3倍遅＋VRAM+3.6GBのため「速い推論」枠ではない点に注意）。
 - **公式パリティのoracle照合**: wheelの`ICLoraPipeline`はstage1のみLoRA適用、当実装は両ステージにfuse。Upscaler用途では挙動的に問題なさそうだが、oracle未照合のまま。
 - **keep-resident運用との整合**: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグル方式（リビルド vs デュアルキャッシュ）を設計する必要あり。
@@ -136,7 +136,7 @@
 - [ ] **Gap Fill／Retake**（＝LTX-Desktop の連続性プリミティブ・**大規模ゆえ次セッションでは着手しない**）。Retake=`TemporalRegionMask`/`RetakePipeline`、Gap Fill=近傍条件の間埋め。
 - [ ] その他パリティ（段階的）: 生成キュー／延長尺(〜30s)／text-only プロンプト強化／STG・sigma schedule・denoise loop・negative・seed lock 露出／空間アップスケーラのユーザー操作露出／**LoRA・attention tiling 再導入**（de-fork で削除済）。
 
-### Phase 4 ＝ 高度な条件付け（LTX-Desktop 未提供・パリティ対象外）※未着手
+### Phase 4 ＝ 高度な条件付け（LTX-Desktop 未提供・パリティ対象外）※IC-LoRA Pixel-Spatial-Upscaler x2 = Phase A スパイク PASS 済（branch `feature/ic-lora-phase-a`・冒頭「最新ステータス」ブロック参照）。他アダプタ・本実装は未着手
 - [ ] IC-LoRA（Union/Motion Track/Pose/Camera/Detailer/HDR/Lip-Dub）
 - [ ] V2V（`ICLoraPipeline` 経由）・audio-to-video（A2Vid）・時間アップスケーラ
 

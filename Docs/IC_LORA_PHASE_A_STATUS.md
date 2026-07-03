@@ -1,4 +1,4 @@
-# IC-LoRA Phase A スパイク — 現状ステータス（成立・目視のみPENDING）
+# IC-LoRA Phase A スパイク — 現状ステータス（成立・残作業=mainマージのみ・目視はfix-later承認済み）
 
 - 更新: 2026-07-03（branch `feature/ic-lora-phase-a`・[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md) を受けた同日実装）
 - 併読: [`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)（本スパイクの全ゲート詳細数値）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)（引き継ぎ）／[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)（着手前サーベイ・入口Doc）
@@ -7,7 +7,7 @@
 
 ## ⚠️ 一行結論
 
-**成立**: IC-LoRA（Lightricks公式 Pixel-Spatial-Upscaler x2 アダプタ）をGGUF Q4_K_M本番経路の**bf16サブパス**にfuse-at-load配線し、参照動画条件付け（`VideoConditionByReferenceLatent`）と合わせて実機スパイクをPASSさせた。回帰（LoRA off時のper-layer-quant本番経路）はbyte-match完全一致・pytest 41 green。**唯一の未消化ゲートはユーザーによる spike.mp4 vs base.mp4 の最終目視サインオフ（PENDING）**。
+**成立**: IC-LoRA（Lightricks公式 Pixel-Spatial-Upscaler x2 アダプタ）をGGUF Q4_K_M本番経路の**bf16サブパス**にfuse-at-load配線し、参照動画条件付け（`VideoConditionByReferenceLatent`）と合わせて実機スパイクをPASSさせた。回帰（LoRA off時のper-layer-quant本番経路）はbyte-match完全一致・pytest 41 green。**唯一の未消化「作業」はmainへのマージ実行**（branch `feature/ic-lora-phase-a` は main 未マージ・4コミット先行・次セッション冒頭でユーザー一言確認して実行）。目視サインオフ（spike.mp4 vs base.mp4）は**fix-later方針でユーザー承認済み**＝非ブロッカー。
 
 ## 背景・スコープ
 
@@ -62,6 +62,6 @@ i7-13700（**AVX2のみ・AVX512-BF16/AMX無し**）／RTX 4070 Ti SUPER 16GB／
 
 ## Pending 項目（次セッション/ユーザー）
 
-1. **【最優先・ユーザー】** `outputs/ic_lora_phaseA/spike.mp4` vs `outputs/ic_lora_phaseA/base.mp4` の目視比較（アップスケール品質・LoRA適用の効果確認）。
-2. Phase B着手判断（上記「未了」項目からのスコープ確定）。
-3. Chain A/B・キーフレーム目視4本は本スパイクとは独立（`NEXT_SESSION_HANDOFF.md`参照）。
+1. **mainマージ**（ユーザー一言確認→実行。branch `feature/ic-lora-phase-a` は4コミット先行・未マージ）。
+2. Phase B着手（承認済み・新セッションで。上記「未了」項目からのスコープ確定）。
+3. 目視（fix-later承認済み・非ブロッカー）: `outputs/ic_lora_phaseA/spike.mp4` vs `outputs/ic_lora_phaseA/base.mp4` の比較＋前セッション持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。

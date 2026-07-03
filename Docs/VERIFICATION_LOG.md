@@ -1269,4 +1269,4 @@ RAM peak 56.7GB（system 65.3/65.3GB＝ほぼ飽和）。
 - keep-resident運用との整合: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグルは設計要（リビルド vs デュアルキャッシュ）。
 - API/UI露出（`engine/api_types.py`のIcLoraスキーマは存在するが未配線）。
 - x4バリアント・他アダプタ（In-Outpainting/Deblur、`PHASE3_NEXT_WORK_SURVEY.md` §6準拠）。
-- **【最優先・ユーザー】** `spike.mp4` vs `base.mp4`の最終目視（送付済み・PENDING）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。
+- `spike.mp4` vs `base.mp4`の最終目視は**fix-later方針でユーザー承認済み・非ブロッカー**（回答到着次第、必要なら追いコミット対応）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。**残る「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` 未マージ・4コミット先行）。

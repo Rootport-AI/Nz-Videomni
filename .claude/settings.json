@@ -110,7 +110,31 @@
       "PowerShell(nvidia-smi --query-gpu=name,memory.total,memory.used,driver_version --format=csv)",
       "PowerShell(powershell -ExecutionPolicy Bypass -File \"vendor/LTX-Desktop-LOW-VRAM/backend/_gpu_mem_sampler.ps1\" -OutFile \"outputs/gpu_mem_verify720p.log\" -IntervalSec 0.5 -MaxSeconds 1200)",
       "PowerShell($o='S:\\\\OriginalApps\\\\12_Nz-LTX23-backend\\\\outputs\\\\phaseB_i2v_audio'; Get-ChildItem $o -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object LastWriteTime, @{n='KB';e={[math]::Round\\($_.Length/1KB,1\\)}}, Name | Format-Table -AutoSize; Write-Output \"--- now: $\\(Get-Date -Format 'HH:mm:ss'\\) ---\"; $p=Get-Process python -ErrorAction SilentlyContinue; if\\($p\\){Write-Output \"python running: PID $\\($p.Id -join ','\\)\"}else{Write-Output \"no python process\"})",
-      "Bash(xargs -I {} du -sh {})"
+      "Bash(xargs -I {} du -sh {})",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'docs\\(phase3\\): correct clip-concat status — plumbing PASS but visual continuity FAILS *)",
+      "Bash(.venv/Scripts/python.exe -m pip list)",
+      "Bash(.venv/Scripts/python.exe -c \"import numpy; print\\('numpy', numpy.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import skimage; print\\('skimage ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import scipy; print\\('scipy ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import matplotlib; print\\('matplotlib ok'\\)\")",
+      "Bash(mkdir -p *)",
+      "PowerShell(cd S:\\\\OriginalApps\\\\12_Nz-LTX23-backend; Select-String -Path Docs\\\\PHASE3_CLIP_CONCAT_STATUS.md -Pattern '^#+ |backlog|目視' | ForEach-Object {\"$\\($_.LineNumber\\): $\\($_.Line\\)\"} | Select-Object -First 30)",
+      "Bash(./.venv/Scripts/python.exe -c \"import httpx; print\\('httpx', httpx.__version__\\)\")",
+      "Bash(./.venv/Scripts/python.exe main.py)",
+      "Bash(echo \"launched pid $!\")",
+      "Bash(./.venv/Scripts/python.exe outputs/visual_review/drive_hires.py a)",
+      "Bash(./.venv/Scripts/python.exe outputs/visual_review/drive_hires.py b1)",
+      "Bash(./.venv/Scripts/python.exe outputs/visual_review/drive_hires.py b2)",
+      "Bash(./.venv/Scripts/python.exe outputs/visual_review/drive_hires.py c)",
+      "Bash(ffmpeg -y -loglevel error -i outputs/visual_review/08a_hires_iclora_base_640x384.mp4 -vf \"select=eq\\(n\\\\,24\\)\" -vframes 1 outputs/visual_review/_cmp_08a_f24.png)",
+      "Bash(ffmpeg -y -loglevel error -i outputs/visual_review/08b_hires_iclora_x2upscaled_1280x768.mp4 -vf \"select=eq\\(n\\\\,24\\)\" -vframes 1 outputs/visual_review/_cmp_08b_f24.png)",
+      "PowerShell(cd S:\\\\OriginalApps\\\\12_Nz-LTX23-backend; foreach \\($id in @\\(\"b895c51f-a109-4ee6-8bf4-6af2f50b3590\",\"ab84dae3-7276-4927-ad84-42d1d50ead65\",\"7af7dd14-3e3b-4ca8-8e43-2d3edbd7d57e\"\\)\\) { $f = Get-ChildItem \"uploads/$id\" -File -ErrorAction SilentlyContinue | Select-Object -First 1; if \\($f\\) { $h = \\(Get-FileHash $f.FullName -Algorithm SHA256\\).Hash.Substring\\(0,12\\); \"{0} -> {1} {2}B sha:{3}\" -f $id.Substring\\(0,8\\), $f.Name, $f.Length, $h } else { \"$id -> NOT FOUND in uploads/\" } }; \"\"; Get-ChildItem outputs/phase3_multikey_smoke/visual_src_images -File | ForEach-Object { $h=\\(Get-FileHash $_.FullName -Algorithm SHA256\\).Hash.Substring\\(0,12\\); \"{0} {1}B sha:{2}\" -f $_.Name, $_.Length, $h })",
+      "PowerShell(cd S:\\\\OriginalApps\\\\12_Nz-LTX23-backend; Select-String -Path outputs/phase3_multikey_smoke/run_visual.py -Pattern 'prompt' | Select-Object -First 10 | ForEach-Object {\"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\"})"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\PHENOT~1\\AppData\\Local\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-backend\\6021c676-a349-4525-97cb-e6c880d122ed\\scratchpad"
     ]
   }
 }

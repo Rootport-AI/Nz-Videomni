@@ -1349,3 +1349,49 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 - loras⇔reference_video_id全か無か制約は「参照必須アダプタしか無い」前提＝参照不要アダプタ導入時にアダプタ別メタデータ駆動へ緩和。
 - Gradio UI露出（Phase 1残(a)と合流）。
 - ユーザー目視: Phase A持ち越し5本＋Phase B出力（`outputs/ic_lora_phaseA/phaseB/api_smoke.mp4`等）＝fix-later方針継続。
+
+## 22. ★IC-LoRA Phase C＝制御系アダプタ（Union-Control）＋engine内前処理段（canny／DWPose）実装・客観ゲート全PASS（2026-07-04・branch `feature/ic-lora-phase-c`・**G5目視はユーザー受容待ち**）
+
+> **正本＝[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)**（現状サマリ）／設計・ゲート定義・リサーチ根拠＝[`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md)。本節はゲートごとの詳細数値。
+> base＝main `1a3dfec`（Phase B＋Phase C準備docs取り込み済）。commit `5a9de32`（スライス1）→`80a909c`（スライス2）→`91dc485`（÷128バリデーション）→`058e862`（スライス3）。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 22.1 実装（commit `5a9de32`→`80a909c`→`91dc485`→`058e862`）
+
+- **スライス1（`5a9de32`）＝レジストリ・config拡張**: `config.py` に `IcLoraEntry{path, preprocess: none|canny|dwpose}`・`ic_loras: dict[str, str | IcLoraEntry]`（文字列値=後方互換=`preprocess none`）。`lora_registry.resolve` は `(path, strength, preprocess)` を返す（辞書/文字列両受理）。`api/generate.py` に複数preprocess種の競合検出 400 `LORA_PREPROCESS_CONFLICT`・`reference_payload` に `preprocess` を追加。tests 10→19・pytest **66→69**。
+- **スライス2（`80a909c`）＝engine前処理段（canny）**: 新設 `engine/preprocess/`（`FrameProcessor` Protocol・`CannyProcessor`＝フォーク `apply_canny` 忠実移植: 64pad→`cv2.Canny(gray,100,200)`→crop→3ch・cv2ドライバでFPS/フレーム数/寸法保存・`get_processor` レジストリ）。worker: `preprocess != none` で制御動画 `control_<kind>.mp4`（ジョブ出力ディレクトリ）へ変換し `ic_reference` を差し替え。**`none` 経路は完全無変更**（cv2遅延import）。metadata.json `ic_lora.loras[]` に `preprocess` 加算。E2E＝job `eb00afe2`（canny-control 512×256/49f）**126.4s**・PREPROCESS canny 129f **0.95s**・peak_vram **9267**。**発見: factor=2参照ジョブは出力÷128必須**（512×320はVAE encodeでeinops fail・512×256 PASS）。
+- **÷128バリデーション（`91dc485`）**: 参照付きジョブで width/height%128≠0 → 422 `REFERENCE_RESOLUTION_INVALID`。参照無しジョブは無影響（回帰テスト付き）。
+- **スライス3（`058e862`）＝DWPose前処理**: `engine/preprocess/dwpose.py`＝G0-bハーネス／フォーク `DWPosePipeline` のverbatim移植（YOLOX検出→DWPose SimCCバッチ5→OpenPose18点remap→body/hand/face骨格描画）。**遅延ロード＋`preprocess_video` 完了後に `release()` でGPU解放**（ワークオーダーの「プロセス内キャッシュ・再ロードなし」から意図的逸脱＝監督承認: 再ロード+5〜7s/ジョブと引き換えにdenoise中の355MB常駐を排除）。E2E＝job `7591f01f`（pose-control 512×256/49f）**144.5s**・PREPROCESS dwpose 129f **16.81s**（モデルロード込み）・peak_vram **8445**（Phase B帯下限）。
+
+### 22.2 G0-b＝DWPoseスループット実測（GPUスモーク・PASS）
+
+- 入力＝`outputs/visual_review/09_hires_chain_2seg_1280x768.mp4`（1280×768・129f→300フレームに循環・ウォームアップ20f）。
+- **13.34fps end-to-end**（計算のみ14.0fps）＝**混雑ワーストケース**（~13人/フレーム・DWPoseはバッチ5で~3バッチ/フレーム）。121f≈**9.1s**・257f≈**19.3s**。
+- VRAM: モデル常駐 **354.7MB**・ループピーク **482MB**(alloc)/617MB(reserved)・`del`+`empty_cache()` で **8.5MB** まで完全解放。
+- 段階別ms/フレーム: decode 1.34／yolox 13.87(18%)／**dwpose 53.04(71%・律速)**／draw 4.51／encode 3.12。
+- **判定**: 前処理は生成時間の~5%・VRAM競合なし＝実用。**スライス4（キャッシュ）前倒し・rtmlibフォールバック共に不要**と監督判断。
+
+### 22.3 G1＝回帰byte-match（LoRA off・本番per-layer経路）
+
+**PASS**: Job A（T2V基準512×320/49f/seed12345/"a calm ocean wave rolling onto a sandy beach at sunset, cinematic"・LoRA無し）SHA＝**`23844b4eebd107ccba8c5534eb65bab86575cca0b9050cb6c7e680a4506bb7bf`** 基準完全一致・peak **8440**（Phase B記録一致）・102.8s。Job B（最小I2V基準）SHA＝**`a511eda431cf0d0942cee97fa130f45e55fc3236833cbf9ea743ea7f4715c217`** 基準完全一致・peak **9525**（§10.4歴史値と同型）・118.2s。pytest **69 passed/1 skipped**。
+
+### 22.4 G2＝非汚染トグル（pose→なし→canny→なし・同一プロセス）
+
+**PASS**: pose（Job C: `8e914661`・148.7s・peak 9525）→なし（Job D: `49109d77`・**SHA=Job A完全一致**）→canny（Job E: `d6daa625`・137.2s・peak 9522）→なし（Job F: `c20fe645`・**SHA=Job A完全一致**）＝attach/detach・前処理の非汚染確認。
+
+### 22.5 G3＝VRAM／速度
+
+- 制御ジョブ peak **9525／9522 ≦ 天井9527**。D/F の peak 9543／9535 はプロセス2ジョブ目以降の既知パターン（VERIFICATION_LOG既存記録「8440/9525/9522」と同型・出力byte一致ゆえ機能退行なし）。
+- PREPROCESS実測: dwpose **16.60s**（≈7.8fps・ロード込み）／canny **1.12s** @129f。
+
+### 22.6 G4＝API e2e実機
+
+**PASS**: metadata（`preprocess="dwpose"`・`reference_video_id` 記録）✓・GET video HTTP **200** ✓・偽video_id→**404 REFERENCE_VIDEO_NOT_FOUND** ✓・512×320+参照→**422 REFERENCE_RESOLUTION_INVALID** ✓。
+
+### 22.7 G5＝目視（客観準備完了・ユーザー目視受容待ち）
+
+- **Job P**＝pose-control 1280×768/121f/seed12345（`408fd361`・219.7s・peak **8548**・PREPROCESS dwpose 18.15s・AAC音声あり）／**Job Q**＝canny-control 同パラメータ（`8c1b5a9c`・196.0s・peak **9541**＝LoRA無しD/F(9543/9535)と同じ~9.5GB帯のジッタ・OOMなし）。
+- プロンプト＝映画トレイラー風「老船長が港町を歩く」（**制御種は非言及**＝シーン記述のみ・追補R4のComfyUI公式ワークフロー流儀・セリフ入り）。
+- 成果物＝`outputs/visual_review/10_〜13_`（pose出力／骨格／canny出力／エッジ・README追記済み）。
+- **監督の事前目視所見（受容判断ではない）**: 参照の歩行動作・カメラ・群衆構図を維持して別キャラクター（老船長）へ置換成立。canny版は参照の街並み構造をより強く保持・pose版は背景自由度が高い（制御タイプの性質どおり）。**受容判断はユーザー**（G1〜G4=客観PASS／G5=目視ゲート＝別物）。

@@ -33,7 +33,7 @@
 - **唯一の未消化ゲート＝ユーザー目視**: `outputs/ic_lora_phaseA/spike.mp4` vs `outputs/ic_lora_phaseA/base.mp4`（送付済み・回答PENDING）。
 
 ### ★次セッションのスコープ候補＝IC-LoRA Phase B（open decisions のみ・詳細計画は次セッションで）
-- **本実装の機構選定**: bf16 full-dequant fuseはスパイク専用でRAM 54-57GB消費（32GB RAM級マシンでは非現実的）。候補＝①per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン）②事前fuse済みチェックポイント派生。どちらを採るかは要議論。
+- **本実装の機構選定**: bf16 full-dequant fuseはスパイク専用でRAM 54-57GB消費（32GB RAM級マシンでは非現実的）。候補＝①per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン・rank64の追加演算<1%・将来の8GB VRAM対応に直結）②事前fuse済みチェックポイント派生（CPU融合→再量子化GGUF保存→本番per-layer経路で最速推論。融合器は実装済み`_fuse_ic_loras`が部品として流用可）。**ユーザー指示(2026-07-03): 現行bf16融合経路は廃止せず既存フラグでユーザー選択可能なまま温存**（開発/oracle照合/パリティ検証用。ただし実測でdenoise約3倍遅＋VRAM+3.6GBのため「速い推論」枠ではない点に注意）。
 - **公式パリティのoracle照合**: wheelの`ICLoraPipeline`はstage1のみLoRA適用、当実装は両ステージにfuse。Upscaler用途では挙動的に問題なさそうだが、oracle未照合のまま。
 - **keep-resident運用との整合**: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグル方式（リビルド vs デュアルキャッシュ）を設計する必要あり。
 - **API/UI露出**: `engine/api_types.py`のIcLoraスキーマは存在するが未配線（`loras`パラメータのAPI露出は基本配線ステップとして未着手）。

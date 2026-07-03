@@ -207,23 +207,30 @@ class GGUFStateDictLoader:
 
     def _fuse_ic_loras(self, base_sd: Any) -> Any:
         """Load each configured LoRA safetensors and fuse it into ``base_sd`` in
-        place (RAM cost = one per-key delta transient, not a second full copy).
+        place (RAM cost = one per-key fp32 delta transient, not a second full copy).
 
-        Uses the wheel's own safetensors loader + fuse machinery so the delta
-        math matches the reference IC-LoRA pipeline exactly.
+        The wheel's apply_loras is deliberately NOT used: it matmuls the LoRA
+        delta in bf16 on CPU (fuse_loras.py _prepare_deltas), and on CPUs without
+        AVX512-BF16/AMX torch's bf16 matmul falls into a ~54x-slower-than-fp32
+        path (measured: ~19 min per fuse vs 68 s no-LoRA load). This loop is
+        mathematically IDENTICAL to the wheel's bf16 route
+        (_prepare_deltas + _fuse_delta_with_bfloat16): both compute
+        W + (B*strength) @ A per key; the only difference is where the single
+        bf16 rounding happens — the wheel rounds the matmul products in-loop
+        (bf16 matmul), we matmul in fp32 and round ONCE when casting the delta
+        to the weight dtype before the in-place add.
         """
         from ltx_core.loader import (
             LTXV_LORA_COMFY_RENAMING_MAP,
-            LoraStateDictWithStrength,
             SafetensorsStateDictLoader,
-            apply_loras,
         )
 
         loader = SafetensorsStateDictLoader()
         cpu = torch.device("cpu")
-        lora_entries: list[Any] = []
         total_lora_keys = 0
         total_delta_keys = 0
+        suffix_a = ".lora_A.weight"
+        suffix_b = ".lora_B.weight"
 
         for path, strength in self.ic_loras:
             if not Path(path).exists():
@@ -232,40 +239,65 @@ class GGUFStateDictLoader:
             # LoRA keys align with the (raw GGUF) model keys.
             lora_sd = loader.load(path, sd_ops=LTXV_LORA_COMFY_RENAMING_MAP, device=cpu)
             n_keys = len(lora_sd.sd)
-            # Cheap delta-coverage count: a model weight "<name>.weight" receives a
-            # delta iff the LoRA carries "<name>.lora_A.weight". Zero matches means
-            # the LoRA/model key formats disagree and the fuse is a silent no-op.
-            suffix = ".lora_A.weight"
-            n_delta = sum(
-                1
-                for k in lora_sd.sd
-                if k.endswith(suffix) and (k[: -len(suffix)] + ".weight") in base_sd.sd
-            )
+            n_delta = 0
+
+            # Per-key fp32 fuse. Multiple LoRAs hitting the same key accumulate
+            # sequentially (same net result as the wheel's summed-deltas path).
+            # Transient memory = ONE fp32 delta at a time (largest LTX-2.3 layer
+            # is a few hundred MB in fp32), freed right after the in-place add.
+            for key_a in lora_sd.sd:
+                if not key_a.endswith(suffix_a):
+                    continue
+                prefix = key_a[: -len(suffix_a)]
+                weight_key = prefix + ".weight"
+                weight = base_sd.sd.get(weight_key)
+                if weight is None:
+                    continue  # counted via n_delta; 0 total → loud WARN below
+                key_b = prefix + suffix_b
+                lora_a = lora_sd.sd.get(key_a)
+                lora_b = lora_sd.sd.get(key_b)
+                if lora_b is None:
+                    raise RuntimeError(
+                        f"IC-LoRA {Path(path).name}: {key_a} present but {key_b} "
+                        "missing — corrupt/unsupported LoRA layout"
+                    )
+                if weight.dtype not in (torch.bfloat16, torch.float16, torch.float32):
+                    raise RuntimeError(
+                        f"IC-LoRA fuse: unsupported model weight dtype {weight.dtype} "
+                        f"for {weight_key} (expected bf16/f16/f32)"
+                    )
+                # B:(out,r) @ A:(r,in) → delta:(out,in), fp32 matmul (fast CPU path).
+                delta = torch.matmul(
+                    lora_b.to(torch.float32) * strength, lora_a.to(torch.float32)
+                )
+                if delta.shape != weight.shape:
+                    raise RuntimeError(
+                        f"IC-LoRA fuse: delta shape {tuple(delta.shape)} != weight "
+                        f"shape {tuple(weight.shape)} for {weight_key} "
+                        f"(A={tuple(lora_a.shape)}, B={tuple(lora_b.shape)})"
+                    )
+                weight.add_(delta.to(weight.dtype))
+                del delta
+                n_delta += 1
+
             total_lora_keys += n_keys
             total_delta_keys += n_delta
             logger.info(
-                "IC-LoRA %s: %d keys, %d model weights matched (strength=%.3f)",
+                "IC-LoRA %s: %d keys, %d model weights fused (strength=%.3f)",
                 Path(path).name, n_keys, n_delta, strength,
             )
             if n_delta == 0:
                 logger.warning(
                     "IC-LoRA %s matched 0 model weights — LoRA/model KEY-FORMAT "
-                    "MISMATCH; the fuse would be a no-op. Check the renaming map.",
+                    "MISMATCH; the fuse was a no-op. Check the renaming map.",
                     Path(path).name,
                 )
-            lora_entries.append(LoraStateDictWithStrength(lora_sd, strength))
 
-        fused = apply_loras(
-            model_sd=base_sd,
-            lora_sd_and_strengths=lora_entries,
-            dtype=torch.bfloat16,
-            destination_sd=base_sd,
-        )
         logger.info(
             "IC-LoRA fuse complete: %d LoRA(s), %d total lora keys, %d total model deltas",
             len(self.ic_loras), total_lora_keys, total_delta_keys,
         )
-        return fused
+        return base_sd
 
 
 # ------------------------------------------------------------------ #

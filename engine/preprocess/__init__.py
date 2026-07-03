@@ -27,11 +27,13 @@ from __future__ import annotations
 
 from engine.preprocess.base import FrameProcessor
 from engine.preprocess.canny import CannyProcessor
+from engine.preprocess.dwpose import DwposeProcessor
 from engine.preprocess.driver import get_processor, preprocess_video
 
 __all__ = [
     "FrameProcessor",
     "CannyProcessor",
+    "DwposeProcessor",
     "get_processor",
     "preprocess_video",
 ]

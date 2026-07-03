@@ -15,10 +15,13 @@ import cv2
 
 from engine.preprocess.base import FrameProcessor
 from engine.preprocess.canny import CannyProcessor
+from engine.preprocess.dwpose import DwposeProcessor
 
-# Kind -> zero-arg factory. Slice 3 registers ``"dwpose": DwposeProcessor`` here.
+# Kind -> zero-arg factory. Canny is stateless; DWPose holds TorchScript models
+# it loads lazily on first frame and frees via ``release()`` (see below).
 _FACTORIES: dict[str, "type"] = {
     "canny": CannyProcessor,
+    "dwpose": DwposeProcessor,
 }
 
 # Process-level instance cache: a stateless Canny is cheap, but a future DWPose
@@ -85,6 +88,14 @@ def preprocess_video(src: Path, dst: Path, processor: FrameProcessor) -> int:
             writer.release()
     finally:
         cap.release()
+        # Evict any GPU-resident weights the processor loaded for this video
+        # (DWPose caches ~355 MB of TorchScript models) BEFORE the caller runs
+        # the 16 GB-tight generation denoise. Optional per the FrameProcessor
+        # protocol: stateless processors (Canny) have no ``release``. The cached
+        # processor instance itself survives; its next ``process`` reloads.
+        release = getattr(processor, "release", None)
+        if callable(release):
+            release()
 
     if n == 0:
         raise RuntimeError(f"preprocess: decoded 0 frames from source: {src}")

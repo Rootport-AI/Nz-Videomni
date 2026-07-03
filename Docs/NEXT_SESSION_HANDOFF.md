@@ -2,6 +2,23 @@
 
 ---
 
+## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03・**次セッションはまずここ**）
+
+> **本ブロックが最新の正本。** 下の 2026-07-01 以前の▶節は歴史記録。
+
+### Phase 3 スライス2「クリップ連結」＝masked AV-latent 連結で再実装・実機検証PASS（ユーザー最終目視/試聴のみ PENDING）
+- 同日中に旧アーキ（配管PASSだが目視hard-cut FAILだった latent-extend 方式）を全面置換。branch **`feature/phase3-clip-concat`**（未 merge・未 push）。commit 列: `aebcd08`（engine masked AV-latent chaining）→`c0ed582`（api/services配線）→`d359e4a`（stage2単一コンテキスト修正）→`622dd81`（worker protocolドキュメント）。
+- **アーキテクチャ**: per-segment stage1でvideo+audio latent tailをcarry+freeze→**1本の連続stage1 AV latentを組み立て**（線形クロスフェード）→1回のupsample→stage2 refineを**常に時間タイル分割**（両モダリティのRoPE20秒天井対策）→**1回だけVAE decode**。旧方式の「per-clip decode＋独立音声」が hard cut の本質だったため、境界が1本の連続latentの内部に存在する構造に転換した。新モジュール＝`chain_math.py`（ジオメトリ単一情報源）／`engine/pipeline/chain_pipeline.py`（`run_chain`）。
+- **検証**: 実装より先に境界連続性ハーネス（`services/video_io.py`＋`outputs/phase3_clip_concat_spike/verify_boundaries.py`）を構築し旧hard-cutアーティファクトへ較正（全検出・偽陽性0）。GPU spike S1/S2/S3 でユーザー都度目視/試聴PASS（S2のタイル継ぎ目直後drift・S3の発話境界口パウズはv1受容済みチューニングbacklog）。本番回帰＝byte-match T2V/I2V不変・pytest 41 green。実機Chain A（2×73f/147s）・Chain B（4×145f/22s/302s）とも全映像junctionがcontinuous（Chain Bの音声J=456フラグはspeech-onset偽陽性の疑いと暫定判断）。
+- **PENDING（最優先・ユーザー）**: Chain A/B 本番出力そのものの最終目視/試聴（パス・詳細は [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md) の「Pending項目」）。旧 `_EXTEND` monkeypatch機構の削除判断も保留。
+- 正本＝**[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（採用アーキテクチャnote付）。VERIFICATION_LOG §19（§18は旧方式FAILの記録として温存）。
+
+### Phase 3 スライス1「キーフレーム条件付け」＝main 入り済だが目視サインオフは未了
+- 機能は main 入り済（merge `7f31935`）。だが目視は**まだ有効に実施されていない**: 監督が目視用に提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモーク出力で**全キーフレームに同一の合成テスト画像**を使っており無効（青い長方形になった理由）。
+- **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先 `visual_bookend/`・`visual_multikey/`）。
+
+---
+
 ## ▶▶▶▶▶▶ 現状ステータス（2026-07-01・**次セッションはまずここを読む**）
 
 > **この節が最新の正本サマリ。** 以下の各▶節は古い順に温存した歴史記録なので、食い違ったら**本節が正**。
@@ -90,7 +107,8 @@
 > **北極星＝公式 LTX-Desktop（Lightricks）の「AI 生成機能」パリティ**。編集/エンコード/タイムラインは AviUtl2 が担う。調査で判明＝**LTX-Desktop 生成機能の大半は下層（engine/wheel）が既に対応済みで、塞いでいるのは我々の凍結 API だけ**。
 
 - [x] **★スライス1＝凍結 API の「解凍」（条件付け露出）＝実装＋客観検証 PASS・main merge 済（2026-07-02・merge `7f31935`・push 済）。目視品質のみ PENDING**: 多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength・cap5 を露出。**engine 内で完結**したが「API 表層のみ／engine 不可触」の当初想定は**誤り**で、実際は engine の条件付け経路に**公式ハイブリッド（idx0=置換 / idx>0=guide）を monkeypatch で自前再現**する必要があった（インストール済み wheel に `combined_image_conditionings` が無い・wheel 更新は回避）。frame_idx は公式 `8n+1` latent 格子へスナップ（ComfyUI `LTXVAddGuide` 準拠）。回帰 byte-match（T2V/単一 I2V バイト一致）＋新経路スモーク（bookend 0/41・multikey3 0/17/41 完走）＋VRAM 8440MB（多キーフレームでもデルタ0）全 PASS。**残＝目視品質判断（ユーザー）＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md)。merge 済ゆえ不足時は追いコミットで調整（strength/グリッド）**。正本＝[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)。commit `1602245`→`5033385`→`d7a56b1`→docs `0854f8d`→merge `7f31935`。num_pixel_frames／reference-video は今回スコープ外（将来）。
-- [ ] **★スライス2（次セッションの主作業）＝クリップ連結（生成プリミティブ）**: ブックエンド I2V＋自己回帰 extend で長尺化。配置は AviUtl2 側（フロント repo 未整備ゆえ本スライスは**バックエンド完結**）。**入口＝リサーチ**: LTX 2.3 の extend は「末尾ピクセルから生成」ではなく**末尾フレームの潜在テンソルの"文脈"から生成**する性質＝この**latent 文脈の扱い**を基礎機能まで掘って確定してから厚薄スコープを決める（手当たり次第禁止）。プロンプトは「グローバル基底＋クリップ毎 override」（text-only 伝播）。**詳細ワークオーダー＝[`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)**。
+  - **⚠️ 2026-07-03 訂正**: 目視は**まだ有効に実施されていない**。監督が提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモークで**全キーフレームに同一の合成画像**を使い無効。**有効な目視＝`run_visual.py` を異なる実画像で**（→`visual_bookend/`・`visual_multikey/`）。
+- [~] **★スライス2＝クリップ連結（生成プリミティブ）＝masked AV-latent 連結で再実装・実機検証PASS（ユーザー最終目視/試聴のみ PENDING・2026-07-03）**: branch `feature/phase3-clip-concat`（未 merge・commit `760a283`→`9fb7111`→`5e73e47`→**`aebcd08`→`c0ed582`→`d359e4a`→`622dd81`（同日中に旧latent-extend方式を全面置換）**）。旧方式は境界フレーム目視で hard cut・音声断絶が確定していたが、原因（per-clip decodeでcausal VAEリセット再トリガー＋音声独立生成）を踏まえ「1本の連続AV latentを組み立てて1回だけdecode」する構造に作り直し。境界連続性ハーネスを既知hard-cutへ較正済み＋GPU spikeでユーザー都度目視/試聴PASS＋実機Chain A/Bで全映像junction continuous。**残＝Chain A/B本番出力そのものの最終目視/試聴（ユーザー）**。**正本＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（採用アーキテクチャnote付）・[`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)・[`VERIFICATION_LOG.md` §19](VERIFICATION_LOG.md)（§18=旧方式FAILの記録）。
 - [ ] **Gap Fill／Retake**（＝LTX-Desktop の連続性プリミティブ・**大規模ゆえ次セッションでは着手しない**）。Retake=`TemporalRegionMask`/`RetakePipeline`、Gap Fill=近傍条件の間埋め。
 - [ ] その他パリティ（段階的）: 生成キュー／延長尺(〜30s)／text-only プロンプト強化／STG・sigma schedule・denoise loop・negative・seed lock 露出／空間アップスケーラのユーザー操作露出／**LoRA・attention tiling 再導入**（de-fork で削除済）。
 

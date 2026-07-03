@@ -167,6 +167,179 @@ class PipelineManager:
         finally:
             safe_memory_cleanup()
 
+    # -------------------------------------------------------- run chain job
+
+    def run_chain_job(self, job: JobRecord) -> None:
+        """Run a multi-clip chain to ONE continuous output.mp4 (Phase 3 WP4).
+
+        Masked AV-latent concatenation: the whole chain runs INSIDE ONE worker
+        invocation (latents resident across segments) — per-segment stage-1 with
+        AV carry+freeze, crossfade assembly, always-tiled stage-2, ONE VAE decode.
+        Replaces the old per-clip generate + carry.pt + ffmpeg-concat + trim path
+        (which cut hard at every boundary). Junction pixel-frame indices (segment
+        seams AND stage-2 tile seams) are recorded in metadata for the review
+        harness. The single-clip :meth:`run_job` is untouched.
+
+        Cancellation: the chain is now one atomic worker op, so cancel is honored
+        at the job boundary (before dispatch) — matching that a single generate is
+        also not interruptible mid-run.
+        """
+        chain = job.chain_request
+        assert chain is not None, "run_chain_job requires job.chain_request"
+
+        job.status = JobStatus.running
+        job.started_at = now_iso()
+        job.progress = 0.02
+        started = time.time()
+        output_dir = self.config.output_dir / job.job_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        n = len(chain.clips)
+
+        logger.info(
+            "Chain job %s start clips=%d %dx%d overlap=%d/%.2f seed=%d",
+            job.job_id, n, chain.width, chain.height,
+            chain.overlap_frames, chain.overlap_strength, chain.seed,
+        )
+
+        try:
+            if job.cancel_requested:
+                job.status = JobStatus.cancelled
+                job.progress = 1.0
+                job.completed_at = now_iso()
+                self.state = self.STATE_READY
+                logger.info("Chain job %s cancelled before dispatch", job.job_id)
+                return
+
+            if not self.runner.loaded:
+                if not self.config.model.auto_load_on_generate:
+                    raise pipeline_load_failed(detail="auto_load_on_generate is disabled")
+                self.load()
+            self.state = self.STATE_RUNNING
+
+            # Only clip 0 may carry conditioning images (validator enforces this).
+            clip0_cond_paths = [
+                self.upload_store.path_for(ci.image_id)
+                for ci in chain.clips[0].conditioning_images
+            ]
+
+            def on_progress(step, total, progress):
+                job.current_step = step
+                job.total_steps = total
+                job.progress = round(max(0.0, min(1.0, progress)), 3)
+
+            outcome = self.runner.generate_chain(
+                chain,
+                output_dir=output_dir,
+                progress_callback=on_progress,
+                clip0_conditioning_paths=clip0_cond_paths,
+            )
+
+            elapsed = time.time() - started
+            meta = outcome.chain_metadata or {}
+            total_frames = int(meta.get("total_px", 0))
+            duration = round(total_frames / chain.frame_rate, 3) if total_frames else 0.0
+            if chain.crop_output is not None:
+                resolution = f"{chain.crop_output.width}x{chain.crop_output.height}"
+            else:
+                resolution = f"{chain.width}x{chain.height}"
+            output_path = outcome.output_path
+            file_size = output_path.stat().st_size if output_path.exists() else 0
+
+            metadata_path = output_dir / "metadata.json"
+            if self.config.output.save_metadata_json:
+                self._write_chain_metadata(
+                    job=job, chain=chain, metadata_path=metadata_path,
+                    resolution=resolution, duration=duration, file_size=file_size,
+                    elapsed=elapsed, seed_used=outcome.seed_used,
+                    backend=outcome.backend or "mock",
+                    peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
+                    chain_meta=meta,
+                )
+
+            result = JobResult(
+                video_url=f"/api/v1/jobs/{job.job_id}/video",
+                duration_seconds=duration,
+                resolution=resolution,
+                file_size_bytes=file_size,
+                generation_time_seconds=round(elapsed, 2),
+                seed_used=outcome.seed_used,
+                output_path=f"outputs/{job.job_id}/output.mp4",
+                metadata_path=f"outputs/{job.job_id}/metadata.json",
+            )
+
+            job.status = JobStatus.completed
+            job.result = result
+            job.progress = 1.0
+            job.completed_at = now_iso()
+            self.state = self.STATE_READY
+            logger.info(
+                "Chain job %s done in %.1fs -> %s (frames=%d)",
+                job.job_id, elapsed, job.status.value, total_frames,
+            )
+
+        except Exception as exc:
+            job.completed_at = now_iso()
+            job.status = JobStatus.failed
+            if _is_oom(exc):
+                err = gpu_oom(job_id=job.job_id, detail=str(exc))
+                logger.error("Chain job %s OOM: %s", job.job_id, exc)
+                self._cleanup_after_error()
+            else:
+                err = generation_failed(job_id=job.job_id, detail=str(exc))
+                logger.exception("Chain job %s failed", job.job_id)
+                self.state = self.STATE_READY if self.runner.loaded else self.STATE_UNLOADED
+            job.error = (
+                f"{err.code}: {err.message} ({err.detail})" if err.detail
+                else f"{err.code}: {err.message}"
+            )
+        finally:
+            safe_memory_cleanup()
+
+    def _write_chain_metadata(
+        self, *, job, chain, metadata_path, resolution, duration, file_size,
+        elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
+    ) -> None:
+        cm = chain_meta or {}
+        metadata = {
+            "job_id": job.job_id,
+            "created_at": job.created_at,
+            "started_at": job.started_at,
+            "completed_at": now_iso(),
+            "status": "completed",
+            "kind": "chain",
+            "request": chain.model_dump(),
+            "generation_mode": "chain",
+            "seed_used": seed_used,
+            "generation_time_seconds": round(elapsed, 2),
+            "backend": backend,
+            "chain": {
+                "num_clips": len(chain.clips),
+                "architecture": "masked_av_latent_concat",
+                "overlap_frames": chain.overlap_frames,
+                "overlap_strength": chain.overlap_strength,
+                "total_frames": total_frames,
+                "clip_num_frames": [c.num_frames for c in chain.clips],
+                # Junction pixel-frame indices (0-based last-frame-of-segment; the
+                # boundary is J / J+1) for the review harness — segment seams AND
+                # stage-2 tile seams, plus the ±1 spread that was actually probed.
+                "segment_seam_junctions": cm.get("segment_seam_junctions", []),
+                "tile_seam_junctions": cm.get("tile_seam_junctions", []),
+                "all_junctions": cm.get("all_junctions", []),
+                "video_tiles": cm.get("video_tiles", []),
+                "n_tiles": cm.get("n_tiles"),
+            },
+            "output": {
+                "path": f"outputs/{job.job_id}/output.mp4",
+                "resolution": resolution,
+                "duration_seconds": duration,
+                "frame_rate": chain.frame_rate,
+                "file_size_bytes": file_size,
+            },
+            "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=peak_vram_mb),
+            "environment": self._environment_block(),
+        }
+        video_io.save_metadata(metadata_path, metadata)
+
     # ------------------------------------------------------------ finalize
 
     def _finalize(self, job: JobRecord, outcome, output_dir: Path, elapsed: float) -> JobResult:

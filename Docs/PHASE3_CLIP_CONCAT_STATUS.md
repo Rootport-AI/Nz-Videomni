@@ -1,0 +1,80 @@
+# Phase 3 スライス2「クリップ連結」現状ステータス — masked AV-latent 連結で再実装・実機検証PASS
+
+- 更新: 2026-07-03（本セッションで旧アーキから作り直し）
+- 併読: [`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（研究/設計・訂正バナー＋採用アーキテクチャ確定note）／[`VERIFICATION_LOG.md` §19](VERIFICATION_LOG.md)（本セッションの全ゲート詳細）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)（引き継ぎ）
+
+---
+
+## ⚠️ 一行結論
+
+**公式パリティ「masked AV-latent 連結」アーキテクチャで再実装・実機検証PASS**（境界の連続性を「境界フレーム目視/画素差分ハーネス」で計測し、ユーザーが known-bad アーティファクトへの較正結果を確認済み）。**ただし Chain A/B 本番出力そのもののユーザー最終目視/試聴はまだ PENDING**（本文書「pending 項目」参照）。旧方式（stage1 latent tail carry を disarm 後の独立 stage2 refine に継がせる方式）は 2026-07-03 冒頭で目視 hard-cut FAIL が確定しており、完全に置き換えた。
+
+## 旧方式と真因（履歴として保持）
+
+2026-07-03 冒頭時点でユーザー目視により確定していた FAIL:
+- 2clip は frame24→25、4clip は49→50/89→90/129→130 で hard cut・音声も断絶。クリップ内は滑らかだが境界で完全不連続。
+- 根本原因: ①二段パイプラインのミスマッチ（carry=stage1 低解像度 latent／表示=stage2 refine後、各clip独立refine）②carry が弱すぎ短すぎ（K=2 latent・soft strength 0.5）③overlap を concat で trim 破棄④音声は各clip完全独立生成⑤AdaIN/クロスフェード/stage2 overlap 凍結が未実装。
+- 検証手法の欠陥: 「テンソル一致・byte-match・VRAM」は配管の検証に過ぎず、映像連続性を一度も目視していなかった。
+
+詳細は git 履歴の本ファイル旧版（commit `876b8c5`）および `VERIFICATION_LOG.md` §18 に温存。
+
+## 新アーキテクチャ（2026-07-03 確定・masked AV-latent concatenation）
+
+構造上の要点（詳細は `chain_math.py` docstring／`engine/pipeline/chain_pipeline.py`／`VERIFICATION_LOG.md` §19.2 の wheel 深掘り）:
+
+1. **root cause の再確認（WP2 read-only wheel 深掘り）**: 旧方式の hard cut は「per-clip VAE decode が causal VAE の "先頭 latent フレーム=1pixel" リセットを毎境界で再トリガーする」＋「音声が各clip完全独立生成」が本質。position はデノイズ呼び出しごとに再構築されるが、VAE decode は position-free かつ既に時間タイル化済み → 「1本の連続 stage1 AV latent を組み立てる → 1回の stage2 → 1回だけ decode」にすれば構造的にシームレスになる。
+2. **アーキテクチャ**: per-segment STAGE1（half-res）で video+audio latent tail を carry+freeze → **1本の連続 stage1 AV latent を組み立て**（overlap は線形クロスフェード。各接合部の音声 overlap 長 K_a は「組み立て後の音声長が stage2 ターゲット長にちょうど一致する」よう逆算）→ 全タイムラインを **1回だけ** upsample → **STAGE2 refine を時間タイル分割**で実行（tile=22 latent フレーム／overlap=4 hard-freeze後ブレンド。短いチェーンは単一タイルに縮退）→ **1回だけ** VAE decode → 1本の mp4。
+3. **両モダリティの RoPE 20秒天井**: video・audio とも RoPE 位置に20秒の学習上限がある（audio は秒単位の位置・`max_pos=[20]`）。stage2 を常に時間タイル化することで各タイルが位置を0から再スタートし、20秒超のチェーンでも位置レンジ内に収まる。
+4. **公式先行事例との整合（WEB調査・github Lightricks/ComfyUI-LTXVideo コード確認）**: 公式 extend/looping サンプラーは video-only（AV latent では明示的に raise）。公式の音声連続性機構は `LTXVSetAudioVideoMaskByTime`（モダリティ別 preserve mask＋線形ランプ）＋標準サンプラー。継ぎ目は `LinearOverlapLatentTransition` クロスフェード。last-frame I2V チェーンは構造上 audio を運べない → 音声連続性必須の本要件では不採用。
+5. **wheel 非改変**: engine が wheel 関数を直接呼ぶのみで monkeypatch 不要（旧 `_EXTEND` monkeypatch 機構は現在未使用、下記「保留事項」参照）。
+
+## 検証手法の是正（本セッションの前提）
+
+旧セッションの「配管PASSのみで機能PASS判定」という欠陥を是正するため、本セッションでは:
+- **WP1（先行）**: 境界連続性検証ハーネスを実装より先に構築（`services/video_io.py` の `frame_count`/`extract_frame_at`/`extract_last_frame` ＋ `outputs/phase3_clip_concat_spike/verify_boundaries.py`）。
+- **既知の bad アーティファクトへ較正**: 旧方式（ユーザー確認済み hard cut）を再解析し、video MAD 比 3倍・audio 30msRMSジャンプ比 6倍のしきい値で **全既知 hard cut を検出**（video 9–11倍・audio 8.8–17.5倍）、intra-clip サンプル11件で偽陽性0。
+- 全 WP で「客観PASS」と「ユーザー目視/試聴」を明確に分離し、ユーザー確認済みの箇所とメトリクスのみの箇所を区別（詳細は VERIFICATION_LOG §19）。
+
+## 検証結果サマリ（詳細は VERIFICATION_LOG §19）
+
+| 段階 | 内容 | 客観結果 | 目視/試聴 |
+|---|---|---|---|
+| ハーネス較正 | 旧hard-cutアーティファクトへの較正 | 既知不連続を全検出・偽陽性0（11サンプル） | ユーザーが判定基準を確認済み |
+| S1（2セグ, K_v=3, strength 0.5） | GPU spike | 全境界 continuous・VRAM 8.85GB | ユーザー目視 PASS |
+| S2（4セグ 529px/22.04s, stage2タイル） | GPU spike | 30プローブ全 continuous | ユーザー: タイル継ぎ目に破綻なし。継ぎ目直後の subtle drift 2件を発見（チューニング backlog） |
+| S3（発話プロンプト） | GPU spike | 音声メトリクス・スペクトログラムとも continuous | 境界での「口が~0.25秒閉じて再度開く」アーティファクトを分析で分離（strength 0.5/0.8/1.0 スイープで strength は原因でないと確認）。ユーザーは視聴時に気づかず＝v1として受容、backlog記録 |
+| WP4 本番配線 | byte-match回帰＋pytest | T2V `23844b4e…`／I2V `a511eda4…` 不変・pytest 41 green | — |
+| Chain A（実機・2×73f/147s） | 全境界 | continuous | **PENDING**（下記） |
+| Chain B（実機・4×145f/22s） | 映像境界7件 | 全 continuous | **PENDING**（下記） |
+| Chain B 音声 | J=456で閾値超過（12.63倍） | 調査の結果 speech onset（無音→発話）での既知の誤検知パターンと判定（下記） | **PENDING**（下記） |
+
+### Chain B の J=456 音声フラグ＝調査済み・harness false-positive 判定
+
+- `boundary_metrics.json`: junction 456 の audio ratio=12.63（閾値6超過・`verdict: DISCONTINUOUS`）、同 junction の video ratio=0.84（閾値3内・`verdict: continuous`）。
+- 調査: 同一チェーンの非境界地点で 25–46倍のジャンプが見られる一方、この境界では 12.6倍（非境界より低い）。同じ overlap ジオメトリは S2 spike では pass している。境界時刻 t≈19.04s は無音→発話の立ち上がり（onset）に一致。
+- **結論（暫定）**: 無音→発話の onset は音声 RMS ジャンプそのものが大きく、境界か否かに関わらず閾値を超えやすい＝ハーネスの speech onset に対する既知の弱点。映像は同境界で continuous。**ユーザーの実試聴での確定判断は PENDING**（下記）。
+
+## 既知の品質特性・チューニング backlog（機能は成立、磨き代として記録）
+
+1. **タイル継ぎ目直後の subtle drift**（S2 spike で発見）: 171→172フレーム付近の雲、470→471フレーム付近の波に、継ぎ目そのものではなく**継ぎ目の少し後**で微妙なドリフトが視認された。
+2. **発話チェーンの境界での口パウズ**（S3 spike で発見）: チェーン境界で「口が約0.25秒閉じて再度開く」アーティファクト。standalone 生成（seg0単体）には存在しない＝チェーン由来。strength 0.5/0.8/1.0 スイープで strength は原因ではないと判明。おそらく全タイムライン stage2 が「発話→ポーズ→発話」という2つの発話区間を再調停する挙動。ユーザーは視聴時に気づかず、v1として受容。
+3. **ハーネスの speech-onset 偽陽性疑い**（Chain B J=456・上記）。
+
+## リポジトリ状態
+
+- branch **`feature/phase3-clip-concat`**（未 merge・未 push）。
+- 本セッションの commit 列: `aebcd08`（engine masked AV-latent chaining）→`c0ed582`（api/services 配線）→`d359e4a`（stage2 単一コンテキスト修正）→`622dd81`（worker protocol ドキュメント）。
+- 旧 `_EXTEND` monkeypatch 機構（`9fb7111`由来）は**残置・未使用**（削除は保留、下記「保留事項」参照）。
+- 主要新規モジュール: `chain_math.py`（リポジトリ直下・app/engine両venvで import 可能な純Python junction/tileジオメトリの単一情報源）、`engine/pipeline/chain_pipeline.py`（`run_chain`＝spikeのs1+s2を本番移植）。
+- worker: 新 `generate_chain` op（`engine/worker.py`＋`engine/api_types.py`）。app: `services/ltx_runner.py`（real+mock）／`services/pipeline_manager.py`（`run_chain_job`・単一呼び出しに再構成）／`api/models.py`（`overlap_frames`既定=K_v=3・`MAX_CHAIN_TOTAL_PIXEL_FRAMES=8×481`）。
+- キャンセルはジョブ境界のみ（チェーン全体が単一の atomic worker op＝ユーザー承認済みの逸脱）。
+
+## Pending 項目（次セッション/ユーザー）
+
+1. **【最優先・ユーザー】Chain A/B 本番出力の最終目視/試聴**:
+   - Chain A: `outputs/a1459043-1177-48ec-9689-a12dbb540dd5/output.mp4`（2×73f・129総フレーム・seam 71→72）。
+   - Chain B: `outputs/0e20e9aa-4ba2-4aa6-89bf-7e62fa74dff6/output.mp4`（4×145f・529総フレーム・segment seam 143→144/271→272/399→400・tile seam 167→168/311→312/455→456・音声は t≈19.0s 付近を要試聴＝上記 J=456 の件）。
+   - 各 `boundary_report/`（`verify_boundaries.py` 出力）にメトリクス・montage PNG・audio波形PNGあり。
+2. **スライス1 キーフレーム目視は別件で PENDING**（`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md` 参照・本スライスとは独立）。
+3. **旧 `_EXTEND` monkeypatch の削除判断はユーザー保留**（未使用だが残置中）。
+4. 上記チューニング backlog（タイル継ぎ目後drift・発話ポーズ・harness speech-onset偽陽性）は v1 受容済みだが将来の磨き候補。

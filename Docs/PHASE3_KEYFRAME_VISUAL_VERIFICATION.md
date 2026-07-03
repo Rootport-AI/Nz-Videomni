@@ -2,8 +2,11 @@
 
 - 作成: 2026-07-02（監督）
 - 対象: ユーザー本人（外出から戻ったら実行）
-- 前提: branch `feature/phase3-api-unfreeze-conditioning`（commit `1602245`→`5033385`・**未 merge**）。実 backend＋GPU（RTX 4070 Ti SUPER 16GB）。
+- 前提: **✅ main 入り済**（merge `7f31935`・2026-07-02）。実 backend＋GPU（RTX 4070 Ti SUPER 16GB）。※旧記述「未 merge」は stale だったため訂正（2026-07-03）。
 - 上位: [`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md) ／ [`PHASE3_API_UNFREEZE_WORKORDER.md`](PHASE3_API_UNFREEZE_WORKORDER.md)
+
+> ## ⚠️ 2026-07-03 注記（この目視はまだ有効に実施されていない）
+> 監督が 2026-07-03 に誤って目視用として提示した `outputs/phase3_multikey_smoke/bookend/output.mp4` ・ `.../multikey3/output.mp4` は、**自動スモーク `run_smoke.py` の出力で、全キーフレームに同一の合成テスト画像（`outputs/qat_reclaim_baseline/cond_image_512x320.png`＝青い長方形+グラデ）を渡していた**。同一画像を全端点にロックしたため出力が静止画になり、**機能の成否を目視判断できない無効な検証**だった（機構自体は実 backend で動作）。**有効な目視は、下記 `run_visual.py` を「視覚的に明確に異なる実画像」で実行すること**（出力先＝`visual_bookend/`・`visual_multikey/`）。目視サインオフは依然 PENDING。
 
 > **なぜ目視だけ残っているか**: 客観検証（回帰 byte-match＋新経路がクラッシュせず動く＋VRAM 16GB fit）は**全 PASS 済み**（§17.5）。残るのは「実際に良い映像になっているか」＝**数値 baseline の無い品質判断**で、これは人間の目でしか確定できない（WORKORDER §4 の目視項目）。既定経路（T2V・単一 I2V）は byte 一致で無傷確認済みなので、ここで壊すものは無く、品質が不足なら strength 調整や `8n+1` グリッド切替で後追い可能。
 

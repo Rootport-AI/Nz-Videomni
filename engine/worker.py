@@ -20,14 +20,20 @@ Protocol (one JSON object per line; parent -> worker):
    gguf_transformer_path, gguf_gemma_path, gguf_per_layer_quant,
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size}
   {"op": "generate", prompt, seed, height, width, num_frames, frame_rate,
-   num_steps, images:[{path,frame_idx,strength}...], output_path}
+   num_steps, images:[{path,frame_idx,strength}...], output_path,
+   # Phase 3 slice-2 clip-concat (all optional; absent -> stock generate):
+   prev_clip_latent_path?, carry_latent_out_path?, overlap_frames?, overlap_strength?}
+  # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
+  {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
+   overlap_frames, overlap_strength, output_path,
+   clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...]}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
 ignored by the parent. Every protocol line: @@LTX@@<compact-json>, flushed. All
 other logging goes to STDERR.
   @@LTX@@{"event":"ready"}
-  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...}
+  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...[,"carry_latent_path":...]}
   @@LTX@@{"event":"error","detail":...}
 """
 
@@ -183,9 +189,27 @@ def _do_generate(msg: dict) -> None:
         for i in msg.get("images", [])
     ]
 
+    # Phase 3 slice-2 — clip-concatenation / latent-level extend (optional).
+    # All keys absent -> byte-identical-to-today generate (extend path dormant).
+    from engine.api_types import (
+        EXTEND_OVERLAP_FRAMES_DEFAULT,
+        EXTEND_OVERLAP_STRENGTH_DEFAULT,
+    )
+
+    prev_clip_latent_path = msg.get("prev_clip_latent_path") or None
+    carry_latent_out_path = msg.get("carry_latent_out_path") or None
+    overlap_frames = int(msg.get("overlap_frames", EXTEND_OVERLAP_FRAMES_DEFAULT))
+    overlap_strength = float(msg.get("overlap_strength", EXTEND_OVERLAP_STRENGTH_DEFAULT))
+    extend_active = bool(prev_clip_latent_path) or bool(carry_latent_out_path)
+
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)}"
+        + (
+            f" | extend: prev={prev_clip_latent_path} out={carry_latent_out_path} "
+            f"K={overlap_frames} strength={overlap_strength}"
+            if extend_active else ""
+        )
     )
     _PIPE.generate(
         prompt=msg["prompt"],
@@ -197,6 +221,10 @@ def _do_generate(msg: dict) -> None:
         images=images,
         output_path=output_path,
         num_steps=int(msg["num_steps"]),
+        prev_clip_latent_path=prev_clip_latent_path,
+        overlap_frames=overlap_frames,
+        overlap_strength=overlap_strength,
+        carry_latent_out_path=carry_latent_out_path,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
@@ -205,7 +233,12 @@ def _do_generate(msg: dict) -> None:
         raise RuntimeError(f"engine produced no/empty output: {output_path}")
 
     _log(f"GENERATED_OK peak_vram_mb={peak} -> {output_path}")
-    _emit("done", seed_used=seed, peak_vram_mb=int(peak))
+    done_fields: dict = {"seed_used": seed, "peak_vram_mb": int(peak)}
+    # Echo the persisted Stage-1 carry tail so the app-side chain orchestrator
+    # can feed it into the next clip's prev_clip_latent_path.
+    if carry_latent_out_path and os.path.exists(carry_latent_out_path):
+        done_fields["carry_latent_path"] = carry_latent_out_path
+    _emit("done", **done_fields)
 
     # Resident-reuse: free the just-finished job's transient allocations before
     # the next job. The block-swap transformer carries reference cycles
@@ -213,6 +246,67 @@ def _do_generate(msg: dict) -> None:
     # can't reclaim, so an explicit gc.collect() is required; empty_cache() then
     # returns the freed CUDA blocks to the driver. Pairs with the keep-latest
     # fix in BlockSwapService.install().
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+def _do_generate_chain(msg: dict) -> None:
+    """Run one masked AV-latent clip chain; ONE mp4 written to output_path.
+
+    Emits ``progress`` events (stage1 per segment, tile per stage-2 tile, decode)
+    and a terminal ``done`` with the peak VRAM + full junction metadata (segment
+    seams AND tile seams) for the review harness.
+    """
+    assert _PIPE is not None, "generate_chain before load"
+    from engine.pipeline.chain_pipeline import ChainClipSpec
+
+    output_path = msg["output_path"]
+    seed = int(msg["seed"])
+    torch.cuda.reset_peak_memory_stats(DEV)
+
+    clips = [
+        ChainClipSpec(
+            prompt=c["prompt"],
+            num_frames=int(c["num_frames"]),
+            images=[
+                ImageConditioningInput(
+                    path=i["path"], frame_idx=int(i["frame_idx"]), strength=float(i["strength"])
+                )
+                for i in c.get("images", [])
+            ],
+        )
+        for c in msg["clips"]
+    ]
+
+    _log(
+        f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
+        f"frames={[c.num_frames for c in clips]} seed={seed} "
+        f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')}"
+    )
+
+    def _progress(stage: str, index: int, total: int) -> None:
+        _emit("progress", stage=stage, index=int(index), total=int(total))
+
+    meta = _PIPE.generate_chain(
+        clips=clips,
+        width=int(msg["width"]),
+        height=int(msg["height"]),
+        frame_rate=msg["frame_rate"],
+        num_steps=int(msg["num_steps"]),
+        seed=seed,
+        overlap_frames=int(msg["overlap_frames"]),
+        overlap_strength=float(msg["overlap_strength"]),
+        output_path=output_path,
+        progress=_progress,
+    )
+
+    peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
+    if not os.path.exists(output_path) or os.path.getsize(output_path) <= 0:
+        raise RuntimeError(f"engine produced no/empty chain output: {output_path}")
+
+    _log(f"CHAIN_OK peak_vram_mb={peak} -> {output_path}")
+    _emit("done", seed_used=seed, peak_vram_mb=int(peak), chain=meta)
+
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -268,6 +362,13 @@ def main() -> None:
                 _do_generate(msg)
             except BaseException as exc:  # noqa: BLE001 - keep serving on error
                 _log("GENERATE_FAILED")
+                _emit("error", detail=_detail(exc))
+            continue
+        if op == "generate_chain":
+            try:
+                _do_generate_chain(msg)
+            except BaseException as exc:  # noqa: BLE001 - keep serving on error
+                _log("GENERATE_CHAIN_FAILED")
                 _emit("error", detail=_detail(exc))
             continue
         if op == "shutdown":

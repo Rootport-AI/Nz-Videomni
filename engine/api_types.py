@@ -30,6 +30,76 @@ class ImageConditioningInput(NamedTuple):
     strength: float
 
 
+# ── Phase 3 slice-2 — clip-concatenation / latent-level extend protocol ──────
+# Optional fields on the worker "generate" op (all default to a NON-extend,
+# byte-identical-to-today run when absent). The worker parses these off the raw
+# JSON msg with safe defaults; on "done" it emits `carry_latent_path` when a
+# carry tail was persisted. Kept back-compatible: existing single-generate
+# clients send none of these and get the frozen contract.
+EXTEND_OVERLAP_FRAMES_DEFAULT: int = 2       # K latent frames of overlap
+EXTEND_OVERLAP_STRENGTH_DEFAULT: float = 0.5  # 1.0 -> hard freeze; 0.5 soft (prior-art)
+
+
+class GenerateExtendParams(TypedDict, total=False):
+    """Extend-related keys on the worker `generate` op (all optional).
+
+    * prev_clip_latent_path: torch.save'd carry tail from the previous clip; when
+      set, injected at Stage 1 so continuity propagates through the two-stage
+      distilled flow. Absent -> first clip / no seed.
+    * overlap_frames: K (latent frames) to soften/freeze at Stage-1 head.
+    * overlap_strength: in [0,1]; overlap-frame denoise_mask = 1.0 - strength.
+    * carry_latent_out_path: when set, the engine persists this clip's Stage-1
+      tail there (torch.save) and the worker echoes it as `carry_latent_path`.
+    TODO(phase3): adain_ref_latent_path (AdaIN drift-suppression) + linear
+    crossfade + Stage-2 overlap freezing are LATER phases — not wired here.
+    """
+
+    prev_clip_latent_path: str
+    overlap_frames: int
+    overlap_strength: float
+    carry_latent_out_path: str
+
+
+# ── Phase 3 WP4 — masked AV-latent clip chaining protocol (worker op) ────────
+# The ``generate_chain`` op runs the WHOLE chain inside one worker invocation
+# (latents resident across segments) and writes ONE mp4. Geometry is resolved by
+# the shared pure-Python ``chain_math`` so the engine and the app agree on the
+# junction pixel-frame indices. Distinct from the OLD per-clip ``generate``
+# extend keys above (which the chain path no longer uses).
+class ChainClipPayload(TypedDict, total=False):
+    """One clip in a ``generate_chain`` op payload.
+
+    * prompt: effective per-clip prompt (already resolved: override else base).
+    * num_frames: 8n+1 pixel frames for this segment.
+    * images: clip-0 only — conditioning triplets {path, frame_idx, strength}
+      (routed via the production keyframe hybrid; empty for clips 1..N-1).
+    """
+
+    prompt: str
+    num_frames: int
+    images: list[dict]
+
+
+class GenerateChainParams(TypedDict, total=False):
+    """Keys on the worker ``generate_chain`` op.
+
+    Emits ``progress`` events (stage in {stage1, tile, decode}) during the run
+    and a terminal ``done`` carrying ``peak_vram_mb`` + ``chain`` (the full
+    junction metadata: segment_seam_junctions, tile_seam_junctions,
+    all_junctions, total_px, tiles, ...).
+    """
+
+    width: int
+    height: int
+    frame_rate: float
+    num_steps: int
+    seed: int
+    overlap_frames: int      # K_v LATENT-frame overlap between segments
+    overlap_strength: float  # stage-1 carry freeze strength (1 - mask value)
+    output_path: str
+    clips: list[ChainClipPayload]
+
+
 # ============================================================
 # TypedDicts for module-level state globals
 # ============================================================

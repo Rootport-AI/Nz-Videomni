@@ -13,6 +13,133 @@ from engine.pipeline.common import default_tiling_config, encode_video_output, v
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 slice-2 — clip-concatenation / latent-level extend (ENGINE wiring).
+#
+# GLOBAL monkeypatch installs that are NO-OP unless armed for the CURRENT job.
+# The chain endpoint reuses ONE worker process for many jobs, so arming MUST be
+# per-job: arm at the start of an extend-enabled generate, DISARM in a finally.
+# A normal (non-extend) generate behaves byte-identically to today because both
+# wrappers early-return to the original when `_EXTEND.armed` is False.
+#
+# Mechanism (proven by outputs/phase3_clip_concat_spike/spike.py, result GO):
+#   * Wrap ltx_core.tools.VideoLatentTools.create_initial_state: let the original
+#     build the patchified all-ones denoise_mask, then override the first K
+#     latent-frame token blocks to (1.0 - overlap_strength). Token order is
+#     (f h w), temporal patch size = 1, so latent frame f is the contiguous token
+#     block f*(H_lat*W_lat):(f+1)*(H_lat*W_lat) in the (b, tokens, 1) mask.
+#     overlap_strength=1.0 -> mask 0.0 hard freeze; 0.5 (default) -> soft.
+#   * Wrap ltx_pipelines.distilled.denoise_audio_video (COMPOSING with the
+#     worker's pre-denoise empty_cache wrapper — we wrap whatever it currently
+#     is, not the raw original): on the armed Stage-1 call, inject
+#     initial_video_latent=<padded tail> and capture the returned unpatchified
+#     (b,c,F,H,W) latent's tail. DISARM after Stage 1 so Stage 2 runs stock.
+# ─────────────────────────────────────────────────────────────────────────────
+class _ExtendState:
+    """Process-global arm state for the extend monkeypatches (one job at a time)."""
+
+    armed: bool = False
+    # Stage-1 seed to inject (padded tail, shape == Stage-1 target VideoLatentShape).
+    inject_initial_latent: "torch.Tensor | None" = None
+    # Number of leading latent frames to soften/freeze (overlap length K).
+    overlap_frames: int = 0
+    # denoise_mask value written on the overlap frames = 1.0 - overlap_strength.
+    overlap_mask_value: float = 0.0
+    # Set True the instant the mask override reached create_initial_state (proof
+    # the injection reached the load-bearing spot).
+    mask_override_applied: bool = False
+    # Captured Stage-1 output (unpatchified video latent, (b,c,F,H,W)), cloned.
+    captured_stage1_latent: "torch.Tensor | None" = None
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.armed = False
+        cls.inject_initial_latent = None
+        cls.overlap_frames = 0
+        cls.overlap_mask_value = 0.0
+        cls.mask_override_applied = False
+        cls.captured_stage1_latent = None
+
+
+_EXTEND = _ExtendState()
+_EXTEND_PATCHES_INSTALLED = False
+
+
+def _install_extend_patches() -> None:
+    """Install the (idempotent) global extend wrappers.
+
+    Wraps the CURRENT ``_distilled.denoise_audio_video`` (which, inside the
+    worker, is already the pre-denoise empty_cache wrapper) so both behaviors
+    compose. Installed lazily on the first extend-enabled generate; wrappers are
+    no-ops until ``_EXTEND.armed`` is set.
+    """
+    global _EXTEND_PATCHES_INSTALLED
+    if _EXTEND_PATCHES_INSTALLED:
+        return
+
+    import ltx_core.tools as _tools
+    import ltx_pipelines.distilled as _distilled
+
+    _orig_create_initial_state = _tools.VideoLatentTools.create_initial_state
+    _prev_denoise_av = _distilled.denoise_audio_video  # may be worker's wrapper
+
+    def _patched_create_initial_state(self, device, dtype, initial_latent=None):
+        state = _orig_create_initial_state(self, device, dtype, initial_latent)
+        if not _EXTEND.armed or _EXTEND.overlap_frames <= 0:
+            return state
+        # target_shape gives the latent grid (b, c, F, H, W). Temporal patch
+        # size = 1, token order (f h w) -> latent frame f == token block
+        # [f*HW : (f+1)*HW] in the patchified (b, tokens, 1) mask.
+        tshape = self.target_shape.to_torch_shape()
+        F_lat, H_lat, W_lat = int(tshape[2]), int(tshape[3]), int(tshape[4])
+        hw = H_lat * W_lat
+        k = min(_EXTEND.overlap_frames, F_lat)
+        mask = state.denoise_mask.clone()
+        assert mask.shape[1] >= F_lat * hw, (
+            f"patchified mask tokens {mask.shape[1]} < F*H*W {F_lat * hw}"
+        )
+        mask[:, : k * hw, ...] = float(_EXTEND.overlap_mask_value)
+        from dataclasses import replace as _dc_replace
+
+        new_state = _dc_replace(state, denoise_mask=mask)
+        _EXTEND.mask_override_applied = True
+        import logging as _lg
+        _lg.getLogger(__name__).info(
+            "extend: create_initial_state override froze first %d/%d latent frames "
+            "(mask=%.3f, %d/%d tokens); grid F=%d H=%d W=%d",
+            k, F_lat, _EXTEND.overlap_mask_value, k * hw, mask.shape[1],
+            F_lat, H_lat, W_lat,
+        )
+        return new_state
+
+    def _patched_denoise_av(*args, **kwargs):
+        # Compose with the previously-installed wrapper (worker's empty_cache).
+        if not _EXTEND.armed:
+            return _prev_denoise_av(*args, **kwargs)
+        if _EXTEND.inject_initial_latent is not None:
+            kwargs["initial_video_latent"] = _EXTEND.inject_initial_latent
+            import logging as _lg
+            _lg.getLogger(__name__).info(
+                "extend: injected initial_video_latent (padded tail) for Stage 1"
+            )
+        video_state, audio_state = _prev_denoise_av(*args, **kwargs)
+        # video_state here is post clear_conditioning + unpatchify -> (b,c,F,H,W).
+        _EXTEND.captured_stage1_latent = video_state.latent.detach().clone()
+        # Disarm so Stage 2 (and any later call) runs stock.
+        _EXTEND.armed = False
+        _EXTEND.inject_initial_latent = None
+        _EXTEND.overlap_frames = 0
+        return video_state, audio_state
+
+    _tools.VideoLatentTools.create_initial_state = _patched_create_initial_state
+    _distilled.denoise_audio_video = _patched_denoise_av
+    _EXTEND_PATCHES_INSTALLED = True
+    import logging as _lg
+    _lg.getLogger(__name__).info(
+        "installed extend monkeypatches (create_initial_state, denoise_audio_video)"
+    )
+
+
 class LTXFastVideoPipeline:
     pipeline_kind: Final = "fast"
 
@@ -512,6 +639,81 @@ class LTXFastVideoPipeline:
         from ltx_core.components.schedulers import BetaScheduler
         return BetaScheduler().execute(steps=num_steps).tolist()
 
+    # ── Phase 3 slice-2 — clip-concatenation carry-tail (de)serialization ──────
+    def _stage1_latent_frames(self, num_frames: int) -> int:
+        """Stage-1 (lowres) latent-frame count for a pixel `num_frames` (8n+1).
+
+        Temporal VAE compression factor = 8 with a causal +1 keyframe, matching
+        the wheel's Patchifier (temporal patch size 1). Latent frames =
+        (num_frames - 1) // 8 + 1.
+        """
+        return (num_frames - 1) // 8 + 1
+
+    def _persist_carry_tail(
+        self, stage1_latent: torch.Tensor, overlap_frames: int, out_path: str
+    ) -> None:
+        """torch.save the last K latent frames of the Stage-1 output as the carry.
+
+        Format: {"tail": <cpu tensor (b,c,K,H,W)>, "overlap_frames": K,
+        "shape": tuple, "clip_meta": {...}}. Saved on CPU so the app process
+        (torch-less) can pass the path around without materializing CUDA.
+        """
+        import os as _os
+
+        F_lat = int(stage1_latent.shape[2])
+        k = max(1, min(int(overlap_frames), F_lat))
+        tail = stage1_latent[:, :, F_lat - k :, :, :].detach().to("cpu").contiguous()
+        payload = {
+            "tail": tail,
+            "overlap_frames": k,
+            "shape": tuple(int(x) for x in tail.shape),
+            "clip_meta": {
+                "stage1_latent_frames": F_lat,
+                "dtype": str(tail.dtype),
+                "format_version": 1,
+            },
+        }
+        _os.makedirs(_os.path.dirname(_os.path.abspath(out_path)) or ".", exist_ok=True)
+        torch.save(payload, out_path)
+        import logging as _lg
+        _lg.getLogger(__name__).info(
+            "extend: persisted carry tail %s (K=%d) -> %s",
+            tuple(tail.shape), k, out_path,
+        )
+
+    def _load_carry_tail(self, prev_clip_latent_path: str, num_frames: int) -> torch.Tensor:
+        """Load a carry tail and PAD it to the Stage-1 target shape for injection.
+
+        The tail occupies latent frames [0..K-1]; frames [K..F-1] are zeros. The
+        result MUST equal the Stage-1 target VideoLatentShape exactly (the wheel
+        asserts this in create_initial_state). dtype/device are constrained to
+        the pipeline (bfloat16 / cuda).
+        """
+        payload = torch.load(prev_clip_latent_path, map_location=self._transformer_device)
+        tail = payload["tail"]
+        if not isinstance(tail, torch.Tensor):
+            raise RuntimeError(f"carry tail payload missing tensor 'tail': {prev_clip_latent_path}")
+        tail = tail.to(device=self._transformer_device, dtype=torch.bfloat16)
+        b, c, K = int(tail.shape[0]), int(tail.shape[1]), int(tail.shape[2])
+        Hl, Wl = int(tail.shape[3]), int(tail.shape[4])
+        F_lat = self._stage1_latent_frames(num_frames)
+        if K > F_lat:
+            raise RuntimeError(
+                f"carry tail K={K} exceeds Stage-1 latent frames F={F_lat} "
+                f"(num_frames={num_frames}); reduce overlap or increase clip length"
+            )
+        padded = torch.zeros((b, c, F_lat, Hl, Wl), dtype=torch.bfloat16, device=self._transformer_device)
+        padded[:, :, :K, :, :] = tail
+        # Sync the arm's overlap length to the actual carry K (guards against a
+        # mismatched overlap_frames arg vs the persisted tail).
+        _EXTEND.overlap_frames = min(_EXTEND.overlap_frames, K) if _EXTEND.overlap_frames > 0 else K
+        import logging as _lg
+        _lg.getLogger(__name__).info(
+            "extend: loaded carry tail K=%d padded to Stage-1 shape %s from %s",
+            K, tuple(padded.shape), prev_clip_latent_path,
+        )
+        return padded
+
     def _run_inference(
         self,
         prompt: str,
@@ -530,6 +732,10 @@ class LTXFastVideoPipeline:
         ge_gamma: float = 2.0,
         res2s_bongmath: bool = False,
         res2s_bongmath_max_iter: int = 5,
+        prev_clip_latent_path: str | None = None,
+        overlap_frames: int = 2,
+        overlap_strength: float = 0.5,
+        carry_latent_out_path: str | None = None,
     ) -> tuple[torch.Tensor | Iterator[torch.Tensor], AudioOrNone]:
         from ltx_pipelines.utils.args import ImageConditioningInput as _LtxImageInput
         import ltx_pipelines.distilled as _distilled_mod
@@ -655,6 +861,30 @@ class LTXFastVideoPipeline:
         # frame_idx images to the keyframe/guide helper (restored in finally).
         _distilled_mod.image_conditionings_by_replacing_latent = _hybrid_image_conditionings  # type: ignore[attr-defined]
 
+        # ── Phase 3 slice-2 — clip-concatenation / latent-level extend arm ─────
+        # Active ONLY when extend inputs are present: consuming a prev clip's
+        # carry tail (prev_clip_latent_path) OR persisting this clip's Stage-1
+        # tail (carry_latent_out_path). When neither is set the wrappers stay
+        # disarmed and the run is byte-identical to today.
+        extend_active = bool(prev_clip_latent_path) or bool(carry_latent_out_path)
+        if extend_active:
+            _install_extend_patches()
+            _EXTEND.reset()
+            _EXTEND.armed = True
+            # overlap_strength in [0,1]; overlap-frame denoise_mask value =
+            # 1.0 - overlap_strength (strength=1.0 -> mask 0.0 hard freeze;
+            # default 0.5 -> soft, per prior-art recommendation).
+            _EXTEND.overlap_frames = max(0, int(overlap_frames))
+            _EXTEND.overlap_mask_value = 1.0 - max(0.0, min(1.0, float(overlap_strength)))
+            if prev_clip_latent_path:
+                _EXTEND.inject_initial_latent = self._load_carry_tail(
+                    prev_clip_latent_path, num_frames=num_frames,
+                )
+            else:
+                # No prev clip to consume (this is the FIRST clip in a chain):
+                # do not soften any frames, just capture the Stage-1 tail.
+                _EXTEND.overlap_frames = 0
+
         try:
             return self.pipeline(
                 prompt=prompt,
@@ -678,6 +908,21 @@ class LTXFastVideoPipeline:
             _distilled_mod.euler_denoising_loop = _orig_euler
             _distilled_mod.image_conditionings_by_replacing_latent = _orig_replace  # type: ignore[attr-defined]
 
+            # ── Extend: persist Stage-1 tail, then ALWAYS disarm (no leak) ─────
+            # The denoise wrapper disarms `.armed` after Stage 1, but reset here
+            # unconditionally so a crash mid-run cannot leave the process armed
+            # for the next job (the chain endpoint reuses one worker process).
+            if extend_active:
+                try:
+                    if carry_latent_out_path and _EXTEND.captured_stage1_latent is not None:
+                        self._persist_carry_tail(
+                            _EXTEND.captured_stage1_latent,
+                            overlap_frames=max(0, int(overlap_frames)),
+                            out_path=carry_latent_out_path,
+                        )
+                finally:
+                    _EXTEND.reset()
+
     @torch.inference_mode()
     def generate(
         self,
@@ -697,6 +942,10 @@ class LTXFastVideoPipeline:
         ge_gamma: float = 2.0,
         res2s_bongmath: bool = False,
         res2s_bongmath_max_iter: int = 5,
+        prev_clip_latent_path: str | None = None,
+        overlap_frames: int = 2,
+        overlap_strength: float = 0.5,
+        carry_latent_out_path: str | None = None,
     ) -> None:
         tiling_config = default_tiling_config(
             spatial_tile_size=self._vae_spatial_tile_size,
@@ -719,6 +968,10 @@ class LTXFastVideoPipeline:
             ge_gamma=ge_gamma,
             res2s_bongmath=res2s_bongmath,
             res2s_bongmath_max_iter=res2s_bongmath_max_iter,
+            prev_clip_latent_path=prev_clip_latent_path,
+            overlap_frames=overlap_frames,
+            overlap_strength=overlap_strength,
+            carry_latent_out_path=carry_latent_out_path,
         )
         chunks = video_chunks_number(num_frames, tiling_config)
         encode_video_output(video=video, audio=audio, fps=int(frame_rate), output_path=output_path, video_chunks_number_value=chunks)
@@ -730,6 +983,43 @@ class LTXFastVideoPipeline:
         torch.cuda.synchronize()
         del video, audio
         torch.cuda.empty_cache()
+
+    @torch.inference_mode()
+    def generate_chain(
+        self,
+        clips: "list",
+        width: int,
+        height: int,
+        frame_rate: float,
+        num_steps: int,
+        seed: int,
+        overlap_frames: int,
+        overlap_strength: float,
+        output_path: str,
+        progress=None,
+    ) -> dict:
+        """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
+
+        Delegates to :func:`engine.pipeline.chain_pipeline.run_chain`, which
+        reuses THIS pipeline's ledger/components/low-VRAM machinery. ``clips`` is
+        a list of ``ChainClipSpec`` (prompt already resolved, images built).
+        Returns metadata incl. segment/tile junction pixel-frame indices.
+        """
+        from engine.pipeline.chain_pipeline import run_chain
+
+        return run_chain(
+            self,
+            clips=clips,
+            width=width,
+            height=height,
+            frame_rate=frame_rate,
+            num_steps=num_steps,
+            seed=seed,
+            overlap_frames=overlap_frames,
+            overlap_strength=overlap_strength,
+            output_path=output_path,
+            progress=progress,
+        )
 
     @torch.inference_mode()
     def warmup(self, output_path: str) -> None:

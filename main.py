@@ -19,7 +19,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from api.context import RuntimeInfo, build_context
 from api.errors import APIError
@@ -95,7 +95,8 @@ def build_app(args: argparse.Namespace) -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix="/api/v1")
-    mount_gradio(app, runtime)
+    ui_mounted = mount_gradio(app, runtime)
+    register_root_route(app, ui_mounted=ui_mounted)
 
     return app
 
@@ -126,10 +127,11 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
 
-def mount_gradio(app: FastAPI, runtime: RuntimeInfo) -> None:
+def mount_gradio(app: FastAPI, runtime: RuntimeInfo) -> bool:
+    """Mount the Gradio test UI at /ui. Returns True iff it actually mounted."""
     if os.environ.get("LTX_DISABLE_GRADIO"):
         logger.info("Gradio UI disabled via LTX_DISABLE_GRADIO")
-        return
+        return False
     try:
         import gradio as gr
 
@@ -138,8 +140,32 @@ def mount_gradio(app: FastAPI, runtime: RuntimeInfo) -> None:
         base_url = f"http://127.0.0.1:{runtime.port}"
         blocks = build_ui(base_url, api_key=runtime.api_key)
         gr.mount_gradio_app(app, blocks, path="/ui")
+        return True
     except Exception:
         logger.exception("Failed to mount Gradio UI; continuing with API only")
+        return False
+
+
+def register_root_route(app: FastAPI, *, ui_mounted: bool) -> None:
+    """GET / -- redirect to the UI when it's mounted, else a tiny API landing JSON.
+
+    Without this, visiting http://host:port/ (the natural first thing to try)
+    hits FastAPI's default 404 even though the UI is happily running at /ui.
+    """
+    if ui_mounted:
+
+        @app.get("/", include_in_schema=False)
+        async def _root() -> RedirectResponse:
+            return RedirectResponse(url="/ui", status_code=307)
+    else:
+
+        @app.get("/", include_in_schema=False)
+        async def _root() -> JSONResponse:
+            return JSONResponse({"service": "LTX-AviUtl2-Bridge", "ui": None, "docs": "/docs"})
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def _favicon() -> Response:
+        return Response(status_code=204)
 
 
 def local_ip() -> str:

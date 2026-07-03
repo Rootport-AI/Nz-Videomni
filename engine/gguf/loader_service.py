@@ -220,47 +220,27 @@ class GGUFStateDictLoader:
         (bf16 matmul), we matmul in fp32 and round ONCE when casting the delta
         to the weight dtype before the in-place add.
         """
-        from ltx_core.loader import (
-            LTXV_LORA_COMFY_RENAMING_MAP,
-            SafetensorsStateDictLoader,
-        )
+        # Shared front half (load + LTXV_LORA_COMFY_RENAMING_MAP rename +
+        # lora_A/lora_B pairing) with the forward-time path; only the in-place
+        # fp32 fuse below is bf16-path specific and stays UNCHANGED.
+        from engine.gguf.ic_lora_common import load_ic_lora_pairs
 
-        loader = SafetensorsStateDictLoader()
-        cpu = torch.device("cpu")
         total_lora_keys = 0
         total_delta_keys = 0
-        suffix_a = ".lora_A.weight"
-        suffix_b = ".lora_B.weight"
 
-        for path, strength in self.ic_loras:
-            if not Path(path).exists():
-                raise FileNotFoundError(f"IC-LoRA safetensors not found: {path}")
-            # LTXV_LORA_COMFY_RENAMING_MAP strips the "diffusion_model." prefix so
-            # LoRA keys align with the (raw GGUF) model keys.
-            lora_sd = loader.load(path, sd_ops=LTXV_LORA_COMFY_RENAMING_MAP, device=cpu)
-            n_keys = len(lora_sd.sd)
+        for path, strength, pairs in load_ic_lora_pairs(self.ic_loras):
+            n_keys = 2 * len(pairs)  # each pair = one lora_A + one lora_B key
             n_delta = 0
 
             # Per-key fp32 fuse. Multiple LoRAs hitting the same key accumulate
             # sequentially (same net result as the wheel's summed-deltas path).
             # Transient memory = ONE fp32 delta at a time (largest LTX-2.3 layer
             # is a few hundred MB in fp32), freed right after the in-place add.
-            for key_a in lora_sd.sd:
-                if not key_a.endswith(suffix_a):
-                    continue
-                prefix = key_a[: -len(suffix_a)]
+            for prefix, lora_a, lora_b in pairs:
                 weight_key = prefix + ".weight"
                 weight = base_sd.sd.get(weight_key)
                 if weight is None:
                     continue  # counted via n_delta; 0 total → loud WARN below
-                key_b = prefix + suffix_b
-                lora_a = lora_sd.sd.get(key_a)
-                lora_b = lora_sd.sd.get(key_b)
-                if lora_b is None:
-                    raise RuntimeError(
-                        f"IC-LoRA {Path(path).name}: {key_a} present but {key_b} "
-                        "missing — corrupt/unsupported LoRA layout"
-                    )
                 if weight.dtype not in (torch.bfloat16, torch.float16, torch.float32):
                     raise RuntimeError(
                         f"IC-LoRA fuse: unsupported model weight dtype {weight.dtype} "

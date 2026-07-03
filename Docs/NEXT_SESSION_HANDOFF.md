@@ -27,10 +27,17 @@
 - 機能は main 入り済（merge `7f31935`）。だが目視は**まだ有効に実施されていない**: 監督が目視用に提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモーク出力で**全キーフレームに同一の合成テスト画像**を使っており無効（青い長方形になった理由）。
 - **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先＝上表#3/#4の `visual_bookend/`・`visual_multikey/`）。
 
-### ★次セッションのメインスコープ＝IC-LoRA Phase A（Phase 2 はユーザー環境待ちでブロック中）
-- 入り口＝**[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)**（コード読解サブエージェント×2＋Webリサーチ×5系統統合サーベイ・2026-07-03作成・末尾に監督・ユーザー議論の補足あり）。
-- **冒頭で確認すべきユーザー判断2つ**: ①beyond-parityスコープへの正式着手承認（仕様 §13.4b は IC-LoRA を LTX-Desktop パリティ対象外＝Phase 4 としていたが、ユーザー最優先関心のため前倒しを検討）②最初に載せるアダプタの確定（推奨＝**Pixel-Spatial-Upscaler x2/x4**、根拠＝SURVEY.md §2.6・§6「監督・ユーザー議論による補足」）。
-- 内容（研究ファースト・段階導入）: **spike**（LoRAキー形式確認→fuse-at-load配線→RAM/VRAM/トークン数/生成時間の計測→**LoRA無効時のbyte-match完全一致確認**）→ **基本配線**（`loras`パラメータ露出＋参照動画条件付け）→ 実機検証＋目視アーティファクト。時間に余剰があれば小物（尺~30s解放・パラメータ露出等、SURVEY.md §3.5）に着手。
+### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`）
+- **成立**: Pixel-Spatial-Upscaler x2 アダプタを bf16パス忠実dequant＋engine側fuse-at-load＋参照動画条件付けで配線し実機スパイクPASS。回帰（LoRA off時の本番per-layer経路）はbyte-match完全一致・pytest 41 green。commit `bbcd82f`（spike wiring）→`016f442`（fp32 fuse化・19分→33秒）。
+- **正本＝[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)**。詳細ゲート数値＝[`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)。着手前サーベイ＝[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
+- **唯一の未消化ゲート＝ユーザー目視**: `outputs/ic_lora_phaseA/spike.mp4` vs `outputs/ic_lora_phaseA/base.mp4`（送付済み・回答PENDING）。
+
+### ★次セッションのスコープ候補＝IC-LoRA Phase B（open decisions のみ・詳細計画は次セッションで）
+- **本実装の機構選定**: bf16 full-dequant fuseはスパイク専用でRAM 54-57GB消費（32GB RAM級マシンでは非現実的）。候補＝①per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン）②事前fuse済みチェックポイント派生。どちらを採るかは要議論。
+- **公式パリティのoracle照合**: wheelの`ICLoraPipeline`はstage1のみLoRA適用、当実装は両ステージにfuse。Upscaler用途では挙動的に問題なさそうだが、oracle未照合のまま。
+- **keep-resident運用との整合**: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグル方式（リビルド vs デュアルキャッシュ）を設計する必要あり。
+- **API/UI露出**: `engine/api_types.py`のIcLoraスキーマは存在するが未配線（`loras`パラメータのAPI露出は基本配線ステップとして未着手）。
+- **アダプタ拡張**: x4バリアント・他アダプタ（In-Outpainting/Deblur、`PHASE3_NEXT_WORK_SURVEY.md` §6準拠）。
 - Gap Fill／Retake は Phase 2（AviUtl2 統合）後に実用から要件を逆算する方針（詳細＝SURVEY.md「§6 監督・ユーザー議論による補足」）。Phase 2 自体はユーザーのプラグイン開発環境整備待ちで**現在ブロック中**。
 - 運用注意の継承: 目視題材は「賑やかな町＋セリフ」系を使う（波/静的部屋はNG・ボイス/口パク確認に不向き）。客観PASS（byte-match・pytest・境界メトリクス）とユーザー目視ゲートを混同しない。サブエージェントは Opus/Sonnet を使う（Fable5 禁止）。
 

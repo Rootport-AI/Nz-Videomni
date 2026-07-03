@@ -141,7 +141,7 @@ de-fork で削除。**IC-LoRA スパイク Phase A の fuse-at-load 基盤がそ
 いずれも chain マージ済み基盤の上の調整。IC-LoRA スパイクの合間の埋め草に好適。
 
 ### 3.7 レビューゲート（工数ゼロ・最優先）
-- **キーフレーム目視**: `outputs/phase3_multikey_smoke/visual_bookend|visual_multikey` 生成済み。レビュー→ branch `feature/phase3-api-unfreeze-conditioning` のマージ判断＋Gap Fill 品質見通し。
+- **キーフレーム目視**: `outputs/phase3_multikey_smoke/visual_bookend|visual_multikey` 生成済み。レビュー→ branch `feature/phase3-api-unfreeze-conditioning` のマージ判断＋Gap Fill 品質見通し。（訂正: 本branchは既に merge `7f31935` で main 入り済み。残るのは目視サインオフのみ）
 - **chain A/B 最終目視**: マージ非ブロッキングだが完了宣言に必要。
 
 ---

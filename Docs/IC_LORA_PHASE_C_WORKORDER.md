@@ -32,6 +32,7 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 - Union-Control形式ディスカッション: https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/discussions/1
 - チュートリアル（DWPose・strength 1.0）: https://ltxworkflow.com/resources/tutorials/ic-lora-ltx-2-3-complete-guide
 - ライセンス（Community License）: https://github.com/Lightricks/LTX-2/blob/main/LICENSE
+- **追補R4（2026-07-04）**: ComfyUI公式の `LTX-2.3_ICLoRA_Union_Control_Distilled.json` が「同一Union LoRA＋前処理ノード（DWPose/Canny/VideoDepthAnything）切替」構成であることをJSON実体で確認＝本設計と同型。**プロンプトは制御種に言及せずシーン記述のみ**（G5目視のプロンプト設計に適用）。詳細=[`IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md) 追補R4。
 
 **⚠️割れている点を隠さない — `ref0.5` の意味**: R1=「downscale factor 2（参照を出力の0.5倍で内部使用）」／R3フォーク考古学=「デフォルト参照強度の可能性」と解釈が割れた。公式docsの「参照の width/height は 64 で割り切れること（= factor 2 × VAE 32×）」記述はR1（factor=2）を支持するが、**確定はGate 0で現物のsafetensorsメタデータを読む**まで保留。
 
@@ -133,7 +134,7 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 ## 8. リスクと未確定事項
 
 - **`ref0.5` の意味が未確定**（factor=2 か 1 か）。Gate 0-a で確定するまで既存ガードの扱いが分岐（§4参照）。factor=2 なら無変更、factor=1 なら緩和スライス要。
-- **骨格の線/関節の色規約が公式未明文化**（"skeleton visualization with lines connecting keypoints" 止まり）。DWPoseの標準カラー骨格（フォーク/ComfyUIと同系の描画）を採用してリスク回避するが、Union-Controlが期待する厳密な色と食い違う可能性はゼロではない。G5目視＋制御系固有ゲートで検出する。
+- **骨格の線/関節の色規約が公式未明文化**（"skeleton visualization with lines connecting keypoints" 止まり）。DWPoseの標準カラー骨格（フォーク/ComfyUIと同系の描画）を採用してリスク回避するが、Union-Controlが期待する厳密な色と食い違う可能性はゼロではない。G5目視＋制御系固有ゲートで検出する。※追補R4で公式2.3ワークフローが `DWPreprocessor`（controlnet_aux系DWPose）を使うことを確認済み＝同系描画なら食い違いリスクは小。
 - **DWPoseスループット未実測**（R2確度低〜中）。Gate 0-b で確定。遅ければキャッシュ（スライス4）で緩和。
 - **19b非互換**: 誤って19b世代の単体アダプタを使うと「エラーは出ないが効果ゼロ」。config登録は 2.3-22b Union-Control のみに限定する。
 - **onnxruntime-gpuの整合リスク（フォールバック採用時）**: rtmlibへ切替える場合、CUDA 12.8 に対し onnxruntime-gpu を 1.20〜1.26 帯にpin要（1.19未満=cuDNN8系NG・1.27以降=CUDA12廃止予定）。第一候補のTorchScript版なら追加依存ゼロでこのリスクを回避。

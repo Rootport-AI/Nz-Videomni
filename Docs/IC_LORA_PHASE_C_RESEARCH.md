@@ -60,6 +60,23 @@ R1（公式仕様・WEB）/ R2（前処理器エコシステム・WEB）/ R3（�
 
 ---
 
+# 追補 R4（2026-07-04・ユーザー質問起点）: ComfyUIは「単体アダプタ不在」をどう扱っているか
+
+ユーザーからの「ComfyUIのIC-LoRAカスタムノード＆ワークフローではアダプタ不在の問題をどう解決しているか」という質問を受けた追加調査。結論＝**ComfyUIエコシステムでは「不在」は問題として扱われておらず、公式の答えは一貫して「2.3ではUnion-Controlを使う」**。
+
+- 公式リポジトリ `Lightricks/ComfyUI-LTXVideo` の `example_workflows/2.3/` に **`LTX-2.3_ICLoRA_Union_Control_Distilled.json`** が存在（JSON実体を確認）。構造:
+  - **同じUnion LoRAを常にロード**（`LTXICLoRALoaderModelOnly`→`LTXAddVideoICLoRAGuide`でguide latent注入）
+  - **前処理ノードを3系統すべて内蔵**: `DWPreprocessor`（pose・comfyui_controlnet_aux由来のDWPose）／`CannyEdgePreprocessor`／`VideoDepthAnythingProcess`（depth）
+  - 制御種の切替＝「どの前処理出力をguideに流すか」**だけ**。LoRAは共通。19bファイルへの参照は一切なし
+  - **プロンプトは制御種に言及しない**（実JSONのpromptはシーン内容の記述のみ。"pose"/"canny"等の制御語なし）
+  - 出典: https://github.com/Lightricks/ComfyUI-LTXVideo/tree/master/example_workflows/2.3 ／ https://raw.githubusercontent.com/Lightricks/ComfyUI-LTXVideo/master/example_workflows/2.3/LTX-2.3_ICLoRA_Union_Control_Distilled.json
+- 19b→22bのLoRAキー変換ノード・移行ツールは**存在しない**。公式開発者ガイド系記述は「2.0系LoRAはVAE/latent空間/パラメータ規模（→22B）の変更により2.3では動作しない・移行パス無し・要再学習」と明言（https://ltx.io/blog/using-lora-adapters ）。「エラーなく効果ゼロ」報告と整合（サイレントno-op化の内部機序のみ推論）。
+- コミュニティの対応も「リマップ」ではなく**22bネイティブ再学習**（例: CivitAI「Cameraman IC-LoRA for LTX2.3 22B」＝カメラ制御。pose単体の2.3再学習は発見できず）。
+
+**Phase C設計への含意（すべて既存設計を強化する方向）**: ①Union一本＋前処理切替という当方設計は公式ワークフローと同型＝正当性確認。②pose前処理にDWPose（controlnet_aux系）を使う選択も公式ワークフローと一致。③将来のdepth対応はVideoDepthAnything（R2推奨と一致）が公式採用済み＝Phase Dの前処理器選定はほぼ確定。④プロンプト規約=制御種を書かずシーン記述のみ（Phase C目視検証時のプロンプト設計に反映）。
+
+---
+
 # 添付: R1生レポート（公式仕様）
 
 （※以下、R1の全文をそのまま保持）

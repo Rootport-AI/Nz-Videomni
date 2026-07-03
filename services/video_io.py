@@ -296,6 +296,78 @@ def probe_resolution(path: Path) -> tuple[int, int] | None:
         return None
 
 
+def frame_count(mp4: Path) -> int:
+    """Return the exact number of decoded video frames in ``mp4`` (via ffprobe).
+
+    Counts frames rather than trusting the container's ``nb_frames`` tag (which
+    can be absent/approximate for some encoders), so this is safe to use as the
+    source of truth for frame-accurate indexing (Phase 3 boundary verification).
+    """
+    exe = shutil.which("ffprobe")
+    if not exe:
+        raise FFmpegError("ffprobe not found on PATH. Install ffmpeg and add it to PATH.")
+    cmd = [
+        exe,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-count_frames",
+        "-show_entries",
+        "stream=nb_read_frames",
+        "-of",
+        "csv=p=0",
+        str(mp4),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffprobe frame_count failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+    try:
+        return int(proc.stdout.strip())
+    except ValueError:
+        raise FFmpegError(f"ffprobe frame_count: unparsable output {proc.stdout!r}")
+
+
+def extract_frame_at(mp4: Path, frame_index: int, out_png: Path) -> Path:
+    """Extract the exact frame at 0-based ``frame_index`` from ``mp4`` to a PNG.
+
+    Uses the ffmpeg ``select`` filter (frame-number based, not timestamp-based)
+    so this is exact-frame accurate even for variable-framerate or short clips
+    where seeking by time could land on the wrong frame. Returns ``out_png``.
+    """
+    exe = ffmpeg_path()
+    if frame_index < 0:
+        raise FFmpegError(f"frame_index must be >= 0, got {frame_index}")
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        exe,
+        "-y",
+        "-i",
+        str(mp4),
+        "-vf",
+        f"select='eq(n\\,{frame_index})'",
+        "-vsync",
+        "0",
+        "-frames:v",
+        "1",
+        str(out_png),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffmpeg extract_frame_at failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+    if not out_png.exists():
+        raise FFmpegError(f"ffmpeg extract_frame_at produced no output for frame {frame_index} (out of range?)")
+    return out_png
+
+
+def extract_last_frame(mp4: Path, out_png: Path) -> Path:
+    """Extract the last decoded frame of ``mp4`` to a PNG. Returns ``out_png``."""
+    n = frame_count(mp4)
+    if n <= 0:
+        raise FFmpegError(f"extract_last_frame: {mp4} reports {n} frames")
+    return extract_frame_at(mp4, n - 1, out_png)
+
+
 def save_metadata(path: Path, metadata: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:

@@ -39,9 +39,17 @@
 - bf16融合経路（`gguf_per_layer_quant=False`）は開発/パリティ照合用に温存（選択スイッチ＝config/loadのper_layer_quant）。
 - 新アダプタの追加＝`config.yaml` `model.ic_loras`に1行（＋参照動画が要るかの検証要件確認）。x4はファイル配置済み・未登録（スコープ外）。
 
+## ✅ ユーザー目視結果（2026-07-03・base vs api_smoke ペア）
+
+- **人物の変化を観察**（512×320のインド系女性 → 1024×640では金髪女性）。ただしユーザー評価は「**IC-LoRAの機能としては悪くない結果**」。
+- これは**公式モデルカード明記の仕様**: Pixel-Spatial-Upscalerは「新しいディテールを合成する生成型アップスケーラ（忠実保存はしない・blind denoiserではない）」。忠実度レバー＝LoRA strength低減（参照に忠実へ）・参照解像度を上げる（同一性情報の残存量が増える）。512×320参照は顔の同一性が壊れやすい条件。
+- **ユーザー指摘で判明した理解の補正**: IC-LoRAファミリーの看板機能は「動き維持で内容置換」（踊る女性→ロボット等）で、それを担うのは**制御系アダプタ（Pose/Union/Motion-Track）**＝前処理済み制御信号（DWPose骨格・深度・エッジ・軌跡）を入力する系統。当実装の参照系（生動画入力）とは別系統。**DWPose等の前処理段は当システム未実装**（コード確認済み）→ **制御系アダプタ対応がPhase C最優先候補**（ユーザー決定 2026-07-03）。
+- 平易な機能解説＝[`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md)。
+
 ## 未了・Phase C候補（詳細=VERIFICATION_LOG §21.8）
 
-keep_resident=1でのトグル検証／`ICLoraPipeline` oracle照合／x4・他アダプタ登録／denoise+20〜26%の最適化（必要時）／参照不要アダプタ向けのバリデーション緩和／Gradio UI露出。
+**最優先候補（ユーザー決定 2026-07-03）＝制御系アダプタ対応（Pose/Union）＋DWPose等の外部プリプロセッサ段の新設**（「動き維持で内容置換」の実現）。
+その他: keep_resident=1でのトグル検証／`ICLoraPipeline` oracle照合／x4・他アダプタ登録／denoise+20〜26%の最適化（必要時）／参照不要アダプタ向けのバリデーション緩和／Gradio UI露出。
 
 ## Pending（ユーザー）
 

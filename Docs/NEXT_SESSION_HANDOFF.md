@@ -6,12 +6,19 @@
 
 > **本ブロックが最新の正本。** 下の 2026-07-01 以前の▶節は歴史記録。
 
-### Phase 3 スライス2「クリップ連結」＝公式パリティ再実装で main へ merge・push 済（ユーザー最終目視/試聴のみ PENDING）
+### ★★★目視レビュー6本＝消化済み（2026-07-03 セッション最終盤・**このブロックが最新**）
+- **結果サマリ**（詳細＝各STATUS doc・VERIFICATION_LOG §17.9）: Chain A=PASS／Chain B=継ぎ目・音声全PASS＋**継ぎ目以外の新規アーティファクト3件をbacklog記録**（PHASE3_CLIP_CONCAT_STATUS.md backlog#4-6）／bookend=PASS／multikey=観察挙動は機構どおりだが**受容判断は保留**（下記）／IC-LoRAペア=人物変化はモデルカード明記の仕様・ユーザー評「機能として悪くない」。
+- **multikey受容判断＝保留の理由**: 監督が内部略語のまま判断を求め機能説明を怠った（ユーザー「知らないものは受容も拒絶もできない」）。→ **平易な機能解説 [`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md) を作成・提示済み。ユーザーの受容/改善優先の回答待ち**。
+- **検証運用の是正（ユーザー総評・以後の全目視検証に適用）**: ①**目視検証は720p級（1280×768）以上**で行う（512×320級は顔溶け・背景ぼやけで品質判断不能）②プロンプトは**「映画のトレイラーのような」**を使う（「CM風」はネット上の低品質TVCM連想で品質を下げる可能性→廃止）③人間向け解説は略語・造語禁止＋機能説明が先（解説文書はOpusサブエージェントに執筆させる運用）。
+- 同日中に**高解像度目視用の再生成3本**（multikey/IC-LoRA x2アップスケール/2セグchain・1280×768・トレイラー風）を実施し `outputs/visual_review/` へ 07/08a/08b/09 として追加（確認ポイント表=同README）。**全て完走・VRAM溢れなし**。副次成果: ①**1280×768での初のチェーン実行成功**（2×73f・264s・peak 9578MB） ②IC-LoRAアップスケールは**640×384参照だと人物同一性が大幅改善**（髪型/人種の変化なし・服装ほぼ維持。512×320参照での別人化は参照解像度不足が主因と裏付け）③multikeyの高解像度版peak_vramは512×320と同値8440MB（block-swap支配的）。**ユーザーの高解像度版目視はPENDING**。
+- **Phase C最優先候補（ユーザー決定）＝IC-LoRA制御系アダプタ（Pose/Union）対応＋DWPose等の外部プリプロセッサ段の新設**（「動き=完全トレース・内容=置換」というIC-LoRAの看板機能の実現。現状は参照系＝生動画入力のみ実装・DWPose等は未搭載とコード確認済み）。
+
+### Phase 3 スライス2「クリップ連結」＝公式パリティ再実装で main へ merge・push 済（**✅目視/試聴 消化済み 2026-07-03**）
 - masked AV-latent 連結アーキテクチャ（per-segment stage1でvideo+audio latent tailをcarry+freeze→**1本の連続stage1 AV latentを組み立て**→1回のupsampleを経て**stage2 refineを常に時間タイル分割**→**1回だけVAE decode**）で再実装。音声連続・実機 Chain B（4×145f/22s）まで実証。詳細アーキテクチャは [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md) を参照。
 - 同日中に旧 `_EXTEND` monkeypatch 機構（latent-extend 方式）を撤去（byte-match検証済・commit `de587b4`）。Gradio ルート `/` の 404 修正（`/ui` マウント時に `/` が404していた不具合、`eb5f7ac`）も同セッションで解消。
 - **main へ merge・push 済**: merge `2cc4cac`（Phase 3 slice-2 rework: masked AV-latent clip-concat chain）→ cleanup merge `1ab5e0c`（旧 `_EXTEND` 撤去）。回帰＝byte-match 2種（T2V/I2V）完全一致・pytest 41 green。
 - 新設した検証ハーネス（`services/video_io.py`＋`outputs/phase3_clip_concat_spike/verify_boundaries.py`）は既知 hard-cut アーティファクトへ較正済み（全検出・偽陽性0）。
-- **唯一の未消化ゲート＝ユーザー一括目視4本**（パス・フレーム番号は下表）:
+- ~~唯一の未消化ゲート＝ユーザー一括目視4本~~ → **✅全4本消化済み（2026-07-03・結果は冒頭★★★節と各STATUS doc）**。下表は歴史記録:
 
 | # | 内容 | パス | 確認ポイント |
 |---|------|------|--------------|
@@ -32,8 +39,8 @@
 - Phase Aのbf16融合ペナルティ（RAM 54-57GB・約3倍遅・VRAM+3.6GB）は本経路で**全解消**: 全体VRAMピーク＝LoRA無しと同一8440.9MB・attach 0.02–0.3s（fuse消滅）・bf16融合比2.2倍速。rank64のdenoise増は実測+20〜26%（許容判断・§21.8に最適化候補）。bf16融合経路はユーザー指示どおり選択可能なまま温存。
 - 検証: G1回帰byte-match（T2V/I2V完全一致・peak_vram 8440不変・pytest 58/1）・G2**新経路とbf16融合がbyte完全一致**（`735a6de9…272`＝Phase B基準SHAに再ピン。旧spike.mp4不一致は`016f442`以前のstale baselineが原因と特定・480層delta CPU/GPU 0 ULP）・G3非汚染トグル（4経路収束）・G5**API e2e実機も出力byte一致**＋偽video_id→404。
 - **正本＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)**・詳細＝[`VERIFICATION_LOG.md` §21](VERIFICATION_LOG.md)・設計＝[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)。
-- **残作業＝①`feature/ic-lora-phase-b`のmainマージ判断（ユーザー） ②mainのpush（監督のpushは権限拒否・Phase Aマージ`a578c83`以降ローカル先行） ③目視fix-later分＝**`outputs/visual_review/` に分かりやすい名前で集約済み（README.md にチェックポイント表・全6本: Phase3連結2＋キーフレーム2＋IC-LoRA比較ペア2）**。旧spike.mp4は`016f442`以前の出力につき目視も#06（api_smoke相当）で代替 ④HFトークン無効化（ユーザー宿題）**。
-- Phase C候補（挙げるのみ・詳細=VERIFICATION_LOG §21.8）: keep=1トグル検証／oracle照合／x4・他アダプタ登録／denoise最適化／参照不要アダプタのバリデーション緩和／Gradio UI露出。
+- **残作業＝①`feature/ic-lora-phase-b`のmainマージ判断（ユーザー） ②mainのpush（監督のpushは権限拒否・Phase Aマージ`a578c83`以降ローカル先行） ③~~目視fix-later分~~ → **✅目視6本消化済み（2026-07-03・結果は冒頭★★★節）。残＝multikeyの受容判断のみ（機能解説の提示後にユーザー回答待ち）** ④HFトークン無効化（ユーザー宿題）**。
+- Phase C候補（詳細=VERIFICATION_LOG §21.8）: **最優先（ユーザー決定 2026-07-03）＝制御系アダプタ（Pose/Union）＋DWPose等外部プリプロセッサ段の新設**。他: keep=1トグル検証／oracle照合／x4・他アダプタ登録／denoise最適化／参照不要アダプタのバリデーション緩和／Gradio UI露出。
 
 ### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`・**✅mainマージ済 `a578c83`（同日）**）
 - **成立**: Pixel-Spatial-Upscaler x2 アダプタを bf16パス忠実dequant＋engine側fuse-at-load＋参照動画条件付けで配線し実機スパイクPASS。回帰（LoRA off時の本番per-layer経路）はbyte-match完全一致・pytest 41 green。commit `bbcd82f`（spike wiring）→`016f442`（fp32 fuse化・19分→33秒）。

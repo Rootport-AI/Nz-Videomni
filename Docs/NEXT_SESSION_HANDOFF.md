@@ -2,20 +2,37 @@
 
 ---
 
-## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03・**次セッションはまずここ**）
+## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03・セッション末・**次セッションはまずここ**）
 
 > **本ブロックが最新の正本。** 下の 2026-07-01 以前の▶節は歴史記録。
 
-### Phase 3 スライス2「クリップ連結」＝masked AV-latent 連結で再実装・実機検証PASS（ユーザー最終目視/試聴のみ PENDING）
-- 同日中に旧アーキ（配管PASSだが目視hard-cut FAILだった latent-extend 方式）を全面置換。branch **`feature/phase3-clip-concat`**（未 merge・未 push）。commit 列: `aebcd08`（engine masked AV-latent chaining）→`c0ed582`（api/services配線）→`d359e4a`（stage2単一コンテキスト修正）→`622dd81`（worker protocolドキュメント）。
-- **アーキテクチャ**: per-segment stage1でvideo+audio latent tailをcarry+freeze→**1本の連続stage1 AV latentを組み立て**（線形クロスフェード）→1回のupsample→stage2 refineを**常に時間タイル分割**（両モダリティのRoPE20秒天井対策）→**1回だけVAE decode**。旧方式の「per-clip decode＋独立音声」が hard cut の本質だったため、境界が1本の連続latentの内部に存在する構造に転換した。新モジュール＝`chain_math.py`（ジオメトリ単一情報源）／`engine/pipeline/chain_pipeline.py`（`run_chain`）。
-- **検証**: 実装より先に境界連続性ハーネス（`services/video_io.py`＋`outputs/phase3_clip_concat_spike/verify_boundaries.py`）を構築し旧hard-cutアーティファクトへ較正（全検出・偽陽性0）。GPU spike S1/S2/S3 でユーザー都度目視/試聴PASS（S2のタイル継ぎ目直後drift・S3の発話境界口パウズはv1受容済みチューニングbacklog）。本番回帰＝byte-match T2V/I2V不変・pytest 41 green。実機Chain A（2×73f/147s）・Chain B（4×145f/22s/302s）とも全映像junctionがcontinuous（Chain Bの音声J=456フラグはspeech-onset偽陽性の疑いと暫定判断）。
-- **PENDING（最優先・ユーザー）**: Chain A/B 本番出力そのものの最終目視/試聴（パス・詳細は [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md) の「Pending項目」）。旧 `_EXTEND` monkeypatch機構の削除判断も保留。
+### Phase 3 スライス2「クリップ連結」＝公式パリティ再実装で main へ merge・push 済（ユーザー最終目視/試聴のみ PENDING）
+- masked AV-latent 連結アーキテクチャ（per-segment stage1でvideo+audio latent tailをcarry+freeze→**1本の連続stage1 AV latentを組み立て**→1回のupsampleを経て**stage2 refineを常に時間タイル分割**→**1回だけVAE decode**）で再実装。音声連続・実機 Chain B（4×145f/22s）まで実証。詳細アーキテクチャは [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md) を参照。
+- 同日中に旧 `_EXTEND` monkeypatch 機構（latent-extend 方式）を撤去（byte-match検証済・commit `de587b4`）。Gradio ルート `/` の 404 修正（`/ui` マウント時に `/` が404していた不具合、`eb5f7ac`）も同セッションで解消。
+- **main へ merge・push 済**: merge `2cc4cac`（Phase 3 slice-2 rework: masked AV-latent clip-concat chain）→ cleanup merge `1ab5e0c`（旧 `_EXTEND` 撤去）。回帰＝byte-match 2種（T2V/I2V）完全一致・pytest 41 green。
+- 新設した検証ハーネス（`services/video_io.py`＋`outputs/phase3_clip_concat_spike/verify_boundaries.py`）は既知 hard-cut アーティファクトへ較正済み（全検出・偽陽性0）。
+- **唯一の未消化ゲート＝ユーザー一括目視4本**（パス・フレーム番号は下表）:
+
+| # | 内容 | パス | 確認ポイント |
+|---|------|------|--------------|
+| 1 | Chain A | `outputs/a1459043-1177-48ec-9689-a12dbb540dd5/output.mp4` | 継ぎ目 71→72 |
+| 2 | Chain B | `outputs/0e20e9aa-4ba2-4aa6-89bf-7e62fa74dff6/output.mp4` | セグメント継ぎ目 143→144/271→272/399→400・タイル継ぎ目 167→168/311→312/455→456・t≈19.0s の音声（検証器フラグ=偽陽性判断済み・耳で確定） |
+| 3 | キーフレーム bookend | `outputs/phase3_multikey_smoke/visual_bookend/output.mp4` | frame0=浜辺／frame41=町並み通過確認（montage/filmstrip併用） |
+| 4 | キーフレーム multikey | `outputs/phase3_multikey_smoke/visual_multikey/output.mp4` | f17ゴースト・静止保持→急遷移の補間特性の受容可否 |
+
+- チューニングバックログ3件（発話chain境界の口閉じポーズ／タイル継ぎ目後drift／ハーネス音声閾値のspeech-onset偽陽性）＝非ブロッキング・上記目視結果待ち。詳細＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「チューニング backlog」節。
 - 正本＝**[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（採用アーキテクチャnote付）。VERIFICATION_LOG §19（§18は旧方式FAILの記録として温存）。
 
 ### Phase 3 スライス1「キーフレーム条件付け」＝main 入り済だが目視サインオフは未了
 - 機能は main 入り済（merge `7f31935`）。だが目視は**まだ有効に実施されていない**: 監督が目視用に提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモーク出力で**全キーフレームに同一の合成テスト画像**を使っており無効（青い長方形になった理由）。
-- **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先 `visual_bookend/`・`visual_multikey/`）。
+- **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先＝上表#3/#4の `visual_bookend/`・`visual_multikey/`）。
+
+### ★次セッションのメインスコープ＝IC-LoRA Phase A（Phase 2 はユーザー環境待ちでブロック中）
+- 入り口＝**[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)**（コード読解サブエージェント×2＋Webリサーチ×5系統統合サーベイ・2026-07-03作成・末尾に監督・ユーザー議論の補足あり）。
+- **冒頭で確認すべきユーザー判断2つ**: ①beyond-parityスコープへの正式着手承認（仕様 §13.4b は IC-LoRA を LTX-Desktop パリティ対象外＝Phase 4 としていたが、ユーザー最優先関心のため前倒しを検討）②最初に載せるアダプタの確定（推奨＝**Pixel-Spatial-Upscaler x2/x4**、根拠＝SURVEY.md §2.6・§6「監督・ユーザー議論による補足」）。
+- 内容（研究ファースト・段階導入）: **spike**（LoRAキー形式確認→fuse-at-load配線→RAM/VRAM/トークン数/生成時間の計測→**LoRA無効時のbyte-match完全一致確認**）→ **基本配線**（`loras`パラメータ露出＋参照動画条件付け）→ 実機検証＋目視アーティファクト。時間に余剰があれば小物（尺~30s解放・パラメータ露出等、SURVEY.md §3.5）に着手。
+- Gap Fill／Retake は Phase 2（AviUtl2 統合）後に実用から要件を逆算する方針（詳細＝SURVEY.md「§6 監督・ユーザー議論による補足」）。Phase 2 自体はユーザーのプラグイン開発環境整備待ちで**現在ブロック中**。
+- 運用注意の継承: 目視題材は「賑やかな町＋セリフ」系を使う（波/静的部屋はNG・ボイス/口パク確認に不向き）。客観PASS（byte-match・pytest・境界メトリクス）とユーザー目視ゲートを混同しない。サブエージェントは Opus/Sonnet を使う（Fable5 禁止）。
 
 ---
 
@@ -108,7 +125,7 @@
 
 - [x] **★スライス1＝凍結 API の「解凍」（条件付け露出）＝実装＋客観検証 PASS・main merge 済（2026-07-02・merge `7f31935`・push 済）。目視品質のみ PENDING**: 多キーフレーム・first+last ブックエンド・任意 frame_idx・複数条件・per-item strength・cap5 を露出。**engine 内で完結**したが「API 表層のみ／engine 不可触」の当初想定は**誤り**で、実際は engine の条件付け経路に**公式ハイブリッド（idx0=置換 / idx>0=guide）を monkeypatch で自前再現**する必要があった（インストール済み wheel に `combined_image_conditionings` が無い・wheel 更新は回避）。frame_idx は公式 `8n+1` latent 格子へスナップ（ComfyUI `LTXVAddGuide` 準拠）。回帰 byte-match（T2V/単一 I2V バイト一致）＋新経路スモーク（bookend 0/41・multikey3 0/17/41 完走）＋VRAM 8440MB（多キーフレームでもデルタ0）全 PASS。**残＝目視品質判断（ユーザー）＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md)。merge 済ゆえ不足時は追いコミットで調整（strength/グリッド）**。正本＝[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)。commit `1602245`→`5033385`→`d7a56b1`→docs `0854f8d`→merge `7f31935`。num_pixel_frames／reference-video は今回スコープ外（将来）。
   - **⚠️ 2026-07-03 訂正**: 目視は**まだ有効に実施されていない**。監督が提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモークで**全キーフレームに同一の合成画像**を使い無効。**有効な目視＝`run_visual.py` を異なる実画像で**（→`visual_bookend/`・`visual_multikey/`）。
-- [~] **★スライス2＝クリップ連結（生成プリミティブ）＝masked AV-latent 連結で再実装・実機検証PASS（ユーザー最終目視/試聴のみ PENDING・2026-07-03）**: branch `feature/phase3-clip-concat`（未 merge・commit `760a283`→`9fb7111`→`5e73e47`→**`aebcd08`→`c0ed582`→`d359e4a`→`622dd81`（同日中に旧latent-extend方式を全面置換）**）。旧方式は境界フレーム目視で hard cut・音声断絶が確定していたが、原因（per-clip decodeでcausal VAEリセット再トリガー＋音声独立生成）を踏まえ「1本の連続AV latentを組み立てて1回だけdecode」する構造に作り直し。境界連続性ハーネスを既知hard-cutへ較正済み＋GPU spikeでユーザー都度目視/試聴PASS＋実機Chain A/Bで全映像junction continuous。**残＝Chain A/B本番出力そのものの最終目視/試聴（ユーザー）**。**正本＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（採用アーキテクチャnote付）・[`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)・[`VERIFICATION_LOG.md` §19](VERIFICATION_LOG.md)（§18=旧方式FAILの記録）。
+- [x] **★スライス2＝クリップ連結（生成プリミティブ）＝masked AV-latent 連結で再実装・main merge・push 済（ユーザー最終目視/試聴のみ PENDING・2026-07-03）**: 元 branch `feature/phase3-clip-concat`（commit `760a283`→`9fb7111`→`5e73e47`→`aebcd08`→`c0ed582`→`d359e4a`→`622dd81`（同日中に旧latent-extend方式を全面置換）→`194ce44`→`eb5f7ac`）→ **main へ merge `2cc4cac`**。同日中に旧 `_EXTEND` monkeypatch 機構も撤去（`de587b4`→cleanup merge `1ab5e0c`・byte-match検証済）。旧方式は境界フレーム目視で hard cut・音声断絶が確定していたが、原因（per-clip decodeでcausal VAEリセット再トリガー＋音声独立生成）を踏まえ「1本の連続AV latentを組み立てて1回だけdecode」する構造に作り直し。境界連続性ハーネスを既知hard-cutへ較正済み＋GPU spikeでユーザー都度目視/試聴PASS＋実機Chain A/Bで全映像junction continuous。**残＝Chain A/B本番出力そのものの最終目視/試聴（ユーザー・パス/フレーム番号は冒頭「最新ステータス」表）**。**正本＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（採用アーキテクチャnote付）・[`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)・[`VERIFICATION_LOG.md` §19](VERIFICATION_LOG.md)（§18=旧方式FAILの記録）。
 - [ ] **Gap Fill／Retake**（＝LTX-Desktop の連続性プリミティブ・**大規模ゆえ次セッションでは着手しない**）。Retake=`TemporalRegionMask`/`RetakePipeline`、Gap Fill=近傍条件の間埋め。
 - [ ] その他パリティ（段階的）: 生成キュー／延長尺(〜30s)／text-only プロンプト強化／STG・sigma schedule・denoise loop・negative・seed lock 露出／空間アップスケーラのユーザー操作露出／**LoRA・attention tiling 再導入**（de-fork で削除済）。
 

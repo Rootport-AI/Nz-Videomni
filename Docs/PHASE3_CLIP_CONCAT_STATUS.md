@@ -62,9 +62,9 @@
 
 ## リポジトリ状態
 
-- branch **`feature/phase3-clip-concat`**（未 merge・未 push）。
-- 本セッションの commit 列: `aebcd08`（engine masked AV-latent chaining）→`c0ed582`（api/services 配線）→`d359e4a`（stage2 単一コンテキスト修正）→`622dd81`（worker protocol ドキュメント）。
-- 旧 `_EXTEND` monkeypatch 機構（`9fb7111`由来）は**残置・未使用**（削除は保留、下記「保留事項」参照）。
+- **main へ merge・push 済**（merge `2cc4cac`）。元 branch `feature/phase3-clip-concat` は merge 済で役目を終えた。
+- 本セッションの commit 列: `aebcd08`（engine masked AV-latent chaining）→`c0ed582`（api/services 配線）→`d359e4a`（stage2 単一コンテキスト修正）→`622dd81`（worker protocol ドキュメント）→`194ce44`（境界検証ハーネス用 video_io ヘルパー）→`eb5f7ac`（Gradio ルート `/` 404 修正）→ merge `2cc4cac`。
+- 旧 `_EXTEND` monkeypatch 機構（`9fb7111`由来）は**削除済**（同日中に判断確定・`de587b4`「remove dead legacy latent-extend machinery」→ cleanup merge `1ab5e0c`。byte-match検証済＝退行なし）。
 - 主要新規モジュール: `chain_math.py`（リポジトリ直下・app/engine両venvで import 可能な純Python junction/tileジオメトリの単一情報源）、`engine/pipeline/chain_pipeline.py`（`run_chain`＝spikeのs1+s2を本番移植）。
 - worker: 新 `generate_chain` op（`engine/worker.py`＋`engine/api_types.py`）。app: `services/ltx_runner.py`（real+mock）／`services/pipeline_manager.py`（`run_chain_job`・単一呼び出しに再構成）／`api/models.py`（`overlap_frames`既定=K_v=3・`MAX_CHAIN_TOTAL_PIXEL_FRAMES=8×481`）。
 - キャンセルはジョブ境界のみ（チェーン全体が単一の atomic worker op＝ユーザー承認済みの逸脱）。
@@ -75,6 +75,7 @@
    - Chain A: `outputs/a1459043-1177-48ec-9689-a12dbb540dd5/output.mp4`（2×73f・129総フレーム・seam 71→72）。
    - Chain B: `outputs/0e20e9aa-4ba2-4aa6-89bf-7e62fa74dff6/output.mp4`（4×145f・529総フレーム・segment seam 143→144/271→272/399→400・tile seam 167→168/311→312/455→456・音声は t≈19.0s 付近を要試聴＝上記 J=456 の件）。
    - 各 `boundary_report/`（`verify_boundaries.py` 出力）にメトリクス・montage PNG・audio波形PNGあり。
+   - 詳細パス・確認ポイントの一覧表＝[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭「最新ステータス」節。
 2. **スライス1 キーフレーム目視は別件で PENDING**（`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md` 参照・本スライスとは独立）。
-3. **旧 `_EXTEND` monkeypatch の削除判断はユーザー保留**（未使用だが残置中）。
-4. 上記チューニング backlog（タイル継ぎ目後drift・発話ポーズ・harness speech-onset偽陽性）は v1 受容済みだが将来の磨き候補。
+3. 上記チューニング backlog（タイル継ぎ目後drift・発話ポーズ・harness speech-onset偽陽性）は v1 受容済みだが将来の磨き候補。
+4. **次セッションのメインスコープは本スライスの続きではなく IC-LoRA Phase A**（Chain A/B 目視はそれと並行/前置きで消化可能）。詳細＝[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。

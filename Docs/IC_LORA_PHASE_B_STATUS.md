@@ -54,7 +54,11 @@
 
 ## Pending（ユーザー）
 
-1. **mainマージ判断**（branch `feature/ic-lora-phase-b`・全ゲートPASS・docsコミット含む）。
-2. main の push（Phase Aマージ `a578c83` 以降ローカル先行・監督のpushは権限拒否のため手動）。
+1. ~~mainマージ判断~~ → **✅マージ済（2026-07-04・merge commit `cfddd77`・pytest 58 passed/1 skipped で回帰なし確認）**。
+2. main の push（ローカル先行のまま・監督のpushは権限拒否のため手動）。
 3. ~~目視~~ → **✅全消化（2026-07-03・低解像度6本＋高解像度3本。人物変化はLTX 2.3の性能限界=仕様としてユーザー受容）**。
 4. HFトークン無効化（前セッションからの宿題）。
+
+## Phase C 準備状況（2026-07-04 追記）
+
+Phase C（Union-Control 制御系アダプタ＋前処理段）のリサーチとワークオーダーが完成。正本=[`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md)（設計根拠全文=[`IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)）。

@@ -1,4 +1,6 @@
-# IC-LoRA Phase A スパイク — 現状ステータス（成立・残作業=mainマージのみ・目視はfix-later承認済み）
+# IC-LoRA Phase A スパイク — 現状ステータス（成立・**✅全消化済み＝歴史記録**）
+
+> **⚠️ 2026-07-03 更新: 本書のPending項目はすべて消化済み**（mainマージ=`a578c83` 実行済・Phase B本実装=branch `feature/ic-lora-phase-b` で完了・目視も全消化）。**最新の正本は [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md) と [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック**。本書はPhase Aスパイクの技術記録として温存。
 
 - 更新: 2026-07-03（branch `feature/ic-lora-phase-a`・[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md) を受けた同日実装）
 - 併読: [`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)（本スパイクの全ゲート詳細数値）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)（引き継ぎ）／[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)（着手前サーベイ・入口Doc）

@@ -1085,6 +1085,20 @@ read-only 調査で 5 候補（#1-#5）を検証し、#4 の呼び出し元ゼ�
 - **注記**: マシン上に ComfyUI `nodes_lt.py` 実ソースが無く式のバイトレベル確認は未（wheel の生ピクセル semantics ＋先の Web 調査の `get_latent_index` 記述と整合的なので採用）。もし目視で旧グリッドの方が良ければ当該 3 行を戻すだけで比較可。
 - commit 列（branch `feature/phase3-api-unfreeze-conditioning`・未 merge）: `1602245`(API 表層・当初 8 の倍数)→`5033385`(engine ハイブリッド)→`d7a56b1`(**8n+1 整合＝最新**)。
 
+### 17.9 ★ユーザー目視結果（2026-07-03・実画像版 visual_bookend / visual_multikey）
+- **bookend＝PASS**: 20〜36フレームで浜辺→町並みへ綺麗なクロスフェード（明白な境界線なしとユーザー確認）。
+- **multikey＝観察2特性は機構どおりと確認・受容判断は保留**: ユーザー観察＝16-21fで海→室内女性のクロスフェード（＝中間guideのソフト誘導によるブレンド・§17.8のf17）／38→39fで連続性なく町歩き女性へ切替（＝最終latentスロット41のguideに近傍連続性制約が無く、最終スロット境界で急遷移）。**どちらも実装機構から予測される文書化済み挙動でありバグではない**（コード読解での機構確認＝guide は追加クリーントークンのみ・補間制約なし）。
+- **受容判断が保留になった理由（重要なプロセス学習）**: 監督が「f17ゴースト・静止保持→急遷移の補間特性の受容可否」という**内部略語のまま判断を求め、機能自体の説明をしなかった**ため、ユーザーから「これが何をする機能なのか知らない。知らないものは受容も拒絶もできない」と正当な指摘。→ **平易な機能解説 [`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md) を作成して提示し、そのうえで再度判断を仰ぐ**フローに変更。以後、人間向け説明は略語・造語禁止＋機能説明が先。
+- **検証運用の是正（ユーザー総評）**: 512×320級は顔溶け・背景ぼやけで品質判断不能→**目視検証は720p級＋映画トレイラー風プロンプト**で行う（「CM風」はネット上の低品質TVCMに引きずられる可能性があるため廃止）。同日中に高解像度再生成（multikey/IC-LoRA/chain）を実施。
+
+### 17.10 ★高解像度multikey再実行（1280×768・job `52e99266`）＝設定検証と挙動差の考察（2026-07-03）
+- **ユーザー観察（1始まりのフレーム番号）**: 海は1-2fのみ→3fで不連続にビデオ会議風の女性へ（3fは右下からのグラデーションでほぼ真っ白→10fにかけて白が抜ける）→11-29f室内の女性→30-41fホワイトクロスフェード→42fから町を歩く女性。**旧runで観察された「最終キーフレーム直前のハードカット」は見られない**。ユーザーから「生成設定が間違っていた可能性」の指摘→検証実施。
+- **設定検証＝正しい**: metadata.json（一次情報）で conditioning 3枚＝frame_idx 0(0.9)/17(0.8)/41(0.7)・49f・seed12345 を確認。アップロード画像3枚を直接目視し、frame0=海・frame17=室内の女性（ウェブカメラ風＝ユーザーの「ビデオ会議風」と一致）・frame41=町の女性、と対応も正しい（ハッシュ差はアップロード経路のリサイズ/再エンコードによるもの・内容は同一）。
+- **変数はプロンプト**: 旧512×320 run＝"a calm ocean wave rolling onto a sandy beach at sunset, cinematic"（＝**先頭キーフレームと同内容**）。本run＝トレイラー風「町を歩く女性」（＝**最終キーフレームと同内容**）。
+- **考察＝機構と整合**: キーフレーム3点は全て所定位置で履行されている（1始まりで1-2f=海・11-29fが18f[=0始まり17]をカバー・42f[=0始まり41]=町）。ガイド機構が保証するのは「各キーフレーム位置への引き寄せ」のみで、**間の遷移の時刻・スタイルは自由領域＝プロンプトが支配的レバー**。旧runはプロンプトが海を支えたため海が~16fまで持続し、最終キーフレームがプロンプトと衝突して「保持→終端で急切替」になった。本runはプロンプトが町を支持するため海は2fで放棄され（ハード固定はframe0の1フレームのみ）、遷移はホワイトフェード（トレイラー的な演出スタイル＝プロンプトの"movie trailer"起因と推定・INFERRED）で終端キーフレームに滑らかに合流した。**＝「終端直前ハードカット」は機構の定数ではなく、旧runのプロンプト×キーフレーム緊張関係の産物**。監督の事前フレーミング（38f前後で急遷移が再現される想定）はこの点で不正確だった。
+- **高解像度チェーン（job `634f2da5`）の実在検証**: metadata＝`kind: chain`・num_clips 2（73f+73f・2部構成プロンプト）・overlap 3/strength 0.5・masked_av_latent_concat・seam junction=72（0始まり）・総129f・264s・peak 9578MB。**本物の2セグメント連結であり、ユーザーは継ぎ目を発見できなかった**（=720p級＋トレイラー風での連結品質の実証）。
+- **✅multikey受容判断＝受容（ユーザー 2026-07-03）**: FEATURE_GUIDE 提示＋本節の「遷移スタイルはプロンプトで操縦できる」分析を踏まえ、**「途中のキーフレームは磁石として引き寄せる（間の遷移は自由領域・プロンプト支配）」という現挙動を仕様として受容**。ユーザーコメント「プロンプトの練りがいがありそうだ」。なめらかな中間補間（Gap Fill前倒し）は優先課題化しない。**＝Phase 3 スライス1の目視ゲート完全クローズ**。
+
 ---
 
 ## 18. ★Phase 3 スライス2「クリップ連結」＝配管 客観 PASS だが**映像連続性は FAIL**（2026-07-03・branch `feature/phase3-clip-concat`・**機能未達**）
@@ -1269,4 +1283,69 @@ RAM peak 56.7GB（system 65.3/65.3GB＝ほぼ飽和）。
 - keep-resident運用との整合: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグルは設計要（リビルド vs デュアルキャッシュ）。
 - API/UI露出（`engine/api_types.py`のIcLoraスキーマは存在するが未配線）。
 - x4バリアント・他アダプタ（In-Outpainting/Deblur、`PHASE3_NEXT_WORK_SURVEY.md` §6準拠）。
-- `spike.mp4` vs `base.mp4`の最終目視は**fix-later方針でユーザー承認済み・非ブロッカー**（回答到着次第、必要なら追いコミット対応）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。**残る「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` 未マージ・4コミット先行）。
+- `spike.mp4` vs `base.mp4`の最終目視は**fix-later方針でユーザー承認済み・非ブロッカー**（回答到着次第、必要なら追いコミット対応）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。**残る「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` 未マージ・4コミット先行）。→ **✅マージ実行済 2026-07-03（merge `a578c83`）・Phase B本実装＝§21**
+
+## 21. ★IC-LoRA Phase B＝forward時GPU LoRA適用（per-layer-quant経路）＋API露出 実装・全ゲートPASS（2026-07-03・branch `feature/ic-lora-phase-b`）
+
+> **正本＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)**（現状サマリ）／設計・ゲート定義＝[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)。本節はゲートごとの詳細数値。
+> base＝main merge `a578c83`（Phase A取り込み）。commit `b805ae1`（engine機構）→`fbef799`（API露出）。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 21.1 事前リサーチ（実装前の裏取り・仮説→確認）
+
+- **ComfyUI-GGUF（city96）のLoRA機構をソース確認**: `GGMLLayer.get_weight()`がdequant直後の行列へfp32 delta（`strength·(alpha/rank)·B@A`）を加算・**毎forward再計算・キャッシュ無し・量子化バイト不変**（=「dequant時ウェイトパッチ」方式）。ComfyUI coreの`calculate_weight`は`intermediate_dtype=fp32`でdeltaを計算し weight dtypeへ1回キャスト＝Phase A `016f442`のfp32 fuse判断と同型。事前fuse/再量子化・deltaキャッシュはメインライン不採用（不可逆量子化誤差・トグル喪失のため）。
+- **side-path方式（出力側低ランク加算）は不採用と判定**: per-layer経路はどのみち毎forwardで全重みを実体化するためVRAM利得ゼロ・G2のbyte-match検証レバー喪失・動画のトークン数域ではdelta計算の方が安い。
+- **自エンジンのフック点をコード読解で確定**: `ggml_linear_forward`（`quant_service.py:625-643`・`types.MethodType`で各Linearにバインド）。block-swapはブロックを`.to()`移動するだけ（モジュール差し替え無し）→Linearに載せた非persistentバッファはswapを自動で生き残る。
+
+### 21.2 実装（commit `b805ae1`→`fbef799`）
+
+- **`engine/gguf/ic_lora_common.py`（新規）**: safetensorsロード＋`LTXV_LORA_COMFY_RENAMING_MAP`＋lora_A/Bペアリングの共通化（`load_ic_lora_pairs`・bf16融合経路と共用）。`attach_ic_loras`＝LoRA prefix→`nn.Linear`解決（X0Modelの`velocity_model.`ラップはLTXModelノード起点で回避）・A/Bを**非persistentバッファ**登録（state_dict非汚染・`.to()`移動対象）。shape不一致raise・0マッチ大声WARN。`detach_ic_loras`＝完全除去。
+- **`quant_service.py`**: `ggml_linear_forward`にLoRA分岐。量子化weight→**毎回新規のdequantテンソルへ** `delta=matmul(B.float()*strength, A.float())`→`.to(bf16.dtype)`加算（**式・演算順序ともPhase A fuseと同一**・G2要件）。float weight→out-of-place（保存バッファ不変）。LoRA無し時は属性読み1回のみ＝既存パス完全同一。複数LoRA＝逐次加算。
+- **`fast_video_pipeline.py`**: 旧「per_layer＋LoRAでraise」ガードを`ic_loras_provider`配線に置換（transformerビルド毎に現ジョブのLoRAをattach）。`generate(*, ic_loras=None, ic_reference=None)`でジョブ毎切替（明示`[]`＝detach・`None`＝create時デフォルト）。**bf16融合経路（`gguf_per_layer_quant=False`）は無傷温存**（ユーザー指示）。
+- **API露出（`fbef799`）**: `POST /api/v1/upload/video`新設（画像uploadと同型）。`GenerateRequest`に追加（凍結契約へ純加算）: `loras:[{name,strength(0<s≤2)}]`（**サーバー側レジストリ名のみ**・パス形式拒否）＋`reference_video_id`（lorasと全か無か）。レジストリ＝`config.yaml` `model.ic_loras`（現登録=`pixel-spatial-upscaler-x2`のみ）。配線=pipeline_manager→ltx_runner→worker generate op（**LoRA無しでも明示`[]`送信**=G3のclean-detach保証）。metadata＝LoRAジョブのみ追加`ic_lora`ブロック。`GET /status`凍結キー不変。
+
+### 21.3 G1＝回帰byte-match（LoRA off・本番per-layer経路）
+
+**PASS**: 本番runner経路でT2V `23844b4e…6bb7bf`／I2V `a511eda4…15c217` 完全一致・peak_vram **8440**不変。pytest **47 passed/1 skipped**（Stage 1後）→**58 passed/1 skipped**（Stage 2後・+11本のAPIテスト）。
+
+### 21.4 G2＝新経路 vs bf16融合のbyte照合（**基準SHA再ピン**）
+
+spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345）で：
+
+- per-layer forward時LoRA（`spike_pl`）＝ **`735a6de97d2deb56a781c66307849924a8ac25b51f0591fbddab07a78875e272`**
+- 現行コミットのbf16融合（`spike_false_current`）＝ **同一SHA（byte完全一致）** → **PASS**
+- 旧アーカイブ`spike.mp4`（`8e10aa59…`）との不一致は**stale baseline**（`016f442`以前のbf16-matmul fuse生成物・§20.6の「丸め1回差」記録と整合）と根本原因特定。フレーム差分PSNR 26.2dB＝拡散カスケードによる増幅で説明済み・ロジック欠陥ではない。
+- 数値証拠: **全480層でdeltaのCPU/GPU計算が0 ULP一致**（bf16キャスト後bit一致）・fused weightサンプル16層0差・LoRA無しres_parity（1024×640）両経路SHA一致（`13227dfe…`）・LoRAあり参照無し（`lora_noref`）両経路SHA一致（`575671ff…`）。
+- **Phase B基準SHA＝`735a6de9…272`に再ピン**（監督判断・旧`spike.mp4`は温存）。
+
+### 21.5 G3＝非汚染トグル（同一プロセス・per_layer=True）
+
+**PASS**: lora1→nolora→lora2 連続実行で、nolora出力＝`base.mp4`（`3a2a87a2…`）**完全一致**・lora1＝lora2＝`735a6de9…`相互一致。create時デフォルト／generate上書き×2／bf16融合の**4経路すべてが`735a6de9…`に収束**＝決定性＋detach健全性の証明。
+
+### 21.6 G4＝VRAM／速度（1024×640/25f・§20.5と同一計測）
+
+| 経路（出力は全て`735a6de9`で同一） | gen時間 | denoiseピーク | 全体ピーク | load/attach |
+|---|---|---|---|---|
+| per-layer forward時LoRA | **124.7s** | 5679MB | **8440.9MB** | attach **0.02–0.3s** |
+| bf16融合（現行） | 273.5s | 9102MB | 9102MB | fuse≈33s+load |
+| LoRA無しper-layerベースライン | 103.4s | 5564MB | 8440.9MB | — |
+
+- **Phase Aのbf16ペナルティ（+3.6GB・約3倍遅）は解消**（対bf16: 2.2倍速・全体ピーク−661MB・denoise−3.4GB）。
+- **全体ピークはLoRA無しと同一（8440.9MB）**＝A/B 654MB＋一時deltaはencode天井の下に収まる。
+- **rank64のdenoise時間増は実測+20〜26%**（毎forwardのB@A再計算。ワークオーダーの「<1%」は楽観的すぎた＝理論flopsでなく実効。それでも融合方式より圧倒的に安い）。run-to-run分散±20s程度あり。
+
+### 21.7 G5＝API e2e実機スモーク（HEAD `fbef799`）
+
+**PASS（ボーナス＝APIパス出力もbyte一致）**: 本番サーバー起動→`POST /upload/video`（base.mp4・保存はbyte同一＝再エンコード無し）→`loras=[{pixel-spatial-upscaler-x2, 1.0}]`＋`reference_video_id`でgenerate→**115.8sで完走・出力SHA＝`735a6de9…272`（ハーネス基準とbyte完全一致）**。workerログ`ic_loras=1 ic_reference=yes`・`peak_vram_mb=8440`。metadata`ic_lora`ブロック有・`GET /status`凍結8キー不変。negativeケース＝偽`reference_video_id`→**404 REFERENCE_VIDEO_NOT_FOUND**・ジョブ非生成。
+- 副次的知見: 本番は`fp8_transformer:true`（Ada）で`QuantizationPolicy.fp8_cast()`が入るが、ハーネス（fp8オフ固定）とbyte一致＝**fp8-castポリシーはGGUF per-layer経路では実質no-op**であることの挙動的証明。
+
+### 21.8 未了・Phase C候補への持ち越し（挙げるのみ）
+
+- keep_resident=1下のLoRAトグル（機構は非汚染なので障害無し・検証のみ未実施）。
+- wheel `ICLoraPipeline` oracle照合（stage1のみ適用 vs 両ステージ適用・未照合のまま）。
+- x4バリアント（ファイルは配置済み・レジストリ未登録）・他アダプタ（In-Outpainting/Deblur）。
+- rank64 denoise +20〜26%の最適化（必要になったら: deltaの層内キャッシュ等・現状は許容と判断）。
+- loras⇔reference_video_id全か無か制約は「参照必須アダプタしか無い」前提＝参照不要アダプタ導入時にアダプタ別メタデータ駆動へ緩和。
+- Gradio UI露出（Phase 1残(a)と合流）。
+- ユーザー目視: Phase A持ち越し5本＋Phase B出力（`outputs/ic_lora_phaseA/phaseB/api_smoke.mp4`等）＝fix-later方針継続。

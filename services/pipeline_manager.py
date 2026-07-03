@@ -20,8 +20,10 @@ from config import AppConfig
 from services import gpu_info, video_io
 from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
+from services.lora_registry import LoraRegistry
 from services.ltx_runner import LTXRunner
 from services.upload_store import UploadStore
+from services.video_upload_store import VideoUploadStore
 
 logger = logging.getLogger("ltx.pipeline")
 
@@ -39,10 +41,21 @@ class PipelineManager:
     STATE_RUNNING = "running"
     STATE_ERROR = "error"
 
-    def __init__(self, config: AppConfig, job_store: JobStore, upload_store: UploadStore):
+    def __init__(
+        self,
+        config: AppConfig,
+        job_store: JobStore,
+        upload_store: UploadStore,
+        video_upload_store: VideoUploadStore | None = None,
+        lora_registry: LoraRegistry | None = None,
+    ):
         self.config = config
         self.job_store = job_store
         self.upload_store = upload_store
+        # Phase B: reference-video store + IC-LoRA name registry. Defaulted so
+        # existing constructions (tests) still work; the app always injects them.
+        self.video_upload_store = video_upload_store or VideoUploadStore(config)
+        self.lora_registry = lora_registry or LoraRegistry(config)
         self.low_vram = build_low_vram_settings(config)
         self.runner = LTXRunner(config, self.low_vram)
         self.state = self.STATE_UNLOADED
@@ -127,6 +140,20 @@ class PipelineManager:
                 for ci in job.request.conditioning_images
             ]
 
+            # Phase B IC-LoRA: resolve adapter names -> (path, strength) via the
+            # registry and reference_video_id -> path via the video store. The API
+            # layer already validated existence (mirroring conditioning images), so
+            # these re-resolve the same objects for the runner hop.
+            lora_paths = [
+                self.lora_registry.resolve(spec.name, spec.strength)
+                for spec in job.request.loras
+            ]
+            reference_video_path = (
+                self.video_upload_store.path_for(job.request.reference_video_id)
+                if job.request.reference_video_id
+                else None
+            )
+
             def on_progress(step, total, progress):
                 job.current_step = step
                 job.total_steps = total
@@ -137,6 +164,8 @@ class PipelineManager:
                 output_dir=output_dir,
                 progress_callback=on_progress,
                 conditioning_image_paths=cond_paths,
+                lora_paths=lora_paths,
+                reference_video_path=reference_video_path,
             )
 
             elapsed = time.time() - started
@@ -398,6 +427,14 @@ class PipelineManager:
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=outcome.peak_vram_mb),
             "environment": self._environment_block(),
         }
+        # Phase B IC-LoRA: additive block, only present for lora jobs so non-lora
+        # metadata keeps its exact prior key set. (The two new GenerateRequest
+        # fields also appear inside the frozen-additive ``request`` dump.)
+        if req.loras:
+            metadata["ic_lora"] = {
+                "loras": [{"name": spec.name, "strength": spec.strength} for spec in req.loras],
+                "reference_video_id": req.reference_video_id,
+            }
         video_io.save_metadata(metadata_path, metadata)
 
     def _environment_block(self) -> dict:

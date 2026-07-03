@@ -36,6 +36,29 @@ class ConditioningImage(BaseModel):
     crf: int | None = None
 
 
+class LoraSpec(BaseModel):
+    """One IC-LoRA adapter reference (Phase B, additive).
+
+    ``name`` is a SERVER-SIDE registered adapter name (resolved to a safetensors
+    path via ``config.model.ic_loras``) — NOT a filesystem path. Path-like names
+    (containing ``/``, ``\\`` or ``..``) are rejected so a client can never point
+    the server at an arbitrary file. ``strength`` is bounded like the other
+    conditioning strengths (0 < s <= 2).
+    """
+
+    name: str = Field(..., min_length=1, max_length=200)
+    strength: float = Field(1.0, gt=0.0, le=2.0)
+
+    @model_validator(mode="after")
+    def validate_name_is_not_a_path(self) -> "LoraSpec":
+        if "/" in self.name or "\\" in self.name or ".." in self.name:
+            raise ValueError(
+                "lora name must be a registered adapter name, not a path "
+                "(no '/', '\\' or '..')"
+            )
+        return self
+
+
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
     negative_prompt: str = ""
@@ -60,6 +83,15 @@ class GenerateRequest(BaseModel):
     # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap 5）。
     # 各 frame_idx は validator で 0-or-8n+1 グリッドへスナップ＋範囲クランプされる。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
+
+    # IC-LoRA (Phase B, ADDITIVE/optional — a request omitting both fields is
+    # byte-identical to before). ``loras`` are registered adapter names (resolved
+    # server-side, never paths). The only supported adapter (Pixel-Spatial-
+    # Upscaler) requires a reference video, so ``loras`` non-empty <=>
+    # ``reference_video_id`` set (cross-validated below). ``reference_video_id``
+    # is obtained from POST /upload/video.
+    loras: list[LoraSpec] = Field(default_factory=list)
+    reference_video_id: str | None = None
 
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
@@ -104,6 +136,20 @@ class GenerateRequest(BaseModel):
                 continue  # latent-replace path (start frame); byte-identical to today
             snapped = (image.frame_idx - 1) // 8 * 8 + 1
             image.frame_idx = max(1, min(snapped, self.num_frames - 8))
+
+        # IC-LoRA (Phase B): the only supported adapter (Pixel-Spatial-Upscaler)
+        # reads its reference-downscale factor from a reference video, so loras and
+        # reference_video_id are all-or-nothing.
+        if self.loras and not self.reference_video_id:
+            raise ValueError(
+                "loras require reference_video_id (the Pixel-Spatial-Upscaler "
+                "adapter needs a reference video)"
+            )
+        if self.reference_video_id and not self.loras:
+            raise ValueError(
+                "reference_video_id requires at least one lora (the reference "
+                "video only conditions an IC-LoRA)"
+            )
         return self
 
     @property
@@ -274,6 +320,14 @@ class UploadImageResponse(BaseModel):
     width: int
     height: int
     content_type: str
+
+
+class UploadVideoResponse(BaseModel):
+    video_id: str
+    original_filename: str
+    stored_path: str
+    content_type: str
+    size_bytes: int
 
 
 class JobStatus(str, Enum):

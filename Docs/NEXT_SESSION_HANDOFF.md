@@ -2,44 +2,49 @@
 
 ---
 
-## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03・セッション末・**次セッションはまずここ**）
+## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03 セッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
 
-> **本ブロックが最新の正本。** 下の 2026-07-01 以前の▶節は歴史記録。
+> **本ブロックが最新の正本。** これ以降の▶節（2026-07-03昼以前・2026-07-01以前）はすべて歴史記録。食い違ったら本ブロックが正。
 
-### Phase 3 スライス2「クリップ連結」＝公式パリティ再実装で main へ merge・push 済（ユーザー最終目視/試聴のみ PENDING）
-- masked AV-latent 連結アーキテクチャ（per-segment stage1でvideo+audio latent tailをcarry+freeze→**1本の連続stage1 AV latentを組み立て**→1回のupsampleを経て**stage2 refineを常に時間タイル分割**→**1回だけVAE decode**）で再実装。音声連続・実機 Chain B（4×145f/22s）まで実証。詳細アーキテクチャは [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md) を参照。
-- 同日中に旧 `_EXTEND` monkeypatch 機構（latent-extend 方式）を撤去（byte-match検証済・commit `de587b4`）。Gradio ルート `/` の 404 修正（`/ui` マウント時に `/` が404していた不具合、`eb5f7ac`）も同セッションで解消。
-- **main へ merge・push 済**: merge `2cc4cac`（Phase 3 slice-2 rework: masked AV-latent clip-concat chain）→ cleanup merge `1ab5e0c`（旧 `_EXTEND` 撤去）。回帰＝byte-match 2種（T2V/I2V）完全一致・pytest 41 green。
-- 新設した検証ハーネス（`services/video_io.py`＋`outputs/phase3_clip_concat_spike/verify_boundaries.py`）は既知 hard-cut アーティファクトへ較正済み（全検出・偽陽性0）。
-- **唯一の未消化ゲート＝ユーザー一括目視4本**（パス・フレーム番号は下表）:
+### 現在地（1分サマリ）
 
-| # | 内容 | パス | 確認ポイント |
-|---|------|------|--------------|
-| 1 | Chain A | `outputs/a1459043-1177-48ec-9689-a12dbb540dd5/output.mp4` | 継ぎ目 71→72 |
-| 2 | Chain B | `outputs/0e20e9aa-4ba2-4aa6-89bf-7e62fa74dff6/output.mp4` | セグメント継ぎ目 143→144/271→272/399→400・タイル継ぎ目 167→168/311→312/455→456・t≈19.0s の音声（検証器フラグ=偽陽性判断済み・耳で確定） |
-| 3 | キーフレーム bookend | `outputs/phase3_multikey_smoke/visual_bookend/output.mp4` | frame0=浜辺／frame41=町並み通過確認（montage/filmstrip併用） |
-| 4 | キーフレーム multikey | `outputs/phase3_multikey_smoke/visual_multikey/output.mp4` | f17ゴースト・静止保持→急遷移の補間特性の受容可否 |
+| 項目 | 状態 |
+|---|---|
+| リポジトリ | main＝`a578c83`（IC-LoRA Phase Aマージ済・**ローカル先行＝push未**）／branch `feature/ic-lora-phase-b`＝Phase B一式（engine機構+API+docs）で main から先行・**全ゲートPASS済み・マージ判断待ち** |
+| IC-LoRA Phase A | ✅完了・mainマージ済（スパイク＝bf16融合経路。正本=[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)・VERIFICATION_LOG §20） |
+| IC-LoRA Phase B | ✅完了（**forward時GPU LoRA適用**＝per-layer-quant本番経路・VRAM増ゼロ・ジョブ毎切替可＋**API露出**＝`loras`/`reference_video_id`/`POST /upload/video`。G1〜G5全PASS・基準SHA=`735a6de9…272`。正本=[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)・VERIFICATION_LOG §21） |
+| Phase 3 スライス1（キーフレーム誘導） | ✅完了・main入り済・**目視受容済み**（挙動=「途中キーフレームは磁石・間の遷移は自由領域でプロンプト支配」をユーザーが仕様として受容 2026-07-03。VERIFICATION_LOG §17.9-17.10） |
+| Phase 3 スライス2（クリップ連結） | ✅完了・main入り済・**目視/試聴全PASS**（720p級2セグでは継ぎ目不可視まで実証。継ぎ目以外のbacklog6件=非ブロッキング。正本=[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)） |
+| 目視ゲート | **全クローズ**（低解像度6本＋高解像度3本・2026-07-03。成果物一覧=`outputs/visual_review/README.md`） |
+| ユーザー向け機能解説 | [`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md)（キーフレーム誘導とIC-LoRA 2系統の平易な解説） |
 
-- チューニングバックログ3件（発話chain境界の口閉じポーズ／タイル継ぎ目後drift／ハーネス音声閾値のspeech-onset偽陽性）＝非ブロッキング・上記目視結果待ち。詳細＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「チューニング backlog」節。
-- 正本＝**[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**。設計記録＝[`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（採用アーキテクチャnote付）。VERIFICATION_LOG §19（§18は旧方式FAILの記録として温存）。
+### 次セッションの入口（この順で）
 
-### Phase 3 スライス1「キーフレーム条件付け」＝main 入り済だが目視サインオフは未了
-- 機能は main 入り済（merge `7f31935`）。だが目視は**まだ有効に実施されていない**: 監督が目視用に提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモーク出力で**全キーフレームに同一の合成テスト画像**を使っており無効（青い長方形になった理由）。
-- **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先＝上表#3/#4の `visual_bookend/`・`visual_multikey/`）。
+1. **ユーザーに2点確認**: ①main の push（`git push origin main`・監督のpushは権限拒否されるためユーザー実施） ②`feature/ic-lora-phase-b` の main マージ。
+2. **Phase C スコープ確定**: **最優先候補（ユーザー決定 2026-07-03）＝IC-LoRA制御系アダプタ（Pose/Union）対応＋DWPose等の外部プリプロセッサ段の新設**（「動き=完全トレース・内容=置換」の実現。現実装は参照系=生動画入力のみ・DWPose等は不存在とコード確認済み）。他の候補=VERIFICATION_LOG §21.8（keep=1トグル検証／oracle照合／x4登録／denoise+20-26%最適化／バリデーション緩和／Gradio UI露出）。
+3. 入口ドキュメント: [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（アーキテクチャ要点「勝手に最適化しない」注意あり）→ VERIFICATION_LOG §21。
 
-### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`）
-- **成立**: Pixel-Spatial-Upscaler x2 アダプタを bf16パス忠実dequant＋engine側fuse-at-load＋参照動画条件付けで配線し実機スパイクPASS。回帰（LoRA off時の本番per-layer経路）はbyte-match完全一致・pytest 41 green。commit `bbcd82f`（spike wiring）→`016f442`（fp32 fuse化・19分→33秒）。
-- **正本＝[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)**。詳細ゲート数値＝[`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)。着手前サーベイ＝[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
-- **唯一の未消化「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` は main 未マージ・4コミット先行。次セッション冒頭でユーザーに一言確認して実行）。目視サインオフ（`spike.mp4` vs `base.mp4`）はユーザーが**fix-later方針で承認済み**＝Phase B着手のブロッカーではない（回答到着次第、必要なら追いコミット対応）。
+### やらないこと（スコープ外・混同注意）
 
-### ★次セッションのスコープ候補＝IC-LoRA Phase B（Phase A/BはIC-LoRA機能内のサブフェーズ呼称。全体ロードマップのPhase 1〜4とは別軸）（open decisions のみ・詳細計画は次セッションで）
-- **本実装の機構選定**: bf16 full-dequant fuseはスパイク専用でRAM 54-57GB消費（32GB RAM級マシンでは非現実的）。候補＝①per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン・rank64の追加演算<1%・将来の8GB VRAM対応に直結）②事前fuse済みチェックポイント派生（CPU融合→再量子化GGUF保存→本番per-layer経路で最速推論。融合器は実装済み`_fuse_ic_loras`が部品として流用可）。**ユーザー指示(2026-07-03): 現行bf16融合経路は廃止せず既存フラグでユーザー選択可能なまま温存**（開発/oracle照合/パリティ検証用。ただし実測でdenoise約3倍遅＋VRAM+3.6GBのため「速い推論」枠ではない点に注意）。
-- **公式パリティのoracle照合**: wheelの`ICLoraPipeline`はstage1のみLoRA適用、当実装は両ステージにfuse。Upscaler用途では挙動的に問題なさそうだが、oracle未照合のまま。
-- **keep-resident運用との整合**: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグル方式（リビルド vs デュアルキャッシュ）を設計する必要あり。
-- **API/UI露出**: `engine/api_types.py`のIcLoraスキーマは存在するが未配線（`loras`パラメータのAPI露出は基本配線ステップとして未着手）。
-- **アダプタ拡張**: x4バリアント・他アダプタ（In-Outpainting/Deblur、`PHASE3_NEXT_WORK_SURVEY.md` §6準拠）。
-- Gap Fill／Retake は Phase 2（AviUtl2 統合）後に実用から要件を逆算する方針（詳細＝SURVEY.md「§6 監督・ユーザー議論による補足」）。Phase 2 自体はユーザーのプラグイン開発環境整備待ちで**現在ブロック中**。
-- 運用注意の継承: 目視題材は「賑やかな町＋セリフ」系を使う（波/静的部屋はNG・ボイス/口パク確認に不向き）。客観PASS（byte-match・pytest・境界メトリクス）とユーザー目視ゲートを混同しない。サブエージェントは Opus/Sonnet を使う（Fable5 禁止）。
+- **プロンプトの練り込み＝リリース後のユーザー作業であり開発スコープ外**（ユーザー指示 2026-07-03）。開発中の生成は検証用の定型プロンプト（下記運用ルール）を使うだけでよい。プロンプト研究のタスク化・実験はしない。
+- Gap Fill の前倒し＝しない（multikey の遷移挙動はユーザー受容済み）。Gap Fill／Retake は Phase 2（AviUtl2統合）後に要件逆算。
+- Phase 2（AviUtl2統合）＝ユーザーのプラグイン開発環境整備待ちで**ブロック中**。
+- 1080pアップスケール機能・多人数インフラ＝削除済みスコープ（spec §13.5）。
+
+### 運用ルール（最新の正・次セッションも適用）
+
+- **目視検証**: 720p級（1280×768）以上＋**映画トレイラー風プロンプト**＋「賑やかな町＋セリフ」題材（512×320級は顔溶けで判断不能・「CM風」は廃止・波/静的部屋はNG）。
+- **人間向けの説明**: プロジェクト内部の略語・造語禁止。ただし専門用語の過剰な言い換えも逆効果＝**「普通のまともな日本語」**で書く。判断を仰ぐ前に機能説明を届ける。解説文書はOpusサブエージェントに執筆させ、監督はレビュー。
+- **サブエージェント**: Opus以下を使用（**Fable5禁止**）。長時間GPU実験は「完了待ちで停止」しがち＝**能動ポーリング監視を指示**する。非破壊原則・異常時は続行せず報告。
+- 客観PASS（byte-match・pytest・メトリクス）とユーザー目視ゲートを混同しない。実験前に仮説→Web/コードで裏取り。
+- **SHA照合の注意**: IC-LoRA付き出力の基準SHA=`735a6de9…272`。旧`outputs/ic_lora_phaseA/spike.mp4`（`8e10aa59…`）は旧コードの出力＝照合に使わない。
+
+### 2026-07-03 セッションの主な記録ポインタ（詳細は各正本・ここには書かない）
+
+- Phase B設計根拠・リサーチ＝[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)／ゲート数値＝VERIFICATION_LOG §21。
+- 目視結果（低解像度6本＋高解像度3本・受容判断の経緯・「遷移はプロンプト支配」の分析）＝VERIFICATION_LOG §17.9-17.10・各STATUS doc。
+- クリップ連結の新規backlog 3件（背景歪み/ワイプ/看板・継ぎ目以外・720p短尺では再発せず）＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md) backlog#4-6。
+- IC-LoRAアップスケールの人物同一性＝参照解像度が主レバー（640×384参照で「同じ人種の別の役者」程度まで改善・ユーザーはLTX 2.3の性能限界=仕様として受容）＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)。
 
 ---
 

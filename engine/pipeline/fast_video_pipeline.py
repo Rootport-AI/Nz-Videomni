@@ -93,36 +93,26 @@ class LTXFastVideoPipeline:
         from ltx_core.quantization import QuantizationPolicy
         from ltx_pipelines.distilled import DistilledPipeline
 
-        # ── IC-LoRA Phase A spike state (all inert by default) ────────────────
-        # ic_loras: (safetensors_path, strength) LoRAs fused into the GGUF base
-        #   transformer state-dict at load (engine-side, see GGUFStateDictLoader).
+        # ── IC-LoRA state (all inert by default) ──────────────────────────────
+        # ic_loras: (safetensors_path, strength) LoRAs applied to the GGUF base
+        #   transformer. Phase A fused them into the full BF16 state-dict at load
+        #   (bf16 path); Phase B adds them at FORWARD time on the per-layer-quant
+        #   path (GGUFQuantLoaderService + ggml_linear_forward). Selectable via
+        #   gguf_per_layer_quant.
         # ic_reference: (reference_video_path, strength) appended as a
         #   VideoConditionByReferenceLatent on the stage-1 conditioning pass.
         # When both are None/empty every changed path is byte-identical to before.
-        self._ic_loras: list[tuple[str, float]] = list(ic_loras or [])
-        self._ic_reference: tuple[str, float] | None = ic_reference
-        # downscale_factor for the reference latent is read from the LoRA
-        # safetensors metadata (reference video resolution = target // factor).
+        #
+        # These are CREATE-TIME DEFAULTS. generate(ic_loras=..., ic_reference=...)
+        # overrides them per job (keep_resident=0 rebuilds the transformer every
+        # job, so the forward-time attach reads the live values). The live values
+        # are held in self._ic_loras / self._ic_reference / the resolved factor.
+        self._ic_loras_default: list[tuple[str, float]] = list(ic_loras or [])
+        self._ic_reference_default: tuple[str, float] | None = ic_reference
+        self._ic_loras: list[tuple[str, float]] = []
+        self._ic_reference: tuple[str, float] | None = None
         self._ic_reference_downscale_factor: int | None = None
-        if self._ic_reference is not None:
-            if not self._ic_loras:
-                raise RuntimeError(
-                    "ic_reference set but no ic_loras — the reference downscale "
-                    "factor is read from the LoRA metadata; supply the IC-LoRA."
-                )
-            # Reuse the wheel's own metadata reader (private, but we already
-            # monkeypatch this wheel). It returns 1 when the metadata key is
-            # absent; for an x2 upscaler LoRA a factor of 1 means the metadata is
-            # missing — fail loudly rather than silently running at native res.
-            from ltx_pipelines.ic_lora import _read_lora_reference_downscale_factor
-            factor = _read_lora_reference_downscale_factor(self._ic_loras[0][0])
-            if factor <= 1:
-                raise RuntimeError(
-                    f"IC-LoRA {self._ic_loras[0][0]} reports reference_downscale_factor="
-                    f"{factor}; expected >1 (metadata missing?). Refusing to run "
-                    "reference conditioning at factor 1."
-                )
-            self._ic_reference_downscale_factor = factor
+        self._set_ic_job(self._ic_loras_default, self._ic_reference_default)
 
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
@@ -261,6 +251,44 @@ class LTXFastVideoPipeline:
         # them. The now-dead `attention_tile_size` and `loras` constructor
         # parameters (no caller ever passed them) have also been removed.
 
+    def _set_ic_job(
+        self,
+        ic_loras: list[tuple[str, float]] | None,
+        ic_reference: tuple[str, float] | None,
+    ) -> None:
+        """Set the live IC-LoRA state for the upcoming build/generate.
+
+        Called from __init__ (create-time defaults) and from generate() (per-job
+        override). Recomputes the reference downscale factor from the LoRA
+        metadata and re-validates the ``ic_reference requires ic_loras`` contract.
+        The forward-time attach reads ``self._ic_loras`` via the provider on the
+        next transformer build; the reference conditioning reads
+        ``self._ic_reference`` / the resolved factor.
+        """
+        self._ic_loras = list(ic_loras or [])
+        self._ic_reference = ic_reference
+        self._ic_reference_downscale_factor = None
+        if self._ic_reference is None:
+            return
+        if not self._ic_loras:
+            raise RuntimeError(
+                "ic_reference set but no ic_loras — the reference downscale "
+                "factor is read from the LoRA metadata; supply the IC-LoRA."
+            )
+        # Reuse the wheel's own metadata reader (private, but we already
+        # monkeypatch this wheel). It returns 1 when the metadata key is
+        # absent; for an x2 upscaler LoRA a factor of 1 means the metadata is
+        # missing — fail loudly rather than silently running at native res.
+        from ltx_pipelines.ic_lora import _read_lora_reference_downscale_factor
+        factor = _read_lora_reference_downscale_factor(self._ic_loras[0][0])
+        if factor <= 1:
+            raise RuntimeError(
+                f"IC-LoRA {self._ic_loras[0][0]} reports reference_downscale_factor="
+                f"{factor}; expected >1 (metadata missing?). Refusing to run "
+                "reference conditioning at factor 1."
+            )
+        self._ic_reference_downscale_factor = factor
+
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
 
@@ -356,23 +384,23 @@ class LTXFastVideoPipeline:
         ic_loras = list(ic_loras or [])
         try:
             if per_layer_quant:
-                # The per-layer quant path keeps weights compressed in VRAM and
-                # has no in-place fuse hook; IC-LoRA fuse only exists on the
-                # bf16 GGUFLoaderService path. Refuse rather than silently drop
-                # the LoRA (that would fake spike results).
-                if ic_loras:
-                    raise RuntimeError(
-                        "ic_loras requested but gguf_per_layer_quant=True; "
-                        "LoRA fuse is only implemented on the bf16 GGUFLoaderService "
-                        "path (set gguf_per_layer_quant=False)"
-                    )
+                # Phase B: the per-layer-quant path applies IC-LoRA at FORWARD
+                # time (ggml_linear_forward adds the fp32 delta onto the fresh
+                # per-call dequant tensor). We hand the service a provider that
+                # returns the CURRENT job's adapters (self._ic_loras), read on
+                # every transformer build — so keep_resident=0 can toggle LoRAs
+                # per generate() without mutating any compressed/cached bytes.
                 from engine.gguf.quant_service import GGUFQuantLoaderService
-                service = GGUFQuantLoaderService(gguf_path=gguf_path)
+                service = GGUFQuantLoaderService(
+                    gguf_path=gguf_path,
+                    ic_loras_provider=lambda: self._ic_loras,
+                )
                 service.install(self.pipeline.model_ledger)
                 self._gguf_service = service
                 import logging
                 logging.getLogger(__name__).info(
-                    "GGUF per-layer quant installed: weights stay compressed in VRAM (%s)", gguf_path
+                    "GGUF per-layer quant installed: weights stay compressed in VRAM "
+                    "(%s); IC-LoRA applied at forward time (per-job)", gguf_path
                 )
             else:
                 from engine.gguf.loader_service import GGUFLoaderService
@@ -828,7 +856,21 @@ class LTXFastVideoPipeline:
         ge_gamma: float = 2.0,
         res2s_bongmath: bool = False,
         res2s_bongmath_max_iter: int = 5,
+        *,
+        ic_loras: list[tuple[str, float]] | None = None,
+        ic_reference: tuple[str, float] | None = None,
     ) -> None:
+        # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
+        # (backward compat — the Phase A harness supplies loras at create()).
+        # An explicit list (incl. []) is authoritative for THIS job, so a no-LoRA
+        # job after a LoRA job cleanly detaches → byte-identical output (gate G3),
+        # with no leak across the resident worker's job loop.
+        eff_loras = ic_loras if ic_loras is not None else self._ic_loras_default
+        eff_reference = (
+            ic_reference if ic_reference is not None else self._ic_reference_default
+        )
+        self._set_ic_job(eff_loras, eff_reference)
+
         tiling_config = default_tiling_config(
             spatial_tile_size=self._vae_spatial_tile_size,
             temporal_tile_size=self._vae_temporal_tile_size,

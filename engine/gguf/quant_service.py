@@ -44,6 +44,8 @@ from typing import Any
 
 import torch
 
+from engine.gguf.ic_lora_common import IC_LORA_SPECS_ATTR as _IC_LORA_SPECS_ATTR
+
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -624,6 +626,12 @@ def _patch_linear_for_ggml_dequant(m: torch.nn.Linear) -> None:
 
     def ggml_linear_forward(self: torch.nn.Linear, x: torch.Tensor) -> torch.Tensor:
         w = self.weight
+        # IC-LoRA (Phase B): forward-time weight patch. When no factors are
+        # attached (`specs` is None/empty) EVERY branch below is byte-identical
+        # to the historical no-LoRA code path — this is only a cheap attribute
+        # read + skipped branch (gate G1). When attached, the delta is computed
+        # in fp32 and cast ONCE, matching the bf16-fuse formula exactly (G2).
+        specs = getattr(self, _IC_LORA_SPECS_ATTR, None)
         if isinstance(w, GGMLQuantizedTensor):
             # Raw uint8 bytes (1D flat) live in the underlying storage.
             # Drop the subclass identity FIRST: .view() preserves the
@@ -636,10 +644,34 @@ def _patch_linear_for_ggml_dequant(m: torch.nn.Linear) -> None:
             # explicitly below from w itself (which still carries the attrs).
             raw = w.as_subclass(torch.Tensor).view(torch.uint8)
             bf16 = dequantize_ggml_tensor(raw, w._ggml_type, w._float_shape, x.dtype)
+            if specs:
+                # In-place add onto the FRESH per-call dequant tensor (transient,
+                # freed below) — the compressed GGMLQuantizedTensor bytes are
+                # never mutated, so the StateDictRegistry cache stays pristine.
+                for a_name, b_name, strength in specs:
+                    a = getattr(self, a_name)
+                    b = getattr(self, b_name)
+                    delta = torch.matmul(
+                        b.to(torch.float32) * strength, a.to(torch.float32)
+                    )
+                    bf16 += delta.to(bf16.dtype)
             result = torch.nn.functional.linear(x, bf16, self.bias)
             del bf16  # free immediately after matmul
             return result
-        # Float buffer (BF16 from non-quantised GGUF layers) or standard path
+        # Float buffer (BF16 from non-quantised GGUF layers) or standard path.
+        if specs:
+            # Plain float weight: do NOT mutate the stored buffer (cache-shared /
+            # persisted). Build the delta out-of-place and add it into a
+            # throwaway weight for this call only.
+            acc = None
+            for a_name, b_name, strength in specs:
+                a = getattr(self, a_name)
+                b = getattr(self, b_name)
+                delta = torch.matmul(
+                    b.to(torch.float32) * strength, a.to(torch.float32)
+                ).to(w.dtype)
+                acc = delta if acc is None else acc + delta
+            return torch.nn.functional.linear(x, w + acc, self.bias)
         return torch.nn.functional.linear(x, w, self.bias)
 
     m.forward = types.MethodType(ggml_linear_forward, m)
@@ -681,8 +713,17 @@ class GGUFQuantLoaderService:
         service.install(model_ledger)
     """
 
-    def __init__(self, gguf_path: str) -> None:
+    def __init__(
+        self,
+        gguf_path: str,
+        ic_loras_provider: Any = None,
+    ) -> None:
         self.gguf_path = gguf_path
+        # Callable[[], list[(safetensors_path, strength)]] returning the CURRENT
+        # job's IC-LoRA adapters. Read fresh on every transformer build so a
+        # keep_resident=0 worker can toggle LoRAs per generate() (Phase B). None
+        # or a call returning [] → no attach → forward path byte-identical.
+        self._ic_loras_provider = ic_loras_provider
 
     def install(self, model_ledger: Any) -> None:
         if not Path(self.gguf_path).exists():
@@ -723,6 +764,20 @@ class GGUFQuantLoaderService:
 
         def patched_transformer(self_ledger: Any) -> Any:
             result = original_transformer_fn(self_ledger)
+            # IC-LoRA (Phase B): attach the CURRENT job's adapters to the freshly
+            # built transformer BEFORE block-swap moves blocks to CPU. attach
+            # registers A/B as non-persistent buffers on each target Linear, so
+            # they ride block.to(device) during the swap and the forward patch
+            # adds their delta onto the per-call dequant tensor. Empty/None
+            # provider → no attach → byte-identical to the no-LoRA build.
+            if self._ic_loras_provider is not None:
+                ic_loras = list(self._ic_loras_provider() or [])
+                if ic_loras:
+                    from engine.gguf.ic_lora_common import attach_ic_loras
+                    attach_ic_loras(result, ic_loras)
+                else:
+                    from engine.gguf.ic_lora_common import detach_ic_loras
+                    detach_ic_loras(result)
             ltx_model = getattr(result, "model", result)
             n_quant = sum(
                 1

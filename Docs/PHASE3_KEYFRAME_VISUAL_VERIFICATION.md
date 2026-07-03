@@ -1,4 +1,6 @@
-# Phase 3 多キーフレーム条件付け — 目視検証レシピ（ユーザー実行）
+# Phase 3 多キーフレーム条件付け — 目視検証レシピ（**✅完了＝歴史記録**）
+
+> **✅ 2026-07-03 クローズ**: 本レシピの目視は実画像版（`visual_bookend`/`visual_multikey`）＋高解像度版（1280×768・`outputs/visual_review/07_…`）で実施済み。bookend=PASS・multikeyの挙動（途中キーフレーム=磁石・間の遷移は自由領域でプロンプト支配）は**ユーザーが仕様として受容**。結果と分析の正本＝[`VERIFICATION_LOG.md` §17.9-17.10](VERIFICATION_LOG.md)、ユーザー向け解説＝[`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md)。以下は手順の歴史記録。
 
 - 作成: 2026-07-02（監督）
 - 対象: ユーザー本人（外出から戻ったら実行）

@@ -77,6 +77,13 @@ class ModelConfig(BaseModel):
     component_audio_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
     component_text_projection_path: str = "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
 
+    # IC-LoRA adapter registry (Phase B). Maps a server-side adapter NAME (what
+    # the API accepts in GenerateRequest.loras[].name — never a filesystem path)
+    # to the safetensors file resolved via AppConfig._abs. Absent/empty section ->
+    # any loras request is rejected (fail loud, no silent skip). The only supported
+    # adapter today is the Pixel-Spatial-Upscaler (reference-video required).
+    ic_loras: dict[str, str] = Field(default_factory=dict)
+
 
 class VramConfig(BaseModel):
     low_vram_mode: bool = True
@@ -145,6 +152,13 @@ class UploadConfig(BaseModel):
         default_factory=lambda: [".png", ".jpg", ".jpeg", ".webp"]
     )
     normalize_to_png: bool = True
+    # Reference-video upload (Phase B, POST /upload/video). Stored as-is (no
+    # re-encode) under uploads/videos/{video_id}/; the engine's ffmpeg-based
+    # video IO reads these containers.
+    max_video_size_mb: int = 200
+    allowed_video_extensions: list[str] = Field(
+        default_factory=lambda: [".mp4", ".mov", ".webm", ".mkv"]
+    )
 
 
 class LimitsConfig(BaseModel):

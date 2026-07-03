@@ -27,6 +27,15 @@ def generate(
     for ci in request.conditioning_images:
         context.upload_store.path_for(ci.image_id)  # raises IMAGE_NOT_FOUND
 
+    # Phase B IC-LoRA: validate the reference video + adapter names up front, the
+    # same way conditioning image_ids are checked (fail at job creation, not deep
+    # in the worker). The GenerateRequest validator already enforced the
+    # loras<->reference_video_id all-or-nothing rule.
+    if request.reference_video_id is not None:
+        context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
+    for spec in request.loras:
+        context.lora_registry.resolve(spec.name, spec.strength)  # 404 if unknown/missing
+
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_if_idle(request)
     if job is None:

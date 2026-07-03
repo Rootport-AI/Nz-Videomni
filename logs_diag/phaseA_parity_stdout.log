@@ -1,0 +1,20 @@
+[PHASE 12:21:03.517] BEFORE create (per_layer_true)     max_alloc=     0.0MB reserved=     2.0MB
+[PHASE 12:21:03.529] AFTER create (per_layer_true)      max_alloc=     0.0MB reserved=     2.0MB
+[PHASE 12:21:22.395] BEFORE encode_text                 max_alloc=  6051.6MB reserved=  6116.0MB
+[PHASE 12:21:26.124] AFTER encode_text                  max_alloc=  8440.9MB reserved= 10020.0MB
+[PHASE 12:21:42.355] BEFORE denoise stage1              max_alloc=  8440.9MB reserved=  1464.0MB
+[PHASE 12:22:19.661] AFTER denoise stage1               max_alloc=  5177.7MB reserved=  5494.0MB
+[PHASE 12:22:20.269] BEFORE denoise stage2              max_alloc=  5177.7MB reserved=  1818.0MB
+[PHASE 12:22:35.827] AFTER denoise stage2               max_alloc=  5332.8MB reserved=  5768.0MB
+[PHASE 12:22:36.236] BEFORE vae_decode_video            max_alloc=  5332.8MB reserved=  1922.0MB
+[PHASE 12:22:36.236] AFTER vae_decode_video             max_alloc=  1879.8MB reserved=  1922.0MB
+[PHASE 12:22:38.228] BEFORE create (per_layer_false)    max_alloc=     9.1MB reserved=    24.0MB
+[PHASE 12:22:38.229] AFTER create (per_layer_false)     max_alloc=     9.1MB reserved=    24.0MB
+[PHASE 12:22:59.335] BEFORE encode_text                 max_alloc=  6060.7MB reserved=  6138.0MB
+[PHASE 12:23:02.742] AFTER encode_text                  max_alloc=  8441.9MB reserved= 10020.0MB
+[PHASE 12:24:11.367] BEFORE denoise stage3              max_alloc=  8441.9MB reserved=  1464.0MB
+[PHASE 12:26:51.509] AFTER denoise stage3               max_alloc=  8859.3MB reserved=  9104.0MB
+[PHASE 12:26:56.801] BEFORE denoise stage4              max_alloc=  8859.3MB reserved=  2236.0MB
+[PHASE 12:27:18.492] AFTER denoise stage4               max_alloc=  8954.7MB reserved=  9244.0MB
+[PHASE 12:27:19.188] BEFORE vae_decode_video            max_alloc=  8954.7MB reserved=  2384.0MB
+[PHASE 12:27:19.188] AFTER vae_decode_video             max_alloc=  2363.1MB reserved=  2384.0MB

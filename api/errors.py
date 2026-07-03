@@ -81,6 +81,21 @@ def lora_preprocess_conflict(kinds: list[str]) -> APIError:
     )
 
 
+def reference_resolution_invalid(width: int, height: int) -> APIError:
+    """Phase C: registered IC-LoRA adapters use reference_downscale_factor=2, so
+    the reference video is consumed at half the output resolution on VAE's
+    64-grid. If width/height are not divisible by 128, that half-resolution
+    reference lands off the 64-grid and the worker's VAE encode fails with an
+    unfriendly einops error deep in the job -- reject it up front instead."""
+    return APIError(
+        "REFERENCE_RESOLUTION_INVALID",
+        "reference-video jobs require width/height divisible by 128 "
+        "(reference is used at half resolution on the 64-grid)",
+        422,
+        detail=f"width={width}, height={height}",
+    )
+
+
 def job_not_found(job_id: str) -> APIError:
     return APIError("JOB_NOT_FOUND", f"job not found: {job_id}", 404, job_id=job_id)
 

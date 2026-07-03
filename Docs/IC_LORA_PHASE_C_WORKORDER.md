@@ -136,3 +136,4 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 - **DWPoseスループット未実測**（R2確度低〜中）。Gate 0-b で確定。遅ければキャッシュ（スライス4）で緩和。
 - **19b非互換**: 誤って19b世代の単体アダプタを使うと「エラーは出ないが効果ゼロ」。config登録は 2.3-22b Union-Control のみに限定する。
 - **onnxruntime-gpuの整合リスク（フォールバック採用時）**: rtmlibへ切替える場合、CUDA 12.8 に対し onnxruntime-gpu を 1.20〜1.26 帯にpin要（1.19未満=cuDNN8系NG・1.27以降=CUDA12廃止予定）。第一候補のTorchScript版なら追加依存ゼロでこのリスクを回避。
+- **÷128制約**: 全登録アダプタが `reference_downscale_factor=2` のため、参照は出力解像度の半分でVAEの64格子に載る＝出力 width/height が128で割り切れないとworker内VAE encodeが不親切なeinopsエラーで必ず失敗する（512×320で実証・512×256はpass）。実装セッションでAPI層に422事前バリデーション（`REFERENCE_RESOLUTION_INVALID`）を追加して検出済み。

@@ -229,6 +229,50 @@ def test_unknown_reference_video_404(lora_client):
     assert r.json()["error"]["code"] == "REFERENCE_VIDEO_NOT_FOUND"
 
 
+def test_reference_resolution_not_divisible_by_128_422(lora_client):
+    """All registered adapters use reference_downscale_factor=2, so the
+    reference is consumed at half output resolution on the 64-grid -- 512x320
+    (320 % 128 != 0) is rejected up front instead of crashing the worker's VAE
+    encode deep in the job (real failure reproduced during Phase C prep)."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        width=512,
+        height=320,
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "REFERENCE_RESOLUTION_INVALID"
+
+
+def test_reference_resolution_divisible_by_128_completes(lora_client):
+    """512x256 (both divisible by 128) is unaffected by the new check and
+    still completes end to end, exactly as before."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        width=512,
+        height=256,
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = lora_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+
+def test_non_reference_job_ignores_128_divisibility(lora_client):
+    """No reference_video_id (and no loras) -- 512x320 is unaffected by the
+    new check, exactly like before this change."""
+    r = lora_client.post("/api/v1/generate", json=_base_payload(width=512, height=320))
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = lora_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+
 def test_lora_strength_out_of_range_422(lora_client):
     vid = _upload_video(lora_client)
     payload = _base_payload(

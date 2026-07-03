@@ -86,13 +86,9 @@
 - worker: 新 `generate_chain` op（`engine/worker.py`＋`engine/api_types.py`）。app: `services/ltx_runner.py`（real+mock）／`services/pipeline_manager.py`（`run_chain_job`・単一呼び出しに再構成）／`api/models.py`（`overlap_frames`既定=K_v=3・`MAX_CHAIN_TOTAL_PIXEL_FRAMES=8×481`）。
 - キャンセルはジョブ境界のみ（チェーン全体が単一の atomic worker op＝ユーザー承認済みの逸脱）。
 
-## Pending 項目（次セッション/ユーザー）
+## Pending 項目 → ✅全消化（2026-07-03 更新）
 
-1. **【最優先・ユーザー】Chain A/B 本番出力の最終目視/試聴**:
-   - Chain A: `outputs/a1459043-1177-48ec-9689-a12dbb540dd5/output.mp4`（2×73f・129総フレーム・seam 71→72）。
-   - Chain B: `outputs/0e20e9aa-4ba2-4aa6-89bf-7e62fa74dff6/output.mp4`（4×145f・529総フレーム・segment seam 143→144/271→272/399→400・tile seam 167→168/311→312/455→456・音声は t≈19.0s 付近を要試聴＝上記 J=456 の件）。
-   - 各 `boundary_report/`（`verify_boundaries.py` 出力）にメトリクス・montage PNG・audio波形PNGあり。
-   - 詳細パス・確認ポイントの一覧表＝[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭「最新ステータス」節。
-2. **スライス1 キーフレーム目視は別件で PENDING**（`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md` 参照・本スライスとは独立）。
-3. 上記チューニング backlog（タイル継ぎ目後drift・発話ポーズ・harness speech-onset偽陽性）は v1 受容済みだが将来の磨き候補。
-4. **次セッションのメインスコープは本スライスの続きではなく IC-LoRA Phase A**（Chain A/B 目視はそれと並行/前置きで消化可能）。詳細＝[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
+1. ~~Chain A/B 本番出力の最終目視/試聴~~ → **✅PASS**（本書「ユーザー最終目視/試聴 結果」節。継ぎ目・音声すべて自然・継ぎ目以外のアーティファクト3件はbacklog#4-6へ）。
+2. ~~スライス1 キーフレーム目視~~ → **✅消化・ユーザー受容済み**（VERIFICATION_LOG §17.9-17.10）。
+3. チューニング backlog（#1-6）＝v1受容済みの磨き候補のまま（非ブロッキング・唯一の将来課題）。
+4. 次スコープ＝IC-LoRA Phase A→B は**完了済み**（`IC_LORA_PHASE_B_STATUS.md`）。現在の入口は [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック。

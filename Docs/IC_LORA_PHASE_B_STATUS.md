@@ -54,7 +54,7 @@
 
 ## Pending（ユーザー）
 
-1. **mainマージ判断**（branch `feature/ic-lora-phase-b`・2コミット先行・全ゲートPASS）。
+1. **mainマージ判断**（branch `feature/ic-lora-phase-b`・全ゲートPASS・docsコミット含む）。
 2. main の push（Phase Aマージ `a578c83` 以降ローカル先行・監督のpushは権限拒否のため手動）。
-3. 目視（fix-later承認済み・非ブロッカー）: Phase A持ち越し5本＋Phase B出力（`outputs/ic_lora_phaseA/phaseB/api_smoke.mp4`＝API経由のx2アップスケール結果）。
+3. ~~目視~~ → **✅全消化（2026-07-03・低解像度6本＋高解像度3本。人物変化はLTX 2.3の性能限界=仕様としてユーザー受容）**。
 4. HFトークン無効化（前セッションからの宿題）。

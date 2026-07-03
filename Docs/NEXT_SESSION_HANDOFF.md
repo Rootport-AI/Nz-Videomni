@@ -27,12 +27,21 @@
 - 機能は main 入り済（merge `7f31935`）。だが目視は**まだ有効に実施されていない**: 監督が目視用に提示した `outputs/phase3_multikey_smoke/bookend|multikey3/output.mp4` は自動スモーク出力で**全キーフレームに同一の合成テスト画像**を使っており無効（青い長方形になった理由）。
 - **有効な目視手順**＝[`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`](PHASE3_KEYFRAME_VISUAL_VERIFICATION.md) の `run_visual.py` を**異なる実画像**で実行（出力先＝上表#3/#4の `visual_bookend/`・`visual_multikey/`）。
 
-### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`）
+### ★★IC-LoRA Phase B＝DONE（本実装・全ゲートG1〜G5 PASS・2026-07-03 同日後半・branch `feature/ic-lora-phase-b`・**この節が最新**）
+- **成立**: per-layer-quant本番経路への**forward時GPU LoRA適用**（ComfyUI-GGUF実証の「dequant時ウェイトパッチ」方式・Web/コード両面のリサーチ裏取り済み）＋**API露出**（`GenerateRequest.loras`＋`reference_video_id`＋`POST /api/v1/upload/video`＋アダプタ名レジストリ`config.yaml model.ic_loras`）。commit `b805ae1`（engine機構）→`fbef799`（API）。
+- Phase Aのbf16融合ペナルティ（RAM 54-57GB・約3倍遅・VRAM+3.6GB）は本経路で**全解消**: 全体VRAMピーク＝LoRA無しと同一8440.9MB・attach 0.02–0.3s（fuse消滅）・bf16融合比2.2倍速。rank64のdenoise増は実測+20〜26%（許容判断・§21.8に最適化候補）。bf16融合経路はユーザー指示どおり選択可能なまま温存。
+- 検証: G1回帰byte-match（T2V/I2V完全一致・peak_vram 8440不変・pytest 58/1）・G2**新経路とbf16融合がbyte完全一致**（`735a6de9…272`＝Phase B基準SHAに再ピン。旧spike.mp4不一致は`016f442`以前のstale baselineが原因と特定・480層delta CPU/GPU 0 ULP）・G3非汚染トグル（4経路収束）・G5**API e2e実機も出力byte一致**＋偽video_id→404。
+- **正本＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)**・詳細＝[`VERIFICATION_LOG.md` §21](VERIFICATION_LOG.md)・設計＝[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)。
+- **残作業＝①`feature/ic-lora-phase-b`のmainマージ判断（ユーザー） ②mainのpush（監督のpushは権限拒否・Phase Aマージ`a578c83`以降ローカル先行） ③目視fix-later分（Phase A持ち越し5本＋`outputs/ic_lora_phaseA/phaseB/api_smoke.mp4`＝API経由x2アップスケール） ④HFトークン無効化（ユーザー宿題）**。
+- Phase C候補（挙げるのみ・詳細=VERIFICATION_LOG §21.8）: keep=1トグル検証／oracle照合／x4・他アダプタ登録／denoise最適化／参照不要アダプタのバリデーション緩和／Gradio UI露出。
+
+### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`・**✅mainマージ済 `a578c83`（同日）**）
 - **成立**: Pixel-Spatial-Upscaler x2 アダプタを bf16パス忠実dequant＋engine側fuse-at-load＋参照動画条件付けで配線し実機スパイクPASS。回帰（LoRA off時の本番per-layer経路）はbyte-match完全一致・pytest 41 green。commit `bbcd82f`（spike wiring）→`016f442`（fp32 fuse化・19分→33秒）。
 - **正本＝[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)**。詳細ゲート数値＝[`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)。着手前サーベイ＝[`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
-- **唯一の未消化「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` は main 未マージ・4コミット先行。次セッション冒頭でユーザーに一言確認して実行）。目視サインオフ（`spike.mp4` vs `base.mp4`）はユーザーが**fix-later方針で承認済み**＝Phase B着手のブロッカーではない（回答到着次第、必要なら追いコミット対応）。
+- ~~唯一の未消化「作業」＝mainへのマージ実行~~ → **✅ 2026-07-03 ユーザー確認のうえ `--no-ff` マージ実行済（merge `a578c83`）**。目視サインオフ（`spike.mp4` vs `base.mp4`）はユーザーが**fix-later方針で承認済み**（回答到着次第、必要なら追いコミット対応）。
+- ⚠️ 補足（Phase B G2で判明）: アーカイブ`spike.mp4`（`8e10aa59…`）は`016f442`（fp32 fuse化）**以前**の生成物＝現行コードの出力は`735a6de9…272`（VERIFICATION_LOG §21.4）。目視比較には引き続き使えるが、SHA照合の基準としてはstale。
 
-### ★次セッションのスコープ候補＝IC-LoRA Phase B（Phase A/BはIC-LoRA機能内のサブフェーズ呼称。全体ロードマップのPhase 1〜4とは別軸）（open decisions のみ・詳細計画は次セッションで）
+### ★同日Phase B着手時のscope候補（歴史記録・**Phase Bは同日中に実装完了＝上の★★節が正**）
 - **本実装の機構選定**: bf16 full-dequant fuseはスパイク専用でRAM 54-57GB消費（32GB RAM級マシンでは非現実的）。候補＝①per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン・rank64の追加演算<1%・将来の8GB VRAM対応に直結）②事前fuse済みチェックポイント派生（CPU融合→再量子化GGUF保存→本番per-layer経路で最速推論。融合器は実装済み`_fuse_ic_loras`が部品として流用可）。**ユーザー指示(2026-07-03): 現行bf16融合経路は廃止せず既存フラグでユーザー選択可能なまま温存**（開発/oracle照合/パリティ検証用。ただし実測でdenoise約3倍遅＋VRAM+3.6GBのため「速い推論」枠ではない点に注意）。
 - **公式パリティのoracle照合**: wheelの`ICLoraPipeline`はstage1のみLoRA適用、当実装は両ステージにfuse。Upscaler用途では挙動的に問題なさそうだが、oracle未照合のまま。
 - **keep-resident運用との整合**: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグル方式（リビルド vs デュアルキャッシュ）を設計する必要あり。

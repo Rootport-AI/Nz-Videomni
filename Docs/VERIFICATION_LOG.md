@@ -1269,4 +1269,69 @@ RAM peak 56.7GB（system 65.3/65.3GB＝ほぼ飽和）。
 - keep-resident運用との整合: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグルは設計要（リビルド vs デュアルキャッシュ）。
 - API/UI露出（`engine/api_types.py`のIcLoraスキーマは存在するが未配線）。
 - x4バリアント・他アダプタ（In-Outpainting/Deblur、`PHASE3_NEXT_WORK_SURVEY.md` §6準拠）。
-- `spike.mp4` vs `base.mp4`の最終目視は**fix-later方針でユーザー承認済み・非ブロッカー**（回答到着次第、必要なら追いコミット対応）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。**残る「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` 未マージ・4コミット先行）。
+- `spike.mp4` vs `base.mp4`の最終目視は**fix-later方針でユーザー承認済み・非ブロッカー**（回答到着次第、必要なら追いコミット対応）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。**残る「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` 未マージ・4コミット先行）。→ **✅マージ実行済 2026-07-03（merge `a578c83`）・Phase B本実装＝§21**
+
+## 21. ★IC-LoRA Phase B＝forward時GPU LoRA適用（per-layer-quant経路）＋API露出 実装・全ゲートPASS（2026-07-03・branch `feature/ic-lora-phase-b`）
+
+> **正本＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)**（現状サマリ）／設計・ゲート定義＝[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)。本節はゲートごとの詳細数値。
+> base＝main merge `a578c83`（Phase A取り込み）。commit `b805ae1`（engine機構）→`fbef799`（API露出）。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 21.1 事前リサーチ（実装前の裏取り・仮説→確認）
+
+- **ComfyUI-GGUF（city96）のLoRA機構をソース確認**: `GGMLLayer.get_weight()`がdequant直後の行列へfp32 delta（`strength·(alpha/rank)·B@A`）を加算・**毎forward再計算・キャッシュ無し・量子化バイト不変**（=「dequant時ウェイトパッチ」方式）。ComfyUI coreの`calculate_weight`は`intermediate_dtype=fp32`でdeltaを計算し weight dtypeへ1回キャスト＝Phase A `016f442`のfp32 fuse判断と同型。事前fuse/再量子化・deltaキャッシュはメインライン不採用（不可逆量子化誤差・トグル喪失のため）。
+- **side-path方式（出力側低ランク加算）は不採用と判定**: per-layer経路はどのみち毎forwardで全重みを実体化するためVRAM利得ゼロ・G2のbyte-match検証レバー喪失・動画のトークン数域ではdelta計算の方が安い。
+- **自エンジンのフック点をコード読解で確定**: `ggml_linear_forward`（`quant_service.py:625-643`・`types.MethodType`で各Linearにバインド）。block-swapはブロックを`.to()`移動するだけ（モジュール差し替え無し）→Linearに載せた非persistentバッファはswapを自動で生き残る。
+
+### 21.2 実装（commit `b805ae1`→`fbef799`）
+
+- **`engine/gguf/ic_lora_common.py`（新規）**: safetensorsロード＋`LTXV_LORA_COMFY_RENAMING_MAP`＋lora_A/Bペアリングの共通化（`load_ic_lora_pairs`・bf16融合経路と共用）。`attach_ic_loras`＝LoRA prefix→`nn.Linear`解決（X0Modelの`velocity_model.`ラップはLTXModelノード起点で回避）・A/Bを**非persistentバッファ**登録（state_dict非汚染・`.to()`移動対象）。shape不一致raise・0マッチ大声WARN。`detach_ic_loras`＝完全除去。
+- **`quant_service.py`**: `ggml_linear_forward`にLoRA分岐。量子化weight→**毎回新規のdequantテンソルへ** `delta=matmul(B.float()*strength, A.float())`→`.to(bf16.dtype)`加算（**式・演算順序ともPhase A fuseと同一**・G2要件）。float weight→out-of-place（保存バッファ不変）。LoRA無し時は属性読み1回のみ＝既存パス完全同一。複数LoRA＝逐次加算。
+- **`fast_video_pipeline.py`**: 旧「per_layer＋LoRAでraise」ガードを`ic_loras_provider`配線に置換（transformerビルド毎に現ジョブのLoRAをattach）。`generate(*, ic_loras=None, ic_reference=None)`でジョブ毎切替（明示`[]`＝detach・`None`＝create時デフォルト）。**bf16融合経路（`gguf_per_layer_quant=False`）は無傷温存**（ユーザー指示）。
+- **API露出（`fbef799`）**: `POST /api/v1/upload/video`新設（画像uploadと同型）。`GenerateRequest`に追加（凍結契約へ純加算）: `loras:[{name,strength(0<s≤2)}]`（**サーバー側レジストリ名のみ**・パス形式拒否）＋`reference_video_id`（lorasと全か無か）。レジストリ＝`config.yaml` `model.ic_loras`（現登録=`pixel-spatial-upscaler-x2`のみ）。配線=pipeline_manager→ltx_runner→worker generate op（**LoRA無しでも明示`[]`送信**=G3のclean-detach保証）。metadata＝LoRAジョブのみ追加`ic_lora`ブロック。`GET /status`凍結キー不変。
+
+### 21.3 G1＝回帰byte-match（LoRA off・本番per-layer経路）
+
+**PASS**: 本番runner経路でT2V `23844b4e…6bb7bf`／I2V `a511eda4…15c217` 完全一致・peak_vram **8440**不変。pytest **47 passed/1 skipped**（Stage 1後）→**58 passed/1 skipped**（Stage 2後・+11本のAPIテスト）。
+
+### 21.4 G2＝新経路 vs bf16融合のbyte照合（**基準SHA再ピン**）
+
+spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345）で：
+
+- per-layer forward時LoRA（`spike_pl`）＝ **`735a6de97d2deb56a781c66307849924a8ac25b51f0591fbddab07a78875e272`**
+- 現行コミットのbf16融合（`spike_false_current`）＝ **同一SHA（byte完全一致）** → **PASS**
+- 旧アーカイブ`spike.mp4`（`8e10aa59…`）との不一致は**stale baseline**（`016f442`以前のbf16-matmul fuse生成物・§20.6の「丸め1回差」記録と整合）と根本原因特定。フレーム差分PSNR 26.2dB＝拡散カスケードによる増幅で説明済み・ロジック欠陥ではない。
+- 数値証拠: **全480層でdeltaのCPU/GPU計算が0 ULP一致**（bf16キャスト後bit一致）・fused weightサンプル16層0差・LoRA無しres_parity（1024×640）両経路SHA一致（`13227dfe…`）・LoRAあり参照無し（`lora_noref`）両経路SHA一致（`575671ff…`）。
+- **Phase B基準SHA＝`735a6de9…272`に再ピン**（監督判断・旧`spike.mp4`は温存）。
+
+### 21.5 G3＝非汚染トグル（同一プロセス・per_layer=True）
+
+**PASS**: lora1→nolora→lora2 連続実行で、nolora出力＝`base.mp4`（`3a2a87a2…`）**完全一致**・lora1＝lora2＝`735a6de9…`相互一致。create時デフォルト／generate上書き×2／bf16融合の**4経路すべてが`735a6de9…`に収束**＝決定性＋detach健全性の証明。
+
+### 21.6 G4＝VRAM／速度（1024×640/25f・§20.5と同一計測）
+
+| 経路（出力は全て`735a6de9`で同一） | gen時間 | denoiseピーク | 全体ピーク | load/attach |
+|---|---|---|---|---|
+| per-layer forward時LoRA | **124.7s** | 5679MB | **8440.9MB** | attach **0.02–0.3s** |
+| bf16融合（現行） | 273.5s | 9102MB | 9102MB | fuse≈33s+load |
+| LoRA無しper-layerベースライン | 103.4s | 5564MB | 8440.9MB | — |
+
+- **Phase Aのbf16ペナルティ（+3.6GB・約3倍遅）は解消**（対bf16: 2.2倍速・全体ピーク−661MB・denoise−3.4GB）。
+- **全体ピークはLoRA無しと同一（8440.9MB）**＝A/B 654MB＋一時deltaはencode天井の下に収まる。
+- **rank64のdenoise時間増は実測+20〜26%**（毎forwardのB@A再計算。ワークオーダーの「<1%」は楽観的すぎた＝理論flopsでなく実効。それでも融合方式より圧倒的に安い）。run-to-run分散±20s程度あり。
+
+### 21.7 G5＝API e2e実機スモーク（HEAD `fbef799`）
+
+**PASS（ボーナス＝APIパス出力もbyte一致）**: 本番サーバー起動→`POST /upload/video`（base.mp4・保存はbyte同一＝再エンコード無し）→`loras=[{pixel-spatial-upscaler-x2, 1.0}]`＋`reference_video_id`でgenerate→**115.8sで完走・出力SHA＝`735a6de9…272`（ハーネス基準とbyte完全一致）**。workerログ`ic_loras=1 ic_reference=yes`・`peak_vram_mb=8440`。metadata`ic_lora`ブロック有・`GET /status`凍結8キー不変。negativeケース＝偽`reference_video_id`→**404 REFERENCE_VIDEO_NOT_FOUND**・ジョブ非生成。
+- 副次的知見: 本番は`fp8_transformer:true`（Ada）で`QuantizationPolicy.fp8_cast()`が入るが、ハーネス（fp8オフ固定）とbyte一致＝**fp8-castポリシーはGGUF per-layer経路では実質no-op**であることの挙動的証明。
+
+### 21.8 未了・Phase C候補への持ち越し（挙げるのみ）
+
+- keep_resident=1下のLoRAトグル（機構は非汚染なので障害無し・検証のみ未実施）。
+- wheel `ICLoraPipeline` oracle照合（stage1のみ適用 vs 両ステージ適用・未照合のまま）。
+- x4バリアント（ファイルは配置済み・レジストリ未登録）・他アダプタ（In-Outpainting/Deblur）。
+- rank64 denoise +20〜26%の最適化（必要になったら: deltaの層内キャッシュ等・現状は許容と判断）。
+- loras⇔reference_video_id全か無か制約は「参照必須アダプタしか無い」前提＝参照不要アダプタ導入時にアダプタ別メタデータ駆動へ緩和。
+- Gradio UI露出（Phase 1残(a)と合流）。
+- ユーザー目視: Phase A持ち越し5本＋Phase B出力（`outputs/ic_lora_phaseA/phaseB/api_smoke.mp4`等）＝fix-later方針継続。

@@ -1,7 +1,7 @@
 """Generate-chain (clip-concatenation) tests through the REST API (mock backend).
 
-The mock runner emits a real per-clip mp4 + a dummy carry file, so the chain
-orchestrator (sequential loop + carry threading + ffmpeg concat) is exercised
+The mock runner renders ONE synthetic full-timeline mp4 + junction metadata
+(via chain_math), so the chain endpoint, job layer, and metadata are exercised
 end-to-end without a GPU.
 """
 

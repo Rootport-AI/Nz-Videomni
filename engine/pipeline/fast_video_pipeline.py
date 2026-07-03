@@ -37,6 +37,9 @@ class LTXFastVideoPipeline:
         component_text_projection_path: str = "",
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
+        *,
+        ic_loras: list[tuple[str, float]] | None = None,
+        ic_reference: tuple[str, float] | None = None,
     ) -> "LTXFastVideoPipeline":
         return LTXFastVideoPipeline(
             checkpoint_path=checkpoint_path,
@@ -58,6 +61,8 @@ class LTXFastVideoPipeline:
             component_text_projection_path=component_text_projection_path,
             te_offload_text_encoder=te_offload_text_encoder,
             dit_cpu_load=dit_cpu_load,
+            ic_loras=ic_loras,
+            ic_reference=ic_reference,
         )
 
     def __init__(
@@ -81,9 +86,43 @@ class LTXFastVideoPipeline:
         component_text_projection_path: str = "",
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
+        *,
+        ic_loras: list[tuple[str, float]] | None = None,
+        ic_reference: tuple[str, float] | None = None,
     ) -> None:
         from ltx_core.quantization import QuantizationPolicy
         from ltx_pipelines.distilled import DistilledPipeline
+
+        # ── IC-LoRA Phase A spike state (all inert by default) ────────────────
+        # ic_loras: (safetensors_path, strength) LoRAs fused into the GGUF base
+        #   transformer state-dict at load (engine-side, see GGUFStateDictLoader).
+        # ic_reference: (reference_video_path, strength) appended as a
+        #   VideoConditionByReferenceLatent on the stage-1 conditioning pass.
+        # When both are None/empty every changed path is byte-identical to before.
+        self._ic_loras: list[tuple[str, float]] = list(ic_loras or [])
+        self._ic_reference: tuple[str, float] | None = ic_reference
+        # downscale_factor for the reference latent is read from the LoRA
+        # safetensors metadata (reference video resolution = target // factor).
+        self._ic_reference_downscale_factor: int | None = None
+        if self._ic_reference is not None:
+            if not self._ic_loras:
+                raise RuntimeError(
+                    "ic_reference set but no ic_loras — the reference downscale "
+                    "factor is read from the LoRA metadata; supply the IC-LoRA."
+                )
+            # Reuse the wheel's own metadata reader (private, but we already
+            # monkeypatch this wheel). It returns 1 when the metadata key is
+            # absent; for an x2 upscaler LoRA a factor of 1 means the metadata is
+            # missing — fail loudly rather than silently running at native res.
+            from ltx_pipelines.ic_lora import _read_lora_reference_downscale_factor
+            factor = _read_lora_reference_downscale_factor(self._ic_loras[0][0])
+            if factor <= 1:
+                raise RuntimeError(
+                    f"IC-LoRA {self._ic_loras[0][0]} reports reference_downscale_factor="
+                    f"{factor}; expected >1 (metadata missing?). Refusing to run "
+                    "reference conditioning at factor 1."
+                )
+            self._ic_reference_downscale_factor = factor
 
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
@@ -175,7 +214,11 @@ class LTXFastVideoPipeline:
 
         # ── Install GGUF loader (replaces transformer weights source) ──
         if gguf_transformer_path:
-            self._install_gguf(gguf_transformer_path, per_layer_quant=gguf_per_layer_quant)
+            self._install_gguf(
+                gguf_transformer_path,
+                per_layer_quant=gguf_per_layer_quant,
+                ic_loras=self._ic_loras,
+            )
 
         # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
@@ -304,9 +347,25 @@ class LTXFastVideoPipeline:
             video_vae_path, audio_vae_path,
         )
 
-    def _install_gguf(self, gguf_path: str, per_layer_quant: bool = True) -> None:
+    def _install_gguf(
+        self,
+        gguf_path: str,
+        per_layer_quant: bool = True,
+        ic_loras: list[tuple[str, float]] | None = None,
+    ) -> None:
+        ic_loras = list(ic_loras or [])
         try:
             if per_layer_quant:
+                # The per-layer quant path keeps weights compressed in VRAM and
+                # has no in-place fuse hook; IC-LoRA fuse only exists on the
+                # bf16 GGUFLoaderService path. Refuse rather than silently drop
+                # the LoRA (that would fake spike results).
+                if ic_loras:
+                    raise RuntimeError(
+                        "ic_loras requested but gguf_per_layer_quant=True; "
+                        "LoRA fuse is only implemented on the bf16 GGUFLoaderService "
+                        "path (set gguf_per_layer_quant=False)"
+                    )
                 from engine.gguf.quant_service import GGUFQuantLoaderService
                 service = GGUFQuantLoaderService(gguf_path=gguf_path)
                 service.install(self.pipeline.model_ledger)
@@ -317,14 +376,21 @@ class LTXFastVideoPipeline:
                 )
             else:
                 from engine.gguf.loader_service import GGUFLoaderService
-                service = GGUFLoaderService(gguf_path=gguf_path)
+                service = GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)
                 service.install(self.pipeline.model_ledger)
                 self._gguf_service = service
                 import logging
                 logging.getLogger(__name__).info(
-                    "GGUF load-time dequant installed (full BF16 in VRAM): %s", gguf_path
+                    "GGUF load-time dequant installed (full BF16 in VRAM): %s%s",
+                    gguf_path,
+                    f" + {len(ic_loras)} IC-LoRA(s)" if ic_loras else "",
                 )
         except Exception as exc:
+            # Fail-loud when LoRAs were requested: a silent safetensors fallback
+            # would produce a plausible-but-wrong (no-LoRA) result and corrupt the
+            # spike measurement. With no LoRAs, preserve the historical fallback.
+            if ic_loras:
+                raise
             import logging
             logging.getLogger(__name__).warning(
                 "GGUF install failed (%s) — falling back to safetensors", exc
@@ -420,6 +486,64 @@ class LTXFastVideoPipeline:
             logging.getLogger(__name__).warning(
                 "BlockSwap install failed (%s)", exc
             )
+
+    def _reference_conditioning_for_stage(
+        self, full_height: int, num_frames: int, cond_kwargs: dict
+    ) -> list:
+        """Build the IC-LoRA reference-video conditioning for the current stage.
+
+        Replicates ICLoraPipeline._create_conditionings' reference branch
+        (ltx_pipelines/ic_lora.py): load the reference video at
+        ``target // downscale_factor`` resolution, VAE-encode it, and wrap it in a
+        VideoConditionByReferenceLatent. Returns [] on any pass that is not
+        stage 1, so the reference latent is added exactly once.
+
+        Stage discriminator: DistilledPipeline builds stage-1 conditionings at
+        HALF resolution (distilled.py stage_1_output_shape uses height//2) and
+        stage-2 at full resolution. ``height`` is the least-fragile signal here —
+        it is the only per-stage-differing argument passed to this conditioning
+        function (num_frames and any stage index are not forwarded to it).
+        """
+        cond_height = int(cond_kwargs["height"])
+        if cond_height != full_height // 2:
+            return []  # stage 2 (or unexpected res) — reference added at stage 1 only
+
+        from ltx_core.conditioning import VideoConditionByReferenceLatent
+        from ltx_pipelines.utils.media_io import load_video_conditioning
+
+        ref_path, ref_strength = self._ic_reference
+        scale = self._ic_reference_downscale_factor
+        assert scale is not None and scale > 1, "reference downscale factor not initialised"
+
+        cond_width = int(cond_kwargs["width"])
+        video_encoder = cond_kwargs["video_encoder"]
+        dtype = cond_kwargs["dtype"]
+        device = cond_kwargs["device"]
+
+        if cond_height % scale != 0 or cond_width % scale != 0:
+            raise ValueError(
+                f"Stage-1 dims ({cond_height}x{cond_width}) must be divisible by "
+                f"reference_downscale_factor ({scale})"
+            )
+        ref_height = cond_height // scale
+        ref_width = cond_width // scale
+
+        video = load_video_conditioning(
+            video_path=ref_path,
+            height=ref_height,
+            width=ref_width,
+            frame_cap=num_frames,
+            dtype=dtype,
+            device=device,
+        )
+        encoded_video = video_encoder(video)
+        return [
+            VideoConditionByReferenceLatent(
+                latent=encoded_video,
+                downscale_factor=scale,
+                strength=ref_strength,
+            )
+        ]
 
     @staticmethod
     def _make_sigma_subset(num_steps: int) -> list[float]:
@@ -587,6 +711,13 @@ class LTXFastVideoPipeline:
                 conds += _orig_replace(replace_imgs, *args, **kwargs)
             if guide_imgs:
                 conds += _orig_add_guide(guide_imgs, *args, **kwargs)
+            # IC-LoRA reference-video conditioning — appended on the STAGE-1 pass
+            # only. Inert (returns []) when no ic_reference is configured, so the
+            # keyframe-only path above stays byte-identical.
+            if self._ic_reference is not None:
+                conds += self._reference_conditioning_for_stage(
+                    full_height=height, num_frames=num_frames, cond_kwargs=kwargs,
+                )
             return conds
 
         # ── Sigma schedule ───────────────────────────────────────────────────

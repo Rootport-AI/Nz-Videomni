@@ -1181,3 +1181,92 @@ read-only 調査で 5 候補（#1-#5）を検証し、#4 の呼び出し元ゼ�
 - チューニングbacklog（タイル継ぎ目後drift・発話ポーズ・harness speech-onset偽陽性）はv1受容済みだが将来の磨き候補。
 - 旧 `_EXTEND` monkeypatch 機構の削除判断（ユーザー保留）。
 - スライス1キーフレームの目視は別件で引き続きPENDING（`PHASE3_KEYFRAME_VISUAL_VERIFICATION.md`）。
+
+---
+
+## 20. ★IC-LoRA Phase A スパイク＝bf16パス忠実dequant＋engine側fuse＋参照条件付けで実機成立（2026-07-03・branch `feature/ic-lora-phase-a`）
+
+> 本節は [`PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md) を受けた同日実装の記録。**正本は [`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)**（現状サマリ）。本節はゲートごとの詳細数値。
+
+本機: i7-13700（**AVX2のみ・AVX512-BF16/AMX無し**）／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 20.1 実装（commit `bbcd82f`→`016f442`）
+
+- `engine/gguf/loader_service.py`:
+  - (a-0) bf16パスのdequantを`quant_service`の忠実カーネルへ委譲するよう変更。**旧・簡易実装のQ4_K/Q6Kカーネルは数値的に誤りだった**（合成Q8_0/F32での等価性検証＝ALL_OK）。
+  - `GGUFStateDictLoader.ic_loras`（`(path, strength)`リスト）→`_fuse_ic_loras`: wheelの`SafetensorsStateDictLoader`＋`LTXV_LORA_COMFY_RENAMING_MAP`でLoRA safetensorsをロードし、キーごとにfp32行列積でdelta融合をin-place適用。wheelの`_fuse_delta_with_bfloat16`と数学的に同一（丸め回数が1回少ないのみ、合成データでfp64参照比bf16-ULPオーダーと検証済み）。マッチdelta0件は大声WARN。**wheelの`transformer_builder.loras`は不使用**（使うとwheelがpath無視の当ローダー経由でGGUFを再読込する既知の落とし穴）。
+  - `016f442`（perf）: 当初 wheel の `apply_loras`（bf16 matmul）を呼んでいたが AVX2-only CPU で**19.3分**要した。engine側で fp32 の per-key fuse ループに置換 → **33秒**に短縮（下記20.5）。
+- `engine/pipeline/fast_video_pipeline.py`: `ic_loras`/`ic_reference`をキーワード専用引数として追加（デフォルト不活性）。fail-loud条件: LoRA指定＋`per_layer_quant=True`併用、LoRAインストール失敗（safetensorsへの無言フォールバック無し）、`reference_downscale_factor<=1`。`VideoConditionByReferenceLatent`はstage1のみ既存hybrid-conditioning monkeypatch経由で追加。ステージ判別＝`cond height == full_height//2`（ステージ間で唯一異なるkwarg）。
+- diff規模: `bbcd82f`＝`loader_service.py` 258行変更／`fast_video_pipeline.py` 139行追加（計246 insertions/151 deletions）。`016f442`＝`loader_service.py` 84行変更（58 insertions/26 deletions）。
+- ハーネス `outputs/ic_lora_phaseA/run_spike.py`（untracked・`outputs/`はgitignore）: モード`parity`/`base`/`spike`/`toggle`。psutil RSSサンプリング・ステージ別VRAMマーク・`VideoConditionByReferenceLatent.apply_to`monkeypatchによるトークン計測。`device_supports_fp8`をFalseに固定パッチし純bf16計測。プロンプトは目視検証題材指針どおり「賑やかな町を歩く女性が『LTX 2.3!』と言う」CM風。
+
+### 20.2 アダプタ
+
+- HF `Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler`（gated=auto・ユーザーがライセンス承諾済み）。
+- `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/` に x2/x4 とも 654,465,286 bytes で配置。
+- x2メタデータ検証: `reference_downscale_factor=2`・`reference_spatial_scale_factor=2`・`model_version=2.3`。960キー＝lora_A 480＋lora_B 480、すべて`diffusion_model.`プレフィックス、BF16、rank 64＝wheelの`apply_loras`期待値＋COMFYリネームマップと厳密一致。
+
+### 20.3 ゲート1＝回帰byte-match（本番per-layer経路・LoRA off）
+
+**PASS**: T2V sha `23844b4e…6bb7bf`／I2V sha `a511eda4…15c217`、既存ピン止めベースラインと一致・peak VRAM 8440MB不変。pytest **41 passed**（`bbcd82f`適用後・`016f442`適用後の各時点で再検証）。
+
+### 20.4 ゲート2＝パリティゲート（a-0検証・LoRA無し）
+
+512×320/49f/8steps/seed12345、`per_layer_quant=True` vs `False`で比較（`result_parity.json`）。
+
+| 指標 | per_layer_quant=True | per_layer_quant=False（bf16パス） |
+|---|---|---|
+| SHA256 | `9a65e4b1…` | `9a65e4b1…`（**完全一致**） |
+| bytes | 235193 | 235193 |
+| generate_s | 94.24 | 282.65（約3倍遅） |
+| denoise最終 max_alloc | 5332.8MB | 8954.7MB（+3.6GB） |
+
+RAM peak 55.9GB。**verdict: MATCH**。
+
+### 20.5 ゲート3＝スパイク本番実行（x2 LoRA fuse＋参照条件付け）
+
+条件: target 1024×640/25f、参照＝base clip 512×320/25f（`base.mp4`、sha `3a2a87a2…`、gen 103.4s）。`result_spike.json`。
+
+- 出力: `spike.mp4`、sha `8e10aa59…`、378415 bytes。**COMPLETED**（VRAM溢れ無し）。
+- gen 1435.2s（うちload+fuseがfp32修正前で約20分を占めた個体＝下記トグルの`with_lora`計測より前の実行）。
+
+VRAMピーク（`max_alloc_MB`）:
+
+| ステージ | 値(MB) |
+|---|---|
+| encode_text後 | 8440.9 |
+| denoise stage1後 | 8915.0 |
+| denoise stage2後 | 9102.2 |
+| vae_decode_video後 | 2364.2 |
+
+RAM peak 56.7GB（system 65.3/65.3GB＝ほぼ飽和）。
+
+トークン計測（`VideoConditionByReferenceLatent.apply_to`monkeypatch）: 参照latent shape `[1,128,4,5,8]`、downscale_factor=2、strength=1.0。stage1 latentトークン数 640 → 参照concat後 **800**（**+25%、2倍ではない**＝参照はdownscale_factor=2で縮小されているため）。
+
+### 20.6 ゲート4＝トグルゲート（LoRA on/offの切替コスト、keep_resident=0のため切替=フルリビルド）
+
+`result_toggle.json`。fp32修正（`016f442`）**前後**で2回計測。
+
+| 指標 | 修正前 | 修正後 |
+|---|---|---|
+| with_lora generate_s | 1455.0 | 323.2 |
+| no_lora generate_s | 294.9 | 295.5 |
+| 差分（≒load+fuse時間） | fuse ≈ 19.3分 | load+fuse 104s vs no_lora load 71s → **fuse ≈ 33s** |
+
+- `no_lora`出力SHA: 両回とも `3a2a87a2…` で完全一致、かつ`base.mp4`のSHAとも一致＝**決定性＋LoRA非汚染性の証明**。
+- `with_lora`出力SHA: 修正前後で異なる（`016f442`は丸め回数1回分の差＝想定どおり）。`with_lora` vs `no_lora`のSHAが異なる＝**fuseが実際に適用されている挙動的証拠**。
+
+### 20.7 ゲート5＝タイミング異常の根本原因調査（Web検証）
+
+- torch CPU bf16 matmulはAVX512-BF16/AMX非搭載CPUで高速カーネルを持たず、fp32変換フォールバックに落ちる（コミュニティ実測で約54倍遅化の報告・Intel執筆のPyTorchチューニングDocsが機構を裏付け・ComfyUI PR#3649も同様の傾向を裏付け）。
+- コンスーマCPU事情: AMXはサーバー専用。Intel第12〜14世代コンスーマ機はAVX-512自体非搭載。AMD Zen4以降はAVX512-BF16搭載。
+- コミュニティの16GB級LTX-2生成時間の通念と照合し、当機のdenoise（~3.3分 @1024×640/25f 二段）は標準〜良好な範囲と確認。RTX 5090はDiT推論で当機の約2〜2.3倍速の目安。
+
+### 20.8 Phase B 未了・持ち越し（詳細は挙げるのみ）
+
+- 32GB RAM級マシン向け本番機構: bf16 full-dequant fuseはスパイク専用（RAM 54-57GB）。候補＝per-layer-quant経路＋GPU forward-time LoRA適用（ComfyUI実証パターン）vs 事前fuse済みチェックポイント派生。
+- wheelの`ICLoraPipeline`をoracleとした公式パリティ照合（stage1のみLoRAの公式挙動 vs 当実装の両ステージfuse＝乖離は文書化済みだがUpscaler用途では挙動的に問題無し・oracle未照合）。
+- keep-resident運用との整合: in-place fuseがキャッシュ済みbaseを変異させるため、`StateDictRegistry`下でのLoRAトグルは設計要（リビルド vs デュアルキャッシュ）。
+- API/UI露出（`engine/api_types.py`のIcLoraスキーマは存在するが未配線）。
+- x4バリアント・他アダプタ（In-Outpainting/Deblur、`PHASE3_NEXT_WORK_SURVEY.md` §6準拠）。
+- `spike.mp4` vs `base.mp4`の最終目視は**fix-later方針でユーザー承認済み・非ブロッカー**（回答到着次第、必要なら追いコミット対応）＋前セッションから持ち越しの目視4本（`NEXT_SESSION_HANDOFF.md`参照）。**残る「作業」＝mainへのマージ実行**（branch `feature/ic-lora-phase-a` 未マージ・4コミット先行）。

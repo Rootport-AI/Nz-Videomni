@@ -36,17 +36,15 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 # GGUF tensor dequantization                                          #
 # ------------------------------------------------------------------ #
-
-# Quantization type constants from the GGUF spec.
-_GGML_TYPE_F32 = 0
-_GGML_TYPE_F16 = 1
-_GGML_TYPE_BF16 = 30
-_GGML_TYPE_Q8_0 = 8
-_GGML_TYPE_Q4_K = 12
-_GGML_TYPE_Q6_K = 14
-_GGML_TYPE_Q4_0 = 2
-_GGML_TYPE_Q5_0 = 6
-_GGML_TYPE_Q5_1 = 7
+#
+# NOTE (a-0 fix): the bf16-path dequant now delegates to the FAITHFUL,
+# numerically-validated kernels in quant_service.dequantize_ggml_tensor
+# (VERIFICATION_LOG §1.3). The former hand-rolled Q4_K/Q6_K kernels here were
+# admittedly "simplified" (wrong nibble-interleave and 6-bit scale/min
+# unpacking) and produced noise-level weights on this bf16 GGUFStateDictLoader
+# path. quant_service imports no ltx_core at module top (only stdlib + torch),
+# so this top-level import cannot form a circular import with loader_service.
+from engine.gguf.quant_service import dequantize_ggml_tensor
 
 
 def _dequantize_tensor(
@@ -55,140 +53,22 @@ def _dequantize_tensor(
     shape: tuple[int, ...],
     dtype: torch.dtype = torch.bfloat16,
 ) -> torch.Tensor:
-    """Dequantize a raw GGUF tensor to a floating point torch tensor."""
-    if ggml_type == _GGML_TYPE_F32:
-        return data.view(shape).to(dtype)
+    """Dequantize a raw GGUF tensor to a floating point torch tensor.
 
-    if ggml_type == _GGML_TYPE_F16:
-        return data.view(torch.float16).view(shape).to(dtype)
-
-    if ggml_type == _GGML_TYPE_BF16:
-        return data.view(torch.bfloat16).view(shape).to(dtype)
-
-    if ggml_type == _GGML_TYPE_Q8_0:
-        return _dequant_q8_0(data, shape, dtype)
-
-    if ggml_type == _GGML_TYPE_Q4_K:
-        return _dequant_q4_k(data, shape, dtype)
-
-    if ggml_type == _GGML_TYPE_Q6_K:
-        return _dequant_q6_k(data, shape, dtype)
-
-    if ggml_type in (_GGML_TYPE_Q4_0, _GGML_TYPE_Q5_0, _GGML_TYPE_Q5_1):
-        return _dequant_q4_0_family(data, shape, dtype, ggml_type)
-
-    logger.warning("Unsupported GGML type %d — loading as float32 raw", ggml_type)
-    return data.view(torch.float32).reshape(-1).to(dtype)
-
-
-def _dequant_q8_0(
-    data: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype
-) -> torch.Tensor:
-    """Q8_0: 32 int8 values + 1 float16 scale per block."""
-    block_size = 34  # 2 bytes scale + 32 bytes data
-    n_blocks = data.numel() // block_size
-    raw = data.view(torch.uint8).reshape(n_blocks, block_size)
-    scales = raw[:, :2].view(torch.float16).to(torch.float32)
-    qs = raw[:, 2:].view(torch.int8).to(torch.float32)
-    dequant = (qs * scales).reshape(-1)
-    n_elems = 1
-    for s in shape:
-        n_elems *= s
-    return dequant[:n_elems].reshape(shape).to(dtype)
-
-
-def _dequant_q4_k(
-    data: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype
-) -> torch.Tensor:
-    """Q4_K: simplified dequantization via numpy for correctness."""
-    try:
-        import numpy as np
-        arr = data.numpy()
-        # Q4_K block: 144 bytes = 2 super-scales (fp16) + 12 scales (6-bit) + 128 quants
-        block_size = 144
-        n_blocks = len(arr) // block_size
-        blocks = arr[:n_blocks * block_size].reshape(n_blocks, block_size)
-
-        d = blocks[:, :2].view(np.float16).astype(np.float32)
-        dmin = blocks[:, 2:4].view(np.float16).astype(np.float32)
-
-        # Extract 4-bit quants (last 64 bytes = 128 values)
-        quants_raw = blocks[:, 80:].reshape(n_blocks, 64)
-        lo = (quants_raw & 0x0F).astype(np.float32)
-        hi = ((quants_raw >> 4) & 0x0F).astype(np.float32)
-        quants = np.stack([lo, hi], axis=2).reshape(n_blocks, 128)
-
-        # Simplified: use d as scale, dmin as offset
-        dequant = (quants * d[:, None] - dmin[:, None]).reshape(-1)
-        n_elems = 1
-        for s in shape:
-            n_elems *= s
-        result = dequant[:n_elems].reshape(shape)
-        return torch.from_numpy(result).to(dtype)
-    except Exception as exc:
-        logger.warning("Q4_K dequant failed (%s), using zero tensor", exc)
-        return torch.zeros(shape, dtype=dtype)
-
-
-def _dequant_q6_k(
-    data: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype
-) -> torch.Tensor:
-    """Q6_K: simplified fallback."""
-    try:
-        import numpy as np
-        arr = data.numpy()
-        block_size = 210  # Q6_K block size
-        n_blocks = len(arr) // block_size
-        blocks = arr[:n_blocks * block_size].reshape(n_blocks, block_size)
-
-        d = blocks[:, 208:210].view(np.float16).astype(np.float32)
-        ql = blocks[:, :128].astype(np.uint8)
-        qh = blocks[:, 128:192].astype(np.uint8)
-
-        q1 = (ql[:, :64] & 0x0F) | ((qh[:, :64] & 0x03) << 4)
-        q2 = (ql[:, :64] >> 4) | (((qh[:, :64] >> 2) & 0x03) << 4)
-        q3 = (ql[:, 64:] & 0x0F) | ((qh[:, :64] & 0x0C) << 2)
-        q4 = (ql[:, 64:] >> 4) | (((qh[:, :64] >> 4) & 0x03) << 4)
-
-        quants = np.stack([q1, q2, q3, q4], axis=2).reshape(n_blocks, 256).astype(np.float32) - 32
-        dequant = (quants * d[:, None]).reshape(-1)
-        n_elems = 1
-        for s in shape:
-            n_elems *= s
-        result = dequant[:n_elems].reshape(shape)
-        return torch.from_numpy(result).to(dtype)
-    except Exception as exc:
-        logger.warning("Q6_K dequant failed (%s), using zero tensor", exc)
-        return torch.zeros(shape, dtype=dtype)
-
-
-def _dequant_q4_0_family(
-    data: torch.Tensor,
-    shape: tuple[int, ...],
-    dtype: torch.dtype,
-    ggml_type: int,
-) -> torch.Tensor:
-    """Q4_0 family: 16 int4 pairs + 1 float16 scale per block."""
-    try:
-        import numpy as np
-        arr = data.numpy()
-        block_size = 18  # 2 scale bytes + 16 data bytes
-        n_blocks = len(arr) // block_size
-        blocks = arr[:n_blocks * block_size].reshape(n_blocks, block_size)
-        scales = blocks[:, :2].view(np.float16).astype(np.float32)
-        raw_q = blocks[:, 2:].astype(np.uint8)
-        lo = (raw_q & 0x0F).astype(np.float32) - 8
-        hi = ((raw_q >> 4) & 0x0F).astype(np.float32) - 8
-        quants = np.stack([lo, hi], axis=2).reshape(n_blocks, 32)
-        dequant = (quants * scales[:, None]).reshape(-1)
-        n_elems = 1
-        for s in shape:
-            n_elems *= s
-        result = dequant[:n_elems].reshape(shape)
-        return torch.from_numpy(result).to(dtype)
-    except Exception as exc:
-        logger.warning("Q4_0 family dequant failed (%s), using zero tensor", exc)
-        return torch.zeros(shape, dtype=dtype)
+    Thin wrapper over the faithful per-tensor kernel in quant_service. Float
+    types (F32/F16/BF16) reinterpret+reshape+cast identically to before; the
+    quantized types (Q8_0/Q4_K/Q6_K/…) now use the validated kernels instead of
+    the old simplified ones. Output dtype behaviour is unchanged (bf16 default).
+    """
+    # dequantize_ggml_tensor expects a FLAT (1-D) input — its production caller
+    # in quant_service flattens explicitly via reshape(-1). GGUFReader's
+    # tensor.data can be MULTI-DIM for quantised types (e.g. (nrows, row_bytes)),
+    # which would break the per-block reshape inside the kernels. The caller
+    # hands us an owned .copy() (contiguous), so reshape(-1) is safe. For float
+    # types the flatten is value-neutral: 1-D view(float_dtype) → view(shape)
+    # reinterprets the same bytes (identity when data already carries that
+    # dtype; byte-reinterpretation when it arrives as uint8 — both correct).
+    return dequantize_ggml_tensor(data.reshape(-1), ggml_type, shape, dtype)
 
 
 # ------------------------------------------------------------------ #
@@ -202,9 +82,18 @@ class GGUFStateDictLoader:
     bfloat16, and returns a StateDict compatible with SingleGPUModelBuilder.
     """
 
-    def __init__(self, gguf_path: str, target_dtype: torch.dtype = torch.bfloat16) -> None:
+    def __init__(
+        self,
+        gguf_path: str,
+        target_dtype: torch.dtype = torch.bfloat16,
+        ic_loras: list[tuple[str, float]] | None = None,
+    ) -> None:
         self.gguf_path = gguf_path
         self.target_dtype = target_dtype
+        # IC-LoRA spike: (safetensors_path, strength) pairs fused in-place into
+        # the base state-dict just before it is returned from load(). Empty by
+        # default → load() is byte-identical to the historical behaviour.
+        self.ic_loras: list[tuple[str, float]] = list(ic_loras or [])
 
     def metadata(self, path: str) -> dict:
         """Extract model config from GGUF metadata."""
@@ -302,12 +191,113 @@ class GGUFStateDictLoader:
             Path(self.gguf_path).name,
         )
 
-        return StateDict(
+        base_sd = StateDict(
             sd=state_dict,
             device=device,
             size=sum(t.numel() * t.element_size() for t in state_dict.values()),
             dtype={t.dtype for t in state_dict.values()},
         )
+
+        # IC-LoRA in-place fuse (spike). No-op when self.ic_loras is empty →
+        # byte-identical to the historical return above.
+        if self.ic_loras:
+            base_sd = self._fuse_ic_loras(base_sd)
+
+        return base_sd
+
+    def _fuse_ic_loras(self, base_sd: Any) -> Any:
+        """Load each configured LoRA safetensors and fuse it into ``base_sd`` in
+        place (RAM cost = one per-key fp32 delta transient, not a second full copy).
+
+        The wheel's apply_loras is deliberately NOT used: it matmuls the LoRA
+        delta in bf16 on CPU (fuse_loras.py _prepare_deltas), and on CPUs without
+        AVX512-BF16/AMX torch's bf16 matmul falls into a ~54x-slower-than-fp32
+        path (measured: ~19 min per fuse vs 68 s no-LoRA load). This loop is
+        mathematically IDENTICAL to the wheel's bf16 route
+        (_prepare_deltas + _fuse_delta_with_bfloat16): both compute
+        W + (B*strength) @ A per key; the only difference is where the single
+        bf16 rounding happens — the wheel rounds the matmul products in-loop
+        (bf16 matmul), we matmul in fp32 and round ONCE when casting the delta
+        to the weight dtype before the in-place add.
+        """
+        from ltx_core.loader import (
+            LTXV_LORA_COMFY_RENAMING_MAP,
+            SafetensorsStateDictLoader,
+        )
+
+        loader = SafetensorsStateDictLoader()
+        cpu = torch.device("cpu")
+        total_lora_keys = 0
+        total_delta_keys = 0
+        suffix_a = ".lora_A.weight"
+        suffix_b = ".lora_B.weight"
+
+        for path, strength in self.ic_loras:
+            if not Path(path).exists():
+                raise FileNotFoundError(f"IC-LoRA safetensors not found: {path}")
+            # LTXV_LORA_COMFY_RENAMING_MAP strips the "diffusion_model." prefix so
+            # LoRA keys align with the (raw GGUF) model keys.
+            lora_sd = loader.load(path, sd_ops=LTXV_LORA_COMFY_RENAMING_MAP, device=cpu)
+            n_keys = len(lora_sd.sd)
+            n_delta = 0
+
+            # Per-key fp32 fuse. Multiple LoRAs hitting the same key accumulate
+            # sequentially (same net result as the wheel's summed-deltas path).
+            # Transient memory = ONE fp32 delta at a time (largest LTX-2.3 layer
+            # is a few hundred MB in fp32), freed right after the in-place add.
+            for key_a in lora_sd.sd:
+                if not key_a.endswith(suffix_a):
+                    continue
+                prefix = key_a[: -len(suffix_a)]
+                weight_key = prefix + ".weight"
+                weight = base_sd.sd.get(weight_key)
+                if weight is None:
+                    continue  # counted via n_delta; 0 total → loud WARN below
+                key_b = prefix + suffix_b
+                lora_a = lora_sd.sd.get(key_a)
+                lora_b = lora_sd.sd.get(key_b)
+                if lora_b is None:
+                    raise RuntimeError(
+                        f"IC-LoRA {Path(path).name}: {key_a} present but {key_b} "
+                        "missing — corrupt/unsupported LoRA layout"
+                    )
+                if weight.dtype not in (torch.bfloat16, torch.float16, torch.float32):
+                    raise RuntimeError(
+                        f"IC-LoRA fuse: unsupported model weight dtype {weight.dtype} "
+                        f"for {weight_key} (expected bf16/f16/f32)"
+                    )
+                # B:(out,r) @ A:(r,in) → delta:(out,in), fp32 matmul (fast CPU path).
+                delta = torch.matmul(
+                    lora_b.to(torch.float32) * strength, lora_a.to(torch.float32)
+                )
+                if delta.shape != weight.shape:
+                    raise RuntimeError(
+                        f"IC-LoRA fuse: delta shape {tuple(delta.shape)} != weight "
+                        f"shape {tuple(weight.shape)} for {weight_key} "
+                        f"(A={tuple(lora_a.shape)}, B={tuple(lora_b.shape)})"
+                    )
+                weight.add_(delta.to(weight.dtype))
+                del delta
+                n_delta += 1
+
+            total_lora_keys += n_keys
+            total_delta_keys += n_delta
+            logger.info(
+                "IC-LoRA %s: %d keys, %d model weights fused (strength=%.3f)",
+                Path(path).name, n_keys, n_delta, strength,
+            )
+            if n_delta == 0:
+                logger.warning(
+                    "IC-LoRA %s matched 0 model weights — LoRA/model KEY-FORMAT "
+                    "MISMATCH; the fuse was a no-op. Check the renaming map.",
+                    Path(path).name,
+                )
+
+        logger.info(
+            "IC-LoRA fuse complete: %d LoRA(s), %d total lora keys, %d total model deltas",
+            len(self.ic_loras), total_lora_keys, total_delta_keys,
+        )
+        return base_sd
 
 
 # ------------------------------------------------------------------ #
@@ -322,9 +312,14 @@ class GGUFLoaderService:
     untouched — they still load from the original safetensors checkpoint.
     """
 
-    def __init__(self, gguf_path: str) -> None:
+    def __init__(
+        self, gguf_path: str, ic_loras: list[tuple[str, float]] | None = None
+    ) -> None:
         self.gguf_path = gguf_path
         self._original_loader: Any = None
+        # IC-LoRA (path, strength) pairs forwarded to the GGUFStateDictLoader for
+        # in-place fuse. Empty by default → historical behaviour unchanged.
+        self.ic_loras: list[tuple[str, float]] = list(ic_loras or [])
 
     def install(self, model_ledger: Any) -> None:
         """Replace transformer_builder loader with GGUF loader."""
@@ -343,6 +338,7 @@ class GGUFLoaderService:
         gguf_loader = GGUFStateDictLoader(
             gguf_path=self.gguf_path,
             target_dtype=model_ledger.dtype,
+            ic_loras=self.ic_loras,
         )
 
         # SingleGPUModelBuilder is frozen so we use replace().

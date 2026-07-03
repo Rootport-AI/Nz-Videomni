@@ -32,7 +32,7 @@
 - Phase Aのbf16融合ペナルティ（RAM 54-57GB・約3倍遅・VRAM+3.6GB）は本経路で**全解消**: 全体VRAMピーク＝LoRA無しと同一8440.9MB・attach 0.02–0.3s（fuse消滅）・bf16融合比2.2倍速。rank64のdenoise増は実測+20〜26%（許容判断・§21.8に最適化候補）。bf16融合経路はユーザー指示どおり選択可能なまま温存。
 - 検証: G1回帰byte-match（T2V/I2V完全一致・peak_vram 8440不変・pytest 58/1）・G2**新経路とbf16融合がbyte完全一致**（`735a6de9…272`＝Phase B基準SHAに再ピン。旧spike.mp4不一致は`016f442`以前のstale baselineが原因と特定・480層delta CPU/GPU 0 ULP）・G3非汚染トグル（4経路収束）・G5**API e2e実機も出力byte一致**＋偽video_id→404。
 - **正本＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)**・詳細＝[`VERIFICATION_LOG.md` §21](VERIFICATION_LOG.md)・設計＝[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)。
-- **残作業＝①`feature/ic-lora-phase-b`のmainマージ判断（ユーザー） ②mainのpush（監督のpushは権限拒否・Phase Aマージ`a578c83`以降ローカル先行） ③目視fix-later分（Phase A持ち越し5本＋`outputs/ic_lora_phaseA/phaseB/api_smoke.mp4`＝API経由x2アップスケール） ④HFトークン無効化（ユーザー宿題）**。
+- **残作業＝①`feature/ic-lora-phase-b`のmainマージ判断（ユーザー） ②mainのpush（監督のpushは権限拒否・Phase Aマージ`a578c83`以降ローカル先行） ③目視fix-later分＝**`outputs/visual_review/` に分かりやすい名前で集約済み（README.md にチェックポイント表・全6本: Phase3連結2＋キーフレーム2＋IC-LoRA比較ペア2）**。旧spike.mp4は`016f442`以前の出力につき目視も#06（api_smoke相当）で代替 ④HFトークン無効化（ユーザー宿題）**。
 - Phase C候補（挙げるのみ・詳細=VERIFICATION_LOG §21.8）: keep=1トグル検証／oracle照合／x4・他アダプタ登録／denoise最適化／参照不要アダプタのバリデーション緩和／Gradio UI露出。
 
 ### ★IC-LoRA Phase A スパイク＝DONE（成立・2026-07-03・branch `feature/ic-lora-phase-a`・**✅mainマージ済 `a578c83`（同日）**）

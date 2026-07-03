@@ -69,6 +69,18 @@ def lora_not_found(name: str, detail: str | None = None) -> APIError:
     return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
 
 
+def lora_preprocess_conflict(kinds: list[str]) -> APIError:
+    """Phase C: the requested loras imply more than one control preprocess kind
+    (e.g. one canny-control + one pose-control adapter) for a single reference
+    video. Only one control signal can be derived from the one uploaded video."""
+    return APIError(
+        "LORA_PREPROCESS_CONFLICT",
+        "loras request more than one control preprocess kind for a single reference video",
+        400,
+        detail=f"conflicting preprocess kinds: {sorted(kinds)}",
+    )
+
+
 def job_not_found(job_id: str) -> APIError:
     return APIError("JOB_NOT_FOUND", f"job not found: {job_id}", 404, job_id=job_id)
 

@@ -140,10 +140,11 @@ class PipelineManager:
                 for ci in job.request.conditioning_images
             ]
 
-            # Phase B IC-LoRA: resolve adapter names -> (path, strength) via the
-            # registry and reference_video_id -> path via the video store. The API
-            # layer already validated existence (mirroring conditioning images), so
-            # these re-resolve the same objects for the runner hop.
+            # Phase B/C IC-LoRA: resolve adapter names -> (path, strength,
+            # preprocess) via the registry and reference_video_id -> path via the
+            # video store. The API layer already validated existence + preprocess-
+            # kind conflicts (mirroring conditioning images), so these re-resolve
+            # the same objects for the runner hop.
             lora_paths = [
                 self.lora_registry.resolve(spec.name, spec.strength)
                 for spec in job.request.loras

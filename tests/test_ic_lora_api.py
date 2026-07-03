@@ -1,10 +1,17 @@
-"""IC-LoRA Phase B — API exposure end-to-end tests (mock backend, no GPU).
+"""IC-LoRA Phase B/C — API exposure end-to-end tests (mock backend, no GPU).
 
 Covers POST /upload/video, the additive GenerateRequest fields (loras +
 reference_video_id), their cross-validation, the adapter-name registry
 (unknown/path-like rejection), and a full mock-mode generate that completes with
 loras + a reference video. The engine weight-patch mechanism itself is unit
 tested in test_ic_lora_forward.py; here we exercise the app-layer plumbing.
+
+Phase C additions: the registry's dict-valued entries (``IcLoraEntry`` ->
+``preprocess`` kind, config.py) alongside legacy string-valued entries
+(backward compat), and the >1-distinct-preprocess-kind conflict rejection
+(``LORA_PREPROCESS_CONFLICT``, 400). No engine preprocessing is exercised here
+(that is Phase C slice 2/3) -- this file only checks that the registry/config
+plumbing resolves and reaches the runner payload boundary correctly.
 """
 
 from __future__ import annotations
@@ -17,12 +24,18 @@ import yaml
 from fastapi.testclient import TestClient
 
 import main
+from api.errors import APIError
+from config import AppConfig
+from services.lora_registry import LoraRegistry
+from services.ltx_runner import _resolve_reference_preprocess
 
 # A tiny but non-empty mp4-ish blob. The video store validates extension + size
 # only (no decode), and the mock backend never opens it, so bytes are arbitrary.
 FAKE_MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
 
 REGISTERED_LORA = "pixel-spatial-upscaler-x2"
+CANNY_LORA = "canny-control"
+POSE_LORA = "pose-control"
 
 
 def _make_args(config_path: str) -> argparse.Namespace:
@@ -45,6 +58,39 @@ def lora_client(tmp_path):
         "model": {
             "backend": "mock",
             "ic_loras": {REGISTERED_LORA: lora_file.as_posix()},  # absolute -> used as-is
+        },
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    app = main.build_app(_make_args(cfg_path.as_posix()))
+    with TestClient(app) as c:
+        c.app_context = app.state.context  # type: ignore[attr-defined]
+        yield c
+
+
+@pytest.fixture()
+def mixed_registry_client(tmp_path):
+    """A mock-backend client whose registry mixes a legacy string-valued entry
+    (Phase B, preprocess implied "none") with two Phase C dict-valued entries
+    (same file, different preprocess kinds) -- exactly the config.yaml shape
+    from IC_LORA_PHASE_C_WORKORDER.md §3-3."""
+    lora_file = tmp_path / "adapter.safetensors"
+    lora_file.write_bytes(b"\x00" * 8)
+    control_file = tmp_path / "union-control.safetensors"
+    control_file.write_bytes(b"\x00" * 8)
+
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {
+            "backend": "mock",
+            "ic_loras": {
+                REGISTERED_LORA: lora_file.as_posix(),  # legacy string value
+                CANNY_LORA: {"path": control_file.as_posix(), "preprocess": "canny"},
+                POSE_LORA: {"path": control_file.as_posix(), "preprocess": "dwpose"},
+            },
         },
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
@@ -207,3 +253,121 @@ def test_generate_without_new_fields_regression(lora_client):
     assert meta["request"]["loras"] == []
     assert meta["request"]["reference_video_id"] is None
     assert "ic_lora" not in meta  # additive block absent for non-lora jobs
+
+
+# --------------------------------------------------------- Phase C: registry
+
+
+def test_registry_string_entry_resolves_backward_compat(tmp_path):
+    """A legacy string-valued ic_loras entry (Phase B) still resolves, now as a
+    3-tuple whose preprocess is "none" -- LoraRegistry.resolve unit-level."""
+    lora_file = tmp_path / "adapter.safetensors"
+    lora_file.write_bytes(b"\x00" * 8)
+    config = AppConfig.model_validate(
+        {"model": {"ic_loras": {REGISTERED_LORA: lora_file.as_posix()}}}
+    )
+    registry = LoraRegistry(config)
+    path, strength, preprocess = registry.resolve(REGISTERED_LORA, 1.0)
+    assert path == lora_file.resolve()
+    assert strength == 1.0
+    assert preprocess == "none"
+
+
+def test_registry_dict_entry_resolves_with_preprocess(tmp_path):
+    """A Phase C dict-valued entry (IcLoraEntry) resolves with its declared
+    preprocess kind -- LoraRegistry.resolve unit-level."""
+    control_file = tmp_path / "union-control.safetensors"
+    control_file.write_bytes(b"\x00" * 8)
+    config = AppConfig.model_validate(
+        {
+            "model": {
+                "ic_loras": {
+                    POSE_LORA: {"path": control_file.as_posix(), "preprocess": "dwpose"},
+                }
+            }
+        }
+    )
+    registry = LoraRegistry(config)
+    path, strength, preprocess = registry.resolve(POSE_LORA, 1.0)
+    assert path == control_file.resolve()
+    assert strength == 1.0
+    assert preprocess == "dwpose"
+
+
+def test_generate_with_dict_valued_adapter_completes(mixed_registry_client):
+    """A dict-valued (Phase C) adapter name resolves through the full app-layer
+    plumbing (registry -> pipeline_manager -> runner) exactly like a legacy
+    string-valued one; the mock backend ignores preprocess and still completes."""
+    vid = _upload_video(mixed_registry_client)
+    payload = _base_payload(
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    r = mixed_registry_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+
+    job = mixed_registry_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = mixed_registry_client.app_context
+    meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["ic_lora"]["loras"][0]["name"] == CANNY_LORA
+
+
+def test_generate_with_string_and_dict_adapters_mixed_completes(mixed_registry_client):
+    """A "none" preprocess adapter alongside a canny adapter is NOT a conflict
+    (only >1 distinct non-"none" kind is rejected)."""
+    vid = _upload_video(mixed_registry_client)
+    payload = _base_payload(
+        loras=[
+            {"name": REGISTERED_LORA, "strength": 1.0},
+            {"name": CANNY_LORA, "strength": 1.0},
+        ],
+        reference_video_id=vid,
+    )
+    r = mixed_registry_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = mixed_registry_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+
+def test_generate_with_conflicting_preprocess_kinds_400(mixed_registry_client):
+    """canny-control + pose-control together imply 2 distinct control kinds for
+    ONE reference video -- rejected up front (400 LORA_PREPROCESS_CONFLICT)."""
+    vid = _upload_video(mixed_registry_client)
+    payload = _base_payload(
+        loras=[
+            {"name": CANNY_LORA, "strength": 1.0},
+            {"name": POSE_LORA, "strength": 1.0},
+        ],
+        reference_video_id=vid,
+    )
+    r = mixed_registry_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 400, r.text
+    assert r.json()["error"]["code"] == "LORA_PREPROCESS_CONFLICT"
+
+
+def test_resolve_reference_preprocess_all_none():
+    assert _resolve_reference_preprocess([]) == "none"
+    from pathlib import Path
+
+    assert _resolve_reference_preprocess([(Path("a"), 1.0, "none")]) == "none"
+
+
+def test_resolve_reference_preprocess_single_kind():
+    from pathlib import Path
+
+    lora_paths = [(Path("a"), 1.0, "none"), (Path("b"), 1.0, "canny")]
+    assert _resolve_reference_preprocess(lora_paths) == "canny"
+
+
+def test_resolve_reference_preprocess_conflict_raises_400():
+    from pathlib import Path
+
+    lora_paths = [(Path("a"), 1.0, "canny"), (Path("b"), 1.0, "dwpose")]
+    with pytest.raises(APIError) as exc_info:
+        _resolve_reference_preprocess(lora_paths)
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "LORA_PREPROCESS_CONFLICT"

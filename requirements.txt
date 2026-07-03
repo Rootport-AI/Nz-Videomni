@@ -19,7 +19,7 @@
 
 fastapi>=0.110
 uvicorn[standard]>=0.29
-gradio>=4.44
+gradio>=6.19,<7
 pydantic>=2.6
 pydantic-settings>=2.2
 pyyaml>=6.0

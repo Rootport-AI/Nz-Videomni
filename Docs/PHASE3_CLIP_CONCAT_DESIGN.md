@@ -1,7 +1,10 @@
 # Phase 3 スライス2「クリップ連結（生成プリミティブ）」設計 — リサーチ結論＋実装計画
 
-> ## ⚠️ 2026-07-03 訂正バナー（最初に読む）
-> **本文書の「スパイク✅GO」「フェーズ2/3✅ 全ゲートPASS」は "配管が動く" の意味であり、映像の連続性は達成していない。** ユーザー目視（2026-07-03）でクリップ境界が hard cut・音声も断絶＝**連結は機能未達**と判明。監督が境界フレームの実映像を目視せず配管チェックのみで PASS 判定していた検証手法の欠陥が原因。**現状・根本原因・修正方針の正本は [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)。** 以下の設計/計画は「latent-extend という方針で配管を組んだ記録」として温存するが、そのまま完成扱いにしないこと。
+> ## ✅ 2026-07-03 更新バナー（最初に読む）
+> **本文書冒頭の旧・訂正バナー（「配管PASSのみで連続性未達」）は解消済み。** 同日中に「masked AV-latent 連結」アーキテクチャで再設計・再実装し、実機検証PASS（境界連続性ハーネスで既知hard-cutへの較正込み）に至った。**現状の正本は [`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)**（ユーザー最終目視/試聴のみ Chain A/B で PENDING）。以下の「§1 リサーチ結論」「§2 スパイク設計」は latent-extend 方針（stage1 tail carry を disarm 後の独立 stage2 に継がせる旧方式）の記録として温存するが、**旧方式自体は目視 hard-cut FAIL により置き換え済み**（採用アーキテクチャは下記）。
+>
+> ### 採用アーキテクチャ（2026-07-03 確定）
+> per-segment stage1（video+audio tail carry+freeze）→ **1本の連続 stage1 AV latent を組み立て**（線形クロスフェード・音声overlap長は逆算）→ 1回のupsample → stage2 refine を**常に時間タイル分割**（tile=22 latent/overlap=4・両モダリティのRoPE20秒天井対策）→ **1回だけ VAE decode**。旧方式の「per-clip decode＋独立音声」を廃し「境界は1本の連続latentの内部に存在する」構造に転換。実装＝`chain_math.py`（ジオメトリ単一情報源）／`engine/pipeline/chain_pipeline.py`（`run_chain`）。詳細は `PHASE3_CLIP_CONCAT_STATUS.md`＋`VERIFICATION_LOG.md` §19。
 
 - 作成: 2026-07-02（監督＋ユーザー合意）
 - 上位: [`PHASE3_CLIP_CONCAT_WORKORDER.md`](PHASE3_CLIP_CONCAT_WORKORDER.md)（§1 リサーチ指示・§2 スコープ分岐）／[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)（スライス1）

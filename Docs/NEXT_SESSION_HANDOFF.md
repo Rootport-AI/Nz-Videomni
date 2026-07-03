@@ -22,7 +22,7 @@
 ### 次セッションの入口（この順で）
 
 1. **ユーザー確認2点**: ①main の push（`git push origin main`・監督のpushは権限拒否されるためユーザー実施。`feature/ic-lora-phase-c-research` のマージ判断も） ②HFトークン無効化（継続宿題）。
-2. **Phase C 実装開始**: [`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md) に沿って **Gate 0 から**（G0-a: Union-Control LoRAダウンロード＋メタデータ実読で `ref0.5`=factor 2 か 1 かを確定 → 既存ガードの扱いが分岐／G0-b: DWPoseスループット実測／G0-c: LoRAキー解決性確認）。実装スライスは canny 疎通先行→pose。
+2. **Phase C 実装開始**: [`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md) に沿って進める。**Gate 0 は G0-a/G0-c 消化済み（2026-07-04・factor=2確定=既存ガード無変更・キー解決性OK・モデル3ファイルDL済み）→ 残りは G0-b（DWPoseスループット実測）のみ**。その後、実装スライス1（レジストリ拡張）→2（canny疎通）→3（pose）。
 3. 入口ドキュメント: [`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md) → 設計根拠は [`IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)。Phase B のアーキテクチャ要点（「勝手に最適化しない」注意）= [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)。
 
 ### やらないこと（スコープ外・混同注意）

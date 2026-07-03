@@ -83,11 +83,9 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 
 制御アダプタと前処理器は「未読の現物」に依存する箇所があるため、**実装前に3点を実測で確定**する。
 
-- **G0-a: Union-Control LoRAのsafetensorsメタデータ実読**。ダウンロード後、`reference_downscale_factor` キーを読む（wheel `_read_lora_reference_downscale_factor` 流用可）。既存ガード `engine/pipeline/fast_video_pipeline.py:271-290`（`_set_ic_job`・`factor <= 1` で raise、L284-289）と `_reference_conditioning_for_stage` 内の `assert scale > 1`（L544）＋divisibility（L551-557）が分岐:
-  - **factor=2 の場合（R1想定・ref0.5表記と整合）**: 既存ガードはそのまま通る＝**変更不要**。参照系Pixel-Spatial-Upscaler と同じ扱いで載る。
-  - **factor=1 の場合（R3が指摘した可能性）**: 既存ガードが `factor<=1` を raise で拒否するため**メタデータ駆動の緩和スライスが必要**。緩和内容 = `_set_ic_job` の raise を factor別分岐に、`_reference_conditioning_for_stage` の `assert scale > 1`（L544）と downscale算術（L551-557）を `if scale != 1:` ガードで囲む。**wheel側は factor=1 を正常系として扱う**（R3確認: `ic_lora.py`・`reference_video_cond.py` は `if scale != 1:` ガード）ため緩和自体は安全。
-- **G0-b: DWPose TorchScriptのスループット実測スモークテスト**。数百フレームの骨格レンダを実行し fps/VRAMを実測（R2はDWPose固有ベンチを発見できず確度低〜中）。生成本体のVRAM天井と前処理ピークが競合しないことを確認。
-- **G0-c: LoRAキー構造の解決性確認**。Union-Control の safetensorsキーが既存 `engine/gguf/ic_lora_common.py` の `attach_ic_loras`（`load_ic_lora_pairs` L48-94・`LTXV_LORA_COMFY_RENAMING_MAP`・`lora_A`/`lora_B` ペアリング L80-92）でそのまま解決できるか（マッチ数 > 0）を確認。0マッチWARN（L191-197）が出たらキーフォーマット差異を先に解消。
+- **G0-a: Union-Control LoRAのsafetensorsメタデータ実読** → **✅完了（2026-07-04）**: メタデータは `reference_downscale_factor: "2"`・`model_version: "2.3.0"`。wheel `_read_lora_reference_downscale_factor` の戻り値=**2**（既知良好のUpscaler x2でも同リーダーで2を確認＝リーダー妥当性も再確認）。→ **factor=2ブランチ確定＝既存ガード（`engine/pipeline/fast_video_pipeline.py:271-290`・L544・L551-557）は無変更でそのまま通る。緩和スライス不要**。ファイルは `models/ltx-2.3-ic-lora/union-control/` に配置済み（654,465,352 bytes=フォーク配布定義と完全一致）。
+- **G0-b: DWPose TorchScriptのスループット実測スモークテスト**（**未消化・実装セッションで実施**）。数百フレームの骨格レンダを実行し fps/VRAMを実測（R2はDWPose固有ベンチを発見できず確度低〜中）。生成本体のVRAM天井と前処理ピークが競合しないことを確認。TorchScriptモデル2ファイルは `models/preprocessors/` にダウンロード済み（yolox_l 217,697,649 bytes／dw-ll_ucoco_384_bs5 135,059,124 bytes=いずれも期待値一致）。
+- **G0-c: LoRAキー構造の解決性確認** → **✅完了（2026-07-04）**: `load_ic_lora_pairs`（CPUのみ）でUnion-ControlとUpscaler x2の両方をロードし比較。**ペア済みprefix 480個・集合として完全同一・rank=64・shape一致**（lora_A (64,4096) / lora_B (4096,64) bf16）。Upscalerは Phase B G1/G2 で transformer への解決実証済みのため、Union-Control も `attach_ic_loras` でそのまま解決可能（0マッチWARNは出ない）。**キー正規化・リネームマップの変更不要**。
 
 ## 5. 実装スライス（順序付き）
 
@@ -133,7 +131,7 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 
 ## 8. リスクと未確定事項
 
-- **`ref0.5` の意味が未確定**（factor=2 か 1 か）。Gate 0-a で確定するまで既存ガードの扱いが分岐（§4参照）。factor=2 なら無変更、factor=1 なら緩和スライス要。
+- ~~`ref0.5` の意味が未確定~~ → **✅解消（2026-07-04・G0-a）**: 現物メタデータで `reference_downscale_factor=2` を確認。`ref0.5`=「参照を出力の0.5倍で内部使用」（R1解釈が的中）。既存ガード無変更。
 - **骨格の線/関節の色規約が公式未明文化**（"skeleton visualization with lines connecting keypoints" 止まり）。DWPoseの標準カラー骨格（フォーク/ComfyUIと同系の描画）を採用してリスク回避するが、Union-Controlが期待する厳密な色と食い違う可能性はゼロではない。G5目視＋制御系固有ゲートで検出する。※追補R4で公式2.3ワークフローが `DWPreprocessor`（controlnet_aux系DWPose）を使うことを確認済み＝同系描画なら食い違いリスクは小。
 - **DWPoseスループット未実測**（R2確度低〜中）。Gate 0-b で確定。遅ければキャッシュ（スライス4）で緩和。
 - **19b非互換**: 誤って19b世代の単体アダプタを使うと「エラーは出ないが効果ゼロ」。config登録は 2.3-22b Union-Control のみに限定する。

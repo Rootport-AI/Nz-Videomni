@@ -123,6 +123,8 @@ class LTXRunner:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
+        lora_paths: list[tuple[Path, float]] | None = None,
+        reference_video_path: Path | None = None,
     ) -> GenerationOutcome:
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -132,6 +134,8 @@ class LTXRunner:
             output_dir=output_dir,
             progress_callback=progress_callback,
             conditioning_image_paths=conditioning_image_paths,
+            lora_paths=lora_paths,
+            reference_video_path=reference_video_path,
         )
 
     def generate_chain(
@@ -263,11 +267,17 @@ class _MockBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
+        lora_paths: list[tuple[Path, float]] | None = None,
+        reference_video_path: Path | None = None,
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
 
         ``conditioning_images`` empty -> T2V; one entry -> minimal I2V using the
         resolved image path as the start frame (frame_idx=0, Phase 1).
+
+        ``lora_paths`` / ``reference_video_path`` are the Phase B IC-LoRA inputs;
+        the mock backend accepts (and ignores) them so the full route completes
+        GPU-free — the real weight patch lives in the engine worker.
         """
         if not self._loaded:
             self.load()
@@ -759,11 +769,14 @@ class _RealBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
+        lora_paths: list[tuple[Path, float]] | None = None,
+        reference_video_path: Path | None = None,
     ) -> GenerationOutcome:
         if not self.loaded:
             self.load()
 
         conditioning_image_paths = conditioning_image_paths or []
+        lora_paths = lora_paths or []
         mode = request.generation_mode
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -794,6 +807,18 @@ class _RealBackend:
         if progress_callback:
             progress_callback(None, None, 0.05)
 
+        # Phase B IC-LoRA (forward-time weight patch). ``loras`` is the list of
+        # (adapter safetensors path, strength) resolved by the registry; empty
+        # list -> the worker passes ic_loras=[] (explicit clean detach per Stage 1
+        # semantics). ``reference_video`` is the Pixel-Spatial-Upscaler reference,
+        # applied at a fixed strength of 1.0; None when no loras.
+        loras_payload = [{"path": str(p), "strength": float(s)} for p, s in lora_paths]
+        reference_payload = (
+            {"path": str(reference_video_path), "strength": 1.0}
+            if reference_video_path is not None
+            else None
+        )
+
         payload: dict = {
             "op": "generate",
             "prompt": request.prompt,
@@ -804,6 +829,8 @@ class _RealBackend:
             "frame_rate": request.frame_rate,
             "num_steps": request.num_inference_steps,
             "images": images,
+            "loras": loras_payload,
+            "reference_video": reference_payload,
             "output_path": str(target),
         }
 

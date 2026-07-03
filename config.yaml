@@ -36,6 +36,12 @@ model:
   gemma_root: "./models/gemma-3-12b-it-tokenizer"
   backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
 
+  # IC-LoRA アダプタ登録（Phase B）。API の GenerateRequest.loras[].name はここに
+  # 登録された「名前」で解決する（生パスは受けない）。セクション不在＝loras 要求は
+  # 全て拒否（fail loud）。今回対応は Pixel-Spatial-Upscaler のみ（参照動画必須）。
+  ic_loras:
+    pixel-spatial-upscaler-x2: "./models/ltx-2.3-ic-lora/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors"
+
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。
   low_vram_mode: true
@@ -108,6 +114,9 @@ upload:
   max_image_size_mb: 20
   allowed_image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
   normalize_to_png: true
+  # 参照動画アップロード（Phase B, POST /upload/video）。再エンコードせず保存。
+  max_video_size_mb: 200
+  allowed_video_extensions: [".mp4", ".mov", ".webm", ".mkv"]
 
 limits:
   max_width: 1920

@@ -61,6 +61,14 @@ def image_not_found(image_id: str) -> APIError:
     return APIError("IMAGE_NOT_FOUND", f"image_id not found: {image_id}", 404)
 
 
+def reference_video_not_found(video_id: str) -> APIError:
+    return APIError("REFERENCE_VIDEO_NOT_FOUND", f"reference_video_id not found: {video_id}", 404)
+
+
+def lora_not_found(name: str, detail: str | None = None) -> APIError:
+    return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
+
+
 def job_not_found(job_id: str) -> APIError:
     return APIError("JOB_NOT_FOUND", f"job not found: {job_id}", 404, job_id=job_id)
 

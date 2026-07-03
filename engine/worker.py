@@ -20,7 +20,10 @@ Protocol (one JSON object per line; parent -> worker):
    gguf_transformer_path, gguf_gemma_path, gguf_per_layer_quant,
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size}
   {"op": "generate", prompt, seed, height, width, num_frames, frame_rate,
-   num_steps, images:[{path,frame_idx,strength}...], output_path}
+   num_steps, images:[{path,frame_idx,strength}...], output_path,
+   # Phase B IC-LoRA (forward-time weight patch); loras always present (may be []),
+   # reference_video null unless a Pixel-Spatial-Upscaler reference is supplied:
+   loras:[{path,strength}...], reference_video:{path,strength}|null}
   # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
@@ -187,9 +190,23 @@ def _do_generate(msg: dict) -> None:
         for i in msg.get("images", [])
     ]
 
+    # Phase B IC-LoRA (forward-time weight patch on the per-layer-quant path).
+    # ``ic_loras`` is always passed EXPLICITLY (even []): an explicit empty list is
+    # the authoritative "no LoRA this job" -> clean detach, so a no-LoRA job after a
+    # LoRA job is byte-identical to base (gate G3). ``ic_reference`` is the
+    # Pixel-Spatial-Upscaler reference video (None when absent).
+    ic_loras = [
+        (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
+    ]
+    ref = msg.get("reference_video")
+    ic_reference = (
+        (str(ref["path"]), float(ref.get("strength", 1.0))) if ref else None
+    )
+
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
-        f"/ {msg['num_steps']} steps seed={seed} images={len(images)}"
+        f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
+        f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'}"
     )
     _PIPE.generate(
         prompt=msg["prompt"],
@@ -201,6 +218,8 @@ def _do_generate(msg: dict) -> None:
         images=images,
         output_path=output_path,
         num_steps=int(msg["num_steps"]),
+        ic_loras=ic_loras,
+        ic_reference=ic_reference,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

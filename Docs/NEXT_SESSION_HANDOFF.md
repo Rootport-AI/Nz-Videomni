@@ -2,15 +2,16 @@
 
 ---
 
-## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-03 セッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
+## ▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 セッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
 
-> **本ブロックが最新の正本。** これ以降の▶節（2026-07-03昼以前・2026-07-01以前）はすべて歴史記録。食い違ったら本ブロックが正。
+> **本ブロックが最新の正本。** これ以降の▶節（2026-07-03以前・2026-07-01以前）はすべて歴史記録。食い違ったら本ブロックが正。
 
 ### 現在地（1分サマリ）
 
 | 項目 | 状態 |
 |---|---|
-| リポジトリ | main＝`a578c83`（IC-LoRA Phase Aマージ済・**ローカル先行＝push未**）／branch `feature/ic-lora-phase-b`＝Phase B一式（engine機構+API+docs）で main から先行・**全ゲートPASS済み・マージ判断待ち** |
+| リポジトリ | main＝**Phase B本実装（merge `cfddd77`・pytest 58 passed/1 skipped）＋Phase C準備docs（`feature/ic-lora-phase-c-research` マージ済）まで入り・origin/main へ push済（2026-07-04・ユーザー承認のもと監督実施）**。次セッションの作業ブランチは main から新規に切る（例: `feature/ic-lora-phase-c`） |
+| IC-LoRA Phase C 準備 | ✅**リサーチ完了・ワークオーダー作成済み**（ターゲット=LTX-2.3-22b **Union-Control**・制御タイプ=canny+pose・前処理=TorchScript版DWPose=追加pip不要。正本=[`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md)・リサーチ全文=[`IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)） |
 | IC-LoRA Phase A | ✅完了・mainマージ済（スパイク＝bf16融合経路。正本=[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)・VERIFICATION_LOG §20） |
 | IC-LoRA Phase B | ✅完了（**forward時GPU LoRA適用**＝per-layer-quant本番経路・VRAM増ゼロ・ジョブ毎切替可＋**API露出**＝`loras`/`reference_video_id`/`POST /upload/video`。G1〜G5全PASS・基準SHA=`735a6de9…272`。正本=[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)・VERIFICATION_LOG §21） |
 | Phase 3 スライス1（キーフレーム誘導） | ✅完了・main入り済・**目視受容済み**（挙動=「途中キーフレームは磁石・間の遷移は自由領域でプロンプト支配」をユーザーが仕様として受容 2026-07-03。VERIFICATION_LOG §17.9-17.10） |
@@ -18,11 +19,11 @@
 | 目視ゲート | **全クローズ**（低解像度6本＋高解像度3本・2026-07-03。成果物一覧=`outputs/visual_review/README.md`） |
 | ユーザー向け機能解説 | [`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md)（キーフレーム誘導とIC-LoRA 2系統の平易な解説） |
 
-### 次セッションの入口（この順で）
+### 次セッションの入口（この順で）— **次セッション＝Phase C 実装（ユーザー決定 2026-07-04）**
 
-1. **ユーザーに2点確認**: ①main の push（`git push origin main`・監督のpushは権限拒否されるためユーザー実施） ②`feature/ic-lora-phase-b` の main マージ。
-2. **Phase C スコープ確定**: **最優先候補（ユーザー決定 2026-07-03）＝IC-LoRA制御系アダプタ（Pose/Union）対応＋DWPose等の外部プリプロセッサ段の新設**（「動き=完全トレース・内容=置換」の実現。現実装は参照系=生動画入力のみ・DWPose等は不存在とコード確認済み）。他の候補=VERIFICATION_LOG §21.8（keep=1トグル検証／oracle照合／x4登録／denoise+20-26%最適化／バリデーション緩和／Gradio UI露出）。
-3. 入口ドキュメント: [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（アーキテクチャ要点「勝手に最適化しない」注意あり）→ VERIFICATION_LOG §21。
+1. **Phase C 実装を開始**: [`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md) に沿って進める。**Gate 0 は G0-a/G0-c 消化済み（2026-07-04・factor=2確定=既存ガード無変更・キー解決性OK・モデル3ファイルDL済み: Union-Control 654MB→`models/ltx-2.3-ic-lora/union-control/`・DWPose TorchScript 2本→`models/preprocessors/`）→ 最初のタスクは **G0-b（DWPoseスループット実測・GPU）**。その後、実装スライス1（レジストリ拡張）→2（canny疎通）→3（pose）。
+2. 入口ドキュメント: [`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md) → 設計根拠は [`IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)（追補R4=ComfyUI公式ワークフロー裏付け含む）。Phase B のアーキテクチャ要点（「勝手に最適化しない」注意）= [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)。
+3. ユーザー宿題は**すべて消化済み**（main push=✅2026-07-04／HFトークン再発行・再登録=✅2026-07-04・旧トークン無効化確認済み）。セッション冒頭のユーザー確認事項なし。
 
 ### やらないこと（スコープ外・混同注意）
 

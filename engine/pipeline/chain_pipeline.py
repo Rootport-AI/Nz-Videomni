@@ -216,25 +216,6 @@ def _tile_images(images: list[ImageConditioningInput], vs: int, vlen: int) -> li
     return out
 
 
-def _seg_global_spans(seg_latent: list[int], kv: int) -> list[tuple[int, int]]:
-    """Per-segment [start, end) in global stage-1 video latent frames."""
-    spans: list[tuple[int, int]] = []
-    for i, L in enumerate(seg_latent):
-        s = 0 if i == 0 else spans[i - 1][0] + seg_latent[i - 1] - kv
-        spans.append((s, s + L))
-    return spans
-
-
-def _dominant_segment(spans: list[tuple[int, int]], vs: int, ve: int) -> int:
-    """Index of the segment whose global span overlaps [vs, ve) the most."""
-    best_i, best_ov = 0, -1
-    for i, (s, e) in enumerate(spans):
-        ov = max(0, min(e, ve) - max(s, vs))
-        if ov > best_ov:
-            best_ov, best_i = ov, i
-    return best_i
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Main chain orchestration.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -386,8 +367,15 @@ def run_chain(
     cleanup_memory()
 
     # ── STAGE 2: always-tiled refine (video+audio jointly). ───────────────────
+    # ONE context (the base/clip-0 prompt) for the ENTIRE stage-2 refine — this
+    # is what the validated S2 spike did (single prompt everywhere). Per-segment
+    # prompt variation lives in STAGE 1 (where the carry+freeze+crossfade absorbs
+    # it smoothly — all segment seams stay continuous). Switching the AUDIO
+    # context mid-tile-overlap in stage 2 injects a speech-context click at the
+    # frozen tile seam (observed: Chain B J=456 audio ratio 13.67); a uniform
+    # context removes that seam entirely.
+    stage2_vctx, stage2_actx = seg_ctx[0]
     stage2_sigmas = torch.Tensor(STAGE_2_DISTILLED_SIGMA_VALUES).to(device)
-    spans = _seg_global_spans(layout.seg_latent, kv)
     refined_v: list[torch.Tensor] = []
     refined_a: list[torch.Tensor] = []
     for i in range(n_tiles):
@@ -410,12 +398,10 @@ def run_chain(
             _tile_images(clips[0].images, vs, vlen),
             height=height, width=width, video_encoder=video_encoder, device=device,
         )
-        dom = _dominant_segment(spans, vs, vs + vlen)
-        vctx, actx = seg_ctx[dom]
         noiser2 = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(base_seed + 100 + i))
         vstate2, astate2 = _denoise_av_with_carry(
             output_shape=tile_shape, components=components, transformer=transformer,
-            video_context=vctx, audio_context=actx, video_conditionings=conds,
+            video_context=stage2_vctx, audio_context=stage2_actx, video_conditionings=conds,
             noiser=noiser2, stepper=stepper, sigmas=stage2_sigmas,
             noise_scale=float(stage2_sigmas[0]),
             initial_video_latent=init_v, initial_audio_latent=init_a,

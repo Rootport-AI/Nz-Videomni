@@ -67,6 +67,38 @@ def test_chain_3clip_completes(client):
     assert meta["kind"] == "chain"
     assert meta["chain"]["num_clips"] == 3
     assert meta["chain"]["clip_num_frames"] == [25, 17, 17]
+    assert meta["chain"]["architecture"] == "masked_av_latent_concat"
+
+
+def test_chain_junction_metadata_matches_chain_math(client):
+    # Junction indices in metadata must equal the shared chain_math layout, and
+    # every junction must be a valid 0-based frame index of the final mp4.
+    import chain_math
+    from services import video_io
+
+    clips = [{"num_frames": 25}, {"num_frames": 25}, {"num_frames": 25}]
+    r = _run_chain(client, clips)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    layout = chain_math.compute_chain_layout([25, 25, 25], 24.0, kv=BASE["overlap_frames"])
+    ch = meta["chain"]
+    assert ch["segment_seam_junctions"] == layout.segment_seam_junctions
+    assert ch["tile_seam_junctions"] == layout.tile_seam_junctions
+    assert ch["all_junctions"] == layout.all_junctions
+    assert ch["total_frames"] == layout.total_px
+
+    out = ctx.config.output_dir / job_id / "output.mp4"
+    nf = video_io.frame_count(out)
+    if nf is not None:
+        assert nf == layout.total_px
+        for j in layout.all_junctions:
+            assert 0 <= j < nf - 1
 
 
 def test_chain_prompt_propagation(client):
@@ -98,9 +130,11 @@ def test_chain_prompt_propagation(client):
     assert model.clip_prompt(1) == "the camera pushes in on a red boat"
 
 
-def test_chain_concat_duration_matches_timeline(client):
-    # K=2 latent overlap -> trim = 1 + (2-1)*8 = 9 leading pixel frames/nonfirst.
-    # timeline = 25 + (25-9) = 41 frames @ 24fps ~= 1.708s.
+def test_chain_duration_matches_timeline(client):
+    # Masked AV-latent chain: total timeline = chain_math geometry (sum of the
+    # per-clip video latent frames minus the shared K_v overlaps, back to pixels).
+    import chain_math
+
     clips = [{"num_frames": 25}, {"num_frames": 25}]
     r = _run_chain(client, clips)
     assert r.status_code == 202
@@ -108,11 +142,11 @@ def test_chain_concat_duration_matches_timeline(client):
     job = client.get(f"/api/v1/jobs/{job_id}").json()
     assert job["status"] == "completed", job
 
-    expected_frames = 25 + (25 - 9)
-    expected_dur = expected_frames / 24.0
+    layout = chain_math.compute_chain_layout([25, 25], 24.0, kv=BASE["overlap_frames"])
+    expected_dur = layout.total_px / 24.0
     assert abs(job["result"]["duration_seconds"] - expected_dur) < 0.01
 
-    # ffprobe the actual concatenated mp4 duration to within ~1 frame.
+    # ffprobe the actual mp4 duration to within ~2 frames.
     from services import video_io
 
     ctx = client.app_context

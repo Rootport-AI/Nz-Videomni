@@ -45,6 +45,7 @@ from typing import Callable
 
 from PIL import Image, ImageDraw
 
+import chain_math
 from api.models import GenerateRequest
 from config import AppConfig
 from services import gpu_info, video_io
@@ -66,12 +67,15 @@ class GenerationOutcome:
     output_path: Path
     seed_used: int
     peak_vram_mb: int | None
-    generation_mode: str  # "t2v" | "i2v"
+    generation_mode: str  # "t2v" | "i2v" | "chain"
     backend: str = MOCK_BACKEND
-    # Phase 3 slice-2 clip-concat: the persisted Stage-1 carry tail for this clip
-    # (set only when a carry_latent_out_path was requested). The chain
-    # orchestrator threads this into the next clip's prev_clip_latent_path.
+    # Phase 3 slice-2 clip-concat (OLD per-clip path): the persisted Stage-1
+    # carry tail for this clip. Retained for back-compat; the WP4 chain path does
+    # not use it.
     carry_latent_path: Path | None = None
+    # Phase 3 WP4 masked AV-latent chain: junction pixel-frame indices + full
+    # geometry (from chain_math / the engine). None for single-clip generate.
+    chain_metadata: dict | None = None
 
 
 class LTXRunner:
@@ -141,6 +145,24 @@ class LTXRunner:
             overlap_frames=overlap_frames,
             overlap_strength=overlap_strength,
             carry_latent_out_path=carry_latent_out_path,
+        )
+
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+    ) -> GenerationOutcome:
+        """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4)."""
+        if self._backend is None or not self._backend.loaded:
+            self.load()
+        assert self._backend is not None
+        return self._backend.generate_chain(
+            chain_request,
+            output_dir=output_dir,
+            progress_callback=progress_callback,
+            clip0_conditioning_paths=clip0_conditioning_paths,
         )
 
     # ----------------------------------------------------- backend selection
@@ -343,6 +365,97 @@ class _MockBackend:
             backend=MOCK_BACKEND,
             carry_latent_path=carry_out,
         )
+
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+    ) -> GenerationOutcome:
+        """Simulate a masked AV-latent chain: ONE synthetic mp4 of the full
+        timeline length + junction metadata (from :mod:`chain_math`). GPU-free;
+        exercises the app-side orchestrator/metadata without model weights.
+        """
+        if not self._loaded:
+            self.load()
+
+        chain = chain_request
+        seed = chain.seed if chain.seed >= 0 else random.randint(0, 2**31 - 1)
+        layout = chain_math.compute_chain_layout(
+            [c.num_frames for c in chain.clips], chain.frame_rate,
+            kv=chain.overlap_frames,
+        )
+        gpu_info.reset_peak_vram()
+        if progress_callback:
+            progress_callback(None, None, 0.05)
+
+        start_image: Image.Image | None = None
+        clip0_conditioning_paths = clip0_conditioning_paths or []
+        if chain.clips[0].conditioning_images and clip0_conditioning_paths:
+            start_image = Image.open(clip0_conditioning_paths[0]).convert("RGB")
+            start_image = start_image.resize((chain.width, chain.height))
+
+        frames = self._render_chain_frames(
+            width=chain.width, height=chain.height, n=layout.total_px,
+            seed=seed, start_image=start_image, progress_callback=progress_callback,
+        )
+        if progress_callback:
+            progress_callback(None, None, 0.90)
+
+        crop = None
+        if chain.crop_output is not None:
+            crop = (chain.crop_output.width, chain.crop_output.height)
+
+        output_path = output_dir / "output.mp4"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        video_io.encode_frames_to_mp4(
+            frames, output_path, frame_rate=chain.frame_rate, crop=crop,
+            keep_raw=self.config.output.keep_raw_frames, raw_dir=output_dir / "raw",
+        )
+        peak = gpu_info.peak_vram_mb()
+        if progress_callback:
+            progress_callback(None, None, 1.0)
+        safe_memory_cleanup()
+
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=seed,
+            peak_vram_mb=peak,
+            generation_mode="chain",
+            backend=MOCK_BACKEND,
+            chain_metadata=layout.to_dict(),
+        )
+
+    def _render_chain_frames(
+        self, *, width: int, height: int, n: int, seed: int,
+        start_image: Image.Image | None, progress_callback: ProgressCallback | None,
+    ) -> list[Image.Image]:
+        """Cheap synthetic full-timeline clip (shifting gradient + moving ball)."""
+        rng = random.Random(seed)
+        base_hue = rng.randint(0, 359)
+        ball_color = (rng.randint(120, 255), rng.randint(120, 255), rng.randint(120, 255))
+        frames: list[Image.Image] = []
+        for i in range(n):
+            t = i / max(1, n - 1)
+            if start_image is not None:
+                frame = start_image.copy()
+                zoom = 1.0 + 0.06 * t
+                zw, zh = int(width * zoom), int(height * zoom)
+                frame = frame.resize((zw, zh))
+                left = int((zw - width) * (0.5 + 0.1 * math.sin(t * math.pi)))
+                top = int((zh - height) * 0.5)
+                frame = frame.crop((left, top, left + width, top + height))
+            else:
+                hue = (base_hue + int(t * 90)) % 360
+                frame = _hue_gradient(width, height, hue)
+            draw = ImageDraw.Draw(frame)
+            cx = int(width * (0.15 + 0.7 * ((i * 5 % max(1, n)) / max(1, n))))
+            cy = int(height * (0.5 + 0.3 * math.sin(t * 6 * math.pi)))
+            r = max(6, min(width, height) // 12)
+            draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ball_color)
+            frames.append(frame)
+        return frames
 
     # --------------------------------------------------------- mock renderer
 
@@ -794,6 +907,118 @@ class _RealBackend:
             backend=REAL_BACKEND,
             carry_latent_path=Path(carry_path) if carry_path else None,
         )
+
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+    ) -> GenerationOutcome:
+        """Masked AV-latent clip chain via the worker's ``generate_chain`` op.
+
+        ONE worker invocation runs the whole chain (latents resident across
+        segments) and writes ONE mp4. Progress events (per stage-1 segment, per
+        stage-2 tile, decode) are streamed to ``progress_callback``; the terminal
+        ``done`` carries peak VRAM + junction metadata.
+        """
+        if not self.loaded:
+            self.load()
+
+        chain = chain_request
+        clip0_conditioning_paths = clip0_conditioning_paths or []
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.mp4"
+
+        seed = chain.seed if chain.seed >= 0 else random.randint(0, 2**31 - 1)
+
+        # Only clip 0 may carry conditioning images (validator enforces this).
+        clip0_images: list[dict] = []
+        if chain.clips[0].conditioning_images and clip0_conditioning_paths:
+            clip0_images = [
+                {"path": str(path), "frame_idx": ci.frame_idx, "strength": ci.strength}
+                for ci, path in zip(chain.clips[0].conditioning_images, clip0_conditioning_paths)
+            ]
+        clips_payload = [
+            {
+                "prompt": chain.clip_prompt(i),
+                "num_frames": chain.clips[i].num_frames,
+                "images": clip0_images if i == 0 else [],
+            }
+            for i in range(len(chain.clips))
+        ]
+
+        target = (output_dir / "_full.mp4") if chain.crop_output is not None else output_path
+
+        if progress_callback:
+            progress_callback(None, None, 0.03)
+
+        payload = {
+            "op": "generate_chain",
+            "width": chain.width,
+            "height": chain.height,
+            "frame_rate": chain.frame_rate,
+            "num_steps": chain.num_inference_steps,
+            "seed": seed,
+            "overlap_frames": int(chain.overlap_frames),
+            "overlap_strength": float(chain.overlap_strength),
+            "output_path": str(target),
+            "clips": clips_payload,
+        }
+
+        with self._lock:
+            try:
+                self._send(payload)
+            except Exception as exc:
+                raise RuntimeError("LTX worker died: " + self._stderr_tail()) from exc
+            event = self._read_chain_events(progress_callback)
+
+        kind = event.get("event")
+        if kind == "error":
+            raise RuntimeError(event.get("detail", "LTX worker chain generation failed"))
+        if kind != "done":
+            raise RuntimeError(f"LTX worker returned unexpected event: {event!r}")
+
+        if chain.crop_output is not None:
+            video_io.crop_mp4(target, output_path, chain.crop_output.width, chain.crop_output.height)
+            target.unlink(missing_ok=True)
+
+        if not output_path.exists() or output_path.stat().st_size <= 0:
+            raise RuntimeError(f"LTX worker produced no/empty chain output: {output_path}")
+
+        if progress_callback:
+            progress_callback(None, None, 1.0)
+
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=event.get("seed_used", seed),
+            peak_vram_mb=event.get("peak_vram_mb"),
+            generation_mode="chain",
+            backend=REAL_BACKEND,
+            chain_metadata=event.get("chain"),
+        )
+
+    def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:
+        """Read framed events until a terminal ``done``/``error``; forward
+        ``progress`` events to ``progress_callback`` as a coarse 0..1 fraction."""
+        while True:
+            event = self._read_event()
+            kind = event.get("event")
+            if kind == "progress":
+                if progress_callback:
+                    stage = event.get("stage")
+                    idx = int(event.get("index", 0))
+                    total = max(1, int(event.get("total", 1)))
+                    step = (idx + 1) / total
+                    if stage == "stage1":
+                        frac = 0.05 + 0.45 * step
+                    elif stage == "tile":
+                        frac = 0.50 + 0.40 * step
+                    else:  # decode
+                        frac = 0.95
+                    progress_callback(None, None, round(min(1.0, frac), 3))
+                continue
+            return event
 
 
 def _hue_gradient(w: int, h: int, hue: int) -> Image.Image:

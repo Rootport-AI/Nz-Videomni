@@ -111,13 +111,22 @@ class GenerateRequest(BaseModel):
         return "i2v" if self.conditioning_images else "t2v"
 
 
+# Total-timeline pixel-frame cap. The masked AV-latent chain is decoded ONCE
+# with an always-tiled stage-2, so it is NOT bound by the single-clip 481f cap
+# (the tiling keeps VRAM flat at any length). The cap here is a sanity ceiling
+# = 8 clips × 481f (the max clip count × the frozen per-clip cap), documented so
+# a UI cannot request an unbounded timeline.
+MAX_CHAIN_TOTAL_PIXEL_FRAMES = 8 * 481  # 3848
+
+
 class ChainClip(BaseModel):
     """One clip in a generate-chain request.
 
     ``prompt`` is optional: when absent the chain's base ``prompt`` is used
     (prompt propagation). ``num_frames`` must be 8n+1. Only clip 0 may carry
-    conditioning images (minimal I2V start / keyframes) — clips 1..N are seeded
-    from the previous clip's carry latent, not from images.
+    conditioning images (minimal I2V start / keyframes) — clips 1..N are the
+    later segments of one continuous masked AV-latent timeline (they inherit
+    continuity from the previous segment's frozen overlap latents, not images).
     """
 
     prompt: str | None = Field(None, max_length=2000)
@@ -126,13 +135,20 @@ class ChainClip(BaseModel):
 
 
 class GenerateChainRequest(BaseModel):
-    """A sequential chain of clips concatenated into one continuous timeline.
+    """A chain of clips assembled into ONE continuous masked AV-latent timeline.
 
     Additive to the frozen single-``/generate`` contract. Shares
     width/height/seed/frame_rate/pipeline across clips; each clip's effective
     prompt is its override if present else the global ``prompt``. Reuses the
     same FROZEN validators (÷64 resolution, 8n+1 frames, distilled 8-step /
     CFG=1.0) as :class:`GenerateRequest`.
+
+    ARCHITECTURE (Phase 3 WP4): every clip is a stage-1 SEGMENT of one timeline;
+    the segments are stage-1 generated with a video+audio latent tail carry over
+    a ``overlap_frames`` (= K_v LATENT-frame) overlap, crossfaded into one latent,
+    then refined in temporal tiles and decoded ONCE. There is no per-clip mp4 and
+    no pixel-domain concat/trim — boundaries live inside the single decode, so
+    the seams are continuous.
     """
 
     prompt: str = Field(..., min_length=1, max_length=2000)
@@ -148,13 +164,15 @@ class GenerateChainRequest(BaseModel):
     seed: int = -1
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
 
-    # Continuity (Phase 3 slice-2): overlap = K latent frames of the previous
-    # clip's tail re-used at the head of each non-first clip.
-    overlap_frames: int = Field(2, ge=1, le=8)
+    # Continuity (Phase 3 WP4): overlap = K_v LATENT frames shared between
+    # consecutive stage-1 segments (the previous segment's tail is copied into
+    # the next segment's head and frozen at ``overlap_strength``). K_v=3 is the
+    # spike-validated default; must be < every clip's stage-1 latent-frame count.
+    overlap_frames: int = Field(3, ge=1, le=8)
     overlap_strength: float = Field(0.5, ge=0.0, le=1.0)
 
     # 2..8 clips: at least 2 (a single clip is just /generate); capped so the
-    # sequential loop stays within the frozen per-generate limits.
+    # total timeline stays within MAX_CHAIN_TOTAL_PIXEL_FRAMES.
     clips: list[ChainClip] = Field(..., min_length=2, max_length=8)
 
     @model_validator(mode="after")
@@ -181,20 +199,20 @@ class GenerateChainRequest(BaseModel):
         for i, clip in enumerate(self.clips):
             if (clip.num_frames - 1) % 8 != 0:
                 raise ValueError(f"clips[{i}].num_frames must be 8n+1")
-            # overlap_frames (latent) must fit inside every non-first clip's
-            # Stage-1 latent-frame count = (num_frames - 1)//8 + 1.
-            if i > 0:
-                stage1_frames = (clip.num_frames - 1) // 8 + 1
-                if self.overlap_frames >= stage1_frames:
-                    raise ValueError(
-                        f"overlap_frames ({self.overlap_frames}) must be < "
-                        f"clips[{i}] stage-1 latent frames ({stage1_frames})"
-                    )
+            # overlap_frames (K_v LATENT) must fit inside EVERY clip's stage-1
+            # latent-frame count = (num_frames - 1)//8 + 1 (each segment either
+            # provides or receives the K_v-frame overlap).
+            stage1_frames = (clip.num_frames - 1) // 8 + 1
+            if self.overlap_frames >= stage1_frames:
+                raise ValueError(
+                    f"overlap_frames ({self.overlap_frames}) must be < "
+                    f"clips[{i}] stage-1 latent frames ({stage1_frames})"
+                )
             # Only clip 0 may carry conditioning images.
             if i > 0 and clip.conditioning_images:
                 raise ValueError(
                     "only clip 0 may carry conditioning_images (later clips are "
-                    "seeded from the previous clip)"
+                    "later segments of one continuous timeline)"
                 )
             if len(clip.conditioning_images) > 5:
                 raise ValueError(
@@ -205,6 +223,24 @@ class GenerateChainRequest(BaseModel):
                     continue
                 snapped = (image.frame_idx - 1) // 8 * 8 + 1
                 image.frame_idx = max(1, min(snapped, clip.num_frames - 8))
+
+        # Total-timeline geometry: sum of pixel frames minus the shared overlaps.
+        # Delegated to the shared pure-Python chain_math so the validator, the
+        # engine and the metadata agree; it also raises on a degenerate audio
+        # overlap (clips too short for a continuous crossfade).
+        import chain_math
+        try:
+            layout = chain_math.compute_chain_layout(
+                [c.num_frames for c in self.clips], self.frame_rate,
+                kv=self.overlap_frames,
+            )
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        if layout.total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
+            raise ValueError(
+                f"chain total timeline {layout.total_px} pixel frames exceeds the "
+                f"cap {MAX_CHAIN_TOTAL_PIXEL_FRAMES} (reduce clip count or lengths)"
+            )
         return self
 
     def clip_prompt(self, index: int) -> str:

@@ -169,27 +169,20 @@ class PipelineManager:
 
     # -------------------------------------------------------- run chain job
 
-    @staticmethod
-    def _overlap_leading_pixels(overlap_frames: int) -> int:
-        """Leading PIXEL frames a non-first clip shares with its predecessor.
-
-        The overlap is ``K = overlap_frames`` LATENT frames at the clip head.
-        Under the causal VAE temporal mapping (latent frame 0 -> 1 pixel, each
-        subsequent latent frame -> 8 pixels; time factor 8) those K latent frames
-        decode to ``1 + (K-1)*8`` pixel frames, which is exactly what must be
-        trimmed from each non-first clip so the timeline is continuous.
-        """
-        k = max(1, int(overlap_frames))
-        return 1 + (k - 1) * 8
-
     def run_chain_job(self, job: JobRecord) -> None:
-        """Run a multi-clip chain to a single concatenated output.mp4.
+        """Run a multi-clip chain to ONE continuous output.mp4 (Phase 3 WP4).
 
-        Clip 0 is a normal T2V/I2V generate; clips 1..N-1 are seeded from the
-        previous clip's Stage-1 carry latent (+ overlap params) and persist their
-        own carry for the next clip. Per-clip mp4s are concatenated with the
-        leading-overlap trim on clips 1..N-1. The existing single-clip
-        :meth:`run_job` is untouched.
+        Masked AV-latent concatenation: the whole chain runs INSIDE ONE worker
+        invocation (latents resident across segments) — per-segment stage-1 with
+        AV carry+freeze, crossfade assembly, always-tiled stage-2, ONE VAE decode.
+        Replaces the old per-clip generate + carry.pt + ffmpeg-concat + trim path
+        (which cut hard at every boundary). Junction pixel-frame indices (segment
+        seams AND stage-2 tile seams) are recorded in metadata for the review
+        harness. The single-clip :meth:`run_job` is untouched.
+
+        Cancellation: the chain is now one atomic worker op, so cancel is honored
+        at the job boundary (before dispatch) — matching that a single generate is
+        also not interruptible mid-run.
         """
         chain = job.chain_request
         assert chain is not None, "run_chain_job requires job.chain_request"
@@ -209,87 +202,47 @@ class PipelineManager:
         )
 
         try:
+            if job.cancel_requested:
+                job.status = JobStatus.cancelled
+                job.progress = 1.0
+                job.completed_at = now_iso()
+                self.state = self.STATE_READY
+                logger.info("Chain job %s cancelled before dispatch", job.job_id)
+                return
+
             if not self.runner.loaded:
                 if not self.config.model.auto_load_on_generate:
                     raise pipeline_load_failed(detail="auto_load_on_generate is disabled")
                 self.load()
             self.state = self.STATE_RUNNING
 
-            clip_paths: list[Path] = []
-            per_clip_seconds: list[float] = []
-            prev_carry: Path | None = None
-            seed_used = chain.seed
-            backend = None
-            peak_vram_mb = None
+            # Only clip 0 may carry conditioning images (validator enforces this).
+            clip0_cond_paths = [
+                self.upload_store.path_for(ci.image_id)
+                for ci in chain.clips[0].conditioning_images
+            ]
 
-            for i in range(n):
-                if job.cancel_requested:
-                    break
-                clip_req = chain.to_clip_request(i)
-                clip_dir = output_dir / f"clip_{i:02d}"
-                clip_dir.mkdir(parents=True, exist_ok=True)
+            def on_progress(step, total, progress):
+                job.current_step = step
+                job.total_steps = total
+                job.progress = round(max(0.0, min(1.0, progress)), 3)
 
-                cond_paths = [
-                    self.upload_store.path_for(ci.image_id)
-                    for ci in clip_req.conditioning_images
-                ]
-
-                # Non-last clips persist a carry tail for the next clip; the last
-                # clip needs none. Clips after the first are seeded from prev.
-                carry_out = (clip_dir / "carry.pt") if i < n - 1 else None
-
-                def on_progress(step, total, progress, _i=i):
-                    job.current_step = step
-                    job.total_steps = total
-                    job.progress = round((_i + max(0.0, min(1.0, progress))) / n, 3)
-
-                clip_started = time.time()
-                outcome = self.runner.generate(
-                    clip_req,
-                    output_dir=clip_dir,
-                    progress_callback=on_progress,
-                    conditioning_image_paths=cond_paths,
-                    prev_clip_latent_path=prev_carry,
-                    overlap_frames=chain.overlap_frames,
-                    overlap_strength=chain.overlap_strength,
-                    carry_latent_out_path=carry_out,
-                )
-                per_clip_seconds.append(round(time.time() - clip_started, 2))
-                clip_paths.append(outcome.output_path)
-                prev_carry = outcome.carry_latent_path
-                seed_used = outcome.seed_used
-                backend = outcome.backend
-                if outcome.peak_vram_mb is not None:
-                    peak_vram_mb = max(peak_vram_mb or 0, outcome.peak_vram_mb)
-
-                logger.info(
-                    "Chain job %s clip %d/%d done in %.1fs carry=%s",
-                    job.job_id, i + 1, n, per_clip_seconds[-1], prev_carry,
-                )
-
-            # Concatenate with the leading-overlap trim on clips 1..N-1.
-            output_path = output_dir / "output.mp4"
-            trim_px = self._overlap_leading_pixels(chain.overlap_frames)
-            crop = None
-            if chain.crop_output is not None:
-                crop = (chain.crop_output.width, chain.crop_output.height)
-            video_io.concat_mp4s(
-                clip_paths,
-                output_path,
-                frame_rate=chain.frame_rate,
-                trim_leading_pixels_per_nonfirst_clip=trim_px,
-                crop=crop,
+            outcome = self.runner.generate_chain(
+                chain,
+                output_dir=output_dir,
+                progress_callback=on_progress,
+                clip0_conditioning_paths=clip0_cond_paths,
             )
 
             elapsed = time.time() - started
-            total_frames = chain.clips[0].num_frames + sum(
-                c.num_frames - trim_px for c in chain.clips[1:]
-            )
-            duration = round(total_frames / chain.frame_rate, 3)
-            if crop is not None:
-                resolution = f"{crop[0]}x{crop[1]}"
+            meta = outcome.chain_metadata or {}
+            total_frames = int(meta.get("total_px", 0))
+            duration = round(total_frames / chain.frame_rate, 3) if total_frames else 0.0
+            if chain.crop_output is not None:
+                resolution = f"{chain.crop_output.width}x{chain.crop_output.height}"
             else:
                 resolution = f"{chain.width}x{chain.height}"
+            output_path = outcome.output_path
             file_size = output_path.stat().st_size if output_path.exists() else 0
 
             metadata_path = output_dir / "metadata.json"
@@ -297,9 +250,10 @@ class PipelineManager:
                 self._write_chain_metadata(
                     job=job, chain=chain, metadata_path=metadata_path,
                     resolution=resolution, duration=duration, file_size=file_size,
-                    elapsed=elapsed, seed_used=seed_used, backend=backend or "mock",
-                    peak_vram_mb=peak_vram_mb, per_clip_seconds=per_clip_seconds,
-                    total_frames=total_frames, trim_px=trim_px,
+                    elapsed=elapsed, seed_used=outcome.seed_used,
+                    backend=outcome.backend or "mock",
+                    peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
+                    chain_meta=meta,
                 )
 
             result = JobResult(
@@ -308,16 +262,13 @@ class PipelineManager:
                 resolution=resolution,
                 file_size_bytes=file_size,
                 generation_time_seconds=round(elapsed, 2),
-                seed_used=seed_used,
+                seed_used=outcome.seed_used,
                 output_path=f"outputs/{job.job_id}/output.mp4",
                 metadata_path=f"outputs/{job.job_id}/metadata.json",
             )
 
-            if job.cancel_requested:
-                job.status = JobStatus.cancelled
-            else:
-                job.status = JobStatus.completed
-                job.result = result
+            job.status = JobStatus.completed
+            job.result = result
             job.progress = 1.0
             job.completed_at = now_iso()
             self.state = self.STATE_READY
@@ -346,9 +297,9 @@ class PipelineManager:
 
     def _write_chain_metadata(
         self, *, job, chain, metadata_path, resolution, duration, file_size,
-        elapsed, seed_used, backend, peak_vram_mb, per_clip_seconds,
-        total_frames, trim_px,
+        elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
     ) -> None:
+        cm = chain_meta or {}
         metadata = {
             "job_id": job.job_id,
             "created_at": job.created_at,
@@ -363,12 +314,19 @@ class PipelineManager:
             "backend": backend,
             "chain": {
                 "num_clips": len(chain.clips),
+                "architecture": "masked_av_latent_concat",
                 "overlap_frames": chain.overlap_frames,
                 "overlap_strength": chain.overlap_strength,
-                "trim_leading_pixels_per_nonfirst_clip": trim_px,
-                "per_clip_seconds": per_clip_seconds,
                 "total_frames": total_frames,
                 "clip_num_frames": [c.num_frames for c in chain.clips],
+                # Junction pixel-frame indices (0-based last-frame-of-segment; the
+                # boundary is J / J+1) for the review harness — segment seams AND
+                # stage-2 tile seams, plus the ±1 spread that was actually probed.
+                "segment_seam_junctions": cm.get("segment_seam_junctions", []),
+                "tile_seam_junctions": cm.get("tile_seam_junctions", []),
+                "all_junctions": cm.get("all_junctions", []),
+                "video_tiles": cm.get("video_tiles", []),
+                "n_tiles": cm.get("n_tiles"),
             },
             "output": {
                 "path": f"outputs/{job.job_id}/output.mp4",

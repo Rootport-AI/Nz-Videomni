@@ -359,3 +359,96 @@ def test_join_v2v_clamps_fade_longer_than_clip(tmp_path):
     assert out.exists()
     assert video_io.frame_count(out) == 2 * n
     assert info["fade_ms_applied"] == 500  # clamped to the 0.5s clip duration
+
+
+# ------------------------------------------- join_v2v HANDLE true-crossfade mode
+
+
+def _make_sine_wav(path, dur_sec: float, freq: float = 440.0, sr: int = 48000, volume_db: float = -10.0) -> None:
+    """Write a mono sine wav via ffmpeg lavfi (deterministic phase-0 start) -- the
+    stand-in engine audio-handle sidecar for the handle-mode join tests."""
+    exe = video_io.ffmpeg_path()
+    cmd = [
+        exe, "-y", "-f", "lavfi", "-i", f"sine=frequency={freq}:sample_rate={sr}",
+        "-t", f"{dur_sec:.6f}", "-af", f"volume={volume_db}dB",
+        "-ac", "1", "-c:a", "pcm_s16le", str(path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg sine-wav build failed: {proc.stderr[-2000:]}")
+
+
+def test_join_v2v_handle_mode_duration_and_frames(tmp_path):
+    fps = 24.0
+    n_src, n_cont = 48, 36  # 2.0s + 1.5s @24fps
+    src = tmp_path / "src.mp4"
+    cont = tmp_path / "cont.mp4"
+    # context = entire source (mirrors E2E-A2), so handle_context_seconds == src_dur
+    _make_v2v_clip(src, num_frames=n_src, fps=fps, freq=440.0, volume_db=-10.0)
+    _make_v2v_clip(cont, num_frames=n_cont, fps=fps, freq=440.0, volume_db=-10.0)
+    # handle = full untrimmed timeline audio: context (2.0s) + continuation (1.5s)
+    handle = tmp_path / "output_audio_handle.wav"
+    _make_sine_wav(handle, dur_sec=(n_src + n_cont) / fps, freq=440.0, volume_db=-10.0)
+
+    out = tmp_path / "joined_handle.mp4"
+    info = video_io.join_v2v(src, cont, out, handle_audio=handle, handle_crossfade_ms=300)
+
+    assert out.exists()
+    assert video_io.frame_count(out) == n_src + n_cont
+    assert info["join_mode"] == "handle_crossfade"
+    assert info["handle_crossfade_ms_applied"] == 300
+    # derived handle_context_seconds = handle_dur - continuation_dur ~= source_dur
+    assert abs(info["handle_context_seconds"] - n_src / fps) < 0.03
+    assert info["loudness_matched"] is True
+
+    out_dur = video_io.probe_duration(out)
+    assert abs(out_dur - (n_src + n_cont) / fps) < 0.15
+
+
+def test_join_v2v_handle_mode_no_valley_vs_fade_pair(tmp_path):
+    """The whole point of handle mode: the junction shows NO energy valley,
+    unlike the fade-pair path which cuts a near-silent notch at the seam."""
+    fps = 24.0
+    n = 48  # 2.0s each
+    src = tmp_path / "src.mp4"
+    cont = tmp_path / "cont.mp4"
+    _make_v2v_clip(src, num_frames=n, fps=fps, freq=440.0, volume_db=-10.0)
+    _make_v2v_clip(cont, num_frames=n, fps=fps, freq=440.0, volume_db=-10.0)
+    # A phase-continuous full-timeline sine standing in for the vocoder handle.
+    # Different tone from the source so the equal-power crossfade blends two
+    # *uncorrelated* streams (as a real vocoder render vs a real recording are) —
+    # equal-power then holds RMS ~flat instead of the pathological phase
+    # cancellation two identical sines would show. Same level (-10dB) both sides.
+    handle = tmp_path / "output_audio_handle.wav"
+    _make_sine_wav(handle, dur_sec=(2 * n) / fps, freq=660.0, volume_db=-10.0)
+
+    src_dur = video_io.probe_duration(src)
+
+    handle_join = tmp_path / "handle.mp4"
+    video_io.join_v2v(src, cont, handle_join, handle_audio=handle,
+                      handle_crossfade_ms=300, loudness_match=False)
+    fade_join = tmp_path / "fade.mp4"
+    video_io.join_v2v(src, cont, fade_join, audio_fade_ms=400, loudness_match=False)
+
+    handle_wav = tmp_path / "handle.wav"
+    fade_wav = tmp_path / "fade.wav"
+    _extract_wav(handle_join, handle_wav)
+    _extract_wav(fade_join, fade_wav)
+    handle_samples, sr_h = _read_wav(handle_wav)
+    fade_samples, sr_f = _read_wav(fade_wav)
+
+    # RMS envelope straddling the junction, and a steady reference away from it.
+    handle_junction = _rms_envelope(handle_samples, sr_h, center_t=src_dur, half_window_sec=0.30)
+    fade_junction = _rms_envelope(fade_samples, sr_f, center_t=src_dur, half_window_sec=0.30)
+    handle_steady = _rms_envelope(handle_samples, sr_h, center_t=src_dur / 2, half_window_sec=0.25)
+
+    assert handle_junction.size and fade_junction.size and handle_steady.size
+    steady = float(np.median(handle_steady))
+    handle_dip = float(np.min(handle_junction))
+    fade_dip = float(np.min(fade_junction))
+
+    # Fade-pair notches deeply below steady; handle mode does NOT valley.
+    assert fade_dip < steady * 0.5, (fade_dip, steady)
+    assert handle_dip > steady * 0.7, (handle_dip, steady)
+    # And the handle junction is unambiguously fuller than the fade-pair notch.
+    assert handle_dip > fade_dip * 1.8, (handle_dip, fade_dip)

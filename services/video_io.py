@@ -516,6 +516,8 @@ def join_v2v(
     *,
     audio_fade_ms: int = 400,
     loudness_match: bool = True,
+    handle_audio: Path | None = None,
+    handle_crossfade_ms: int = 300,
 ) -> dict:
     """Join a real ``source`` clip to a generated ``continuation`` clip (V2V).
 
@@ -555,6 +557,35 @@ def join_v2v(
     metadata/logging: ``{source_lufs, continuation_lufs_before,
     fade_ms_applied, loudness_matched}`` (``source_lufs`` /
     ``continuation_lufs_before`` are ``None`` when loudness was not measured).
+
+    HANDLE TRUE-CROSSFADE mode (opt-in, ``handle_audio`` given). The engine can
+    now emit a sidecar wav (``<stem>_audio_handle.wav``) holding the FULL
+    untrimmed timeline audio — the pre-junction *context* region (which BOTH the
+    real source recording and this vocoder render depict) plus the continuation
+    region, in one sample-continuous stream. Given that handle, this does a real
+    overlapped equal-power crossfade instead of the no-overlap fade pair (which
+    leaves an energy valley at the seam):
+
+    - Video: the SAME hard concat as the default path (unchanged).
+    - Audio: ``acrossfade=d=<handle_crossfade_ms>:c1=qsin:c2=qsin`` between the
+      real source audio (stream A) and the handle stream (stream B), where B is
+      the sidecar trimmed to start at ``handle_context_seconds − crossfade`` so
+      the crossfade window sits ENTIRELY BEFORE the junction — both A and B
+      depict the same music there. From the junction onward the audio is the
+      handle's continuation region: sample-continuous, NO fade at the junction.
+      ``handle_context_seconds`` (the junction offset inside the handle) is
+      derived as ``handle_duration − continuation_duration`` (the handle = the
+      context region + the continuation region, so this is exact given the
+      sample geometry). B is loudness-matched to the source (same two-pass
+      ``loudnorm``) before the fade.
+    - Duration: ``acrossfade`` shrinks the summed stream by ``d``; because A ends
+      at the junction and B's first ``d`` seconds are the pre-junction overlap,
+      the output audio length works out to ``source_audio + continuation_audio``
+      — matching the hard-concatenated video. Asserted within a small tolerance.
+
+    Handle mode requires both inputs to carry audio (``with_audio``); otherwise it
+    falls back to the default video-only behavior. When ``handle_audio`` is None
+    the behavior is byte-identical to before (the default fade-pair join).
     """
     exe = ffmpeg_path()
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -574,12 +605,16 @@ def join_v2v(
         )
 
     with_audio = has_audio_stream(source) and has_audio_stream(continuation)
+    use_handle = handle_audio is not None and with_audio
 
     info: dict[str, Any] = {
         "source_lufs": None,
         "continuation_lufs_before": None,
         "fade_ms_applied": 0,
         "loudness_matched": False,
+        "join_mode": "handle_crossfade" if use_handle else ("fade_pair" if with_audio else "video_only"),
+        "handle_crossfade_ms_applied": 0,
+        "handle_context_seconds": None,
     }
 
     parts: list[str] = [
@@ -588,7 +623,56 @@ def join_v2v(
     ]
 
     aout: str | None = None
-    if with_audio:
+    if use_handle:
+        # ── HANDLE true-crossfade (opt-in) ───────────────────────────────────
+        src_dur = probe_duration(source) or 0.0
+        cont_dur = probe_duration(continuation) or 0.0
+        handle_dur = probe_duration(handle_audio) or 0.0
+        # junction offset inside the handle = context region duration.
+        hcs = handle_dur - cont_dur
+        if hcs <= 0.0:
+            raise FFmpegError(
+                f"join_v2v handle: derived handle_context_seconds={hcs:.4f} <= 0 "
+                f"(handle_dur={handle_dur:.4f}, continuation_dur={cont_dur:.4f})"
+            )
+        info["handle_context_seconds"] = round(hcs, 6)
+
+        # crossfade must fit entirely in the pre-junction context region (<= hcs)
+        # and have enough source tail to fade out (<= src_dur).
+        requested_cf = max(0, handle_crossfade_ms) / 1000.0
+        cf = max(0.0, min(requested_cf, hcs, src_dur))
+        info["handle_crossfade_ms_applied"] = round(cf * 1000.0)
+        trim_start = max(0.0, hcs - cf)
+
+        # loudness-match the handle (stream B) to the source before the fade.
+        handle_label = "[2:a]"
+        loud_prefix = ""
+        if loudness_match:
+            src_stats = _loudnorm_measure(exe, source)
+            h_stats = _loudnorm_measure(exe, handle_audio)
+            source_lufs = float(src_stats["input_i"])
+            info["source_lufs"] = source_lufs
+            info["continuation_lufs_before"] = float(h_stats["input_i"])
+            info["loudness_matched"] = True
+            loud_prefix = (
+                f"loudnorm=I={source_lufs}:TP=-2:LRA=7:"
+                f"measured_I={h_stats['input_i']}:measured_TP={h_stats['input_tp']}:"
+                f"measured_LRA={h_stats['input_lra']}:measured_thresh={h_stats['input_thresh']}:"
+                f"offset={h_stats['target_offset']}:linear=true,"
+            )
+
+        afmt = "aformat=sample_rates=48000:channel_layouts=stereo"
+        # A = real source audio (its tail is the pre-junction crossfade window).
+        parts.append(f"[0:a]{afmt},asetpts=PTS-STARTPTS[a0]")
+        # B = handle trimmed to start `cf` before the junction, loudness-matched.
+        parts.append(
+            f"{handle_label}{loud_prefix}atrim=start={trim_start:.6f},"
+            f"{afmt},asetpts=PTS-STARTPTS[a2]"
+        )
+        parts.append(f"[a0][a2]acrossfade=d={cf:.6f}:c1=qsin:c2=qsin[ca]")
+        parts.append("[v0][v1]concat=n=2:v=1:a=0[cv]")
+        vout, aout = "[cv]", "[ca]"
+    elif with_audio:
         src_dur = probe_duration(source) or 0.0
         cont_dur = probe_duration(continuation) or 0.0
         requested_fade_sec = max(0, audio_fade_ms) / 1000.0
@@ -643,6 +727,10 @@ def join_v2v(
         str(source),
         "-i",
         str(continuation),
+    ]
+    if use_handle:
+        cmd += ["-i", str(handle_audio)]
+    cmd += [
         "-filter_complex",
         filter_complex,
         "-map",
@@ -662,6 +750,25 @@ def join_v2v(
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg join_v2v failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+
+    if use_handle:
+        # A/V duration sanity: acrossfade output = source_audio + continuation_audio
+        # which should match the hard-concatenated video (source_video + cont_video).
+        out_v_frames = frame_count(out)
+        expected_frames = frame_count(source) + frame_count(continuation)
+        if out_v_frames != expected_frames:
+            raise FFmpegError(
+                f"join_v2v handle: joined video frame count {out_v_frames} != "
+                f"source+continuation {expected_frames}"
+            )
+        out_dur = probe_duration(out) or 0.0
+        expected_dur = (probe_duration(source) or 0.0) + (probe_duration(continuation) or 0.0)
+        if abs(out_dur - expected_dur) > 0.15:
+            raise FFmpegError(
+                f"join_v2v handle: output duration {out_dur:.3f}s deviates from "
+                f"expected {expected_dur:.3f}s by > 0.15s (A/V desync risk)"
+            )
+        info["output_duration_seconds"] = round(out_dur, 4)
 
     return info
 

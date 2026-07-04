@@ -199,6 +199,41 @@ def test_v2v_mock_e2e_same_fps_not_resampled(client, tmp_path):
     assert meta["v2v"]["resampled"] is False
 
 
+def test_v2v_mock_e2e_audio_handle_sidecar(client, tmp_path):
+    """The mock mirrors the engine's opt-in audio-handle sidecar: metadata v2v
+    carries ``audio_handle_filename`` + ``handle_context_seconds`` and the placeholder
+    wav (synthetic silence) exists next to output.mp4 with a plausible duration."""
+    src = _make_source_mp4(tmp_path / "src24.mp4", n_frames=50, fps=24.0)
+    vid = _upload_source(client, src)
+    r = _run_chain(
+        client, [{"num_frames": 49}],
+        frame_rate=24.0,
+        source_video={"video_id": vid, "context_frames": 25},
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = client.app_context
+    job_dir = ctx.config.output_dir / job_id
+    meta = json.loads((job_dir / "metadata.json").read_text(encoding="utf-8"))
+    v2v = meta["v2v"]
+
+    layout = chain_math.compute_chain_layout([49], 24.0, kv=2, source_context_px=25)
+    # additive keys present
+    assert v2v["audio_handle_filename"] == "output_audio_handle.wav"
+    # junction offset inside the handle = context (trim) duration
+    assert abs(v2v["handle_context_seconds"] - layout.trim_px / 24.0) < 1e-4
+
+    # sidecar exists with a plausible duration (full untrimmed timeline @ 24fps)
+    handle_wav = job_dir / v2v["audio_handle_filename"]
+    assert handle_wav.exists() and handle_wav.stat().st_size > 0
+    handle_dur = video_io.probe_duration(handle_wav)
+    assert handle_dur is not None
+    assert abs(handle_dur - layout.total_px / 24.0) < 0.05
+
+
 # -------------------------------------------------------------- (e) too short
 
 

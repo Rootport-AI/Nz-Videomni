@@ -436,6 +436,17 @@ class _MockBackend:
             # Mirror the worker's merged chain.v2v key set (engine done.chain.v2v):
             # geometry from ChainLayout + runtime fields. The mock has no audio
             # decode, so trimmed_audio_samples / audio_fade_in_samples are 0.
+            # Placeholder audio-handle sidecar (synthetic SILENCE — the mock has no
+            # audio pipeline). Mirrors the real engine's sidecar so pytest can pin
+            # the contract (existence + metadata keys) without a GPU: the wav holds
+            # `decoded_frames_px/frame_rate` seconds of 48kHz mono int16 zeros, with
+            # the notional junction at `handle_context_seconds` = trim_px/frame_rate.
+            handle_context_seconds = float(layout.trim_px) / float(chain.frame_rate)
+            audio_handle_filename = self._write_placeholder_handle_wav(
+                output_dir / "output_audio_handle.wav",
+                total_frames=int(layout.total_px),
+                frame_rate=float(chain.frame_rate),
+            )
             v2v = dict(chain_metadata.get("v2v", {}))
             v2v.update({
                 "context_frames": int(source_context_frames),
@@ -454,6 +465,8 @@ class _MockBackend:
                 "new_frames_px": int(layout.new_frames_px),
                 "decoded_frames_px": int(layout.total_px),
                 "v2v_context_junction_px": layout.v2v_context_junction_px,
+                "audio_handle_filename": audio_handle_filename,
+                "handle_context_seconds": round(handle_context_seconds, 6),
             })
             chain_metadata["v2v"] = v2v
 
@@ -495,6 +508,25 @@ class _MockBackend:
             draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ball_color)
             frames.append(frame)
         return frames
+
+    @staticmethod
+    def _write_placeholder_handle_wav(
+        path: Path, *, total_frames: int, frame_rate: float, sr: int = 48000
+    ) -> str:
+        """Write a synthetic-SILENCE 48kHz mono int16 wav standing in for the real
+        engine's audio-handle sidecar (the mock has no audio decode). Length =
+        ``total_frames / frame_rate`` seconds so the sample geometry (junction at
+        trim_px/frame_rate) is plausible. Returns the basename for metadata."""
+        import wave
+
+        n_samples = int(round(total_frames / float(frame_rate) * sr))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)  # int16
+            wf.setframerate(sr)
+            wf.writeframes(b"\x00\x00" * n_samples)
+        return path.name
 
     # --------------------------------------------------------- mock renderer
 

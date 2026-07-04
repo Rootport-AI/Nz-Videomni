@@ -673,6 +673,33 @@ def run_chain(
         if wf.dim() == 3:
             wf = wf.squeeze(0)                      # (channels, samples)
         n_trim_a = int(round(trim_px / float(frame_rate) * sr))
+
+        # ── audio HANDLE sidecar (opt-in true-crossfade join material) ───────
+        # Emit the FULL untrimmed timeline audio (context + new region, the very
+        # waveform sliced just below) as a sidecar wav next to the delivered mp4,
+        # with NO fade applied. A client join can then do a true overlapped
+        # equal-power crossfade over the pre-junction context region (which BOTH
+        # the source recording and this vocoder render depict) instead of a
+        # no-overlap fade-pair that leaves an energy valley. The delivered mp4 is
+        # untouched (still the trimmed new-part-only clip with its 30ms head
+        # fade), so this is purely additive — byte-identical deliverable.
+        audio_handle_filename: str | None = None
+        handle_context_seconds = float(trim_px) / float(frame_rate)
+        try:
+            import os as _os
+            import numpy as _np
+            from scipy.io import wavfile as _wavfile
+
+            _op = str(output_path)
+            _root, _ = _os.path.splitext(_op)
+            handle_path = _root + "_audio_handle.wav"
+            handle_np = wf.detach().to(torch.float32).cpu().numpy()  # (channels, samples)
+            handle_np = _np.ascontiguousarray(handle_np.T)           # (samples, channels)
+            _wavfile.write(handle_path, int(sr), handle_np)
+            audio_handle_filename = _os.path.basename(handle_path)
+        except Exception as _exc:  # sidecar is best-effort; never fail the job on it
+            print(f"[chain] WARN: audio handle sidecar not written: {_exc}", file=sys.stderr)
+
         new_wf = wf[:, n_trim_a:].contiguous()
         # short linear fade-in (~30ms) on the continuation audio head: click
         # guard for the vocoder-vs-AAC noise-floor notch at the client-side join
@@ -706,6 +733,10 @@ def run_chain(
             "new_frames_px": int(new_video.shape[0]),
             "decoded_frames_px": int(f_total_px),
             "v2v_context_junction_px": layout.v2v_context_junction_px,
+            # Opt-in true-crossfade join material (sidecar wav emitted above):
+            # the full untrimmed timeline audio, junction at handle_context_seconds.
+            "audio_handle_filename": audio_handle_filename,
+            "handle_context_seconds": round(handle_context_seconds, 6),
         }
         torch.cuda.synchronize()
         del decoded_video, decoded_audio, full_video, new_video

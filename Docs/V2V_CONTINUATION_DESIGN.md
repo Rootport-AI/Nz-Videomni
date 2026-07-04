@@ -62,7 +62,7 @@
 - バリデータ（すべて 422 事前検出・加算的）:
   - `source_video` 有り時のみ `clips` の min を 1 に緩和（無し時は従来通り min 2＝旧クライアント不変）。
   - `source_video` と `clips[0].conditioning_images` は排他（先頭 latent は源が占有するため）。
-  - `context_frames` は 8n+1・下限 25（≈1秒）・上限 481。源動画の実フレーム数 ≥ context_frames（app 側 ffprobe で事前検査・不足時 422）。
+  - `context_frames` は 8n+1・下限 25（≈1秒）・**上限 145（実装で確定・当初ドラフトの「481」は誤り）**。理由＝凍結ヘッド n_ctx_v は stage2 の時間タイル（`STAGE2_V_TILE`=22 latent）内に収まる必要があり（variant B のハード凍結は tile0 にしか掛からない・レビュー Finding 1）、理論安全上限は 169px、運用上限は保守的に 145px（`limits.v2v_context_frames_max`・chain_math 側にも不変条件 raise とガードテストあり）。源動画の実フレーム数 ≥ context_frames（app 側 ffprobe で事前検査・不足時 422）。
   - `source_video.video_id` 不在は 404（`reference_video_not_found` 前例に従い新エラーコード `SOURCE_VIDEO_NOT_FOUND` を追加）。
   - IC-LoRA（`loras`）との併用は v1 スコープ外＝当面 422（将来解禁の余地は残す）。
 - `GET /config` の `limits` に `v2v_context_frames_default` / `v2v_context_frames_max` 等を追加（`spill_free_frames` 前例＝config.py にデフォルト付きで足すだけで自動露出）。
@@ -111,12 +111,13 @@
 - スパイク素材: 高品質な既存生成物（`outputs/visual_review/` の 720p 級）＝「きれいな源」と、実写・h264 圧縮素材＝「汚い源」の両方で junction を比較（§1.3 の未確認リスクの検証）。
 - 失敗時の early-stop: shape assert・junction 不連続・VRAM 超過を検知したら走り切らず報告→判断を仰ぐ。
 
-## 実装スライス（チェーン実装の前例に従う）
+## 実装スライス（チェーン実装の前例に従う）— 進捗（2026-07-04）
 
-1. **S0**: G0 スパイク（GO/NO-GO・stage2 ヘッド freeze の採否確定）
-2. **S1**: engine（chain_pipeline source 対応＋worker op＋エンコード配線）
-3. **S2**: app（API フィールド＋バリデータ＋ffprobe/リサンプル＋metadata＋mock）＋pytest
-4. **S3**: 実機 e2e＋目視素材生成→G3
+1. **S0**: ✅**GO**（`outputs/v2v_spike/SPIKE_REPORT.md`）。**variant B（stage2 tile0 ヘッドのフル解像度ハード凍結）が必須と確定**＝variant A は継ぎ目で色調が跳ね G0 不合格（MAD 4.00×）、B は 1.00×。h264 強圧縮源でも継ぎ目連続（圧縮アーティファクト混入リスクは観測されず）。音声はノイズフロア差の微小クリック→30ms フェードインガードで対処（最終判断は G3 試聴）。audio_encoder 初ロード 45.7MB。
+2. **S1**: ✅完了（commit `e7d497c`→`2830ede`→`5482225`）。tiled_encode 採用で VRAM はスパイク比 -1066MB・**720p 完走 15,817MB**。G1a pytest 147 緑・G1b T2V/I2V byte-match 完全一致・no-source チェーン回帰一致。
+3. **S2**: ✅完了（commit `33fae6d`→`73dc20f`→`44facdd`→`a89963c`）。pytest 162 緑・mock 実サーバースモーク PASS（30fps 源→24fps 自動リサンプル含む）。注記: チェーン要求に `loras` フィールドは元々存在せず「IC-LoRA 併用 422」は構造的に不要だった。
+4. **レビュー反映**: ✅完了（commit `59c8ee4`・Opus レビュー Finding 1 MAJOR=タイル適合不変条件を chain_math に early-raise＋設定ガードテスト、Finding 2=音声アンダーフリーズ警告＋`audio_head_frozen` キー、nits）。pytest 165 緑・数値経路不変。
+5. **S3**: 実機 e2e（REST 経由 720p・多クリップ継続・実 fps リサンプル）＋ G3 目視素材生成 → 実行中。
 
 ---
 

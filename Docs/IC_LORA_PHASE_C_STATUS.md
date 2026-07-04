@@ -1,4 +1,4 @@
-# IC-LoRA Phase C — 現状ステータス（成立・客観ゲートG0-b/G1〜G4 PASS・残作業=G5ユーザー目視受容→mainマージ）
+# IC-LoRA Phase C — 現状ステータス（✅完了・全ゲートPASS＝G5ユーザー受容済み・mainマージ済 2026-07-04）
 
 - 更新: 2026-07-04（branch `feature/ic-lora-phase-c`・base=main `1a3dfec`）
 - 併読: [`VERIFICATION_LOG.md` §22](VERIFICATION_LOG.md)（全ゲート詳細数値）／[`IC_LORA_PHASE_C_WORKORDER.md`](IC_LORA_PHASE_C_WORKORDER.md)（設計・ゲート定義・リサーチ根拠）／[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（前段=参照系アダプタ）
@@ -7,7 +7,7 @@
 
 ## ⚠️ 一行結論
 
-**成立**: 制御系IC-LoRA（**LTX-2.3-22b Union-Control** 一本）＋**engine内前処理段の新設**（canny＝エッジ抽出／pose＝DWPose骨格）が完成し、看板機能「動きを維持したまま内容を差し替える」を実装した。ユーザーは従来どおり生の動画をアップロードするだけで、サーバー側が制御信号へ変換して生成する。客観ゲート（G0-bスループット実測・G1回帰byte-match・G2非汚染トグル・G3 VRAM/速度・G4 API e2e）は全PASS。前処理は生成時間の~5%・VRAM天井（Phase B帯8440〜9527MB）を超えない。**残る「作業」はG5ユーザー目視受容（成果物準備済み）→mainマージ判断のみ**。
+**成立**: 制御系IC-LoRA（**LTX-2.3-22b Union-Control** 一本）＋**engine内前処理段の新設**（canny＝エッジ抽出／pose＝DWPose骨格）が完成し、看板機能「動きを維持したまま内容を差し替える」を実装した。ユーザーは従来どおり生の動画をアップロードするだけで、サーバー側が制御信号へ変換して生成する。客観ゲート（G0-bスループット実測・G1回帰byte-match・G2非汚染トグル・G3 VRAM/速度・G4 API e2e）は全PASS。前処理は生成時間の~5%・VRAM天井（Phase B帯8440〜9527MB）を超えない。**G5もユーザー受容済み（2026-07-04）＝Phase C完了・mainマージ済**。
 
 ## 何ができるようになったか
 
@@ -25,7 +25,7 @@
 | G2 | 非汚染トグル（pose→なし→canny→なし） | **PASS**（「なし」2本がJob A基準SHAと完全一致＝attach/detach漏れ・前処理の副作用なし） |
 | G3 | VRAM/速度 | **PASS**（制御ジョブpeak 9525/9522≦天井9527。前処理時間実測: dwpose 16.60s(≈7.8fps・ロード込み)／canny 1.12s @129f） |
 | G4 | API e2e実機 | **PASS**（metadata に `preprocess`・`reference_video_id` 記録・GET video 200・偽video_id→404・512×320+参照→422 REFERENCE_RESOLUTION_INVALID） |
-| G5 | 目視（720p級・映画トレイラー風） | **客観準備完了・ユーザー目視待ち**（成果物=`outputs/visual_review/10_〜13_`。受容判断はユーザー） |
+| G5 | 目視（720p級・映画トレイラー風） | **PASS＝ユーザー受容（2026-07-04）**（成果物=`outputs/visual_review/10_〜13_`・pose/canny両方で「動き維持で内容置換」成立を受容） |
 
 ## commit（branch `feature/ic-lora-phase-c`・base=main `1a3dfec`）
 
@@ -67,7 +67,7 @@
 - rtmlibへの切替（TorchScript版DWPoseで問題が出た場合のフォールバックとしてのみ記載・G0-bで不要判断）
 - Gradio UI露出（APIのみ）
 
-## Pending（ユーザー）
+## Pending（ユーザー）→ ✅全消化（2026-07-04）
 
-1. **G5目視受容判断** → 成果物準備済み（`outputs/visual_review/10_〜13_`）。「動き維持で内容置換」の成立をユーザーが受容するか。
-2. **mainマージ判断** → G5受容後。branch `feature/ic-lora-phase-c`（4コミット先行・G0-b/G1〜G4客観PASS）。
+1. **G5目視受容判断** → ✅**ユーザー受容（2026-07-04）**。`outputs/visual_review/10_〜13_` を目視し「動き維持で内容置換」の成立を受容。÷128制約・DWPose解放方針（release()逸脱）も併せて了承。**Phase C全ゲートクローズ**。
+2. **mainマージ判断** → ✅**受容を受けてmainへマージ・push済（2026-07-04・ユーザー指示）**。

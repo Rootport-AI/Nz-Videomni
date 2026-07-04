@@ -1389,9 +1389,10 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 
 **PASS**: metadata（`preprocess="dwpose"`・`reference_video_id` 記録）✓・GET video HTTP **200** ✓・偽video_id→**404 REFERENCE_VIDEO_NOT_FOUND** ✓・512×320+参照→**422 REFERENCE_RESOLUTION_INVALID** ✓。
 
-### 22.7 G5＝目視（客観準備完了・ユーザー目視受容待ち）
+### 22.7 G5＝目視 → ✅**PASS＝ユーザー受容（2026-07-04）**
 
 - **Job P**＝pose-control 1280×768/121f/seed12345（`408fd361`・219.7s・peak **8548**・PREPROCESS dwpose 18.15s・AAC音声あり）／**Job Q**＝canny-control 同パラメータ（`8c1b5a9c`・196.0s・peak **9541**＝LoRA無しD/F(9543/9535)と同じ~9.5GB帯のジッタ・OOMなし）。
 - プロンプト＝映画トレイラー風「老船長が港町を歩く」（**制御種は非言及**＝シーン記述のみ・追補R4のComfyUI公式ワークフロー流儀・セリフ入り）。
 - 成果物＝`outputs/visual_review/10_〜13_`（pose出力／骨格／canny出力／エッジ・README追記済み）。
 - **監督の事前目視所見（受容判断ではない）**: 参照の歩行動作・カメラ・群衆構図を維持して別キャラクター（老船長）へ置換成立。canny版は参照の街並み構造をより強く保持・pose版は背景自由度が高い（制御タイプの性質どおり）。**受容判断はユーザー**（G1〜G4=客観PASS／G5=目視ゲート＝別物）。
+- **✅ユーザー受容（2026-07-04・起床後レビュー）**: `10_〜13_` を目視し「動き維持で内容置換」の成立を受容。÷128制約・DWPose release()逸脱も併せて了承。**Phase C全ゲートクローズ→mainマージ・push実施（ユーザー指示）**。

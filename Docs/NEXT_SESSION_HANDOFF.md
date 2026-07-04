@@ -10,17 +10,29 @@
 
 | 項目 | 状態 |
 |---|---|
-| リポジトリ | branch `feature/ic-lora-phase-c`（main `1a3dfec` から）＝**Phase C実装完了・4コミット先行・未マージ**（監督レビュー後にマージ判断）。commit `5a9de32`（スライス1）→`80a909c`（スライス2）→`91dc485`（÷128バリデーション）→`058e862`（スライス3） |
-| IC-LoRA Phase C | ✅**実装完了・客観ゲート全PASS**（制御系アダプタ=LTX-2.3-22b **Union-Control** 一本＋engine内前処理段 canny/DWPose 新設。「動き維持で内容置換」を実装）。**G0-b（DWPoseスループット実測）／G1〜G4 全PASS**・**G5=生成物準備済み・ユーザー目視受容待ち**。正本=[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)・数値=VERIFICATION_LOG §22 |
+| リポジトリ | **IC-LoRA Phase C＝mainマージ・push済（2026-07-04・ユーザー指示）**。branch `feature/ic-lora-phase-c` の全コミット（`5a9de32`スライス1→`80a909c`スライス2→`91dc485`÷128バリデーション→`058e862`スライス3→`a1a4359`docs＋G5受容反映）。次セッションの作業ブランチは main から新規に切る |
+| IC-LoRA Phase C | ✅**完了・全ゲートPASS（G5=ユーザー受容済み 2026-07-04）**。制御系アダプタ=LTX-2.3-22b **Union-Control** 一本＋engine内前処理段 canny/DWPose 新設＝「動き維持で内容置換」成立。正本=[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)・数値=VERIFICATION_LOG §22。**÷128制約**（参照付きジョブは出力w/hが128の倍数・422事前検出）に注意 |
 | IC-LoRA Phase A/B | ✅完了・mainマージ済（A=bf16融合スパイク／B=forward時GPU LoRA＋API露出。正本=各STATUS・VERIFICATION_LOG §20/§21） |
 | Phase 3 スライス1/2 | ✅完了・main入り済・目視受容済み（キーフレーム誘導／クリップ連結） |
-| G5成果物 | `outputs/visual_review/10_〜13_`（pose出力/骨格/canny出力/エッジ・README追記済み）。Job P=pose-control `408fd361`／Job Q=canny-control `8c1b5a9c`（共に1280×768/121f/seed12345・映画トレイラー風「老船長が港町を歩く」） |
+| 目視ゲート | **全クローズ**（Phase C G5含む・2026-07-04。成果物一覧=`outputs/visual_review/README.md`・10_〜13_=Phase C） |
 
-### 次セッションの入口（この順で）
+### 次セッションの入口 — **検証用Gradio GUIのバックエンド追いつき（ユーザー決定 2026-07-04）**
 
-1. **G5ユーザー目視受容判断**: `outputs/visual_review/10_〜13_` を確認し「動き維持で内容置換」の成立を受容するか（受容判断はユーザー・客観ゲートG1〜G4は既にPASS）。
-2. **受容後→mainマージ**: branch `feature/ic-lora-phase-c`（4コミット）を main へマージ。マージ前に pytest 69 passed/1 skipped で回帰なし確認。
-3. **残課題（Phase D以降・スコープ外）**: depth/Motion-Track等の他アダプタ・strength可変化・前処理キャッシュ・Gradio UI露出。詳細=[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md) スコープ外節。
+**目的**: `gradio_ui.py`（`/ui`・現在186行）が Phase 1 初期の機能のまま止まっており、Phase 3／IC-LoRA Phase B/C で増えたバックエンド機能を検証できない。**①必要機能の洗い出し → ②設計＆仕様固め（ユーザー合意） → ③実装** の順で進める（ユーザー指示 2026-07-04）。
+
+**現状GUI（監督確認済み 2026-07-04・`gradio_ui.py`）**: prompt／negative／単一画像I2V（frame_idx=0固定）／strength／プリセット3種（smoke_test・phase1_default・**phase1_target=960×576←現行の720p級=1280×768より古い**）／width/height/crop/num_frames/frame_rate/seed／status表示。**それだけ**。
+
+**GUI未露出のバックエンド機能（洗い出しの出発点・網羅性は①で要検証）**:
+- Phase 3 スライス1: 多キーフレーム条件付け（複数画像・任意frame_idx・per-item strength・bookend・cap5）
+- Phase 3 スライス2: クリップ連結（API表層の形は①で要確認＝`chain_math.py`・[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)）
+- IC-LoRA Phase B: `POST /upload/video`＋`reference_video_id`＋`loras`（pixel-spatial-upscaler-x2）
+- IC-LoRA Phase C: `pose-control`／`canny-control`（＋**÷128制約のUI側ガイド**＝422になる解像度を選ばせない or 注記）
+- 720p級プリセット（1280×768→crop 1280×720）・音声付き出力の再生
+- `GET /status` 表示の拡充（要否は①で判断）
+
+**進め方の注意**: 凍結API契約は不変＝**GUIはAPIの薄いクライアントに徹する**（AviUtl2統合の予行でもある）。仕様はユーザーと合意してから実装（勝手に画面を盛らない）。実装・調査はサブエージェント（Opus以下・Fable5禁止）。
+
+**残課題（Phase D以降・スコープ外）**: depth/Motion-Track等の他アダプタ・strength可変化・前処理キャッシュ。詳細=[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md) スコープ外節。
 
 ---
 

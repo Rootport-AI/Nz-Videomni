@@ -23,6 +23,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from config import LimitsConfig
+
+# Pydantic-declared DEFAULTS only (no config.yaml file I/O) — the single place
+# api/models.py sources the V2V context_frames bounds from, so they can never
+# silently drift from what config.py / GET /config advertise. See
+# SourceVideoSpec.validate_context_frames.
+_LIMITS_DEFAULTS = LimitsConfig()
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -180,6 +188,49 @@ class ChainClip(BaseModel):
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
 
+class SourceVideoSpec(BaseModel):
+    """Video-to-video continuation source (Phase V2V, ADDITIVE/optional).
+
+    ``video_id`` is an existing upload from POST /upload/video (reuses the
+    reference-video store). ``context_frames`` is the source *tail* span (pixel
+    frames, 8n+1) that is VAE-encoded and frozen as clip-0's head; the delivered
+    mp4 is the NEW part only (the context is trimmed off the front server-side).
+
+    ``context_frames`` is bounded [25, config.limits.v2v_context_frames_max]. The
+    max (currently 145, sourced from :class:`config.LimitsConfig` so this stays
+    in lockstep with the value advertised via ``GET /config``) is a conservative
+    v1 ceiling well inside the HARD invariant enforced by
+    :func:`chain_math.compute_chain_layout`: the frozen video head
+    (``n_ctx_v = (context_frames-1)//8+1``) must fit inside stage-2 TILE 0
+    (``chain_math.STAGE2_V_TILE`` = 22 latents, i.e. <= 169 pixel frames /
+    ``chain_math.px_from_v_latent(chain_math.STAGE2_V_TILE)``) because the
+    variant-B hard-freeze only covers tile 0 — ``compute_chain_layout`` raises
+    ValueError if that invariant is ever violated. Do NOT raise this cap without
+    re-checking multi-tile freeze behaviour first.
+    ``context_frames < clips[0].num_frames`` is cross-validated on the request.
+    """
+
+    video_id: str = Field(..., min_length=1)
+    context_frames: int = Field(73)
+
+    @model_validator(mode="after")
+    def validate_context_frames(self) -> "SourceVideoSpec":
+        cf = self.context_frames
+        cf_min = _LIMITS_DEFAULTS.v2v_context_frames_min
+        cf_max = _LIMITS_DEFAULTS.v2v_context_frames_max
+        if cf < cf_min:
+            raise ValueError(f"source_video.context_frames must be >= {cf_min}")
+        if cf > cf_max:
+            raise ValueError(
+                f"source_video.context_frames must be <= {cf_max} "
+                "(conservative v1 cap, config.limits.v2v_context_frames_max; "
+                "see chain_math's stage-2 tile-fit invariant)"
+            )
+        if (cf - 1) % 8 != 0:
+            raise ValueError("source_video.context_frames must be 8n+1")
+        return self
+
+
 class GenerateChainRequest(BaseModel):
     """A chain of clips assembled into ONE continuous masked AV-latent timeline.
 
@@ -217,9 +268,18 @@ class GenerateChainRequest(BaseModel):
     overlap_frames: int = Field(3, ge=1, le=8)
     overlap_strength: float = Field(0.5, ge=0.0, le=1.0)
 
-    # 2..8 clips: at least 2 (a single clip is just /generate); capped so the
-    # total timeline stays within MAX_CHAIN_TOTAL_PIXEL_FRAMES.
-    clips: list[ChainClip] = Field(..., min_length=2, max_length=8)
+    # 1..8 clips. WITHOUT source_video the floor is 2 (a single clip is just
+    # /generate) — enforced explicitly in the model_validator so the old
+    # rejection is preserved. WITH source_video a single clip is allowed (the
+    # frozen source head IS the "previous segment"). Field floor is 1 so the
+    # source path validates; capped so the timeline stays within
+    # MAX_CHAIN_TOTAL_PIXEL_FRAMES.
+    clips: list[ChainClip] = Field(..., min_length=1, max_length=8)
+
+    # Video-to-video continuation (Phase V2V, ADDITIVE/optional — a request
+    # omitting this field is byte-identical to before). When set, the tail of an
+    # uploaded source video is frozen as clip-0's head; see :class:`SourceVideoSpec`.
+    source_video: SourceVideoSpec | None = None
 
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
@@ -240,6 +300,30 @@ class GenerateChainRequest(BaseModel):
             if self.guidance_scale != 1.0:
                 raise ValueError(
                     "distilled pipeline requires guidance_scale=1.0 in Phase 1"
+                )
+
+        # Clip-count floor: WITHOUT a source_video a chain needs >= 2 clips (a
+        # single clip is just /generate) — preserve the pre-V2V rejection. WITH a
+        # source_video the frozen source head IS the prior segment, so 1 clip is OK.
+        if self.source_video is None and len(self.clips) < 2:
+            raise ValueError("chain requires at least 2 clips")
+
+        # V2V continuation cross-validation (all 422 at request time):
+        if self.source_video is not None:
+            cf = self.source_video.context_frames
+            clip0 = self.clips[0].num_frames
+            if cf >= clip0:
+                raise ValueError(
+                    f"source_video.context_frames ({cf}) must be < clips[0].num_frames "
+                    f"({clip0}) so a NEW tail remains to generate"
+                )
+            # The frozen source head occupies clip-0's first latent frames, so the
+            # start-frame slot is taken by the source — clip 0 cannot also carry
+            # conditioning images.
+            if self.clips[0].conditioning_images:
+                raise ValueError(
+                    "source_video is mutually exclusive with clips[0].conditioning_images "
+                    "(the source tail already occupies clip 0's frozen head)"
                 )
 
         for i, clip in enumerate(self.clips):
@@ -279,6 +363,9 @@ class GenerateChainRequest(BaseModel):
             layout = chain_math.compute_chain_layout(
                 [c.num_frames for c in self.clips], self.frame_rate,
                 kv=self.overlap_frames,
+                source_context_px=(
+                    self.source_video.context_frames if self.source_video else None
+                ),
             )
         except ValueError as exc:
             raise ValueError(str(exc)) from exc

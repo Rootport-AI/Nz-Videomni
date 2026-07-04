@@ -29,7 +29,14 @@ Protocol (one JSON object per line; parent -> worker):
   # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
-   clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...]}
+   clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...],
+   # V2V continuation (optional; null unless continuing an uploaded video). When
+   # present, clips may be length 1; clips[0].num_frames is the TOTAL clip-0
+   # timeline (frozen context head + new tail). ``path`` is ALREADY the source
+   # tail cut at the request fps (the app guarantees this — the engine does not
+   # resample). The source tail is VAE-encoded (tiled) and frozen as clip-0's
+   # head; the delivered mp4 is the NEW part only (context trimmed off the front):
+   source:{path, context_frames}|null}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
@@ -38,6 +45,16 @@ other logging goes to STDERR.
   @@LTX@@{"event":"ready"}
   @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...}
   @@LTX@@{"event":"error","detail":...}
+
+The generate_chain ``done`` event carries a ``chain`` dict (full junction
+geometry). For a V2V run it additionally holds a ``chain.v2v`` sub-dict:
+{context_frames, n_ctx_v, n_ctx_a, freeze_ka, trimmed_px, trimmed_audio_samples,
+audio_fade_in_samples, source_had_audio, audio_head_frozen, new_frames_px,
+decoded_frames_px, v2v_context_junction_px, source_context_px}.
+``source_had_audio`` = the source FILE had an audio stream; ``audio_head_frozen``
+(= freeze_ka > 0) = the frozen head actually carries audio continuity — these
+can differ if the source's encoded audio latents ran out before n_ctx_a (a
+warning is logged to STDERR in that case, freeze_ka is silently reduced).
 """
 
 import os
@@ -276,7 +293,7 @@ def _do_generate_chain(msg: dict) -> None:
     seams AND tile seams) for the review harness.
     """
     assert _PIPE is not None, "generate_chain before load"
-    from engine.pipeline.chain_pipeline import ChainClipSpec
+    from engine.pipeline.chain_pipeline import ChainClipSpec, SourceSpec
 
     output_path = msg["output_path"]
     seed = int(msg["seed"])
@@ -296,10 +313,27 @@ def _do_generate_chain(msg: dict) -> None:
         for c in msg["clips"]
     ]
 
+    # V2V continuation: optional source (an mp4 that is ALREADY the fps-correct
+    # source tail). When present, a single clip is allowed.
+    source = None
+    src = msg.get("source")
+    if src:
+        try:
+            source = SourceSpec(
+                path=str(src["path"]),
+                context_frames=int(src["context_frames"]),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: source requires path and context_frames "
+                f"(missing key {exc})"
+            ) from exc
+
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
         f"frames={[c.num_frames for c in clips]} seed={seed} "
-        f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')}"
+        f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
+        f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -316,6 +350,7 @@ def _do_generate_chain(msg: dict) -> None:
         overlap_strength=float(msg["overlap_strength"]),
         output_path=output_path,
         progress=_progress,
+        source=source,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

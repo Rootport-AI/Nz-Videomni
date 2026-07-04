@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import gc
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -55,6 +56,22 @@ class ChainClipSpec:
     prompt: str
     num_frames: int
     images: list[ImageConditioningInput] = field(default_factory=list)
+
+
+@dataclass
+class SourceSpec:
+    """Video-to-video continuation source (the uploaded video's tail).
+
+    * ``path``: an mp4 that is ALREADY the tail cut at the correct fps (the app
+      layer guarantees this in S2 — the engine does not resample). Its first
+      ``context_frames`` pixel frames are VAE-encoded and frozen as the head of
+      clip-0's timeline; the rest of clip-0 is generated as the continuation.
+    * ``context_frames``: 8n+1 pixel-frame context span (== ``source_context_px``
+      in :func:`chain_math.compute_chain_layout`).
+    """
+
+    path: str
+    context_frames: int
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -216,6 +233,136 @@ def _tile_images(images: list[ImageConditioningInput], vs: int, vlen: int) -> li
     return out
 
 
+def _load_video_conditioning_cpu(
+    *,
+    video_path: str,
+    height: int,
+    width: int,
+    frame_cap: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """Numerics-preserving, low-VRAM twin of ``media_io.load_video_conditioning``.
+
+    The installed ``load_video_conditioning`` decodes every frame onto ``device``
+    (GPU), preprocesses it there, and ``torch.cat``s the growing (1,C,F,H,W)
+    tensor **on the GPU** — so the WHOLE context-pixel tensor stays resident on
+    the GPU while ``tiled_encode`` runs on top of it (1–2.5GB of avoidable
+    residency at 720p, on top of an already-pegged 16GB).
+
+    This twin runs the EXACT same per-frame ops on the EXACT same device (GPU) in
+    the same dtype flow — ``decode_video_from_file`` -> ``resize_and_center_crop``
+    on float32 -> ``normalize_latent`` to ``dtype`` — but moves each processed
+    frame to CPU immediately and assembles the (1,C,F,H,W) tensor on CPU. The GPU
+    holds at most one frame at a time. Because the resize/normalize math still
+    runs on the GPU, the per-frame values are bit-identical to the installed
+    loader; the CPU copy is a pure device transfer (no arithmetic), and
+    ``torch.cat`` is a deterministic copy, so the assembled tensor is
+    byte-identical to the installed loader's output apart from residing on CPU.
+    ``tiled_encode`` then streams tiles back to the GPU one at a time (it
+    explicitly supports CPU-resident input), yielding the identical latent.
+    """
+    from ltx_pipelines.utils.media_io import (
+        decode_video_from_file,
+        normalize_latent,
+        resize_and_center_crop,
+    )
+
+    frames_cpu: list[torch.Tensor] = []
+    for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
+        # Same ops, same device (GPU), same dtype flow as load_video_conditioning.
+        frame = resize_and_center_crop(f.to(torch.float32), height, width)
+        frame = normalize_latent(frame, device, dtype)
+        frames_cpu.append(frame.to("cpu"))
+        del f, frame
+    return torch.cat(frames_cpu, dim=2)
+
+
+def _encode_source_heads(
+    *,
+    source: "SourceSpec",
+    layout: ChainLayout,
+    width: int,
+    height: int,
+    video_encoder,
+    tiling_cfg,
+    ledger,
+    device: torch.device,
+):
+    """VAE-encode the source tail into frozen HEAD latents (video-to-video).
+
+    Returns ``(src_head_v_half, src_head_v_full, src_head_a, freeze_ka,
+    had_audio)``:
+      * ``src_head_v_half`` — half-res head for stage-1 carry (n_ctx_v frames),
+      * ``src_head_v_full`` — FULL-res head for stage-2 variant-B hard-freeze,
+      * ``src_head_a`` / ``freeze_ka`` — audio head latents (None/0 if the source
+        has no audio -> free audio generation).
+
+    BOTH video encodes use ``VideoEncoder.tiled_encode`` (mandatory: the spike's
+    untiled full-res head encode cost ~+1GB and would OOM at 720p).
+    """
+    from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
+    from ltx_core.types import Audio
+    from ltx_pipelines.utils.helpers import cleanup_memory
+    from ltx_pipelines.utils.media_io import decode_audio_from_file
+
+    ctx_px = source.context_frames
+    n_ctx_v = layout.n_ctx_v
+    n_ctx_a = layout.n_ctx_a
+
+    # ── half-res head (stage-1 carry, matches the half-res stage-1 latent) ──
+    # CPU-assembled source pixels (numerics-identical; keeps the full context
+    # tensor off the GPU while tiled_encode streams tiles back one at a time).
+    src_half = _load_video_conditioning_cpu(
+        video_path=source.path, height=height // 2, width=width // 2,
+        frame_cap=ctx_px, dtype=DTYPE, device=device,
+    )
+    src_head_v_half = video_encoder.tiled_encode(src_half, tiling_cfg)[:, :, :n_ctx_v].detach().clone()
+    del src_half
+    cleanup_memory()
+    assert src_head_v_half.shape[2] == n_ctx_v, (src_head_v_half.shape[2], n_ctx_v)
+
+    # ── full-res head (stage-2 variant-B hard-freeze) — TILED (720p-critical) ──
+    src_full = _load_video_conditioning_cpu(
+        video_path=source.path, height=height, width=width,
+        frame_cap=ctx_px, dtype=DTYPE, device=device,
+    )
+    src_head_v_full = video_encoder.tiled_encode(src_full, tiling_cfg)[:, :, :n_ctx_v].detach().clone()
+    del src_full
+    cleanup_memory()
+    assert src_head_v_full.shape[2] == n_ctx_v, (src_head_v_full.shape[2], n_ctx_v)
+
+    # ── audio head (first-ever audio_encoder load; cheap, ~46MB) ──
+    src_head_a = None
+    freeze_ka = 0
+    src_audio = decode_audio_from_file(source.path, device)
+    had_audio = src_audio is not None
+    if had_audio:
+        audio_encoder = ledger.audio_encoder()
+        # decode_audio_from_file always returns Audio(waveform=(1,channels,samples))
+        # (ltx_pipelines.utils.media_io.decode_audio_from_file docstring + impl:
+        # the final `.unsqueeze(0)` always yields a 3-D tensor) — no 2-D case to
+        # normalise here.
+        enc = vae_encode_audio(
+            Audio(waveform=src_audio.waveform.to(DTYPE), sampling_rate=src_audio.sampling_rate),
+            audio_encoder, None,
+        )
+        avail = enc.shape[2]
+        freeze_ka = min(n_ctx_a, avail)
+        if avail < n_ctx_a:
+            print(
+                f"[ltx_worker] chain: source audio underrun — only {avail} encoded "
+                f"audio-latent frames available but the requested context needs "
+                f"n_ctx_a={n_ctx_a}; freezing {freeze_ka} frames only (silent "
+                "under-freeze, no error).",
+                file=sys.stderr, flush=True,
+            )
+        src_head_a = enc[:, :, :freeze_ka, :].detach().clone()
+        del audio_encoder, enc
+        cleanup_memory()
+    return src_head_v_half, src_head_v_full, src_head_a, freeze_ka, had_audio
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main chain orchestration.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -233,6 +380,7 @@ def run_chain(
     overlap_strength: float,
     output_path: str,
     progress: ProgressFn | None = None,
+    source: "SourceSpec | None" = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -268,7 +416,11 @@ def run_chain(
     )
 
     clip_frames = [c.num_frames for c in clips]
-    layout: ChainLayout = compute_chain_layout(clip_frames, frame_rate, kv=kv)
+    src_ctx_px = int(source.context_frames) if source is not None else None
+    layout: ChainLayout = compute_chain_layout(
+        clip_frames, frame_rate, kv=kv, source_context_px=src_ctx_px
+    )
+    n_ctx_v = layout.n_ctx_v  # 0 when source is None
     ka_list = layout.ka_list
     v_tiles = layout.v_tiles
     a_tiles = layout.a_tiles
@@ -304,6 +456,20 @@ def run_chain(
     gc.collect()
     torch.cuda.empty_cache()
 
+    # ── video-to-video: encode the source tail into frozen HEAD latents ───────
+    src_head_v_half = src_head_v_full = src_head_a = None
+    freeze_ka = 0
+    source_had_audio = False
+    if source is not None:
+        (src_head_v_half, src_head_v_full, src_head_a,
+         freeze_ka, source_had_audio) = _encode_source_heads(
+            source=source, layout=layout, width=width, height=height,
+            video_encoder=video_encoder, tiling_cfg=tiling_cfg,
+            ledger=ledger, device=device,
+        )
+        gc.collect()
+        torch.cuda.empty_cache()
+
     stepper = EulerDiffusionStep()
     stage1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(device)
 
@@ -313,7 +479,27 @@ def run_chain(
     for i in range(n):
         seg_shape = VideoPixelShape(1, clip_frames[i], height // 2, width // 2, frame_rate)
         noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
-        if i == 0:
+        if i == 0 and source is not None:
+            # video-to-video: freeze the source tail as clip-0's head (same
+            # carry mechanism as an inter-clip join; mask = 1-overlap_strength).
+            from ltx_core.types import AudioLatentShape as _ALShape
+            from ltx_core.types import VideoLatentShape as _VLShape
+            v_half_shape = _VLShape.from_pixel_shape(
+                seg_shape,
+                latent_channels=components.video_latent_channels,
+                scale_factors=components.video_scale_factors,
+            ).to_torch_shape()
+            init_v = torch.zeros(tuple(v_half_shape), dtype=DTYPE, device=device)
+            init_v[:, :, :n_ctx_v] = src_head_v_half.to(DTYPE)
+            if freeze_ka > 0:
+                a_shape = _ALShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+                init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
+                init_a[:, :, :freeze_ka] = src_head_a.to(DTYPE)
+            else:
+                init_a = None
+            fkv, fka = n_ctx_v, freeze_ka
+            conds = []  # source & conditioning_images are mutually exclusive (app-enforced)
+        elif i == 0:
             init_v = init_a = None
             fkv = fka = 0
             # clip-0 conditioning at HALF resolution (stage-1).
@@ -324,9 +510,22 @@ def run_chain(
         else:
             ka_i = ka_list[i - 1]
             prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
-            init_v = torch.zeros_like(prev_v)
+            # Size the init tensors from the CURRENT segment's latent shapes —
+            # NOT zeros_like(prev_*). The previous segment may have a different
+            # num_frames (unequal clip lengths are legal), so its latent shape
+            # need not match this segment's create_initial_state target. Mirror
+            # the i==0/source branch: build the current segment's shape, then
+            # copy the K_v / K_a tail of the previous segment into the frozen
+            # head. dtype/device are preserved from the previous segment.
+            v_shape = VideoLatentShape.from_pixel_shape(
+                seg_shape,
+                latent_channels=components.video_latent_channels,
+                scale_factors=components.video_scale_factors,
+            ).to_torch_shape()
+            init_v = torch.zeros(tuple(v_shape), dtype=prev_v.dtype, device=prev_v.device)
             init_v[:, :, :kv] = prev_v[:, :, prev_v.shape[2] - kv:]
-            init_a = torch.zeros_like(prev_a)
+            a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+            init_a = torch.zeros(tuple(a_shape), dtype=prev_a.dtype, device=prev_a.device)
             init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
             fkv, fka = kv, ka_i
             conds = []
@@ -385,7 +584,18 @@ def run_chain(
         tile_shape = VideoPixelShape(1, tile_px, height, width, frame_rate)
         init_v = upscaled_v[:, :, vs:vs + vlen].contiguous().clone()
         init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
-        if i == 0:
+        if i == 0 and source is not None:
+            # video-to-video variant B: hard-freeze (mask 0.0) the source head at
+            # tile-0's leading region using the FULL-res VAE re-encode, mirroring
+            # how i>=1 tile joins freeze their leading kt_v. This is the one
+            # genuinely new stage-2 orchestration piece (spike: eliminates the
+            # variant-A color/tone drift; variant A failed G0).
+            fkv, fka = n_ctx_v, freeze_ka
+            mv = 0.0
+            init_v[:, :, :n_ctx_v] = src_head_v_full.to(DTYPE)
+            if freeze_ka > 0:
+                init_a[:, :, :freeze_ka] = src_head_a.to(DTYPE)
+        elif i == 0:
             fkv = fka = 0
             mv = 0.0
         else:
@@ -432,14 +642,105 @@ def run_chain(
     gen = torch.Generator(device=device).manual_seed(base_seed)
     decoded_video = vae_decode_video(final_v, ledger.video_decoder(), tiling_cfg, gen)
     decoded_audio = vae_decode_audio(final_a, ledger.audio_decoder(), ledger.vocoder())
-    chunks = video_chunks_number(total_px, tiling_cfg)
-    encode_video_output(
-        video=decoded_video, audio=decoded_audio, fps=int(frame_rate),
-        output_path=str(output_path), video_chunks_number_value=chunks,
-    )
-    torch.cuda.synchronize()
-    del decoded_video, decoded_audio
-    torch.cuda.empty_cache()
+    v2v_meta: dict | None = None
+    if source is None:
+        # ── source-less path: BYTE-IDENTICAL to today (gated). ────────────────
+        chunks = video_chunks_number(total_px, tiling_cfg)
+        encode_video_output(
+            video=decoded_video, audio=decoded_audio, fps=int(frame_rate),
+            output_path=str(output_path), video_chunks_number_value=chunks,
+        )
+        torch.cuda.synchronize()
+        del decoded_video, decoded_audio
+        torch.cuda.empty_cache()
+    else:
+        # ── video-to-video: trim the frozen context head so the delivered mp4
+        #    is the NEW part only. vae_decode_video yields a LAZY generator of
+        #    temporally-tiled (f,H,W,3) chunks -> materialize before slicing.
+        from ltx_core.types import Audio
+
+        if torch.is_tensor(decoded_video):
+            full_video = decoded_video
+        else:
+            full_video = torch.cat(list(decoded_video), dim=0)
+        f_total_px = int(full_video.shape[0])
+        assert f_total_px == total_px, (f_total_px, total_px)
+        trim_px = layout.trim_px
+        new_video = full_video[trim_px:].contiguous()
+
+        sr = decoded_audio.sampling_rate
+        wf = decoded_audio.waveform
+        if wf.dim() == 3:
+            wf = wf.squeeze(0)                      # (channels, samples)
+        n_trim_a = int(round(trim_px / float(frame_rate) * sr))
+
+        # ── audio HANDLE sidecar (opt-in true-crossfade join material) ───────
+        # Emit the FULL untrimmed timeline audio (context + new region, the very
+        # waveform sliced just below) as a sidecar wav next to the delivered mp4,
+        # with NO fade applied. A client join can then do a true overlapped
+        # equal-power crossfade over the pre-junction context region (which BOTH
+        # the source recording and this vocoder render depict) instead of a
+        # no-overlap fade-pair that leaves an energy valley. The delivered mp4 is
+        # untouched (still the trimmed new-part-only clip with its 30ms head
+        # fade), so this is purely additive — byte-identical deliverable.
+        audio_handle_filename: str | None = None
+        handle_context_seconds = float(trim_px) / float(frame_rate)
+        try:
+            import os as _os
+            import numpy as _np
+            from scipy.io import wavfile as _wavfile
+
+            _op = str(output_path)
+            _root, _ = _os.path.splitext(_op)
+            handle_path = _root + "_audio_handle.wav"
+            handle_np = wf.detach().to(torch.float32).cpu().numpy()  # (channels, samples)
+            handle_np = _np.ascontiguousarray(handle_np.T)           # (samples, channels)
+            _wavfile.write(handle_path, int(sr), handle_np)
+            audio_handle_filename = _os.path.basename(handle_path)
+        except Exception as _exc:  # sidecar is best-effort; never fail the job on it
+            print(f"[chain] WARN: audio handle sidecar not written: {_exc}", file=sys.stderr)
+
+        new_wf = wf[:, n_trim_a:].contiguous()
+        # short linear fade-in (~30ms) on the continuation audio head: click
+        # guard for the vocoder-vs-AAC noise-floor notch at the client-side join
+        # (spike finding; video needs no fade).
+        fade_n = min(int(round(0.030 * sr)), new_wf.shape[1])
+        if fade_n > 1:
+            ramp = torch.linspace(0.0, 1.0, fade_n, device=new_wf.device, dtype=new_wf.dtype)
+            new_wf[:, :fade_n] = new_wf[:, :fade_n] * ramp
+        new_audio = Audio(waveform=new_wf, sampling_rate=sr)
+
+        new_chunks = video_chunks_number(int(new_video.shape[0]), tiling_cfg)
+        encode_video_output(
+            video=new_video, audio=new_audio, fps=int(frame_rate),
+            output_path=str(output_path), video_chunks_number_value=new_chunks,
+        )
+        v2v_meta = {
+            "context_frames": int(source.context_frames),
+            "n_ctx_v": int(layout.n_ctx_v),
+            "n_ctx_a": int(layout.n_ctx_a),
+            "freeze_ka": int(freeze_ka),
+            "trimmed_px": int(trim_px),
+            "trimmed_audio_samples": int(n_trim_a),
+            "audio_fade_in_samples": int(fade_n if fade_n > 1 else 0),
+            "source_had_audio": bool(source_had_audio),
+            # Distinct from source_had_audio: the source FILE can have an audio
+            # stream (source_had_audio=True) while still ending up with a 0-frame
+            # frozen audio head (freeze_ka=0) if the encoded source audio ran out
+            # before n_ctx_a (see the audio-underrun warning above). This key is
+            # unambiguous: "did the frozen head actually carry audio continuity".
+            "audio_head_frozen": bool(freeze_ka > 0),
+            "new_frames_px": int(new_video.shape[0]),
+            "decoded_frames_px": int(f_total_px),
+            "v2v_context_junction_px": layout.v2v_context_junction_px,
+            # Opt-in true-crossfade join material (sidecar wav emitted above):
+            # the full untrimmed timeline audio, junction at handle_context_seconds.
+            "audio_handle_filename": audio_handle_filename,
+            "handle_context_seconds": round(handle_context_seconds, 6),
+        }
+        torch.cuda.synchronize()
+        del decoded_video, decoded_audio, full_video, new_video
+        torch.cuda.empty_cache()
 
     wall = time.time() - t0
     peak = round(torch.cuda.max_memory_allocated(device) / 1e6, 1)
@@ -458,4 +759,8 @@ def run_chain(
         "vram_within_16gb": peak < 16000,
         "output_mp4": str(output_path),
     })
+    if v2v_meta is not None:
+        # merge the runtime v2v fields into the geometry v2v sub-dict from
+        # ChainLayout.to_dict() (single unified ``chain.v2v`` for the done event).
+        meta.setdefault("v2v", {}).update(v2v_meta)
     return meta

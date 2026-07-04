@@ -186,6 +186,9 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_timeout": "Timeout (min)",
         "h_server": "Server config (read-only)",
         "sum_config": "Raw /config JSON",
+        "warn_config_load_failed": "Failed to load server settings: {err}. Retrying automatically…",
+        "warn_config_retry_exhausted": ("Still unable to load server settings after {n} attempts: "
+                                        "{err}. Use Refresh to try again."),
         "lbl_maxframes": "Comfortable frame-count limits by resolution",
         "col_res": "Resolution",
         "col_maxframes": "Max frames",
@@ -367,6 +370,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_timeout": "タイムアウト(分)",
         "h_server": "サーバ設定(読み取り専用)",
         "sum_config": "生の /config JSON",
+        "warn_config_load_failed": "サーバ設定の取得に失敗しました: {err}。自動的に再試行します…",
+        "warn_config_retry_exhausted": "{n}回試行しましたがサーバ設定を取得できませんでした: {err}。更新ボタンで再試行してください。",
         "lbl_maxframes": "解像度別の快適フレーム数上限",
         "col_res": "解像度",
         "col_maxframes": "最大フレーム数",

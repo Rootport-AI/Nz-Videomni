@@ -103,8 +103,22 @@ class ChainLayout:
 
     duration_sec: float = 0.0
 
+    # ── video-to-video continuation (source head) geometry ───────────────────
+    # Populated ONLY when ``compute_chain_layout`` is called with
+    # ``source_context_px`` (a source video's tail is frozen as the head of
+    # clip-0). All None/0 for a normal chain (source-less path unchanged).
+    source_context_px: int | None = None   # frozen context pixel-frame span
+    n_ctx_v: int = 0                        # frozen video-latent head frames
+    n_ctx_a: int = 0                        # frozen audio-latent head frames
+    trim_px: int = 0                        # pixel frames trimmed off the front
+    # 0-based pixel index (UNTRIMMED timeline) of the last frozen context frame
+    # (source->new boundary is v2v_context_junction_px / +1); the delivered
+    # (trimmed) mp4 starts the NEW content at pixel index 0.
+    v2v_context_junction_px: int | None = None
+    new_frames_px: int = 0                  # delivered new pixel frames (post-trim)
+
     def to_dict(self) -> dict:
-        return {
+        d = {
             "clip_frames": self.clip_frames,
             "fps": self.fps,
             "kv": self.kv,
@@ -127,6 +141,16 @@ class ChainLayout:
             "all_junctions": self.all_junctions,
             "duration_sec": self.duration_sec,
         }
+        if self.source_context_px is not None:
+            d["v2v"] = {
+                "source_context_px": self.source_context_px,
+                "n_ctx_v": self.n_ctx_v,
+                "n_ctx_a": self.n_ctx_a,
+                "trim_px": self.trim_px,
+                "v2v_context_junction_px": self.v2v_context_junction_px,
+                "new_frames_px": self.new_frames_px,
+            }
+        return d
 
 
 def compute_chain_layout(
@@ -136,17 +160,60 @@ def compute_chain_layout(
     *,
     v_tile: int = STAGE2_V_TILE,
     v_adv: int = STAGE2_V_ADV,
+    source_context_px: int | None = None,
 ) -> ChainLayout:
     """Resolve the full chain geometry from clip pixel-frame counts + fps + K_v.
 
     Faithful generalisation of the S2 spike (reduces to it for uniform clips).
     Raises ValueError on geometrically impossible inputs (surfaced by the API
     validator / engine before any GPU work).
+
+    ``source_context_px`` (video-to-video continuation): when given, the tail of
+    an uploaded source video (``source_context_px`` pixel frames, 8n+1) is
+    VAE-encoded and frozen as the HEAD of clip-0's timeline. This is the SINGLE
+    SOURCE OF TRUTH for:
+      * ``n_ctx_v`` = frozen video-latent head frames = ``v_latent_frames(px)``,
+      * ``n_ctx_a`` = frozen audio-latent head frames = ``a_frames_for_px(px)``,
+      * ``trim_px`` = pixel frames (and the matching audio samples, derived at
+        runtime from the decoded sample-rate) cut off the FRONT of the decoded
+        output so the delivered mp4 is the NEW part only,
+      * the source->new junction index (untrimmed timeline) for metadata/harness.
+    clip_frames[0] is the TOTAL clip-0 timeline (context head + new tail); the
+    frozen context occupies its first ``n_ctx_v`` stage-1 latent frames.
     """
     n = len(clip_frames)
     if n < 1:
         raise ValueError("chain requires at least one clip")
     kt_v = v_tile - v_adv
+
+    n_ctx_v = n_ctx_a = trim_px = new_frames_px = 0
+    v2v_context_junction_px: int | None = None
+    if source_context_px is not None:
+        if source_context_px < 1:
+            raise ValueError(f"source_context_px must be >= 1 (got {source_context_px})")
+        if (source_context_px - 1) % VIDEO_TIME_FACTOR != 0:
+            raise ValueError(
+                f"source_context_px must be 8n+1 (got {source_context_px})"
+            )
+        if source_context_px >= clip_frames[0]:
+            raise ValueError(
+                f"source_context_px ({source_context_px}) must be < clip 0 "
+                f"total frames ({clip_frames[0]}) so a NEW tail remains"
+            )
+        n_ctx_v = v_latent_frames(source_context_px)
+        if n_ctx_v > v_tile:
+            max_ctx_px = px_from_v_latent(v_tile)
+            raise ValueError(
+                f"source_context_px ({source_context_px}) -> frozen video-latent "
+                f"head n_ctx_v={n_ctx_v} exceeds stage-2 tile size v_tile={v_tile}: "
+                "the variant-B hard-freeze only covers stage-2 TILE 0, so the "
+                "frozen head must fit entirely inside the first tile. Max allowed "
+                f"source_context_px for this v_tile is {max_ctx_px}."
+            )
+        n_ctx_a = a_frames_for_px(source_context_px, fps)
+        trim_px = source_context_px
+        new_frames_px = clip_frames[0] - source_context_px
+        v2v_context_junction_px = source_context_px - 1
 
     seg_latent = [v_latent_frames(f) for f in clip_frames]
     seg_audio = [a_frames_for_px(f, fps) for f in clip_frames]
@@ -259,4 +326,10 @@ def compute_chain_layout(
         tile_seam_junctions=tile_seam_junctions,
         all_junctions=all_junctions,
         duration_sec=round(total_px / float(fps), 3),
+        source_context_px=source_context_px,
+        n_ctx_v=n_ctx_v,
+        n_ctx_a=n_ctx_a,
+        trim_px=trim_px,
+        v2v_context_junction_px=v2v_context_junction_px,
+        new_frames_px=new_frames_px,
     )

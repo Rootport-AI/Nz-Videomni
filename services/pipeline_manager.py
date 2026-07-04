@@ -14,8 +14,8 @@ import threading
 import time
 from pathlib import Path
 
-from api.errors import gpu_oom, generation_failed, pipeline_load_failed
-from api.models import JobResult, JobStatus
+from api.errors import gpu_oom, generation_failed, pipeline_load_failed, source_video_too_short
+from api.models import JobResult, JobStatus, SourceVideoSpec
 from config import AppConfig
 from services import gpu_info, video_io
 from services.job_store import JobRecord, JobStore, now_iso
@@ -197,6 +197,38 @@ class PipelineManager:
         finally:
             safe_memory_cleanup()
 
+    # --------------------------------------------------- V2V source preflight
+
+    def preflight_source_video(
+        self, source_video: SourceVideoSpec, request_frame_rate: float
+    ) -> None:
+        """Validate an uploaded V2V continuation source BEFORE a job is created.
+
+        ffprobes the stored source for fps + frame count and rejects (422
+        SOURCE_VIDEO_TOO_SHORT) when it cannot supply the requested
+        ``context_frames`` tail after resampling to ``request_frame_rate``. The
+        video_id is assumed already resolved (the endpoint 404s first). Geometry
+        bounds (8n+1, [25,145], context < clip-0) are enforced by the schema.
+        """
+        src_path = self.video_upload_store.path_for(source_video.video_id)
+        n_src = video_io.frame_count(src_path)
+        src_fps = video_io.probe_fps(src_path)
+        # Frame count after resampling to the request fps. Exact for the no-resample
+        # case; a duration-based estimate for the resample case (cut_tail_mp4 is the
+        # frame-exact backstop, which raises if the resampled source is still short).
+        if src_fps and abs(src_fps - float(request_frame_rate)) > 1e-3:
+            effective = int(round(n_src * float(request_frame_rate) / src_fps))
+        else:
+            effective = n_src
+        if effective < source_video.context_frames:
+            raise source_video_too_short(
+                detail=(
+                    f"source has {n_src} frames @ {src_fps} fps "
+                    f"(~{effective} @ {request_frame_rate} fps) < "
+                    f"context_frames={source_video.context_frames}"
+                )
+            )
+
     # -------------------------------------------------------- run chain job
 
     def run_chain_job(self, job: JobRecord) -> None:
@@ -252,6 +284,26 @@ class PipelineManager:
                 for ci in chain.clips[0].conditioning_images
             ]
 
+            # V2V continuation: cut the fps-correct source tail the engine needs
+            # (last context_frames frames at the request fps; resampled if the
+            # source fps differs). The engine does NOT resample. Provenance
+            # (source_fps, resampled) is recorded in the v2v metadata block.
+            source_tail_path = None
+            source_context_frames = None
+            v2v_provenance = None
+            if chain.source_video is not None:
+                src_path = self.video_upload_store.path_for(chain.source_video.video_id)
+                source_context_frames = chain.source_video.context_frames
+                source_tail_path = output_dir / "_source_tail.mp4"
+                cut = video_io.cut_tail_mp4(
+                    src_path, source_tail_path, source_context_frames, chain.frame_rate,
+                )
+                v2v_provenance = {
+                    "source_video_id": chain.source_video.video_id,
+                    "source_fps": cut["source_fps"],
+                    "resampled": cut["resampled"],
+                }
+
             def on_progress(step, total, progress):
                 job.current_step = step
                 job.total_steps = total
@@ -262,6 +314,8 @@ class PipelineManager:
                 output_dir=output_dir,
                 progress_callback=on_progress,
                 clip0_conditioning_paths=clip0_cond_paths,
+                source_tail_path=source_tail_path,
+                source_context_frames=source_context_frames,
             )
 
             elapsed = time.time() - started
@@ -283,7 +337,7 @@ class PipelineManager:
                     elapsed=elapsed, seed_used=outcome.seed_used,
                     backend=outcome.backend or "mock",
                     peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
-                    chain_meta=meta,
+                    chain_meta=meta, v2v_provenance=v2v_provenance,
                 )
 
             result = JobResult(
@@ -328,6 +382,7 @@ class PipelineManager:
     def _write_chain_metadata(
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
+        v2v_provenance=None,
     ) -> None:
         cm = chain_meta or {}
         metadata = {
@@ -368,6 +423,13 @@ class PipelineManager:
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=peak_vram_mb),
             "environment": self._environment_block(),
         }
+        # V2V continuation (additive): only present when a source_video was used,
+        # so a normal chain's metadata key set is byte-unchanged. The engine's
+        # (or mock's) chain.v2v sub-dict + the app-side provenance (source_video_id,
+        # source_fps, resampled).
+        v2v = cm.get("v2v")
+        if v2v is not None:
+            metadata["v2v"] = {**v2v, **(v2v_provenance or {})}
         video_io.save_metadata(metadata_path, metadata)
 
     # ------------------------------------------------------------ finalize

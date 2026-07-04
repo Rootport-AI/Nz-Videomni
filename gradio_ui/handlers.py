@@ -426,6 +426,60 @@ def _resolve_poll(poll_interval, poll_timeout_min):
 _FINISHED_STATES = ("completed", "failed", "cancelled")
 
 
+# --------------------------------------------------------------------------- #
+# Settings tab: /config fetch + automatic retry (bug fix). A page load used to
+# perform exactly ONE /config fetch and silently swallow any failure into
+# ``{}`` -- if that single fetch raced server startup or hit a transient
+# error, the Settings-tab spill-free table (and preset/adapter choices) stayed
+# empty FOREVER with no error and no retry, indistinguishable from "still
+# loading". These two module-level helpers (mirroring ``delete_finished_jobs``
+# above: take the ApiClient explicitly, no Gradio runtime needed) are shared by
+# ui.py's page-load handler, the manual Refresh button, and a one-shot
+# gr.Timer armed after a failed page load, so all three share IDENTICAL
+# failure semantics.
+# --------------------------------------------------------------------------- #
+
+# Automatic retry attempts (via the Settings-tab gr.Timer) before giving up and
+# pointing the user at the manual Refresh button instead of retrying forever
+# in the background against a persistently-dead server.
+CONFIG_RETRY_MAX_ATTEMPTS = 5
+
+
+def fetch_config_safe(api: ApiClient, lang: str = _DEFAULT_LANG) -> tuple[dict | None, str | None]:
+    """Fetch /config; returns ``(cfg, None)`` on success or ``(None, warning)``
+    on failure. Never raises and never guesses at a fallback config -- the
+    caller decides what to do with a ``None`` cfg (the safe default is: keep
+    whatever was already displayed, do NOT clobber it with ``{}``)."""
+    try:
+        return api.get_config(), None
+    except Exception as exc:
+        return None, L("warn_config_load_failed", lang).format(err=exc)
+
+
+def on_config_retry_tick(api: ApiClient, attempt: int,
+                          lang: str = _DEFAULT_LANG) -> tuple[dict | None, str | None, int, bool]:
+    """One tick of the Settings-tab auto-retry timer (armed after a failed
+    page-load /config fetch). Returns
+    ``(cfg_or_none, warning_or_none, next_attempt, keep_retrying)``:
+
+    * success               -> ``(cfg, None, attempt, False)`` -- stop the timer.
+    * failure, budget left  -> ``(None, transient_msg, attempt + 1, True)`` --
+      keep ticking (no gr.Warning here; the caller only surfaces the initial
+      failure and the final exhaustion, not every silent retry).
+    * failure, exhausted    -> ``(None, final_msg, attempt + 1, False)`` --
+      stop and tell the user to use the manual Refresh button instead.
+    """
+    cfg, err = fetch_config_safe(api, lang)
+    if err is None:
+        return cfg, None, attempt, False
+    next_attempt = attempt + 1
+    if next_attempt >= CONFIG_RETRY_MAX_ATTEMPTS:
+        final_msg = L("warn_config_retry_exhausted", lang).format(
+            err=err, n=CONFIG_RETRY_MAX_ATTEMPTS)
+        return None, final_msg, next_attempt, False
+    return None, err, next_attempt, True
+
+
 def delete_finished_jobs(api: ApiClient, lang: str = _DEFAULT_LANG) -> str:
     """Client-side "delete all finished jobs": list /jobs and DELETE every job in
     a terminal state (NO new endpoint). Returns a localized count message."""

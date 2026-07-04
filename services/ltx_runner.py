@@ -164,8 +164,15 @@ class LTXRunner:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
     ) -> GenerationOutcome:
-        """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4)."""
+        """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4).
+
+        ``source_tail_path`` / ``source_context_frames`` (V2V continuation,
+        additive): when set, the fps-correct source tail is frozen as clip-0's
+        head and the delivered mp4 is the NEW part only (both backends).
+        """
         if self._backend is None or not self._backend.loaded:
             self.load()
         assert self._backend is not None
@@ -174,6 +181,8 @@ class LTXRunner:
             output_dir=output_dir,
             progress_callback=progress_callback,
             clip0_conditioning_paths=clip0_conditioning_paths,
+            source_tail_path=source_tail_path,
+            source_context_frames=source_context_frames,
         )
 
     # ----------------------------------------------------- backend selection
@@ -361,10 +370,19 @@ class _MockBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
     ) -> GenerationOutcome:
         """Simulate a masked AV-latent chain: ONE synthetic mp4 of the full
         timeline length + junction metadata (from :mod:`chain_math`). GPU-free;
         exercises the app-side orchestrator/metadata without model weights.
+
+        V2V continuation (``source_tail_path`` / ``source_context_frames``): mirror
+        the engine geometry via ``compute_chain_layout(source_context_px=...)`` —
+        the mock mp4 holds ``new_frames_px`` frames (the NEW part only, matching the
+        engine's context trim) and ``chain.v2v`` carries the same key set the real
+        worker emits so pytest can pin the contract without a GPU. The mock has no
+        audio pipeline, so the audio-sample numerics are reported as 0.
         """
         if not self._loaded:
             self.load()
@@ -374,6 +392,7 @@ class _MockBackend:
         layout = chain_math.compute_chain_layout(
             [c.num_frames for c in chain.clips], chain.frame_rate,
             kv=chain.overlap_frames,
+            source_context_px=source_context_frames,
         )
         gpu_info.reset_peak_vram()
         if progress_callback:
@@ -385,8 +404,10 @@ class _MockBackend:
             start_image = Image.open(clip0_conditioning_paths[0]).convert("RGB")
             start_image = start_image.resize((chain.width, chain.height))
 
+        # V2V: the delivered mp4 is the NEW part only (context trimmed off front).
+        n_out = layout.new_frames_px if source_context_frames is not None else layout.total_px
         frames = self._render_chain_frames(
-            width=chain.width, height=chain.height, n=layout.total_px,
+            width=chain.width, height=chain.height, n=n_out,
             seed=seed, start_image=start_image, progress_callback=progress_callback,
         )
         if progress_callback:
@@ -407,13 +428,55 @@ class _MockBackend:
             progress_callback(None, None, 1.0)
         safe_memory_cleanup()
 
+        chain_metadata = layout.to_dict()
+        if source_context_frames is not None:
+            source_had_audio = bool(
+                source_tail_path is not None and video_io.has_audio_stream(source_tail_path)
+            )
+            # Mirror the worker's merged chain.v2v key set (engine done.chain.v2v):
+            # geometry from ChainLayout + runtime fields. The mock has no audio
+            # decode, so trimmed_audio_samples / audio_fade_in_samples are 0.
+            # Placeholder audio-handle sidecar (synthetic SILENCE — the mock has no
+            # audio pipeline). Mirrors the real engine's sidecar so pytest can pin
+            # the contract (existence + metadata keys) without a GPU: the wav holds
+            # `decoded_frames_px/frame_rate` seconds of 48kHz mono int16 zeros, with
+            # the notional junction at `handle_context_seconds` = trim_px/frame_rate.
+            handle_context_seconds = float(layout.trim_px) / float(chain.frame_rate)
+            audio_handle_filename = self._write_placeholder_handle_wav(
+                output_dir / "output_audio_handle.wav",
+                total_frames=int(layout.total_px),
+                frame_rate=float(chain.frame_rate),
+            )
+            v2v = dict(chain_metadata.get("v2v", {}))
+            v2v.update({
+                "context_frames": int(source_context_frames),
+                "n_ctx_v": int(layout.n_ctx_v),
+                "n_ctx_a": int(layout.n_ctx_a),
+                "freeze_ka": int(layout.n_ctx_a) if source_had_audio else 0,
+                "trimmed_px": int(layout.trim_px),
+                "trimmed_audio_samples": 0,
+                "audio_fade_in_samples": 0,
+                "source_had_audio": source_had_audio,
+                # Mock has no partial-availability audio decode: it either freezes
+                # the full n_ctx_a (source has audio) or nothing (it doesn't), so
+                # audio_head_frozen == source_had_audio here — but the key is kept
+                # distinct to mirror the real engine's done-dict shape exactly.
+                "audio_head_frozen": source_had_audio,
+                "new_frames_px": int(layout.new_frames_px),
+                "decoded_frames_px": int(layout.total_px),
+                "v2v_context_junction_px": layout.v2v_context_junction_px,
+                "audio_handle_filename": audio_handle_filename,
+                "handle_context_seconds": round(handle_context_seconds, 6),
+            })
+            chain_metadata["v2v"] = v2v
+
         return GenerationOutcome(
             output_path=output_path,
             seed_used=seed,
             peak_vram_mb=peak,
             generation_mode="chain",
             backend=MOCK_BACKEND,
-            chain_metadata=layout.to_dict(),
+            chain_metadata=chain_metadata,
         )
 
     def _render_chain_frames(
@@ -445,6 +508,25 @@ class _MockBackend:
             draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ball_color)
             frames.append(frame)
         return frames
+
+    @staticmethod
+    def _write_placeholder_handle_wav(
+        path: Path, *, total_frames: int, frame_rate: float, sr: int = 48000
+    ) -> str:
+        """Write a synthetic-SILENCE 48kHz mono int16 wav standing in for the real
+        engine's audio-handle sidecar (the mock has no audio decode). Length =
+        ``total_frames / frame_rate`` seconds so the sample geometry (junction at
+        trim_px/frame_rate) is plausible. Returns the basename for metadata."""
+        import wave
+
+        n_samples = int(round(total_frames / float(frame_rate) * sr))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)  # int16
+            wf.setframerate(sr)
+            wf.writeframes(b"\x00\x00" * n_samples)
+        return path.name
 
     # --------------------------------------------------------- mock renderer
 
@@ -908,6 +990,8 @@ class _RealBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain via the worker's ``generate_chain`` op.
 
@@ -915,6 +999,11 @@ class _RealBackend:
         segments) and writes ONE mp4. Progress events (per stage-1 segment, per
         stage-2 tile, decode) are streamed to ``progress_callback``; the terminal
         ``done`` carries peak VRAM + junction metadata.
+
+        V2V continuation: when ``source_tail_path`` is set, an additive ``source``
+        block ({path, context_frames}) is added to the worker payload (the app has
+        already cut the fps-correct tail). The worker's ``done.chain`` then carries
+        the ``v2v`` sub-dict, returned as-is in ``chain_metadata``.
         """
         if not self.loaded:
             self.load()
@@ -959,6 +1048,13 @@ class _RealBackend:
             "output_path": str(target),
             "clips": clips_payload,
         }
+        # V2V continuation (additive): the app-cut fps-correct source tail. Absent
+        # for a normal chain (payload byte-identical to before).
+        if source_tail_path is not None and source_context_frames is not None:
+            payload["source"] = {
+                "path": str(source_tail_path),
+                "context_frames": int(source_context_frames),
+            }
 
         with self._lock:
             try:

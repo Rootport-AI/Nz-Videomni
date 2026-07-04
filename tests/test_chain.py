@@ -222,3 +222,104 @@ def test_chain_clip0_conditioning_image_missing_404(client):
     r = _run_chain(client, clips)
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "IMAGE_NOT_FOUND"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unequal-length chains (regression for the stage-1 carry init-shape bug).
+#
+# The engine used to size segment i>0's init latents with ``zeros_like(prev)`` —
+# the PREVIOUS segment's frame count — which crashed create_initial_state whenever
+# consecutive clips had different num_frames (first surfaced by V2V e2e E2E-B,
+# clips [145, 73]). The fix sizes the init tensors from the CURRENT segment's
+# latent shape. Every prior chain test used uniform clip lengths, so it stayed
+# latent. These tests pin unequal lengths as a first-class, accepted input.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_chain_unequal_lengths_completes_and_matches_chain_math(client):
+    # [145, 73] is the exact E2E-B repro geometry (minus source_video, which the
+    # mock backend does not encode). Longer-then-shorter is the direction that
+    # crashed: prev segment (145 -> 19 latent) larger than current (73 -> 10).
+    import chain_math
+
+    clips = [{"num_frames": 145}, {"num_frames": 73}]
+    r = _run_chain(client, clips)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    layout = chain_math.compute_chain_layout([145, 73], 24.0, kv=BASE["overlap_frames"])
+    ch = meta["chain"]
+    assert ch["clip_num_frames"] == [145, 73]
+    assert ch["total_frames"] == layout.total_px
+    assert ch["segment_seam_junctions"] == layout.segment_seam_junctions
+    assert ch["all_junctions"] == layout.all_junctions
+
+
+def test_chain_unequal_lengths_shorter_then_longer(client):
+    # [73, 145] — the reverse direction (Gate 2b geometry): current segment
+    # larger than prev. Both directions must be accepted and complete.
+    import chain_math
+
+    clips = [{"num_frames": 73}, {"num_frames": 145}]
+    r = _run_chain(client, clips)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    layout = chain_math.compute_chain_layout([73, 145], 24.0, kv=BASE["overlap_frames"])
+    assert meta["chain"]["clip_num_frames"] == [73, 145]
+    assert meta["chain"]["total_frames"] == layout.total_px
+
+
+def test_chain_carry_always_fits_current_segment():
+    """Invariant the engine stage-1 carry relies on: for every inter-clip join the
+    frozen carry (K_v video / K_a audio latent frames, copied from the previous
+    segment's tail into the current segment's head) fits inside BOTH adjacent
+    segments' latent frame counts.
+
+    The video half is guaranteed by the request/geometry guard
+    (``overlap_frames < every clip's stage-1 latent frames``). The audio half has
+    no separate validator; this test confirms the video guard + geometry implies
+    ``ka_list[j] <= min(seg_audio[j], seg_audio[j+1])`` for a broad set of unequal
+    configs (including the E2E-B repro and high-fps stress, where audio latent
+    frames are scarcest). If this ever fails, an explicit ka guard belongs in
+    chain_math (the geometry SoT), not the engine.
+    """
+    import chain_math
+
+    configs = [
+        ([145, 73], 24.0),
+        ([73, 145], 24.0),
+        ([145, 25, 73], 24.0),
+        ([25, 145], 24.0),
+        ([25, 33, 33, 33], 60.0),   # min-slack case from the exhaustive scan
+        ([9, 9, 9], 60.0),          # shortest legal audio segments, high fps
+        ([73, 73], 60.0),
+    ]
+    for clip_frames, fps in configs:
+        for kv in range(1, 9):
+            seg_lat = [chain_math.v_latent_frames(f) for f in clip_frames]
+            if any(kv >= L for L in seg_lat):   # rejected by the video guard
+                continue
+            try:
+                layout = chain_math.compute_chain_layout(clip_frames, fps, kv=kv)
+            except ValueError:
+                continue   # geometrically-degenerate config -> 422 before the engine
+
+            for j, ka in enumerate(layout.ka_list):
+                assert kv < layout.seg_latent[j] and kv < layout.seg_latent[j + 1], (
+                    clip_frames, fps, kv, j, layout.seg_latent
+                )
+                limit = min(layout.seg_audio[j], layout.seg_audio[j + 1])
+                assert ka <= limit, (clip_frames, fps, kv, j, ka, layout.seg_audio)

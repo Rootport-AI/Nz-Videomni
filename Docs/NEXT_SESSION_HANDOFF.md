@@ -2,9 +2,35 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 Gradio GUI追いつき＋機能リサーチセッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
+## ▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 video-to-video 継続セッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
 
-> **本ブロックが最新の正本。** これ以降の▶節（2026-07-04 Phase C実装末・Phase C準備末・2026-07-03以前・2026-07-01以前）はすべて歴史記録。食い違ったら本ブロックが正。
+> **本ブロックが最新の正本。** これ以降の▶節（GUI追いつき末・Phase C実装末・それ以前）はすべて歴史記録。食い違ったら本ブロックが正。
+
+### 現在地（1分サマリ）
+
+| 項目 | 状態 |
+|---|---|
+| リポジトリ | branch **`feature/v2v-continuation`（main へ未マージ・push もユーザー承認待ち）**。base＝main `86a3fcf`（GUI マージ済）。コミット列＝設計`cf99448`→S1 engine `e7d497c`/`2830ede`/`5482225`→S2 app `33fae6d`/`73dc20f`/`44facdd`/`a89963c`→レビュー反映`092d37f`→docs`0e8b1a7`→チェーンバグ修正`e8557cb`→docs`86f38e8`→**v1.1: GUI修正`b95a38c`→join_v2v`933b57a`→VRAM是正`b2c20ee`→音声ハンドル`501c5ca`** |
+| video-to-video 継続 | ✅**実装完了（v1.1 含む）・客観ゲート全PASS**。`POST /generate/chain` に optional `source_video`。**G3 経緯**: 初回試聴=映像完璧/音声FAIL（音楽ブツ切れ+セリフ反復）→ v1.1 で音声継ぎ改善（詳細=**VERIFICATION_LOG §24.7**・[`V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md)）→ G3v2 をユーザーが「谷はあるが音楽連続・限定用途で実用域」と受容（温存決定）→ ハンドル真クロスフェード（オプトイン・`501c5ca`）で無音谷を消滅させた**最終試聴（G3v4）のみ OPEN** |
+| ★同梱の重要修正 | ①クリップ長不揃いチェーンの潜伏クラッシュ（`e8557cb`）②**V2V エンコードの WDDM ページ降格カスケード**（`b2c20ee`・共有溢れ12.5GB→ゼロ・2.09×高速化。教訓=一過性の GPU 超過で降格されたページは戻らず後続フェーズ全体が共有メモリ実行になる）③GUI Settings spill表の無限読み込み（`b95a38c`） |
+| 回帰 | T2V `23844b4e…`／I2V `a511eda4…` **byte一致**（各実装後に再証明）・同一シード V2V もバイト一致・pytest **191 passed / 1 skipped**・720p/257f は spill-free（`b2c20ee` 後） |
+| 開いているゲート | ①~~V2V G3 最終試聴~~→**✅PASS（2026-07-05・「自然音やスローテンポならまず気付かない」＝V2V の目視/試聴ゲート全クローズ）** ②GUI 目視ゲート＋実機 e2e（前セッション宿題・据え置き。ただし Settings 表バグは修正済み）③~~push／main マージ~~→**実施（G3 PASS を受けユーザー事前決定の条件成立）** |
+| 次セッション | G3v4 判定→マージ→次機能（候補: audio-to-video＝[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節・V2V の `encode_audio`/ハンドル配線が下地／GUI への V2V 露出＝**音声スムージング ON/OFF チェックボックス要件**（ユーザー 2026-07-04・VERIFICATION_LOG §24.7 将来項目①）含む／モデル管理=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)） |
+
+### 用語・試聴素材
+
+- 用語: **「元動画」**＝V2V の入力動画（旧表記「源動画」は同義・以後「元動画」に統一）。
+- 試聴素材の現行世代: **G3v4**（`outputs/v2v_e2e/E2E-A4/G3v4_joined_handle_{300,150}ms.mp4`・音楽プロンプト継続×ハンドル真クロスフェード）。参考=G3v2（フェードペア・ユーザー受容済み）`outputs/v2v_e2e/E2E-A2/G3v2_joined_source_plus_continuation.mp4`・フェード変種 `outputs/v2v_e2e/E2E-A2/audio_join_variants/`・初回素材と E2E-B/C は `outputs/v2v_e2e/E2E-A|B|C/`
+
+### 使い方（最小）
+
+`POST /upload/video` → `POST /generate/chain` に `{"source_video": {"video_id": "...", "context_frames": 73}, "clips": [{"prompt": "...", "num_frames": 217}], "width": 1280, "height": 768, ...}`（source 有り時は 1 クリップ可）→ 出力は**新規部分のみ**（この例では 217−73=144f）。context_frames は 8n+1・25〜145（理由＝stage2 タイル適合・VERIFICATION_LOG §24.3）。fps 不一致は自動リサンプル。音声も凍結継続。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 Gradio GUI追いつき＋機能リサーチセッション末）（歴史記録）
+
+> **（歴史記録）本ブロックは上位の「2026-07-04 video-to-video 継続セッション末」ブロックに置き換わった。** これ以降の▶節（2026-07-04 Phase C実装末・Phase C準備末・2026-07-03以前・2026-07-01以前）はすべて歴史記録。食い違ったら最新ブロックが正。
 
 ### 現在地（1分サマリ）
 

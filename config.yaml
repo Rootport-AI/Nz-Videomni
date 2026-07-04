@@ -149,6 +149,12 @@ limits:
     "1280x768": 257          # 720p（実用快適上限）
     "1920x1088": 153         # 1080p（20s は非実用~40分→720p生成+外部upscale 推奨）
     "2560x1472": 81          # 1440p
+  # V2V 継続（POST /generate/chain の source_video.context_frames）。/config で公開。
+  # context_frames は 8n+1。max=145 は保守的な v1 上限（凍結ヘッドを stage-2 の
+  # 1タイル内に収める。api.models.SourceVideoSpec 参照）。
+  v2v_context_frames_default: 73
+  v2v_context_frames_min: 25
+  v2v_context_frames_max: 145
 
 output:
   dir: "./outputs"

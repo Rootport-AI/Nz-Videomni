@@ -1451,3 +1451,74 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 - **`build_ui` は uvicorn がlistenする前に走る**ため、`/config` はビルド時に取得できない → `demo.load`（`demo.load` 内）で取得する。
 - **`gr.I18n` はブラウザロケール依存のみ**＝実行中の言語切替はラベルレジストリ＋`gr.update` 一括更新で実現。
 - **クリップ連結の総フレーム数上限はサーバーと同じ `chain_math` を流用**して事前チェック（独自算術を発明しない）。
+
+---
+
+## 24. ★video-to-video 継続（アップロード動画の「続き」生成）＝設計→実装→実機e2e 全客観ゲートPASS（2026-07-04・branch `feature/v2v-continuation`・**G3目視はユーザー未実施＝OPEN**）
+
+> **正本＝本節＋設計書 [`V2V_CONTINUATION_DESIGN.md`](V2V_CONTINUATION_DESIGN.md)（ユーザー合意済み4決定含む）。一次情報＝`outputs/v2v_spike/SPIKE_REPORT.md`（S0）・`outputs/v2v_e2e/E2E_REPORT.md`（S3）・`outputs/v2v_e2e/S4_fix_verify/`（バグ修正検証）。**
+> base＝main `8bdf90a`＋GUIマージ `86a3fcf`。**push／main マージはユーザー承認待ち。**
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11。
+
+### 24.1 何を作ったか（1分）
+
+`POST /generate/chain` に optional `source_video: {video_id, context_frames=73}` を追加（凍結APIの加算的拡張・省略時byte同一）。アップロード動画（`POST /upload/video` 再利用）の末尾 context（既定73px≈3秒）を VAE エンコードし、クリップ連結の carry+freeze 機構に凍結ヘッドとして注入して続きを生成。出力は**新規部分のみ**（context はサーバー側でフレーム正確にトリム・音声は30msフェードインのクリックガード付き）。fps 不一致は app 側 ffmpeg で自動リサンプル。音声トラックも latent 化して凍結継続（音声なし源は自由生成へフォールバック）。
+
+### 24.2 ゲート実績（コミット列: 設計`cf99448`→S1 `e7d497c`/`2830ede`/`5482225`→S2 `33fae6d`/`73dc20f`/`44facdd`/`a89963c`→レビュー反映`092d37f`→docs`0e8b1a7`→チェーンバグ修正`e8557cb`）
+
+- **G0 スパイク（GO）**: stage2 ヘッド凍結の A/B が決着＝**variant B（源末尾のフル解像度 tiled 再エンコードで stage2 tile0 先頭を mask=0 ハード凍結）必須**。A は継ぎ目で色調が跳ね FAIL（MAD 4.00×/輝度6.62×）、B は 1.00×。h264-crf35 の汚い源でも連続（圧縮アーティファクト混入は観測されず）。audio_encoder 初ロード 45.7MB。
+- **G1 回帰**: T2V `23844b4e…6bb7bf`／I2V `a511eda4…c217` **byte 完全一致**（S1 実装後と `e8557cb` 修正後の2回証明）。等長チェーンは修正前後で SHA `f706057a…0ea1` **バイト一致**＝修正は等長経路の no-op を証明。pytest **168 passed / 1 skipped**（基準147→+15 S2＋+3 レビュー＋+3 バグ回帰）。
+- **G2 新経路（実機・REST 経由＝完全消化）**: 720p（1280×768・context73＋新規144f）完走・継ぎ目連続（video 1.18×）・worker peak 10202MB（瞬間 nvidia-smi 15.9GB＝既知の Gemma encode 一過性・16GB内）。多クリップ継続（等長・不等長とも）・30fps→24fps 実リサンプル・422/404 異常系全PASS。
+- **★既存バグ発掘・修正（`e8557cb`）**: クリップ長が不揃いのチェーンは V2V 以前からクラッシュする潜在バグ（stage1 carry の init を `torch.zeros_like(prev)`＝前セグメント長で確保）。過去検証が全て等長だったため潜伏。現セグメントの latent 形状から確保する修正＋回帰テスト3件。音声 carry 側の防御要否は網羅スキャン（結合900万件超）で「既存バリデータで到達不能」を確認し追加せず。
+- **VRAM**: 生成ピークは既存チェーン同族（640×384で8.4–9.5GB・720pで10.2GB）。V2V 固有の追加コストは実質ゼロ（源エンコードは tiled 化で ピーク非支配・スパイクの未タイル比 -1066MB）。
+
+### 24.3 設計の要点・制約（実装で確定）
+
+- **context_frames 上限=145px**（8n+1・下限25）。理由＝凍結ヘッドは stage2 時間タイル（22 latent）内に収まる必要（variant B は tile0 のみ凍結・理論上限169px）。不変条件は `chain_math.py` の early-raise＋config ガードテストで二重化（レビュー Finding 1 反映）。
+- metadata.json に加算的 `v2v` ブロック（source_video_id・source_fps・resampled・freeze_ka・audio_head_frozen・トリム幾何）。`GET /config` の limits に `v2v_context_frames_default/min/max` 露出。
+- チェーン要求に `loras` フィールドは存在しないため IC-LoRA 併用は構造的に不可（将来チェーンに loras を足す時に 422 を設けること）。
+
+### 24.4 目視ゲート G3＝**ユーザー未実施（OPEN）**・素材準備済み
+
+- **本命（720p・音声付き・源+継続の結合）**: `outputs/v2v_e2e/E2E-A/G3_candidate_joined_source_plus_continuation.mp4`（源=visual_review 09 の 720p 級＋6秒継続・継ぎ目はフレーム128/129）。継続単体＝`outputs/v2v_e2e/E2E-A/continuation_only_1280x768_144f.mp4`・境界モンタージュ＝同 `boundary_report/boundary_montage_128.png`。
+- 補助: 多クリップ＝`outputs/v2v_e2e/E2E-B/joined_source_plus_multiclip.mp4`・リサンプル＝`outputs/v2v_e2e/E2E-C/joined_source_plus_continuation.mp4`・スパイクの A/B 比較（variant A の色跳ね現物）＝`outputs/v2v_spike/runs/A_clean|B_clean/joined_source_plus_continuation.mp4`。
+- **判定観点**: ①継ぎ目の自然さ（映像） ②色/明度ドリフト ③音声の継ぎ目（クライアント側で源と結合した時の微小クリックが許容か。ハーネス値は 3.5–6.7×・映像は全て連続）。
+
+### 24.5 持ち越し（将来項目）
+
+- 音声継ぎ目のクリック根治（源の実音声とデコード音声のノイズフロア差）: v1 は 30ms フェードで緩和・G3 試聴の結果次第で「サーバー側結合出力＋真のクロスフェード」オプションを検討。
+- stage2 の音声タイル継ぎ目（既知・チェーン由来 backlog と同族・V2V 固有ではない）。
+- fps リサンプルが全体変換（末尾だけの部分変換に最適化可能・単一ユーザーでは実害小）。VFR 源は未ストレステスト。
+- mock の音声数値は 0 固定（実バックエンドと差異あり・docstring 記載済み）。
+
+### 24.6 得られた知見
+
+- **実写・圧縮素材の VAE latent 混入リスクは杞憂だった**（h264-crf35 でも継ぎ目連続・色ドリフトむしろ最小）。
+- **causal VAE の先頭 latent 規約**: 末尾 kv 個だけの切り出し注入は先頭アンカー規約とずれる → **context 丸ごと凍結ヘッド**にすれば規約が一致（ComfyUI extend と同運用）。
+- **pin `00dc53d` に `RetakePipeline`（動画→initial latent＋mask 部分 denoise）と `tiled_encode` は在る**が、新 vendor ツリーの `video_latent_from_file`/`VideoConditionByMask` は無い（流用不可・チェーンの freeze mask 方式で代替）。
+- 検証ハーネスの再利用が効いた: Phase 3 の境界ハーネス（既知 hard-cut 較正済み）を V2V の junction 判定にそのまま流用。
+
+### 24.7 ★G3 試聴 → v1.1（音声継ぎ改善＋VRAM 是正）（2026-07-04 同日後半・同 branch）
+
+> 一次情報: 音声接続リサーチ＝[`V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md)（§4=ハンドル実装）・E2E 追補＝`outputs/v2v_e2e/E2E_REPORT.md`（E2E-A2 節）・VRAM 修正検証＝`outputs/v2v_encode_fix/`・試聴素材＝`outputs/v2v_e2e/E2E-A2|A3|A4/`。用語: 以後「元動画」（旧表記「源動画」と同義）。
+
+**G3 初回試聴（ユーザー・2026-07-04）**: 映像=**完璧**（128→129f の継ぎ目視認不能）。音声=**FAIL**（①音楽がブツ切れ ②同じセリフの反復）。比較用の不採用 variant A は「雰囲気だけ似た別動画の接続」と評され、variant B 採用の正しさを裏付け。
+
+**根本原因（調査で確定）**: ①セリフ反復=検証素材の継続プロンプトが元動画の発話済みセリフを指示していた（素材の不手際・コードのバグではない）②音楽ブツ切れ=クロスフェード機構なしのハード連結＋「音楽を継続させる条件付けは構造的に存在しない」（公式ホスト API も同方式・プロンプトに音楽記述が皆無）。**クリップ連結には本問題は存在しない**（単一ジョブ内の音声は 1 本の連続 latent＋1 回デコード＝貼り合わせ点が無い。`concat_mp4s` の本番呼び出し元も無し）。問題は「別々に生成したファイルの結合面」全般に付随する。
+
+**v1.1 の実施内容（コミット列 `b95a38c`→`933b57a`→`b2c20ee`→`501c5ca`）**:
+
+1. **R0 リサーチ（ユーザー指摘で追加・実装前）**: 音声接合の先行事例調査 → クロスフェード方針は整合・equal-power（`qsin`）/音楽向け 300–500ms/LUFS 整合を確定（[`V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md)）。
+2. **`join_v2v` ヘルパー（`933b57a`）**: フェードペア（400ms qsin）＋2パス loudnorm。実素材で継ぎ目 audio ratio 3.52×→**0.29×**。副次発見=生成音声は元動画より 8.6dB 大きかった（ラウドネス整合の価値）。
+3. **G3v2 再生成**: セリフ無し＋音楽明示プロンプト・context 最大化（元動画 129f 全量。※監督指示の 145 は元動画長超過で不可・事前検証 422 が正しく拘束）。継ぎ目 audio 0.61×。**ユーザー判定: 谷はあるが音楽は連続・用途を絞れば実用域＝v1 として温存決定**（壊さない）。
+4. **谷の平坦化（ユーザー方針: 案出し→先行事例→高性能×低難易度なら試す）**: リサーチ裁定=**ハンドル方式**（エンジンがトリムで捨てている context 領域音声を流用した真の重ね合わせ equal-power クロスフェード）が勝者・位相打ち消しリスクは低〜中（「同じ曲の別テイク編集」として音響編集の定石が明示的に容認・qsin は重ね合わせ時に equal-power）。フェード変種 4 種の計測で**谷の一部（~85ms）は生成内容そのものに由来**（フェードゼロでも存在）と判明。
+5. **ハンドル実装（`501c5ca`・オプトイン・現行既定不変）**: エンジンがトリム前全長音声を `<stem>_audio_handle.wav` サイドカー出力（配信 mp4 バイト不変を SHA で実証）＋`join_v2v(handle_audio=…, handle_crossfade_ms=300)`。**ほぼ無音の谷（深さ 0・~710ms）は消滅**、残余はクロスフェード窓内の浅い凹み（深さ 0.42・150ms 版で幅 105ms ≒ 内容由来の下限 85ms）。数値=[`V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md) §4。
+6. **★VRAM 是正（`b2c20ee`・ユーザーの「VRAM に載せ続ける必要あるの?」指摘が起点）**: `_encode_source_heads` が context ピクセル全量を GPU 常駐させていた → フレーム毎に GPU 前処理→即 CPU 退避（数値完全一致設計・`tiled_encode` は CPU 入力対応）。**共有 GPU メモリ溢れ ~12.5GB→実質ゼロ・壁時間 584s→279s（2.09×）・出力バイト完全一致**。真因の教訓=**WDDM はエンコード段の一過性超過で torch のページを共有メモリへ降格し、降格ページは戻らないため後続 stage-1 全体が共有メモリ実行になる**（「stage-1 で溢れた」ように見えた正体）。720p/257f は修正後 spill-free（E2E-A2 時の「V2V 実用天井は 217f」暫定判断は撤回・257f まで OK）。
+7. **付随修正（GUI・`b95a38c`）**: Settings の spill-free 表が初回 `/config` 取得失敗時に無言で空のまま（=「無限読み込み」に見える）→ 失敗の可視化（警告・英日）＋`gr.Timer` 自動再試行（最大5回）。
+
+**回帰**: T2V/I2V byte-match は各実装後に維持（`23844b4e…`/`a511eda4…`）。同一シード V2V 出力も VRAM 修正・サイドカー追加の前後でバイト一致。pytest **191 passed / 1 skipped**。
+
+**将来項目（記録）**: ①**音声スムージングの UI チェックボックス**（ユーザー要望 2026-07-04）: 将来の GUI V2V 露出時に「結合出力」機能へ ON/OFF を付ける（ON=ハンドル有なら真クロスフェード/無ければフェードペア・OFF=ハード連結。API/エンジン不変＝結合はクライアント側の関心事）②残余の浅い凹みのさらなる平坦化（ノイズフロア整合等）③モデル管理（A1111 風）=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。
+
+**✅G3 最終試聴 PASS（ユーザー・2026-07-05）**: G3v4（音楽プロンプト継続×ハンドル真クロスフェード・`outputs/v2v_e2e/E2E-A4/`）で「音の繋ぎ目はかなり滑らかになった。自然音やスローテンポの EDM ならまず繋ぎ目に気付かない。音楽や会話の途中なら気づくが、それは現在の生成 AI の性能の限界」＝**合格**。参考: G3v4 の計測は下請けエージェントが生 wav から独立再計算しても完全一致（二重検証済み）。**V2V の目視/試聴ゲートは全クローズ** → push/main マージへ（ユーザー事前決定の条件成立）。

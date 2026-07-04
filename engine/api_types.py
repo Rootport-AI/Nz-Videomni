@@ -49,13 +49,32 @@ class ChainClipPayload(TypedDict, total=False):
     images: list[dict]
 
 
+class SourceVideoPayload(TypedDict, total=False):
+    """Optional video-to-video continuation source on ``generate_chain``.
+
+    * path: an mp4 that is ALREADY the source tail cut at the request fps (the
+      app layer guarantees this — the engine does NOT resample).
+    * context_frames: 8n+1 pixel-frame context span whose VAE encode is frozen
+      as clip-0's head. clips[0].num_frames is the TOTAL clip-0 timeline
+      (context head + new tail); the delivered mp4 is the NEW part only.
+    """
+
+    path: str
+    context_frames: int
+
+
 class GenerateChainParams(TypedDict, total=False):
     """Keys on the worker ``generate_chain`` op.
 
     Emits ``progress`` events (stage in {stage1, tile, decode}) during the run
     and a terminal ``done`` carrying ``peak_vram_mb`` + ``chain`` (the full
     junction metadata: segment_seam_junctions, tile_seam_junctions,
-    all_junctions, total_px, tiles, ...).
+    all_junctions, total_px, tiles, ...). For a V2V run the ``chain`` dict also
+    holds a ``v2v`` sub-dict (context_frames, n_ctx_v, n_ctx_a, trimmed_px,
+    source_had_audio, v2v_context_junction_px, ...).
+
+    ``source`` is optional (absent/null for a normal chain); when present the
+    ``clips`` list may be length 1.
     """
 
     width: int
@@ -67,6 +86,7 @@ class GenerateChainParams(TypedDict, total=False):
     overlap_strength: float  # stage-1 carry freeze strength (1 - mask value)
     output_path: str
     clips: list[ChainClipPayload]
+    source: SourceVideoPayload
 
 
 # ============================================================

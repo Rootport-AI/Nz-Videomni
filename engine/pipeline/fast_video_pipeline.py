@@ -917,12 +917,15 @@ class LTXFastVideoPipeline:
         overlap_strength: float,
         output_path: str,
         progress=None,
+        source=None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
         Delegates to :func:`engine.pipeline.chain_pipeline.run_chain`, which
         reuses THIS pipeline's ledger/components/low-VRAM machinery. ``clips`` is
         a list of ``ChainClipSpec`` (prompt already resolved, images built).
+        ``source`` (optional ``SourceSpec``) enables video-to-video continuation:
+        the source tail is frozen as clip-0's head and trimmed from the output.
         Returns metadata incl. segment/tile junction pixel-frame indices.
         """
         from engine.pipeline.chain_pipeline import run_chain
@@ -939,6 +942,7 @@ class LTXFastVideoPipeline:
             overlap_strength=overlap_strength,
             output_path=output_path,
             progress=progress,
+            source=source,
         )
 
     @torch.inference_mode()

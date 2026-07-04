@@ -472,6 +472,200 @@ def extract_last_frame(mp4: Path, out_png: Path) -> Path:
     return extract_frame_at(mp4, n - 1, out_png)
 
 
+def _loudnorm_measure(exe: str, path: Path) -> dict[str, float]:
+    """Run ffmpeg's ``loudnorm`` filter in pass-1 (measure-only) mode and parse
+    the JSON stats block it writes to stderr. Used by :func:`join_v2v` to read
+    the actual integrated loudness (LUFS) of an existing audio track without
+    modifying it (spec ch.10 V2V join: "measure before you touch anything").
+
+    The ``I``/``TP``/``LRA`` target values passed here only affect the
+    *analysis* thresholds, not the reported ``input_i`` (the file's own
+    measured loudness) -- neutral defaults are used since this call never
+    writes output.
+    """
+    cmd = [
+        exe,
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        str(path),
+        "-vn",
+        "-af",
+        "loudnorm=I=-23:TP=-2:LRA=7:print_format=json",
+        "-f",
+        "null",
+        "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffmpeg loudnorm measure failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+    text = proc.stderr
+    start, end = text.rfind("{"), text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise FFmpegError(f"ffmpeg loudnorm measure: could not parse JSON stats from stderr: {text[-1000:]}")
+    try:
+        return json.loads(text[start : end + 1])
+    except Exception as exc:
+        raise FFmpegError(f"ffmpeg loudnorm measure: bad JSON stats: {exc}") from exc
+
+
+def join_v2v(
+    source: Path,
+    continuation: Path,
+    out: Path,
+    *,
+    audio_fade_ms: int = 400,
+    loudness_match: bool = True,
+) -> dict:
+    """Join a real ``source`` clip to a generated ``continuation`` clip (V2V).
+
+    Unlike :func:`concat_mp4s` (used for same-generation clip chains, where
+    segments share one continuous vocoder-audio stream), the two inputs here
+    come from independent audio sources -- a real source recording and a
+    freshly generated (vocoder) continuation with a different noise floor.
+    Research (R0) confirmed a true overlapped ``acrossfade`` is not possible:
+    neither file has audio *past* the visual join point, and shrinking either
+    track by the fade duration would desync audio from video. So this
+    implements the no-handle standard instead:
+
+    - Video: a hard cut, concatenated the same way as :func:`concat_mp4s`
+      (re-encoded; ``source`` and ``continuation`` must share resolution and
+      fps -- raises :class:`FFmpegError` otherwise).
+    - Audio: fade the source's last ``audio_fade_ms`` out and the
+      continuation's first ``audio_fade_ms`` in (both ``curve=qsin``, the
+      "equal-power" crossfade curve), so the discontinuity is masked by
+      silence at the seam rather than heard as a hard cut. Total duration is
+      preserved (no audio/video trimming -- only fades, which do not change
+      length).
+    - Loudness: when ``loudness_match`` is True and both clips have audio, the
+      source's integrated loudness is measured (two-pass ``loudnorm``,
+      pass-1 JSON) and the continuation's audio is normalized toward it
+      *before* fading, so the fade blends between two clips at matched
+      levels rather than masking a volume jump. The source's audio is never
+      altered except for its fade-out.
+
+    If either input lacks an audio stream, no audio treatment is applied at
+    all (mirrors :func:`concat_mp4s`'s fallback): the output is video-only,
+    matching the "both must have audio" gate that function also uses.
+
+    ``audio_fade_ms`` is clamped to the shorter of the two clips' audio
+    durations if it would otherwise exceed one side's available audio.
+
+    Writes the joined video to ``out``. Returns a small dict for
+    metadata/logging: ``{source_lufs, continuation_lufs_before,
+    fade_ms_applied, loudness_matched}`` (``source_lufs`` /
+    ``continuation_lufs_before`` are ``None`` when loudness was not measured).
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    src_res = probe_resolution(source)
+    cont_res = probe_resolution(continuation)
+    if src_res is None or cont_res is None or src_res != cont_res:
+        raise FFmpegError(
+            f"join_v2v: resolution mismatch/unavailable: source={src_res} continuation={cont_res}"
+        )
+
+    src_fps = probe_fps(source)
+    cont_fps = probe_fps(continuation)
+    if src_fps is None or cont_fps is None or abs(src_fps - cont_fps) > 1e-3:
+        raise FFmpegError(
+            f"join_v2v: fps mismatch/unavailable: source={src_fps} continuation={cont_fps}"
+        )
+
+    with_audio = has_audio_stream(source) and has_audio_stream(continuation)
+
+    info: dict[str, Any] = {
+        "source_lufs": None,
+        "continuation_lufs_before": None,
+        "fade_ms_applied": 0,
+        "loudness_matched": False,
+    }
+
+    parts: list[str] = [
+        "[0:v]setpts=PTS-STARTPTS[v0]",
+        "[1:v]setpts=PTS-STARTPTS[v1]",
+    ]
+
+    aout: str | None = None
+    if with_audio:
+        src_dur = probe_duration(source) or 0.0
+        cont_dur = probe_duration(continuation) or 0.0
+        requested_fade_sec = max(0, audio_fade_ms) / 1000.0
+        max_fade_sec = max(0.0, min(src_dur, cont_dur))
+        applied_fade_sec = min(requested_fade_sec, max_fade_sec)
+        info["fade_ms_applied"] = round(applied_fade_sec * 1000.0)
+
+        cont_audio_label = "[1:a]"
+        if loudness_match:
+            src_stats = _loudnorm_measure(exe, source)
+            cont_stats = _loudnorm_measure(exe, continuation)
+            source_lufs = float(src_stats["input_i"])
+            info["source_lufs"] = source_lufs
+            info["continuation_lufs_before"] = float(cont_stats["input_i"])
+            info["loudness_matched"] = True
+
+            loudnorm_filter = (
+                f"loudnorm=I={source_lufs}:TP=-2:LRA=7:"
+                f"measured_I={cont_stats['input_i']}:measured_TP={cont_stats['input_tp']}:"
+                f"measured_LRA={cont_stats['input_lra']}:measured_thresh={cont_stats['input_thresh']}:"
+                f"offset={cont_stats['target_offset']}:linear=true"
+            )
+            parts.append(f"[1:a]{loudnorm_filter}[a1n]")
+            cont_audio_label = "[a1n]"
+
+        if applied_fade_sec > 0:
+            fade_out_start = max(0.0, src_dur - applied_fade_sec)
+            parts.append(
+                f"[0:a]afade=t=out:st={fade_out_start}:d={applied_fade_sec}:curve=qsin,"
+                f"asetpts=PTS-STARTPTS[a0]"
+            )
+            parts.append(
+                f"{cont_audio_label}afade=t=in:st=0:d={applied_fade_sec}:curve=qsin,"
+                f"asetpts=PTS-STARTPTS[a1]"
+            )
+        else:
+            parts.append("[0:a]asetpts=PTS-STARTPTS[a0]")
+            parts.append(f"{cont_audio_label}asetpts=PTS-STARTPTS[a1]")
+
+        parts.append("[v0][a0][v1][a1]concat=n=2:v=1:a=1[cv][ca]")
+        vout, aout = "[cv]", "[ca]"
+    else:
+        parts.append("[v0][v1]concat=n=2:v=1:a=0[cv]")
+        vout = "[cv]"
+
+    filter_complex = ";".join(parts)
+
+    cmd = [
+        exe,
+        "-y",
+        "-i",
+        str(source),
+        "-i",
+        str(continuation),
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        vout,
+    ]
+    if aout is not None:
+        cmd += ["-map", aout, "-c:a", "aac"]
+    cmd += [
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        str(src_fps),
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffmpeg join_v2v failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+
+    return info
+
+
 def save_metadata(path: Path, metadata: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:

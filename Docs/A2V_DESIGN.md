@@ -1,6 +1,6 @@
 # audio-to-video（A2V）— アップロード音声に合わせた動画生成 設計＋実装計画
 
-- 作成: 2026-07-05（監督）。**ステータス: ✅設計合意済み（ユーザー決定 Q1-Q4, Q8・§4）→ S0 スパイク着手**
+- 作成: 2026-07-05（監督）。**ステータス: ✅設計合意済み（ユーザー決定 Q1-Q4, Q8・§4）・✅S0 スパイク GO（G0 4基準 PASS 2026-07-05）→ S1 コア実装**
 - 入口: [`A2V_ENTRY.md`](A2V_ENTRY.md)（次セッション導線）・機能リサーチ原典 [`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節
 - 直近の成功例（様式の手本）: [`V2V_CONTINUATION_DESIGN.md`](V2V_CONTINUATION_DESIGN.md)（§2.2 幾何・§3 ゲート表・スライス進捗ログ）
 - 裏取り: 上流 pin `00dc53d` の `A2VidPipelineTwoStage` 読解＋我々のチェーン機構（V2V で main マージ済 merge `18296b2`）の再確認（2026-07-05・本書 §1・file:line）
@@ -123,7 +123,7 @@
 
 ## 実装スライス（V2V 前例に従う）— 進捗ログ（S0 以降を追記）
 
-1. **S0 スパイク**: ⏳未（GO 判定が S1 の前提）。独立プローブ（main 不可触）で §3 G0 を実証。成果物＝`outputs/a2v_spike/SPIKE_REPORT.md`。**GO/NO-GO をここで確定**（④ が弱ければユーザー相談）。
+1. **S0 スパイク**: ✅**GO（2026-07-05・G0 4基準すべて PASS）**。独立プローブ `outputs/a2v_spike/probe_a2v.py`（n=1・704×448・121f・seed固定・main/wheel 不可触）で実証。①shape 整合・crash 無し（stage1 音声凍結の max drift=**0.000e+00**＝ハード凍結が厳密に成立）②VRAM: torch ピーク **8858.7MB**／nvidia-smi dedicated ピーク **~11.2GB**・**共有溢れ無し** ③出力音声==入力 wav（Pearson r=1.0000/0.9999・差は AAC 損失のみ）④**同一 seed・異なる2音声→全フレーム平均絶対差 3.94%（per-frame MAD 9.22–12.70・全フレーム非ゼロ）**、目視で口の形・頭部姿勢が明確に相違＝**蒸留経路でも凍結音声がクロスアテンション経由で動画を駆動**（§1.4 の最大リスク解消・fallback 不要）。1本 ~122秒。詳細＝`outputs/a2v_spike/SPIKE_REPORT.md`（outputs は git 管理外のため数値は本書へ転記）。**技術知見: 音声 VAE エンコーダは stereo(2ch)入力必須（conv_in=[128,2,3,3]）・mux の `_write_audio` も stereo 前提** → S1 では mono 入力を stereo へ複製する正規化が必要。
 2. **S1 コア（エンジン側）**: ⏳未。`chain_pipeline.py` に `AudioSourceSpec`／`run_chain(audio_source=)`・Stage1/Stage2 全長凍結・原波形 mux を配線。**G1 緑を維持**（T2V/I2V byte-match・no-source 回帰一致）。
 3. **S2 API/テスト**: ⏳未。`services/audio_upload_store.py`・`POST /upload/audio`・`SourceAudioSpec`・バリデータ（排他/404/422）・`chain_math` 純関数・mock backend。`tests/test_a2v_chain.py`（`test_v2v_chain.py` の型: 省略時 regression／422 群／404／mock e2e／geometry 不変条件）＋ upload/audio 型テスト。**G2 消化**。
 4. **S3 実機 e2e ＋ G3 素材**: ⏳未。REST 経由実機で source_audio 付き chain 完走・422/404/排他 全網羅・G3 候補（TTS セリフ＋音楽の 2 ケース・720p 級・映画トレイラー風）を生成。**残 OPEN は G3（ユーザー試聴）**。

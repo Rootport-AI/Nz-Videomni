@@ -918,6 +918,7 @@ class LTXFastVideoPipeline:
         output_path: str,
         progress=None,
         source=None,
+        audio_source=None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -926,7 +927,10 @@ class LTXFastVideoPipeline:
         a list of ``ChainClipSpec`` (prompt already resolved, images built).
         ``source`` (optional ``SourceSpec``) enables video-to-video continuation:
         the source tail is frozen as clip-0's head and trimmed from the output.
-        Returns metadata incl. segment/tile junction pixel-frame indices.
+        ``audio_source`` (optional ``AudioSourceSpec``) enables audio-to-video:
+        the uploaded audio is frozen over the whole timeline and the video is
+        driven off it (mutually exclusive with ``source``). Returns metadata
+        incl. segment/tile junction pixel-frame indices.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
@@ -943,6 +947,7 @@ class LTXFastVideoPipeline:
             output_path=output_path,
             progress=progress,
             source=source,
+            audio_source=audio_source,
         )
 
     @torch.inference_mode()

@@ -333,3 +333,44 @@ def compute_chain_layout(
         v2v_context_junction_px=v2v_context_junction_px,
         new_frames_px=new_frames_px,
     )
+
+
+# ── audio-to-video (A2V) geometry — uploaded-audio freeze windows ────────────
+# These are the SINGLE SOURCE OF TRUTH shared by the app (preflight: is the
+# uploaded audio long enough?) and the engine (how many audio-latent frames to
+# slice off the VAE-encoded upload, and which global window each stage-1 segment
+# freezes). Both are pure functions of the same geometry ``compute_chain_layout``
+# already resolves, so app and engine agree byte-for-byte.
+def audio_latents_required(
+    clip_frames: list[int], fps: float, kv: int = DEFAULT_OVERLAP_FRAMES
+) -> int:
+    """Total audio-latent frames the assembled chain timeline requires.
+
+    Equal to ``compute_chain_layout(...).a_total`` — the audio-latent count for
+    the assembled pixel timeline (per-join K_v overlaps already folded into
+    ``total_px``), computed via :func:`a_frames_for_px`. An uploaded audio track
+    that VAE-encodes to fewer than this many latent frames is a truncation error
+    at the caller (video length is authoritative; audio is truncated, never
+    padded — matches upstream a2vid).
+    """
+    return compute_chain_layout(clip_frames, fps, kv=kv).a_total
+
+
+def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
+    """Per stage-1 segment ``(start, len)`` window on the GLOBAL audio timeline.
+
+    For audio-to-video each stage-1 segment hard-freezes the slice of the
+    uploaded audio latent that lands under it. Segment ``i`` occupies
+    ``seg_audio[i]`` audio-latent frames and consecutive segments overlap by
+    ``ka_list[i]`` (the same per-join audio crossfade the engine assembles with),
+    so segment ``i`` starts at ``sum(seg_audio[:i]) - sum(ka_list[:i])`` and the
+    last window ends exactly at ``a_total``. For a single clip this reduces to
+    ``[(0, a_total)]``. Pure function of a resolved :class:`ChainLayout`.
+    """
+    windows: list[tuple[int, int]] = []
+    start = 0
+    for i, alen in enumerate(layout.seg_audio):
+        windows.append((start, alen))
+        if i < len(layout.ka_list):
+            start += alen - layout.ka_list[i]
+    return windows

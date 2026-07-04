@@ -85,6 +85,26 @@ def source_video_too_short(detail: str | None = None) -> APIError:
     )
 
 
+def source_audio_not_found(audio_id: str) -> APIError:
+    """A2V: the ``source_audio.audio_id`` does not resolve to a stored upload.
+    Mirrors :func:`source_video_not_found` (404) with its own stable code so a
+    client can distinguish the audio-to-video source from a continuation video."""
+    return APIError("SOURCE_AUDIO_NOT_FOUND", f"source_audio.audio_id not found: {audio_id}", 404)
+
+
+def source_audio_too_short(detail: str | None = None) -> APIError:
+    """A2V: the uploaded source audio VAE-encodes to fewer audio-latent frames
+    than the chain timeline requires (video length is authoritative; audio is
+    truncated, never padded). Rejected up front (422) before any GPU work —
+    mirrors :func:`source_video_too_short`."""
+    return APIError(
+        "SOURCE_AUDIO_TOO_SHORT",
+        "source audio is shorter than the requested chain timeline",
+        422,
+        detail=detail,
+    )
+
+
 def lora_not_found(name: str, detail: str | None = None) -> APIError:
     return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
 

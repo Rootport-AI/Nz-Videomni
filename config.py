@@ -175,6 +175,14 @@ class UploadConfig(BaseModel):
     allowed_video_extensions: list[str] = Field(
         default_factory=lambda: [".mp4", ".mov", ".webm", ".mkv"]
     )
+    # Audio-to-video upload (A2V, POST /upload/audio). Stored as-is (no
+    # re-encode) under uploads/audios/{audio_id}/; the engine's PyAV-based audio
+    # decode (decode_audio_from_file) reads these containers. Codec validity is
+    # verified at preflight (ffprobe), not on upload — only extension + size gate.
+    max_audio_size_mb: int = 50
+    allowed_audio_extensions: list[str] = Field(
+        default_factory=lambda: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
+    )
 
 
 class LimitsConfig(BaseModel):

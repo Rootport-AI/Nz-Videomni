@@ -132,6 +132,10 @@ upload:
   # 参照動画アップロード（Phase B, POST /upload/video）。再エンコードせず保存。
   max_video_size_mb: 200
   allowed_video_extensions: [".mp4", ".mov", ".webm", ".mkv"]
+  # 音声アップロード（A2V, POST /upload/audio）。再エンコードせず保存。コーデック
+  # 検査は preflight（ffprobe）が担当。ここは拡張子とサイズのみ。
+  max_audio_size_mb: 50
+  allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 
 limits:
   max_width: 1920

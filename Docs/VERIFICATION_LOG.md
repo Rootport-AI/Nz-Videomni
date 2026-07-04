@@ -1522,3 +1522,54 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 **将来項目（記録）**: ①**音声スムージングの UI チェックボックス**（ユーザー要望 2026-07-04）: 将来の GUI V2V 露出時に「結合出力」機能へ ON/OFF を付ける（ON=ハンドル有なら真クロスフェード/無ければフェードペア・OFF=ハード連結。API/エンジン不変＝結合はクライアント側の関心事）②残余の浅い凹みのさらなる平坦化（ノイズフロア整合等）③モデル管理（A1111 風）=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。
 
 **✅G3 最終試聴 PASS（ユーザー・2026-07-05）**: G3v4（音楽プロンプト継続×ハンドル真クロスフェード・`outputs/v2v_e2e/E2E-A4/`）で「音の繋ぎ目はかなり滑らかになった。自然音やスローテンポの EDM ならまず繋ぎ目に気付かない。音楽や会話の途中なら気づくが、それは現在の生成 AI の性能の限界」＝**合格**。参考: G3v4 の計測は下請けエージェントが生 wav から独立再計算しても完全一致（二重検証済み）。**V2V の目視/試聴ゲートは全クローズ** → push/main マージへ（ユーザー事前決定の条件成立）。
+
+---
+
+## 25. ★audio-to-video（A2V）＝アップロード音声に合わせた動画生成＝設計→実装→実機e2e 全客観ゲートPASS＋**G3試聴（ユーザー・条件付き受容＝マージ承認 2026-07-05）**（branch `feature/a2v`）
+
+> **正本＝本節＋設計書 [`A2V_DESIGN.md`](A2V_DESIGN.md)（ユーザー合意済み Q1-Q4/Q8 含む）。一次情報＝`outputs/a2v_spike/SPIKE_REPORT.md`（G0）・`outputs/a2v_e2e/E2E_REPORT.md`（S3）。outputs は git 管理外のため数値は本節へ転記。**
+> base＝main（V2V マージ済 merge `18296b2`）。**G3試聴の結果「おおむね満足」＝ユーザーが push／main マージを承認（2026-07-05）。リップシンク品質の深掘りは §25.5 参照（追加検証・継続）。**
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11。
+
+### 25.1 何を作ったか（1分）
+
+`POST /generate/chain` に optional `source_audio: {audio_id}` を追加（凍結APIの加算的拡張・省略時byte同一）＋ `POST /upload/audio` を新設。アップロード音声を VAE で latent 化し、AV 結合 latent の**音声側を全長ハード凍結**して動画側だけを denoise する。LTX-2 の動画／音声双方向クロスモーダル注意でリップシンクは生成の中で成立。機構は V2V の凍結 mask を流用（`mask_value=0.0`）＝新規開発なし。出力は**元波形をそのまま mux**（vocoder 不使用）。v1 スコープ＝1クリップのみ・A2V×V2V 排他・トリミング非露出・短い音声は 422・`conditioning_images` 併用可。
+
+### 25.2 ゲート実績（コミット列: 設計docs `83150ca`→S0記録 `7a93259`→S1エンジン `b59d0fb`→G1記録 `30b61c9`→S2 API `e37a9ef`→S2記録 `8cc793e`）
+
+- **G0 スパイク（GO）**: 独立プローブ `outputs/a2v_spike/probe_a2v.py`（n=1・704×448・121f・seed1234 固定・main/wheel 不可触）。①shape 整合・crash 無し（stage1 音声凍結 max drift=**0.000e+00**＝ハード凍結が厳密に成立） ②torch ピーク **8858.7MB**／nvidia-smi dedicated ピーク **~11.2GB**・**共有溢れ無し** ③出力音声==入力 wav（Pearson r=**1.0000/0.9999**・差は AAC 損失のみ） ④**同一 seed・異なる2音声→全フレーム平均絶対差 3.94%**（per-frame MAD 9.22–12.70・**全フレーム非ゼロ**）・目視で口の形／頭部姿勢が相違＝**蒸留経路でも凍結音声がクロスアテンション経由で動画を駆動**（modality_scale 摂動なしで成立・fallback 不要＝§1.4 の最大リスク解消）。1本 ~122秒。素材＝System.Speech TTS 16kHz stereo。**技術知見: 音声 VAE エンコーダは stereo 入力必須（conv_in=[128,2,3,3]）・mux の `_write_audio` も stereo 前提** → mono→stereo 複製の正規化を S1 で実装。
+- **G1 回帰（全PASS）**: HEAD `b59d0fb` 時点・本番 runner 経路。T2V `23844b4e…6bb7bf`／I2V `a511eda4…c217`／チェーン no-source `f706057a…0ea1`（640×384・clips[121,121]・seed12345・793973 bytes）すべて基準 SHA-256 と**バイト完全一致**。pytest **199 passed / 1 skipped**（基準191＋chain_math 新規8）。peak_vram_mb=**8440**（§22/§24 と同値）。チェーン最終 VAE デコード瞬間 ~14.9GB（16GB 内・OOM/spill なし）。
+- **G2 スモーク（mock＋実機・全PASS）**:
+  - **mock**（実 uvicorn）: upload 200→chain 202→completed→a2v メタ正・negative（2クリップ 422／不在 404／A2V+V2V 422）。pytest **212 passed / 1 skipped**（＋`test_a2v_chain.py` 13本）。
+  - **実機**（RTX 4070 Ti SUPER・`main.py --port 18620`・config 不変）: TTS 11.19s wav→upload→chain（704×448/121f）→completed **117.1s**。a2v メタ（a_total=126・muxed_original_waveform・vocoder_skipped・source_audio_id）正。CHAIN_OK peak_vram_mb=**8440**・nvidia-smi dedicated peak **14371MB**・shared 平坦（spill なし）。音声一致 Pearson r=**1.0000**・RMS 比 0.9989。negative 実機4件（A2V+V2V 422／不在 404／2クリップ 422／短音声 422 `SOURCE_AUDIO_TOO_SHORT`）全緑。
+
+### 25.3 G3 候補生成（試聴は OPEN）・720p 級
+
+720p 級＝1280×768 生成→crop 1280×720（`standard_720p` プリセット）・121f・REST 経由。全 run で OOM/spill なし。
+
+| ケース | job | 時間 | worker peak | nvidia-smi peak | 音声 r | 出力 |
+|---|---|---|---|---|---|---|
+| A（セリフ・男声TTSトレイラーナレーション） | `0bab3830` | 175.14s | 9519MB | 14885MB | 0.9999 | `outputs/a2v_g3/caseA_speech_1280x720_121f.mp4` |
+| B（音楽のみ・過去LTX生成物のオーケストラ音声流用） | `93fffd3b` | 185.84s | 9525MB | 14715MB | 0.9999 | `outputs/a2v_g3/caseB_music_1280x720_121f.mp4` |
+
+- **客観PASS≠目視ゲート: G3 試聴判定はユーザー OPEN**（ケースA＝リップシンク本丸／ケースB＝音楽）。
+
+### 25.4 正本・成果物
+
+- 設計正本＝[`A2V_DESIGN.md`](A2V_DESIGN.md)（Q1-Q4/Q8 合意済み）。レポート＝`outputs/a2v_spike/SPIKE_REPORT.md`（G0）・`outputs/a2v_e2e/E2E_REPORT.md`（S3）＝outputs は git 管理外。
+
+### 25.5 ★G3 試聴結果（ユーザー・2026-07-05）＝条件付き受容・リップシンク品質の追加検証へ
+
+**総評: おおむね満足 → push／main マージ承認。** 個別判定:
+
+| 素材 | 判定 |
+|---|---|
+| スパイク run_A（704×448・女声Zira・静的クローズアップ） | **かなり正確にリップシンク** |
+| スパイク run_B（704×448・男声David早口） | 意図は見えるが一致は弱い |
+| G3 ケースA（720p・男声トレイラーナレ・賑やかな町＋歩行） | 意図は見えるが一致は弱い |
+| G3 ケースB（720p・音楽のみ） | 大きな問題なし。セリフ終了と同時にカメラがパンして女性が画面外へ＝「音と一致させようとしている」ことは分かる |
+
+**ユーザー考察（仮説・モデル性質由来の可能性）**: ①女声の方がリップシンクが得意 ②当該男声音源がたまたま LTX 2.3 が解釈しにくい波形だった ③背景の書き込み・人物の移動が増えるとリップシンクが弱くなる（スパイク＝静的クローズアップとの差）。→ **バグではなくモデル性質の可能性が高い**との見立て。
+
+**フォローアップ（発注済み・2026-07-05）**: (a) コミュニティ報告の広域リサーチ（LTX 2.3 の A2V/リップシンクの使い勝手） (b) 仮説切り分けの追加検証動画 2〜3本（声質×背景複雑度のマトリクス） (c) Stage1 クロスモーダル摂動ガイダンス（上流 `a2v_guidance_scale`）差し込み案の平易な解説→採否判断。結果は本節に追記する。

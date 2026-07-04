@@ -166,12 +166,18 @@ class LTXRunner:
         clip0_conditioning_paths: list[Path] | None = None,
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4).
 
         ``source_tail_path`` / ``source_context_frames`` (V2V continuation,
         additive): when set, the fps-correct source tail is frozen as clip-0's
         head and the delivered mp4 is the NEW part only (both backends).
+
+        ``source_audio_path`` (A2V, additive): when set, the uploaded audio is
+        frozen as the chain's audio latent and its original waveform is muxed onto
+        the output; the terminal ``chain.a2v`` sub-dict pins the contract. Mutually
+        exclusive with ``source_tail_path`` (enforced at the API layer).
         """
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -183,6 +189,7 @@ class LTXRunner:
             clip0_conditioning_paths=clip0_conditioning_paths,
             source_tail_path=source_tail_path,
             source_context_frames=source_context_frames,
+            source_audio_path=source_audio_path,
         )
 
     # ----------------------------------------------------- backend selection
@@ -372,6 +379,7 @@ class _MockBackend:
         clip0_conditioning_paths: list[Path] | None = None,
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
     ) -> GenerationOutcome:
         """Simulate a masked AV-latent chain: ONE synthetic mp4 of the full
         timeline length + junction metadata (from :mod:`chain_math`). GPU-free;
@@ -469,6 +477,34 @@ class _MockBackend:
                 "handle_context_seconds": round(handle_context_seconds, 6),
             })
             chain_metadata["v2v"] = v2v
+
+        # A2V: mirror the engine's chain.a2v sub-dict (geometry from ChainLayout +
+        # a ffprobe of the uploaded audio). The mock does NOT decode/mux audio, so
+        # the output mp4 has no audio — but the metadata contract (key set +
+        # geometry) is pinned so pytest can assert it without a GPU. Source-less
+        # and V2V paths never set it, so their metas are unchanged.
+        if source_audio_path is not None:
+            a_total = int(layout.a_total)
+            sr, channels = video_io.probe_audio_stream(source_audio_path)
+            duration = video_io.probe_duration(source_audio_path)
+            sr = sr or 16000
+            channels = channels or 2
+            available = (
+                round(duration * chain_math.AUDIO_LATENTS_PER_SEC)
+                if duration is not None
+                else a_total
+            )
+            n_mux = int(round(layout.total_px / float(chain.frame_rate) * sr))
+            chain_metadata["a2v"] = {
+                "source_audio_path": str(source_audio_path),
+                "a_total": a_total,
+                "encoded_audio_frames_available": int(available),
+                "muxed_original_waveform": True,
+                "vocoder_skipped": True,
+                "muxed_audio_samples": n_mux,
+                "audio_sampling_rate": int(sr),
+                "audio_channels": int(channels),
+            }
 
         return GenerationOutcome(
             output_path=output_path,
@@ -992,6 +1028,7 @@ class _RealBackend:
         clip0_conditioning_paths: list[Path] | None = None,
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain via the worker's ``generate_chain`` op.
 
@@ -1055,6 +1092,10 @@ class _RealBackend:
                 "path": str(source_tail_path),
                 "context_frames": int(source_context_frames),
             }
+        # A2V continuation (additive): the uploaded audio path, passed as-is (the
+        # engine truncates to the timeline). Absent for a normal / V2V chain.
+        if source_audio_path is not None:
+            payload["audio_source"] = {"path": str(source_audio_path)}
 
         with self._lock:
             try:

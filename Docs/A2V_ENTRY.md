@@ -14,6 +14,7 @@
 
 - **`A2VidPipelineTwoStage`** = `.uv_cache\git-v0\checkouts\821c13058d1842d3\00dc53d\packages\ltx-pipelines\src\ltx_pipelines\a2vid_two_stage.py:41`。`audio_path` を受け取り `decode_audio_from_file(audio_path, device, audio_start_time, audio_max_duration)`（:118）で読む**公式のA2V二段パイプライン**。V2Vにおける `retake.py` と同様、機構の一次参照はこれ。まずこのファイルを通読すること。
 - 音声の全凍結プリミティブ: `ltx_pipelines/utils/blocks.py` の `ModalitySpec(frozen=True)`（denoise_maskを全ゼロ化・RetakePipelineの音声分岐とA2Vidが使用）。
+  - 【訂正 2026-07-05 設計セッション】`blocks.py`／`ModalitySpec` は**実在しない**（該当ファイル・クラスとも無し）。音声全凍結の**実体は `denoise_video_only`（`ltx_pipelines/utils/helpers.py:476-524`）の denoise_mask 全ゼロ方式**（`noise_scale=0.0`・毎ステップ clean latent へ置き戻し）。正＝[`A2V_DESIGN.md`](A2V_DESIGN.md) §1.1。
 - wheelは不可触（v2vと同じ規律）。engine側から直接呼ぶ/自前orchestrationする。
 
 ### 1.2 我々のコードベースに既にある部品（V2Vで配線済み・file:line）

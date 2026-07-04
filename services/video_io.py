@@ -172,6 +172,133 @@ def probe_duration(path: Path) -> float | None:
         return None
 
 
+def probe_fps(path: Path) -> float | None:
+    """Return the average frame rate (fps) of the first video stream, via ffprobe.
+
+    Uses ``avg_frame_rate`` (a ``num/den`` rational) which reflects the real
+    decoded cadence better than ``r_frame_rate`` for VFR sources. Returns None
+    when ffprobe is missing or the value is unavailable/degenerate.
+    """
+    exe = shutil.which("ffprobe")
+    if not exe:
+        return None
+    cmd = [
+        exe,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=avg_frame_rate,r_frame_rate",
+        "-of",
+        "json",
+        str(path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None
+    try:
+        stream = json.loads(proc.stdout)["streams"][0]
+    except Exception:
+        return None
+    for key in ("avg_frame_rate", "r_frame_rate"):
+        val = stream.get(key)
+        if not val or val == "0/0":
+            continue
+        try:
+            if "/" in val:
+                num, den = val.split("/", 1)
+                den_f = float(den)
+                if den_f == 0:
+                    continue
+                return float(num) / den_f
+            return float(val)
+        except Exception:
+            continue
+    return None
+
+
+def cut_tail_mp4(
+    src: Path,
+    out: Path,
+    context_frames: int,
+    fps: float,
+) -> dict:
+    """Write to ``out`` an mp4 holding EXACTLY the last ``context_frames`` frames
+    of ``src`` at ``fps`` (the fps-correct source tail the V2V engine consumes).
+
+    When ``src``'s native fps differs from ``fps`` the whole source is first
+    resampled (ffmpeg ``fps`` filter) so the tail cadence matches the request;
+    the frame-exact tail is then selected with the ``select`` filter (the same
+    frame-number-based selection used by :func:`extract_frame_at`, so it is exact
+    even for VFR/short sources where time seeking could miss). Audio, when
+    present, is carried through and trimmed to the same tail window (the engine
+    freezes/fades the audio head itself). Re-encodes (the VAE re-encodes anyway).
+
+    Returns ``{source_fps, resampled, total_frames}`` where ``total_frames`` is
+    the frame count of the (possibly resampled) source. Raises
+    :class:`FFmpegError` if the (resampled) source has fewer than
+    ``context_frames`` frames (a defensive backstop — the app preflights this).
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    source_fps = probe_fps(src)
+    resampled = source_fps is not None and abs(source_fps - float(fps)) > 1e-3
+
+    work = src
+    tmp_resampled: Path | None = None
+    if resampled:
+        tmp_resampled = out.parent / (out.stem + "_resampled.mp4")
+        rs_cmd = [
+            exe, "-y", "-i", str(src),
+            "-vf", f"fps={fps}",
+            "-map", "0:v", "-map", "0:a?",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(fps),
+            "-c:a", "aac",
+            str(tmp_resampled),
+        ]
+        proc = subprocess.run(rs_cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise FFmpegError(f"ffmpeg fps-resample failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+        work = tmp_resampled
+
+    try:
+        total = frame_count(work)
+        if total < context_frames:
+            raise FFmpegError(
+                f"source has {total} frames (after resample={resampled}) < "
+                f"context_frames={context_frames}"
+            )
+        start = total - context_frames
+        with_audio = has_audio_stream(work)
+
+        parts = [f"[0:v]select='gte(n\\,{start})',setpts=PTS-STARTPTS[v]"]
+        vout = "[v]"
+        aout = None
+        if with_audio:
+            start_t = start / float(fps)
+            parts.append(f"[0:a]atrim=start={start_t},asetpts=PTS-STARTPTS[a]")
+            aout = "[a]"
+        filter_complex = ";".join(parts)
+
+        cmd = [exe, "-y", "-i", str(work), "-filter_complex", filter_complex, "-map", vout]
+        if aout is not None:
+            cmd += ["-map", aout, "-c:a", "aac"]
+        cmd += [
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(fps),
+            str(out),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise FFmpegError(f"ffmpeg tail-cut failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+    finally:
+        if tmp_resampled is not None:
+            tmp_resampled.unlink(missing_ok=True)
+
+    return {"source_fps": source_fps, "resampled": resampled, "total_frames": total}
+
+
 def concat_mp4s(
     clip_paths: list[Path],
     output_path: Path,

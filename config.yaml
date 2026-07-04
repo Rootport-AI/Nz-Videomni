@@ -36,11 +36,19 @@ model:
   gemma_root: "./models/gemma-3-12b-it-tokenizer"
   backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
 
-  # IC-LoRA アダプタ登録（Phase B）。API の GenerateRequest.loras[].name はここに
-  # 登録された「名前」で解決する（生パスは受けない）。セクション不在＝loras 要求は
-  # 全て拒否（fail loud）。今回対応は Pixel-Spatial-Upscaler のみ（参照動画必須）。
+  # IC-LoRA アダプタ登録（Phase B、Phase C で拡張）。API の GenerateRequest.loras[].name は
+  # ここに登録された「名前」で解決する（生パスは受けない）。セクション不在＝loras 要求は
+  # 全て拒否（fail loud）。
   ic_loras:
+    # 後方互換: 文字列値 = preprocess none（Phase B のまま動く）
     pixel-spatial-upscaler-x2: "./models/ltx-2.3-ic-lora/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors"
+    # Phase C: 同一 Union-Control ファイルを2つの論理名で公開し preprocess で切替
+    canny-control:
+      path: "./models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
+      preprocess: canny
+    pose-control:
+      path: "./models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
+      preprocess: dwpose
 
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。

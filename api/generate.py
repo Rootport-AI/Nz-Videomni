@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from api.context import AppContext
 from api.deps import get_context, require_auth
-from api.errors import job_busy
+from api.errors import job_busy, lora_preprocess_conflict, reference_resolution_invalid
 from api.models import GenerateRequest, GenerateResponse
 
 router = APIRouter()
@@ -33,8 +33,21 @@ def generate(
     # loras<->reference_video_id all-or-nothing rule.
     if request.reference_video_id is not None:
         context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
+        # All registered adapters use reference_downscale_factor=2, so the
+        # reference is consumed at half output resolution on the 64-grid --
+        # width/height not divisible by 128 crashes the worker's VAE encode.
+        if request.width % 128 != 0 or request.height % 128 != 0:
+            raise reference_resolution_invalid(request.width, request.height)
+    # Phase C: a single reference video can only be turned into ONE kind of
+    # control signal, so >1 distinct non-"none" preprocess kind among the
+    # requested loras is rejected up front (fail loud, minimal implementation).
+    preprocess_kinds: set[str] = set()
     for spec in request.loras:
-        context.lora_registry.resolve(spec.name, spec.strength)  # 404 if unknown/missing
+        _, _, preprocess = context.lora_registry.resolve(spec.name, spec.strength)  # 404 if unknown/missing
+        if preprocess != "none":
+            preprocess_kinds.add(preprocess)
+    if len(preprocess_kinds) > 1:
+        raise lora_preprocess_conflict(sorted(preprocess_kinds))
 
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_if_idle(request)

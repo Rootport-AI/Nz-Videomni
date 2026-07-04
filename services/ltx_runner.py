@@ -46,6 +46,7 @@ from typing import Callable
 from PIL import Image, ImageDraw
 
 import chain_math
+from api.errors import lora_preprocess_conflict
 from api.models import GenerateRequest
 from config import AppConfig
 from services import gpu_info, video_io
@@ -60,6 +61,25 @@ ProgressCallback = Callable[[int | None, int | None, float], None]
 MOCK_BACKEND = "mock"
 # Real backend identifier surfaced in metadata.
 REAL_BACKEND = "ltx-distilled"
+
+
+def _resolve_reference_preprocess(lora_paths: list[tuple[Path, float, str]]) -> str:
+    """Phase C: derive the single control-preprocess kind for the one reference
+    video from the resolved loras of a job.
+
+    ``lora_paths`` entries are ``(path, strength, preprocess)`` (see
+    ``services.lora_registry.LoraRegistry.resolve``). All-``"none"`` (Phase B
+    reference-only adapters, or no loras) -> ``"none"``. Exactly one non-``"none"``
+    kind -> that kind. More than one distinct kind is a conflict: a single
+    uploaded reference video can only be converted into ONE control signal, so
+    this raises ``LORA_PREPROCESS_CONFLICT`` (400) -- the same check the API
+    layer (``api/generate.py``) already performs up front; this is the
+    defensive re-check at the runner hop.
+    """
+    kinds = {preprocess for _, _, preprocess in lora_paths if preprocess != "none"}
+    if len(kinds) > 1:
+        raise lora_preprocess_conflict(sorted(kinds))
+    return next(iter(kinds)) if kinds else "none"
 
 
 @dataclass
@@ -123,7 +143,7 @@ class LTXRunner:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float]] | None = None,
+        lora_paths: list[tuple[Path, float, str]] | None = None,
         reference_video_path: Path | None = None,
     ) -> GenerationOutcome:
         if self._backend is None or not self._backend.loaded:
@@ -267,7 +287,7 @@ class _MockBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float]] | None = None,
+        lora_paths: list[tuple[Path, float, str]] | None = None,
         reference_video_path: Path | None = None,
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
@@ -275,9 +295,11 @@ class _MockBackend:
         ``conditioning_images`` empty -> T2V; one entry -> minimal I2V using the
         resolved image path as the start frame (frame_idx=0, Phase 1).
 
-        ``lora_paths`` / ``reference_video_path`` are the Phase B IC-LoRA inputs;
-        the mock backend accepts (and ignores) them so the full route completes
-        GPU-free — the real weight patch lives in the engine worker.
+        ``lora_paths`` (now ``(path, strength, preprocess)`` triples, Phase C) /
+        ``reference_video_path`` are the Phase B/C IC-LoRA inputs; the mock
+        backend accepts (and ignores) them so the full route completes GPU-free —
+        the real weight patch (and the preprocess -> control-signal conversion)
+        lives in the engine worker.
         """
         if not self._loaded:
             self.load()
@@ -769,7 +791,7 @@ class _RealBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float]] | None = None,
+        lora_paths: list[tuple[Path, float, str]] | None = None,
         reference_video_path: Path | None = None,
     ) -> GenerationOutcome:
         if not self.loaded:
@@ -807,14 +829,19 @@ class _RealBackend:
         if progress_callback:
             progress_callback(None, None, 0.05)
 
-        # Phase B IC-LoRA (forward-time weight patch). ``loras`` is the list of
-        # (adapter safetensors path, strength) resolved by the registry; empty
-        # list -> the worker passes ic_loras=[] (explicit clean detach per Stage 1
-        # semantics). ``reference_video`` is the Pixel-Spatial-Upscaler reference,
-        # applied at a fixed strength of 1.0; None when no loras.
-        loras_payload = [{"path": str(p), "strength": float(s)} for p, s in lora_paths]
+        # Phase B/C IC-LoRA (forward-time weight patch). ``loras`` is the list of
+        # (adapter safetensors path, strength, preprocess) resolved by the
+        # registry; empty list -> the worker passes ic_loras=[] (explicit clean
+        # detach per Stage 1 semantics). ``reference_video`` is the raw reference
+        # (Pixel-Spatial-Upscaler: used as-is / Union-Control: converted to a
+        # control signal by the worker per ``preprocess``), applied at a fixed
+        # strength of 1.0; None when no loras. ``preprocess`` is derived from the
+        # job's loras -- a conflict (>1 distinct kind) is rejected up front by
+        # api/generate.py already, this is the defensive re-check at the runner.
+        loras_payload = [{"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths]
+        preprocess = _resolve_reference_preprocess(lora_paths)
         reference_payload = (
-            {"path": str(reference_video_path), "strength": 1.0}
+            {"path": str(reference_video_path), "strength": 1.0, "preprocess": preprocess}
             if reference_video_path is not None
             else None
         )

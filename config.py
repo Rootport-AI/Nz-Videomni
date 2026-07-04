@@ -10,13 +10,27 @@ are applied in ``main.py`` on top of the loaded ``ServerConfig``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+
+
+class IcLoraEntry(BaseModel):
+    """Dict-value form of an ``ic_loras`` registry entry (Phase C).
+
+    Adds a ``preprocess`` kind alongside the safetensors ``path`` so one
+    adapter file (e.g. the Union-Control LoRA) can be exposed under several
+    logical names that each imply a different raw-video -> control-signal
+    conversion in the engine worker. Plain string registry values (Phase B)
+    remain valid and are equivalent to ``preprocess="none"``.
+    """
+
+    path: str
+    preprocess: Literal["none", "canny", "dwpose"] = "none"
 
 
 class ServerConfig(BaseModel):
@@ -77,12 +91,14 @@ class ModelConfig(BaseModel):
     component_audio_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
     component_text_projection_path: str = "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
 
-    # IC-LoRA adapter registry (Phase B). Maps a server-side adapter NAME (what
-    # the API accepts in GenerateRequest.loras[].name — never a filesystem path)
-    # to the safetensors file resolved via AppConfig._abs. Absent/empty section ->
-    # any loras request is rejected (fail loud, no silent skip). The only supported
-    # adapter today is the Pixel-Spatial-Upscaler (reference-video required).
-    ic_loras: dict[str, str] = Field(default_factory=dict)
+    # IC-LoRA adapter registry (Phase B, extended Phase C). Maps a server-side
+    # adapter NAME (what the API accepts in GenerateRequest.loras[].name — never
+    # a filesystem path) to either a bare safetensors path (string, legacy Phase B
+    # form, implies preprocess="none") or an IcLoraEntry (Phase C: path +
+    # preprocess kind, for control adapters like Union-Control that need a raw
+    # reference video converted to a control signal before use). Absent/empty
+    # section -> any loras request is rejected (fail loud, no silent skip).
+    ic_loras: dict[str, str | IcLoraEntry] = Field(default_factory=dict)
 
 
 class VramConfig(BaseModel):

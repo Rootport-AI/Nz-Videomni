@@ -84,7 +84,7 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 制御アダプタと前処理器は「未読の現物」に依存する箇所があるため、**実装前に3点を実測で確定**する。
 
 - **G0-a: Union-Control LoRAのsafetensorsメタデータ実読** → **✅完了（2026-07-04）**: メタデータは `reference_downscale_factor: "2"`・`model_version: "2.3.0"`。wheel `_read_lora_reference_downscale_factor` の戻り値=**2**（既知良好のUpscaler x2でも同リーダーで2を確認＝リーダー妥当性も再確認）。→ **factor=2ブランチ確定＝既存ガード（`engine/pipeline/fast_video_pipeline.py:271-290`・L544・L551-557）は無変更でそのまま通る。緩和スライス不要**。ファイルは `models/ltx-2.3-ic-lora/union-control/` に配置済み（654,465,352 bytes=フォーク配布定義と完全一致）。
-- **G0-b: DWPose TorchScriptのスループット実測スモークテスト**（**未消化・実装セッションで実施**）。数百フレームの骨格レンダを実行し fps/VRAMを実測（R2はDWPose固有ベンチを発見できず確度低〜中）。生成本体のVRAM天井と前処理ピークが競合しないことを確認。TorchScriptモデル2ファイルは `models/preprocessors/` にダウンロード済み（yolox_l 217,697,649 bytes／dw-ll_ucoco_384_bs5 135,059,124 bytes=いずれも期待値一致）。
+- **G0-b: DWPose TorchScriptのスループット実測スモークテスト** → **✅完了（2026-07-04）**: 1280×768入力（129f→300フレーム循環）で **13.34fps end-to-end**（混雑ワーストケース~13人/フレーム）・121f≈9.1s／257f≈19.3s。VRAMはモデル常駐354.7MB・ループピーク482MB(alloc)・`del`+`empty_cache()` で8.5MBまで完全解放＝**生成本体のdenoise天井と非競合**。律速はdwpose段（53.04ms/フレーム=71%）。判定＝前処理は生成時間の~5%で実用・スライス4キャッシュとrtmlibフォールバックは共に不要（監督判断）。詳細=[`VERIFICATION_LOG.md` §22.2](VERIFICATION_LOG.md)。
 - **G0-c: LoRAキー構造の解決性確認** → **✅完了（2026-07-04）**: `load_ic_lora_pairs`（CPUのみ）でUnion-ControlとUpscaler x2の両方をロードし比較。**ペア済みprefix 480個・集合として完全同一・rank=64・shape一致**（lora_A (64,4096) / lora_B (4096,64) bf16）。Upscalerは Phase B G1/G2 で transformer への解決実証済みのため、Union-Control も `attach_ic_loras` でそのまま解決可能（0マッチWARNは出ない）。**キー正規化・リネームマップの変更不要**。
 
 ## 5. 実装スライス（順序付き）
@@ -136,3 +136,4 @@ Phase Cは、その「動き維持で内容置換」を実現する。具体的�
 - **DWPoseスループット未実測**（R2確度低〜中）。Gate 0-b で確定。遅ければキャッシュ（スライス4）で緩和。
 - **19b非互換**: 誤って19b世代の単体アダプタを使うと「エラーは出ないが効果ゼロ」。config登録は 2.3-22b Union-Control のみに限定する。
 - **onnxruntime-gpuの整合リスク（フォールバック採用時）**: rtmlibへ切替える場合、CUDA 12.8 に対し onnxruntime-gpu を 1.20〜1.26 帯にpin要（1.19未満=cuDNN8系NG・1.27以降=CUDA12廃止予定）。第一候補のTorchScript版なら追加依存ゼロでこのリスクを回避。
+- **÷128制約**: 全登録アダプタが `reference_downscale_factor=2` のため、参照は出力解像度の半分でVAEの64格子に載る＝出力 width/height が128で割り切れないとworker内VAE encodeが不親切なeinopsエラーで必ず失敗する（512×320で実証・512×256はpass）。実装セッションでAPI層に422事前バリデーション（`REFERENCE_RESOLUTION_INVALID`）を追加して検出済み。

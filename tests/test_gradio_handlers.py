@@ -1300,6 +1300,244 @@ def test_language_switch_returns_update_per_registry_entry():
     assert updates[-1]["headers"] == ["解像度", "最大フレーム数"]
 
 
+# --------------------------------------------------------------------------- #
+# Settings /config bug fix: build_spill_rows (pure formatter for the Settings
+# spill-free Dataframe) + fetch_config_safe / on_config_retry_tick (the
+# testable retry logic that replaces the old "swallow into {} forever" bug).
+# --------------------------------------------------------------------------- #
+def test_build_spill_rows_normal():
+    from gradio_ui.ui import build_spill_rows
+
+    cfg = {"limits": {"spill_free_frames": {"1280x768": 257, "1920x1088": 153}}}
+    rows = build_spill_rows(cfg)
+    assert rows == [["1280x768", 257], ["1920x1088", 153]]
+
+
+def test_build_spill_rows_missing_key():
+    from gradio_ui.ui import build_spill_rows
+
+    # "limits" present but no "spill_free_frames" key -> empty rows, no crash.
+    assert build_spill_rows({"limits": {}}) == []
+    # "limits" itself absent.
+    assert build_spill_rows({"generation_presets": {}}) == []
+
+
+def test_build_spill_rows_empty_config():
+    from gradio_ui.ui import build_spill_rows
+
+    assert build_spill_rows({}) == []
+    assert build_spill_rows(None) == []
+
+
+def test_fetch_config_safe_success():
+    from gradio_ui.handlers import fetch_config_safe
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"limits": {"spill_free_frames": {"512x320": 49}}})
+
+    api = _make_client(handler)
+    cfg, err = fetch_config_safe(api)
+    assert err is None
+    assert cfg["limits"]["spill_free_frames"]["512x320"] == 49
+
+
+def test_fetch_config_safe_failure_returns_warning_not_raise():
+    from gradio_ui.handlers import fetch_config_safe
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "boom"})
+
+    api = _make_client(handler)
+    cfg, err = fetch_config_safe(api)
+    assert cfg is None
+    assert err is not None
+    assert "Failed to load server settings" in err
+
+
+def test_fetch_config_safe_failure_localized_japanese():
+    from gradio_ui.handlers import fetch_config_safe
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={})
+
+    api = _make_client(handler)
+    _cfg, err = fetch_config_safe(api, lang="ja")
+    assert "サーバ設定の取得に失敗" in err
+
+
+def test_on_config_retry_tick_success_stops_timer():
+    from gradio_ui.handlers import on_config_retry_tick
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"limits": {}})
+
+    api = _make_client(handler)
+    cfg, err, next_attempt, keep_retrying = on_config_retry_tick(api, attempt=1)
+    assert err is None
+    assert cfg == {"limits": {}}
+    assert next_attempt == 1  # unchanged on success
+    assert keep_retrying is False
+
+
+def test_on_config_retry_tick_failure_below_budget_keeps_retrying():
+    from gradio_ui.handlers import CONFIG_RETRY_MAX_ATTEMPTS, on_config_retry_tick
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={})
+
+    api = _make_client(handler)
+    cfg, err, next_attempt, keep_retrying = on_config_retry_tick(api, attempt=0)
+    assert cfg is None
+    assert err is not None
+    assert next_attempt == 1
+    assert next_attempt < CONFIG_RETRY_MAX_ATTEMPTS
+    assert keep_retrying is True
+
+
+def test_on_config_retry_tick_exhausted_stops_and_final_message():
+    from gradio_ui.handlers import CONFIG_RETRY_MAX_ATTEMPTS, on_config_retry_tick
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={})
+
+    api = _make_client(handler)
+    cfg, err, next_attempt, keep_retrying = on_config_retry_tick(
+        api, attempt=CONFIG_RETRY_MAX_ATTEMPTS - 1)
+    assert cfg is None
+    assert next_attempt == CONFIG_RETRY_MAX_ATTEMPTS
+    assert keep_retrying is False
+    assert str(CONFIG_RETRY_MAX_ATTEMPTS) in err  # exhaustion count in the message
+    assert "Use Refresh" in err
+
+
+def test_on_config_retry_tick_localized_japanese_exhausted():
+    from gradio_ui.handlers import CONFIG_RETRY_MAX_ATTEMPTS, on_config_retry_tick
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={})
+
+    api = _make_client(handler)
+    _cfg, err, _next, keep_retrying = on_config_retry_tick(
+        api, attempt=CONFIG_RETRY_MAX_ATTEMPTS - 1, lang="ja")
+    assert keep_retrying is False
+    assert "更新ボタン" in err
+
+
+# --------------------------------------------------------------------------- #
+# Settings /config bug fix, wired end-to-end through build_ui: on_page_load
+# and on_config_retry are exposed on the returned demo (like switch_language),
+# and demo.api is the SAME ApiClient the Blocks graph calls -- swapping in a
+# mock transport exercises the exact closures wired to demo.load /
+# config_retry_timer.tick, without a live server.
+# --------------------------------------------------------------------------- #
+def test_on_page_load_success_populates_and_disables_timer():
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/status"):
+            return httpx.Response(200, json={"server": "running", "version": "0.4.0",
+                                              "pipeline_loaded": False,
+                                              "gpu": {"name": None, "vram_free_mb": 0,
+                                                      "vram_total_mb": 0},
+                                              "vram_optimization": {"low_vram_mode": False,
+                                                                    "low_vram_profile": "d"}})
+        return httpx.Response(200, json={
+            "generation_presets": {}, "limits": {"spill_free_frames": {"512x320": 49}},
+        })
+
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
+    (status, cfg, preset_upd, adapter_upd, server_json_upd, spill_upd,
+     timer_upd) = demo.on_page_load({}, "en")
+
+    assert cfg["limits"]["spill_free_frames"]["512x320"] == 49
+    assert spill_upd["value"] == [["512x320", 49]]
+    assert server_json_upd["value"] == cfg
+    assert timer_upd["active"] is False  # success -> timer stays off
+
+
+def test_on_page_load_failure_warns_keeps_state_and_arms_timer():
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/status"):
+            return httpx.Response(500, json={})
+        return httpx.Response(500, json={"error": "server not ready"})
+
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
+    stale_cfg = {"limits": {"spill_free_frames": {"stale": 1}}}
+    with pytest.warns(UserWarning):
+        (_status, cfg, preset_upd, adapter_upd, server_json_upd, spill_upd,
+         timer_upd) = demo.on_page_load(stale_cfg, "en")
+
+    # No-op-on-failure: existing good state is NOT clobbered with {} (a plain
+    # gr.update() carries no "value"/"choices" key, so nothing changes).
+    assert cfg is stale_cfg
+    assert "choices" not in preset_upd
+    assert "choices" not in adapter_upd
+    assert "value" not in server_json_upd
+    assert "value" not in spill_upd
+    assert timer_upd["active"] is True  # failure -> retry timer armed
+
+
+def test_on_config_retry_success_repopulates_and_stops_timer():
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "generation_presets": {}, "limits": {"spill_free_frames": {"1280x768": 257}},
+        })
+
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
+    (cfg, preset_upd, adapter_upd, server_json_upd, spill_upd,
+     next_attempt, timer_upd) = demo.on_config_retry({}, 1, "en")
+
+    assert cfg["limits"]["spill_free_frames"]["1280x768"] == 257
+    assert spill_upd["value"] == [["1280x768", 257]]
+    assert "choices" in preset_upd
+    assert "choices" in adapter_upd
+    assert next_attempt == 1
+    assert timer_upd["active"] is False
+
+
+def test_on_config_retry_dead_backend_no_op_until_exhausted():
+    from gradio_ui import build_ui
+    from gradio_ui.handlers import CONFIG_RETRY_MAX_ATTEMPTS
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+
+    # Simulate a dead port: MockTransport that always raises a connection error.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
+    stale_cfg = {"limits": {"spill_free_frames": {"stale": 1}}}
+
+    # Not yet exhausted -> no-op on config/table, timer stays armed, no warning.
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        (cfg, preset_upd, adapter_upd, server_json_upd, spill_upd,
+         next_attempt, timer_upd) = demo.on_config_retry(stale_cfg, 0, "en")
+    assert cfg is stale_cfg
+    assert "choices" not in preset_upd and "choices" not in adapter_upd
+    assert "value" not in server_json_upd and "value" not in spill_upd
+    assert next_attempt == 1
+    assert timer_upd["active"] is True
+
+    # Exhausted -> stop retrying + final gr.Warning.
+    with pytest.warns(UserWarning):
+        (*_rest, last_attempt, timer_upd_final) = demo.on_config_retry(
+            stale_cfg, CONFIG_RETRY_MAX_ATTEMPTS - 1, "en")
+    assert last_attempt == CONFIG_RETRY_MAX_ATTEMPTS
+    assert timer_upd_final["active"] is False
+
+
 def test_language_switch_rebuilds_choice_components():
     from gradio_ui import build_ui
 

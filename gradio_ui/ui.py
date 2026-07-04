@@ -15,7 +15,13 @@ from .formatting import (
     format_status,
     jobs_table_headers,
 )
-from .handlers import delete_finished_jobs, make_chain_handler, make_generate_handler
+from .handlers import (
+    delete_finished_jobs,
+    fetch_config_safe,
+    make_chain_handler,
+    make_generate_handler,
+    on_config_retry_tick,
+)
 from .i18n import L
 from .presets import PRESETS, apply_preset, build_preset_choices, compute_spill_warning, pick_default_preset
 
@@ -61,12 +67,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             return L("status_error").format(err=exc)
         return refresh_status()
 
-    def on_page_load():
+    def on_page_load(current_cfg, lang):
         status = refresh_status()
-        try:
-            cfg = api.get_config()
-        except Exception:
-            cfg = {}
+        cfg, err = fetch_config_safe(api, lang)
+        if err is not None:
+            # Single fetch failed (races server startup, transient error, ...).
+            # Surface it instead of silently clobbering with {} forever, keep
+            # whatever config_state already held, and arm the retry timer so
+            # a single missed fetch never strands the session.
+            gr.Warning(err)
+            return (status, current_cfg, gr.update(), gr.update(),
+                    gr.update(), gr.update(), gr.update(active=True))
         preset_update = gr.update(choices=build_preset_choices(cfg),
                                   value=pick_default_preset(cfg))
         # Rebuild the adapter choices from /config model.ic_loras; keep the
@@ -74,15 +85,36 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         adapter_update = gr.update(choices=build_adapter_choices(cfg))
         # Settings: populate the raw-config viewer + spill-free table.
         return (status, cfg, preset_update, adapter_update,
-                gr.update(value=cfg), gr.update(value=build_spill_rows(cfg)))
+                gr.update(value=cfg), gr.update(value=build_spill_rows(cfg)),
+                gr.update(active=False))
 
-    def on_refresh_config(current_cfg):
+    def on_config_retry(current_cfg, attempt, lang):
+        # One tick of the Settings-tab auto-retry gr.Timer, armed by
+        # on_page_load (or a previous tick) after a failed /config fetch.
+        # Keeps retrying until success or CONFIG_RETRY_MAX_ATTEMPTS, then
+        # disables itself either way (success: silently; exhausted: with a
+        # final gr.Warning pointing at the manual Refresh button).
+        cfg, err, next_attempt, keep_retrying = on_config_retry_tick(api, attempt, lang)
+        if err is not None:
+            if not keep_retrying:
+                gr.Warning(err)
+            return (current_cfg, gr.update(), gr.update(), gr.update(), gr.update(),
+                    next_attempt, gr.update(active=keep_retrying))
+        return (cfg,
+                gr.update(choices=build_preset_choices(cfg), value=pick_default_preset(cfg)),
+                gr.update(choices=build_adapter_choices(cfg)),
+                gr.update(value=cfg),
+                gr.update(value=build_spill_rows(cfg)),
+                next_attempt, gr.update(active=False))
+
+    def on_refresh_config(current_cfg, lang):
         # Top-bar Refresh also refreshes the Settings config viewer + spill table
         # and rebuilds preset/adapter choices. On fetch failure everything is
-        # left as-is (only the status line, refreshed separately, changes).
-        try:
-            cfg = api.get_config()
-        except Exception:
+        # left as-is (only the status line, refreshed separately, changes) and
+        # a gr.Warning surfaces the failure instead of clobbering good state.
+        cfg, err = fetch_config_safe(api, lang)
+        if err is not None:
+            gr.Warning(err)
             return current_cfg, gr.update(), gr.update(), gr.update(), gr.update()
         return (cfg,
                 gr.update(value=cfg),
@@ -108,6 +140,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # Current UI language (S6). Fed as a runtime input to the generate/chain
         # handlers so flow messages localize, and updated by the Language switch.
         lang_state = gr.State("en")
+        # Settings /config auto-retry (bug fix): counts failed attempts since
+        # the timer was armed; the timer itself starts inactive and is only
+        # switched on by on_page_load / on_config_retry after a fetch failure.
+        config_retry_state = gr.State(0)
+        config_retry_timer = gr.Timer(3.0, active=False)
 
         gr.Markdown("# LTX-AviUtl2-Bridge")
         reg(gr.Markdown(L("app_subtitle")), "app_subtitle", "value")
@@ -424,8 +461,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         refresh_btn.click(refresh_status, outputs=status_box)
         # Top-bar Refresh also refreshes the Settings config viewer + spill table.
         refresh_btn.click(
-            on_refresh_config, inputs=config_state,
+            on_refresh_config, inputs=[config_state, lang_state],
             outputs=[config_state, server_config_json, spill_table, preset, adapter],
+        )
+
+        # Settings /config auto-retry: ticks every 3s while active, calling
+        # on_config_retry, which disables the timer on success (or once
+        # CONFIG_RETRY_MAX_ATTEMPTS is exhausted).
+        config_retry_timer.tick(
+            on_config_retry, inputs=[config_state, config_retry_state, lang_state],
+            outputs=[config_state, preset, adapter, server_config_json, spill_table,
+                     config_retry_state, config_retry_timer],
         )
         load_btn.click(load_model, outputs=status_box)
         unload_btn.click(unload_model, outputs=status_box)
@@ -592,12 +638,19 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                        outputs=lang_switch_outputs)
         lang_dd.change(lambda v: v, inputs=lang_dd, outputs=lang_state)
 
-        demo.load(on_page_load,
+        demo.load(on_page_load, inputs=[config_state, lang_state],
                   outputs=[status_box, config_state, preset, adapter,
-                           server_config_json, spill_table])
+                           server_config_json, spill_table, config_retry_timer])
 
     # Expose the registry + language-switch fn for the S6 handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]
     demo.switch_language = switch_language  # type: ignore[attr-defined]
     demo.lang_switch_outputs = lang_switch_outputs  # type: ignore[attr-defined]
+    # Expose the ApiClient + config-fetch closures for tests (mirrors the
+    # switch_language exposure above): lets a test swap in a mock transport
+    # and drive on_page_load / on_config_retry directly, matching how the
+    # Blocks graph actually wires them, without a live server.
+    demo.api = api  # type: ignore[attr-defined]
+    demo.on_page_load = on_page_load  # type: ignore[attr-defined]
+    demo.on_config_retry = on_config_retry  # type: ignore[attr-defined]
     return demo

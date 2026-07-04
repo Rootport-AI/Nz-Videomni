@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import upload_invalid_type
-from api.models import UploadImageResponse, UploadVideoResponse
+from api.models import UploadAudioResponse, UploadImageResponse, UploadVideoResponse
 
 router = APIRouter()
 
@@ -50,6 +50,24 @@ async def upload_video(
         video_id=stored.video_id,
         original_filename=stored.original_filename,
         stored_path=context.video_upload_store.stored_relpath(stored),
+        content_type=stored.content_type,
+        size_bytes=stored.size_bytes,
+    )
+
+
+@router.post("/upload/audio", response_model=UploadAudioResponse, dependencies=[Depends(require_auth)])
+async def upload_audio(
+    file: UploadFile = File(...),
+    context: AppContext = Depends(get_context),
+) -> UploadAudioResponse:
+    if not file.filename:
+        raise upload_invalid_type(detail="missing filename")
+    data = await file.read()
+    stored = context.audio_upload_store.save(data=data, filename=file.filename)
+    return UploadAudioResponse(
+        audio_id=stored.audio_id,
+        original_filename=stored.original_filename,
+        stored_path=context.audio_upload_store.stored_relpath(stored),
         content_type=stored.content_type,
         size_bytes=stored.size_bytes,
     )

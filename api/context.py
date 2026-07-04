@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from config import AppConfig
+from services.audio_upload_store import AudioUploadStore
 from services.job_store import JobStore
 from services.lora_registry import LoraRegistry
 from services.pipeline_manager import PipelineManager
@@ -32,12 +33,14 @@ class AppContext:
     job_store: JobStore = field(default_factory=JobStore)
     upload_store: UploadStore = field(init=False)
     video_upload_store: VideoUploadStore = field(init=False)
+    audio_upload_store: AudioUploadStore = field(init=False)
     lora_registry: LoraRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
 
     def __post_init__(self) -> None:
         self.upload_store = UploadStore(self.config)
         self.video_upload_store = VideoUploadStore(self.config)
+        self.audio_upload_store = AudioUploadStore(self.config)
         self.lora_registry = LoraRegistry(self.config)
         self.pipeline_manager = PipelineManager(
             self.config,
@@ -45,6 +48,7 @@ class AppContext:
             self.upload_store,
             self.video_upload_store,
             self.lora_registry,
+            audio_upload_store=self.audio_upload_store,
         )
 
 

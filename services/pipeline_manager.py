@@ -14,10 +14,18 @@ import threading
 import time
 from pathlib import Path
 
-from api.errors import gpu_oom, generation_failed, pipeline_load_failed, source_video_too_short
-from api.models import JobResult, JobStatus, SourceVideoSpec
+import chain_math
+from api.errors import (
+    gpu_oom,
+    generation_failed,
+    pipeline_load_failed,
+    source_audio_too_short,
+    source_video_too_short,
+)
+from api.models import JobResult, JobStatus, SourceAudioSpec, SourceVideoSpec
 from config import AppConfig
 from services import gpu_info, video_io
+from services.audio_upload_store import AudioUploadStore
 from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
@@ -48,6 +56,7 @@ class PipelineManager:
         upload_store: UploadStore,
         video_upload_store: VideoUploadStore | None = None,
         lora_registry: LoraRegistry | None = None,
+        audio_upload_store: AudioUploadStore | None = None,
     ):
         self.config = config
         self.job_store = job_store
@@ -55,6 +64,9 @@ class PipelineManager:
         # Phase B: reference-video store + IC-LoRA name registry. Defaulted so
         # existing constructions (tests) still work; the app always injects them.
         self.video_upload_store = video_upload_store or VideoUploadStore(config)
+        # A2V: source-audio store. Defaulted like the video store so existing
+        # constructions keep working; the app always injects it.
+        self.audio_upload_store = audio_upload_store or AudioUploadStore(config)
         self.lora_registry = lora_registry or LoraRegistry(config)
         self.low_vram = build_low_vram_settings(config)
         self.runner = LTXRunner(config, self.low_vram)
@@ -229,6 +241,49 @@ class PipelineManager:
                 )
             )
 
+    # --------------------------------------------------- A2V source preflight
+
+    def preflight_source_audio(
+        self,
+        source_audio: SourceAudioSpec,
+        clip_frames: list[int],
+        frame_rate: float,
+        overlap_frames: int,
+    ) -> None:
+        """Validate an uploaded A2V source audio BEFORE a job is created.
+
+        Resolves the ``audio_id`` (the endpoint 404s first) and ffprobes the
+        stored file for an audio stream + duration. The chain timeline needs
+        ``chain_math.audio_latents_required(...)`` audio-latent frames (25/sec —
+        :data:`chain_math.AUDIO_LATENTS_PER_SEC`, the SINGLE SOURCE OF TRUTH the
+        engine also encodes against); an upload whose duration VAE-encodes to
+        fewer than that is rejected (422 SOURCE_AUDIO_TOO_SHORT). Video length is
+        authoritative — audio is truncated, never padded (matches upstream a2vid
+        and the engine's ``a2v_avail < a_total`` guard). No fps resample is done.
+        """
+        src_path = self.audio_upload_store.path_for(source_audio.audio_id)
+        required = chain_math.audio_latents_required(
+            clip_frames, frame_rate, kv=overlap_frames
+        )
+        if not video_io.has_audio_stream(src_path):
+            raise source_audio_too_short(
+                detail=f"no decodable audio stream in upload {source_audio.audio_id}"
+            )
+        duration = video_io.probe_duration(src_path)
+        if duration is None:
+            # ffprobe unavailable / unreadable duration: cannot verify length here.
+            # The engine's a2v_avail < a_total guard is the frame-exact backstop.
+            return
+        available = round(duration * chain_math.AUDIO_LATENTS_PER_SEC)
+        if available < required:
+            raise source_audio_too_short(
+                detail=(
+                    f"audio is {duration:.3f}s (~{available} audio-latent frames) "
+                    f"< required {required} frames for the {sum(clip_frames)}-frame "
+                    f"timeline @ {frame_rate} fps"
+                )
+            )
+
     # -------------------------------------------------------- run chain job
 
     def run_chain_job(self, job: JobRecord) -> None:
@@ -304,6 +359,18 @@ class PipelineManager:
                     "resampled": cut["resampled"],
                 }
 
+            # A2V: resolve the uploaded audio path (byte-passed to the engine as-is
+            # — no cut/resample; the engine truncates to the timeline). Mutually
+            # exclusive with source_video (validator enforces this), so only one of
+            # source_tail_path / source_audio_path is ever set.
+            source_audio_path = None
+            a2v_provenance = None
+            if chain.source_audio is not None:
+                source_audio_path = self.audio_upload_store.path_for(
+                    chain.source_audio.audio_id
+                )
+                a2v_provenance = {"source_audio_id": chain.source_audio.audio_id}
+
             def on_progress(step, total, progress):
                 job.current_step = step
                 job.total_steps = total
@@ -316,6 +383,7 @@ class PipelineManager:
                 clip0_conditioning_paths=clip0_cond_paths,
                 source_tail_path=source_tail_path,
                 source_context_frames=source_context_frames,
+                source_audio_path=source_audio_path,
             )
 
             elapsed = time.time() - started
@@ -338,6 +406,7 @@ class PipelineManager:
                     backend=outcome.backend or "mock",
                     peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
                     chain_meta=meta, v2v_provenance=v2v_provenance,
+                    a2v_provenance=a2v_provenance,
                 )
 
             result = JobResult(
@@ -382,7 +451,7 @@ class PipelineManager:
     def _write_chain_metadata(
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
-        v2v_provenance=None,
+        v2v_provenance=None, a2v_provenance=None,
     ) -> None:
         cm = chain_meta or {}
         metadata = {
@@ -430,6 +499,12 @@ class PipelineManager:
         v2v = cm.get("v2v")
         if v2v is not None:
             metadata["v2v"] = {**v2v, **(v2v_provenance or {})}
+        # A2V continuation (additive): only present when a source_audio was used,
+        # so a normal chain's metadata key set is byte-unchanged. The engine's (or
+        # mock's) chain.a2v sub-dict + the app-side provenance (source_audio_id).
+        a2v = cm.get("a2v")
+        if a2v is not None:
+            metadata["a2v"] = {**a2v, **(a2v_provenance or {})}
         video_io.save_metadata(metadata_path, metadata)
 
     # ------------------------------------------------------------ finalize

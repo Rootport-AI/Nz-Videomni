@@ -218,6 +218,43 @@ def probe_fps(path: Path) -> float | None:
     return None
 
 
+def probe_audio_stream(path: Path) -> tuple[int | None, int | None]:
+    """Return ``(sample_rate, channels)`` of the first audio stream via ffprobe.
+
+    Either value may be None when ffprobe is missing, the file has no audio
+    stream, or the field is unavailable. Used by the A2V mock backend to report a
+    faithful ``chain.a2v`` sample rate / channel count without a real audio decode.
+    """
+    exe = shutil.which("ffprobe")
+    if not exe:
+        return None, None
+    cmd = [
+        exe,
+        "-v",
+        "error",
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "stream=sample_rate,channels",
+        "-of",
+        "json",
+        str(path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None, None
+    try:
+        streams = json.loads(proc.stdout).get("streams", [])
+        if not streams:
+            return None, None
+        stream = streams[0]
+        sr = int(stream["sample_rate"]) if stream.get("sample_rate") else None
+        ch = int(stream["channels"]) if stream.get("channels") is not None else None
+        return sr, ch
+    except Exception:
+        return None, None
+
+
 def cut_tail_mp4(
     src: Path,
     out: Path,

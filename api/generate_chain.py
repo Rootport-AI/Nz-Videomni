@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from api.context import AppContext
 from api.deps import get_context, require_auth
-from api.errors import APIError, job_busy, source_video_not_found
+from api.errors import APIError, job_busy, source_audio_not_found, source_video_not_found
 from api.models import GenerateChainRequest, GenerateChainResponse
 
 router = APIRouter()
@@ -44,6 +44,20 @@ def generate_chain(
             raise source_video_not_found(request.source_video.video_id)
         context.pipeline_manager.preflight_source_video(
             request.source_video, request.frame_rate
+        )
+
+    # A2V: resolve the source audio (404) and preflight it (422 for too-short)
+    # BEFORE reserving a job — same up-front-failure discipline as source_video.
+    if request.source_audio is not None:
+        try:
+            context.audio_upload_store.path_for(request.source_audio.audio_id)
+        except APIError:
+            raise source_audio_not_found(request.source_audio.audio_id)
+        context.pipeline_manager.preflight_source_audio(
+            request.source_audio,
+            [c.num_frames for c in request.clips],
+            request.frame_rate,
+            request.overlap_frames,
         )
 
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.

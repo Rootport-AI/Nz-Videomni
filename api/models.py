@@ -231,6 +231,24 @@ class SourceVideoSpec(BaseModel):
         return self
 
 
+class SourceAudioSpec(BaseModel):
+    """Audio-to-video source (Phase A2V, ADDITIVE/optional).
+
+    ``audio_id`` is an existing upload from POST /upload/audio. The uploaded
+    waveform is VAE-encoded to audio latents that are HARD-frozen (full length,
+    mask_value=0) across the chain timeline, so the generated video is driven to
+    match the audio (lip-sync) while the ORIGINAL waveform is muxed back onto the
+    output (no vocoder). Video length is authoritative: the audio is truncated to
+    the timeline, never padded — a too-short upload is rejected up front (422
+    SOURCE_AUDIO_TOO_SHORT). v1 exposes no trimming controls (audio_start_time /
+    audio_max_duration) and is limited to a single clip (see the request
+    validator). Mutually exclusive with ``source_video`` (A2V + V2V is out of
+    v1 scope).
+    """
+
+    audio_id: str = Field(..., min_length=1)
+
+
 class GenerateChainRequest(BaseModel):
     """A chain of clips assembled into ONE continuous masked AV-latent timeline.
 
@@ -281,6 +299,12 @@ class GenerateChainRequest(BaseModel):
     # uploaded source video is frozen as clip-0's head; see :class:`SourceVideoSpec`.
     source_video: SourceVideoSpec | None = None
 
+    # Audio-to-video (Phase A2V, ADDITIVE/optional — a request omitting this field
+    # is byte-identical to before). When set, an uploaded audio track is frozen as
+    # the chain's audio latent and the video is generated to match it; see
+    # :class:`SourceAudioSpec`. Mutually exclusive with ``source_video``.
+    source_audio: SourceAudioSpec | None = None
+
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
         if self.width % 64 != 0:
@@ -302,10 +326,29 @@ class GenerateChainRequest(BaseModel):
                     "distilled pipeline requires guidance_scale=1.0 in Phase 1"
                 )
 
-        # Clip-count floor: WITHOUT a source_video a chain needs >= 2 clips (a
-        # single clip is just /generate) — preserve the pre-V2V rejection. WITH a
-        # source_video the frozen source head IS the prior segment, so 1 clip is OK.
-        if self.source_video is None and len(self.clips) < 2:
+        # A2V + V2V are mutually exclusive (v1 scope — do not mix an uploaded
+        # continuation video with an uploaded driving audio). Rejected up front.
+        if self.source_audio is not None and self.source_video is not None:
+            raise ValueError(
+                "source_audio and source_video are mutually exclusive "
+                "(A2V and V2V cannot be combined in v1)"
+            )
+
+        # A2V is limited to EXACTLY one clip in v1 (multi-clip audio window split
+        # is out of scope). The single frozen audio latent spans the one clip.
+        if self.source_audio is not None and len(self.clips) != 1:
+            raise ValueError("source_audio requires exactly 1 clip in v1")
+
+        # Clip-count floor: WITHOUT a source (video OR audio) a chain needs >= 2
+        # clips (a single clip is just /generate) — preserve the pre-V2V
+        # rejection. WITH a source_video the frozen source head IS the prior
+        # segment, and WITH a source_audio a single clip is the whole timeline, so
+        # 1 clip is OK in both cases.
+        if (
+            self.source_video is None
+            and self.source_audio is None
+            and len(self.clips) < 2
+        ):
             raise ValueError("chain requires at least 2 clips")
 
         # V2V continuation cross-validation (all 422 at request time):
@@ -411,6 +454,14 @@ class UploadImageResponse(BaseModel):
 
 class UploadVideoResponse(BaseModel):
     video_id: str
+    original_filename: str
+    stored_path: str
+    content_type: str
+    size_bytes: int
+
+
+class UploadAudioResponse(BaseModel):
+    audio_id: str
     original_filename: str
     stored_path: str
     content_type: str

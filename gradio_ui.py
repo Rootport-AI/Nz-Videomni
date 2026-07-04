@@ -90,8 +90,6 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_prompt": "Prompt",
         "ph_prompt": "A bustling downtown at dusk; crowds weave through the alleys as neon signs flicker on — like a scene from a movie trailer",
         "lbl_negative": "Negative prompt",
-        "lbl_image": "Input image (optional, minimal I2V — frame 0)",
-        "lbl_strength": "Image strength",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -111,6 +109,17 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_seed": "Seed (-1 = random)",
         "warn_spill_limit": ("Exceeds the comfortable limit for {res} ({limit} frames): "
                               "generation still works but is much slower."),
+        # --- generate: keyframe accordion (S3) ---
+        "lbl_kf_accordion": "Keyframe images (I2V conditioning, up to 5)",
+        "lbl_kf_use": "Use",
+        "lbl_kf_image": "Keyframe image",
+        "lbl_kf_frame_pos0": "Frame position (0 = start frame)",
+        "lbl_kf_frame_pos": "Frame position",
+        "lbl_kf_strength": "Strength",
+        "cap_kf_grid": "Frame positions are snapped server-side to the 8n+1 grid.",
+        "msg_kf_missing_image": "Slot {n}: enabled but no image selected.",
+        "msg_kf_negative_frame": "Slot {n}: frame position must be 0 or greater.",
+        "msg_uploading_keyframe": "Uploading keyframe {i}/{n}…",
         # --- generate: right column ---
         "btn_generate": "Generate",
         "lbl_progress": "Progress",
@@ -167,8 +176,6 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_prompt": "プロンプト",
         "ph_prompt": "夕暮れの賑やかな下町、行き交う人々、ネオンが灯りはじめる路地。映画のワンシーンのように——",
         "lbl_negative": "ネガティブプロンプト",
-        "lbl_image": "入力画像 (任意・最小I2V — frame 0)",
-        "lbl_strength": "画像適用強度",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",
@@ -187,6 +194,17 @@ LABELS: dict[str, dict[str, str]] = {
         "cap_lock": "8 / 1.0 に固定 (distilled)",
         "lbl_seed": "シード (-1 = ランダム)",
         "warn_spill_limit": "解像度 {res} の快適上限 ({limit} フレーム) を超えています: 生成は可能ですが大幅に低速化します。",
+        # --- generate: keyframe accordion (S3) ---
+        "lbl_kf_accordion": "キーフレーム画像 (I2V条件付け・最大5枚)",
+        "lbl_kf_use": "使用",
+        "lbl_kf_image": "キーフレーム画像",
+        "lbl_kf_frame_pos0": "フレーム位置 (0 = 開始フレーム)",
+        "lbl_kf_frame_pos": "フレーム位置",
+        "lbl_kf_strength": "適用強度",
+        "cap_kf_grid": "フレーム位置はサーバ側で8n+1の格子に合わせられます。",
+        "msg_kf_missing_image": "スロット{n}: 有効ですが画像が選択されていません。",
+        "msg_kf_negative_frame": "スロット{n}: フレーム位置は0以上にしてください。",
+        "msg_uploading_keyframe": "キーフレームをアップロード中… {i}/{n}",
         # --- generate: right column ---
         "btn_generate": "生成",
         "lbl_progress": "進捗",
@@ -431,22 +449,50 @@ def format_status(s: dict, lang: str = _DEFAULT_LANG) -> str:
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
 # --------------------------------------------------------------------------- #
 def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
-    def generate(prompt, negative_prompt, image_path, strength, width, height,
-                 crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed):
+    def generate(prompt, negative_prompt,
+                 kf1_enabled, kf1_image, kf1_frame_idx, kf1_strength,
+                 kf2_enabled, kf2_image, kf2_frame_idx, kf2_strength,
+                 kf3_enabled, kf3_image, kf3_frame_idx, kf3_strength,
+                 kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength,
+                 kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength,
+                 width, height, crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed):
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
             return
 
-        # 1) optional single-image upload (minimal I2V, frame 0).
+        # 1) keyframe slots (up to 5, I2V multi-keyframe conditioning). Each
+        # FIXED slot is (enabled, image_path, frame_idx, strength); disabled or
+        # empty slots are skipped. Pre-validate ALL enabled slots before any
+        # upload starts, so a bad slot never leaves earlier slots uploaded.
+        slots = [
+            (kf1_enabled, kf1_image, kf1_frame_idx, kf1_strength),
+            (kf2_enabled, kf2_image, kf2_frame_idx, kf2_strength),
+            (kf3_enabled, kf3_image, kf3_frame_idx, kf3_strength),
+            (kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength),
+            (kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength),
+        ]
+        to_upload: list[tuple[str, int, float]] = []
+        for slot_n, (enabled, image_path, frame_idx, strength) in enumerate(slots, start=1):
+            if not enabled:
+                continue
+            if frame_idx is None or int(frame_idx) < 0:
+                yield L("msg_kf_negative_frame", lang).format(n=slot_n), "", None
+                return
+            if not image_path:
+                yield L("msg_kf_missing_image", lang).format(n=slot_n), "", None
+                return
+            to_upload.append((image_path, int(frame_idx), float(strength)))
+
         conditioning: list[dict] = []
-        if image_path:
+        total = len(to_upload)
+        for i, (image_path, frame_idx, strength) in enumerate(to_upload, start=1):
+            yield L("msg_uploading_keyframe", lang).format(i=i, n=total), "", None
             try:
                 image_id = api.upload_image(image_path)
             except Exception as exc:
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
-            conditioning = [{"image_id": image_id, "frame_idx": 0, "strength": float(strength)}]
-            yield L("msg_upload_done", lang).format(image_id=image_id), "", None
+            conditioning.append({"image_id": image_id, "frame_idx": frame_idx, "strength": strength})
 
         # 2) start generation. Quality is locked to distilled in S1 (steps/cfg
         # fixed); the payload keeps the frozen contract.
@@ -610,10 +656,6 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             value="distilled", label=L("lbl_qmode"),
                         ), "lbl_qmode")
 
-                        image = reg(gr.Image(label=L("lbl_image"), type="filepath"), "lbl_image")
-                        strength = reg(gr.Slider(0.0, 1.0, value=0.8, step=0.05,
-                                                 label=L("lbl_strength")), "lbl_strength")
-
                         preset = reg(gr.Dropdown(list(PRESETS.keys()), value="phase1_default",
                                                  label=L("lbl_preset"), info=L("hint_preset")),
                                      "lbl_preset")
@@ -646,6 +688,28 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         cap_lock = reg(gr.Markdown(L("cap_lock")), "cap_lock", "value")
 
                         seed = reg(gr.Number(value=-1, label=L("lbl_seed"), precision=0), "lbl_seed")
+
+                        # accordion: up to 5 fixed keyframe slots (I2V multi-keyframe
+                        # conditioning). Slot 1 suggests "start frame (0)"; slots 2-5
+                        # are plain "frame position" slots, all defaulting to 0 (the
+                        # server snaps any non-zero value to the 8n+1 grid).
+                        kf_slots: list[tuple[object, object, object, object]] = []
+                        with gr.Accordion(L("lbl_kf_accordion"), open=False) as kf_accordion:
+                            reg(kf_accordion, "lbl_kf_accordion", "label")
+                            for _slot_i in range(1, 6):
+                                frame_key = "lbl_kf_frame_pos0" if _slot_i == 1 else "lbl_kf_frame_pos"
+                                with gr.Row():
+                                    kf_enabled = reg(gr.Checkbox(value=False, label=L("lbl_kf_use")),
+                                                     "lbl_kf_use")
+                                    kf_image = reg(gr.Image(label=L("lbl_kf_image"), type="filepath"),
+                                                   "lbl_kf_image")
+                                    kf_frame = reg(gr.Number(value=0, label=L(frame_key), precision=0,
+                                                             minimum=0), frame_key)
+                                    kf_strength = reg(gr.Slider(0.0, 1.0, value=0.8, step=0.05,
+                                                               label=L("lbl_kf_strength")),
+                                                     "lbl_kf_strength")
+                                kf_slots.append((kf_enabled, kf_image, kf_frame, kf_strength))
+                            reg(gr.Markdown(L("cap_kf_grid")), "cap_kf_grid", "value")
 
                     # RIGHT: action panel (Generate first) -> progress -> job id -> video
                     with gr.Column(scale=2):
@@ -712,9 +776,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                "document.body.classList.toggle('dark', v === 'dark'); }",
         )
 
+        kf_inputs: list[object] = []
+        for kf_enabled, kf_image, kf_frame, kf_strength in kf_slots:
+            kf_inputs.extend([kf_enabled, kf_image, kf_frame, kf_strength])
+
         generate_btn.click(
             generate,
-            inputs=[prompt, negative, image, strength, width, height,
+            inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed],
             outputs=[progress_box, job_box, video_out],
         )

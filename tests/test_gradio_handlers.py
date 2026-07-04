@@ -181,6 +181,20 @@ def _run_until_job_started(gen):
     return first
 
 
+# --------------------------------------------------------------------------- #
+# S3: the 5 fixed keyframe slots are flattened into 20 positional args
+# (enabled, image_path, frame_idx, strength) x 5. This helper builds that flat
+# list from as few slots as a test cares about; the rest default to
+# disabled/empty (pure T2V when all 5 are left out).
+# --------------------------------------------------------------------------- #
+def _kf_args(*slots):
+    filled = list(slots) + [(False, None, 0, 0.8)] * (5 - len(slots))
+    args = []
+    for enabled, image, frame_idx, strength in filled[:5]:
+        args.extend([enabled, image, frame_idx, strength])
+    return args
+
+
 def test_generate_t2v_payload():
     captured = {}
 
@@ -193,7 +207,7 @@ def test_generate_t2v_payload():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "blurry", None, 0.8,
+        "A calm river", "blurry", *_kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     progress, job_id, video = _run_until_job_started(gen)
@@ -207,7 +221,7 @@ def test_generate_t2v_payload():
     assert captured["guidance_scale"] == 1.0
     assert captured["pipeline"] == "distilled"
     assert captured["crop_output"] is None  # checkbox off
-    assert captured["conditioning_images"] == []  # no image => t2v
+    assert captured["conditioning_images"] == []  # no keyframes => t2v
     assert job_id == "job-1"
     assert "t2v" in progress
 
@@ -223,7 +237,7 @@ def test_generate_crop_output_when_enabled():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", None, 0.8,
+        "prompt", "", *_kf_args(),
         1280, 768, True, 1280, 720, 257, 24.0, 7,
     )
     _run_until_job_started(gen)
@@ -240,7 +254,7 @@ def test_generate_empty_prompt_short_circuits():
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
-    out = list(generate("   ", "", None, 0.8, 512, 320, False, 0, 0, 49, 24.0, -1))
+    out = list(generate("   ", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1))
     assert calls["n"] == 0  # no HTTP performed
     assert len(out) == 1
     progress, job_id, video = out[0]
@@ -253,7 +267,7 @@ def test_generate_409_reports_busy():
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
-    out = list(generate("prompt", "", None, 0.8, 512, 320, False, 0, 0, 49, 24.0, -1))
+    out = list(generate("prompt", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1))
     progress, job_id, video = out[-1]
     assert "409" in progress
     assert job_id == ""
@@ -273,15 +287,155 @@ def test_generate_i2v_uploads_then_generates(tmp_path):
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
-    gen = generate("prompt", "", str(img), 0.65, 512, 320, False, 0, 0, 49, 24.0, -1)
-    # first yield = upload-done; advance again to trigger the generate POST.
-    next(gen)
+    gen = generate(
+        "prompt", "", *_kf_args((True, str(img), 0, 0.65)),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    # first yield = "uploading keyframe 1/1"; advance again to trigger the
+    # generate POST.
+    first = next(gen)
     second = next(gen)
     gen.close()
+    assert "1/1" in first[0]
     assert captured["conditioning_images"] == [
         {"image_id": "img-7", "frame_idx": 0, "strength": 0.65}
     ]
     assert "i2v" in second[0]
+
+
+# --------------------------------------------------------------------------- #
+# S3: multi-keyframe conditioning (5 fixed slots).
+# --------------------------------------------------------------------------- #
+def test_generate_multi_keyframe_uploads_in_slot_order(tmp_path):
+    img1 = tmp_path / "a.png"
+    img2 = tmp_path / "b.png"
+    img3 = tmp_path / "c.png"
+    for p in (img1, img2, img3):
+        p.write_bytes(b"\x89PNG\r\n")
+
+    uploads = []
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/image"):
+            uploads.append(request.content)
+            return httpx.Response(200, json={"image_id": f"img-{len(uploads)}"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-multi"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "",
+        *_kf_args(
+            (True, str(img1), 0, 0.8),
+            (True, str(img2), 32, 0.6),
+            (True, str(img3), 64, 0.4),
+        ),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    progress_msgs = []
+    for out in gen:
+        progress_msgs.append(out[0])
+        if out[1]:  # job started -> stop before the poll loop's 1s sleeps
+            gen.close()
+            break
+
+    assert len(uploads) == 3
+    assert any("1/3" in m for m in progress_msgs)
+    assert any("2/3" in m for m in progress_msgs)
+    assert any("3/3" in m for m in progress_msgs)
+    assert captured["conditioning_images"] == [
+        {"image_id": "img-1", "frame_idx": 0, "strength": 0.8},
+        {"image_id": "img-2", "frame_idx": 32, "strength": 0.6},
+        {"image_id": "img-3", "frame_idx": 64, "strength": 0.4},
+    ]
+
+
+def test_generate_disabled_slot_with_image_is_skipped(tmp_path):
+    img = tmp_path / "in.png"
+    img.write_bytes(b"\x89PNG\r\n")
+    uploads = {"n": 0}
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/image"):
+            uploads["n"] += 1
+            return httpx.Response(200, json={"image_id": "img-x"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-skip"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "",
+        *_kf_args((False, str(img), 0, 0.8)),  # slot 1 filled but disabled
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert uploads["n"] == 0
+    assert captured["conditioning_images"] == []
+
+
+def test_generate_enabled_slot_missing_image_errors():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "",
+        *_kf_args((True, None, 0, 0.8)),  # slot 1 enabled but no image
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    ))
+    assert calls["n"] == 0  # no HTTP performed at all
+    assert len(out) == 1
+    progress, job_id, video = out[0]
+    assert "1" in progress  # localized message references slot 1
+    assert job_id == "" and video is None
+
+
+def test_generate_all_slots_disabled_is_pure_t2v():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert not request.url.path.endswith("/upload/image")
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-t2v"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate("prompt", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1)
+    _run_until_job_started(gen)
+    assert captured["conditioning_images"] == []
+
+
+def test_generate_negative_frame_idx_errors_before_any_api_call(tmp_path):
+    img = tmp_path / "in.png"
+    img.write_bytes(b"\x89PNG\r\n")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "",
+        *_kf_args((True, str(img), -1, 0.8)),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    ))
+    assert calls["n"] == 0  # neither upload nor generate performed
+    assert len(out) == 1
+    progress, job_id, video = out[0]
+    assert job_id == "" and video is None
 
 
 # --------------------------------------------------------------------------- #

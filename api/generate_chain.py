@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from api.context import AppContext
 from api.deps import get_context, require_auth
-from api.errors import job_busy
+from api.errors import APIError, job_busy, source_video_not_found
 from api.models import GenerateChainRequest, GenerateChainResponse
 
 router = APIRouter()
@@ -33,6 +33,18 @@ def generate_chain(
     # them; the model validator already enforces that).
     for ci in request.clips[0].conditioning_images:
         context.upload_store.path_for(ci.image_id)  # raises IMAGE_NOT_FOUND
+
+    # V2V continuation: resolve the source video (404) and preflight it (422 for
+    # too-short) BEFORE reserving a job — same up-front-failure discipline as the
+    # conditioning-image check above (precedent api/generate.py).
+    if request.source_video is not None:
+        try:
+            context.video_upload_store.path_for(request.source_video.video_id)
+        except APIError:
+            raise source_video_not_found(request.source_video.video_id)
+        context.pipeline_manager.preflight_source_video(
+            request.source_video, request.frame_rate
+        )
 
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_chain_if_idle(request)

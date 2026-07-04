@@ -23,9 +23,16 @@ from .validation import check_chain_total
 # (progress_text, job_id, video_path) tuples; behaviour is byte-identical to the
 # original inline loop in make_generate_handler.
 # --------------------------------------------------------------------------- #
-def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG):
-    for _ in range(3600):
-        time.sleep(1.0)
+def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
+                         interval: float = 1.0, timeout_s: float = 3600.0):
+    # Poll every ``interval`` seconds up to ``timeout_s`` (Settings-tab tunable;
+    # defaults preserve the original 1s / 1h behaviour).
+    try:
+        iterations = max(1, int(float(timeout_s) / float(interval)))
+    except (TypeError, ValueError, ZeroDivisionError):
+        interval, iterations = 1.0, 3600
+    for _ in range(iterations):
+        time.sleep(interval)
         try:
             job = api.get_job(job_id)
         except Exception as exc:
@@ -58,6 +65,8 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG)
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
 # --------------------------------------------------------------------------- #
 def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
+    default_lang = lang
+
     def generate(prompt, negative_prompt,
                  kf1_enabled, kf1_image, kf1_frame_idx, kf1_strength,
                  kf2_enabled, kf2_image, kf2_frame_idx, kf2_strength,
@@ -65,7 +74,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength,
                  kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength,
                  width, height, crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
-                 adapter=ADAPTER_NONE, adapter_strength=1.0, ref_video_path=None, config=None):
+                 adapter=ADAPTER_NONE, adapter_strength=1.0, ref_video_path=None, config=None,
+                 ui_lang=None, poll_interval=None, poll_timeout_min=None):
+        # Runtime language + polling cadence come from Settings-tab gr.State
+        # inputs (S6). They are optional so the pre-S6 call signature (and every
+        # existing test) keeps working with the build-time default language and
+        # the 1s / 60min poll defaults.
+        lang = ui_lang or default_lang
+        interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
             return
@@ -192,8 +208,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         mode = "i2v" if conditioning else "t2v"
         yield L("msg_job_started", lang).format(mode=mode, job_id=job_id), job_id, None
 
-        # 3) poll (1s) — shared with the clip-chain flow.
-        yield from _poll_job_until_done(api, job_id, lang)
+        # 3) poll — shared with the clip-chain flow (cadence from Settings).
+        yield from _poll_job_until_done(api, job_id, lang, interval, timeout_s)
 
     return generate
 
@@ -207,6 +223,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 # only). ``clips`` are emitted in slot order, enabled slots only.
 # --------------------------------------------------------------------------- #
 def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
+    default_lang = lang
+
     def generate_chain(prompt, negative_prompt, width, height,
                        crop_enabled, crop_w, crop_h, frame_rate, seed,
                        overlap_frames, overlap_strength,
@@ -218,7 +236,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        c6_enabled, c6_prompt, c6_frames,
                        c7_enabled, c7_prompt, c7_frames,
                        c8_enabled, c8_prompt, c8_frames,
-                       config=None):
+                       config=None, ui_lang=None, poll_interval=None,
+                       poll_timeout_min=None):
+        # Runtime language + poll cadence from Settings (S6); optional so the
+        # pre-S6 signature and existing tests are unchanged.
+        lang = ui_lang or default_lang
+        interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         # --- prechecks (localized; NO API call on any violation) ---
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
@@ -371,7 +394,57 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
         yield L("msg_chain_started", lang).format(n=len(clips_payload), job_id=job_id), job_id, None
 
-        # poll (1s) — shared with the generate flow.
-        yield from _poll_job_until_done(api, job_id, lang)
+        # poll — shared with the generate flow (cadence from Settings).
+        yield from _poll_job_until_done(api, job_id, lang, interval, timeout_s)
 
     return generate_chain
+
+
+# --------------------------------------------------------------------------- #
+# Settings-tab helpers (S6).
+# --------------------------------------------------------------------------- #
+def _resolve_poll(poll_interval, poll_timeout_min):
+    """Resolve the (interval_s, timeout_s) pair from the Settings gr.Number
+    inputs, falling back to 1s / 60min when unset or invalid."""
+    try:
+        interval = float(poll_interval) if poll_interval else 1.0
+        if interval <= 0:
+            interval = 1.0
+    except (TypeError, ValueError):
+        interval = 1.0
+    try:
+        timeout_min = float(poll_timeout_min) if poll_timeout_min else 60.0
+        if timeout_min <= 0:
+            timeout_min = 60.0
+    except (TypeError, ValueError):
+        timeout_min = 60.0
+    return interval, timeout_min * 60.0
+
+
+# Terminal states whose jobs "Delete all finished jobs" removes (the DELETE
+# endpoint drops a terminal job + its output dir; active jobs are left alone).
+_FINISHED_STATES = ("completed", "failed", "cancelled")
+
+
+def delete_finished_jobs(api: ApiClient, lang: str = _DEFAULT_LANG) -> str:
+    """Client-side "delete all finished jobs": list /jobs and DELETE every job in
+    a terminal state (NO new endpoint). Returns a localized count message."""
+    try:
+        jobs = api.list_jobs()
+    except Exception as exc:
+        return L("msg_purge_failed", lang).format(err=exc)
+    deleted = 0
+    for job in jobs or []:
+        if not isinstance(job, dict):
+            continue
+        if job.get("status") in _FINISHED_STATES:
+            job_id = job.get("job_id")
+            if not job_id:
+                continue
+            try:
+                api.delete_job(job_id)
+                deleted += 1
+            except Exception:
+                # Best-effort: a job may have been removed between list + delete.
+                continue
+    return L("msg_purge_done", lang).format(n=deleted)

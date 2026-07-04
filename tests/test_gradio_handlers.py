@@ -17,11 +17,15 @@ from gradio_ui import (
     ApiClient,
     apply_preset,
     build_adapter_choices,
+    build_jobs_rows,
     build_preset_choices,
     check_chain_total,
     compute_spill_warning,
+    delete_finished_jobs,
     format_api_error,
+    format_job_error,
     format_status,
+    jobs_table_headers,
     make_chain_handler,
     make_generate_handler,
     pick_default_preset,
@@ -1094,3 +1098,221 @@ def test_chain_validation_error_formatted():
     ])))
     assert "must be 8n+1" in out[-1][0]
     assert out[-1][1] == ""
+
+
+# --------------------------------------------------------------------------- #
+# S6: Jobs tab — ApiClient list_jobs / delete_job paths.
+# --------------------------------------------------------------------------- #
+def test_list_jobs_path():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert str(request.url) == "http://test/api/v1/jobs"
+        return httpx.Response(200, json=[{"job_id": "j1", "status": "completed"}])
+
+    api = _make_client(handler)
+    jobs = api.list_jobs()
+    assert jobs[0]["job_id"] == "j1"
+
+
+def test_delete_job_path_and_method():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"job_id": "j9", "deleted": True})
+
+    api = _make_client(handler)
+    resp = api.delete_job("j9")
+    assert seen["method"] == "DELETE"
+    assert seen["url"] == "http://test/api/v1/jobs/j9"
+    assert resp["deleted"] is True
+
+
+# --------------------------------------------------------------------------- #
+# S6: build_jobs_rows — Dataframe rows from a fake /jobs list.
+# --------------------------------------------------------------------------- #
+def _fake_jobs() -> list:
+    return [
+        {"job_id": "a3f8", "status": "completed", "progress": 1.0,
+         "created_at": "2026-07-04T14:22:07", "completed_at": "2026-07-04T14:25:41",
+         "error": None},
+        {"job_id": "b7d1", "status": "running", "progress": 0.62,
+         "created_at": "2026-07-04T14:31:55", "completed_at": None, "error": None},
+        {"job_id": "c0e4", "status": "failed", "progress": 0.0,
+         "created_at": "2026-07-04T13:58:40", "completed_at": "2026-07-04T13:59:10",
+         "error": "GPU_OOM: CUDA out of memory (detail)"},
+    ]
+
+
+def test_build_jobs_rows_columns_and_formatting():
+    rows = build_jobs_rows(_fake_jobs())
+    assert len(rows) == 3
+    # completed -> 100%, no error summary.
+    assert rows[0] == ["a3f8", "completed", "100%", "2026-07-04T14:22:07",
+                       "2026-07-04T14:25:41", ""]
+    # running -> 62%.
+    assert rows[1][2] == "62%"
+    # failed -> progress dash + error CODE summary.
+    assert rows[2][1] == "failed"
+    assert rows[2][2] == "—"
+    assert rows[2][5] == "GPU_OOM"
+
+
+def test_build_jobs_rows_handles_missing_and_empty():
+    assert build_jobs_rows([]) == []
+    assert build_jobs_rows(None) == []
+    rows = build_jobs_rows([{"job_id": "x", "status": "queued", "progress": None}])
+    assert rows[0][2] == "—"  # no progress -> dash
+
+
+def test_jobs_table_headers_localized():
+    en = jobs_table_headers("en")
+    ja = jobs_table_headers("ja")
+    assert en[0] == "Job ID" and ja[0] == "ジョブID"
+    assert len(en) == 6 and len(ja) == 6
+
+
+# --------------------------------------------------------------------------- #
+# S6: format_job_error — parse "CODE: message (detail)" and reuse apierr_* hints.
+# --------------------------------------------------------------------------- #
+def test_format_job_error_known_code_english_hint():
+    msg = format_job_error("GPU_OOM: CUDA out of memory (detail)")
+    assert "Out of GPU memory" in msg          # localized apierr_GPU_OOM hint
+    assert "CUDA out of memory (detail)" in msg  # raw server text kept
+
+
+def test_format_job_error_known_code_japanese_hint():
+    msg = format_job_error("GENERATION_FAILED: boom", lang="ja")
+    assert "生成に失敗" in msg  # localized apierr_GENERATION_FAILED (ja)
+
+
+def test_format_job_error_unknown_prefix_returns_raw():
+    raw = "SOMETHING_WEIRD: unexpected failure"
+    assert format_job_error(raw) == raw
+
+
+def test_format_job_error_none_and_non_string():
+    assert format_job_error(None) == ""
+    assert format_job_error("") == ""
+
+
+# --------------------------------------------------------------------------- #
+# S6: delete_finished_jobs — client-side loop deletes ONLY terminal jobs.
+# --------------------------------------------------------------------------- #
+def test_delete_finished_jobs_only_terminal_states():
+    deleted = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path.endswith("/jobs"):
+            return httpx.Response(200, json=[
+                {"job_id": "done1", "status": "completed"},
+                {"job_id": "run1", "status": "running"},
+                {"job_id": "fail1", "status": "failed"},
+                {"job_id": "queue1", "status": "queued"},
+                {"job_id": "cancel1", "status": "cancelled"},
+            ])
+        if request.method == "DELETE":
+            deleted.append(request.url.path.rsplit("/", 1)[-1])
+            return httpx.Response(200, json={"job_id": "x", "deleted": True})
+        return httpx.Response(404, json={})
+
+    api = _make_client(handler)
+    msg = delete_finished_jobs(api)
+    # running + queued are active -> never deleted.
+    assert sorted(deleted) == ["cancel1", "done1", "fail1"]
+    assert "3" in msg
+
+
+def test_delete_finished_jobs_list_failure_localized():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": {"code": "X"}})
+
+    api = _make_client(handler)
+    msg = delete_finished_jobs(api, lang="ja")
+    assert "失敗" in msg  # msg_purge_failed (ja)
+
+
+# --------------------------------------------------------------------------- #
+# S6: polling cadence — _poll_job_until_done honours a custom interval/timeout,
+# and _resolve_poll plumbs the Settings gr.Number values (with safe defaults).
+# --------------------------------------------------------------------------- #
+def test_resolve_poll_defaults_and_custom():
+    from gradio_ui.handlers import _resolve_poll
+
+    assert _resolve_poll(None, None) == (1.0, 3600.0)
+    assert _resolve_poll(0.5, 2) == (0.5, 120.0)
+    # non-positive / invalid inputs fall back to the 1s / 60min defaults.
+    assert _resolve_poll(0, 0) == (1.0, 3600.0)
+    assert _resolve_poll("x", "y") == (1.0, 3600.0)
+
+
+def test_poll_respects_custom_interval(monkeypatch):
+    from gradio_ui import handlers
+
+    slept: list[float] = []
+    monkeypatch.setattr(handlers.time, "sleep", lambda s: slept.append(s))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Any request (poll or video fetch) returns a completed job body.
+        return httpx.Response(200, json={"status": "completed", "progress": 1.0})
+
+    api = _make_client(handler)
+    outs = list(handlers._poll_job_until_done(api, "j1", "en",
+                                              interval=0.25, timeout_s=10))
+    assert slept and slept[0] == 0.25       # custom interval used
+    assert outs[-1][1] == "j1"              # returned after completion
+
+
+def test_generate_runtime_lang_localizes_messages():
+    # ui_lang is the trailing arg; an empty prompt short-circuits with the
+    # Japanese message when ui_lang="ja".
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "   ", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
+        ADAPTER_NONE, 1.0, None, None,
+        "ja",  # ui_lang
+    ))
+    assert "プロンプト" in out[0][0]  # msg_prompt_required (ja)
+
+
+# --------------------------------------------------------------------------- #
+# S6: language switch — build_ui exposes switch_language; it returns one update
+# per registered component plus the two localized-header Dataframes.
+# --------------------------------------------------------------------------- #
+def test_language_switch_returns_update_per_registry_entry():
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key="secret")
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    # One update per registry entry + 2 extra header-only Dataframes.
+    assert len(updates) == len(registry) + 2
+    assert len(updates) == len(demo.lang_switch_outputs)
+    # A Japanese label made it into the batch (spot-check).
+    assert any(u.get("label") == "生成" or u.get("value") == "生成" for u in updates)
+    # The last two updates carry localized Dataframe headers (jobs + spill).
+    assert updates[-2]["headers"][0] == "ジョブID"
+    assert updates[-1]["headers"] == ["解像度", "最大フレーム数"]
+
+
+def test_language_switch_rebuilds_choice_components():
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    cfg = {"model": {"ic_loras": {"canny-control": {"path": "x"}}}}
+    updates = demo.switch_language("ja", cfg)
+    # Quality-mode radios get localized choices (value unchanged).
+    qmode_updates = [u for u in updates if "choices" in u
+                     and any(v == "distilled" for _lbl, v in u["choices"])]
+    assert qmode_updates, "quality radios should get rebuilt localized choices"
+    assert any("高速" in lbl for u in qmode_updates for lbl, _v in u["choices"])
+    # Adapter dropdown choices are rebuilt from /config (localized "None").
+    adapter_updates = [u for u in updates if "choices" in u
+                       and any(v == ADAPTER_NONE for _lbl, v in u["choices"])]
+    assert adapter_updates
+    assert adapter_updates[0]["choices"][0][0] == "なし"  # adapter_none (ja)

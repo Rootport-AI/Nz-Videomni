@@ -9,10 +9,22 @@ import gradio as gr
 
 from .adapters import ADAPTER_NONE, build_adapter_choices
 from .api_client import ApiClient
-from .formatting import format_status
-from .handlers import make_chain_handler, make_generate_handler
+from .formatting import (
+    build_jobs_rows,
+    format_job_error,
+    format_status,
+    jobs_table_headers,
+)
+from .handlers import delete_finished_jobs, make_chain_handler, make_generate_handler
 from .i18n import L
 from .presets import PRESETS, apply_preset, build_preset_choices, compute_spill_warning, pick_default_preset
+
+
+def build_spill_rows(config: dict | None) -> list[list]:
+    """Rows for the Settings spill-free table: [resolution, max comfortable
+    frames] built from /config limits.spill_free_frames."""
+    spill = ((config or {}).get("limits") or {}).get("spill_free_frames") or {}
+    return [[res, frames] for res, frames in spill.items()]
 
 
 def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
@@ -60,7 +72,23 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # Rebuild the adapter choices from /config model.ic_loras; keep the
         # current value (ADAPTER_NONE "None", which is always the first choice).
         adapter_update = gr.update(choices=build_adapter_choices(cfg))
-        return status, cfg, preset_update, adapter_update
+        # Settings: populate the raw-config viewer + spill-free table.
+        return (status, cfg, preset_update, adapter_update,
+                gr.update(value=cfg), gr.update(value=build_spill_rows(cfg)))
+
+    def on_refresh_config(current_cfg):
+        # Top-bar Refresh also refreshes the Settings config viewer + spill table
+        # and rebuilds preset/adapter choices. On fetch failure everything is
+        # left as-is (only the status line, refreshed separately, changes).
+        try:
+            cfg = api.get_config()
+        except Exception:
+            return current_cfg, gr.update(), gr.update(), gr.update(), gr.update()
+        return (cfg,
+                gr.update(value=cfg),
+                gr.update(value=build_spill_rows(cfg)),
+                gr.update(choices=build_preset_choices(cfg)),
+                gr.update(choices=build_adapter_choices(cfg)))
 
     def on_qmode_change(value: str):
         # two_stage_hq is not yet consumed by the backend (ltx_runner ignores
@@ -77,6 +105,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # /config is fetched on page load and stashed for later slices (presets,
         # limits, ic_loras, etc.).
         config_state = gr.State({})
+        # Current UI language (S6). Fed as a runtime input to the generate/chain
+        # handlers so flow messages localize, and updated by the Language switch.
+        lang_state = gr.State("en")
 
         gr.Markdown("# LTX-AviUtl2-Bridge")
         reg(gr.Markdown(L("app_subtitle")), "app_subtitle", "value")
@@ -297,17 +328,45 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         chain_video = reg(gr.Video(label=L("lbl_result")), "lbl_result")
 
             # ============================== Jobs =============================
+            # GET /jobs list -> Dataframe; row select -> GET /jobs/{id} detail +
+            # (completed) video + (failed) localized error; [Cancel / Delete] ->
+            # DELETE /jobs/{id} (cancel if active, delete if terminal).
             with gr.Tab(L("tab_jobs")) as tab_jobs:
                 reg(tab_jobs, "tab_jobs", "label")
-                reg(gr.Markdown(L("msg_coming")), "msg_coming", "value")
+                # Row order mirrors jobs_table; used to resolve a selected row
+                # index -> job id (the Dataframe select event gives an index).
+                jobs_ids_state = gr.State([])
+                selected_job_state = gr.State(None)
+
+                jobs_refresh_btn = reg(gr.Button(L("btn_jobs_refresh")),
+                                       "btn_jobs_refresh", "value")
+                jobs_table = gr.Dataframe(
+                    headers=jobs_table_headers("en"),
+                    datatype="str", column_count=(6, "fixed"),
+                    interactive=False, wrap=True, value=[],
+                )
+                job_detail_json = reg(gr.JSON(label=L("lbl_job_detail")),
+                                      "lbl_job_detail", "label")
+                job_error_box = reg(gr.Textbox(label=L("lbl_job_error"),
+                                               interactive=False, visible=False,
+                                               lines=3),
+                                    "lbl_job_error")
+                job_video = reg(gr.Video(label=L("lbl_done_video")),
+                                "lbl_done_video")
+                with gr.Row():
+                    job_action_btn = reg(gr.Button(L("btn_job_action"),
+                                                   variant="stop"),
+                                         "btn_job_action", "value")
+                    job_action_msg = gr.Textbox(label="", show_label=False,
+                                                interactive=False, container=False)
 
             # ============================ Settings ===========================
             with gr.Tab(L("tab_settings")) as tab_settings:
                 reg(tab_settings, "tab_settings", "label")
+
+                # ---- Interface (language + theme) ----
                 reg(gr.Markdown(f"### {L('h_ui')}"), "h_ui", "value")
                 with gr.Row():
-                    # NOTE: language handler is wired in S6; theme is a pure-JS
-                    # frontend toggle (below).
                     lang_dd = reg(gr.Dropdown(
                         choices=[("English", "en"), ("日本語", "ja")],
                         value="en", label=L("lbl_lang"),
@@ -317,8 +376,57 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         value="dark", label=L("lbl_theme"),
                     ), "lbl_theme")
 
+                # ---- Connection (base_url + api-key badge; both build-time) ----
+                reg(gr.Markdown(f"### {L('h_conn')}"), "h_conn", "value")
+                base_url_box = reg(gr.Textbox(value=base_url, label=L("lbl_base_url"),
+                                              interactive=False), "lbl_base_url")
+                api_badge = reg(
+                    gr.Markdown(L("badge_set") if api_key else L("badge_unset")),
+                    "badge_set" if api_key else "badge_unset", "value",
+                )
+
+                # ---- Behavior (poll cadence -> generate/chain handlers) ----
+                reg(gr.Markdown(f"### {L('h_behavior')}"), "h_behavior", "value")
+                with gr.Row():
+                    poll_interval = reg(gr.Number(value=1.0, label=L("lbl_poll"),
+                                                  minimum=0.1), "lbl_poll")
+                    poll_timeout = reg(gr.Number(value=60, label=L("lbl_timeout"),
+                                                 precision=0, minimum=1), "lbl_timeout")
+
+                # ---- Server config viewer (raw /config + spill-free table) ----
+                reg(gr.Markdown(f"### {L('h_server')}"), "h_server", "value")
+                with gr.Accordion(L("sum_config"), open=False) as config_accordion:
+                    reg(config_accordion, "sum_config", "label")
+                    server_config_json = gr.JSON(value={})
+                reg(gr.Markdown(L("lbl_maxframes")), "lbl_maxframes", "value")
+                spill_table = gr.Dataframe(
+                    headers=[L("col_res"), L("col_maxframes")],
+                    datatype="str", column_count=(2, "fixed"),
+                    interactive=False, value=[],
+                )
+                reg(gr.Markdown(L("cap_over"), elem_classes=["note"]), "cap_over", "value")
+
+                # ---- Danger zone (gated by a confirmation checkbox) ----
+                reg(gr.Markdown(f"### {L('h_danger')}"), "h_danger", "value")
+                danger_chk = reg(gr.Checkbox(value=False, label=L("chk_danger")),
+                                 "chk_danger")
+                with gr.Row():
+                    unload_confirm_btn = reg(gr.Button(L("btn_unload_confirm"),
+                                                       interactive=False),
+                                             "btn_unload_confirm", "value")
+                    purge_btn = reg(gr.Button(L("btn_purge"), variant="stop",
+                                              interactive=False),
+                                    "btn_purge", "value")
+                purge_msg = gr.Textbox(label="", show_label=False,
+                                       interactive=False, container=False)
+
         # ---- events ----
         refresh_btn.click(refresh_status, outputs=status_box)
+        # Top-bar Refresh also refreshes the Settings config viewer + spill table.
+        refresh_btn.click(
+            on_refresh_config, inputs=config_state,
+            outputs=[config_state, server_config_json, spill_table, preset, adapter],
+        )
         load_btn.click(load_model, outputs=status_box)
         unload_btn.click(unload_model, outputs=status_box)
 
@@ -355,7 +463,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             generate,
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
-                    adapter, adapter_strength, ref_video, config_state],
+                    adapter, adapter_strength, ref_video, config_state,
+                    lang_state, poll_interval, poll_timeout],
             outputs=[progress_box, job_box, video_out],
         )
 
@@ -374,12 +483,121 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             inputs=[chain_prompt, chain_negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
-                    *chain_clip_inputs, config_state],
+                    *chain_clip_inputs, config_state,
+                    lang_state, poll_interval, poll_timeout],
             outputs=[chain_progress, chain_job, chain_video],
         )
 
-        demo.load(on_page_load, outputs=[status_box, config_state, preset, adapter])
+        # ---- Jobs tab events ----
+        def on_jobs_refresh(lang):
+            try:
+                jobs = api.list_jobs()
+            except Exception as exc:
+                gr.Warning(L("msg_jobs_refresh_failed", lang).format(err=exc))
+                return gr.update(), []
+            ids = [j.get("job_id", "") for j in jobs if isinstance(j, dict)]
+            return gr.update(value=build_jobs_rows(jobs, lang)), ids
 
-    # Expose the registry for the S6 language-switch handler (and tests).
+        def on_job_select(job_ids, lang, evt: gr.SelectData):
+            # Dataframe.select gives evt.index == (row, col); resolve the row to a
+            # job id via the parallel jobs_ids_state captured on the last refresh.
+            idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
+            if not job_ids or idx is None or idx >= len(job_ids):
+                return (gr.update(), None, gr.update(value=None),
+                        gr.update(value="", visible=False))
+            job_id = job_ids[idx]
+            try:
+                job = api.get_job(job_id)
+            except Exception as exc:
+                gr.Warning(L("msg_job_select_failed", lang).format(err=exc))
+                return (gr.update(), job_id, gr.update(value=None),
+                        gr.update(value="", visible=False))
+            status = job.get("status")
+            video = None
+            if status == "completed":
+                try:
+                    video = api.fetch_video(job_id)
+                except Exception:
+                    video = None
+            if status == "failed":
+                err_update = gr.update(value=format_job_error(job.get("error"), lang),
+                                       visible=True)
+            else:
+                err_update = gr.update(value="", visible=False)
+            return gr.update(value=job), job_id, gr.update(value=video), err_update
+
+        def on_job_action(job_id, lang):
+            if not job_id:
+                return L("msg_no_job_selected", lang)
+            try:
+                resp = api.delete_job(job_id)
+            except Exception as exc:
+                return L("msg_job_action_failed", lang).format(err=exc)
+            if resp.get("cancel_requested"):
+                return L("msg_job_cancel_requested", lang).format(job_id=job_id)
+            if resp.get("deleted"):
+                return L("msg_job_deleted", lang).format(job_id=job_id)
+            return str(resp)
+
+        jobs_refresh_btn.click(on_jobs_refresh, inputs=lang_state,
+                               outputs=[jobs_table, jobs_ids_state])
+        jobs_table.select(on_job_select, inputs=[jobs_ids_state, lang_state],
+                          outputs=[job_detail_json, selected_job_state,
+                                   job_video, job_error_box])
+        job_action_btn.click(on_job_action, inputs=[selected_job_state, lang_state],
+                             outputs=job_action_msg)
+
+        # ---- Settings: danger zone ----
+        def on_danger_toggle(enabled):
+            upd = gr.update(interactive=bool(enabled))
+            return upd, upd
+
+        danger_chk.change(on_danger_toggle, inputs=danger_chk,
+                          outputs=[unload_confirm_btn, purge_btn])
+        unload_confirm_btn.click(unload_model, outputs=status_box)
+        purge_btn.click(lambda lang: delete_finished_jobs(api, lang),
+                        inputs=lang_state, outputs=purge_msg)
+
+        # ---- Settings: language switch (the big one) ----
+        # Iterate the label registry and return one gr.update per registered
+        # component. Components with language-dependent CHOICES (quality radios,
+        # theme dropdown, adapter dropdown) fold a ``choices`` rebuild into the
+        # SAME update (values unchanged) so they never appear twice in outputs.
+        # Two components carry language-dependent Dataframe HEADERS (jobs / spill)
+        # and are not label-registered, so they are appended as explicit extras.
+        lang_switch_extras = [jobs_table, spill_table]
+        lang_switch_outputs = [c for c, _k, _a in registry] + lang_switch_extras
+
+        def switch_language(lang, config):
+            qmode_choices = [(L("qmode_fast", lang), "distilled"),
+                             (L("qmode_hq", lang), "two_stage_hq")]
+            theme_choices = [(L("opt_dark", lang), "dark"),
+                             (L("opt_light", lang), "light")]
+            adapter_choices = build_adapter_choices(config, lang)
+            updates = []
+            for component, key, attr in registry:
+                kwargs = {attr: L(key, lang)}
+                if component is qmode or component is chain_qmode:
+                    kwargs["choices"] = qmode_choices
+                elif component is theme_dd:
+                    kwargs["choices"] = theme_choices
+                elif component is adapter:
+                    kwargs["choices"] = adapter_choices
+                updates.append(gr.update(**kwargs))
+            updates.append(gr.update(headers=jobs_table_headers(lang)))
+            updates.append(gr.update(headers=[L("col_res", lang), L("col_maxframes", lang)]))
+            return updates
+
+        lang_dd.change(switch_language, inputs=[lang_dd, config_state],
+                       outputs=lang_switch_outputs)
+        lang_dd.change(lambda v: v, inputs=lang_dd, outputs=lang_state)
+
+        demo.load(on_page_load,
+                  outputs=[status_box, config_state, preset, adapter,
+                           server_config_json, spill_table])
+
+    # Expose the registry + language-switch fn for the S6 handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]
+    demo.switch_language = switch_language  # type: ignore[attr-defined]
+    demo.lang_switch_outputs = lang_switch_outputs  # type: ignore[attr-defined]
     return demo

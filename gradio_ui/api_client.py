@@ -47,6 +47,21 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def list_jobs(self) -> list[dict]:
+        """GET /jobs -> the full job list (each item is a JobResponse dict)."""
+        r = self.client.get(self._url("/api/v1/jobs"), headers=self.headers, timeout=10)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_job(self, job_id: str) -> dict:
+        """DELETE /jobs/{id}. The server cancels the job if it is still active
+        (``{"cancel_requested": True, ...}``) or drops it + its output dir if it
+        is terminal (``{"deleted": True, ...}``). Returns the parsed envelope."""
+        r = self.client.delete(self._url(f"/api/v1/jobs/{job_id}"),
+                               headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
     # --- lifecycle ---
     def load_pipeline(self) -> dict:
         # Model load can be slow; give it a generous timeout.

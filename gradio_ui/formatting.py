@@ -77,3 +77,66 @@ def format_api_error(body: object, lang: str = _DEFAULT_LANG) -> str:
     elif isinstance(detail, str) and detail:
         lines.append(detail)
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Jobs tab (S6). A failed job's ``error`` is NOT the REST error envelope: it is
+# the pre-formatted string the pipeline_manager writes as
+# ``"CODE: message (detail)"`` (pipeline_manager.py:196,321). We reuse the SAME
+# 15 ``apierr_*`` hints as the envelope path: parse the ``CODE`` prefix and, when
+# it is a known code, prepend the localized hint (keeping the raw server text for
+# debugging). An unknown prefix is returned verbatim.
+# --------------------------------------------------------------------------- #
+def format_job_error(error_str: object, lang: str = _DEFAULT_LANG) -> str:
+    if not error_str or not isinstance(error_str, str):
+        return error_str or ""
+    code, sep, rest = error_str.partition(":")
+    hint_key = f"apierr_{code.strip()}"
+    if sep and hint_key in LABELS["en"]:
+        lines = [L(hint_key, lang)]
+        rest = rest.strip()
+        if rest:
+            lines.append(rest)
+        return "\n".join(lines)
+    return error_str
+
+
+# --------------------------------------------------------------------------- #
+# Jobs tab (S6): localized Dataframe headers + row building from a /jobs list.
+# Fields verified against api/models.py JobResponse (job_id / status / progress /
+# created_at / completed_at / error). ``progress`` is a 0..1 float rendered as a
+# percent; a terminal-without-progress job shows "—". The error column shows the
+# CODE prefix (a compact summary) when an error is present.
+# --------------------------------------------------------------------------- #
+def jobs_table_headers(lang: str = _DEFAULT_LANG) -> list[str]:
+    return [L("col_job_id", lang), L("col_status", lang), L("col_progress", lang),
+            L("col_created", lang), L("col_completed", lang), L("col_error", lang)]
+
+
+def build_jobs_rows(jobs: list, lang: str = _DEFAULT_LANG) -> list[list]:
+    rows: list[list] = []
+    for job in jobs or []:
+        if not isinstance(job, dict):
+            continue
+        status = job.get("status", "")
+        progress = job.get("progress")
+        if status in ("failed", "cancelled") or progress is None:
+            pct = "—"
+        else:
+            try:
+                pct = f"{float(progress) * 100:.0f}%"
+            except (TypeError, ValueError):
+                pct = "—"
+        error = job.get("error") or ""
+        # Compact summary = the CODE prefix (e.g. "GPU_OOM"); full text is shown
+        # in the detail pane on row selection.
+        err_summary = error.partition(":")[0].strip() if error else ""
+        rows.append([
+            job.get("job_id", ""),
+            status,
+            pct,
+            job.get("created_at") or "",
+            job.get("completed_at") or "",
+            err_summary,
+        ])
+    return rows

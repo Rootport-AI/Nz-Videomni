@@ -49,8 +49,14 @@ from __future__ import annotations
 
 from .adapters import ADAPTER_FRIENDLY, ADAPTER_NONE, build_adapter_choices
 from .api_client import ApiClient
-from .formatting import format_api_error, format_status
-from .handlers import make_chain_handler, make_generate_handler
+from .formatting import (
+    build_jobs_rows,
+    format_api_error,
+    format_job_error,
+    format_status,
+    jobs_table_headers,
+)
+from .handlers import delete_finished_jobs, make_chain_handler, make_generate_handler
 from .i18n import LABELS, L
 from .presets import (
     PRESETS,
@@ -72,12 +78,16 @@ __all__ = [
     "PRESETS",
     "apply_preset",
     "build_adapter_choices",
+    "build_jobs_rows",
     "build_preset_choices",
     "build_ui",
     "check_chain_total",
     "compute_spill_warning",
+    "delete_finished_jobs",
     "format_api_error",
+    "format_job_error",
     "format_status",
+    "jobs_table_headers",
     "make_chain_handler",
     "make_generate_handler",
     "pick_default_preset",

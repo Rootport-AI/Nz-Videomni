@@ -233,6 +233,51 @@ def _tile_images(images: list[ImageConditioningInput], vs: int, vlen: int) -> li
     return out
 
 
+def _load_video_conditioning_cpu(
+    *,
+    video_path: str,
+    height: int,
+    width: int,
+    frame_cap: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """Numerics-preserving, low-VRAM twin of ``media_io.load_video_conditioning``.
+
+    The installed ``load_video_conditioning`` decodes every frame onto ``device``
+    (GPU), preprocesses it there, and ``torch.cat``s the growing (1,C,F,H,W)
+    tensor **on the GPU** — so the WHOLE context-pixel tensor stays resident on
+    the GPU while ``tiled_encode`` runs on top of it (1–2.5GB of avoidable
+    residency at 720p, on top of an already-pegged 16GB).
+
+    This twin runs the EXACT same per-frame ops on the EXACT same device (GPU) in
+    the same dtype flow — ``decode_video_from_file`` -> ``resize_and_center_crop``
+    on float32 -> ``normalize_latent`` to ``dtype`` — but moves each processed
+    frame to CPU immediately and assembles the (1,C,F,H,W) tensor on CPU. The GPU
+    holds at most one frame at a time. Because the resize/normalize math still
+    runs on the GPU, the per-frame values are bit-identical to the installed
+    loader; the CPU copy is a pure device transfer (no arithmetic), and
+    ``torch.cat`` is a deterministic copy, so the assembled tensor is
+    byte-identical to the installed loader's output apart from residing on CPU.
+    ``tiled_encode`` then streams tiles back to the GPU one at a time (it
+    explicitly supports CPU-resident input), yielding the identical latent.
+    """
+    from ltx_pipelines.utils.media_io import (
+        decode_video_from_file,
+        normalize_latent,
+        resize_and_center_crop,
+    )
+
+    frames_cpu: list[torch.Tensor] = []
+    for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
+        # Same ops, same device (GPU), same dtype flow as load_video_conditioning.
+        frame = resize_and_center_crop(f.to(torch.float32), height, width)
+        frame = normalize_latent(frame, device, dtype)
+        frames_cpu.append(frame.to("cpu"))
+        del f, frame
+    return torch.cat(frames_cpu, dim=2)
+
+
 def _encode_source_heads(
     *,
     source: "SourceSpec",
@@ -259,31 +304,32 @@ def _encode_source_heads(
     from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
     from ltx_core.types import Audio
     from ltx_pipelines.utils.helpers import cleanup_memory
-    from ltx_pipelines.utils.media_io import (
-        decode_audio_from_file,
-        load_video_conditioning,
-    )
+    from ltx_pipelines.utils.media_io import decode_audio_from_file
 
     ctx_px = source.context_frames
     n_ctx_v = layout.n_ctx_v
     n_ctx_a = layout.n_ctx_a
 
     # ── half-res head (stage-1 carry, matches the half-res stage-1 latent) ──
-    src_half = load_video_conditioning(
+    # CPU-assembled source pixels (numerics-identical; keeps the full context
+    # tensor off the GPU while tiled_encode streams tiles back one at a time).
+    src_half = _load_video_conditioning_cpu(
         video_path=source.path, height=height // 2, width=width // 2,
         frame_cap=ctx_px, dtype=DTYPE, device=device,
     )
     src_head_v_half = video_encoder.tiled_encode(src_half, tiling_cfg)[:, :, :n_ctx_v].detach().clone()
     del src_half
+    cleanup_memory()
     assert src_head_v_half.shape[2] == n_ctx_v, (src_head_v_half.shape[2], n_ctx_v)
 
     # ── full-res head (stage-2 variant-B hard-freeze) — TILED (720p-critical) ──
-    src_full = load_video_conditioning(
+    src_full = _load_video_conditioning_cpu(
         video_path=source.path, height=height, width=width,
         frame_cap=ctx_px, dtype=DTYPE, device=device,
     )
     src_head_v_full = video_encoder.tiled_encode(src_full, tiling_cfg)[:, :, :n_ctx_v].detach().clone()
     del src_full
+    cleanup_memory()
     assert src_head_v_full.shape[2] == n_ctx_v, (src_head_v_full.shape[2], n_ctx_v)
 
     # ── audio head (first-ever audio_encoder load; cheap, ~46MB) ──

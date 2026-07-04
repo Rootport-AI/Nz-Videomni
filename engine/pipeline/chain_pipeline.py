@@ -464,9 +464,22 @@ def run_chain(
         else:
             ka_i = ka_list[i - 1]
             prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
-            init_v = torch.zeros_like(prev_v)
+            # Size the init tensors from the CURRENT segment's latent shapes —
+            # NOT zeros_like(prev_*). The previous segment may have a different
+            # num_frames (unequal clip lengths are legal), so its latent shape
+            # need not match this segment's create_initial_state target. Mirror
+            # the i==0/source branch: build the current segment's shape, then
+            # copy the K_v / K_a tail of the previous segment into the frozen
+            # head. dtype/device are preserved from the previous segment.
+            v_shape = VideoLatentShape.from_pixel_shape(
+                seg_shape,
+                latent_channels=components.video_latent_channels,
+                scale_factors=components.video_scale_factors,
+            ).to_torch_shape()
+            init_v = torch.zeros(tuple(v_shape), dtype=prev_v.dtype, device=prev_v.device)
             init_v[:, :, :kv] = prev_v[:, :, prev_v.shape[2] - kv:]
-            init_a = torch.zeros_like(prev_a)
+            a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+            init_a = torch.zeros(tuple(a_shape), dtype=prev_a.dtype, device=prev_a.device)
             init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
             fkv, fka = kv, ka_i
             conds = []

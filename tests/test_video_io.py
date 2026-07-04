@@ -83,3 +83,47 @@ def test_extract_last_frame_matches_final_index(color_mp4, tmp_path):
     avg_index = _avg_rgb(last_via_index)
     assert _closest_color_index(avg_helper) == len(_COLORS) - 1
     assert _closest_color_index(avg_helper) == _closest_color_index(avg_index)
+
+
+# ------------------------------------------------------ V2V source tail helpers
+
+
+def test_probe_fps_reads_encoded_rate(tmp_path):
+    frames = [Image.new("RGB", (64, 64), c) for c in _COLORS]
+    out = tmp_path / "r30.mp4"
+    video_io.encode_frames_to_mp4(frames, out, frame_rate=30.0)
+    fps = video_io.probe_fps(out)
+    assert fps is not None and abs(fps - 30.0) < 0.5
+
+
+def test_cut_tail_mp4_frame_exact_no_resample(color_mp4, tmp_path):
+    # 6 distinct color frames @10fps; tail of 3 == the LAST 3 (indices 3,4,5).
+    out = tmp_path / "tail3.mp4"
+    info = video_io.cut_tail_mp4(color_mp4, out, context_frames=3, fps=10.0)
+    assert info["resampled"] is False
+    assert video_io.frame_count(out) == 3
+
+    first_png = tmp_path / "t0.png"
+    video_io.extract_frame_at(out, 0, first_png)
+    assert _closest_color_index(_avg_rgb(first_png)) == 3  # source frame index 3
+
+    last_png = tmp_path / "t2.png"
+    video_io.extract_frame_at(out, 2, last_png)
+    assert _closest_color_index(_avg_rgb(last_png)) == len(_COLORS) - 1
+
+
+def test_cut_tail_mp4_resample_path_frame_exact(tmp_path):
+    # 30 frames @30fps (=1.0s) resampled to 24fps -> ~24 frames; tail of 9 == 9.
+    frames = [Image.new("RGB", (64, 64), (i * 8 % 256, 100, 150)) for i in range(30)]
+    src = tmp_path / "src30.mp4"
+    video_io.encode_frames_to_mp4(frames, src, frame_rate=30.0)
+    out = tmp_path / "tail9.mp4"
+    info = video_io.cut_tail_mp4(src, out, context_frames=9, fps=24.0)
+    assert info["resampled"] is True
+    assert abs(info["source_fps"] - 30.0) < 0.5
+    assert video_io.frame_count(out) == 9
+
+
+def test_cut_tail_mp4_too_short_raises(color_mp4, tmp_path):
+    with pytest.raises(video_io.FFmpegError):
+        video_io.cut_tail_mp4(color_mp4, tmp_path / "oops.mp4", context_frames=25, fps=10.0)

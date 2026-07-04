@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import gc
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -292,14 +293,24 @@ def _encode_source_heads(
     had_audio = src_audio is not None
     if had_audio:
         audio_encoder = ledger.audio_encoder()
-        wf = src_audio.waveform
-        wf = wf.unsqueeze(0) if wf.dim() == 2 else wf
+        # decode_audio_from_file always returns Audio(waveform=(1,channels,samples))
+        # (ltx_pipelines.utils.media_io.decode_audio_from_file docstring + impl:
+        # the final `.unsqueeze(0)` always yields a 3-D tensor) — no 2-D case to
+        # normalise here.
         enc = vae_encode_audio(
-            Audio(waveform=wf.to(DTYPE), sampling_rate=src_audio.sampling_rate),
+            Audio(waveform=src_audio.waveform.to(DTYPE), sampling_rate=src_audio.sampling_rate),
             audio_encoder, None,
         )
         avail = enc.shape[2]
         freeze_ka = min(n_ctx_a, avail)
+        if avail < n_ctx_a:
+            print(
+                f"[ltx_worker] chain: source audio underrun — only {avail} encoded "
+                f"audio-latent frames available but the requested context needs "
+                f"n_ctx_a={n_ctx_a}; freezing {freeze_ka} frames only (silent "
+                "under-freeze, no error).",
+                file=sys.stderr, flush=True,
+            )
         src_head_a = enc[:, :, :freeze_ka, :].detach().clone()
         del audio_encoder, enc
         cleanup_memory()
@@ -627,6 +638,12 @@ def run_chain(
             "trimmed_audio_samples": int(n_trim_a),
             "audio_fade_in_samples": int(fade_n if fade_n > 1 else 0),
             "source_had_audio": bool(source_had_audio),
+            # Distinct from source_had_audio: the source FILE can have an audio
+            # stream (source_had_audio=True) while still ending up with a 0-frame
+            # frozen audio head (freeze_ka=0) if the encoded source audio ran out
+            # before n_ctx_a (see the audio-underrun warning above). This key is
+            # unambiguous: "did the frozen head actually carry audio continuity".
+            "audio_head_frozen": bool(freeze_ka > 0),
             "new_frames_px": int(new_video.shape[0]),
             "decoded_frames_px": int(f_total_px),
             "v2v_context_junction_px": layout.v2v_context_junction_px,

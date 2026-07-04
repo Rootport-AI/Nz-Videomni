@@ -201,6 +201,15 @@ def compute_chain_layout(
                 f"total frames ({clip_frames[0]}) so a NEW tail remains"
             )
         n_ctx_v = v_latent_frames(source_context_px)
+        if n_ctx_v > v_tile:
+            max_ctx_px = px_from_v_latent(v_tile)
+            raise ValueError(
+                f"source_context_px ({source_context_px}) -> frozen video-latent "
+                f"head n_ctx_v={n_ctx_v} exceeds stage-2 tile size v_tile={v_tile}: "
+                "the variant-B hard-freeze only covers stage-2 TILE 0, so the "
+                "frozen head must fit entirely inside the first tile. Max allowed "
+                f"source_context_px for this v_tile is {max_ctx_px}."
+            )
         n_ctx_a = a_frames_for_px(source_context_px, fps)
         trim_px = source_context_px
         new_frames_px = clip_frames[0] - source_context_px

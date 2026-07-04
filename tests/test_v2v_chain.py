@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from PIL import Image
 
 import chain_math
@@ -172,6 +173,10 @@ def test_v2v_mock_e2e_resample(client, tmp_path):
     # no-audio source -> free audio head
     assert v2v["source_had_audio"] is False
     assert v2v["freeze_ka"] == 0
+    # audio_head_frozen (Fix 2): distinct from source_had_audio, = freeze_ka > 0.
+    # Here the source has no audio at all, so both are False/0 in lockstep, but
+    # the key must exist and carry the right (derived) value regardless.
+    assert v2v["audio_head_frozen"] is False
     # the additive request field round-trips
     assert meta["request"]["source_video"]["context_frames"] == 25
     assert meta["request"]["source_video"]["video_id"] == vid
@@ -207,3 +212,45 @@ def test_v2v_source_too_short_422(client, tmp_path):
     )
     assert r.status_code == 422
     assert r.json()["error"]["code"] == "SOURCE_VIDEO_TOO_SHORT"
+
+
+# ---------------------------------------------------- (f) stage-2 tile-fit invariant
+#
+# The frozen source head (n_ctx_v latent frames) is hard-frozen ONLY inside
+# stage-2 TILE 0 (variant-B hard-freeze). compute_chain_layout is the single
+# source of truth that enforces this BEFORE any GPU work (worker + direct
+# harness both funnel through it) — see chain_math.compute_chain_layout and
+# api.models.SourceVideoSpec's docstring for the same invariant restated at the
+# API-cap layer.
+
+
+def test_chain_layout_source_context_exceeds_tile_raises():
+    # 177 = 8*22+1 -> n_ctx_v = v_latent_frames(177) = 23 > STAGE2_V_TILE (22).
+    with pytest.raises(ValueError, match="exceeds stage-2 tile"):
+        chain_math.compute_chain_layout(
+            [481], 24.0, kv=2,
+            v_tile=chain_math.STAGE2_V_TILE, v_adv=chain_math.STAGE2_V_ADV,
+            source_context_px=177,
+        )
+
+
+def test_chain_layout_source_context_exactly_fills_tile_ok():
+    # 169 = 8*21+1 -> n_ctx_v = v_latent_frames(169) = 22 == STAGE2_V_TILE: fits
+    # tile 0 exactly, must NOT raise.
+    layout = chain_math.compute_chain_layout(
+        [481], 24.0, kv=2,
+        v_tile=chain_math.STAGE2_V_TILE, v_adv=chain_math.STAGE2_V_ADV,
+        source_context_px=169,
+    )
+    assert layout.n_ctx_v == chain_math.STAGE2_V_TILE
+
+
+def test_v2v_context_frames_max_within_chain_math_ceiling():
+    """Guard: config.limits.v2v_context_frames_max must stay <= the chain_math
+    stage-2 tile-fit ceiling (px_from_v_latent(STAGE2_V_TILE) = 169). If a future
+    config bump raises the cap past this, chain_math.compute_chain_layout would
+    reject the config's own advertised max — this test fails CI first."""
+    from config import LimitsConfig
+
+    ceiling = chain_math.px_from_v_latent(chain_math.STAGE2_V_TILE)
+    assert LimitsConfig().v2v_context_frames_max <= ceiling

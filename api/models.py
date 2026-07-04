@@ -23,6 +23,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from config import LimitsConfig
+
+# Pydantic-declared DEFAULTS only (no config.yaml file I/O) — the single place
+# api/models.py sources the V2V context_frames bounds from, so they can never
+# silently drift from what config.py / GET /config advertise. See
+# SourceVideoSpec.validate_context_frames.
+_LIMITS_DEFAULTS = LimitsConfig()
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -188,10 +196,17 @@ class SourceVideoSpec(BaseModel):
     frames, 8n+1) that is VAE-encoded and frozen as clip-0's head; the delivered
     mp4 is the NEW part only (the context is trimmed off the front server-side).
 
-    ``context_frames`` is bounded [25, 145]. The 145 cap is a conservative v1
-    ceiling: it keeps the frozen video head (n_ctx_v = (context_frames-1)//8+1,
-    max 19) inside a single stage-2 tile (22 latents). A pending review is
-    checking multi-tile freeze behaviour — do NOT raise this cap without it.
+    ``context_frames`` is bounded [25, config.limits.v2v_context_frames_max]. The
+    max (currently 145, sourced from :class:`config.LimitsConfig` so this stays
+    in lockstep with the value advertised via ``GET /config``) is a conservative
+    v1 ceiling well inside the HARD invariant enforced by
+    :func:`chain_math.compute_chain_layout`: the frozen video head
+    (``n_ctx_v = (context_frames-1)//8+1``) must fit inside stage-2 TILE 0
+    (``chain_math.STAGE2_V_TILE`` = 22 latents, i.e. <= 169 pixel frames /
+    ``chain_math.px_from_v_latent(chain_math.STAGE2_V_TILE)``) because the
+    variant-B hard-freeze only covers tile 0 — ``compute_chain_layout`` raises
+    ValueError if that invariant is ever violated. Do NOT raise this cap without
+    re-checking multi-tile freeze behaviour first.
     ``context_frames < clips[0].num_frames`` is cross-validated on the request.
     """
 
@@ -201,11 +216,15 @@ class SourceVideoSpec(BaseModel):
     @model_validator(mode="after")
     def validate_context_frames(self) -> "SourceVideoSpec":
         cf = self.context_frames
-        if cf < 25:
-            raise ValueError("source_video.context_frames must be >= 25")
-        if cf > 145:
+        cf_min = _LIMITS_DEFAULTS.v2v_context_frames_min
+        cf_max = _LIMITS_DEFAULTS.v2v_context_frames_max
+        if cf < cf_min:
+            raise ValueError(f"source_video.context_frames must be >= {cf_min}")
+        if cf > cf_max:
             raise ValueError(
-                "source_video.context_frames must be <= 145 (conservative v1 cap)"
+                f"source_video.context_frames must be <= {cf_max} "
+                "(conservative v1 cap, config.limits.v2v_context_frames_max; "
+                "see chain_math's stage-2 tile-fit invariant)"
             )
         if (cf - 1) % 8 != 0:
             raise ValueError("source_video.context_frames must be 8n+1")

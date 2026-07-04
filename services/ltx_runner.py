@@ -446,6 +446,11 @@ class _MockBackend:
                 "trimmed_audio_samples": 0,
                 "audio_fade_in_samples": 0,
                 "source_had_audio": source_had_audio,
+                # Mock has no partial-availability audio decode: it either freezes
+                # the full n_ctx_a (source has audio) or nothing (it doesn't), so
+                # audio_head_frozen == source_had_audio here — but the key is kept
+                # distinct to mirror the real engine's done-dict shape exactly.
+                "audio_head_frozen": source_had_audio,
                 "new_frames_px": int(layout.new_frames_px),
                 "decoded_frames_px": int(layout.total_px),
                 "v2v_context_junction_px": layout.v2v_context_junction_px,

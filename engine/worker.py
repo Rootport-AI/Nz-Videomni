@@ -49,8 +49,12 @@ other logging goes to STDERR.
 The generate_chain ``done`` event carries a ``chain`` dict (full junction
 geometry). For a V2V run it additionally holds a ``chain.v2v`` sub-dict:
 {context_frames, n_ctx_v, n_ctx_a, freeze_ka, trimmed_px, trimmed_audio_samples,
-audio_fade_in_samples, source_had_audio, new_frames_px, decoded_frames_px,
-v2v_context_junction_px, source_context_px}.
+audio_fade_in_samples, source_had_audio, audio_head_frozen, new_frames_px,
+decoded_frames_px, v2v_context_junction_px, source_context_px}.
+``source_had_audio`` = the source FILE had an audio stream; ``audio_head_frozen``
+(= freeze_ka > 0) = the frozen head actually carries audio continuity — these
+can differ if the source's encoded audio latents ran out before n_ctx_a (a
+warning is logged to STDERR in that case, freeze_ka is silently reduced).
 """
 
 import os
@@ -314,10 +318,16 @@ def _do_generate_chain(msg: dict) -> None:
     source = None
     src = msg.get("source")
     if src:
-        source = SourceSpec(
-            path=str(src["path"]),
-            context_frames=int(src["context_frames"]),
-        )
+        try:
+            source = SourceSpec(
+                path=str(src["path"]),
+                context_frames=int(src["context_frames"]),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: source requires path and context_frames "
+                f"(missing key {exc})"
+            ) from exc
 
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "

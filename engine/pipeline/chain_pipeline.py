@@ -35,7 +35,12 @@ from dataclasses import dataclass, field
 
 import torch
 
-from chain_math import VIDEO_TIME_FACTOR, ChainLayout, compute_chain_layout
+from chain_math import (
+    VIDEO_TIME_FACTOR,
+    ChainLayout,
+    audio_segment_windows,
+    compute_chain_layout,
+)
 from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import (
     default_tiling_config,
@@ -72,6 +77,26 @@ class SourceSpec:
 
     path: str
     context_frames: int
+
+
+@dataclass
+class AudioSourceSpec:
+    """Audio-to-video source (an uploaded audio-only or A/V file's audio track).
+
+    * ``path``: a media file with a decodable audio stream (wav/mp3/m4a/…). Its
+      waveform is VAE-encoded to an audio latent that is HARD-FROZEN (mask 0.0)
+      over the FULL timeline while ONLY the video is denoised, so the model's
+      cross-modal attention drives lip-sync toward the given audio. The ORIGINAL
+      waveform (never the vocoder) is muxed into the delivered mp4, trimmed to
+      the video duration — the output audio track == the upload by construction.
+
+    Mutually exclusive with :class:`SourceSpec` (V2V): a single chain is either a
+    video-to-video continuation or an audio-to-video generation, never both
+    (asserted in :func:`run_chain`; also 422 at the API layer). A distinct type
+    from ``SourceSpec`` on purpose — the two carry unrelated payloads.
+    """
+
+    path: str
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -381,6 +406,7 @@ def run_chain(
     output_path: str,
     progress: ProgressFn | None = None,
     source: "SourceSpec | None" = None,
+    audio_source: "AudioSourceSpec | None" = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -388,7 +414,14 @@ def run_chain(
     every stage-1 segment and stage-2 tile; the text encoder is loaded once,
     used to encode all distinct clip prompts, then freed (mirrors the spikes +
     DistilledPipeline ordering).
+
+    ``audio_source`` (audio-to-video, additive to the ``audio_source=None`` path,
+    which stays byte-identical) freezes an uploaded audio latent over the whole
+    timeline and drives the video off it; mutually exclusive with ``source``.
     """
+    assert not (source is not None and audio_source is not None), (
+        "run_chain: source (V2V) and audio_source (A2V) are mutually exclusive"
+    )
     from ltx_core.components.diffusion_steps import EulerDiffusionStep
     from ltx_core.components.noisers import GaussianNoiser
     from ltx_core.model.audio_vae import decode_audio as vae_decode_audio
@@ -446,6 +479,57 @@ def run_chain(
     cleanup_memory()
 
     seg_ctx = [ctx_by_prompt[c.prompt] for c in clips]
+
+    # ── audio-to-video: encode the uploaded waveform to a frozen audio latent ──
+    # ONE encode (mirrors _encode_source_heads' audio path), then free the tiny
+    # ~46MB audio_encoder. Done here — before the big video_encoder/transformer
+    # build — to keep VRAM lowest (G0 spike ordering). The ORIGINAL waveform is
+    # kept on CPU for the final mux; the vocoder is skipped entirely so the
+    # delivered audio track == the upload. a2v_a is the a_total-length latent
+    # frozen across every stage-1 segment + stage-2 tile.
+    a2v_a = None                 # (1, C, a_total, F) frozen audio latent
+    a2v_orig_wf = None           # (channels, samples) stereo CPU float32 — mux
+    a2v_sr = 0
+    a2v_avail = 0
+    a_seg_windows: list[tuple[int, int]] | None = None
+    if audio_source is not None:
+        from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
+        from ltx_core.types import Audio
+        from ltx_pipelines.utils.media_io import decode_audio_from_file
+
+        a_total = layout.a_total
+        src_audio = decode_audio_from_file(audio_source.path, device)
+        if src_audio is None:
+            raise ValueError(
+                f"audio_source has no decodable audio stream: {audio_source.path}"
+            )
+        wf = src_audio.waveform                    # (1, channels, samples)
+        if wf.dim() == 2:                          # defensive; loader returns 3-D
+            wf = wf.unsqueeze(0)
+        # The audio VAE encoder's conv_in expects STEREO (weight [128,2,3,3]); a
+        # mono upload must be duplicated to 2 channels — both for the encode and
+        # for the stereo-only mux writer (G0 finding).
+        if wf.shape[1] == 1:
+            wf = wf.repeat(1, 2, 1)
+        a2v_sr = int(src_audio.sampling_rate)
+        a2v_orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()  # (2, S)
+
+        audio_encoder = ledger.audio_encoder()
+        enc = vae_encode_audio(
+            Audio(waveform=wf.to(DTYPE), sampling_rate=a2v_sr), audio_encoder, None,
+        )
+        a2v_avail = int(enc.shape[2])
+        if a2v_avail < a_total:
+            raise ValueError(
+                f"audio_source too short: encoded {a2v_avail} audio-latent frames "
+                f"< required a_total={a_total} for the {total_px}-pixel-frame "
+                "timeline (video length is authoritative; audio is truncated, "
+                "never padded)."
+            )
+        a2v_a = enc[:, :, :a_total, :].detach().clone()
+        del audio_encoder, enc, src_audio, wf
+        cleanup_memory()
+        a_seg_windows = audio_segment_windows(layout)
 
     # ── Build video_encoder + transformer ONCE (reuse for stage1 + stage2). ───
     video_encoder = ledger.video_encoder()
@@ -529,13 +613,25 @@ def run_chain(
             init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
             fkv, fka = kv, ka_i
             conds = []
+        # audio-to-video (additive): override the audio init/freeze with the
+        # uploaded audio latent's window for this segment and HARD-freeze it
+        # (mask 0.0) over the whole segment — the video branch above is untouched
+        # (v1 A2V is single-clip: fkv==0, so mask 0.0 does not touch the video).
+        seg_mask_value = stage1_mask_value
+        if audio_source is not None:
+            ws, wl = a_seg_windows[i]
+            a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+            init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
+            init_a[:, :, :wl] = a2v_a[:, :, ws:ws + wl].to(DTYPE)
+            fka = wl
+            seg_mask_value = 0.0
         vctx, actx = seg_ctx[i]
         vstate, astate = _denoise_av_with_carry(
             output_shape=seg_shape, components=components, transformer=transformer,
             video_context=vctx, audio_context=actx, video_conditionings=conds,
             noiser=noiser, stepper=stepper, sigmas=stage1_sigmas, noise_scale=1.0,
             initial_video_latent=init_v, initial_audio_latent=init_a,
-            freeze_kv=fkv, freeze_ka=fka, mask_value=stage1_mask_value, device=device,
+            freeze_kv=fkv, freeze_ka=fka, mask_value=seg_mask_value, device=device,
         )
         seg_v.append(vstate.latent.detach().clone())
         seg_a.append(astate.latent.detach().clone())
@@ -603,6 +699,14 @@ def run_chain(
             mv = 0.0  # hard freeze on the leading overlap
             init_v[:, :, :kt_v] = refined_v[i - 1][:, :, refined_v[i - 1].shape[2] - kt_v:]
             init_a[:, :, :kt_a] = refined_a[i - 1][:, :, refined_a[i - 1].shape[2] - kt_a:]
+        # audio-to-video (additive): refine this tile off the uploaded audio's
+        # tile window (layout.a_tiles == (as_, alen)), HARD-frozen for the whole
+        # tile. Stage-2 already runs mask 0.0 everywhere, so only the audio
+        # init/freeze changes; the video refine (fkv/mv above) is untouched.
+        if audio_source is not None:
+            init_a = a2v_a[:, :, as_:as_ + alen].contiguous().clone().to(DTYPE)
+            fka = alen
+            mv = 0.0
         # clip-0 conditioning routed to the tile that owns each keyframe (full res).
         conds = _build_video_conditionings(
             _tile_images(clips[0].images, vs, vlen),
@@ -641,9 +745,45 @@ def run_chain(
         progress("decode", 0, 1)
     gen = torch.Generator(device=device).manual_seed(base_seed)
     decoded_video = vae_decode_video(final_v, ledger.video_decoder(), tiling_cfg, gen)
-    decoded_audio = vae_decode_audio(final_a, ledger.audio_decoder(), ledger.vocoder())
+    # A2V muxes the ORIGINAL waveform, so the vocoder is skipped entirely; every
+    # other path decodes model audio exactly as before (byte-identical).
+    decoded_audio = (
+        None if audio_source is not None
+        else vae_decode_audio(final_a, ledger.audio_decoder(), ledger.vocoder())
+    )
     v2v_meta: dict | None = None
-    if source is None:
+    a2v_meta: dict | None = None
+    if audio_source is not None:
+        # ── audio-to-video: mux the ORIGINAL uploaded waveform (no vocoder),
+        #    trimmed to the video duration. The video side streams through the
+        #    same lazy chunk generator as the source-less path (no whole-timeline
+        #    materialization — WDDM discipline: never assemble a GB-scale frame
+        #    tensor); only the muxed audio differs (original waveform, not the
+        #    vocoder render).
+        from ltx_core.types import Audio
+
+        n_mux = int(round(total_px / float(frame_rate) * a2v_sr))
+        mux_wf = a2v_orig_wf[:, :n_mux].contiguous()          # (channels, samples)
+        mux_audio = Audio(waveform=mux_wf.to(torch.float32), sampling_rate=a2v_sr)
+        chunks = video_chunks_number(total_px, tiling_cfg)
+        encode_video_output(
+            video=decoded_video, audio=mux_audio, fps=int(frame_rate),
+            output_path=str(output_path), video_chunks_number_value=chunks,
+        )
+        a2v_meta = {
+            "source_audio_path": str(audio_source.path),
+            "a_total": int(layout.a_total),
+            "encoded_audio_frames_available": int(a2v_avail),
+            "muxed_original_waveform": True,
+            "vocoder_skipped": True,
+            "muxed_audio_samples": int(mux_wf.shape[-1]),
+            "audio_sampling_rate": int(a2v_sr),
+            "audio_channels": int(mux_wf.shape[0]),
+        }
+        torch.cuda.synchronize()
+        del decoded_video
+        torch.cuda.empty_cache()
+    elif source is None:
         # ── source-less path: BYTE-IDENTICAL to today (gated). ────────────────
         chunks = video_chunks_number(total_px, tiling_cfg)
         encode_video_output(
@@ -763,4 +903,8 @@ def run_chain(
         # merge the runtime v2v fields into the geometry v2v sub-dict from
         # ChainLayout.to_dict() (single unified ``chain.v2v`` for the done event).
         meta.setdefault("v2v", {}).update(v2v_meta)
+    if a2v_meta is not None:
+        # additive audio-to-video sub-dict (mirrors the v2v block; source-less +
+        # v2v paths never set it, so those metas are unchanged).
+        meta["a2v"] = a2v_meta
     return meta

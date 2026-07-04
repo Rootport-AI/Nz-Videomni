@@ -293,7 +293,7 @@ def _do_generate_chain(msg: dict) -> None:
     seams AND tile seams) for the review harness.
     """
     assert _PIPE is not None, "generate_chain before load"
-    from engine.pipeline.chain_pipeline import ChainClipSpec, SourceSpec
+    from engine.pipeline.chain_pipeline import AudioSourceSpec, ChainClipSpec, SourceSpec
 
     output_path = msg["output_path"]
     seed = int(msg["seed"])
@@ -329,11 +329,24 @@ def _do_generate_chain(msg: dict) -> None:
                 f"(missing key {exc})"
             ) from exc
 
+    # A2V (audio-to-video): optional audio_source (a decodable audio/media file).
+    # Mutually exclusive with source (also enforced in run_chain + the API layer).
+    audio_source = None
+    asrc = msg.get("audio_source")
+    if asrc:
+        try:
+            audio_source = AudioSourceSpec(path=str(asrc["path"]))
+        except KeyError as exc:
+            raise ValueError(
+                f"generate_chain: audio_source requires path (missing key {exc})"
+            ) from exc
+
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
         f"frames={[c.num_frames for c in clips]} seed={seed} "
         f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
-        f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'}"
+        f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
+        f"audio_source={'yes' if audio_source else 'no'}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -351,6 +364,7 @@ def _do_generate_chain(msg: dict) -> None:
         output_path=output_path,
         progress=_progress,
         source=source,
+        audio_source=audio_source,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

@@ -2,9 +2,26 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-05 V2V 完結・**次セッション＝audio-to-video。まず [`A2V_ENTRY.md`](A2V_ENTRY.md) を読む**）
+## ▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-05 深夜 audio-to-video 実装・全客観ゲートPASS・**残＝G3試聴（ユーザー）＋push/mainマージ（ユーザー承認）**）
 
 > **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。
+
+| 項目 | 状態 |
+|---|---|
+| リポジトリ | branch **`feature/a2v`（main へ未マージ・push 未実施＝ユーザー承認待ち）**。base＝main（V2V マージ済 merge `18296b2`）。コミット列 `83150ca`（設計docs）→`7a93259`（S0記録）→`b59d0fb`（S1エンジン）→`30b61c9`（G1記録）→`e37a9ef`（S2 API）→`8cc793e`（S2記録） |
+| audio-to-video | ✅**実装完了・全客観ゲートPASS（G3試聴のみ OPEN）**。`POST /upload/audio` 新設＋`POST /generate/chain` に optional `source_audio{audio_id}`（加算的・省略時 byte 同一）。機構＝音声 latent を全長ハード凍結＋動画のみ denoise・出力は元波形 mux（vocoder 不使用）。v1 スコープ＝1クリップのみ・A2V×V2V 排他・トリミング非露出・短い音声 422・`conditioning_images` 併用可。**正本: 設計=[`A2V_DESIGN.md`](A2V_DESIGN.md)・検証/G3経緯/コミット列=VERIFICATION_LOG §25** |
+| ゲート状況 | G0 **GO**／G1 **全PASS**（T2V/I2V/チェーン no-source の3経路 byte 一致）／G2 **mock＋実機 PASS**／**G3 試聴＝OPEN（ユーザー）**。pytest **212 passed / 1 skipped** |
+| G3 試聴素材（720p 級・crop 1280×720） | セリフ（リップシンク本丸）＝`outputs/a2v_g3/caseA_speech_1280x720_121f.mp4`／音楽＝`outputs/a2v_g3/caseB_music_1280x720_121f.mp4` |
+| 残る OPEN | ①**G3 試聴（ユーザー）** ②**push／main マージ（ユーザー承認）** ③旧宿題＝GUI 目視ゲート＋実機 e2e（変わらず・A2V をブロックしない） ④GUI への A2V/V2V 露出＝別セッション |
+
+- 用語: **「元音声」「元動画」**＝ユーザーがアップロードする入力素材（旧表記「源音声／源動画」は同義）。
+- 将来項目の所在: 音声スムージング UI チェックボックス（V2V 由来）＋GUI への A2V/V2V 露出=別セッション／モデル管理=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-05 V2V 完結・次セッション＝audio-to-video）（歴史記録）
+
+> **（歴史記録）本ブロックは上位の「2026-07-05 深夜 audio-to-video 実装」ブロックに置き換わった。** これ以降の▶節はすべて歴史記録。食い違ったら最新ブロックが正。
 
 | 項目 | 状態 |
 |---|---|

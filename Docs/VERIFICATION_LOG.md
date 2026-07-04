@@ -1396,3 +1396,58 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 - 成果物＝`outputs/visual_review/10_〜13_`（pose出力／骨格／canny出力／エッジ・README追記済み）。
 - **監督の事前目視所見（受容判断ではない）**: 参照の歩行動作・カメラ・群衆構図を維持して別キャラクター（老船長）へ置換成立。canny版は参照の街並み構造をより強く保持・pose版は背景自由度が高い（制御タイプの性質どおり）。**受容判断はユーザー**（G1〜G4=客観PASS／G5=目視ゲート＝別物）。
 - **✅ユーザー受容（2026-07-04・起床後レビュー）**: `10_〜13_` を目視し「動き維持で内容置換」の成立を受容。÷128制約・DWPose release()逸脱も併せて了承。**Phase C全ゲートクローズ→mainマージ・push実施（ユーザー指示）**。
+
+## 23. ★検証用Gradio GUIのバックエンド追いつき＝4タブ再構築・客観ゲート全PASS（2026-07-04・branch `feature/gradio-gui-catchup`・**目視ゲートは未実施＝OPEN**）
+
+> **正本＝本節＋引き継ぎ書 `NEXT_SESSION_HANDOFF.md` 最新ブロック。** 旧GUI（`gradio_ui.py` 単一ファイル186行・Phase 1初期機能のまま）を、Phase 3／IC-LoRA Phase B/C で増えたバックエンド機能を検証できる4タブ構成へ作り替えた。GUIは凍結APIの薄いクライアントに徹する方針（AviUtl2統合の予行）。
+> base＝main `8bdf90a`（Phase C マージ済）。**このブランチはまだ main へ未マージ**（push/マージはユーザー承認待ち）。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11。
+
+### 23.1 実装（コミット列・順序）
+
+まず**HTMLモックアップ（アーティファクト）で仕様をユーザーと合意してから**実装に着手した（勝手に画面を盛らない方針）。ユーザーからの仕様修正3点を反映済み＝(1)既定言語は英語・日本語はSettingsタブから切替、(2)ダークモード既定、(3)Generateボタンは右カラムの操作パネルへ移動。
+
+- **S1（`1c5b146`）＝土台**: 4タブ・上部ステータスバー・`ApiClient`・i18n `LABELS`（英語既定＋日本語）・ダークテーマ既定（`mount_gradio_app` の `js=` 経由）。
+- **S2（`feea189`）＝プリセット**: `GET /config` からプリセット取得。`config.yaml` に `standard_720p`（1280×768生成→crop 1280×720／257フレーム）を追加。spill-free（VRAM溢れ回避）の警告表示。
+- **S3（`4c2c356`）＝多キーフレーム**: 5スロット固定のアコーディオン式キーフレーム条件付け。
+- **S4（`b4a09e1`）＝IC-LoRA参照動画**: 参照動画アコーディオン・アダプタ選択ドロップダウン（`/config` から取得）・÷128／拡張子／サイズの事前チェック・`format_api_error`（15コード）。
+- **S5（`6f00ebc`）＝クリップ連結タブ**: Clip Chainタブ・8クリップスロット・overlap／総フレーム数の事前チェック（サーバー側と同じ `chain_math` を流用＝独自算術を発明しない）。
+- **リファクタ（`88f7c1a`）**: `gradio_ui.py` 単一ファイル → `gradio_ui/` パッケージ（9モジュール）。**挙動変更ゼロ**（リファクタ前後で pytest 131 passed が同一であることを確認）。
+- **S6（`f766f88`）＝Jobs／Settings**: Jobsタブ・Settingsタブ・実行中の言語切替（ラベルレジストリ経由で127出力を一括更新）・ポーリング設定・危険操作ゾーン（danger zone）。
+
+### 23.2 完全性監査（Opusサブエージェント）
+
+仕様とAPI表層全体を突き合わせる完全性監査を実施し、9件の指摘を反映。うちユーザー判断で見送った2件：
+
+- **(a) `two_stage_hq` オプション**: 画面には出すが**無効化し「バックエンド対応待ち」の注記**を付けた。理由＝`services/ltx_runner.py:849-862` の payload が pipeline／guidance_scale をエンジンへ渡しておらず、常にdistilled経路になるため。バックエンド側の対応は将来項目として記録。
+- **(b) `GET /jobs/{id}/metadata` エンドポイント**（GUIで peak_vram_mb／backend を表示する用途）: **新規エンドポイントを足さない方針**により意図的に追加せず。将来項目。
+
+### 23.3 客観ゲート（PASS）
+
+- **pytest**: **147 passed / 1 skipped**（skipはappのvenvにおける既存の `ltx_core` import skip＝新規ではない）。
+- **統合スモーク（モックバックエンド）**: `--config` で `model.backend=mock`・port 8765 で起動。
+  - `GET /ui` → **200**・ダークモードjs入り・**213** Gradioコンポーネント（タブ含む）。
+  - `POST /generate` → completed → video/mp4 **8094 bytes**。
+  - `POST /generate/chain`（2クリップ）→ completed → video/mp4 **17750 bytes**。
+
+### 23.4 目視ゲート＝**未実施（OPEN）**
+
+- **未実施**: 実サーバー起動での目視確認（4タブ全操作・言語／テーマ切替の見た目・720p生成の音声付き再生をGUI内で）。客観PASS≠目視ゲートの規律に従い、ユーザー目視は別ゲートとして残す。
+- **未実施**: 実バックエンドe2e（720pプリセット・多キーフレーム・pose-controlの÷128違反／遵守・クリップ連結）。
+- **未実施**: push／main マージ（ユーザー承認要）。
+
+### 23.5 持ち越し（将来項目）
+
+- バックエンドでの pipeline／guidance_scale 消費（`two_stage_hq` の実効化）。
+- `GET /jobs/{id}/metadata`（新規エンドポイント不追加の方針で見送り）。
+- `gr.BrowserState` による言語／テーマの永続化（固定secret＋実機検証が必要）。
+- `gr.render` による動的なキーフレーム／クリップ行（現状は固定スロット）。
+- Settings のデフォルト negative prompt 設定（S6では死んだUIを避けるため意図的に見送り）。
+
+### 23.6 得られた知見（記録）
+
+- **gradio 6 で theme／js／css の指定場所が移動**: `gr.Blocks()` から `mount_gradio_app()`／`launch()` へ。
+- **`build_ui` は uvicorn がlistenする前に走る**ため、`/config` はビルド時に取得できない → `demo.load`（`demo.load` 内）で取得する。
+- **`gr.I18n` はブラウザロケール依存のみ**＝実行中の言語切替はラベルレジストリ＋`gr.update` 一括更新で実現。
+- **クリップ連結の総フレーム数上限はサーバーと同じ `chain_math` を流用**して事前チェック（独自算術を発明しない）。

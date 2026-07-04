@@ -11,11 +11,14 @@ import httpx
 import pytest
 
 from gradio_ui import (
+    ADAPTER_NONE,
     PRESETS,
     ApiClient,
     apply_preset,
+    build_adapter_choices,
     build_preset_choices,
     compute_spill_warning,
+    format_api_error,
     format_status,
     make_generate_handler,
     pick_default_preset,
@@ -573,3 +576,261 @@ def test_build_ui_constructs_and_registers_labels():
     for _component, key, _attr in registry:
         assert key in LABELS["en"], f"missing en label for {key}"
         assert key in LABELS["ja"], f"missing ja label for {key}"
+
+
+# --------------------------------------------------------------------------- #
+# S4: IC-LoRA reference-video control. The generate handler gains 4 trailing
+# args (adapter, adapter_strength, ref_video_path, config); a helper appends
+# them so the intent of each test is explicit.
+# --------------------------------------------------------------------------- #
+def _adapter_args(adapter=ADAPTER_NONE, strength=1.0, ref_path=None, config=None):
+    return [adapter, strength, ref_path, config]
+
+
+def test_upload_video_path_and_returns_id(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"MP4DATA")
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["is_multipart"] = request.headers.get("content-type", "").startswith("multipart/")
+        return httpx.Response(200, json={"video_id": "vid-1"})
+
+    api = _make_client(handler)
+    video_id = api.upload_video(str(vid))
+    assert seen["url"] == "http://test/api/v1/upload/video"
+    assert seen["is_multipart"] is True
+    assert video_id == "vid-1"
+
+
+def test_generate_adapter_none_omits_lora_and_reference():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert not request.url.path.endswith("/upload/video")
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-none"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        *_adapter_args(),  # adapter = ADAPTER_NONE
+    )
+    _run_until_job_started(gen)
+    assert "loras" not in captured
+    assert "reference_video_id" not in captured
+
+
+def test_generate_adapter_uploads_video_and_correct_payload(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    uploads = {"video": 0}
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/video"):
+            uploads["video"] += 1
+            return httpx.Response(200, json={"video_id": "vid-9"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-ref"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.5, str(vid), {}),
+    )
+    for out in gen:
+        if out[1]:  # job started -> stop before the poll loop's sleeps
+            gen.close()
+            break
+
+    assert uploads["video"] == 1
+    assert captured["loras"] == [{"name": "canny-control", "strength": 1.5}]
+    assert captured["reference_video_id"] == "vid-9"
+    # keyframes and adapter can combine; here no keyframes -> empty list.
+    assert captured["conditioning_images"] == []
+
+
+def test_generate_adapter_missing_video_errors_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, None, {}),
+    ))
+    assert calls["n"] == 0  # no upload, no generate
+    assert len(out) == 1
+    progress, job_id, video = out[0]
+    assert job_id == "" and video is None
+
+
+def test_generate_adapter_bad_extension_errors_zero_calls(tmp_path):
+    bad = tmp_path / "ref.txt"
+    bad.write_bytes(b"not a video")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, str(bad), {}),
+    ))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_generate_adapter_resolution_not_128_errors_zero_calls(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"data")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    # 1280 % 128 == 0 but 720 % 128 == 80 -> the ÷128 precheck fires.
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        1280, 720, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, str(vid), {}),
+    ))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_generate_adapter_resolution_128_passes_precheck(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"data")
+    seen = {"video": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/video"):
+            seen["video"] += 1
+            return httpx.Response(200, json={"video_id": "v"})
+        return httpx.Response(200, json={"job_id": "j"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("pose-control", 1.0, str(vid), {}),
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert seen["video"] == 1  # precheck passed -> reference video uploaded
+
+
+def test_generate_adapter_too_large_errors_zero_calls(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"x" * 2048)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    # A tiny configured limit (0 MB) makes the 2KB file "too large".
+    cfg = {"upload": {"max_video_size_mb": 0, "allowed_video_extensions": [".mp4"]}}
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, str(vid), cfg),
+    ))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+# --------------------------------------------------------------------------- #
+# S4: format_api_error — the shared error-envelope formatter.
+# --------------------------------------------------------------------------- #
+def test_format_api_error_reference_resolution_hint():
+    body = {"error": {"code": "REFERENCE_RESOLUTION_INVALID",
+                      "message": "reference-video jobs require width/height divisible by 128",
+                      "detail": "width=1280, height=720"}}
+    msg = format_api_error(body)
+    assert "128" in msg              # actionable hint
+    assert "width=1280" in msg       # detail appended
+
+
+def test_format_api_error_validation_list_renders_loc_msg():
+    body = {"error": {"code": "VALIDATION_ERROR", "message": "Request validation failed",
+                      "detail": [
+                          {"loc": ["body", "width"], "msg": "width must be a multiple of 64",
+                           "type": "value_error"},
+                          {"loc": ["body", "num_frames"], "msg": "num_frames must be 8n+1",
+                           "type": "value_error"},
+                      ]}}
+    msg = format_api_error(body)
+    assert "body.width: width must be a multiple of 64" in msg
+    assert "body.num_frames: num_frames must be 8n+1" in msg
+
+
+def test_format_api_error_unknown_code_falls_back_to_raw():
+    body = {"error": {"code": "SOMETHING_WEIRD", "message": "boom"}}
+    msg = format_api_error(body)
+    assert "SOMETHING_WEIRD" in msg  # raw text (no hint for unknown code)
+
+
+def test_format_api_error_raw_text_when_not_a_dict():
+    assert format_api_error("upstream 502 bad gateway") == "upstream 502 bad gateway"
+
+
+def test_format_api_error_japanese_hint():
+    body = {"error": {"code": "GPU_OOM", "message": "CUDA OOM"}}
+    msg = format_api_error(body, lang="ja")
+    assert "GPU" in msg  # Japanese hint mentions GPU memory
+
+
+# --------------------------------------------------------------------------- #
+# S4: build_adapter_choices — dynamic from /config, static fallback.
+# --------------------------------------------------------------------------- #
+def test_build_adapter_choices_from_config_with_unknown_key():
+    cfg = {"model": {"ic_loras": {
+        "pixel-spatial-upscaler-x2": "path",
+        "canny-control": {"path": "x", "preprocess": "canny"},
+        "pose-control": {"path": "y", "preprocess": "dwpose"},
+        "my-custom-adapter": "z",
+    }}}
+    choices = build_adapter_choices(cfg)
+    values = [v for _label, v in choices]
+    assert values[0] == ADAPTER_NONE
+    assert "pixel-spatial-upscaler-x2" in values
+    assert "my-custom-adapter" in values
+    labels = {v: label for label, v in choices}
+    assert labels["canny-control"] == "Canny edge control (canny-control)"
+    assert labels["my-custom-adapter"] == "my-custom-adapter"  # unknown shown as-is
+
+
+def test_build_adapter_choices_fallback_when_no_ic_loras():
+    values = [v for _label, v in build_adapter_choices({})]
+    assert values == [ADAPTER_NONE, "pixel-spatial-upscaler-x2",
+                      "canny-control", "pose-control"]

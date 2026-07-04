@@ -34,6 +34,8 @@ initial /status + /config fetch happens in ``demo.load``.
 
 from __future__ import annotations
 
+import json
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -120,6 +122,14 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_kf_missing_image": "Slot {n}: enabled but no image selected.",
         "msg_kf_negative_frame": "Slot {n}: frame position must be 0 or greater.",
         "msg_uploading_keyframe": "Uploading keyframe {i}/{n}…",
+        # --- generate: reference-video control (IC-LoRA) accordion (S4) ---
+        "lbl_iclora_accordion": "Reference-video control (IC-LoRA)",
+        "lbl_adapter": "Control adapter",
+        "adapter_none": "None",
+        "lbl_adapter_strength": "Adapter strength",
+        "lbl_ref_video": "Reference video (mp4/mov/webm/mkv, max 200 MB)",
+        "note_ref128": ("When using a reference video, the output width and height must be "
+                        "multiples of 128 (e.g. 1280×768); generation will not start otherwise."),
         # --- generate: right column ---
         "btn_generate": "Generate",
         "lbl_progress": "Progress",
@@ -139,6 +149,33 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_completed": "Completed: {job_id}",
         "msg_failed": "{status}: {error}",
         "msg_timeout": "Timed out.",
+        # --- generate: reference-video flow messages (S4) ---
+        "msg_ref_video_required": "Please select a reference video for the control adapter.",
+        "msg_ref_bad_extension": "Reference video type not allowed. Allowed: {exts}",
+        "msg_ref_too_large": "Reference video exceeds the {limit} MB limit.",
+        "msg_ref_resolution": ("Reference-video jobs require width and height divisible by 128 "
+                               "(e.g. 1280×768). Adjust the size and retry."),
+        "msg_uploading_ref": "Uploading reference video…",
+        # --- shared API error-envelope hints (S4), one line each, actionable ---
+        "apierr_JOB_BUSY": "Another job is already running. Wait for it to finish, then retry.",
+        "apierr_UPLOAD_INVALID_TYPE": "Unsupported file type. Use an allowed image/video format.",
+        "apierr_UPLOAD_TOO_LARGE": "The file is too large. Reduce the file size and retry.",
+        "apierr_IMAGE_NOT_FOUND": "The uploaded image was not found. Re-upload the keyframe image.",
+        "apierr_REFERENCE_VIDEO_NOT_FOUND": ("The reference video was not found. Re-upload the "
+                                             "reference video."),
+        "apierr_LORA_NOT_FOUND": "The selected control adapter is not registered on the server.",
+        "apierr_LORA_PREPROCESS_CONFLICT": ("The selected adapters need conflicting preprocessing. "
+                                            "Use one control adapter at a time."),
+        "apierr_REFERENCE_RESOLUTION_INVALID": ("Reference-video jobs require width and height "
+                                                "divisible by 128 (e.g. 1280×768)."),
+        "apierr_JOB_NOT_FOUND": "Job not found. It may have already been deleted.",
+        "apierr_VIDEO_NOT_READY": "The video is not ready yet. Wait until the job completes.",
+        "apierr_PIPELINE_LOAD_FAILED": ("Failed to load the model pipeline. Check server VRAM / "
+                                        "logs and retry."),
+        "apierr_GPU_OOM": "Out of GPU memory. Reduce the resolution or frame count and retry.",
+        "apierr_GENERATION_FAILED": "Generation failed on the server. Check the server logs.",
+        "apierr_UNAUTHORIZED": "Authentication failed. Check the API key.",
+        "apierr_VALIDATION_ERROR": "The request was rejected by validation. See the details below.",
         # --- settings: interface section ---
         "h_ui": "Interface",
         "lbl_lang": "Language",
@@ -205,6 +242,14 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_kf_missing_image": "スロット{n}: 有効ですが画像が選択されていません。",
         "msg_kf_negative_frame": "スロット{n}: フレーム位置は0以上にしてください。",
         "msg_uploading_keyframe": "キーフレームをアップロード中… {i}/{n}",
+        # --- generate: reference-video control (IC-LoRA) accordion (S4) ---
+        "lbl_iclora_accordion": "参照動画による制御 (IC-LoRA)",
+        "lbl_adapter": "制御アダプタ",
+        "adapter_none": "なし",
+        "lbl_adapter_strength": "アダプタ強度",
+        "lbl_ref_video": "参照動画 (mp4/mov/webm/mkv・最大200MB)",
+        "note_ref128": ("参照動画を使う場合、出力の幅と高さは128の倍数にしてください"
+                        "(例: 1280×768)。満たさない場合は生成を開始しません。"),
         # --- generate: right column ---
         "btn_generate": "生成",
         "lbl_progress": "進捗",
@@ -224,6 +269,29 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_completed": "完了: {job_id}",
         "msg_failed": "{status}: {error}",
         "msg_timeout": "タイムアウト。",
+        # --- generate: reference-video flow messages (S4) ---
+        "msg_ref_video_required": "制御アダプタ用の参照動画を選択してください。",
+        "msg_ref_bad_extension": "参照動画の形式が許可されていません。許可形式: {exts}",
+        "msg_ref_too_large": "参照動画が上限 {limit} MB を超えています。",
+        "msg_ref_resolution": ("参照動画を使う場合、幅と高さは128の倍数にしてください"
+                               "(例: 1280×768)。サイズを調整して再試行してください。"),
+        "msg_uploading_ref": "参照動画をアップロード中…",
+        # --- shared API error-envelope hints (S4), one line each, actionable ---
+        "apierr_JOB_BUSY": "別のジョブが実行中です。終了を待ってから再試行してください。",
+        "apierr_UPLOAD_INVALID_TYPE": "対応していないファイル形式です。許可された画像/動画形式を使ってください。",
+        "apierr_UPLOAD_TOO_LARGE": "ファイルが大きすぎます。サイズを小さくして再試行してください。",
+        "apierr_IMAGE_NOT_FOUND": "アップロードした画像が見つかりません。キーフレーム画像を再アップロードしてください。",
+        "apierr_REFERENCE_VIDEO_NOT_FOUND": "参照動画が見つかりません。参照動画を再アップロードしてください。",
+        "apierr_LORA_NOT_FOUND": "選択した制御アダプタはサーバに登録されていません。",
+        "apierr_LORA_PREPROCESS_CONFLICT": "選択したアダプタの前処理が競合しています。制御アダプタは一度に1つにしてください。",
+        "apierr_REFERENCE_RESOLUTION_INVALID": "参照動画のジョブは幅と高さを128の倍数にする必要があります(例: 1280×768)。",
+        "apierr_JOB_NOT_FOUND": "ジョブが見つかりません。すでに削除された可能性があります。",
+        "apierr_VIDEO_NOT_READY": "動画はまだ準備できていません。ジョブの完了を待ってください。",
+        "apierr_PIPELINE_LOAD_FAILED": "モデルパイプラインの読み込みに失敗しました。サーバのVRAM/ログを確認して再試行してください。",
+        "apierr_GPU_OOM": "GPUメモリが不足しています。解像度やフレーム数を減らして再試行してください。",
+        "apierr_GENERATION_FAILED": "サーバ側で生成に失敗しました。サーバのログを確認してください。",
+        "apierr_UNAUTHORIZED": "認証に失敗しました。APIキーを確認してください。",
+        "apierr_VALIDATION_ERROR": "リクエストが検証で拒否されました。詳細は以下を参照してください。",
         # --- settings: interface section ---
         "h_ui": "表示",
         "lbl_lang": "言語 (Language)",
@@ -302,6 +370,18 @@ class ApiClient:
                              headers=self.headers, timeout=60)
         r.raise_for_status()
         return r.json()["image_id"]
+
+    def upload_video(self, path: str) -> str:
+        # Reference-video upload (POST /upload/video) for the IC-LoRA control
+        # adapters. Videos can be large (up to 200MB), so use a longer timeout
+        # than image uploads. Returns the server's ``video_id`` (passed to
+        # /generate as ``reference_video_id``).
+        with open(path, "rb") as fh:
+            files = {"file": (Path(path).name, fh.read())}
+        r = self.client.post(self._url("/api/v1/upload/video"), files=files,
+                             headers=self.headers, timeout=300)
+        r.raise_for_status()
+        return r.json()["video_id"]
 
     def generate(self, payload: dict) -> httpx.Response:
         # Return the raw response so the caller can branch on 409 / >=400 while
@@ -445,6 +525,78 @@ def format_status(s: dict, lang: str = _DEFAULT_LANG) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# IC-LoRA reference-video control (S4). The Generate tab exposes an adapter
+# Dropdown whose choices are rebuilt on page load from /config model.ic_loras;
+# the static list below is the offline fallback (server /config unavailable).
+# ``ADAPTER_NONE`` is the sentinel value meaning "no adapter" (payload omits
+# loras + reference_video_id entirely). The three known adapter keys get a
+# friendly label; any unknown registered key is shown as-is.
+# --------------------------------------------------------------------------- #
+ADAPTER_NONE = "__none__"
+
+ADAPTER_FRIENDLY: dict[str, str] = {
+    "pixel-spatial-upscaler-x2": "Upscale ×2 (pixel-spatial-upscaler-x2)",
+    "canny-control": "Canny edge control (canny-control)",
+    "pose-control": "Pose control (pose-control)",
+}
+
+# Fallbacks used when /config is unavailable (mirrors config.yaml upload.*).
+_FALLBACK_VIDEO_EXTS = [".mp4", ".mov", ".webm", ".mkv"]
+_FALLBACK_MAX_VIDEO_MB = 200
+
+
+def build_adapter_choices(config: dict | None, lang: str = _DEFAULT_LANG) -> list[tuple[str, str]]:
+    """Build the adapter Dropdown ``choices`` (list of (label, value)).
+
+    "None" is always first (value :data:`ADAPTER_NONE`). The remaining entries
+    come from the fetched /config ``model.ic_loras`` keys (value == key); each
+    key gets a friendly label when known, else is shown verbatim. Falls back to
+    the three static known adapters when the server config has no ic_loras.
+    """
+    none_choice = (L("adapter_none", lang), ADAPTER_NONE)
+    ic_loras = ((config or {}).get("model") or {}).get("ic_loras") or {}
+    if not ic_loras:
+        return [none_choice] + [
+            (ADAPTER_FRIENDLY[k], k)
+            for k in ("pixel-spatial-upscaler-x2", "canny-control", "pose-control")
+        ]
+    return [none_choice] + [(ADAPTER_FRIENDLY.get(key, key), key) for key in ic_loras]
+
+
+def format_api_error(body: object, lang: str = _DEFAULT_LANG) -> str:
+    """Render a REST error envelope into a localized, actionable message.
+
+    ``body`` is the parsed JSON dict (``{"error": {"code", "message", "detail"}}``)
+    or, when the response was not JSON, the raw text. Maps ``error.code`` to a
+    one-line hint (all 15 real codes). For ``VALIDATION_ERROR`` the ``detail`` is
+    a list of ``{loc, msg, type}`` rendered as ``loc: msg`` lines; for other
+    codes ``detail`` is a string appended when present. An unknown code or an
+    unparseable body falls back to the raw text.
+    """
+    if not isinstance(body, dict):
+        return str(body)
+    error = body.get("error")
+    if not isinstance(error, dict):
+        return json.dumps(body, ensure_ascii=False)
+    code = error.get("code")
+    hint_key = f"apierr_{code}" if code else None
+    if not hint_key or hint_key not in LABELS["en"]:
+        # Unknown / unmapped code -> raw text (still useful for debugging).
+        return json.dumps(body, ensure_ascii=False)
+
+    lines = [L(hint_key, lang)]
+    detail = error.get("detail")
+    if code == "VALIDATION_ERROR" and isinstance(detail, list):
+        for item in detail:
+            loc = ".".join(str(x) for x in (item.get("loc") or []))
+            msg = item.get("msg", "")
+            lines.append(f"{loc}: {msg}" if loc else str(msg))
+    elif isinstance(detail, str) and detail:
+        lines.append(detail)
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
 # Generate flow, factored out for unit testing (mock transport). Yields
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
 # --------------------------------------------------------------------------- #
@@ -455,7 +607,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  kf3_enabled, kf3_image, kf3_frame_idx, kf3_strength,
                  kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength,
                  kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength,
-                 width, height, crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed):
+                 width, height, crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
+                 adapter=ADAPTER_NONE, adapter_strength=1.0, ref_video_path=None, config=None):
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
             return
@@ -483,6 +636,38 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 return
             to_upload.append((image_path, int(frame_idx), float(strength)))
 
+        # 1b) IC-LoRA reference-video control (S4). Validate the adapter's
+        # reference video BEFORE any upload happens, so a violation costs zero
+        # API calls. Prechecks in order: (a) video present, (b) extension
+        # allowed, (c) size within limit, (d) width/height divisible by 128
+        # (the ÷128 rule the server also enforces with a 422). Keyframes (I2V)
+        # and an adapter can combine — the API allows both.
+        use_adapter = bool(adapter) and adapter != ADAPTER_NONE
+        if use_adapter:
+            upload_cfg = (config or {}).get("upload") or {}
+            allowed_exts = upload_cfg.get("allowed_video_extensions") or _FALLBACK_VIDEO_EXTS
+            max_mb = upload_cfg.get("max_video_size_mb")
+            if max_mb is None:
+                max_mb = _FALLBACK_MAX_VIDEO_MB
+
+            if not ref_video_path:
+                yield L("msg_ref_video_required", lang), "", None
+                return
+            ext = Path(ref_video_path).suffix.lower()
+            if ext not in [e.lower() for e in allowed_exts]:
+                yield L("msg_ref_bad_extension", lang).format(exts=", ".join(allowed_exts)), "", None
+                return
+            try:
+                size_mb = os.path.getsize(ref_video_path) / (1024 * 1024)
+            except OSError:
+                size_mb = 0.0
+            if size_mb > max_mb:
+                yield L("msg_ref_too_large", lang).format(limit=max_mb), "", None
+                return
+            if int(width) % 128 != 0 or int(height) % 128 != 0:
+                yield L("msg_ref_resolution", lang), "", None
+                return
+
         conditioning: list[dict] = []
         total = len(to_upload)
         for i, (image_path, frame_idx, strength) in enumerate(to_upload, start=1):
@@ -493,6 +678,17 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
             conditioning.append({"image_id": image_id, "frame_idx": frame_idx, "strength": strength})
+
+        # Upload the reference video last (after keyframes), then attach the
+        # lora + reference_video_id to the payload below.
+        reference_video_id: str | None = None
+        if use_adapter:
+            yield L("msg_uploading_ref", lang), "", None
+            try:
+                reference_video_id = api.upload_video(ref_video_path)
+            except Exception as exc:
+                yield L("msg_upload_failed", lang).format(err=exc), "", None
+                return
 
         # 2) start generation. Quality is locked to distilled in S1 (steps/cfg
         # fixed); the payload keeps the frozen contract.
@@ -513,6 +709,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "pipeline": "distilled",
             "conditioning_images": conditioning,
         }
+        # IC-LoRA (S4): only add loras + reference_video_id when an adapter is
+        # selected. Omitting both keys keeps the request byte-identical to the
+        # no-adapter path (matches GenerateRequest defaults).
+        if use_adapter:
+            payload["loras"] = [{"name": adapter, "strength": float(adapter_strength)}]
+            payload["reference_video_id"] = reference_video_id
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -522,7 +724,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield L("msg_job_busy", lang), "", None
             return
         if resp.status_code >= 400:
-            yield L("msg_generate_error", lang).format(code=resp.status_code, text=resp.text), "", None
+            try:
+                err_body: object = resp.json()
+            except Exception:
+                err_body = resp.text
+            yield format_api_error(err_body, lang), "", None
             return
         job_id = resp.json()["job_id"]
 
@@ -605,7 +811,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             cfg = {}
         preset_update = gr.update(choices=build_preset_choices(cfg),
                                   value=pick_default_preset(cfg))
-        return status, cfg, preset_update
+        # Rebuild the adapter choices from /config model.ic_loras; keep the
+        # current value (ADAPTER_NONE "None", which is always the first choice).
+        adapter_update = gr.update(choices=build_adapter_choices(cfg))
+        return status, cfg, preset_update, adapter_update
 
     def on_qmode_change(value: str):
         # two_stage_hq is not yet consumed by the backend (ltx_runner ignores
@@ -711,6 +920,30 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 kf_slots.append((kf_enabled, kf_image, kf_frame, kf_strength))
                             reg(gr.Markdown(L("cap_kf_grid")), "cap_kf_grid", "value")
 
+                        # accordion: reference-video control (IC-LoRA). The
+                        # adapter Dropdown's choices are rebuilt on page load
+                        # from /config model.ic_loras (static list is the
+                        # offline fallback). gr.File(type="filepath") gives a
+                        # reliable local path for arbitrary containers
+                        # (.mp4/.mov/.webm/.mkv), unlike gr.Video which may
+                        # re-encode/preview.
+                        with gr.Accordion(L("lbl_iclora_accordion"), open=False) as iclora_accordion:
+                            reg(iclora_accordion, "lbl_iclora_accordion", "label")
+                            adapter = reg(gr.Dropdown(
+                                choices=build_adapter_choices(None),
+                                value=ADAPTER_NONE, label=L("lbl_adapter"),
+                            ), "lbl_adapter")
+                            adapter_strength = reg(gr.Slider(
+                                0.05, 2.0, value=1.0, step=0.05,
+                                label=L("lbl_adapter_strength"),
+                            ), "lbl_adapter_strength")
+                            ref_video = reg(gr.File(
+                                label=L("lbl_ref_video"), type="filepath",
+                                file_count="single", file_types=["video"],
+                            ), "lbl_ref_video")
+                            reg(gr.Markdown(L("note_ref128"),
+                                            elem_classes=["note"]), "note_ref128", "value")
+
                     # RIGHT: action panel (Generate first) -> progress -> job id -> video
                     with gr.Column(scale=2):
                         generate_btn = reg(gr.Button(L("btn_generate"), variant="primary"),
@@ -783,11 +1016,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         generate_btn.click(
             generate,
             inputs=[prompt, negative, *kf_inputs, width, height,
-                    crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed],
+                    crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
+                    adapter, adapter_strength, ref_video, config_state],
             outputs=[progress_box, job_box, video_out],
         )
 
-        demo.load(on_page_load, outputs=[status_box, config_state, preset])
+        demo.load(on_page_load, outputs=[status_box, config_state, preset, adapter])
 
     # Expose the registry for the S6 language-switch handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]

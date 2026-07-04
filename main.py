@@ -139,7 +139,13 @@ def mount_gradio(app: FastAPI, runtime: RuntimeInfo) -> bool:
 
         base_url = f"http://127.0.0.1:{runtime.port}"
         blocks = build_ui(base_url, api_key=runtime.api_key)
-        gr.mount_gradio_app(app, blocks, path="/ui")
+        # Dark theme is the default (spec: Settings->Theme switches to light).
+        # gr.Blocks(js=) is deprecated in gradio 6, so the startup js is passed
+        # at the mount site (mount_gradio_app accepts js=; routes.py ~L2472).
+        gr.mount_gradio_app(
+            app, blocks, path="/ui",
+            js="() => { document.body.classList.add('dark'); }",
+        )
         return True
     except Exception:
         logger.exception("Failed to mount Gradio UI; continuing with API only")

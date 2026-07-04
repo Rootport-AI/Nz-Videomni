@@ -14,7 +14,7 @@
 | video-to-video 継続 | ✅**実装完了（v1.1 含む）・客観ゲート全PASS**。`POST /generate/chain` に optional `source_video`。**G3 経緯**: 初回試聴=映像完璧/音声FAIL（音楽ブツ切れ+セリフ反復）→ v1.1 で音声継ぎ改善（詳細=**VERIFICATION_LOG §24.7**・[`V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md)）→ G3v2 をユーザーが「谷はあるが音楽連続・限定用途で実用域」と受容（温存決定）→ ハンドル真クロスフェード（オプトイン・`501c5ca`）で無音谷を消滅させた**最終試聴（G3v4）のみ OPEN** |
 | ★同梱の重要修正 | ①クリップ長不揃いチェーンの潜伏クラッシュ（`e8557cb`）②**V2V エンコードの WDDM ページ降格カスケード**（`b2c20ee`・共有溢れ12.5GB→ゼロ・2.09×高速化。教訓=一過性の GPU 超過で降格されたページは戻らず後続フェーズ全体が共有メモリ実行になる）③GUI Settings spill表の無限読み込み（`b95a38c`） |
 | 回帰 | T2V `23844b4e…`／I2V `a511eda4…` **byte一致**（各実装後に再証明）・同一シード V2V もバイト一致・pytest **191 passed / 1 skipped**・720p/257f は spill-free（`b2c20ee` 後） |
-| 開いているゲート | ①**V2V G3 最終試聴**（G3v4=音楽プロンプト×ハンドル結合 300/150ms・`outputs/v2v_e2e/E2E-A4/`）②GUI 目視ゲート＋実機 e2e（前セッション宿題・据え置き。ただし Settings 表バグは修正済み）③push／main マージ（ユーザー決定=音声再検証 PASS 後にまとめて） |
+| 開いているゲート | ①~~V2V G3 最終試聴~~→**✅PASS（2026-07-05・「自然音やスローテンポならまず気付かない」＝V2V の目視/試聴ゲート全クローズ）** ②GUI 目視ゲート＋実機 e2e（前セッション宿題・据え置き。ただし Settings 表バグは修正済み）③~~push／main マージ~~→**実施（G3 PASS を受けユーザー事前決定の条件成立）** |
 | 次セッション | G3v4 判定→マージ→次機能（候補: audio-to-video＝[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節・V2V の `encode_audio`/ハンドル配線が下地／GUI への V2V 露出＝**音声スムージング ON/OFF チェックボックス要件**（ユーザー 2026-07-04・VERIFICATION_LOG §24.7 将来項目①）含む／モデル管理=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)） |
 
 ### 用語・試聴素材

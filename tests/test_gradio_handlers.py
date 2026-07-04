@@ -12,14 +12,17 @@ import pytest
 
 from gradio_ui import (
     ADAPTER_NONE,
+    MAX_CHAIN_TOTAL_PIXEL_FRAMES,
     PRESETS,
     ApiClient,
     apply_preset,
     build_adapter_choices,
     build_preset_choices,
+    check_chain_total,
     compute_spill_warning,
     format_api_error,
     format_status,
+    make_chain_handler,
     make_generate_handler,
     pick_default_preset,
 )
@@ -834,3 +837,260 @@ def test_build_adapter_choices_fallback_when_no_ic_loras():
     values = [v for _label, v in build_adapter_choices({})]
     assert values == [ADAPTER_NONE, "pixel-spatial-upscaler-x2",
                       "canny-control", "pose-control"]
+
+
+# --------------------------------------------------------------------------- #
+# S5: Clip Chain handler. The 8 FIXED clip slots are flattened into positional
+# args; only slot 1 carries a start image + strength. ``_chain_args`` builds the
+# full arg tuple from as few clip specs as a test cares about (rest disabled).
+# --------------------------------------------------------------------------- #
+def _chain_args(prompt="Base prompt", negative="", width=1280, height=768,
+                crop_enabled=False, crop_w=0, crop_h=0, fps=24.0, seed=-1,
+                overlap=3, overlap_strength=0.5, clips=None, config=None):
+    clips = list(clips or [])
+    filled = clips + [None] * (8 - len(clips))
+    args = [prompt, negative, width, height, crop_enabled, crop_w, crop_h, fps, seed,
+            overlap, overlap_strength]
+    for i, spec in enumerate(filled[:8]):
+        spec = spec or {}
+        enabled = spec.get("enabled", False)
+        p = spec.get("prompt", "")
+        frames = spec.get("frames", 121)
+        if i == 0:  # slot 1 has image + strength
+            args.extend([enabled, p, frames, spec.get("image"), spec.get("strength", 0.8)])
+        else:
+            args.extend([enabled, p, frames])
+    args.append(config)
+    return args
+
+
+def _run_chain_until_started(gen):
+    """Drive the chain generator until the /generate/chain POST produced a job
+    id, then close it so the poll loop's 1s sleeps never run. Returns all yields."""
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:  # job started
+            gen.close()
+            break
+    return outs
+
+
+def test_chain_payload_two_clips():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "http://test/api/v1/generate/chain"
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-1"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(
+        prompt="Shared base", negative="blurry", width=1280, height=768, fps=24.0, seed=7,
+        overlap=3, overlap_strength=0.5,
+        clips=[
+            {"enabled": True, "prompt": "Clip one override", "frames": 121},
+            {"enabled": True, "prompt": "", "frames": 129},  # blank -> omitted
+        ],
+    ))
+    outs = _run_chain_until_started(gen)
+
+    assert captured["prompt"] == "Shared base"
+    assert captured["negative_prompt"] == "blurry"
+    assert captured["width"] == 1280 and captured["height"] == 768
+    assert captured["frame_rate"] == 24.0
+    assert captured["seed"] == 7
+    assert captured["num_inference_steps"] == 8
+    assert captured["guidance_scale"] == 1.0
+    assert captured["pipeline"] == "distilled"
+    assert captured["overlap_frames"] == 3
+    assert captured["overlap_strength"] == 0.5
+    assert captured["crop_output"] is None
+    # order + per-clip prompt omission when blank; no conditioning (no image).
+    assert captured["clips"] == [
+        {"num_frames": 121, "prompt": "Clip one override"},
+        {"num_frames": 129},
+    ]
+    assert outs[-1][1] == "chain-1"
+    assert "chain-1" in outs[-1][0]
+
+
+def test_chain_payload_three_clips_order_and_prompt_omission():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-3"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "prompt": "", "frames": 121},        # blank
+        {"enabled": True, "prompt": "second", "frames": 121},
+        {"enabled": True, "prompt": "third", "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert captured["clips"] == [
+        {"num_frames": 121},
+        {"num_frames": 121, "prompt": "second"},
+        {"num_frames": 121, "prompt": "third"},
+    ]
+
+
+def test_chain_clip0_conditioning_present_only_when_image_set(tmp_path):
+    img = tmp_path / "start.png"
+    img.write_bytes(b"\x89PNG\r\n")
+    uploads = {"n": 0}
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/image"):
+            uploads["n"] += 1
+            return httpx.Response(200, json={"image_id": "img-c0"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-i2v"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "prompt": "", "frames": 121, "image": str(img), "strength": 0.65},
+        {"enabled": True, "prompt": "", "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert uploads["n"] == 1
+    assert captured["clips"][0] == {
+        "num_frames": 121,
+        "conditioning_images": [{"image_id": "img-c0", "frame_idx": 0, "strength": 0.65}],
+    }
+    # clip 1 never carries conditioning.
+    assert "conditioning_images" not in captured["clips"][1]
+
+
+def test_chain_clip0_no_conditioning_key_when_no_image():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert not request.url.path.endswith("/upload/image")
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-t2v"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "conditioning_images" not in captured["clips"][0]
+
+
+def test_chain_fewer_than_two_clips_errors_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(clips=[{"enabled": True, "frames": 121}])))
+    assert calls["n"] == 0  # no API call
+    assert len(out) == 1
+    progress, job_id, video = out[0]
+    assert job_id == "" and video is None
+
+
+def test_chain_bad_num_frames_errors_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    # 120 is not 8n+1 (119 or 121 would be) -> precheck fires.
+    out = list(chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 120},
+    ])))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_chain_overlap_too_large_for_shortest_clip_errors_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    # shortest clip 9 frames -> stage-1 latent frames = 2 -> max overlap = 1;
+    # overlap 3 is too large.
+    out = list(chain(*_chain_args(overlap=3, clips=[
+        {"enabled": True, "frames": 9},
+        {"enabled": True, "frames": 121},
+    ])))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_chain_total_frames_cap_violation_via_helper():
+    # The 3848 cap is unreachable through the 8-slot handler (8×481 -> 3841), so
+    # exercise the mirror-math helper directly with clips exceeding it.
+    err = check_chain_total([481] * 10, 24.0, 1)
+    assert err is not None
+    assert str(MAX_CHAIN_TOTAL_PIXEL_FRAMES) in err  # "3848"
+
+
+def test_chain_total_frames_within_cap_returns_none():
+    assert check_chain_total([121, 129], 24.0, 3) is None
+
+
+def test_chain_geometry_degenerate_short_clips_via_helper():
+    # Clips too short for a continuous audio cross-fade -> chain_math raises;
+    # helper surfaces it as a localized geometry error (not None).
+    err = check_chain_total([9, 9], 24.0, 1)
+    assert err is not None
+
+
+def test_chain_409_reports_busy():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(409, json={"error": {"code": "JOB_BUSY"}})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ])))
+    progress, job_id, video = out[-1]
+    assert "409" in progress
+    assert job_id == ""
+
+
+def test_chain_validation_error_formatted():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, json={"error": {
+            "code": "VALIDATION_ERROR", "message": "bad",
+            "detail": [{"loc": ["body", "clips", 0, "num_frames"],
+                        "msg": "must be 8n+1", "type": "value_error"}],
+        }})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ])))
+    assert "must be 8n+1" in out[-1][0]
+    assert out[-1][1] == ""

@@ -176,6 +176,35 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_GENERATION_FAILED": "Generation failed on the server. Check the server logs.",
         "apierr_UNAUTHORIZED": "Authentication failed. Check the API key.",
         "apierr_VALIDATION_ERROR": "The request was rejected by validation. See the details below.",
+        # --- clip chain tab (S5) ---
+        "lbl_prompt_shared": "Prompt (shared)",
+        "ph_prompt2": ("A stormy harbor town; a small boat pushes through the swelling waves while "
+                       "a distant bell tolls — like a scene from a movie trailer"),
+        "lbl_overlap": "Transition frames (overlap between clips, 1-8)",
+        "lbl_overlap_strength": "Transition strength",
+        "cap_crossfade": "Clips are joined with a cross-fade-like blend using these settings.",
+        "h_clips": "Clip list",
+        "lbl_clip_prompt": "Clip prompt",
+        "ph_clip_prompt": "Leave blank to use the shared prompt",
+        "lbl_clip_start_image": "Start image (first clip only)",
+        "cap_first_clip": "A start image can be set only on the first clip.",
+        "cap_clip_count": "Enable 2 to 8 clips.",
+        "clip1": "Clip 1", "clip2": "Clip 2", "clip3": "Clip 3", "clip4": "Clip 4",
+        "clip5": "Clip 5", "clip6": "Clip 6", "clip7": "Clip 7", "clip8": "Clip 8",
+        "btn_concat": "Generate chain",
+        # --- clip chain: flow / precheck messages (S5) ---
+        "msg_bad_dimension": "Width and height must be multiples of 64.",
+        "msg_size_limit": "Width/height exceed the server limit ({maxw}×{maxh}).",
+        "msg_crop_range": "Crop size must be at least 32 and not exceed the generation size.",
+        "msg_fps_range": "Frame rate must be between 1 and 60.",
+        "msg_chain_clip_count": "Enable between 2 and 8 clips.",
+        "msg_chain_bad_frames": "Clip {n}: frames must be 8n+1 and between 9 and 481.",
+        "msg_chain_overlap_too_large": ("Transition frames ({kv}) must be smaller than the shortest "
+                                        "enabled clip allows (max {maxkv})."),
+        "msg_chain_total_frames": ("The chain timeline ({total} frames) exceeds the {cap}-frame cap. "
+                                   "Reduce clip count or clip lengths."),
+        "msg_chain_geometry": "The chain geometry is invalid: {err}",
+        "msg_chain_started": "Chain job started ({n} clips): {job_id}",
         # --- settings: interface section ---
         "h_ui": "Interface",
         "lbl_lang": "Language",
@@ -292,6 +321,32 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_GENERATION_FAILED": "サーバ側で生成に失敗しました。サーバのログを確認してください。",
         "apierr_UNAUTHORIZED": "認証に失敗しました。APIキーを確認してください。",
         "apierr_VALIDATION_ERROR": "リクエストが検証で拒否されました。詳細は以下を参照してください。",
+        # --- clip chain tab (S5) ---
+        "lbl_prompt_shared": "プロンプト(共通)",
+        "ph_prompt2": "嵐の港町、荒れる波間を進む小舟、遠くで鳴る鐘の音——映画のワンシーンのように",
+        "lbl_overlap": "つなぎ目のフレーム数 (クリップ間のオーバーラップ・1〜8)",
+        "lbl_overlap_strength": "つなぎ目の強さ",
+        "cap_crossfade": "クリップ間はこの設定でクロスフェード的に接続されます。",
+        "h_clips": "クリップ一覧",
+        "lbl_clip_prompt": "クリッププロンプト",
+        "ph_clip_prompt": "空欄なら共通プロンプトを使用",
+        "lbl_clip_start_image": "開始画像 (先頭クリップのみ)",
+        "cap_first_clip": "開始画像を指定できるのは先頭クリップのみです。",
+        "cap_clip_count": "有効にするクリップは2〜8個。",
+        "clip1": "クリップ1", "clip2": "クリップ2", "clip3": "クリップ3", "clip4": "クリップ4",
+        "clip5": "クリップ5", "clip6": "クリップ6", "clip7": "クリップ7", "clip8": "クリップ8",
+        "btn_concat": "連結生成",
+        # --- clip chain: flow / precheck messages (S5) ---
+        "msg_bad_dimension": "幅と高さは64の倍数にしてください。",
+        "msg_size_limit": "幅/高さがサーバの上限 ({maxw}×{maxh}) を超えています。",
+        "msg_crop_range": "クロップサイズは32以上かつ生成サイズ以下にしてください。",
+        "msg_fps_range": "フレームレートは1〜60の範囲にしてください。",
+        "msg_chain_clip_count": "有効にするクリップは2〜8個にしてください。",
+        "msg_chain_bad_frames": "クリップ{n}: フレーム数は8n+1かつ9〜481にしてください。",
+        "msg_chain_overlap_too_large": "つなぎ目フレーム数 ({kv}) は最短クリップが許す値 (最大 {maxkv}) より小さくしてください。",
+        "msg_chain_total_frames": "連結タイムライン ({total} フレーム) が上限 {cap} フレームを超えています。クリップ数か長さを減らしてください。",
+        "msg_chain_geometry": "連結ジオメトリが不正です: {err}",
+        "msg_chain_started": "連結ジョブ開始 ({n} クリップ): {job_id}",
         # --- settings: interface section ---
         "h_ui": "表示",
         "lbl_lang": "言語 (Language)",
@@ -387,6 +442,13 @@ class ApiClient:
         # Return the raw response so the caller can branch on 409 / >=400 while
         # keeping the client thin.
         return self.client.post(self._url("/api/v1/generate"), json=payload,
+                                headers=self.headers, timeout=60)
+
+    def generate_chain(self, payload: dict) -> httpx.Response:
+        # Clip-chain start (POST /generate/chain). Same thin style as
+        # ``generate``: return the raw response so the caller branches on
+        # 409 / >=400. The endpoint responds 202 with the job envelope.
+        return self.client.post(self._url("/api/v1/generate/chain"), json=payload,
                                 headers=self.headers, timeout=60)
 
     def fetch_video(self, job_id: str) -> str:
@@ -597,6 +659,72 @@ def format_api_error(body: object, lang: str = _DEFAULT_LANG) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Shared 1s poll loop (factored out of the generate flow so /generate and
+# /generate/chain reuse the SAME progress/complete/fail handling). Yields
+# (progress_text, job_id, video_path) tuples; behaviour is byte-identical to the
+# original inline loop in make_generate_handler.
+# --------------------------------------------------------------------------- #
+def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG):
+    for _ in range(3600):
+        time.sleep(1.0)
+        try:
+            job = api.get_job(job_id)
+        except Exception as exc:
+            yield L("msg_poll_failed", lang).format(err=exc), job_id, None
+            continue
+
+        status = job["status"]
+        progress = job.get("progress", 0.0)
+        if status == "running":
+            step = job.get("current_step")
+            total = job.get("total_steps")
+            yield L("msg_generating", lang).format(pct=progress, step=step, total=total), job_id, None
+        elif status == "completed":
+            yield L("msg_completing", lang), job_id, None
+            try:
+                video = api.fetch_video(job_id)
+            except Exception:
+                video = None
+            yield L("msg_completed", lang).format(job_id=job_id), job_id, video
+            return
+        elif status in ("failed", "cancelled"):
+            yield L("msg_failed", lang).format(status=status, error=job.get("error")), job_id, None
+            return
+
+    yield L("msg_timeout", lang), job_id, None
+
+
+# --------------------------------------------------------------------------- #
+# Clip-chain total-timeline precheck (S5). Mirrors the SAME arithmetic the API
+# validator uses (api/models.py GenerateChainRequest.validate_chain_constraints):
+# it delegates to the shared pure-Python ``chain_math.compute_chain_layout`` and
+# compares against MAX_CHAIN_TOTAL_PIXEL_FRAMES = 8 * 481 (= 3848), so the GUI and
+# the server agree byte-for-byte. Returns a localized error string on violation,
+# else None. Note: because a single clip is capped at 481 frames and a chain at 8
+# clips, the 3848 cap is unreachable through the 8-slot UI (max 8×481 = 3841 total
+# pixel frames after overlap); the check is defence-in-depth that mirrors the
+# server and also surfaces chain_math's degenerate-geometry ValueError (e.g. clips
+# too short for a continuous audio cross-fade) before any API call.
+# --------------------------------------------------------------------------- #
+MAX_CHAIN_TOTAL_PIXEL_FRAMES = 8 * 481  # 3848; mirrors api/models.py
+
+
+def check_chain_total(clip_frames, fps, overlap_frames, lang: str = _DEFAULT_LANG):
+    import chain_math
+    try:
+        layout = chain_math.compute_chain_layout(
+            [int(f) for f in clip_frames], float(fps), kv=int(overlap_frames),
+        )
+    except ValueError as exc:
+        return L("msg_chain_geometry", lang).format(err=exc)
+    if layout.total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
+        return L("msg_chain_total_frames", lang).format(
+            total=layout.total_px, cap=MAX_CHAIN_TOTAL_PIXEL_FRAMES,
+        )
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Generate flow, factored out for unit testing (mock transport). Yields
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
 # --------------------------------------------------------------------------- #
@@ -735,36 +863,189 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         mode = "i2v" if conditioning else "t2v"
         yield L("msg_job_started", lang).format(mode=mode, job_id=job_id), job_id, None
 
-        # 3) poll (1s).
-        for _ in range(3600):
-            time.sleep(1.0)
-            try:
-                job = api.get_job(job_id)
-            except Exception as exc:
-                yield L("msg_poll_failed", lang).format(err=exc), job_id, None
-                continue
-
-            status = job["status"]
-            progress = job.get("progress", 0.0)
-            if status == "running":
-                step = job.get("current_step")
-                total = job.get("total_steps")
-                yield L("msg_generating", lang).format(pct=progress, step=step, total=total), job_id, None
-            elif status == "completed":
-                yield L("msg_completing", lang), job_id, None
-                try:
-                    video = api.fetch_video(job_id)
-                except Exception:
-                    video = None
-                yield L("msg_completed", lang).format(job_id=job_id), job_id, video
-                return
-            elif status in ("failed", "cancelled"):
-                yield L("msg_failed", lang).format(status=status, error=job.get("error")), job_id, None
-                return
-
-        yield L("msg_timeout", lang), job_id, None
+        # 3) poll (1s) — shared with the clip-chain flow.
+        yield from _poll_job_until_done(api, job_id, lang)
 
     return generate
+
+
+# --------------------------------------------------------------------------- #
+# Clip-chain flow (S5), factored out for unit testing (mock transport). Mirrors
+# make_generate_handler: prechecks (zero API calls on violation) -> optional
+# clip-0 start-image upload -> POST /generate/chain -> shared poll loop. The 8
+# FIXED clip slots are flattened into positional args; only slot 1 carries a
+# start image + strength (structural guarantee that conditioning lives on clip 0
+# only). ``clips`` are emitted in slot order, enabled slots only.
+# --------------------------------------------------------------------------- #
+def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
+    def generate_chain(prompt, negative_prompt, width, height,
+                       crop_enabled, crop_w, crop_h, frame_rate, seed,
+                       overlap_frames, overlap_strength,
+                       c1_enabled, c1_prompt, c1_frames, c1_image, c1_strength,
+                       c2_enabled, c2_prompt, c2_frames,
+                       c3_enabled, c3_prompt, c3_frames,
+                       c4_enabled, c4_prompt, c4_frames,
+                       c5_enabled, c5_prompt, c5_frames,
+                       c6_enabled, c6_prompt, c6_frames,
+                       c7_enabled, c7_prompt, c7_frames,
+                       c8_enabled, c8_prompt, c8_frames,
+                       config=None):
+        # --- prechecks (localized; NO API call on any violation) ---
+        if not prompt or not prompt.strip():
+            yield L("msg_prompt_required", lang), "", None
+            return
+
+        try:
+            w, h = int(width), int(height)
+        except (TypeError, ValueError):
+            yield L("msg_bad_dimension", lang), "", None
+            return
+        if w % 64 != 0 or h % 64 != 0:
+            yield L("msg_bad_dimension", lang), "", None
+            return
+        limits = (config or {}).get("limits") or {}
+        max_w = limits.get("max_width", 1920)
+        max_h = limits.get("max_height", 1088)
+        if w > max_w or h > max_h:
+            yield L("msg_size_limit", lang).format(maxw=max_w, maxh=max_h), "", None
+            return
+
+        if crop_enabled:
+            try:
+                cw, ch = int(crop_w), int(crop_h)
+            except (TypeError, ValueError):
+                cw = ch = 0
+            if cw < 32 or ch < 32 or cw > w or ch > h:
+                yield L("msg_crop_range", lang), "", None
+                return
+
+        try:
+            fps = float(frame_rate)
+        except (TypeError, ValueError):
+            yield L("msg_fps_range", lang), "", None
+            return
+        if fps < 1.0 or fps > 60.0:
+            yield L("msg_fps_range", lang), "", None
+            return
+
+        # Collect enabled clips in slot order. Slot 1 additionally carries the
+        # start image + strength (image conditions clip 0 only).
+        raw_slots = [
+            (c1_enabled, c1_prompt, c1_frames, c1_image, c1_strength),
+            (c2_enabled, c2_prompt, c2_frames, None, None),
+            (c3_enabled, c3_prompt, c3_frames, None, None),
+            (c4_enabled, c4_prompt, c4_frames, None, None),
+            (c5_enabled, c5_prompt, c5_frames, None, None),
+            (c6_enabled, c6_prompt, c6_frames, None, None),
+            (c7_enabled, c7_prompt, c7_frames, None, None),
+            (c8_enabled, c8_prompt, c8_frames, None, None),
+        ]
+        enabled = [(p, nf, img, strg) for en, p, nf, img, strg in raw_slots if en]
+
+        if not (2 <= len(enabled) <= 8):
+            yield L("msg_chain_clip_count", lang), "", None
+            return
+
+        # Per-clip num_frames: 8n+1 within [9, 481].
+        clip_frames: list[int] = []
+        for n, (_p, nf, _img, _strg) in enumerate(enabled, start=1):
+            try:
+                nf_i = int(nf)
+            except (TypeError, ValueError):
+                yield L("msg_chain_bad_frames", lang).format(n=n), "", None
+                return
+            if nf_i < 9 or nf_i > 481 or (nf_i - 1) % 8 != 0:
+                yield L("msg_chain_bad_frames", lang).format(n=n), "", None
+                return
+            clip_frames.append(nf_i)
+
+        # overlap_frames (K_v LATENT) must be < every clip's stage-1 latent-frame
+        # count = (num_frames - 1)//8 + 1 (mirrors api/models.py).
+        try:
+            kv = int(overlap_frames)
+        except (TypeError, ValueError):
+            kv = 3
+        max_kv = min((nf - 1) // 8 + 1 for nf in clip_frames) - 1
+        if kv < 1 or kv > max_kv:
+            yield L("msg_chain_overlap_too_large", lang).format(kv=kv, maxkv=max_kv), "", None
+            return
+
+        # Total-timeline geometry: same arithmetic as the API validator.
+        err = check_chain_total(clip_frames, fps, kv, lang)
+        if err is not None:
+            yield err, "", None
+            return
+
+        # --- clip-0 start image (only slot 1 can carry one) -> upload ---
+        conditioning: list[dict] = []
+        clip0_image = enabled[0][2]
+        clip0_strength = enabled[0][3]
+        if clip0_image:
+            yield L("msg_uploading_keyframe", lang).format(i=1, n=1), "", None
+            try:
+                image_id = api.upload_image(clip0_image)
+            except Exception as exc:
+                yield L("msg_upload_failed", lang).format(err=exc), "", None
+                return
+            conditioning.append({
+                "image_id": image_id, "frame_idx": 0,
+                "strength": float(clip0_strength if clip0_strength is not None else 0.8),
+            })
+
+        # --- build payload (clips in slot order; per-clip prompt omitted when
+        # blank; conditioning attached to clip 0 only) ---
+        crop_output = None
+        if crop_enabled and int(crop_w) > 0 and int(crop_h) > 0:
+            crop_output = {"width": int(crop_w), "height": int(crop_h)}
+
+        clips_payload: list[dict] = []
+        for idx, (p, nf, _img, _strg) in enumerate(enabled):
+            entry: dict = {"num_frames": int(nf)}
+            if p and str(p).strip():
+                entry["prompt"] = p
+            if idx == 0 and conditioning:
+                entry["conditioning_images"] = conditioning
+            clips_payload.append(entry)
+
+        payload = {
+            "prompt": prompt,
+            "negative_prompt": negative_prompt or "",
+            "width": w,
+            "height": h,
+            "crop_output": crop_output,
+            "frame_rate": fps,
+            "num_inference_steps": 8,
+            "guidance_scale": 1.0,
+            "seed": int(seed),
+            "pipeline": "distilled",
+            "overlap_frames": kv,
+            "overlap_strength": float(overlap_strength),
+            "clips": clips_payload,
+        }
+
+        try:
+            resp = api.generate_chain(payload)
+        except Exception as exc:
+            yield L("msg_generate_failed", lang).format(err=exc), "", None
+            return
+        if resp.status_code == 409:
+            yield L("msg_job_busy", lang), "", None
+            return
+        if resp.status_code >= 400:
+            try:
+                err_body: object = resp.json()
+            except Exception:
+                err_body = resp.text
+            yield format_api_error(err_body, lang), "", None
+            return
+        job_id = resp.json()["job_id"]
+
+        yield L("msg_chain_started", lang).format(n=len(clips_payload), job_id=job_id), job_id, None
+
+        # poll (1s) — shared with the generate flow.
+        yield from _poll_job_until_done(api, job_id, lang)
+
+    return generate_chain
 
 
 # --------------------------------------------------------------------------- #
@@ -773,6 +1054,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     api = ApiClient(base_url, api_key=api_key)
     generate = make_generate_handler(api)
+    chain_generate = make_chain_handler(api)
 
     # Component registry: (component, label_key, attr). S6 iterates this to
     # implement live language switching. attr is the gr.update field to set.
@@ -954,9 +1236,101 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         video_out = reg(gr.Video(label=L("lbl_result")), "lbl_result")
 
             # =========================== Clip Chain ==========================
+            # One continuous masked AV-latent timeline (POST /generate/chain):
+            # shared params + join (overlap) params on the left, 8 FIXED clip
+            # slots (only slot 1 carries a start image = conditioning on clip 0),
+            # and the action panel / output trio on the right.
             with gr.Tab(L("tab_concat")) as tab_concat:
                 reg(tab_concat, "tab_concat", "label")
-                reg(gr.Markdown(L("msg_coming")), "msg_coming", "value")
+                chain_clip_slots: list[tuple] = []
+                with gr.Row():
+                    # LEFT: shared + join params + clip list
+                    with gr.Column(scale=3):
+                        chain_prompt = reg(gr.Textbox(label=L("lbl_prompt_shared"), lines=3,
+                                                      placeholder=L("ph_prompt2")),
+                                           "lbl_prompt_shared")
+                        chain_negative = reg(gr.Textbox(label=L("lbl_negative"),
+                                                        value="blurry, low quality, distorted"),
+                                             "lbl_negative")
+                        chain_qmode = reg(gr.Radio(
+                            choices=[(L("qmode_fast"), "distilled"),
+                                     (L("qmode_hq"), "two_stage_hq")],
+                            value="distilled", label=L("lbl_qmode"),
+                        ), "lbl_qmode")
+                        with gr.Row():
+                            chain_width = reg(gr.Number(value=1280, label=L("lbl_width"),
+                                                        precision=0), "lbl_width")
+                            chain_height = reg(gr.Number(value=768, label=L("lbl_height"),
+                                                         precision=0), "lbl_height")
+                        chain_crop_enabled = reg(gr.Checkbox(value=False, label=L("chk_crop")),
+                                                 "chk_crop")
+                        with gr.Row(visible=False) as chain_crop_row:
+                            chain_crop_w = reg(gr.Number(value=0, label=L("lbl_crop_w"),
+                                                         precision=0), "lbl_crop_w")
+                            chain_crop_h = reg(gr.Number(value=0, label=L("lbl_crop_h"),
+                                                         precision=0), "lbl_crop_h")
+                        with gr.Row():
+                            chain_fps = reg(gr.Number(value=24.0, label=L("lbl_fps")), "lbl_fps")
+                            chain_steps = reg(gr.Slider(1, 50, value=8, step=1, label=L("lbl_steps"),
+                                                        interactive=False), "lbl_steps")
+                            chain_cfg = reg(gr.Slider(1.0, 12.0, value=1.0, step=0.1,
+                                                      label=L("lbl_cfg"), interactive=False),
+                                            "lbl_cfg")
+                        reg(gr.Markdown(L("cap_lock")), "cap_lock", "value")
+                        chain_seed = reg(gr.Number(value=-1, label=L("lbl_seed"), precision=0),
+                                         "lbl_seed")
+
+                        # join (overlap) params — the cross-fade-like blend.
+                        with gr.Row():
+                            chain_overlap = reg(gr.Slider(1, 8, value=3, step=1,
+                                                          label=L("lbl_overlap")), "lbl_overlap")
+                            chain_overlap_strength = reg(gr.Slider(
+                                0.0, 1.0, value=0.5, step=0.05, label=L("lbl_overlap_strength"),
+                            ), "lbl_overlap_strength")
+                        reg(gr.Markdown(L("cap_crossfade")), "cap_crossfade", "value")
+
+                        # clip list: 8 fixed slots (slots 1-2 enabled by default).
+                        reg(gr.Markdown(f"### {L('h_clips')}"), "h_clips", "value")
+                        # slot 1 — the only slot with a start image (clip 0).
+                        with gr.Group():
+                            c1_enabled = reg(gr.Checkbox(value=True, label=L("clip1")), "clip1")
+                            c1_prompt = reg(gr.Textbox(label=L("lbl_clip_prompt"),
+                                                       placeholder=L("ph_clip_prompt")),
+                                            "lbl_clip_prompt")
+                            with gr.Row():
+                                c1_frames = reg(gr.Number(value=121, label=L("lbl_frames"),
+                                                          precision=0), "lbl_frames")
+                                c1_image = reg(gr.Image(label=L("lbl_clip_start_image"),
+                                                        type="filepath"), "lbl_clip_start_image")
+                                c1_strength = reg(gr.Slider(0.0, 1.0, value=0.8, step=0.05,
+                                                            label=L("lbl_kf_strength")),
+                                                  "lbl_kf_strength")
+                            reg(gr.Markdown(L("cap_first_clip")), "cap_first_clip", "value")
+                        chain_clip_slots.append((c1_enabled, c1_prompt, c1_frames,
+                                                 c1_image, c1_strength))
+                        # slots 2-8 — no start image (later timeline segments).
+                        for _slot_i in range(2, 9):
+                            clip_key = f"clip{_slot_i}"
+                            with gr.Group():
+                                cN_enabled = reg(gr.Checkbox(value=(_slot_i == 2),
+                                                             label=L(clip_key)), clip_key)
+                                cN_prompt = reg(gr.Textbox(label=L("lbl_clip_prompt"),
+                                                           placeholder=L("ph_clip_prompt")),
+                                                "lbl_clip_prompt")
+                                cN_frames = reg(gr.Number(value=121, label=L("lbl_frames"),
+                                                          precision=0), "lbl_frames")
+                            chain_clip_slots.append((cN_enabled, cN_prompt, cN_frames))
+                        reg(gr.Markdown(L("cap_clip_count")), "cap_clip_count", "value")
+
+                    # RIGHT: action panel (Generate chain first) -> outputs
+                    with gr.Column(scale=2):
+                        chain_generate_btn = reg(gr.Button(L("btn_concat"), variant="primary"),
+                                                 "btn_concat", "value")
+                        chain_progress = reg(gr.Textbox(label=L("lbl_progress"), interactive=False),
+                                             "lbl_progress")
+                        chain_job = reg(gr.Textbox(label=L("lbl_jobid"), interactive=False),
+                                        "lbl_jobid")
+                        chain_video = reg(gr.Video(label=L("lbl_result")), "lbl_result")
 
             # ============================== Jobs =============================
             with gr.Tab(L("tab_jobs")) as tab_jobs:
@@ -1019,6 +1393,25 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, ref_video, config_state],
             outputs=[progress_box, job_box, video_out],
+        )
+
+        # ---- Clip Chain events ----
+        # Reuse the SAME quality-mode revert + crop-toggle handlers as Generate.
+        chain_qmode.change(on_qmode_change, inputs=chain_qmode, outputs=chain_qmode)
+        chain_crop_enabled.change(on_crop_toggle, inputs=chain_crop_enabled,
+                                  outputs=chain_crop_row)
+
+        chain_clip_inputs: list[object] = []
+        for _slot in chain_clip_slots:
+            chain_clip_inputs.extend(_slot)
+
+        chain_generate_btn.click(
+            chain_generate,
+            inputs=[chain_prompt, chain_negative, chain_width, chain_height,
+                    chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
+                    chain_overlap, chain_overlap_strength,
+                    *chain_clip_inputs, config_state],
+            outputs=[chain_progress, chain_job, chain_video],
         )
 
         demo.load(on_page_load, outputs=[status_box, config_state, preset, adapter])

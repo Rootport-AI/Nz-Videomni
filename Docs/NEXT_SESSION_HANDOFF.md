@@ -2,9 +2,35 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 Gradio GUI追いつき＋機能リサーチセッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
+## ▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 video-to-video 継続セッション末・**次セッションはこのブロックだけ読めば現在地が分かる**）
 
-> **本ブロックが最新の正本。** これ以降の▶節（2026-07-04 Phase C実装末・Phase C準備末・2026-07-03以前・2026-07-01以前）はすべて歴史記録。食い違ったら本ブロックが正。
+> **本ブロックが最新の正本。** これ以降の▶節（GUI追いつき末・Phase C実装末・それ以前）はすべて歴史記録。食い違ったら本ブロックが正。
+
+### 現在地（1分サマリ）
+
+| 項目 | 状態 |
+|---|---|
+| リポジトリ | branch **`feature/v2v-continuation`（main へ未マージ・push もユーザー承認待ち）**。base＝main `86a3fcf`（GUI マージ済）。コミット列＝設計`cf99448`→S1 engine `e7d497c`/`2830ede`/`5482225`→S2 app `33fae6d`/`73dc20f`/`44facdd`/`a89963c`→レビュー反映`092d37f`→docs`0e8b1a7`→**既存チェーンバグ修正`e8557cb`** |
+| video-to-video 継続 | ✅**実装完了・客観ゲート全PASS（G0/G1/G2）・G3目視のみ OPEN**。`POST /generate/chain` に optional `source_video`（加算的・省略時byte同一）。正本＝[`V2V_CONTINUATION_DESIGN.md`](V2V_CONTINUATION_DESIGN.md)・数値＝**VERIFICATION_LOG §24**・一次情報＝`outputs/v2v_spike/SPIKE_REPORT.md`・`outputs/v2v_e2e/E2E_REPORT.md` |
+| ★既存バグ修正（同梱） | クリップ長不揃いのチェーンが V2V 以前からクラッシュする潜伏バグを発掘・修正（`e8557cb`・等長経路は修正前後バイト一致で無害証明） |
+| 回帰 | T2V `23844b4e…`／I2V `a511eda4…` **byte一致**・pytest **168 passed / 1 skipped**・VRAM 生成ピーク 8.4–10.2GB（V2V 追加コスト実質ゼロ） |
+| 開いているゲート | ①**V2V G3 目視**（素材準備済み・下記）②GUI 目視ゲート＋実機 e2e（前セッションからの宿題・据え置き）③push／main マージ（ユーザー承認） |
+| 次セッション | ユーザー G3 判定 → push/マージ判断 → 次機能（候補: audio-to-video＝設計入口は [`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節・V2V で作った `encode_audio` 配線が下地）または GUI への V2V 露出 |
+
+### V2V G3 目視素材（ユーザーの判定待ち・判定観点は VERIFICATION_LOG §24.4）
+
+- **本命**: `outputs/v2v_e2e/E2E-A/G3_candidate_joined_source_plus_continuation.mp4`（720p・音声付き・源+6秒継続の結合・継ぎ目=フレーム128/129）
+- 補助: 多クリップ `outputs/v2v_e2e/E2E-B/joined_source_plus_multiclip.mp4`／リサンプル `outputs/v2v_e2e/E2E-C/joined_source_plus_continuation.mp4`／不採用 variant A の色跳ね現物 `outputs/v2v_spike/runs/A_clean/joined_source_plus_continuation.mp4`
+
+### 使い方（最小）
+
+`POST /upload/video` → `POST /generate/chain` に `{"source_video": {"video_id": "...", "context_frames": 73}, "clips": [{"prompt": "...", "num_frames": 217}], "width": 1280, "height": 768, ...}`（source 有り時は 1 クリップ可）→ 出力は**新規部分のみ**（この例では 217−73=144f）。context_frames は 8n+1・25〜145（理由＝stage2 タイル適合・VERIFICATION_LOG §24.3）。fps 不一致は自動リサンプル。音声も凍結継続。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-04 Gradio GUI追いつき＋機能リサーチセッション末）（歴史記録）
+
+> **（歴史記録）本ブロックは上位の「2026-07-04 video-to-video 継続セッション末」ブロックに置き換わった。** これ以降の▶節（2026-07-04 Phase C実装末・Phase C準備末・2026-07-03以前・2026-07-01以前）はすべて歴史記録。食い違ったら最新ブロックが正。
 
 ### 現在地（1分サマリ）
 

@@ -117,7 +117,7 @@
 2. **S1**: ✅完了（commit `e7d497c`→`2830ede`→`5482225`）。tiled_encode 採用で VRAM はスパイク比 -1066MB・**720p 完走 15,817MB**。G1a pytest 147 緑・G1b T2V/I2V byte-match 完全一致・no-source チェーン回帰一致。
 3. **S2**: ✅完了（commit `33fae6d`→`73dc20f`→`44facdd`→`a89963c`）。pytest 162 緑・mock 実サーバースモーク PASS（30fps 源→24fps 自動リサンプル含む）。注記: チェーン要求に `loras` フィールドは元々存在せず「IC-LoRA 併用 422」は構造的に不要だった。
 4. **レビュー反映**: ✅完了（commit `59c8ee4`・Opus レビュー Finding 1 MAJOR=タイル適合不変条件を chain_math に early-raise＋設定ガードテスト、Finding 2=音声アンダーフリーズ警告＋`audio_head_frozen` キー、nits）。pytest 165 緑・数値経路不変。
-5. **S3**: 実機 e2e（REST 経由 720p・多クリップ継続・実 fps リサンプル）＋ G3 目視素材生成 → 実行中。
+5. **S3**: ✅完了（`outputs/v2v_e2e/E2E_REPORT.md`）。REST 経由実機 e2e＝720p PASS（G3候補生成済み）・等長多クリップ PASS・実 fps リサンプル PASS・422/404 全PASS。**副産物＝既存チェーンの潜伏バグ発掘**（クリップ長不揃いでクラッシュ・V2V 以前から存在）→ 修正 `e8557cb`（等長経路は修正前後バイト一致で無害証明・不等長の実機再現→修正確認・pytest 168 緑）。**G2 完全消化。残る OPEN は G3（ユーザー目視）のみ**＝素材と判定観点は VERIFICATION_LOG §24.4。
 
 ---
 

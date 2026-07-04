@@ -11,9 +11,14 @@ import httpx
 import pytest
 
 from gradio_ui import (
+    PRESETS,
     ApiClient,
+    apply_preset,
+    build_preset_choices,
+    compute_spill_warning,
     format_status,
     make_generate_handler,
+    pick_default_preset,
 )
 
 
@@ -277,6 +282,127 @@ def test_generate_i2v_uploads_then_generates(tmp_path):
         {"image_id": "img-7", "frame_idx": 0, "strength": 0.65}
     ]
     assert "i2v" in second[0]
+
+
+# --------------------------------------------------------------------------- #
+# S2: dynamic presets (/config generation_presets) + spill-free warning.
+# --------------------------------------------------------------------------- #
+def _fake_config_with_presets() -> dict:
+    return {
+        "generation_presets": {
+            "smoke_test": {"width": 384, "height": 256, "crop_output": None, "num_frames": 17},
+            "standard_720p": {
+                "width": 1280, "height": 768,
+                "crop_output": {"width": 1280, "height": 720},
+                "num_frames": 257,
+            },
+        },
+        "limits": {
+            "spill_free_frames": {"1280x768": 257, "1920x1088": 153},
+        },
+    }
+
+
+def test_build_preset_choices_from_server_config():
+    choices = build_preset_choices(_fake_config_with_presets())
+    values = [v for _label, v in choices]
+    assert values == ["smoke_test", "standard_720p"]
+    labels_by_value = {v: label for label, v in choices}
+    # crop_output present -> "WxH -> cropW x cropH, Nf" in the label.
+    assert "1280×768" in labels_by_value["standard_720p"]
+    assert "1280×720" in labels_by_value["standard_720p"]
+    assert "257f" in labels_by_value["standard_720p"]
+    # crop_output absent -> no arrow.
+    assert "→" not in labels_by_value["smoke_test"]
+
+
+def test_build_preset_choices_falls_back_when_config_empty():
+    choices = build_preset_choices({})
+    assert choices == [(name, name) for name in PRESETS]
+
+
+def test_pick_default_preset_prefers_standard_720p():
+    assert pick_default_preset(_fake_config_with_presets()) == "standard_720p"
+
+
+def test_pick_default_preset_first_key_when_no_standard_720p():
+    cfg = {"generation_presets": {"smoke_test": {"width": 384, "height": 256,
+                                                  "crop_output": None, "num_frames": 17}}}
+    assert pick_default_preset(cfg) == "smoke_test"
+
+
+def test_pick_default_preset_fallback_when_config_empty():
+    assert pick_default_preset({}) == "phase1_default"
+
+
+def test_apply_preset_from_server_config_with_crop():
+    cfg = _fake_config_with_presets()
+    (width, height, frames, crop_enabled, crop_w, crop_h,
+     crop_row_update, spill_update) = apply_preset("standard_720p", cfg)
+    assert (width, height, frames) == (1280, 768, 257)
+    assert crop_enabled is True
+    assert (crop_w, crop_h) == (1280, 720)
+    assert crop_row_update["visible"] is True
+    # 257 frames == the spill-free threshold exactly -> not exceeded, no warning.
+    assert spill_update["visible"] is False
+
+
+def test_apply_preset_from_server_config_without_crop():
+    cfg = _fake_config_with_presets()
+    (width, height, frames, crop_enabled, crop_w, crop_h,
+     crop_row_update, _spill_update) = apply_preset("smoke_test", cfg)
+    assert (width, height, frames) == (384, 256, 17)
+    assert crop_enabled is False
+    assert (crop_w, crop_h) == (0, 0)
+    assert crop_row_update["visible"] is False
+
+
+def test_apply_preset_fallback_when_config_empty():
+    (width, height, frames, crop_enabled, crop_w, crop_h,
+     crop_row_update, _spill_update) = apply_preset("phase1_target", {})
+    assert (width, height, frames) == (960, 576, 121)
+    assert crop_enabled is True
+    assert (crop_w, crop_h) == (960, 540)
+    assert crop_row_update["visible"] is True
+
+
+def test_apply_preset_fallback_unknown_name_uses_phase1_default():
+    (width, height, frames, *_rest) = apply_preset("does_not_exist", {})
+    assert (width, height, frames) == (512, 320, 49)
+
+
+def test_spill_warning_hidden_at_exact_threshold():
+    cfg = _fake_config_with_presets()
+    upd = compute_spill_warning(1280, 768, 257, cfg)
+    assert upd["visible"] is False
+    assert upd["value"] == ""
+
+
+def test_spill_warning_shown_when_exceeded():
+    cfg = _fake_config_with_presets()
+    upd = compute_spill_warning(1280, 768, 321, cfg)
+    assert upd["visible"] is True
+    assert "1280x768" in upd["value"]
+    assert "257" in upd["value"]
+
+
+def test_spill_warning_hidden_for_unknown_resolution():
+    cfg = _fake_config_with_presets()
+    upd = compute_spill_warning(999, 999, 999, cfg)
+    assert upd["visible"] is False
+
+
+def test_spill_warning_hidden_when_config_empty():
+    upd = compute_spill_warning(1280, 768, 321, {})
+    assert upd["visible"] is False
+
+
+def test_spill_warning_japanese():
+    cfg = _fake_config_with_presets()
+    upd = compute_spill_warning(1280, 768, 321, cfg, lang="ja")
+    assert upd["visible"] is True
+    assert "1280x768" in upd["value"]
+    assert "快適上限" in upd["value"]
 
 
 # --------------------------------------------------------------------------- #

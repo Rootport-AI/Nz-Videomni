@@ -103,6 +103,13 @@ generation_presets:
       width: 960
       height: 540
     num_frames: 121
+  standard_720p:
+    width: 1280
+    height: 768
+    crop_output:
+      width: 1280
+      height: 720
+    num_frames: 257 # limits.spill_free_frames["1280x768"] 実測快適上限と一致
 
 generation_defaults:
   # Gradio/API の初期値。まず16GBで通しやすい軽量設定にする。width/height は64の倍数。

@@ -97,7 +97,7 @@ LABELS: dict[str, dict[str, str]] = {
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
         "warn_hq_unsupported": "High-quality mode is not yet supported by the backend.",
         "lbl_preset": "Preset",
-        "hint_preset": "Fetched automatically from the server /config (S2)",
+        "hint_preset": "Fetched automatically from the server /config",
         "lbl_width": "Width (multiple of 64)",
         "lbl_height": "Height (multiple of 64)",
         "chk_crop": "Crop output",
@@ -109,6 +109,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_cfg": "CFG scale",
         "cap_lock": "Fixed at 8 / 1.0 (distilled)",
         "lbl_seed": "Seed (-1 = random)",
+        "warn_spill_limit": ("Exceeds the comfortable limit for {res} ({limit} frames): "
+                              "generation still works but is much slower."),
         # --- generate: right column ---
         "btn_generate": "Generate",
         "lbl_progress": "Progress",
@@ -172,7 +174,7 @@ LABELS: dict[str, dict[str, str]] = {
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",
         "warn_hq_unsupported": "高品質モードはまだバックエンドが対応していません。",
         "lbl_preset": "プリセット",
-        "hint_preset": "サーバの /config から自動取得 (S2)",
+        "hint_preset": "サーバの /config から自動取得",
         "lbl_width": "幅 (64の倍数)",
         "lbl_height": "高さ (64の倍数)",
         "chk_crop": "出力をクロップ",
@@ -184,6 +186,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_cfg": "CFGスケール",
         "cap_lock": "8 / 1.0 に固定 (distilled)",
         "lbl_seed": "シード (-1 = ランダム)",
+        "warn_spill_limit": "解像度 {res} の快適上限 ({limit} フレーム) を超えています: 生成は可能ですが大幅に低速化します。",
         # --- generate: right column ---
         "btn_generate": "生成",
         "lbl_progress": "進捗",
@@ -297,6 +300,94 @@ class ApiClient:
         tmp.write(r.content)
         tmp.close()
         return tmp.name
+
+
+# --------------------------------------------------------------------------- #
+# Preset handling (S2). The hardcoded PRESETS dict above is now only a fallback
+# for when the server /config fetch (demo.load) failed or returned no presets;
+# the normal path reads config["generation_presets"] (GET /config, which
+# model_dumps config.py's GenerationPreset -- width/height/num_frames/
+# crop_output, the last being {"width", "height"} or None).
+# --------------------------------------------------------------------------- #
+def build_preset_choices(config: dict | None) -> list[tuple[str, str]]:
+    """Build Dropdown ``choices`` from the fetched /config generation_presets.
+
+    Falls back to the hardcoded ``PRESETS`` keys (label == value, matching S1
+    behaviour) when the server config is empty/unavailable.
+    """
+    presets = (config or {}).get("generation_presets") or {}
+    if not presets:
+        return [(name, name) for name in PRESETS]
+
+    choices: list[tuple[str, str]] = []
+    for key, p in presets.items():
+        w, h, nf = p.get("width"), p.get("height"), p.get("num_frames")
+        crop = p.get("crop_output")
+        if crop:
+            label = f"{key} ({w}×{h} → {crop.get('width')}×{crop.get('height')}, {nf}f)"
+        else:
+            label = f"{key} ({w}×{h}, {nf}f)"
+        choices.append((label, key))
+    return choices
+
+
+def pick_default_preset(config: dict | None) -> str:
+    """Pick the Dropdown's initial value: ``standard_720p`` if present, else the
+    first server preset, else the S1 fallback default."""
+    presets = (config or {}).get("generation_presets") or {}
+    if "standard_720p" in presets:
+        return "standard_720p"
+    if presets:
+        return next(iter(presets))
+    return "phase1_default"
+
+
+def compute_spill_warning(width, height, num_frames, config: dict | None,
+                           lang: str = _DEFAULT_LANG):
+    """Look up limits.spill_free_frames[f"{width}x{height}"] from the fetched
+    /config. Returns a gr.update for a Markdown warning: visible+worded when
+    num_frames exceeds the comfortable (spill-free) threshold for that
+    resolution, hidden when the resolution is unknown or within budget."""
+    try:
+        w, h, nf = int(width), int(height), int(num_frames)
+    except (TypeError, ValueError):
+        return gr.update(value="", visible=False)
+
+    spill = ((config or {}).get("limits") or {}).get("spill_free_frames") or {}
+    key = f"{w}x{h}"
+    threshold = spill.get(key)
+    if threshold is not None and nf > threshold:
+        text = L("warn_spill_limit", lang).format(res=key, limit=threshold)
+        return gr.update(value=text, visible=True)
+    return gr.update(value="", visible=False)
+
+
+def apply_preset(name: str, config: dict | None, lang: str = _DEFAULT_LANG):
+    """Resolve a preset name to the Generate-tab field values.
+
+    Reads the server preset (config["generation_presets"][name]) when present;
+    falls back to the hardcoded PRESETS dict only when the server config is
+    unavailable or does not contain ``name``. Returns a tuple matching the
+    ``preset.change`` outputs: (width, height, num_frames, crop_enabled,
+    crop_w, crop_h, crop_row_update, spill_warning_update).
+    """
+    presets = (config or {}).get("generation_presets") or {}
+    if name in presets:
+        p = presets[name]
+        width_v, height_v, frames_v = p["width"], p["height"], p["num_frames"]
+        crop = p.get("crop_output")
+        crop_w_v = crop["width"] if crop else 0
+        crop_h_v = crop["height"] if crop else 0
+    else:
+        p = PRESETS.get(name) or PRESETS["phase1_default"]
+        width_v, height_v, frames_v = p["width"], p["height"], p["num_frames"]
+        crop_w_v, crop_h_v = p.get("crop_w", 0), p.get("crop_h", 0)
+
+    crop_enabled_v = bool(crop_w_v) and bool(crop_h_v)
+    crop_row_update = gr.update(visible=crop_enabled_v)
+    spill_update = compute_spill_warning(width_v, height_v, frames_v, config, lang)
+    return (width_v, height_v, frames_v, crop_enabled_v, crop_w_v, crop_h_v,
+            crop_row_update, spill_update)
 
 
 # --------------------------------------------------------------------------- #
@@ -466,11 +557,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             cfg = api.get_config()
         except Exception:
             cfg = {}
-        return status, cfg
-
-    def apply_preset(name: str):
-        p = PRESETS[name]
-        return p["width"], p["height"], p["num_frames"], p["crop_w"], p["crop_h"]
+        preset_update = gr.update(choices=build_preset_choices(cfg),
+                                  value=pick_default_preset(cfg))
+        return status, cfg, preset_update
 
     def on_qmode_change(value: str):
         # two_stage_hq is not yet consumed by the backend (ltx_runner ignores
@@ -546,6 +635,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                              "lbl_frames")
                             frame_rate = reg(gr.Number(value=24.0, label=L("lbl_fps")), "lbl_fps")
 
+                        spill_warning = gr.Markdown("", visible=False,
+                                                    elem_classes=["spill-warning"])
+
                         with gr.Row():
                             steps = reg(gr.Slider(1, 50, value=8, step=1, label=L("lbl_steps"),
                                                   interactive=False), "lbl_steps")
@@ -595,10 +687,22 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         load_btn.click(load_model, outputs=status_box)
         unload_btn.click(unload_model, outputs=status_box)
 
-        preset.change(apply_preset, inputs=preset,
-                      outputs=[width, height, num_frames, crop_w, crop_h])
+        preset.change(
+            apply_preset, inputs=[preset, config_state],
+            outputs=[width, height, num_frames, crop_enabled, crop_w, crop_h,
+                     crop_row, spill_warning],
+        )
         qmode.change(on_qmode_change, inputs=qmode, outputs=qmode)
         crop_enabled.change(on_crop_toggle, inputs=crop_enabled, outputs=crop_row)
+
+        # Spill-free warning: recompute on any manual width/height/num_frames
+        # edit (preset application already includes it in its own outputs above).
+        for _ctrl in (width, height, num_frames):
+            _ctrl.change(
+                compute_spill_warning,
+                inputs=[width, height, num_frames, config_state],
+                outputs=spill_warning,
+            )
 
         # Theme: pure-frontend toggle (no backend round-trip). Matches the mount
         # site's dark-default js.
@@ -615,7 +719,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             outputs=[progress_box, job_box, video_out],
         )
 
-        demo.load(on_page_load, outputs=[status_box, config_state])
+        demo.load(on_page_load, outputs=[status_box, config_state, preset])
 
     # Expose the registry for the S6 language-switch handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]

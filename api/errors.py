@@ -65,6 +65,26 @@ def reference_video_not_found(video_id: str) -> APIError:
     return APIError("REFERENCE_VIDEO_NOT_FOUND", f"reference_video_id not found: {video_id}", 404)
 
 
+def source_video_not_found(video_id: str) -> APIError:
+    """V2V continuation: the ``source_video.video_id`` does not resolve to a
+    stored upload. Mirrors :func:`reference_video_not_found` (404) with its own
+    stable code so a client can distinguish the continuation source from an
+    IC-LoRA reference video."""
+    return APIError("SOURCE_VIDEO_NOT_FOUND", f"source_video.video_id not found: {video_id}", 404)
+
+
+def source_video_too_short(detail: str | None = None) -> APIError:
+    """V2V continuation: the stored source video has fewer frames (after any fps
+    resample) than the requested ``context_frames``, so there is no full context
+    tail to freeze. Rejected up front (422) before any GPU work."""
+    return APIError(
+        "SOURCE_VIDEO_TOO_SHORT",
+        "source video has fewer frames than the requested context_frames",
+        422,
+        detail=detail,
+    )
+
+
 def lora_not_found(name: str, detail: str | None = None) -> APIError:
     return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
 

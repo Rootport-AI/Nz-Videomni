@@ -194,6 +194,14 @@ class LimitsConfig(BaseModel):
     # これを超えると shared へ溢れ ~2-4x 低速化（OOM せず）→ クライアント UI で警告する。
     # キーは "WxH" 生成サイズ文字列（client が引きやすい形式）。
     spill_free_frames: dict[str, int] = Field(default_factory=dict)
+    # V2V continuation (POST /generate/chain source_video.context_frames). Bounds
+    # advertised via /config so a UI can build the control. context_frames is 8n+1;
+    # the 145 max is a conservative v1 cap (keeps the frozen head inside one
+    # stage-2 tile — see api.models.SourceVideoSpec). Defaulted so an old
+    # config.yaml (without these keys) still parses (spill_free_frames precedent).
+    v2v_context_frames_default: int = 73
+    v2v_context_frames_min: int = 25
+    v2v_context_frames_max: int = 145
 
 
 class OutputConfig(BaseModel):

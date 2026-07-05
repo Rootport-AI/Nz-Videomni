@@ -84,7 +84,9 @@ def test_chain_stage_progress_logging(caplog):
 
     seen = []
     with caplog.at_level(logging.INFO, logger="ltx.runner"):
-        result = be._read_chain_events(lambda step, total, frac: seen.append(frac))
+        result = be._read_chain_events(
+            lambda step, total, frac, stage=None: seen.append(frac)
+        )
 
     assert result["event"] == "done"
     assert seen and seen[-1] == 0.95  # decode -> 0.95 fraction (unchanged path)
@@ -97,3 +99,83 @@ def test_chain_stage_progress_logging(caplog):
     # the final unit of a multi-unit stage always logs a x/total progress line
     assert any("stage-1 denoise 2/2 segments" in m for m in msgs), joined
     assert any("stage-2 tiled upsample 3/3 tiles" in m for m in msgs), joined
+
+
+# ----------------------- F1: uvicorn access-log job-polling filter (G3 gate)
+
+
+def _access_record(args) -> logging.LogRecord:
+    """Forge a uvicorn.access-shaped LogRecord (message %s slots + args tuple)."""
+    return logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=0,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=args,
+        exc_info=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "args,expected",
+    [
+        # THE polling line: successful single-job status GET -> dropped.
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123", "1.1", 200), False),
+        # Trailing slash / query string are still the same resource -> dropped.
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123/", "1.1", 200), False),
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123?x=1", "1.1", 200), False),
+        # Subresources (video/joined/...) are real downloads -> kept.
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123/video", "1.1", 200), True),
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123/joined", "1.1", 200), True),
+        # The job LIST is not per-second polling -> kept.
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs", "1.1", 200), True),
+        # Non-GET methods on the same path -> kept.
+        (("127.0.0.1:5000", "POST", "/api/v1/jobs/abc-123", "1.1", 200), True),
+        (("127.0.0.1:5000", "DELETE", "/api/v1/jobs/abc-123", "1.1", 200), True),
+        # Non-200 statuses (a failing poll is signal) -> kept.
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123", "1.1", 404), True),
+        (("127.0.0.1:5000", "GET", "/api/v1/jobs/abc-123", "1.1", 500), True),
+        # Unrelated endpoints -> kept.
+        (("127.0.0.1:5000", "GET", "/api/v1/status", "1.1", 200), True),
+    ],
+)
+def test_job_polling_access_filter(args, expected):
+    from main import JobPollingAccessFilter
+
+    assert JobPollingAccessFilter().filter(_access_record(args)) is expected
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        None,  # no args at all
+        ("only", "three", "slots"),  # wrong arity
+        ("127.0.0.1:5000", "GET", 42, "1.1", 200),  # non-str path
+        {"client": "127.0.0.1", "path": "/api/v1/jobs/x"},  # not a tuple
+    ],
+)
+def test_job_polling_access_filter_fails_open(args):
+    """Unexpected record.args shapes must pass through (fail-open)."""
+    from main import JobPollingAccessFilter
+
+    assert JobPollingAccessFilter().filter(_access_record(args)) is True
+
+
+def test_build_uvicorn_log_config_attaches_filter_without_mutating_default():
+    import uvicorn
+
+    from main import JobPollingAccessFilter, build_uvicorn_log_config
+
+    before = uvicorn.config.LOGGING_CONFIG.get("handlers", {}).get("access", {}).get("filters")
+    cfg = build_uvicorn_log_config()
+    # The returned config wires the filter into the access handler...
+    assert cfg["handlers"]["access"]["filters"] == ["job_polling_access"]
+    assert cfg["filters"]["job_polling_access"]["()"] is JobPollingAccessFilter
+    # ...and uvicorn's module-level default template is untouched.
+    after = uvicorn.config.LOGGING_CONFIG.get("handlers", {}).get("access", {}).get("filters")
+    assert before == after
+    # The config must remain loadable by logging.config.dictConfig.
+    import logging.config
+
+    logging.config.dictConfig(cfg)

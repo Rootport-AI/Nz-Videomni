@@ -90,6 +90,15 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_generate_failed": "generate failed: {err}",
         "msg_job_started": "Job started ({mode}): {job_id}",
         "msg_generating": "Generating… {pct:.0%} (step {step}/{total})",
+        # F3: step-less variant (never print "step None/None") + phase labels
+        # appended when the backend reports one.
+        "msg_generating_pct": "Generating… {pct:.0%}",
+        "stage_encoding": "Encoding",
+        "stage_denoise_s1": "Denoising (stage 1)",
+        "stage_denoise_s2": "Denoising (stage 2)",
+        "stage_denoise": "Denoising",
+        "stage_upsample": "Upsampling",
+        "stage_decode": "Decoding",
         "msg_poll_failed": "polling failed: {err}",
         "msg_completing": "Completed. Fetching video…",
         "msg_completed": "Completed: {job_id}",
@@ -161,12 +170,27 @@ LABELS: dict[str, dict[str, str]] = {
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "Source video (mp4/mov/webm/mkv, max 200 MB)",
         "v2v_lbl_context": "Context frames (source tail to continue from, 8n+1)",
+        # F4: usage guide (same rank as a2v_guide).
+        "v2v_guide": ("**Getting good results with V2V**\n\n"
+                      "This feature reads the tail end of the video you upload — the stretch set "
+                      "by the context frame count — and generates what comes next, both picture "
+                      "and sound. Write your prompt as a continuation of the *same* scene that "
+                      "the original video is already showing. If you describe a different scene "
+                      "instead, the content will lurch abruptly the moment the reference stretch "
+                      "ends. Don't re-instruct any dialogue that has already been spoken in the "
+                      "original video, or the character will say it a second time. If you want "
+                      "the music to keep going, say so explicitly in the prompt — state that the "
+                      "music continues. Finally, a larger context frame count makes the "
+                      "generation more stable, so raise it as far as the length of your original "
+                      "video allows."),
         "v2v_cap_panel": ("With V2V a single clip is enough (the frozen source tail acts as the "
                           "previous segment). The source video must have at least this many frames, "
                           "and clip 1 must be longer than the context so a new part remains. "
                           "Clip 1's start image cannot be used (the source occupies the head). "
                           "The delivered video is the NEW part only."),
         "v2v_chk_join": "Also create a version joined to the source video (crossfade the audio seam)",
+        # F5: crossfade length selector for the joined version.
+        "v2v_lbl_crossfade": "Audio crossfade length at the join (ms)",
         "v2v_cap_join": ("In addition to the video of the newly generated portion alone, this also "
                          "exports a combined version joined to your original clip, with the audio "
                          "seam smoothed by a crossfade. Turn it off and the audio may sound like it "
@@ -383,6 +407,14 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_generate_failed": "generate 失敗: {err}",
         "msg_job_started": "ジョブ開始 ({mode}): {job_id}",
         "msg_generating": "生成中… {pct:.0%} (step {step}/{total})",
+        # F3: step情報なしの表示("step None/None"を出さない)+ 工程名ラベル。
+        "msg_generating_pct": "生成中… {pct:.0%}",
+        "stage_encoding": "エンコード中",
+        "stage_denoise_s1": "デノイズ中 (stage 1)",
+        "stage_denoise_s2": "デノイズ中 (stage 2)",
+        "stage_denoise": "デノイズ中",
+        "stage_upsample": "アップサンプル中",
+        "stage_decode": "デコード中",
         "msg_poll_failed": "ポーリング失敗: {err}",
         "msg_completing": "完了。動画を取得中…",
         "msg_completed": "完了: {job_id}",
@@ -446,11 +478,24 @@ LABELS: dict[str, dict[str, str]] = {
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "元動画 (mp4/mov/webm/mkv・最大200MB)",
         "v2v_lbl_context": "参照フレーム数 (元動画の末尾から続きの手がかりにする長さ・8n+1)",
+        # F4: 使いこなしガイド (a2v_guideと同格)。
+        "v2v_guide": ("**V2Vを使いこなすには**\n\n"
+                      "この機能は、アップロードした元動画の末尾（参照フレーム数で指定した長さの区間）を"
+                      "モデルに読み取らせ、その続きの映像と音声を生成します。"
+                      "プロンプトには、元動画がすでに映している場面と同じシーンの「続き」を書いてください。"
+                      "別の新しいシーンを書いてしまうと、参照区間が終わった瞬間に内容が急に飛んでしまう原因になります。"
+                      "元動画の中ですでに話されたセリフは、プロンプトで改めて指示しないでください"
+                      "（同じセリフをもう一度言い直してしまいます）。"
+                      "音楽を続けたい場合は、音楽が続いていることをプロンプトにはっきり書いてください。"
+                      "また、参照フレーム数は大きいほど生成が安定するので、"
+                      "元動画の長さが許す範囲でできるだけ大きくするのがおすすめです。"),
         "v2v_cap_panel": ("V2Vではクリップ1個から生成できます（凍結された元動画の末尾が直前のセグメントの役割を果たします）。"
                           "元動画にはこのフレーム数以上の長さが必要で、クリップ1のフレーム数は参照フレーム数より大きくしてください"
                           "（続きとして生成する余地を残すため）。クリップ1の開始画像は使えません（先頭は元動画が占有します）。"
                           "出力される動画は新しく生成した部分のみです。"),
         "v2v_chk_join": "元動画と結合した完成版も作る（音声の継ぎ目をクロスフェード）",
+        # F5: 結合版のクロスフェード長セレクタ。
+        "v2v_lbl_crossfade": "結合部の音声クロスフェード長 (ms)",
         "v2v_cap_join": ("新しく生成した部分だけの動画に加えて、元動画とつないだ完成版も書き出します。"
                          "つなぎ目の音の段差はクロスフェードで滑らかにします。"
                          "オフにすると、つなぎ目で音が途切れて聞こえることがあります。"),

@@ -485,13 +485,15 @@ class JoinRequest(BaseModel):
     * ``False`` — hard concat (no fades). Kept for parity/testing; the GUI only
       exposes the smoothed path.
 
-    ``handle_crossfade_ms`` applies to the handle true-crossfade only (150 ms is
-    the measured sweet spot — VERIFICATION_LOG §24.7). All fields are optional;
-    an empty body ``{}`` gives the default smoothed join.
+    ``handle_crossfade_ms`` applies to the handle true-crossfade only. The
+    default is 300 ms (F5, G3 visual/audition gate: 150 ms — the original
+    VERIFICATION_LOG §24.7 sweet spot — left the seam slightly audible on real
+    content; the GUI offers 150/300/500). All fields are optional; an empty
+    body ``{}`` gives the default smoothed join.
     """
 
     audio_smoothing: bool = True
-    handle_crossfade_ms: int = Field(150, ge=0, le=2000)
+    handle_crossfade_ms: int = Field(300, ge=0, le=2000)
 
 
 class JoinResponse(BaseModel):
@@ -554,6 +556,12 @@ class JobResponse(BaseModel):
     progress: float
     current_step: int | None
     total_steps: int | None
+    # F3 (G3 feedback, ADDITIVE): pipeline phase of the latest progress event
+    # ("encode" / "stage1_denoise" / "stage2_denoise" / "stage1" / "tile" /
+    # "decode" / "denoise"). None when the backend has not reported one (mock
+    # milestones, queued jobs, pre-F2 workers) — consumers must treat unknown
+    # values as "no label".
+    stage: str | None = None
     created_at: str
     started_at: str | None
     completed_at: str | None

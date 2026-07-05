@@ -63,52 +63,130 @@ _CHAIN_STAGE_LABELS: dict[str, tuple[str, str]] = {
     "stage1": ("stage-1 denoise", "segment"),
     "tile": ("stage-2 tiled upsample", "tile"),
     "decode": ("VAE decode", "step"),
+    # F2 additions: chain text-encode marker + per-step denoise stages emitted
+    # by the worker's tqdm shim (engine/progress_shim.py).
+    "encode": ("text encode", "step"),
+    "stage1_denoise": ("stage-1 denoise", "step"),
+    "stage2_denoise": ("stage-2 denoise", "step"),
+    "denoise": ("denoise", "step"),
 }
-# Don't log every coarse event — for a long clip the stage-2 tile count can be
-# large. Emit the first event of a stage, its final event, and at most one line
-# per this interval in between.
+
+# Per-step denoise stages (F2): their ``index`` is the 1-based count of
+# COMPLETED steps (the tqdm shim emits AFTER each step), unlike the coarse
+# chain stages whose 0-based ``index`` means "unit index+1 is now complete".
+# Their step/total pass straight through to the ProgressCallback.
+_STEP_STAGES = frozenset({"stage1_denoise", "stage2_denoise", "denoise"})
+
+# Don't log every event — a denoise runs steps quickly and the stage-2 tile
+# count can be large. Emit the first event of a stage, its final event, and at
+# most one line per this interval in between.
 _STAGE_LOG_MIN_INTERVAL_S = 2.0
 
 
-def _log_chain_progress(
-    stage: str | None,
-    idx: int,
+def _log_stage_progress(
+    prefix: str,
+    label: str,
+    unit: str,
+    done: int,
     total: int,
     state: dict[str, dict],
+    key: str,
+    it_s: float | None = None,
 ) -> None:
-    """Emit a rate-limited INFO line for one chain-progress event.
+    """Emit a rate-limited INFO line for one progress event.
 
-    ``state`` is caller-owned scratch (one dict per ``_read_chain_events`` call)
-    holding per-stage timing so throughput can be measured across events without
-    a class attribute. Pure logging — never touches the numeric/progress path.
+    ``done`` is the number of COMPLETED units (the caller normalizes coarse
+    0-based indices to ``idx + 1`` and per-step 1-based counts as-is).
+    ``state`` is caller-owned scratch (one dict per event-read loop) holding
+    per-``key`` timing so throughput can be measured across events without a
+    class attribute; per-step stages key per segment/tile so their timing (and
+    the started line) resets each outer unit. ``it_s`` (worker-measured
+    steps/s, when present) wins over the locally computed arrival rate. Pure
+    logging — never touches the numeric/progress path.
     """
     now = time.monotonic()
-    label, unit = _CHAIN_STAGE_LABELS.get(stage or "", (stage or "?", "unit"))
-    done = idx + 1
-    st = state.get(stage or "")
+    st = state.get(key)
     if st is None:
-        state[stage or ""] = {"t0": now, "last_t": now, "last_done": done}
+        state[key] = {"t0": now, "last_t": now, "last_done": done}
         if total <= 1:
-            logger.info("chain %s started", label)
+            logger.info("%s %s started", prefix, label)
         else:
-            logger.info("chain %s started (%d %ss)", label, total, unit)
+            logger.info("%s %s started (%d %ss)", prefix, label, total, unit)
         return
     is_last = done >= total
     if not is_last and (now - st["last_t"]) < _STAGE_LOG_MIN_INTERVAL_S:
         return
-    dt = now - st["last_t"]
-    dd = done - st["last_done"]
-    rate = dd / dt if dt > 0 else 0.0
+    if it_s is not None:
+        rate = float(it_s)
+    else:
+        dt = now - st["last_t"]
+        dd = done - st["last_done"]
+        rate = dd / dt if dt > 0 else 0.0
     elapsed = now - st["t0"]
     logger.info(
-        "chain %s %d/%d %ss (%.2f %s/s, %.1fs elapsed)",
-        label, done, total, unit, rate, unit, elapsed,
+        "%s %s %d/%d %ss (%.2f %s/s, %.1fs elapsed)",
+        prefix, label, done, total, unit, rate, unit, elapsed,
     )
     st["last_t"] = now
     st["last_done"] = done
 
-# (current_step, total_steps, progress 0..1)
-ProgressCallback = Callable[[int | None, int | None, float], None]
+
+def _progress_frac(
+    stage: str | None,
+    done: int,
+    total: int,
+    outer_index: int | None,
+    outer_total: int | None,
+    *,
+    chain: bool,
+) -> float | None:
+    """Map one worker progress event to the coarse job fraction (0..1).
+
+    Chain milestones keep their historical values (0.05..0.50 stage 1,
+    0.50..0.90 stage 2, 0.95 decode); per-step events interpolate WITHIN those
+    bands using the segment/tile position (``outer_index``/``outer_total``)
+    the shim attaches, so the fraction now moves every denoise step instead of
+    once per 100+ seconds. Returns None for unknown stages (the caller keeps
+    the last fraction — an unknown stage must never yank the bar around).
+    """
+    step = done / total if total > 0 else 0.0
+    if outer_total:
+        try:
+            outer_step = (int(outer_index or 0) + step) / int(outer_total)
+        except (TypeError, ValueError):
+            outer_step = step
+    else:
+        outer_step = step
+    if chain:
+        if stage == "encode":
+            return 0.04
+        if stage == "stage1":
+            return 0.05 + 0.45 * step
+        if stage == "stage1_denoise":
+            return 0.05 + 0.45 * outer_step
+        if stage == "tile":
+            return 0.50 + 0.40 * step
+        if stage == "stage2_denoise":
+            return 0.50 + 0.40 * outer_step
+        if stage == "decode":
+            return 0.95
+        return None
+    # Single generate: 0.05 is emitted before dispatch and 0.90/1.0 after the
+    # terminal done (unchanged); the denoise steps fill the space between.
+    if stage == "encode":
+        return 0.06
+    if stage == "stage1_denoise":
+        return 0.06 + 0.44 * step
+    if stage == "stage2_denoise":
+        return 0.50 + 0.35 * step
+    return None
+
+
+# (current_step, total_steps, progress 0..1[, stage]). ``stage`` (F2, additive)
+# names the pipeline phase of per-step events ("stage1_denoise" /
+# "stage2_denoise" / "encode" / coarse chain stages); callbacks MUST declare it
+# with a None default — mock-backend milestone calls pass only 3 args.
+ProgressCallback = Callable[..., None]
 
 # Mock backend identifier surfaced in logs / status / metadata.
 MOCK_BACKEND = "mock"
@@ -1085,12 +1163,16 @@ class _RealBackend:
         }
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
+        # F2: the worker now streams per-step ``progress`` events during a
+        # single generate too, so read through them (same receipt loop as the
+        # chain) instead of the old one-shot _read_event() — which turned the
+        # first progress event into "unexpected event" and failed the job.
         with self._lock:
             try:
                 self._send(payload)
             except Exception as exc:
                 raise RuntimeError("LTX worker died: " + self._stderr_tail()) from exc
-            event = self._read_event()
+            event = self._read_worker_events(progress_callback, chain=False, prefix="generate")
 
         kind = event.get("event")
         if kind == "error":
@@ -1236,28 +1318,65 @@ class _RealBackend:
 
     def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:
         """Read framed events until a terminal ``done``/``error``; forward
-        ``progress`` events to ``progress_callback`` as a coarse 0..1 fraction
-        and emit a rate-limited INFO line per stage (S2 console progress)."""
+        ``progress`` events to ``progress_callback`` and emit rate-limited INFO
+        lines per stage (S2 console progress). See :meth:`_read_worker_events`."""
+        return self._read_worker_events(progress_callback, chain=True, prefix="chain")
+
+    def _read_worker_events(
+        self,
+        progress_callback: ProgressCallback | None,
+        *,
+        chain: bool,
+        prefix: str,
+    ) -> dict:
+        """Shared event-receipt loop for ``generate`` and ``generate_chain``.
+
+        Reads framed worker events until the first non-``progress`` event
+        (``done``/``error``/anything unexpected) and returns it — the caller
+        keeps its existing terminal-event validation. Each ``progress`` event:
+
+        * per-step denoise stages (F2 tqdm shim): step/total pass through to
+          ``progress_callback(current_step, total_steps, frac, stage)``;
+        * coarse stages (chain segment/tile/decode, encode): forwarded as
+          ``(None, None, frac, stage)`` — same fractions as before F2;
+        * the fraction is monotone non-decreasing across the whole read (clamped
+          against the last emitted value), and unknown stages never move it;
+        * a rate-limited INFO line per stage keeps the console readable
+          (worker-measured it/s preferred when present).
+        """
         stage_state: dict[str, dict] = {}
+        last_frac = 0.0
         while True:
             event = self._read_event()
-            kind = event.get("event")
-            if kind == "progress":
-                stage = event.get("stage")
-                idx = int(event.get("index", 0))
-                total = max(1, int(event.get("total", 1)))
-                _log_chain_progress(stage, idx, total, stage_state)
-                if progress_callback:
-                    step = (idx + 1) / total
-                    if stage == "stage1":
-                        frac = 0.05 + 0.45 * step
-                    elif stage == "tile":
-                        frac = 0.50 + 0.40 * step
-                    else:  # decode
-                        frac = 0.95
-                    progress_callback(None, None, round(min(1.0, frac), 3))
-                continue
-            return event
+            if event.get("event") != "progress":
+                return event
+            stage = event.get("stage")
+            idx = int(event.get("index", 0))
+            total = max(1, int(event.get("total", 1)))
+            outer_index = event.get("outer_index")
+            outer_total = event.get("outer_total")
+            it_s = event.get("it_s")
+            is_step = stage in _STEP_STAGES
+            done = idx if is_step else idx + 1
+
+            label, unit = _CHAIN_STAGE_LABELS.get(stage or "", (stage or "?", "unit"))
+            key = stage or ""
+            if is_step and outer_index is not None and outer_total:
+                # Per-segment/tile timing + "started" line reset each outer unit.
+                key = f"{stage}:{outer_index}"
+                label = f"{label} [{int(outer_index) + 1}/{int(outer_total)}]"
+            _log_stage_progress(prefix, label, unit, done, total, stage_state, key, it_s=it_s)
+
+            frac = _progress_frac(stage, done, total, outer_index, outer_total, chain=chain)
+            if frac is None:
+                frac = last_frac
+            frac = max(last_frac, min(1.0, frac))
+            last_frac = frac
+            if progress_callback:
+                if is_step:
+                    progress_callback(idx, total, round(frac, 3), stage)
+                else:
+                    progress_callback(None, None, round(frac, 3), stage)
 
 
 def _hue_gradient(w: int, h: int, hue: int) -> Image.Image:

@@ -317,11 +317,21 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 25, 145, value=73, step=8,
                                 label=L("v2v_lbl_context"),
                             ), "v2v_lbl_context")
+                            # F4: usage guide, same rank/placement as a2v_guide.
+                            reg(gr.Markdown(L("v2v_guide"), elem_classes=["note"]),
+                                "v2v_guide", "value")
                             reg(gr.Markdown(L("v2v_cap_panel"), elem_classes=["note"]),
                                 "v2v_cap_panel", "value")
                             v2v_join_chk = reg(gr.Checkbox(value=True,
                                                            label=L("v2v_chk_join")),
                                                "v2v_chk_join")
+                            # F5: crossfade length for the joined version
+                            # (JoinRequest.handle_crossfade_ms; server default 300).
+                            v2v_crossfade = reg(gr.Dropdown(
+                                choices=[("150 ms", 150), ("300 ms", 300),
+                                         ("500 ms", 500)],
+                                value=300, label=L("v2v_lbl_crossfade"),
+                            ), "v2v_lbl_crossfade")
                             reg(gr.Markdown(L("v2v_cap_join"), elem_classes=["note"]),
                                 "v2v_cap_join", "value")
 
@@ -655,7 +665,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # (the GUI only ever requests the server's default smoothed join).
         v2v_join_btn.click(
             chain_join,
-            inputs=[chain_job, v2v_join_chk, lang_state],
+            inputs=[chain_job, v2v_join_chk, v2v_crossfade, lang_state],
             outputs=[v2v_join_msg, chain_joined_video],
         )
 

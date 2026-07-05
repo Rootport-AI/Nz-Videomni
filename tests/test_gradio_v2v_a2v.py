@@ -431,7 +431,7 @@ def test_join_error_envelope_localized_hint():
 
     api = _make_client(handler)
     join = make_join_handler(api)
-    outs = list(join("j1", True, "ja"))
+    outs = list(join("j1", True, 300, "ja"))
     msg, video = outs[-1]
     assert video is None
     assert msg == LABELS["ja"]["apierr_JOB_NOT_JOINABLE"]
@@ -482,3 +482,111 @@ def test_i18n_v2v_a2v_keys_present_in_both_languages():
     for key in new_keys:
         assert key in LABELS["ja"], f"missing ja translation: {key}"
         assert LABELS["ja"][key], f"empty ja translation: {key}"
+
+
+# --------------------------------------------------------------------------- #
+# F4: V2V usage guide — registered en/ja text carrying the four guidance points
+# (same-scene continuation / no re-instructed dialogue / explicit music
+# continuation / larger context is more stable).
+# --------------------------------------------------------------------------- #
+def test_v2v_guide_present_in_both_languages():
+    for lang in ("en", "ja"):
+        assert "v2v_guide" in LABELS[lang], lang
+
+    en = LABELS["en"]["v2v_guide"]
+    assert en.startswith("**Getting good results with V2V**")
+    assert "same" in en and "scene" in en          # 1) same-scene continuation
+    assert "dialogue" in en and "already" in en    # 2) no re-instructed dialogue
+    assert "music continues" in en                 # 3) explicit music continuation
+    assert "more stable" in en                     # 4) larger context stability
+
+    ja = LABELS["ja"]["v2v_guide"]
+    assert ja.startswith("**V2Vを使いこなすには**")
+    assert "同じシーン" in ja
+    assert "セリフ" in ja
+    assert "音楽" in ja
+    assert "安定" in ja
+
+
+def test_v2v_guide_is_registered_for_language_switch():
+    """build_ui reg()s the guide Markdown, so switch_language must emit an
+    update carrying the Japanese guide text."""
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    updates = demo.switch_language("ja", None)
+    assert any(
+        isinstance(u.get("value"), str) and u["value"].startswith("**V2Vを使いこなすには**")
+        for u in updates
+    )
+
+
+# --------------------------------------------------------------------------- #
+# F5: crossfade length — JoinRequest default 300 ms, GUI Dropdown rides along
+# as handle_crossfade_ms in the join body (None -> field omitted).
+# --------------------------------------------------------------------------- #
+def test_join_request_default_crossfade_is_300ms():
+    from api.models import JoinRequest
+
+    req = JoinRequest()  # empty body {}
+    assert req.handle_crossfade_ms == 300
+    assert req.audio_smoothing is True
+
+
+def test_join_handler_sends_selected_crossfade_ms():
+    import json
+
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            bodies.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(200, json={
+                "job_id": "j1", "join_mode": "handle_crossfade",
+                "joined_path": "outputs/j1/joined.mp4", "source_normalized": False,
+            })
+        return httpx.Response(200, content=b"JOINED")
+
+    api = _make_client(handler)
+    join = make_join_handler(api)
+    outs = list(join("j1", True, 500))
+    assert bodies == [{"handle_crossfade_ms": 500}]
+    assert outs[-1][1] and outs[-1][1].endswith(".mp4")
+
+
+def test_join_handler_without_selection_sends_empty_body():
+    import json
+
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            bodies.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(200, json={
+                "job_id": "j1", "join_mode": "handle_crossfade",
+                "joined_path": "outputs/j1/joined.mp4", "source_normalized": False,
+            })
+        return httpx.Response(200, content=b"JOINED")
+
+    api = _make_client(handler)
+    join = make_join_handler(api)
+    list(join("j1", True))          # legacy 2-arg call: no crossfade selection
+    list(join("j1", True, "junk"))  # junk selection also falls back
+    assert bodies == [{}, {}]
+
+
+def test_v2v_crossfade_dropdown_default_300():
+    """build_ui exposes the crossfade Dropdown with 150/300/500 and default 300."""
+    import gradio as gr
+
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    dropdowns = [
+        c for c in demo.blocks.values()
+        if isinstance(c, gr.Dropdown)
+        and getattr(c, "choices", None)
+        and [v for _lbl, v in c.choices] == [150, 300, 500]
+    ]
+    assert dropdowns, "crossfade dropdown (150/300/500) not found"
+    assert dropdowns[0].value == 300

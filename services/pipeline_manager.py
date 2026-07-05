@@ -242,9 +242,10 @@ class PipelineManager:
                 else None
             )
 
-            def on_progress(step, total, progress):
+            def on_progress(step, total, progress, stage=None):
                 job.current_step = step
                 job.total_steps = total
+                job.stage = stage
                 job.progress = progress
 
             outcome = self.runner.generate(
@@ -450,9 +451,10 @@ class PipelineManager:
                 )
                 a2v_provenance = {"source_audio_id": chain.source_audio.audio_id}
 
-            def on_progress(step, total, progress):
+            def on_progress(step, total, progress, stage=None):
                 job.current_step = step
                 job.total_steps = total
+                job.stage = stage
                 job.progress = round(max(0.0, min(1.0, progress)), 3)
 
             outcome = self.runner.generate_chain(

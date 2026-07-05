@@ -41,6 +41,7 @@ from chain_math import (
     audio_segment_windows,
     compute_chain_layout,
 )
+from engine import progress_shim
 from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import (
     default_tiling_config,
@@ -52,7 +53,12 @@ DTYPE = torch.bfloat16
 
 logger = logging.getLogger(__name__)
 
-# progress(stage, index, total) — stage in {"stage1","tile","decode"}.
+# progress(stage, index, total) — stage in {"encode","stage1","tile","decode"}.
+# "encode" (F2, additive) fires BEFORE the text encode (receivers use dict.get
+# and ignore unknown stages, so older consumers are unaffected). Per-step
+# denoise events ("stage1_denoise"/"stage2_denoise") do NOT go through this
+# callback — they are emitted by the tqdm shim (engine/progress_shim.py),
+# phase-tagged via set_phase() below.
 ProgressFn = Callable[[str, int, int], None]
 
 
@@ -469,6 +475,11 @@ def run_chain(
     t0 = time.time()
 
     # ── Text encode ONCE for all DISTINCT prompts, then free the encoder. ─────
+    # F2: announce the encode phase (fires BEFORE the encode so the app's job
+    # status can show "encoding" during the wait; the first stage1_denoise step
+    # event implicitly ends it).
+    if progress:
+        progress("encode", 0, 1)
     text_encoder = ledger.text_encoder()
     distinct = list(dict.fromkeys(c.prompt for c in clips))  # preserves order, dedups
     ctx_by_prompt: dict[str, tuple] = {}
@@ -562,6 +573,9 @@ def run_chain(
     seg_v: list[torch.Tensor] = []
     seg_a: list[torch.Tensor] = []
     for i in range(n):
+        # F2: tag the upcoming wheel denoising loop with its chain position so
+        # the per-step tqdm shim events carry segment context (observation only).
+        progress_shim.set_phase("stage1_denoise", outer_index=i, outer_total=n)
         seg_shape = VideoPixelShape(1, clip_frames[i], height // 2, width // 2, frame_rate)
         noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
         if i == 0 and source is not None:
@@ -675,6 +689,8 @@ def run_chain(
     refined_v: list[torch.Tensor] = []
     refined_a: list[torch.Tensor] = []
     for i in range(n_tiles):
+        # F2: per-step shim phase for this tile's denoise (observation only).
+        progress_shim.set_phase("stage2_denoise", outer_index=i, outer_total=n_tiles)
         vs, vlen = v_tiles[i]
         as_, alen = a_tiles[i]
         tile_px = (vlen - 1) * VIDEO_TIME_FACTOR + 1
@@ -742,6 +758,9 @@ def run_chain(
     assert final_a.shape[2] == layout.a_total, (final_a.shape[2], layout.a_total)
 
     # ── ONE VAE decode -> ONE mp4. ────────────────────────────────────────────
+    # F2: clear the shim phase — any further (unexpected) wheel loop would be
+    # labelled with the generic "denoise", never a stale stage2 tag.
+    progress_shim.end_op()
     if progress:
         progress("decode", 0, 1)
     gen = torch.Generator(device=device).manual_seed(base_seed)

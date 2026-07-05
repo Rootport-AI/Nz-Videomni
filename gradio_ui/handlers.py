@@ -34,6 +34,39 @@ _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
 
 
+# F3: JobResponse.stage -> localized phase-label key. Unknown / absent stages
+# show no label (older backends and the mock milestones never send one).
+_STAGE_LABEL_KEYS = {
+    "encode": "stage_encoding",
+    "stage1": "stage_denoise_s1",
+    "stage1_denoise": "stage_denoise_s1",
+    "stage2_denoise": "stage_denoise_s2",
+    "denoise": "stage_denoise",
+    "tile": "stage_upsample",
+    "decode": "stage_decode",
+}
+
+
+def _format_running_progress(job: dict, lang: str) -> str:
+    """Progress line for a running job (F3, display-only).
+
+    * step/total known -> the classic "Generating… 42% (step 3/8)";
+    * unknown -> percent only (never the literal "step None/None");
+    * a recognized ``stage`` appends its localized phase label.
+    """
+    progress = job.get("progress", 0.0)
+    step = job.get("current_step")
+    total = job.get("total_steps")
+    if step is not None and total is not None:
+        text = L("msg_generating", lang).format(pct=progress, step=step, total=total)
+    else:
+        text = L("msg_generating_pct", lang).format(pct=progress)
+    stage_key = _STAGE_LABEL_KEYS.get(job.get("stage") or "")
+    if stage_key:
+        text = f"{text} — {L(stage_key, lang)}"
+    return text
+
+
 # --------------------------------------------------------------------------- #
 # Shared 1s poll loop (factored out of the generate flow so /generate and
 # /generate/chain reuse the SAME progress/complete/fail handling). Yields
@@ -57,11 +90,8 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
             continue
 
         status = job["status"]
-        progress = job.get("progress", 0.0)
         if status == "running":
-            step = job.get("current_step")
-            total = job.get("total_steps")
-            yield L("msg_generating", lang).format(pct=progress, step=step, total=total), job_id, None
+            yield _format_running_progress(job, lang), job_id, None
         elif status == "completed":
             yield L("msg_completing", lang), job_id, None
             try:
@@ -535,7 +565,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
     default_lang = lang
 
-    def join(job_id, smoothing_enabled, ui_lang=None):
+    def join(job_id, smoothing_enabled, crossfade_ms=None, ui_lang=None):
         lang = ui_lang or default_lang
         job_id = str(job_id).strip() if job_id else ""
         if not job_id:
@@ -545,9 +575,19 @@ def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield L("v2v_msg_join_disabled", lang), None
             return
 
+        # F5: the crossfade-length Dropdown (150/300/500 ms) rides along as
+        # JoinRequest.handle_crossfade_ms; None / junk falls back to the server
+        # default (300 ms) by simply omitting the field.
+        payload: dict = {}
+        try:
+            if crossfade_ms is not None:
+                payload["handle_crossfade_ms"] = int(crossfade_ms)
+        except (TypeError, ValueError):
+            payload = {}
+
         yield L("v2v_msg_joining", lang), None
         try:
-            resp = api.join_job(job_id)  # empty body {} = default smoothed join
+            resp = api.join_job(job_id, payload or None)
         except Exception as exc:
             yield L("v2v_msg_join_failed", lang).format(err=exc), None
             return

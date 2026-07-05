@@ -10,7 +10,10 @@ import os
 import time
 from pathlib import Path
 
+import httpx
+
 from .adapters import ADAPTER_NONE, _FALLBACK_MAX_VIDEO_MB, _FALLBACK_VIDEO_EXTS
+from .adapters import MODEL_CATEGORIES, MODEL_DEFAULT
 from .api_client import ApiClient
 from .formatting import format_api_error
 from .i18n import L, _DEFAULT_LANG
@@ -502,3 +505,54 @@ def delete_finished_jobs(api: ApiClient, lang: str = _DEFAULT_LANG) -> str:
                 # Best-effort: a job may have been removed between list + delete.
                 continue
     return L("msg_purge_done", lang).format(n=deleted)
+
+
+# --------------------------------------------------------------------------- #
+# Model management (Settings tab "Models" section, S3). Standalone handlers —
+# the shared generate/chain flows and _poll_job_until_done above are untouched
+# (model load is a synchronous POST, not a polled job).
+# --------------------------------------------------------------------------- #
+
+def fetch_models_safe(api: ApiClient, lang: str = _DEFAULT_LANG) -> tuple[dict | None, str | None]:
+    """Fetch GET /models; ``(models_json, None)`` on success or
+    ``(None, warning)`` on failure. Mirrors :func:`fetch_config_safe`: never
+    raises and never invents a fallback — the caller keeps the dropdowns
+    as-is when the fetch fails."""
+    try:
+        return api.get_models(), None
+    except Exception as exc:
+        return None, L("model_fetch_failed", lang).format(err=exc)
+
+
+def load_selected_models(api: ApiClient, transformer: str | None, text_encoder: str | None,
+                         video_vae: str | None, audio: str | None,
+                         lang: str = _DEFAULT_LANG) -> str:
+    """POST /pipeline/load with the four dropdown selections.
+
+    Returns a localized status line for the Models-section status box. An
+    empty/None dropdown value falls back to ``"default"`` (the server-side
+    always-safe entry). REST errors are rendered through
+    :func:`gradio_ui.formatting.format_api_error` so the model-management
+    codes (MODEL_NOT_FOUND / MODEL_FILE_MISSING / MODEL_INCOMPATIBLE /
+    JOB_BUSY / PIPELINE_LOAD_FAILED) each get their actionable hint."""
+    models = {
+        "transformer": transformer or MODEL_DEFAULT,
+        "text_encoder": text_encoder or MODEL_DEFAULT,
+        "video_vae": video_vae or MODEL_DEFAULT,
+        "audio": audio or MODEL_DEFAULT,
+    }
+    try:
+        resp = api.load_pipeline_models(models)
+    except httpx.HTTPStatusError as exc:
+        try:
+            body: object = exc.response.json()
+        except Exception:
+            body = exc.response.text
+        return L("model_load_failed", lang).format(err=format_api_error(body, lang))
+    except Exception as exc:
+        return L("model_load_failed", lang).format(err=exc)
+    active = resp.get("models") or models
+    summary = ", ".join(
+        f"{category}={active.get(category, MODEL_DEFAULT)}" for category in MODEL_CATEGORIES
+    )
+    return L("model_load_ok", lang).format(models=summary)

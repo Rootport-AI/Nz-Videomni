@@ -13,6 +13,7 @@ from config import AppConfig
 from services.audio_upload_store import AudioUploadStore
 from services.job_store import JobStore
 from services.lora_registry import LoraRegistry
+from services.model_registry import ModelRegistry
 from services.pipeline_manager import PipelineManager
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
@@ -35,6 +36,7 @@ class AppContext:
     video_upload_store: VideoUploadStore = field(init=False)
     audio_upload_store: AudioUploadStore = field(init=False)
     lora_registry: LoraRegistry = field(init=False)
+    model_registry: ModelRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
 
     def __post_init__(self) -> None:
@@ -42,6 +44,7 @@ class AppContext:
         self.video_upload_store = VideoUploadStore(self.config)
         self.audio_upload_store = AudioUploadStore(self.config)
         self.lora_registry = LoraRegistry(self.config)
+        self.model_registry = ModelRegistry(self.config)
         self.pipeline_manager = PipelineManager(
             self.config,
             self.job_store,

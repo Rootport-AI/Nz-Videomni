@@ -53,6 +53,12 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def get_models(self) -> dict:
+        """GET /models — category-scoped model enumeration (model management)."""
+        r = self.client.get(self._url("/api/v1/models"), headers=self.headers, timeout=10)
+        r.raise_for_status()
+        return r.json()
+
     def delete_job(self, job_id: str) -> dict:
         """DELETE /jobs/{id}. The server cancels the job if it is still active
         (``{"cancel_requested": True, ...}``) or drops it + its output dir if it
@@ -66,6 +72,16 @@ class ApiClient:
     def load_pipeline(self) -> dict:
         # Model load can be slow; give it a generous timeout.
         r = self.client.post(self._url("/api/v1/pipeline/load"), headers=self.headers, timeout=600)
+        r.raise_for_status()
+        return r.json()
+
+    def load_pipeline_models(self, models: dict) -> dict:
+        """POST /pipeline/load with a ``models`` selection block (additive S2
+        extension: category -> registered NAME). A swap restarts the engine
+        worker and can take minutes, so reuse the generous load timeout."""
+        r = self.client.post(self._url("/api/v1/pipeline/load"),
+                             json={"models": models},
+                             headers=self.headers, timeout=600)
         r.raise_for_status()
         return r.json()
 

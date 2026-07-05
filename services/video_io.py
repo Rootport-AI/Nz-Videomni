@@ -8,6 +8,8 @@ centered crop, and writes ``metadata.json``.
 from __future__ import annotations
 
 import json
+import logging
+import math
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +17,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from PIL import Image
+
+logger = logging.getLogger("ltx.video_io")
 
 
 class FFmpegError(RuntimeError):
@@ -546,6 +550,40 @@ def _loudnorm_measure(exe: str, path: Path) -> dict[str, float]:
         raise FFmpegError(f"ffmpeg loudnorm measure: bad JSON stats: {exc}") from exc
 
 
+def _loudnorm_stats_usable(stats: dict, *, as_target: bool) -> bool:
+    """Return True only when ``stats`` (a pass-1 ``loudnorm`` JSON block) can be
+    safely expanded into a pass-2 ``loudnorm`` filter argument.
+
+    Digitally-silent audio (a present-but-zero stream, e.g. a source recording
+    with a muted track) makes ffmpeg report ``input_i`` (and friends) as
+    ``-inf``. Feeding that straight back into ``loudnorm=I=-inf`` /
+    ``measured_I=-inf`` makes ffmpeg reject the filter graph
+    (``Value -inf for parameter 'I' out of range [-70 - -5]``), which surfaced as
+    a 503 on the V2V join. This guard detects non-finite / out-of-range measured
+    values so the caller can skip loudness matching instead of crashing.
+
+    ``as_target`` selects the range that ``input_i`` must satisfy: True when the
+    value will be passed as the pass-2 *target* ``I=`` (ffmpeg accepts
+    ``[-70, -5]``); False when it is a *measured_* input (ffmpeg accepts
+    ``[-99, 0]``). The remaining fields only need to be finite floats.
+    """
+    keys = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
+    vals: dict[str, float] = {}
+    for key in keys:
+        raw = stats.get(key)
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(val):
+            return False
+        vals[key] = val
+    lo, hi = (-70.0, -5.0) if as_target else (-99.0, 0.0)
+    if not (lo <= vals["input_i"] <= hi):
+        return False
+    return True
+
+
 def normalize_clip(src: Path, out: Path, width: int, height: int, fps: float) -> Path:
     """Re-encode ``src`` to exactly ``width`` x ``height`` @ ``fps`` for joining.
 
@@ -723,16 +761,30 @@ def join_v2v(
         if loudness_match:
             src_stats = _loudnorm_measure(exe, source)
             h_stats = _loudnorm_measure(exe, handle_audio)
-            source_lufs = float(src_stats["input_i"])
-            info["source_lufs"] = source_lufs
-            info["continuation_lufs_before"] = float(h_stats["input_i"])
-            info["loudness_matched"] = True
-            loud_prefix = (
-                f"loudnorm=I={source_lufs}:TP=-2:LRA=7:"
-                f"measured_I={h_stats['input_i']}:measured_TP={h_stats['input_tp']}:"
-                f"measured_LRA={h_stats['input_lra']}:measured_thresh={h_stats['input_thresh']}:"
-                f"offset={h_stats['target_offset']}:linear=true,"
-            )
+            if _loudnorm_stats_usable(src_stats, as_target=True) and _loudnorm_stats_usable(
+                h_stats, as_target=False
+            ):
+                source_lufs = float(src_stats["input_i"])
+                info["source_lufs"] = source_lufs
+                info["continuation_lufs_before"] = float(h_stats["input_i"])
+                info["loudness_matched"] = True
+                loud_prefix = (
+                    f"loudnorm=I={source_lufs}:TP=-2:LRA=7:"
+                    f"measured_I={h_stats['input_i']}:measured_TP={h_stats['input_tp']}:"
+                    f"measured_LRA={h_stats['input_lra']}:measured_thresh={h_stats['input_thresh']}:"
+                    f"offset={h_stats['target_offset']}:linear=true,"
+                )
+            else:
+                info["loudness_skip_reason"] = (
+                    "loudnorm stats unusable (likely digitally-silent audio); "
+                    "skipped loudness matching to avoid an out-of-range filter argument"
+                )
+                logger.warning(
+                    "join_v2v handle: skipping loudness match "
+                    "(source input_i=%r, handle input_i=%r)",
+                    src_stats.get("input_i"),
+                    h_stats.get("input_i"),
+                )
 
         afmt = "aformat=sample_rates=48000:channel_layouts=stereo"
         # A = real source audio (its tail is the pre-junction crossfade window).
@@ -757,19 +809,33 @@ def join_v2v(
         if loudness_match:
             src_stats = _loudnorm_measure(exe, source)
             cont_stats = _loudnorm_measure(exe, continuation)
-            source_lufs = float(src_stats["input_i"])
-            info["source_lufs"] = source_lufs
-            info["continuation_lufs_before"] = float(cont_stats["input_i"])
-            info["loudness_matched"] = True
+            if _loudnorm_stats_usable(src_stats, as_target=True) and _loudnorm_stats_usable(
+                cont_stats, as_target=False
+            ):
+                source_lufs = float(src_stats["input_i"])
+                info["source_lufs"] = source_lufs
+                info["continuation_lufs_before"] = float(cont_stats["input_i"])
+                info["loudness_matched"] = True
 
-            loudnorm_filter = (
-                f"loudnorm=I={source_lufs}:TP=-2:LRA=7:"
-                f"measured_I={cont_stats['input_i']}:measured_TP={cont_stats['input_tp']}:"
-                f"measured_LRA={cont_stats['input_lra']}:measured_thresh={cont_stats['input_thresh']}:"
-                f"offset={cont_stats['target_offset']}:linear=true"
-            )
-            parts.append(f"[1:a]{loudnorm_filter}[a1n]")
-            cont_audio_label = "[a1n]"
+                loudnorm_filter = (
+                    f"loudnorm=I={source_lufs}:TP=-2:LRA=7:"
+                    f"measured_I={cont_stats['input_i']}:measured_TP={cont_stats['input_tp']}:"
+                    f"measured_LRA={cont_stats['input_lra']}:measured_thresh={cont_stats['input_thresh']}:"
+                    f"offset={cont_stats['target_offset']}:linear=true"
+                )
+                parts.append(f"[1:a]{loudnorm_filter}[a1n]")
+                cont_audio_label = "[a1n]"
+            else:
+                info["loudness_skip_reason"] = (
+                    "loudnorm stats unusable (likely digitally-silent audio); "
+                    "skipped loudness matching to avoid an out-of-range filter argument"
+                )
+                logger.warning(
+                    "join_v2v: skipping loudness match "
+                    "(source input_i=%r, continuation input_i=%r)",
+                    src_stats.get("input_i"),
+                    cont_stats.get("input_i"),
+                )
 
         if applied_fade_sec > 0:
             fade_out_start = max(0.0, src_dur - applied_fade_sec)

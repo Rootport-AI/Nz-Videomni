@@ -199,6 +199,30 @@ LABELS: dict[str, dict[str, str]] = {
         "btn_purge": "Delete all finished jobs",
         "msg_purge_done": "Deleted {n} finished job(s).",
         "msg_purge_failed": "Failed to delete jobs: {err}",
+        # --- settings tab: model management (model_ prefix) ---
+        "model_section_title": "Models",
+        "model_cat_transformer": "Video model (transformer)",
+        "model_cat_text_encoder": "Text encoder (Gemma)",
+        "model_cat_video_vae": "Video VAE",
+        "model_cat_audio": "Audio model (audio VAE + vocoder)",
+        "model_btn_refresh": "Refresh model list",
+        "model_btn_load": "Load selected models",
+        "model_missing": "file missing",
+        "model_loading": ("Loading models… switching rebuilds the engine and can take "
+                          "several minutes."),
+        "model_load_ok": "Models loaded: {models}",
+        "model_load_failed": "Model load failed:\n{err}",
+        "model_fetch_failed": "Failed to fetch the model list: {err}",
+        "model_hint": ("Selections apply when you press Load. 'default' is the stock "
+                       "combination. Switching restarts the engine worker (a few "
+                       "minutes). If a load fails, select 'default' everywhere and "
+                       "Load again."),
+        "apierr_MODEL_NOT_FOUND": ("Unknown model name. Refresh the model list and pick "
+                                   "again."),
+        "apierr_MODEL_FILE_MISSING": ("The model file is missing on disk. Re-download it "
+                                      "or pick another model."),
+        "apierr_MODEL_INCOMPATIBLE": ("The selected file is not a valid model for that "
+                                      "slot. Pick another model."),
     },
     "ja": {
         # --- top common bar ---
@@ -382,6 +406,25 @@ LABELS: dict[str, dict[str, str]] = {
         "btn_purge": "終了済みジョブを全削除",
         "msg_purge_done": "終了済みジョブを {n} 件削除しました。",
         "msg_purge_failed": "ジョブの削除に失敗しました: {err}",
+        # --- settings tab: model management (model_ prefix) ---
+        "model_section_title": "モデル",
+        "model_cat_transformer": "動画モデル (transformer)",
+        "model_cat_text_encoder": "テキストエンコーダ (Gemma)",
+        "model_cat_video_vae": "動画VAE",
+        "model_cat_audio": "音声モデル (音声VAE+ボコーダ)",
+        "model_btn_refresh": "モデル一覧を更新",
+        "model_btn_load": "選択したモデルを読込",
+        "model_missing": "ファイルなし",
+        "model_loading": "モデルを読込中… 切替はエンジンの再構築を伴うため数分かかることがあります。",
+        "model_load_ok": "モデルを読み込みました: {models}",
+        "model_load_failed": "モデルの読込に失敗しました:\n{err}",
+        "model_fetch_failed": "モデル一覧の取得に失敗しました: {err}",
+        "model_hint": ("選択は「読込」ボタンで反映されます。default は標準構成です。"
+                       "切替はエンジンの再起動を伴い数分かかります。読込に失敗した場合は、"
+                       "すべて default を選び直して再度読込してください。"),
+        "apierr_MODEL_NOT_FOUND": "不明なモデル名です。モデル一覧を更新して選び直してください。",
+        "apierr_MODEL_FILE_MISSING": "モデルファイルがディスク上に見つかりません。再ダウンロードするか別のモデルを選んでください。",
+        "apierr_MODEL_INCOMPATIBLE": "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",
     },
 }
 

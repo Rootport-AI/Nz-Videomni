@@ -8,6 +8,12 @@ from __future__ import annotations
 import gradio as gr
 
 from .adapters import ADAPTER_NONE, build_adapter_choices
+from .adapters import (
+    MODEL_CATEGORIES,
+    MODEL_DEFAULT,
+    build_model_choices,
+    model_active_value,
+)
 from .api_client import ApiClient
 from .formatting import (
     build_jobs_rows,
@@ -22,6 +28,7 @@ from .handlers import (
     make_generate_handler,
     on_config_retry_tick,
 )
+from .handlers import fetch_models_safe, load_selected_models
 from .i18n import L
 from .presets import PRESETS, apply_preset, build_preset_choices, compute_spill_warning, pick_default_preset
 
@@ -443,6 +450,37 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 )
                 reg(gr.Markdown(L("cap_over"), elem_classes=["note"]), "cap_over", "value")
 
+                # ---- Models (model management: per-category dropdowns) ----
+                # Independent section (parent ruling): it shares NO closure or
+                # outputs with on_page_load / on_refresh_config / the top-bar
+                # load buttons — only additive event listeners below.
+                reg(gr.Markdown(f"### {L('model_section_title')}"),
+                    "model_section_title", "value")
+                with gr.Row():
+                    model_dd_transformer = reg(gr.Dropdown(
+                        choices=[(MODEL_DEFAULT, MODEL_DEFAULT)], value=MODEL_DEFAULT,
+                        label=L("model_cat_transformer")), "model_cat_transformer")
+                    model_dd_text_encoder = reg(gr.Dropdown(
+                        choices=[(MODEL_DEFAULT, MODEL_DEFAULT)], value=MODEL_DEFAULT,
+                        label=L("model_cat_text_encoder")), "model_cat_text_encoder")
+                with gr.Row():
+                    model_dd_video_vae = reg(gr.Dropdown(
+                        choices=[(MODEL_DEFAULT, MODEL_DEFAULT)], value=MODEL_DEFAULT,
+                        label=L("model_cat_video_vae")), "model_cat_video_vae")
+                    model_dd_audio = reg(gr.Dropdown(
+                        choices=[(MODEL_DEFAULT, MODEL_DEFAULT)], value=MODEL_DEFAULT,
+                        label=L("model_cat_audio")), "model_cat_audio")
+                with gr.Row():
+                    model_refresh_btn = reg(gr.Button(L("model_btn_refresh")),
+                                            "model_btn_refresh", "value")
+                    model_load_btn = reg(gr.Button(L("model_btn_load"),
+                                                   variant="primary"),
+                                         "model_btn_load", "value")
+                model_status_box = gr.Textbox(label="", show_label=False,
+                                              interactive=False, container=False)
+                reg(gr.Markdown(L("model_hint"), elem_classes=["note"]),
+                    "model_hint", "value")
+
                 # ---- Danger zone (gated by a confirmation checkbox) ----
                 reg(gr.Markdown(f"### {L('h_danger')}"), "h_danger", "value")
                 danger_chk = reg(gr.Checkbox(value=False, label=L("chk_danger")),
@@ -641,6 +679,54 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         demo.load(on_page_load, inputs=[config_state, lang_state],
                   outputs=[status_box, config_state, preset, adapter,
                            server_config_json, spill_table, config_retry_timer])
+
+        # ---- Settings: model management (INDEPENDENT listeners) ----
+        # Parent ruling: the shared on_page_load / on_refresh_config closures
+        # above stay untouched — the Models section registers its own page-load
+        # hook (gr.Blocks allows several) and its own Refresh button.
+        model_dds = [model_dd_transformer, model_dd_text_encoder,
+                     model_dd_video_vae, model_dd_audio]
+
+        def refresh_model_dropdowns(lang, warn: bool = True):
+            models_json, err = fetch_models_safe(api, lang)
+            if err is not None:
+                # Silent on page load (a dead server already warns via the
+                # /config path); the explicit Refresh button does warn.
+                if warn:
+                    gr.Warning(err)
+                return tuple(gr.update() for _ in MODEL_CATEGORIES)
+            return tuple(
+                gr.update(choices=build_model_choices(models_json, cat, lang),
+                          value=model_active_value(models_json, cat))
+                for cat in MODEL_CATEGORIES
+            )
+
+        model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
+                                outputs=model_dds)
+        demo.load(lambda lang: refresh_model_dropdowns(lang, warn=False),
+                  inputs=lang_state, outputs=model_dds)
+
+        def on_model_load_start(lang):
+            # Disable the button + show the "takes minutes" notice while the
+            # blocking POST runs (model load is synchronous, not a polled job).
+            return gr.update(interactive=False), L("model_loading", lang)
+
+        def on_model_load(tr, te, vv, au, lang):
+            return load_selected_models(api, tr, te, vv, au, lang)
+
+        model_load_btn.click(
+            on_model_load_start, inputs=lang_state,
+            outputs=[model_load_btn, model_status_box],
+        ).then(
+            on_model_load, inputs=[*model_dds, lang_state],
+            outputs=model_status_box,
+        ).then(
+            lambda: gr.update(interactive=True), outputs=model_load_btn,
+        ).then(
+            # Re-pull /models so the dropdowns reflect the new active marks.
+            lambda lang: refresh_model_dropdowns(lang, warn=False),
+            inputs=lang_state, outputs=model_dds,
+        )
 
     # Expose the registry + language-switch fn for the S6 handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]

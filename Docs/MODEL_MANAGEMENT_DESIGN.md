@@ -1,5 +1,7 @@
 # モデル管理ドロップダウン機能 — S0 設計書
 
+> **✅ 実装完了（2026-07-05）。本書は S0 設計書で以後は歴史記録。** S1〜S4 全 PASS（S4 実機＝別名二重登録 swap→同 seed→**SHA 一致×3**・未知名 404・後片付け済み）。§9 の裁定6点は本文へ反映済み（各所「裁定（§9-x）」注記）。正本＝VERIFICATION_LOG §26.1。**実代替モデルの DL はしない方針（ユーザー決定）**＝切替配線は別名二重登録で実証済み・実重み投入は将来ユーザー任意。
+
 - 作成: 2026-07-05（子B・branch `feature/model-management-dropdown`）
 - 正本の親: [`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md) 冒頭★注記2つ
 - スコープ: **既存レイアウトのまま**「追加ファインチューニングモデルをドロップダウンで選択してロード」。ディレクトリ再編・移行スクリプト・インストーラ書き換えは**やらない**。API は加算のみ。凍結契約（`GET /status` の `vram_optimization`・`metadata.json` のキー集合）は不変。

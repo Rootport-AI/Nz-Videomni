@@ -1,5 +1,7 @@
 # 次セッション ワークオーダー — Phase 3 スライス2「クリップ連結（生成プリミティブ）」
 
+> **（歴史記録・2026-07-05 注記）本スライス2＝実施済み・main マージ済（実施記録＝[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)・VERIFICATION_LOG）。本書は 2026-07-02 の着手時ワークオーダーで「次セッション」の現役指示ではない。現在の正本＝[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック。**
+
 - 作成: 2026-07-02（監督＋ユーザー合意）
 - 対象: 次セッション担当者
 - 上位: [`../LTX23_Backend_Specification.md` §13.4 #2](../LTX23_Backend_Specification.md)（Phase 3 の作業 #2＝クリップ連結）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)／[`VERIFICATION_LOG.md` §17](VERIFICATION_LOG.md)（スライス1＝API解凍の実施記録）

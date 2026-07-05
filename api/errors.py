@@ -109,6 +109,31 @@ def lora_not_found(name: str, detail: str | None = None) -> APIError:
     return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
 
 
+def model_not_found(category: str, name: str, detail: str | None = None) -> APIError:
+    """Model management: an unknown model NAME (or unknown category) was
+    requested. Mirrors :func:`lora_not_found` (404) — names come from the
+    category registry (GET /models); arbitrary filesystem paths are never
+    accepted."""
+    return APIError(
+        "MODEL_NOT_FOUND",
+        f"unknown model name '{name}' in category '{category}'",
+        404,
+        detail=detail,
+    )
+
+
+def model_file_missing(category: str, name: str, detail: str | None = None) -> APIError:
+    """Model management: the NAME is registered but its weight file is gone
+    from disk (deleted/moved after registration or scan). 422 — the request is
+    well-formed; the server-side artifact is what is unusable."""
+    return APIError(
+        "MODEL_FILE_MISSING",
+        f"registered model file for '{category}/{name}' is missing on disk",
+        422,
+        detail=detail,
+    )
+
+
 def lora_preprocess_conflict(kinds: list[str]) -> APIError:
     """Phase C: the requested loras imply more than one control preprocess kind
     (e.g. one canny-control + one pose-control adapter) for a single reference

@@ -100,6 +100,20 @@ class ModelConfig(BaseModel):
     # section -> any loras request is rejected (fail loud, no silent skip).
     ic_loras: dict[str, str | IcLoraEntry] = Field(default_factory=dict)
 
+    # Model-management registries (additive, Docs/MODEL_MANAGEMENT_DESIGN.md).
+    # Category-scoped NAME -> path maps mirroring ic_loras: a server-side model
+    # NAME (what GET /models lists and POST /pipeline/load accepts in its
+    # optional ``models`` block — never a filesystem path) to a project-relative
+    # (or absolute) weight file. Absent/empty sections are the norm:
+    # services/model_registry.py always injects a "default" entry per category
+    # from the fixed default-path fields above (so the default combination stays
+    # byte-identical), and directory scanning discovers additional files in the
+    # existing layout without any config edit.
+    transformers: dict[str, str] = Field(default_factory=dict)
+    text_encoders: dict[str, str] = Field(default_factory=dict)
+    video_vaes: dict[str, str] = Field(default_factory=dict)
+    audio_models: dict[str, str] = Field(default_factory=dict)
+
 
 class VramConfig(BaseModel):
     low_vram_mode: bool = True

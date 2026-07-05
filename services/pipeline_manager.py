@@ -30,6 +30,7 @@ from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
 from services.ltx_runner import LTXRunner
+from services.model_registry import CATEGORIES, DEFAULT_NAME
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
 
@@ -81,6 +82,12 @@ class PipelineManager:
         self.runner = LTXRunner(config, self.low_vram)
         self.state = self.STATE_UNLOADED
         self._lock = threading.Lock()
+        # Model management: the category NAME used by the last successful load
+        # ("default" until an explicit selection succeeds). Read by GET /models;
+        # retained while the worker is unloaded — load-state questions belong to
+        # ``pipeline_loaded`` (design ruling §9-6). Never updated on a failed
+        # swap-load (the previous successful selection stays authoritative).
+        self.active_models: dict[str, str] = {c: DEFAULT_NAME for c in CATEGORIES}
 
     # --------------------------------------------------------------- status
 

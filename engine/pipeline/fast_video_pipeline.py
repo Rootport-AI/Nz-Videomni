@@ -40,6 +40,7 @@ class LTXFastVideoPipeline:
         *,
         ic_loras: list[tuple[str, float]] | None = None,
         ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float = 1.0,
     ) -> "LTXFastVideoPipeline":
         return LTXFastVideoPipeline(
             checkpoint_path=checkpoint_path,
@@ -63,6 +64,7 @@ class LTXFastVideoPipeline:
             dit_cpu_load=dit_cpu_load,
             ic_loras=ic_loras,
             ic_reference=ic_reference,
+            ic_attention_strength=ic_attention_strength,
         )
 
     def __init__(
@@ -89,6 +91,7 @@ class LTXFastVideoPipeline:
         *,
         ic_loras: list[tuple[str, float]] | None = None,
         ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float = 1.0,
     ) -> None:
         from ltx_core.quantization import QuantizationPolicy
         from ltx_pipelines.distilled import DistilledPipeline
@@ -107,12 +110,22 @@ class LTXFastVideoPipeline:
         # overrides them per job (keep_resident=0 rebuilds the transformer every
         # job, so the forward-time attach reads the live values). The live values
         # are held in self._ic_loras / self._ic_reference / the resolved factor.
+        # ic_attention_strength: IC-LoRA control-adherence knob (0..1, default 1.0).
+        #   Forwarded to a ConditioningItemAttentionStrengthWrapper around the
+        #   reference conditioning ONLY when < 1.0 (upstream iclora_utils parity);
+        #   at 1.0 no wrapper is added → structurally byte-identical to before.
         self._ic_loras_default: list[tuple[str, float]] = list(ic_loras or [])
         self._ic_reference_default: tuple[str, float] | None = ic_reference
+        self._ic_attention_strength_default: float = float(ic_attention_strength)
         self._ic_loras: list[tuple[str, float]] = []
         self._ic_reference: tuple[str, float] | None = None
+        self._ic_attention_strength: float = 1.0
         self._ic_reference_downscale_factor: int | None = None
-        self._set_ic_job(self._ic_loras_default, self._ic_reference_default)
+        self._set_ic_job(
+            self._ic_loras_default,
+            self._ic_reference_default,
+            self._ic_attention_strength_default,
+        )
 
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
@@ -255,6 +268,7 @@ class LTXFastVideoPipeline:
         self,
         ic_loras: list[tuple[str, float]] | None,
         ic_reference: tuple[str, float] | None,
+        ic_attention_strength: float = 1.0,
     ) -> None:
         """Set the live IC-LoRA state for the upcoming build/generate.
 
@@ -263,10 +277,11 @@ class LTXFastVideoPipeline:
         metadata and re-validates the ``ic_reference requires ic_loras`` contract.
         The forward-time attach reads ``self._ic_loras`` via the provider on the
         next transformer build; the reference conditioning reads
-        ``self._ic_reference`` / the resolved factor.
+        ``self._ic_reference`` / the resolved factor / the attention strength.
         """
         self._ic_loras = list(ic_loras or [])
         self._ic_reference = ic_reference
+        self._ic_attention_strength = float(ic_attention_strength)
         self._ic_reference_downscale_factor = None
         if self._ic_reference is None:
             return
@@ -536,7 +551,10 @@ class LTXFastVideoPipeline:
         if cond_height != full_height // 2:
             return []  # stage 2 (or unexpected res) — reference added at stage 1 only
 
-        from ltx_core.conditioning import VideoConditionByReferenceLatent
+        from ltx_core.conditioning import (
+            ConditioningItemAttentionStrengthWrapper,
+            VideoConditionByReferenceLatent,
+        )
         from ltx_pipelines.utils.media_io import load_video_conditioning
 
         ref_path, ref_strength = self._ic_reference
@@ -565,13 +583,20 @@ class LTXFastVideoPipeline:
             device=device,
         )
         encoded_video = video_encoder(video)
-        return [
-            VideoConditionByReferenceLatent(
-                latent=encoded_video,
-                downscale_factor=scale,
-                strength=ref_strength,
+        # Control-adherence knob (upstream iclora_utils parity): only when the
+        # attention strength is < 1.0 do we wrap the reference conditioning so a
+        # scalar additive self-attention mask reaches SDPA. At 1.0 the bare
+        # VideoConditionByReferenceLatent is returned (byte-identical to before).
+        cond = VideoConditionByReferenceLatent(
+            latent=encoded_video,
+            downscale_factor=scale,
+            strength=ref_strength,
+        )
+        if self._ic_attention_strength < 1.0:
+            cond = ConditioningItemAttentionStrengthWrapper(
+                cond, attention_mask=self._ic_attention_strength
             )
-        ]
+        return [cond]
 
     @staticmethod
     def _make_sigma_subset(num_steps: int) -> list[float]:
@@ -859,6 +884,7 @@ class LTXFastVideoPipeline:
         *,
         ic_loras: list[tuple[str, float]] | None = None,
         ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float | None = None,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -869,7 +895,12 @@ class LTXFastVideoPipeline:
         eff_reference = (
             ic_reference if ic_reference is not None else self._ic_reference_default
         )
-        self._set_ic_job(eff_loras, eff_reference)
+        eff_attention_strength = (
+            ic_attention_strength
+            if ic_attention_strength is not None
+            else self._ic_attention_strength_default
+        )
+        self._set_ic_job(eff_loras, eff_reference, eff_attention_strength)
 
         tiling_config = default_tiling_config(
             spatial_tile_size=self._vae_spatial_tile_size,

@@ -111,6 +111,18 @@ class ApiClient:
         r.raise_for_status()
         return r.json()["video_id"]
 
+    def upload_audio(self, path: str) -> str:
+        # Source-audio upload (POST /upload/audio) for A2V (audio-driven
+        # generation). Audio caps at 50MB (server default), so a 120s timeout
+        # is plenty. Returns the server's ``audio_id`` (passed to
+        # /generate/chain as ``source_audio.audio_id``).
+        with open(path, "rb") as fh:
+            files = {"file": (Path(path).name, fh.read())}
+        r = self.client.post(self._url("/api/v1/upload/audio"), files=files,
+                             headers=self.headers, timeout=120)
+        r.raise_for_status()
+        return r.json()["audio_id"]
+
     def generate(self, payload: dict) -> httpx.Response:
         # Return the raw response so the caller can branch on 409 / >=400 while
         # keeping the client thin.
@@ -130,6 +142,27 @@ class ApiClient:
                             headers=self.headers, timeout=60)
         r.raise_for_status()
         tmp = tempfile.NamedTemporaryFile(prefix=f"{job_id}_", suffix=".mp4", delete=False)
+        tmp.write(r.content)
+        tmp.close()
+        return tmp.name
+
+    # --- V2V join flow ---
+    def join_job(self, job_id: str, payload: dict | None = None) -> httpx.Response:
+        # Server-side V2V join (POST /jobs/{id}/join). Synchronous on the server
+        # (ffmpeg: loudnorm two-pass + re-encode) so give it a generous 120s
+        # timeout. Same thin style as ``generate``: return the raw response so
+        # the caller branches on >=400 and formats the error envelope.
+        return self.client.post(self._url(f"/api/v1/jobs/{job_id}/join"),
+                                json=payload or {}, headers=self.headers, timeout=120)
+
+    def fetch_joined(self, job_id: str) -> str:
+        """Download joined.mp4 (GET /jobs/{id}/joined) to a temp file and return
+        its path. Mirrors :meth:`fetch_video`; long timeout for big outputs."""
+        r = self.client.get(self._url(f"/api/v1/jobs/{job_id}/joined"),
+                            headers=self.headers, timeout=120)
+        r.raise_for_status()
+        tmp = tempfile.NamedTemporaryFile(prefix=f"{job_id}_joined_", suffix=".mp4",
+                                          delete=False)
         tmp.write(r.content)
         tmp.close()
         return tmp.name

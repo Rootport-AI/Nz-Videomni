@@ -40,6 +40,18 @@ def configure_logging(log_dir: Path) -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=handlers,
     )
+    # S0: the Gradio test UI polls GET /jobs/{id} once per second via an httpx
+    # client (gradio_ui/handlers.py::_poll_job_until_done). httpx/httpcore log
+    # every request at INFO ("HTTP Request: GET ... 200 OK"), and because those
+    # loggers propagate to the root logger configured above, that one line per
+    # second floods BOTH the console and server.log — drowning the meaningful
+    # job/progress/VRAM lines (historically ~69% of server.log). Raise their
+    # threshold to WARNING so routine polling is silent while genuine transport
+    # errors still surface. uvicorn's access log is left at its default (it is a
+    # separate logger with its own handler and far lower volume — one line per
+    # request, not the httpx "HTTP Request:" echo).
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def build_app(args: argparse.Namespace) -> FastAPI:

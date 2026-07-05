@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import gc
-import sys
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -49,6 +49,8 @@ from engine.pipeline.common import (
 )
 
 DTYPE = torch.bfloat16
+
+logger = logging.getLogger(__name__)
 
 # progress(stage, index, total) — stage in {"stage1","tile","decode"}.
 ProgressFn = Callable[[str, int, int], None]
@@ -375,12 +377,11 @@ def _encode_source_heads(
         avail = enc.shape[2]
         freeze_ka = min(n_ctx_a, avail)
         if avail < n_ctx_a:
-            print(
-                f"[ltx_worker] chain: source audio underrun — only {avail} encoded "
-                f"audio-latent frames available but the requested context needs "
-                f"n_ctx_a={n_ctx_a}; freezing {freeze_ka} frames only (silent "
-                "under-freeze, no error).",
-                file=sys.stderr, flush=True,
+            logger.warning(
+                "chain: source audio underrun — only %d encoded audio-latent "
+                "frames available but the requested context needs n_ctx_a=%d; "
+                "freezing %d frames only (silent under-freeze, no error).",
+                avail, n_ctx_a, freeze_ka,
             )
         src_head_a = enc[:, :, :freeze_ka, :].detach().clone()
         del audio_encoder, enc
@@ -838,7 +839,7 @@ def run_chain(
             _wavfile.write(handle_path, int(sr), handle_np)
             audio_handle_filename = _os.path.basename(handle_path)
         except Exception as _exc:  # sidecar is best-effort; never fail the job on it
-            print(f"[chain] WARN: audio handle sidecar not written: {_exc}", file=sys.stderr)
+            logger.warning("chain: audio handle sidecar not written: %s", _exc)
 
         new_wf = wf[:, n_trim_a:].contiguous()
         # short linear fade-in (~30ms) on the continuation audio head: click

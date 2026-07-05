@@ -692,7 +692,16 @@ class _RealBackend:
             for raw in self._proc.stdout:
                 line = raw.strip()
                 if not line.startswith(self._PREFIX):
-                    continue  # ignore library/tqdm stdout noise
+                    # Non-protocol stdout (a stray library/tqdm print that escaped
+                    # the worker's STDERR routing). Previously dropped silently;
+                    # now surfaced at DEBUG so it is recoverable when diagnosing a
+                    # wedged worker, without flooding the default INFO console.
+                    # Lazy %-formatting means no cost unless DEBUG is enabled, so
+                    # even a tqdm bar spamming stdout stays cheap and quiet here.
+                    if line:
+                        logger.debug("ignored non-protocol worker stdout: %s", line)
+                    continue
+
                 try:
                     return json.loads(line[len(self._PREFIX):])
                 except Exception:

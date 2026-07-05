@@ -61,6 +61,7 @@ import os
 import sys
 import json
 import gc
+import logging
 import traceback
 from pathlib import Path
 
@@ -77,6 +78,35 @@ os.chdir(ROOT)
 
 # Unique frame prefix for every protocol line the parent parses.
 PREFIX = "@@LTX@@"
+
+
+def _configure_worker_logging() -> None:
+    """Route the engine's ``logging.getLogger(__name__)`` calls to STDERR.
+
+    The engine modules (engine/gguf, engine/gemma, engine/transformer,
+    engine/pipeline/*) log via module loggers that, until now, had no handler
+    anywhere in the worker process -> everything below WARNING was silently
+    dropped, so the GGUF/block-swap/model-load breakdown never reached
+    logs/ltx_worker.log. We add ONE StreamHandler on the root logger pointed at
+    STDERR (which the parent redirects to logs/ltx_worker.log — the peak_vram
+    primary source) so those INFO lines become visible in the same file, framed
+    with the familiar ``[ltx_worker]`` prefix + the emitting module name.
+
+    This never touches STDOUT (the ``@@LTX@@`` protocol channel), and it does
+    NOT duplicate the ``_log()`` print path: ``_log`` writes to STDERR directly
+    (not through logging), so each diagnostic line is emitted exactly once. The
+    handler is tagged + added idempotently so re-entry can't double it.
+    """
+    root = logging.getLogger()
+    if not any(getattr(h, "_ltx_worker_handler", False) for h in root.handlers):
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("[ltx_worker] %(name)s: %(message)s"))
+        handler._ltx_worker_handler = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
+_configure_worker_logging()
 
 
 def _log(msg: str) -> None:

@@ -134,7 +134,11 @@
       "PowerShell(cd S:\\\\OriginalApps\\\\12_Nz-LTX23-backend; Select-String -Path outputs/phase3_multikey_smoke/run_visual.py -Pattern 'prompt' | Select-Object -First 10 | ForEach-Object {\"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\"})",
       "WebFetch(domain:civitai.com)",
       "Bash(ls hf_home/)",
-      "Bash(ls .venv/Scripts/hf.exe)"
+      "Bash(ls .venv/Scripts/hf.exe)",
+      "PowerShell(git -C \"s:\\\\OriginalApps\\\\12_Nz-LTX23-backend\" status --short)",
+      "PowerShell(git -C \"s:\\\\OriginalApps\\\\12_Nz-LTX23-backend\" branch --show-current)",
+      "Bash(S:\\\\OriginalApps\\\\12_Nz-LTX23-backend\\\\.venv\\\\Scripts\\\\python.exe -c \"import gradio; print\\(gradio.__version__\\)\")",
+      "PowerShell(& \"S:\\\\OriginalApps\\\\12_Nz-LTX23-backend\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import gradio; print\\(gradio.__version__\\)\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\PHENOT~1\\AppData\\Local\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-backend\\6021c676-a349-4525-97cb-e6c880d122ed\\scratchpad"

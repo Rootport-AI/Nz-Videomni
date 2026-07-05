@@ -39,6 +39,7 @@ import os
 import random
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -53,6 +54,58 @@ from services import gpu_info, video_io
 from services.low_vram import LowVramSettings, safe_memory_cleanup
 
 logger = logging.getLogger("ltx.runner")
+
+# S2: friendly labels for the coarse chain-progress stages the engine emits
+# (worker.py _progress -> chain_pipeline progress("stage1"|"tile"|"decode")).
+# ``index`` is a COUNT of completed units (segments / tiles), not a denoise step,
+# so the reported rate is honestly "units/s" for that stage, not raw it/s.
+_CHAIN_STAGE_LABELS: dict[str, tuple[str, str]] = {
+    "stage1": ("stage-1 denoise", "segment"),
+    "tile": ("stage-2 tiled upsample", "tile"),
+    "decode": ("VAE decode", "step"),
+}
+# Don't log every coarse event — for a long clip the stage-2 tile count can be
+# large. Emit the first event of a stage, its final event, and at most one line
+# per this interval in between.
+_STAGE_LOG_MIN_INTERVAL_S = 2.0
+
+
+def _log_chain_progress(
+    stage: str | None,
+    idx: int,
+    total: int,
+    state: dict[str, dict],
+) -> None:
+    """Emit a rate-limited INFO line for one chain-progress event.
+
+    ``state`` is caller-owned scratch (one dict per ``_read_chain_events`` call)
+    holding per-stage timing so throughput can be measured across events without
+    a class attribute. Pure logging — never touches the numeric/progress path.
+    """
+    now = time.monotonic()
+    label, unit = _CHAIN_STAGE_LABELS.get(stage or "", (stage or "?", "unit"))
+    done = idx + 1
+    st = state.get(stage or "")
+    if st is None:
+        state[stage or ""] = {"t0": now, "last_t": now, "last_done": done}
+        if total <= 1:
+            logger.info("chain %s started", label)
+        else:
+            logger.info("chain %s started (%d %ss)", label, total, unit)
+        return
+    is_last = done >= total
+    if not is_last and (now - st["last_t"]) < _STAGE_LOG_MIN_INTERVAL_S:
+        return
+    dt = now - st["last_t"]
+    dd = done - st["last_done"]
+    rate = dd / dt if dt > 0 else 0.0
+    elapsed = now - st["t0"]
+    logger.info(
+        "chain %s %d/%d %ss (%.2f %s/s, %.1fs elapsed)",
+        label, done, total, unit, rate, unit, elapsed,
+    )
+    st["last_t"] = now
+    st["last_done"] = done
 
 # (current_step, total_steps, progress 0..1)
 ProgressCallback = Callable[[int | None, int | None, float], None]
@@ -1140,15 +1193,18 @@ class _RealBackend:
 
     def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:
         """Read framed events until a terminal ``done``/``error``; forward
-        ``progress`` events to ``progress_callback`` as a coarse 0..1 fraction."""
+        ``progress`` events to ``progress_callback`` as a coarse 0..1 fraction
+        and emit a rate-limited INFO line per stage (S2 console progress)."""
+        stage_state: dict[str, dict] = {}
         while True:
             event = self._read_event()
             kind = event.get("event")
             if kind == "progress":
+                stage = event.get("stage")
+                idx = int(event.get("index", 0))
+                total = max(1, int(event.get("total", 1)))
+                _log_chain_progress(stage, idx, total, stage_state)
                 if progress_callback:
-                    stage = event.get("stage")
-                    idx = int(event.get("index", 0))
-                    total = max(1, int(event.get("total", 1)))
                     step = (idx + 1) / total
                     if stage == "stage1":
                         frac = 0.05 + 0.45 * step

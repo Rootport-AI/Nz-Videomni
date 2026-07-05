@@ -36,6 +36,15 @@ from services.video_upload_store import VideoUploadStore
 logger = logging.getLogger("ltx.pipeline")
 
 
+def _peak_vram_suffix(peak_vram_mb) -> str:
+    """`` peak_vram=NNNNMB`` for a truthy peak, else ``""`` (mock reports 0/None)."""
+    try:
+        peak = int(peak_vram_mb)
+    except (TypeError, ValueError):
+        return ""
+    return f" peak_vram={peak}MB" if peak > 0 else ""
+
+
 def _is_oom(exc: BaseException) -> bool:
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
@@ -130,12 +139,14 @@ class PipelineManager:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "Job %s start mode=%s %dx%d frames=%d seed=%d",
+            "Job %s start mode=%s %dx%d frames=%d steps=%d fps=%g seed=%d",
             job.job_id,
             job.request.generation_mode,
             job.request.width,
             job.request.height,
             job.request.num_frames,
+            job.request.num_inference_steps,
+            job.request.frame_rate,
             job.request.seed,
         )
 
@@ -192,7 +203,10 @@ class PipelineManager:
             job.progress = 1.0
             job.completed_at = now_iso()
             self.state = self.STATE_READY
-            logger.info("Job %s done in %.1fs -> %s", job.job_id, elapsed, job.status.value)
+            logger.info(
+                "Job %s done in %.1fs%s -> %s",
+                job.job_id, elapsed, _peak_vram_suffix(outcome.peak_vram_mb), job.status.value,
+            )
 
         except Exception as exc:
             job.completed_at = now_iso()
@@ -313,8 +327,9 @@ class PipelineManager:
         n = len(chain.clips)
 
         logger.info(
-            "Chain job %s start clips=%d %dx%d overlap=%d/%.2f seed=%d",
+            "Chain job %s start clips=%d %dx%d steps=%d fps=%g overlap=%d/%.2f seed=%d",
             job.job_id, n, chain.width, chain.height,
+            chain.num_inference_steps, chain.frame_rate,
             chain.overlap_frames, chain.overlap_strength, chain.seed,
         )
 
@@ -426,8 +441,9 @@ class PipelineManager:
             job.completed_at = now_iso()
             self.state = self.STATE_READY
             logger.info(
-                "Chain job %s done in %.1fs -> %s (frames=%d)",
-                job.job_id, elapsed, job.status.value, total_frames,
+                "Chain job %s done in %.1fs%s -> %s (frames=%d)",
+                job.job_id, elapsed, _peak_vram_suffix(outcome.peak_vram_mb),
+                job.status.value, total_frames,
             )
 
         except Exception as exc:

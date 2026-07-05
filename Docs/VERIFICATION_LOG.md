@@ -1742,3 +1742,20 @@ GUI の V2V クリップ連結で「Create joined version」を押すと **HTTP 
 - スコープ: `generate_chain` のみ（Generate タブ・join ハンドラは不変）。新規 i18n 文字列なし・yield 構造不変。
 - テスト: 共有プロンプト空で「API 呼び出しゼロ＋`gr.Warning` ちょうど 1 回＋トースト文字列＝テキスト欄文字列」を検証する 1 本を追加。pytest **347 passed / 1 skipped**（346+1 → +1）。
 - **残 OPEN**: main マージ後にユーザーが空プロンプトで押してトーストが出ることの実機確認。
+
+### 27.10 チェーン進捗のクリップ位置表示（ユーザー要望・2026-07-06 未明）
+
+**要望の本質（ユーザー整理）**: 不便さの真因は「今いくつのクリップまで生成が終わったのか」「本当に全クリップ生成されたのか」が GUI やログから読めないこと。クリップごとの VAE デコードプレビュー（ComfyUI 式）は**大半を捨てるデータをデコードする無駄なので不採用（ユーザー判断）**。文字情報で表示する。
+
+**配線調査（実装前）**: worker のステップ進捗イベントは F2 の tqdm シム由来の `outer_index`/`outer_total`（stage-1 のセグメント＝クリップ位置）を既に運んでいたが、`services/ltx_runner.py::_read_worker_events` がコンソールラベル `[1/2]` と進捗率補間に使うだけで **progress コールバックへ渡す時点で捨てていた**（＝欠落点はサーバー側の1箇所のみ・engine/wheel 改変不要）。
+
+**実装（コミット `8bfd559`＝サーバー側・`338519f`＝GUI 側）**:
+- `api/models.py::JobResponse` に **optional 加算** `clip: int | None`・`clip_count: int | None`（既定 None・凍結 API の加算的変更＝F3 の `stage` と同型。単発生成・キュー中・mock・旧 worker では None のまま）。`services/job_store.py::JobRecord` 経由で配管。
+- `_read_worker_events`: chain の stage-1 系イベントに限り `clip=`/`clip_count=` キーワードを追加（per-step＝処理中クリップの 1 始まり番号・粗い per-segment＝完了したクリップ番号）。**既知のときだけ渡す**ため他イベント・単発経路の呼び出し形は完全不変。stage-2 のタイル位置はクリップと誤認しないようガード。
+- chain の `on_progress` は clip 到着時のみ保持し、stage-2／デコード中も最後の値を維持（「クリップ N/N」＝全クリップが stage-1 通過済み、の意味づけ）。
+- GUI: 進捗テキストを「生成中… 20% (step 3/8) — デノイズ中 (stage 1) — クリップ 1/2」形式（i18n 日英・新キー `msg_clip_progress`/`msg_all_clips_done`）。完了行に「全 N クリップ処理済み」。clip 情報なしのジョブは従来表示と完全同一。
+
+**検証**:
+- テスト 7 本追加（stage-1 のみ clip が届く／stage-2 タイル位置は clip にしない／単発では渡らない／JobRecord→JobResponse 配管／GUI 整形 日英／完了行の有無で従来文字列不変）。pytest **354 passed / 1 skipped**（347+1 → +7）。
+- **実機 e2e PASS（2026-07-06 未明・job `fa6b37d3`）**: 通常 2 クリップチェーン（各 49f・1280x768・seed 42）で 1 秒間隔ポーリング→ `clip` が **None（encode）→1/2（stage-1 前半）→2/2（stage-1 後半）→2/2 維持（stage-2／デコード／completed）** と設計どおり遷移。従来のコンソール行（`chain stage-1 denoise [1/2]` 等）不変・ERROR/Traceback なし・**peak_vram_mb 8440＝チェーン回帰基準値と一致**。
+- **残 OPEN**: main マージ後、ユーザーが GUI で「クリップ n/N」表示を実機確認。あわせてクリップ1/2 に別々の個別プロンプトを入れて生成し、出力後半で内容が切り替わること＝クリップ2の実在を目視確認する手順を案内済み。

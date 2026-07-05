@@ -468,6 +468,54 @@ class UploadAudioResponse(BaseModel):
     size_bytes: int
 
 
+class JoinRequest(BaseModel):
+    """POST /jobs/{job_id}/join body (V2V, ADDITIVE — new endpoint only).
+
+    Server-side join of a completed V2V job's continuation (``output.mp4``, the
+    NEW part only) back onto its uploaded source video, producing ``joined.mp4``
+    next to the job output. GPU-free (ffmpeg only) and independent of the
+    single-GPU-job guard.
+
+    ``audio_smoothing`` selects the audio treatment at the junction:
+
+    * ``True`` (default) — crossfade: a true overlapped equal-power crossfade
+      via the engine's ``<stem>_audio_handle.wav`` sidecar when the job has one,
+      else the no-handle fade-pair (see ``services/video_io.join_v2v`` and
+      Docs/V2V_AUDIO_JOIN_RESEARCH.md).
+    * ``False`` — hard concat (no fades). Kept for parity/testing; the GUI only
+      exposes the smoothed path.
+
+    ``handle_crossfade_ms`` applies to the handle true-crossfade only (150 ms is
+    the measured sweet spot — VERIFICATION_LOG §24.7). All fields are optional;
+    an empty body ``{}`` gives the default smoothed join.
+    """
+
+    audio_smoothing: bool = True
+    handle_crossfade_ms: int = Field(150, ge=0, le=2000)
+
+
+class JoinResponse(BaseModel):
+    """POST /jobs/{job_id}/join result (synchronous 200).
+
+    ``join_mode`` is the treatment actually applied: ``handle_crossfade`` |
+    ``fade_pair`` | ``hard_concat`` | ``video_only`` (either side had no audio).
+    ``source_normalized`` reports whether the uploaded source needed an ffmpeg
+    normalization pass (scale + center-crop + fps resample) to match the
+    continuation's resolution/fps before joining.
+    """
+
+    job_id: str
+    joined_path: str
+    join_mode: str
+    source_normalized: bool
+    source_lufs: float | None = None
+    continuation_lufs_before: float | None = None
+    fade_ms_applied: int = 0
+    handle_crossfade_ms_applied: int = 0
+    handle_context_seconds: float | None = None
+    loudness_matched: bool = False
+
+
 class JobStatus(str, Enum):
     queued = "queued"
     running = "running"

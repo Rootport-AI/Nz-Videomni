@@ -546,6 +546,42 @@ def _loudnorm_measure(exe: str, path: Path) -> dict[str, float]:
         raise FFmpegError(f"ffmpeg loudnorm measure: bad JSON stats: {exc}") from exc
 
 
+def normalize_clip(src: Path, out: Path, width: int, height: int, fps: float) -> Path:
+    """Re-encode ``src`` to exactly ``width`` x ``height`` @ ``fps`` for joining.
+
+    The V2V join (:func:`join_v2v` / :func:`concat_mp4s`) requires both inputs to
+    share resolution and fps, but the user's uploaded source video generally does
+    not match the generated continuation (the engine only fps-aligns the context
+    TAIL it consumes — the full source is untouched). This is the app-side
+    normalization pass (R3 smoke, 2026-07-05): scale-to-cover + centered crop
+    (mirroring the engine's resize+center-crop conditioning semantics) + fps
+    resample. ``setsar=1`` is REQUIRED — scaling can leave a fractional sample
+    aspect ratio and ffmpeg's ``concat`` filter then rejects the pair even though
+    the pixel dimensions match (verified in the R3 smoke). Audio is carried
+    through untouched (``-c:a aac`` re-mux). Returns ``out``.
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    vf = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height}:(in_w-{width})/2:(in_h-{height})/2,"
+        f"setsar=1,fps={fps}"
+    )
+    cmd = [
+        exe, "-y", "-i", str(src),
+        "-vf", vf, "-map", "0:v", "-map", "0:a?",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(fps),
+        "-c:a", "aac",
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg normalize_clip failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+        )
+    return out
+
+
 def join_v2v(
     source: Path,
     continuation: Path,

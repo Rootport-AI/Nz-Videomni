@@ -51,7 +51,8 @@ def format_api_error(body: object, lang: str = _DEFAULT_LANG) -> str:
 
     ``body`` is the parsed JSON dict (``{"error": {"code", "message", "detail"}}``)
     or, when the response was not JSON, the raw text. Maps ``error.code`` to a
-    one-line hint (all 15 real codes). For ``VALIDATION_ERROR`` the ``detail`` is
+    one-line hint (every code with an ``apierr_*`` label, incl. the V2V/A2V and
+    join codes). For ``VALIDATION_ERROR`` the ``detail`` is
     a list of ``{loc, msg, type}`` rendered as ``loc: msg`` lines; for other
     codes ``detail`` is a string appended when present. An unknown code or an
     unparseable body falls back to the raw text.
@@ -83,7 +84,7 @@ def format_api_error(body: object, lang: str = _DEFAULT_LANG) -> str:
 # Jobs tab (S6). A failed job's ``error`` is NOT the REST error envelope: it is
 # the pre-formatted string the pipeline_manager writes as
 # ``"CODE: message (detail)"`` (pipeline_manager.py:196,321). We reuse the SAME
-# 15 ``apierr_*`` hints as the envelope path: parse the ``CODE`` prefix and, when
+# ``apierr_*`` hints as the envelope path: parse the ``CODE`` prefix and, when
 # it is a known code, prepend the localized hint (keeping the raw server text for
 # debugging). An unknown prefix is returned verbatim.
 # --------------------------------------------------------------------------- #

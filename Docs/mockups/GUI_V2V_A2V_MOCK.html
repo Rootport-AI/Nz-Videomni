@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip Chain タブ拡張案 — V2V / A2V 露出モック</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a22; --panel2:#1e2230; --edge:#2b3040;
+    --edge2:#3a4152; --ink:#e6e8ee; --sub:#9aa2b4; --muted:#6b7386;
+    --accent:#f59e0b; --accent2:#fbbf24; --new:#f59e0b; --newbg:#2a220f;
+    --v2v:#38bdf8; --v2vbg:#0e2230; --a2v:#a78bfa; --a2vbg:#1c1630;
+    --ok:#34d399; --err:#f87171; --errbg:#2a1414;
+    --lock:#5b6379;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    font-size:14px;line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
+  h1{font-size:19px;margin:0 0 4px;font-weight:650}
+  .lead{color:var(--sub);font-size:13px;margin:0 0 18px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 18px;font-size:12px;color:var(--sub)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .dot.new{background:var(--new)} .dot.v2v{background:var(--v2v)} .dot.a2v{background:var(--a2v)} .dot.cur{background:var(--edge)}
+
+  /* app chrome */
+  .topbar{background:var(--panel);border:1px solid var(--edge);border-radius:10px;
+    padding:10px 14px;display:flex;align-items:center;gap:12px;margin-bottom:12px;font-size:12px;color:var(--sub)}
+  .topbar b{color:var(--ink);font-weight:600}
+  .pill{background:var(--panel2);border:1px solid var(--edge);border-radius:20px;padding:3px 10px;color:var(--sub)}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--edge);margin-bottom:16px}
+  .tab{padding:9px 16px;color:var(--muted);border-bottom:2px solid transparent;font-size:13px;cursor:default}
+  .tab.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+  .cols{display:flex;gap:16px;align-items:flex-start}
+  .colL{flex:3;min-width:0} .colR{flex:2;min-width:0}
+  @media(max-width:820px){.cols{flex-direction:column}.colL,.colR{width:100%}}
+
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:14px;margin-bottom:14px}
+  .card.cur{opacity:.62}
+  .card.new{border-color:var(--new);background:var(--newbg);box-shadow:0 0 0 1px rgba(245,158,11,.15)}
+  .card.v2v{border-color:var(--v2v);background:var(--v2vbg)}
+  .card.a2v{border-color:var(--a2v);background:var(--a2vbg)}
+  .card h3{margin:0 0 3px;font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:20px;text-transform:uppercase}
+  .tag.new{background:var(--new);color:#1a1204} .tag.v2v{background:var(--v2v);color:#04202e}
+  .tag.a2v{background:var(--a2v);color:#150a30} .tag.cur{background:var(--edge);color:var(--sub)}
+  .hint{color:var(--sub);font-size:12px;margin:6px 0 0}
+
+  label.f{display:block;font-size:11px;color:var(--sub);margin:10px 0 4px}
+  label.f:first-child{margin-top:0}
+  .inp,.sel,.ta{width:100%;background:var(--panel2);border:1px solid var(--edge);border-radius:7px;
+    color:var(--ink);padding:8px 10px;font-size:13px;font-family:inherit}
+  .ta{resize:vertical;min-height:52px}
+  .row{display:flex;gap:10px} .row>*{flex:1}
+  .locked{opacity:.5}
+  .lockrow{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:6px}
+
+  .range{width:100%;accent-color:var(--accent);margin:2px 0}
+  .rangehead{display:flex;justify-content:space-between;font-size:11px;color:var(--sub)}
+  .rangeval{color:var(--accent2);font-weight:600}
+
+  .radio{display:flex;flex-direction:column;gap:8px}
+  .radio .opt{display:flex;gap:9px;align-items:flex-start;background:var(--panel2);border:1px solid var(--edge);
+    border-radius:8px;padding:9px 11px;cursor:pointer}
+  .radio .opt.sel{border-color:var(--accent);background:#241d0d}
+  .radio .opt input{margin-top:2px;accent-color:var(--accent)}
+  .radio .opt .t{font-size:13px;font-weight:600}
+  .radio .opt .d{font-size:11px;color:var(--sub);margin-top:1px}
+
+  .upload{border:1.5px dashed var(--edge2, #3a4152);border-radius:9px;padding:16px;text-align:center;
+    background:rgba(255,255,255,.02);color:var(--sub);font-size:12px}
+  .upload .big{color:var(--ink);font-size:13px;font-weight:600;margin-bottom:3px}
+  .fileset{font-size:11px;color:var(--muted);margin-top:7px}
+
+  .clip{background:var(--panel2);border:1px solid var(--edge);border-radius:8px;padding:10px;margin-bottom:8px}
+  .clip.dim{opacity:.4}
+  .clip .ch{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600}
+  .clip .ch input{accent-color:var(--accent)}
+  .clipbody{margin-top:8px}
+
+  .guide{background:#141019;border:1px solid var(--a2v);border-radius:8px;padding:11px 12px;margin-top:10px;font-size:12px}
+  .guide .lbl{font-size:10px;font-weight:700;color:var(--a2v);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
+  .guide p{margin:0 0 8px} .guide p:last-child{margin-bottom:0}
+  .guide .en{color:var(--sub);font-style:italic}
+  .guide .ex{background:#0d0b12;border-radius:6px;padding:8px 9px;font-family:"SFMono-Regular",Consolas,monospace;
+    font-size:11px;color:#cbd2e0;margin-top:4px;white-space:pre-wrap;word-break:break-word}
+
+  .btn{width:100%;background:var(--accent);color:#1a1204;border:none;border-radius:8px;padding:11px;
+    font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px}
+  .btn.ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--edge)}
+  .out{background:#0b0d13;border:1px solid var(--edge);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:10px}
+  .out .k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .videobox{background:#0b0d13;border:1px solid var(--edge);border-radius:8px;height:150px;
+    display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;margin-bottom:10px}
+  .err{background:var(--errbg);border:1px solid var(--err);border-radius:8px;padding:10px 12px;font-size:12px;color:#fca5a5}
+  .err .c{color:var(--err);font-weight:700;font-family:monospace}
+  .err .loc{color:#fda4a4;font-family:monospace;font-size:11px}
+
+  .note{background:#12151d;border-left:3px solid var(--accent);border-radius:0 7px 7px 0;padding:9px 12px;
+    font-size:12px;color:var(--sub);margin:14px 0}
+  .note b{color:var(--ink)}
+  .foot{margin-top:26px;padding-top:16px;border-top:1px solid var(--edge);font-size:11px;color:var(--muted)}
+  .foot h4{color:var(--sub);font-size:12px;margin:0 0 6px}
+  .foot ul{margin:0 0 12px;padding-left:18px} .foot li{margin:3px 0}
+  code{background:#0d0f15;border:1px solid var(--edge);border-radius:4px;padding:1px 5px;font-size:11px;color:#cbd2e0}
+  .q{color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Clip Chain タブ — V2V / A2V 露出モック（実装前の仕様合意用）</h1>
+  <p class="lead">現行の Clip Chain タブに、動画→動画継続（V2V）と音声駆動生成（A2V）を追加する案。既存の部品は薄く（灰色）、追加部品は色付きで示す。API は既に実装済み（<code>source_video</code> / <code>source_audio</code>）で、本モックは GUI 露出の形だけを問う。</p>
+
+  <div class="legend">
+    <span><i class="dot cur"></i>現行タブ（変更なし）</span>
+    <span><i class="dot new"></i>新規：モード選択</span>
+    <span><i class="dot v2v"></i>新規：V2V（動画継続）</span>
+    <span><i class="dot a2v"></i>新規：A2V（音声駆動）</span>
+  </div>
+
+  <!-- app chrome -->
+  <div class="topbar">
+    <b>LTX-AviUtl2-Bridge</b>
+    <span class="pill">pipeline: loaded (distilled)</span>
+    <span class="pill">GPU 空き 5120 / 16376 MB</span>
+    <span class="pill">low-vram: ON</span>
+  </div>
+  <div class="tabs">
+    <div class="tab">Generate</div>
+    <div class="tab active">Clip Chain</div>
+    <div class="tab">Jobs</div>
+    <div class="tab">Settings</div>
+  </div>
+
+  <div class="cols">
+    <!-- ===================== LEFT ===================== -->
+    <div class="colL">
+
+      <!-- NEW: mode selector -->
+      <div class="card new">
+        <h3><span class="tag new">新規</span>生成モード</h3>
+        <p class="hint">V2V と A2V は<b style="color:var(--new)">同時に使えません</b>（サーバーが 422 で拒否）。1つのラジオで排他を表現し、選んだモードのパネルだけを開く。「なし」は現行どおりのクリップ連結。</p>
+        <div class="radio" style="margin-top:10px">
+          <label class="opt" onclick="setMode('none')" id="opt-none"><input type="radio" name="mode"><span><span class="t">なし（通常のクリップ連結）</span><span class="d">2〜8 クリップを 1 本の連続タイムラインへ。現行の動作。</span></span></label>
+          <label class="opt sel" onclick="setMode('v2v')" id="opt-v2v"><input type="radio" name="mode" checked><span><span class="t">V2V 継続 — アップロード動画の続きを生成</span><span class="d">元動画の末尾を凍結ヘッドにして続きを作る。クリップは 1 個から可。</span></span></label>
+          <label class="opt" onclick="setMode('a2v')" id="opt-a2v"><input type="radio" name="mode"><span><span class="t">A2V 音声駆動 — アップロード音声に口を合わせる</span><span class="d">音声に合わせてリップシンク動画を生成。クリップはちょうど 1 個。</span></span></label>
+        </div>
+      </div>
+
+      <!-- NEW: V2V panel -->
+      <div class="card v2v" id="panel-v2v">
+        <h3><span class="tag v2v">V2V</span>元動画（続きを生成する素材）</h3>
+        <div class="upload">
+          <div class="big">元動画をドロップ / 選択</div>
+          POST /upload/video → <code>video_id</code>
+          <div class="fileset">許可：.mp4 / .mov / .webm など・上限 200MB（<code>/config</code> の upload 設定に従う）</div>
+        </div>
+        <label class="f">context_frames — 元動画の末尾から参照する尺（凍結ヘッド）</label>
+        <div class="rangehead"><span>25</span><span class="rangeval" id="cfval">73 フレーム（≈3.0秒 @24fps）</span><span>145</span></div>
+        <input class="range" type="range" min="25" max="145" step="8" value="73" oninput="cfUpdate(this.value)">
+        <p class="hint">8n+1 のみ（25, 33, … 145）。既定 73。<b>この尺は clip 1 の num_frames より短いこと</b>（続きとして生成する余地を残すため）。元動画の実フレーム数がこれ未満だと 422（<code>SOURCE_VIDEO_TOO_SHORT</code>）。</p>
+        <div class="note" style="margin:10px 0 0"><b>V2V 時はクリップ 1 個から可。</b>凍結された元動画の末尾が「直前のセグメント」の役割を果たすため。clip 1 の開始画像（下の Start image）は使えません（先頭は元動画が占有）。</div>
+
+        <!-- NEW: audio smoothing / join -->
+        <div class="card new" style="margin:12px 0 0;background:#241c0c">
+          <h3><span class="tag new">V2V のみ</span>元動画と結合した完成版も作る</h3>
+          <label class="opt sel" style="display:flex;gap:9px;align-items:flex-start;border:1px solid var(--accent);border-radius:8px;padding:9px 11px;background:#2a220f">
+            <input type="checkbox" checked style="accent-color:var(--accent);margin-top:2px">
+            <span><span class="t" style="font-size:13px;font-weight:600">音声の継ぎ目をクロスフェードで滑らかにする</span>
+            <span class="d" style="font-size:11px;color:var(--sub);margin-top:2px">新しく生成した部分だけの動画に加えて、元動画とつないだ完成版も書き出します。つなぎ目の音の段差はクロスフェードで滑らかにします。オフにすると、つなぎ目で音が途切れて聞こえることがあります。</span></span>
+          </label>
+          <label class="f">クロスフェード長</label>
+          <select class="sel"><option>150 ms（既定・凹み最小）</option><option>300 ms</option><option>フェードペア（ハンドル無し時）</option></select>
+          <p class="hint">結合はサーバー側で行う（新エンドポイント <code>POST /jobs/{job_id}/join</code>・提案は JOIN_API_PROPOSAL.md）。生成完了後に「結合版を作成」ボタンが右パネルに現れ、<code>joined.mp4</code> を取得できる。</p>
+        </div>
+      </div>
+
+      <!-- NEW: A2V panel -->
+      <div class="card a2v" id="panel-a2v" style="display:none">
+        <h3><span class="tag a2v">A2V</span>元音声（口を合わせる素材）</h3>
+        <div class="upload">
+          <div class="big">音声ファイルをドロップ / 選択</div>
+          POST /upload/audio → <code>audio_id</code>
+          <div class="fileset">許可：.wav / .mp3 / .m4a / .aac / .flac / .ogg・上限 50MB</div>
+        </div>
+        <div class="note" style="margin:10px 0 0"><b>A2V はクリップちょうど 1 個。</b>1 本の凍結音声がそのクリップ全体を駆動します。音声が動画尺より短いと 422（<code>SOURCE_AUDIO_TOO_SHORT</code>）。出力にはアップロードした音声がそのまま入ります。</div>
+
+        <div class="guide">
+          <div class="lbl">A2V を使いこなすには</div>
+          <p>この機能は、アップロードした音声に口の動きを合わせて動画を生成します。もっとも効果を発揮するのは、顔のクローズアップ・単一話者・動きが控えめな構図です。この条件なら、口の動きが音声とほぼぴったり一致します。反対に、大勢が行き交う賑やかなシーンや、人物が広い画角の中を動き回る構図では、口の一致は弱くなりがちです。うまくいかないときは、まず構図をシンプルに寄せてみてください。</p>
+          <p class="en">This feature generates video with mouth movements matched to the audio you upload. It works best with a close-up of a single speaker in a composition with limited movement — in that setting the lip movements line up almost exactly with the audio. In busier scenes, or when the subject moves around within a wide shot, the match tends to weaken. If the result isn't convincing, try simplifying the composition first.</p>
+          <div class="lbl" style="margin-top:8px">プロンプト例（クローズアップ・単一話者）</div>
+          <div class="ex">Cinematic trailer shot, extreme close-up of a weathered detective speaking directly to camera in a dim office, warm lamplight raking across his face, shallow depth of field, subtle head movement, lips articulating each word clearly, tense and intimate mood, film grain, 35mm.</div>
+          <p style="margin-top:6px;color:var(--sub)">薄暗い部屋で、カメラに向かって語りかける刑事の顔のクローズアップ。単一話者・動き控えめ・浅い被写界深度という、リップシンクが最も安定する構図を狙っています。プロンプトは英語で、「一語一語はっきり口を動かす」といった記述を添えると効きやすくなります。音声は明瞭な発話を、尺は 5〜6 秒よりやや長めが安定します。</p>
+        </div>
+      </div>
+
+      <!-- CURRENT: shared params (dimmed = unchanged) -->
+      <div class="card cur">
+        <h3><span class="tag cur">現行</span>共通パラメータ（変更なし）</h3>
+        <label class="f">共通プロンプト</label>
+        <textarea class="ta" placeholder="全クリップ共通の基調プロンプト">A weathered detective speaks directly to camera in a dim office...</textarea>
+        <label class="f">ネガティブプロンプト</label>
+        <input class="inp" value="blurry, low quality, distorted">
+        <label class="f">品質モード</label>
+        <select class="sel"><option>高速（distilled）</option><option>高品質（two_stage_hq）</option></select>
+        <div class="row">
+          <div><label class="f">幅</label><input class="inp" value="1280"></div>
+          <div><label class="f">高さ</label><input class="inp" value="768"></div>
+        </div>
+        <div class="row locked">
+          <div><label class="f">ステップ数（固定）</label><input class="inp" value="8" disabled></div>
+          <div><label class="f">CFG（固定）</label><input class="inp" value="1.0" disabled></div>
+        </div>
+        <div class="lockrow">🔒 蒸留パイプラインのためステップ数・CFG は固定・ネガティブは未配線</div>
+        <label class="f">シード</label><input class="inp" value="-1">
+        <div class="row">
+          <div><label class="f">overlap_frames</label><input class="inp" value="3"></div>
+          <div><label class="f">overlap_strength</label><input class="inp" value="0.5"></div>
+        </div>
+      </div>
+
+      <!-- CURRENT: clip slots -->
+      <div class="card cur">
+        <h3><span class="tag cur">現行</span>クリップ（V2V/A2V の下限緩和を反映）</h3>
+        <div class="clip">
+          <div class="ch"><input type="checkbox" checked> クリップ 1</div>
+          <div class="clipbody">
+            <input class="inp" placeholder="クリップ1のプロンプト（省略可）">
+            <div class="row" style="margin-top:8px">
+              <div><label class="f">フレーム数</label><input class="inp" value="121"></div>
+              <div class="locked" id="c1img"><label class="f">開始画像（V2V時は不可）</label><input class="inp" value="—" disabled></div>
+            </div>
+          </div>
+        </div>
+        <div class="clip dim" id="clip2">
+          <div class="ch"><input type="checkbox"> クリップ 2 <span style="color:var(--muted);font-weight:400" id="clip2note">（V2V は 1 個から可 / A2V は 1 個のみ）</span></div>
+        </div>
+        <p class="hint">A2V＝ちょうど 1 クリップ（クリップ 2 以降は無効）。V2V＝1〜8 クリップ（多クリップ継続も可）。モード「なし」＝従来どおり 2〜8 クリップ必須。</p>
+      </div>
+
+    </div>
+
+    <!-- ===================== RIGHT ===================== -->
+    <div class="colR">
+      <div class="card cur" style="opacity:1">
+        <h3>実行 & 結果</h3>
+        <button class="btn">チェーンを生成</button>
+        <div class="out"><div class="k">進捗</div>生成中… 62%（step 5 / 8）</div>
+        <div class="out"><div class="k">ジョブ ID</div>0bab3830-…-a2v</div>
+        <div class="videobox">▶ 生成結果（新規部分のみ）</div>
+
+        <!-- V2V-only join output -->
+        <div id="joinout">
+          <button class="btn ghost">🔗 元動画と結合した完成版を作成</button>
+          <div class="videobox">▶ 結合版 joined.mp4</div>
+          <p class="hint">結合は生成完了後にサーバー側 <code>POST /jobs/{job_id}/join</code> を呼ぶ。GPU 不要・数秒。</p>
+        </div>
+
+        <!-- Error display (format_api_error style) -->
+        <div class="card new" style="margin:14px 0 0;background:transparent;border-color:var(--err)">
+          <h3><span class="tag cur">現行方式</span>エラー表示（format_api_error）</h3>
+          <p class="hint">エラーは進捗テキスト欄に、既存の <code>format_api_error</code> と同じ形式（コード別の日本語ヒント＋詳細行）で出す。例：</p>
+          <div class="err" style="margin-top:8px">
+            <div><span class="c">SOURCE_AUDIO_TOO_SHORT</span> — 音声が動画の長さに足りません</div>
+            <div class="loc" style="margin-top:5px">source audio is shorter than the requested chain timeline</div>
+          </div>
+          <div class="err" style="margin-top:8px">
+            <div><span class="c">VALIDATION_ERROR</span> — 入力値を確認してください</div>
+            <div class="loc" style="margin-top:5px">body.source_audio: source_audio requires exactly 1 clip in v1</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- footnotes -->
+  <div class="foot">
+    <h4>設計上の選択点（親の判断を仰ぐ点）</h4>
+    <ul>
+      <li><b>排他 UI ＝ 3択ラジオ「なし / V2V継続 / A2V音声駆動」</b>。チェックボックス2個より誤操作が起きにくく、選択でパネルを開閉できる。API の 422 排他（<code>api/models.py:331</code>）と 1:1 対応。</li>
+      <li><b>音声スムージング ＝ V2V パネル内のチェックボックス</b>（既定 ON）＋クロスフェード長の選択。結合はサーバー側の新エンドポイントで行い、右パネルに「結合版を作成」ボタンと <code>joined.mp4</code> プレビューを出す。<span class="q">要判断：チェックはあくまで「結合版も作るか」の意思表示で、実際の結合は生成完了後に押すボタンで走る二段構え（このモックの形）でよいか。あるいは生成と同時に自動結合するか。</span></li>
+      <li><b>A2V の開始画像併用</b>：API は A2V×conditioning_images を許可（<code>A2V_DESIGN §2.1</code>）。本モックでは簡潔さのため A2V パネルに開始画像を出していない。<span class="q">要判断：A2V に開始画像スロットを露出するか（1クリップなので clip1 の開始画像がそのまま使える）。</span></li>
+      <li><b>context_frames スライダ</b>：8n+1・[25,145]・既定 73。上限 145 は <code>/config</code> の <code>limits.v2v_context_frames_max</code> から取得して動的に反映する想定。</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  function setMode(m){
+    document.getElementById('panel-v2v').style.display = (m==='v2v')?'block':'none';
+    document.getElementById('panel-a2v').style.display = (m==='a2v')?'block':'none';
+    document.getElementById('joinout').style.display  = (m==='v2v')?'block':'none';
+    for(const id of ['none','v2v','a2v']){
+      document.getElementById('opt-'+id).classList.toggle('sel', id===m);
+      document.querySelector('#opt-'+id+' input').checked = (id===m);
+    }
+    // clip-2 slot + clip-1 start image availability per mode
+    const clip2 = document.getElementById('clip2');
+    const clip2note = document.getElementById('clip2note');
+    const c1img = document.getElementById('c1img');
+    if(m==='a2v'){ clip2.classList.add('dim'); clip2note.textContent='（A2V は 1 クリップのみ）'; c1img.classList.remove('locked'); c1img.querySelector('input').value='任意'; c1img.querySelector('input').disabled=false; }
+    else if(m==='v2v'){ clip2.classList.remove('dim'); clip2note.textContent='（V2V は 1 個から可）'; c1img.classList.add('locked'); c1img.querySelector('input').value='—'; c1img.querySelector('input').disabled=true; }
+    else { clip2.classList.remove('dim'); clip2note.textContent='（通常：2〜8 クリップ必須）'; c1img.classList.remove('locked'); c1img.querySelector('input').value='任意'; c1img.querySelector('input').disabled=false; }
+  }
+  function cfUpdate(v){
+    const sec = ((v-1)/24 + 1/24).toFixed(1); // approx pixel-frames -> seconds @24fps
+    document.getElementById('cfval').textContent = v + ' フレーム（≈' + (v/24).toFixed(1) + '秒 @24fps）';
+  }
+</script>
+</body>
+</html>

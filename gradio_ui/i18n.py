@@ -151,6 +151,84 @@ LABELS: dict[str, dict[str, str]] = {
                                    "Reduce clip count or clip lengths."),
         "msg_chain_geometry": "The chain geometry is invalid: {err}",
         "msg_chain_started": "Chain job started ({n} clips): {job_id}",
+        # --- clip chain: generation mode (none / V2V / A2V) ---
+        "v2v_mode_label": "Generation mode",
+        "v2v_mode_none": "None (normal clip chain)",
+        "v2v_mode_v2v": "V2V continuation — generate a continuation of an uploaded video",
+        "a2v_mode_a2v": "A2V audio-driven — match the video (lip movement) to uploaded audio",
+        "v2v_cap_mode": ("V2V and A2V cannot be combined — pick one mode. "
+                         "\"None\" is the ordinary 2-8 clip chain."),
+        # --- clip chain: V2V panel ---
+        "v2v_lbl_video": "Source video (mp4/mov/webm/mkv, max 200 MB)",
+        "v2v_lbl_context": "Context frames (source tail to continue from, 8n+1)",
+        "v2v_cap_panel": ("With V2V a single clip is enough (the frozen source tail acts as the "
+                          "previous segment). The source video must have at least this many frames, "
+                          "and clip 1 must be longer than the context so a new part remains. "
+                          "Clip 1's start image cannot be used (the source occupies the head). "
+                          "The delivered video is the NEW part only."),
+        "v2v_chk_join": "Also create a version joined to the source video (crossfade the audio seam)",
+        "v2v_cap_join": ("In addition to the video of the newly generated portion alone, this also "
+                         "exports a combined version joined to your original clip, with the audio "
+                         "seam smoothed by a crossfade. Turn it off and the audio may sound like it "
+                         "cuts out at the join."),
+        "v2v_btn_join": "Create joined version",
+        "v2v_lbl_joined": "Joined result (source + continuation)",
+        # --- clip chain: V2V flow messages ---
+        "v2v_msg_video_required": "Please select a source video for V2V continuation.",
+        "v2v_msg_bad_extension": "Source video type not allowed. Allowed: {exts}",
+        "v2v_msg_too_large": "Source video exceeds the {limit} MB limit.",
+        "v2v_msg_bad_context": "Context frames must be 8n+1 between {mincf} and {maxcf}.",
+        "v2v_msg_context_ge_clip": ("Context frames ({cf}) must be smaller than clip 1's frames "
+                                    "({clip}) so a new part remains to generate."),
+        "v2v_msg_image_conflict": ("V2V cannot use a start image on clip 1 (the source tail "
+                                   "occupies the head). Remove the image and retry."),
+        "v2v_msg_clip_count": "With V2V enable 1 to 8 clips.",
+        "v2v_msg_uploading": "Uploading source video…",
+        "v2v_msg_join_disabled": ("Joined-version creation is turned off. Enable the checkbox "
+                                  "to create one."),
+        "v2v_msg_no_job": "No completed chain job yet. Generate a V2V chain first.",
+        "v2v_msg_joining": "Creating the joined version (server-side)…",
+        "v2v_msg_join_done": "Joined version created ({mode}): {job_id}",
+        "v2v_msg_join_failed": "Failed to create the joined version: {err}",
+        # --- clip chain: A2V panel ---
+        "a2v_lbl_audio": "Source audio (wav/mp3/m4a/aac/flac/ogg, max 50 MB)",
+        "a2v_guide": ("**Getting good results with A2V**\n\n"
+                      "This feature generates video with mouth movements matched to the audio you "
+                      "upload. It works best with a close-up of a single speaker in a composition "
+                      "with limited movement — in that setting the lip movements line up almost "
+                      "exactly with the audio. In busier scenes, or when the subject moves around "
+                      "within a wide shot, the match tends to weaken. If the result isn't "
+                      "convincing, try simplifying the composition first. Setting a start image on "
+                      "clip 1 is an effective way to pin the close-up composition.\n\n"
+                      "Prompt example (close-up, single speaker):\n\n"
+                      "`Cinematic trailer shot, extreme close-up of a weathered detective speaking "
+                      "directly to camera in a dim office, warm lamplight raking across his face, "
+                      "shallow depth of field, subtle head movement, lips articulating each word "
+                      "clearly, tense and intimate mood, film grain, 35mm.`\n\n"
+                      "Clear speech works best, and clips somewhat longer than 5-6 seconds tend "
+                      "to be more stable."),
+        "a2v_cap_panel": ("A2V uses exactly ONE clip (the audio drives that whole clip). The audio "
+                          "must be at least as long as the video — shorter audio is rejected. Your "
+                          "uploaded audio is kept as-is in the output."),
+        # --- clip chain: A2V flow messages ---
+        "a2v_msg_audio_required": "Please select a source audio file for A2V.",
+        "a2v_msg_bad_extension": "Audio type not allowed. Allowed: {exts}",
+        "a2v_msg_too_large": "Audio exceeds the {limit} MB limit.",
+        "a2v_msg_clip_count": "A2V uses exactly 1 clip — enable clip 1 only.",
+        "a2v_msg_uploading": "Uploading audio…",
+        # --- V2V/A2V + join API error-envelope hints ---
+        "apierr_SOURCE_VIDEO_NOT_FOUND": ("The source video was not found on the server. "
+                                          "Re-upload the source video."),
+        "apierr_SOURCE_VIDEO_TOO_SHORT": ("The source video has fewer frames than the requested "
+                                          "context. Reduce the context frames or use a longer video."),
+        "apierr_SOURCE_AUDIO_NOT_FOUND": ("The source audio was not found on the server. "
+                                          "Re-upload the audio file."),
+        "apierr_SOURCE_AUDIO_TOO_SHORT": ("The audio is shorter than the video timeline. Use longer "
+                                          "audio or fewer frames."),
+        "apierr_JOB_NOT_JOINABLE": ("This job is not a V2V continuation, so there is nothing to "
+                                    "join it to."),
+        "apierr_JOIN_FAILED": "Joining failed on the server. Check the server logs.",
+        "apierr_JOINED_NOT_READY": "The joined version has not been created yet. Create it first.",
         # --- settings: interface section ---
         "h_ui": "Interface",
         "lbl_lang": "Language",
@@ -359,6 +437,71 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_chain_total_frames": "連結タイムライン ({total} フレーム) が上限 {cap} フレームを超えています。クリップ数か長さを減らしてください。",
         "msg_chain_geometry": "連結ジオメトリが不正です: {err}",
         "msg_chain_started": "連結ジョブ開始 ({n} クリップ): {job_id}",
+        # --- clip chain: generation mode (none / V2V / A2V) ---
+        "v2v_mode_label": "生成モード",
+        "v2v_mode_none": "なし（通常のクリップ連結）",
+        "v2v_mode_v2v": "V2V継続 — アップロード動画の続きを生成",
+        "a2v_mode_a2v": "A2V音声駆動 — アップロード音声に口の動きを合わせる",
+        "v2v_cap_mode": "V2VとA2Vは同時に使えません。どちらか一方を選んでください。「なし」は従来どおりの2〜8クリップ連結です。",
+        # --- clip chain: V2V panel ---
+        "v2v_lbl_video": "元動画 (mp4/mov/webm/mkv・最大200MB)",
+        "v2v_lbl_context": "参照フレーム数 (元動画の末尾から続きの手がかりにする長さ・8n+1)",
+        "v2v_cap_panel": ("V2Vではクリップ1個から生成できます（凍結された元動画の末尾が直前のセグメントの役割を果たします）。"
+                          "元動画にはこのフレーム数以上の長さが必要で、クリップ1のフレーム数は参照フレーム数より大きくしてください"
+                          "（続きとして生成する余地を残すため）。クリップ1の開始画像は使えません（先頭は元動画が占有します）。"
+                          "出力される動画は新しく生成した部分のみです。"),
+        "v2v_chk_join": "元動画と結合した完成版も作る（音声の継ぎ目をクロスフェード）",
+        "v2v_cap_join": ("新しく生成した部分だけの動画に加えて、元動画とつないだ完成版も書き出します。"
+                         "つなぎ目の音の段差はクロスフェードで滑らかにします。"
+                         "オフにすると、つなぎ目で音が途切れて聞こえることがあります。"),
+        "v2v_btn_join": "結合版を作成",
+        "v2v_lbl_joined": "結合版 (元動画+続き)",
+        # --- clip chain: V2V flow messages ---
+        "v2v_msg_video_required": "V2V継続に使う元動画を選択してください。",
+        "v2v_msg_bad_extension": "元動画の形式が許可されていません。許可形式: {exts}",
+        "v2v_msg_too_large": "元動画が上限 {limit} MB を超えています。",
+        "v2v_msg_bad_context": "参照フレーム数は8n+1かつ{mincf}〜{maxcf}にしてください。",
+        "v2v_msg_context_ge_clip": "参照フレーム数 ({cf}) はクリップ1のフレーム数 ({clip}) より小さくしてください（続きを生成する余地を残すため）。",
+        "v2v_msg_image_conflict": "V2Vではクリップ1の開始画像は使えません（先頭は元動画が占有します）。画像を外して再試行してください。",
+        "v2v_msg_clip_count": "V2Vでは有効にするクリップは1〜8個にしてください。",
+        "v2v_msg_uploading": "元動画をアップロード中…",
+        "v2v_msg_join_disabled": "結合版の作成がオフになっています。チェックを入れると作成できます。",
+        "v2v_msg_no_job": "完了した連結ジョブがまだありません。先にV2V連結を生成してください。",
+        "v2v_msg_joining": "結合版を作成中（サーバー側処理）…",
+        "v2v_msg_join_done": "結合版を作成しました ({mode}): {job_id}",
+        "v2v_msg_join_failed": "結合版の作成に失敗しました: {err}",
+        # --- clip chain: A2V panel ---
+        "a2v_lbl_audio": "元音声 (wav/mp3/m4a/aac/flac/ogg・最大50MB)",
+        "a2v_guide": ("**A2Vを使いこなすには**\n\n"
+                      "この機能は、アップロードした音声に口の動きを合わせて動画を生成します。"
+                      "もっとも効果を発揮するのは、顔のクローズアップ・単一話者・動きが控えめな構図です。"
+                      "この条件なら、口の動きが音声とほぼぴったり一致します。"
+                      "反対に、大勢が行き交う賑やかなシーンや、人物が広い画角の中を動き回る構図では、口の一致は弱くなりがちです。"
+                      "うまくいかないときは、まず構図をシンプルに寄せてみてください。"
+                      "クリップ1に開始画像を指定してクローズアップ構図を固定するのも効果的です。\n\n"
+                      "プロンプト例（クローズアップ・単一話者）:\n\n"
+                      "`Cinematic trailer shot, extreme close-up of a weathered detective speaking "
+                      "directly to camera in a dim office, warm lamplight raking across his face, "
+                      "shallow depth of field, subtle head movement, lips articulating each word "
+                      "clearly, tense and intimate mood, film grain, 35mm.`\n\n"
+                      "音声は明瞭な発話を、動画の尺は5〜6秒よりやや長めにすると安定しやすくなります。"),
+        "a2v_cap_panel": ("A2Vではクリップをちょうど1個使います（1本の音声がそのクリップ全体を駆動します）。"
+                          "音声は動画の長さ以上必要で、短い音声は拒否されます。"
+                          "出力にはアップロードした音声がそのまま入ります。"),
+        # --- clip chain: A2V flow messages ---
+        "a2v_msg_audio_required": "A2Vに使う元音声を選択してください。",
+        "a2v_msg_bad_extension": "音声の形式が許可されていません。許可形式: {exts}",
+        "a2v_msg_too_large": "音声が上限 {limit} MB を超えています。",
+        "a2v_msg_clip_count": "A2Vではクリップ1のみを有効にしてください（ちょうど1個）。",
+        "a2v_msg_uploading": "音声をアップロード中…",
+        # --- V2V/A2V + join API error-envelope hints ---
+        "apierr_SOURCE_VIDEO_NOT_FOUND": "元動画がサーバー上に見つかりません。元動画を再アップロードしてください。",
+        "apierr_SOURCE_VIDEO_TOO_SHORT": "元動画のフレーム数が参照フレーム数に足りません。参照フレーム数を減らすか、長い動画を使ってください。",
+        "apierr_SOURCE_AUDIO_NOT_FOUND": "元音声がサーバー上に見つかりません。音声を再アップロードしてください。",
+        "apierr_SOURCE_AUDIO_TOO_SHORT": "音声が動画の長さに足りません。長い音声を使うか、フレーム数を減らしてください。",
+        "apierr_JOB_NOT_JOINABLE": "このジョブはV2V継続ではないため、結合する相手がありません。",
+        "apierr_JOIN_FAILED": "サーバー側で結合に失敗しました。サーバーのログを確認してください。",
+        "apierr_JOINED_NOT_READY": "結合版はまだ作成されていません。先に「結合版を作成」を実行してください。",
         # --- settings: interface section ---
         "h_ui": "表示",
         "lbl_lang": "言語 (Language)",

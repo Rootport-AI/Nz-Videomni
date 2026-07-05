@@ -26,6 +26,7 @@ from .handlers import (
     fetch_config_safe,
     make_chain_handler,
     make_generate_handler,
+    make_join_handler,
     on_config_retry_tick,
 )
 from .handlers import fetch_models_safe, load_selected_models
@@ -44,6 +45,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     api = ApiClient(base_url, api_key=api_key)
     generate = make_generate_handler(api)
     chain_generate = make_chain_handler(api)
+    chain_join = make_join_handler(api)
 
     # Component registry: (component, label_key, attr). S6 iterates this to
     # implement live language switching. attr is the gr.update field to set.
@@ -285,6 +287,55 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 with gr.Row():
                     # LEFT: shared + join params + clip list
                     with gr.Column(scale=3):
+                        # ---- generation mode (none / V2V / A2V) ----
+                        # ONE radio makes the V2V x A2V exclusivity structural
+                        # (mirrors the API's source_video x source_audio 422);
+                        # each mode's panel is shown only while selected.
+                        chain_mode = reg(gr.Radio(
+                            choices=[(L("v2v_mode_none"), "none"),
+                                     (L("v2v_mode_v2v"), "v2v"),
+                                     (L("a2v_mode_a2v"), "a2v")],
+                            value="none", label=L("v2v_mode_label"),
+                        ), "v2v_mode_label")
+                        reg(gr.Markdown(L("v2v_cap_mode"), elem_classes=["note"]),
+                            "v2v_cap_mode", "value")
+
+                        # ---- V2V panel (visible in v2v mode only) ----
+                        # gr.File(type="filepath") for the source video — same
+                        # rationale as the IC-LoRA reference video (reliable
+                        # local path, no gr.Video preview re-encode).
+                        with gr.Group(visible=False) as v2v_group:
+                            v2v_video = reg(gr.File(
+                                label=L("v2v_lbl_video"), type="filepath",
+                                file_count="single", file_types=["video"],
+                            ), "v2v_lbl_video")
+                            # 8n+1 grid: start 25, step 8 -> 25, 33, ... 145
+                            # (the static max mirrors the server default
+                            # limits.v2v_context_frames_max; the precheck uses
+                            # the live /config value).
+                            v2v_context = reg(gr.Slider(
+                                25, 145, value=73, step=8,
+                                label=L("v2v_lbl_context"),
+                            ), "v2v_lbl_context")
+                            reg(gr.Markdown(L("v2v_cap_panel"), elem_classes=["note"]),
+                                "v2v_cap_panel", "value")
+                            v2v_join_chk = reg(gr.Checkbox(value=True,
+                                                           label=L("v2v_chk_join")),
+                                               "v2v_chk_join")
+                            reg(gr.Markdown(L("v2v_cap_join"), elem_classes=["note"]),
+                                "v2v_cap_join", "value")
+
+                        # ---- A2V panel (visible in a2v mode only) ----
+                        with gr.Group(visible=False) as a2v_group:
+                            a2v_audio = reg(gr.File(
+                                label=L("a2v_lbl_audio"), type="filepath",
+                                file_count="single", file_types=["audio"],
+                            ), "a2v_lbl_audio")
+                            reg(gr.Markdown(L("a2v_guide"), elem_classes=["note"]),
+                                "a2v_guide", "value")
+                            reg(gr.Markdown(L("a2v_cap_panel"), elem_classes=["note"]),
+                                "a2v_cap_panel", "value")
+
                         chain_prompt = reg(gr.Textbox(label=L("lbl_prompt_shared"), lines=3,
                                                       placeholder=L("ph_prompt2")),
                                            "lbl_prompt_shared")
@@ -370,6 +421,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         chain_job = reg(gr.Textbox(label=L("lbl_jobid"), interactive=False),
                                         "lbl_jobid")
                         chain_video = reg(gr.Video(label=L("lbl_result")), "lbl_result")
+
+                        # V2V-only: server-side join of the completed
+                        # continuation back onto the source video
+                        # (POST /jobs/{id}/join). Shown in v2v mode only.
+                        with gr.Group(visible=False) as v2v_join_panel:
+                            v2v_join_btn = reg(gr.Button(L("v2v_btn_join")),
+                                               "v2v_btn_join", "value")
+                            v2v_join_msg = gr.Textbox(label="", show_label=False,
+                                                      interactive=False, container=False)
+                            chain_joined_video = reg(gr.Video(label=L("v2v_lbl_joined")),
+                                                     "v2v_lbl_joined")
 
             # ============================== Jobs =============================
             # GET /jobs list -> Dataframe; row select -> GET /jobs/{id} detail +
@@ -568,8 +630,33 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
                     *chain_clip_inputs, config_state,
-                    lang_state, poll_interval, poll_timeout],
+                    lang_state, poll_interval, poll_timeout,
+                    chain_mode, v2v_video, v2v_context, a2v_audio],
             outputs=[chain_progress, chain_job, chain_video],
+        )
+
+        # ---- V2V/A2V mode switching ----
+        # Only the selected mode's panel is visible; the join panel is V2V-only;
+        # clip 1's start image is unavailable in V2V (the frozen source tail
+        # occupies clip 0's head — the server rejects the combination with 422,
+        # and the handler prechecks it too).
+        def on_chain_mode_change(mode):
+            is_v2v = mode == "v2v"
+            is_a2v = mode == "a2v"
+            return (gr.update(visible=is_v2v), gr.update(visible=is_a2v),
+                    gr.update(visible=is_v2v), gr.update(interactive=not is_v2v))
+
+        chain_mode.change(on_chain_mode_change, inputs=chain_mode,
+                          outputs=[v2v_group, a2v_group, v2v_join_panel, c1_image])
+
+        # ---- V2V join ("Create joined version") ----
+        # Hangs off the finished chain job id shown in chain_job; the checkbox
+        # is the two-way "create the smoothed joined version / don't" switch
+        # (the GUI only ever requests the server's default smoothed join).
+        v2v_join_btn.click(
+            chain_join,
+            inputs=[chain_job, v2v_join_chk, lang_state],
+            outputs=[v2v_join_msg, chain_joined_video],
         )
 
         # ---- Jobs tab events ----
@@ -657,6 +744,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                              (L("qmode_hq", lang), "two_stage_hq")]
             theme_choices = [(L("opt_dark", lang), "dark"),
                              (L("opt_light", lang), "light")]
+            mode_choices = [(L("v2v_mode_none", lang), "none"),
+                            (L("v2v_mode_v2v", lang), "v2v"),
+                            (L("a2v_mode_a2v", lang), "a2v")]
             adapter_choices = build_adapter_choices(config, lang)
             updates = []
             for component, key, attr in registry:
@@ -665,6 +755,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     kwargs["choices"] = qmode_choices
                 elif component is theme_dd:
                     kwargs["choices"] = theme_choices
+                elif component is chain_mode:
+                    kwargs["choices"] = mode_choices
                 elif component is adapter:
                     kwargs["choices"] = adapter_choices
                 updates.append(gr.update(**kwargs))

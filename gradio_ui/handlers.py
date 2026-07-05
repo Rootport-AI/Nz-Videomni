@@ -17,7 +17,21 @@ from .adapters import MODEL_CATEGORIES, MODEL_DEFAULT
 from .api_client import ApiClient
 from .formatting import format_api_error
 from .i18n import L, _DEFAULT_LANG
-from .validation import check_chain_total
+from .validation import check_chain_total, check_v2v_context
+
+# Clip-chain generation modes (the mode Radio's stable values). V2V and A2V are
+# mutually exclusive by construction — ONE radio, one value (mirrors the API's
+# source_video x source_audio 422 without ever being able to trigger it).
+MODE_NONE = "none"
+MODE_V2V = "v2v"
+MODE_A2V = "a2v"
+
+# A2V source-audio precheck fallbacks used when /config is unavailable (mirrors
+# config.py UploadConfig.allowed_audio_extensions / max_audio_size_mb). Kept
+# here — not in adapters.py (owned by another work stream) — since only the
+# chain flow consumes them.
+_FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
+_FALLBACK_MAX_AUDIO_MB = 50
 
 
 # --------------------------------------------------------------------------- #
@@ -240,11 +254,17 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        c7_enabled, c7_prompt, c7_frames,
                        c8_enabled, c8_prompt, c8_frames,
                        config=None, ui_lang=None, poll_interval=None,
-                       poll_timeout_min=None):
+                       poll_timeout_min=None,
+                       mode=MODE_NONE, src_video=None, context_frames=73,
+                       src_audio=None):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
+        # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
+        # after the S6 params so every pre-existing positional call keeps its
+        # meaning; the defaults reproduce the pre-V2V payload byte-for-byte.
         lang = ui_lang or default_lang
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
+        mode = mode if mode in (MODE_V2V, MODE_A2V) else MODE_NONE
         # --- prechecks (localized; NO API call on any violation) ---
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
@@ -297,7 +317,18 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         ]
         enabled = [(p, nf, img, strg) for en, p, nf, img, strg in raw_slots if en]
 
-        if not (2 <= len(enabled) <= 8):
+        # Clip-count floor mirrors the API validator: plain chain needs 2-8,
+        # V2V allows 1-8 (the frozen source tail IS the prior segment), A2V is
+        # exactly 1 (one frozen audio latent spans one clip).
+        if mode == MODE_V2V:
+            if not (1 <= len(enabled) <= 8):
+                yield L("v2v_msg_clip_count", lang), "", None
+                return
+        elif mode == MODE_A2V:
+            if len(enabled) != 1:
+                yield L("a2v_msg_clip_count", lang), "", None
+                return
+        elif not (2 <= len(enabled) <= 8):
             yield L("msg_chain_clip_count", lang), "", None
             return
 
@@ -325,8 +356,66 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield L("msg_chain_overlap_too_large", lang).format(kv=kv, maxkv=max_kv), "", None
             return
 
-        # Total-timeline geometry: same arithmetic as the API validator.
-        err = check_chain_total(clip_frames, fps, kv, lang)
+        # --- V2V prechecks (zero API calls on violation; mirrors the API's
+        # SourceVideoSpec + cross-validators) ---
+        upload_cfg = (config or {}).get("upload") or {}
+        if mode == MODE_V2V:
+            err = check_v2v_context(context_frames, clip_frames[0], lang, config)
+            if err is not None:
+                yield err, "", None
+                return
+            if not src_video:
+                yield L("v2v_msg_video_required", lang), "", None
+                return
+            allowed_exts = upload_cfg.get("allowed_video_extensions") or _FALLBACK_VIDEO_EXTS
+            ext = Path(str(src_video)).suffix.lower()
+            if ext not in [e.lower() for e in allowed_exts]:
+                yield L("v2v_msg_bad_extension", lang).format(exts=", ".join(allowed_exts)), "", None
+                return
+            max_mb = upload_cfg.get("max_video_size_mb")
+            if max_mb is None:
+                max_mb = _FALLBACK_MAX_VIDEO_MB
+            try:
+                size_mb = os.path.getsize(str(src_video)) / (1024 * 1024)
+            except OSError:
+                size_mb = 0.0
+            if size_mb > max_mb:
+                yield L("v2v_msg_too_large", lang).format(limit=max_mb), "", None
+                return
+            # The frozen source tail occupies clip 0's head — a start image on
+            # clip 1 would conflict (server 422); reject before any upload.
+            if enabled[0][2]:
+                yield L("v2v_msg_image_conflict", lang), "", None
+                return
+
+        # --- A2V prechecks (zero API calls on violation) ---
+        if mode == MODE_A2V:
+            if not src_audio:
+                yield L("a2v_msg_audio_required", lang), "", None
+                return
+            allowed_audio = upload_cfg.get("allowed_audio_extensions") or _FALLBACK_AUDIO_EXTS
+            ext = Path(str(src_audio)).suffix.lower()
+            if ext not in [e.lower() for e in allowed_audio]:
+                yield L("a2v_msg_bad_extension", lang).format(exts=", ".join(allowed_audio)), "", None
+                return
+            max_audio_mb = upload_cfg.get("max_audio_size_mb")
+            if max_audio_mb is None:
+                max_audio_mb = _FALLBACK_MAX_AUDIO_MB
+            try:
+                size_mb = os.path.getsize(str(src_audio)) / (1024 * 1024)
+            except OSError:
+                size_mb = 0.0
+            if size_mb > max_audio_mb:
+                yield L("a2v_msg_too_large", lang).format(limit=max_audio_mb), "", None
+                return
+
+        # Total-timeline geometry: same arithmetic as the API validator. For V2V
+        # the frozen-head geometry (incl. the stage-2 tile-fit invariant) is
+        # forwarded so the precheck matches the server's compute_chain_layout.
+        err = check_chain_total(
+            clip_frames, fps, kv, lang,
+            source_context_px=int(context_frames) if mode == MODE_V2V else None,
+        )
         if err is not None:
             yield err, "", None
             return
@@ -346,6 +435,25 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 "image_id": image_id, "frame_idx": 0,
                 "strength": float(clip0_strength if clip0_strength is not None else 0.8),
             })
+
+        # --- V2V/A2V source upload (after the keyframe image, mirroring the
+        # generate flow's "reference video last" ordering) ---
+        source_video_id: str | None = None
+        source_audio_id: str | None = None
+        if mode == MODE_V2V:
+            yield L("v2v_msg_uploading", lang), "", None
+            try:
+                source_video_id = api.upload_video(str(src_video))
+            except Exception as exc:
+                yield L("msg_upload_failed", lang).format(err=exc), "", None
+                return
+        elif mode == MODE_A2V:
+            yield L("a2v_msg_uploading", lang), "", None
+            try:
+                source_audio_id = api.upload_audio(str(src_audio))
+            except Exception as exc:
+                yield L("msg_upload_failed", lang).format(err=exc), "", None
+                return
 
         # --- build payload (clips in slot order; per-clip prompt omitted when
         # blank; conditioning attached to clip 0 only) ---
@@ -377,6 +485,16 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "overlap_strength": float(overlap_strength),
             "clips": clips_payload,
         }
+        # ADDITIVE source keys: only present in their mode, so a mode="none"
+        # request stays byte-identical to the pre-V2V payload (frozen-API
+        # discipline mirrored client-side).
+        if mode == MODE_V2V:
+            payload["source_video"] = {
+                "video_id": source_video_id,
+                "context_frames": int(context_frames),
+            }
+        elif mode == MODE_A2V:
+            payload["source_audio"] = {"audio_id": source_audio_id}
 
         try:
             resp = api.generate_chain(payload)
@@ -401,6 +519,56 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         yield from _poll_job_until_done(api, job_id, lang, interval, timeout_s)
 
     return generate_chain
+
+
+# --------------------------------------------------------------------------- #
+# V2V join flow ("Create joined version" button). Separate from the chain flow:
+# joining is a POST-completion, GPU-free server-side ffmpeg step
+# (POST /jobs/{id}/join), so it hangs off the finished job id rather than the
+# generation generator. Yields (message, joined_video_path) pairs.
+#
+# Per the approved UI decision the checkbox is a two-way switch — "create the
+# smoothed joined version" (default ON) vs "don't" — so the GUI only ever calls
+# the server's default smoothed join (audio_smoothing=true); the API's
+# hard-concat variant is never sent from here.
+# --------------------------------------------------------------------------- #
+def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
+    default_lang = lang
+
+    def join(job_id, smoothing_enabled, ui_lang=None):
+        lang = ui_lang or default_lang
+        job_id = str(job_id).strip() if job_id else ""
+        if not job_id:
+            yield L("v2v_msg_no_job", lang), None
+            return
+        if not smoothing_enabled:
+            yield L("v2v_msg_join_disabled", lang), None
+            return
+
+        yield L("v2v_msg_joining", lang), None
+        try:
+            resp = api.join_job(job_id)  # empty body {} = default smoothed join
+        except Exception as exc:
+            yield L("v2v_msg_join_failed", lang).format(err=exc), None
+            return
+        if resp.status_code >= 400:
+            try:
+                err_body: object = resp.json()
+            except Exception:
+                err_body = resp.text
+            yield format_api_error(err_body, lang), None
+            return
+        info = resp.json()
+
+        try:
+            video = api.fetch_joined(job_id)
+        except Exception as exc:
+            yield L("v2v_msg_join_failed", lang).format(err=exc), None
+            return
+        yield L("v2v_msg_join_done", lang).format(
+            mode=info.get("join_mode", ""), job_id=job_id), video
+
+    return join
 
 
 # --------------------------------------------------------------------------- #

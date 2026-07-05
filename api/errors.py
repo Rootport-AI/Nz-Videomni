@@ -105,6 +105,36 @@ def source_audio_too_short(detail: str | None = None) -> APIError:
     )
 
 
+def job_not_joinable(job_id: str, detail: str | None = None) -> APIError:
+    """V2V join: the target job is not a V2V continuation job (its metadata has
+    no ``v2v`` block — a plain chain / A2V / single generate), so there is no
+    source video + continuation pair to join. Rejected up front (422)."""
+    return APIError(
+        "JOB_NOT_JOINABLE",
+        "job is not a V2V continuation job (nothing to join)",
+        422,
+        job_id=job_id,
+        detail=detail,
+    )
+
+
+def join_failed(job_id: str | None = None, detail: str | None = None) -> APIError:
+    """V2V join: the server-side ffmpeg join (normalize / crossfade / concat)
+    failed. Mirrors :func:`generation_failed` (503) with its own stable code."""
+    return APIError("JOIN_FAILED", "V2V join failed", 503, job_id=job_id, detail=detail)
+
+
+def joined_not_ready(job_id: str) -> APIError:
+    """V2V join: GET /jobs/{id}/joined was called before a successful
+    POST /jobs/{id}/join produced ``joined.mp4``."""
+    return APIError(
+        "JOINED_NOT_READY",
+        "joined video has not been created yet (POST /jobs/{job_id}/join first)",
+        404,
+        job_id=job_id,
+    )
+
+
 def lora_not_found(name: str, detail: str | None = None) -> APIError:
     return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
 

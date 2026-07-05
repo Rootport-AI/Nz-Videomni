@@ -1,4 +1,6 @@
-# IC-LoRA Phase B — 現状ステータス（成立・全ゲートG1〜G5 PASS・残作業=mainマージ判断のみ）
+# IC-LoRA Phase B — 現状ステータス（✅完結・全ゲートG1〜G5 PASS・mainマージ済）
+
+> **（歴史記録・2026-07-06 注記）✅mainマージ済（merge `cfddd77`）。** タイトル旧表記「残作業=mainマージ判断のみ」は解消済み。正本＝VERIFICATION_LOG §21。
 
 - 更新: 2026-07-03（branch `feature/ic-lora-phase-b`・base=main merge `a578c83`）
 - 併読: [`VERIFICATION_LOG.md` §21](VERIFICATION_LOG.md)（全ゲート詳細数値）／[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)（設計・リサーチ根拠）／[`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)（前段スパイク）

@@ -1,5 +1,7 @@
 # IC-LoRA Phase B ワークオーダー — forward時GPU LoRA適用（per-layer-quant経路）＋API露出
 
+> **（歴史記録・2026-07-06 注記）✅実装完了・mainマージ済（merge `cfddd77`）。** 本書は着手前のワークオーダー。成果・ゲートの正本＝[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)・VERIFICATION_LOG §21。
+
 - 作成: 2026-07-03（branch `feature/ic-lora-phase-b`・base = main merge `a578c83`）
 - 併読: [`IC_LORA_PHASE_A_STATUS.md`](IC_LORA_PHASE_A_STATUS.md)（Phase A成果）／[`VERIFICATION_LOG.md` §20](VERIFICATION_LOG.md)（Phase Aゲート数値）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)
 - ユーザー決定（2026-07-03・本セッション）: 機構=**① per-layer-quant経路＋forward時GPU適用**／周辺スコープ=**API露出のみ**（keep-resident整合・oracle照合・x4/他アダプタは今回外）／loras=**generate毎**／参照動画=**POST /upload/video 新設**／**bf16融合経路は温存**（確定事項）

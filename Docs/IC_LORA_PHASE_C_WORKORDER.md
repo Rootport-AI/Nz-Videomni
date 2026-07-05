@@ -1,5 +1,7 @@
 # IC-LoRA Phase C ワークオーダー — Union-Control 制御系アダプタ対応＋engine内前処理段の新設
 
+> **（歴史記録・2026-07-06 注記）✅実装完了・mainマージ済（merge `8bdf90a`・G5 ユーザー受容 2026-07-04）。** 本書は着手前のワークオーダー。成果・ゲートの正本＝[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)・VERIFICATION_LOG §22。次セッションの strength 可変化の入口は同 STATUS のスコープ外節。
+
 - 作成: 2026-07-03（base = main・Phase B マージ済み `cfddd77`・作業branch `feature/ic-lora-phase-c-research`）
 - 併読: [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（前提状態・完成物）／[`IC_LORA_PHASE_B_WORKORDER.md`](IC_LORA_PHASE_B_WORKORDER.md)（構成の踏襲元）／[`VERIFICATION_LOG.md` §21](VERIFICATION_LOG.md)
 - 正本: [`IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)（監督の統合判断＋R1/R2/R3リサーチ全文）。**本ワークオーダーはその決定を具体化したもの。設計変更は監督判断を仰ぐこと。**

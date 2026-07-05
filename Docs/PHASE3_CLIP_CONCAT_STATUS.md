@@ -1,5 +1,7 @@
 # Phase 3 スライス2「クリップ連結」現状ステータス — masked AV-latent 連結で再実装・実機検証PASS
 
+> **（歴史記録・2026-07-06 注記）✅mainマージ済（merge `2cc4cac`）。** 本文の「Chain A/B 本番出力の最終目視/試聴 PENDING」は当時の状態。クリップ連結の映像/試聴ゲートはその後クローズ（720p 級2セグで継ぎ目不可視まで実証・VERIFICATION_LOG §19）。GUI 経由クリップ連結＋結合の症状も解消済（§27）。現在の目視宿題は [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭が正。
+
 - 更新: 2026-07-03（本セッションで旧アーキから作り直し）
 - 併読: [`PHASE3_CLIP_CONCAT_DESIGN.md`](PHASE3_CLIP_CONCAT_DESIGN.md)（研究/設計・訂正バナー＋採用アーキテクチャ確定note）／[`VERIFICATION_LOG.md` §19](VERIFICATION_LOG.md)（本セッションの全ゲート詳細）／[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)（引き継ぎ）
 

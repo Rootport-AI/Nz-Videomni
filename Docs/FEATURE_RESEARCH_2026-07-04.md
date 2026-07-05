@@ -1,5 +1,7 @@
 # 機能リサーチまとめ（2026-07-04）— フロントエンド計画の入口
 
+> **（歴史記録・2026-07-06 注記）本書の「次セッション＝B（video-to-video）」は達成済み。** video-to-video・audio-to-video・GUI 露出はいずれも実装済み・mainマージ済（VERIFICATION_LOG §24/§25/§26）。現在の次セッションは **IC-LoRA strength 可変化**（[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭が正）。本書は将来判断の背景資料（高品質モード D節等）として温存。
+
 > **本書の位置づけ**: 本家 LTX Desktop との機能比較と、今後の実装候補（video-to-video / audio-to-video / プロンプト強化 / 高品質モード）を調べた結果を、次セッションがすぐ設計に入れる形でまとめた参照資料。会話ログの再録ではなく要点のみ。出典は各節に記載。
 >
 > **次セッションの本題は B（video-to-video 継続）の設計→実装**。まず B を読めば足りる。A・C〜G は背景と将来判断のための材料。

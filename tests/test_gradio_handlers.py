@@ -1028,6 +1028,38 @@ def test_chain_bad_num_frames_errors_zero_calls():
     assert out[0][1] == "" and out[0][2] is None
 
 
+def test_chain_empty_prompt_fires_toast_warning_zero_calls(monkeypatch):
+    # A chain-precheck rejection must ALSO surface as a gr.Warning toast --
+    # the progress textbox alone was missed by a real user ("the button does
+    # nothing"). gr.Warning is a plain notification call, so capture it.
+    from gradio_ui import handlers as handlers_mod
+
+    toasts: list[str] = []
+    monkeypatch.setattr(
+        handlers_mod.gr, "Warning",
+        lambda message, *args, **kwargs: toasts.append(message),
+    )
+
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(prompt="", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ])))
+
+    assert calls["n"] == 0  # rejected before any API call
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+    # exactly one toast, carrying the SAME localized message as the textbox.
+    assert toasts == [out[0][0]]
+
+
 def test_chain_overlap_too_large_for_shortest_clip_errors_zero_calls():
     calls = {"n": 0}
 

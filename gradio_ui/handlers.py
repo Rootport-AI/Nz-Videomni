@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 
+import gradio as gr
 import httpx
 
 from .adapters import ADAPTER_NONE, _FALLBACK_MAX_VIDEO_MB, _FALLBACK_VIDEO_EXTS
@@ -261,6 +262,22 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
     return generate
 
 
+def _precheck_reject(message: str) -> str:
+    """Surface a chain-precheck rejection as a Gradio toast (``gr.Warning``) in
+    ADDITION to the ``chain_progress`` textbox line. The textbox alone proved
+    too easy to miss -- a real user read the silent early-return as "the button
+    does nothing" and kept clicking. Returns ``message`` unchanged so call
+    sites stay one-liners: ``yield _precheck_reject(...), "", None``.
+
+    ``gr.Warning`` is gradio's non-raising notification API: inside a queued
+    event it renders the yellow toast modal; outside one (unit tests) it
+    degrades to ``warnings.warn`` (verified on gradio 6.19.0,
+    ``gradio.helpers.log_message``).
+    """
+    gr.Warning(message)
+    return message
+
+
 # --------------------------------------------------------------------------- #
 # Clip-chain flow (S5), factored out for unit testing (mock transport). Mirrors
 # make_generate_handler: prechecks (zero API calls on violation) -> optional
@@ -295,24 +312,27 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         lang = ui_lang or default_lang
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         mode = mode if mode in (MODE_V2V, MODE_A2V) else MODE_NONE
-        # --- prechecks (localized; NO API call on any violation) ---
+        # --- prechecks (localized; NO API call on any violation). Every
+        # rejection ALSO fires a gr.Warning toast (_precheck_reject) so the
+        # early return is visible even when the progress textbox goes
+        # unnoticed. ---
         if not prompt or not prompt.strip():
-            yield L("msg_prompt_required", lang), "", None
+            yield _precheck_reject(L("msg_prompt_required", lang)), "", None
             return
 
         try:
             w, h = int(width), int(height)
         except (TypeError, ValueError):
-            yield L("msg_bad_dimension", lang), "", None
+            yield _precheck_reject(L("msg_bad_dimension", lang)), "", None
             return
         if w % 64 != 0 or h % 64 != 0:
-            yield L("msg_bad_dimension", lang), "", None
+            yield _precheck_reject(L("msg_bad_dimension", lang)), "", None
             return
         limits = (config or {}).get("limits") or {}
         max_w = limits.get("max_width", 1920)
         max_h = limits.get("max_height", 1088)
         if w > max_w or h > max_h:
-            yield L("msg_size_limit", lang).format(maxw=max_w, maxh=max_h), "", None
+            yield _precheck_reject(L("msg_size_limit", lang).format(maxw=max_w, maxh=max_h)), "", None
             return
 
         if crop_enabled:
@@ -321,16 +341,16 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             except (TypeError, ValueError):
                 cw = ch = 0
             if cw < 32 or ch < 32 or cw > w or ch > h:
-                yield L("msg_crop_range", lang), "", None
+                yield _precheck_reject(L("msg_crop_range", lang)), "", None
                 return
 
         try:
             fps = float(frame_rate)
         except (TypeError, ValueError):
-            yield L("msg_fps_range", lang), "", None
+            yield _precheck_reject(L("msg_fps_range", lang)), "", None
             return
         if fps < 1.0 or fps > 60.0:
-            yield L("msg_fps_range", lang), "", None
+            yield _precheck_reject(L("msg_fps_range", lang)), "", None
             return
 
         # Collect enabled clips in slot order. Slot 1 additionally carries the
@@ -352,14 +372,14 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # exactly 1 (one frozen audio latent spans one clip).
         if mode == MODE_V2V:
             if not (1 <= len(enabled) <= 8):
-                yield L("v2v_msg_clip_count", lang), "", None
+                yield _precheck_reject(L("v2v_msg_clip_count", lang)), "", None
                 return
         elif mode == MODE_A2V:
             if len(enabled) != 1:
-                yield L("a2v_msg_clip_count", lang), "", None
+                yield _precheck_reject(L("a2v_msg_clip_count", lang)), "", None
                 return
         elif not (2 <= len(enabled) <= 8):
-            yield L("msg_chain_clip_count", lang), "", None
+            yield _precheck_reject(L("msg_chain_clip_count", lang)), "", None
             return
 
         # Per-clip num_frames: 8n+1 within [9, 481].
@@ -368,10 +388,10 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             try:
                 nf_i = int(nf)
             except (TypeError, ValueError):
-                yield L("msg_chain_bad_frames", lang).format(n=n), "", None
+                yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=n)), "", None
                 return
             if nf_i < 9 or nf_i > 481 or (nf_i - 1) % 8 != 0:
-                yield L("msg_chain_bad_frames", lang).format(n=n), "", None
+                yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=n)), "", None
                 return
             clip_frames.append(nf_i)
 
@@ -383,7 +403,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             kv = 3
         max_kv = min((nf - 1) // 8 + 1 for nf in clip_frames) - 1
         if kv < 1 or kv > max_kv:
-            yield L("msg_chain_overlap_too_large", lang).format(kv=kv, maxkv=max_kv), "", None
+            yield _precheck_reject(L("msg_chain_overlap_too_large", lang).format(kv=kv, maxkv=max_kv)), "", None
             return
 
         # --- V2V prechecks (zero API calls on violation; mirrors the API's
@@ -392,15 +412,15 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         if mode == MODE_V2V:
             err = check_v2v_context(context_frames, clip_frames[0], lang, config)
             if err is not None:
-                yield err, "", None
+                yield _precheck_reject(err), "", None
                 return
             if not src_video:
-                yield L("v2v_msg_video_required", lang), "", None
+                yield _precheck_reject(L("v2v_msg_video_required", lang)), "", None
                 return
             allowed_exts = upload_cfg.get("allowed_video_extensions") or _FALLBACK_VIDEO_EXTS
             ext = Path(str(src_video)).suffix.lower()
             if ext not in [e.lower() for e in allowed_exts]:
-                yield L("v2v_msg_bad_extension", lang).format(exts=", ".join(allowed_exts)), "", None
+                yield _precheck_reject(L("v2v_msg_bad_extension", lang).format(exts=", ".join(allowed_exts))), "", None
                 return
             max_mb = upload_cfg.get("max_video_size_mb")
             if max_mb is None:
@@ -410,23 +430,23 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             except OSError:
                 size_mb = 0.0
             if size_mb > max_mb:
-                yield L("v2v_msg_too_large", lang).format(limit=max_mb), "", None
+                yield _precheck_reject(L("v2v_msg_too_large", lang).format(limit=max_mb)), "", None
                 return
             # The frozen source tail occupies clip 0's head — a start image on
             # clip 1 would conflict (server 422); reject before any upload.
             if enabled[0][2]:
-                yield L("v2v_msg_image_conflict", lang), "", None
+                yield _precheck_reject(L("v2v_msg_image_conflict", lang)), "", None
                 return
 
         # --- A2V prechecks (zero API calls on violation) ---
         if mode == MODE_A2V:
             if not src_audio:
-                yield L("a2v_msg_audio_required", lang), "", None
+                yield _precheck_reject(L("a2v_msg_audio_required", lang)), "", None
                 return
             allowed_audio = upload_cfg.get("allowed_audio_extensions") or _FALLBACK_AUDIO_EXTS
             ext = Path(str(src_audio)).suffix.lower()
             if ext not in [e.lower() for e in allowed_audio]:
-                yield L("a2v_msg_bad_extension", lang).format(exts=", ".join(allowed_audio)), "", None
+                yield _precheck_reject(L("a2v_msg_bad_extension", lang).format(exts=", ".join(allowed_audio))), "", None
                 return
             max_audio_mb = upload_cfg.get("max_audio_size_mb")
             if max_audio_mb is None:
@@ -436,7 +456,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             except OSError:
                 size_mb = 0.0
             if size_mb > max_audio_mb:
-                yield L("a2v_msg_too_large", lang).format(limit=max_audio_mb), "", None
+                yield _precheck_reject(L("a2v_msg_too_large", lang).format(limit=max_audio_mb)), "", None
                 return
 
         # Total-timeline geometry: same arithmetic as the API validator. For V2V
@@ -447,7 +467,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             source_context_px=int(context_frames) if mode == MODE_V2V else None,
         )
         if err is not None:
-            yield err, "", None
+            yield _precheck_reject(err), "", None
             return
 
         # --- clip-0 start image (only slot 1 can carry one) -> upload ---

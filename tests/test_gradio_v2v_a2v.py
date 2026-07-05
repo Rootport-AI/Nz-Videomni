@@ -482,3 +482,40 @@ def test_i18n_v2v_a2v_keys_present_in_both_languages():
     for key in new_keys:
         assert key in LABELS["ja"], f"missing ja translation: {key}"
         assert LABELS["ja"][key], f"empty ja translation: {key}"
+
+
+# --------------------------------------------------------------------------- #
+# F4: V2V usage guide — registered en/ja text carrying the four guidance points
+# (same-scene continuation / no re-instructed dialogue / explicit music
+# continuation / larger context is more stable).
+# --------------------------------------------------------------------------- #
+def test_v2v_guide_present_in_both_languages():
+    for lang in ("en", "ja"):
+        assert "v2v_guide" in LABELS[lang], lang
+
+    en = LABELS["en"]["v2v_guide"]
+    assert en.startswith("**Getting good results with V2V**")
+    assert "same" in en and "scene" in en          # 1) same-scene continuation
+    assert "dialogue" in en and "already" in en    # 2) no re-instructed dialogue
+    assert "music continues" in en                 # 3) explicit music continuation
+    assert "more stable" in en                     # 4) larger context stability
+
+    ja = LABELS["ja"]["v2v_guide"]
+    assert ja.startswith("**V2Vを使いこなすには**")
+    assert "同じシーン" in ja
+    assert "セリフ" in ja
+    assert "音楽" in ja
+    assert "安定" in ja
+
+
+def test_v2v_guide_is_registered_for_language_switch():
+    """build_ui reg()s the guide Markdown, so switch_language must emit an
+    update carrying the Japanese guide text."""
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    updates = demo.switch_language("ja", None)
+    assert any(
+        isinstance(u.get("value"), str) and u["value"].startswith("**V2Vを使いこなすには**")
+        for u in updates
+    )

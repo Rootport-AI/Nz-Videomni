@@ -317,6 +317,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 25, 145, value=73, step=8,
                                 label=L("v2v_lbl_context"),
                             ), "v2v_lbl_context")
+                            # F4: usage guide, same rank/placement as a2v_guide.
+                            reg(gr.Markdown(L("v2v_guide"), elem_classes=["note"]),
+                                "v2v_guide", "value")
                             reg(gr.Markdown(L("v2v_cap_panel"), elem_classes=["note"]),
                                 "v2v_cap_panel", "value")
                             v2v_join_chk = reg(gr.Checkbox(value=True,

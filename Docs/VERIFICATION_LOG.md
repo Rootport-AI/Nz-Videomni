@@ -1605,3 +1605,66 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 **結論**: 決定要因は**シーンの複雑さ・人物の動き・画角**（仮説③）。同一の男声 wav がクローズアップで完璧＝仮説②（音源）は実用上消え、caseC の劣化で仮説①（声質）も消えた。**公式 Limitations（動き・広角で口の追従が落ちる）と完全に整合＝実装ミスではなく LTX 2.3 のモデル性質で確定（ユーザー・監督合意）**。720p でもクローズアップなら完璧が再現（解像度は無関係）。
 
 **運用への帰結**: A2V のリップシンクは「クローズアップ・単一話者・動き控えめ」の構図で使う機能として案内する（GUI 露出時のガイド文言・プロンプト例に反映すること）。複雑シーンでの強化が将来必要になった場合の選択肢＝Stage1 クロスモーダル摂動ガイダンス差し込み（生成 ~2倍・上流既定 3.0・蒸留との相性未知）は**未採用のまま選択肢として保留**（§25.5 フォローアップ (c)）。本フォローアップはクローズ。
+
+---
+
+## 26. ★GUI への V2V/A2V 露出＋モデル管理ドロップダウン＋コンソールログ改修＝3子並行オーケストレーション実装＋G3 目視ゲート＋フィードバック対応（2026-07-05）
+
+> **正本＝本節。** 設計正本＝モデル管理=[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)／結合API=[`mockups/JOIN_API_PROPOSAL.md`](mockups/JOIN_API_PROPOSAL.md)／GUI モック=[`mockups/GUI_V2V_A2V_MOCK.html`](mockups/GUI_V2V_A2V_MOCK.html)。前提＝§25 完結（A2V main マージ済）。本セッションは **Fable5 親＋Opus 子の並行オーケストレーション**（フェーズ1＝3子・フェーズ2＝1子）で実施。GPU 所有権は常に1つ＝親が逐次貸与（並行 GPU 実行なし・従来規律維持）。
+> 本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11。
+
+### 26.1 フェーズ1＝3子並行（各自 worktree ブランチ→親が順にマージ）
+
+**題目C＝コンソールログ改修**（正本の調査＝[`CONSOLE_LOG_FORGE_NEO_RESEARCH.md`](CONSOLE_LOG_FORGE_NEO_RESEARCH.md)）
+- 内容: httpx のポーリング行抑制＋worker logging 土台（従来無出力だった engine 側 logger 群の可視化）＋ジョブ開始/終了・ステージ進捗・完了サマリ（peak_vram＋所要時間）のコンソール出力。
+- コミット列: `afc66aa`→`a3d7f3b`→`199e8da`→**merge `b77a812`**。
+- **S3 実機（GPU 窓）**: byte-match 3系統完全一致（T2V `23844b4e…`／I2V `a511eda4…`／チェーン `f706057a…`）・peak_vram **8440** 再現・server.log の httpx ポーリング行 **68%→0行**。
+
+**題目B＝モデル管理ドロップダウン**（正本の設計＝[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)）
+- 内容: 4カテゴリレジストリ（transformer／text_encoder／video_vae／audio＝音声 VAE＋vocoder は物理1ファイル）＋`GET /models`＋`POST /pipeline/load` の optional モデル指定（省略時＝golden スナップショットで byte 同一固定）＋Settings タブ GUI（IC-LoRA ドロップダウンの型を踏襲）。
+- コミット列: `8c762b9`→`4613b7e`→`a062274`→`e3e3601`→`42f36b2`→（rebase 後 `5ad77d3`）→merge 済み。
+- **S4 実機（GPU 窓）**: 別名二重登録（default-alias）で swap→同 seed 生成→**SHA 完全一致×3**（切替配線の実証）・未知名 404・後片付け済み。**実代替モデルの DL はしない方針（ユーザー決定・検証後に余計な登録を削除）**。
+
+**題目A＝GUI V2V/A2V 露出＋サーバー側結合 API**（正本の提案＝[`mockups/JOIN_API_PROPOSAL.md`](mockups/JOIN_API_PROPOSAL.md)）
+- 内容: ユーザー承認モック（[`mockups/GUI_V2V_A2V_MOCK.html`](mockups/GUI_V2V_A2V_MOCK.html)）→`POST /jobs/{id}/join`＋`GET /jobs/{id}/joined` 新設（`services/join_manager.py`・解像度/fps 不一致時の正規化＝**setsar 必須の発見**を含む）→Clip Chain タブに生成モード Radio（なし／V2V 継続／A2V 音声駆動＝構造的排他）＋A2V ガイド（クローズアップ・単一話者・動き控えめ＝§25.5.3 反映）。
+- コミット列: `13b5501`→`6fbe763`→`214c26f`（rebase 後 `dce6fc9`→`8b08b5c`→`c7fce67`）→**merge `f999374`**。
+- **実機 e2e（GPU 窓）**: V2V **190.5s**／peak **9889**・join **3.2s**（handle_crossfade・正規化発動・尺誤差 **0.000**）・A2V **185.2s**／音声一致 r=**1.0000**。
+
+**本セッションのユーザー決定**: 音声スムージング＝サーバー側結合 API 方式・切替検証＝別名二重登録のみ・モデル UI＝Settings タブ内。
+
+### 26.2 G3 目視ゲート（ユーザー・2026-07-05）
+
+| 素材 | 判定 |
+|---|---|
+| A2V（GUI 経由・joined 前の単発） | **完璧（リップシンク含む）** |
+| i2v 操作/出力 | **完璧** |
+| A2V 音量 +3dB | 違和感なし＝**研究課題へ格下げ（クローズ）** |
+| V2V 結合版（子A 素材） | **FAIL＝音楽ブツ切り＋新規部分の内容ジャンプ** |
+
+- **V2V FAIL の原因分析（確定）**: 子A の素材が §24.7 の教訓（元動画と同じシーンを継続するプロンプト・context 最大化）に反していた＝**コード退行ではない**（後述 26.3 の F6/再検証で二重実証）。
+- 積み残し症状: GUI 進捗「3% (step None/None)」凍結＋uvicorn アクセスログ洪水＝26.3 で対処。
+
+### 26.3 フェーズ2＝G3 フィードバック対応（子F＝Opus1人・branch `fix/g3-feedback`）
+
+- **F1** uvicorn ジョブポーリング GET の選択的抑制（カスタム log_config＋Filter・POST/エラー/video 系は残す）。
+- **F2** ステップ単位進捗: wheel の `ltx_pipelines.utils.samplers.tqdm` を `engine/progress_shim.py` のシムに実行時差し替え（wheel 無改変・数値非干渉）＋チェーンに encode イベント＋単発経路 `_RealBackend.generate` の progress 受理ループ化＋コンソール n/N・it/s 整形。
+- **F3** GUI 進捗整形（step None 時は % のみ＋工程名ラベル・`JobResponse` に optional `stage` 加算）。
+- **F4** V2V 継続の作法ガイド（同一シーン継続を記述・セリフ再指示禁止・音楽継続明示・参照フレーム数最大化）。
+- **F5** クロスフェード長: 既定 150→**300ms**＋GUI ドロップダウン 150/300/500。
+- コミット列: `fc9ce2d`→`33f1be4`→`3bd6100`→`2a955ac`→`821db57`→**merge `b8d9236`**。pytest **343 passed / 1 skipped**（本セッション累計: 212→343）。
+- **GPU 窓④実機**: **byte-match×3 完全一致**（T2V/I2V＋**V2V 再検証 output.mp4 が §24.7 G3v4 合格素材 `b7a2fa21…8aa7` とバイト一致**＝シム非干渉＋コード退行なしの二重実証）・単発ステップ進捗の実機動作（step1/8→8/8→stage2 1/3→3/3）・uvicorn ポーリング行 **0**。
+- **ユーザー再ゲート（2026-07-05）**: joined.mp4＝完璧・ログ＝完璧・GUI 進捗表示＝完璧→**3件クローズ**。
+
+### 26.4 ★次セッション持ち越し＝GUI 経由のクリップ連結＋結合の症状（分析・仮説まで本セッション実施・調査/修正は次セッション）
+
+**ユーザー症状（GUI 操作時）**: ①1クリップ目だけ生成され結合版が作られない ②2クリップ目が作られない ③「Create joined version」で 503＋ffmpeg エラー `[loudnorm] Value -inf for parameter 'I' out of range [-70 - -5]`。
+
+**親の一次調査（確定事実）**:
+- 対象 job `03c0a691`（wtA outputs）＝**正常 completed**（313.8s・clips=2・total 225f・new_frames_px=152・source_had_audio=true・audio_handle 出力済み・source_fps=16→24 リサンプル）。
+- 元動画（upload `ed7d8b41`）の音声は**デジタル無音**（AAC 2kb/s・volumedetect mean_volume **-91.0 dB**）。
+
+**仮説（次セッションで検証）**:
+- **H1（③の本命・確度高）**: `join_v2v` の2パス loudnorm が無音音声の実測 I=**-inf** をそのまま第2パスに渡し ffmpeg が拒否→FFmpegError→503。`source_had_audio=true`（ストリーム存在）だが無音のため、音声なしフォールバック（video_only）も発動しない盲点。**対処方向＝実測が -inf/範囲外なら loudness 整合をスキップ（loudness_matched=false）してクロスフェードのみ実施**。
+- **H2（①は UX と③の複合）**: 結合版は自動生成ではなく手動ボタン（設計どおり）＋クリックすると③で失敗＝「作られない」に見える。
+- **H3（②は仕様と期待のギャップの可能性）**: metadata 上クリップ2は生成済み（new_frames_px=152）。V2V では参照フレーム数 73 がクリップ1の頭を置換するため新規部分＝152f≈6.3s（2×121f≈10s ではない）。出力が想定より短い/クリップ境界が滑らかで区別できないことが「2クリップ目が無い」に見えた可能性。GUI 側で「新規部分の長さ＝クリップ合計−参照フレーム数」の説明が不足。※**実物の目視確認は未実施＝次セッションで出力内容を確認してから確定**。
+- 副次: 16fps→24fps リサンプルは正常動作。**無音音声の 16fps 素材という入力条件そのものがこれまでの検証マトリクスに無かった（新しい入力クラス）**。

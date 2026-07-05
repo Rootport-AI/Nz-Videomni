@@ -296,7 +296,78 @@ def test_generate_without_new_fields_regression(lora_client):
     meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
     assert meta["request"]["loras"] == []
     assert meta["request"]["reference_video_id"] is None
+    # S1 control-adjustability fields default to None in the frozen request dump.
+    assert meta["request"]["conditioning_attention_strength"] is None
+    assert meta["request"]["reference_video_strength"] is None
     assert "ic_lora" not in meta  # additive block absent for non-lora jobs
+
+
+# ------------------------------------------ S1: IC-LoRA control adjustability
+
+
+def test_attention_strength_requires_loras(lora_client):
+    payload = _base_payload(conditioning_attention_strength=0.6)
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+    assert "conditioning_attention_strength requires at least one lora" in r.text
+
+
+def test_reference_strength_requires_loras(lora_client):
+    payload = _base_payload(reference_video_strength=0.8)
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+    assert "reference_video_strength requires at least one lora" in r.text
+
+
+def test_strength_fields_accept_range(lora_client):
+    vid = _upload_video(lora_client)
+    # 0.0 and 1.0 both accepted (with loras + reference present).
+    for value in (0.0, 1.0):
+        payload = _base_payload(
+            width=512, height=256,  # 128-divisible reference resolution
+            loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+            reference_video_id=vid,
+            conditioning_attention_strength=value,
+            reference_video_strength=value,
+        )
+        r = lora_client.post("/api/v1/generate", json=payload)
+        assert r.status_code == 202, r.text
+    # Out-of-range values rejected per field.
+    for field in ("conditioning_attention_strength", "reference_video_strength"):
+        for bad in (-0.1, 1.1):
+            payload = _base_payload(
+                width=512, height=256,
+                loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+                reference_video_id=vid,
+                **{field: bad},
+            )
+            r = lora_client.post("/api/v1/generate", json=payload)
+            assert r.status_code == 422, (field, bad, r.text)
+
+
+def test_strength_fields_in_request_dump(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        width=512, height=256,
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+        conditioning_attention_strength=0.6,
+        reference_video_strength=0.8,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = lora_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = lora_client.app_context
+    meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    # Frozen-additive request dump carries both.
+    assert meta["request"]["conditioning_attention_strength"] == 0.6
+    assert meta["request"]["reference_video_strength"] == 0.8
+    # ic_lora block records both (only-when-meaningful).
+    assert meta["ic_lora"]["conditioning_attention_strength"] == 0.6
+    assert meta["ic_lora"]["reference_video_strength"] == 0.8
 
 
 # --------------------------------------------------------- Phase C: registry

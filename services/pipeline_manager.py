@@ -674,6 +674,17 @@ class PipelineManager:
                 ],
                 "reference_video_id": req.reference_video_id,
             }
+            # Control-adjustability overrides: record only when meaningful
+            # (mirrors the source_audio precedent), so an omitted-field lora job's
+            # ic_lora block stays byte-identical to before.
+            if req.conditioning_attention_strength is not None:
+                metadata["ic_lora"]["conditioning_attention_strength"] = (
+                    req.conditioning_attention_strength
+                )
+            if req.reference_video_strength is not None:
+                metadata["ic_lora"]["reference_video_strength"] = (
+                    req.reference_video_strength
+                )
         video_io.save_metadata(metadata_path, metadata)
 
     def _environment_block(self) -> dict:

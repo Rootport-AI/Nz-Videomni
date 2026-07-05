@@ -10,8 +10,10 @@ Run it via ``run.ps1`` or the project venv's interpreter.
 from __future__ import annotations
 
 import argparse
+import copy
 import logging
 import os
+import re
 import socket
 from pathlib import Path
 
@@ -52,6 +54,66 @@ def configure_logging(log_dir: Path) -> None:
     # request, not the httpx "HTTP Request:" echo).
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+class JobPollingAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for SUCCESSFUL job-status polling GETs.
+
+    The Gradio UI polls ``GET /api/v1/jobs/{job_id}`` once per second while a
+    job runs; with uvicorn's default access log that is one console line per
+    second for minutes (the "access-log flood" from the G3 gate). This filter
+    suppresses exactly that traffic and nothing else:
+
+    * only ``GET`` (POST /generate, DELETE /jobs/... always show),
+    * only the job-status resource itself — subpaths like
+      ``/api/v1/jobs/{id}/video`` or ``/joined`` and the job LIST
+      ``/api/v1/jobs`` still show,
+    * only status 200 — a 404/500 on the polling URL still shows.
+
+    uvicorn's access LogRecord carries ``record.args ==
+    (client_addr, method, full_path, http_version, status_code)``
+    (uvicorn.protocols.utils / logging AccessFormatter contract). The tuple is
+    handled defensively: any unexpected shape lets the record through
+    (fail-open — we would rather log too much than eat a real access line).
+    """
+
+    _JOB_STATUS_GET = re.compile(r"^/api/v1/jobs/[^/?#]+/?(?:[?#].*)?$")
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            args = record.args
+            if not isinstance(args, tuple) or len(args) != 5:
+                return True
+            _client, method, path, _http_version, status = args
+            if method != "GET" or status != 200:
+                return True
+            if not isinstance(path, str):
+                return True
+            return not self._JOB_STATUS_GET.match(path)
+        except Exception:
+            return True  # fail-open: never let log filtering break logging
+
+
+def build_uvicorn_log_config() -> dict:
+    """uvicorn's default logging dictConfig + the job-polling access filter.
+
+    Deep-copied so the module-level ``uvicorn.config.LOGGING_CONFIG`` template
+    is never mutated. Everything else (formatters, levels, handlers) stays
+    byte-identical to uvicorn's defaults; only the ``access`` handler gains the
+    :class:`JobPollingAccessFilter`.
+    """
+    log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    filters = log_config.setdefault("filters", {})
+    # "()" as a callable is the documented dictConfig custom-factory hook; the
+    # class object (not a dotted path) keeps this immune to __main__ vs main
+    # module-name ambiguity.
+    filters["job_polling_access"] = {"()": JobPollingAccessFilter}
+    access_handler = log_config.get("handlers", {}).get("access")
+    if isinstance(access_handler, dict):
+        handler_filters = access_handler.setdefault("filters", [])
+        if "job_polling_access" not in handler_filters:
+            handler_filters.append("job_polling_access")
+    return log_config
 
 
 def build_app(args: argparse.Namespace) -> FastAPI:
@@ -229,7 +291,15 @@ def main() -> None:
         logger.warning("UI: http://%s:%d/ui", local_ip(), runtime.port)
     logger.info("Starting server on %s:%d  (UI: http://127.0.0.1:%d/ui)", runtime.host, runtime.port, runtime.port)
 
-    uvicorn.run(app, host=runtime.host, port=runtime.port, log_level="info")
+    uvicorn.run(
+        app,
+        host=runtime.host,
+        port=runtime.port,
+        log_level="info",
+        # F1 (G3 feedback): uvicorn defaults + a filter that mutes the 1-line/s
+        # GET /api/v1/jobs/{id} 200 polling flood (see JobPollingAccessFilter).
+        log_config=build_uvicorn_log_config(),
+    )
 
 
 if __name__ == "__main__":

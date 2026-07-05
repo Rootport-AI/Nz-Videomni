@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from config import AppConfig
 from services.audio_upload_store import AudioUploadStore
 from services.job_store import JobStore
+from services.join_manager import JoinManager
 from services.lora_registry import LoraRegistry
 from services.model_registry import ModelRegistry
 from services.pipeline_manager import PipelineManager
@@ -38,11 +39,15 @@ class AppContext:
     lora_registry: LoraRegistry = field(init=False)
     model_registry: ModelRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
+    join_manager: JoinManager = field(init=False)
 
     def __post_init__(self) -> None:
         self.upload_store = UploadStore(self.config)
         self.video_upload_store = VideoUploadStore(self.config)
         self.audio_upload_store = AudioUploadStore(self.config)
+        self.join_manager = JoinManager(
+            self.config, self.job_store, self.video_upload_store
+        )
         self.lora_registry = LoraRegistry(self.config)
         self.model_registry = ModelRegistry(self.config)
         self.pipeline_manager = PipelineManager(

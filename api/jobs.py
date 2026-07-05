@@ -1,16 +1,17 @@
-"""Job endpoints: list / get / video / cancel-delete (spec 5.2 / 8.2)."""
+"""Job endpoints: list / get / video / cancel-delete (spec 5.2 / 8.2) and the
+ADDITIVE V2V join pair (POST /jobs/{id}/join, GET /jobs/{id}/joined)."""
 
 from __future__ import annotations
 
 import shutil
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from fastapi.responses import FileResponse
 
 from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import job_not_found, video_not_ready
-from api.models import JobResponse, JobStatus
+from api.models import JobResponse, JobStatus, JoinRequest, JoinResponse
 
 router = APIRouter()
 
@@ -42,6 +43,35 @@ def get_job_video(job_id: str, context: AppContext = Depends(get_context)) -> Fi
         video_path,
         media_type="video/mp4",
         filename=f"{job_id}.mp4",
+    )
+
+
+@router.post(
+    "/jobs/{job_id}/join",
+    response_model=JoinResponse,
+    dependencies=[Depends(require_auth)],
+)
+def join_job(
+    job_id: str,
+    request: JoinRequest | None = Body(default=None),
+    context: AppContext = Depends(get_context),
+) -> JoinResponse:
+    """Server-side V2V join (ADDITIVE endpoint): source video + continuation ->
+    ``joined.mp4``. Synchronous 200 — ffmpeg only, no GPU, independent of the
+    single-job guard (FastAPI runs sync endpoints on the thread pool). The body
+    is optional; ``{}`` (or none) gives the default smoothed join."""
+    return context.join_manager.join(job_id, request or JoinRequest())
+
+
+@router.get("/jobs/{job_id}/joined")
+def get_job_joined(job_id: str, context: AppContext = Depends(get_context)) -> FileResponse:
+    """Download a previously-joined ``joined.mp4`` (404 JOINED_NOT_READY before
+    a successful POST /jobs/{id}/join). Mirrors GET /jobs/{id}/video."""
+    path = context.join_manager.joined_path(job_id)
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=f"{job_id}_joined.mp4",
     )
 
 

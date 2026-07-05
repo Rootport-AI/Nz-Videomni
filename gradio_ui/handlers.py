@@ -565,7 +565,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
     default_lang = lang
 
-    def join(job_id, smoothing_enabled, ui_lang=None):
+    def join(job_id, smoothing_enabled, crossfade_ms=None, ui_lang=None):
         lang = ui_lang or default_lang
         job_id = str(job_id).strip() if job_id else ""
         if not job_id:
@@ -575,9 +575,19 @@ def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield L("v2v_msg_join_disabled", lang), None
             return
 
+        # F5: the crossfade-length Dropdown (150/300/500 ms) rides along as
+        # JoinRequest.handle_crossfade_ms; None / junk falls back to the server
+        # default (300 ms) by simply omitting the field.
+        payload: dict = {}
+        try:
+            if crossfade_ms is not None:
+                payload["handle_crossfade_ms"] = int(crossfade_ms)
+        except (TypeError, ValueError):
+            payload = {}
+
         yield L("v2v_msg_joining", lang), None
         try:
-            resp = api.join_job(job_id)  # empty body {} = default smoothed join
+            resp = api.join_job(job_id, payload or None)
         except Exception as exc:
             yield L("v2v_msg_join_failed", lang).format(err=exc), None
             return

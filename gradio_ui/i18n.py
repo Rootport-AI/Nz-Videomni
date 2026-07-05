@@ -189,6 +189,8 @@ LABELS: dict[str, dict[str, str]] = {
                           "Clip 1's start image cannot be used (the source occupies the head). "
                           "The delivered video is the NEW part only."),
         "v2v_chk_join": "Also create a version joined to the source video (crossfade the audio seam)",
+        # F5: crossfade length selector for the joined version.
+        "v2v_lbl_crossfade": "Audio crossfade length at the join (ms)",
         "v2v_cap_join": ("In addition to the video of the newly generated portion alone, this also "
                          "exports a combined version joined to your original clip, with the audio "
                          "seam smoothed by a crossfade. Turn it off and the audio may sound like it "
@@ -492,6 +494,8 @@ LABELS: dict[str, dict[str, str]] = {
                           "（続きとして生成する余地を残すため）。クリップ1の開始画像は使えません（先頭は元動画が占有します）。"
                           "出力される動画は新しく生成した部分のみです。"),
         "v2v_chk_join": "元動画と結合した完成版も作る（音声の継ぎ目をクロスフェード）",
+        # F5: 結合版のクロスフェード長セレクタ。
+        "v2v_lbl_crossfade": "結合部の音声クロスフェード長 (ms)",
         "v2v_cap_join": ("新しく生成した部分だけの動画に加えて、元動画とつないだ完成版も書き出します。"
                          "つなぎ目の音の段差はクロスフェードで滑らかにします。"
                          "オフにすると、つなぎ目で音が途切れて聞こえることがあります。"),

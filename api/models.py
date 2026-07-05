@@ -485,13 +485,15 @@ class JoinRequest(BaseModel):
     * ``False`` — hard concat (no fades). Kept for parity/testing; the GUI only
       exposes the smoothed path.
 
-    ``handle_crossfade_ms`` applies to the handle true-crossfade only (150 ms is
-    the measured sweet spot — VERIFICATION_LOG §24.7). All fields are optional;
-    an empty body ``{}`` gives the default smoothed join.
+    ``handle_crossfade_ms`` applies to the handle true-crossfade only. The
+    default is 300 ms (F5, G3 visual/audition gate: 150 ms — the original
+    VERIFICATION_LOG §24.7 sweet spot — left the seam slightly audible on real
+    content; the GUI offers 150/300/500). All fields are optional; an empty
+    body ``{}`` gives the default smoothed join.
     """
 
     audio_smoothing: bool = True
-    handle_crossfade_ms: int = Field(150, ge=0, le=2000)
+    handle_crossfade_ms: int = Field(300, ge=0, le=2000)
 
 
 class JoinResponse(BaseModel):

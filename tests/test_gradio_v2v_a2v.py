@@ -431,7 +431,7 @@ def test_join_error_envelope_localized_hint():
 
     api = _make_client(handler)
     join = make_join_handler(api)
-    outs = list(join("j1", True, "ja"))
+    outs = list(join("j1", True, 300, "ja"))
     msg, video = outs[-1]
     assert video is None
     assert msg == LABELS["ja"]["apierr_JOB_NOT_JOINABLE"]
@@ -519,3 +519,74 @@ def test_v2v_guide_is_registered_for_language_switch():
         isinstance(u.get("value"), str) and u["value"].startswith("**V2Vを使いこなすには**")
         for u in updates
     )
+
+
+# --------------------------------------------------------------------------- #
+# F5: crossfade length — JoinRequest default 300 ms, GUI Dropdown rides along
+# as handle_crossfade_ms in the join body (None -> field omitted).
+# --------------------------------------------------------------------------- #
+def test_join_request_default_crossfade_is_300ms():
+    from api.models import JoinRequest
+
+    req = JoinRequest()  # empty body {}
+    assert req.handle_crossfade_ms == 300
+    assert req.audio_smoothing is True
+
+
+def test_join_handler_sends_selected_crossfade_ms():
+    import json
+
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            bodies.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(200, json={
+                "job_id": "j1", "join_mode": "handle_crossfade",
+                "joined_path": "outputs/j1/joined.mp4", "source_normalized": False,
+            })
+        return httpx.Response(200, content=b"JOINED")
+
+    api = _make_client(handler)
+    join = make_join_handler(api)
+    outs = list(join("j1", True, 500))
+    assert bodies == [{"handle_crossfade_ms": 500}]
+    assert outs[-1][1] and outs[-1][1].endswith(".mp4")
+
+
+def test_join_handler_without_selection_sends_empty_body():
+    import json
+
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            bodies.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(200, json={
+                "job_id": "j1", "join_mode": "handle_crossfade",
+                "joined_path": "outputs/j1/joined.mp4", "source_normalized": False,
+            })
+        return httpx.Response(200, content=b"JOINED")
+
+    api = _make_client(handler)
+    join = make_join_handler(api)
+    list(join("j1", True))          # legacy 2-arg call: no crossfade selection
+    list(join("j1", True, "junk"))  # junk selection also falls back
+    assert bodies == [{}, {}]
+
+
+def test_v2v_crossfade_dropdown_default_300():
+    """build_ui exposes the crossfade Dropdown with 150/300/500 and default 300."""
+    import gradio as gr
+
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    dropdowns = [
+        c for c in demo.blocks.values()
+        if isinstance(c, gr.Dropdown)
+        and getattr(c, "choices", None)
+        and [v for _lbl, v in c.choices] == [150, 300, 500]
+    ]
+    assert dropdowns, "crossfade dropdown (150/300/500) not found"
+    assert dropdowns[0].value == 300

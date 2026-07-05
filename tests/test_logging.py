@@ -85,7 +85,9 @@ def test_chain_stage_progress_logging(caplog):
     seen = []
     with caplog.at_level(logging.INFO, logger="ltx.runner"):
         result = be._read_chain_events(
-            lambda step, total, frac, stage=None: seen.append(frac)
+            # clip/clip_count arrive with chain stage-1 events (additive
+            # ProgressCallback contract) — this test only tracks fractions.
+            lambda step, total, frac, stage=None, **kw: seen.append(frac)
         )
 
     assert result["event"] == "done"

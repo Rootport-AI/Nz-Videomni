@@ -174,7 +174,10 @@ def test_chain_interleaved_step_and_coarse_progress_is_monotone(caplog):
 
     with caplog.at_level(logging.INFO, logger="ltx.runner"):
         result = be._read_chain_events(
-            lambda step, total, frac, stage=None: calls.append((step, total, frac, stage))
+            # clip/clip_count arrive with chain stage-1 events (additive
+            # contract; asserted in the dedicated clip-position test below).
+            lambda step, total, frac, stage=None, clip=None, clip_count=None:
+                calls.append((step, total, frac, stage))
         )
 
     assert result["event"] == "done"
@@ -230,3 +233,72 @@ def test_job_record_stage_reaches_job_response():
     assert rec.to_response().stage is None  # additive default: absent -> None
     rec.stage = "stage1_denoise"
     assert rec.to_response().stage == "stage1_denoise"
+
+
+# ------------------------------------ chain clip position plumbing (additive)
+
+
+def test_chain_clip_position_reaches_callback_only_for_stage1_events():
+    """Chain stage-1 events (per-step with a segment position + the coarse
+    per-segment event) pass clip=/clip_count= keywords; every other event keeps
+    its old call shape (recorded here as clip None)."""
+    events = [
+        {"event": "progress", "stage": "encode", "index": 0, "total": 1},
+        {"event": "progress", "stage": "stage1_denoise", "index": 4, "total": 8,
+         "outer_index": 0, "outer_total": 2, "it_s": 0.5},
+        {"event": "progress", "stage": "stage1", "index": 0, "total": 2},
+        {"event": "progress", "stage": "stage1_denoise", "index": 8, "total": 8,
+         "outer_index": 1, "outer_total": 2, "it_s": 0.5},
+        {"event": "progress", "stage": "stage1", "index": 1, "total": 2},
+        # stage-2 outer position is a TILE, not a clip -- must stay clip-less.
+        {"event": "progress", "stage": "stage2_denoise", "index": 3, "total": 3,
+         "outer_index": 0, "outer_total": 1, "it_s": 0.4},
+        {"event": "progress", "stage": "tile", "index": 0, "total": 1},
+        {"event": "progress", "stage": "decode", "index": 0, "total": 1},
+        {"event": "done", "seed_used": 7},
+    ]
+    calls: list[tuple] = []
+    be = _backend_with_events(events)
+
+    be._read_chain_events(
+        lambda step, total, frac, stage=None, clip=None, clip_count=None:
+            calls.append((stage, clip, clip_count))
+    )
+
+    assert calls == [
+        ("encode", None, None),
+        ("stage1_denoise", 1, 2),  # denoising clip 1 of 2
+        ("stage1", 1, 2),          # clip 1 complete
+        ("stage1_denoise", 2, 2),  # denoising clip 2 of 2
+        ("stage1", 2, 2),          # clip 2 complete
+        ("stage2_denoise", None, None),
+        ("tile", None, None),
+        ("decode", None, None),
+    ]
+
+
+def test_single_generate_never_passes_clip_position():
+    events = [
+        {"event": "progress", "stage": "stage1_denoise", "index": 4, "total": 8},
+        {"event": "done", "seed_used": 1},
+    ]
+    kwargs_seen: list[dict] = []
+    be = _backend_with_events(events)
+    be._read_worker_events(
+        lambda step, total, frac, stage=None, **kw: kwargs_seen.append(kw),
+        chain=False,
+        prefix="generate",
+    )
+    assert kwargs_seen == [{}]  # no clip keywords outside chain stage 1
+
+
+def test_job_record_clip_reaches_job_response():
+    from api.models import GenerateRequest
+    from services.job_store import JobRecord
+
+    rec = JobRecord("jid", GenerateRequest(prompt="x"))
+    resp = rec.to_response()
+    assert resp.clip is None and resp.clip_count is None  # additive default
+    rec.clip, rec.clip_count = 2, 3
+    resp = rec.to_response()
+    assert resp.clip == 2 and resp.clip_count == 3

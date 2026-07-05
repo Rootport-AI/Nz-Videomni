@@ -45,6 +45,10 @@ class JobRecord:
         self.total_steps: int | None = None
         # F3: pipeline phase of the latest progress event (see JobResponse.stage).
         self.stage: str | None = None
+        # Chain clip progress (see JobResponse.clip / clip_count): 1-based
+        # current stage-1 segment + clip total; None outside chain stage 1.
+        self.clip: int | None = None
+        self.clip_count: int | None = None
         self.created_at: str = now_iso()
         self.started_at: str | None = None
         self.completed_at: str | None = None
@@ -64,6 +68,8 @@ class JobRecord:
             current_step=self.current_step,
             total_steps=self.total_steps,
             stage=self.stage,
+            clip=self.clip,
+            clip_count=self.clip_count,
             created_at=self.created_at,
             started_at=self.started_at,
             completed_at=self.completed_at,

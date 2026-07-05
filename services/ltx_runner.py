@@ -186,6 +186,10 @@ def _progress_frac(
 # names the pipeline phase of per-step events ("stage1_denoise" /
 # "stage2_denoise" / "encode" / coarse chain stages); callbacks MUST declare it
 # with a None default — mock-backend milestone calls pass only 3 args.
+# Chain stage-1 events ADDITIONALLY pass ``clip=``/``clip_count=`` keywords
+# (1-based segment position / segment total, from the worker's outer_index /
+# outer_total); they are only passed when known, so callbacks MUST declare them
+# with None defaults too (all other events keep the exact pre-existing calls).
 ProgressCallback = Callable[..., None]
 
 # Mock backend identifier surfaced in logs / status / metadata.
@@ -1339,6 +1343,12 @@ class _RealBackend:
           ``progress_callback(current_step, total_steps, frac, stage)``;
         * coarse stages (chain segment/tile/decode, encode): forwarded as
           ``(None, None, frac, stage)`` — same fractions as before F2;
+        * chain stage-1 events (per-step ``stage1_denoise`` with a segment
+          position, and the coarse per-segment ``stage1``) additionally pass
+          ``clip=``/``clip_count=`` keywords (1-based clip being denoised /
+          clip total) so the job store can surface "clip n/N" to the GUI. The
+          keywords are only added when the position is known — every other
+          event keeps its exact pre-existing call shape;
         * the fraction is monotone non-decreasing across the whole read (clamped
           against the last emitted value), and unknown stages never move it;
         * a rate-limited INFO line per stage keeps the console readable
@@ -1372,11 +1382,31 @@ class _RealBackend:
                 frac = last_frac
             frac = max(last_frac, min(1.0, frac))
             last_frac = frac
+
+            # Chain clip position (ADDITIVE): stage-1 events carry which clip
+            # (= stage-1 segment) is being worked on. Per-step events name it
+            # via the shim's outer position; the coarse per-segment event fires
+            # when segment idx+1 has just completed. Keywords are only passed
+            # when known, so non-stage-1 events keep their exact old call shape
+            # (callbacks declare clip/clip_count with None defaults).
+            clip_kwargs: dict[str, int] = {}
+            if chain:
+                if stage == "stage1_denoise" and outer_total:
+                    try:
+                        clip_kwargs = {
+                            "clip": int(outer_index or 0) + 1,
+                            "clip_count": int(outer_total),
+                        }
+                    except (TypeError, ValueError):
+                        clip_kwargs = {}
+                elif stage == "stage1":
+                    clip_kwargs = {"clip": min(idx + 1, total), "clip_count": total}
+
             if progress_callback:
                 if is_step:
-                    progress_callback(idx, total, round(frac, 3), stage)
+                    progress_callback(idx, total, round(frac, 3), stage, **clip_kwargs)
                 else:
-                    progress_callback(None, None, round(frac, 3), stage)
+                    progress_callback(None, None, round(frac, 3), stage, **clip_kwargs)
 
 
 def _hue_gradient(w: int, h: int, hue: int) -> Image.Image:

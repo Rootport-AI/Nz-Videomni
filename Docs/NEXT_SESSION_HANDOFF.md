@@ -2,18 +2,18 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 IC-LoRA strength 可変化 実装完了・全客観ゲート PASS・**目視／マージ待ち**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 IC-LoRA strength 可変化 完結＝目視受容・**main マージ＆push 済**）
 
 > **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。
 
 | 項目 | 状態 |
 |---|---|
-| リポジトリ | **feature branch `feature/ic-lora-strength`（未 push・未マージ）**＝commit `2a2bd06`（S3 GUI）→`3e5f367`（S1 API）→`e2039f6`（S2 engine）。push／main マージはユーザー承認待ち。（前回まで＝main `3778113`・origin 同期済） |
-| 実装サマリ | 「制御にどれだけ従わせるか」を可変化。**②`conditioning_attention_strength`（本命ノブ・上流未配線だったものを DistilledPipeline 経路へ新配線）**＋**①`reference_video_strength`（送信側の固定解除）** を optional 2フィールドで加算（**省略時＝byte 同一**）。3層＝API（`api/models.py`）／engine（`engine/worker.py`＋`fast_video_pipeline.py`・<1.0 のみ `ConditioningItemAttentionStrengthWrapper` で包む・IC-LoRA 重みパッチ機構は不可触）／GUI（Generate タブにスライダー2本・既定 1.0・値<1.0 のみキー送出）。詳細＝**VERIFICATION_LOG §28** |
-| **次セッション** | **目視ゲート済み → push／main マージのユーザー承認が入口**。目視対象＝`outputs/visual_review/` の #10 vs #14（追従度 1.0 vs 0.6・本命ペア）・#15（参照 0.8 の滲み確認）・#16 vs #17（補助ペア）は **✅ユーザー目視 OK（2026-07-06・「参照動画の動きを反映した生成」を確認・受容）**。残るは push／main マージのユーザー承認のみ。以降のバックログは下記「バックログの正本」行を参照 |
-| 残る宿題（次セッションをブロックしない） | ①IC-LoRA strength の目視ゲート 4 本（上記）＝**✅済み（2026-07-06・ユーザー受容）** ②前回持ち越しの GUI 実機確認 3 点（事前チェック拒否の黄色トースト／チェーン進捗「クリップ n/N」／クリップ別プロンプトでクリップ2の実在目視）＝**残（ユーザーが後日実施すると表明・2026-07-06）** |
-| バックログの正本 | 「2026-07-05 audio-to-video 完結」ブロックの**バックログ（三次トリアージ済み）行**＝近い将来（GUI V2V/A2V 露出※・モデル管理※・ログ改修※・**IC-LoRA strength＝§28 で実施済み**）／将来改修／研究課題／不要。※印3件は「GUI V2V/A2V 露出＋モデル管理＋ログ改修」セッションで実施済み（VERIFICATION_LOG §26） |
-| pytest 基準 | **365 passed / 1 skipped**（§28 時点・旧 354→+11＝S1 6本・S2 2本・S3 3本） |
+| リポジトリ | **main マージ＆push 済（merge `e94559e`・2026-07-06・ユーザー承認）**。中身＝`2a2bd06`（S3 GUI）→`3e5f367`（S1 API）→`e2039f6`（S2 engine）→`75b4d46`/`b8b33e6`（docs）。マージ後 pytest 緑（365/1）。feature ブランチは削除済み |
+| 実装サマリ | 「制御にどれだけ従わせるか」を可変化。**②`conditioning_attention_strength`（本命ノブ・上流未配線だったものを DistilledPipeline 経路へ新配線）**＋**①`reference_video_strength`（送信側の固定解除）** を optional 2フィールドで加算（**省略時＝byte 同一**）。3層＝API（`api/models.py`）／engine（`engine/worker.py`＋`fast_video_pipeline.py`・<1.0 のみ `ConditioningItemAttentionStrengthWrapper` で包む・IC-LoRA 重みパッチ機構は不可触）／GUI（Generate タブにスライダー2本・既定 1.0・値<1.0 のみキー送出）。目視＝**✅ユーザー受容（2026-07-06・「参照動画の動きを反映した生成」を確認）**。詳細＝**VERIFICATION_LOG §28** |
+| **次セッション** | **未定（バックログから選定）**。候補の入口＝下記「バックログの正本」行＋**任意 LoRA（画風/キャラ等・CivitAI 配布）対応の現状調査メモ**（ユーザー関心 2026-07-06・現状は loras⇔reference_video_id の all-or-nothing 検証と config.yaml レジストリ登録制のため単独 LoRA 適用は不可・土台の forward 時 LoRA 適用＋strength 可変は §21/§28 で完成済み） |
+| 残る宿題（次セッションをブロックしない） | 前回持ち越しの GUI 実機確認 3 点（事前チェック拒否の黄色トースト／チェーン進捗「クリップ n/N」／クリップ別プロンプトでクリップ2の実在目視）＝**残（ユーザーが後日実施すると表明・2026-07-06）** |
+| バックログの正本 | 「2026-07-05 audio-to-video 完結」ブロックの**バックログ（三次トリアージ済み）行**＝近い将来（GUI V2V/A2V 露出※・モデル管理※・ログ改修※・**IC-LoRA strength＝§28 で実施済み**）／将来改修／研究課題／不要。※印3件は §26 で実施済み。**追加（ユーザー処置 2026-07-06）**: IC-LoRA の重ね掛け（多重制御）＝**研究課題**へ格付け（メモ＝`IC_LORA_PHASE_C_STATUS.md` 末尾・公式は単一制御が流儀・機構は複数可） |
+| pytest 基準 | **365 passed / 1 skipped**（§28 時点・旧 354→+11＝S1 6本・S2 2本・S3 3本。マージ後再確認済み） |
 
 ---
 

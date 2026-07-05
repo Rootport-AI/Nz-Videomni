@@ -73,6 +73,12 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_adapter": "Control adapter",
         "adapter_none": "None",
         "lbl_adapter_strength": "Adapter strength",
+        "lbl_control_adherence": "Control adherence",
+        "info_control_adherence": ("1.0 = follow the control signal (edges/skeleton) strictly; "
+                                   "lower = interpret it more freely (recommended 0.5-0.7)."),
+        "lbl_reference_strength": "Reference strength",
+        "info_reference_strength": ("Usually keep at 1.0. Below 1.0 the reference video may pop "
+                                    "or bleed through into the output (official warning)."),
         "lbl_ref_video": "Reference video (mp4/mov/webm/mkv, max 200 MB)",
         "note_ref128": ("When using a reference video, the output width and height must be "
                         "multiples of 128 (e.g. 1280×768); generation will not start otherwise."),
@@ -396,6 +402,12 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_adapter": "制御アダプタ",
         "adapter_none": "なし",
         "lbl_adapter_strength": "アダプタ強度",
+        "lbl_control_adherence": "制御追従度",
+        "info_control_adherence": ("1.0=制御信号（輪郭線・骨格）に厳密に従う。"
+                                   "下げるほど自由に解釈します（推奨 0.5〜0.7）。"),
+        "lbl_reference_strength": "参照強度",
+        "info_reference_strength": ("通常は 1.0 のままにします。1.0 未満では参照映像が出力に"
+                                    "滲み込む（bleed-through）ことがあります（公式の注意）。"),
         "lbl_ref_video": "参照動画 (mp4/mov/webm/mkv・最大200MB)",
         "note_ref128": ("参照動画を使う場合、出力の幅と高さは128の倍数にしてください"
                         "(例: 1280×768)。満たさない場合は生成を開始しません。"),

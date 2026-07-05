@@ -260,6 +260,16 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 0.05, 2.0, value=1.0, step=0.05,
                                 label=L("lbl_adapter_strength"),
                             ), "lbl_adapter_strength")
+                            control_adherence = reg(gr.Slider(
+                                0.0, 1.0, value=1.0, step=0.05,
+                                label=L("lbl_control_adherence"),
+                                info=L("info_control_adherence"),
+                            ), "lbl_control_adherence")
+                            reference_strength_slider = reg(gr.Slider(
+                                0.0, 1.0, value=1.0, step=0.05,
+                                label=L("lbl_reference_strength"),
+                                info=L("info_reference_strength"),
+                            ), "lbl_reference_strength")
                             ref_video = reg(gr.File(
                                 label=L("lbl_ref_video"), type="filepath",
                                 file_count="single", file_types=["video"],
@@ -619,7 +629,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             generate,
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
-                    adapter, adapter_strength, ref_video, config_state,
+                    adapter, adapter_strength, control_adherence,
+                    reference_strength_slider, ref_video, config_state,
                     lang_state, poll_interval, poll_timeout],
             outputs=[progress_box, job_box, video_out],
         )

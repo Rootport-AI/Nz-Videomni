@@ -1,7 +1,9 @@
-# audio-to-video（A2V）セッション入口 — 次セッションはまずこれを読む
+# audio-to-video（A2V）セッション入口 — （歴史記録）
+
+> **（歴史記録・2026-07-05 注記）A2V は完結した**（設計→実装→全ゲート→G3 受容→main マージ・push 済）。本書は着手時の入口であり役目を終えた。現在の正本＝[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック・設計/検証＝[`A2V_DESIGN.md`](A2V_DESIGN.md)＋VERIFICATION_LOG §25。
 
 - 作成: 2026-07-05（V2Vセッション末・ユーザー決定「次セッション=A2V」を受けた導線整理）
-- 位置づけ: **次セッションの出発点**。ここから[リサーチ→設計→ユーザー合意→スパイク→実装]に入る。機能リサーチの原典=[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節・プロジェクト現在地=[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック。
+- 位置づけ: ~~**次セッションの出発点**~~（役目済み）。ここから[リサーチ→設計→ユーザー合意→スパイク→実装]に入る。機能リサーチの原典=[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節・プロジェクト現在地=[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック。
 - 用語: 「元動画」「元音声」= ユーザーがアップロードする入力素材。
 
 ## 0. やりたいこと（ユーザー要望・確定）

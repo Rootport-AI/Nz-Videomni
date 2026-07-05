@@ -1,6 +1,6 @@
 # audio-to-video（A2V）— アップロード音声に合わせた動画生成 設計＋実装計画
 
-- 作成: 2026-07-05（監督）。**ステータス: ✅設計合意済み（ユーザー決定 Q1-Q4, Q8・§4）・S0-S3 完了（G0 GO／G1 全PASS／G2 mock+実機 PASS）・残＝G3 試聴（ユーザー OPEN）＋push/main マージ（ユーザー承認）**
+- 作成: 2026-07-05（監督）。**ステータス: ✅完結 — S0-S3 完了（G0 GO／G1 全PASS／G2 mock+実機 PASS）＋G3 試聴=条件付き受容→main マージ・push 済（merge `d4a0cb2`・2026-07-05）**。リップシンクの弱さはシーン要因（動き・画角）＝モデル性質で確定（判定と運用指針=VERIFICATION_LOG §25.5）。本書は歴史記録＝以後の変更は加えない。
 - 入口: [`A2V_ENTRY.md`](A2V_ENTRY.md)（次セッション導線）・機能リサーチ原典 [`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) C節
 - 直近の成功例（様式の手本）: [`V2V_CONTINUATION_DESIGN.md`](V2V_CONTINUATION_DESIGN.md)（§2.2 幾何・§3 ゲート表・スライス進捗ログ）
 - 裏取り: 上流 pin `00dc53d` の `A2VidPipelineTwoStage` 読解＋我々のチェーン機構（V2V で main マージ済 merge `18296b2`）の再確認（2026-07-05・本書 §1・file:line）

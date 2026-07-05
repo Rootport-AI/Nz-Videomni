@@ -84,7 +84,9 @@ def test_chain_stage_progress_logging(caplog):
 
     seen = []
     with caplog.at_level(logging.INFO, logger="ltx.runner"):
-        result = be._read_chain_events(lambda step, total, frac: seen.append(frac))
+        result = be._read_chain_events(
+            lambda step, total, frac, stage=None: seen.append(frac)
+        )
 
     assert result["event"] == "done"
     assert seen and seen[-1] == 0.95  # decode -> 0.95 fraction (unchanged path)

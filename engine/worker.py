@@ -172,6 +172,44 @@ def _denoise_with_cache_release(*args, **kwargs):
 _distilled.denoise_audio_video = _denoise_with_cache_release
 _log("installed pre-denoise empty_cache monkeypatch (Phase 5B VRAM fix)")
 
+# F2 (G3 gate): per-step denoise progress. The wheel's denoising loops have no
+# callback, but they all iterate via the samplers module's ``tqdm`` binding —
+# engine/progress_shim.py swaps that for an observation-only wrapper that calls
+# the emitter below after every completed step. STRICTLY additive: the shim
+# yields the wheel's items unchanged (numbers/seeds/tensors untouched) and any
+# emit failure is logged and swallowed so a progress hiccup can never fail a
+# generation.
+from engine import progress_shim  # noqa: E402
+
+
+def _emit_step_progress(
+    stage: str,
+    index: int,
+    total: int,
+    it_s: float | None = None,
+    outer_index: int | None = None,
+    outer_total: int | None = None,
+) -> None:
+    fields: dict[str, object] = {
+        "stage": str(stage),
+        "index": int(index),
+        "total": int(total),
+    }
+    if it_s is not None:
+        fields["it_s"] = float(it_s)
+    if outer_index is not None:
+        fields["outer_index"] = int(outer_index)
+    if outer_total is not None:
+        fields["outer_total"] = int(outer_total)
+    try:
+        _emit("progress", **fields)
+    except Exception as exc:  # noqa: BLE001 - observation must never kill a job
+        _log(f"step-progress emit failed (ignored): {exc!r}")
+
+
+progress_shim.install(_emit_step_progress)
+_log("installed per-step tqdm progress shim (F2)")
+
 # Module-global pipeline, built once on the first {"op":"load"}.
 _PIPE: LTXFastVideoPipeline | None = None
 
@@ -283,19 +321,26 @@ def _do_generate(msg: dict) -> None:
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'}"
     )
-    _PIPE.generate(
-        prompt=msg["prompt"],
-        seed=seed,
-        height=int(msg["height"]),
-        width=int(msg["width"]),
-        num_frames=int(msg["num_frames"]),
-        frame_rate=msg["frame_rate"],
-        images=images,
-        output_path=output_path,
-        num_steps=int(msg["num_steps"]),
-        ic_loras=ic_loras,
-        ic_reference=ic_reference,
-    )
+    # F2: single-generate runs the wheel's two denoising loops back-to-back
+    # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
+    # the loop-invocation count within this op (see engine/progress_shim.py).
+    progress_shim.begin_single_op()
+    try:
+        _PIPE.generate(
+            prompt=msg["prompt"],
+            seed=seed,
+            height=int(msg["height"]),
+            width=int(msg["width"]),
+            num_frames=int(msg["num_frames"]),
+            frame_rate=msg["frame_rate"],
+            images=images,
+            output_path=output_path,
+            num_steps=int(msg["num_steps"]),
+            ic_loras=ic_loras,
+            ic_reference=ic_reference,
+        )
+    finally:
+        progress_shim.end_op()
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
 

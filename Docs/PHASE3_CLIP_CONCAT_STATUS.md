@@ -92,3 +92,17 @@
 2. ~~スライス1 キーフレーム目視~~ → **✅消化・ユーザー受容済み**（VERIFICATION_LOG §17.9-17.10）。
 3. チューニング backlog（#1-6）＝v1受容済みの磨き候補のまま（非ブロッキング・唯一の将来課題）。
 4. 次スコープ＝IC-LoRA Phase A→B は**完了済み**（`IC_LORA_PHASE_B_STATUS.md`）。現在の入口は [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) 冒頭ブロック。
+
+## ★フロントエンド開発向けメモ: クリップ入力フレーム数と出力フレーム数は一致しない（2026-07-06 追記・ユーザー指示）
+
+将来のフロントエンド（AviUtl2 統合等）でユーザー向け説明が必須になる算術。GUI 検証（VERIFICATION_LOG §27.7/§27.9）で実ユーザーが「クリップ2が生成されていない」と誤解した実績があるため、ここに正本として記録する。
+
+**原則: クリップの `num_frames` は「生成時の計算単位」であり、出力動画の尺の単純合計にはならない。** 減算は2種類ある。
+
+1. **オーバーラップ融合（全チェーン共通）**: 継ぎ目を滑らかにするため隣接クリップを `overlap_frames`（latent 単位・既定3）だけ重ねて融合する。デコード総フレーム数は `chain_math.compute_chain_layout` が単一情報源。例: 121f+121f・overlap 3 → **総225f**（242 にはならない）。
+2. **V2V 継続の参照置換（V2V のみ）**: `source_video.context_frames`（例73）がクリップ1の頭を元動画の末尾で置換・凍結する。この部分は元動画のコピーであり新規生成ではないため、**配信される output.mp4 は「新規部分のみ」＝総フレーム − context_frames**。例: 225 − 73 = **152f ≈ 6.3秒**（クリップ1の新規分48f＋クリップ2の寄与104f）。除かれた元動画部分は `POST /jobs/{id}/join` の結合版（joined.mp4）で戻る。
+
+**フロントエンドが説明・表示すべきこと**:
+- 生成前: 予想出力尺 ≈（Σclip − overlap融合 − context_frames）÷ fps（Gradio GUI は `v2v_cap_panel` の説明文で対応済み）。
+- 生成中: 進捗の「クリップ n/N」（`JobResponse.clip`/`clip_count`・optional 加算フィールド・§27.10）で「今どのクリップか・全クリップ処理されたか」を文字表示（クリップごとの VAE デコードプレビューは大半を捨てるデコードになるため不採用＝ユーザー決定）。
+- 生成後: metadata の `chain.total_frames`・`chain.clip_num_frames`・`v2v.new_frames_px`・`segment_seam_junctions`（クリップ境界のフレーム位置。出力内の境界 ＝ junction − context_frames）で内訳を提示できる。

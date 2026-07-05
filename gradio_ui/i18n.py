@@ -187,7 +187,9 @@ LABELS: dict[str, dict[str, str]] = {
                           "previous segment). The source video must have at least this many frames, "
                           "and clip 1 must be longer than the context so a new part remains. "
                           "Clip 1's start image cannot be used (the source occupies the head). "
-                          "The delivered video is the NEW part only."),
+                          "The delivered video is the NEW part only, so its length is roughly "
+                          "(total frames - context frames) / 24 seconds "
+                          "(e.g. 225 total frames with 73 context frames is about 6.3s)."),
         "v2v_chk_join": "Also create a version joined to the source video (crossfade the audio seam)",
         # F5: crossfade length selector for the joined version.
         "v2v_lbl_crossfade": "Audio crossfade length at the join (ms)",
@@ -492,7 +494,9 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_cap_panel": ("V2Vではクリップ1個から生成できます（凍結された元動画の末尾が直前のセグメントの役割を果たします）。"
                           "元動画にはこのフレーム数以上の長さが必要で、クリップ1のフレーム数は参照フレーム数より大きくしてください"
                           "（続きとして生成する余地を残すため）。クリップ1の開始画像は使えません（先頭は元動画が占有します）。"
-                          "出力される動画は新しく生成した部分のみです。"),
+                          "出力される動画は新しく生成した部分のみで、長さはおおむね"
+                          "（総フレーム数−参照フレーム数）÷24秒になります"
+                          "（例: 総225フレーム・参照73フレームなら約6.3秒）。"),
         "v2v_chk_join": "元動画と結合した完成版も作る（音声の継ぎ目をクロスフェード）",
         # F5: 結合版のクロスフェード長セレクタ。
         "v2v_lbl_crossfade": "結合部の音声クロスフェード長 (ms)",

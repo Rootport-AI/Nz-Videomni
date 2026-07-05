@@ -287,9 +287,16 @@ def _do_generate(msg: dict) -> None:
     ]
     ref = msg.get("reference_video")
     ic_reference = None
+    # IC-LoRA control-adherence knob (conditioning_attention_strength, 0..1,
+    # default 1.0). At 1.0 no attention-strength wrapper is applied (structurally
+    # byte-identical to before); < 1.0 relaxes how strongly the reference drives
+    # self-attention. Parsed here and forwarded to the pipeline; inert without a
+    # reference_video.
+    attn_strength = 1.0
     if ref:
         ref_path = str(ref["path"])
         ref_strength = float(ref.get("strength", 1.0))
+        attn_strength = float(ref.get("attention_strength", 1.0))
         # Phase C: control adapters (Union-Control) need the raw reference video
         # converted to a control signal (edge map / skeleton). ``preprocess`` is
         # "none" for Phase B reference adapters (Pixel-Spatial-Upscaler) -> the
@@ -338,6 +345,7 @@ def _do_generate(msg: dict) -> None:
             num_steps=int(msg["num_steps"]),
             ic_loras=ic_loras,
             ic_reference=ic_reference,
+            ic_attention_strength=attn_strength,
         )
     finally:
         progress_shim.end_op()

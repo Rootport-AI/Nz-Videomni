@@ -48,7 +48,7 @@
 
 - **÷128制約**: 全登録アダプタが `reference_downscale_factor=2` ＝参照は出力解像度の半分でVAEの64格子に載る。**参照付きジョブは出力 width/height が128で割り切れないと必ず失敗する**（512×320はVAE encodeでeinops fail・512×256はPASS）。API層に422事前バリデーション（`REFERENCE_RESOLUTION_INVALID`）を追加して検出。参照無しジョブは無影響。
 - **前処理種の競合禁止**: 1ジョブで複数の異なる `preprocess` 種を混在させると 400 `LORA_PREPROCESS_CONFLICT`。
-- **strength=1.0固定**: 公式tutorial警告（1.0未満はreferenceのpop/bleed-through）に従い可変化はしない。
+- **strength=1.0固定**: 公式tutorial警告（1.0未満はreferenceのpop/bleed-through）に従い可変化はしない。 → **（2026-07-06 注記）実装済み＝VERIFICATION_LOG §28**（`conditioning_attention_strength`＋`reference_video_strength` を optional 加算・省略時 1.0 で byte 不変）。ここでの警告はノブ①（参照 strength）の話で、本命ノブ②（attention strength）は公式 docs でアーティファクト警告なしと判明。
 - **前処理は逐次デコード**: キャッシュ無し（スライス4）。G0-bで前処理が生成時間の~5%と実測されたためキャッシュは不要と判断。
 
 ## ✅ G5成果物（客観準備完了・ユーザー目視待ち）
@@ -62,7 +62,7 @@
 
 - depth・Motion-Track・In-Outpainting・Deblur等の他アダプタ
 - 19b世代アダプタの流用（効果ゼロ報告・非対応）
-- strength可変化・`conditioning_attention_mask` 露出
+- strength可変化・`conditioning_attention_mask` 露出 → **（2026-07-06 注記）strength可変化は実装済み＝VERIFICATION_LOG §28**（`conditioning_attention_strength`＋`reference_video_strength`・省略時 1.0 不変）。`conditioning_attention_mask` の露出は引き続きスコープ外。
 - 前処理キャッシュ（スライス4＝G0-bでキャッシュ不要と判断）
 - rtmlibへの切替（TorchScript版DWPoseで問題が出た場合のフォールバックとしてのみ記載・G0-bで不要判断）
 - Gradio UI露出（APIのみ）
@@ -71,3 +71,12 @@
 
 1. **G5目視受容判断** → ✅**ユーザー受容（2026-07-04）**。`outputs/visual_review/10_〜13_` を目視し「動き維持で内容置換」の成立を受容。÷128制約・DWPose解放方針（release()逸脱）も併せて了承。**Phase C全ゲートクローズ**。
 2. **mainマージ判断** → ✅**受容を受けてmainへマージ・push済（2026-07-04・ユーザー指示）**。
+
+## 重ね掛け（多重制御）メモ — フロントエンド設計向け（2026-07-06 追記）
+
+**問い**: Stable Diffusion の ControlNet 多重ユニット（Forge Neo の Control unit タブを複数並べる運用）のように、IC-LoRA 制御を1回の生成に**重ね掛け**できるか。本セッションのコード読解＋Web 裏取りで整理した所見（設計は未定・記録のみ）。
+
+- **コード上の事実＝上流は機構的に複数対応**: `ICLoraPipeline.__call__` の `video_conditioning` は `list[(path, strength)]`（`ic_lora.py:140`）で複数受け取れる。`iclora_utils.py:111-141` がそのリストをループして参照条件を複数 append する。CLI も `--video-conditioning`／`--lora` を**繰り返し指定で蓄積**（`utils/args.py`）。複数アダプタの同時ロードも設計済み（scale 幾何が矛盾する場合のみ拒否）。
+- **我々のバックエンドは現在3箇所で意図的に単一制御に制限**: ①`reference_video_id` が単数スカラー（`api/models.py:102`）／②前処理種が2種以上で **400 `LORA_PREPROCESS_CONFLICT`**（`api/generate.py:41-50`・`ltx_runner.py:201-217` の防御的再チェック）／③engine の `_ic_reference` が単一タプル（`fast_video_pipeline.py:121`）。
+- **公式情報（Web 裏取り・2026-07-06）**: 公式ドキュメントに重ね掛けの記載は**なし**・公式サンプルワークフローも**すべて単一制御**。Union-Control の公式 ComfyUI 例は canny／depth／pose の前処理を3つ並べつつ**ガイドに繋ぐのは1本だけ**（他はミュートされた選択肢）。Union-Control は「**1つのアダプタでどの制御種でも受けられる**（実行ごとに切替・チェックポイント差し替え不要）」ものであり、同時融合を謳うものではない。コミュニティのチュートリアルは複数 IC-LoRA 同時実行を **VRAM 理由で明確に非推奨**。ただし「1つしかサポートしない」という明文の禁止も**ない**。＝**機構的には可能・公式に文書化／例示されていない**、が正確な現状。
+- **フロントエンド設計への含意（メモ・設計は未定）**: 既定は**単一制御の選択式**（ラジオ／ドロップダウン）が公式流儀に合致。重ね掛けは（対応するなら）「**実験的・非公式**」の明示付き上級オプション＋参照1本あたりの VRAM 増警告として分離するのが安全。対応する場合のバックエンド改修点＝**reference の複数化**（API／engine の単一スロット解除）＋**前処理競合チェックの per-reference 化**（詳細は本セッションのコード調査＝上記3箇所を参照）。

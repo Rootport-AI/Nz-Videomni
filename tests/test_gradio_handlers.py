@@ -586,12 +586,16 @@ def test_build_ui_constructs_and_registers_labels():
 
 
 # --------------------------------------------------------------------------- #
-# S4: IC-LoRA reference-video control. The generate handler gains 4 trailing
-# args (adapter, adapter_strength, ref_video_path, config); a helper appends
-# them so the intent of each test is explicit.
+# S4: IC-LoRA reference-video control. The generate handler gains trailing
+# args (adapter, adapter_strength, control_adherence, reference_strength,
+# ref_video_path, config); a helper appends them so the intent of each test is
+# explicit. control_adherence / reference_strength (S3) are keyword-only here so
+# the existing positional call sites (adapter, strength, ref_path, config) stay
+# valid; the returned list places them in the real UI/handler order.
 # --------------------------------------------------------------------------- #
-def _adapter_args(adapter=ADAPTER_NONE, strength=1.0, ref_path=None, config=None):
-    return [adapter, strength, ref_path, config]
+def _adapter_args(adapter=ADAPTER_NONE, strength=1.0, ref_path=None, config=None,
+                  control_adherence=1.0, reference_strength=1.0):
+    return [adapter, strength, control_adherence, reference_strength, ref_path, config]
 
 
 def test_upload_video_path_and_returns_id(tmp_path):
@@ -774,6 +778,89 @@ def test_generate_adapter_too_large_errors_zero_calls(tmp_path):
     assert calls["n"] == 0
     assert len(out) == 1
     assert out[0][1] == "" and out[0][2] is None
+
+
+# --------------------------------------------------------------------------- #
+# S3: control-adherence + reference-strength sliders. Each key is sent ONLY when
+# the adapter flow is active AND the slider value is below 1.0, so the default
+# (both 1.0) op stays byte-identical to the pre-S3 request.
+# --------------------------------------------------------------------------- #
+def test_generate_adapter_strengths_default_omits_keys(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/video"):
+            return httpx.Response(200, json={"video_id": "vid-9"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-def"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, str(vid), {}),  # both sliders 1.0
+    )
+    for out in gen:
+        if out[1]:  # job started -> stop before the poll loop's sleeps
+            gen.close()
+            break
+    assert "conditioning_attention_strength" not in captured
+    assert "reference_video_strength" not in captured
+
+
+def test_generate_adapter_strengths_below_one_included(tmp_path):
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/video"):
+            return httpx.Response(200, json={"video_id": "vid-9"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-str"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        1280, 768, False, 0, 0, 257, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, str(vid), {},
+                       control_adherence=0.6, reference_strength=0.8),
+    )
+    for out in gen:
+        if out[1]:  # job started -> stop before the poll loop's sleeps
+            gen.close()
+            break
+    assert captured["conditioning_attention_strength"] == 0.6
+    assert captured["reference_video_strength"] == 0.8
+
+
+def test_generate_non_adapter_ignores_strength_sliders():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert not request.url.path.endswith("/upload/video")
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-noadapt"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    # adapter = ADAPTER_NONE but sliders below 1.0 -> keys must stay absent
+    # (no adapter flow, so no reference-conditioning strengths apply).
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        *_adapter_args(control_adherence=0.5, reference_strength=0.5),
+    )
+    _run_until_job_started(gen)
+    assert "conditioning_attention_strength" not in captured
+    assert "reference_video_strength" not in captured
 
 
 # --------------------------------------------------------------------------- #
@@ -1306,7 +1393,7 @@ def test_generate_runtime_lang_localizes_messages():
     generate = make_generate_handler(api)
     out = list(generate(
         "   ", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
-        ADAPTER_NONE, 1.0, None, None,
+        *_adapter_args(),  # adapter none + default strengths
         "ja",  # ui_lang
     ))
     assert "プロンプト" in out[0][0]  # msg_prompt_required (ja)

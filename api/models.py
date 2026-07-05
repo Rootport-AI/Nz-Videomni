@@ -101,6 +101,22 @@ class GenerateRequest(BaseModel):
     loras: list[LoraSpec] = Field(default_factory=list)
     reference_video_id: str | None = None
 
+    # IC-LoRA control adjustability (ADDITIVE/optional — a request omitting both
+    # fields is byte-identical to before). Both only apply to a lora job (cross-
+    # validated below to require ``loras``).
+    #
+    # ``conditioning_attention_strength`` — control adherence: how strictly the
+    # output follows the IC-LoRA control signal (canny edges / pose skeleton).
+    # Upstream name kept. None ⇒ omitted ⇒ the engine builds no attention wrapper
+    # ⇒ byte-identical to today.
+    conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)
+    # ``reference_video_strength`` — the reference conditioning strength
+    # (denoise_mask = 1 − s). Official guidance keeps this at 1.0; values < 1.0
+    # can cause the reference to pop/bleed through into the output (official
+    # tutorial warning) — exposed deliberately per user decision, default
+    # unchanged (the runner still emits strength=1.0 when this is None).
+    reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)
+
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
         if self.width % 64 != 0:
@@ -157,6 +173,17 @@ class GenerateRequest(BaseModel):
             raise ValueError(
                 "reference_video_id requires at least one lora (the reference "
                 "video only conditions an IC-LoRA)"
+            )
+        # IC-LoRA control-adjustability fields only apply to a lora job.
+        if self.conditioning_attention_strength is not None and not self.loras:
+            raise ValueError(
+                "conditioning_attention_strength requires at least one lora "
+                "(it only adjusts an IC-LoRA control signal)"
+            )
+        if self.reference_video_strength is not None and not self.loras:
+            raise ValueError(
+                "reference_video_strength requires at least one lora "
+                "(it only adjusts an IC-LoRA reference conditioning)"
             )
         return self
 

@@ -1139,17 +1139,34 @@ class _RealBackend:
         # registry; empty list -> the worker passes ic_loras=[] (explicit clean
         # detach per Stage 1 semantics). ``reference_video`` is the raw reference
         # (Pixel-Spatial-Upscaler: used as-is / Union-Control: converted to a
-        # control signal by the worker per ``preprocess``), applied at a fixed
-        # strength of 1.0; None when no loras. ``preprocess`` is derived from the
-        # job's loras -- a conflict (>1 distinct kind) is rejected up front by
-        # api/generate.py already, this is the defensive re-check at the runner.
+        # control signal by the worker per ``preprocess``). The reference
+        # conditioning ``strength`` defaults to 1.0 (official guidance) but is
+        # overridable per request via ``reference_video_strength``; None when no
+        # loras. ``preprocess`` is derived from the job's loras -- a conflict (>1
+        # distinct kind) is rejected up front by api/generate.py already, this is
+        # the defensive re-check at the runner. When the request carries a
+        # ``conditioning_attention_strength`` an ``attention_strength`` key is
+        # spliced in (control-adherence override); it is entirely absent
+        # otherwise so an omitted-field job's payload stays byte-identical.
         loras_payload = [{"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths]
         preprocess = _resolve_reference_preprocess(lora_paths)
-        reference_payload = (
-            {"path": str(reference_video_path), "strength": 1.0, "preprocess": preprocess}
-            if reference_video_path is not None
-            else None
-        )
+        if reference_video_path is not None:
+            ref_strength = (
+                1.0
+                if request.reference_video_strength is None
+                else float(request.reference_video_strength)
+            )
+            reference_payload = {
+                "path": str(reference_video_path),
+                "strength": ref_strength,
+                "preprocess": preprocess,
+            }
+            if request.conditioning_attention_strength is not None:
+                reference_payload["attention_strength"] = float(
+                    request.conditioning_attention_strength
+                )
+        else:
+            reference_payload = None
 
         payload: dict = {
             "op": "generate",

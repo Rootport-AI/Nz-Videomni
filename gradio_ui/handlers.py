@@ -136,7 +136,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength,
                  kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength,
                  width, height, crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
-                 adapter=ADAPTER_NONE, adapter_strength=1.0, ref_video_path=None, config=None,
+                 adapter=ADAPTER_NONE, adapter_strength=1.0,
+                 control_adherence=1.0, reference_strength=1.0,
+                 ref_video_path=None, config=None,
                  ui_lang=None, poll_interval=None, poll_timeout_min=None):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
@@ -250,6 +252,13 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         if use_adapter:
             payload["loras"] = [{"name": adapter, "strength": float(adapter_strength)}]
             payload["reference_video_id"] = reference_video_id
+            # S3: control-adherence + reference-strength are optional server-side
+            # (default 1.0). Send each key ONLY when the slider is below 1.0 so
+            # the default op stays byte-identical to the pre-S3 request.
+            if float(control_adherence) < 1.0:
+                payload["conditioning_attention_strength"] = float(control_adherence)
+            if float(reference_strength) < 1.0:
+                payload["reference_video_strength"] = float(reference_strength)
         try:
             resp = api.generate(payload)
         except Exception as exc:

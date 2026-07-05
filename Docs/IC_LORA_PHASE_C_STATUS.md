@@ -48,7 +48,7 @@
 
 - **÷128制約**: 全登録アダプタが `reference_downscale_factor=2` ＝参照は出力解像度の半分でVAEの64格子に載る。**参照付きジョブは出力 width/height が128で割り切れないと必ず失敗する**（512×320はVAE encodeでeinops fail・512×256はPASS）。API層に422事前バリデーション（`REFERENCE_RESOLUTION_INVALID`）を追加して検出。参照無しジョブは無影響。
 - **前処理種の競合禁止**: 1ジョブで複数の異なる `preprocess` 種を混在させると 400 `LORA_PREPROCESS_CONFLICT`。
-- **strength=1.0固定**: 公式tutorial警告（1.0未満はreferenceのpop/bleed-through）に従い可変化はしない。
+- **strength=1.0固定**: 公式tutorial警告（1.0未満はreferenceのpop/bleed-through）に従い可変化はしない。 → **（2026-07-06 注記）実装済み＝VERIFICATION_LOG §28**（`conditioning_attention_strength`＋`reference_video_strength` を optional 加算・省略時 1.0 で byte 不変）。ここでの警告はノブ①（参照 strength）の話で、本命ノブ②（attention strength）は公式 docs でアーティファクト警告なしと判明。
 - **前処理は逐次デコード**: キャッシュ無し（スライス4）。G0-bで前処理が生成時間の~5%と実測されたためキャッシュは不要と判断。
 
 ## ✅ G5成果物（客観準備完了・ユーザー目視待ち）
@@ -62,7 +62,7 @@
 
 - depth・Motion-Track・In-Outpainting・Deblur等の他アダプタ
 - 19b世代アダプタの流用（効果ゼロ報告・非対応）
-- strength可変化・`conditioning_attention_mask` 露出
+- strength可変化・`conditioning_attention_mask` 露出 → **（2026-07-06 注記）strength可変化は実装済み＝VERIFICATION_LOG §28**（`conditioning_attention_strength`＋`reference_video_strength`・省略時 1.0 不変）。`conditioning_attention_mask` の露出は引き続きスコープ外。
 - 前処理キャッシュ（スライス4＝G0-bでキャッシュ不要と判断）
 - rtmlibへの切替（TorchScript版DWPoseで問題が出た場合のフォールバックとしてのみ記載・G0-bで不要判断）
 - Gradio UI露出（APIのみ）

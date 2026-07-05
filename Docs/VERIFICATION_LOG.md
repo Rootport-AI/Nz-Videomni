@@ -1759,3 +1759,61 @@ GUI の V2V クリップ連結で「Create joined version」を押すと **HTTP 
 - テスト 7 本追加（stage-1 のみ clip が届く／stage-2 タイル位置は clip にしない／単発では渡らない／JobRecord→JobResponse 配管／GUI 整形 日英／完了行の有無で従来文字列不変）。pytest **354 passed / 1 skipped**（347+1 → +7）。
 - **実機 e2e PASS（2026-07-06 未明・job `fa6b37d3`）**: 通常 2 クリップチェーン（各 49f・1280x768・seed 42）で 1 秒間隔ポーリング→ `clip` が **None（encode）→1/2（stage-1 前半）→2/2（stage-1 後半）→2/2 維持（stage-2／デコード／completed）** と設計どおり遷移。従来のコンソール行（`chain stage-1 denoise [1/2]` 等）不変・ERROR/Traceback なし・**peak_vram_mb 8440＝チェーン回帰基準値と一致**。
 - **残 OPEN**: main マージ後、ユーザーが GUI で「クリップ n/N」表示を実機確認。あわせてクリップ1/2 に別々の個別プロンプトを入れて生成し、出力後半で内容が切り替わること＝クリップ2の実在を目視確認する手順を案内済み。
+
+---
+
+## 28. ★IC-LoRA 制御の効き具合（strength）可変化＝`conditioning_attention_strength`＋`reference_video_strength`（2026-07-06・branch `feature/ic-lora-strength`・**目視ゲート／マージはユーザー承認待ち**）
+
+> **正本＝本節。** [`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md) の「strength=1.0固定」制約（既知の制約）とスコープ外節「strength可変化」を実装で解消した回。凍結 API の加算的変更（optional フィールド・**省略時 byte 同一**の定型ゲート）で3層（API／エンジン／GUI）に配線。
+> commit `2a2bd06`（S3=GUI）→`3e5f367`（S1=API/payload/metadata）→`e2039f6`（S2=engine 配線＋unit）。**push／main マージはユーザー承認待ち**。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 28.1 リサーチ結論＝「制御にどれだけ従わせるか」のノブは3つ（コード読解＋Web・2系統一致）
+
+コードの実配線と公式ドキュメントを突き合わせ、「制御追従度」を左右するパラメータを3つに切り分けた。
+
+| ノブ | 実体 | 従来状態 | 出典（照合済み） |
+|---|---|---|---|
+| ①参照条件付け strength | `VideoConditionByReferenceLatent.strength`（`denoise_mask = 1 − s`） | `ltx_runner.py` で **1.0 固定**送信（worker→pipeline は既に可変対応済み） | 公式 tutorial（ltxworkflow.com IC-LoRA guide）の「<1.0 で reference が pop／bleed-through」警告は**このノブ**の話 |
+| ②`conditioning_attention_strength` | noisy↔reference トークン間 attention への **log-space 加算バイアス** | 上流 `ICLoraPipeline` 専用で我々の `DistilledPipeline` 経路には**未配線**だった | Lightricks 公式 docs（docs.ltx.video）が「control signal にどれだけ厳密に従うか」のノブと明記・0〜1・既定 1.0・0.5=バランス・depth 系 0.6 推奨・**アーティファクト警告なし** |
+| ③LoRA アダプタ強度 | B@A スケール（per-layer） | **既に全層配線済み**（API 0〜2.0＋GUI Adapter strength スライダー）＝今回不変 | Phase B G0-c |
+
+- **ユーザー決定**: ①と②の両方を可変化・既定値＝公式既定の **1.0**（省略時 byte 同一）。**②が本命ノブ**（アーティファクト警告なし・追従度を素直に緩める）。
+- **上流 parity（省略時 byte 同一の構造的裏付け）**: `iclora_utils.py:122-140` は strength<1.0 のときだけ `ConditioningItemAttentionStrengthWrapper` で包み、1.0 ではラッパー自体を作らない。したがって「1.0＝no-wrapper」は上流 verbatim で成立する。
+
+### 28.2 S0 スパイク（GPU 実測・懸念潰し・pose 1280×768/121f/seed12345）
+
+②のラッパーが挟むマスク付き attention で SDPA が math フォールバックへ落ちて VRAM が跳ねないか、を実測で潰した。
+
+- **カーネル選択**: マスク付き video self-attention（q=(1,32,4800,128)・mask=(1,1,4800,4800) bf16）は **cuDNN カーネル選択**（スコア行列を実体化しない）。math フォールバックは一度も発生せず。
+- **ラッパーの VRAM 増≈ゼロ**: フレッシュワーカーでラッパーあり(0.6)=peak **8544** vs なし=**8548** ＝差は誤差帯。**緩和策（EFFICIENT 強制）不要**と判断。
+- **ベースライン健全性 PASS**: Job A（②省略）peak **8548** ＝ Phase C Job P 基準と完全一致。
+
+### 28.3 実装（3層・凍結 API 加算的変更）
+
+- **API（`api/models.py`）**: `GenerateRequest` に optional 2フィールド `conditioning_attention_strength: float|None (ge=0, le=1)`・`reference_video_strength: float|None (ge=0, le=1)`。`loras` なしで指定→**422 VALIDATION_ERROR**（新エラーコードなし）。
+- **ペイロード（`services/ltx_runner.py`）**: `reference_video.strength` ＝省略時 1.0（従来 byte 同一）／指定時その値。`attention_strength` キーは**指定時のみ splice**（省略時はキー自体なし）。
+- **metadata（`services/pipeline_manager.py`）**: 各フィールド非 None のときのみ `ic_lora` ブロックに記録。
+- **エンジン（`engine/worker.py`＋`engine/pipeline/fast_video_pipeline.py`）**: `attention_strength` を payload から parse→`ic_attention_strength` として配線→`_reference_conditioning_for_stage` で **<1.0 のときのみ** `ConditioningItemAttentionStrengthWrapper` で包む（上流 verbatim・**IC-LoRA 重みパッチ機構は不可触**のまま）。参照 strength（①）は worker→pipeline が既に可変対応済みだったため**送信側の固定解除のみ**。
+- **GUI（`gradio_ui/`）**: Generate タブ IC-LoRA アコーディオンにスライダー2本（0.0〜1.0 step 0.05 既定 1.0）。「制御追従度 / Control adherence」（info: 1.0=制御信号に厳密に従う・下げるほど自由に解釈・推奨 0.5〜0.7）、「参照強度 / Reference strength」（info: 通常 1.0 のまま・1.0 未満は参照映像が滲み込むことがある＝公式の注意）。**値<1.0 のときのみキー送出**＝既定操作は API リクエストも従来形。EN/JA i18n。
+
+### 28.4 検証ゲート（全 PASS・実 API 経由・一次ソース＝`peak_vram_mb`）
+
+| ゲート | job | 結果 |
+|---|---|---|
+| G1 T2V 基準 | `05bee2d0…` 512×320/49f | SHA `23844b4eebd107ccba8c5534eb65bab86575cca0b9050cb6c7e680a4506bb7bf` **完全一致**・peak **8440**・104.8s |
+| G2 IC-LoRA 基準（両フィールド省略） | `c7dcd1e1…` 1024×640/25f upscaler | SHA `735a6de97d2deb56a781c66307849924a8ac25b51f0591fbddab07a78875e272` **完全一致**・peak **9525**・128.0s |
+| G3 明示 1.0/1.0 | `8d838f27…` | G2 と SHA **完全一致**＝「1.0＝no-wrapper」の e2e 実証・peak **9534** |
+| E2E-A attention 0.6 | `2f9a1e41…` pose 1280×768/121f | 完走・metadata 両所に 0.6 記録・peak **9537**（≤9541 帯）・215.9s |
+| E2E-B 参照 0.8 | `a62d8b74…` | 完走・metadata 記録・**attention キー正しく不在**・peak **9542**・215.6s |
+| pytest | — | **365 passed / 1 skipped**（旧基準 354→+11 新テスト＝S1 6本 API/payload・S2 2本 engine・S3 3本 GUI） |
+
+- G2/G3 の peak が Phase B 期の 8440 と違うのは**同一ワーカー連続実行のアロケータ状態持ち越し**（SHA 一致が計算不変を証明）。OOM／WDDM 共有溢れなし。
+
+### 28.5 OPEN（ユーザー宿題・次回）
+
+1. **目視ゲート（ユーザー）**: `outputs/visual_review/` — **#10 vs #14**（同プロンプト／seed／参照の追従度 1.0 vs 0.6・**本命ペア**）・**#15**（参照強度 0.8・滲み／ポップスルーの実態確認）・**#16 vs #17**（スパイク由来の補助ペア・別プロンプト）。README に見どころ追記済み。
+2. **push／main マージ**: ユーザー承認待ち（branch `feature/ic-lora-strength`）。
+3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝ユーザーが後日実施。
+4. negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続）。

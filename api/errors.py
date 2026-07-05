@@ -134,6 +134,19 @@ def model_file_missing(category: str, name: str, detail: str | None = None) -> A
     )
 
 
+def model_incompatible(category: str, name: str, detail: str | None = None) -> APIError:
+    """Model management: the selected file failed the cheap compatibility
+    precheck (wrong extension / not a GGUF / broken safetensors header) that
+    runs BEFORE the worker is restarted — guarding against a native loader
+    crash deep in the engine. 422."""
+    return APIError(
+        "MODEL_INCOMPATIBLE",
+        f"selected model '{category}/{name}' failed the compatibility precheck",
+        422,
+        detail=detail,
+    )
+
+
 def lora_preprocess_conflict(kinds: list[str]) -> APIError:
     """Phase C: the requested loras imply more than one control preprocess kind
     (e.g. one canny-control + one pose-control adapter) for a single reference

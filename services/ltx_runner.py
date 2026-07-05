@@ -176,12 +176,16 @@ class LTXRunner:
 
     # ------------------------------------------------------------------ load
 
-    def load(self) -> None:
+    def load(self, selection: dict[str, str] | None = None) -> None:
+        """Load the pipeline. ``selection`` (model management, additive) maps a
+        category (services.model_registry.CATEGORIES) to an ABSOLUTE weight
+        path; absent categories / a None selection use the config defaults, so
+        the legacy no-argument call is byte-identical to before."""
         if self._backend is not None and self._backend.loaded:
             return
         if self._backend is None:
             self._backend = self._select_backend()
-        self._backend.load()
+        self._backend.load(selection=selection)
 
     def unload(self) -> None:
         if self._backend is None:
@@ -323,14 +327,22 @@ class _MockBackend:
         self.low_vram = low_vram
         self.pipeline = None
         self._loaded = False
+        # Model management (tests/observability): the selection passed to the
+        # last actual load, and a load counter (a swap = unload + load bumps
+        # it; a no-op does not). The mock has no weights to swap — it only
+        # records that the selection plumbing reached the backend.
+        self.last_selection: dict[str, str] | None = None
+        self.load_calls = 0
 
     @property
     def loaded(self) -> bool:
         return self._loaded
 
-    def load(self) -> None:
+    def load(self, selection: dict[str, str] | None = None) -> None:
         if self._loaded:
             return
+        self.last_selection = dict(selection) if selection else None
+        self.load_calls += 1
         logger.info(
             "Loading pipeline (MOCK). checkpoint=%s low_vram=%s fp8=%s cpu_offload_te=%s vae_tiling=%s",
             self.config.model.checkpoint_name,
@@ -780,25 +792,29 @@ class _RealBackend:
 
     # ------------------------------------------------------------------ load
 
-    def load(self) -> None:
-        if self.loaded:
-            return
+    # Model-management selection: category -> the worker-payload field it
+    # overrides. The four swappable categories (Docs/MODEL_MANAGEMENT_DESIGN.md
+    # §0); every other payload field always comes from config.
+    _SELECTION_FIELDS = {
+        "transformer": "gguf_transformer_path",
+        "text_encoder": "gguf_gemma_path",
+        "video_vae": "component_video_vae_path",
+        "audio": "component_audio_vae_path",
+    }
 
+    def _build_load_payload(self, selection: dict[str, str] | None = None) -> dict:
+        """Build the ``{"op": "load"}`` worker payload (pure — no process I/O).
+
+        ``selection`` maps a model-management category to an ABSOLUTE weight
+        path, already resolved + prechecked by the API layer. Categories absent
+        from ``selection`` (or a ``None``/empty selection) resolve from the
+        config default fields exactly as before, so the no-selection payload is
+        BYTE-IDENTICAL to the pre-model-management payload. Key set AND
+        insertion order are part of that contract, pinned by the golden
+        snapshot in tests/test_model_swap_load.py — do not reorder.
+        """
+        selection = selection or {}
         model = self.config.model
-
-        # Resolve + validate the engine python, worker script, and 5 model paths.
-        engine_python = self._require_path(model.engine_python, "engine_python")
-        if not model.engine_dir:
-            raise RuntimeError("model.engine_dir is not configured (required for the real backend).")
-        engine_dir = self.config._abs(model.engine_dir)
-        if not engine_dir.exists():
-            raise RuntimeError(f"model.engine_dir not found: {engine_dir}")
-        worker = engine_dir / "worker.py"
-        if not worker.exists():
-            raise RuntimeError(f"LTX worker script not found: {worker}")
-        # The worker is launched as `python -m engine.worker`, so its imports
-        # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
-        project_root = self.config._abs(".")
 
         # checkpoint_path (43GB monolith) is reference-only: the GGUF + component-file
         # path never opens it. It is still forwarded to the worker as a payload field
@@ -815,22 +831,67 @@ class _RealBackend:
         gemma_root = self._require_path(model.gemma_root, "gemma_root")
 
         upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
-        gguf_transformer_path = self._require_path(model.gguf_transformer_path, "gguf_transformer_path")
-        gguf_gemma_path = self._require_path(model.gguf_gemma_path, "gguf_gemma_path")
+
+        def _swappable(category: str, field: str) -> str:
+            override = selection.get(category)
+            if override:
+                return str(override)
+            return self._require_path(getattr(model, field), field)
+
+        gguf_transformer_path = _swappable("transformer", "gguf_transformer_path")
+        gguf_gemma_path = _swappable("text_encoder", "gguf_gemma_path")
 
         # Component-file re-sourcing. Fixed on in config.yaml; the 3 standalone
         # files replace the monolith for VAE/audio (+ text projection connectors),
         # so they are load-bearing and always validated for existence.
-        use_component_files = bool(self.config.vram.use_component_files)
-        component_video_vae_path = self._require_path(
-            model.component_video_vae_path, "component_video_vae_path"
-        )
-        component_audio_vae_path = self._require_path(
-            model.component_audio_vae_path, "component_audio_vae_path"
-        )
+        component_video_vae_path = _swappable("video_vae", "component_video_vae_path")
+        component_audio_vae_path = _swappable("audio", "component_audio_vae_path")
         component_text_projection_path = self._require_path(
             model.component_text_projection_path, "component_text_projection_path"
         )
+
+        return {
+            "op": "load",
+            "checkpoint_path": checkpoint_path,
+            "gemma_root": gemma_root,
+            "upsampler_path": upsampler_path,
+            "gguf_transformer_path": gguf_transformer_path,
+            "gguf_gemma_path": gguf_gemma_path,
+            # Phase 1 component-file paths (gate via LTX_COMPONENT_FILES env).
+            "component_video_vae_path": component_video_vae_path,
+            "component_audio_vae_path": component_audio_vae_path,
+            "component_text_projection_path": component_text_projection_path,
+            "gguf_per_layer_quant": bool(model.gguf_per_layer_quant),
+            "block_swap_blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or 8,
+            "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
+            "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
+        }
+
+    def load(self, selection: dict[str, str] | None = None) -> None:
+        if self.loaded:
+            return
+
+        model = self.config.model
+
+        # Resolve + validate the engine python and worker script.
+        engine_python = self._require_path(model.engine_python, "engine_python")
+        if not model.engine_dir:
+            raise RuntimeError("model.engine_dir is not configured (required for the real backend).")
+        engine_dir = self.config._abs(model.engine_dir)
+        if not engine_dir.exists():
+            raise RuntimeError(f"model.engine_dir not found: {engine_dir}")
+        worker = engine_dir / "worker.py"
+        if not worker.exists():
+            raise RuntimeError(f"LTX worker script not found: {worker}")
+        # The worker is launched as `python -m engine.worker`, so its imports
+        # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
+        project_root = self.config._abs(".")
+
+        # Full worker payload: validates the model paths and applies any
+        # model-management selection overrides (byte-identical when absent).
+        payload = self._build_load_payload(selection)
+
+        use_component_files = bool(self.config.vram.use_component_files)
 
         # Child env: inherit, force the 16GB-load-bearing CUDA + compile knobs,
         # unbuffered IO, and set PYTHONPATH to the project root so the worker's
@@ -867,19 +928,15 @@ class _RealBackend:
         log_dir.mkdir(parents=True, exist_ok=True)
         self._log_path = log_dir / "ltx_worker.log"
 
-        knobs = {
-            "gguf_per_layer_quant": bool(model.gguf_per_layer_quant),
-            "block_swap_blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or 8,
-            "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
-            "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
-        }
         logger.info(
             "Loading pipeline (REAL worker). python=%s engine_dir=%s block_swap=%s ckpt=%s",
             engine_python,
             engine_dir,
-            knobs["block_swap_blocks_on_gpu"],
-            checkpoint_path,
+            payload["block_swap_blocks_on_gpu"],
+            payload["checkpoint_path"],
         )
+        if selection:
+            logger.info("Model-management overrides: %s", selection)
 
         log_fh = open(self._log_path, "a", encoding="utf-8")
         try:
@@ -900,21 +957,7 @@ class _RealBackend:
             raise RuntimeError(f"failed to launch LTX worker: {exc!r}") from exc
 
         try:
-            self._send(
-                {
-                    "op": "load",
-                    "checkpoint_path": checkpoint_path,
-                    "gemma_root": gemma_root,
-                    "upsampler_path": upsampler_path,
-                    "gguf_transformer_path": gguf_transformer_path,
-                    "gguf_gemma_path": gguf_gemma_path,
-                    # Phase 1 component-file paths (gate via LTX_COMPONENT_FILES env).
-                    "component_video_vae_path": component_video_vae_path,
-                    "component_audio_vae_path": component_audio_vae_path,
-                    "component_text_projection_path": component_text_projection_path,
-                    **knobs,
-                }
-            )
+            self._send(payload)
             event = self._read_event(timeout=self._LOAD_TIMEOUT_S)
         except Exception:
             self._kill()

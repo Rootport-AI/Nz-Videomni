@@ -88,6 +88,11 @@ class PipelineManager:
         # ``pipeline_loaded`` (design ruling §9-6). Never updated on a failed
         # swap-load (the previous successful selection stays authoritative).
         self.active_models: dict[str, str] = {c: DEFAULT_NAME for c in CATEGORIES}
+        # The resolved ABSOLUTE paths behind active_models' non-default names
+        # (empty while everything is default). A selection-less load() reuses
+        # these, so auto-load-on-generate after an unload keeps the active
+        # (possibly swapped) combination instead of silently reverting.
+        self._active_selection_paths: dict[str, str] = {}
 
     # --------------------------------------------------------------- status
 
@@ -106,20 +111,72 @@ class PipelineManager:
 
     # ------------------------------------------------------------ lifecycle
 
-    def load(self) -> None:
+    def load(
+        self,
+        selection: dict[str, str] | None = None,
+        active_names: dict[str, str] | None = None,
+    ) -> None:
+        """Load the pipeline (model management: optionally with overrides).
+
+        ``selection`` maps a category to a resolved ABSOLUTE weight path;
+        ``active_names`` is the matching category->NAME map recorded (on
+        success only) for GET /models. Both default to None: a plain ``load()``
+        reuses the last successful selection (all-default on boot), keeping the
+        legacy call — and auto-load-on-generate — behaviorally unchanged while
+        honoring a previous swap.
+        """
         with self._lock:
             if self.runner.loaded:
                 self.state = self.STATE_READY
                 return
             self.state = self.STATE_LOADING
+        if selection is None:
+            selection = dict(self._active_selection_paths)
+            active_names = dict(self.active_models)
         try:
-            self.runner.load()
+            self.runner.load(selection=selection or None)
             self.state = self.STATE_READY
         except Exception as exc:
             self.state = self.STATE_ERROR
             self._cleanup_after_error()
             logger.exception("Pipeline load failed")
             raise pipeline_load_failed(detail=str(exc)) from exc
+        if active_names:
+            self.active_models = dict(active_names)
+        self._active_selection_paths = dict(selection)
+
+    def reload(
+        self, selection: dict[str, str], active_names: dict[str, str]
+    ) -> None:
+        """Swap-load (model management): force a worker rebuild with a new
+        model selection.
+
+        The worker builds its pipeline exactly once (engine/worker.py) and
+        ``load()`` early-returns while loaded, so a swap is unload (kill the
+        subprocess) + load — never an in-place re-load op. On failure there is
+        NO automatic fallback (design ruling §9-1): the pipeline stays
+        unloaded, ``active_models`` keeps the previous successful selection,
+        and the error tells the user how to recover.
+        """
+        with self._lock:
+            self.runner.unload()
+            self.state = self.STATE_LOADING
+        try:
+            self.runner.load(selection=selection or None)
+        except Exception as exc:
+            self.state = self.STATE_ERROR
+            self._cleanup_after_error()
+            logger.exception("Pipeline swap-load failed")
+            raise pipeline_load_failed(
+                detail=(
+                    f"{exc} — the previous pipeline was unloaded and no fallback "
+                    "was attempted; select the 'default' models and Load again "
+                    "to recover."
+                )
+            ) from exc
+        self.active_models = dict(active_names)
+        self._active_selection_paths = dict(selection)
+        self.state = self.STATE_READY
 
     def unload(self) -> None:
         with self._lock:

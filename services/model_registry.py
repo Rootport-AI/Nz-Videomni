@@ -28,11 +28,13 @@ Fail loud, no silent skip (lora_registry precedent):
 
 from __future__ import annotations
 
+import json
 import logging
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-from api.errors import model_file_missing, model_not_found
+from api.errors import APIError, model_file_missing, model_incompatible, model_not_found
 from config import PROJECT_ROOT, AppConfig
 
 logger = logging.getLogger("ltx.models")
@@ -113,6 +115,69 @@ class ModelEntryInfo:
             "exists": self.exists,
             "source": self.source,
         }
+
+
+_GGUF_MAGIC = b"GGUF"
+# A safetensors JSON header beyond this is implausible for these models and
+# more likely a corrupt/foreign file than a real header.
+_MAX_SAFETENSORS_HEADER = 100 * 1024 * 1024
+
+
+def precheck_model_file(category: str, name: str, path: Path) -> None:
+    """Cheap compatibility precheck BEFORE the worker is (re)started.
+
+    Reads only a few bytes: GGUF magic for .gguf, and the 8-byte length +
+    JSON header parse for .safetensors (weights are never loaded). This stops
+    "right extension, wrong file" inputs from reaching the engine's native
+    loaders (where they would crash without a friendly error). Deep key/shape
+    validation stays with the engine's fail-fast load path (design §5.2).
+
+    Raises ``model_incompatible`` (422) on any failure.
+    """
+    spec = CATEGORY_SPECS.get(category)
+    if spec is None:
+        raise model_not_found(
+            category, name, detail=f"unknown category; known: {list(CATEGORIES)}"
+        )
+    suffix = path.suffix.lower()
+    if suffix not in spec.extensions:
+        raise model_incompatible(
+            category,
+            name,
+            detail=f"expected one of {list(spec.extensions)}, got '{path.suffix}'",
+        )
+    try:
+        with path.open("rb") as fh:
+            if suffix == ".gguf":
+                magic = fh.read(4)
+                if magic != _GGUF_MAGIC:
+                    raise model_incompatible(
+                        category, name, detail=f"not a GGUF file (magic {magic!r})"
+                    )
+            else:  # .safetensors
+                raw = fh.read(8)
+                if len(raw) != 8:
+                    raise model_incompatible(
+                        category, name, detail="file too small for a safetensors header"
+                    )
+                (header_len,) = struct.unpack("<Q", raw)
+                size = path.stat().st_size
+                if header_len == 0 or header_len > size - 8 or header_len > _MAX_SAFETENSORS_HEADER:
+                    raise model_incompatible(
+                        category,
+                        name,
+                        detail=f"implausible safetensors header length {header_len}",
+                    )
+                try:
+                    json.loads(fh.read(header_len).decode("utf-8"))
+                except Exception as exc:
+                    raise model_incompatible(
+                        category, name, detail=f"unparsable safetensors header: {exc}"
+                    ) from exc
+    except APIError:
+        raise
+    except OSError as exc:
+        raise model_incompatible(category, name, detail=f"unreadable file: {exc}") from exc
 
 
 def _hint_matches(filename: str, hint: str | None) -> bool:

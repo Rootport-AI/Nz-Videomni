@@ -1668,3 +1668,94 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 - **H2（①は UX と③の複合）**: 結合版は自動生成ではなく手動ボタン（設計どおり）＋クリックすると③で失敗＝「作られない」に見える。
 - **H3（②は仕様と期待のギャップの可能性）**: metadata 上クリップ2は生成済み（new_frames_px=152）。V2V では参照フレーム数 73 がクリップ1の頭を置換するため新規部分＝152f≈6.3s（2×121f≈10s ではない）。出力が想定より短い/クリップ境界が滑らかで区別できないことが「2クリップ目が無い」に見えた可能性。GUI 側で「新規部分の長さ＝クリップ合計−参照フレーム数」の説明が不足。※**実物の目視確認は未実施＝次セッションで出力内容を確認してから確定**。
 - 副次: 16fps→24fps リサンプルは正常動作。**無音音声の 16fps 素材という入力条件そのものがこれまでの検証マトリクスに無かった（新しい入力クラス）**。
+
+---
+
+## 27. ★GUI 経由クリップ連結＋結合の症状解消＝無音音声素材の V2V 結合 503 修正（2026-07-05）
+
+> **正本＝本節。** §26.4 の持ち越し（仮説 H1/H2/H3）の検証と対処。作業ブランチ＝`fix/v2v-join-silent-loudnorm`（worktree・push／main マージはユーザー承認待ち）。GPU 生成を伴わない修正のため、実装・単体検証は ffmpeg/CPU のみで完結（実機 e2e は親が別途実施・後述 27.6）。
+
+### 27.1 症状（§26.4 からの持ち越し）
+
+GUI の V2V クリップ連結で「Create joined version」を押すと **HTTP 503**＋ffmpeg エラー `[loudnorm] Value -inf for parameter 'I' out of range [-70 - -5]`。素材＝ユーザーの元動画（upload `ed7d8b41`・1280x720・16fps・音声ストリームは存在するがデジタル無音＝volumedetect mean_volume **-91.0 dB**）。
+
+### 27.2 確定原因＝H1（2パス loudnorm の -inf 無ガード）
+
+`services/video_io.py::join_v2v` の音量整合（ラウドネスマッチ）は2パス方式＝第1パスで両クリップの実測ラウドネス（LUFS）を測り、第2パスの `loudnorm` フィルタに目標値・実測値として展開する。**音声ストリームが存在するがデジタル無音のとき、第1パスの実測 `input_i` が `-inf` になり、それを無ガードで `loudnorm=I=…:measured_I=…` に展開するため、ffmpeg が範囲外（`I` の許容範囲 [-70, -5]）として拒否**→FFmpegError→503。
+
+- 該当箇所（修正前）: with_audio フェードペア経路と handle 真クロスフェード経路の両方（同じ展開ロジック）。
+- 盲点: `has_audio_stream` は**ストリームの有無しか見ない**ため、`source_had_audio=true` のまま音声なしフォールバック（video_only）に落ちず、必ず loudnorm 展開に進んでいた。
+
+### 27.3 仮説検証の経緯（修正前に再現→修正→同手順成功）
+
+1. **修正前の再現（実素材）**: 無音 16fps 元動画を継続クリップの 1280x768・24fps へ正規化（`normalize_clip`・`join_manager.py` と同じ判定）→ `join_v2v` 実行→ **FFmpegError 再現**。エラー本文＝`[Parsed_loudnorm_2] Value -inf for parameter 'I' out of range [-70 - -5]` / `Error applying option 'I' to filter 'loudnorm': Result too large`。仮説 H1 と完全一致。
+2. 修正（27.4）を実装。
+3. **同一手順を再実行→成功**: 517 フレーム（正規化後 source 365f＋新規 152f）・音声 AAC あり・`loudness_matched=false`・`loudness_skip_reason` 設定・警告ログ `source input_i='-inf', continuation input_i='-8.32'`。
+
+### 27.4 対処＝実測値が使えないときは音量整合をスキップ（クロスフェードのみ実施）
+
+`services/video_io.py` に検査ヘルパー `_loudnorm_stats_usable(stats: dict, *, as_target: bool) -> bool`（553行〜）を新設し、第1パスの実測値（`input_i`/`input_tp`/`input_lra`/`input_thresh`/`target_offset`）を float 化・**非有限（-inf/NaN）または範囲外なら不合格**とする。範囲＝`input_i` が第2パスの目標 `I=` に渡る側（元動画）は ffmpeg の許容 **[-70, -5]**・実測 `measured_*` として渡る側（継続/ハンドル）は **[-99, 0]**。
+
+- with_audio フェードペア経路（812行〜）と handle 真クロスフェード経路（764行〜）の両方で、**どちらか一方でも不合格なら loudnorm フィルタを組まずスキップ**: `loudness_matched=false` のまま・LUFS 欄は null のまま・クロスフェード（フェードペア／acrossfade）はそのまま実施。内部 info に `loudness_skip_reason` を記録し、`logger.warning`（`ltx.video_io`）で実測生値を出力。
+- **クランプ方式（ffmpeg-normalize が採る -inf→-99 置換）を不採用にした理由**: 先行事例の ffmpeg-normalize は「固定目標へ正規化する」ツールなので実測側のクランプで足りるが、我々は「**元動画の実測 LUFS を目標 `I=` に渡して継続側を合わせる**」整合であり、無音（-inf→-99 相当）に合わせると**継続クリップの音声を無音近くまで潰してしまう**。無音素材に音量を「合わせる」こと自体が無意味なので、スキップが正しい。
+- **凍結 API は無変更**: `api/models.py::JoinResponse` に手を入れず、`loudness_skip_reason` は info 内部キーに留めた（`join_manager.py` は明示キーしか拾わないためレスポンスに漏れない）。
+
+### 27.5 テスト＝anullsrc フィクスチャ＋3本追加（pytest 346 passed / 1 skipped）
+
+- `tests/test_video_io.py::_make_v2v_clip` に `silent: bool = False` を追加（sine の代わりに `anullsrc`＝ストリームあり・信号ゼロ。既存呼び出しの挙動は不変）。
+- 追加 3 本（実 ffmpeg 使用・既存作法）: ①無音 source×有音 continuation（フェードペア） ②有音 source×無音 continuation ③handle 経路×無音 source。いずれも**例外なく成功・`loudness_matched=false`・LUFS 欄 null・`loudness_skip_reason` あり・フレーム数＝source+continuation・音声ストリームあり**を確認。
+- pytest **346 passed / 1 skipped**（343+1 → +3）。既存の有音経路テスト（`test_join_v2v_loudness_match_changes_continuation_level` 等）は緑のまま＝**正常値は従来どおり素通しで整合が掛かる（非退行の証拠）**。
+
+### 27.6 実機 e2e（親が別エージェントで実施・PASS・2026-07-05）
+
+新ジョブ **`e4a34bf5-941f-4ed5-a9cc-ed6d82783964`**: 無音 16fps 素材（ユーザー症状素材のコピー）をアップロード→V2V チェーン生成（2×121f・context 73・1280x768・**312.66s**・peak_vram_mb **9889**）→ `POST /jobs/{id}/join` が **HTTP 200（503 解消）**。
+
+- join レスポンス: `join_mode=handle_crossfade`・`handle_crossfade_ms_applied=300`・`loudness_matched=false`・`source_lufs=null`・**`loudness_skip_reason` はレスポンスに非露出＝凍結 API 無変更の実証**。
+- joined.mp4: **21.54 秒・517 フレーム**（正規化 source 365f＋新規 152f）・1280x768 24fps・音声 AAC あり。
+- server.log:1841 に `WARNING ltx.video_io: join_v2v handle: skipping loudness match (source input_i='-inf', handle input_i='-8.08')`。**503／ERROR／Traceback なし**。
+
+### 27.7 H2/H3 の結論
+
+- **H2（①「結合版が作られない」）＝手動ボタン＋503 失敗の複合で確定**。結合版は設計どおり手動ボタンで作るものであり、クリックすると③の 503 で失敗していたため「作られない」に見えた。**コード修正（H1）で解消**。
+- **H3（②「2クリップ目が無い」）＝仕様と期待のギャップで確定**。metadata 上クリップ2は生成済み（new_frames_px=152）。V2V では参照フレーム数（73）がクリップ1の頭を置換するため、**出力は新規部分のみ＝152f≈6.3 秒**（2×121f≈10 秒ではない）＝仕様どおり。対処＝GUI の V2V 説明文（`gradio_ui/i18n.py` の `v2v_cap_panel`・日英両方）に「出力の長さ≈（総フレーム数−参照フレーム数）÷24 秒」の説明と例を追記。
+- **ユーザー目視ゲート＝OPEN**: ①output.mp4（6.3 秒）にクリップ2の内容が含まれるかの実物目視（H3 の最終確定） ②joined.mp4（`outputs/e4a34bf5-…/joined.mp4`）の目視試聴。→ **✅クローズ（§27.9・2026-07-05 夜「問題なし」）**
+
+### 27.8 コミット列・状態
+
+- コミット列（branch `fix/v2v-join-silent-loudnorm`）: `c7ad906`（fix: video_io ガード＋スキップ＋警告ログ）→`6ba83ae`（test: anullsrc フィクスチャ＋3本）→`1422543`（docs(i18n): v2v_cap_panel 尺説明）→`2322ac8`（docs: §27＋handoff）→`5557dcb`（fix(gui): トースト警告・§27.9）→docs 追記コミット。
+- 凍結 API 無変更・wheel 無改変・GPU 経路無変更（ffmpeg フィルタ組み立てのみ）。**push／main マージ＝ユーザー承認待ち**。
+
+### 27.9 ユーザー実機 GUI 再検証の顛末＋事前チェックのトースト警告化（2026-07-05 夜）
+
+**ユーザー目視ゲート 2 件＝クローズ**: `03c0a691` の output.mp4（新規部分 6.3 秒）と `e4a34bf5` の joined.mp4 をユーザーが確認し「問題なし」→ **H3＝仕様で最終確定**。
+
+**GUI 再検証で新事象→原因確定（コード退行ではない）**:
+- 症状: V2V モードで「Generate chain」を押しても生成が始まらないように見える（Gradio のイベントはサーバーに届くがバックエンド API は呼ばれない）。
+- 調査: ①ハンドラの全早期 return 経路の精読（配線・モード Radio の内部値・ボタン有効状態に問題なし） ②git 履歴の突き合わせ（20:05 に成功した時点のコードと現 main で「Generate chain」まわりの配線・比較値は機能的に同一＝**退行なし**）。
+- **原因（ユーザー確認で確定）＝共有プロンプト（Prompt (shared)）が空欄**のまま押したため、事前チェックの最初の関門で早期 return。メッセージは `chain_progress` テキスト欄に 1 行出るだけで、見落として「何も起きない」と解釈された。
+- プロンプトを入れた再操作: チェーン job **`9b4a184d`**（2×121f・225f・314.5s・peak_vram_mb **9889**）＝ログの `chain stage-1 denoise [1/2]`／`[2/2]` どおり**両クリップ生成成功**→「Create joined version」→join **HTTP 200**→joined.mp4 が **GUI 内の結合版プレーヤーでプレビュー再生まで全工程成功**（この join は音あり素材＝音量整合は通常経路）。「クリップ2が見えない」＝クリップは 1 本に連続デコードされる設計（§19）＋出力は新規部分のみ表示（§27.7 H3）の仕様どおり。
+- 副次の確認: 22:43 の実行は修正ブランチ未マージの main 上だったが、音あり素材のため join は成功（無音素材対策の本修正は引き続きブランチ側にある）。
+
+**対処（ユーザー指示）＝事前チェック拒否の可視化（コミット `5557dcb`）**:
+- `gradio_ui/handlers.py` に `_precheck_reject(message)` ヘルパーを新設し、`generate_chain` の**バックエンド API 呼び出し前の早期 return 全 22 箇所**（プロンプト空・寸法・fps・クリップ数・フレーム数・V2V/A2V 各チェック・総尺ジオメトリ）で、従来のテキスト欄表示に加えて **`gr.Warning` のトースト警告**（同一のローカライズ済み文字列）を発火。
+- 裏取り: 使用中の gradio 6.19.0 で `gr.Warning` は raise しない通知 API（キュー有効イベント内＝黄色いトースト表示・イベント外＝`warnings.warn` に無害フォールバック）。generator ハンドラは必ずキュー経由のため実 UI では確実にトーストになる。
+- スコープ: `generate_chain` のみ（Generate タブ・join ハンドラは不変）。新規 i18n 文字列なし・yield 構造不変。
+- テスト: 共有プロンプト空で「API 呼び出しゼロ＋`gr.Warning` ちょうど 1 回＋トースト文字列＝テキスト欄文字列」を検証する 1 本を追加。pytest **347 passed / 1 skipped**（346+1 → +1）。
+- **残 OPEN**: main マージ後にユーザーが空プロンプトで押してトーストが出ることの実機確認。
+
+### 27.10 チェーン進捗のクリップ位置表示（ユーザー要望・2026-07-06 未明）
+
+**要望の本質（ユーザー整理）**: 不便さの真因は「今いくつのクリップまで生成が終わったのか」「本当に全クリップ生成されたのか」が GUI やログから読めないこと。クリップごとの VAE デコードプレビュー（ComfyUI 式）は**大半を捨てるデータをデコードする無駄なので不採用（ユーザー判断）**。文字情報で表示する。
+
+**配線調査（実装前）**: worker のステップ進捗イベントは F2 の tqdm シム由来の `outer_index`/`outer_total`（stage-1 のセグメント＝クリップ位置）を既に運んでいたが、`services/ltx_runner.py::_read_worker_events` がコンソールラベル `[1/2]` と進捗率補間に使うだけで **progress コールバックへ渡す時点で捨てていた**（＝欠落点はサーバー側の1箇所のみ・engine/wheel 改変不要）。
+
+**実装（コミット `8bfd559`＝サーバー側・`338519f`＝GUI 側）**:
+- `api/models.py::JobResponse` に **optional 加算** `clip: int | None`・`clip_count: int | None`（既定 None・凍結 API の加算的変更＝F3 の `stage` と同型。単発生成・キュー中・mock・旧 worker では None のまま）。`services/job_store.py::JobRecord` 経由で配管。
+- `_read_worker_events`: chain の stage-1 系イベントに限り `clip=`/`clip_count=` キーワードを追加（per-step＝処理中クリップの 1 始まり番号・粗い per-segment＝完了したクリップ番号）。**既知のときだけ渡す**ため他イベント・単発経路の呼び出し形は完全不変。stage-2 のタイル位置はクリップと誤認しないようガード。
+- chain の `on_progress` は clip 到着時のみ保持し、stage-2／デコード中も最後の値を維持（「クリップ N/N」＝全クリップが stage-1 通過済み、の意味づけ）。
+- GUI: 進捗テキストを「生成中… 20% (step 3/8) — デノイズ中 (stage 1) — クリップ 1/2」形式（i18n 日英・新キー `msg_clip_progress`/`msg_all_clips_done`）。完了行に「全 N クリップ処理済み」。clip 情報なしのジョブは従来表示と完全同一。
+
+**検証**:
+- テスト 7 本追加（stage-1 のみ clip が届く／stage-2 タイル位置は clip にしない／単発では渡らない／JobRecord→JobResponse 配管／GUI 整形 日英／完了行の有無で従来文字列不変）。pytest **354 passed / 1 skipped**（347+1 → +7）。
+- **実機 e2e PASS（2026-07-06 未明・job `fa6b37d3`）**: 通常 2 クリップチェーン（各 49f・1280x768・seed 42）で 1 秒間隔ポーリング→ `clip` が **None（encode）→1/2（stage-1 前半）→2/2（stage-1 後半）→2/2 維持（stage-2／デコード／completed）** と設計どおり遷移。従来のコンソール行（`chain stage-1 denoise [1/2]` 等）不変・ERROR/Traceback なし・**peak_vram_mb 8440＝チェーン回帰基準値と一致**。
+- **残 OPEN**: main マージ後、ユーザーが GUI で「クリップ n/N」表示を実機確認。あわせてクリップ1/2 に別々の個別プロンプトを入れて生成し、出力後半で内容が切り替わること＝クリップ2の実在を目視確認する手順を案内済み。

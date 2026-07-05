@@ -242,7 +242,10 @@ class PipelineManager:
                 else None
             )
 
-            def on_progress(step, total, progress, stage=None):
+            def on_progress(step, total, progress, stage=None, clip=None, clip_count=None):
+                # clip/clip_count are part of the ProgressCallback contract but
+                # only chain stage-1 events ever pass them — a single generate
+                # has no clips, so they are accepted and ignored here.
                 job.current_step = step
                 job.total_steps = total
                 job.stage = stage
@@ -451,10 +454,16 @@ class PipelineManager:
                 )
                 a2v_provenance = {"source_audio_id": chain.source_audio.audio_id}
 
-            def on_progress(step, total, progress, stage=None):
+            def on_progress(step, total, progress, stage=None, clip=None, clip_count=None):
                 job.current_step = step
                 job.total_steps = total
                 job.stage = stage
+                # Clip position arrives only with chain stage-1 events; keep the
+                # last known value through stage-2/decode so "clip N/N" persists
+                # as "all clips are through stage 1".
+                if clip is not None:
+                    job.clip = clip
+                    job.clip_count = clip_count
                 job.progress = round(max(0.0, min(1.0, progress)), 3)
 
             outcome = self.runner.generate_chain(

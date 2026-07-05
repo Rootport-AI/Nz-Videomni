@@ -144,6 +144,7 @@ def _make_v2v_clip(
     freq: float = 440.0,
     volume_db: float = 0.0,
     with_audio: bool = True,
+    silent: bool = False,
     sample_rate: int = 48000,
     width: int = 64,
     height: int = 64,
@@ -153,13 +154,21 @@ def _make_v2v_clip(
     ``lavfi`` sources directly (unlike ``encode_frames_to_mp4``, this can
     produce audio, which the join_v2v tests need). ``-frames:v`` pins the
     exact frame count regardless of any rounding in ``-t``.
+
+    ``silent=True`` swaps the sine tone for ``anullsrc`` -- a present but
+    digitally-silent audio stream (zero signal). ffmpeg's ``loudnorm`` reports
+    ``input_i=-inf`` for such a track, which the join must tolerate rather than
+    crash on (regression fixture for the silent-source V2V join 503).
     """
     exe = video_io.ffmpeg_path()
     duration = num_frames / fps
     color_hex = f"0x{color[0]:02x}{color[1]:02x}{color[2]:02x}"
     cmd = [exe, "-y", "-f", "lavfi", "-i", f"color=c={color_hex}:s={width}x{height}:r={fps}"]
     if with_audio:
-        cmd += ["-f", "lavfi", "-i", f"sine=frequency={freq}:sample_rate={sample_rate}"]
+        if silent:
+            cmd += ["-f", "lavfi", "-i", f"anullsrc=channel_layout=stereo:sample_rate={sample_rate}"]
+        else:
+            cmd += ["-f", "lavfi", "-i", f"sine=frequency={freq}:sample_rate={sample_rate}"]
     cmd += ["-t", f"{duration:.6f}"]
     if with_audio:
         cmd += ["-af", f"volume={volume_db}dB", "-c:a", "aac", "-shortest"]
@@ -361,6 +370,48 @@ def test_join_v2v_clamps_fade_longer_than_clip(tmp_path):
     assert info["fade_ms_applied"] == 500  # clamped to the 0.5s clip duration
 
 
+def test_join_v2v_silent_source_skips_loudness_match(tmp_path):
+    # A digitally-silent source track makes loudnorm report input_i=-inf; the
+    # join must skip loudness matching rather than crash (regression: the 503).
+    fps = 24.0
+    src = tmp_path / "src.mp4"
+    cont = tmp_path / "cont.mp4"
+    _make_v2v_clip(src, num_frames=48, fps=fps, silent=True)  # silent source
+    _make_v2v_clip(cont, num_frames=36, fps=fps, freq=880.0, volume_db=-18.0)
+
+    out = tmp_path / "joined.mp4"
+    info = video_io.join_v2v(src, cont, out)  # must not raise
+
+    assert out.exists()
+    assert video_io.frame_count(out) == 48 + 36
+    assert video_io.has_audio_stream(out)
+    assert info["loudness_matched"] is False
+    assert info["source_lufs"] is None
+    assert info["continuation_lufs_before"] is None
+    assert "loudness_skip_reason" in info
+
+
+def test_join_v2v_silent_continuation_skips_loudness_match(tmp_path):
+    # Symmetric case: a loud source but a digitally-silent continuation. The
+    # continuation's -inf measured_I would also blow up the filter, so skip.
+    fps = 24.0
+    src = tmp_path / "src.mp4"
+    cont = tmp_path / "cont.mp4"
+    _make_v2v_clip(src, num_frames=48, fps=fps, freq=440.0, volume_db=-6.0)
+    _make_v2v_clip(cont, num_frames=36, fps=fps, silent=True)  # silent continuation
+
+    out = tmp_path / "joined.mp4"
+    info = video_io.join_v2v(src, cont, out)  # must not raise
+
+    assert out.exists()
+    assert video_io.frame_count(out) == 48 + 36
+    assert video_io.has_audio_stream(out)
+    assert info["loudness_matched"] is False
+    assert info["source_lufs"] is None
+    assert info["continuation_lufs_before"] is None
+    assert "loudness_skip_reason" in info
+
+
 # ------------------------------------------- join_v2v HANDLE true-crossfade mode
 
 
@@ -452,3 +503,29 @@ def test_join_v2v_handle_mode_no_valley_vs_fade_pair(tmp_path):
     assert handle_dip > steady * 0.7, (handle_dip, steady)
     # And the handle junction is unambiguously fuller than the fade-pair notch.
     assert handle_dip > fade_dip * 1.8, (handle_dip, fade_dip)
+
+
+def test_join_v2v_handle_silent_source_skips_loudness_match(tmp_path):
+    # Handle (true-crossfade) path with a digitally-silent source: the source's
+    # input_i=-inf feeds the pass-2 target I=, so loudness matching must be
+    # skipped -- but the acrossfade itself still runs and preserves geometry.
+    fps = 24.0
+    n_src, n_cont = 48, 36  # 2.0s + 1.5s @24fps
+    src = tmp_path / "src.mp4"
+    cont = tmp_path / "cont.mp4"
+    _make_v2v_clip(src, num_frames=n_src, fps=fps, silent=True)  # silent source
+    _make_v2v_clip(cont, num_frames=n_cont, fps=fps, freq=440.0, volume_db=-10.0)
+    # handle = full untrimmed timeline audio: context (2.0s) + continuation (1.5s)
+    handle = tmp_path / "output_audio_handle.wav"
+    _make_sine_wav(handle, dur_sec=(n_src + n_cont) / fps, freq=440.0, volume_db=-10.0)
+
+    out = tmp_path / "joined_handle.mp4"
+    info = video_io.join_v2v(src, cont, out, handle_audio=handle, handle_crossfade_ms=300)
+
+    assert out.exists()
+    assert info["join_mode"] == "handle_crossfade"
+    assert video_io.frame_count(out) == n_src + n_cont  # acrossfade ran, geometry intact
+    assert info["loudness_matched"] is False
+    assert info["source_lufs"] is None
+    assert info["continuation_lufs_before"] is None
+    assert "loudness_skip_reason" in info

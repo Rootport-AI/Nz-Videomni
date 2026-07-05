@@ -562,6 +562,15 @@ class JobResponse(BaseModel):
     # milestones, queued jobs, pre-F2 workers) — consumers must treat unknown
     # values as "no label".
     stage: str | None = None
+    # Chain clip progress (ADDITIVE, same discipline as ``stage``): 1-based
+    # index of the clip (stage-1 segment) the chain is currently denoising and
+    # the total clip count. Set only by chain jobs on real backends (the worker
+    # reports the segment position); ``clip`` retains its last value through
+    # the later whole-timeline stages (stage-2 tiles / decode), so clip ==
+    # clip_count reads as "all clips are through stage 1". None for single
+    # generates, queued jobs, mock milestones, and pre-F2 workers.
+    clip: int | None = None
+    clip_count: int | None = None
     created_at: str
     started_at: str | None
     completed_at: str | None

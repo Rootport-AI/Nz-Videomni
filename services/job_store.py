@@ -43,6 +43,8 @@ class JobRecord:
         self.progress: float = 0.0
         self.current_step: int | None = None
         self.total_steps: int | None = None
+        # F3: pipeline phase of the latest progress event (see JobResponse.stage).
+        self.stage: str | None = None
         self.created_at: str = now_iso()
         self.started_at: str | None = None
         self.completed_at: str | None = None
@@ -61,6 +63,7 @@ class JobRecord:
             progress=self.progress,
             current_step=self.current_step,
             total_steps=self.total_steps,
+            stage=self.stage,
             created_at=self.created_at,
             started_at=self.started_at,
             completed_at=self.completed_at,

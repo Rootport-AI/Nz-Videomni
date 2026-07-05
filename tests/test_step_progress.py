@@ -217,3 +217,16 @@ def test_unknown_stage_never_moves_the_fraction():
         prefix="chain",
     )
     assert fracs == [0.7, 0.7, 0.9]  # unknown stage repeats the last fraction
+
+
+# ------------------------------------------------- F3: stage plumbing (additive)
+
+
+def test_job_record_stage_reaches_job_response():
+    from api.models import GenerateRequest
+    from services.job_store import JobRecord
+
+    rec = JobRecord("jid", GenerateRequest(prompt="x"))
+    assert rec.to_response().stage is None  # additive default: absent -> None
+    rec.stage = "stage1_denoise"
+    assert rec.to_response().stage == "stage1_denoise"

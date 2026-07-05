@@ -1554,3 +1554,81 @@ def test_language_switch_rebuilds_choice_components():
                        and any(v == ADAPTER_NONE for _lbl, v in u["choices"])]
     assert adapter_updates
     assert adapter_updates[0]["choices"][0][0] == "なし"  # adapter_none (ja)
+
+
+# --------------------------------------------------------------------------- #
+# F3 (G3 feedback): running-progress text — no "step None/None", optional
+# localized stage label appended when the backend reports one.
+# --------------------------------------------------------------------------- #
+def test_running_progress_without_steps_hides_step_suffix():
+    from gradio_ui.handlers import _format_running_progress
+
+    text = _format_running_progress({"progress": 0.42}, "en")
+    assert "42%" in text
+    assert "None" not in text and "step" not in text
+
+    text_ja = _format_running_progress({"progress": 0.42}, "ja")
+    assert "42%" in text_ja and "None" not in text_ja
+
+
+def test_running_progress_with_steps_keeps_classic_format():
+    from gradio_ui.handlers import _format_running_progress
+
+    text = _format_running_progress(
+        {"progress": 0.375, "current_step": 3, "total_steps": 8}, "en"
+    )
+    assert "(step 3/8)" in text and "38%" in text
+
+
+@pytest.mark.parametrize(
+    "stage,en_label,ja_label",
+    [
+        ("encode", "Encoding", "エンコード中"),
+        ("stage1_denoise", "Denoising (stage 1)", "デノイズ中 (stage 1)"),
+        ("stage1", "Denoising (stage 1)", "デノイズ中 (stage 1)"),
+        ("stage2_denoise", "Denoising (stage 2)", "デノイズ中 (stage 2)"),
+        ("tile", "Upsampling", "アップサンプル中"),
+        ("decode", "Decoding", "デコード中"),
+    ],
+)
+def test_running_progress_stage_labels(stage, en_label, ja_label):
+    from gradio_ui.handlers import _format_running_progress
+
+    job = {"progress": 0.5, "current_step": 4, "total_steps": 8, "stage": stage}
+    assert en_label in _format_running_progress(job, "en")
+    assert ja_label in _format_running_progress(job, "ja")
+
+
+def test_running_progress_unknown_or_absent_stage_shows_no_label():
+    from gradio_ui.handlers import _format_running_progress
+
+    assert "—" not in _format_running_progress({"progress": 0.5}, "en")
+    assert "—" not in _format_running_progress(
+        {"progress": 0.5, "stage": "mystery_stage"}, "en"
+    )
+
+
+def test_poll_loop_uses_graceful_progress_text(monkeypatch):
+    """End-to-end through _poll_job_until_done: a running job with step=None
+    yields the percent-only line; the poll machinery itself is untouched."""
+    from gradio_ui import handlers
+
+    monkeypatch.setattr(handlers.time, "sleep", lambda s: None)
+    bodies = iter(
+        [
+            {"status": "running", "progress": 0.03,
+             "current_step": None, "total_steps": None, "stage": "encode"},
+            {"status": "running", "progress": 0.2,
+             "current_step": 3, "total_steps": 8, "stage": "stage1_denoise"},
+            {"status": "failed", "error": "X: boom"},
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=next(bodies))
+
+    api = _make_client(handler)
+    outs = [t for t, _jid, _vid in handlers._poll_job_until_done(api, "j1", "en")]
+    assert "None" not in outs[0]
+    assert "Encoding" in outs[0]
+    assert "(step 3/8)" in outs[1] and "Denoising (stage 1)" in outs[1]

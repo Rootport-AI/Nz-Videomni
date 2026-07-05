@@ -554,6 +554,12 @@ class JobResponse(BaseModel):
     progress: float
     current_step: int | None
     total_steps: int | None
+    # F3 (G3 feedback, ADDITIVE): pipeline phase of the latest progress event
+    # ("encode" / "stage1_denoise" / "stage2_denoise" / "stage1" / "tile" /
+    # "decode" / "denoise"). None when the backend has not reported one (mock
+    # milestones, queued jobs, pre-F2 workers) — consumers must treat unknown
+    # values as "no label".
+    stage: str | None = None
     created_at: str
     started_at: str | None
     completed_at: str | None

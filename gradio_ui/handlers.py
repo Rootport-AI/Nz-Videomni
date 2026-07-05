@@ -34,6 +34,39 @@ _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
 
 
+# F3: JobResponse.stage -> localized phase-label key. Unknown / absent stages
+# show no label (older backends and the mock milestones never send one).
+_STAGE_LABEL_KEYS = {
+    "encode": "stage_encoding",
+    "stage1": "stage_denoise_s1",
+    "stage1_denoise": "stage_denoise_s1",
+    "stage2_denoise": "stage_denoise_s2",
+    "denoise": "stage_denoise",
+    "tile": "stage_upsample",
+    "decode": "stage_decode",
+}
+
+
+def _format_running_progress(job: dict, lang: str) -> str:
+    """Progress line for a running job (F3, display-only).
+
+    * step/total known -> the classic "Generating… 42% (step 3/8)";
+    * unknown -> percent only (never the literal "step None/None");
+    * a recognized ``stage`` appends its localized phase label.
+    """
+    progress = job.get("progress", 0.0)
+    step = job.get("current_step")
+    total = job.get("total_steps")
+    if step is not None and total is not None:
+        text = L("msg_generating", lang).format(pct=progress, step=step, total=total)
+    else:
+        text = L("msg_generating_pct", lang).format(pct=progress)
+    stage_key = _STAGE_LABEL_KEYS.get(job.get("stage") or "")
+    if stage_key:
+        text = f"{text} — {L(stage_key, lang)}"
+    return text
+
+
 # --------------------------------------------------------------------------- #
 # Shared 1s poll loop (factored out of the generate flow so /generate and
 # /generate/chain reuse the SAME progress/complete/fail handling). Yields
@@ -57,11 +90,8 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
             continue
 
         status = job["status"]
-        progress = job.get("progress", 0.0)
         if status == "running":
-            step = job.get("current_step")
-            total = job.get("total_steps")
-            yield L("msg_generating", lang).format(pct=progress, step=step, total=total), job_id, None
+            yield _format_running_progress(job, lang), job_id, None
         elif status == "completed":
             yield L("msg_completing", lang), job_id, None
             try:

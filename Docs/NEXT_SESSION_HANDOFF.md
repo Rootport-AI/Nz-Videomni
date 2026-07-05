@@ -2,7 +2,7 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-05 audio-to-video 完結＝G3条件付き受容・mainマージ承認・**継続＝リップシンク品質の深掘り**）
+## ▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-05 audio-to-video 完結・mainマージ済・リップシンク深掘りクローズ・**バックログのユーザー処置済み**）
 
 > **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。
 
@@ -11,8 +11,9 @@
 | リポジトリ | **main＝A2V マージ・push 済（2026-07-05・ユーザー承認）**。branch `feature/a2v` は役目を終えた。コミット列 `83150ca`（設計docs）→`7a93259`（S0記録）→`b59d0fb`（S1エンジン）→`30b61c9`（G1記録）→`e37a9ef`（S2 API）→`8cc793e`（S2記録）→`8fedc12`（§25）＋G3判定記録 |
 | audio-to-video | ✅**完結（全客観ゲートPASS＋G3試聴＝条件付き受容 2026-07-05）**。`POST /upload/audio` 新設＋`POST /generate/chain` に optional `source_audio{audio_id}`（加算的・省略時 byte 同一）。機構＝音声 latent を全長ハード凍結＋動画のみ denoise・出力は元波形 mux（vocoder 不使用）。v1 スコープ＝1クリップのみ・A2V×V2V 排他・トリミング非露出・短い音声 422・`conditioning_images` 併用可。**正本: 設計=[`A2V_DESIGN.md`](A2V_DESIGN.md)・検証/G3判定=VERIFICATION_LOG §25（判定詳細=§25.5）** |
 | ゲート状況 | G0 **GO**／G1 **全PASS**（3経路 byte 一致）／G2 **mock＋実機 PASS**／G3 **条件付き受容**（静的クローズアップ×女声＝高精度・賑やかな背景×男声＝弱い。ユーザー見立て＝モデル性質由来）。pytest **212 passed / 1 skipped** |
-| **継続タスク（リップシンク品質）** | ①コミュニティ報告リサーチ（LTX 2.3 A2V の使い勝手） ②仮説切り分けの追加検証動画 2〜3本（声質×背景複雑度） ③Stage1 クロスモーダル摂動ガイダンス差し込み案の解説→採否判断。結果は VERIFICATION_LOG §25.5 に追記 |
-| 残る OPEN | ①上記継続タスク ②旧宿題＝GUI 目視ゲート＋実機 e2e（変わらず） ③GUI への A2V/V2V 露出＝別セッション |
+| リップシンク深掘り | ✅**クローズ（2026-07-05・研究課題へ格下げ＝改善事項より低優先）**。マトリクス試聴で**シーン要因（動き・画角）で確定＝モデル性質**（クローズアップ×同一男声 wav＝完璧・複雑シーン＝大ズレ）。リサーチ正本=[`A2V_LIPSYNC_COMMUNITY_RESEARCH.md`](A2V_LIPSYNC_COMMUNITY_RESEARCH.md)・判定=VERIFICATION_LOG §25.5.3。運用指針=A2V は「クローズアップ・単一話者・動き控えめ」の構図で使う機能として案内（GUI 露出時に反映） |
+| GUI 目視ゲート（旧宿題） | ✅**クローズ（2026-07-05・ユーザー実施）**: 表示崩れなし・ENG/JPN・Dark/Light 切替問題なし・動画生成＆GUI 内再生 OK |
+| **バックログ（ユーザー処置 2026-07-05）** | **近い将来にやる**: ①GUI への V2V/A2V 露出（音声スムージング UI 要件含む） ②モデル管理=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)＋**コンソールログ改修**（新規 2026-07-05: 生成中のログが httpx ポーリング行の繰り返しで無意味。進捗度・イテレーション速度・ステップ数・所要時間を表示する。参考=Forge Neo・調査=[`CONSOLE_LOG_FORGE_NEO_RESEARCH.md`](CONSOLE_LOG_FORGE_NEO_RESEARCH.md)） ③GUI 細目（言語/テーマ永続化・動的行・デフォルト negative 欄）。**将来の改善事項（一旦クローズ）**: 高品質モード実配線（D節）・IC-LoRA Phase D・A2V 将来拡張（複数クリップ音声窓割り／V2V 併用／トリミング露出）。**研究課題（改善事項より低優先）**: リップシンク強化（ガイダンス差し込み案は VERIFICATION_LOG §25.5 に保留）・V2V 音声継ぎ目の浅い凹み（§24.7） |
 
 - 用語: **「元音声」「元動画」**＝ユーザーがアップロードする入力素材（旧表記「源音声／源動画」は同義）。
 - 将来項目の所在: 音声スムージング UI チェックボックス（V2V 由来）＋GUI への A2V/V2V 露出=別セッション／モデル管理=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。

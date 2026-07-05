@@ -99,6 +99,10 @@ LABELS: dict[str, dict[str, str]] = {
         "stage_denoise": "Denoising",
         "stage_upsample": "Upsampling",
         "stage_decode": "Decoding",
+        # Chain clip progress: appended while a chain job reports which clip
+        # (stage-1 segment) it is working on, and to the completion line.
+        "msg_clip_progress": "clip {clip}/{total}",
+        "msg_all_clips_done": "all {n} clips processed",
         "msg_poll_failed": "polling failed: {err}",
         "msg_completing": "Completed. Fetching video…",
         "msg_completed": "Completed: {job_id}",
@@ -417,6 +421,9 @@ LABELS: dict[str, dict[str, str]] = {
         "stage_denoise": "デノイズ中",
         "stage_upsample": "アップサンプル中",
         "stage_decode": "デコード中",
+        # クリップ連結の進捗: 何個目のクリップを処理中かを進捗行と完了行に添える。
+        "msg_clip_progress": "クリップ {clip}/{total}",
+        "msg_all_clips_done": "全{n}クリップ処理済み",
         "msg_poll_failed": "ポーリング失敗: {err}",
         "msg_completing": "完了。動画を取得中…",
         "msg_completed": "完了: {job_id}",

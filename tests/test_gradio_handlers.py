@@ -1664,3 +1664,69 @@ def test_poll_loop_uses_graceful_progress_text(monkeypatch):
     assert "None" not in outs[0]
     assert "Encoding" in outs[0]
     assert "(step 3/8)" in outs[1] and "Denoising (stage 1)" in outs[1]
+
+
+# --------------------------------------------------------------------------- #
+# Chain clip progress: "clip n/N" appended while a chain job reports which clip
+# it is on (additive JobResponse fields), and "all N clips processed" on the
+# completion line. Non-chain jobs (no clip fields) are byte-identical.
+# --------------------------------------------------------------------------- #
+def test_running_progress_appends_clip_position():
+    from gradio_ui.handlers import _format_running_progress
+
+    job = {"progress": 0.2, "current_step": 3, "total_steps": 8,
+           "stage": "stage1_denoise", "clip": 1, "clip_count": 2}
+    text = _format_running_progress(job, "en")
+    assert "(step 3/8)" in text and "Denoising (stage 1)" in text
+    assert "clip 1/2" in text
+    text_ja = _format_running_progress(job, "ja")
+    assert "クリップ 1/2" in text_ja
+
+
+def test_running_progress_without_clip_fields_shows_no_clip_text():
+    from gradio_ui.handlers import _format_running_progress
+
+    job = {"progress": 0.2, "current_step": 3, "total_steps": 8,
+           "stage": "stage1_denoise"}
+    assert "clip" not in _format_running_progress(job, "en")
+    assert "クリップ" not in _format_running_progress(job, "ja")
+
+
+def test_poll_loop_completion_notes_all_clips_processed(monkeypatch):
+    from gradio_ui import handlers
+
+    monkeypatch.setattr(handlers.time, "sleep", lambda s: None)
+    bodies = iter(
+        [
+            {"status": "running", "progress": 0.3, "current_step": 4,
+             "total_steps": 8, "stage": "stage1_denoise",
+             "clip": 2, "clip_count": 2},
+            {"status": "completed", "clip_count": 2},
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/video"):
+            return httpx.Response(404)  # fetch_video fails -> video None path
+        return httpx.Response(200, json=next(bodies))
+
+    api = _make_client(handler)
+    outs = [t for t, _jid, _vid in handlers._poll_job_until_done(api, "j1", "en")]
+    assert "clip 2/2" in outs[0]
+    assert "all 2 clips processed" in outs[-1]
+
+
+def test_poll_loop_completion_without_clip_count_is_unchanged(monkeypatch):
+    from gradio_ui import handlers
+
+    monkeypatch.setattr(handlers.time, "sleep", lambda s: None)
+    bodies = iter([{"status": "completed"}])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/video"):
+            return httpx.Response(404)
+        return httpx.Response(200, json=next(bodies))
+
+    api = _make_client(handler)
+    outs = [t for t, _jid, _vid in handlers._poll_job_until_done(api, "j1", "en")]
+    assert outs[-1] == "Completed: j1"  # single generate: no clip note

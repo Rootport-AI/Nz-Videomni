@@ -53,7 +53,10 @@ def _format_running_progress(job: dict, lang: str) -> str:
 
     * step/total known -> the classic "Generating… 42% (step 3/8)";
     * unknown -> percent only (never the literal "step None/None");
-    * a recognized ``stage`` appends its localized phase label.
+    * a recognized ``stage`` appends its localized phase label;
+    * chain clip position (``clip``/``clip_count``, additive JobResponse
+      fields) appends "clip n/N" so a chain job shows which clip it is on —
+      the n -> n+1 change IS the "clip n done, clip n+1 started" signal.
     """
     progress = job.get("progress", 0.0)
     step = job.get("current_step")
@@ -65,6 +68,10 @@ def _format_running_progress(job: dict, lang: str) -> str:
     stage_key = _STAGE_LABEL_KEYS.get(job.get("stage") or "")
     if stage_key:
         text = f"{text} — {L(stage_key, lang)}"
+    clip = job.get("clip")
+    clip_count = job.get("clip_count")
+    if clip is not None and clip_count:
+        text = f"{text} — {L('msg_clip_progress', lang).format(clip=clip, total=clip_count)}"
     return text
 
 
@@ -99,7 +106,14 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
                 video = api.fetch_video(job_id)
             except Exception:
                 video = None
-            yield L("msg_completed", lang).format(job_id=job_id), job_id, video
+            done_text = L("msg_completed", lang).format(job_id=job_id)
+            # Chain jobs report their clip total (additive JobResponse field);
+            # say so on completion — "all N clips processed" answers the
+            # "did every clip actually get generated?" doubt at a glance.
+            clip_count = job.get("clip_count")
+            if clip_count:
+                done_text = f"{done_text} — {L('msg_all_clips_done', lang).format(n=clip_count)}"
+            yield done_text, job_id, video
             return
         elif status in ("failed", "cancelled"):
             yield L("msg_failed", lang).format(status=status, error=job.get("error")), job_id, None

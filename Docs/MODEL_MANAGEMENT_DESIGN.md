@@ -3,7 +3,7 @@
 - 作成: 2026-07-05（子B・branch `feature/model-management-dropdown`）
 - 正本の親: [`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md) 冒頭★注記2つ
 - スコープ: **既存レイアウトのまま**「追加ファインチューニングモデルをドロップダウンで選択してロード」。ディレクトリ再編・移行スクリプト・インストーラ書き換えは**やらない**。API は加算のみ。凍結契約（`GET /status` の `vram_optimization`・`metadata.json` のキー集合）は不変。
-- 本書は **S0（設計のみ）**。実装は親レビュー後の S1 以降。
+- 本書は **S0（設計）**。**親レビュー承認済み（2026-07-05）**: §9 の6点は裁定済み（本文へ反映済み）。追加の境界指示＝GUI は既存共有クロージャ（`on_page_load`/`on_refresh_config`/トップバー `load_model` 等）を**改変せず独立イベントリスナーを追加**する（§6.1 反映済み）。
 
 ---
 
@@ -55,17 +55,14 @@
 
 ```python
 # config.py ModelConfig に追加（すべて additive・default 空）
-class ModelEntry(BaseModel):        # 将来の拡張余地（今は path のみ）。IcLoraEntry と同型思想
-    path: str
-
-# name -> path(str) | ModelEntry。空 = 既定のみ（自動登録）
-transformers:   dict[str, str | ModelEntry] = Field(default_factory=dict)
-text_encoders:  dict[str, str | ModelEntry] = Field(default_factory=dict)
-video_vaes:     dict[str, str | ModelEntry] = Field(default_factory=dict)
-audio_models:   dict[str, str | ModelEntry] = Field(default_factory=dict)
+# name -> project-relative path。空 = 既定のみ（自動登録）
+transformers:   dict[str, str] = Field(default_factory=dict)
+text_encoders:  dict[str, str] = Field(default_factory=dict)
+video_vaes:     dict[str, str] = Field(default_factory=dict)
+audio_models:   dict[str, str] = Field(default_factory=dict)
 ```
 
-> v1 は `str`（path）だけで足りるが、`str | ModelEntry` を許すことで IC-LoRA と同じ「後で属性を足せる」拡張性を確保（ここは親判断ポイント §9-4：単純に `dict[str,str]` でよいか）。
+> **裁定（§9-4）**: 単純な `dict[str, str]` で確定。ModelEntry 予約クラスは導入しない（strength 相当の属性が現状存在しない＝YAGNI。将来必要になれば union 化は後方互換の加算で可能）。
 
 ### 1.2 既定エントリの自動登録（byte 同一の要）
 
@@ -148,7 +145,7 @@ class ModelRegistry:
 }
 ```
 
-- `active` = **直近の成功 load で使われた選択**（`PipelineManager` が保持。初回ブート時/未ロード時は `default`）。切替後は新選択を反映。
+- `active` = **直近の成功 load で使われた選択**（`PipelineManager` が保持。初回ブート時/未ロード時は `default`）。切替後は新選択を反映。**裁定（§9-6）: worker 停止中も active は最後の成功選択を保持し、ロード状態の判断は既存 `pipeline_loaded`（GET /status）に委ねる。**
 - `path` は project-relative 表示（絶対パスは漏らさない）。
 - `exists` は走査時の実在チェック（config 登録だが未 DL のエントリを UI が薄字表示できる）。
 - `source` = `"config"` | `"scan"`。
@@ -220,7 +217,7 @@ POST /pipeline/load {models}
 - `LTXRunner.load(self, selection=None)`（→ `backend.load(selection)`）
 - `_RealBackend.load(self, selection=None)` / `_MockBackend.load(self, selection=None)`（mock は無視でよい）
 
-**失敗時フォールバック（§9 決定事項1・親判断）**: 推奨は**自動フォールバックしない**（未ロードのまま `state=error`・`PIPELINE_LOAD_FAILED(503)` を detail つきで返す）。理由: 自動で既定へ戻すと本当の非互換を隠し、ロード時間が倍になる。ただし config トグル `model.reload_fallback_to_default`（既定 False）で「失敗時は直前 active へ戻す」を選べる余地を残す設計を提案。→ 親に諮る。
+**失敗時フォールバック（裁定 §9-1・確定）**: **自動フォールバックしない**。未ロードのまま `PIPELINE_LOAD_FAILED(503)` を detail つきで返す（自動で既定へ戻すと本当の非互換を隠し、ロード時間が倍になる）。`reload_fallback_to_default` トグルは**作らない**（死んだオプションを増やさない）。エラー detail に「default を選び直してロードしてください」相当の案内を含める。失敗時 active は更新しない（直前の成功選択のまま）。
 
 `busy` ガードは load 側にも追加（現行の unload だけでなく）。切替中はさらに `state=LOADING` で `_lock` を保持し、二重ロードを直列化。
 
@@ -277,7 +274,7 @@ def model_incompatible(category, name, detail=None):    # 422（前段 magic/sha
 ```
 
 - choices は **`GET /models`** から `adapters.py` の新 `build_model_choices(models_json, category)` で構築（`build_adapter_choices` の型踏襲・(label, value)=(name, name)、既定は `"default"` を先頭・欠損エントリは薄字ラベル）。
-- ページロード / トップバー Refresh 時に `GET /models` を引いて4つの Dropdown choices を更新（`on_page_load`/`on_refresh_config` に**出力を加算**、または独立の `gr.Timer`/ボタンで。子Aの outputs を壊さぬよう新規 state/outputs を足す形にする）。
+- **裁定（境界指示・確定）**: `on_page_load`/`on_refresh_config` への出力加算は**やらない**。既存の共有クロージャは一切改変せず、**独立したイベントリスナーを追加**する（gradio は `demo.load` を複数登録可能）＋モデルセクション内に**専用 Refresh ボタン**を置く。共有クロージャ不可触の徹底でマージ衝突を根絶。
 - `model_load_btn.click` → **新規ハンドラ** `handlers.load_selected_models(api, tr, te, vv, au, lang)`:
   - 4 Dropdown の値から `{"models": {...}}` を組み、`api_client.load_pipeline_models(body)`（新メソッド）を POST（`load_pipeline` は 600s timeout 既存流用）。
   - 成功→ `GET /status` で `pipeline_loaded` を確認し成功メッセージ。409/422/404/503 は本文の error code を i18n で表示。
@@ -319,7 +316,7 @@ def load_pipeline_models(self, models: dict) -> dict:  # POST /pipeline/load {"m
 
 | スライス | 内容 | 完了ゲート |
 |---|---|---|
-| **S1 列挙** | config 拡張（4カテゴリ空 dict + ModelEntry）・`services/model_registry.py`・`GET /models` router・走査 | registry/endpoint の pytest 緑・`GET /config` 無改変・load 挙動は無変更（byte-match 既存回帰緑） |
+| **S1 列挙** | config 拡張（4カテゴリ空 `dict[str,str]`）・`services/model_registry.py`・`GET /models` router・走査 | registry/endpoint の pytest 緑・`GET /config` 無改変・load 挙動は無変更（byte-match 既存回帰緑） |
 | **S2 load 拡張** | `_build_load_payload` 抽出・`POST /pipeline/load` override・selection 伝搬（pm→runner→backend・全 optional）・unload→load 強制再構築・busy ガード・§5 エラー＆magic 検査 | **byte-match スナップショット緑**・override 切替が mock で成立・409/404/422/503 経路・`/status`・`/metadata` 契約 drift なし |
 | **S3 GUI** | Settings「モデル」セクション・`build_model_choices`・api_client 2メソッド・`handlers.load_selected_models`・i18n `model_*` | ハンドラ単体（MockTransport）緑・mock UI スモーク（GPU 無し）・子A領域（Generate/Chain/`_poll_job_until_done`/トップバー load）無改変 |
 | **S4 実機** | 別名二重登録切替 byte-match・既定 byte-match 回帰・16GB fit（**親が GPU で・別セッション**） | 切替後 byte 一致・既定 byte 一致・peak_vram 不変・一時成果物削除 |
@@ -328,11 +325,13 @@ def load_pipeline_models(self, models: dict) -> dict:  # POST /pipeline/load {"m
 
 ---
 
-## 9. 親に諮る判断ポイント
+## 9. 判断ポイント（**裁定済み・2026-07-05 親レビュー**）
 
-1. **swap-load 失敗時ポリシー**: 未ロードのまま error を返す（推奨）か、直前 active/既定へ自動フォールバックか。トグル `model.reload_fallback_to_default`（既定 False）を用意するか。
-2. **走査の video/audio 自動判別**: 同居 `vae/` ディレクトリはファイル名 `video`/`audio` ヒューリスティックで振り分け・判別不能はスキップ（config 明示が権威）。この妥協で良いか。
-3. **対象カテゴリを 4 に限定**（transformer/text_encoder/video_vae/audio）。tokenizer_root・spatial_upsampler・text_projection connector・ic_loras は対象外。text_projection は transformer GGUF と結合のため独立差し替え不可＝除外で良いか。
-4. **config の値型**: `dict[str, str | ModelEntry]`（ic_loras 踏襲・将来拡張余地）か、単純に `dict[str, str]` か。
-5. **selection 伝搬の実装**: `pm.load/runner.load/backend.load` に optional `selection=None` を加算（推奨・明示的）で良いか。あるいは PipelineManager に active_selection を持たせ backend が読む方式か。
-6. **`GET /models` の active の定義**: 「直近成功 load の選択」（未ロード時 default）で良いか。worker が落ちている間の active 表示の扱い。
+1. **swap-load 失敗時 = 未ロードのまま error 返却で確定**。`reload_fallback_to_default` トグルは**作らない**。エラーメッセージに「default を選び直してロードしてください」相当の案内を含める。
+2. **video/audio 判別ヒューリスティック = 承認**（判別不能はスキップ＋ログ・config 明示が権威）。
+3. **4カテゴリ限定 = 承認**（text_projection 除外の根拠も妥当）。
+4. **config 値型 = 単純 `dict[str, str]` で確定**（ModelEntry 予約クラスは導入しない。YAGNI。将来は union 化を後方互換の加算で）。
+5. **selection 伝搬 = optional 引数加算で確定**（`pm.load/runner.load/backend.load` に `selection=None`）。
+6. **active 定義 = 直近成功 load の選択（未ロード時 `"default"`）で確定**。worker 停止中も active は最後の成功選択を保持し、ロード状態は既存 `pipeline_loaded` で判断。
+
+追加の境界指示（親・確定）: GUI は既存共有クロージャ（`on_page_load`/`on_refresh_config`/トップバー `load_model`・`unload_model`）を改変せず、**独立イベントリスナー**＋モデルセクション専用 Refresh ボタンで実装（§6.1）。

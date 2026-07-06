@@ -2,16 +2,16 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 画風/キャラクター LoRA 対応 S1+S2 実装完了・回帰全 PASS・branch `feature/style-lora`・**最終目視ゲート＋マージ承認待ち**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 画風/キャラクター LoRA 対応 S1+S2 実装完了・回帰全 PASS・**main マージ＆push 済（ユーザー承認）・最終目視ゲートは未完了＝持ち越し**）
 
 > **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。
 
 | 項目 | 状態 |
 |---|---|
-| リポジトリ | **branch `feature/style-lora`（未マージ・push はユーザー承認待ち）**。コミット＝`bcdde05`（S1 バックエンド）→`aed220b`／`591d4be`（S2 GUI）＋docs。回帰は全 PASS |
+| リポジトリ | **main マージ＆push 済（2026-07-06・ユーザー承認・目視未完了を承知の上での承認）**。中身＝`bcdde05`（S1 バックエンド）→`aed220b`／`591d4be`（S2 GUI）＋docs（`34e5b41` ほか）。回帰は全 PASS |
 | 実装サマリ | 画風/キャラクター LoRA 対応の要件3点を S1（バックエンド）＋S2（GUI）で実装。**S0 スパイク＝GO（§29）→S1+S2＝実装完了（§30）**。①`models/loras/` にディレクトリスキャン＋登録制のマージ（衝突は config 勝ち）②kind 判定（メタ／preprocess で control か style か）③alpha/rank を strength に自動畳み込み（weight 1.0＝学習想定・不可触機構の外側）④all-or-nothing 撤廃＋control かつ参照なしは 422 `LORA_REQUIRES_REFERENCE`⑤新設 `GET /loras`／`POST /loras/reload`／`GET /loras/{name}/thumbnail`⑥GUI＝プロンプト内 `<lora:名前:weight>` パース（トークン無し時は payload byte 同一）＋「Style LoRA」サムネイルタブ（クリックでコマンド自動入力・Reload ボタン）。詳細＝**VERIFICATION_LOG §29（S0）＋§30（S1/S2）** |
 | **使い方** | `models/loras/` に `.safetensors` を置く → GUI の「Style LoRA」タブで Reload → サムネイルをクリックするか、プロンプトに手書きで `<lora:名前:weight>` を書く。weight 1.0＝学習が想定したとおりの効き（alpha を自動で畳み込む）。制御 LoRA（canny／pose／upscaler）は従来どおりアダプタ欄から使う |
-| **残＝ユーザー宿題** | **①最終目視ゲート＝S0 スパイクの動画 6 本（scratchpad の `dspike_out`）と GUI 実機操作の確認（ユーザー帰宅後）②push／main マージのユーザー承認**。いずれも §30.5 OPEN |
+| **残＝ユーザー宿題** | **最終目視ゲート＝未完了（ユーザーが外出先から「目視未完了のままマージしてよい」と承認・2026-07-06）**。宿題＝①S0 スパイクの動画 6 本（セッション scratchpad の `dspike_out`・720p 4本＋スモーク）の目視 ②GUI 実機操作（Style LoRA タブ／Reload／クリック挿入）の確認。§30.5 OPEN のまま持ち越し。問題が見つかったら通常の不具合改修として扱う |
 | 残る宿題（次をブロックしない） | 前回持ち越しの GUI 実機確認 3 点（事前チェック拒否の黄色トースト／チェーン進捗「クリップ n/N」／クリップ別プロンプトでクリップ2の実在目視）＝**残（ユーザーが後日実施すると表明・2026-07-06）** |
 | バックログの正本 | 「2026-07-05 audio-to-video 完結」ブロックの**バックログ（三次トリアージ済み）行**＝近い将来（GUI V2V/A2V 露出※・モデル管理※・ログ改修※・**IC-LoRA strength＝§28 で実施済み**）／将来改修／研究課題／不要。※印3件は §26 で実施済み。IC-LoRA の重ね掛け（多重制御）＝**研究課題**（メモ＝`IC_LORA_PHASE_C_STATUS.md` 末尾・公式は単一制御が流儀・機構は複数可）。**注記**: negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続） |
 | pytest 基準 | **418 passed / 1 skipped**（§30 時点・§28 の 365+1 → S1 +26・S2 +27） |

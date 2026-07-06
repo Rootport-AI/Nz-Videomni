@@ -49,7 +49,7 @@
 
 ## 6. 参照
 
-- ユーザー提示の実物例（本体対象・スタイル LoRA）:
+- ユーザー提示の実物例（本ワークオーダーの対象＝画風/キャラクター LoRA）:
   - https://civitai.red/models/2536130/ltx-23-pixar-cgi-toon-style
   - https://civitai.red/models/2487612/ltx-23-transformation
 - スコープ外の本体例（ファインチューン本体・参考）: https://civitai.red/models/2601098/sulphur-2-base

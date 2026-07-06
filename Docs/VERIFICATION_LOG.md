@@ -1922,3 +1922,34 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 2. **push／main マージ**: ユーザー承認待ち（branch `feature/style-lora`）。
 3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝ユーザーが後日実施。
 4. negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続）。
+
+## 31. ★GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト 実装＝客観ゲート PASS（2026-07-06・branch `feature/prompt-unification`・commit `fd35877`・**最終目視／実機ゲート待ち**）
+
+> **正本＝本節。** メインのプロンプト入力欄が Generate（`prompt`）と Clip Chain（`chain_prompt`＝共通ベース）の2箇所に分かれていたのを、タブ外・タブ群の上に置く**単一「下書き」欄**へ統合した回。Forge Neo 風（LoRA 選択→上部欄にタグが載る）。入口＝[`PROMPT_UNIFICATION_WORKORDER.md`](PROMPT_UNIFICATION_WORKORDER.md)。**GUI のみ（API／engine／services 不可触）**。
+> commit `fd35877`（変更4ファイル）。**push／main マージはユーザー承認待ち。最終目視／実機ゲートはユーザー帰宅後。**
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。（**本節は GUI 改修のため GPU 計測・SHA 新規測定は該当なし＝既存 SHA 不変。**）
+
+### 31.1 方式（設計判断＝「下書き欄を唯一の本物にする」）
+
+- 「隠し欄＋クリック時にコピー」ではなく、**下書き欄そのものを唯一の本物**にして両生成ハンドラへ**直結**する方式を採った。
+- 根拠: Gradio は `inputs=` に並べたコンポーネントの値をクリック時に**atomic に受け取る**ため、コピー順序の取りこぼしや残留プロンプトが**構造的に発生しない**。ユーザーの当初案（下書き欄）を本セッションでブラッシュアップして合意した設計。
+
+### 31.2 実装（commit `fd35877`・変更4ファイル）
+
+- **`gradio_ui/ui.py`**: 上部共通バー（status／refresh／load／unload の Row）直後・`with gr.Tabs()` の直前に**単一の3行 Textbox（下書き欄）**を新設。旧 `prompt`／`chain_prompt` は削除。`generate_btn.click`・`chain_generate_btn.click`・`style_gallery.select` を下書き欄へ直結（`handlers.py` のシグネチャは変更なし）。
+- **`gradio_ui/handlers.py`**: `make_chain_handler` で共通プロンプト中の `<lora:...>` を除去し `gr.Warning`（連結は LoRA 未対応＝研究課題）を出す。**トークンが無いときは `send_prompt=prompt` として payload byte 同一を維持**（`_LORA_TOKEN_RE` を再利用・パース仕様は不変）。各クリップの**個別プロンプトは除去対象外**。
+- **ネガティブ欄**（`negative`／`chain_negative`）を `interactive=False`＋info 注記（蒸留 CFG＝1 で無効）へ。値・送信ペイロード・キーは不変＝回帰 SHA 不変。欄は**将来の非蒸留対応モックとして残置**（削除しない）。
+- **`gradio_ui/i18n.py`**: `lbl_prompt` 文言更新・`info_negative`／`chain_lora_ignored` 新設（EN／JA）・`lbl_prompt_shared`／`ph_prompt2` の対を削除（EN／JA 計4）。
+
+### 31.3 客観ゲート（PASS）
+
+- **pytest**: **422 passed / 1 skipped**（§30 の基準 418+1 → 新規4件・赤化ゼロ・app venv・mock transport）。
+- **`build_ui()` スモーク**: Blocks グラフが正常に組み上がることを確認。下書き欄は `lbl_prompt` が1回だけ登録され、旧 `lbl_prompt_shared` は消滅していることを確認。
+- **payload byte 同一**: トークン無しプロンプトで送信ペイロードが従来と byte 同一であることを新規テストで担保（Generate 側の既存担保＋連結側の担保を追加）。
+
+### 31.4 OPEN（残ゲート・ユーザー宿題）
+
+1. **最終目視／実機ゲート（ユーザー・帰宅後）**: ①上部に下書き欄が1つ・全タブで表示される ②Style LoRA タブでサムネイル選択→上部欄にタグが載る ③連結で LoRA タグ除去の警告が出る ④ネガティブ欄がグレーアウトしている。
+2. **push／main マージ**: ユーザー承認待ち（branch `feature/prompt-unification`）。
+3. **スコープ外／研究課題**: 連結タブで LoRA を実際に効かせるバックエンド改修（`GenerateChainRequest.loras` 加算＋worker 配線）＝将来の研究課題。

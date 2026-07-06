@@ -1876,7 +1876,7 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 ## 30. ★画風／キャラクター LoRA 対応 S1（バックエンド）＋S2（GUI）実装と回帰ゲート＝全 PASS（2026-07-06・branch `feature/style-lora`・**目視ゲート✅クローズ・main マージ＆push 済**）
 
 > **正本＝本節。** §29 の S0「D スパイク」＝GO を受け、[`STYLE_LORA_WORKORDER.md`](STYLE_LORA_WORKORDER.md) の要件3点（ディレクトリ配置＋リロード／プロンプト内 `<lora:名前:weight>` コマンド／GUI「Style LoRA」サムネイルタブ）を S1＝バックエンド、S2＝GUI の2スライスで実装した回。凍結 API の加算的変更（新設エンドポイントと optional 緩和・**トークン無し／フィールド省略時は従来と byte 同一**の定型ゲート）を守り、不可触の LoRA 重みパッチ機構には触れていない。
-> commit `bcdde05`（S1＝バックエンド）→`591d4be`（S2＝GUI）＋docs。**push／main マージはユーザー承認待ち。最終目視ゲート（720p 動画のユーザー確認）と GUI 実機操作確認はユーザー帰宅後。**
+> commit `bcdde05`（S1＝バックエンド）→`591d4be`（S2＝GUI）＋docs。**push／main マージ＝✅済（merge `f39f22f`・ユーザー承認 2026-07-06）。最終目視ゲート＝✅クローズ（30.5 参照・スパイク動画 6 本をユーザー受容）。**
 
 本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
 
@@ -1926,7 +1926,7 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 ## 31. ★GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト 実装＝客観ゲート PASS＋目視ゲート✅クローズ（2026-07-06・branch `feature/prompt-unification`・commit `fd35877`・**main マージ＆push 済**）
 
 > **正本＝本節。** メインのプロンプト入力欄が Generate（`prompt`）と Clip Chain（`chain_prompt`＝共通ベース）の2箇所に分かれていたのを、タブ外・タブ群の上に置く**単一「下書き」欄**へ統合した回。Forge Neo 風（LoRA 選択→上部欄にタグが載る）。入口＝[`PROMPT_UNIFICATION_WORKORDER.md`](PROMPT_UNIFICATION_WORKORDER.md)。**GUI のみ（API／engine／services 不可触）**。
-> commit `fd35877`（変更4ファイル）。**push／main マージはユーザー承認待ち。最終目視／実機ゲートはユーザー帰宅後。**
+> commit `fd35877`（変更4ファイル）。**push／main マージ＝✅済（ユーザー承認 2026-07-06）。最終目視／実機ゲート＝✅クローズ（31.4 参照・実機4点をユーザー受容）。**
 
 本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。（**本節は GUI 改修のため GPU 計測・SHA 新規測定は該当なし＝既存 SHA 不変。**）
 

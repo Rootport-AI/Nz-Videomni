@@ -7,6 +7,7 @@ byte-identical progress/complete/fail handling.
 from __future__ import annotations
 
 import os
+import re
 import time
 from pathlib import Path
 
@@ -123,6 +124,92 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
 
 
 # --------------------------------------------------------------------------- #
+# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight>`` (S2). The
+# weight is optional (default 1.0) and the ``lora`` keyword is case-insensitive
+# (``<LORA:...>`` allowed). Nothing is invented client-side — the weight range
+# mirrors the server's ``0 < strength <= 2.0`` rule; out-of-range weights are
+# clamped into [MIN, MAX] (MIN reuses the Generate-tab adapter-strength slider's
+# own 0.05 floor) and a toast warns. Name resolution is against the GET /loras
+# name set, case-insensitive with exact match preferred; an unknown name aborts
+# the send (mirrors the existing precheck flow).
+# --------------------------------------------------------------------------- #
+_LORA_TOKEN_RE = re.compile(r"<lora:([^:>]+)(?::([0-9]*\.?[0-9]+))?>", re.IGNORECASE)
+LORA_WEIGHT_MIN = 0.05
+LORA_WEIGHT_MAX = 2.0
+LORA_WEIGHT_DEFAULT = 1.0
+
+
+def _merge_loras(loras: list[dict]) -> list[dict]:
+    """Dedup a lora list by name: the LAST occurrence's strength wins, the FIRST
+    occurrence's position is kept (plain dict insertion-order semantics). A
+    single-element / empty list round-trips unchanged, so the payload stays
+    byte-identical on the adapter-only and no-lora paths."""
+    merged: dict[str, dict] = {}
+    for item in loras:
+        merged[item["name"]] = item
+    return list(merged.values())
+
+
+def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
+    """Extract ``<lora:name:weight>`` tokens from ``prompt``.
+
+    Returns ``(cleaned_prompt, loras, error)``:
+
+    * ``cleaned_prompt`` — the prompt with every matched token removed and the
+      whitespace runs left behind collapsed to single spaces (applied ONLY when
+      a token was actually removed, so a token-free prompt is returned byte-for-
+      byte unchanged — the caller only invokes this when a token is present);
+    * ``loras`` — ``[{"name", "strength"}]`` in first-seen order, deduped
+      last-wins by resolved name;
+    * ``error`` — a localized message (unknown token name) meaning "abort the
+      send with zero generate/upload calls", else ``None``. Weight-range clamps
+      are non-fatal: they fire a ``gr.Warning`` toast and continue.
+
+    ``known_names`` is the GET /loras name set; resolution is case-insensitive
+    with an exact match preferred.
+    """
+    exact = set(known_names)
+    lower_map: dict[str, str] = {}
+    for n in known_names:
+        lower_map.setdefault(n.lower(), n)
+
+    def _resolve(raw: str):
+        if raw in exact:
+            return raw
+        return lower_map.get(raw.lower())
+
+    collected: list[dict] = []
+    unknown: list[str] = []
+    for m in _LORA_TOKEN_RE.finditer(prompt or ""):
+        raw_name = m.group(1).strip()
+        resolved = _resolve(raw_name)
+        if resolved is None:
+            unknown.append(raw_name)
+            continue
+        if m.group(2) is None:
+            weight = LORA_WEIGHT_DEFAULT
+        else:
+            weight = float(m.group(2))
+            if weight < LORA_WEIGHT_MIN or weight > LORA_WEIGHT_MAX:
+                clamped = min(max(weight, LORA_WEIGHT_MIN), LORA_WEIGHT_MAX)
+                gr.Warning(L("lora_warn_weight_clamp", lang).format(
+                    name=resolved, given=weight, clamped=clamped))
+                weight = clamped
+        collected.append({"name": resolved, "strength": weight})
+
+    # Unknown name(s) -> abort (mirrors the "reject before any API call" flow).
+    if unknown:
+        return prompt, [], L("lora_msg_unknown", lang).format(names=", ".join(unknown))
+    # No token matched at all -> leave the prompt byte-identical.
+    if not collected:
+        return prompt, [], None
+
+    cleaned = _LORA_TOKEN_RE.sub("", prompt)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned, _merge_loras(collected), None
+
+
+# --------------------------------------------------------------------------- #
 # Generate flow, factored out for unit testing (mock transport). Yields
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
 # --------------------------------------------------------------------------- #
@@ -205,6 +292,26 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_ref_resolution", lang), "", None
                 return
 
+        # 1c) prompt-embedded <lora:name:weight> tokens (S2). Resolved + stripped
+        # here — BEFORE any upload — so an unknown token name aborts the send
+        # with zero generate/upload calls (matches the precheck discipline). The
+        # GET /loras name lookup runs only when a token is actually present, so a
+        # token-free prompt performs no extra call and stays byte-identical.
+        send_prompt = prompt
+        prompt_loras: list[dict] = []
+        if _LORA_TOKEN_RE.search(prompt or ""):
+            try:
+                lora_list = api.list_loras()
+            except Exception as exc:
+                yield _precheck_reject(L("lora_msg_list_failed", lang).format(err=exc)), "", None
+                return
+            known = [e.get("name") for e in (lora_list or [])
+                     if isinstance(e, dict) and e.get("name")]
+            send_prompt, prompt_loras, lora_err = parse_prompt_loras(prompt, known, lang)
+            if lora_err is not None:
+                yield _precheck_reject(lora_err), "", None
+                return
+
         conditioning: list[dict] = []
         total = len(to_upload)
         for i, (image_path, frame_idx, strength) in enumerate(to_upload, start=1):
@@ -233,7 +340,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         if crop_enabled and int(crop_w) > 0 and int(crop_h) > 0:
             crop_output = {"width": int(crop_w), "height": int(crop_h)}
         payload = {
-            "prompt": prompt,
+            "prompt": send_prompt,
             "negative_prompt": negative_prompt or "",
             "width": int(width),
             "height": int(height),
@@ -246,11 +353,21 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "pipeline": "distilled",
             "conditioning_images": conditioning,
         }
-        # IC-LoRA (S4): only add loras + reference_video_id when an adapter is
-        # selected. Omitting both keys keeps the request byte-identical to the
-        # no-adapter path (matches GenerateRequest defaults).
+        # loras: combine the adapter-dropdown control LoRA (IC-LoRA, S4) with the
+        # prompt <lora:...> style/character LoRAs (S2). Adapter first, then prompt
+        # order; deduped last-wins by name. The "loras" key is added ONLY when the
+        # merged list is non-empty, and reference_video_id (+ the S3 strength
+        # keys) only when an adapter is selected — so the request stays
+        # byte-identical to the pre-S2/S4 payload on the no-adapter/no-token path
+        # (no keys) AND on the adapter-only path (single-entry list, same order).
+        combined_loras: list[dict] = []
         if use_adapter:
-            payload["loras"] = [{"name": adapter, "strength": float(adapter_strength)}]
+            combined_loras.append({"name": adapter, "strength": float(adapter_strength)})
+        combined_loras.extend(prompt_loras)
+        merged_loras = _merge_loras(combined_loras)
+        if merged_loras:
+            payload["loras"] = merged_loras
+        if use_adapter:
             payload["reference_video_id"] = reference_video_id
             # S3: control-adherence + reference-strength are optional server-side
             # (default 1.0). Send each key ONLY when the slider is below 1.0 so

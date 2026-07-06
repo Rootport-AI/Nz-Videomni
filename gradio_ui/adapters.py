@@ -8,6 +8,8 @@ friendly label; any unknown registered key is shown as-is.
 
 from __future__ import annotations
 
+import numpy as np
+
 from .i18n import L, _DEFAULT_LANG
 
 ADAPTER_NONE = "__none__"
@@ -83,3 +85,48 @@ def model_active_value(models_json: dict | None, category: str) -> str:
     """The currently active NAME for a category (``"default"`` fallback)."""
     block = ((models_json or {}).get("categories") or {}).get(category) or {}
     return block.get("active") or MODEL_DEFAULT
+
+
+# --------------------------------------------------------------------------- #
+# Style/character LoRA gallery (Style LoRA tab, S2). GET /loras enumerates every
+# adapter with its ``kind``; the gallery shows ONLY the ``style`` ones (control
+# adapters — canny/pose/upscaler — stay in the Generate tab's reference-video
+# field). Each entry's thumbnail is served by the API (GET /loras/{name}/
+# thumbnail); entries without one get a neutral placeholder so the tile still
+# renders with its name caption.
+# --------------------------------------------------------------------------- #
+
+#: Neutral placeholder tile for a style LoRA that has no sibling .png thumbnail
+#: (a light-gray square; gradio postprocesses the ndarray into an <img>).
+_STYLE_PLACEHOLDER = np.full((144, 144, 3), 210, dtype=np.uint8)
+
+
+def _style_lora_entries(loras: list[dict] | None) -> list[dict]:
+    """The ``kind == "style"`` entries from a GET /loras list, in server order."""
+    return [
+        e for e in (loras or [])
+        if isinstance(e, dict) and e.get("kind") == "style" and e.get("name")
+    ]
+
+
+def build_style_gallery(loras: list[dict] | None, base_url: str | None) -> list[tuple]:
+    """gr.Gallery ``value`` for the Style LoRA tab: ``[(image, caption), ...]``
+    over the style LoRAs only. ``image`` is the thumbnail URL when the entry has
+    one (fetched by the browser from ``base_url``), else the neutral
+    placeholder; ``caption`` is the LoRA name."""
+    base = (base_url or "").rstrip("/")
+    items: list[tuple] = []
+    for entry in _style_lora_entries(loras):
+        name = entry["name"]
+        if entry.get("has_thumbnail"):
+            image: object = f"{base}/api/v1/loras/{name}/thumbnail"
+        else:
+            image = _STYLE_PLACEHOLDER
+        items.append((image, name))
+    return items
+
+
+def style_lora_names(loras: list[dict] | None) -> list[str]:
+    """Style-LoRA names in the SAME order as :func:`build_style_gallery`, so a
+    gallery select index resolves 1:1 to a name."""
+    return [e["name"] for e in _style_lora_entries(loras)]

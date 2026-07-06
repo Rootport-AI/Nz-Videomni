@@ -337,6 +337,27 @@ LABELS: dict[str, dict[str, str]] = {
                                       "or pick another model."),
         "apierr_MODEL_INCOMPATIBLE": ("The selected file is not a valid model for that "
                                       "slot. Pick another model."),
+        # --- style / character LoRA tab (S2) ---
+        "tab_style_lora": "Style LoRA",
+        "style_gallery_label": "Style / character LoRAs",
+        "style_reload_btn": "Reload LoRA list",
+        "style_note": ("Click a LoRA below to append a <lora:name:1.0> token to the Generate "
+                       "tab's prompt. Adjust the weight by editing the number in the prompt "
+                       "(0–2.0; 1.0 = the strength the LoRA was trained for). Control LoRAs "
+                       "(canny / pose / upscaler) are not shown here — use them as before from "
+                       "the reference-video adapter field on the Generate tab."),
+        "style_added": "Added to the prompt: {name}",
+        "style_reload_done": ("LoRAs reloaded: {total} total ({styles} style, "
+                              "{controls} control)."),
+        "style_reload_failed": "Failed to reload LoRAs: {err}",
+        "style_list_failed": "Failed to load the LoRA list: {err}",
+        # --- prompt-embedded <lora:...> messages (S2) ---
+        "lora_msg_unknown": ("Unknown LoRA name(s) in the prompt: {names}. Remove or fix the "
+                             "<lora:...> token(s) and retry."),
+        "lora_warn_weight_clamp": ("LoRA <{name}> weight {given} is out of range (0–2.0); "
+                                   "clamped to {clamped}."),
+        "lora_msg_list_failed": ("Failed to look up the LoRA list for the <lora:...> tokens: "
+                                 "{err}"),
     },
     "ja": {
         # --- top common bar ---
@@ -636,6 +657,25 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_MODEL_NOT_FOUND": "不明なモデル名です。モデル一覧を更新して選び直してください。",
         "apierr_MODEL_FILE_MISSING": "モデルファイルがディスク上に見つかりません。再ダウンロードするか別のモデルを選んでください。",
         "apierr_MODEL_INCOMPATIBLE": "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",
+        # --- style / character LoRA tab (S2) ---
+        "tab_style_lora": "画風LoRA",
+        "style_gallery_label": "画風・キャラクターLoRA",
+        "style_reload_btn": "LoRA一覧を再読込",
+        "style_note": ("下のLoRAをクリックすると、Generateタブのプロンプト末尾に <lora:名前:1.0> が"
+                       "追加されます。重みはプロンプト内の数値を書き換えて調整します"
+                       "（0〜2.0・1.0=そのLoRAが学習時に想定した強さ）。"
+                       "canny／pose／アップスケーラなどの制御LoRAはここには表示されません。"
+                       "従来どおりGenerateタブの参照動画アダプタ欄から使ってください。"),
+        "style_added": "プロンプトに追加しました: {name}",
+        "style_reload_done": "LoRAを再読込しました: 合計{total}件（画風{styles}件・制御{controls}件）。",
+        "style_reload_failed": "LoRAの再読込に失敗しました: {err}",
+        "style_list_failed": "LoRA一覧の取得に失敗しました: {err}",
+        # --- prompt-embedded <lora:...> messages (S2) ---
+        "lora_msg_unknown": ("プロンプト内に未知のLoRA名があります: {names}。"
+                             "<lora:...> の記述を修正するか削除して再試行してください。"),
+        "lora_warn_weight_clamp": ("LoRA <{name}> の重み {given} が範囲外（0〜2.0）です。"
+                                   "{clamped} に丸めました。"),
+        "lora_msg_list_failed": "<lora:...> を解決するためのLoRA一覧取得に失敗しました: {err}",
     },
 }
 

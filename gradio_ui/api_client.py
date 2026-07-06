@@ -59,6 +59,27 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def list_loras(self) -> list[dict]:
+        """GET /loras -> the LoRA list (each item: name, kind, has_thumbnail,
+        exists, source). The server rescans on every call, so a freshly
+        dropped-in file shows up without a restart."""
+        r = self.client.get(self._url("/api/v1/loras"), headers=self.headers, timeout=10)
+        r.raise_for_status()
+        return r.json().get("loras", [])
+
+    def reload_loras(self) -> dict:
+        """POST /loras/reload -> ``{total, styles, controls}`` after an explicit
+        registry rescan (config + lora_dir)."""
+        r = self.client.post(self._url("/api/v1/loras/reload"), headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    def lora_thumbnail_url(self, name: str) -> str:
+        """The absolute URL of a LoRA's thumbnail (GET /loras/{name}/thumbnail).
+        Used by the Style-LoRA gallery — the browser fetches it directly from
+        the same server the UI is mounted on."""
+        return self._url(f"/api/v1/loras/{name}/thumbnail")
+
     def delete_job(self, job_id: str) -> dict:
         """DELETE /jobs/{id}. The server cancels the job if it is still active
         (``{"cancel_requested": True, ...}``) or drops it + its output dir if it

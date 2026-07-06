@@ -1817,3 +1817,108 @@ GUI の V2V クリップ連結で「Create joined version」を押すと **HTTP 
 2. **push／main マージ**: ユーザー承認待ち（branch `feature/ic-lora-strength`）。
 3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝ユーザーが後日実施。
 4. negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続）。
+
+## 29. ★画風／キャラクター LoRA 対応 S0「D スパイク」＝キー互換 GO/NO-GO 判定＝**GO**（2026-07-06・branch `feature/style-lora`・両トラック合格＋ユーザー目視確認済み）
+
+> **正本＝本節。** 画風／キャラクター LoRA 対応（[`STYLE_LORA_WORKORDER.md`](STYLE_LORA_WORKORDER.md)）の最初のゲート「D. キー互換スパイク」の検証記録。CivitAI（外部配布サイト）が配っている実物の LoRA 2 本が、既存の IC-LoRA 適用機構でそのまま使えるか（追加のキーマップなしで読み込めるか）の GO/NO-GO 判定。
+> スパイクは**コード・config を一切変更せずに** GO 判定へ到達（一時パッチなし）。本セッションはコード・設定を触っていない。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 29.1 対象 LoRA と素性（2 本とも sd-scripts 系学習）
+
+| ファイル | サイズ | rank | `ss_network_alpha` | 用途 | 発動方法 |
+|---|---|---|---|---|---|
+| `models/loras/Pixar_Toon.safetensors` | 336MB | 32 | 16 | 画風（Pixar 風トゥーン） | トリガーワード `P1x4r` |
+| `models/loras/LTX-2.3-Henshin.safetensors` | 816MB | 64 | 32 | 変身エフェクト | プロンプトテンプレート方式 |
+
+- 両者とも sd-scripts 系（`networks.lora_ltx2`）で学習。全キーが `diffusion_model.` プレフィックス ＋ `lora_A.weight`／`lora_B.weight`・データ型 BF16・`.alpha` テンソルは**持たず**（alpha はメタデータ `ss_network_alpha` のみ）。
+- alpha/rank は両方とも **0.5**（Pixar=16/32・Henshin=32/64）。
+
+### 29.2 Track A＝attach 検証（生成なし・GPU 不使用）
+
+LoRA の各テンソルが本番モデルのどのモジュールに対応付くか（attach）を、実重みなしで確かめた。
+
+- **方法**: `torch.device("meta")` 下で `LTXModelConfigurator.from_config()`（GGUF メタデータから本番と同一 config）を使い、モジュール木の構造だけを構築。そこへ公式 `attach_ic_loras()` を直接実行。attach 処理はモジュール名と Linear 層の in/out features しか参照しないため、実重みをロードせずに解決可否を判定できるのが根拠。
+- **結果**: Pixar＝**576/576 ペア**解決・Henshin＝**1152/1152 ペア**解決。shape mismatch **0 件**・「0 マッチ WARN」なし。Pixar の `to_gate_logits`／`ff.net.0.proj`／`ff.net.2`、Henshin の `audio_attn1/2`・`audio_to_video_attn`・`video_to_audio_attn` を含む全モジュールが `named_modules()` に実在して解決（モデル＝AudioVideo・48 層・gated attention）。
+- **含意**: 上流 `LTXV_LORA_COMFY_RENAMING_MAP`（`diffusion_model.` プレフィックス剥がし）＋ `lora_A`/`lora_B` ペアリングという既存経路のまま、**追加キーマップは不要**。
+
+### 29.3 Track B＝実生成検証（API バイパス・runner 直接駆動・pose なしの純 T2V）
+
+- **方法**: `services.ltx_runner.LTXRunner` を直接駆動する使い捨てドライバ（scratchpad・**コミットせず**）。`lora_paths=[(絶対パス, strength, "none")]`／`reference_video_path=None` の純 T2V。現行本番設定（distilled 8step／CFG1.0・`keep_resident=0`・comp=1）・seed=12345 固定・1 回ロードで 6 本を直列生成。
+- **結果表**（一次ソース＝`ltx_worker.log` の `peak_vram_mb`）:
+
+| ラン | 解像度／尺 | LoRA（strength） | 生成時間 | `peak_vram_mb` | attach 数 |
+|---|---|---|---|---|---|
+| smoke_pixar-1.0 | 512×320／49f | Pixar（1.0） | 115.2s | 8440 | 576 |
+| baseline | 1280×768／121f | なし | 179.7s | 9532 | 0 |
+| pixar-1.0 | 1280×768／121f | Pixar（1.0） | 195.1s | 9518 | 576 |
+| pixar-0.5 | 1280×768／121f | Pixar（0.5） | 191.5s | 9532 | 576 |
+| henshin-1.0 | 1280×768／121f | Henshin（1.0） | 192.3s | 9532 | 1152 |
+| henshin-0.5 | 1280×768／121f | Henshin（0.5） | 193.6s | 9539 | 1152 |
+
+- **VRAM**: LoRA のオーバーヘッドは実質ゼロ（baseline 9532MB と同水準・rank64／1152 バッファでも増分なし）。512×320 スモークは 8440MB ＝ LoRA なし基準値と一致。OOM／WDDM 共有溢れなし。
+- **目視**: baseline＝実写調 ／ pixar-1.0＝明確なフル 3D CGI トゥーン調 ／ pixar-0.5＝自然寄りの 3D アニメ調（同一 seed で段階差＝strength 可変の実効を確認）／ henshin-1.0＝実写調のまま腰周りに金色の光の渦（変身 VFX）が発現。**ユーザー本人が代表フレーム 4 枚を目視し「完璧」と受容（2026-07-06）**。※動画本体の最終目視ゲートは実装完了後に別途実施。
+- **attach ログ引用**: 「IC-LoRA Pixar_Toon.safetensors: 576 Linear(s) attached for forward-time apply (strength=1.000)」等・「0 マッチ WARN」なし。
+
+### 29.4 alpha スケールの裏付けと設計決定（ユーザー承認済み）
+
+- 両 LoRA は `.alpha` テンソルを持たず、メタデータ `ss_network_alpha` のみ（両方 alpha/rank＝0.5）。既存の delta 式（`strength × B@A`）は alpha を読まない。
+- **ユーザー決定**: alpha/rank を LoRA 名前解決層（`services/lora_registry.py` の `resolve()`）で strength に自動乗算する（Forge 系互換・weight 1.0＝学習が想定したとおりの効き）。不可触の重みパッチ機構は無改造。既存 IC-LoRA は alpha メタなし→係数 1.0→既存挙動は不変。
+- **併せて確定した設計判断**: GUI は分離する（制御 LoRA＝従来のアダプタドロップダウン ／ 画風 LoRA＝プロンプト内 `<lora:名前:weight>` コマンド ＋ 新「Style LoRA」タブ）。
+
+### 29.5 結論と次アクション
+
+- **結論＝GO**（Track A／Track B 両方合格 ＋ ユーザー目視受容・2026-07-06）。
+- ブランチ: `feature/style-lora`。LoRA 実物は `models/loras/` に配置（git 管理外）。
+- **次**: S1（ディレクトリスキャン＋kind 判定＋alpha 畳み込み＋all-or-nothing 緩和＋`GET /loras` 等の加算 API）→ S2（GUI）。
+
+## 30. ★画風／キャラクター LoRA 対応 S1（バックエンド）＋S2（GUI）実装と回帰ゲート＝全 PASS（2026-07-06・branch `feature/style-lora`・**最終目視ゲート待ち**）
+
+> **正本＝本節。** §29 の S0「D スパイク」＝GO を受け、[`STYLE_LORA_WORKORDER.md`](STYLE_LORA_WORKORDER.md) の要件3点（ディレクトリ配置＋リロード／プロンプト内 `<lora:名前:weight>` コマンド／GUI「Style LoRA」サムネイルタブ）を S1＝バックエンド、S2＝GUI の2スライスで実装した回。凍結 API の加算的変更（新設エンドポイントと optional 緩和・**トークン無し／フィールド省略時は従来と byte 同一**の定型ゲート）を守り、不可触の LoRA 重みパッチ機構には触れていない。
+> commit `bcdde05`（S1＝バックエンド）→`591d4be`（S2＝GUI）＋docs。**push／main マージはユーザー承認待ち。最終目視ゲート（720p 動画のユーザー確認）と GUI 実機操作確認はユーザー帰宅後。**
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 30.1 S1＝バックエンド（commit `bcdde05`）
+
+- **ディレクトリスキャン＋登録制のマージ（`services/lora_registry.py` 拡張）**: `rescan()` を新設。`config.yaml` の登録（authoritative）と `config.model.lora_dir="./models/loras"` のスキャン結果をマージする。名前が衝突したら config 側を勝たせ、スキャン側は親ディレクトリ名を付けて退避する。
+- **kind 判定**: safetensors メタに `reference_downscale_factor` があるか、または preprocess が `none` 以外なら **control**（制御 LoRA＝参照動画が要る）、それ以外を **style**（画風／キャラ）と判定する。
+- **alpha 自動畳み込み**: scale＝alpha/rank（メタ `ss_network_alpha`／`ss_network_dim` から算出・メタ無しは 1.0）を `resolve()` が返す strength に自動乗算する（§29.4 のユーザー承認済み設計・不可触機構の外側で完結）。
+- **all-or-nothing 緩和（`api/models.py`）**: 「loras を指定したら `reference_video_id` 必須」という all-or-nothing 検証を撤廃（逆向き＝`reference_video_id`／strength 系を指定したら loras 必須、は維持）。かわりに `api/generate.py` の endpoint 層で kind を判定し、**kind＝control かつ参照動画なし** のときに **422 `LORA_REQUIRES_REFERENCE`** を返す。
+- **新設 API（`api/loras.py`）**: `GET /loras`（毎回 rescan して一覧）／`POST /loras/reload`／`GET /loras/{name}/thumbnail`（`<stem>.png` を併置・無ければ 404）。
+- **既存 IC-LoRA への無影響を事前確認**: 既存の IC-LoRA 実ファイル（upscaler x2／x4・union-control）は `ss_network_alpha` を持たないため scale＝1.0＝挙動不変。alpha 畳み込みが既存経路に影響しないことを事前に確認済み。
+
+### 30.2 S1 回帰ゲート（全 PASS）
+
+- **pytest**: **391 passed / 1 skipped**（§28 の基準 365+1 → +26＝`test_lora_registry` 19 本＋`test_loras_endpoint` 6 本＋意図的なテスト更新分 +1）。
+- **SHA byte 一致 3/3**（alpha 畳み込みが既存経路に無影響であることの実証を含む）:
+
+| 経路 | SHA256 |
+|---|---|
+| T2V 基準 | `23844b4eebd107ccba8c5534eb65bab86575cca0b9050cb6c7e680a4506bb7bf` |
+| 最小 I2V | `a511eda431cf0d0942cee97fa130f45e55fc3236833cbf9ea743ea7f4715c217` |
+| IC-LoRA 付き | `735a6de97d2deb56a781c66307849924a8ac25b51f0591fbddab07a78875e272` |
+
+- **peak_vram_mb**（一次ソース＝`ltx_worker.log`）: T2V＝**8440**（基準一致）／I2V＝**9525**／IC-LoRA＝**9525**。
+- **新 API スモーク**: `GET /loras`＝実物 2 本（style・スキャン由来）＋config 3 種（control・登録由来）を返す。`POST /loras/reload`＝`{total:5, styles:2, controls:3}`。thumbnail＝png 無しで 404。style 単独 generate＝202→completed（worker 実効 strength **0.5**＝1.0×α）。control 単独＝**422**。
+
+### 30.3 S2＝GUI（commit `591d4be`）
+
+- **プロンプト内コマンドのパース（`gradio_ui/handlers.py`）**: `<lora:名前:weight>` を解釈（`re.IGNORECASE`・weight 省略時 1.0・0.05〜2.0 に clamp して超過時は警告）。名前は `GET /loras` の名前集合に大文字小文字を無視して解決し、**未知の名前は警告して送信を中止**（アップロード前配置を促す設計＝副作用ゼロ）。同名は後勝ちでマージ、トークンはプロンプトから除去して空白を畳む。**トークンが無いときは `GET /loras` を発行せず、payload は従来と byte 同一。**
+- **「Style LoRA」タブ（`gradio_ui/ui.py`）**: 5 番目のタブに `gr.Gallery`（kind＝style のみ表示・control 3 種は除外）を置き、サムネイルは `GET /loras/{name}/thumbnail`（無しはプレースホルダ）。Reload ボタン＝`POST /loras/reload`。サムネイルをクリックすると Generate タブの prompt 末尾に `<lora:名前:1.0>` を追記する。i18n EN／JA 11 キー。
+- **pytest**: **418 passed / 1 skipped**（S1 の 391+1 → +27・赤化ゼロ）。
+
+### 30.4 S2 E2E（実サーバー＋実 GUI ハンドラ経路・全 PASS）
+
+- **入力**: プロンプト「…cheering crowd `<lora:pixar_toon:0.8>` P1x4r pixar style character」／512×320・49f・seed 12345。
+- **送信 payload**: prompt からトークン除去済み・`loras=[{"name":"Pixar_Toon","strength":0.8}]`（小文字入力 `pixar_toon` → 正準名 `Pixar_Toon` に解決）。
+- **`ltx_worker.log`**: 「IC-LoRA Pixar_Toon.safetensors: 576 Linear(s) attached for forward-time apply (strength=0.400)」（0.8×0.5＝0.4＝GUI 指定 weight × alpha 畳み込み）。
+- **結果**: completed 112.84s・**peak_vram_mb 8440**（基準一致）。gallery＝style 2 件のみ（control 3 種は除外）。
+
+### 30.5 OPEN（残ゲート・ユーザー宿題）
+
+1. **最終目視ゲート（ユーザー）**: 720p 動画のユーザー確認と GUI 実機操作確認＝**ユーザー帰宅後**。
+2. **push／main マージ**: ユーザー承認待ち（branch `feature/style-lora`）。
+3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝ユーザーが後日実施。
+4. negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続）。

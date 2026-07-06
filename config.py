@@ -100,6 +100,18 @@ class ModelConfig(BaseModel):
     # section -> any loras request is rejected (fail loud, no silent skip).
     ic_loras: dict[str, str | IcLoraEntry] = Field(default_factory=dict)
 
+    # Style / character LoRA directory (S1). A drop-in folder scanned by
+    # services.lora_registry.LoraRegistry: every ``*.safetensors`` here is
+    # exposed under its filename stem as an additional selectable adapter WITHOUT
+    # a config edit (mirrors the model-registry directory scan). config.model.ic_loras
+    # stays authoritative — a scanned file whose stem (or on-disk path) collides
+    # with a registered adapter yields to the registration. A ``<stem>.png`` next
+    # to the weight file is served as its GUI thumbnail. Directory-scanned entries
+    # are style adapters unless their safetensors metadata carries
+    # ``reference_downscale_factor`` (then control). Absent/empty directory -> no
+    # scan entries (fresh checkout tolerated).
+    lora_dir: str = "./models/loras"
+
     # Model-management registries (additive, Docs/MODEL_MANAGEMENT_DESIGN.md).
     # Category-scoped NAME -> path maps mirroring ic_loras: a server-side model
     # NAME (what GET /models lists and POST /pipeline/load accepts in its

@@ -182,11 +182,29 @@ def test_generate_with_loras_and_reference_completes(lora_client):
     assert meta["ic_lora"]["reference_video_id"] == vid
 
 
-def test_loras_without_reference_video_422(lora_client):
+def test_style_lora_without_reference_completes(lora_client):
+    """S1 semantics change: the old all-or-nothing rule ("loras require
+    reference_video_id", 422) is relaxed to a per-adapter-KIND check. The lora_client
+    registers REGISTERED_LORA against a metadata-less dummy file, so it classifies
+    as a STYLE adapter -> a loras-only request (no reference video) now completes,
+    where it used to be rejected 422."""
     payload = _base_payload(loras=[{"name": REGISTERED_LORA, "strength": 1.0}])
     r = lora_client.post("/api/v1/generate", json=payload)
-    assert r.status_code == 422
-    assert "reference_video_id" in r.text
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = lora_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+
+def test_control_lora_without_reference_422(mixed_registry_client):
+    """A CONTROL adapter (canny-control: preprocess != none) still requires a
+    reference video — a control-lora-only request is rejected up front (422
+    LORA_REQUIRES_REFERENCE), the kind-aware successor to the old all-or-nothing
+    rejection."""
+    payload = _base_payload(loras=[{"name": CANNY_LORA, "strength": 1.0}])
+    r = mixed_registry_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "LORA_REQUIRES_REFERENCE"
 
 
 def test_reference_without_loras_422(lora_client):

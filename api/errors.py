@@ -177,6 +177,32 @@ def model_incompatible(category: str, name: str, detail: str | None = None) -> A
     )
 
 
+def lora_requires_reference(names: list[str]) -> APIError:
+    """S1: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler — it
+    derives its conditioning from a reference video) was requested without a
+    ``reference_video_id``. Style/character LoRAs need no reference, so the old
+    all-or-nothing ``loras <=> reference_video_id`` rule was relaxed to this
+    kind-aware endpoint check. 422 — the request is well-formed; the required
+    companion input (a reference video) is what is missing."""
+    return APIError(
+        "LORA_REQUIRES_REFERENCE",
+        "a control-type IC-LoRA requires a reference_video_id",
+        422,
+        detail=f"control loras needing a reference video: {sorted(names)}",
+    )
+
+
+def lora_thumbnail_not_found(name: str) -> APIError:
+    """S1: GET /loras/{name}/thumbnail for an adapter that has no sibling
+    ``<stem>.png`` (or an unknown adapter name). Mirrors :func:`lora_not_found`
+    (404)."""
+    return APIError(
+        "LORA_THUMBNAIL_NOT_FOUND",
+        f"no thumbnail for IC-LoRA adapter: {name}",
+        404,
+    )
+
+
 def lora_preprocess_conflict(kinds: list[str]) -> APIError:
     """Phase C: the requested loras imply more than one control preprocess kind
     (e.g. one canny-control + one pose-control adapter) for a single reference

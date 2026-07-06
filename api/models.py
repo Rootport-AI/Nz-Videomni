@@ -92,12 +92,14 @@ class GenerateRequest(BaseModel):
     # 各 frame_idx は validator で 0-or-8n+1 グリッドへスナップ＋範囲クランプされる。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
-    # IC-LoRA (Phase B, ADDITIVE/optional — a request omitting both fields is
-    # byte-identical to before). ``loras`` are registered adapter names (resolved
-    # server-side, never paths). The only supported adapter (Pixel-Spatial-
-    # Upscaler) requires a reference video, so ``loras`` non-empty <=>
-    # ``reference_video_id`` set (cross-validated below). ``reference_video_id``
-    # is obtained from POST /upload/video.
+    # IC-LoRA / style-LoRA (Phase B + S1, ADDITIVE/optional — a request omitting
+    # both fields is byte-identical to before). ``loras`` are registered adapter
+    # names (resolved server-side, never paths). A CONTROL adapter (union-control /
+    # pixel-spatial-upscaler) requires a reference video; a STYLE/character adapter
+    # does not — so the reference requirement is enforced per-adapter-kind at the
+    # endpoint (api/generate.py), not as a shape-only cross-validation here. The
+    # reverse still holds: ``reference_video_id`` set => at least one lora (below).
+    # ``reference_video_id`` is obtained from POST /upload/video.
     loras: list[LoraSpec] = Field(default_factory=list)
     reference_video_id: str | None = None
 
@@ -161,14 +163,13 @@ class GenerateRequest(BaseModel):
             snapped = (image.frame_idx - 1) // 8 * 8 + 1
             image.frame_idx = max(1, min(snapped, self.num_frames - 8))
 
-        # IC-LoRA (Phase B): the only supported adapter (Pixel-Spatial-Upscaler)
-        # reads its reference-downscale factor from a reference video, so loras and
-        # reference_video_id are all-or-nothing.
-        if self.loras and not self.reference_video_id:
-            raise ValueError(
-                "loras require reference_video_id (the Pixel-Spatial-Upscaler "
-                "adapter needs a reference video)"
-            )
+        # IC-LoRA reference requirement is now KIND-dependent (S1) and enforced at
+        # the endpoint layer (api/generate.py), not here: a CONTROL adapter
+        # (union-control / pixel-spatial-upscaler) needs a reference video, but a
+        # STYLE/character adapter does not — so "loras require reference_video_id"
+        # can no longer be decided from the request shape alone (it needs the
+        # registry's per-adapter kind). The reverse still holds unconditionally: a
+        # reference video only ever conditions a lora.
         if self.reference_video_id and not self.loras:
             raise ValueError(
                 "reference_video_id requires at least one lora (the reference "

@@ -1817,3 +1817,58 @@ GUI の V2V クリップ連結で「Create joined version」を押すと **HTTP 
 2. **push／main マージ**: ユーザー承認待ち（branch `feature/ic-lora-strength`）。
 3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝ユーザーが後日実施。
 4. negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続）。
+
+## 29. ★画風／キャラクター LoRA 対応 S0「D スパイク」＝キー互換 GO/NO-GO 判定＝**GO**（2026-07-06・branch `feature/style-lora`・両トラック合格＋ユーザー目視確認済み）
+
+> **正本＝本節。** 画風／キャラクター LoRA 対応（[`STYLE_LORA_WORKORDER.md`](STYLE_LORA_WORKORDER.md)）の最初のゲート「D. キー互換スパイク」の検証記録。CivitAI（外部配布サイト）が配っている実物の LoRA 2 本が、既存の IC-LoRA 適用機構でそのまま使えるか（追加のキーマップなしで読み込めるか）の GO/NO-GO 判定。
+> スパイクは**コード・config を一切変更せずに** GO 判定へ到達（一時パッチなし）。本セッションはコード・設定を触っていない。
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
+
+### 29.1 対象 LoRA と素性（2 本とも sd-scripts 系学習）
+
+| ファイル | サイズ | rank | `ss_network_alpha` | 用途 | 発動方法 |
+|---|---|---|---|---|---|
+| `models/loras/Pixar_Toon.safetensors` | 336MB | 32 | 16 | 画風（Pixar 風トゥーン） | トリガーワード `P1x4r` |
+| `models/loras/LTX-2.3-Henshin.safetensors` | 816MB | 64 | 32 | 変身エフェクト | プロンプトテンプレート方式 |
+
+- 両者とも sd-scripts 系（`networks.lora_ltx2`）で学習。全キーが `diffusion_model.` プレフィックス ＋ `lora_A.weight`／`lora_B.weight`・データ型 BF16・`.alpha` テンソルは**持たず**（alpha はメタデータ `ss_network_alpha` のみ）。
+- alpha/rank は両方とも **0.5**（Pixar=16/32・Henshin=32/64）。
+
+### 29.2 Track A＝attach 検証（生成なし・GPU 不使用）
+
+LoRA の各テンソルが本番モデルのどのモジュールに対応付くか（attach）を、実重みなしで確かめた。
+
+- **方法**: `torch.device("meta")` 下で `LTXModelConfigurator.from_config()`（GGUF メタデータから本番と同一 config）を使い、モジュール木の構造だけを構築。そこへ公式 `attach_ic_loras()` を直接実行。attach 処理はモジュール名と Linear 層の in/out features しか参照しないため、実重みをロードせずに解決可否を判定できるのが根拠。
+- **結果**: Pixar＝**576/576 ペア**解決・Henshin＝**1152/1152 ペア**解決。shape mismatch **0 件**・「0 マッチ WARN」なし。Pixar の `to_gate_logits`／`ff.net.0.proj`／`ff.net.2`、Henshin の `audio_attn1/2`・`audio_to_video_attn`・`video_to_audio_attn` を含む全モジュールが `named_modules()` に実在して解決（モデル＝AudioVideo・48 層・gated attention）。
+- **含意**: 上流 `LTXV_LORA_COMFY_RENAMING_MAP`（`diffusion_model.` プレフィックス剥がし）＋ `lora_A`/`lora_B` ペアリングという既存経路のまま、**追加キーマップは不要**。
+
+### 29.3 Track B＝実生成検証（API バイパス・runner 直接駆動・pose なしの純 T2V）
+
+- **方法**: `services.ltx_runner.LTXRunner` を直接駆動する使い捨てドライバ（scratchpad・**コミットせず**）。`lora_paths=[(絶対パス, strength, "none")]`／`reference_video_path=None` の純 T2V。現行本番設定（distilled 8step／CFG1.0・`keep_resident=0`・comp=1）・seed=12345 固定・1 回ロードで 6 本を直列生成。
+- **結果表**（一次ソース＝`ltx_worker.log` の `peak_vram_mb`）:
+
+| ラン | 解像度／尺 | LoRA（strength） | 生成時間 | `peak_vram_mb` | attach 数 |
+|---|---|---|---|---|---|
+| smoke_pixar-1.0 | 512×320／49f | Pixar（1.0） | 115.2s | 8440 | 576 |
+| baseline | 1280×768／121f | なし | 179.7s | 9532 | 0 |
+| pixar-1.0 | 1280×768／121f | Pixar（1.0） | 195.1s | 9518 | 576 |
+| pixar-0.5 | 1280×768／121f | Pixar（0.5） | 191.5s | 9532 | 576 |
+| henshin-1.0 | 1280×768／121f | Henshin（1.0） | 192.3s | 9532 | 1152 |
+| henshin-0.5 | 1280×768／121f | Henshin（0.5） | 193.6s | 9539 | 1152 |
+
+- **VRAM**: LoRA のオーバーヘッドは実質ゼロ（baseline 9532MB と同水準・rank64／1152 バッファでも増分なし）。512×320 スモークは 8440MB ＝ LoRA なし基準値と一致。OOM／WDDM 共有溢れなし。
+- **目視**: baseline＝実写調 ／ pixar-1.0＝明確なフル 3D CGI トゥーン調 ／ pixar-0.5＝自然寄りの 3D アニメ調（同一 seed で段階差＝strength 可変の実効を確認）／ henshin-1.0＝実写調のまま腰周りに金色の光の渦（変身 VFX）が発現。**ユーザー本人が代表フレーム 4 枚を目視し「完璧」と受容（2026-07-06）**。※動画本体の最終目視ゲートは実装完了後に別途実施。
+- **attach ログ引用**: 「IC-LoRA Pixar_Toon.safetensors: 576 Linear(s) attached for forward-time apply (strength=1.000)」等・「0 マッチ WARN」なし。
+
+### 29.4 alpha スケールの裏付けと設計決定（ユーザー承認済み）
+
+- 両 LoRA は `.alpha` テンソルを持たず、メタデータ `ss_network_alpha` のみ（両方 alpha/rank＝0.5）。既存の delta 式（`strength × B@A`）は alpha を読まない。
+- **ユーザー決定**: alpha/rank を LoRA 名前解決層（`services/lora_registry.py` の `resolve()`）で strength に自動乗算する（Forge 系互換・weight 1.0＝学習が想定したとおりの効き）。不可触の重みパッチ機構は無改造。既存 IC-LoRA は alpha メタなし→係数 1.0→既存挙動は不変。
+- **併せて確定した設計判断**: GUI は分離する（制御 LoRA＝従来のアダプタドロップダウン ／ 画風 LoRA＝プロンプト内 `<lora:名前:weight>` コマンド ＋ 新「Style LoRA」タブ）。
+
+### 29.5 結論と次アクション
+
+- **結論＝GO**（Track A／Track B 両方合格 ＋ ユーザー目視受容・2026-07-06）。
+- ブランチ: `feature/style-lora`。LoRA 実物は `models/loras/` に配置（git 管理外）。
+- **次**: S1（ディレクトリスキャン＋kind 判定＋alpha 畳み込み＋all-or-nothing 緩和＋`GET /loras` 等の加算 API）→ S2（GUI）。

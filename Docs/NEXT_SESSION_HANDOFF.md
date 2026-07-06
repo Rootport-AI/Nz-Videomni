@@ -2,17 +2,20 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 次セッション＝**GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト**・設計ユーザー合意済み・**実装は次セッション**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 **GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト**＝実装完了・客観ゲート PASS・**目視／実機ゲート✅クローズ・main マージ＆push 済**）
 
 > **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。
 
 | 項目 | 状態 |
 |---|---|
-| リポジトリ | **main＝origin 同期済**（画風/キャラ LoRA 対応までマージ＆push 済・`f21d42c`）。作業ツリー clean |
-| **次セッション（実装）** | **GUI のメインプロンプト欄を一本化**＝Generate の `prompt` と Clip Chain の共通 `chain_prompt` を、タブ外・タブ群の上に置く**単一「下書き」欄**へ統合。**入口＝[`PROMPT_UNIFICATION_WORKORDER.md`](PROMPT_UNIFICATION_WORKORDER.md)**（設計はユーザー合意済み）。方式＝下書き欄を唯一の本物にして両生成ハンドラへ**直結**（隠し欄＋コピーはしない＝残留・順序事故を構造的に回避）／LoRA サムネイル選択の貼付け先を下書き欄へ（バックエンド不要）／`make_chain_handler` で `<lora:...>` を**除去＋警告**（連結は LoRA 未対応）。併せて**ネガティブ欄を `interactive=False`（常時グレーアウト・将来の非蒸留対応のモックとして残す・ペイロード不変）**。**GUI のみ（API/engine/services 不可触）** |
-| 引き継ぐ宿題（次をブロックしない） | ①**画風/キャラ LoRA 対応の最終目視ゲート＝未完了**（S0 スパイク動画 6 本＝session scratchpad `dspike_out`／GUI 実機操作＝Style LoRA タブ・Reload・クリック挿入）②前回持ち越しの GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプトでクリップ2の実在目視）。いずれもユーザー実施待ち |
+| リポジトリ | **main マージ＆push 済（2026-07-06・ユーザー承認）**・実装 `fd35877`＋docs。回帰 PASS（pytest **422 passed / 1 skipped**）。**画風/キャラ LoRA 対応（§29/§30）も目視ゲート✅クローズ・マージ済**。作業ツリー clean |
+| **実装サマリ** | GUI のメインプロンプト欄を一本化＝Generate の `prompt` と Clip Chain の共通 `chain_prompt` を、タブ外・タブ群の上に置く**単一「下書き」欄**へ統合。方式＝下書き欄を**唯一の本物**にして両生成ハンドラへ**直結**（隠し欄＋コピーはしない＝残留・順序事故を構造的に回避）。**変更4ファイル**＝①`gradio_ui/ui.py`（上部共通バー直後・`gr.Tabs()` 直前に3行 Textbox〔下書き欄〕を新設・旧 `prompt`／`chain_prompt` 削除・両生成ボタンと Style gallery 選択を下書き欄へ直結）②`gradio_ui/handlers.py`（`make_chain_handler` で共通プロンプトの `<lora:...>` を除去＋警告・トークン無しは payload byte 同一・各クリップ個別プロンプトは除去せず）③ネガティブ欄 `negative`／`chain_negative` を `interactive=False`＋info（蒸留 CFG＝1 で無効・将来の非蒸留対応モックとして残置・ペイロード不変）④`gradio_ui/i18n.py`（文言更新・info／キー新設／旧キー削除 EN/JA）。**GUI のみ（API/engine/services 不可触）**。**入口＝[`PROMPT_UNIFICATION_WORKORDER.md`](PROMPT_UNIFICATION_WORKORDER.md)・詳細＝VERIFICATION_LOG §31** |
+| **使い方** | プロンプトは上部の**単一欄**に書く（Generate／Clip Chain 共通）。Clip Chain では各クリップ枠が空ならこの共通プロンプトを流用する。LoRA サムネイルをクリックすると上部欄に `<lora:名前:1.0>` が追記される。連結タブでは LoRA タグは無視（除去＋警告）＝連結は LoRA 未対応 |
+| **目視ゲート** | **✅クローズ（2026-07-06）**: ①プロンプト一本化の実機 4 点（下書き欄1つ・全タブ表示／Style LoRA 選択→上部欄タグ／連結で LoRA タグ除去警告／ネガティブ欄グレーアウト）②画風/キャラ LoRA のスパイク動画 6 本（`dspike_out`）を、いずれもユーザーが確認し「問題ない・完璧」と受容 |
+| 残＝ユーザー宿題（次をブロックしない） | 前回持ち越しの GUI 実機確認 3 点（事前チェック拒否の黄トースト／チェーン進捗「クリップ n/N」／クリップ別プロンプトでクリップ2の実在目視）＝**この承認とは別・ユーザーが後日実施（継続）** |
+| **次セッション** | **AviUtl2 拡張フロントエンド（Phase 2＝最終目的・spec §13.3／§14）**。ユーザーは Claude Design で UI/UX 叩き台を作成予定＝ブリーフ `Docs/AVIUTL2_DESIGN_BRIEF.md`（自己完結・push 済）。着手の入口＝AviUtl2 SDK の「拡張が取れる UI 形態」の確定スパイク（要調査＝ブリーフ §7） |
 | 研究課題（格下げ済み・AviUtl2 統合より後） | ①**連結タブで LoRA を効かせるバックエンド改修**（`GenerateChainRequest.loras` 加算＋worker 配線・全体 or クリップ毎）＝今回のワークオーダー §5 ②negative/CFG の worker 配線＆API 露出（非蒸留 dev 向け）③Sulphur-2 distilled の GGUF 化。詳細＝下の（旧最新）ブロックのバックログ行 |
-| pytest 基準 | **418 passed / 1 skipped**（§30 時点） |
+| pytest 基準 | **422 passed / 1 skipped**（§31 時点） |
 
 ---
 

@@ -35,9 +35,10 @@ LABELS: dict[str, dict[str, str]] = {
         "app_subtitle": "Verification UI — thin client over the frozen REST API (/api/v1/*).",
         "msg_coming": "Coming in a later slice.",
         # --- generate: left column ---
-        "lbl_prompt": "Prompt",
+        "lbl_prompt": "Prompt (single generation & clip-chain shared base)",
         "ph_prompt": "A bustling downtown at dusk; crowds weave through the alleys as neon signs flicker on — like a scene from a movie trailer",
         "lbl_negative": "Negative prompt",
+        "info_negative": "Disabled: the distilled model runs at CFG=1, so negative prompts have no effect.",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -142,9 +143,7 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_UNAUTHORIZED": "Authentication failed. Check the API key.",
         "apierr_VALIDATION_ERROR": "The request was rejected by validation. See the details below.",
         # --- clip chain tab (S5) ---
-        "lbl_prompt_shared": "Prompt (shared)",
-        "ph_prompt2": ("A stormy harbor town; a small boat pushes through the swelling waves while "
-                       "a distant bell tolls — like a scene from a movie trailer"),
+        "chain_lora_ignored": "Clip Chain does not support LoRA yet — the <lora:...> tag(s) were ignored.",
         "lbl_overlap": "Transition frames (overlap between clips, 1-8)",
         "lbl_overlap_strength": "Transition strength",
         "cap_crossfade": "Clips are joined with a cross-fade-like blend using these settings.",
@@ -386,9 +385,10 @@ LABELS: dict[str, dict[str, str]] = {
         "app_subtitle": "検証用UI — 凍結REST API (/api/v1/*) の薄いクライアント。",
         "msg_coming": "後のスライスで実装予定。",
         # --- generate: left column ---
-        "lbl_prompt": "プロンプト",
+        "lbl_prompt": "プロンプト(単発生成・クリップ連結の共通ベース)",
         "ph_prompt": "夕暮れの賑やかな下町、行き交う人々、ネオンが灯りはじめる路地。映画のワンシーンのように——",
         "lbl_negative": "ネガティブプロンプト",
+        "info_negative": "無効: 蒸留モデルはCFG=1で動作するため、ネガティブプロンプトは効きません。",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",
@@ -486,8 +486,7 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_UNAUTHORIZED": "認証に失敗しました。APIキーを確認してください。",
         "apierr_VALIDATION_ERROR": "リクエストが検証で拒否されました。詳細は以下を参照してください。",
         # --- clip chain tab (S5) ---
-        "lbl_prompt_shared": "プロンプト(共通)",
-        "ph_prompt2": "嵐の港町、荒れる波間を進む小舟、遠くで鳴る鐘の音——映画のワンシーンのように",
+        "chain_lora_ignored": "クリップ連結ではLoRAは未対応のため、<lora:...>タグを無視しました。",
         "lbl_overlap": "つなぎ目のフレーム数 (クリップ間のオーバーラップ・1〜8)",
         "lbl_overlap_strength": "つなぎ目の強さ",
         "cap_crossfade": "クリップ間はこの設定でクロスフェード的に接続されます。",

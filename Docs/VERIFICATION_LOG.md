@@ -1873,10 +1873,10 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 - ブランチ: `feature/style-lora`。LoRA 実物は `models/loras/` に配置（git 管理外）。
 - **次**: S1（ディレクトリスキャン＋kind 判定＋alpha 畳み込み＋all-or-nothing 緩和＋`GET /loras` 等の加算 API）→ S2（GUI）。
 
-## 30. ★画風／キャラクター LoRA 対応 S1（バックエンド）＋S2（GUI）実装と回帰ゲート＝全 PASS（2026-07-06・branch `feature/style-lora`・**最終目視ゲート待ち**）
+## 30. ★画風／キャラクター LoRA 対応 S1（バックエンド）＋S2（GUI）実装と回帰ゲート＝全 PASS（2026-07-06・branch `feature/style-lora`・**目視ゲート✅クローズ・main マージ＆push 済**）
 
 > **正本＝本節。** §29 の S0「D スパイク」＝GO を受け、[`STYLE_LORA_WORKORDER.md`](STYLE_LORA_WORKORDER.md) の要件3点（ディレクトリ配置＋リロード／プロンプト内 `<lora:名前:weight>` コマンド／GUI「Style LoRA」サムネイルタブ）を S1＝バックエンド、S2＝GUI の2スライスで実装した回。凍結 API の加算的変更（新設エンドポイントと optional 緩和・**トークン無し／フィールド省略時は従来と byte 同一**の定型ゲート）を守り、不可触の LoRA 重みパッチ機構には触れていない。
-> commit `bcdde05`（S1＝バックエンド）→`591d4be`（S2＝GUI）＋docs。**push／main マージはユーザー承認待ち。最終目視ゲート（720p 動画のユーザー確認）と GUI 実機操作確認はユーザー帰宅後。**
+> commit `bcdde05`（S1＝バックエンド）→`591d4be`（S2＝GUI）＋docs。**push／main マージ＝✅済（merge `f39f22f`・ユーザー承認 2026-07-06）。最終目視ゲート＝✅クローズ（30.5 参照・スパイク動画 6 本をユーザー受容）。**
 
 本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
 
@@ -1916,9 +1916,40 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 - **`ltx_worker.log`**: 「IC-LoRA Pixar_Toon.safetensors: 576 Linear(s) attached for forward-time apply (strength=0.400)」（0.8×0.5＝0.4＝GUI 指定 weight × alpha 畳み込み）。
 - **結果**: completed 112.84s・**peak_vram_mb 8440**（基準一致）。gallery＝style 2 件のみ（control 3 種は除外）。
 
-### 30.5 OPEN（残ゲート・ユーザー宿題）
+### 30.5 目視ゲート＝✅クローズ（2026-07-06）
 
-1. **最終目視ゲート（ユーザー）**: 720p 動画のユーザー確認と GUI 実機操作確認＝**ユーザー帰宅後**。
-2. **push／main マージ**: ユーザー承認待ち（branch `feature/style-lora`）。
-3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝ユーザーが後日実施。
-4. negative／CFG／pipeline は worker 未配線＝GUI 露出禁止（継続）。
+1. **最終目視ゲート（ユーザー）＝✅OK（2026-07-06）**: スパイク動画 6 本（`dspike_out` の baseline／pixar 1.0・0.5／henshin 1.0・0.5／smoke）をユーザーが目視し「問題ない・完璧」と受容。GUI 実機操作（Style LoRA タブのサムネイル選択→プロンプト欄へのタグ挿入）は §31 のプロンプト欄一本化 GUI 確認で併せて OK（クリック挿入先は一本化後の上部下書き欄）。
+2. **push／main マージ＝✅済**（ユーザー承認 2026-07-06・merge `f39f22f`）。
+3. 前回からの持ち越し: GUI 実機確認 3 点（黄トースト／クリップ n/N／クリップ別プロンプト）＝**この承認とは別・ユーザーが後日実施（継続）**。
+4. negative／CFG は worker 未配線＝機能的に無効（CFG＝1 固定）。**値の送出自体は禁止しない**（ネガティブ欄は現状 payload に送信）。§31 で GUI 上は `interactive=False` のグレーアウト表示（将来の非蒸留対応モック）へ。
+
+## 31. ★GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト 実装＝客観ゲート PASS＋目視ゲート✅クローズ（2026-07-06・branch `feature/prompt-unification`・commit `fd35877`・**main マージ＆push 済**）
+
+> **正本＝本節。** メインのプロンプト入力欄が Generate（`prompt`）と Clip Chain（`chain_prompt`＝共通ベース）の2箇所に分かれていたのを、タブ外・タブ群の上に置く**単一「下書き」欄**へ統合した回。Forge Neo 風（LoRA 選択→上部欄にタグが載る）。入口＝[`PROMPT_UNIFICATION_WORKORDER.md`](PROMPT_UNIFICATION_WORKORDER.md)。**GUI のみ（API／engine／services 不可触）**。
+> commit `fd35877`（変更4ファイル）。**push／main マージ＝✅済（ユーザー承認 2026-07-06）。最終目視／実機ゲート＝✅クローズ（31.4 参照・実機4点をユーザー受容）。**
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。（**本節は GUI 改修のため GPU 計測・SHA 新規測定は該当なし＝既存 SHA 不変。**）
+
+### 31.1 方式（設計判断＝「下書き欄を唯一の本物にする」）
+
+- 「隠し欄＋クリック時にコピー」ではなく、**下書き欄そのものを唯一の本物**にして両生成ハンドラへ**直結**する方式を採った。
+- 根拠: Gradio は `inputs=` に並べたコンポーネントの値をクリック時に**atomic に受け取る**ため、コピー順序の取りこぼしや残留プロンプトが**構造的に発生しない**。ユーザーの当初案（下書き欄）を本セッションでブラッシュアップして合意した設計。
+
+### 31.2 実装（commit `fd35877`・変更4ファイル）
+
+- **`gradio_ui/ui.py`**: 上部共通バー（status／refresh／load／unload の Row）直後・`with gr.Tabs()` の直前に**単一の3行 Textbox（下書き欄）**を新設。旧 `prompt`／`chain_prompt` は削除。`generate_btn.click`・`chain_generate_btn.click`・`style_gallery.select` を下書き欄へ直結（`handlers.py` のシグネチャは変更なし）。
+- **`gradio_ui/handlers.py`**: `make_chain_handler` で共通プロンプト中の `<lora:...>` を除去し `gr.Warning`（連結は LoRA 未対応＝研究課題）を出す。**トークンが無いときは `send_prompt=prompt` として payload byte 同一を維持**（`_LORA_TOKEN_RE` を再利用・パース仕様は不変）。各クリップの**個別プロンプトは除去対象外**。
+- **ネガティブ欄**（`negative`／`chain_negative`）を `interactive=False`＋info 注記（蒸留 CFG＝1 で無効）へ。値・送信ペイロード・キーは不変＝回帰 SHA 不変。欄は**将来の非蒸留対応モックとして残置**（削除しない）。
+- **`gradio_ui/i18n.py`**: `lbl_prompt` 文言更新・`info_negative`／`chain_lora_ignored` 新設（EN／JA）・`lbl_prompt_shared`／`ph_prompt2` の対を削除（EN／JA 計4）。
+
+### 31.3 客観ゲート（PASS）
+
+- **pytest**: **422 passed / 1 skipped**（§30 の基準 418+1 → 新規4件・赤化ゼロ・app venv・mock transport）。
+- **`build_ui()` スモーク**: Blocks グラフが正常に組み上がることを確認。下書き欄は `lbl_prompt` が1回だけ登録され、旧 `lbl_prompt_shared` は消滅していることを確認。
+- **payload byte 同一**: トークン無しプロンプトで送信ペイロードが従来と byte 同一であることを新規テストで担保（Generate 側の既存担保＋連結側の担保を追加）。
+
+### 31.4 目視／実機ゲート＝✅クローズ（2026-07-06）
+
+1. **最終目視／実機ゲート（ユーザー）＝✅OK（2026-07-06）**: ①上部に下書き欄が1つ・全タブで表示 ②Style LoRA タブでサムネイル選択→上部欄にタグが載る ③連結で LoRA タグ除去の警告 ④ネガティブ欄グレーアウト、をユーザーが実機確認し「問題ない」と受容。
+2. **push／main マージ＝✅済**（ユーザー承認 2026-07-06）。
+3. **スコープ外／研究課題**: 連結タブで LoRA を実際に効かせるバックエンド改修（`GenerateChainRequest.loras` 加算＋worker 配線）＝将来の研究課題。

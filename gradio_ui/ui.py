@@ -170,6 +170,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             load_btn = reg(gr.Button(L("btn_load_model"), scale=0), "btn_load_model", "value")
             unload_btn = reg(gr.Button(L("btn_unload_model"), scale=0), "btn_unload_model", "value")
 
+        # ---- unified draft prompt (always visible, above the tabs) ----
+        # Single source of truth for BOTH the Generate and Clip Chain flows:
+        # wired DIRECTLY into generate_btn.click and chain_generate_btn.click
+        # (no hidden mirror to copy from, so no copy-order race / stale value).
+        # Style-LoRA thumbnails append their <lora:...> token here too, so a
+        # selection is visible from whichever tab the user is on.
+        prompt = reg(gr.Textbox(label=L("lbl_prompt"), lines=3,
+                                placeholder=L("ph_prompt")), "lbl_prompt")
+
         with gr.Tabs():
             # ============================ Generate ============================
             with gr.Tab(L("tab_gen")) as tab_gen:
@@ -177,10 +186,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 with gr.Row():
                     # LEFT: inputs
                     with gr.Column(scale=3):
-                        prompt = reg(gr.Textbox(label=L("lbl_prompt"), lines=3,
-                                                placeholder=L("ph_prompt")), "lbl_prompt")
+                        # Prompt lives in the shared draft box above the tabs.
+                        # Negative is kept but greyed out (distilled CFG=1 => no
+                        # effect); the default value + sent payload are unchanged.
                         negative = reg(gr.Textbox(label=L("lbl_negative"),
-                                                  value="blurry, low quality, distorted"),
+                                                  value="blurry, low quality, distorted",
+                                                  interactive=False,
+                                                  info=L("info_negative")),
                                        "lbl_negative")
 
                         # quality mode (two_stage_hq is non-selectable in S1)
@@ -358,11 +370,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("a2v_cap_panel"), elem_classes=["note"]),
                                 "a2v_cap_panel", "value")
 
-                        chain_prompt = reg(gr.Textbox(label=L("lbl_prompt_shared"), lines=3,
-                                                      placeholder=L("ph_prompt2")),
-                                           "lbl_prompt_shared")
+                        # Shared prompt lives in the draft box above the tabs
+                        # (it is the common base for every clip). Negative is
+                        # kept but greyed out (distilled CFG=1 => no effect);
+                        # default value + sent payload unchanged.
                         chain_negative = reg(gr.Textbox(label=L("lbl_negative"),
-                                                        value="blurry, low quality, distorted"),
+                                                        value="blurry, low quality, distorted",
+                                                        interactive=False,
+                                                        info=L("info_negative")),
                                              "lbl_negative")
                         chain_qmode = reg(gr.Radio(
                             choices=[(L("qmode_fast"), "distilled"),
@@ -670,7 +685,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         chain_generate_btn.click(
             chain_generate,
-            inputs=[chain_prompt, chain_negative, chain_width, chain_height,
+            inputs=[prompt, chain_negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
                     *chain_clip_inputs, config_state,

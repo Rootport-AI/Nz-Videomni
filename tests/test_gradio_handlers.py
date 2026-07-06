@@ -1186,6 +1186,98 @@ def test_chain_geometry_degenerate_short_clips_via_helper():
     assert err is not None
 
 
+# --------------------------------------------------------------------------- #
+# Prompt unification: the SHARED (draft) prompt feeds the chain flow. Clip
+# chaining has no LoRA wiring, so any <lora:...> token in the shared prompt is
+# stripped (never applied) with a gr.Warning; a token-free prompt is forwarded
+# byte-identical, and per-clip prompts are left untouched (out of scope).
+# --------------------------------------------------------------------------- #
+def test_chain_strips_shared_prompt_loras_and_warns(monkeypatch):
+    from gradio_ui import handlers as handlers_mod
+
+    toasts: list[str] = []
+    monkeypatch.setattr(
+        handlers_mod.gr, "Warning",
+        lambda message, *args, **kwargs: toasts.append(message),
+    )
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # No GET /loras lookup: chain strips by regex, it does not resolve names.
+        assert not request.url.path.endswith("/loras")
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-lora"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(prompt="a city <lora:whatever:0.7> at dusk", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    # token removed + whitespace collapsed; never applied as a lora.
+    assert captured["prompt"] == "a city at dusk"
+    assert "loras" not in captured
+    assert toasts and "lora" in toasts[0].lower()
+
+
+def test_chain_token_free_shared_prompt_unchanged_no_warning(monkeypatch):
+    from gradio_ui import handlers as handlers_mod
+
+    toasts: list[str] = []
+    monkeypatch.setattr(
+        handlers_mod.gr, "Warning",
+        lambda message, *args, **kwargs: toasts.append(message),
+    )
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-plain"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(prompt="a plain shared prompt", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert captured["prompt"] == "a plain shared prompt"  # byte-identical
+    assert toasts == []  # no <lora:...> token -> no warning
+
+
+def test_chain_per_clip_prompt_lora_is_preserved():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-clip-lora"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(prompt="base", clips=[
+        {"enabled": True, "prompt": "hero <lora:foo:1.0>", "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    # shared prompt has no token -> unchanged; per-clip token left as authored.
+    assert captured["prompt"] == "base"
+    assert captured["clips"][0]["prompt"] == "hero <lora:foo:1.0>"
+
+
+def test_prompt_unification_i18n_keys_present_both_langs():
+    from gradio_ui import LABELS
+
+    for k in ("chain_lora_ignored", "info_negative"):
+        assert LABELS["en"].get(k), f"missing EN: {k}"
+        assert LABELS["ja"].get(k), f"missing JA: {k}"
+
+
 def test_chain_409_reports_busy():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(409, json={"error": {"code": "JOB_BUSY"}})

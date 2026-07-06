@@ -645,6 +645,19 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
 
+        # --- strip prompt-embedded <lora:...> tokens from the SHARED prompt ---
+        # Clip chaining has no LoRA wiring yet (a research task); the shared
+        # prompt is the one place the draft box's <lora:...> tokens could leak
+        # in, so remove them (never applied) and warn. Only the shared prompt is
+        # cleaned — per-clip prompts are out of scope (left as authored). The
+        # sub/collapse runs ONLY when a token is actually present, so a
+        # token-free prompt is forwarded byte-identical (payload unchanged).
+        send_prompt = prompt
+        if _LORA_TOKEN_RE.search(prompt or ""):
+            stripped = _LORA_TOKEN_RE.sub("", prompt)
+            send_prompt = re.sub(r"\s+", " ", stripped).strip()
+            gr.Warning(L("chain_lora_ignored", lang))
+
         # --- build payload (clips in slot order; per-clip prompt omitted when
         # blank; conditioning attached to clip 0 only) ---
         crop_output = None
@@ -661,7 +674,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             clips_payload.append(entry)
 
         payload = {
-            "prompt": prompt,
+            "prompt": send_prompt,
             "negative_prompt": negative_prompt or "",
             "width": w,
             "height": h,

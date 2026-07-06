@@ -47,7 +47,13 @@ behavior change.
 
 from __future__ import annotations
 
-from .adapters import ADAPTER_FRIENDLY, ADAPTER_NONE, build_adapter_choices
+from .adapters import (
+    ADAPTER_FRIENDLY,
+    ADAPTER_NONE,
+    build_adapter_choices,
+    build_style_gallery,
+    style_lora_names,
+)
 from .api_client import ApiClient
 from .formatting import (
     build_jobs_rows,
@@ -56,7 +62,12 @@ from .formatting import (
     format_status,
     jobs_table_headers,
 )
-from .handlers import delete_finished_jobs, make_chain_handler, make_generate_handler
+from .handlers import (
+    delete_finished_jobs,
+    make_chain_handler,
+    make_generate_handler,
+    parse_prompt_loras,
+)
 from .i18n import LABELS, L
 from .presets import (
     PRESETS,
@@ -80,6 +91,7 @@ __all__ = [
     "build_adapter_choices",
     "build_jobs_rows",
     "build_preset_choices",
+    "build_style_gallery",
     "build_ui",
     "check_chain_total",
     "compute_spill_warning",
@@ -90,5 +102,7 @@ __all__ = [
     "jobs_table_headers",
     "make_chain_handler",
     "make_generate_handler",
+    "parse_prompt_loras",
     "pick_default_preset",
+    "style_lora_names",
 ]

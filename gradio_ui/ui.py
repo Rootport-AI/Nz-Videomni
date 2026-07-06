@@ -12,7 +12,9 @@ from .adapters import (
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
     build_model_choices,
+    build_style_gallery,
     model_active_value,
+    style_lora_names,
 )
 from .api_client import ApiClient
 from .formatting import (
@@ -577,6 +579,27 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 purge_msg = gr.Textbox(label="", show_label=False,
                                        interactive=False, container=False)
 
+            # =========================== Style LoRA ==========================
+            # Style/character LoRA browser (S2). GET /loras -> gallery of the
+            # kind=="style" adapters only (thumbnails served by the API);
+            # selecting one appends a <lora:name:1.0> token to the Generate-tab
+            # prompt. Control LoRAs (canny/pose/upscaler) are NOT shown here —
+            # they stay in the Generate tab's reference-video adapter field.
+            with gr.Tab(L("tab_style_lora")) as tab_style_lora:
+                reg(tab_style_lora, "tab_style_lora", "label")
+                # Style-LoRA names parallel to the gallery order, so a gallery
+                # select index resolves 1:1 to a name (mirrors jobs_ids_state).
+                style_names_state = gr.State([])
+                reg(gr.Markdown(L("style_note"), elem_classes=["note"]),
+                    "style_note", "value")
+                style_reload_btn = reg(gr.Button(L("style_reload_btn")),
+                                       "style_reload_btn", "value")
+                style_gallery = gr.Gallery(
+                    label=L("style_gallery_label"), columns=4, height="auto",
+                    show_label=True, interactive=False, value=[],
+                )
+                reg(style_gallery, "style_gallery_label", "label")
+
         # ---- events ----
         refresh_btn.click(refresh_status, outputs=status_box)
         # Top-bar Refresh also refreshes the Settings config viewer + spill table.
@@ -841,6 +864,64 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             inputs=lang_state, outputs=model_dds,
         )
 
+        # ---- Style LoRA tab events (INDEPENDENT listeners) ----
+        # Same shape as the Models section: its own page-load hook + Refresh
+        # button, no shared closure/outputs with the other tabs.
+        def load_style_gallery(lang, current_names, warn: bool = True):
+            try:
+                loras = api.list_loras()
+            except Exception as exc:
+                if warn:
+                    gr.Warning(L("style_list_failed", lang).format(err=exc))
+                return gr.update(), current_names
+            return (gr.update(value=build_style_gallery(loras, base_url)),
+                    style_lora_names(loras))
+
+        def on_style_reload(lang, current_names):
+            # POST /loras/reload (explicit rescan) -> re-list -> rebuild gallery +
+            # count toast. On failure the gallery/names are left as-is.
+            try:
+                counts = api.reload_loras()
+            except Exception as exc:
+                gr.Warning(L("style_reload_failed", lang).format(err=exc))
+                return gr.update(), current_names
+            try:
+                loras = api.list_loras()
+            except Exception as exc:
+                gr.Warning(L("style_list_failed", lang).format(err=exc))
+                return gr.update(), current_names
+            gr.Info(L("style_reload_done", lang).format(
+                total=counts.get("total", 0), styles=counts.get("styles", 0),
+                controls=counts.get("controls", 0)))
+            return (gr.update(value=build_style_gallery(loras, base_url)),
+                    style_lora_names(loras))
+
+        def on_style_select(prompt_val, names, lang, evt: gr.SelectData):
+            # Gallery.select gives evt.index (the selected tile index); resolve
+            # it to a name via style_names_state and APPEND a <lora:name:1.0>
+            # token to the Generate-tab prompt (existing value preserved).
+            idx = evt.index
+            if isinstance(idx, (list, tuple)):
+                idx = idx[0] if idx else None
+            if idx is None or not names or idx >= len(names):
+                return gr.update()
+            name = names[idx]
+            token = f"<lora:{name}:1.0>"
+            base = prompt_val or ""
+            new_prompt = f"{base.rstrip()} {token}" if base.strip() else token
+            gr.Info(L("style_added", lang).format(name=name))
+            return gr.update(value=new_prompt)
+
+        style_reload_btn.click(on_style_reload,
+                               inputs=[lang_state, style_names_state],
+                               outputs=[style_gallery, style_names_state])
+        style_gallery.select(on_style_select,
+                             inputs=[prompt, style_names_state, lang_state],
+                             outputs=prompt)
+        demo.load(lambda lang, names: load_style_gallery(lang, names, warn=False),
+                  inputs=[lang_state, style_names_state],
+                  outputs=[style_gallery, style_names_state])
+
     # Expose the registry + language-switch fn for the S6 handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]
     demo.switch_language = switch_language  # type: ignore[attr-defined]
@@ -852,4 +933,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     demo.api = api  # type: ignore[attr-defined]
     demo.on_page_load = on_page_load  # type: ignore[attr-defined]
     demo.on_config_retry = on_config_retry  # type: ignore[attr-defined]
+    # Style LoRA closures (S2): let a test drive the gallery load / reload /
+    # select paths against a mock transport without a live server.
+    demo.load_style_gallery = load_style_gallery  # type: ignore[attr-defined]
+    demo.on_style_reload = on_style_reload  # type: ignore[attr-defined]
+    demo.on_style_select = on_style_select  # type: ignore[attr-defined]
     return demo

@@ -97,6 +97,29 @@ backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行い�
 `engine/worker.py`・上記ロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です
 （[`services/ltx_runner.py`](services/ltx_runner.py) `_real_available`）。
 
+### 追加の transformer GGUF / LoRA を配置する
+
+**transformer GGUF**: `models/ltx-2.3-gguf/` 配下に任意のサブフォルダを作って `.gguf` を置くだけで、
+再帰スキャンにより自動認識されます（[`services/model_registry.py`](services/model_registry.py) の
+`CATEGORY_SPECS["transformer"]`、`recursive=True`）。登録名はファイル名（拡張子除く）で、既定の登録名と
+衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
+（`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
+
+選択は UI の「Models」設定タブのドロップダウン、または API `GET /models`（登録名の一覧確認）→
+`POST /pipeline/load`（body `{"models": {"transformer": "<登録名>"}}`）で行います。選択が現在ロード中のものと
+異なる場合のみワーカーが再構築されます。
+
+GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字列）が埋め込まれていること、(2) テンソル名が
+LTXネイティブの生キーであること、(3) `embeddings_connector` 層が非量子化（F32/BF16）であること。これらを
+満たさない外部配布 GGUF はロードに失敗します（条件を満たすのは QuantStack 製、および自家製変換ツール
+`Nz-GGUF-Converter-LTX23` の出力）。量子化タイプは既定の Q4_K_M に加え Q6_K / Q8_0 等にも対応します。
+
+**LoRA**: `models/loras/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、
+`POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または
+Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0〜2）。ComfyUI 形式
+（`diffusion_model.` プレフィックス＋ `lora_A`/`lora_B`）に対応し、量子化 GGUF モデルにもそのまま適用できます
+（実行時加算方式のため、モデル側の量子化と衝突しません）。
+
 ---
 
 ## 2. 起動

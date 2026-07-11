@@ -766,7 +766,10 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 
 - 投入直後は `queued`。バックグラウンドタスク（`run_job`）開始で即 `running`（`started_at` を記録）。
 - `queued` は短命（`create_if_idle` 直後〜スレッド開始まで）。
-- キャンセルはベストエフォート: `DELETE /jobs/{job_id}` が active ジョブに来ると `record.cancel_requested = True` を立て、`{job_id, cancel_requested: true, status}` を返す（推論は安全に中断できない）。生成が終わったとき `cancel_requested` が立っていれば最終ステータスを `cancelled` にする。終了済みジョブへの DELETE はレコード削除＋ `outputs/{job_id}` ディレクトリ削除で `{job_id, deleted: true}`。
+- `DELETE /jobs/{job_id}` の挙動と応答形はジョブ状態で異なる（実装＝`api/jobs.py::delete_job`）:
+  - **`running` ジョブ＝キャンセルはベストエフォート**: `record.cancel_requested = True` を立て、`{"job_id": ..., "cancel_requested": true, "status": ...}` を返す（推論は安全に中断できない）。生成が終わったとき `cancel_requested` が立っていれば最終ステータスを `cancelled` にする。
+  - **`queued` ジョブ＝即時キャンセル（2026-07-11 追加・queued 詰まり対策・VERIFICATION_LOG §33）**: まだ実行に移っていないので、ベストエフォートではなく**即座に `cancelled` へ遷移**させ、単一ジョブガードを解放する。応答は `{"job_id": ..., "cancelled": true, "status": "cancelled"}` ＝**running 時とキー名が異なる**（`cancel_requested` ではなく `cancelled`）ため、API クライアント実装は取り違えに注意。`JobStore` は `_lock` 配下の CAS（compare-and-swap）ヘルパー（`start_job` / `cancel_if_queued`）で queued→running への昇格とキャンセル操作を相互排他化しており、昇格とキャンセルが競合しても取りこぼさない（`cancelled` になったジョブが `running` へ復活することはない）。これにより従来サーバー再起動でしか抜けられなかった「queued のまま無言で固まる」状態を GUI／API から解消できる。
+  - **終了済みジョブ＝削除**: レコード削除＋ `outputs/{job_id}` ディレクトリ削除で `{"job_id": ..., "deleted": true}` を返す。
 
 ### 7.3 進捗コールバック
 
@@ -1075,7 +1078,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - **preset** ドロップダウン（`GET /config` の `generation_presets`＝§11.4 の6種を解像度・フレーム数のラベル付きで列挙。選択で width/height/num_frames/crop を一括反映）。
 - **crop width / height**（0=none。両方 >0 のとき `crop_output` を送る）/ **seed**（-1=random）。
 - **キーフレーム画像アコーディオン**: 固定5スロット（I2Vの多段誘導）。**A2V（音声から動画生成）と併用時も5枚すべて配線済み**で、`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内にクランプされる（`frame_idx=0` は開始フレーム扱い）。
-- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。IC-LoRA / スタイルLoRA（`<lora:...>` 記法）とは併用不可。
+- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。**スタイルLoRA（画風・キャラクター系。`<lora:...>` 記法）とは併用できる**（2026-07-11 に解禁。`GenerateChainRequest.loras` の加算＝VERIFICATION_LOG §32。それ以前は排他だった）。ただし参照動画を要する control 系 IC-LoRA（canny／pose 等）は、チェーンが参照動画を持たない構造のため併用不可で、指定すると `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否される（GUI では送信前に拒否）。
   - **音声長の事前チェック**: 添付が `.wav` の場合、送信前にクライアント側で長さを測定し、その設定（フレーム数・fps）が必要とする秒数に足りなければ、必要秒数を明示して送信を拒否する（API 呼び出しゼロ）。`.wav` 以外（mp3/m4a等）はクライアント側で測定できないためこのチェックをスキップし、サーバーの `422 SOURCE_AUDIO_TOO_SHORT` に委ねる（このエラーもヒント付きで表示される）。
   - **Frames の自動調整**: `.wav` を添付すると、その音声長に収まる最大の 8n+1 値を自動計算して num_frames へ入力し、トースト通知で知らせる（既存の値は上書きされる）。計算式は `((floor(音声秒数×fps)-1)//8)*8+1` を起点に、音声側の latent フレーム数（`chain_math.audio_latents_required`）で検算しながら 8 刻みで縮小し、最終的に `[9, 481]` へクランプする。`.wav` 以外の添付・クリア時は何もしない。
 - **生成中はボタンをグレーアウト**: 「生成」ボタンはクリック直後に無効化され、ラベルが "Generating..." / "生成中…" に切り替わる。生成完了・失敗いずれの場合も必ずボタンが再有効化・ラベル復帰する（click→無効化→生成→復元 の3段イベント連鎖。Clip Chain タブの「Generate chain」ボタンも同じ挙動）。
@@ -1134,6 +1137,8 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 3. **Gap Fill ／ Retake（大規模・後続セッション）**: LTX-Desktop の連続性プリミティブ。Gap Fill＝近傍フレーム条件の間埋め、Retake＝`TemporalRegionMask` による領域再生成（`RetakePipeline`）。**規模が大きいので次セッションでは着手しない。**
 4. **その他パリティ項目（段階的）**: 生成キュー（逐次・cancel）／延長尺（〜30s）／プロンプト強化（**text-only 版のみ**＝T2V 用）／STG・sigma schedule・denoise loop・negative・seed lock 等の露出／空間アップスケーラのユーザー操作露出／LoRA 再導入（de-fork で削除済のため）／attention tiling 再導入。
 
+> **→ 進捗追記（2026-07-11 時点）**: 上記 1（多キーフレーム・任意 frame_idx・複数条件・per-item strength の露出）と 2（クリップ連結＝`POST /generate/chain`）は**実装済み**。4 のうち「LoRA 再導入」も**実装済み**（IC-LoRA＋画風/キャラクターのスタイル LoRA。`GET /loras`／`<lora:...>` 記法／チェーンへの `loras` 加算＝VERIFICATION_LOG §32）。本節は起票当時のロードマップ記録として残す。
+
 ### 13.4b Phase 4 — 高度な条件付け（IC-LoRA / V2V）
 
 **LTX-Desktop 自身が UI で提供していない**（モデルは可能だがアプリ未提供・フォークも roadmap 止まり）ため、生成パリティの対象外として **Phase 4 に切り出す**。
@@ -1141,6 +1146,8 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 - **IC-LoRA**（Union Control / Motion Track / Pose / Camera / Detailer / HDR / Lip-Dub 等）
 - **V2V**（`ICLoraPipeline` 経由）
 - **audio-to-video（A2Vid）／時間アップスケーラ**等の別パイプライン系も、必要になった時点で Phase 4 で検討。
+
+> **→ 進捗追記（2026-07-11 時点）**: 本節の主要項目は**実装済み**＝IC-LoRA（canny／pose 等の control 系＋strength 可変・VERIFICATION_LOG §21/§28）・V2V（`source_video` によるチェーン継続生成・§24）・audio-to-video（`source_audio`・§25）。さらに A2V＋LoRA の併用も 2026-07-11 に解禁した（`GenerateChainRequest.loras`・§32。参照動画を要する control 系のみ `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否）。時間アップスケーラは未実装のまま。本節は起票当時のフェーズ分類の記録として残す。
 
 ### 13.4c 将来課題（現行の開発計画からは除外）
 

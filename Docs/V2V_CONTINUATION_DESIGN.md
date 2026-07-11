@@ -67,6 +67,7 @@
   - `context_frames` は 8n+1・下限 25（≈1秒）・**上限 145（実装で確定・当初ドラフトの「481」は誤り）**。理由＝凍結ヘッド n_ctx_v は stage2 の時間タイル（`STAGE2_V_TILE`=22 latent）内に収まる必要があり（variant B のハード凍結は tile0 にしか掛からない・レビュー Finding 1）、理論安全上限は 169px、運用上限は保守的に 145px（`limits.v2v_context_frames_max`・chain_math 側にも不変条件 raise とガードテストあり）。源動画の実フレーム数 ≥ context_frames（app 側 ffprobe で事前検査・不足時 422）。
   - `source_video.video_id` 不在は 404（`reference_video_not_found` 前例に従い新エラーコード `SOURCE_VIDEO_NOT_FOUND` を追加）。
   - IC-LoRA（`loras`）との併用は v1 スコープ外＝当面 422（将来解禁の余地は残す）。
+    - **→ 2026-07-11 更新（NEXT_SESSION_HANDOFF 冒頭ブロック／VERIFICATION_LOG §32）**: その後 `GenerateChainRequest.loras` が加算され、`/generate/chain` 全体で LoRA を扱えるようになった（当初「`loras` フィールドが無いので併用 422 は構造的に不要」＝下記 S2 注記の状況も、フィールド追加で変化した）。現在の拒否対象は「参照動画を要する control 系 IC-LoRA」に限られ（`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）、V2V は `source_video`（参照動画ではない）で成立するため、**画風・キャラクター系のスタイル LoRA は V2V チェーンと併用可能**。本節の「当面 422」は起票当時の設計判断の記録として残す。
 - `GET /config` の `limits` に `v2v_context_frames_default` / `v2v_context_frames_max` 等を追加（`spill_free_frames` 前例＝config.py にデフォルト付きで足すだけで自動露出）。
 
 ### 2.2 幾何（chain_math を単一情報源として拡張）

@@ -57,6 +57,13 @@ MODEL_CATEGORIES = ("transformer", "text_encoder", "video_vae", "audio")
 MODEL_DEFAULT = "default"
 
 
+def _path_basename(path: str) -> str:
+    """Last path component of ``path``, tolerant of both ``/`` and ``\\``
+    separators regardless of the OS this happens to run on (the string comes
+    verbatim from the server's GET /models response)."""
+    return path.replace("\\", "/").rsplit("/", 1)[-1]
+
+
 def build_model_choices(
     models_json: dict | None, category: str, lang: str = _DEFAULT_LANG
 ) -> list[tuple[str, str]]:
@@ -67,6 +74,14 @@ def build_model_choices(
     selectable but labeled so the user knows why a load would fail. An empty /
     missing response falls back to the lone "default" choice (the server-side
     default entry always exists).
+
+    The injected default entry (``name == "default"``) gets a descriptive
+    label of the form ``"default — <filename>"`` built from its ``path``, so
+    the user can tell which file the config-side default actually points at
+    instead of seeing a bare, uninformative "default". This is a DISPLAY-ONLY
+    change: the choice's VALUE stays ``"default"`` (the server-side resolution
+    logic and callers key off that name, never the label). When ``path`` is
+    empty or missing the label falls back to plain "default", same as before.
     """
     block = ((models_json or {}).get("categories") or {}).get(category) or {}
     choices: list[tuple[str, str]] = []
@@ -75,8 +90,13 @@ def build_model_choices(
         if not name:
             continue
         label = name
+        if name == MODEL_DEFAULT:
+            path = entry.get("path") or ""
+            filename = _path_basename(path) if path else ""
+            if filename:
+                label = f"{MODEL_DEFAULT} — {filename}"
         if not entry.get("exists", True):
-            label = f"{name} ({L('model_missing', lang)})"
+            label = f"{label} ({L('model_missing', lang)})"
         choices.append((label, name))
     return choices or [(MODEL_DEFAULT, MODEL_DEFAULT)]
 

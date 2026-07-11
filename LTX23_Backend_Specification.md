@@ -288,7 +288,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 ```text
 12_Nz-LTX23-backend/
 ├─ main.py                 アプリ起動（./.venv, FastAPI）
-├─ gradio_ui.py            検証用 /ui
+├─ gradio_ui/              検証用 /ui（ui.py / handlers.py / presets.py / i18n.py ほか）
 ├─ config.py / config.yaml 設定（相対パスは PROJECT_ROOT 基準で絶対化）
 ├─ api/                    router / models(スキーマ) / status / generate ...
 ├─ services/               job_store / upload_store / pipeline_manager /
@@ -341,7 +341,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 | 要素 | 既定パス | 概算 | 役割 |
 |------|----------|------|------|
-| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | 本番 DiT トランスフォーマー（VRAM 圧縮常駐） |
+| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | 本番 DiT トランスフォーマー（VRAM 圧縮常駐） |
 | GGUF Gemma (Q4_K_M) | `models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | text encoder（GPU 推論・逐次層オフロード） |
 | component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | 46GB モノリスを置換する小単体ファイル |
 | spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | 二段生成の x2 アップサンプラ |
@@ -699,7 +699,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `max_width` | `1920` | 生成幅の運用上限（Pydantic の `le=4096` とは別の運用リミット） |
 | `max_height` | `1088` | 生成高の運用上限 |
 | `max_num_frames` | `481` | 20s@24fps（481=8×60+1） |
-| `max_conditioning_images_phase1` | `1` | Phase 1 の I2V は 1 枚 |
+| `max_conditioning_images` | `5` | I2V キーフレーム画像は最大5枚（Phase 3 で 1→5 に拡張） |
 | `phase1_max_concurrent_jobs` | `1` | 単一ジョブ |
 | `low_vram_disabled_required` | `false` | status に反映 |
 | `spill_free_frames` | 下記マップ | 解像度別「溢れない」フレーム数（クライアント UI 警告用） |
@@ -964,7 +964,7 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `spatial_upsampler_path` | `"./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"` | 空間 2x アップサンプラ（load-bearing） |
 | `gemma_root` | `"./models/gemma-3-12b-it-tokenizer"` | **tokenizer-only ~40MB**。DistilledPipeline を `gemma_root=None` で構築し重み glob をバイパス、engine は tokenizer/processor の module_ops のみ読む（load-bearing、存在チェックあり） |
 | `backend` | `"auto"` | `auto` \| `mock` \| `real`（auto: GPU+モデル有→real、無→mock） |
-| `gguf_transformer_path` | `"./models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"` | GGUF 量子化トランスフォーマー（16GB レシピ Q4_K_M） |
+| `gguf_transformer_path` | `"./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"` | GGUF 量子化トランスフォーマー（16GB レシピ Q4_K_M） |
 | `gguf_gemma_path` | `"./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"` | GGUF Gemma（Q4_K_M） |
 | `engine_dir` | `"./engine"` | 自前 engine パッケージ（`python -m engine.worker`） |
 | `engine_python` | `"./.venv-engine/Scripts/python.exe"` | engine worker を回す専用 venv インタプリタ（torch+cu128） |
@@ -1000,8 +1000,13 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | プリセット | width | height | crop_output | num_frames |
 |-----------|------:|------:|-------------|----------:|
 | `smoke_test` | 384 | 256 | null | 17 |
-| `phase1_default` | 512 | 320 | null | 49 |
-| `phase1_target` | 960 | 576 | `{960, 540}` | 121 |
+| `minimal` | 512 | 320 | null | 49 |
+| `small` | 960 | 576 | `{960, 540}` | 121 |
+| `standard_720p` | 1280 | 768 | `{1280, 720}` | 257 |
+| `FHD_1080p` | 1920 | 1088 | `{1920, 1080}` | 153 |
+| `WQHD_1440p` | 2560 | 1472 | `{2560, 1440}` | 81 |
+
+> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は `limits.spill_free_frames`（§11.7）の解像度別快適上限（spill-free 実測値）と一致させてある。
 
 ### 11.5 generation_defaults
 Gradio / API の初期値。
@@ -1029,7 +1034,7 @@ Gradio / API の初期値。
 | `normalize_to_png` | `true` | PNG 正規化（EXIF orientation 反映・RGB 変換） |
 
 ### 11.7 limits
-§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images_phase1=1`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`={"1280x768":257,"1920x1088":153,"2560x1472":81}）。
+§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=5`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`={"1280x768":257,"1920x1088":153,"2560x1472":81}）。
 
 ### 11.8 output
 | キー | 実値 | 説明 |
@@ -1058,16 +1063,32 @@ poll GET   /api/v1/jobs/{job_id}       -> progress
 GET        /api/v1/jobs/{job_id}/video -> mp4
 ```
 
-### 12.2 機能（`gradio_ui.py` 準拠）
+### 12.2 機能（`gradio_ui/` 準拠）
 
-- **プロンプト** / **negative_prompt** 入力。
-- **入力画像アップロード**（任意・1枚 → 最小I2V。`image strength` スライダ付き。frame_idx=0 固定）。画像なし → T2V。
-- **width / height**（各 ×64）、**num_frames**（8n+1）、**frame_rate** の指定。
-- **preset** ドロップダウン（`smoke_test` / `phase1_default` / `phase1_target`。選択で width/height/num_frames/crop を一括反映）。
-- **crop width / height**（0=none。両方 >0 のとき `crop_output` を送る）。
-- **seed**（-1=random）。
-- **server status 表示**（`GET /api/v1/status` を叩き、GPU 名・空き VRAM・**low_vram_mode / profile** を表示）。
-- ジョブ進捗を 1 秒間隔でポーリングし、完了後に mp4 を取得してプレビュー表示。distilled は **8 steps / CFG=1.0** 固定で送る。
+タブ構成は **Generate | Clip Chain | Style LoRA | Jobs | Settings**。上段の共通バーは **server status 表示 + Refresh のみ**（旧 Load Model / Unload ボタンは廃止。モデルのロードは Settings→Models、アンロードは Settings→Danger zone に一本化）。**プロンプト**入力はタブの上に常時表示され、Generate / Clip Chain 双方で共用する。
+
+**Generate タブ**:
+
+- **negative_prompt** 入力 / **入力画像アップロード**（任意・1枚 → 最小I2V。`image strength` スライダ付き。frame_idx=0 固定。画像なし → T2V）/ キーフレーム画像・IC-LoRA の各アコーディオン。
+- **width / height**（各 ×64）、**num_frames**（8n+1）、**frame_rate** の3つは `gr.Number` の**サーバー側 `minimum` を撤去**してある。手入力の途中（例: "80" と打つ途中の "8"）で最小値未満エラーが飛ぶ Gradio の不具合を根治するための措置で、代わりにページロード時の JS（`demo.load(js=...)`）が各入力の HTML `min` 属性を後付けする。動作としては**手入力は自由**、スピナー矢印は width/height が **64刻み**、num_frames が **8n+1刻み**でスナップする（サーバー側の 8n+1・÷64 検証は従来どおり有効）。
+- **num_frames / Duration / frame_rate は1つのパネルに統合**（`gr.Group` で横3カラム）。中央カラムは入力欄を持たず、num_frames と frame_rate から算出した **Duration（"N.NNs"）をアクセントカラーで常時表示**する読み取り専用の要約。
+- **preset** ドロップダウン（`GET /config` の `generation_presets`＝§11.4 の6種を解像度・フレーム数のラベル付きで列挙。選択で width/height/num_frames/crop を一括反映）。
+- **crop width / height**（0=none。両方 >0 のとき `crop_output` を送る）/ **seed**（-1=random）。
+- **キーフレーム画像アコーディオン**: 固定5スロット（I2Vの多段誘導）。**A2V（音声から動画生成）と併用時も5枚すべて配線済み**で、`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内にクランプされる（`frame_idx=0` は開始フレーム扱い）。
+- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。IC-LoRA / スタイルLoRA（`<lora:...>` 記法）とは併用不可。
+  - **音声長の事前チェック**: 添付が `.wav` の場合、送信前にクライアント側で長さを測定し、その設定（フレーム数・fps）が必要とする秒数に足りなければ、必要秒数を明示して送信を拒否する（API 呼び出しゼロ）。`.wav` 以外（mp3/m4a等）はクライアント側で測定できないためこのチェックをスキップし、サーバーの `422 SOURCE_AUDIO_TOO_SHORT` に委ねる（このエラーもヒント付きで表示される）。
+  - **Frames の自動調整**: `.wav` を添付すると、その音声長に収まる最大の 8n+1 値を自動計算して num_frames へ入力し、トースト通知で知らせる（既存の値は上書きされる）。計算式は `((floor(音声秒数×fps)-1)//8)*8+1` を起点に、音声側の latent フレーム数（`chain_math.audio_latents_required`）で検算しながら 8 刻みで縮小し、最終的に `[9, 481]` へクランプする。`.wav` 以外の添付・クリア時は何もしない。
+- **生成中はボタンをグレーアウト**: 「生成」ボタンはクリック直後に無効化され、ラベルが "Generating..." / "生成中…" に切り替わる。生成完了・失敗いずれの場合も必ずボタンが再有効化・ラベル復帰する（click→無効化→生成→復元 の3段イベント連鎖。Clip Chain タブの「Generate chain」ボタンも同じ挙動）。
+
+**Clip Chain タブ**:
+
+- モード切替は **None / V2V の2択**（A2V は Generate タブの上記アコーディオンへ移設済み）。
+- Quality mode 直下に **Preset** ドロップダウン。選択すると解像度・crop と各クリップの推奨フレーム数（解像度別の快適上限）を全スロットへ一括自動入力する。
+- width / height の `minimum` 撤去・JS での `min` 属性付与、および「生成中はボタンをグレーアウト」は Generate タブと同じ仕組みを共有する。
+
+**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（カテゴリ別ドロップダウン＋Load。`models\ltx-2.3-gguf` 直下に GGUF を置くと自動認識される旨のフォルダ案内つき。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。
+
+**共通**: 上段バーの server status は `GET /api/v1/status` を叩き、GPU 名・空き VRAM・**low_vram_mode / profile** を表示。ジョブ進捗を 1 秒間隔でポーリングし、完了後に mp4 を取得してプレビュー表示。distilled は **8 steps / CFG=1.0** 固定で送る。
 
 ---
 
@@ -1225,9 +1246,9 @@ AviUtl2 拡張機能との連携は**本プロジェクトの最終目的**で�
 | 手順 | preset / 内容 | width×height | num_frames | crop_output | 種別 |
 |------|---------------|--------------|-----------|-------------|------|
 | 1 | `smoke_test` | 384×256 | 17 | なし | T2V |
-| 2 | `phase1_default` | 512×320 | 49 | なし | T2V |
-| 3 | I2V（`phase1_default` + 画像1枚） | 512×320 | 49 | なし | 最小I2V（`frame_idx=0`） |
-| 4 | `phase1_target` | 960×576 | 121 | **960×540** | T2V（+ 任意で I2V） |
+| 2 | `minimal` | 512×320 | 49 | なし | T2V |
+| 3 | I2V（`minimal` + 画像1枚） | 512×320 | 49 | なし | 最小I2V（`frame_idx=0`） |
+| 4 | `small` | 960×576 | 121 | **960×540** | T2V（+ 任意で I2V） |
 
 期待される具体的な生成秒数・peak_vram は `Docs/RESOLUTION_DURATION_CAPABILITY.md` および `Docs/VERIFICATION_LOG.md` が正本（本書は代表値のみ）。手動 API 例は `README.md` §5 を参照。720p は 1280×768 生成 → `crop_output={1280×720}` で確認する。
 

@@ -24,6 +24,7 @@ from .formatting import (
     jobs_table_headers,
 )
 from .handlers import (
+    a2v_audio_change_handler,
     delete_finished_jobs,
     fetch_config_safe,
     make_chain_handler,
@@ -33,7 +34,16 @@ from .handlers import (
 )
 from .handlers import fetch_models_safe, load_selected_models
 from .i18n import L
-from .presets import PRESETS, apply_preset, build_preset_choices, compute_spill_warning, pick_default_preset
+from .presets import (
+    PRESETS,
+    apply_chain_preset,
+    apply_preset,
+    build_preset_choices,
+    compute_spill_warning,
+    format_duration_label,
+    pick_default_preset,
+)
+from .styles import CUSTOM_CSS
 
 
 def build_spill_rows(config: dict | None) -> list[list]:
@@ -64,13 +74,6 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         except Exception as exc:
             return L("status_error").format(err=exc)
 
-    def load_model() -> str:
-        try:
-            api.load_pipeline()
-        except Exception as exc:
-            return L("status_error").format(err=exc)
-        return refresh_status()
-
     def unload_model() -> str:
         try:
             api.unload_pipeline()
@@ -95,6 +98,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # current value (ADAPTER_NONE "None", which is always the first choice).
         adapter_update = gr.update(choices=build_adapter_choices(cfg))
         # Settings: populate the raw-config viewer + spill-free table.
+        # NOTE: chain_preset choices are NOT returned here -- they are refreshed
+        # by a dedicated config_state.change listener (see events) so this
+        # closure keeps its exact return arity (frozen by test_gradio_handlers).
         return (status, cfg, preset_update, adapter_update,
                 gr.update(value=cfg), gr.update(value=build_spill_rows(cfg)),
                 gr.update(active=False))
@@ -144,7 +150,32 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     def on_crop_toggle(enabled: bool):
         return gr.update(visible=bool(enabled))
 
+    # Feature 3: grey out + relabel generate_btn / chain_generate_btn while a
+    # generation is in flight, via a .click().then(generate).then(restore)
+    # chain — the restore step runs unconditionally (gradio's default .then()
+    # semantics: "regardless of success or failure" of the preceding step),
+    # so a failed/raising generation still re-enables the button. The button's
+    # normal label lives in the language-switch registry (reg(..., "value"));
+    # the restore step looks it up by ``label_key`` so it matches whichever
+    # label the OTHER button uses (btn_generate vs btn_concat).
+    def on_generate_btn_start(lang):
+        return gr.update(interactive=False, value=L("btn_generating", lang))
+
+    def make_generate_btn_restore(label_key: str):
+        def _restore(lang):
+            return gr.update(interactive=True, value=L(label_key, lang))
+        return _restore
+
     with gr.Blocks(title="LTX-AviUtl2-Bridge") as demo:
+        # CUSTOM_CSS wiring. NOTE: gr.Blocks(css=...) is deprecated in Gradio 6
+        # AND, because the app is mounted via gr.mount_gradio_app() (main.py)
+        # rather than launched, mount_gradio_app unconditionally overwrites
+        # blocks.css (routes.py: ``blocks.css = css or ""``) -- so a constructor
+        # css= would be silently dropped. Injecting the stylesheet as an in-tree
+        # gr.HTML <style> block is the mount-safe equivalent: it lives in the
+        # component config and is applied on the page regardless of the mount
+        # path, with no deprecation warning.
+        gr.HTML(f"<style>{CUSTOM_CSS}</style>", padding=False)
         # /config is fetched on page load and stashed for later slices (presets,
         # limits, ic_loras, etc.).
         config_state = gr.State({})
@@ -167,8 +198,6 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 container=False, scale=4, elem_classes=["status-line"],
             )
             refresh_btn = reg(gr.Button(L("btn_refresh"), scale=0), "btn_refresh", "value")
-            load_btn = reg(gr.Button(L("btn_load_model"), scale=0), "btn_load_model", "value")
-            unload_btn = reg(gr.Button(L("btn_unload_model"), scale=0), "btn_unload_model", "value")
 
         # ---- unified draft prompt (always visible, above the tabs) ----
         # Single source of truth for BOTH the Generate and Clip Chain flows:
@@ -192,7 +221,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         negative = reg(gr.Textbox(label=L("lbl_negative"),
                                                   value="blurry, low quality, distorted",
                                                   interactive=False,
-                                                  info=L("info_negative")),
+                                                  info=L("info_negative"),
+                                                  elem_classes=["negative-greyed"]),
                                        "lbl_negative")
 
                         # quality mode (two_stage_hq is non-selectable in S1)
@@ -202,13 +232,24 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             value="distilled", label=L("lbl_qmode"),
                         ), "lbl_qmode")
 
-                        preset = reg(gr.Dropdown(list(PRESETS.keys()), value="phase1_default",
+                        preset = reg(gr.Dropdown(list(PRESETS.keys()), value="minimal",
                                                  label=L("lbl_preset"), info=L("hint_preset")),
                                      "lbl_preset")
                         with gr.Row():
-                            width = reg(gr.Number(value=512, label=L("lbl_width"), precision=0),
+                            # NOTE: no server-side ``minimum=`` here. A live
+                            # .change listener (duration/spill) preprocesses the
+                            # value on every keystroke, and Gradio's Number
+                            # preprocess raises "Value N is less than minimum" for
+                            # any in-progress sub-minimum digit (e.g. "8" while
+                            # typing "80"), surfacing as a queue/join error. The
+                            # min is re-applied CLIENT-SIDE only, as the HTML input
+                            # ``min`` attribute (arrow-key step-snap base), by the
+                            # demo.load(js=...) hook below — keyed off elem_id.
+                            width = reg(gr.Number(value=512, label=L("lbl_width"), precision=0,
+                                                  step=64, elem_id="gen_width"),
                                         "lbl_width")
-                            height = reg(gr.Number(value=320, label=L("lbl_height"), precision=0),
+                            height = reg(gr.Number(value=320, label=L("lbl_height"), precision=0,
+                                                   step=64, elem_id="gen_height"),
                                          "lbl_height")
 
                         crop_enabled = reg(gr.Checkbox(value=False, label=L("chk_crop")), "chk_crop")
@@ -218,10 +259,37 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             crop_h = reg(gr.Number(value=0, label=L("lbl_crop_h"), precision=0),
                                          "lbl_crop_h")
 
-                        with gr.Row():
-                            num_frames = reg(gr.Number(value=49, label=L("lbl_frames"), precision=0),
-                                             "lbl_frames")
-                            frame_rate = reg(gr.Number(value=24.0, label=L("lbl_fps")), "lbl_fps")
+                        # Frames / Duration / Frame-rate merged into ONE panel:
+                        # gr.Group fuses its children's block chrome (border /
+                        # shadow / radius all collapse to 0 on Gradio's
+                        # BaseForm wrapper) into a single card -- the exact
+                        # same technique already used for the Clip Chain slot
+                        # panels below, just horizontal here via Row+Column
+                        # instead of the slots' vertical stacking. Duration
+                        # itself carries no input: a bold "Duration" heading
+                        # (deliberately un-i18n'd -- i18n.py is frozen) sits
+                        # above the accent-coloured "N.NNs" readout, centred
+                        # in a narrower middle column so it reads as a
+                        # standout summary rather than a third input field.
+                        with gr.Group(elem_classes=["duration-panel"]):
+                            with gr.Row():
+                                with gr.Column(scale=3, min_width=0):
+                                    # minimum omitted server-side (see width note);
+                                    # client min=9 applied via demo.load(js=...).
+                                    num_frames = reg(gr.Number(
+                                        value=49, label=L("lbl_frames"), precision=0,
+                                        step=8, elem_id="gen_num_frames"), "lbl_frames")
+                                with gr.Column(scale=2, min_width=0,
+                                               elem_classes=["duration-col"]):
+                                    gr.Markdown("**Duration**",
+                                               elem_classes=["duration-heading"])
+                                    # Live "N.NNs" readout derived from frames / fps.
+                                    duration_md = gr.Markdown(
+                                        format_duration_label(49, 24.0),
+                                        elem_classes=["duration-line"])
+                                with gr.Column(scale=3, min_width=0):
+                                    frame_rate = reg(gr.Number(
+                                        value=24.0, label=L("lbl_fps")), "lbl_fps")
 
                         spill_warning = gr.Markdown("", visible=False,
                                                     elem_classes=["spill-warning"])
@@ -291,6 +359,20 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("note_ref128"),
                                             elem_classes=["note"]), "note_ref128", "value")
 
+                        # accordion: Audio-to-Video (案A). Attaching an audio
+                        # file routes generate() down the A2V path (src_audio,
+                        # the handler's last positional input). Mutually
+                        # exclusive with IC-LoRA / <lora:> tokens (the handler
+                        # prechecks the conflict).
+                        with gr.Accordion(L("gen_a2v_accordion"), open=False) as gen_a2v_accordion:
+                            reg(gen_a2v_accordion, "gen_a2v_accordion", "label")
+                            reg(gr.Markdown(L("gen_a2v_note"), elem_classes=["note"]),
+                                "gen_a2v_note", "value")
+                            gen_a2v_audio = reg(gr.File(
+                                label=L("a2v_lbl_audio"), type="filepath",
+                                file_count="single", file_types=["audio"],
+                            ), "a2v_lbl_audio")
+
                     # RIGHT: action panel (Generate first) -> progress -> job id -> video
                     with gr.Column(scale=2):
                         generate_btn = reg(gr.Button(L("btn_generate"), variant="primary"),
@@ -317,8 +399,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # each mode's panel is shown only while selected.
                         chain_mode = reg(gr.Radio(
                             choices=[(L("v2v_mode_none"), "none"),
-                                     (L("v2v_mode_v2v"), "v2v"),
-                                     (L("a2v_mode_a2v"), "a2v")],
+                                     (L("v2v_mode_v2v"), "v2v")],
                             value="none", label=L("v2v_mode_label"),
                         ), "v2v_mode_label")
                         reg(gr.Markdown(L("v2v_cap_mode"), elem_classes=["note"]),
@@ -359,16 +440,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("v2v_cap_join"), elem_classes=["note"]),
                                 "v2v_cap_join", "value")
 
-                        # ---- A2V panel (visible in a2v mode only) ----
-                        with gr.Group(visible=False) as a2v_group:
-                            a2v_audio = reg(gr.File(
-                                label=L("a2v_lbl_audio"), type="filepath",
-                                file_count="single", file_types=["audio"],
-                            ), "a2v_lbl_audio")
-                            reg(gr.Markdown(L("a2v_guide"), elem_classes=["note"]),
-                                "a2v_guide", "value")
-                            reg(gr.Markdown(L("a2v_cap_panel"), elem_classes=["note"]),
-                                "a2v_cap_panel", "value")
+                        # A2V for the Clip Chain flow now lives on the Generate
+                        # tab's Audio-to-Video accordion (案A). The chain A2V
+                        # handler/i18n keys are kept; only this UI entry point
+                        # was removed.
 
                         # Shared prompt lives in the draft box above the tabs
                         # (it is the common base for every clip). Negative is
@@ -377,18 +452,33 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         chain_negative = reg(gr.Textbox(label=L("lbl_negative"),
                                                         value="blurry, low quality, distorted",
                                                         interactive=False,
-                                                        info=L("info_negative")),
+                                                        info=L("info_negative"),
+                                                        elem_classes=["negative-greyed"]),
                                              "lbl_negative")
                         chain_qmode = reg(gr.Radio(
                             choices=[(L("qmode_fast"), "distilled"),
                                      (L("qmode_hq"), "two_stage_hq")],
                             value="distilled", label=L("lbl_qmode"),
                         ), "lbl_qmode")
+                        # Chain preset: fills resolution/crop + a recommended
+                        # per-clip length into all 8 slots (apply_chain_preset).
+                        chain_preset = reg(gr.Dropdown(
+                            list(PRESETS.keys()), value="minimal",
+                            label=L("lbl_chain_preset"), info=L("info_chain_preset"),
+                        ), "lbl_chain_preset")
+                        chain_preset_warning = gr.Markdown(
+                            "", visible=False, elem_classes=["spill-warning"])
                         with gr.Row():
+                            # minimum omitted server-side (see Generate width note);
+                            # client min=64 applied via demo.load(js=...).
                             chain_width = reg(gr.Number(value=1280, label=L("lbl_width"),
-                                                        precision=0), "lbl_width")
+                                                        precision=0, step=64,
+                                                        elem_id="chain_width"),
+                                              "lbl_width")
                             chain_height = reg(gr.Number(value=768, label=L("lbl_height"),
-                                                         precision=0), "lbl_height")
+                                                         precision=0, step=64,
+                                                         elem_id="chain_height"),
+                                               "lbl_height")
                         chain_crop_enabled = reg(gr.Checkbox(value=False, label=L("chk_crop")),
                                                  "chk_crop")
                         with gr.Row(visible=False) as chain_crop_row:
@@ -426,7 +516,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                             "lbl_clip_prompt")
                             with gr.Row():
                                 c1_frames = reg(gr.Number(value=121, label=L("lbl_frames"),
-                                                          precision=0), "lbl_frames")
+                                                          precision=0, step=8,
+                                                          elem_id="chain_c1_frames"),
+                                                "lbl_frames")
                                 c1_image = reg(gr.Image(label=L("lbl_clip_start_image"),
                                                         type="filepath"), "lbl_clip_start_image")
                                 c1_strength = reg(gr.Slider(0.0, 1.0, value=0.8, step=0.05,
@@ -445,7 +537,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                            placeholder=L("ph_clip_prompt")),
                                                 "lbl_clip_prompt")
                                 cN_frames = reg(gr.Number(value=121, label=L("lbl_frames"),
-                                                          precision=0), "lbl_frames")
+                                                          precision=0, step=8,
+                                                          elem_id=f"chain_c{_slot_i}_frames"),
+                                                "lbl_frames")
                             chain_clip_slots.append((cN_enabled, cN_prompt, cN_frames))
                         reg(gr.Markdown(L("cap_clip_count")), "cap_clip_count", "value")
 
@@ -469,6 +563,27 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                       interactive=False, container=False)
                             chain_joined_video = reg(gr.Video(label=L("v2v_lbl_joined")),
                                                      "v2v_lbl_joined")
+
+            # =========================== Style LoRA ==========================
+            # Style/character LoRA browser (S2). GET /loras -> gallery of the
+            # kind=="style" adapters only (thumbnails served by the API);
+            # selecting one appends a <lora:name:1.0> token to the Generate-tab
+            # prompt. Control LoRAs (canny/pose/upscaler) are NOT shown here —
+            # they stay in the Generate tab's reference-video adapter field.
+            with gr.Tab(L("tab_style_lora")) as tab_style_lora:
+                reg(tab_style_lora, "tab_style_lora", "label")
+                # Style-LoRA names parallel to the gallery order, so a gallery
+                # select index resolves 1:1 to a name (mirrors jobs_ids_state).
+                style_names_state = gr.State([])
+                reg(gr.Markdown(L("style_note"), elem_classes=["note"]),
+                    "style_note", "value")
+                style_reload_btn = reg(gr.Button(L("style_reload_btn")),
+                                       "style_reload_btn", "value")
+                style_gallery = gr.Gallery(
+                    label=L("style_gallery_label"), columns=4, height="auto",
+                    show_label=True, interactive=False, value=[],
+                )
+                reg(style_gallery, "style_gallery_label", "label")
 
             # ============================== Jobs =============================
             # GET /jobs list -> Dataframe; row select -> GET /jobs/{id} detail +
@@ -522,7 +637,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # ---- Connection (base_url + api-key badge; both build-time) ----
                 reg(gr.Markdown(f"### {L('h_conn')}"), "h_conn", "value")
                 base_url_box = reg(gr.Textbox(value=base_url, label=L("lbl_base_url"),
-                                              interactive=False), "lbl_base_url")
+                                              interactive=False, buttons=["copy"],
+                                              elem_classes=["base-url-box"]), "lbl_base_url")
                 api_badge = reg(
                     gr.Markdown(L("badge_set") if api_key else L("badge_unset")),
                     "badge_set" if api_key else "badge_unset", "value",
@@ -555,6 +671,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # load buttons — only additive event listeners below.
                 reg(gr.Markdown(f"### {L('model_section_title')}"),
                     "model_section_title", "value")
+                # Where to drop GGUF files so the server auto-detects them.
+                reg(gr.Markdown(L("model_folder_hint"), elem_classes=["note"]),
+                    "model_folder_hint", "value")
+                # Copy-able folder path. buttons=["copy"] (Gradio 6's replacement
+                # for show_copy_button) only renders when show_label is True, so
+                # the box carries the section title as its label (existing key --
+                # i18n.py stays untouched).
+                reg(gr.Textbox(value="models\\ltx-2.3-gguf",
+                               label=L("model_section_title"), interactive=False,
+                               buttons=["copy"], elem_classes=["base-url-box"]),
+                    "model_section_title")
                 with gr.Row():
                     model_dd_transformer = reg(gr.Dropdown(
                         choices=[(MODEL_DEFAULT, MODEL_DEFAULT)], value=MODEL_DEFAULT,
@@ -594,27 +721,6 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 purge_msg = gr.Textbox(label="", show_label=False,
                                        interactive=False, container=False)
 
-            # =========================== Style LoRA ==========================
-            # Style/character LoRA browser (S2). GET /loras -> gallery of the
-            # kind=="style" adapters only (thumbnails served by the API);
-            # selecting one appends a <lora:name:1.0> token to the Generate-tab
-            # prompt. Control LoRAs (canny/pose/upscaler) are NOT shown here —
-            # they stay in the Generate tab's reference-video adapter field.
-            with gr.Tab(L("tab_style_lora")) as tab_style_lora:
-                reg(tab_style_lora, "tab_style_lora", "label")
-                # Style-LoRA names parallel to the gallery order, so a gallery
-                # select index resolves 1:1 to a name (mirrors jobs_ids_state).
-                style_names_state = gr.State([])
-                reg(gr.Markdown(L("style_note"), elem_classes=["note"]),
-                    "style_note", "value")
-                style_reload_btn = reg(gr.Button(L("style_reload_btn")),
-                                       "style_reload_btn", "value")
-                style_gallery = gr.Gallery(
-                    label=L("style_gallery_label"), columns=4, height="auto",
-                    show_label=True, interactive=False, value=[],
-                )
-                reg(style_gallery, "style_gallery_label", "label")
-
         # ---- events ----
         refresh_btn.click(refresh_status, outputs=status_box)
         # Top-bar Refresh also refreshes the Settings config viewer + spill table.
@@ -631,14 +737,32 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             outputs=[config_state, preset, adapter, server_config_json, spill_table,
                      config_retry_state, config_retry_timer],
         )
-        load_btn.click(load_model, outputs=status_box)
-        unload_btn.click(unload_model, outputs=status_box)
+
+        # chain_preset choices mirror the Generate preset, but are refreshed via
+        # this dedicated config_state.change listener rather than folded into the
+        # shared on_page_load / on_config_retry / on_refresh_config returns --
+        # those closures' return arity is asserted by test_gradio_handlers and
+        # must stay fixed. config_state is updated by every one of those paths,
+        # so this single listener covers page-load, refresh and retry uniformly.
+        config_state.change(
+            lambda cfg: gr.update(choices=build_preset_choices(cfg),
+                                  value=pick_default_preset(cfg)),
+            inputs=config_state, outputs=chain_preset,
+        )
 
         preset.change(
             apply_preset, inputs=[preset, config_state],
             outputs=[width, height, num_frames, crop_enabled, crop_w, crop_h,
                      crop_row, spill_warning],
+        ).then(
+            format_duration_label, inputs=[num_frames, frame_rate],
+            outputs=duration_md,
         )
+
+        # Live duration readout: recompute on any frames/fps edit.
+        for _dctrl in (num_frames, frame_rate):
+            _dctrl.change(format_duration_label, inputs=[num_frames, frame_rate],
+                          outputs=duration_md)
         qmode.change(on_qmode_change, inputs=qmode, outputs=qmode)
         crop_enabled.change(on_crop_toggle, inputs=crop_enabled, outputs=crop_row)
 
@@ -664,13 +788,31 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             kf_inputs.extend([kf_enabled, kf_image, kf_frame, kf_strength])
 
         generate_btn.click(
+            on_generate_btn_start, inputs=lang_state, outputs=generate_btn,
+        ).then(
             generate,
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
                     reference_strength_slider, ref_video, config_state,
-                    lang_state, poll_interval, poll_timeout],
+                    lang_state, poll_interval, poll_timeout, gen_a2v_audio],
             outputs=[progress_box, job_box, video_out],
+        ).then(
+            make_generate_btn_restore("btn_generate"),
+            inputs=lang_state, outputs=generate_btn,
+        )
+
+        # Feature 1: attaching a .wav to the A2V audio field auto-adjusts
+        # Frames to fit its measured duration (non-wav / unreadable / cleared
+        # attachments are a no-op). num_frames' OWN .change listeners (Duration
+        # readout, spill-free warning — wired below) fire on this programmatic
+        # update too (gradio's .change semantics do not distinguish a
+        # user edit from a value set by another event's output), so no extra
+        # wiring is needed here to keep those in sync.
+        gen_a2v_audio.change(
+            a2v_audio_change_handler,
+            inputs=[gen_a2v_audio, frame_rate, lang_state],
+            outputs=[num_frames],
         )
 
         # ---- Clip Chain events ----
@@ -679,34 +821,62 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         chain_crop_enabled.change(on_crop_toggle, inputs=chain_crop_enabled,
                                   outputs=chain_crop_row)
 
+        # Chain preset: the 8 slot Checkbox values feed enabled_flags (count of
+        # enabled slots -> total-timeline warning); all 8 frame Numbers receive
+        # the recommended per-clip length. apply_chain_preset takes enabled_flags
+        # as ONE list, so a thin wrapper gathers the 8 checkbox values.
+        chain_enabled_boxes = [_slot[0] for _slot in chain_clip_slots]
+        chain_frame_nums = [_slot[2] for _slot in chain_clip_slots]
+
+        def on_chain_preset_change(name, config, e1, e2, e3, e4, e5, e6, e7, e8,
+                                   fps, overlap, lang):
+            return apply_chain_preset(
+                name, config, enabled_flags=[e1, e2, e3, e4, e5, e6, e7, e8],
+                fps=fps, overlap_frames=overlap, lang=lang,
+            )
+
+        chain_preset.change(
+            on_chain_preset_change,
+            inputs=[chain_preset, config_state, *chain_enabled_boxes,
+                    chain_fps, chain_overlap, lang_state],
+            outputs=[chain_width, chain_height, chain_crop_enabled,
+                     chain_crop_w, chain_crop_h, chain_crop_row,
+                     *chain_frame_nums, chain_preset_warning],
+        )
+
         chain_clip_inputs: list[object] = []
         for _slot in chain_clip_slots:
             chain_clip_inputs.extend(_slot)
 
         chain_generate_btn.click(
+            on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
+        ).then(
             chain_generate,
             inputs=[prompt, chain_negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
                     *chain_clip_inputs, config_state,
                     lang_state, poll_interval, poll_timeout,
-                    chain_mode, v2v_video, v2v_context, a2v_audio],
+                    chain_mode, v2v_video, v2v_context],
             outputs=[chain_progress, chain_job, chain_video],
+        ).then(
+            make_generate_btn_restore("btn_concat"),
+            inputs=lang_state, outputs=chain_generate_btn,
         )
 
-        # ---- V2V/A2V mode switching ----
-        # Only the selected mode's panel is visible; the join panel is V2V-only;
-        # clip 1's start image is unavailable in V2V (the frozen source tail
-        # occupies clip 0's head — the server rejects the combination with 422,
-        # and the handler prechecks it too).
+        # ---- V2V mode switching ----
+        # The V2V panel + join panel are visible in v2v mode only; clip 1's start
+        # image is unavailable in V2V (the frozen source tail occupies clip 0's
+        # head — the server rejects the combination with 422, and the handler
+        # prechecks it too). A2V now lives on the Generate tab, so this radio is
+        # a none/v2v toggle only.
         def on_chain_mode_change(mode):
             is_v2v = mode == "v2v"
-            is_a2v = mode == "a2v"
-            return (gr.update(visible=is_v2v), gr.update(visible=is_a2v),
-                    gr.update(visible=is_v2v), gr.update(interactive=not is_v2v))
+            return (gr.update(visible=is_v2v), gr.update(visible=is_v2v),
+                    gr.update(interactive=not is_v2v))
 
         chain_mode.change(on_chain_mode_change, inputs=chain_mode,
-                          outputs=[v2v_group, a2v_group, v2v_join_panel, c1_image])
+                          outputs=[v2v_group, v2v_join_panel, c1_image])
 
         # ---- V2V join ("Create joined version") ----
         # Hangs off the finished chain job id shown in chain_job; the checkbox
@@ -804,8 +974,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             theme_choices = [(L("opt_dark", lang), "dark"),
                              (L("opt_light", lang), "light")]
             mode_choices = [(L("v2v_mode_none", lang), "none"),
-                            (L("v2v_mode_v2v", lang), "v2v"),
-                            (L("a2v_mode_a2v", lang), "a2v")]
+                            (L("v2v_mode_v2v", lang), "v2v")]
             adapter_choices = build_adapter_choices(config, lang)
             updates = []
             for component, key, attr in registry:
@@ -830,6 +999,34 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         demo.load(on_page_load, inputs=[config_state, lang_state],
                   outputs=[status_box, config_state, preset, adapter,
                            server_config_json, spill_table, config_retry_timer])
+
+        # ---- Client-side HTML ``min`` attributes (bug fix) ----
+        # The width/height/frames Numbers carry NO server-side ``minimum`` (an
+        # in-progress sub-minimum keystroke -- e.g. "8" while typing "80" -- would
+        # otherwise raise "Value 8 is less than minimum value 64" inside Gradio's
+        # Number preprocess on every live duration/spill .change listener, which
+        # surfaced as the reported queue/join errors). The ``min`` attribute is
+        # still wanted on the rendered <input> purely as the browser's arrow-key /
+        # spinner step-snap BASE (width/height -> 64n; frames -> 8n+1, i.e. base
+        # 9), so re-apply it CLIENT-SIDE on page load, keyed off each Number's
+        # elem_id. This is a fn=None load event whose ONLY effect is the js (the
+        # same pattern as theme_dd.change's js= toggle) -- no server round-trip,
+        # no outputs, so it cannot re-introduce the preprocess bound check.
+        _min_attr_js = """() => {
+            const setMin = (id, v) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const inp = el.querySelector('input');
+                if (inp) inp.setAttribute('min', v);
+            };
+            ['gen_width', 'gen_height', 'chain_width', 'chain_height']
+                .forEach((id) => setMin(id, '64'));
+            ['gen_num_frames', 'chain_c1_frames', 'chain_c2_frames',
+             'chain_c3_frames', 'chain_c4_frames', 'chain_c5_frames',
+             'chain_c6_frames', 'chain_c7_frames', 'chain_c8_frames']
+                .forEach((id) => setMin(id, '9'));
+        }"""
+        demo.load(None, js=_min_attr_js)
 
         # ---- Settings: model management (INDEPENDENT listeners) ----
         # Parent ruling: the shared on_page_load / on_refresh_config closures

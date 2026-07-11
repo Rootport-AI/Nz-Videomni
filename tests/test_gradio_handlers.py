@@ -496,7 +496,7 @@ def test_pick_default_preset_first_key_when_no_standard_720p():
 
 
 def test_pick_default_preset_fallback_when_config_empty():
-    assert pick_default_preset({}) == "phase1_default"
+    assert pick_default_preset({}) == "minimal"
 
 
 def test_apply_preset_from_server_config_with_crop():
@@ -522,15 +522,16 @@ def test_apply_preset_from_server_config_without_crop():
 
 
 def test_apply_preset_fallback_when_config_empty():
+    # "small" (was "phase1_target") -- 960x576, 121 frames, 960x540 crop.
     (width, height, frames, crop_enabled, crop_w, crop_h,
-     crop_row_update, _spill_update) = apply_preset("phase1_target", {})
+     crop_row_update, _spill_update) = apply_preset("small", {})
     assert (width, height, frames) == (960, 576, 121)
     assert crop_enabled is True
     assert (crop_w, crop_h) == (960, 540)
     assert crop_row_update["visible"] is True
 
 
-def test_apply_preset_fallback_unknown_name_uses_phase1_default():
+def test_apply_preset_fallback_unknown_name_uses_minimal():
     (width, height, frames, *_rest) = apply_preset("does_not_exist", {})
     assert (width, height, frames) == (512, 320, 49)
 
@@ -861,6 +862,307 @@ def test_generate_non_adapter_ignores_strength_sliders():
     _run_until_job_started(gen)
     assert "conditioning_attention_strength" not in captured
     assert "reference_video_strength" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Generate-tab: ÷64 / 8n+1 precheck (moved over from the chain handler's
+# identical rule) — zero API calls on violation.
+# --------------------------------------------------------------------------- #
+def test_generate_bad_width_precheck_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    # 500 is not a multiple of 64.
+    out = list(generate("prompt", "", *_kf_args(), 500, 320, False, 0, 0, 49, 24.0, -1))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_generate_bad_num_frames_precheck_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    # 50 is not 8n+1 (49 or 57 would be).
+    out = list(generate("prompt", "", *_kf_args(), 512, 320, False, 0, 0, 50, 24.0, -1))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+# --------------------------------------------------------------------------- #
+# A2V (Generate tab, 案A): a src_audio upload routes make_generate_handler's
+# ``generate`` to POST /generate/chain as a single-clip chain instead of
+# POST /generate. Mutually exclusive with an IC-LoRA adapter selection and
+# with prompt-embedded <lora:...> tokens.
+# --------------------------------------------------------------------------- #
+def test_generate_a2v_conflict_with_adapter_zero_calls(tmp_path):
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        adapter="canny-control", src_audio=str(aud),
+    ))
+    assert calls["n"] == 0  # no upload_audio, no generate_chain
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_generate_a2v_conflict_with_prompt_lora_zero_calls(tmp_path):
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "hero <lora:foo:1.0> walking", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud),
+    ))
+    assert calls["n"] == 0  # no GET /loras lookup, no upload_audio, no generate_chain
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_generate_a2v_audio_only_uses_generate_chain(tmp_path):
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    uploads = {"audio": 0}
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/audio"):
+            uploads["audio"] += 1
+            return httpx.Response(200, json={"audio_id": "aud-1"})
+        assert str(request.url) == "http://test/api/v1/generate/chain"
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer performing", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud),
+    )
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:  # job started -> stop before the poll loop's sleeps
+            gen.close()
+            break
+
+    assert uploads["audio"] == 1
+    assert captured["clips"] == [{"num_frames": 49}]
+    assert captured["source_audio"] == {"audio_id": "aud-1"}
+    assert captured["width"] == 512 and captured["height"] == 320
+    assert captured["prompt"] == "a singer performing"
+    assert captured["overlap_frames"] == 3
+    assert captured["overlap_strength"] == 0.5
+    assert "num_frames" not in captured  # lives on the clip, not top-level
+    assert "loras" not in captured  # GenerateChainRequest carries no loras field
+    assert outs[-1][1] == "chain-a2v"
+
+
+def test_generate_a2v_upload_failure_reports_error_zero_generate_chain(tmp_path):
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    calls = {"chain": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/audio"):
+            return httpx.Response(500, json={"error": "boom"})
+        calls["chain"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud),
+    ))
+    assert calls["chain"] == 0  # upload failed -> generate/chain never called
+    assert out[-1][1] == "" and out[-1][2] is None
+
+
+def test_generate_a2v_with_keyframe_builds_clip_conditioning(tmp_path):
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    img = tmp_path / "kf.png"
+    img.write_bytes(b"\x89PNG\r\n")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-2"})
+        if request.url.path.endswith("/upload/image"):
+            return httpx.Response(200, json={"image_id": "img-1"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-kf"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "",
+        *_kf_args((True, str(img), 0, 0.7)),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud),
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+
+    assert captured["clips"] == [{
+        "num_frames": 49,
+        "conditioning_images": [{"image_id": "img-1", "frame_idx": 0, "strength": 0.7}],
+    }]
+
+
+def _real_wav(path, seconds, sr=16000):
+    """Write a real (readable) mono 16-bit PCM wav of ``seconds`` at ``path``."""
+    import struct
+    import wave
+
+    n = int(seconds * sr)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(struct.pack("<%dh" % n, *([0] * n)))
+    return str(path)
+
+
+def test_generate_a2v_short_wav_rejected_zero_calls(tmp_path):
+    """A2V length precheck: a wav shorter than the timeline is rejected BEFORE
+    any upload/API call (mirrors the server's 422 SOURCE_AUDIO_TOO_SHORT). 2s
+    audio vs. 121 frames @ 24fps (~5.04s video, ~126 audio-latent frames
+    required, only ~50 available)."""
+    aud = _real_wav(tmp_path / "short.wav", 2.0)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 121, 24.0, -1,
+        src_audio=aud,
+    ))
+    assert calls["n"] == 0  # no upload_audio, no generate_chain
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+    # The message states both the required and the attached seconds.
+    assert "5.04" in out[0][0] and "2.00" in out[0][0]
+
+
+def test_generate_a2v_long_wav_passes_precheck_and_uploads(tmp_path):
+    """A2V length precheck: a wav at least as long as the timeline sails through
+    the precheck and proceeds to upload + /generate/chain. 6s audio vs. the same
+    121-frame @ 24fps timeline (~150 available >= ~126 required)."""
+    aud = _real_wav(tmp_path / "long.wav", 6.0)
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-1"})
+        return httpx.Response(202, json={"job_id": "chain-a2v"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 121, 24.0, -1,
+        src_audio=aud,
+    )
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:
+            gen.close()
+            break
+    assert any(p.endswith("/upload/audio") for p in calls)
+    assert outs[-1][1] == "chain-a2v"
+
+
+def test_generate_a2v_non_wav_defers_to_server(tmp_path):
+    """A non-wav audio (stdlib cannot decode) skips the local length precheck and
+    proceeds to upload — the server's ffprobe preflight is the authority. An
+    otherwise-too-short setting must still reach the API (zero client rejection)."""
+    aud = tmp_path / "clip.mp3"
+    aud.write_bytes(b"ID3\x03\x00\x00\x00")  # not a real mp3; length unmeasurable
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-1"})
+        return httpx.Response(202, json={"job_id": "chain-a2v"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 121, 24.0, -1,
+        src_audio=str(aud),
+    )
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:
+            gen.close()
+            break
+    assert any(p.endswith("/upload/audio") for p in calls)
+    assert outs[-1][1] == "chain-a2v"
+
+
+def test_generate_no_audio_uses_plain_generate_endpoint_unchanged():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"job_id": "job-plain"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=None,
+    )
+    _run_until_job_started(gen)
+    assert seen["url"] == "http://test/api/v1/generate"  # not /generate/chain
 
 
 # --------------------------------------------------------------------------- #
@@ -1909,3 +2211,127 @@ def test_poll_loop_completion_without_clip_count_is_unchanged(monkeypatch):
     api = _make_client(handler)
     outs = [t for t, _jid, _vid in handlers._poll_job_until_done(api, "j1", "en")]
     assert outs[-1] == "Completed: j1"  # single generate: no clip note
+
+
+# --------------------------------------------------------------------------- #
+# Feature 1: A2V audio-length -> Frames auto-adjust
+# (suggest_frames_for_audio + a2v_audio_change_handler).
+# --------------------------------------------------------------------------- #
+def test_suggest_frames_for_audio_5s_24fps_matches_hand_derived_value():
+    from gradio_ui.handlers import suggest_frames_for_audio
+
+    # nf = ((floor(5*24) - 1) // 8) * 8 + 1 = ((120-1)//8)*8+1 = (14*8)+1 = 113.
+    # Preflight check (kv=3): required = audio_latents_required([113], 24, kv=3)
+    # = 118 latent frames; available = round(5*25) = 125 >= 118, no shrink.
+    assert suggest_frames_for_audio(5.0, 24.0) == 113
+
+
+def test_suggest_frames_for_audio_2s_24fps_matches_hand_derived_value():
+    from gradio_ui.handlers import suggest_frames_for_audio
+
+    # nf = ((floor(2*24) - 1) // 8) * 8 + 1 = ((48-1)//8)*8+1 = (5*8)+1 = 41.
+    # required = audio_latents_required([41], 24, kv=3) = 43; available =
+    # round(2*25) = 50 >= 43, no shrink.
+    assert suggest_frames_for_audio(2.0, 24.0) == 41
+
+
+def test_suggest_frames_for_audio_30s_clamped_to_481():
+    from gradio_ui.handlers import suggest_frames_for_audio
+
+    # Raw formula gives 713 (way above the server's num_frames ceiling);
+    # clamped down to 481, which is itself on the 8n+1 grid (8*60+1).
+    assert suggest_frames_for_audio(30.0, 24.0) == 481
+
+
+def test_suggest_frames_for_audio_result_always_on_8n_plus_1_grid():
+    from gradio_ui.handlers import suggest_frames_for_audio
+
+    for dur in (0.1, 0.5, 1.0, 2.0, 3.7, 5.0, 9.9, 17.3, 30.0, 60.0):
+        nf = suggest_frames_for_audio(dur, 24.0)
+        assert 9 <= nf <= 481
+        assert (nf - 1) % 8 == 0
+
+
+def test_suggest_frames_for_audio_falls_back_to_24fps_on_falsy_or_bad_fps():
+    from gradio_ui.handlers import suggest_frames_for_audio
+
+    baseline = suggest_frames_for_audio(6.0, 24.0)
+    assert suggest_frames_for_audio(6.0, None) == baseline
+    assert suggest_frames_for_audio(6.0, 0) == baseline
+    assert suggest_frames_for_audio(6.0, "not-a-number") == baseline
+
+
+def test_suggest_frames_for_audio_very_short_clamps_to_9():
+    from gradio_ui.handlers import suggest_frames_for_audio
+
+    assert suggest_frames_for_audio(0.1, 24.0) == 9
+
+
+def test_a2v_audio_change_handler_real_wav_sets_num_frames_and_notifies(
+        tmp_path, capsys):
+    from gradio_ui.handlers import a2v_audio_change_handler, suggest_frames_for_audio
+
+    wav = _real_wav(tmp_path / "five.wav", 5.0)
+    expected = suggest_frames_for_audio(5.0, 24.0)
+    update = a2v_audio_change_handler(wav, 24.0, "en")
+    assert update["value"] == expected == 113
+    out = capsys.readouterr().out
+    assert str(expected) in out  # gr.Info degrades to a console print outside a queue
+
+
+def test_a2v_audio_change_handler_recomputes_on_fps_change(tmp_path):
+    from gradio_ui.handlers import a2v_audio_change_handler
+
+    wav = _real_wav(tmp_path / "two.wav", 2.0)
+    at_24fps = a2v_audio_change_handler(wav, 24.0, "en")["value"]
+    at_30fps = a2v_audio_change_handler(wav, 30.0, "en")["value"]
+    assert at_24fps == 41
+    assert at_30fps == 57
+    assert at_24fps != at_30fps
+
+
+def test_a2v_audio_change_handler_overwrites_current_frames_value(tmp_path):
+    # The handler itself has no notion of "current Frames value" -- ui.py
+    # wires it straight to num_frames' outputs, so its gr.update ALWAYS
+    # carries a fresh "value" key on a readable wav, unconditionally (i.e. it
+    # does not merely no-op just because *some* value was already there).
+    from gradio_ui.handlers import a2v_audio_change_handler
+
+    wav = _real_wav(tmp_path / "five.wav", 5.0)
+    update = a2v_audio_change_handler(wav, 24.0, "en")
+    assert "value" in update and update["value"] == 113
+
+
+def test_a2v_audio_change_handler_non_wav_is_noop(tmp_path):
+    from gradio_ui.handlers import a2v_audio_change_handler
+
+    mp3 = tmp_path / "clip.mp3"
+    mp3.write_bytes(b"ID3....")
+    update = a2v_audio_change_handler(str(mp3), 24.0, "en")
+    assert "value" not in update
+
+
+def test_a2v_audio_change_handler_none_path_is_noop():
+    from gradio_ui.handlers import a2v_audio_change_handler
+
+    update = a2v_audio_change_handler(None, 24.0, "en")
+    assert "value" not in update
+
+
+def test_a2v_audio_change_handler_unreadable_wav_is_noop(tmp_path):
+    from gradio_ui.handlers import a2v_audio_change_handler
+
+    bad = tmp_path / "broken.wav"
+    bad.write_bytes(b"not a real wav file")
+    update = a2v_audio_change_handler(str(bad), 24.0, "en")
+    assert "value" not in update
+
+
+def test_a2v_msg_frames_adjusted_i18n_keys_present():
+    from gradio_ui.i18n import LABELS
+
+    for lang in ("en", "ja"):
+        assert "a2v_msg_frames_adjusted" in LABELS[lang]
+        # Must actually format with the {frames}/{dur} kwargs the handler
+        # passes (a KeyError here means the template and the call site drifted).
+        LABELS[lang]["a2v_msg_frames_adjusted"].format(frames=113, dur=5.0)

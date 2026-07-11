@@ -2,9 +2,67 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 **GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト**＝実装完了・客観ゲート PASS・**目視／実機ゲート✅クローズ・main マージ＆push 済**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-11 **Gradio WebGUI 大規模改修**＝実装完了・客観ゲート PASS（pytest 485 passed / 1 skipped＝486件）・**次セッション＝A2V＋LoRA併用の解禁（オーナー決定済み）**）
 
 > **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。
+
+### 本日完了した内容の要約
+
+Gradio WebGUI の使い勝手改修一式。主戦場は `gradio_ui/` だが、**GUI だけの改修ではない**: プリセット再編と動画 GGUF の配置変更に伴い `config.py`・`config.yaml`・`services/model_registry.py`・`scripts/install_ltx.ps1`・テストにも同期変更が入っている（凍結 API 契約そのものは不変）。詳細は `LTX23_Backend_Specification.md` §11.4/§12.2 と `README.md`（Gradio UI 節・モデル配置節）に反映済み。
+
+1. **Frames / Duration / Frame rate の統合パネル**（`gr.Group` 内・横3カラム）。中央カラムは入力欄を持たず、num_frames と frame_rate から算出した Duration（"N.NNs"）をアクセントカラーで常時表示。
+2. **`gr.Number` のサーバー側 `minimum` 撤去 ＋ ページロード時 JS で `min` 属性付与**（width/height/num_frames 対象）。手入力途中（例: "80" と打つ途中の "8"）で最小値未満エラーが飛ぶ Gradio の不具合を根治。手入力は自由・スピナー矢印のみ 64刻み/8n+1刻みでスナップ。サーバー側の 8n+1・÷64 検証は従来どおり有効。
+3. **A2V の音声長事前チェック**: `.wav` は送信前にクライアント側（stdlib `wave`）で長さを測定し、設定（フレーム数・fps）に対して不足していれば必要秒数を明示して送信を拒否（API 呼び出しゼロ）。`.wav` 以外はクライアント側で測定できないためスキップし、サーバーの `422 SOURCE_AUDIO_TOO_SHORT` をヒント付きで表示する。
+4. **wav 添付時の Frames 自動調整**: 音声に収まる最大の 8n+1 値を自動計算して num_frames へ入力し、トースト通知。式は `((floor(秒×fps)-1)//8)*8+1` を起点に `chain_math.audio_latents_required` で latent 検算しながら8刻みで縮小、最終的に `[9, 481]` へクランプ。`.wav` 以外は対象外。
+5. **生成中ボタンのグレーアウト**: 両方の生成ボタン（Generate / Generate chain）がクリック→無効化（"Generating..." / "生成中…"）→生成→必ず復元、の3段イベント連鎖（`.click().then().then()`。失敗時も `.then()` は実行されるため必ず復元される）。
+6. **A2V のキーフレーム画像は5枚すべて配線済み**（従来から）であることをドキュメントに明記。`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内クランプ（`api/models.py`）。
+7. **生成プリセットの改名・追加**: `phase1_default`→`minimal`、`phase1_target`→`small` に改名し、`FHD_1080p`（1920×1088→1080クロップ・153f）と `WQHD_1440p`（2560×1472→1440クロップ・81f）を追加＝計6種。**`config.yaml` の `generation_presets` が単一の真実源**（GUI/フロントエンドは `GET /config` で動的取得）。WebView2 フロントエンドのフォールバック定数（`webui/src/modes/create/defaultConfig.ts`）も同期済み。
+8. **動画 GGUF の公式配置を `models\ltx-2.3-gguf` 直下に変更**: 旧配置はサブフォルダ `LTX-2.3-distilled-1.1\` 内。`config.py`（`gguf_transformer_path` の既定を直下パスへ変更）・`services/model_registry.py`（transformer の `parent_levels` 2→1）・`scripts/install_ltx.ps1`（DL 後に1階層上へ自動移動）・テストを同期し、実ファイルも移動済み。サブフォルダ配置も再帰スキャンで引き続き動作する（README「追加の transformer GGUF / LoRA を配置する」節に移行手順あり）。
+
+コード状態: 全テスト **485 passed / 1 skipped**（計486件）PASS。**本セッションの改修一式（バックエンド約22ファイル、フロントエンド3ファイル）はセッション末尾に main へコミット＆push 済み。**
+
+---
+
+### 次セッション: A2V＋LoRA併用の解禁（チェーンAPIへの `loras` 追加・オーナー決定済み）
+
+#### 目的と背景
+
+現在、A2V（`POST /generate/chain` + `source_audio`）は IC-LoRA / スタイルLoRA と併用できない（GUI 側で事前拒否・`gen_a2v_conflict_lora`）。これは **LTX 2.3 モデル自体の制約ではなく、単なる配線欠落**。根拠:
+
+- forward 時に LoRA を適用する機構（`engine/gguf/quant_service.py` の `patched_transformer` / `ggml_linear_forward`）は、chain の denoise 呼び出しにもそのまま効く。LoRA 適用は transformer の `forward()` にフックされており、単発 `generate()` かチェーンの `generate_chain()` かを区別しない。
+- chain（`engine/pipeline/chain_pipeline.py run_chain` / `fast_video_pipeline.py generate_chain`）は **transformer を1回だけビルドして Stage1/Stage2 の全クリップ・全タイルで使い回す**構造。したがって chain に LoRA を配線すれば、**チェーン全体（＝実質すべてのクリップ）に適用される**。単発 `generate()` の一部の上流実装（LoRA を Stage1 のみに適用するもの）とは効き方が異なる点に注意（本チェーン実装は Stage1/Stage2 両方に効く＝より強く効く方向）。
+
+#### 加算的変更が必要な5箇所
+
+既存の凍結 API 契約への**加算的変更**（optional フィールド追加・省略時 byte 同一）。オーナー承認済み。
+
+1. **`api/models.py`**: `GenerateChainRequest` に `loras: list[LoraSpec] = Field(default_factory=list)` を追加（既存 `LoraSpec` をそのまま流用。`GenerateRequest.loras` と同じ型・同じバリデーション）。
+2. **`services/pipeline_manager.py`**: `run_chain_job` で `lora_registry.resolve(...)` を呼び名前→(path, strength, preprocess) を解決する。単発 `run_generation` の該当箇所（:235-237、`lora_paths = [self.lora_registry.resolve(spec.name, spec.strength) for spec in job.request.loras]`）がそのままコピー元になる。
+3. **`services/ltx_runner.py`**: `generate_chain` のペイロード（worker へ渡す dict）に `loras` を追加（`generate` の `loras_payload` 組み立て・:1151/:1181 と同型）。
+4. **`engine/worker.py`**: `_do_generate_chain`（:371〜）で `loras` を解析し、`_PIPE.generate_chain(..., ic_loras=...)` を呼ぶ。単発 `_do_generate`（:263〜、`ic_loras = [...]`・:285・:346）が実装の型。
+5. **`engine/pipeline/fast_video_pipeline.py generate_chain`（:939〜）／`engine/pipeline/chain_pipeline.py run_chain`（:402〜）**: 両方に `ic_loras` 引数を追加し、**`ledger.transformer()` を呼び出す前に必ず `_set_ic_job(...)`（:267〜）で明示的にセット/クリアする**こと。単発 `generate()` は毎回 `_set_ic_job(eff_loras, ...)`（:894/:903）を呼んでから transformer を触っているが、chain は現状これを一切呼ばない。**直前の単発 `generate()` 由来の LoRA（`self._ic_loras`）がそのまま chain の denoise に持ち越される stale 問題を防ぐため、chain 側にも同じ明示セット（LoRA 無指定なら空リストで明示クリア）を必ず入れること。** これが今回の配線で最も事故りやすい箇所。
+
+#### GUI 側の変更
+
+- `gradio_ui/handlers.py` の A2V×LoRA 相互排他プリチェック（`gen_a2v_conflict_lora`、`make_generate_handler` 内 :364-367）を解除。
+- Clip Chain タブの `<lora:...>` トークン除去＋警告（`chain_lora_ignored`、`make_chain_handler` 内 :862-865）を解除。
+- `gradio_ui/i18n.py` の該当文言（EN/JA）を更新。
+
+#### 未決の設計論点（着手前にユーザーと合意すること）
+
+1. **LoRA 強度はチェーン全体で共通か、クリップ毎に変えられるか。** v1 は「チェーン全体共通」を推奨（実装がシンプル・`GenerateChainRequest.loras` はリクエストレベルの1リストで足りる）。クリップ毎にしたい場合は `ChainClip` 側にも `loras` を持たせる設計が必要になり、スコープが広がる。
+2. **reference 付き IC-LoRA（参照動画による条件付け・`reference_video_id`）は chain に未実装。** 今回のスコープに含めるか、v1 はスタイル/キャラクター系 LoRA（reference 不要）のみとして reference 付きは別途スコープ外にするか、要合意。
+
+#### テスト・検証の指針
+
+- スキーマ疎通（`GenerateChainRequest.loras` の受理・バリデーション・省略時 byte 同一）は mock backend で pytest 化できる。
+- 実際に LoRA が chain の生成結果に効いているかの GPU 実生成検証（stale LoRA が残っていないかの確認含む）は、**オーナー立ち会いで実施**すること（このプロジェクトの運用ルール＝目視検証はユーザーが行う）。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-06 **GUI プロンプト欄の一本化 ＋ ネガティブ欄グレーアウト**＝実装完了・客観ゲート PASS・**目視／実機ゲート✅クローズ・main マージ＆push 済**）（歴史記録）
+
+> **（歴史記録）本ブロックは上位の「2026-07-11 Gradio WebGUI 大規模改修」ブロックに置き換わった。** 食い違ったら最新ブロックが正。
 
 | 項目 | 状態 |
 |---|---|

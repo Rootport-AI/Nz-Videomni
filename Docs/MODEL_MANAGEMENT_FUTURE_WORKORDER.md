@@ -1,5 +1,9 @@
 # モデル管理機能（A1111 風）将来ワークオーダー — 現状記録と要件の入口
 
+> **注記（2026-07-11）**: 2026-07-11 の UI 改修でモデル配置（GGUF 直下配置がデフォルトに）とプリセット名
+> （`phase1_default`→`minimal`、`phase1_target`→`small`）が変更された。最新の配置・名称は
+> [`README.md`](../README.md) を参照。§1 のレイアウト表は当時（2026-07-04）の記録のため変更しない。
+
 > ## ✅ 実装済み（2026-07-05）
 > **最小スコープ（下記★絞り込み）を実装・main マージ済み。** 4カテゴリレジストリ（transformer／text_encoder／video_vae／audio）＋`GET /models`＋`POST /pipeline/load` の optional モデル指定（省略時＝golden スナップショットで byte 同一固定）＋Settings タブのドロップダウン GUI。**正本＝[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)＋VERIFICATION_LOG §26**（S4 切替検証＝別名二重登録 swap で **SHA 一致×3** PASS・未知名 404）。**実代替モデルの DL は将来ユーザー任意**（本セッションでは切替配線の実証のみ・検証後に余計な登録は削除済み）。以下は着手前の記録として残す。
 >

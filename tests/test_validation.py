@@ -19,7 +19,7 @@ def test_width_not_multiple_of_64(client):
 
 
 def test_height_not_multiple_of_64(client):
-    # 288 (the old phase1_default height) is ÷32 but not ÷64 -> rejected.
+    # 288 (the old minimal height) is ÷32 but not ÷64 -> rejected.
     r = client.post("/api/v1/generate", json={**BASE, "width": 512, "height": 288, "num_frames": 49})
     assert r.status_code == 422
     assert "multiple of 64" in r.text

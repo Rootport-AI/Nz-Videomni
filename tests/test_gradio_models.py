@@ -33,10 +33,14 @@ def _make_client(handler, *, api_key: str | None = "secret") -> ApiClient:
     return ApiClient("http://test", api_key=api_key, client=httpx.Client(transport=transport))
 
 
-def _entry(name, exists=True, is_default=False, source="config"):
-    return {"name": name, "path": f"models/{name}", "is_default": is_default,
-            "exists": exists, "source": source}
+def _entry(name, exists=True, is_default=False, source="config", path=None):
+    return {"name": name, "path": path if path is not None else f"models/{name}",
+            "is_default": is_default, "exists": exists, "source": source}
 
+
+#: Filename backing the "default" transformer entry in SAMPLE_MODELS, used to
+#: assert the new "default — <filename>" label formatting below.
+_DEFAULT_TRANSFORMER_FILENAME = "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
 
 SAMPLE_MODELS = {
     "categories": {
@@ -44,7 +48,8 @@ SAMPLE_MODELS = {
             "default": "default",
             "active": "alt",
             "entries": [
-                _entry("default", is_default=True),
+                _entry("default", is_default=True,
+                       path=f"models/transformer/{_DEFAULT_TRANSFORMER_FILENAME}"),
                 _entry("alt", source="scan"),
                 _entry("ghost", exists=False),
             ],
@@ -67,7 +72,9 @@ def test_build_model_choices_values_are_names():
     choices = build_model_choices(SAMPLE_MODELS, "transformer")
     assert [value for _label, value in choices] == ["default", "alt", "ghost"]
     labels = {value: label for label, value in choices}
-    assert labels["default"] == "default"
+    # Default entry's label is decorated with its path's filename, but the
+    # VALUE (what gets sent back to the server) must stay the bare "default".
+    assert labels["default"] == f"default — {_DEFAULT_TRANSFORMER_FILENAME}"
     assert labels["alt"] == "alt"
     # Missing-on-disk entry stays selectable but is labeled.
     assert LABELS["en"]["model_missing"] in labels["ghost"]
@@ -82,6 +89,60 @@ def test_build_model_choices_missing_label_localizes():
 def test_build_model_choices_empty_fallback():
     for bad in (None, {}, {"categories": {}}):
         assert build_model_choices(bad, "transformer") == [(MODEL_DEFAULT, MODEL_DEFAULT)]
+
+
+def test_build_model_choices_default_label_includes_filename():
+    """The default entry's label surfaces which file config points at, so the
+    user isn't stuck staring at an uninformative bare "default" in the
+    Settings-tab Models dropdown."""
+    models_json = {"categories": {"transformer": {
+        "default": "default", "active": "default",
+        "entries": [_entry("default", is_default=True,
+                            path="models/transformer/some-model.gguf")],
+    }}}
+    choices = build_model_choices(models_json, "transformer")
+    assert choices == [("default — some-model.gguf", "default")]
+
+
+def test_build_model_choices_default_label_windows_path_separator():
+    """Path separators from a Windows-hosted backend (backslash) resolve to
+    the same filename-only label as forward-slash paths."""
+    models_json = {"categories": {"transformer": {
+        "default": "default", "active": "default",
+        "entries": [_entry("default", is_default=True,
+                            path=r"models\transformer\some-model.gguf")],
+    }}}
+    choices = build_model_choices(models_json, "transformer")
+    assert choices == [("default — some-model.gguf", "default")]
+
+
+def test_build_model_choices_default_label_falls_back_without_path():
+    """When the default entry has no path (empty string or missing key), the
+    label falls back to the plain "default" text used before this change."""
+    for bad_path in ("", None):
+        entry = _entry("default", is_default=True, path=bad_path)
+        if bad_path is None:
+            del entry["path"]
+        models_json = {"categories": {"transformer": {
+            "default": "default", "active": "default", "entries": [entry],
+        }}}
+        choices = build_model_choices(models_json, "transformer")
+        assert choices == [("default", "default")]
+
+
+def test_build_model_choices_default_missing_on_disk_keeps_filename_and_flag():
+    """A default entry that is both filename-labeled AND missing-on-disk gets
+    both pieces of information in its label; the value is still "default"."""
+    models_json = {"categories": {"transformer": {
+        "default": "default", "active": "default",
+        "entries": [_entry("default", is_default=True, exists=False,
+                            path="models/transformer/some-model.gguf")],
+    }}}
+    choices = build_model_choices(models_json, "transformer")
+    label, value = choices[0]
+    assert value == "default"
+    assert "some-model.gguf" in label
+    assert LABELS["en"]["model_missing"] in label
 
 
 def test_model_active_value():

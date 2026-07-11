@@ -77,7 +77,7 @@ provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR
 
 | 要素 | 既定パス | 概算 | 役割 |
 |------|----------|------|------|
-| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | 本番トランスフォーマー |
+| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | 本番トランスフォーマー |
 | GGUF Gemma (Q4_K_M) | `models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | text encoder（GPU 推論・逐次オフロード） |
 | component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | 46GB モノリスを置換する小単体ファイル |
 | spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | 2段生成の x2 アップサンプラ |
@@ -99,11 +99,30 @@ backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行い�
 
 ### 追加の transformer GGUF / LoRA を配置する
 
-**transformer GGUF**: `models/ltx-2.3-gguf/` 配下に任意のサブフォルダを作って `.gguf` を置くだけで、
-再帰スキャンにより自動認識されます（[`services/model_registry.py`](services/model_registry.py) の
+**transformer GGUF**: `models/ltx-2.3-gguf/` **直下**に `.gguf` を置くだけで、ファイル名から自動認識され
+UI/API のドロップダウンに列挙されます。サブフォルダに入れても再帰スキャンで拾われます（[`services/model_registry.py`](services/model_registry.py) の
 `CATEGORY_SPECS["transformer"]`、`recursive=True`）。登録名はファイル名（拡張子除く）で、既定の登録名と
 衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
 （`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
+
+> **既存インストールからの移行**: 従来の `install_ltx.ps1` は本番トランスフォーマー GGUF を
+> `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダの中に配置していました。現在の公式配置は
+> `models/ltx-2.3-gguf/` **直下**です（サブフォルダ配置自体は再帰スキャンで引き続き動作しますが、以後の
+> 公式手順・ドキュメントの既定パスは直下を前提にします）。既にインストール済みの環境は、以下のいずれかで
+> 揃えてください。
+>
+> - **PowerShell を再実行する**（推奨）: 最新の `scripts/install_ltx.ps1` は DL 後に自動でファイルを1階層
+>   上へ移動し、空になったサブフォルダを削除します（既に直下にある場合はスキップされます）。
+> - **手動で移動する**: 以下のコマンドでサブフォルダ内の `.gguf` を直下へ移し、空フォルダを削除します。
+>
+>   ```powershell
+>   Move-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1\*.gguf" "models\ltx-2.3-gguf\"
+>   Remove-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1" -Force
+>   ```
+>
+>   `config.yaml` に `model.gguf_transformer_path` を明示的に指定している場合は、直下のパス
+>   （既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）に合わせて書き換えてください。
+>   指定していない場合はコード側の既定値が既に直下パスを指すため、`config.yaml` の編集は不要です。
 
 選択は UI の「Models」設定タブのドロップダウン、または API `GET /models`（登録名の一覧確認）→
 `POST /pipeline/load`（body `{"models": {"transformer": "<登録名>"}}`）で行います。選択が現在ロード中のものと
@@ -251,7 +270,7 @@ curl http://127.0.0.1:18620/api/v1/jobs/<job_id>
 curl http://127.0.0.1:18620/api/v1/jobs/<job_id>/video --output out.mp4
 ```
 
-### phase1_default (T2V, 512x320 / 49 frames)
+### minimal (T2V, 512x320 / 49 frames)
 
 ```powershell
 # seed 固定で決定的に検証（別プロセスでもバイト一致することを実測済み）
@@ -289,6 +308,8 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### Gradio UI
 `/ui` を開き、画像なしで「生成」→ T2V、画像1枚を指定して「生成」→ 最小I2V。
+
+**A2V（音声から動画生成）**: Generate タブの「A2V（音声から動画生成）」アコーディオンに音声ファイルを添付する。`.wav` 推奨（添付すると音声長に収まる最大フレーム数を自動でFramesへ入力してくれる。他形式は自動調整の対象外でサーバー側チェックに委ねる）。画像でキャラクター等を固定したい場合は「キーフレーム画像」アコーディオンを使う（5スロットとも A2V と併用可）。IC-LoRA / スタイルLoRA（`<lora:...>` 記法）とは併用不可。
 
 ---
 

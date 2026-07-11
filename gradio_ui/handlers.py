@@ -6,9 +6,11 @@ byte-identical progress/complete/fail handling.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import time
+import wave
 from pathlib import Path
 
 import gradio as gr
@@ -34,6 +36,94 @@ MODE_A2V = "a2v"
 # chain flow consumes them.
 _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
+
+
+def _wav_duration_seconds(path) -> float | None:
+    """Duration in seconds of a ``.wav`` file via the stdlib :mod:`wave` module,
+    or ``None`` when ``path`` is not a readable ``.wav`` (a non-wav container, an
+    unreadable/short header, or a zero frame rate).
+
+    Used by the A2V length precheck to reject a too-short upload with the exact
+    seconds needed BEFORE any API call. A ``None`` result means "cannot measure
+    here" and the caller defers to the server's ffprobe preflight — so mp3/m4a/…
+    (which the stdlib cannot decode) and malformed wavs still reach the server
+    unchanged, matching the pre-precheck behaviour."""
+    if not path or Path(str(path)).suffix.lower() != ".wav":
+        return None
+    try:
+        with wave.open(str(path), "rb") as w:
+            frames = w.getnframes()
+            rate = w.getframerate()
+    except Exception:
+        return None
+    if not rate or rate <= 0:
+        return None
+    return frames / float(rate)
+
+
+def _resolve_fps(fps) -> float:
+    """Coerce a (possibly falsy/non-numeric) frame-rate input to a float,
+    falling back to 24.0 — the same fallback the A2V length precheck in
+    :func:`make_generate_handler` uses for ``frame_rate``."""
+    try:
+        fps_v = float(fps) if fps else 24.0
+    except (TypeError, ValueError):
+        fps_v = 24.0
+    return fps_v or 24.0
+
+
+def suggest_frames_for_audio(dur: float, fps) -> int:
+    """Suggest a ``Frames`` value (8n+1) that fits ``dur`` seconds of audio at
+    ``fps`` (auto-adjust the Generate-tab A2V audio attach, feature 1).
+
+    Starts from the largest 8n+1 frame count the duration covers
+    (``((floor(dur*fps) - 1) // 8) * 8 + 1``), then verifies it against the
+    SAME arithmetic as the server preflight (mirrors the A2V length precheck
+    in :func:`make_generate_handler`: :func:`chain_math.audio_latents_required`
+    with ``kv=3`` — mirroring the A2V chain payload's fixed
+    ``overlap_frames`` — vs ``round(dur * chain_math.AUDIO_LATENTS_PER_SEC)``),
+    shrinking by 8 while the attached audio would VAE-encode to fewer latent
+    frames than that frame count requires. The result is finally clamped to
+    ``[9, 481]`` (the server's ``num_frames`` range); both the formula and the
+    shrink step stay on the 8n+1 grid so the clamp bounds (9 and 481) are the
+    only values that can land off-grid, and both of those are themselves
+    8n+1."""
+    import chain_math
+
+    fps_v = _resolve_fps(fps)
+    nf = ((math.floor(dur * fps_v) - 1) // 8) * 8 + 1
+    nf = max(nf, 9)
+    while nf > 9:
+        try:
+            required = chain_math.audio_latents_required([nf], fps_v, kv=3)
+        except ValueError:
+            # nf too small for the fixed kv=3 overlap to even be computed
+            # (mirrors the same edge case the server-side arithmetic would
+            # hit) — stop shrinking; the final clamp below still applies.
+            break
+        available = round(dur * chain_math.AUDIO_LATENTS_PER_SEC)
+        if available >= required:
+            break
+        nf -= 8
+    return max(9, min(481, nf))
+
+
+def a2v_audio_change_handler(path, frame_rate, lang: str = _DEFAULT_LANG):
+    """``.change`` handler for the Generate-tab A2V audio ``gr.File``
+    (feature 1: wav-only auto Frames adjustment).
+
+    A ``.wav`` attach ALWAYS overwrites ``num_frames`` (regardless of its
+    current value) with :func:`suggest_frames_for_audio`'s result and surfaces
+    a ``gr.Info`` toast naming the new value. Anything :func:`_wav_duration_seconds`
+    cannot measure — a non-wav container, an unreadable/malformed wav, or a
+    cleared attachment (``path is None``) — is a no-op: ``gr.update()`` with no
+    value change, leaving Frames exactly as the user left it."""
+    dur = _wav_duration_seconds(path)
+    if dur is None:
+        return gr.update()
+    nf = suggest_frames_for_audio(dur, frame_rate)
+    gr.Info(L("a2v_msg_frames_adjusted", lang).format(frames=nf, dur=dur))
+    return gr.update(value=nf)
 
 
 # F3: JobResponse.stage -> localized phase-label key. Unknown / absent stages
@@ -226,16 +316,80 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  adapter=ADAPTER_NONE, adapter_strength=1.0,
                  control_adherence=1.0, reference_strength=1.0,
                  ref_video_path=None, config=None,
-                 ui_lang=None, poll_interval=None, poll_timeout_min=None):
+                 ui_lang=None, poll_interval=None, poll_timeout_min=None,
+                 src_audio=None):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
         # the 1s / 60min poll defaults.
+        # ``src_audio`` (A2V, case A) is the LAST positional arg -- a gr.File
+        # value (path str or None). Wiring the audio input component into
+        # ``inputs=[...]`` is owned by another work stream.
         lang = ui_lang or default_lang
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
             return
+
+        # 0) width/height (÷64) + num_frames (8n+1, [9, 481]) precheck, moved
+        # over from the chain handler's identical rule (:468-470 / :533) so a
+        # violating Generate-tab request never reaches the API either. Zero
+        # API calls on violation -- same _precheck_reject discipline as chain.
+        try:
+            w_i, h_i = int(width), int(height)
+        except (TypeError, ValueError):
+            yield _precheck_reject(L("msg_bad_dimension", lang)), "", None
+            return
+        if w_i % 64 != 0 or h_i % 64 != 0:
+            yield _precheck_reject(L("msg_bad_dimension", lang)), "", None
+            return
+        try:
+            nf_i = int(num_frames)
+        except (TypeError, ValueError):
+            yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=1)), "", None
+            return
+        if nf_i < 9 or nf_i > 481 or (nf_i - 1) % 8 != 0:
+            yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=1)), "", None
+            return
+
+        # 0b) A2V (案A): a src_audio upload routes this SAME handler to
+        # POST /generate/chain as a single-clip chain carrying a frozen
+        # source_audio latent, instead of POST /generate. It is mutually
+        # exclusive with any IC-LoRA adapter selection and with prompt-embedded
+        # <lora:...> tokens (GenerateChainRequest carries no ``loras`` field at
+        # all, so there is nowhere for either to go) -- rejected with zero API
+        # calls before anything else runs.
+        use_audio = bool(src_audio)
+        if use_audio:
+            audio_conflict = bool(adapter) and adapter != ADAPTER_NONE
+            if audio_conflict or _LORA_TOKEN_RE.search(prompt or ""):
+                yield _precheck_reject(L("gen_a2v_conflict_lora", lang)), "", None
+                return
+
+            # Length precheck (wav only): the server rejects audio that
+            # VAE-encodes to fewer audio-latent frames than the assembled
+            # timeline (422 SOURCE_AUDIO_TOO_SHORT — the single most likely A2V
+            # failure). For a .wav we measure the duration locally (stdlib wave)
+            # and reject with the exact seconds needed BEFORE any upload/API
+            # call, using the SAME arithmetic as the server preflight
+            # (services/pipeline_manager.preflight_source_audio): required =
+            # chain_math.audio_latents_required([num_frames], fps, kv=3) latent
+            # frames, available = round(duration * AUDIO_LATENTS_PER_SEC). kv=3
+            # mirrors the A2V chain payload's fixed overlap_frames below. Non-wav
+            # (mp3/m4a/…) and unreadable wavs skip this and defer to the server.
+            audio_dur = _wav_duration_seconds(src_audio)
+            if audio_dur is not None:
+                import chain_math
+
+                fps_v = float(frame_rate) if frame_rate else 24.0
+                required = chain_math.audio_latents_required([nf_i], fps_v, kv=3)
+                available = round(audio_dur * chain_math.AUDIO_LATENTS_PER_SEC)
+                if available < required:
+                    need_s = required / chain_math.AUDIO_LATENTS_PER_SEC
+                    yield _precheck_reject(L("a2v_msg_too_short", lang).format(
+                        frames=nf_i, fps=fps_v, video=nf_i / fps_v,
+                        need=need_s, have=float(audio_dur))), "", None
+                    return
 
         # 1) keyframe slots (up to 5, I2V multi-keyframe conditioning). Each
         # FIXED slot is (enabled, image_path, frame_idx, strength); disabled or
@@ -339,6 +493,58 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         crop_output = None
         if crop_enabled and int(crop_w) > 0 and int(crop_h) > 0:
             crop_output = {"width": int(crop_w), "height": int(crop_h)}
+
+        # --- A2V (案A): upload the audio, then POST /generate/chain with a
+        # single ChainClip carrying this same request's num_frames + any
+        # collected keyframe conditioning, and source_audio.audio_id. Mirrors
+        # make_chain_handler's A2V branch (:640-646, :699-700) but with only
+        # ONE clip (this handler has no per-clip slots). ---
+        if use_audio:
+            yield L("a2v_msg_uploading", lang), "", None
+            try:
+                audio_id = api.upload_audio(str(src_audio))
+            except Exception as exc:
+                yield L("msg_upload_failed", lang).format(err=exc), "", None
+                return
+            clip_entry: dict = {"num_frames": int(num_frames)}
+            if conditioning:
+                clip_entry["conditioning_images"] = conditioning
+            chain_payload = {
+                "prompt": send_prompt,
+                "negative_prompt": negative_prompt or "",
+                "width": int(width),
+                "height": int(height),
+                "crop_output": crop_output,
+                "frame_rate": float(frame_rate),
+                "num_inference_steps": 8,
+                "guidance_scale": 1.0,
+                "seed": int(seed),
+                "pipeline": "distilled",
+                "overlap_frames": 3,
+                "overlap_strength": 0.5,
+                "clips": [clip_entry],
+                "source_audio": {"audio_id": audio_id},
+            }
+            try:
+                resp = api.generate_chain(chain_payload)
+            except Exception as exc:
+                yield L("msg_generate_failed", lang).format(err=exc), "", None
+                return
+            if resp.status_code == 409:
+                yield L("msg_job_busy", lang), "", None
+                return
+            if resp.status_code >= 400:
+                try:
+                    err_body: object = resp.json()
+                except Exception:
+                    err_body = resp.text
+                yield format_api_error(err_body, lang), "", None
+                return
+            job_id = resp.json()["job_id"]
+            yield L("msg_job_started", lang).format(mode="a2v", job_id=job_id), job_id, None
+            yield from _poll_job_until_done(api, job_id, lang, interval, timeout_s)
+            return
+
         payload = {
             "prompt": send_prompt,
             "negative_prompt": negative_prompt or "",

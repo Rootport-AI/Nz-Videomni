@@ -425,6 +425,24 @@ if ($SkipModels) {
         -LocalDir "models/ltx-2.3-gguf" `
         -MinBytes 17000000000
 
+    # 1b) Flatten: the HF repo nests the file one level under
+    #     LTX-2.3-distilled-1.1/; the project's canonical layout keeps it
+    #     directly in models/ltx-2.3-gguf/ (so the model-registry scan roots at
+    #     that one directory instead of all of models/). Idempotent: no-op if
+    #     already flattened (re-run / already-installed machine).
+    $ggufNested = Join-Path $ProjectRoot "models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+    $ggufFlat = Join-Path $ProjectRoot "models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+    if (Test-Path $ggufNested) {
+        Move-Item -Path $ggufNested -Destination $ggufFlat -Force
+        $ggufNestedDir = Split-Path $ggufNested -Parent
+        if ((Test-Path $ggufNestedDir) -and ((Get-ChildItem $ggufNestedDir -Force | Measure-Object).Count -eq 0)) {
+            Remove-Item $ggufNestedDir -Force
+        }
+        Write-Ok "Transformer GGUF flattened to models/ltx-2.3-gguf/"
+    } elseif (Test-Path $ggufFlat) {
+        Write-Skip "Transformer GGUF already flattened"
+    }
+
     # 2) Video+Audio VAE + Text-projection (3 files, ungated). PIN the revision:
     #    HEAD of Kijai/LTX2.3_comfy has moved past the validated snapshot.
     Invoke-ModelDownload -Name "VAE + text-projection (3 files)" `
@@ -495,7 +513,7 @@ $required = @(
     @{ Label = "engine_python";           Rel = ".venv-engine/Scripts/python.exe";                                                 IsDir = $false; Min = [long]0 }
     @{ Label = "app_python";              Rel = ".venv/Scripts/python.exe";                                                        IsDir = $false; Min = [long]0 }
     @{ Label = "engine worker.py";        Rel = "engine/worker.py";                                                                IsDir = $false; Min = [long]0 }
-    @{ Label = "gguf_transformer";        Rel = "models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"; IsDir = $false; Min = [long]17000000000 }
+    @{ Label = "gguf_transformer";        Rel = "models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf";                       IsDir = $false; Min = [long]17000000000 }
     @{ Label = "gguf_gemma";              Rel = "models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf";                           IsDir = $false; Min = [long]7000000000 }
     @{ Label = "component_video_vae";     Rel = "models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors";                  IsDir = $false; Min = [long]1000000000 }
     @{ Label = "component_audio_vae";     Rel = "models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors";                  IsDir = $false; Min = [long]200000000 }
@@ -540,7 +558,7 @@ $installedPaths = @"
 # GGUF + component-file recipe (matches config.yaml -> model:). The 46GB monolith
 # and 22.7GB QAT Gemma are intentionally absent (deleted; never re-downloaded).
 # The monolith path below is a reference-only payload field (never opened).
-  gguf_transformer:          "./models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+  gguf_transformer:          "./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
   gguf_gemma:                "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
   component_video_vae:       "./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"
   component_audio_vae:       "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"

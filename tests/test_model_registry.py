@@ -30,10 +30,11 @@ def _touch(path, size: int = 4):
 
 def _config_with_layout(tmp_path) -> AppConfig:
     """A config whose 4 default paths point into a tmp models layout that
-    mirrors the real one (transformer default one subdir deep; video/audio
-    VAEs sharing one directory)."""
+    mirrors the real one (transformer default directly in its models dir,
+    sibling releases in subdirectories; video/audio VAEs sharing one
+    directory)."""
     gguf_dir = tmp_path / "models" / "ltx-gguf"
-    default_tr = _touch(gguf_dir / "distilled-1.1" / "LTX-Q4_K_M.gguf")
+    default_tr = _touch(gguf_dir / "LTX-Q4_K_M.gguf")
     te_dir = tmp_path / "models" / "gemma-gguf"
     default_te = _touch(te_dir / "gemma-Q4_K_M.gguf")
     vae_dir = tmp_path / "models" / "components" / "vae"
@@ -102,12 +103,22 @@ def test_reserved_default_name_in_config_is_ignored(tmp_path):
 def test_scan_discovers_sibling_gguf_recursively(tmp_path):
     cfg = _config_with_layout(tmp_path)
     # A sibling release in its own subdirectory (transformer scan is recursive
-    # from the grandparent of the default file).
+    # from the default file's own directory).
     _touch(tmp_path / "models" / "ltx-gguf" / "dev-1.2" / "LTX-dev-Q6_K.gguf")
     reg = ModelRegistry(cfg)
     assert "LTX-dev-Q6_K" in reg.names("transformer")
     entry = {e.name: e for e in reg.entries("transformer")}["LTX-dev-Q6_K"]
     assert entry.source == "scan" and entry.exists
+
+
+def test_scan_discovers_sibling_gguf_alongside_default(tmp_path):
+    """A sibling release placed directly next to the (also top-level) default
+    file must also be discovered -- the common case now that the default
+    itself is no longer nested one subdirectory deep."""
+    cfg = _config_with_layout(tmp_path)
+    _touch(tmp_path / "models" / "ltx-gguf" / "LTX-dev-Q8.gguf")
+    reg = ModelRegistry(cfg)
+    assert "LTX-dev-Q8" in reg.names("transformer")
 
 
 def test_scan_text_encoder_non_recursive(tmp_path):

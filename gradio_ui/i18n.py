@@ -85,6 +85,9 @@ LABELS: dict[str, dict[str, str]] = {
                         "multiples of 128 (e.g. 1280×768); generation will not start otherwise."),
         # --- generate: right column ---
         "btn_generate": "Generate",
+        # Feature 3: shown on generate_btn / chain_generate_btn while a
+        # generation is in flight (button disabled for the duration).
+        "btn_generating": "Generating...",
         "lbl_progress": "Progress",
         "lbl_jobid": "Job ID",
         "lbl_result": "Result",
@@ -144,6 +147,9 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_VALIDATION_ERROR": "The request was rejected by validation. See the details below.",
         # --- clip chain tab (S5) ---
         "chain_lora_ignored": "Clip Chain does not support LoRA yet — the <lora:...> tag(s) were ignored.",
+        "lbl_chain_preset": "Preset",
+        "info_chain_preset": ("Automatically fills in the resolution, frame rate, and the "
+                              "recommended (comfortable-limit) frame count for each clip."),
         "lbl_overlap": "Transition frames (overlap between clips, 1-8)",
         "lbl_overlap_strength": "Transition strength",
         "cap_crossfade": "Clips are joined with a cross-fade-like blend using these settings.",
@@ -167,6 +173,8 @@ LABELS: dict[str, dict[str, str]] = {
                                         "enabled clip allows (max {maxkv})."),
         "msg_chain_total_frames": ("The chain timeline ({total} frames) exceeds the {cap}-frame cap. "
                                    "Reduce clip count or clip lengths."),
+        "warn_chain_preset_total": ("The clip total ({total} frames) exceeds the chain's maximum "
+                                    "length ({max} frames)."),
         "msg_chain_geometry": "The chain geometry is invalid: {err}",
         "msg_chain_started": "Chain job started ({n} clips): {job_id}",
         # --- clip chain: generation mode (none / V2V / A2V) ---
@@ -251,6 +259,23 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_too_large": "Audio exceeds the {limit} MB limit.",
         "a2v_msg_clip_count": "A2V uses exactly 1 clip — enable clip 1 only.",
         "a2v_msg_uploading": "Uploading audio…",
+        # Client-side length precheck (wav only): the attached audio is shorter
+        # than the video timeline this Frames/Frame-rate setting produces, so the
+        # server would reject it (422 SOURCE_AUDIO_TOO_SHORT). Caught before any
+        # upload with the exact seconds needed vs. attached.
+        "a2v_msg_too_short": ("The audio is too short. This setting ({frames} frames @ {fps} fps "
+                              "= {video:.2f}s) needs at least {need:.2f}s of audio, but the "
+                              "attached file is {have:.2f}s. Use longer audio or reduce the frames."),
+        # Feature 1: fired when attaching a .wav to the Generate-tab A2V audio
+        # field auto-adjusts Frames to fit its measured duration.
+        "a2v_msg_frames_adjusted": "Frames adjusted to {frames} to fit the {dur:.2f}s audio.",
+        # --- generate: audio-to-video accordion (single generation) ---
+        "gen_a2v_accordion": "Audio-to-Video (e.g. lip-sync)",
+        "gen_a2v_note": ("When audio is attached, Reference-video control (IC-LoRA) and style "
+                         "LoRAs (<lora:...> tags) cannot be used together with it. Keyframe "
+                         "images can still be combined with it."),
+        "gen_a2v_conflict_lora": ("Audio-to-Video cannot be combined with IC-LoRA / style LoRAs. "
+                                  "Remove the audio, or clear the LoRA selection, and retry."),
         # --- V2V/A2V + join API error-envelope hints ---
         "apierr_SOURCE_VIDEO_NOT_FOUND": ("The source video was not found on the server. "
                                           "Re-upload the source video."),
@@ -302,7 +327,7 @@ LABELS: dict[str, dict[str, str]] = {
         "warn_config_load_failed": "Failed to load server settings: {err}. Retrying automatically…",
         "warn_config_retry_exhausted": ("Still unable to load server settings after {n} attempts: "
                                         "{err}. Use Refresh to try again."),
-        "lbl_maxframes": "Comfortable frame-count limits by resolution",
+        "lbl_maxframes": "Comfortable frame-count limits by resolution (for VRAM 16GB, RAM 62GB)",
         "col_res": "Resolution",
         "col_maxframes": "Max frames",
         "cap_over": "Exceeding these still works, but generation becomes much slower.",
@@ -330,6 +355,7 @@ LABELS: dict[str, dict[str, str]] = {
                        "combination. Switching restarts the engine worker (a few "
                        "minutes). If a load fails, select 'default' everywhere and "
                        "Load again."),
+        "model_folder_hint": "Drop GGUF files into this folder and they will be auto-detected.",
         "apierr_MODEL_NOT_FOUND": ("Unknown model name. Refresh the model list and pick "
                                    "again."),
         "apierr_MODEL_FILE_MISSING": ("The model file is missing on disk. Re-download it "
@@ -434,6 +460,8 @@ LABELS: dict[str, dict[str, str]] = {
                         "(例: 1280×768)。満たさない場合は生成を開始しません。"),
         # --- generate: right column ---
         "btn_generate": "生成",
+        # 機能3: generate_btn / chain_generate_btnの生成中に表示（ボタンは無効化）。
+        "btn_generating": "生成中…",
         "lbl_progress": "進捗",
         "lbl_jobid": "ジョブID",
         "lbl_result": "結果",
@@ -487,6 +515,8 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_VALIDATION_ERROR": "リクエストが検証で拒否されました。詳細は以下を参照してください。",
         # --- clip chain tab (S5) ---
         "chain_lora_ignored": "クリップ連結ではLoRAは未対応のため、<lora:...>タグを無視しました。",
+        "lbl_chain_preset": "プリセット",
+        "info_chain_preset": "解像度・フレームレート・各クリップの推奨フレーム数（快適上限）を自動入力します。",
         "lbl_overlap": "つなぎ目のフレーム数 (クリップ間のオーバーラップ・1〜8)",
         "lbl_overlap_strength": "つなぎ目の強さ",
         "cap_crossfade": "クリップ間はこの設定でクロスフェード的に接続されます。",
@@ -508,6 +538,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_chain_bad_frames": "クリップ{n}: フレーム数は8n+1かつ9〜481にしてください。",
         "msg_chain_overlap_too_large": "つなぎ目フレーム数 ({kv}) は最短クリップが許す値 (最大 {maxkv}) より小さくしてください。",
         "msg_chain_total_frames": "連結タイムライン ({total} フレーム) が上限 {cap} フレームを超えています。クリップ数か長さを減らしてください。",
+        "warn_chain_preset_total": "クリップ合計 ({total} フレーム) がチェーンの最大長 ({max} フレーム) を超えています。",
         "msg_chain_geometry": "連結ジオメトリが不正です: {err}",
         "msg_chain_started": "連結ジョブ開始 ({n} クリップ): {job_id}",
         # --- clip chain: generation mode (none / V2V / A2V) ---
@@ -582,6 +613,21 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_too_large": "音声が上限 {limit} MB を超えています。",
         "a2v_msg_clip_count": "A2Vではクリップ1のみを有効にしてください（ちょうど1個）。",
         "a2v_msg_uploading": "音声をアップロード中…",
+        # クライアント側の長さ事前チェック（wavのみ）。この Frames/Frame rate 設定が
+        # 生む動画尺に対して添付音声が短く、サーバーが 422 SOURCE_AUDIO_TOO_SHORT で
+        # 拒否する条件。アップロード前に必要秒数と添付秒数を明示して弾く。
+        "a2v_msg_too_short": ("音声が短すぎます。この設定（{frames}フレーム / {fps}fps = {video:.2f}秒）には "
+                              "{need:.2f}秒以上の音声が必要ですが、添付は {have:.2f}秒です。"
+                              "長い音声を使うか、フレーム数を減らしてください。"),
+        # 機能1: Generateタブの音声(A2V)欄にwavを添付すると、測定した長さに合わせて
+        # Framesを自動調整したときに表示。
+        "a2v_msg_frames_adjusted": "音声{dur:.2f}秒に合わせてFramesを{frames}に調整しました",
+        # --- generate: audio-to-video accordion (single generation) ---
+        "gen_a2v_accordion": "音声から動画生成（リップシンクなど）",
+        "gen_a2v_note": ("音声を添付した場合、参照動画による制御 (IC-LoRA) とスタイルLoRA "
+                         "(<lora:...> 記法) は併用できません。キーフレーム画像は併用できます。"),
+        "gen_a2v_conflict_lora": ("Audio-to-VideoはIC-LoRA/スタイルLoRAと併用できません。"
+                                  "音声を外すか、LoRA指定を解除してください。"),
         # --- V2V/A2V + join API error-envelope hints ---
         "apierr_SOURCE_VIDEO_NOT_FOUND": "元動画がサーバー上に見つかりません。元動画を再アップロードしてください。",
         "apierr_SOURCE_VIDEO_TOO_SHORT": "元動画のフレーム数が参照フレーム数に足りません。参照フレーム数を減らすか、長い動画を使ってください。",
@@ -627,7 +673,7 @@ LABELS: dict[str, dict[str, str]] = {
         "sum_config": "生の /config JSON",
         "warn_config_load_failed": "サーバ設定の取得に失敗しました: {err}。自動的に再試行します…",
         "warn_config_retry_exhausted": "{n}回試行しましたがサーバ設定を取得できませんでした: {err}。更新ボタンで再試行してください。",
-        "lbl_maxframes": "解像度別の快適フレーム数上限",
+        "lbl_maxframes": "解像度別の快適フレーム数上限（VRAM 16GB・RAM 62GB環境での目安）",
         "col_res": "解像度",
         "col_maxframes": "最大フレーム数",
         "cap_over": "これらを超えても生成は可能ですが、大幅に低速化します。",
@@ -653,6 +699,7 @@ LABELS: dict[str, dict[str, str]] = {
         "model_hint": ("選択は「読込」ボタンで反映されます。default は標準構成です。"
                        "切替はエンジンの再起動を伴い数分かかります。読込に失敗した場合は、"
                        "すべて default を選び直して再度読込してください。"),
+        "model_folder_hint": "このフォルダにGGUFファイルを置くと自動認識されます。",
         "apierr_MODEL_NOT_FOUND": "不明なモデル名です。モデル一覧を更新して選び直してください。",
         "apierr_MODEL_FILE_MISSING": "モデルファイルがディスク上に見つかりません。再ダウンロードするか別のモデルを選んでください。",
         "apierr_MODEL_INCOMPATIBLE": "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",

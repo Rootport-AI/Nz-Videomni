@@ -91,12 +91,12 @@ generation_presets:
     height: 256
     crop_output: null
     num_frames: 17
-  phase1_default:
+  minimal:
     width: 512
     height: 320
     crop_output: null
     num_frames: 49
-  phase1_target:
+  small:
     width: 960
     height: 576
     crop_output:
@@ -110,6 +110,20 @@ generation_presets:
       width: 1280
       height: 720
     num_frames: 257 # limits.spill_free_frames["1280x768"] 実測快適上限と一致
+  FHD_1080p:
+    width: 1920
+    height: 1088
+    crop_output:
+      width: 1920
+      height: 1080
+    num_frames: 153
+  WQHD_1440p:
+    width: 2560
+    height: 1472
+    crop_output:
+      width: 2560
+      height: 1440
+    num_frames: 81
 
 generation_defaults:
   # Gradio/API の初期値。まず16GBで通しやすい軽量設定にする。width/height は64の倍数。

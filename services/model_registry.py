@@ -51,9 +51,11 @@ class CategorySpec:
     config_field: str  # ModelConfig dict field with explicit registrations
     extensions: tuple[str, ...]  # accepted weight-file extensions
     # How many parents above the DEFAULT FILE the scan roots at. 1 = the file's
-    # own directory. The transformer default lives one subdirectory deep
-    # (models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/*.gguf) and sibling releases
-    # get sibling subdirectories, so it scans the grandparent recursively.
+    # own directory. The transformer default lives directly in
+    # models/ltx-2.3-gguf/*.gguf, and sibling releases (other quantizations /
+    # fine-tunes) get their own subdirectories, so parent_levels=1 combined
+    # with recursive=True still discovers them without also pulling in
+    # unrelated GGUFs from elsewhere under models/ (e.g. the Gemma GGUF).
     parent_levels: int = 1
     recursive: bool = False
     # Filename classifier for categories sharing one directory: the video and
@@ -69,7 +71,7 @@ CATEGORY_SPECS: dict[str, CategorySpec] = {
         default_field="gguf_transformer_path",
         config_field="transformers",
         extensions=(".gguf",),
-        parent_levels=2,
+        parent_levels=1,
         recursive=True,
     ),
     "text_encoder": CategorySpec(

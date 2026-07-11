@@ -575,6 +575,20 @@ def test_join_handler_without_selection_sends_empty_body():
     assert bodies == [{}, {}]
 
 
+def test_chain_mode_radio_dropped_a2v_choice():
+    """WP-UI: A2V moved to the Generate tab, so the Clip Chain mode radio is a
+    none/v2v toggle only (the chain A2V handler/i18n keys are untouched)."""
+    import gradio as gr
+
+    from gradio_ui import build_ui
+
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    radios = [c for c in demo.blocks.values() if isinstance(c, gr.Radio)]
+    chain_modes = [r for r in radios if [v for _l, v in r.choices] == ["none", "v2v"]]
+    assert chain_modes, "chain-mode none/v2v radio not found"
+    assert not any("a2v" in [v for _l, v in r.choices] for r in radios)
+
+
 def test_v2v_crossfade_dropdown_default_300():
     """build_ui exposes the crossfade Dropdown with 150/300/500 and default 300."""
     import gradio as gr

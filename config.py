@@ -71,7 +71,7 @@ class ModelConfig(BaseModel):
     # Phase 5 (real GGUF engine) runtime paths. Consumed only by the
     # subprocess-worker real backend in services/ltx_runner.py. Defaults are the
     # spike-proven 16GB recipe (Q4_K_M transformer + Q4_K_M GGUF Gemma on GPU).
-    gguf_transformer_path: str = "./models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+    gguf_transformer_path: str = "./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
     gguf_gemma_path: str = "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
     # First-party engine package (project root ./engine). ltx_runner launches
     # `python -m engine.worker` with this on PYTHONPATH.

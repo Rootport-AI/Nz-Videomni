@@ -424,12 +424,23 @@ def _do_generate_chain(msg: dict) -> None:
                 f"generate_chain: audio_source requires path (missing key {exc})"
             ) from exc
 
+    # Style/character IC-LoRA (forward-time weight patch, applied across the whole
+    # chain). Always parsed EXPLICITLY (even []): an explicit empty list is the
+    # authoritative "no LoRA this chain" -> clean detach, clearing any stale LoRA
+    # left on the resident pipeline by a prior single generate() (mirrors
+    # _do_generate). Control (reference) adapters are rejected at the API layer, so
+    # only style adapters (no ic_reference) ever arrive here.
+    ic_loras = [
+        (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
+    ]
+
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
         f"frames={[c.num_frames for c in clips]} seed={seed} "
         f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
-        f"audio_source={'yes' if audio_source else 'no'}"
+        f"audio_source={'yes' if audio_source else 'no'} "
+        f"ic_loras={len(ic_loras)}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -448,6 +459,7 @@ def _do_generate_chain(msg: dict) -> None:
         progress=_progress,
         source=source,
         audio_source=audio_source,
+        ic_loras=ic_loras,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

@@ -55,6 +55,17 @@ from services.low_vram import LowVramSettings, safe_memory_cleanup
 
 logger = logging.getLogger("ltx.runner")
 
+
+def resolve_seed(requested: int) -> int:
+    """Resolve a request seed to the concrete value actually used.
+
+    ``requested >= 0`` is used verbatim; a negative (``-1`` random) request draws
+    a fresh 31-bit seed. This is the SINGLE resolution point shared by the
+    backends and :class:`services.pipeline_manager.PipelineManager`, so the seed
+    logged at job start is byte-identical to the seed the backend runs with.
+    """
+    return requested if requested >= 0 else random.randint(0, 2**31 - 1)
+
 # S2: friendly labels for the coarse chain-progress stages the engine emits
 # (worker.py _progress -> chain_pipeline progress("stage1"|"tile"|"decode")).
 # ``index`` is a COUNT of completed units (segments / tiles), not a denoise step,
@@ -284,6 +295,7 @@ class LTXRunner:
         conditioning_image_paths: list[Path] | None = None,
         lora_paths: list[tuple[Path, float, str]] | None = None,
         reference_video_path: Path | None = None,
+        seed: int | None = None,
     ) -> GenerationOutcome:
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -295,6 +307,7 @@ class LTXRunner:
             conditioning_image_paths=conditioning_image_paths,
             lora_paths=lora_paths,
             reference_video_path=reference_video_path,
+            seed=seed,
         )
 
     def generate_chain(
@@ -306,6 +319,8 @@ class LTXRunner:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
+        lora_paths: list[tuple[Path, float, str]] | None = None,
+        seed: int | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4).
 
@@ -317,6 +332,11 @@ class LTXRunner:
         frozen as the chain's audio latent and its original waveform is muxed onto
         the output; the terminal ``chain.a2v`` sub-dict pins the contract. Mutually
         exclusive with ``source_tail_path`` (enforced at the API layer).
+
+        ``lora_paths`` (style/character IC-LoRA, additive): resolved
+        ``(path, strength, preprocess)`` triples applied uniformly across the whole
+        chain (every clip / stage). Empty/None -> no loras (byte-identical default);
+        the mock ignores them, the real backend forwards them to the worker.
         """
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -329,6 +349,8 @@ class LTXRunner:
             source_tail_path=source_tail_path,
             source_context_frames=source_context_frames,
             source_audio_path=source_audio_path,
+            lora_paths=lora_paths,
+            seed=seed,
         )
 
     # ----------------------------------------------------- backend selection
@@ -452,6 +474,7 @@ class _MockBackend:
         conditioning_image_paths: list[Path] | None = None,
         lora_paths: list[tuple[Path, float, str]] | None = None,
         reference_video_path: Path | None = None,
+        seed: int | None = None,
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
 
@@ -467,7 +490,7 @@ class _MockBackend:
         if not self._loaded:
             self.load()
 
-        seed = request.seed if request.seed >= 0 else random.randint(0, 2**31 - 1)
+        seed = int(seed) if seed is not None else resolve_seed(request.seed)
         mode = request.generation_mode
         conditioning_image_paths = conditioning_image_paths or []
 
@@ -527,10 +550,16 @@ class _MockBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
+        lora_paths: list[tuple[Path, float, str]] | None = None,
+        seed: int | None = None,
     ) -> GenerationOutcome:
         """Simulate a masked AV-latent chain: ONE synthetic mp4 of the full
         timeline length + junction metadata (from :mod:`chain_math`). GPU-free;
         exercises the app-side orchestrator/metadata without model weights.
+
+        ``lora_paths`` (style/character IC-LoRA, additive) is accepted and ignored
+        — the mock has no weights to patch; the real forward-time patch lives in
+        the engine worker (mirrors :meth:`generate`).
 
         V2V continuation (``source_tail_path`` / ``source_context_frames``): mirror
         the engine geometry via ``compute_chain_layout(source_context_px=...)`` —
@@ -543,7 +572,7 @@ class _MockBackend:
             self.load()
 
         chain = chain_request
-        seed = chain.seed if chain.seed >= 0 else random.randint(0, 2**31 - 1)
+        seed = int(seed) if seed is not None else resolve_seed(chain.seed)
         layout = chain_math.compute_chain_layout(
             [c.num_frames for c in chain.clips], chain.frame_rate,
             kv=chain.overlap_frames,
@@ -1098,6 +1127,7 @@ class _RealBackend:
         conditioning_image_paths: list[Path] | None = None,
         lora_paths: list[tuple[Path, float, str]] | None = None,
         reference_video_path: Path | None = None,
+        seed: int | None = None,
     ) -> GenerationOutcome:
         if not self.loaded:
             self.load()
@@ -1110,8 +1140,10 @@ class _RealBackend:
         output_path = output_dir / "output.mp4"
 
         # Resolve the seed IN THE PARENT so seed_used is deterministic regardless
-        # of the worker.
-        seed = request.seed if request.seed >= 0 else random.randint(0, 2**31 - 1)
+        # of the worker. When the caller (pipeline_manager) already resolved it —
+        # so it could log the real value at job start — that value is used as-is;
+        # a direct caller that passes nothing resolves here exactly as before.
+        seed = int(seed) if seed is not None else resolve_seed(request.seed)
 
         # Image conditioning: multi-keyframe I2V. frame_idx is already snapped to
         # a multiple of 8 and clamped in the validator (api/models.py). cond_paths
@@ -1237,6 +1269,8 @@ class _RealBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
+        lora_paths: list[tuple[Path, float, str]] | None = None,
+        seed: int | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain via the worker's ``generate_chain`` op.
 
@@ -1249,16 +1283,23 @@ class _RealBackend:
         block ({path, context_frames}) is added to the worker payload (the app has
         already cut the fps-correct tail). The worker's ``done.chain`` then carries
         the ``v2v`` sub-dict, returned as-is in ``chain_metadata``.
+
+        Style/character IC-LoRA: when ``lora_paths`` is non-empty an additive
+        ``loras`` block ([{path, strength}, ...]) is added to the worker payload
+        (mirrors the single-generate ``loras_payload``). The strengths apply
+        uniformly to every clip/stage. Absent for a no-lora chain (payload
+        byte-identical to before); the worker clears any stale LoRA regardless.
         """
         if not self.loaded:
             self.load()
 
         chain = chain_request
         clip0_conditioning_paths = clip0_conditioning_paths or []
+        lora_paths = lora_paths or []
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "output.mp4"
 
-        seed = chain.seed if chain.seed >= 0 else random.randint(0, 2**31 - 1)
+        seed = int(seed) if seed is not None else resolve_seed(chain.seed)
 
         # Only clip 0 may carry conditioning images (validator enforces this).
         clip0_images: list[dict] = []
@@ -1304,6 +1345,15 @@ class _RealBackend:
         # engine truncates to the timeline). Absent for a normal / V2V chain.
         if source_audio_path is not None:
             payload["audio_source"] = {"path": str(source_audio_path)}
+        # Style/character IC-LoRA (additive): (path, strength) per adapter, applied
+        # uniformly across the chain. Only added when non-empty so a no-lora chain
+        # payload is byte-identical to before (the worker parses msg.get("loras",
+        # []) and clears stale LoRA either way). preprocess is dropped — control
+        # adapters are rejected at the API layer, so every entry here is style.
+        if lora_paths:
+            payload["loras"] = [
+                {"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths
+            ]
 
         with self._lock:
             try:

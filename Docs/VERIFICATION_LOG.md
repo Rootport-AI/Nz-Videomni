@@ -1952,4 +1952,92 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 
 1. **最終目視／実機ゲート（ユーザー）＝✅OK（2026-07-06）**: ①上部に下書き欄が1つ・全タブで表示 ②Style LoRA タブでサムネイル選択→上部欄にタグが載る ③連結で LoRA タグ除去の警告 ④ネガティブ欄グレーアウト、をユーザーが実機確認し「問題ない」と受容。
 2. **push／main マージ＝✅済**（ユーザー承認 2026-07-06）。
-3. **スコープ外／研究課題**: 連結タブで LoRA を実際に効かせるバックエンド改修（`GenerateChainRequest.loras` 加算＋worker 配線）＝将来の研究課題。
+3. **スコープ外／研究課題**: 連結タブで LoRA を実際に効かせるバックエンド改修（`GenerateChainRequest.loras` 加算＋worker 配線）＝将来の研究課題。**→ §32 で実施済み。**
+
+---
+
+## 32. ★A2V＋LoRA併用の解禁＝`GenerateChainRequest.loras` 追加＋stale LoRA持ち越し修正込み＝客観ゲート全PASS・独立レビュー must-fix/should-fix ゼロ・**目視ゲート✅クローズ＝ユーザー受容**（2026-07-11）
+
+> **正本＝本節。** NEXT_SESSION_HANDOFF.md 冒頭ブロックの引き継ぎ課題「A2V＋LoRA併用の解禁」（§31.4 の3で「将来の研究課題」としていたものが今回昇格）を実装した回。A2V（音声から動画を生成する機能）とスタイル／キャラクター LoRA（少量データで画風・キャラクターを追加学習した軽量アダプタ）を同時に使えるようにした。設計論点2点はユーザー決定済み（32.1）。**目視ゲート＝✅クローズ（32.5参照・原因究明の経緯＝トリガーワード欠落）。** ログ拡充・GUIバグ2件修正・JobStore CAS化は§33を参照。**コミット未実施（作業ツリーの変更のまま・push はユーザー判断待ち）。**
+
+本機: i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。（**32.1〜32.4は配線・スキーマ・GUI の客観ゲート。GPU 実生成によるLoRA効果の目視確認は32.5で実施＝✅クローズ。**）
+
+### 32.1 設計論点の決着（ユーザー決定）
+
+前回（§31.4 の3・NEXT_SESSION_HANDOFF.md）で未決だった2点を本セッションでユーザーが決定した:
+
+1. **LoRA 強度はチェーン全体で共通**。クリップ（連結される動画の1区間）ごとに強度を変える機能は v1 では見送り（`GenerateChainRequest.loras` はリクエスト全体で1本のリストのみ）。
+2. **reference 動画付き IC-LoRA（参照動画から輪郭線 canny・骨格 pose などを読み取って条件付けする「control系」アダプタ）はチェーン非対応**。チェーンは `reference_video_id` を持たない構造のため、control系アダプタが指定されたら API 側でジョブ予約前に **422**（新設エラーコード `LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）で拒否する。
+3. GUI は Generate タブ（単発生成・A2V の窓口）と Clip Chain タブ（クリップ連結）の**両方**で解禁する。
+
+### 32.2 実装（加算的変更5箇所＋GUI）
+
+既存の凍結 API 契約への加算的変更（省略時は従来と byte 同一）:
+
+- **`api/models.py`**: `GenerateChainRequest` に `loras: list[LoraSpec] = Field(default_factory=list)` を追加（`GenerateRequest.loras` と同じ型・同じバリデーション）。
+- **`api/generate_chain.py`**: ジョブ予約前に指定 LoRA 名をすべて解決（未知/欠落は404）し、control系アダプタが含まれていれば `lora_control_unsupported_in_chain()`（422）で拒否。`api/errors.py` に同エラーファクトリを新設。
+- **`services/pipeline_manager.py`**: `run_chain_job` 内で `lora_registry.resolve(...)` を呼び `lora_paths` を解決（単発 `run_generation` の既存箇所を踏襲）。
+- **`services/ltx_runner.py`**: `generate_chain`（`LTXRunner`／`_MockBackend`／`_RealBackend` 全て）に `lora_paths` 引数を追加。`_RealBackend` は非空のときのみ worker ペイロードへ `loras` ブロックを追加（空なら従来と byte 同一）。
+- **`engine/worker.py`**: `_do_generate_chain` で `msg.get("loras", [])` を明示的に解析し `ic_loras` として `run_chain` へ渡す（キー欠落時も空リストとして扱い、必ず解析を通す）。
+- **`engine/pipeline/chain_pipeline.py run_chain`（`engine/pipeline/fast_video_pipeline.py generate_chain` 経由）**: `ic_loras` 引数を追加し、**`ledger.transformer()` を呼び出す前に必ず `pipe._set_ic_job(list(ic_loras or []), None, 1.0)` を呼んで明示的にセット/クリア**する。**stale（前のジョブの LoRA 適用状態が次のジョブに残留すること）防止の修正を兼ねる**: 従来チェーン側はこの呼び出しが一切無く、直前の単発 `generate()` 由来の LoRA がそのままチェーンの denoise に持ち越される恐れがあった。今回、LoRA 無指定のチェーンでも空リストで明示的にクリアするようにしたことで、この persistence 問題を解消した。
+- **GUI（`gradio_ui/handlers.py`）**: A2V×LoRA の相互排他プリチェックを撤去。**reference 動画付き control アダプタ＋A2V の組み合わせのみ**、新文言 `a2v_control_lora_unsupported` で事前拒否する。単発 generate 経路の LoRA 合成ロジックを `_combine_generate_loras()` として関数化し、A2V 経路（`use_adapter=False` で呼ぶ）でも同じロジックを共用。Clip Chain タブは、これまでプロンプト内 `<lora:...>` トークンを除去して警告（`chain_lora_ignored`）していたのを撤去し、トークンを解決して `loras` として送出するように変更。
+- **`gradio_ui/i18n.py`**: EN／JA 両方を更新。`gen_a2v_conflict_lora`・`chain_lora_ignored` を削除、`gen_a2v_note` を新仕様に書き換え、`a2v_control_lora_unsupported`・`apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN` を新設。
+
+### 32.3 客観ゲート（PASS）
+
+- **pytest**: **500 passed / 1 skipped**（本セッション開始時点の基準 485+1 → +15・退行ゼロ。§31 時点の基準 422+1 からは、間に挟まる「2026-07-11 Gradio WebGUI 大規模改修」セッション分＝+63 を経て 485+1 に到達済み〔同セッションの詳細は VERIFICATION_LOG に節を持たず `NEXT_SESSION_HANDOFF.md` のみに記録〕。うち本セッションの新規分＝新規ファイル `tests/test_chain_lora.py` 13件＋既存 `tests/test_gradio_handlers.py` の更新・新規分）。
+- **新規 `tests/test_chain_lora.py`（13件）のカバレッジ**: (a) スキーマ＝`loras` 既定空・spec 受理・パス様の名前は拒否　(b) エンドポイント＝チェーンへの control アダプタは422／未知名は404／style アダプタは完走　(c) 配線＝mock backend の e2e でリクエストダンプに `loras` が載ること、実バックエンドでは worker ペイロードに `loras` ブロックが追加される（空なら追加されない）こと　(d) stale クリア＝`chain_pipeline.run_chain` が transformer ビルド前に `pipe._set_ic_job` を（このチェーンの loras か、クリア用の空リストで）呼ぶこと。**mock backend には実重みが無いため forward 時の実際の LoRA 効果そのものはこのテストの対象外**＝(d) は配線を GPU 無しで担保するのみで、実際の重み適用効果は §32.5 のユーザー立ち会いGPU確認に委ねる。
+- **`tests/test_gradio_handlers.py` 更新**: A2V＋LoRA トークン併用時にチェーンペイロードへ `loras` が載ること／未知トークンでゼロ API 呼び出しのまま中止すること／control アダプタ＋A2V の新拒否文言／Clip Chain 共有プロンプトの `<lora:...>` トークンが除去ではなく解決・送出されることを確認。
+
+### 32.4 独立レビュー（PASS・must-fix/should-fix ゼロ）
+
+- 独立レビューを実施。**must-fix（必須修正）・should-fix（推奨修正）はゼロ件**。
+- **nit（軽微な指摘）1件**: control系アダプタの名前をプロンプトに `<lora:...>` として手打ちした場合、音声または画像を1回アップロード消費したあとサーバー側の422（`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）で拒否される（拒否メッセージ自体は正しくローカライズされる）。**Style ギャラリーのサムネイルをクリックする通常の操作では発生しない**（クリック挿入は style のみを対象にした一覧から選ぶため）。既知の軽微事項として記録し、対応は見送り。
+
+### 32.5 目視ゲート＝✅クローズ（ユーザー受容・2026-07-11）
+
+客観ゲート（32.3・32.4）はすべて PASS していたが、ユーザーが GPU 実機で32.1〜32.4の4点（チェーン全体適用・stale 非残留・Clip Chain 適用・省略時回帰なし）を確認する過程で、当初「LoRA が効いていないのでは」という報告があった。原因を2段階で調査し、以下の経緯で解明・クローズした。
+
+1. **調査(a)＝ログ面の誤解**: コンソールにはそもそも LoRA 適用ログが出力されない仕様だった（後述§33.1でログ拡充を実施）。物証として `logs/ltx_worker.log` の「N Linear(s) attached」行と `outputs/<job_id>/metadata.json` を確認したところ、**全ジョブで LoRA は当初から正常に適用されていた**ことが判明した。
+2. **調査(b)＝本質的な原因＝トリガーワード（LoRA を発動させるための合言葉となる特殊な単語）の欠落**: 使用していた Pixar_Toon LoRA は「P1x4r pixar style character」等のトリガー語をプロンプトに含めないと画風が変化しない設計であり、過去にスパイクテストで成功していた事例は全てトリガー語入りだった。報告のあった生成ではトリガー語が入っていなかったため、LoRA 自体は適用されていても画風変化が視覚的に確認できなかった。
+3. 併せて、alpha／rank 正規化（Pixar_Toon は alpha16／dim32＝×0.5 のため実効強度が指定値の半分になる仕様）と seed の影響も、体感的な効き方のばらつき要因として確認した。
+4. **トリガー語を入れた実機テストでユーザーが成功を確認**し、32.1〜32.4 の4点の確認事項も含めて A2V＋LoRA 併用を受容。**目視ゲート✅クローズ**。
+
+なお、この調査を機にオーナーから追加要望が3件出ており（ログ拡充・GUI バグ2件の修正）、これらは§33で別途実装・クローズ済み。git commit／push は本節・§33とも時点では未実施（作業ツリーの変更のまま・ユーザー判断待ち）。
+
+## 33. ★ジョブ起動ログ拡充＋GUIバグ2件修正（ref_video 無効化・queued 詰まり解消）＋JobStore CAS化＝客観ゲート全PASS・独立レビュー2巡（must-fix残存なし）（2026-07-11）
+
+> **正本＝本節。** §32.5 の目視ゲート調査（トリガーワード欠落の解明）を機に、オーナーから追加要望が出た3件を実装した回: 「ジョブ開始時のログに実 seed／ベース GGUF／LoRA／プロンプトを出す」「adapter=None のまま参照動画をアップロードするとサイレント無視される」「queued で詰まると無言のままハングしサーバー再起動が必要になる」。バックエンド改修のため、計画→実装→独立レビュー→指摘への追修正→再検証、のフルサイクルを実施。**コミット未実施（作業ツリーの変更のまま・push はユーザー判断待ち）。**
+
+本機: 同上（i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`）。
+
+### 33.1 ジョブ開始ログの拡充（オーナー要望）
+
+- コンソール（`ltx.pipeline` ロガー）に、ジョブ開始時点で以下を出力するようにした。
+  - 実際に使われる seed（`-1` 指定＝ランダム決定の場合でも、解決後の実値を表示。**表示値＝使用値の一致を保証**）。
+  - ベースとなる transformer GGUF のファイル名。
+  - 適用 LoRA 名（要求 strength／実効 strength の両方を併記。LoRA 無しの場合は `loras=none` と明示）。
+  - プロンプト先頭200字（改行はエスケープして1行に収める）。
+- 目的＝§32.5 で判明した「LoRA 適用状況がログから読み取れず、効果の有無を切り分けにくい」問題への恒久対応。今後同種の問い合わせがあっても、ログのみで seed・LoRA 適用状況を即座に確認できるようにした。
+- pytest 件数の増分（503→の一部）はこの節の新規／更新テストを含む。
+
+### 33.2 GUIバグ2件の修正（計画→実装→独立レビュー→追修正→再検証まで完了）
+
+1. **adapter=None＋参照動画のサイレント無視**: LoRA アダプタ未選択（None）のまま参照動画をアップロードしても警告なく無視される不具合。`gradio_ui/ui.py` で参照動画（ref_video）欄を初期状態で非活性化し、adapter 選択の `change` イベントで interactive を連動トグルするように修正。None へ切り替えた際はアップロード済みの動画も自動クリアする。
+2. **queued 詰まりで無言ハング＆サーバー再起動が必須**: ジョブが queued 状態のまま進まなくなっても、GUI は何も表示せずユーザーはサーバー再起動以外に手段が無かった。以下3点で対応した。
+   - ポーリング表示に queued 状態を追加し、30秒を超えて解消しない場合は「Jobs タブからキャンセルしてください」と誘導する文言を表示（i18n 新設キー `msg_queued`／`msg_queued_stuck`、EN／JA）。
+   - `DELETE /jobs/{id}` が queued 状態のジョブに対しても即座に `cancelled` へ遷移させ、詰まりを解放できるようにした（従来は running 以降のみ対応）。
+   - `JobStore` に `_lock` 配下の CAS（compare-and-swap）ヘルパー（`start_job`／`cancel_if_queued`）を新設し、`run_job`／`run_chain_job` の queued→running 昇格とキャンセル操作を相互排他化。独立レビュー指摘 S1（昇格とキャンセルの間の TOCTOU＝競合状態）を解消。
+   - 実バックエンド使用時はジョブ実行を専用 daemon スレッドへ切り出し（mock バックエンドは従来通り BackgroundTasks のまま）。`Thread.start()` 失敗時はジョブを failed へ遷移させガードを解放（独立レビュー指摘 S2）。AnyIO のスレッドリミッタを200へ拡大。
+
+### 33.3 客観ゲート（PASS）
+
+- **pytest**: **511 passed / 1 skipped**（§32時点の基準 500+1 → +11・退行ゼロ）。
+
+### 33.4 独立レビュー（2巡・must-fix残存なし）
+
+- **1巡目**: should-fix（推奨修正）2件を指摘（S1＝queued 昇格とキャンセル操作の TOCTOU、S2＝`Thread.start()` 失敗時にジョブが queued のまま取り残される）。
+- **追修正**: 33.2 記載の CAS ヘルパー導入（S1対応）と `Thread.start()` 失敗時の failed フォールバック（S2対応）を実装。
+- **2巡目（再検証）**: must-fix／should-fix とも残存なし。クローズ。
+
+git commit／push は本節時点でも未実施（作業ツリーの変更のまま・ユーザー判断待ち）。次セッションの筆頭課題はコミット／プッシュ（オーナー判断）。

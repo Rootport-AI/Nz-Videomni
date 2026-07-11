@@ -128,6 +128,46 @@ class JobStore:
         with self._lock:
             return any(r.is_active for r in self._jobs.values())
 
+    # ------------------------------------------------- atomic state transitions
+    # DELETE /jobs/{id} (queued -> cancelled) and the worker's queued -> running
+    # promotion race each other from different threads. Both transitions go
+    # through these compare-and-set helpers under the SAME store lock, so exactly
+    # one side wins: a cancelled job can never be resurrected to running, and a
+    # started job can never be flipped to cancelled-in-place (it falls back to
+    # the best-effort cancel_requested path). The helpers take the record itself
+    # (not an id) so a worker can promote a record even in tests that construct
+    # one without registering it in the store.
+
+    def start_job(self, record: JobRecord) -> bool:
+        """Atomically promote ``queued`` -> ``running`` (sets ``started_at``).
+
+        Returns False — leaving the record untouched — if the job is no longer
+        queued (e.g. a concurrent DELETE already cancelled it) or a cancel was
+        requested while it waited. The caller must then finalize/skip the job.
+        """
+        with self._lock:
+            if record.status != JobStatus.queued or record.cancel_requested:
+                return False
+            record.status = JobStatus.running
+            record.started_at = now_iso()
+            return True
+
+    def cancel_if_queued(self, record: JobRecord) -> bool:
+        """Atomically cancel a still-queued job in place (terminal, guard freed).
+
+        Returns False — leaving the record untouched — if the job already left
+        the queued state (running/terminal); DELETE then falls back to the
+        best-effort ``cancel_requested`` flag for running jobs.
+        """
+        with self._lock:
+            if record.status != JobStatus.queued:
+                return False
+            record.cancel_requested = True
+            record.status = JobStatus.cancelled
+            record.progress = 1.0
+            record.completed_at = now_iso()
+            return True
+
     def get(self, job_id: str) -> JobRecord | None:
         with self._lock:
             return self._jobs.get(job_id)

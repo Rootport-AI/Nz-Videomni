@@ -118,6 +118,9 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_completed": "Completed: {job_id}",
         "msg_failed": "{status}: {error}",
         "msg_timeout": "Timed out.",
+        "msg_queued": "Queued — waiting for the worker… ({secs}s)",
+        "msg_queued_stuck": ("Still queued after {secs}s. If it stays stuck, cancel it "
+                             "from the Jobs tab and try again."),
         # --- generate: reference-video flow messages (S4) ---
         "msg_ref_video_required": "Please select a reference video for the control adapter.",
         "msg_ref_bad_extension": "Reference video type not allowed. Allowed: {exts}",
@@ -146,7 +149,6 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_UNAUTHORIZED": "Authentication failed. Check the API key.",
         "apierr_VALIDATION_ERROR": "The request was rejected by validation. See the details below.",
         # --- clip chain tab (S5) ---
-        "chain_lora_ignored": "Clip Chain does not support LoRA yet — the <lora:...> tag(s) were ignored.",
         "lbl_chain_preset": "Preset",
         "info_chain_preset": ("Automatically fills in the resolution, frame rate, and the "
                               "recommended (comfortable-limit) frame count for each clip."),
@@ -271,11 +273,13 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_frames_adjusted": "Frames adjusted to {frames} to fit the {dur:.2f}s audio.",
         # --- generate: audio-to-video accordion (single generation) ---
         "gen_a2v_accordion": "Audio-to-Video (e.g. lip-sync)",
-        "gen_a2v_note": ("When audio is attached, Reference-video control (IC-LoRA) and style "
-                         "LoRAs (<lora:...> tags) cannot be used together with it. Keyframe "
-                         "images can still be combined with it."),
-        "gen_a2v_conflict_lora": ("Audio-to-Video cannot be combined with IC-LoRA / style LoRAs. "
-                                  "Remove the audio, or clear the LoRA selection, and retry."),
+        "gen_a2v_note": ("When audio is attached, style LoRAs (<lora:...> tags) and keyframe "
+                         "images can still be combined with it. Only Reference-video control "
+                         "(IC-LoRA, the adapter above) cannot be used together with audio."),
+        "a2v_control_lora_unsupported": ("Audio-to-Video cannot be combined with the reference-video "
+                                         "control adapter (IC-LoRA). Clear the adapter selection, or "
+                                         "remove the audio. Style LoRAs (<lora:...> tags) and keyframe "
+                                         "images can still be used with audio."),
         # --- V2V/A2V + join API error-envelope hints ---
         "apierr_SOURCE_VIDEO_NOT_FOUND": ("The source video was not found on the server. "
                                           "Re-upload the source video."),
@@ -285,6 +289,9 @@ LABELS: dict[str, dict[str, str]] = {
                                           "Re-upload the audio file."),
         "apierr_SOURCE_AUDIO_TOO_SHORT": ("The audio is shorter than the video timeline. Use longer "
                                           "audio or fewer frames."),
+        "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": ("A control adapter (canny/pose/upscaler) cannot be "
+                                                     "used on a clip chain. Use a style/character LoRA "
+                                                     "instead, or remove the control LoRA."),
         "apierr_JOB_NOT_JOINABLE": ("This job is not a V2V continuation, so there is nothing to "
                                     "join it to."),
         "apierr_JOIN_FAILED": "Joining failed on the server. Check the server logs.",
@@ -490,6 +497,9 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_completed": "完了: {job_id}",
         "msg_failed": "{status}: {error}",
         "msg_timeout": "タイムアウト。",
+        "msg_queued": "順番待ち — ワーカーの空きを待っています…（{secs}秒）",
+        "msg_queued_stuck": ("{secs}秒たっても順番待ちのままです。"
+                             "止まったままの場合は、Jobsタブからキャンセルして再試行してください。"),
         # --- generate: reference-video flow messages (S4) ---
         "msg_ref_video_required": "制御アダプタ用の参照動画を選択してください。",
         "msg_ref_bad_extension": "参照動画の形式が許可されていません。許可形式: {exts}",
@@ -514,7 +524,6 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_UNAUTHORIZED": "認証に失敗しました。APIキーを確認してください。",
         "apierr_VALIDATION_ERROR": "リクエストが検証で拒否されました。詳細は以下を参照してください。",
         # --- clip chain tab (S5) ---
-        "chain_lora_ignored": "クリップ連結ではLoRAは未対応のため、<lora:...>タグを無視しました。",
         "lbl_chain_preset": "プリセット",
         "info_chain_preset": "解像度・フレームレート・各クリップの推奨フレーム数（快適上限）を自動入力します。",
         "lbl_overlap": "つなぎ目のフレーム数 (クリップ間のオーバーラップ・1〜8)",
@@ -624,15 +633,19 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_frames_adjusted": "音声{dur:.2f}秒に合わせてFramesを{frames}に調整しました",
         # --- generate: audio-to-video accordion (single generation) ---
         "gen_a2v_accordion": "音声から動画生成（リップシンクなど）",
-        "gen_a2v_note": ("音声を添付した場合、参照動画による制御 (IC-LoRA) とスタイルLoRA "
-                         "(<lora:...> 記法) は併用できません。キーフレーム画像は併用できます。"),
-        "gen_a2v_conflict_lora": ("Audio-to-VideoはIC-LoRA/スタイルLoRAと併用できません。"
-                                  "音声を外すか、LoRA指定を解除してください。"),
+        "gen_a2v_note": ("音声を添付した場合でも、スタイルLoRA (<lora:...> 記法) とキーフレーム画像は "
+                         "併用できます。参照動画による制御 (IC-LoRA・上のアダプタ) だけは音声と "
+                         "併用できません。"),
+        "a2v_control_lora_unsupported": ("Audio-to-Videoは参照動画による制御アダプタ (IC-LoRA) とは"
+                                         "併用できません。アダプタの選択を解除するか、音声を外して"
+                                         "ください。スタイルLoRA (<lora:...> 記法) とキーフレーム画像は"
+                                         "音声と併用できます。"),
         # --- V2V/A2V + join API error-envelope hints ---
         "apierr_SOURCE_VIDEO_NOT_FOUND": "元動画がサーバー上に見つかりません。元動画を再アップロードしてください。",
         "apierr_SOURCE_VIDEO_TOO_SHORT": "元動画のフレーム数が参照フレーム数に足りません。参照フレーム数を減らすか、長い動画を使ってください。",
         "apierr_SOURCE_AUDIO_NOT_FOUND": "元音声がサーバー上に見つかりません。音声を再アップロードしてください。",
         "apierr_SOURCE_AUDIO_TOO_SHORT": "音声が動画の長さに足りません。長い音声を使うか、フレーム数を減らしてください。",
+        "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": "制御アダプタ（canny/pose/アップスケーラ）はクリップ連結では使えません。スタイル/キャラクターLoRAを使うか、制御LoRAを外してください。",
         "apierr_JOB_NOT_JOINABLE": "このジョブはV2V継続ではないため、結合する相手がありません。",
         "apierr_JOIN_FAILED": "サーバー側で結合に失敗しました。サーバーのログを確認してください。",
         "apierr_JOINED_NOT_READY": "結合版はまだ作成されていません。先に「結合版を作成」を実行してください。",

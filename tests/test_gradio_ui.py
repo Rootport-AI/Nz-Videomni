@@ -383,3 +383,25 @@ def test_language_switch_does_not_crash_with_button_mid_generation_relabel():
     btn_update = updates[idx]
     assert btn_update["value"] == LABELS["ja"]["btn_generate"]
     assert "interactive" not in btn_update
+
+
+def test_adapter_change_toggles_reference_video_interactivity():
+    # Change A: the reference-video input tracks the adapter selection. "None"
+    # (ADAPTER_NONE) / an empty selection greys it out AND clears any uploaded
+    # file; a real (control) adapter re-enables it without touching its value.
+    from gradio_ui.adapters import ADAPTER_NONE
+
+    demo = _demo()
+    fn = demo.on_adapter_change
+
+    off = fn(ADAPTER_NONE)
+    assert off["interactive"] is False
+    assert off["value"] is None  # stale upload cleared on de-select
+
+    off_empty = fn("")
+    assert off_empty["interactive"] is False
+    assert off_empty["value"] is None
+
+    on = fn("union-control")  # any real (non-None) adapter name
+    assert on["interactive"] is True
+    assert "value" not in on  # must NOT clobber an uploaded reference video

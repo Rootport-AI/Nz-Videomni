@@ -333,6 +333,17 @@ class GenerateChainRequest(BaseModel):
     # :class:`SourceAudioSpec`. Mutually exclusive with ``source_video``.
     source_audio: SourceAudioSpec | None = None
 
+    # Style/character IC-LoRA (ADDITIVE/optional — a request omitting this field is
+    # byte-identical to before). Same ``LoraSpec`` type/validation as
+    # ``GenerateRequest.loras``; the strengths apply uniformly to EVERY clip and
+    # every stage of the chain (no per-clip strengths in v1 — owner decision).
+    # A2V (source_audio) and V2V continuation (source_video) may be combined with
+    # loras (no exclusivity guard). Reference-video CONTROL adapters are out of
+    # chain scope: a chain carries no ``reference_video_id``, so a control adapter
+    # is rejected up front at the endpoint (api/generate_chain.py) rather than here
+    # (the kind needs the registry, like the single-generate check).
+    loras: list[LoraSpec] = Field(default_factory=list)
+
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
         if self.width % 64 != 0:

@@ -355,15 +355,23 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ref_video = reg(gr.File(
                                 label=L("lbl_ref_video"), type="filepath",
                                 file_count="single", file_types=["video"],
+                                # The default adapter is ADAPTER_NONE ("None"), so
+                                # the reference-video input starts greyed out; it is
+                                # re-enabled by on_adapter_change when a real
+                                # (control) adapter is selected.
+                                interactive=False,
                             ), "lbl_ref_video")
                             reg(gr.Markdown(L("note_ref128"),
                                             elem_classes=["note"]), "note_ref128", "value")
 
                         # accordion: Audio-to-Video (案A). Attaching an audio
                         # file routes generate() down the A2V path (src_audio,
-                        # the handler's last positional input). Mutually
-                        # exclusive with IC-LoRA / <lora:> tokens (the handler
-                        # prechecks the conflict).
+                        # the handler's last positional input). Style LoRAs
+                        # (<lora:> tokens) and keyframe images CAN combine with
+                        # audio (wired into the chain payload's ``loras``); only
+                        # the reference-video CONTROL adapter above cannot (a
+                        # chain has no reference_video_id — the handler prechecks
+                        # that one conflict).
                         with gr.Accordion(L("gen_a2v_accordion"), open=False) as gen_a2v_accordion:
                             reg(gen_a2v_accordion, "gen_a2v_accordion", "label")
                             reg(gr.Markdown(L("gen_a2v_note"), elem_classes=["note"]),
@@ -787,6 +795,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         for kf_enabled, kf_image, kf_frame, kf_strength in kf_slots:
             kf_inputs.extend([kf_enabled, kf_image, kf_frame, kf_strength])
 
+        # A control adapter needs a reference video; "None" (ADAPTER_NONE) and any
+        # empty/unset selection do not. Grey out (and CLEAR any uploaded file on)
+        # the reference-video input unless a real adapter is chosen, so the field's
+        # enabled state matches what the handler actually consumes (handlers.py
+        # use_adapter check). Clearing the value on de-select avoids a stale video
+        # lingering behind a greyed-out control.
+        def on_adapter_change(adapter_value):
+            if not adapter_value or adapter_value == ADAPTER_NONE:
+                return gr.update(interactive=False, value=None)
+            return gr.update(interactive=True)
+
         generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=generate_btn,
         ).then(
@@ -801,6 +820,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             make_generate_btn_restore("btn_generate"),
             inputs=lang_state, outputs=generate_btn,
         )
+
+        # Enable/disable (and clear) the reference-video input to track the adapter
+        # selection (control adapter -> enabled; None/unset -> greyed out + cleared).
+        adapter.change(on_adapter_change, inputs=adapter, outputs=ref_video)
 
         # Feature 1: attaching a .wav to the A2V audio field auto-adjusts
         # Frames to fit its measured duration (non-wav / unreadable / cleared
@@ -1150,4 +1173,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     demo.load_style_gallery = load_style_gallery  # type: ignore[attr-defined]
     demo.on_style_reload = on_style_reload  # type: ignore[attr-defined]
     demo.on_style_select = on_style_select  # type: ignore[attr-defined]
+    # Adapter -> reference-video enable/disable closure: lets a test drive the
+    # greying logic directly (mirrors the on_page_load / on_style_select exposure).
+    demo.on_adapter_change = on_adapter_change  # type: ignore[attr-defined]
     return demo

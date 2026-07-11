@@ -950,6 +950,7 @@ class LTXFastVideoPipeline:
         progress=None,
         source=None,
         audio_source=None,
+        ic_loras: list[tuple[str, float]] | None = None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -962,6 +963,12 @@ class LTXFastVideoPipeline:
         the uploaded audio is frozen over the whole timeline and the video is
         driven off it (mutually exclusive with ``source``). Returns metadata
         incl. segment/tile junction pixel-frame indices.
+
+        ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength)``
+        adapters applied via the forward-time weight patch across the WHOLE chain
+        (every stage-1 segment + stage-2 tile). run_chain sets them explicitly
+        before building the transformer (empty list clears any stale LoRA left by
+        a prior single ``generate()`` on the resident pipeline).
         """
         from engine.pipeline.chain_pipeline import run_chain
 
@@ -979,6 +986,7 @@ class LTXFastVideoPipeline:
             progress=progress,
             source=source,
             audio_source=audio_source,
+            ic_loras=ic_loras,
         )
 
     @torch.inference_mode()

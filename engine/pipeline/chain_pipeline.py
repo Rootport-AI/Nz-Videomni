@@ -414,6 +414,7 @@ def run_chain(
     progress: ProgressFn | None = None,
     source: "SourceSpec | None" = None,
     audio_source: "AudioSourceSpec | None" = None,
+    ic_loras: list[tuple[str, float]] | None = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -425,6 +426,14 @@ def run_chain(
     ``audio_source`` (audio-to-video, additive to the ``audio_source=None`` path,
     which stays byte-identical) freezes an uploaded audio latent over the whole
     timeline and drives the video off it; mutually exclusive with ``source``.
+
+    ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength)`` adapters
+    applied via the forward-time weight patch across the whole chain (the single
+    transformer is reused for every stage-1 segment + stage-2 tile, so the LoRA
+    effects the entire timeline). Set EXPLICITLY before the transformer is built
+    below — an empty list clears any stale ``_ic_loras`` left by a prior single
+    ``generate()`` on the resident pipeline, so ``ic_loras=None/[]`` is a genuine
+    "no LoRA" (byte-identical to before) rather than a leak of the last job's.
     """
     assert not (source is not None and audio_source is not None), (
         "run_chain: source (V2V) and audio_source (A2V) are mutually exclusive"
@@ -542,6 +551,15 @@ def run_chain(
         del audio_encoder, enc, src_audio, wf
         cleanup_memory()
         a_seg_windows = audio_segment_windows(layout)
+
+    # ── IC-LoRA state MUST be set before the transformer is built/fetched ──────
+    # The forward-time weight patch reads pipe._ic_loras via the provider wired at
+    # transformer build; set it here (explicitly, empty list = clear) so THIS
+    # chain's style adapters — and ONLY this chain's — apply. Clearing on the empty
+    # path is the stale-detach that keeps a prior single generate()'s LoRA from
+    # bleeding into the chain denoise (mirrors generate()'s _set_ic_job call). No
+    # reference/attention for chains (control adapters rejected at the API layer).
+    pipe._set_ic_job(list(ic_loras or []), None, 1.0)
 
     # ── Build video_encoder + transformer ONCE (reuse for stage1 + stage2). ───
     video_encoder = ledger.video_encoder()

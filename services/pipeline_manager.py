@@ -29,7 +29,7 @@ from services.audio_upload_store import AudioUploadStore
 from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
-from services.ltx_runner import LTXRunner
+from services.ltx_runner import LTXRunner, resolve_seed
 from services.model_registry import CATEGORIES, DEFAULT_NAME
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
@@ -50,6 +50,57 @@ def _is_oom(exc: BaseException) -> bool:
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
     return "outofmemory" in name or "out of memory" in msg or "cuda oom" in msg
+
+
+# Console job-info logging (owner requirement): the operator watches the uvicorn
+# console and needs to see, per job, the real seed, the base weight file, the
+# LoRAs, and the prompt. These helpers build that one INFO line safely.
+_PROMPT_LOG_MAX = 200
+
+
+def _prompt_for_log(prompt: str, limit: int = _PROMPT_LOG_MAX) -> str:
+    """One-line, length-capped rendering of a prompt for the console.
+
+    The prompt is raw USER input, so newlines/tabs are escaped (log-injection
+    safe — a crafted prompt can't forge extra log lines) and the text is capped
+    at ``limit`` chars with an ellipsis so a very long prompt can't flood the
+    console. ASCII-only punctuation is used so the line stays encodable on a
+    legacy (cp932) console even when the prompt body itself is non-ASCII.
+    """
+    text = (
+        (prompt or "")
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    if len(text) > limit:
+        text = text[:limit] + "..."
+    return text
+
+
+def _loras_for_log(specs, resolved) -> str:
+    """``name(strength=R[, effective=E])`` per adapter, or ``none``.
+
+    ``specs`` are the request ``LoraSpec``s (friendly NAME + the REQUESTED
+    strength); ``resolved`` are the registry ``(path, effective_strength,
+    preprocess)`` triples in the SAME order (see ``LoraRegistry.resolve`` —
+    ``effective`` folds in the alpha/rank convolution). ``effective`` is only
+    shown when it actually differs from the requested strength, so the common
+    scale==1.0 case stays terse.
+    """
+    if not specs:
+        return "none"
+    parts: list[str] = []
+    for i, spec in enumerate(specs):
+        eff = resolved[i][1] if i < len(resolved) else None
+        if eff is not None and abs(float(eff) - float(spec.strength)) > 1e-6:
+            parts.append(
+                f"{spec.name}(strength={spec.strength:g}, effective={float(eff):g})"
+            )
+        else:
+            parts.append(f"{spec.name}(strength={spec.strength:g})")
+    return ", ".join(parts)
 
 
 class PipelineManager:
@@ -108,6 +159,23 @@ class PipelineManager:
         return self.low_vram.status_block(
             low_vram_disabled_required=self.config.limits.low_vram_disabled_required
         )
+
+    def _base_model_name(self) -> str:
+        """Filename of the transformer weight (GGUF) that would actually load.
+
+        A model-management swap records the selected transformer path in
+        ``_active_selection_paths``; otherwise the config default applies. Only
+        the basename is surfaced (no path leak) — e.g.
+        ``LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`` — so the operator can tell from
+        the console which base weight a job ran on. Falls back to the configured
+        ``checkpoint_name`` when no GGUF path is set.
+        """
+        path = self._active_selection_paths.get("transformer") or (
+            self.config.model.gguf_transformer_path
+        )
+        if path:
+            return Path(path).name
+        return self.config.model.checkpoint_name or "unknown"
 
     # ------------------------------------------------------------ lifecycle
 
@@ -195,12 +263,28 @@ class PipelineManager:
 
     def run_job(self, job: JobRecord) -> None:
         """Run one generation job to terminal state. Intended for a worker thread."""
-        job.status = JobStatus.running
-        job.started_at = now_iso()
+        # Race guard: promote queued -> running as a compare-and-set under the
+        # store lock, mutually exclusive with DELETE's queued -> cancelled
+        # transition (JobStore.cancel_if_queued). Exactly one side wins — a job
+        # DELETE cancelled while queued can never be resurrected here, and once
+        # this promotion lands DELETE falls back to best-effort cancel_requested.
+        if not self.job_store.start_job(job):
+            # Lost to a concurrent cancel (or a cancel_requested flag set while
+            # still queued): finalize as cancelled if DELETE hasn't already.
+            self.job_store.cancel_if_queued(job)
+            self.state = self.STATE_READY
+            logger.info("Job %s cancelled before dispatch", job.job_id)
+            return
+
         job.progress = 0.05
         started = time.time()
         output_dir = self.config.output_dir / job.job_id
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Resolve the seed HERE (single source of truth) so the console shows the
+        # value actually used even for a -1 (random) request; the same value is
+        # handed to the runner below so the log and the render never disagree.
+        seed = resolve_seed(job.request.seed)
 
         logger.info(
             "Job %s start mode=%s %dx%d frames=%d steps=%d fps=%g seed=%d",
@@ -211,7 +295,7 @@ class PipelineManager:
             job.request.num_frames,
             job.request.num_inference_steps,
             job.request.frame_rate,
-            job.request.seed,
+            seed,
         )
 
         try:
@@ -242,6 +326,19 @@ class PipelineManager:
                 else None
             )
 
+            # Console job-info line (owner requirement): base weight file + LoRAs
+            # (name/requested/effective strength) + prompt, so LoRA application is
+            # visible from the uvicorn console (the worker's per-adapter attach
+            # line only reaches logs/ltx_worker.log). Additive — the start line
+            # above keeps its exact format.
+            logger.info(
+                'Job %s base=%s loras=%s prompt="%s"',
+                job.job_id,
+                self._base_model_name(),
+                _loras_for_log(job.request.loras, lora_paths),
+                _prompt_for_log(job.request.prompt),
+            )
+
             def on_progress(step, total, progress, stage=None, clip=None, clip_count=None):
                 # clip/clip_count are part of the ProgressCallback contract but
                 # only chain stage-1 events ever pass them — a single generate
@@ -258,6 +355,7 @@ class PipelineManager:
                 conditioning_image_paths=cond_paths,
                 lora_paths=lora_paths,
                 reference_video_path=reference_video_path,
+                seed=seed,
             )
 
             elapsed = time.time() - started
@@ -386,19 +484,30 @@ class PipelineManager:
         chain = job.chain_request
         assert chain is not None, "run_chain_job requires job.chain_request"
 
-        job.status = JobStatus.running
-        job.started_at = now_iso()
+        # Same lock-guarded queued -> running compare-and-set as run_job: DELETE's
+        # queued -> cancelled transition and this promotion are mutually exclusive,
+        # so a cancelled chain can never be resurrected into a running one.
+        if not self.job_store.start_job(job):
+            self.job_store.cancel_if_queued(job)
+            self.state = self.STATE_READY
+            logger.info("Chain job %s cancelled before dispatch", job.job_id)
+            return
+
         job.progress = 0.02
         started = time.time()
         output_dir = self.config.output_dir / job.job_id
         output_dir.mkdir(parents=True, exist_ok=True)
         n = len(chain.clips)
 
+        # Single seed resolution point (see run_job) — logged and handed to the
+        # runner so the console value matches the render even for a -1 request.
+        seed = resolve_seed(chain.seed)
+
         logger.info(
             "Chain job %s start clips=%d %dx%d steps=%d fps=%g overlap=%d/%.2f seed=%d",
             job.job_id, n, chain.width, chain.height,
             chain.num_inference_steps, chain.frame_rate,
-            chain.overlap_frames, chain.overlap_strength, chain.seed,
+            chain.overlap_frames, chain.overlap_strength, seed,
         )
 
         try:
@@ -421,6 +530,27 @@ class PipelineManager:
                 self.upload_store.path_for(ci.image_id)
                 for ci in chain.clips[0].conditioning_images
             ]
+
+            # Style/character IC-LoRA: resolve adapter names -> (path, strength,
+            # preprocess) via the registry (mirrors run_job:235-238). The endpoint
+            # already validated existence + rejected control adapters, so this
+            # re-resolves the same style objects for the runner hop. Empty list
+            # when the chain requested no loras (byte-identical default path).
+            lora_paths = [
+                self.lora_registry.resolve(spec.name, spec.strength)
+                for spec in chain.loras
+            ]
+
+            # Console job-info line (owner requirement): base weight + LoRAs +
+            # base prompt (clip overrides propagate from it). Mirrors run_job so
+            # LoRA application is visible from the uvicorn console.
+            logger.info(
+                'Chain job %s base=%s loras=%s prompt="%s"',
+                job.job_id,
+                self._base_model_name(),
+                _loras_for_log(chain.loras, lora_paths),
+                _prompt_for_log(chain.prompt),
+            )
 
             # V2V continuation: cut the fps-correct source tail the engine needs
             # (last context_frames frames at the request fps; resampled if the
@@ -474,6 +604,8 @@ class PipelineManager:
                 source_tail_path=source_tail_path,
                 source_context_frames=source_context_frames,
                 source_audio_path=source_audio_path,
+                lora_paths=lora_paths,
+                seed=seed,
             )
 
             elapsed = time.time() - started

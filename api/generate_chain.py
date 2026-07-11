@@ -12,7 +12,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from api.context import AppContext
 from api.deps import get_context, require_auth
-from api.errors import APIError, job_busy, source_audio_not_found, source_video_not_found
+from api.errors import (
+    APIError,
+    job_busy,
+    lora_control_unsupported_in_chain,
+    source_audio_not_found,
+    source_video_not_found,
+)
+from api.generate import spawn_job_thread
 from api.models import GenerateChainRequest, GenerateChainResponse
 
 router = APIRouter()
@@ -60,12 +67,34 @@ def generate_chain(
             request.overlap_frames,
         )
 
+    # Style/character IC-LoRA (ADDITIVE): resolve every requested adapter (404
+    # unknown/missing) up front — same discipline as api/generate.py — and reject
+    # CONTROL adapters. A chain carries no reference_video_id, so a reference-
+    # driven control adapter (union-control / pixel-spatial-upscaler) cannot be
+    # satisfied here; only STYLE/character LoRAs (applied uniformly across the
+    # chain) are accepted. The kind needs the registry, so this lives at the
+    # endpoint (not the schema), mirroring the single-generate reference check.
+    control_names: list[str] = []
+    for spec in request.loras:
+        context.lora_registry.resolve(spec.name, spec.strength)  # 404 if unknown/missing
+        if context.lora_registry.info(spec.name).kind == "control":
+            control_names.append(spec.name)
+    if control_names:
+        raise lora_control_unsupported_in_chain(control_names)
+
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_chain_if_idle(request)
     if job is None:
         raise job_busy()
 
-    background_tasks.add_task(context.pipeline_manager.run_chain_job, job)
+    # Mock backend -> BackgroundTasks (preserves TestClient sync semantics the
+    # suite relies on); real backend -> dedicated daemon thread so a long chain
+    # job doesn't starve the polling GET /jobs / self-POSTs (see api/generate.py,
+    # including the start-failure guard that fails the job instead of orphaning it).
+    if (context.config.model.backend or "auto").strip().lower() == "mock":
+        background_tasks.add_task(context.pipeline_manager.run_chain_job, job)
+    else:
+        spawn_job_thread(context.pipeline_manager.run_chain_job, job)
 
     return GenerateChainResponse(
         job_id=job.job_id,

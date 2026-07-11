@@ -192,6 +192,23 @@ def lora_requires_reference(names: list[str]) -> APIError:
     )
 
 
+def lora_control_unsupported_in_chain(names: list[str]) -> APIError:
+    """Chain LoRA: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler
+    — it derives its conditioning from a reference video) was requested on a
+    chain. A chain carries no ``reference_video_id`` (reference-video conditioning
+    is out of chain scope in v1), so only STYLE/character adapters are accepted.
+    Mirrors :func:`lora_requires_reference` (422) — the request is well-formed but
+    the adapter kind is unsupported on this route."""
+    return APIError(
+        "LORA_CONTROL_UNSUPPORTED_IN_CHAIN",
+        "control-type IC-LoRA is not supported on a chain request "
+        "(reference-video conditioning is out of chain scope; use a "
+        "style/character LoRA)",
+        422,
+        detail=f"control loras rejected on chain: {sorted(names)}",
+    )
+
+
 def lora_thumbnail_not_found(name: str) -> APIError:
     """S1: GET /loras/{name}/thumbnail for an adapter that has no sibling
     ``<stem>.png`` (or an unknown adapter name). Mirrors :func:`lora_not_found`

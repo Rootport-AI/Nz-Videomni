@@ -17,6 +17,7 @@ import re
 import socket
 from pathlib import Path
 
+import anyio
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -168,6 +169,20 @@ def build_app(args: argparse.Namespace) -> FastAPI:
         )
 
     register_exception_handlers(app)
+
+    @app.on_event("startup")
+    async def _raise_thread_limiter() -> None:
+        # Starlette runs sync endpoints (and BackgroundTasks) on anyio's default
+        # worker-thread pool, whose default cap is 40. With the real backend now
+        # off on its own daemon threads, this pool only serves the many small
+        # sync handlers (polling GET /jobs, self-issued POSTs, video fetches);
+        # raise the ceiling to 200 so a burst of those never queues behind a
+        # saturated pool and appears to hang.
+        try:
+            anyio.to_thread.current_default_thread_limiter().total_tokens = 200
+        except Exception:  # pragma: no cover - never fatal to startup
+            logger.warning("Could not raise the anyio thread limiter", exc_info=True)
+
     app.include_router(api_router, prefix="/api/v1")
     ui_mounted = mount_gradio(app, runtime)
     register_root_route(app, ui_mounted=ui_mounted)

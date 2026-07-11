@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from fastapi import APIRouter, BackgroundTasks, Depends
 
 from api.context import AppContext
@@ -12,9 +14,26 @@ from api.errors import (
     lora_requires_reference,
     reference_resolution_invalid,
 )
-from api.models import GenerateRequest, GenerateResponse
+from api.models import GenerateRequest, GenerateResponse, JobStatus
+from services.job_store import JobRecord, now_iso
 
 router = APIRouter()
+
+
+def spawn_job_thread(target, job: JobRecord) -> None:
+    """Start the real-backend worker thread for ``job`` (shared with
+    /generate/chain). If the thread cannot be started, the job must NOT stay
+    queued: an is_active orphan would 409-block every later request until a
+    server restart. Fail it (terminal, guard released) and re-raise so the
+    request surfaces the error as a 500."""
+    worker = threading.Thread(target=target, args=(job,), daemon=True)
+    try:
+        worker.start()
+    except Exception:
+        job.status = JobStatus.failed
+        job.error = "Failed to start the generation worker thread"
+        job.completed_at = now_iso()
+        raise
 
 
 @router.post(
@@ -67,9 +86,17 @@ def generate(
     if job is None:
         raise job_busy()
 
-    # Run the generation off the request path (Starlette runs sync tasks in a
-    # threadpool, so ffmpeg / inference won't block the event loop).
-    background_tasks.add_task(context.pipeline_manager.run_job, job)
+    # Run the generation off the request path. The mock backend keeps using
+    # BackgroundTasks (Starlette's threadpool) so the TestClient's synchronous
+    # after-response semantics — which the whole test suite relies on — are
+    # preserved. The real backend instead gets its OWN daemon thread: a real job
+    # can run for many minutes, and parking it in the shared anyio worker-thread
+    # pool would let long jobs starve the polling GET /jobs and self-issued POSTs
+    # that the UI depends on. Dedicated threads sidestep that entirely.
+    if (context.config.model.backend or "auto").strip().lower() == "mock":
+        background_tasks.add_task(context.pipeline_manager.run_job, job)
+    else:
+        spawn_job_thread(context.pipeline_manager.run_job, job)
 
     return GenerateResponse(
         job_id=job.job_id,

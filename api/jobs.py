@@ -82,7 +82,17 @@ def delete_job(job_id: str, context: AppContext = Depends(get_context)) -> dict:
         raise job_not_found(job_id)
 
     if record.is_active:
-        # Best-effort cancel: inference cannot be safely interrupted in Phase 1.
+        # Not started yet: cancel in place so the single-job guard frees up
+        # immediately (a queued job stuck behind the worker would otherwise
+        # block the next /generate until the server restarts). The transition
+        # is a compare-and-set under the store lock, mutually exclusive with
+        # the worker's queued -> running promotion (JobStore.start_job) — a
+        # cancelled job can never be resurrected into a running one.
+        if context.job_store.cancel_if_queued(record):
+            return {"job_id": job_id, "cancelled": True, "status": record.status.value}
+        # Running (or won the race to running): inference cannot be safely
+        # interrupted mid-flight (Phase 1), so this stays best-effort — the
+        # worker checks cancel_requested where it can.
         record.cancel_requested = True
         return {"job_id": job_id, "cancel_requested": True, "status": record.status.value}
 

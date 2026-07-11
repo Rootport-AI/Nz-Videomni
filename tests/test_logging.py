@@ -11,6 +11,7 @@ These pin the observable logging contract the overhaul introduces:
 from __future__ import annotations
 
 import logging
+import re
 
 import pytest
 
@@ -58,6 +59,71 @@ def test_job_lifecycle_logs(client, caplog):
     assert "steps=8" in start[0] and "seed=42" in start[0] and "frames=17" in start[0]
     assert done, msgs
     assert "done in" in done[0]
+
+
+# --------------------------- job-info console line (seed/base/loras/prompt)
+
+
+def test_job_info_line_and_resolved_seed(client, caplog):
+    """A single T2V job emits an additive info line carrying the base weight
+    file, ``loras=none`` (no adapters), and the prompt; and the start line shows
+    the RESOLVED seed (a concrete value) even though the request asked for -1."""
+    payload = {
+        "prompt": "A neon koi swimming through rain",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "seed": -1,  # random -> the console must show the value actually used
+        "conditioning_images": [],
+    }
+    with caplog.at_level(logging.INFO, logger="ltx.pipeline"):
+        r = client.post("/api/v1/generate", json=payload)
+        assert r.status_code == 202
+
+    msgs = [rec.getMessage() for rec in caplog.records if rec.name == "ltx.pipeline"]
+    start = [m for m in msgs if "start mode=" in m]
+    info = [m for m in msgs if "base=" in m and "prompt=" in m]
+    assert start, msgs
+    assert info, msgs
+    # The random request resolved to a concrete non-negative seed (not -1).
+    m = re.search(r"seed=(-?\d+)", start[0])
+    assert m and int(m.group(1)) >= 0, start[0]
+    assert "loras=none" in info[0], info[0]
+    assert ".gguf" in info[0] or "base=" in info[0], info[0]
+    assert "A neon koi swimming through rain" in info[0], info[0]
+
+
+def test_prompt_for_log_escapes_newlines_and_truncates():
+    """Raw user prompts are one-lined (newlines/tabs escaped -> no log injection)
+    and capped in length so a huge prompt can't flood the console."""
+    from services.pipeline_manager import _prompt_for_log
+
+    out = _prompt_for_log("line1\nline2\tcol\r\nINFO forged")
+    assert "\n" not in out and "\r" not in out and "\t" not in out
+    assert "\\n" in out and "\\t" in out
+
+    long = _prompt_for_log("x" * 500, limit=200)
+    assert len(long) == 203 and long.endswith("...")  # 200 chars + ellipsis
+
+
+def test_loras_for_log_names_and_effective_strength():
+    """The info line lists adapter NAMES with requested strength, adding the
+    effective (alpha-scaled) strength only when it differs; empty -> ``none``."""
+    import types
+
+    from services.pipeline_manager import _loras_for_log
+
+    assert _loras_for_log([], []) == "none"
+
+    spec = types.SimpleNamespace(name="Pixar_Toon", strength=0.45)
+    # scale 1.0 (effective == requested) -> terse, no "effective="
+    terse = _loras_for_log([spec], [("/p/a.safetensors", 0.45, "none")])
+    assert terse == "Pixar_Toon(strength=0.45)"
+    # alpha/rank convolution changed the strength -> both are shown
+    scaled = _loras_for_log([spec], [("/p/a.safetensors", 0.30, "none")])
+    assert "Pixar_Toon(strength=0.45, effective=0.3)" == scaled
 
 
 # --------------------------------- S2: chain stage-progress (real-backend unit)

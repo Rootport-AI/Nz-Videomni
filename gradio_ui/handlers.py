@@ -166,6 +166,12 @@ def _format_running_progress(job: dict, lang: str) -> str:
     return text
 
 
+# A queued job that has waited this many seconds without starting switches its
+# progress message from a plain "waiting" tick to a "stuck — cancel from Jobs"
+# hint. The poll never auto-aborts; this only changes the wording.
+QUEUED_WARN_SECONDS = 30
+
+
 # --------------------------------------------------------------------------- #
 # Shared 1s poll loop (factored out of the generate flow so /generate and
 # /generate/chain reuse the SAME progress/complete/fail handling). Yields
@@ -180,6 +186,7 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
         iterations = max(1, int(float(timeout_s) / float(interval)))
     except (TypeError, ValueError, ZeroDivisionError):
         interval, iterations = 1.0, 3600
+    queued_elapsed = 0.0
     for _ in range(iterations):
         time.sleep(interval)
         try:
@@ -189,7 +196,17 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
             continue
 
         status = job["status"]
-        if status == "running":
+        if status == "queued":
+            # The single-job guard means a job can sit queued behind another job
+            # (or wait for the worker to pick it up). Surface the wait instead of
+            # a silent frozen progress box: below the threshold, a plain "waiting"
+            # tick; past it, a "stuck" hint pointing at the Jobs-tab cancel. The
+            # poll itself keeps going — we never auto-abort a queued job.
+            queued_elapsed += interval
+            secs = int(queued_elapsed)
+            key = "msg_queued_stuck" if queued_elapsed >= QUEUED_WARN_SECONDS else "msg_queued"
+            yield L(key, lang).format(secs=secs), job_id, None
+        elif status == "running":
             yield _format_running_progress(job, lang), job_id, None
         elif status == "completed":
             yield L("msg_completing", lang), job_id, None
@@ -299,6 +316,25 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
     return cleaned, _merge_loras(collected), None
 
 
+def _combine_generate_loras(use_adapter, adapter, adapter_strength, prompt_loras):
+    """Merge the Generate tab's two LoRA sources into the single ``loras`` payload
+    list: the reference-video CONTROL adapter from the dropdown (S4) first, then
+    the prompt-embedded ``<lora:...>`` style/character adapters (S2) in prompt
+    order, deduped last-wins by name (:func:`_merge_loras`). Returns ``[]`` when
+    neither is present, so the caller adds the ``loras`` key ONLY when non-empty
+    and the no-lora path stays byte-identical.
+
+    Shared by ``POST /generate`` and the A2V ``POST /generate/chain`` path so both
+    build ``loras`` identically. A2V passes ``use_adapter=False`` (a chain carries
+    no ``reference_video_id`` and rejects control adapters up front), so it merges
+    only the prompt style/character tokens."""
+    combined: list[dict] = []
+    if use_adapter:
+        combined.append({"name": adapter, "strength": float(adapter_strength)})
+    combined.extend(prompt_loras)
+    return _merge_loras(combined)
+
+
 # --------------------------------------------------------------------------- #
 # Generate flow, factored out for unit testing (mock transport). Yields
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
@@ -354,16 +390,18 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
         # 0b) A2V (案A): a src_audio upload routes this SAME handler to
         # POST /generate/chain as a single-clip chain carrying a frozen
-        # source_audio latent, instead of POST /generate. It is mutually
-        # exclusive with any IC-LoRA adapter selection and with prompt-embedded
-        # <lora:...> tokens (GenerateChainRequest carries no ``loras`` field at
-        # all, so there is nowhere for either to go) -- rejected with zero API
-        # calls before anything else runs.
+        # source_audio latent, instead of POST /generate. A2V+LoRA is now allowed:
+        # style/character IC-LoRAs (prompt <lora:...> tokens) are wired into the
+        # chain payload's ``loras`` below and applied uniformly across the clip.
+        # The ONLY unsupported combination is a reference-video CONTROL adapter
+        # (the dropdown above = canny/pose/upscaler): a chain carries no
+        # reference_video_id, so the server rejects it (422
+        # LORA_CONTROL_UNSUPPORTED_IN_CHAIN). Reject that one case up front with
+        # zero API calls -- a clearer message than deferring to the server's 422.
         use_audio = bool(src_audio)
         if use_audio:
-            audio_conflict = bool(adapter) and adapter != ADAPTER_NONE
-            if audio_conflict or _LORA_TOKEN_RE.search(prompt or ""):
-                yield _precheck_reject(L("gen_a2v_conflict_lora", lang)), "", None
+            if bool(adapter) and adapter != ADAPTER_NONE:
+                yield _precheck_reject(L("a2v_control_lora_unsupported", lang)), "", None
                 return
 
             # Length precheck (wav only): the server rejects audio that
@@ -525,6 +563,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 "clips": [clip_entry],
                 "source_audio": {"audio_id": audio_id},
             }
+            # A2V+LoRA (ADDITIVE): wire the prompt <lora:...> style/character
+            # adapters into the chain payload's ``loras`` (same builder as the
+            # single /generate path; use_adapter=False because a control adapter
+            # was already rejected above). The key is added ONLY when non-empty,
+            # so a token-free A2V request stays byte-identical to before.
+            a2v_loras = _combine_generate_loras(False, None, None, prompt_loras)
+            if a2v_loras:
+                chain_payload["loras"] = a2v_loras
             try:
                 resp = api.generate_chain(chain_payload)
             except Exception as exc:
@@ -566,11 +612,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # keys) only when an adapter is selected — so the request stays
         # byte-identical to the pre-S2/S4 payload on the no-adapter/no-token path
         # (no keys) AND on the adapter-only path (single-entry list, same order).
-        combined_loras: list[dict] = []
-        if use_adapter:
-            combined_loras.append({"name": adapter, "strength": float(adapter_strength)})
-        combined_loras.extend(prompt_loras)
-        merged_loras = _merge_loras(combined_loras)
+        merged_loras = _combine_generate_loras(
+            use_adapter, adapter, adapter_strength, prompt_loras)
         if merged_loras:
             payload["loras"] = merged_loras
         if use_adapter:
@@ -816,6 +859,33 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield _precheck_reject(err), "", None
             return
 
+        # --- prompt-embedded <lora:...> tokens from the SHARED prompt (chain
+        # LoRA, ADDITIVE). Clip chaining now wires style/character IC-LoRAs into
+        # GenerateChainRequest.loras; the strengths apply UNIFORMLY across the
+        # whole chain (every clip, every stage — no per-clip strengths in v1).
+        # Resolved + stripped here BEFORE any upload, so an unknown token name
+        # aborts with zero upload/generate calls (mirrors the Generate tab's 1c
+        # block). Only the SHARED prompt is scanned — per-clip prompts are left as
+        # authored (out of scope). GET /loras runs ONLY when a token is present,
+        # so a token-free prompt makes no extra call and the payload is
+        # byte-identical. A reference-video CONTROL token (canny/pose/upscaler) is
+        # left to the server's 422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN (rendered via
+        # format_api_error) — the chain has no reference video to drive it. ---
+        send_prompt = prompt
+        chain_loras: list[dict] = []
+        if _LORA_TOKEN_RE.search(prompt or ""):
+            try:
+                lora_list = api.list_loras()
+            except Exception as exc:
+                yield _precheck_reject(L("lora_msg_list_failed", lang).format(err=exc)), "", None
+                return
+            known = [e.get("name") for e in (lora_list or [])
+                     if isinstance(e, dict) and e.get("name")]
+            send_prompt, chain_loras, lora_err = parse_prompt_loras(prompt, known, lang)
+            if lora_err is not None:
+                yield _precheck_reject(lora_err), "", None
+                return
+
         # --- clip-0 start image (only slot 1 can carry one) -> upload ---
         conditioning: list[dict] = []
         clip0_image = enabled[0][2]
@@ -851,19 +921,6 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
 
-        # --- strip prompt-embedded <lora:...> tokens from the SHARED prompt ---
-        # Clip chaining has no LoRA wiring yet (a research task); the shared
-        # prompt is the one place the draft box's <lora:...> tokens could leak
-        # in, so remove them (never applied) and warn. Only the shared prompt is
-        # cleaned — per-clip prompts are out of scope (left as authored). The
-        # sub/collapse runs ONLY when a token is actually present, so a
-        # token-free prompt is forwarded byte-identical (payload unchanged).
-        send_prompt = prompt
-        if _LORA_TOKEN_RE.search(prompt or ""):
-            stripped = _LORA_TOKEN_RE.sub("", prompt)
-            send_prompt = re.sub(r"\s+", " ", stripped).strip()
-            gr.Warning(L("chain_lora_ignored", lang))
-
         # --- build payload (clips in slot order; per-clip prompt omitted when
         # blank; conditioning attached to clip 0 only) ---
         crop_output = None
@@ -894,6 +951,11 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "overlap_strength": float(overlap_strength),
             "clips": clips_payload,
         }
+        # ADDITIVE chain LoRA: the SHARED prompt's <lora:...> style/character
+        # adapters, applied uniformly across the chain. Key added ONLY when
+        # non-empty, so a token-free chain stays byte-identical to before.
+        if chain_loras:
+            payload["loras"] = chain_loras
         # ADDITIVE source keys: only present in their mode, so a mode="none"
         # request stays byte-identical to the pre-V2V payload (frozen-API
         # discipline mirrored client-side).

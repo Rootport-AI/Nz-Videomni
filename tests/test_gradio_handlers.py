@@ -903,10 +903,12 @@ def test_generate_bad_num_frames_precheck_zero_calls():
 # --------------------------------------------------------------------------- #
 # A2V (Generate tab, 案A): a src_audio upload routes make_generate_handler's
 # ``generate`` to POST /generate/chain as a single-clip chain instead of
-# POST /generate. Mutually exclusive with an IC-LoRA adapter selection and
-# with prompt-embedded <lora:...> tokens.
+# POST /generate. Style/character <lora:...> tokens ARE allowed (wired into the
+# chain payload's ``loras``); only the reference-video CONTROL adapter is not.
 # --------------------------------------------------------------------------- #
 def test_generate_a2v_conflict_with_adapter_zero_calls(tmp_path):
+    """A2V + a reference-video CONTROL adapter (canny/pose/upscaler) is rejected
+    up front (a chain has no reference_video_id) with zero API calls."""
     aud = tmp_path / "a.wav"
     aud.write_bytes(b"RIFF....WAVEfmt ")
     calls = {"n": 0}
@@ -925,27 +927,81 @@ def test_generate_a2v_conflict_with_adapter_zero_calls(tmp_path):
     assert calls["n"] == 0  # no upload_audio, no generate_chain
     assert len(out) == 1
     assert out[0][1] == "" and out[0][2] is None
+    # rejection uses the dedicated control-LoRA message (not a generic conflict)
+    from gradio_ui import LABELS
+    assert LABELS["en"]["a2v_control_lora_unsupported"] in out[0][0]
 
 
-def test_generate_a2v_conflict_with_prompt_lora_zero_calls(tmp_path):
+def test_generate_a2v_with_style_lora_token_wires_chain_loras(tmp_path):
+    """A2V + a prompt <lora:...> STYLE token: the token is resolved against
+    GET /loras, stripped from the prompt, and sent in the chain payload's
+    ``loras`` (uniform strength across the clip)."""
     aud = tmp_path / "a.wav"
-    aud.write_bytes(b"RIFF....WAVEfmt ")
-    calls = {"n": 0}
+    aud.write_bytes(b"RIFF....WAVEfmt ")  # unreadable wav -> length precheck skipped
+    captured = {}
+    uploads = {"audio": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
+        if request.url.path.endswith("/loras") and request.method == "GET":
+            return httpx.Response(200, json={"loras": [
+                {"name": "neon-city", "kind": "style", "has_thumbnail": False,
+                 "exists": True, "source": "scan"},
+            ]})
+        if request.url.path.endswith("/upload/audio"):
+            uploads["audio"] += 1
+            return httpx.Response(200, json={"audio_id": "aud-lora"})
+        assert str(request.url) == "http://test/api/v1/generate/chain"
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-lora"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer <lora:neon-city:0.7> performing", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud),
+    )
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:  # job started -> stop before the poll loop's sleeps
+            gen.close()
+            break
+    assert uploads["audio"] == 1
+    assert captured["loras"] == [{"name": "neon-city", "strength": 0.7}]
+    assert captured["prompt"] == "a singer performing"  # token stripped
+    assert captured["source_audio"] == {"audio_id": "aud-lora"}
+    assert captured["clips"] == [{"num_frames": 49}]
+    assert outs[-1][1] == "chain-a2v-lora"
+
+
+def test_generate_a2v_unknown_style_token_aborts_zero_calls(tmp_path):
+    """A2V + an UNKNOWN <lora:...> token aborts with zero upload/generate calls
+    (same precheck discipline as the single /generate path)."""
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    posts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/loras") and request.method == "GET":
+            return httpx.Response(200, json={"loras": [
+                {"name": "neon-city", "kind": "style", "has_thumbnail": False,
+                 "exists": True, "source": "scan"},
+            ]})
+        if request.method == "POST":
+            posts["n"] += 1
         return httpx.Response(200, json={"job_id": "x"})
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "hero <lora:foo:1.0> walking", "", *_kf_args(),
+        "hero <lora:does-not-exist:1.0> walking", "", *_kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud),
     ))
-    assert calls["n"] == 0  # no GET /loras lookup, no upload_audio, no generate_chain
-    assert len(out) == 1
-    assert out[0][1] == "" and out[0][2] is None
+    assert posts["n"] == 0  # no upload_audio, no generate_chain
+    assert out[-1][1] == "" and out[-1][2] is None
 
 
 def test_generate_a2v_audio_only_uses_generate_chain(tmp_path):
@@ -1489,40 +1545,59 @@ def test_chain_geometry_degenerate_short_clips_via_helper():
 
 
 # --------------------------------------------------------------------------- #
-# Prompt unification: the SHARED (draft) prompt feeds the chain flow. Clip
-# chaining has no LoRA wiring, so any <lora:...> token in the shared prompt is
-# stripped (never applied) with a gr.Warning; a token-free prompt is forwarded
+# Chain LoRA (A2V+LoRA解禁): the SHARED (draft) prompt feeds the chain flow. Clip
+# chaining now wires style/character <lora:...> tokens into the chain payload's
+# ``loras`` (uniform strength across the chain); a token-free prompt is forwarded
 # byte-identical, and per-clip prompts are left untouched (out of scope).
 # --------------------------------------------------------------------------- #
-def test_chain_strips_shared_prompt_loras_and_warns(monkeypatch):
-    from gradio_ui import handlers as handlers_mod
-
-    toasts: list[str] = []
-    monkeypatch.setattr(
-        handlers_mod.gr, "Warning",
-        lambda message, *args, **kwargs: toasts.append(message),
-    )
-
+def test_chain_shared_prompt_loras_wired_and_stripped():
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        # No GET /loras lookup: chain strips by regex, it does not resolve names.
-        assert not request.url.path.endswith("/loras")
+        if request.url.path.endswith("/loras") and request.method == "GET":
+            return httpx.Response(200, json={"loras": [
+                {"name": "neon-city", "kind": "style", "has_thumbnail": False,
+                 "exists": True, "source": "scan"},
+            ]})
+        assert str(request.url) == "http://test/api/v1/generate/chain"
         import json
         captured.update(json.loads(request.content))
         return httpx.Response(202, json={"job_id": "chain-lora"})
 
     api = _make_client(handler)
     chain = make_chain_handler(api)
-    gen = chain(*_chain_args(prompt="a city <lora:whatever:0.7> at dusk", clips=[
+    gen = chain(*_chain_args(prompt="a city <lora:neon-city:0.7> at dusk", clips=[
         {"enabled": True, "frames": 121},
         {"enabled": True, "frames": 121},
     ]))
     _run_chain_until_started(gen)
-    # token removed + whitespace collapsed; never applied as a lora.
+    # token removed + whitespace collapsed; wired into loras (uniform strength).
     assert captured["prompt"] == "a city at dusk"
-    assert "loras" not in captured
-    assert toasts and "lora" in toasts[0].lower()
+    assert captured["loras"] == [{"name": "neon-city", "strength": 0.7}]
+
+
+def test_chain_unknown_shared_prompt_lora_aborts_zero_calls():
+    posts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/loras") and request.method == "GET":
+            return httpx.Response(200, json={"loras": [
+                {"name": "neon-city", "kind": "style", "has_thumbnail": False,
+                 "exists": True, "source": "scan"},
+            ]})
+        if request.method == "POST":
+            posts["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(prompt="a city <lora:missing:0.7> at dusk", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    )
+    assert posts["n"] == 0  # unknown token -> no upload, no generate/chain
+    assert out[-1][1] == "" and out[-1][2] is None
 
 
 def test_chain_token_free_shared_prompt_unchanged_no_warning(monkeypatch):
@@ -1575,7 +1650,7 @@ def test_chain_per_clip_prompt_lora_is_preserved():
 def test_prompt_unification_i18n_keys_present_both_langs():
     from gradio_ui import LABELS
 
-    for k in ("chain_lora_ignored", "info_negative"):
+    for k in ("info_negative",):
         assert LABELS["en"].get(k), f"missing EN: {k}"
         assert LABELS["ja"].get(k), f"missing JA: {k}"
 
@@ -1775,6 +1850,51 @@ def test_poll_respects_custom_interval(monkeypatch):
                                               interval=0.25, timeout_s=10))
     assert slept and slept[0] == 0.25       # custom interval used
     assert outs[-1][1] == "j1"              # returned after completion
+
+
+def test_poll_queued_emits_waiting_then_stuck(monkeypatch):
+    # B-1: a queued job surfaces a "waiting" tick; once it stays queued past
+    # QUEUED_WARN_SECONDS the wording flips to the "stuck — cancel from Jobs"
+    # hint. The poll never aborts on its own — it keeps going until completion.
+    from gradio_ui import handlers
+    from gradio_ui.i18n import L
+
+    monkeypatch.setattr(handlers.time, "sleep", lambda s: None)
+    monkeypatch.setattr(handlers, "QUEUED_WARN_SECONDS", 3)
+
+    # queued x5 (interval=1s -> elapsed 1..5) then completed.
+    seq = iter(["queued", "queued", "queued", "queued", "queued", "completed"])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        try:
+            status = next(seq)
+        except StopIteration:
+            status = "completed"  # trailing video-fetch request
+        return httpx.Response(200, json={"status": status, "progress": 0.0})
+
+    api = _make_client(handler)
+    outs = list(handlers._poll_job_until_done(api, "jq", "en",
+                                              interval=1.0, timeout_s=60))
+    texts = [o[0] for o in outs]
+
+    # Below threshold (elapsed 1, 2): plain waiting message with the second count.
+    assert texts[0] == L("msg_queued", "en").format(secs=1)
+    assert texts[1] == L("msg_queued", "en").format(secs=2)
+    # At/after threshold (elapsed 3, 4, 5): stuck message.
+    assert texts[2] == L("msg_queued_stuck", "en").format(secs=3)
+    assert texts[4] == L("msg_queued_stuck", "en").format(secs=5)
+    # Still reaches completion afterwards (never auto-aborted).
+    assert outs[-1][1] == "jq"
+    assert L("msg_completed", "en").format(job_id="jq") in texts[-1]
+
+
+def test_queued_i18n_keys_present_both_langs():
+    # B-1: both new queued keys exist (and are non-empty) in EN and JA.
+    from gradio_ui import LABELS
+
+    for k in ("msg_queued", "msg_queued_stuck"):
+        assert LABELS["en"].get(k), f"missing EN: {k}"
+        assert LABELS["ja"].get(k), f"missing JA: {k}"
 
 
 def test_generate_runtime_lang_localizes_messages():

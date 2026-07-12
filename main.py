@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import socket
+import warnings
 from pathlib import Path
 
 import anyio
@@ -95,13 +96,47 @@ class JobPollingAccessFilter(logging.Filter):
             return True  # fail-open: never let log filtering break logging
 
 
+class GradioApiInternalAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for Gradio's internal API traffic.
+
+    The mounted Gradio UI (/ui) drives its own SSE stream, queue join/data and
+    component uploads through ``/ui/gradio_api/...`` — a steady stream of access
+    lines that carries no operational value for this project (the meaningful
+    traffic is ``/api/v1/*`` plus the ``/ui`` page loads). This filter drops the
+    ``/ui/gradio_api/`` records and nothing else:
+
+    * ``/api/v1/*`` (the real REST API) always shows,
+    * ``/ui`` and ``/ui/`` page/config loads still show — only the
+      ``/ui/gradio_api/`` sub-tree is muted.
+
+    Same defensive contract as :class:`JobPollingAccessFilter`: uvicorn's access
+    LogRecord carries ``record.args == (client_addr, method, full_path,
+    http_version, status_code)``; any unexpected shape fails open (the record is
+    kept) so log filtering can never swallow a genuine access line.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            args = record.args
+            if not isinstance(args, tuple) or len(args) != 5:
+                return True
+            _client, _method, path, _http_version, _status = args
+            if not isinstance(path, str):
+                return True
+            return "/ui/gradio_api/" not in path
+        except Exception:
+            return True  # fail-open: never let log filtering break logging
+
+
 def build_uvicorn_log_config() -> dict:
-    """uvicorn's default logging dictConfig + the job-polling access filter.
+    """uvicorn's default logging dictConfig + the access-log filters.
 
     Deep-copied so the module-level ``uvicorn.config.LOGGING_CONFIG`` template
     is never mutated. Everything else (formatters, levels, handlers) stays
     byte-identical to uvicorn's defaults; only the ``access`` handler gains the
-    :class:`JobPollingAccessFilter`.
+    :class:`JobPollingAccessFilter` (mutes the job-status polling flood) and the
+    :class:`GradioApiInternalAccessFilter` (mutes the ``/ui/gradio_api/`` SSE /
+    queue traffic).
     """
     log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
     filters = log_config.setdefault("filters", {})
@@ -109,12 +144,42 @@ def build_uvicorn_log_config() -> dict:
     # class object (not a dotted path) keeps this immune to __main__ vs main
     # module-name ambiguity.
     filters["job_polling_access"] = {"()": JobPollingAccessFilter}
+    filters["gradio_api_internal_access"] = {"()": GradioApiInternalAccessFilter}
     access_handler = log_config.get("handlers", {}).get("access")
     if isinstance(access_handler, dict):
         handler_filters = access_handler.setdefault("filters", [])
-        if "job_polling_access" not in handler_filters:
-            handler_filters.append("job_polling_access")
+        for _name in ("job_polling_access", "gradio_api_internal_access"):
+            if _name not in handler_filters:
+                handler_filters.append(_name)
     return log_config
+
+
+def suppress_starlette_422_deprecation() -> None:
+    """Mute Starlette's ``HTTP_422_UNPROCESSABLE_ENTITY`` deprecation warning.
+
+    Gradio 6.19's queue-join route (``gradio/routes.py`` ~L1402) still reads
+    ``starlette.status.HTTP_422_UNPROCESSABLE_ENTITY`` when building its
+    status-code map, and Starlette emits a :class:`StarletteDeprecationWarning`
+    ("'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use ...") on every such
+    access — a console warning the owner cannot act on (it is inside Gradio, not
+    this project's code). Suppress *only* that one warning: the filter is scoped
+    by both the exact message regex and the Starlette warning category, so no
+    other DeprecationWarning is affected. Falls back to a message-only filter if
+    the category import ever changes upstream.
+    """
+    try:
+        from starlette.exceptions import StarletteDeprecationWarning
+
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*HTTP_422_UNPROCESSABLE_ENTITY.*deprecated.*",
+            category=StarletteDeprecationWarning,
+        )
+    except Exception:  # pragma: no cover - never fatal to startup
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*HTTP_422_UNPROCESSABLE_ENTITY.*deprecated.*",
+        )
 
 
 def build_app(args: argparse.Namespace) -> FastAPI:
@@ -305,6 +370,11 @@ def main() -> None:
         logger.warning("--listen enabled: server is reachable on your LAN (no internet exposure intended).")
         logger.warning("UI: http://%s:%d/ui", local_ip(), runtime.port)
     logger.info("Starting server on %s:%d  (UI: http://127.0.0.1:%d/ui)", runtime.host, runtime.port, runtime.port)
+
+    # Quiet the console: mute Gradio's per-request Starlette 422 deprecation
+    # warning right before the server begins serving (harmless when the Gradio
+    # UI is disabled — nothing ever triggers the warning then).
+    suppress_starlette_422_deprecation()
 
     uvicorn.run(
         app,

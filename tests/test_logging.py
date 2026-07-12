@@ -233,13 +233,20 @@ def test_job_polling_access_filter_fails_open(args):
 def test_build_uvicorn_log_config_attaches_filter_without_mutating_default():
     import uvicorn
 
-    from main import JobPollingAccessFilter, build_uvicorn_log_config
+    from main import (
+        GradioApiInternalAccessFilter,
+        JobPollingAccessFilter,
+        build_uvicorn_log_config,
+    )
 
     before = uvicorn.config.LOGGING_CONFIG.get("handlers", {}).get("access", {}).get("filters")
     cfg = build_uvicorn_log_config()
-    # The returned config wires the filter into the access handler...
-    assert cfg["handlers"]["access"]["filters"] == ["job_polling_access"]
+    # The returned config wires both access-log filters into the access handler...
+    assert cfg["handlers"]["access"]["filters"] == [
+        "job_polling_access", "gradio_api_internal_access"]
     assert cfg["filters"]["job_polling_access"]["()"] is JobPollingAccessFilter
+    assert (cfg["filters"]["gradio_api_internal_access"]["()"]
+            is GradioApiInternalAccessFilter)
     # ...and uvicorn's module-level default template is untouched.
     after = uvicorn.config.LOGGING_CONFIG.get("handlers", {}).get("access", {}).get("filters")
     assert before == after

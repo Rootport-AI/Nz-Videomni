@@ -325,9 +325,10 @@ def _combine_generate_loras(use_adapter, adapter, adapter_strength, prompt_loras
     and the no-lora path stays byte-identical.
 
     Shared by ``POST /generate`` and the A2V ``POST /generate/chain`` path so both
-    build ``loras`` identically. A2V passes ``use_adapter=False`` (a chain carries
-    no ``reference_video_id`` and rejects control adapters up front), so it merges
-    only the prompt style/character tokens."""
+    build ``loras`` identically. A2V passes the same ``use_adapter``/``adapter``/
+    ``adapter_strength`` as the single-shot path (a 1-clip chain also accepts a
+    control adapter + ``reference_video_id``), so both the control adapter and
+    the prompt style/character tokens are merged the same way on either path."""
     combined: list[dict] = []
     if use_adapter:
         combined.append({"name": adapter, "strength": float(adapter_strength)})
@@ -390,20 +391,16 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
         # 0b) A2V (案A): a src_audio upload routes this SAME handler to
         # POST /generate/chain as a single-clip chain carrying a frozen
-        # source_audio latent, instead of POST /generate. A2V+LoRA is now allowed:
-        # style/character IC-LoRAs (prompt <lora:...> tokens) are wired into the
-        # chain payload's ``loras`` below and applied uniformly across the clip.
-        # The ONLY unsupported combination is a reference-video CONTROL adapter
-        # (the dropdown above = canny/pose/upscaler): a chain carries no
-        # reference_video_id, so the server rejects it (422
-        # LORA_CONTROL_UNSUPPORTED_IN_CHAIN). Reject that one case up front with
-        # zero API calls -- a clearer message than deferring to the server's 422.
+        # source_audio latent, instead of POST /generate. A2V+LoRA is allowed:
+        # style/character IC-LoRAs (prompt <lora:...> tokens) AND a
+        # reference-video CONTROL adapter (the dropdown above =
+        # canny/pose/upscaler) are both wired into the chain payload below
+        # (``loras`` + ``reference_video_id`` / S3 strength keys) and applied
+        # to the clip. The server allows a control adapter on a chain only
+        # when it carries exactly one clip -- true here since this handler
+        # always sends a single ChainClip.
         use_audio = bool(src_audio)
         if use_audio:
-            if bool(adapter) and adapter != ADAPTER_NONE:
-                yield _precheck_reject(L("a2v_control_lora_unsupported", lang)), "", None
-                return
-
             # Length precheck (wav only): the server rejects audio that
             # VAE-encodes to fewer audio-latent frames than the assembled
             # timeline (422 SOURCE_AUDIO_TOO_SHORT — the single most likely A2V
@@ -564,13 +561,24 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 "source_audio": {"audio_id": audio_id},
             }
             # A2V+LoRA (ADDITIVE): wire the prompt <lora:...> style/character
-            # adapters into the chain payload's ``loras`` (same builder as the
-            # single /generate path; use_adapter=False because a control adapter
-            # was already rejected above). The key is added ONLY when non-empty,
-            # so a token-free A2V request stays byte-identical to before.
-            a2v_loras = _combine_generate_loras(False, None, None, prompt_loras)
+            # adapters AND the reference-video CONTROL adapter (S4 dropdown)
+            # into the chain payload's ``loras`` -- same builder as the single
+            # /generate path. The key is added ONLY when non-empty, so a
+            # token-free, adapter-free A2V request stays byte-identical to
+            # before.
+            a2v_loras = _combine_generate_loras(
+                use_adapter, adapter, adapter_strength, prompt_loras)
             if a2v_loras:
                 chain_payload["loras"] = a2v_loras
+            if use_adapter:
+                chain_payload["reference_video_id"] = reference_video_id
+                # S3: same optional-below-1.0 send discipline as the single
+                # /generate path (:624-627 below) -- default 1.0 stays
+                # byte-identical.
+                if float(control_adherence) < 1.0:
+                    chain_payload["conditioning_attention_strength"] = float(control_adherence)
+                if float(reference_strength) < 1.0:
+                    chain_payload["reference_video_strength"] = float(reference_strength)
             try:
                 resp = api.generate_chain(chain_payload)
             except Exception as exc:

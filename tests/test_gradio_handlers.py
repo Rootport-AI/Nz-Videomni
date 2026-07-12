@@ -906,9 +906,13 @@ def test_generate_bad_num_frames_precheck_zero_calls():
 # POST /generate. Style/character <lora:...> tokens ARE allowed (wired into the
 # chain payload's ``loras``); only the reference-video CONTROL adapter is not.
 # --------------------------------------------------------------------------- #
-def test_generate_a2v_conflict_with_adapter_zero_calls(tmp_path):
-    """A2V + a reference-video CONTROL adapter (canny/pose/upscaler) is rejected
-    up front (a chain has no reference_video_id) with zero API calls."""
+def test_generate_a2v_conflict_with_adapter_without_reference_zero_calls(tmp_path):
+    """A2V + a reference-video CONTROL adapter (canny/pose/upscaler) WITHOUT a
+    reference video selected is rejected up front by the existing adapter
+    precheck (:466-468 -- ``msg_ref_video_required``), zero API calls. This is
+    the SAME precheck the non-A2V adapter flow already uses; A2V+adapter has no
+    dedicated conflict message anymore now that reference-video IC-LoRA can be
+    combined with A2V (chains carry ``reference_video_id`` for a single clip)."""
     aud = tmp_path / "a.wav"
     aud.write_bytes(b"RIFF....WAVEfmt ")
     calls = {"n": 0}
@@ -924,12 +928,59 @@ def test_generate_a2v_conflict_with_adapter_zero_calls(tmp_path):
         512, 320, False, 0, 0, 49, 24.0, -1,
         adapter="canny-control", src_audio=str(aud),
     ))
-    assert calls["n"] == 0  # no upload_audio, no generate_chain
+    assert calls["n"] == 0  # no upload_video, no upload_audio, no generate_chain
     assert len(out) == 1
     assert out[0][1] == "" and out[0][2] is None
-    # rejection uses the dedicated control-LoRA message (not a generic conflict)
     from gradio_ui import LABELS
-    assert LABELS["en"]["a2v_control_lora_unsupported"] in out[0][0]
+    assert LABELS["en"]["msg_ref_video_required"] in out[0][0]
+
+
+def test_generate_a2v_with_adapter_and_reference_wires_chain_payload(tmp_path):
+    """A2V + a reference-video CONTROL adapter WITH a reference video selected
+    is accepted: the reference video is uploaded, the chain payload carries
+    both ``reference_video_id`` and ``loras`` (the control adapter), and
+    /generate/chain (not /generate) is called."""
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    vid = tmp_path / "ref.mp4"
+    vid.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    uploads = {"video": 0, "audio": 0}
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/video"):
+            uploads["video"] += 1
+            return httpx.Response(200, json={"video_id": "vid-a2v-ref"})
+        if request.url.path.endswith("/upload/audio"):
+            uploads["audio"] += 1
+            return httpx.Response(200, json={"audio_id": "aud-a2v-ref"})
+        assert str(request.url) == "http://test/api/v1/generate/chain"
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-ref"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "prompt", "", *_kf_args(),
+        512, 384, False, 0, 0, 49, 24.0, -1,
+        *_adapter_args("canny-control", 1.0, str(vid), {}),
+        src_audio=str(aud),
+    )
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:  # job started -> stop before the poll loop's sleeps
+            gen.close()
+            break
+
+    assert uploads["video"] == 1
+    assert uploads["audio"] == 1
+    assert captured["reference_video_id"] == "vid-a2v-ref"
+    assert captured["loras"] == [{"name": "canny-control", "strength": 1.0}]
+    assert captured["source_audio"] == {"audio_id": "aud-a2v-ref"}
+    assert captured["clips"] == [{"num_frames": 49}]
+    assert outs[-1][1] == "chain-a2v-ref"
 
 
 def test_generate_a2v_with_style_lora_token_wires_chain_loras(tmp_path):

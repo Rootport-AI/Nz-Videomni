@@ -145,8 +145,10 @@ def test_chain_loras_in_request_dump_roundtrips():
 
 
 def test_chain_control_lora_rejected_422(chain_lora_client):
-    """A CONTROL adapter on a chain is rejected up front (chains carry no
-    reference_video_id — reference conditioning is out of chain scope)."""
+    """A CONTROL adapter on a MULTI-CLIP chain (clips>=2) is still rejected up
+    front: reference-video IC-LoRA conditioning is only wired into stage-1's
+    clip-0, so a chain of 2+ clips carrying a control adapter is unsupported
+    regardless of whether ``reference_video_id`` is present."""
     r = _run_chain(
         chain_lora_client,
         [{"num_frames": 25}, {"num_frames": 25}],

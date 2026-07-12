@@ -320,6 +320,7 @@ class LTXRunner:
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
         lora_paths: list[tuple[Path, float, str]] | None = None,
+        reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4).
@@ -337,6 +338,12 @@ class LTXRunner:
         ``(path, strength, preprocess)`` triples applied uniformly across the whole
         chain (every clip / stage). Empty/None -> no loras (byte-identical default);
         the mock ignores them, the real backend forwards them to the worker.
+
+        ``reference_video_path`` (Phase C reference-video CONTROL IC-LoRA, ALPHA
+        scope — clips=1 only, enforced by the schema/endpoint): mirrors
+        :meth:`generate`'s ``reference_video_path``. None -> no reference (byte-
+        identical default); the mock ignores it, the real backend forwards it to
+        the worker.
         """
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -350,6 +357,7 @@ class LTXRunner:
             source_context_frames=source_context_frames,
             source_audio_path=source_audio_path,
             lora_paths=lora_paths,
+            reference_video_path=reference_video_path,
             seed=seed,
         )
 
@@ -551,6 +559,7 @@ class _MockBackend:
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
         lora_paths: list[tuple[Path, float, str]] | None = None,
+        reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
         """Simulate a masked AV-latent chain: ONE synthetic mp4 of the full
@@ -560,6 +569,10 @@ class _MockBackend:
         ``lora_paths`` (style/character IC-LoRA, additive) is accepted and ignored
         — the mock has no weights to patch; the real forward-time patch lives in
         the engine worker (mirrors :meth:`generate`).
+
+        ``reference_video_path`` (Phase C reference-video CONTROL IC-LoRA,
+        additive) is likewise accepted and ignored — the mock has no weights to
+        patch against the reference either.
 
         V2V continuation (``source_tail_path`` / ``source_context_frames``): mirror
         the engine geometry via ``compute_chain_layout(source_context_px=...)`` —
@@ -1270,6 +1283,7 @@ class _RealBackend:
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
         lora_paths: list[tuple[Path, float, str]] | None = None,
+        reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
         """Masked AV-latent clip chain via the worker's ``generate_chain`` op.
@@ -1289,6 +1303,14 @@ class _RealBackend:
         (mirrors the single-generate ``loras_payload``). The strengths apply
         uniformly to every clip/stage. Absent for a no-lora chain (payload
         byte-identical to before); the worker clears any stale LoRA regardless.
+
+        Reference-video CONTROL IC-LoRA (Phase C, ALPHA scope — clips=1 only,
+        enforced by the schema/endpoint): when ``reference_video_path`` is set an
+        additive ``reference_video`` block ({path, strength, preprocess[,
+        attention_strength]}) is added to the worker payload, mirroring the
+        single-generate ``reference_payload`` (see :meth:`_RealBackend.generate`).
+        Absent when no reference video was requested, so the payload stays
+        byte-identical to before that case.
         """
         if not self.loaded:
             self.load()
@@ -1354,6 +1376,26 @@ class _RealBackend:
             payload["loras"] = [
                 {"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths
             ]
+        # Reference-video CONTROL IC-LoRA (additive, ALPHA scope — clips=1 only):
+        # mirrors the single-generate ``reference_payload`` (see :meth:`generate`
+        # above). Only added when a reference video was requested, so a chain
+        # without one keeps a byte-identical payload.
+        if reference_video_path is not None:
+            ref_strength = (
+                1.0
+                if chain.reference_video_strength is None
+                else float(chain.reference_video_strength)
+            )
+            reference_payload = {
+                "path": str(reference_video_path),
+                "strength": ref_strength,
+                "preprocess": _resolve_reference_preprocess(lora_paths),
+            }
+            if chain.conditioning_attention_strength is not None:
+                reference_payload["attention_strength"] = float(
+                    chain.conditioning_attention_strength
+                )
+            payload["reference_video"] = reference_payload
 
         with self._lock:
             try:

@@ -1078,7 +1078,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - **preset** ドロップダウン（`GET /config` の `generation_presets`＝§11.4 の6種を解像度・フレーム数のラベル付きで列挙。選択で width/height/num_frames/crop を一括反映）。
 - **crop width / height**（0=none。両方 >0 のとき `crop_output` を送る）/ **seed**（-1=random）。
 - **キーフレーム画像アコーディオン**: 固定5スロット（I2Vの多段誘導）。**A2V（音声から動画生成）と併用時も5枚すべて配線済み**で、`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内にクランプされる（`frame_idx=0` は開始フレーム扱い）。
-- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。**スタイルLoRA（画風・キャラクター系。`<lora:...>` 記法）とは併用できる**（2026-07-11 に解禁。`GenerateChainRequest.loras` の加算＝VERIFICATION_LOG §32。それ以前は排他だった）。ただし参照動画を要する control 系 IC-LoRA（canny／pose 等）は、チェーンが参照動画を持たない構造のため併用不可で、指定すると `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否される（GUI では送信前に拒否）。
+- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。**スタイルLoRA（画風・キャラクター系。`<lora:...>` 記法）とは併用できる**（2026-07-11 に解禁。`GenerateChainRequest.loras` の加算＝VERIFICATION_LOG §32。それ以前は排他だった）。**参照動画を要する control 系 IC-LoRA（canny／pose 等）も、`clips` がちょうど1つのチェーン（A2V を含む）に限り併用できる**（α版・2026-07-11 に解禁＝VERIFICATION_LOG §34。詳細は §13.4b の追記を参照）。`clips` が2つ以上のチェーン（Clip Chain タブでの複数クリップ連結）では従来どおり併用不可で、指定すると `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否される（GUI では送信前に拒否）。
   - **音声長の事前チェック**: 添付が `.wav` の場合、送信前にクライアント側で長さを測定し、その設定（フレーム数・fps）が必要とする秒数に足りなければ、必要秒数を明示して送信を拒否する（API 呼び出しゼロ）。`.wav` 以外（mp3/m4a等）はクライアント側で測定できないためこのチェックをスキップし、サーバーの `422 SOURCE_AUDIO_TOO_SHORT` に委ねる（このエラーもヒント付きで表示される）。
   - **Frames の自動調整**: `.wav` を添付すると、その音声長に収まる最大の 8n+1 値を自動計算して num_frames へ入力し、トースト通知で知らせる（既存の値は上書きされる）。計算式は `((floor(音声秒数×fps)-1)//8)*8+1` を起点に、音声側の latent フレーム数（`chain_math.audio_latents_required`）で検算しながら 8 刻みで縮小し、最終的に `[9, 481]` へクランプする。`.wav` 以外の添付・クリア時は何もしない。
 - **生成中はボタンをグレーアウト**: 「生成」ボタンはクリック直後に無効化され、ラベルが "Generating..." / "生成中…" に切り替わる。生成完了・失敗いずれの場合も必ずボタンが再有効化・ラベル復帰する（click→無効化→生成→復元 の3段イベント連鎖。Clip Chain タブの「Generate chain」ボタンも同じ挙動）。
@@ -1148,6 +1148,8 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 - **audio-to-video（A2Vid）／時間アップスケーラ**等の別パイプライン系も、必要になった時点で Phase 4 で検討。
 
 > **→ 進捗追記（2026-07-11 時点）**: 本節の主要項目は**実装済み**＝IC-LoRA（canny／pose 等の control 系＋strength 可変・VERIFICATION_LOG §21/§28）・V2V（`source_video` によるチェーン継続生成・§24）・audio-to-video（`source_audio`・§25）。さらに A2V＋LoRA の併用も 2026-07-11 に解禁した（`GenerateChainRequest.loras`・§32。参照動画を要する control 系のみ `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否）。時間アップスケーラは未実装のまま。本節は起票当時のフェーズ分類の記録として残す。
+>
+> **→ 追加進捗（2026-07-11・α版・VERIFICATION_LOG §34）**: 上記「参照動画を要する control 系のみ拒否」の制約は、**`clips` がちょうど1つのチェーン（A2V を含む）に限り**解禁された。`GenerateChainRequest` に単発 `GenerateRequest` と同型・同バリデーションの3フィールド（`reference_video_id`／`conditioning_attention_strength`／`reference_video_strength`、いずれも optional）を加算し、`clips` が1のときだけ受理する（2以上のチェーンは従来どおり `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）。意味論は単発生成と同じ「reference latent は stage 1 のクリップ0にのみ注入し、stage 2 のタイルには注入しない」＝チェーン全体（stage1+stage2の全区間）へ一様に効く点は変わらない。新設の 422 群: `REFERENCE_RESOLUTION_INVALID`（幅・高さが128の倍数でない）／`LORA_REQUIRES_REFERENCE`（control系＋clips=1＋参照動画無し）／`LORA_PREPROCESS_CONFLICT`（preprocess 種別が2種以上混在）。`reference_video_id` は `source_video`（V2V 継続）と排他（422）。既知の制約: pydantic のスキーマ検証がエンドポイントより先に走るため `clips>=2` ＋ `reference_video_id` の複合誤設定はコード付きでない汎用 `VALIDATION_ERROR` になる。GPU 実機の目視ゲート（単発生成との一致確認・A2V 音声との共存確認）は次セッションへ持ち越し。
 
 ### 13.4c 将来課題（現行の開発計画からは除外）
 

@@ -260,6 +260,53 @@ def _do_load(msg: dict) -> None:
     _emit("ready")
 
 
+def _resolve_ic_reference(
+    ref: dict | None, output_path: str
+) -> tuple[tuple[str, float] | None, float]:
+    """Resolve a worker ``reference_video`` block -> (ic_reference, attn_strength).
+
+    ``ref`` is the raw ``reference_video`` dict (or None when absent). Returns
+    ``((ref_path, ref_strength), attention_strength)`` — or ``(None, 1.0)`` when
+    no reference is supplied. ``attention_strength`` is the IC-LoRA
+    control-adherence knob (conditioning_attention_strength, 0..1, default 1.0):
+    at 1.0 no attention-strength wrapper is applied downstream (structurally
+    byte-identical to before); < 1.0 relaxes how strongly the reference drives
+    self-attention. For a Phase C control adapter (``preprocess`` != "none") the
+    raw reference is converted to a control-signal video (edge map / skeleton)
+    via engine/preprocess/ and the returned path is swapped to that control mp4
+    (written next to ``output_path``); "none" leaves the raw video as-is and cv2
+    is never imported. An unknown ``preprocess`` fails the job loud
+    (``get_processor`` raises). Extracted verbatim from _do_generate so the
+    single-generate and chain paths resolve the reference identically.
+    """
+    ic_reference = None
+    attn_strength = 1.0
+    if ref:
+        ref_path = str(ref["path"])
+        ref_strength = float(ref.get("strength", 1.0))
+        attn_strength = float(ref.get("attention_strength", 1.0))
+        preprocess = ref.get("preprocess", "none")
+        if preprocess and preprocess != "none":
+            import time
+
+            from engine.preprocess import get_processor, preprocess_video
+
+            processor = get_processor(preprocess)
+            control_path = os.path.join(
+                os.path.dirname(output_path), f"control_{preprocess}.mp4"
+            )
+            t0 = time.perf_counter()
+            n_frames = preprocess_video(Path(ref_path), Path(control_path), processor)
+            elapsed = time.perf_counter() - t0
+            _log(
+                f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
+                f"frames={n_frames} elapsed={elapsed:.2f}"
+            )
+            ref_path = control_path
+        ic_reference = (ref_path, ref_strength)
+    return ic_reference, attn_strength
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; mp4 is written by the engine to msg['output_path']."""
     assert _PIPE is not None, "generate before load"
@@ -285,43 +332,13 @@ def _do_generate(msg: dict) -> None:
     ic_loras = [
         (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
     ]
-    ref = msg.get("reference_video")
-    ic_reference = None
-    # IC-LoRA control-adherence knob (conditioning_attention_strength, 0..1,
-    # default 1.0). At 1.0 no attention-strength wrapper is applied (structurally
-    # byte-identical to before); < 1.0 relaxes how strongly the reference drives
-    # self-attention. Parsed here and forwarded to the pipeline; inert without a
-    # reference_video.
-    attn_strength = 1.0
-    if ref:
-        ref_path = str(ref["path"])
-        ref_strength = float(ref.get("strength", 1.0))
-        attn_strength = float(ref.get("attention_strength", 1.0))
-        # Phase C: control adapters (Union-Control) need the raw reference video
-        # converted to a control signal (edge map / skeleton). ``preprocess`` is
-        # "none" for Phase B reference adapters (Pixel-Spatial-Upscaler) -> the
-        # raw video is used as-is and cv2 is never imported. Any other value ->
-        # convert and swap ``ic_reference`` to the control video path. An unknown
-        # value fails the job loud (``get_processor`` raises).
-        preprocess = ref.get("preprocess", "none")
-        if preprocess and preprocess != "none":
-            import time
-
-            from engine.preprocess import get_processor, preprocess_video
-
-            processor = get_processor(preprocess)
-            control_path = os.path.join(
-                os.path.dirname(output_path), f"control_{preprocess}.mp4"
-            )
-            t0 = time.perf_counter()
-            n_frames = preprocess_video(Path(ref_path), Path(control_path), processor)
-            elapsed = time.perf_counter() - t0
-            _log(
-                f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
-                f"frames={n_frames} elapsed={elapsed:.2f}"
-            )
-            ref_path = control_path
-        ic_reference = (ref_path, ref_strength)
+    # ``reference_video`` -> (ic_reference, attn_strength). The Phase C control
+    # preprocess (edge/pose) and the conditioning_attention_strength knob are
+    # both resolved inside the shared helper (see _resolve_ic_reference); no
+    # reference -> (None, 1.0), inert + byte-identical to before.
+    ic_reference, attn_strength = _resolve_ic_reference(
+        msg.get("reference_video"), output_path
+    )
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
@@ -428,11 +445,17 @@ def _do_generate_chain(msg: dict) -> None:
     # chain). Always parsed EXPLICITLY (even []): an explicit empty list is the
     # authoritative "no LoRA this chain" -> clean detach, clearing any stale LoRA
     # left on the resident pipeline by a prior single generate() (mirrors
-    # _do_generate). Control (reference) adapters are rejected at the API layer, so
-    # only style adapters (no ic_reference) ever arrive here.
+    # _do_generate). α: control (reference) adapters are now accepted for
+    # clips=1 chains — the reference_video block (present only when a reference
+    # was supplied) is resolved below via the SAME helper as single generate()
+    # and wired to run_chain's stage-1 clip-0 conditioning; without it the chain
+    # is byte-identical to before.
     ic_loras = [
         (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
     ]
+    ic_reference, ic_attn = _resolve_ic_reference(
+        msg.get("reference_video"), output_path
+    )
 
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
@@ -460,6 +483,8 @@ def _do_generate_chain(msg: dict) -> None:
         source=source,
         audio_source=audio_source,
         ic_loras=ic_loras,
+        ic_reference=ic_reference,
+        ic_attention_strength=ic_attn,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

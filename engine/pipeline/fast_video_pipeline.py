@@ -951,6 +951,8 @@ class LTXFastVideoPipeline:
         source=None,
         audio_source=None,
         ic_loras: list[tuple[str, float]] | None = None,
+        ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float | None = None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -969,6 +971,12 @@ class LTXFastVideoPipeline:
         (every stage-1 segment + stage-2 tile). run_chain sets them explicitly
         before building the transformer (empty list clears any stale LoRA left by
         a prior single ``generate()`` on the resident pipeline).
+
+        ``ic_reference`` / ``ic_attention_strength`` (α, additive): a control-adapter
+        reference video ``(path, strength)`` wired to clip-0's STAGE-1 conditioning
+        (accepted only for clips=1 chains; the API layer enforces that). ``None``
+        reference -> the chain is byte-identical to before; ``ic_attention_strength``
+        is normalised to 1.0 when unset so run_chain's ``float`` contract holds.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
@@ -987,6 +995,10 @@ class LTXFastVideoPipeline:
             source=source,
             audio_source=audio_source,
             ic_loras=ic_loras,
+            ic_reference=ic_reference,
+            ic_attention_strength=(
+                1.0 if ic_attention_strength is None else ic_attention_strength
+            ),
         )
 
     @torch.inference_mode()

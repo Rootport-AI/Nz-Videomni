@@ -195,8 +195,10 @@ def lora_requires_reference(names: list[str]) -> APIError:
 def lora_control_unsupported_in_chain(names: list[str]) -> APIError:
     """Chain LoRA: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler
     — it derives its conditioning from a reference video) was requested on a
-    chain. A chain carries no ``reference_video_id`` (reference-video conditioning
-    is out of chain scope in v1), so only STYLE/character adapters are accepted.
+    chain with clips >= 2. A chain only ever carries a ``reference_video_id`` when
+    it is exactly 1 clip (ALPHA scope — a per-clip reference video is out of v1
+    scope), so a control adapter on a multi-clip chain can never be satisfied and
+    is rejected outright; only STYLE/character adapters are accepted there.
     Mirrors :func:`lora_requires_reference` (422) — the request is well-formed but
     the adapter kind is unsupported on this route."""
     return APIError(

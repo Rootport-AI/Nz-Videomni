@@ -16,6 +16,9 @@ from api.errors import (
     APIError,
     job_busy,
     lora_control_unsupported_in_chain,
+    lora_preprocess_conflict,
+    lora_requires_reference,
+    reference_resolution_invalid,
     source_audio_not_found,
     source_video_not_found,
 )
@@ -67,20 +70,46 @@ def generate_chain(
             request.overlap_frames,
         )
 
-    # Style/character IC-LoRA (ADDITIVE): resolve every requested adapter (404
-    # unknown/missing) up front — same discipline as api/generate.py — and reject
-    # CONTROL adapters. A chain carries no reference_video_id, so a reference-
-    # driven control adapter (union-control / pixel-spatial-upscaler) cannot be
-    # satisfied here; only STYLE/character LoRAs (applied uniformly across the
-    # chain) are accepted. The kind needs the registry, so this lives at the
-    # endpoint (not the schema), mirroring the single-generate reference check.
+    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE, ALPHA
+    # scope — clips=1 only, schema-enforced): validate the reference video up
+    # front, mirroring api/generate.py 57-63.
+    if request.reference_video_id is not None:
+        context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
+        # All CONTROL adapters use reference_downscale_factor=2, so the reference
+        # is consumed at half output resolution on the 64-grid -- width/height not
+        # divisible by 128 crashes the worker's VAE encode (mirrors api/generate.py).
+        if request.width % 128 != 0 or request.height % 128 != 0:
+            raise reference_resolution_invalid(request.width, request.height)
+
+    # Style/character + reference-video CONTROL IC-LoRA (ADDITIVE): resolve every
+    # requested adapter (404 unknown/missing) up front — same discipline as
+    # api/generate.py — and inspect its kind:
+    #   * a CONTROL adapter (union-control / pixel-spatial-upscaler) derives its
+    #     conditioning from a reference video. In v1 a chain only carries a
+    #     reference_video_id when it is exactly 1 clip (schema-enforced), so a
+    #     control adapter on a >1-clip chain is still rejected outright
+    #     (LORA_CONTROL_UNSUPPORTED_IN_CHAIN, unchanged pre-alpha behaviour); on a
+    #     1-clip chain it instead needs the reference_video_id, exactly like the
+    #     single-generate check (LORA_REQUIRES_REFERENCE);
+    #   * a single reference video can only be turned into ONE control signal, so
+    #     >1 distinct non-"none" preprocess kind is a conflict (Phase C, mirrors
+    #     api/generate.py).
+    preprocess_kinds: set[str] = set()
     control_names: list[str] = []
     for spec in request.loras:
         context.lora_registry.resolve(spec.name, spec.strength)  # 404 if unknown/missing
-        if context.lora_registry.info(spec.name).kind == "control":
+        entry = context.lora_registry.info(spec.name)
+        if entry.kind == "control":
             control_names.append(spec.name)
+        if entry.preprocess != "none":
+            preprocess_kinds.add(entry.preprocess)
     if control_names:
-        raise lora_control_unsupported_in_chain(control_names)
+        if len(request.clips) != 1:
+            raise lora_control_unsupported_in_chain(control_names)
+        if request.reference_video_id is None:
+            raise lora_requires_reference(control_names)
+    if len(preprocess_kinds) > 1:
+        raise lora_preprocess_conflict(sorted(preprocess_kinds))
 
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_chain_if_idle(request)

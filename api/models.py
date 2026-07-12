@@ -338,11 +338,23 @@ class GenerateChainRequest(BaseModel):
     # ``GenerateRequest.loras``; the strengths apply uniformly to EVERY clip and
     # every stage of the chain (no per-clip strengths in v1 — owner decision).
     # A2V (source_audio) and V2V continuation (source_video) may be combined with
-    # loras (no exclusivity guard). Reference-video CONTROL adapters are out of
-    # chain scope: a chain carries no ``reference_video_id``, so a control adapter
-    # is rejected up front at the endpoint (api/generate_chain.py) rather than here
-    # (the kind needs the registry, like the single-generate check).
+    # loras (no exclusivity guard).
     loras: list[LoraSpec] = Field(default_factory=list)
+
+    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE/optional,
+    # ALPHA scope — owner decision 2026-07-11): a chain MAY now carry a
+    # ``reference_video_id`` like a single ``/generate``, but ONLY when the chain
+    # is exactly 1 clip in v1 (a per-clip reference video is out of scope, demoted
+    # to a later research item). Mutually exclusive with ``source_video``: the
+    # frozen V2V source head and a reference-conditioned control adapter would
+    # otherwise compete for clip 0's head. Same type/bounds as
+    # ``GenerateRequest.reference_video_id`` / ``conditioning_attention_strength``
+    # / ``reference_video_strength`` (see there for field-level rationale); the
+    # control-vs-style adapter kind check still needs the registry, so it stays at
+    # the endpoint (api/generate_chain.py), mirroring the single-generate check.
+    reference_video_id: str | None = None
+    conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)
+    reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
@@ -378,14 +390,17 @@ class GenerateChainRequest(BaseModel):
         if self.source_audio is not None and len(self.clips) != 1:
             raise ValueError("source_audio requires exactly 1 clip in v1")
 
-        # Clip-count floor: WITHOUT a source (video OR audio) a chain needs >= 2
-        # clips (a single clip is just /generate) — preserve the pre-V2V
-        # rejection. WITH a source_video the frozen source head IS the prior
-        # segment, and WITH a source_audio a single clip is the whole timeline, so
-        # 1 clip is OK in both cases.
+        # Clip-count floor: WITHOUT a source (video OR audio) OR a reference-video
+        # control adapter, a chain needs >= 2 clips (a single clip is just
+        # /generate) — preserve the pre-V2V rejection. WITH a source_video the
+        # frozen source head IS the prior segment, WITH a source_audio a single
+        # clip is the whole timeline, and WITH reference_video_id the chain is
+        # ALPHA-scoped to exactly 1 clip (enforced below) — so 1 clip is OK in all
+        # three cases.
         if (
             self.source_video is None
             and self.source_audio is None
+            and self.reference_video_id is None
             and len(self.clips) < 2
         ):
             raise ValueError("chain requires at least 2 clips")
@@ -455,6 +470,40 @@ class GenerateChainRequest(BaseModel):
             raise ValueError(
                 f"chain total timeline {layout.total_px} pixel frames exceeds the "
                 f"cap {MAX_CHAIN_TOTAL_PIXEL_FRAMES} (reduce clip count or lengths)"
+            )
+
+        # Reference-video CONTROL IC-LoRA (alpha, clips=1 only): mirrors
+        # GenerateRequest.validate_ltx_constraints (api/models.py:173-188) plus the
+        # v1 clip-count cap and the V2V exclusivity below. The reverse still holds
+        # unconditionally: a reference video only ever conditions a lora.
+        if self.reference_video_id and not self.loras:
+            raise ValueError(
+                "reference_video_id requires at least one lora (the reference "
+                "video only conditions an IC-LoRA)"
+            )
+        if self.reference_video_id and len(self.clips) != 1:
+            raise ValueError("reference_video_id requires exactly 1 clip in v1")
+        # IC-LoRA control-adjustability fields only apply to a lora job.
+        if self.conditioning_attention_strength is not None and not self.loras:
+            raise ValueError(
+                "conditioning_attention_strength requires at least one lora "
+                "(it only adjusts an IC-LoRA control signal)"
+            )
+        if self.reference_video_strength is not None and not self.loras:
+            raise ValueError(
+                "reference_video_strength requires at least one lora "
+                "(it only adjusts an IC-LoRA reference conditioning)"
+            )
+        # V2V continuation freezes clip 0's head from the source tail; a
+        # reference-conditioned control adapter also drives conditioning at clip 0.
+        # Disallow combining them (mirrors the source_audio/source_video
+        # exclusivity above) rather than defining a precedence rule between the
+        # two clip-0 heads.
+        if self.reference_video_id and self.source_video is not None:
+            raise ValueError(
+                "reference_video_id and source_video are mutually exclusive "
+                "(a control adapter's reference conditioning would compete with "
+                "the frozen V2V source head at clip 0)"
             )
         return self
 

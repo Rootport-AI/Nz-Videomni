@@ -415,6 +415,8 @@ def run_chain(
     source: "SourceSpec | None" = None,
     audio_source: "AudioSourceSpec | None" = None,
     ic_loras: list[tuple[str, float]] | None = None,
+    ic_reference: tuple[str, float] | None = None,
+    ic_attention_strength: float = 1.0,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -434,6 +436,17 @@ def run_chain(
     below — an empty list clears any stale ``_ic_loras`` left by a prior single
     ``generate()`` on the resident pipeline, so ``ic_loras=None/[]`` is a genuine
     "no LoRA" (byte-identical to before) rather than a leak of the last job's.
+
+    ``ic_reference`` / ``ic_attention_strength`` (α, additive): a control-adapter
+    reference video ``(path, strength)`` plus its conditioning_attention_strength
+    knob. When present, the reference latent is appended to clip-0's STAGE-1
+    conditioning ONLY (via ``pipe._reference_conditioning_for_stage`` — the same
+    builder the single ``generate()`` path uses on its stage-1 pass), so the
+    reference drives the whole timeline through the carry/crossfade exactly like a
+    single generate. Accepted only for clips=1 chains (α; the API layer enforces
+    that). ``ic_reference=None`` -> the chain is byte-identical to before: the
+    ``_set_ic_job`` below is called with ``(loras, None, 1.0)`` (stale-clear
+    semantics preserved) and no reference latent is injected.
     """
     assert not (source is not None and audio_source is not None), (
         "run_chain: source (V2V) and audio_source (A2V) are mutually exclusive"
@@ -557,9 +570,11 @@ def run_chain(
     # transformer build; set it here (explicitly, empty list = clear) so THIS
     # chain's style adapters — and ONLY this chain's — apply. Clearing on the empty
     # path is the stale-detach that keeps a prior single generate()'s LoRA from
-    # bleeding into the chain denoise (mirrors generate()'s _set_ic_job call). No
-    # reference/attention for chains (control adapters rejected at the API layer).
-    pipe._set_ic_job(list(ic_loras or []), None, 1.0)
+    # bleeding into the chain denoise (mirrors generate()'s _set_ic_job call). α:
+    # a control-adapter reference (clips=1 only) is forwarded here too so
+    # _set_ic_job resolves its downscale factor + attention wrapper exactly as the
+    # single path; ic_reference=None keeps the historical (None, 1.0) stale-clear.
+    pipe._set_ic_job(list(ic_loras or []), ic_reference, ic_attention_strength)
 
     # ── Build video_encoder + transformer ONCE (reuse for stage1 + stage2). ───
     video_encoder = ledger.video_encoder()
@@ -624,6 +639,27 @@ def run_chain(
                 clips[0].images, height=height // 2, width=width // 2,
                 video_encoder=video_encoder, device=device,
             )
+            # α control-adapter reference (additive): append the reference latent
+            # to clip-0's STAGE-1 conditioning ONLY — the same "stage-1 once"
+            # semantics as single generate() (which routes through
+            # pipe._reference_conditioning_for_stage on its stage-1 pass and
+            # returns [] on stage 2). Reuse that exact builder with the HALF-res
+            # cond_kwargs (height//2, width//2, DTYPE, device, video_encoder) so
+            # the downscale/encode is byte-for-byte the single path's. Never
+            # injected on the V2V head branch above (source & reference are
+            # API-exclusive) nor on the stage-2 tiles below.
+            if ic_reference is not None:
+                conds += pipe._reference_conditioning_for_stage(
+                    full_height=height,
+                    num_frames=clip_frames[0],
+                    cond_kwargs={
+                        "height": height // 2,
+                        "width": width // 2,
+                        "video_encoder": video_encoder,
+                        "dtype": DTYPE,
+                        "device": device,
+                    },
+                )
         else:
             ka_i = ka_list[i - 1]
             prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]

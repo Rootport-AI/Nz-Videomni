@@ -541,6 +541,17 @@ class PipelineManager:
                 for spec in chain.loras
             ]
 
+            # Reference-video CONTROL IC-LoRA (ALPHA, clips=1 only): resolve
+            # reference_video_id -> path via the video store, mirroring run_job
+            # (see above). The endpoint already validated existence + the
+            # clips=1/preprocess-kind constraints, so this re-resolves the same
+            # path for the runner hop. None when the chain requested no reference
+            # video (byte-identical default path).
+            reference_video_path = (
+                self.video_upload_store.path_for(chain.reference_video_id)
+                if chain.reference_video_id else None
+            )
+
             # Console job-info line (owner requirement): base weight + LoRAs +
             # base prompt (clip overrides propagate from it). Mirrors run_job so
             # LoRA application is visible from the uvicorn console.
@@ -605,6 +616,7 @@ class PipelineManager:
                 source_context_frames=source_context_frames,
                 source_audio_path=source_audio_path,
                 lora_paths=lora_paths,
+                reference_video_path=reference_video_path,
                 seed=seed,
             )
 

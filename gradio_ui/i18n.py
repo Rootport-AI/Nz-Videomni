@@ -273,13 +273,9 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_frames_adjusted": "Frames adjusted to {frames} to fit the {dur:.2f}s audio.",
         # --- generate: audio-to-video accordion (single generation) ---
         "gen_a2v_accordion": "Audio-to-Video (e.g. lip-sync)",
-        "gen_a2v_note": ("When audio is attached, style LoRAs (<lora:...> tags) and keyframe "
-                         "images can still be combined with it. Only Reference-video control "
-                         "(IC-LoRA, the adapter above) cannot be used together with audio."),
-        "a2v_control_lora_unsupported": ("Audio-to-Video cannot be combined with the reference-video "
-                                         "control adapter (IC-LoRA). Clear the adapter selection, or "
-                                         "remove the audio. Style LoRAs (<lora:...> tags) and keyframe "
-                                         "images can still be used with audio."),
+        "gen_a2v_note": ("When audio is attached, style LoRAs (<lora:...> tags), keyframe images, "
+                         "and the reference-video control adapter (IC-LoRA, the dropdown above) "
+                         "can all still be combined with it."),
         # --- V2V/A2V + join API error-envelope hints ---
         "apierr_SOURCE_VIDEO_NOT_FOUND": ("The source video was not found on the server. "
                                           "Re-upload the source video."),
@@ -290,8 +286,9 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_SOURCE_AUDIO_TOO_SHORT": ("The audio is shorter than the video timeline. Use longer "
                                           "audio or fewer frames."),
         "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": ("A control adapter (canny/pose/upscaler) cannot be "
-                                                     "used on a clip chain. Use a style/character LoRA "
-                                                     "instead, or remove the control LoRA."),
+                                                     "used on a chain of 2 or more clips. Use a "
+                                                     "style/character LoRA instead, or reduce the "
+                                                     "chain to a single clip."),
         "apierr_JOB_NOT_JOINABLE": ("This job is not a V2V continuation, so there is nothing to "
                                     "join it to."),
         "apierr_JOIN_FAILED": "Joining failed on the server. Check the server logs.",
@@ -633,19 +630,15 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_frames_adjusted": "音声{dur:.2f}秒に合わせてFramesを{frames}に調整しました",
         # --- generate: audio-to-video accordion (single generation) ---
         "gen_a2v_accordion": "音声から動画生成（リップシンクなど）",
-        "gen_a2v_note": ("音声を添付した場合でも、スタイルLoRA (<lora:...> 記法) とキーフレーム画像は "
-                         "併用できます。参照動画による制御 (IC-LoRA・上のアダプタ) だけは音声と "
-                         "併用できません。"),
-        "a2v_control_lora_unsupported": ("Audio-to-Videoは参照動画による制御アダプタ (IC-LoRA) とは"
-                                         "併用できません。アダプタの選択を解除するか、音声を外して"
-                                         "ください。スタイルLoRA (<lora:...> 記法) とキーフレーム画像は"
-                                         "音声と併用できます。"),
+        "gen_a2v_note": ("音声を添付した場合でも、スタイルLoRA (<lora:...> 記法)・キーフレーム画像・"
+                         "参照動画による制御アダプタ (IC-LoRA・上のドロップダウン) は "
+                         "すべて併用できます。"),
         # --- V2V/A2V + join API error-envelope hints ---
         "apierr_SOURCE_VIDEO_NOT_FOUND": "元動画がサーバー上に見つかりません。元動画を再アップロードしてください。",
         "apierr_SOURCE_VIDEO_TOO_SHORT": "元動画のフレーム数が参照フレーム数に足りません。参照フレーム数を減らすか、長い動画を使ってください。",
         "apierr_SOURCE_AUDIO_NOT_FOUND": "元音声がサーバー上に見つかりません。音声を再アップロードしてください。",
         "apierr_SOURCE_AUDIO_TOO_SHORT": "音声が動画の長さに足りません。長い音声を使うか、フレーム数を減らしてください。",
-        "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": "制御アダプタ（canny/pose/アップスケーラ）はクリップ連結では使えません。スタイル/キャラクターLoRAを使うか、制御LoRAを外してください。",
+        "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": "制御アダプタ（canny/pose/アップスケーラ）は2つ以上のクリップを連結するチェーンでは使えません。スタイル/キャラクターLoRAを使うか、クリップを1つにしてください。",
         "apierr_JOB_NOT_JOINABLE": "このジョブはV2V継続ではないため、結合する相手がありません。",
         "apierr_JOIN_FAILED": "サーバー側で結合に失敗しました。サーバーのログを確認してください。",
         "apierr_JOINED_NOT_READY": "結合版はまだ作成されていません。先に「結合版を作成」を実行してください。",

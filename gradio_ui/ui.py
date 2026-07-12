@@ -1019,9 +1019,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                        outputs=lang_switch_outputs)
         lang_dd.change(lambda v: v, inputs=lang_dd, outputs=lang_state)
 
+        # show_progress="hidden": startup background config fetches must not
+        # spawn per-component status trackers -- with several simultaneous
+        # demo.load events, Gradio 6.19's client can leave a tracker pending
+        # forever, and its pointer-events:auto overlay steals clicks from
+        # components in collapsed accordions / inactive tabs.
         demo.load(on_page_load, inputs=[config_state, lang_state],
                   outputs=[status_box, config_state, preset, adapter,
-                           server_config_json, spill_table, config_retry_timer])
+                           server_config_json, spill_table, config_retry_timer],
+                  show_progress="hidden")
 
         # ---- Client-side HTML ``min`` attributes (bug fix) ----
         # The width/height/frames Numbers carry NO server-side ``minimum`` (an
@@ -1074,8 +1080,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
                                 outputs=model_dds)
+        # show_progress="hidden": same rationale as on_page_load's show_progress.
         demo.load(lambda lang: refresh_model_dropdowns(lang, warn=False),
-                  inputs=lang_state, outputs=model_dds)
+                  inputs=lang_state, outputs=model_dds, show_progress="hidden")
 
         def on_model_load_start(lang):
             # Disable the button + show the "takes minutes" notice while the
@@ -1153,9 +1160,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         style_gallery.select(on_style_select,
                              inputs=[prompt, style_names_state, lang_state],
                              outputs=prompt)
+        # show_progress="hidden": same rationale as on_page_load's show_progress.
         demo.load(lambda lang, names: load_style_gallery(lang, names, warn=False),
                   inputs=[lang_state, style_names_state],
-                  outputs=[style_gallery, style_names_state])
+                  outputs=[style_gallery, style_names_state],
+                  show_progress="hidden")
 
     # Expose the registry + language-switch fn for the S6 handler (and tests).
     demo.label_registry = registry  # type: ignore[attr-defined]

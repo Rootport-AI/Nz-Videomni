@@ -2041,3 +2041,117 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 - **2巡目（再検証）**: must-fix／should-fix とも残存なし。クローズ。
 
 git commit／push は本節時点でも未実施（作業ツリーの変更のまま・ユーザー判断待ち）。次セッションの筆頭課題はコミット／プッシュ（オーナー判断）。
+
+---
+
+## 34. ★reference動画付きIC-LoRAのchain対応＝α版（clips=1限定）で解禁＝客観ゲート全PASS・独立レビュー must-fix ゼロ・mock E2E PASS・**GPU実機目視ゲート✅完了・ユーザー受容（2026-07-12）**（2026-07-11）
+
+> **正本＝本節。** NEXT_SESSION_HANDOFF.md 冒頭ブロックの引き継ぎ課題「reference 付き IC-LoRA のチェーン対応」（§32.1 の2で「チェーン非対応・422で拒否」としていたスコープを、オーナー決定によりα版として昇格）を実装した回。**`clips` がちょうど1つのチェーン（A2V を含む）に限り**、reference動画付き control 系 IC-LoRA（参照動画から輪郭線 canny・骨格 pose 等を読み取って条件付けするアダプタ）を許可する。`clips` が2つ以上のチェーンは従来どおり 422（`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）で拒否を維持。**客観ゲート（pytest・独立レビュー・mock E2E）はすべて PASS。GPU 実機の目視ゲートは2026-07-12にオーナー立ち会いのもと実施し完了・受容済み（詳細＝34.7）。コミット未実施（作業ツリーの変更のまま・push はユーザー判断待ち）。**
+
+本機: 同上（i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`）。
+
+### 34.1 要件確定（オーナー決定・§32.9〔NEXT_SESSION_HANDOFF.md 99-108行〕の課題を実装）
+
+- **α版スコープ**: `clips` がちょうど1つのチェーンに限り、reference 動画付き IC-LoRA（control系）を許可する。`clips` が2つ以上のチェーンは従来どおり 422（`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）。
+- **根拠**: 主眼のユースケースは A2V（音声から動画を生成する機能）との併用であり、A2V は内部的に「1クリップのチェーン」として実行されるため、clips=1 限定で目的を満たせる。
+- **クリップ毎の参照動画入力**（Clip 2 に専用の参照動画を与える方式）は研究課題へ格下げ（対象外）。
+
+### 34.2 実装（加算的変更）
+
+既存の凍結 API 契約への加算的変更（省略時は従来と byte 同一）:
+
+- **`api/models.py`**: `GenerateChainRequest`（280行目〜）に `reference_video_id: str | None = None`／`conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)`／`reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)` を追加（355-357行目。`GenerateRequest` の同名フィールドと同型・同バリデーション）。`validate_chain_constraints`（360行目〜）に検証を追加: クリップ数下限判定（397-406行目）に `self.reference_video_id is None` の条件を足し、reference 指定時は clips=1 を許容／`reference_video_id` かつ `loras` 空 → 422（479-482行目）／`reference_video_id` かつ `len(clips) != 1` → 422「requires exactly 1 clip in v1」（484-485行目）／`conditioning_attention_strength`・`reference_video_strength` 単独指定かつ `loras` 空 → 422（487-495行目）／`reference_video_id` と `source_video` の併用 → 422（502-507行目、V2V の凍結ヘッドとの競合を理由に排他）。
+- **`api/generate_chain.py`**: `generate_chain()`（37行目〜）内、ジョブ予約前に `reference_video_id` の実在確認＋÷128 検証（76-82行目・未知IDなら404、幅高が128の倍数でなければ422 `REFERENCE_RESOLUTION_INVALID`）。LoRA 解決ループ（97-112行目）で `preprocess_kinds` を集計するよう拡張し、control系アダプタが含まれる場合: `len(request.clips) != 1` なら従来どおり422 `LORA_CONTROL_UNSUPPORTED_IN_CHAIN`（108行目）、clips=1 かつ `reference_video_id is None` なら422 `LORA_REQUIRES_REFERENCE`（109-110行目、単発 `/generate` と同一の判定）。preprocess 種別が2種以上なら422 `LORA_PREPROCESS_CONFLICT`（111-112行目）。`api/errors.py::lora_control_unsupported_in_chain` の docstring／エラーメッセージを「chains carry no reference_video_id」から「chain with clips >= 2」に更新（送出条件が変わったため）。
+- **`services/pipeline_manager.py`**: `run_chain_job`（550行目付近）で `chain.reference_video_id` を `video_upload_store.path_for()` で実パスへ解決し `reference_video_path` として `ltx_runner.generate_chain(...)` へ渡す（619行目）。無指定なら `None`（従来と byte 同一の経路）。
+- **`services/ltx_runner.py`**: `LTXRunner.generate_chain`／`_MockBackend.generate_chain`／`_RealBackend.generate_chain` の3箇所に `reference_video_path: Path | None = None` 引数を追加。mock は無視するのみ。`_RealBackend`（1383-1400行目付近）は `reference_video_path` が非 None のときだけ worker ペイロードに `reference_video` ブロック（`{path, strength, preprocess}` ＋ `conditioning_attention_strength` 指定時のみ `attention_strength`）を追加。単発 `/generate` の `reference_payload` 組み立てをそのまま踏襲。
+- **`engine/worker.py`**: 単発 `_do_generate` にあった reference 解析ロジック（旧: 関数内インライン）を `_resolve_ic_reference(ref, output_path) -> (ic_reference, attn_strength)`（263-307行目）として関数抽出。**単発側の挙動は逐語不変**（抽出のみ、ロジック変更なし）。`_do_generate`（310行目〜）と `_do_generate_chain`（451行目付近）の両方がこのヘルパーを呼ぶよう変更し、`_do_generate_chain` は結果を `run_chain(..., ic_reference=ic_reference, ic_attention_strength=ic_attn)`（483-484行目）へ渡す。
+- **`engine/pipeline/chain_pipeline.py run_chain`**（`engine/pipeline/fast_video_pipeline.py generate_chain` 経由）: `ic_reference`／`ic_attention_strength` 引数を追加（418-419行目）。`ledger.transformer()` 構築前の `pipe._set_ic_job(...)` 呼び出し（577行目）に両値を渡す（無指定時は従来どおり `(None, 1.0)` の stale クリア）。**stage1のクリップ0（V2V 継続でない非分岐時のみ）**で `pipe._reference_conditioning_for_stage(...)`（651-667行目）を呼び、reference latent を conditioning に追加。半解像度（`height//2`/`width//2`）の cond_kwargs は単発側と同一のビルダーを再利用。**stage2 のタイルには一切注入しない**（単発生成と同じ「stage1のみ」の意味論）。
+- **GUI（`gradio_ui/handlers.py`）**: A2V 送信前の「adapter が None 以外なら拒否」チェックを撤去（旧: 402行目付近）。`use_adapter` が真のときは既存の `_combine_generate_loras(use_adapter, adapter, adapter_strength, prompt_loras)`（569-570行目）で単発経路と同一ロジックにより `loras` を合成し、chain_payload へ `reference_video_id`（574行目）と、`control_adherence`／`reference_strength` が1.0未満のときのみ `conditioning_attention_strength`／`reference_video_strength`（576-581行目、単発経路 623-635行目と同じ「1.0未満のみ送出」規約）を追加。adapter 選択済み＋参照動画未指定は既存の `msg_ref_video_required` により従来どおり事前拒否（変更なし）。
+- **`gradio_ui/i18n.py`**: デッドキーとなった `a2v_control_lora_unsupported` を EN/JA から削除。`gen_a2v_note` を「control 系アダプタも併用可」に書き換え。`apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN` の文言を「チェーン（clips>=2）では使えない」旨に正確化（旧文言は条件を明示していなかった）。
+
+### 34.3 客観ゲート（PASS）
+
+- **pytest**: **526 passed / 0 failed / 1 skipped**（§33 時点の基準 511+1 → +15・退行ゼロ。既存 skip 1件のみ）。新規ファイル `tests/test_chain_reference.py`（14件）＝スキーマ検証（reference＋loras空／reference＋clips≠1／strength系＋loras空／reference＋source_video排他／未知ID404／÷128違反422）・エンドポイント（clips=1+control+reference→受理、clips=1+control+reference無し→`LORA_REQUIRES_REFERENCE`）・worker ペイロード疎通（reference_video ブロックの有無・attention_strength 省略時の挙動）・`run_chain` が `_set_ic_job` へ ic_reference/attention_strength を渡すこと・stage1のクリップ0にのみ reference conditioning が1回だけ注入されること・A2V+control+reference の mock 完走をカバー。既存 `tests/test_chain_lora.py` は control アダプタ拒否テストの docstring／条件を「clips>=2」に更新。`tests/test_gradio_handlers.py` は旧「A2V+adapter は無条件拒否」テストを「reference 未指定のみ拒否（既存 `msg_ref_video_required` 経由）」に置き換え、A2V+control+reference がチェーンペイロードへ正しく配線されることを確認する新規テストを追加。
+
+### 34.4 独立レビュー（PASS・must-fix ゼロ）
+
+- 実装に関与していないレビュアーによる独立レビューを実施。**must-fix（必須修正）はゼロ件**。
+
+### 34.5 mock E2E（実サーバー起動・port 18901・隔離 config）
+
+- 実サーバー（mock backend）を隔離環境（scratchpad 上の専用 config・別ポート 18901）で起動し、以下4パターンを確認:
+  - `clips=1` ＋ control アダプタ ＋ `reference_video_id` ＋ `source_audio`（A2V）→ 202 → `completed`。`outputs/{job_id}/metadata.json` に `reference_video_id`／`loras` が記録されていることを確認。
+  - `clips=2` ＋ control アダプタ → 422 `LORA_CONTROL_UNSUPPORTED_IN_CHAIN`。
+  - `clips=1` ＋ control アダプタ ＋ `reference_video_id` 無し → 422 `LORA_REQUIRES_REFERENCE`。
+  - 従来どおりの A2V（`loras` 無し）→ `completed`（回帰なし）。
+
+### 34.6 既知事項（ドキュメント記録のみ・対応は見送り）
+
+1. **precedence**: pydantic のスキーマ検証がエンドポイントより先に走るため、`clips>=2` ＋ `reference_video_id` の複合誤設定は、コード付きの `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` ではなく汎用の `VALIDATION_ERROR`（422）になる。
+2. `reference_video_id` ＋ スタイル系 LoRA のみ（control 系を含まない）はスキーマ上は受理されるが、worker 側の `_set_ic_job` で `RuntimeError`（ジョブ失敗）になる。単発 `/generate` の既存挙動をそのまま写像したものであり、GUI からは到達不能（アダプタ欄が control 系のみを選択肢に持つため）＝直接 API 経由のみ。早期422化は将来の改善余地として残す。
+3. `GET /jobs/{id}` の応答の `request` ブロックは chain 固有フィールド（`source_audio`／`loras`／`reference_video_id` 等）を載せない（`JobResponse.request` が `to_clip_request` 経由の `GenerateRequest` 形のため）。§30 の `loras` 追加時からの既存の表現上の制約であり、今回の退行ではない。正式な記録は `metadata.json` 側。
+4. **既知の無害事象（GPU実機目視ゲート中に観測・2026-07-12）**: 2本目のジョブ完了直後にサーバーログへ `ERROR asyncio: ... ConnectionResetError [WinError 10054]`（`_ProactorBasePipeTransport._call_connection_lost`）が1回出力された。これは Windows の asyncio proactor がクライアント（ブラウザ）側の強制切断を後処理する際の既知の無害なノイズであり、直後に再接続し以降のジョブも正常完走した。機能影響なし・対応不要（オーナー判断で無視と決定）。
+
+### 34.7 GPU実機目視ゲート＝✅完了・ユーザー受容（2026-07-12）
+
+客観ゲート（34.3〜34.5）に続き、オーナー立ち会いのもと GPU 実機で目視ゲートを実施した。GUI の Generate タブから音声 wav＋参照動画＋control 系アダプタ（reference動画付き IC-LoRA）で生成を実行し、成功を確認した。
+
+**実績**: 解像度 1280×768・201 frames・8 steps・所要時間 約300秒/本・ピーク VRAM 9241〜9537MB。内訳＝pose-control（strength=1）×3本＋canny-control（strength=1）×1本、いずれも `completed`。ジョブ開始ログに `loras=pose-control(strength=1)` 等の配線物証を確認（本節「ジョブ起動ログの拡充」機能がここでも有効に機能した）。
+
+オーナーが実際の生成結果を受容＝**A2V＋reference付きIC-LoRA併用のGPU実機目視ゲートはクローズ**。
+
+観測された既知の無害事象は34.6の4に追記済み（asyncio ConnectionResetError・機能影響なし・対応不要）。
+
+git commit／push は本節時点でも未実施（作業ツリーの変更のまま・ユーザー判断待ち）。残る筆頭課題はコミット／プッシュ（オーナー判断）のみ。
+
+---
+
+## 35. GUIスピナー退行の原因特定と修正＝`demo.load` 3箇所へ`show_progress="hidden"`＝オーナー実機確認✅完了・**§35クローズ**（2026-07-12）
+
+> **正本＝本節。** §34.7 の GPU 実機目視ゲートに着手する前提として、実機（実ブラウザ）で GUI を触ったところ、§34 の本題（reference動画付きIC-LoRAのchain対応）とは**別系統**の表示不具合が発覚した。目視ゲート自体を進める前に本節の修正を先行させる。
+
+本機: 同上（i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`）。
+
+### 35.1 症状（実機確認・2026-07-12）
+
+- Generate タブの **Control adapter**（参照動画欄を含む一帯）が、ページ読み込み直後から永久スピナー状態のまま固まり、参照動画のアップロード欄が操作不能（クリックが素通りしない）。
+- Settings タブでも同様の症状: `server_config_json`／`spill_table`、および Models セクションの4本のモデル管理ドロップダウン（transformer／text_encoder／video_vae／audio）が同じく操作不能。**影響箇所は計7箇所。**
+- **3種のブラウザ（Chrome／Edge／Firefox、実機・別環境）で再現**。単一ブラウザ／拡張機能起因ではない。
+
+### 35.2 調査結論
+
+- **退行コミットの特定**: `1e18dea`（WebGUI 大規模改修）**単独**が原因。それ以前の `fd35877`（§31・プロンプト欄一本化）・`ab274ad` は実ブラウザで動作クリーンであることを確認した。オーナーが 2026-07-08 に確認した GUI 生成成功時の出力（`outputs/1a9aee65-...`）とも整合する＝それ以降に踏んだコミットのうち `1e18dea` のみが新規に該当。
+- **機構の特定**: 複数の `demo.load` イベントが同一ページロードで同時発火する際、Gradio 6.19 のクライアント側 status-tracker（コンポーネントごとの進捗オーバーレイ管理）が pending のまま残ってしまう既知動作。pending のまま残った status-tracker のオーバーレイ（`z-index:30`／`pointer-events:auto`）が、折りたたまれたアコーディオンや非アクティブなタブの内側にある部品を覆い、クリックを奪う。
+  - **因果の精密化**: 退行コミット直前の `ab274ad` にも、同じ3つの `demo.load` と閉じたアコーディオン内の部品は**既に存在していた**のに症状は出なかった（実ブラウザ確認済み）。`1e18dea` は4本目の `demo.load(None, js=_min_attr_js)` の追加と大量の部品追加（`gen_a2v_accordion`・Duration パネル・`chain_preset` 等）で構成を拡大しており、この**構成拡大によって、潜在していたクライアント側のレース条件が顕在化した**というのが正確な因果である。切り分け実験では js ロード単独の無効化では解消しなかったため、単一要素の追加ではなく構成拡大そのものが引き金と結論した。
+  - バックエンド側は正常完走しておりサーバーエラーは無し。ブラウザの JS 例外もゼロ（コンソールクリーン）。
+  - **除外した仮説**: `config_retry_timer`（`gr.Timer`）／`_min_attr_js`（`demo.load(None, js=...)`）／`CUSTOM_CSS` を個別に無効化してもこの症状に変化は無く、これらは主因ではないと判断した。
+
+### 35.3 修正（`gradio_ui/ui.py`・変更3箇所）
+
+以下3箇所の `demo.load(...)` に `show_progress="hidden"` を追加した。背景処理そのもの（fetch内容・outputs）は変更していない＝挙動は「進捗オーバーレイを出さない」点のみ変わる。
+
+1. **`on_page_load`**（設定・アダプタ・spill_table 等の起動時フェッチ）。
+2. **`refresh_model_dropdowns`（warn=False）**（Models セクションの起動時ドロップダウン更新）。
+3. **`load_style_gallery`（warn=False）**（Style LoRA タブの起動時ギャラリー読み込み）。
+
+なお 3 の `load_style_gallery` への付与は、観測された症状（35.1 の adapter＋Settings 6箇所＝計7箇所）に含まれていたからではなく、**同クラスの起動時バックグラウンド取得への予防的統一**である。
+
+**対象外**（変更していないもの・理由）:
+
+- `config_retry_timer.tick`（`gr.Timer` ハンドラ）: Gradio の `Timer.tick` はリスナー個別既定で `show_progress="hidden"` のため対象外。**出典＝実行時実体** `.venv/Lib/site-packages/gradio/events.py` 1330-1334行の `tick = EventListener(..., show_progress="hidden")`。自動生成の型スタブ（`gradio/timer.pyi`）は既定を `"full"` と表示するが、これはリスナー個別既定を反映しないスタブ側の不正確さであり、実行時の既定は hidden が正（将来この食い違いを見て「対象漏れ」と誤解しないこと）。副次的な理由として、`config_retry_timer` は `gr.Timer(3.0, active=False)` で**非アクティブ起動**（`ui.py` 189行付近）であり、設定取得が失敗してリトライに入るまで発火しない＝そもそも起動時の複数 `demo.load` 同時発火シナリオの外にある。
+- `model_refresh_btn.click`／`style_reload_btn.click` 等の**ユーザー操作イベント**: 明示的な操作への応答なので進捗表示は維持（意図的に変更しない）。
+- `config_state.change`: 対象外（デリバリー先の挙動と無関係）。
+- `demo.load(None, js=_min_attr_js)`: `fn=None` のクライアント専用フックであり status-tracker を生成しないため対象外。
+
+### 35.4 検証結果
+
+- [x] **pytest** ✅ **526 passed / 0 failed / 1 skipped**（junit 集計）＝ベースライン（§34 の 526+1）からの退行ゼロ。
+- [x] **CDP実ブラウザでの再検証** ✅ 以下すべて確認:
+  - ページロード後、アクティブな status-tracker が **0個**。
+  - IC-LoRA アコーディオン展開後 **60秒監視**でスピナー出現無し。`elementFromPoint` が INPUT 本体を返し（オーバーレイに覆われていない）、実クリックで Control adapter の選択肢4項目が開く。
+  - Settings タブ展開後も status-tracker **0個**（`server_config_json`／`spill_table`／モデル管理ドロップダウン×4 とも操作可能）。
+  - Style LoRA タブのギャラリーが正常描画。
+  - mock バックエンドでの Generate ボタン実行時、進捗表示は**従来どおり出現し完了後に復元**（ユーザー操作イベントの進捗表示維持＝意図どおり）。
+- [x] **オーナー実機確認**✅（2026-07-12）: `run.ps1` でサーバー起動 → `/ui` を開いたところ Control adapter が即座に表示され操作可能であることを確認。副次効果として「以前よりGUIが開くまでの時間が短縮され軽快になった」という体感改善も確認された。
+
+**§35クローズ（オーナー実機確認完了・2026-07-12）。** git commit／push は本節時点でも未実施（作業ツリーの変更のまま・ユーザー判断待ち）。

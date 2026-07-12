@@ -313,7 +313,9 @@ def test_generate_btn_click_chain_has_disable_generate_restore_stages():
     generate_btn = next(c for c, k, a in registry if k == "btn_generate" and a == "value")
 
     start, middle, end = _click_chain(demo, generate_btn)
-    assert middle.fn is not None and middle.fn.__name__ == "generate"
+    # WP3: the middle stage is now the batch-aware ``dispatch`` closure, which
+    # delegates verbatim to ``generate`` when batch mode is off.
+    assert middle.fn is not None and middle.fn.__name__ == "dispatch"
     assert end.fn is not None and end.fn.__name__ == "_restore"
     # Stage 1 (disable) and stage 3 (restore) both target the SAME button.
     assert any(o._id == generate_btn._id for o in start.outputs)
@@ -346,9 +348,12 @@ def test_generate_btn_restore_uses_this_buttons_own_label_key():
 
     _gs, _gm, g_end = _click_chain(demo, generate_btn)
     _cs, _cm, c_end = _click_chain(demo, chain_btn)
-    assert g_end.fn("en")["value"] == LABELS["en"]["btn_generate"]
+    # WP3: the Generate button's restore is batch-aware — (enable, lang). With
+    # batch OFF it restores to the plain "Generate" label; the chain button's
+    # restore keeps its single-arg (lang) signature.
+    assert g_end.fn(False, "en")["value"] == LABELS["en"]["btn_generate"]
     assert c_end.fn("en")["value"] == LABELS["en"]["btn_concat"]
-    assert g_end.fn("ja")["value"] == LABELS["ja"]["btn_generate"]
+    assert g_end.fn(False, "ja")["value"] == LABELS["ja"]["btn_generate"]
     assert c_end.fn("ja")["value"] == LABELS["ja"]["btn_concat"]
 
 
@@ -405,3 +410,116 @@ def test_adapter_change_toggles_reference_video_interactivity():
     on = fn("union-control")  # any real (non-None) adapter name
     assert on["interactive"] is True
     assert "value" not in on  # must NOT clobber an uploaded reference video
+
+
+# --------------------------------------------------------------------------- #
+# 2nd-round FB — modification A: the batch table uses FIXED PIXEL column widths
+# (so the table overflows -> horizontal scrollbar) rather than percentages
+# (which always fit the viewport and squeeze the Prompt column).
+# --------------------------------------------------------------------------- #
+def _batch_table(demo):
+    from gradio_ui.ui import _BATCH_COL_WIDTHS
+    return next(c for c in demo.blocks.values()
+                if isinstance(c, gr.Dataframe)
+                and getattr(c, "column_widths", None) == _BATCH_COL_WIDTHS)
+
+
+def _preorder(block):
+    order = [block]
+    for ch in getattr(block, "children", []) or []:
+        order.extend(_preorder(ch))
+    return order
+
+
+def test_batch_table_column_widths_are_fixed_pixels():
+    from gradio_ui.ui import _BATCH_COL_WIDTHS
+
+    demo = _demo()
+    batch_df = _batch_table(demo)
+    assert len(batch_df.column_widths) == 7
+    # Every width is a fixed pixel value (not a "%"): with pixels the frontend
+    # sizes the table to the SUM of the columns, overflowing the container so
+    # its overflow-x:auto shows a horizontal scrollbar.
+    assert all(isinstance(w, str) and w.endswith("px")
+               for w in batch_df.column_widths)
+    px = [int(w[:-2]) for w in batch_df.column_widths]
+    # Prompt column (index 4) is the widest and always ≥480px (click-into room),
+    # and the total width comfortably exceeds a typical accordion panel so the
+    # scrollbar actually appears.
+    assert px[4] == max(px) and px[4] >= 480
+    assert sum(px) > 1000
+    # wrap stays on: long prompts wrap inside the 480px cell (no truncation).
+    assert batch_df.wrap is True
+    assert batch_df.column_widths == _BATCH_COL_WIDTHS
+
+
+# --------------------------------------------------------------------------- #
+# 2nd-round FB — modification B: the max-duration + summary readouts sit ABOVE
+# the batch table (between the "Set audios" button and the table).
+# --------------------------------------------------------------------------- #
+def test_batch_maxdur_summary_readouts_are_above_the_table():
+    demo = _demo()
+    acc = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Accordion)
+               and c.label == LABELS["en"]["batch_accordion"])
+    order = _preorder(acc)
+    pos = {id(b): i for i, b in enumerate(order)}
+
+    batch_df = _batch_table(demo)
+    maxdur_md = next(b for b in order
+                     if isinstance(b, gr.Markdown) and b.value
+                     and "max duration" in b.value)
+    set_btn = next(b for b in order
+                   if isinstance(b, gr.Button)
+                   and getattr(b, "value", None) == LABELS["en"]["batch_set_audios"])
+    # Order within the accordion: Set audios -> max-duration/summary -> table.
+    assert pos[id(set_btn)] < pos[id(maxdur_md)] < pos[id(batch_df)]
+
+
+# --------------------------------------------------------------------------- #
+# 2nd-round FB — modification C: the Regenerate handler refuses a Skip row
+# (leaves stat + table untouched) but still re-queues a non-Skip row.
+# --------------------------------------------------------------------------- #
+def test_batch_regen_refuses_skip_row(tmp_path):
+    from gradio_ui.manifest import BatchRow, STAT_DONE, STAT_SKIP, STAT_WAITING
+
+    demo = _demo()
+    fn = demo.on_batch_regen
+
+    # A Skip row is refused: stat stays Skip and the table update is a no-op.
+    skip_rows = [BatchRow(queue=1, wav="a.wav", stat=STAT_SKIP,
+                          skip_reason="over-481f")]
+    upd, out_rows = fn(0, skip_rows, str(tmp_path), "en")
+    assert out_rows[0].stat == STAT_SKIP        # NOT promoted to Waiting
+    assert "value" not in upd                    # table left as-is (no re-render)
+
+    # A non-Skip (Done) row IS re-queued to Waiting (control path).
+    done_rows = [BatchRow(queue=1, wav="a.wav", stat=STAT_DONE)]
+    upd2, out2 = fn(0, done_rows, str(tmp_path), "en")
+    assert out2[0].stat == STAT_WAITING
+    assert "value" in upd2                        # table re-rendered
+
+
+def test_batch_regen_skip_i18n_key_present_both_languages():
+    for lang in ("en", "ja"):
+        assert "batch_msg_regen_skip" in LABELS[lang]
+        assert "{reason}" in LABELS[lang]["batch_msg_regen_skip"]
+    assert LABELS["en"]["batch_msg_regen_skip"] != LABELS["ja"]["batch_msg_regen_skip"]
+
+
+# --------------------------------------------------------------------------- #
+# 2nd-round FB — modification D: the foolproof prompt reason codes localize.
+# --------------------------------------------------------------------------- #
+def test_batch_prompt_foolproof_reason_codes_localize():
+    from gradio_ui.ui import _batch_start_reason
+
+    for lang in ("en", "ja"):
+        assert "batch_msg_prompt_empty_add" in LABELS[lang]
+        assert "batch_msg_prompt_rows_empty" in LABELS[lang]
+        # "add" reason maps straight through.
+        assert _batch_start_reason("prompt-empty-add", lang) == \
+            LABELS[lang]["batch_msg_prompt_empty_add"]
+        # "replace" reason carries the empty-row count into the text.
+        out = _batch_start_reason("prompt-rows-empty:3", lang)
+        assert out == LABELS[lang]["batch_msg_prompt_rows_empty"].format(n="3")
+        assert "3" in out

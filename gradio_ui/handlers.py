@@ -336,6 +336,66 @@ def _combine_generate_loras(use_adapter, adapter, adapter_strength, prompt_loras
     return _merge_loras(combined)
 
 
+def build_a2v_chain_payload(
+    *,
+    audio_id,
+    num_frames,
+    prompt,
+    negative_prompt,
+    width,
+    height,
+    crop_output,
+    frame_rate,
+    seed,
+    conditioning_images=None,
+    loras=None,
+    use_adapter=False,
+    reference_video_id=None,
+    control_adherence=1.0,
+    reference_strength=1.0,
+):
+    """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
+    carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
+    distilled quality contract, ``overlap_frames=3``/``overlap_strength=0.5``, and
+    ``source_audio.audio_id``. A pure function (primitives + ID strings in, dict
+    out) with NO Gradio / gr.* / ApiClient dependency, so the batch runner can
+    build the byte-identical payload off the UI thread.
+
+    Optional keys reproduce the Generate-tab A2V branch exactly: ``conditioning_images``
+    only when non-empty, ``loras`` only when the combined list is non-empty, and
+    ``reference_video_id`` (+ the S3 ``conditioning_attention_strength`` /
+    ``reference_video_strength`` keys, each only below 1.0) only when an adapter is
+    used -- so a token-free, adapter-free request stays byte-identical to before."""
+    clip_entry: dict = {"num_frames": int(num_frames)}
+    if conditioning_images:
+        clip_entry["conditioning_images"] = conditioning_images
+    chain_payload = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt or "",
+        "width": int(width),
+        "height": int(height),
+        "crop_output": crop_output,
+        "frame_rate": float(frame_rate),
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": int(seed),
+        "pipeline": "distilled",
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [clip_entry],
+        "source_audio": {"audio_id": audio_id},
+    }
+    if loras:
+        chain_payload["loras"] = loras
+    if use_adapter:
+        chain_payload["reference_video_id"] = reference_video_id
+        if float(control_adherence) < 1.0:
+            chain_payload["conditioning_attention_strength"] = float(control_adherence)
+        if float(reference_strength) < 1.0:
+            chain_payload["reference_video_strength"] = float(reference_strength)
+    return chain_payload
+
+
 # --------------------------------------------------------------------------- #
 # Generate flow, factored out for unit testing (mock transport). Yields
 # (progress_text, job_id, video_path) tuples, matching the previous behaviour.
@@ -541,44 +601,33 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             except Exception as exc:
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
-            clip_entry: dict = {"num_frames": int(num_frames)}
-            if conditioning:
-                clip_entry["conditioning_images"] = conditioning
-            chain_payload = {
-                "prompt": send_prompt,
-                "negative_prompt": negative_prompt or "",
-                "width": int(width),
-                "height": int(height),
-                "crop_output": crop_output,
-                "frame_rate": float(frame_rate),
-                "num_inference_steps": 8,
-                "guidance_scale": 1.0,
-                "seed": int(seed),
-                "pipeline": "distilled",
-                "overlap_frames": 3,
-                "overlap_strength": 0.5,
-                "clips": [clip_entry],
-                "source_audio": {"audio_id": audio_id},
-            }
             # A2V+LoRA (ADDITIVE): wire the prompt <lora:...> style/character
             # adapters AND the reference-video CONTROL adapter (S4 dropdown)
             # into the chain payload's ``loras`` -- same builder as the single
             # /generate path. The key is added ONLY when non-empty, so a
             # token-free, adapter-free A2V request stays byte-identical to
-            # before.
+            # before. Payload assembly (including the S3 optional-below-1.0 send
+            # discipline for the reference strengths) lives in the pure
+            # build_a2v_chain_payload so the batch runner emits the same body.
             a2v_loras = _combine_generate_loras(
                 use_adapter, adapter, adapter_strength, prompt_loras)
-            if a2v_loras:
-                chain_payload["loras"] = a2v_loras
-            if use_adapter:
-                chain_payload["reference_video_id"] = reference_video_id
-                # S3: same optional-below-1.0 send discipline as the single
-                # /generate path (:624-627 below) -- default 1.0 stays
-                # byte-identical.
-                if float(control_adherence) < 1.0:
-                    chain_payload["conditioning_attention_strength"] = float(control_adherence)
-                if float(reference_strength) < 1.0:
-                    chain_payload["reference_video_strength"] = float(reference_strength)
+            chain_payload = build_a2v_chain_payload(
+                audio_id=audio_id,
+                num_frames=num_frames,
+                prompt=send_prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                crop_output=crop_output,
+                frame_rate=frame_rate,
+                seed=seed,
+                conditioning_images=conditioning,
+                loras=a2v_loras,
+                use_adapter=use_adapter,
+                reference_video_id=reference_video_id,
+                control_adherence=control_adherence,
+                reference_strength=reference_strength,
+            )
             try:
                 resp = api.generate_chain(chain_payload)
             except Exception as exc:

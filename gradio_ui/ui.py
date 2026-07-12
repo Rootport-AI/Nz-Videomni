@@ -5,6 +5,9 @@ later slices (S3-S6).
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import gradio as gr
 
 from .adapters import ADAPTER_NONE, build_adapter_choices
@@ -33,6 +36,25 @@ from .handlers import (
     on_config_retry_tick,
 )
 from .handlers import fetch_models_safe, load_selected_models
+from .handlers import (
+    _LORA_TOKEN_RE,
+    _combine_generate_loras,
+    _resolve_fps,
+    _resolve_poll,
+    parse_prompt_loras,
+    suggest_frames_for_audio,
+)
+from . import manifest as batch_manifest
+from .batch import BatchSnapshot, STATE_IDLE, get_runner
+from .manifest import (
+    IMAGE_SHARED,
+    MAX_FRAMES,
+    STAT_DONE,
+    STAT_FAILED,
+    STAT_GENERATING,
+    STAT_SKIP,
+    STAT_WAITING,
+)
 from .i18n import L
 from .presets import (
     PRESETS,
@@ -51,6 +73,149 @@ def build_spill_rows(config: dict | None) -> list[list]:
     frames] built from /config limits.spill_free_frames."""
     spill = ((config or {}).get("limits") or {}).get("spill_free_frames") or {}
     return [[res, frames] for res, frames in spill.items()]
+
+
+# --------------------------------------------------------------------------- #
+# Batch A2V (WP3) — pure display/formatting helpers. Kept module-level (not in
+# batch.py, which is frozen) so the UI wiring below stays terse; none of them
+# touch Gradio state, so they are trivially reusable + testable.
+# --------------------------------------------------------------------------- #
+# Image extensions offered in the per-row image dropdown (mirrors the Generate
+# tab's gr.Image filepath input's practical set).
+_BATCH_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
+
+# Initial per-column widths for the 7-column batch table (gr.Dataframe
+# ``column_widths``, supported in Gradio 6.19). FIXED PIXEL widths (not
+# percentages): with pixels the frontend sizes the header table to the SUM of
+# the column widths (Gradio 6.19 Index-*.js: ``d.style.width = `${G}px``` where
+# G = Σ column px), so once that sum (here 1270px) exceeds the accordion's width
+# the ``.table-wrap`` container (``overflow-x:auto`` in the compiled Dataframe
+# CSS) shows a HORIZONTAL SCROLLBAR instead of squeezing every column. A
+# percentage list, by contrast, is always resolved as a fraction of the viewport
+# width (``v/100*viewport``) so it can never overflow — which is exactly why the
+# old percentages shrank the Prompt column rather than scrolling. ``wrap=True``
+# is kept, so the 480px Prompt column is always clickable and only text longer
+# than 480px wraps inside its own cell.
+# Columns: # / Audio / dur. / Image / Prompt / Status / Output.
+_BATCH_COL_WIDTHS = ["50px", "220px", "70px", "140px", "480px", "90px", "220px"]
+
+# Row-status -> (emoji, i18n key). The emoji is theme-independent (no CSS
+# colouring, which is fragile across Gradio themes); the label localizes.
+_BATCH_STAT_DISPLAY = {
+    STAT_WAITING: ("⚪", "batch_stat_waiting"),      # white circle
+    STAT_GENERATING: ("⏳", "batch_stat_generating"),  # hourglass
+    STAT_DONE: ("✅", "batch_stat_done"),            # check mark
+    STAT_FAILED: ("❌", "batch_stat_failed"),        # cross mark
+    STAT_SKIP: ("⛔", "batch_stat_skip"),            # no-entry
+}
+
+# scan_wav_folder's skip_reason strings -> localized i18n key.
+_BATCH_SKIP_KEY = {
+    "over-481f": "batch_skip_over481",
+    "wav-only-alpha": "batch_skip_wavonly",
+}
+
+
+def _batch_stat_cell(stat: str, lang: str) -> str:
+    emoji, key = _BATCH_STAT_DISPLAY.get(stat, ("", None))
+    label = L(key, lang) if key else stat
+    return f"{emoji} {label}".strip()
+
+
+def batch_rows_to_table(rows, lang: str) -> list[list]:
+    """Render a list[BatchRow] into the 7-column Dataframe value
+    (queue# / Audio / Duration / Image / Prompt / Status / Output)."""
+    table: list[list] = []
+    for r in rows:
+        dur = f"{r.duration_s:.2f}s" if r.duration_s else ""
+        table.append([
+            r.queue, r.wav, dur, r.image or IMAGE_SHARED, r.prompt,
+            _batch_stat_cell(r.stat, lang), r.output,
+        ])
+    return table
+
+
+def batch_table_headers(lang: str) -> list[str]:
+    return [L("batch_col_queue", lang), L("batch_col_wav", lang),
+            L("batch_col_dur", lang), L("batch_col_image", lang),
+            L("batch_col_prompt", lang), L("batch_col_stat", lang),
+            L("batch_col_output", lang)]
+
+
+def batch_summary_text(rows, lang: str) -> str:
+    counts = {STAT_DONE: 0, STAT_FAILED: 0, STAT_SKIP: 0, STAT_WAITING: 0,
+              STAT_GENERATING: 0}
+    for r in rows:
+        if r.stat in counts:
+            counts[r.stat] += 1
+    return L("batch_msg_summary", lang).format(
+        done=counts[STAT_DONE], failed=counts[STAT_FAILED],
+        skip=counts[STAT_SKIP], waiting=counts[STAT_WAITING])
+
+
+def batch_maxdur_text(width, height, fps, config, lang: str) -> str:
+    """The "max duration: 481f (Ns)" line, plus the comfortable (spill-free)
+    frame ceiling for the CURRENT resolution when /config advertises one."""
+    fps_v = _resolve_fps(fps)
+    txt = L("batch_maxdur", lang).format(frames=MAX_FRAMES, secs=MAX_FRAMES / fps_v)
+    try:
+        spill = ((config or {}).get("limits") or {}).get("spill_free_frames") or {}
+        key = f"{int(width)}x{int(height)}"
+        thr = spill.get(key)
+        if thr:
+            txt = f"{txt} — {key}: {thr}f"
+    except (TypeError, ValueError):
+        pass
+    return txt
+
+
+def batch_image_choices(img_dir) -> list[str]:
+    """Dropdown choices for the per-row image: the "Shared" sentinel first,
+    then every image file in ``img_dir`` (by name). Empty / missing folder ->
+    just the sentinel."""
+    choices = [IMAGE_SHARED]
+    if img_dir:
+        try:
+            p = Path(str(img_dir))
+            if p.is_dir():
+                for f in sorted(p.iterdir()):
+                    if f.is_file() and f.suffix.lower() in _BATCH_IMAGE_EXTS:
+                        choices.append(f.name)
+        except OSError:
+            pass
+    return choices
+
+
+def batch_row_info_text(row, lang: str) -> str:
+    """The lower edit-panel status line for the selected row: localized
+    skip-reason + any error message."""
+    parts: list[str] = []
+    if row.skip_reason:
+        key = _BATCH_SKIP_KEY.get(row.skip_reason)
+        parts.append(L(key, lang) if key else row.skip_reason)
+    if row.error:
+        parts.append(row.error)
+    return " / ".join(parts)
+
+
+def _batch_start_reason(msg: str, lang: str) -> str:
+    """Map BatchRunner.start()'s internal reason codes onto the localized
+    batch_msg_* text where one exists; otherwise pass it through."""
+    if msg.startswith("shared keyframe"):
+        return L("batch_msg_no_common_image", lang)
+    if msg.startswith("batch already running"):
+        return L("batch_msg_already_running", lang)
+    if msg.startswith("no rows to process"):
+        return L("batch_msg_no_rows", lang)
+    if msg.startswith("wav folder not found"):
+        return L("batch_msg_wav_dir_missing", lang)
+    # Foolproof preflight (empty common prompt).
+    if msg == "prompt-empty-add":
+        return L("batch_msg_prompt_empty_add", lang)
+    if msg.startswith("prompt-rows-empty:"):
+        n = msg.split(":", 1)[1]
+        return L("batch_msg_prompt_rows_empty", lang).format(n=n)
+    return msg
 
 
 def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
@@ -380,6 +545,80 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 label=L("a2v_lbl_audio"), type="filepath",
                                 file_count="single", file_types=["audio"],
                             ), "a2v_lbl_audio")
+
+                        # accordion: Batch A2V (WP3). A wav folder -> CSV
+                        # manifest -> a queue table the in-process BatchRunner
+                        # (batch.py) drives one clip at a time for unattended
+                        # overnight runs. The heavy lifting (scan/merge/CSV,
+                        # payload, execution) lives in manifest.py / batch.py;
+                        # this accordion is only the wiring + a Timer that reads
+                        # the runner's state back on a tick.
+                        # Runtime state (not visible components):
+                        #   batch_rows_state — the canonical list[BatchRow]
+                        #   batch_sel_state  — the selected row index (edit panel)
+                        #   batch_timer      — polls the runner while it runs
+                        batch_rows_state = gr.State([])
+                        batch_sel_state = gr.State(None)
+                        batch_timer = gr.Timer(2.0, active=False)
+                        with gr.Accordion(L("batch_accordion"), open=False) as batch_accordion:
+                            reg(batch_accordion, "batch_accordion", "label")
+                            # Enable panel — the batch toggle, the source folder
+                            # paths, and the output-location controls, fused into
+                            # one card (gr.Group) so they read as the "set up the
+                            # batch" section.
+                            with gr.Group():
+                                batch_enable = reg(gr.Checkbox(
+                                    value=False, label=L("batch_enable")), "batch_enable")
+                                batch_wav_dir = reg(gr.Textbox(
+                                    label=L("batch_wav_dir")), "batch_wav_dir")
+                                batch_img_dir = reg(gr.Textbox(
+                                    label=L("batch_img_dir")), "batch_img_dir")
+                                batch_out_mode = reg(gr.Radio(
+                                    choices=[(L("batch_out_auto"), "auto"),
+                                             (L("batch_out_custom"), "custom")],
+                                    value="auto", label=L("batch_out_mode"),
+                                ), "batch_out_mode")
+                                batch_out_dir = reg(gr.Textbox(
+                                    label=L("batch_out_dir"), visible=False),
+                                    "batch_out_dir")
+                            # Prompt mode sits just above "Set audios".
+                            batch_add_replace = reg(gr.Radio(
+                                choices=[(L("batch_mode_add"), "add"),
+                                         (L("batch_mode_replace"), "replace")],
+                                value="add", label=L("batch_add_replace"),
+                            ), "batch_add_replace")
+                            batch_set_btn = reg(gr.Button(L("batch_set_audios")),
+                                                "batch_set_audios", "value")
+                            # Info readouts sit between "Set audios" and the
+                            # table: the max-duration line and the live batch
+                            # summary, side by side (owner feedback — they read
+                            # as the batch's headline numbers above the queue).
+                            with gr.Row():
+                                batch_maxdur_md = gr.Markdown(
+                                    batch_maxdur_text(512, 320, 24.0, None, "en"),
+                                    elem_classes=["note"])
+                                batch_summary_md = gr.Markdown("")
+                            batch_table = gr.Dataframe(
+                                headers=batch_table_headers("en"),
+                                datatype="str", column_count=(7, "fixed"),
+                                interactive=True,
+                                static_columns=[0, 1, 2, 3, 5, 6],
+                                wrap=True, max_height=360, value=[],
+                                column_widths=_BATCH_COL_WIDTHS,
+                            )
+                            # lower edit panel — acts on the selected row.
+                            with gr.Group():
+                                batch_img_dd = reg(gr.Dropdown(
+                                    choices=[IMAGE_SHARED], value=IMAGE_SHARED,
+                                    label=L("batch_row_image")), "batch_row_image")
+                                batch_row_info_md = gr.Markdown(
+                                    "", elem_classes=["note"])
+                            batch_copy_common_btn = reg(gr.Button(
+                                L("batch_copy_common")), "batch_copy_common", "value")
+                            batch_regen_btn = reg(gr.Button(
+                                L("batch_regen_row")), "batch_regen_row", "value")
+                            batch_stop_btn = reg(gr.Button(
+                                L("batch_stop"), variant="stop"), "batch_stop", "value")
 
                     # RIGHT: action panel (Generate first) -> progress -> job id -> video
                     with gr.Column(scale=2):
@@ -806,19 +1045,172 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 return gr.update(interactive=False, value=None)
             return gr.update(interactive=True)
 
+        # ---- Generate button dispatch (single vs. batch A2V) ----
+        # The middle stage of the Generate button's click chain. When batch A2V
+        # is OFF it delegates verbatim to the frozen ``generate`` handler (same
+        # 40 inputs, same 3 outputs). When ON it instead snapshots the whole
+        # Generate tab into a BatchSnapshot and hands it to the in-process
+        # BatchRunner, then returns immediately (the run proceeds on a daemon
+        # thread; the batch_timer below reflects its progress). The 6 batch
+        # inputs are APPENDED after the existing 40 so every pre-existing
+        # positional maps to the exact same generate() argument as before.
+        def dispatch(prompt_v, negative_v,
+                     kf1_en, kf1_img, kf1_fr, kf1_st,
+                     kf2_en, kf2_img, kf2_fr, kf2_st,
+                     kf3_en, kf3_img, kf3_fr, kf3_st,
+                     kf4_en, kf4_img, kf4_fr, kf4_st,
+                     kf5_en, kf5_img, kf5_fr, kf5_st,
+                     width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
+                     num_frames_v, frame_rate_v, seed_v,
+                     adapter_v, adapter_strength_v, control_adherence_v,
+                     reference_strength_v, ref_video_v, config_v,
+                     lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
+                     batch_enable_v, batch_rows_v, batch_wav_dir_v,
+                     batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
+                     batch_img_dir_v):
+            if not batch_enable_v:
+                # Single-generation path: byte-identical delegation (first 40
+                # positionals ARE the generate() signature).
+                yield from generate(
+                    prompt_v, negative_v,
+                    kf1_en, kf1_img, kf1_fr, kf1_st,
+                    kf2_en, kf2_img, kf2_fr, kf2_st,
+                    kf3_en, kf3_img, kf3_fr, kf3_st,
+                    kf4_en, kf4_img, kf4_fr, kf4_st,
+                    kf5_en, kf5_img, kf5_fr, kf5_st,
+                    width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
+                    num_frames_v, frame_rate_v, seed_v,
+                    adapter_v, adapter_strength_v, control_adherence_v,
+                    reference_strength_v, ref_video_v, config_v,
+                    lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v)
+                return
+
+            rows = batch_rows_v or []
+            if not rows:
+                yield L("batch_msg_no_wav", lang_v), "", None
+                return
+
+            # --- common prompt: strip <lora:...> tokens exactly as the frozen
+            # generate path does, so the runner's compose_prompt gets the clean
+            # base text and the extracted tokens flow into ``loras``. ---
+            use_adapter_v = bool(adapter_v) and adapter_v != ADAPTER_NONE
+            send_prompt = prompt_v
+            prompt_loras: list[dict] = []
+            if _LORA_TOKEN_RE.search(prompt_v or ""):
+                try:
+                    lora_list = api.list_loras()
+                except Exception as exc:
+                    yield L("lora_msg_list_failed", lang_v).format(err=exc), "", None
+                    return
+                known = [e.get("name") for e in (lora_list or [])
+                         if isinstance(e, dict) and e.get("name")]
+                send_prompt, prompt_loras, lora_err = parse_prompt_loras(
+                    prompt_v, known, lang_v)
+                if lora_err is not None:
+                    yield lora_err, "", None
+                    return
+            combined_loras = _combine_generate_loras(
+                use_adapter_v, adapter_v, adapter_strength_v, prompt_loras)
+
+            # crop_output — identical arithmetic to the frozen generate path.
+            crop_output = None
+            try:
+                if crop_en_v and int(crop_w_v) > 0 and int(crop_h_v) > 0:
+                    crop_output = {"width": int(crop_w_v), "height": int(crop_h_v)}
+            except (TypeError, ValueError):
+                crop_output = None
+
+            # shared keyframe images (common i2v slots) -> (path, frame, strength),
+            # collected the same way the frozen path builds ``to_upload``.
+            shared_images: list[tuple] = []
+            for en, img, fr, st in (
+                (kf1_en, kf1_img, kf1_fr, kf1_st),
+                (kf2_en, kf2_img, kf2_fr, kf2_st),
+                (kf3_en, kf3_img, kf3_fr, kf3_st),
+                (kf4_en, kf4_img, kf4_fr, kf4_st),
+                (kf5_en, kf5_img, kf5_fr, kf5_st),
+            ):
+                if en and img:
+                    try:
+                        shared_images.append((img, int(fr or 0), float(st)))
+                    except (TypeError, ValueError):
+                        continue
+
+            try:
+                width_i, height_i = int(width_v), int(height_v)
+                seed_i = int(seed_v)
+                fps_f = float(frame_rate_v) if frame_rate_v else 24.0
+            except (TypeError, ValueError):
+                yield L("msg_bad_dimension", lang_v), "", None
+                return
+
+            interval, timeout_s = _resolve_poll(poll_interval_v, poll_timeout_v)
+            out_dir = str(batch_manifest.resolve_output_dir(
+                batch_wav_dir_v, batch_out_mode_v, batch_out_dir_v))
+
+            snapshot = BatchSnapshot(
+                wav_dir=batch_wav_dir_v,
+                out_dir=out_dir,
+                img_dir=batch_img_dir_v or "",
+                prompt_common=send_prompt,
+                negative=negative_v or "",
+                prompt_mode=batch_add_replace_v or "add",
+                width=width_i,
+                height=height_i,
+                crop_output=crop_output,
+                frame_rate=fps_f,
+                seed=seed_i,
+                loras=combined_loras,
+                shared_images=shared_images,
+                use_adapter=use_adapter_v,
+                ref_video_path=ref_video_v,
+                control_adherence=control_adherence_v,
+                reference_strength=reference_strength_v,
+                poll_interval=interval,
+                poll_timeout_s=timeout_s,
+            )
+
+            ok, msg = get_runner().start(snapshot, rows, api)
+            if ok:
+                n = len([r for r in rows if r.stat in
+                         (STAT_WAITING, STAT_FAILED, STAT_GENERATING)])
+                yield L("batch_msg_started", lang_v).format(n=n), "", None
+            else:
+                yield _batch_start_reason(msg, lang_v), "", None
+
+        # Batch-aware restore for stage 3: while batch mode is on AND the runner
+        # actually took off (running/stopping), the button stays disabled and
+        # shows "Batching a2v..." so the run is visibly in progress; the
+        # batch_timer tick below restores it to "Start a2v batch" once the runner
+        # returns to idle. Otherwise (batch off, or a start that failed and left
+        # the runner idle) it re-enables to the appropriate normal label.
+        def _restore(enable, lang):
+            if enable and get_runner().state != STATE_IDLE:
+                return gr.update(interactive=False, value=L("batch_running", lang))
+            key = "batch_start" if enable else "btn_generate"
+            return gr.update(interactive=True, value=L(key, lang))
+
+        def arm_batch_timer():
+            # Only tick the batch table while a run is actually in flight.
+            return gr.update(active=(get_runner().state != STATE_IDLE))
+
         generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=generate_btn,
         ).then(
-            generate,
+            dispatch,
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
                     reference_strength_slider, ref_video, config_state,
-                    lang_state, poll_interval, poll_timeout, gen_a2v_audio],
+                    lang_state, poll_interval, poll_timeout, gen_a2v_audio,
+                    batch_enable, batch_rows_state, batch_wav_dir,
+                    batch_out_mode, batch_out_dir, batch_add_replace,
+                    batch_img_dir],
             outputs=[progress_box, job_box, video_out],
         ).then(
-            make_generate_btn_restore("btn_generate"),
-            inputs=lang_state, outputs=generate_btn,
+            _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
+        ).then(
+            arm_batch_timer, outputs=batch_timer,
         )
 
         # Enable/disable (and clear) the reference-video input to track the adapter
@@ -837,6 +1229,270 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             inputs=[gen_a2v_audio, frame_rate, lang_state],
             outputs=[num_frames],
         )
+
+        # ---- Batch A2V events (WP3) ----
+        # Enabling batch mode repurposes the Generate button ("Start a2v batch")
+        # and freezes the single-shot audio + Frames inputs (per-wav Frames are
+        # auto-computed on scan). switch_language re-stamps generate_btn to its
+        # plain label, so a dedicated lang listener below re-applies these while
+        # enabled (the frozen switch_language signature/arity is untouched).
+        def on_batch_enable_toggle(enable, lang):
+            if enable:
+                return (gr.update(value=L("batch_start", lang)),
+                        gr.update(interactive=False),
+                        gr.update(interactive=False,
+                                  info=L("batch_frames_auto", lang)))
+            return (gr.update(value=L("btn_generate", lang)),
+                    gr.update(interactive=True),
+                    gr.update(interactive=True, info=""))
+
+        batch_enable.change(
+            on_batch_enable_toggle, inputs=[batch_enable, lang_state],
+            outputs=[generate_btn, gen_a2v_audio, num_frames],
+        )
+
+        # Custom output folder textbox visible only in "custom" mode.
+        batch_out_mode.change(
+            lambda m: gr.update(visible=(m == "custom")),
+            inputs=batch_out_mode, outputs=batch_out_dir,
+        )
+
+        # Live "max duration" readout tracks resolution / fps edits (independent
+        # of the Duration / spill listeners so it never interferes with them).
+        def on_batch_maxdur(width_v, height_v, fps_v, config_v, lang):
+            return gr.update(value=batch_maxdur_text(width_v, height_v, fps_v,
+                                                     config_v, lang))
+
+        for _mctrl in (width, height, frame_rate):
+            _mctrl.change(
+                on_batch_maxdur,
+                inputs=[width, height, frame_rate, config_state, lang_state],
+                outputs=batch_maxdur_md,
+            )
+
+        # "Set audios": scan the wav folder, merge over any existing manifest,
+        # persist the CSV, and (re)build the table + image dropdown + summary.
+        def on_batch_set_audios(wav_dir, img_dir, width_v, height_v, fps_v,
+                                config_v, lang):
+            # Locked while a run is in flight: re-scanning would rewrite the CSV
+            # the runner owns and desync the displayed rows from its state. Leave
+            # the table, rows-state, dropdown, maxdur and summary all untouched
+            # (bare gr.update() -> the State keeps its current value, see
+            # postprocess_data's stateful branch: an update with no "value").
+            if get_runner().state != STATE_IDLE:
+                gr.Warning(L("batch_msg_running_locked", lang))
+                return (gr.update(), gr.update(), gr.update(),
+                        gr.update(), gr.update())
+            if not wav_dir or not os.path.isdir(str(wav_dir)):
+                gr.Warning(L("batch_msg_wav_dir_invalid", lang))
+                return (gr.update(value=[]), [],
+                        gr.update(choices=[IMAGE_SHARED], value=IMAGE_SHARED),
+                        gr.update(), gr.update(value=""))
+            fps = _resolve_fps(fps_v)
+            scanned = batch_manifest.scan_wav_folder(
+                wav_dir, fps, frames_for=suggest_frames_for_audio)
+            if not scanned:
+                gr.Warning(L("batch_msg_no_wav", lang))
+            existing = batch_manifest.read_manifest(wav_dir)
+            rows, warnings = batch_manifest.merge_rows(existing, scanned)
+            res = batch_manifest.write_manifest_atomic(wav_dir, rows)
+            if res.locked:
+                gr.Warning(L("batch_msg_csv_locked", lang))
+            for w in warnings:
+                gr.Warning(w)
+            # spill (comfortable-limit) advisory — count of over-threshold rows.
+            spill_free = ((config_v or {}).get("limits") or {}).get(
+                "spill_free_frames") or {}
+            spill = batch_manifest.compute_spill_warnings(
+                rows, width_v, height_v, spill_free)
+            if spill:
+                key = f"{int(width_v)}x{int(height_v)}"
+                gr.Warning(L("batch_warn_spill", lang).format(
+                    n=len(spill), res=key, frames=spill_free.get(key)))
+            return (gr.update(value=batch_rows_to_table(rows, lang)), rows,
+                    gr.update(choices=batch_image_choices(img_dir),
+                              value=IMAGE_SHARED),
+                    gr.update(value=batch_maxdur_text(width_v, height_v, fps_v,
+                                                      config_v, lang)),
+                    gr.update(value=batch_summary_text(rows, lang)))
+
+        batch_set_btn.click(
+            on_batch_set_audios,
+            inputs=[batch_wav_dir, batch_img_dir, width, height, frame_rate,
+                    config_state, lang_state],
+            outputs=[batch_table, batch_rows_state, batch_img_dd,
+                     batch_maxdur_md, batch_summary_md],
+        )
+
+        # Prompt-column (idx 4) inline edits. Any other column is reverted (the
+        # table is re-rendered from the canonical rows); edits are refused while
+        # a run is in flight.
+        def on_batch_prompt_edit(rows, wav_dir, lang, evt: gr.EditData):
+            rows = rows or []
+            if get_runner().state != STATE_IDLE:
+                gr.Warning(L("batch_msg_running_locked", lang))
+                return gr.update(value=batch_rows_to_table(rows, lang)), rows
+            index = evt.index
+            row_i = index[0] if isinstance(index, (list, tuple)) else index
+            col_i = index[1] if isinstance(index, (list, tuple)) and len(index) > 1 else None
+            if col_i != 4 or row_i is None or row_i >= len(rows):
+                return gr.update(value=batch_rows_to_table(rows, lang)), rows
+            rows[row_i].prompt = evt.value or ""
+            res = batch_manifest.write_manifest_atomic(wav_dir, rows)
+            if res.locked:
+                gr.Warning(L("batch_msg_csv_locked", lang))
+            return gr.update(value=batch_rows_to_table(rows, lang)), rows
+
+        batch_table.edit(
+            on_batch_prompt_edit,
+            inputs=[batch_rows_state, batch_wav_dir, lang_state],
+            outputs=[batch_table, batch_rows_state],
+        )
+
+        # Row select -> load the edit panel (image dropdown + info line).
+        def on_batch_row_select(rows, lang, evt: gr.SelectData):
+            rows = rows or []
+            idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
+            if idx is None or idx >= len(rows):
+                return None, gr.update(), gr.update(value="")
+            row = rows[idx]
+            return (idx, gr.update(value=row.image or IMAGE_SHARED),
+                    gr.update(value=batch_row_info_text(row, lang)))
+
+        batch_table.select(
+            on_batch_row_select, inputs=[batch_rows_state, lang_state],
+            outputs=[batch_sel_state, batch_img_dd, batch_row_info_md],
+        )
+
+        # Per-row image assignment (edit panel dropdown).
+        def on_batch_img_change(sel_idx, image_name, rows, wav_dir, lang):
+            rows = rows or []
+            if sel_idx is None or sel_idx >= len(rows):
+                return gr.update(), rows
+            new_image = image_name or IMAGE_SHARED
+            # No-op when the value did not actually change (this .change also
+            # fires when row-select programmatically loads the dropdown), so a
+            # mere selection neither rewrites the CSV nor warns during a run.
+            if rows[sel_idx].image == new_image:
+                return gr.update(), rows
+            if get_runner().state != STATE_IDLE:
+                gr.Warning(L("batch_msg_running_locked", lang))
+                return gr.update(), rows
+            rows[sel_idx].image = new_image
+            res = batch_manifest.write_manifest_atomic(wav_dir, rows)
+            if res.locked:
+                gr.Warning(L("batch_msg_csv_locked", lang))
+            return gr.update(value=batch_rows_to_table(rows, lang)), rows
+
+        batch_img_dd.change(
+            on_batch_img_change,
+            inputs=[batch_sel_state, batch_img_dd, batch_rows_state,
+                    batch_wav_dir, lang_state],
+            outputs=[batch_table, batch_rows_state],
+        )
+
+        # Copy the common prompt into the selected row.
+        def on_batch_copy_common(sel_idx, common_prompt, rows, wav_dir, lang):
+            rows = rows or []
+            if get_runner().state != STATE_IDLE:
+                gr.Warning(L("batch_msg_running_locked", lang))
+                return gr.update(), rows
+            if sel_idx is None or sel_idx >= len(rows):
+                return gr.update(), rows
+            rows[sel_idx].prompt = common_prompt or ""
+            res = batch_manifest.write_manifest_atomic(wav_dir, rows)
+            if res.locked:
+                gr.Warning(L("batch_msg_csv_locked", lang))
+            return gr.update(value=batch_rows_to_table(rows, lang)), rows
+
+        batch_copy_common_btn.click(
+            on_batch_copy_common,
+            inputs=[batch_sel_state, prompt, batch_rows_state, batch_wav_dir,
+                    lang_state],
+            outputs=[batch_table, batch_rows_state],
+        )
+
+        # Re-queue the selected row (stat -> Waiting; output/error untouched).
+        # A Skip row is refused: it was excluded for a structural reason
+        # (over-481f / non-wav) that re-queueing cannot fix, so warn and leave
+        # the table + state untouched rather than silently promoting it.
+        def on_batch_regen(sel_idx, rows, wav_dir, lang):
+            rows = rows or []
+            if get_runner().state != STATE_IDLE:
+                gr.Warning(L("batch_msg_running_locked", lang))
+                return gr.update(), rows
+            if sel_idx is None or sel_idx >= len(rows):
+                return gr.update(), rows
+            if rows[sel_idx].stat == STAT_SKIP:
+                raw = rows[sel_idx].skip_reason
+                reason = L(_BATCH_SKIP_KEY[raw], lang) if raw in _BATCH_SKIP_KEY \
+                    else (raw or "")
+                gr.Warning(L("batch_msg_regen_skip", lang).format(reason=reason))
+                return gr.update(), rows
+            rows[sel_idx].stat = STAT_WAITING
+            res = batch_manifest.write_manifest_atomic(wav_dir, rows)
+            if res.locked:
+                gr.Warning(L("batch_msg_csv_locked", lang))
+            return gr.update(value=batch_rows_to_table(rows, lang)), rows
+
+        batch_regen_btn.click(
+            on_batch_regen,
+            inputs=[batch_sel_state, batch_rows_state, batch_wav_dir, lang_state],
+            outputs=[batch_table, batch_rows_state],
+        )
+
+        # Stop button: ask the runner to halt (in-flight row rewinds to Waiting).
+        def on_batch_stop(lang):
+            get_runner().request_stop()
+            gr.Info(L("batch_msg_stopped", lang))
+
+        batch_stop_btn.click(on_batch_stop, inputs=lang_state, outputs=None)
+
+        # Timer tick: mirror the runner's live rows + summary into the table and
+        # self-disable once the runner is idle (final state stays displayed).
+        # It also drives the Generate button's label back: while the run is in
+        # flight the button stays "Batching a2v..."/disabled, and on the tick
+        # where the runner has returned to idle it is restored to
+        # "Start a2v batch"/enabled (enable + lang come from the inputs). With
+        # batch mode off the button is left untouched (bare gr.update()).
+        def on_batch_tick(enable, lang):
+            runner = get_runner()
+            rows = runner.snapshot_rows()
+            active = runner.state != STATE_IDLE
+            if not enable:
+                btn = gr.update()
+            elif active:
+                btn = gr.update(interactive=False, value=L("batch_running", lang))
+            else:
+                btn = gr.update(interactive=True, value=L("batch_start", lang))
+            return (gr.update(value=batch_rows_to_table(rows, lang)),
+                    gr.update(value=batch_summary_text(rows, lang)),
+                    rows, gr.update(active=active), btn)
+
+        batch_timer.tick(
+            on_batch_tick, inputs=[batch_enable, lang_state],
+            outputs=[batch_table, batch_summary_md, batch_rows_state, batch_timer,
+                     generate_btn],
+        )
+
+        # Language switch for the batch table headers + rendered rows/summary.
+        # Kept as a SEPARATE lang listener (not folded into switch_language)
+        # because test_gradio_handlers pins switch_language's output arity to
+        # len(registry)+2; this adds no extra registry/extra outputs.
+        def on_batch_lang_switch(lang, rows):
+            rows = rows or []
+            return (gr.update(headers=batch_table_headers(lang),
+                              value=batch_rows_to_table(rows, lang)),
+                    gr.update(value=batch_summary_text(rows, lang)))
+
+        # Re-apply the batch-enabled overrides after switch_language resets the
+        # Generate button to its plain label (only while batch mode is on).
+        def on_batch_reapply_enable(enable, lang):
+            if not enable:
+                return gr.update(), gr.update(), gr.update()
+            return (gr.update(value=L("batch_start", lang)),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False, info=L("batch_frames_auto", lang)))
 
         # ---- Clip Chain events ----
         # Reuse the SAME quality-mode revert + crop-toggle handlers as Generate.
@@ -998,6 +1654,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                              (L("opt_light", lang), "light")]
             mode_choices = [(L("v2v_mode_none", lang), "none"),
                             (L("v2v_mode_v2v", lang), "v2v")]
+            batch_mode_choices = [(L("batch_mode_add", lang), "add"),
+                                  (L("batch_mode_replace", lang), "replace")]
+            batch_out_choices = [(L("batch_out_auto", lang), "auto"),
+                                 (L("batch_out_custom", lang), "custom")]
             adapter_choices = build_adapter_choices(config, lang)
             updates = []
             for component, key, attr in registry:
@@ -1010,14 +1670,28 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     kwargs["choices"] = mode_choices
                 elif component is adapter:
                     kwargs["choices"] = adapter_choices
+                elif component is batch_add_replace:
+                    kwargs["choices"] = batch_mode_choices
+                elif component is batch_out_mode:
+                    kwargs["choices"] = batch_out_choices
                 updates.append(gr.update(**kwargs))
             updates.append(gr.update(headers=jobs_table_headers(lang)))
             updates.append(gr.update(headers=[L("col_res", lang), L("col_maxframes", lang)]))
             return updates
 
-        lang_dd.change(switch_language, inputs=[lang_dd, config_state],
-                       outputs=lang_switch_outputs)
+        lang_dd.change(
+            switch_language, inputs=[lang_dd, config_state],
+            outputs=lang_switch_outputs,
+        ).then(
+            # Re-apply the batch overrides AFTER switch_language resets the
+            # Generate button to its plain label (no-op unless batch is on).
+            on_batch_reapply_enable, inputs=[batch_enable, lang_dd],
+            outputs=[generate_btn, gen_a2v_audio, num_frames],
+        )
         lang_dd.change(lambda v: v, inputs=lang_dd, outputs=lang_state)
+        # Batch table headers + rendered rows/summary localize on switch too.
+        lang_dd.change(on_batch_lang_switch, inputs=[lang_dd, batch_rows_state],
+                       outputs=[batch_table, batch_summary_md])
 
         # show_progress="hidden": startup background config fetches must not
         # spawn per-component status trackers -- with several simultaneous
@@ -1185,4 +1859,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     # Adapter -> reference-video enable/disable closure: lets a test drive the
     # greying logic directly (mirrors the on_page_load / on_style_select exposure).
     demo.on_adapter_change = on_adapter_change  # type: ignore[attr-defined]
+    # Batch Regenerate closure (2nd-round FB, modification C): lets a test drive
+    # the Skip-row refusal directly without a live event round-trip.
+    demo.on_batch_regen = on_batch_regen  # type: ignore[attr-defined]
     return demo

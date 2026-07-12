@@ -2506,3 +2506,180 @@ def test_a2v_msg_frames_adjusted_i18n_keys_present():
         # Must actually format with the {frames}/{dur} kwargs the handler
         # passes (a KeyError here means the template and the call site drifted).
         LABELS[lang]["a2v_msg_frames_adjusted"].format(frames=113, dur=5.0)
+
+
+# --------------------------------------------------------------------------- #
+# build_a2v_chain_payload (WP0): the pure POST /generate/chain body builder
+# extracted from make_generate_handler's A2V branch. The batch runner reuses it,
+# so these lock the exact keys + key ORDER + the optional-key gating (loras only
+# when non-empty, conditioning_images only when present, reference_* only under
+# an adapter and each strength only below 1.0).
+# --------------------------------------------------------------------------- #
+def test_build_a2v_chain_payload_minimal_no_loras_no_ref_no_cond():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-1",
+        num_frames=113,
+        prompt="a cat",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=7,
+        conditioning_images=[],
+        loras=[],
+        use_adapter=False,
+    )
+    assert payload == {
+        "prompt": "a cat",
+        "negative_prompt": "",
+        "width": 512,
+        "height": 512,
+        "crop_output": None,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 7,
+        "pipeline": "distilled",
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 113}],
+        "source_audio": {"audio_id": "aud-1"},
+    }
+    # Optional keys must be entirely absent on the byte-identical baseline path.
+    assert "loras" not in payload
+    assert "reference_video_id" not in payload
+    assert "conditioning_images" not in payload["clips"][0]
+    # Key order is part of the frozen contract (dicts preserve insertion order).
+    assert list(payload.keys()) == [
+        "prompt", "negative_prompt", "width", "height", "crop_output",
+        "frame_rate", "num_inference_steps", "guidance_scale", "seed",
+        "pipeline", "overlap_frames", "overlap_strength", "clips", "source_audio",
+    ]
+
+
+def test_build_a2v_chain_payload_with_conditioning_and_crop():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    cond = [{"image_id": "img-9", "frame_idx": 0, "strength": 1.0}]
+    payload = build_a2v_chain_payload(
+        audio_id="aud-2",
+        num_frames=57,
+        prompt="p",
+        negative_prompt="ugly",
+        width=768,
+        height=512,
+        crop_output={"width": 640, "height": 480},
+        frame_rate=30.0,
+        seed=0,
+        conditioning_images=cond,
+    )
+    assert payload["clips"] == [{"num_frames": 57, "conditioning_images": cond}]
+    assert payload["crop_output"] == {"width": 640, "height": 480}
+    assert payload["negative_prompt"] == "ugly"
+    assert "loras" not in payload
+    assert "reference_video_id" not in payload
+
+
+def test_build_a2v_chain_payload_adds_loras_only_when_non_empty():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    loras = [{"name": "style", "strength": 0.8}]
+    payload = build_a2v_chain_payload(
+        audio_id="aud-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        loras=loras,
+    )
+    assert payload["loras"] == loras
+    # loras is appended AFTER source_audio (last of the base dict).
+    assert list(payload.keys())[-1] == "loras"
+    assert "reference_video_id" not in payload
+
+
+def test_build_a2v_chain_payload_adapter_defaults_send_ref_id_only():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    # Adapter used but both strengths at the 1.0 default: only reference_video_id
+    # is added; the two S3 strength keys stay absent (byte-identical default).
+    payload = build_a2v_chain_payload(
+        audio_id="aud-4",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        loras=[{"name": "canny", "strength": 1.0}],
+        use_adapter=True,
+        reference_video_id="vid-1",
+        control_adherence=1.0,
+        reference_strength=1.0,
+    )
+    assert payload["reference_video_id"] == "vid-1"
+    assert "conditioning_attention_strength" not in payload
+    assert "reference_video_strength" not in payload
+    # Order: base dict -> loras -> reference_video_id.
+    assert list(payload.keys())[-2:] == ["loras", "reference_video_id"]
+
+
+def test_build_a2v_chain_payload_adapter_below_one_adds_strength_keys():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-5",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        use_adapter=True,
+        reference_video_id="vid-2",
+        control_adherence=0.5,
+        reference_strength=0.25,
+    )
+    assert payload["reference_video_id"] == "vid-2"
+    assert payload["conditioning_attention_strength"] == 0.5
+    assert payload["reference_video_strength"] == 0.25
+    assert list(payload.keys())[-3:] == [
+        "reference_video_id",
+        "conditioning_attention_strength",
+        "reference_video_strength",
+    ]
+
+
+def test_build_a2v_chain_payload_coerces_numeric_types():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    # Mirrors the handler's int()/float() coercion so a batch caller passing
+    # numeric strings emits the same JSON as the Generate tab.
+    payload = build_a2v_chain_payload(
+        audio_id="aud-6",
+        num_frames="113",
+        prompt="p",
+        negative_prompt=None,
+        width="512",
+        height="512",
+        crop_output=None,
+        frame_rate="24",
+        seed="9",
+    )
+    assert payload["clips"][0]["num_frames"] == 113
+    assert payload["width"] == 512 and payload["height"] == 512
+    assert payload["frame_rate"] == 24.0 and isinstance(payload["frame_rate"], float)
+    assert payload["seed"] == 9
+    # negative_prompt=None coalesces to "" exactly like the handler branch.
+    assert payload["negative_prompt"] == ""

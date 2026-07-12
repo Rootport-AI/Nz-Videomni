@@ -387,6 +387,66 @@ LABELS: dict[str, dict[str, str]] = {
                                    "clamped to {clamped}."),
         "lora_msg_list_failed": ("Failed to look up the LoRA list for the <lora:...> tokens: "
                                  "{err}"),
+        # --- Batch A2V ---
+        "batch_accordion": "Batch A2V",
+        "batch_enable": "Enable batch A2V",
+        "batch_start": "Start a2v batch",
+        # Shown on the Generate button while a batch run is in flight (both
+        # languages use the same wording, per owner request).
+        "batch_running": "Batching a2v...",
+        "batch_add_replace": "Prompt mode",
+        "batch_mode_add": "Add (append to common prompt)",
+        "batch_mode_replace": "Replace (row replaces common)",
+        "batch_wav_dir": "Audio folder path",
+        "batch_img_dir": "Image folder path (optional)",
+        "batch_out_mode": "Output location",
+        "batch_out_auto": "Auto (beside audio folder)",
+        "batch_out_custom": "Custom folder",
+        "batch_out_dir": "Output folder path",
+        "batch_set_audios": "Set audios",
+        "batch_stop": "Stop batch",
+        "batch_maxdur": "max duration: {frames}f ({secs:.1f}s)",
+        "batch_frames_auto": "Auto-computed per wav (batch enabled)",
+        "batch_row_image": "Image for this row",
+        "batch_image_shared": "Shared",
+        "batch_copy_common": "Copy common prompt to this row",
+        "batch_regen_row": "Regenerate this row",
+        "batch_col_queue": "#",
+        "batch_col_wav": "Audio",
+        "batch_col_dur": "dur.",
+        "batch_col_image": "Image",
+        "batch_col_prompt": "Prompt",
+        "batch_col_stat": "Status",
+        "batch_col_output": "Output",
+        "batch_stat_waiting": "Waiting",
+        "batch_stat_generating": "Generating",
+        "batch_stat_done": "Done",
+        "batch_stat_failed": "Failed",
+        "batch_stat_skip": "Skip",
+        "batch_msg_no_common_image": ("The first keyframe image (slot 1, frame 0) is not set "
+                                      "while some rows use \"Shared\". Set it in the Keyframe "
+                                      "images section, or assign per-row images."),
+        "batch_msg_already_running": "A batch is already running.",
+        "batch_msg_started": "Batch started: {n} clips queued.",
+        "batch_msg_stopped": "Batch stop requested. The current job may still finish.",
+        "batch_msg_summary": "Done {done} / Failed {failed} / Skip {skip} / Waiting {waiting}",
+        "batch_msg_csv_locked": ("Manifest CSV is locked (is it open in Excel?). Saved to "
+                                 "autosave copy instead."),
+        "batch_msg_no_wav": "No audio files found in the folder.",
+        "batch_msg_wav_dir_invalid": "Audio folder path is invalid.",
+        "batch_skip_over481": "Over 481-frame hard limit",
+        "batch_skip_wavonly": "Alpha supports .wav only",
+        "batch_warn_spill": ("{n} row(s) exceed the comfortable limit for {res} ({frames}f); "
+                             "generation may be slow."),
+        "batch_msg_running_locked": "Table editing is locked while the batch is running.",
+        "batch_msg_no_rows": "No rows to process (all done or skipped).",
+        "batch_msg_wav_dir_missing": "Audio folder not found.",
+        "batch_msg_regen_skip": ("This row is skipped ({reason}) and cannot be "
+                                 "regenerated."),
+        "batch_msg_prompt_empty_add": ("Common prompt is empty. Enter it, or switch "
+                                       "Prompt mode to Replace."),
+        "batch_msg_prompt_rows_empty": ("Common prompt is empty and {n} row(s) have "
+                                        "no prompt (Replace mode)."),
     },
     "ja": {
         # --- top common bar ---
@@ -728,6 +788,64 @@ LABELS: dict[str, dict[str, str]] = {
         "lora_warn_weight_clamp": ("LoRA <{name}> の重み {given} が範囲外（0〜2.0）です。"
                                    "{clamped} に丸めました。"),
         "lora_msg_list_failed": "<lora:...> を解決するためのLoRA一覧取得に失敗しました: {err}",
+        # --- Batch A2V ---
+        "batch_accordion": "バッチA2V",
+        "batch_enable": "バッチA2Vを有効化",
+        "batch_start": "Start a2v batch",
+        # バッチ実行中にGenerateボタンへ表示（両言語とも同一表記・オーナー指定）。
+        "batch_running": "Batching a2v...",
+        "batch_add_replace": "プロンプト合成モード",
+        "batch_mode_add": "追記（共通プロンプトの末尾に追加）",
+        "batch_mode_replace": "置換（行のプロンプトが共通を置き換え）",
+        "batch_wav_dir": "音声フォルダのパス",
+        "batch_img_dir": "画像フォルダのパス（任意）",
+        "batch_out_mode": "出力先",
+        "batch_out_auto": "自動（音声フォルダの隣）",
+        "batch_out_custom": "フォルダを指定",
+        "batch_out_dir": "出力フォルダのパス",
+        "batch_set_audios": "音声を読み込む",
+        "batch_stop": "バッチを停止",
+        "batch_maxdur": "上限尺: {frames}f（{secs:.1f}秒）",
+        "batch_frames_auto": "wavごとに自動算出されます（バッチ有効中）",
+        "batch_row_image": "この行の画像",
+        "batch_image_shared": "Shared",
+        "batch_copy_common": "共通プロンプトをこの行へコピー",
+        "batch_regen_row": "この行を再生成",
+        "batch_col_queue": "#",
+        "batch_col_wav": "音声",
+        "batch_col_dur": "尺",
+        "batch_col_image": "画像",
+        "batch_col_prompt": "プロンプト",
+        "batch_col_stat": "状態",
+        "batch_col_output": "出力",
+        "batch_stat_waiting": "待機",
+        "batch_stat_generating": "生成中",
+        "batch_stat_done": "完了",
+        "batch_stat_failed": "失敗",
+        "batch_stat_skip": "除外",
+        "batch_msg_no_common_image": ("共通キーフレーム画像の1枚目（スロット1・先頭フレーム）が"
+                                      "未設定のまま、\"Shared\"指定の行があります。Keyframe images"
+                                      "の1枚目を設定するか、行ごとに画像を指定してください。"),
+        "batch_msg_already_running": "バッチは既に実行中です。",
+        "batch_msg_started": "バッチを開始しました: {n}件を投入します。",
+        "batch_msg_stopped": "バッチの停止を要求しました。実行中の1件は完了まで動く場合があります。",
+        "batch_msg_summary": "完了 {done} / 失敗 {failed} / 除外 {skip} / 待機 {waiting}",
+        "batch_msg_csv_locked": ("マニフェストCSVがロックされています（Excelで開いていませんか？）。"
+                                 "退避コピーに保存しました。"),
+        "batch_msg_no_wav": "フォルダに音声ファイルが見つかりません。",
+        "batch_msg_wav_dir_invalid": "音声フォルダのパスが正しくありません。",
+        "batch_skip_over481": "481フレーム上限超過",
+        "batch_skip_wavonly": "α版は.wavのみ対応",
+        "batch_warn_spill": ("{res}の快適上限（{frames}f）を超える行が{n}件あります。"
+                             "生成が低速になる可能性があります。"),
+        "batch_msg_running_locked": "バッチ実行中は表の編集はできません。",
+        "batch_msg_no_rows": "実行対象の行がありません（全て完了済みまたは除外です）。",
+        "batch_msg_wav_dir_missing": "音声フォルダが見つかりません。",
+        "batch_msg_regen_skip": "この行は除外されています（{reason}）。再生成できません。",
+        "batch_msg_prompt_empty_add": ("共通プロンプトが空です。入力するか、プロンプト合成モードを"
+                                       "Replaceに切り替えてください。"),
+        "batch_msg_prompt_rows_empty": ("共通プロンプトが空のまま、プロンプト未入力の行が{n}件あります"
+                                        "（Replaceモード）。"),
     },
 }
 

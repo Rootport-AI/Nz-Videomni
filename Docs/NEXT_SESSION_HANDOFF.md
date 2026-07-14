@@ -32,6 +32,8 @@ Clip Chain拡張の完結を受けて、次セッションの課題は以下の2
 
 ② **WebView2フロントエンドのバッチA2Vパリティ**（AviUtl2拡張・別リポジトリの課題）: 正本＝[`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)。
 
+> **2026-07-15追記**: フロントエンドのバックエンド追随はより広い範囲を[`FRONTEND_CATCHUP_WORKORDER.md`](FRONTEND_CATCHUP_WORKORDER.md)（2026-07-15新設）で正本化した。上記②（バッチA2Vパリティ）は同書のグループ2に統合済み。
+
 なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は[`LONGFORM_RESEARCH_TOPICS.md`](LONGFORM_RESEARCH_TOPICS.md)（長尺動画の品質と上限の研究課題ノート、2026-07-15新設）にまとめた。
 
 ---

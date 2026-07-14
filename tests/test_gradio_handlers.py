@@ -1440,6 +1440,27 @@ def test_chain_payload_three_clips_order_and_prompt_omission():
     ]
 
 
+def test_chain_payload_chunked_upsample_flag():
+    # The chunked-upsample checkbox (bound after v2v_context) rides into the
+    # /generate/chain payload as a bool. _chain_args stops at ``config``, so it is
+    # passed as a keyword here (the real UI binds it as a trailing positional).
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-cu"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "prompt": "", "frames": 121},
+        {"enabled": True, "prompt": "", "frames": 121},
+    ]), chunked_upsample=True)
+    _run_chain_until_started(gen)
+    assert captured["chunked_upsample"] is True
+
+
 def test_chain_clip0_conditioning_present_only_when_image_set(tmp_path):
     img = tmp_path / "start.png"
     img.write_bytes(b"\x89PNG\r\n")

@@ -781,6 +781,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ), "lbl_overlap_strength")
                         reg(gr.Markdown(L("cap_crossfade")), "cap_crossfade", "value")
 
+                        chain_chunked_upsample = reg(
+                            gr.Checkbox(value=False, label=L("chk_chunked_upsample")),
+                            "chk_chunked_upsample",
+                        )
+
                         # clip list: 24 fixed slots (slots 1-2 shown by default;
                         # the ± buttons grow/shrink the visible count). The open
                         # count lives in a gr.State because Gradio does not expose
@@ -1700,7 +1705,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     chain_overlap, chain_overlap_strength,
                     *chain_clip_inputs, config_state,
                     lang_state, poll_interval, poll_timeout,
-                    chain_mode, v2v_video, v2v_context],
+                    chain_mode, v2v_video, v2v_context, chain_chunked_upsample],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),

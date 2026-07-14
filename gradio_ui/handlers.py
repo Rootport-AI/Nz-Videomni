@@ -765,6 +765,10 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        config=None, ui_lang=None, poll_interval=None,
                        poll_timeout_min=None,
                        mode=MODE_NONE, src_video=None, context_frames=73,
+                       # ADDITIVE: bound to ui.py's chain_chunked_upsample input
+                       # (appended after v2v_context); MUST stay before src_audio,
+                       # which the inputs list does not pass.
+                       chunked_upsample=False,
                        src_audio=None):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
@@ -1038,6 +1042,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "pipeline": "distilled",
             "overlap_frames": kv,
             "overlap_strength": float(overlap_strength),
+            "chunked_upsample": bool(chunked_upsample),
             "clips": clips_payload,
         }
         # ADDITIVE chain LoRA: the SHARED prompt's <lora:...> style/character

@@ -155,6 +155,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_overlap": "Transition frames (overlap between clips, 1-8)",
         "lbl_overlap_strength": "Transition strength",
         "cap_crossfade": "Clips are joined with a cross-fade-like blend using these settings.",
+        "chk_chunked_upsample": "Chunked upsample mode (for VRAM 16GB)",
         "h_clips": "Clip list",
         "lbl_clip_prompt": "Clip prompt",
         "ph_clip_prompt": "Leave blank to use the shared prompt",
@@ -596,6 +597,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_overlap": "つなぎ目のフレーム数 (クリップ間のオーバーラップ・1〜8)",
         "lbl_overlap_strength": "つなぎ目の強さ",
         "cap_crossfade": "クリップ間はこの設定でクロスフェード的に接続されます。",
+        # 意図的に英語固定（en側と同一文字列）。
+        "chk_chunked_upsample": "Chunked upsample mode (for VRAM 16GB)",
         "h_clips": "クリップ一覧",
         "lbl_clip_prompt": "クリッププロンプト",
         "ph_clip_prompt": "空欄なら共通プロンプトを使用",

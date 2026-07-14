@@ -953,6 +953,7 @@ class LTXFastVideoPipeline:
         ic_loras: list[tuple[str, float]] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
+        chunked_upsample: bool = False,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -999,6 +1000,7 @@ class LTXFastVideoPipeline:
             ic_attention_strength=(
                 1.0 if ic_attention_strength is None else ic_attention_strength
             ),
+            chunked_upsample=chunked_upsample,
         )
 
     @torch.inference_mode()

@@ -40,6 +40,7 @@ from chain_math import (
     ChainLayout,
     audio_segment_windows,
     compute_chain_layout,
+    plan_upsample_chunks,
 )
 from engine import progress_shim
 from engine.api_types import ImageConditioningInput
@@ -395,6 +396,37 @@ def _encode_source_heads(
     return src_head_v_half, src_head_v_full, src_head_a, freeze_ka, had_audio
 
 
+def _chunked_upsample_cpu(assembled_v, video_encoder, upsampler, upsample_video_fn, device, progress=None):
+    """Temporal-chunked spatial upsample. Returns the upscaled latent on CPU.
+
+    Memory-bounded twin of the one-shot ``upsample_video`` over the whole
+    timeline: the assembled stage-1 latent is parked on CPU and each
+    :func:`chain_math.plan_upsample_chunks` chunk (core + halo) is streamed to the
+    GPU in ``channels_last_3d``, upsampled, its halo dropped, and immediately
+    evicted back to CPU with an ``empty_cache`` so only one chunk's working set is
+    resident at a time (chunk-wise cache release is mandatory — skipping it
+    fragments the reserved pool and spills). Cores tile the timeline with no
+    gap/overlap, so the CPU ``cat`` reassembles the identical latent (halo=18
+    matches the one-shot convolution interior).
+    """
+    plan = plan_upsample_chunks(int(assembled_v.shape[2]))
+    src_cpu = assembled_v[:1].to("cpu")
+    upsampler = upsampler.to(memory_format=torch.channels_last_3d)
+    out_parts = []
+    for k, ch in enumerate(plan):
+        xin = src_cpu[:, :, ch.in_start:ch.in_start + ch.in_len]
+        xin = xin.to(device).contiguous(memory_format=torch.channels_last_3d)
+        yout = upsample_video_fn(xin, video_encoder, upsampler)
+        out_parts.append(yout[:, :, ch.keep_lo:ch.keep_lo + ch.keep_len].to("cpu"))
+        del xin, yout
+        torch.cuda.empty_cache()
+        if progress:
+            progress("upsample", k, len(plan))
+    result = torch.cat(out_parts, dim=2)
+    del out_parts, src_cpu
+    return result
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main chain orchestration.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -417,6 +449,7 @@ def run_chain(
     ic_loras: list[tuple[str, float]] | None = None,
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
+    chunked_upsample: bool = False,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -726,9 +759,21 @@ def run_chain(
     assert tuple(assembled_a.shape) == tuple(exp_a), (tuple(assembled_a.shape), tuple(exp_a))
 
     # ── ONE upsample over the whole timeline. ─────────────────────────────────
-    upscaled_v = upsample_video(assembled_v[:1], video_encoder, ledger.spatial_upsampler())
-    torch.cuda.synchronize()
-    cleanup_memory()
+    if chunked_upsample:
+        # Opt-in memory-bounded path: upsample in halo-padded temporal chunks and
+        # keep the result on CPU (VRAM stays flat instead of scaling with total
+        # length -> long 768p chains no longer OOM). The stage-2 slice below
+        # transfers each tile back to the GPU on demand.
+        upsampler = ledger.spatial_upsampler()
+        upscaled_v = _chunked_upsample_cpu(
+            assembled_v, video_encoder, upsampler, upsample_video, device, progress
+        )
+        del upsampler
+        cleanup_memory()
+    else:
+        upscaled_v = upsample_video(assembled_v[:1], video_encoder, ledger.spatial_upsampler())
+        torch.cuda.synchronize()
+        cleanup_memory()
 
     # ── STAGE 2: always-tiled refine (video+audio jointly). ───────────────────
     # ONE context (the base/clip-0 prompt) for the ENTIRE stage-2 refine — this
@@ -750,6 +795,8 @@ def run_chain(
         tile_px = (vlen - 1) * VIDEO_TIME_FACTOR + 1
         tile_shape = VideoPixelShape(1, tile_px, height, width, frame_rate)
         init_v = upscaled_v[:, :, vs:vs + vlen].contiguous().clone()
+        if upscaled_v.device.type == "cpu":
+            init_v = init_v.to(device)
         init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
         if i == 0 and source is not None:
             # video-to-video variant B: hard-freeze (mask 0.0) the source head at

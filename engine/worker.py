@@ -29,6 +29,10 @@ Protocol (one JSON object per line; parent -> worker):
   # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
+   # chunked_upsample (optional, default False): when true the whole-timeline
+   # spatial upsample runs in halo-padded temporal chunks (VRAM-bounded for long
+   # 768p chains). Omitted/false -> the one-shot upsample path is byte-identical.
+   chunked_upsample,
    clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...],
    # V2V continuation (optional; null unless continuing an uploaded video). When
    # present, clips may be length 1; clips[0].num_frames is the TOTAL clip-0
@@ -457,6 +461,12 @@ def _do_generate_chain(msg: dict) -> None:
         msg.get("reference_video"), output_path
     )
 
+    # Opt-in memory-bounded spatial upsample (additive; default False keeps the
+    # one-shot whole-timeline upsample byte-identical). When True the engine
+    # upsamples the assembled stage-1 latent in halo-padded temporal chunks so a
+    # long 768p chain fits in 16GB VRAM.
+    chunked_upsample = bool(msg.get("chunked_upsample", False))
+
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
         f"frames={[c.num_frames for c in clips]} seed={seed} "
@@ -485,6 +495,7 @@ def _do_generate_chain(msg: dict) -> None:
         ic_loras=ic_loras,
         ic_reference=ic_reference,
         ic_attention_strength=ic_attn,
+        chunked_upsample=chunked_upsample,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

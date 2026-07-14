@@ -1353,6 +1353,7 @@ class _RealBackend:
             "seed": seed,
             "overlap_frames": int(chain.overlap_frames),
             "overlap_strength": float(chain.overlap_strength),
+            "chunked_upsample": bool(chain.chunked_upsample),
             "output_path": str(target),
             "clips": clips_payload,
         }

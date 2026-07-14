@@ -173,6 +173,38 @@ def test_chain_rejects_single_clip(client):
     assert r.status_code == 422
 
 
+def test_chain_accepts_chunked_upsample_flag(client):
+    # Opt-in chunked-upsample (ADDITIVE): a chain requesting it is accepted (202)
+    # and the flag is recorded in the request metadata.
+    clips = [{"num_frames": 25}, {"num_frames": 25}]
+    r = _run_chain(client, clips, chunked_upsample=True)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["request"]["chunked_upsample"] is True
+
+
+def test_chain_chunked_upsample_defaults_false(client):
+    # Omitting the flag keeps the existing one-pass path (default False) and still
+    # completes exactly as before.
+    clips = [{"num_frames": 25}, {"num_frames": 25}]
+    r = _run_chain(client, clips)  # flag omitted
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["request"]["chunked_upsample"] is False
+
+
 def test_chain_request_accepts_24_clips():
     # Upper clip-count bound (24-slot UI expansion): the model accepts a full
     # 24-clip chain (small clips stay well under MAX_CHAIN_TOTAL_PIXEL_FRAMES).

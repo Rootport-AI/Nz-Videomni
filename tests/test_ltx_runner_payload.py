@@ -16,7 +16,7 @@ import threading
 import types
 from pathlib import Path
 
-from api.models import GenerateRequest
+from api.models import GenerateChainRequest, GenerateRequest
 from services.ltx_runner import _RealBackend
 
 REGISTERED_LORA = "pixel-spatial-upscaler-x2"
@@ -92,3 +92,38 @@ def test_payload_defaults_when_fields_omitted(tmp_path):
     ref = captured[0]["reference_video"]
     assert ref["strength"] == 1.0  # byte-identical default
     assert "attention_strength" not in ref  # key entirely absent
+
+
+def _chain_request(**over) -> GenerateChainRequest:
+    base = dict(
+        prompt="a serene mountain lake at dawn",
+        width=384,
+        height=256,
+        frame_rate=24.0,
+        num_inference_steps=8,
+        guidance_scale=1.0,
+        seed=123,
+        pipeline="distilled",
+        overlap_frames=2,
+        overlap_strength=0.5,
+        clips=[{"num_frames": 25}, {"num_frames": 25}],
+    )
+    base.update(over)
+    return GenerateChainRequest(**base)
+
+
+def test_chain_payload_carries_chunked_upsample_true(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request(chunked_upsample=True)
+    be.generate_chain(req, tmp_path / "out")
+    # Always-present key (like overlap_frames/overlap_strength), correct bool.
+    assert captured[0]["chunked_upsample"] is True
+
+
+def test_chain_payload_chunked_upsample_false_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request()  # flag omitted -> default False
+    be.generate_chain(req, tmp_path / "out")
+    assert captured[0]["chunked_upsample"] is False

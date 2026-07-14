@@ -358,6 +358,14 @@ class GenerateChainRequest(BaseModel):
     conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)
     reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)
 
+    # Chunked-upsample opt-in (ADDITIVE/optional — a request omitting this field
+    # is byte-identical to before). When True the engine upsamples the assembled
+    # stage-1 timeline in temporal chunks (halo overlap + CPU offload) instead of
+    # one whole-timeline GPU pass, trading time for a flat VRAM ceiling so long
+    # 768p chains fit in 16GB; the default (False) keeps the existing one-pass
+    # path untouched (owner decision: off = zero regression).
+    chunked_upsample: bool = False
+
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
         if self.width % 64 != 0:

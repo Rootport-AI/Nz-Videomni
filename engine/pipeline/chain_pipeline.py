@@ -411,7 +411,12 @@ def _chunked_upsample_cpu(assembled_v, video_encoder, upsampler, upsample_video_
     """
     plan = plan_upsample_chunks(int(assembled_v.shape[2]))
     src_cpu = assembled_v[:1].to("cpu")
-    upsampler = upsampler.to(memory_format=torch.channels_last_3d)
+    # channels_last_3d ONLY on the Conv3d layers (in-place): the upsampler also
+    # holds Conv2d modules (spatial 2x, rank-4 weights), and a whole-module
+    # .to(channels_last_3d) raises "required rank 5 tensor" on those.
+    for m in upsampler.modules():
+        if isinstance(m, torch.nn.Conv3d):
+            m.to(memory_format=torch.channels_last_3d)
     out_parts = []
     for k, ch in enumerate(plan):
         xin = src_cpu[:, :, ch.in_start:ch.in_start + ch.in_len]

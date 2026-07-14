@@ -53,6 +53,74 @@ STAGE2_KT_V = STAGE2_V_TILE - STAGE2_V_ADV   # 4
 DEFAULT_OVERLAP_FRAMES = 3       # K_v (video latent overlap), S1-validated
 DEFAULT_OVERLAP_STRENGTH = 0.5   # stage-1 carry overlap strength, S1-validated
 
+# ── Chunked spatial-upsample layout (video-latent domain) ────────────────────
+# The whole-timeline stage-1 -> stage-2 spatial upsample is memory-bound on the
+# full assembled latent (VRAM grows with total length -> OOM on long 768p
+# chains). The optional chunked path upsamples in temporal chunks of
+# UPSAMPLE_CHUNK_FRAMES output-core frames, each padded by UPSAMPLE_HALO_FRAMES
+# frames on both sides so the spatial upsampler's temporal convolutions see the
+# same neighbourhood as the one-shot pass (halo=18 reproduces it exactly on the
+# convolution interior; halo=17 breaks). The halo is discarded after upsampling
+# — only the core is kept — and the physical timeline ends keep the same
+# zero-padding the one-shot upsample sees.
+UPSAMPLE_CHUNK_FRAMES = 32
+UPSAMPLE_HALO_FRAMES = 18
+
+
+@dataclass
+class UpsampleChunk:
+    """One temporal chunk of the chunked spatial upsample (video-latent frames).
+
+    * ``in_start`` / ``in_len`` — slice ``[in_start, in_start+in_len)`` of the
+      assembled latent fed to the upsampler (output core + physical-clipped halo),
+    * ``keep_lo`` / ``keep_len`` — sub-slice of the UPSAMPLED chunk to keep
+      (drops the halo): ``[keep_lo, keep_lo+keep_len)``,
+    * ``out_start`` — where the kept core lands on the output timeline (== the
+      core start ``s``); consecutive chunks tile ``[0, f_total)`` with no gap and
+      no overlap.
+    """
+
+    in_start: int
+    in_len: int
+    keep_lo: int
+    keep_len: int
+    out_start: int
+
+
+def plan_upsample_chunks(
+    f_total: int,
+    chunk: int = UPSAMPLE_CHUNK_FRAMES,
+    halo: int = UPSAMPLE_HALO_FRAMES,
+) -> list[UpsampleChunk]:
+    """Tile ``[0, f_total)`` output-core video-latent frames into halo-padded chunks.
+
+    The output cores ``[s, e)`` advance by ``chunk`` (s = 0, chunk, 2*chunk, …),
+    with ``e = min(s+chunk, f_total)``. Each chunk reads ``[in_start, in_end)``
+    with ``halo`` frames of context on both sides, clipped to the physical
+    timeline ends. ``keep_lo`` is the core's offset inside the upsampled chunk
+    (== ``halo`` for interior chunks, 0 at the head); ``keep_len`` is the core
+    length. The kept cores tile the whole timeline with neither gap nor overlap.
+    Pure geometry (no torch); ``f_total`` is the assembled video-latent frame
+    count and must be >= 1.
+    """
+    if f_total <= 0:
+        raise ValueError(f"f_total must be >= 1 (got {f_total})")
+    chunks: list[UpsampleChunk] = []
+    for s in range(0, f_total, chunk):
+        e = min(s + chunk, f_total)
+        in_start = max(0, s - halo)
+        in_end = min(f_total, e + halo)
+        chunks.append(
+            UpsampleChunk(
+                in_start=in_start,
+                in_len=in_end - in_start,
+                keep_lo=s - in_start,
+                keep_len=e - s,
+                out_start=s,
+            )
+        )
+    return chunks
+
 
 def v_latent_frames(pixel_frames: int) -> int:
     """Video latent-frame count for a pixel frame count (8n+1)."""

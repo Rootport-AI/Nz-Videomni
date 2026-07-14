@@ -165,7 +165,7 @@ class BatchSnapshot:
     control_adherence: float = 1.0
     reference_strength: float = 1.0
     poll_interval: float = 2.0
-    poll_timeout_s: float = 3600.0
+    poll_timeout_s: float = 7200.0
 
 
 # --------------------------------------------------------------------------- #
@@ -516,7 +516,7 @@ class BatchRunner:
             step = interval if interval > 0 else 1.0
             iterations = max(1, int(float(timeout_s) / step))
         except (TypeError, ValueError, ZeroDivisionError):
-            interval, iterations = 1.0, 3600
+            interval, iterations = 1.0, 7200
 
         for _ in range(iterations):
             time.sleep(interval)

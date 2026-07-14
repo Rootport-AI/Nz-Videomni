@@ -173,6 +173,28 @@ def test_chain_rejects_single_clip(client):
     assert r.status_code == 422
 
 
+def test_chain_request_accepts_24_clips():
+    # Upper clip-count bound (24-slot UI expansion): the model accepts a full
+    # 24-clip chain (small clips stay well under MAX_CHAIN_TOTAL_PIXEL_FRAMES).
+    from api.models import GenerateChainRequest
+
+    clips = [{"num_frames": 25} for _ in range(24)]
+    model = GenerateChainRequest(**{**BASE, "clips": clips})
+    assert len(model.clips) == 24
+
+
+def test_chain_request_rejects_25_clips():
+    # One past the cap -> pydantic max_length validation error.
+    import pytest
+    from pydantic import ValidationError
+
+    from api.models import GenerateChainRequest
+
+    clips = [{"num_frames": 25} for _ in range(25)]
+    with pytest.raises(ValidationError):
+        GenerateChainRequest(**{**BASE, "clips": clips})
+
+
 def test_chain_rejects_bad_frames(client):
     # 24 is not 8n+1.
     r = _run_chain(client, [{"num_frames": 25}, {"num_frames": 24}])

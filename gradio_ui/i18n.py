@@ -160,16 +160,26 @@ LABELS: dict[str, dict[str, str]] = {
         "ph_clip_prompt": "Leave blank to use the shared prompt",
         "lbl_clip_start_image": "Start image (first clip only)",
         "cap_first_clip": "A start image can be set only on the first clip.",
-        "cap_clip_count": "Enable 2 to 8 clips.",
+        "cap_clip_count": "Enable 2 to 24 clips.",
         "clip1": "Clip 1", "clip2": "Clip 2", "clip3": "Clip 3", "clip4": "Clip 4",
         "clip5": "Clip 5", "clip6": "Clip 6", "clip7": "Clip 7", "clip8": "Clip 8",
+        "clip9": "Clip 9", "clip10": "Clip 10", "clip11": "Clip 11", "clip12": "Clip 12",
+        "clip13": "Clip 13", "clip14": "Clip 14", "clip15": "Clip 15", "clip16": "Clip 16",
+        "clip17": "Clip 17", "clip18": "Clip 18", "clip19": "Clip 19", "clip20": "Clip 20",
+        "clip21": "Clip 21", "clip22": "Clip 22", "clip23": "Clip 23", "clip24": "Clip 24",
+        # Live chain-duration readout under the "Clip list" heading (S: 24-slot
+        # expansion). Not label-registered (dynamic Markdown, like batch_maxdur);
+        # re-formatted on its own lang_dd.change listener.
+        "chain_est": "**Estimated total:** ≈ {sec}s ({frames}f)",
+        "chain_est_over": "**Estimated total:** ≈ {sec}s ({frames}f) — exceeds max {maxf}f",
+        "chain_est_none": "—",
         "btn_concat": "Generate chain",
         # --- clip chain: flow / precheck messages (S5) ---
         "msg_bad_dimension": "Width and height must be multiples of 64.",
         "msg_size_limit": "Width/height exceed the server limit ({maxw}×{maxh}).",
         "msg_crop_range": "Crop size must be at least 32 and not exceed the generation size.",
         "msg_fps_range": "Frame rate must be between 1 and 60.",
-        "msg_chain_clip_count": "Enable between 2 and 8 clips.",
+        "msg_chain_clip_count": "Enable between 2 and 24 clips.",
         "msg_chain_bad_frames": "Clip {n}: frames must be 8n+1 and between 9 and 481.",
         "msg_chain_overlap_too_large": ("Transition frames ({kv}) must be smaller than the shortest "
                                         "enabled clip allows (max {maxkv})."),
@@ -185,7 +195,7 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_mode_v2v": "V2V continuation — generate a continuation of an uploaded video",
         "a2v_mode_a2v": "A2V audio-driven — match the video (lip movement) to uploaded audio",
         "v2v_cap_mode": ("V2V and A2V cannot be combined — pick one mode. "
-                         "\"None\" is the ordinary 2-8 clip chain."),
+                         "\"None\" is the ordinary 2-24 clip chain."),
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "Source video (mp4/mov/webm/mkv, max 200 MB)",
         "v2v_lbl_context": "Context frames (source tail to continue from, 8n+1)",
@@ -227,7 +237,7 @@ LABELS: dict[str, dict[str, str]] = {
                                     "({clip}) so a new part remains to generate."),
         "v2v_msg_image_conflict": ("V2V cannot use a start image on clip 1 (the source tail "
                                    "occupies the head). Remove the image and retry."),
-        "v2v_msg_clip_count": "With V2V enable 1 to 8 clips.",
+        "v2v_msg_clip_count": "With V2V enable 1 to 24 clips.",
         "v2v_msg_uploading": "Uploading source video…",
         "v2v_msg_join_disabled": ("Joined-version creation is turned off. Enable the checkbox "
                                   "to create one."),
@@ -591,16 +601,25 @@ LABELS: dict[str, dict[str, str]] = {
         "ph_clip_prompt": "空欄なら共通プロンプトを使用",
         "lbl_clip_start_image": "開始画像 (先頭クリップのみ)",
         "cap_first_clip": "開始画像を指定できるのは先頭クリップのみです。",
-        "cap_clip_count": "有効にするクリップは2〜8個。",
+        "cap_clip_count": "有効にするクリップは2〜24個。",
         "clip1": "クリップ1", "clip2": "クリップ2", "clip3": "クリップ3", "clip4": "クリップ4",
         "clip5": "クリップ5", "clip6": "クリップ6", "clip7": "クリップ7", "clip8": "クリップ8",
+        "clip9": "クリップ9", "clip10": "クリップ10", "clip11": "クリップ11", "clip12": "クリップ12",
+        "clip13": "クリップ13", "clip14": "クリップ14", "clip15": "クリップ15", "clip16": "クリップ16",
+        "clip17": "クリップ17", "clip18": "クリップ18", "clip19": "クリップ19", "clip20": "クリップ20",
+        "clip21": "クリップ21", "clip22": "クリップ22", "clip23": "クリップ23", "clip24": "クリップ24",
+        # 「Clip list」見出し直下の連結推計尺の表示（24枠化）。ラベル登録せず、
+        # 専用の lang_dd.change リスナーで再フォーマットする。
+        "chain_est": "**推計合計:** 約 {sec}秒 ({frames}f)",
+        "chain_est_over": "**推計合計:** 約 {sec}秒 ({frames}f) — 上限 {maxf}f を超過",
+        "chain_est_none": "—",
         "btn_concat": "連結生成",
         # --- clip chain: flow / precheck messages (S5) ---
         "msg_bad_dimension": "幅と高さは64の倍数にしてください。",
         "msg_size_limit": "幅/高さがサーバの上限 ({maxw}×{maxh}) を超えています。",
         "msg_crop_range": "クロップサイズは32以上かつ生成サイズ以下にしてください。",
         "msg_fps_range": "フレームレートは1〜60の範囲にしてください。",
-        "msg_chain_clip_count": "有効にするクリップは2〜8個にしてください。",
+        "msg_chain_clip_count": "有効にするクリップは2〜24個にしてください。",
         "msg_chain_bad_frames": "クリップ{n}: フレーム数は8n+1かつ9〜481にしてください。",
         "msg_chain_overlap_too_large": "つなぎ目フレーム数 ({kv}) は最短クリップが許す値 (最大 {maxkv}) より小さくしてください。",
         "msg_chain_total_frames": "連結タイムライン ({total} フレーム) が上限 {cap} フレームを超えています。クリップ数か長さを減らしてください。",
@@ -612,7 +631,7 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_mode_none": "なし（通常のクリップ連結）",
         "v2v_mode_v2v": "V2V継続 — アップロード動画の続きを生成",
         "a2v_mode_a2v": "A2V音声駆動 — アップロード音声に口の動きを合わせる",
-        "v2v_cap_mode": "V2VとA2Vは同時に使えません。どちらか一方を選んでください。「なし」は従来どおりの2〜8クリップ連結です。",
+        "v2v_cap_mode": "V2VとA2Vは同時に使えません。どちらか一方を選んでください。「なし」は従来どおりの2〜24クリップ連結です。",
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "元動画 (mp4/mov/webm/mkv・最大200MB)",
         "v2v_lbl_context": "参照フレーム数 (元動画の末尾から続きの手がかりにする長さ・8n+1)",
@@ -648,7 +667,7 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_bad_context": "参照フレーム数は8n+1かつ{mincf}〜{maxcf}にしてください。",
         "v2v_msg_context_ge_clip": "参照フレーム数 ({cf}) はクリップ1のフレーム数 ({clip}) より小さくしてください（続きを生成する余地を残すため）。",
         "v2v_msg_image_conflict": "V2Vではクリップ1の開始画像は使えません（先頭は元動画が占有します）。画像を外して再試行してください。",
-        "v2v_msg_clip_count": "V2Vでは有効にするクリップは1〜8個にしてください。",
+        "v2v_msg_clip_count": "V2Vでは有効にするクリップは1〜24個にしてください。",
         "v2v_msg_uploading": "元動画をアップロード中…",
         "v2v_msg_join_disabled": "結合版の作成がオフになっています。チェックを入れると作成できます。",
         "v2v_msg_no_job": "完了した連結ジョブがまだありません。先にV2V連結を生成してください。",

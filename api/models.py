@@ -193,12 +193,14 @@ class GenerateRequest(BaseModel):
         return "i2v" if self.conditioning_images else "t2v"
 
 
-# Total-timeline pixel-frame cap. The masked AV-latent chain is decoded ONCE
-# with an always-tiled stage-2, so it is NOT bound by the single-clip 481f cap
-# (the tiling keeps VRAM flat at any length). The cap here is a sanity ceiling
-# = 8 clips × 481f (the max clip count × the frozen per-clip cap), documented so
-# a UI cannot request an unbounded timeline.
-MAX_CHAIN_TOTAL_PIXEL_FRAMES = 8 * 481  # 3848
+# Total-timeline pixel-frame cap. The masked AV-latent chain's stage-2 DECODE is
+# always tiled, so that step stays VRAM-flat at any length. The UPSAMPLE step,
+# however, runs over the WHOLE timeline in one GPU pass and does not free its
+# intermediate latents, so it carries a VRAM term that DOES grow with total
+# length. This cap bounds that term: it is a sanity ceiling = 24 clips × 481f
+# (the max clip count × the frozen per-clip cap), documented so a UI cannot
+# request an unbounded timeline.
+MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544
 
 
 class ChainClip(BaseModel):
@@ -314,13 +316,13 @@ class GenerateChainRequest(BaseModel):
     overlap_frames: int = Field(3, ge=1, le=8)
     overlap_strength: float = Field(0.5, ge=0.0, le=1.0)
 
-    # 1..8 clips. WITHOUT source_video the floor is 2 (a single clip is just
+    # 1..24 clips. WITHOUT source_video the floor is 2 (a single clip is just
     # /generate) — enforced explicitly in the model_validator so the old
     # rejection is preserved. WITH source_video a single clip is allowed (the
     # frozen source head IS the "previous segment"). Field floor is 1 so the
     # source path validates; capped so the timeline stays within
     # MAX_CHAIN_TOTAL_PIXEL_FRAMES.
-    clips: list[ChainClip] = Field(..., min_length=1, max_length=8)
+    clips: list[ChainClip] = Field(..., min_length=1, max_length=24)
 
     # Video-to-video continuation (Phase V2V, ADDITIVE/optional — a request
     # omitting this field is byte-identical to before). When set, the tail of an

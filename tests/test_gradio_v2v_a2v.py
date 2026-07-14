@@ -36,10 +36,10 @@ def _chain_args(prompt="Base prompt", negative="", width=1280, height=768,
                 mode=MODE_NONE, src_video=None, context_frames=73,
                 src_audio=None):
     clips = list(clips or [])
-    filled = clips + [None] * (8 - len(clips))
+    filled = clips + [None] * (24 - len(clips))
     args = [prompt, negative, width, height, crop_enabled, crop_w, crop_h, fps, seed,
             overlap, overlap_strength]
-    for i, spec in enumerate(filled[:8]):
+    for i, spec in enumerate(filled[:24]):
         spec = spec or {}
         enabled = spec.get("enabled", False)
         p = spec.get("prompt", "")

@@ -179,13 +179,13 @@ QUEUED_WARN_SECONDS = 30
 # original inline loop in make_generate_handler.
 # --------------------------------------------------------------------------- #
 def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
-                         interval: float = 1.0, timeout_s: float = 3600.0):
+                         interval: float = 1.0, timeout_s: float = 7200.0):
     # Poll every ``interval`` seconds up to ``timeout_s`` (Settings-tab tunable;
-    # defaults preserve the original 1s / 1h behaviour).
+    # defaults give a 1s cadence / 2h ceiling — long chains can run for hours).
     try:
         iterations = max(1, int(float(timeout_s) / float(interval)))
     except (TypeError, ValueError, ZeroDivisionError):
-        interval, iterations = 1.0, 3600
+        interval, iterations = 1.0, 7200
     queued_elapsed = 0.0
     for _ in range(iterations):
         time.sleep(interval)
@@ -727,7 +727,7 @@ def _precheck_reject(message: str) -> str:
 # --------------------------------------------------------------------------- #
 # Clip-chain flow (S5), factored out for unit testing (mock transport). Mirrors
 # make_generate_handler: prechecks (zero API calls on violation) -> optional
-# clip-0 start-image upload -> POST /generate/chain -> shared poll loop. The 8
+# clip-0 start-image upload -> POST /generate/chain -> shared poll loop. The 24
 # FIXED clip slots are flattened into positional args; only slot 1 carries a
 # start image + strength (structural guarantee that conditioning lives on clip 0
 # only). ``clips`` are emitted in slot order, enabled slots only.
@@ -746,6 +746,22 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        c6_enabled, c6_prompt, c6_frames,
                        c7_enabled, c7_prompt, c7_frames,
                        c8_enabled, c8_prompt, c8_frames,
+                       c9_enabled, c9_prompt, c9_frames,
+                       c10_enabled, c10_prompt, c10_frames,
+                       c11_enabled, c11_prompt, c11_frames,
+                       c12_enabled, c12_prompt, c12_frames,
+                       c13_enabled, c13_prompt, c13_frames,
+                       c14_enabled, c14_prompt, c14_frames,
+                       c15_enabled, c15_prompt, c15_frames,
+                       c16_enabled, c16_prompt, c16_frames,
+                       c17_enabled, c17_prompt, c17_frames,
+                       c18_enabled, c18_prompt, c18_frames,
+                       c19_enabled, c19_prompt, c19_frames,
+                       c20_enabled, c20_prompt, c20_frames,
+                       c21_enabled, c21_prompt, c21_frames,
+                       c22_enabled, c22_prompt, c22_frames,
+                       c23_enabled, c23_prompt, c23_frames,
+                       c24_enabled, c24_prompt, c24_frames,
                        config=None, ui_lang=None, poll_interval=None,
                        poll_timeout_min=None,
                        mode=MODE_NONE, src_video=None, context_frames=73,
@@ -810,21 +826,37 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             (c6_enabled, c6_prompt, c6_frames, None, None),
             (c7_enabled, c7_prompt, c7_frames, None, None),
             (c8_enabled, c8_prompt, c8_frames, None, None),
+            (c9_enabled, c9_prompt, c9_frames, None, None),
+            (c10_enabled, c10_prompt, c10_frames, None, None),
+            (c11_enabled, c11_prompt, c11_frames, None, None),
+            (c12_enabled, c12_prompt, c12_frames, None, None),
+            (c13_enabled, c13_prompt, c13_frames, None, None),
+            (c14_enabled, c14_prompt, c14_frames, None, None),
+            (c15_enabled, c15_prompt, c15_frames, None, None),
+            (c16_enabled, c16_prompt, c16_frames, None, None),
+            (c17_enabled, c17_prompt, c17_frames, None, None),
+            (c18_enabled, c18_prompt, c18_frames, None, None),
+            (c19_enabled, c19_prompt, c19_frames, None, None),
+            (c20_enabled, c20_prompt, c20_frames, None, None),
+            (c21_enabled, c21_prompt, c21_frames, None, None),
+            (c22_enabled, c22_prompt, c22_frames, None, None),
+            (c23_enabled, c23_prompt, c23_frames, None, None),
+            (c24_enabled, c24_prompt, c24_frames, None, None),
         ]
         enabled = [(p, nf, img, strg) for en, p, nf, img, strg in raw_slots if en]
 
-        # Clip-count floor mirrors the API validator: plain chain needs 2-8,
-        # V2V allows 1-8 (the frozen source tail IS the prior segment), A2V is
+        # Clip-count floor mirrors the API validator: plain chain needs 2-24,
+        # V2V allows 1-24 (the frozen source tail IS the prior segment), A2V is
         # exactly 1 (one frozen audio latent spans one clip).
         if mode == MODE_V2V:
-            if not (1 <= len(enabled) <= 8):
+            if not (1 <= len(enabled) <= 24):
                 yield _precheck_reject(L("v2v_msg_clip_count", lang)), "", None
                 return
         elif mode == MODE_A2V:
             if len(enabled) != 1:
                 yield _precheck_reject(L("a2v_msg_clip_count", lang)), "", None
                 return
-        elif not (2 <= len(enabled) <= 8):
+        elif not (2 <= len(enabled) <= 24):
             yield _precheck_reject(L("msg_chain_clip_count", lang)), "", None
             return
 
@@ -1114,7 +1146,7 @@ def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 # --------------------------------------------------------------------------- #
 def _resolve_poll(poll_interval, poll_timeout_min):
     """Resolve the (interval_s, timeout_s) pair from the Settings gr.Number
-    inputs, falling back to 1s / 60min when unset or invalid."""
+    inputs, falling back to 1s / 120min when unset or invalid."""
     try:
         interval = float(poll_interval) if poll_interval else 1.0
         if interval <= 0:
@@ -1122,11 +1154,11 @@ def _resolve_poll(poll_interval, poll_timeout_min):
     except (TypeError, ValueError):
         interval = 1.0
     try:
-        timeout_min = float(poll_timeout_min) if poll_timeout_min else 60.0
+        timeout_min = float(poll_timeout_min) if poll_timeout_min else 120.0
         if timeout_min <= 0:
-            timeout_min = 60.0
+            timeout_min = 120.0
     except (TypeError, ValueError):
-        timeout_min = 60.0
+        timeout_min = 120.0
     return interval, timeout_min * 60.0
 
 

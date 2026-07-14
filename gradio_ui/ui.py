@@ -57,13 +57,19 @@ from .manifest import (
 )
 from .i18n import L
 from .presets import (
+    CHAIN_MAX_CLIPS,
+    CHAIN_MIN_OPEN,
+    KF_MAX_SLOTS,
+    KF_MIN_OPEN,
     PRESETS,
     apply_chain_preset,
     apply_preset,
     build_preset_choices,
+    compute_chain_duration_label,
     compute_spill_warning,
     format_duration_label,
     pick_default_preset,
+    slot_step_state,
 )
 from .styles import CUSTOM_CSS
 
@@ -473,11 +479,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # are plain "frame position" slots, all defaulting to 0 (the
                         # server snaps any non-zero value to the 8n+1 grid).
                         kf_slots: list[tuple[object, object, object, object]] = []
+                        kf_extra_rows: list[object] = []
+                        # Collapsible keyframe grid: slot 1 always visible (the
+                        # start frame / batch-A2V required reference), slots 2-5
+                        # start hidden and the ± buttons grow/shrink the count.
+                        # State is server-side (Gradio has no live-visibility read).
+                        kf_open_count = gr.State(KF_MIN_OPEN)
                         with gr.Accordion(L("lbl_kf_accordion"), open=False) as kf_accordion:
                             reg(kf_accordion, "lbl_kf_accordion", "label")
                             for _slot_i in range(1, 6):
                                 frame_key = "lbl_kf_frame_pos0" if _slot_i == 1 else "lbl_kf_frame_pos"
-                                with gr.Row():
+                                with gr.Row(visible=(_slot_i == 1)) as kf_row:
                                     kf_enabled = reg(gr.Checkbox(value=False, label=L("lbl_kf_use")),
                                                      "lbl_kf_use")
                                     kf_image = reg(gr.Image(label=L("lbl_kf_image"), type="filepath"),
@@ -488,6 +500,22 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                                label=L("lbl_kf_strength")),
                                                      "lbl_kf_strength")
                                 kf_slots.append((kf_enabled, kf_image, kf_frame, kf_strength))
+                                if _slot_i > 1:
+                                    kf_extra_rows.append(kf_row)
+                            # ± buttons (symbols only, i18n non-registered) grow /
+                            # shrink the visible keyframe rows (min 1, max 5). "−"
+                            # also unchecks a hidden row's Use box and greys out at
+                            # the 1-slot floor (the startup state, hence
+                            # interactive=False here); "＋" greys out at the 5-slot
+                            # ceiling. Owner-requested order: ＋ left, − right,
+                            # plus a language-independent "n/5" counter (digits
+                            # only -> not i18n-registered) on the same row.
+                            with gr.Row():
+                                kf_plus_btn = gr.Button("＋", scale=0)
+                                kf_minus_btn = gr.Button("−", scale=0,
+                                                         interactive=False)
+                                kf_counter_md = gr.Markdown(
+                                    f"{KF_MIN_OPEN}/{KF_MAX_SLOTS}")
                             reg(gr.Markdown(L("cap_kf_grid")), "cap_kf_grid", "value")
 
                         # accordion: reference-video control (IC-LoRA). The
@@ -708,7 +736,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             value="distilled", label=L("lbl_qmode"),
                         ), "lbl_qmode")
                         # Chain preset: fills resolution/crop + a recommended
-                        # per-clip length into all 8 slots (apply_chain_preset).
+                        # per-clip length into all 24 slots (apply_chain_preset).
                         chain_preset = reg(gr.Dropdown(
                             list(PRESETS.keys()), value="minimal",
                             label=L("lbl_chain_preset"), info=L("info_chain_preset"),
@@ -753,8 +781,19 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ), "lbl_overlap_strength")
                         reg(gr.Markdown(L("cap_crossfade")), "cap_crossfade", "value")
 
-                        # clip list: 8 fixed slots (slots 1-2 enabled by default).
+                        # clip list: 24 fixed slots (slots 1-2 shown by default;
+                        # the ± buttons grow/shrink the visible count). The open
+                        # count lives in a gr.State because Gradio does not expose
+                        # a component's live visibility to the server.
+                        chain_open_count = gr.State(CHAIN_MIN_OPEN)
                         reg(gr.Markdown(f"### {L('h_clips')}"), "h_clips", "value")
+                        # Estimated total duration for the enabled clips. NOT
+                        # label-registered (dynamic Markdown, like batch_maxdur_md);
+                        # a dedicated lang_dd.change listener re-formats it.
+                        chain_duration_md = gr.Markdown(
+                            compute_chain_duration_label(
+                                [True, True] + [False] * (CHAIN_MAX_CLIPS - 2),
+                                [121] * CHAIN_MAX_CLIPS, 24.0, 3, "en"))
                         # slot 1 — the only slot with a start image (clip 0).
                         with gr.Group():
                             c1_enabled = reg(gr.Checkbox(value=True, label=L("clip1")), "clip1")
@@ -774,10 +813,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("cap_first_clip")), "cap_first_clip", "value")
                         chain_clip_slots.append((c1_enabled, c1_prompt, c1_frames,
                                                  c1_image, c1_strength))
-                        # slots 2-8 — no start image (later timeline segments).
-                        for _slot_i in range(2, 9):
+                        # slots 2-24 — no start image (later timeline segments).
+                        # Each is wrapped in a gr.Group so the ± buttons can
+                        # hide/show it non-destructively (gr.update(visible=...)
+                        # keeps the field values). Only slot 2's group is visible
+                        # at startup (chain_open_count == 2).
+                        chain_extra_groups: list[object] = []
+                        for _slot_i in range(2, CHAIN_MAX_CLIPS + 1):
                             clip_key = f"clip{_slot_i}"
-                            with gr.Group():
+                            with gr.Group(visible=(_slot_i == 2)) as chain_slot_group:
                                 cN_enabled = reg(gr.Checkbox(value=(_slot_i == 2),
                                                              label=L(clip_key)), clip_key)
                                 cN_prompt = reg(gr.Textbox(label=L("lbl_clip_prompt"),
@@ -788,6 +832,24 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                           elem_id=f"chain_c{_slot_i}_frames"),
                                                 "lbl_frames")
                             chain_clip_slots.append((cN_enabled, cN_prompt, cN_frames))
+                            chain_extra_groups.append(chain_slot_group)
+                        # ± buttons (symbols only, i18n non-registered): grow /
+                        # shrink the visible clip count (min 2, max 24). "＋" also
+                        # checks the newly-revealed slot's Use box on (owner
+                        # request) and greys out at the 24-slot ceiling; "−"
+                        # unchecks the newly-hidden slots' Use box so they are
+                        # never submitted (the handler collects every ENABLED
+                        # slot regardless of visibility) and greys out at the
+                        # 2-slot floor (the startup state, hence
+                        # interactive=False here). Owner-requested order: ＋ left,
+                        # − right, plus an "n/24" counter (digits only -> not
+                        # i18n-registered) — all mirroring the keyframe grid.
+                        with gr.Row():
+                            chain_plus_btn = gr.Button("＋", scale=0)
+                            chain_minus_btn = gr.Button("−", scale=0,
+                                                        interactive=False)
+                            chain_counter_md = gr.Markdown(
+                                f"{CHAIN_MIN_OPEN}/{CHAIN_MAX_CLIPS}")
                         reg(gr.Markdown(L("cap_clip_count")), "cap_clip_count", "value")
 
                     # RIGHT: action panel (Generate chain first) -> outputs
@@ -896,7 +958,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 with gr.Row():
                     poll_interval = reg(gr.Number(value=1.0, label=L("lbl_poll"),
                                                   minimum=0.1), "lbl_poll")
-                    poll_timeout = reg(gr.Number(value=60, label=L("lbl_timeout"),
+                    poll_timeout = reg(gr.Number(value=120, label=L("lbl_timeout"),
                                                  precision=0, minimum=1), "lbl_timeout")
 
                 # ---- Server config viewer (raw /config + spill-free table) ----
@@ -1500,19 +1562,41 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         chain_crop_enabled.change(on_crop_toggle, inputs=chain_crop_enabled,
                                   outputs=chain_crop_row)
 
-        # Chain preset: the 8 slot Checkbox values feed enabled_flags (count of
-        # enabled slots -> total-timeline warning); all 8 frame Numbers receive
+        # Chain preset: the 24 slot Checkbox values feed enabled_flags (count of
+        # enabled slots -> total-timeline warning); all 24 frame Numbers receive
         # the recommended per-clip length. apply_chain_preset takes enabled_flags
-        # as ONE list, so a thin wrapper gathers the 8 checkbox values.
+        # as ONE list, so a thin wrapper gathers the checkbox values.
         chain_enabled_boxes = [_slot[0] for _slot in chain_clip_slots]
         chain_frame_nums = [_slot[2] for _slot in chain_clip_slots]
 
-        def on_chain_preset_change(name, config, e1, e2, e3, e4, e5, e6, e7, e8,
-                                   fps, overlap, lang):
+        def on_chain_preset_change(name, config, *rest):
+            # rest = 24 enabled flags + fps + overlap + lang.
+            enabled_flags = list(rest[:CHAIN_MAX_CLIPS])
+            fps, overlap, lang = rest[CHAIN_MAX_CLIPS:CHAIN_MAX_CLIPS + 3]
             return apply_chain_preset(
-                name, config, enabled_flags=[e1, e2, e3, e4, e5, e6, e7, e8],
+                name, config, enabled_flags=enabled_flags,
                 fps=fps, overlap_frames=overlap, lang=lang,
             )
+
+        # ---- Chain clip-count estimate (live duration readout) ----
+        # ONE common handler recomputes chain_duration_md from the enabled slots.
+        # It masks the enabled flags by chain_open_count so a hidden-but-checked
+        # slot (which the ± handler keeps off anyway) can never inflate the
+        # estimate. Wired to every trigger below AND re-run on lang switch so the
+        # readout never keeps a stale-language string.
+        chain_est_inputs = [chain_open_count, lang_state, chain_fps, chain_overlap,
+                            *chain_enabled_boxes, *chain_frame_nums]
+
+        def on_chain_estimate(open_count, lang, fps, overlap, *enabled_and_frames):
+            enabled = list(enabled_and_frames[:CHAIN_MAX_CLIPS])
+            frames = list(enabled_and_frames[CHAIN_MAX_CLIPS:2 * CHAIN_MAX_CLIPS])
+            try:
+                oc = int(open_count)
+            except (TypeError, ValueError):
+                oc = CHAIN_MAX_CLIPS
+            masked = [bool(e) and (i < oc) for i, e in enumerate(enabled)]
+            return gr.update(value=compute_chain_duration_label(
+                masked, frames, fps, overlap, lang))
 
         chain_preset.change(
             on_chain_preset_change,
@@ -1521,7 +1605,87 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             outputs=[chain_width, chain_height, chain_crop_enabled,
                      chain_crop_w, chain_crop_h, chain_crop_row,
                      *chain_frame_nums, chain_preset_warning],
+        ).then(
+            # Preset rewrites every frame Number; refresh the estimate explicitly
+            # (do NOT rely on the frame .change cascade firing in order).
+            on_chain_estimate, inputs=chain_est_inputs, outputs=chain_duration_md,
         )
+
+        # Every enabled/frames/fps/overlap edit refreshes the estimate live.
+        for _ctrl in (*chain_enabled_boxes, *chain_frame_nums,
+                      chain_fps, chain_overlap):
+            _ctrl.change(on_chain_estimate, inputs=chain_est_inputs,
+                         outputs=chain_duration_md)
+
+        # ---- Clip Chain ± buttons (grow/shrink the visible clip count) ----
+        # chain_extra_* cover slots 2..24 (slot 1 is always visible); the ±
+        # handler returns, atomically: the new open count, the 23 group
+        # visibility updates, the 23 Use-box updates (forced ON for slots newly
+        # revealed by "＋" — owner request —, forced OFF when hidden, no-op for
+        # slots that merely stay visible so a hand-unchecked box is respected),
+        # and the refreshed estimate.
+        chain_extra_use = chain_enabled_boxes[1:]
+
+        def _make_chain_step(delta):
+            def handler(count, lang, fps, overlap, *enabled_and_frames):
+                enabled = list(enabled_and_frames[:CHAIN_MAX_CLIPS])
+                frames = list(enabled_and_frames[CHAIN_MAX_CLIPS:2 * CHAIN_MAX_CLIPS])
+                new_count, states, minus_on, plus_on, counter = slot_step_state(
+                    count, delta, CHAIN_MIN_OPEN, CHAIN_MAX_CLIPS, enable_new=True)
+                group_updates = [gr.update(visible=vis) for vis, _use in states]
+                use_updates = [gr.update() if use is None else gr.update(value=use)
+                               for _vis, use in states]
+                # Estimate reflects the POST-step state: slot 1 always in; slot i
+                # (2..24) counts with its post-update Use value (a hidden slot's
+                # use is False, a newly-revealed one's is True).
+                masked = [bool(enabled[0])]
+                for idx, (vis, use) in enumerate(states):
+                    eff = enabled[idx + 1] if use is None else use
+                    masked.append(bool(eff) and vis)
+                est = gr.update(value=compute_chain_duration_label(
+                    masked, frames, fps, overlap, lang))
+                return (new_count, *group_updates, *use_updates,
+                        gr.update(interactive=minus_on),
+                        gr.update(interactive=plus_on),
+                        gr.update(value=counter), est)
+            return handler
+
+        _chain_step_inputs = [chain_open_count, lang_state, chain_fps, chain_overlap,
+                              *chain_enabled_boxes, *chain_frame_nums]
+        _chain_step_outputs = [chain_open_count, *chain_extra_groups,
+                               *chain_extra_use, chain_minus_btn, chain_plus_btn,
+                               chain_counter_md, chain_duration_md]
+        chain_plus_btn.click(_make_chain_step(+1), inputs=_chain_step_inputs,
+                             outputs=_chain_step_outputs)
+        chain_minus_btn.click(_make_chain_step(-1), inputs=_chain_step_inputs,
+                              outputs=_chain_step_outputs)
+
+        # ---- Keyframe ± buttons (grow/shrink the visible keyframe rows) ----
+        # slot_step_state (pure, presets.py, shared with the Clip Chain) carries
+        # the whole semantic transition: row visibility + Use-off for hidden rows
+        # (NO auto-enable — owner asked for that on the Clip Chain only), the
+        # −/＋ buttons' grey-out-at-floor/-ceiling flags, and the "n/5" counter
+        # text. Everything is returned in ONE handler so the update is atomic.
+        kf_extra_use = [_slot[0] for _slot in kf_slots[1:]]
+
+        def _make_kf_step(delta):
+            def handler(count):
+                new_count, states, minus_on, plus_on, counter = slot_step_state(
+                    count, delta, KF_MIN_OPEN, KF_MAX_SLOTS)
+                row_updates = [gr.update(visible=vis) for vis, _use in states]
+                use_updates = [gr.update() if use is None else gr.update(value=use)
+                               for _vis, use in states]
+                return (new_count, *row_updates, *use_updates,
+                        gr.update(interactive=minus_on),
+                        gr.update(interactive=plus_on), gr.update(value=counter))
+            return handler
+
+        _kf_step_outputs = [kf_open_count, *kf_extra_rows, *kf_extra_use,
+                            kf_minus_btn, kf_plus_btn, kf_counter_md]
+        kf_plus_btn.click(_make_kf_step(+1), inputs=kf_open_count,
+                          outputs=_kf_step_outputs)
+        kf_minus_btn.click(_make_kf_step(-1), inputs=kf_open_count,
+                           outputs=_kf_step_outputs)
 
         chain_clip_inputs: list[object] = []
         for _slot in chain_clip_slots:
@@ -1692,6 +1856,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # Batch table headers + rendered rows/summary localize on switch too.
         lang_dd.change(on_batch_lang_switch, inputs=[lang_dd, batch_rows_state],
                        outputs=[batch_table, batch_summary_md])
+        # chain_duration_md is dynamic (not label-registered), so re-format it on
+        # language switch; otherwise the old-language estimate string lingers.
+        lang_dd.change(on_chain_estimate, inputs=chain_est_inputs,
+                       outputs=chain_duration_md)
 
         # show_progress="hidden": startup background config fetches must not
         # spawn per-component status trackers -- with several simultaneous
@@ -1715,6 +1883,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # elem_id. This is a fn=None load event whose ONLY effect is the js (the
         # same pattern as theme_dd.change's js= toggle) -- no server round-trip,
         # no outputs, so it cannot re-introduce the preprocess bound check.
+        _frame_min_ids = "['gen_num_frames', " + ", ".join(
+            f"'chain_c{_i}_frames'" for _i in range(1, CHAIN_MAX_CLIPS + 1)) + "]"
         _min_attr_js = """() => {
             const setMin = (id, v) => {
                 const el = document.getElementById(id);
@@ -1724,11 +1894,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             };
             ['gen_width', 'gen_height', 'chain_width', 'chain_height']
                 .forEach((id) => setMin(id, '64'));
-            ['gen_num_frames', 'chain_c1_frames', 'chain_c2_frames',
-             'chain_c3_frames', 'chain_c4_frames', 'chain_c5_frames',
-             'chain_c6_frames', 'chain_c7_frames', 'chain_c8_frames']
+            __FRAME_IDS__
                 .forEach((id) => setMin(id, '9'));
-        }"""
+        }""".replace("__FRAME_IDS__", _frame_min_ids)
         demo.load(None, js=_min_attr_js)
 
         # ---- Settings: model management (INDEPENDENT listeners) ----

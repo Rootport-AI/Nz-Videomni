@@ -1340,7 +1340,7 @@ def test_build_adapter_choices_fallback_when_no_ic_loras():
 
 
 # --------------------------------------------------------------------------- #
-# S5: Clip Chain handler. The 8 FIXED clip slots are flattened into positional
+# S5: Clip Chain handler. The 24 FIXED clip slots are flattened into positional
 # args; only slot 1 carries a start image + strength. ``_chain_args`` builds the
 # full arg tuple from as few clip specs as a test cares about (rest disabled).
 # --------------------------------------------------------------------------- #
@@ -1348,10 +1348,10 @@ def _chain_args(prompt="Base prompt", negative="", width=1280, height=768,
                 crop_enabled=False, crop_w=0, crop_h=0, fps=24.0, seed=-1,
                 overlap=3, overlap_strength=0.5, clips=None, config=None):
     clips = list(clips or [])
-    filled = clips + [None] * (8 - len(clips))
+    filled = clips + [None] * (24 - len(clips))
     args = [prompt, negative, width, height, crop_enabled, crop_w, crop_h, fps, seed,
             overlap, overlap_strength]
-    for i, spec in enumerate(filled[:8]):
+    for i, spec in enumerate(filled[:24]):
         spec = spec or {}
         enabled = spec.get("enabled", False)
         p = spec.get("prompt", "")
@@ -1577,11 +1577,12 @@ def test_chain_overlap_too_large_for_shortest_clip_errors_zero_calls():
 
 
 def test_chain_total_frames_cap_violation_via_helper():
-    # The 3848 cap is unreachable through the 8-slot handler (8×481 -> 3841), so
-    # exercise the mirror-math helper directly with clips exceeding it.
-    err = check_chain_total([481] * 10, 24.0, 1)
+    # The 11544 cap is unreachable through the 24-slot handler (24×481 minus the
+    # join overlaps stays under it), so exercise the mirror-math helper directly
+    # with more clips than the UI can request.
+    err = check_chain_total([481] * 26, 24.0, 1)
     assert err is not None
-    assert str(MAX_CHAIN_TOTAL_PIXEL_FRAMES) in err  # "3848"
+    assert str(MAX_CHAIN_TOTAL_PIXEL_FRAMES) in err  # "11544"
 
 
 def test_chain_total_frames_within_cap_returns_none():
@@ -1879,11 +1880,11 @@ def test_delete_finished_jobs_list_failure_localized():
 def test_resolve_poll_defaults_and_custom():
     from gradio_ui.handlers import _resolve_poll
 
-    assert _resolve_poll(None, None) == (1.0, 3600.0)
+    assert _resolve_poll(None, None) == (1.0, 7200.0)
     assert _resolve_poll(0.5, 2) == (0.5, 120.0)
-    # non-positive / invalid inputs fall back to the 1s / 60min defaults.
-    assert _resolve_poll(0, 0) == (1.0, 3600.0)
-    assert _resolve_poll("x", "y") == (1.0, 3600.0)
+    # non-positive / invalid inputs fall back to the 1s / 120min defaults.
+    assert _resolve_poll(0, 0) == (1.0, 7200.0)
+    assert _resolve_poll("x", "y") == (1.0, 7200.0)
 
 
 def test_poll_respects_custom_interval(monkeypatch):

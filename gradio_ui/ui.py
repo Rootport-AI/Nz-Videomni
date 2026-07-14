@@ -781,8 +781,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ), "lbl_overlap_strength")
                         reg(gr.Markdown(L("cap_crossfade")), "cap_crossfade", "value")
 
+                        # Default ON (owner decision 2026-07-14, after the real-GPU
+                        # 4-clip gate: complete, seam-free, 9311MB peak). UI-side
+                        # default only — the API model keeps False so flag-omitting
+                        # clients (WebView2 etc.) are unchanged; Gradio always sends
+                        # the checkbox's actual value explicitly.
                         chain_chunked_upsample = reg(
-                            gr.Checkbox(value=False, label=L("chk_chunked_upsample")),
+                            gr.Checkbox(value=True, label=L("chk_chunked_upsample")),
                             "chk_chunked_upsample",
                         )
 

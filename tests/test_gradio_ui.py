@@ -145,6 +145,18 @@ def test_chain_preset_dropdown_present_with_valid_default():
     assert dd.value in [v for _l, v in dd.choices]
 
 
+def test_chain_chunked_upsample_checkbox_defaults_on():
+    # Owner decision 2026-07-14 (real-GPU 4-clip gate passed): the chunked-
+    # upsample checkbox starts ON. UI default only — the API model default
+    # stays False for flag-omitting clients.
+    demo = _demo()
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == LABELS["en"]["chk_chunked_upsample"]]
+    assert len(boxes) == 1, "chunked-upsample checkbox not found"
+    assert boxes[0].value is True
+
+
 def test_generate_tab_a2v_audio_file_present():
     demo = _demo()
     # The Generate-tab A2V accordion holds an audio gr.File.

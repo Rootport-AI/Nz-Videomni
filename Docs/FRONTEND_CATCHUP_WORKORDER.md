@@ -4,6 +4,19 @@
 - 正本: 本書。着手後の状態遷移は本書の冒頭に歴史記録ブロックを追加していく運用とする（他の `*_WORKORDER.md` と同じ体裁）。
 - 併読: フロントエンドリポジトリ（`Nz-LTX23-frontend-AviUtl2`）の [`Docs/WEBVIEW2_PARITY_BACKLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)（2026-07-11作成の既存ギャップ分析。本書はそれ以降のAPI変更を加えた上位互換）／[`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)（バッチA2VのCSVマニフェスト仕様・正本）／[`CHUNKED_UPSAMPLE_WORKORDER.md`](CHUNKED_UPSAMPLE_WORKORDER.md)（チャンク化アップサンプルの実装経緯・正本）／[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)（クリップ連結の尺の算術・フロントエンド向けメモを含む）
 
+> **（2026-07-15 グループ1完了・歴史記録追記）グループ1（APIコントラクト追随・項目1〜6）を実装完了した。** 項目5（ジョブポーリングの120分化）は精査のうえ**対応不要と判定**した（フロントエンドのジョブ監視はそもそも打ち切りのデッドラインを持たない非同期ポーリング構造であり、Gradio側の「120分」に対応する概念自体が存在しないため）。項目4（chain参照動画対応・α版・任意扱い）も本セッションで対応した。詳細は以下「グループ1 実装完了の要約」節を参照。実バックエンド（`real`）での通し確認（グループ3・項目13）は、当初の着手手順どおり最終ゲートとして引き続き未実施のまま残置している。フロントエンド側の記録は`Nz-LTX23-frontend-AviUtl2\Docs\DEVLOG.md`§8を参照。
+
+## グループ1 実装完了の要約（2026-07-15）
+
+- **項目1（Clip Chainのクリップ上限8→24）**: フロントエンドの`webui/src/modes/chain/chainUtils.ts`で`MAX_CLIPS`を24へ、合計フレーム上限を3848（8×481）から11544（24×481＝`MAX_CHAIN_TOTAL_PIXEL_FRAMES`）へ更新し、24枚のクリップ枠を横スクロールできるようCSSを調整した。
+- **項目2（`chunked_upsample`フラグ対応）**: Chain画面に送信トグルを追加した。API既定値のFalse（互換維持のため）はそのままに、フロントエンドのUI初期値は既定オンとし、リクエストには値を省略せず常に明示送信する実装にした（省略すると旧経路＝一括アップサンプルに戻ってしまうため）。
+- **項目3（チェーンLoRA対応の前提解消）**: `webui/src/api/types.ts`に残っていた誤った前提コメント（「chainに`loras`フィールドは無いためタグをストリップする」）と、それに基づく実装・警告トーストを撤去した。`<lora:...>`タグはパースして`loras`配列としてそのままchain APIへ送信するよう修正した。
+- **項目4（chain参照動画対応・α版）**: `reference_video_id`と`conditioning_attention_strength`／`reference_video_strength`（0.0〜1.0、未指定時はnull）の2スライダーをChain画面に追加した。バックエンドの制約（`clips=1`かつ`source_video`と排他）に合わせ、Clipsサブモード限定のオプション節とし、参照動画添付中はクリップ数を1にピン留めした。また「参照動画ありならLoRA必須」の制約を送信前バリデーションに反映し、422エラーを予防した。
+- **項目5（ジョブポーリング120分化）**: 対応不要と判定した。フロントエンドのジョブ監視（`useGeneration.ts`）は1秒間隔の無限ポーリングであり、打ち切りのタイムアウト自体が実装上存在しない。Gradio側の120分は同期ブロッキング呼び出しを前提にした概念であり、フロントエンドの非同期ジョブ投入＋ポーリング構造には等価物がない。フロントエンドの`API_REFERENCE.md`に残っていた3600秒（60分）表記は、実態に合わせて7200秒（120分）へ更新した。
+- **項目6（尺の算術の反映）**: `chain_math.compute_chain_layout`の式を、フロントエンドの`chainUtils.ts`へ純関数（`vLatentFrames`/`pxFromVLatent`/`computeOutputFrames`）として転記した（JSDocに本書パスを正本として明記）。Chain画面に「予想出力尺」のプレビュー表示と、減算理由（オーバーラップ融合・V2Vのcontext置換）の注記を追加した。進捗表示（`JobResponse.clip`／`clip_count`／`stage`）は既に実装済みのため変更していない。
+- **付帯修正**: `webui/src/api/types.ts`とフロントエンドの`API_REFERENCE.md`を新契約（clips上限24・chainの`loras`/`chunked_upsample`/`reference_video_id`対応・ポーリング120分）へ同期した。`webui/src/bridge/mockBridge.ts`に残っていた旧上限8のモック側バリデーションも24へ修正した。
+- **品質ゲート**: webui vitestは40ファイル413件全パス（改修前398件から退行なし、新規テスト15件追加）、tsc（strict）はエラー0。**実バックエンド（`real`）での通し確認は、当初の着手手順どおり最終ゲート（グループ3・項目13）として本セッションでは未実施のまま残している。**
+
 ## 背景
 
 フロントエンド（React＋TypeScript＋Vite＝Webの標準的な作り方を組み合わせた構成でAviUtl2内蔵ブラウザ〔WebView2〕上に表示する仕組み、別リポジトリ `Nz-LTX23-frontend-AviUtl2`）の実質的な機能開発は2026-07-08（1.0.0-rc1完了）で停止している。それ以降はnative側（AviUtl2拡張本体）の軽微修正（07-10）と、バックエンドのプリセット改名への追従確認およびギャップ分析文書の追加（07-11）のみが行われ、React側のコード自体は07-08からノータッチのままである。

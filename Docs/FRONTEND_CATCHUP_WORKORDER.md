@@ -5,6 +5,21 @@
 - 併読: フロントエンドリポジトリ（`Nz-LTX23-frontend-AviUtl2`）の [`Docs/WEBVIEW2_PARITY_BACKLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)（2026-07-11作成の既存ギャップ分析。本書はそれ以降のAPI変更を加えた上位互換）／[`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)（バッチA2VのCSVマニフェスト仕様・正本）／[`CHUNKED_UPSAMPLE_WORKORDER.md`](CHUNKED_UPSAMPLE_WORKORDER.md)（チャンク化アップサンプルの実装経緯・正本）／[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)（クリップ連結の尺の算術・フロントエンド向けメモを含む）
 
 > **（2026-07-15 グループ1完了・歴史記録追記）グループ1（APIコントラクト追随・項目1〜6）を実装完了した。** 項目5（ジョブポーリングの120分化）は精査のうえ**対応不要と判定**した（フロントエンドのジョブ監視はそもそも打ち切りのデッドラインを持たない非同期ポーリング構造であり、Gradio側の「120分」に対応する概念自体が存在しないため）。項目4（chain参照動画対応・α版・任意扱い）も本セッションで対応した。詳細は以下「グループ1 実装完了の要約」節を参照。実バックエンド（`real`）での通し確認（グループ3・項目13）は、当初の着手手順どおり最終ゲートとして引き続き未実施のまま残置している。フロントエンド側の記録は`Nz-LTX23-frontend-AviUtl2\Docs\DEVLOG.md`§8を参照。
+>
+> **（2026-07-15 グループ2完了・歴史記録追記）グループ2（機能パリティ・項目7〜10）を実装完了した。** バッチA2V「就寝中一括生成」（項目7、本グループ最大の工数）、モデル管理UI（項目8）、Chain画面のプリセットドロップダウン（項目9）、wav長→Frames自動調整・事前チェック（項目10）の4項目すべてに対応した。バッチA2VとwavチェックのためにフロントエンドのWebUI⇔native間ブリッジ契約を「contract v6」として新設し、native側（C++、`ui.pickFolder`／`fs.listFiles`／`fs.readTextFile`／`fs.writeTextFileAtomic`／`fs.probeAudioDuration`と`backend.downloadVideo`のparams拡張）まで同セッション内で実装を完了させている。詳細は以下「グループ2 実装完了の要約」節を参照。実バックエンド（`real`）での通し確認（グループ3・項目13）は引き続き未実施のまま残置している。フロントエンド側の記録は`Nz-LTX23-frontend-AviUtl2\Docs\DEVLOG.md`§9、`Nz-LTX23-frontend-AviUtl2\Docs\BRIDGE_CONTRACT.md`を参照。
+
+## グループ2 実装完了の要約（2026-07-15）
+
+- **項目7（バッチA2V「就寝中一括生成」）**: [`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)（版1.0）準拠のCSVマニフェスト（10列・UTF-8 BOM付き・CRLF改行）相互運用によるバッチA2Vを、フロントエンドのCreate画面内の折りたたみ節として実装した。`stat`列のみを再開判定の正典として扱い、書込みの原子性（一時ファイル→原子的リネームで置換、ロックが5回のリトライ後も解消しなければautosave側へ退避）、Done行の保護マージ、出力フォルダ規約（`{音声フォルダ名}_a2v_out`）、ファイル名対応規約（`音声名.wav`→同名`.mp4`、衝突時は付番）をすべて実装した。API追加は不要で、既存の`POST /generate/chain`をループ呼び出しする形で実現している。
+- **ブリッジ契約v6の新設とnative実装完了**: バッチA2Vとwav長自動調整のため、フロントエンドのWebUI⇔native間JSON-RPC契約に`ui.pickFolder`／`fs.listFiles`／`fs.readTextFile`／`fs.writeTextFileAtomic`／`fs.probeAudioDuration`の5メソッドと、`backend.downloadVideo`への`destDir`/`fileName`/`noClobber`params拡張（後方互換）、新エラーコード`WRITE_LOCKED`を新設した。TypeScript側の契約定義だけでなく、**native（C++）側の実装まで同セッション内で完了**させている（新規モジュール`wav_probe`・`fs_util`、doctestで単体検証済み）。
+- **項目8（モデル管理UI）**: フロントエンドのSettingsPanel内に、`GET /models`（モデル一覧取得）と`POST /pipeline/load`（モデル切替）を使うUIを追加した。4カテゴリのドロップダウン＋Refresh＋Loadの構成。`loadPipeline`呼び出しは`timeoutMs`を600000（10分）に明示指定し、バックエンドのビジー応答（HTTP 409、`JOB_BUSY`）には専用メッセージを表示する。
+- **項目9（Chainプリセットドロップダウン）**: フロントエンドのChain画面に、`config.generation_presets`駆動のプリセットドロップダウンを追加した。選択すると`spill_free_frames`を優先した推奨クリップ長を全クリップスロットへ一律反映する。
+- **項目10（wav長→Frames自動調整・事前チェック）**: フロントエンドのA2Vソース音声アップロード時、契約v6の`fs.probeAudioDuration`でwav長を実測し、`chain_math`由来の算術に追加した関数でFrames候補を自動算出・反映する。音声に対して現在の設定が短すぎる場合は送信前にブロックする。
+- **品質ゲート**: フロントエンドのwebui vitestは48ファイル534件全パス（改修前413件から退行なし）、`npm run typecheck`（`tsc -b`）はエラー0、native doctestは201ケース（実バックエンド〔mockモード〕接続時のintegrationテストを含め207件全PASS）、警告ゼロ。埋め込みaux2＋`.au2pkg.zip`パッケージングも生成済み。
+- **実機ゲート**（2026-07-15）: 実バックエンド（mockモード）起動状態でnative integrationテスト207件全PASS、バッチA2VのE2E（実ファイルシステム上のBOM/CRLF実バイト確認、バックエンド正本の`manifest.py`との相互運用突合、再開時のDone行スキップ、`noClobber`付番）全クリア、AviUtl2 v2.0.54（ポータブル構成）でのクリーンロード・全経路疎通を確認した。
+- **α版の意図的省略**: バッチの共有キーフレーム（image列`Shared`はconditioningなしのA2Vとしてのみ扱う）、バッチでの参照動画（IC-LoRA用）、開始時の事前検証（re-judgement）は今回スコープ外とした。バッチはウィンドウ（Create画面／WebView2）を開いている間だけ処理が進む制約であることをUI上に明記している。
+- **重要な発見（バックエンド側の残課題）**: Gradioのバッチランナー（バックエンド`services`配下のバッチ実行経路）は、チェーンリクエストに`chunked_upsample`（アップサンプル処理を小分けにしてVRAM溢れを防ぐオプション、グループ1・項目2で追加）を明示送信していない既存のギャップがあることが判明した。フロントエンドのバッチA2Vはこの点に先んじて常に明示送信する実装にしてあるため実害はないが、**バックエンド側のGradioバッチ実行経路にも`chunked_upsample`の明示送信を追加することが望ましい**（本ワークオーダーのスコープ外につき、バックエンド側の別途対応が必要な残課題として記録する）。
+- 併せて判明した品質面の教訓として、フロントエンドの`webui`ディレクトリで`npx tsc --noEmit -p .`を単体実行すると型検査がほぼ素通りする「偽合格」になることが分かった。正しい型検査ゲートは`npm run typecheck`（内部で`tsc -b`のプロジェクト参照ビルドを実行する）であり、今後のフロントエンド検証手順はすべて後者を使うべきである（バックエンド側の変更は不要な、フロントエンド側限定の教訓）。
 
 ## グループ1 実装完了の要約（2026-07-15）
 

@@ -128,15 +128,90 @@ class GradioApiInternalAccessFilter(logging.Filter):
             return True  # fail-open: never let log filtering break logging
 
 
+class StatusAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for SUCCESSFUL server-status polling GETs.
+
+    ``GET /api/v1/status`` is polled repeatedly by the frontend/UI to show
+    server readiness, which produces the same kind of one-line-per-request
+    flood as the job-status polling above. This filter suppresses exactly
+    that traffic and nothing else:
+
+    * only ``GET`` (any POST/DELETE always shows),
+    * only the status resource itself,
+    * only status 200 — a 404/500 on the status URL still shows.
+
+    Same defensive contract as :class:`JobPollingAccessFilter`: uvicorn's
+    access LogRecord carries ``record.args == (client_addr, method,
+    full_path, http_version, status_code)``; any unexpected shape fails open
+    (the record is kept) so log filtering can never swallow a genuine access
+    line.
+    """
+
+    _STATUS_GET = re.compile(r"^/api/v1/status/?(?:[?#].*)?$")
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            args = record.args
+            if not isinstance(args, tuple) or len(args) != 5:
+                return True
+            _client, method, path, _http_version, status = args
+            if method != "GET" or status != 200:
+                return True
+            if not isinstance(path, str):
+                return True
+            return not self._STATUS_GET.match(path)
+        except Exception:
+            return True  # fail-open: never let log filtering break logging
+
+
+class JobsListAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for SUCCESSFUL bare job-list GETs.
+
+    ``GET /api/v1/jobs`` (the bare list, no id) is polled to refresh the job
+    list view and floods the access log the same way job-status polling
+    does. This filter suppresses exactly that traffic and nothing else:
+
+    * only ``GET`` (any POST/DELETE always shows),
+    * only the bare list resource — ``/api/v1/jobs/{id}`` and its subpaths
+      still show (that is :class:`JobPollingAccessFilter`'s job, not this
+      one's),
+    * only status 200 — a 404/500 on the list URL still shows.
+
+    Same defensive contract as :class:`JobPollingAccessFilter`: uvicorn's
+    access LogRecord carries ``record.args == (client_addr, method,
+    full_path, http_version, status_code)``; any unexpected shape fails open
+    (the record is kept) so log filtering can never swallow a genuine access
+    line.
+    """
+
+    _JOBS_LIST_GET = re.compile(r"^/api/v1/jobs/?(?:[?#].*)?$")
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            args = record.args
+            if not isinstance(args, tuple) or len(args) != 5:
+                return True
+            _client, method, path, _http_version, status = args
+            if method != "GET" or status != 200:
+                return True
+            if not isinstance(path, str):
+                return True
+            return not self._JOBS_LIST_GET.match(path)
+        except Exception:
+            return True  # fail-open: never let log filtering break logging
+
+
 def build_uvicorn_log_config() -> dict:
     """uvicorn's default logging dictConfig + the access-log filters.
 
     Deep-copied so the module-level ``uvicorn.config.LOGGING_CONFIG`` template
     is never mutated. Everything else (formatters, levels, handlers) stays
     byte-identical to uvicorn's defaults; only the ``access`` handler gains the
-    :class:`JobPollingAccessFilter` (mutes the job-status polling flood) and the
+    :class:`JobPollingAccessFilter` (mutes the job-status polling flood), the
     :class:`GradioApiInternalAccessFilter` (mutes the ``/ui/gradio_api/`` SSE /
-    queue traffic).
+    queue traffic), the :class:`StatusAccessFilter` (mutes ``/api/v1/status``
+    polling), and the :class:`JobsListAccessFilter` (mutes the bare
+    ``/api/v1/jobs`` list polling).
     """
     log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
     filters = log_config.setdefault("filters", {})
@@ -145,10 +220,17 @@ def build_uvicorn_log_config() -> dict:
     # module-name ambiguity.
     filters["job_polling_access"] = {"()": JobPollingAccessFilter}
     filters["gradio_api_internal_access"] = {"()": GradioApiInternalAccessFilter}
+    filters["status_access"] = {"()": StatusAccessFilter}
+    filters["jobs_list_access"] = {"()": JobsListAccessFilter}
     access_handler = log_config.get("handlers", {}).get("access")
     if isinstance(access_handler, dict):
         handler_filters = access_handler.setdefault("filters", [])
-        for _name in ("job_polling_access", "gradio_api_internal_access"):
+        for _name in (
+            "job_polling_access",
+            "gradio_api_internal_access",
+            "status_access",
+            "jobs_list_access",
+        ):
             if _name not in handler_filters:
                 handler_filters.append(_name)
     return log_config

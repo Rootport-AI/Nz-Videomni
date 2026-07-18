@@ -152,8 +152,8 @@ upload:
   allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 
 limits:
-  max_width: 1920
-  max_height: 1088
+  max_width: 4096
+  max_height: 4096
   max_num_frames: 481        # 20s@24fps(481=8×60+1)。溢れ/低速/非実用はクライアント警告に委ねる（§8.4/§8.6）。
   max_conditioning_images: 5
   # /config で公開：キーフレームのlatent-frame-startグリッド。frame_idx 0=先頭フレーム

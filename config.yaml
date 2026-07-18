@@ -126,11 +126,13 @@ generation_presets:
     num_frames: 81
 
 generation_defaults:
-  # Gradio/API の初期値。まず16GBで通しやすい軽量設定にする。width/height は64の倍数。
-  width: 512
-  height: 320
-  crop_output: null
-  num_frames: 49
+  # Gradio/API の初期値。standard_720p プリセットと完全一致させる。width/height は64の倍数。
+  width: 1280
+  height: 768
+  crop_output:
+    width: 1280
+    height: 720
+  num_frames: 257
   frame_rate: 24.0
   num_inference_steps: 8
   guidance_scale: 1.0

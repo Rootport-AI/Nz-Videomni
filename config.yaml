@@ -95,14 +95,14 @@ generation_presets:
     width: 512
     height: 320
     crop_output: null
-    num_frames: 49
+    num_frames: 481
   small:
     width: 960
     height: 576
     crop_output:
       width: 960
       height: 540
-    num_frames: 121
+    num_frames: 481 # G4でわずかな共有メモリ使用を観測したが、ログ確認により速度低下しない無害なベースライン（RESOLUTION_DURATION_CAPABILITY.md §8.2）と確定し481へ復帰（2026-07-20）
   standard_720p:
     width: 1280
     height: 768
@@ -166,6 +166,8 @@ limits:
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
   spill_free_frames:         # 16GB 実測(§8.4)。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告
+    "512x320": 481           # minimal（20s@24fps 上限）
+    "960x576": 481           # small（G4でわずかな共有メモリ使用を観測したが、ログ確認により速度低下しない無害なベースライン（§8.2）と確定し481へ復帰、2026-07-20）
     "1280x768": 257          # 720p（実用快適上限）
     "1920x1088": 153         # 1080p（20s は非実用~40分→720p生成+外部upscale 推奨）
     "2560x1472": 81          # 1440p

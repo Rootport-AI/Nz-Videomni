@@ -236,17 +236,22 @@ def test_build_uvicorn_log_config_attaches_filter_without_mutating_default():
     from main import (
         GradioApiInternalAccessFilter,
         JobPollingAccessFilter,
+        JobsListAccessFilter,
+        StatusAccessFilter,
         build_uvicorn_log_config,
     )
 
     before = uvicorn.config.LOGGING_CONFIG.get("handlers", {}).get("access", {}).get("filters")
     cfg = build_uvicorn_log_config()
-    # The returned config wires both access-log filters into the access handler...
+    # The returned config wires all four access-log filters into the access handler...
     assert cfg["handlers"]["access"]["filters"] == [
-        "job_polling_access", "gradio_api_internal_access"]
+        "job_polling_access", "gradio_api_internal_access", "status_access",
+        "jobs_list_access"]
     assert cfg["filters"]["job_polling_access"]["()"] is JobPollingAccessFilter
     assert (cfg["filters"]["gradio_api_internal_access"]["()"]
             is GradioApiInternalAccessFilter)
+    assert cfg["filters"]["status_access"]["()"] is StatusAccessFilter
+    assert cfg["filters"]["jobs_list_access"]["()"] is JobsListAccessFilter
     # ...and uvicorn's module-level default template is untouched.
     after = uvicorn.config.LOGGING_CONFIG.get("handlers", {}).get("access", {}).get("filters")
     assert before == after

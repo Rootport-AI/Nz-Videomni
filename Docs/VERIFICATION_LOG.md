@@ -2258,3 +2258,37 @@ GPU実機目視ゲートの過程でオーナーから寄せられた使い勝�
 - **検証**: `.venv\Scripts\python.exe -m pytest -q -p no:warnings`をjunitxml集計で確認——`tests="589" failures="0" errors="0" skipped="1"`（§36.9時点の585+1=586から+3＝退行ゼロ）。
 
 Docs更新: `README.md`（Batch A2V節の開始前チェック説明）・`BATCH_A2V_WORKORDER.md`（§画像判定の強化・2.5節）・`NEXT_SESSION_HANDOFF.md`（最新ステータスブロック＋画像判定の強化サブ節）・本節。
+
+---
+
+## 37. ★V2V Join機能（末尾トリム方式）の実機検証＋IC-LoRA×A2V併用のreal GPU生成完走＝オーナー実機ゲート全項目合格（2026-07-21）
+
+> **正本＝本節。** V2V Join復活（API拡張＝コミット `d22706e`、本書はコード非対象なので詳細は `LTX23_Backend_Specification.md` §6.1／§6.3、フロント側の実装増分はI1〜I6）の、オーナー立ち会いによるrealバックエンド・実GPUでの実機検証記録。詳細な経緯・修正差分・実機ログはフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。
+
+本機: 同上（i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11）。
+
+### 37.1 V2V Join機能（末尾トリム方式）の実機検証＝全項目合格
+
+realバックエンド・実GPUでオーナーが以下を確認し、**全項目合格**:
+
+- Joinボタンの表示（実装以来初の実機表示）。
+- トリム2択（末尾を残す秒数の選択）→ Join実行。
+- プレビューの差し替え（結合後の joined.mp4 への切り替え）。
+- 位置付き🎞挿入＋仮オブジェクトの自動削除。
+- Unjoin／再Join（上書き）。
+- joined.mp4 を手動削除した状態からの復帰。
+
+### 37.2 fps注意文の誤情報バグ発覚→真因特定→同日中に修正・再検証合格
+
+実機検証の過程で、fps注意文が「project 24 / video 24なのに did not match」という誤情報を表示する不具合が発覚した。
+
+- **真因**: バックエンドのJoin処理自体は全ケースで成功していた（正規化・トリム・atomic rename とも仕様どおり動作）。不具合の所在はフロント側の文言設計——正規化（`JoinResponse.source_normalized`）は解像度差だけでも発火する（fps差の有無を問わない）仕様なのに、注意文はfps不一致を前提とした文言しか出さず、しかもソース側の実測fpsを表示していなかった。
+- **修正**: フロント側で注意文を発火理由別の3部品（ソースfps明示の文言／fps非言及の正規化文言／プロジェクトfps推奨行）へ分岐する形に改修し、同日中に再検証まで完了した。バックエンド側は無改修。詳細は `PENDING_TASKS.md` §3-29・`DEVLOG.md` §45。
+
+### 37.3 IC-LoRA×A2V併用のreal GPU生成完走
+
+音声＋参照動画＋制御LoRAを同時に添付したチェーン生成を実GPUで完走させ、ポーズ制御（参照動画由来）と音声由来の動きが両立した動画が出力されることを確認した。同日合格。
+
+### 37.4 参照
+
+詳細な経緯・実機ログ・フロント側の修正差分はフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。バックエンド側のV2V継続初回実装は本ログ§24、2026-07-21のAPI拡張（`is_v2v`／`joined`／`source_tail_seconds`／`trimmed_source_seconds`／`source_fps`）はコミット `d22706e`（`LTX23_Backend_Specification.md` §6.1／§6.3に反映済み）。

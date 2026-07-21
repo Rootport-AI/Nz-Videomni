@@ -395,14 +395,17 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | GET | `/api/v1/jobs` | メモリ上のジョブ一覧を返す | 不要 | 200 |
 | GET | `/api/v1/jobs/{job_id}` | ジョブ状態を返す | 不要 | 200 / 404(JOB_NOT_FOUND) |
 | GET | `/api/v1/jobs/{job_id}/video` | 完了済み動画（`video/mp4`）を返す | 不要 | 200 / 404(JOB_NOT_FOUND) / 409(VIDEO_NOT_READY) |
+| POST | `/api/v1/jobs/{job_id}/join` | 完了済みV2Vジョブの継続動画（`output.mp4`）をアップロード元のソース動画へサーバー側で結合し `joined.mp4` を生成（ffmpegのみ・GPU不要・単一ジョブガードから独立） | 要 | 200 / 404(JOB_NOT_FOUND, SOURCE_VIDEO_NOT_FOUND) / 409(VIDEO_NOT_READY) / 422(VALIDATION_ERROR, JOB_NOT_JOINABLE) / 503(JOIN_FAILED) |
+| GET | `/api/v1/jobs/{job_id}/joined` | 結合済み動画（`joined.mp4`）を返す | 不要 | 200 / 404(JOB_NOT_FOUND, JOINED_NOT_READY) |
 | DELETE | `/api/v1/jobs/{job_id}` | 実行中はキャンセル要求、終了済みは結果削除 | 要 | 200 / 404(JOB_NOT_FOUND) |
 
 補足（実装どおり）:
 - `POST /generate` は成功時 **202 Accepted**（`status_code=202`）。レスポンス `status` は `queued`。
-- 認証が必要なのは `require_auth` 依存を持つ 5 経路のみ: `pipeline/load`, `pipeline/unload`, `upload/image`, `generate`, `DELETE /jobs/{job_id}`。`status` / `config` / `jobs` 系 GET は認証不要。
+- 認証が必要なのは `require_auth` 依存を持つ 6 経路のみ: `pipeline/load`, `pipeline/unload`, `upload/image`, `generate`, `jobs/{job_id}/join`, `DELETE /jobs/{job_id}`。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined` を含む）は認証不要。
 - api_key 設定時に Bearer 不一致/欠落 → `401 UNAUTHORIZED`。
 - `POST /generate` は投入時にまず `conditioning_images` の各 `image_id` の実在を検証（`upload_store.path_for` が `IMAGE_NOT_FOUND`=404 を送出）、次に単一ジョブガードで 409。
 - `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。
+- `POST /jobs/{job_id}/join`・`GET /jobs/{job_id}/joined` は V2V（video-to-video 継続）専用の ADDITIVE エンドポイントで、V2V 継続機能そのものの実装時（§24）に新設され、**2026-07-21 に凍結の限定解除（オーナー承認・コミット `d22706e`）でリクエスト/レスポンスが拡張された**。リクエスト `JoinRequest` は `audio_smoothing`（bool, 既定 `true`＝クロスフェード）・`handle_crossfade_ms`（int, 既定 `300`, `0`〜`2000`）・`source_tail_seconds`（float, 既定 `5.0`, `2026-07-21追加`——結合前にソース動画の末尾 `N` 秒だけを残す tail-keep トリム。`0` はソースを全長のまま結合）。レスポンス `JoinResponse` は `job_id`・`joined_path`（結合後 mp4 のパス）・`join_mode`・`source_normalized`・`source_lufs`・`continuation_lufs_before`・`fade_ms_applied`・`handle_crossfade_ms_applied`・`handle_context_seconds`・`loudness_matched`・`trimmed_source_seconds`（float, `2026-07-21追加`——tail-keep で削られた秒数。挿入位置計算に使う）・`source_fps`（float \| null, `2026-07-21追加`——ソースの実測fps）を返す。ボディ省略（またはPOST時ボディ無し）は既定値でのスムーズ結合になる。
 
 ### 6.2 GenerateRequest 全文
 
@@ -496,12 +499,16 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `progress` | float |
 | `current_step` | int \| null |
 | `total_steps` | int \| null |
+| `is_v2v` | bool |
+| `joined` | bool |
 | `created_at` | str |
 | `started_at` | str \| null |
 | `completed_at` | str \| null |
 | `error` | str \| null |
 | `request` | GenerateRequest |
 | `result` | JobResult \| null |
+
+> `is_v2v` / `joined` は**2026-07-21追加（V2V Join復活・コミット `d22706e`）**。`is_v2v` は `chain_request` に `source_video` があるV2Vジョブ（＝ `POST /jobs/{job_id}/join` の対象になり得るジョブ）かどうか、`joined` はサーバー側の連結済み動画 `outputs/{job_id}/joined.mp4` が現存するか（＝ join 実行済みで未削除か）を表す。
 
 ### 6.4 代表的な Req/Res 例（JSON）
 

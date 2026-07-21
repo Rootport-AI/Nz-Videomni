@@ -11,6 +11,7 @@ from __future__ import annotations
 import threading
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from api.models import (
     GenerateChainRequest,
@@ -60,7 +61,18 @@ class JobRecord:
     def is_active(self) -> bool:
         return self.status in (JobStatus.queued, JobStatus.running)
 
-    def to_response(self) -> JobResponse:
+    def to_response(self, output_dir: Path | None = None) -> JobResponse:
+        # V2V (ADDITIVE): a job is joinable iff it is a chain continuation of an
+        # uploaded source video. ``joined`` needs the output root to look for the
+        # sidecar; callers without it (unit tests) get False.
+        is_v2v = (
+            self.chain_request is not None
+            and self.chain_request.source_video is not None
+        )
+        joined = (
+            output_dir is not None
+            and (output_dir / self.job_id / "joined.mp4").exists()
+        )
         return JobResponse(
             job_id=self.job_id,
             status=self.status,
@@ -70,6 +82,8 @@ class JobRecord:
             stage=self.stage,
             clip=self.clip,
             clip_count=self.clip_count,
+            is_v2v=is_v2v,
+            joined=joined,
             created_at=self.created_at,
             started_at=self.started_at,
             completed_at=self.completed_at,

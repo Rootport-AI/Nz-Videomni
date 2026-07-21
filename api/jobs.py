@@ -18,7 +18,9 @@ router = APIRouter()
 
 @router.get("/jobs", response_model=list[JobResponse])
 def list_jobs(context: AppContext = Depends(get_context)) -> list[JobResponse]:
-    return [r.to_response() for r in context.job_store.list()]
+    return [
+        r.to_response(context.config.output_dir) for r in context.job_store.list()
+    ]
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
@@ -26,7 +28,7 @@ def get_job(job_id: str, context: AppContext = Depends(get_context)) -> JobRespo
     record = context.job_store.get(job_id)
     if record is None:
         raise job_not_found(job_id)
-    return record.to_response()
+    return record.to_response(context.config.output_dir)
 
 
 @router.get("/jobs/{job_id}/video")

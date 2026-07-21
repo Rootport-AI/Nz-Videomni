@@ -30,6 +30,7 @@ Design (Docs/mockups/JOIN_API_PROPOSAL.md, approved 2026-07-05):
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from api.errors import (
@@ -149,11 +150,33 @@ class JoinManager:
                     handle = candidate
 
         norm_tmp = job_dir / "_join_source_norm.mp4"
+        trim_tmp = job_dir / "_join_source_tail.mp4"
+        # Write to a temp name and os.replace into joined.mp4 on success, so the
+        # GET /jobs poll's exists() never observes a half-written file.
+        out_tmp = job_dir / "_join_output.tmp.mp4"
         source_use = source
+        trimmed_source_seconds = 0.0
         try:
+            # Tail-keep: keep only the last ``source_tail_seconds`` of the source
+            # before joining. cut_tail_mp4 is given the source's OWN fps so it
+            # only selects the trailing frames (no resample/full re-encode). 0 or
+            # a source already at/under the requested length -> full-length join.
+            if src_fps is not None and request.source_tail_seconds > 0:
+                keep_frames = round(request.source_tail_seconds * src_fps)
+                total = video_io.frame_count(source)
+                if 0 < keep_frames < total:
+                    src_dur_before = video_io.probe_duration(source)
+                    video_io.cut_tail_mp4(source, trim_tmp, keep_frames, src_fps)
+                    source_use = trim_tmp
+                    src_dur_after = video_io.probe_duration(trim_tmp)
+                    if src_dur_before is not None and src_dur_after is not None:
+                        trimmed_source_seconds = max(0.0, src_dur_before - src_dur_after)
+                    else:
+                        trimmed_source_seconds = (total - keep_frames) / src_fps
+
             if needs_norm:
                 video_io.normalize_clip(
-                    source, norm_tmp, cont_res[0], cont_res[1], cont_fps
+                    source_use, norm_tmp, cont_res[0], cont_res[1], cont_fps
                 )
                 source_use = norm_tmp
 
@@ -161,19 +184,22 @@ class JoinManager:
                 info = video_io.join_v2v(
                     source_use,
                     continuation,
-                    out,
+                    out_tmp,
                     handle_audio=handle,
                     handle_crossfade_ms=request.handle_crossfade_ms,
                 )
             else:
                 # Hard concat (no fades). API parity with §24.7's OFF meaning;
                 # not exposed by the GUI.
-                video_io.concat_mp4s([source_use, continuation], out, cont_fps)
+                video_io.concat_mp4s([source_use, continuation], out_tmp, cont_fps)
                 info = {"join_mode": "hard_concat"}
+            os.replace(out_tmp, out)
         except video_io.FFmpegError as exc:
             raise join_failed(job_id, detail=str(exc)[-1000:])
         finally:
             norm_tmp.unlink(missing_ok=True)
+            trim_tmp.unlink(missing_ok=True)
+            out_tmp.unlink(missing_ok=True)
 
         return JoinResponse(
             job_id=job_id,
@@ -186,4 +212,6 @@ class JoinManager:
             handle_crossfade_ms_applied=int(info.get("handle_crossfade_ms_applied", 0) or 0),
             handle_context_seconds=info.get("handle_context_seconds"),
             loudness_matched=bool(info.get("loudness_matched", False)),
+            trimmed_source_seconds=trimmed_source_seconds,
+            source_fps=src_fps,
         )

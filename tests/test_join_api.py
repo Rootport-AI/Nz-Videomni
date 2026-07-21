@@ -222,3 +222,108 @@ def test_join_does_not_change_video_endpoint(client, tmp_path):
     ctx = client.app_context
     meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
     assert meta["v2v"]["source_video_id"] == _vid
+
+
+# ---------------------------------------------------- I3: tail-keep trim (V2V)
+
+
+def test_join_tail_keep_trims_source(client, tmp_path):
+    """source_tail_seconds keeps only the trailing seconds of the source: the
+    joined output holds keep_frames + continuation, and trimmed_source_seconds
+    reports the dropped head."""
+    # 50-frame source @ 24 fps (~2.08 s); keep the last 1.0 s -> 24 frames.
+    job_id, _vid = _run_v2v_job(client, tmp_path, n_src=50, src_fps=24.0)
+
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={"source_tail_seconds": 1.0})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed_source_seconds"] > 0
+    assert abs(body["source_fps"] - 24.0) < 1e-3
+
+    ctx = client.app_context
+    joined = ctx.config.output_dir / job_id / "joined.mp4"
+    layout = chain_math.compute_chain_layout([49], 24.0, kv=2, source_context_px=25)
+    keep_frames = round(1.0 * 24.0)
+    assert video_io.frame_count(joined) == keep_frames + layout.new_frames_px
+    assert keep_frames < 50  # actually trimmed vs the full 50-frame source
+
+
+def test_join_source_shorter_than_tail_joins_full_length(client, tmp_path):
+    """A source at/under source_tail_seconds is joined at full length with no
+    trim (trimmed_source_seconds == 0.0)."""
+    job_id, _vid = _run_v2v_job(client, tmp_path, n_src=50, src_fps=24.0)
+
+    # 100 s of tail requested but the source is only ~2 s -> keep everything.
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={"source_tail_seconds": 100.0})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed_source_seconds"] == 0.0
+
+    ctx = client.app_context
+    joined = ctx.config.output_dir / job_id / "joined.mp4"
+    layout = chain_math.compute_chain_layout([49], 24.0, kv=2, source_context_px=25)
+    assert video_io.frame_count(joined) == 50 + layout.new_frames_px
+
+
+def test_join_tail_zero_joins_full_length(client, tmp_path):
+    """source_tail_seconds=0 is the explicit full-length join (backward compat
+    with the pre-I3 behavior)."""
+    job_id, _vid = _run_v2v_job(client, tmp_path, n_src=50, src_fps=24.0)
+
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={"source_tail_seconds": 0})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed_source_seconds"] == 0.0
+
+    ctx = client.app_context
+    joined = ctx.config.output_dir / job_id / "joined.mp4"
+    layout = chain_math.compute_chain_layout([49], 24.0, kv=2, source_context_px=25)
+    assert video_io.frame_count(joined) == 50 + layout.new_frames_px
+
+
+def test_join_negative_tail_seconds_422(client, tmp_path):
+    job_id, _vid = _run_v2v_job(client, tmp_path)
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={"source_tail_seconds": -1.0})
+    assert r.status_code == 422
+
+
+# ---------------------------------------- I3: is_v2v / joined on JobResponse
+
+
+def test_job_response_is_v2v_and_joined_transitions(client, tmp_path):
+    job_id, _vid = _run_v2v_job(client, tmp_path)
+
+    # V2V job before any join: is_v2v true, joined false.
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["is_v2v"] is True
+    assert job["joined"] is False
+
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={})
+    assert r.status_code == 200, r.text
+
+    # After a successful join: joined flips true.
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["is_v2v"] is True
+    assert job["joined"] is True
+    # ...and the list endpoint agrees.
+    listed = {j["job_id"]: j for j in client.get("/api/v1/jobs").json()}
+    assert listed[job_id]["is_v2v"] is True
+    assert listed[job_id]["joined"] is True
+
+    # Remove joined.mp4 -> joined reads false again.
+    ctx = client.app_context
+    (ctx.config.output_dir / job_id / "joined.mp4").unlink()
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["joined"] is False
+
+
+def test_job_response_non_v2v_is_v2v_false(client):
+    """A plain (no-source) chain job is not a V2V continuation -> is_v2v false."""
+    r = client.post("/api/v1/generate/chain",
+                    json={**BASE, "clips": [{"num_frames": 25}, {"num_frames": 25}]})
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["is_v2v"] is False
+    assert job["joined"] is False

@@ -583,7 +583,8 @@ class JoinRequest(BaseModel):
     * ``False`` — hard concat (no fades). Kept for parity/testing; the GUI only
       exposes the smoothed path.
 
-    ``handle_crossfade_ms`` applies to the handle true-crossfade only. The
+    ``handle_crossfade_ms`` applies to the handle true-crossfade only; it is an
+    audio-only acrossfade (the video is always a hard cut at the seam). The
     default is 300 ms (F5, G3 visual/audition gate: 150 ms — the original
     VERIFICATION_LOG §24.7 sweet spot — left the seam slightly audible on real
     content; the GUI offers 150/300/500). All fields are optional; an empty
@@ -592,6 +593,12 @@ class JoinRequest(BaseModel):
 
     audio_smoothing: bool = True
     handle_crossfade_ms: int = Field(300, ge=0, le=2000)
+    # V2V Join tail-keep: keep only this many trailing seconds of the uploaded
+    # source before concatenating the continuation, so the join delivers "the
+    # last N seconds of the original + the new part". 0 is the explicit request
+    # to join the source at full length. When the source is already this short
+    # (or shorter) it is joined at full length unchanged.
+    source_tail_seconds: float = Field(5.0, ge=0.0)
 
 
 class JoinResponse(BaseModel):
@@ -614,6 +621,13 @@ class JoinResponse(BaseModel):
     handle_crossfade_ms_applied: int = 0
     handle_context_seconds: float | None = None
     loudness_matched: bool = False
+    # V2V Join tail-keep: seconds of the source dropped from its head by the
+    # tail-keep trim (= source full duration - kept duration), i.e. the offset at
+    # which the continuation begins in the joined timeline. 0.0 when no trim ran
+    # (source_tail_seconds=0 or source already at/under that length).
+    trimmed_source_seconds: float = 0.0
+    # The source's measured fps (ffprobe). None when it could not be probed.
+    source_fps: float | None = None
 
 
 class JobStatus(str, Enum):
@@ -669,6 +683,13 @@ class JobResponse(BaseModel):
     # generates, queued jobs, mock milestones, and pre-F2 workers.
     clip: int | None = None
     clip_count: int | None = None
+    # V2V (ADDITIVE): ``is_v2v`` is True when the job is a chain continuation of
+    # an uploaded source video (has a ``source_video`` spec) — the only jobs
+    # POST /jobs/{id}/join accepts. ``joined`` reports whether a ``joined.mp4``
+    # currently exists next to the job output (i.e. a join has been run and not
+    # deleted); it is False unless the responder resolved the output dir.
+    is_v2v: bool = False
+    joined: bool = False
     created_at: str
     started_at: str | None
     completed_at: str | None

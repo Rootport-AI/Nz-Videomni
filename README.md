@@ -20,11 +20,13 @@ API 契約・スキーマの詳細仕様は [`LTX23_Backend_Specification.md`](L
 ## 0. 環境分離ポリシー（最重要・最初に読む）
 
 **このプロジェクトは PC のシステム Python 環境を一切汚しません。** Python 本体を含め、必要なものはすべて
-プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.python/`）に閉じ込めます（仕様書 2.5）。
+プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.python/`, `tools/`）に閉じ込めます（仕様書 2.5）。
 
 - グローバル/システムの `pip install` は **禁止**。必ず `uv` + プロジェクトローカル venv。
 - 環境変数（`PYTORCH_CUDA_ALLOC_CONF`, `UV_PYTHON_INSTALL_DIR`）は **そのプロセス内のみ**。永続化しない。
-- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.python` 含む）を削除するだけで完全に元に戻ります。
+- 前提ツール（`uv` / `ffmpeg` / `ffprobe`）も `tools/` に取り込み、`PATH` への追加は **そのプロセス内のみ**。
+  Windows の環境変数設定は書き換えません。
+- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.python` / `tools` 含む）を削除するだけで完全に元に戻ります。
 
 ### 2つの venv（重要）
 
@@ -45,12 +47,86 @@ API 契約・スキーマの詳細仕様は [`LTX23_Backend_Specification.md`](L
 ## 1. セットアップ
 
 ### 必要なもの
+
 - Windows 10/11 x64
-- [`uv`](https://docs.astral.sh/uv/)（パッケージ/Python管理）
-- `ffmpeg`（PATH に通すこと。MP4エンコード・クロップに使用）
+- **git** — [公式サイト](https://git-scm.com/download/win)からインストーラを入手してください。画面上のボタンを押していくだけで導入が終わり、コマンドの入力は必要ありません。
 - 実モデルで生成する場合のみ: NVIDIA CUDA GPU と十分なメインメモリ（下記「ハードウェア要件」）
 
-モック backend（GPU 無しで動く合成クリップ生成）で API・UI・テストを動かすだけなら、上の3つだけで足ります。
+**あらかじめ用意しておくものは git だけです。** パッケージ管理ツールの
+[`uv`](https://docs.astral.sh/uv/) と、動画の変換に使う `ffmpeg` / `ffprobe` は、`setup.bat` が
+このプロジェクトの中（`tools/` フォルダ）へ自動的に取り込みます。Windows 側の設定（PATH など）は
+一切書き換えないので、後片付けはこのフォルダを削除するだけで済みます。
+
+### かんたんインストール（`setup.bat` → `run.bat`）
+
+コマンドを打つ必要はありません。次の順に進めてください。
+
+1. **`setup.bat` をダブルクリックする。**
+   黒い画面が開き、道具の取り込み（`uv` / `ffmpeg`）→ 専用の Python 環境の作成 → モデルのダウンロード
+   （約 30GB）が順に進みます。所要時間の目安は、光回線（下り 90〜100Mbps）でおよそ 50 分、
+   30Mbps 程度の回線ではおよそ 2 時間半です。
+   **途中でこの画面を閉じても構いません。** もう一度 `setup.bat` を実行すれば続きから再開します。
+   ただし途中でパソコンがスリープすると通信が止まるので、長時間そのままにする場合は、電源の設定で
+   スリープを「なし」にしておいてください。
+2. **`run.bat` をダブルクリックする。**
+   サーバーが起動し、黒い画面に `http://127.0.0.1:18620/ui` のようなアドレスが表示されます。
+   このアドレスはクリップボードにも入っているので、ブラウザのアドレス欄に Ctrl+V で貼り付けられます。
+3. **表示されたアドレスをブラウザで開く。** これで Web の操作画面（Gradio UI）が使えます。
+4. **AviUtl2 から使う場合**は、このリポジトリの直下にある **`NzLTX23-1.0.0-rc1.au2pkg.zip`** を、
+   **AviUtl2 のプレビュー画面へドラッグ＆ドロップ**してください。AviUtl2 公式のプラグイン導入方法です
+   （本体添付の `aviutl2.txt` に記載があります）。
+5. **AviUtl2 を再起動する。** 上部メニューから Nz-LTX23 を開けるようになります。
+
+#### サーバーの止め方
+
+`run.bat` で開いた黒い画面を、**右上の × ボタンで閉じてください**。これでサーバーが止まります。
+
+> **この案内に `Ctrl+C` を書き足さないでください（意図的な省略です）。** `Ctrl+C` で止めると、`cmd` が
+> `Terminate batch job (Y/N)?` という英語のプロンプトを返すことがあり、本プロジェクトの想定利用者
+> （PowerShell を自分で開けないリテラシー）はここで手が止まります。× で閉じる 1 通りだけを案内する、
+> というのが決定事項です（フロントエンド側 `Docs/PENDING_TASKS.md` §3-37）。
+
+#### AviUtl2 から使うときの注意（重要）
+
+**先に `run.bat` を起動して、その黒い画面を開いたままにしておいてください。**
+AviUtl2 のプラグインは、バックエンドのサーバーを自分で起動しません（プラグイン側にサーバーを
+立ち上げる仕組みは入っていません）。サーバーが動いていないと、プラグインの画面には
+**「サーバー未起動」**というバッジが出るだけで、生成はできません。黒い画面を閉じるとサーバーも
+止まるので、AviUtl2 から使っている間は閉じないでください。
+
+#### 更新のしかた
+
+1. VSCode の画面から `git pull`（同期）を実行して、最新のコードを取り込む。
+2. **そのあと、`setup.bat` をもう一度実行する。**
+
+**2 を省かないでください。** 依存パッケージの内容が変わっていた場合、`run.bat` は起動こそするものの
+中身が古いままで正しく動かない、という分かりにくい状態になります。`setup.bat` は 2 回目以降、
+すでに揃っているものを飛ばすので、変更が無ければ短時間で終わります。
+
+自動更新の仕組みはあえて用意していません（更新確認の通信がウイルス対策ソフトに誤検知される
+リスクを避けるためです）。
+
+#### 設定ファイル `config.yaml` の扱い
+
+`config.yaml` は **git の管理対象外**です。配布されるのはひな型の `config.yaml.example` で、
+`setup.bat`（および `run.bat`）が、`config.yaml` がまだ無いときにひな型から複製する作りになっています。
+利用者が自分のマシンに合わせて書き換えた設定が、`git pull` のたびに衝突しないようにするための
+作りです。設定を変えたい方は `config.yaml` のほうを編集してください（ひな型を編集しても、
+動作中の設定には反映されません）。
+
+> **この複製経路は、まだ一度も実際に走ったことがありません（未検証）。** 開発機には以前から
+> `config.yaml` が存在するため、`setup.bat` の唯一の実行ログでも「既にあります」の分岐しか通って
+> いません。`config.yaml` が無い状態からの初回導入（＝clone 直後のサブマシン）で複製が本当に
+> 行われるかは、オーナーの実機検証で最初に確認すべき項目のひとつです。もし複製されずに
+> 起動した場合、設定は既定値のままになり、生成が「お試し表示」（モック backend）へ切り替わる
+> ことがあります。
+
+> **すでに `config.yaml` を編集して使っていた方への注意（移行時に一度だけ）**
+>
+> この変更を取り込む `git pull` は、**「リポジトリ側での削除」と「手元での変更」がぶつかって途中で
+> 止まります**。`git pull` する前に、`config.yaml` を `config.yaml.bak` などの別名でコピーして
+> 退避しておいてください。pull のあと、必要な設定を新しい `config.yaml` へ書き戻せます。
+> （編集していなかった場合は何も起きません。静かに消え、次の起動時にひな型から復元されます。）
 
 ### ハードウェア要件（実モデルで生成する場合）
 
@@ -59,7 +135,7 @@ API 契約・スキーマの詳細仕様は [`LTX23_Backend_Specification.md`](L
 | GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
 | GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
 | メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要） |
-| ストレージ | モデル ~28GB ＋ ページファイル用にドライブの空き 60GB 以上 |
+| ストレージ | **このフォルダを置くドライブに約 38〜40GB**（モデル 約 29.7GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
 | attention（注意機構の計算方法） | 全世代で **SDPA 固定**（PyTorch 標準の実装）。xformers・flash-attn は導入も使用もしません |
 
 #### 対応する GPU 世代
@@ -85,6 +161,23 @@ PyTorch v2.9.1 のビルド設定（[`build_cuda.sh`](https://github.com/pytorch
 
 attention は全世代で PyTorch の SDPA に固定しており、xformers や flash-attn はインストールもしなければコードからも
 呼びません（16GB 環境で速度を決めているのは attention ではなく重みの転送であるため。仕様書 §5.4）。
+
+#### 必要な空き容量の内訳
+
+このフォルダの中に入るものは、実測で次のとおりです。合計 **約 38〜40GB** を見てください。
+この「約 38〜40GB」が本プロジェクトで統一している必要容量の数字で、`setup.bat`（`scripts/setup.ps1`）が
+起動時に出す空き容量の案内・失敗時の案内も同じ数字を使います（判定のしきい値はその上端の 40GB）。
+
+| 中身 | 実測サイズ | 備考 |
+|------|-----------|------|
+| `models/`（モデル一式） | 約 29.7 GiB | GGUF transformer ＋ GGUF Gemma ＋ component ファイル群 ＋ アップサンプラ ＋ tokenizer ＋ IC-LoRA 2点（1.22 GiB）＋ DWPose 前処理器 2点（0.33 GiB） |
+| Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、2つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
+| `tools/`（`uv` ＋ `ffmpeg`） | 約 0.4 GiB（実測 378 MB） | `setup.bat` が取り込む前提ツール。ffmpeg のダウンロードは約 104 MB だが、展開後はこの大きさになる |
+
+> **ページファイル用の 60GB は、この 38〜40GB の代わりにはなりません。** ページファイルは
+> 別のドライブに置いていても構わない性質のもので（Windows の既定では C ドライブ）、
+> 用途もまったく別です。**両方**必要だと考えてください。たとえばこのフォルダを D ドライブへ
+> 置き、ページファイルが C ドライブにあるなら、D に 38〜40GB・C に 60GB の空きが要ります。
 
 #### メインメモリとページファイル（最重要）
 
@@ -115,6 +208,9 @@ attention は全世代で PyTorch の SDPA に固定しており、xformers や 
 
 ### アプリ venv（`./.venv`, torch 無し）
 
+> ここから先は**中で何が起きているかの説明**です。`setup.bat` が `scripts/install_ltx.ps1` を通じて
+> 同じことを自動で行うので、通常の利用では手で打つ必要はありません。
+
 ```powershell
 # Python 本体もプロジェクト内に固定する（システムを汚さない）
 $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
@@ -137,7 +233,17 @@ uv sync --extra dev
 [`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt)（`name==version` の完全スナップショット）から再構築できます。
 provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) を参照してください。
 
-必要なモデル（`config.yaml` の `model:` が参照。相対パスは PROJECT_ROOT 基準で絶対化）:
+> **`setup.bat` を再実行したときのふるまい**: `.venv-engine` は「すでに存在するから飛ばす」のでは
+> なく、**ピン留めされた依存の内容が前回と変わっていないときだけ飛ばします**。freeze ファイルの中身と、
+> `install_ltx.ps1` が持つ 3 つの git リビジョンの指定をまとめてハッシュにし、
+> `.venv-engine/.nz-engine-state` に記録した前回の値と突き合わせる方式です。`git pull` で依存が
+> 変わっていれば自動で貼り直され、記録が無い場合（前回の導入が途中で中断した場合や、この仕組みが
+> できる前に作られた環境）も貼り直しになります。「`git pull` のあとに `setup.bat` を再実行する」
+> という更新手順は、この仕組みで成り立っています。
+
+必要なモデル（`setup.bat` / `install_ltx.ps1` が自動でダウンロードする全 20 ファイル。上5行は `config.yaml` の
+`model:` が参照し、相対パスは PROJECT_ROOT 基準で絶対化されます。下2行のうち IC-LoRA は `model.ic_loras:` が参照し、
+DWPose 前処理器は `engine/preprocess/dwpose.py` が固定パスで読みます）:
 
 | 要素 | 既定パス | 概算 | 取得元リポジトリ | 役割 |
 |------|----------|------|------------------|------|
@@ -146,22 +252,33 @@ provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR
 | component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 46GB モノリスを置換する小単体ファイル |
 | spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 2段生成の x2 アップサンプラ |
 | Gemma tokenizer dir (`gemma_root`) | `models/gemma-3-12b-it-tokenizer/` | ~40MB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
+| IC-LoRA 2点 | `models/ltx-2.3-ic-lora/{pixel-spatial-upscaler,union-control}/*.safetensors` | ~1.2GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `config.yaml` の `ic_loras:` が登録する3アダプタの実体（`pixel-spatial-upscaler-x2` と、同一の union-control ファイルを2つの名前で公開した `canny-control` / `pose-control`） |
+| DWPose 前処理器 2点 | `models/preprocessors/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt` | ~0.34GB | [`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose) | `pose-control` アダプタが参照動画から骨格を起こすときに使う姿勢推定モデル（`engine/preprocess/dwpose.py` が絶対パスで読む） |
 
-上記5要素はすべて、本プロジェクトが再ホストした **2つの公開リポジトリ**（`Rootport/Nz-LTX23-weights` と
-`Rootport/Nz-Gemma3-12B`）から取得します。どちらも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、
-**HuggingFace のアカウントもアクセストークンも一切必要ありません**。`scripts/install_ltx.ps1` を実行すれば
-2回のダウンロードで全部揃います。両リポジトリの内部構造は上表の `models/` 配下と 1 対 1 で一致させてあるので、
+上記7要素はすべて、本プロジェクトが再ホストした **3つの公開リポジトリ**（`Rootport/Nz-LTX23-weights`・
+`Rootport/Nz-Gemma3-12B`・`Rootport/Nz-DWPose`）から取得します。いずれも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、
+**HuggingFace のアカウントもアクセストークンも一切必要ありません**。`setup.bat`（内部で
+`scripts/install_ltx.ps1` を呼びます）を実行すれば、3回のダウンロード（合計 20 ファイル・31,889,519,494 バイト＝約 29.7GiB）で全部揃います。
+3リポジトリの内部構造は上表の `models/` 配下と 1 対 1 で一致させてあるので、
 `models/` へそのまま展開されます（配置換えやリネームは発生しません）。
 
-> **削除済み（2026-07-01 の refactor）**: (1) 43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors` を物理削除。
+**IC-LoRA と DWPose 前処理器も `install_ltx.ps1` が自動で取得します（手動配置は不要です）。** インストールの最後に出る
+検証テーブル（14 項目）は、この 2 種類も含めて 1 ファイルずつ PASS/MISSING を表示します。ここが MISSING のまま気づかないと、
+UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control`）が出るのに、選んだ瞬間に 404 になる
+——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
+
+> **削除済み（2026-07-01 の refactor）**: (1) 46GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B ＝ 約 43GiB。
+> 資料によって「43GB」と書かれていることがあるが、GiB 表記の同一ファイルを指す）を物理削除。
 > `config.model.checkpoint_path` はフィールドとしては残りますが **reference-only**（worker payload に載るが GGUF+component
 > 経路では一切開かれない・rename test で実証済み）。(2) **22.7GB の QAT Gemma dir `models/gemma-3-12b-it-qat/` も物理削除**。
 > Gemma を **text-only（`Gemma3ForCausalLM`・vision 無し）** で構築するよう作り替えたため（`engine/gemma/text_encoder_configurator.py`）、
 > wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は上記 ~40MB の tokenizer-only dir で足ります。full-QAT
 > baseline と出力バイト一致で検証済み（`Docs/VERIFICATION_LOG.md` §14）。
 >
-> 実行に本当に要るモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + tokenizer dir。実測 `models/` 全体
-> 28.15GB）で、ComfyUI の GGUF 16GB レシピと同等のフットプリントです。
+> 生成の中核として実際にロードされるモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + tokenizer dir＝28.15GiB）で、
+> ComfyUI の GGUF 16GB レシピと同等のフットプリントです。`install_ltx.ps1` はこれに IC-LoRA 2点（1.22GiB）と DWPose 前処理器 2点（0.33GiB）を
+> 加えた **約 30GB（29.7GiB）** をダウンロードします。後者2種は無くても T2V/I2V の生成自体は成立しますが、`config.yaml` が IC-LoRA を
+> 無条件に登録するため、欠けていると UI から選んだときに 404 になります（上の検証テーブルの説明を参照）。
 
 backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「`./.venv-engine` の python・
 `engine/worker.py`・上記ロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です
@@ -175,12 +292,17 @@ UI/API のドロップダウンに列挙されます。サブフォルダに入�
 衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
 （`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
 
-> **取得元の変更について（2026-07-26）**: モデルの入手先を、配布元が入り混じった5つのリポジトリから、
-> 本プロジェクトが再ホストした **2つの公開リポジトリ**（[`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) と
-> [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B)）へ一本化しました。従来は spatial upsampler と
+> **取得元の変更について（2026-07-26）**: モデルの入手先を、配布元が入り混じった上流リポジトリ群から、
+> 本プロジェクトが再ホストした **3つの公開リポジトリ**（[`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights)・
+> [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B)・[`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose)）へ
+> 一本化しました。従来は spatial upsampler と
 > Gemma の tokenizer 一式が Gated リポジトリにあり、ブラウザでのライセンス承諾とアクセストークンの発行が
 > 必須でしたが、**現在はアカウントもトークンも不要**です。`install_ltx.ps1` からトークン関連の引数
 > （`-HfToken`）と、ログイン補助スクリプト `scripts/hf_login.ps1` は削除済みです。
+>
+> **IC-LoRA（`models/ltx-2.3-ic-lora/`）と DWPose 前処理器（`models/preprocessors/`）も、この一本化で
+> `install_ltx.ps1` の取得対象になりました。** 以前は上流から手で落として置く前提の、インストーラの管理外の
+> ファイルでしたが、現在は他のモデルと同じく自動でダウンロード・検証されます。手動配置の手順は不要です。
 >
 > 併せて、本番トランスフォーマー GGUF の配置も整理しました。従来の取得元は
 > `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダの中にファイルを置く構造だったため、
@@ -209,7 +331,11 @@ LTXネイティブの生キーであること、(3) `embeddings_connector` 層�
 満たさない外部配布 GGUF はロードに失敗します（条件を満たすのは QuantStack 製、および自家製変換ツール
 `Nz-GGUF-Converter-LTX23` の出力）。量子化タイプは既定の Q4_K_M に加え Q6_K / Q8_0 等にも対応します。
 
-**LoRA**: `models/loras/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、
+**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。
+`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control`）は
+`install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。
+
+`models/loras/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、
 `POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または
 Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0〜2）。ComfyUI 形式
 （`diffusion_model.` プレフィックス＋ `lora_A`/`lora_B`）に対応し、量子化 GGUF モデルにもそのまま適用できます
@@ -219,11 +345,19 @@ Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します�
 
 ## 2. 起動
 
+**通常は `run.bat` をダブルクリックしてください。** 黒い画面にアドレスが表示され、同時に
+クリップボードにも入るので、ブラウザに貼り付けて開きます。止めるときは、その画面を × ボタンで
+閉じてください。
+
+`run.bat` は、リポジトリ直下の `run.ps1` を実行ポリシーの制約を受けない形で呼び出すだけの
+薄いラッパーです。`run.ps1` は残っており、PowerShell から直接実行することもできます
+（引数はどちらからでも同じように渡せます）。
+
 ```powershell
-# 推奨: 起動スクリプト（環境変数設定 → アプリ venv → main.py 起動 を一括）
+# 起動スクリプト（環境変数設定 → tools/ を PATH の先頭へ → アプリ venv → main.py 起動 を一括）
 ./run.ps1
 
-# もしくは直接
+# もしくは直接（環境変数と PATH は自分で用意することになります）
 $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 .\.venv\Scripts\python.exe main.py
@@ -231,6 +365,10 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 
 `run.ps1` は **アプリ**（`./.venv` の `main.py`）を起動します。real backend が選ばれると、アプリが
 `./.venv-engine\Scripts\python.exe -m engine.worker` を subprocess として自動 spawn します（手動起動は不要）。
+
+`run.ps1` は起動を軽く保つため、**依存の再同期（`uv sync` など）は行いません**。`git pull` のあとは
+`setup.bat` を実行してください（§1「更新のしかた」）。なお `.venv` がまだ無い場合は、その旨を表示して
+終了します（自動では作りません。`.venv` だけ作ってもモデルもエンジン環境も無く、実生成はできないためです）。
 
 起動後:
 - UI: <http://127.0.0.1:18620/ui>
@@ -252,6 +390,8 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 ```powershell
 ./run.ps1 --listen --port 19000
 ```
+
+`run.bat` に渡した引数もそのまま `run.ps1` へ届きます（`run.bat --port 19000` のように使えます）。
 
 ---
 

@@ -43,6 +43,10 @@ LTX-2/
 *.npz
 *.tar
 *.zip
+# Exception: the AviUtl2 plugin package (~378 KB) ships inside this repo so the
+# installer flow is self-contained. Plain git object, NOT Git LFS on purpose --
+# LFS would force every user to install git-lfs before cloning.
+!*.au2pkg.zip
 
 # HuggingFace / uv / torch caches redirected into the project (install_ltx.ps1)
 .hf_cache/
@@ -52,3 +56,16 @@ hf_home/
 
 # uv lockfile (resolved per-machine here)
 uv.lock
+
+# ---------------------------------------------------------------------------
+# Local setup artifacts — created by setup.bat, never committed
+# ---------------------------------------------------------------------------
+
+# User-edited configuration. Tracking it would make every `git pull` stop on a
+# merge conflict against the settings the user tuned for their own machine.
+# The template that ships with the repo is config.yaml.example; setup.bat and
+# run.bat copy it into place when config.yaml is missing.
+config.yaml
+
+# Prerequisite tools fetched by setup.bat (uv + ffmpeg/ffprobe), ~378 MB on disk.
+tools/

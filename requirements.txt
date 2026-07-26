@@ -7,13 +7,17 @@
 #     python -m venv .venv
 #     .venv\Scripts\pip install -r requirements.txt
 #
-# NOTE: The LTX inference stack (torch ~=2.7 on CUDA 12.9, ltx-core,
-# ltx-pipelines, and the GPU-generation-specific attention backend) is NOT
-# listed here. It is installed separately by scripts/install_ltx.ps1 because:
-#   - torch/xformers come from the PyTorch cu129 wheel index, and
-#   - the attention backend differs per GPU generation
-#       * Ada Lovelace / Ampere / Hopper -> xformers   (uv sync --extra xformers)
-#       * Blackwell                      -> flash-attn-4==4.0.0b9
+# NOTE: The LTX inference stack (torch 2.9.1+cu128, ltx-core, ltx-pipelines,
+# and the rest of the GPU side) is NOT listed here, and is NOT installed into
+# this venv at all. It lives in a SEPARATE engine venv (./.venv-engine), pinned
+# by engine/venv-engine.freeze.txt and applied by scripts/install_ltx.ps1,
+# because:
+#   - torch must come from the PyTorch cu128 wheel index (not PyPI), and
+#   - the two stacks cannot share one interpreter (both ship a top-level
+#     `services` package).
+# Attention backend: PyTorch SDPA on EVERY GPU architecture. Neither xformers
+# nor flash-attn is installed or imported; there is no per-architecture branch
+# and no `xformers` extra (pyproject.toml declares only the `dev` extra).
 # See README "7. LTX 2.3 のインストール".
 # =============================================================================
 

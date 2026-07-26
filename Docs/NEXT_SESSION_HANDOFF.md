@@ -2,9 +2,52 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-14 Clip Chain拡張（±ボタン式の折りたたみUI・クリップ連結上限8→24）＝実装完了・**GPU実機ゲート✅合格（オーナー確認済み）**・pytest 598 passed / 1 skipped）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-26 α版インストール導線の整備＝実装完了・**ただし全変更が未コミット**・オーナーの実機検証待ち）
 
-> **本ブロックが最新の正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正。正式なワークオーダー＝[`CHAIN_UI_EXPANSION_WORKORDER.md`](CHAIN_UI_EXPANSION_WORKORDER.md)（実装完了の要約・オーナー決定事項・2026-07-14の実機ゲート結果〔二点測定の実測値・スピル発生箇所の特定・外挿と判定〕を冒頭の歴史記録ブロックに記載済み）。
+> **本ブロックが日付として最新（2026-07-26）。** ただし扱っているのは**配布・導入まわりだけ**で、**生成機能そのものの正本は次の「2026-07-14 Clip Chain拡張」ブロック**である（二系統が並走している。食い違ったら、配布・導入は本ブロック、生成機能は次ブロックが正）。それ以降の▶節はすべて歴史記録。
+
+### ⚠ 最初に読むこと — 作業ツリーの状態（2026-07-26 時点）
+
+**下記の実装はすべて完了しているが、`Nz-LTX23-backend` の変更は 1 つもコミットされていない。** しかも `git index` には
+**`config.yaml` と `wheels/.gitkeep` の削除だけがステージ済み**という中途半端な状態になっている。
+
+```
+D  config.yaml          <- ステージ済み（削除）
+D  wheels/.gitkeep      <- ステージ済み（削除）
+ M .gitattributes / .gitignore / main.py / run.ps1 / scripts/install_ltx.ps1
+ M README.md / LTX23_Backend_Specification.md / Docs/NEXT_SESSION_HANDOFF.md
+?? setup.bat / run.bat / scripts/setup.ps1 / config.yaml.example / NzLTX23-1.0.0-rc1.au2pkg.zip
+```
+
+この状態で素の `git commit` を打つと、**ステージ済みの 2 件の削除だけがコミットされる**。すなわち
+「`config.yaml` は消えたが `config.yaml.example` も `.gitignore` の追加も入っていない」コミットができあがり、
+これは **[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-37 が「絶対に避けろ」と
+書いている壊れた中間コミットそのもの**である（§3-37: 「ひな型の追加・`.gitignore` への追加・`git rm --cached` は
+**同一コミットで**行う必要がある（分けると中間のコミットを引いた人が詰む）」）。
+
+→ **コミットするときは `git add -A` で全変更をまとめてから 1 コミットにすること。** ステージ済みの削除だけを
+先に確定させてはならない。分割したい場合も、上記 3 点（`config.yaml` の削除・`config.yaml.example` の追加・
+`.gitignore` への `config.yaml` 追加）は必ず同一コミットに入れる。なお本プロジェクトの慣行として、
+**コミットとプッシュはオーナーが手動で行う**。
+
+### 完了している内容
+
+- **モデルの再ホストが完了**（HuggingFace `Rootport` アカウント・**4リポジトリ**）。`Nz-LTX23-weights`（LTX本体5点＋**IC-LoRA 2点**＝7ファイル・24,196,952,364 B）／`Nz-Gemma3-12B`（11ファイル・7,339,810,357 B）／`Nz-DWPose`（**新設**・前処理器2点・352,756,773 B）／`Nz-Sulphur2`（自家変換GGUF 1点・インストーラの取得対象外）。全リポジトリが Public 非 Gated で、**HFアカウントもトークンも不要**。
+- **`install_ltx.ps1` は 3 リポジトリから合計 20 ファイル・約30GB（29.7GiB）を取得する。** 従来インストーラの管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も**自動取得の対象になった**（手動配置は不要）。step 6 の検証表は 10 → **14 項目**。
+- **エンドユーザー入口 `setup.bat` / `run.bat` を新設**（前提ツールは git のみ。`uv` と `ffmpeg`/`ffprobe` は `tools/` へ取り込む）。`config.yaml` は追跡外化し `config.yaml.example` から複製する。フロントエンドの `.au2pkg.zip`（378,689 B）をバックエンドリポジトリ直下に同梱。
+- **正本**: フロントエンド側 [`Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`LTX23_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
+
+### 残っていること
+
+1. **コミット**（上記のとおり `git add -A` で一括。オーナーが手動で行う）。
+2. **オーナーの実機検証**（サブマシンでの `setup.bat`→`run.bat`→生成、およびAviUtl2へのD&D導入）。とくに **`config.yaml` が無い状態からの複製経路は一度も実行されたことがない**ので、そこを見ること（`README.md` §1）。
+3. **コード側の設計・実装の未了はない。**
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-14 Clip Chain拡張（±ボタン式の折りたたみUI・クリップ連結上限8→24）＝実装完了・**GPU実機ゲート✅合格（オーナー確認済み）**・pytest 598 passed / 1 skipped）（**生成機能の正本**）
+
+> **生成機能については本ブロックが正本。** これ以降の▶節はすべて歴史記録。食い違ったら本ブロックが正（配布・導入まわりは上の 2026-07-26 ブロックが正）。正式なワークオーダー＝[`CHAIN_UI_EXPANSION_WORKORDER.md`](CHAIN_UI_EXPANSION_WORKORDER.md)（実装完了の要約・オーナー決定事項・2026-07-14の実機ゲート結果〔二点測定の実測値・スピル発生箇所の特定・外挿と判定〕を冒頭の歴史記録ブロックに記載済み）。
 
 ### 本日完了した内容の要約
 
@@ -518,14 +561,14 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 - **残課題A（worker 再利用 crash）解決**=§9.7: 真因＝`BlockSwapService._installed_transformers` の per-job リーク（append し続け解放しない）。修正＝install() で append 前に `clear()`（keep-latest）＋`_do_generate()` 完了直後に `gc.collect(); torch.cuda.empty_cache()`。6ジョブ実機 PASS・出力 byte 一致。真因確定の経緯（当初 mmap 破損説→棄却→Windows commit（仮想メモリ）枯渇で確定）=§8。
 - **de-fork（engine first-party 化）**=§13: 旧同梱フォーク backend→`engine/` パッケージ（`worker`/`pipeline`/`gguf`/`gemma`/`transformer`）へ採用・アルゴリズム不変・43GB モノリス物理削除（`checkpoint_path` は reference-only 化）・全段 SHA256 一致。**QAT 回収**=§14: Gemma を text-only（`Gemma3ForCausalLM`・vision 無し）化し 22.7GB の QAT dir を物理削除・gemma_root は ~40MB tokenizer-only dir（`models/gemma-3-12b-it-tokenizer/`）に差替え・models/ 50.9→28.15GB・byte 完全一致。
 - **keep=1 常駐モード＝調査 CLOSE**（16GB で原理的 non-viable・利得は既存経路で捕捉済み・既定 keep=0 不変）=§15。**dead-code 整理**（text-only/de-fork の残 no-op 除去・byte-match ゲート）=§16。**Phase 5(A) 配線**（Approach W 常駐サブプロセスワーカー・`@@LTX@@` JSON-lines プロトコル・app `.venv` は torch 非 import）=§6・**Phase 5(B)**（denoise 直前 `empty_cache` で shared 溢れ 3969→742MB）=§7。
-- **install スクリプト**: `scripts/install_ltx.ps1` は冪等クリーンインストーラ（2026-07-02 全面書き換え済＝現行の正・両venv・現行~28GBのみDL）。**GPU アーキの自動判定（`nvidia-smi` 読み取り・`-GpuArch` 引数）は 2026-07-26 に廃止**＝全アーキで SDPA 固定のため分岐する理由が無く、アーキ別のプリビルド wheel 自動導入も行わない（`scripts/build_xformers.ps1` は手動ツールとして残す）。互換メモ＝torch は必ず cu128 index から／attention＝**SDPA 固定**（xformers/flash-attn はインストールも import もしない。ただし `sageattention==1.0.6` だけは `engine/engine-venv-pyproject.toml`・`engine/venv-engine.freeze.txt` に必須依存として載っており `.venv-engine` に実際に入っているが、バックエンドのコードからは一切 import されていない＝死重依存。削除は `.venv-engine` 再構築を伴うためリリース後に棚卸し＝フロント側 `PENDING_TASKS.md` §4-25）／Blackwell は R570+ ドライバ（全世代 R570+ 推奨）。
+- **install スクリプト**: `scripts/install_ltx.ps1` は冪等クリーンインストーラ（2026-07-02 全面書き換え済＝現行の正・両venv・現行~30GBのみDL）。**モデル取得は 2026-07-26 に 3 リポジトリ・20 ファイル・31,889,519,494 B（約29.7GiB）へ更新**＝`Rootport/Nz-LTX23-weights`（LTX本体5点＋IC-LoRA 2点）／`Rootport/Nz-Gemma3-12B`（11点）／`Rootport/Nz-DWPose`（前処理器2点・新設）。いずれも Public 非 Gated でトークン不要、内部構造が `models/` と 1 対 1 のため後処理なしで展開される。**従来インストーラ管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も自動取得の対象になった**（手動配置は不要）ため、step 6 の PASS/MISSING 検証表は 10 → **14 項目**（IC-LoRA 2＋DWPose 2 を追加）。この 4 点は `_real_available()` の判定対象ではない＝欠けても mock に落ちず、`config.yaml` と `gradio_ui/adapters.py` が 3 アダプタを無条件に見せるため、選んだ瞬間 404 という分かりにくい壊れ方をする。だから検証表であえて名指しする。**冪等ガードは `-Check` による「ディレクトリ単位の独立判定」**＝`@{ Dir=…; Min=… }` を展開先ディレクトリの数だけ並べ、**全部がそれぞれ自分の `Min` を満たしたときだけ SKIP**（1つでも下回れば再DL）。**合計を単一しきい値と比べる旧 `-CheckDir`＋`MinBytes` は 2026-07-26 に廃止**＝大ファイル1つが丸ごと欠けた兄弟 dir を覆い隠すため（Gemma で実発現：7.3GB GGUF だけで合計を超え、トークナイザ dir 全欠落でも SKIP → 検証表 `gemma_root` MISSING → exit 1 → 再実行しても直らない復旧不能デッドロック）。各 `Min` は「**そのディレクトリ**の合計 −**そのディレクトリ内で step 6 の検証表が個別にゲートしている最小ファイル**」より上・想定合計より少し下に置く（＝検証表が MISSING にできる欠落は必ずガードも割る、という対応を作る）。検証表が個別に見ないファイル（`gemma_root` は dir 全体を 20MB で 1 行）は捕捉不要（狙うと 35 バイト幅の窓になり破綻）。`models/ltx-2.3-gguf/` は自家変換 GGUF が同居しサイズ判定が緩むが、これは検証表が受け持つ。`hf download --include` は **1 つの `--include` に全パターンを並べる**こと（`nargs="*"` のため flag を繰り返すと最後の組しか効かない。ただしこれは `huggingface_hub 0.36.2` 固有で、1.20.1 では逆に単一 flag 複数パターンが無視される＝venv の同パッケージを上げたら書き換えが要る）。**GPU アーキの自動判定（`nvidia-smi` 読み取り・`-GpuArch` 引数）は 2026-07-26 に廃止**＝全アーキで SDPA 固定のため分岐する理由が無く、アーキ別のプリビルド wheel 自動導入も行わない（`scripts/build_xformers.ps1` は手動ツールとして残す）。**エンジン venv の再同期を 2026-07-26 に追加**＝従来は `.venv-engine` が存在するだけでブロックごとスキップし、freeze が変わっても二度と適用されなかった（＝「`git pull` したら `setup.bat` 再実行」が機能しない）。現行は freeze 本文＋スクリプト内の3つの git rev（`diffusers`/`ltx-core`/`ltx-pipelines`）を連結した SHA-256 を `.venv-engine/.nz-engine-state`（追跡外・完了マーカー兼用）と突き合わせ、**一致するときだけ SKIP**する。マーカー不在は「再適用」に倒す（中断遺残と、この仕組み以前に作られた venv を救うため）。2段構えの適用処理（git pin 先行インストール → cu128 index ＋ `--index-strategy unsafe-best-match` で freeze 適用）は `Invoke-EngineFreezeApply` に切り出し、新規作成パスと再適用パスの両方から呼ぶ。`-RunSmoke` では `uv sync --extra dev` を明示（素の `uv sync` が optional の dev extra を刈り取り `.venv` から pytest が消えるため）。**エンドユーザー入口として `setup.bat` / `run.bat` を 2026-07-26 に新設**＝`setup.bat`→`scripts/setup.ps1`（前提ツール `uv`/`ffmpeg` を `tools/` へ取り込み・`config.yaml` を `.example` から複製・`logs/setup_<日時>.log` へ記録・事前チェックは警告のみ）→`install_ltx.ps1` を `&` で呼ぶ。`run.bat`→**リポジトリ直下の** `run.ps1`（移動禁止＝`$PSScriptRoot` 依存）。`.bat` は純 ASCII・CRLF・末尾 `pause` で日本語は `.ps1` 側（`.gitattributes` に `*.bat text eol=crlf`）。`config.yaml` は追跡外化し `config.yaml.example` を配布。互換メモ＝torch は必ず cu128 index から／attention＝**SDPA 固定**（xformers/flash-attn はインストールも import もしない。ただし `sageattention==1.0.6` だけは `engine/engine-venv-pyproject.toml`・`engine/venv-engine.freeze.txt` に必須依存として載っており `.venv-engine` に実際に入っているが、バックエンドのコードからは一切 import されていない＝死重依存。削除は `.venv-engine` 再構築を伴うためリリース後に棚卸し＝フロント側 `PENDING_TASKS.md` §4-25）／Blackwell は R570+ ドライバ（全世代 R570+ 推奨）。
 
 ### 凍結してある契約・構成（不変・壊さない）
 
 - **凍結 API 契約**: ÷64 解像度（`api/models.py`）・8n+1 フレーム・T2V/最小I2V（frame_idx0・conditioning≤1）・distilled 8step/CFG1.0・`GET /status` の `vram_optimization`（`services/low_vram.py` `_STATUS_KEYS`）・`metadata.json` スキーマ・limits/generation_presets。**加算的変更のみ許可**（optional フィールド・省略時 byte 同一が定型ゲート）。
 - **2プロセス・2venv**: app=`./.venv`（torch 無し・FastAPI/Gradio/mock backend）／engine=`./.venv-engine`（torch 2.9.1+cu128＋`ltx_core`/`ltx_pipelines`@`00dc53d`＋`gguf`）。同一インタプリタで共存させない（双方が `services` トップレベルパッケージを持つため）。
 - **本番 env**: `LTX_KEEP_RESIDENT=0` 既定（keep=1 だと 720p の Gemma 移動で native crash・§10.2）／`use_component_files: true`（Path B）／`te_offload`・`dit_cpu_load` 既定 ON。設定は `config.yaml` が正。起動＝`python -m engine.worker`（別プロセス・別venv・`cwd=root`）。
-- **本番モデル（実行に要る ~28GB）**: GGUF transformer Q4_K_M ~17GB＋GGUF Gemma Q4_K_M ~7.3GB（`ggml-org/gemma-3-12b-it-GGUF`）＋component VAE/audio/projection ~3.9GB＋spatial upsampler ~0.95GB＋tokenizer-only gemma_root ~40MB。43GB モノリス・QAT dir は削除済。
+- **本番モデル（実行に要る ~28GB）**: GGUF transformer Q4_K_M ~17GB＋GGUF Gemma Q4_K_M ~7.3GB（`ggml-org/gemma-3-12b-it-GGUF`）＋component VAE/audio/projection ~3.9GB＋spatial upsampler ~0.95GB＋tokenizer-only gemma_root ~40MB。43GB モノリス・QAT dir は削除済。**インストーラはこれに IC-LoRA 2点（1.22GiB）＋DWPose 前処理器 2点（0.33GiB）を加えた ~30GB（29.7GiB）を取得する**（後者2種は `_real_available()` の対象外＝生成の中核ではないが、欠けると IC-LoRA 選択時に 404 になる）。
 - **回帰基準 SHA**: T2V(seed=12345, "a calm ocean wave…") 512×320/49f=`23844b4e…6bb7bf`／最小I2V=`a511eda4…c217`／peak_vram_mb 8440。IC-LoRA 付き出力の基準 SHA=`735a6de9…272`（旧 `outputs/ic_lora_phaseA/spike.mp4` `8e10aa59…` は旧コード出力＝照合に使わない）。
 
 ### アーキテクチャ（二層・壊さない）

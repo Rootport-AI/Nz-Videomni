@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from api.context import RuntimeInfo, build_context
 from api.errors import APIError
 from api.router import api_router
-from config import load_config
+from config import DEFAULT_CONFIG_PATH, load_config
 
 logger = logging.getLogger("ltx")
 
@@ -283,6 +283,21 @@ def build_app(args: argparse.Namespace) -> FastAPI:
 
     configure_logging(config.log_dir)
 
+    # Last line of defence (plan Phase 5-1): load_config() falls back to the
+    # code defaults WITHOUT raising when config.yaml is absent, and those
+    # defaults differ enough from the real file (empty ic_loras/presets, no
+    # spatial_upsampler_path / gemma_root) that _real_available() answers False
+    # and the backend silently drops to MOCK. Say so, once, in Japanese.
+    _config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
+    if not _config_path.exists():
+        logger.warning(
+            "config.yaml not found (%s): running on built-in defaults. "
+            "設定ファイル config.yaml が見つかりません。既定値で起動します"
+            "（このままだと動画生成がお試し表示に切り替わることがあります）。"
+            "config.yaml.example をコピーして config.yaml を作ってから起動し直してください。",
+            _config_path,
+        )
+
     if not os.environ.get("PYTORCH_CUDA_ALLOC_CONF"):
         logger.warning(
             "PYTORCH_CUDA_ALLOC_CONF is not set. "
@@ -452,6 +467,20 @@ def main() -> None:
         logger.warning("--listen enabled: server is reachable on your LAN (no internet exposure intended).")
         logger.warning("UI: http://%s:%d/ui", local_ip(), runtime.port)
     logger.info("Starting server on %s:%d  (UI: http://127.0.0.1:%d/ui)", runtime.host, runtime.port, runtime.port)
+
+    # Human-facing launch banner. This is the ONLY place that knows the port
+    # after the CLI overrides were applied, so run.bat/run.ps1 deliberately
+    # leave the authoritative URL to us. Pure ASCII framing + plain Japanese:
+    # the console code page is cp932 on a Japanese Windows and box-drawing or
+    # emoji characters would raise inside the logging StreamHandler.
+    _rule = "=" * 68
+    logger.info(_rule)
+    logger.info("  準備ができたら、次のアドレスをブラウザで開いてください")
+    logger.info("      http://127.0.0.1:%d/ui", runtime.port)
+    if args.listen:
+        logger.info("  同じLANの別のパソコンからは  http://%s:%d/ui", local_ip(), runtime.port)
+    logger.info("  この黒い画面は閉じないでください（閉じるとサーバーが止まります）")
+    logger.info(_rule)
 
     # Quiet the console: mute Gradio's per-request Starlette 422 deprecation
     # warning right before the server begins serving (harmless when the Gradio

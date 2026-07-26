@@ -4,8 +4,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5** |
-| 日付 | **2026-07-02** |
+| 版 | **v0.5.1** |
+| 日付 | **2026-07-26**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
 ## 目次
@@ -15,7 +15,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 - §2 実行環境と環境分離
 - §3 ネットワークと起動
 - §4 アーキテクチャ
-- §5 モデル構成（実行 ~28GB）
+- §5 モデル構成（実行 ~28GB・取得 ~30GB）
 - §6 【凍結】API 契約 ← 本書が正本
 - §7 ジョブ管理と Pipeline / Runner
 - §8 出力ファイル
@@ -39,12 +39,19 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5** |
-| 日付 | **2026-07-02** |
+| 版 | **v0.5.1** |
+| 日付 | **2026-07-26** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
 本書は前版 v04 の**全面改訂版**である。v04 は当初計画（公式 `ltx_pipelines` safetensors ローダ + fp8-cast + cu129 + xformers 前提）の章立てを引きずっていたため、本 v0.5 では **実装現実に合わせて章立てから書き直した**。
+
+#### 改訂履歴
+
+| 版 | 日付 | 内容 |
+|----|------|------|
+| v0.5 | 2026-07-02 | v04 からの全面改訂（章立てを実装現実に合わせて書き直し）。 |
+| v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS.md` §3-36・§3-37。 |
 
 ### 0.2 スコープ
 
@@ -65,7 +72,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 |--------------|-----------|
 | **本書 §6** | 凍結 API 契約・スキーマ・enum・エラーコード（この文書が正本） |
 | `README.md` | 起動・2venv・セットアップ導線・API 概要・生成テスト手順 |
-| `config.yaml` | 実行時設定の実値（presets / limits / vram ノブ / モデルパス） |
+| `config.yaml` | 実行時設定の実値（presets / limits / vram ノブ / モデルパス）。**git 追跡外**（2026-07-26〜） |
+| `config.yaml.example` | 配布されるひな型。**リポジトリに入っているのはこちらだけ**で、`config.yaml` は `setup.bat` / `run.bat` がここから複製する |
 | `Docs/VERIFICATION_LOG.md` | 実機検証の全経緯・実測 peak_vram/秒数・SHA256 バイト一致・設計判断の根拠 |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/NEXT_SESSION_HANDOFF.md` | プロジェクトのゴール像・フェーズ別ロードマップ・設計対話の決定・削除スコープ |
@@ -73,6 +81,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | `engine/VENDOR_NOTICE.md` | `engine/` の由来・provenance・依存再現手順・ライセンス帰属 |
 
 > **乖離時の原則**: 本文の数値（秒数・GB・上限フレーム等）は**代表値**であり、正確な網羅・最新実測は上表の該当 Docs が正。乖離を見つけたら Docs を正とし、Docs 側を更新すること。
+
+> **`config.yaml` の SSOT としての読み方（2026-07-26 更新）**: `config.yaml` は 2026-07-26 に **git の追跡から外した**。したがって **`git clone` した直後のリポジトリに `config.yaml` は存在しない**。本書や README が「`config.yaml` の値」と書いているとき、リポジトリ上でその値を確認できる場所は `config.yaml.example` である。設定の**実値**の正本は各利用者の手元の `config.yaml`、**配布される既定値**の正本は `config.yaml.example` という二段構えになる。両者は同期させること（片方だけを編集すると、既定値と実値が静かに食い違う）。
 
 ---
 
@@ -139,7 +149,9 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 ### 2.4 プロセススコープの環境変数
 
-環境変数はすべて**そのプロセス内のみ**で設定し、永続化しない（`run.ps1` / `scripts/install_ltx.ps1` が設定する）。
+環境変数はすべて**そのプロセス内のみ**で設定し、永続化しない（`run.ps1` / `scripts/setup.ps1` / `scripts/install_ltx.ps1` が設定する）。`setup.bat` / `run.bat` は `.ps1` を呼ぶだけのラッパーで、環境変数の設定は行わない。
+
+あわせて `scripts/setup.ps1` と `run.ps1` は、`tools/uv` と `tools/ffmpeg/bin` を**そのプロセスの `PATH` の先頭**に足す（システムの `PATH` は書き換えない）。これにより `services/video_io.py` の `shutil.which` がプロジェクト内の `ffmpeg` / `ffprobe` を解決する（Python 側のコードは不変）。
 
 | 変数 | 用途 |
 |------|------|
@@ -150,7 +162,18 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 ### 2.5 インストール導線
 
-セットアップは `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。両 venv 構築 → 現行 ~28GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全・既存物は SKIP）に行う。手順とモデル内訳は §16 / `README.md` §1 を参照。
+セットアップの実体は `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。両 venv 構築 → 現行 ~30GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全）に行う。手順とモデル内訳は **§5** / `README.md` §1 を参照（§16 は受け入れテスト）。
+
+**モデルの取得元は 3 リポジトリ（2026-07-26 更新）**: `Rootport/Nz-LTX23-weights`（LTX 本体 5 点＋IC-LoRA 2 点＝計 7 ファイル・24,196,952,364 B）／`Rootport/Nz-Gemma3-12B`（11 ファイル・7,339,810,357 B）／`Rootport/Nz-DWPose`（前処理器 2 点・352,756,773 B）。合計 20 ファイル・31,889,519,494 B（約 29.7GiB）。3 つとも Public かつ非 Gated で、HuggingFace のアカウント・トークンは一切不要。各リポジトリの内部構造は本プロジェクトの `models/` 配下と 1 対 1 で一致させてあるため、いずれも `models/` へそのまま展開され、後処理（平坦化・リネーム）は発生しない。`Rootport/Nz-Sulphur2`（自家変換 GGUF）は同じアカウントにあるがインストーラの取得対象ではない。
+
+エンドユーザーの入口は **`setup.bat`（ダブルクリック）→ `scripts/setup.ps1` → `install_ltx.ps1`** である。`setup.ps1` は前提ツール（`uv` / `ffmpeg`+`ffprobe`）を `tools/` 配下へ取り込み、`config.yaml` が無ければ `config.yaml.example` から複製し、`logs/setup_<日時>.log` へ記録を残したうえで `install_ltx.ps1` を `&` で呼ぶ（ドットソースは禁止＝`install_ltx.ps1` の `exit` が呼び出し元ごと落とすため）。想定利用者が PowerShell を自分で開けないことを前提とした導線であり、`.bat` は純 ASCII・CRLF・末尾 `pause`、日本語のメッセージはすべて `.ps1` 側に置く。
+
+**冪等の粒度（2026-07-26 更新）**: 「既存物は無条件 SKIP」ではない。
+
+- **アプリ venv `./.venv`**: `uv sync` は毎回走る（冪等だが SKIP はしない）。
+- **エンジン venv `./.venv-engine`**: **ピン留めされた依存が前回適用時から変わっていないときだけ SKIP** する。判定は `engine/venv-engine.freeze.txt` の本文と、`install_ltx.ps1` 内にハードコードされた 3 つの git リビジョン（`diffusers` / `ltx-core` / `ltx-pipelines`）を連結した SHA-256 で行い、適用済みの値を `.venv-engine/.nz-engine-state` に記録する（`.gitignore` 配下＝追跡外・venv と運命を共にする）。このファイルは**完了マーカーを兼ねる**ため、記録が無い場合は「再適用する」側へ倒す（中断で半端に残った venv と、この仕組み以前に作られた venv を救うため）。`-ResolveLatest` を通った場合はマーカーを書かない（凍結スタックではないため）。この再同期があってはじめて「`git pull` → `setup.bat` 再実行」という更新手順が成立する。
+- **モデル群**: サイズによる冪等ガードで SKIP するが、判定は **ディレクトリごとに独立**である。`Invoke-ModelDownload` の `-Check` はそのリポジトリが展開する各ディレクトリについて `@{ Dir = "<パス>"; Min = <バイト数> }` を受け取り、**全エントリがそれぞれ自分の `Min` を満たしたときにだけ SKIP** する（1 つでも下回れば、そのリポジトリのダウンロードが走る）。判定対象を展開先（3 件とも `models`）から分離しているのはこの `Dir` である。**複数ディレクトリの合計を単一のしきい値と比べてはならない**（旧 `-CheckDir` ＋ `MinBytes` 方式・2026-07-26 廃止）。合計方式では大きなファイル 1 つが丸ごと欠けた兄弟ディレクトリを覆い隠す。実際 Gemma で発現し、7.3GB の GGUF だけで合計しきい値を超えるためトークナイザ dir が全欠落でも SKIP → 検証表 `gemma_root` MISSING → exit 1 → 再実行しても変わらない、という復旧不能のデッドロックになった。
+- **`Min` の取り方**: 真の正当性ゲートは `install_ltx.ps1` step 6 のファイル単位検証表（**14 項目**）である。したがって各 `Min` は「**そのディレクトリ**の合計 − **そのディレクトリ内で step 6 の検証表が個別にゲートしている最小ファイル**」より大きく、かつそのディレクトリの想定合計より少し小さく置く。これで「検証表が MISSING にできる欠落は必ずガードも割る」という対応が成立し、上記デッドロックが構造的に起きなくなる。検証表が個別に見ていないファイル（例: `gemma_root` はディレクトリ全体を 20MB で 1 行として見るだけ）は、欠けても MISSING にならないため捕捉できる必要はない（捕捉しようとすると 35 バイト幅のしきい値になり破綻する）。なお `models/ltx-2.3-gguf/` はユーザーが自家変換 GGUF を置くためサイズ判定が原理的に緩くなるが、これはサイズガードでは解けず検証表が受け持つ。
 
 ---
 
@@ -178,13 +201,15 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 ### 3.3 起動方法
 
-推奨は起動スクリプト `run.ps1`（環境変数設定 → アプリ venv → `main.py` を一括起動）。
+エンドユーザー向けの標準手順は **`run.bat`（ダブルクリック）**である。`run.bat` は実行ポリシーを回避してリポジトリ直下の `run.ps1` を呼ぶだけの薄いラッパーで、引数はそのまま透過する（`"%~dp0run.ps1" %*`）。**`run.ps1` はリポジトリ直下に置くこと**（`$PSScriptRoot` を基準に `.python` / `.venv` / `main.py` を解決するため、`scripts/` へ移すと全て 1 階層ずれる）。開発時は `run.ps1` を直接実行してよい。
 
 ```powershell
 ./run.ps1                 # localhost 限定・port 18620
 ./run.ps1 --listen        # 0.0.0.0（家庭内 LAN）
 ./run.ps1 --port 19000
 ```
+
+`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。ポートが既に使われている場合は「すでに起動しています」と案内して `exit 0` する（`setup.bat` への誤誘導を避けるため）。URL の正本は `main.py` の起動バナーで、`run.ps1` はそれとは別に `Set-Clipboard` で URL を控えに入れる。
 
 `run.ps1` は**アプリ**（`./.venv` の `main.py`）だけを起動する。real backend が選ばれると、アプリが `./.venv-engine\Scripts\python.exe -m engine.worker` を subprocess として自動 spawn する（worker の手動起動は不要）。起動後のエンドポイント:
 
@@ -279,7 +304,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 | GGUF Gemma | `model.gguf_gemma_path` |
 | component VAE / audio / text-projection | `model.component_video_vae_path` / `component_audio_vae_path` / `component_text_projection_path` |
 
-`checkpoint_path`（43GB モノリス）は **reference-only** で、GGUF + component 経路では一切開かれないため、ここでは**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
+`checkpoint_path`（43GB モノリス。本書中の「46GB モノリス」と**同一ファイル**＝§5.2 の表記注記）は **reference-only** で、GGUF + component 経路では一切開かれないため、ここでは**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
 
 **MockBackend の用途**: GPU / モデルウェイトの無い環境（開発・CI・pytest）向けの合成クリップ生成。`tests/conftest.py` が `model.backend="mock"` を強制する。API・スキーマ・出力構造（`outputs/{job_id}/output.mp4` + `metadata.json`）は real と同一で、`GenerationOutcome.backend` の値だけが異なる（mock=`"mock"`, real=`"ltx-distilled"`）。
 
@@ -287,9 +312,16 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 ```text
 12_Nz-LTX23-backend/
+├─ setup.bat / run.bat     エンドユーザー向け入口（純 ASCII・CRLF・末尾 pause）
+├─ run.ps1                 起動本体（**直下固定**・$PSScriptRoot 依存）
+├─ NzLTX23-1.0.0-rc1.au2pkg.zip
+│                          フロントエンド配布物（378,689 B・**git 追跡**・`.gitignore` の
+│                          `*.zip` に対し `!*.au2pkg.zip` で例外化。Git LFS は使わない）
 ├─ main.py                 アプリ起動（./.venv, FastAPI）
 ├─ gradio_ui/              検証用 /ui（ui.py / handlers.py / presets.py / i18n.py ほか）
-├─ config.py / config.yaml 設定（相対パスは PROJECT_ROOT 基準で絶対化）
+├─ config.py               設定ローダ（相対パスは PROJECT_ROOT 基準で絶対化）
+├─ config.yaml             実設定（**git 追跡外**・config.yaml.example から複製される）
+├─ config.yaml.example     配布されるひな型（config.yaml と同期させること）
 ├─ api/                    router / models(スキーマ) / status / generate ...
 ├─ services/               job_store / upload_store / pipeline_manager /
 │                          video_io / low_vram / gpu_info /
@@ -302,9 +334,11 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 │   ├─ transformer/        block_swap / dit_cpu_load サービス
 │   ├─ VENDOR_NOTICE.md    provenance
 │   └─ venv-engine.freeze.txt / engine-venv-pyproject.toml（venv 再現）
-├─ scripts/                install_ltx.ps1 / build_xformers.ps1 ...
+├─ scripts/                setup.ps1（setup.bat の本体）/ install_ltx.ps1 /
+│                          build_xformers.ps1 ...
+├─ tools/                  scripts/setup.ps1 が取り込む前提ツール（uv / ffmpeg・**git 追跡外**）
 ├─ tests/                  pytest（mock 強制・torch 無し）
-├─ models/                 実行に要る GGUF/component 群（~28GB, §5）
+├─ models/                 GGUF/component 群＋IC-LoRA＋前処理器（取得 ~30GB, §5）
 ├─ outputs/                outputs/{job_id}/output.mp4 + metadata.json
 └─ vendor/LTX-2            上流 LTX-2 クローン（reference only・非実行）
 ```
@@ -333,11 +367,11 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 ---
 
-## §5 モデル構成（実行 ~28GB）
+## §5 モデル構成（実行 ~28GB・取得 ~30GB）
 
 ### 5.1 実行に本当に要る構成
 
-本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 `models/` 全体 ~28.15GB）である。相対パスは `config.model` が保持し、PROJECT_ROOT 基準で `config._abs` が絶対化する。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。
+本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 28.15GiB）である。相対パスは `config.model` が保持し、PROJECT_ROOT 基準で `config._abs` が絶対化する。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。同ファイルが列挙するのは **9 行**で、内訳は本表の 5 要素を展開したもの（component ファイルが video VAE / audio VAE / text-projection の 3 行に分かれる）**7 行**＋ `engine_python`（`./.venv-engine/Scripts/python.exe`）＋ `checkpoint_path (ref-only)`（46GB モノリスへの reference-only パス・§5.5）である。**§5.1b の IC-LoRA / 前処理器は含まない。**
 
 | 要素 | 既定パス | 概算 | 役割 |
 |------|----------|------|------|
@@ -349,6 +383,17 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 このフットプリントは ComfyUI の GGUF 16GB レシピと同等である（VERIFICATION_LOG §10.4 / §14.1）。
 
+### 5.1b インストーラが追加で取得するもの（IC-LoRA / 前処理器）
+
+上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 2 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。合わせて取得総量は **~30GB（31,889,519,494 B ＝ 約 29.7GiB）** になる。
+
+| 要素 | 既定パス | 概算 | 取得元 | 役割 |
+|------|----------|------|--------|------|
+| IC-LoRA 2 点 | `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/…-x2-0.9.safetensors`／`models/ltx-2.3-ic-lora/union-control/…-union-control-ref0.5.safetensors` | 1.22GiB | `Rootport/Nz-LTX23-weights` | `config.yaml` `model.ic_loras` の 3 エントリの実体。union-control の 1 ファイルを `canny-control` / `pose-control` の 2 名で公開している（§11 / IC-LoRA Phase C） |
+| DWPose 前処理器 2 点 | `models/preprocessors/yolox_l.torchscript.pt`／`models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt` | 0.33GiB | `Rootport/Nz-DWPose` | `pose-control` の前処理（`engine/preprocess/dwpose.py` が自ファイル位置からの絶対パスで両方を読むため、配置は変更不可） |
+
+**これらは「無くても mock に落ちない」ため、検証を省くと壊れ方が分かりにくい**: `_real_available()` は見ておらず、`config.yaml` は 3 つの `ic_loras` を無条件に登録し、`gradio_ui/adapters.py` は登録が空でも同じ 3 名を静的フォールバックで並べる。したがって欠けていても UI にはアダプタ名が出て、選んだ瞬間に 404 になる。この失敗を前倒しで名指しするため、install_ltx.ps1 step 6 の検証表はこの 4 ファイルを含む **14 項目**になっている（x4 アップスケーラ版は未登録＝リポジトリにも置かない）。
+
 ### 5.2 削除済みの重量物
 
 de-fork（§13）と QAT 回収（§13）のリファクタで、実行に不要な以下を**物理削除**した:
@@ -357,6 +402,8 @@ de-fork（§13）と QAT 回収（§13）のリファクタで、実行に不要
 - **22.7GB の QAT Gemma dir** `models/gemma-3-12b-it-qat/`。Gemma を text-only 化（下記 5.3）したため wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は ~40MB の tokenizer-only dir で足りる。
 
 これにより `models/` は 50.9GB → ~28.15GB（VERIFICATION_LOG §14.1）。
+
+> **「43GB モノリス」と「46GB モノリス」の表記について（本書全体に適用）**: 本書はこのファイルを箇所により「43GB モノリス」とも「46GB モノリス」とも書いている（§4.3・§4.6・§5.1・§5.2・§5.5・§7.6・§9.1・§9.2・§11.2・付録B）。**両方とも同一の 1 ファイルを指し、どちらの表記も誤りではない。** 実測 **46,139,885,414 バイト**で、10 進 GB では 46.1GB、2 進 GiB では 42.97GiB（≒43GiB）になるだけである（同じ混在が `config.py` にもある）。同旨の注記が `README.md` §1 の「削除済み（2026-07-01 の refactor）」ブロックにもあり、そちらが利用者向けの正本である。
 
 ### 5.3 Gemma の text-only 化
 
@@ -984,6 +1031,7 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `component_video_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"` | 単体 VIDEO VAE（load-bearing） |
 | `component_audio_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"` | 単体 AUDIO VAE/vocoder（load-bearing） |
 | `component_text_projection_path` | `"./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"` | 単体 text projection（load-bearing） |
+| `ic_loras` | `pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` の 3 エントリ | IC-LoRA アダプタの**名前 → パス**登録。API の `GenerateRequest.loras[].name` はここに登録された**名前でのみ**解決する（生パスは受けない）。値は文字列（＝`preprocess: none`・Phase B 互換）または `{ path, preprocess }` マップ。`canny-control`（`preprocess: canny`）と `pose-control`（`preprocess: dwpose`）は**同一の union-control ファイル**を 2 つの論理名で公開したもの。**セクション不在＝`loras` 要求は全て拒否（fail loud）**。実体ファイルの取得と検証は §5.1b（`_real_available()` は見ないため、欠けると UI に名前は出るのに選択時 404 になる） |
 
 ### 11.3 vram
 | キー | 実値 | 説明 |
@@ -1328,6 +1376,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **te-offload**（`--te-offload`） | Gemma text-encoder を逐次 per-layer で CPU オフロードし encode ピーク VRAM を下げる（既定 ON・§9）。 |
 | **dit-cpu-load**（`--dit-cpu-load`） | DiT(transformer) を CPU で構築しブロックのみ GPU へストリーム。ロード時の ~16.9GB GPU スパイクを除去（既定 ON・§9）。 |
 | **component-files** | VAE / audio / text-projection を 46GB モノリスでなく小単体 safetensors から読む経路（`use_component_files: true`）。マルチジョブの commit 枯渇を防ぐ。 |
+| **43GB モノリス / 46GB モノリス** | **同一の 1 ファイル** `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B＝46.1GB＝42.97GiB）。本書は箇所により両方の表記を使うが指すものは同じで、どちらも誤りではない（§5.2 の表記注記・`README.md` §1 の削除済みブロック注記）。物理削除済で `checkpoint_path` は reference-only。 |
 | **spill / spill-free** | 生成が dedicated 16GB を超えて system RAM（shared）へ溢れること。溢れると ~2-4x 低速化（OOM はしない）。溢れない上限が spill-free frames。 |
 | **commit** | Windows の仮想メモリ予約（物理 RAM + ページファイル）。ディスク使用量ではない。連続生成で枯渇すると native crash しうる（component-files で束縛）。 |
 | **GGUF / Q4_K_M** | 量子化重みフォーマット。本番の transformer / Gemma とも GGUF Q4_K_M。 |

@@ -1,19 +1,24 @@
 <#
 .SYNOPSIS
-    Build an xformers wheel from source for THIS project's pinned stack
+    MANUAL TOOL, FOR FUTURE PERFORMANCE EXPERIMENTS ONLY. Not part of setup.
+    Builds an xformers wheel from source for THIS project's pinned stack
     (torch 2.9.1 / CUDA 12.8 / Windows / Python 3.12, Ada Lovelace sm_89).
 
 .DESCRIPTION
+    NOTHING RUNS THIS FOR YOU. install_ltx.ps1 does not call it and does not look
+    in wheels/; the installed attention backend is PyTorch SDPA on every GPU. The
+    backend code does not import xformers today either, so a built wheel changes
+    nothing until someone wires it in. Keep this script for the day you want to
+    measure whether xformers is worth that work.
+
     The cu128 xformers wheel is Linux-only, so on Windows we compile it ourselves.
-    The resulting wheel is dropped into wheels/ (tracked via Git LFS) so other
-    clones can `install_ltx.ps1` without building.
 
     Flow:
       1. Verify the engine venv has torch 2.9.1 + CUDA 12.8 (build target).
       2. Set up the MSVC build environment (vcvars64) and CUDA 12.8 toolchain.
       3. Clone xformers at the commit LTX pins, init the CUTLASS submodule.
       4. `pip wheel --no-build-isolation` against the LTX-2 venv's torch.
-      5. Output xformers-*.whl into wheels/ and (optionally) install it.
+      5. Output xformers-*.whl into wheels/ and (only with -Install) install it.
 
     Everything stays inside the project. MSVC and the CUDA Toolkit are system
     build tools (not Python) — they do not violate the Python-isolation rule.
@@ -37,7 +42,10 @@ param(
     [string] $EngineDir = ".venv-engine",
     # Commit LTX-2's lock pins: xformers 0.0.33+5d4b92a5.d20251029
     [string] $XformersRef = "5d4b92a5",
-    [string] $Arch = "8.9",                 # Ada Lovelace sm_89
+    # Compute capability to compile cubins for. The wheel is good ONLY for the
+    # generation you name here (default 8.9 = Ada Lovelace / RTX 40). See the
+    # closing notes at the bottom of this script before reusing a wheel elsewhere.
+    [string] $Arch = "8.9",
     [string] $OutDir = "wheels",
     # Match the cu128 torch stack. CUDA Toolkit 12.8 (nvcc) must match torch's cu128.
     [string] $CudaVersion = "12.8",
@@ -162,7 +170,20 @@ if ($Install) {
     & $venvPy -c "import xformers, xformers.ops; print('xformers', xformers.__version__, 'OK')"
 }
 
-Write-Host "`nNext:" -ForegroundColor Cyan
-Write-Host "  git add wheels/$($wheel.Name) .gitattributes   # tracked via Git LFS"
-Write-Host "  git commit -m 'Add prebuilt xformers wheel (torch2.9.1/cu128/win/py312, sm_89)'"
-Write-Host "  Other clones: ./scripts/install_ltx.ps1  will install this wheel automatically."
+Write-Host "`nNOTE: this wheel is NOT installed automatically." -ForegroundColor Yellow
+Write-Host "  install_ltx.ps1 never looks in $OutDir\ -- the installed attention backend"
+Write-Host "  is PyTorch SDPA on every GPU. To use the wheel, install it yourself into"
+Write-Host "  the engine venv:"
+Write-Host "    uv pip install --python `"$venvPy`" `"$($wheel.FullName)`"" -ForegroundColor Cyan
+Write-Host "  (or re-run this script with -Install, which does exactly that)."
+Write-Host ""
+Write-Host "  ARCH LOCK: this wheel only runs on the generation you built it for" -ForegroundColor Yellow
+Write-Host "  (-Arch $Arch). CUDA cubin compatibility is one-way: a cubin built for a"
+Write-Host "  LOWER minor within the SAME major runs on a HIGHER-minor device, never the"
+Write-Host "  reverse. So the default -Arch 8.9 (Ada / RTX 40) will NOT run on Ampere"
+Write-Host "  (sm_86) -- for Ampere rebuild with -Arch 8.6. The install itself succeeds"
+Write-Host "  either way; a mismatch only shows up at run time as"
+Write-Host "  'no kernel image is available for execution on the device'."
+Write-Host ""
+Write-Host "  Also: the backend code does not import xformers, so installing it has NO"
+Write-Host "  effect on generation today. Using it needs code changes as well."

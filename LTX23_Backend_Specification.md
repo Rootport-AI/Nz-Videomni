@@ -150,7 +150,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 ### 2.5 インストール導線
 
-セットアップは `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。両 venv 構築 → GPU アーキ自動判定（`nvidia-smi`。明示 `-GpuArch` が優先）→ 現行 ~28GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全・既存物は SKIP）に行う。手順とモデル内訳は §16 / `README.md` §1 を参照。
+セットアップは `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。両 venv 構築 → 現行 ~28GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全・既存物は SKIP）に行う。手順とモデル内訳は §16 / `README.md` §1 を参照。
 
 ---
 
@@ -366,7 +366,9 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 ### 5.4 attention バックエンド
 
-既定は **PyTorch SDPA**（全アーキ共通）。Ada Lovelace + torch 2.9 では SDPA の実体は **FlashAttention-2** カーネルであり、16GB の律速は attention でなく重み転送（PCIe）であるため、これで十分である（`Docs/note.md` の結論サマリ）。**xformers は任意**の最適化で、Windows では自動導入されず、必要ならソースビルドする（`scripts/build_xformers.ps1`）。インストーラ `scripts/install_ltx.ps1` も「全アーキで SDPA、xformers/flash-attn は自動導入しない（ada/ampere/hopper は `wheels/` にプリビルド wheel があればそれを使う）」方針で一致している。
+既定は **PyTorch SDPA**（全アーキ共通）。Ada Lovelace + torch 2.9 では SDPA の実体は **FlashAttention-2** カーネルであり、16GB の律速は attention でなく重み転送（PCIe）であるため、これで十分である（`Docs/note.md` の結論サマリ）。**xformers は任意**の最適化で、Windows では自動導入されず、必要ならソースビルドする（`scripts/build_xformers.ps1`）。
+
+インストーラ `scripts/install_ltx.ps1` は「全アーキで SDPA、xformers/flash-attn は自動導入しない」方針である。かつては GPU アーキを `nvidia-smi` で自動判定し、ada/ampere/hopper については `wheels/` にプリビルド wheel があればそれを導入する分岐を持っていたが、**この自動導入は 2026-07-26 に廃止した**（全アーキ SDPA 固定である以上、アーキごとに導入物を変える理由が無く、判定の失敗・誤判定が事故の種になるだけであるため）。`scripts/build_xformers.ps1` は、xformers を自分でビルドしたいユーザーのための**手動ツール**として引き続き `scripts/` に残す（インストーラからは呼ばれない）。
 
 ### 5.5 reference-only パスの位置づけ
 

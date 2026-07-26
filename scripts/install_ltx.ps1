@@ -18,14 +18,10 @@
       4. Engine venv .venv-engine (torch 2.9.1+cu128 stack). DEFAULT = deterministic
          FREEZE path (reproduces the VALIDATED stack all verification ran on).
          -ResolveLatest opts into a fresh resolve (UNVALIDATED newer torch).
-      5. Attention backend: SDPA is the backend for ALL archs (xformers/flash-attn
-         are NOT auto-installed, per the NEXT_SESSION_HANDOFF install-compat policy).
-         Optional on ada/ampere/hopper: a prebuilt xformers wheel from wheels/ is
-         used only if present (build via scripts/build_xformers.ps1). Blackwell = SDPA.
-      6. Model downloads (~28GB, 2 guarded items) via .venv-engine's hf.exe,
+      5. Model downloads (~28GB, 2 guarded items) via .venv-engine's hf.exe,
          pulled from two PUBLIC, NON-GATED repos. No HuggingFace account,
          login or token is required at any point.
-      7. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt.
+      6. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt.
 
     The GGUF + component-file recipe is the ONLY supported real path. It never
     opens the old 46GB monolith (ltx-2.3-22b-distilled-1.1.safetensors) or the
@@ -33,19 +29,20 @@
     downloads them. The monolith path survives only in config.yaml as a
     reference-only payload field (see config.py ModelConfig.checkpoint_path).
 
-.GPU ARCHITECTURES (the only GPU-specific knob)
-    -GpuArch is AUTO-DETECTED from nvidia-smi unless passed explicitly. ALL archs
-    use PyTorch SDPA; xformers/flash-attn are NOT auto-installed (see step 5):
-      ada       RTX 40-series / RTX Ada / L40 / L4   (sm_89)      -> SDPA (opt. xformers wheel)
-      ampere    RTX 30-series / A100 / A6000         (sm_80/86)   -> SDPA (opt. xformers wheel)
-      hopper    H100 / H200                          (sm_90)      -> SDPA (opt. xformers wheel)
-      blackwell RTX 50-series / B200 / RTX PRO 6000  (sm_100/120) -> SDPA (R570+ driver)
-    An explicit -GpuArch always wins over detection. If detection fails, the
-    script warns and requires an explicit -GpuArch.
+.ATTENTION BACKEND (no GPU-specific knob)
+    There is none to choose: PyTorch SDPA is the attention backend on EVERY arch
+    (Ada / Ampere / Hopper / Blackwell). xformers and flash-attn are never
+    installed by this script -- SDPA is what the code actually uses, and on
+    Blackwell adding flash-attn can jam it. sageattention IS the exception: it is
+    a declared dependency of the engine venv (engine-venv-pyproject.toml /
+    venv-engine.freeze.txt), so step 4 does install it -- but nothing imports it,
+    so it is dead weight awaiting a cleanup (filed as PENDING_TASKS.md 4-25).
+    Being pure Python, it is at least not arch-sensitive. Blackwell needs an R570+
+    driver. Because nothing here is arch-dependent, this installer does not detect
+    or take a GPU architecture at all.
 
 .EXAMPLE
-    ./scripts/install_ltx.ps1                       # auto-detect GPU, full install
-    ./scripts/install_ltx.ps1 -GpuArch blackwell    # force Blackwell attention
+    ./scripts/install_ltx.ps1                       # full install
     ./scripts/install_ltx.ps1 -ResolveLatest        # fresh (unvalidated) engine resolve
     ./scripts/install_ltx.ps1 -SkipModels           # venvs only, no downloads
     ./scripts/install_ltx.ps1 -RunSmoke             # + mock GPU-free smoke test
@@ -53,9 +50,6 @@
 
 [CmdletBinding()]
 param(
-    # Auto-detect from nvidia-smi when not passed. Explicit value wins.
-    [ValidateSet("ada", "ampere", "hopper", "blackwell")]
-    [string] $GpuArch,
     # Opt into a fresh resolve of the engine venv (UNVALIDATED newer torch ~2.11).
     # Default (unset) uses the deterministic freeze path.
     [switch] $ResolveLatest,
@@ -118,7 +112,15 @@ function Get-PathSize([string] $absPath) {
 }
 
 # ----------------------------------------------------------------------------
-# 1) Prerequisites + GPU-arch resolution
+# 1) Prerequisites
+#
+#    NOTE (deliberate behaviour change, 2026-07): this step no longer probes
+#    nvidia-smi and no longer aborts when no NVIDIA GPU can be seen. The old
+#    probe existed only to pick an attention backend, and there is nothing left
+#    to pick (SDPA on every arch). Neither the venvs nor the model downloads
+#    care about the GPU -- it is first needed at generation time -- so install
+#    now succeeds on a box with no driver / no nvidia-smi (e.g. a build agent),
+#    and a wrong or missing GPU surfaces when you actually run the engine.
 # ----------------------------------------------------------------------------
 Write-Step "Checking prerequisites"
 Require-Cmd git
@@ -130,38 +132,6 @@ Write-Host "git    : $((Get-Command git).Source)"
 Write-Host "uv     : $((Get-Command uv).Source)"
 Write-Host "root   : $ProjectRoot"
 Write-Host "HF_HOME: $env:HF_HOME"
-
-# Auto-detect the GPU architecture unless the caller passed -GpuArch. An explicit
-# param always wins. Detection failure => warn + require explicit -GpuArch.
-if (-not $GpuArch) {
-    $smi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
-    $gpuName = $null
-    if ($smi) {
-        # Capture fully BEFORE Select-Object: piping a native exe straight into
-        # `Select-Object -First 1` stops the pipeline early and leaves
-        # $LASTEXITCODE = -1 (broken pipe), which would otherwise leak out as the
-        # script's own exit code on the success path.
-        $smiOut = (& nvidia-smi --query-gpu=name --format=csv,noheader 2>$null)
-        $gpuName = ($smiOut | Select-Object -First 1)
-    }
-    if ($gpuName) {
-        Write-Host "Detected GPU: $gpuName"
-        switch -Regex ($gpuName) {
-            "RTX 50|B200|RTX PRO 6000|Blackwell" { $GpuArch = "blackwell"; break }
-            "H100|H200|Hopper"                   { $GpuArch = "hopper";    break }
-            "RTX 30|A100|A6000|A40|Ampere"       { $GpuArch = "ampere";    break }
-            "RTX 40|Ada|L40|L4"                  { $GpuArch = "ada";       break }
-            default { $GpuArch = $null }
-        }
-    }
-    if (-not $GpuArch) {
-        Write-Warning "Could not auto-detect GPU architecture (nvidia-smi missing or name unmatched)."
-        throw "Pass an explicit -GpuArch {ada|ampere|hopper|blackwell}."
-    }
-    Write-Host "Auto-selected GpuArch: $GpuArch" -ForegroundColor Green
-} else {
-    Write-Host "GpuArch (explicit): $GpuArch"
-}
 
 # ----------------------------------------------------------------------------
 # 2) uv-managed Python 3.12  (skip if an in-project cpython-3.12 is already present)
@@ -286,35 +256,16 @@ if ($SkipVenv) {
 $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
 
 # ----------------------------------------------------------------------------
-# 5) Attention backend (per GPU arch)
+# Attention backend: nothing to install, on any GPU.
+#
+# PyTorch SDPA is the backend the engine actually uses, on every architecture.
+# This step installs nothing at all -- not on any arch, not optionally.
+# (Historically this step could pick up a prebuilt xformers wheel out of wheels/;
+# that path was removed because such a wheel is compiled for ONE compute
+# capability and installs cleanly on machines it cannot run on. If you want to
+# experiment with xformers, build and install it by hand -- see
+# scripts/build_xformers.ps1 -- and note the engine code does not import it.)
 # ----------------------------------------------------------------------------
-Write-Step "Attention backend ($GpuArch)"
-# POLICY (NEXT_SESSION_HANDOFF install-compat memo): SDPA is the attention backend
-# for this stack. xformers/flash-attn/sageattention are intentionally NOT
-# auto-installed -- SDPA is what's used, and on Blackwell adding flash-attn can jam
-# it. xformers stays an OPTIONAL manual speedup on ada/ampere/hopper: the installer
-# picks up a prebuilt wheel from wheels/ ONLY if you built one via
-# scripts/build_xformers.ps1. Absent (the default) => SDPA.
-if ($SkipVenv) {
-    Write-Skip "-SkipVenv given"
-} elseif ($GpuArch -eq "blackwell") {
-    # Blackwell (sm_100/120): SDPA only -- do NOT add flash-attn (see policy above).
-    # Requires an R570+ driver. Nothing to install.
-    Write-Ok "SDPA backend (Blackwell: no xformers/flash-attn added, per install-compat policy)"
-} else {
-    # ada / ampere / hopper: SDPA by default. Install an OPTIONAL prebuilt xformers
-    # wheel from wheels/ ONLY if present (built by build_xformers.ps1); never required.
-    $wheel = Get-ChildItem "$ProjectRoot\wheels" -Filter "xformers-*.whl" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($wheel) {
-        Write-Do "uv pip install $($wheel.Name)  (optional xformers speedup)"
-        uv pip install --python $enginePy $wheel.FullName
-        if ($LASTEXITCODE -ne 0) { throw "xformers wheel install failed." }
-        Write-Ok "xformers installed ($($wheel.Name))"
-    } else {
-        Write-Ok "SDPA backend (default). Optional speedup: .\scripts\build_xformers.ps1 -Install"
-    }
-}
 
 # ----------------------------------------------------------------------------
 # Optional: clone upstream LTX-2 as REFERENCE ONLY (no venv built there).
@@ -334,7 +285,7 @@ if ($CloneUpstreamReference) {
 }
 
 # ----------------------------------------------------------------------------
-# 6) Model downloads (~28GB) via the engine venv's hf.exe.
+# 5) Model downloads (~28GB) via the engine venv's hf.exe.
 #    Everything comes from TWO self-hosted repos that are PUBLIC and NON-GATED,
 #    so no HuggingFace account, login or token is involved anywhere:
 #      Rootport/Nz-LTX23-weights -> ltx-2.3/, ltx-2.3-components/, ltx-2.3-gguf/
@@ -354,6 +305,15 @@ if ($CloneUpstreamReference) {
 #   argparse keep only the LAST group and silently drop earlier files. So we build
 #   ONE "--include" followed by all patterns.
 #
+#   WARNING (huggingface_hub version dependency, verified 2026-07-26): the single-
+#   flag form above is correct ONLY for huggingface_hub 0.36.2, the engine venv's
+#   current pin. On 1.20.1 it flips: one --include with multiple patterns warns
+#   "Ignoring --include since filenames have been explicitly set." and silently
+#   drops files (spatial upscaler went missing in testing). If that venv's
+#   huggingface_hub is ever upgraded, switch this to repeated --include flags.
+#   MinBytes below does catch the resulting short download, but the thrown error
+#   gives no hint that a version bump is the cause -- look here first.
+#
 #   NOTE (glob semantics, verified live against both repos): --include matches with
 #   Python fnmatch against the repo-relative path, and `*` DOES cross '/'. So
 #   "ltx-2.3-components/*" reaches the nested vae/ and text_encoders/ files two
@@ -370,7 +330,7 @@ if ($CloneUpstreamReference) {
 #   holds any extra self-converted transformer GGUFs the user dropped in (10Eros /
 #   Sulphur, ~16.5GB each), which inflates the LTX total and makes that guard more
 #   lenient than the numbers suggest. The guard only exists to catch a missing or
-#   truncated download; the per-file step 7 verification table below is the real
+#   truncated download; the per-file step 6 verification table below is the real
 #   correctness gate.
 function Invoke-ModelDownload {
     param(
@@ -447,7 +407,7 @@ if ($SkipModels) {
 }
 
 # ----------------------------------------------------------------------------
-# 7) Verification + regenerate models/INSTALLED_PATHS.txt
+# 6) Verification + regenerate models/INSTALLED_PATHS.txt
 #
 #    $required is derived DIRECTLY from services/ltx_runner.py:
 #      * _real_available()  (L178-198): engine_python, gemma_root,

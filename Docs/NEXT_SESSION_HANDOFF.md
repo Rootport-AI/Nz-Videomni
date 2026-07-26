@@ -2,33 +2,29 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-26 α版インストール導線の整備＝実装完了・**ただし全変更が未コミット**・オーナーの実機検証待ち）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-26 α版インストール導線の整備＝実装完了・**コミット＆プッシュ済み**・**オーナーのサブマシン実機検証は 2026-07-27 に全項目合格**）
 
 > **本ブロックが日付として最新（2026-07-26）。** ただし扱っているのは**配布・導入まわりだけ**で、**生成機能そのものの正本は次の「2026-07-14 Clip Chain拡張」ブロック**である（二系統が並走している。食い違ったら、配布・導入は本ブロック、生成機能は次ブロックが正）。それ以降の▶節はすべて歴史記録。
 
-### ⚠ 最初に読むこと — 作業ツリーの状態（2026-07-26 時点）
+### ✅ 最初に読むこと — 作業ツリーの状態（2026-07-27 更新。旧「未コミット警告」は役目を終えた）
 
-**下記の実装はすべて完了しているが、`Nz-LTX23-backend` の変更は 1 つもコミットされていない。** しかも `git index` には
-**`config.yaml` と `wheels/.gitkeep` の削除だけがステージ済み**という中途半端な状態になっている。
+**下記の実装はすべてコミット＆プッシュ済みである。** `Nz-LTX23-backend` は `f5b02c8`（"setup and run"）、
+`Nz-LTX23-frontend-AviUtl2` は `db3856c`（"setup and run"）。どちらも `origin/main` に反映済みで、
+作業ツリーはクリーン（`nothing to commit, working tree clean`）である。
 
-```
-D  config.yaml          <- ステージ済み（削除）
-D  wheels/.gitkeep      <- ステージ済み（削除）
- M .gitattributes / .gitignore / main.py / run.ps1 / scripts/install_ltx.ps1
- M README.md / LTX23_Backend_Specification.md / Docs/NEXT_SESSION_HANDOFF.md
-?? setup.bat / run.bat / scripts/setup.ps1 / config.yaml.example / NzLTX23-1.0.0-rc1.au2pkg.zip
-```
+コミットは **`git add -A` による一括コミット**で行われ、懸念されていた壊れた中間コミットは回避された。
+`f5b02c8` には `config.yaml => config.yaml.example` のリネーム・`.gitignore` への追加・
+`setup.bat` / `run.bat` / `scripts/setup.ps1` の新設・`NzLTX23-1.0.0-rc1.au2pkg.zip` の同梱が
+**すべて同一コミットに入っている**。
 
-この状態で素の `git commit` を打つと、**ステージ済みの 2 件の削除だけがコミットされる**。すなわち
-「`config.yaml` は消えたが `config.yaml.example` も `.gitignore` の追加も入っていない」コミットができあがり、
-これは **[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-37 が「絶対に避けろ」と
-書いている壊れた中間コミットそのもの**である（§3-37: 「ひな型の追加・`.gitignore` への追加・`git rm --cached` は
-**同一コミットで**行う必要がある（分けると中間のコミットを引いた人が詰む）」）。
-
-→ **コミットするときは `git add -A` で全変更をまとめてから 1 コミットにすること。** ステージ済みの削除だけを
-先に確定させてはならない。分割したい場合も、上記 3 点（`config.yaml` の削除・`config.yaml.example` の追加・
-`.gitignore` への `config.yaml` 追加）は必ず同一コミットに入れる。なお本プロジェクトの慣行として、
-**コミットとプッシュはオーナーが手動で行う**。
+> **（歴史記録）2026-07-26 時点では全変更が未コミットで、しかも `git index` には `config.yaml` と
+> `wheels/.gitkeep` の削除だけがステージ済みという中途半端な状態だった。** そのまま素の `git commit` を
+> 打っていれば、「`config.yaml` は消えたが `config.yaml.example` も `.gitignore` の追加も入っていない」
+> コミット——**[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-37 が
+> 「絶対に避けろ」と書いている壊れた中間コミットそのもの**——ができるところだった。
+> 「ひな型の追加・`.gitignore` への追加・`git rm --cached` は**同一コミットで**行う（分けると中間の
+> コミットを引いた人が詰む）」という原則は、今後同種の作業をするときも必ず守ること。なお本プロジェクトの
+> 慣行として、**コミットとプッシュはオーナーが手動で行う**。
 
 ### 完了している内容
 
@@ -37,11 +33,34 @@ D  wheels/.gitkeep      <- ステージ済み（削除）
 - **エンドユーザー入口 `setup.bat` / `run.bat` を新設**（前提ツールは git のみ。`uv` と `ffmpeg`/`ffprobe` は `tools/` へ取り込む）。`config.yaml` は追跡外化し `config.yaml.example` から複製する。フロントエンドの `.au2pkg.zip`（378,689 B）をバックエンドリポジトリ直下に同梱。
 - **正本**: フロントエンド側 [`Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`LTX23_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
 
+### 実機検証の結果（2026-07-27・全項目合格）
+
+オーナーがサブマシンで実機検証を行い、**全項目に合格した**。検証環境は **RAM 32GB／RTX 3080 mobile（VRAM 16GB・Ampere 世代）／AviUtl2 を導入していない新規環境**で、AviUtl2 は **2026-07-25 更新の公開最新版**（開発機の v2.0.54 より新しい）を新規に導入した。合格したのは次の 9 項目である。
+
+1. `setup.bat` でのインストール。
+2. `run.bat` でのサーバー起動。
+3. ブラウザで WebUI を開く。
+4. `smoke_test` サイズの動画生成。
+5. **IC-LoRA DWPose（pose-control）768p・257 フレーム** — コンソールに `loras=pose-control(strength=1)` と表示され、エラーなく**制御された動画の生成に成功**。
+6. **IC-LoRA canny 768p・257 フレーム** — 同様に成功。
+7. `NzLTX23.aux2` を AviUtl2 のプレビュー画面から D&D でインストール。
+8. 再起動後、Nz-LTX23 の操作パネル表示を確認。
+9. タイムラインからの動画生成と、生成済み動画を右クリックからタイムラインへ配置。
+
+この結果から確定したこと:
+
+- **RAM 32GB で、最小構成の生成どころか 768p／257 フレームの IC-LoRA 制御生成まで動く**（「32GB の実測データが存在しない」という従来の制約は解消した。ただし**この 1 台での実測合格**であり、あらゆる 32GB 環境での動作保証ではない）。
+- **Ampere（`sm_86`）での実動を確認した**（従来は理論上の互換のみ）。
+- **`config.yaml` の自動複製経路が初めて実際に通った。** 公開リポジトリに `config.yaml` は無いため新規環境では `.example` からの複製が必ず走り、real バックエンドで生成できたことがそのまま「正しく複製された」証拠になる。
+- **2026-07-25 更新版の AviUtl2 との互換を実証した**（開発機は v2.0.54 固定だが、より新しい版で全機能が動作した）。
+
+なお **`Ctrl+C` で停止したときの日本語表示は依然として未検証**である（`README.md` §1「サーバーの止め方」は `Ctrl+C` を意図的に案内していない）。
+
 ### 残っていること
 
-1. **コミット**（上記のとおり `git add -A` で一括。オーナーが手動で行う）。
-2. **オーナーの実機検証**（サブマシンでの `setup.bat`→`run.bat`→生成、およびAviUtl2へのD&D導入）。とくに **`config.yaml` が無い状態からの複製経路は一度も実行されたことがない**ので、そこを見ること（`README.md` §1）。
-3. **コード側の設計・実装の未了はない。**
+1. **README の文面をオーナーが手書きで仕上げる**（冒頭に置く「スピードガイド」。備忘の正本＝[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-4）。
+2. **リポジトリを public にする。**
+3. コミット＆プッシュは完了済み（上記「作業ツリーの状態」）。実機検証も完了済み（上記）。**コード側の設計・実装の未了はない。**
 
 ---
 

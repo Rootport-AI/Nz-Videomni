@@ -76,13 +76,19 @@ provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR
 
 必要なモデル（`config.yaml` の `model:` が参照。相対パスは PROJECT_ROOT 基準で絶対化）:
 
-| 要素 | 既定パス | 概算 | 役割 |
-|------|----------|------|------|
-| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | 本番トランスフォーマー |
-| GGUF Gemma (Q4_K_M) | `models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | text encoder（GPU 推論・逐次オフロード） |
-| component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | 46GB モノリスを置換する小単体ファイル |
-| spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | 2段生成の x2 アップサンプラ |
-| Gemma tokenizer dir (`gemma_root`) | `models/gemma-3-12b-it-tokenizer/` | ~40MB | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
+| 要素 | 既定パス | 概算 | 取得元リポジトリ | 役割 |
+|------|----------|------|------------------|------|
+| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 本番トランスフォーマー |
+| GGUF Gemma (Q4_K_M) | `models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | text encoder（GPU 推論・逐次オフロード） |
+| component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 46GB モノリスを置換する小単体ファイル |
+| spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 2段生成の x2 アップサンプラ |
+| Gemma tokenizer dir (`gemma_root`) | `models/gemma-3-12b-it-tokenizer/` | ~40MB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
+
+上記5要素はすべて、本プロジェクトが再ホストした **2つの公開リポジトリ**（`Rootport/Nz-LTX23-weights` と
+`Rootport/Nz-Gemma3-12B`）から取得します。どちらも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、
+**HuggingFace のアカウントもアクセストークンも一切必要ありません**。`scripts/install_ltx.ps1` を実行すれば
+2回のダウンロードで全部揃います。両リポジトリの内部構造は上表の `models/` 配下と 1 対 1 で一致させてあるので、
+`models/` へそのまま展開されます（配置換えやリネームは発生しません）。
 
 > **削除済み（2026-07-01 の refactor）**: (1) 43GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors` を物理削除。
 > `config.model.checkpoint_path` はフィールドとしては残りますが **reference-only**（worker payload に載るが GGUF+component
@@ -106,24 +112,30 @@ UI/API のドロップダウンに列挙されます。サブフォルダに入�
 衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
 （`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
 
-> **既存インストールからの移行**: 従来の `install_ltx.ps1` は本番トランスフォーマー GGUF を
-> `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダの中に配置していました。現在の公式配置は
-> `models/ltx-2.3-gguf/` **直下**です（サブフォルダ配置自体は再帰スキャンで引き続き動作しますが、以後の
-> 公式手順・ドキュメントの既定パスは直下を前提にします）。既にインストール済みの環境は、以下のいずれかで
-> 揃えてください。
+> **取得元の変更について（2026-07-26）**: モデルの入手先を、配布元が入り混じった5つのリポジトリから、
+> 本プロジェクトが再ホストした **2つの公開リポジトリ**（[`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) と
+> [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B)）へ一本化しました。従来は spatial upsampler と
+> Gemma の tokenizer 一式が Gated リポジトリにあり、ブラウザでのライセンス承諾とアクセストークンの発行が
+> 必須でしたが、**現在はアカウントもトークンも不要**です。`install_ltx.ps1` からトークン関連の引数
+> （`-HfToken`）と、ログイン補助スクリプト `scripts/hf_login.ps1` は削除済みです。
 >
-> - **PowerShell を再実行する**（推奨）: 最新の `scripts/install_ltx.ps1` は DL 後に自動でファイルを1階層
->   上へ移動し、空になったサブフォルダを削除します（既に直下にある場合はスキップされます）。
-> - **手動で移動する**: 以下のコマンドでサブフォルダ内の `.gguf` を直下へ移し、空フォルダを削除します。
+> 併せて、本番トランスフォーマー GGUF の配置も整理しました。従来の取得元は
+> `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダの中にファイルを置く構造だったため、
+> `install_ltx.ps1` がダウンロード後に1階層上へ移動していました。新しいリポジトリは最初から
+> `models/ltx-2.3-gguf/` **直下**の構造で持っているので、この移動処理そのものを削除しています。
 >
->   ```powershell
->   Move-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1\*.gguf" "models\ltx-2.3-gguf\"
->   Remove-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1" -Force
->   ```
+> そのため、**古い `install_ltx.ps1` でインストールした環境がサブフォルダ配置のまま残っている場合は、
+> 手動で移動してください**（再実行しても自動では直りません）。
 >
->   `config.yaml` に `model.gguf_transformer_path` を明示的に指定している場合は、直下のパス
->   （既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）に合わせて書き換えてください。
->   指定していない場合はコード側の既定値が既に直下パスを指すため、`config.yaml` の編集は不要です。
+> ```powershell
+> Move-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1\*.gguf" "models\ltx-2.3-gguf\"
+> Remove-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1" -Force
+> ```
+>
+> サブフォルダ配置でも再帰スキャンでモデル自体は認識されますが、以後の公式手順・ドキュメントの既定パスは
+> 直下を前提にします。`config.yaml` に `model.gguf_transformer_path` を明示的に指定している場合は、直下のパス
+> （既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）に合わせて書き換えてください。
+> 指定していない場合はコード側の既定値が既に直下パスを指すため、`config.yaml` の編集は不要です。
 
 選択は UI の「Models」設定タブのドロップダウン、または API `GET /models`（登録名の一覧確認）→
 `POST /pipeline/load`（body `{"models": {"transformer": "<登録名>"}}`）で行います。選択が現在ロード中のものと

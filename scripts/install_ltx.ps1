@@ -22,7 +22,9 @@
          are NOT auto-installed, per the NEXT_SESSION_HANDOFF install-compat policy).
          Optional on ada/ampere/hopper: a prebuilt xformers wheel from wheels/ is
          used only if present (build via scripts/build_xformers.ps1). Blackwell = SDPA.
-      6. Model downloads (~28GB, 5 guarded items) via .venv-engine's hf.exe.
+      6. Model downloads (~28GB, 2 guarded items) via .venv-engine's hf.exe,
+         pulled from two PUBLIC, NON-GATED repos. No HuggingFace account,
+         login or token is required at any point.
       7. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt.
 
     The GGUF + component-file recipe is the ONLY supported real path. It never
@@ -54,9 +56,6 @@ param(
     # Auto-detect from nvidia-smi when not passed. Explicit value wins.
     [ValidateSet("ada", "ampere", "hopper", "blackwell")]
     [string] $GpuArch,
-    # HF token for the 2 GATED repos (spatial upsampler, gemma tokenizer set).
-    # Precedence: this param > $env:HF_TOKEN > stored hf_home/token.
-    [string] $HfToken,
     # Opt into a fresh resolve of the engine venv (UNVALIDATED newer torch ~2.11).
     # Default (unset) uses the deterministic freeze path.
     [switch] $ResolveLatest,
@@ -336,47 +335,58 @@ if ($CloneUpstreamReference) {
 
 # ----------------------------------------------------------------------------
 # 6) Model downloads (~28GB) via the engine venv's hf.exe.
-#    Each item guards on existence + a minimum size -> SKIP; else download.
-#    Gated repos (spatial upsampler, gemma tokenizer set) need the HF token.
+#    Everything comes from TWO self-hosted repos that are PUBLIC and NON-GATED,
+#    so no HuggingFace account, login or token is involved anywhere:
+#      Rootport/Nz-LTX23-weights -> ltx-2.3/, ltx-2.3-components/, ltx-2.3-gguf/
+#      Rootport/Nz-Gemma3-12B    -> gemma-3-12b-it-gguf/, gemma-3-12b-it-tokenizer/
+#    Both repos mirror this project's models/ layout 1:1, so each one expands
+#    straight into models/ with no post-processing (no flattening, no renames).
+#    Each item guards on a minimum on-disk size -> SKIP; else download.
 # ----------------------------------------------------------------------------
 
-# Resolve the HF token once: -HfToken > $env:HF_TOKEN > stored hf_home/token.
-$hfTokenResolved = $null
-$hfTokenSource = $null
-if ($HfToken) {
-    $hfTokenResolved = $HfToken; $hfTokenSource = "-HfToken param"
-} elseif ($env:HF_TOKEN) {
-    $hfTokenResolved = $env:HF_TOKEN; $hfTokenSource = "`$env:HF_TOKEN"
-} elseif (Test-Path "$env:HF_HOME\token") {
-    $stored = (Get-Content "$env:HF_HOME\token" -Raw -ErrorAction SilentlyContinue)
-    if ($stored) { $hfTokenResolved = $stored.Trim(); $hfTokenSource = "stored hf_home/token" }
-}
-
-# One download item. `local-dir` is relative-to-root; `include` is one or more
-# glob patterns passed under a SINGLE --include flag.
+# One download item. `LocalDir` is relative-to-root and is where the repo expands
+# (both repos below expand into models/, since their internal layout already
+# matches ours). `Include` is one or more glob patterns passed under a SINGLE
+# --include flag.
 #
 #   NOTE (argparse nargs gotcha, carried over from the old script): `hf download
 #   --include` is nargs="*". Repeating the flag (--include A --include B) makes
 #   argparse keep only the LAST group and silently drop earlier files. So we build
 #   ONE "--include" followed by all patterns.
+#
+#   NOTE (glob semantics, verified live against both repos): --include matches with
+#   Python fnmatch against the repo-relative path, and `*` DOES cross '/'. So
+#   "ltx-2.3-components/*" reaches the nested vae/ and text_encoders/ files two
+#   levels down. Just as importantly, the repo-root card files (LICENSE /
+#   NOTICE.md / README.md / .gitattributes) match NO "<dir>/*" pattern -- which is
+#   what stops the two repos' identically-named cards from landing in models/ and
+#   overwriting each other.
+#
+#   NOTE (why CheckDir is separate from LocalDir): both calls below pass
+#   LocalDir = "models", so sizing the guard on LocalDir would see the ~23GB LTX
+#   download and then wrongly SKIP the Gemma one. CheckDir instead names the
+#   subdirectories that THIS repo expands into, and MinBytes is compared against
+#   their combined size. Caveat, deliberately accepted: models/ltx-2.3-gguf/ also
+#   holds any extra self-converted transformer GGUFs the user dropped in (10Eros /
+#   Sulphur, ~16.5GB each), which inflates the LTX total and makes that guard more
+#   lenient than the numbers suggest. The guard only exists to catch a missing or
+#   truncated download; the per-file step 7 verification table below is the real
+#   correctness gate.
 function Invoke-ModelDownload {
     param(
         [Parameter(Mandatory)] [string]   $Name,
         [Parameter(Mandatory)] [string]   $Repo,
-        [string]   $Revision,                          # optional --revision <sha>
         [Parameter(Mandatory)] [string[]] $Include,    # glob(s), one --include
         [Parameter(Mandatory)] [string]   $LocalDir,   # relative to root
-        [Parameter(Mandatory)] [long]     $MinBytes,
-        [switch]   $Gated
+        [Parameter(Mandatory)] [string[]] $CheckDir,   # relative to root; sizes summed
+        [Parameter(Mandatory)] [long]     $MinBytes
     )
     $absLocal = Join-Path $ProjectRoot $LocalDir
-    $have = Get-PathSize $absLocal
+    $have = [long] 0
+    foreach ($d in $CheckDir) { $have += Get-PathSize (Join-Path $ProjectRoot $d) }
     if ($have -ge $MinBytes) {
-        Write-Skip "$Name  ($(Format-Size $have) already present in $LocalDir)"
+        Write-Skip "$Name  ($(Format-Size $have) already present in $($CheckDir -join ', '))"
         return
-    }
-    if ($Gated -and -not $hfTokenResolved) {
-        throw "'$Name' is a GATED repo ($Repo) and no HF token was found. Accept the license on huggingface.co, then set a token (`-HfToken`, `$env:HF_TOKEN`) or run scripts\hf_login.ps1."
     }
     if (-not (Test-Path $hfExe)) {
         throw "hf.exe not found at $hfExe. The engine venv must be created first (do not pass -SkipVenv)."
@@ -385,22 +395,16 @@ function Invoke-ModelDownload {
 
     # Single --include with ALL patterns (see nargs note above).
     $argv = @("download", $Repo)
-    if ($Revision) { $argv += @("--revision", $Revision) }
     $argv += @("--include") + $Include
     $argv += @("--local-dir", $absLocal)
-    if ($Gated -and $hfTokenResolved) { $argv += @("--token", $hfTokenResolved) }
 
-    $revSuffix = ""
-    if ($Revision) { $revSuffix = " @ $Revision" }
-    Write-Do "$Name  download $Repo$revSuffix"
+    Write-Do "$Name  download $Repo"
     & $hfExe @argv
     if ($LASTEXITCODE -ne 0) {
-        if ($Gated) {
-            throw "Download of gated '$Name' failed (likely 401). Accept the license on huggingface.co/$Repo and set a valid token, or run scripts\hf_login.ps1."
-        }
-        throw "Download of '$Name' failed. Check the include globs against https://huggingface.co/$Repo/tree/main"
+        throw "Download of '$Name' failed. The repo is public and needs no token, so check your network first, then the include globs against https://huggingface.co/$Repo/tree/main"
     }
-    $now = Get-PathSize $absLocal
+    $now = [long] 0
+    foreach ($d in $CheckDir) { $now += Get-PathSize (Join-Path $ProjectRoot $d) }
     if ($now -lt $MinBytes) {
         throw "'$Name' downloaded but is smaller than expected ($(Format-Size $now) < $(Format-Size $MinBytes)). Check the include globs."
     }
@@ -411,86 +415,35 @@ if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
 } else {
-    Write-Step "Model downloads (~28GB total)"
-    if ($hfTokenSource) {
-        Write-Host "  HF token: found via $hfTokenSource (needed only for the 2 gated repos)"
-    } else {
-        Write-Host "  HF token: none found (fine for the 3 ungated repos; gated ones will error early)"
-    }
+    Write-Step "Model downloads (~28GB total, 2 public repos, no token needed)"
 
-    # 1) Transformer GGUF (ungated, ~17GB). HEAD ok; validated commit 4b420da2.
-    Invoke-ModelDownload -Name "Transformer GGUF (Q4_K_M)" `
-        -Repo "QuantStack/LTX-2.3-GGUF" `
-        -Include @("LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf") `
-        -LocalDir "models/ltx-2.3-gguf" `
-        -MinBytes 17000000000
+    # 1) LTX-2.3 weights, 5 files / 22,888,021,726 B:
+    #      ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors            (0.93GB)
+    #      ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors        (1.35GB)
+    #      ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors        (0.34GB)
+    #      ltx-2.3-components/text_encoders/..._text_projection_bf16...   (2.15GB)
+    #      ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf            (16.54GB)
+    #    Already laid out exactly as the project wants them, so this expands into
+    #    models/ verbatim -- in particular the transformer GGUF arrives directly in
+    #    models/ltx-2.3-gguf/ and the old "flatten one level up" fixup is gone.
+    Invoke-ModelDownload -Name "LTX-2.3 weights (5 files)" `
+        -Repo "Rootport/Nz-LTX23-weights" `
+        -Include @("ltx-2.3/*", "ltx-2.3-components/*", "ltx-2.3-gguf/*") `
+        -LocalDir "models" `
+        -CheckDir @("models/ltx-2.3", "models/ltx-2.3-components", "models/ltx-2.3-gguf") `
+        -MinBytes 22500000000   # repo total 22,888,021,726
 
-    # 1b) Flatten: the HF repo nests the file one level under
-    #     LTX-2.3-distilled-1.1/; the project's canonical layout keeps it
-    #     directly in models/ltx-2.3-gguf/ (so the model-registry scan roots at
-    #     that one directory instead of all of models/). Idempotent: no-op if
-    #     already flattened (re-run / already-installed machine).
-    $ggufNested = Join-Path $ProjectRoot "models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
-    $ggufFlat = Join-Path $ProjectRoot "models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
-    if (Test-Path $ggufNested) {
-        Move-Item -Path $ggufNested -Destination $ggufFlat -Force
-        $ggufNestedDir = Split-Path $ggufNested -Parent
-        if ((Test-Path $ggufNestedDir) -and ((Get-ChildItem $ggufNestedDir -Force | Measure-Object).Count -eq 0)) {
-            Remove-Item $ggufNestedDir -Force
-        }
-        Write-Ok "Transformer GGUF flattened to models/ltx-2.3-gguf/"
-    } elseif (Test-Path $ggufFlat) {
-        Write-Skip "Transformer GGUF already flattened"
-    }
-
-    # 2) Video+Audio VAE + Text-projection (3 files, ungated). PIN the revision:
-    #    HEAD of Kijai/LTX2.3_comfy has moved past the validated snapshot.
-    Invoke-ModelDownload -Name "VAE + text-projection (3 files)" `
-        -Repo "Kijai/LTX2.3_comfy" `
-        -Revision "34b11f68e9440e8eec7cfa981346f3ddcab5c9de" `
-        -Include @(
-            "vae/LTX23_video_vae_bf16.safetensors",
-            "vae/LTX23_audio_vae_bf16.safetensors",
-            "text_encoders/ltx-2.3_text_projection_bf16.safetensors"
-        ) `
-        -LocalDir "models/ltx-2.3-components" `
-        -MinBytes 3500000000   # ~1.3 + 0.3 + 2.2 GB
-
-    # 3) Gemma GGUF (ungated, ~7GB). HEAD ok; validated commit ec0cbabd.
-    Invoke-ModelDownload -Name "Gemma-3-12B GGUF (Q4_K_M)" `
-        -Repo "ggml-org/gemma-3-12b-it-GGUF" `
-        -Include @("gemma-3-12b-it-Q4_K_M.gguf") `
-        -LocalDir "models/gemma-3-12b-it-gguf" `
-        -MinBytes 7000000000
-
-    # 4) Spatial upsampler (GATED, ~0.9GB). HEAD ok; validated commit 76730e63.
-    Invoke-ModelDownload -Name "Spatial upsampler x2" `
-        -Repo "Lightricks/LTX-2.3" `
-        -Include @("ltx-2.3-spatial-upscaler-x2-1.1.safetensors") `
-        -LocalDir "models/ltx-2.3" `
-        -MinBytes 800000000 `
-        -Gated
-
-    # 5) Gemma tokenizer set (GATED, ~40MB dir). EXPLICIT 10 small files ONLY --
-    #    NEVER pull the multi-GB model-*.safetensors weights from this repo.
-    #    HEAD ok; validated commit 68f7ee4f.
-    Invoke-ModelDownload -Name "Gemma tokenizer set (10 files)" `
-        -Repo "google/gemma-3-12b-it-qat-q4_0-unquantized" `
-        -Include @(
-            "added_tokens.json",
-            "chat_template.json",
-            "config.json",
-            "generation_config.json",
-            "preprocessor_config.json",
-            "processor_config.json",
-            "special_tokens_map.json",
-            "tokenizer.json",
-            "tokenizer.model",
-            "tokenizer_config.json"
-        ) `
-        -LocalDir "models/gemma-3-12b-it-tokenizer" `
-        -MinBytes 20000000 `
-        -Gated
+    # 2) Gemma-3-12B, 11 files / 7,339,810,357 B:
+    #      gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf                 (6.80GB)
+    #      gemma-3-12b-it-tokenizer/  (10 small files, ~38MB)
+    #    The tokenizer dir is tokenizer/preprocessor config ONLY -- the repo holds
+    #    no multi-GB model-*.safetensors, so there is nothing here to exclude.
+    Invoke-ModelDownload -Name "Gemma-3-12B GGUF + tokenizer set (11 files)" `
+        -Repo "Rootport/Nz-Gemma3-12B" `
+        -Include @("gemma-3-12b-it-gguf/*", "gemma-3-12b-it-tokenizer/*") `
+        -LocalDir "models" `
+        -CheckDir @("models/gemma-3-12b-it-gguf", "models/gemma-3-12b-it-tokenizer") `
+        -MinBytes 7200000000    # repo total 7,339,810,357
 }
 
 # ----------------------------------------------------------------------------

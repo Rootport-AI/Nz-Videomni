@@ -97,7 +97,7 @@ Clip Chain拡張の完結を受けて、次セッションの課題は以下の2
 
 > **2026-07-15追記**: フロントエンドのバックエンド追随はより広い範囲を[`FRONTEND_CATCHUP_WORKORDER.md`](FRONTEND_CATCHUP_WORKORDER.md)（2026-07-15新設）で正本化した。上記②（バッチA2Vパリティ）は同書のグループ2に統合済み。課題①（チャンク化アップサンプル）は上記のとおり実装完了・実機ゲート合格済み。
 
-なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は[`LONGFORM_RESEARCH_TOPICS.md`](LONGFORM_RESEARCH_TOPICS.md)（長尺動画の品質と上限の研究課題ノート、2026-07-15新設）にまとめた。
+なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は、**2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-42・§3-43へ移設した**。あわせて、実運用で得た経験則（連結点の歪みの正体・キャラクター設計のドリフト・「1クリップ最長×連結4〜5個」という実用最適解）と調査の一次情報URLは[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）」節へ吸収し、両者をまとめていた旧ノート`LONGFORM_RESEARCH_TOPICS.md`（2026-07-15新設）は削除した。
 
 ---
 
@@ -598,10 +598,13 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 
 ### 将来項目・未着手（現行スコープ外・記録のみ）
 
-- **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝ユーザーのプラグイン開発環境整備待ちでブロック中。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。
-- **Phase 3 残パリティ**（未着手・spec §13.4）: Gap Fill／Retake（大規模）・生成キュー・延長尺(~30s)・text-only プロンプト強化・negative/CFG/STG/sigma schedule/denoise loop/seed lock 露出・空間アップスケーラのユーザー操作露出・LoRA/attention tiling 再導入（de-fork で削除）。**negative/CFG/pipeline は worker 未配線＝GUI 露出禁止（継続）。**
-- **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝遠い将来。現状 `services/ltx_runner.py` の payload がこれらをエンジンに渡さず常に distilled 経路のため GUI は当該オプションを表示するが無効化＋「バックエンド対応待ち」注記。着手の入口＝非蒸留×量子化 dev 重み（`unsloth/LTX-2.3-GGUF` の `ltx-2.3-22b-dev-Q4_K_M.gguf` 等）＝[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節。
-- **VLM(vision) 再導入**（enhance_i2v・フレームを見た Gap Fill 提案）＝QAT text-only 化を巻き戻すため計画外・要件化時に別途判断。
+**2026-07-27の整理で、本節に列挙していた将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 現在の所在は次のとおり（同書は番号だけでなくファイル名を添えて参照すること）。
+
+- **Phase 3 残パリティのうち、非蒸留(dev)モデル向けの生成つまみ一式**（negative／CFG／ステップ数／STG／sigma schedule／denoise loop／seed lock／延長尺~30s／空間アップスケーラのユーザー操作露出）＝同書**§4-1**。**negative／CFG／`pipeline` は worker 未配線＝GUI 露出禁止（継続）**という現行制約も同項へ転記済み。
+- **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝同書**§3-2**（着手の入口＝`services/ltx_runner.py` の payload 未配線箇所・非蒸留×量子化 dev 重み・計算コスト~7〜12倍まで転記済み。背景資料は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節）。
+- **Gap Fill**＝同書**§3-10**／**Retake・Inpaint**＝同書**§4-12**／**attention tiling の本番投入**＝同書**§4-2**／**VLM(vision) 再導入**（enhance_i2v・フレームを見た Gap Fill 提案。QAT text-only 化を巻き戻すため計画外）＝同書**§4-5**。
+- **本節にのみ残る（台帳に未収録の）項目**: 生成キュー、text-only プロンプト強化（spec §13.4 由来）。いずれも**台帳へは起票しない**——前者は下記「やらない」のユーザー決定（「1ジョブ＋busy 409」が正しい設計）およびタイムライン側の「順番待ちは作らない（バグ温床）」決定（[`TIMELINE_ALPHA_REQUIREMENTS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)）と衝突し、後者は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) E節でユーザー決定「不要」と重複するため。
+- **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝当時はユーザーのプラグイン開発環境整備待ちでブロック中と記録していた（現在は別リポジトリ `Nz-LTX23-frontend-AviUtl2` で実装済み）。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。
 - **やらない（削除済みスコープ・ユーザー決定・spec §13.5）**: ①1080p アップスケール「機能」（＝外部ツール推奨。内部二段 upsampler は生成の仕組みゆえ残す）②多人数インフラ（本格ジョブキュー/認証/インターネット公開/永続 DB＝単一ユーザー想定で不要・現状の「1ジョブ＋busy 409」が正しい設計）。
 
 ### 運用ルール（最新の正・memory にも記録）

@@ -827,9 +827,13 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 - **→ encode ピークが解像度・フレーム数に非依存である**ことを確認（§5/RESOLUTION_DURATION_CAPABILITY §1 の「天井＝固定費」と整合、その固定費を te-offload が下げた形）。
 
 ### 11.5 ★スコープ注意（次セッションが誤解しないよう明記）
+
+- **（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節の「peak ② の低減は将来課題」は同書**§4-3**（VRAMの残レバー3件）の①にあたる。以下の実測記録は不変。
 - **全体ジョブ `peak_vram_mb` は両モードとも 16,944 で不変**＝**16GB の天井は denoise / transformer-load 段（peak ②）で決まり、`--te-offload` はそこに触れない**。te-offload が下げるのは **Gemma text-encode ピーク（peak ①）** のみで、encode 時の shared 溢れを消すだけ。**peak ② の低減は将来課題**（§7.9 の「transformer を直接 CPU ロード」と地続き）。2つのピークは逐次で、その max がジョブ天井を決めるという前セッションの所見（§7.9）どおり。
 
 ### 11.6 チューニングレバー
+
+- **（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節の`layers_on_gpu`未露出は同書**§4-3**の②にあたる。以下の実測記録は不変。
 - `GemmaLayerOffloadService(layers_on_gpu=2)`：**1 に下げると encode ピークがさらに下がる**／3-4 に上げるとピークと速度をトレード。**現状ハードコード**（`config.yaml` 未露出）。露出は任意の将来課題。
 
 ### 11.7 テスト
@@ -1001,6 +1005,8 @@ construction-required で削除不可」として温存していた（§13.3）�
 - ∴ **当初構想の keep=1 は「16GB で誤ったターゲット」**。単一ユーザー逐次運用（クリップ連結含む）では現行 keep=0 で十分（§10.7 で I2V×4＋音声 連続 PASS 済）。
 
 ### 15.4 将来やるなら（Phase 3・GPU 常駐ではなく層ストリーミング）
+
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節のopt-in層ストリーミングは同書**§4-3**の③にあたる。本節の調査結論・実測記録そのものは不変。
 もし長尺連結で漸増が実害化したら、**opt-in の「CPU 正本温存＋GPU は限定サブセット＋残りを層ストリーミング」**（＝ComfyUI-GGUF / HF accelerate 方式）で再着手する。これは既存の `--dit-cpu-load` / te-offload 経路の延長で、フル GPU 常駐（crash 源）を避ける唯一の 16GB fit 経路。断片化緩和（`expandable_segments` 等）も別レバーとして併検討。**いずれも計測前提**（`torch.cuda.max_memory_allocated` ＋ WDDM Dedicated/Shared ＋ committed bytes）。
 
 ### 15.5 一次情報
@@ -1439,6 +1445,8 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 
 ### 23.5 持ち越し（将来項目）
 
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 1点目（`two_stage_hq`の実効化）は同書**§3-2**、残る4点は同書**§4-6**（バックエンド同梱Gradio UIの残4件）にあたる。以下の記録は不変。
+
 - バックエンドでの pipeline／guidance_scale 消費（`two_stage_hq` の実効化）。
 - `GET /jobs/{id}/metadata`（新規エンドポイント不追加の方針で見送り）。
 - `gr.BrowserState` による言語／テーマの永続化（固定secret＋実機検証が必要）。
@@ -1487,12 +1495,16 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 
 ### 24.5 持ち越し（将来項目）
 
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** stage2の音声タイル継ぎ目とfpsリサンプルの全体変換は同書**§4-7**（V2V／チェーンの音声まわりの残件3点）にあたる。1点目（音声継ぎ目のクリック根治）は§24.7のv1.1で対処済みで、残った浅い凹みが§4-7の③。以下の記録は不変。
+
 - 音声継ぎ目のクリック根治（源の実音声とデコード音声のノイズフロア差）: v1 は 30ms フェードで緩和・G3 試聴の結果次第で「サーバー側結合出力＋真のクロスフェード」オプションを検討。
 - stage2 の音声タイル継ぎ目（既知・チェーン由来 backlog と同族・V2V 固有ではない）。
 - fps リサンプルが全体変換（末尾だけの部分変換に最適化可能・単一ユーザーでは実害小）。VFR 源は未ストレステスト。
 - mock の音声数値は 0 固定（実バックエンドと差異あり・docstring 記載済み）。
 
 ### 24.6 得られた知見
+
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節3点目の`RetakePipeline`在中の知見は、同書**§4-12**（Retake・Inpaint）の「土台」根拠として引用されている。以下の知見の記録は不変。
 
 - **実写・圧縮素材の VAE latent 混入リスクは杞憂だった**（h264-crf35 でも継ぎ目連続・色ドリフトむしろ最小）。
 - **causal VAE の先頭 latent 規約**: 末尾 kv 個だけの切り出し注入は先頭アンカー規約とずれる → **context 丸ごと凍結ヘッド**にすれば規約が一致（ComfyUI extend と同運用）。
@@ -1520,6 +1532,8 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 **回帰**: T2V/I2V byte-match は各実装後に維持（`23844b4e…`/`a511eda4…`）。同一シード V2V 出力も VRAM 修正・サイドカー追加の前後でバイト一致。pytest **191 passed / 1 skipped**。
 
 **将来項目（記録）**: ①**音声スムージングの UI チェックボックス**（ユーザー要望 2026-07-04）: 将来の GUI V2V 露出時に「結合出力」機能へ ON/OFF を付ける（ON=ハンドル有なら真クロスフェード/無ければフェードペア・OFF=ハード連結。API/エンジン不変＝結合はクライアント側の関心事）②残余の浅い凹みのさらなる平坦化（ノイズフロア整合等）③モデル管理（A1111 風）=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。
+
+> **（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 上記①（音声スムージングのUIチェックボックス）はGUI露出とともに実装済み、②（残余の浅い凹みの平坦化）は同書**§4-7**の③、③（モデル管理）は2026-07-05に実装完了（§26）。③のリンク先だった`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`は2026-07-27の文書整理で削除しており、現在の正本は[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)である。
 
 **✅G3 最終試聴 PASS（ユーザー・2026-07-05）**: G3v4（音楽プロンプト継続×ハンドル真クロスフェード・`outputs/v2v_e2e/E2E-A4/`）で「音の繋ぎ目はかなり滑らかになった。自然音やスローテンポの EDM ならまず繋ぎ目に気付かない。音楽や会話の途中なら気づくが、それは現在の生成 AI の性能の限界」＝**合格**。参考: G3v4 の計測は下請けエージェントが生 wav から独立再計算しても完全一致（二重検証済み）。**V2V の目視/試聴ゲートは全クローズ** → push/main マージへ（ユーザー事前決定の条件成立）。
 

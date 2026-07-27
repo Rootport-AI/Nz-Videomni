@@ -55,6 +55,6 @@
 ## 5. スコープ外（混同注意）
 
 - GUIへのV2V/A2V露出（別セッション・**音声スムージングON/OFFチェックボックス要件**が記録済み=VERIFICATION_LOG §24.7将来項目①）。
-- モデル管理=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。
+- モデル管理=[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)（2026-07-05に実装完了。旧`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`は2026-07-27に削除し、残る将来項目は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-26へ集約した）。
 - 高品質モード（two_stage_hq）・Retake・プロンプト強化=従来どおり将来/不要。
 - GUI目視ゲート+実機e2e=旧宿題のまま（A2VセッションをブロックしないとV2V時に確認済みの扱いを踏襲するが、着手前にユーザーへ一言確認するとよい）。

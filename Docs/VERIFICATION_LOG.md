@@ -2263,7 +2263,7 @@ Docs更新: `README.md`（Batch A2V節の開始前チェック説明）・`BATCH
 
 ## 37. ★V2V Join機能（末尾トリム方式）の実機検証＋IC-LoRA×A2V併用のreal GPU生成完走＝オーナー実機ゲート全項目合格（2026-07-21）
 
-> **正本＝本節。** V2V Join復活（API拡張＝コミット `d22706e`、本書はコード非対象なので詳細は `LTX23_Backend_Specification.md` §6.1／§6.3、フロント側の実装増分はI1〜I6）の、オーナー立ち会いによるrealバックエンド・実GPUでの実機検証記録。詳細な経緯・修正差分・実機ログはフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。
+> **正本＝本節。** V2V Join復活（API拡張＝コミット `d22706e`、本書はコード非対象なので詳細は `LTX23_Backend_Specification.md` §6.1／§6.3、フロント側の実装増分はI1〜I6）の、オーナー立ち会いによるrealバックエンド・実GPUでの実機検証記録。詳細な経緯・修正差分・実機ログはフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。
 
 本機: 同上（i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11）。
 
@@ -2283,7 +2283,7 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 実機検証の過程で、fps注意文が「project 24 / video 24なのに did not match」という誤情報を表示する不具合が発覚した。
 
 - **真因**: バックエンドのJoin処理自体は全ケースで成功していた（正規化・トリム・atomic rename とも仕様どおり動作）。不具合の所在はフロント側の文言設計——正規化（`JoinResponse.source_normalized`）は解像度差だけでも発火する（fps差の有無を問わない）仕様なのに、注意文はfps不一致を前提とした文言しか出さず、しかもソース側の実測fpsを表示していなかった。
-- **修正**: フロント側で注意文を発火理由別の3部品（ソースfps明示の文言／fps非言及の正規化文言／プロジェクトfps推奨行）へ分岐する形に改修し、同日中に再検証まで完了した。バックエンド側は無改修。詳細は `PENDING_TASKS.md` §3-29・`DEVLOG.md` §45。
+- **修正**: フロント側で注意文を発火理由別の3部品（ソースfps明示の文言／fps非言及の正規化文言／プロジェクトfps推奨行）へ分岐する形に改修し、同日中に再検証まで完了した。バックエンド側は無改修。詳細は `PENDING_TASKS_CLOSED.md` §3-29・`DEVLOG.md` §45。
 
 ### 37.3 IC-LoRA×A2V併用のreal GPU生成完走
 
@@ -2291,4 +2291,4 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 
 ### 37.4 参照
 
-詳細な経緯・実機ログ・フロント側の修正差分はフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。バックエンド側のV2V継続初回実装は本ログ§24、2026-07-21のAPI拡張（`is_v2v`／`joined`／`source_tail_seconds`／`trimmed_source_seconds`／`source_fps`）はコミット `d22706e`（`LTX23_Backend_Specification.md` §6.1／§6.3に反映済み）。
+詳細な経緯・実機ログ・フロント側の修正差分はフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。バックエンド側のV2V継続初回実装は本ログ§24、2026-07-21のAPI拡張（`is_v2v`／`joined`／`source_tail_seconds`／`trimmed_source_seconds`／`source_fps`）はコミット `d22706e`（`LTX23_Backend_Specification.md` §6.1／§6.3に反映済み）。

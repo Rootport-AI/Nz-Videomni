@@ -39,8 +39,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.1** |
-| 日付 | **2026-07-26** |
+| 版 | **v0.5.2** |
+| 日付 | **2026-07-27** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
@@ -51,7 +51,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | 版 | 日付 | 内容 |
 |----|------|------|
 | v0.5 | 2026-07-02 | v04 からの全面改訂（章立てを実装現実に合わせて書き直し）。 |
-| v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS.md` §3-36・§3-37。 |
+| v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-36・§3-37。 |
+| v0.5.2 | 2026-07-27 | サブマシンでの実機検証（`Docs/NEXT_SESSION_HANDOFF.md`・`README.md` §7）の反映と、実装との乖離を潰す収束修正。**§2.1**（ffmpeg は「PATH に通す」ではなく `scripts/setup.ps1` が `tools/ffmpeg` へ取り込む＝§2.4 の PATH 前置で解決される）／**§2.5**（`setup.ps1` の事前チェック 3 種＝空き容量・ページファイル・GPU がいずれも警告のみであること、および `run.ps1` の二重起動ガードの存在を追記）／**§3.3**（URL を控えに入れる処理は現行の `run.ps1` に存在しない＝利用者に見せる URL は `main.py` の起動バナーが唯一の正本、という実装に合わせて訂正）／**§4.4**（ディレクトリ構成のルートフォルダ名を実際の `Nz-LTX23-backend/` へ訂正）。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-38。 |
 
 ### 0.2 スコープ
 
@@ -125,7 +126,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | PyTorch | **`torch 2.9.1+cu128`** | engine 側実体（`engine/venv-engine.freeze.txt`） |
 | NVIDIA ドライバ | CUDA 12.8 対応版 | cu128 wheel 実行要件。Blackwell は R570+ |
 | パッケージ管理 | **uv** | Python 本体もプロジェクト内へ |
-| 動画エンコード | ffmpeg（PATH に通す） | MP4 保存・クロップ用 |
+| 動画エンコード | ffmpeg（`scripts/setup.ps1` が `tools/ffmpeg` へ取り込む） | MP4 保存・クロップ用。`run.ps1` が `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すため、システムの `PATH` へ通す必要はない（§2.4） |
 
 ### 2.2 2プロセス・2venv 構成（概要）
 
@@ -168,6 +169,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 エンドユーザーの入口は **`setup.bat`（ダブルクリック）→ `scripts/setup.ps1` → `install_ltx.ps1`** である。`setup.ps1` は前提ツール（`uv` / `ffmpeg`+`ffprobe`）を `tools/` 配下へ取り込み、`config.yaml` が無ければ `config.yaml.example` から複製し、`logs/setup_<日時>.log` へ記録を残したうえで `install_ltx.ps1` を `&` で呼ぶ（ドットソースは禁止＝`install_ltx.ps1` の `exit` が呼び出し元ごと落とすため）。想定利用者が PowerShell を自分で開けないことを前提とした導線であり、`.bat` は純 ASCII・CRLF・末尾 `pause`、日本語のメッセージはすべて `.ps1` 側に置く。
 
+`setup.ps1` は本処理の前に**事前チェックを 3 種**（インストール先ドライブの空き容量／ページファイルの設定／NVIDIA GPU の有無）行うが、**いずれも警告を出すだけでセットアップは止めない**（環境の自動判定で利用者の作業を止めない方針）。起動側にも同種のガードがあり、`run.ps1` は待ち受けポートが既に使われていれば「すでに起動しています」と案内して `exit 0` する＝**二重起動ガード**（詳細は §3.3）。
+
 **冪等の粒度（2026-07-26 更新）**: 「既存物は無条件 SKIP」ではない。
 
 - **アプリ venv `./.venv`**: `uv sync` は毎回走る（冪等だが SKIP はしない）。
@@ -209,7 +212,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 ./run.ps1 --port 19000
 ```
 
-`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。ポートが既に使われている場合は「すでに起動しています」と案内して `exit 0` する（`setup.bat` への誤誘導を避けるため）。URL の正本は `main.py` の起動バナーで、`run.ps1` はそれとは別に `Set-Clipboard` で URL を控えに入れる。
+`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。ポートが既に使われている場合は「すでに起動しています」と案内して `exit 0` する（`setup.bat` への誤誘導を避けるため）。**利用者に見せる URL の正本は `main.py` の起動バナー**であり（CLI フラグ適用後のポートを知っているのはそこだけ）、`run.ps1` は URL を一切表示しない。
 
 `run.ps1` は**アプリ**（`./.venv` の `main.py`）だけを起動する。real backend が選ばれると、アプリが `./.venv-engine\Scripts\python.exe -m engine.worker` を subprocess として自動 spawn する（worker の手動起動は不要）。起動後のエンドポイント:
 
@@ -311,7 +314,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 ### 4.4 ディレクトリ構成
 
 ```text
-12_Nz-LTX23-backend/
+Nz-LTX23-backend/
 ├─ setup.bat / run.bat     エンドユーザー向け入口（純 ASCII・CRLF・末尾 pause）
 ├─ run.ps1                 起動本体（**直下固定**・$PSScriptRoot 依存）
 ├─ NzLTX23-1.0.0-rc1.au2pkg.zip

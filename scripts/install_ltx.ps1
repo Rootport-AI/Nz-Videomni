@@ -40,7 +40,7 @@
     Blackwell adding flash-attn can jam it. sageattention IS the exception: it is
     a declared dependency of the engine venv (engine-venv-pyproject.toml /
     venv-engine.freeze.txt), so step 4 does install it -- but nothing imports it,
-    so it is dead weight awaiting a cleanup (filed as PENDING_TASKS.md 4-25).
+    so it is dead weight awaiting a cleanup (filed as PENDING_TASKS.md 3-25).
     Being pure Python, it is at least not arch-sensitive. Blackwell needs an R570+
     driver. Because nothing here is arch-dependent, this installer does not detect
     or take a GPU architecture at all.

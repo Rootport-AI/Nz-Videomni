@@ -78,12 +78,12 @@ function Invoke-FileDownload {
         [Parameter(Mandatory)] [string] $OutFile,
         [Parameter(Mandatory)] [string] $Label
     )
-    Write-Info ($Label + ' をダウンロードしています。回線によっては数分かかります...')
+    Write-Info ($Label + ' をダウンロード中…')
     Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
     if (-not (Test-Path -LiteralPath $OutFile)) {
         throw ($Label + ' のダウンロードに失敗しました（ファイルができていません）。')
     }
-    Write-Info ($Label + ' のダウンロードが終わりました（' + (Format-Size (Get-Item -LiteralPath $OutFile).Length) + '）。')
+    Write-Info ($Label + ' 取得完了（' + (Format-Size (Get-Item -LiteralPath $OutFile).Length) + '）')
 }
 
 # 一時展開先。tools\ の中に作るので、確定の Move-Item が同じドライブ内の
@@ -107,10 +107,10 @@ function Test-FreeSpace {
         $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='" + $qualifier + "'")
         if (-not $disk) { Write-Warn '空き容量を確認できませんでした。'; return }
         $freeGB = [Math]::Round($disk.FreeSpace / 1GB, 1)
-        Write-Info ($qualifier + ' ドライブの空き容量: ' + $freeGB + ' GB（必要な目安: 約 38〜40 GB）')
+        Write-Info ($qualifier + ' ドライブの空き容量: ' + $freeGB + ' GB（必要: 約 38〜40 GB）')
         if ($freeGB -lt $needGB) {
-            Write-Warn ('空き容量が足りない可能性があります。モデルに約 30 GB、Python 環境に 7〜8 GB、道具類に約 0.4 GB 使います（合計 約 38〜40 GB）。')
-            Write-Info '足りないまま進めると途中で失敗します。不要なファイルを整理してからの実行をおすすめします。'
+            Write-Warn '空き容量が不足気味です（モデル 約 30 GB＋Python 環境 7〜8 GB＋道具類 約 0.4 GB）。'
+            Write-Info '足りないと途中で失敗します。不要なファイルを整理してから実行してください。'
         } else {
             Write-Good '空き容量は足りています。'
         }
@@ -133,9 +133,8 @@ function Test-PageFile {
             $desc = ($settings | ForEach-Object { $_.Name + '（初期 ' + $_.InitialSize + ' MB / 最大 ' + $_.MaximumSize + ' MB）' }) -join ', '
             Write-Warn ('ページファイルが手動設定です: ' + $desc)
         }
-        Write-Info 'ページファイルが小さすぎると、生成の途中でログも残さずに落ちることがあります。'
-        Write-Info '「システムのプロパティ」→「詳細設定」→「パフォーマンス」→「詳細設定」→「仮想メモリ」で'
-        Write-Info '「すべてのドライブのページング ファイルのサイズを自動的に管理する」を有効にすることをおすすめします。'
+        Write-Info 'ページファイルが小さいと、生成の途中でログも残さずに落ちます。'
+        Write-Info 'システムのプロパティ→詳細設定→パフォーマンス→詳細設定→仮想メモリ で「自動的に管理する」を有効にしてください。'
     } catch {
         Write-Warn 'ページファイルの設定を確認できませんでした（処理は続けます）。'
     }
@@ -152,7 +151,7 @@ function Test-Gpu {
                 $mib = 0
                 if ($first -match '(\d+)\s*MiB') { $mib = [int] $Matches[1] }
                 if ($mib -gt 0 -and $mib -lt 16000) {
-                    Write-Warn ('VRAM が ' + [Math]::Round($mib / 1024, 1) + ' GB です。16 GB 未満では動画生成が途中で失敗しやすくなります。')
+                    Write-Warn ('VRAM ' + [Math]::Round($mib / 1024, 1) + ' GB。16 GB 未満では生成が失敗しやすくなります。')
                 } else {
                     Write-Good 'NVIDIA GPU を確認しました。'
                 }
@@ -166,8 +165,8 @@ function Test-Gpu {
         $names = @(Get-CimInstance -ClassName Win32_VideoController | ForEach-Object { $_.Name })
         if ($names.Count -gt 0) { Write-Info ('画面表示のデバイス: ' + ($names -join ', ')) }
     } catch { }
-    Write-Warn 'NVIDIA の GPU を確認できませんでした。動画の生成には NVIDIA 製 GPU（VRAM 16 GB 以上）が必要です。'
-    Write-Info '導入そのものは最後まで進みます（GPU が必要になるのは生成のときです）。'
+    Write-Warn 'NVIDIA GPU を確認できませんでした。生成には NVIDIA 製 GPU（VRAM 16 GB 以上）が必要です。'
+    Write-Info '導入自体は最後まで進みます（GPU が要るのは生成のとき）。'
 }
 
 # ---------------------------------------------------------------------------
@@ -190,7 +189,7 @@ function Install-Uv {
         $zip = Join-Path $stage 'uv.zip'
         Invoke-FileDownload -Uri $UvUrl -OutFile $zip -Label ('uv ' + $UvVersion + '（約 20 MB）')
         $unpack = Join-Path $stage 'unpack'
-        Write-Info '展開しています...'
+        Write-Info '展開中…'
         Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
         $found = Get-ChildItem -LiteralPath $unpack -Recurse -File -Filter 'uv.exe' | Select-Object -First 1
         if (-not $found) { throw 'ダウンロードした uv の書庫に uv.exe が入っていませんでした。' }
@@ -215,7 +214,7 @@ function Install-Ffmpeg {
         $zip = Join-Path $stage 'ffmpeg.zip'
         Invoke-FileDownload -Uri $FfmpegUrl -OutFile $zip -Label 'ffmpeg（約 104 MB）'
         $unpack = Join-Path $stage 'unpack'
-        Write-Info '展開しています。少し時間がかかります...'
+        Write-Info '展開中…（少し時間がかかります）'
         Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
         # 展開後のフォルダ名にはバージョンが入る（ffmpeg-8.1.2-essentials_build など）。
         # 決め打ちにできないので、実行ファイルを探して場所を割り出す。
@@ -256,21 +255,17 @@ function Test-Tools {
 function Show-InstallFailureHelp {
     Write-Host ''
     Write-Host ('=' * 74) -ForegroundColor Red
-    Write-Bad '導入の途中で失敗しました。'
+    Write-Bad '導入に失敗しました。'
     Write-Host ('=' * 74) -ForegroundColor Red
     Write-Host ''
-    Write-Info '上の英語のメッセージに理由が書かれています。'
-    Write-Info ('作業の記録: ' + $script:transcriptPath)
-    Write-Info '報告のときは、この記録のファイルを添えてください。'
+    Write-Info '理由は上の英語のメッセージにあります。'
+    Write-Info ('記録: ' + $script:transcriptPath)
     Write-Host ''
-    Write-Info '会社や学校のネットワークではダウンロードが失敗することがあります。'
-    Write-Info 'ウイルス対策ソフトが tools フォルダのファイルを削除した可能性もあります。'
-    Write-Info ('その場合は tools フォルダ（' + $ToolsDir + '）を除外設定に追加してから、')
-    Write-Info 'もう一度 setup.bat を実行してください。'
+    Write-Info '会社や学校の回線ではダウンロードが失敗することがあります。'
+    Write-Info ('ウイルス対策ソフトが原因のときは tools フォルダ（' + $ToolsDir + '）を除外設定に追加して再実行してください。')
 
     Write-Host ''
-    Write-Info 'モデルのファイルが一部だけ欠けている場合は、下のフォルダを削除してから'
-    Write-Info 'もう一度 setup.bat を実行すると直ります（消したぶんは取り直されます）。'
+    Write-Info 'モデルが一部だけ欠けている場合は、下のフォルダを削除して setup.bat を再実行すると取り直します。'
     Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3'))
     Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3-components'))
     Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3-ic-lora'))
@@ -282,10 +277,9 @@ function Show-InstallFailureHelp {
     # 用意した GGUF（当プロジェクトの配布物に含まれず、取り直せないもの）が同居しうる。
     # フォルダごと消させると、再取得できない資産を失わせることになる。
     Write-Host ''
-    Write-Warn ('次のフォルダは、フォルダごと削除しないでください: ' + (Join-Path $ProjectRoot 'models\ltx-2.3-gguf'))
-    Write-Info '  このフォルダには、ご自分で用意した追加のモデルが入っていることがあります。'
-    Write-Info '  そうしたファイルはここから取り直すことができません。取り直せるのは下の'
-    Write-Info '  1 ファイルだけなので、その場合はこのファイルだけを消してください。'
+    Write-Warn ('次のフォルダはフォルダごと削除しないでください: ' + (Join-Path $ProjectRoot 'models\ltx-2.3-gguf'))
+    Write-Info '  自分で用意した GGUF が同居していることがあり、それは取り直せません。'
+    Write-Info '  取り直せるのは次の 1 ファイルだけです。消すならこれだけにしてください。'
     Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3-gguf\LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf'))
 }
 
@@ -305,9 +299,8 @@ if (Test-Path -LiteralPath $LockFile) {
         $proc = Get-Process -Id $otherPid -ErrorAction SilentlyContinue
         if ($proc -and $proc.ProcessName -match 'powershell|pwsh') {
             Write-Host ''
-            Write-Warn 'すでにセットアップが動いています。'
-            Write-Info '先に開いているセットアップの画面が終わるのを待ってください。'
-            Write-Info ('（動いているのは プロセス番号 ' + $otherPid + ' です）')
+            Write-Warn 'すでにセットアップが動いています。先に開いた画面が終わるのを待ってください。'
+            Write-Info ('（プロセス番号 ' + $otherPid + '）')
             Write-Host ''
             exit 1
         }
@@ -322,7 +315,7 @@ try {
     Start-Transcript -LiteralPath $transcriptPath | Out-Null
     $transcribing = $true
 } catch {
-    Write-Warn '作業の記録を開始できませんでした（処理は続けます）。'
+    Write-Warn '記録を開始できませんでした（処理は続けます）。'
 }
 
 $exitCode = 0
@@ -340,18 +333,10 @@ try {
     Test-Gpu
 
     Write-Head 'これから行うこと'
-    Write-Info '1. 動画の変換に使う道具（uv と ffmpeg）を、このフォルダの中に入れます。'
-    Write-Info '2. 専用の Python 環境を作ります（約 7〜8 GB）。'
-    Write-Info '3. 動画生成のモデルをダウンロードします（約 30 GB）。'
-    Write-Host ''
-    Write-Info '所要時間の目安: 光回線（下り 90〜100 Mbps）で 50 分ほど。'
-    Write-Info '                30 Mbps 程度の回線では 2 時間半ほどかかります。'
-    Write-Host ''
-    Write-Host '  ★ この画面は途中で閉じても大丈夫です。' -ForegroundColor Green
-    Write-Host '     もう一度 setup.bat を実行すれば、続きから再開します。' -ForegroundColor Green
-    Write-Host ''
-    Write-Info 'ただし、途中でパソコンがスリープすると通信が止まります。'
-    Write-Info '長時間そのままにする場合は、電源の設定でスリープを「なし」にしておいてください。'
+    Write-Info '1. 道具（uv / ffmpeg）を用意  2. 専用 Python 環境（約 7〜8 GB）  3. モデル取得（約 30 GB）'
+    Write-Info '初回はモデル取得に時間がかかります（回線速度により 1〜3 時間）。'
+    Write-Info '途中で閉じても、再実行で続きから再開します。'
+    Write-Info 'スリープすると通信が止まるので、電源設定でスリープを「なし」にしてください。'
     Write-Host ''
 
     Write-Head '道具をそろえます（uv / ffmpeg）'
@@ -369,7 +354,7 @@ try {
         Write-Good 'config.yaml.example から config.yaml を作りました。'
     } else {
         Write-Warn 'config.yaml も config.yaml.example も見つかりません。'
-        Write-Info '設定が既定値のままになり、動画生成が「お試し表示」に切り替わることがあります。'
+        Write-Info '既定値のまま進みます（生成が「お試し表示」になることがあります）。'
     }
 
     # tools/ をこのプロセスの PATH の先頭へ。ここから先の uv / ffmpeg / ffprobe は
@@ -377,7 +362,7 @@ try {
     $env:PATH = $UvDir + ';' + $FfmpegBin + ';' + $env:PATH
 
     Write-Head 'Python 環境とモデルを用意します'
-    Write-Info 'ここから先は英語の表示が続きます。進み具合はそのまま画面に出ます。'
+    Write-Info 'ここから先は英語表示になります。'
     Write-Host ''
 
     $installScript = Join-Path $PSScriptRoot 'install_ltx.ps1'
@@ -409,25 +394,17 @@ try {
         $exitCode = 1
     } else {
         Write-Host ''
-        Write-Host '========================================================================' -ForegroundColor Green
-        Write-Host '   セットアップが終わりました' -ForegroundColor Green
-        Write-Host '========================================================================' -ForegroundColor Green
+        Write-Host '   セットアップ完了' -ForegroundColor Green
         Write-Host ''
-        Write-Info '次にやること'
-        Write-Info ('  1. ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリックしてください。')
-        Write-Info '     黒い画面にアドレス（http://127.0.0.1:...）が出たら、それをブラウザで開きます。'
+        Write-Info ('次: ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリック。')
         $pkg = Get-ChildItem -LiteralPath $ProjectRoot -Filter '*.au2pkg.zip' -File -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($pkg) {
-            Write-Info '  2. AviUtl2 から使う場合は、下のファイルを AviUtl2 のプレビュー画面へ'
-            Write-Info '     ドラッグ＆ドロップしてください（プラグインの導入）。'
-            Write-Info ('     ' + $pkg.FullName)
+            Write-Info ('AviUtl2 で使うには ' + $pkg.Name + ' を AviUtl2 のプレビュー画面へドラッグ。')
         } else {
-            Write-Info '  2. AviUtl2 から使う場合は、配布物に入っている .au2pkg.zip を'
-            Write-Info '     AviUtl2 のプレビュー画面へドラッグ＆ドロップしてください。'
+            Write-Info 'AviUtl2 で使うには .au2pkg.zip を AviUtl2 のプレビュー画面へドラッグ。'
         }
-        Write-Host ''
-        Write-Info 'AviUtl2 から使うときも、先に run.bat を起動して黒い画面を開いたままにしてください。'
+        Write-Info 'AviUtl2 から使うときも run.bat の画面は開いたままにしてください。'
     }
 } catch {
     if ($exitCode -eq 0) {
@@ -438,8 +415,7 @@ try {
     }
 } finally {
     Write-Host ''
-    Write-Info ('この作業の記録: ' + $transcriptPath)
-    Write-Info 'うまくいかないときは、このファイルを添えて報告してください。'
+    Write-Info ('記録: ' + $transcriptPath)
     Write-Host ''
     if ($transcribing) { try { Stop-Transcript | Out-Null } catch { } }
     Remove-Item -LiteralPath $LockFile -Force -ErrorAction SilentlyContinue

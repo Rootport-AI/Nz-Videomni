@@ -127,3 +127,69 @@ def test_chain_payload_chunked_upsample_false_by_default(tmp_path):
     req = _chain_request()  # flag omitted -> default False
     be.generate_chain(req, tmp_path / "out")
     assert captured[0]["chunked_upsample"] is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NAG (Normalized Attention Guidance) — additive worker-payload block.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _nag_request(**over) -> GenerateRequest:
+    base = dict(
+        prompt="a busy town street",
+        width=512,
+        height=256,
+        num_frames=17,
+        frame_rate=24.0,
+        num_inference_steps=8,
+        guidance_scale=1.0,
+        seed=99,
+        pipeline="distilled",
+    )
+    base.update(over)
+    return GenerateRequest(**base)
+
+
+def test_generate_payload_carries_nag_when_enabled(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _nag_request(
+        nag_enabled=True, negative_prompt="blurry, low quality",
+        nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
+    )
+    be.generate(req, tmp_path / "out")
+    assert captured[0]["nag"] == {
+        "negative_prompt": "blurry, low quality",
+        "scale": 11.0,
+        "tau": 2.5,
+        "alpha": 0.25,
+    }
+
+
+def test_generate_payload_omits_nag_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _nag_request()  # nag_enabled omitted -> False
+    be.generate(req, tmp_path / "out")
+    assert "nag" not in captured[0]
+
+
+def test_chain_payload_carries_nag_when_enabled(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request(nag_enabled=True, negative_prompt="blurry, low quality")
+    be.generate_chain(req, tmp_path / "out")
+    assert captured[0]["nag"] == {
+        "negative_prompt": "blurry, low quality",
+        "scale": 11.0,
+        "tau": 2.5,
+        "alpha": 0.25,
+    }
+
+
+def test_chain_payload_omits_nag_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request()  # nag_enabled omitted -> False
+    be.generate_chain(req, tmp_path / "out")
+    assert "nag" not in captured[0]

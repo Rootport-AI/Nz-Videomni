@@ -39,8 +39,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.2** |
-| 日付 | **2026-07-27** |
+| 版 | **v0.5.3** |
+| 日付 | **2026-07-28** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
@@ -53,6 +53,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5 | 2026-07-02 | v04 からの全面改訂（章立てを実装現実に合わせて書き直し）。 |
 | v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-36・§3-37。 |
 | v0.5.2 | 2026-07-27 | サブマシンでの実機検証（`Docs/NEXT_SESSION_HANDOFF.md`・`README.md` §7）の反映と、実装との乖離を潰す収束修正。**§2.1**（ffmpeg は「PATH に通す」ではなく `scripts/setup.ps1` が `tools/ffmpeg` へ取り込む＝§2.4 の PATH 前置で解決される）／**§2.5**（`setup.ps1` の事前チェック 3 種＝空き容量・ページファイル・GPU がいずれも警告のみであること、および `run.ps1` の二重起動ガードの存在を追記）／**§3.3**（URL を控えに入れる処理は現行の `run.ps1` に存在しない＝利用者に見せる URL は `main.py` の起動バナーが唯一の正本、という実装に合わせて訂正）／**§4.4**（ディレクトリ構成のルートフォルダ名を実際の `Nz-LTX23-backend/` へ訂正）。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-38。 |
+| v0.5.3 | 2026-07-28 | NAG（Normalized Attention Guidance＝非CFGネガティブプロンプト機能）の追加を反映。**§6.2**（`GenerateRequest` に `nag_enabled`/`nag_scale`/`nag_tau`/`nag_alpha` の4フィールドを追加し `negative_prompt` に `max_length=2000` を付与、凍結制約に相互検証を追加。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§12.2**（共有プロンプト直下の Negative Prompt アコーディオンを追記）。凍結API契約（§6）への追加は、2026-07-21 の V2V Join 拡張（`d22706e`）と同じく既存フィールドの意味変更を伴わない加算のみで、実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §38。 |
 
 ### 0.2 スコープ
 
@@ -466,7 +467,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | フィールド | 型 | デフォルト | 制約（Field） | 説明 |
 |-----------|----|-----------|--------------|------|
 | `prompt` | str | （必須） | `min_length=1, max_length=2000` | 生成プロンプト |
-| `negative_prompt` | str | `""` | — | ネガティブプロンプト |
+| `negative_prompt` | str | `""` | `max_length=2000`（**2026-07-28追加**。従来はno-opだったため上限が無かった） | ネガティブプロンプト |
 | `width` | int | `512` | `ge=256, le=4096` | 生成幅。**64 の倍数必須**（下記バリデータ） |
 | `height` | int | `320` | `ge=128, le=4096` | 生成高。**64 の倍数必須** |
 | `crop_output` | CropOutput \| null | `null` | — | 最終 MP4 のクロップサイズ。null ならクロップなし |
@@ -477,6 +478,10 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `seed` | int | `-1` | — | `-1` は乱数シード（親プロセスで解決） |
 | `pipeline` | `Literal["distilled","two_stage_hq"]` | `"distilled"` | enum | パイプライン種別 |
 | `conditioning_images` | list[ConditioningImage] | `[]` | — | 空=T2V、1 件=最小 I2V |
+| `nag_enabled` | bool | `false` | — | **2026-07-28追加**。NAG（Normalized Attention Guidance＝CFGを使わずcross-attention出力レベルでネガティブプロンプトを効かせる非CFG手法）の有効化 |
+| `nag_scale` | float | `11.0` | `ge=1.0, le=20.0` | **2026-07-28追加**。外挿の強さ |
+| `nag_tau` | float | `2.5` | `ge=1.0, le=10.0` | **2026-07-28追加**。ノルム頭打ち上限 |
+| `nag_alpha` | float | `0.25` | `ge=0.0, le=1.0` | **2026-07-28追加**。正出力とのブレンド比率 |
 
 凍結制約（`model_validator(mode="after") validate_ltx_constraints`、順序どおり）:
 
@@ -487,6 +492,9 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 5. `pipeline == "distilled"` のとき: `num_inference_steps != 8` → ValueError、`guidance_scale != 1.0` → ValueError（Phase 1 の distilled は 8 step / CFG=1.0 固定）
 6. `len(conditioning_images) > 1` → `ValueError("Phase 1 supports at most one conditioning image")`（最小 I2V は 1 枚まで）
 7. `conditioning_images` が 1 件のとき `frame_idx != 0` → `ValueError("Phase 1 supports only frame_idx=0 for I2V")`
+8. `nag_enabled` が true かつ `negative_prompt.strip()` が空 → `ValueError("nag_enabled requires a non-empty negative_prompt")`（**2026-07-28追加**）
+
+> **NAGフィールドの補足（2026-07-28追加）**: 上記4フィールドは `GenerateRequest` に加えて `GenerateChainRequest`（`POST /generate/chain`。本書は§6ではPhase 1の単発生成のみを扱うため独立のスキーマ表は持たない）にも同一の名前・型・デフォルト・制約で存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。詳細な設計判断（式の規約・非対称設計の根拠・実装箇所一覧・実機ゲート）は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を正本とする。
 
 - `width`/`height` は two-stage distilled が stage-1 を半解像度で生成し 2x アップサンプルするため **64 の倍数**（32 からの意図的な厳格化。960x540 等の非 64 表示サイズは `crop_output` で得る）。
 - バリデータ失敗はすべて 422（`VALIDATION_ERROR` エンベロープ、§6.8）。
@@ -1129,6 +1137,8 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 ### 12.2 機能（`gradio_ui/` 準拠）
 
 タブ構成は **Generate | Clip Chain | Style LoRA | Jobs | Settings**。上段の共通バーは **server status 表示 + Refresh のみ**（旧 Load Model / Unload ボタンは廃止。モデルのロードは Settings→Models、アンロードは Settings→Danger zone に一本化）。**プロンプト**入力はタブの上に常時表示され、Generate / Clip Chain 双方で共用する。
+
+**共有 Negative Prompt アコーディオン（2026-07-28追加）**: 共有プロンプトの直下・`Tabs` の外に「Negative Prompt」アコーディオンがあり、Generate/Clip Chain 両タブから見える単一の入力群を提供する。テキスト欄（既定値 `"blurry, low quality, distorted"`）は「non-CFG Negative」チェックボックスがONのときだけ編集可能で、OFFの間は非活性のまま既定文字列を保持する。「NAG / Other」ラジオ（Other選択時は即座にNAGへ戻るフォールバック＋トースト）と、nag_scale/nag_tau/nag_alphaの3スライダーを持つ。詳細な設計判断は `Docs/VERIFICATION_LOG.md` §38、APIフィールドは§6.2を参照。
 
 **Generate タブ**:
 

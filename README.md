@@ -551,6 +551,25 @@ $env:PYTHONPATH = (Get-Location).Path
 
 詳しい仕様・設計上の決定事項は [`Docs/BATCH_A2V_WORKORDER.md`](Docs/BATCH_A2V_WORKORDER.md) を、CSV マニフェストの列定義・文字コードなど相互運用のための共通仕様は [`Docs/BATCH_A2V_CSV_SPEC.md`](Docs/BATCH_A2V_CSV_SPEC.md) を参照。
 
+### 非CFGネガティブプロンプト（NAG）
+
+蒸留版 LTX 2.3 は CFG（Classifier-Free Guidance。正負2パスの denoise でネガティブプロンプトを効かせる従来手法）が `guidance_scale=1.0` に凍結されているため、従来型のネガティブプロンプトはこれまで何も効かない no-op だった。**NAG（Normalized Attention Guidance）** は、cross-attention（テキストと映像/音声の対応を取る注意機構）の出力レベルで正プロンプト出力と負プロンプト出力を外挿・正規化・ブレンドすることで、CFG の2パス化なしに1パスのままネガティブプロンプトを効かせる非CFG手法。単発 Generate（`/generate`）・Clip Chain（`/generate/chain`）・バッチA2V（内部的に行ごとに `/generate/chain` を叩く）の**全経路で使える**。
+
+**API**（`GenerateRequest` / `GenerateChainRequest` 共通）:
+
+| フィールド | 型 | デフォルト | 範囲 | 説明 |
+|-----------|----|-----------|------|------|
+| `nag_enabled` | bool | `false` | — | ONにするとNAGが有効になる。ONで`negative_prompt`が空だと422 |
+| `nag_scale` | float | `11.0` | `1.0`〜`20.0` | 負プロンプトをどれだけ強く外挿するか |
+| `nag_tau` | float | `2.5` | `1.0`〜`10.0` | ノルムの頭打ち上限（暴れ防止） |
+| `nag_alpha` | float | `0.25` | `0.0`〜`1.0` | 正出力とのブレンド比率 |
+
+`negative_prompt` にも `max_length=2000`（`prompt` と同じ上限）が付いている。既定値 11.0/2.5/0.25 は、先行実装 [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) の `LTX2_NAG` に準拠したもの。
+
+**GUI**: 共有プロンプト欄の直下（Generate/Clip Chain 両タブの外）にある「Negative Prompt」アコーディオンから使う。テキスト欄は既定では入力不可（グレーアウト）で、「non-CFG Negative」チェックボックスをONにすると編集可能になり、下の3スライダー（scale/tau/alpha）も効くようになる。「NAG / Other」ラジオは将来の拡張用の枠で、Other を選ぶと即座に NAG へ戻るフォールバック動作になる（現状は NAG のみ実装済み）。
+
+**コスト**: cross-attention の計算が正負2回に増える（自己注意は増えないため全体では数%〜15%程度の増加見込み）。VRAM は negative context とゲート用の中間テンソル分だけ増える（768p 帯で数百MB程度の見込み）。詳しい設計判断・非対称設計（AdaLN変調の扱い）の根拠は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を参照。
+
 ---
 
 ## 6. テスト

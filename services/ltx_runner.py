@@ -1227,6 +1227,16 @@ class _RealBackend:
             "reference_video": reference_payload,
             "output_path": str(target),
         }
+        # NAG (additive): only present when enabled, so a non-NAG job's payload
+        # stays byte-identical to pre-NAG (regression contract, mirrors the
+        # reference_video/loras additive style above).
+        if request.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": request.negative_prompt,
+                "scale": float(request.nag_scale),
+                "tau": float(request.nag_tau),
+                "alpha": float(request.nag_alpha),
+            }
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1311,6 +1321,12 @@ class _RealBackend:
         single-generate ``reference_payload`` (see :meth:`_RealBackend.generate`).
         Absent when no reference video was requested, so the payload stays
         byte-identical to before that case.
+
+        NAG (Normalized Attention Guidance, ADDITIVE/optional): when
+        ``chain.nag_enabled`` an additive ``nag`` block ({negative_prompt, scale,
+        tau, alpha}) is added to the worker payload, applying uniformly across
+        every clip/stage. Absent for a non-NAG chain (payload byte-identical to
+        before).
         """
         if not self.loaded:
             self.load()
@@ -1397,6 +1413,16 @@ class _RealBackend:
                     chain.conditioning_attention_strength
                 )
             payload["reference_video"] = reference_payload
+
+        # NAG (additive): only present when enabled, so a non-NAG chain's payload
+        # stays byte-identical to pre-NAG (regression contract).
+        if chain.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": chain.negative_prompt,
+                "scale": float(chain.nag_scale),
+                "tau": float(chain.nag_tau),
+                "alpha": float(chain.nag_alpha),
+            }
 
         with self._lock:
             try:

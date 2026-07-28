@@ -169,3 +169,145 @@ def test_distilled_requires_8_steps(client):
     )
     assert r.status_code == 422
     assert "num_inference_steps=8" in r.text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NAG (Normalized Attention Guidance) — GenerateRequest / GenerateChainRequest.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CHAIN_BASE = {
+    "prompt": "a serene mountain lake at dawn",
+    "width": 384,
+    "height": 256,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "guidance_scale": 1.0,
+    "pipeline": "distilled",
+    "overlap_frames": 2,
+    "overlap_strength": 0.5,
+    "clips": [{"num_frames": 25}, {"num_frames": 25}],
+}
+
+
+def test_nag_enabled_requires_nonempty_negative_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "nag_enabled": True, "negative_prompt": ""},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_requires_nonempty_negative_generate_whitespace_only(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "nag_enabled": True, "negative_prompt": "   "},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_requires_nonempty_negative_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "nag_enabled": True, "negative_prompt": ""},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_requires_nonempty_negative_chain_whitespace_only(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "nag_enabled": True, "negative_prompt": "   "},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_with_negative_prompt_accepted_and_defaults():
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+        nag_enabled=True, negative_prompt="blurry, low quality",
+    )
+    assert req.nag_enabled is True
+    assert req.nag_scale == 11.0
+    assert req.nag_tau == 2.5
+    assert req.nag_alpha == 0.25
+
+
+def test_nag_enabled_with_negative_prompt_accepted_and_defaults_chain():
+    from api.models import GenerateChainRequest
+
+    req = GenerateChainRequest(
+        **{**CHAIN_BASE, "nag_enabled": True, "negative_prompt": "blurry, low quality"}
+    )
+    assert req.nag_enabled is True
+    assert req.nag_scale == 11.0
+    assert req.nag_tau == 2.5
+    assert req.nag_alpha == 0.25
+
+
+def test_nag_scale_out_of_range_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x", "nag_scale": 0.5},
+    )
+    assert r.status_code == 422
+
+
+def test_nag_tau_out_of_range_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x", "nag_tau": 0.5},
+    )
+    assert r.status_code == 422
+
+
+def test_nag_alpha_out_of_range_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x", "nag_alpha": 1.5},
+    )
+    assert r.status_code == 422
+
+
+def test_nag_fields_omitted_defaults_disabled(client):
+    # Regression guard: a request that omits every nag field is unaffected.
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49},
+    )
+    assert r.status_code == 202
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.nag_enabled is False
+
+
+def test_negative_prompt_over_2000_chars_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x" * 2001},
+    )
+    assert r.status_code == 422
+
+
+def test_negative_prompt_over_2000_chars_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "negative_prompt": "x" * 2001},
+    )
+    assert r.status_code == 422

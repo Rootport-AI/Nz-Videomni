@@ -69,7 +69,18 @@ class LoraSpec(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
-    negative_prompt: str = ""
+    negative_prompt: str = Field("", max_length=2000)
+
+    # NAG（Normalized Attention Guidance, arXiv:2505.21179）— CFG を使わない
+    # ネガティブプロンプト手法。蒸留パイプラインは guidance_scale=1.0 固定
+    # （CFG 2パス denoise は不可）のため、代わりに cross-attention の出力を
+    # 正プロンプト出力と負プロンプト出力から外挿・正規化してブレンドする。1本の
+    # negative_prompt が映像・音声どちらの text cross-attention にも効く。既定値
+    # 11.0 / 2.5 / 0.25 は kijai/ComfyUI-KJNodes の LTX2_NAG 実装と同一。
+    nag_enabled: bool = False
+    nag_scale: float = Field(11.0, ge=1.0, le=20.0)
+    nag_tau: float = Field(2.5, ge=1.0, le=10.0)
+    nag_alpha: float = Field(0.25, ge=0.0, le=1.0)
 
     # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
@@ -186,6 +197,8 @@ class GenerateRequest(BaseModel):
                 "reference_video_strength requires at least one lora "
                 "(it only adjusts an IC-LoRA reference conditioning)"
             )
+        if self.nag_enabled and not self.negative_prompt.strip():
+            raise ValueError("nag_enabled requires a non-empty negative_prompt")
         return self
 
     @property
@@ -297,7 +310,15 @@ class GenerateChainRequest(BaseModel):
     """
 
     prompt: str = Field(..., min_length=1, max_length=2000)
-    negative_prompt: str = ""
+    negative_prompt: str = Field("", max_length=2000)
+
+    # NAG（Normalized Attention Guidance, arXiv:2505.21179）— CFG を使わない
+    # ネガティブプロンプト手法。詳細は GenerateRequest の同名フィールドを参照。
+    # チェーンでは全クリップ・全ステージ共通で1本の negative_prompt が効く。
+    nag_enabled: bool = False
+    nag_scale: float = Field(11.0, ge=1.0, le=20.0)
+    nag_tau: float = Field(2.5, ge=1.0, le=10.0)
+    nag_alpha: float = Field(0.25, ge=0.0, le=1.0)
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -515,6 +536,8 @@ class GenerateChainRequest(BaseModel):
                 "(a control adapter's reference conditioning would compete with "
                 "the frozen V2V source head at clip 0)"
             )
+        if self.nag_enabled and not self.negative_prompt.strip():
+            raise ValueError("nag_enabled requires a non-empty negative_prompt")
         return self
 
     def clip_prompt(self, index: int) -> str:
@@ -523,11 +546,24 @@ class GenerateChainRequest(BaseModel):
         return override if override else self.prompt
 
     def to_clip_request(self, index: int) -> "GenerateRequest":
-        """Build the per-clip :class:`GenerateRequest` (clip 0 keeps its images)."""
+        """Build the per-clip :class:`GenerateRequest` (clip 0 keeps its images).
+
+        LIVE PATH: ``services/job_store.py:135`` (``create_chain_if_idle``) calls
+        this on every chain job creation, and the result is re-validated as a
+        ``GenerateRequest`` and stored as ``JobRecord.request``. Any field added
+        to ``GenerateChainRequest`` that is not transcribed here silently drops
+        out of the stored/serialized request for a chain job — omitting the nag
+        fields would make chain creation 500 (nag_enabled True + empty
+        negative_prompt would fail GenerateRequest's own validator).
+        """
         clip = self.clips[index]
         return GenerateRequest(
             prompt=self.clip_prompt(index),
             negative_prompt=self.negative_prompt,
+            nag_enabled=self.nag_enabled,
+            nag_scale=self.nag_scale,
+            nag_tau=self.nag_tau,
+            nag_alpha=self.nag_alpha,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

@@ -2306,3 +2306,67 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 ### 37.4 参照
 
 詳細な経緯・実機ログ・フロント側の修正差分はフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。バックエンド側のV2V継続初回実装は本ログ§24、2026-07-21のAPI拡張（`is_v2v`／`joined`／`source_tail_seconds`／`trimmed_source_seconds`／`source_fps`）はコミット `d22706e`（`LTX23_Backend_Specification.md` §6.1／§6.3に反映済み）。
+
+---
+
+## 38. ★NAG（非CFGネガティブプロンプト）機能＝実装完了・機械検証（selfcheck・pytest）全PASS・**実機ゲート未実施（オーナー実機待ち）**（2026-07-28）
+
+> **正本＝本節。** 蒸留版 LTX 2.3 は CFG（Classifier-Free Guidance。正負2パスのdenoiseでネガティブプロンプトを効かせる従来手法）が `guidance_scale=1.0` に凍結されているため、従来型のネガティブプロンプトはこれまで完全な no-op だった。NAG（Normalized Attention Guidance, arXiv:2505.21179）は、cross-attention（テキストと映像/音声の対応を取る注意機構）の出力レベルで正プロンプト出力と負プロンプト出力を外挿・正規化・ブレンドすることで、CFGの2パス化なしに1パスのままネガティブプロンプトを効かせる非CFG手法。適用範囲は単発Generate（`POST /generate`）・Clip Chain（`POST /generate/chain`）・バッチA2V（内部的に行ごとに`/generate/chain`を叩く）の全経路。Wave 0〜3（エンジンコア→エンジン配線→API/runner→GUI）を段階的に実装し、本節（Wave 4）で実機ゲート前の最終ドキュメント化を行う。
+
+### 38.1 決定事項
+
+1. **式の規約**: 先行実装 [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) の `LTX2_NAG`（`nodes/ltxv_nodes.py`）実コードを取得・精読し、その規約に完全準拠する設計にした。正プロンプト出力を Z⁺、負プロンプト出力を Z⁻ とすると、外挿式は `Z̃ = s・Z⁺ − (s−1)・Z⁻`（`s`=nag_scale）。以降、L1ノルム比 `R = ‖Z̃‖₁ / ‖Z⁺‖₁` に対して `min(R, τ)/R`（`τ`=nag_tau）でノルムを頭打ちにし、`α`（nag_alpha）で正出力とブレンドしてから、per-head ゲート（`2・sigmoid(to_gate_logits(x))`）→ `to_out` という順で結合する（結合はゲートより前）。既定値 `scale=11.0 / tau=2.5 / alpha=0.25` も KJNodes の既定値をそのまま踏襲した。
+2. **非対称設計の根拠**: 実装時の敵対的レビュー（Opusサブエージェントによる17件指摘）で「negative側にもAdaLN変調を掛けて対称化すべき」という指摘が上がったが、採用しなかった。理由は、本番で使う3種のGGUF量子化モデルすべてが `cross_attention_adaln: true` をメタデータに埋め込んでおり、実際の推論では positive context が毎ステップ `context*(1+scale_kv)+shift_kv` の変調を受けてからattentionに渡る一方、KJNodes参照実装のコードを直接照合したところ、そちらも同じ非対称（positiveは変調済み・NAGのnegative contextは生のまま）で動いていることを確認したため。既定値11.0/2.5/0.25はこの非対称の下でチューニングされた値であり、対称化すると参照実装から意味的に乖離してしまう。指摘は2体の独立検証エージェント（ローカルコード確認＋KJNodes実物のWeb取得）で裏取りした上で不採用と判断した。
+3. **空ネガティブは422**: `nag_enabled=True` かつ `negative_prompt` が空（または空白のみ）の場合、両リクエストモデル（`GenerateRequest`/`GenerateChainRequest`）のバリデータが `ValueError("nag_enabled requires a non-empty negative_prompt")` を送出し、`422 VALIDATION_ERROR` として返る。GUI側にも同内容のprecheckトースト（`nag_msg_negative_required`）があり、API呼び出し自体を行わずに止める。
+4. **UIルール**: 共有プロンプト欄の直下（Generate/Clip Chain両タブの外）に「Negative Prompt」アコーディオンを新設し一本化した。中の入力欄（`negative`、既定値`"blurry, low quality, distorted"`）は「non-CFG Negative」チェックボックスがONのときだけ編集可能になり、OFFの間は非活性（グレーアウト）表示のまま既定文字列が残る。「NAG / Other」ラジオはOtherを選ぶと即座にNAGへ復帰しトースト通知が出る簡易フォールバック（Other方式の実体は未実装。§38.5参照）。
+5. **無効時バイト一致の構造保証**: `NagState`が「未要求」の場合、`NagService.install()`は先頭のbool判定1回で即returnし、cross-attentionのforwardへのパッチを一切当てない。したがって`nag_enabled=False`のジョブは、エンジン内部の挙動がNAG導入前とバイト単位で完全に一致する（パッチ自体が存在しないため、恒等短絡のような数値的な作り込みに依存しない構造的な保証）。同様にworkerペイロードも無効時は`payload["nag"]`キー自体が存在しない加算方式で、既存のkey-order契約テストが無改修で通っている。
+
+### 38.2 実装箇所一覧
+
+- **`engine/transformer/nag_service.py`（新規）**: NAGコア。`NagParams`（negative_prompt/scale/tau/alpha の frozen dataclass）、`NagState`（1ジョブ分のミュータブル状態）、`encode_negative(text_encoder, prompt)`（negativeを1回エンコードし映像・音声両方のcontextを返す共通ヘルパ）、`nag_combine(z_pos, z_neg, scale, tau, alpha)`（§38.1の式。冒頭に`alpha==0.0 or scale==1.0`の恒等短絡）、`_make_nag_forward`（cross-attention forwardの等価展開パッチ。pe/mask/perturbationが非Noneなど想定外の呼び出しはRuntimeErrorでfail-loud）、`NagService(state_provider).install(transformer)`（未要求なら即return 0、要求済みでcontext未設定ならRuntimeError）。
+- **`engine/transformer/nag_selfcheck.py`（新規）**: `.venv-engine`のpythonで直接実行するエンジンvenv用の自己検証（pytest非収集）。6項目は§38.3参照。
+- **`engine/pipeline/fast_video_pipeline.py`**: `__init__`末尾で`_install_nag()`を無条件に呼び`ledger.transformer`をラップ（block-swap/GGUFラップの後、最後に足す）。`_set_nag_job`（IC-LoRAの`_set_ic_job`と同型）。`_run_inference`の`try:`開始位置を既存4本のモジュールグローバル差し替え区間の前に前倒しし、`encode_text`パッチを含む計5本すべてを`finally`復元の傘に入れた（既存の潜在欠陥＝パッチ適用中の例外でグローバルが復元されない問題も同時に解消）。`_make_nag_encode_text`がpositiveを素通ししつつ同じ生きたtext_encoderでnegativeを1回追加エンコードする。`generate`/`generate_chain`のシグネチャ末尾に`nag: NagParams | None = None`を追加し、両方とも`try/finally: self._nag.reset()`。
+- **`engine/pipeline/chain_pipeline.py`**: `run_chain`に`nag=None`引数を追加。positiveエンコードループ直後・`del text_encoder`直前（text_encoder生存中）でnegativeエンコードを実施。stage-1/2とも同一transformer・同一negativeを共用。
+- **`engine/worker.py`**: `_resolve_nag(msg)`でNagParamsを復元し、`_do_generate`/`_do_generate_chain`から`_PIPE.generate(...)`/`generate_chain(...)`へ渡す。ログ行に`nag=on/off`を出力。
+- **`api/models.py`**: `GenerateRequest`/`GenerateChainRequest`双方に`nag_enabled: bool = False`・`nag_scale: float = Field(11.0, ge=1.0, le=20.0)`・`nag_tau: float = Field(2.5, ge=1.0, le=10.0)`・`nag_alpha: float = Field(0.25, ge=0.0, le=1.0)`を追加。`negative_prompt`に`max_length=2000`（promptと同じ上限。これまでno-opだったため上限が無かった）。バリデータに§38.1の3の相互検証。`to_clip_request`（本番経路＝`services/job_store.py`の`create_chain_if_idle`が毎回呼ぶ）に4フィールドを転記。
+- **`services/ltx_runner.py`**: `_RealBackend.generate`/`generate_chain`のペイロード末尾に、有効時のみ`payload["nag"] = {negative_prompt, scale, tau, alpha}`を加算（無効時はキー自体が存在しない）。
+- **`gradio_ui/i18n.py`**: `nag_accordion`/`nag_note`/`nag_enable`/`nag_lbl_method`/`nag_method_nag`/`nag_method_other`/`nag_msg_fallback`/`nag_lbl_scale`/`nag_lbl_tau`/`nag_lbl_alpha`/`nag_msg_negative_required`をen/ja両方に新設。既存`info_negative`の文言差し替え。
+- **`gradio_ui/ui.py`**: 旧・タブ内グレーアウトNegative Prompt欄（Generate/Chain両方）を撤去し、共有プロンプト直下・Tabsの外に共通アコーディオンを新設。`on_nag_enable_toggle`（interactive切替のみ）・`on_nag_method_change`（"nag"以外を選ぶと即NAGへ復帰＋トースト）ハンドラを追加。
+- **`gradio_ui/handlers.py`**: `build_a2v_chain_payload`・単発`generate`ハンドラ・chainハンドラそれぞれの末尾にnag 4値を追加し、有効時のみペイロードへ加算。
+
+### 38.3 機械検証の結果
+
+**エンジンvenvでのselfcheck（`.venv-engine`のpythonで`python -m engine.transformer.nag_selfcheck`を実行）＝6/6 PASS**（本節作成時に再実行し確認済み）:
+
+```
+[PASS] nag_combine matches KJNodes reference (bf16+fp32, both clamp branches)
+[PASS] identity short-circuit (alpha=0 / scale=1) is the same z_pos object
+[PASS] zero-norm degenerate inputs produce no NaN/Inf
+[PASS] real BasicAVTransformerBlock: OFF no-op, ON matches reference, fail-loud shapes
+[PASS] NagService.install() on fake transformer with NAG off is a no-op
+[PASS] NagService.install() raises when requested but negative context not encoded
+
+6/6 checks passed
+```
+
+4番目の「real BasicAVTransformerBlock」チェックは、モックではなく実物の`BasicAVTransformerBlock`を`cross_attention_adaln=True`・`apply_gated_attention=True`（＝本番3モデルの実際の構成）でCPU上に小サイズ構築し、(a) NAG OFFではパッチ0件・出力がビット一致、(b) NAG ONでは「positiveは変調済み・negativeは生」という非対称を踏まえた手書き参照計算と一致、(c) 結合順（NAG→ゲート→to_out）が正しいこと、の3点を検証している。
+
+**アプリvenvでのpytest（`.venv\Scripts\python.exe -m pytest -q`）＝658 passed / 6 skipped**（skipはいずれも`torch`未導入によるエンジン系テストの収集スキップ＝アプリvenvに元々torchを入れない設計のための既知スキップで、NAG関連ではない）。Wave 0〜3合計で新規テスト+37件程度を追加した一方、**既存テストの改修は「positional `_chain_args`ヘルパ」と「i18nキー一覧」の2件に限定**した。これは狙って達成した性質で、NAGが既存の生成経路に対して純粋な加算的拡張（無効時は挙動もペイロードも従来と不変）であることの、テストスイート側からの裏付けになっている。
+
+### 38.4 実機ゲート表（オーナー実機待ち）
+
+以下は承認済み計画書の「実機検証チェックリスト」を転記したもの。**全項目未実施。**
+
+| ゲート | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| G0（最重要） | 回帰: NAG OFFで単発T2V/I2V/A2V/chain 2clips/バッチ2行 | 出力mp4のSHA256が変更前とバイト一致・peak VRAMも同値 | ⬜ 未実施 |
+| G1 | ログ | `NAG installed on <実測数> cross-attention modules ...`（期待96）が1ジョブ1回出力される（chainでも1回） | ⬜ 未実施 |
+| G2 | 恒等 | alpha=0 / scale=1でOFFと一致（恒等短絡によりビット一致が期待値。cuBLAS差ならPSNR≥50dB許容＋要因記録） | ⬜ 未実施 |
+| G3（オーナー目視） | 効果 | 同一seedでOFF/ONのSHA256が異なり、negativeの概念が抑制され、破綻がない（破綻時はalpha 0.25→0.15、scale 11→5で再確認） | ⬜ 未実施 |
+| G4 | 音声到達 | 音声寄りnegativeで音声トラックが変化することを聴取確認 | ⬜ 未実施 |
+| G5 | コスト | VRAM増分ピーク（z_neg＋z_gの2テンソル分、768p stage-2タイルで約+350MB目安・16GB内）と時間増（cross-attentionは倍だがself-attention支配のため全体数%〜15%程度の見込み）を実測。バッチA2Vは行ごとにGemmaロード＋negativeエンコードが加算されるため行あたりの時間増も実測 | ⬜ 未実施 |
+| G6 | 経路網羅 | ONで単発T2V/I2V/A2V/chain/chain+V2V/chain+IC-LoRA/バッチ/chunked_upsampleすべて完走 | ⬜ 未実施 |
+| G7 | 併用非干渉 | IC-LoRA＋NAG、block-swap小窓＋NAG、GGUF既定経路のいずれも問題なく完走 | ⬜ 未実施 |
+| V-UI | 目視6項目 | 共有アコーディオンが両タブから見える／旧2欄消滅／チェックOFFグレーアウト・ONで解除／Other→NAG復帰トースト／言語切替追従／有効＋空negativeはトーストのみでジョブ不発 | ⬜ 未実施 |
+
+**§38は実機ゲート未実施の状態でクローズしない。** オーナーの実機検証完了後、本節に結果を追記すること。

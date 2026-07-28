@@ -818,3 +818,51 @@ def test_start_allows_no_shared_image_when_all_rows_have_own_image(tmp_path):
 
 def test_get_runner_is_singleton():
     assert get_runner() is get_runner()
+
+
+# --------------------------------------------------------------------------- #
+# NAG (Normalized Attention Guidance / non-CFG Negative): BatchSnapshot's four
+# nag_* fields must reach every row's /generate/chain payload (via
+# build_a2v_chain_payload) when enabled, and stay entirely absent by default.
+# --------------------------------------------------------------------------- #
+def test_batch_nag_enabled_snapshot_adds_four_keys_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, negative="blurry",
+                     nag_enabled=True, nag_scale=9.0, nag_tau=3.0, nag_alpha=0.4)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["nag_enabled"] is True
+    assert p["nag_scale"] == 9.0
+    assert p["nag_tau"] == 3.0
+    assert p["nag_alpha"] == 0.4
+
+
+def test_batch_default_snapshot_omits_nag_keys_from_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+        assert key not in p

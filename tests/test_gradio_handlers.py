@@ -1723,7 +1723,13 @@ def test_chain_per_clip_prompt_lora_is_preserved():
 def test_prompt_unification_i18n_keys_present_both_langs():
     from gradio_ui import LABELS
 
-    for k in ("info_negative",):
+    for k in (
+        "info_negative",
+        "nag_accordion", "nag_note", "nag_enable",
+        "nag_lbl_method", "nag_method_nag", "nag_method_other",
+        "nag_msg_fallback", "nag_lbl_scale", "nag_lbl_tau", "nag_lbl_alpha",
+        "nag_msg_negative_required",
+    ):
         assert LABELS["en"].get(k), f"missing EN: {k}"
         assert LABELS["ja"].get(k), f"missing JA: {k}"
 
@@ -2705,3 +2711,176 @@ def test_build_a2v_chain_payload_coerces_numeric_types():
     assert payload["seed"] == 9
     # negative_prompt=None coalesces to "" exactly like the handler branch.
     assert payload["negative_prompt"] == ""
+
+
+# --------------------------------------------------------------------------- #
+# NAG (Normalized Attention Guidance / non-CFG Negative) -- additive keys on
+# build_a2v_chain_payload, the single/chain handlers' request bodies, and the
+# precheck that rejects an enabled-but-empty negative prompt with zero API
+# calls (same discipline as every other precheck above).
+# --------------------------------------------------------------------------- #
+def test_build_a2v_chain_payload_nag_enabled_appends_four_keys_in_order():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-7",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        nag_scale=9.0,
+        nag_tau=3.0,
+        nag_alpha=0.4,
+    )
+    assert list(payload.keys())[-4:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+    ]
+    assert payload["nag_enabled"] is True
+    assert payload["nag_scale"] == 9.0
+    assert payload["nag_tau"] == 3.0
+    assert payload["nag_alpha"] == 0.4
+
+
+def test_build_a2v_chain_payload_nag_default_omits_all_four_keys():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-8",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+        assert key not in payload
+
+
+def test_generate_handler_nag_enabled_adds_body_fields():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nag"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "blurry", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        nag_enabled=True, nag_scale=9.0, nag_tau=3.0, nag_alpha=0.4,
+    )
+    _run_until_job_started(gen)
+    assert captured["nag_enabled"] is True
+    assert captured["nag_scale"] == 9.0
+    assert captured["nag_tau"] == 3.0
+    assert captured["nag_alpha"] == 0.4
+
+
+def test_generate_handler_nag_default_omits_body_fields():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nonag"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+        assert key not in captured
+
+
+def test_generate_nag_enabled_empty_negative_precheck_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "   ", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
+        nag_enabled=True,
+    ))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_chain_handler_nag_enabled_adds_body_fields_positional_order():
+    # Exercises the POSITIONAL contract (chunked_upsample -> nag x4 ->
+    # src_audio) that ui.py's click inputs / _chain_args rely on.
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nag"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    # _chain_args (this file's helper) stops at ``config``; nag_* are passed as
+    # keywords directly to ``chain`` (they sit further along the signature,
+    # after the S6/mode params this helper never fills in).
+    gen = chain(*_chain_args(negative="blurry", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), nag_enabled=True, nag_scale=8.0, nag_tau=4.0, nag_alpha=0.5)
+    _run_chain_until_started(gen)
+    assert captured["nag_enabled"] is True
+    assert captured["nag_scale"] == 8.0
+    assert captured["nag_tau"] == 4.0
+    assert captured["nag_alpha"] == 0.5
+
+
+def test_chain_handler_nag_default_omits_body_fields():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nonag"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+        assert key not in captured
+
+
+def test_chain_nag_enabled_empty_negative_precheck_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(negative="", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), nag_enabled=True))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None

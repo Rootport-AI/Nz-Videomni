@@ -145,6 +145,11 @@ class BatchSnapshot:
         poll_interval   seconds between GET /jobs/{id} polls.
         poll_timeout_s  per-row polling ceiling in seconds (a row that has not
                         reached a terminal state by then is marked Failed).
+
+    NAG (non-CFG Negative)
+        nag_enabled, nag_scale, nag_tau, nag_alpha — forwarded to
+        build_a2v_chain_payload for every row; defaults reproduce the pre-NAG
+        payload (NAG off) byte-for-byte.
     """
 
     wav_dir: str
@@ -166,6 +171,10 @@ class BatchSnapshot:
     reference_strength: float = 1.0
     poll_interval: float = 2.0
     poll_timeout_s: float = 7200.0
+    nag_enabled: bool = False
+    nag_scale: float = 11.0
+    nag_tau: float = 2.5
+    nag_alpha: float = 0.25
 
 
 # --------------------------------------------------------------------------- #
@@ -408,6 +417,10 @@ class BatchRunner:
                 reference_video_id=ref_id,
                 control_adherence=snap.control_adherence,
                 reference_strength=snap.reference_strength,
+                nag_enabled=snap.nag_enabled,
+                nag_scale=snap.nag_scale,
+                nag_tau=snap.nag_tau,
+                nag_alpha=snap.nag_alpha,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

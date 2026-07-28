@@ -535,3 +535,67 @@ def test_batch_prompt_foolproof_reason_codes_localize():
         out = _batch_start_reason("prompt-rows-empty:3", lang)
         assert out == LABELS[lang]["batch_msg_prompt_rows_empty"].format(n="3")
         assert "3" in out
+
+
+# --------------------------------------------------------------------------- #
+# NAG (Normalized Attention Guidance / non-CFG Negative): the shared
+# accordion above gr.Tabs() replaces the two old per-tab greyed-out Negative
+# textboxes with ONE shared textbox + toggle + method radio + 3 sliders.
+# --------------------------------------------------------------------------- #
+def test_exactly_one_negative_textbox_and_it_is_disabled_by_default():
+    demo = _demo()
+    negatives = [c for c in demo.blocks.values()
+                 if isinstance(c, gr.Textbox)
+                 and c.label == LABELS["en"]["lbl_negative"]]
+    assert len(negatives) == 1, "the two old per-tab Negative textboxes must be gone"
+    assert negatives[0].interactive is False
+    assert negatives[0].value == "blurry, low quality, distorted"
+
+
+def test_nag_accordion_exists_closed_by_default():
+    demo = _demo()
+    acc = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Accordion)
+               and c.label == LABELS["en"]["nag_accordion"])
+    assert acc.open is False
+
+
+def test_nag_sliders_have_expected_defaults_and_ranges():
+    demo = _demo()
+    sliders = {s.label: s for s in demo.blocks.values() if isinstance(s, gr.Slider)}
+    scale = sliders[LABELS["en"]["nag_lbl_scale"]]
+    tau = sliders[LABELS["en"]["nag_lbl_tau"]]
+    alpha = sliders[LABELS["en"]["nag_lbl_alpha"]]
+    assert (scale.minimum, scale.maximum, scale.value) == (1.0, 20.0, 11.0)
+    assert (tau.minimum, tau.maximum, tau.value) == (1.0, 10.0, 2.5)
+    assert (alpha.minimum, alpha.maximum, alpha.value) == (0.0, 1.0, 0.25)
+
+
+def test_nag_enable_toggle_flips_negative_textbox_interactivity():
+    demo = _demo()
+    fn = demo.on_nag_enable_toggle
+    assert fn(True)["interactive"] is True
+    assert fn(False)["interactive"] is False
+
+
+def test_nag_method_change_falls_back_to_nag_with_toast():
+    demo = _demo()
+    fn = demo.on_nag_method_change
+    other = fn("other", "en")
+    assert other["value"] == "nag"
+    nag = fn("nag", "en")
+    assert "value" not in nag
+
+
+def test_nag_method_choices_translate_on_language_switch():
+    demo = _demo()
+    registry = demo.label_registry
+    nag_method = next(c for c, k, a in registry if k == "nag_lbl_method" and a == "label")
+
+    updates = demo.switch_language("ja", {})
+    idx = [c for c, _k, _a in registry].index(nag_method)
+    upd = updates[idx]
+    assert upd["choices"] == [
+        (LABELS["ja"]["nag_method_nag"], "nag"),
+        (LABELS["ja"]["nag_method_other"], "other"),
+    ]

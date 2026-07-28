@@ -379,6 +379,41 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         prompt = reg(gr.Textbox(label=L("lbl_prompt"), lines=3,
                                 placeholder=L("ph_prompt")), "lbl_prompt")
 
+        # ---- shared Negative Prompt / NAG accordion (always visible, above the
+        # tabs) ----
+        # NAG (Normalized Attention Guidance) is the ONLY way a negative prompt
+        # has any effect: the distilled model is frozen at CFG=1, so a plain
+        # negative_prompt is otherwise a no-op. One negative prompt is shared by
+        # Generate / Clip Chain / Batch A2V (same rationale as the shared prompt
+        # box above), so this accordion sits outside gr.Tabs() rather than being
+        # duplicated per tab. The textbox variable name stays ``negative`` (the
+        # pre-NAG Generate-tab component's name) so the existing generate_btn
+        # inputs list / dispatch signature below need no renumbering.
+        with gr.Accordion(L("nag_accordion"), open=False) as nag_accordion:
+            reg(nag_accordion, "nag_accordion", "label")
+            reg(gr.Markdown(L("nag_note"), elem_classes=["note"]), "nag_note", "value")
+            negative = reg(gr.Textbox(label=L("lbl_negative"),
+                                      value="blurry, low quality, distorted",
+                                      interactive=False,
+                                      info=L("info_negative"),
+                                      elem_classes=["negative-greyed"]),
+                           "lbl_negative")
+            nag_enabled = reg(gr.Checkbox(value=False, label=L("nag_enable")), "nag_enable")
+            # "Other" is a placeholder for a future non-NAG method; selecting it
+            # immediately snaps back to "nag" (on_nag_method_change below) with a
+            # gr.Info toast, per owner's confirmed requirement.
+            nag_method = reg(gr.Radio(
+                choices=[(L("nag_method_nag"), "nag"), (L("nag_method_other"), "other")],
+                value="nag", label=L("nag_lbl_method"),
+            ), "nag_lbl_method")
+            with gr.Row():
+                nag_scale = reg(gr.Slider(1.0, 20.0, value=11.0, step=0.5,
+                                          label=L("nag_lbl_scale")), "nag_lbl_scale")
+                nag_tau = reg(gr.Slider(1.0, 10.0, value=2.5, step=0.05,
+                                        label=L("nag_lbl_tau")), "nag_lbl_tau")
+                nag_alpha = reg(gr.Slider(0.0, 1.0, value=0.25, step=0.01,
+                                          label=L("nag_lbl_alpha")), "nag_lbl_alpha")
+
         with gr.Tabs():
             # ============================ Generate ============================
             with gr.Tab(L("tab_gen")) as tab_gen:
@@ -387,14 +422,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     # LEFT: inputs
                     with gr.Column(scale=3):
                         # Prompt lives in the shared draft box above the tabs.
-                        # Negative is kept but greyed out (distilled CFG=1 => no
-                        # effect); the default value + sent payload are unchanged.
-                        negative = reg(gr.Textbox(label=L("lbl_negative"),
-                                                  value="blurry, low quality, distorted",
-                                                  interactive=False,
-                                                  info=L("info_negative"),
-                                                  elem_classes=["negative-greyed"]),
-                                       "lbl_negative")
+                        # Negative prompt / NAG now live in the shared accordion
+                        # above gr.Tabs() (see ``negative`` there).
 
                         # quality mode (two_stage_hq is non-selectable in S1)
                         qmode = reg(gr.Radio(
@@ -721,15 +750,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # was removed.
 
                         # Shared prompt lives in the draft box above the tabs
-                        # (it is the common base for every clip). Negative is
-                        # kept but greyed out (distilled CFG=1 => no effect);
-                        # default value + sent payload unchanged.
-                        chain_negative = reg(gr.Textbox(label=L("lbl_negative"),
-                                                        value="blurry, low quality, distorted",
-                                                        interactive=False,
-                                                        info=L("info_negative"),
-                                                        elem_classes=["negative-greyed"]),
-                                             "lbl_negative")
+                        # (it is the common base for every clip). Negative
+                        # prompt / NAG now live in the shared accordion above
+                        # gr.Tabs() (see ``negative`` there) -- this tab reuses
+                        # that SAME component; there is no chain_negative.
                         chain_qmode = reg(gr.Radio(
                             choices=[(L("qmode_fast"), "distilled"),
                                      (L("qmode_hq"), "two_stage_hq")],
@@ -1117,6 +1141,22 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 return gr.update(interactive=False, value=None)
             return gr.update(interactive=True)
 
+        # NAG (non-CFG Negative): the shared negative-prompt textbox is
+        # interactive ONLY while the checkbox is on (CSS's .negative-greyed
+        # selectors key off the disabled/readonly state, so no extra CSS
+        # follow-up is needed here).
+        def on_nag_enable_toggle(enabled):
+            return gr.update(interactive=bool(enabled))
+
+        # "Other" is a placeholder for a future non-NAG method (owner-confirmed
+        # requirement): picking it immediately reverts to "nag" with a gr.Info
+        # toast instead of silently accepting an unimplemented method.
+        def on_nag_method_change(method, lang):
+            if method != "nag":
+                gr.Info(L("nag_msg_fallback", lang))
+                return gr.update(value="nag")
+            return gr.update()
+
         # ---- Generate button dispatch (single vs. batch A2V) ----
         # The middle stage of the Generate button's click chain. When batch A2V
         # is OFF it delegates verbatim to the frozen ``generate`` handler (same
@@ -1139,10 +1179,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
                      batch_enable_v, batch_rows_v, batch_wav_dir_v,
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
-                     batch_img_dir_v):
+                     batch_img_dir_v,
+                     nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v):
             if not batch_enable_v:
                 # Single-generation path: byte-identical delegation (first 40
-                # positionals ARE the generate() signature).
+                # positionals ARE the generate() signature); nag_* are passed
+                # as keywords since they sit at the very end of generate()'s
+                # signature.
                 yield from generate(
                     prompt_v, negative_v,
                     kf1_en, kf1_img, kf1_fr, kf1_st,
@@ -1154,12 +1197,22 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     num_frames_v, frame_rate_v, seed_v,
                     adapter_v, adapter_strength_v, control_adherence_v,
                     reference_strength_v, ref_video_v, config_v,
-                    lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v)
+                    lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
+                    nag_enabled=nag_enabled_v, nag_scale=nag_scale_v,
+                    nag_tau=nag_tau_v, nag_alpha=nag_alpha_v)
                 return
 
             rows = batch_rows_v or []
             if not rows:
                 yield L("batch_msg_no_wav", lang_v), "", None
+                return
+
+            # NAG precheck (owner requirement): non-CFG Negative enabled but the
+            # shared negative prompt is empty -> reject with zero API calls,
+            # same yield-shape as the "no wav rows" check above (toast handled
+            # by the caller reading this message, not gr.Warning here).
+            if nag_enabled_v and not (negative_v or "").strip():
+                yield L("nag_msg_negative_required", lang_v), "", None
                 return
 
             # --- common prompt: strip <lora:...> tokens exactly as the frozen
@@ -1240,6 +1293,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 reference_strength=reference_strength_v,
                 poll_interval=interval,
                 poll_timeout_s=timeout_s,
+                nag_enabled=bool(nag_enabled_v),
+                nag_scale=float(nag_scale_v),
+                nag_tau=float(nag_tau_v),
+                nag_alpha=float(nag_alpha_v),
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1270,6 +1327,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             on_generate_btn_start, inputs=lang_state, outputs=generate_btn,
         ).then(
             dispatch,
+            # nag_enabled/nag_scale/nag_tau/nag_alpha are APPENDED at the very
+            # end, after every pre-existing positional (matching dispatch()'s
+            # signature order, which appends them after batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1277,7 +1337,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     lang_state, poll_interval, poll_timeout, gen_a2v_audio,
                     batch_enable, batch_rows_state, batch_wav_dir,
                     batch_out_mode, batch_out_dir, batch_add_replace,
-                    batch_img_dir],
+                    batch_img_dir,
+                    nag_enabled, nag_scale, nag_tau, nag_alpha],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1288,6 +1349,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # Enable/disable (and clear) the reference-video input to track the adapter
         # selection (control adapter -> enabled; None/unset -> greyed out + cleared).
         adapter.change(on_adapter_change, inputs=adapter, outputs=ref_video)
+
+        # NAG: checkbox toggles the shared negative textbox's editability;
+        # the method radio snaps back to "nag" with a toast if "Other" is
+        # picked (no non-NAG method is implemented yet).
+        nag_enabled.change(on_nag_enable_toggle, inputs=nag_enabled, outputs=negative)
+        nag_method.change(on_nag_method_change, inputs=[nag_method, lang_state],
+                          outputs=nag_method)
 
         # Feature 1: attaching a .wav to the A2V audio field auto-adjusts
         # Frames to fit its measured duration (non-wav / unreadable / cleared
@@ -1705,12 +1773,21 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
         ).then(
             chain_generate,
-            inputs=[prompt, chain_negative, chain_width, chain_height,
+            # Positional-order contract with make_chain_handler.generate_chain
+            # (handlers.py): this list stops at ``chunked_upsample`` -- the
+            # function's remaining trailing params (nag_enabled, nag_scale,
+            # nag_tau, nag_alpha, src_audio) are appended right after it in
+            # inputs=[...] below, matching the signature's declared order
+            # exactly (chunked_upsample -> nag x4 -> src_audio). ``src_audio``
+            # itself is never wired from this tab (A2V lives on Generate), so
+            # it is intentionally left off the end and keeps its None default.
+            inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
                     *chain_clip_inputs, config_state,
                     lang_state, poll_interval, poll_timeout,
-                    chain_mode, v2v_video, v2v_context, chain_chunked_upsample],
+                    chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
+                    nag_enabled, nag_scale, nag_tau, nag_alpha],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
@@ -1832,6 +1909,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                   (L("batch_mode_replace", lang), "replace")]
             batch_out_choices = [(L("batch_out_auto", lang), "auto"),
                                  (L("batch_out_custom", lang), "custom")]
+            nag_method_choices = [(L("nag_method_nag", lang), "nag"),
+                                  (L("nag_method_other", lang), "other")]
             adapter_choices = build_adapter_choices(config, lang)
             updates = []
             for component, key, attr in registry:
@@ -1848,6 +1927,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     kwargs["choices"] = batch_mode_choices
                 elif component is batch_out_mode:
                     kwargs["choices"] = batch_out_choices
+                elif component is nag_method:
+                    kwargs["choices"] = nag_method_choices
                 updates.append(gr.update(**kwargs))
             updates.append(gr.update(headers=jobs_table_headers(lang)))
             updates.append(gr.update(headers=[L("col_res", lang), L("col_maxframes", lang)]))
@@ -2040,4 +2121,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     # Batch Regenerate closure (2nd-round FB, modification C): lets a test drive
     # the Skip-row refusal directly without a live event round-trip.
     demo.on_batch_regen = on_batch_regen  # type: ignore[attr-defined]
+    # NAG (non-CFG Negative) toggle / method-fallback closures: lets a test
+    # drive them directly (mirrors the on_adapter_change exposure above).
+    demo.on_nag_enable_toggle = on_nag_enable_toggle  # type: ignore[attr-defined]
+    demo.on_nag_method_change = on_nag_method_change  # type: ignore[attr-defined]
     return demo

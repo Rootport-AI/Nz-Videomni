@@ -353,6 +353,10 @@ def build_a2v_chain_payload(
     reference_video_id=None,
     control_adherence=1.0,
     reference_strength=1.0,
+    nag_enabled=False,
+    nag_scale=11.0,
+    nag_tau=2.5,
+    nag_alpha=0.25,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -365,7 +369,10 @@ def build_a2v_chain_payload(
     only when non-empty, ``loras`` only when the combined list is non-empty, and
     ``reference_video_id`` (+ the S3 ``conditioning_attention_strength`` /
     ``reference_video_strength`` keys, each only below 1.0) only when an adapter is
-    used -- so a token-free, adapter-free request stays byte-identical to before."""
+    used -- so a token-free, adapter-free request stays byte-identical to before.
+    NAG (non-CFG Negative) keys are ADDITIVE too: only added when ``nag_enabled``
+    is true, appended last, so the default (NAG off) payload stays byte-identical
+    to the pre-NAG contract the key-order tests lock in."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -393,6 +400,13 @@ def build_a2v_chain_payload(
             chain_payload["conditioning_attention_strength"] = float(control_adherence)
         if float(reference_strength) < 1.0:
             chain_payload["reference_video_strength"] = float(reference_strength)
+    # NAG (additive): keys appended only when enabled so the default payload —
+    # and the key-order contract tests locked on it — stay byte-identical.
+    if nag_enabled:
+        chain_payload["nag_enabled"] = True
+        chain_payload["nag_scale"] = float(nag_scale)
+        chain_payload["nag_tau"] = float(nag_tau)
+        chain_payload["nag_alpha"] = float(nag_alpha)
     return chain_payload
 
 
@@ -414,7 +428,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  control_adherence=1.0, reference_strength=1.0,
                  ref_video_path=None, config=None,
                  ui_lang=None, poll_interval=None, poll_timeout_min=None,
-                 src_audio=None):
+                 src_audio=None,
+                 nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -426,6 +441,13 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
+            return
+
+        # NAG (non-CFG Negative) precheck: enabled but no negative prompt to
+        # apply -> reject with zero API calls (toast + textbox line, same
+        # discipline as the dimension prechecks just below).
+        if nag_enabled and not (negative_prompt or "").strip():
+            yield _precheck_reject(L("nag_msg_negative_required", lang)), "", None
             return
 
         # 0) width/height (÷64) + num_frames (8n+1, [9, 481]) precheck, moved
@@ -627,6 +649,10 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 reference_video_id=reference_video_id,
                 control_adherence=control_adherence,
                 reference_strength=reference_strength,
+                nag_enabled=nag_enabled,
+                nag_scale=nag_scale,
+                nag_tau=nag_tau,
+                nag_alpha=nag_alpha,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -682,6 +708,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 payload["conditioning_attention_strength"] = float(control_adherence)
             if float(reference_strength) < 1.0:
                 payload["reference_video_strength"] = float(reference_strength)
+        # NAG (additive): keys appended only when enabled, mirroring
+        # build_a2v_chain_payload's discipline, so the NAG-off request stays
+        # byte-identical to the pre-NAG payload.
+        if nag_enabled:
+            payload["nag_enabled"] = True
+            payload["nag_scale"] = float(nag_scale)
+            payload["nag_tau"] = float(nag_tau)
+            payload["nag_alpha"] = float(nag_alpha)
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -767,8 +801,13 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        mode=MODE_NONE, src_video=None, context_frames=73,
                        # ADDITIVE: bound to ui.py's chain_chunked_upsample input
                        # (appended after v2v_context); MUST stay before src_audio,
-                       # which the inputs list does not pass.
+                       # which the inputs list does not pass. Positional-order
+                       # contract with ui.py's chain_generate_btn.click inputs=[...]
+                       # (and tests/test_gradio_v2v_a2v.py's _chain_args helper):
+                       # chunked_upsample -> nag_enabled/nag_scale/nag_tau/nag_alpha
+                       # -> src_audio.
                        chunked_upsample=False,
+                       nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
                        src_audio=None):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
@@ -784,6 +823,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # unnoticed. ---
         if not prompt or not prompt.strip():
             yield _precheck_reject(L("msg_prompt_required", lang)), "", None
+            return
+
+        # NAG (non-CFG Negative) precheck: enabled but no negative prompt to
+        # apply -> reject with zero API calls (mirrors make_generate_handler).
+        if nag_enabled and not (negative_prompt or "").strip():
+            yield _precheck_reject(L("nag_msg_negative_required", lang)), "", None
             return
 
         try:
@@ -1060,6 +1105,15 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             }
         elif mode == MODE_A2V:
             payload["source_audio"] = {"audio_id": source_audio_id}
+
+        # NAG (additive): keys appended only when enabled, mirroring
+        # build_a2v_chain_payload's discipline, so the NAG-off chain payload
+        # stays byte-identical to the pre-NAG contract.
+        if nag_enabled:
+            payload["nag_enabled"] = True
+            payload["nag_scale"] = float(nag_scale)
+            payload["nag_tau"] = float(nag_tau)
+            payload["nag_alpha"] = float(nag_alpha)
 
         try:
             resp = api.generate_chain(payload)

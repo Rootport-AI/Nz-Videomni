@@ -49,6 +49,7 @@ from engine.pipeline.common import (
     encode_video_output,
     video_chunks_number,
 )
+from engine.transformer.nag_service import NagParams, encode_negative
 
 DTYPE = torch.bfloat16
 
@@ -455,6 +456,7 @@ def run_chain(
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
     chunked_upsample: bool = False,
+    nag: NagParams | None = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -485,6 +487,18 @@ def run_chain(
     that). ``ic_reference=None`` -> the chain is byte-identical to before: the
     ``_set_ic_job`` below is called with ``(loras, None, 1.0)`` (stale-clear
     semantics preserved) and no reference latent is injected.
+
+    ``nag`` (NAG negative-prompt guidance, additive): always set explicitly
+    (``None`` included — the same stale-clear discipline as ``ic_loras`` above),
+    via ``pipe._set_nag_job`` BEFORE the positive-prompt text encode below. This
+    is EARLIER than ``_set_ic_job``'s call site further down, which can wait
+    until just before the transformer build because IC-LoRA is a forward-time
+    weight patch with no encode step of its own. NAG's negative prompt, by
+    contrast, MUST be encoded together with the positive prompts while
+    ``text_encoder`` is still alive — encoding it after ``del text_encoder``
+    below would require a second Gemma load, which is exactly what the single-
+    generate path's encode_text patch avoids (see fast_video_pipeline.py's D2
+    ordering comment).
     """
     assert not (source is not None and audio_source is not None), (
         "run_chain: source (V2V) and audio_source (A2V) are mutually exclusive"
@@ -534,6 +548,11 @@ def run_chain(
     torch.cuda.reset_peak_memory_stats(device)
     t0 = time.time()
 
+    # ── NAG job state — set BEFORE encoding (see this function's docstring for
+    # why this is earlier than _set_ic_job below): the negative prompt must be
+    # encoded together with the positives while text_encoder is still alive.
+    pipe._set_nag_job(nag)
+
     # ── Text encode ONCE for all DISTINCT prompts, then free the encoder. ─────
     # F2: announce the encode phase (fires BEFORE the encode so the app's job
     # status can show "encoding" during the wait; the first stage1_denoise step
@@ -546,6 +565,12 @@ def run_chain(
     for p in distinct:
         vctx, actx = encode_text(text_encoder, prompts=[p])[0]
         ctx_by_prompt[p] = (vctx, actx)
+    # NAG negative encode: one extra call against the SAME live text_encoder
+    # (avoids a second Gemma load), stashed in NagState before it's freed below.
+    # Inert when this chain didn't request NAG (pipe._nag.requested is False).
+    if pipe._nag.requested:
+        nvc, nac = encode_negative(text_encoder, pipe._nag.params.negative_prompt)
+        pipe._nag.set_contexts(nvc, nac)
     torch.cuda.synchronize()
     del text_encoder
     cleanup_memory()

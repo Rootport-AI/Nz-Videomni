@@ -38,7 +38,24 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_prompt": "Prompt (single generation & clip-chain shared base)",
         "ph_prompt": "A bustling downtown at dusk; crowds weave through the alleys as neon signs flicker on — like a scene from a movie trailer",
         "lbl_negative": "Negative prompt",
-        "info_negative": "Disabled: the distilled model runs at CFG=1, so negative prompts have no effect.",
+        "info_negative": ("Editable while non-CFG Negative is on; applied via NAG "
+                          "(the distilled model runs at CFG=1, so a plain negative "
+                          "prompt has no effect)."),
+        # --- NAG (Normalized Attention Guidance) accordion ---
+        "nag_accordion": "Negative Prompt",
+        "nag_note": ("NAG (Normalized Attention Guidance) applies the negative "
+                     "prompt inside the video and audio text cross-attention, so "
+                     "it works even though the distilled model runs at CFG=1. "
+                     "Cost: the cross-attention compute roughly doubles."),
+        "nag_enable": "non-CFG Negative",
+        "nag_lbl_method": "Method",
+        "nag_method_nag": "NAG",
+        "nag_method_other": "Other",
+        "nag_msg_fallback": "Only NAG is available for now — reverted to NAG.",
+        "nag_lbl_scale": "NAG scale",
+        "nag_lbl_tau": "NAG tau (norm clamp)",
+        "nag_lbl_alpha": "NAG alpha (blend)",
+        "nag_msg_negative_required": "Enter a negative prompt, or turn off non-CFG Negative.",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -489,7 +506,24 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_prompt": "プロンプト(単発生成・クリップ連結の共通ベース)",
         "ph_prompt": "夕暮れの賑やかな下町、行き交う人々、ネオンが灯りはじめる路地。映画のワンシーンのように——",
         "lbl_negative": "ネガティブプロンプト",
-        "info_negative": "無効: 蒸留モデルはCFG=1で動作するため、ネガティブプロンプトは効きません。",
+        "info_negative": ("non-CFG Negative がオンのあいだ編集できます。適用は NAG "
+                          "経由です（蒸留モデルは CFG=1 動作のため、通常のネガティブ"
+                          "プロンプトは効きません）。"),
+        # --- NAG (Normalized Attention Guidance) アコーディオン ---
+        "nag_accordion": "ネガティブプロンプト",
+        "nag_note": ("NAG（Normalized Attention Guidance）は、映像・音声のテキスト "
+                     "cross-attention の内部でネガティブプロンプトを効かせる方式で"
+                     "す。蒸留モデルは CFG=1 動作ですが、それでも作用します。コスト"
+                     "は cross-attention の計算がおよそ2倍になります。"),
+        "nag_enable": "non-CFG Negative",
+        "nag_lbl_method": "方式",
+        "nag_method_nag": "NAG",
+        "nag_method_other": "その他",
+        "nag_msg_fallback": "現在は NAG のみ利用できます。NAG に戻しました。",
+        "nag_lbl_scale": "NAG スケール",
+        "nag_lbl_tau": "NAG tau（ノルム上限）",
+        "nag_lbl_alpha": "NAG alpha（ブレンド）",
+        "nag_msg_negative_required": "ネガティブプロンプトを入力するか、non-CFG Negative をオフにしてください。",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

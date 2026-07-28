@@ -75,6 +75,15 @@ class GenerateChainParams(TypedDict, total=False):
 
     ``source`` is optional (absent/null for a normal chain); when present the
     ``clips`` list may be length 1.
+
+    NAG (non-CFG negative prompt guidance, Wave 1): both this op and
+    ``generate`` also accept an optional ``nag`` block —
+    ``{negative_prompt: str, scale: float, tau: float, alpha: float}`` — present
+    ONLY when the request enabled NAG (see engine/transformer/nag_service.py
+    and engine/worker.py's ``_resolve_nag``). Absent/omitted ``nag`` -> the
+    payload is byte-identical to before NAG existed. Not declared as a
+    TypedDict field here (mirrors the existing ``reference_video`` block, which
+    is also a plain untyped dict) — see ``_resolve_nag`` for the keys it reads.
     """
 
     width: int

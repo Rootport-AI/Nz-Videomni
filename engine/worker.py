@@ -151,6 +151,7 @@ from engine.pipeline.fast_video_pipeline import (  # noqa: E402
     LTXFastVideoPipeline,
 )
 from engine.api_types import ImageConditioningInput  # noqa: E402
+from engine.transformer.nag_service import NagParams  # noqa: E402
 
 _log("imported LTXFastVideoPipeline + ImageConditioningInput")
 
@@ -311,6 +312,25 @@ def _resolve_ic_reference(
     return ic_reference, attn_strength
 
 
+def _resolve_nag(msg: dict) -> "NagParams | None":
+    """Resolve a worker ``nag`` block -> NagParams, or None when absent/falsy.
+
+    ``nag`` is present only when the app/API layer had NAG enabled for this
+    job (payload is additive — absent for every pre-NAG caller and every
+    NAG-disabled request, so this returns None and the job is byte-identical
+    to before the feature existed).
+    """
+    blk = msg.get("nag")
+    if not blk:
+        return None
+    return NagParams(
+        negative_prompt=str(blk["negative_prompt"]),
+        scale=float(blk["scale"]),
+        tau=float(blk["tau"]),
+        alpha=float(blk["alpha"]),
+    )
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; mp4 is written by the engine to msg['output_path']."""
     assert _PIPE is not None, "generate before load"
@@ -343,11 +363,15 @@ def _do_generate(msg: dict) -> None:
     ic_reference, attn_strength = _resolve_ic_reference(
         msg.get("reference_video"), output_path
     )
+    # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
+    # identical to before this feature existed.
+    nag = _resolve_nag(msg)
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
-        f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'}"
+        f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
+        f"nag={'on' if nag else 'off'}"
     )
     # F2: single-generate runs the wheel's two denoising loops back-to-back
     # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
@@ -367,6 +391,7 @@ def _do_generate(msg: dict) -> None:
             ic_loras=ic_loras,
             ic_reference=ic_reference,
             ic_attention_strength=attn_strength,
+            nag=nag,
         )
     finally:
         progress_shim.end_op()
@@ -467,13 +492,17 @@ def _do_generate_chain(msg: dict) -> None:
     # long 768p chain fits in 16GB VRAM.
     chunked_upsample = bool(msg.get("chunked_upsample", False))
 
+    # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
+    # identical to before this feature existed.
+    nag = _resolve_nag(msg)
+
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
         f"frames={[c.num_frames for c in clips]} seed={seed} "
         f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
-        f"ic_loras={len(ic_loras)}"
+        f"ic_loras={len(ic_loras)} nag={'on' if nag else 'off'}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -496,6 +525,7 @@ def _do_generate_chain(msg: dict) -> None:
         ic_reference=ic_reference,
         ic_attention_strength=ic_attn,
         chunked_upsample=chunked_upsample,
+        nag=nag,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)

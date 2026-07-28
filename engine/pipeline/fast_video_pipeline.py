@@ -11,6 +11,7 @@ import torch
 from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
+from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
 
 
 class LTXFastVideoPipeline:
@@ -126,6 +127,15 @@ class LTXFastVideoPipeline:
             self._ic_reference_default,
             self._ic_attention_strength_default,
         )
+
+        # ── NAG (Normalized Attention Guidance) state ──────────────────────────
+        # One NagState per pipeline instance, scoped to a single generate()/
+        # generate_chain() call by _set_nag_job / the try/finally reset in both
+        # entry points (see engine/transformer/nag_service.py). Installed
+        # unconditionally below (after block-swap), regardless of whether any
+        # job ever requests NAG — install() itself is the zero-overhead-when-off
+        # gate (D3).
+        self._nag = NagState()
 
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
@@ -256,6 +266,15 @@ class LTXFastVideoPipeline:
         if block_swap_blocks_on_gpu > 0:
             self._install_block_swap(block_swap_blocks_on_gpu)
 
+        # ── Install NAG (unconditional — D1) ──
+        # Wraps ledger.transformer LAST, so NAG's install() runs against the
+        # fully-assembled transformer (block-swap/GGUF already applied). Runs
+        # every time (not gated on any job ever requesting NAG): the per-job
+        # gate lives inside NagService.install() (state.requested check), which
+        # is what keeps a NAG-OFF job byte-identical to before this feature
+        # existed (D3).
+        self._install_nag()
+
         # NOTE: attention-tiling and LoRA install branches (guarded by
         # attention_tile_size > 0 / loras) were removed during the engine
         # relocation: their services (AttentionTileService / LoraService) are not
@@ -303,6 +322,21 @@ class LTXFastVideoPipeline:
                 "reference conditioning at factor 1."
             )
         self._ic_reference_downscale_factor = factor
+
+    def _set_nag_job(self, nag: NagParams | None) -> None:
+        """Set (or clear, with None) the live NAG request for the upcoming job.
+
+        Called from generate() directly and from run_chain() (chain_pipeline.py,
+        IC-LoRA convention — generate_chain() itself does not call this; run_chain
+        is the single place that sets it for the chain path). Always calling this
+        — even with None — is what gives stale-clear semantics: a NAG job
+        followed by a non-NAG job on the same resident pipeline does not leak the
+        prior negative prompt (NagState.set_params clears any encoded contexts
+        too, so a caller that forgets the matching set_contexts() call correctly
+        hits install()'s "requested but not ready" RuntimeError instead of
+        silently reusing a stale encoding).
+        """
+        self._nag.set_params(nag)
 
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
@@ -530,6 +564,32 @@ class LTXFastVideoPipeline:
                 "BlockSwap install failed (%s)", exc
             )
 
+    def _install_nag(self) -> None:
+        """Wrap ``ledger.transformer`` so every freshly-built transformer gets
+        its cross-attention modules NAG-patched (a no-op patch when the current
+        job didn't request NAG — see NagService.install()).
+
+        Deliberately NO try/except, unlike _install_block_swap and _install_gguf
+        above: those swallow install failures and fall back to an unpatched/
+        unaccelerated path because their features are pure speed/VRAM
+        optimizations where "worked, but slower" beats "job failed". NAG affects
+        the actual generated output (a negative prompt the user explicitly
+        turned on), so a silent fallback here would produce a plausible-looking
+        video that quietly ignored the negative prompt — worse than an error.
+        Any failure inside NagService.install() (including its own fail-loud
+        RuntimeErrors) must abort the job.
+        """
+        service = NagService(lambda: self._nag)
+        original_transformer = self.pipeline.model_ledger.transformer
+
+        def patched_transformer() -> torch.nn.Module:
+            t = original_transformer()
+            service.install(t)
+            return t
+
+        self.pipeline.model_ledger.transformer = patched_transformer
+        self._nag_service = service
+
     def _reference_conditioning_for_stage(
         self, full_height: int, num_frames: int, cond_kwargs: dict
     ) -> list:
@@ -723,6 +783,11 @@ class LTXFastVideoPipeline:
         _orig_sigmas = _distilled_mod.DISTILLED_SIGMA_VALUES
         _orig_simple = _distilled_mod.simple_denoising_func
         _orig_euler = _distilled_mod.euler_denoising_loop
+        # NAG: encode_text is patched (only when this job requested NAG) so the
+        # negative prompt gets encoded into NagState using the same live
+        # text_encoder, exactly once, before ledger.transformer() is built
+        # (distilled.py:99 -> :108; see _make_nag_encode_text below).
+        _orig_encode = _distilled_mod.encode_text
 
         # ── Keyframe conditioning hybrid ──────────────────────────────────────
         # The installed wheel's DistilledPipeline builds image conditionings for
@@ -747,99 +812,118 @@ class LTXFastVideoPipeline:
         # DESIGN INVARIANT: images with frame_idx == 0 (and T2V with no images)
         # go through _orig_replace exactly as before → byte-identical to today.
         _orig_replace = _distilled_mod.image_conditionings_by_replacing_latent
-        # The guide helper is NOT imported into distilled.py's namespace, so we
-        # reference it from the helpers module (its canonical home).  Both helpers
-        # share the identical signature (images, height, width, video_encoder,
-        # dtype, device) and both return list[ConditioningItem], so delegation +
-        # list concatenation is exact.
-        from ltx_pipelines.utils.helpers import (
-            image_conditionings_by_adding_guiding_latent as _orig_add_guide,
-        )
 
-        def _hybrid_image_conditionings(images: list, *args: object, **kwargs: object) -> list:
-            replace_imgs = [im for im in images if im.frame_idx == 0]
-            guide_imgs = [im for im in images if im.frame_idx > 0]
-            conds: list = []
-            if replace_imgs:
-                conds += _orig_replace(replace_imgs, *args, **kwargs)
-            if guide_imgs:
-                conds += _orig_add_guide(guide_imgs, *args, **kwargs)
-            # IC-LoRA reference-video conditioning — appended on the STAGE-1 pass
-            # only. Inert (returns []) when no ic_reference is configured, so the
-            # keyframe-only path above stays byte-identical.
-            if self._ic_reference is not None:
-                conds += self._reference_conditioning_for_stage(
-                    full_height=height, num_frames=num_frames, cond_kwargs=kwargs,
-                )
-            return conds
-
-        # ── Sigma schedule ───────────────────────────────────────────────────
-        if sigma_schedule == "linear":
-            _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_linear_sigmas(num_steps)  # type: ignore[attr-defined]
-        elif sigma_schedule == "linear_quadratic":
-            _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_linearquadratic_sigmas(num_steps)  # type: ignore[attr-defined]
-        elif sigma_schedule == "beta":
-            _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_beta_sigmas(num_steps)  # type: ignore[attr-defined]
-        elif num_steps < 8:
-            _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_sigma_subset(num_steps)  # type: ignore[attr-defined]
-
-        # ── STG guidance function ─────────────────────────────────────────────
-        if stg_scale > 0.0:
-            _distilled_mod.simple_denoising_func = self._make_stg_denoising_func(stg_scale, stg_block_index)  # type: ignore[attr-defined]
-
-        # ── Denoising loop ───────────────────────────────────────────────────
-        # "gradient_estimating" applies velocity correction across consecutive
-        # steps (paper: openreview.net/pdf?id=o2ND9v0CeK).  We patch the loop
-        # name in the distilled module so DistilledPipeline.__call__ picks it
-        # up — same LOAD_GLOBAL mechanism used for DISTILLED_SIGMA_VALUES above.
-        if denoising_loop == "gradient_estimating":
-            from functools import partial
-            from ltx_pipelines.utils.samplers import gradient_estimating_euler_denoising_loop
-            _distilled_mod.euler_denoising_loop = partial(  # type: ignore[attr-defined]
-                gradient_estimating_euler_denoising_loop, ge_gamma=ge_gamma
+        # try/finally window widened (was: only around self.pipeline(...) below)
+        # to also cover the patch-application section right below this comment.
+        # Latent defect this closes: if any of the patch-building calls between
+        # here and the old try (e.g. _make_stg_denoising_func, the sigma-schedule
+        # builders) had raised, the _orig_* saves above would never be restored
+        # — the NEXT job on this resident pipeline would silently inherit a
+        # half-applied previous job's globals. Widening the window one level up
+        # is required before adding the encode_text patch below (a 5th global to
+        # get this same guarantee).
+        try:
+            # The guide helper is NOT imported into distilled.py's namespace, so we
+            # reference it from the helpers module (its canonical home).  Both helpers
+            # share the identical signature (images, height, width, video_encoder,
+            # dtype, device) and both return list[ConditioningItem], so delegation +
+            # list concatenation is exact.
+            from ltx_pipelines.utils.helpers import (
+                image_conditionings_by_adding_guiding_latent as _orig_add_guide,
             )
 
-        elif denoising_loop == "res2s":
-            # res2s is a second-order Runge-Kutta sampler with SDE noise injection.
-            # distilled.py hardcodes EulerDiffusionStep as its stepper, so we replace
-            # the euler_denoising_loop name at module level with a wrapper that
-            # substitutes Res2sDiffusionStep and calls res2s instead.
-            # Cost: 2× model evaluations per step vs Euler.
-            # Benefit: may match Euler quality at half the step count; SDE noise
-            # can break up deterministic artifacts.
-            from functools import partial
-            from ltx_core.components.diffusion_steps import Res2sDiffusionStep
-            from ltx_pipelines.utils.samplers import res2s_audio_video_denoising_loop
+            def _hybrid_image_conditionings(images: list, *args: object, **kwargs: object) -> list:
+                replace_imgs = [im for im in images if im.frame_idx == 0]
+                guide_imgs = [im for im in images if im.frame_idx > 0]
+                conds: list = []
+                if replace_imgs:
+                    conds += _orig_replace(replace_imgs, *args, **kwargs)
+                if guide_imgs:
+                    conds += _orig_add_guide(guide_imgs, *args, **kwargs)
+                # IC-LoRA reference-video conditioning — appended on the STAGE-1 pass
+                # only. Inert (returns []) when no ic_reference is configured, so the
+                # keyframe-only path above stays byte-identical.
+                if self._ic_reference is not None:
+                    conds += self._reference_conditioning_for_stage(
+                        full_height=height, num_frames=num_frames, cond_kwargs=kwargs,
+                    )
+                return conds
 
-            _res2s_stepper = Res2sDiffusionStep()
+            # ── Sigma schedule ───────────────────────────────────────────────────
+            if sigma_schedule == "linear":
+                _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_linear_sigmas(num_steps)  # type: ignore[attr-defined]
+            elif sigma_schedule == "linear_quadratic":
+                _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_linearquadratic_sigmas(num_steps)  # type: ignore[attr-defined]
+            elif sigma_schedule == "beta":
+                _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_beta_sigmas(num_steps)  # type: ignore[attr-defined]
+            elif num_steps < 8:
+                _distilled_mod.DISTILLED_SIGMA_VALUES = self._make_sigma_subset(num_steps)  # type: ignore[attr-defined]
 
-            def _res2s_as_euler(
-                sigmas: torch.Tensor,
-                video_state: object,
-                audio_state: object,
-                stepper: object,  # EulerDiffusionStep from distilled.py — ignored
-                denoise_fn: object,
-                **_kwargs: object,
-            ) -> object:
-                return res2s_audio_video_denoising_loop(
-                    sigmas=sigmas,
-                    video_state=video_state,  # type: ignore[arg-type]
-                    audio_state=audio_state,  # type: ignore[arg-type]
-                    stepper=_res2s_stepper,
-                    denoise_fn=denoise_fn,  # type: ignore[arg-type]
-                    noise_seed=seed,
-                    bongmath=res2s_bongmath,
-                    bongmath_max_iter=res2s_bongmath_max_iter,
+            # ── STG guidance function ─────────────────────────────────────────────
+            if stg_scale > 0.0:
+                _distilled_mod.simple_denoising_func = self._make_stg_denoising_func(stg_scale, stg_block_index)  # type: ignore[attr-defined]
+
+            # ── Denoising loop ───────────────────────────────────────────────────
+            # "gradient_estimating" applies velocity correction across consecutive
+            # steps (paper: openreview.net/pdf?id=o2ND9v0CeK).  We patch the loop
+            # name in the distilled module so DistilledPipeline.__call__ picks it
+            # up — same LOAD_GLOBAL mechanism used for DISTILLED_SIGMA_VALUES above.
+            if denoising_loop == "gradient_estimating":
+                from functools import partial
+                from ltx_pipelines.utils.samplers import gradient_estimating_euler_denoising_loop
+                _distilled_mod.euler_denoising_loop = partial(  # type: ignore[attr-defined]
+                    gradient_estimating_euler_denoising_loop, ge_gamma=ge_gamma
                 )
 
-            _distilled_mod.euler_denoising_loop = _res2s_as_euler  # type: ignore[attr-defined]
+            elif denoising_loop == "res2s":
+                # res2s is a second-order Runge-Kutta sampler with SDE noise injection.
+                # distilled.py hardcodes EulerDiffusionStep as its stepper, so we replace
+                # the euler_denoising_loop name at module level with a wrapper that
+                # substitutes Res2sDiffusionStep and calls res2s instead.
+                # Cost: 2× model evaluations per step vs Euler.
+                # Benefit: may match Euler quality at half the step count; SDE noise
+                # can break up deterministic artifacts.
+                from functools import partial
+                from ltx_core.components.diffusion_steps import Res2sDiffusionStep
+                from ltx_pipelines.utils.samplers import res2s_audio_video_denoising_loop
 
-        # ── Keyframe conditioning hybrid rebind ───────────────────────────────
-        # Rebind the module-global so both Stage 1 and Stage 2 route non-zero
-        # frame_idx images to the keyframe/guide helper (restored in finally).
-        _distilled_mod.image_conditionings_by_replacing_latent = _hybrid_image_conditionings  # type: ignore[attr-defined]
+                _res2s_stepper = Res2sDiffusionStep()
 
-        try:
+                def _res2s_as_euler(
+                    sigmas: torch.Tensor,
+                    video_state: object,
+                    audio_state: object,
+                    stepper: object,  # EulerDiffusionStep from distilled.py — ignored
+                    denoise_fn: object,
+                    **_kwargs: object,
+                ) -> object:
+                    return res2s_audio_video_denoising_loop(
+                        sigmas=sigmas,
+                        video_state=video_state,  # type: ignore[arg-type]
+                        audio_state=audio_state,  # type: ignore[arg-type]
+                        stepper=_res2s_stepper,
+                        denoise_fn=denoise_fn,  # type: ignore[arg-type]
+                        noise_seed=seed,
+                        bongmath=res2s_bongmath,
+                        bongmath_max_iter=res2s_bongmath_max_iter,
+                    )
+
+                _distilled_mod.euler_denoising_loop = _res2s_as_euler  # type: ignore[attr-defined]
+
+            # ── Keyframe conditioning hybrid rebind ───────────────────────────────
+            # Rebind the module-global so both Stage 1 and Stage 2 route non-zero
+            # frame_idx images to the keyframe/guide helper (restored in finally).
+            _distilled_mod.image_conditionings_by_replacing_latent = _hybrid_image_conditionings  # type: ignore[attr-defined]
+
+            # ── NAG negative-prompt encode patch ──────────────────────────────────
+            # Only when THIS job requested NAG (NagState.requested) — otherwise
+            # encode_text is left untouched, so a NAG-OFF job never even sees this
+            # branch (D3). See _make_nag_encode_text: the wrapper encodes the
+            # negative prompt into NagState using the SAME live text_encoder,
+            # exactly once, before returning the positive result unchanged.
+            if self._nag.requested:
+                _distilled_mod.encode_text = self._make_nag_encode_text(_orig_encode)  # type: ignore[attr-defined]
+
             return self.pipeline(
                 prompt=prompt,
                 seed=seed,
@@ -861,6 +945,35 @@ class LTXFastVideoPipeline:
             _distilled_mod.simple_denoising_func = _orig_simple
             _distilled_mod.euler_denoising_loop = _orig_euler
             _distilled_mod.image_conditionings_by_replacing_latent = _orig_replace  # type: ignore[attr-defined]
+            _distilled_mod.encode_text = _orig_encode  # type: ignore[attr-defined]
+
+    def _make_nag_encode_text(self, orig):
+        """Build the NAG-aware replacement for ``encode_text`` installed (only
+        when ``self._nag.requested``) over ``ltx_pipelines.distilled``'s module-
+        global during ``_run_inference``.
+
+        Called exactly once per job at distilled.py:99
+        (``encode_text(text_encoder, prompts=[prompt])``), before
+        ``ledger.transformer()`` is built at distilled.py:108 — this ordering
+        (encode negative -> build transformer) is D2's correctness guarantee:
+        NagService.install() raises if the transformer is built before the
+        negative context is in NagState.
+
+        The positive result is returned to the caller completely unchanged
+        (DistilledPipeline never learns NAG exists); the negative prompt is
+        encoded as an extra call against the SAME live ``text_encoder``
+        instance (avoiding a second Gemma load) and stashed in NagState via
+        ``encode_negative``/``set_contexts``.
+        """
+        def wrapped(text_encoder: object, prompts: list[str]):
+            result = orig(text_encoder, prompts=prompts)
+            params = self._nag.params
+            assert params is not None  # implied by self._nag.requested at the call site
+            video_ctx, audio_ctx = encode_negative(text_encoder, params.negative_prompt)
+            self._nag.set_contexts(video_ctx, audio_ctx)
+            return result
+
+        return wrapped
 
     @torch.inference_mode()
     def generate(
@@ -885,6 +998,7 @@ class LTXFastVideoPipeline:
         ic_loras: list[tuple[str, float]] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
+        nag: NagParams | None = None,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -901,39 +1015,50 @@ class LTXFastVideoPipeline:
             else self._ic_attention_strength_default
         )
         self._set_ic_job(eff_loras, eff_reference, eff_attention_strength)
+        # NAG has no create-time default (unlike IC-LoRA above) — every job sets
+        # it explicitly, ``None`` included, so a NAG job followed by a plain job
+        # cleanly detaches instead of leaking the prior negative prompt.
+        self._set_nag_job(nag)
 
-        tiling_config = default_tiling_config(
-            spatial_tile_size=self._vae_spatial_tile_size,
-            temporal_tile_size=self._vae_temporal_tile_size,
-        )
-        video, audio = self._run_inference(
-            prompt=prompt,
-            seed=seed,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            frame_rate=frame_rate,
-            images=images,
-            tiling_config=tiling_config,
-            num_steps=num_steps,
-            stg_scale=stg_scale,
-            stg_block_index=stg_block_index,
-            sigma_schedule=sigma_schedule,
-            denoising_loop=denoising_loop,
-            ge_gamma=ge_gamma,
-            res2s_bongmath=res2s_bongmath,
-            res2s_bongmath_max_iter=res2s_bongmath_max_iter,
-        )
-        chunks = video_chunks_number(num_frames, tiling_config)
-        encode_video_output(video=video, audio=audio, fps=int(frame_rate), output_path=output_path, video_chunks_number_value=chunks)
-        # Synchronize BEFORE freeing GPU tensors so any CUDA ops still queued
-        # inside encode_video (tiled VAE decode iterator, audio write) are fully
-        # complete before Python GC can reclaim the underlying CUDA memory.
-        # del-then-sync is wrong: the tensor backing memory is freed immediately
-        # on del (refcount → 0) while CUDA is still accessing it → 0xC0000005.
-        torch.cuda.synchronize()
-        del video, audio
-        torch.cuda.empty_cache()
+        try:
+            tiling_config = default_tiling_config(
+                spatial_tile_size=self._vae_spatial_tile_size,
+                temporal_tile_size=self._vae_temporal_tile_size,
+            )
+            video, audio = self._run_inference(
+                prompt=prompt,
+                seed=seed,
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                frame_rate=frame_rate,
+                images=images,
+                tiling_config=tiling_config,
+                num_steps=num_steps,
+                stg_scale=stg_scale,
+                stg_block_index=stg_block_index,
+                sigma_schedule=sigma_schedule,
+                denoising_loop=denoising_loop,
+                ge_gamma=ge_gamma,
+                res2s_bongmath=res2s_bongmath,
+                res2s_bongmath_max_iter=res2s_bongmath_max_iter,
+            )
+            chunks = video_chunks_number(num_frames, tiling_config)
+            encode_video_output(video=video, audio=audio, fps=int(frame_rate), output_path=output_path, video_chunks_number_value=chunks)
+            # Synchronize BEFORE freeing GPU tensors so any CUDA ops still queued
+            # inside encode_video (tiled VAE decode iterator, audio write) are fully
+            # complete before Python GC can reclaim the underlying CUDA memory.
+            # del-then-sync is wrong: the tensor backing memory is freed immediately
+            # on del (refcount → 0) while CUDA is still accessing it → 0xC0000005.
+            torch.cuda.synchronize()
+            del video, audio
+            torch.cuda.empty_cache()
+        finally:
+            # Resident-worker leak guard: NAG state must never survive past the
+            # job that requested it (same reasoning as the IC-LoRA per-job reset
+            # above, but NAG has no "revert to create-time default" concept, so
+            # the only correct end state is fully cleared).
+            self._nag.reset()
 
     @torch.inference_mode()
     def generate_chain(
@@ -954,6 +1079,7 @@ class LTXFastVideoPipeline:
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
         chunked_upsample: bool = False,
+        nag: NagParams | None = None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -978,30 +1104,42 @@ class LTXFastVideoPipeline:
         (accepted only for clips=1 chains; the API layer enforces that). ``None``
         reference -> the chain is byte-identical to before; ``ic_attention_strength``
         is normalised to 1.0 when unset so run_chain's ``float`` contract holds.
+
+        ``nag`` (NAG negative-prompt guidance, additive): passed straight through
+        to ``run_chain``, which is the single place that calls
+        ``pipe._set_nag_job`` for the chain path (IC-LoRA convention — NOT called
+        here, mirroring how ``ic_loras`` above is set inside run_chain too). The
+        ``finally: self._nag.reset()`` below still runs regardless of which layer
+        set it, so NAG state never survives past this call on the resident
+        pipeline.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
-        return run_chain(
-            self,
-            clips=clips,
-            width=width,
-            height=height,
-            frame_rate=frame_rate,
-            num_steps=num_steps,
-            seed=seed,
-            overlap_frames=overlap_frames,
-            overlap_strength=overlap_strength,
-            output_path=output_path,
-            progress=progress,
-            source=source,
-            audio_source=audio_source,
-            ic_loras=ic_loras,
-            ic_reference=ic_reference,
-            ic_attention_strength=(
-                1.0 if ic_attention_strength is None else ic_attention_strength
-            ),
-            chunked_upsample=chunked_upsample,
-        )
+        try:
+            return run_chain(
+                self,
+                clips=clips,
+                width=width,
+                height=height,
+                frame_rate=frame_rate,
+                num_steps=num_steps,
+                seed=seed,
+                overlap_frames=overlap_frames,
+                overlap_strength=overlap_strength,
+                output_path=output_path,
+                progress=progress,
+                source=source,
+                audio_source=audio_source,
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=(
+                    1.0 if ic_attention_strength is None else ic_attention_strength
+                ),
+                chunked_upsample=chunked_upsample,
+                nag=nag,
+            )
+        finally:
+            self._nag.reset()
 
     @torch.inference_mode()
     def warmup(self, output_path: str) -> None:
@@ -1026,6 +1164,13 @@ class LTXFastVideoPipeline:
                 os.unlink(output_path)
 
     def compile_transformer(self) -> None:
+        # NOT compatible with NAG: this caches ONE compiled transformer instance
+        # and replaces ledger.transformer with a lambda that returns it forever,
+        # which defeats D1 (NAG's install() must re-run against a FRESH
+        # transformer every job, since attn2/audio_attn2 are patched per-job
+        # based on that job's NagState). No caller currently uses this method in
+        # the production path (see D1's dead-code note), so it is left as-is
+        # rather than reworked to cooperate with per-job NAG install.
         transformer = self.pipeline.model_ledger.transformer()
 
         compiled = cast(

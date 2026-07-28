@@ -156,6 +156,50 @@ def test_chain_duration_matches_timeline(client):
         assert abs(probed - expected_dur) < (2.0 / 24.0)
 
 
+def test_chain_with_nag_creates_job(client):
+    # Exercises the job_store.create_chain_if_idle -> to_clip_request path: if
+    # any nag field were missing from that transcription, clip 0's re-validated
+    # GenerateRequest would 500 (nag_enabled True + empty negative_prompt fails
+    # its own validator). Job meta request.nag_enabled must read back True.
+    clips = [{"num_frames": 25}, {"num_frames": 25}]
+    r = _run_chain(
+        client, clips,
+        nag_enabled=True, negative_prompt="blurry, low quality, distorted",
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["request"]["nag_enabled"] is True
+    assert meta["request"]["negative_prompt"] == "blurry, low quality, distorted"
+
+
+def test_chain_to_clip_request_transcribes_nag_fields():
+    # Direct regression guard for the to_clip_request transcription (the LIVE
+    # path job_store.create_chain_if_idle uses to build JobRecord.request):
+    # metadata.json's "request" is chain.model_dump() directly (unaffected by
+    # to_clip_request), so it cannot catch an omission here -- this test checks
+    # the transcription itself.
+    from api.models import GenerateChainRequest
+
+    clips = [{"num_frames": 25}, {"num_frames": 25}]
+    model = GenerateChainRequest(**{
+        **BASE, "clips": clips,
+        "nag_enabled": True, "negative_prompt": "blurry, low quality",
+        "nag_scale": 15.0, "nag_tau": 4.0, "nag_alpha": 0.5,
+    })
+    clip0 = model.to_clip_request(0)
+    assert clip0.nag_enabled is True
+    assert clip0.negative_prompt == "blurry, low quality"
+    assert clip0.nag_scale == 15.0
+    assert clip0.nag_tau == 4.0
+    assert clip0.nag_alpha == 0.5
+
+
 def test_chain_busy_returns_409(client):
     from api.models import GenerateRequest
 

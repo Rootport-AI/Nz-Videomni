@@ -107,6 +107,55 @@ def test_i2v_smoke_generation(client, png_bytes):
     assert meta["request"]["conditioning_images"][0]["frame_idx"] == 0
 
 
+def test_t2v_smoke_generation_with_nag(client):
+    # NAG-enabled single /generate completes under the mock backend, and the
+    # stored job meta request reflects nag_enabled (pipeline_manager model_dump
+    # carries it through to metadata.json).
+    payload = {
+        "prompt": "A red ball rolling on a white floor",
+        "negative_prompt": "blurry, low quality, distorted",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 42,
+        "pipeline": "distilled",
+        "nag_enabled": True,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+    }
+    r = client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = client.app_context
+    meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["request"]["nag_enabled"] is True
+    assert meta["request"]["nag_scale"] == 11.0
+
+
+def test_generate_with_nag_enabled_and_empty_negative_422(client):
+    payload = {
+        "prompt": "x",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "pipeline": "distilled",
+        "nag_enabled": True,
+        "negative_prompt": "",
+    }
+    r = client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
 def test_generate_with_unknown_image_404(client):
     payload = {
         "prompt": "x",

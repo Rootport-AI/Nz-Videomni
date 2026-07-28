@@ -250,6 +250,36 @@ function Test-Tools {
 }
 
 # ---------------------------------------------------------------------------
+# .mcp.json の生成（AIエージェント連携・MCPサーバー登録）
+#
+# 絶対パスで書き出す。$CLAUDE_PROJECT_DIR のような相対解決に頼ると、開発機で
+# 親フォルダをワークスペースとして開いた場合や、エンドユーザーがセットアップ前
+# （.venv が無い状態）でクライアントを設定した場合に壊れる。.venv\Scripts\
+# python.exe が実際に存在することを確認してから書き出す（無ければ、まだ
+# セットアップの途中ということなので黙ってスキップする）。
+# ---------------------------------------------------------------------------
+function New-McpJson {
+    $mcpJsonPath = Join-Path $ProjectRoot '.mcp.json'
+    $pythonExe = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
+    if (-not (Test-Path -LiteralPath $pythonExe)) {
+        Write-Warn 'MCPサーバー設定 (.mcp.json) を生成できませんでした（.venv がまだありません）。'
+        return
+    }
+    $mcpConfig = [ordered]@{
+        mcpServers = [ordered]@{
+            'nz-ltx23' = [ordered]@{
+                command = $pythonExe
+                args    = @('-m', 'mcp_server')
+                env     = [ordered]@{ PYTHONUTF8 = '1' }
+            }
+        }
+    }
+    ($mcpConfig | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $mcpJsonPath -Encoding utf8
+    Write-Good ('MCPサーバー設定を作りました（' + $mcpJsonPath + '）')
+    Write-Info 'Claude Code 等のMCPクライアントでこのフォルダを開くと、承認確認のうえで使えるようになります。'
+}
+
+# ---------------------------------------------------------------------------
 # install_ltx.ps1 が失敗したときの、日本語の手当て
 # ---------------------------------------------------------------------------
 function Show-InstallFailureHelp {
@@ -395,6 +425,8 @@ try {
     } else {
         Write-Host ''
         Write-Host '   セットアップ完了' -ForegroundColor Green
+        Write-Host ''
+        New-McpJson
         Write-Host ''
         Write-Info ('次: ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリック。')
         $pkg = Get-ChildItem -LiteralPath $ProjectRoot -Filter '*.au2pkg.zip' -File -ErrorAction SilentlyContinue |

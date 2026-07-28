@@ -2370,3 +2370,62 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 | V-UI | 目視6項目 | 共有アコーディオンが両タブから見える／旧2欄消滅／チェックOFFグレーアウト・ONで解除／Other→NAG復帰トースト／言語切替追従／有効＋空negativeはトーストのみでジョブ不発 | ⬜ 未実施 |
 
 **§38は実機ゲート未実施の状態でクローズしない。** オーナーの実機検証完了後、本節に結果を追記すること。
+
+---
+
+## 39. ★MCPサーバー（`mcp_server/`）＝実装完了・機械検証（pytest）全PASS・**実機ゲート未実施（オーナー実機待ち）**（2026-07-28）
+
+> **正本＝本節。** Claude Code 等の MCP（Model Context Protocol）クライアントから、Web の操作パネルと同等の操作をできるようにする `mcp_server/` パッケージ（22ツール）の実装記録。設計判断の詳細は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md)、利用者向け説明は [`../README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節を参照。実装計画そのものはオーナーのプランファイル（リポジトリ外）が正本で、Wave 0〜6（依存追加＋骨組み→system完成→uploads/submit_generate→jobs 7本→submit_chain→outputs→batch_planning）を順に実装し、本節（Wave 7）でドキュメント化と最終機械検証を行った。
+
+### 39.1 実装物
+
+- `mcp_server/`（新設・7ファイル＋`tools/`サブパッケージ6ファイル＝計13ファイル）: `__init__.py` / `__main__.py`（`Path(__file__)`起点でsys.path自己解決）/ `settings.py`（`LTX_MCP_*`環境変数→`config.yaml`の順で解決）/ `client.py`（`BackendClient`＝httpx.AsyncClient＋エラー翻訳）/ `params.py` / `paths.py` / `batch_planning.py` / `server.py`（`build_server()`＋日本語instructions）/ `tools/{system,uploads,generate,jobs,outputs,batch}.py`。
+- `pyproject.toml` / `requirements.txt`: `mcp>=1.28,<2` をmain依存として追記。
+- `scripts/setup.ps1`: セットアップ完了時に絶対パス入り `.mcp.json` を生成する `New-McpJson` 関数を追加。`.gitignore` に `.mcp.json` を追加（マシン固有の絶対パスを含むためコミット対象外）。
+- `tests/conftest.py`: `_build_app(tmp_path)` を抽出し `mcp_app` フィクスチャを追加（既存 `client` フィクスチャの外形は不変・15ファイルが依存する契約を維持）。
+- `tests/test_mcp_*.py`（新規7ファイル）: `test_mcp_registration.py` / `test_mcp_tools_system.py` / `test_mcp_errors.py` / `test_mcp_tools_generate.py` / `test_mcp_tools_jobs.py` / `test_mcp_outputs.py` / `test_mcp_batch_planning.py`。
+- `gradio_ui/handlers.py` / `gradio_ui/manifest.py`: 写経元であることを示すコメントを追加（ロジック自体は無変更）。
+
+### 39.2 pytest推移（Wave別・退行ゼロ）
+
+Wave 0〜6を順に実装するにつれ、アプリvenv（`.venv\Scripts\python.exe -m pytest -q`）のテスト総数は次のように増加した（NAG機能完了時点の658 passed/6 skippedを起点に、MCPサーバーのテストのみを加算した）。
+
+```
+658 → 675 → 699 → 736
+```
+
+W7（本節作成時点）で最終確認した結果は **736 tests / 730 passed / 6 skipped / 0 failed / 0 errors**（`--junitxml`集計）。skipの6件はいずれも `torch` 未導入によるエンジン系テストの収集スキップで、アプリvenvに元々torchを入れない設計のための既知スキップ（NAGの回でも同数出ており、MCP関連ではない）。既存テストへの改修は最小限（`tests/conftest.py`の`_build_app`抽出のみ）で、新規7ファイルはすべて加算的に追加された。
+
+### 39.3 stdout清浄性の確認
+
+MCPの `stdio` トランスポートはJSON-RPCを標準出力に流すため、`mcp_server/`配下のどこかで意図せず標準出力に書き込みが発生すると、プロトコル全体が即座に壊れる。この清浄性を次のコマンドで機械的に確認した。
+
+```powershell
+.venv\Scripts\python.exe -m mcp_server < NUL
+```
+
+標準入力を即座に閉じることでサーバーが起動直後に終了する状態を作り、標準出力バイト数を計測したところ **0 バイト**（終了コード0）だった。ドキュメント作成による変更後に再実行しても結果は変わらず、退行が無いことを確認した。
+
+### 39.4 22ツール登録の確認
+
+`tests/test_mcp_registration.py::test_tool_name_set_matches_expected` が、`mcp.shared.memory.create_connected_server_and_client_session` 経由の実MCPプロトコル往復で `mcp.list_tools()` を呼び、返ってきたツール名の集合が `EXPECTED_TOOLS`（22個・system 6/uploads 3/generate 2/jobs 7/outputs 3/batch 1）と厳密一致することをアサートしている。同ファイルの別テストは、全ツールに空でない説明文があること、`dict[str, Any]`を返すツールの結果が`{"result": ...}`でラップされず`structuredContent`にそのまま入ること（FastMCP 1.28の構造化出力の仕様どおり）も検証済み。
+
+### 39.5 実機実叩き（Claude Codeからの操作）＝未実施
+
+**本節作成時点で、Claude Code など実際のMCPクライアントからの操作は一つも行っていない。** ここまでの検証はすべてモックバックエンド（`httpx.ASGITransport`）を使ったオフラインのpytestであり、実際のバックエンドプロセス（`run.bat`）と実際のMCPクライアントを組み合わせた実機ゲートは、オーナーの確認待ちである。
+
+以下は承認済み計画書「W7」の実機検証チェックリストを転記したもの。**全項目未実施。**
+
+| ゲート | 内容 | 状態 |
+|---|---|---|
+| 承認ゲート | リポジトリフォルダをClaude Codeで開く→ワークスペース信頼確認→プロジェクトスコープMCPサーバーの承認（⏸ Pending approval）が出て、承認すると解除される | ⬜ 未実施 |
+| 22ツール表示 | `/mcp` コマンドで `nz-ltx23` サーバーと22個のツールが一覧表示される | ⬜ 未実施 |
+| T2V submit+poll | `submit_generate`（画像なし）→`wait_for_job`を繰り返し呼んで完了確認 | ⬜ 未実施 |
+| I2V | `upload_image`→`submit_generate`（`conditioning_images`指定）→完了確認 | ⬜ 未実施 |
+| A2Vバッチ1行 | `plan_a2v_batch`→1行分`upload_audio`→`submit_chain`→`wait_for_job`→`save_job_video` | ⬜ 未実施 |
+| join | V2V継続ジョブに対して`join_job`を呼び、`joined.mp4`が生成される | ⬜ 未実施 |
+| purge dry_run | `purge_terminal_jobs(dry_run=true)`が実際には何も削除せず対象一覧のみ返す | ⬜ 未実施 |
+| JOB_BUSY挙動 | ジョブ実行中に別の`submit_generate`/`submit_chain`を呼ぶと409 JOB_BUSY相当のエラーがエージェントに伝わる | ⬜ 未実施 |
+| api_key設定時の再起動 | `--api-key`指定でバックエンドを起動した状態でMCP経由の操作がBearer認証込みで通る | ⬜ 未実施 |
+
+**§39は実機ゲート未実施の状態でクローズしない。** オーナーの実機検証完了後、本節に結果を追記すること。

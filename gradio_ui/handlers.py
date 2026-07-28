@@ -38,6 +38,7 @@ _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
 
 
+# MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
     """Duration in seconds of a ``.wav`` file via the stdlib :mod:`wave` module,
     or ``None`` when ``path`` is not a readable ``.wav`` (a non-wav container, an
@@ -72,6 +73,7 @@ def _resolve_fps(fps) -> float:
     return fps_v or 24.0
 
 
+# MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def suggest_frames_for_audio(dur: float, fps) -> int:
     """Suggest a ``Frames`` value (8n+1) that fits ``dur`` seconds of audio at
     ``fps`` (auto-adjust the Generate-tab A2V audio attach, feature 1).

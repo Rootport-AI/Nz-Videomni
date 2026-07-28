@@ -287,6 +287,8 @@ def _wav_duration_seconds(path) -> float | None:
 # --------------------------------------------------------------------------- #
 # Scan
 # --------------------------------------------------------------------------- #
+# MCPサーバー側 mcp_server/batch_planning.py に写経あり（scan_wav_folder の走査
+# 規約 / raw_frame_count / over_frame_limit）。変更時は両方＋パリティテストを更新
 def scan_wav_folder(
     wav_dir, fps, frames_for: Callable[[float, float], int]
 ) -> list[BatchRow]:

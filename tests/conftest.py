@@ -28,8 +28,15 @@ def _make_args(config_path: str) -> argparse.Namespace:
     )
 
 
-@pytest.fixture()
-def client(tmp_path):
+def _build_app(tmp_path):
+    """Build a ``main.build_app`` FastAPI app wired to a temp-dir config.
+
+    Extracted from the ``client`` fixture (below) so ``mcp_app`` can share the
+    exact same app construction without duplicating it -- 15+ test files
+    depend on ``client``'s observable behavior staying byte-identical, so this
+    extraction must not change anything about it (see MEMORY.md: aux2/conftest
+    extraction lessons).
+    """
     cfg = {
         "server": {"log_dir": (tmp_path / "logs").as_posix()},
         "model": {"backend": "mock"},  # deterministic: tests never hit the real pipeline
@@ -38,11 +45,30 @@ def client(tmp_path):
     }
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return main.build_app(_make_args(cfg_path.as_posix()))
 
-    app = main.build_app(_make_args(cfg_path.as_posix()))
+
+@pytest.fixture()
+def client(tmp_path):
+    app = _build_app(tmp_path)
     with TestClient(app) as c:
         c.app_context = app.state.context  # type: ignore[attr-defined]
         yield c
+
+
+@pytest.fixture()
+def mcp_app(tmp_path):
+    """Same app as ``client``, for MCP tool tests that talk to it via
+    ``httpx.ASGITransport`` instead of ``TestClient`` (the MCP tools use an
+    async ``httpx.AsyncClient`` throughout, so an async-native transport keeps
+    the test path closer to production than driving the sync TestClient would).
+
+    Yields ``(app, output_dir_path)`` -- the output dir is a ``pathlib.Path``
+    tests can inspect directly.
+    """
+    app = _build_app(tmp_path)
+    with TestClient(app):  # runs startup/shutdown events, same as `client`
+        yield app, (tmp_path / "outputs")
 
 
 @pytest.fixture()

@@ -3,31 +3,28 @@ name = "ltx-desktop-backend"
 version = "1.0.0"
 description = "LTX-2 Video Generation Backend"
 requires-python = ">=3.12"
+# 2026-07-28 cleanup (PENDING_TASKS.md §3-25): removed sageattention, triton
+# (both platform variants), imageio + imageio-ffmpeg, peft, fastapi/uvicorn/
+# python-multipart (engine-venv copies), pynvml, ftfy -- all fork-era (4ea5c4b)
+# leftovers with zero importers in this codebase (consumer code was already
+# deleted in d0d3df5). sentencepiece and protobuf are deliberately KEPT
+# (Gemma tokenizer fallback concern, owner decision). See
+# engine/venv-engine.freeze.txt for the matching freeze-side removal + the
+# transitive orphan analysis.
 dependencies = [
     "pillow>=10.3.0",
     "torch>=2.3.0",
     "huggingface-hub>=0.23.0",
     "tqdm>=4.66.0",
-    "pynvml>=11.5.0; sys_platform != 'darwin'",
     "pydantic>=2.7.0",
     # LTX-2 inference dependencies
     "ltx-core",
     "ltx-pipelines",
     "diffusers>=0.36.0",
-    "ftfy>=6.0.0",
-    "imageio>=2.37.2",
-    "imageio-ffmpeg>=0.6.0",
-    "peft>=0.13.2",
     "protobuf>=3.20.0",
     "transformers>=4.52,<5",
     "sentencepiece>=0.1.99",
-    "sageattention>=1.0.0; sys_platform != 'darwin'",
     "opencv-python-headless>=4.8.0",
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "python-multipart>=0.0.9",
-    "triton-windows; sys_platform == 'win32'",
-    "triton; sys_platform == 'linux'",
     "gguf>=0.10.0",
 ]
 

@@ -38,10 +38,16 @@ model:
   # component 経路では重みとして開かれない（下記インライン注記の通り）。
   # 相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
   ltx_repo_dir: "./vendor/LTX-2"   # reference only（上流LTX-2クローン）。
-  # reference-only。43GB モノリスは Stage3 で物理削除済み。worker payload には
-  # 渡すが GGUF + component 経路では一切開かれない（rename test で実証）。
-  # DistilledPipeline のシグネチャ用に保持。
-  checkpoint_path: "./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"
+  # 2026-07-28 削除済み（PENDING_TASKS.md §3-26）: ここには以前 checkpoint_path
+  # キー（43GB モノリスの参照専用パス、Stage3 で物理削除済み）があった。調査の結果
+  # 完全に無害な死んだ設定と確定したため削除した——services/ltx_runner.py は
+  # このキーが未設定のときも常に worker payload の checkpoint_path を ""（空文字）
+  # として送っており（実運用で他の値になったことは一度も無い）、DistilledPipeline
+  # 側もその文字列を一切開かない。渡す理由は「None でない str」であることだけ
+  # （ModelLedger.build_model_builders が checkpoint_path is not None を条件に
+  # 後で dataclasses.replace で上書きされる遅延ビルダーを作るため）で、""でその
+  # 条件は満たされる。services/ltx_runner.py 側は同じ "" を直接ハードコードして
+  # いるので、この設定を削除しても worker payload はバイト同一のまま。
   spatial_upsampler_path: "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
   # GGUF Gemma 経路では tokenizer 群のみ必要。DistilledPipeline を gemma_root=None で
   # 構築し wheel の重み glob（model*.safetensors）をバイパス済 → Gemma LM 重みは GGUF 供給、

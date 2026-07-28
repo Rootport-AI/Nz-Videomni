@@ -213,10 +213,10 @@ attention は全世代で PyTorch の SDPA に固定しており、xformers や 
 
 > ここから先は**中で何が起きているかの説明**です。`setup.bat` が `scripts/install_ltx.ps1` を通じて
 > ほぼ同じことを自動で行うので、通常の利用では手で打つ必要はありません。
-> **1点だけ違います**: インストーラが実行するのは素の `uv sync`（実行に必要な依存だけ）で、
-> 開発用の追加依存（pytest ほか＝`dev` extra）は入りません。`dev` 込みの `uv sync --extra dev` が
-> 走るのは `scripts/install_ltx.ps1 -RunSmoke` を指定したときだけです。テストを動かしたい場合は
-> §6 を参照してください。
+> **2026-07-28更新**: インストーラは常に `uv sync --extra dev`（開発用の追加依存＝pytest ほかを含む）で
+> 同期するようになりました。以前は `-RunSmoke` 指定時だけ `dev` extra が入る仕組みでしたが、
+> 「セットアップし直すと pytest が消える」罠を仕組みで塞ぐため、常時同梱に変更しています
+> （詳細は[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §40）。テストの動かし方は §6 を参照してください。
 
 ```powershell
 # Python 本体もプロジェクト内に固定する（システムを汚さない）
@@ -276,8 +276,10 @@ UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose
 
 > **削除済み（2026-07-01 の refactor）**: (1) 46GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B ＝ 約 43GiB。
 > 資料によって「43GB」と書かれていることがあるが、GiB 表記の同一ファイルを指す）を物理削除。
-> `config.model.checkpoint_path` はフィールドとしては残りますが **reference-only**（worker payload に載るが GGUF+component
-> 経路では一切開かれない・rename test で実証済み）。(2) **22.7GB の QAT Gemma dir `models/gemma-3-12b-it-qat/` も物理削除**。
+> `checkpoint_path`（このモノリスへの参照専用パス）は2026-07-28に`config.model`から削除しました（死んだ設定と
+> 確認済み・詳細は[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §40）。worker payload へは
+> `services/ltx_runner.py`が直値の`""`をハードコードして渡すようになっており、GGUF+component 経路では
+> 以前と同じく一切開かれません。(2) **22.7GB の QAT Gemma dir `models/gemma-3-12b-it-qat/` も物理削除**。
 > Gemma を **text-only（`Gemma3ForCausalLM`・vision 無し）** で構築するよう作り替えたため（`engine/gemma/text_encoder_configurator.py`）、
 > wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は上記 ~40MB の tokenizer-only dir で足ります。full-QAT
 > baseline と出力バイト一致で検証済み（`Docs/VERIFICATION_LOG.md` §14）。
@@ -575,18 +577,18 @@ $env:PYTHONPATH = (Get-Location).Path
 ## 6. テスト
 
 ```powershell
-$env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
-
-# 先に開発用の依存（pytest ほか）を入れる。setup.bat で導入した環境には入っていない。
-uv sync --extra dev
-
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-> **`uv sync --extra dev` を必ず先に実行してください。** `setup.bat`（`scripts/install_ltx.ps1`）が
-> 走らせるのは素の `uv sync` で、これは `dev` extra に属する pytest を `.venv` から取り除きます。
-> そのため `setup.bat` で作った環境では、いきなり pytest を呼んでも「モジュールが無い」と言われます。
-> なお `uv sync --extra dev` の後に素の `uv sync` を走らせると pytest はまた消えます（そういう仕様です）。
+> **2026-07-28更新**: `setup.bat`（`scripts/install_ltx.ps1` 経由）で作った環境には、pytest など `dev` extra の
+> 依存が最初から入っています（インストーラが常に `uv sync --extra dev` で同期するようになったため）。
+> ただし、素の `uv sync` を単体で実行すると `dev` extra（pytest / iniconfig / pluggy）はいまも
+> 取り除かれます（`uv sync` は明示したextraだけを「入っているべきもの」とみなし、それ以外を削除する
+> 仕様のため）。取り除かれてしまった場合は次のコマンドで入れ直してください。
+>
+> ```powershell
+> uv sync --extra dev
+> ```
 
 pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`tests/conftest.py` が `model.backend="mock"` を強制するため、
 GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・複数画像・frame_idx≠0）とモックランナーによる生成疎通、

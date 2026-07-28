@@ -4,7 +4,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.4** |
+| 版 | **v0.5.5** |
 | 日付 | **2026-07-28**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -40,7 +40,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.4** |
+| 版 | **v0.5.5** |
 | 日付 | **2026-07-28** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
@@ -56,6 +56,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.2 | 2026-07-27 | サブマシンでの実機検証（`Docs/NEXT_SESSION_HANDOFF.md`・`README.md` §7）の反映と、実装との乖離を潰す収束修正。**§2.1**（ffmpeg は「PATH に通す」ではなく `scripts/setup.ps1` が `tools/ffmpeg` へ取り込む＝§2.4 の PATH 前置で解決される）／**§2.5**（`setup.ps1` の事前チェック 3 種＝空き容量・ページファイル・GPU がいずれも警告のみであること、および `run.ps1` の二重起動ガードの存在を追記）／**§3.3**（URL を控えに入れる処理は現行の `run.ps1` に存在しない＝利用者に見せる URL は `main.py` の起動バナーが唯一の正本、という実装に合わせて訂正）／**§4.4**（ディレクトリ構成のルートフォルダ名を実際の `Nz-LTX23-backend/` へ訂正）。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-38。 |
 | v0.5.3 | 2026-07-28 | NAG（Normalized Attention Guidance＝非CFGネガティブプロンプト機能）の追加を反映。**§6.2**（`GenerateRequest` に `nag_enabled`/`nag_scale`/`nag_tau`/`nag_alpha` の4フィールドを追加し `negative_prompt` に `max_length=2000` を付与、凍結制約に相互検証を追加。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§12.2**（共有プロンプト直下の Negative Prompt アコーディオンを追記）。凍結API契約（§6）への追加は、2026-07-21 の V2V Join 拡張（`d22706e`）と同じく既存フィールドの意味変更を伴わない加算のみで、実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §38。 |
 | v0.5.4 | 2026-07-28 | 同日の第2コミット（`2f8e85b`）で追加された **MCPサーバー**（`mcp_server/`。Claude Code 等の MCP クライアントからバックエンドを操作する22ツール）を反映。**§12b＝完全新設**（位置づけ・22ツールの概要・依存関係・実機ゲート状況へのポインタ）／**§0.3 の SSOT 地図**（`Docs/MCP_SERVER_DESIGN.md` を追加）／**§4.5**（アプリ venv の技術スタック表に `mcp` パッケージを追加）／**付録B.1**（用語集に MCP のエントリを追加）。凍結 API 契約（§6）そのものへの変更は無い（MCPサーバーは既存 `/api/v1/*` を叩く追加のクライアントであり、REST API 契約は無改修）。詳細な設計判断は `Docs/MCP_SERVER_DESIGN.md`、利用者向け説明は `README.md` §8、機械検証・実機ゲート状況は `Docs/VERIFICATION_LOG.md` §39 が正本。 |
+| v0.5.5 | 2026-07-28 | 同日の依存整理バッチ（未使用パッケージ削除・`uv sync --extra dev` 常時化・`checkpoint_path` 後始末）を反映し、`checkpoint_path` が `config.model` から削除された事実に追随して**5箇所の記述を訂正**した。**§4.3**（`checkpoint_path` はそもそも対応する config フィールドが無くなり、worker payload への値は `services/ltx_runner.py` が直値の `""` をハードコードする、という実装に合わせて訂正）／**§5.1**（`models/INSTALLED_PATHS.txt` の行数を「9 行」→「**8 行**」に訂正。`checkpoint_path (ref-only)` の行は `config.yaml` からの削除に伴い消えた）／**§5.2**（`config.model.checkpoint_path` は「フィールドとしては残る」ではなく**削除済み**、worker payload には `services/ltx_runner.py` のハードコードとして残るのみ、と訂正）／**§5.5**（`checkpoint_path` は「config に残るが reference-only」ではなく**削除済み**、と訂正）／**§11.2**（`config.yaml` の実値表から `checkpoint_path` の行を削除。現行 `config.yaml` にこのキーは存在しない）。凍結 API 契約（§6）への変更は無い（worker プロトコルの `checkpoint_path` フィールド自体は存続し、値がハードコード化されただけ）。実装・機械検証の詳細は `Docs/VERIFICATION_LOG.md` §40 が正本。 |
 
 ### 0.2 スコープ
 
@@ -311,7 +312,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 | GGUF Gemma | `model.gguf_gemma_path` |
 | component VAE / audio / text-projection | `model.component_video_vae_path` / `component_audio_vae_path` / `component_text_projection_path` |
 
-`checkpoint_path`（43GB モノリス。本書中の「46GB モノリス」と**同一ファイル**＝§5.2 の表記注記）は **reference-only** で、GGUF + component 経路では一切開かれないため、ここでは**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
+`checkpoint_path`（43GB モノリス。本書中の「46GB モノリス」と**同一ファイル**＝§5.2 の表記注記）は2026-07-28に`config.model`から削除済みで、そもそも対応する config フィールドが無い。`services/ltx_runner.py`が worker payload へ渡す値は直値の`""`にハードコードされており（`DistilledPipeline`構築のシグネチャを満たすためだけの存在）、GGUF + component 経路では一切開かれないため、ここでは**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
 
 **MockBackend の用途**: GPU / モデルウェイトの無い環境（開発・CI・pytest）向けの合成クリップ生成。`tests/conftest.py` が `model.backend="mock"` を強制する。API・スキーマ・出力構造（`outputs/{job_id}/output.mp4` + `metadata.json`）は real と同一で、`GenerationOutcome.backend` の値だけが異なる（mock=`"mock"`, real=`"ltx-distilled"`）。
 
@@ -378,7 +379,7 @@ Nz-LTX23-backend/
 
 ### 5.1 実行に本当に要る構成
 
-本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 28.15GiB）である。相対パスは `config.model` が保持し、PROJECT_ROOT 基準で `config._abs` が絶対化する。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。同ファイルが列挙するのは **9 行**で、内訳は本表の 5 要素を展開したもの（component ファイルが video VAE / audio VAE / text-projection の 3 行に分かれる）**7 行**＋ `engine_python`（`./.venv-engine/Scripts/python.exe`）＋ `checkpoint_path (ref-only)`（46GB モノリスへの reference-only パス・§5.5）である。**§5.1b の IC-LoRA / 前処理器は含まない。**
+本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 28.15GiB）である。相対パスは `config.model` が保持し、PROJECT_ROOT 基準で `config._abs` が絶対化する。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。同ファイルが列挙するのは **8 行**で、内訳は本表の 5 要素を展開したもの（component ファイルが video VAE / audio VAE / text-projection の 3 行に分かれる）**7 行**＋ `engine_python`（`./.venv-engine/Scripts/python.exe`）である（2026-07-28、`checkpoint_path`の行は`config.yaml`からの削除に伴い消えた・§5.5）。**§5.1b の IC-LoRA / 前処理器は含まない。**
 
 | 要素 | 既定パス | 概算 | 役割 |
 |------|----------|------|------|
@@ -405,7 +406,7 @@ Nz-LTX23-backend/
 
 de-fork（§13）と QAT 回収（§13）のリファクタで、実行に不要な以下を**物理削除**した:
 
-- **43GB モノリス** `ltx-2.3-22b-distilled-1.1.safetensors`。`config.model.checkpoint_path` はフィールドとしては残るが **reference-only** で、GGUF + component 経路では一切開かれない（rename test で実証・VERIFICATION_LOG §13.3）。worker payload には載る（`DistilledPipeline` のシグネチャ用）が、存在チェックすら課さない。
+- **43GB モノリス** `ltx-2.3-22b-distilled-1.1.safetensors`。`config.model.checkpoint_path` フィールドは2026-07-28に削除済み（死んだ設定と確認済み・`Docs/VERIFICATION_LOG.md` §40）。worker payload には引き続き載る（`services/ltx_runner.py`が`DistilledPipeline`のシグネチャを満たすため直値`""`をハードコード）が、GGUF + component 経路では一切開かれず、存在チェックすら課さない（rename test で実証・VERIFICATION_LOG §13.3）。
 - **22.7GB の QAT Gemma dir** `models/gemma-3-12b-it-qat/`。Gemma を text-only 化（下記 5.3）したため wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は ~40MB の tokenizer-only dir で足りる。
 
 これにより `models/` は 50.9GB → ~28.15GB（VERIFICATION_LOG §14.1）。
@@ -426,7 +427,7 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 ### 5.5 reference-only パスの位置づけ
 
-`checkpoint_path`（43GB モノリス）・`ltx_repo_dir`（`vendor/LTX-2` 上流クローン）は config に残るが **reference-only** で、GGUF + component 経路では読まれない。`checkpoint_path` は `DistilledPipeline` 構築のシグネチャを満たすために worker payload へ転送されるだけで（存在チェック無し）、`fast_video_pipeline.py` の fail-fast アサートが「component/GGUF ソースが全て揃っていること」を build 前に要求するため、モノリスへサイレントにフォールバックすることは無い。
+`ltx_repo_dir`（`vendor/LTX-2` 上流クローン）は config に残るが **reference-only** で、GGUF + component 経路では読まれない。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/ltx_runner.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast アサートが「component/GGUF ソースが全て揃っていること」を build 前に要求するため、モノリスへサイレントにフォールバックすることは無い。
 
 ---
 
@@ -1033,7 +1034,6 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `auto_load_on_generate` | `true` | 初回 generate で自動ロード |
 | `reload_interval` | `0` | 再ロード間隔（0=無効） |
 | `ltx_repo_dir` | `"./vendor/LTX-2"` | reference-only（上流クローン） |
-| `checkpoint_path` | `"./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"` | **reference-only**。43GB モノリスは物理削除済。worker payload に載るが GGUF+component 経路では開かれない（`_real_available` で存在チェックしない） |
 | `spatial_upsampler_path` | `"./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"` | 空間 2x アップサンプラ（load-bearing） |
 | `gemma_root` | `"./models/gemma-3-12b-it-tokenizer"` | **tokenizer-only ~40MB**。DistilledPipeline を `gemma_root=None` で構築し重み glob をバイパス、engine は tokenizer/processor の module_ops のみ読む（load-bearing、存在チェックあり） |
 | `backend` | `"auto"` | `auto` \| `mock` \| `real`（auto: GPU+モデル有→real、無→mock） |
@@ -1046,6 +1046,8 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `component_audio_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"` | 単体 AUDIO VAE/vocoder（load-bearing） |
 | `component_text_projection_path` | `"./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"` | 単体 text projection（load-bearing） |
 | `ic_loras` | `pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` の 3 エントリ | IC-LoRA アダプタの**名前 → パス**登録。API の `GenerateRequest.loras[].name` はここに登録された**名前でのみ**解決する（生パスは受けない）。値は文字列（＝`preprocess: none`・Phase B 互換）または `{ path, preprocess }` マップ。`canny-control`（`preprocess: canny`）と `pose-control`（`preprocess: dwpose`）は**同一の union-control ファイル**を 2 つの論理名で公開したもの。**セクション不在＝`loras` 要求は全て拒否（fail loud）**。実体ファイルの取得と検証は §5.1b（`_real_available()` は見ないため、欠けると UI に名前は出るのに選択時 404 になる） |
+
+> **2026-07-28**: 本表はかつて`checkpoint_path`（43GBモノリスへの reference-only パス）の行を含んでいたが、`config.model`から削除済みのため本表から除去した（§5.2・§5.5・`Docs/VERIFICATION_LOG.md` §40）。worker payload 自体には`checkpoint_path`キーが残るが、値は`services/ltx_runner.py`が直値`""`をハードコードするため、config側に対応するフィールドは無い。
 
 ### 11.3 vram
 | キー | 実値 | 説明 |
@@ -1414,7 +1416,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **te-offload**（`--te-offload`） | Gemma text-encoder を逐次 per-layer で CPU オフロードし encode ピーク VRAM を下げる（既定 ON・§9）。 |
 | **dit-cpu-load**（`--dit-cpu-load`） | DiT(transformer) を CPU で構築しブロックのみ GPU へストリーム。ロード時の ~16.9GB GPU スパイクを除去（既定 ON・§9）。 |
 | **component-files** | VAE / audio / text-projection を 46GB モノリスでなく小単体 safetensors から読む経路（`use_component_files: true`）。マルチジョブの commit 枯渇を防ぐ。 |
-| **43GB モノリス / 46GB モノリス** | **同一の 1 ファイル** `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B＝46.1GB＝42.97GiB）。本書は箇所により両方の表記を使うが指すものは同じで、どちらも誤りではない（§5.2 の表記注記・`README.md` §1 の削除済みブロック注記）。物理削除済で `checkpoint_path` は reference-only。 |
+| **43GB モノリス / 46GB モノリス** | **同一の 1 ファイル** `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B＝46.1GB＝42.97GiB）。本書は箇所により両方の表記を使うが指すものは同じで、どちらも誤りではない（§5.2 の表記注記・`README.md` §1 の削除済みブロック注記）。物理削除済で、旧参照パス`checkpoint_path`も2026-07-28に`config.model`から削除済み（現在は`services/ltx_runner.py`がworker payloadへ直値`""`をハードコード）。 |
 | **spill / spill-free** | 生成が dedicated 16GB を超えて system RAM（shared）へ溢れること。溢れると ~2-4x 低速化（OOM はしない）。溢れない上限が spill-free frames。 |
 | **commit** | Windows の仮想メモリ予約（物理 RAM + ページファイル）。ディスク使用量ではない。連続生成で枯渇すると native crash しうる（component-files で束縛）。 |
 | **GGUF / Q4_K_M** | 量子化重みフォーマット。本番の transformer / Gemma とも GGUF Q4_K_M。 |

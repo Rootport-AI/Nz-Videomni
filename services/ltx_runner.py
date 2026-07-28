@@ -387,11 +387,11 @@ class LTXRunner:
         """True only if the engine python, worker script and every file the real
         GGUF + component-file path actually loads are present.
 
-        The GGUF + component-file recipe never opens the 43GB monolith
-        (``checkpoint_path``): it is passed to the worker as a reference-only
-        payload field (the wheel's lazy builders receive it but the GGUF/component
-        installs replace every loader), so it is deliberately NOT gated here. The
-        (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
+        The GGUF + component-file recipe never opens the 43GB monolith. The
+        worker payload's ``checkpoint_path`` field is a hardcoded ``""`` (see
+        ``_build_load_payload``) — the wheel's lazy builders receive it but the
+        GGUF/component installs replace every loader — so there is no path here
+        to gate. The (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
         with gemma_root=None so the wheel's weight glob is bypassed,
         but the engine still loads the tokenizer/processor module_ops from this dir,
         so a missing dir must fail fast in the app layer rather than crash deep in
@@ -940,12 +940,17 @@ class _RealBackend:
         selection = selection or {}
         model = self.config.model
 
-        # checkpoint_path (43GB monolith) is reference-only: the GGUF + component-file
-        # path never opens it. It is still forwarded to the worker as a payload field
-        # (the wheel's lazy builders expect it), so resolve to a project-rooted
-        # absolute WITHOUT an existence check — it may be physically absent while the
-        # real path still works.
-        checkpoint_path = str(self.config._abs(model.checkpoint_path)) if model.checkpoint_path else ""
+        # checkpoint_path: hardcoded "" (2026-07-28, PENDING_TASKS.md 3-26; the
+        # ModelConfig field this used to read no longer exists — see config.py's
+        # NOTE next to spatial_upsampler_path for the full evidence chain). The
+        # GGUF + component-file path never opens this string; it is forwarded
+        # only because DistilledPipeline requires a non-None str so
+        # ModelLedger.build_model_builders() populates the lazy builder objects
+        # that the GGUF/component re-sourcing later overwrites via
+        # dataclasses.replace(). "" satisfies that "not None" requirement and
+        # keeps this payload byte-identical to every prior config state (no
+        # config.yaml value ever set this to anything else in practice).
+        checkpoint_path = ""
         # gemma_root (tokenizer-only ~40MB) IS load-bearing: DistilledPipeline is
         # built with gemma_root=None so the wheel's weight glob (model*.safetensors)
         # is bypassed, but the engine loads the tokenizer/processor

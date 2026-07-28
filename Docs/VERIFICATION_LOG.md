@@ -2359,15 +2359,19 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 
 | ゲート | 内容 | 合格条件 | 状態 |
 |---|---|---|---|
-| G0（最重要） | 回帰: NAG OFFで単発T2V/I2V/A2V/chain 2clips/バッチ2行 | 出力mp4のSHA256が変更前とバイト一致・peak VRAMも同値 | ⬜ 未実施 |
+| G0（最重要） | 回帰: NAG OFFで単発T2V/I2V/A2V/chain 2clips/バッチ2行 | 出力mp4のSHA256が変更前とバイト一致・peak VRAMも同値 | 🔶 部分合格（単発T2V/I2Vのみ。下記2026-07-28追記参照。A2V/chain/バッチは未実施） |
 | G1 | ログ | `NAG installed on <実測数> cross-attention modules ...`（期待96）が1ジョブ1回出力される（chainでも1回） | ⬜ 未実施 |
 | G2 | 恒等 | alpha=0 / scale=1でOFFと一致（恒等短絡によりビット一致が期待値。cuBLAS差ならPSNR≥50dB許容＋要因記録） | ⬜ 未実施 |
-| G3（オーナー目視） | 効果 | 同一seedでOFF/ONのSHA256が異なり、negativeの概念が抑制され、破綻がない（破綻時はalpha 0.25→0.15、scale 11→5で再確認） | ⬜ 未実施 |
+| G3（オーナー目視） | 効果 | 同一seedでOFF/ONのSHA256が異なり、negativeの概念が抑制され、破綻がない（破綻時はalpha 0.25→0.15、scale 11→5で再確認） | ✅ 合格（2026-07-28） |
 | G4 | 音声到達 | 音声寄りnegativeで音声トラックが変化することを聴取確認 | ⬜ 未実施 |
 | G5 | コスト | VRAM増分ピーク（z_neg＋z_gの2テンソル分、768p stage-2タイルで約+350MB目安・16GB内）と時間増（cross-attentionは倍だがself-attention支配のため全体数%〜15%程度の見込み）を実測。バッチA2Vは行ごとにGemmaロード＋negativeエンコードが加算されるため行あたりの時間増も実測 | ⬜ 未実施 |
 | G6 | 経路網羅 | ONで単発T2V/I2V/A2V/chain/chain+V2V/chain+IC-LoRA/バッチ/chunked_upsampleすべて完走 | ⬜ 未実施 |
 | G7 | 併用非干渉 | IC-LoRA＋NAG、block-swap小窓＋NAG、GGUF既定経路のいずれも問題なく完走 | ⬜ 未実施 |
 | V-UI | 目視6項目 | 共有アコーディオンが両タブから見える／旧2欄消滅／チェックOFFグレーアウト・ONで解除／Other→NAG復帰トースト／言語切替追従／有効＋空negativeはトーストのみでジョブ不発 | ⬜ 未実施 |
+
+**2026-07-28追記（G3合格）**: オーナーがGradio経由2ジョブ（`423d19ca-1228-4621-a48f-09862fdcc5a0`／`74c4a11f-66ab-4b5e-ae30-f158ddea9920`）・AviUtl2経由2ジョブ（`2637bcc9-edd0-484d-b49e-a97787cc5f3c`／`77f028ce-45b0-464f-9b53-9b0d3b32238c`）でOFF/ON比較を実施し、NAG=Enableでnegative_promptに書いた内容が出力から目に見えて減ることを確認した（G3合格）。G0/G1/G2/G4〜G7・V-UIは引き続き未実施。
+
+**2026-07-28追記（G0部分合格、§40の依存整理バッチ実機回帰と同時実施）**: §40.6の実GPU SHA回帰（MCP経由、job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`＝T2V／job `3d231fc1-4cad-49d8-9026-8ddf45419f11`＝I2V）は、依存整理バッチ（§40.1〜40.3）だけでなくNAG機能そのものについても「OFF時は出力に一切触れない」ことの裏付けになる。両ジョブとも基準SHA256・peak_vram_mbと完全一致し、T2Vのリクエストエコーで`nag_enabled=false`を確認済み。**したがってG0は単発T2V／単発I2Vの2経路に限り部分合格とする。A2V・chain 2clips・バッチ2行のG0、およびG1/G2/G4〜G7・V-UIは引き続き未実施のまま**（過大評価を避けるため、G0行は「部分合格」表記に留め全合格とはしない）。
 
 **§38は実機ゲート未実施の状態でクローズしない。** オーナーの実機検証完了後、本節に結果を追記すること。
 
@@ -2419,13 +2423,78 @@ MCPの `stdio` トランスポートはJSON-RPCを標準出力に流すため、
 | ゲート | 内容 | 状態 |
 |---|---|---|
 | 承認ゲート | リポジトリフォルダをClaude Codeで開く→ワークスペース信頼確認→プロジェクトスコープMCPサーバーの承認（⏸ Pending approval）が出て、承認すると解除される | ⬜ 未実施 |
-| 22ツール表示 | `/mcp` コマンドで `nz-ltx23` サーバーと22個のツールが一覧表示される | ⬜ 未実施 |
-| T2V submit+poll | `submit_generate`（画像なし）→`wait_for_job`を繰り返し呼んで完了確認 | ⬜ 未実施 |
-| I2V | `upload_image`→`submit_generate`（`conditioning_images`指定）→完了確認 | ⬜ 未実施 |
+| 22ツール表示 | `/mcp` コマンドで `nz-ltx23` サーバーと22個のツールが一覧表示される | 暫定✅ 2026-07-28（下記注記参照） |
+| T2V submit+poll | `submit_generate`（画像なし）→`wait_for_job`を繰り返し呼んで完了確認 | 暫定✅ 2026-07-28（job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`、§40.6参照） |
+| I2V | `upload_image`→`submit_generate`（`conditioning_images`指定）→完了確認 | 暫定✅ 2026-07-28（job `3d231fc1-4cad-49d8-9026-8ddf45419f11`、§40.6参照） |
 | A2Vバッチ1行 | `plan_a2v_batch`→1行分`upload_audio`→`submit_chain`→`wait_for_job`→`save_job_video` | ⬜ 未実施 |
 | join | V2V継続ジョブに対して`join_job`を呼び、`joined.mp4`が生成される | ⬜ 未実施 |
 | purge dry_run | `purge_terminal_jobs(dry_run=true)`が実際には何も削除せず対象一覧のみ返す | ⬜ 未実施 |
-| JOB_BUSY挙動 | ジョブ実行中に別の`submit_generate`/`submit_chain`を呼ぶと409 JOB_BUSY相当のエラーがエージェントに伝わる | ⬜ 未実施 |
+| JOB_BUSY挙動 | ジョブ実行中に別の`submit_generate`/`submit_chain`を呼ぶと409 JOB_BUSY相当のエラーがエージェントに伝わる | 暫定✅ 2026-07-28（I2V実行中に409「`JOB_BUSY: A job is already running (Phase 1 allows one concurrent job)`」をライブ確認） |
 | api_key設定時の再起動 | `--api-key`指定でバックエンドを起動した状態でMCP経由の操作がBearer認証込みで通る | ⬜ 未実施 |
 
+**2026-07-28追記（「暫定✅」の位置づけ）**: 上表の「暫定✅」は、オーナー承認済みのエージェントがMCPクライアント（`mcp==1.28.1`、stdioトランスポート、実バックエンド＝ltx-distilled・RTX 4070 Ti SUPER）を自前のスクリプトから直接叩いて確認したもので、**Claude Code本体のUI（承認ダイアログ・`/mcp`コマンドの実画面）を経由した確認ではない**。オーナー判断により「MCP経由で実バックエンドを回せることが確認できれば暫定合格と見做す」ため✅としているが、Claude Code UIの承認導線そのものの実地確認はまだ済んでいない。**未実施のまま残る項目**: 承認ゲート（Claude Code UI経由のPending approval導線）、A2Vバッチ1行、join、purge dry_run、api_key設定時の再起動、submit_chain単体、cancel/delete、save_job_video、load/unload_pipeline、upload_video/upload_audio、list_jobs。
+
 **§39は実機ゲート未実施の状態でクローズしない。** オーナーの実機検証完了後、本節に結果を追記すること。
+
+---
+
+## 40. ★依存整理バッチ（未使用パッケージの削除＋`uv sync --extra dev`常時化＋`checkpoint_path`後始末）＝実装完了・機械検証全PASS・**実機SHA回帰は未実施（オーナー実機待ち）**（2026-07-28）
+
+> **正本＝本節。** フロントエンド側の起票・経緯は [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-5・§3-25・§3-26（本節との対応関係もそちらに明記）。着手はNAG（§38）の実機ゲート完了後の別バッチとして実施した（同時実施だとSHA不一致が出た場合にNAGと依存削除のどちらが原因か切り分けられなくなるため）。
+
+### 40.1 未使用依存パッケージの削除（`.venv-engine`）
+
+`.venv-engine`の依存表に残っていた、2026-06-30のフォーク取り込み（`4ea5c4b`）由来で消費側コードが翌日の大掃除（`d0d3df5`）で削除済みの「フォーク由来の化石」を棚卸しし、確認済み未使用10件＋追加調査で特定した確実な孤児9件＝**計19エントリ**を`engine/engine-venv-pyproject.toml`と`engine/venv-engine.freeze.txt`から削除した。
+
+**確認済み未使用10件（内訳）**: `sageattention` 1.0.6（77KB）／`triton-windows` 3.6.0（129MB）／`imageio`＋`imageio-ffmpeg`（計約85MB）／`peft`（2.3MB）／`fastapi`・`uvicorn`・`python-multipart`のエンジンvenv側重複コピー（計約1MB）／`pynvml`／`ftfy`。
+
+**追加の確実な孤児9件**: 同じ棚卸しの過程で、上記10件とは別の観点（コードから一度もimportされない・消費側が既に削除済み）で特定した9パッケージ。残り9件は上記10件と同じ基準（全ソースgrepで参照ゼロを確認）で選定した。
+
+**sageattentionも削除する理由**: 入っているのは旧世代1.0.6で、将来の高速推論モードは現行世代（SageAttention 2系）の新規選定になるため温存価値がない。フォーク元のコード自体に「有効化すると2倍遅くなる原因を調査中（既定OFF）」と記されていた。
+
+**保留（削除しない）**: `sentencepiece`／`protobuf`の2つ。Gemmaトークナイザのフォールバック経路で使われる可能性を静的解析で否定しきれず、壊れたときの症状（トークナイザロード失敗）が致命的なわりに節約が小さい（2026-07-28オーナー決定）。
+
+**サイズ・エントリ数の変化**: `engine/venv-engine.freeze.txt`のエントリ数は**69→50**。`.venv-engine`の実ディスク使用量は約230MB縮小（**4.98GB→4.77GB**）。
+
+### 40.2 `uv sync`が「任意の依存」を黙って刈り取る問題への対処
+
+アプリ用仮想環境（`./.venv`）で、`uv sync`（`--extra dev`無し）を実行すると`dev` extra（`pytest`・推移的依存の`iniconfig`／`pluggy`）が**警告なく削除される**仕様が確認されていた（`uv sync`は要求された状態へ環境を合わせにいく道具で、明示しないextraは「入っていてはいけないもの」とみなして刈り取るため）。
+
+**対処（実施済み）**: `scripts/install_ltx.ps1`のアプリvenv同期ステップを常に`uv sync --extra dev`にした。従来は`-RunSmoke`指定時だけ追加で`uv sync --extra dev`を走らせる特別扱いだったが、ステップ本体が常時`--extra dev`になったことでこの特別扱いは冗長になったため撤去した。数MBの追加でエンドユーザー環境にも`pytest`が入るが、「`git pull`後に`setup.bat`を再実行するとテストが消える」罠を仕組みで塞ぐことを優先した（実害の実績: 2026-07-28のNAG実装作業でもこの罠を踏み、手動`uv sync --extra dev`での復旧が必要だった）。
+
+### 40.3 `checkpoint_path`の後始末
+
+`checkpoint_path`（物理削除済みの43GBモノリスを指す参照専用キー）を`config.py`の`ModelConfig`・`config.yaml`・`config.yaml.example`の3箇所から完全に削除した。
+
+調査の結果、`config.py`のコメントにあった「`DistilledPipeline`のシグネチャのために保持している」という制約は外せると確定した。`ModelLedger.build_model_builders`が要求するのは「`None`でない文字列」であることだけで、その文字列が実際に開かれることは無い（GGUF＋componentファイル経路では一切参照されない）。そのため`services/ltx_runner.py`側で、worker payloadへ渡す`checkpoint_path`を直値の`""`にハードコードするよう変更し（証跡コメントをコード上に残した）、設定削除の前後でworker payloadがバイト同一であることを確認した。
+
+### 40.4 機械検証の結果
+
+- **エンジンimport確認**: `.venv-engine`再構築後、`engine`パッケージ一式のimportが正常に通ることを確認。
+- **`engine.transformer.nag_selfcheck`**: 6/6 PASS（§38.3と同一の自己検証。依存削除後も退行なし）。
+- **アプリvenv pytest**: 736 tests / 730 passed / 6 skipped（§39.2と同数。退行ゼロ）。
+- **`uv sync --extra dev`の存続確認**: セットアップ経路を再実行しても`dev` extra（pytest/iniconfig/pluggy）が消えないことを確認（§40.2の対処が機能している）。
+
+### 40.5 判明した2点（NOTE）
+
+1. **インストーラのfreeze適用は加算的（additive）**: `install_ltx.ps1`のfreeze同期は「無いものを入れる」動作であり、「入っているものを消す」動作ではない。したがって、この変更より前に`.venv-engine`を作った既存ユーザーの環境からは、削除対象の19パッケージは自動では消えない。実害の無い残留物として残るのみで、新規インストール環境は最初からクリーンな状態になる。
+2. **`torchvision`は要調査のまま保留**: メタデータの依存グラフ上は必須の要求元（requirer）が見当たらないが、明示依存かつ既存の記載であるため今回の削除対象には含めなかった。将来あらためて確認する対象として記録する。
+
+### 40.6 オーナー実機チェックリスト（実GPU SHA回帰・未実施）
+
+依存削除・`uv sync`変更・`checkpoint_path`削除のいずれも「出力に触れないはずの変更」であることを、実GPUでのバイト一致回帰で最終確認する。
+
+| # | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| 1 | T2V回帰 | 既存の基準seed/paramsで生成し、出力mp4のSHA256が変更前の基準と一致・peak VRAMも同値 | ✅ 合格（2026-07-28。job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`、SHA256 `23844b4eebd107ccba8c5534eb65bab86575cca0b9050cb6c7e680a4506bb7bf`＝基準と完全一致、peak_vram_mb **8440**＝基準一致） |
+| 2 | 最小I2V回帰 | 同上（最小I2Vの基準ケースで実施） | ✅ 合格（2026-07-28。job `3d231fc1-4cad-49d8-9026-8ddf45419f11`、SHA256 `a511eda431cf0d0942cee97fa130f45e55fc3236833cbf9ea743ea7f4715c217`＝基準と完全一致、peak_vram_mb **9525**＝基準一致） |
+| 3 | 合格後の後始末 | 1・2が合格したら、フロントエンド側台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-5／§3-25／§3-26をクローズする | ✅ 実施済み（2026-07-28、本節作成と同日にフロントエンド側台帳をクローズ。[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md)へ移設済み） |
+
+**2026-07-28追記（実GPU SHA回帰PASS）**: オーナー承認のもと、エージェントがMCPサーバー（`mcp_server/`）経由（`mcp==1.28.1`のstdioクライアントスクリプト、実バックエンド＝ltx-distilled、GPU＝RTX 4070 Ti SUPER）で実施。Claude Code UIの承認フローは通していない（この点は§39の暫定注記を参照）が、生成そのものは実プロセス・実GPUを通しており、出力SHA256とpeak_vram_mbの一致という合否基準に照らして**正式PASS**として扱う。
+
+- **T2V**: job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`。パラメータ＝基準（prompt "a calm ocean wave..."／512×320／49f／8steps／seed12345）。リクエストエコーで`nag_enabled=false`を確認（§38 NAG機能の非干渉も同時に裏付け）。出力SHA256は§13.1以来の基準値と完全一致・peak_vram_mbも基準一致。
+- **最小I2V**: job `3d231fc1-4cad-49d8-9026-8ddf45419f11`。条件画像は`outputs/qat_reclaim_baseline/cond_image_512x320.png`をmanifestとバイト一致確認したうえで`upload_image`ツール経由でアップロードしたもの。出力SHA256・peak_vram_mbともに基準一致。
+- **副産物（JOB_BUSY実地確認）**: I2Vジョブ実行中に別ジョブ投入を試みたところ、ライブで409「`JOB_BUSY: A job is already running (Phase 1 allows one concurrent job)`」を受信・確認（§39のJOB_BUSY行の実地裏付けを兼ねる）。
+- **この回帰が持つ副次的な意味**: これらの基準SHA自体はNAG（§38）実装より前から存在する値のため、今回のバイト一致は「依存整理（§40.1〜40.3）が出力に触れていないこと」だけでなく、「単発T2V／最小I2Vにおいて NAG OFF 時の出力がバイト不変であること」も同時に裏付けている（＝§38.4 G0 の単発T2V／I2V分に相当。A2V／chain／バッチのG0は未実施のまま）。
+
+**§40は実機SHA回帰が未実施の状態でクローズしない。** →**2026-07-28時点でチェックリスト1〜3すべて合格・完了。** 依存整理バッチ（§40.1〜40.3）の実機確認はこれで完結する。

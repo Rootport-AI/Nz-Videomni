@@ -4,8 +4,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.1** |
-| 日付 | **2026-07-26**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
+| 版 | **v0.5.4** |
+| 日付 | **2026-07-28**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
 ## 目次
@@ -23,6 +23,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 - §10 解像度×尺の能力と音声
 - §11 config.yaml
 - §12 Gradio 検証UI
+- §12b MCPサーバー（AIエージェント連携）
 - §13 開発フェーズとロードマップ
 - §14 AviUtl2 / DaVinci Resolve 連携（Phase 2 = ゴール）
 - §15 ログ・エラーハンドリング
@@ -39,7 +40,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.3** |
+| 版 | **v0.5.4** |
 | 日付 | **2026-07-28** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
@@ -54,6 +55,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-36・§3-37。 |
 | v0.5.2 | 2026-07-27 | サブマシンでの実機検証（`Docs/NEXT_SESSION_HANDOFF.md`・`README.md` §7）の反映と、実装との乖離を潰す収束修正。**§2.1**（ffmpeg は「PATH に通す」ではなく `scripts/setup.ps1` が `tools/ffmpeg` へ取り込む＝§2.4 の PATH 前置で解決される）／**§2.5**（`setup.ps1` の事前チェック 3 種＝空き容量・ページファイル・GPU がいずれも警告のみであること、および `run.ps1` の二重起動ガードの存在を追記）／**§3.3**（URL を控えに入れる処理は現行の `run.ps1` に存在しない＝利用者に見せる URL は `main.py` の起動バナーが唯一の正本、という実装に合わせて訂正）／**§4.4**（ディレクトリ構成のルートフォルダ名を実際の `Nz-LTX23-backend/` へ訂正）。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-38。 |
 | v0.5.3 | 2026-07-28 | NAG（Normalized Attention Guidance＝非CFGネガティブプロンプト機能）の追加を反映。**§6.2**（`GenerateRequest` に `nag_enabled`/`nag_scale`/`nag_tau`/`nag_alpha` の4フィールドを追加し `negative_prompt` に `max_length=2000` を付与、凍結制約に相互検証を追加。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§12.2**（共有プロンプト直下の Negative Prompt アコーディオンを追記）。凍結API契約（§6）への追加は、2026-07-21 の V2V Join 拡張（`d22706e`）と同じく既存フィールドの意味変更を伴わない加算のみで、実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §38。 |
+| v0.5.4 | 2026-07-28 | 同日の第2コミット（`2f8e85b`）で追加された **MCPサーバー**（`mcp_server/`。Claude Code 等の MCP クライアントからバックエンドを操作する22ツール）を反映。**§12b＝完全新設**（位置づけ・22ツールの概要・依存関係・実機ゲート状況へのポインタ）／**§0.3 の SSOT 地図**（`Docs/MCP_SERVER_DESIGN.md` を追加）／**§4.5**（アプリ venv の技術スタック表に `mcp` パッケージを追加）／**付録B.1**（用語集に MCP のエントリを追加）。凍結 API 契約（§6）そのものへの変更は無い（MCPサーバーは既存 `/api/v1/*` を叩く追加のクライアントであり、REST API 契約は無改修）。詳細な設計判断は `Docs/MCP_SERVER_DESIGN.md`、利用者向け説明は `README.md` §8、機械検証・実機ゲート状況は `Docs/VERIFICATION_LOG.md` §39 が正本。 |
 
 ### 0.2 スコープ
 
@@ -77,6 +79,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | `config.yaml` | 実行時設定の実値（presets / limits / vram ノブ / モデルパス）。**git 追跡外**（2026-07-26〜） |
 | `config.yaml.example` | 配布されるひな型。**リポジトリに入っているのはこちらだけ**で、`config.yaml` は `setup.bat` / `run.bat` がここから複製する |
 | `Docs/VERIFICATION_LOG.md` | 実機検証の全経緯・実測 peak_vram/秒数・SHA256 バイト一致・設計判断の根拠 |
+| `Docs/MCP_SERVER_DESIGN.md` | MCPサーバー（`mcp_server/`）の設計判断（ツール分割・非同期化・エラー翻訳・`.mcp.json` 生成方式 等） |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/NEXT_SESSION_HANDOFF.md` | プロジェクトのゴール像・フェーズ別ロードマップ・設計対話の決定・削除スコープ |
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
@@ -353,7 +356,7 @@ Nz-LTX23-backend/
 
 | 層 | 主なパッケージ / バージョン | 出所 |
 |----|------------------------------|------|
-| アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
+| アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow / **`mcp`（`>=1.28,<2`。2026-07-28追加・MCPサーバー用main依存＝§12b）**（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
 | エンジン（`./.venv-engine`） | **torch 2.9.1+cu128**（+ torchaudio 0.24.1+cu128 / torchvision）、`ltx-core` / `ltx-pipelines` @git rev `00dc53d`、`diffusers` @git rev（`engine/venv-engine.freeze.txt` ヘッダが正）、`gguf`、`transformers` | `engine/venv-engine.freeze.txt`（完全スナップショット）/ `engine/engine-venv-pyproject.toml`（`[tool.uv.sources]` に cu128 index と git rev） |
 
 `ltx-core` / `ltx-pipelines` / `diffusers` は **git direct-url インストール**（PyPI ではない）。Windows の PyPI 版 torch は CPU 専用のため、cu128 インデックスから `torch/torchaudio/torchvision == *+cu128` を明示インストールする（`Docs/note.md`）。provenance と再現手順の一次情報は `engine/VENDOR_NOTICE.md`。
@@ -1165,6 +1168,28 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 
 ---
 
+## §12b MCPサーバー（AIエージェント連携）
+
+**MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` パッケージとして新設した（2026-07-28・コミット `2f8e85b`）。Claude Code などの MCP クライアントから、Gradio UI（§12）と同等の操作をツール呼び出しとして行える。
+
+### 12b.1 位置づけ（アーキテクチャへの影響なし）
+
+`mcp_server/` は Gradio UI と同じ**クライアント層**に属する。§4 の「2プロセス・2venv」構成そのものは変わらない——MCPサーバーは `./.venv`（torch 無し）の中で動く追加のプロセスで、既存の `/api/v1/*` を `httpx` 経由で叩くだけであり、バックエンド自身は起動しない（起動確認は `backend_status` ツールが行う）。凍結 API 契約（§6）への変更も無い。
+
+### 12b.2 ツールの概要
+
+**22個のツール**を6カテゴリ（system 6 / uploads 3 / generate 2 / jobs 7 / outputs 3 / batch 1）で公開する。全ツールは `async def` で実装され、ブロッキングI/O（ファイルコピー・wav走査等）は `anyio.to_thread.run_sync` で逃がす（MCP SDK 1.28 は同期ツールをイベントループ上で直接呼ぶため）。生成物は base64 埋め込みではなく常にローカル絶対パスで返す。ツール名の完全な一覧・1行説明・典型ワークフロー（T2V/I2V/A2Vバッチ）は `README.md` §8 を参照（本書では重複させない）。設計判断（依存を main 化した理由・非同期化の根拠・エラー封筒の翻訳規則・`.mcp.json` 絶対パス生成方式 等、D1〜D11）は `Docs/MCP_SERVER_DESIGN.md` が正本。
+
+### 12b.3 依存とセットアップ導線
+
+`mcp>=1.28,<2` は `pyproject.toml` / `requirements.txt` の**main依存**として追加した（`dev` extra ではない。エンドユーザーの `uv sync` にそのまま含まれる、§2.5/§4.5）。`scripts/setup.ps1` がセットアップ完了時に、`.venv\Scripts\python.exe` への絶対パスを埋め込んだ `.mcp.json` をリポジトリ直下へ自動生成する（マシン固有パスのため `.gitignore` 済み・git 追跡外）。
+
+### 12b.4 テストと実機ゲート
+
+テストは `tests/test_mcp_*.py`（7ファイル）が `./.venv` で完結し、GPU・実バックエンドプロセスを必要としない（`httpx.ASGITransport` でモック FastAPI アプリに直結）。機械検証・実機ゲート（承認フロー・22ツール表示・T2V/I2V/A2Vバッチ等の実操作）の実施記録は `Docs/VERIFICATION_LOG.md` §39 が正本（本書執筆時点でのゲート状況もそちらを参照。本書では都度古くなる実施状況を複製しない）。
+
+---
+
 ## §13 開発フェーズとロードマップ
 
 > 本章は `Docs/NEXT_SESSION_HANDOFF.md`「設計対話の決定」「フェーズ別ロードマップ」の **early-integration 是正**を反映する。旧 v04 §16 の Phase 2〜5 枠は、以下の削除・再分類・格上げで置き換わる。
@@ -1394,7 +1419,8 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **commit** | Windows の仮想メモリ予約（物理 RAM + ページファイル）。ディスク使用量ではない。連続生成で枯渇すると native crash しうる（component-files で束縛）。 |
 | **GGUF / Q4_K_M** | 量子化重みフォーマット。本番の transformer / Gemma とも GGUF Q4_K_M。 |
 | **mock backend** | GPU/モデル無しで合成クリップを返す backend。API/スキーマ/出力構造は real と同一で、テスト・GPU 無し開発に使う。 |
+| **MCP（Model Context Protocol）** | AIエージェントが外部ツールを呼び出すための標準規格。本プロジェクトは `mcp_server/` パッケージで22個のツールを公開する（§12b）。 |
 
 ### B.2 SSOT ドキュメント地図
 
-§0.3 の SSOT 地図と整合。どの Docs が何の正本かは §0.3 の表を参照（本書 §6＝凍結 API 契約 / `config.yaml`＝設定実値 / `VERIFICATION_LOG`＝実測・検証 / `RESOLUTION_DURATION_CAPABILITY`＝解像度×尺の能力 / `NEXT_SESSION_HANDOFF`＝ゴール・ロードマップ / `LTX23_REFERENCE`＝LTX 一般知識 / `engine/VENDOR_NOTICE`＝provenance / `README`＝起動・導線）。
+§0.3 の SSOT 地図と整合。どの Docs が何の正本かは §0.3 の表を参照（本書 §6＝凍結 API 契約 / `config.yaml`＝設定実値 / `VERIFICATION_LOG`＝実測・検証 / `RESOLUTION_DURATION_CAPABILITY`＝解像度×尺の能力 / `NEXT_SESSION_HANDOFF`＝ゴール・ロードマップ / `LTX23_REFERENCE`＝LTX 一般知識 / `engine/VENDOR_NOTICE`＝provenance / `MCP_SERVER_DESIGN`＝MCPサーバーの設計判断（§12b）/ `README`＝起動・導線）。

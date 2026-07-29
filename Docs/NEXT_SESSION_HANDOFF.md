@@ -2,11 +2,13 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-29 VSF（Value Sign Flip）非CFGネガティブプロンプト第2方式＝**VSFテーマ完結（実装・目視・デバッグスイッチ縮退まで）・push済み・残はフロントエンド追随のみ**）（**生成機能の正本・本ブロックが日付としても最新**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-29 VSF（Value Sign Flip）非CFGネガティブプロンプト第2方式＝**VSFテーマ全クローズ（フロントエンド目視ゲート含む）・残課題なし**）（**生成機能の正本・本ブロックが日付としても最新**）
 
 > **生成機能についてはこのブロックが正本。以降の▶節（本ブロック直下の2026-07-28 NAGブロック・2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-28 NAG」ブロックは本ブロックに置き換わった（NAG自体は非CFGネガの第1方式として現役のまま。VSFは第2方式の追加）。
 >
-> 正式なワークオーダーは本セッション実行時点でオーナーのプランファイル（`reactive-weaving-umbrella.md`、リポジトリ外）が正本で、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-46。
+> **2026-07-29追記: フロントエンド（React／AviUtl2連携UI）の目視ゲートもオーナーが実機で全件合格と判定し、VSFテーマは実装・機械検証・実機ゲート・デバッグスイッチ縮退・フロントエンド追随・目視ゲートのすべてが完了、残課題なしで全クローズした。詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳のクローズ記録は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55。将来の再訪条件（コミュニティのVSF scaleベストプラクティス報告が出たとき、既定値1.5を見直すか検討）も同節に記載。**
+>
+> 正式なワークオーダーは本セッション実行時点でオーナーのプランファイル（`reactive-weaving-umbrella.md`、リポジトリ外）が正本で、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55（クローズ済み）。
 
 ### 本日完了した内容の要約
 
@@ -20,7 +22,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 2. ~~**既定値確定後、デバッグスイッチ（AdaLNラジオ等）を縮退するかどうかは別途承認が必要。**~~ → オーナー決定により縮退第3弾として`vsf_adaln`を全レイヤーから撤去済み。VSF APIは`neg_method`＋`vsf_scale`（0〜10）の2フィールドに確定した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.10）。実験の歴史はコミット`f2124e1`に保存。
 3. **βノブ（`vsf_offset`）は未実装のまま。** mの実測（video約0.8〜1.2%・audio約0.5%、raw時）を踏まえてもαだけでは不足すると判明した場合に限り、第2弾として起票する。
 4. **コミットはオーナー指示待ち。** `mcp_server/tools/`を含む`git add`が必要（上記gitignore修正参照）。
-5. **フロントエンド（React）追随は本Waveの範囲外・未着手のまま残っている。** VSF UIはGradio側のみで、AviUtl2連携のReactフロントエンドには一切手を入れていない。ラジオ「Other」→VSFへの追随・scaleレンジ0〜10への追随が必要（`vsf_adaln`は撤去済みのため追随不要）。台帳は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-46。
+5. ~~**フロントエンド（React）追随は本Waveの範囲外・未着手のまま残っている。**~~ → 2026-07-29中に追随実装＋オーナー実機目視ゲートまで完結し、VSFテーマは全クローズした（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55）。残タスクはない。
 
 ---
 

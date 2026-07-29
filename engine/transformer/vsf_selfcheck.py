@@ -20,26 +20,19 @@ What is checked, and why:
      encoding untouched. The forward half of the same check shows that a
      sliced negative context genuinely changes the attention output — i.e.
      that the registers would otherwise be sign-flipped into the result.
-  3. All three AdaLN modes match independently-written reference formulas,
-     driven through a REAL ``BasicAVTransformerBlock.forward``
-     (cross_attention_adaln=True, apply_gated_attention=True — the production
-     GGUF configuration) so the ``apply_cross_attention_adaln`` monkeypatch is
-     proven to actually run: "modulated"/"v_scale" cannot produce a result at
-     all unless the window's wrapper stashed the coefficients.
-  4. OFF is structurally inert: install() with nothing requested patches zero
-     modules and leaves no instance-level ``forward`` at all, and a window
-     opened for None / NAG params / VSF-with-adaln_mode="raw" leaves the
-     wheel's ``apply_cross_attention_adaln`` global identical (``is``) during
-     AND after the window.
-  5. Fail-loud: unexpected call shapes, unknown adaln_mode (rejected once, at
-     VsfParams construction), a missing stash, a shift_kv whose sequence axis
-     is not 1, install for a non-VSF params object, and install-before-encode.
-  6. The worker's method-resolution helpers (``engine.worker._resolve_nag``/
+  3. OFF is structurally inert: install() with nothing requested patches zero
+     modules and leaves no instance-level ``forward`` at all.
+  4. Fail-loud: unexpected call shapes, install for a non-VSF params object,
+     and install-before-encode.
+  5. The worker's method-resolution helpers (``engine.worker._resolve_nag``/
      ``_neg_label``): a ``nag`` block with no ``method`` key resolves to
      NagParams (forward-compat default), an explicit ``method="vsf"`` block
-     resolves to VsfParams with its own knobs propagated, an unknown method
+     resolves to VsfParams with its own knob propagated, an unknown method
      raises RuntimeError, and ``_neg_label`` maps None/NagParams/VsfParams to
      "off"/"nag"/"vsf".
+
+The negative context is always raw here: the AdaLN 3-mode experiment settled
+on raw on real hardware and was removed (VERIFICATION_LOG §41.9).
 """
 
 from __future__ import annotations
@@ -57,11 +50,7 @@ from engine.transformer.nag_selfcheck import (
     _manual_gate_and_out,
 )
 from engine.transformer.nag_service import NagParams, NagState, encode_negative
-from engine.transformer.vsf_service import (
-    VsfParams,
-    VsfService,
-    adaln_stash_window,
-)
+from engine.transformer.vsf_service import VsfParams, VsfService
 
 _RESULTS: list[tuple[str, bool, str]] = []
 
@@ -117,19 +106,18 @@ def _reference_vsf(
     attn: torch.nn.Module,
     x: torch.Tensor,
     context: torch.Tensor,
-    neg_k_input: torch.Tensor,
-    neg_v_input: torch.Tensor,
+    neg_context: torch.Tensor,
     scale: float,
 ) -> torch.Tensor:
     """Full hand-written VSF forward built from attn's own submodules:
     concatenate, sign-flip+scale the negative values, one attention, gate,
-    to_out. ``neg_k_input``/``neg_v_input`` differ only under the AdaLN modes.
+    to_out.
     """
     q = attn.q_norm(attn.to_q(x))
     k = torch.cat(
-        [attn.k_norm(attn.to_k(context)), attn.k_norm(attn.to_k(neg_k_input))], dim=1
+        [attn.k_norm(attn.to_k(context)), attn.k_norm(attn.to_k(neg_context))], dim=1
     )
-    v = torch.cat([attn.to_v(context), attn.to_v(neg_v_input) * (-scale)], dim=1)
+    v = torch.cat([attn.to_v(context), attn.to_v(neg_context) * (-scale)], dim=1)
     out = _reference_attention(q, k, v, attn.heads).to(q.dtype)
     return _manual_gate_and_out(attn, x, out)
 
@@ -166,15 +154,13 @@ def check_concat_attention_matches_formula() -> None:
             # when the positive side is batched (batch=2 below exercises that).
             neg_ctx = torch.randn(1, neg_tokens, 16, dtype=dtype)
 
-            params = VsfParams(negative_prompt="blurry", scale=1.7, adaln_mode="raw")
+            params = VsfParams(negative_prompt="blurry", scale=1.7)
             _install_vsf(block, params, neg_ctx)
 
             got = attn2.forward(x, context=pos_ctx)
 
             neg_expanded = neg_ctx.expand(batch, -1, -1)
-            want = _reference_vsf(
-                attn2, x, pos_ctx, neg_expanded, neg_expanded, params.scale
-            )
+            want = _reference_vsf(attn2, x, pos_ctx, neg_expanded, params.scale)
             if not torch.allclose(got.float(), want.float(), rtol=1e-3, atol=atol):
                 max_diff = (got.float() - want.float()).abs().max().item()
                 raise AssertionError(
@@ -186,9 +172,7 @@ def check_concat_attention_matches_formula() -> None:
             # Sanity: the sign flip must actually matter. Same call with the
             # negative values NOT negated has to differ, otherwise the check
             # above would pass on a no-op implementation.
-            neutral = _reference_vsf(
-                attn2, x, pos_ctx, neg_expanded, neg_expanded, -params.scale
-            )
+            neutral = _reference_vsf(attn2, x, pos_ctx, neg_expanded, -params.scale)
             if torch.allclose(got.float(), neutral.float(), rtol=1e-3, atol=atol):
                 raise AssertionError(
                     f"dtype={dtype} batch={batch}: sign-flipped and "
@@ -280,17 +264,15 @@ def check_encode_time_slice() -> None:
     torch.manual_seed(556)
     x = torch.randn(1, 5, dim)
     pos_ctx = torch.randn(1, 9, dim)
-    params = VsfParams(negative_prompt="blurry", scale=1.5, adaln_mode="raw")
+    params = VsfParams(negative_prompt="blurry", scale=1.5)
     _install_vsf(block, params, v_cut)
 
     got = attn2.forward(x, context=pos_ctx)
-    want_sliced = _reference_vsf(attn2, x, pos_ctx, v_cut, v_cut, params.scale)
+    want_sliced = _reference_vsf(attn2, x, pos_ctx, v_cut, params.scale)
     if not torch.allclose(got, want_sliced, rtol=1e-4, atol=1e-5):
         raise AssertionError("patched forward does not match the sliced reference")
 
-    want_unsliced = _reference_vsf(
-        attn2, x, pos_ctx, video_ctx, video_ctx, params.scale
-    )
+    want_unsliced = _reference_vsf(attn2, x, pos_ctx, video_ctx, params.scale)
     if torch.allclose(got, want_unsliced, rtol=1e-3, atol=1e-3):
         raise AssertionError(
             "sliced and unsliced negative contexts give the same output — the "
@@ -299,164 +281,11 @@ def check_encode_time_slice() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Check 3: the three AdaLN modes, driven through a real block.forward          #
-# --------------------------------------------------------------------------- #
-
-
-def _build_adaln_block():
-    """_build_test_block, but with every parameter initialised.
-
-    BasicAVTransformerBlock allocates its scale_shift_table / prompt_scale_
-    shift_table with torch.empty (uninitialised memory, potentially NaN). NAG's
-    selfcheck calls attn2.forward directly and never touches them; this check
-    drives the whole block.forward, so they must hold real numbers.
-    """
-    block = _build_test_block()
-    torch.manual_seed(2024)
-    with torch.no_grad():
-        for param in block.parameters():
-            param.normal_(0.0, 0.1)
-    return block
-
-
-def _video_args(x: torch.Tensor, context: torch.Tensor, dim: int):
-    """Minimal video-only TransformerArgs for BasicAVTransformerBlock.forward.
-
-    positional_embeddings=None keeps attn1 on its no-RoPE path and
-    context_mask=None matches what the production text cross-attention always
-    passes (the VSF forward fails loud on anything else). timesteps carries
-    9 AdaLN parameter groups (6 base + 3 cross-attention), prompt_timestep the
-    2 (shift_kv, scale_kv) groups.
-    """
-    from ltx_core.model.transformer.transformer_args import TransformerArgs
-
-    batch = x.shape[0]
-    torch.manual_seed(4096)
-    return TransformerArgs(
-        x=x,
-        context=context,
-        context_mask=None,
-        timesteps=torch.randn(batch, 1, 9 * dim) * 0.1,
-        embedded_timestep=torch.zeros(batch, 1, dim),
-        positional_embeddings=None,
-        cross_positional_embeddings=None,
-        cross_scale_shift_timestep=None,
-        cross_gate_timestep=None,
-        enabled=True,
-        prompt_timestep=torch.randn(batch, 1, 2 * dim) * 0.1,
-    )
-
-
-def check_adaln_modes_through_block_forward() -> None:
-    from ltx_core.model.transformer import transformer as _tmod
-
-    dim, batch, tokens, neg_tokens = 16, 2, 5, 3
-    outputs: dict[str, torch.Tensor] = {}
-
-    for mode in ("raw", "modulated", "v_scale"):
-        block = _build_adaln_block()
-        attn2 = block.attn2
-        torch.manual_seed(77)
-        x = torch.randn(batch, tokens, dim)
-        pos_ctx = torch.randn(batch, 9, dim)
-        neg_ctx = torch.randn(1, neg_tokens, dim)
-        args = _video_args(x, pos_ctx, dim)
-
-        params = VsfParams(negative_prompt="blurry", scale=1.5, adaln_mode=mode)
-        _install_vsf(block, params, neg_ctx)
-
-        # Record what the block actually hands the patched forward: the AdaLN
-        # path builds both the query input and the MODULATED positive context
-        # internally, so the reference has to be computed from the real values,
-        # not from reconstructed ones.
-        seen: dict[str, torch.Tensor] = {}
-        vsf_forward = attn2.forward
-
-        def recording_forward(x_in, context=None, **kwargs):
-            seen["x"] = x_in
-            seen["context"] = context
-            out = vsf_forward(x_in, context=context, **kwargs)
-            seen["out"] = out
-            return out
-
-        attn2.forward = recording_forward  # type: ignore[method-assign]
-
-        original_global = _tmod.apply_cross_attention_adaln
-        with adaln_stash_window(_FakeTransformer([block]), params):
-            patched_global = _tmod.apply_cross_attention_adaln
-            if mode == "raw":
-                if patched_global is not original_global:
-                    raise AssertionError(
-                        'adaln_mode="raw" opened a real window (the wheel '
-                        "global was replaced) — it must be a no-op"
-                    )
-            elif patched_global is original_global:
-                raise AssertionError(
-                    f"adaln_mode={mode!r}: the window did not replace "
-                    "apply_cross_attention_adaln"
-                )
-            with torch.no_grad():
-                block(args, None)
-        if _tmod.apply_cross_attention_adaln is not original_global:
-            raise AssertionError(f"adaln_mode={mode!r}: the window did not restore")
-
-        if "out" not in seen:
-            raise AssertionError(
-                f"adaln_mode={mode!r}: the patched attn2 forward was never "
-                "called by block.forward"
-            )
-
-        # Independent reproduction of transformer.py:394-397's coefficients.
-        shift_kv, scale_kv = (
-            block.prompt_scale_shift_table[None, None].to(
-                device=x.device, dtype=x.dtype
-            )
-            + args.prompt_timestep.reshape(batch, args.prompt_timestep.shape[1], 2, -1)
-        ).unbind(dim=2)
-
-        neg_expanded = neg_ctx.expand(batch, -1, -1)
-        if mode == "raw":
-            neg_k = neg_v = neg_expanded
-        elif mode == "modulated":
-            neg_k = neg_v = neg_expanded * (1 + scale_kv) + shift_kv
-        else:  # v_scale
-            neg_k = neg_expanded
-            neg_v = neg_expanded * (1 + scale_kv)
-
-        want = _reference_vsf(
-            attn2, seen["x"], seen["context"], neg_k, neg_v, params.scale
-        )
-        if not torch.allclose(seen["out"], want, rtol=1e-4, atol=1e-5):
-            max_diff = (seen["out"] - want).abs().max().item()
-            raise AssertionError(
-                f"adaln_mode={mode!r}: attn2 output != reference, "
-                f"max_abs_diff={max_diff}"
-            )
-        outputs[mode] = seen["out"].clone()
-
-        # A stale stash would silently feed the next step the wrong
-        # coefficients; the forward pops it and the window sweeps the rest.
-        if hasattr(attn2, "_vsf_kv_mod"):
-            raise AssertionError(
-                f"adaln_mode={mode!r}: a stash survived the window"
-            )
-
-    for a, b in (("raw", "modulated"), ("raw", "v_scale"), ("modulated", "v_scale")):
-        if torch.allclose(outputs[a], outputs[b], rtol=1e-4, atol=1e-5):
-            raise AssertionError(
-                f"adaln modes {a!r} and {b!r} produced identical output — the "
-                "modes are not actually distinct"
-            )
-
-
-# --------------------------------------------------------------------------- #
 # Check 4: OFF is structurally inert                                           #
 # --------------------------------------------------------------------------- #
 
 
 def check_off_is_inert() -> None:
-    from ltx_core.model.transformer import transformer as _tmod
-
     block = _build_test_block()
     state = NagState()  # requested is False: set_params was never called
     service = VsfService(state_provider=lambda: state)
@@ -471,25 +300,6 @@ def check_off_is_inert() -> None:
         module = getattr(block, name)
         if "forward" in module.__dict__:
             raise AssertionError(f"install() with VSF off shadowed {name}.forward")
-
-    original_global = _tmod.apply_cross_attention_adaln
-    no_op_params = (
-        None,
-        NagParams(negative_prompt="x", scale=11.0, tau=2.5, alpha=0.25),
-        VsfParams(negative_prompt="x", scale=1.5, adaln_mode="raw"),
-    )
-    for params in no_op_params:
-        with adaln_stash_window(_FakeTransformer([block]), params):
-            if _tmod.apply_cross_attention_adaln is not original_global:
-                raise AssertionError(
-                    f"adaln_stash_window({type(params).__name__}) replaced the "
-                    "wheel global — it must be a no-op window"
-                )
-        if _tmod.apply_cross_attention_adaln is not original_global:
-            raise AssertionError(
-                f"adaln_stash_window({type(params).__name__}) left the wheel "
-                "global changed after exit"
-            )
 
 
 # --------------------------------------------------------------------------- #
@@ -507,7 +317,7 @@ def check_fail_loud() -> None:
     neg_ctx = torch.randn(1, 3, dim)
 
     # --- call shapes this patch was never designed for ---
-    _install_vsf(block, VsfParams("blurry", 1.5, "raw"), neg_ctx)
+    _install_vsf(block, VsfParams("blurry", 1.5), neg_ctx)
     _expect_runtime_error(
         "pe set", lambda: attn2.forward(x, context=pos_ctx, pe=torch.zeros(1))
     )
@@ -515,32 +325,6 @@ def check_fail_loud() -> None:
     _expect_runtime_error(
         "mask set", lambda: attn2.forward(x, context=pos_ctx, mask=torch.zeros(1))
     )
-
-    # --- unknown adaln_mode: rejected once, at VsfParams construction ---
-    # (install/forward/window no longer validate it separately — see
-    # VsfParams.__post_init__ — so there is nothing left to construct a
-    # "bogus" instance to feed them; the RuntimeError fires before one exists.)
-    _expect_runtime_error(
-        "VsfParams(unknown adaln_mode)",
-        lambda: VsfParams(negative_prompt="blurry", scale=1.5, adaln_mode="modulate"),
-    )
-
-    # --- adaln_mode != "raw" with no window open -> no stash -> fail ---
-    mod_block = _build_test_block()
-    mod_attn2 = mod_block.attn2
-    _install_vsf(mod_block, VsfParams("blurry", 1.5, "modulated"), neg_ctx)
-    _expect_runtime_error(
-        "modulated without an open window",
-        lambda: mod_attn2.forward(x, context=pos_ctx),
-    )
-
-    # --- shift_kv whose sequence axis is not 1 (per-token prompt timesteps) ---
-    mod_attn2._vsf_kv_mod = (torch.zeros(1, 2, dim), torch.zeros(1, 2, dim))
-    _expect_runtime_error(
-        "shift_kv.shape[1] != 1", lambda: mod_attn2.forward(x, context=pos_ctx)
-    )
-    if hasattr(mod_attn2, "_vsf_kv_mod"):
-        delattr(mod_attn2, "_vsf_kv_mod")
 
     # --- wrong params type / requested-but-not-encoded ---
     nag_state = NagState()
@@ -554,7 +338,7 @@ def check_fail_loud() -> None:
     )
 
     not_ready = NagState()
-    not_ready.set_params(VsfParams("blurry", 1.5, "raw"))  # no set_contexts
+    not_ready.set_params(VsfParams("blurry", 1.5))  # no set_contexts
     _expect_runtime_error(
         "install(requested but not encoded)",
         lambda: VsfService(lambda: not_ready).install(
@@ -626,21 +410,14 @@ def check_worker_resolve() -> None:
     ):
         raise AssertionError(f"NagParams fields did not propagate: {nag_params!r}")
 
-    # --- method="vsf" -> VsfParams, its own knobs propagated (non-default
-    # values, so a copy-paste of the API defaults would not accidentally pass) ---
+    # --- method="vsf" -> VsfParams, its own knob propagated (a non-default
+    # value, so a copy-paste of the API default would not accidentally pass) ---
     vsf_params = _resolve_nag(
-        {
-            "nag": {
-                "negative_prompt": "x",
-                "method": "vsf",
-                "vsf_scale": 7.5,
-                "vsf_adaln": "v_scale",
-            }
-        }
+        {"nag": {"negative_prompt": "x", "method": "vsf", "vsf_scale": 7.5}}
     )
     if not isinstance(vsf_params, VsfParams):
         raise AssertionError(f'method="vsf" nag block resolved to {type(vsf_params).__name__}, expected VsfParams')
-    if (vsf_params.scale, vsf_params.adaln_mode) != (7.5, "v_scale"):
+    if vsf_params.scale != 7.5:
         raise AssertionError(f"VsfParams fields did not propagate: {vsf_params!r}")
 
     # --- unknown method -> RuntimeError ---
@@ -654,7 +431,7 @@ def check_worker_resolve() -> None:
         raise AssertionError('_neg_label(None) != "off"')
     if _neg_label(NagParams("x", 11.0, 2.5, 0.25)) != "nag":
         raise AssertionError('_neg_label(NagParams(...)) != "nag"')
-    if _neg_label(VsfParams("x", 1.5, "raw")) != "vsf":
+    if _neg_label(VsfParams("x", 1.5)) != "vsf":
         raise AssertionError('_neg_label(VsfParams(...)) != "vsf"')
 
 
@@ -671,9 +448,8 @@ def main() -> int:
     checks: list[tuple[str, Callable[[], None]]] = [
         ("concatenated attention matches the written-out VSF formula (fp32+bf16, B=1/B=2)", check_concat_attention_matches_formula),
         ("encode-time slice keeps real tokens only and changes the forward", check_encode_time_slice),
-        ("AdaLN raw/modulated/v_scale match references via real block.forward", check_adaln_modes_through_block_forward),
-        ("VSF OFF: zero patches + wheel global identity preserved", check_off_is_inert),
-        ("fail-loud: shapes, unknown mode, missing stash, wrong params", check_fail_loud),
+        ("VSF OFF: zero patches (forward not shadowed)", check_off_is_inert),
+        ("fail-loud: call shapes, wrong params type, install-before-encode", check_fail_loud),
         ("engine.worker._resolve_nag/_neg_label: method resolution and labels", check_worker_resolve),
     ]
 

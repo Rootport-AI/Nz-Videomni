@@ -327,9 +327,8 @@ def _resolve_nag(msg: dict) -> "NagParams | VsfParams | None":
     client (or a replayed pre-VSF payload) must keep resolving to exactly the
     NAG params it always did. An UNKNOWN method is a different situation
     entirely — it means the two layers disagree — and fails loudly rather than
-    quietly falling back to the wrong algorithm. VSF's own two knobs default
-    to the API's defaults (scale 1.5, adaln "raw") for the same
-    forward-compatibility reason.
+    quietly falling back to the wrong algorithm. VSF's own knob defaults to
+    the API's default (scale 1.5) for the same forward-compatibility reason.
     """
     blk = msg.get("nag")
     if not blk:
@@ -346,7 +345,6 @@ def _resolve_nag(msg: dict) -> "NagParams | VsfParams | None":
         return VsfParams(
             negative_prompt=str(blk["negative_prompt"]),
             scale=float(blk.get("vsf_scale", 1.5)),
-            adaln_mode=str(blk.get("vsf_adaln", "raw")),
         )
     raise RuntimeError(
         f"worker: unknown negative-prompt method {method!r} in the job's "

@@ -202,7 +202,7 @@ def test_chain_to_clip_request_transcribes_nag_fields():
 
 def test_chain_to_clip_request_transcribes_vsf_fields():
     # Same direct regression guard as test_chain_to_clip_request_transcribes_nag_fields,
-    # for the VSF fields (neg_method/vsf_scale/vsf_adaln): an omission here would
+    # for the VSF fields (neg_method/vsf_scale): an omission here would
     # make clip 0's re-validated GenerateRequest silently fall back to the
     # neg_method="nag" default instead of carrying the requested VSF settings.
     from api.models import GenerateChainRequest
@@ -211,12 +211,11 @@ def test_chain_to_clip_request_transcribes_vsf_fields():
     model = GenerateChainRequest(**{
         **BASE, "clips": clips,
         "nag_enabled": True, "negative_prompt": "blurry, low quality",
-        "neg_method": "vsf", "vsf_scale": 3.0, "vsf_adaln": "v_scale",
+        "neg_method": "vsf", "vsf_scale": 3.0,
     })
     clip0 = model.to_clip_request(0)
     assert clip0.neg_method == "vsf"
     assert clip0.vsf_scale == 3.0
-    assert clip0.vsf_adaln == "v_scale"
 
 
 def test_chain_busy_returns_409(client):

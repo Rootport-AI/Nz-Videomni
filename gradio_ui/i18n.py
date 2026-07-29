@@ -66,14 +66,6 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7. Even 0 does not disable VSF — use the Method "
                                "selector or the non-CFG Negative checkbox to turn "
                                "it off."),
-        "vsf_debug_accordion": "VSF debug options",
-        "vsf_lbl_adaln": "AdaLN mode",
-        "vsf_lbl_adaln_info": ("Debug only: how the negative context is treated by "
-                               "cross-attention AdaLN modulation (for real-GPU "
-                               "A/B testing)."),
-        "vsf_adaln_raw": "raw",
-        "vsf_adaln_modulated": "modulated",
-        "vsf_adaln_v_scale": "v_scale",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -551,13 +543,6 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7。0にしても無効化にはなりません——無効化は「方式」"
                                "の切り替えか non-CFG Negative のチェックOFFで行って"
                                "ください。"),
-        "vsf_debug_accordion": "VSFデバッグ設定",
-        "vsf_lbl_adaln": "AdaLNモード",
-        "vsf_lbl_adaln_info": ("デバッグ用: 負のコンテキストをcross-attentionの"
-                               "AdaLN変調でどう扱うかの設定です（実機A/Bテスト用）。"),
-        "vsf_adaln_raw": "raw",
-        "vsf_adaln_modulated": "modulated",
-        "vsf_adaln_v_scale": "v_scale",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

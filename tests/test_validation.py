@@ -369,23 +369,6 @@ def test_vsf_scale_above_cap_rejected_chain(client):
     assert r.status_code == 422
 
 
-def test_vsf_adaln_invalid_value_rejected_generate(client):
-    r = client.post(
-        "/api/v1/generate",
-        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
-              "vsf_adaln": "not-a-mode"},
-    )
-    assert r.status_code == 422
-
-
-def test_vsf_adaln_invalid_value_rejected_chain(client):
-    r = client.post(
-        "/api/v1/generate/chain",
-        json={**CHAIN_BASE, "vsf_adaln": "not-a-mode"},
-    )
-    assert r.status_code == 422
-
-
 def test_neg_method_vsf_requires_nonempty_negative_generate(client):
     # neg_method="vsf" is also covered by the shared nag_enabled validator
     # (nag_enabled is the non-CFG-negative master toggle for both methods).
@@ -417,7 +400,6 @@ def test_vsf_fields_default_values_generate():
     )
     assert req.neg_method == "nag"
     assert req.vsf_scale == 1.5
-    assert req.vsf_adaln == "raw"
 
 
 def test_vsf_fields_default_values_chain():
@@ -426,7 +408,6 @@ def test_vsf_fields_default_values_chain():
     req = GenerateChainRequest(**CHAIN_BASE)
     assert req.neg_method == "nag"
     assert req.vsf_scale == 1.5
-    assert req.vsf_adaln == "raw"
 
 
 def test_vsf_fields_accepted_generate():
@@ -436,8 +417,7 @@ def test_vsf_fields_accepted_generate():
         prompt="x", width=512, height=320, num_frames=49,
         num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
         nag_enabled=True, negative_prompt="blurry, low quality",
-        neg_method="vsf", vsf_scale=1.7, vsf_adaln="modulated",
+        neg_method="vsf", vsf_scale=1.7,
     )
     assert req.neg_method == "vsf"
     assert req.vsf_scale == 1.7
-    assert req.vsf_adaln == "modulated"

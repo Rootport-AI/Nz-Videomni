@@ -93,9 +93,6 @@ class GenerateRequest(BaseModel):
     # でscale 15以上は8ステップ蒸留で収束崩壊と確定したため上限10（論文の実証
     # レンジ相当）。実用域は1.5〜5。
     vsf_scale: float = Field(1.5, ge=0.0, le=10.0)
-    # vsf_adaln はデバッグ用（AdaLN非対称の実機A/B用の3モード）。実機A/B決着後
-    # に縮退予定。
-    vsf_adaln: Literal["raw", "modulated", "v_scale"] = "raw"
 
     # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
@@ -339,7 +336,6 @@ class GenerateChainRequest(BaseModel):
     # フィールドを参照。チェーンでは全クリップ・全ステージ共通で1本の設定が効く。
     neg_method: Literal["nag", "vsf"] = "nag"
     vsf_scale: float = Field(1.5, ge=0.0, le=10.0)
-    vsf_adaln: Literal["raw", "modulated", "v_scale"] = "raw"
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -587,7 +583,6 @@ class GenerateChainRequest(BaseModel):
             nag_alpha=self.nag_alpha,
             neg_method=self.neg_method,
             vsf_scale=self.vsf_scale,
-            vsf_adaln=self.vsf_adaln,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

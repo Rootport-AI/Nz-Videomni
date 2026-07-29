@@ -150,8 +150,8 @@ class BatchSnapshot:
         nag_enabled, nag_scale, nag_tau, nag_alpha — forwarded to
         build_a2v_chain_payload for every row; defaults reproduce the pre-NAG
         payload (NAG off) byte-for-byte.
-        neg_method, vsf_scale, vsf_adaln — the method selector + VSF's own
-        params, forwarded the same way (only reach the payload when
+        neg_method, vsf_scale — the method selector + VSF's own
+        param, forwarded the same way (only reach the payload when
         nag_enabled is True, per build_a2v_chain_payload's discipline).
     """
 
@@ -180,7 +180,6 @@ class BatchSnapshot:
     nag_alpha: float = 0.25
     neg_method: str = "nag"
     vsf_scale: float = 1.5
-    vsf_adaln: str = "raw"
 
 
 # --------------------------------------------------------------------------- #
@@ -429,7 +428,6 @@ class BatchRunner:
                 nag_alpha=snap.nag_alpha,
                 neg_method=snap.neg_method,
                 vsf_scale=snap.vsf_scale,
-                vsf_adaln=snap.vsf_adaln,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

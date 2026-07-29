@@ -848,7 +848,7 @@ def test_batch_nag_enabled_snapshot_adds_four_keys_to_payload(tmp_path):
     assert p["nag_alpha"] == 0.4
 
 
-def test_batch_vsf_enabled_snapshot_adds_three_keys_to_payload(tmp_path):
+def test_batch_vsf_enabled_snapshot_adds_two_keys_to_payload(tmp_path):
     wav_dir = tmp_path / "wavs"
     wav_dir.mkdir()
     _write_wav(wav_dir / "a.wav")
@@ -857,8 +857,7 @@ def test_batch_vsf_enabled_snapshot_adds_three_keys_to_payload(tmp_path):
     server = _Server()
     api = _make_client(server.handler)
     snap = _snapshot(wav_dir, out_dir, negative="blurry",
-                     nag_enabled=True, neg_method="vsf", vsf_scale=2.0,
-                     vsf_adaln="modulated")
+                     nag_enabled=True, neg_method="vsf", vsf_scale=2.0)
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
@@ -868,7 +867,6 @@ def test_batch_vsf_enabled_snapshot_adds_three_keys_to_payload(tmp_path):
     _jid, p = server.payloads[0]
     assert p["neg_method"] == "vsf"
     assert p["vsf_scale"] == 2.0
-    assert p["vsf_adaln"] == "modulated"
 
 
 def test_batch_default_snapshot_omits_nag_keys_from_payload(tmp_path):
@@ -888,5 +886,5 @@ def test_batch_default_snapshot_omits_nag_keys_from_payload(tmp_path):
 
     _jid, p = server.payloads[0]
     for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
-                "neg_method", "vsf_scale", "vsf_adaln"):
+                "neg_method", "vsf_scale"):
         assert key not in p

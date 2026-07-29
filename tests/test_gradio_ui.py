@@ -620,34 +620,11 @@ def test_vsf_scale_slider_has_expected_defaults_and_range():
     assert (scale.minimum, scale.maximum, scale.value) == (0, 10, 1.5)
 
 
-def test_vsf_adaln_radio_has_expected_default_and_choices():
-    demo = _demo()
-    radios = [c for c in demo.blocks.values() if isinstance(c, gr.Radio)]
-    adaln = next(r for r in radios if r.label == LABELS["en"]["vsf_lbl_adaln"])
-    assert adaln.value == "raw"
-    assert [v for _l, v in adaln.choices] == ["raw", "modulated", "v_scale"]
-
-
-def test_vsf_adaln_choices_translate_on_language_switch():
-    demo = _demo()
-    registry = demo.label_registry
-    vsf_adaln = next(c for c, k, a in registry if k == "vsf_lbl_adaln" and a == "label")
-
-    updates = demo.switch_language("ja", {})
-    idx = [c for c, _k, _a in registry].index(vsf_adaln)
-    upd = updates[idx]
-    assert upd["choices"] == [
-        (LABELS["ja"]["vsf_adaln_raw"], "raw"),
-        (LABELS["ja"]["vsf_adaln_modulated"], "modulated"),
-        (LABELS["ja"]["vsf_adaln_v_scale"], "v_scale"),
-    ]
-
-
-def test_vsf_scale_and_adaln_info_registered_and_translate_on_language_switch():
-    # vsf_scale/vsf_adaln each carry an `info=` string (Wave 4 review item 7):
-    # registered as a SECOND registry entry (same component, attr="info") next
-    # to the existing label entry, so switch_language must update both without
-    # the components colliding in the outputs list.
+def test_vsf_scale_info_registered_and_translates_on_language_switch():
+    # vsf_scale carries an `info=` string (Wave 4 review item 7): registered as
+    # a SECOND registry entry (same component, attr="info") next to the
+    # existing label entry, so switch_language must update both without the
+    # components colliding in the outputs list.
     demo = _demo()
     registry = demo.label_registry
 
@@ -657,17 +634,9 @@ def test_vsf_scale_and_adaln_info_registered_and_translate_on_language_switch():
     scale_info_entries = [
         (c, k, a) for c, k, a in registry if k == "vsf_lbl_scale_info" and a == "info"
     ]
-    adaln_label_entries = [
-        (c, k, a) for c, k, a in registry if k == "vsf_lbl_adaln" and a == "label"
-    ]
-    adaln_info_entries = [
-        (c, k, a) for c, k, a in registry if k == "vsf_lbl_adaln_info" and a == "info"
-    ]
     assert len(scale_info_entries) == 1
-    assert len(adaln_info_entries) == 1
     # Same underlying component as the label registration, not a stray copy.
     assert scale_info_entries[0][0] is scale_label_entries[0][0]
-    assert adaln_info_entries[0][0] is adaln_label_entries[0][0]
 
     updates = demo.switch_language("ja", {})
     assert len(updates) == len(registry) + 2  # matches the pinned-arity contract
@@ -676,12 +645,7 @@ def test_vsf_scale_and_adaln_info_registered_and_translate_on_language_switch():
         i for i, (c, k, a) in enumerate(registry)
         if k == "vsf_lbl_scale_info" and a == "info"
     )
-    adaln_info_idx = next(
-        i for i, (c, k, a) in enumerate(registry)
-        if k == "vsf_lbl_adaln_info" and a == "info"
-    )
     assert updates[scale_info_idx]["info"] == LABELS["ja"]["vsf_lbl_scale_info"]
-    assert updates[adaln_info_idx]["info"] == LABELS["ja"]["vsf_lbl_adaln_info"]
     # The label update (same component, earlier registry position) still
     # fires too -- the two registrations don't clobber each other.
     scale_label_idx = next(

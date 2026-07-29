@@ -165,7 +165,6 @@ def test_generate_payload_carries_nag_when_enabled(tmp_path):
         "alpha": 0.25,
         "method": "nag",
         "vsf_scale": 1.5,
-        "vsf_adaln": "raw",
     }
 
 
@@ -189,7 +188,6 @@ def test_chain_payload_carries_nag_when_enabled(tmp_path):
         "alpha": 0.25,
         "method": "nag",
         "vsf_scale": 1.5,
-        "vsf_adaln": "raw",
     }
 
 

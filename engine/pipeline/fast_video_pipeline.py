@@ -12,7 +12,7 @@ from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
-from engine.transformer.vsf_service import VsfParams, VsfService, adaln_stash_window
+from engine.transformer.vsf_service import VsfParams, VsfService
 
 
 class LTXFastVideoPipeline:
@@ -941,29 +941,16 @@ class LTXFastVideoPipeline:
             if self._nag.requested:
                 _distilled_mod.encode_text = self._make_nag_encode_text(_orig_encode)  # type: ignore[attr-defined]
 
-            # ── VSF AdaLN stash window ────────────────────────────────────────
-            # Covers the ENTIRE denoise, not just the transformer build: the
-            # wheel resolves apply_cross_attention_adaln by LOAD_GLOBAL inside
-            # the block's forward, so a window that closed before denoising
-            # would patch exactly nothing. A no-op for every other job (NAG,
-            # VSF with adaln_mode="raw", no negative prompt) — it does not read
-            # or write the wheel's global at all in those cases, which is why
-            # this `with` can sit here unconditionally without disturbing the
-            # five-global patch/restore umbrella above. The transformer handle
-            # is None because it is built INSIDE self.pipeline(...) below; the
-            # patched forward pops its own stash on every call, so there is
-            # nothing left to sweep on the normal path.
-            with adaln_stash_window(None, self._nag.params):
-                return self.pipeline(
-                    prompt=prompt,
-                    seed=seed,
-                    height=height,
-                    width=width,
-                    num_frames=num_frames,
-                    frame_rate=frame_rate,
-                    images=[_LtxImageInput(img.path, img.frame_idx, img.strength) for img in images],
-                    tiling_config=tiling_config,
-                )
+            return self.pipeline(
+                prompt=prompt,
+                seed=seed,
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                frame_rate=frame_rate,
+                images=[_LtxImageInput(img.path, img.frame_idx, img.strength) for img in images],
+                tiling_config=tiling_config,
+            )
         finally:
             # Synchronize before restoring module state so any async CUDA ops
             # queued inside DistilledPipeline.__call__ (e.g. vae_decode_audio)

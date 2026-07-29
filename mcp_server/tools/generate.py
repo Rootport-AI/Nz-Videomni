@@ -48,7 +48,6 @@ async def submit_generate(
     reference_video_strength: float | None = None,
     neg_method: str = "nag",
     vsf_scale: float = 1.5,
-    vsf_adaln: str = "raw",
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -91,9 +90,6 @@ async def submit_generate(
         vsf_scale: VSFの負側V（value）への乗算係数α（既定1.5、0〜10、
             ``neg_method="vsf"`` のときのみ意味を持つ。0でも無効化にはなら
             ない）。
-        vsf_adaln: VSFのAdaLN非対称モード（``"raw"``/``"modulated"``/
-            ``"v_scale"``、既定``"raw"``）。デバッグ用の設定で、実機A/B
-            決着後に縮退予定。
         width, height: 生成解像度（64の倍数、参照動画使用時は128の倍数）。
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
@@ -137,7 +133,6 @@ async def submit_generate(
         payload["nag_alpha"] = nag_alpha
         payload["neg_method"] = neg_method
         payload["vsf_scale"] = vsf_scale
-        payload["vsf_adaln"] = vsf_adaln
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -198,7 +193,6 @@ async def submit_chain(
     chunked_upsample: bool = True,
     neg_method: str = "nag",
     vsf_scale: float = 1.5,
-    vsf_adaln: str = "raw",
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -247,9 +241,9 @@ async def submit_chain(
             ``conditioning_images`` は省略可）。
         negative_prompt, nag_enabled, nag_scale, nag_tau, nag_alpha:
             submit_generate と同じ意味（チェーン全体・全ステージ共通）。
-        neg_method, vsf_scale, vsf_adaln: submit_generate と同じ意味
+        neg_method, vsf_scale: submit_generate と同じ意味
             （``nag_enabled=True`` のときのみ意味を持ち、チェーン全体・全
-            ステージ共通で効く）。vsf_adalnはデバッグ用。
+            ステージ共通で効く）。
         width, height: 生成解像度（64の倍数、参照動画使用時は128の倍数）。
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
@@ -297,7 +291,6 @@ async def submit_chain(
         payload["nag_alpha"] = nag_alpha
         payload["neg_method"] = neg_method
         payload["vsf_scale"] = vsf_scale
-        payload["vsf_adaln"] = vsf_adaln
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

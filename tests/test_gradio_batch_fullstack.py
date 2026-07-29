@@ -408,9 +408,9 @@ def test_batch_nag_enabled_reaches_server_job_request(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# 7) VSF (Value Sign Flip): BatchSnapshot's neg_method/vsf_scale/vsf_adaln
+# 7) VSF (Value Sign Flip): BatchSnapshot's neg_method/vsf_scale
 #    fields reach the REAL server's job store the same way the nag_* fields
-#    do above -- exercising api/models.py's neg_method/vsf_scale/vsf_adaln
+#    do above -- exercising api/models.py's neg_method/vsf_scale
 #    validation end-to-end.
 # --------------------------------------------------------------------------- #
 def test_batch_vsf_enabled_reaches_server_job_request(tmp_path):
@@ -425,8 +425,7 @@ def test_batch_vsf_enabled_reaches_server_job_request(tmp_path):
     api = _build_app_client(tmp_path / "srv")
     snap = _snapshot(wav_dir, out_dir, negative="blurry, low quality",
                      shared_images=[(str(img), 0, 0.8)],
-                     nag_enabled=True, neg_method="vsf", vsf_scale=2.0,
-                     vsf_adaln="modulated")
+                     nag_enabled=True, neg_method="vsf", vsf_scale=2.0)
 
     runner = BatchRunner()
     started, reason = runner.start(snap, rows, api, sync=True)
@@ -438,4 +437,3 @@ def test_batch_vsf_enabled_reaches_server_job_request(tmp_path):
     req = jobs[0]["request"]
     assert req["neg_method"] == "vsf"
     assert req["vsf_scale"] == 2.0
-    assert req["vsf_adaln"] == "modulated"

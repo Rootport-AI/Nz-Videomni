@@ -222,19 +222,17 @@ def test_submit_generate_with_vsf_fields_includes_them():
             nag_enabled=True,
             neg_method="vsf",
             vsf_scale=3.0,
-            vsf_adaln="modulated",
         )
     )
 
     body = captured["body"]
     assert body["neg_method"] == "vsf"
     assert body["vsf_scale"] == 3.0
-    assert body["vsf_adaln"] == "modulated"
 
 
 def test_submit_generate_nag_enabled_defaults_vsf_fields_to_nag():
-    # nag_enabled=True with neg_method/vsf_scale/vsf_adaln omitted -> the
-    # neg_method="nag"/vsf_scale=1.5/vsf_adaln="raw" defaults still ride along
+    # nag_enabled=True with neg_method/vsf_scale omitted -> the
+    # neg_method="nag"/vsf_scale=1.5 defaults still ride along
     # in the payload (mirrors the always-sent-inside-the-if-block contract).
     captured: dict = {}
 
@@ -258,7 +256,6 @@ def test_submit_generate_nag_enabled_defaults_vsf_fields_to_nag():
     body = captured["body"]
     assert body["neg_method"] == "nag"
     assert body["vsf_scale"] == 1.5
-    assert body["vsf_adaln"] == "raw"
 
 
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
@@ -483,14 +480,12 @@ def test_submit_chain_with_vsf_fields_includes_them():
             nag_enabled=True,
             neg_method="vsf",
             vsf_scale=3.0,
-            vsf_adaln="v_scale",
         )
     )
 
     body = captured["body"]
     assert body["neg_method"] == "vsf"
     assert body["vsf_scale"] == 3.0
-    assert body["vsf_adaln"] == "v_scale"
 
 
 def test_submit_chain_nag_enabled_defaults_vsf_fields_to_nag():
@@ -518,7 +513,6 @@ def test_submit_chain_nag_enabled_defaults_vsf_fields_to_nag():
     body = captured["body"]
     assert body["neg_method"] == "nag"
     assert body["vsf_scale"] == 1.5
-    assert body["vsf_adaln"] == "raw"
 
 
 def test_submit_chain_input_schema_has_no_hidden_fields():

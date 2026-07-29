@@ -42,55 +42,23 @@ the first few patched forwards of every job log ``m`` at INFO (see
 _log_negative_mass): that number, not a pixel diff of the output video, is
 the primary "is it working?" signal.
 
-AdaLN asymmetry is a first-class experiment here (``adaln_mode``). The
-production call path modulates the POSITIVE context per timestep via
-``apply_cross_attention_adaln`` (transformer.py:373-392) while a
-NagState-held negative context stays raw forever. NAG keeps that asymmetry
-because its reference implementation (KJNodes) does; VSF's paper is silent
-about it, and under a shared softmax the K-side scale mismatch directly
-changes ``m``. So all three hypotheses are selectable and decided on real
-hardware: "raw" (negative stays raw, NAG-like), "modulated" (negative gets
-the same context modulation, matching K scales), "v_scale" (keys raw, only
-the negative VALUE path scaled).
-
-``adaln_stash_window`` is what makes modes other than "raw" possible, and its
-placement matters: ``apply_cross_attention_adaln`` is resolved by LOAD_GLOBAL
-inside ``BasicAVTransformerBlock._apply_text_cross_attention`` at FORWARD
-time, so the patch window must stay open across the whole denoise, not merely
-across the model-construction call. Callers therefore wrap the entire
-inference (single: the ``self.pipeline(...)`` call; chain: from
-``ledger.transformer()`` through the last stage-2 tile). The window is a
-no-op for every other job — NAG, VSF with adaln_mode="raw", and no negative
-prompt at all — which is what lets callers place the ``with`` unconditionally
-without ever touching a wheel global on the OFF path.
+The negative context stays raw (never AdaLN-modulated), matching NAG's
+asymmetry. Three AdaLN hypotheses were briefly selectable here; real-hardware
+A/B settled on raw and the switch was removed — see VERIFICATION_LOG §41.9.
 """
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import math
 from dataclasses import dataclass
-from typing import Callable, Iterator
+from typing import Callable
 
 import torch
 
 from engine.transformer.nag_service import NagState, _cross_attn_modules
 
 logger = logging.getLogger(__name__)
-
-# The three AdaLN hypotheses (see module docstring). Anything else is a wiring
-# bug in the API/worker layer, never a runtime fallback.
-ADALN_MODES: tuple[str, ...] = ("raw", "modulated", "v_scale")
-
-# Per-module attribute adaln_stash_window's wrapper writes the current step's
-# (shift_kv, scale_kv) to, and the patched forward POPS. Pop (not read) is
-# deliberate: apply_cross_attention_adaln calls the attention module exactly
-# once per stash, so a leftover stash can only mean the window closed early or
-# a module was called outside it — and popping turns that into the fail-loud
-# "no stash" RuntimeError instead of silently reusing a previous step's
-# coefficients.
-_STASH_ATTR = "_vsf_kv_mod"
 
 # How many patched forwards per job log their negative softmax mass. Cross-
 # attention runs in block order within a denoising step, so 4 covers block 0
@@ -114,23 +82,11 @@ class VsfParams:
     ``scale`` is the paper's alpha (the negative values' multiplier); the
     reference implementations' default is 1.5 and Wan's tuned value is 1.7,
     but see the module docstring on why this backend allows much larger
-    values. ``adaln_mode`` must be one of ADALN_MODES; it is validated ONCE,
-    here in __post_init__, rather than separately at each of install/forward/
-    window — a bad value fails as soon as the job's params object is built,
-    with the same fail-loud RuntimeError style as the rest of this module.
+    values.
     """
 
     negative_prompt: str
     scale: float
-    adaln_mode: str
-
-    def __post_init__(self) -> None:
-        if self.adaln_mode not in ADALN_MODES:
-            raise RuntimeError(
-                f"VsfParams: unknown adaln_mode {self.adaln_mode!r} — expected "
-                f"one of {ADALN_MODES}. The API layer validates this as a "
-                "Literal, so reaching here means a payload bypassed validation."
-            )
 
 
 class _MassLogBudget:
@@ -267,46 +223,6 @@ def _make_vsf_forward(
 
         params = state.params
         assert params is not None  # implied by state.ready, checked at install()
-        mode = params.adaln_mode  # validated once, at VsfParams.__post_init__
-
-        # AdaLN hypotheses. "raw" needs nothing from the window at all, which
-        # is why the window stays closed (and the wheel global untouched) for
-        # that mode.
-        neg_k_input = neg_context
-        neg_v_input = neg_context
-        if mode != "raw":
-            stash = getattr(attn, _STASH_ATTR, None)
-            if stash is None:
-                raise RuntimeError(
-                    f"VSF forward ({modality}): adaln_mode={mode!r} needs the "
-                    "current step's (shift_kv, scale_kv), but nothing was "
-                    "stashed on this module. adaln_stash_window() must be open "
-                    "around the ENTIRE denoise (apply_cross_attention_adaln is "
-                    "resolved by LOAD_GLOBAL at forward time, so wrapping only "
-                    "the model build patches nothing)."
-                )
-            delattr(attn, _STASH_ATTR)  # pop: one stash per call, never reused
-            shift_kv, scale_kv = stash
-            if shift_kv.shape[1] != 1 or scale_kv.shape[1] != 1:
-                raise RuntimeError(
-                    f"VSF forward ({modality}): expected per-step AdaLN "
-                    "coefficients broadcast over the sequence axis "
-                    f"(shape[1] == 1), got shift_kv{tuple(shift_kv.shape)} "
-                    f"scale_kv{tuple(scale_kv.shape)}. That means the wheel "
-                    "now emits per-token prompt timesteps; slicing them onto "
-                    "the negative context's (different) token count would be "
-                    "a guess, so this fails instead."
-                )
-            if mode == "modulated":
-                # Same modulation the positive context gets: matches K scales
-                # on both halves of the shared softmax.
-                modulated = neg_context * (1 + scale_kv) + shift_kv
-                neg_k_input = modulated
-                neg_v_input = modulated
-            else:  # "v_scale"
-                # Keys stay raw (so the mass split is the "raw" one) while the
-                # VALUE magnitude is brought onto the positive half's scale.
-                neg_v_input = neg_context * (1 + scale_kv)
 
         q = attn.q_norm(attn.to_q(x))
 
@@ -314,14 +230,14 @@ def _make_vsf_forward(
         # and normalising each half separately and then concatenating is
         # exactly equal to normalising a pre-concatenated tensor.
         k = torch.cat(
-            [attn.k_norm(attn.to_k(context)), attn.k_norm(attn.to_k(neg_k_input))],
+            [attn.k_norm(attn.to_k(context)), attn.k_norm(attn.to_k(neg_context))],
             dim=1,
         )
         # Out-of-place negation: attn.to_v's output for the negative half is a
         # fresh tensor, but multiplying in place would still be a trap if the
         # projection ever starts returning a view.
         v = torch.cat(
-            [attn.to_v(context), attn.to_v(neg_v_input) * (-params.scale)],
+            [attn.to_v(context), attn.to_v(neg_context) * (-params.scale)],
             dim=1,
         )
 
@@ -346,110 +262,6 @@ def _make_vsf_forward(
         return attn.to_out(out)
 
     return vsf_forward
-
-
-@contextlib.contextmanager
-def adaln_stash_window(
-    transformer_or_none: torch.nn.Module | None,
-    params: object | None,
-) -> Iterator[None]:
-    """Make the current step's AdaLN (shift_kv, scale_kv) visible to the
-    patched cross-attention forwards, for the duration of a denoise.
-
-    ``apply_cross_attention_adaln`` computes those coefficients from the
-    prompt timestep and immediately consumes them; the attention module it
-    calls never sees them. This window replaces that module-level function
-    with a wrapper that recomputes the same two tensors, stashes them on the
-    ``attn`` argument (video and audio cross-attention are separate module
-    instances, so the two streams cannot collide), and then delegates to the
-    ORIGINAL function for the actual work.
-
-    Delegating rather than re-implementing means the positive path's math is
-    the wheel's own, for ever, at the cost of computing the coefficients
-    twice. The duplicated work is one broadcast add over a (B, 1, 2, dim)
-    tensor per module per step — utterly negligible next to the attention it
-    precedes — whereas an inlined copy would silently drift if the wheel's
-    formula ever changed. That trade is the whole reason for the choice.
-
-    No-op window: for NAG jobs, VSF jobs with adaln_mode="raw", and jobs with
-    no negative prompt at all, this yields WITHOUT reading or writing the
-    wheel's module global, so callers can place the ``with`` unconditionally
-    and an OFF job's process state stays identical (identity-checked by
-    vsf_selfcheck).
-
-    ``transformer_or_none`` is used only for the finally-time sweep of any
-    stash that a raised exception left behind mid-step; the single-generate
-    caller passes None because its transformer is built inside the wheel's
-    pipeline call and is discarded with the job (and the forward pops its
-    stash on every normal call anyway).
-    """
-    if not isinstance(params, VsfParams) or params.adaln_mode == "raw":
-        yield
-        return
-
-    # adaln_mode is validated once, at VsfParams.__post_init__ — reaching here
-    # with a VsfParams instance means it is already one of ADALN_MODES.
-    from ltx_core.model.transformer import transformer as _transformer_mod
-
-    original = _transformer_mod.apply_cross_attention_adaln
-
-    # Logged once per window (not once per call — this closure fires on every
-    # cross-attention module of every denoise step, and the shape is the same
-    # every time within a job): confirms the stash actually carries the
-    # per-step-broadcast shape adaln_mode's forward branch expects, without
-    # spamming a job's log once per module per step.
-    logged = False
-
-    def stashing_adaln(
-        x: torch.Tensor,
-        context: torch.Tensor,
-        attn: object,
-        q_shift: torch.Tensor,
-        q_scale: torch.Tensor,
-        q_gate: torch.Tensor,
-        prompt_scale_shift_table: torch.Tensor,
-        prompt_timestep: torch.Tensor,
-        context_mask: torch.Tensor | None = None,
-        norm_eps: float = 1e-6,
-    ) -> torch.Tensor:
-        # Mirrors transformer.py:394-397 exactly (the only lines of the
-        # original this wrapper needs to know about).
-        batch_size = x.shape[0]
-        shift_kv, scale_kv = (
-            prompt_scale_shift_table[None, None].to(device=x.device, dtype=x.dtype)
-            + prompt_timestep.reshape(batch_size, prompt_timestep.shape[1], 2, -1)
-        ).unbind(dim=2)
-        setattr(attn, _STASH_ATTR, (shift_kv, scale_kv))
-        nonlocal logged
-        if not logged:
-            logged = True
-            logger.info(
-                "VSF adaln stash: shift_kv=%s scale_kv=%s",
-                tuple(shift_kv.shape),
-                tuple(scale_kv.shape),
-            )
-        return original(
-            x,
-            context,
-            attn,
-            q_shift,
-            q_scale,
-            q_gate,
-            prompt_scale_shift_table,
-            prompt_timestep,
-            context_mask,
-            norm_eps,
-        )
-
-    _transformer_mod.apply_cross_attention_adaln = stashing_adaln
-    try:
-        yield
-    finally:
-        _transformer_mod.apply_cross_attention_adaln = original
-        if transformer_or_none is not None:
-            for attn, _modality in _cross_attn_modules(transformer_or_none):
-                if hasattr(attn, _STASH_ATTR):
-                    delattr(attn, _STASH_ATTR)
 
 
 class VsfService:
@@ -489,7 +301,6 @@ class VsfService:
                 "service selection and the worker's method resolution "
                 "disagree about this job's negative-prompt method."
             )
-        # adaln_mode is validated once, at VsfParams.__post_init__.
 
         budget = _MassLogBudget(_MASS_LOG_BUDGET)
         count = 0
@@ -509,11 +320,9 @@ class VsfService:
             )
 
         logger.info(
-            "VSF installed on %d cross-attention modules "
-            "(scale=%.2f adaln=%s negative=%r)",
+            "VSF installed on %d cross-attention modules (scale=%.2f negative=%r)",
             count,
             params.scale,
-            params.adaln_mode,
             params.negative_prompt[:60],
         )
         return count

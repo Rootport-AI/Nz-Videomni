@@ -2,7 +2,29 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-28 NAG（非CFGネガティブプロンプト）機能＝Wave 0〜3実装完了・機械検証（selfcheck 6/6・pytest 658 passed/6 skipped）全PASS・**実機ゲート未実施（オーナー実機待ち）**）（**生成機能の正本・本ブロックが日付としても最新**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-29 VSF（Value Sign Flip）非CFGネガティブプロンプト第2方式＝バックエンド＋Gradio UI実装完了・機械検証（selfcheck 5/5・pytest 763 passed/6 skipped）全PASS・**実機ゲート機械検証全項目合格・オーナー目視待ち**）（**生成機能の正本・本ブロックが日付としても最新**）
+
+> **生成機能についてはこのブロックが正本。以降の▶節（本ブロック直下の2026-07-28 NAGブロック・2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-28 NAG」ブロックは本ブロックに置き換わった（NAG自体は非CFGネガの第1方式として現役のまま。VSFは第2方式の追加）。
+>
+> 正式なワークオーダーは本セッション実行時点でオーナーのプランファイル（`reactive-weaving-umbrella.md`、リポジトリ外）が正本で、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-46。
+
+### 本日完了した内容の要約
+
+NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法として、VSF（Value Sign Flip, arXiv:2508.10931）を実装した。VSFは正負のコンテキストを連結して1回のattentionで処理し、負側のV（value）だけを−scale倍する方式で、NAGより排除力が強い一方、正プロンプト忠実度はNAGが上という性格違いのため、方式を選べるUI（`neg_method: "nag"|"vsf"`）にした。エンジン新規モジュール `engine/transformer/vsf_service.py`（連結1回attention・負側V×(−scale)・エンコード時実トークンスライス・AdaLN 3モード〔raw/modulated/v_scale〕をデバッグ用に切替可能なスタッシュ窓contextmanager・負側softmax質量mのINFOログ）を中心に、`nag_service.py`拡張・両パイプライン配線・`worker.py`分岐・API 3フィールド（`neg_method`/`vsf_scale`/`vsf_adaln`）・MCP `submit_generate`/`submit_chain`末尾3引数・Gradio UI（方式ラジオ・スライダー出し分け・デバッグアコーディオン）まで一気通貫で配線した。敵対的レビュー2ラウンド（計画時）＋コードレビュー1回（実装後）を実施し、指摘は全て修正済み。エンジンvenvのselfcheckが`vsf_selfcheck` 5/5・`nag_selfcheck`回帰6/6でPASS、アプリvenvのpytestが763 passed/6 skipped（既存テストの改修は計画どおり4本のみ）。**実機ゲートはMCP経由で親エージェント自身が実施し、G0回帰（単発T2V/I2V・chain OFF/chunked双方）・VSF疎通＋mログ実測・AdaLN 3モード・経路網羅（chain/A2V/NAG回帰）・NAG対VSF効き比較セット収集まで全て合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.5）。目視評価用の成果物一式はHugging Faceの非公開datasetへアップロード済み: https://huggingface.co/datasets/Rootport/Nz-LTX23-vsf-eval-20260729 。**残るのはオーナーによる目視評価のみ**（効き具合・scale適正値・AdaLNモードの判断）。
+
+途中、`.gitignore`の`tools/`パターンが`mcp_server/tools/`（MCPツール実装一式・別セッション由来）を不可視化していた致命的な欠陥を発見し`/tools/`へ修正した。**次回コミット時は`git add mcp_server/tools/`を忘れないこと。**
+
+### 次セッションの残課題（2026-07-29起票）
+
+1. **HFの動画をオーナーが目視して効き具合・scale適正値・AdaLNモードを判断すること。** リンクは上記。判断後に既定値を確定する（現状`vsf_scale`既定1.5・`vsf_adaln`既定"raw"は暫定値）。
+2. **既定値確定後、デバッグスイッチ（AdaLNラジオ等）を縮退するかどうかは別途承認が必要。** 現状は3モードとも常時UIに露出しているデバッグ用の作り。
+3. **βノブ（`vsf_offset`）は未実装のまま。** mの実測（video約0.8〜1.2%・audio約0.5%、raw時）を踏まえてもαだけでは不足すると判明した場合に限り、第2弾として起票する。
+4. **コミットはオーナー指示待ち。** `mcp_server/tools/`を含む`git add`が必要（上記gitignore修正参照）。
+5. **フロントエンド（React）追随は本Waveの範囲外・未着手。** VSF UIはGradio側のみで、AviUtl2連携のReactフロントエンドには一切手を入れていない。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-28 NAG（非CFGネガティブプロンプト）機能＝Wave 0〜3実装完了・機械検証（selfcheck 6/6・pytest 658 passed/6 skipped）全PASS・**実機ゲート全項目合格（2026-07-29 オーナー実機確認で完了）**）
 
 > **生成機能についてはこのブロックが正本。以降の▶節（本ブロック直下の2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは直下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-14 Clip Chain拡張」ブロックは本ブロックに置き換わった。
 >
@@ -10,11 +32,11 @@
 
 ### 本日完了した内容の要約
 
-蒸留版 LTX 2.3 は CFG（`guidance_scale=1.0`）凍結によりネガティブプロンプトが no-op だった問題を、NAG（Normalized Attention Guidance）という非CFG手法で解消した。Wave 0（エンジンコア `engine/transformer/nag_service.py` + `nag_selfcheck.py`）→ Wave 1（`fast_video_pipeline.py`/`chain_pipeline.py`/`worker.py` の配線）→ Wave 2（`api/models.py`/`services/ltx_runner.py` のAPI・ペイロード）→ Wave 3（GUIの共有 Negative Prompt アコーディオン）を段階的に実装し、単発Generate・Clip Chain・バッチA2Vの全経路に配線済み。エンジンvenvのselfcheckが6/6 PASS、アプリvenvのpytestが658 passed/6 skipped（既存テストの改修はpositional `_chain_args`ヘルパとi18nキー一覧の2件のみ＝NAGが加算的拡張であることの裏付け）。**Wave 4（本ブロック）でドキュメント化まで完了したが、実機ゲート（G0〜G7・V-UI）はまだ一つも実施していない。**
+蒸留版 LTX 2.3 は CFG（`guidance_scale=1.0`）凍結によりネガティブプロンプトが no-op だった問題を、NAG（Normalized Attention Guidance）という非CFG手法で解消した。Wave 0（エンジンコア `engine/transformer/nag_service.py` + `nag_selfcheck.py`）→ Wave 1（`fast_video_pipeline.py`/`chain_pipeline.py`/`worker.py` の配線）→ Wave 2（`api/models.py`/`services/ltx_runner.py` のAPI・ペイロード）→ Wave 3（GUIの共有 Negative Prompt アコーディオン）を段階的に実装し、単発Generate・Clip Chain・バッチA2Vの全経路に配線済み。エンジンvenvのselfcheckが6/6 PASS、アプリvenvのpytestが658 passed/6 skipped（既存テストの改修はpositional `_chain_args`ヘルパとi18nキー一覧の2件のみ＝NAGが加算的拡張であることの裏付け）。**Wave 4（本ブロック）でドキュメント化まで完了し、実機ゲート（G0〜G7・V-UI）も2026-07-29のオーナー実機確認で全項目合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4）。**
 
 ### 次セッションの残課題（2026-07-28起票）
 
-1. **実機ゲートG0〜G7・V-UIが未実施。** [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4 のゲート表を上から順に、オーナーの実機（RTX 4070 Ti SUPER 16GB）で実施すること。特にG0（NAG OFFでの回帰＝バイト一致）を最優先で通し、既存の生成経路を壊していないことを先に確定させる。
+1. ~~**実機ゲートG0〜G7・V-UIが未実施。** [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4 のゲート表を上から順に、オーナーの実機（RTX 4070 Ti SUPER 16GB）で実施すること。特にG0（NAG OFFでの回帰＝バイト一致）を最優先で通し、既存の生成経路を壊していないことを先に確定させる。~~ **（2026-07-29解消）** オーナーが実機確認を行い、G0〜G7・V-UIの全項目が合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4）。
 2. **STG（Spatio-Temporal Guidance。既存の別ガイダンス機構）× NAG併用は未検証。** 両方を同時に有効化した場合の挙動・干渉の有無を確認していない。
 3. **`compile_transformer` はNAGと非互換（現状は死コード）。** `torch.compile`はNAGのforwardパッチ（`block.attn2.forward`等の差し替え）と衝突する設計のため、`fast_video_pipeline.py`にコメントを追記して回避したが、`compile_transformer`自体は呼び出し元ゼロの死コードのまま（本番未使用）。将来これを復活させる場合はNAGとの共存方式を再設計する必要がある。
 4. **ラジオ「Other」の実体実装は将来課題。** 現状は「NAG / Other」ラジオでOtherを選ぶと即座にNAGへ戻すフォールバックのみで、Other（NAG以外の非CFG手法）自体の実装は無い。

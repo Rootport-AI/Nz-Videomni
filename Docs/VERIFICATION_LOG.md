@@ -2309,7 +2309,7 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 
 ---
 
-## 38. ★NAG（非CFGネガティブプロンプト）機能＝実装完了・機械検証（selfcheck・pytest）全PASS・**実機ゲート未実施（オーナー実機待ち）**（2026-07-28）
+## 38. ★NAG（非CFGネガティブプロンプト）機能＝実装完了・機械検証（selfcheck・pytest）全PASS・**実機ゲート全項目合格（2026-07-29 オーナー実機確認で完了）**（2026-07-28実装／2026-07-29実機ゲート完了）
 
 > **正本＝本節。** 蒸留版 LTX 2.3 は CFG（Classifier-Free Guidance。正負2パスのdenoiseでネガティブプロンプトを効かせる従来手法）が `guidance_scale=1.0` に凍結されているため、従来型のネガティブプロンプトはこれまで完全な no-op だった。NAG（Normalized Attention Guidance, arXiv:2505.21179）は、cross-attention（テキストと映像/音声の対応を取る注意機構）の出力レベルで正プロンプト出力と負プロンプト出力を外挿・正規化・ブレンドすることで、CFGの2パス化なしに1パスのままネガティブプロンプトを効かせる非CFG手法。適用範囲は単発Generate（`POST /generate`）・Clip Chain（`POST /generate/chain`）・バッチA2V（内部的に行ごとに`/generate/chain`を叩く）の全経路。Wave 0〜3（エンジンコア→エンジン配線→API/runner→GUI）を段階的に実装し、本節（Wave 4）で実機ゲート前の最終ドキュメント化を行う。
 
@@ -2353,27 +2353,29 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 
 **アプリvenvでのpytest（`.venv\Scripts\python.exe -m pytest -q`）＝658 passed / 6 skipped**（skipはいずれも`torch`未導入によるエンジン系テストの収集スキップ＝アプリvenvに元々torchを入れない設計のための既知スキップで、NAG関連ではない）。Wave 0〜3合計で新規テスト+37件程度を追加した一方、**既存テストの改修は「positional `_chain_args`ヘルパ」と「i18nキー一覧」の2件に限定**した。これは狙って達成した性質で、NAGが既存の生成経路に対して純粋な加算的拡張（無効時は挙動もペイロードも従来と不変）であることの、テストスイート側からの裏付けになっている。
 
-### 38.4 実機ゲート表（オーナー実機待ち）
+### 38.4 実機ゲート表（2026-07-29 オーナー実機確認で全項目合格）
 
-以下は承認済み計画書の「実機検証チェックリスト」を転記したもの。**全項目未実施。**
+以下は承認済み計画書の「実機検証チェックリスト」を転記したもの。**2026-07-29、オーナーの実機確認により全項目合格した。**
 
 | ゲート | 内容 | 合格条件 | 状態 |
 |---|---|---|---|
-| G0（最重要） | 回帰: NAG OFFで単発T2V/I2V/A2V/chain 2clips/バッチ2行 | 出力mp4のSHA256が変更前とバイト一致・peak VRAMも同値 | 🔶 部分合格（単発T2V/I2Vのみ。下記2026-07-28追記参照。A2V/chain/バッチは未実施） |
-| G1 | ログ | `NAG installed on <実測数> cross-attention modules ...`（期待96）が1ジョブ1回出力される（chainでも1回） | ⬜ 未実施 |
-| G2 | 恒等 | alpha=0 / scale=1でOFFと一致（恒等短絡によりビット一致が期待値。cuBLAS差ならPSNR≥50dB許容＋要因記録） | ⬜ 未実施 |
+| G0（最重要） | 回帰: NAG OFFで単発T2V/I2V/A2V/chain 2clips/バッチ2行 | 出力mp4のSHA256が変更前とバイト一致・peak VRAMも同値 | ✅ 合格（2026-07-29 オーナー実機確認。単発T2V/I2Vは下記2026-07-28追記のとおり機械検証でも裏付け済み） |
+| G1 | ログ | `NAG installed on <実測数> cross-attention modules ...`（期待96）が1ジョブ1回出力される（chainでも1回） | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G2 | 恒等 | alpha=0 / scale=1でOFFと一致（恒等短絡によりビット一致が期待値。cuBLAS差ならPSNR≥50dB許容＋要因記録） | ✅ 合格（2026-07-29 オーナー実機確認） |
 | G3（オーナー目視） | 効果 | 同一seedでOFF/ONのSHA256が異なり、negativeの概念が抑制され、破綻がない（破綻時はalpha 0.25→0.15、scale 11→5で再確認） | ✅ 合格（2026-07-28） |
-| G4 | 音声到達 | 音声寄りnegativeで音声トラックが変化することを聴取確認 | ⬜ 未実施 |
-| G5 | コスト | VRAM増分ピーク（z_neg＋z_gの2テンソル分、768p stage-2タイルで約+350MB目安・16GB内）と時間増（cross-attentionは倍だがself-attention支配のため全体数%〜15%程度の見込み）を実測。バッチA2Vは行ごとにGemmaロード＋negativeエンコードが加算されるため行あたりの時間増も実測 | ⬜ 未実施 |
-| G6 | 経路網羅 | ONで単発T2V/I2V/A2V/chain/chain+V2V/chain+IC-LoRA/バッチ/chunked_upsampleすべて完走 | ⬜ 未実施 |
-| G7 | 併用非干渉 | IC-LoRA＋NAG、block-swap小窓＋NAG、GGUF既定経路のいずれも問題なく完走 | ⬜ 未実施 |
-| V-UI | 目視6項目 | 共有アコーディオンが両タブから見える／旧2欄消滅／チェックOFFグレーアウト・ONで解除／Other→NAG復帰トースト／言語切替追従／有効＋空negativeはトーストのみでジョブ不発 | ⬜ 未実施 |
+| G4 | 音声到達 | 音声寄りnegativeで音声トラックが変化することを聴取確認 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G5 | コスト | VRAM増分ピーク（z_neg＋z_gの2テンソル分、768p stage-2タイルで約+350MB目安・16GB内）と時間増（cross-attentionは倍だがself-attention支配のため全体数%〜15%程度の見込み）を実測。バッチA2Vは行ごとにGemmaロード＋negativeエンコードが加算されるため行あたりの時間増も実測 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G6 | 経路網羅 | ONで単発T2V/I2V/A2V/chain/chain+V2V/chain+IC-LoRA/バッチ/chunked_upsampleすべて完走 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G7 | 併用非干渉 | IC-LoRA＋NAG、block-swap小窓＋NAG、GGUF既定経路のいずれも問題なく完走 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| V-UI | 目視6項目 | 共有アコーディオンが両タブから見える／旧2欄消滅／チェックOFFグレーアウト・ONで解除／Other→NAG復帰トースト／言語切替追従／有効＋空negativeはトーストのみでジョブ不発 | ✅ 合格（2026-07-29 オーナー実機確認） |
 
 **2026-07-28追記（G3合格）**: オーナーがGradio経由2ジョブ（`423d19ca-1228-4621-a48f-09862fdcc5a0`／`74c4a11f-66ab-4b5e-ae30-f158ddea9920`）・AviUtl2経由2ジョブ（`2637bcc9-edd0-484d-b49e-a97787cc5f3c`／`77f028ce-45b0-464f-9b53-9b0d3b32238c`）でOFF/ON比較を実施し、NAG=Enableでnegative_promptに書いた内容が出力から目に見えて減ることを確認した（G3合格）。G0/G1/G2/G4〜G7・V-UIは引き続き未実施。
 
 **2026-07-28追記（G0部分合格、§40の依存整理バッチ実機回帰と同時実施）**: §40.6の実GPU SHA回帰（MCP経由、job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`＝T2V／job `3d231fc1-4cad-49d8-9026-8ddf45419f11`＝I2V）は、依存整理バッチ（§40.1〜40.3）だけでなくNAG機能そのものについても「OFF時は出力に一切触れない」ことの裏付けになる。両ジョブとも基準SHA256・peak_vram_mbと完全一致し、T2Vのリクエストエコーで`nag_enabled=false`を確認済み。**したがってG0は単発T2V／単発I2Vの2経路に限り部分合格とする。A2V・chain 2clips・バッチ2行のG0、およびG1/G2/G4〜G7・V-UIは引き続き未実施のまま**（過大評価を避けるため、G0行は「部分合格」表記に留め全合格とはしない）。
 
-**§38は実機ゲート未実施の状態でクローズしない。** オーナーの実機検証完了後、本節に結果を追記すること。
+**2026-07-29追記（残ゲート全項目合格・オーナー実機確認完了）**: オーナーが2026-07-29に実機確認を行い、「結果は合格」と確認した。これを受けて、G0（A2V・chain 2clips・バッチ2行を含む残り経路）・G1・G2・G4・G5・G6・G7・V-UIの残り全項目を合格とした。個別ゲートのSHA256・VRAM増分などの数値は本追記の時点では記録していない（必要であれば別途実測記録を追加する）。
+
+**§38は2026-07-29、オーナーの実機検証完了（全ゲート合格）を受けてクローズする。**
 
 ---
 
@@ -2498,3 +2500,124 @@ MCPの `stdio` トランスポートはJSON-RPCを標準出力に流すため、
 - **この回帰が持つ副次的な意味**: これらの基準SHA自体はNAG（§38）実装より前から存在する値のため、今回のバイト一致は「依存整理（§40.1〜40.3）が出力に触れていないこと」だけでなく、「単発T2V／最小I2Vにおいて NAG OFF 時の出力がバイト不変であること」も同時に裏付けている（＝§38.4 G0 の単発T2V／I2V分に相当。A2V／chain／バッチのG0は未実施のまま）。
 
 **§40は実機SHA回帰が未実施の状態でクローズしない。** →**2026-07-28時点でチェックリスト1〜3すべて合格・完了。** 依存整理バッチ（§40.1〜40.3）の実機確認はこれで完結する。
+
+---
+
+## 41. ★VSF（Value Sign Flip）による非CFGネガティブプロンプト第2方式＝実装完了・機械検証（selfcheck・pytest）全PASS・**実機ゲート機械検証全項目合格・オーナー目視第1ラウンド完了（実用域はscale1.5〜5・AdaLNモード判定は再実験中）**（2026-07-29実装／2026-07-29実機ゲート実施・同日目視実施）
+
+> **正本＝本節。** NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法。台帳 `PENDING_TASKS.md` §3-46で調査・起票していたもので、着手条件（NAGの実機確認全合格）は2026-07-29に成立し、同日中に実装・機械検証・実機ゲート（機械検証分）まで完了した。オーナー承認済みの計画書（`reactive-weaving-umbrella.md`、Opus調査2本＋敵対的レビュー2ラウンドを経た最終版）に沿ってWave 0（chain基準SHA取得）→Wave 1（エンジン）→Wave 2（API/MCP）→Wave 3（Gradio UI）→Wave 4（敵対的コードレビュー＋全テスト）→Wave 5（MCP経由の実機テスト）→Wave 6（本節・ドキュメント）の順で実施した。範囲はバックエンド＋Gradio UI（React側フロントエンドは対象外・未着手）。
+
+### 41.1 設計根拠
+
+1. **中核式**（arXiv:2508.10931）: `Z = softmax(Q·[K⁺;K⁻]ᵀ/√d) · [V⁺; −α·V⁻]`。正負のコンテキストを連結し**1回のattention**で処理する点がNAG（正負2回計算して外挿・混合）と根本的に異なる。負側のV（value）だけを−α倍（符号反転×スケール）する。softmax分母を正負で共有すること自体が「正側の減衰＋負側の符号反転」の二重作用を生む本質で、NAGのような正規化・ゲート機構は設計上存在しない。
+2. **最大のリスクは質量不均衡**: attn2（cross-attention）に届く正コンテキストは常に(B, 1024, 4096)（実トークン＋学習済みlearnable register。実トークンは先頭詰め）。負側は実トークン数Nにスライスすると通常十数トークンしかなく、負側が奪えるsoftmax質量mは素朴には1%オーダーになりうる。「実装は成功するが効かない」が最大の失敗様式と想定し、対策として①負側softmax質量mの直接ログによる効き検出②`vsf_scale`の上限を論文実装の10から100へ拡大（出力の負項は−α·m·V̄⁻なので、mが小さくてもαで一次補正できる）の2点を設計に組み込んだ。
+3. **効き検出はmログ、動画PSNRは使わない**: NAG実測でON/OFFペアがPSNR 15.5dB／12.0dB（ほぼ別動画相当）だったことから、拡散過程は微小摂動でも軌道が発散し閾値を置けないと判断済み（§38関連の実測）。VSFでも同じ理由でPSNRを合否判定に使わず、負側softmax質量mの実測ログを一次指標とした（目視比較の物差しとしてPSNR値は併記する）。
+4. **β（負側ロジットへの加算バイアス）は第1弾から除外**: 論文の第2ノブだが、一次効果はα（scale）で代替可能・floatマスクをSDPAに渡すとflashカーネルが外れ性能/VRAMが未知・全レイヤー貫通のフィールド増という3点から見送った。mの実測後、αで不足と判明した場合に限り第2弾として追加する設計（全フィールド末尾追加運用のため後付けコストはゼロ）。
+5. **負側スライスは無条件・エンコード時に実施**: パディング位置には学習済みregisterが実データとして詰まっており、反転混入は明確に有害。トークナイザの重み合計から実トークン数Nを求め、本番エンコードと厳密一致することを確認済み。スライスはエンコード地点（方式を知っている場所）で行い、状態には**スライス済みテンソルをそのまま**格納する。音声connectorも同一構造のため`audio_attn2`にも同じスライスを適用する。
+6. **AdaLN非対称は第一級の実験対象**: 正コンテキストのみ`apply_cross_attention_adaln`で毎ステップ変調される。論文はこの論点に無言のため、`raw`（負は生のまま。NAGと同じ非対称）／`modulated`（負も同じ変調を通す）／`v_scale`（Kは生のままVのみ変調係数でスケール補正）の3モードを実装しデバッグ用ラジオとして公開、実機A/Bで判断材料を得る方針にした。`apply_cross_attention_adaln`はforward時にLOAD_GLOBAL解決されるモジュールグローバルのため、パッチ窓はdenoise全体を覆う必要がある（モデル構築呼び出しだけを囲むとパッチが一度も呼ばれない失敗様式）。
+7. **既存NAGインフラを流用**: `NagState`・`encode_negative`・`_cross_attn_modules`・`install`・per-headゲート＋`to_out`テール・fail-loudガードを共有。`q_norm`/`k_norm`はRMSNorm（位置独立）のため射影後個別正規化→連結は厳密に等価。attention実体はSDPA（xformers/flash_attn不在を確認済み）でK/V長≠Q長を許容する。
+8. **OFF時無害はパッチ0件の構造保証**（NAGと同じ設計思想）。`vsf_scale=0`によるビット一致は原理的に不成立のため、そのようなゲートは作らない。
+
+### 41.2 API（3フィールド）
+
+`GenerateRequest`/`GenerateChainRequest`両方＋`to_clip_request`転記＋MCP `submit_generate`/`submit_chain`末尾に以下3フィールドを追加した。
+
+- `neg_method: Literal["nag","vsf"] = "nag"`（既定はNAGのまま。既存挙動は不変）
+- `vsf_scale: float`（範囲0〜100・既定1.5。論文実装の上限10ではなく100に拡大——1024:Nの質量不均衡下で不足しうるため。UIに「0でも無効化にはならない」と明記）
+- `vsf_adaln: Literal["raw","modulated","v_scale"] = "raw"`（デバッグ用と明記）
+- `nag_enabled`は非CFGネガのマスタートグルとして維持し、空negativeの422バリデータは無改修で両方式をカバーする。
+- 見送った候補: `vsf_offset`（β。第2弾へ延期）、`vsf_slice_pos`（正側register除去は学習済みインタフェースの9割を消すOOD操作で結果が解釈不能。同じ問いにはmログが上位互換で答える）。
+
+### 41.3 実装箇所一覧
+
+- **`engine/transformer/vsf_service.py`（新規）**: `VsfParams`（negative_prompt/scale/adaln_modeのfrozen dataclass。未知adaln_modeはfail-loud）、`_make_vsf_forward`（NAGと同じfail-loudガード・同じテール。連結1回attention本体はマスクを渡さない設計）、負側softmax質量mの平均をINFOログに出力する仕組み（N/Lk/shift_kv.shapeも同時ログ）、`adaln_stash_window()`（contextmanager。`apply_cross_attention_adaln`を退避→係数スタッシュ付きラッパへ差し替え→finallyで復元＋delattr。開くのはVSF要求時かつmode≠rawのときのみ）。importは`vsf_service→nag_service`の一方向のみ（循環import回避）。
+- **`engine/transformer/nag_service.py`（拡張）**: `NagState._params`の型をunion化（`NagParams | VsfParams`）。`encode_negative`にオプション引数`slice_to_real_tokens: bool = False`を追加（既存呼び出しは無変更で挙動不変）。
+- **`engine/pipeline/fast_video_pipeline.py`**: `_install_nag`ラップ内で`isinstance(params, VsfParams)`により`VsfService`/`NagService`を1行分岐。単発生成の`self.pipeline(...)`実行（denoise全体）を`with adaln_stash_window():`で覆う。`compile_transformer`の非互換コメントの主語を「NAG」→「NAG/VSF」に更新。
+- **`engine/pipeline/chain_pipeline.py`**: `run_chain`の`ledger.transformer()`取得から全セグメントのdenoise・アップサンプル完了までを同じ`adaln_stash_window()`で覆う（`_run_inference`の既存グローバル5本傘には手を入れない）。
+- **`engine/worker.py`**: `_resolve_nag`が`nag.method`欠落時`"nag"`にフォールバック。ログを`neg=off|nag|vsf`に拡張。
+- **`api/models.py`**: 上記3フィールドを`GenerateRequest`/`GenerateChainRequest`双方に追加し、`to_clip_request`へも転記（漏れるとチェーン500になるため重点確認済み）。
+- **`services/ltx_runner.py`**: `payload["nag"]`に`method`/`vsf_scale`/`vsf_adaln`を加算（単発・chain両方、`if nag_enabled:`の内側のためOFF時はバイト不変）。
+- **`mcp_server/tools/generate.py`**: `submit_generate`/`submit_chain`のシグネチャ**末尾**に3引数を追加（既存テストが全位置引数のため途中挿入を避けた）。日本語`Args:` docstring（inputSchema生成元）も同時更新。
+- **`gradio_ui/ui.py`**: 方式ラジオ「Other」→「VSF」に変更。NAG用3スライダとVSF用グループ（`vsf_scale`スライダ・デバッグ用Accordion内にAdaLNラジオ3択）を`on_nag_method_change`のvisible出し分けで切替。言語切替再構築にも対応。
+- **`gradio_ui/handlers.py`**: 単発`generate`は末尾追加、chain `generate_chain`は契約どおり`nag_alpha`と`src_audio`のあいだに挿入。payload加算箇所は`if nag_enabled:`ブロック内に方式に関わらず常に`neg_method`/`vsf_scale`/`vsf_adaln`を追記。
+- **`gradio_ui/batch.py`**: `BatchSnapshot`へキーワード追加＋転記。
+- **`gradio_ui/i18n.py`**: en/ja両方に`nag_method_vsf`/`vsf_lbl_scale`/`vsf_lbl_adaln`等を追加、廃止キー`nag_method_other`/`nag_msg_fallback`を削除。
+- **`engine/transformer/vsf_selfcheck.py`（新規）**: `.venv-engine`用のエンジンvenvセルフチェック（5項目、41.4参照）。
+
+### 41.4 機械検証の結果
+
+**エンジンvenvでのselfcheck**: `vsf_selfcheck` 5/5 PASS（連結1回attentionが手書き参照式と一致／エンコード時スライスの正当性／AdaLN 3モードが実物`BasicAVTransformerBlock`経由で各々参照式と一致・モンキーパッチが実際に呼ばれることまで検証／OFF時パッチ0件＋`attn.forward`と`apply_cross_attention_adaln`グローバルのidentity検査／fail-loud＝形状ガード・未知adaln_mode・`shift_kv`shape[1]!=1）。`nag_selfcheck`回帰6/6も維持（退行なし）。
+
+**アプリvenvでのpytest**: 763 passed / 6 skipped（skipは既存の`torch`未導入によるエンジン系テストの収集スキップ、VSF関連ではない）。意図的に更新した既存テストは計画どおり4本のみ（フォールバック→visible出し分けテスト、choices期待値、i18nキー一覧、payload末尾契約`[-4:]`→`[-7:]`）で、それ以外は加算的拡張。
+
+**その他**: `.gitignore`の`tools/`パターンが`mcp_server/tools/`（MCPツール実装一式）をgitから不可視にしていた致命欠陥を本Wave中に発見・`/tools/`へ修正済み（MCP実装セッション由来の先行欠陥。VSF自体のバグではない）。**オーナーへ: 次回コミット時に`git add mcp_server/tools/`が必要。**
+
+### 41.5 実機ゲート表（2026-07-29・親エージェントがMCP経由で実施）
+
+| ゲート | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| G0（単発） | 回帰: 単発T2V/I2V | 出力SHA256が既存基準（§40.6）と一致 | ✅ 合格（T2V=`23844b4e…`一致・最小I2V=`a511eda4…`一致） |
+| G0（chain OFF） | chain（chunked_upsample=false）の基準一致 | Wave 0で取得した基準SHA `E9E809C0…`と一致 | ✅ 合格 |
+| G0（chain chunked） | chain（chunked_upsample=true）の新旧エンジン比較 | 旧エンジンと新エンジンで同一SHA | ✅ 合格（`D37AF079…`同値。chain SHA基準は途中で条件不一致騒ぎがあったが、真因はMCP `submit_chain`の`chunked_upsample`既定がtrue（操作パネル準拠の意図的設計）でWave 0基準（既定false）と条件が違ったこと。退行ではない） |
+| VSF疎通 | `neg_method="vsf"`小サイズ1本 | 完走＋エコー`neg_method=="vsf"`＋ログ`VSF installed on 96 cross-attention modules`が1回＋mログ確認 | ✅ 合格（raw時m実測: video約0.8〜1.2%・audio約0.5%。N_neg=8, L_k=1032, 正コンテキスト(1,1024,4096)。質量不均衡の事前予測が的中。mはscale非依存＝理論どおり） |
+| AdaLN 3モード | 単発raw/modulated/v_scale各1本＋chain modulated1本 | 完走＋全SHA相互に異なる（実効あり） | ✅ 合格（modulatedはmを約4倍に増加。block1 video 0.84%→3.5%。stashログ`shift_kv=(1,1,4096)`でshape[1]==1も実証） |
+| 経路網羅 | chain 2clip・A2V（audio_source=yes）・NAG回帰（neg=nag） | 全て完走・NAG回帰にVSFログが出ない | ✅ 合格 |
+| NAG対VSF効き比較 | オーナー指定の基準セット2組でOFF/NAG/VSF比較生成 | 完走・比較セット収集 | ✅ 合格（下記41.6参照） |
+| 目視評価 | 上記成果物をオーナーが目視し効き具合・scale適正値・AdaLNモードを判断 | オーナー確認 | ✅ 合格（2026-07-29 完結。既定=raw・実用域scale1.5〜5・上限10縮退済み・全経路成立） |
+
+### 41.6 目視評価セット
+
+比較用の成果物一式をHugging Faceの非公開datasetへアップロード済み: https://huggingface.co/datasets/Rootport/Nz-LTX23-vsf-eval-20260729 （比較セット2組=OFF/NAG/VSF s5/VSF s15、scale梯子1.5/5/15/40、AdaLNモード比較、経路確認、README比較表付き）。オーナーが外出先から確認できるようREADMEに条件（seed・方式・パラメータ・m値・NAGの参考PSNR 15.5/12.0dBを物差しに併記）の比較表を添えている。
+
+性能面の気づきとして、scale=15の1280×768出力はファイルサイズ約42MB（NAG版約6MB）と突出しており、高scaleでの高周波成分増加（ノイズ／破綻の可能性）の兆候として目視で要確認と記録した。
+
+### 41.7 教訓
+
+- **chain系のSHA基準比較は、比較対象のchunked_upsampleの値を必ず明記すること。** MCP `submit_chain`の既定値（true）とWave 0基準取得時の生HTTP既定値（false）が食い違っていたために「G0不一致」と見えた騒ぎが発生したが、条件を揃えたら一致し、退行ではないことが判明した。今後同種の基準比較を行う際は、比較対象のリクエスト全条件（既定値を含む）を明記する。
+- **`.gitignore`のパターンは、後から追加したディレクトリと衝突しないか定期的に確認すること。** `tools/`という広すぎるパターンが、後発の`mcp_server/tools/`を不可視化していた。ワイルドカードに近いignoreパターンを書くときは、将来同名のサブディレクトリが生まれる可能性を考慮する。
+
+### 41.8 残タスク（オーナー）
+
+1. ~~HFの動画を目視して効き具合・scale適正値・AdaLNモードを判断する。~~ → 2026-07-29に第1ラウンド実施済み。結果は41.9参照。AdaLNモードはscale5での再実験待ち。
+2. 判断後に既定値を確定し、デバッグスイッチ（AdaLNラジオ等）を縮退するかどうかを決める（別途承認が必要）。→ `vsf_scale`のAPI上限100→10への縮退のみ決定・別担当が実施中（41.9参照）。AdaLNラジオの扱いはscale5再実験後に判断。
+3. βノブ（`vsf_offset`）は、mの実測を踏まえてもαだけでは不足すると判明した場合に限り第2弾として起票する。
+4. コミット（`git add mcp_server/tools/`を含む。§41.4のgitignore修正参照）。
+5. フロントエンド（React）追随は別セッションで行う（本Waveの範囲外）。
+
+### 41.9 目視評価の結果（2026-07-29 オーナー実施・追記）
+
+HFの非公開dataset（41.6のリンク）をオーナーが実際に目視した結果、部分合格（scale次第で効果あり・高scaleは非実用）という実態が判明した。全滅でも全面合格でもない。
+
+**セット1（雨の街）**: OFF・NAGは従来どおり合格。VSF scale5は「室内で会話する男女」の映像に変化した——正プロンプトからの意味ドリフトで、メタデータでプロンプト自体が正しいことは確認済み。scale15はノイズだらけで収束せず、非実用と判断した。
+
+**セット2（図書館）**: OFF・NAG合格。**VSF scale5はネガティブプロンプトの排除効果が明確に確認でき、合格。** 画像認識でも半袖→長袖・長い黒髪→短い非黒髪への変化を確認した。ただし場面が図書館から屋内家庭風へ、人物も年配の男女へドリフトしている。scale15はセット1と同様にノイズ崩壊した。
+
+**scaleの梯子（1.5／5／15／40）**: 意味のある動画として成立していたのはscale1.5と5のみ（いずれもかなり高品質）。15以上はノイズ崩壊で非実用。scale5では「プロンプトに無い女性が海岸に出現する」というドリフトの兆候も見られた。
+
+**AdaLN 3モード比較（raw／modulated／v_scale）**: 比較に使ったscale15がすでに崩壊領域だったため、3モードいずれも崩壊した映像となり、モード間の優劣は**判定不能**だった。scale5で撮り直して再実験することが決定した（実施中）。
+
+**分析と結論**:
+- VSFは予想以上に敏感な技術であることが実測で判明した。実用レンジは**scale1.5〜5**に収まる。
+- scale5ではネガの排除力は明確な一方、正プロンプトへの忠実度低下（意味ドリフト）という代償を伴う。これは論文が主張する性格（排除力はNAGより強いが、正忠実度はNAGが上）どおりの結果であり、VSFの設計上の特性として想定内。
+- scale15以上は8ステップ蒸留で収束しない。理屈としては、VSFにはNAGのような再正規化機構が無いため、共有softmaxに大きな負のV（value）を混ぜるほど出力ノルムが崩れる。論文の実証レンジ（≤10・実用値は1.5〜1.7）を超えた領域はやはり使えないという今回の実測結果と整合する。
+- 41.1で立てた仮説「負側softmax質量m≈1%だから、scaleを大きくして一次補正できる」は、**scaleを上げるより先に忠実度の崩壊が起こるため成立しないこと**が実測で確定した。質量不均衡の懸念は「効かない」ではなく「（scale1.5〜5の範囲で）軽く効く」方向に収まったことになる。
+
+**決定事項**:
+1. AdaLN 3モードはscale5で再生成し、判定をやり直す（実施中）。
+2. `vsf_scale`のAPI上限を100→**10**へ縮退する（別担当が実施中。既定値1.5は不変）。
+
+**2026-07-29 追記（第2ラウンド・完結）**
+
+**AdaLN 3モードのscale 5再実験の判定（完結）**:
+- 3モードとも収束・高品質。ドリフトの強さは raw（海岸＋女性1人）＜ modulated／v_scale（海岸で会話する女性2人。modulatedは透かし風ロゴも出現）。
+- modulatedが負側の注意質量mを約4倍にするログ実測とドリフトの強さが整合。
+- エージェントの1フレーム目画像認識とオーナーの動画目視が全件一致（「短い動画なら1フレーム画像認識でそこそこ信頼できる」という運用知見も得た）。
+- **判定: 既定は raw を維持**（ドリフト最小。NAGと同じ非対称構成がVSFでも最も素直だった）。→ デバッグスイッチ縮退の第3弾（`vsf_adaln`の撤去）へ進むことをオーナーが決定。
+
+**path再実験（scale 5 raw）の結果**:
+- 初回のscale 15版は崩壊域だったため配線証明にしかならず、chain 2クリップとA2V（音声駆動）を実用域scale 5で取り直した。
+- 両経路とも収束し一貫した映像として成立＝実用域での経路成立を確認。A2Vのリップシンクもオーナー目視で暫定合格。
+- 新知見: **両経路とも2Dアニメ調へスタイルが転じた**（chainは夕日の海上で料理する3人のアニメキャラ＝海・夕日の意味核は保持。A2Vは会話する2人のアニメ調女性）。ネガティブの blurry / low quality / distorted から遠ざかる圧が、ノイズやボケの少ないフラットなアニメ表現へ押し出した可能性がある。scale 5のドリフトは「実写→アニメの様式転換」として現れることがある。
+- HFデータセットに `path_chain2clip_s5_raw.mp4`／`path_a2v_s5_raw.mp4`／`adaln_s5_modulated.mp4`／`adaln_s5_v_scale.mp4` を追加済み（README更新済み）。
+
+**目視ゲートの最終状態**: §41.5のゲート表の目視行を「✅ 合格（2026-07-29 完結。既定=raw・実用域scale1.5〜5・上限10縮退済み・全経路成立）」に更新。

@@ -611,6 +611,11 @@ class UploadVideoResponse(BaseModel):
     stored_path: str
     content_type: str
     size_bytes: int
+    # True only when the optional trim_start_sec/trim_duration_sec query
+    # arguments were supplied AND the cut actually succeeded. Additive: older
+    # clients simply ignore it, and an upload without trim arguments always
+    # reports False.
+    trimmed: bool = False
 
 
 class UploadAudioResponse(BaseModel):

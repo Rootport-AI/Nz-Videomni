@@ -132,6 +132,79 @@ def test_cut_tail_mp4_too_short_raises(color_mp4, tmp_path):
         video_io.cut_tail_mp4(color_mp4, tmp_path / "oops.mp4", context_frames=25, fps=10.0)
 
 
+# ------------------------------------------------- cut_range_mp4 (ribbon trim)
+
+
+def test_cut_range_mp4_is_frame_exact(color_mp4, tmp_path):
+    # 6 distinct color frames @10fps. [0.2s, +0.3s) -> frames 2,3,4 inclusive.
+    out = tmp_path / "range.mp4"
+    info = video_io.cut_range_mp4(color_mp4, out, start_sec=0.2, duration_sec=0.3)
+
+    assert info["start_frame"] == 2
+    assert info["end_frame"] == 4
+    assert info["written_frames"] == 3
+    assert info["total_frames"] == len(_COLORS)
+    assert video_io.frame_count(out) == 3
+
+    for out_idx, src_idx in enumerate((2, 3, 4)):
+        png = tmp_path / f"r{out_idx}.png"
+        video_io.extract_frame_at(out, out_idx, png)
+        assert _closest_color_index(_avg_rgb(png)) == src_idx
+
+
+def test_cut_range_mp4_clamps_duration_past_the_end(color_mp4, tmp_path):
+    # Ask for 10s starting at frame 4 of a 6-frame clip -> the remainder (4,5).
+    out = tmp_path / "clamped.mp4"
+    info = video_io.cut_range_mp4(color_mp4, out, start_sec=0.4, duration_sec=10.0)
+
+    assert info["start_frame"] == 4
+    assert info["end_frame"] == len(_COLORS) - 1
+    assert info["written_frames"] == 2
+    assert video_io.frame_count(out) == 2
+
+
+@pytest.mark.parametrize("duration_sec", [0.0, -1.0, 0.01])  # 0.01s @10fps rounds to 0 frames
+def test_cut_range_mp4_non_positive_window_raises(color_mp4, tmp_path, duration_sec):
+    with pytest.raises(video_io.FFmpegError):
+        video_io.cut_range_mp4(color_mp4, tmp_path / "bad.mp4", start_sec=0.0, duration_sec=duration_sec)
+
+
+def test_cut_range_mp4_start_past_the_end_raises(color_mp4, tmp_path):
+    with pytest.raises(video_io.FFmpegError):
+        video_io.cut_range_mp4(color_mp4, tmp_path / "oob.mp4", start_sec=100.0, duration_sec=1.0)
+
+
+def test_cut_range_mp4_preserves_source_fps(tmp_path):
+    # No resampling: a 30fps source stays 30fps even though the window is short.
+    frames = [Image.new("RGB", (64, 64), (i * 8 % 256, 100, 150)) for i in range(30)]
+    src = tmp_path / "src30.mp4"
+    video_io.encode_frames_to_mp4(frames, src, frame_rate=30.0)
+
+    out = tmp_path / "cut30.mp4"
+    info = video_io.cut_range_mp4(src, out, start_sec=0.2, duration_sec=0.5)
+
+    assert abs(info["source_fps"] - 30.0) < 0.5
+    out_fps = video_io.probe_fps(out)
+    assert out_fps is not None and abs(out_fps - info["source_fps"]) < 0.5
+    assert video_io.frame_count(out) == 15  # 0.5s @30fps
+
+
+def test_cut_range_mp4_trims_audio_to_the_same_window(tmp_path):
+    fps = 24.0
+    src = tmp_path / "withaudio.mp4"
+    _make_v2v_clip(src, num_frames=48, fps=fps, freq=440.0, volume_db=-10.0)  # 2.0s
+
+    out = tmp_path / "cut_audio.mp4"
+    info = video_io.cut_range_mp4(src, out, start_sec=0.5, duration_sec=1.0)
+
+    assert info["start_frame"] == 12 and info["end_frame"] == 35
+    assert video_io.frame_count(out) == 24
+    assert video_io.has_audio_stream(out)
+    # Audio was cut to the same window, not carried through whole.
+    out_dur = video_io.probe_duration(out)
+    assert out_dur is not None and abs(out_dur - 1.0) < 0.15
+
+
 # ------------------------------------------------------------- join_v2v tests
 
 

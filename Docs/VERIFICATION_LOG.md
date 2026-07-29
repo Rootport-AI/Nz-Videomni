@@ -2655,3 +2655,49 @@ HFの非公開dataset（41.6のリンク）をオーナーが実際に目視し�
 これをもってVSFテーマ（バックエンド実装・Gradio UI・デバッグスイッチ縮退・フロントエンド追随・目視ゲート）は**全クローズ**とした。台帳は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55（フロントエンド側の完結記録）。
 
 **将来の再訪条件（オーナー決定）**: コミュニティからWan等の動画生成AIにおけるVSFのscaleベストプラクティスの報告が出てきたとき、LTX 2.3への応用可否と既定値1.5の見直しを検討する。現状の1.5は問題ないと判断している。
+
+## 42. ★`POST /upload/video` のリボン範囲トリム（`trim_start_sec` / `trim_duration_sec` 加算＋`cut_range_mp4` 新設）＝実装完了・機械検証（pytest）全PASS・**実機ゲートはフロントエンド側の実機調査待ち**（2026-07-30）
+
+> **正本＝本節**（バックエンド側の検証記録）。機能全体の作業指示書はフロントエンド側の[`V2V_RIBBON_TRIM_WORKORDER.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/V2V_RIBBON_TRIM_WORKORDER.md)、台帳は同[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-6。AviUtl2のタイムラインに置いた動画オブジェクト（リボン）が元動画ファイルの一部しか占めていないとき、その範囲だけを切り出したmp4をV2Vの冒頭クリップにするための**バックエンド側の受け口**を実装した。凍結表（`LTX23_Backend_Specification.md` §6.1）外エンドポイントへの追加専用拡張であり、`source_tail_seconds`（§37のJoin拡張）と同じ作法に従う。
+
+### 42.1 実装箇所（4ファイル）
+
+- **`services/video_io.py`**: `cut_range_mp4(src, out, start_sec, duration_sec)` を新設した。既存の `cut_tail_mp4` のクローンだが**リサンプルを一切しない**点が決定的に異なる——ユーザーがタイムラインで見ている素材そのものを渡したいので、ソースの実測fps（`probe_fps`）をそのまま `-r` に据え、切り出す窓だけを変える。窓の指定は時間シークではなく `select='between(n\,start\,end)'` のフレーム番号選択で行い（VFR素材でもずれない既存流儀）、`start_frame = round(start_sec * source_fps)` / `n = round(duration_sec * source_fps)` / `end = min(total-1, start+n-1)` と**フレーム空間で完結**させている。音声があれば `atrim=start=…:end=…` で同じ窓へ揃えてAAC再エンコードする。戻り値は `{source_fps, total_frames, start_frame, end_frame, written_frames}`。`FFmpegError` を送出するのは①fpsが計測できない②尺が0フレームに丸まる③開始位置がソース末尾以降——の3ケースのみで、**末尾を超える要求は失敗ではなくクランプ**（残りだけを書く）。
+  - 単位に関する意図的なヘッジ: 公開シグネチャは**秒**だが内部で即フレームへ変換しているため、実機調査の結果「AviUtl2の`再生位置`はフレーム単位だった」と判明した場合でも、`start_frame`/`num_frames` を受け取る引数を足して換算を短絡させるだけで済み、選択ロジックは動かさなくてよい（関数のdocstringにも明記した）。
+- **`services/video_upload_store.py`**: `VideoUploadStore.save()` にキーワード引数 `trim_start_sec` / `trim_duration_sec` を追加した。判定は純ヘルパ `_trim_window()` に閉じ込め、**「使える窓」でなければ `None` を返して従来の保存経路へ素通しする**——片方だけ指定・非数値・NaN／inf・`start < 0`・`duration <= 0` がすべてここで吸収される。使える窓があるときも、**まず受信バイト列を `input{ext}` へそのまま書いてから**兄弟の一時ファイル（`_input.tmp.mp4`。`_` 始まりなので `path_for` の `glob("input.*")` に決して掛からない）へ切り出し、成功したときだけ `os.replace` で `input.mp4` へ差し替える。したがって`FFmpegError`／`OSError` はすべて「無傷の元アップロードを `trimmed=False` で返す」へ縮退する。mkv/webm等を入力にトリムした場合は保存が `input.mp4` へ正規化され（元の `input.mkv` は削除。`path_for` が一意になるよう `input.*` を1本に保つ）、`content_type` も `video/mp4` に、`size_bytes` は切り出し後の実サイズに差し替わる。
+- **`api/uploads.py`**: `upload_video` に `trim_start_sec: float | None = Query(None)` / `trim_duration_sec: float | None = Query(None)` を追加した。**`ge=`／`le=` を意図的に付けていない**——範囲外や非有限の値でバリデーションエラー（422）を新設してしまうと、それまで成功していたリクエストが失敗に変わるため、判定はストア側に委ねて「黙って素通し」に統一する意図をコメントで明記している。あわせて `context.video_upload_store.save` の呼び出しを `run_in_threadpool` 経由へ変更した（トリム経路はffmpegへshell outするので、そのままawaitしないとイベントループ＝他の全APIが切り出しのあいだ止まる）。
+- **`api/models.py`**: `UploadVideoResponse` に `trimmed: bool = False` を加算した。既存クライアントは無視するだけで済み、トリム引数なしのアップロードは常に `False` を返す。
+
+### 42.2 機械検証の結果（pytest 776 passed / 6 skipped）
+
+**アプリvenvでのpytest**: `776 passed, 6 skipped`（skipは既存の`torch`未導入によるエンジン系テストの収集スキップで、本件とは無関係）。§41.10時点の753件から23件増（新規2ファイル分）で、既存テストの削除・書き換えはゼロ＝完全に加算的な拡張である。
+
+**`tests/test_video_io.py`（`cut_range_mp4` の単体、5テスト＋パラメータ展開3ケース）**:
+
+| 検証内容 | 合格条件と結果 |
+|---|---|
+| フレーム精度 | 10fps・6色フレームの素材で `[0.2s, +0.3s)` を要求 → `start_frame=2` / `end_frame=4` / `written_frames=3`、`frame_count(out)==3`。さらに**出力の各フレームを`extract_frame_at`で取り出して平均色を突き合わせ、元素材のフレーム2・3・4であることを色で確認**（「3フレーム書けた」だけでなく「正しい3フレームを書いた」ことの検証） |
+| 末尾超過のクランプ | 6フレーム素材のフレーム4から10秒を要求 → 失敗せず残り2フレーム（`end_frame=5`）を書く |
+| 非正の窓 | `duration_sec` が `0.0` / `-1.0` / `0.01`（10fpsで0フレームに丸まる）の3通りで `FFmpegError` |
+| 開始位置がソース末尾以降 | `start_sec=100.0` で `FFmpegError` |
+| ソースfpsの保存 | 30fps素材から0.5秒を切り出し → `source_fps≈30`・**出力の実測fpsも≈30**（リサンプルしていないこと）・`frame_count==15` |
+| 音声窓の一致 | 24fps・2.0秒・440Hzトーン付き素材から `[0.5s, +1.0s)` → `start_frame=12` / `end_frame=35`、`frame_count==24`、音声ストリーム存置、かつ**出力の実測尺が1.0秒±0.15**（音声が丸ごと通っていない＝同じ窓へ切られていること） |
+
+**`tests/test_upload_video_trim.py`（エンドポイント契約、6テスト＋パラメータ展開10ケース）**:
+
+- **無トリム時の`cut_range_mp4`未呼び出し＋バイト等価**: `cut_range_mp4` を「呼ばれたら `AssertionError`」のスタンドインへ差し替えた状態でクエリなしPOST → 200・`trimmed=False`・`size_bytes==len(payload)`、かつ**保存ファイルが投稿バイト列と完全一致**。「トリム引数を足したがOFF経路は1バイトも変わっていない」ことを機械的に固定している。
+- **トリム引数の素通し確認**: `trim_start_sec=1.0&trim_duration_sec=2.0` → 呼び出し1回・引数が `(1.0, 2.0)` のまま到達・入力は `input.mp4`・出力先の名前が `_` 始まり、応答は `trimmed=True`・`stored_path` が `/input.mp4` 終わり、ディレクトリ内に残るのは `input.mp4` 1本のみ（一時ファイルが片付いている）。
+- **片方だけ指定**: `trim_start_sec` のみ／`trim_duration_sec` のみの2ケースとも、`cut_range_mp4` は呼ばれず200・`trimmed=False`・バイト等価。
+- **ffmpeg失敗のフォールバック**: 一時ファイルを半端に書いてから `FFmpegError` を投げるスタブで、200・`trimmed=False`・**元アップロードが無傷**・`input.*` が1本・一時ファイルが除去済み。
+- **nan / inf / 負値 / 0以下の素通し**: `(nan,2.0)` `(1.0,nan)` `(inf,2.0)` `(1.0,inf)` `(-1.0,2.0)` `(1.0,0.0)` `(1.0,-2.0)` の7ケースで `cut_range_mp4` に**到達しない**ことをスタブのアサーションで固定し、いずれも200・`trimmed=False`・バイト等価。8ケース目の `(1e30, 1e30)`（有限だが荒唐無稽）だけは意図どおりffmpegまで到達し、そこでの失敗が200・`trimmed=False` へ縮退する。
+- **mkv入力の正規化**: `clip.mkv` をトリム付きでPOST → `trimmed=True`・`content_type` が `video/mp4`・`stored_path` が `/input.mp4`・ディレクトリの `input.*` は1本のみ・`path_for` の拡張子が `.mp4`。
+- **実ffmpegでのE2E**: 10fps・10フレームの実mp4を生成して `[0.2s, +0.3s)` をPOST → 保存ファイルの `frame_count` が実測3・`size_bytes` が実ファイルサイズと一致・元ファイルとサイズが異なる（本当に切られている）。続けて `(1e30, 1.0)` をPOSTし、ffmpeg内で失敗して200・`trimmed=False`・**保存バイト列が投稿バイト列と一致**することも同じテスト内で確認している。
+
+### 42.3 実機ゲート（未実施・フロントエンド側の実機調査が前提）
+
+本節の範囲（バックエンド）は機械検証で完結しているが、**機能としての実機ゲートは未実施**である。フロントエンド側がトリム引数を送るには、AviUtl2の`動画ファイル`エフェクトの`再生位置`項目の**単位**（秒／プロジェクトfpsのフレーム／ソースfpsのフレーム）が実機で確定する必要があり、その採取が済んでいない（採取依頼書はフロントエンドの[`V2V_TRIM_PROBE_GUIDE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/V2V_TRIM_PROBE_GUIDE.md)、判定表は[`V2V_RIBBON_TRIM_WORKORDER.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/V2V_RIBBON_TRIM_WORKORDER.md) §4）。したがって現時点では**製品UIからトリム引数が送られる経路は存在せず、本エンドポイントの挙動は従来と完全に同一**である。実機ゲートの手順はフロントエンドの[`REAL_BACKEND_CHECKLIST.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.12に置いた。
+
+### 42.4 教訓
+
+- **既存エンドポイントへ任意引数を足すときは、「不正値でも新しいエラー応答を作らない」を先に決めてから`Query()`を書くこと。** `ge=0` のような一見自然な制約を付けると、それまで200だったリクエストが422になり得る（クライアントが古い・値の導出にバグがある、のどちらでも起こる）。本件は制約をゼロにして判定をストア側の純ヘルパへ移し、「使えない窓＝トリムしない」に一本化した。
+- **ffmpegへshell outする処理を`async def`の中で直接呼ばないこと。** `run_in_threadpool` を挟まないと、切り出しのあいだイベントループが止まり、進捗ポーリングを含む他の全APIが無応答になる。同期I/Oを足すときは呼び出し側の非同期性を必ず確認する。

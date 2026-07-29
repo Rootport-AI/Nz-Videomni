@@ -50,6 +50,7 @@ from engine.pipeline.common import (
     video_chunks_number,
 )
 from engine.transformer.nag_service import NagParams, encode_negative
+from engine.transformer.vsf_service import VsfParams, adaln_stash_window
 
 DTYPE = torch.bfloat16
 
@@ -456,7 +457,7 @@ def run_chain(
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
     chunked_upsample: bool = False,
-    nag: NagParams | None = None,
+    nag: NagParams | VsfParams | None = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -565,11 +566,19 @@ def run_chain(
     for p in distinct:
         vctx, actx = encode_text(text_encoder, prompts=[p])[0]
         ctx_by_prompt[p] = (vctx, actx)
-    # NAG negative encode: one extra call against the SAME live text_encoder
+    # NAG/VSF negative encode: one extra call against the SAME live text_encoder
     # (avoids a second Gemma load), stashed in NagState before it's freed below.
-    # Inert when this chain didn't request NAG (pipe._nag.requested is False).
+    # Inert when this chain didn't request either (pipe._nag.requested is False).
+    # VSF additionally trims the encoding to the prompt's real tokens — its
+    # single shared softmax must not sign-flip the connector's learned register
+    # embeddings (see encode_negative's docstring); NAG passes False and stays
+    # byte-identical.
     if pipe._nag.requested:
-        nvc, nac = encode_negative(text_encoder, pipe._nag.params.negative_prompt)
+        nvc, nac = encode_negative(
+            text_encoder,
+            pipe._nag.params.negative_prompt,
+            slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+        )
         pipe._nag.set_contexts(nvc, nac)
     torch.cuda.synchronize()
     del text_encoder
@@ -642,237 +651,248 @@ def run_chain(
     # ── Build video_encoder + transformer ONCE (reuse for stage1 + stage2). ───
     video_encoder = ledger.video_encoder()
     transformer = ledger.transformer()
-    # Drop the Windows-stranded reserved pool from the block-swap load-then-evict
-    # (Phase 5B fix; the chain path bypasses the worker's denoise_audio_video
-    # wrapper, so release explicitly here before the first heavy denoise).
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    # ── video-to-video: encode the source tail into frozen HEAD latents ───────
-    src_head_v_half = src_head_v_full = src_head_a = None
-    freeze_ka = 0
-    source_had_audio = False
-    if source is not None:
-        (src_head_v_half, src_head_v_full, src_head_a,
-         freeze_ka, source_had_audio) = _encode_source_heads(
-            source=source, layout=layout, width=width, height=height,
-            video_encoder=video_encoder, tiling_cfg=tiling_cfg,
-            ledger=ledger, device=device,
-        )
+    # ── VSF AdaLN stash window (no-op for every other job) ────────────────
+    # Must stay open across the WHOLE denoise: the wheel resolves
+    # apply_cross_attention_adaln by LOAD_GLOBAL inside the block's forward,
+    # so a window that closed after the transformer was built would patch
+    # nothing at all. It therefore spans every stage-1 segment, the
+    # upsample, and every stage-2 tile — and closes just BEFORE the
+    # `del transformer` below, so the transformer's release point (and the
+    # chain's VRAM profile) is exactly where it always was. For NAG jobs,
+    # VSF jobs with adaln_mode="raw", and jobs with no negative prompt this
+    # yields without touching the wheel's module global.
+    with adaln_stash_window(transformer, pipe._nag.params):
+        # Drop the Windows-stranded reserved pool from the block-swap load-then-evict
+        # (Phase 5B fix; the chain path bypasses the worker's denoise_audio_video
+        # wrapper, so release explicitly here before the first heavy denoise).
         gc.collect()
         torch.cuda.empty_cache()
 
-    stepper = EulerDiffusionStep()
-    stage1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(device)
-
-    # ── STAGE 1: per-segment (half-res) with carry+freeze. ────────────────────
-    seg_v: list[torch.Tensor] = []
-    seg_a: list[torch.Tensor] = []
-    for i in range(n):
-        # F2: tag the upcoming wheel denoising loop with its chain position so
-        # the per-step tqdm shim events carry segment context (observation only).
-        progress_shim.set_phase("stage1_denoise", outer_index=i, outer_total=n)
-        seg_shape = VideoPixelShape(1, clip_frames[i], height // 2, width // 2, frame_rate)
-        noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
-        if i == 0 and source is not None:
-            # video-to-video: freeze the source tail as clip-0's head (same
-            # carry mechanism as an inter-clip join; mask = 1-overlap_strength).
-            from ltx_core.types import AudioLatentShape as _ALShape
-            from ltx_core.types import VideoLatentShape as _VLShape
-            v_half_shape = _VLShape.from_pixel_shape(
-                seg_shape,
-                latent_channels=components.video_latent_channels,
-                scale_factors=components.video_scale_factors,
-            ).to_torch_shape()
-            init_v = torch.zeros(tuple(v_half_shape), dtype=DTYPE, device=device)
-            init_v[:, :, :n_ctx_v] = src_head_v_half.to(DTYPE)
-            if freeze_ka > 0:
-                a_shape = _ALShape.from_video_pixel_shape(seg_shape).to_torch_shape()
-                init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
-                init_a[:, :, :freeze_ka] = src_head_a.to(DTYPE)
-            else:
-                init_a = None
-            fkv, fka = n_ctx_v, freeze_ka
-            conds = []  # source & conditioning_images are mutually exclusive (app-enforced)
-        elif i == 0:
-            init_v = init_a = None
-            fkv = fka = 0
-            # clip-0 conditioning at HALF resolution (stage-1).
-            conds = _build_video_conditionings(
-                clips[0].images, height=height // 2, width=width // 2,
-                video_encoder=video_encoder, device=device,
+        # ── video-to-video: encode the source tail into frozen HEAD latents ───────
+        src_head_v_half = src_head_v_full = src_head_a = None
+        freeze_ka = 0
+        source_had_audio = False
+        if source is not None:
+            (src_head_v_half, src_head_v_full, src_head_a,
+             freeze_ka, source_had_audio) = _encode_source_heads(
+                source=source, layout=layout, width=width, height=height,
+                video_encoder=video_encoder, tiling_cfg=tiling_cfg,
+                ledger=ledger, device=device,
             )
-            # α control-adapter reference (additive): append the reference latent
-            # to clip-0's STAGE-1 conditioning ONLY — the same "stage-1 once"
-            # semantics as single generate() (which routes through
-            # pipe._reference_conditioning_for_stage on its stage-1 pass and
-            # returns [] on stage 2). Reuse that exact builder with the HALF-res
-            # cond_kwargs (height//2, width//2, DTYPE, device, video_encoder) so
-            # the downscale/encode is byte-for-byte the single path's. Never
-            # injected on the V2V head branch above (source & reference are
-            # API-exclusive) nor on the stage-2 tiles below.
-            if ic_reference is not None:
-                conds += pipe._reference_conditioning_for_stage(
-                    full_height=height,
-                    num_frames=clip_frames[0],
-                    cond_kwargs={
-                        "height": height // 2,
-                        "width": width // 2,
-                        "video_encoder": video_encoder,
-                        "dtype": DTYPE,
-                        "device": device,
-                    },
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        stepper = EulerDiffusionStep()
+        stage1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(device)
+
+        # ── STAGE 1: per-segment (half-res) with carry+freeze. ────────────────────
+        seg_v: list[torch.Tensor] = []
+        seg_a: list[torch.Tensor] = []
+        for i in range(n):
+            # F2: tag the upcoming wheel denoising loop with its chain position so
+            # the per-step tqdm shim events carry segment context (observation only).
+            progress_shim.set_phase("stage1_denoise", outer_index=i, outer_total=n)
+            seg_shape = VideoPixelShape(1, clip_frames[i], height // 2, width // 2, frame_rate)
+            noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
+            if i == 0 and source is not None:
+                # video-to-video: freeze the source tail as clip-0's head (same
+                # carry mechanism as an inter-clip join; mask = 1-overlap_strength).
+                from ltx_core.types import AudioLatentShape as _ALShape
+                from ltx_core.types import VideoLatentShape as _VLShape
+                v_half_shape = _VLShape.from_pixel_shape(
+                    seg_shape,
+                    latent_channels=components.video_latent_channels,
+                    scale_factors=components.video_scale_factors,
+                ).to_torch_shape()
+                init_v = torch.zeros(tuple(v_half_shape), dtype=DTYPE, device=device)
+                init_v[:, :, :n_ctx_v] = src_head_v_half.to(DTYPE)
+                if freeze_ka > 0:
+                    a_shape = _ALShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+                    init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
+                    init_a[:, :, :freeze_ka] = src_head_a.to(DTYPE)
+                else:
+                    init_a = None
+                fkv, fka = n_ctx_v, freeze_ka
+                conds = []  # source & conditioning_images are mutually exclusive (app-enforced)
+            elif i == 0:
+                init_v = init_a = None
+                fkv = fka = 0
+                # clip-0 conditioning at HALF resolution (stage-1).
+                conds = _build_video_conditionings(
+                    clips[0].images, height=height // 2, width=width // 2,
+                    video_encoder=video_encoder, device=device,
                 )
+                # α control-adapter reference (additive): append the reference latent
+                # to clip-0's STAGE-1 conditioning ONLY — the same "stage-1 once"
+                # semantics as single generate() (which routes through
+                # pipe._reference_conditioning_for_stage on its stage-1 pass and
+                # returns [] on stage 2). Reuse that exact builder with the HALF-res
+                # cond_kwargs (height//2, width//2, DTYPE, device, video_encoder) so
+                # the downscale/encode is byte-for-byte the single path's. Never
+                # injected on the V2V head branch above (source & reference are
+                # API-exclusive) nor on the stage-2 tiles below.
+                if ic_reference is not None:
+                    conds += pipe._reference_conditioning_for_stage(
+                        full_height=height,
+                        num_frames=clip_frames[0],
+                        cond_kwargs={
+                            "height": height // 2,
+                            "width": width // 2,
+                            "video_encoder": video_encoder,
+                            "dtype": DTYPE,
+                            "device": device,
+                        },
+                    )
+            else:
+                ka_i = ka_list[i - 1]
+                prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
+                # Size the init tensors from the CURRENT segment's latent shapes —
+                # NOT zeros_like(prev_*). The previous segment may have a different
+                # num_frames (unequal clip lengths are legal), so its latent shape
+                # need not match this segment's create_initial_state target. Mirror
+                # the i==0/source branch: build the current segment's shape, then
+                # copy the K_v / K_a tail of the previous segment into the frozen
+                # head. dtype/device are preserved from the previous segment.
+                v_shape = VideoLatentShape.from_pixel_shape(
+                    seg_shape,
+                    latent_channels=components.video_latent_channels,
+                    scale_factors=components.video_scale_factors,
+                ).to_torch_shape()
+                init_v = torch.zeros(tuple(v_shape), dtype=prev_v.dtype, device=prev_v.device)
+                init_v[:, :, :kv] = prev_v[:, :, prev_v.shape[2] - kv:]
+                a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+                init_a = torch.zeros(tuple(a_shape), dtype=prev_a.dtype, device=prev_a.device)
+                init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
+                fkv, fka = kv, ka_i
+                conds = []
+            # audio-to-video (additive): override the audio init/freeze with the
+            # uploaded audio latent's window for this segment and HARD-freeze it
+            # (mask 0.0) over the whole segment — the video branch above is untouched
+            # (v1 A2V is single-clip: fkv==0, so mask 0.0 does not touch the video).
+            seg_mask_value = stage1_mask_value
+            if audio_source is not None:
+                ws, wl = a_seg_windows[i]
+                a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+                init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
+                init_a[:, :, :wl] = a2v_a[:, :, ws:ws + wl].to(DTYPE)
+                fka = wl
+                seg_mask_value = 0.0
+            vctx, actx = seg_ctx[i]
+            vstate, astate = _denoise_av_with_carry(
+                output_shape=seg_shape, components=components, transformer=transformer,
+                video_context=vctx, audio_context=actx, video_conditionings=conds,
+                noiser=noiser, stepper=stepper, sigmas=stage1_sigmas, noise_scale=1.0,
+                initial_video_latent=init_v, initial_audio_latent=init_a,
+                freeze_kv=fkv, freeze_ka=fka, mask_value=seg_mask_value, device=device,
+            )
+            seg_v.append(vstate.latent.detach().clone())
+            seg_a.append(astate.latent.detach().clone())
+            if progress:
+                progress("stage1", i, n)
+
+        # ── Assemble ONE continuous stage-1 AV latent. ────────────────────────────
+        assembled_v = seg_v[0]
+        for i in range(1, n):
+            assembled_v = _crossfade_concat(assembled_v, seg_v[i], kv)
+        assembled_a = seg_a[0]
+        for i in range(1, n):
+            assembled_a = _crossfade_concat(assembled_a, seg_a[i], ka_list[i - 1])
+
+        exp_v = VideoLatentShape.from_pixel_shape(
+            VideoPixelShape(1, total_px, height // 2, width // 2, frame_rate),
+            latent_channels=components.video_latent_channels,
+            scale_factors=components.video_scale_factors,
+        ).to_torch_shape()
+        exp_a = AudioLatentShape.from_video_pixel_shape(
+            VideoPixelShape(1, total_px, height, width, frame_rate)).to_torch_shape()
+        assert tuple(assembled_v.shape) == tuple(exp_v), (tuple(assembled_v.shape), tuple(exp_v))
+        assert tuple(assembled_a.shape) == tuple(exp_a), (tuple(assembled_a.shape), tuple(exp_a))
+
+        # ── ONE upsample over the whole timeline. ─────────────────────────────────
+        if chunked_upsample:
+            # Opt-in memory-bounded path: upsample in halo-padded temporal chunks and
+            # keep the result on CPU (VRAM stays flat instead of scaling with total
+            # length -> long 768p chains no longer OOM). The stage-2 slice below
+            # transfers each tile back to the GPU on demand.
+            upsampler = ledger.spatial_upsampler()
+            upscaled_v = _chunked_upsample_cpu(
+                assembled_v, video_encoder, upsampler, upsample_video, device, progress
+            )
+            del upsampler
+            cleanup_memory()
         else:
-            ka_i = ka_list[i - 1]
-            prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
-            # Size the init tensors from the CURRENT segment's latent shapes —
-            # NOT zeros_like(prev_*). The previous segment may have a different
-            # num_frames (unequal clip lengths are legal), so its latent shape
-            # need not match this segment's create_initial_state target. Mirror
-            # the i==0/source branch: build the current segment's shape, then
-            # copy the K_v / K_a tail of the previous segment into the frozen
-            # head. dtype/device are preserved from the previous segment.
-            v_shape = VideoLatentShape.from_pixel_shape(
-                seg_shape,
-                latent_channels=components.video_latent_channels,
-                scale_factors=components.video_scale_factors,
-            ).to_torch_shape()
-            init_v = torch.zeros(tuple(v_shape), dtype=prev_v.dtype, device=prev_v.device)
-            init_v[:, :, :kv] = prev_v[:, :, prev_v.shape[2] - kv:]
-            a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
-            init_a = torch.zeros(tuple(a_shape), dtype=prev_a.dtype, device=prev_a.device)
-            init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
-            fkv, fka = kv, ka_i
-            conds = []
-        # audio-to-video (additive): override the audio init/freeze with the
-        # uploaded audio latent's window for this segment and HARD-freeze it
-        # (mask 0.0) over the whole segment — the video branch above is untouched
-        # (v1 A2V is single-clip: fkv==0, so mask 0.0 does not touch the video).
-        seg_mask_value = stage1_mask_value
-        if audio_source is not None:
-            ws, wl = a_seg_windows[i]
-            a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
-            init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
-            init_a[:, :, :wl] = a2v_a[:, :, ws:ws + wl].to(DTYPE)
-            fka = wl
-            seg_mask_value = 0.0
-        vctx, actx = seg_ctx[i]
-        vstate, astate = _denoise_av_with_carry(
-            output_shape=seg_shape, components=components, transformer=transformer,
-            video_context=vctx, audio_context=actx, video_conditionings=conds,
-            noiser=noiser, stepper=stepper, sigmas=stage1_sigmas, noise_scale=1.0,
-            initial_video_latent=init_v, initial_audio_latent=init_a,
-            freeze_kv=fkv, freeze_ka=fka, mask_value=seg_mask_value, device=device,
-        )
-        seg_v.append(vstate.latent.detach().clone())
-        seg_a.append(astate.latent.detach().clone())
-        if progress:
-            progress("stage1", i, n)
+            upscaled_v = upsample_video(assembled_v[:1], video_encoder, ledger.spatial_upsampler())
+            torch.cuda.synchronize()
+            cleanup_memory()
 
-    # ── Assemble ONE continuous stage-1 AV latent. ────────────────────────────
-    assembled_v = seg_v[0]
-    for i in range(1, n):
-        assembled_v = _crossfade_concat(assembled_v, seg_v[i], kv)
-    assembled_a = seg_a[0]
-    for i in range(1, n):
-        assembled_a = _crossfade_concat(assembled_a, seg_a[i], ka_list[i - 1])
-
-    exp_v = VideoLatentShape.from_pixel_shape(
-        VideoPixelShape(1, total_px, height // 2, width // 2, frame_rate),
-        latent_channels=components.video_latent_channels,
-        scale_factors=components.video_scale_factors,
-    ).to_torch_shape()
-    exp_a = AudioLatentShape.from_video_pixel_shape(
-        VideoPixelShape(1, total_px, height, width, frame_rate)).to_torch_shape()
-    assert tuple(assembled_v.shape) == tuple(exp_v), (tuple(assembled_v.shape), tuple(exp_v))
-    assert tuple(assembled_a.shape) == tuple(exp_a), (tuple(assembled_a.shape), tuple(exp_a))
-
-    # ── ONE upsample over the whole timeline. ─────────────────────────────────
-    if chunked_upsample:
-        # Opt-in memory-bounded path: upsample in halo-padded temporal chunks and
-        # keep the result on CPU (VRAM stays flat instead of scaling with total
-        # length -> long 768p chains no longer OOM). The stage-2 slice below
-        # transfers each tile back to the GPU on demand.
-        upsampler = ledger.spatial_upsampler()
-        upscaled_v = _chunked_upsample_cpu(
-            assembled_v, video_encoder, upsampler, upsample_video, device, progress
-        )
-        del upsampler
-        cleanup_memory()
-    else:
-        upscaled_v = upsample_video(assembled_v[:1], video_encoder, ledger.spatial_upsampler())
-        torch.cuda.synchronize()
-        cleanup_memory()
-
-    # ── STAGE 2: always-tiled refine (video+audio jointly). ───────────────────
-    # ONE context (the base/clip-0 prompt) for the ENTIRE stage-2 refine — this
-    # is what the validated S2 spike did (single prompt everywhere). Per-segment
-    # prompt variation lives in STAGE 1 (where the carry+freeze+crossfade absorbs
-    # it smoothly — all segment seams stay continuous). Switching the AUDIO
-    # context mid-tile-overlap in stage 2 injects a speech-context click at the
-    # frozen tile seam (observed: Chain B J=456 audio ratio 13.67); a uniform
-    # context removes that seam entirely.
-    stage2_vctx, stage2_actx = seg_ctx[0]
-    stage2_sigmas = torch.Tensor(STAGE_2_DISTILLED_SIGMA_VALUES).to(device)
-    refined_v: list[torch.Tensor] = []
-    refined_a: list[torch.Tensor] = []
-    for i in range(n_tiles):
-        # F2: per-step shim phase for this tile's denoise (observation only).
-        progress_shim.set_phase("stage2_denoise", outer_index=i, outer_total=n_tiles)
-        vs, vlen = v_tiles[i]
-        as_, alen = a_tiles[i]
-        tile_px = (vlen - 1) * VIDEO_TIME_FACTOR + 1
-        tile_shape = VideoPixelShape(1, tile_px, height, width, frame_rate)
-        init_v = upscaled_v[:, :, vs:vs + vlen].contiguous().clone()
-        if upscaled_v.device.type == "cpu":
-            init_v = init_v.to(device)
-        init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
-        if i == 0 and source is not None:
-            # video-to-video variant B: hard-freeze (mask 0.0) the source head at
-            # tile-0's leading region using the FULL-res VAE re-encode, mirroring
-            # how i>=1 tile joins freeze their leading kt_v. This is the one
-            # genuinely new stage-2 orchestration piece (spike: eliminates the
-            # variant-A color/tone drift; variant A failed G0).
-            fkv, fka = n_ctx_v, freeze_ka
-            mv = 0.0
-            init_v[:, :, :n_ctx_v] = src_head_v_full.to(DTYPE)
-            if freeze_ka > 0:
-                init_a[:, :, :freeze_ka] = src_head_a.to(DTYPE)
-        elif i == 0:
-            fkv = fka = 0
-            mv = 0.0
-        else:
-            fkv, fka = kt_v, kt_a
-            mv = 0.0  # hard freeze on the leading overlap
-            init_v[:, :, :kt_v] = refined_v[i - 1][:, :, refined_v[i - 1].shape[2] - kt_v:]
-            init_a[:, :, :kt_a] = refined_a[i - 1][:, :, refined_a[i - 1].shape[2] - kt_a:]
-        # audio-to-video (additive): refine this tile off the uploaded audio's
-        # tile window (layout.a_tiles == (as_, alen)), HARD-frozen for the whole
-        # tile. Stage-2 already runs mask 0.0 everywhere, so only the audio
-        # init/freeze changes; the video refine (fkv/mv above) is untouched.
-        if audio_source is not None:
-            init_a = a2v_a[:, :, as_:as_ + alen].contiguous().clone().to(DTYPE)
-            fka = alen
-            mv = 0.0
-        # clip-0 conditioning routed to the tile that owns each keyframe (full res).
-        conds = _build_video_conditionings(
-            _tile_images(clips[0].images, vs, vlen),
-            height=height, width=width, video_encoder=video_encoder, device=device,
-        )
-        noiser2 = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(base_seed + 100 + i))
-        vstate2, astate2 = _denoise_av_with_carry(
-            output_shape=tile_shape, components=components, transformer=transformer,
-            video_context=stage2_vctx, audio_context=stage2_actx, video_conditionings=conds,
-            noiser=noiser2, stepper=stepper, sigmas=stage2_sigmas,
-            noise_scale=float(stage2_sigmas[0]),
-            initial_video_latent=init_v, initial_audio_latent=init_a,
-            freeze_kv=fkv, freeze_ka=fka, mask_value=mv, device=device,
-        )
-        refined_v.append(vstate2.latent.detach().clone())
-        refined_a.append(astate2.latent.detach().clone())
-        if progress:
-            progress("tile", i, n_tiles)
+        # ── STAGE 2: always-tiled refine (video+audio jointly). ───────────────────
+        # ONE context (the base/clip-0 prompt) for the ENTIRE stage-2 refine — this
+        # is what the validated S2 spike did (single prompt everywhere). Per-segment
+        # prompt variation lives in STAGE 1 (where the carry+freeze+crossfade absorbs
+        # it smoothly — all segment seams stay continuous). Switching the AUDIO
+        # context mid-tile-overlap in stage 2 injects a speech-context click at the
+        # frozen tile seam (observed: Chain B J=456 audio ratio 13.67); a uniform
+        # context removes that seam entirely.
+        stage2_vctx, stage2_actx = seg_ctx[0]
+        stage2_sigmas = torch.Tensor(STAGE_2_DISTILLED_SIGMA_VALUES).to(device)
+        refined_v: list[torch.Tensor] = []
+        refined_a: list[torch.Tensor] = []
+        for i in range(n_tiles):
+            # F2: per-step shim phase for this tile's denoise (observation only).
+            progress_shim.set_phase("stage2_denoise", outer_index=i, outer_total=n_tiles)
+            vs, vlen = v_tiles[i]
+            as_, alen = a_tiles[i]
+            tile_px = (vlen - 1) * VIDEO_TIME_FACTOR + 1
+            tile_shape = VideoPixelShape(1, tile_px, height, width, frame_rate)
+            init_v = upscaled_v[:, :, vs:vs + vlen].contiguous().clone()
+            if upscaled_v.device.type == "cpu":
+                init_v = init_v.to(device)
+            init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
+            if i == 0 and source is not None:
+                # video-to-video variant B: hard-freeze (mask 0.0) the source head at
+                # tile-0's leading region using the FULL-res VAE re-encode, mirroring
+                # how i>=1 tile joins freeze their leading kt_v. This is the one
+                # genuinely new stage-2 orchestration piece (spike: eliminates the
+                # variant-A color/tone drift; variant A failed G0).
+                fkv, fka = n_ctx_v, freeze_ka
+                mv = 0.0
+                init_v[:, :, :n_ctx_v] = src_head_v_full.to(DTYPE)
+                if freeze_ka > 0:
+                    init_a[:, :, :freeze_ka] = src_head_a.to(DTYPE)
+            elif i == 0:
+                fkv = fka = 0
+                mv = 0.0
+            else:
+                fkv, fka = kt_v, kt_a
+                mv = 0.0  # hard freeze on the leading overlap
+                init_v[:, :, :kt_v] = refined_v[i - 1][:, :, refined_v[i - 1].shape[2] - kt_v:]
+                init_a[:, :, :kt_a] = refined_a[i - 1][:, :, refined_a[i - 1].shape[2] - kt_a:]
+            # audio-to-video (additive): refine this tile off the uploaded audio's
+            # tile window (layout.a_tiles == (as_, alen)), HARD-frozen for the whole
+            # tile. Stage-2 already runs mask 0.0 everywhere, so only the audio
+            # init/freeze changes; the video refine (fkv/mv above) is untouched.
+            if audio_source is not None:
+                init_a = a2v_a[:, :, as_:as_ + alen].contiguous().clone().to(DTYPE)
+                fka = alen
+                mv = 0.0
+            # clip-0 conditioning routed to the tile that owns each keyframe (full res).
+            conds = _build_video_conditionings(
+                _tile_images(clips[0].images, vs, vlen),
+                height=height, width=width, video_encoder=video_encoder, device=device,
+            )
+            noiser2 = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(base_seed + 100 + i))
+            vstate2, astate2 = _denoise_av_with_carry(
+                output_shape=tile_shape, components=components, transformer=transformer,
+                video_context=stage2_vctx, audio_context=stage2_actx, video_conditionings=conds,
+                noiser=noiser2, stepper=stepper, sigmas=stage2_sigmas,
+                noise_scale=float(stage2_sigmas[0]),
+                initial_video_latent=init_v, initial_audio_latent=init_a,
+                freeze_kv=fkv, freeze_ka=fka, mask_value=mv, device=device,
+            )
+            refined_v.append(vstate2.latent.detach().clone())
+            refined_a.append(astate2.latent.detach().clone())
+            if progress:
+                progress("tile", i, n_tiles)
 
     torch.cuda.synchronize()
     del transformer, video_encoder

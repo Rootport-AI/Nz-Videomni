@@ -84,6 +84,19 @@ class GenerateChainParams(TypedDict, total=False):
     payload is byte-identical to before NAG existed. Not declared as a
     TypedDict field here (mirrors the existing ``reference_video`` block, which
     is also a plain untyped dict) — see ``_resolve_nag`` for the keys it reads.
+
+    VSF (Value Sign Flip, arXiv:2508.10931, Wave 1/2): the second non-CFG
+    negative-prompt method, selected via the same ``nag`` block above. Three
+    additional keys ride alongside the four above (present whenever ``nag`` is
+    present, regardless of method — the API layer always sends them):
+    ``method: "nag" | "vsf"`` (worker key is ``"method"``, NOT ``"neg_method"``
+    — the API field is named ``neg_method`` but the wire key mirrors the
+    engine's existing ``nag`` block naming), ``vsf_scale: float`` (the negative-
+    side V multiplier α), ``vsf_adaln: "raw" | "modulated" | "v_scale"``
+    (debug-only AdaLN-asymmetry mode, expected to shrink post A/B). ``scale`` /
+    ``tau`` / ``alpha`` above are still sent unconditionally but are read by the
+    engine only when ``method == "nag"``. ``method`` missing (older payload)
+    falls back to ``"nag"`` in ``_resolve_nag``.
     """
 
     width: int

@@ -12,6 +12,7 @@ from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
+from engine.transformer.vsf_service import VsfParams, VsfService, adaln_stash_window
 
 
 class LTXFastVideoPipeline:
@@ -323,8 +324,15 @@ class LTXFastVideoPipeline:
             )
         self._ic_reference_downscale_factor = factor
 
-    def _set_nag_job(self, nag: NagParams | None) -> None:
-        """Set (or clear, with None) the live NAG request for the upcoming job.
+    def _set_nag_job(self, nag: NagParams | VsfParams | None) -> None:
+        """Set (or clear, with None) the live non-CFG negative-prompt request
+        for the upcoming job — ``NagParams`` for NAG, ``VsfParams`` for VSF.
+
+        The two methods share one NagState slot (and one stale-clear path)
+        because at most one of them can be active per job; which one it is is
+        carried by the params TYPE, and the only place that reads that type is
+        _install_nag's service selection below plus the encode wrapper's slice
+        decision. Everything else in this class is method-agnostic.
 
         Called from generate() directly and from run_chain() (chain_pipeline.py,
         IC-LoRA convention — generate_chain() itself does not call this; run_chain
@@ -578,17 +586,26 @@ class LTXFastVideoPipeline:
         video that quietly ignored the negative prompt — worse than an error.
         Any failure inside NagService.install() (including its own fail-loud
         RuntimeErrors) must abort the job.
+
+        Method selection (NAG vs VSF) is the single isinstance below. Both
+        services no-op on a job that requested neither (their install() reads
+        the same NagState and returns 0 when nothing was requested), so the
+        branch only decides WHICH patch an actively-requesting job gets — it
+        never becomes a third code path for an OFF job.
         """
-        service = NagService(lambda: self._nag)
+        nag_service = NagService(lambda: self._nag)
+        vsf_service = VsfService(lambda: self._nag)
         original_transformer = self.pipeline.model_ledger.transformer
 
         def patched_transformer() -> torch.nn.Module:
             t = original_transformer()
-            service.install(t)
+            if isinstance(self._nag.params, VsfParams):
+                vsf_service.install(t)
+            else:
+                nag_service.install(t)
             return t
 
         self.pipeline.model_ledger.transformer = patched_transformer
-        self._nag_service = service
 
     def _reference_conditioning_for_stage(
         self, full_height: int, num_frames: int, cond_kwargs: dict
@@ -924,16 +941,29 @@ class LTXFastVideoPipeline:
             if self._nag.requested:
                 _distilled_mod.encode_text = self._make_nag_encode_text(_orig_encode)  # type: ignore[attr-defined]
 
-            return self.pipeline(
-                prompt=prompt,
-                seed=seed,
-                height=height,
-                width=width,
-                num_frames=num_frames,
-                frame_rate=frame_rate,
-                images=[_LtxImageInput(img.path, img.frame_idx, img.strength) for img in images],
-                tiling_config=tiling_config,
-            )
+            # ── VSF AdaLN stash window ────────────────────────────────────────
+            # Covers the ENTIRE denoise, not just the transformer build: the
+            # wheel resolves apply_cross_attention_adaln by LOAD_GLOBAL inside
+            # the block's forward, so a window that closed before denoising
+            # would patch exactly nothing. A no-op for every other job (NAG,
+            # VSF with adaln_mode="raw", no negative prompt) — it does not read
+            # or write the wheel's global at all in those cases, which is why
+            # this `with` can sit here unconditionally without disturbing the
+            # five-global patch/restore umbrella above. The transformer handle
+            # is None because it is built INSIDE self.pipeline(...) below; the
+            # patched forward pops its own stash on every call, so there is
+            # nothing left to sweep on the normal path.
+            with adaln_stash_window(None, self._nag.params):
+                return self.pipeline(
+                    prompt=prompt,
+                    seed=seed,
+                    height=height,
+                    width=width,
+                    num_frames=num_frames,
+                    frame_rate=frame_rate,
+                    images=[_LtxImageInput(img.path, img.frame_idx, img.strength) for img in images],
+                    tiling_config=tiling_config,
+                )
         finally:
             # Synchronize before restoring module state so any async CUDA ops
             # queued inside DistilledPipeline.__call__ (e.g. vae_decode_audio)
@@ -969,7 +999,16 @@ class LTXFastVideoPipeline:
             result = orig(text_encoder, prompts=prompts)
             params = self._nag.params
             assert params is not None  # implied by self._nag.requested at the call site
-            video_ctx, audio_ctx = encode_negative(text_encoder, params.negative_prompt)
+            # VSF concatenates the negative context into ONE shared softmax
+            # and negates its values, so it must never see the connector's
+            # learned register embeddings — hence the encode-time slice, taken
+            # here where the method is known (see encode_negative's docstring).
+            # NAG passes False and stays byte-identical.
+            video_ctx, audio_ctx = encode_negative(
+                text_encoder,
+                params.negative_prompt,
+                slice_to_real_tokens=isinstance(params, VsfParams),
+            )
             self._nag.set_contexts(video_ctx, audio_ctx)
             return result
 
@@ -998,7 +1037,7 @@ class LTXFastVideoPipeline:
         ic_loras: list[tuple[str, float]] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
-        nag: NagParams | None = None,
+        nag: NagParams | VsfParams | None = None,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -1079,7 +1118,7 @@ class LTXFastVideoPipeline:
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
         chunked_upsample: bool = False,
-        nag: NagParams | None = None,
+        nag: NagParams | VsfParams | None = None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -1164,13 +1203,13 @@ class LTXFastVideoPipeline:
                 os.unlink(output_path)
 
     def compile_transformer(self) -> None:
-        # NOT compatible with NAG: this caches ONE compiled transformer instance
-        # and replaces ledger.transformer with a lambda that returns it forever,
-        # which defeats D1 (NAG's install() must re-run against a FRESH
-        # transformer every job, since attn2/audio_attn2 are patched per-job
-        # based on that job's NagState). No caller currently uses this method in
-        # the production path (see D1's dead-code note), so it is left as-is
-        # rather than reworked to cooperate with per-job NAG install.
+        # NOT compatible with NAG/VSF: this caches ONE compiled transformer
+        # instance and replaces ledger.transformer with a lambda that returns it
+        # forever, which defeats D1 (NAG's/VSF's install() must re-run against a
+        # FRESH transformer every job, since attn2/audio_attn2 are patched
+        # per-job based on that job's NagState). No caller currently uses this
+        # method in the production path (see D1's dead-code note), so it is left
+        # as-is rather than reworked to cooperate with per-job NAG/VSF install.
         transformer = self.pipeline.model_ledger.transformer()
 
         compiled = cast(

@@ -1726,9 +1726,12 @@ def test_prompt_unification_i18n_keys_present_both_langs():
     for k in (
         "info_negative",
         "nag_accordion", "nag_note", "nag_enable",
-        "nag_lbl_method", "nag_method_nag", "nag_method_other",
-        "nag_msg_fallback", "nag_lbl_scale", "nag_lbl_tau", "nag_lbl_alpha",
+        "nag_lbl_method", "nag_method_nag", "nag_method_vsf",
+        "nag_lbl_scale", "nag_lbl_tau", "nag_lbl_alpha",
         "nag_msg_negative_required",
+        "vsf_lbl_scale", "vsf_lbl_scale_info", "vsf_debug_accordion",
+        "vsf_lbl_adaln", "vsf_lbl_adaln_info",
+        "vsf_adaln_raw", "vsf_adaln_modulated", "vsf_adaln_v_scale",
     ):
         assert LABELS["en"].get(k), f"missing EN: {k}"
         assert LABELS["ja"].get(k), f"missing JA: {k}"
@@ -2719,7 +2722,7 @@ def test_build_a2v_chain_payload_coerces_numeric_types():
 # precheck that rejects an enabled-but-empty negative prompt with zero API
 # calls (same discipline as every other precheck above).
 # --------------------------------------------------------------------------- #
-def test_build_a2v_chain_payload_nag_enabled_appends_four_keys_in_order():
+def test_build_a2v_chain_payload_nag_enabled_appends_seven_keys_in_order():
     from gradio_ui.handlers import build_a2v_chain_payload
 
     payload = build_a2v_chain_payload(
@@ -2736,17 +2739,24 @@ def test_build_a2v_chain_payload_nag_enabled_appends_four_keys_in_order():
         nag_scale=9.0,
         nag_tau=3.0,
         nag_alpha=0.4,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        vsf_adaln="modulated",
     )
-    assert list(payload.keys())[-4:] == [
+    assert list(payload.keys())[-7:] == [
         "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "vsf_adaln",
     ]
     assert payload["nag_enabled"] is True
     assert payload["nag_scale"] == 9.0
     assert payload["nag_tau"] == 3.0
     assert payload["nag_alpha"] == 0.4
+    assert payload["neg_method"] == "vsf"
+    assert payload["vsf_scale"] == 2.0
+    assert payload["vsf_adaln"] == "modulated"
 
 
-def test_build_a2v_chain_payload_nag_default_omits_all_four_keys():
+def test_build_a2v_chain_payload_nag_default_omits_all_seven_keys():
     from gradio_ui.handlers import build_a2v_chain_payload
 
     payload = build_a2v_chain_payload(
@@ -2760,7 +2770,8 @@ def test_build_a2v_chain_payload_nag_default_omits_all_four_keys():
         frame_rate=24.0,
         seed=1,
     )
-    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale", "vsf_adaln"):
         assert key not in payload
 
 
@@ -2786,6 +2797,30 @@ def test_generate_handler_nag_enabled_adds_body_fields():
     assert captured["nag_alpha"] == 0.4
 
 
+def test_generate_handler_vsf_enabled_adds_body_fields():
+    # neg_method/vsf_scale/vsf_adaln reach the request body ALONGSIDE the four
+    # nag_* keys whenever nag_enabled is True, regardless of which method is
+    # actually selected (the key-order contract stays simple).
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-vsf"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "blurry", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        nag_enabled=True, neg_method="vsf", vsf_scale=2.5, vsf_adaln="modulated",
+    )
+    _run_until_job_started(gen)
+    assert captured["neg_method"] == "vsf"
+    assert captured["vsf_scale"] == 2.5
+    assert captured["vsf_adaln"] == "modulated"
+
+
 def test_generate_handler_nag_default_omits_body_fields():
     captured = {}
 
@@ -2801,7 +2836,8 @@ def test_generate_handler_nag_default_omits_body_fields():
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
-    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale", "vsf_adaln"):
         assert key not in captured
 
 
@@ -2849,6 +2885,32 @@ def test_chain_handler_nag_enabled_adds_body_fields_positional_order():
     assert captured["nag_alpha"] == 0.5
 
 
+def test_chain_handler_vsf_enabled_adds_body_fields():
+    # Calls `chain` with vsf_* as KEYWORD arguments (see _chain_args's docstring
+    # below), so this only checks the resulting request body's fields, not
+    # positional order. The positional contract itself (chunked_upsample ->
+    # nag x4 -> neg_method/vsf_scale/vsf_adaln -> src_audio) is verified against
+    # ui.py's actual click-handler wiring by tests/test_gradio_v2v_a2v.py's
+    # `_chain_args` helper.
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-vsf"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(negative="blurry", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), nag_enabled=True, neg_method="vsf", vsf_scale=3.0, vsf_adaln="v_scale")
+    _run_chain_until_started(gen)
+    assert captured["neg_method"] == "vsf"
+    assert captured["vsf_scale"] == 3.0
+    assert captured["vsf_adaln"] == "v_scale"
+
+
 def test_chain_handler_nag_default_omits_body_fields():
     captured = {}
 
@@ -2864,7 +2926,8 @@ def test_chain_handler_nag_default_omits_body_fields():
         {"enabled": True, "frames": 121},
     ]))
     _run_chain_until_started(gen)
-    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha"):
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale", "vsf_adaln"):
         assert key not in captured
 
 

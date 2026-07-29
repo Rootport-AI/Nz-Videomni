@@ -1242,6 +1242,12 @@ class _RealBackend:
                 "tau": float(request.nag_tau),
                 "alpha": float(request.nag_alpha),
             }
+            # VSF (additive, method switch): worker key is "method" (not
+            # "neg_method") — scale/tau/alpha above stay unconditional since the
+            # engine only reads them when method=="nag".
+            payload["nag"]["method"] = request.neg_method
+            payload["nag"]["vsf_scale"] = request.vsf_scale
+            payload["nag"]["vsf_adaln"] = request.vsf_adaln
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1428,6 +1434,12 @@ class _RealBackend:
                 "tau": float(chain.nag_tau),
                 "alpha": float(chain.nag_alpha),
             }
+            # VSF (additive, method switch): worker key is "method" (not
+            # "neg_method") — scale/tau/alpha above stay unconditional since the
+            # engine only reads them when method=="nag".
+            payload["nag"]["method"] = chain.neg_method
+            payload["nag"]["vsf_scale"] = chain.vsf_scale
+            payload["nag"]["vsf_adaln"] = chain.vsf_adaln
 
         with self._lock:
             try:

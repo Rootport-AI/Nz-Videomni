@@ -13,6 +13,7 @@ Same two-double pattern as test_mcp_tools_system.py:
 
 from __future__ import annotations
 
+import functools
 import json
 import struct
 import wave
@@ -200,6 +201,64 @@ def test_submit_generate_with_nag_and_conditioning_images_includes_them():
     assert body["conditioning_images"] == [
         {"image_id": "img-1", "frame_idx": 0, "strength": 0.9}
     ]
+
+
+def test_submit_generate_with_vsf_fields_includes_them():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            negative_prompt="blurry",
+            nag_enabled=True,
+            neg_method="vsf",
+            vsf_scale=3.0,
+            vsf_adaln="modulated",
+        )
+    )
+
+    body = captured["body"]
+    assert body["neg_method"] == "vsf"
+    assert body["vsf_scale"] == 3.0
+    assert body["vsf_adaln"] == "modulated"
+
+
+def test_submit_generate_nag_enabled_defaults_vsf_fields_to_nag():
+    # nag_enabled=True with neg_method/vsf_scale/vsf_adaln omitted -> the
+    # neg_method="nag"/vsf_scale=1.5/vsf_adaln="raw" defaults still ride along
+    # in the payload (mirrors the always-sent-inside-the-if-block contract).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            negative_prompt="blurry",
+            nag_enabled=True,
+        )
+    )
+
+    body = captured["body"]
+    assert body["neg_method"] == "nag"
+    assert body["vsf_scale"] == 1.5
+    assert body["vsf_adaln"] == "raw"
 
 
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
@@ -401,6 +460,65 @@ def test_submit_chain_nag_and_clip_prompt_and_conditioning_images_included():
     ]
     assert "prompt" not in body["clips"][1]
     assert "conditioning_images" not in body["clips"][1]
+
+
+def test_submit_chain_with_vsf_fields_includes_them():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            negative_prompt="blurry",
+            nag_enabled=True,
+            neg_method="vsf",
+            vsf_scale=3.0,
+            vsf_adaln="v_scale",
+        )
+    )
+
+    body = captured["body"]
+    assert body["neg_method"] == "vsf"
+    assert body["vsf_scale"] == 3.0
+    assert body["vsf_adaln"] == "v_scale"
+
+
+def test_submit_chain_nag_enabled_defaults_vsf_fields_to_nag():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            negative_prompt="blurry",
+            nag_enabled=True,
+        )
+    )
+
+    body = captured["body"]
+    assert body["neg_method"] == "nag"
+    assert body["vsf_scale"] == 1.5
+    assert body["vsf_adaln"] == "raw"
 
 
 def test_submit_chain_input_schema_has_no_hidden_fields():

@@ -46,9 +46,18 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterator
 
 import torch
+
+if TYPE_CHECKING:
+    # Type-only import: VSF (the second non-CFG negative-prompt method, see
+    # vsf_service.py) reuses NagState verbatim and stores its own params in
+    # it. vsf_service imports FROM this module at runtime, so importing it
+    # back here for real would be a circular import — under
+    # `from __future__ import annotations` every annotation below is a string,
+    # so this guard costs nothing at runtime.
+    from engine.transformer.vsf_service import VsfParams
 
 logger = logging.getLogger(__name__)
 
@@ -94,12 +103,12 @@ class NagState:
     """
 
     def __init__(self) -> None:
-        self._params: NagParams | None = None
+        self._params: NagParams | VsfParams | None = None
         self._video_context: torch.Tensor | None = None
         self._audio_context: torch.Tensor | None = None
 
     @property
-    def params(self) -> NagParams | None:
+    def params(self) -> NagParams | VsfParams | None:
         return self._params
 
     @property
@@ -126,8 +135,8 @@ class NagState:
             and self._audio_context is not None
         )
 
-    def set_params(self, params: NagParams | None) -> None:
-        """Set (or clear, with None) this job's NAG request.
+    def set_params(self, params: NagParams | VsfParams | None) -> None:
+        """Set (or clear, with None) this job's NAG (or VSF) request.
 
         Always clears any previously-encoded contexts, even if params is
         unchanged from the prior job: this is the ONLY entry point that
@@ -162,8 +171,12 @@ class NagState:
         self._audio_context = None
 
 
-def encode_negative(text_encoder: object, prompt: str) -> tuple[torch.Tensor, torch.Tensor]:
-    """Encode the NAG negative prompt into (video_context, audio_context).
+def encode_negative(
+    text_encoder: object,
+    prompt: str,
+    slice_to_real_tokens: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Encode the NAG (or VSF) negative prompt into (video_context, audio_context).
 
     Import of `encode_text` is local to this function: it is the one place in
     this module that needs the live Gemma encoder wheel import, and keeping it
@@ -190,12 +203,54 @@ def encode_negative(text_encoder: object, prompt: str) -> tuple[torch.Tensor, to
     NagState hands to the patched attn2/audio_attn2 forward is at the exact
     same representation stage as the positive context those modules receive
     from the real preprocessing path.
+
+    ``slice_to_real_tokens`` (default False — every NAG caller keeps the full,
+    historically-encoded context, so this argument cannot change NAG's output
+    by a single bit): trim both contexts to the prompt's REAL token count.
+    The encoder always returns a fixed-length sequence whose tail is filled by
+    the connector's learned register embeddings, and those registers are real
+    trained data rather than padding. NAG can live with them because it
+    combines two SEPARATE attention outputs; VSF cannot, because it
+    concatenates the negative keys/values into one shared softmax and negates
+    the negative values — sign-flipping learned registers would inject a large
+    prompt-independent repulsion. Hence the slice is a correctness requirement
+    for VSF and is applied HERE, at encode time, where the method is known,
+    so the forward path stays method-agnostic and simply uses whatever tensor
+    NagState holds. The real token count comes from the tokenizer's own
+    attention weights (the same tokenize_with_weights call the encoder itself
+    makes), so no second Gemma run is needed.
     """
     from ltx_core.text_encoders.gemma.encoders.base_encoder import encode_text
 
     [(video_context, audio_context)] = encode_text(text_encoder, [prompt])
     video_context = video_context.view(video_context.shape[0], -1, video_context.shape[-1])
     audio_context = audio_context.view(audio_context.shape[0], -1, audio_context.shape[-1])
+
+    if slice_to_real_tokens:
+        tokenizer = getattr(text_encoder, "tokenizer", None)
+        if tokenizer is None:
+            raise RuntimeError(
+                "encode_negative(slice_to_real_tokens=True): the text encoder "
+                "has no .tokenizer, so the real token count cannot be "
+                "determined. Slicing is a correctness requirement for VSF "
+                "(see this function's docstring), so this fails rather than "
+                "silently sign-flipping the learned register embeddings."
+            )
+        pairs = tokenizer.tokenize_with_weights(prompt)["gemma"]
+        n_real = int(sum(int(weight) for _token, weight in pairs))
+        # min() over both modalities: the video and audio connectors emit the
+        # same token count on this wheel, but the bound has to hold for the
+        # tensor actually being sliced, not just the one we happened to check.
+        seq_len = int(min(video_context.shape[1], audio_context.shape[1]))
+        if n_real <= 0 or n_real > seq_len:
+            raise RuntimeError(
+                f"encode_negative(slice_to_real_tokens=True): tokenizer "
+                f"reports {n_real} real tokens for a context of length "
+                f"{seq_len} — expected 0 < N <= seq_len. Refusing to guess."
+            )
+        video_context = video_context[:, :n_real, :]
+        audio_context = audio_context[:, :n_real, :]
+
     return video_context, audio_context
 
 

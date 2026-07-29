@@ -359,6 +359,9 @@ def build_a2v_chain_payload(
     nag_scale=11.0,
     nag_tau=2.5,
     nag_alpha=0.25,
+    neg_method="nag",
+    vsf_scale=1.5,
+    vsf_adaln="raw",
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -374,7 +377,10 @@ def build_a2v_chain_payload(
     used -- so a token-free, adapter-free request stays byte-identical to before.
     NAG (non-CFG Negative) keys are ADDITIVE too: only added when ``nag_enabled``
     is true, appended last, so the default (NAG off) payload stays byte-identical
-    to the pre-NAG contract the key-order tests lock in."""
+    to the pre-NAG contract the key-order tests lock in. ``neg_method``/
+    ``vsf_scale``/``vsf_adaln`` are appended right after the four nag_* keys
+    (still inside the same ``if nag_enabled:`` block, regardless of which
+    method is actually selected) so the key-order contract stays simple."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -409,6 +415,9 @@ def build_a2v_chain_payload(
         chain_payload["nag_scale"] = float(nag_scale)
         chain_payload["nag_tau"] = float(nag_tau)
         chain_payload["nag_alpha"] = float(nag_alpha)
+        chain_payload["neg_method"] = neg_method
+        chain_payload["vsf_scale"] = float(vsf_scale)
+        chain_payload["vsf_adaln"] = vsf_adaln
     return chain_payload
 
 
@@ -431,7 +440,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  ref_video_path=None, config=None,
                  ui_lang=None, poll_interval=None, poll_timeout_min=None,
                  src_audio=None,
-                 nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25):
+                 nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
+                 neg_method="nag", vsf_scale=1.5, vsf_adaln="raw"):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -655,6 +665,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 nag_scale=nag_scale,
                 nag_tau=nag_tau,
                 nag_alpha=nag_alpha,
+                neg_method=neg_method,
+                vsf_scale=vsf_scale,
+                vsf_adaln=vsf_adaln,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -718,6 +731,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             payload["nag_scale"] = float(nag_scale)
             payload["nag_tau"] = float(nag_tau)
             payload["nag_alpha"] = float(nag_alpha)
+            payload["neg_method"] = neg_method
+            payload["vsf_scale"] = float(vsf_scale)
+            payload["vsf_adaln"] = vsf_adaln
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -807,9 +823,10 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # contract with ui.py's chain_generate_btn.click inputs=[...]
                        # (and tests/test_gradio_v2v_a2v.py's _chain_args helper):
                        # chunked_upsample -> nag_enabled/nag_scale/nag_tau/nag_alpha
-                       # -> src_audio.
+                       # -> neg_method/vsf_scale/vsf_adaln -> src_audio.
                        chunked_upsample=False,
                        nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
+                       neg_method="nag", vsf_scale=1.5, vsf_adaln="raw",
                        src_audio=None):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
@@ -1116,6 +1133,9 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             payload["nag_scale"] = float(nag_scale)
             payload["nag_tau"] = float(nag_tau)
             payload["nag_alpha"] = float(nag_alpha)
+            payload["neg_method"] = neg_method
+            payload["vsf_scale"] = float(vsf_scale)
+            payload["vsf_adaln"] = vsf_adaln
 
         try:
             resp = api.generate_chain(payload)

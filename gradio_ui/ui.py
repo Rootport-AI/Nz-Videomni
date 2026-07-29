@@ -399,20 +399,38 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                       elem_classes=["negative-greyed"]),
                            "lbl_negative")
             nag_enabled = reg(gr.Checkbox(value=False, label=L("nag_enable")), "nag_enable")
-            # "Other" is a placeholder for a future non-NAG method; selecting it
-            # immediately snaps back to "nag" (on_nag_method_change below) with a
-            # gr.Info toast, per owner's confirmed requirement.
+            # Two non-CFG-negative methods: NAG (attention run twice, blended)
+            # and VSF (Value Sign Flip -- positive/negative contexts concatenated
+            # into ONE attention pass, negative V sign-flipped). Each method's
+            # parameter group is shown/hidden by on_nag_method_change below.
             nag_method = reg(gr.Radio(
-                choices=[(L("nag_method_nag"), "nag"), (L("nag_method_other"), "other")],
+                choices=[(L("nag_method_nag"), "nag"), (L("nag_method_vsf"), "vsf")],
                 value="nag", label=L("nag_lbl_method"),
             ), "nag_lbl_method")
-            with gr.Row():
-                nag_scale = reg(gr.Slider(1.0, 20.0, value=11.0, step=0.5,
-                                          label=L("nag_lbl_scale")), "nag_lbl_scale")
-                nag_tau = reg(gr.Slider(1.0, 10.0, value=2.5, step=0.05,
-                                        label=L("nag_lbl_tau")), "nag_lbl_tau")
-                nag_alpha = reg(gr.Slider(0.0, 1.0, value=0.25, step=0.01,
-                                          label=L("nag_lbl_alpha")), "nag_lbl_alpha")
+            with gr.Group(elem_classes=["nag-group"]) as nag_group:
+                with gr.Row():
+                    nag_scale = reg(gr.Slider(1.0, 20.0, value=11.0, step=0.5,
+                                              label=L("nag_lbl_scale")), "nag_lbl_scale")
+                    nag_tau = reg(gr.Slider(1.0, 10.0, value=2.5, step=0.05,
+                                            label=L("nag_lbl_tau")), "nag_lbl_tau")
+                    nag_alpha = reg(gr.Slider(0.0, 1.0, value=0.25, step=0.01,
+                                              label=L("nag_lbl_alpha")), "nag_lbl_alpha")
+            with gr.Group(visible=False, elem_classes=["vsf-group"]) as vsf_group:
+                vsf_scale = reg(gr.Slider(
+                    0, 10, value=1.5, step=0.1, label=L("vsf_lbl_scale"),
+                    info=L("vsf_lbl_scale_info"),
+                ), "vsf_lbl_scale")
+                reg(vsf_scale, "vsf_lbl_scale_info", "info")
+                with gr.Accordion(L("vsf_debug_accordion"), open=False) as vsf_debug_accordion:
+                    reg(vsf_debug_accordion, "vsf_debug_accordion", "label")
+                    vsf_adaln = reg(gr.Radio(
+                        choices=[(L("vsf_adaln_raw"), "raw"),
+                                 (L("vsf_adaln_modulated"), "modulated"),
+                                 (L("vsf_adaln_v_scale"), "v_scale")],
+                        value="raw", label=L("vsf_lbl_adaln"),
+                        info=L("vsf_lbl_adaln_info"),
+                    ), "vsf_lbl_adaln")
+                    reg(vsf_adaln, "vsf_lbl_adaln_info", "info")
 
         with gr.Tabs():
             # ============================ Generate ============================
@@ -1148,14 +1166,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         def on_nag_enable_toggle(enabled):
             return gr.update(interactive=bool(enabled))
 
-        # "Other" is a placeholder for a future non-NAG method (owner-confirmed
-        # requirement): picking it immediately reverts to "nag" with a gr.Info
-        # toast instead of silently accepting an unimplemented method.
-        def on_nag_method_change(method, lang):
-            if method != "nag":
-                gr.Info(L("nag_msg_fallback", lang))
-                return gr.update(value="nag")
-            return gr.update()
+        # Method choice ("nag" / "vsf") toggles which parameter group is shown:
+        # each method's group is mutually exclusive (only one non-CFG negative
+        # method runs per job).
+        def on_nag_method_change(method):
+            is_vsf = method == "vsf"
+            return gr.update(visible=not is_vsf), gr.update(visible=is_vsf)
 
         # ---- Generate button dispatch (single vs. batch A2V) ----
         # The middle stage of the Generate button's click chain. When batch A2V
@@ -1180,12 +1196,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_enable_v, batch_rows_v, batch_wav_dir_v,
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
                      batch_img_dir_v,
-                     nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v):
+                     nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
+                     nag_method_v, vsf_scale_v, vsf_adaln_v):
             if not batch_enable_v:
                 # Single-generation path: byte-identical delegation (first 40
-                # positionals ARE the generate() signature); nag_* are passed
-                # as keywords since they sit at the very end of generate()'s
-                # signature.
+                # positionals ARE the generate() signature); nag_*/neg_method/
+                # vsf_* are passed as keywords since they sit at the very end
+                # of generate()'s signature.
                 yield from generate(
                     prompt_v, negative_v,
                     kf1_en, kf1_img, kf1_fr, kf1_st,
@@ -1199,7 +1216,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     reference_strength_v, ref_video_v, config_v,
                     lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
                     nag_enabled=nag_enabled_v, nag_scale=nag_scale_v,
-                    nag_tau=nag_tau_v, nag_alpha=nag_alpha_v)
+                    nag_tau=nag_tau_v, nag_alpha=nag_alpha_v,
+                    neg_method=nag_method_v, vsf_scale=vsf_scale_v,
+                    vsf_adaln=vsf_adaln_v)
                 return
 
             rows = batch_rows_v or []
@@ -1297,6 +1316,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 nag_scale=float(nag_scale_v),
                 nag_tau=float(nag_tau_v),
                 nag_alpha=float(nag_alpha_v),
+                neg_method=nag_method_v,
+                vsf_scale=float(vsf_scale_v),
+                vsf_adaln=vsf_adaln_v,
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1327,9 +1349,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             on_generate_btn_start, inputs=lang_state, outputs=generate_btn,
         ).then(
             dispatch,
-            # nag_enabled/nag_scale/nag_tau/nag_alpha are APPENDED at the very
-            # end, after every pre-existing positional (matching dispatch()'s
-            # signature order, which appends them after batch_img_dir_v).
+            # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
+            # vsf_scale/vsf_adaln, are APPENDED at the very end, after every
+            # pre-existing positional (matching dispatch()'s signature order,
+            # which appends them after batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1338,7 +1361,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_enable, batch_rows_state, batch_wav_dir,
                     batch_out_mode, batch_out_dir, batch_add_replace,
                     batch_img_dir,
-                    nag_enabled, nag_scale, nag_tau, nag_alpha],
+                    nag_enabled, nag_scale, nag_tau, nag_alpha,
+                    nag_method, vsf_scale, vsf_adaln],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1351,11 +1375,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         adapter.change(on_adapter_change, inputs=adapter, outputs=ref_video)
 
         # NAG: checkbox toggles the shared negative textbox's editability;
-        # the method radio snaps back to "nag" with a toast if "Other" is
-        # picked (no non-NAG method is implemented yet).
+        # the method radio ("nag"/"vsf") shows/hides that method's own
+        # parameter group.
         nag_enabled.change(on_nag_enable_toggle, inputs=nag_enabled, outputs=negative)
-        nag_method.change(on_nag_method_change, inputs=[nag_method, lang_state],
-                          outputs=nag_method)
+        nag_method.change(on_nag_method_change, inputs=nag_method,
+                          outputs=[nag_group, vsf_group])
 
         # Feature 1: attaching a .wav to the A2V audio field auto-adjusts
         # Frames to fit its measured duration (non-wav / unreadable / cleared
@@ -1776,9 +1800,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # Positional-order contract with make_chain_handler.generate_chain
             # (handlers.py): this list stops at ``chunked_upsample`` -- the
             # function's remaining trailing params (nag_enabled, nag_scale,
-            # nag_tau, nag_alpha, src_audio) are appended right after it in
-            # inputs=[...] below, matching the signature's declared order
-            # exactly (chunked_upsample -> nag x4 -> src_audio). ``src_audio``
+            # nag_tau, nag_alpha, neg_method, vsf_scale, vsf_adaln, src_audio)
+            # are appended right after it in inputs=[...] below, matching the
+            # signature's declared order exactly (chunked_upsample -> nag x4
+            # -> neg_method/vsf_scale/vsf_adaln -> src_audio). ``src_audio``
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
             inputs=[prompt, negative, chain_width, chain_height,
@@ -1787,7 +1812,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     *chain_clip_inputs, config_state,
                     lang_state, poll_interval, poll_timeout,
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
-                    nag_enabled, nag_scale, nag_tau, nag_alpha],
+                    nag_enabled, nag_scale, nag_tau, nag_alpha,
+                    nag_method, vsf_scale, vsf_adaln],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
@@ -1910,7 +1936,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             batch_out_choices = [(L("batch_out_auto", lang), "auto"),
                                  (L("batch_out_custom", lang), "custom")]
             nag_method_choices = [(L("nag_method_nag", lang), "nag"),
-                                  (L("nag_method_other", lang), "other")]
+                                  (L("nag_method_vsf", lang), "vsf")]
+            vsf_adaln_choices = [(L("vsf_adaln_raw", lang), "raw"),
+                                 (L("vsf_adaln_modulated", lang), "modulated"),
+                                 (L("vsf_adaln_v_scale", lang), "v_scale")]
             adapter_choices = build_adapter_choices(config, lang)
             updates = []
             for component, key, attr in registry:
@@ -1929,6 +1958,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     kwargs["choices"] = batch_out_choices
                 elif component is nag_method:
                     kwargs["choices"] = nag_method_choices
+                elif component is vsf_adaln:
+                    kwargs["choices"] = vsf_adaln_choices
                 updates.append(gr.update(**kwargs))
             updates.append(gr.update(headers=jobs_table_headers(lang)))
             updates.append(gr.update(headers=[L("col_res", lang), L("col_maxframes", lang)]))

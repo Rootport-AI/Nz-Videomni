@@ -152,6 +152,7 @@ from engine.pipeline.fast_video_pipeline import (  # noqa: E402
 )
 from engine.api_types import ImageConditioningInput  # noqa: E402
 from engine.transformer.nag_service import NagParams  # noqa: E402
+from engine.transformer.vsf_service import VsfParams  # noqa: E402
 
 _log("imported LTXFastVideoPipeline + ImageConditioningInput")
 
@@ -312,23 +313,57 @@ def _resolve_ic_reference(
     return ic_reference, attn_strength
 
 
-def _resolve_nag(msg: dict) -> "NagParams | None":
-    """Resolve a worker ``nag`` block -> NagParams, or None when absent/falsy.
+def _resolve_nag(msg: dict) -> "NagParams | VsfParams | None":
+    """Resolve a worker ``nag`` block -> NagParams / VsfParams, or None when
+    absent/falsy.
 
-    ``nag`` is present only when the app/API layer had NAG enabled for this
-    job (payload is additive — absent for every pre-NAG caller and every
-    NAG-disabled request, so this returns None and the job is byte-identical
-    to before the feature existed).
+    ``nag`` is present only when the app/API layer had a non-CFG negative
+    prompt enabled for this job (payload is additive — absent for every
+    pre-NAG caller and every disabled request, so this returns None and the
+    job is byte-identical to before the feature existed).
+
+    ``method`` selects between the two methods and defaults to ``"nag"`` when
+    the key is missing: the app layer gained that key with VSF, so an older
+    client (or a replayed pre-VSF payload) must keep resolving to exactly the
+    NAG params it always did. An UNKNOWN method is a different situation
+    entirely — it means the two layers disagree — and fails loudly rather than
+    quietly falling back to the wrong algorithm. VSF's own two knobs default
+    to the API's defaults (scale 1.5, adaln "raw") for the same
+    forward-compatibility reason.
     """
     blk = msg.get("nag")
     if not blk:
         return None
-    return NagParams(
-        negative_prompt=str(blk["negative_prompt"]),
-        scale=float(blk["scale"]),
-        tau=float(blk["tau"]),
-        alpha=float(blk["alpha"]),
+    method = str(blk.get("method", "nag"))
+    if method == "nag":
+        return NagParams(
+            negative_prompt=str(blk["negative_prompt"]),
+            scale=float(blk["scale"]),
+            tau=float(blk["tau"]),
+            alpha=float(blk["alpha"]),
+        )
+    if method == "vsf":
+        return VsfParams(
+            negative_prompt=str(blk["negative_prompt"]),
+            scale=float(blk.get("vsf_scale", 1.5)),
+            adaln_mode=str(blk.get("vsf_adaln", "raw")),
+        )
+    raise RuntimeError(
+        f"worker: unknown negative-prompt method {method!r} in the job's "
+        "'nag' block — expected 'nag' or 'vsf'."
     )
+
+
+def _neg_label(nag: "NagParams | VsfParams | None") -> str:
+    """Job-log tag for the non-CFG negative-prompt method: off / nag / vsf.
+
+    Replaces the old ``nag=on|off``: with two methods, "on" no longer says
+    which algorithm actually ran, and that is the first thing anyone reading
+    a log for a suspicious result needs to know.
+    """
+    if nag is None:
+        return "off"
+    return "vsf" if isinstance(nag, VsfParams) else "nag"
 
 
 def _do_generate(msg: dict) -> None:
@@ -371,7 +406,7 @@ def _do_generate(msg: dict) -> None:
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
-        f"nag={'on' if nag else 'off'}"
+        f"neg={_neg_label(nag)}"
     )
     # F2: single-generate runs the wheel's two denoising loops back-to-back
     # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
@@ -502,7 +537,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
-        f"ic_loras={len(ic_loras)} nag={'on' if nag else 'off'}"
+        f"ic_loras={len(ic_loras)} neg={_neg_label(nag)}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:

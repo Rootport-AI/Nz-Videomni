@@ -43,19 +43,37 @@ LABELS: dict[str, dict[str, str]] = {
                           "prompt has no effect)."),
         # --- NAG (Normalized Attention Guidance) accordion ---
         "nag_accordion": "Negative Prompt",
-        "nag_note": ("NAG (Normalized Attention Guidance) applies the negative "
-                     "prompt inside the video and audio text cross-attention, so "
-                     "it works even though the distilled model runs at CFG=1. "
-                     "Cost: the cross-attention compute roughly doubles."),
+        "nag_note": ("Two non-CFG negative-prompt methods, both working even "
+                     "though the distilled model runs at CFG=1. NAG (Normalized "
+                     "Attention Guidance) computes attention (the cross-attention "
+                     "mechanism) twice and blends the result, so its compute "
+                     "cost is roughly double. VSF (Value Sign Flip) mixes the "
+                     "negative signal into a single attention pass instead, so "
+                     "it adds almost no extra cost."),
         "nag_enable": "non-CFG Negative",
         "nag_lbl_method": "Method",
         "nag_method_nag": "NAG",
-        "nag_method_other": "Other",
-        "nag_msg_fallback": "Only NAG is available for now — reverted to NAG.",
+        "nag_method_vsf": "VSF",
         "nag_lbl_scale": "NAG scale",
         "nag_lbl_tau": "NAG tau (norm clamp)",
         "nag_lbl_alpha": "NAG alpha (blend)",
         "nag_msg_negative_required": "Enter a negative prompt, or turn off non-CFG Negative.",
+        # --- VSF (Value Sign Flip) — 2nd non-CFG negative method: positive and
+        # negative contexts are concatenated into ONE attention pass, and the
+        # negative side's V (value) is sign-flipped and scaled by vsf_scale.
+        "vsf_lbl_scale": "VSF scale",
+        "vsf_lbl_scale_info": ("VSF (Value Sign Flip) strength. Wan-measured value: "
+                               "1.7. Even 0 does not disable VSF — use the Method "
+                               "selector or the non-CFG Negative checkbox to turn "
+                               "it off."),
+        "vsf_debug_accordion": "VSF debug options",
+        "vsf_lbl_adaln": "AdaLN mode",
+        "vsf_lbl_adaln_info": ("Debug only: how the negative context is treated by "
+                               "cross-attention AdaLN modulation (for real-GPU "
+                               "A/B testing)."),
+        "vsf_adaln_raw": "raw",
+        "vsf_adaln_modulated": "modulated",
+        "vsf_adaln_v_scale": "v_scale",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -511,19 +529,35 @@ LABELS: dict[str, dict[str, str]] = {
                           "プロンプトは効きません）。"),
         # --- NAG (Normalized Attention Guidance) アコーディオン ---
         "nag_accordion": "ネガティブプロンプト",
-        "nag_note": ("NAG（Normalized Attention Guidance）は、映像・音声のテキスト "
-                     "cross-attention の内部でネガティブプロンプトを効かせる方式で"
-                     "す。蒸留モデルは CFG=1 動作ですが、それでも作用します。コスト"
-                     "は cross-attention の計算がおよそ2倍になります。"),
+        "nag_note": ("非CFGのネガティブプロンプト方式が2つあります。蒸留モデルは "
+                     "CFG=1 動作ですが、どちらも作用します。NAG（Normalized "
+                     "Attention Guidance）はattention（注意機構）を2回計算して"
+                     "ブレンドする方式で、計算コストが約2倍になります。VSF"
+                     "（Value Sign Flip）は1回の計算に負の指示を混ぜ込む方式で、"
+                     "追加コストはほとんどありません。"),
         "nag_enable": "non-CFG Negative",
         "nag_lbl_method": "方式",
         "nag_method_nag": "NAG",
-        "nag_method_other": "その他",
-        "nag_msg_fallback": "現在は NAG のみ利用できます。NAG に戻しました。",
+        "nag_method_vsf": "VSF",
         "nag_lbl_scale": "NAG スケール",
         "nag_lbl_tau": "NAG tau（ノルム上限）",
         "nag_lbl_alpha": "NAG alpha（ブレンド）",
         "nag_msg_negative_required": "ネガティブプロンプトを入力するか、non-CFG Negative をオフにしてください。",
+        # --- VSF（Value Sign Flip）— 非CFGネガティブの第2方式。正負のコンテキ
+        # ストを連結して1回のattentionで処理し、負側のV（value）だけを符号反転
+        # してvsf_scale倍する方式です。
+        "vsf_lbl_scale": "VSFスケール",
+        "vsf_lbl_scale_info": ("VSF（Value Sign Flip）の強さです。Wanでの実測値は"
+                               "1.7。0にしても無効化にはなりません——無効化は「方式」"
+                               "の切り替えか non-CFG Negative のチェックOFFで行って"
+                               "ください。"),
+        "vsf_debug_accordion": "VSFデバッグ設定",
+        "vsf_lbl_adaln": "AdaLNモード",
+        "vsf_lbl_adaln_info": ("デバッグ用: 負のコンテキストをcross-attentionの"
+                               "AdaLN変調でどう扱うかの設定です（実機A/Bテスト用）。"),
+        "vsf_adaln_raw": "raw",
+        "vsf_adaln_modulated": "modulated",
+        "vsf_adaln_v_scale": "v_scale",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

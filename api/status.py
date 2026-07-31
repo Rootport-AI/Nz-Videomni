@@ -25,6 +25,12 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
         "pipeline_type": pm.pipeline_type if pm.loaded else None,
         "gpu": gpu_info.get_gpu_info(),
         "vram_optimization": pm.vram_status_block(),
+        # Acceleration capability (ADDITIVE, top level — the FROZEN
+        # vram_optimization block above is deliberately left untouched):
+        # which attention backends this build understands, and whether the
+        # non-default one can actually run here. See
+        # PipelineManager.acceleration_status_block for the truth table.
+        "acceleration": pm.acceleration_status_block(),
         "queue": {
             "mode": "single_job_in_memory",
             **context.job_store.counts(),

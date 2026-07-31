@@ -66,6 +66,22 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7. Even 0 does not disable VSF — use the Method "
                                "selector or the non-CFG Negative checkbox to turn "
                                "it off."),
+        # --- Acceleration (Settings tab): per-job speed options. Only the
+        # attention selector is implemented; the fused-GGUF checkbox and the VAE
+        # radio are disabled placeholders that never reach a request payload.
+        # NOTE: the VAE selector is unrelated to the server's ``vae_tiling``
+        # (a VRAM-saving tile split).
+        "accel_section_title": "Acceleration",
+        "accel_note": ("Speed options applied per generation job. They take "
+                       "effect immediately — no restart needed."),
+        "accel_lbl_fused_gguf": "Fused GGUF dequant + GEMM",
+        "accel_lbl_attention": "Attention",
+        "accel_info_attention": ("Changes fine details of the output even with "
+                                 "the same seed (different numerical "
+                                 "precision). Roughly 1.2-1.6x faster."),
+        "accel_lbl_vae": "VAE",
+        "accel_info_unimplemented": ("Not implemented yet — shown for a future "
+                                     "release; selecting it has no effect."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -543,6 +559,21 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7。0にしても無効化にはなりません——無効化は「方式」"
                                "の切り替えか non-CFG Negative のチェックOFFで行って"
                                "ください。"),
+        # --- Acceleration（設定タブ）: ジョブ単位の高速化設定。実装済みは
+        # attention の選択のみで、GGUFの融合チェックボックスとVAEのラジオは
+        # 無効化した表示専用（リクエストには一切載りません）。
+        # 注意: ここのVAE選択は、サーバ側の vae_tiling（VRAM節約のためのタイル
+        # 分割）とは無関係です。
+        "accel_section_title": "生成の高速化",
+        "accel_note": ("生成ジョブごとに適用される高速化の設定です。再起動は"
+                       "不要で、次の生成からすぐに反映されます。"),
+        "accel_lbl_fused_gguf": "GGUFの逆量子化と行列積の融合",
+        "accel_lbl_attention": "Attention（注意機構）の実装",
+        "accel_info_attention": ("同じシードでも生成結果の細部が変わります"
+                                 "（数値精度が異なるため）。速度は約1.2〜1.6倍"),
+        "accel_lbl_vae": "VAE（潜在表現と映像を相互変換する部品）",
+        "accel_info_unimplemented": ("まだ実装されていません。将来の実装に備えて"
+                                     "表示しているだけで、選んでも効果はありません。"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

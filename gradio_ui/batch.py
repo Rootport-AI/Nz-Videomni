@@ -153,6 +153,14 @@ class BatchSnapshot:
         neg_method, vsf_scale — the method selector + VSF's own
         param, forwarded the same way (only reach the payload when
         nag_enabled is True, per build_a2v_chain_payload's discipline).
+
+    Acceleration
+        attention_backend  "sdpa" (default) or "sage". Snapshotted from the
+                     Settings-tab selector so an overnight batch uses the SAME
+                     backend the single-generate path would have used —
+                     forgetting this wiring is exactly how a speed option ends
+                     up being "displayed only" for batch runs. Reaches the
+                     payload only when it differs from "sdpa".
     """
 
     wav_dir: str
@@ -180,6 +188,7 @@ class BatchSnapshot:
     nag_alpha: float = 0.25
     neg_method: str = "nag"
     vsf_scale: float = 1.5
+    attention_backend: str = "sdpa"
 
 
 # --------------------------------------------------------------------------- #
@@ -428,6 +437,7 @@ class BatchRunner:
                 nag_alpha=snap.nag_alpha,
                 neg_method=snap.neg_method,
                 vsf_scale=snap.vsf_scale,
+                attention_backend=snap.attention_backend,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

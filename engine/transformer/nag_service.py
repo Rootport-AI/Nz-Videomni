@@ -373,6 +373,13 @@ def _make_nag_forward(
 
         q = attn.q_norm(attn.to_q(x))
 
+        # Both attention_function calls below go through whatever backend is
+        # installed on the module — including SageAttention when the job asked
+        # for it (engine/transformer/sage_attention_service.py swaps exactly this
+        # attribute, on all 288 attention modules, while NAG swaps `forward`).
+        # So a NAG+sage job runs its positive AND negative attention on the sage
+        # kernel; nothing here needs to change for that, but it is why the
+        # sage x NAG combination has its own real-device gate (G5.5).
         k_pos = attn.k_norm(attn.to_k(context))
         v_pos = attn.to_v(context)
         z_pos = attn.attention_function(q, k_pos, v_pos, attn.heads, None)

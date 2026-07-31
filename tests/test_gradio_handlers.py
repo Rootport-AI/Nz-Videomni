@@ -2941,3 +2941,205 @@ def test_chain_nag_enabled_empty_negative_precheck_zero_calls():
     assert calls["n"] == 0
     assert len(out) == 1
     assert out[0][1] == "" and out[0][2] is None
+
+
+# --------------------------------------------------------------------------- #
+# Acceleration (attention_backend): the Settings-tab selector reaches every
+# request body, but ONLY when it differs from the "sdpa" default -- the sdpa
+# payload must stay byte-identical to the pre-Acceleration contract the
+# exact-match / key-order tests above lock in. Passed as a KEYWORD everywhere
+# (it sits at the very end of each handler signature, after src_audio for the
+# chain handler), so no positional helper needed changing.
+# --------------------------------------------------------------------------- #
+def test_accel_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_section_title", "accel_note", "accel_lbl_fused_gguf",
+                "accel_lbl_attention", "accel_info_attention",
+                "accel_lbl_vae", "accel_info_unimplemented"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The sage caveat must actually say the output changes + name the speedup.
+    assert "1.2-1.6x" in LABELS["en"]["accel_info_attention"]
+    assert "1.2〜1.6倍" in LABELS["ja"]["accel_info_attention"]
+
+
+def test_build_a2v_chain_payload_sage_appends_attention_backend_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-accel-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        attention_backend="sage",
+    )
+    assert payload["attention_backend"] == "sage"
+    assert list(payload.keys())[-1] == "attention_backend"
+
+
+def test_build_a2v_chain_payload_sage_sits_after_the_nag_block():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-accel-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+    )
+    assert list(payload.keys())[-7:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_attention_backend():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-accel-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    assert "attention_backend" not in payload
+    # Explicitly passing the default must be indistinguishable from omitting it.
+    assert payload == build_a2v_chain_payload(
+        audio_id="aud-accel-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        attention_backend="sdpa",
+    )
+
+
+def test_generate_handler_sage_adds_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-sage"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        attention_backend="sage",
+    )
+    _run_until_job_started(gen)
+    assert captured["attention_backend"] == "sage"
+    # Appended last, after the (absent here) NAG block.
+    assert list(captured.keys())[-1] == "attention_backend"
+
+
+def test_generate_handler_default_omits_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-sdpa"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "attention_backend" not in captured
+
+
+def test_generate_handler_a2v_forwards_attention_backend(tmp_path):
+    # The A2V branch builds its body through build_a2v_chain_payload -- the
+    # selector must survive that hop too.
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-accel"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-sage"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), attention_backend="sage",
+    )
+    # The A2V branch yields an "uploading audio" line BEFORE the POST, so this
+    # drives the generator to the job-started yield instead of using
+    # _run_until_job_started (which stops at the first yield).
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["attention_backend"] == "sage"
+
+
+def test_chain_handler_sage_adds_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-sage"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), attention_backend="sage")
+    _run_chain_until_started(gen)
+    assert captured["attention_backend"] == "sage"
+    assert list(captured.keys())[-1] == "attention_backend"
+
+
+def test_chain_handler_default_omits_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-sdpa"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "attention_backend" not in captured

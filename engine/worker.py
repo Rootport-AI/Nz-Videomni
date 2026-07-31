@@ -21,6 +21,9 @@ Protocol (one JSON object per line; parent -> worker):
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size}
   {"op": "generate", prompt, seed, height, width, num_frames, frame_rate,
    num_steps, images:[{path,frame_idx,strength}...], output_path,
+   # attention_backend (optional, default "sdpa"): "sdpa" | "sage". Present on
+   # BOTH generate ops. Purely a speed knob — see _resolve_attention:
+   attention_backend,
    # Phase B/C IC-LoRA (forward-time weight patch); loras always present (may be []),
    # reference_video null unless a reference is supplied. preprocess (Phase C):
    # "none" -> raw reference used as-is (Phase B); "canny"/... -> converted to a
@@ -46,9 +49,17 @@ Protocol (one JSON object per line; parent -> worker):
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
 ignored by the parent. Every protocol line: @@LTX@@<compact-json>, flushed. All
 other logging goes to STDERR.
-  @@LTX@@{"event":"ready"}
-  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...}
+  @@LTX@@{"event":"ready","sage_available":true|false}
+  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,"attention_used":...}
   @@LTX@@{"event":"error","detail":...}
+
+``ready.sage_available`` is this process's SageAttention probe (see
+engine/transformer/sage_attention_service.probe_sage); the app publishes it as
+``acceleration.sage_available`` on GET /status. ``done.attention_used`` is what
+the finished job ACTUALLY ran on — "sdpa", "sage", or "sage->sdpa" when sage was
+asked for but degraded (unavailable, or a kernel call raised mid-job). It rides
+the same route as ``seed_used`` into metadata.json, and it — not any log line —
+is the judging criterion for the sage real-device gates.
 
 The generate_chain ``done`` event carries a ``chain`` dict (full junction
 geometry). For a V2V run it additionally holds a ``chain.v2v`` sub-dict:
@@ -152,6 +163,7 @@ from engine.pipeline.fast_video_pipeline import (  # noqa: E402
 )
 from engine.api_types import ImageConditioningInput  # noqa: E402
 from engine.transformer.nag_service import NagParams  # noqa: E402
+from engine.transformer.sage_attention_service import probe_sage  # noqa: E402
 from engine.transformer.vsf_service import VsfParams  # noqa: E402
 
 _log("imported LTXFastVideoPipeline + ImageConditioningInput")
@@ -223,10 +235,17 @@ _PIPE: LTXFastVideoPipeline | None = None
 def _do_load(msg: dict) -> None:
     """Build the pipeline ONCE. Mirrors run_t2v_bs8.py create() arg names/values."""
     global _PIPE
+    # Probe BEFORE the (multi-minute, memory-hungry) pipeline build: probe_sage()
+    # is fully guarded and cached, so this cannot fail the load, and doing it
+    # first means the answer is already known no matter which branch below emits
+    # ``ready``. The early-return branch is currently unreachable (the parent
+    # never sends a second "load"), but it must carry the same field.
+    sage_available = probe_sage()
     if _PIPE is not None:
-        _emit("ready")
+        _emit("ready", sage_available=sage_available)
         return
 
+    _log(f"sage_available={sage_available}")
     _log("creating pipeline (GGUF transformer + GGUF Gemma)...")
     _PIPE = LTXFastVideoPipeline.create(
         checkpoint_path=msg["checkpoint_path"],
@@ -263,7 +282,7 @@ def _do_load(msg: dict) -> None:
         # cpu_text_encode intentionally NOT set -> GGUF Gemma path wins.
     )
     _log("PIPELINE_CREATED_OK")
-    _emit("ready")
+    _emit("ready", sage_available=sage_available)
 
 
 def _resolve_ic_reference(
@@ -364,6 +383,66 @@ def _neg_label(nag: "NagParams | VsfParams | None") -> str:
     return "vsf" if isinstance(nag, VsfParams) else "nag"
 
 
+def _resolve_attention(msg: dict) -> tuple[str, bool]:
+    """Resolve a job's ``attention_backend`` -> ``(effective_backend, degraded)``.
+
+    ``degraded`` means "sage was asked for but this process cannot deliver it",
+    which is what turns into ``attention_used="sage->sdpa"`` below.
+
+    Missing key -> "sdpa": the payload is additive, so every pre-Acceleration
+    caller (and every default request, which does not send the key at all)
+    resolves to exactly the behaviour it always had.
+
+    An UNKNOWN value fails the job loudly, exactly like ``_resolve_nag``'s
+    unknown method: it can only mean the app and the engine disagree about the
+    protocol, and quietly running the wrong backend would be recorded as a
+    truthful-looking ``attention_used`` for a job that ignored the request.
+
+    ``sage`` when SageAttention is unavailable is a DIFFERENT case and is
+    deliberately not fatal: this is a speed knob, so "ran, just not faster"
+    beats "failed". Warn, degrade, and make the degradation visible in the
+    job's metadata rather than only in this log.
+    """
+    backend = str(msg.get("attention_backend", "sdpa"))
+    if backend not in ("sdpa", "sage"):
+        raise RuntimeError(
+            f"worker: unknown attention_backend {backend!r} — expected "
+            "'sdpa' or 'sage'."
+        )
+    if backend == "sage" and not probe_sage():
+        # ASCII only, deliberately. This goes straight to STDERR, which on a
+        # Japanese Windows is cp932 with errors="backslashreplace" - an em dash
+        # here would land in logs/ltx_worker.log as a backslash-u2014 escape,
+        # right in the middle of the one sentence an operator reads when
+        # asking "why did my sage job run slow?". (Nothing crashes either way;
+        # backslashreplace is exactly why it does not - this is only
+        # legibility, which is why the RuntimeError above can keep its dash - that
+        # one is JSON-escaped onto the protocol channel, never printed raw.)
+        _log(
+            "WARNING attention_backend='sage' requested but SageAttention is not "
+            "available in this engine venv - falling back to sdpa for this job "
+            "(reported as attention_used='sage->sdpa')."
+        )
+        return "sdpa", True
+    return backend, False
+
+
+def _attention_used(effective: str, degraded: bool) -> str:
+    """The ``done`` event's ``attention_used``: what the job ACTUALLY ran on.
+
+    Three sources, in order: the pre-job availability degrade (``degraded``),
+    the backend that was handed to the pipeline, and — only when sage really did
+    start — the pipeline's own record, which reports "sage->sdpa" if a kernel
+    call raised mid-job and latched the rest of the job onto sdpa.
+    """
+    if degraded:
+        return "sage->sdpa"
+    if effective != "sage":
+        return "sdpa"
+    assert _PIPE is not None  # only reachable from a post-load generate op
+    return _PIPE.attention_used()
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; mp4 is written by the engine to msg['output_path']."""
     assert _PIPE is not None, "generate before load"
@@ -399,12 +478,15 @@ def _do_generate(msg: dict) -> None:
     # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
     # identical to before this feature existed.
     nag = _resolve_nag(msg)
+    # Attention backend (speed only): absent -> "sdpa", byte-identical to before
+    # this feature existed.
+    attention, attn_degraded = _resolve_attention(msg)
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
-        f"neg={_neg_label(nag)}"
+        f"neg={_neg_label(nag)} attn={attention}"
     )
     # F2: single-generate runs the wheel's two denoising loops back-to-back
     # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
@@ -425,6 +507,7 @@ def _do_generate(msg: dict) -> None:
             ic_reference=ic_reference,
             ic_attention_strength=attn_strength,
             nag=nag,
+            attention_backend=attention,
         )
     finally:
         progress_shim.end_op()
@@ -434,8 +517,9 @@ def _do_generate(msg: dict) -> None:
     if not os.path.exists(output_path) or os.path.getsize(output_path) <= 0:
         raise RuntimeError(f"engine produced no/empty output: {output_path}")
 
-    _log(f"GENERATED_OK peak_vram_mb={peak} -> {output_path}")
-    _emit("done", seed_used=seed, peak_vram_mb=int(peak))
+    attention_used = _attention_used(attention, attn_degraded)
+    _log(f"GENERATED_OK peak_vram_mb={peak} attention_used={attention_used} -> {output_path}")
+    _emit("done", seed_used=seed, peak_vram_mb=int(peak), attention_used=attention_used)
 
     # Resident-reuse: free the just-finished job's transient allocations before
     # the next job. The block-swap transformer carries reference cycles
@@ -528,6 +612,8 @@ def _do_generate_chain(msg: dict) -> None:
     # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
     # identical to before this feature existed.
     nag = _resolve_nag(msg)
+    # Attention backend (speed only): absent -> "sdpa", byte-identical to before.
+    attention, attn_degraded = _resolve_attention(msg)
 
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
@@ -535,7 +621,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
-        f"ic_loras={len(ic_loras)} neg={_neg_label(nag)}"
+        f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -559,14 +645,22 @@ def _do_generate_chain(msg: dict) -> None:
         ic_attention_strength=ic_attn,
         chunked_upsample=chunked_upsample,
         nag=nag,
+        attention_backend=attention,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
     if not os.path.exists(output_path) or os.path.getsize(output_path) <= 0:
         raise RuntimeError(f"engine produced no/empty chain output: {output_path}")
 
-    _log(f"CHAIN_OK peak_vram_mb={peak} -> {output_path}")
-    _emit("done", seed_used=seed, peak_vram_mb=int(peak), chain=meta)
+    attention_used = _attention_used(attention, attn_degraded)
+    _log(f"CHAIN_OK peak_vram_mb={peak} attention_used={attention_used} -> {output_path}")
+    _emit(
+        "done",
+        seed_used=seed,
+        peak_vram_mb=int(peak),
+        chain=meta,
+        attention_used=attention_used,
+    )
 
     gc.collect()
     torch.cuda.empty_cache()

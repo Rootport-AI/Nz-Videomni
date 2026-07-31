@@ -20,6 +20,161 @@ def test_status_reports_low_vram(client):
     assert "available" in s["gpu"]
 
 
+def test_status_reports_acceleration(client):
+    # Acceleration capability block (ADDITIVE, top level). The mock backend has
+    # no engine at all, so sage_available is False regardless of what the real
+    # engine venv on this machine happens to contain -- that mock rule is what
+    # keeps this assertion machine-independent.
+    r = client.get("/api/v1/status")
+    assert r.status_code == 200
+    accel = r.json()["acceleration"]
+    assert accel["attention_backends"] == ["sdpa", "sage"]
+    assert accel["sage_available"] is False
+
+
+def test_status_vram_optimization_key_set_is_unchanged(client):
+    # FROZEN contract (spec 7.4): the acceleration feature must NOT smuggle any
+    # key into vram_optimization -- it lives in its own top-level block.
+    r = client.get("/api/v1/status")
+    assert set(r.json()["vram_optimization"]) == {
+        "low_vram_mode",
+        "low_vram_profile",
+        "fp8_transformer",
+        "cpu_offload_text_encoder",
+        "vae_tiling",
+        "attention_tiling",
+        "block_swap",
+        "low_vram_disabled_required",
+    }
+
+
+def test_acceleration_status_truth_table(client):
+    # PipelineManager.acceleration_status_block is the single place the
+    # sage-availability truth table lives; exercise all four rows of it.
+    import types
+
+    pm = client.app_context.pipeline_manager
+    runner = pm.runner
+    runner._sage_probe_cache = True  # pretend the engine venv HAS sageattention
+
+    # (1) mock backend -> False, and the file probe cannot override it.
+    assert pm.acceleration_status_block()["sage_available"] is False
+
+    # From here on the backend is no longer the mock.
+    runner.config.model.backend = "real"
+
+    # (2) not loaded -> the file probe answers.
+    assert pm.acceleration_status_block()["sage_available"] is True
+    runner._sage_probe_cache = False
+    assert pm.acceleration_status_block()["sage_available"] is False
+
+    # (3) loaded -> the WORKER's own probe wins over the file probe.
+    runner._backend = types.SimpleNamespace(loaded=True, sage_available=True)
+    assert pm.acceleration_status_block()["sage_available"] is True
+
+    # (4) load failed / unloaded (no live worker) -> back to the file probe.
+    runner._backend = types.SimpleNamespace(loaded=False, sage_available=True)
+    assert pm.acceleration_status_block()["sage_available"] is False
+
+
+def test_sage_file_probe_checks_engine_venv_site_packages(tmp_path):
+    # The pre-load probe is a pure file-existence check on the engine venv's
+    # site-packages (Windows layout), and BOTH sageattention/ and triton/ are
+    # required -- sage kernels are Triton-backed.
+    from config import AppConfig
+    from services.low_vram import build_low_vram_settings
+    from services.ltx_runner import LTXRunner
+
+    venv = tmp_path / ".venv-engine"
+    site = venv / "Lib" / "site-packages"
+    site.mkdir(parents=True)
+    (venv / "Scripts").mkdir()
+
+    def _runner() -> LTXRunner:
+        cfg = AppConfig()
+        cfg.model.engine_python = (venv / "Scripts" / "python.exe").as_posix()
+        return LTXRunner(cfg, build_low_vram_settings(cfg))
+
+    assert _runner().sage_available is False  # neither package present
+    (site / "sageattention").mkdir()
+    assert _runner().sage_available is False  # triton missing -> still False
+    (site / "triton").mkdir()
+    assert _runner().sage_available is True
+
+    # Cached after the first read: removing the dirs does not flip it back.
+    r = _runner()
+    assert r.sage_available is True
+    (site / "triton").rmdir()
+    assert r.sage_available is True
+
+
+def test_metadata_records_attention_used(client):
+    # The engine's ACTUAL attention backend is recorded next to seed_used, so a
+    # "requested sage but sdpa ran" case is visible in the job record. The mock
+    # backend runs no attention at all -> null, but the KEY must be present (an
+    # absent key would let the real path regress unnoticed).
+    payload = {
+        "prompt": "A red ball rolling on a white floor",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 42,
+        "pipeline": "distilled",
+        "attention_backend": "sage",
+        "fused_gguf_dequant_gemm": True,
+        "vae_mode": "prune_vaed",
+    }
+    r = client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "attention_used" in meta
+    assert meta["attention_used"] is None  # mock backend ran no engine attention
+    # The request dump DOES carry all three fields, mocks included -- same
+    # precedent as the two_stage_hq pipeline value; only the worker payload and
+    # /status keep the mocks out.
+    assert meta["request"]["attention_backend"] == "sage"
+    assert meta["request"]["fused_gguf_dequant_gemm"] is True
+    assert meta["request"]["vae_mode"] == "prune_vaed"
+
+
+def test_chain_metadata_records_attention_used(client):
+    # Same key on the chain writer (a separate metadata builder -- it does not
+    # share _write_metadata, so it needs its own guard).
+    payload = {
+        "prompt": "a serene mountain lake at dawn",
+        "width": 384,
+        "height": 256,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "pipeline": "distilled",
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 25}, {"num_frames": 25}],
+        "attention_backend": "sage",
+    }
+    r = client.post("/api/v1/generate/chain", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "attention_used" in meta
+    assert meta["attention_used"] is None
+    assert meta["request"]["attention_backend"] == "sage"
+
+
 def test_upload_image(client, png_bytes):
     r = client.post("/api/v1/upload/image", files={"file": ("first.png", png_bytes, "image/png")})
     assert r.status_code == 200

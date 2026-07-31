@@ -238,6 +238,13 @@ class GenerationOutcome:
     # Phase 3 WP4 masked AV-latent chain: junction pixel-frame indices + full
     # geometry (from chain_math / the engine). None for single-clip generate.
     chain_metadata: dict | None = None
+    # Acceleration: the attention backend the engine ACTUALLY ran with
+    # ("sdpa" | "sage" | "sage->sdpa" when it fell back). Reported by the
+    # worker's terminal ``done`` event and carried to metadata.json exactly like
+    # ``seed_used``, so "the request said sage" and "sage actually ran" can never
+    # silently diverge (the fp8 "displayed but not applied" trap). None on the
+    # mock backend and on any worker that predates the field.
+    attention_used: str | None = None
 
 
 class LTXRunner:
@@ -252,6 +259,9 @@ class LTXRunner:
         self.config = config
         self.low_vram = low_vram
         self._backend: _MockBackend | _RealBackend | None = None
+        # Acceleration capability probe result (see ``sage_available``); None
+        # until the first read, then cached for the process lifetime.
+        self._sage_probe_cache: bool | None = None
 
     @property
     def loaded(self) -> bool:
@@ -429,6 +439,84 @@ class LTXRunner:
             return True
         except Exception:
             return False
+
+    # ------------------------------------------- acceleration (SageAttention)
+
+    @property
+    def sage_available(self) -> bool:
+        """Pre-load capability probe: is SageAttention installed in the ENGINE venv?
+
+        Same discipline as :meth:`_real_available` — a pure FILE-EXISTENCE check
+        that NEVER imports anything. sageattention/triton live only in the engine
+        venv (they pull in torch), so importing them here would break the
+        torch-free app venv; and a failed import is not cached by Python, so the
+        import route would also re-pay the cost on every ``GET /status`` poll.
+
+        WINDOWS VENV LAYOUT is assumed, matching ``model.engine_python``'s own
+        default (``./.venv-engine/Scripts/python.exe``): the interpreter's
+        grandparent is the venv root and its packages live in
+        ``<venv>/Lib/site-packages``. Both ``sageattention/`` and ``triton/`` are
+        required — the sage kernels are Triton-backed, so sageattention alone is
+        not usable.
+
+        This answers "COULD sage run" before a worker exists. Once the worker is
+        up, its own import-time probe (reported on the ``ready`` event) is
+        authoritative — see ``_RealBackend.sage_available`` and
+        ``PipelineManager.acceleration_status_block``.
+
+        Evaluated ONCE and cached for the process lifetime: GET /status polls
+        every 10s, and installing sageattention into the engine venv requires a
+        server restart to take effect anyway.
+        """
+        if self._sage_probe_cache is None:
+            self._sage_probe_cache = self._probe_sage_files()
+        return self._sage_probe_cache
+
+    def _probe_sage_files(self) -> bool:
+        try:
+            engine_python = self.config.model.engine_python
+            if not engine_python:
+                return False
+            venv_root = self.config._abs(engine_python).parent.parent
+            site_packages = venv_root / "Lib" / "site-packages"
+            return (
+                (site_packages / "sageattention").is_dir()
+                and (site_packages / "triton").is_dir()
+            )
+        except Exception:
+            return False
+
+    @property
+    def worker_sage_available(self) -> bool | None:
+        """The LOADED worker's OWN sage probe result, or None when unknown.
+
+        None means "no loaded worker has told us anything" — no backend, an
+        unloaded/dead backend, the mock (which has no engine), or a worker that
+        predates the ``ready.sage_available`` field. Callers fall back to the
+        file-existence :attr:`sage_available` in that case.
+        """
+        backend = self._backend
+        if backend is None or not backend.loaded:
+            return None
+        value = getattr(backend, "sage_available", None)
+        return None if value is None else bool(value)
+
+    @property
+    def is_mock(self) -> bool:
+        """True when the mock backend is (or, before any load, would be) active.
+
+        The mock has no engine at all, so it can never run sage regardless of
+        what the engine venv contains. Before the first ``load()`` there is no
+        backend instance yet, so the CONFIGURED choice decides; ``auto`` is
+        deliberately not resolved here (resolving it means the full
+        ``_real_available`` file sweep) — an auto install without the real stack
+        also has no engine venv, so the file probe reports False anyway.
+        """
+        if isinstance(self._backend, _MockBackend):
+            return True
+        if self._backend is not None:
+            return False
+        return (self.config.model.backend or "auto").strip().lower() == "mock"
 
 
 class _MockBackend:
@@ -829,6 +917,10 @@ class _RealBackend:
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._log_path: Path | None = None
+        # Acceleration: the worker's OWN import-time SageAttention probe, taken
+        # from the ``ready`` event. None until a worker reports it (and again
+        # after unload) — see LTXRunner.worker_sage_available.
+        self.sage_available: bool | None = None
 
     @property
     def loaded(self) -> bool:
@@ -1095,7 +1187,13 @@ class _RealBackend:
 
         kind = event.get("event")
         if kind == "ready":
-            logger.info("LTX worker ready.")
+            # Acceleration (additive): the worker's own SageAttention probe,
+            # run inside the engine venv where the import can actually be
+            # attempted. Absent on a pre-acceleration worker -> stays None and
+            # the app falls back to LTXRunner's file-existence probe.
+            raw_sage = event.get("sage_available")
+            self.sage_available = None if raw_sage is None else bool(raw_sage)
+            logger.info("LTX worker ready. sage_available=%s", self.sage_available)
             return
         if kind == "error":
             detail = event.get("detail", "")
@@ -1133,6 +1231,10 @@ class _RealBackend:
         finally:
             self._proc = None
             self.pipeline = None
+            # The worker-reported capability dies with the worker: a later
+            # /status must fall back to the file probe rather than keep quoting
+            # a dead process (the engine venv may have changed meanwhile).
+            self.sage_available = None
             safe_memory_cleanup()
 
     # -------------------------------------------------------------- generate
@@ -1248,6 +1350,21 @@ class _RealBackend:
             payload["nag"]["method"] = request.neg_method
             payload["nag"]["vsf_scale"] = request.vsf_scale
 
+        # Acceleration (additive): the attention backend is sent ONLY when it is
+        # not the default, so a default job's payload stays byte-identical to
+        # pre-acceleration (regression contract, same style as nag above). The
+        # worker fails loud on an unknown value and degrades sage -> sdpa when
+        # the import is unavailable.
+        #
+        # The two MOCK fields (request.fused_gguf_dequant_gemm / request.vae_mode)
+        # are deliberately NEVER put on the wire: the engine does not consume
+        # them, and shipping an inert key is exactly the "displayed but not
+        # applied" trap this design exists to avoid. They still show up in
+        # metadata.json / GET /jobs via model_dump() — that is intentional (same
+        # as the two_stage_hq pipeline value), and no exclude() trickery is used.
+        if request.attention_backend != "sdpa":
+            payload["attention_backend"] = request.attention_backend
+
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
         # single generate too, so read through them (same receipt loop as the
@@ -1291,6 +1408,9 @@ class _RealBackend:
             peak_vram_mb=peak_vram_mb,
             generation_mode=mode,
             backend=REAL_BACKEND,
+            # Acceleration: what the engine ACTUALLY ran with (same relay as
+            # seed_used). None on a worker that predates the field.
+            attention_used=event.get("attention_used"),
         )
 
     def generate_chain(
@@ -1439,6 +1559,13 @@ class _RealBackend:
             payload["nag"]["method"] = chain.neg_method
             payload["nag"]["vsf_scale"] = chain.vsf_scale
 
+        # Acceleration (additive): mirrors the single-generate block in
+        # :meth:`generate` — sent only when non-default (byte-identical default
+        # payload), and the two MOCK fields are never put on the wire. See there
+        # for the full rationale.
+        if chain.attention_backend != "sdpa":
+            payload["attention_backend"] = chain.attention_backend
+
         with self._lock:
             try:
                 self._send(payload)
@@ -1469,6 +1596,8 @@ class _RealBackend:
             generation_mode="chain",
             backend=REAL_BACKEND,
             chain_metadata=event.get("chain"),
+            # Acceleration: same relay as the single-generate path above.
+            attention_used=event.get("attention_used"),
         )
 
     def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:

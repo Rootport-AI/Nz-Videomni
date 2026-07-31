@@ -4,6 +4,11 @@
 フィールド（``pipeline`` / ``num_inference_steps`` / ``guidance_scale`` /
 ``crf``）は計画D8により出さない -- ``two_stage_hq`` は現状モックのみで、
 distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える意味がないため。
+同じ理由で ``fused_gguf_dequant_gemm`` / ``vae_mode`` も出さない -- どちらも
+Acceleration機能のうち現状モック（受理のみで効果が無い）の2項目であり、
+``two_stage_hq`` の ``pipeline`` と同様に実装のない切替をクライアントへ見せて
+も意味がないため（計画D1）。一方で同じAcceleration機能のうち実装がある
+``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）は公開する。
 
 送信ボディは「Noneまたは空は送らない」を徹底する（計画のペイロード契約）。
 ``crop_width`` / ``crop_height`` は両方指定 or 両方省略のみを許す（片側だけの
@@ -48,6 +53,7 @@ async def submit_generate(
     reference_video_strength: float | None = None,
     neg_method: str = "nag",
     vsf_scale: float = 1.5,
+    attention_backend: str = "sdpa",
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -105,6 +111,14 @@ async def submit_generate(
             ``loras`` 指定時のみ）。
         reference_video_strength: 参照動画の条件付け強度（0〜1、``loras``
             指定時のみ）。
+        attention_backend: attentionの実装（``"sdpa"``（既定）または
+            ``"sage"``）。``"sage"`` はエンジンに sageattention が導入済みの
+            場合のみ有効で、未導入時はサーバーが自動的に ``"sdpa"`` へ降格
+            して完走します。**``"sage"`` 有効時は同一シードでも生成結果の
+            細部が変わります**（数値精度が異なるため）。利用可否は
+            ``backend_status`` の ``acceleration.sage_available`` で確認で
+            きます。実際に使われた方式はジョブ完了後のメタデータの
+            ``attention_used`` に記録されます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -133,6 +147,9 @@ async def submit_generate(
         payload["nag_alpha"] = nag_alpha
         payload["neg_method"] = neg_method
         payload["vsf_scale"] = vsf_scale
+
+    if attention_backend != "sdpa":
+        payload["attention_backend"] = attention_backend
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -193,6 +210,7 @@ async def submit_chain(
     chunked_upsample: bool = True,
     neg_method: str = "nag",
     vsf_scale: float = 1.5,
+    attention_backend: str = "sdpa",
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -259,6 +277,14 @@ async def submit_chain(
         conditioning_attention_strength: 制御系IC-LoRAの追従の強さ（0〜1）。
         reference_video_strength: 参照動画の条件付け強度（0〜1）。
         chunked_upsample: アップサンプルのチャンク分割（既定True）。
+        attention_backend: attentionの実装（``"sdpa"``（既定）または
+            ``"sage"``）。``"sage"`` はエンジンに sageattention が導入済みの
+            場合のみ有効で、未導入時はサーバーが自動的に ``"sdpa"`` へ降格
+            して完走します。**``"sage"`` 有効時は同一シードでも生成結果の
+            細部が変わります**（数値精度が異なるため）。利用可否は
+            ``backend_status`` の ``acceleration.sage_available`` で確認で
+            きます。実際に使われた方式はジョブ完了後のメタデータの
+            ``attention_used`` に記録されます（チェーン全体・全ステージ共通）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -291,6 +317,9 @@ async def submit_chain(
         payload["nag_alpha"] = nag_alpha
         payload["neg_method"] = neg_method
         payload["vsf_scale"] = vsf_scale
+
+    if attention_backend != "sdpa":
+        payload["attention_backend"] = attention_backend
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

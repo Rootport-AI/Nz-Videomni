@@ -160,6 +160,48 @@ class PipelineManager:
             low_vram_disabled_required=self.config.limits.low_vram_disabled_required
         )
 
+    # Acceleration backends advertised by GET /status. Only ``attention_backend``
+    # is a real implementation; the two MOCK request fields
+    # (fused_gguf_dequant_gemm / vae_mode) are deliberately NOT advertised here —
+    # /status describes what the server can actually DO.
+    ATTENTION_BACKENDS = ["sdpa", "sage"]
+
+    def acceleration_status_block(self) -> dict:
+        """The ``acceleration`` block for GET /status.
+
+        Sibling of :meth:`vram_status_block` (the FROZEN ``vram_optimization``
+        block is untouched by this feature). This method is the single place the
+        sage-availability TRUTH TABLE lives:
+
+        =========================  ==========================================
+        server state               ``sage_available``
+        =========================  ==========================================
+        mock backend               ``False`` (no engine exists at all)
+        pipeline not loaded        engine-venv FILE probe
+        pipeline loaded            the WORKER's own import probe (authoritative)
+        load failed / unloaded     engine-venv FILE probe (no live worker)
+        =========================  ==========================================
+
+        The two probe routes are intentionally different answers to different
+        questions: the file probe says "sage COULD be importable", the worker's
+        says "sage IS importable in the process that would use it" (it catches
+        a DLL/ABI failure the file probe cannot see). ``pipeline_loaded`` in the
+        same /status payload already tells a client which route produced the
+        value, so no extra ``sage_source`` field is exposed.
+        """
+        return {
+            "attention_backends": list(self.ATTENTION_BACKENDS),
+            "sage_available": self._sage_available(),
+        }
+
+    def _sage_available(self) -> bool:
+        if self.runner.is_mock:
+            return False
+        worker_value = self.runner.worker_sage_available
+        if worker_value is not None:
+            return worker_value
+        return self.runner.sage_available
+
     def _base_model_name(self) -> str:
         """Filename of the transformer weight (GGUF) that would actually load.
 
@@ -641,6 +683,7 @@ class PipelineManager:
                     peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
                     chain_meta=meta, v2v_provenance=v2v_provenance,
                     a2v_provenance=a2v_provenance,
+                    attention_used=outcome.attention_used,
                 )
 
             result = JobResult(
@@ -686,7 +729,7 @@ class PipelineManager:
     def _write_chain_metadata(
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
-        v2v_provenance=None, a2v_provenance=None,
+        v2v_provenance=None, a2v_provenance=None, attention_used=None,
     ) -> None:
         cm = chain_meta or {}
         metadata = {
@@ -699,6 +742,8 @@ class PipelineManager:
             "request": chain.model_dump(),
             "generation_mode": "chain",
             "seed_used": seed_used,
+            # Acceleration: see the same key in :meth:`_write_metadata`.
+            "attention_used": attention_used,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
             "chain": {
@@ -788,6 +833,12 @@ class PipelineManager:
             "request": req.model_dump(),
             "generation_mode": outcome.generation_mode,
             "seed_used": outcome.seed_used,
+            # Acceleration: the attention backend the engine ACTUALLY ran with
+            # ("sdpa" | "sage" | "sage->sdpa"), reported by the worker's done
+            # event. Unconditional like seed_used — an always-present key is the
+            # point: it makes "the request asked for sage but sdpa ran" visible
+            # instead of inferable only from logs. None on the mock backend.
+            "attention_used": outcome.attention_used,
             "generation_time_seconds": round(elapsed, 2),
             "backend": outcome.backend,
             "output": {

@@ -36,15 +36,22 @@
 .NOTES
     ATTENTION BACKEND (no GPU-specific knob)
     ----------------------------------------
-    There is none to choose: PyTorch SDPA is the attention backend on EVERY arch
-    (Ada / Ampere / Hopper / Blackwell). xformers and flash-attn are never
-    installed by this script -- SDPA is what the code actually uses, and on
-    Blackwell adding flash-attn can jam it. sageattention was historically an
-    exception (a declared-but-unused engine-venv dependency, pure dead weight
-    since nothing imported it) -- removed in the 2026-07-28 dependency cleanup
-    (PENDING_TASKS.md 3-25; see engine/venv-engine.freeze.txt). Blackwell needs
-    an R570+ driver. Because nothing here is arch-dependent, this installer does
-    not detect or take a GPU architecture at all.
+    PyTorch SDPA remains the attention backend on EVERY arch (Ada / Ampere /
+    Hopper / Blackwell) and is always installed and always usable. xformers and
+    flash-attn are never installed by this script -- SDPA is the baseline the
+    code always falls back to, and on Blackwell adding flash-attn can jam it.
+    sageattention was historically an exception (a declared-but-unused
+    engine-venv dependency, pure dead weight since nothing imported it) --
+    removed in the 2026-07-28 dependency cleanup (PENDING_TASKS.md 3-25; see
+    engine/venv-engine.freeze.txt). It is back as of 2026-07-31: the
+    Acceleration feature's SageAttentionService (engine/transformer/
+    sage_attention_service.py) is now a real consumer, so sageattention 2.2.0
+    (prebuilt wheel, cu128/torch2.9.1) and triton-windows (its runtime JIT
+    dependency) are installed by default -- see $engineDirectPins below and
+    engine/venv-engine.freeze.txt. SDPA stays the default at generation time;
+    sage is opt-in per job via `attention_backend`. Blackwell needs an R570+
+    driver. Because nothing here is arch-dependent, this installer does not
+    detect or take a GPU architecture at all.
 
 .EXAMPLE
     ./scripts/install_ltx.ps1                       # full install
@@ -221,29 +228,45 @@ $enginePyprojectDir = "$ProjectRoot\engine"
 # .gitignore already excludes, so it is never tracked and dies with the venv.
 $engineStateFile = "$ProjectRoot\.venv-engine\.nz-engine-state"
 
-# The 3 git packages as uv requirement strings, at their EXACT pinned revs. The
-# freeze file lists them only as bare `name==version` (no such build exists on
-# PyPI), so a plain `-r freeze` cannot fetch them -- they are installed from
-# these URLs first, and their bare lines are filtered out of the freeze copy.
+# The 3 git packages PLUS 1 direct-URL wheel, as uv requirement strings, all
+# pinned exactly. The freeze file lists all 4 only as bare `name==version` (no
+# such build exists on PyPI for any of them), so a plain `-r freeze` cannot
+# fetch them -- they are installed from these direct references first, and
+# their bare lines are filtered out of the freeze copy.
 # Keeping them in ONE array is what lets the state hash below cover them: bump a
-# rev here and the hash changes, which forces a re-apply on the next run.
-$engineGitPins = @(
+# rev/wheel URL here and the hash changes, which forces a re-apply on the next
+# run.
+#
+# The sageattention entry is a prebuilt wheel (not a git pin): woct0rdho's
+# Windows build for sageattention 2.2.0, matched to this project's exact
+# torch 2.9.1+cu128 (a mismatched wheel fails the ABI-tagged import at load
+# time, not at install time). `%2B` is the URL-encoded form of `+` inside the
+# wheel filename's local version segment (`2.2.0+cu128torch2.9.1.post6`) --
+# keep this string SINGLE-quoted so PowerShell does not try to interpolate it.
+# Re-added 2026-07-31 (see .NOTES above and D4 in the Acceleration plan): this
+# is the only supported source for sageattention -- engine-venv-pyproject.toml
+# deliberately does NOT list it (see that file's header comment), because
+# -ResolveLatest resolves an unvalidated newer torch this ABI-pinned wheel is
+# not built against.
+$engineDirectPins = @(
     "diffusers @ git+https://github.com/huggingface/diffusers.git@01de02e8b4f2cc91df4f3e91cb6535ebcbeb490c"
     "ltx-core @ git+https://github.com/Lightricks/LTX-2.git@00dc53d3f81c405932f9f16d9c57557de411e702#subdirectory=packages/ltx-core"
     "ltx-pipelines @ git+https://github.com/Lightricks/LTX-2.git@00dc53d3f81c405932f9f16d9c57557de411e702#subdirectory=packages/ltx-pipelines"
+    'sageattention @ https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu128torch2.9.1.post6-cp310-abi3-win_amd64.whl'
 )
 
-# SHA-256 over the freeze body PLUS the git pins. The freeze file alone is NOT a
-# sufficient input: the 3 revs are hardcoded in this script, so a rev bump would
-# otherwise leave the hash unchanged and never re-apply. Line endings are
-# normalised first so a CRLF/LF checkout flip does not masquerade as a change.
+# SHA-256 over the freeze body PLUS the direct pins. The freeze file alone is
+# NOT a sufficient input: the pinned revs/URLs are hardcoded in this script, so
+# a bump would otherwise leave the hash unchanged and never re-apply. Line
+# endings are normalised first so a CRLF/LF checkout flip does not masquerade
+# as a change.
 function Get-EngineStateHash {
     param(
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $GitPins
+        [Parameter(Mandatory)] [string[]] $DirectPins
     )
     $body = [System.IO.File]::ReadAllText($FreezeFile).Replace("`r`n", "`n")
-    $payload = $body + "`n" + ($GitPins -join "`n") + "`n"
+    $payload = $body + "`n" + ($DirectPins -join "`n") + "`n"
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         $digest = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))
@@ -255,10 +278,12 @@ function Get-EngineStateHash {
 
 # The 2-stage deterministic freeze apply, called by BOTH the create path and the
 # re-sync path (never inline a second copy of this).
-#  (a) install the 3 git packages at their pinned revs (see $engineGitPins).
+#  (a) install the 3 git packages + 1 direct-URL wheel at their pinned refs (see
+#      $engineDirectPins).
 #  (b) install the remaining pinned wheels from a TEMP copy of the freeze that has
-#      those 3 bare lines removed (already installed in (a); left in place uv
-#      would fetch some other PyPI build of the same version).
+#      those 4 bare lines removed (already installed in (a); left in place uv
+#      would fetch some other PyPI build of the same version -- and for
+#      sageattention there IS no PyPI build at all).
 # The cu128 --index and --index-strategy in (b) are BOTH load-bearing: without
 # them uv resolves CPU-only torch/torchaudio wheels (known uv bug for the
 # platform-marker-less torchaudio source).
@@ -266,17 +291,17 @@ function Invoke-EngineFreezeApply {
     param(
         [Parameter(Mandatory)] [string]   $EnginePython,
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $GitPins
+        [Parameter(Mandatory)] [string[]] $DirectPins
     )
-    Write-Do "install 3 git packages at pinned revs (diffusers / ltx-core / ltx-pipelines)"
-    $gitArgs = @("pip", "install", "--python", $EnginePython) + $GitPins
-    uv @gitArgs
-    if ($LASTEXITCODE -ne 0) { throw "engine git-package install failed." }
+    Write-Do "install direct-reference packages (3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention)"
+    $directArgs = @("pip", "install", "--python", $EnginePython) + $DirectPins
+    uv @directArgs
+    if ($LASTEXITCODE -ne 0) { throw "engine direct-pin install failed." }
 
     # Distribution names taken from the pins themselves, so this filter cannot
     # drift out of sync with the list above.
-    $gitNames = $GitPins | ForEach-Object { [regex]::Escape((($_ -split ' ')[0])) }
-    $gitLineRe = "^(" + ($gitNames -join "|") + ")=="
+    $directNames = $DirectPins | ForEach-Object { [regex]::Escape((($_ -split ' ')[0])) }
+    $gitLineRe = "^(" + ($directNames -join "|") + ")=="
 
     $tmpFreeze = Join-Path ([System.IO.Path]::GetTempPath()) ("venv-engine.freeze.nogit.{0}.txt" -f ([guid]::NewGuid().ToString("N")))
     try {
@@ -329,7 +354,7 @@ if ($SkipVenv) {
     Write-Step "Engine venv .venv-engine  (torch cu128 stack, deterministic freeze)"
     if (-not (Test-Path $freezeSrc)) { throw "Engine freeze file not found: $freezeSrc" }
 
-    $wantState = Get-EngineStateHash -FreezeFile $freezeSrc -GitPins $engineGitPins
+    $wantState = Get-EngineStateHash -FreezeFile $freezeSrc -DirectPins $engineDirectPins
     $haveState = ""
     if (Test-Path $engineStateFile) {
         $haveState = ((Get-Content $engineStateFile -Raw) -replace '\s', '')
@@ -339,7 +364,7 @@ if ($SkipVenv) {
         Write-Do "uv venv --python 3.12 .venv-engine"
         uv venv --python 3.12 .venv-engine
         if ($LASTEXITCODE -ne 0) { throw "uv venv .venv-engine failed." }
-        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -GitPins $engineGitPins
+        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -DirectPins $engineDirectPins
         Set-Content -Path $engineStateFile -Value $wantState -Encoding ascii
         Write-Ok ".venv-engine ready"
     } elseif ($haveState -eq $wantState) {
@@ -354,7 +379,7 @@ if ($SkipVenv) {
         } else {
             Write-Do "no completion marker found (interrupted install, or built before re-sync existed) -- re-applying the freeze"
         }
-        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -GitPins $engineGitPins
+        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -DirectPins $engineDirectPins
         Set-Content -Path $engineStateFile -Value $wantState -Encoding ascii
         Write-Ok ".venv-engine re-synced"
     }
@@ -364,15 +389,24 @@ if ($SkipVenv) {
 $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
 
 # ----------------------------------------------------------------------------
-# Attention backend: nothing to install, on any GPU.
+# Attention backend: nothing EXTRA to install here, on any GPU.
 #
-# PyTorch SDPA is the backend the engine actually uses, on every architecture.
-# This step installs nothing at all -- not on any arch, not optionally.
-# (Historically this step could pick up a prebuilt xformers wheel out of wheels/;
-# that path was removed because such a wheel is compiled for ONE compute
-# capability and installs cleanly on machines it cannot run on. If you want to
-# experiment with xformers, build and install it by hand -- see
+# PyTorch SDPA is the always-available backend on every architecture, and this
+# step (still) does not install anything for it -- not on any arch, not
+# optionally. (Historically this step could pick up a prebuilt xformers wheel
+# out of wheels/; that path was removed because such a wheel is compiled for
+# ONE compute capability and installs cleanly on machines it cannot run on. If
+# you want to experiment with xformers, build and install it by hand -- see
 # scripts/build_xformers.ps1 -- and note the engine code does not import it.)
+#
+# sageattention, the optional second backend, is NOT installed here either --
+# it was re-added 2026-07-31 as one of the $engineDirectPins pinned wheels
+# above (step 4), alongside triton-windows (its runtime JIT dependency, in
+# engine/venv-engine.freeze.txt) which bundles its own TinyCC/ptxas and needs
+# no Visual Studio on the end-user machine. It was removed as dead weight in
+# the 2026-07-28 cleanup (PENDING_TASKS.md 3-25) and came back once the
+# Acceleration feature's SageAttentionService gave it a real consumer. SDPA
+# remains the default at generation time; sage is opt-in per job.
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------

@@ -1003,6 +1003,46 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     poll_timeout = reg(gr.Number(value=120, label=L("lbl_timeout"),
                                                  precision=0, minimum=1), "lbl_timeout")
 
+                # ---- Acceleration (per-job speed options; no restart) ----
+                # Only the attention selector is implemented. The fused-GGUF
+                # checkbox and the VAE radio are DISABLED placeholders: they are
+                # not handler inputs and never enter a request payload, so there
+                # is no "displayed only" trap where a greyed-out control silently
+                # claims to do something. NOTE: the VAE selector is unrelated to
+                # the server's vae_tiling (a VRAM-saving tile split).
+                reg(gr.Markdown(f"### {L('accel_section_title')}"),
+                    "accel_section_title", "value")
+                reg(gr.Markdown(L("accel_note"), elem_classes=["note"]),
+                    "accel_note", "value")
+                accel_fused_gguf = reg(gr.Checkbox(
+                    value=False, interactive=False,
+                    label=L("accel_lbl_fused_gguf"),
+                    info=L("accel_info_unimplemented"),
+                ), "accel_lbl_fused_gguf")
+                reg(accel_fused_gguf, "accel_info_unimplemented", "info")
+                # The radio's VALUES are the API literals ("sdpa"/"sage"); the
+                # displayed choice strings are deliberately fixed, untranslated
+                # text so switch_language needs no extra branch (only the label
+                # and the info line are registered for translation).
+                # Availability is NOT gated here: this UI ships with the server,
+                # so it runs on the machine that has (or has not) SageAttention
+                # installed, and the API degrades a sage request to sdpa on its
+                # own — a client-side lockout would only add a second, drifting
+                # source of truth.
+                attention_backend = reg(gr.Radio(
+                    choices=[("sdpa", "sdpa"), ("sage attention", "sage")],
+                    value="sdpa", label=L("accel_lbl_attention"),
+                    info=L("accel_info_attention"),
+                ), "accel_lbl_attention")
+                reg(attention_backend, "accel_info_attention", "info")
+                accel_vae = reg(gr.Radio(
+                    choices=[("Default", "default"), ("PruneVAED", "prune_vaed")],
+                    value="default", interactive=False,
+                    label=L("accel_lbl_vae"),
+                    info=L("accel_info_unimplemented"),
+                ), "accel_lbl_vae")
+                reg(accel_vae, "accel_info_unimplemented", "info")
+
                 # ---- Server config viewer (raw /config + spill-free table) ----
                 reg(gr.Markdown(f"### {L('h_server')}"), "h_server", "value")
                 with gr.Accordion(L("sum_config"), open=False) as config_accordion:
@@ -1187,7 +1227,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
                      batch_img_dir_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
-                     nag_method_v, vsf_scale_v):
+                     nag_method_v, vsf_scale_v, attention_backend_v):
             if not batch_enable_v:
                 # Single-generation path: byte-identical delegation (first 40
                 # positionals ARE the generate() signature); nag_*/neg_method/
@@ -1207,7 +1247,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
                     nag_enabled=nag_enabled_v, nag_scale=nag_scale_v,
                     nag_tau=nag_tau_v, nag_alpha=nag_alpha_v,
-                    neg_method=nag_method_v, vsf_scale=vsf_scale_v)
+                    neg_method=nag_method_v, vsf_scale=vsf_scale_v,
+                    attention_backend=attention_backend_v)
                 return
 
             rows = batch_rows_v or []
@@ -1307,6 +1348,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 nag_alpha=float(nag_alpha_v),
                 neg_method=nag_method_v,
                 vsf_scale=float(vsf_scale_v),
+                # Acceleration: the batch runner builds its payloads from THIS
+                # snapshot, not from handler args — without this line an
+                # overnight batch would silently stay on sdpa.
+                attention_backend=attention_backend_v or "sdpa",
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1338,9 +1383,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         ).then(
             dispatch,
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
-            # vsf_scale, are APPENDED at the very end, after every
-            # pre-existing positional (matching dispatch()'s signature order,
-            # which appends them after batch_img_dir_v).
+            # vsf_scale, then the Acceleration attention selector, are APPENDED
+            # at the very end, after every pre-existing positional (matching
+            # dispatch()'s signature order, which appends them after
+            # batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1350,7 +1396,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_out_mode, batch_out_dir, batch_add_replace,
                     batch_img_dir,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
-                    nag_method, vsf_scale],
+                    nag_method, vsf_scale, attention_backend],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1781,10 +1827,20 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         for _slot in chain_clip_slots:
             chain_clip_inputs.extend(_slot)
 
+        # Acceleration: the attention selector is APPENDED at the very end of the
+        # chain inputs list below. generate_chain keeps ``src_audio`` as its last
+        # POSITIONAL parameter (never wired from this tab, and relied on
+        # positionally by tests/test_gradio_v2v_a2v.py's _chain_args), so the
+        # trailing value cannot be delivered positionally -- this thin wrapper
+        # peels it off and forwards it as a KEYWORD, the same discipline the
+        # Generate tab's dispatch() uses.
+        def chain_dispatch(*args):
+            yield from chain_generate(*args[:-1], attention_backend=args[-1])
+
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
         ).then(
-            chain_generate,
+            chain_dispatch,
             # Positional-order contract with make_chain_handler.generate_chain
             # (handlers.py): this list stops at ``chunked_upsample`` -- the
             # function's remaining trailing params (nag_enabled, nag_scale,
@@ -1794,6 +1850,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # -> neg_method/vsf_scale -> src_audio). ``src_audio``
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
+            # The Acceleration attention selector is APPENDED last and reaches
+            # the handler as a keyword via chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -1801,7 +1859,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     lang_state, poll_interval, poll_timeout,
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
-                    nag_method, vsf_scale],
+                    nag_method, vsf_scale, attention_backend],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),

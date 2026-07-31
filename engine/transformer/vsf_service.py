@@ -246,6 +246,14 @@ def _make_vsf_forward(
                 q, k, attn.heads, int(neg_context.shape[1]), modality, tuple(context.shape)
             )
 
+        # Goes through whatever backend is installed on the module — including
+        # SageAttention when the job asked for it (sage_attention_service.py
+        # swaps this very attribute; VSF swaps `forward`). Note what that means
+        # here specifically: the sage kernel receives the CONCATENATED
+        # [K+; K-] / [V+; -scale*V-] tensors, i.e. values whose negative half is
+        # sign-flipped and scaled — the widest dynamic range any INT8/FP8
+        # quantized attention call in this engine sees. Hence its own real-device
+        # gate (G5.6).
         out = attn.attention_function(q, k, v, attn.heads, None)
         del k, v, q
 

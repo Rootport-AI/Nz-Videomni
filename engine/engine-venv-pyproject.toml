@@ -11,6 +11,27 @@ requires-python = ">=3.12"
 # (Gemma tokenizer fallback concern, owner decision). See
 # engine/venv-engine.freeze.txt for the matching freeze-side removal + the
 # transitive orphan analysis.
+#
+# 2026-07-31 (Acceleration feature, D4/STEP 5): triton-windows is RE-ADDED
+# below -- it now has a real importer, engine/transformer/
+# sage_attention_service.py (via sageattention's own runtime JIT use of
+# triton), unlike its fork-era dead-weight predecessor. Its version is left
+# unbound here, same convention as every other engine-venv dependency in this
+# list: the exact pin (triton-windows==3.5.1.post24) lives in
+# engine/venv-engine.freeze.txt, which is what the DEFAULT (freeze) install
+# path actually applies.
+#
+# sageattention itself is DELIBERATELY NOT listed here, in dependencies OR in
+# [tool.uv.sources] below, even though it is also re-added project-wide. The
+# only supported source for it is the direct wheel URL pinned in
+# scripts/install_ltx.ps1's $engineDirectPins (see also
+# engine/venv-engine.freeze.txt), because that wheel is ABI-pinned to this
+# project's exact validated stack (cu128 / torch 2.9.1) and ships no PyPI
+# build uv could resolve here anyway. -ResolveLatest (this file's fresh-resolve
+# path) deliberately does NOT get sage: it resolves an UNVALIDATED newer torch
+# (~2.11), which the pinned wheel is not built against and would silently fail
+# to import (or, worse, import against a mismatched ABI) -- so a -ResolveLatest
+# venv is sage-unavailable by design, not by oversight, and falls back to sdpa.
 dependencies = [
     "pillow>=10.3.0",
     "torch>=2.3.0",
@@ -26,6 +47,7 @@ dependencies = [
     "sentencepiece>=0.1.99",
     "opencv-python-headless>=4.8.0",
     "gguf>=0.10.0",
+    "triton-windows",
 ]
 
 [[tool.uv.index]]

@@ -361,6 +361,7 @@ def build_a2v_chain_payload(
     nag_alpha=0.25,
     neg_method="nag",
     vsf_scale=1.5,
+    attention_backend="sdpa",
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -379,7 +380,11 @@ def build_a2v_chain_payload(
     to the pre-NAG contract the key-order tests lock in. ``neg_method``/
     ``vsf_scale`` are appended right after the four nag_* keys
     (still inside the same ``if nag_enabled:`` block, regardless of which
-    method is actually selected) so the key-order contract stays simple."""
+    method is actually selected) so the key-order contract stays simple.
+    ``attention_backend`` follows the same discipline one step further out: the
+    key is emitted ONLY when it differs from the ``"sdpa"`` default, and always
+    LAST (after the NAG/VSF block), so every pre-Acceleration payload -- and the
+    exact-match/key-order tests locked on it -- stay byte-identical."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -416,6 +421,11 @@ def build_a2v_chain_payload(
         chain_payload["nag_alpha"] = float(nag_alpha)
         chain_payload["neg_method"] = neg_method
         chain_payload["vsf_scale"] = float(vsf_scale)
+    # Acceleration (additive, conditional): sent ONLY for a non-default backend,
+    # and appended after the NAG/VSF block so the default payload keeps its
+    # frozen key order.
+    if attention_backend != "sdpa":
+        chain_payload["attention_backend"] = attention_backend
     return chain_payload
 
 
@@ -439,7 +449,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  ui_lang=None, poll_interval=None, poll_timeout_min=None,
                  src_audio=None,
                  nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
-                 neg_method="nag", vsf_scale=1.5):
+                 neg_method="nag", vsf_scale=1.5,
+                 # Acceleration (ADDITIVE, last): the Settings-tab attention
+                 # selector. ui.py's dispatch() passes it as a KEYWORD, so this
+                 # stays at the very end and no positional call site shifts.
+                 attention_backend="sdpa"):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -665,6 +679,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 nag_alpha=nag_alpha,
                 neg_method=neg_method,
                 vsf_scale=vsf_scale,
+                attention_backend=attention_backend,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -730,6 +745,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             payload["nag_alpha"] = float(nag_alpha)
             payload["neg_method"] = neg_method
             payload["vsf_scale"] = float(vsf_scale)
+        # Acceleration (additive, conditional): appended AFTER the NAG/VSF block
+        # and only for a non-default backend, so the sdpa request stays
+        # byte-identical to the pre-Acceleration payload.
+        if attention_backend != "sdpa":
+            payload["attention_backend"] = attention_backend
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -823,7 +843,13 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        chunked_upsample=False,
                        nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
                        neg_method="nag", vsf_scale=1.5,
-                       src_audio=None):
+                       src_audio=None,
+                       # Acceleration (ADDITIVE, last): ``src_audio`` keeps its
+                       # place as the last POSITIONAL param (the only caller that
+                       # fills it is tests/test_gradio_v2v_a2v.py's _chain_args),
+                       # so the attention selector goes AFTER it and ui.py's
+                       # chain_dispatch forwards it as a KEYWORD.
+                       attention_backend="sdpa"):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1131,6 +1157,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             payload["nag_alpha"] = float(nag_alpha)
             payload["neg_method"] = neg_method
             payload["vsf_scale"] = float(vsf_scale)
+
+        # Acceleration (additive, conditional): appended AFTER the NAG/VSF block
+        # and only for a non-default backend, mirroring the single-generate path
+        # and build_a2v_chain_payload.
+        if attention_backend != "sdpa":
+            payload["attention_backend"] = attention_backend
 
         try:
             resp = api.generate_chain(payload)

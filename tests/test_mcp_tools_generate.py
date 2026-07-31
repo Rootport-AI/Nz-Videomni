@@ -258,6 +258,56 @@ def test_submit_generate_nag_enabled_defaults_vsf_fields_to_nag():
     assert body["vsf_scale"] == 1.5
 
 
+def test_submit_generate_sage_attention_backend_included_in_body():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            attention_backend="sage",
+        )
+    )
+
+    body = captured["body"]
+    assert body["attention_backend"] == "sage"
+
+
+def test_submit_generate_payload_contract_defaults_only_key_set_unchanged_with_default_attention_backend():
+    # Guards D2's byte-identical contract: leaving attention_backend at its
+    # "sdpa" default must not add a key to the payload (trip-wire alongside
+    # the existing exact-match assertion at line ~165).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            attention_backend="sdpa",
+        )
+    )
+
+    body = captured["body"]
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+    assert "attention_backend" not in body
+
+
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
@@ -392,6 +442,63 @@ def test_submit_chain_payload_contract_defaults_only_and_chunked_upsample_always
     assert "source_audio" not in body
     assert "loras" not in body
     assert "reference_video_id" not in body
+
+
+def test_submit_chain_sage_attention_backend_included_in_body():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            attention_backend="sage",
+        )
+    )
+
+    body = captured["body"]
+    assert body["attention_backend"] == "sage"
+
+
+def test_submit_chain_payload_contract_key_set_unchanged_with_default_attention_backend():
+    # Guards D2's byte-identical contract: leaving attention_backend at its
+    # "sdpa" default must not add a key to the payload (trip-wire alongside
+    # the existing exact-match assertion at line ~382).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            attention_backend="sdpa",
+        )
+    )
+
+    body = captured["body"]
+    assert set(body.keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
+    assert "attention_backend" not in body
 
 
 def test_submit_chain_chunked_upsample_false_is_sent_explicitly():

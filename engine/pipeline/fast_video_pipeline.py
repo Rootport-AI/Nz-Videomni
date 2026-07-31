@@ -12,6 +12,7 @@ from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
+from engine.transformer.sage_attention_service import SageAttentionService, SageState
 from engine.transformer.vsf_service import VsfParams, VsfService
 
 
@@ -137,6 +138,14 @@ class LTXFastVideoPipeline:
         # job ever requests NAG — install() itself is the zero-overhead-when-off
         # gate (D3).
         self._nag = NagState()
+
+        # ── Attention backend (sdpa / SageAttention) state ─────────────────────
+        # Same lifetime rules as NagState above: one instance per pipeline,
+        # scoped to a single generate()/generate_chain() call by _set_sage_job +
+        # the try/finally reset in both entry points. Defaults to "sdpa", so a
+        # caller that never mentions the backend gets exactly today's behaviour
+        # (see engine/transformer/sage_attention_service.py).
+        self._sage = SageState()
 
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
@@ -276,6 +285,15 @@ class LTXFastVideoPipeline:
         # existed (D3).
         self._install_nag()
 
+        # ── Install the attention-backend swap (unconditional — same rule) ─────
+        # Order relative to _install_nag() does NOT matter: NAG/VSF replace
+        # ``Attention.forward`` while this replaces ``Attention.attention_function``,
+        # two independent attributes. (The NAG/VSF patched forwards call
+        # attention_function themselves, so a NAG+sage job runs its cross-attention
+        # through the sage kernel either way.) The only requirement is that both
+        # wrap ledger.transformer and therefore run on every build.
+        self._install_sage()
+
         # NOTE: attention-tiling and LoRA install branches (guarded by
         # attention_tile_size > 0 / loras) were removed during the engine
         # relocation: their services (AttentionTileService / LoraService) are not
@@ -345,6 +363,39 @@ class LTXFastVideoPipeline:
         silently reusing a stale encoding).
         """
         self._nag.set_params(nag)
+
+    def _set_sage_job(self, attention_backend: str) -> None:
+        """Set the attention backend ("sdpa" / "sage") for the upcoming job.
+
+        NEVER raises — deliberately, and this is load-bearing. Like
+        ``_set_nag_job`` this runs OUTSIDE generate()'s try/finally (the state
+        has to exist before the transformer is built), so an exception here
+        would skip the matching ``self._sage.reset()`` and leak the request into
+        the next job on a resident worker. An unrecognised value therefore
+        degrades to "sdpa" inside ``SageState.set_backend`` instead; the
+        fail-loud gate for unknown values lives at the protocol edge
+        (``engine.worker._resolve_attention``), where rejecting the job is still
+        possible.
+
+        Chain asymmetry (mirror of the note in ``generate_chain``): this is
+        called from ``generate()`` and from ``generate_chain()`` directly, NOT
+        from ``run_chain`` — unlike ``_set_nag_job``, which run_chain owns
+        because NAG's negative prompt must be encoded between setting the params
+        and building the transformer. sage has nothing to encode, so it is set at
+        the outermost entry point, next to its own ``finally: reset()``.
+        """
+        self._sage.set_backend(attention_backend)
+
+    def attention_used(self) -> str:
+        """What the last finished job's attention actually ran on: "sdpa",
+        "sage", or "sage->sdpa" (sage requested, but the job degraded because a
+        kernel call raised).
+
+        Read by the worker AFTER generate()/generate_chain() returns, which is
+        why it reports the snapshot taken by ``SageState.reset()`` rather than
+        the live state (the pipeline's own finally has already cleared that).
+        """
+        return self._sage.last_attention_used
 
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
@@ -603,6 +654,29 @@ class LTXFastVideoPipeline:
                 vsf_service.install(t)
             else:
                 nag_service.install(t)
+            return t
+
+        self.pipeline.model_ledger.transformer = patched_transformer
+
+    def _install_sage(self) -> None:
+        """Wrap ``ledger.transformer`` so every freshly-built transformer gets
+        its ``attention_function``s swapped for SageAttention — a no-op patch
+        when the current job didn't request it (SageAttentionService.install()
+        returns 0 immediately, having touched nothing).
+
+        No try/except here, unlike _install_block_swap/_install_gguf: this method
+        only stores a closure, it cannot fail. The failures that DO matter
+        (missing wheel, unhappy kernel) are handled inside the service, which
+        degrades to sdpa and records that as ``attention_used="sage->sdpa"`` —
+        the discipline is deliberately different from NAG's fail-loud because
+        sage changes speed, not output (see sage_attention_service's docstring).
+        """
+        sage_service = SageAttentionService(lambda: self._sage)
+        original_transformer = self.pipeline.model_ledger.transformer
+
+        def patched_transformer() -> torch.nn.Module:
+            t = original_transformer()
+            sage_service.install(t)
             return t
 
         self.pipeline.model_ledger.transformer = patched_transformer
@@ -1025,6 +1099,7 @@ class LTXFastVideoPipeline:
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
         nag: NagParams | VsfParams | None = None,
+        attention_backend: str = "sdpa",
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -1045,6 +1120,11 @@ class LTXFastVideoPipeline:
         # it explicitly, ``None`` included, so a NAG job followed by a plain job
         # cleanly detaches instead of leaking the prior negative prompt.
         self._set_nag_job(nag)
+        # Attention backend, same "every job sets it explicitly" rule as NAG.
+        # Kept LAST of the three _set_*_job calls on purpose: _set_ic_job can
+        # raise, and it must not do so with the sage request already armed but
+        # the try/finally not yet entered.
+        self._set_sage_job(attention_backend)
 
         try:
             tiling_config = default_tiling_config(
@@ -1085,6 +1165,9 @@ class LTXFastVideoPipeline:
             # above, but NAG has no "revert to create-time default" concept, so
             # the only correct end state is fully cleared).
             self._nag.reset()
+            # Same guard for the attention backend; reset() also snapshots what
+            # this job actually ran on for attention_used() below.
+            self._sage.reset()
 
     @torch.inference_mode()
     def generate_chain(
@@ -1106,6 +1189,7 @@ class LTXFastVideoPipeline:
         ic_attention_strength: float | None = None,
         chunked_upsample: bool = False,
         nag: NagParams | VsfParams | None = None,
+        attention_backend: str = "sdpa",
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -1138,8 +1222,18 @@ class LTXFastVideoPipeline:
         ``finally: self._nag.reset()`` below still runs regardless of which layer
         set it, so NAG state never survives past this call on the resident
         pipeline.
+
+        ``attention_backend`` ("sdpa" / "sage", additive): set HERE rather than
+        inside run_chain — the deliberate opposite of ``nag`` above. NAG's
+        params have to be set by whoever also encodes the negative prompt,
+        because install() rejects "requested but not encoded"; the attention
+        backend has no such ordering constraint, so it is armed at the outermost
+        entry point where its ``finally: reset()`` also lives. See
+        ``_set_sage_job``'s docstring for the mirror of this note.
         """
         from engine.pipeline.chain_pipeline import run_chain
+
+        self._set_sage_job(attention_backend)
 
         try:
             return run_chain(
@@ -1166,6 +1260,7 @@ class LTXFastVideoPipeline:
             )
         finally:
             self._nag.reset()
+            self._sage.reset()
 
     @torch.inference_mode()
     def warmup(self, output_path: str) -> None:

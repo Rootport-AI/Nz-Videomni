@@ -421,3 +421,105 @@ def test_vsf_fields_accepted_generate():
     )
     assert req.neg_method == "vsf"
     assert req.vsf_scale == 1.7
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Acceleration — attention_backend (implemented) + the two MOCK fields
+# (fused_gguf_dequant_gemm / vae_mode, accepted but never consumed).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_acceleration_fields_default_values_generate():
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.attention_backend == "sdpa"
+    assert req.fused_gguf_dequant_gemm is False
+    assert req.vae_mode == "default"
+
+
+def test_acceleration_fields_default_values_chain():
+    from api.models import GenerateChainRequest
+
+    req = GenerateChainRequest(**CHAIN_BASE)
+    assert req.attention_backend == "sdpa"
+    assert req.fused_gguf_dequant_gemm is False
+    assert req.vae_mode == "default"
+
+
+def test_acceleration_fields_accepted_generate(client):
+    # All three at non-default values are ACCEPTED (no validator gates them —
+    # sage availability is a runtime capability, not a request constraint: an
+    # engine without sage degrades to sdpa rather than rejecting the job).
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "attention_backend": "sage", "fused_gguf_dequant_gemm": True,
+              "vae_mode": "prune_vaed"},
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_acceleration_fields_accepted_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "attention_backend": "sage",
+              "fused_gguf_dequant_gemm": True, "vae_mode": "prune_vaed"},
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_attention_backend_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "attention_backend": "flash"},
+    )
+    assert r.status_code == 422
+
+
+def test_attention_backend_invalid_value_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "attention_backend": "flash"},
+    )
+    assert r.status_code == 422
+
+
+def test_vae_mode_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "vae_mode": "not-a-mode"},
+    )
+    assert r.status_code == 422
+
+
+def test_chain_to_clip_request_transcribes_acceleration_fields():
+    # DIRECT guard for the to_clip_request transcription (the LIVE path
+    # job_store.create_chain_if_idle uses to build JobRecord.request). Unlike the
+    # nag fields, an omission here does NOT fail validation -- it silently
+    # degrades a chain job's stored request to the sdpa/default values, so GET
+    # /jobs and metadata.json would mis-report what was asked for. Only this
+    # direct check can catch it.
+    from api.models import GenerateChainRequest
+
+    model = GenerateChainRequest(**{
+        **CHAIN_BASE,
+        "attention_backend": "sage",
+        "fused_gguf_dequant_gemm": True,
+        "vae_mode": "prune_vaed",
+    })
+    clip0 = model.to_clip_request(0)
+    assert clip0.attention_backend == "sage"
+    assert clip0.fused_gguf_dequant_gemm is True
+    assert clip0.vae_mode == "prune_vaed"
+
+    # ...and the default chain transcribes the defaults (no accidental flip).
+    plain = GenerateChainRequest(**CHAIN_BASE).to_clip_request(0)
+    assert plain.attention_backend == "sdpa"
+    assert plain.fused_gguf_dequant_gemm is False
+    assert plain.vae_mode == "default"

@@ -18,6 +18,12 @@
 #   ltx-core: git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-core @ 00dc53d3f81c405932f9f16d9c57557de411e702
 #   ltx-pipelines: git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-pipelines @ 00dc53d3f81c405932f9f16d9c57557de411e702
 #
+# 2026-07-31 re-addition: a FOURTH distribution, sageattention, is also a bare
+# 'name==version' pin below for the same reason (no matching PyPI build), but
+# via a direct WHEEL URL, not git:
+#   sageattention: https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu128torch2.9.1.post6-cp310-abi3-win_amd64.whl
+# See scripts/install_ltx.ps1's $engineDirectPins for the authoritative pin.
+#
 # 2026-07-28 cleanup (PENDING_TASKS.md §3-25): removed 19 entries -- the 10
 # fork-era (4ea5c4b) leftovers with zero importers (annotated-doc, fastapi,
 # ftfy, ImageIO, imageio-ffmpeg, peft, pynvml, sageattention, triton-windows,
@@ -30,6 +36,17 @@
 # Wave B1 report for the full reverse-dependency table. sentencepiece and
 # protobuf are deliberately KEPT (Gemma tokenizer fallback concern, owner
 # decision).
+#
+# 2026-07-31 (Acceleration feature, D4/STEP 5): sageattention and
+# triton-windows are RE-ADDED, two of the 19 above. This time each has a real
+# importer -- engine/transformer/sage_attention_service.py -- so this is not a
+# repeat of the fork-era dead-weight mistake. sageattention==2.2.0+... below is
+# a BARE line (no matching PyPI build exists for this wheel): it is installed
+# from the direct wheel URL pinned in scripts/install_ltx.ps1's
+# $engineDirectPins, same mechanism as the diffusers/ltx-core/ltx-pipelines git
+# pins, and that bare line is what lets `$gitLineRe`-style filtering exclude it
+# from the plain `-r freeze` install. triton-windows is a NORMAL line (real
+# PyPI package) and installs straight from this freeze like everything else.
 #
 accelerate==1.12.0
 annotated-types==0.7.0
@@ -67,6 +84,7 @@ PyYAML==6.0.3
 regex==2026.1.15
 requests==2.32.5
 safetensors==0.7.0
+sageattention==2.2.0+cu128torch2.9.1.post6
 scipy==1.17.0
 sentencepiece==0.2.1
 setuptools==82.0.0
@@ -77,6 +95,7 @@ torchaudio==2.9.1+cu128
 torchvision==0.24.1+cu128
 tqdm==4.67.3
 transformers==4.57.6
+triton-windows==3.5.1.post24
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.6.3

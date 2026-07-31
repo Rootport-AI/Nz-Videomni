@@ -94,6 +94,37 @@ class GenerateRequest(BaseModel):
     # レンジ相当）。実用域は1.5〜5。
     vsf_scale: float = Field(1.5, ge=0.0, le=10.0)
 
+    # ─── Acceleration（生成高速化）— ADDITIVE/optional。3つとも既定値のまま
+    # 省略したリクエストは、ワーカーペイロードが導入前とバイト単位で同一になる。
+    #
+    # attention_backend: attention の実装を差し替える。"sdpa"（既定）は
+    # PyTorch の scaled_dot_product_attention、"sage" は SageAttention 2.2.0
+    # （INT8/FP8 量子化 attention カーネル）。実測で 720p end-to-end 約1.17倍・
+    # stage2 約1.56倍、VRAM 増なし。
+    # 【重要】sage は数値精度が sdpa と異なるため、**同一シードでも生成結果の
+    # 細部が変わる**（バグではなく仕様）。厳密な再現性が要る場合は sdpa のまま
+    # にすること。実際に使われた backend は metadata.json の attention_used に
+    # 記録される（「設定したのに効いていない」を検出するため）。
+    # 未導入環境で "sage" を指定した場合はジョブを落とさず sdpa へ降格する
+    # （速度最適化であって生成結果の正しさの前提ではないので、NAG のような
+    # fail-loud とは規律を変えている）。利用可否は GET /status の
+    # acceleration.sage_available で確認できる。
+    attention_backend: Literal["sdpa", "sage"] = "sdpa"
+
+    # ─── モック2件（受理のみ・エンジン未消費）───
+    # 以下2つは UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
+    # 受け取っても生成は何も変わらない。ワーカーペイロードにも GET /status にも
+    # 載せない（載せると「設定したのに効いていない」罠になる）。一方、
+    # model_dump() 経由の metadata.json / GET /jobs の request には自然に現れる
+    # ——two_stage_hq の pipeline と同じ既存前例で、exclude 等の細工はしない。
+    #
+    # fused_gguf_dequant_gemm: GGUF の逆量子化と GEMM を1カーネルに融合する案。
+    fused_gguf_dequant_gemm: bool = False
+    # vae_mode: VAE の実装選択（"prune_vaed" は枝刈り版 VAE デコーダ）。
+    # 既存の vram.vae_tiling（VRAM 節約のためのタイル分割）とは**無関係**——
+    # 名前が似ているだけで、こちらは VAE 実装そのものの差し替えを指す。
+    vae_mode: Literal["default", "prune_vaed"] = "default"
+
     # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -337,6 +368,15 @@ class GenerateChainRequest(BaseModel):
     neg_method: Literal["nag", "vsf"] = "nag"
     vsf_scale: float = Field(1.5, ge=0.0, le=10.0)
 
+    # Acceleration（生成高速化）— 詳細は GenerateRequest の同名フィールドを参照。
+    # チェーンでは全クリップ・全ステージ共通で1つの設定が効く。sage 有効時は
+    # 同一シードでも生成結果の細部が変わる点、モック2件（fused_gguf_dequant_gemm /
+    # vae_mode）が受理のみでエンジン未消費である点、vae_mode が既存 vae_tiling と
+    # 無関係である点も、すべて GenerateRequest と同じ。
+    attention_backend: Literal["sdpa", "sage"] = "sdpa"
+    fused_gguf_dequant_gemm: bool = False
+    vae_mode: Literal["default", "prune_vaed"] = "default"
+
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
     crop_output: CropOutput | None = None
@@ -572,6 +612,14 @@ class GenerateChainRequest(BaseModel):
         out of the stored/serialized request for a chain job — omitting the nag
         fields would make chain creation 500 (nag_enabled True + empty
         negative_prompt would fail GenerateRequest's own validator).
+
+        The acceleration fields (``attention_backend`` and the two mock fields
+        ``fused_gguf_dequant_gemm`` / ``vae_mode``) are transcribed for the same
+        reason: they do not fail validation when dropped, so an omission would
+        silently mis-report a chain job's reproducibility metadata (GET /jobs'
+        ``request`` and metadata.json would claim sdpa/default for a sage chain).
+        The chain's OWN worker payload is built from the chain request, not from
+        this per-clip copy — this transcription only feeds the stored record.
         """
         clip = self.clips[index]
         return GenerateRequest(
@@ -583,6 +631,9 @@ class GenerateChainRequest(BaseModel):
             nag_alpha=self.nag_alpha,
             neg_method=self.neg_method,
             vsf_scale=self.vsf_scale,
+            attention_backend=self.attention_backend,
+            fused_gguf_dequant_gemm=self.fused_gguf_dequant_gemm,
+            vae_mode=self.vae_mode,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

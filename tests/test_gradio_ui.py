@@ -342,7 +342,10 @@ def test_chain_generate_btn_click_chain_has_disable_generate_restore_stages():
     chain_btn = next(c for c, k, a in registry if k == "btn_concat" and a == "value")
 
     start, middle, end = _click_chain(demo, chain_btn)
-    assert middle.fn is not None and middle.fn.__name__ == "generate_chain"
+    # Acceleration: the middle stage is now the ``chain_dispatch`` closure,
+    # which forwards the appended attention selector to ``generate_chain`` as a
+    # keyword (same shape as the Generate tab's ``dispatch`` above).
+    assert middle.fn is not None and middle.fn.__name__ == "chain_dispatch"
     assert end.fn is not None and end.fn.__name__ == "_restore"
     assert any(o._id == chain_btn._id for o in start.outputs)
     assert any(o._id == chain_btn._id for o in end.outputs)
@@ -653,3 +656,68 @@ def test_vsf_scale_info_registered_and_translates_on_language_switch():
         if k == "vsf_lbl_scale" and a == "label"
     )
     assert updates[scale_label_idx]["label"] == LABELS["ja"]["vsf_lbl_scale"]
+
+
+# --------------------------------------------------------------------------- #
+# Acceleration section (Settings tab). Only the attention selector is real; the
+# fused-GGUF checkbox and the VAE radio are DISABLED placeholders that are not
+# wired into any handler input, so they can never reach a payload.
+# --------------------------------------------------------------------------- #
+def test_acceleration_attention_radio_values_and_default():
+    demo = _demo()
+    en = LABELS["en"]
+    radios = [c for c in demo.blocks.values()
+              if isinstance(c, gr.Radio) and c.label == en["accel_lbl_attention"]]
+    assert len(radios) == 1, "attention radio not found"
+    radio = radios[0]
+    # VALUES are the API literals; the visible choice strings are fixed,
+    # untranslated text (so switch_language needs no extra branch).
+    assert [v for _l, v in radio.choices] == ["sdpa", "sage"]
+    assert [label for label, _v in radio.choices] == ["sdpa", "sage attention"]
+    assert radio.value == "sdpa"
+    assert radio.interactive is not False
+    assert radio.info == en["accel_info_attention"]
+
+
+def test_acceleration_mock_controls_are_disabled():
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_fused_gguf"]]
+    assert len(boxes) == 1, "fused-GGUF checkbox not found"
+    assert boxes[0].value is False
+    assert boxes[0].interactive is False
+
+    vae = [c for c in demo.blocks.values()
+           if isinstance(c, gr.Radio) and c.label == en["accel_lbl_vae"]]
+    assert len(vae) == 1, "VAE radio not found"
+    assert vae[0].interactive is False
+    assert [v for _l, v in vae[0].choices] == ["default", "prune_vaed"]
+
+
+def test_acceleration_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_section_title", "value"),
+                      ("accel_lbl_attention", "label"),
+                      ("accel_info_attention", "info"),
+                      ("accel_lbl_vae", "label")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
+    # The selector must be an INPUT of both generate flows -- a section that
+    # renders but is not wired is exactly the "displayed only" trap.
+    demo = _demo()
+    en = LABELS["en"]
+    radio = next(c for c in demo.blocks.values()
+                 if isinstance(c, gr.Radio) and c.label == en["accel_lbl_attention"])
+    deps_with_radio = [d for d in demo.fns.values()
+                       if radio in getattr(d, "inputs", [])]
+    assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
+    # And it is the LAST input of each (the APPENDED wiring discipline).
+    for dep in deps_with_radio:
+        assert dep.inputs[-1] is radio

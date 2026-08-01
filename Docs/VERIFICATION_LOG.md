@@ -2454,6 +2454,8 @@ MCPの `stdio` トランスポートはJSON-RPCを標準出力に流すため、
 
 **sageattentionも削除する理由**: 入っているのは旧世代1.0.6で、将来の高速推論モードは現行世代（SageAttention 2系）の新規選定になるため温存価値がない。フォーク元のコード自体に「有効化すると2倍遅くなる原因を調査中（既定OFF）」と記されていた。
 
+> **2026-07-31追記（`sageattention`／`triton-windows` の再導入）**: 上記19エントリのうちこの2つは、Acceleration（生成の高速化）機能の実装にともなって**エンジン用仮想環境へ戻した**（§43.3）。**当時の判断と矛盾はしない。** 2026-07-28にここで削除したのは旧世代の `sageattention` **1.0.6**＝コードから一度も import されない死重依存であり、再導入したのは現行世代の **2.2.0**（torch 2.9.1+cu128 向けのビルド済み wheel を直リンクで固定）で、`engine/transformer/sage_attention_service.py` という**実際の消費者がある**。「実消費者のない依存は置かない」という本節の基準はそのまま維持されている。上の一文が予告していた「将来の高速推論モードは現行世代の新規選定になる」という見立てが、そのとおりに実現した形である。
+
 **保留（削除しない）**: `sentencepiece`／`protobuf`の2つ。Gemmaトークナイザのフォールバック経路で使われる可能性を静的解析で否定しきれず、壊れたときの症状（トークナイザロード失敗）が致命的なわりに節約が小さい（2026-07-28オーナー決定）。
 
 **サイズ・エントリ数の変化**: `engine/venv-engine.freeze.txt`のエントリ数は**69→50**。`.venv-engine`の実ディスク使用量は約230MB縮小（**4.98GB→4.77GB**）。
@@ -2500,6 +2502,8 @@ MCPの `stdio` トランスポートはJSON-RPCを標準出力に流すため、
 - **この回帰が持つ副次的な意味**: これらの基準SHA自体はNAG（§38）実装より前から存在する値のため、今回のバイト一致は「依存整理（§40.1〜40.3）が出力に触れていないこと」だけでなく、「単発T2V／最小I2Vにおいて NAG OFF 時の出力がバイト不変であること」も同時に裏付けている（＝§38.4 G0 の単発T2V／I2V分に相当。A2V／chain／バッチのG0は未実施のまま）。
 
 **§40は実機SHA回帰が未実施の状態でクローズしない。** →**2026-07-28時点でチェックリスト1〜3すべて合格・完了。** 依存整理バッチ（§40.1〜40.3）の実機確認はこれで完結する。
+
+> **2026-07-31追記（§43との関係）**: 2026-07-31の Acceleration 機能で `sageattention`／`triton-windows` の2件を再導入した（§40.1の追記・§43.3）。この依存構成の変更に対する実機確認は、**本節と同じ形のSHA回帰を繰り返すのではなく、§43 の G9（インストーラを再適用して完走し `sage_available: true` になること）で吸収・代替する**。再導入した2パッケージは既定のジョブでは import すらされない位置にあり、既定経路が従来とバイト同一であることは §43.4 のペイロード完全一致テスト群が構造的に固定しているためである（判断の根拠は §43.7）。
 
 ---
 
@@ -2701,3 +2705,97 @@ HFの非公開dataset（41.6のリンク）をオーナーが実際に目視し�
 
 - **既存エンドポイントへ任意引数を足すときは、「不正値でも新しいエラー応答を作らない」を先に決めてから`Query()`を書くこと。** `ge=0` のような一見自然な制約を付けると、それまで200だったリクエストが422になり得る（クライアントが古い・値の導出にバグがある、のどちらでも起こる）。本件は制約をゼロにして判定をストア側の純ヘルパへ移し、「使えない窓＝トリムしない」に一本化した。
 - **ffmpegへshell outする処理を`async def`の中で直接呼ばないこと。** `run_in_threadpool` を挟まないと、切り出しのあいだイベントループが止まり、進捗ポーリングを含む他の全APIが無応答になる。同期I/Oを足すときは呼び出し側の非同期性を必ず確認する。
+
+---
+
+## 43. ★Acceleration（生成の高速化）機能＝SageAttention 2.2.0 のジョブ単位切替＋モック2項目＝実装完了・機械検証（selfcheck・pytest・型検査・doctest）全PASS・**実機ゲート全項目合格（2026-08-01 オーナー実機確認で完了）**（2026-07-31実装／2026-08-01実機ゲート完了）
+
+> **正本＝本節。** 操作パネル（AviUtl2連携UI）とGradio UIの設定画面に「Acceleration（生成の高速化）」という区画を新設し、生成そのものを速くする切替を3項目ぶん置いた。3項目のうち**実装があるのは attention（注意機構）の実装選択だけ**で、残る2項目は将来の実装枠として置いた**モック（受理はするが効果が無い）**である。attention の選択肢は `sdpa`（PyTorch標準の実装。既定）と `sage`（[SageAttention 2.2.0](https://github.com/thu-ml/SageAttention)＝量子化を使って注意機構の計算そのものを速くする外部カーネル）の2つ。着手条件は2026-07-31の実機スパイク（本節43.5）で「本環境で安全に動き、720pの生成が実測1.17倍速くなり、VRAMは増えない」ことを確認できたことで、オーナー承認済みの計画書（`wise-waddling-dragon.md`、敵対的レビュー1ラウンドと調査エージェント10件の裏取りを経た rev.2）に沿って STEP 1（エンジン）→ STEP 2（APIスキーマ・runner・能力公開）→ STEP 3（Gradio UI）→ STEP 4（MCP公開）→ STEP 5（インストーラ標準同梱）→ STEP 6（フロントエンド）→ STEP 7（本節・ドキュメント）の順で実施した。
+
+### 43.1 決定事項
+
+1. **既定は `sdpa` のまま据え置く**。理由は3つある。①**アップデートで生成結果を黙って変えない**——`sage` は数値精度が異なるため、同じシードを指定しても生成結果の細部が変わる（構図は同じで、細かな質感やノイズの出方が変わる）。既定を差し替えると、利用者が「昨日と同じ設定なのに絵が違う」という説明のつかない体験をすることになる。②`sdpa` は常に正しい参照実装であり、比較の基準として動かさない価値がある。③切替はUIの1クリックで済み、その選択はブラウザ側に保存されるため、速度を取りたい利用者が払うコストが小さい。
+2. **切替の単位はジョブ**。サーバーの再起動もパイプラインの再読み込みも要らない。リクエスト（`GenerateRequest` / `GenerateChainRequest`）のフィールド `attention_backend` を毎回のジョブが持ち、worker がそのジョブの実行直前に注意機構を差し替える。設定ファイルや起動オプションでの固定は導入していない。
+3. **モック2項目は「受理するが効かない」ことを構造で担保する**。`fused_gguf_dequant_gemm`（GGUFの逆量子化と行列積を1つの計算に融合する案）と `vae_mode`（映像を復元するVAEの実装選択。`prune_vaed` は枝刈り版デコーダ）はリクエストとしては受け取るが、**workerへ渡すペイロードにも `GET /status` にも一切載せない**。UI側は常に無効（グレーアウト）表示で、押しても何も起こらない。過去に `fp8_transformer` が「表示はあるが挙動を変えない」状態で長く残った反省から、**実際に使われた方式を後から検証できる仕組み**（下記5）を同時に入れた。`vae_mode` は既存の `vae_tiling`（VRAM節約のためにVAEをタイル分割する設定）とは無関係で、コード上のコメントにもその旨を明記した。
+4. **MCPには実装のある1項目だけを公開する**。`submit_generate` / `submit_chain` の引数に `attention_backend` を追加し、モック2件は追加しない（実装のない切替をエージェントに見せても意味がないため。`two_stage_hq` の `pipeline` と同じ考え方）。
+5. **実際に使われた方式をメタデータに記録する**。worker の完了イベントに `attention_used` を載せ、`seed_used` とまったく同じ経路で `outputs/{job_id}/metadata.json` のトップレベルへ書き出す。値は `"sdpa"` / `"sage"` / `"sage->sdpa"`（sage を要求したが利用不可で降格した）の3種。**実機ゲートの合否判定はログではなくこの値を根拠にした。**
+6. **sage が使えないときはジョブを落とさず降格する**。NAG（§38）や VSF（§41）は「要求したのに条件が揃わなければ 422 で止める」fail-loud の規律だが、Acceleration は**速度の最適化**であって生成結果の意味を変える機能ではないため、規律をあえて変えている。sageattention が導入されていない環境で `sage` を指定しても、警告を1行出して `sdpa` で完走する（この理由はコード上のコメントにも残した）。
+
+### 43.2 実装箇所一覧
+
+- **`engine/transformer/sage_attention_service.py`（新規）**: sage の本体。`SageState`（そのジョブで要求された backend 文字列だけを持つ）、`probe_sage()`（sageattention が実際に import できるかを1回だけ確かめてモジュール変数へキャッシュする。失敗した import を Python 自身はキャッシュしないため必須）、`SageAttentionService.install()`（transformer の各ブロックが持つ `attention_function` を sage 版へ差し替える）。**差し替え対象は48ブロック×6種（`attn1`／`attn2`／`audio_attn1`／`audio_attn2`／`audio_to_video_attn`／`video_to_audio_attn`）＝288モジュール**（NAG が96なのは cross-attention だけを対象にするためで、数が違うのは正しい）。head_dim が sage の対応外であるといった**静的に判定できる条件はインストール時に判定し、対象外のモジュールにはラップ自体を張らない**。実行時に見るのは「マスク付きの呼び出しかどうか」と dtype/device だけにした。
+- **`engine/transformer/sage_selfcheck.py`（新規）**: エンジン用仮想環境（`.venv-engine`）のpythonで直接実行する自己検証（pytestからは収集されない）。3項目＝①`sdpa` と `sage` の出力が数値的に一致すること（コサイン類似度 ≥0.999）②フォールバック行列（マスク付き・非対応dtype等でSDPAへ戻ること）③install件数が288であること。NAG/VSF の selfcheck のような大型のものにはせず、G0の単一成果物として必要な3点に絞った。
+- **`engine/pipeline/fast_video_pipeline.py`**: `_install_nag()` の直後に `_install_sage()` を追加（毎回のビルドで `ledger.transformer` をラップする）。`_set_sage_job()` は `_set_nag_job` と同じ位置に置くため**例外を投げない実装**にし、`finally` でリセットする。**インストールの順序は結果に影響しない**——NAG は `attn.forward` を、sage は `attn.attention_function` を差し替えるので、触る属性が独立しているため。
+- **`engine/pipeline/chain_pipeline.py` / `engine/worker.py`**: chain 側は `generate_chain()` で設定する（NAG が `run_chain` の中で設定しているのは負プロンプトのエンコード順序の制約によるもので、この非対称は相互参照コメントで固定した）。worker には `_resolve_attention()`（未知の値は fail-loud、sage が使えなければ降格）、ジョブ開始ログへの `attn=` 表示、`ready` イベントへの `sage_available` 付与、`done` イベントへの `attention_used` 付与を入れた。**利用可否のプローブはパイプライン構築より前に `try/except BaseException` で完全に囲んで実行し、結果をキャッシュする**（DLLの読み込み失敗やABI不一致が起きてもworkerの起動そのものは絶対に落とさないため）。
+- **`api/models.py`**: `GenerateRequest` / `GenerateChainRequest` の両方に `attention_backend`（`"sdpa"` / `"sage"`、既定 `"sdpa"`）・`fused_gguf_dequant_gemm`（bool、既定 `false`）・`vae_mode`（`"default"` / `"prune_vaed"`、既定 `"default"`）の3フィールドを追加し、`to_clip_request()` にも3つとも転記した（転記漏れの実害はジョブ記録の表示欠落だが、再現性のためのメタデータが正しくなくなるので必須）。
+- **`services/ltx_runner.py`**: `attention_backend` が `"sdpa"` でないときだけ worker ペイロードへ加算する（既定のジョブはペイロードのキーが1つも増えない＝従来とバイト同一）。加えて、engine用仮想環境の site-packages に `sageattention/` と `triton/` が両方あるかを見るファイル存在チェック（`sage_available`、1回だけ評価してキャッシュ）、worker の `ready` からの受領、`done` の `attention_used` の中継を実装した。
+- **`services/pipeline_manager.py`**: `acceleration_status_block()` を新設し、利用可否の真理値表（mock時は `false`／未ロード時はファイル存在チェック／ロード成功時はworker自身の import 判定／ロード失敗・解放後はファイル存在チェック）をこの1箇所に集約した。凍結済みの `vram_optimization` には一切触れていない。metadata.json への `attention_used` の書き出しもここ。
+- **`api/status.py`**: `GET /status` のトップレベルに `"acceleration": {"attention_backends": ["sdpa","sage"], "sage_available": bool}` を追加した。判定経路を示す `sage_source` のような追加フィールドは設けていない（同じ応答の `pipeline_loaded` を見ればどちらの経路の値かが分かるため）。
+- **`mcp_server/tools/generate.py`**: `submit_generate` / `submit_chain` の引数末尾に `attention_backend` を追加。日本語のdocstring（MCPのツール定義の生成元）に「同一シードでも生成結果の細部が変わる」旨と、`backend_status` の `acceleration.sage_available` で利用可否を確認できることを明記した。
+- **`gradio_ui/i18n.py` / `ui.py` / `handlers.py` / `batch.py`**: Settings タブの Behavior と Server config viewer のあいだに Acceleration 区画を新設（①モックのチェックボックス〔無効〕②attention のラジオ③モックのラジオ〔無効〕）。ペイロードへの加算は単発・chain・`build_a2v_chain_payload` の3経路に入れた。**Gradio のバッチはハンドラの引数ではなくスナップショット（`BatchSnapshot`）経由で設定を受け取る**ため、そこへの配線も忘れずに行った（ここが漏れるとバッチだけ永久に `sdpa` のまま、という「表示だけ」の罠の再演になる）。
+- **インストーラ関連（`scripts/install_ltx.ps1` / `engine/venv-engine.freeze.txt` / `engine/engine-venv-pyproject.toml`）**: 43.3の「依存の再導入」を参照。
+
+### 43.3 依存の標準同梱（2026-07-28に削除したものの再導入）
+
+sage を使うには外部パッケージが要るため、**`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24 をエンジン用仮想環境の標準同梱に戻した**。
+
+- `sageattention` は [woct0rdho 版の Windows 用ビルド済み wheel](https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/) を**直リンクで固定**して導入する（`sageattention-2.2.0+cu128torch2.9.1.post6-cp310-abi3-win_amd64.whl`）。torch 2.9.1+cu128 に合わせてビルドされた ABI 固定の wheel であるため、`engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも**載せていない**——`-ResolveLatest`（依存を最新へ解決し直すオプション）は未検証の新しい torch を引く経路であり、この wheel とは互換にならないため。**`-ResolveLatest` を使った環境では sage の動作は保証外**である旨をコメントに明記した。`triton-windows` のみ `dependencies` に載せている（バージョンの固定は freeze 側が持つ）。
+- `triton-windows` は TinyCC と ptxas を同梱しており、**エンドユーザーに Visual Studio の導入を要求しない**ことを確認済み。
+- **§40.1 で削除した19エントリのうち2つを戻したことになるが、当時の判断と矛盾しない。** §40.1 が削除したのは旧世代の `sageattention` **1.0.6**（フォーク由来で、コードから一度も import されていない死重依存）であり、今回入れるのは現行世代の 2.2.0 で、`engine/transformer/sage_attention_service.py` という**実際の消費者がある**。「実消費者のない依存は置かない」という当時の基準はそのまま守られている。同旨の追記を §40.1 にも入れた。
+- **ハッシュが変わるため、導入済みの環境では次回の `setup.bat` 実行時に freeze の再適用が1回走る**（`.venv-engine/.nz-engine-state` との突き合わせによる冪等ガード）。パッケージの差分自体はほぼ無いため、実測では監査（audit）で止まる短時間の処理になる。「即座に終了」ではない点に注意。
+
+### 43.4 機械検証の結果
+
+- **エンジン用仮想環境の selfcheck**: `sage_selfcheck` **3/3 PASS**（数値パリティ cos≥0.999／フォールバック行列／install件数288）。
+- **バックエンドの pytest**（アプリ用仮想環境）: **817 passed / 6 skipped**。§42.2 のベースライン776件に新規41本を加算したもので、既存テストの削除はゼロ。skip の6件は従来どおり torch 未導入によるエンジン系テストの収集スキップで、本件とは無関係。
+- **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
+- **フロントエンドの vitest**: **1585 passed / 10 skipped**（直前の1545件から+40本。前回値の出典はフロントエンド [`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §54.9）。
+- **ネイティブ（`.aux2`）の doctest**: **267ケース全PASS**。
+
+新規テストの重点は「**既定のジョブでは何も増えない**」ことの固定に置いた。worker ペイロードの完全一致断言（`build_a2v_chain_payload` の完全dict一致1本＋キー順序断言5本）と、MCP側の `set(body.keys()) ==` の完全一致断言が既存のトリップワイヤとして張られており、既定時にキーが1つも増えないことをこれらが無改修のまま通ることで担保している。加えて `to_clip_request()` の3フィールド転記を直接検査するテストと、モック2件が worker ペイロードにも `/status` にも現れないことを証明するテストを置いた。
+
+### 43.5 実機ゲート表（2026-07-31〜2026-08-01・全項目合格）
+
+生成テストはMCP経由でエージェントが実施し、目視はオーナーが実施した（既存の運用どおり）。
+
+| ゲート | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| G0 | selfcheck | エンジン用仮想環境で `sage_selfcheck` が全PASS（数値パリティ・フォールバック行列・install件数288） | ✅ 合格（3/3） |
+| G1 | pytest 回帰 | ベースライン776 passed / 6 skipped を下回らず、新規テストも全緑 | ✅ 合格（**817 passed / 6 skipped**） |
+| G2 | 能力公開（ロード前） | `GET /status` に `acceleration` があり `sage_available: true`、凍結済みの `vram_optimization` のキー集合が不変 | ✅ 合格 |
+| G3 | 能力公開（ロード後） | パイプライン読み込み後は worker 自身の判定値へ切り替わり、workerログにも記録される | ✅ 合格 |
+| G4 | 単発 sage（Gradio） | 720p固定シードで成功し、`metadata.json` の `attention_used` が `"sage"`、`sdpa` 比1.15倍以上、VRAM同等、差は細部のみ | ✅ 合格（下記の実測。**平均1.167倍**・peak VRAM差0.08%以内・同一シードでPSNR約27〜28dB） |
+| G5 | IC-LoRA のフォールバック | control系IC-LoRA＋`conditioning_attention_strength=0.6`＋sage で成功し、マスク経路のフォールバックがログに残り、品質は同等 | ✅ 合格（`attention_used="sage"`、マスクフォールバックのINFOログがジョブ内でちょうど1回） |
+| G5.5 | sage × NAG | NAG有効＋sage で成功・品質同等 | ✅ 合格 |
+| G5.6 | sage × VSF | `neg_method="vsf"`＋sage で成功・品質同等 | ✅ 合格 |
+| G6 | chain ＋ sage | 2クリップ以上の720pが成功し、継ぎ目に破綻がない | ✅ 合格（2クリップ×121フレーム・720p） |
+| G7 | 未導入時の縮退 | sageattention を一時退避 → `sage_available: false`、API直叩きで `sage` を指定しても `sdpa` へ降格して完走し、メタデータが `"sage->sdpa"` になる（検証後に復元） | ✅ 合格 |
+| G8 | フロント目視（AviUtl2実機） | 区画の表示・日英の文言・モック2件のグレーアウト・sage での生成・選択の保持 | ✅ 合格（2026-08-01 オーナー実機確認。下記の実測を含む） |
+| G9 | インストーラ | `.nz-engine-state` を削除して再実行し、wheel の直リンク取得と freeze の再適用が1回走って完走する | ✅ 合格（監査止まりで完走・wheel直リンクは HTTP 200 応答） |
+
+**スパイク（2026-07-31・実装着手前の可否判定。RTX 4070 Ti SUPER）**: 720p（1280×768・257フレーム）の生成が end-to-end で **261.4秒 → 224.3秒（1.17倍）**、2段目（stage2）は **32.76 → 20.95 秒/ステップ（1.56倍）**。VRAMのピークは同一。
+
+**G4の本計測**: `sdpa` と `sage` を交互に流した対比較3組で **1.143 / 1.171 / 1.188（平均1.167倍）**。peak VRAM の差は0.08%以内。同一シードでの `sdpa` 版と `sage` 版のPSNRは約27〜28dBで、構図は同一・細部のみが異なる。
+
+**オーナー実機（2026-08-01）**: i2v（画像からの動画生成）＋NAG、1344×1728・153フレームで **460.63秒 → 366.85秒（1.26倍）**。Settings の3項目の見た目・文言も合格。
+
+### 43.6 計測手順の注意（**これを外すと偽のFAILが出る**）
+
+速度の比較をやり直すときは、次の2点を必ず守ること。**単純に「1本目に `sdpa`、2本目に `sage`」を流して比べると 1.09倍程度にしか見えず、合格基準（1.15倍以上）を割って偽のFAILになる。**
+
+1. **worker プロセスの初回ジョブだけが約8%速い。** 原因は特定していないが再現性のある挙動で、比較の1本目に有利な下駄を履かせてしまう。したがって **`sdpa` と `sage` を交互に流す対比較**（sdpa→sage→sdpa→sage…）を行い、隣り合う組どうしで比べること。
+2. **`sage` の計測は2ジョブ目以降で行う。** sage は内部で triton を使い、その初回だけ JIT コンパイル（実行時のカーネル生成）が走るため、1本目には無関係な時間が乗る。
+
+### 43.7 §40（依存整理バッチ）との関係
+
+§40.6 の実機SHA回帰は「依存構成を変えたときに出力がバイト単位で変わらないことを確かめる」ためのチェックリストだったが、**今回の依存の再導入（43.3）については、本節の G9（インストーラの再適用が完走し、`sage_available: true` になること）で吸収・代替する**。理由は、今回追加した2パッケージが「既定のジョブでは import すらされない」位置にあり（`attention_backend != "sdpa"` のときだけ触る）、既定経路のバイト不変性は §43.4 の pytest 側のペイロード完全一致テスト群が構造的に固定しているため、実GPUでのSHA再取得は同じ事実を高いコストで二重に確かめるだけになるからである。§40 側にも同旨の追記を入れた。
+
+### 43.8 既知の無関係な事象（記録のみ）
+
+`GET /status` の `gpu` ブロックが常に `available: false` を返す。これはアプリ用仮想環境（`./.venv`）にCUDA版のtorchを入れない**2プロセス／2仮想環境という構成そのものに由来する既存の挙動**で、今回の改修とは一切関係がない。ただし Acceleration の検証中に `/status` を何度も読むことになり、「GPUが見えていないから sage も効いていないのでは」と紛らわしいため、無関係であることをここに明記しておく（実際のGPU情報はエンジン側のworkerプロセスが持っている）。
+
+### 43.9 残タスク
+
+1. コミットはオーナー判断（本節作成時点で未コミット）。
+2. モック2項目（fused GGUF dequant + GEMM／PruneVAED）の実装は将来課題として起票済み（フロントエンド側台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49・§3-50）。
+3. `sage` を既定にするかどうかの再検討は、フィールドでの安定実績が溜まってからの判断事項として起票済み（同 §4-22。現状は再現性を優先して `sdpa` 既定）。

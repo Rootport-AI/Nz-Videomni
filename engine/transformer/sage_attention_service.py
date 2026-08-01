@@ -36,7 +36,11 @@ Discipline, and why it differs from NAG's (D3):
       2. call-time, dynamic — an attention mask (only the IC-LoRA
          ``attention_strength < 1.0`` path produces one), a non-fp16/bf16
          dtype, or a non-CUDA tensor: fall back to the original callable for
-         THAT call only.
+         THAT call only. The mask case is additionally counted and logged once
+         per job (``SageState.note_masked_fallback``): it is the one degradation
+         that happens on an otherwise perfectly healthy sage job, so it leaves
+         ``attention_used`` at "sage" and would be completely invisible
+         otherwise.
       3. call-time, catastrophic — the kernel itself raises. That is latched
          for the whole job (see ``SageState.latch_fallback``): one warning,
          then every remaining call in the job goes straight to sdpa. Without
@@ -175,12 +179,13 @@ class SageState:
     sageattn's own per-GPU dispatch).
     """
 
-    __slots__ = ("_backend", "_latched", "_last_attention_used")
+    __slots__ = ("_backend", "_latched", "_last_attention_used", "_masked_calls")
 
     def __init__(self) -> None:
         self._backend = "sdpa"
         self._latched = False
         self._last_attention_used = "sdpa"
+        self._masked_calls = 0
 
     @property
     def backend(self) -> str:
@@ -198,6 +203,21 @@ class SageState:
         """A sage kernel call raised earlier in this job — everything from that
         point on runs on the original callable."""
         return self._latched
+
+    @property
+    def masked_calls(self) -> int:
+        """How many calls in THIS job took the attention-mask fallback.
+
+        Nonzero is normal and expected on an IC-LoRA job with
+        conditioning_attention_strength < 1.0 — it is the only thing on this
+        pipeline that produces an attention mask, and sageattn cannot express
+        one. It is exposed (and logged once, see ``note_masked_fallback``)
+        because "some calls quietly went to sdpa" is otherwise invisible: it
+        does not change ``attention_used``, so without this the real-device
+        IC-LoRA gate (G5) would have no positive evidence that the mask path
+        was actually taken.
+        """
+        return self._masked_calls
 
     @property
     def use_sage(self) -> bool:
@@ -242,6 +262,33 @@ class SageState:
         outside the pipeline's try/finally."""
         self._backend = "sage" if backend == "sage" else "sdpa"
         self._latched = False
+        self._masked_calls = 0
+
+    def note_masked_fallback(self, name: str) -> None:
+        """Record one attention-mask fallback, logging on the FIRST one only.
+
+        Level is INFO, not WARNING, on purpose: with IC-LoRA
+        conditioning_attention_strength < 1.0 this is the correct and expected
+        behaviour, not a malfunction, and routinely emitting warnings for normal
+        operation is how people learn to ignore warnings. The worker sets the
+        root logger to INFO and pipes it to STDERR, so this still lands in
+        logs/ltx_worker.log where the G5 gate looks for it.
+
+        Logged once per job rather than per call, for the same reason
+        ``latch_fallback`` is: a masked job would otherwise emit one line per
+        attention module per step (tens of thousands), which is not observability
+        but noise. The running total stays available on ``masked_calls``.
+        """
+        self._masked_calls += 1
+        if self._masked_calls > 1:
+            return
+        logger.info(
+            "SageAttention: attention mask present on some calls (first: %s) -> "
+            "those calls use SDPA. This is the expected masked-call fallback "
+            "(IC-LoRA conditioning_attention_strength < 1.0); the rest of the "
+            "job still runs on sage.",
+            name,
+        )
 
     def latch_fallback(self, reason: str) -> None:
         """Give up on sage for the remainder of this job, warning exactly once."""
@@ -261,6 +308,7 @@ class SageState:
         self._last_attention_used = self.attention_used
         self._backend = "sdpa"
         self._latched = False
+        self._masked_calls = 0
 
 
 class _SageAttentionFunction:
@@ -309,7 +357,13 @@ class _SageAttentionFunction:
         #     mask appears only on the IC-LoRA
         #     ConditioningItemAttentionStrengthWrapper path
         #     (conditioning_attention_strength < 1.0).
+        #     Counted + logged once per job (note_masked_fallback): this is a
+        #     PARTIAL fallback that leaves attention_used == "sage", so without a
+        #     record there would be no positive evidence anywhere that the mask
+        #     path was taken. Deliberately does NOT latch — the unmasked calls in
+        #     the same job are still perfectly good sage calls.
         if mask is not None:
+            self._state.note_masked_fallback(self._name)
             return self._fallback(q, k, v, heads, mask)
 
         # (b) dtype: the kernel quantizes from fp16/bf16 only.

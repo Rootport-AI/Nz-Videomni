@@ -40,8 +40,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.5** |
-| 日付 | **2026-07-28** |
+| 版 | **v0.5.6** |
+| 日付 | **2026-08-01** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
@@ -56,6 +56,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.2 | 2026-07-27 | サブマシンでの実機検証（`Docs/NEXT_SESSION_HANDOFF.md`・`README.md` §7）の反映と、実装との乖離を潰す収束修正。**§2.1**（ffmpeg は「PATH に通す」ではなく `scripts/setup.ps1` が `tools/ffmpeg` へ取り込む＝§2.4 の PATH 前置で解決される）／**§2.5**（`setup.ps1` の事前チェック 3 種＝空き容量・ページファイル・GPU がいずれも警告のみであること、および `run.ps1` の二重起動ガードの存在を追記）／**§3.3**（URL を控えに入れる処理は現行の `run.ps1` に存在しない＝利用者に見せる URL は `main.py` の起動バナーが唯一の正本、という実装に合わせて訂正）／**§4.4**（ディレクトリ構成のルートフォルダ名を実際の `Nz-LTX23-backend/` へ訂正）。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-38。 |
 | v0.5.3 | 2026-07-28 | NAG（Normalized Attention Guidance＝非CFGネガティブプロンプト機能）の追加を反映。**§6.2**（`GenerateRequest` に `nag_enabled`/`nag_scale`/`nag_tau`/`nag_alpha` の4フィールドを追加し `negative_prompt` に `max_length=2000` を付与、凍結制約に相互検証を追加。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§12.2**（共有プロンプト直下の Negative Prompt アコーディオンを追記）。凍結API契約（§6）への追加は、2026-07-21 の V2V Join 拡張（`d22706e`）と同じく既存フィールドの意味変更を伴わない加算のみで、実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §38。 |
 | v0.5.4 | 2026-07-28 | 同日の第2コミット（`2f8e85b`）で追加された **MCPサーバー**（`mcp_server/`。Claude Code 等の MCP クライアントからバックエンドを操作する22ツール）を反映。**§12b＝完全新設**（位置づけ・22ツールの概要・依存関係・実機ゲート状況へのポインタ）／**§0.3 の SSOT 地図**（`Docs/MCP_SERVER_DESIGN.md` を追加）／**§4.5**（アプリ venv の技術スタック表に `mcp` パッケージを追加）／**付録B.1**（用語集に MCP のエントリを追加）。凍結 API 契約（§6）そのものへの変更は無い（MCPサーバーは既存 `/api/v1/*` を叩く追加のクライアントであり、REST API 契約は無改修）。詳細な設計判断は `Docs/MCP_SERVER_DESIGN.md`、利用者向け説明は `README.md` §8、機械検証・実機ゲート状況は `Docs/VERIFICATION_LOG.md` §39 が正本。 |
+| v0.5.6 | 2026-08-01 | Acceleration（生成の高速化）機能の追加を反映。**§4.5**（エンジン venv の技術スタック表に `sageattention` 2.2.0 と `triton-windows` を追加）／**§5.4**（章題を「attention バックエンド」のまま、既定は SDPA・ジョブ単位で SageAttention へ切替可能という現行仕様へ書き直し。xformers/flash-attn を導入しない方針そのものは不変）／**§6.2**（`GenerateRequest` に `attention_backend`／`fused_gguf_dequant_gemm`／`vae_mode` の3フィールドを追加。後者2つは受理のみでエンジン未消費の**モック**である旨を明記。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§6.5b＝新設**（`GET /status` の非凍結ブロック `acceleration`＝`attention_backends` と `sage_available` の真理値表）／**§6.6**（`metadata.json` トップレベルへの `attention_used` 追加）。凍結 API 契約（§6）への追加は既存フィールドの意味変更を伴わない加算のみで、既定値のジョブは worker ペイロードがバイト同一のまま。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §43、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
 | v0.5.5 | 2026-07-28 | 同日の依存整理バッチ（未使用パッケージ削除・`uv sync --extra dev` 常時化・`checkpoint_path` 後始末）を反映し、`checkpoint_path` が `config.model` から削除された事実に追随して**5箇所の記述を訂正**した。**§4.3**（`checkpoint_path` はそもそも対応する config フィールドが無くなり、worker payload への値は `services/ltx_runner.py` が直値の `""` をハードコードする、という実装に合わせて訂正）／**§5.1**（`models/INSTALLED_PATHS.txt` の行数を「9 行」→「**8 行**」に訂正。`checkpoint_path (ref-only)` の行は `config.yaml` からの削除に伴い消えた）／**§5.2**（`config.model.checkpoint_path` は「フィールドとしては残る」ではなく**削除済み**、worker payload には `services/ltx_runner.py` のハードコードとして残るのみ、と訂正）／**§5.5**（`checkpoint_path` は「config に残るが reference-only」ではなく**削除済み**、と訂正）／**§11.2**（`config.yaml` の実値表から `checkpoint_path` の行を削除。現行 `config.yaml` にこのキーは存在しない）。凍結 API 契約（§6）への変更は無い（worker プロトコルの `checkpoint_path` フィールド自体は存続し、値がハードコード化されただけ）。実装・機械検証の詳細は `Docs/VERIFICATION_LOG.md` §40 が正本。 |
 
 ### 0.2 スコープ
@@ -358,7 +359,7 @@ Nz-LTX23-backend/
 | 層 | 主なパッケージ / バージョン | 出所 |
 |----|------------------------------|------|
 | アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow / **`mcp`（`>=1.28,<2`。2026-07-28追加・MCPサーバー用main依存＝§12b）**（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
-| エンジン（`./.venv-engine`） | **torch 2.9.1+cu128**（+ torchaudio 0.24.1+cu128 / torchvision）、`ltx-core` / `ltx-pipelines` @git rev `00dc53d`、`diffusers` @git rev（`engine/venv-engine.freeze.txt` ヘッダが正）、`gguf`、`transformers` | `engine/venv-engine.freeze.txt`（完全スナップショット）/ `engine/engine-venv-pyproject.toml`（`[tool.uv.sources]` に cu128 index と git rev） |
+| エンジン（`./.venv-engine`） | **torch 2.9.1+cu128**（+ torchaudio 0.24.1+cu128 / torchvision）、`ltx-core` / `ltx-pipelines` @git rev `00dc53d`、`diffusers` @git rev（`engine/venv-engine.freeze.txt` ヘッダが正）、`gguf`、`transformers`、**`sageattention` 2.2.0＋`triton-windows` 3.5.1.post24（2026-07-31追加・Acceleration 機能用＝§5.4）** | `engine/venv-engine.freeze.txt`（完全スナップショット）/ `engine/engine-venv-pyproject.toml`（`[tool.uv.sources]` に cu128 index と git rev） |
 
 `ltx-core` / `ltx-pipelines` / `diffusers` は **git direct-url インストール**（PyPI ではない）。Windows の PyPI 版 torch は CPU 専用のため、cu128 インデックスから `torch/torchaudio/torchvision == *+cu128` を明示インストールする（`Docs/note.md`）。provenance と再現手順の一次情報は `engine/VENDOR_NOTICE.md`。
 
@@ -371,7 +372,7 @@ Nz-LTX23-backend/
 - Gemma text encoder も GGUF Q4_K_M（逐次層オフロード）。
 - VAE/audio/text-projection は 46GB モノリスでなく小単体 component ファイルから読む。
 
-判断根拠は「16GB / Windows で公式ローダが落ちる」という実機事実に尽きる。詳細な経緯・A/B 実測・SHA256 バイト一致検証は `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/VERIFICATION_LOG.md`、engine の由来は `engine/VENDOR_NOTICE.md` を一次情報とする。なお `Docs/note.md` は旧・公式ローダ前提のノートだが、「torch 2.9.1+cu128 / attention は SDPA（Ada では FlashAttention-2）で十分 / xformers は任意 / 16GB の律速は重み転送(PCIe)」という結論部分は現行でも有効である。
+判断根拠は「16GB / Windows で公式ローダが落ちる」という実機事実に尽きる。詳細な経緯・A/B 実測・SHA256 バイト一致検証は `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/VERIFICATION_LOG.md`、engine の由来は `engine/VENDOR_NOTICE.md` を一次情報とする。なお `Docs/note.md` は旧・公式ローダ前提のノートだが、「torch 2.9.1+cu128 / attention は SDPA（Ada では FlashAttention-2）で十分 / xformers は任意 / 16GB の律速は重み転送(PCIe)」という結論部分は現行でも有効である（**2026-07-31 補足**: この「SDPA で十分」は既定の話として引き続き正しいが、2026-07-31 に SageAttention をジョブ単位で選べるようにした結果、attention 側にも 720p で 1.17 倍・二段目単体で 1.56 倍という実測の伸びしろがあることが判明した。詳細は §5.4）。
 
 ---
 
@@ -422,6 +423,13 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 ### 5.4 attention バックエンド
 
 既定は **PyTorch SDPA**（全アーキ共通）。Ada Lovelace + torch 2.9 では SDPA の実体は **FlashAttention-2** カーネルであり、16GB の律速は attention でなく重み転送（PCIe）であるため、これで十分である（`Docs/note.md` の結論サマリ）。**xformers は任意**の最適化で、Windows では自動導入されず、必要ならソースビルドする（`scripts/build_xformers.ps1`）。
+
+**SageAttention によるジョブ単位の切替（2026-07-31追加）**: 上記の既定は変えないまま、**ジョブごとに attention の実装を選べる**ようにした（`GenerateRequest` / `GenerateChainRequest` の `attention_backend`＝`"sdpa"`（既定）/ `"sage"`。§6.2）。`"sage"` を選んだジョブでは、engine 側の `engine/transformer/sage_attention_service.py` が transformer の **48 ブロック × 6 種（`attn1`／`attn2`／`audio_attn1`／`audio_attn2`／`audio_to_video_attn`／`video_to_audio_attn`）＝ 288 モジュール**の `attention_function` を SageAttention 2.2.0 の実装へ差し替える。サーバー再起動・パイプライン再ロードは不要。
+
+- **降格の規律**: sageattention が導入されていない環境で `"sage"` を指定しても **422 にはせず、警告1行を出して SDPA で完走する**。NAG（§6.2 の相互検証）のような fail-loud と規律をあえて変えているのは、本機能が生成結果の意味ではなく**速度**のオプションだからである。マスク付きの attention 呼び出し（IC-LoRA の `conditioning_attention_strength < 1.0` 経路）も SDPA へ自動フォールバックし、カーネル例外が出た場合はそのジョブ内で SDPA に固定する。
+- **実効値の記録**: 実際に使われた方式は `metadata.json` トップレベルの `attention_used`（`"sdpa"` / `"sage"` / `"sage->sdpa"`）に残る（§6.6）。利用可否は `GET /status` の `acceleration.sage_available`（§6.5b）。
+- **依存**: `sageattention` 2.2.0（woct0rdho 版 Windows wheel を直リンク pin）＋ `triton-windows==3.5.1.post24` を `engine/venv-engine.freeze.txt` に載せ、インストーラが標準で導入する。`sageattention` は `engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも**載せない**——`-ResolveLatest` は未検証の新しい torch を解決する経路で、torch 2.9.1 固定 ABI の wheel と非互換になるため。**`-ResolveLatest` を使った環境では sage の動作は保証外**である。2026-07-28 の依存整理（`Docs/VERIFICATION_LOG.md` §40.1）で削除した旧世代 `sageattention` 1.0.6 とは別物で、今回は実消費者があるための再導入である（同 §43.3）。
+- **実測と設計判断の正本**: `Docs/VERIFICATION_LOG.md` §43。利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。
 
 インストーラ `scripts/install_ltx.ps1` は「全アーキで SDPA、xformers/flash-attn は自動導入しない」方針である。かつては GPU アーキを `nvidia-smi` で自動判定し、ada/ampere/hopper については `wheels/` にプリビルド wheel があればそれを導入する分岐を持っていたが、**この自動導入は 2026-07-26 に廃止した**（全アーキ SDPA 固定である以上、アーキごとに導入物を変える理由が無く、判定の失敗・誤判定が事故の種になるだけであるため）。`scripts/build_xformers.ps1` は、xformers を自分でビルドしたいユーザーのための**手動ツール**として引き続き `scripts/` に残す（インストーラからは呼ばれない）。
 
@@ -487,6 +495,9 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `nag_scale` | float | `11.0` | `ge=1.0, le=20.0` | **2026-07-28追加**。外挿の強さ |
 | `nag_tau` | float | `2.5` | `ge=1.0, le=10.0` | **2026-07-28追加**。ノルム頭打ち上限 |
 | `nag_alpha` | float | `0.25` | `ge=0.0, le=1.0` | **2026-07-28追加**。正出力とのブレンド比率 |
+| `attention_backend` | `Literal["sdpa","sage"]` | `"sdpa"` | enum | **2026-07-31追加**。attention（注意機構）の実装選択。`"sage"` は SageAttention 2.2.0（§5.4）。**実装あり**。sageattention 未導入の環境では 422 にせず `"sdpa"` へ降格して完走する |
+| `fused_gguf_dequant_gemm` | bool | `false` | — | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注） |
+| `vae_mode` | `Literal["default","prune_vaed"]` | `"default"` | enum | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注）。既存の `vram_optimization.vae_tiling`（VRAM 節約のタイル分割）とは**無関係** |
 
 凍結制約（`model_validator(mode="after") validate_ltx_constraints`、順序どおり）:
 
@@ -500,6 +511,12 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 8. `nag_enabled` が true かつ `negative_prompt.strip()` が空 → `ValueError("nag_enabled requires a non-empty negative_prompt")`（**2026-07-28追加**）
 
 > **NAGフィールドの補足（2026-07-28追加）**: 上記4フィールドは `GenerateRequest` に加えて `GenerateChainRequest`（`POST /generate/chain`。本書は§6ではPhase 1の単発生成のみを扱うため独立のスキーマ表は持たない）にも同一の名前・型・デフォルト・制約で存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。詳細な設計判断（式の規約・非対称設計の根拠・実装箇所一覧・実機ゲート）は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を正本とする。
+
+> **Acceleration フィールドの補足（2026-07-31追加）**: 上記3フィールド（`attention_backend` / `fused_gguf_dequant_gemm` / `vae_mode`）も NAG と同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。
+>
+> - **モック2件（`fused_gguf_dequant_gemm` / `vae_mode`）の位置づけ**: 受理はするがエンジンへは渡さない、将来の実装枠である。`model_dump()` 経由の `metadata.json` と `GET /jobs` の `request` エコーには**現れる**（`pipeline: "two_stage_hq"` と同じ既存の前例に倣う。`exclude` 等の細工はしない）。**現れないのは worker ペイロードと `GET /status` だけ**——`/status` はサーバーが実際にできることを記述する場所だからである。MCP のツール引数にも公開しない。UI 側は常時グレーアウト。
+> - **既定値のジョブは worker ペイロードがバイト同一**: `attention_backend != "sdpa"` のときだけ条件付きでキーを加算する方式のため、既定のリクエストではペイロードのキーが1つも増えない（`Docs/VERIFICATION_LOG.md` §43.4 の完全一致テスト群が固定している）。
+> - 詳細な設計判断・実装箇所一覧・実機ゲート・実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43 を正本とする。
 
 - `width`/`height` は two-stage distilled が stage-1 を半解像度で生成し 2x アップサンプルするため **64 の倍数**（32 からの意図的な厳格化。960x540 等の非 64 表示サイズは `crop_output` で得る）。
 - バリデータ失敗はすべて 422（`VALIDATION_ERROR` エンベロープ、§6.8）。
@@ -699,6 +716,33 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 （GET /status 全体の形は `api/status.py` を参照。`gpu` ブロックは `gpu_info.get_gpu_info()`、`queue` は `mode="single_job_in_memory"` に `job_store.counts()`=`pending/running/completed/failed` を展開。`version`="0.4.0"（API 実装のバージョン文字列であり、本仕様書の版 v0.5 とは別物）。）
 
+> **`gpu.available` が常に `false` になる件（既知・仕様どおり）**: `GET /status` の `gpu` ブロックは、アプリ用仮想環境（`./.venv`、torch 無し）から見た値を返すため、実機でも `available: false` になる。2プロセス／2仮想環境という構成（§2）に由来する既存の挙動で、実際の GPU はエンジン側 worker プロセスが握っている。紛らわしいが不具合ではない。
+
+### 6.5b GET /status の `acceleration`（**非凍結**・2026-07-31追加）
+
+`services/pipeline_manager.py::PipelineManager.acceleration_status_block()` が生成するトップレベルブロック。§6.5 の `vram_optimization`（凍結キー集合）とは別物で、**こちらは凍結対象ではない**（`vram_optimization` には一切触れていない）。
+
+```json
+"acceleration": {
+  "attention_backends": ["sdpa", "sage"],
+  "sage_available": true
+}
+```
+
+- `attention_backends`: `attention_backend`（§6.2）が受け付ける値の一覧。**実装のある項目だけ**を並べる。モック2件（`fused_gguf_dequant_gemm` / `vae_mode`）は、`/status` が「サーバーが実際にできること」を記述する場所である以上、**意図的に載せていない**。
+- `sage_available`: SageAttention が使えるかどうか。サーバーの状態によって判定経路が変わる（**真理値表**。この表の置き場が `acceleration_status_block()` である）:
+
+| サーバーの状態 | `sage_available` の由来 |
+|---|---|
+| mock backend | 常に `false`（エンジンが存在しない） |
+| パイプライン未ロード | エンジン用仮想環境の site-packages に `sageattention/` と `triton/` が両方あるかの**ファイル存在チェック** |
+| パイプライン ロード済み | **worker プロセス自身の import 判定**（こちらが権威。DLL ロード失敗や ABI 不一致まで捕捉できる） |
+| ロード失敗 / unload 後 | ファイル存在チェック（生きた worker が無いため） |
+
+2つの経路は「import できる**はず**か」と「実際に使うプロセスで import **できる**か」という別々の問いへの答えであり、どちらの値かは同じ応答の `pipeline_loaded` を見れば判別できる。そのため判定経路を示す `sage_source` のような追加フィールドは設けていない。
+
+**クライアント側の作法**: `sage_available` が `false` でも `attention_backend="sage"` を送ること自体は許される（サーバーが `"sdpa"` へ降格して完走する）。値が取れない・不明な場合に UI 側で `sage` を封じる必要はない。
+
 ### 6.6 metadata.json スキーマ
 
 `services/pipeline_manager.py::_write_metadata` が書き出す（`output.save_metadata_json` が true のとき）。実フィールド:
@@ -713,6 +757,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `request` | `GenerateRequest.model_dump()` |
 | `generation_mode` | `"t2v"` / `"i2v"`（outcome 由来） |
 | `seed_used` | int |
+| `attention_used` | str \| null（**2026-07-31追加**。実際に使われた attention の実装＝`"sdpa"` / `"sage"` / `"sage->sdpa"`。`seed_used` とまったく同じ経路〔worker の完了イベント → outcome → メタデータ〕で書き出される。mock backend や旧 worker では `null`） |
 | `generation_time_seconds` | `round(elapsed, 2)` |
 | `backend` | outcome.backend（mock は `"mock"`、real は `"ltx-distilled"`） |
 | `output` | `{path, resolution, duration_seconds, frame_rate, file_size_bytes}` |

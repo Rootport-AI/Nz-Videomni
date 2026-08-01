@@ -21,10 +21,13 @@ actually break silently:
   2. FALLBACK MATRIX. Each degradation route hands the ORIGINAL, untouched
      q/k/v/mask to the original callable and returns its result BIT-identically
      — i.e. a fallback call is indistinguishable from an sdpa run. Six rows:
-     attention mask present (the IC-LoRA attention_strength path), fp32 dtype,
+     attention mask present (the IC-LoRA attention_strength path — which must
+     also be counted per call and logged exactly ONCE per job, since it leaves
+     attention_used at "sage" and would otherwise be untraceable), fp32 dtype,
      non-CUDA tensors, a stale wrapper whose job already ended, a kernel that
      raises (which must latch for the rest of the job and be attempted exactly
      once), and the install-time static skip of an unsupported head_dim.
+     ``reset()`` must clear the mask counter along with everything else.
 
   3. INSTALL COUNT. A 48-block transformer yields exactly 288 wrapped modules —
      6 per block (attn1 / attn2 / audio_attn1 / audio_attn2 /
@@ -39,6 +42,7 @@ correct and safe.
 
 from __future__ import annotations
 
+import logging
 import sys
 import traceback
 from typing import Callable
@@ -112,6 +116,34 @@ class _FakeTransformer(torch.nn.Module):
     def __init__(self, blocks: list[torch.nn.Module]) -> None:
         super().__init__()
         self.transformer_blocks = torch.nn.ModuleList(blocks)
+
+
+class _LogCapture(logging.Handler):
+    """Collect the sage service's own log records for the duration of a block.
+
+    Used to assert the "logged once per job, not once per call" contract — the
+    thing that makes the masked-call fallback observable (G5's evidence) without
+    turning an IC-LoRA job's log into tens of thousands of identical lines.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.messages: list[str] = []
+        self._saved_level = logging.NOTSET
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+    def __enter__(self) -> "_LogCapture":
+        self._saved_level = sage_mod.logger.level
+        sage_mod.logger.setLevel(logging.DEBUG)
+        sage_mod.logger.addHandler(self)
+        return self
+
+    def __exit__(self, *exc_info: object) -> bool:
+        sage_mod.logger.removeHandler(self)
+        sage_mod.logger.setLevel(self._saved_level)
+        return False
 
 
 class _Spy:
@@ -288,9 +320,24 @@ def check_fallback_matrix() -> None:
 
     # (1) attention mask present — the only producer on this pipeline is the
     #     IC-LoRA ConditioningItemAttentionStrengthWrapper (strength < 1.0).
+    #     This is a PARTIAL fallback (attention_used stays "sage"), so it is the
+    #     one degradation with no other trace: assert it is counted per call but
+    #     logged exactly ONCE however many calls take it.
     q, k, v = _qkv(1, 64, attn.heads, 128, torch.bfloat16, device)
     mask = torch.zeros(1, attn.heads, 64, 64, dtype=torch.bfloat16, device=device)
-    _assert_fell_back("mask is not None", attn, spy, q, k, v, mask)
+    with _LogCapture() as logs:
+        _assert_fell_back("mask is not None (call 1)", attn, spy, q, k, v, mask)
+        _assert_fell_back("mask is not None (call 2)", attn, spy, q, k, v, mask)
+    if state.masked_calls != 2:
+        raise AssertionError(
+            f"masked_calls={state.masked_calls} after 2 masked calls, expected 2"
+        )
+    masked_logs = [m for m in logs.messages if "attention mask present" in m]
+    if len(masked_logs) != 1:
+        raise AssertionError(
+            f"expected exactly 1 masked-fallback log line for 2 masked calls, "
+            f"got {len(masked_logs)}: {masked_logs}"
+        )
 
     # (2) unsupported dtype (sage quantizes from fp16/bf16 only).
     q32, k32, v32 = _qkv(1, 64, attn.heads, 128, torch.float32, device)
@@ -313,6 +360,11 @@ def check_fallback_matrix() -> None:
     # rather than silently accelerating (and mis-reporting) an sdpa job.
     qb, kb, vb = _qkv(1, 64, attn.heads, 128, torch.bfloat16, device)
     state.reset()  # what the pipeline's finally does at the end of the job
+    if state.masked_calls != 0:
+        raise AssertionError(
+            f"reset() left masked_calls={state.masked_calls}; the counter is "
+            "per-job and must not carry into the next job on a resident worker"
+        )
     _assert_fell_back("stale wrapper after state.reset()", attn, spy, qb, kb, vb)
     if state.last_attention_used != "sage":
         raise AssertionError(

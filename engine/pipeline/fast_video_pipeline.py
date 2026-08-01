@@ -147,6 +147,15 @@ class LTXFastVideoPipeline:
         # (see engine/transformer/sage_attention_service.py).
         self._sage = SageState()
 
+        # ── Block-swap prefetch state ──────────────────────────────────────────
+        # Same lifetime rules again (set at the entry point, reset in its
+        # finally), but the state itself lives on the resident BlockSwapService
+        # — that is what install() reads on every rebuilt transformer. These two
+        # fields are only the pipeline's copy of the request and the verdict of
+        # the job that just finished (read back by the worker).
+        self._block_swap_prefetch_requested = False
+        self._block_swap_prefetch_used = "off"
+
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
         # standalone sources are all present BEFORE constructing DistilledPipeline
@@ -397,6 +406,55 @@ class LTXFastVideoPipeline:
         """
         return self._sage.last_attention_used
 
+    def _set_block_swap_prefetch_job(self, enabled: bool) -> None:
+        """Arm block-swap prefetching for the upcoming job.
+
+        NEVER raises, for exactly the reason spelled out in ``_set_sage_job``:
+        this runs outside generate()'s try/finally, so an exception here would
+        skip the matching reset and leak the request into the next job on a
+        resident worker. When block swap is not installed at all the flag is
+        simply never read and the job silently runs without prefetching.
+        """
+        self._block_swap_prefetch_requested = bool(enabled)
+        svc = getattr(self, "_block_swap_service", None)
+        if svc is not None:
+            svc.prefetch_requested = self._block_swap_prefetch_requested
+            # Clear the previous job's verdict: a job that dies before install()
+            # must not inherit "on" from the job before it.
+            svc.last_prefetch_used = None
+
+    def _reset_block_swap_prefetch_job(self) -> None:
+        """End-of-job counterpart: snapshot the verdict, then clean up.
+
+        ``last_prefetch_used is None`` means install() never ran (an early
+        return or an exception upstream), which for a job that asked for
+        prefetching is a degradation — hence "on->off".
+        """
+        svc = getattr(self, "_block_swap_service", None)
+        if svc is not None:
+            self._block_swap_prefetch_used = svc.last_prefetch_used or (
+                "on->off" if self._block_swap_prefetch_requested else "off"
+            )
+            # The job owns the prefetch resources; releasing them here (rather
+            # than at the next install) is what keeps the finished transformer
+            # from being pinned alive between jobs.
+            svc.teardown_prefetch()
+            svc.prefetch_requested = False
+        else:
+            self._block_swap_prefetch_used = (
+                "on->off" if self._block_swap_prefetch_requested else "off"
+            )
+        self._block_swap_prefetch_requested = False
+
+    def block_swap_prefetch_used(self) -> str:
+        """What the last finished job's block swap actually did: "off", "on", or
+        "on->off" (asked for, but degraded to the synchronous path).
+
+        Like ``attention_used`` above, this is the snapshot taken by the reset
+        in the entry point's finally, not live state.
+        """
+        return self._block_swap_prefetch_used
+
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
 
@@ -594,6 +652,9 @@ class LTXFastVideoPipeline:
                 blocks_on_gpu=blocks_on_gpu,
                 device=self._transformer_device,
             )
+            # Always False at create time; the per-job value is written by
+            # _set_block_swap_prefetch_job before the transformer is built.
+            service.prefetch_requested = self._block_swap_prefetch_requested
             # Wrap model_ledger.transformer() persistently so block swap is
             # re-installed on every build (model_ledger never caches the model).
             original_transformer = self.pipeline.model_ledger.transformer
@@ -1100,6 +1161,7 @@ class LTXFastVideoPipeline:
         ic_attention_strength: float | None = None,
         nag: NagParams | VsfParams | None = None,
         attention_backend: str = "sdpa",
+        block_swap_prefetch: bool = False,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -1125,6 +1187,9 @@ class LTXFastVideoPipeline:
         # raise, and it must not do so with the sage request already armed but
         # the try/finally not yet entered.
         self._set_sage_job(attention_backend)
+        # Block-swap prefetch, armed alongside sage for the same reason (no
+        # ordering constraint, and its reset lives in the finally below).
+        self._set_block_swap_prefetch_job(block_swap_prefetch)
 
         try:
             tiling_config = default_tiling_config(
@@ -1168,6 +1233,10 @@ class LTXFastVideoPipeline:
             # Same guard for the attention backend; reset() also snapshots what
             # this job actually ran on for attention_used() below.
             self._sage.reset()
+            # Same again for prefetching, and this one additionally tears the
+            # transfer state down (drains the stream, frees the arenas and the
+            # CPU masters) so nothing survives into the next job.
+            self._reset_block_swap_prefetch_job()
 
     @torch.inference_mode()
     def generate_chain(
@@ -1190,6 +1259,7 @@ class LTXFastVideoPipeline:
         chunked_upsample: bool = False,
         nag: NagParams | VsfParams | None = None,
         attention_backend: str = "sdpa",
+        block_swap_prefetch: bool = False,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -1230,10 +1300,17 @@ class LTXFastVideoPipeline:
         backend has no such ordering constraint, so it is armed at the outermost
         entry point where its ``finally: reset()`` also lives. See
         ``_set_sage_job``'s docstring for the mirror of this note.
+
+        ``block_swap_prefetch`` (additive): set HERE too, for the same reason as
+        ``attention_backend`` — it has nothing to encode, so it belongs at the
+        outermost entry point next to its own ``finally``. The chain builds the
+        transformer exactly once (chain_pipeline.py), so one prefetch engine
+        serves every segment and every stage-2 tile of the whole chain.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
         self._set_sage_job(attention_backend)
+        self._set_block_swap_prefetch_job(block_swap_prefetch)
 
         try:
             return run_chain(
@@ -1261,6 +1338,7 @@ class LTXFastVideoPipeline:
         finally:
             self._nag.reset()
             self._sage.reset()
+            self._reset_block_swap_prefetch_job()
 
     @torch.inference_mode()
     def warmup(self, output_path: str) -> None:

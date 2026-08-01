@@ -581,14 +581,15 @@ $env:PYTHONPATH = (Get-Location).Path
 ### 生成の高速化（Acceleration）
 
 生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめました
-（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は3つありますが、**いま実際に効くのは
-真ん中の「Attention（注意機構の実装）」だけ**です。残る2つは将来の実装枠として場所だけ確保してあり、
-常にグレーアウトしていて押せません。
+（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は4つあり、**実際に効くのは
+「Attention（注意機構の実装）」と「Block-swap prefetch（先読みblock swap）」の2つ**です。残る2つは将来の実装枠
+として場所だけ確保してあり、常にグレーアウトしていて押せません。
 
 | 項目 | 選択肢 | 状態 |
 |------|--------|------|
 | fused GGUF dequant + GEMM（GGUFの逆量子化と行列積の融合） | On / Off | **未実装**（グレーアウト・将来対応予定） |
 | Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` |
+| Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on |
 | VAE（映像の復元処理） | Default / PruneVAED | **未実装**（グレーアウト・将来対応予定） |
 
 **選び方**: `sdpa` は PyTorch 標準の実装で、これまでどおりの結果が出ます。`sage` は
@@ -628,6 +629,18 @@ VRAM の使用量は実測で変わりません（ピークの差は 0.08% 以�
 **API から使う場合**: `POST /generate` と `POST /generate/chain` のどちらにも `attention_backend`
 （`"sdpa"` または `"sage"`、既定 `"sdpa"`）を指定できます。詳しい設計判断・検証結果は
 [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43 を参照してください。
+
+### 先読みblock swap（`block_swap_prefetch`）
+
+block swap（VRAM を節約するために transformer のブロックを CPU と GPU のあいだで出し入れする既定の仕組み）の転送を、
+計算とは別の CUDA stream で先回りさせて待ち時間を隠す機能です。Settings の Acceleration 区画にある「Block-swap
+prefetch」トグルで、Attention と同じくジョブ単位で切り替えられます。**既定は on**（2026-08-02、実機ゲート全項目
+合格を受けて反転）。
+
+`sage` と違い、**転送方式だけを変えるので出力は変わりません**——同じシードなら off/on でビット単位で完全に同じ動画
+になります。実測（768p/257フレーム、交互対比較3組）で平均約14.7%短縮、VRAM の増加はほぼ0です。off にすると従来の
+同期スワップへ戻ります（block swap 自体が無効な設定では、on/off にかかわらず何も起きません）。詳しい設計判断・
+マイクロベンチ・実機ゲートの実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §44 を参照してください。
 
 ---
 
@@ -671,7 +684,7 @@ GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・複�
   - **実装済み**: 複数キーフレームI2V（キーフレーム画像・最大5枚・任意 `frame_idx`）／V2V（元動画からの継続生成）／A2V（音声から動画生成）／クリップ連結（`POST /generate/chain`）／IC-LoRA・スタイルLoRA（`<lora:...>` 記法含む）／1080p の直接生成（`FHD_1080p` プリセット。なお「1080p アップスケール機能」としての提供は仕様書 §13.5 でスコープ削除）／簡易認証（`--api-key` 指定時の Bearer 認証・任意）。
   - **引き続き未実装**: 終了フレーム指定（キーフレームは末尾近傍まで＝`frame_idx` は `num_frames-8` にクランプされ、最終フレームちょうどの条件付けはできない）／本格的なジョブキュー（単一ユーザー想定のため「1ジョブ＋busy 409」を正式仕様とし、仕様書 §13.5 でスコープ削除）／AviUtl2 拡張フロントエンド（別リポジトリで開発・本リポジトリは汎用 REST API のまま）。
 - **MCPサーバー（§8）はモック検証のみ完了しており、実機（Claude Code からの実際の操作）での検証は未実施**です。同時1ジョブ制約は MCP 経由でも変わらず、複数エージェント/複数セッションからの並行操作は非対応です。
-- **「生成の高速化（Acceleration）」の3項目のうち、2項目は未実装です**（2026-07-31 現在）。設定画面には場所だけ確保してありますが、常にグレーアウトしていて選べません。実際に効くのは「Attention（注意機構の実装）」だけです（§5「生成の高速化（Acceleration）」）。
+- **「生成の高速化（Acceleration）」の4項目のうち、2項目は未実装です**（2026-08-02 現在）。設定画面には場所だけ確保してありますが、常にグレーアウトしていて選べません。実際に効くのは「Attention（注意機構の実装）」と「Block-swap prefetch（先読みblock swap）」の2つです（§5「生成の高速化（Acceleration）」）。
   - **fused GGUF dequant + GEMM**（GGUF の逆量子化と行列積を1つの計算に融合する案）: 未実装。
   - **PruneVAED**（枝刈りを施した VAE デコーダ＝映像の復元処理の軽量版）: 未実装。
   - API 上は `fused_gguf_dequant_gemm` / `vae_mode` というフィールドを受け取りますが、**値は生成に一切影響しません**（ジョブの記録には残りますが、エンジンへは渡していません）。MCP のツールにもこの2項目は公開していません。

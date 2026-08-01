@@ -718,6 +718,55 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     deps_with_radio = [d for d in demo.fns.values()
                        if radio in getattr(d, "inputs", [])]
     assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
-    # And it is the LAST input of each (the APPENDED wiring discipline).
+    # And it is the SECOND-TO-LAST input of each: the APPENDED wiring
+    # discipline put it last when it was the only Acceleration control, and
+    # the later-added block-swap prefetch checkbox is now appended after it.
     for dep in deps_with_radio:
-        assert dep.inputs[-1] is radio
+        assert dep.inputs[-2] is radio
+
+
+# --------------------------------------------------------------------------- #
+# Block-swap prefetch checkbox (Settings tab). Same reg/i18n/wiring pattern as
+# the attention selector above; S4 (2026-08-01) flipped the shared
+# gradio_ui.handlers.BLOCK_SWAP_PREFETCH_DEFAULT constant to True once the
+# real-device gate (bit-exact output + VRAM headroom, G1-G7) passed.
+# --------------------------------------------------------------------------- #
+def test_block_swap_prefetch_checkbox_default_and_label():
+    from gradio_ui.handlers import BLOCK_SWAP_PREFETCH_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_prefetch"]]
+    assert len(boxes) == 1, "block-swap prefetch checkbox not found"
+    box = boxes[0]
+    assert box.value is BLOCK_SWAP_PREFETCH_DEFAULT
+    assert box.value is True, "on by default post-S4 (real-device gate passed)"
+    assert box.interactive is not False
+    assert box.info == en["accel_info_prefetch"]
+
+
+def test_block_swap_prefetch_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_prefetch", "label"),
+                      ("accel_info_prefetch", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
+    # Same "displayed only" trap check as the attention radio: the checkbox
+    # must actually be an INPUT of both generate flows.
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_prefetch"])
+    deps_with_box = [d for d in demo.fns.values()
+                     if box in getattr(d, "inputs", [])]
+    assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
+    # And it is the LAST input of each (APPENDED after attention_backend).
+    for dep in deps_with_box:
+        assert dep.inputs[-1] is box

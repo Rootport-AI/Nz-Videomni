@@ -308,6 +308,59 @@ def test_submit_generate_payload_contract_defaults_only_key_set_unchanged_with_d
     assert "attention_backend" not in body
 
 
+def test_submit_generate_block_swap_prefetch_off_included_in_body():
+    # S4 (2026-08-01): BLOCK_SWAP_PREFETCH_DEFAULT flipped to True (real-device
+    # gate G1-G7 passed), so it is now the OFF (False) call that diverges from
+    # the default and reaches the wire — mirrors gradio_ui/handlers.py's
+    # discipline (backend §44 / WORKORDER §8.8).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            block_swap_prefetch=False,
+        )
+    )
+
+    body = captured["body"]
+    assert body["block_swap_prefetch"] is False
+
+
+def test_submit_generate_payload_contract_defaults_only_key_set_unchanged_with_default_block_swap_prefetch():
+    # Explicitly passing the default (True, post-S4) must be indistinguishable
+    # from omitting it.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            block_swap_prefetch=True,
+        )
+    )
+
+    body = captured["body"]
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+    assert "block_swap_prefetch" not in body
+
+
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
@@ -499,6 +552,66 @@ def test_submit_chain_payload_contract_key_set_unchanged_with_default_attention_
         "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
     }
     assert "attention_backend" not in body
+
+
+def test_submit_chain_block_swap_prefetch_off_included_in_body():
+    # S4 (2026-08-01): BLOCK_SWAP_PREFETCH_DEFAULT flipped to True, so it is
+    # now the OFF (False) call that diverges from the default and reaches the
+    # wire — mirrors test_submit_chain_sage_attention_backend_included_in_body
+    # (backend §44 / WORKORDER §8.8).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            block_swap_prefetch=False,
+        )
+    )
+
+    body = captured["body"]
+    assert body["block_swap_prefetch"] is False
+
+
+def test_submit_chain_payload_contract_key_set_unchanged_with_default_block_swap_prefetch():
+    # Explicitly passing the default (True, post-S4) must be indistinguishable
+    # from omitting it.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            block_swap_prefetch=True,
+        )
+    )
+
+    body = captured["body"]
+    assert set(body.keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
+    assert "block_swap_prefetch" not in body
 
 
 def test_submit_chain_chunked_upsample_false_is_sent_explicitly():

@@ -933,3 +933,51 @@ def test_batch_default_snapshot_omits_attention_backend(tmp_path):
 
     _jid, p = server.payloads[0]
     assert "attention_backend" not in p
+
+
+# --------------------------------------------------------------------------- #
+# Block-swap prefetch: same reasoning as attention_backend above -- the
+# snapshot is the only path from the Settings-tab checkbox into a batch row's
+# payload, so an overnight batch would silently drift from the checkbox
+# without this wiring. S4 (2026-08-01) flipped the default to True (real-
+# device gate G1-G7 passed); the payload now reaches the wire only when the
+# snapshot's value DIFFERS from BLOCK_SWAP_PREFETCH_DEFAULT (build_a2v_chain_payload's
+# discipline), so it is the OFF case that now appends the key.
+# --------------------------------------------------------------------------- #
+def test_batch_prefetch_off_snapshot_adds_block_swap_prefetch_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, block_swap_prefetch=False)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["block_swap_prefetch"] is False
+    assert list(p.keys())[-1] == "block_swap_prefetch"
+
+
+def test_batch_default_snapshot_omits_block_swap_prefetch(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "block_swap_prefetch" not in p

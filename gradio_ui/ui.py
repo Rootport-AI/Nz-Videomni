@@ -27,6 +27,7 @@ from .formatting import (
     jobs_table_headers,
 )
 from .handlers import (
+    BLOCK_SWAP_PREFETCH_DEFAULT,
     a2v_audio_change_handler,
     delete_finished_jobs,
     fetch_config_safe,
@@ -1035,6 +1036,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_attention"),
                 ), "accel_lbl_attention")
                 reg(attention_backend, "accel_info_attention", "info")
+                # 実装のあるつまみは attention に続いてここが2つ目。
+                # 利用可否は API 側が黙って no-op にするのでクライアント側で
+                # ゲートしない（attention と同じ理由。:1027-1031 参照）。
+                accel_prefetch = reg(gr.Checkbox(
+                    value=BLOCK_SWAP_PREFETCH_DEFAULT, label=L("accel_lbl_prefetch"),
+                    info=L("accel_info_prefetch"),
+                ), "accel_lbl_prefetch")
+                reg(accel_prefetch, "accel_info_prefetch", "info")
                 accel_vae = reg(gr.Radio(
                     choices=[("Default", "default"), ("PruneVAED", "prune_vaed")],
                     value="default", interactive=False,
@@ -1227,7 +1236,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
                      batch_img_dir_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
-                     nag_method_v, vsf_scale_v, attention_backend_v):
+                     nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v):
             if not batch_enable_v:
                 # Single-generation path: byte-identical delegation (first 40
                 # positionals ARE the generate() signature); nag_*/neg_method/
@@ -1248,7 +1257,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     nag_enabled=nag_enabled_v, nag_scale=nag_scale_v,
                     nag_tau=nag_tau_v, nag_alpha=nag_alpha_v,
                     neg_method=nag_method_v, vsf_scale=vsf_scale_v,
-                    attention_backend=attention_backend_v)
+                    attention_backend=attention_backend_v,
+                    block_swap_prefetch=accel_prefetch_v)
                 return
 
             rows = batch_rows_v or []
@@ -1352,6 +1362,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # snapshot, not from handler args — without this line an
                 # overnight batch would silently stay on sdpa.
                 attention_backend=attention_backend_v or "sdpa",
+                block_swap_prefetch=bool(accel_prefetch_v),
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1383,10 +1394,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         ).then(
             dispatch,
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
-            # vsf_scale, then the Acceleration attention selector, are APPENDED
-            # at the very end, after every pre-existing positional (matching
-            # dispatch()'s signature order, which appends them after
-            # batch_img_dir_v).
+            # vsf_scale, then the Acceleration attention selector and the
+            # block-swap prefetch checkbox, are APPENDED at the very end,
+            # after every pre-existing positional (matching dispatch()'s
+            # signature order, which appends them after batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1396,7 +1407,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_out_mode, batch_out_dir, batch_add_replace,
                     batch_img_dir,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
-                    nag_method, vsf_scale, attention_backend],
+                    nag_method, vsf_scale, attention_backend, accel_prefetch],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1827,15 +1838,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         for _slot in chain_clip_slots:
             chain_clip_inputs.extend(_slot)
 
-        # Acceleration: the attention selector is APPENDED at the very end of the
-        # chain inputs list below. generate_chain keeps ``src_audio`` as its last
-        # POSITIONAL parameter (never wired from this tab, and relied on
-        # positionally by tests/test_gradio_v2v_a2v.py's _chain_args), so the
-        # trailing value cannot be delivered positionally -- this thin wrapper
-        # peels it off and forwards it as a KEYWORD, the same discipline the
-        # Generate tab's dispatch() uses.
+        # Acceleration: the attention selector AND the block-swap prefetch
+        # checkbox are APPENDED at the very end of the chain inputs list below
+        # (attention_backend, then accel_prefetch). generate_chain keeps
+        # ``src_audio`` as its last POSITIONAL parameter (never wired from this
+        # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
+        # _chain_args), so the two trailing values cannot be delivered
+        # positionally -- this thin wrapper peels them off and forwards them as
+        # KEYWORDS, the same discipline the Generate tab's dispatch() uses.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-1], attention_backend=args[-1])
+            yield from chain_generate(*args[:-2],
+                                      attention_backend=args[-2],
+                                      block_swap_prefetch=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -1850,8 +1864,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # -> neg_method/vsf_scale -> src_audio). ``src_audio``
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
-            # The Acceleration attention selector is APPENDED last and reaches
-            # the handler as a keyword via chain_dispatch above.
+            # The Acceleration attention selector and the block-swap prefetch
+            # checkbox are APPENDED last (in that order) and reach the handler
+            # as keywords via chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -1859,7 +1874,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     lang_state, poll_interval, poll_timeout,
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
-                    nag_method, vsf_scale, attention_backend],
+                    nag_method, vsf_scale, attention_backend, accel_prefetch],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),

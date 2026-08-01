@@ -3143,3 +3143,229 @@ def test_chain_handler_default_omits_attention_backend():
     ]))
     _run_chain_until_started(gen)
     assert "attention_backend" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Block-swap prefetch (block_swap_prefetch): the Settings-tab checkbox added
+# alongside attention_backend. S4 (2026-08-01) flipped BOTH the API's own
+# pydantic default (api/models.py) AND this module's mirror constant to True
+# -- the real-device gate (bit-exact output + VRAM headroom, G1-G7) passed and
+# the owner confirmed "gate green -> default on". The payload discipline
+# flipped WITH it: a request now reaches the body ONLY when it differs from
+# gradio_ui.handlers.BLOCK_SWAP_PREFETCH_DEFAULT (no longer "only when True"
+# -- that pattern would have silently gone inert on this flip, since an
+# explicit "off" would then never reach the wire and the server's new True
+# default would turn it back on behind the caller's back). Appended right
+# after attention_backend so the default payload stays byte-identical to the
+# pre-prefetch contract either way.
+# --------------------------------------------------------------------------- #
+def test_block_swap_prefetch_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_prefetch", "accel_info_prefetch"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+
+
+def test_block_swap_prefetch_default_constant_is_true():
+    from gradio_ui.handlers import BLOCK_SWAP_PREFETCH_DEFAULT
+
+    assert BLOCK_SWAP_PREFETCH_DEFAULT is True
+
+
+def test_build_a2v_chain_payload_prefetch_off_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        block_swap_prefetch=False,
+    )
+    assert payload["block_swap_prefetch"] is False
+    assert list(payload.keys())[-1] == "block_swap_prefetch"
+
+
+def test_build_a2v_chain_payload_prefetch_sits_after_attention_backend():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+    )
+    assert list(payload.keys())[-8:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend", "block_swap_prefetch",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_block_swap_prefetch():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    assert "block_swap_prefetch" not in payload
+    # Explicitly passing the default (True, post-S4) must be indistinguishable
+    # from omitting it.
+    assert payload == build_a2v_chain_payload(
+        audio_id="aud-prefetch-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        block_swap_prefetch=True,
+    )
+
+
+def test_build_a2v_chain_payload_explicit_off_sends_false():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-4",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        block_swap_prefetch=False,
+    )
+    assert payload["block_swap_prefetch"] is False
+
+
+def test_generate_handler_prefetch_off_adds_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-prefetch"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        block_swap_prefetch=False,
+    )
+    _run_until_job_started(gen)
+    assert captured["block_swap_prefetch"] is False
+    # Appended last, after the (absent here) attention_backend key.
+    assert list(captured.keys())[-1] == "block_swap_prefetch"
+
+
+def test_generate_handler_default_omits_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-noprefetch"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "block_swap_prefetch" not in captured
+
+
+def test_generate_handler_a2v_forwards_block_swap_prefetch(tmp_path):
+    # The A2V branch builds its body through build_a2v_chain_payload -- the
+    # checkbox must survive that hop too.
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-prefetch"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-prefetch"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), block_swap_prefetch=False,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["block_swap_prefetch"] is False
+
+
+def test_chain_handler_prefetch_off_adds_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-prefetch"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), block_swap_prefetch=False)
+    _run_chain_until_started(gen)
+    assert captured["block_swap_prefetch"] is False
+    assert list(captured.keys())[-1] == "block_swap_prefetch"
+
+
+def test_chain_handler_default_omits_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-noprefetch"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "block_swap_prefetch" not in captured

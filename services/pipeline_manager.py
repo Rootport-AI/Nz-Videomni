@@ -192,6 +192,12 @@ class PipelineManager:
         return {
             "attention_backends": list(self.ATTENTION_BACKENDS),
             "sage_available": self._sage_available(),
+            # Block-swap prefetch (backend §44). Judged by the SAME formula as
+            # the real gate (services/ltx_runner.py's block-swap-blocks-on-GPU
+            # expression), NOT the display-only ``low_vram.block_swap`` bool —
+            # that bool is never read on the real path and defaults to False,
+            # which would make this field lie in the default configuration.
+            "block_swap_prefetch_available": self._block_swap_prefetch_available(),
         }
 
     def _sage_available(self) -> bool:
@@ -201,6 +207,18 @@ class PipelineManager:
         if worker_value is not None:
             return worker_value
         return self.runner.sage_available
+
+    def _block_swap_prefetch_available(self) -> bool:
+        """True iff block swap is actually active on the real worker.
+
+        Mirrors ``services/ltx_runner.py``'s
+        ``self.low_vram.block_swap_blocks_on_gpu or 8`` expression exactly (the
+        ``load`` payload's ``block_swap_blocks_on_gpu``), so this can never
+        disagree with what the worker was actually told to do.
+        """
+        if self.runner.is_mock:
+            return False
+        return int(self.low_vram.block_swap_blocks_on_gpu or 8) > 0
 
     def _base_model_name(self) -> str:
         """Filename of the transformer weight (GGUF) that would actually load.
@@ -684,6 +702,8 @@ class PipelineManager:
                     chain_meta=meta, v2v_provenance=v2v_provenance,
                     a2v_provenance=a2v_provenance,
                     attention_used=outcome.attention_used,
+                    block_swap_prefetch_used=outcome.block_swap_prefetch_used,
+                    peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                 )
 
             result = JobResult(
@@ -730,6 +750,7 @@ class PipelineManager:
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, attention_used=None,
+        block_swap_prefetch_used=None, peak_vram_reserved_mb=None,
     ) -> None:
         cm = chain_meta or {}
         metadata = {
@@ -742,8 +763,10 @@ class PipelineManager:
             "request": chain.model_dump(),
             "generation_mode": "chain",
             "seed_used": seed_used,
-            # Acceleration: see the same key in :meth:`_write_metadata`.
+            # Acceleration: see the same keys in :meth:`_write_metadata`.
             "attention_used": attention_used,
+            "block_swap_prefetch_used": block_swap_prefetch_used,
+            "peak_vram_reserved_mb": peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
             "chain": {
@@ -839,6 +862,13 @@ class PipelineManager:
             # point: it makes "the request asked for sage but sdpa ran" visible
             # instead of inferable only from logs. None on the mock backend.
             "attention_used": outcome.attention_used,
+            # Acceleration: whether block-swap prefetch ACTUALLY ran ("off" |
+            # "on" | "on->off"), same relay discipline as attention_used above.
+            "block_swap_prefetch_used": outcome.block_swap_prefetch_used,
+            # torch.cuda.max_memory_reserved()-based, additive alongside the
+            # vram_optimization block's peak_vram_mb (max_memory_allocated-
+            # based) — this feature's VRAM-risk signal (§44).
+            "peak_vram_reserved_mb": outcome.peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": outcome.backend,
             "output": {

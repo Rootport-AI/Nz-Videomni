@@ -245,6 +245,18 @@ class GenerationOutcome:
     # silently diverge (the fp8 "displayed but not applied" trap). None on the
     # mock backend and on any worker that predates the field.
     attention_used: str | None = None
+    # Acceleration: whether block-swap prefetch ACTUALLY ran ("off" | "on" |
+    # "on->off" when it fell back to the synchronous path). Reported by the
+    # worker's terminal ``done`` event and carried to metadata.json exactly like
+    # ``attention_used``. None on the mock backend and on any worker that
+    # predates the field.
+    block_swap_prefetch_used: str | None = None
+    # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
+    # peak_vram_mb (which is max_memory_allocated-based and cannot see
+    # allocator-reserved-but-unallocated growth from stream-separate pools).
+    # Additive — does not replace peak_vram_mb. None on the mock backend and on
+    # any worker that predates the field.
+    peak_vram_reserved_mb: int | None = None
 
 
 class LTXRunner:
@@ -1364,6 +1376,11 @@ class _RealBackend:
         # as the two_stage_hq pipeline value), and no exclude() trickery is used.
         if request.attention_backend != "sdpa":
             payload["attention_backend"] = request.attention_backend
+        # block_swap_prefetch: same additive contract as attention_backend above
+        # — sent only when True, so a default job's payload stays byte-identical
+        # to pre-acceleration.
+        if request.block_swap_prefetch:
+            payload["block_swap_prefetch"] = True
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1411,6 +1428,8 @@ class _RealBackend:
             # Acceleration: what the engine ACTUALLY ran with (same relay as
             # seed_used). None on a worker that predates the field.
             attention_used=event.get("attention_used"),
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
     def generate_chain(
@@ -1565,6 +1584,9 @@ class _RealBackend:
         # for the full rationale.
         if chain.attention_backend != "sdpa":
             payload["attention_backend"] = chain.attention_backend
+        # block_swap_prefetch: same additive contract as attention_backend above.
+        if chain.block_swap_prefetch:
+            payload["block_swap_prefetch"] = True
 
         with self._lock:
             try:
@@ -1598,6 +1620,8 @@ class _RealBackend:
             chain_metadata=event.get("chain"),
             # Acceleration: same relay as the single-generate path above.
             attention_used=event.get("attention_used"),
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
     def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:

@@ -31,6 +31,19 @@ from config import LimitsConfig
 # SourceVideoSpec.validate_context_frames.
 _LIMITS_DEFAULTS = LimitsConfig()
 
+# block_swap_prefetch's own default (S4, 2026-08-01: real-device gate G1-G7
+# passed, owner confirmed "gate green -> default on"). Named (unlike most
+# Field defaults in this file) because it is the SINGLE SOURCE this module's
+# two Field(...) defaults below both read, AND the value mcp_server/tools/
+# generate.py imports directly (mcp_server already sits in the same process/
+# repo as api/, same precedent as services/*.py's existing `from api.models
+# import ...`). gradio_ui/handlers.py deliberately does NOT import this — it
+# keeps its own mirrored constant (`BLOCK_SWAP_PREFETCH_DEFAULT`) with an
+# explicit cross-reference comment instead, since gradio_ui talks to the
+# backend purely over HTTP. If this value ever changes again, update it here
+# and move gradio_ui's mirror + mcp_server's import target in the same change.
+BLOCK_SWAP_PREFETCH_DEFAULT = True
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -110,6 +123,21 @@ class GenerateRequest(BaseModel):
     # fail-loud とは規律を変えている）。利用可否は GET /status の
     # acceleration.sage_available で確認できる。
     attention_backend: Literal["sdpa", "sage"] = "sdpa"
+
+    # block_swap_prefetch: block swap（VRAM を節約するために transformer の
+    # ブロックを CPU と GPU のあいだで出し入れする仕組み）の転送を、計算とは
+    # 別の CUDA stream で先回りさせて待ち時間を隠す。あわせて GPU→CPU の
+    # 退避コピーを廃止する（重みは推論中に一切変化しないので、CPU 側の正本を
+    # 保持して GPU 側は捨てるだけでよい）。実測 768p/257f で約11〜13%短縮。
+    # 【重要】attention_backend と違い、**生成結果は変わらない**（転送の
+    # 方式だけを変えるので、同一シードならビット単位で同一になる）。
+    # block swap が無効な設定（vram.block_swap=false / blocks_on_gpu=0 /
+    # blocks_on_gpu が全ブロック数以上）では黙って no-op になる。実際に
+    # 効いたかどうかは metadata.json の block_swap_prefetch_used で確認できる。
+    # 利用可否は GET /status の acceleration.block_swap_prefetch_available。
+    # 既定on（S4, 2026-08-01）: 実機ゲート（ビット一致＋VRAM）G1〜G7全PASSを
+    # 条件にオーナーが確定した既定反転。offにすると従来の同期スワップになる。
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
 
     # ─── モック2件（受理のみ・エンジン未消費）───
     # 以下2つは UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
@@ -374,6 +402,9 @@ class GenerateChainRequest(BaseModel):
     # vae_mode）が受理のみでエンジン未消費である点、vae_mode が既存 vae_tiling と
     # 無関係である点も、すべて GenerateRequest と同じ。
     attention_backend: Literal["sdpa", "sage"] = "sdpa"
+    # block_swap_prefetch: 詳細は GenerateRequest の同名フィールドを参照。
+    # 既定on（S4, 2026-08-01）。offにすると従来の同期スワップになる。
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
     fused_gguf_dequant_gemm: bool = False
     vae_mode: Literal["default", "prune_vaed"] = "default"
 
@@ -613,11 +644,12 @@ class GenerateChainRequest(BaseModel):
         fields would make chain creation 500 (nag_enabled True + empty
         negative_prompt would fail GenerateRequest's own validator).
 
-        The acceleration fields (``attention_backend`` and the two mock fields
-        ``fused_gguf_dequant_gemm`` / ``vae_mode``) are transcribed for the same
-        reason: they do not fail validation when dropped, so an omission would
-        silently mis-report a chain job's reproducibility metadata (GET /jobs'
-        ``request`` and metadata.json would claim sdpa/default for a sage chain).
+        The acceleration fields (``attention_backend``, ``block_swap_prefetch``,
+        and the two mock fields ``fused_gguf_dequant_gemm`` / ``vae_mode``) are
+        transcribed for the same reason: they do not fail validation when
+        dropped, so an omission would silently mis-report a chain job's
+        reproducibility metadata (GET /jobs' ``request`` and metadata.json would
+        claim sdpa/default for a sage chain).
         The chain's OWN worker payload is built from the chain request, not from
         this per-clip copy — this transcription only feeds the stored record.
         """
@@ -632,6 +664,7 @@ class GenerateChainRequest(BaseModel):
             neg_method=self.neg_method,
             vsf_scale=self.vsf_scale,
             attention_backend=self.attention_backend,
+            block_swap_prefetch=self.block_swap_prefetch,
             fused_gguf_dequant_gemm=self.fused_gguf_dequant_gemm,
             vae_mode=self.vae_mode,
             width=self.width,

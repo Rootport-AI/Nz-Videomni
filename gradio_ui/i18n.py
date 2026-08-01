@@ -82,6 +82,12 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vae": "VAE",
         "accel_info_unimplemented": ("Not implemented yet — shown for a future "
                                      "release; selecting it has no effect."),
+        "accel_lbl_prefetch": "Block-swap prefetch",
+        "accel_info_prefetch": ("Hides the CPU<->GPU weight-transfer time behind the "
+                                "computation (block swap only). The output is "
+                                "bit-identical to having it off — only the speed "
+                                "changes. Roughly 10-13% faster; no effect when block "
+                                "swap is disabled."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -574,6 +580,11 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vae": "VAE（潜在表現と映像を相互変換する部品）",
         "accel_info_unimplemented": ("まだ実装されていません。将来の実装に備えて"
                                      "表示しているだけで、選んでも効果はありません。"),
+        "accel_lbl_prefetch": "ブロック入れ替えの先読み",
+        "accel_info_prefetch": ("重みをCPUとGPUのあいだで運ぶ時間を、計算の裏に隠します"
+                                "（ブロック入れ替えを使っているときだけ効きます）。"
+                                "生成結果はオフのときと完全に同一で、速度だけが変わります。"
+                                "約10〜13%短縮。ブロック入れ替えが無効な設定では何も起きません。"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

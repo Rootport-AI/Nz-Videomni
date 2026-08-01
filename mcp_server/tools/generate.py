@@ -8,7 +8,10 @@ distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える
 Acceleration機能のうち現状モック（受理のみで効果が無い）の2項目であり、
 ``two_stage_hq`` の ``pipeline`` と同様に実装のない切替をクライアントへ見せて
 も意味がないため（計画D1）。一方で同じAcceleration機能のうち実装がある
-``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）は公開する。
+``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
+``block_swap_prefetch``（既定on。backend §44、実装は先読み block swap。
+offにすると従来の同期スワップになる。S4, 2026-08-01: 実機ゲートG1〜G7全PASS
+を条件にオーナーが確定した既定反転）は公開する。
 
 送信ボディは「Noneまたは空は送らない」を徹底する（計画のペイロード契約）。
 ``crop_width`` / ``crop_height`` は両方指定 or 両方省略のみを許す（片側だけの
@@ -25,6 +28,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
+from api.models import BLOCK_SWAP_PREFETCH_DEFAULT
 from mcp_server.client import get_client
 from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 
@@ -54,6 +58,7 @@ async def submit_generate(
     neg_method: str = "nag",
     vsf_scale: float = 1.5,
     attention_backend: str = "sdpa",
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -119,6 +124,15 @@ async def submit_generate(
             ``backend_status`` の ``acceleration.sage_available`` で確認で
             きます。実際に使われた方式はジョブ完了後のメタデータの
             ``attention_used`` に記録されます。
+        block_swap_prefetch: block swap（VRAM節約のためtransformerのブロックを
+            CPUとGPUのあいだで出し入れする仕組み）の転送を、計算の裏に先読み
+            で隠します（既定on。offにすると従来の同期スワップになります）。
+            **``attention_backend`` と違い、生成結果は変わりません**（転送
+            方式だけが変わるので、同一シードならビット単位で同一になります）。
+            block swapが無効な設定では黙って無効になります。利用可否は
+            ``backend_status`` の ``acceleration.block_swap_prefetch_available``
+            で確認できます。実際に効いたかはジョブ完了後のメタデータの
+            ``block_swap_prefetch_used`` に記録されます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -150,6 +164,14 @@ async def submit_generate(
 
     if attention_backend != "sdpa":
         payload["attention_backend"] = attention_backend
+    # block_swap_prefetch: sent ONLY when it differs from the server's own
+    # default (BLOCK_SWAP_PREFETCH_DEFAULT, S4 2026-08-01 = True) — mirrors
+    # gradio_ui/handlers.py's discipline. "send only when True" would have
+    # gone unsafe the moment the server's default flipped to True: an
+    # explicit "off" call would then never reach the wire and the server's
+    # own default would silently turn it back on.
+    if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+        payload["block_swap_prefetch"] = block_swap_prefetch
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -211,6 +233,7 @@ async def submit_chain(
     neg_method: str = "nag",
     vsf_scale: float = 1.5,
     attention_backend: str = "sdpa",
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -285,6 +308,9 @@ async def submit_chain(
             ``backend_status`` の ``acceleration.sage_available`` で確認で
             きます。実際に使われた方式はジョブ完了後のメタデータの
             ``attention_used`` に記録されます（チェーン全体・全ステージ共通）。
+        block_swap_prefetch: submit_generate と同じ意味（既定on。offにすると
+            従来の同期スワップになります。チェーン全体・全ステージ共通で
+            効きます。生成結果はオン/オフどちらでも同一です）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -320,6 +346,11 @@ async def submit_chain(
 
     if attention_backend != "sdpa":
         payload["attention_backend"] = attention_backend
+    # block_swap_prefetch: same "differs from BLOCK_SWAP_PREFETCH_DEFAULT"
+    # discipline as submit_generate above — see that comment for why "only
+    # when True" is unsafe now that the server's own default is True.
+    if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+        payload["block_swap_prefetch"] = block_swap_prefetch
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

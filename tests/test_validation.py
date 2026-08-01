@@ -437,6 +437,9 @@ def test_acceleration_fields_default_values_generate():
         num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
     )
     assert req.attention_backend == "sdpa"
+    # S4 (2026-08-01): default flipped True once the real-device gate
+    # (bit-exact output + VRAM headroom, G1-G7) passed.
+    assert req.block_swap_prefetch is True
     assert req.fused_gguf_dequant_gemm is False
     assert req.vae_mode == "default"
 
@@ -446,18 +449,22 @@ def test_acceleration_fields_default_values_chain():
 
     req = GenerateChainRequest(**CHAIN_BASE)
     assert req.attention_backend == "sdpa"
+    assert req.block_swap_prefetch is True
     assert req.fused_gguf_dequant_gemm is False
     assert req.vae_mode == "default"
 
 
 def test_acceleration_fields_accepted_generate(client):
-    # All three at non-default values are ACCEPTED (no validator gates them —
+    # All four at non-default values are ACCEPTED (no validator gates them —
     # sage availability is a runtime capability, not a request constraint: an
     # engine without sage degrades to sdpa rather than rejecting the job).
+    # block_swap_prefetch=True is likewise accepted regardless of whether block
+    # swap is actually configured server-side — it silently no-ops there.
     r = client.post(
         "/api/v1/generate",
         json={**BASE, "width": 512, "height": 320, "num_frames": 49,
-              "attention_backend": "sage", "fused_gguf_dequant_gemm": True,
+              "attention_backend": "sage", "block_swap_prefetch": True,
+              "fused_gguf_dequant_gemm": True,
               "vae_mode": "prune_vaed"},
     )
     assert r.status_code == 202, r.text
@@ -467,6 +474,7 @@ def test_acceleration_fields_accepted_chain(client):
     r = client.post(
         "/api/v1/generate/chain",
         json={**CHAIN_BASE, "attention_backend": "sage",
+              "block_swap_prefetch": True,
               "fused_gguf_dequant_gemm": True, "vae_mode": "prune_vaed"},
     )
     assert r.status_code == 202, r.text
@@ -485,6 +493,23 @@ def test_attention_backend_invalid_value_rejected_chain(client):
     r = client.post(
         "/api/v1/generate/chain",
         json={**CHAIN_BASE, "attention_backend": "flash"},
+    )
+    assert r.status_code == 422
+
+
+def test_block_swap_prefetch_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "block_swap_prefetch": "not-a-bool"},
+    )
+    assert r.status_code == 422
+
+
+def test_block_swap_prefetch_invalid_value_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "block_swap_prefetch": "not-a-bool"},
     )
     assert r.status_code == 422
 
@@ -510,16 +535,19 @@ def test_chain_to_clip_request_transcribes_acceleration_fields():
     model = GenerateChainRequest(**{
         **CHAIN_BASE,
         "attention_backend": "sage",
+        "block_swap_prefetch": True,
         "fused_gguf_dequant_gemm": True,
         "vae_mode": "prune_vaed",
     })
     clip0 = model.to_clip_request(0)
     assert clip0.attention_backend == "sage"
+    assert clip0.block_swap_prefetch is True
     assert clip0.fused_gguf_dequant_gemm is True
     assert clip0.vae_mode == "prune_vaed"
 
     # ...and the default chain transcribes the defaults (no accidental flip).
     plain = GenerateChainRequest(**CHAIN_BASE).to_clip_request(0)
     assert plain.attention_backend == "sdpa"
+    assert plain.block_swap_prefetch is True
     assert plain.fused_gguf_dequant_gemm is False
     assert plain.vae_mode == "default"

@@ -24,12 +24,14 @@ def test_status_reports_acceleration(client):
     # Acceleration capability block (ADDITIVE, top level). The mock backend has
     # no engine at all, so sage_available is False regardless of what the real
     # engine venv on this machine happens to contain -- that mock rule is what
-    # keeps this assertion machine-independent.
+    # keeps this assertion machine-independent. block_swap_prefetch_available
+    # (backend §44) follows the same mock rule.
     r = client.get("/api/v1/status")
     assert r.status_code == 200
     accel = r.json()["acceleration"]
     assert accel["attention_backends"] == ["sdpa", "sage"]
     assert accel["sage_available"] is False
+    assert accel["block_swap_prefetch_available"] is False
 
 
 def test_status_vram_optimization_key_set_is_unchanged(client):
@@ -75,6 +77,43 @@ def test_acceleration_status_truth_table(client):
     # (4) load failed / unloaded (no live worker) -> back to the file probe.
     runner._backend = types.SimpleNamespace(loaded=False, sage_available=True)
     assert pm.acceleration_status_block()["sage_available"] is False
+
+
+def test_block_swap_prefetch_available_truth_table(client):
+    # PipelineManager._block_swap_prefetch_available (backend §44) mirrors the
+    # REAL gate (services/ltx_runner.py's ``block_swap_blocks_on_gpu or 8``
+    # expression), NOT the display-only low_vram.block_swap bool -- that bool
+    # is never read on the real path and would make this field lie by default.
+    pm = client.app_context.pipeline_manager
+    runner = pm.runner
+
+    # (1) mock backend -> False regardless of low_vram config.
+    pm.low_vram.block_swap_blocks_on_gpu = 8
+    assert pm.acceleration_status_block()["block_swap_prefetch_available"] is False
+
+    # From here on the backend is no longer the mock.
+    runner.config.model.backend = "real"
+
+    # (2) real + unset (None) -> falls back to 8 (the `or 8` expression) -> True.
+    pm.low_vram.block_swap_blocks_on_gpu = None
+    assert pm.acceleration_status_block()["block_swap_prefetch_available"] is True
+
+    # (3) real + explicit positive value -> True.
+    pm.low_vram.block_swap_blocks_on_gpu = 8
+    assert pm.acceleration_status_block()["block_swap_prefetch_available"] is True
+
+    # (4) real + 0 -> the ``or 8`` expression treats 0 as falsy too (same quirk
+    # as the real worker-payload formula at services/ltx_runner.py's
+    # ``block_swap_blocks_on_gpu or 8``), so it ALSO falls back to 8 -> True.
+    # This mirrors the real gate exactly rather than a "nicer" 0-means-off
+    # reading, by design (§8.5): the two must never disagree.
+    pm.low_vram.block_swap_blocks_on_gpu = 0
+    assert pm.acceleration_status_block()["block_swap_prefetch_available"] is True
+
+    # (5) real + a negative value is the only way this expression yields False
+    # on a real backend (0/None both fall back to 8 above).
+    pm.low_vram.block_swap_blocks_on_gpu = -1
+    assert pm.acceleration_status_block()["block_swap_prefetch_available"] is False
 
 
 def test_sage_file_probe_checks_engine_venv_site_packages(tmp_path):
@@ -145,6 +184,40 @@ def test_metadata_records_attention_used(client):
     assert meta["request"]["vae_mode"] == "prune_vaed"
 
 
+def test_metadata_records_block_swap_prefetch_used(client):
+    # Mirrors test_metadata_records_attention_used (backend §44): the effective
+    # value (from the worker's done event, via outcome.block_swap_prefetch_used)
+    # is recorded, not the raw request value -- same "actually applied" contract
+    # as attention_used. The mock backend never installs block swap -> null, but
+    # the KEY must be present unconditionally.
+    payload = {
+        "prompt": "A red ball rolling on a white floor",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 42,
+        "pipeline": "distilled",
+        "block_swap_prefetch": True,
+    }
+    r = client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "block_swap_prefetch_used" in meta
+    assert meta["block_swap_prefetch_used"] is None  # mock backend ran no engine
+    assert "peak_vram_reserved_mb" in meta
+    assert meta["peak_vram_reserved_mb"] is None
+    # The request dump carries the raw requested value regardless.
+    assert meta["request"]["block_swap_prefetch"] is True
+
+
 def test_chain_metadata_records_attention_used(client):
     # Same key on the chain writer (a separate metadata builder -- it does not
     # share _write_metadata, so it needs its own guard).
@@ -173,6 +246,38 @@ def test_chain_metadata_records_attention_used(client):
     assert "attention_used" in meta
     assert meta["attention_used"] is None
     assert meta["request"]["attention_backend"] == "sage"
+
+
+def test_chain_metadata_records_block_swap_prefetch_used(client):
+    # Same key on the chain writer (a separate metadata builder -- it does not
+    # share _write_metadata, so it needs its own guard).
+    payload = {
+        "prompt": "a serene mountain lake at dawn",
+        "width": 384,
+        "height": 256,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "pipeline": "distilled",
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 25}, {"num_frames": 25}],
+        "block_swap_prefetch": True,
+    }
+    r = client.post("/api/v1/generate/chain", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "block_swap_prefetch_used" in meta
+    assert meta["block_swap_prefetch_used"] is None
+    assert "peak_vram_reserved_mb" in meta
+    assert meta["peak_vram_reserved_mb"] is None
+    assert meta["request"]["block_swap_prefetch"] is True
 
 
 def test_upload_image(client, png_bytes):

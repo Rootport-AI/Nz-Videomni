@@ -497,6 +497,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `nag_tau` | float | `2.5` | `ge=1.0, le=10.0` | **2026-07-28追加**。ノルム頭打ち上限 |
 | `nag_alpha` | float | `0.25` | `ge=0.0, le=1.0` | **2026-07-28追加**。正出力とのブレンド比率 |
 | `attention_backend` | `Literal["sdpa","sage"]` | `"sdpa"` | enum | **2026-07-31追加**。attention（注意機構）の実装選択。`"sage"` は SageAttention 2.2.0（§5.4）。**実装あり**。sageattention 未導入の環境では 422 にせず `"sdpa"` へ降格して完走する |
+| `block_swap_prefetch` | bool | `true` | — | **2026-08-02追加**。block swap（transformer のブロックを CPU⇔GPU 間で出し入れする既定の省VRAM機構）の転送を、計算とは別の CUDA stream で先回りさせて隠す先読み機能。**実装あり**。`attention_backend` と違い転送方式のみを変えるため、同一シードなら off/on で出力がビット単位一致する。block swap 自体が無効な設定（`vram.block_swap=false` / `block_swap_blocks_on_gpu=0` / 全ブロック数以上）では黙って no-op になる。詳細は `Docs/VERIFICATION_LOG.md` §44 |
 | `fused_gguf_dequant_gemm` | bool | `false` | — | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注） |
 | `vae_mode` | `Literal["default","prune_vaed"]` | `"default"` | enum | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注）。既存の `vram_optimization.vae_tiling`（VRAM 節約のタイル分割）とは**無関係** |
 
@@ -513,11 +514,12 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 > **NAGフィールドの補足（2026-07-28追加）**: 上記4フィールドは `GenerateRequest` に加えて `GenerateChainRequest`（`POST /generate/chain`。本書は§6ではPhase 1の単発生成のみを扱うため独立のスキーマ表は持たない）にも同一の名前・型・デフォルト・制約で存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。詳細な設計判断（式の規約・非対称設計の根拠・実装箇所一覧・実機ゲート）は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を正本とする。
 
-> **Acceleration フィールドの補足（2026-07-31追加）**: 上記3フィールド（`attention_backend` / `fused_gguf_dequant_gemm` / `vae_mode`）も NAG と同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。
+> **Acceleration フィールドの補足（2026-07-31追加、2026-08-02追記）**: 上記4フィールド（`attention_backend` / `block_swap_prefetch` / `fused_gguf_dequant_gemm` / `vae_mode`）も NAG と同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。
 >
 > - **モック2件（`fused_gguf_dequant_gemm` / `vae_mode`）の位置づけ**: 受理はするがエンジンへは渡さない、将来の実装枠である。`model_dump()` 経由の `metadata.json` と `GET /jobs` の `request` エコーには**現れる**（`pipeline: "two_stage_hq"` と同じ既存の前例に倣う。`exclude` 等の細工はしない）。**現れないのは worker ペイロードと `GET /status` だけ**——`/status` はサーバーが実際にできることを記述する場所だからである。MCP のツール引数にも公開しない。UI 側は常時グレーアウト。
-> - **既定値のジョブは worker ペイロードがバイト同一**: `attention_backend != "sdpa"` のときだけ条件付きでキーを加算する方式のため、既定のリクエストではペイロードのキーが1つも増えない（`Docs/VERIFICATION_LOG.md` §43.4 の完全一致テスト群が固定している）。
-> - 詳細な設計判断・実装箇所一覧・実機ゲート・実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43 を正本とする。
+> - **既定値のジョブは worker ペイロードがバイト同一**: `attention_backend != "sdpa"` のとき、`block_swap_prefetch != true` のとき、それぞれ条件付きでキーを加算する方式のため、両方とも既定のリクエストではペイロードのキーが1つも増えない（`Docs/VERIFICATION_LOG.md` §43.4／§44.4 の完全一致テスト群が固定している）。
+> - **`block_swap_prefetch` の既定は `true`**（`attention_backend` とは既定値の向きが逆）。実機ゲート（ビット一致＋VRAM）合格を条件に、開発時の既定 `false` から 2026-08-02 に反転した経緯は `Docs/VERIFICATION_LOG.md` §44.7 を参照。
+> - 詳細な設計判断・実装箇所一覧・実機ゲート・実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43（`attention_backend`）・§44（`block_swap_prefetch`）を正本とする。
 
 - `width`/`height` は two-stage distilled が stage-1 を半解像度で生成し 2x アップサンプルするため **64 の倍数**（32 からの意図的な厳格化。960x540 等の非 64 表示サイズは `crop_output` で得る）。
 - バリデータ失敗はすべて 422（`VALIDATION_ERROR` エンベロープ、§6.8）。
@@ -726,11 +728,13 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 ```json
 "acceleration": {
   "attention_backends": ["sdpa", "sage"],
-  "sage_available": true
+  "sage_available": true,
+  "block_swap_prefetch_available": true
 }
 ```
 
 - `attention_backends`: `attention_backend`（§6.2）が受け付ける値の一覧。**実装のある項目だけ**を並べる。モック2件（`fused_gguf_dequant_gemm` / `vae_mode`）は、`/status` が「サーバーが実際にできること」を記述する場所である以上、**意図的に載せていない**。
+- `block_swap_prefetch_available`（**2026-08-02追加**）: 先読み block swap（`block_swap_prefetch`、§6.2）が実際に効く構成かどうか。判定式は実ゲートと完全同一で `not runner.is_mock and int(low_vram.block_swap_blocks_on_gpu or 8) > 0`（`services/pipeline_manager.py::_block_swap_prefetch_available`）。§6.5 の凍結 `vram_optimization` ブロックには一切触れていない。`block_swap_blocks_on_gpu=0` を `or 8` により実質8として扱う式は本項のために新設したものではなく、`services/ltx_runner.py:1086` に既存の式をそのまま流用している。詳細は `Docs/VERIFICATION_LOG.md` §44.1・§44.8。
 - `sage_available`: SageAttention が使えるかどうか。サーバーの状態によって判定経路が変わる（**真理値表**。この表の置き場が `acceleration_status_block()` である）:
 
 | サーバーの状態 | `sage_available` の由来 |
@@ -759,6 +763,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `generation_mode` | `"t2v"` / `"i2v"`（outcome 由来） |
 | `seed_used` | int |
 | `attention_used` | str \| null（**2026-07-31追加**。実際に使われた attention の実装＝`"sdpa"` / `"sage"` / `"sage->sdpa"`。`seed_used` とまったく同じ経路〔worker の完了イベント → outcome → メタデータ〕で書き出される。mock backend や旧 worker では `null`） |
+| `block_swap_prefetch_used` | str \| null（**2026-08-02追加**。実際に効いた先読み block swap の状態＝`"off"` / `"on"` / `"on->off"`〔on を要求したが block swap 未インストール・pinned 確保失敗などで同期経路へ降格〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`） |
+| `peak_vram_reserved_mb` | int \| null（**2026-08-02追加**。`torch.cuda.max_memory_reserved` 換算 MB。既存の `vram_optimization.peak_vram_mb`〔`max_memory_allocated`〕はstream別プール分断・reserved増を検知できないため、先読み block swap のVRAMリスクを見る指標として加算した。既存フィールドは置換していない） |
 | `generation_time_seconds` | `round(elapsed, 2)` |
 | `backend` | outcome.backend（mock は `"mock"`、real は `"ltx-distilled"`） |
 | `output` | `{path, resolution, duration_seconds, frame_rate, file_size_bytes}` |

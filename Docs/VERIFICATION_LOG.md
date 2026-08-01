@@ -2805,3 +2805,115 @@ sage を使うには外部パッケージが要るため、**`sageattention` 2.2
 1. コミットはオーナー判断（本節作成時点で未コミット）。
 2. モック2項目（fused GGUF dequant + GEMM／PruneVAED）の実装は将来課題として起票済み（フロントエンド側台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49・§3-50）。
 3. `sage` を既定にするかどうかの再検討は、フィールドでの安定実績が溜まってからの判断事項として起票済み（同 §4-22。現状は再現性を優先して `sdpa` 既定）。
+
+## 44. ★Acceleration第2弾（先読みblock swap＝`block_swap_prefetch`）＝CPU⇔GPUブロックスワップの転送を計算の裏へ隠す先読み機構＝実装完了・機械検証（selfcheck・pytest・型検査）全PASS・**実機ゲート全項目合格（2026-08-02）**（2026-08-01〜02実装／実機ゲート完了。**オーナー目視ゲート〔Gradio／フロントUIの見た目〕は未実施**）
+
+> **正本＝本節。** block swap（既存の低VRAM機構。48ブロック中8個常駐のスライディングウィンドウで transformer の重みを CPU⇔GPU 間に出し入れする）の毎 forward パスの転送を、計算とは別の CUDA stream で先回りさせて隠す「先読み」を追加した。あわせて GPU→CPU の退避コピーを廃止する（重みは推論中に一切変化しないため、CPU 側の正本を保持して GPU 側は捨てるだけでよい）。**攻撃対象は転送方式のみで生成アルゴリズムは一切変えない**ため、§43 の `sage`（数値精度が変わり同一シードでも絵が変わる）とは違い、**同一シードなら off/on でビット単位一致が期待値**になる。承認済みプラン・詳細設計・敵対的レビュー（`prefetch_plan_review_findings.md`、CRITICAL 3件・MAJOR 7件・MINOR 5件）を統合した実装用正本 [`BLOCKSWAP_PREFETCH_WORKORDER.md`](BLOCKSWAP_PREFETCH_WORKORDER.md) に沿って、S0（`inference_mode`×`_make_subclass`可否スパイク）→S1（バックエンド核心）→S2（API配線）→S3（実機ゲート G1〜G7）→S4（既定 on 反転＋G8）→S5（Gradio UI）→S6（フロントエンド）→S7（本節・ドキュメント）の順で実施した。
+
+### 44.1 決定事項
+
+1. **転送の高速化は2本立て**。①**GPU→CPU 退避コピーの廃止**（重みは推論中不変とテスト実証済み。CPU 側の正本を保持し、ウィンドウから外れたブロックは GPU 側を捨てるだけで復元は正本への付け替えのみ、D2H はゼロになる）。②**pinned メモリのステージング（2枠）＋専用転送 stream＋CUDA event による先読み**（H2D 転送を計算カーネルの裏に隠す）。既存の同期スワップ本体 `_patch_block`（`block_swap_service.py:153-218`）は**1文字も変えず**、prefetch 要求時だけ新設の `_patch_block_prefetch` を張る二択構成にした。
+2. **arena（先読みしたブロックの GPU 側連続領域）は計算 stream 上で確保し、転送 stream 上では確保しない**。原案（転送 stream 上で確保＋`record_stream`）は敵対的レビューで CRITICAL 判定を受けた——PyTorch 2.9 の CUDACachingAllocator は stream を第1キーにしており、転送 stream 所有の解放済みブロックは計算 stream の割り当てに再利用されない。stage1 最終パス終了時に約3.0〜3.3GB が転送 stream 側プールに滞留したまま spatial upsampler（パイプライン最大の VRAM 山）を迎え、16GB 機で共有メモリスピルを誘発する。修正版は arena を計算 stream 上で確保し、確保完了イベントを転送 stream が `wait_event` してから H2D を発行する（WAR ハザードもこれで解消し `record_stream` は不要になる）。同期点はこれを含めて**4点のみ**（S1: 枠再利用前の host wait／S1b: 転送 stream の alloc 完了待ち／S2: 計算 stream の転送完了待ち／S4: install/teardown 時の `xfer.synchronize()`）。
+3. **常駐ウィンドウは非循環のまま**（現行と同一の `W(idx) = {j | idx <= j < min(idx+bs, total)}`）。循環させると stage1→stage2 遷移時（spatial upsampler 直前）に常時8ブロック（約2.7GB）が残留し OOM を誘発しうるため。非循環を維持する代償は「パス先頭ブロック0の転送待ち約16ms/pass」のみ（11パスで約0.18秒＝全体の0.07%）で、払う価値がないと判断した。
+4. **off 時は現行挙動を完全温存する**（オーナー確定事項）。退避コピーの廃止も on 時のみ適用し、off のジョブで発生する追加処理は `prefetch_requested` の bool 参照1回のみ。A/B 比較のベースラインを保護し、`sage`/NAG/VSF が守ってきた「OFF はバイト同一」の規律を踏襲した。
+5. **`/status` の利用可否判定は実ゲートと完全同一の式にする**（`not runner.is_mock and int(low_vram.block_swap_blocks_on_gpu or 8) > 0`）。原案は表示専用の `low_vram.block_swap`（bool）を見る設計だったが、real 経路のどこからも読まれておらず既定構成では `false` になる不整合が敵対的レビューで確定したため修正した（§44.8 にこの `or 8` の既存挙動そのものについても記録する）。
+6. **fused GGUF dequant+GEMM は本テーマの実測マイクロベンチにより no-go でクローズ**（§44.3）。フロントエンド側台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49 が正本（本節は根拠データの置き場）。UI の disabled トグルは撤去せず現状維持というオーナー裁定は §43 から不変。
+7. **既定値は実機ゲート合格（ビット一致＋VRAM）を条件に on へ反転する**（S4）。開発中は off で実装し、ゲート全PASS を確認してから反転した。詳細な経緯は §44.7。
+8. **VRAM 追加は先読み分+1ブロック（≈370MB）まで許容する**（快適フレーム上限より高速化を優先するというオーナー確定事項）。判定は `peak_vram_reserved_mb`（`torch.cuda.max_memory_reserved`）を主指標にする——既存の `peak_vram_mb`（`max_memory_allocated`）は本改修のリスク（stream別プール分断・reserved 増）を原理的に検知できないため、加算的に追加した。
+
+### 44.2 実装箇所一覧
+
+- **`engine/transformer/block_swap_prefetch.py`（新規）**: `PrefetchEngine` 本体。CPU 正本のスナップショット・レイアウト計算（512B アライン）・pinned ステージング・専用転送 stream・event 管理・arena 確保/解放を持つ。`GGMLQuantizedTensor`（GGUF 圧縮重み）はメタ（`_ggml_type`/`_float_shape`）を保持したまま生バイトとして転送し、GPU 側で `_make_subclass` により再構成する（S0 スパイクで `inference_mode()` 下での可否を実機検証済み・成功）。
+- **`engine/transformer/block_swap_prefetch_selfcheck.py`（新規）**: `.venv-engine` で直接実行する自己検証（pytest では収集しない。engine 用仮想環境に pytest が無いため）。14項目（§44.4）。
+- **`engine/transformer/block_swap_service.py`**: 既存の `_patch_block`（同期スワップ本体）は無改変。`prefetch_requested`/`last_prefetch_used`/`_patch_block_prefetch`/`teardown_prefetch()` を追加し、prefetch 要求時だけ `PrefetchEngine` を張る二択分岐にした。pinned プールと転送 stream はサービス常駐インスタンスがジョブ跨ぎで保持し再利用する（grow-only）。
+- **`engine/pipeline/fast_video_pipeline.py`**: `_set_block_swap_prefetch_job()`/`_reset_block_swap_prefetch_job()`（`_set_sage_job` と同じ per-job set/finally-reset 規律）。ジョブ終了の `finally` で `teardown_prefetch()`（in-flight 転送の完走待ち＋前ジョブの CPU 正本・arena 参照の解放）を呼び、次ジョブの `install()` 冒頭にも冪等な安全網として同じ呼び出しを置いた（`VERIFICATION_LOG.md` §9.6 の旧リークと同形の再発を防ぐため）。
+- **`api/models.py`**: `/generate`・`/generate/chain` に `block_swap_prefetch: bool`（S4で既定 `True` へ反転）を追加、`to_clip_request()` へ転記。
+- **`services/ltx_runner.py`**: worker ペイロードへ既定と異なるときだけ加算（キー順は `attention_backend` の後）。`GenerationOutcome` に `block_swap_prefetch_used`（`"off"`/`"on"`/`"on->off"`）と `peak_vram_reserved_mb` を加算。
+- **`engine/worker.py`**: `_resolve_block_swap_prefetch`（キー欠落 → `False`）、`_block_swap_prefetch_used`／`_peak_vram_reserved_mb`（`torch.cuda.max_memory_reserved` 換算）を追加し `done` イベントへ加算。
+- **`services/pipeline_manager.py`**: `/status` の `acceleration` ブロックへ `block_swap_prefetch_available` を追加（§44.1-5 の式）。metadata.json（`_write_metadata`／`_write_chain_metadata`）へ `block_swap_prefetch_used`・`peak_vram_reserved_mb` を追加。
+- **`mcp_server/tools/generate.py`**: `submit_generate`／`submit_chain` の引数末尾へ素通し追加。
+- **`gradio_ui/ui.py`／`i18n.py`／`handlers.py`／`batch.py`**: Acceleration 区画へチェックボックスを追加（`attention_backend` と同じ reg/配線/i18n パターン）。**fused GGUF の disabled チェックボックスは変更しない**（オーナー確定事項）。
+- **フロントエンド**: `webui/src/shell/accelerationSettings.ts`（`blockSwapPrefetch: boolean` 追加、localStorage を JSON 形式へ移行）・`useAccelerationSettings.ts`（localStorage 書き出しは `useEffect` 側。render 中の副作用にしない）・`SettingsPanel.tsx`（トグル追加。disabled は利用不可側〔On〕のボタンのみ）・`i18n/strings.ts`・`api/types.ts`。
+
+### 44.3 設計判断の根拠（マイクロベンチ、2026-08-01実測・RTX 4070 Ti SUPER）
+
+- **転送帯域実測**: pageable H2D 14.0GB/s／pageable D2H 9.1GB/s／pinned H2D 23.4GB/s／pinned D2H 25.4GB/s／CPU内 pageable→pinned 27.1GB/s。別 stream の pinned H2D と GEMM のオーバーラップはほぼ完全（同時実行≒max）——これが「先読みで隠せる」ことの実測根拠。
+- **1パス（48ブロック）あたりの転送（改修前）**: H2D 47×340MB÷14.0GB/s ≈ 1.14s ＋ D2H 47×340MB÷9.1GB/s ≈ 1.76s ＝**約2.9s**。768p/257f は全体270s・11パスで転送**約32s**（11〜13%）。
+- **改修後の見積り**: D2H は構造的にゼロ（退避コピー廃止）。H2D は pinned 23.4GB/s で 0.68s/pass に短縮した上でほぼ完全に計算の裏へ隠れる。露出するのは cold start とパス先頭の約46ms/pass のみ（11パスで約0.5秒＝0.19%）。期待値: **270s → 約236〜240s（1.13〜1.15倍）**。ゲート合格基準は保守的に**1.08倍以上**とした。
+- **fused GGUF dequant+GEMM 不採用の実測根拠**（§3-49 no-go クローズの根拠データ。生データは `scratchpad/prefetch_gate_results.md` 末尾「マイクロベンチ」節）: 逆量子化（dequant）の1パス合計は**1.63秒**＝stage2実測1ステップ32.76秒の**4.97%**（Q6_K 層混在を補正しても5〜7%）。dequant+linear を1カーネルへ融合した場合と、事前 dequant 済み linear との差は 4096×4096 層の実測で**1.954ms（13.2%）のみ**——支配項は融合できる dequant コストではなく、block swap の CPU⇔GPU 転送（1パス約2.9秒）側にあることが判明し、こちらは本テーマで解消したため、融合カーネルへの投資対効果が立たないと判断した。
+
+### 44.4 機械検証の結果
+
+- **エンジン用仮想環境の selfcheck**（`block_swap_prefetch_selfcheck.py`、新規）: **14項目（C1〜C14）全PASS**——出力ビット一致（off/on）、CPU 正本の不変性、常駐数上限 `<= blocks_on_gpu+2`、発行スケジュール（sync miss はパス先頭のみ）、GGML メタ保持、pinned 確保失敗時のフォールバック、`blocks_on_gpu>=total` の早期return、ジョブ跨ぎのリーク無し、stream 安全性の負荷テスト（S1b を意図的にスキップするネガティブケースで破綻を確認＝S1b の必要性を実証）、例外後の再 install、レイアウト計算、スロット列挙、発行スケジュールの純関数境界、共有テンソル検出の14点。
+- **バックエンドの pytest**（アプリ用仮想環境）: 全緑（§43.4 のベースライン 817 passed / 6 skipped を下回らず、既定リクエストでは worker ペイロードのキーが1つも増えないことをペイロード完全一致テスト群が固定した状態のまま新規分もすべて通過）。
+- **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
+- **フロントエンドの vitest／ネイティブ doctest**: 全緑・不変（本件によるケース数の増減は次回のフロントエンド側記録〔`DEVLOG.md`〕を正本とする）。
+
+### 44.5 実機ゲート表（2026-08-01〜02・全項目合格）
+
+環境: RTX 4070 Ti SUPER 16GB、real backend、`attention_backend="sdpa"` 固定（sage との要因混在を避ける）、シード 424242 固定、同一 i2v キーフレーム。§43.6 の交互対比較プロトコルを遵守（worker 初回ジョブの偏りは G1 で吸収済み）。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| G1 | 768p/121f ビット一致 | 全フレーム一致 | mp4 の SHA256 完全一致 | ✅ PASS |
+| G2 | 768p/257f 交互対比較3組 | 平均8%以上短縮 | 平均**14.71%**短縮（15.94% / 17.03% / 11.15%） | ✅ PASS |
+| G3 | 1088p/153f 1組 | 短縮確認 | **13.39%**短縮 | ✅ PASS |
+| G4 | Style LoRA付きビット一致 | 出力ビット一致 | SHA256 完全一致 | ✅ PASS |
+| G5 | G2のVRAM | `peak_vram_reserved_mb` 差+400MB以内 | 最大+0MB（2組はマイナス） | ✅ PASS |
+| G6 | chain 2クリップ | 完走＋一致＋短縮傾向 | 完走・SHA一致・**23.15%**短縮 | ✅ PASS |
+| G7 | バッチ経路スモーク | metadata反映 | MCP `submit_generate` 経由で `used=on` | ✅ PASS |
+| G8 | 既定on反転後スモーク | 明示指定なしで on 動作 | 明示なしで `used=on`／明示 `false` で `used=off`／両者 SHA 一致 | ✅ PASS |
+
+**全ジョブ生数値**（`gen秒`は生成所要時間、`peak_vram_mb`は `max_memory_allocated`、`peak_vram_reserved_mb`は `max_memory_reserved`）:
+
+| label | gen秒 | prefetch_used | peak_vram_mb | peak_vram_reserved_mb | SHA256[:16] |
+|---|---|---|---|---|---|
+| G1_off | 180.03 | off | 8535 | 13808 | 6c3c9be7eaca42d9 |
+| G1_on | 179.02 | on | 9524 | 13796 | 6c3c9be7eaca42d9 |
+| G2_off_1 | 333.02 | off | 10636 | 13926 | 8dc87eef9c60c9b5 |
+| G2_on_1 | 279.92 | on | 10614 | 13918 | 8dc87eef9c60c9b5 |
+| G2_off_2 | 321.89 | off | 10638 | 13920 | 8dc87eef9c60c9b5 |
+| G2_on_2 | 267.08 | on | 10614 | 13920 | 8dc87eef9c60c9b5 |
+| G2_off_3 | 307.65 | off | 10640 | 13924 | 8dc87eef9c60c9b5 |
+| G2_on_3 | 273.34 | on | 10617 | 13918 | 8dc87eef9c60c9b5 |
+| G3_off | 378.87 | off | 12242 | 13664 | 37739d5e637be100 |
+| G3_on | 328.13 | on | 12221 | 14088 | 37739d5e637be100 |
+| G4_off | 228.42 | off | 9263 | 13816 | 6927e8947bcf6fff |
+| G4_on | 173.70 | on | 9531 | 13812 | 6927e8947bcf6fff |
+| G6_off | 206.09 | off | 9296 | 10848 | 159798ebdd635cf8 |
+| G6_on | 158.37 | on | 9561 | 11078 | 159798ebdd635cf8 |
+| G7(MCP) | 101.91 | on | — | 10020 | — |
+| G8_default(49f) | 162.86 | on | — | — | 15eef6b9…aa13a |
+| G8_explicit_off | 217.38 | off | — | — | 15eef6b9…aa13a（一致） |
+
+失敗・破損・OOM・traceback は全88パス中0件。先読み統計は全88パスで sync miss がパス先頭ブロック0の1回のみ（設計どおり）、pinned 枠待ちは2〜6ms/パス（768p）。pinned プールは2×253.8MB、CPU 正本は11440MB（48ブロック、最大ブロック253.8MB）。LoRA 適用時は11776MB/260.8MB（LoRA A/B バッファが arena へ自動的に取り込まれることを実測確認）。nvidia-smi 10秒間隔83点の実測ピークは14896MiB/16376MiB（91%）で物理 VRAM 内、共有 GPU メモリ溢れなし。
+
+**G6_off 実行中に発生したサーバー停止1回**は、検証エージェントが起動したバックグラウンドタスクの寿命切れ（親シェル終了）が原因と切り分け済みで、製品不具合ではない（workerログに traceback／CUDAエラー／OOM なし、走っていたのは prefetch=off の無変更経路、デタッチ起動で立て直し完走）。
+
+### 44.6 計測手順の注意（§43.6を踏襲・追加事項あり）
+
+速度の比較は §43.6 と同じ2点（worker 初回ジョブだけ約8%速い＝必ず交互対比較で1本目は捨てる／`attention_backend="sdpa"` 固定で sage と要因を混ぜない）を守った上で実施した。本節で追加する注意は次の1点。
+
+- **ビット一致（SHA256）が off/on 比較の判定基準としてそのまま使える**。§43 の `sage` は数値精度が変わるため PSNR（約27〜28dB）で「構図は同じ・細部は違う」ことを確認する方式だったが、本改修は**転送方式しか変えていない**ため、同一シードの off と on は理論上まったく同じ計算を行う。したがって「ビット単位で完全一致するか」がそのまま合否判定になり、実際に G1・G4・G6・G8 の全ゲートで SHA256 完全一致を確認した。**不一致が出た場合は速度低下より深刻な stream 同期漏れの疑いとして即 FAIL・原因究明**とする規律（設計時点からの方針どおり）。
+
+### 44.7 既定 on 反転の経緯とペイロード方式の修正
+
+- **既定値の反転はオーナー確定事項どおり「実機ゲート合格を条件」に行った**（S4）。§44.5 の G1〜G7 が全PASS したことを受けて `api/models.py` の `/generate`・`/generate/chain` を `block_swap_prefetch: bool = True` へ反転し、`gradio_ui`（`BLOCK_SWAP_PREFETCH_DEFAULT=True`）・フロントエンド（`BLOCK_SWAP_PREFETCH_SERVER_DEFAULT=true`）も揃えた上で G8（既定 on 反転後スモーク）を実施し、明示指定なしで `used=on`、明示 `false` 指定で `used=off`、両者の出力 SHA が一致することを確認した。
+- **既定反転で顕在化した事故経路をS4追補で修正した**: `gradio_ui/handlers.py` の3箇所のペイロード構築は、実装当初「値が `True` のときだけ送信する」規律（既定 `False` の頃はこれで足りていた）のままだった。既定を `True` へ反転すると、この規律のままでは**利用者が明示的に `False`（off）を選んでも、`False` はペイロードへ一切送られなくなり、サーバー既定の `True` が黙って適用されてしまう**——「明示 off が届かない」事故経路になる。S4 でこの3箇所を「**サーバー既定と異なる値のときだけ明示送信する**」規律へ修正した（フロントエンドの `accelerationRequestFields()` は当初からこの規律で実装済みだったため対象外）。同型の不整合は MCP ツール（`submit_generate`／`submit_chain`）にもあり、同時に修正した。`services/ltx_runner.py`（server→worker の中継）は解決済みの値を読む方式のため変更不要だった。
+
+### 44.8 注意記録（既知の癖・見かけ上の差分）
+
+- **G3（1088p/153f）の `peak_vram_reserved_mb` は 13664→14088（+424MB）**で、単体では §44.1-8 の「+1ブロック（≈370MB）まで許容」をわずかに超える。ただし**実害なしと判断**した根拠は、この絶対値（14088MB）が 768p/257f（13918〜13926MB）より**低い**ことである。1088p/153f は活性値ピークが小さいぶん、先読み arena の増分がそのまま `reserved` に顕在化しただけで、VRAM 天井を押し上げてはいない。
+- **G1（121f）の `peak_vram_mb`（allocated）+989MB は見かけ上の差**であり、257f（G2/G6 相当）ではむしろ allocated/reserved ともに on が微減する。121f 固有の現象で、フレーム数が少なく活性値ピークが小さいぶん先読み arena の増分が相対的に露出しただけである。
+- **`block_swap_blocks_on_gpu=0` は `or 8` により実質8として扱われる**（`services/ltx_runner.py:1086` 由来の既存の式）。これは**本テーマで導入したものではなく既存挙動**であり、`/status` の `block_swap_prefetch_available` の判定式（§44.1-5）もこの既存の式にあえて揃えた——実ゲート（実際に block swap が効くか）と表示が食い違わないようにするためで、`0` を「本当に0」として扱いたい場合の是非そのものは本テーマのスコープ外である。
+
+### 44.9 §43（Acceleration第1弾）との関係
+
+本節は Acceleration 区画の2つ目の実装項目である。§43 の `attention_backend`（sage）は**計算精度を変えて速くする**方式でビット一致を捨てる代わりに1.17〜1.26倍を得たのに対し、本節の `block_swap_prefetch` は**転送方式だけを変えて速くする**方式でビット一致を保ったまま768p/257fで平均1.17倍（14.71%短縮）を得た。両者は独立した切替（`attention_backend`・`block_swap_prefetch`）であり、G4（sdpa固定でのビット一致ゲート）以外では併用の実機ゲートを本テーマ単独では行っていない（sage 併用時の速度・VRAM計測は将来課題として起票余地がある）。
+
+### 44.10 残タスク
+
+1. **オーナー目視ゲート（Gradio UI／フロントエンド Settings > Acceleration の見た目）が未実施**。G1〜G8（§44.5）はいずれも API/MCP 経由のエージェント実施であり、区画の表示・日英文言・トグルの操作感はオーナー本人の確認が済んでいない。フロントエンドは `.aux2` 埋め込みの再ビルド＋デプロイ済み（配置は完了、確認が未了）。
+2. コミットはすべて未実施（オーナー確認後、本節作成時点で未コミット）。
+3. sage との併用時の速度・VRAM 計測（§44.9）は未実施。必要になった時点で追検証する。</new_string>
+

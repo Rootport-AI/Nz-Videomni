@@ -37,6 +37,18 @@ MODE_A2V = "a2v"
 _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
 
+# Acceleration: block-swap prefetch checkbox default. S4 (2026-08-01) flips
+# this to True — the real-device gate (bit-exact output + VRAM headroom, G1-G7)
+# passed and the owner confirmed "gate green -> default on". Every default=
+# below (this module, ui.py, batch.py) reads from here so there is exactly one
+# place to change. Mirrors the server's own GenerateRequest/GenerateChainRequest
+# default flip (api/models.py) — the two must move together, since this
+# constant also anchors the "send explicitly only when it differs from the
+# default" payload discipline below (S4 also flipped that discipline: it used
+# to be "send only when True", which would have silently gone inert now that
+# True is the default — an explicit False must now be the one that's sent).
+BLOCK_SWAP_PREFETCH_DEFAULT = True
+
 
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
@@ -362,6 +374,7 @@ def build_a2v_chain_payload(
     neg_method="nag",
     vsf_scale=1.5,
     attention_backend="sdpa",
+    block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -384,7 +397,16 @@ def build_a2v_chain_payload(
     ``attention_backend`` follows the same discipline one step further out: the
     key is emitted ONLY when it differs from the ``"sdpa"`` default, and always
     LAST (after the NAG/VSF block), so every pre-Acceleration payload -- and the
-    exact-match/key-order tests locked on it -- stay byte-identical."""
+    exact-match/key-order tests locked on it -- stay byte-identical.
+    ``block_swap_prefetch`` follows immediately after ``attention_backend``,
+    same "differs from default" discipline (S4, 2026-08-01: the API's own
+    default flipped to True, so the constant this compares against —
+    ``BLOCK_SWAP_PREFETCH_DEFAULT`` — flipped too): emitted ONLY when it
+    differs from that default, so a request that never touches the checkbox
+    stays byte-identical to the pre-prefetch contract EITHER WAY. Sending only
+    when True would have silently broken on this flip: an explicit "off" would
+    have gone unsent and the server's new True default would have turned it
+    back on behind the caller's back."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -426,6 +448,12 @@ def build_a2v_chain_payload(
     # frozen key order.
     if attention_backend != "sdpa":
         chain_payload["attention_backend"] = attention_backend
+    # Block-swap prefetch (additive, conditional): sent ONLY when it differs
+    # from BLOCK_SWAP_PREFETCH_DEFAULT (S4: the server's own default is now
+    # True), appended after attention_backend so the default payload keeps its
+    # frozen key order.
+    if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+        chain_payload["block_swap_prefetch"] = bool(block_swap_prefetch)
     return chain_payload
 
 
@@ -453,7 +481,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # Acceleration (ADDITIVE, last): the Settings-tab attention
                  # selector. ui.py's dispatch() passes it as a KEYWORD, so this
                  # stays at the very end and no positional call site shifts.
-                 attention_backend="sdpa"):
+                 attention_backend="sdpa",
+                 # Acceleration (ADDITIVE, last): the Settings-tab block-swap
+                 # prefetch checkbox. Same discipline as attention_backend --
+                 # keyword-only from ui.py's dispatch(), appended after it.
+                 block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -680,6 +712,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 neg_method=neg_method,
                 vsf_scale=vsf_scale,
                 attention_backend=attention_backend,
+                block_swap_prefetch=block_swap_prefetch,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -750,6 +783,15 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # byte-identical to the pre-Acceleration payload.
         if attention_backend != "sdpa":
             payload["attention_backend"] = attention_backend
+        # Block-swap prefetch (additive, conditional): appended right after
+        # attention_backend, only when it differs from BLOCK_SWAP_PREFETCH_DEFAULT
+        # (S4: the API's own default is now True), so a request that never
+        # touches the checkbox stays byte-identical to the default payload
+        # EITHER WAY. Sending only when True would silently re-enable the
+        # feature for a caller who explicitly turned it off, now that the
+        # server's own default has flipped to True.
+        if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+            payload["block_swap_prefetch"] = bool(block_swap_prefetch)
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -849,7 +891,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # fills it is tests/test_gradio_v2v_a2v.py's _chain_args),
                        # so the attention selector goes AFTER it and ui.py's
                        # chain_dispatch forwards it as a KEYWORD.
-                       attention_backend="sdpa"):
+                       attention_backend="sdpa",
+                       # Acceleration (ADDITIVE, last): the block-swap prefetch
+                       # checkbox, same discipline -- appended after
+                       # attention_backend, forwarded as a KEYWORD by ui.py's
+                       # chain_dispatch.
+                       block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1163,6 +1210,13 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # and build_a2v_chain_payload.
         if attention_backend != "sdpa":
             payload["attention_backend"] = attention_backend
+        # Block-swap prefetch (additive, conditional): appended right after
+        # attention_backend, only when it differs from BLOCK_SWAP_PREFETCH_DEFAULT,
+        # mirroring the single-generate path and build_a2v_chain_payload (see
+        # there for why "only when True" is unsafe now that the server's own
+        # default is True).
+        if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+            payload["block_swap_prefetch"] = bool(block_swap_prefetch)
 
         try:
             resp = api.generate_chain(payload)

@@ -51,7 +51,11 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from .handlers import build_a2v_chain_payload, suggest_frames_for_audio
+from .handlers import (
+    BLOCK_SWAP_PREFETCH_DEFAULT,
+    build_a2v_chain_payload,
+    suggest_frames_for_audio,
+)
 from .manifest import (
     IMAGE_SHARED,
     STAT_DONE,
@@ -161,6 +165,9 @@ class BatchSnapshot:
                      forgetting this wiring is exactly how a speed option ends
                      up being "displayed only" for batch runs. Reaches the
                      payload only when it differs from "sdpa".
+        block_swap_prefetch  Snapshotted from the Settings-tab checkbox, same
+                     reasoning as attention_backend. Reaches the payload only
+                     when True (the API's own default is False).
     """
 
     wav_dir: str
@@ -189,6 +196,7 @@ class BatchSnapshot:
     neg_method: str = "nag"
     vsf_scale: float = 1.5
     attention_backend: str = "sdpa"
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
 
 
 # --------------------------------------------------------------------------- #
@@ -438,6 +446,7 @@ class BatchRunner:
                 neg_method=snap.neg_method,
                 vsf_scale=snap.vsf_scale,
                 attention_backend=snap.attention_backend,
+                block_swap_prefetch=snap.block_swap_prefetch,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

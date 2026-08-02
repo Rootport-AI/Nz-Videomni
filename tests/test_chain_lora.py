@@ -138,7 +138,12 @@ def test_chain_loras_in_request_dump_roundtrips():
         **_chain_kwargs(loras=[{"name": "style-x", "strength": 0.8}])
     )
     dumped = req.model_dump()
-    assert dumped["loras"] == [{"name": "style-x", "strength": 0.8}]
+    # audio_strength rides along as null (WP4 addition) -- accepted repo
+    # policy (api/models.py:146 precedent: model_dump() is never given
+    # exclude-none treatment for the request block).
+    assert dumped["loras"] == [
+        {"name": "style-x", "strength": 0.8, "audio_strength": None}
+    ]
 
 
 # --------------------------------------------------------------- (b) endpoint

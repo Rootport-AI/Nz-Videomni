@@ -2943,3 +2943,35 @@ sage を使うには外部パッケージが要るため、**`sageattention` 2.2
 
 **位置づけ**: 本項の実機検証とその直前の目視ゲート合格をもって、§44.10の残タスク3点はすべて解消し、Acceleration第2弾（先読みblock swap）はテーマとして完結した。
 
+## 45. ★Style LoRA音声強度制御（`audio_strength`）＝実装完了・機械検証（pytest・型検査・vitest）全PASS・**実機A/Bゲート未実施（オーナー実施待ち）**（2026-08-02）
+
+> LTX 2.3でStyle LoRA（画風・キャラクターLoRA。追加学習した差分重みを本体モデルへ足し込む仕組み）適用時に音声が壊れる（雑音・音割れ）というコミュニティ報告への対処として、LoRAごとに音声側の適用強度を映像側と独立制御できる`audio_strength`をバックエンドAPI＋MCP（Model Context Protocol）＋Gradio（検証用UI）＋AviUtl2フロントエンドへ一気通貫で実装した。正本は[`LORA_AUDIO_STRENGTH_WORKORDER.md`](LORA_AUDIO_STRENGTH_WORKORDER.md)（分類ルール・スキップ設計の理由・実装ファイル一覧）、API利用者向けの仕様はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.3、実装の経緯はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §57。
+
+### 45.1 実装後の自動ゲート結果（2026-08-02実測）
+
+- **バックエンドpytest**（アプリ用仮想環境`.venv`）: **874 passed / 6 skipped**。skipの6件はいずれも従来どおり`torch`未導入によるエンジン系テストの収集スキップ（`test_ic_lora_engine_conditioning.py`1件・`test_ic_lora_forward.py`1件・`test_chain_lora.py`2件・`test_chain_reference.py`2件の計6件）で、既存テストの削除はゼロ。
+- **torch必須テスト**: 上記skip対象のうち、本テーマで新設した`tests/test_ic_lora_forward.py`（分類6ケース・None追従・2タプル受理・`audio_strength=0`でのattachスキップとforward結果のno-LoRAとのビット同一・全ミュート時にWARNが出ないことのcaplog確認、計**13件**）を`.venv-engine`（torch入りのエンジン用仮想環境）で実行し、**13 passed**を確認した。実行は`--noconftest`（アプリ用の`tests/conftest.py`が`fastapi`等のアプリ依存を要求し、エンジン用仮想環境には無いため）を付けた`pytest`で行った。
+- **フロントエンド**: `npm run typecheck`（`tsc -b`）**0エラー**。`npm run test`（vitest）**1656 passed / 10 skipped（109ファイル）**（skipの10件は`backend.integration.test.ts`が実バックエンド未起動時に自動スキップする既存分で、本テーマとは無関係）。既存テストの削除はゼロ。
+
+### 45.2 オーナー実機A/Bゲート（未実施・手順のみ準備）
+
+本節は実施後にオーナーまたは検証担当が結果を書き込むための空欄。手順は以下のとおり。
+
+**準備**: `audio_strength`が実際に効くことを確認するには、**音声側の重みキーを持つLoRA**を使うこと。実測で該当するのは`DR34ML4Y_LT3X_V3`／`LTX-2.3-Henshin`／`LTX2.3-MysticXXX`の3本。**登録済みIC-LoRA 3本と`Pixar_Toon`は音声キーがゼロのためno-op**（`audio_strength`を指定しても何も起きない）で、本ゲートの検証には使えない。
+
+**A/B比較（本機能の目的）**: 音声キーを持つLoRAのいずれか1本を用い、同一シード・同一設定で以下を比較する。
+
+- A: `<lora:名前:0.8>`（従来どおり、音声側も0.8が適用される）
+- B: `<lora:名前:0.8:0>`（音声側だけ0にスキップ）
+
+Bで音割れが消えているか確認する。**映像はA/Bでビット一致しないのが正常**である（音声潜在が`audio_to_video_attn`経由で映像側へ還流するため。構図・画風は保たれるが細部は変わりうる）。
+
+**回帰C（後方互換ゲート）**: `audio_strength`を指定しない従来どおりのタグ（例`<lora:名前:0.8>`のみ、または`loras`配列に`audio_strength`キーを含めないリクエスト）の出力が、本改修**前**のビルドとビット同一であることを確認する。
+
+**分類が実際に効いたことの確認**: 生成時のエンジンログに`muted=N linears`（`N>0`）が出ることを確認する。**`N=0`の場合は分類が空振りしている（音声側キーを1つも掴めていない）ことを意味するので、その場合は結果を待たずに報告すること。**
+
+- [ ] A/B比較: Bで音割れが消える
+- [ ] 回帰C: 従来タグの出力が改修前とビット同一
+- [ ] エンジンログに`muted=N linears`（N>0）が出る
+- 結果・所見:
+

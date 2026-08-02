@@ -445,6 +445,8 @@ LABELS: dict[str, dict[str, str]] = {
                              "<lora:...> token(s) and retry."),
         "lora_warn_weight_clamp": ("LoRA <{name}> weight {given} is out of range (0–2.0); "
                                    "clamped to {clamped}."),
+        "lora_warn_audio_weight_clamp": ("LoRA <{name}> audio-side weight {given} is out of range "
+                                         "(0–2.0); clamped to {clamped}."),
         "lora_msg_list_failed": ("Failed to look up the LoRA list for the <lora:...> tokens: "
                                  "{err}"),
         # --- Batch A2V ---
@@ -904,6 +906,8 @@ LABELS: dict[str, dict[str, str]] = {
                              "<lora:...> の記述を修正するか削除して再試行してください。"),
         "lora_warn_weight_clamp": ("LoRA <{name}> の重み {given} が範囲外（0〜2.0）です。"
                                    "{clamped} に丸めました。"),
+        "lora_warn_audio_weight_clamp": ("LoRA <{name}> の音声側の重み {given} が範囲外（0〜2.0）"
+                                         "です。{clamped} に丸めました。"),
         "lora_msg_list_failed": "<lora:...> を解決するためのLoRA一覧取得に失敗しました: {err}",
         # --- Batch A2V ---
         "batch_accordion": "バッチA2V",

@@ -17,6 +17,7 @@ import types
 from pathlib import Path
 
 from api.models import GenerateChainRequest, GenerateRequest
+from services.lora_registry import ResolvedLora
 from services.ltx_runner import _RealBackend
 
 REGISTERED_LORA = "pixel-spatial-upscaler-x2"
@@ -92,6 +93,66 @@ def test_payload_defaults_when_fields_omitted(tmp_path):
     ref = captured[0]["reference_video"]
     assert ref["strength"] == 1.0  # byte-identical default
     assert "attention_strength" not in ref  # key entirely absent
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# audio_strength (Style LoRA音声強度制御, WP3) — the worker-payload lora entry
+# only carries "audio_strength" when the resolved lora has one. Legacy plain
+# 3-tuples (no such attribute at all) prove the G-BC no-key contract; a
+# ResolvedLora with audio_strength=0.0 proves 0.0 (falsy but not None) survives.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_generate_payload_omits_audio_strength_for_legacy_3tuple(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _lora_request()
+    be.generate(
+        req,
+        tmp_path / "out",
+        lora_paths=[(tmp_path / "adapter.safetensors", 1.0, "none")],
+    )
+    assert "audio_strength" not in captured[0]["loras"][0]
+
+
+def test_generate_payload_carries_audio_strength_zero(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _lora_request()
+    be.generate(
+        req,
+        tmp_path / "out",
+        lora_paths=[
+            ResolvedLora(tmp_path / "adapter.safetensors", 1.0, "none", 0.0)
+        ],
+    )
+    assert captured[0]["loras"][0]["audio_strength"] == 0.0
+
+
+def test_chain_payload_omits_audio_strength_for_legacy_3tuple(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request()
+    be.generate_chain(
+        req,
+        tmp_path / "out",
+        lora_paths=[(tmp_path / "adapter.safetensors", 1.0, "none")],
+    )
+    assert "audio_strength" not in captured[0]["loras"][0]
+
+
+def test_chain_payload_carries_audio_strength_zero(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request()
+    be.generate_chain(
+        req,
+        tmp_path / "out",
+        lora_paths=[
+            ResolvedLora(tmp_path / "adapter.safetensors", 1.0, "none", 0.0)
+        ],
+    )
+    assert captured[0]["loras"][0]["audio_strength"] == 0.0
 
 
 def _chain_request(**over) -> GenerateChainRequest:

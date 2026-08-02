@@ -32,6 +32,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -51,6 +52,9 @@ from engine.pipeline.common import (
 )
 from engine.transformer.nag_service import NagParams, encode_negative
 from engine.transformer.vsf_service import VsfParams
+
+if TYPE_CHECKING:
+    from engine.gguf.ic_lora_common import IcLoraEntry
 
 DTYPE = torch.bfloat16
 
@@ -453,7 +457,7 @@ def run_chain(
     progress: ProgressFn | None = None,
     source: "SourceSpec | None" = None,
     audio_source: "AudioSourceSpec | None" = None,
-    ic_loras: list[tuple[str, float]] | None = None,
+    ic_loras: list[IcLoraEntry] | None = None,
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
     chunked_upsample: bool = False,
@@ -470,13 +474,14 @@ def run_chain(
     which stays byte-identical) freezes an uploaded audio latent over the whole
     timeline and drives the video off it; mutually exclusive with ``source``.
 
-    ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength)`` adapters
-    applied via the forward-time weight patch across the whole chain (the single
-    transformer is reused for every stage-1 segment + stage-2 tile, so the LoRA
-    effects the entire timeline). Set EXPLICITLY before the transformer is built
-    below — an empty list clears any stale ``_ic_loras`` left by a prior single
-    ``generate()`` on the resident pipeline, so ``ic_loras=None/[]`` is a genuine
-    "no LoRA" (byte-identical to before) rather than a leak of the last job's.
+    ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
+    audio_strength)`` adapters applied via the forward-time weight patch across
+    the whole chain (the single transformer is reused for every stage-1 segment
+    + stage-2 tile, so the LoRA effects the entire timeline). Set EXPLICITLY
+    before the transformer is built below — an empty list clears any stale
+    ``_ic_loras`` left by a prior single ``generate()`` on the resident
+    pipeline, so ``ic_loras=None/[]`` is a genuine "no LoRA" (byte-identical to
+    before) rather than a leak of the last job's.
 
     ``ic_reference`` / ``ic_attention_strength`` (α, additive): a control-adapter
     reference video ``(path, strength)`` plus its conditioning_attention_strength

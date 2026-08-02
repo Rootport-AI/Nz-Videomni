@@ -80,14 +80,16 @@ def _prompt_for_log(prompt: str, limit: int = _PROMPT_LOG_MAX) -> str:
 
 
 def _loras_for_log(specs, resolved) -> str:
-    """``name(strength=R[, effective=E])`` per adapter, or ``none``.
+    """``name(strength=R[, effective=E][, audio=A[, effective=E]])`` per adapter,
+    or ``none``.
 
     ``specs`` are the request ``LoraSpec``s (friendly NAME + the REQUESTED
-    strength); ``resolved`` are the registry ``(path, effective_strength,
-    preprocess)`` triples in the SAME order (see ``LoraRegistry.resolve`` —
-    ``effective`` folds in the alpha/rank convolution). ``effective`` is only
-    shown when it actually differs from the requested strength, so the common
-    scale==1.0 case stays terse.
+    strength); ``resolved`` are the registry ``ResolvedLora``s in the SAME order
+    (see ``LoraRegistry.resolve`` — ``effective`` folds in the alpha/rank
+    convolution). ``effective`` is only shown when it actually differs from the
+    requested strength, so the common scale==1.0 case stays terse. The
+    ``audio=`` segment is appended only when the resolved audio_strength is not
+    None (video-axis-only jobs keep the exact prior rendering).
     """
     if not specs:
         return "none"
@@ -95,12 +97,37 @@ def _loras_for_log(specs, resolved) -> str:
     for i, spec in enumerate(specs):
         eff = resolved[i][1] if i < len(resolved) else None
         if eff is not None and abs(float(eff) - float(spec.strength)) > 1e-6:
-            parts.append(
-                f"{spec.name}(strength={spec.strength:g}, effective={float(eff):g})"
-            )
+            part = f"{spec.name}(strength={spec.strength:g}, effective={float(eff):g})"
         else:
-            parts.append(f"{spec.name}(strength={spec.strength:g})")
+            part = f"{spec.name}(strength={spec.strength:g})"
+        audio_eff = resolved[i][3] if i < len(resolved) and len(resolved[i]) > 3 else None
+        if audio_eff is not None:
+            requested_audio = getattr(spec, "audio_strength", None)
+            if requested_audio is not None and abs(
+                float(audio_eff) - float(requested_audio)
+            ) > 1e-6:
+                part += f", audio={requested_audio:g}, effective={float(audio_eff):g}"
+            else:
+                part += f", audio={float(audio_eff):g}"
+        parts.append(part)
     return ", ".join(parts)
+
+
+def _lora_metadata_entry(spec, registry: LoraRegistry) -> dict:
+    """One ``ic_lora.loras[]`` row: ``name``/``strength``/``preprocess`` (Phase
+    B/C, unchanged) plus ``audio_strength`` — added only when the spec carries
+    one (``None`` before WP4 adds the field to ``LoraSpec``), so a video-axis-
+    only job's metadata keeps its exact prior key set.
+    """
+    entry = {
+        "name": spec.name,
+        "strength": spec.strength,
+        "preprocess": registry.preprocess_for(spec.name),
+    }
+    audio_strength = getattr(spec, "audio_strength", None)
+    if audio_strength is not None:
+        entry["audio_strength"] = audio_strength
+    return entry
 
 
 class PipelineManager:
@@ -377,7 +404,9 @@ class PipelineManager:
             # kind conflicts (mirroring conditioning images), so these re-resolve
             # the same objects for the runner hop.
             lora_paths = [
-                self.lora_registry.resolve(spec.name, spec.strength)
+                self.lora_registry.resolve(
+                    spec.name, spec.strength, getattr(spec, "audio_strength", None)
+                )
                 for spec in job.request.loras
             ]
             reference_video_path = (
@@ -597,7 +626,9 @@ class PipelineManager:
             # re-resolves the same style objects for the runner hop. Empty list
             # when the chain requested no loras (byte-identical default path).
             lora_paths = [
-                self.lora_registry.resolve(spec.name, spec.strength)
+                self.lora_registry.resolve(
+                    spec.name, spec.strength, getattr(spec, "audio_strength", None)
+                )
                 for spec in chain.loras
             ]
 
@@ -889,14 +920,7 @@ class PipelineManager:
                 # Phase C: additive ``preprocess`` field (control-signal kind per
                 # adapter). Existing ``name``/``strength``/``reference_video_id``
                 # keys are unchanged so Phase B metadata parsers keep working.
-                "loras": [
-                    {
-                        "name": spec.name,
-                        "strength": spec.strength,
-                        "preprocess": self.lora_registry.preprocess_for(spec.name),
-                    }
-                    for spec in req.loras
-                ],
+                "loras": [_lora_metadata_entry(spec, self.lora_registry) for spec in req.loras],
                 "reference_video_id": req.reference_video_id,
             }
             # Control-adjustability overrides: record only when meaningful

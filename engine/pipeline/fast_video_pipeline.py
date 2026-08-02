@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import os
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 import torch
 
@@ -14,6 +14,9 @@ from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports
 from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
 from engine.transformer.sage_attention_service import SageAttentionService, SageState
 from engine.transformer.vsf_service import VsfParams, VsfService
+
+if TYPE_CHECKING:
+    from engine.gguf.ic_lora_common import IcLoraEntry
 
 
 class LTXFastVideoPipeline:
@@ -41,7 +44,7 @@ class LTXFastVideoPipeline:
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
         *,
-        ic_loras: list[tuple[str, float]] | None = None,
+        ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float = 1.0,
     ) -> "LTXFastVideoPipeline":
@@ -92,7 +95,7 @@ class LTXFastVideoPipeline:
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
         *,
-        ic_loras: list[tuple[str, float]] | None = None,
+        ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float = 1.0,
     ) -> None:
@@ -100,11 +103,12 @@ class LTXFastVideoPipeline:
         from ltx_pipelines.distilled import DistilledPipeline
 
         # ── IC-LoRA state (all inert by default) ──────────────────────────────
-        # ic_loras: (safetensors_path, strength) LoRAs applied to the GGUF base
-        #   transformer. Phase A fused them into the full BF16 state-dict at load
-        #   (bf16 path); Phase B adds them at FORWARD time on the per-layer-quant
-        #   path (GGUFQuantLoaderService + ggml_linear_forward). Selectable via
-        #   gguf_per_layer_quant.
+        # ic_loras: (safetensors_path, strength, audio_strength) LoRAs applied to
+        #   the GGUF base transformer. Phase A fused them into the full BF16
+        #   state-dict at load (bf16 path); Phase B adds them at FORWARD time on
+        #   the per-layer-quant path (GGUFQuantLoaderService + ggml_linear_forward).
+        #   Selectable via gguf_per_layer_quant. audio_strength is None unless the
+        #   caller opts in (see engine.gguf.ic_lora_common.IcLoraEntry).
         # ic_reference: (reference_video_path, strength) appended as a
         #   VideoConditionByReferenceLatent on the stage-1 conditioning pass.
         # When both are None/empty every changed path is byte-identical to before.
@@ -117,10 +121,10 @@ class LTXFastVideoPipeline:
         #   Forwarded to a ConditioningItemAttentionStrengthWrapper around the
         #   reference conditioning ONLY when < 1.0 (upstream iclora_utils parity);
         #   at 1.0 no wrapper is added → structurally byte-identical to before.
-        self._ic_loras_default: list[tuple[str, float]] = list(ic_loras or [])
+        self._ic_loras_default: list[IcLoraEntry] = list(ic_loras or [])
         self._ic_reference_default: tuple[str, float] | None = ic_reference
         self._ic_attention_strength_default: float = float(ic_attention_strength)
-        self._ic_loras: list[tuple[str, float]] = []
+        self._ic_loras: list[IcLoraEntry] = []
         self._ic_reference: tuple[str, float] | None = None
         self._ic_attention_strength: float = 1.0
         self._ic_reference_downscale_factor: int | None = None
@@ -313,7 +317,7 @@ class LTXFastVideoPipeline:
 
     def _set_ic_job(
         self,
-        ic_loras: list[tuple[str, float]] | None,
+        ic_loras: list[IcLoraEntry] | None,
         ic_reference: tuple[str, float] | None,
         ic_attention_strength: float = 1.0,
     ) -> None:
@@ -545,7 +549,7 @@ class LTXFastVideoPipeline:
         self,
         gguf_path: str,
         per_layer_quant: bool = True,
-        ic_loras: list[tuple[str, float]] | None = None,
+        ic_loras: list[IcLoraEntry] | None = None,
     ) -> None:
         ic_loras = list(ic_loras or [])
         try:
@@ -1156,7 +1160,7 @@ class LTXFastVideoPipeline:
         res2s_bongmath: bool = False,
         res2s_bongmath_max_iter: int = 5,
         *,
-        ic_loras: list[tuple[str, float]] | None = None,
+        ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
         nag: NagParams | VsfParams | None = None,
@@ -1253,7 +1257,7 @@ class LTXFastVideoPipeline:
         progress=None,
         source=None,
         audio_source=None,
-        ic_loras: list[tuple[str, float]] | None = None,
+        ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
         chunked_upsample: bool = False,
@@ -1273,8 +1277,9 @@ class LTXFastVideoPipeline:
         driven off it (mutually exclusive with ``source``). Returns metadata
         incl. segment/tile junction pixel-frame indices.
 
-        ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength)``
-        adapters applied via the forward-time weight patch across the WHOLE chain
+        ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
+        audio_strength)`` adapters applied via the forward-time weight patch
+        across the WHOLE chain
         (every stage-1 segment + stage-2 tile). run_chain sets them explicitly
         before building the transformer (empty list clears any stale LoRA left by
         a prior single ``generate()`` on the resident pipeline).

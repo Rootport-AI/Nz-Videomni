@@ -32,11 +32,15 @@ class LoraArg(BaseModel):
 
     ``name`` は ``list_loras`` で得られる登録済みアダプタ名（ファイルパスでは
     ない）。参照動画を要する制御系（control）アダプタを使う場合は、必ず
-    ``loras`` の先頭（``loras[0]``）に置くこと。
+    ``loras`` の先頭（``loras[0]``）に置くこと。``audio_strength`` は映像軸
+    （``strength``）とは独立した音声軸の適用強度（省略時は ``strength`` に
+    追従、0は音声側の重みを無効化）。ここにはバリデータを置かない（範囲・
+    整合性チェックはサーバー側422が正本）。
     """
 
     name: str
     strength: float = 1.0
+    audio_strength: float | None = None
 
 
 class ChainClipArg(BaseModel):

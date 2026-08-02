@@ -301,6 +301,72 @@ def test_lora_strength_out_of_range_422(lora_client):
     assert r.status_code == 422
 
 
+def test_lora_strength_zero_still_rejected_422(lora_client):
+    """Regression: strength keeps its gt=0.0 bound (only audio_strength gains
+    a ge=0.0 allowance) -- strength: 0 must still 422."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 0.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
+def test_lora_audio_strength_omitted_completes(lora_client):
+    """Omitting audio_strength behaves exactly as before (audio side follows
+    strength) -- 202 as usual."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+
+
+def test_lora_audio_strength_zero_accepted(lora_client):
+    """audio_strength=0.0 is explicitly allowed (mutes the audio-side LoRA
+    weights) -- unlike strength, ge=0.0 not gt=0.0."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0, "audio_strength": 0.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+
+
+def test_lora_audio_strength_upper_bound_accepted(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0, "audio_strength": 2.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+
+
+def test_lora_audio_strength_above_max_422(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0, "audio_strength": 2.1}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
+def test_lora_audio_strength_below_min_422(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0, "audio_strength": -0.1}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
 def test_generate_without_new_fields_regression(lora_client):
     """A request omitting loras/reference_video_id behaves exactly as before:
     the new fields default (empty list / None), no ic_lora metadata block."""
@@ -400,10 +466,11 @@ def test_registry_string_entry_resolves_backward_compat(tmp_path):
         {"model": {"ic_loras": {REGISTERED_LORA: lora_file.as_posix()}}}
     )
     registry = LoraRegistry(config)
-    path, strength, preprocess = registry.resolve(REGISTERED_LORA, 1.0)
+    path, strength, preprocess, audio_strength = registry.resolve(REGISTERED_LORA, 1.0)
     assert path == lora_file.resolve()
     assert strength == 1.0
     assert preprocess == "none"
+    assert audio_strength is None
 
 
 def test_registry_dict_entry_resolves_with_preprocess(tmp_path):
@@ -421,10 +488,11 @@ def test_registry_dict_entry_resolves_with_preprocess(tmp_path):
         }
     )
     registry = LoraRegistry(config)
-    path, strength, preprocess = registry.resolve(POSE_LORA, 1.0)
+    path, strength, preprocess, audio_strength = registry.resolve(POSE_LORA, 1.0)
     assert path == control_file.resolve()
     assert strength == 1.0
     assert preprocess == "dwpose"
+    assert audio_strength is None
 
 
 def test_generate_with_dict_valued_adapter_completes(mixed_registry_client):

@@ -69,6 +69,12 @@ class LoraSpec(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=200)
     strength: float = Field(1.0, gt=0.0, le=2.0)
+    # audio_strength: 映像軸（strength）とは独立した音声軸の適用強度。省略
+    # （None）なら音声側も strength に追従する（従来と完全同一の挙動）。
+    # 0 は音声側の重みを一切適用しない（=スキップ）——映像目的で訓練された
+    # style LoRA の音声側差分が生成音声を壊す事例（雑音・音割れ）への対処。
+    # strength と異なり 0 を許容する（gt=0.0 ではなく ge=0.0）。
+    audio_strength: float | None = Field(None, ge=0.0, le=2.0)
 
     @model_validator(mode="after")
     def validate_name_is_not_a_path(self) -> "LoraSpec":

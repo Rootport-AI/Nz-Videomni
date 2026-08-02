@@ -41,11 +41,24 @@ import logging
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from api.errors import lora_not_found
 from config import AppConfig, IcLoraEntry
 
 logger = logging.getLogger("ltx.loras")
+
+
+class ResolvedLora(NamedTuple):
+    """``resolve()``'s return shape. Indices 0-2 (``path``/``strength``/
+    ``preprocess``) are positionally compatible with the pre-audio_strength
+    3-tuple, so callers that still unpack/index only those stay correct.
+    """
+
+    path: Path
+    strength: float
+    preprocess: str
+    audio_strength: float | None
 
 # A safetensors JSON header beyond this is implausible for a LoRA and more likely
 # a corrupt/foreign file than a real header (services.model_registry precedent).
@@ -291,14 +304,20 @@ class LoraRegistry:
 
     # --------------------------------------------------------------- resolve
 
-    def resolve(self, name: str, strength: float) -> tuple[Path, float, str]:
-        """Resolve ``name`` -> ``(safetensors_path, scaled_strength, preprocess)``.
+    def resolve(
+        self, name: str, strength: float, audio_strength: float | None = None
+    ) -> ResolvedLora:
+        """Resolve ``name`` -> ``ResolvedLora(path, scaled_strength, preprocess,
+        scaled_audio_strength)``.
 
         ``scaled_strength`` is ``strength * scale`` where ``scale`` is the LoRA
         alpha/rank convolution factor read from the header (1.0 when absent, i.e.
         byte-identical to the pre-S1 behaviour for the existing IC-LoRA files).
         ``preprocess`` is ``"none"`` for legacy string entries / scanned files or
         the ``IcLoraEntry.preprocess`` value for config dict entries.
+        ``scaled_audio_strength`` mirrors ``scaled_strength`` (same ``scale``
+        factor) but stays ``None`` when ``audio_strength`` is ``None`` (video-axis
+        follow — the caller didn't ask for an independent audio strength).
 
         Raises ``lora_not_found`` (404) for a path-like name, an empty registry,
         an unknown name, or a registered-but-missing file.
@@ -318,4 +337,9 @@ class LoraRegistry:
             raise lora_not_found(
                 name, detail=f"registered adapter file missing: {entry.path}"
             )
-        return entry.path, float(strength) * entry.scale, entry.preprocess
+        scaled_audio = (
+            None if audio_strength is None else float(audio_strength) * entry.scale
+        )
+        return ResolvedLora(
+            entry.path, float(strength) * entry.scale, entry.preprocess, scaled_audio
+        )

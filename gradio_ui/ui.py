@@ -2160,15 +2160,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         def on_style_select(prompt_val, names, lang, evt: gr.SelectData):
             # Gallery.select gives evt.index (the selected tile index); resolve
-            # it to a name via style_names_state and APPEND a <lora:name:1.0>
-            # token to the Generate-tab prompt (existing value preserved).
+            # it to a name via style_names_state and APPEND a <lora:name:1.0:1.0>
+            # token to the Generate-tab prompt (existing value preserved). The
+            # 3-arg form surfaces the audio-strength slot up front (audio=1.0
+            # numerically matches "follow video", so generation is unchanged).
             idx = evt.index
             if isinstance(idx, (list, tuple)):
                 idx = idx[0] if idx else None
             if idx is None or not names or idx >= len(names):
                 return gr.update()
             name = names[idx]
-            token = f"<lora:{name}:1.0>"
+            token = f"<lora:{name}:1.0:1.0>"
             base = prompt_val or ""
             new_prompt = f"{base.rstrip()} {token}" if base.strip() else token
             gr.Info(L("style_added", lang).format(name=name))

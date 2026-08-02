@@ -109,7 +109,11 @@ async def submit_generate(
         seed: 乱数シード（-1でランダム）。
         conditioning_images: I2V用のキーフレーム画像（最大5件、``upload_image``
             で得た ``image_id`` を使う）。
-        loras: 適用するIC-LoRAアダプタのリスト。
+        loras: 適用するIC-LoRAアダプタのリスト。各要素の ``audio_strength``
+            は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、
+            0〜2）。省略時は音声側も ``strength`` に追従（従来と同一）。0は
+            音声側の重みを一切適用しない（style LoRAが生成音声を壊す事例
+            への対処）。
         reference_video_id: 制御系IC-LoRA用の参照動画ID（``upload_video`` で
             取得）。
         conditioning_attention_strength: 制御系IC-LoRAの追従の強さ（0〜1、
@@ -176,7 +180,7 @@ async def submit_generate(
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
     if loras:
-        payload["loras"] = [lora.model_dump() for lora in loras]
+        payload["loras"] = [lora.model_dump(exclude_none=True) for lora in loras]
     if reference_video_id:
         payload["reference_video_id"] = reference_video_id
     if conditioning_attention_strength is not None:
@@ -295,7 +299,11 @@ async def submit_chain(
         source_video_id: V2V継続元の動画ID（``upload_video`` で取得）。
         source_video_context_frames: 元動画から凍結するフレーム数（8n+1）。
         source_audio_id: A2V駆動音声のID（``upload_audio`` で取得）。
-        loras: 適用するIC-LoRAアダプタのリスト。
+        loras: 適用するIC-LoRAアダプタのリスト。各要素の ``audio_strength``
+            は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、
+            0〜2）。省略時は音声側も ``strength`` に追従（従来と同一）。0は
+            音声側の重みを一切適用しない（style LoRAが生成音声を壊す事例
+            への対処）。
         reference_video_id: 制御系IC-LoRA用の参照動画ID（1クリップ限定）。
         conditioning_attention_strength: 制御系IC-LoRAの追従の強さ（0〜1）。
         reference_video_strength: 参照動画の条件付け強度（0〜1）。
@@ -365,7 +373,7 @@ async def submit_chain(
         payload["source_audio"] = {"audio_id": source_audio_id}
 
     if loras:
-        payload["loras"] = [lora.model_dump() for lora in loras]
+        payload["loras"] = [lora.model_dump(exclude_none=True) for lora in loras]
     if reference_video_id:
         payload["reference_video_id"] = reference_video_id
     if conditioning_attention_strength is not None:

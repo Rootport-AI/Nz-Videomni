@@ -34,7 +34,10 @@ Protocol (one JSON object per line; parent -> worker):
    # reference_video null unless a reference is supplied. preprocess (Phase C):
    # "none" -> raw reference used as-is (Phase B); "canny"/... -> converted to a
    # control-signal video via engine/preprocess/, path swapped to it:
-   loras:[{path,strength}...], reference_video:{path,strength,preprocess}|null}
+   # loras[].audio_strength is optional: absent -> the audio side follows
+   # strength (byte-identical to before this feature existed); 0 -> skip the
+   # audio-side weights entirely.
+   loras:[{path,strength,audio_strength?}...], reference_video:{path,strength,preprocess}|null}
   # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
@@ -515,7 +518,12 @@ def _do_generate(msg: dict) -> None:
     # LoRA job is byte-identical to base (gate G3). ``ic_reference`` is the
     # Pixel-Spatial-Upscaler reference video (None when absent).
     ic_loras = [
-        (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
+        (
+            str(lo["path"]),
+            float(lo["strength"]),
+            None if lo.get("audio_strength") is None else float(lo["audio_strength"]),
+        )
+        for lo in msg.get("loras", [])
     ]
     # ``reference_video`` -> (ic_reference, attn_strength). The Phase C control
     # preprocess (edge/pose) and the conditioning_attention_strength knob are
@@ -663,7 +671,12 @@ def _do_generate_chain(msg: dict) -> None:
     # and wired to run_chain's stage-1 clip-0 conditioning; without it the chain
     # is byte-identical to before.
     ic_loras = [
-        (str(lo["path"]), float(lo["strength"])) for lo in msg.get("loras", [])
+        (
+            str(lo["path"]),
+            float(lo["strength"]),
+            None if lo.get("audio_strength") is None else float(lo["audio_strength"]),
+        )
+        for lo in msg.get("loras", [])
     ]
     ic_reference, ic_attn = _resolve_ic_reference(
         msg.get("reference_video"), output_path

@@ -51,6 +51,7 @@ from api.errors import lora_preprocess_conflict
 from api.models import GenerateRequest
 from config import AppConfig
 from services import gpu_info, video_io
+from services.lora_registry import ResolvedLora
 from services.low_vram import LowVramSettings, safe_memory_cleanup
 
 logger = logging.getLogger("ltx.runner")
@@ -209,23 +210,42 @@ MOCK_BACKEND = "mock"
 REAL_BACKEND = "ltx-distilled"
 
 
-def _resolve_reference_preprocess(lora_paths: list[tuple[Path, float, str]]) -> str:
+def _resolve_reference_preprocess(lora_paths: list[ResolvedLora]) -> str:
     """Phase C: derive the single control-preprocess kind for the one reference
     video from the resolved loras of a job.
 
-    ``lora_paths`` entries are ``(path, strength, preprocess)`` (see
-    ``services.lora_registry.LoraRegistry.resolve``). All-``"none"`` (Phase B
-    reference-only adapters, or no loras) -> ``"none"``. Exactly one non-``"none"``
-    kind -> that kind. More than one distinct kind is a conflict: a single
-    uploaded reference video can only be converted into ONE control signal, so
-    this raises ``LORA_PREPROCESS_CONFLICT`` (400) -- the same check the API
-    layer (``api/generate.py``) already performs up front; this is the
-    defensive re-check at the runner hop.
+    ``lora_paths`` entries are ``ResolvedLora`` (``path``, ``strength``,
+    ``preprocess``, ``audio_strength``; see
+    ``services.lora_registry.LoraRegistry.resolve``) — index access (``lp[2]``)
+    so plain 3-tuples from legacy/test call sites are still accepted. All-
+    ``"none"`` (Phase B reference-only adapters, or no loras) -> ``"none"``.
+    Exactly one non-``"none"`` kind -> that kind. More than one distinct kind is
+    a conflict: a single uploaded reference video can only be converted into ONE
+    control signal, so this raises ``LORA_PREPROCESS_CONFLICT`` (400) -- the
+    same check the API layer (``api/generate.py``) already performs up front;
+    this is the defensive re-check at the runner hop.
     """
-    kinds = {preprocess for _, _, preprocess in lora_paths if preprocess != "none"}
+    kinds = {lp[2] for lp in lora_paths if lp[2] != "none"}
     if len(kinds) > 1:
         raise lora_preprocess_conflict(sorted(kinds))
     return next(iter(kinds)) if kinds else "none"
+
+
+def _lora_payload_entry(lp) -> dict:
+    """One worker-payload lora dict: ``{"path", "strength"}`` plus
+    ``"audio_strength"`` when the resolved entry carries one.
+
+    Index access (``lp[0]``/``lp[1]``) + ``getattr(lp, "audio_strength", None)``
+    so a plain 3-tuple (legacy/test call sites, no ``audio_strength`` field at
+    all) still works — only a real ``ResolvedLora`` with a non-None
+    ``audio_strength`` adds the key, keeping a no-audio job's payload
+    byte-identical to before.
+    """
+    entry = {"path": str(lp[0]), "strength": float(lp[1])}
+    audio_strength = getattr(lp, "audio_strength", None)
+    if audio_strength is not None:
+        entry["audio_strength"] = float(audio_strength)
+    return entry
 
 
 @dataclass
@@ -315,7 +335,7 @@ class LTXRunner:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -341,7 +361,7 @@ class LTXRunner:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -357,9 +377,10 @@ class LTXRunner:
         exclusive with ``source_tail_path`` (enforced at the API layer).
 
         ``lora_paths`` (style/character IC-LoRA, additive): resolved
-        ``(path, strength, preprocess)`` triples applied uniformly across the whole
-        chain (every clip / stage). Empty/None -> no loras (byte-identical default);
-        the mock ignores them, the real backend forwards them to the worker.
+        ``ResolvedLora`` (``path``, ``strength``, ``preprocess``, ``audio_strength``)
+        entries applied uniformly across the whole chain (every clip / stage).
+        Empty/None -> no loras (byte-identical default); the mock ignores them,
+        the real backend forwards them to the worker.
 
         ``reference_video_path`` (Phase C reference-video CONTROL IC-LoRA, ALPHA
         scope — clips=1 only, enforced by the schema/endpoint): mirrors
@@ -580,7 +601,7 @@ class _MockBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -589,7 +610,8 @@ class _MockBackend:
         ``conditioning_images`` empty -> T2V; one entry -> minimal I2V using the
         resolved image path as the start frame (frame_idx=0, Phase 1).
 
-        ``lora_paths`` (now ``(path, strength, preprocess)`` triples, Phase C) /
+        ``lora_paths`` (now ``ResolvedLora`` entries — ``path``, ``strength``,
+        ``preprocess``, ``audio_strength``, Phase C/S1) /
         ``reference_video_path`` are the Phase B/C IC-LoRA inputs; the mock
         backend accepts (and ignores) them so the full route completes GPU-free —
         the real weight patch (and the preprocess -> control-signal conversion)
@@ -658,7 +680,7 @@ class _MockBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -1257,7 +1279,7 @@ class _RealBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -1299,9 +1321,10 @@ class _RealBackend:
             progress_callback(None, None, 0.05)
 
         # Phase B/C IC-LoRA (forward-time weight patch). ``loras`` is the list of
-        # (adapter safetensors path, strength, preprocess) resolved by the
-        # registry; empty list -> the worker passes ic_loras=[] (explicit clean
-        # detach per Stage 1 semantics). ``reference_video`` is the raw reference
+        # ResolvedLora (adapter safetensors path, strength, preprocess,
+        # audio_strength) resolved by the registry; empty list -> the worker
+        # passes ic_loras=[] (explicit clean detach per Stage 1 semantics).
+        # ``reference_video`` is the raw reference
         # (Pixel-Spatial-Upscaler: used as-is / Union-Control: converted to a
         # control signal by the worker per ``preprocess``). The reference
         # conditioning ``strength`` defaults to 1.0 (official guidance) but is
@@ -1312,7 +1335,7 @@ class _RealBackend:
         # ``conditioning_attention_strength`` an ``attention_strength`` key is
         # spliced in (control-adherence override); it is entirely absent
         # otherwise so an omitted-field job's payload stays byte-identical.
-        loras_payload = [{"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths]
+        loras_payload = [_lora_payload_entry(lp) for lp in lora_paths]
         preprocess = _resolve_reference_preprocess(lora_paths)
         if reference_video_path is not None:
             ref_strength = (
@@ -1441,7 +1464,7 @@ class _RealBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -1458,10 +1481,11 @@ class _RealBackend:
         the ``v2v`` sub-dict, returned as-is in ``chain_metadata``.
 
         Style/character IC-LoRA: when ``lora_paths`` is non-empty an additive
-        ``loras`` block ([{path, strength}, ...]) is added to the worker payload
-        (mirrors the single-generate ``loras_payload``). The strengths apply
-        uniformly to every clip/stage. Absent for a no-lora chain (payload
-        byte-identical to before); the worker clears any stale LoRA regardless.
+        ``loras`` block ([{path, strength[, audio_strength]}, ...]) is added to
+        the worker payload (mirrors the single-generate ``loras_payload``). The
+        strengths apply uniformly to every clip/stage. Absent for a no-lora
+        chain (payload byte-identical to before); the worker clears any stale
+        LoRA regardless.
 
         Reference-video CONTROL IC-LoRA (Phase C, ALPHA scope — clips=1 only,
         enforced by the schema/endpoint): when ``reference_video_path`` is set an
@@ -1533,15 +1557,14 @@ class _RealBackend:
         # engine truncates to the timeline). Absent for a normal / V2V chain.
         if source_audio_path is not None:
             payload["audio_source"] = {"path": str(source_audio_path)}
-        # Style/character IC-LoRA (additive): (path, strength) per adapter, applied
-        # uniformly across the chain. Only added when non-empty so a no-lora chain
-        # payload is byte-identical to before (the worker parses msg.get("loras",
-        # []) and clears stale LoRA either way). preprocess is dropped — control
-        # adapters are rejected at the API layer, so every entry here is style.
+        # Style/character IC-LoRA (additive): (path, strength[, audio_strength])
+        # per adapter, applied uniformly across the chain. Only added when
+        # non-empty so a no-lora chain payload is byte-identical to before (the
+        # worker parses msg.get("loras", []) and clears stale LoRA either way).
+        # preprocess is dropped — control adapters are rejected at the API
+        # layer, so every entry here is style.
         if lora_paths:
-            payload["loras"] = [
-                {"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths
-            ]
+            payload["loras"] = [_lora_payload_entry(lp) for lp in lora_paths]
         # Reference-video CONTROL IC-LoRA (additive, ALPHA scope — clips=1 only):
         # mirrors the single-generate ``reference_payload`` (see :meth:`generate`
         # above). Only added when a reference video was requested, so a chain

@@ -245,19 +245,35 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
 
 
 # --------------------------------------------------------------------------- #
-# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight>`` (S2). The
-# weight is optional (default 1.0) and the ``lora`` keyword is case-insensitive
-# (``<LORA:...>`` allowed). Nothing is invented client-side — the weight range
-# mirrors the server's ``0 < strength <= 2.0`` rule; out-of-range weights are
-# clamped into [MIN, MAX] (MIN reuses the Generate-tab adapter-strength slider's
-# own 0.05 floor) and a toast warns. Name resolution is against the GET /loras
-# name set, case-insensitive with exact match preferred; an unknown name aborts
-# the send (mirrors the existing precheck flow).
+# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight:audio_weight>``
+# (S2). The video weight is optional (default 1.0) and the ``lora`` keyword is
+# case-insensitive (``<LORA:...>`` allowed). Nothing is invented client-side —
+# the weight range mirrors the server's ``0 < strength <= 2.0`` rule; out-of-
+# range weights are clamped into [MIN, MAX] (MIN reuses the Generate-tab
+# adapter-strength slider's own 0.05 floor) and a toast warns. Name resolution
+# is against the GET /loras name set, case-insensitive with exact match
+# preferred; an unknown name aborts the send (mirrors the existing precheck
+# flow).
+#
+# A third, also-optional, numeric group carries the audio-side strength
+# (``audio_strength``, range [0.0, 2.0] — the 0.05 video floor does NOT apply
+# here since 0 is a valid "mute the audio-side delta" value). When the group is
+# absent no ``audio_strength`` key is added to the parsed dict at all, so the
+# HTTP body stays byte-identical to the pre-audio-strength behaviour (G-BC).
+# Out-of-range audio weights are clamped the same non-fatal way as the video
+# weight. NOTE: ``<lora:name::0>`` (empty video-strength slot) is NOT
+# supported — the middle ``:`` has nothing to match against the video-weight
+# pattern, so the whole token fails to match and is left untouched in the
+# prompt text.
 # --------------------------------------------------------------------------- #
-_LORA_TOKEN_RE = re.compile(r"<lora:([^:>]+)(?::([0-9]*\.?[0-9]+))?>", re.IGNORECASE)
+_LORA_TOKEN_RE = re.compile(
+    r"<lora:([^:>]+)(?::([0-9]*\.?[0-9]+))?(?::([0-9]*\.?[0-9]+))?>", re.IGNORECASE
+)
 LORA_WEIGHT_MIN = 0.05
 LORA_WEIGHT_MAX = 2.0
 LORA_WEIGHT_DEFAULT = 1.0
+LORA_AUDIO_WEIGHT_MIN = 0.0
+LORA_AUDIO_WEIGHT_MAX = 2.0
 
 
 def _merge_loras(loras: list[dict]) -> list[dict]:
@@ -272,7 +288,7 @@ def _merge_loras(loras: list[dict]) -> list[dict]:
 
 
 def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
-    """Extract ``<lora:name:weight>`` tokens from ``prompt``.
+    """Extract ``<lora:name:weight:audio_weight>`` tokens from ``prompt``.
 
     Returns ``(cleaned_prompt, loras, error)``:
 
@@ -281,13 +297,21 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
       a token was actually removed, so a token-free prompt is returned byte-for-
       byte unchanged — the caller only invokes this when a token is present);
     * ``loras`` — ``[{"name", "strength"}]`` in first-seen order, deduped
-      last-wins by resolved name;
+      last-wins by resolved name. When the token carries a third (audio)
+      numeric group the dict also gets an ``"audio_strength"`` key; when the
+      group is absent no such key is added at all, so the payload stays byte-
+      identical to the pre-audio-strength behaviour (G-BC);
     * ``error`` — a localized message (unknown token name) meaning "abort the
       send with zero generate/upload calls", else ``None``. Weight-range clamps
-      are non-fatal: they fire a ``gr.Warning`` toast and continue.
+      (both video and audio) are non-fatal: they fire a ``gr.Warning`` toast and
+      continue.
 
     ``known_names`` is the GET /loras name set; resolution is case-insensitive
     with an exact match preferred.
+
+    NOTE: ``<lora:name::0>`` (empty video-strength slot) is NOT supported —
+    the token simply fails to match ``_LORA_TOKEN_RE`` and is left as-is in
+    the prompt text.
     """
     exact = set(known_names)
     lower_map: dict[str, str] = {}
@@ -316,7 +340,16 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
                 gr.Warning(L("lora_warn_weight_clamp", lang).format(
                     name=resolved, given=weight, clamped=clamped))
                 weight = clamped
-        collected.append({"name": resolved, "strength": weight})
+        entry = {"name": resolved, "strength": weight}
+        if m.group(3) is not None:
+            audio_weight = float(m.group(3))
+            if audio_weight < LORA_AUDIO_WEIGHT_MIN or audio_weight > LORA_AUDIO_WEIGHT_MAX:
+                audio_clamped = min(max(audio_weight, LORA_AUDIO_WEIGHT_MIN), LORA_AUDIO_WEIGHT_MAX)
+                gr.Warning(L("lora_warn_audio_weight_clamp", lang).format(
+                    name=resolved, given=audio_weight, clamped=audio_clamped))
+                audio_weight = audio_clamped
+            entry["audio_strength"] = audio_weight
+        collected.append(entry)
 
     # Unknown name(s) -> abort (mirrors the "reject before any API call" flow).
     if unknown:

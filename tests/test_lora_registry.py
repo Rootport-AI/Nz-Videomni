@@ -198,18 +198,51 @@ def test_resolve_folds_alpha_scale_into_strength(tmp_path):
         metadata={"ss_network_alpha": "16", "ss_network_dim": "32"},
     )
     reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    path, strength, preprocess = reg.resolve("scaled", 1.0)
+    path, strength, preprocess, audio_strength = reg.resolve("scaled", 1.0)
     assert strength == pytest.approx(0.5)  # 1.0 * (16/32)
     assert preprocess == "none"
     assert path.name == "scaled.safetensors"
+    assert audio_strength is None  # not requested -> follows the video axis
 
 
 def test_resolve_scan_entry_default_scale_unchanged(tmp_path):
     lora_dir = tmp_path / "loras"
     _write_safetensors(lora_dir / "plain.safetensors", metadata={"x": "1"})
     reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    _, strength, _ = reg.resolve("plain", 0.8)
+    _, strength, _, _ = reg.resolve("plain", 0.8)
     assert strength == pytest.approx(0.8)  # scale 1.0
+
+
+def test_resolve_audio_strength_none_by_default(tmp_path):
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(lora_dir / "plain.safetensors", metadata={"x": "1"})
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    resolved = reg.resolve("plain", 1.0)
+    assert resolved.audio_strength is None
+
+
+def test_resolve_audio_strength_zero_with_scaled_entry_stays_zero(tmp_path):
+    # audio_strength=0.0 means "skip the audio-side patch entirely" — 0 * scale
+    # must stay exactly 0.0, never folded away to None.
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(
+        lora_dir / "scaled.safetensors",
+        metadata={"ss_network_alpha": "16", "ss_network_dim": "32"},
+    )
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    resolved = reg.resolve("scaled", 1.0, audio_strength=0.0)
+    assert resolved.audio_strength == 0.0
+
+
+def test_resolve_audio_strength_scaled_by_entry_scale(tmp_path):
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(
+        lora_dir / "scaled.safetensors",
+        metadata={"ss_network_alpha": "32", "ss_network_dim": "16"},  # scale=2.0
+    )
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    resolved = reg.resolve("scaled", 1.0, audio_strength=0.5)
+    assert resolved.audio_strength == pytest.approx(1.0)  # 0.5 * 2.0
 
 
 def test_resolve_pathlike_name_rejected(tmp_path):

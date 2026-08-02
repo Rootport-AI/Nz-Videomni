@@ -25,7 +25,7 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mcp_server.client import BackendClient, set_client
-from mcp_server.params import ChainClipArg, ConditioningImageArg
+from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 from mcp_server.server import build_server
 from mcp_server.settings import Settings
 from mcp_server.tools import generate, jobs, uploads
@@ -256,6 +256,56 @@ def test_submit_generate_nag_enabled_defaults_vsf_fields_to_nag():
     body = captured["body"]
     assert body["neg_method"] == "nag"
     assert body["vsf_scale"] == 1.5
+
+
+def test_submit_generate_loras_without_audio_strength_omits_key():
+    # WP4: LoraArg.model_dump(exclude_none=True) -- omitting audio_strength on
+    # the client side must not put an "audio_strength" key in the loras
+    # payload entries (backward-compat: audio side follows strength).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            loras=[LoraArg(name="style-x", strength=0.8)],
+        )
+    )
+
+    body = captured["body"]
+    assert body["loras"] == [{"name": "style-x", "strength": 0.8}]
+    assert "audio_strength" not in body["loras"][0]
+
+
+def test_submit_generate_loras_with_audio_strength_zero_included():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            loras=[LoraArg(name="style-x", strength=0.8, audio_strength=0.0)],
+        )
+    )
+
+    body = captured["body"]
+    assert body["loras"] == [{"name": "style-x", "strength": 0.8, "audio_strength": 0.0}]
 
 
 def test_submit_generate_sage_attention_backend_included_in_body():
@@ -495,6 +545,58 @@ def test_submit_chain_payload_contract_defaults_only_and_chunked_upsample_always
     assert "source_audio" not in body
     assert "loras" not in body
     assert "reference_video_id" not in body
+
+
+def test_submit_chain_loras_without_audio_strength_omits_key():
+    # WP4: same exclude_none=True contract as submit_generate.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            loras=[LoraArg(name="style-x", strength=0.8)],
+        )
+    )
+
+    body = captured["body"]
+    assert body["loras"] == [{"name": "style-x", "strength": 0.8}]
+    assert "audio_strength" not in body["loras"][0]
+
+
+def test_submit_chain_loras_with_audio_strength_zero_included():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            loras=[LoraArg(name="style-x", strength=0.8, audio_strength=0.0)],
+        )
+    )
+
+    body = captured["body"]
+    assert body["loras"] == [{"name": "style-x", "strength": 0.8, "audio_strength": 0.0}]
 
 
 def test_submit_chain_sage_attention_backend_included_in_body():

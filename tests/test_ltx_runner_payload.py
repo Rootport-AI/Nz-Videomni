@@ -499,3 +499,124 @@ def test_block_swap_prefetch_used_and_peak_reserved_relayed_from_done_event(tmp_
     outcome2 = be2.generate_chain(_chain_request(), tmp_path / "out2")
     assert outcome2.block_swap_prefetch_used is None
     assert outcome2.peak_vram_reserved_mb is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# keep_resident (cross-job CPU-skeleton cache, §48) — conditional worker-payload
+# key. Structurally identical to block_swap_prefetch above BUT the default is
+# OFF, so "send only when the resolved field is truthy" means the key rides only
+# on an explicit opt-in and a fully-default request is byte-identical to
+# pre-keep_resident. The worker's missing-key fallback is likewise False, and
+# there it doubles as the explicit "free the ~20GB cache" trigger.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_generate_payload_carries_keep_resident_when_true(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(keep_resident=True), tmp_path / "out")
+    assert captured[0]["keep_resident"] is True
+
+
+def test_generate_payload_omits_keep_resident_by_default(tmp_path):
+    # Opposite direction from block_swap_prefetch: the pydantic default is
+    # False, so an untouched request must NOT carry the key at all.
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(), tmp_path / "out")
+    assert "keep_resident" not in captured[0]
+
+    # ...and an explicit False is the same wire shape as omitting it (which is
+    # what makes "absent == off == release the cache" a single rule).
+    captured_off: list[dict] = []
+    be_off = _capturing_backend(captured_off)
+    be_off.generate(_nag_request(keep_resident=False), tmp_path / "out_off")
+    assert "keep_resident" not in captured_off[0]
+
+
+def test_generate_payload_keep_resident_key_is_last(tmp_path):
+    # Key-order contract: appended after block_swap_prefetch, which is itself
+    # after attention_backend.
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _nag_request(
+        attention_backend="sage", block_swap_prefetch=True, keep_resident=True
+    )
+    be.generate(req, tmp_path / "out")
+    keys = list(captured[0].keys())
+    assert keys.index("attention_backend") < keys.index("block_swap_prefetch")
+    assert keys.index("block_swap_prefetch") < keys.index("keep_resident")
+
+
+def test_chain_payload_carries_keep_resident_when_true(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(_chain_request(keep_resident=True), tmp_path / "out")
+    assert captured[0]["keep_resident"] is True
+    keys = list(captured[0].keys())
+    assert keys.index("block_swap_prefetch") < keys.index("keep_resident")
+
+
+def test_chain_payload_omits_keep_resident_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(_chain_request(), tmp_path / "out")
+    assert "keep_resident" not in captured[0]
+
+
+def test_default_payload_key_set_is_unchanged_by_keep_resident(tmp_path):
+    # The regression contract, stated positively and INDEPENDENTLY of the
+    # feature's own tests: adding keep_resident must not have grown the
+    # default-request key set by even one key (the block_swap_prefetch flip is
+    # the cautionary precedent -- there, a default request DID grow a key).
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(), tmp_path / "single")
+    assert set(captured[0]) == {
+        "op", "prompt", "seed", "height", "width", "num_frames", "frame_rate",
+        "num_steps", "images", "loras", "reference_video", "output_path",
+        "block_swap_prefetch",
+    }
+
+    captured_chain: list[dict] = []
+    be2 = _capturing_backend(captured_chain)
+    be2.generate_chain(_chain_request(), tmp_path / "chain")
+    assert set(captured_chain[0]) == {
+        "op", "width", "height", "frame_rate", "num_steps", "seed",
+        "overlap_frames", "overlap_strength", "chunked_upsample",
+        "output_path", "clips", "block_swap_prefetch",
+    }
+
+
+def test_keep_resident_used_is_relayed_from_the_done_event(tmp_path):
+    # metadata.json's keep_resident_used is the ONLY machine-readable way to
+    # tell "asked for it" from "it actually ran" (the real-device gate judges
+    # on this field), so the relay gets its own guard on both paths.
+    be = _capturing_backend([])
+    be._read_worker_events = (  # type: ignore[attr-defined]
+        lambda cb, chain, prefix: {
+            "event": "done", "seed_used": 7, "peak_vram_mb": 100,
+            "keep_resident_used": "on->off",
+        }
+    )
+    outcome = be.generate(_nag_request(keep_resident=True), tmp_path / "out")
+    assert outcome.keep_resident_used == "on->off"
+
+    be2 = _capturing_backend([])
+    be2._read_worker_events = (  # type: ignore[attr-defined]
+        lambda cb, chain, prefix: {
+            "event": "done", "seed_used": 7, "keep_resident_used": "on",
+        }
+    )
+    outcome2 = be2.generate_chain(
+        _chain_request(keep_resident=True), tmp_path / "out2"
+    )
+    assert outcome2.keep_resident_used == "on"
+
+    # A worker predating the field -> None (never a fabricated "off").
+    be3 = _capturing_backend([])
+    be3._read_worker_events = (  # type: ignore[attr-defined]
+        lambda cb, chain, prefix: {"event": "done", "seed_used": 7}
+    )
+    outcome3 = be3.generate(_nag_request(), tmp_path / "out3")
+    assert outcome3.keep_resident_used is None

@@ -44,6 +44,17 @@ _LIMITS_DEFAULTS = LimitsConfig()
 # and move gradio_ui's mirror + mcp_server's import target in the same change.
 BLOCK_SWAP_PREFETCH_DEFAULT = True
 
+# keep_resident（モデル骨格のジョブ間常駐）の既定値。**off** —
+# block_swap_prefetch と向きが逆である点に注意（あちらは既定 True なので
+# 「明示 False のときだけ送る」、こちらは既定 False なので「ON のときだけ
+# 送る」）。既定 off はオーナー確定（メインメモリ約20GBを常駐で持つ機能を、
+# メモリ量の分からない環境で勝手に有効化しない）。名前付き定数にしている
+# 理由は BLOCK_SWAP_PREFETCH_DEFAULT と同じ：この2つの Field 既定と
+# mcp_server/tools/generate.py の import 元を1箇所に集約するため。
+# gradio_ui/handlers.py だけは（HTTP越しのクライアントなので）import せず
+# 自前のミラー定数を持つ——変えるときは両方＋MCPを同じ変更で動かすこと。
+KEEP_RESIDENT_DEFAULT = False
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -144,6 +155,24 @@ class GenerateRequest(BaseModel):
     # 既定on（S4, 2026-08-01）: 実機ゲート（ビット一致＋VRAM）G1〜G7全PASSを
     # 条件にオーナーが確定した既定反転。offにすると従来の同期スワップになる。
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+
+    # keep_resident: モデルのCPU側「骨格」（各サブモデルの state_dict）を
+    # ジョブ間で常駐させ、2回目以降の生成でディスクからの再マテリアライズを
+    # 省く。wheel の StateDictRegistry をワーカーの ModelLedger に差し込む
+    # 実装で、**生成結果は変わらない**（§47.3 G9：同一シードで5本すべて
+    # ビット単位一致）。効果は前処理（骨格の組み立て）で、実測 66〜79秒 →
+    # 9〜15秒。
+    # 【重要】代償はメインメモリ：キャッシュ実体が約20GB常駐する（ワーカーの
+    # PrivateBytes 実測 41.6GB → 62.9GB）。**メモリ64GB以上を推奨**。足りない
+    # 環境ではページアウトで denoise が逆に遅くなりうるため既定 off。
+    # ON→OFF→ON と戻した場合、OFF の時点でキャッシュを解放するので次の ON は
+    # 全サブモデルの再ロード（50〜70秒）を1回だけ払い直す（仕様）。
+    # 実際に効いたかどうかは metadata.json の keep_resident_used で確認できる
+    # （"off" / "on" / "on->off"）。ワーカー側には安全ガードがあり、
+    # 組み合わせによっては自動的に off へ降格する（engine/worker.py の
+    # _resolve_keep_resident を参照）。GET /status には載せない（利用可否は
+    # 環境依存ではなくメモリ量の問題で、サーバーからは判定できないため）。
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
 
     # ─── モック2件（受理のみ・エンジン未消費）───
     # 以下2つは UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
@@ -411,6 +440,10 @@ class GenerateChainRequest(BaseModel):
     # block_swap_prefetch: 詳細は GenerateRequest の同名フィールドを参照。
     # 既定on（S4, 2026-08-01）。offにすると従来の同期スワップになる。
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+    # keep_resident: 詳細は GenerateRequest の同名フィールドを参照。既定off
+    # （メインメモリ約20GB常駐・64GB以上推奨）。チェーンでも1つの設定が
+    # チェーン全体に効く（骨格キャッシュはジョブ単位ではなくワーカー単位）。
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
     fused_gguf_dequant_gemm: bool = False
     vae_mode: Literal["default", "prune_vaed"] = "default"
 
@@ -651,7 +684,8 @@ class GenerateChainRequest(BaseModel):
         negative_prompt would fail GenerateRequest's own validator).
 
         The acceleration fields (``attention_backend``, ``block_swap_prefetch``,
-        and the two mock fields ``fused_gguf_dequant_gemm`` / ``vae_mode``) are
+        ``keep_resident``, and the two mock fields ``fused_gguf_dequant_gemm`` /
+        ``vae_mode``) are
         transcribed for the same reason: they do not fail validation when
         dropped, so an omission would silently mis-report a chain job's
         reproducibility metadata (GET /jobs' ``request`` and metadata.json would
@@ -671,6 +705,7 @@ class GenerateChainRequest(BaseModel):
             vsf_scale=self.vsf_scale,
             attention_backend=self.attention_backend,
             block_swap_prefetch=self.block_swap_prefetch,
+            keep_resident=self.keep_resident,
             fused_gguf_dequant_gemm=self.fused_gguf_dequant_gemm,
             vae_mode=self.vae_mode,
             width=self.width,

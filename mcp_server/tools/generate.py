@@ -28,7 +28,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
-from api.models import BLOCK_SWAP_PREFETCH_DEFAULT
+from api.models import BLOCK_SWAP_PREFETCH_DEFAULT, KEEP_RESIDENT_DEFAULT
 from mcp_server.client import get_client
 from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 
@@ -59,6 +59,7 @@ async def submit_generate(
     vsf_scale: float = 1.5,
     attention_backend: str = "sdpa",
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -137,6 +138,17 @@ async def submit_generate(
             ``backend_status`` の ``acceleration.block_swap_prefetch_available``
             で確認できます。実際に効いたかはジョブ完了後のメタデータの
             ``block_swap_prefetch_used`` に記録されます。
+        keep_resident: モデルのCPU側「骨格」をジョブ間で常駐させ、2回目以降の
+            生成の前処理を大幅に短縮します（実測 約70秒→約10秒）。**既定off**
+            （``block_swap_prefetch`` とは既定の向きが逆）。**メインメモリを
+            約20GB常駐で使うため、64GB以上を推奨**します。``attention_backend``
+            と違い**生成結果は変わりません**（同一シードでビット単位で同一）。
+            offに戻すとキャッシュを解放し、再度onにすると作り直しで50〜70秒を
+            1回だけ払い直します。``gguf_per_layer_quant=0`` のモデル構成では
+            エラーになり、``dit_cpu_load=0`` または ``block_swap_prefetch=false``
+            との併用では自動的にoffへ降格します（メインメモリ二重化の回避）。
+            実際に効いたかはジョブ完了後のメタデータの ``keep_resident_used``
+            （``"off"`` / ``"on"`` / ``"on->off"``）に記録されます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -176,6 +188,13 @@ async def submit_generate(
     # own default would silently turn it back on.
     if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
         payload["block_swap_prefetch"] = block_swap_prefetch
+    # keep_resident: same "differs from the server's own default" rule — but
+    # KEEP_RESIDENT_DEFAULT is False, so in practice the key rides only on an
+    # explicit True. Do not fold the two into one "send when True" branch: they
+    # are the same RULE with opposite defaults, and the rule is what survives a
+    # future default flip.
+    if keep_resident != KEEP_RESIDENT_DEFAULT:
+        payload["keep_resident"] = keep_resident
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -238,6 +257,7 @@ async def submit_chain(
     vsf_scale: float = 1.5,
     attention_backend: str = "sdpa",
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -319,6 +339,10 @@ async def submit_chain(
         block_swap_prefetch: submit_generate と同じ意味（既定on。offにすると
             従来の同期スワップになります。チェーン全体・全ステージ共通で
             効きます。生成結果はオン/オフどちらでも同一です）。
+        keep_resident: submit_generate と同じ意味（**既定off・メモリ64GB以上
+            推奨**。生成結果は変わりません。チェーンでも1つの設定がチェーン
+            全体に効きます——骨格キャッシュはジョブ単位ではなくワーカー単位で
+            持つためです）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -359,6 +383,10 @@ async def submit_chain(
     # when True" is unsafe now that the server's own default is True.
     if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
         payload["block_swap_prefetch"] = block_swap_prefetch
+    # keep_resident: same rule as submit_generate (default off -> sent only on
+    # an explicit True).
+    if keep_resident != KEEP_RESIDENT_DEFAULT:
+        payload["keep_resident"] = keep_resident
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

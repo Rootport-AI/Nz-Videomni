@@ -411,6 +411,43 @@ def test_submit_generate_payload_contract_defaults_only_key_set_unchanged_with_d
     assert "block_swap_prefetch" not in body
 
 
+def test_submit_generate_keep_resident_on_included_in_body():
+    # keep_resident's default is OFF (§48), so — unlike block_swap_prefetch
+    # right above — it is the ON call that diverges from the default and
+    # reaches the wire. Same rule, opposite direction.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            keep_resident=True,
+        )
+    )
+
+    body = captured["body"]
+    assert body["keep_resident"] is True
+
+    # ...and the default (False) is indistinguishable from omitting it.
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            keep_resident=False,
+        )
+    )
+    body = captured["body"]
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+
+
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
@@ -683,6 +720,44 @@ def test_submit_chain_block_swap_prefetch_off_included_in_body():
 
     body = captured["body"]
     assert body["block_swap_prefetch"] is False
+
+
+def test_submit_chain_keep_resident_on_included_in_body():
+    # Default OFF (§48) -> the ON call is the one that reaches the wire, and
+    # the default call must leave the frozen chain key set untouched.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            keep_resident=True,
+        )
+    )
+    assert captured["body"]["keep_resident"] is True
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            keep_resident=False,
+        )
+    )
+    assert set(captured["body"].keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
 
 
 def test_submit_chain_payload_contract_key_set_unchanged_with_default_block_swap_prefetch():

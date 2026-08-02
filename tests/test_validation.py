@@ -551,3 +551,62 @@ def test_chain_to_clip_request_transcribes_acceleration_fields():
     assert plain.block_swap_prefetch is True
     assert plain.fused_gguf_dequant_gemm is False
     assert plain.vae_mode == "default"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# keep_resident (cross-job CPU-skeleton cache, §48)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_keep_resident_defaults_off_and_is_accepted(client):
+    from api.models import (
+        KEEP_RESIDENT_DEFAULT,
+        GenerateChainRequest,
+        GenerateRequest,
+    )
+
+    # The default is OFF on BOTH models -- the opposite direction from
+    # block_swap_prefetch, which is the single easiest thing to get backwards
+    # when copying that feature's wiring.
+    assert KEEP_RESIDENT_DEFAULT is False
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.keep_resident is False
+    assert GenerateChainRequest(**CHAIN_BASE).keep_resident is False
+
+    # Accepted at both endpoints with no availability gate: whether ~20GB of
+    # main memory is a good idea is a property of the user's machine, not of
+    # the request, so the server never rejects it (and /status does not
+    # advertise it either).
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "keep_resident": True},
+    )
+    assert r.status_code == 202, r.text
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "keep_resident": True},
+    )
+    assert r.status_code == 202, r.text
+
+    # A non-bool is still a 422 (pydantic), like block_swap_prefetch.
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "keep_resident": "not-a-bool"},
+    )
+    assert r.status_code == 422
+
+
+def test_chain_to_clip_request_transcribes_keep_resident():
+    # Same trap as the acceleration fields above: an omission here does NOT
+    # fail validation, it just makes a chain job's stored request (GET /jobs,
+    # metadata.json) claim keep_resident=False for a run that asked for True.
+    from api.models import GenerateChainRequest
+
+    model = GenerateChainRequest(**{**CHAIN_BASE, "keep_resident": True})
+    assert model.to_clip_request(0).keep_resident is True
+    assert GenerateChainRequest(**CHAIN_BASE).to_clip_request(0).keep_resident is False

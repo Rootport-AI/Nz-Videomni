@@ -271,6 +271,15 @@ class GenerationOutcome:
     # ``attention_used``. None on the mock backend and on any worker that
     # predates the field.
     block_swap_prefetch_used: str | None = None
+    # Acceleration: whether the cross-job CPU-skeleton cache ACTUALLY stayed
+    # resident for this job ("off" | "on" | "on->off" when a worker-side guard
+    # auto-downgraded it — see engine/worker.py's ``_resolve_keep_resident``).
+    # Same relay discipline as ``block_swap_prefetch_used``: the worker's
+    # terminal ``done`` event carries it into metadata.json, which is the ONLY
+    # way to tell "the request asked for it" from "it actually ran" without
+    # reading worker logs. None on the mock backend and on any worker that
+    # predates the field.
+    keep_resident_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).
@@ -1158,15 +1167,16 @@ class _RealBackend:
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
         env["PYTHONPATH"] = str(project_root)
-        # Phase 1 gate: the worker reads LTX_COMPONENT_FILES (mirrors LTX_KEEP_RESIDENT).
+        # Phase 1 gate: the worker reads LTX_COMPONENT_FILES.
         env["LTX_COMPONENT_FILES"] = "1" if use_component_files else "0"
-        # Default keep-resident-weights OFF. At 720p the keep-resident path builds
-        # Gemma on CPU then does an out-of-place .to(cuda) move (momentary
-        # double-residence) that overruns the 16GB card and hard-crashes the
-        # worker (native, no traceback) during text-encode. This single-user /
-        # single-job local server does not need cross-job weight reuse, so default
-        # to 0; an explicit LTX_KEEP_RESIDENT in the environment still wins.
-        env.setdefault("LTX_KEEP_RESIDENT", "0")
+        # NOTE (§48): the old ``LTX_KEEP_RESIDENT`` env var is GONE. Keep-resident
+        # weights are now a PER-JOB request field (``GenerateRequest.keep_resident``)
+        # carried on the generate payload, so there is exactly one source of truth
+        # and the setting can be flipped without a 60-90s worker reload. The worker
+        # creates the pipeline with keep_resident_weights=False unconditionally and
+        # arms/disarms the registry per job. An LTX_KEEP_RESIDENT left over in
+        # someone's environment is now inert (it is neither set nor read) — the
+        # reproduction steps in §10.2/§46/§47 that export it are historical.
         # Sequential per-layer CPU offload of the GGUF Gemma during text-encode
         # (caps the ~15GB encode peak). On by default; the worker reads this and
         # keeps the 48 Gemma decoder layers CPU-resident, streaming them to GPU
@@ -1404,6 +1414,13 @@ class _RealBackend:
         # to pre-acceleration.
         if request.block_swap_prefetch:
             payload["block_swap_prefetch"] = True
+        # keep_resident: same additive contract, but the DEFAULT IS OFF here —
+        # so "sent only when True" is also "sent only when it differs from the
+        # default", and an omitted key on the worker side means off (which is
+        # additionally the explicit trigger that FREES the cache). A default
+        # job's payload therefore stays byte-identical to pre-keep_resident.
+        if request.keep_resident:
+            payload["keep_resident"] = True
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1452,6 +1469,7 @@ class _RealBackend:
             # seed_used). None on a worker that predates the field.
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            keep_resident_used=event.get("keep_resident_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
@@ -1610,6 +1628,10 @@ class _RealBackend:
         # block_swap_prefetch: same additive contract as attention_backend above.
         if chain.block_swap_prefetch:
             payload["block_swap_prefetch"] = True
+        # keep_resident: mirrors the single-generate block (default OFF, so the
+        # key is sent only when True and an omission means off/free-the-cache).
+        if chain.keep_resident:
+            payload["keep_resident"] = True
 
         with self._lock:
             try:
@@ -1644,6 +1666,7 @@ class _RealBackend:
             # Acceleration: same relay as the single-generate path above.
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            keep_resident_used=event.get("keep_resident_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 

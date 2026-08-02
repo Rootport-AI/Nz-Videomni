@@ -17,6 +17,7 @@
 - **生成サイズは必ず ÷64**（two-stage distilled の契約）。**表示解像度へは中央 crop**（例 1088→1080、1472→1440、2176→2160）。crop は既定 OFF＝既定で生成サイズのまま配信（[api/models.py] `crop_output`）。
 - **音声は joint で自動生成**（AAC/48kHz/stereo）。発話・効果音・音楽はプロンプト依存（ベストエフォート）。
 - 設定: **use_component_files=true（Path B）/ LTX_KEEP_RESIDENT=0 / block_swap_blocks_on_gpu=8 / vae_spatial_tile_size=512 / vae_temporal_tile_size=64**（＝本番デフォルト）。
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝上記の keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 - **▶ 「実用最長」と「溢れない尺」は別軸（2026-07-01 実測で明確化）**: 上表の「実用最長」は *溢れても待てる速度上限*（spill 容認・低速化を許容）。一方 **VRAM が溢れ始めない最長尺（快適域）** は別で、直接実測 = **720p 257f=10.67秒（API上限で clean・物理境界は<321f＝321f は追試で溢れ）・1080p ~6.3秒(153f)・1440p ~3.3秒(81f)**。生成時間は各解像度の天井で ~340秒に収束（§8.6）。正本は **§8.4／§8.6**（旧 doc の外挿値 720p~18.5s/1080p~8.5s は実測で下方修正・退行ではない）。
 
 ---

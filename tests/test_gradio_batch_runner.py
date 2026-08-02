@@ -981,3 +981,48 @@ def test_batch_default_snapshot_omits_block_swap_prefetch(tmp_path):
 
     _jid, p = server.payloads[0]
     assert "block_swap_prefetch" not in p
+
+
+# --------------------------------------------------------------------------- #
+# keep-resident: same snapshot-is-the-only-path reasoning again. This is the
+# setting a batch benefits from MOST (every row after the first is a cache
+# HIT), so a dropped wire here is a large silent regression -- and, being
+# default-off, it is the CHECKED case that appends the key.
+# --------------------------------------------------------------------------- #
+def test_batch_keep_resident_snapshot_adds_key_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, keep_resident=True)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["keep_resident"] is True
+    assert list(p.keys())[-1] == "keep_resident"
+
+
+def test_batch_default_snapshot_omits_keep_resident(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "keep_resident" not in p

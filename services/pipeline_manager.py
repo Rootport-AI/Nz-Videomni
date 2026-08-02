@@ -734,6 +734,7 @@ class PipelineManager:
                     a2v_provenance=a2v_provenance,
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
+                    keep_resident_used=outcome.keep_resident_used,
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                 )
 
@@ -781,7 +782,8 @@ class PipelineManager:
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, attention_used=None,
-        block_swap_prefetch_used=None, peak_vram_reserved_mb=None,
+        block_swap_prefetch_used=None, keep_resident_used=None,
+        peak_vram_reserved_mb=None,
     ) -> None:
         cm = chain_meta or {}
         metadata = {
@@ -797,6 +799,7 @@ class PipelineManager:
             # Acceleration: see the same keys in :meth:`_write_metadata`.
             "attention_used": attention_used,
             "block_swap_prefetch_used": block_swap_prefetch_used,
+            "keep_resident_used": keep_resident_used,
             "peak_vram_reserved_mb": peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
@@ -896,6 +899,12 @@ class PipelineManager:
             # Acceleration: whether block-swap prefetch ACTUALLY ran ("off" |
             # "on" | "on->off"), same relay discipline as attention_used above.
             "block_swap_prefetch_used": outcome.block_swap_prefetch_used,
+            # Acceleration: whether the cross-job CPU-skeleton cache actually
+            # stayed resident ("off" | "on" | "on->off"), same relay discipline
+            # again. This is the ONLY machine-readable place a worker-side
+            # auto-downgrade (see engine/worker._resolve_keep_resident) becomes
+            # visible — the real-device gate judges on this field, not on logs.
+            "keep_resident_used": outcome.keep_resident_used,
             # torch.cuda.max_memory_reserved()-based, additive alongside the
             # vram_optimization block's peak_vram_mb (max_memory_allocated-
             # based) — this feature's VRAM-risk signal (§44).

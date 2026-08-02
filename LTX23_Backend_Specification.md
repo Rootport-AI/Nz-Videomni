@@ -40,8 +40,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.6** |
-| 日付 | **2026-08-01** |
+| 版 | **v0.5.7** |
+| 日付 | **2026-08-03** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
@@ -58,6 +58,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.4 | 2026-07-28 | 同日の第2コミット（`2f8e85b`）で追加された **MCPサーバー**（`mcp_server/`。Claude Code 等の MCP クライアントからバックエンドを操作する22ツール）を反映。**§12b＝完全新設**（位置づけ・22ツールの概要・依存関係・実機ゲート状況へのポインタ）／**§0.3 の SSOT 地図**（`Docs/MCP_SERVER_DESIGN.md` を追加）／**§4.5**（アプリ venv の技術スタック表に `mcp` パッケージを追加）／**付録B.1**（用語集に MCP のエントリを追加）。凍結 API 契約（§6）そのものへの変更は無い（MCPサーバーは既存 `/api/v1/*` を叩く追加のクライアントであり、REST API 契約は無改修）。詳細な設計判断は `Docs/MCP_SERVER_DESIGN.md`、利用者向け説明は `README.md` §8、機械検証・実機ゲート状況は `Docs/VERIFICATION_LOG.md` §39 が正本。 |
 | v0.5.6 | 2026-08-01 | Acceleration（生成の高速化）機能の追加を反映。**§4.5**（エンジン venv の技術スタック表に `sageattention` 2.2.0 と `triton-windows` を追加）／**§5.4**（章題を「attention バックエンド」のまま、既定は SDPA・ジョブ単位で SageAttention へ切替可能という現行仕様へ書き直し。xformers/flash-attn を導入しない方針そのものは不変）／**§6.2**（`GenerateRequest` に `attention_backend`／`fused_gguf_dequant_gemm`／`vae_mode` の3フィールドを追加。後者2つは受理のみでエンジン未消費の**モック**である旨を明記。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§6.5b＝新設**（`GET /status` の非凍結ブロック `acceleration`＝`attention_backends` と `sage_available` の真理値表）／**§6.6**（`metadata.json` トップレベルへの `attention_used` 追加）。凍結 API 契約（§6）への追加は既存フィールドの意味変更を伴わない加算のみで、既定値のジョブは worker ペイロードがバイト同一のまま。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §43、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
 | v0.5.5 | 2026-07-28 | 同日の依存整理バッチ（未使用パッケージ削除・`uv sync --extra dev` 常時化・`checkpoint_path` 後始末）を反映し、`checkpoint_path` が `config.model` から削除された事実に追随して**5箇所の記述を訂正**した。**§4.3**（`checkpoint_path` はそもそも対応する config フィールドが無くなり、worker payload への値は `services/ltx_runner.py` が直値の `""` をハードコードする、という実装に合わせて訂正）／**§5.1**（`models/INSTALLED_PATHS.txt` の行数を「9 行」→「**8 行**」に訂正。`checkpoint_path (ref-only)` の行は `config.yaml` からの削除に伴い消えた）／**§5.2**（`config.model.checkpoint_path` は「フィールドとしては残る」ではなく**削除済み**、worker payload には `services/ltx_runner.py` のハードコードとして残るのみ、と訂正）／**§5.5**（`checkpoint_path` は「config に残るが reference-only」ではなく**削除済み**、と訂正）／**§11.2**（`config.yaml` の実値表から `checkpoint_path` の行を削除。現行 `config.yaml` にこのキーは存在しない）。凍結 API 契約（§6）への変更は無い（worker プロトコルの `checkpoint_path` フィールド自体は存続し、値がハードコード化されただけ）。実装・機械検証の詳細は `Docs/VERIFICATION_LOG.md` §40 が正本。 |
+| v0.5.7 | 2026-08-03 | `keep_resident`（モデルCPU骨格のジョブ間キャッシュ）の製品化を反映。**§6.2**（`GenerateRequest` に `keep_resident` を追加。`GenerateChainRequest` にも同一フィールドが存在すること、既定のジョブは worker ペイロードがバイト同一のままであること、`GET /status` には意図的に載せないことを補足で明記）／**§9.2**（本番既定の env 一覧から `LTX_KEEP_RESIDENT` を削除し、per-job フィールドへ移行した旨へ書き換え。あわせて 2026-06-30 当時の「keep=1 は native crash する」という記述に、現構成では修正済みで製品化されたという追記を添えた）。凍結 API 契約（§6）への追加は既存フィールドの意味変更を伴わない加算のみで、既定値のジョブは worker ペイロードがバイト同一のまま。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §48、利用者向け説明は `README.md`「モデル骨格の常駐（`keep_resident`）」節。 |
 
 ### 0.2 スコープ
 
@@ -498,6 +499,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `nag_alpha` | float | `0.25` | `ge=0.0, le=1.0` | **2026-07-28追加**。正出力とのブレンド比率 |
 | `attention_backend` | `Literal["sdpa","sage"]` | `"sdpa"` | enum | **2026-07-31追加**。attention（注意機構）の実装選択。`"sage"` は SageAttention 2.2.0（§5.4）。**実装あり**。sageattention 未導入の環境では 422 にせず `"sdpa"` へ降格して完走する |
 | `block_swap_prefetch` | bool | `true` | — | **2026-08-02追加**。block swap（transformer のブロックを CPU⇔GPU 間で出し入れする既定の省VRAM機構）の転送を、計算とは別の CUDA stream で先回りさせて隠す先読み機能。**実装あり**。`attention_backend` と違い転送方式のみを変えるため、同一シードなら off/on で出力がビット単位一致する。block swap 自体が無効な設定（`vram.block_swap=false` / `block_swap_blocks_on_gpu=0` / 全ブロック数以上）では黙って no-op になる。詳細は `Docs/VERIFICATION_LOG.md` §44 |
+| `keep_resident` | bool | `false` | — | **2026-08-02追加**。モデルのCPU側「骨格」（GGUF から組み上げた state dict とモジュールツリー。DiT 約16.5GB＋Gemma 約8〜9GB）をジョブ間で保持して使い回し、2本目以降の前処理固定費を消す per-job フィールド（ジョブごとのリクエスト項目）。**実装あり**。GPU には何も常駐させないため VRAM プロファイルは不変で、同一シードなら off/on で出力がビット単位一致する（HIT 時の前処理は実測 5.32 秒。ベースラインは 68.6〜75.0 秒）。**メモリ 64GB 以上を推奨**（約20GB を常時占有する）。`gguf_per_layer_quant=false` との併用はジョブがエラーで停止し（bf16 融合経路の in-place な LoRA 融合がキャッシュを汚染するため）、`dit_cpu_load=false` / `block_swap_prefetch=false` との併用は警告のうえ自動 off になる。実際に効いたかは `metadata.json` の `keep_resident_used`（`"off"` / `"on"` / `"on->off"`）で確認する。詳細は `Docs/VERIFICATION_LOG.md` §48 |
 | `fused_gguf_dequant_gemm` | bool | `false` | — | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注） |
 | `vae_mode` | `Literal["default","prune_vaed"]` | `"default"` | enum | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注）。既存の `vram_optimization.vae_tiling`（VRAM 節約のタイル分割）とは**無関係** |
 
@@ -520,6 +522,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 > - **既定値のジョブは worker ペイロードがバイト同一**: `attention_backend != "sdpa"` のとき、`block_swap_prefetch != true` のとき、それぞれ条件付きでキーを加算する方式のため、両方とも既定のリクエストではペイロードのキーが1つも増えない（`Docs/VERIFICATION_LOG.md` §43.4／§44.4 の完全一致テスト群が固定している）。
 > - **`block_swap_prefetch` の既定は `true`**（`attention_backend` とは既定値の向きが逆）。実機ゲート（ビット一致＋VRAM）合格を条件に、開発時の既定 `false` から 2026-08-02 に反転した経緯は `Docs/VERIFICATION_LOG.md` §44.7 を参照。
 > - 詳細な設計判断・実装箇所一覧・実機ゲート・実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43（`attention_backend`）・§44（`block_swap_prefetch`）を正本とする。
+
+> **`keep_resident` の補足（2026-08-02追加）**: 本フィールドも NAG・Acceleration の各フィールドと同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。既定（`false`）のジョブは worker ペイロードのキーが1つも増えない（`true` のときだけ加算する方式）。**`GET /status` には意図的に載せていない**——`/status` は「サーバーが実際にできること」を書く場所であり、`keep_resident` は `sage_available` のような可否判定（能力ゲート）を持たないためである（このマシンに十分なメモリがあるかという利用者側の選択にすぎない）。旧来の環境変数 `LTX_KEEP_RESIDENT` は**撤去済み**で、真実源は本フィールドへ一本化されている（§9.2、[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48）。
 
 - `width`/`height` は two-stage distilled が stage-1 を半解像度で生成し 2x アップサンプルするため **64 の倍数**（32 からの意図的な厳格化。960x540 等の非 64 表示サイズは `crop_output` で得る）。
 - バリデータ失敗はすべて 422（`VALIDATION_ERROR` エンベロープ、§6.8）。
@@ -1001,12 +1005,14 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 本番 worker 起動時、`services/ltx_runner.py` は以下の env を子プロセスに設定する:
 
-- `LTX_KEEP_RESIDENT=0`（keep-resident-weights OFF・`env.setdefault` で明示指定は尊重）。
+- `LTX_KEEP_RESIDENT` は **2026-08-02 に撤去済み**（この env はもう設定されないし、設定しても読まれない）。モデル骨格のジョブ間常駐は、環境変数ではなく `POST /generate`・`POST /generate/chain` の per-job フィールド（ジョブごとのリクエスト項目）`keep_resident`（既定 `false`）で指定する。§6.2 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照。
 - `LTX_COMPONENT_FILES=1`（`config.vram.use_component_files=true` に連動 / comp=1）。
 - `LTX_TE_OFFLOAD=1` / `LTX_DIT_CPU_LOAD=1`（既定 ON、`--no-te-offload` / `--no-dit-cpu-load` で無効化）。
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`。
 
 `keep=0`（ジョブ毎再 materialize）と `comp=1`（Path B）の組合せが本番既定である理由は、**マルチジョブ連続生成での commit（仮想メモリ）枯渇回避**にある。`keep=1` は 720p の Gemma text-encode 中に out-of-place な `.to(cuda)` で瞬間二重在が発生し native crash する（VERIFICATION_LOG §10.2）。`comp=0` は毎ジョブ 46GB モノリスを再 materialize して job3 で commit 枯渇 crash（同 §10.3）。`comp=1/keep=0` は 46GB モノリスを使わず commit を束縛し、T2V・I2V ともマルチジョブ連続 + 音声で PASS 済（同 §10.3 / §10.7）。
+
+> **上段の keep=1 に関する記述は 2026-06-30 時点の判断である（2026-08-02 追記）。** その後 Gemma レイヤーオフロード導入後の構成で再検証し、native crash の原因だったデバイス移動の不具合を修正したうえで、`keep_resident` を per-job フィールドとして製品化した（既定は引き続き off）。現在の正しい理解は「本番既定は off のまま・利用者がジョブ単位で on にできる・on 時はメモリ 64GB 以上を推奨」であり、詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §47・§48 を正本とする。
 
 ### 9.3 表示専用フィールド（worker へ非伝播）
 

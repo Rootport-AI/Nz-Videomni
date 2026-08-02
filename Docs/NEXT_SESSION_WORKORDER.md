@@ -98,6 +98,7 @@ keep=1 → `ModelLedger._target_device()` が CPU → GGUF Gemma を **CPU ビ�
 - `engine/gemma/gguf_quant_service.py:1280`（`build_device = _target_device()` が CPU に）
 - `engine/gemma/gguf_quant_service.py:1305-1313`（out-of-place `.to(cuda)` の発生点）
 - `engine/worker.py`（`keep_resident_weights` / `LTX_KEEP_RESIDENT` 分岐）
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 
 ### 修正の方向性（すべて**仮説・実装前・要計測**）
 1. **in-place 化**: `model._apply(lambda t: t.to(cuda))` を param 単位の in-place（`param.data = param.data.to(dev, copy=False)` 等）へ。瞬間二重在を消す狙い。**リスク大**: `GGMLQuantizedTensor` の subclass attrs（`_ggml_type`/`_float_shape`）が out-of-place `.to()` override で保持されている前提を崩す恐れ。かつ **vendor wheel 凍結の `ltx_core` 側 `_apply` はオーバーライドできない**可能性＝根本構造を変えられない懸念。

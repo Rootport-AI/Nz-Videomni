@@ -3369,3 +3369,201 @@ def test_chain_handler_default_omits_block_swap_prefetch():
     ]))
     _run_chain_until_started(gen)
     assert "block_swap_prefetch" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# keep-resident (keep_resident): the Settings-tab checkbox added after the
+# block-swap prefetch one. SAME "only when it differs from the mirrored server
+# default" rule -- but the default is OFF here, so the key rides only on a
+# CHECKED box. Reading these tests as a copy of the prefetch block above and
+# expecting the OFF case to send the key is the mistake to avoid; the rule is
+# shared, the direction is not.
+# --------------------------------------------------------------------------- #
+def test_keep_resident_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_keep_resident", "accel_info_keep_resident"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The owner-specified memory guidance must be in BOTH languages -- it is
+    # the whole reason this option ships with a note instead of a gate.
+    assert "64GB" in LABELS["ja"]["accel_info_keep_resident"]
+    assert "64GB" in LABELS["en"]["accel_info_keep_resident"]
+
+
+def test_keep_resident_default_constant_is_false():
+    from gradio_ui.handlers import KEEP_RESIDENT_DEFAULT
+
+    assert KEEP_RESIDENT_DEFAULT is False
+
+
+def test_build_a2v_chain_payload_keep_resident_on_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-keepres-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        keep_resident=True,
+    )
+    assert payload["keep_resident"] is True
+    assert list(payload.keys())[-1] == "keep_resident"
+
+
+def test_build_a2v_chain_payload_keep_resident_sits_after_prefetch():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-keepres-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+        keep_resident=True,
+    )
+    assert list(payload.keys())[-9:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend", "block_swap_prefetch",
+        "keep_resident",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_keep_resident():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kw = dict(
+        audio_id="aud-keepres-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    payload = build_a2v_chain_payload(**kw)
+    assert "keep_resident" not in payload
+    # Explicitly passing the default (False) is indistinguishable from omitting
+    # it -- the wire shape of "off" IS "absent", which is also what tells the
+    # worker to release the cache.
+    assert payload == build_a2v_chain_payload(**kw, keep_resident=False)
+
+
+def test_generate_handler_keep_resident_on_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-keepres"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        keep_resident=True,
+    )
+    _run_until_job_started(gen)
+    assert captured["keep_resident"] is True
+    assert list(captured.keys())[-1] == "keep_resident"
+
+
+def test_generate_handler_default_omits_keep_resident():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nokeepres"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "keep_resident" not in captured
+
+
+def test_generate_handler_a2v_forwards_keep_resident(tmp_path):
+    # The A2V branch goes through build_a2v_chain_payload -- the checkbox must
+    # survive that hop too (this is the one that silently drops in a copy-paste).
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-keepres"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-keepres"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), keep_resident=True,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["keep_resident"] is True
+
+
+def test_chain_handler_keep_resident_on_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-keepres"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), keep_resident=True)
+    _run_chain_until_started(gen)
+    assert captured["keep_resident"] is True
+    assert list(captured.keys())[-1] == "keep_resident"
+
+
+def test_chain_handler_default_omits_keep_resident():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nokeepres"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "keep_resident" not in captured

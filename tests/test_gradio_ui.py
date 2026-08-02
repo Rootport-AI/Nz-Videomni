@@ -718,11 +718,13 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     deps_with_radio = [d for d in demo.fns.values()
                        if radio in getattr(d, "inputs", [])]
     assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
-    # And it is the SECOND-TO-LAST input of each: the APPENDED wiring
-    # discipline put it last when it was the only Acceleration control, and
-    # the later-added block-swap prefetch checkbox is now appended after it.
+    # And it is the THIRD-TO-LAST input of each: the APPENDED wiring discipline
+    # put it last when it was the only Acceleration control, then the
+    # block-swap prefetch checkbox went after it, and the keep-resident
+    # checkbox after that. This index is the canary for a wiring list and a
+    # handler signature drifting apart.
     for dep in deps_with_radio:
-        assert dep.inputs[-2] is radio
+        assert dep.inputs[-3] is radio
 
 
 # --------------------------------------------------------------------------- #
@@ -757,6 +759,52 @@ def test_block_swap_prefetch_labels_switch_language():
         assert updates[idx][attr] == LABELS["ja"][key]
 
 
+# --------------------------------------------------------------------------- #
+# keep-resident checkbox (Settings tab, §48). Same reg/i18n/wiring pattern as
+# the two controls above, but default OFF -- it parks ~20GB in main memory, so
+# the owner's rule is "never on unless asked, and say 64GB+ in the note".
+# --------------------------------------------------------------------------- #
+def test_keep_resident_checkbox_default_and_label():
+    from gradio_ui.handlers import KEEP_RESIDENT_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == en["accel_lbl_keep_resident"]]
+    assert len(boxes) == 1, "keep-resident checkbox not found"
+    box = boxes[0]
+    assert box.value is KEEP_RESIDENT_DEFAULT
+    assert box.value is False, "off by default (owner decision: ~20GB resident)"
+    # NOT gated/disabled: whether the machine has the RAM is not something the
+    # server can answer, so the note informs and the user decides.
+    assert box.interactive is not False
+    assert box.info == en["accel_info_keep_resident"]
+
+
+def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox)
+               and c.label == en["accel_lbl_keep_resident"])
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
+    for dep in deps:
+        assert dep.inputs[-1] is box
+
+
+def test_keep_resident_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_keep_resident", "label"),
+                      ("accel_info_keep_resident", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
 def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     # Same "displayed only" trap check as the attention radio: the checkbox
     # must actually be an INPUT of both generate flows.
@@ -767,6 +815,8 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     deps_with_box = [d for d in demo.fns.values()
                      if box in getattr(d, "inputs", [])]
     assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
-    # And it is the LAST input of each (APPENDED after attention_backend).
+    # And it is the SECOND-TO-LAST input of each: APPENDED after
+    # attention_backend, and the keep-resident checkbox (§48) was later
+    # appended after IT.
     for dep in deps_with_box:
-        assert dep.inputs[-1] is box
+        assert dep.inputs[-2] is box

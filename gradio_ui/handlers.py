@@ -49,6 +49,16 @@ _FALLBACK_MAX_AUDIO_MB = 50
 # True is the default — an explicit False must now be the one that's sent).
 BLOCK_SWAP_PREFETCH_DEFAULT = True
 
+# Acceleration: keep-resident (cross-job CPU-skeleton cache) checkbox default.
+# Mirrors api/models.py's KEEP_RESIDENT_DEFAULT for the same reason the
+# constant above mirrors its own server-side twin (this module talks to the
+# backend purely over HTTP, so it does not import from api/). **The direction
+# is the OPPOSITE of block_swap_prefetch**: the server default is off, so the
+# "send only when it differs from the default" discipline below means the key
+# is emitted only when the box is CHECKED. Owner decision: never default-on a
+# feature that parks ~20GB in main memory (64GB+ recommended).
+KEEP_RESIDENT_DEFAULT = False
+
 
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
@@ -408,6 +418,7 @@ def build_a2v_chain_payload(
     vsf_scale=1.5,
     attention_backend="sdpa",
     block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
+    keep_resident=KEEP_RESIDENT_DEFAULT,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -439,7 +450,11 @@ def build_a2v_chain_payload(
     stays byte-identical to the pre-prefetch contract EITHER WAY. Sending only
     when True would have silently broken on this flip: an explicit "off" would
     have gone unsent and the server's new True default would have turned it
-    back on behind the caller's back."""
+    back on behind the caller's back.
+    ``keep_resident`` is appended after it under the SAME "differs from the
+    default" rule -- but since its default is off, that rule emits the key only
+    when the box is CHECKED (the mirror image of block_swap_prefetch; do not
+    read the two tests as one pattern)."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -487,6 +502,10 @@ def build_a2v_chain_payload(
     # frozen key order.
     if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
         chain_payload["block_swap_prefetch"] = bool(block_swap_prefetch)
+    # keep-resident (additive, conditional): same rule, appended last. Default
+    # off -> the key appears only when the box is checked.
+    if keep_resident != KEEP_RESIDENT_DEFAULT:
+        chain_payload["keep_resident"] = bool(keep_resident)
     return chain_payload
 
 
@@ -518,7 +537,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # Acceleration (ADDITIVE, last): the Settings-tab block-swap
                  # prefetch checkbox. Same discipline as attention_backend --
                  # keyword-only from ui.py's dispatch(), appended after it.
-                 block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT):
+                 block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
+                 # Acceleration (ADDITIVE, last): the Settings-tab keep-resident
+                 # checkbox. Same discipline again -- keyword-only from ui.py's
+                 # dispatch(), appended after block_swap_prefetch.
+                 keep_resident=KEEP_RESIDENT_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -746,6 +769,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 vsf_scale=vsf_scale,
                 attention_backend=attention_backend,
                 block_swap_prefetch=block_swap_prefetch,
+                keep_resident=keep_resident,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -825,6 +849,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # server's own default has flipped to True.
         if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
             payload["block_swap_prefetch"] = bool(block_swap_prefetch)
+        # keep-resident (additive, conditional): appended right after
+        # block_swap_prefetch, only when it differs from KEEP_RESIDENT_DEFAULT.
+        # That default is OFF, so in practice the key rides only on a checked
+        # box -- the mirror image of the line above, despite the identical shape.
+        if keep_resident != KEEP_RESIDENT_DEFAULT:
+            payload["keep_resident"] = bool(keep_resident)
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -929,7 +959,11 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # checkbox, same discipline -- appended after
                        # attention_backend, forwarded as a KEYWORD by ui.py's
                        # chain_dispatch.
-                       block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT):
+                       block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
+                       # Acceleration (ADDITIVE, last): the keep-resident
+                       # checkbox, appended after block_swap_prefetch and
+                       # forwarded as a KEYWORD by ui.py's chain_dispatch.
+                       keep_resident=KEEP_RESIDENT_DEFAULT):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1250,6 +1284,10 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # default is True).
         if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
             payload["block_swap_prefetch"] = bool(block_swap_prefetch)
+        # keep-resident (additive, conditional): appended last, same rule (the
+        # default is off, so the key rides only on a checked box).
+        if keep_resident != KEEP_RESIDENT_DEFAULT:
+            payload["keep_resident"] = bool(keep_resident)
 
         try:
             resp = api.generate_chain(payload)

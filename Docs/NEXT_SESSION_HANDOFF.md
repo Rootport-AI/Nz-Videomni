@@ -656,6 +656,7 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 ### 基盤マイルストーン（すべて完了・mainマージ済）
 
 - **720p 達成＋連続生成 commit 枯渇解決**（2026-06-30）: 1280×768 二段を本番 API で完走（~167–171s・RTX 4070 Ti SUPER 16GB）→任意で 1280×720 crop。連続マルチジョブも commit 枯渇せず PASS。レシピ＝comp=1（component-files/Path B）＋`LTX_KEEP_RESIDENT=0`＋bs=8＋vae 512/64。正本=VERIFICATION_LOG §10・[`SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md)。解像度×尺の能力＝[`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md)（尺 cap 257→481f(20s) 緩和・解像度別 spill-free frames=720p:257/1080p:153/1440p:81 を `/api/v1/config` の `limits.spill_free_frames` に露出）=§10.6。
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 - **I2V マルチジョブ＋音声 連続 実機 PASS**（2026-07-02）=§10.7。**音声 Phase 1**（native joint audio・AAC/48kHz/stereo・crop 後も保持）=§9.8。
 - **load/encode 16GB fit**: `--te-offload`（Gemma encode ピーク低減・既定 ON）=§11／`--dit-cpu-load`（transformer load スパイク除去・既定 ON・transformer ブロックを直接 CPU 構築）=§12＝512×320 で whole-job ceiling 16,944→~9.2GB。残るのは den2（denoise stage2）の解像度×尺スケーリング軸のみ（バグでない・`RESOLUTION_DURATION_CAPABILITY.md §8` が正本）。
 - **残課題A（worker 再利用 crash）解決**=§9.7: 真因＝`BlockSwapService._installed_transformers` の per-job リーク（append し続け解放しない）。修正＝install() で append 前に `clear()`（keep-latest）＋`_do_generate()` 完了直後に `gc.collect(); torch.cuda.empty_cache()`。6ジョブ実機 PASS・出力 byte 一致。真因確定の経緯（当初 mmap 破損説→棄却→Windows commit（仮想メモリ）枯渇で確定）=§8。
@@ -668,6 +669,7 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 - **凍結 API 契約**: ÷64 解像度（`api/models.py`）・8n+1 フレーム・T2V/最小I2V（frame_idx0・conditioning≤1）・distilled 8step/CFG1.0・`GET /status` の `vram_optimization`（`services/low_vram.py` `_STATUS_KEYS`）・`metadata.json` スキーマ・limits/generation_presets。**加算的変更のみ許可**（optional フィールド・省略時 byte 同一が定型ゲート）。
 - **2プロセス・2venv**: app=`./.venv`（torch 無し・FastAPI/Gradio/mock backend）／engine=`./.venv-engine`（torch 2.9.1+cu128＋`ltx_core`/`ltx_pipelines`@`00dc53d`＋`gguf`）。同一インタプリタで共存させない（双方が `services` トップレベルパッケージを持つため）。
 - **本番 env**: `LTX_KEEP_RESIDENT=0` 既定（keep=1 だと 720p の Gemma 移動で native crash・§10.2）／`use_component_files: true`（Path B）／`te_offload`・`dit_cpu_load` 既定 ON。設定は `config.yaml` が正。起動＝`python -m engine.worker`（別プロセス・別venv・`cwd=root`）。
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 - **本番モデル（実行に要る ~28GB）**: GGUF transformer Q4_K_M ~17GB＋GGUF Gemma Q4_K_M ~7.3GB（`ggml-org/gemma-3-12b-it-GGUF`）＋component VAE/audio/projection ~3.9GB＋spatial upsampler ~0.95GB＋tokenizer-only gemma_root ~40MB。43GB モノリス・QAT dir は削除済。**インストーラはこれに IC-LoRA 2点（1.22GiB）＋DWPose 前処理器 2点（0.33GiB）を加えた ~30GB（29.7GiB）を取得する**（後者2種は `_real_available()` の対象外＝生成の中核ではないが、欠けると IC-LoRA 選択時に 404 になる）。
 - **回帰基準 SHA**: T2V(seed=12345, "a calm ocean wave…") 512×320/49f=`23844b4e…6bb7bf`／最小I2V=`a511eda4…c217`／peak_vram_mb 8440。IC-LoRA 付き出力の基準 SHA=`735a6de9…272`（旧 `outputs/ic_lora_phaseA/spike.mp4` `8e10aa59…` は旧コード出力＝照合に使わない）。
 

@@ -88,6 +88,14 @@ LABELS: dict[str, dict[str, str]] = {
                                 "bit-identical to having it off — only the speed "
                                 "changes. Roughly 10-13% faster; no effect when block "
                                 "swap is disabled."),
+        "accel_lbl_keep_resident": "Keep the model skeleton resident (cross-job cache)",
+        "accel_info_keep_resident": ("64GB or more of memory recommended. Keeps the "
+                                     "model's CPU-side skeleton between jobs, greatly "
+                                     "shortening the preparation phase from the second "
+                                     "generation onward (measured: about 70s -> about "
+                                     "10s). Uses about 20GB of main memory while "
+                                     "resident. The output does not change (bit-for-bit "
+                                     "identical for the same seed)."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -587,6 +595,12 @@ LABELS: dict[str, dict[str, str]] = {
                                 "（ブロック入れ替えを使っているときだけ効きます）。"
                                 "生成結果はオフのときと完全に同一で、速度だけが変わります。"
                                 "約10〜13%短縮。ブロック入れ替えが無効な設定では何も起きません。"),
+        "accel_lbl_keep_resident": "モデル骨格の常駐（ジョブ間キャッシュ）",
+        "accel_info_keep_resident": ("メモリ64GB以上を推奨。モデルのCPU側骨格をジョブ間で"
+                                     "保持し、2回目以降の生成の前処理を大幅に短縮します"
+                                     "（実測 約70秒→約10秒）。メインメモリを約20GB常駐で"
+                                     "使用します。生成結果は変わりません"
+                                     "（同じシードならビット単位で同一）。"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

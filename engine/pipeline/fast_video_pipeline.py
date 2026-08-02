@@ -19,6 +19,30 @@ if TYPE_CHECKING:
     from engine.gguf.ic_lora_common import IcLoraEntry
 
 
+# keep_resident（ジョブ間のCPU骨格キャッシュ）で registry を差し替える
+# ModelLedger のビルダー属性、**全部**。wheel の
+# ``ModelLedger.build_model_builders()`` が作る7つ（checkpoint_path 由来6つ＋
+# spatial_upsampler_path 由来1つ）に、この engine が自前で組み立てる
+# ``text_encoder_builder``（gemma_root=None で wheel が作らないぶんを
+# ``engine/gemma/gguf_quant_service.py`` の
+# ``_build_shardless_text_encoder_builder`` が作る）を加えた8つ。
+#
+# ここに載せ忘れた属性は「そのサブモデルだけキャッシュが効かない（かつ
+# ledger.registry が非Dummyなので CPU ビルドされたまま）」という**静かな部分
+# 故障**になるため、``_swap_registry`` は8つの存在を assert する（欠落＝
+# 属性名のタイポか wheel 側の構成変更で、どちらも黙って進めてはいけない）。
+_LEDGER_BUILDER_ATTRS: Final[tuple[str, ...]] = (
+    "transformer_builder",
+    "vae_decoder_builder",
+    "vae_encoder_builder",
+    "audio_encoder_builder",
+    "audio_decoder_builder",
+    "vocoder_builder",
+    "upsampler_builder",
+    "text_encoder_builder",
+)
+
+
 class LTXFastVideoPipeline:
     pipeline_kind: Final = "fast"
 
@@ -160,6 +184,18 @@ class LTXFastVideoPipeline:
         self._block_swap_prefetch_requested = False
         self._block_swap_prefetch_used = "off"
 
+        # ── keep_resident（ジョブ間のCPU骨格キャッシュ）state ──────────────────
+        # 上の3つ（NAG/sage/prefetch）と決定的に違うのは**ジョブ終了時に
+        # リセットしない**点。残ること自体が機能（次のジョブで再利用されるのが
+        # 目的）なので、``generate()``/``generate_chain()`` の finally には
+        # 対応するリセットが無い。この非対称は意図的。
+        # ``_keep_resident_enabled`` は「いま ledger に非Dummy registry が
+        # 刺さっているか」、``_keep_resident_registry`` は保持している
+        # StateDictRegistry 実体（OFF で clear() され、再ONで同じ実体を空から
+        # 使い直す＝キャッシュの作り直し）。
+        self._keep_resident_enabled = False
+        self._keep_resident_registry: object | None = None
+
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
         # standalone sources are all present BEFORE constructing DistilledPipeline
@@ -224,26 +260,10 @@ class LTXFastVideoPipeline:
             quantization=QuantizationPolicy.fp8_cast() if use_fp8 else None,
         )
 
-        # ── Stage 3: load-once / keep-resident weights via StateDictRegistry ──
-        # Wire a real StateDictRegistry into the ModelLedger so each submodel's CPU
-        # state_dict is loaded ONCE (job1 warmup) and reused on every later job (HIT),
-        # eliminating the per-job disk re-materialization that exhausts Windows commit
-        # (virtual memory) and crashes the resident worker on job2+ (exit 139).
-        # Must run BEFORE the GGUF/Gemma/block-swap installs below so those operate on
-        # registry-aware builders; build_model_builders() rebuilds the (lazy) builders
-        # carrying the new registry. A non-Dummy registry also flips ModelLedger
-        # ._target_device() to CPU, so submodels build on CPU (cached) and move to GPU
-        # out-of-place per generate (VRAM-neutral).
-        if keep_resident_weights:
-            from ltx_core.loader.registry import StateDictRegistry
-            self.pipeline.model_ledger.registry = StateDictRegistry()
-            self.pipeline.model_ledger.build_model_builders()
-
         # ── Re-source VIDEO VAE + AUDIO VAE/vocoder from standalone component files ──
         # Phase 1: drop the 46GB monolith for the VAE/audio builders by re-pointing
-        # their model_path to small standalone files. Runs AFTER the keep-resident
-        # registry wiring (so it operates on the registry-aware builders) and BEFORE
-        # the transformer/Gemma GGUF installs. Gated on use_component_files + both
+        # their model_path to small standalone files. Runs BEFORE the
+        # transformer/Gemma GGUF installs. Gated on use_component_files + both
         # VAE paths present.
         if use_component_files and component_video_vae_path and component_audio_vae_path:
             self._install_component_sources(component_video_vae_path, component_audio_vae_path)
@@ -306,6 +326,28 @@ class LTXFastVideoPipeline:
         # through the sage kernel either way.) The only requirement is that both
         # wrap ledger.transformer and therefore run on every build.
         self._install_sage()
+
+        # ── Stage 3: load-once / keep-resident weights via StateDictRegistry ──
+        # 各サブモデルのCPU側 state_dict を1回だけ読み、以降のジョブでは再利用
+        # する（ジョブ毎のディスク再マテリアライズの除去。前処理 66〜79秒 →
+        # 9〜15秒、出力はビット一致）。
+        #
+        # ここは**create時の初期値**を張るだけの入口で、本番の切り替えは
+        # ``generate()``/``generate_chain()`` の ``keep_resident=`` 引数
+        # →``_set_keep_resident_job`` が担う。実装を1本にするため、create時も
+        # ジョブ時とまったく同じ ``_swap_registry`` を通す（以前はここだけ
+        # ``build_model_builders()`` を呼び直す別実装だった。あの方式は
+        # install群を**先に**走らせると model_path / model_loader /
+        # model_sd_ops / module_ops が作り直しで消えるので、install群より前に
+        # 置くしかなかった。``_swap_registry`` は frozen dataclass の
+        # ``dataclasses.replace(registry=...)`` なので他フィールドを保存でき、
+        # install群の**後**に置ける＝スパイクスクリプトも本番と同じ経路を通る）。
+        #
+        # 非Dummy registry は ``ModelLedger._target_device()`` を CPU に倒すので、
+        # サブモデルはCPUでビルド（＝キャッシュ）され、生成毎にGPUへ
+        # out-of-place で移される（VRAM中立）。
+        if keep_resident_weights:
+            self._swap_registry(True)
 
         # NOTE: attention-tiling and LoRA install branches (guarded by
         # attention_tile_size > 0 / loras) were removed during the engine
@@ -458,6 +500,118 @@ class LTXFastVideoPipeline:
         in the entry point's finally, not live state.
         """
         return self._block_swap_prefetch_used
+
+    def _swap_registry(self, enabled: bool) -> None:
+        """Arm (``True``) / disarm (``False``) the cross-job CPU-skeleton cache.
+
+        Swaps ``ledger.registry`` AND every builder's own ``registry`` field in
+        one step. Both halves are load-bearing:
+
+        * ``ledger.registry`` is what ``ModelLedger._target_device()`` reads
+          live — non-Dummy flips submodel builds to CPU (cacheable), Dummy puts
+          them back on the GPU.
+        * each ``*_builder.registry`` is what ``SingleGPUModelBuilder.load_sd``
+          actually consults for the cache HIT/MISS. Builders are FROZEN
+          dataclasses holding the registry BY VALUE, so re-pointing the ledger
+          alone would leave every builder caching into the old registry.
+
+        ``dataclasses.replace`` is used (not ``build_model_builders()``) because
+        the builders here are no longer the wheel's originals: the install group
+        above has rewritten ``model_path`` / ``model_loader`` / ``model_sd_ops``
+        / ``module_ops`` on them. Rebuilding would silently throw all of that
+        away (46GB monolith back in the path, GGUF loaders gone); ``replace``
+        preserves every other field by construction.
+
+        No closure captures the registry: the block-swap / NAG / sage wrappers
+        and the Gemma service's wrapper all read ``ledger``/``ledger.*_builder``
+        live on every build, so a swap takes effect from the very next build.
+
+        All 8 builder attributes must EXIST (assert). ``getattr(..., None)``
+        with a silent skip is deliberately NOT used: a typo'd or wheel-renamed
+        attribute would then mean "that one submodel is CPU-built with no
+        cache", i.e. slower AND memory-heavier with nothing in any log.
+        """
+        import dataclasses
+        import gc
+        import logging
+
+        from ltx_core.loader.registry import DummyRegistry, StateDictRegistry
+
+        log = logging.getLogger(__name__)
+        ledger = self.pipeline.model_ledger
+
+        missing = [a for a in _LEDGER_BUILDER_ATTRS if not hasattr(ledger, a)]
+        assert not missing, (
+            "keep_resident: ModelLedger is missing builder attribute(s) "
+            f"{missing} — _LEDGER_BUILDER_ATTRS is out of sync with the ledger "
+            "(typo, or the wheel/Gemma install changed which builders exist). "
+            "Swapping only the ones that happen to exist would leave those "
+            "submodels un-cached and CPU-built, which is invisible at runtime."
+        )
+
+        old = getattr(ledger, "registry", None)
+        if enabled:
+            if self._keep_resident_registry is None:
+                self._keep_resident_registry = StateDictRegistry()
+            new: object = self._keep_resident_registry
+        else:
+            new = DummyRegistry()
+
+        ledger.registry = new
+        for attr in _LEDGER_BUILDER_ATTRS:
+            setattr(ledger, attr, dataclasses.replace(getattr(ledger, attr), registry=new))
+
+        if not enabled and old is not None and not isinstance(old, DummyRegistry):
+            # 明示的な解放：ここを通らないと約20GBのCPU骨格が居座り続ける。
+            # ``clear()`` は state_dict の参照を落とすだけなので、循環参照
+            # （block swap の swapped_forward クロージャ等）を確実に回収する
+            # ため gc を1回回す。残留はログで追える形にする（実測では
+            # prefetch ON時のDiT分が次の install() まで／``_pinned_pool`` ／
+            # ``held_embed_cpu`` 約1.9GB が残りうる）。
+            old.clear()
+            gc.collect()
+            log.info(
+                "keep_resident OFF: StateDictRegistry cleared + gc.collect() done "
+                "(residual CPU memory may remain until the next transformer build: "
+                "block-swap CPU masters, pinned pool, held_embed_cpu ~1.9GB)"
+            )
+        else:
+            log.info("keep_resident %s: registry swapped on ledger + %d builders",
+                     "ON" if enabled else "OFF", len(_LEDGER_BUILDER_ATTRS))
+
+        self._keep_resident_enabled = bool(enabled)
+
+    def _set_keep_resident_job(self, enabled: bool) -> None:
+        """Arm/disarm the cross-job CPU-skeleton cache for the upcoming job.
+
+        NEVER raises, for the same reason as ``_set_block_swap_prefetch_job``:
+        this runs at the outermost entry point, OUTSIDE generate()'s
+        try/finally. A swap failure must not kill an otherwise runnable job —
+        the feature is a preprocessing-time optimization, so "ran, just not
+        cached" beats "failed". The state flag is only advanced by a swap that
+        actually succeeded, so the next job retries the same transition.
+
+        **Deliberately NOT reset at the end of a job** (the one asymmetry
+        against _set_nag_job / _set_sage_job / _set_block_swap_prefetch_job):
+        the cache surviving into the next job IS the feature. It is released
+        only when a later job explicitly asks for ``keep_resident=False`` —
+        which is exactly what an omitted request field resolves to — or when
+        the worker dies (model switch: services/pipeline_manager's reload()
+        kills the worker process, so a model change can never serve stale
+        weights out of this cache; that is the structural guarantee behind
+        §1-9's invalidation requirement).
+        """
+        enabled = bool(enabled)
+        if enabled == self._keep_resident_enabled:
+            return
+        try:
+            self._swap_registry(enabled)
+        except Exception as exc:  # noqa: BLE001 - arming must never kill a job
+            import logging
+            logging.getLogger(__name__).error(
+                "keep_resident switch to %s FAILED (%r) — the job continues with "
+                "keep_resident=%s", enabled, exc, self._keep_resident_enabled,
+            )
 
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
@@ -1166,6 +1320,7 @@ class LTXFastVideoPipeline:
         nag: NagParams | VsfParams | None = None,
         attention_backend: str = "sdpa",
         block_swap_prefetch: bool = False,
+        keep_resident: bool | None = None,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -1194,6 +1349,14 @@ class LTXFastVideoPipeline:
         # Block-swap prefetch, armed alongside sage for the same reason (no
         # ordering constraint, and its reset lives in the finally below).
         self._set_block_swap_prefetch_job(block_swap_prefetch)
+        # keep_resident: ``None`` = 触らない（現在の状態を維持）。ワーカーは
+        # 常に明示的な bool を渡すが、outputs/ 配下のスパイクスクリプトは
+        # create時に keep_resident_weights=True を張って直接 generate() を
+        # 呼ぶので、既定 False にすると1本目でキャッシュを剥がしてしまう。
+        # 上の3つと違い、finally に対応するリセットは**無い**（残ることが機能。
+        # ``_set_keep_resident_job`` のdocstring参照）。
+        if keep_resident is not None:
+            self._set_keep_resident_job(keep_resident)
 
         try:
             tiling_config = default_tiling_config(
@@ -1264,6 +1427,7 @@ class LTXFastVideoPipeline:
         nag: NagParams | VsfParams | None = None,
         attention_backend: str = "sdpa",
         block_swap_prefetch: bool = False,
+        keep_resident: bool | None = None,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -1311,11 +1475,18 @@ class LTXFastVideoPipeline:
         outermost entry point next to its own ``finally``. The chain builds the
         transformer exactly once (chain_pipeline.py), so one prefetch engine
         serves every segment and every stage-2 tile of the whole chain.
+
+        ``keep_resident`` (additive, ``None`` = leave the current state alone):
+        armed here for the same "outermost entry point" reason, but with NO
+        counterpart in the finally — the whole point of the CPU-skeleton cache
+        is that it survives the job. See ``_set_keep_resident_job``.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
         self._set_sage_job(attention_backend)
         self._set_block_swap_prefetch_job(block_swap_prefetch)
+        if keep_resident is not None:
+            self._set_keep_resident_job(keep_resident)
 
         try:
             return run_chain(

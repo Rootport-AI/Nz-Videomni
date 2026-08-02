@@ -53,6 +53,7 @@ from typing import List, Optional, Tuple
 
 from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
+    KEEP_RESIDENT_DEFAULT,
     build_a2v_chain_payload,
     suggest_frames_for_audio,
 )
@@ -167,7 +168,13 @@ class BatchSnapshot:
                      payload only when it differs from "sdpa".
         block_swap_prefetch  Snapshotted from the Settings-tab checkbox, same
                      reasoning as attention_backend. Reaches the payload only
-                     when True (the API's own default is False).
+                     when it differs from the API's own default (now True).
+        keep_resident  Snapshotted from the Settings-tab checkbox, same
+                     reasoning again. The API default is OFF, so this one
+                     reaches the payload only when True. For a batch it is the
+                     setting that matters most (every row after the first is a
+                     cache HIT) — and also the one that parks ~20GB of main
+                     memory for the whole overnight run.
     """
 
     wav_dir: str
@@ -197,6 +204,7 @@ class BatchSnapshot:
     vsf_scale: float = 1.5
     attention_backend: str = "sdpa"
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
 
 
 # --------------------------------------------------------------------------- #
@@ -447,6 +455,7 @@ class BatchRunner:
                 vsf_scale=snap.vsf_scale,
                 attention_backend=snap.attention_backend,
                 block_swap_prefetch=snap.block_swap_prefetch,
+                keep_resident=snap.keep_resident,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

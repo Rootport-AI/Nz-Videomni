@@ -968,6 +968,127 @@ def _install_cpu_embed_offload(text_encoder: Any, embed_cpu: torch.Tensor) -> No
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Keep-resident (StateDictRegistry) CPU build -> compute-device move
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Sliding-window size for the TE per-layer offload. Read by BOTH the keep-resident
+# move (to decide which decoder layers must STAY on CPU) and the
+# GemmaLayerOffloadService construction below, so the two can never disagree about
+# the window. Next step (config knob) only has to swap the source of this value.
+_GEMMA_LAYERS_ON_GPU = 2
+
+# The one legitimate CPU residency outside the offloaded decoder layers: the
+# held-back token embedding and its tied lm_head (Lever 3). They are still on the
+# meta device while the move below runs — _install_cpu_embed_offload assigns them
+# afterwards — so the post-condition check normally never sees them; the exemption
+# only keeps the check honest if that ordering ever changes.
+_EMBED_CPU_LEAF_MARKERS = ("embed_tokens", "lm_head")
+
+
+def _excluded_module_ids(excluded_roots: Any) -> set[int]:
+    """id() set of every module in the excluded sub-trees (roots included)."""
+    ids: set[int] = set()
+    for root in excluded_roots:
+        for sub in root.modules():
+            ids.add(id(sub))
+    return ids
+
+
+def _leaf_tensors_to_move(
+    model: torch.nn.Module, excluded_roots: Any = ()
+) -> list[tuple[torch.nn.Module, str, str]]:
+    """SELECT the CPU-resident leaf tensors that must move to the compute device.
+
+    Pure (no mutation) so the selection rule is unit-testable without a GPU.
+    Returns ``[(module, kind, name)]`` with ``kind`` in ``{"param", "buffer"}``.
+
+    Same walk as ``DitCpuLoadService._move_non_block_tensors_to_gpu``: per-module
+    ``_parameters`` / ``_buffers`` with ``recurse=False`` semantics (so leaves
+    attached directly to a container module are caught too), minus the whole
+    sub-tree of every excluded root. meta tensors are skipped by the
+    ``device.type == "cpu"`` test, which is what keeps the held-back
+    ``embed_tokens.weight`` out of the move.
+    """
+    excluded_ids = _excluded_module_ids(excluded_roots)
+    selected: list[tuple[torch.nn.Module, str, str]] = []
+    for module in model.modules():
+        if id(module) in excluded_ids:
+            continue
+        for name, p in list(module._parameters.items()):
+            if p is not None and p.device.type == "cpu":
+                selected.append((module, "param", name))
+        for name, buf in list(module._buffers.items()):
+            if (
+                buf is not None
+                and getattr(buf, "device", None) is not None
+                and buf.device.type == "cpu"
+            ):
+                selected.append((module, "buffer", name))
+    return selected
+
+
+def _move_leaf_tensors_to_device(
+    model: torch.nn.Module, device: Any, excluded_roots: Any = ()
+) -> int:
+    """Move the selected leaves onto ``device`` out-of-place; returns the count.
+
+    The param/buffer asymmetry is deliberate (and copied from the DiT precedent):
+      - param:  ``p.data = p.data.to(device)`` — ``load_state_dict(assign=True)``
+        wrapped the cached tensor in a FRESH Parameter, so re-pointing ``.data``
+        cannot reach the registry cache; keeping the same Parameter object also
+        preserves weight tying.
+      - buffer: MUST re-bind the slot ``module._buffers[n] = b.to(device)`` — with
+        ``assign=True`` the cached tensor object IS the registered buffer, so a
+        ``b.data = ...`` in-place re-point would corrupt the cached state_dict.
+    ``GGMLQuantizedTensor.to()`` is out-of-place and preserves the subclass +
+    ``_ggml_type`` / ``_float_shape`` attrs, so quantized buffers survive the move.
+    """
+    moved = 0
+    for module, kind, name in _leaf_tensors_to_move(model, excluded_roots):
+        if kind == "param":
+            p = module._parameters[name]
+            p.data = p.data.to(device)
+        else:
+            module._buffers[name] = module._buffers[name].to(device)
+        moved += 1
+    return moved
+
+
+def _assert_no_stray_cpu_leaves(
+    model: torch.nn.Module, excluded_roots: Any = ()
+) -> None:
+    """Post-condition of the move: nothing outside the excluded sub-trees is on CPU.
+
+    This is the single safety net for the keep-resident path. It verifies the two
+    invariants whose violation is otherwise silent-but-fatal — the final norm (the
+    ``compute_dev`` anchor) and the connectors / aggregate_embed must be on the
+    compute device — without naming any device or depending on which flags are on.
+    Raises with every offending tensor listed by name.
+    """
+    excluded_ids = _excluded_module_ids(excluded_roots)
+    stray: list[str] = []
+    for mod_name, module in model.named_modules():
+        if id(module) in excluded_ids:
+            continue
+        for name, t in (*module._parameters.items(), *module._buffers.items()):
+            if t is None or getattr(t, "device", None) is None:
+                continue
+            if t.device.type != "cpu":
+                continue
+            full = f"{mod_name}.{name}" if mod_name else name
+            if any(marker in full for marker in _EMBED_CPU_LEAF_MARKERS):
+                continue
+            stray.append(full)
+    if stray:
+        raise RuntimeError(
+            "Gemma keep-resident: %d leaf tensor(s) stayed on CPU outside the "
+            "offloaded decoder layers — the text encoder would run (partly) on the "
+            "CPU or die on a device mismatch. Offenders: %s"
+            % (len(stray), ", ".join(stray))
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Service — mirrors GGUFQuantLoaderService.install but targets text_encoder_builder
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1207,45 +1328,90 @@ class GemmaGGUFQuantLoaderService:
             build_device = model_ledger._target_device()
             model = tb.build(device=build_device)
 
+            # TEXT-ONLY: outer = Gemma3ForCausalLM; outer.model = Gemma3TextModel,
+            # which holds .layers / .norm directly (it IS the language model — no
+            # intermediate Gemma3Model, no .language_model attribute). Derived here,
+            # BEFORE the move, because ``offload_root`` is the single root expression
+            # shared by the keep-resident exclusion set and the offload install below.
+            outer = getattr(model, "model", None)
+            lang = getattr(outer, "model", None) if outer is not None else None
+            offload_root = lang if lang is not None else model
+            offload_svc = None
+
             # When we built on CPU (registry active), move the model to the GPU for
             # inference OUT-OF-PLACE, skipping any meta tensor (the held-back
             # embed_tokens.weight stays meta until the offload wrapper assigns it on
             # CPU below). _return_model() short-circuits its own .to(device) because of
             # that meta param, so the loader/this move is what places weights on the
-            # GPU. The move replaces module params/buffers with fresh GPU tensors and
-            # leaves the cached CPU state_dict objects untouched (VRAM-neutral); the
-            # GGMLQuantizedTensor.to override is out-of-place and preserves subclass +
-            # _ggml_type/_float_shape attrs.
+            # GPU.
             if build_device != ledger_device:
-                # TE per-layer offload caveat: in offload mode the
-                # ``model.model.layers.*`` GGUF buffers are deliberately held on
-                # CPU (loader left them there) so GemmaLayerOffloadService can stream
-                # them per window. This keep-resident GPU-move would drag them all
-                # back onto the GPU, defeating the offload. Production runs with
-                # keep-resident OFF (build_device == ledger_device), so this branch
-                # is skipped there and the offload path is correct. To make the
-                # keep-resident + offload combo correct too, we skip the move for
-                # tensors already on CPU when layer_offload is on (the CPU-held layer
-                # buffers); the GPU-resident kept tensors (connectors / final norm /
-                # rotary) still move as before. Non-offload mode is unchanged.
+                # Terminal state after the move (independent of the registry):
+                #   L  decoder layers ............ CPU iff layer_offload is on
+                #                                  (GemmaLayerOffloadService streams
+                #                                  them per window), else ledger_device
+                #   N  final norm ................ ledger_device (compute_dev anchor)
+                #   C  connectors + aggregate_embed ... ledger_device
+                #   E  embed_tokens / lm_head .... CPU (still meta here; assigned by
+                #                                  _install_cpu_embed_offload below)
+                #   R  rotary inv_freq ........... either (forward follows its input)
+                #
+                # The exclusion set L is taken from the SAME GemmaLayerOffloadService
+                # instance and the SAME root that install the streaming below, and it
+                # mirrors install()'s own gate, so the mover and the streamer can never
+                # disagree about which layers are CPU-resident. We deliberately do NOT
+                # use "is this tensor already on CPU" as the proxy for "the loader left
+                # it behind" any more: with a StateDictRegistry active EVERYTHING is
+                # CPU-built, so that proxy skipped the whole model and Gemma silently
+                # ran on the CPU (553 s text-encode) before dying on a device mismatch.
+                #
+                # Cache-safe by construction: params are re-pointed through .data and
+                # buffers are slot-rebound out-of-place, so the cached CPU state_dict
+                # objects are never mutated (see _move_leaf_tensors_to_device).
+                #
+                # NOTE: ``ledger_device`` is the snapshot taken at install() time, not
+                # re-read per build. Nothing mutates ledger.device between the two
+                # today; if that ever changes this is the line to revisit.
+                excluded: tuple[Any, ...] = ()
                 if gemma_loader_ref.layer_offload:
-                    model = model._apply(
-                        lambda t: t
-                        if t.device.type in ("meta", "cpu")
-                        else t.to(ledger_device)
+                    from engine.gemma.layer_offload_service import (
+                        GemmaLayerOffloadService,
                     )
-                else:
-                    model = model._apply(
-                        lambda t: t if t.device.type == "meta" else t.to(ledger_device)
+
+                    offload_svc = GemmaLayerOffloadService(
+                        layers_on_gpu=_GEMMA_LAYERS_ON_GPU
                     )
+                    _layers, _ = offload_svc._get_layers(offload_root)
+                    if _layers and 0 < _GEMMA_LAYERS_ON_GPU < len(_layers):
+                        excluded = tuple(_layers)
+                moved = _move_leaf_tensors_to_device(model, ledger_device, excluded)
+                logger.info(
+                    "Gemma keep-resident: moved %d leaf tensors to %s "
+                    "(%d decoder layers left on CPU)",
+                    moved,
+                    ledger_device,
+                    len(excluded),
+                )
+                _assert_no_stray_cpu_leaves(model, excluded)
 
             # (Lever 3) Wire the held-back CPU token embedding + CPU-lookup forward.
             # The builder left embed_tokens.weight on the meta device (we kept it out
             # of the merged sd) so the build never pulled the 1.9 GB embedding onto
             # the GPU. Assign it on CPU now and install the offload forward wrapper.
             # Done AFTER the GPU move so the embedding stays resident on CPU.
+            # Contract: ``held_embed_cpu`` is a side effect of the loader's first
+            # (cache-MISS) load(). Under a StateDictRegistry a later cache HIT skips
+            # loader.load() entirely, so this relies on the resident loader instance
+            # still carrying it from that first MISS. Fail loud rather than leave
+            # embed_tokens on the meta device, which would surface much later as an
+            # unrelated crash. Inert on the default path (load() runs every job).
             if gemma_loader_ref.held_embed_cpu is not None:
                 _install_cpu_embed_offload(model, gemma_loader_ref.held_embed_cpu)
+            elif gemma_loader_ref.embed_cpu_offload:
+                raise RuntimeError(
+                    "Gemma GGUF (Lever 3): embed_cpu_offload is on but the loader "
+                    "holds no CPU token embedding (held_embed_cpu is None) — the "
+                    "held-back embed_tokens.weight would stay on the meta device."
+                )
 
             model = model.eval()
 
@@ -1257,41 +1423,50 @@ class GemmaGGUFQuantLoaderService:
             # (matches Lever-3's compute_dev). No-op + safe if the layer container
             # can't be located.
             if gemma_loader_ref.layer_offload:
-                from engine.gemma.layer_offload_service import (
-                    GemmaLayerOffloadService,
-                )
-
-                # TEXT-ONLY: outer = Gemma3ForCausalLM; outer.model = Gemma3TextModel,
-                # which holds .layers / .norm directly (it IS the language model — no
-                # intermediate Gemma3Model, no .language_model attribute).
-                outer = getattr(model, "model", None)
-                lang = getattr(outer, "model", None) if outer is not None else None
                 compute_dev = None
                 if lang is not None and getattr(lang, "norm", None) is not None:
                     compute_dev = lang.norm.weight.device
                 if compute_dev is None:
                     compute_dev = ledger_device
-                offload_service = GemmaLayerOffloadService(
-                    layers_on_gpu=2, compute_device=compute_dev
-                )
-                # Install on the Gemma3TextModel holding the decoder .layers.
-                offload_service.install(lang if lang is not None else model)
+                if offload_svc is None:
+                    # keep-resident OFF (production default): the move above never
+                    # ran, so no instance exists yet — build it here as before.
+                    from engine.gemma.layer_offload_service import (
+                        GemmaLayerOffloadService,
+                    )
+
+                    offload_svc = GemmaLayerOffloadService(
+                        layers_on_gpu=_GEMMA_LAYERS_ON_GPU
+                    )
+                offload_svc.compute_device = compute_dev
+                # Install on the Gemma3TextModel holding the decoder .layers — the
+                # same root the exclusion set above was derived from.
+                offload_svc.install(offload_root)
                 logger.info(
                     "Gemma GGUF (TE offload): installed per-layer CPU->GPU streaming "
-                    "(layers_on_gpu=2, compute_device=%s)",
+                    "(layers_on_gpu=%d, compute_device=%s)",
+                    _GEMMA_LAYERS_ON_GPU,
                     compute_dev,
                 )
 
-            n_quant = sum(
-                1
-                for buf in model.buffers()
-                if isinstance(buf, GGMLQuantizedTensor)
-            )
+            n_quant = 0
+            n_quant_cpu = 0
+            for buf in model.buffers():
+                if isinstance(buf, GGMLQuantizedTensor):
+                    n_quant += 1
+                    if buf.device.type == "cpu":
+                        n_quant_cpu += 1
             if n_quant:
+                # Report the ACTUAL placement: with the TE offload on, the decoder
+                # layer buffers are CPU-resident and only streamed to the compute
+                # device per window (the old single-device line was misleading).
                 logger.info(
-                    "Gemma GGUF per-layer quant active: %d quantized buffers on %s",
+                    "Gemma GGUF per-layer quant active: %d quantized buffers "
+                    "(%d on %s, %d held on CPU for per-layer streaming)",
                     n_quant,
+                    n_quant - n_quant_cpu,
                     ledger_device,
+                    n_quant_cpu,
                 )
             else:
                 logger.warning(

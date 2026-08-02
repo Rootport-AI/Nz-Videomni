@@ -101,6 +101,8 @@ vram:
   # Path B: VAE/audio/text-projection を 46GB モノリスでなく小単体ファイルから読む。
   # keep_resident=0（ジョブ毎再materialize）でも commit を束縛し、マルチジョブ連続
   # 生成の commit 枯渇 native crash を防ぐ（§9.6 / §8）。720p+連続生成の両立に必須。
+  # ※keep_resident は 2026-08-03 から per-job フィールド化（POST /generate・
+  #   /generate/chain の keep_resident・既定 false）。Docs/VERIFICATION_LOG.md §48。
   use_component_files: true
 
   # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。

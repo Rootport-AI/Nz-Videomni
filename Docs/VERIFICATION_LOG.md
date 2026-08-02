@@ -981,6 +981,8 @@ construction-required で削除不可」として温存していた（§13.3）�
 
 ## 15. ★keep=1 常駐モード新設 ＝ 調査完了につき CLOSE（2026-07-02・コード読解＋Web リサーチ）
 
+> ※この「keep=1 は non-viable」という結論は §47 のバグ修正と §48 の製品化で覆った。現在の正本は §48 である。
+
 **結論: 当初構想の keep=1（＝GGUF モデルをジョブ間 GPU 常駐させ「毎ジョブ再ビルドによる gen 時間漸増」を消す）は、16GB では原理的に non-viable。しかも狙った利得は既存経路（`--dit-cpu-load` / `--te-offload` ＋ OS の RAM/mmap キャッシュ）で概ね捕捉済み。よって本タスクは「新規実装せず・調査結論を記録して close」とする。** 現行の既定 `LTX_KEEP_RESIDENT=0`（keep=0）は不変。将来の必要が生じたら §15.4 の道筋（GPU 常駐ではなく層ストリーミング）で再着手する。
 
 > 本節は HANDOFF「次の一手メニュー」「Phase 1 やることリスト」の keep_resident 恒久化項目と、`NEXT_SESSION_WORKORDER.md` タスク③ をクローズする。
@@ -3060,16 +3062,16 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 - **しかし全体時間は条件依存**: ②768p/257fは267.6→222秒（**−45秒・−17%**）だが、①1088p/153fは323.3→340秒（**+16秒悪化**）。原因はdenoise工程の減速で、①のstage2ステップが43.6→60〜62秒（+37%）。VRAMは±3MBで不変のため、**ホストRAM側のコミット圧（96%）でblock swapのCPUマスター11.4GBがページアウトされている**と推定。キャッシュ常駐約20GB（ワーカーPrivateBytes 41.6→62.9GB）が原因。
 - **訂正（2026-08-02・オーナーによる実験解釈の確定）**: 上記の1088p減速の計測は、**オーナーが裏で重量級の並行作業（ブラウザでの配信視聴・AviUtl2での動画編集・別の画像生成アプリの常駐等）を行っていた状態**でのもので、物理メモリの取り合いという機序の推定を含めて条件が汚れていた。正しい読みはむしろ「**その状態ですら768p/257fは全体−45秒（−17%）で速度低下ゼロ**」というポジティブな結果である。よって1088pのdenoise減速は現時点では判断材料にせず、§1-9の製品化（configノブ・Settings UI）へ予定どおり進む。実装後の通常運用（生成中は他の重量級作業を控える）でも減速が頻発する場合の対策は、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§3-51**（メインメモリ不足時の速度低下を賢く避ける機構）として起票した。
 - 既知の残リスク（次段階の必須要件として引き継ぎ）: `gguf_per_layer_quant=False`時のIC-LoRA融合（`engine/gguf/loader_service.py`の`weight.add_()`）はstate dictをin-place変異させるため、keep=1と併用すると融合済み重みが永続キャッシュされる。次段階では排他制御が必須。
-- **現状**: 本番既定（keep=0）は無変更・バックエンドは既定状態で稼働中。修正コードは未コミット。
+- **現状**: 本番既定（keep=0）は無変更・バックエンドは既定状態で稼働中。**追記（2026-08-03）**: 本節の修正コードを含む実装は backend `c67f860`／frontend `fdc4fc8` でコミット済みである（未コミットで残っているのは当日の文書追記のみ）。
 
-## 48. ★keep_resident（モデルCPU骨格のジョブ間キャッシュ）の製品化＝`/generate`・`/generate/chain` の per-job フィールド化＋3段ガード＝実装完了・機械検証全PASS・**実機ゲート R1〜R9 全項目合格（2026-08-02〜03）・オーナー目視ゲート待ち**
+## 48. ★keep_resident（モデルCPU骨格のジョブ間キャッシュ）の製品化＝`/generate`・`/generate/chain` の per-job フィールド化＋3段ガード＝実装完了・機械検証全PASS・**実機ゲート R1〜R7・R9（エージェント担当分）全項目合格（2026-08-02〜03）。R8 はオーナー目視の別枠・本命の高速化はオーナー実機確認済み（2026-08-03）・細目のオーナー目視ゲート残**
 
 > **正本＝本節。** §46（前処理固定費の内訳分解）→§47（keep=1×TE offload 併用時の Gemma デバイス配置バグ修正とスパイク再実験）に続く、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-9 の最終段階＝製品化である。§47 まで環境変数 `LTX_KEEP_RESIDENT` によるワーカー全体の設定として実験していたものを、**`/generate`・`/generate/chain` の `keep_resident: bool`（既定 `false`）という per-job フィールド（ジョブごとのリクエスト項目）**へ作り替え、Gradio・MCP・AviUtl2 フロントエンドの3クライアントすべてに露出した。中身は DiT 約16.5GB＋Gemma 約8〜9GB の**CPU 側の「骨格」**（GGUF から組み上げた state dict とモジュールツリー）をジョブ間で保持して使い回す仕組みで、GPU には何も常駐させないため VRAM プロファイルは不変・生成結果はビット単位で不変である。効くのは毎ジョブ先頭の前処理固定費だけで、**HIT 時の前処理は実測 5.32 秒**（ベースライン 68.6〜75.0 秒）まで落ちる。
 
 ### 48.1 決定事項（設計判断）
 
 1. **wheel の `build_model_builders()` は呼ばない。** registry を差し替えるのに一番素直に見えるのはビルダー群を作り直す（`build_model_builders()` を呼ぶ）方法だが、これは `*_builder` をゼロから作り直すため、その後に install 群（component-files 経路・GGUF ローダ・Gemma）が書き込んだ `model_path` / `model_loader` / `model_sd_ops` / `module_ops` が**丸ごと消える**。46GB モノリスが経路に戻り GGUF ローダが外れるという、実行時にはログにすら現れない静かな退行になる。
-2. **`_swap_registry(enabled)` が `ledger.registry` と8ビルダーを `dataclasses.replace` で同時に差し替える。** 対象は `transformer` / `vae_decoder` / `vae_encoder` / `audio_encoder` / `audio_decoder` / `vocoder` / `upsampler` / `text_encoder_builder` の8つ。`replace` は他のフィールドを構造上そのまま引き継ぐので、install 群が書き込んだ内容は保存される。registry を掴んだクロージャは存在せず（block swap・NAG・sage の各ラッパも Gemma サービスのラッパも、ビルドのたびに `ledger` / `ledger.*_builder` を読み直す）、差し替えは**次のビルドから即座に効く**。
+2. **`_swap_registry(enabled)` が `ledger.registry` と8ビルダーを `dataclasses.replace` で同時に差し替える。** 対象は `transformer_builder` / `vae_decoder_builder` / `vae_encoder_builder` / `audio_encoder_builder` / `audio_decoder_builder` / `vocoder_builder` / `upsampler_builder` / `text_encoder_builder` の8つ（すべて `_builder` 付きの実名。`engine/pipeline/fast_video_pipeline.py` の `_LEDGER_BUILDER_ATTRS` が正）。`replace` は他のフィールドを構造上そのまま引き継ぐので、install 群が書き込んだ内容は保存される。registry を掴んだクロージャは存在せず（block swap・NAG・sage の各ラッパも Gemma サービスのラッパも、ビルドのたびに `ledger` / `ledger.*_builder` を読み直す）、差し替えは**次のビルドから即座に効く**。
 3. **8属性は存在必須（assert）。** `getattr(..., None)` で「無ければ黙って飛ばす」書き方は意図的に採らない。属性名の打ち間違いや wheel 側のリネームが起きたとき、その書き方だと「そのサブモデルだけキャッシュ無しで CPU ビルドされる」＝**遅くなり、かつメモリも食い、しかもログに何も出ない**という最悪の壊れ方をするためである。
 4. **OFF 時は `clear()` ＋ `gc.collect()` ＋残留ログ。** ここを通らないと約20GB の CPU 骨格が居座り続ける。`clear()` は state dict の参照を落とすだけなので、循環参照（block swap の `swapped_forward` クロージャ等）を確実に回収するために `gc` を1回回す。回収しきれない残留は「次の transformer ビルドまで残りうるもの」としてログに明示する（§48.8）。
 5. **arm（有効化／無効化）は `generate()`／`generate_chain()` の最外で行い、引数は `keep_resident: bool | None = None`。** `None` は「触らない＝現在の状態を維持」を意味する。これは §47 までのスパイクスクリプト（create 時に `keep_resident_weights=True` を張って直接 `generate()` を呼ぶ書き方）との互換のためで、既存の呼び出し側が壊れない。
@@ -3108,7 +3110,7 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 - **フロントエンドの vitest**: **1675 passed**。失敗7件は実バックエンドを起動しているときだけ走る `backend.integration.test.ts` の統合テストで、これも既知の環境依存である。
 - **フロントエンドの lint**: **0**（エラーなし）。
 
-### 48.5 実機ゲート表（2026-08-02 深夜〜08-03 未明・R1〜R9 全項目合格）
+### 48.5 実機ゲート表（2026-08-02 深夜〜08-03 未明・R1〜R7・R9〔エージェント担当分〕全項目合格。R8 はオーナー目視の別枠）
 
 環境: RTX 4070 Ti SUPER 16GB／System RAM 64GB、real backend。**清浄環境**（SD 系プロセスをはじめ重量級の並行作業なし。§47.4 の計測が汚れていた反省を踏まえ、開始前に確認した）。**全10ジョブ完走・crash 0**。
 
@@ -3124,6 +3126,9 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 | R7 | コミット（仮想メモリ）のピーク | 記録のみ（閾値判定なし） | ピーク **99.75GB / 114.69GB＝87.0%**。ON/OFF のアイドル差 **+19.0GB** | ✅ PASS（記録） |
 | R9 | MCP 経由 | スキーマに `keep_resident` があり完走する | 自前の stdio クライアントで `submit_generate` の引数スキーマを確認＋完走・metadata `"on"`・**HIT 時の前処理 7.82 秒** | ✅ PASS |
 
+- **R1 のベースライン 68.6〜75.0 秒の出所**: 本ゲート中に発生した MISS ジョブ（1本目と R4 の再ウォームアップ）の実測である。§46.2 の 66.2／79.3 秒とは**計測条件が別**（あちらは §46 の一点計測ジョブの条件別平均）なので、両者を同じ数列として並べて比較してはならない。
+- **R7 で §47.3 の G7 絶対基準（コミット 90% 閾値）を引き継がず「記録のみ」としたのは**、①当時の 96% が並行重量作業下の汚れた計測だったこと（§47.4 の訂正）、②RAM を見て自動で振る舞いを変える機構は作らないというオーナー方針（2026-08-02・§48.1-10）——の2点による。閾値による合否判定を置くと、作らないと決めた自動判定の代わりを人手で運用することになるためである。
+- **Gradio 同梱 UI のトグルは mock テストのみ**である（実機での操作確認は行っていない。Gradio 側の実機確認はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-6 の Gradio 残件と同じ扱い）。
 - **R7 のピークの読み方**: 87.0% という数字は **G-C の auto-off が起きたジョブの最中**に記録されたもので、`clear()` 直後のコミット返却の遅れと、キャッシュを捨てたことによる再ビルドとが一過性に重なった瞬間である。定常状態の値ではないため、上限に対する余裕の評価にそのまま使ってはならない。ON/OFF のアイドル差 +19.0GB のほうが、キャッシュが常時占有する量として実態に近い。
 - **R8 は本表に無い**。R8 はフロントエンドの実機目視ゲートで、**オーナーが行う残ゲート**である（§48.9）。
 - **MCP の Claude Code UI 経由の実機確認は別枠のまま**である。§39.5 の既存方針（エージェントが自前スクリプトで MCP クライアントを叩いた確認は「暫定✅」とし、Claude Code 本体の UI＝承認ダイアログや `/mcp` の実画面は別途オーナーが通す）を変更していない。R9 は前者に相当する。
@@ -3138,7 +3143,11 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 | ピーク VRAM | **不変**（GPU には何も常駐させない設計。§47.3 の G8 で ±3MB を確認済み） |
 | HIT 時の前処理 | **5.32 秒**（R1）／**7.82 秒**（R9・MCP 経由）。ベースラインは 68.6〜75.0 秒 |
 
+- **名目サイズ（DiT 約16.5GB＋Gemma 約8〜9GB＝計25〜27GB）と実測19.4GB の差について**: 19.4GB は**ワーカープロセスの PrivateBytes の ON/OFF 差の実測**であり、モデルの名目サイズの合計ではない。骨格が保持するのは量子化済み state dict とモジュールツリーであること、また OS のページキャッシュや共有マップに落ちる分がプライベート領域に計上されないことから、実測が名目合計を下回る。利用者向けの案内はこの実測（約20GB）を採る。
+
 この実測をもって、利用者向けの案内は「**メモリ 64GB 以上を推奨（約20GB を常時占有します）。生成結果は変わりません**」に統一した（フロントエンドのヒント文・Gradio・MCP のツール説明・`README.md` すべて同じ趣旨）。
+
+- **UI 文言の「約70秒→約10秒」という丸めの根拠**: HIT 時の前処理は本ゲートで 5.32 秒（R1）／7.82 秒（R9）、§47.3 のスパイクでは 9.3〜15.3 秒だった。利用者向けの文言はこの幅の**上側を含むように保守的に丸めて**「約70秒→約10秒」としてある（実測の最良値である 5.32 秒をそのまま謳わない）。
 
 ### 48.7 env 経路（`LTX_KEEP_RESIDENT`）撤去の移行メモ
 
@@ -3147,7 +3156,7 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 - `services/ltx_runner.py` がワーカーの env へ入れていた `setdefault("LTX_KEEP_RESIDENT", "0")` を削除した。
 - `engine/worker.py` の env 読みは `False` 固定へ置き換えた（パイプライン生成時の `keep_resident_weights` は常に `False`）。
 - **旧手順の `$env:LTX_KEEP_RESIDENT="1"` は無効である。**設定しても何も起こらない。今後は `POST /generate`・`POST /generate/chain` の `keep_resident` フィールド（既定 `false`）で指定する。Gradio・MCP・AviUtl2 フロントエンドからは Settings の Acceleration 区画のトグルで切り替える。
-- 本ログ内の **§10.2・§46・§47** に出てくる `LTX_KEEP_RESIDENT` の記述は、当時の実験手順を記録した歴史であり書き換えていない。同様の理由で `Docs/RESOLUTION_DURATION_CAPABILITY.md`・`Docs/SCALEUP_16GB_RESEARCH.md`・`Docs/NEXT_SESSION_HANDOFF.md`・`Docs/NEXT_SESSION_WORKORDER.md` の該当箇所には本文を書き換えず注記を1行だけ添えた。
+- 本ログ内の各節の実験条件・環境記述（**§9・§10・§15・§20〜§36 など**。§10.2・§46・§47 を含む）に出てくる `LTX_KEEP_RESIDENT` の記述は、当時の実験手順を記録した歴史であり書き換えていない。同様の理由で `Docs/RESOLUTION_DURATION_CAPABILITY.md`・`Docs/SCALEUP_16GB_RESEARCH.md`・`Docs/NEXT_SESSION_HANDOFF.md`・`Docs/NEXT_SESSION_WORKORDER.md`・`Docs/IC_LORA_PHASE_A_STATUS.md` の該当箇所には本文を書き換えず注記を1行だけ添えた。
 - **`GET /status` には意図的に載せていない。** `/status` は「サーバーが実際にできること」を書く場所であり、`keep_resident` は能力ゲート（使える／使えないの判定）を持たない——このマシンに RAM があるかどうかという利用者側の選択にすぎないためである。`attention_backend` の `sage_available` や `block_swap_prefetch_available` のような可否フラグは存在せず、クライアント側もボタンを封じない。
 
 ### 48.8 既知の残留・注意記録
@@ -3155,16 +3164,19 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 - **OFF 時のコミット返却には遅れがある。** `clear()` ＋ `gc.collect()` を通した直後でも、OS がコミットを返すまでには間があり、その最中に次のジョブが再ビルドを始めると一過性にピークが立つ（R7 の 87.0% がまさにこれ）。異常ではない。
 - **OFF 時に完全にはゼロにならない残留がある。** 実測で残りうるのは、先読み block swap が ON のときの DiT 分（次の `install()` まで）・pinned プール・`held_embed_cpu` **約1.9GB** の3つ。解放ログ自体にこの3点を書き出してあるので、RAM の減り方が期待と違うときはまずログを見ればよい。
 - **G-B の再現には `config.yaml` の一時編集が必要だった。** `dit_cpu_load` はリクエストから切れないためで、検証後に**バイト一致で復元済み**であることを確認している。
+- **LoRA 併用 × keep=1 の実機確認は未実施である。** R1〜R9 はすべて素の T2V で、LoRA を付けたジョブは一度も流していない。G-A ガードが止めるのは `gguf_per_layer_quant=False`（bf16 融合経路）だけで、**通常の per-layer quant 経路の LoRA は毎ジョブ attach/detach されキャッシュを汚染しない**——設計上は安全だが、実測はまだ取っていない。実機確認の項目はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1 に起票した。
 - **`keep_resident_used` は3値**（`"off"` / `"on"` / `"on->off"`）。`"on->off"` は G-B / G-C の auto-off が起きたことを意味し、`metadata.json` に残る。速度が期待どおり出ないときは、まずここを見ると原因が切り分けられる。
 
 ### 48.9 残るオーナーゲート（R8＝フロントエンド実機目視）
 
-以下はオーナー本人の目視・操作でしか判定できないため、本テーマは**オーナー目視ゲート待ち**の状態である。フロントエンド側のチェックリストは[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1／§2-2 に「何を操作して確認するか → どうなれば合格か」の形で起票済み。
+以下はオーナー本人の目視・操作でしか判定できないため、本テーマは**細目のオーナー目視ゲート待ち**の状態である。ただし**本命にあたる 7（実 GPU での高速化）は 2026-08-03 にオーナーが実機で確認して合格**しており、残っているのは見た目・文言・永続化・4経路といった細目である。フロントエンド側のチェックリストは[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1／§2-2 に「何を操作して確認するか → どうなれば合格か」の形で起票済み。
 
-1. Settings > Acceleration に「モデル骨格の常駐（ジョブ間キャッシュ）」トグルが表示される。
+1. Settings > Acceleration に「モデル骨格の常駐（ジョブ間キャッシュ）」トグルが表示される。※フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10**（prefetch 連動グレーアウト）を実装したあとは合格条件が変わる（先読み block swap が off のときだけグレーアウトしているのが正しい姿になる）。
 2. **既定が off** である（初回起動時・localStorage が空のとき）。
 3. **ON にしたときだけ**ヒント文（「メモリ64GB以上を推奨…生成結果は変わりません」）が出る。
 4. localStorage に永続化され、AviUtl2 を再起動しても選択が保たれる。
 5. **4経路すべて**（Create／Chain／バッチA2V／バッチi2v-long）で、ON のときリクエストに `keep_resident` キーが載る。
 6. 日本語・英語の両方で文言が自然である。
-7. 実 GPU で、2本目以降の生成が体感で速くなる（前処理の待ちが消える）。
+7. 実 GPU で、2本目以降の生成が体感で速くなる（前処理の待ちが消える）。→ **✅ 合格（2026-08-03・オーナー実機確認）。「生成が大幅に高速化すること」を確認。**
+
+**フォローアップ（2026-08-03 オーナー指示）**: prefetch=off 時の UI 連動グレーアウトをフロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10** として起票した。§48.3 の G-C（`block_swap_prefetch=False` × `keep_resident=1` → warn ＋ auto-off）はサーバー側の安全装置として正しく働いているが、利用者から見ると「トグルを On にしたのに効かない」という見え方になりうる。そこでフロントエンド側で、先読み block swap が off のあいだは骨格常駐トグルを自動的に off にしてグレーアウト（操作不能）にし、prefetch を on に戻すと解除する。**本節のガードそのものは変更しない**（UI の見せ方だけの改修である）。

@@ -352,7 +352,7 @@ LTXネイティブの生キーであること、(3) `embeddings_connector` 層�
 
 `models/loras/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、
 `POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または
-Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0〜2）。ComfyUI 形式
+Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0.05〜2、0は不可）。**音声側の適用強度だけを映像側と別に指定したい場合は `<lora:名前:映像の強度:音声の強度>` の第3引数（0〜2。音声側だけ0=適用しないを指定できる）を使います。省略時は音声側も映像側の値に追従します（後方互換）。詳細は `Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`。** ComfyUI 形式
 （`diffusion_model.` プレフィックス＋ `lora_A`/`lora_B`）に対応し、量子化 GGUF モデルにもそのまま適用できます
 （実行時加算方式のため、モデル側の量子化と衝突しません）。
 

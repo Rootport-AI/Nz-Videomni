@@ -1,6 +1,6 @@
 # Style LoRA 音声強度制御（audio_strength）ワークオーダー
 
-> **【ステータス追記 2026-08-02】実装完了。** バックエンドAPI＋MCP（Model Context Protocol。Claudeなどのエージェントがツールを呼び出すための標準プロトコル）＋Gradio（バックエンド検証用のWeb UI）＋AviUtl2フロントエンドまで一気通貫で実装済み・自動ゲート全緑（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の対応節）。残るのはオーナーの実機A/Bのみ。**本文は実装内容の記録として運用する**（今後この機能の仕様を確認したいときはここを読む）。
+> **【ステータス追記 2026-08-02】実装完了・テーマ完結。** バックエンドAPI＋MCP（Model Context Protocol。Claudeなどのエージェントがツールを呼び出すための標準プロトコル）＋Gradio（バックエンド検証用のWeb UI）＋AviUtl2フロントエンドまで一気通貫で実装済み・自動ゲート全緑・オーナー実機A/Bゲート全項目合格・LoRAチップUIの目視確認も合格（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §45.2/§45.3）。**本文は実装内容の記録として運用する**（今後この機能の仕様を確認したいときはここを読む）。
 >
 > 併読: [`STYLE_LORA_WORKORDER.md`](STYLE_LORA_WORKORDER.md)（LoRA適用機構そのものの起票元。書式はこれに倣っている）／フロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.3（API利用者向けの正本）。
 
@@ -11,7 +11,7 @@
 
 LTX 2.3では、Style LoRA（画風・キャラクターLoRA。映像の見た目を変える目的で訓練された追加学習の差分重み）を適用した状態で動画を生成すると、**音声出力が壊れる**（雑音・音割れ）症状がコミュニティで複数報告されていた。原因の仮説は、「映像目的で訓練されたLoRAの重みファイルの中に、音声側の層に対応する差分重みも同時に含まれており、それが音声生成を汚染している」というもの。LTX 2.3のトランスフォーマーは映像ストリームと音声ストリームを持つデュアルストリーム構造で、LoRAは通常どちらのストリームの層にも無差別にキーを持つため、映像用に調整されたLoRAでも音声側の層にランダムに近い差分が乗ってしまう。
 
-対処として、LoRAごとに音声側の適用強度を映像側とは独立に制御できる`audio_strength`をAPIに追加した。**オーナー確定事項として、軸は2つ（映像軸・音声軸）に絞った。** 厳密にはLTX 2.3のクロス注意（映像→音声、音声→映像の2方向）まで含めると軸は4つ取りうるが、ComfyUIカスタムノード「LTX2 LoRA Loader Advanced」（kijai/ComfyUI-KJNodes）のような4軸＋その他の5スライダー露出は採用せず、2方向のクロス注意は「どちらのストリームに書き込むか」で2軸へ畳み込んでいる。4軸化案は「Style LoRA Advanced mode」として、フロントエンドの台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-24にスコープ外として起票済み（リップシンク用途のStyle LoRA需要が出てきたときの再訪条件つき）。
+対処として、LoRAごとに音声側の適用強度を映像側とは独立に制御できる`audio_strength`をAPIに追加した。軸は2つ（映像軸・音声軸）に確定した（4軸案の経緯と再訪条件はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-24）。
 
 計画段階でPlanエージェントが起案した計画に敵対的レビューを実施し、BLOCKER 2件（うち1件は`parseLoraPrompt`のコールバック署名変更漏れ——タグの引数が2個から3個に増えると文字列中の出現位置がズレ、チップの±/×ボタンが誤った位置を編集する不具合）を含む指摘を実装前にすべて計画へ反映してから着手した。
 
@@ -33,7 +33,7 @@ audio_strength: float | None = Field(None, ge=0.0, le=2.0)
 <lora:名前:映像の強さ:音声の強さ>
 ```
 
-第3位置引数が音声の強さ。省略時は映像の強さにそのまま追従する。Gradio側は`gradio_ui/handlers.py::_LORA_TOKEN_RE`、フロントエンド側は`webui/src/lora/loraTags.ts::LORA_TAG_RE`がそれぞれ対応する正規表現を持つ。
+第3位置引数が音声の強さ。省略時は映像の強さにそのまま追従する。Gradio側は`gradio_ui/handlers.py::_LORA_TOKEN_RE`、フロントエンド側は`webui/src/lora/loraTags.ts::LORA_TAG_RE`がそれぞれ対応する正規表現を持つが、許容する引数の文字種が異なる——Gradio側は数値限定マッチ、フロントエンド側は任意文字列にマッチしたうえで`normalizeStrength`が数値へ正規化する。この差が§2.5の非対応構文で挙動の食い違いを生む。
 
 ### 2.3 クランプ範囲
 
@@ -46,9 +46,9 @@ audio_strength: float | None = Field(None, ge=0.0, le=2.0)
 
 画風LoRAのカード（Library・Gradioギャラリー共通）をクリックしたときの既定挿入トークンは、`<lora:名前:1.0>`（2引数）から**`<lora:名前:1.0:1.0>`（3引数）**へ変更した。第3引数を最初から見せることで、音声強度制御という機能の存在に気づけるようにする狙い。音声側`1.0`は映像追従時の実効値と数値が同一なので、この変更自体は生成結果に影響しない。
 
-### 2.5 非対応構文
+### 2.5 `<lora:名前::0>`（映像側省略）の扱い
 
-`<lora:名前::0>`のように映像側の引数だけを省略する記法は**非対応**。トークン用の正規表現にマッチせず、プロンプト本文にそのまま残る（LoRAとして解釈されない）。音声側だけを指定したい場合も、映像側の強さを明示する必要がある。フロントエンド側は`formatLoraTag`が音声強度を出力するときに必ず映像強度も明示するよう設計されており、UI操作からこの非対応構文が生成されることはない（詳細は§6）。
+`<lora:名前::0>`のように映像側の引数だけを省略する記法は、**Gradio側とフロントエンド側で解釈が食い違うため使用しないこと**。Gradio側の`_LORA_TOKEN_RE`は数値限定マッチのため空の第2引数にはマッチせず、タグはLoRAとして解釈されずプロンプト本文にそのまま残る。フロントエンド側の`LORA_TAG_RE`は任意文字列にマッチするため空の第2引数でもタグとして認識され、`normalizeStrength`が既定値`1.0`を返して`{strength: 1.0, audio_strength: 0}`としてAPIへ送信される（映像側は既定強度で適用、音声側だけ0）。音声側だけを指定したい場合も、映像側の強さを明示すること。フロントエンド側の`formatLoraTag`は音声強度を出力するときに必ず映像強度も明示するよう設計されており、UI操作からこの記法が生成されることはない（詳細は§6）。
 
 ## 3. 分類ルール（音声軸／映像軸判定）
 
@@ -71,8 +71,8 @@ LoRAの重みキーのモジュール接頭辞（例`transformer_blocks.0.audio_
 
 `audio_strength=0`のキーは、LoRAバッファの登録・forward時の適用specsへの追加を**行わない**（`continue`でスキップする）。数式上は「delta（差分重み）に0を掛けて加算する」ことと**数学的に等価**だが、あえて計算そのものをスキップする実装にしたのは次の理由による。
 
-- **VRAM**: スキップした分のLoRAバッファ（A/B行列）をGPUへ載せずに済む。
-- **速度**: フォワード時にdelta計算（`fp32`でのmatmul→キャスト→in-place加算）自体を丸ごと省略できる。
+- **VRAM（forward時attach経路のみ）**: スキップした分のLoRAバッファ（A/B行列）をGPUへ載せずに済む。bf16融合経路はもともとA/B行列をバッファとして保持しないため、この効果はない。
+- **速度（両経路）**: フォワード時にdelta計算（`fp32`でのmatmul→キャスト→in-place加算）自体を丸ごと省略できる。bf16融合経路でも、省けるのはロード時のfp32一時確保とmatmulの計算コストである。
 
 このスキップ判定は、forward時attach経路（`attach_ic_loras`）とbf16融合経路（`_fuse_ic_loras`）の両方で同じ`strength_for_prefix`ヘルパーの戻り値`0.0`をトリガーに行う。
 
@@ -94,13 +94,13 @@ LoRAの重みキーのモジュール接頭辞（例`transformer_blocks.0.audio_
 - エンジンのdelta計算経路（`audio_strength is None`のとき`strength_for_prefix`は分類を経由せず`strength`を即座に返す設計。「Noneならstrengthをそのまま返す」という分岐自体はあるが、分類ロジックへは進まない）。
 - 生成結果（同一シードでビット同一）。
 
-**唯一の例外（許容する差分）**: `outputs/{job_id}/metadata.json`の`request`ブロックは`req.model_dump()`をそのまま書き出す実装（`pipeline_manager.py`）のため、LoRAを使うジョブでは`"audio_strength": null`が常に出現する。これは`api/models.py`にコメントで明記されている本リポジトリの確定方針——`two_stage_hq`の`pipeline`フィールドと同じ既存前例で、「受け取っても効かない／未指定のフィールドがmetadataの`request`ブロックに素通しで現れることは許容し、`exclude`等の細工はしない」——に従うもので、意図的な差分である。既存テスト`tests/test_chain_lora.py`の辞書完全一致アサーションはこの`null`キーを織り込んで期待値を更新済み。
+**唯一の例外（許容する差分）**:
 
-## 7. 非対応構文（再掲）
+- `outputs/{job_id}/metadata.json`の`request`ブロックは`req.model_dump()`を素通しで書き出すため、LoRAを使うジョブでは`"audio_strength": null`が必ず出現する。
+- `two_stage_hq`の`pipeline`フィールドと同じ既存前例で、意図的な差分（`api/models.py`にコメントで明記）。
+- 既存テスト`tests/test_chain_lora.py`の辞書完全一致アサーションはこの`null`キーを織り込んで期待値を更新済み。
 
-`<lora:名前::0>`（映像側省略）は非対応。§2.5参照。
-
-## 8. 実装ファイル一覧
+## 7. 実装ファイル一覧
 
 WP1〜WP6（バックエンドエンジン中核・エンジン配線・サービス層・API/MCP・Gradio UI・AviUtl2フロントエンド）で変更したファイルは以下（`git status`で確認可能。バックエンドリポジトリの一覧）。
 
@@ -122,7 +122,7 @@ WP1〜WP6（バックエンドエンジン中核・エンジン配線・サー�
 
 フロントエンドリポジトリ（`Nz-LTX23-frontend-AviUtl2`）側は`webui/src/api/types.ts`・`webui/src/lora/loraTags.ts`・`webui/src/lora/LoraChips.tsx`・`webui/src/lora/lora.css`・`webui/src/i18n/strings.ts`と各テストファイル（詳細はフロントエンドDocsの記録を参照）。
 
-## 9. 参照
+## 8. 参照
 
 - KJNodes `nodes/ltxv_nodes.py`の`LTX2LoraLoaderAdvanced`（4軸＋その他の5スライダー露出、4軸化を見送った際の比較対象）。
 - フロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-24（4軸化「Style LoRA Advanced mode」のスコープ外起票）。

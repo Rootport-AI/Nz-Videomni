@@ -4,6 +4,8 @@
 
 > **本書は着手前のワークオーダー。** 次セッションはこの入口から開始する。設計を先取りせず「リサーチ→スパイク→設計→ユーザー合意→スライス実装→回帰ゲート→目視ゲート」の型（本プロジェクト標準）で解く。**特に D（キー互換）は実物検証なしに約束しない**。
 
+> **追記（2026-08-02）**: 本書が起票した `<lora:名前:weight>` 記法は、その後 `audio_strength`（音声側の適用強度を映像側と独立指定する第3引数）が追加され、現在の正式構文は `<lora:名前:映像の強さ:音声の強さ>` です。詳細は [`LORA_AUDIO_STRENGTH_WORKORDER.md`](LORA_AUDIO_STRENGTH_WORKORDER.md)。
+
 - 作成: 2026-07-06（ユーザー要件を確定・**設計/実装は次セッション**）
 - 併読: [`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（LoRA 適用機構の完成物・不可触）／[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)（「一覧を返す API＋選択適用」の型）／[`VERIFICATION_LOG.md` §28](VERIFICATION_LOG.md)（strength 可変化）・[§23](VERIFICATION_LOG.md)（GUI モック合意の型）
 - 正本ポインタ: 機構＝`IC_LORA_PHASE_B_STATUS.md`／strength＝VERIFICATION_LOG §28／モデル管理の型＝`MODEL_MANAGEMENT_DESIGN.md`／GUI の型＝VERIFICATION_LOG §23

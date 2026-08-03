@@ -575,13 +575,14 @@ if ($SkipModels) {
     #    Already laid out exactly as the project wants them, so this expands into
     #    models/ verbatim -- in particular the transformer GGUF arrives directly in
     #    models/ltx-2.3-gguf/ and the old "flatten one level up" fixup is gone.
-    #    The 2 IC-LoRA adapters back all three entries config.yaml registers under
-    #    ic_loras: -- pixel-spatial-upscaler-x2 (resolution boost), plus the ONE
-    #    union-control file published twice, as canny-control (edge-outline
-    #    guidance) and pose-control (skeleton guidance). They are not optional in
-    #    practice: gradio_ui/adapters.py lists those three names from a static
+    #    The 2 IC-LoRA adapters back four of the entries config.yaml registers
+    #    under ic_loras: -- pixel-spatial-upscaler-x2 (resolution boost), plus the
+    #    ONE union-control file published three times, as canny-control (edge-
+    #    outline guidance), pose-control (skeleton guidance) and depth-control
+    #    (depth-map guidance). They are not optional in practice:
+    #    gradio_ui/adapters.py lists those names from a static
     #    fallback even when nothing is registered, so a fresh install without these
-    #    files puts three adapters in the UI that 404 the moment they are picked.
+    #    files puts the adapters in the UI that 404 the moment they are picked.
     #    The x4 upscaler variant is deliberately not in the repo (unregistered).
     #    One pattern covers both nested files: `*` crosses '/' (glob note above).
     #    Per-directory Mins (see the sizing rule above); every file below is gated

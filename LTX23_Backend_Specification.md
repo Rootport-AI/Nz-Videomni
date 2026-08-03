@@ -173,7 +173,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 セットアップの実体は `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。両 venv 構築 → 現行 ~30GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全）に行う。手順とモデル内訳は **§5** / `README.md` §1 を参照（§16 は受け入れテスト）。
 
-**モデルの取得元は 3 リポジトリ（2026-07-26 更新）**: `Rootport/Nz-LTX23-weights`（LTX 本体 5 点＋IC-LoRA 2 点＝計 7 ファイル・24,196,952,364 B）／`Rootport/Nz-Gemma3-12B`（11 ファイル・7,339,810,357 B）／`Rootport/Nz-DWPose`（前処理器 2 点・352,756,773 B）。合計 20 ファイル・31,889,519,494 B（約 29.7GiB）。3 つとも Public かつ非 Gated で、HuggingFace のアカウント・トークンは一切不要。各リポジトリの内部構造は本プロジェクトの `models/` 配下と 1 対 1 で一致させてあるため、いずれも `models/` へそのまま展開され、後処理（平坦化・リネーム）は発生しない。`Rootport/Nz-Sulphur2`（自家変換 GGUF）は同じアカウントにあるがインストーラの取得対象ではない。
+**モデルの取得元は 3 リポジトリ（2026-08-03 更新）**: `Rootport/Nz-LTX23-weights`（LTX 本体 5 点＋IC-LoRA 3 点＋VDA 深度前処理器 2 点＝計 10 ファイル・25,219,475,913 B）／`Rootport/Nz-Gemma3-12B`（11 ファイル・7,339,810,357 B）／`Rootport/Nz-DWPose`（前処理器 2 点・352,756,773 B）。5 回のダウンロード呼び出しで合計 23 ファイル・32,912,043,043 B（約 30.7GiB）。3 つとも Public かつ非 Gated で、HuggingFace のアカウント・トークンは一切不要。各リポジトリの内部構造は本プロジェクトの `models/` 配下と 1 対 1 で一致させてあるため、いずれも `models/` へそのまま展開され、後処理（平坦化・リネーム）は発生しない。`Rootport/Nz-Sulphur2`（自家変換 GGUF）は同じアカウントにあるがインストーラの取得対象ではない。
 
 エンドユーザーの入口は **`setup.bat`（ダブルクリック）→ `scripts/setup.ps1` → `install_ltx.ps1`** である。`setup.ps1` は前提ツール（`uv` / `ffmpeg`+`ffprobe`）を `tools/` 配下へ取り込み、`config.yaml` が無ければ `config.yaml.example` から複製し、`logs/setup_<日時>.log` へ記録を残したうえで `install_ltx.ps1` を `&` で呼ぶ（ドットソースは禁止＝`install_ltx.ps1` の `exit` が呼び出し元ごと落とすため）。想定利用者が PowerShell を自分で開けないことを前提とした導線であり、`.bat` は純 ASCII・CRLF・末尾 `pause`、日本語のメッセージはすべて `.ps1` 側に置く。
 
@@ -396,13 +396,13 @@ Nz-LTX23-backend/
 
 ### 5.1b インストーラが追加で取得するもの（IC-LoRA / 前処理器）
 
-上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 4 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。下 2 行は 2026-08-03 の depth-control / deblur 追加分である（正本 `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。合わせて取得総量は **~31GB** になる。
+上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 4 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。下 2 行は 2026-08-03 の depth-control / deblur 追加分である（正本 `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。合わせて取得総量は **~33GB（30.7GiB）** になる。
 
 | 要素 | 既定パス | 概算 | 取得元 | 役割 |
 |------|----------|------|--------|------|
 | IC-LoRA 2 点 | `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/…-x2-0.9.safetensors`／`models/ltx-2.3-ic-lora/union-control/…-union-control-ref0.5.safetensors` | 1.22GiB | `Rootport/Nz-LTX23-weights` | `config.yaml` `model.ic_loras` の 4 エントリの実体。union-control の 1 ファイルを `canny-control` / `pose-control` / `depth-control` の 3 名で公開している（§11 / IC-LoRA Phase C / `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`） |
 | DWPose 前処理器 2 点 | `models/preprocessors/yolox_l.torchscript.pt`／`models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt` | 0.33GiB | `Rootport/Nz-DWPose` | `pose-control` の前処理（`engine/preprocess/dwpose.py` が自ファイル位置からの絶対パスで両方を読むため、配置は変更不可） |
-| IC-LoRA Deblur 1 点（2026-08-03 追加） | `models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | 906,071,437 B | `Rootport/Nz-LTX23-weights` | `deblur` エントリの実体。**前処理不要**（ぼけた参照動画をそのまま渡す）なので `config.yaml` では**文字列形式**で登録する。メタデータの `reference_downscale_factor="1"`＝参照を縮めず出力と同解像度で処理するため、既存アダプタ（係数 2）より stage-1 の VRAM を食う |
+| IC-LoRA Deblur 1 点（2026-08-03 追加） | `models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | 906,071,437 B | `Rootport/Nz-LTX23-weights` | `deblur` エントリの実体。**前処理不要**（ぼけた参照動画をそのまま渡す）なので `config.yaml` では**文字列形式**で登録する。メタデータの `reference_downscale_factor="1"`＝参照を縮小せずに（縮小係数1で）条件付けに使うため、既存アダプタ（係数 2）より stage-1 の VRAM を食う |
 | VDA 深度前処理器 2 点（2026-08-03 追加） | `models/preprocessors-vda/video_depth_anything_vits.pth`／同 `LICENSE` | 116,452,112 B | `Rootport/Nz-LTX23-weights` | `depth-control` の前処理（Video-Depth-Anything Small。`engine/preprocess/depth.py` が自ファイル位置からの絶対パスで読むため配置は変更不可。dwpose.py と同じ作法）。**`LICENSE` は Apache-2.0 の全文**で、重みリポジトリ内の他ファイル（LTX-2 Community Licence）とはライセンスが異なるため `.pth` と必ず一緒に運ぶ |
 
 **これらは「無くても mock に落ちない」ため、検証を省くと壊れ方が分かりにくい**: `_real_available()` は見ておらず、`config.yaml` はすべての `ic_loras` エントリを無条件に登録し、`gradio_ui/adapters.py` は登録が空でも同じ名前を静的フォールバックで並べる。したがって欠けていても UI にはアダプタ名が出て、選んだ瞬間に 404 になる。この失敗を前倒しで名指しするため、install_ltx.ps1 step 6 の検証表はこの 6 ファイルを含む **16 項目**になっている（x4 アップスケーラ版は未登録＝リポジトリにも置かない）。
@@ -1309,7 +1309,7 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 
 > **→ 進捗追記（2026-07-11 時点）**: 本節の主要項目は**実装済み**＝IC-LoRA（canny／pose 等の control 系＋strength 可変・VERIFICATION_LOG §21/§28）・V2V（`source_video` によるチェーン継続生成・§24）・audio-to-video（`source_audio`・§25）。さらに A2V＋LoRA の併用も 2026-07-11 に解禁した（`GenerateChainRequest.loras`・§32。参照動画を要する control 系のみ `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否）。時間アップスケーラは未実装のまま。本節は起票当時のフェーズ分類の記録として残す。
 >
-> **→ 追加進捗（2026-07-11・α版・VERIFICATION_LOG §34）**: 上記「参照動画を要する control 系のみ拒否」の制約は、**`clips` がちょうど1つのチェーン（A2V を含む）に限り**解禁された。`GenerateChainRequest` に単発 `GenerateRequest` と同型・同バリデーションの3フィールド（`reference_video_id`／`conditioning_attention_strength`／`reference_video_strength`、いずれも optional）を加算し、`clips` が1のときだけ受理する（2以上のチェーンは従来どおり `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）。意味論は単発生成と同じ「reference latent は stage 1 のクリップ0にのみ注入し、stage 2 のタイルには注入しない」＝チェーン全体（stage1+stage2の全区間）へ一様に効く点は変わらない。新設の 422 群: `REFERENCE_RESOLUTION_INVALID`（幅・高さが128の倍数でない）／`LORA_REQUIRES_REFERENCE`（control系＋clips=1＋参照動画無し）／`LORA_PREPROCESS_CONFLICT`（preprocess 種別が2種以上混在）。`reference_video_id` は `source_video`（V2V 継続）と排他（422）。既知の制約: pydantic のスキーマ検証がエンドポイントより先に走るため `clips>=2` ＋ `reference_video_id` の複合誤設定はコード付きでない汎用 `VALIDATION_ERROR` になる。GPU 実機の目視ゲート（単発生成との一致確認・A2V 音声との共存確認）は次セッションへ持ち越し。
+> **→ 追加進捗（2026-07-11・α版・VERIFICATION_LOG §34）**: 上記「参照動画を要する control 系のみ拒否」の制約は、**`clips` がちょうど1つのチェーン（A2V を含む）に限り**解禁された。`GenerateChainRequest` に単発 `GenerateRequest` と同型・同バリデーションの3フィールド（`reference_video_id`／`conditioning_attention_strength`／`reference_video_strength`、いずれも optional）を加算し、`clips` が1のときだけ受理する（2以上のチェーンは従来どおり `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）。意味論は単発生成と同じ「reference latent は stage 1 のクリップ0にのみ注入し、stage 2 のタイルには注入しない」＝チェーン全体（stage1+stage2の全区間）へ一様に効く点は変わらない。新設の 422 群: `REFERENCE_RESOLUTION_INVALID`（幅・高さが128の倍数でない）／`LORA_REQUIRES_REFERENCE`（control系＋clips=1＋参照動画無し）。なお `LORA_PREPROCESS_CONFLICT`（preprocess 種別が2種以上混在）は**既存の 400** であって本群には含まれない。`reference_video_id` は `source_video`（V2V 継続）と排他（422）。既知の制約: pydantic のスキーマ検証がエンドポイントより先に走るため `clips>=2` ＋ `reference_video_id` の複合誤設定はコード付きでない汎用 `VALIDATION_ERROR` になる。GPU 実機の目視ゲート（単発生成との一致確認・A2V 音声との共存確認）は次セッションへ持ち越し。
 
 ### 13.4c 将来課題（現行の開発計画からは除外）
 

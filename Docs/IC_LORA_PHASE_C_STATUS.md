@@ -11,7 +11,7 @@
 
 ## 何ができるようになったか
 
-- **制御系アダプタが使える**: `canny-control`（エッジ）と `pose-control`（DWPose骨格）の2論理名。いずれも同一のUnion-Control safetensors（654MB）を指し、**どの制御信号を入れるかは前処理種別（レジストリ側メタデータ）で切替**。Phase Bで完成したforward時GPU LoRA適用機構をそのまま使う（機構は無変更）。
+- **制御系アダプタが使える**: `canny-control`（エッジ）／`pose-control`（DWPose骨格）／`depth-control`（深度）の3論理名（depthは2026-08-03追加。正本[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)）。いずれも同一のUnion-Control safetensors（654MB）を指し、**どの制御信号を入れるかは前処理種別（レジストリ側メタデータ）で切替**。Phase Bで完成したforward時GPU LoRA適用機構をそのまま使う（機構は無変更）。
 - **engine内前処理段**: サーバーは生の参照動画を受け取り、engine worker（`.venv-engine`）内で**制御動画（`control_<kind>.mp4`）へ変換してから**IC-LoRA参照に差し替える。ユーザーはエッジ抽出や姿勢推定を意識しなくてよい。前処理は動画→動画のフレーム単位変換（cv2ドライバでFPS・フレーム数・寸法を保存）。
 - **API形状はPhase Bと完全同一**: 凍結API契約は不変・リクエストスキーマ無変更。クライアントは `POST /upload/video` で参照動画→`video_id`、`loras:[{name:"pose-control"}]`＋`reference_video_id`。制御タイプはサーバー側レジストリの論理名で解決。
 - **前処理なし経路（`preprocess=none`）は完全無変更**: 文字列値エントリ（Phase Bの `pixel-spatial-upscaler-x2` 等）は従来どおり動く（後方互換）。

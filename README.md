@@ -136,7 +136,7 @@ AviUtl2 のプラグインは、バックエンドのサーバーを自分で起
 | GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
 | GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
 | メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（約 20GB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」） |
-| ストレージ | **このフォルダを置くドライブに約 38〜40GB**（モデル 約 29.7GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
+| ストレージ | **このフォルダを置くドライブに約 38〜40GB**（モデル 約 30.7GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
 | attention（注意機構の計算方法） | 既定は全世代で **SDPA**（PyTorch 標準の実装）。**2026-07-31 から、生成のたびに SageAttention へ切り替えられます**（§5「生成の高速化（Acceleration）」）。xformers・flash-attn は引き続き導入も使用もしません |
 
 #### 対応する GPU 世代
@@ -179,7 +179,7 @@ attention は全世代で PyTorch の SDPA を既定にしており、xformers �
 
 | 中身 | 実測サイズ | 備考 |
 |------|-----------|------|
-| `models/`（モデル一式） | 約 29.7 GiB | GGUF transformer ＋ GGUF Gemma ＋ component ファイル群 ＋ アップサンプラ ＋ tokenizer ＋ IC-LoRA 2点（1.22 GiB）＋ DWPose 前処理器 2点（0.33 GiB） |
+| `models/`（モデル一式） | 約 30.7 GiB | GGUF transformer ＋ GGUF Gemma ＋ component ファイル群 ＋ アップサンプラ ＋ tokenizer ＋ IC-LoRA 2点（1.22 GiB）＋ DWPose 前処理器 2点（0.33 GiB）＋ Deblur 1点（0.91 GiB）＋ Video-Depth-Anything 2点（0.12 GiB） |
 | Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、2つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
 | `tools/`（`uv` ＋ `ffmpeg`） | 約 0.4 GiB（実測 378 MB） | `setup.bat` が取り込む前提ツール。ffmpeg のダウンロードは約 104 MB だが、展開後はこの大きさになる |
 
@@ -293,8 +293,8 @@ UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose
 > baseline と出力バイト一致で検証済み（`Docs/VERIFICATION_LOG.md` §14）。
 >
 > 生成の中核として実際にロードされるモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + tokenizer dir＝28.15GiB）で、
-> ComfyUI の GGUF 16GB レシピと同等のフットプリントです。`install_ltx.ps1` はこれに IC-LoRA 2点（1.22GiB）と DWPose 前処理器 2点（0.33GiB）を
-> 加えた **約 30GB（29.7GiB）** をダウンロードします。後者2種は無くても T2V/I2V の生成自体は成立しますが、`config.yaml` が IC-LoRA を
+> ComfyUI の GGUF 16GB レシピと同等のフットプリントです。`install_ltx.ps1` はこれに IC-LoRA 2点（1.22GiB）・DWPose 前処理器 2点（0.33GiB）・Deblur 1点（0.91GiB）・
+> Video-Depth-Anything 2点（0.12GiB）を加えた **約 33GB（30.7GiB）** をダウンロードします。後者4種は無くても T2V/I2V の生成自体は成立しますが、`config.yaml` が IC-LoRA を
 > 無条件に登録するため、欠けていると UI から選んだときに 404 になります（上の検証テーブルの説明を参照）。
 
 backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「`./.venv-engine` の python・
@@ -349,7 +349,7 @@ LTXネイティブの生キーであること、(3) `embeddings_connector` 層�
 `Nz-GGUF-Converter-LTX23` の出力）。量子化タイプは既定の Q4_K_M に加え Q6_K / Q8_0 等にも対応します。
 
 **LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。
-`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control`）は
+`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）は
 `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。
 
 `models/loras/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、

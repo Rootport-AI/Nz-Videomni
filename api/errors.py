@@ -251,10 +251,10 @@ def lora_preprocess_conflict(kinds: list[str]) -> APIError:
 
 
 def reference_resolution_invalid(width: int, height: int) -> APIError:
-    """Phase C: registered IC-LoRA adapters use reference_downscale_factor=2, so
-    the reference video is consumed at half the output resolution on VAE's
-    64-grid. If width/height are not divisible by 128, that half-resolution
-    reference lands off the 64-grid and the worker's VAE encode fails with an
+    """Phase C: the reference video is consumed on the VAE's 64-grid. The
+    downscale factor is 2 (union-control family) or 1 (deblur); the divisible-by-128
+    requirement is unchanged either way. If width/height are not divisible by 128,
+    the reference lands off the 64-grid and the worker's VAE encode fails with an
     unfriendly einops error deep in the job -- reject it up front instead."""
     return APIError(
         "REFERENCE_RESOLUTION_INVALID",

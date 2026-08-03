@@ -172,9 +172,16 @@ def _emit(event: str, **fields: object) -> None:
 
 
 def _detail(exc: BaseException) -> str:
-    """repr + last ~2000 chars of traceback for an error reply."""
+    """repr + head/tail of the traceback for an error reply.
+
+    Tail-only truncation dropped the OUTER frames, which is where "which of our
+    call sites raised" lives — a deep wheel traceback then says only that some
+    VAE op OOM'd. Keep both ends (budget roughly unchanged).
+    """
     tb = "".join(traceback.format_exc())
-    return f"{exc!r}\n{tb[-2000:]}"
+    if len(tb) > 2800:
+        tb = f"{tb[:1200]}\n...[traceback truncated]...\n{tb[-1600:]}"
+    return f"{exc!r}\n{tb}"
 
 
 import torch  # noqa: E402

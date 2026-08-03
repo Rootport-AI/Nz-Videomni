@@ -10,9 +10,13 @@ scalar strength as its ``attention_mask`` (upstream ``iclora_utils`` parity).
 Unit-level: no GPU, no model load, no LTX wheel. The pipeline module imports the
 ``ltx_core`` conditioning classes + the ``ltx_pipelines`` media loader LAZILY
 inside the method under test, so we inject tiny stand-in modules into
-``sys.modules`` and drive the real method end-to-end. This runs under the
-canonical ``.venv`` pytest runner (torch present, ltx wheel absent) exactly like
-the torch-only tests in ``test_ic_lora_forward.py``.
+``sys.modules`` and drive the real method end-to-end.
+
+Run this file in the ENGINE venv — the app ``.venv`` has no torch, so
+``importorskip("torch")`` skips the whole module there:
+
+  .venv-engine\\Scripts\\python.exe -m pytest tests\\test_ic_lora_engine_conditioning.py ^
+      -p no:warnings -p no:cacheprovider --noconftest --rootdir .
 """
 
 from __future__ import annotations
@@ -24,7 +28,10 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from engine.pipeline.fast_video_pipeline import LTXFastVideoPipeline  # noqa: E402
+from engine.pipeline.fast_video_pipeline import (  # noqa: E402
+    LTXFastVideoPipeline,
+    _set_conv3d_memory_format,
+)
 
 
 # ── Stand-in conditioning classes mirroring the ltx_core signatures ──────────
@@ -39,6 +46,25 @@ class _StubAttentionStrengthWrapper:
     def __init__(self, conditioning, attention_mask):
         self.conditioning = conditioning
         self.attention_mask = attention_mask
+
+
+class _FakeVideoEncoder:
+    """Stand-in for the wheel's ``VideoEncoder``: callable (plain encode) AND
+    carrying ``tiled_encode`` — the method under test picks one by downscale
+    factor, so both must exist and both must be observable."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.tiling_configs: list[object] = []
+
+    def __call__(self, video):
+        self.calls.append("plain")
+        return torch.zeros(1, 128, 3, 4, 5)
+
+    def tiled_encode(self, video, tiling_config=None):
+        self.calls.append("tiled")
+        self.tiling_configs.append(tiling_config)
+        return torch.zeros(1, 128, 3, 4, 5)
 
 
 @pytest.fixture
@@ -59,11 +85,17 @@ def stub_ltx(monkeypatch):
         1, 3, int(kw["frame_cap"]), int(kw["height"]), int(kw["width"])
     )
 
+    # cleanup_memory (gc + empty_cache + synchronize) is called before the
+    # reference load; on CPU the real one is a no-op, the stub keeps the wheel out.
+    helpers_mod = types.ModuleType("ltx_pipelines.utils.helpers")
+    helpers_mod.cleanup_memory = lambda: None
+
     for name, mod in (
         ("ltx_core", types.ModuleType("ltx_core")),
         ("ltx_core.conditioning", cond_mod),
         ("ltx_pipelines", types.ModuleType("ltx_pipelines")),
         ("ltx_pipelines.utils", types.ModuleType("ltx_pipelines.utils")),
+        ("ltx_pipelines.utils.helpers", helpers_mod),
         ("ltx_pipelines.utils.media_io", media_mod),
     ):
         monkeypatch.setitem(sys.modules, name, mod)
@@ -79,7 +111,10 @@ class _FakePipe:
         self._ic_attention_strength = attn_strength
 
 
-def _call(attn_strength: float, scale: int = 2):
+_TILING_SENTINEL = object()  # stands in for the TilingConfig the callers pass through
+
+
+def _call(attn_strength: float, scale: int = 2, encoder=None):
     """Invoke the real (unbound) method against a fake pipe + stage-1 cond_kwargs."""
     full_height = 768
     cond_height = full_height // 2  # 384 -> stage-1 gate passes
@@ -87,9 +122,10 @@ def _call(attn_strength: float, scale: int = 2):
     cond_kwargs = {
         "height": cond_height,
         "width": cond_width,
-        "video_encoder": lambda vid: torch.zeros(1, 128, 3, 4, 5),
+        "video_encoder": encoder if encoder is not None else _FakeVideoEncoder(),
         "dtype": torch.float32,
         "device": torch.device("cpu"),
+        "tiling_config": _TILING_SENTINEL,
     }
     fake = _FakePipe(attn_strength, scale=scale)
     method = LTXFastVideoPipeline._reference_conditioning_for_stage
@@ -131,12 +167,83 @@ def test_reference_conditioning_at_scale_one(stub_ltx):
     assert isinstance(conds[0], _StubVideoConditionByReferenceLatent)
 
 
+def test_scale_one_uses_tiled_encode(stub_ltx):
+    """Factor 1 (deblur) carries 4x the reference pixels of factor 2 and OOM'd a
+    16GB card on the untiled encode -> it must go through ``tiled_encode``, with
+    the tiling config the caller threaded in via cond_kwargs."""
+    enc = _FakeVideoEncoder()
+    conds = _call(1.0, scale=1, encoder=enc)
+    assert enc.calls == ["tiled"]
+    assert enc.tiling_configs == [_TILING_SENTINEL]
+    assert conds[0].downscale_factor == 1
+
+
+def test_scale_two_stays_untiled(stub_ltx):
+    """Factor 2 is deliberately NOT tiled: tiling splits the reference across
+    temporal tiles and would break byte-identity with every existing output."""
+    enc = _FakeVideoEncoder()
+    conds = _call(1.0, scale=2, encoder=enc)
+    assert enc.calls == ["plain"]
+    assert enc.tiling_configs == []
+    assert conds[0].downscale_factor == 2
+
+
 def test_reference_conditioning_unresolved_factor_raises(stub_ltx):
     """The factor is resolved by _set_ic_job; reaching the conditioning builder
     with it unset is a wiring bug. It must raise a real error (the previous
     ``assert`` vanished under ``python -O``)."""
     with pytest.raises(RuntimeError, match="not initialised"):
         _call(1.0, scale=None)
+
+
+# ── Conv3d memory-format switch: the round trip must be lossless ────────────
+
+
+class _MixedConvNet(torch.nn.Module):
+    """Conv3d + Conv2d + Linear, i.e. the shape of module the helper must survive:
+    a whole-module ``.to(channels_last_3d)`` would raise on the rank-4 Conv2d
+    weight, which is why the helper filters on Conv3d."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv3d_a = torch.nn.Conv3d(2, 3, kernel_size=3)
+        self.inner = torch.nn.Sequential(torch.nn.Conv3d(3, 4, kernel_size=3))
+        self.conv2d = torch.nn.Conv2d(3, 4, kernel_size=3)
+        self.linear = torch.nn.Linear(4, 5)
+
+
+def test_conv3d_memory_format_round_trip_is_lossless():
+    """channels_last_3d -> contiguous restores every tensor bit-for-bit and keeps
+    the Parameter objects themselves (the encoder is rebuilt from a registry that
+    aliases them), and non-Conv3d modules are never touched at all.
+
+    This is what makes the reference-encode layout switch safe to undo in the
+    ``finally``: stage 2 of the same job re-encodes keyframes with this encoder.
+    """
+    net = _MixedConvNet()
+    before = {k: v.clone() for k, v in net.state_dict().items()}
+    params_before = {k: v for k, v in net.named_parameters()}
+    non_conv3d = ("conv2d.weight", "conv2d.bias", "linear.weight", "linear.bias")
+
+    touched = _set_conv3d_memory_format(net, torch.channels_last_3d)
+    assert touched == 2  # both Conv3d, including the nested one; Conv2d/Linear skipped
+    assert net.conv3d_a.weight.is_contiguous(memory_format=torch.channels_last_3d)
+    assert net.inner[0].weight.is_contiguous(memory_format=torch.channels_last_3d)
+    # non-Conv3d parameters keep their original (contiguous) layout
+    for name in non_conv3d:
+        assert net.state_dict()[name].is_contiguous()
+
+    restored = _set_conv3d_memory_format(net, torch.contiguous_format)
+    assert restored == 2
+
+    after = net.state_dict()
+    assert set(after) == set(before)
+    for name, original in before.items():
+        assert torch.equal(after[name], original), f"{name} changed value"
+        assert after[name].is_contiguous(), f"{name} not back to contiguous"
+    # ``Module.to(memory_format=)`` rewrites storages in place: same objects out
+    for name, param in net.named_parameters():
+        assert param is params_before[name], f"{name} was replaced, not converted"
 
 
 # ── _set_ic_job: reference downscale factor resolution ──────────────────────

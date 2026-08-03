@@ -292,7 +292,8 @@ def test_unknown_reference_video_404(lora_client):
 
 
 def test_reference_resolution_not_divisible_by_128_422(lora_client):
-    """All registered adapters use reference_downscale_factor=2, so the
+    """CONTROL adapters declare reference_downscale_factor=2 (union-control
+    family, incl. the one registered here) or 1 (deblur); under factor 2 the
     reference is consumed at half output resolution on the 64-grid -- 512x320
     (320 % 128 != 0) is rejected up front instead of crashing the worker's VAE
     encode deep in the job (real failure reproduced during Phase C prep)."""

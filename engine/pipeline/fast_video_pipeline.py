@@ -43,6 +43,30 @@ _LEDGER_BUILDER_ATTRS: Final[tuple[str, ...]] = (
 )
 
 
+def _set_conv3d_memory_format(module, fmt: torch.memory_format) -> int:
+    """Re-lay-out every ``Conv3d`` weight inside ``module`` in place; return how
+    many Conv3d modules were touched.
+
+    Conv3d-only instead of a whole-module ``module.to(memory_format=...)``: the
+    existing precedent in this repo (``chain_pipeline._chunked_upsample_cpu``,
+    the ``for m in upsampler.modules()`` loop) had to be written this way because
+    that module mixes in Conv2d (rank-4) weights, on which a whole-module
+    ``.to(channels_last_3d)`` raises "required rank 5 tensor". The current
+    VideoEncoder happens to hold none, but staying identical to that call site
+    keeps this safe if the model's composition ever changes.
+
+    ``Module.to(memory_format=)`` rewrites the storage behind each Parameter /
+    buffer without replacing the Python objects, so anything holding references
+    to them keeps working; it is also permitted under ``inference_mode``.
+    """
+    touched = 0
+    for m in module.modules():
+        if isinstance(m, torch.nn.Conv3d):
+            m.to(memory_format=fmt)
+            touched += 1
+    return touched
+
+
 class LTXFastVideoPipeline:
     pipeline_kind: Final = "fast"
 
@@ -951,10 +975,13 @@ class LTXFastVideoPipeline:
         if cond_height != full_height // 2:
             return []  # stage 2 (or unexpected res) — reference added at stage 1 only
 
+        import logging
+
         from ltx_core.conditioning import (
             ConditioningItemAttentionStrengthWrapper,
             VideoConditionByReferenceLatent,
         )
+        from ltx_pipelines.utils.helpers import cleanup_memory
         from ltx_pipelines.utils.media_io import load_video_conditioning
 
         ref_path, ref_strength = self._ic_reference
@@ -979,15 +1006,122 @@ class LTXFastVideoPipeline:
         ref_height = cond_height // scale
         ref_width = cond_width // scale
 
-        video = load_video_conditioning(
-            video_path=ref_path,
-            height=ref_height,
-            width=ref_width,
-            frame_cap=num_frames,
-            dtype=dtype,
-            device=device,
+        # ONE predicate for both the measurement and the layout switch below:
+        # ``device`` may arrive as a plain string (so compare
+        # ``torch.device(device).type``, not the object), and the unit tests'
+        # fake encoders have no ``.modules()`` to walk.
+        _accel = torch.device(device).type == "cuda" and callable(
+            getattr(video_encoder, "modules", None)
         )
-        encoded_video = video_encoder(video)
+        _relayout = _accel and scale == 1
+        _converted = 0
+        if _relayout:
+            # torch 2.9's bf16 Conv3d takes an im2col fallback for contiguous
+            # weights and materialises an "in_ch*27 x output volume" bf16 matrix
+            # per convolution; THAT intermediate — not the activations — is what
+            # OOMs the factor-1 (deblur) reference encode, tiled or not.
+            # channels_last_3d weights route to the cuDNN direct kernel and the
+            # intermediate disappears (measured on the OOM case: peak 6265 ->
+            # 1198 MiB, 6.8 -> 5.0 s).
+            #
+            # This is NOT bit-identical, and this comment is the full extent of
+            # the change: only the factor-1 REFERENCE latent moves (rel_rms
+            # 1.2e-2 / cos 0.99993). Keyframes, factor-2 references, chain source
+            # heads and stage 2 all stay bit-identical (measured), and deblur has
+            # no shipped baseline output, so nothing published shifts.
+            #
+            # The input video is deliberately NOT converted: CausalConv3d's
+            # repeat+cat (convolution.py:304-313) re-normalises it to contiguous
+            # before the first convolution, so an input-side channels_last is
+            # provably inert (measured rel_rms 0.0).
+            #
+            # Nothing leaks downstream either: tiled_encode returns a contiguous
+            # accumulator (video_vae.py:371-404 — ``torch.zeros`` + ``+=``).
+            _converted = _set_conv3d_memory_format(video_encoder, torch.channels_last_3d)
+        try:
+            # cleanup AFTER the switch, so the contiguous weight storages it just
+            # dropped (~608MiB) are reclaimed by this same pass. This encode runs
+            # OUTSIDE the pre-denoise release window (worker.py's
+            # _denoise_with_cache_release), so the reserved pool has to be freed
+            # here explicitly — same gc+empty_cache+synchronize as
+            # chain_pipeline._encode_source_heads.
+            cleanup_memory()
+            if _accel:
+                _mb = 1024 * 1024
+                # The reset below clears BOTH per-job counters worker.py reports
+                # (peak_vram_mb from max_memory_allocated, peak_vram_reserved_mb
+                # from max_memory_reserved), so carry the job-so-far peaks into
+                # the log line rather than losing them. The VRAM gates read the
+                # reference-encode numbers from THIS log line, not from the job
+                # metadata.
+                _prior_peak = torch.cuda.max_memory_allocated() // _mb
+                _prior_peak_reserved = torch.cuda.max_memory_reserved() // _mb
+                torch.cuda.reset_peak_memory_stats()
+                _alloc_before = torch.cuda.memory_allocated() // _mb
+                _reserved_before = torch.cuda.memory_reserved() // _mb
+
+            video = load_video_conditioning(
+                video_path=ref_path,
+                height=ref_height,
+                width=ref_width,
+                frame_cap=num_frames,
+                dtype=dtype,
+                device=device,
+            )
+            if scale == 1:
+                # Factor-1 adapters (deblur) feed the reference at 4x the pixel
+                # count of the factor-2 ones, and the untiled encode's
+                # intermediates OOM a 16GB card — the same reason
+                # chain_pipeline._encode_source_heads is tiled. The tiling config
+                # is the DECODE-side default reused here; there is no separate
+                # encode config. Factor >= 2 stays untiled (tiling would split it
+                # temporally and break byte-identity).
+                encoded_video = video_encoder.tiled_encode(
+                    video, cond_kwargs.get("tiling_config")
+                )
+            else:
+                encoded_video = video_encoder(video)
+            del video
+            if _accel:
+                # Logged here — after the encode, BEFORE the restore — so the
+                # interval peak is the encode's own and not polluted by the
+                # restore's transient (+54MiB, one weight's worth). ``convs`` is
+                # the converted Conv3d count (expect 42; a 0 means the layout
+                # switch did not run).
+                logging.getLogger(__name__).info(
+                    "IC-LoRA reference encode (scale=%d tiled=%s channels_last_3d convs=%d): "
+                    "allocated %d -> %d MB, reserved %d -> %d MB, "
+                    "interval peak allocated %d MB / reserved %d MB "
+                    "(job peak before this interval: allocated %d MB, reserved %d MB)",
+                    scale, scale == 1, _converted,
+                    _alloc_before, torch.cuda.memory_allocated() // _mb,
+                    _reserved_before, torch.cuda.memory_reserved() // _mb,
+                    torch.cuda.max_memory_allocated() // _mb,
+                    torch.cuda.max_memory_reserved() // _mb,
+                    _prior_peak, _prior_peak_reserved,
+                )
+        finally:
+            if _relayout:
+                try:
+                    # Restoring is a CORRECTNESS requirement, not hygiene: stage 2
+                    # of the SAME job re-encodes the keyframes through this very
+                    # encoder (distilled.py:164-171 / chain_pipeline.py:877) and
+                    # those latents do change under channels_last (measured).
+                    # Later jobs rebuild the encoder from scratch, so they are
+                    # structurally safe regardless — that is the second net, not
+                    # the first. The encoder always enters here contiguous, so
+                    # "restore" is an unconditional force back to contiguous.
+                    _set_conv3d_memory_format(video_encoder, torch.contiguous_format)
+                    # ...and release the channels_last storages just discarded:
+                    # the chain route has no pre-denoise release wrapper of its
+                    # own (chain_pipeline.py:659 — its private denoise never goes
+                    # through worker.py's monkeypatch). Costs a few ms.
+                    cleanup_memory()
+                except Exception:  # must never mask an in-flight encode failure
+                    logging.getLogger(__name__).exception(
+                        "IC-LoRA reference encode: failed to restore the video "
+                        "encoder's contiguous layout"
+                    )
         # Control-adherence knob (upstream iclora_utils parity): only when the
         # attention strength is < 1.0 do we wrap the reference conditioning so a
         # scalar additive self-attention mask reaches SDPA. At 1.0 the bare
@@ -1189,8 +1323,12 @@ class LTXFastVideoPipeline:
                 # only. Inert (returns []) when no ic_reference is configured, so the
                 # keyframe-only path above stays byte-identical.
                 if self._ic_reference is not None:
+                    # tiling_config rides along in a COPY of the wheel's kwargs
+                    # (the originals above must stay exactly as the wheel passed
+                    # them); the factor-1 reference encode needs it.
                     conds += self._reference_conditioning_for_stage(
-                        full_height=height, num_frames=num_frames, cond_kwargs=kwargs,
+                        full_height=height, num_frames=num_frames,
+                        cond_kwargs={**kwargs, "tiling_config": tiling_config},
                     )
                 return conds
 

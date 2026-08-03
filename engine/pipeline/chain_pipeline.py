@@ -735,6 +735,8 @@ def run_chain(
                         "video_encoder": video_encoder,
                         "dtype": DTYPE,
                         "device": device,
+                        # factor-1 references (deblur) are tiled-encoded there.
+                        "tiling_config": tiling_cfg,
                     },
                 )
         else:

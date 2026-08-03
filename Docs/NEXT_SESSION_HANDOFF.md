@@ -8,6 +8,7 @@
 >
 > - **§44 先読み block swap**（テーマ完結・既定 ON）／**§45 `audio_strength`**（Style LoRA の音割れ対策・実機A/B合格でテーマ完結）／**§48 モデル骨格の常駐（`keep_resident`）**（本命の高速化はオーナー実機確認済み・残るのは細目のオーナー目視ゲート）。
 > - **最新は §49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加。実装完了・G0／G1／G2 全PASS・コミット＆プッシュ済み（backend `fd6d43f` / frontend `d375028`）。ただし G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）は未実施＝実機ゲート待ちで、デプロイも未実施。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。**
+> - フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 骨格常駐トグルのprefetch連動グレーアウトも実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）・目視待ち。記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §60。
 >
 > pytest の現在のベースラインは **910 passed / 9 skipped**（§49.5）。IC-LoRA は現在5エントリ（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`。うち union-control の1ファイルを3つの論理名で共用）。
 

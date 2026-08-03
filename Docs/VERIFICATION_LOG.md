@@ -3178,6 +3178,23 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 4. localStorage に永続化され、AviUtl2 を再起動しても選択が保たれる。
 5. **4経路すべて**（Create／Chain／バッチA2V／バッチi2v-long）で、ON のときリクエストに `keep_resident` キーが載る。
 6. 日本語・英語の両方で文言が自然である。
+
+### 48.10 オーナー実機の三者併用交互対比較（768p/257f、2026-08-03記録）
+
+オーナーが768p/257fで attention・block_swap_prefetch・keep_resident の交互対比較を実機実施した（実施日時2026-08-02 22:18〜22:42・UTC、metadata.jsonの`created_at`で確認）。4ジョブとも1280x768・257フレーム・t2v・同一プロンプト・8ステップ・seed 1687351733・LoRAなし・distilledで条件を揃えている。
+
+| attention | block_swap_prefetch | keep_resident | 生成時間 | ジョブID（先頭8桁） |
+|---|---|---|---|---|
+| sdpa | off | off | 257.31秒 | 12f0fa3d |
+| sage | on | off | 202.04秒 | fe6db822 |
+| sage | on | on（1回目＝キャッシュ MISS・構築） | 228.63秒 | b152172b |
+| sage | on | on（2回目＝HIT） | 165.0秒 | 263c64b4 |
+
+- 全部offに対し、フルスタック定常（HIT）は約36%短縮。try1の+26.6秒は骨格キャッシュ構築の入場料である（`keep_resident_used="on"`・ガード降格なし）。
+- sageの3ジョブの`output.mp4`はSHA-256完全一致（`926CE1BD8CA627F8...`）——§44（prefetch）・§48（keep_resident）で個別に確認済みのビット一致性が、768p/257fでの三者併用でも保たれることをオーナー実機で裏付けた。
+- これは768p/257fにおける attention・prefetch・keep_resident 三者併用の初の実測である。
+
+この165.0秒を分母にした§3-49（fused GGUF dequant+GEMM）の再検算: 逆量子化の見た目の割合は約11%に育つが、融合で実際に削れるBF16往復分は約2.3秒=約1.4%のままで、クローズ判断は不変（2026-08-03ディスカッション）。
 7. 実 GPU で、2本目以降の生成が体感で速くなる（前処理の待ちが消える）。→ **✅ 合格（2026-08-03・オーナー実機確認）。「生成が大幅に高速化すること」を確認。**
 
 **フォローアップ（2026-08-03 オーナー指示）**: prefetch=off 時の UI 連動グレーアウトをフロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10** として起票した。§48.3 の G-C（`block_swap_prefetch=False` × `keep_resident=1` → warn ＋ auto-off）はサーバー側の安全装置として正しく働いているが、利用者から見ると「トグルを On にしたのに効かない」という見え方になりうる。そこでフロントエンド側で、先読み block swap が off のあいだは骨格常駐トグルを自動的に off にしてグレーアウト（操作不能）にし、prefetch を on に戻すと解除する。**本節のガードそのものは変更しない**（UI の見せ方だけの改修である）。

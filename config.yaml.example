@@ -71,6 +71,11 @@ model:
     pose-control:
       path: "./models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
       preprocess: dwpose
+    depth-control:
+      path: "./models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
+      preprocess: depth
+    # 前処理不要の制御アダプタ（ぼけた参照動画をそのまま渡す）＝文字列形式
+    deblur: "./models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors"
 
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。

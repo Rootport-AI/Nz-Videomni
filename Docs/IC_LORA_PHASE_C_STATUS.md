@@ -62,6 +62,8 @@
 
 **未対応アダプタ4種（depth・Motion-Track・In-Outpainting・Deblur）と19b世代アダプタの流用不可は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8へ移設した。以後の管理は同書で行う**（depthの前処理器選定が未収束だった経緯と、後の調査で公式ComfyUIワークフローがVideo-Depth-Anythingを採用済みと判明した事実も同項に転記済み）。
 
+> **2026-08-03追記**: 上記4種のうち**DepthとDeblurは2026-08-03に着手し、実装を完了した**（`depth-control`・`deblur` の2アダプタとVideo-Depth-Anything Small前処理器。**ただしオーナー実機ゲートは未実施**）。**正本は[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)**（検証記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49）。未対応として残るのはMotion-TrackとIn-Outpaintingの2種である。
+
 本節に残る決着済みの項目は次のとおり——**strength可変化**は2026-07-06に実装済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §28。`conditioning_attention_strength`＋`reference_video_strength`・省略時1.0で不変）／**前処理キャッシュ**（スライス4）と**rtmlibへの切替**はG0-bの実測により不要と判断済み／**Gradio UI露出**（APIのみ）は後日実施済み。
 
 - **`conditioning_attention_mask` の露出だけは、いまも未着手のスコープ外項目として残る**（管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8。着手するなら本節が入口）。

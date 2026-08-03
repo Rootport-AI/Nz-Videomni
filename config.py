@@ -30,7 +30,7 @@ class IcLoraEntry(BaseModel):
     """
 
     path: str
-    preprocess: Literal["none", "canny", "dwpose"] = "none"
+    preprocess: Literal["none", "canny", "dwpose", "depth"] = "none"
 
 
 class ServerConfig(BaseModel):

@@ -12,6 +12,7 @@ from api.errors import (
     job_busy,
     lora_preprocess_conflict,
     lora_requires_reference,
+    reference_requires_control_lora,
     reference_resolution_invalid,
 )
 from api.models import GenerateRequest, GenerateResponse, JobStatus
@@ -65,6 +66,11 @@ def generate(
     #   * a CONTROL adapter derives its conditioning from a reference video, so it
     #     requires reference_video_id (S1: replaces the old all-or-nothing rule,
     #     which is now kind-aware -- a STYLE/character adapter needs no reference);
+    #   * conversely a reference video is ONLY consumable through a control
+    #     adapter (its downscale factor comes from that adapter's metadata), so a
+    #     reference + style-only request is rejected here. Until the factor guard
+    #     was relaxed to accept factor 1, the engine happened to catch this misuse
+    #     deep in the job; this endpoint check is now the only one;
     #   * a single reference video can only be turned into ONE control signal, so
     #     >1 distinct non-"none" preprocess kind is a conflict (Phase C).
     preprocess_kinds: set[str] = set()
@@ -78,6 +84,8 @@ def generate(
             preprocess_kinds.add(entry.preprocess)
     if control_names and request.reference_video_id is None:
         raise lora_requires_reference(control_names)
+    if request.reference_video_id is not None and not control_names:
+        raise reference_requires_control_lora([spec.name for spec in request.loras])
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
 

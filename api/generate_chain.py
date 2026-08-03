@@ -18,6 +18,7 @@ from api.errors import (
     lora_control_unsupported_in_chain,
     lora_preprocess_conflict,
     lora_requires_reference,
+    reference_requires_control_lora,
     reference_resolution_invalid,
     source_audio_not_found,
     source_video_not_found,
@@ -91,6 +92,10 @@ def generate_chain(
     #     (LORA_CONTROL_UNSUPPORTED_IN_CHAIN, unchanged pre-alpha behaviour); on a
     #     1-clip chain it instead needs the reference_video_id, exactly like the
     #     single-generate check (LORA_REQUIRES_REFERENCE);
+    #   * conversely a reference video is ONLY consumable through a control
+    #     adapter (its downscale factor comes from that adapter's metadata), so a
+    #     reference + style-only chain is rejected here
+    #     (REFERENCE_REQUIRES_CONTROL_LORA, mirrors api/generate.py);
     #   * a single reference video can only be turned into ONE control signal, so
     #     >1 distinct non-"none" preprocess kind is a conflict (Phase C, mirrors
     #     api/generate.py).
@@ -108,6 +113,8 @@ def generate_chain(
             raise lora_control_unsupported_in_chain(control_names)
         if request.reference_video_id is None:
             raise lora_requires_reference(control_names)
+    if request.reference_video_id is not None and not control_names:
+        raise reference_requires_control_lora([spec.name for spec in request.loras])
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
 

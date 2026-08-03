@@ -18,6 +18,8 @@ ADAPTER_FRIENDLY: dict[str, str] = {
     "pixel-spatial-upscaler-x2": "Upscale ×2 (pixel-spatial-upscaler-x2)",
     "canny-control": "Canny edge control (canny-control)",
     "pose-control": "Pose control (pose-control)",
+    "depth-control": "Depth control (depth-control)",
+    "deblur": "Deblur (deblur)",
 }
 
 # Fallbacks used when /config is unavailable (mirrors config.yaml upload.*).

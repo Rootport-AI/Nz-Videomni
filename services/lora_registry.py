@@ -71,7 +71,7 @@ class LoraEntryInfo:
 
     name: str
     path: Path  # absolute (config._abs of the registered/scanned path)
-    preprocess: str  # "none" | "canny" | "dwpose"
+    preprocess: str  # "none" | "canny" | "dwpose" | "depth"
     kind: str  # "style" | "control"
     scale: float  # alpha/rank convolution factor (1.0 when unknown)
     has_thumbnail: bool  # a sibling <stem>.png exists

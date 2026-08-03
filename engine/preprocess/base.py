@@ -25,3 +25,25 @@ class FrameProcessor(Protocol):
         generation side, not here).
         """
         ...
+
+
+@runtime_checkable
+class VideoProcessor(Protocol):
+    """The whole-clip counterpart of ``FrameProcessor``.
+
+    Some control signals cannot be produced one frame at a time: the depth
+    processor runs a temporal sliding window and normalises over the whole clip,
+    so per-frame calls would be both wrong and slower. Such a processor
+    implements ``process_video`` INSTEAD of ``process``; the driver dispatches on
+    which of the two is present, and everything else (decode, encode, FPS,
+    ``frame_cap``, ``release``) stays in the driver exactly as before.
+    """
+
+    def process_video(self, frames_bgr: list[np.ndarray]) -> list[np.ndarray]:
+        """Convert a whole BGR clip to a BGR control clip.
+
+        The returned list MUST have the same length as the input and each frame
+        MUST keep the input's height and width (same contract as
+        ``FrameProcessor.process``, applied clip-wide).
+        """
+        ...

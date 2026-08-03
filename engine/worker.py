@@ -327,8 +327,26 @@ def _do_load(msg: dict) -> None:
     _emit("ready", sage_available=sage_available)
 
 
+def _preprocess_frame_cap(msg: dict) -> int | None:
+    """Frames the depth preprocessor should decode: the generation length.
+
+    Depth normalises over the whole clip it is given, so decoding footage the
+    generation will never use both costs time and shifts the gray range. The
+    generation length is ``num_frames`` for a single generate and
+    ``clips[0]["num_frames"]`` for a chain — clip 0 because a reference is only
+    ever attached to the first clip's stage-1 conditioning. Returns None (decode
+    everything, the pre-existing behaviour) when neither key is present.
+    """
+    if "num_frames" in msg:
+        return int(msg["num_frames"])
+    clips = msg.get("clips") or []
+    if clips and "num_frames" in clips[0]:
+        return int(clips[0]["num_frames"])
+    return None
+
+
 def _resolve_ic_reference(
-    ref: dict | None, output_path: str
+    ref: dict | None, output_path: str, frame_cap: int | None = None
 ) -> tuple[tuple[str, float] | None, float]:
     """Resolve a worker ``reference_video`` block -> (ic_reference, attn_strength).
 
@@ -339,12 +357,16 @@ def _resolve_ic_reference(
     at 1.0 no attention-strength wrapper is applied downstream (structurally
     byte-identical to before); < 1.0 relaxes how strongly the reference drives
     self-attention. For a Phase C control adapter (``preprocess`` != "none") the
-    raw reference is converted to a control-signal video (edge map / skeleton)
-    via engine/preprocess/ and the returned path is swapped to that control mp4
-    (written next to ``output_path``); "none" leaves the raw video as-is and cv2
-    is never imported. An unknown ``preprocess`` fails the job loud
+    raw reference is converted to a control-signal video (edge map / skeleton /
+    depth map) via engine/preprocess/ and the returned path is swapped to that
+    control mp4 (written next to ``output_path``); "none" leaves the raw video
+    as-is and cv2 is never imported. An unknown ``preprocess`` fails the job loud
     (``get_processor`` raises). Extracted verbatim from _do_generate so the
     single-generate and chain paths resolve the reference identically.
+
+    ``frame_cap`` is forwarded to the driver ONLY for the whole-clip processors
+    (depth); canny/dwpose keep decoding the full source, byte-identical to
+    before this parameter existed.
     """
     ic_reference = None
     attn_strength = 1.0
@@ -362,12 +384,19 @@ def _resolve_ic_reference(
             control_path = os.path.join(
                 os.path.dirname(output_path), f"control_{preprocess}.mp4"
             )
+            cap = frame_cap if preprocess == "depth" else None
             t0 = time.perf_counter()
-            n_frames = preprocess_video(Path(ref_path), Path(control_path), processor)
+            n_frames = preprocess_video(
+                Path(ref_path), Path(control_path), processor, frame_cap=cap
+            )
             elapsed = time.perf_counter() - t0
+            # cap= is appended only when one applies, so the canny/dwpose log
+            # line stays character-identical to the Phase C recorded runs.
             _log(
                 f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
-                f"frames={n_frames} elapsed={elapsed:.2f}"
+                f"frames={n_frames}"
+                + ("" if cap is None else f" cap={cap}")
+                + f" elapsed={elapsed:.2f}"
             )
             ref_path = control_path
         ic_reference = (ref_path, ref_strength)
@@ -646,7 +675,7 @@ def _do_generate(msg: dict) -> None:
     # both resolved inside the shared helper (see _resolve_ic_reference); no
     # reference -> (None, 1.0), inert + byte-identical to before.
     ic_reference, attn_strength = _resolve_ic_reference(
-        msg.get("reference_video"), output_path
+        msg.get("reference_video"), output_path, _preprocess_frame_cap(msg)
     )
     # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
     # identical to before this feature existed.
@@ -806,7 +835,7 @@ def _do_generate_chain(msg: dict) -> None:
         for lo in msg.get("loras", [])
     ]
     ic_reference, ic_attn = _resolve_ic_reference(
-        msg.get("reference_video"), output_path
+        msg.get("reference_video"), output_path, _preprocess_frame_cap(msg)
     )
 
     # Opt-in memory-bounded spatial upsample (additive; default False keeps the

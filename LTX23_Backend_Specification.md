@@ -396,14 +396,18 @@ Nz-LTX23-backend/
 
 ### 5.1b インストーラが追加で取得するもの（IC-LoRA / 前処理器）
 
-上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 2 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。合わせて取得総量は **~30GB（31,889,519,494 B ＝ 約 29.7GiB）** になる。
+上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 4 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。下 2 行は 2026-08-03 の depth-control / deblur 追加分である（正本 `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。合わせて取得総量は **~31GB** になる。
 
 | 要素 | 既定パス | 概算 | 取得元 | 役割 |
 |------|----------|------|--------|------|
-| IC-LoRA 2 点 | `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/…-x2-0.9.safetensors`／`models/ltx-2.3-ic-lora/union-control/…-union-control-ref0.5.safetensors` | 1.22GiB | `Rootport/Nz-LTX23-weights` | `config.yaml` `model.ic_loras` の 3 エントリの実体。union-control の 1 ファイルを `canny-control` / `pose-control` の 2 名で公開している（§11 / IC-LoRA Phase C） |
+| IC-LoRA 2 点 | `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/…-x2-0.9.safetensors`／`models/ltx-2.3-ic-lora/union-control/…-union-control-ref0.5.safetensors` | 1.22GiB | `Rootport/Nz-LTX23-weights` | `config.yaml` `model.ic_loras` の 4 エントリの実体。union-control の 1 ファイルを `canny-control` / `pose-control` / `depth-control` の 3 名で公開している（§11 / IC-LoRA Phase C / `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`） |
 | DWPose 前処理器 2 点 | `models/preprocessors/yolox_l.torchscript.pt`／`models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt` | 0.33GiB | `Rootport/Nz-DWPose` | `pose-control` の前処理（`engine/preprocess/dwpose.py` が自ファイル位置からの絶対パスで両方を読むため、配置は変更不可） |
+| IC-LoRA Deblur 1 点（2026-08-03 追加） | `models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | 906,071,437 B | `Rootport/Nz-LTX23-weights` | `deblur` エントリの実体。**前処理不要**（ぼけた参照動画をそのまま渡す）なので `config.yaml` では**文字列形式**で登録する。メタデータの `reference_downscale_factor="1"`＝参照を縮めず出力と同解像度で処理するため、既存アダプタ（係数 2）より stage-1 の VRAM を食う |
+| VDA 深度前処理器 2 点（2026-08-03 追加） | `models/preprocessors-vda/video_depth_anything_vits.pth`／同 `LICENSE` | 116,452,112 B | `Rootport/Nz-LTX23-weights` | `depth-control` の前処理（Video-Depth-Anything Small。`engine/preprocess/depth.py` が自ファイル位置からの絶対パスで読むため配置は変更不可。dwpose.py と同じ作法）。**`LICENSE` は Apache-2.0 の全文**で、重みリポジトリ内の他ファイル（LTX-2 Community Licence）とはライセンスが異なるため `.pth` と必ず一緒に運ぶ |
 
-**これらは「無くても mock に落ちない」ため、検証を省くと壊れ方が分かりにくい**: `_real_available()` は見ておらず、`config.yaml` は 3 つの `ic_loras` を無条件に登録し、`gradio_ui/adapters.py` は登録が空でも同じ 3 名を静的フォールバックで並べる。したがって欠けていても UI にはアダプタ名が出て、選んだ瞬間に 404 になる。この失敗を前倒しで名指しするため、install_ltx.ps1 step 6 の検証表はこの 4 ファイルを含む **14 項目**になっている（x4 アップスケーラ版は未登録＝リポジトリにも置かない）。
+**これらは「無くても mock に落ちない」ため、検証を省くと壊れ方が分かりにくい**: `_real_available()` は見ておらず、`config.yaml` はすべての `ic_loras` エントリを無条件に登録し、`gradio_ui/adapters.py` は登録が空でも同じ名前を静的フォールバックで並べる。したがって欠けていても UI にはアダプタ名が出て、選んだ瞬間に 404 になる。この失敗を前倒しで名指しするため、install_ltx.ps1 step 6 の検証表はこの 6 ファイルを含む **16 項目**になっている（x4 アップスケーラ版は未登録＝リポジトリにも置かない）。
+
+> **新規の重みを既存ディレクトリの「子」ではなく「兄弟」に置いている理由**: インストーラのスキップ判定は Check ディレクトリの**再帰的サイズ合計**である。Deblur の 906MB を既存の `models/ltx-2.3-ic-lora/` の**中**に置くと、union-control ファイル（654MB）を失っているマシンでも合計が既存の Min 値を上回ってしまい、ダウンロードがスキップされて「union-control MISSING」が永久に解消しなくなる（Gemma tokenizer で起きた事故の逆方向の再発）。`models/preprocessors-vda` を `models/preprocessors` の兄弟にしているのも同じ理由で、子（`models/preprocessors/vda/`）にしていたら VDA の 116MB が DWPose 側の判定を水増しして、欠けた `dw-ll_ucoco`（135MB）を覆い隠していた。詳細は `Docs/VERIFICATION_LOG.md` §49.6。
 
 ### 5.2 削除済みの重量物
 
@@ -1104,7 +1108,7 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `component_video_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"` | 単体 VIDEO VAE（load-bearing） |
 | `component_audio_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"` | 単体 AUDIO VAE/vocoder（load-bearing） |
 | `component_text_projection_path` | `"./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"` | 単体 text projection（load-bearing） |
-| `ic_loras` | `pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` の 3 エントリ | IC-LoRA アダプタの**名前 → パス**登録。API の `GenerateRequest.loras[].name` はここに登録された**名前でのみ**解決する（生パスは受けない）。値は文字列（＝`preprocess: none`・Phase B 互換）または `{ path, preprocess }` マップ。`canny-control`（`preprocess: canny`）と `pose-control`（`preprocess: dwpose`）は**同一の union-control ファイル**を 2 つの論理名で公開したもの。**セクション不在＝`loras` 要求は全て拒否（fail loud）**。実体ファイルの取得と検証は §5.1b（`_real_available()` は見ないため、欠けると UI に名前は出るのに選択時 404 になる） |
+| `ic_loras` | `pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` の 5 エントリ | IC-LoRA アダプタの**名前 → パス**登録。API の `GenerateRequest.loras[].name` はここに登録された**名前でのみ**解決する（生パスは受けない）。値は文字列（＝`preprocess: none`・Phase B 互換）または `{ path, preprocess }` マップ。`canny-control`（`preprocess: canny`）・`pose-control`（`preprocess: dwpose`）・`depth-control`（`preprocess: depth`・2026-08-03 追加）は**同一の union-control ファイル**を 3 つの論理名で公開したもの。`deblur`（2026-08-03 追加）は前処理不要のため**文字列形式**で登録する。**セクション不在＝`loras` 要求は全て拒否（fail loud）**。実体ファイルの取得と検証は §5.1b（`_real_available()` は見ないため、欠けると UI に名前は出るのに選択時 404 になる）。depth-control / deblur の正本は `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`（**オーナー実機ゲート未実施**） |
 
 > **2026-07-28**: 本表はかつて`checkpoint_path`（43GBモノリスへの reference-only パス）の行を含んでいたが、`config.model`から削除済みのため本表から除去した（§5.2・§5.5・`Docs/VERIFICATION_LOG.md` §40）。worker payload 自体には`checkpoint_path`キーが残るが、値は`services/ltx_runner.py`が直値`""`をハードコードするため、config側に対応するフィールドは無い。
 

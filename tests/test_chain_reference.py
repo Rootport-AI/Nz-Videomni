@@ -184,6 +184,39 @@ def test_reference_resolution_not_divisible_by_128_422(chain_ref_client):
     assert r.json()["error"]["code"] == "REFERENCE_RESOLUTION_INVALID"
 
 
+def test_reference_with_style_only_loras_422(chain_ref_client):
+    """The chain counterpart of test_ic_lora_api.test_reference_with_style_only_loras_422:
+    a 1-clip chain carrying a reference video but only STYLE adapters has nothing
+    to consume the reference (the downscale factor comes from a CONTROL adapter's
+    metadata) -> 422 REFERENCE_REQUIRES_CONTROL_LORA."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[{"name": STYLE_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "REFERENCE_REQUIRES_CONTROL_LORA"
+    assert STYLE_LORA in r.json()["error"]["detail"]
+
+
+def test_reference_with_style_plus_control_accepted(chain_ref_client):
+    """STYLE + CONTROL together on a 1-clip chain still passes -- only
+    style-ONLY is rejected."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[
+            {"name": STYLE_LORA, "strength": 1.0},
+            {"name": CANNY_LORA, "strength": 1.0},
+        ],
+        reference_video_id=vid,
+    )
+    assert r.status_code == 202, r.text
+    job = chain_ref_client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+
+
 def test_reference_with_empty_loras_422_schema(chain_ref_client):
     vid = _upload_video(chain_ref_client)
     r = _run_chain(

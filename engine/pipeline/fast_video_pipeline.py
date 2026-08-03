@@ -383,17 +383,47 @@ class LTXFastVideoPipeline:
                 "ic_reference set but no ic_loras — the reference downscale "
                 "factor is read from the LoRA metadata; supply the IC-LoRA."
             )
-        # Reuse the wheel's own metadata reader (private, but we already
-        # monkeypatch this wheel). It returns 1 when the metadata key is
-        # absent; for an x2 upscaler LoRA a factor of 1 means the metadata is
-        # missing — fail loudly rather than silently running at native res.
+        # The wheel's reader returns 1 BOTH for "declared as 1" (a
+        # same-resolution reference adapter, e.g. Deblur) and for "key absent"
+        # (a style/character LoRA), so key presence must be tested separately:
+        # only LoRAs that actually declare the key may vote. A LoRA whose header
+        # cannot be read does not vote (the wheel's reader degrades the same way
+        # and the registry has already header-validated every config entry).
+        from safetensors import safe_open
         from ltx_pipelines.ic_lora import _read_lora_reference_downscale_factor
-        factor = _read_lora_reference_downscale_factor(self._ic_loras[0][0])
-        if factor <= 1:
+
+        declared: dict[str, int] = {}
+        for entry in self._ic_loras:
+            path = entry[0]
+            try:
+                with safe_open(path, framework="pt") as fh:
+                    metadata = fh.metadata() or {}
+            except Exception:
+                continue
+            if "reference_downscale_factor" in metadata:
+                declared[path] = _read_lora_reference_downscale_factor(path)
+        if not declared:
             raise RuntimeError(
-                f"IC-LoRA {self._ic_loras[0][0]} reports reference_downscale_factor="
-                f"{factor}; expected >1 (metadata missing?). Refusing to run "
-                "reference conditioning at factor 1."
+                "ic_reference set but none of the IC-LoRAs "
+                f"{[entry[0] for entry in self._ic_loras]} declares "
+                "reference_downscale_factor (metadata missing?). Refusing to "
+                "run reference conditioning without a declared factor."
+            )
+        # One reference video is loaded at ONE resolution, so every declaring
+        # LoRA must agree — including a declared 1 against a declared 2, which
+        # would silently feed one of the two adapters a reference at a scale it
+        # was not trained on.
+        factors = sorted(set(declared.values()))
+        if len(factors) > 1:
+            raise RuntimeError(
+                f"Conflicting reference_downscale_factor values in IC-LoRAs: {declared}. "
+                "Cannot combine LoRAs that expect different reference resolutions."
+            )
+        factor = factors[0]
+        if factor < 1:
+            raise RuntimeError(
+                f"IC-LoRA metadata reports reference_downscale_factor={factor} "
+                f"({declared}); expected >=1."
             )
         self._ic_reference_downscale_factor = factor
 
@@ -929,7 +959,12 @@ class LTXFastVideoPipeline:
 
         ref_path, ref_strength = self._ic_reference
         scale = self._ic_reference_downscale_factor
-        assert scale is not None and scale > 1, "reference downscale factor not initialised"
+        if scale is None or scale < 1:
+            raise RuntimeError(
+                f"reference downscale factor not initialised (got {scale}); "
+                "_set_ic_job must resolve it before the reference conditioning "
+                "is built."
+            )
 
         cond_width = int(cond_kwargs["width"])
         video_encoder = cond_kwargs["video_encoder"]

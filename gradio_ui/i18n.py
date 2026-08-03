@@ -140,6 +140,21 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_ref_video": "Reference video (mp4/mov/webm/mkv, max 200 MB)",
         "note_ref128": ("When using a reference video, the output width and height must be "
                         "multiples of 128 (e.g. 1280×768); generation will not start otherwise."),
+        "note_iclora_aspect": ("The reference video is simply resized to the output resolution, "
+                               "so a mismatched aspect ratio will distort it (most noticeable "
+                               "with Depth control)."),
+        "note_iclora_depth": ("Depth control: the official recommendation is Control adherence "
+                              "= 0.6. Keep Adapter strength at 1.0 — lowering it can make "
+                              "the reference bleed through (these are two different sliders)."),
+        "note_iclora_deblur": ("Deblur: write the prompt in two parts, e.g. \"Reference shows "
+                               "<scene>, heavily out of focus with soft defocused blur and no "
+                               "fine detail. Edited shows the same scene in sharp focus with "
+                               "crisp detail and clean edges. DEBLUR <scene>. Subject identity, "
+                               "framing, and background geometry are identical to the reference; "
+                               "only focus and sharpness differ between reference and edited.\" "
+                               "It removes defocus blur (out-of-focus shots), not motion blur. "
+                               "Because the reference is processed at full output resolution, it "
+                               "uses more VRAM than the other adapters."),
         # --- generate: right column ---
         "btn_generate": "Generate",
         # Feature 3: shown on generate_btn / chain_generate_btn while a
@@ -644,6 +659,20 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_ref_video": "参照動画 (mp4/mov/webm/mkv・最大200MB)",
         "note_ref128": ("参照動画を使う場合、出力の幅と高さは128の倍数にしてください"
                         "(例: 1280×768)。満たさない場合は生成を開始しません。"),
+        "note_iclora_aspect": ("参照動画は出力解像度へ単純にリサイズされるため、アスペクト比が"
+                               "異なると映像が歪みます（特にDepth controlで目立ちます）。"),
+        "note_iclora_depth": ("Depth control: 公式推奨は制御追従度（control adherence）="
+                              "0.6です。アダプタ強度（LoRA強度）は1.0のままにしてください——"
+                              "下げると参照が滲み込みます（この2つは別のつまみです）。"),
+        "note_iclora_deblur": ("Deblur: プロンプトは2段構成で書きます。例（公式モデルカードより）: "
+                               "「Reference shows <場面の説明>, heavily out of focus with soft "
+                               "defocused blur and no fine detail. Edited shows the same scene "
+                               "in sharp focus with crisp detail and clean edges. DEBLUR "
+                               "<場面の説明>. Subject identity, framing, and background geometry "
+                               "are identical to the reference; only focus and sharpness differ "
+                               "between reference and edited.」対象はデフォーカスぼけ（ピンぼけ）"
+                               "のみで、モーションブラーには効きません。参照動画を出力と同じ解像度で"
+                               "処理するため、他のアダプタよりVRAM消費が大きくなります。"),
         # --- generate: right column ---
         "btn_generate": "生成",
         # 機能3: generate_btn / chain_generate_btnの生成中に表示（ボタンは無効化）。

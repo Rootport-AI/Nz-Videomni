@@ -2105,6 +2105,7 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 
 1. **precedence**: pydantic のスキーマ検証がエンドポイントより先に走るため、`clips>=2` ＋ `reference_video_id` の複合誤設定は、コード付きの `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` ではなく汎用の `VALIDATION_ERROR`（422）になる。
 2. `reference_video_id` ＋ スタイル系 LoRA のみ（control 系を含まない）はスキーマ上は受理されるが、worker 側の `_set_ic_job` で `RuntimeError`（ジョブ失敗）になる。単発 `/generate` の既存挙動をそのまま写像したものであり、GUI からは到達不能（アダプタ欄が control 系のみを選択肢に持つため）＝直接 API 経由のみ。早期422化は将来の改善余地として残す。
+   - **→ ✅ 解消（2026-08-03）**: IC-LoRA Depth／Deblur 追加（§49）で新設した **`REFERENCE_REQUIRES_CONTROL_LORA`（422）**により、この組み合わせは**単発・チェーンの両方でリクエスト時点で拒否**されるようになった。「アップロードもジョブ開始も済んだあとにワーカー内で落ちる」経路は消えている。**解消は §49.7 の G2（mock 通し）で実機確認済み**（項目5）。ここで挙げていた「早期422化は将来の改善余地」は**クローズ**である。
 3. `GET /jobs/{id}` の応答の `request` ブロックは chain 固有フィールド（`source_audio`／`loras`／`reference_video_id` 等）を載せない（`JobResponse.request` が `to_clip_request` 経由の `GenerateRequest` 形のため）。§30 の `loras` 追加時からの既存の表現上の制約であり、今回の退行ではない。正式な記録は `metadata.json` 側。
 4. **既知の無害事象（GPU実機目視ゲート中に観測・2026-07-12）**: 2本目のジョブ完了直後にサーバーログへ `ERROR asyncio: ... ConnectionResetError [WinError 10054]`（`_ProactorBasePipeTransport._call_connection_lost`）が1回出力された。これは Windows の asyncio proactor がクライアント（ブラウザ）側の強制切断を後処理する際の既知の無害なノイズであり、直後に再接続し以降のジョブも正常完走した。機能影響なし・対応不要（オーナー判断で無視と決定）。
 
@@ -3180,3 +3181,139 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 7. 実 GPU で、2本目以降の生成が体感で速くなる（前処理の待ちが消える）。→ **✅ 合格（2026-08-03・オーナー実機確認）。「生成が大幅に高速化すること」を確認。**
 
 **フォローアップ（2026-08-03 オーナー指示）**: prefetch=off 時の UI 連動グレーアウトをフロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10** として起票した。§48.3 の G-C（`block_swap_prefetch=False` × `keep_resident=1` → warn ＋ auto-off）はサーバー側の安全装置として正しく働いているが、利用者から見ると「トグルを On にしたのに効かない」という見え方になりうる。そこでフロントエンド側で、先読み block swap が off のあいだは骨格常駐トグルを自動的に off にしてグレーアウト（操作不能）にし、prefetch を on に戻すと解除する。**本節のガードそのものは変更しない**（UI の見せ方だけの改修である）。
+
+---
+
+## 49. ★IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加＝実装完了・機械検証（pytest・自己診断・型検査・vitest）全PASS・**G1（深度制御信号の性質ゲート）全項目PASS・G2（mock 通し）全項目PASS（2026-08-03）。G3／G4 は未実施＝実機ゲート待ち**（2026-08-03実装。**テーマ未完結**）
+
+> **正本＝[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)**（経緯・確定方針・公式ワークフロー解読結果・実装内容・残ゲートの定義）。本節はその**実測値の記録**である。フロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8 に残っていた未対応IC-LoRA 4種のうち、Depth と Deblur の2種を製品化した。前処理器は **Video-Depth-Anything Small（vits・Apache-2.0）**、Deblur は Lightricks 公式 `LTX-2.3-22b-IC-LoRA-Deblur`。**本節の時点で通っているのは G0・G1・G2・自動テスト・再ホスト検証までであり、G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）は未実施である。デプロイも未実施。**
+
+### 49.1 一次資料の実測（公式ワークフローJSONの直接解読・Deblurのヘッダ実測）
+
+**公式ComfyUIワークフロー `LTX-2.3_ICLoRA_Union_Control_Distilled.json`** をJSONとして直接解読し、深度前処理ノードのパラメータ実値を読み出した（推測なしの転記）。
+
+| 項目 | 実値 | 本実装 |
+|---|---|---|
+| モデル種別 | `vits`（Small） | 同一 |
+| `input_size` | `518` | 同一 |
+| `max_res` | `960` | 同一 |
+| 精度 | `fp32`（autocast無効） | 同一 |
+| 出力形式 | グレースケール（近＝白） | 同一（クリップ全体でのmin-max正規化1回） |
+
+**留保**: 同ワークフローで実際に配線が完成しているのは **canny 経路のみ**で、depth と pose のノードは「例示」の位置づけである。したがって上表は「公式が depth に使うと示している前処理器とその値」の一次資料としては有効だが、「公式が動作保証している完成品の depth 経路」ではない。**G1 で公式実装との数値比較を合格条件に採らなかった理由の一つがこれである**（§49.3 末尾）。
+
+**Deblurアダプタの safetensors ヘッダ実測**（`ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`・906,071,437バイト）:
+
+| キー | 実測 | 帰結 |
+|---|---|---|
+| `reference_downscale_factor` | **実在・値 `"1"`** | 既存のメタデータキー判定がそのまま `kind=control` へ自動分類する。**configスキーマの拡張は不要**と確定 |
+| `reference_temporal_scale_factor` | **無し** | 動作中wheelが時間係数を適用できない制約に抵触しない。方針の再検討は不要 |
+
+値が **1**（参照を縮めず出力と同解像度で処理する）であることが、エンジン側の縮小係数ガード緩和（§49.4）が必要になった直接の理由であり、同時に Deblur の VRAM 増（stage-1 のトークン数がおよそ2倍）の理由でもある。**VRAM の実測は G3 で行う（未実施）。**
+
+### 49.2 G0 前処理単体スモーク（2026-08-03実測・エンジン用仮想環境＋GPU）
+
+エンジン用仮想環境（**torch 2.9.1／numpy 2.4、xformers・decord は無し**）で、**追加インストールを一切せずに動く**ことを確認した。
+
+| 観測点 | 実測 |
+|---|---|
+| xformers不在フォールバックの実体 | **素のsoftmax実体化**（N×Nのスコア行列を丸ごと確保する上流実装）。1920×1088で **reserved 14.7GB** |
+| SDPAへ差し替えた場合 | **約4.4GB**（reserved）。**速度も向上** |
+| 差し替えによる数値差 | **fp16の許容誤差の1/20以下** |
+| 本実装のVRAM | **約4GB固定** |
+| 本実装のスループット | **1280×768で約15fps** |
+| `easydict` | キーワード引数の入れ物としてしか使われていない → 素の `dict` へ置換（エンジン用仮想環境に未導入のため） |
+
+- **この実測を受けて SDPA 化を「任意の最適化」ではなく必須として実装に組み込んだ**（`vda/video_depth_anything/dinov2_layers/attention.py` と `vda/video_depth_anything/motion_module/attention.py` の2箇所）。後者は上流が `baddbmm` の `alpha` としてスケールを掛けており、それが必ずしも `1/sqrt(head_dim)` ではないため、SDPA へは `scale=self.scale` を**明示的に**渡してある。前者は SDPA が同じ `1/sqrt(head_dim)` を内部で掛けるので明示の `q * self.scale` を落とした。
+- あわせて xformers の import ガードを3ファイルから削除した。ガードが握る `except ImportError` 分岐は素の `print(...)` を実行するもので、**ワーカーの標準出力はフレーム化されたプロトコル通信路**であるため、そこへ文字列が漏れると通信が壊れる。削除後に残る経路は、xformers が無いときに上流が元々通っていた経路そのもの＝本スモークが実測した構成である。
+
+### 49.3 G1 深度制御信号の性質ゲート＝全項目PASS（2026-08-03実測）
+
+`engine/preprocess/depth_g1_gate.py`（本テーマで新設）で実施。**本番と同じ経路**（`get_processor("depth")` ＋ `driver.preprocess_video`）を1回走らせ、mp4へ書き出す直前のフレームを取り出して測る作りなので、測定対象は実ジョブが生成するものと同一である。条件は**実クリップ 1280×720・41フレーム**。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| (a) | 近い被写体が白か（近／遠の矩形を指定して平均輝度を比較） | 近 > 遠 ＋ 余裕 | 近 **184.07** ／ 遠 **15.49** | ✅ PASS |
+| (b) | 静止画素のフリッカ（元動画がほぼ動いていない画素だけで測ったフレーム間の深度の揺れ） | 閾値 **2.0** 以下 | 平均 **0.561** ／ p95 **0.693** | ✅ PASS |
+| (c) | mp4書き出し往復の階調劣化（バンディング） | PSNR 閾値 **6.0** 以上 | **35.67dB** | ✅ PASS |
+| — | 速度 | 記録のみ | 41フレームを **4.35秒** | ✅ PASS（記録） |
+
+- **(b) が「静止画素だけ」で測る理由**: 連続フレームの生の差分は、フリッカと**本物の動き**を混同する。元動画側の差分が小さい画素（`--static-delta` 未満）に限れば、そこは深度も動いてはならないので、フリッカだけを取り出せる。
+- **(c) の閾値 6.0 の出所**: ドライバの既存エンコーダ（`mp4v` fourcc。canny/pose が既に通っている経路）の実測から較正した値である。**この項目が捕まえるのはコーデック由来の一般的な劣化ではなく、階調の崩壊**である。生き残った異なるグレー階調の数を数えるバンディング指標も併せて出している。
+- **(a) は矩形を指定しない場合、報告のみで合否判定しない**（絵としての最終判断はオーナーの目視＝G3に委ねる設計）。
+- **公式実装との数値比較を G1 に採らなかった理由**: ①比較には別環境の構築が必要、②§49.1 のとおり公式ワークフローの depth 経路は配線が完成しておらず、突き合わせ先として信頼できる基準にならない——の2点。最終的な絵の正しさは既存の `outputs/visual_review/` 運用に従い G3 のオーナー目視で判定する。
+
+### 49.4 実装箇所一覧（設計判断の要点つき）
+
+- **`engine/pipeline/fast_video_pipeline.py`**: 縮小係数の読み取りを**先頭1本のみ → 全LoRA走査**へ。wheel の読み取り関数は「1と宣言されている」場合と「キー自体が無い」場合の**両方で1を返す**ため、`safetensors` のヘッダを別途開いて**キーの存在そのもの**を確かめ、**キーを持つLoRAだけが投票**する方式にした。宣言値が2種類以上あれば矛盾としてエラー（**1と2の混在も矛盾**——参照動画は1つの解像度で1回だけ読まれるので、片方のアダプタに訓練時と違うスケールの参照を黙って食わせることになる）。**どのLoRAもキーを持たなければエラー**。あわせて `factor <= 1` 拒否を **`factor >= 1` 許容**へ緩め、下流の `assert` を**明示的な検証と例外**へ置換した（`python -O` では assert が消えるため）。割り切れ判定には手を触れていない（係数1では元々発火しない）。チェーン側は同メソッドを共用するため独自修正は不要。
+- **`api/errors.py`・`api/generate.py`・`api/generate_chain.py`**: 新エラー **`REFERENCE_REQUIRES_CONTROL_LORA`（422）**。ガード緩和で消える「参照動画＋画風LoRAのみ」の誤用検出を、**API層の逆方向チェック**として作り直した（**単発・チェーンの両方**）。従来はこの誤用を縮小係数ガードが偶然弾いていたが、それは**アップロードもジョブ開始も済んだあとで落ちる**という不親切な失敗の仕方だった。フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§4-11 の①**を本テーマの副産物として解消したことになる。
+- **`engine/preprocess/vda/`（新規）**: Video-Depth-Anything の**推論コアのみ**をベンダリング（git追跡対象。`vendor/` は `.gitignore` 除外のため使えない）。Apache-2.0 の `LICENSE` 全文と、**改変点の完全な一覧を含む `README.md`** を同梱。クラス名・モジュール構成・属性名・コンストラクタ引数は**一切不変**（`strict=True` で読み込むため）。改変は4点のみ＝①相対import化（`from utils.util import ...` は `sys.path` 上の別の `utils` へ黙って結びつく危険があった）②`easydict` 除去 ③SDPA化2箇所（§49.2）④xformers import ガード削除3ファイル（§49.2）。上流の `run.py` / `app.py` / `benchmark/` / `loss/` / `utils/dc_utils.py`（`decord`・`matplotlib`・`imageio` を引き込む）は取り込んでいない。`.pth` は git 外・インストーラ経由。
+- **`engine/preprocess/depth.py`（新規）**: `DepthProcessor`。公式 `infer_video_depth`（**32フレームの移動窓・10フレームの重なり・窓どうしの整合処理**）をそのまま呼ぶ薄いラッパー。重いimport（torchvision＋DINOv2スタック）は `_ensure_loaded()` 内に**遅延**（DWPose と同じ作法。トップレベルのimport失敗が canny/pose を道連れにするのを防ぐ）。ジョブごとにロードし、制御動画を書き終えたら `release()` でGPUから追い出す（16GBぎりぎりの生成デノイズ中に深度の重みを残さない）。
+- **`engine/preprocess/base.py`・`driver.py`・`__init__.py`**: 新プロトコル **`VideoProcessor`（クリップ単位）** を `FrameProcessor`（フレーム単位）と並置し、ドライバがどちらを持つかで分岐する。深度は時間方向の移動窓とクリップ全体の正規化を使うため1枚ずつでは処理できない。**`frame_cap`**（デコード打ち切り）を追加——深度は与えられた分をすべて正規化に使うので、生成で使わないフレームまで処理すると時間を無駄にするうえ**グレーの割り当てレンジがずれる**。
+- **`engine/worker.py`**: `_preprocess_frame_cap(msg)`。**単発＝`num_frames`／チェーン＝`clips[0]["num_frames"]`**（参照条件は先頭クリップのstage-1にしか付かないため）。キーが無ければ `None`（全デコード＝従来どおり）。**`frame_cap` は `preprocess == "depth"` のときだけ渡す**ので、**canny/dwpose の経路はバイト不変**であり、ログ行も `cap=` の部分は該当するときにしか付かない（Phase C で記録した実行ログと文字単位で一致し続ける）。
+- **`config.yaml.example`・`config.py`・`services/lora_registry.py`**: `depth-control`（**union-control のファイルを共用**・`preprocess: depth`）と `deblur`（前処理不要のため**文字列形式**でパスのみ）の2エントリ登録。`IcLoraEntry.preprocess` のリテラル型に `"depth"` 追加。**Gradio の静的フォールバック一覧には手を触れていない**（`/config` 不達時だけの死に枝と確認済み）。
+- **`gradio_ui/adapters.py`・`i18n.py`・`ui.py`**: `ADAPTER_FRIENDLY` に2件、英日それぞれ**ヒント3種**（アスペクト比／Depth の推奨値／Deblur の書式とVRAM）。**アダプタ選択に連動して出し分ける仕組みは既存に無く、そのためだけの新UI機構は足していない**（既存の `note_ref128` と同じ常時表示の注記）。
+- **フロントエンド**（`Nz-LTX23-frontend-AviUtl2`）: `webui/src/i18n/strings.ts`（英日の同内容ヒント3種）／`GenerationForm.tsx`（参照動画セクションに3行）／`api/types.ts`（`"depth"`）／`bridge/mockBridge.ts`（`depth-control` マップ形式＋`deblur` 文字列形式のフィクスチャ）。**選択肢そのものは `/config` 経由で自動的に増える。** 詳細は[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §59。
+
+**値の自動セットはしない**（オーナー決定）。深度の推奨 0.6 は**ヒント文の表示のみ**である。またヒント文は、推奨 0.6 の対象が **②`conditioning_attention_strength`（制御追従度）**であり **③LoRAアダプタ強度は 1.0 のまま**であるという区別を明記している（③を下げると参照が滲み込む＝bleed-through と公式が警告している）。3つのノブの切り分けは **§28.1** で照合済みで、0.6 の出典は Lightricks 公式ドキュメントの記載である。
+
+### 49.5 自動テストの結果（2026-08-03実測）
+
+| 対象 | 結果 | 着手前 |
+|---|---|---|
+| アプリ用仮想環境の pytest | **910 passed / 9 skipped** | 900 passed |
+| エンジン用仮想環境（`tests/test_ic_lora_engine_conditioning.py` ＋ forward 系・`--noconftest`） | **28 passed** | 15 passed |
+| `engine/preprocess/preprocess_selfcheck.py`（前処理の自己診断） | **11 / 11 PASS** | 新規 |
+| Gradio 系テスト | **277 緑** | — |
+| フロントエンド vitest | **1673 緑** | — |
+| フロントエンド `npm run typecheck`（`tsc -b`） | **0エラー** | — |
+
+- **`preprocess_selfcheck.py` を pytest ではなくスクリプトにした理由**: エンジン用仮想環境には `fastapi` が無いため `tests/conftest.py` を収集できず、アプリ用仮想環境には `cv2` も `torch` も無い。`block_swap_prefetch_selfcheck.py` と同じ切り分けである。GPU も重みも不要で、ドライバは偽のプロセッサで、`DepthProcessor` は純粋な配列変換ヘルパだけを叩く。11項目の内容は、`get_processor` の解決と不正値の拒否／深度だけが `VideoProcessor` であること（canny/dwpose の誤ルーティングが起こりえないこと）／クリップ単位分岐が全フレームを1回で順序どおり渡すこと／`frame_cap` の先頭切り出し／`frame_cap=None` の従来動作／FPSと解像度の保存／両分岐＋失敗時の `release()` 実行／フレーム数不一致の loud fail／`_inference_size` の 960 境界と偶数化／`_to_control_frames` の近＝白・クリップ全体正規化・3チャンネル同一・元解像度復元／チェックポイントの探索先の一致。
+- **フロントエンド `npm run typecheck`（`tsc -b`）を使っている**のは既存の規律どおりで、`npx tsc --noEmit -p .` は偽合格するため使わない。
+
+### 49.6 再ホストの検証（2026-08-03）
+
+`Rootport/Nz-LTX23-weights`（既存の公開・非gatedリポジトリ）へ2ディレクトリを追加。**上流とのSHA-256一致・匿名（ログイン無し）でのダウンロード成功・README／NOTICE の更新**をいずれも確認済み。
+
+| ディレクトリ | 内容 | サイズ |
+|---|---|---|
+| `ltx-2.3-ic-lora-deblur/` | `ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | 906,071,437バイト |
+| `preprocessors-vda/` | `video_depth_anything_vits.pth` ＋ `LICENSE`（Apache-2.0 全文） | 116,452,112バイト（2ファイル計） |
+
+`LICENSE` を同梱しているのは、これが重みリポジトリ内の他ファイル（LTX-2 Community Licence）と**異なるライセンス**であり、`.pth` と必ず一緒に運ばれる必要があるためである。
+
+**`scripts/install_ltx.ps1`**: 独立したダウンロード呼び出しを2本追加し、検証表（`$required`）を **14項目 → 16項目**へ拡張した。
+
+> **兄弟ディレクトリ方式を採った理由（容量チェックの構造的な罠）**: インストーラのスキップ判定は Check ディレクトリの**再帰的サイズ合計**である。Deblur の906MBを既存の `models/ltx-2.3-ic-lora/` の**中**に置くと、同ディレクトリの合計は 1,308,930,638 → 2,215,002,075 になる。すると **654MB の union-control ファイルを失っているマシンでも合計 1,560,536,723 となり、既存の Min 値 1,000,000,000 を上回ってスキップ**してしまう。以後は再実行のたびに「union-control MISSING」が出続け、しかも自力では直せない恒久的な行き詰まりになる。これは Gemma tokenizer で実際に起きた事故の**逆方向の再発**である（あちらは大きなファイルが不在の兄弟**ディレクトリ**を覆い隠した。こちらは新しいファイルが不在の兄弟**ファイル**を覆い隠す）。新しい Check ディレクトリは自分の中身だけで測られるので、この事故が構造的に起こりえない。
+>
+> **命名も僅差で助かっている**: `models/preprocessors-vda` は DWPose の `models/preprocessors` の**兄弟**であって子ではないため、互いのサイズ合計が混ざらない。もし `models/preprocessors/vda/` にしていたら、その116MBが DWPose の判定を水増しし、欠けた135MBの `dw-ll_ucoco` を覆い隠していた。ダウンロード対象を絞る glob も `preprocessors/*` は `preprocessors-vda/...` に一致しないため混線しない。
+>
+> **Min 値**: `ltx-2.3-ic-lora-deblur` = **900,000,000**（唯一のファイルが検証表の対象なので、失えば 0 に落ちて再ダウンロードが走る）／`preprocessors-vda` = **110,000,000**（`LICENSE` の 11,356バイトは検証表の対象外＝欠けても MISSING にならないため、**LICENSE の有無で判定が変わらない**値を選んだ。両方あり＝116,452,112でSKIP、LICENSEのみ欠損＝116,440,756でもSKIP、`.pth` 欠損＝11,356でダウンロード）。**疑似環境で3ケースの実測トレースと反例テストを実施済み。**
+
+### 49.7 G2 mock 通し＝全項目PASS（2026-08-03実施）
+
+**実施方法**は §23.3／§34.5 の前例に倣った——scratchpad へコピーした**隔離 config**（`backend: "mock"`・**ポート 18902**・出力先とアップロード先も scratchpad へ隔離）で**実 uvicorn を起動**し、HTTP 経由で叩く。**リポジトリ側のファイルおよび `outputs/`・`uploads/` への書き込みはゼロ**であることを確認済みである。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| 1 | `depth-control` ＋ 参照動画 ＋ `conditioning_attention_strength=0.6` の**単発生成** | 202 → `completed`・metadata に正記録 | 202 → `completed`。`metadata.json` に `preprocess: depth`／参照ID／`0.6` が正しく記録された | ✅ PASS |
+| 2 | `deblur` ＋ 参照動画の**単発生成** | 202 → `completed` | 202 → `completed` | ✅ PASS |
+| 3 | **1クリップ chain**（Create 画面の A2V 相当。`clips[0]["num_frames"]` 側の分岐を通る） | 202 → `completed` | 202 → `completed`（`num_frames=25`） | ✅ PASS |
+| 4 | **2クリップ chain ＋ 制御系** | 422 で拒否（既存仕様の維持） | **422 `LORA_CONTROL_UNSUPPORTED_IN_CHAIN`** | ✅ PASS |
+| 5 | 参照動画 ＋ **画風系 LoRA のみ** | 422 で拒否（§49.4 の新設チェック） | **単発・chain の両方で 422 `REFERENCE_REQUIRES_CONTROL_LORA`** | ✅ PASS |
+| 6 | `/config`・`/loras` への新2件の出現 | 2件が出現し、kind が正しい | 両エンドポイントに出現。**`deblur` は実メタデータ由来で `kind: control`**（§49.1 の `reference_downscale_factor="1"` による自動分類が実サーバー上でも効いていることの確認） | ✅ PASS |
+
+- **項目3 の `num_frames=25` について**: 17 で投げると **422** になるが、これは `overlap_frames=3` との**既存の境界バリデーション**が正しく働いた結果であり、**本改修のバグではない**。25 で正常に完走する。
+- **項目5 は §34.6 の既知事項#2 を解消したことの実機確認である。** 従来「`reference_video_id` ＋ 画風系 LoRA のみ」はスキーマ上受理されてワーカー内の `_set_ic_job` で `RuntimeError` になっていた（早期422化は将来の改善余地として残されていた）。§49.4 で新設した `REFERENCE_REQUIRES_CONTROL_LORA` によりリクエスト時点の 422 になったことを、実サーバーで確認した。§34.6 側にも解消を追記済み。
+- **`control_depth.mp4` の実生成確認は G2 の対象外である。** **mock エンジンは設計上、前処理を実行しない**（`_MockBackend` は `lora_paths`／`reference_video_path` を受理はするが無視する）。深度前処理が実際に動いて制御動画が書き出されることの確認は **G3 の対象**として残る（前処理そのものの性質は §49.3 の G1 で実測済み）。
+
+### 49.8 残ゲート（**未実施**）— G3／G4
+
+**本テーマは実機ゲート待ちである。以下は「これから行うこと」の定義であり、結果ではない。** 定義の正本は[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md) §7。
+
+| ゲート | 内容 | 状態 |
+|---|---|---|
+| **G3** オーナー実機 real | ①`depth-control` 通常経路を1本以上（制御追従度 0.6 を出発点に、元の動きや構図を保ったまま内容が置き換わることを目視）②`depth-control` の A2V 経由を1本以上 ③`deblur` を1本以上（**デフォーカスぼけ**の素材で。§49.1 のプロンプト2段構成）④**Deblur の VRAM 実測**——`reference_downscale_factor=1` のため stage-1 のトークン数がおよそ2倍（既存の係数2に対し1.25倍→2.0倍）になる。スピルの起きない解像度・フレーム数の表と突き合わせ、**ヒント文の VRAM 記述を確定させる**（現在は具体値のない固定文言）。**あわせて `control_depth.mp4` が実際に書き出されることの確認もここに含まれる**（G2 は mock のため前処理が走らない） | ⬜ **未実施** |
+| **G4** 既存アダプタの回帰 | `canny-control`・`pose-control`・`pixel-spatial-upscaler-x2` が本改修前と同一に動くこと。**縮小係数2の経路がバイト不変**であることを確認する（§49.4 でメタデータ読み取りを全走査に変え、ドライバに `frame_cap` を足しているため） | ⬜ **未実施** |
+
+**デプロイも未実施である。** コミットもしていない（オーナー指示待ち）。

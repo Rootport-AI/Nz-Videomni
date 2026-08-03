@@ -192,6 +192,22 @@ def lora_requires_reference(names: list[str]) -> APIError:
     )
 
 
+def reference_requires_control_lora(names: list[str]) -> APIError:
+    """The reverse of :func:`lora_requires_reference`: a ``reference_video_id``
+    was supplied but not one requested adapter is CONTROL-type. A reference
+    video is only ever consumed through a control adapter (the reference
+    downscale factor is read from that adapter's metadata), so a
+    reference + style-only request has nothing to feed the video to. 422 — the
+    request is well-formed; the required companion input (a control adapter) is
+    what is missing."""
+    return APIError(
+        "REFERENCE_REQUIRES_CONTROL_LORA",
+        "a reference_video_id requires at least one control-type IC-LoRA",
+        422,
+        detail=f"requested loras, none of them control-type: {sorted(names)}",
+    )
+
+
 def lora_control_unsupported_in_chain(names: list[str]) -> APIError:
     """Chain LoRA: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler
     — it derives its conditioning from a reference video) was requested on a

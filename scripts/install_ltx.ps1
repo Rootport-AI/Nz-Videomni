@@ -20,7 +20,7 @@
          Re-applied automatically whenever the pinned dependency set changes, so
          "git pull, then re-run this" actually updates the venv.
          -ResolveLatest opts into a fresh resolve (UNVALIDATED newer torch).
-      5. Model downloads (~30GB, 3 guarded items) via .venv-engine's hf.exe,
+      5. Model downloads (~31GB, 5 guarded items) via .venv-engine's hf.exe,
          pulled from three PUBLIC, NON-GATED repos. No HuggingFace account,
          login or token is required at any point.
       6. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt.
@@ -427,11 +427,12 @@ if ($CloneUpstreamReference) {
 }
 
 # ----------------------------------------------------------------------------
-# 5) Model downloads (~30GB) via the engine venv's hf.exe.
+# 5) Model downloads (~31GB) via the engine venv's hf.exe.
 #    Everything comes from THREE self-hosted repos that are PUBLIC and NON-GATED,
 #    so no HuggingFace account, login or token is involved anywhere:
 #      Rootport/Nz-LTX23-weights -> ltx-2.3/, ltx-2.3-components/, ltx-2.3-gguf/,
-#                                   ltx-2.3-ic-lora/
+#                                   ltx-2.3-ic-lora/, ltx-2.3-ic-lora-deblur/,
+#                                   preprocessors-vda/
 #      Rootport/Nz-Gemma3-12B    -> gemma-3-12b-it-gguf/, gemma-3-12b-it-tokenizer/
 #      Rootport/Nz-DWPose        -> preprocessors/
 #    All three repos mirror this project's models/ layout 1:1, so each one expands
@@ -561,7 +562,7 @@ if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
 } else {
-    Write-Step "Model downloads (~30GB total, 3 public repos, no token needed)"
+    Write-Step "Model downloads (~31GB total, 3 public repos, no token needed)"
 
     # 1) LTX-2.3 weights, 7 files / 24,196,952,364 B:
     #      ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors            (0.93GB)
@@ -652,6 +653,86 @@ if ($SkipModels) {
         -Check @(
             @{ Dir = "models/preprocessors"; Min = [long] 340000000 }
         )
+
+    # 4) IC-LoRA Deblur, 1 file / 906,071,437 B:
+    #      ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors  (906MB)
+    #    Sharpens a blurry reference video. It needs NO preprocessor at all: the
+    #    blurry clip is handed to the adapter as-is, which is why nothing else ships
+    #    alongside it. That is also why config.yaml registers `deblur:` in the bare
+    #    STRING form (just a path), not the mapping form with a `preprocess:` key
+    #    that canny-/pose-/depth-control use.
+    #
+    #    WHY THIS IS A SEPARATE CALL WITH ITS OWN DIRECTORY, and NOT one more glob
+    #    bolted onto call 1 above / one more file inside models/ltx-2.3-ic-lora/:
+    #    the guard is a RECURSIVE size sum over the Check directory (Get-PathSize).
+    #    Dropping a fresh 906MB file into models/ltx-2.3-ic-lora/ would lift that
+    #    directory from 1,308,930,638 to 2,215,002,075 -- so a machine that had LOST
+    #    the 654MB union-control file would still sit at 1,560,536,723, clear the
+    #    existing Min of 1,000,000,000, and SKIP. Step 6 would then report
+    #    "ic_lora union-control MISSING" on every single re-run with no way to fix
+    #    it: exactly the permanent deadlock the Gemma tokenizer hit (see the
+    #    per-directory Min note above), just arrived from the opposite direction --
+    #    there a big file masked an absent SIBLING DIRECTORY, here a NEW file would
+    #    mask an absent sibling FILE. A brand-new Check directory can only ever be
+    #    measured against its own contents, which makes that impossible by
+    #    construction. Same reasoning applies to call 5 below.
+    #    (Repo side: the file is stored at ltx-2.3-ic-lora-deblur/ in
+    #    Rootport/Nz-LTX23-weights precisely so it expands here, a SIBLING of
+    #    ltx-2.3-ic-lora/, with no post-processing.)
+    #
+    #    Min sizing (same rule as above -- above (dir total - smallest file the step
+    #    6 table checks in that dir), at or below the dir total):
+    #      ltx-2.3-ic-lora-deblur 906,071,437, 1 file, and that one file IS gated by
+    #                             the step 6 table (906,071,437-906,071,437 = 0)
+    #                                                     -> Min 900,000,000
+    #    i.e. losing the only file drops the dir to 0 and re-triggers the download;
+    #    a truncated one lands under 900,000,000 and does too. Mirrors the
+    #    models/ltx-2.3 entry in call 1, which gates a single ~1GB file the same way.
+    Invoke-ModelDownload -Name "IC-LoRA Deblur (1 file)" `
+        -Repo "Rootport/Nz-LTX23-weights" `
+        -Include @("ltx-2.3-ic-lora-deblur/*") `
+        -LocalDir "models" `
+        -Check @(
+            @{ Dir = "models/ltx-2.3-ic-lora-deblur"; Min = [long] 900000000 }
+        )
+
+    # 5) Video-Depth-Anything preprocessor model, 2 files / 116,452,112 B:
+    #      preprocessors-vda/video_depth_anything_vits.pth  (116.4MB)
+    #      preprocessors-vda/LICENSE                        (11,356 B, Apache-2.0)
+    #    The Small (vits) checkpoint behind the depth-control IC-LoRA: it turns the
+    #    reference video into the grayscale depth map that is then fed to the SAME
+    #    union-control adapter canny/pose already use. engine/preprocess/depth.py
+    #    loads it from models/preprocessors-vda/ by an absolute path built from its
+    #    own file location, so this layout is not negotiable (mirrors dwpose.py).
+    #    The bundled LICENSE is the Apache-2.0 text this checkpoint ships under --
+    #    a DIFFERENT licence from everything else in the weights repo (which is
+    #    LTX-2 Community Licence), so it must travel with the .pth, not be dropped.
+    #
+    #    Separate Check directory for the same structural reason as call 4, and
+    #    NOTE the near-miss in the naming: models/preprocessors-vda is a SIBLING of
+    #    the DWPose models/preprocessors, not a child, so neither directory's
+    #    recursive sum can ever see the other's bytes. (Had it been named
+    #    models/preprocessors/vda/, its 116MB would have padded the DWPose guard and
+    #    masked a missing 135MB dw-ll_ucoco.) The include glob is likewise distinct:
+    #    fnmatch's "preprocessors/*" does not match "preprocessors-vda/...".
+    #
+    #    Min sizing: the step 6 table gates ONLY the .pth inside this dir (LICENSE is
+    #    documentation -- losing it produces no MISSING row, so per the sizing rule
+    #    it does not have to be catchable, and making it so would demand an
+    #    11,356-byte-wide window). So the Min only has to sit above
+    #    (116,452,112 - 116,440,756 = 11,356) and at/below the .pth's own size, so
+    #    that the verdict is identical with or without the LICENSE file present:
+    #      preprocessors-vda      116,452,112, 2 files    -> Min 110,000,000
+    #    Both files present = 116,452,112 -> SKIP. LICENSE alone missing =
+    #    116,440,756 -> still SKIP (nothing step 6 checks is gone). .pth missing or
+    #    truncated = 11,356 (or < 110,000,000) -> download.
+    Invoke-ModelDownload -Name "Video-Depth-Anything Small preprocessor (2 files)" `
+        -Repo "Rootport/Nz-LTX23-weights" `
+        -Include @("preprocessors-vda/*") `
+        -LocalDir "models" `
+        -Check @(
+            @{ Dir = "models/preprocessors-vda"; Min = [long] 110000000 }
+        )
 }
 
 # ----------------------------------------------------------------------------
@@ -669,15 +750,18 @@ if ($SkipModels) {
 #    We ALSO check the app venv python (needed to run the server) and the smoke
 #    test file when -RunSmoke.
 #
-#    The 4 IC-LoRA / DWPose rows at the end are a deliberate widening: _real_available()
-#    does not look at them (their absence downgrades no backend to mock), but
-#    config.yaml registers all three ic_loras: entries unconditionally and
-#    gradio_ui/adapters.py falls back to the same three names even when nothing is
+#    The 6 IC-LoRA / preprocessor rows at the end are a deliberate widening:
+#    _real_available() does not look at them (their absence downgrades no backend to
+#    mock), but config.yaml registers every ic_loras: entry unconditionally and
+#    gradio_ui/adapters.py falls back to the same names even when nothing is
 #    registered. A missing file there is therefore invisible until a user picks the
 #    adapter and gets a 404, which is exactly the failure this table exists to
-#    convert into an up-front, named MISSING. Both source repos guard tightly enough
-#    (see the per-directory Min note in step 5) that a MISSING here is cleared by
-#    re-running.
+#    convert into an up-front, named MISSING. The last two rows extend that same
+#    protection to the adapters added 2026-08 (deblur, and depth-control -- whose
+#    404 would come from the missing VDA checkpoint rather than from the adapter
+#    file, since depth-control re-uses the union-control weights). All source repos
+#    guard tightly enough (see the per-directory Min note in step 5) that a MISSING
+#    here is cleared by re-running.
 # ----------------------------------------------------------------------------
 Write-Step "Verification (required load-bearing artifacts)"
 
@@ -697,6 +781,8 @@ $required = @(
     @{ Label = "ic_lora union-control (canny/pose)"; Rel = "models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"; IsDir = $false; Min = [long]600000000 }
     @{ Label = "dwpose detector (yolox_l)"; Rel = "models/preprocessors/yolox_l.torchscript.pt";                                  IsDir = $false; Min = [long]200000000 }
     @{ Label = "dwpose estimator (dw-ll_ucoco)"; Rel = "models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt";                 IsDir = $false; Min = [long]120000000 }
+    @{ Label = "ic_lora deblur";          Rel = "models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors";       IsDir = $false; Min = [long]800000000 }
+    @{ Label = "vda depth model (vits)";  Rel = "models/preprocessors-vda/video_depth_anything_vits.pth";                         IsDir = $false; Min = [long]110000000 }
 )
 
 $rows = @()

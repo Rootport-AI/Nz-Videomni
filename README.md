@@ -254,9 +254,9 @@ provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR
 > できる前に作られた環境）も貼り直しになります。「`git pull` のあとに `setup.bat` を再実行する」
 > という更新手順は、この仕組みで成り立っています。
 
-必要なモデル（`setup.bat` / `install_ltx.ps1` が自動でダウンロードする全 20 ファイル。上5行は `config.yaml` の
-`model:` が参照し、相対パスは PROJECT_ROOT 基準で絶対化されます。下2行のうち IC-LoRA は `model.ic_loras:` が参照し、
-DWPose 前処理器は `engine/preprocess/dwpose.py` が固定パスで読みます）:
+必要なモデル（`setup.bat` / `install_ltx.ps1` が自動でダウンロードします。上5行は `config.yaml` の
+`model:` が参照し、相対パスは PROJECT_ROOT 基準で絶対化されます。下4行のうち IC-LoRA 2 種は `model.ic_loras:` が参照し、
+DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`・`engine/preprocess/depth.py` がそれぞれ固定パスで読みます）:
 
 | 要素 | 既定パス | 概算 | 取得元リポジトリ | 役割 |
 |------|----------|------|------------------|------|
@@ -265,20 +265,22 @@ DWPose 前処理器は `engine/preprocess/dwpose.py` が固定パスで読みま
 | component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 46GB モノリスを置換する小単体ファイル |
 | spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 2段生成の x2 アップサンプラ |
 | Gemma tokenizer dir (`gemma_root`) | `models/gemma-3-12b-it-tokenizer/` | ~40MB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
-| IC-LoRA 2点 | `models/ltx-2.3-ic-lora/{pixel-spatial-upscaler,union-control}/*.safetensors` | ~1.2GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `config.yaml` の `ic_loras:` が登録する3アダプタの実体（`pixel-spatial-upscaler-x2` と、同一の union-control ファイルを2つの名前で公開した `canny-control` / `pose-control`） |
+| IC-LoRA 2点 | `models/ltx-2.3-ic-lora/{pixel-spatial-upscaler,union-control}/*.safetensors` | ~1.2GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `config.yaml` の `ic_loras:` が登録するアダプタの実体（`pixel-spatial-upscaler-x2` と、同一の union-control ファイルを3つの名前で公開した `canny-control` / `pose-control` / `depth-control`） |
 | DWPose 前処理器 2点 | `models/preprocessors/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt` | ~0.34GB | [`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose) | `pose-control` アダプタが参照動画から骨格を起こすときに使う姿勢推定モデル（`engine/preprocess/dwpose.py` が絶対パスで読む） |
+| IC-LoRA Deblur 1点 | `models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | ~0.91GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | ピンぼけした動画をくっきりさせる `deblur` アダプタの実体。前処理を必要とせず、ぼけた参照動画をそのまま渡す（2026-08-03 追加） |
+| VDA 深度前処理器 2点 | `models/preprocessors-vda/video_depth_anything_vits.pth` ＋ `LICENSE` | ~0.12GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `depth-control` アダプタが参照動画から深度マップ（手前と奥の距離を明暗で表した白黒映像）を起こすときに使う Video-Depth-Anything Small（`engine/preprocess/depth.py` が絶対パスで読む）。同梱の `LICENSE` は Apache-2.0 の全文で、この重みだけライセンスが異なるため必ず一緒に置かれる（2026-08-03 追加） |
 
-上記7要素はすべて、本プロジェクトが再ホストした **3つの公開リポジトリ**（`Rootport/Nz-LTX23-weights`・
+上記9要素はすべて、本プロジェクトが再ホストした **3つの公開リポジトリ**（`Rootport/Nz-LTX23-weights`・
 `Rootport/Nz-Gemma3-12B`・`Rootport/Nz-DWPose`）から取得します。いずれも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、
 **HuggingFace のアカウントもアクセストークンも一切必要ありません**。`setup.bat`（内部で
-`scripts/install_ltx.ps1` を呼びます）を実行すれば、3回のダウンロード（合計 20 ファイル・31,889,519,494 バイト＝約 29.7GiB）で全部揃います。
+`scripts/install_ltx.ps1` を呼びます）を実行すれば、5回のダウンロード（合計 23 ファイル・32,912,043,043 バイト＝約 30.7GiB）で全部揃います。
 3リポジトリの内部構造は上表の `models/` 配下と 1 対 1 で一致させてあるので、
 `models/` へそのまま展開されます（配置換えやリネームは発生しません）。
 
-**IC-LoRA と DWPose 前処理器も `install_ltx.ps1` が自動で取得します（手動配置は不要です）。** インストールの最後に出る
-検証テーブル（14 項目）は、この 2 種類も含めて 1 ファイルずつ PASS/MISSING を表示します。ここが MISSING のまま気づかないと、
-UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control`）が出るのに、選んだ瞬間に 404 になる
-——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
+**IC-LoRA・DWPose 前処理器・VDA 深度前処理器も `install_ltx.ps1` が自動で取得します（手動配置は不要です）。** インストールの最後に出る
+検証テーブル（16 項目）は、これらも含めて 1 ファイルずつ PASS/MISSING を表示します。ここが MISSING のまま気づかないと、
+UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）が出るのに、
+選んだ瞬間に 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
 
 > **削除済み（2026-07-01 の refactor）**: (1) 46GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B ＝ 約 43GiB。
 > 資料によって「43GB」と書かれていることがあるが、GiB 表記の同一ファイルを指す）を物理削除。

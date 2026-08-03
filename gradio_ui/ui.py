@@ -595,6 +595,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ), "lbl_ref_video")
                             reg(gr.Markdown(L("note_ref128"),
                                             elem_classes=["note"]), "note_ref128", "value")
+                            # Static hints for the newer control adapters (depth-control,
+                            # deblur). No adapter-conditional show/hide mechanism exists
+                            # (only ref_video's enabled state tracks the selection via
+                            # on_adapter_change), so these stay always-visible notes like
+                            # note_ref128 above rather than adding a new UI mechanism.
+                            reg(gr.Markdown(L("note_iclora_aspect"),
+                                            elem_classes=["note"]), "note_iclora_aspect", "value")
+                            reg(gr.Markdown(L("note_iclora_depth"),
+                                            elem_classes=["note"]), "note_iclora_depth", "value")
+                            reg(gr.Markdown(L("note_iclora_deblur"),
+                                            elem_classes=["note"]), "note_iclora_deblur", "value")
 
                         # accordion: Audio-to-Video (案A). Attaching an audio
                         # file routes generate() down the A2V path (src_audio,

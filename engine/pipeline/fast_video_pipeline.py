@@ -981,8 +981,8 @@ class LTXFastVideoPipeline:
             ConditioningItemAttentionStrengthWrapper,
             VideoConditionByReferenceLatent,
         )
+        from engine.pipeline.common import load_video_conditioning_cpu
         from ltx_pipelines.utils.helpers import cleanup_memory
-        from ltx_pipelines.utils.media_io import load_video_conditioning
 
         ref_path, ref_strength = self._ic_reference
         scale = self._ic_reference_downscale_factor
@@ -1060,7 +1060,11 @@ class LTXFastVideoPipeline:
                 _alloc_before = torch.cuda.memory_allocated() // _mb
                 _reserved_before = torch.cuda.memory_reserved() // _mb
 
-            video = load_video_conditioning(
+            # CPU-assembled reference pixels: the wheel's load_video_conditioning
+            # cats the growing tensor ON THE GPU, so its allocation volume grows
+            # with the SQUARE of the frame count (measured 46.8GB reserved at
+            # 640x384x257). Numerics are bit-identical — see the docstring.
+            video = load_video_conditioning_cpu(
                 video_path=ref_path,
                 height=ref_height,
                 width=ref_width,
@@ -1080,6 +1084,10 @@ class LTXFastVideoPipeline:
                     video, cond_kwargs.get("tiling_config")
                 )
             else:
+                # VideoEncoder.forward expects its input already on the compute
+                # device (tiled_encode above moves tiles itself; the plain call
+                # does not). dtype is already final (normalize_latent).
+                video = video.to(device)
                 encoded_video = video_encoder(video)
             del video
             if _accel:

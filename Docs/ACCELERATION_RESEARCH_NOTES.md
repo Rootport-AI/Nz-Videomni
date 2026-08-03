@@ -29,6 +29,8 @@ GGUFの逆量子化（dequantization）と行列積（GEMM）を1カーネルへ
 
 IC-LoRA Depth／DeblurのOOM修正（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.9）で判明した、torch 2.9.1のbf16 Conv3dのim2colフォールバックは、係数1（Deblur）だけでなく**係数2（canny/pose等の既存制御系）のuntiled参照エンコードでも同じ構造で起きる**。実測では257フレームでピーク8.4GBだった。バイト一致制約（既存アダプタの出力を変えないという§49.9の要件）を優先したため今回は対処していないが、その制約が緩む場面（例えば§3-42の長尺チャンク化を単発生成へ移植する際）には削減余地として残る。
 
+なお、参照動画そのものの読み込み経路（wheelの`load_video_conditioning`がフレームを1枚ずつGPU上で`torch.cat`連結する実装で、確保総量がフレーム数の2乗に比例して膨張する問題）は別件として特定・根治済みである——`engine/pipeline/common.py`のCPU組み立て版（`load_video_conditioning_cpu`）へ置換した（2026-08-04、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.10）。
+
 ### 4. fp32エンコード案（却下）
 
 Conv3dのim2colフォールバックを避ける代替として参照エンコードをfp32で行う案を検討したが、**却下**。実測でピークが2倍悪化し、速度も1.5倍遅くなった。

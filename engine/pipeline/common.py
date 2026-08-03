@@ -80,6 +80,63 @@ def encode_video_output(
     )
 
 
+def load_video_conditioning_cpu(
+    *,
+    video_path: str,
+    height: int,
+    width: int,
+    frame_cap: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """Numerics-preserving, low-VRAM twin of ``media_io.load_video_conditioning``.
+
+    The installed ``load_video_conditioning`` decodes every frame onto ``device``
+    (GPU), preprocesses it there, and ``torch.cat``s the growing (1,C,F,H,W)
+    tensor **on the GPU** — allocating a fresh full-size buffer per frame while
+    the previous one is still live, so the total allocated volume grows with the
+    SQUARE of the frame count (F(F+1)/2 frame-sized buffers). At 640x384x257
+    that is a measured 46.8GB of reserved VRAM for a tensor whose final size is
+    ~380MB; on Windows it does not even fail, it silently spills into shared
+    memory and drags the whole job down.
+
+    This twin runs the EXACT same per-frame ops on the EXACT same device (GPU) in
+    the same dtype flow — ``decode_video_from_file`` -> ``resize_and_center_crop``
+    on float32 -> ``normalize_latent`` to ``dtype`` — but moves each processed
+    frame to CPU immediately and assembles the (1,C,F,H,W) tensor on CPU with a
+    single ``torch.cat``. The GPU holds at most one frame at a time. Because the
+    resize/normalize math still runs on the GPU, the per-frame values are
+    bit-identical to the installed loader; the CPU copy is a pure device transfer
+    (no arithmetic), and ``torch.cat`` is a deterministic copy, so the assembled
+    tensor is byte-identical to the installed loader's output apart from residing
+    on CPU. Measured on the same 640x384x257 case: reserved 46,794MB -> 20MB,
+    9.45s -> 0.90s, output ``torch.equal`` with the installed loader.
+
+    Callers that hand the result to ``VideoEncoder.tiled_encode`` can pass the
+    CPU tensor straight through (tiled_encode streams tiles back to the GPU one
+    at a time); callers that call the encoder directly must ``.to(device)`` first.
+
+    Behaviour difference on a 0-frame video: the installed loader returns ``None``
+    (its accumulator never gets a first frame), whereas this twin raises from
+    ``torch.cat`` on an empty list. Both are failure paths for callers that
+    require pixels; no production caller feeds a 0-frame source.
+    """
+    from ltx_pipelines.utils.media_io import (
+        decode_video_from_file,
+        normalize_latent,
+        resize_and_center_crop,
+    )
+
+    frames_cpu: list[torch.Tensor] = []
+    for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
+        # Same ops, same device (GPU), same dtype flow as load_video_conditioning.
+        frame = resize_and_center_crop(f.to(torch.float32), height, width)
+        frame = normalize_latent(frame, device, dtype)
+        frames_cpu.append(frame.to("cpu"))
+        del f, frame
+    return torch.cat(frames_cpu, dim=2)
+
+
 class DistilledNativePipeline:
     """Fast native pipeline implementation moved from ltx2_server.py."""
 

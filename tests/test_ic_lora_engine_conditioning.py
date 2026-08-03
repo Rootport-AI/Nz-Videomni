@@ -8,9 +8,10 @@ below 1.0 it is wrapped in ``ConditioningItemAttentionStrengthWrapper`` with the
 scalar strength as its ``attention_mask`` (upstream ``iclora_utils`` parity).
 
 Unit-level: no GPU, no model load, no LTX wheel. The pipeline module imports the
-``ltx_core`` conditioning classes + the ``ltx_pipelines`` media loader LAZILY
-inside the method under test, so we inject tiny stand-in modules into
-``sys.modules`` and drive the real method end-to-end.
+``ltx_core`` conditioning classes LAZILY inside the method under test (the video
+loader is the repo's own ``engine.pipeline.common.load_video_conditioning_cpu``,
+monkeypatched directly), so we inject tiny stand-in modules into ``sys.modules``
+and drive the real method end-to-end.
 
 Run this file in the ENGINE venv — the app ``.venv`` has no torch, so
 ``importorskip("torch")`` skips the whole module there:
@@ -56,33 +57,43 @@ class _FakeVideoEncoder:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.tiling_configs: list[object] = []
+        self.inputs: list[object] = []
 
     def __call__(self, video):
         self.calls.append("plain")
+        self.inputs.append(video)
         return torch.zeros(1, 128, 3, 4, 5)
 
     def tiled_encode(self, video, tiling_config=None):
         self.calls.append("tiled")
         self.tiling_configs.append(tiling_config)
+        self.inputs.append(video)
         return torch.zeros(1, 128, 3, 4, 5)
 
 
 @pytest.fixture
 def stub_ltx(monkeypatch):
-    """Inject stub ``ltx_core.conditioning`` + ``ltx_pipelines.utils.media_io``.
+    """Inject stub ``ltx_core.conditioning`` + a stub reference-video loader.
 
     The method under test does ``from ltx_core.conditioning import (...)`` and
-    ``from ltx_pipelines.utils.media_io import load_video_conditioning`` at call
-    time, so pre-seeding sys.modules with these stubs (parents included) makes the
-    imports resolve without the real wheel. monkeypatch restores sys.modules.
+    ``from engine.pipeline.common import load_video_conditioning_cpu`` at call
+    time, so pre-seeding sys.modules with the ltx stubs (parents included) makes
+    the wheel imports resolve without the real wheel, and monkeypatching the
+    loader on ``engine.pipeline.common`` is picked up by the lazy import.
+    monkeypatch restores both.
     """
     cond_mod = types.ModuleType("ltx_core.conditioning")
     cond_mod.VideoConditionByReferenceLatent = _StubVideoConditionByReferenceLatent
     cond_mod.ConditioningItemAttentionStrengthWrapper = _StubAttentionStrengthWrapper
 
-    media_mod = types.ModuleType("ltx_pipelines.utils.media_io")
-    media_mod.load_video_conditioning = lambda **kw: torch.zeros(
-        1, 3, int(kw["frame_cap"]), int(kw["height"]), int(kw["width"])
+    import engine.pipeline.common as common_mod
+
+    monkeypatch.setattr(
+        common_mod,
+        "load_video_conditioning_cpu",
+        lambda **kw: torch.zeros(
+            1, 3, int(kw["frame_cap"]), int(kw["height"]), int(kw["width"])
+        ),
     )
 
     # cleanup_memory (gc + empty_cache + synchronize) is called before the
@@ -96,7 +107,6 @@ def stub_ltx(monkeypatch):
         ("ltx_pipelines", types.ModuleType("ltx_pipelines")),
         ("ltx_pipelines.utils", types.ModuleType("ltx_pipelines.utils")),
         ("ltx_pipelines.utils.helpers", helpers_mod),
-        ("ltx_pipelines.utils.media_io", media_mod),
     ):
         monkeypatch.setitem(sys.modules, name, mod)
     return cond_mod
@@ -114,7 +124,7 @@ class _FakePipe:
 _TILING_SENTINEL = object()  # stands in for the TilingConfig the callers pass through
 
 
-def _call(attn_strength: float, scale: int = 2, encoder=None):
+def _call(attn_strength: float, scale: int = 2, encoder=None, device="cpu"):
     """Invoke the real (unbound) method against a fake pipe + stage-1 cond_kwargs."""
     full_height = 768
     cond_height = full_height // 2  # 384 -> stage-1 gate passes
@@ -124,7 +134,7 @@ def _call(attn_strength: float, scale: int = 2, encoder=None):
         "width": cond_width,
         "video_encoder": encoder if encoder is not None else _FakeVideoEncoder(),
         "dtype": torch.float32,
-        "device": torch.device("cpu"),
+        "device": torch.device(device),
         "tiling_config": _TILING_SENTINEL,
     }
     fake = _FakePipe(attn_strength, scale=scale)
@@ -186,6 +196,27 @@ def test_scale_two_stays_untiled(stub_ltx):
     assert enc.calls == ["plain"]
     assert enc.tiling_configs == []
     assert conds[0].downscale_factor == 2
+
+
+def test_scale_two_moves_video_to_device(stub_ltx):
+    """The loader now assembles the reference on the CPU, so the UNTILED factor-2
+    path must ``.to(device)`` it before calling the encoder (VideoEncoder.forward
+    expects device-resident input; tiled_encode moves tiles itself).
+
+    ``device="meta"`` is the probe: it is not cuda (so the channels_last_3d /
+    measurement branch stays off) yet it is distinguishable from the loader's
+    "cpu" output, so a missing ``.to(device)`` shows up as a cpu tensor reaching
+    the encoder — the regression that would silently kill every factor-2 job."""
+    enc = _FakeVideoEncoder()
+    _call(1.0, scale=2, encoder=enc, device="meta")
+    assert enc.calls == ["plain"]
+    assert enc.inputs[0].device.type == "meta"
+
+    # ...and the tiled factor-1 path must NOT move it (tiles stream themselves).
+    enc1 = _FakeVideoEncoder()
+    _call(1.0, scale=1, encoder=enc1, device="meta")
+    assert enc1.calls == ["tiled"]
+    assert enc1.inputs[0].device.type == "cpu"
 
 
 def test_reference_conditioning_unresolved_factor_raises(stub_ltx):

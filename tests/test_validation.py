@@ -169,3 +169,448 @@ def test_distilled_requires_8_steps(client):
     )
     assert r.status_code == 422
     assert "num_inference_steps=8" in r.text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NAG (Normalized Attention Guidance) — GenerateRequest / GenerateChainRequest.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CHAIN_BASE = {
+    "prompt": "a serene mountain lake at dawn",
+    "width": 384,
+    "height": 256,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "guidance_scale": 1.0,
+    "pipeline": "distilled",
+    "overlap_frames": 2,
+    "overlap_strength": 0.5,
+    "clips": [{"num_frames": 25}, {"num_frames": 25}],
+}
+
+
+def test_nag_enabled_requires_nonempty_negative_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "nag_enabled": True, "negative_prompt": ""},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_requires_nonempty_negative_generate_whitespace_only(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "nag_enabled": True, "negative_prompt": "   "},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_requires_nonempty_negative_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "nag_enabled": True, "negative_prompt": ""},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_requires_nonempty_negative_chain_whitespace_only(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "nag_enabled": True, "negative_prompt": "   "},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_nag_enabled_with_negative_prompt_accepted_and_defaults():
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+        nag_enabled=True, negative_prompt="blurry, low quality",
+    )
+    assert req.nag_enabled is True
+    assert req.nag_scale == 11.0
+    assert req.nag_tau == 2.5
+    assert req.nag_alpha == 0.25
+
+
+def test_nag_enabled_with_negative_prompt_accepted_and_defaults_chain():
+    from api.models import GenerateChainRequest
+
+    req = GenerateChainRequest(
+        **{**CHAIN_BASE, "nag_enabled": True, "negative_prompt": "blurry, low quality"}
+    )
+    assert req.nag_enabled is True
+    assert req.nag_scale == 11.0
+    assert req.nag_tau == 2.5
+    assert req.nag_alpha == 0.25
+
+
+def test_nag_scale_out_of_range_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x", "nag_scale": 0.5},
+    )
+    assert r.status_code == 422
+
+
+def test_nag_tau_out_of_range_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x", "nag_tau": 0.5},
+    )
+    assert r.status_code == 422
+
+
+def test_nag_alpha_out_of_range_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x", "nag_alpha": 1.5},
+    )
+    assert r.status_code == 422
+
+
+def test_nag_fields_omitted_defaults_disabled(client):
+    # Regression guard: a request that omits every nag field is unaffected.
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49},
+    )
+    assert r.status_code == 202
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.nag_enabled is False
+
+
+def test_negative_prompt_over_2000_chars_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "negative_prompt": "x" * 2001},
+    )
+    assert r.status_code == 422
+
+
+def test_negative_prompt_over_2000_chars_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "negative_prompt": "x" * 2001},
+    )
+    assert r.status_code == 422
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VSF (Value Sign Flip, arXiv:2508.10931) — GenerateRequest / GenerateChainRequest.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_neg_method_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "neg_method": "not-a-method"},
+    )
+    assert r.status_code == 422
+
+
+def test_neg_method_invalid_value_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "neg_method": "not-a-method"},
+    )
+    assert r.status_code == 422
+
+
+def test_vsf_scale_out_of_range_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "vsf_scale": -0.1},
+    )
+    assert r.status_code == 422
+
+
+def test_vsf_scale_above_cap_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "vsf_scale": 10.1},
+    )
+    assert r.status_code == 422
+
+
+def test_vsf_scale_out_of_range_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "vsf_scale": -0.1},
+    )
+    assert r.status_code == 422
+
+
+def test_vsf_scale_above_cap_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "vsf_scale": 10.1},
+    )
+    assert r.status_code == 422
+
+
+def test_neg_method_vsf_requires_nonempty_negative_generate(client):
+    # neg_method="vsf" is also covered by the shared nag_enabled validator
+    # (nag_enabled is the non-CFG-negative master toggle for both methods).
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "nag_enabled": True, "negative_prompt": "", "neg_method": "vsf"},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_neg_method_vsf_requires_nonempty_negative_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "nag_enabled": True, "negative_prompt": "",
+              "neg_method": "vsf"},
+    )
+    assert r.status_code == 422
+    assert "nag_enabled requires a non-empty negative_prompt" in r.text
+
+
+def test_vsf_fields_default_values_generate():
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.neg_method == "nag"
+    assert req.vsf_scale == 1.5
+
+
+def test_vsf_fields_default_values_chain():
+    from api.models import GenerateChainRequest
+
+    req = GenerateChainRequest(**CHAIN_BASE)
+    assert req.neg_method == "nag"
+    assert req.vsf_scale == 1.5
+
+
+def test_vsf_fields_accepted_generate():
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+        nag_enabled=True, negative_prompt="blurry, low quality",
+        neg_method="vsf", vsf_scale=1.7,
+    )
+    assert req.neg_method == "vsf"
+    assert req.vsf_scale == 1.7
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Acceleration — attention_backend / block_swap_prefetch /
+# fused_gguf_dequant_kernel (all implemented) + the MOCK field
+# (vae_mode, accepted but never consumed).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_acceleration_fields_default_values_generate():
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.attention_backend == "sdpa"
+    # S4 (2026-08-01): default flipped True once the real-device gate
+    # (bit-exact output + VRAM headroom, G1-G7) passed.
+    assert req.block_swap_prefetch is True
+    # §1-11 (2026-08-04): default flipped True once the real-device gates
+    # G1-G8 passed (bit-identical output, ~17.5% faster) and the owner approved
+    # -- the same "gate green -> default on" step block_swap_prefetch took.
+    assert req.fused_gguf_dequant_kernel is True
+    assert req.vae_mode == "default"
+
+
+def test_acceleration_fields_default_values_chain():
+    from api.models import GenerateChainRequest
+
+    req = GenerateChainRequest(**CHAIN_BASE)
+    assert req.attention_backend == "sdpa"
+    assert req.block_swap_prefetch is True
+    assert req.fused_gguf_dequant_kernel is True
+    assert req.vae_mode == "default"
+
+
+def test_acceleration_fields_accepted_generate(client):
+    # All four at non-default values are ACCEPTED (no validator gates them —
+    # sage availability is a runtime capability, not a request constraint: an
+    # engine without sage degrades to sdpa rather than rejecting the job).
+    # block_swap_prefetch=True is likewise accepted regardless of whether block
+    # swap is actually configured server-side — it silently no-ops there.
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "attention_backend": "sage", "block_swap_prefetch": True,
+              "fused_gguf_dequant_kernel": True,
+              "vae_mode": "prune_vaed"},
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_acceleration_fields_accepted_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "attention_backend": "sage",
+              "block_swap_prefetch": True,
+              "fused_gguf_dequant_kernel": True, "vae_mode": "prune_vaed"},
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_attention_backend_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "attention_backend": "flash"},
+    )
+    assert r.status_code == 422
+
+
+def test_attention_backend_invalid_value_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "attention_backend": "flash"},
+    )
+    assert r.status_code == 422
+
+
+def test_block_swap_prefetch_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "block_swap_prefetch": "not-a-bool"},
+    )
+    assert r.status_code == 422
+
+
+def test_block_swap_prefetch_invalid_value_rejected_chain(client):
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "block_swap_prefetch": "not-a-bool"},
+    )
+    assert r.status_code == 422
+
+
+def test_vae_mode_invalid_value_rejected_generate(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "vae_mode": "not-a-mode"},
+    )
+    assert r.status_code == 422
+
+
+def test_chain_to_clip_request_transcribes_acceleration_fields():
+    # DIRECT guard for the to_clip_request transcription (the LIVE path
+    # job_store.create_chain_if_idle uses to build JobRecord.request). Unlike the
+    # nag fields, an omission here does NOT fail validation -- it silently
+    # degrades a chain job's stored request to the sdpa/default values, so GET
+    # /jobs and metadata.json would mis-report what was asked for. Only this
+    # direct check can catch it.
+    from api.models import GenerateChainRequest
+
+    model = GenerateChainRequest(**{
+        **CHAIN_BASE,
+        "attention_backend": "sage",
+        "block_swap_prefetch": True,
+        "fused_gguf_dequant_kernel": True,
+        "vae_mode": "prune_vaed",
+    })
+    clip0 = model.to_clip_request(0)
+    assert clip0.attention_backend == "sage"
+    assert clip0.block_swap_prefetch is True
+    assert clip0.fused_gguf_dequant_kernel is True
+    assert clip0.vae_mode == "prune_vaed"
+
+    # ...and the default chain transcribes the defaults (no accidental flip).
+    plain = GenerateChainRequest(**CHAIN_BASE).to_clip_request(0)
+    assert plain.attention_backend == "sdpa"
+    assert plain.block_swap_prefetch is True
+    assert plain.fused_gguf_dequant_kernel is True
+    assert plain.vae_mode == "default"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# keep_resident (cross-job CPU-skeleton cache, §48)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_keep_resident_defaults_off_and_is_accepted(client):
+    from api.models import (
+        KEEP_RESIDENT_DEFAULT,
+        GenerateChainRequest,
+        GenerateRequest,
+    )
+
+    # The default is OFF on BOTH models -- the opposite direction from
+    # block_swap_prefetch, which is the single easiest thing to get backwards
+    # when copying that feature's wiring.
+    assert KEEP_RESIDENT_DEFAULT is False
+    req = GenerateRequest(
+        prompt="x", width=512, height=320, num_frames=49,
+        num_inference_steps=8, guidance_scale=1.0, pipeline="distilled",
+    )
+    assert req.keep_resident is False
+    assert GenerateChainRequest(**CHAIN_BASE).keep_resident is False
+
+    # Accepted at both endpoints with no availability gate: whether ~20GB of
+    # main memory is a good idea is a property of the user's machine, not of
+    # the request, so the server never rejects it (and /status does not
+    # advertise it either).
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "keep_resident": True},
+    )
+    assert r.status_code == 202, r.text
+    r = client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BASE, "keep_resident": True},
+    )
+    assert r.status_code == 202, r.text
+
+    # A non-bool is still a 422 (pydantic), like block_swap_prefetch.
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "keep_resident": "not-a-bool"},
+    )
+    assert r.status_code == 422
+
+
+def test_chain_to_clip_request_transcribes_keep_resident():
+    # Same trap as the acceleration fields above: an omission here does NOT
+    # fail validation, it just makes a chain job's stored request (GET /jobs,
+    # metadata.json) claim keep_resident=False for a run that asked for True.
+    from api.models import GenerateChainRequest
+
+    model = GenerateChainRequest(**{**CHAIN_BASE, "keep_resident": True})
+    assert model.to_clip_request(0).keep_resident is True
+    assert GenerateChainRequest(**CHAIN_BASE).to_clip_request(0).keep_resident is False

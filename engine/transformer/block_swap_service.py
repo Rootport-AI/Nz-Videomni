@@ -9,6 +9,13 @@ Usage:
     service = BlockSwapService(blocks_on_gpu=20, device=torch.device("cuda:0"))
     service.install(transformer)   # call once after model load
     service.uninstall(transformer) # call to restore original behaviour
+
+Optional per-job prefetching (``prefetch_requested``): when a job opts in, the
+same window is served by ``block_swap_prefetch.PrefetchEngine`` instead — the
+H2D transfer runs ahead of the compute on its own CUDA stream and the D2H
+eviction disappears entirely. The synchronous path below is left byte-identical
+so that OFF remains an exact A/B baseline; a prefetch that cannot be set up
+(no pinned memory, non-CUDA device) simply falls back to it.
 """
 
 from __future__ import annotations
@@ -53,12 +60,32 @@ class BlockSwapService:
         self.device = device
         self._installed_transformers: list[nn.Module] = []
 
+        # ── Per-job prefetch (opt-in) ─────────────────────────────────────
+        # `prefetch_requested` is written by the pipeline's per-job setter and
+        # read by install(); `last_prefetch_used` is what the job actually got
+        # ("off" / "on" / "on->off"), or None until install() has decided.
+        self.prefetch_requested = False
+        self.last_prefetch_used: str | None = None
+        self._prefetch_engine: Any = None
+        # Pinned staging buffers and the transfer stream are expensive to
+        # create and safe to share, so they live on the resident service and
+        # survive teardown_prefetch(); only the engine is per-job.
+        self._pinned_pool: Any = None
+        self._xfer_stream: Any = None
+
     # ------------------------------------------------------------------ #
     # Public API                                                           #
     # ------------------------------------------------------------------ #
 
     def install(self, transformer: nn.Module) -> None:
         """Patch transformer blocks with swap hooks. Idempotent."""
+        # Safety net for a job that never reached its finally (the normal
+        # teardown site): a no-op when nothing is in flight. Also resets the
+        # verdict so an early return below reports "off" rather than the
+        # previous job's value.
+        self.teardown_prefetch()
+        self.last_prefetch_used = "off"
+
         if self.blocks_on_gpu == 0:
             logger.info("BlockSwap disabled (blocks_on_gpu=0)")
             return
@@ -85,9 +112,20 @@ class BlockSwapService:
         for block in blocks:
             block.to("cpu")
 
+        # Opt-in prefetching. Everything about it is confined to this branch:
+        # when the job did not ask for it the only added cost is the bool read.
+        engine = self._build_prefetch_engine(blocks) if self.prefetch_requested else None
+        self._prefetch_engine = engine
+        self.last_prefetch_used = (
+            "on" if engine is not None else ("on->off" if self.prefetch_requested else "off")
+        )
+
         # Patch each block with a swap-in / swap-out forward wrapper.
         for idx, block in enumerate(blocks):
-            self._patch_block(block, idx, blocks)
+            if engine is None:
+                self._patch_block(block, idx, blocks)
+            else:
+                self._patch_block_prefetch(block, idx, engine)
 
         # Resident-reuse leak fix: the BlockSwapService is a single resident
         # instance, and install() runs on a freshly-built transformer on EVERY
@@ -118,7 +156,26 @@ class BlockSwapService:
         if transformer in self._installed_transformers:
             self._installed_transformers.remove(transformer)
 
+        # Not used in production, but if it ever is: the pinned pool is the one
+        # resource worth handing back when the service is explicitly retired.
+        self.teardown_prefetch()
+        if self._pinned_pool is not None:
+            self._pinned_pool.release()
+
         logger.info("BlockSwap: uninstalled, all blocks moved to %s", self.device)
+
+    def teardown_prefetch(self) -> None:
+        """Drop this job's prefetch state. Idempotent, and never raises.
+
+        Called from the pipeline's per-job ``finally`` — NOT deferred to the
+        next install(), which would keep the finished transformer's 48 CPU
+        masters and one GPU arena alive across the gap between jobs (the same
+        shape of leak as the resident-transformer one fixed in install()).
+        """
+        engine = self._prefetch_engine
+        self._prefetch_engine = None
+        if engine is not None:
+            engine.teardown()
 
     # ------------------------------------------------------------------ #
     # Internal helpers                                                     #
@@ -216,6 +273,73 @@ class BlockSwapService:
             return original_forward(*args, **kwargs)
 
         block.forward = swapped_forward  # type: ignore[method-assign]
+
+    # ------------------------------------------------------------------ #
+    # Prefetch path (only reached when the job opted in)                   #
+    # ------------------------------------------------------------------ #
+
+    def _build_prefetch_engine(self, blocks: list[nn.Module]) -> Any:
+        """Set the prefetch engine up, or return None to use the sync path.
+
+        Every failure mode (no CUDA, cudaHostAlloc refusing ~740MB of pinned
+        memory, an unexpected tensor layout) degrades this job to the existing
+        synchronous swap instead of failing it — this is a speed knob, not a
+        correctness prerequisite.
+        """
+        try:
+            from engine.transformer.block_swap_prefetch import (
+                PinnedStagingPool,
+                PrefetchEngine,
+            )
+
+            if self.device.type != "cuda":
+                raise RuntimeError(f"prefetch needs a CUDA device, got {self.device}")
+            if self._pinned_pool is None:
+                self._pinned_pool = PinnedStagingPool()
+            if self._xfer_stream is None:
+                self._xfer_stream = torch.cuda.Stream(device=self.device)
+
+            engine = PrefetchEngine(
+                blocks, self.device, self.blocks_on_gpu,
+                self._pinned_pool, self._xfer_stream,
+            )
+            engine.prepare()
+            return engine
+        except Exception as exc:  # noqa: BLE001 — any setup failure means "fall back"
+            logger.warning(
+                "BlockSwap prefetch unavailable (%s) — falling back to the "
+                "synchronous path for this job", exc,
+            )
+            return None
+
+    def _patch_block_prefetch(self, block: nn.Module, idx: int, engine: Any) -> None:
+        """Prefetching counterpart of :meth:`_patch_block`.
+
+        The engine owns residency (issue / wait / release), so all that is left
+        here is the input-device fix-up that the synchronous wrapper also does:
+        PyTorch dispatches on the *inputs'* device, so without it the whole
+        forward would silently run on CPU.
+        """
+        # Prefer the stashed original over the current forward: production
+        # rebuilds the transformer every job so they are the same thing, but a
+        # second install() on the SAME block (selfcheck, or a future caller)
+        # would otherwise wrap the previous wrapper and drive two engines.
+        original_forward = getattr(block, _BLOCK_SWAP_ATTR, None) or block.forward
+        # Same attribute the synchronous path sets — uninstall() and the IC-LoRA
+        # phase-B machinery both rely on it being there regardless of mode.
+        setattr(block, _BLOCK_SWAP_ATTR, original_forward)
+
+        device = self.device
+
+        def swapped_forward_prefetch(*args: Any, **kwargs: Any) -> Any:
+            engine.on_block_forward(idx)
+
+            args = _move_to_device(args, device)
+            kwargs = _move_to_device(kwargs, device)
+
+            return original_forward(*args, **kwargs)
+
+        block.forward = swapped_forward_prefetch  # type: ignore[method-assign]
 
 
 def build_block_swap_service(

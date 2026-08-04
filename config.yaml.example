@@ -10,9 +10,8 @@
 #
 # 【開発者向けの注意】
 # config.yaml を変更したら、このファイルも必ず同じように直してください。
-# 両者の同期を強制する仕組みはありません。config.yaml は 24 個のコミットに
-# わたって更新され続けているファイルで、片方だけ直して忘れる事故が起きやすい
-# 場所です。
+# 両者の同期を強制する仕組みはありません。config.yaml は開発を通じて繰り返し
+# 更新され続けているファイルで、片方だけ直して忘れる事故が起きやすい場所です。
 # =============================================================================
 
 server:
@@ -39,10 +38,16 @@ model:
   # component 経路では重みとして開かれない（下記インライン注記の通り）。
   # 相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
   ltx_repo_dir: "./vendor/LTX-2"   # reference only（上流LTX-2クローン）。
-  # reference-only。43GB モノリスは Stage3 で物理削除済み。worker payload には
-  # 渡すが GGUF + component 経路では一切開かれない（rename test で実証）。
-  # DistilledPipeline のシグネチャ用に保持。
-  checkpoint_path: "./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"
+  # 2026-07-28 削除済み（PENDING_TASKS.md §3-26）: ここには以前 checkpoint_path
+  # キー（43GB モノリスの参照専用パス、Stage3 で物理削除済み）があった。調査の結果
+  # 完全に無害な死んだ設定と確定したため削除した——services/ltx_runner.py は
+  # このキーが未設定のときも常に worker payload の checkpoint_path を ""（空文字）
+  # として送っており（実運用で他の値になったことは一度も無い）、DistilledPipeline
+  # 側もその文字列を一切開かない。渡す理由は「None でない str」であることだけ
+  # （ModelLedger.build_model_builders が checkpoint_path is not None を条件に
+  # 後で dataclasses.replace で上書きされる遅延ビルダーを作るため）で、""でその
+  # 条件は満たされる。services/ltx_runner.py 側は同じ "" を直接ハードコードして
+  # いるので、この設定を削除しても worker payload はバイト同一のまま。
   spatial_upsampler_path: "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
   # GGUF Gemma 経路では tokenizer 群のみ必要。DistilledPipeline を gemma_root=None で
   # 構築し wheel の重み glob（model*.safetensors）をバイパス済 → Gemma LM 重みは GGUF 供給、
@@ -66,6 +71,11 @@ model:
     pose-control:
       path: "./models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
       preprocess: dwpose
+    depth-control:
+      path: "./models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
+      preprocess: depth
+    # 前処理不要の制御アダプタ（ぼけた参照動画をそのまま渡す）＝文字列形式
+    deblur: "./models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors"
 
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。
@@ -96,6 +106,8 @@ vram:
   # Path B: VAE/audio/text-projection を 46GB モノリスでなく小単体ファイルから読む。
   # keep_resident=0（ジョブ毎再materialize）でも commit を束縛し、マルチジョブ連続
   # 生成の commit 枯渇 native crash を防ぐ（§9.6 / §8）。720p+連続生成の両立に必須。
+  # ※keep_resident は 2026-08-03 から per-job フィールド化（POST /generate・
+  #   /generate/chain の keep_resident・既定 false）。Docs/VERIFICATION_LOG.md §48。
   use_component_files: true
 
   # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。

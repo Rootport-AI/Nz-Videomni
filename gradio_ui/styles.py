@@ -84,22 +84,26 @@ from __future__ import annotations
 
 CUSTOM_CSS: str = """
 /* ---- .negative-greyed ---------------------------------------------------
-   Negative prompt textbox is functionally disabled (interactive=False;
-   distilled mode runs at CFG=1, so the value has no effect on generation).
-   Grey it out so the non-editability reads visually in both themes. */
-.negative-greyed textarea,
-.negative-greyed input {
+   Negative prompt textbox is dimmed only while non-CFG Negative is off
+   (interactive=False / readonly); the "non-CFG Negative" checkbox flips it
+   back to interactive, at which point these selectors simply no longer
+   match -- no follow-up JS/CSS toggle is needed. Selectors are scoped to the
+   disabled/readonly state itself (not the elem_classes wrapper alone) so the
+   greyed look tracks the live interactive state. */
+.negative-greyed textarea:disabled,
+.negative-greyed textarea[readonly],
+.negative-greyed input:disabled,
+.negative-greyed input[readonly] {
     background: var(--input-background-fill) !important;
     filter: grayscale(40%);
     opacity: 0.6;
     color: var(--body-text-color-subdued) !important;
     cursor: not-allowed;
 }
-.negative-greyed label > span {
-    color: var(--body-text-color-subdued);
-}
-body.dark .negative-greyed textarea,
-body.dark .negative-greyed input {
+body.dark .negative-greyed textarea:disabled,
+body.dark .negative-greyed textarea[readonly],
+body.dark .negative-greyed input:disabled,
+body.dark .negative-greyed input[readonly] {
     opacity: 0.5;
 }
 

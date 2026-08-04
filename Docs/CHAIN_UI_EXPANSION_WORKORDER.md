@@ -126,4 +126,4 @@ Generateタブの Keyframe images（i2v＝画像から動画を生成する機�
 
 ### 遠い将来の構想（今回のスコープ外）
 
-120クリップ級の長尺チェーンをやるとすれば、固定枠の拡張という方式ではなく、バッチA2V機能（[`BATCH_A2V_WORKORDER.md`](BATCH_A2V_WORKORDER.md)）と同様の「表＋State方式のUI＋区間分割生成して繋ぐ再開可能な仕組み」として、別途の設計課題で扱うべきものと位置付ける。
+120クリップ級の長尺チェーン構想は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-10へ移設した。**以後の管理は同書で行う。** 要旨は「やるとすれば固定枠の拡張ではなく、バッチA2V機能（[`BATCH_A2V_WORKORDER.md`](BATCH_A2V_WORKORDER.md)）と同様の『表＋State方式のUI＋区間分割生成して繋ぐ再開可能な仕組み』として別途の設計課題で扱う」。撤回の理由（チェーンが不可分の単一ジョブであるリスク）は上の§2に残す。

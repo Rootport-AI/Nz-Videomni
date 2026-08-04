@@ -64,22 +64,16 @@ if (-not (Test-Path $python)) {
     # ここで throw してはいけない。$ErrorActionPreference = "Stop" のもとでは
     # その場でスクリプトが終わり、下の案内にたどり着かない。
     Write-Host ""
-    Write-Host "========================================================================" -ForegroundColor Red
-    Write-Host "  まだ準備ができていません" -ForegroundColor Red
-    Write-Host "========================================================================" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  先に setup.bat を実行してください。" -ForegroundColor Yellow
-    Write-Host "  場所: $PSScriptRoot\setup.bat"
-    Write-Host ""
-    Write-Host "  （開発者向け: 画面の動きだけを確かめたい場合は"
-    Write-Host "    scripts\install_ltx.ps1 -SkipModels でモデル無しの環境を作れます）"
+    Write-Host "先に setup.bat を実行してください。" -ForegroundColor Yellow
+    Write-Host "  $PSScriptRoot\setup.bat"
+    Write-Host "（開発者向け: scripts\install_ltx.ps1 -SkipModels でモデル無しの環境を作れます）"
     Write-Host ""
     exit 1
 }
 
 # ---------------------------------------------------------------------------
 # 待ち受けポートの割り出し。--port が渡されていればそれを、無ければ既定値。
-# config.yaml でポートを変えた場合はここの表示がずれるが、正しい URL は
+# ここで得たポートは二重起動の判定にだけ使う。利用者に見せる URL は
 # main.py の起動バナーが必ず表示する（そちらが表示の正本）。
 # ---------------------------------------------------------------------------
 $argList = @($Args)
@@ -94,8 +88,6 @@ for ($i = 0; $i -lt $argList.Count; $i++) {
 }
 if ($port -le 0) { $port = 18620 }
 
-$url = "http://127.0.0.1:$port/ui"
-
 # 既に同じポートで待ち受けているなら、それは二枚目の run.bat である可能性が高い。
 # ここで案内しないと「setup.bat を実行してください」という誤った誘導になる。
 $portInUse = $false
@@ -107,29 +99,14 @@ try {
 }
 if ($portInUse) {
     Write-Host ""
-    Write-Host "========================================================================" -ForegroundColor Yellow
-    Write-Host "  Nz-LTX23 はすでに起動しています" -ForegroundColor Yellow
-    Write-Host "========================================================================" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  先に開いている画面をそのままお使いください。"
-    Write-Host "  ブラウザで開くアドレス: $url"
-    Write-Host ""
-    Write-Host "  もし前の画面が見当たらない場合は、開いている黒い画面をすべて閉じてから"
-    Write-Host "  もう一度 run.bat を実行してください。"
+    Write-Host "すでに起動しています。先に開いた画面をそのまま使ってください。" -ForegroundColor Yellow
+    Write-Host "見当たらないときは、黒い画面をすべて閉じてから run.bat を実行し直してください。"
     Write-Host ""
     exit 0
 }
 
-$clipboardOk = $true
-try { Set-Clipboard -Value $url } catch { $clipboardOk = $false }
-
 Write-Host ""
-Write-Host "Nz-LTX23 のサーバーを起動しています。1〜2 分ほどかかることがあります。" -ForegroundColor Cyan
-Write-Host "  ブラウザで開くアドレス: $url" -ForegroundColor Cyan
-if ($clipboardOk) {
-    Write-Host "  このアドレスはコピー済みです。ブラウザのアドレス欄に Ctrl+V で貼り付けてください。" -ForegroundColor Cyan
-}
-Write-Host "  準備が終わると、下に同じアドレスがもう一度、枠付きで表示されます。" -ForegroundColor Cyan
+Write-Host "サーバー起動中…" -ForegroundColor Cyan
 Write-Host ""
 
 # 注意: & $python ... 2>&1 の形は使わないこと。Windows PowerShell 5.1 では
@@ -140,18 +117,12 @@ $code = $LASTEXITCODE
 
 Write-Host ""
 if ($code -ne 0) {
-    Write-Host "========================================================================" -ForegroundColor Red
-    Write-Host "  サーバーが異常終了しました" -ForegroundColor Red
-    Write-Host "========================================================================" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  上に出ている英語のメッセージに理由が書かれています。"
-    Write-Host "  git pull で更新した直後なら、setup.bat をもう一度実行してください。"
-    Write-Host ""
-    Write-Host "  記録は logs\server.log に残っています。報告のときはこのファイルを添えてください。"
-    Write-Host "  場所: $PSScriptRoot\logs\server.log"
+    Write-Host "サーバーが異常終了しました。理由は上の英語のメッセージにあります。" -ForegroundColor Red
+    Write-Host "git pull の直後なら setup.bat を再実行してください。"
+    Write-Host "ログ: $PSScriptRoot\logs\server.log"
     Write-Host ""
 } else {
-    Write-Host "サーバーを終了しました。この画面は閉じて構いません。" -ForegroundColor Green
+    Write-Host "サーバーを終了しました。" -ForegroundColor Green
     Write-Host ""
 }
 

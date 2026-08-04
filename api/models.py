@@ -31,6 +31,42 @@ from config import LimitsConfig
 # SourceVideoSpec.validate_context_frames.
 _LIMITS_DEFAULTS = LimitsConfig()
 
+# block_swap_prefetch's own default (S4, 2026-08-01: real-device gate G1-G7
+# passed, owner confirmed "gate green -> default on"). Named (unlike most
+# Field defaults in this file) because it is the SINGLE SOURCE this module's
+# two Field(...) defaults below both read, AND the value mcp_server/tools/
+# generate.py imports directly (mcp_server already sits in the same process/
+# repo as api/, same precedent as services/*.py's existing `from api.models
+# import ...`). gradio_ui/handlers.py deliberately does NOT import this — it
+# keeps its own mirrored constant (`BLOCK_SWAP_PREFETCH_DEFAULT`) with an
+# explicit cross-reference comment instead, since gradio_ui talks to the
+# backend purely over HTTP. If this value ever changes again, update it here
+# and move gradio_ui's mirror + mcp_server's import target in the same change.
+BLOCK_SWAP_PREFETCH_DEFAULT = True
+
+# keep_resident（モデル骨格のジョブ間常駐）の既定値。**off** —
+# block_swap_prefetch と向きが逆である点に注意（あちらは既定 True なので
+# 「明示 False のときだけ送る」、こちらは既定 False なので「ON のときだけ
+# 送る」）。既定 off はオーナー確定（メインメモリ約20GBを常駐で持つ機能を、
+# メモリ量の分からない環境で勝手に有効化しない）。名前付き定数にしている
+# 理由は BLOCK_SWAP_PREFETCH_DEFAULT と同じ：この2つの Field 既定と
+# mcp_server/tools/generate.py の import 元を1箇所に集約するため。
+# gradio_ui/handlers.py だけは（HTTP越しのクライアントなので）import せず
+# 自前のミラー定数を持つ——変えるときは両方＋MCPを同じ変更で動かすこと。
+KEEP_RESIDENT_DEFAULT = False
+
+# fused_gguf_dequant_kernel（GGUF 逆量子化の Triton 1カーネル化）の既定値。
+# **on**（2026-08-04: 実機ゲート G1〜G8 全PASS、オーナー承認「ゲート緑なら
+# 既定ON」。block_swap_prefetch の S4 と同じ前例。実測は backend
+# Docs/VERIFICATION_LOG.md §51）。block_swap_prefetch と同じ向き＝既定 True
+# なので、クライアントは「明示 False のときだけ送る」。名前付き定数にしている
+# 理由は BLOCK_SWAP_PREFETCH_DEFAULT / KEEP_RESIDENT_DEFAULT と同じ：この2つの
+# Field 既定と mcp_server/tools/generate.py の import 元を1箇所に集約するため。
+# gradio_ui/handlers.py だけは（HTTP越しのクライアントなので）import せず自前の
+# ミラー定数を持つ——**変えるときは正本（ここ）＋gradio_ui のミラー＋MCP の
+# import 元の3点を同じ変更で動かすこと**。
+FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -56,6 +92,12 @@ class LoraSpec(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=200)
     strength: float = Field(1.0, gt=0.0, le=2.0)
+    # audio_strength: 映像軸（strength）とは独立した音声軸の適用強度。省略
+    # （None）なら音声側も strength に追従する（従来と完全同一の挙動）。
+    # 0 は音声側の重みを一切適用しない（=スキップ）——映像目的で訓練された
+    # style LoRA の音声側差分が生成音声を壊す事例（雑音・音割れ）への対処。
+    # strength と異なり 0 を許容する（gt=0.0 ではなく ge=0.0）。
+    audio_strength: float | None = Field(None, ge=0.0, le=2.0)
 
     @model_validator(mode="after")
     def validate_name_is_not_a_path(self) -> "LoraSpec":
@@ -69,7 +111,103 @@ class LoraSpec(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
-    negative_prompt: str = ""
+    negative_prompt: str = Field("", max_length=2000)
+
+    # NAG（Normalized Attention Guidance, arXiv:2505.21179）— CFG を使わない
+    # ネガティブプロンプト手法。蒸留パイプラインは guidance_scale=1.0 固定
+    # （CFG 2パス denoise は不可）のため、代わりに cross-attention の出力を
+    # 正プロンプト出力と負プロンプト出力から外挿・正規化してブレンドする。1本の
+    # negative_prompt が映像・音声どちらの text cross-attention にも効く。既定値
+    # 11.0 / 2.5 / 0.25 は kijai/ComfyUI-KJNodes の LTX2_NAG 実装と同一。
+    nag_enabled: bool = False
+    nag_scale: float = Field(11.0, ge=1.0, le=20.0)
+    nag_tau: float = Field(2.5, ge=1.0, le=10.0)
+    nag_alpha: float = Field(0.25, ge=0.0, le=1.0)
+
+    # VSF（Value Sign Flip, arXiv:2508.10931）— NAG に続く第2の非CFGネガティブ
+    # プロンプト手法。正負のコンテキストを連結し1回の attention で処理、負側の
+    # V（value）だけを −α倍する（NAGのような正規化・ゲートは無い）。排除力は
+    # NAGより強く、正プロンプト忠実度はNAGが上——性格違いのため方式を選べる。
+    # neg_method で NAG/VSF を切り替える（nag_enabled が非CFGネガの共通マスター
+    # トグルで、両方式をカバーする）。
+    neg_method: Literal["nag", "vsf"] = "nag"
+    # vsf_scale（α）既定1.5はWan実測1.7に近い論文準拠値。実機検証（2026-07-29）
+    # でscale 15以上は8ステップ蒸留で収束崩壊と確定したため上限10（論文の実証
+    # レンジ相当）。実用域は1.5〜5。
+    vsf_scale: float = Field(1.5, ge=0.0, le=10.0)
+
+    # ─── Acceleration（生成高速化）— ADDITIVE/optional。3つとも既定値のまま
+    # 省略したリクエストは、ワーカーペイロードが導入前とバイト単位で同一になる。
+    #
+    # attention_backend: attention の実装を差し替える。"sdpa"（既定）は
+    # PyTorch の scaled_dot_product_attention、"sage" は SageAttention 2.2.0
+    # （INT8/FP8 量子化 attention カーネル）。実測で 720p end-to-end 約1.17倍・
+    # stage2 約1.56倍、VRAM 増なし。
+    # 【重要】sage は数値精度が sdpa と異なるため、**同一シードでも生成結果の
+    # 細部が変わる**（バグではなく仕様）。厳密な再現性が要る場合は sdpa のまま
+    # にすること。実際に使われた backend は metadata.json の attention_used に
+    # 記録される（「設定したのに効いていない」を検出するため）。
+    # 未導入環境で "sage" を指定した場合はジョブを落とさず sdpa へ降格する
+    # （速度最適化であって生成結果の正しさの前提ではないので、NAG のような
+    # fail-loud とは規律を変えている）。利用可否は GET /status の
+    # acceleration.sage_available で確認できる。
+    attention_backend: Literal["sdpa", "sage"] = "sdpa"
+
+    # block_swap_prefetch: block swap（VRAM を節約するために transformer の
+    # ブロックを CPU と GPU のあいだで出し入れする仕組み）の転送を、計算とは
+    # 別の CUDA stream で先回りさせて待ち時間を隠す。あわせて GPU→CPU の
+    # 退避コピーを廃止する（重みは推論中に一切変化しないので、CPU 側の正本を
+    # 保持して GPU 側は捨てるだけでよい）。実測 768p/257f で約11〜13%短縮。
+    # 【重要】attention_backend と違い、**生成結果は変わらない**（転送の
+    # 方式だけを変えるので、同一シードならビット単位で同一になる）。
+    # block swap が無効な設定（vram.block_swap=false / blocks_on_gpu=0 /
+    # blocks_on_gpu が全ブロック数以上）では黙って no-op になる。実際に
+    # 効いたかどうかは metadata.json の block_swap_prefetch_used で確認できる。
+    # 利用可否は GET /status の acceleration.block_swap_prefetch_available。
+    # 既定on（S4, 2026-08-01）: 実機ゲート（ビット一致＋VRAM）G1〜G7全PASSを
+    # 条件にオーナーが確定した既定反転。offにすると従来の同期スワップになる。
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+
+    # keep_resident: モデルのCPU側「骨格」（各サブモデルの state_dict）を
+    # ジョブ間で常駐させ、2回目以降の生成でディスクからの再マテリアライズを
+    # 省く。wheel の StateDictRegistry をワーカーの ModelLedger に差し込む
+    # 実装で、**生成結果は変わらない**（§47.3 G9：同一シードで5本すべて
+    # ビット単位一致）。効果は前処理（骨格の組み立て）で、実測 66〜79秒 →
+    # 9〜15秒。
+    # 【重要】代償はメインメモリ：キャッシュ実体が約20GB常駐する（ワーカーの
+    # PrivateBytes 実測 41.6GB → 62.9GB）。**メモリ64GB以上を推奨**。足りない
+    # 環境ではページアウトで denoise が逆に遅くなりうるため既定 off。
+    # ON→OFF→ON と戻した場合、OFF の時点でキャッシュを解放するので次の ON は
+    # 全サブモデルの再ロード（50〜70秒）を1回だけ払い直す（仕様）。
+    # 実際に効いたかどうかは metadata.json の keep_resident_used で確認できる
+    # （"off" / "on" / "on->off"）。ワーカー側には安全ガードがあり、
+    # 組み合わせによっては自動的に off へ降格する（engine/worker.py の
+    # _resolve_keep_resident を参照）。GET /status には載せない（利用可否は
+    # 環境依存ではなくメモリ量の問題で、サーバーからは判定できないため）。
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
+
+    # fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
+    # Triton の1カーネルに融合し、純 PyTorch 実装の多段テンソル演算を置き換える。
+    # 実測で逆量子化そのものが1ジョブあたり約21.8秒（GPU）を占めていた。
+    # 【重要】block_swap_prefetch と同じく **生成結果は変わらない**（現行実装との
+    # ビット一致を必須要件として実装・検証している）。Triton 不在・カーネル例外・
+    # 自己検証不一致のいずれでも黙って従来実装へ降格し、生成は落とさない。
+    # 実際に効いたかどうかは metadata.json の fused_gguf_dequant_kernel_used で
+    # 確認できる（"off" / "on" / "on->off"。"on->off" は「要求したが実際には
+    # 適用されなかった」）。GET /status には載せない（keep_resident と同じ規律）。
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    # ─── モック1件（受理のみ・エンジン未消費）───
+    # 以下は UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
+    # 受け取っても生成は何も変わらない。ワーカーペイロードにも GET /status にも
+    # 載せない（載せると「設定したのに効いていない」罠になる）。一方、
+    # model_dump() 経由の metadata.json / GET /jobs の request には自然に現れる
+    # ——two_stage_hq の pipeline と同じ既存前例で、exclude 等の細工はしない。
+    #
+    # vae_mode: VAE の実装選択（"prune_vaed" は枝刈り版 VAE デコーダ）。
+    # 既存の vram.vae_tiling（VRAM 節約のためのタイル分割）とは**無関係**——
+    # 名前が似ているだけで、こちらは VAE 実装そのものの差し替えを指す。
+    vae_mode: Literal["default", "prune_vaed"] = "default"
 
     # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
@@ -108,7 +246,8 @@ class GenerateRequest(BaseModel):
     # validated below to require ``loras``).
     #
     # ``conditioning_attention_strength`` — control adherence: how strictly the
-    # output follows the IC-LoRA control signal (canny edges / pose skeleton).
+    # output follows the IC-LoRA control signal (canny edges / pose skeleton /
+    # depth map).
     # Upstream name kept. None ⇒ omitted ⇒ the engine builds no attention wrapper
     # ⇒ byte-identical to today.
     conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)
@@ -186,6 +325,8 @@ class GenerateRequest(BaseModel):
                 "reference_video_strength requires at least one lora "
                 "(it only adjusts an IC-LoRA reference conditioning)"
             )
+        if self.nag_enabled and not self.negative_prompt.strip():
+            raise ValueError("nag_enabled requires a non-empty negative_prompt")
         return self
 
     @property
@@ -297,7 +438,38 @@ class GenerateChainRequest(BaseModel):
     """
 
     prompt: str = Field(..., min_length=1, max_length=2000)
-    negative_prompt: str = ""
+    negative_prompt: str = Field("", max_length=2000)
+
+    # NAG（Normalized Attention Guidance, arXiv:2505.21179）— CFG を使わない
+    # ネガティブプロンプト手法。詳細は GenerateRequest の同名フィールドを参照。
+    # チェーンでは全クリップ・全ステージ共通で1本の negative_prompt が効く。
+    nag_enabled: bool = False
+    nag_scale: float = Field(11.0, ge=1.0, le=20.0)
+    nag_tau: float = Field(2.5, ge=1.0, le=10.0)
+    nag_alpha: float = Field(0.25, ge=0.0, le=1.0)
+
+    # VSF（Value Sign Flip, arXiv:2508.10931）— 詳細は GenerateRequest の同名
+    # フィールドを参照。チェーンでは全クリップ・全ステージ共通で1本の設定が効く。
+    neg_method: Literal["nag", "vsf"] = "nag"
+    vsf_scale: float = Field(1.5, ge=0.0, le=10.0)
+
+    # Acceleration（生成高速化）— 詳細は GenerateRequest の同名フィールドを参照。
+    # チェーンでは全クリップ・全ステージ共通で1つの設定が効く。sage 有効時は
+    # 同一シードでも生成結果の細部が変わる点、モック1件（vae_mode）が受理のみで
+    # エンジン未消費である点、vae_mode が既存 vae_tiling と無関係である点も、
+    # すべて GenerateRequest と同じ。
+    attention_backend: Literal["sdpa", "sage"] = "sdpa"
+    # block_swap_prefetch: 詳細は GenerateRequest の同名フィールドを参照。
+    # 既定on（S4, 2026-08-01）。offにすると従来の同期スワップになる。
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+    # keep_resident: 詳細は GenerateRequest の同名フィールドを参照。既定off
+    # （メインメモリ約20GB常駐・64GB以上推奨）。チェーンでも1つの設定が
+    # チェーン全体に効く（骨格キャッシュはジョブ単位ではなくワーカー単位）。
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
+    # fused_gguf_dequant_kernel: 詳細は GenerateRequest の同名フィールドを参照。
+    # 既定on（GenerateRequest と同じ）。チェーンでも1つの設定がチェーン全体に効く。
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+    vae_mode: Literal["default", "prune_vaed"] = "default"
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -515,6 +687,8 @@ class GenerateChainRequest(BaseModel):
                 "(a control adapter's reference conditioning would compete with "
                 "the frozen V2V source head at clip 0)"
             )
+        if self.nag_enabled and not self.negative_prompt.strip():
+            raise ValueError("nag_enabled requires a non-empty negative_prompt")
         return self
 
     def clip_prompt(self, index: int) -> str:
@@ -523,11 +697,41 @@ class GenerateChainRequest(BaseModel):
         return override if override else self.prompt
 
     def to_clip_request(self, index: int) -> "GenerateRequest":
-        """Build the per-clip :class:`GenerateRequest` (clip 0 keeps its images)."""
+        """Build the per-clip :class:`GenerateRequest` (clip 0 keeps its images).
+
+        LIVE PATH: ``services/job_store.py:135`` (``create_chain_if_idle``) calls
+        this on every chain job creation, and the result is re-validated as a
+        ``GenerateRequest`` and stored as ``JobRecord.request``. Any field added
+        to ``GenerateChainRequest`` that is not transcribed here silently drops
+        out of the stored/serialized request for a chain job — omitting the nag
+        fields would make chain creation 500 (nag_enabled True + empty
+        negative_prompt would fail GenerateRequest's own validator).
+
+        The acceleration fields (``attention_backend``, ``block_swap_prefetch``,
+        ``keep_resident``, ``fused_gguf_dequant_kernel``, and the mock field
+        ``vae_mode``) are transcribed for the same reason: they do not fail
+        validation when
+        dropped, so an omission would silently mis-report a chain job's
+        reproducibility metadata (GET /jobs' ``request`` and metadata.json would
+        claim sdpa/default for a sage chain).
+        The chain's OWN worker payload is built from the chain request, not from
+        this per-clip copy — this transcription only feeds the stored record.
+        """
         clip = self.clips[index]
         return GenerateRequest(
             prompt=self.clip_prompt(index),
             negative_prompt=self.negative_prompt,
+            nag_enabled=self.nag_enabled,
+            nag_scale=self.nag_scale,
+            nag_tau=self.nag_tau,
+            nag_alpha=self.nag_alpha,
+            neg_method=self.neg_method,
+            vsf_scale=self.vsf_scale,
+            attention_backend=self.attention_backend,
+            block_swap_prefetch=self.block_swap_prefetch,
+            keep_resident=self.keep_resident,
+            fused_gguf_dequant_kernel=self.fused_gguf_dequant_kernel,
+            vae_mode=self.vae_mode,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.
@@ -556,6 +760,11 @@ class UploadVideoResponse(BaseModel):
     stored_path: str
     content_type: str
     size_bytes: int
+    # True only when the optional trim_start_sec/trim_duration_sec query
+    # arguments were supplied AND the cut actually succeeded. Additive: older
+    # clients simply ignore it, and an upload without trim arguments always
+    # reports False.
+    trimmed: bool = False
 
 
 class UploadAudioResponse(BaseModel):

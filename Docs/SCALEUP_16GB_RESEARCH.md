@@ -4,6 +4,8 @@
 > **このスケールアップ（残課題C＝720p）は完了した。** 1280×768/121f を本番 API で ~167–171秒で完走（16GB・OOM なし）、crop で 1280×720 配信、**連続3本も commit 枯渇せず PASS**。採用レシピ＝**use_component_files=true（Path B）＋ LTX_KEEP_RESIDENT=0 ＋ block_swap_blocks_on_gpu=8 ＋ vae_spatial_tile_size=512 ＋ vae_temporal_tile_size=64**。
 > 真の難所3点の実測結論：①段間遷移＝フォークは meta 退避で両段同時滞在なし＝非問題化。②block-swap 深度＝bs=8 で denoise ~6–8GB の大余裕（深掘り不要）。③共存性＝tiling＋GGUF＋block-swap＋component-files が 720p で同時に正常動作を実機確認。
 > 詳細・原因分析（keep_resident の Gemma out-of-place 移動 crash、comp=1 による commit 束縛、マシンスペック比較）は **VERIFICATION_LOG §10** と **NEXT_SESSION_HANDOFF.md 冒頭 ▶▶▶▶**。以下（本バナー以降）は着手前の調査記録（有効・参照用）。
+>
+> ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝上記レシピの keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 
 作成日: 2026-06-30
 
@@ -32,7 +34,7 @@
 | VAE 空間タイル | ✅配線済・OFF | `vae_spatial_tile_size` | 0=ライブラリ既定768px | `ltx_pipeline_common.py:36`, `ltx_fast_video_pipeline.py:776` | `SpatialTilingConfig(768px, overlap64px)`、最小64px・32倍数 |
 | VAE 時間タイル | ✅配線済・OFF | `vae_temporal_tile_size` | 0=ライブラリ既定80フレーム | `ltx_pipeline_common.py:43`, `:777` | `TemporalTilingConfig(80f, overlap24f)`、最小16f・8倍数 |
 | Block-swap | ✅配線済 | `block_swap_blocks_on_gpu` | 0(OFF=全48ブロックGPU常駐) | `block_swap_service.py:51-53`, `ltx_fast_video_pipeline.py:64` | 全48ブロック中N個のみGPU、残りCPU-RAM入替。blocks_on_gpu=20で約8-10GB削減（worker内コメント） |
-| FFN チャンキング | ❌未実装 | — | — | `ltx_core/.../feed_forward.py`は`Sequential(GELUApprox,Identity,Linear)`で分割なし | 主に長尺向け、720p空間スケールには非必須 |
+| FFN チャンキング | ❌未実装 | — | — | `ltx_core/.../feed_forward.py`は`Sequential(GELUApprox,Identity,Linear)`で分割なし | 主に長尺向け、720p空間スケールには非必須。**将来項目としての管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-44へ移設（2026-07-27）** |
 
 **generate() シグネチャ**: `prompt, seed, height, width, num_frames, frame_rate, images, output_path, num_steps` ＋ `sigma_schedule`（distilled/linear/linear_quadratic/beta）/ `denoising_loop`（euler/gradient_estimating/res2s）/ STG。**注意: worker（`_ltx_worker.py`）のgenerateプロトコルは標準引数のみ受け、VRAMレバーはload(create)時に固定**。
 
@@ -92,7 +94,7 @@
 
 - 1920×1088/800f ~16.5GB・900f ~18.5GB / V3単GPU `ffn_chunks=16` / LTX-2(22B系) / 単発(作者ベンチRTX4090) / RandomInternetPreson
 - 1080p>200f / 16GBでstage2遷移OOM(peak14.9GB) / Comfy-Org #11726
-- **ChunkedFFN**（RandomInternetPreson, LTX-2専用）: FFNのhidden4倍展開（例4096→16384, ~3.7GB中間テンソル）ピークをシーケンス分割でO(chunk×4D)に削減・品質劣化ゼロ謳う。`ffn_chunks`（単GPUは"Tensor Parallel V3 (Safe FFN Chunking)"使用, default8）: 600f→8 / 800f→12-16 / 900f+→16-24。最大~8x削減。長尺（シーケンス長支配）に本命。実績24GBのみ・GGUF/block-swap併用未記載・推論専用。https://github.com/RandomInternetPreson/ComfyUI_LTX-2_VRAM_Memory_Management
+- **ChunkedFFN**（RandomInternetPreson, LTX-2専用）＝**将来項目としての管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-44へ移設した（2026-07-27）**。機構の要旨（FFNのhidden4倍展開の中間テンソルをシーケンス分割して最大~8x削減）と参考値（`ffn_chunks`: 600f→8 / 800f→12-16 / 900f+→16-24。実績24GBのみ・GGUF/block-swap併用の記載なし）も同項に転記済み。出典URLは付録Bに残す。
 - 16GB起動フラグ実例（手順記事）: `--use-sage-attention --novram --cache-none --disable-smart-memory --preview-method taesd`、RAM32GB+swap64GB(swappiness=6)。`--novram`がモデルスワップ時スパイク平滑化。
 
 ---

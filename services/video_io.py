@@ -340,6 +340,93 @@ def cut_tail_mp4(
     return {"source_fps": source_fps, "resampled": resampled, "total_frames": total}
 
 
+def cut_range_mp4(
+    src: Path,
+    out: Path,
+    start_sec: float,
+    duration_sec: float,
+) -> dict:
+    """Write to ``out`` an mp4 holding EXACTLY the ``[start_sec, start_sec +
+    duration_sec)`` window of ``src``, at ``src``'s own measured frame rate.
+
+    Unlike :func:`cut_tail_mp4` this NEVER resamples: the caller wants the very
+    same material the user sees on the timeline ribbon, so the source cadence is
+    preserved verbatim (``-r src_fps``) and only the frame window changes.
+
+    UNIT NOTE (deliberate hedge): the public signature takes SECONDS, but this
+    function internally converts to frames immediately
+    (``start_frame = round(start_sec * src_fps)``) and does all of its work in
+    frame space via the ``select`` filter. If the caller's unit ever turns out to
+    be frames rather than seconds (the AviUtl2 timeline probe is what decides
+    this), the change is a purely additive signature -- an extra
+    ``start_frame``/``num_frames`` pair short-circuiting the conversion -- and
+    none of the selection logic below has to move.
+
+    The window is inclusive on both ends in frame space
+    (``select='between(n,start,end)'``) and ``end`` is clamped to the last
+    available frame, so asking for more than the source holds simply yields the
+    remainder rather than failing. Audio, when present, is trimmed to the same
+    window (``atrim``) and re-encoded to AAC.
+
+    Returns ``{source_fps, total_frames, start_frame, end_frame,
+    written_frames}``. Raises :class:`FFmpegError` when the frame rate cannot be
+    probed (the caller must not silently guess a cadence), when the requested
+    duration is non-positive, or when the window starts past the end of the
+    source.
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    source_fps = probe_fps(src)
+    if source_fps is None or source_fps <= 0:
+        raise FFmpegError(f"cut_range_mp4: could not probe a usable frame rate for {src}")
+
+    start = max(0, round(start_sec * source_fps))
+    n = round(duration_sec * source_fps)
+    if n <= 0:
+        raise FFmpegError(
+            f"cut_range_mp4: duration_sec={duration_sec} maps to {n} frames at {source_fps} fps"
+        )
+
+    total = frame_count(src)
+    if start >= total:
+        raise FFmpegError(
+            f"cut_range_mp4: start_sec={start_sec} maps to frame {start} but source has {total} frames"
+        )
+    end = min(total - 1, start + n - 1)
+
+    with_audio = has_audio_stream(src)
+
+    parts = [f"[0:v]select='between(n\\,{start}\\,{end})',setpts=PTS-STARTPTS[v]"]
+    vout = "[v]"
+    aout = None
+    if with_audio:
+        start_t = start / float(source_fps)
+        end_t = (end + 1) / float(source_fps)
+        parts.append(f"[0:a]atrim=start={start_t}:end={end_t},asetpts=PTS-STARTPTS[a]")
+        aout = "[a]"
+    filter_complex = ";".join(parts)
+
+    cmd = [exe, "-y", "-i", str(src), "-filter_complex", filter_complex, "-map", vout]
+    if aout is not None:
+        cmd += ["-map", aout, "-c:a", "aac"]
+    cmd += [
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(source_fps),
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffmpeg range-cut failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+
+    return {
+        "source_fps": source_fps,
+        "total_frames": total,
+        "start_frame": start,
+        "end_frame": end,
+        "written_frames": end - start + 1,
+    }
+
+
 def concat_mp4s(
     clip_paths: list[Path],
     output_path: Path,

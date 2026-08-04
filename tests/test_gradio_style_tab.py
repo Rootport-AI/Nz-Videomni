@@ -106,14 +106,14 @@ def test_on_style_select_appends_token_to_prompt():
     demo = build_ui(BASE, api_key=None)
     evt = SimpleNamespace(index=1)
     upd = demo.on_style_select("a scene", ["neon-city", "portrait"], "en", evt)
-    assert upd["value"] == "a scene <lora:portrait:1.0>"
+    assert upd["value"] == "a scene <lora:portrait:1.0:1.0>"
 
 
 def test_on_style_select_from_empty_prompt():
     demo = build_ui(BASE, api_key=None)
     evt = SimpleNamespace(index=0)
     upd = demo.on_style_select("", ["neon-city"], "en", evt)
-    assert upd["value"] == "<lora:neon-city:1.0>"
+    assert upd["value"] == "<lora:neon-city:1.0:1.0>"
 
 
 def test_on_style_select_out_of_range_is_noop():

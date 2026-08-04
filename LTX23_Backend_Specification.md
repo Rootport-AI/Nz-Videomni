@@ -4,8 +4,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.1** |
-| 日付 | **2026-07-26**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
+| 版 | **v0.5.5** |
+| 日付 | **2026-07-28**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
 ## 目次
@@ -23,6 +23,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 - §10 解像度×尺の能力と音声
 - §11 config.yaml
 - §12 Gradio 検証UI
+- §12b MCPサーバー（AIエージェント連携）
 - §13 開発フェーズとロードマップ
 - §14 AviUtl2 / DaVinci Resolve 連携（Phase 2 = ゴール）
 - §15 ログ・エラーハンドリング
@@ -39,8 +40,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.1** |
-| 日付 | **2026-07-26** |
+| 版 | **v0.5.8** |
+| 日付 | **2026-08-04** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
@@ -51,7 +52,15 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | 版 | 日付 | 内容 |
 |----|------|------|
 | v0.5 | 2026-07-02 | v04 からの全面改訂（章立てを実装現実に合わせて書き直し）。 |
-| v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS.md` §3-36・§3-37。 |
+| v0.5.1 | 2026-07-26 | α版インストール導線の整備に追随して **10 箇所**を更新。**§0.3**（SSOT 地図に `config.yaml.example` を追加し、`config.yaml` を git 追跡外にしたこと＝clone 直後には存在しないことを明記）／**§2.4**（`setup.bat` / `run.bat` はラッパーで環境変数を設定しないこと、`tools/uv` と `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すこと）／**§2.5**（`setup.bat` → `scripts/setup.ps1` → `install_ltx.ps1` の導線、取得元の 3 リポジトリ化、冪等の粒度＝venv 再同期とモデルガード）／**§3.3**（`run.bat`、`run.ps1` のリポジトリ直下固定、`uv sync` を行わない設計、起動バナー）／**§4.4**（ディレクトリ構成に `setup.bat` / `run.bat` / `config.yaml.example` / `.au2pkg.zip` を反映）／**§5 の章見出しと目次**（「モデル構成」→「モデル構成（実行 ~28GB・取得 ~30GB）」＝実行に要る量と取得量の区別を見出しに出した）／**§5.1**（`INSTALLED_PATHS.txt` が 9 行であることの内訳、および §5.1b を含まない旨の明示）／**§5.1b＝完全新設**（インストーラが追加取得する IC-LoRA 2 点・DWPose 前処理器 2 点、取得総量 31,889,519,494 B、検証表が 14 項目である理由）／**§5.4**（GPU アーキ自動判定と `wheels/` プリビルド wheel 自動導入の**廃止**、`build_xformers.ps1` は手動ツールとして存置）／**§11.2**（`model.ic_loras` の行を追加＝§5.1b が参照している登録の本体）。**同日の第 2 次敵対的レビューによる訂正**: §2.5 の冪等ガードの記述を実装（`-Check` によるディレクトリ単位の独立判定）に合わせて全面的に書き直し（旧記述は廃止済みの `-CheckDir`＋`MinBytes` 合計方式＝Gemma のデッドロックを再発させる誤りだった）、§5.2 と付録B に「43GB / 46GB は同一ファイル」の表記注記を追加、本履歴表自体の記載漏れ（§5 見出し・§5.1・§5.1b・§5.4）を補完。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-36・§3-37。 |
+| v0.5.2 | 2026-07-27 | サブマシンでの実機検証（`Docs/NEXT_SESSION_HANDOFF.md`・`README.md` §7）の反映と、実装との乖離を潰す収束修正。**§2.1**（ffmpeg は「PATH に通す」ではなく `scripts/setup.ps1` が `tools/ffmpeg` へ取り込む＝§2.4 の PATH 前置で解決される）／**§2.5**（`setup.ps1` の事前チェック 3 種＝空き容量・ページファイル・GPU がいずれも警告のみであること、および `run.ps1` の二重起動ガードの存在を追記）／**§3.3**（URL を控えに入れる処理は現行の `run.ps1` に存在しない＝利用者に見せる URL は `main.py` の起動バナーが唯一の正本、という実装に合わせて訂正）／**§4.4**（ディレクトリ構成のルートフォルダ名を実際の `Nz-LTX23-backend/` へ訂正）。正本はフロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-38。 |
+| v0.5.3 | 2026-07-28 | NAG（Normalized Attention Guidance＝非CFGネガティブプロンプト機能）の追加を反映。**§6.2**（`GenerateRequest` に `nag_enabled`/`nag_scale`/`nag_tau`/`nag_alpha` の4フィールドを追加し `negative_prompt` に `max_length=2000` を付与、凍結制約に相互検証を追加。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§12.2**（共有プロンプト直下の Negative Prompt アコーディオンを追記）。凍結API契約（§6）への追加は、2026-07-21 の V2V Join 拡張（`d22706e`）と同じく既存フィールドの意味変更を伴わない加算のみで、実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §38。 |
+| v0.5.4 | 2026-07-28 | 同日の第2コミット（`2f8e85b`）で追加された **MCPサーバー**（`mcp_server/`。Claude Code 等の MCP クライアントからバックエンドを操作する22ツール）を反映。**§12b＝完全新設**（位置づけ・22ツールの概要・依存関係・実機ゲート状況へのポインタ）／**§0.3 の SSOT 地図**（`Docs/MCP_SERVER_DESIGN.md` を追加）／**§4.5**（アプリ venv の技術スタック表に `mcp` パッケージを追加）／**付録B.1**（用語集に MCP のエントリを追加）。凍結 API 契約（§6）そのものへの変更は無い（MCPサーバーは既存 `/api/v1/*` を叩く追加のクライアントであり、REST API 契約は無改修）。詳細な設計判断は `Docs/MCP_SERVER_DESIGN.md`、利用者向け説明は `README.md` §8、機械検証・実機ゲート状況は `Docs/VERIFICATION_LOG.md` §39 が正本。 |
+| v0.5.5 | 2026-07-28 | 同日の依存整理バッチ（未使用パッケージ削除・`uv sync --extra dev` 常時化・`checkpoint_path` 後始末）を反映し、`checkpoint_path` が `config.model` から削除された事実に追随して**5箇所の記述を訂正**した。**§4.3**（`checkpoint_path` はそもそも対応する config フィールドが無くなり、worker payload への値は `services/ltx_runner.py` が直値の `""` をハードコードする、という実装に合わせて訂正）／**§5.1**（`models/INSTALLED_PATHS.txt` の行数を「9 行」→「**8 行**」に訂正。`checkpoint_path (ref-only)` の行は `config.yaml` からの削除に伴い消えた）／**§5.2**（`config.model.checkpoint_path` は「フィールドとしては残る」ではなく**削除済み**、worker payload には `services/ltx_runner.py` のハードコードとして残るのみ、と訂正）／**§5.5**（`checkpoint_path` は「config に残るが reference-only」ではなく**削除済み**、と訂正）／**§11.2**（`config.yaml` の実値表から `checkpoint_path` の行を削除。現行 `config.yaml` にこのキーは存在しない）。凍結 API 契約（§6）への変更は無い（worker プロトコルの `checkpoint_path` フィールド自体は存続し、値がハードコード化されただけ）。実装・機械検証の詳細は `Docs/VERIFICATION_LOG.md` §40 が正本。 |
+| v0.5.6 | 2026-08-01 | Acceleration（生成の高速化）機能の追加を反映。**§4.5**（エンジン venv の技術スタック表に `sageattention` 2.2.0 と `triton-windows` を追加）／**§5.4**（章題を「attention バックエンド」のまま、既定は SDPA・ジョブ単位で SageAttention へ切替可能という現行仕様へ書き直し。xformers/flash-attn を導入しない方針そのものは不変）／**§6.2**（`GenerateRequest` に `attention_backend`／`fused_gguf_dequant_gemm`／`vae_mode` の3フィールドを追加。後者2つは受理のみでエンジン未消費の**モック**である旨を明記。`GenerateChainRequest` にも同一フィールドが存在する旨を補足）／**§6.5b＝新設**（`GET /status` の非凍結ブロック `acceleration`＝`attention_backends` と `sage_available` の真理値表）／**§6.6**（`metadata.json` トップレベルへの `attention_used` 追加）。凍結 API 契約（§6）への追加は既存フィールドの意味変更を伴わない加算のみで、既定値のジョブは worker ペイロードがバイト同一のまま。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §43、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
+| v0.5.7 | 2026-08-03 | `keep_resident`（モデルCPU骨格のジョブ間キャッシュ）の製品化を反映。**§6.2**（`GenerateRequest` に `keep_resident` を追加。`GenerateChainRequest` にも同一フィールドが存在すること、既定のジョブは worker ペイロードがバイト同一のままであること、`GET /status` には意図的に載せないことを補足で明記）／**§9.2**（本番既定の env 一覧から `LTX_KEEP_RESIDENT` を削除し、per-job フィールドへ移行した旨へ書き換え。あわせて 2026-06-30 当時の「keep=1 は native crash する」という記述に、現構成では修正済みで製品化されたという追記を添えた）。凍結 API 契約（§6）への追加は既存フィールドの意味変更を伴わない加算のみで、既定値のジョブは worker ペイロードがバイト同一のまま。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §48、利用者向け説明は `README.md`「モデル骨格の常駐（`keep_resident`）」節。 |
+| v0.5.7b | 2026-08-03 | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加を反映。**§5.1b**（Deblur 1 点・VDA 深度前処理器 2 点を取得対象に追加し、検証表を 14 → **16 項目**へ）／**§11.2**（`model.ic_loras` を `depth-control`・`deblur` を含む **5 エントリ**へ）。凍結 API 契約（§6）への変更は無い（登録済みアダプタ名が増えただけで、`loras[].name` の解決方式は不変）。仕様・設計判断の正本は `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`、実測と検証記録は `Docs/VERIFICATION_LOG.md` §49。 |
+| v0.5.8 | 2026-08-04 | `fused_gguf_dequant_kernel`（GGUF 逆量子化の Triton 1カーネル化）の追加と、旧モック `fused_gguf_dequant_gemm` の完全撤去を反映。**§6.2**（`GenerateRequest` の表から `fused_gguf_dequant_gemm` の行を削除し、実装のある `fused_gguf_dequant_kernel`〔既定 `true`〕の行を追加。補足の「モック2件」を「モック1件（`vae_mode`）」へ書き換え、既定 `true` のフィールドが2つになったことに伴う worker ペイロードの記述も更新）／**§6.5b**（`/status` にモックを載せない理由の記述を1件構成へ更新）／**§6.6**（`metadata.json` トップレベルに `fused_gguf_dequant_kernel_used` を追加）。凍結 API 契約（§6）への変更は、加算1件と**受理のみで生成に一切影響しなかったモック1件の削除**である（pydantic の `extra=ignore` により、旧フィールドを送る古いクライアントがあっても API は壊れない）。既定 `true` への反転は実機ゲート G1〜G8 全項目合格を条件にオーナーが承認した（`block_swap_prefetch` の前例と同じ手順）。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §51、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
 
 ### 0.2 スコープ
 
@@ -75,7 +84,11 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | `config.yaml` | 実行時設定の実値（presets / limits / vram ノブ / モデルパス）。**git 追跡外**（2026-07-26〜） |
 | `config.yaml.example` | 配布されるひな型。**リポジトリに入っているのはこちらだけ**で、`config.yaml` は `setup.bat` / `run.bat` がここから複製する |
 | `Docs/VERIFICATION_LOG.md` | 実機検証の全経緯・実測 peak_vram/秒数・SHA256 バイト一致・設計判断の根拠 |
+| `Docs/MCP_SERVER_DESIGN.md` | MCPサーバー（`mcp_server/`）の設計判断（ツール分割・非同期化・エラー翻訳・`.mcp.json` 生成方式 等） |
+| `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md` | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の仕様・設計判断 |
+| `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
+| `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
 | `Docs/NEXT_SESSION_HANDOFF.md` | プロジェクトのゴール像・フェーズ別ロードマップ・設計対話の決定・削除スコープ |
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
 | `engine/VENDOR_NOTICE.md` | `engine/` の由来・provenance・依存再現手順・ライセンス帰属 |
@@ -125,7 +138,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | PyTorch | **`torch 2.9.1+cu128`** | engine 側実体（`engine/venv-engine.freeze.txt`） |
 | NVIDIA ドライバ | CUDA 12.8 対応版 | cu128 wheel 実行要件。Blackwell は R570+ |
 | パッケージ管理 | **uv** | Python 本体もプロジェクト内へ |
-| 動画エンコード | ffmpeg（PATH に通す） | MP4 保存・クロップ用 |
+| 動画エンコード | ffmpeg（`scripts/setup.ps1` が `tools/ffmpeg` へ取り込む） | MP4 保存・クロップ用。`run.ps1` が `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すため、システムの `PATH` へ通す必要はない（§2.4） |
 
 ### 2.2 2プロセス・2venv 構成（概要）
 
@@ -164,16 +177,18 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 セットアップの実体は `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。両 venv 構築 → 現行 ~30GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全）に行う。手順とモデル内訳は **§5** / `README.md` §1 を参照（§16 は受け入れテスト）。
 
-**モデルの取得元は 3 リポジトリ（2026-07-26 更新）**: `Rootport/Nz-LTX23-weights`（LTX 本体 5 点＋IC-LoRA 2 点＝計 7 ファイル・24,196,952,364 B）／`Rootport/Nz-Gemma3-12B`（11 ファイル・7,339,810,357 B）／`Rootport/Nz-DWPose`（前処理器 2 点・352,756,773 B）。合計 20 ファイル・31,889,519,494 B（約 29.7GiB）。3 つとも Public かつ非 Gated で、HuggingFace のアカウント・トークンは一切不要。各リポジトリの内部構造は本プロジェクトの `models/` 配下と 1 対 1 で一致させてあるため、いずれも `models/` へそのまま展開され、後処理（平坦化・リネーム）は発生しない。`Rootport/Nz-Sulphur2`（自家変換 GGUF）は同じアカウントにあるがインストーラの取得対象ではない。
+**モデルの取得元は 3 リポジトリ（2026-08-03 更新）**: `Rootport/Nz-LTX23-weights`（LTX 本体 5 点＋IC-LoRA 3 点＋VDA 深度前処理器 2 点＝計 10 ファイル・25,219,475,913 B）／`Rootport/Nz-Gemma3-12B`（11 ファイル・7,339,810,357 B）／`Rootport/Nz-DWPose`（前処理器 2 点・352,756,773 B）。5 回のダウンロード呼び出しで合計 23 ファイル・32,912,043,043 B（約 30.7GiB）。3 つとも Public かつ非 Gated で、HuggingFace のアカウント・トークンは一切不要。各リポジトリの内部構造は本プロジェクトの `models/` 配下と 1 対 1 で一致させてあるため、いずれも `models/` へそのまま展開され、後処理（平坦化・リネーム）は発生しない。`Rootport/Nz-Sulphur2`（自家変換 GGUF）は同じアカウントにあるがインストーラの取得対象ではない。
 
 エンドユーザーの入口は **`setup.bat`（ダブルクリック）→ `scripts/setup.ps1` → `install_ltx.ps1`** である。`setup.ps1` は前提ツール（`uv` / `ffmpeg`+`ffprobe`）を `tools/` 配下へ取り込み、`config.yaml` が無ければ `config.yaml.example` から複製し、`logs/setup_<日時>.log` へ記録を残したうえで `install_ltx.ps1` を `&` で呼ぶ（ドットソースは禁止＝`install_ltx.ps1` の `exit` が呼び出し元ごと落とすため）。想定利用者が PowerShell を自分で開けないことを前提とした導線であり、`.bat` は純 ASCII・CRLF・末尾 `pause`、日本語のメッセージはすべて `.ps1` 側に置く。
+
+`setup.ps1` は本処理の前に**事前チェックを 3 種**（インストール先ドライブの空き容量／ページファイルの設定／NVIDIA GPU の有無）行うが、**いずれも警告を出すだけでセットアップは止めない**（環境の自動判定で利用者の作業を止めない方針）。起動側にも同種のガードがあり、`run.ps1` は待ち受けポートが既に使われていれば「すでに起動しています」と案内して `exit 0` する＝**二重起動ガード**（詳細は §3.3）。
 
 **冪等の粒度（2026-07-26 更新）**: 「既存物は無条件 SKIP」ではない。
 
 - **アプリ venv `./.venv`**: `uv sync` は毎回走る（冪等だが SKIP はしない）。
 - **エンジン venv `./.venv-engine`**: **ピン留めされた依存が前回適用時から変わっていないときだけ SKIP** する。判定は `engine/venv-engine.freeze.txt` の本文と、`install_ltx.ps1` 内にハードコードされた 3 つの git リビジョン（`diffusers` / `ltx-core` / `ltx-pipelines`）を連結した SHA-256 で行い、適用済みの値を `.venv-engine/.nz-engine-state` に記録する（`.gitignore` 配下＝追跡外・venv と運命を共にする）。このファイルは**完了マーカーを兼ねる**ため、記録が無い場合は「再適用する」側へ倒す（中断で半端に残った venv と、この仕組み以前に作られた venv を救うため）。`-ResolveLatest` を通った場合はマーカーを書かない（凍結スタックではないため）。この再同期があってはじめて「`git pull` → `setup.bat` 再実行」という更新手順が成立する。
 - **モデル群**: サイズによる冪等ガードで SKIP するが、判定は **ディレクトリごとに独立**である。`Invoke-ModelDownload` の `-Check` はそのリポジトリが展開する各ディレクトリについて `@{ Dir = "<パス>"; Min = <バイト数> }` を受け取り、**全エントリがそれぞれ自分の `Min` を満たしたときにだけ SKIP** する（1 つでも下回れば、そのリポジトリのダウンロードが走る）。判定対象を展開先（3 件とも `models`）から分離しているのはこの `Dir` である。**複数ディレクトリの合計を単一のしきい値と比べてはならない**（旧 `-CheckDir` ＋ `MinBytes` 方式・2026-07-26 廃止）。合計方式では大きなファイル 1 つが丸ごと欠けた兄弟ディレクトリを覆い隠す。実際 Gemma で発現し、7.3GB の GGUF だけで合計しきい値を超えるためトークナイザ dir が全欠落でも SKIP → 検証表 `gemma_root` MISSING → exit 1 → 再実行しても変わらない、という復旧不能のデッドロックになった。
-- **`Min` の取り方**: 真の正当性ゲートは `install_ltx.ps1` step 6 のファイル単位検証表（**14 項目**）である。したがって各 `Min` は「**そのディレクトリ**の合計 − **そのディレクトリ内で step 6 の検証表が個別にゲートしている最小ファイル**」より大きく、かつそのディレクトリの想定合計より少し小さく置く。これで「検証表が MISSING にできる欠落は必ずガードも割る」という対応が成立し、上記デッドロックが構造的に起きなくなる。検証表が個別に見ていないファイル（例: `gemma_root` はディレクトリ全体を 20MB で 1 行として見るだけ）は、欠けても MISSING にならないため捕捉できる必要はない（捕捉しようとすると 35 バイト幅のしきい値になり破綻する）。なお `models/ltx-2.3-gguf/` はユーザーが自家変換 GGUF を置くためサイズ判定が原理的に緩くなるが、これはサイズガードでは解けず検証表が受け持つ。
+- **`Min` の取り方**: 真の正当性ゲートは `install_ltx.ps1` step 6 のファイル単位検証表（**16 項目**）である。したがって各 `Min` は「**そのディレクトリ**の合計 − **そのディレクトリ内で step 6 の検証表が個別にゲートしている最小ファイル**」より大きく、かつそのディレクトリの想定合計より少し小さく置く。これで「検証表が MISSING にできる欠落は必ずガードも割る」という対応が成立し、上記デッドロックが構造的に起きなくなる。検証表が個別に見ていないファイル（例: `gemma_root` はディレクトリ全体を 20MB で 1 行として見るだけ）は、欠けても MISSING にならないため捕捉できる必要はない（捕捉しようとすると 35 バイト幅のしきい値になり破綻する）。なお `models/ltx-2.3-gguf/` はユーザーが自家変換 GGUF を置くためサイズ判定が原理的に緩くなるが、これはサイズガードでは解けず検証表が受け持つ。
 
 ---
 
@@ -209,7 +224,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 ./run.ps1 --port 19000
 ```
 
-`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。ポートが既に使われている場合は「すでに起動しています」と案内して `exit 0` する（`setup.bat` への誤誘導を避けるため）。URL の正本は `main.py` の起動バナーで、`run.ps1` はそれとは別に `Set-Clipboard` で URL を控えに入れる。
+`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。ポートが既に使われている場合は「すでに起動しています」と案内して `exit 0` する（`setup.bat` への誤誘導を避けるため）。**利用者に見せる URL の正本は `main.py` の起動バナー**であり（CLI フラグ適用後のポートを知っているのはそこだけ）、`run.ps1` は URL を一切表示しない。
 
 `run.ps1` は**アプリ**（`./.venv` の `main.py`）だけを起動する。real backend が選ばれると、アプリが `./.venv-engine\Scripts\python.exe -m engine.worker` を subprocess として自動 spawn する（worker の手動起動は不要）。起動後のエンドポイント:
 
@@ -304,21 +319,21 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 | GGUF Gemma | `model.gguf_gemma_path` |
 | component VAE / audio / text-projection | `model.component_video_vae_path` / `component_audio_vae_path` / `component_text_projection_path` |
 
-`checkpoint_path`（43GB モノリス。本書中の「46GB モノリス」と**同一ファイル**＝§5.2 の表記注記）は **reference-only** で、GGUF + component 経路では一切開かれないため、ここでは**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
+`checkpoint_path`（43GB モノリス。本書中の「46GB モノリス」と**同一ファイル**＝§5.2 の表記注記）は2026-07-28に`config.model`から削除済みで、そもそも対応する config フィールドが無い。`services/ltx_runner.py`が worker payload へ渡す値は直値の`""`にハードコードされており（`DistilledPipeline`構築のシグネチャを満たすためだけの存在）、GGUF + component 経路では一切開かれないため、ここでは**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
 
 **MockBackend の用途**: GPU / モデルウェイトの無い環境（開発・CI・pytest）向けの合成クリップ生成。`tests/conftest.py` が `model.backend="mock"` を強制する。API・スキーマ・出力構造（`outputs/{job_id}/output.mp4` + `metadata.json`）は real と同一で、`GenerationOutcome.backend` の値だけが異なる（mock=`"mock"`, real=`"ltx-distilled"`）。
 
 ### 4.4 ディレクトリ構成
 
 ```text
-12_Nz-LTX23-backend/
+Nz-LTX23-backend/
 ├─ setup.bat / run.bat     エンドユーザー向け入口（純 ASCII・CRLF・末尾 pause）
 ├─ run.ps1                 起動本体（**直下固定**・$PSScriptRoot 依存）
-├─ NzLTX23-1.0.0-rc1.au2pkg.zip
-│                          フロントエンド配布物（378,689 B・**git 追跡**・`.gitignore` の
-│                          `*.zip` に対し `!*.au2pkg.zip` で例外化。Git LFS は使わない）
+├─ AviUtl2-Plugin/         NzLTX23.aux2（フロントエンド配布物・**git 追跡**）
 ├─ main.py                 アプリ起動（./.venv, FastAPI）
 ├─ gradio_ui/              検証用 /ui（ui.py / handlers.py / presets.py / i18n.py ほか）
+├─ mcp_server/             MCPサーバー（§12b・./.venv で動くクライアント層）
+├─ chain_math.py           チェーンのフレーム／音声 latent 計算（アプリとエンジンで共用）
 ├─ config.py               設定ローダ（相対パスは PROJECT_ROOT 基準で絶対化）
 ├─ config.yaml             実設定（**git 追跡外**・config.yaml.example から複製される）
 ├─ config.yaml.example     配布されるひな型（config.yaml と同期させること）
@@ -331,7 +346,8 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 │   ├─ pipeline/           fast_video_pipeline.py（低VRAM機構の配線点）
 │   ├─ gguf/               GGUF dequant / loader サービス
 │   ├─ gemma/              GGUF Gemma + 逐次層オフロード + text-only configurator
-│   ├─ transformer/        block_swap / dit_cpu_load サービス
+│   ├─ transformer/        block_swap / dit_cpu_load / sage_attention / nag / vsf サービス
+│   ├─ preprocess/         参照動画の制御信号を起こす前処理（canny / dwpose / depth）
 │   ├─ VENDOR_NOTICE.md    provenance
 │   └─ venv-engine.freeze.txt / engine-venv-pyproject.toml（venv 再現）
 ├─ scripts/                setup.ps1（setup.bat の本体）/ install_ltx.ps1 /
@@ -349,8 +365,8 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 | 層 | 主なパッケージ / バージョン | 出所 |
 |----|------------------------------|------|
-| アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
-| エンジン（`./.venv-engine`） | **torch 2.9.1+cu128**（+ torchaudio 0.24.1+cu128 / torchvision）、`ltx-core` / `ltx-pipelines` @git rev `00dc53d`、`diffusers` @git rev（`engine/venv-engine.freeze.txt` ヘッダが正）、`gguf`、`transformers` | `engine/venv-engine.freeze.txt`（完全スナップショット）/ `engine/engine-venv-pyproject.toml`（`[tool.uv.sources]` に cu128 index と git rev） |
+| アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow / **`mcp`（`>=1.28,<2`。2026-07-28追加・MCPサーバー用main依存＝§12b）**（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
+| エンジン（`./.venv-engine`） | **torch 2.9.1+cu128**（+ torchaudio 0.24.1+cu128 / torchvision）、`ltx-core` / `ltx-pipelines` @git rev `00dc53d`、`diffusers` @git rev（`engine/venv-engine.freeze.txt` ヘッダが正）、`gguf`、`transformers`、**`sageattention` 2.2.0＋`triton-windows` 3.5.1.post24（2026-07-31追加・Acceleration 機能用＝§5.4）** | `engine/venv-engine.freeze.txt`（完全スナップショット）/ `engine/engine-venv-pyproject.toml`（`[tool.uv.sources]` に cu128 index と git rev） |
 
 `ltx-core` / `ltx-pipelines` / `diffusers` は **git direct-url インストール**（PyPI ではない）。Windows の PyPI 版 torch は CPU 専用のため、cu128 インデックスから `torch/torchaudio/torchvision == *+cu128` を明示インストールする（`Docs/note.md`）。provenance と再現手順の一次情報は `engine/VENDOR_NOTICE.md`。
 
@@ -363,7 +379,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 - Gemma text encoder も GGUF Q4_K_M（逐次層オフロード）。
 - VAE/audio/text-projection は 46GB モノリスでなく小単体 component ファイルから読む。
 
-判断根拠は「16GB / Windows で公式ローダが落ちる」という実機事実に尽きる。詳細な経緯・A/B 実測・SHA256 バイト一致検証は `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/VERIFICATION_LOG.md`、engine の由来は `engine/VENDOR_NOTICE.md` を一次情報とする。なお `Docs/note.md` は旧・公式ローダ前提のノートだが、「torch 2.9.1+cu128 / attention は SDPA（Ada では FlashAttention-2）で十分 / xformers は任意 / 16GB の律速は重み転送(PCIe)」という結論部分は現行でも有効である。
+判断根拠は「16GB / Windows で公式ローダが落ちる」という実機事実に尽きる。詳細な経緯・A/B 実測・SHA256 バイト一致検証は `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/VERIFICATION_LOG.md`、engine の由来は `engine/VENDOR_NOTICE.md` を一次情報とする。なお `Docs/note.md` は旧・公式ローダ前提のノートだが、「torch 2.9.1+cu128 / attention は SDPA（Ada では FlashAttention-2）で十分 / xformers は任意 / 16GB の律速は重み転送(PCIe)」という結論部分は現行でも有効である（**2026-07-31 補足**: この「SDPA で十分」は既定の話として引き続き正しいが、2026-07-31 に SageAttention をジョブ単位で選べるようにした結果、attention 側にも 720p で 1.17 倍・二段目単体で 1.56 倍という実測の伸びしろがあることが判明した。詳細は §5.4）。
 
 ---
 
@@ -371,7 +387,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 ### 5.1 実行に本当に要る構成
 
-本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 28.15GiB）である。相対パスは `config.model` が保持し、PROJECT_ROOT 基準で `config._abs` が絶対化する。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。同ファイルが列挙するのは **9 行**で、内訳は本表の 5 要素を展開したもの（component ファイルが video VAE / audio VAE / text-projection の 3 行に分かれる）**7 行**＋ `engine_python`（`./.venv-engine/Scripts/python.exe`）＋ `checkpoint_path (ref-only)`（46GB モノリスへの reference-only パス・§5.5）である。**§5.1b の IC-LoRA / 前処理器は含まない。**
+本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 28.15GiB）である。相対パスは `config.model` が保持し、PROJECT_ROOT 基準で `config._abs` が絶対化する。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。同ファイルが列挙するのは **8 行**で、内訳は本表の 5 要素を展開したもの（component ファイルが video VAE / audio VAE / text-projection の 3 行に分かれる）**7 行**＋ `engine_python`（`./.venv-engine/Scripts/python.exe`）である（2026-07-28、`checkpoint_path`の行は`config.yaml`からの削除に伴い消えた・§5.5）。**§5.1b の IC-LoRA / 前処理器は含まない。**
 
 | 要素 | 既定パス | 概算 | 役割 |
 |------|----------|------|------|
@@ -385,25 +401,29 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 ### 5.1b インストーラが追加で取得するもの（IC-LoRA / 前処理器）
 
-上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 2 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。合わせて取得総量は **~30GB（31,889,519,494 B ＝ 約 29.7GiB）** になる。
+上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 4 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。下 2 行は 2026-08-03 の depth-control / deblur 追加分である（正本 `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。合わせて取得総量は **~33GB（30.7GiB）** になる。
 
 | 要素 | 既定パス | 概算 | 取得元 | 役割 |
 |------|----------|------|--------|------|
-| IC-LoRA 2 点 | `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/…-x2-0.9.safetensors`／`models/ltx-2.3-ic-lora/union-control/…-union-control-ref0.5.safetensors` | 1.22GiB | `Rootport/Nz-LTX23-weights` | `config.yaml` `model.ic_loras` の 3 エントリの実体。union-control の 1 ファイルを `canny-control` / `pose-control` の 2 名で公開している（§11 / IC-LoRA Phase C） |
+| IC-LoRA 2 点 | `models/ltx-2.3-ic-lora/pixel-spatial-upscaler/…-x2-0.9.safetensors`／`models/ltx-2.3-ic-lora/union-control/…-union-control-ref0.5.safetensors` | 1.22GiB | `Rootport/Nz-LTX23-weights` | `config.yaml` `model.ic_loras` の 4 エントリの実体。union-control の 1 ファイルを `canny-control` / `pose-control` / `depth-control` の 3 名で公開している（§11 / IC-LoRA Phase C / `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`） |
 | DWPose 前処理器 2 点 | `models/preprocessors/yolox_l.torchscript.pt`／`models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt` | 0.33GiB | `Rootport/Nz-DWPose` | `pose-control` の前処理（`engine/preprocess/dwpose.py` が自ファイル位置からの絶対パスで両方を読むため、配置は変更不可） |
+| IC-LoRA Deblur 1 点（2026-08-03 追加） | `models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | 906,071,437 B | `Rootport/Nz-LTX23-weights` | `deblur` エントリの実体。**前処理不要**（ぼけた参照動画をそのまま渡す）なので `config.yaml` では**文字列形式**で登録する。メタデータの `reference_downscale_factor="1"`＝参照を縮小せずに（縮小係数1で）条件付けに使うため、既存アダプタ（係数 2）より stage-1 の VRAM を食う |
+| VDA 深度前処理器 2 点（2026-08-03 追加） | `models/preprocessors-vda/video_depth_anything_vits.pth`／同 `LICENSE` | 116,452,112 B | `Rootport/Nz-LTX23-weights` | `depth-control` の前処理（Video-Depth-Anything Small。`engine/preprocess/depth.py` が自ファイル位置からの絶対パスで読むため配置は変更不可。dwpose.py と同じ作法）。**`LICENSE` は Apache-2.0 の全文**で、重みリポジトリ内の他ファイル（LTX-2 Community Licence）とはライセンスが異なるため `.pth` と必ず一緒に運ぶ |
 
-**これらは「無くても mock に落ちない」ため、検証を省くと壊れ方が分かりにくい**: `_real_available()` は見ておらず、`config.yaml` は 3 つの `ic_loras` を無条件に登録し、`gradio_ui/adapters.py` は登録が空でも同じ 3 名を静的フォールバックで並べる。したがって欠けていても UI にはアダプタ名が出て、選んだ瞬間に 404 になる。この失敗を前倒しで名指しするため、install_ltx.ps1 step 6 の検証表はこの 4 ファイルを含む **14 項目**になっている（x4 アップスケーラ版は未登録＝リポジトリにも置かない）。
+**これらは「無くても mock に落ちない」ため、検証を省くと壊れ方が分かりにくい**: `_real_available()` は見ておらず、`config.yaml` はすべての `ic_loras` エントリを無条件に登録し、`gradio_ui/adapters.py` は登録が空でも同じ名前を静的フォールバックで並べる。したがって欠けていても UI にはアダプタ名が出て、選んだ瞬間に 404 になる。この失敗を前倒しで名指しするため、install_ltx.ps1 step 6 の検証表はこの 6 ファイルを含む **16 項目**になっている（x4 アップスケーラ版は未登録＝リポジトリにも置かない）。
+
+> **新規の重みを既存ディレクトリの「子」ではなく「兄弟」に置いている理由**: インストーラのスキップ判定は Check ディレクトリの**再帰的サイズ合計**である。Deblur の 906MB を既存の `models/ltx-2.3-ic-lora/` の**中**に置くと、union-control ファイル（654MB）を失っているマシンでも合計が既存の Min 値を上回ってしまい、ダウンロードがスキップされて「union-control MISSING」が永久に解消しなくなる（Gemma tokenizer で起きた事故の逆方向の再発）。`models/preprocessors-vda` を `models/preprocessors` の兄弟にしているのも同じ理由で、子（`models/preprocessors/vda/`）にしていたら VDA の 116MB が DWPose 側の判定を水増しして、欠けた `dw-ll_ucoco`（135MB）を覆い隠していた。詳細は `Docs/VERIFICATION_LOG.md` §49.6。
 
 ### 5.2 削除済みの重量物
 
 de-fork（§13）と QAT 回収（§13）のリファクタで、実行に不要な以下を**物理削除**した:
 
-- **43GB モノリス** `ltx-2.3-22b-distilled-1.1.safetensors`。`config.model.checkpoint_path` はフィールドとしては残るが **reference-only** で、GGUF + component 経路では一切開かれない（rename test で実証・VERIFICATION_LOG §13.3）。worker payload には載る（`DistilledPipeline` のシグネチャ用）が、存在チェックすら課さない。
+- **43GB モノリス** `ltx-2.3-22b-distilled-1.1.safetensors`。`config.model.checkpoint_path` フィールドは2026-07-28に削除済み（死んだ設定と確認済み・`Docs/VERIFICATION_LOG.md` §40）。worker payload には引き続き載る（`services/ltx_runner.py`が`DistilledPipeline`のシグネチャを満たすため直値`""`をハードコード）が、GGUF + component 経路では一切開かれず、存在チェックすら課さない（rename test で実証・VERIFICATION_LOG §13.3）。
 - **22.7GB の QAT Gemma dir** `models/gemma-3-12b-it-qat/`。Gemma を text-only 化（下記 5.3）したため wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は ~40MB の tokenizer-only dir で足りる。
 
 これにより `models/` は 50.9GB → ~28.15GB（VERIFICATION_LOG §14.1）。
 
-> **「43GB モノリス」と「46GB モノリス」の表記について（本書全体に適用）**: 本書はこのファイルを箇所により「43GB モノリス」とも「46GB モノリス」とも書いている（§4.3・§4.6・§5.1・§5.2・§5.5・§7.6・§9.1・§9.2・§11.2・付録B）。**両方とも同一の 1 ファイルを指し、どちらの表記も誤りではない。** 実測 **46,139,885,414 バイト**で、10 進 GB では 46.1GB、2 進 GiB では 42.97GiB（≒43GiB）になるだけである（同じ混在が `config.py` にもある）。同旨の注記が `README.md` §1 の「削除済み（2026-07-01 の refactor）」ブロックにもあり、そちらが利用者向けの正本である。
+> **「43GB モノリス」と「46GB モノリス」の表記について（本書全体に適用）**: 本書はこのファイルを箇所により「43GB モノリス」とも「46GB モノリス」とも書いている（§4.3・§4.6・§5.1・§5.2・§5.5・§7.6・§9.1・§9.2・§11.2・付録B）。**両方とも同一の 1 ファイルを指し、どちらの表記も誤りではない。** 実測 **46,139,885,414 バイト**で、10 進 GB では 46.1GB、2 進 GiB では 42.97GiB（≒43GiB）になるだけである（同じ混在が `config.py` にもある）。**この表記についての正本は本節である。**
 
 ### 5.3 Gemma の text-only 化
 
@@ -415,11 +435,18 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 既定は **PyTorch SDPA**（全アーキ共通）。Ada Lovelace + torch 2.9 では SDPA の実体は **FlashAttention-2** カーネルであり、16GB の律速は attention でなく重み転送（PCIe）であるため、これで十分である（`Docs/note.md` の結論サマリ）。**xformers は任意**の最適化で、Windows では自動導入されず、必要ならソースビルドする（`scripts/build_xformers.ps1`）。
 
+**SageAttention によるジョブ単位の切替（2026-07-31追加）**: 上記の既定は変えないまま、**ジョブごとに attention の実装を選べる**ようにした（`GenerateRequest` / `GenerateChainRequest` の `attention_backend`＝`"sdpa"`（既定）/ `"sage"`。§6.2）。`"sage"` を選んだジョブでは、engine 側の `engine/transformer/sage_attention_service.py` が transformer の **48 ブロック × 6 種（`attn1`／`attn2`／`audio_attn1`／`audio_attn2`／`audio_to_video_attn`／`video_to_audio_attn`）＝ 288 モジュール**の `attention_function` を SageAttention 2.2.0 の実装へ差し替える。サーバー再起動・パイプライン再ロードは不要。
+
+- **降格の規律**: sageattention が導入されていない環境で `"sage"` を指定しても **422 にはせず、警告1行を出して SDPA で完走する**。NAG（§6.2 の相互検証）のような fail-loud と規律をあえて変えているのは、本機能が生成結果の意味ではなく**速度**のオプションだからである。マスク付きの attention 呼び出し（IC-LoRA の `conditioning_attention_strength < 1.0` 経路）も SDPA へ自動フォールバックし、カーネル例外が出た場合はそのジョブ内で SDPA に固定する。
+- **実効値の記録**: 実際に使われた方式は `metadata.json` トップレベルの `attention_used`（`"sdpa"` / `"sage"` / `"sage->sdpa"`）に残る（§6.6）。利用可否は `GET /status` の `acceleration.sage_available`（§6.5b）。
+- **依存**: `sageattention` 2.2.0（woct0rdho 版 Windows wheel を直リンク pin）＋ `triton-windows==3.5.1.post24` を `engine/venv-engine.freeze.txt` に載せ、インストーラが標準で導入する。`sageattention` は `engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも**載せない**——`-ResolveLatest` は未検証の新しい torch を解決する経路で、torch 2.9.1 固定 ABI の wheel と非互換になるため。**`-ResolveLatest` を使った環境では sage の動作は保証外**である。2026-07-28 の依存整理（`Docs/VERIFICATION_LOG.md` §40.1）で削除した旧世代 `sageattention` 1.0.6 とは別物で、今回は実消費者があるための再導入である（同 §43.3）。
+- **実測と設計判断の正本**: `Docs/VERIFICATION_LOG.md` §43。利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。
+
 インストーラ `scripts/install_ltx.ps1` は「全アーキで SDPA、xformers/flash-attn は自動導入しない」方針である。かつては GPU アーキを `nvidia-smi` で自動判定し、ada/ampere/hopper については `wheels/` にプリビルド wheel があればそれを導入する分岐を持っていたが、**この自動導入は 2026-07-26 に廃止した**（全アーキ SDPA 固定である以上、アーキごとに導入物を変える理由が無く、判定の失敗・誤判定が事故の種になるだけであるため）。`scripts/build_xformers.ps1` は、xformers を自分でビルドしたいユーザーのための**手動ツール**として引き続き `scripts/` に残す（インストーラからは呼ばれない）。
 
 ### 5.5 reference-only パスの位置づけ
 
-`checkpoint_path`（43GB モノリス）・`ltx_repo_dir`（`vendor/LTX-2` 上流クローン）は config に残るが **reference-only** で、GGUF + component 経路では読まれない。`checkpoint_path` は `DistilledPipeline` 構築のシグネチャを満たすために worker payload へ転送されるだけで（存在チェック無し）、`fast_video_pipeline.py` の fail-fast アサートが「component/GGUF ソースが全て揃っていること」を build 前に要求するため、モノリスへサイレントにフォールバックすることは無い。
+`ltx_repo_dir`（`vendor/LTX-2` 上流クローン）は config に残るが **reference-only** で、GGUF + component 経路では読まれない。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/ltx_runner.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast アサートが「component/GGUF ソースが全て揃っていること」を build 前に要求するため、モノリスへサイレントにフォールバックすることは無い。
 
 ---
 
@@ -454,6 +481,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 - api_key 設定時に Bearer 不一致/欠落 → `401 UNAUTHORIZED`。
 - `POST /generate` は投入時にまず `conditioning_images` の各 `image_id` の実在を検証（`upload_store.path_for` が `IMAGE_NOT_FOUND`=404 を送出）、次に単一ジョブガードで 409。
 - `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。
+- `POST /upload/video`（`api/uploads.py::upload_video`）も本表に未掲載の ADDITIVE エンドポイント（Phase B の IC-LoRA 参照動画／V2V 継続元アップロード）で、**2026-07-30 に任意のクエリ引数 `trim_start_sec` / `trim_duration_sec`（いずれも `float | None`、既定 `None`）を加算した**——アップロードした動画のうち `[trim_start_sec, trim_start_sec + trim_duration_sec)` の区間だけを残してサーバー側で切り出す（フロントエンドのタイムライン上でリボンが元動画の一部しか占めていないときに、その範囲だけを冒頭クリップにするための機能）。作法は `source_tail_seconds` と同じ「凍結表外エンドポイントへの追加専用拡張」で、**2引数とも未指定なら旧リクエストとバイト単位で同一**（`services/video_upload_store.py` の切り出し経路そのものが走らず、受信バイト列がそのまま保存される）。`Query()` に `ge=`／`le=` を意図的に付けておらず、**片方だけ指定・NaN／inf・負の開始・0以下の尺・ffmpeg 失敗はすべて 422 や 500 にせず「トリムせずそのまま保存」へ穏当に劣化する**（本引数の加算で新しいエラー応答が生まれないことを保証する設計）。レスポンス `UploadVideoResponse` には `trimmed`（bool, 既定 `False`, `2026-07-30追加`——2引数が指定され、かつ切り出しが実際に成功したときだけ `True`）を加算した。**この2引数は V2V 継続元だけでなく IC-LoRA 参照動画（`reference_video_id`）のアップロードにも同じクエリのまま使われる**（`2026-08-01`——フロントエンドが同じ判定関数で両方の経路にトリムを適用するようになったため。バックエンドは両者を区別せず、`POST /upload/video` は1本のままである）。実装・機械検証・実機ゲートの記録は `Docs/VERIFICATION_LOG.md` §42。
 - `POST /jobs/{job_id}/join`・`GET /jobs/{job_id}/joined` は V2V（video-to-video 継続）専用の ADDITIVE エンドポイントで、V2V 継続機能そのものの実装時（§24）に新設され、**2026-07-21 に凍結の限定解除（オーナー承認・コミット `d22706e`）でリクエスト/レスポンスが拡張された**。リクエスト `JoinRequest` は `audio_smoothing`（bool, 既定 `true`＝クロスフェード）・`handle_crossfade_ms`（int, 既定 `300`, `0`〜`2000`）・`source_tail_seconds`（float, 既定 `5.0`, `2026-07-21追加`——結合前にソース動画の末尾 `N` 秒だけを残す tail-keep トリム。`0` はソースを全長のまま結合）。レスポンス `JoinResponse` は `job_id`・`joined_path`（結合後 mp4 のパス）・`join_mode`・`source_normalized`・`source_lufs`・`continuation_lufs_before`・`fade_ms_applied`・`handle_crossfade_ms_applied`・`handle_context_seconds`・`loudness_matched`・`trimmed_source_seconds`（float, `2026-07-21追加`——tail-keep で削られた秒数。挿入位置計算に使う）・`source_fps`（float \| null, `2026-07-21追加`——ソースの実測fps）を返す。ボディ省略（またはPOST時ボディ無し）は既定値でのスムーズ結合になる。
 
 ### 6.2 GenerateRequest 全文
@@ -463,7 +491,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | フィールド | 型 | デフォルト | 制約（Field） | 説明 |
 |-----------|----|-----------|--------------|------|
 | `prompt` | str | （必須） | `min_length=1, max_length=2000` | 生成プロンプト |
-| `negative_prompt` | str | `""` | — | ネガティブプロンプト |
+| `negative_prompt` | str | `""` | `max_length=2000`（**2026-07-28追加**。従来はno-opだったため上限が無かった） | ネガティブプロンプト |
 | `width` | int | `512` | `ge=256, le=4096` | 生成幅。**64 の倍数必須**（下記バリデータ） |
 | `height` | int | `320` | `ge=128, le=4096` | 生成高。**64 の倍数必須** |
 | `crop_output` | CropOutput \| null | `null` | — | 最終 MP4 のクロップサイズ。null ならクロップなし |
@@ -474,6 +502,15 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `seed` | int | `-1` | — | `-1` は乱数シード（親プロセスで解決） |
 | `pipeline` | `Literal["distilled","two_stage_hq"]` | `"distilled"` | enum | パイプライン種別 |
 | `conditioning_images` | list[ConditioningImage] | `[]` | — | 空=T2V、1 件=最小 I2V |
+| `nag_enabled` | bool | `false` | — | **2026-07-28追加**。NAG（Normalized Attention Guidance＝CFGを使わずcross-attention出力レベルでネガティブプロンプトを効かせる非CFG手法）の有効化 |
+| `nag_scale` | float | `11.0` | `ge=1.0, le=20.0` | **2026-07-28追加**。外挿の強さ |
+| `nag_tau` | float | `2.5` | `ge=1.0, le=10.0` | **2026-07-28追加**。ノルム頭打ち上限 |
+| `nag_alpha` | float | `0.25` | `ge=0.0, le=1.0` | **2026-07-28追加**。正出力とのブレンド比率 |
+| `attention_backend` | `Literal["sdpa","sage"]` | `"sdpa"` | enum | **2026-07-31追加**。attention（注意機構）の実装選択。`"sage"` は SageAttention 2.2.0（§5.4）。**実装あり**。sageattention 未導入の環境では 422 にせず `"sdpa"` へ降格して完走する |
+| `block_swap_prefetch` | bool | `true` | — | **2026-08-02追加**。block swap（transformer のブロックを CPU⇔GPU 間で出し入れする既定の省VRAM機構）の転送を、計算とは別の CUDA stream で先回りさせて隠す先読み機能。**実装あり**。`attention_backend` と違い転送方式のみを変えるため、同一シードなら off/on で出力がビット単位一致する。block swap 自体が無効な設定（`vram.block_swap=false` / `block_swap_blocks_on_gpu=0` / 全ブロック数以上）では黙って no-op になる。詳細は `Docs/VERIFICATION_LOG.md` §44 |
+| `keep_resident` | bool | `false` | — | **2026-08-03追加**。モデルのCPU側「骨格」（GGUF から組み上げた state dict とモジュールツリー。DiT 約16.5GB＋Gemma 約8〜9GB）をジョブ間で保持して使い回し、2本目以降の前処理固定費を消す per-job フィールド（ジョブごとのリクエスト項目）。**実装あり**。GPU には何も常駐させないため VRAM プロファイルは不変で、同一シードなら off/on で出力がビット単位一致する（HIT 時の前処理は実測 5.32 秒。ベースラインは 68.6〜75.0 秒）。**メモリ 64GB 以上を推奨**（約20GB を常時占有する）。`gguf_per_layer_quant=false` との併用はジョブがエラーで停止し（bf16 融合経路の in-place な LoRA 融合がキャッシュを汚染するため）、`dit_cpu_load=false` / `block_swap_prefetch=false` との併用は警告のうえ自動 off になる。実際に効いたかは `metadata.json` の `keep_resident_used`（`"off"` / `"on"` / `"on->off"`）で確認する。詳細は `Docs/VERIFICATION_LOG.md` §48 |
+| `fused_gguf_dequant_kernel` | bool | `true` | — | **2026-08-04追加**。GGUF の K量子化（Q4_K / Q5_K / Q6_K）の逆量子化を Triton の1カーネルへ融合する高速化。**実装あり**。`attention_backend` と違い展開の手順しか変えないため、同一シードなら off/on で出力がビット単位一致する（必須要件として検証済み）。Triton 不在・カーネル例外・型ごとの初回自己検証の不一致のいずれでも黙って従来実装へ降格し、生成は落とさない。実際に効いたかは `metadata.json` の `fused_gguf_dequant_kernel_used`（`"off"` / `"on"` / `"on->off"`）で確認する。実測は 768p/257f で約17.5%短縮。既定は実機ゲート G1〜G8 合格を条件に 2026-08-04 に `false` から反転した。詳細は `Docs/VERIFICATION_LOG.md` §51。**同日、受理のみで生成に影響しなかった旧モック `fused_gguf_dequant_gemm` は完全撤去した**（オーナー裁定。pydantic の `extra=ignore` により旧クライアントが送っても API は壊れない） |
+| `vae_mode` | `Literal["default","prune_vaed"]` | `"default"` | enum | **2026-07-31追加・モック**（受理のみでエンジン未消費。下記注）。既存の `vram_optimization.vae_tiling`（VRAM 節約のタイル分割）とは**無関係** |
 
 凍結制約（`model_validator(mode="after") validate_ltx_constraints`、順序どおり）:
 
@@ -484,6 +521,18 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 5. `pipeline == "distilled"` のとき: `num_inference_steps != 8` → ValueError、`guidance_scale != 1.0` → ValueError（Phase 1 の distilled は 8 step / CFG=1.0 固定）
 6. `len(conditioning_images) > 1` → `ValueError("Phase 1 supports at most one conditioning image")`（最小 I2V は 1 枚まで）
 7. `conditioning_images` が 1 件のとき `frame_idx != 0` → `ValueError("Phase 1 supports only frame_idx=0 for I2V")`
+8. `nag_enabled` が true かつ `negative_prompt.strip()` が空 → `ValueError("nag_enabled requires a non-empty negative_prompt")`（**2026-07-28追加**）
+
+> **NAGフィールドの補足（2026-07-28追加）**: 上記4フィールドは `GenerateRequest` に加えて `GenerateChainRequest`（`POST /generate/chain`。本書は§6ではPhase 1の単発生成のみを扱うため独立のスキーマ表は持たない）にも同一の名前・型・デフォルト・制約で存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。詳細な設計判断（式の規約・非対称設計の根拠・実装箇所一覧・実機ゲート）は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を正本とする。
+
+> **Acceleration フィールドの補足（2026-07-31追加、2026-08-02・2026-08-04追記）**: 上記4フィールド（`attention_backend` / `block_swap_prefetch` / `fused_gguf_dequant_kernel` / `vae_mode`）も NAG と同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。
+>
+> - **モック1件（`vae_mode`）の位置づけ**: 受理はするがエンジンへは渡さない、将来の実装枠である。`model_dump()` 経由の `metadata.json` と `GET /jobs` の `request` エコーには**現れる**（`pipeline: "two_stage_hq"` と同じ既存の前例に倣う。`exclude` 等の細工はしない）。**現れないのは worker ペイロードと `GET /status` だけ**——`/status` はサーバーが実際にできることを記述する場所だからである。MCP のツール引数にも公開しない。UI 側は常時グレーアウト。**2026-08-04 まではもう1件（`fused_gguf_dequant_gemm`）があったが、同名の実装が入るわけではないため完全撤去し、実装のある `fused_gguf_dequant_kernel` が UI 上の位置だけを引き継いだ**（`Docs/VERIFICATION_LOG.md` §51.1）。
+> - **既定値のジョブの worker ペイロード**: いずれのフィールドも「**サーバー既定と異なる値のときだけキーを加算する**」方式である。既定が `"sdpa"` の `attention_backend` と既定 `false` の `keep_resident` は既定のジョブでキーが増えず、既定 `true` の `block_swap_prefetch` と `fused_gguf_dequant_kernel` は既定のジョブでも `true` として載る（`Docs/VERIFICATION_LOG.md` §43.4／§44.4／§51.5 の完全一致テスト群が固定している。**このキー集合が増えてよいのは「実機ゲート合格後の既定反転」のときだけ**である）。
+> - **`block_swap_prefetch` と `fused_gguf_dequant_kernel` の既定は `true`**（`attention_backend` とは既定値の向きが逆）。いずれも実機ゲート（ビット一致＋VRAM）合格を条件に、開発時の既定 `false` から反転したものである（前者は 2026-08-02、経緯は `Docs/VERIFICATION_LOG.md` §44.7／後者は 2026-08-04、経緯は同 §51.5）。
+> - 詳細な設計判断・実装箇所一覧・実機ゲート・実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43（`attention_backend`）・§44（`block_swap_prefetch`）・§51（`fused_gguf_dequant_kernel`）を正本とする。
+
+> **`keep_resident` の補足（2026-08-03追加）**: 本フィールドも NAG・Acceleration の各フィールドと同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。既定（`false`）のジョブは worker ペイロードのキーが1つも増えない（`true` のときだけ加算する方式）。**`GET /status` には意図的に載せていない**——`/status` は「サーバーが実際にできること」を書く場所であり、`keep_resident` は `sage_available` のような可否判定（能力ゲート）を持たないためである（このマシンに十分なメモリがあるかという利用者側の選択にすぎない）。旧来の環境変数 `LTX_KEEP_RESIDENT` は**撤去済み**で、真実源は本フィールドへ一本化されている（§9.2、[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48）。
 
 - `width`/`height` は two-stage distilled が stage-1 を半解像度で生成し 2x アップサンプルするため **64 の倍数**（32 からの意図的な厳格化。960x540 等の非 64 表示サイズは `crop_output` で得る）。
 - バリデータ失敗はすべて 422（`VALIDATION_ERROR` エンベロープ、§6.8）。
@@ -683,6 +732,35 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 （GET /status 全体の形は `api/status.py` を参照。`gpu` ブロックは `gpu_info.get_gpu_info()`、`queue` は `mode="single_job_in_memory"` に `job_store.counts()`=`pending/running/completed/failed` を展開。`version`="0.4.0"（API 実装のバージョン文字列であり、本仕様書の版 v0.5 とは別物）。）
 
+> **`gpu.available` が常に `false` になる件（既知・仕様どおり）**: `GET /status` の `gpu` ブロックは、アプリ用仮想環境（`./.venv`、torch 無し）から見た値を返すため、実機でも `available: false` になる。2プロセス／2仮想環境という構成（§2）に由来する既存の挙動で、実際の GPU はエンジン側 worker プロセスが握っている。紛らわしいが不具合ではない。
+
+### 6.5b GET /status の `acceleration`（**非凍結**・2026-07-31追加）
+
+`services/pipeline_manager.py::PipelineManager.acceleration_status_block()` が生成するトップレベルブロック。§6.5 の `vram_optimization`（凍結キー集合）とは別物で、**こちらは凍結対象ではない**（`vram_optimization` には一切触れていない）。
+
+```json
+"acceleration": {
+  "attention_backends": ["sdpa", "sage"],
+  "sage_available": true,
+  "block_swap_prefetch_available": true
+}
+```
+
+- `attention_backends`: `attention_backend`（§6.2）が受け付ける値の一覧。**実装のある項目だけ**を並べる。残る1件のモック（`vae_mode`）は、`/status` が「サーバーが実際にできること」を記述する場所である以上、**意図的に載せていない**（`keep_resident` と `fused_gguf_dequant_kernel` も、環境依存の可否ではないという理由で意図的に載せていない）。
+- `block_swap_prefetch_available`（**2026-08-02追加**）: 先読み block swap（`block_swap_prefetch`、§6.2）が実際に効く構成かどうか。判定式は実ゲートと完全同一で `not runner.is_mock and int(low_vram.block_swap_blocks_on_gpu or 8) > 0`（`services/pipeline_manager.py::_block_swap_prefetch_available`）。§6.5 の凍結 `vram_optimization` ブロックには一切触れていない。`block_swap_blocks_on_gpu=0` を `or 8` により実質8として扱う式は本項のために新設したものではなく、`services/ltx_runner.py:1086` に既存の式をそのまま流用している。詳細は `Docs/VERIFICATION_LOG.md` §44.1・§44.8。
+- `sage_available`: SageAttention が使えるかどうか。サーバーの状態によって判定経路が変わる（**真理値表**。この表の置き場が `acceleration_status_block()` である）:
+
+| サーバーの状態 | `sage_available` の由来 |
+|---|---|
+| mock backend | 常に `false`（エンジンが存在しない） |
+| パイプライン未ロード | エンジン用仮想環境の site-packages に `sageattention/` と `triton/` が両方あるかの**ファイル存在チェック** |
+| パイプライン ロード済み | **worker プロセス自身の import 判定**（こちらが権威。DLL ロード失敗や ABI 不一致まで捕捉できる） |
+| ロード失敗 / unload 後 | ファイル存在チェック（生きた worker が無いため） |
+
+2つの経路は「import できる**はず**か」と「実際に使うプロセスで import **できる**か」という別々の問いへの答えであり、どちらの値かは同じ応答の `pipeline_loaded` を見れば判別できる。そのため判定経路を示す `sage_source` のような追加フィールドは設けていない。
+
+**クライアント側の作法**: `sage_available` が `false` でも `attention_backend="sage"` を送ること自体は許される（サーバーが `"sdpa"` へ降格して完走する）。値が取れない・不明な場合に UI 側で `sage` を封じる必要はない。
+
 ### 6.6 metadata.json スキーマ
 
 `services/pipeline_manager.py::_write_metadata` が書き出す（`output.save_metadata_json` が true のとき）。実フィールド:
@@ -697,6 +775,11 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `request` | `GenerateRequest.model_dump()` |
 | `generation_mode` | `"t2v"` / `"i2v"`（outcome 由来） |
 | `seed_used` | int |
+| `attention_used` | str \| null（**2026-07-31追加**。実際に使われた attention の実装＝`"sdpa"` / `"sage"` / `"sage->sdpa"`。`seed_used` とまったく同じ経路〔worker の完了イベント → outcome → メタデータ〕で書き出される。mock backend や旧 worker では `null`） |
+| `block_swap_prefetch_used` | str \| null（**2026-08-02追加**。実際に効いた先読み block swap の状態＝`"off"` / `"on"` / `"on->off"`〔on を要求したが block swap 未インストール・pinned 確保失敗などで同期経路へ降格〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`） |
+| `keep_resident_used` | str \| null（**2026-08-03追加**。モデル骨格の常駐が実際に効いたか＝`"off"` / `"on"` / `"on->off"`〔on を要求したが `dit_cpu_load=false` / `block_swap_prefetch=false` との併用で自動 off になった〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`。詳細は `Docs/VERIFICATION_LOG.md` §48） |
+| `fused_gguf_dequant_kernel_used` | str \| null（**2026-08-04追加**。GGUF 逆量子化の1カーネル化が実際に効いたか＝`"off"` / `"on"` / `"on->off"`〔on を要求したが実際には適用されなかった。Triton 不在・カーネル例外での降格・型ごとの初回自己検証の不一致・対象テンソル0件のいずれか〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`。実機ゲートの判定基準もこのフィールドである。詳細は `Docs/VERIFICATION_LOG.md` §51） |
+| `peak_vram_reserved_mb` | int \| null（**2026-08-02追加**。`torch.cuda.max_memory_reserved` 換算 MB。既存の `vram_optimization.peak_vram_mb`〔`max_memory_allocated`〕はstream別プール分断・reserved増を検知できないため、先読み block swap のVRAMリスクを見る指標として加算した。既存フィールドは置換していない） |
 | `generation_time_seconds` | `round(elapsed, 2)` |
 | `backend` | outcome.backend（mock は `"mock"`、real は `"ltx-distilled"`） |
 | `output` | `{path, resolution, duration_seconds, frame_rate, file_size_bytes}` |
@@ -776,7 +859,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 ```
 （`job_id`・`detail` は非 None のときだけ含まれる。）
 
-実在するエラーコードと HTTP ステータス（`api/errors.py` のファクトリ）:
+実在するエラーコードと HTTP ステータス（`api/errors.py` のファクトリ 27 件と、ハンドラ側で生成される 2 件）:
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
@@ -784,6 +867,24 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 | `UPLOAD_INVALID_TYPE` | 400 | 未対応画像形式・デコード不能・filename 欠落 |
 | `UPLOAD_TOO_LARGE` | 400 | `upload.max_image_size_mb` 超過 |
 | `IMAGE_NOT_FOUND` | 404 | `image_id` が存在しない |
+| `REFERENCE_VIDEO_NOT_FOUND` | 404 | `reference_video_id` が存在しない（IC-LoRA の参照動画） |
+| `SOURCE_VIDEO_NOT_FOUND` | 404 | `source_video.video_id` が存在しない（V2V 継続の元動画。参照動画と区別するための独立コード） |
+| `SOURCE_VIDEO_TOO_SHORT` | 422 | V2V 継続の元動画のフレーム数が `context_frames` に足りない（GPU 作業の前に拒否） |
+| `SOURCE_AUDIO_NOT_FOUND` | 404 | `source_audio.audio_id` が存在しない（A2V の元音声） |
+| `SOURCE_AUDIO_TOO_SHORT` | 422 | A2V の元音声がチェーンのタイムラインより短い（音声は切り詰めのみで水増ししない） |
+| `JOB_NOT_JOINABLE` | 422 | `POST /jobs/{id}/join` の対象が V2V 継続ジョブではない（metadata に `v2v` ブロックが無い） |
+| `JOIN_FAILED` | 503 | サーバー側 ffmpeg の結合（正規化・クロスフェード・連結）が失敗 |
+| `JOINED_NOT_READY` | 404 | `joined.mp4` の生成前に `GET /jobs/{id}/joined` を呼んだ |
+| `LORA_NOT_FOUND` | 404 | 未登録の IC-LoRA アダプタ名 |
+| `MODEL_NOT_FOUND` | 404 | 未登録のモデル名（またはカテゴリ不明）。生パスは受けない |
+| `MODEL_FILE_MISSING` | 422 | 登録名は在るが重みファイルがディスク上に無い |
+| `MODEL_INCOMPATIBLE` | 422 | 選択ファイルが互換性の事前チェックに失敗（拡張子違い・GGUF でない・safetensors ヘッダ破損） |
+| `LORA_REQUIRES_REFERENCE` | 422 | 制御系 IC-LoRA を `reference_video_id` 無しで要求した |
+| `REFERENCE_REQUIRES_CONTROL_LORA` | 422 | `reference_video_id` を渡したが、要求アダプタに制御系が1つも無い（逆方向チェック） |
+| `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` | 422 | 2クリップ以上のチェーンで制御系 IC-LoRA を要求した（スタイル系のみ受理） |
+| `LORA_THUMBNAIL_NOT_FOUND` | 404 | サムネイル（`<stem>.png`）を持たないアダプタ、または未知のアダプタ名 |
+| `LORA_PREPROCESS_CONFLICT` | 400 | 1本の参照動画に対して2種類以上の制御前処理を要求した（canny と pose の同時指定など） |
+| `REFERENCE_RESOLUTION_INVALID` | 422 | 参照動画を使うジョブで `width`/`height` が 128 の倍数でない |
 | `JOB_NOT_FOUND` | 404 | ジョブ未存在 / video 実体なし |
 | `VIDEO_NOT_READY` | 409 | ジョブが completed 前に video 要求 |
 | `PIPELINE_LOAD_FAILED` | 503 | パイプラインロード失敗 |
@@ -933,12 +1034,14 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 本番 worker 起動時、`services/ltx_runner.py` は以下の env を子プロセスに設定する:
 
-- `LTX_KEEP_RESIDENT=0`（keep-resident-weights OFF・`env.setdefault` で明示指定は尊重）。
+- `LTX_KEEP_RESIDENT` は **2026-08-02 に撤去済み**（この env はもう設定されないし、設定しても読まれない）。モデル骨格のジョブ間常駐は、環境変数ではなく `POST /generate`・`POST /generate/chain` の per-job フィールド（ジョブごとのリクエスト項目）`keep_resident`（既定 `false`）で指定する。§6.2 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照。
 - `LTX_COMPONENT_FILES=1`（`config.vram.use_component_files=true` に連動 / comp=1）。
 - `LTX_TE_OFFLOAD=1` / `LTX_DIT_CPU_LOAD=1`（既定 ON、`--no-te-offload` / `--no-dit-cpu-load` で無効化）。
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`。
 
 `keep=0`（ジョブ毎再 materialize）と `comp=1`（Path B）の組合せが本番既定である理由は、**マルチジョブ連続生成での commit（仮想メモリ）枯渇回避**にある。`keep=1` は 720p の Gemma text-encode 中に out-of-place な `.to(cuda)` で瞬間二重在が発生し native crash する（VERIFICATION_LOG §10.2）。`comp=0` は毎ジョブ 46GB モノリスを再 materialize して job3 で commit 枯渇 crash（同 §10.3）。`comp=1/keep=0` は 46GB モノリスを使わず commit を束縛し、T2V・I2V ともマルチジョブ連続 + 音声で PASS 済（同 §10.3 / §10.7）。
+
+> **上段の keep=1 に関する記述は 2026-06-30 時点の判断である（2026-08-02 追記）。** その後 Gemma レイヤーオフロード導入後の構成で再検証し、native crash の原因だったデバイス移動の不具合を修正したうえで、`keep_resident` を per-job フィールドとして製品化した（既定は引き続き off）。現在の正しい理解は「本番既定は off のまま・利用者がジョブ単位で on にできる・on 時はメモリ 64GB 以上を推奨」であり、詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §47・§48 を正本とする。
 
 ### 9.3 表示専用フィールド（worker へ非伝播）
 
@@ -958,13 +1061,14 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 数値は**代表値のみ**を引く。網羅表・推定式・全スイープ結果は複製せず、正本を `Docs/RESOLUTION_DURATION_CAPABILITY.md`（以下 RES-DUR）とする。乖離時は RES-DUR を正とする。
 
-### 10.1 実測代表値（16GB / RTX 4070 Ti SUPER・本番既定 comp=1/keep=0/bs=8/vae512-64）
+### 10.1 実測代表値（Acceleration 全オフ時の基準値。16GB / RTX 4070 Ti SUPER・本番既定 comp=1/keep=0/bs=8/vae512-64）
 
 | 解像度（生成÷64） | 尺 | 生成時間 | 全体 peak | 出所 |
 |-------------------|----|----------|-----------|------|
 | 720p（1280×768） | 121f（5s） | **~167–171s** | peak ~16.9GB（全体天井） | RES-DUR §0 / VERIFICATION_LOG §10.1 |
 | 1080p（1920×1088） | 121f（5s） | **262s（4.3分）** | — | RES-DUR §3.2 |
 
+- 上表は **Acceleration（生成の高速化）を全オフにしたときの基準値**である。**現行の既定（先読み block swap on・GGUF 逆量子化の1カーネル化 on）では合計3割前後短くなる**（`Docs/VERIFICATION_LOG.md` §44／§51）。
 - **生成サイズは必ず ÷64**（two-stage distilled の契約）。表示解像度へは `crop_output` の中央クロップで得る（例 1280×768 → 1280×720）。crop は既定 OFF。
 - 実測の秒数・GB は RES-DUR の代表値であり、細部は同 Docs を参照。
 
@@ -1019,7 +1123,6 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `auto_load_on_generate` | `true` | 初回 generate で自動ロード |
 | `reload_interval` | `0` | 再ロード間隔（0=無効） |
 | `ltx_repo_dir` | `"./vendor/LTX-2"` | reference-only（上流クローン） |
-| `checkpoint_path` | `"./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"` | **reference-only**。43GB モノリスは物理削除済。worker payload に載るが GGUF+component 経路では開かれない（`_real_available` で存在チェックしない） |
 | `spatial_upsampler_path` | `"./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"` | 空間 2x アップサンプラ（load-bearing） |
 | `gemma_root` | `"./models/gemma-3-12b-it-tokenizer"` | **tokenizer-only ~40MB**。DistilledPipeline を `gemma_root=None` で構築し重み glob をバイパス、engine は tokenizer/processor の module_ops のみ読む（load-bearing、存在チェックあり） |
 | `backend` | `"auto"` | `auto` \| `mock` \| `real`（auto: GPU+モデル有→real、無→mock） |
@@ -1031,7 +1134,9 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `component_video_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"` | 単体 VIDEO VAE（load-bearing） |
 | `component_audio_vae_path` | `"./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"` | 単体 AUDIO VAE/vocoder（load-bearing） |
 | `component_text_projection_path` | `"./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"` | 単体 text projection（load-bearing） |
-| `ic_loras` | `pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` の 3 エントリ | IC-LoRA アダプタの**名前 → パス**登録。API の `GenerateRequest.loras[].name` はここに登録された**名前でのみ**解決する（生パスは受けない）。値は文字列（＝`preprocess: none`・Phase B 互換）または `{ path, preprocess }` マップ。`canny-control`（`preprocess: canny`）と `pose-control`（`preprocess: dwpose`）は**同一の union-control ファイル**を 2 つの論理名で公開したもの。**セクション不在＝`loras` 要求は全て拒否（fail loud）**。実体ファイルの取得と検証は §5.1b（`_real_available()` は見ないため、欠けると UI に名前は出るのに選択時 404 になる） |
+| `ic_loras` | `pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` の 5 エントリ | IC-LoRA アダプタの**名前 → パス**登録。API の `GenerateRequest.loras[].name` はここに登録された**名前でのみ**解決する（生パスは受けない）。値は文字列（＝`preprocess: none`・Phase B 互換）または `{ path, preprocess }` マップ。`canny-control`（`preprocess: canny`）・`pose-control`（`preprocess: dwpose`）・`depth-control`（`preprocess: depth`・2026-08-03 追加）は**同一の union-control ファイル**を 3 つの論理名で公開したもの。`deblur`（2026-08-03 追加）は前処理不要のため**文字列形式**で登録する。**セクション不在＝`loras` 要求は全て拒否（fail loud）**。実体ファイルの取得と検証は §5.1b（`_real_available()` は見ないため、欠けると UI に名前は出るのに選択時 404 になる）。depth-control / deblur の正本は `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`（2026-08-04にG3・G4合格でテーマ完結） |
+
+> **2026-07-28**: 本表はかつて`checkpoint_path`（43GBモノリスへの reference-only パス）の行を含んでいたが、`config.model`から削除済みのため本表から除去した（§5.2・§5.5・`Docs/VERIFICATION_LOG.md` §40）。worker payload 自体には`checkpoint_path`キーが残るが、値は`services/ltx_runner.py`が直値`""`をハードコードするため、config側に対応するフィールドは無い。
 
 ### 11.3 vram
 | キー | 実値 | 説明 |
@@ -1127,6 +1232,8 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 
 タブ構成は **Generate | Clip Chain | Style LoRA | Jobs | Settings**。上段の共通バーは **server status 表示 + Refresh のみ**（旧 Load Model / Unload ボタンは廃止。モデルのロードは Settings→Models、アンロードは Settings→Danger zone に一本化）。**プロンプト**入力はタブの上に常時表示され、Generate / Clip Chain 双方で共用する。
 
+**共有 Negative Prompt アコーディオン（2026-07-28追加）**: 共有プロンプトの直下・`Tabs` の外に「Negative Prompt」アコーディオンがあり、Generate/Clip Chain 両タブから見える単一の入力群を提供する。テキスト欄（既定値 `"blurry, low quality, distorted"`）は「non-CFG Negative」チェックボックスがONのときだけ編集可能で、OFFの間は非活性のまま既定文字列を保持する。「NAG / Other」ラジオ（Other選択時は即座にNAGへ戻るフォールバック＋トースト）と、nag_scale/nag_tau/nag_alphaの3スライダーを持つ。詳細な設計判断は `Docs/VERIFICATION_LOG.md` §38、APIフィールドは§6.2を参照。
+
 **Generate タブ**:
 
 - **negative_prompt** 入力 / **入力画像アップロード**（任意・1枚 → 最小I2V。`image strength` スライダ付き。frame_idx=0 固定。画像なし → T2V）/ キーフレーム画像・IC-LoRA の各アコーディオン。
@@ -1146,9 +1253,31 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - Quality mode 直下に **Preset** ドロップダウン。選択すると解像度・crop と各クリップの推奨フレーム数（解像度別の快適上限）を全スロットへ一括自動入力する。
 - width / height の `minimum` 撤去・JS での `min` 属性付与、および「生成中はボタンをグレーアウト」は Generate タブと同じ仕組みを共有する。
 
-**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（カテゴリ別ドロップダウン＋Load。`models\ltx-2.3-gguf` 直下に GGUF を置くと自動認識される旨のフォルダ案内つき。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。
+**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（カテゴリ別ドロップダウン＋Load。`models\ltx-2.3-gguf` 直下に GGUF を置くと自動認識される旨のフォルダ案内つき。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。あわせて **Acceleration（生成の高速化）** 区画があり、実装のある4トグル——Fused GGUF Dequantization Kernel（GGUF 逆量子化の1カーネル化）／attention（`sdpa`・`sage`）／Block-swap prefetch（先読み block swap）／モデル骨格の常駐（`keep_resident`）——と、将来枠のプレースホルダ VAE（PruneVAED・常時グレーアウト）を並べる。**値はジョブ単位でリクエストに載る**（サーバーの再起動もパイプラインの再読み込みも要らない。フィールドは §6.2 を参照）。
 
 **共通**: 上段バーの server status は `GET /api/v1/status` を叩き、GPU 名・空き VRAM・**low_vram_mode / profile** を表示。ジョブ進捗を 1 秒間隔でポーリングし、完了後に mp4 を取得してプレビュー表示。distilled は **8 steps / CFG=1.0** 固定で送る。
+
+---
+
+## §12b MCPサーバー（AIエージェント連携）
+
+**MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` パッケージとして新設した（2026-07-28・コミット `2f8e85b`）。Claude Code などの MCP クライアントから、Gradio UI（§12）と同等の操作をツール呼び出しとして行える。
+
+### 12b.1 位置づけ（アーキテクチャへの影響なし）
+
+`mcp_server/` は Gradio UI と同じ**クライアント層**に属する。§4 の「2プロセス・2venv」構成そのものは変わらない——MCPサーバーは `./.venv`（torch 無し）の中で動く追加のプロセスで、既存の `/api/v1/*` を `httpx` 経由で叩くだけであり、バックエンド自身は起動しない（起動確認は `backend_status` ツールが行う）。凍結 API 契約（§6）への変更も無い。
+
+### 12b.2 ツールの概要
+
+**22個のツール**を6カテゴリ（system 6 / uploads 3 / generate 2 / jobs 7 / outputs 3 / batch 1）で公開する。全ツールは `async def` で実装され、ブロッキングI/O（ファイルコピー・wav走査等）は `anyio.to_thread.run_sync` で逃がす（MCP SDK 1.28 は同期ツールをイベントループ上で直接呼ぶため）。生成物は base64 埋め込みではなく常にローカル絶対パスで返す。ツール名の完全な一覧・1行説明・典型ワークフロー（T2V/I2V/A2Vバッチ）は `README.md` §8 を参照（本書では重複させない）。設計判断（依存を main 化した理由・非同期化の根拠・エラー封筒の翻訳規則・`.mcp.json` 絶対パス生成方式 等、D1〜D11）は `Docs/MCP_SERVER_DESIGN.md` が正本。
+
+### 12b.3 依存とセットアップ導線
+
+`mcp>=1.28,<2` は `pyproject.toml` / `requirements.txt` の**main依存**として追加した（`dev` extra ではない。エンドユーザーの `uv sync` にそのまま含まれる、§2.5/§4.5）。`scripts/setup.ps1` がセットアップ完了時に、`.venv\Scripts\python.exe` への絶対パスを埋め込んだ `.mcp.json` をリポジトリ直下へ自動生成する（マシン固有パスのため `.gitignore` 済み・git 追跡外）。
+
+### 12b.4 テストと実機ゲート
+
+テストは `tests/test_mcp_*.py`（7ファイル）が `./.venv` で完結し、GPU・実バックエンドプロセスを必要としない（`httpx.ASGITransport` でモック FastAPI アプリに直結）。機械検証・実機ゲート（承認フロー・22ツール表示・T2V/I2V/A2Vバッチ等の実操作）の実施記録は `Docs/VERIFICATION_LOG.md` §39 が正本（本書執筆時点でのゲート状況もそちらを参照。本書では都度古くなる実施状況を複製しない）。
 
 ---
 
@@ -1206,7 +1335,7 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 
 > **→ 進捗追記（2026-07-11 時点）**: 本節の主要項目は**実装済み**＝IC-LoRA（canny／pose 等の control 系＋strength 可変・VERIFICATION_LOG §21/§28）・V2V（`source_video` によるチェーン継続生成・§24）・audio-to-video（`source_audio`・§25）。さらに A2V＋LoRA の併用も 2026-07-11 に解禁した（`GenerateChainRequest.loras`・§32。参照動画を要する control 系のみ `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否）。時間アップスケーラは未実装のまま。本節は起票当時のフェーズ分類の記録として残す。
 >
-> **→ 追加進捗（2026-07-11・α版・VERIFICATION_LOG §34）**: 上記「参照動画を要する control 系のみ拒否」の制約は、**`clips` がちょうど1つのチェーン（A2V を含む）に限り**解禁された。`GenerateChainRequest` に単発 `GenerateRequest` と同型・同バリデーションの3フィールド（`reference_video_id`／`conditioning_attention_strength`／`reference_video_strength`、いずれも optional）を加算し、`clips` が1のときだけ受理する（2以上のチェーンは従来どおり `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）。意味論は単発生成と同じ「reference latent は stage 1 のクリップ0にのみ注入し、stage 2 のタイルには注入しない」＝チェーン全体（stage1+stage2の全区間）へ一様に効く点は変わらない。新設の 422 群: `REFERENCE_RESOLUTION_INVALID`（幅・高さが128の倍数でない）／`LORA_REQUIRES_REFERENCE`（control系＋clips=1＋参照動画無し）／`LORA_PREPROCESS_CONFLICT`（preprocess 種別が2種以上混在）。`reference_video_id` は `source_video`（V2V 継続）と排他（422）。既知の制約: pydantic のスキーマ検証がエンドポイントより先に走るため `clips>=2` ＋ `reference_video_id` の複合誤設定はコード付きでない汎用 `VALIDATION_ERROR` になる。GPU 実機の目視ゲート（単発生成との一致確認・A2V 音声との共存確認）は次セッションへ持ち越し。
+> **→ 追加進捗（2026-07-11・α版・VERIFICATION_LOG §34）**: 上記「参照動画を要する control 系のみ拒否」の制約は、**`clips` がちょうど1つのチェーン（A2V を含む）に限り**解禁された。`GenerateChainRequest` に単発 `GenerateRequest` と同型・同バリデーションの3フィールド（`reference_video_id`／`conditioning_attention_strength`／`reference_video_strength`、いずれも optional）を加算し、`clips` が1のときだけ受理する（2以上のチェーンは従来どおり `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN`）。意味論は単発生成と同じ「reference latent は stage 1 のクリップ0にのみ注入し、stage 2 のタイルには注入しない」＝チェーン全体（stage1+stage2の全区間）へ一様に効く点は変わらない。新設の 422 群: `REFERENCE_RESOLUTION_INVALID`（幅・高さが128の倍数でない）／`LORA_REQUIRES_REFERENCE`（control系＋clips=1＋参照動画無し）。なお `LORA_PREPROCESS_CONFLICT`（preprocess 種別が2種以上混在）は**既存の 400** であって本群には含まれない。`reference_video_id` は `source_video`（V2V 継続）と排他（422）。既知の制約: pydantic のスキーマ検証がエンドポイントより先に走るため `clips>=2` ＋ `reference_video_id` の複合誤設定はコード付きでない汎用 `VALIDATION_ERROR` になる。GPU 実機の目視ゲート（単発生成との一致確認・A2V 音声との共存確認）は次セッションへ持ち越し。
 
 ### 13.4c 将来課題（現行の開発計画からは除外）
 
@@ -1376,12 +1505,13 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **te-offload**（`--te-offload`） | Gemma text-encoder を逐次 per-layer で CPU オフロードし encode ピーク VRAM を下げる（既定 ON・§9）。 |
 | **dit-cpu-load**（`--dit-cpu-load`） | DiT(transformer) を CPU で構築しブロックのみ GPU へストリーム。ロード時の ~16.9GB GPU スパイクを除去（既定 ON・§9）。 |
 | **component-files** | VAE / audio / text-projection を 46GB モノリスでなく小単体 safetensors から読む経路（`use_component_files: true`）。マルチジョブの commit 枯渇を防ぐ。 |
-| **43GB モノリス / 46GB モノリス** | **同一の 1 ファイル** `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B＝46.1GB＝42.97GiB）。本書は箇所により両方の表記を使うが指すものは同じで、どちらも誤りではない（§5.2 の表記注記・`README.md` §1 の削除済みブロック注記）。物理削除済で `checkpoint_path` は reference-only。 |
+| **43GB モノリス / 46GB モノリス** | **同一の 1 ファイル** `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B＝46.1GB＝42.97GiB）。本書は箇所により両方の表記を使うが指すものは同じで、どちらも誤りではない（§5.2 の表記注記・`README.md` §1 の削除済みブロック注記）。物理削除済で、旧参照パス`checkpoint_path`も2026-07-28に`config.model`から削除済み（現在は`services/ltx_runner.py`がworker payloadへ直値`""`をハードコード）。 |
 | **spill / spill-free** | 生成が dedicated 16GB を超えて system RAM（shared）へ溢れること。溢れると ~2-4x 低速化（OOM はしない）。溢れない上限が spill-free frames。 |
 | **commit** | Windows の仮想メモリ予約（物理 RAM + ページファイル）。ディスク使用量ではない。連続生成で枯渇すると native crash しうる（component-files で束縛）。 |
 | **GGUF / Q4_K_M** | 量子化重みフォーマット。本番の transformer / Gemma とも GGUF Q4_K_M。 |
 | **mock backend** | GPU/モデル無しで合成クリップを返す backend。API/スキーマ/出力構造は real と同一で、テスト・GPU 無し開発に使う。 |
+| **MCP（Model Context Protocol）** | AIエージェントが外部ツールを呼び出すための標準規格。本プロジェクトは `mcp_server/` パッケージで22個のツールを公開する（§12b）。 |
 
 ### B.2 SSOT ドキュメント地図
 
-§0.3 の SSOT 地図と整合。どの Docs が何の正本かは §0.3 の表を参照（本書 §6＝凍結 API 契約 / `config.yaml`＝設定実値 / `VERIFICATION_LOG`＝実測・検証 / `RESOLUTION_DURATION_CAPABILITY`＝解像度×尺の能力 / `NEXT_SESSION_HANDOFF`＝ゴール・ロードマップ / `LTX23_REFERENCE`＝LTX 一般知識 / `engine/VENDOR_NOTICE`＝provenance / `README`＝起動・導線）。
+§0.3 の SSOT 地図と整合。どの Docs が何の正本かは §0.3 の表を参照（本書 §6＝凍結 API 契約 / `config.yaml`＝設定実値 / `VERIFICATION_LOG`＝実測・検証 / `RESOLUTION_DURATION_CAPABILITY`＝解像度×尺の能力 / `NEXT_SESSION_HANDOFF`＝ゴール・ロードマップ / `LTX23_REFERENCE`＝LTX 一般知識 / `engine/VENDOR_NOTICE`＝provenance / `MCP_SERVER_DESIGN`＝MCPサーバーの設計判断（§12b）/ `ICLORA_DEPTH_DEBLUR_WORKORDER`＝IC-LoRA Depth・Deblur の仕様・設計判断 / `ACCELERATION_RESEARCH_NOTES`＝生成高速化の候補整理と採否判断 / `README`＝起動・導線）。

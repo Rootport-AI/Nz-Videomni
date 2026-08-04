@@ -97,13 +97,8 @@
 
 - ÷64・8n+1・総フレーム上限・16GB 天井・SDPA 一択・torch 2.9.1+cu128 固定・2プロセス/2venv・巨大ディスク要求禁止＝すべて不変。
 - **蒸留パイプライン＝CFG/negative 不可**（worker 未配線・露出禁止・継続）。
-- **スコープ外（v1）**:
-  - 複数クリップ A2V（音声の窓割り）。
-  - A2V ＋ V2V 同時（`source_audio` × `source_video` は 422 排他）。
-  - vocoder 音声返却（原波形 mux 一択）。
-  - `audio_start_time`／`audio_max_duration` 露出（トリミング非露出）。
-  - modality_scale 露出（G0 結果次第で将来・§4 Q3）。
-  - GUI 露出（別セッション・音声スムージング ON/OFF チェックボックス要件は VERIFICATION_LOG §24.7 将来項目①）。
+- **スコープ外（v1）の5点**（複数クリップA2Vの音声窓割り／A2V＋V2V同時指定〔422で排他〕／vocoder音声の返却／`audio_start_time`・`audio_max_duration`の露出／`modality_scale`の露出）は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-9へ移設した。**以後の管理は同書で行う。** いずれも凍結APIへの加算的拡張として後から足せる形は保たれている。
+- 同じくv1でスコープ外としていた**GUI露出**（音声スムージングON/OFFチェックボックス要件＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.7将来項目①）は、その後実装済み。
 
 ---
 

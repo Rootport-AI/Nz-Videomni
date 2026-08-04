@@ -44,14 +44,110 @@ IC_LORA_SPECS_ATTR = "_ic_lora_specs"
 _SUFFIX_A = ".lora_A.weight"
 _SUFFIX_B = ".lora_B.weight"
 
+# One configured LoRA: ``audio_strength`` None → the audio side follows
+# ``strength`` (historical behaviour, byte-identical delta path).
+IcLoraEntry = tuple[str, float, "float | None"]
+
+# Cross-attention blocks are named after their SOURCE stream but write into the
+# other one, so their axis is the opposite of what the name suggests; the gates
+# and scale-shift tables of the AV cross-attention follow the stream they
+# modulate. These exact-name specials are evaluated BEFORE the ``audio_`` prefix
+# rule (``audio_to_video_attn`` would otherwise be misread as audio).
+_AUDIO_AXIS_EXACT = frozenset({
+    "video_to_audio_attn",
+    "av_ca_v2a_gate_adaln_single",
+    "av_ca_audio_scale_shift_adaln_single",
+})
+_VIDEO_AXIS_EXACT = frozenset({
+    "audio_to_video_attn",
+    "av_ca_a2v_gate_adaln_single",
+    "av_ca_video_scale_shift_adaln_single",
+})
+
+# LTXModel top-level submodules that legitimately fall through to the video
+# axis; anything else reaching that fallback is unrecognised (DEBUG trace).
+_KNOWN_VIDEO_TOP_LEVEL = frozenset({
+    "transformer_blocks",
+    "patchify_proj",
+    "proj_out",
+    "norm_out",
+    "scale_shift_table",
+    "caption_projection",
+    "adaln_single",
+    "prompt_adaln_single",
+    "video_args_preprocessor",
+})
+
+
+def classify_lora_axis(module_prefix: str) -> str:
+    """Return ``"audio"`` or ``"video"`` for a renamed LoRA module prefix.
+
+    The prefix is split on dots and matched component-wise: exact-name specials
+    first (see above), then a plain ``audio_`` prefix, else video. Evaluation
+    order is part of the contract — do not reorder.
+    """
+    parts = module_prefix.split(".")
+    for part in parts:
+        if part in _AUDIO_AXIS_EXACT:
+            return "audio"
+        if part in _VIDEO_AXIS_EXACT:
+            return "video"
+    for part in parts:
+        if part.startswith("audio_"):
+            return "audio"
+    if parts[0] not in _KNOWN_VIDEO_TOP_LEVEL:
+        logger.debug(
+            "IC-LoRA axis: unknown module prefix %s — treating as video", module_prefix
+        )
+    return "video"
+
+
+def strength_for_prefix(
+    module_prefix: str, strength: float, audio_strength: float | None
+) -> float:
+    """Pick the per-axis strength for one LoRA key.
+
+    ``audio_strength is None`` returns ``strength`` untouched WITHOUT classifying
+    (G-BC: the no-audio_strength path must stay identical to the historical one).
+    """
+    if audio_strength is None:
+        return strength
+    return audio_strength if classify_lora_axis(module_prefix) == "audio" else strength
+
+
+def normalize_ic_loras(
+    ic_loras: list[tuple[str, float]] | list[IcLoraEntry],
+) -> list[IcLoraEntry]:
+    """Accept legacy 2-tuples and 3-tuples, return 3-tuples with float fields."""
+    out: list[IcLoraEntry] = []
+    for entry in ic_loras:
+        if len(entry) == 2:
+            path, strength = entry
+            audio_strength = None
+        elif len(entry) == 3:
+            path, strength, audio_strength = entry  # type: ignore[misc]
+        else:
+            raise ValueError(
+                "IC-LoRA entry must be (path, strength[, audio_strength]), "
+                f"got {entry!r}"
+            )
+        out.append(
+            (
+                str(path),
+                float(strength),
+                None if audio_strength is None else float(audio_strength),
+            )
+        )
+    return out
+
 
 def load_ic_lora_pairs(
-    ic_loras: list[tuple[str, float]],
-) -> list[tuple[str, float, list[tuple[str, torch.Tensor, torch.Tensor]]]]:
+    ic_loras: list[tuple[str, float]] | list[IcLoraEntry],
+) -> list[tuple[str, float, float | None, list[tuple[str, torch.Tensor, torch.Tensor]]]]:
     """Load + rename + pair each configured IC-LoRA safetensors.
 
     Returns a list (one entry per configured LoRA, in order) of
-    ``(path, strength, pairs)`` where ``pairs`` is a list of
+    ``(path, strength, audio_strength, pairs)`` where ``pairs`` is a list of
     ``(module_prefix, lora_A, lora_B)`` in the LoRA file's own key order.
 
     ``module_prefix`` is the ``diffusion_model.``-stripped key prefix, which is
@@ -70,9 +166,11 @@ def load_ic_lora_pairs(
 
     loader = SafetensorsStateDictLoader()
     cpu = torch.device("cpu")
-    out: list[tuple[str, float, list[tuple[str, torch.Tensor, torch.Tensor]]]] = []
+    out: list[
+        tuple[str, float, float | None, list[tuple[str, torch.Tensor, torch.Tensor]]]
+    ] = []
 
-    for path, strength in ic_loras:
+    for path, strength, audio_strength in normalize_ic_loras(ic_loras):
         if not Path(path).exists():
             raise FileNotFoundError(f"IC-LoRA safetensors not found: {path}")
         lora_sd = loader.load(path, sd_ops=LTXV_LORA_COMFY_RENAMING_MAP, device=cpu)
@@ -90,7 +188,7 @@ def load_ic_lora_pairs(
                     "missing — corrupt/unsupported LoRA layout"
                 )
             pairs.append((prefix, lora_a, lora_b))
-        out.append((path, float(strength), pairs))
+        out.append((path, strength, audio_strength, pairs))
     return out
 
 
@@ -119,7 +217,9 @@ def _find_target_model(transformer: nn.Module) -> nn.Module:
     return transformer
 
 
-def attach_ic_loras(transformer: nn.Module, ic_loras: list[tuple[str, float]]) -> int:
+def attach_ic_loras(
+    transformer: nn.Module, ic_loras: list[tuple[str, float]] | list[IcLoraEntry]
+) -> int:
     """Attach IC-LoRA A/B factors as buffers onto their target Linear modules.
 
     Resolves each renamed LoRA prefix to the correspondingly-named ``nn.Linear``
@@ -132,8 +232,14 @@ def attach_ic_loras(transformer: nn.Module, ic_loras: list[tuple[str, float]]) -
     (the forward adds their deltas sequentially — same net result as the wheel's
     summed-deltas path). Returns the total number of (LoRA, Linear) matches.
 
-    Fail-loud contract: a shape mismatch raises; 0 total matches WARNs loudly
-    (key-format mismatch → the adapter would be a silent no-op).
+    A per-entry ``audio_strength`` applies to the audio-axis Linears only (see
+    :func:`classify_lora_axis`); a resolved Linear whose effective strength is
+    0.0 gets NO buffers and NO spec (mathematically a zero delta, but cheaper in
+    VRAM and time) and is reported as muted.
+
+    Fail-loud contract: a shape mismatch raises; 0 RESOLVED prefixes WARN loudly
+    (key-format mismatch → the adapter would be a silent no-op). Full mutes are
+    resolved, so they do not trip that warning.
     """
     if not ic_loras:
         return 0
@@ -145,14 +251,16 @@ def attach_ic_loras(transformer: nn.Module, ic_loras: list[tuple[str, float]]) -
     per_lora = load_ic_lora_pairs(ic_loras)
     total_matches = 0
 
-    for path, strength, pairs in per_lora:
+    for path, strength, audio_strength, pairs in per_lora:
         n_match = 0
+        n_resolved = 0
         for prefix, lora_a, lora_b in pairs:
             module = modules_by_name.get(prefix)
             if not isinstance(module, nn.Linear):
                 # Prefix has no Linear counterpart (e.g. non-target key). Skip —
-                # counted via the 0-match WARN below, mirroring the bf16 path.
+                # counted via the 0-resolved WARN below, mirroring the bf16 path.
                 continue
+            n_resolved += 1
             out_features = module.out_features
             in_features = module.in_features
             # A:(rank,in)  B:(out,rank)  ->  delta = B@A : (out,in) == weight
@@ -169,6 +277,12 @@ def attach_ic_loras(transformer: nn.Module, ic_loras: list[tuple[str, float]]) -
                     f"Linear(out={out_features}, in={in_features})"
                 )
 
+            # Shape-checked first (fail-loud stays independent of muting), then
+            # muted keys leave the module byte-identical to the no-LoRA state.
+            eff = strength_for_prefix(prefix, strength, audio_strength)
+            if eff == 0.0:
+                continue
+
             specs = getattr(module, IC_LORA_SPECS_ATTR, None)
             if specs is None:
                 specs = []
@@ -180,15 +294,21 @@ def attach_ic_loras(transformer: nn.Module, ic_loras: list[tuple[str, float]]) -
             # untouched but .to(device) still moves them with the block.
             module.register_buffer(a_name, lora_a.contiguous(), persistent=False)
             module.register_buffer(b_name, lora_b.contiguous(), persistent=False)
-            specs.append((a_name, b_name, strength))
+            specs.append((a_name, b_name, eff))
             n_match += 1
 
         total_matches += n_match
+        extra = ""
+        if audio_strength is not None:
+            extra = (
+                f", audio_strength={audio_strength:.3f}, "
+                f"muted={n_resolved - n_match} linears"
+            )
         logger.info(
-            "IC-LoRA %s: %d Linear(s) attached for forward-time apply (strength=%.3f)",
-            Path(path).name, n_match, strength,
+            "IC-LoRA %s: %d Linear(s) attached for forward-time apply (strength=%.3f%s)",
+            Path(path).name, n_match, strength, extra,
         )
-        if n_match == 0:
+        if n_resolved == 0:
             logger.warning(
                 "IC-LoRA %s matched 0 Linear modules — LoRA/model KEY-FORMAT "
                 "MISMATCH; the adapter would be a silent no-op. Check the "

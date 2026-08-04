@@ -11,7 +11,7 @@
 
 ## 何ができるようになったか
 
-- **制御系アダプタが使える**: `canny-control`（エッジ）と `pose-control`（DWPose骨格）の2論理名。いずれも同一のUnion-Control safetensors（654MB）を指し、**どの制御信号を入れるかは前処理種別（レジストリ側メタデータ）で切替**。Phase Bで完成したforward時GPU LoRA適用機構をそのまま使う（機構は無変更）。
+- **制御系アダプタが使える**: `canny-control`（エッジ）／`pose-control`（DWPose骨格）／`depth-control`（深度）の3論理名（depthは2026-08-03追加。正本[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)）。いずれも同一のUnion-Control safetensors（654MB）を指し、**どの制御信号を入れるかは前処理種別（レジストリ側メタデータ）で切替**。Phase Bで完成したforward時GPU LoRA適用機構をそのまま使う（機構は無変更）。
 - **engine内前処理段**: サーバーは生の参照動画を受け取り、engine worker（`.venv-engine`）内で**制御動画（`control_<kind>.mp4`）へ変換してから**IC-LoRA参照に差し替える。ユーザーはエッジ抽出や姿勢推定を意識しなくてよい。前処理は動画→動画のフレーム単位変換（cv2ドライバでFPS・フレーム数・寸法を保存）。
 - **API形状はPhase Bと完全同一**: 凍結API契約は不変・リクエストスキーマ無変更。クライアントは `POST /upload/video` で参照動画→`video_id`、`loras:[{name:"pose-control"}]`＋`reference_video_id`。制御タイプはサーバー側レジストリの論理名で解決。
 - **前処理なし経路（`preprocess=none`）は完全無変更**: 文字列値エントリ（Phase Bの `pixel-spatial-upscaler-x2` 等）は従来どおり動く（後方互換）。
@@ -60,12 +60,13 @@
 
 ## スコープ外（Phase Cではやらない・Phase D以降）
 
-- depth・Motion-Track・In-Outpainting・Deblur等の他アダプタ
-- 19b世代アダプタの流用（効果ゼロ報告・非対応）
-- strength可変化・`conditioning_attention_mask` 露出 → **（2026-07-06 注記）strength可変化は実装済み＝VERIFICATION_LOG §28**（`conditioning_attention_strength`＋`reference_video_strength`・省略時 1.0 不変）。`conditioning_attention_mask` の露出は引き続きスコープ外。
-- 前処理キャッシュ（スライス4＝G0-bでキャッシュ不要と判断）
-- rtmlibへの切替（TorchScript版DWPoseで問題が出た場合のフォールバックとしてのみ記載・G0-bで不要判断）
-- Gradio UI露出（APIのみ）
+**未対応アダプタ4種（depth・Motion-Track・In-Outpainting・Deblur）と19b世代アダプタの流用不可は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8へ移設した。以後の管理は同書で行う**（うちdepthとDeblurの2種は2026-08-04に実装完結し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-63へクローズ済み。§4-8に残るのはMotion-Track・In-Outpaintingと`conditioning_attention_mask`）（depthの前処理器選定が未収束だった経緯と、後の調査で公式ComfyUIワークフローがVideo-Depth-Anythingを採用済みと判明した事実も同項に転記済み）。
+
+> **2026-08-03追記**: 上記4種のうち**DepthとDeblurは2026-08-03に着手し、実装を完了した**（`depth-control`・`deblur` の2アダプタとVideo-Depth-Anything Small前処理器。**ただしオーナー実機ゲートは未実施** → 2026-08-04に合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.11））。**正本は[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)**（検証記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49）。未対応として残るのはMotion-TrackとIn-Outpaintingの2種である。
+
+本節に残る決着済みの項目は次のとおり——**strength可変化**は2026-07-06に実装済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §28。`conditioning_attention_strength`＋`reference_video_strength`・省略時1.0で不変）／**前処理キャッシュ**（スライス4）と**rtmlibへの切替**はG0-bの実測により不要と判断済み／**Gradio UI露出**（APIのみ）は後日実施済み。
+
+- **`conditioning_attention_mask` の露出だけは、いまも未着手のスコープ外項目として残る**（管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8。着手するなら本節が入口）。
 
 ## Pending（ユーザー）→ ✅全消化（2026-07-04）
 

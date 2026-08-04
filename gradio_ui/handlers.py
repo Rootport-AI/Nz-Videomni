@@ -37,7 +37,41 @@ MODE_A2V = "a2v"
 _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
 
+# Acceleration: block-swap prefetch checkbox default. S4 (2026-08-01) flips
+# this to True — the real-device gate (bit-exact output + VRAM headroom, G1-G7)
+# passed and the owner confirmed "gate green -> default on". Every default=
+# below (this module, ui.py, batch.py) reads from here so there is exactly one
+# place to change. Mirrors the server's own GenerateRequest/GenerateChainRequest
+# default flip (api/models.py) — the two must move together, since this
+# constant also anchors the "send explicitly only when it differs from the
+# default" payload discipline below (S4 also flipped that discipline: it used
+# to be "send only when True", which would have silently gone inert now that
+# True is the default — an explicit False must now be the one that's sent).
+BLOCK_SWAP_PREFETCH_DEFAULT = True
 
+# Acceleration: keep-resident (cross-job CPU-skeleton cache) checkbox default.
+# Mirrors api/models.py's KEEP_RESIDENT_DEFAULT for the same reason the
+# constant above mirrors its own server-side twin (this module talks to the
+# backend purely over HTTP, so it does not import from api/). **The direction
+# is the OPPOSITE of block_swap_prefetch**: the server default is off, so the
+# "send only when it differs from the default" discipline below means the key
+# is emitted only when the box is CHECKED. Owner decision: never default-on a
+# feature that parks ~20GB in main memory (64GB+ recommended).
+KEEP_RESIDENT_DEFAULT = False
+
+# Acceleration: fused GGUF dequantization kernel (Triton, Q4_K/Q5_K/Q6_K)
+# checkbox default. Mirrors api/models.py's FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+# for the same reason as the two constants above (this module talks to the
+# backend purely over HTTP, so it does not import from api/) — **change the
+# canonical constant in api/models.py, this mirror and the MCP import site in
+# one move**. Same direction as block_swap_prefetch (server default ON since
+# 2026-08-04, after real-device gates G1-G8 passed and the owner approved the
+# flip), so the "send only when it differs from the default" discipline below
+# emits the key only when the box is UNCHECKED.
+FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
+
+
+# MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
     """Duration in seconds of a ``.wav`` file via the stdlib :mod:`wave` module,
     or ``None`` when ``path`` is not a readable ``.wav`` (a non-wav container, an
@@ -72,6 +106,7 @@ def _resolve_fps(fps) -> float:
     return fps_v or 24.0
 
 
+# MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def suggest_frames_for_audio(dur: float, fps) -> int:
     """Suggest a ``Frames`` value (8n+1) that fits ``dur`` seconds of audio at
     ``fps`` (auto-adjust the Generate-tab A2V audio attach, feature 1).
@@ -231,19 +266,35 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
 
 
 # --------------------------------------------------------------------------- #
-# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight>`` (S2). The
-# weight is optional (default 1.0) and the ``lora`` keyword is case-insensitive
-# (``<LORA:...>`` allowed). Nothing is invented client-side — the weight range
-# mirrors the server's ``0 < strength <= 2.0`` rule; out-of-range weights are
-# clamped into [MIN, MAX] (MIN reuses the Generate-tab adapter-strength slider's
-# own 0.05 floor) and a toast warns. Name resolution is against the GET /loras
-# name set, case-insensitive with exact match preferred; an unknown name aborts
-# the send (mirrors the existing precheck flow).
+# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight:audio_weight>``
+# (S2). The video weight is optional (default 1.0) and the ``lora`` keyword is
+# case-insensitive (``<LORA:...>`` allowed). Nothing is invented client-side —
+# the weight range mirrors the server's ``0 < strength <= 2.0`` rule; out-of-
+# range weights are clamped into [MIN, MAX] (MIN reuses the Generate-tab
+# adapter-strength slider's own 0.05 floor) and a toast warns. Name resolution
+# is against the GET /loras name set, case-insensitive with exact match
+# preferred; an unknown name aborts the send (mirrors the existing precheck
+# flow).
+#
+# A third, also-optional, numeric group carries the audio-side strength
+# (``audio_strength``, range [0.0, 2.0] — the 0.05 video floor does NOT apply
+# here since 0 is a valid "mute the audio-side delta" value). When the group is
+# absent no ``audio_strength`` key is added to the parsed dict at all, so the
+# HTTP body stays byte-identical to the pre-audio-strength behaviour (G-BC).
+# Out-of-range audio weights are clamped the same non-fatal way as the video
+# weight. NOTE: ``<lora:name::0>`` (empty video-strength slot) is NOT
+# supported — the middle ``:`` has nothing to match against the video-weight
+# pattern, so the whole token fails to match and is left untouched in the
+# prompt text.
 # --------------------------------------------------------------------------- #
-_LORA_TOKEN_RE = re.compile(r"<lora:([^:>]+)(?::([0-9]*\.?[0-9]+))?>", re.IGNORECASE)
+_LORA_TOKEN_RE = re.compile(
+    r"<lora:([^:>]+)(?::([0-9]*\.?[0-9]+))?(?::([0-9]*\.?[0-9]+))?>", re.IGNORECASE
+)
 LORA_WEIGHT_MIN = 0.05
 LORA_WEIGHT_MAX = 2.0
 LORA_WEIGHT_DEFAULT = 1.0
+LORA_AUDIO_WEIGHT_MIN = 0.0
+LORA_AUDIO_WEIGHT_MAX = 2.0
 
 
 def _merge_loras(loras: list[dict]) -> list[dict]:
@@ -258,7 +309,7 @@ def _merge_loras(loras: list[dict]) -> list[dict]:
 
 
 def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
-    """Extract ``<lora:name:weight>`` tokens from ``prompt``.
+    """Extract ``<lora:name:weight:audio_weight>`` tokens from ``prompt``.
 
     Returns ``(cleaned_prompt, loras, error)``:
 
@@ -267,13 +318,21 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
       a token was actually removed, so a token-free prompt is returned byte-for-
       byte unchanged — the caller only invokes this when a token is present);
     * ``loras`` — ``[{"name", "strength"}]`` in first-seen order, deduped
-      last-wins by resolved name;
+      last-wins by resolved name. When the token carries a third (audio)
+      numeric group the dict also gets an ``"audio_strength"`` key; when the
+      group is absent no such key is added at all, so the payload stays byte-
+      identical to the pre-audio-strength behaviour (G-BC);
     * ``error`` — a localized message (unknown token name) meaning "abort the
       send with zero generate/upload calls", else ``None``. Weight-range clamps
-      are non-fatal: they fire a ``gr.Warning`` toast and continue.
+      (both video and audio) are non-fatal: they fire a ``gr.Warning`` toast and
+      continue.
 
     ``known_names`` is the GET /loras name set; resolution is case-insensitive
     with an exact match preferred.
+
+    NOTE: ``<lora:name::0>`` (empty video-strength slot) is NOT supported —
+    the token simply fails to match ``_LORA_TOKEN_RE`` and is left as-is in
+    the prompt text.
     """
     exact = set(known_names)
     lower_map: dict[str, str] = {}
@@ -302,7 +361,16 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
                 gr.Warning(L("lora_warn_weight_clamp", lang).format(
                     name=resolved, given=weight, clamped=clamped))
                 weight = clamped
-        collected.append({"name": resolved, "strength": weight})
+        entry = {"name": resolved, "strength": weight}
+        if m.group(3) is not None:
+            audio_weight = float(m.group(3))
+            if audio_weight < LORA_AUDIO_WEIGHT_MIN or audio_weight > LORA_AUDIO_WEIGHT_MAX:
+                audio_clamped = min(max(audio_weight, LORA_AUDIO_WEIGHT_MIN), LORA_AUDIO_WEIGHT_MAX)
+                gr.Warning(L("lora_warn_audio_weight_clamp", lang).format(
+                    name=resolved, given=audio_weight, clamped=audio_clamped))
+                audio_weight = audio_clamped
+            entry["audio_strength"] = audio_weight
+        collected.append(entry)
 
     # Unknown name(s) -> abort (mirrors the "reject before any API call" flow).
     if unknown:
@@ -353,6 +421,16 @@ def build_a2v_chain_payload(
     reference_video_id=None,
     control_adherence=1.0,
     reference_strength=1.0,
+    nag_enabled=False,
+    nag_scale=11.0,
+    nag_tau=2.5,
+    nag_alpha=0.25,
+    neg_method="nag",
+    vsf_scale=1.5,
+    attention_backend="sdpa",
+    block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
+    keep_resident=KEEP_RESIDENT_DEFAULT,
+    fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -365,7 +443,33 @@ def build_a2v_chain_payload(
     only when non-empty, ``loras`` only when the combined list is non-empty, and
     ``reference_video_id`` (+ the S3 ``conditioning_attention_strength`` /
     ``reference_video_strength`` keys, each only below 1.0) only when an adapter is
-    used -- so a token-free, adapter-free request stays byte-identical to before."""
+    used -- so a token-free, adapter-free request stays byte-identical to before.
+    NAG (non-CFG Negative) keys are ADDITIVE too: only added when ``nag_enabled``
+    is true, appended last, so the default (NAG off) payload stays byte-identical
+    to the pre-NAG contract the key-order tests lock in. ``neg_method``/
+    ``vsf_scale`` are appended right after the four nag_* keys
+    (still inside the same ``if nag_enabled:`` block, regardless of which
+    method is actually selected) so the key-order contract stays simple.
+    ``attention_backend`` follows the same discipline one step further out: the
+    key is emitted ONLY when it differs from the ``"sdpa"`` default, and always
+    LAST (after the NAG/VSF block), so every pre-Acceleration payload -- and the
+    exact-match/key-order tests locked on it -- stay byte-identical.
+    ``block_swap_prefetch`` follows immediately after ``attention_backend``,
+    same "differs from default" discipline (S4, 2026-08-01: the API's own
+    default flipped to True, so the constant this compares against —
+    ``BLOCK_SWAP_PREFETCH_DEFAULT`` — flipped too): emitted ONLY when it
+    differs from that default, so a request that never touches the checkbox
+    stays byte-identical to the pre-prefetch contract EITHER WAY. Sending only
+    when True would have silently broken on this flip: an explicit "off" would
+    have gone unsent and the server's new True default would have turned it
+    back on behind the caller's back.
+    ``keep_resident`` is appended after it under the SAME "differs from the
+    default" rule -- but since its default is off, that rule emits the key only
+    when the box is CHECKED (the mirror image of block_swap_prefetch; do not
+    read the two tests as one pattern).
+    ``fused_gguf_dequant_kernel`` is appended LAST under the same rule, with
+    the same direction as block_swap_prefetch since 2026-08-04 (§51 flipped the
+    server default to on -> the key rides only on an UNCHECKED box)."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -393,6 +497,35 @@ def build_a2v_chain_payload(
             chain_payload["conditioning_attention_strength"] = float(control_adherence)
         if float(reference_strength) < 1.0:
             chain_payload["reference_video_strength"] = float(reference_strength)
+    # NAG (additive): keys appended only when enabled so the default payload —
+    # and the key-order contract tests locked on it — stay byte-identical.
+    if nag_enabled:
+        chain_payload["nag_enabled"] = True
+        chain_payload["nag_scale"] = float(nag_scale)
+        chain_payload["nag_tau"] = float(nag_tau)
+        chain_payload["nag_alpha"] = float(nag_alpha)
+        chain_payload["neg_method"] = neg_method
+        chain_payload["vsf_scale"] = float(vsf_scale)
+    # Acceleration (additive, conditional): sent ONLY for a non-default backend,
+    # and appended after the NAG/VSF block so the default payload keeps its
+    # frozen key order.
+    if attention_backend != "sdpa":
+        chain_payload["attention_backend"] = attention_backend
+    # Block-swap prefetch (additive, conditional): sent ONLY when it differs
+    # from BLOCK_SWAP_PREFETCH_DEFAULT (S4: the server's own default is now
+    # True), appended after attention_backend so the default payload keeps its
+    # frozen key order.
+    if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+        chain_payload["block_swap_prefetch"] = bool(block_swap_prefetch)
+    # keep-resident (additive, conditional): same rule. Default off -> the key
+    # appears only when the box is checked.
+    if keep_resident != KEEP_RESIDENT_DEFAULT:
+        chain_payload["keep_resident"] = bool(keep_resident)
+    # fused GGUF dequantization kernel (additive, conditional): same rule,
+    # appended last. Default ON since 2026-08-04 -> the key rides only on an
+    # UNCHECKED box.
+    if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+        chain_payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
     return chain_payload
 
 
@@ -414,7 +547,26 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  control_adherence=1.0, reference_strength=1.0,
                  ref_video_path=None, config=None,
                  ui_lang=None, poll_interval=None, poll_timeout_min=None,
-                 src_audio=None):
+                 src_audio=None,
+                 nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
+                 neg_method="nag", vsf_scale=1.5,
+                 # Acceleration (ADDITIVE, last): the Settings-tab attention
+                 # selector. ui.py's dispatch() passes it as a KEYWORD, so this
+                 # stays at the very end and no positional call site shifts.
+                 attention_backend="sdpa",
+                 # Acceleration (ADDITIVE, last): the Settings-tab block-swap
+                 # prefetch checkbox. Same discipline as attention_backend --
+                 # keyword-only from ui.py's dispatch(), appended after it.
+                 block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
+                 # Acceleration (ADDITIVE, last): the Settings-tab keep-resident
+                 # checkbox. Same discipline again -- keyword-only from ui.py's
+                 # dispatch(), appended after block_swap_prefetch.
+                 keep_resident=KEEP_RESIDENT_DEFAULT,
+                 # Acceleration (ADDITIVE, last): the Settings-tab fused GGUF
+                 # dequantization kernel checkbox. Same discipline again --
+                 # keyword-only from ui.py's dispatch(), appended after
+                 # keep_resident.
+                 fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -426,6 +578,13 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         if not prompt or not prompt.strip():
             yield L("msg_prompt_required", lang), "", None
+            return
+
+        # NAG (non-CFG Negative) precheck: enabled but no negative prompt to
+        # apply -> reject with zero API calls (toast + textbox line, same
+        # discipline as the dimension prechecks just below).
+        if nag_enabled and not (negative_prompt or "").strip():
+            yield _precheck_reject(L("nag_msg_negative_required", lang)), "", None
             return
 
         # 0) width/height (÷64) + num_frames (8n+1, [9, 481]) precheck, moved
@@ -627,6 +786,16 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 reference_video_id=reference_video_id,
                 control_adherence=control_adherence,
                 reference_strength=reference_strength,
+                nag_enabled=nag_enabled,
+                nag_scale=nag_scale,
+                nag_tau=nag_tau,
+                nag_alpha=nag_alpha,
+                neg_method=neg_method,
+                vsf_scale=vsf_scale,
+                attention_backend=attention_backend,
+                block_swap_prefetch=block_swap_prefetch,
+                keep_resident=keep_resident,
+                fused_gguf_dequant_kernel=fused_gguf_dequant_kernel,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -682,6 +851,41 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 payload["conditioning_attention_strength"] = float(control_adherence)
             if float(reference_strength) < 1.0:
                 payload["reference_video_strength"] = float(reference_strength)
+        # NAG (additive): keys appended only when enabled, mirroring
+        # build_a2v_chain_payload's discipline, so the NAG-off request stays
+        # byte-identical to the pre-NAG payload.
+        if nag_enabled:
+            payload["nag_enabled"] = True
+            payload["nag_scale"] = float(nag_scale)
+            payload["nag_tau"] = float(nag_tau)
+            payload["nag_alpha"] = float(nag_alpha)
+            payload["neg_method"] = neg_method
+            payload["vsf_scale"] = float(vsf_scale)
+        # Acceleration (additive, conditional): appended AFTER the NAG/VSF block
+        # and only for a non-default backend, so the sdpa request stays
+        # byte-identical to the pre-Acceleration payload.
+        if attention_backend != "sdpa":
+            payload["attention_backend"] = attention_backend
+        # Block-swap prefetch (additive, conditional): appended right after
+        # attention_backend, only when it differs from BLOCK_SWAP_PREFETCH_DEFAULT
+        # (S4: the API's own default is now True), so a request that never
+        # touches the checkbox stays byte-identical to the default payload
+        # EITHER WAY. Sending only when True would silently re-enable the
+        # feature for a caller who explicitly turned it off, now that the
+        # server's own default has flipped to True.
+        if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+            payload["block_swap_prefetch"] = bool(block_swap_prefetch)
+        # keep-resident (additive, conditional): appended right after
+        # block_swap_prefetch, only when it differs from KEEP_RESIDENT_DEFAULT.
+        # That default is OFF, so in practice the key rides only on a checked
+        # box -- the mirror image of the line above, despite the identical shape.
+        if keep_resident != KEEP_RESIDENT_DEFAULT:
+            payload["keep_resident"] = bool(keep_resident)
+        # fused GGUF dequantization kernel (additive, conditional): appended
+        # last, same rule; its default is ON since 2026-08-04, so the key rides
+        # only on an UNCHECKED box (the same direction as block_swap_prefetch).
+        if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+            payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -767,9 +971,35 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        mode=MODE_NONE, src_video=None, context_frames=73,
                        # ADDITIVE: bound to ui.py's chain_chunked_upsample input
                        # (appended after v2v_context); MUST stay before src_audio,
-                       # which the inputs list does not pass.
+                       # which the inputs list does not pass. Positional-order
+                       # contract with ui.py's chain_generate_btn.click inputs=[...]
+                       # (and tests/test_gradio_v2v_a2v.py's _chain_args helper):
+                       # chunked_upsample -> nag_enabled/nag_scale/nag_tau/nag_alpha
+                       # -> neg_method/vsf_scale -> src_audio.
                        chunked_upsample=False,
-                       src_audio=None):
+                       nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
+                       neg_method="nag", vsf_scale=1.5,
+                       src_audio=None,
+                       # Acceleration (ADDITIVE, last): ``src_audio`` keeps its
+                       # place as the last POSITIONAL param (the only caller that
+                       # fills it is tests/test_gradio_v2v_a2v.py's _chain_args),
+                       # so the attention selector goes AFTER it and ui.py's
+                       # chain_dispatch forwards it as a KEYWORD.
+                       attention_backend="sdpa",
+                       # Acceleration (ADDITIVE, last): the block-swap prefetch
+                       # checkbox, same discipline -- appended after
+                       # attention_backend, forwarded as a KEYWORD by ui.py's
+                       # chain_dispatch.
+                       block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
+                       # Acceleration (ADDITIVE, last): the keep-resident
+                       # checkbox, appended after block_swap_prefetch and
+                       # forwarded as a KEYWORD by ui.py's chain_dispatch.
+                       keep_resident=KEEP_RESIDENT_DEFAULT,
+                       # Acceleration (ADDITIVE, last): the fused GGUF
+                       # dequantization kernel checkbox, appended after
+                       # keep_resident and forwarded as a KEYWORD by ui.py's
+                       # chain_dispatch.
+                       fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -784,6 +1014,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # unnoticed. ---
         if not prompt or not prompt.strip():
             yield _precheck_reject(L("msg_prompt_required", lang)), "", None
+            return
+
+        # NAG (non-CFG Negative) precheck: enabled but no negative prompt to
+        # apply -> reject with zero API calls (mirrors make_generate_handler).
+        if nag_enabled and not (negative_prompt or "").strip():
+            yield _precheck_reject(L("nag_msg_negative_required", lang)), "", None
             return
 
         try:
@@ -1060,6 +1296,39 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             }
         elif mode == MODE_A2V:
             payload["source_audio"] = {"audio_id": source_audio_id}
+
+        # NAG (additive): keys appended only when enabled, mirroring
+        # build_a2v_chain_payload's discipline, so the NAG-off chain payload
+        # stays byte-identical to the pre-NAG contract.
+        if nag_enabled:
+            payload["nag_enabled"] = True
+            payload["nag_scale"] = float(nag_scale)
+            payload["nag_tau"] = float(nag_tau)
+            payload["nag_alpha"] = float(nag_alpha)
+            payload["neg_method"] = neg_method
+            payload["vsf_scale"] = float(vsf_scale)
+
+        # Acceleration (additive, conditional): appended AFTER the NAG/VSF block
+        # and only for a non-default backend, mirroring the single-generate path
+        # and build_a2v_chain_payload.
+        if attention_backend != "sdpa":
+            payload["attention_backend"] = attention_backend
+        # Block-swap prefetch (additive, conditional): appended right after
+        # attention_backend, only when it differs from BLOCK_SWAP_PREFETCH_DEFAULT,
+        # mirroring the single-generate path and build_a2v_chain_payload (see
+        # there for why "only when True" is unsafe now that the server's own
+        # default is True).
+        if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+            payload["block_swap_prefetch"] = bool(block_swap_prefetch)
+        # keep-resident (additive, conditional): same rule (the default is off,
+        # so the key rides only on a checked box).
+        if keep_resident != KEEP_RESIDENT_DEFAULT:
+            payload["keep_resident"] = bool(keep_resident)
+        # fused GGUF dequantization kernel (additive, conditional): appended
+        # last, same rule but the OPPOSITE direction from keep_resident since
+        # 2026-08-04 (default on -> emitted only when unchecked).
+        if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+            payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
 
         try:
             resp = api.generate_chain(payload)

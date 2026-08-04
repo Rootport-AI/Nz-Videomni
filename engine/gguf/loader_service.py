@@ -26,9 +26,12 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
+
+if TYPE_CHECKING:
+    from engine.gguf.ic_lora_common import IcLoraEntry
 
 logger = logging.getLogger(__name__)
 
@@ -86,14 +89,14 @@ class GGUFStateDictLoader:
         self,
         gguf_path: str,
         target_dtype: torch.dtype = torch.bfloat16,
-        ic_loras: list[tuple[str, float]] | None = None,
+        ic_loras: list[IcLoraEntry] | None = None,
     ) -> None:
         self.gguf_path = gguf_path
         self.target_dtype = target_dtype
-        # IC-LoRA spike: (safetensors_path, strength) pairs fused in-place into
-        # the base state-dict just before it is returned from load(). Empty by
-        # default → load() is byte-identical to the historical behaviour.
-        self.ic_loras: list[tuple[str, float]] = list(ic_loras or [])
+        # IC-LoRA spike: (path, strength, audio_strength) entries fused in-place
+        # into the base state-dict just before it is returned from load(). Empty
+        # by default → load() is byte-identical to the historical behaviour.
+        self.ic_loras: list[IcLoraEntry] = list(ic_loras or [])
 
     def metadata(self, path: str) -> dict:
         """Extract model config from GGUF metadata."""
@@ -223,14 +226,15 @@ class GGUFStateDictLoader:
         # Shared front half (load + LTXV_LORA_COMFY_RENAMING_MAP rename +
         # lora_A/lora_B pairing) with the forward-time path; only the in-place
         # fp32 fuse below is bf16-path specific and stays UNCHANGED.
-        from engine.gguf.ic_lora_common import load_ic_lora_pairs
+        from engine.gguf.ic_lora_common import load_ic_lora_pairs, strength_for_prefix
 
         total_lora_keys = 0
         total_delta_keys = 0
 
-        for path, strength, pairs in load_ic_lora_pairs(self.ic_loras):
+        for path, strength, audio_strength, pairs in load_ic_lora_pairs(self.ic_loras):
             n_keys = 2 * len(pairs)  # each pair = one lora_A + one lora_B key
             n_delta = 0
+            n_resolved = 0
 
             # Per-key fp32 fuse. Multiple LoRAs hitting the same key accumulate
             # sequentially (same net result as the wheel's summed-deltas path).
@@ -240,7 +244,13 @@ class GGUFStateDictLoader:
                 weight_key = prefix + ".weight"
                 weight = base_sd.sd.get(weight_key)
                 if weight is None:
-                    continue  # counted via n_delta; 0 total → loud WARN below
+                    continue  # counted via n_resolved; 0 total → loud WARN below
+                n_resolved += 1
+                # audio_strength=0 on an audio-axis key → zero delta; skip the
+                # matmul entirely (mathematically identical to add_(0)).
+                eff = strength_for_prefix(prefix, strength, audio_strength)
+                if eff == 0.0:
+                    continue
                 if weight.dtype not in (torch.bfloat16, torch.float16, torch.float32):
                     raise RuntimeError(
                         f"IC-LoRA fuse: unsupported model weight dtype {weight.dtype} "
@@ -248,7 +258,7 @@ class GGUFStateDictLoader:
                     )
                 # B:(out,r) @ A:(r,in) → delta:(out,in), fp32 matmul (fast CPU path).
                 delta = torch.matmul(
-                    lora_b.to(torch.float32) * strength, lora_a.to(torch.float32)
+                    lora_b.to(torch.float32) * eff, lora_a.to(torch.float32)
                 )
                 if delta.shape != weight.shape:
                     raise RuntimeError(
@@ -262,11 +272,17 @@ class GGUFStateDictLoader:
 
             total_lora_keys += n_keys
             total_delta_keys += n_delta
+            extra = ""
+            if audio_strength is not None:
+                extra = (
+                    f", audio_strength={audio_strength:.3f}, "
+                    f"muted={n_resolved - n_delta} keys"
+                )
             logger.info(
-                "IC-LoRA %s: %d keys, %d model weights fused (strength=%.3f)",
-                Path(path).name, n_keys, n_delta, strength,
+                "IC-LoRA %s: %d keys, %d model weights fused (strength=%.3f%s)",
+                Path(path).name, n_keys, n_delta, strength, extra,
             )
-            if n_delta == 0:
+            if n_resolved == 0:
                 logger.warning(
                     "IC-LoRA %s matched 0 model weights — LoRA/model KEY-FORMAT "
                     "MISMATCH; the fuse was a no-op. Check the renaming map.",
@@ -293,13 +309,14 @@ class GGUFLoaderService:
     """
 
     def __init__(
-        self, gguf_path: str, ic_loras: list[tuple[str, float]] | None = None
+        self, gguf_path: str, ic_loras: list[IcLoraEntry] | None = None
     ) -> None:
         self.gguf_path = gguf_path
         self._original_loader: Any = None
-        # IC-LoRA (path, strength) pairs forwarded to the GGUFStateDictLoader for
-        # in-place fuse. Empty by default → historical behaviour unchanged.
-        self.ic_loras: list[tuple[str, float]] = list(ic_loras or [])
+        # IC-LoRA (path, strength, audio_strength) entries forwarded to the
+        # GGUFStateDictLoader for in-place fuse. Empty by default → historical
+        # behaviour unchanged.
+        self.ic_loras: list[IcLoraEntry] = list(ic_loras or [])
 
     def install(self, model_ledger: Any) -> None:
         """Replace transformer_builder loader with GGUF loader."""

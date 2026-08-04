@@ -20,7 +20,7 @@
          Re-applied automatically whenever the pinned dependency set changes, so
          "git pull, then re-run this" actually updates the venv.
          -ResolveLatest opts into a fresh resolve (UNVALIDATED newer torch).
-      5. Model downloads (~30GB, 3 guarded items) via .venv-engine's hf.exe,
+      5. Model downloads (~31GB, 5 guarded items) via .venv-engine's hf.exe,
          pulled from three PUBLIC, NON-GATED repos. No HuggingFace account,
          login or token is required at any point.
       6. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt.
@@ -28,22 +28,30 @@
     The GGUF + component-file recipe is the ONLY supported real path. It never
     opens the old 46GB monolith (ltx-2.3-22b-distilled-1.1.safetensors) or the
     22.7GB QAT Gemma dir -- both were physically deleted; this installer never
-    downloads them. The monolith path survives only in config.yaml as a
-    reference-only payload field (see config.py ModelConfig.checkpoint_path).
+    downloads them. The monolith path is not configurable at all any more
+    (config.yaml's checkpoint_path key was removed 2026-07-28, PENDING_TASKS.md
+    3-26, once confirmed dead): the worker payload's checkpoint_path field is
+    now a hardcoded "" in services/ltx_runner.py.
 
 .NOTES
     ATTENTION BACKEND (no GPU-specific knob)
     ----------------------------------------
-    There is none to choose: PyTorch SDPA is the attention backend on EVERY arch
-    (Ada / Ampere / Hopper / Blackwell). xformers and flash-attn are never
-    installed by this script -- SDPA is what the code actually uses, and on
-    Blackwell adding flash-attn can jam it. sageattention IS the exception: it is
-    a declared dependency of the engine venv (engine-venv-pyproject.toml /
-    venv-engine.freeze.txt), so step 4 does install it -- but nothing imports it,
-    so it is dead weight awaiting a cleanup (filed as PENDING_TASKS.md 4-25).
-    Being pure Python, it is at least not arch-sensitive. Blackwell needs an R570+
-    driver. Because nothing here is arch-dependent, this installer does not detect
-    or take a GPU architecture at all.
+    PyTorch SDPA remains the attention backend on EVERY arch (Ada / Ampere /
+    Hopper / Blackwell) and is always installed and always usable. xformers and
+    flash-attn are never installed by this script -- SDPA is the baseline the
+    code always falls back to, and on Blackwell adding flash-attn can jam it.
+    sageattention was historically an exception (a declared-but-unused
+    engine-venv dependency, pure dead weight since nothing imported it) --
+    removed in the 2026-07-28 dependency cleanup (PENDING_TASKS.md 3-25; see
+    engine/venv-engine.freeze.txt). It is back as of 2026-07-31: the
+    Acceleration feature's SageAttentionService (engine/transformer/
+    sage_attention_service.py) is now a real consumer, so sageattention 2.2.0
+    (prebuilt wheel, cu128/torch2.9.1) and triton-windows (its runtime JIT
+    dependency) are installed by default -- see $engineDirectPins below and
+    engine/venv-engine.freeze.txt. SDPA stays the default at generation time;
+    sage is opt-in per job via `attention_backend`. Blackwell needs an R570+
+    driver. Because nothing here is arch-dependent, this installer does not
+    detect or take a GPU architecture at all.
 
 .EXAMPLE
     ./scripts/install_ltx.ps1                       # full install
@@ -178,9 +186,19 @@ if ($SkipVenv) {
     }
     # `uv sync` is cheap+idempotent, so run it every time to reconcile the app deps
     # with the root pyproject.toml (this is the torch-free FastAPI/Gradio side).
-    Write-Do "uv sync  (root pyproject.toml, app deps)"
-    uv sync
-    if ($LASTEXITCODE -ne 0) { throw "uv sync (app venv) failed." }
+    #
+    # --extra dev is ALWAYS passed (2026-07-28 owner decision, PENDING_TASKS.md
+    # 3-26, option (a)): `uv sync` treats the venv as authoritative for exactly
+    # the extras it is told to sync, so a plain `uv sync` doesn't just skip the
+    # `dev` optional-dependency group (pytest / iniconfig / pluggy) -- it PRUNES
+    # it back out if it was ever installed. That silently deletes pytest on every
+    # re-run of this step, which is exactly the trap that bit the 2026-07-28
+    # NAG work (recovered only by a manual `uv sync --extra dev`). Always
+    # including it costs a few MB and keeps "git pull, re-run setup" from ever
+    # breaking `pytest` again -- worth it over saving that space for end users.
+    Write-Do "uv sync --extra dev  (root pyproject.toml, app deps + dev extra)"
+    uv sync --extra dev
+    if ($LASTEXITCODE -ne 0) { throw "uv sync --extra dev (app venv) failed." }
     Write-Ok ".venv ready"
 }
 
@@ -210,29 +228,45 @@ $enginePyprojectDir = "$ProjectRoot\engine"
 # .gitignore already excludes, so it is never tracked and dies with the venv.
 $engineStateFile = "$ProjectRoot\.venv-engine\.nz-engine-state"
 
-# The 3 git packages as uv requirement strings, at their EXACT pinned revs. The
-# freeze file lists them only as bare `name==version` (no such build exists on
-# PyPI), so a plain `-r freeze` cannot fetch them -- they are installed from
-# these URLs first, and their bare lines are filtered out of the freeze copy.
+# The 3 git packages PLUS 1 direct-URL wheel, as uv requirement strings, all
+# pinned exactly. The freeze file lists all 4 only as bare `name==version` (no
+# such build exists on PyPI for any of them), so a plain `-r freeze` cannot
+# fetch them -- they are installed from these direct references first, and
+# their bare lines are filtered out of the freeze copy.
 # Keeping them in ONE array is what lets the state hash below cover them: bump a
-# rev here and the hash changes, which forces a re-apply on the next run.
-$engineGitPins = @(
+# rev/wheel URL here and the hash changes, which forces a re-apply on the next
+# run.
+#
+# The sageattention entry is a prebuilt wheel (not a git pin): woct0rdho's
+# Windows build for sageattention 2.2.0, matched to this project's exact
+# torch 2.9.1+cu128 (a mismatched wheel fails the ABI-tagged import at load
+# time, not at install time). `%2B` is the URL-encoded form of `+` inside the
+# wheel filename's local version segment (`2.2.0+cu128torch2.9.1.post6`) --
+# keep this string SINGLE-quoted so PowerShell does not try to interpolate it.
+# Re-added 2026-07-31 (see .NOTES above and D4 in the Acceleration plan): this
+# is the only supported source for sageattention -- engine-venv-pyproject.toml
+# deliberately does NOT list it (see that file's header comment), because
+# -ResolveLatest resolves an unvalidated newer torch this ABI-pinned wheel is
+# not built against.
+$engineDirectPins = @(
     "diffusers @ git+https://github.com/huggingface/diffusers.git@01de02e8b4f2cc91df4f3e91cb6535ebcbeb490c"
     "ltx-core @ git+https://github.com/Lightricks/LTX-2.git@00dc53d3f81c405932f9f16d9c57557de411e702#subdirectory=packages/ltx-core"
     "ltx-pipelines @ git+https://github.com/Lightricks/LTX-2.git@00dc53d3f81c405932f9f16d9c57557de411e702#subdirectory=packages/ltx-pipelines"
+    'sageattention @ https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu128torch2.9.1.post6-cp310-abi3-win_amd64.whl'
 )
 
-# SHA-256 over the freeze body PLUS the git pins. The freeze file alone is NOT a
-# sufficient input: the 3 revs are hardcoded in this script, so a rev bump would
-# otherwise leave the hash unchanged and never re-apply. Line endings are
-# normalised first so a CRLF/LF checkout flip does not masquerade as a change.
+# SHA-256 over the freeze body PLUS the direct pins. The freeze file alone is
+# NOT a sufficient input: the pinned revs/URLs are hardcoded in this script, so
+# a bump would otherwise leave the hash unchanged and never re-apply. Line
+# endings are normalised first so a CRLF/LF checkout flip does not masquerade
+# as a change.
 function Get-EngineStateHash {
     param(
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $GitPins
+        [Parameter(Mandatory)] [string[]] $DirectPins
     )
     $body = [System.IO.File]::ReadAllText($FreezeFile).Replace("`r`n", "`n")
-    $payload = $body + "`n" + ($GitPins -join "`n") + "`n"
+    $payload = $body + "`n" + ($DirectPins -join "`n") + "`n"
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         $digest = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))
@@ -244,10 +278,12 @@ function Get-EngineStateHash {
 
 # The 2-stage deterministic freeze apply, called by BOTH the create path and the
 # re-sync path (never inline a second copy of this).
-#  (a) install the 3 git packages at their pinned revs (see $engineGitPins).
+#  (a) install the 3 git packages + 1 direct-URL wheel at their pinned refs (see
+#      $engineDirectPins).
 #  (b) install the remaining pinned wheels from a TEMP copy of the freeze that has
-#      those 3 bare lines removed (already installed in (a); left in place uv
-#      would fetch some other PyPI build of the same version).
+#      those 4 bare lines removed (already installed in (a); left in place uv
+#      would fetch some other PyPI build of the same version -- and for
+#      sageattention there IS no PyPI build at all).
 # The cu128 --index and --index-strategy in (b) are BOTH load-bearing: without
 # them uv resolves CPU-only torch/torchaudio wheels (known uv bug for the
 # platform-marker-less torchaudio source).
@@ -255,17 +291,17 @@ function Invoke-EngineFreezeApply {
     param(
         [Parameter(Mandatory)] [string]   $EnginePython,
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $GitPins
+        [Parameter(Mandatory)] [string[]] $DirectPins
     )
-    Write-Do "install 3 git packages at pinned revs (diffusers / ltx-core / ltx-pipelines)"
-    $gitArgs = @("pip", "install", "--python", $EnginePython) + $GitPins
-    uv @gitArgs
-    if ($LASTEXITCODE -ne 0) { throw "engine git-package install failed." }
+    Write-Do "install direct-reference packages (3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention)"
+    $directArgs = @("pip", "install", "--python", $EnginePython) + $DirectPins
+    uv @directArgs
+    if ($LASTEXITCODE -ne 0) { throw "engine direct-pin install failed." }
 
     # Distribution names taken from the pins themselves, so this filter cannot
     # drift out of sync with the list above.
-    $gitNames = $GitPins | ForEach-Object { [regex]::Escape((($_ -split ' ')[0])) }
-    $gitLineRe = "^(" + ($gitNames -join "|") + ")=="
+    $directNames = $DirectPins | ForEach-Object { [regex]::Escape((($_ -split ' ')[0])) }
+    $gitLineRe = "^(" + ($directNames -join "|") + ")=="
 
     $tmpFreeze = Join-Path ([System.IO.Path]::GetTempPath()) ("venv-engine.freeze.nogit.{0}.txt" -f ([guid]::NewGuid().ToString("N")))
     try {
@@ -318,7 +354,7 @@ if ($SkipVenv) {
     Write-Step "Engine venv .venv-engine  (torch cu128 stack, deterministic freeze)"
     if (-not (Test-Path $freezeSrc)) { throw "Engine freeze file not found: $freezeSrc" }
 
-    $wantState = Get-EngineStateHash -FreezeFile $freezeSrc -GitPins $engineGitPins
+    $wantState = Get-EngineStateHash -FreezeFile $freezeSrc -DirectPins $engineDirectPins
     $haveState = ""
     if (Test-Path $engineStateFile) {
         $haveState = ((Get-Content $engineStateFile -Raw) -replace '\s', '')
@@ -328,7 +364,7 @@ if ($SkipVenv) {
         Write-Do "uv venv --python 3.12 .venv-engine"
         uv venv --python 3.12 .venv-engine
         if ($LASTEXITCODE -ne 0) { throw "uv venv .venv-engine failed." }
-        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -GitPins $engineGitPins
+        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -DirectPins $engineDirectPins
         Set-Content -Path $engineStateFile -Value $wantState -Encoding ascii
         Write-Ok ".venv-engine ready"
     } elseif ($haveState -eq $wantState) {
@@ -343,7 +379,7 @@ if ($SkipVenv) {
         } else {
             Write-Do "no completion marker found (interrupted install, or built before re-sync existed) -- re-applying the freeze"
         }
-        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -GitPins $engineGitPins
+        Invoke-EngineFreezeApply -EnginePython $enginePy -FreezeFile $freezeSrc -DirectPins $engineDirectPins
         Set-Content -Path $engineStateFile -Value $wantState -Encoding ascii
         Write-Ok ".venv-engine re-synced"
     }
@@ -353,15 +389,24 @@ if ($SkipVenv) {
 $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
 
 # ----------------------------------------------------------------------------
-# Attention backend: nothing to install, on any GPU.
+# Attention backend: nothing EXTRA to install here, on any GPU.
 #
-# PyTorch SDPA is the backend the engine actually uses, on every architecture.
-# This step installs nothing at all -- not on any arch, not optionally.
-# (Historically this step could pick up a prebuilt xformers wheel out of wheels/;
-# that path was removed because such a wheel is compiled for ONE compute
-# capability and installs cleanly on machines it cannot run on. If you want to
-# experiment with xformers, build and install it by hand -- see
+# PyTorch SDPA is the always-available backend on every architecture, and this
+# step (still) does not install anything for it -- not on any arch, not
+# optionally. (Historically this step could pick up a prebuilt xformers wheel
+# out of wheels/; that path was removed because such a wheel is compiled for
+# ONE compute capability and installs cleanly on machines it cannot run on. If
+# you want to experiment with xformers, build and install it by hand -- see
 # scripts/build_xformers.ps1 -- and note the engine code does not import it.)
+#
+# sageattention, the optional second backend, is NOT installed here either --
+# it was re-added 2026-07-31 as one of the $engineDirectPins pinned wheels
+# above (step 4), alongside triton-windows (its runtime JIT dependency, in
+# engine/venv-engine.freeze.txt) which bundles its own TinyCC/ptxas and needs
+# no Visual Studio on the end-user machine. It was removed as dead weight in
+# the 2026-07-28 cleanup (PENDING_TASKS.md 3-25) and came back once the
+# Acceleration feature's SageAttentionService gave it a real consumer. SDPA
+# remains the default at generation time; sage is opt-in per job.
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
@@ -382,11 +427,12 @@ if ($CloneUpstreamReference) {
 }
 
 # ----------------------------------------------------------------------------
-# 5) Model downloads (~30GB) via the engine venv's hf.exe.
+# 5) Model downloads (~31GB) via the engine venv's hf.exe.
 #    Everything comes from THREE self-hosted repos that are PUBLIC and NON-GATED,
 #    so no HuggingFace account, login or token is involved anywhere:
 #      Rootport/Nz-LTX23-weights -> ltx-2.3/, ltx-2.3-components/, ltx-2.3-gguf/,
-#                                   ltx-2.3-ic-lora/
+#                                   ltx-2.3-ic-lora/, ltx-2.3-ic-lora-deblur/,
+#                                   preprocessors-vda/
 #      Rootport/Nz-Gemma3-12B    -> gemma-3-12b-it-gguf/, gemma-3-12b-it-tokenizer/
 #      Rootport/Nz-DWPose        -> preprocessors/
 #    All three repos mirror this project's models/ layout 1:1, so each one expands
@@ -422,10 +468,10 @@ if ($CloneUpstreamReference) {
 #   what stops the two repos' identically-named cards from landing in models/ and
 #   overwriting each other.
 #
-#   NOTE (why Check is separate from LocalDir): all three calls below pass
+#   NOTE (why Check is separate from LocalDir): all five calls below pass
 #   LocalDir = "models", so sizing the guard on LocalDir would see the ~24GB LTX
-#   download and then wrongly SKIP the Gemma and DWPose ones. Check instead names
-#   the subdirectories that THIS repo expands into.
+#   download and then wrongly SKIP the Gemma, DWPose, Deblur and VDA ones. Check
+#   instead names the subdirectories that THIS repo expands into.
 #
 #   NOTE (the guard is PER-DIRECTORY -- read before adding a repo): every Check
 #   entry carries its OWN Min, and EACH one must clear it independently or the
@@ -516,7 +562,7 @@ if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
 } else {
-    Write-Step "Model downloads (~30GB total, 3 public repos, no token needed)"
+    Write-Step "Model downloads (~31GB total, 3 public repos, no token needed)"
 
     # 1) LTX-2.3 weights, 7 files / 24,196,952,364 B:
     #      ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors            (0.93GB)
@@ -529,13 +575,14 @@ if ($SkipModels) {
     #    Already laid out exactly as the project wants them, so this expands into
     #    models/ verbatim -- in particular the transformer GGUF arrives directly in
     #    models/ltx-2.3-gguf/ and the old "flatten one level up" fixup is gone.
-    #    The 2 IC-LoRA adapters back all three entries config.yaml registers under
-    #    ic_loras: -- pixel-spatial-upscaler-x2 (resolution boost), plus the ONE
-    #    union-control file published twice, as canny-control (edge-outline
-    #    guidance) and pose-control (skeleton guidance). They are not optional in
-    #    practice: gradio_ui/adapters.py lists those three names from a static
+    #    The 2 IC-LoRA adapters back four of the entries config.yaml registers
+    #    under ic_loras: -- pixel-spatial-upscaler-x2 (resolution boost), plus the
+    #    ONE union-control file published three times, as canny-control (edge-
+    #    outline guidance), pose-control (skeleton guidance) and depth-control
+    #    (depth-map guidance). They are not optional in practice:
+    #    gradio_ui/adapters.py lists those names from a static
     #    fallback even when nothing is registered, so a fresh install without these
-    #    files puts three adapters in the UI that 404 the moment they are picked.
+    #    files puts the adapters in the UI that 404 the moment they are picked.
     #    The x4 upscaler variant is deliberately not in the repo (unregistered).
     #    One pattern covers both nested files: `*` crosses '/' (glob note above).
     #    Per-directory Mins (see the sizing rule above); every file below is gated
@@ -607,6 +654,86 @@ if ($SkipModels) {
         -Check @(
             @{ Dir = "models/preprocessors"; Min = [long] 340000000 }
         )
+
+    # 4) IC-LoRA Deblur, 1 file / 906,071,437 B:
+    #      ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors  (906MB)
+    #    Sharpens a blurry reference video. It needs NO preprocessor at all: the
+    #    blurry clip is handed to the adapter as-is, which is why nothing else ships
+    #    alongside it. That is also why config.yaml registers `deblur:` in the bare
+    #    STRING form (just a path), not the mapping form with a `preprocess:` key
+    #    that canny-/pose-/depth-control use.
+    #
+    #    WHY THIS IS A SEPARATE CALL WITH ITS OWN DIRECTORY, and NOT one more glob
+    #    bolted onto call 1 above / one more file inside models/ltx-2.3-ic-lora/:
+    #    the guard is a RECURSIVE size sum over the Check directory (Get-PathSize).
+    #    Dropping a fresh 906MB file into models/ltx-2.3-ic-lora/ would lift that
+    #    directory from 1,308,930,638 to 2,215,002,075 -- so a machine that had LOST
+    #    the 654MB union-control file would still sit at 1,560,536,723, clear the
+    #    existing Min of 1,000,000,000, and SKIP. Step 6 would then report
+    #    "ic_lora union-control MISSING" on every single re-run with no way to fix
+    #    it: exactly the permanent deadlock the Gemma tokenizer hit (see the
+    #    per-directory Min note above), just arrived from the opposite direction --
+    #    there a big file masked an absent SIBLING DIRECTORY, here a NEW file would
+    #    mask an absent sibling FILE. A brand-new Check directory can only ever be
+    #    measured against its own contents, which makes that impossible by
+    #    construction. Same reasoning applies to call 5 below.
+    #    (Repo side: the file is stored at ltx-2.3-ic-lora-deblur/ in
+    #    Rootport/Nz-LTX23-weights precisely so it expands here, a SIBLING of
+    #    ltx-2.3-ic-lora/, with no post-processing.)
+    #
+    #    Min sizing (same rule as above -- above (dir total - smallest file the step
+    #    6 table checks in that dir), at or below the dir total):
+    #      ltx-2.3-ic-lora-deblur 906,071,437, 1 file, and that one file IS gated by
+    #                             the step 6 table (906,071,437-906,071,437 = 0)
+    #                                                     -> Min 900,000,000
+    #    i.e. losing the only file drops the dir to 0 and re-triggers the download;
+    #    a truncated one lands under 900,000,000 and does too. Mirrors the
+    #    models/ltx-2.3 entry in call 1, which gates a single ~1GB file the same way.
+    Invoke-ModelDownload -Name "IC-LoRA Deblur (1 file)" `
+        -Repo "Rootport/Nz-LTX23-weights" `
+        -Include @("ltx-2.3-ic-lora-deblur/*") `
+        -LocalDir "models" `
+        -Check @(
+            @{ Dir = "models/ltx-2.3-ic-lora-deblur"; Min = [long] 900000000 }
+        )
+
+    # 5) Video-Depth-Anything preprocessor model, 2 files / 116,452,112 B:
+    #      preprocessors-vda/video_depth_anything_vits.pth  (116.4MB)
+    #      preprocessors-vda/LICENSE                        (11,356 B, Apache-2.0)
+    #    The Small (vits) checkpoint behind the depth-control IC-LoRA: it turns the
+    #    reference video into the grayscale depth map that is then fed to the SAME
+    #    union-control adapter canny/pose already use. engine/preprocess/depth.py
+    #    loads it from models/preprocessors-vda/ by an absolute path built from its
+    #    own file location, so this layout is not negotiable (mirrors dwpose.py).
+    #    The bundled LICENSE is the Apache-2.0 text this checkpoint ships under --
+    #    a DIFFERENT licence from everything else in the weights repo (which is
+    #    LTX-2 Community Licence), so it must travel with the .pth, not be dropped.
+    #
+    #    Separate Check directory for the same structural reason as call 4, and
+    #    NOTE the near-miss in the naming: models/preprocessors-vda is a SIBLING of
+    #    the DWPose models/preprocessors, not a child, so neither directory's
+    #    recursive sum can ever see the other's bytes. (Had it been named
+    #    models/preprocessors/vda/, its 116MB would have padded the DWPose guard and
+    #    masked a missing 135MB dw-ll_ucoco.) The include glob is likewise distinct:
+    #    fnmatch's "preprocessors/*" does not match "preprocessors-vda/...".
+    #
+    #    Min sizing: the step 6 table gates ONLY the .pth inside this dir (LICENSE is
+    #    documentation -- losing it produces no MISSING row, so per the sizing rule
+    #    it does not have to be catchable, and making it so would demand an
+    #    11,356-byte-wide window). So the Min only has to sit above
+    #    (116,452,112 - 116,440,756 = 11,356) and at/below the .pth's own size, so
+    #    that the verdict is identical with or without the LICENSE file present:
+    #      preprocessors-vda      116,452,112, 2 files    -> Min 110,000,000
+    #    Both files present = 116,452,112 -> SKIP. LICENSE alone missing =
+    #    116,440,756 -> still SKIP (nothing step 6 checks is gone). .pth missing or
+    #    truncated = 11,356 (or < 110,000,000) -> download.
+    Invoke-ModelDownload -Name "Video-Depth-Anything Small preprocessor (2 files)" `
+        -Repo "Rootport/Nz-LTX23-weights" `
+        -Include @("preprocessors-vda/*") `
+        -LocalDir "models" `
+        -Check @(
+            @{ Dir = "models/preprocessors-vda"; Min = [long] 110000000 }
+        )
 }
 
 # ----------------------------------------------------------------------------
@@ -618,20 +745,24 @@ if ($SkipModels) {
 #        spatial_upsampler_path, gguf_transformer_path, gguf_gemma_path, and the
 #        3 component_* files; plus engine_dir/worker.py.
 #      * env/launch _RealBackend._require_path(): the same load-bearing files.
-#    The 46GB monolith checkpoint_path is DELIBERATELY NOT gated (reference-only
-#    payload field; the GGUF+component path never opens it).
+#    The 46GB monolith is not gated here: it is no longer a config option at all
+#    (checkpoint_path was removed from config.yaml 2026-07-28, PENDING_TASKS.md
+#    3-26) and the GGUF+component path never opened it even before that.
 #    We ALSO check the app venv python (needed to run the server) and the smoke
 #    test file when -RunSmoke.
 #
-#    The 4 IC-LoRA / DWPose rows at the end are a deliberate widening: _real_available()
-#    does not look at them (their absence downgrades no backend to mock), but
-#    config.yaml registers all three ic_loras: entries unconditionally and
-#    gradio_ui/adapters.py falls back to the same three names even when nothing is
+#    The 6 IC-LoRA / preprocessor rows at the end are a deliberate widening:
+#    _real_available() does not look at them (their absence downgrades no backend to
+#    mock), but config.yaml registers every ic_loras: entry unconditionally and
+#    gradio_ui/adapters.py falls back to the same names even when nothing is
 #    registered. A missing file there is therefore invisible until a user picks the
 #    adapter and gets a 404, which is exactly the failure this table exists to
-#    convert into an up-front, named MISSING. Both source repos guard tightly enough
-#    (see the per-directory Min note in step 5) that a MISSING here is cleared by
-#    re-running.
+#    convert into an up-front, named MISSING. The last two rows extend that same
+#    protection to the adapters added 2026-08 (deblur, and depth-control -- whose
+#    404 would come from the missing VDA checkpoint rather than from the adapter
+#    file, since depth-control re-uses the union-control weights). All source repos
+#    guard tightly enough (see the per-directory Min note in step 5) that a MISSING
+#    here is cleared by re-running.
 # ----------------------------------------------------------------------------
 Write-Step "Verification (required load-bearing artifacts)"
 
@@ -648,9 +779,11 @@ $required = @(
     @{ Label = "spatial_upsampler";       Rel = "models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors";                      IsDir = $false; Min = [long]800000000 }
     @{ Label = "gemma_root (tokenizer dir)"; Rel = "models/gemma-3-12b-it-tokenizer";                                             IsDir = $true;  Min = [long]20000000 }
     @{ Label = "ic_lora pixel-spatial-upscaler-x2"; Rel = "models/ltx-2.3-ic-lora/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors"; IsDir = $false; Min = [long]600000000 }
-    @{ Label = "ic_lora union-control (canny/pose)"; Rel = "models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"; IsDir = $false; Min = [long]600000000 }
+    @{ Label = "ic_lora union-control (canny/pose/depth)"; Rel = "models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"; IsDir = $false; Min = [long]600000000 }
     @{ Label = "dwpose detector (yolox_l)"; Rel = "models/preprocessors/yolox_l.torchscript.pt";                                  IsDir = $false; Min = [long]200000000 }
     @{ Label = "dwpose estimator (dw-ll_ucoco)"; Rel = "models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt";                 IsDir = $false; Min = [long]120000000 }
+    @{ Label = "ic_lora deblur";          Rel = "models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors";       IsDir = $false; Min = [long]800000000 }
+    @{ Label = "vda depth model (vits)";  Rel = "models/preprocessors-vda/video_depth_anything_vits.pth";                         IsDir = $false; Min = [long]110000000 }
 )
 
 $rows = @()
@@ -688,7 +821,8 @@ $installedPaths = @"
 # Regenerated by scripts/install_ltx.ps1 at $stamp
 # GGUF + component-file recipe (matches config.yaml -> model:). The 46GB monolith
 # and 22.7GB QAT Gemma are intentionally absent (deleted; never re-downloaded).
-# The monolith path below is a reference-only payload field (never opened).
+# The monolith path is no longer a config option at all (checkpoint_path was
+# removed from config.yaml 2026-07-28, PENDING_TASKS.md 3-26, confirmed dead).
   gguf_transformer:          "./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
   gguf_gemma:                "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
   component_video_vae:       "./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"
@@ -697,7 +831,6 @@ $installedPaths = @"
   spatial_upsampler:         "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
   gemma_root:                "./models/gemma-3-12b-it-tokenizer"
   engine_python:             "./.venv-engine/Scripts/python.exe"
-  checkpoint_path (ref-only): "./models/ltx-2.3/ltx-2.3-22b-distilled-1.1.safetensors"
 "@
 $installedPaths | Out-File -FilePath "$ProjectRoot\models\INSTALLED_PATHS.txt" -Encoding utf8
 Write-Host "`nRegenerated models/INSTALLED_PATHS.txt" -ForegroundColor Cyan
@@ -717,18 +850,10 @@ Write-Ok "All required artifacts present."
 if ($RunSmoke) {
     Write-Step "Smoke test (mock, GPU-free)"
     if (-not (Test-Path $appPy)) { throw "App venv python not found for smoke test: $appPy" }
-    # `uv sync` (step 3, run on EVERY invocation to keep the app venv reconciled
-    # with pyproject.toml) does not install the `dev` optional-dependency group
-    # (pytest / iniconfig / pluggy) unless told to -- and worse, if those packages
-    # were ever present from a prior `--extra dev` sync, a plain `uv sync` PRUNES
-    # them right back out, because uv treats the venv as authoritative for exactly
-    # the extras it was asked to sync. So without this, `-RunSmoke` would first
-    # have step 3 delete pytest and then immediately try to invoke it below. Only
-    # do this here (smoke-test-only), not in step 3, so a normal install -- which
-    # never runs pytest -- stays free of dev-only weight for end users.
-    Write-Do "uv sync --extra dev  (dev deps for pytest: pytest / iniconfig / pluggy)"
-    uv sync --extra dev
-    if ($LASTEXITCODE -ne 0) { throw "uv sync --extra dev failed (dev deps required to run the smoke test)." }
+    # No extra `uv sync --extra dev` needed here (2026-07-28): step 3 now always
+    # syncs with --extra dev, so pytest / iniconfig / pluggy are already present
+    # by the time this branch runs. The special-case re-sync that used to live
+    # here was made redundant by that step-3 change and has been removed.
     & $appPy -m pytest -q tests/test_smoke.py
     if ($LASTEXITCODE -ne 0) { throw "Smoke test failed." }
     Write-Ok "Smoke test passed."

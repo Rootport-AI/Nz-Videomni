@@ -18,6 +18,7 @@ import pytest
 
 from gradio_ui.adapters import ADAPTER_NONE
 from gradio_ui.handlers import (
+    LORA_AUDIO_WEIGHT_MAX,
     LORA_WEIGHT_MAX,
     LORA_WEIGHT_MIN,
     make_generate_handler,
@@ -132,6 +133,64 @@ def test_no_token_prompt_returned_unchanged():
     assert err is None
     assert loras == []
     assert cleaned == prompt
+
+
+# --------------------------------------------------------------------------- #
+# audio_strength (3-arg tag) parsing.
+# --------------------------------------------------------------------------- #
+def test_three_arg_tag_parses_video_and_audio_strength():
+    _c, loras, err = parse_prompt_loras("<lora:neon-city:0.8:0>", KNOWN)
+    assert err is None
+    assert loras == [{"name": "neon-city", "strength": 0.8, "audio_strength": 0.0}]
+
+
+def test_two_arg_tag_has_no_audio_strength_key():
+    _c, loras, err = parse_prompt_loras("<lora:neon-city:0.8>", KNOWN)
+    assert err is None
+    assert len(loras) == 1
+    assert "audio_strength" not in loras[0]
+
+
+def test_bare_tag_has_no_audio_strength_key():
+    _c, loras, err = parse_prompt_loras("<lora:neon-city>", KNOWN)
+    assert err is None
+    assert loras == [{"name": "neon-city", "strength": 1.0}]
+    assert "audio_strength" not in loras[0]
+
+
+def test_audio_strength_clamped_above_max_fires_warning(monkeypatch):
+    from gradio_ui import handlers as handlers_mod
+
+    toasts: list[str] = []
+    monkeypatch.setattr(
+        handlers_mod.gr, "Warning",
+        lambda message, *args, **kwargs: toasts.append(message),
+    )
+
+    _c, loras, err = parse_prompt_loras("<lora:neon-city:0.8:5.0>", KNOWN)
+    assert err is None
+    assert loras == [
+        {"name": "neon-city", "strength": 0.8, "audio_strength": LORA_AUDIO_WEIGHT_MAX}
+    ]
+    assert len(toasts) == 1
+
+
+def test_duplicate_name_audio_strength_last_wins():
+    _c, loras, err = parse_prompt_loras(
+        "<lora:neon-city:1.0:0> x <lora:neon-city:1.0>", KNOWN)
+    assert err is None
+    # The second (last) tag has no audio group, so it wins entirely -- the
+    # merged entry carries NO audio_strength key at all.
+    assert loras == [{"name": "neon-city", "strength": 1.0}]
+    assert "audio_strength" not in loras[0]
+
+
+def test_empty_video_slot_with_audio_is_unsupported_and_left_in_prompt():
+    prompt = "a <lora:neon-city::0> b"
+    cleaned, loras, err = parse_prompt_loras(prompt, KNOWN)
+    assert err is None
+    assert loras == []
+    assert cleaned == prompt  # token didn't match at all -> untouched
 
 
 # --------------------------------------------------------------------------- #

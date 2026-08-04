@@ -29,14 +29,19 @@ def _make_client(handler, *, api_key: str | None = "secret") -> ApiClient:
 
 # _chain_args mirrors tests/test_gradio_handlers.py, extended with the ADDITIVE
 # trailing mode args (mode, src_video, context_frames, chunked_upsample,
+# nag_enabled/nag_scale/nag_tau/nag_alpha, neg_method/vsf_scale,
 # src_audio) appended after the S6 params — the same positional order the
-# handler's signature declares (ui.py's click inputs stop at chunked_upsample;
-# src_audio is only ever passed positionally by this helper).
+# handler's signature declares (ui.py's click inputs stop at
+# vsf_scale; src_audio is only ever passed positionally by
+# this helper).
 def _chain_args(prompt="Base prompt", negative="", width=1280, height=768,
                 crop_enabled=False, crop_w=0, crop_h=0, fps=24.0, seed=-1,
                 overlap=3, overlap_strength=0.5, clips=None, config=None,
                 mode=MODE_NONE, src_video=None, context_frames=73,
-                chunked_upsample=False, src_audio=None):
+                chunked_upsample=False,
+                nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
+                neg_method="nag", vsf_scale=1.5,
+                src_audio=None):
     clips = list(clips or [])
     filled = clips + [None] * (24 - len(clips))
     args = [prompt, negative, width, height, crop_enabled, crop_w, crop_h, fps, seed,
@@ -52,7 +57,9 @@ def _chain_args(prompt="Base prompt", negative="", width=1280, height=768,
             args.extend([enabled, p, frames])
     # config, ui_lang, poll_interval, poll_timeout_min, then the mode args.
     args.extend([config, None, None, None, mode, src_video, context_frames,
-                 chunked_upsample, src_audio])
+                 chunked_upsample, nag_enabled, nag_scale, nag_tau, nag_alpha,
+                 neg_method, vsf_scale,
+                 src_audio])
     return args
 
 

@@ -81,6 +81,8 @@
 
 ## タスク③ keep=1 常駐モードの新設 ＝ ✅ 調査完了につき CLOSE（2026-07-02）
 
+> ※この「keep=1 は non-viable」という結論は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §47 のバグ修正と §48 の製品化で覆った。現在の正本は §48。
+
 > **確定（2026-07-02・コード読解＋Web リサーチ＋ユーザー決定）**: 当初構想の keep=1（フル GPU 常駐でジョブ間再ビルドを消す）は **16GB では原理的に non-viable**、かつ狙った利得は既存経路（`--dit-cpu-load`/`--te-offload`＋OS RAM/mmap キャッシュ）で概ね捕捉済み。よって **新規実装せず close**。既定 keep=0 は不変。**詳細＝`VERIFICATION_LOG.md §15`（仮説 H1–H4 の検証・一次情報つき）**。将来 Phase3 の長尺連結で漸増が実害化したら、GPU 常駐ではなく §15.4 の「CPU 正本温存＋層ストリーミング」で再着手する。
 > ↓以下は当時の調査前メモ（背景として温存・結論は上記 §15 が正）。
 
@@ -98,6 +100,7 @@ keep=1 → `ModelLedger._target_device()` が CPU → GGUF Gemma を **CPU ビ�
 - `engine/gemma/gguf_quant_service.py:1280`（`build_device = _target_device()` が CPU に）
 - `engine/gemma/gguf_quant_service.py:1305-1313`（out-of-place `.to(cuda)` の発生点）
 - `engine/worker.py`（`keep_resident_weights` / `LTX_KEEP_RESIDENT` 分岐）
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 
 ### 修正の方向性（すべて**仮説・実装前・要計測**）
 1. **in-place 化**: `model._apply(lambda t: t.to(cuda))` を param 単位の in-place（`param.data = param.data.to(dev, copy=False)` 等）へ。瞬間二重在を消す狙い。**リスク大**: `GGMLQuantizedTensor` の subclass attrs（`_ggml_type`/`_float_shape`）が out-of-place `.to()` override で保持されている前提を崩す恐れ。かつ **vendor wheel 凍結の `ltx_core` 側 `_apply` はオーバーライドできない**可能性＝根本構造を変えられない懸念。

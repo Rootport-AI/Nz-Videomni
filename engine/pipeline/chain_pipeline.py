@@ -32,6 +32,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -47,8 +48,14 @@ from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import (
     default_tiling_config,
     encode_video_output,
+    load_video_conditioning_cpu,
     video_chunks_number,
 )
+from engine.transformer.nag_service import NagParams, encode_negative
+from engine.transformer.vsf_service import VsfParams
+
+if TYPE_CHECKING:
+    from engine.gguf.ic_lora_common import IcLoraEntry
 
 DTYPE = torch.bfloat16
 
@@ -267,51 +274,6 @@ def _tile_images(images: list[ImageConditioningInput], vs: int, vlen: int) -> li
     return out
 
 
-def _load_video_conditioning_cpu(
-    *,
-    video_path: str,
-    height: int,
-    width: int,
-    frame_cap: int,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> torch.Tensor:
-    """Numerics-preserving, low-VRAM twin of ``media_io.load_video_conditioning``.
-
-    The installed ``load_video_conditioning`` decodes every frame onto ``device``
-    (GPU), preprocesses it there, and ``torch.cat``s the growing (1,C,F,H,W)
-    tensor **on the GPU** — so the WHOLE context-pixel tensor stays resident on
-    the GPU while ``tiled_encode`` runs on top of it (1–2.5GB of avoidable
-    residency at 720p, on top of an already-pegged 16GB).
-
-    This twin runs the EXACT same per-frame ops on the EXACT same device (GPU) in
-    the same dtype flow — ``decode_video_from_file`` -> ``resize_and_center_crop``
-    on float32 -> ``normalize_latent`` to ``dtype`` — but moves each processed
-    frame to CPU immediately and assembles the (1,C,F,H,W) tensor on CPU. The GPU
-    holds at most one frame at a time. Because the resize/normalize math still
-    runs on the GPU, the per-frame values are bit-identical to the installed
-    loader; the CPU copy is a pure device transfer (no arithmetic), and
-    ``torch.cat`` is a deterministic copy, so the assembled tensor is
-    byte-identical to the installed loader's output apart from residing on CPU.
-    ``tiled_encode`` then streams tiles back to the GPU one at a time (it
-    explicitly supports CPU-resident input), yielding the identical latent.
-    """
-    from ltx_pipelines.utils.media_io import (
-        decode_video_from_file,
-        normalize_latent,
-        resize_and_center_crop,
-    )
-
-    frames_cpu: list[torch.Tensor] = []
-    for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
-        # Same ops, same device (GPU), same dtype flow as load_video_conditioning.
-        frame = resize_and_center_crop(f.to(torch.float32), height, width)
-        frame = normalize_latent(frame, device, dtype)
-        frames_cpu.append(frame.to("cpu"))
-        del f, frame
-    return torch.cat(frames_cpu, dim=2)
-
-
 def _encode_source_heads(
     *,
     source: "SourceSpec",
@@ -347,7 +309,7 @@ def _encode_source_heads(
     # ── half-res head (stage-1 carry, matches the half-res stage-1 latent) ──
     # CPU-assembled source pixels (numerics-identical; keeps the full context
     # tensor off the GPU while tiled_encode streams tiles back one at a time).
-    src_half = _load_video_conditioning_cpu(
+    src_half = load_video_conditioning_cpu(
         video_path=source.path, height=height // 2, width=width // 2,
         frame_cap=ctx_px, dtype=DTYPE, device=device,
     )
@@ -357,7 +319,7 @@ def _encode_source_heads(
     assert src_head_v_half.shape[2] == n_ctx_v, (src_head_v_half.shape[2], n_ctx_v)
 
     # ── full-res head (stage-2 variant-B hard-freeze) — TILED (720p-critical) ──
-    src_full = _load_video_conditioning_cpu(
+    src_full = load_video_conditioning_cpu(
         video_path=source.path, height=height, width=width,
         frame_cap=ctx_px, dtype=DTYPE, device=device,
     )
@@ -451,10 +413,11 @@ def run_chain(
     progress: ProgressFn | None = None,
     source: "SourceSpec | None" = None,
     audio_source: "AudioSourceSpec | None" = None,
-    ic_loras: list[tuple[str, float]] | None = None,
+    ic_loras: list[IcLoraEntry] | None = None,
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
     chunked_upsample: bool = False,
+    nag: NagParams | VsfParams | None = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
 
@@ -467,13 +430,14 @@ def run_chain(
     which stays byte-identical) freezes an uploaded audio latent over the whole
     timeline and drives the video off it; mutually exclusive with ``source``.
 
-    ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength)`` adapters
-    applied via the forward-time weight patch across the whole chain (the single
-    transformer is reused for every stage-1 segment + stage-2 tile, so the LoRA
-    effects the entire timeline). Set EXPLICITLY before the transformer is built
-    below — an empty list clears any stale ``_ic_loras`` left by a prior single
-    ``generate()`` on the resident pipeline, so ``ic_loras=None/[]`` is a genuine
-    "no LoRA" (byte-identical to before) rather than a leak of the last job's.
+    ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
+    audio_strength)`` adapters applied via the forward-time weight patch across
+    the whole chain (the single transformer is reused for every stage-1 segment
+    + stage-2 tile, so the LoRA effects the entire timeline). Set EXPLICITLY
+    before the transformer is built below — an empty list clears any stale
+    ``_ic_loras`` left by a prior single ``generate()`` on the resident
+    pipeline, so ``ic_loras=None/[]`` is a genuine "no LoRA" (byte-identical to
+    before) rather than a leak of the last job's.
 
     ``ic_reference`` / ``ic_attention_strength`` (α, additive): a control-adapter
     reference video ``(path, strength)`` plus its conditioning_attention_strength
@@ -485,6 +449,18 @@ def run_chain(
     that). ``ic_reference=None`` -> the chain is byte-identical to before: the
     ``_set_ic_job`` below is called with ``(loras, None, 1.0)`` (stale-clear
     semantics preserved) and no reference latent is injected.
+
+    ``nag`` (NAG negative-prompt guidance, additive): always set explicitly
+    (``None`` included — the same stale-clear discipline as ``ic_loras`` above),
+    via ``pipe._set_nag_job`` BEFORE the positive-prompt text encode below. This
+    is EARLIER than ``_set_ic_job``'s call site further down, which can wait
+    until just before the transformer build because IC-LoRA is a forward-time
+    weight patch with no encode step of its own. NAG's negative prompt, by
+    contrast, MUST be encoded together with the positive prompts while
+    ``text_encoder`` is still alive — encoding it after ``del text_encoder``
+    below would require a second Gemma load, which is exactly what the single-
+    generate path's encode_text patch avoids (see fast_video_pipeline.py's D2
+    ordering comment).
     """
     assert not (source is not None and audio_source is not None), (
         "run_chain: source (V2V) and audio_source (A2V) are mutually exclusive"
@@ -534,6 +510,11 @@ def run_chain(
     torch.cuda.reset_peak_memory_stats(device)
     t0 = time.time()
 
+    # ── NAG job state — set BEFORE encoding (see this function's docstring for
+    # why this is earlier than _set_ic_job below): the negative prompt must be
+    # encoded together with the positives while text_encoder is still alive.
+    pipe._set_nag_job(nag)
+
     # ── Text encode ONCE for all DISTINCT prompts, then free the encoder. ─────
     # F2: announce the encode phase (fires BEFORE the encode so the app's job
     # status can show "encoding" during the wait; the first stage1_denoise step
@@ -546,6 +527,20 @@ def run_chain(
     for p in distinct:
         vctx, actx = encode_text(text_encoder, prompts=[p])[0]
         ctx_by_prompt[p] = (vctx, actx)
+    # NAG/VSF negative encode: one extra call against the SAME live text_encoder
+    # (avoids a second Gemma load), stashed in NagState before it's freed below.
+    # Inert when this chain didn't request either (pipe._nag.requested is False).
+    # VSF additionally trims the encoding to the prompt's real tokens — its
+    # single shared softmax must not sign-flip the connector's learned register
+    # embeddings (see encode_negative's docstring); NAG passes False and stays
+    # byte-identical.
+    if pipe._nag.requested:
+        nvc, nac = encode_negative(
+            text_encoder,
+            pipe._nag.params.negative_prompt,
+            slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+        )
+        pipe._nag.set_contexts(nvc, nac)
     torch.cuda.synchronize()
     del text_encoder
     cleanup_memory()
@@ -696,6 +691,8 @@ def run_chain(
                         "video_encoder": video_encoder,
                         "dtype": DTYPE,
                         "device": device,
+                        # factor-1 references (deblur) are tiled-encoded there.
+                        "tiling_config": tiling_cfg,
                     },
                 )
         else:

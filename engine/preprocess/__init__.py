@@ -14,25 +14,34 @@ Design (mirrors — but does not copy — the deleted low-VRAM fork's
     dimensions preserved. Stateless implementations (Canny) and stateful ones
     (a future DWPose that caches TorchScript models in-process, Slice 3) both
     satisfy it.
+  * ``VideoProcessor`` — the whole-clip Protocol, for control signals that cannot
+    be produced one frame at a time (Depth: temporal window + clip-wide
+    normalisation).
   * ``CannyProcessor`` — ``cv2.Canny(gray, 100, 200)`` edge map, 1ch -> 3ch.
-  * ``preprocess_video`` — the driver: decode a video frame-by-frame, run each
-    frame through a ``FrameProcessor``, and re-encode to mp4. FPS / frame count /
-    resolution are all preserved (the wheel's ``frame_cap`` truncates to the
-    generation length; no resampling or resize happens here).
-  * ``get_processor`` — kind ("canny" / future "dwpose") -> cached processor
+  * ``DepthProcessor`` — Video-Depth-Anything (Small) grayscale depth, near=white.
+  * ``preprocess_video`` — the driver: decode a video, run it through a
+    ``FrameProcessor`` frame-by-frame or a ``VideoProcessor`` clip-at-a-time, and
+    re-encode to mp4. FPS / frame count / resolution are all preserved (the
+    wheel's ``frame_cap`` truncates to the generation length; no resampling or
+    resize happens here). ``frame_cap`` stops the decode early for the
+    clip-at-a-time processors.
+  * ``get_processor`` — kind ("canny" / "dwpose" / "depth") -> cached processor
     instance. Unknown kinds fail loud.
 """
 
 from __future__ import annotations
 
-from engine.preprocess.base import FrameProcessor
+from engine.preprocess.base import FrameProcessor, VideoProcessor
 from engine.preprocess.canny import CannyProcessor
+from engine.preprocess.depth import DepthProcessor
 from engine.preprocess.dwpose import DwposeProcessor
 from engine.preprocess.driver import get_processor, preprocess_video
 
 __all__ = [
     "FrameProcessor",
+    "VideoProcessor",
     "CannyProcessor",
+    "DepthProcessor",
     "DwposeProcessor",
     "get_processor",
     "preprocess_video",

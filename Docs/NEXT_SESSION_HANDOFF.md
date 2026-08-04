@@ -2,46 +2,178 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-26 α版インストール導線の整備＝実装完了・**ただし全変更が未コミット**・オーナーの実機検証待ち）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-04＝**本ブロックが日付として最新**）
 
-> **本ブロックが日付として最新（2026-07-26）。** ただし扱っているのは**配布・導入まわりだけ**で、**生成機能そのものの正本は次の「2026-07-14 Clip Chain拡張」ブロック**である（二系統が並走している。食い違ったら、配布・導入は本ブロック、生成機能は次ブロックが正）。それ以降の▶節はすべて歴史記録。
+> **最新は §51 GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）。** Q4_K・Q5_K・Q6_Kの逆量子化をTritonカーネル3本へ融合したもので、**実装完了・機械検証全PASS・実機ゲートG1〜G8全項目合格・既定on**（オーナー承認済み）。生成結果はビット単位で不変。実測は**25.28秒短縮（約17.5%）**。正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §51、台帳はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11。
+>
+> **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加はテーマ完結。** G3・G4ともオーナー実機で合格し、コミット・プッシュ・デプロイまで完了している（`e273052`〜`9701fbe`）。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。
 
-### ⚠ 最初に読むこと — 作業ツリーの状態（2026-07-26 時点）
+---
 
-**下記の実装はすべて完了しているが、`Nz-LTX23-backend` の変更は 1 つもコミットされていない。** しかも `git index` には
-**`config.yaml` と `wheels/.gitkeep` の削除だけがステージ済み**という中途半端な状態になっている。
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-03 時点のテーマ一覧）
 
-```
-D  config.yaml          <- ステージ済み（削除）
-D  wheels/.gitkeep      <- ステージ済み（削除）
- M .gitattributes / .gitignore / main.py / run.ps1 / scripts/install_ltx.ps1
- M README.md / LTX23_Backend_Specification.md / Docs/NEXT_SESSION_HANDOFF.md
-?? setup.bat / run.bat / scripts/setup.ps1 / config.yaml.example / NzLTX23-1.0.0-rc1.au2pkg.zip
-```
+> **2026-08-03 時点で走っている／終わったテーマは次の4つ。** いずれも正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) の該当節である。
+>
+> - **§44 先読み block swap**（テーマ完結・既定 ON）／**§45 `audio_strength`**（Style LoRA の音割れ対策・実機A/B合格でテーマ完結）／**§48 モデル骨格の常駐（`keep_resident`）**（本命の高速化はオーナー実機確認済み・残るのは細目のオーナー目視ゲート）。
+> - **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加。実装完了・G0／G1／G2 全PASS・コミット＆プッシュ済み（backend `fd6d43f` / frontend `d375028`）。G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）も2026-08-04に合格し、テーマ完結。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。**
+> - フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 だった骨格常駐トグルのprefetch連動グレーアウトは実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）で、2026-08-04にオーナー目視合格し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-62へ移設・クローズ済み。記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §60。
+>
+> pytest の現在のベースラインは **910 passed / 9 skipped**（§49.5）。IC-LoRA は現在5エントリ（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`。うち union-control の1ファイルを3つの論理名で共用）。
 
-この状態で素の `git commit` を打つと、**ステージ済みの 2 件の削除だけがコミットされる**。すなわち
-「`config.yaml` は消えたが `config.yaml.example` も `.gitignore` の追加も入っていない」コミットができあがり、
-これは **[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-37 が「絶対に避けろ」と
-書いている壊れた中間コミットそのもの**である（§3-37: 「ひな型の追加・`.gitignore` への追加・`git rm --cached` は
-**同一コミットで**行う必要がある（分けると中間のコミットを引いた人が詰む）」）。
+---
 
-→ **コミットするときは `git add -A` で全変更をまとめてから 1 コミットにすること。** ステージ済みの削除だけを
-先に確定させてはならない。分割したい場合も、上記 3 点（`config.yaml` の削除・`config.yaml.example` の追加・
-`.gitignore` への `config.yaml` 追加）は必ず同一コミットに入れる。なお本プロジェクトの慣行として、
-**コミットとプッシュはオーナーが手動で行う**。
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-01 Acceleration（生成の高速化）機能＝SageAttention 2.2.0 のジョブ単位切替＋モック2項目＝**実装・機械検証・実機ゲート（G0〜G9）すべて完了・オーナー実機目視も合格**）（**生成機能の正本**）
+
+> **（当時の記録）本ブロックは2026-08-01時点の記録である。日付として最新なのは冒頭の2026-08-04ブロック。**
+>
+> **生成機能についてはこのブロックが正本。以降の▶節（直下の2026-07-29 VSFブロック・2026-07-28 NAGブロック・2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-29 VSF」ブロックは本ブロックに置き換わった（NAG・VSFはいずれも非CFGネガティブプロンプトの方式として現役のまま）。
+>
+> 実装・機械検証・実機ゲートの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43。APIフィールドは [`../LTX23_Backend_Specification.md`](../LTX23_Backend_Specification.md) §6.2・§6.5b（v0.5.6）、利用者向け説明は [`../README.md`](../README.md)「生成の高速化（Acceleration）」節。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-58（クローズ済み）。
+
+### 本日完了した内容の要約
+
+操作パネル（AviUtl2連携UI）とGradio UIの設定画面に「Acceleration（生成の高速化）」という区画を新設し、生成そのものを速くする切替を3項目ぶん置いた。**実装があるのは attention（注意機構）の実装選択だけ**で、`sdpa`（PyTorch標準・既定）と `sage`（SageAttention 2.2.0＝量子化を使って注意機構の計算を速くする外部カーネル）から選ぶ。残る2項目——fused GGUF dequant + GEMM（GGUFの逆量子化と行列積の融合）と PruneVAED（枝刈り版のVAEデコーダ）——は将来の実装枠として置いた**モック（受理はするが効果が無い）**で、UI上は常にグレーアウトし、workerへのペイロードにも `GET /status` にも載せていない。
+
+切替の単位はジョブで、サーバーの再起動もパイプラインの再読み込みも要らない（リクエストの `attention_backend` フィールド、既定 `"sdpa"`）。MCPにも同じ1項目だけを公開した（モック2件は非公開）。エンジン側は新規の `engine/transformer/sage_attention_service.py` が48ブロック×6種＝**288モジュール**の注意機構を差し替え、マスク付きの呼び出し（IC-LoRAで `conditioning_attention_strength<1.0` を使う経路）はSDPAへ自動で戻す。カーネルが例外を出した場合はそのジョブ内で `sdpa` に固定する。**実際に使われた方式は `outputs/{job_id}/metadata.json` の `attention_used`（`"sdpa"` / `"sage"` / `"sage->sdpa"`）に記録される**——過去に `fp8_transformer` が「表示はあるが挙動を変えない」状態で残った反省から入れた仕組みで、実機ゲートの合否もログではなくこの値で判定した。
+
+**既定を `sdpa` のまま据え置いたのは意図的な判断**である。`sage` は数値精度が異なるため、同じシードを指定しても生成結果の細部が変わる（構図は同じで、質感やノイズの出方が変わる）。アップデートで利用者の生成結果を黙って変えないこと、`sdpa` を常に正しい参照実装として残すこと、切替が1クリックで済み選択も保存されることの3点による。
+
+依存としては `sageattention` 2.2.0（woct0rdho 版のWindows用ビルド済み wheel を直リンクで固定）と `triton-windows` 3.5.1.post24 をエンジン用仮想環境の標準同梱に戻した。**2026-07-28（§40）に削除した依存の再導入だが、当時の判断と矛盾しない**——削除したのは旧世代1.0.6の死重依存で、今回は実際の消費者があるため（詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.3）。`-ResolveLatest` を使った環境では動作保証外である旨をコメントに明記してある。
+
+機械検証はバックエンドの pytest **817 passed / 6 skipped**（従来776件＋新規41本）、フロントエンドの型検査0エラー・vitest **1585 passed / 10 skipped**（+40本）、ネイティブの doctest **267ケース全PASS**、エンジン用仮想環境の `sage_selfcheck` **3/3 PASS**。実機ゲートはG0〜G9の全項目が合格し、**2026-08-01のオーナー実機確認（i2v＋NAG、1344×1728・153フレームで 460.63秒 → 366.85秒＝1.26倍）で目視ゲートも合格**した。720pの対比較では平均1.167倍・VRAM差0.08%以内。
+
+> **速度を測り直すときの注意（重要）**: workerプロセスの**初回ジョブだけ約8%速い**という再現性のある挙動があるため、単純に「1本目に `sdpa`、2本目に `sage`」を流して比べると1.09倍程度にしか見えず**偽のFAIL**になる。`sdpa` と `sage` を交互に流す対比較を行うこと。あわせて `sage` は初回に triton のJITコンパイルが走るため、計測は2ジョブ目以降で行う。詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.6。
+
+### 次セッションの残課題（2026-08-01起票）
+
+1. **コミットはオーナー指示待ち。** 本ブロック作成時点で未コミット。
+2. **モック2項目の実装**（fused GGUF dequant + GEMM／PruneVAED）は将来課題として起票済み。fused GGUF dequant + GEMM は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) **§3-61（no-go再確認のうえクローズ済み）**で、後継の「逆量子化の1カーネル化」が[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-11＝実装完了**。PruneVAED は同 §3-50。
+3. **`sage` を既定にするかどうかの再検討**は、フィールドでの安定実績が溜まってからの判断事項として起票済み（同 §4-22）。現状は再現性を優先して `sdpa` 既定。
+4. **無関係だが紛らわしい既知事象**: `GET /status` の `gpu` ブロックは常に `available: false` を返す。アプリ用仮想環境にCUDA版torchを入れない2プロセス構成に由来する既存の挙動で、今回の改修とは無関係（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.8）。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-29 VSF（Value Sign Flip）非CFGネガティブプロンプト第2方式＝**VSFテーマ全クローズ（フロントエンド目視ゲート含む）・残課題なし**）（歴史記録・非CFGネガティブプロンプトについては引き続き正）
+
+> **本ブロックは2026-08-01のAccelerationブロックに「生成機能の正本」の座を譲ったが、非CFGネガティブプロンプト（NAG／VSF）についての記述は引き続き正である。** 以降の▶節（本ブロック直下の2026-07-28 NAGブロック・2026-07-26配布・導入ブロックを除く）はすべて歴史記録。配布・導入まわりは下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-28 NAG」ブロックは本ブロックに置き換わった（NAG自体は非CFGネガの第1方式として現役のまま。VSFは第2方式の追加）。
+>
+> **なお、本ブロック本文に出てくる「pytest 763 passed/6 skipped」は2026-07-29時点の数字である。** 現在のベースラインは **910 passed / 9 skipped**（2026-08-03・IC-LoRA Depth／Deblur まで反映。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.5）。
+>
+> **2026-07-29追記: フロントエンド（React／AviUtl2連携UI）の目視ゲートもオーナーが実機で全件合格と判定し、VSFテーマは実装・機械検証・実機ゲート・デバッグスイッチ縮退・フロントエンド追随・目視ゲートのすべてが完了、残課題なしで全クローズした。詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳のクローズ記録は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55。将来の再訪条件（コミュニティのVSF scaleベストプラクティス報告が出たとき、既定値1.5を見直すか検討）も同節に記載。**
+>
+> 正式なワークオーダーは本セッション実行時点でオーナーのプランファイル（`reactive-weaving-umbrella.md`、リポジトリ外）が正本で、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55（クローズ済み）。
+
+### 本日完了した内容の要約
+
+NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法として、VSF（Value Sign Flip, arXiv:2508.10931）を実装した。VSFは正負のコンテキストを連結して1回のattentionで処理し、負側のV（value）だけを−scale倍する方式で、NAGより排除力が強い一方、正プロンプト忠実度はNAGが上という性格違いのため、方式を選べるUI（`neg_method: "nag"|"vsf"`）にした。エンジン新規モジュール `engine/transformer/vsf_service.py`（連結1回attention・負側V×(−scale)・エンコード時実トークンスライス・AdaLN 3モード〔raw/modulated/v_scale〕をデバッグ用に切替可能なスタッシュ窓contextmanager・負側softmax質量mのINFOログ）を中心に、`nag_service.py`拡張・両パイプライン配線・`worker.py`分岐・API 3フィールド（`neg_method`/`vsf_scale`/`vsf_adaln`）・MCP `submit_generate`/`submit_chain`末尾3引数・Gradio UI（方式ラジオ・スライダー出し分け・デバッグアコーディオン）まで一気通貫で配線した。敵対的レビュー2ラウンド（計画時）＋コードレビュー1回（実装後）を実施し、指摘は全て修正済み。エンジンvenvのselfcheckが`vsf_selfcheck` 5/5・`nag_selfcheck`回帰6/6でPASS、アプリvenvのpytestが763 passed/6 skipped（既存テストの改修は計画どおり4本のみ）。**実機ゲートはMCP経由で親エージェント自身が実施し、G0回帰（単発T2V/I2V・chain OFF/chunked双方）・VSF疎通＋mログ実測・AdaLN 3モード・経路網羅（chain/A2V/NAG回帰）・NAG対VSF効き比較セット収集まで全て合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.5）。目視評価用の成果物一式はHugging Faceの非公開datasetへアップロード済み: https://huggingface.co/datasets/Rootport/Nz-LTX23-vsf-eval-20260729 。**残るのはオーナーによる目視評価のみ**（効き具合・scale適正値・AdaLNモードの判断）。
+
+途中、`.gitignore`の`tools/`パターンが`mcp_server/tools/`（MCPツール実装一式・別セッション由来）を不可視化していた致命的な欠陥を発見し`/tools/`へ修正した。**次回コミット時は`git add mcp_server/tools/`を忘れないこと。**
+
+### 次セッションの残課題（2026-07-29起票・同日中に大半解消）
+
+1. ~~**HFの動画をオーナーが目視して効き具合・scale適正値・AdaLNモードを判断すること。**~~ → 同日中に第1・第2ラウンドで完結。既定=raw・実用域scale1.5〜5（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.9）。
+2. ~~**既定値確定後、デバッグスイッチ（AdaLNラジオ等）を縮退するかどうかは別途承認が必要。**~~ → オーナー決定により縮退第3弾として`vsf_adaln`を全レイヤーから撤去済み。VSF APIは`neg_method`＋`vsf_scale`（0〜10）の2フィールドに確定した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.10）。実験の歴史はコミット`f2124e1`に保存。
+3. **βノブ（`vsf_offset`）は未実装のまま。** mの実測（video約0.8〜1.2%・audio約0.5%、raw時）を踏まえてもαだけでは不足すると判明した場合に限り、第2弾として起票する。
+4. **コミットはオーナー指示待ち。** `mcp_server/tools/`を含む`git add`が必要（上記gitignore修正参照）。
+5. ~~**フロントエンド（React）追随は本Waveの範囲外・未着手のまま残っている。**~~ → 2026-07-29中に追随実装＋オーナー実機目視ゲートまで完結し、VSFテーマは全クローズした（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55）。残タスクはない。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-28 NAG（非CFGネガティブプロンプト）機能＝Wave 0〜3実装完了・機械検証（selfcheck 6/6・pytest 658 passed/6 skipped）全PASS・**実機ゲート全項目合格（2026-07-29 オーナー実機確認で完了）**）
+
+> **生成機能についてはこのブロックが正本。以降の▶節（本ブロック直下の2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは直下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-14 Clip Chain拡張」ブロックは本ブロックに置き換わった。
+>
+> 正式なワークオーダーは本セッション実行時点でリポジトリ外（オーナーのプランファイル）にあり、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38。API フィールドは [`../LTX23_Backend_Specification.md`](../LTX23_Backend_Specification.md) §6.2（v0.5.3）、利用者向け説明は [`../README.md`](../README.md)「非CFGネガティブプロンプト（NAG）」節。
+
+### 本日完了した内容の要約
+
+蒸留版 LTX 2.3 は CFG（`guidance_scale=1.0`）凍結によりネガティブプロンプトが no-op だった問題を、NAG（Normalized Attention Guidance）という非CFG手法で解消した。Wave 0（エンジンコア `engine/transformer/nag_service.py` + `nag_selfcheck.py`）→ Wave 1（`fast_video_pipeline.py`/`chain_pipeline.py`/`worker.py` の配線）→ Wave 2（`api/models.py`/`services/ltx_runner.py` のAPI・ペイロード）→ Wave 3（GUIの共有 Negative Prompt アコーディオン）を段階的に実装し、単発Generate・Clip Chain・バッチA2Vの全経路に配線済み。エンジンvenvのselfcheckが6/6 PASS、アプリvenvのpytestが658 passed/6 skipped（既存テストの改修はpositional `_chain_args`ヘルパとi18nキー一覧の2件のみ＝NAGが加算的拡張であることの裏付け）。**Wave 4（本ブロック）でドキュメント化まで完了し、実機ゲート（G0〜G7・V-UI）も2026-07-29のオーナー実機確認で全項目合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4）。**
+
+### 次セッションの残課題（2026-07-28起票）
+
+1. ~~**実機ゲートG0〜G7・V-UIが未実施。** [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4 のゲート表を上から順に、オーナーの実機（RTX 4070 Ti SUPER 16GB）で実施すること。特にG0（NAG OFFでの回帰＝バイト一致）を最優先で通し、既存の生成経路を壊していないことを先に確定させる。~~ **（2026-07-29解消）** オーナーが実機確認を行い、G0〜G7・V-UIの全項目が合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38.4）。
+2. **STG（Spatio-Temporal Guidance。既存の別ガイダンス機構）× NAG併用は未検証。** 両方を同時に有効化した場合の挙動・干渉の有無を確認していない。
+3. **`compile_transformer` はNAGと非互換（現状は死コード）。** `torch.compile`はNAGのforwardパッチ（`block.attn2.forward`等の差し替え）と衝突する設計のため、`fast_video_pipeline.py`にコメントを追記して回避したが、`compile_transformer`自体は呼び出し元ゼロの死コードのまま（本番未使用）。将来これを復活させる場合はNAGとの共存方式を再設計する必要がある。
+4. **ラジオ「Other」の実体実装は将来課題。** 現状は「NAG / Other」ラジオでOtherを選ぶと即座にNAGへ戻すフォールバックのみで、Other（NAG以外の非CFG手法）自体の実装は無い。
+5. **クリップ毎の個別ネガティブは範囲外。** 現状のnegative_promptはチェーン全体で1本のみ（`GenerateChainRequest`レベル）。クリップごとに異なるネガティブプロンプトを持たせる機能は実装していない。
+6. **`_run_inference`のモジュールグローバル差し替えが5本に達した。** `fast_video_pipeline.py`の`_run_inference`は、NAGの`encode_text`パッチを含めてモジュールレベルのグローバル関数/属性を5本差し替えるようになった（Wave 1で`try:`の開始位置を前倒しし全5本をfinally復元の傘に入れる形で安全性は担保済みだが）。次にこの方式で6本目以降を足す必要が出た場合は、モンキーパッチの本数がスケールしない設計であることを踏まえ、方式そのもの（例: コンテキストマネージャ化、専用のパッチスタック管理）を再検討すべき。
+
+### MCPサーバー実装完了の追記（2026-07-28・NAGとは別系統・並走）
+
+上記NAGとは別に、同日のセッションでClaude Code等のMCPクライアントからバックエンドを操作するための `mcp_server/` パッケージ（Web操作パネル相当の22ツール）を実装した。Wave 0〜7を完了し、pytestは658→675→699→**736**（730 passed / 6 skipped、退行ゼロ）、`echo "" | python -m mcp_server` のstdoutが0バイトであることも確認済み。`.mcp.json`は`scripts/setup.ps1`が絶対パス入りで自動生成する方式にし、`.gitignore`に追加済み。**ただし実機（Claude Codeからの実際の操作）での検証はまだ一つも行っていない。** 承認ゲート→22ツール表示→T2V/I2V/A2Vバッチ/join/purge dry_run/JOB_BUSY挙動/api_key再起動の実機チェックリストは[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §39に転記済み（全項目⬜未実施）。設計判断の記録は新設の[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md)、利用者向け説明は[`../README.md`](../README.md)「AIエージェント連携（MCPサーバー）」節（§8）を参照。次セッションでオーナーの実機確認を行うこと。**（2026-08-04追記＝本段落は当時の記録。実機検証はその後 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §39.6 で実施され、Claude Code UIの承認導線を除く全項目が合格した。残るのは承認ダイアログと`/mcp`画面の目視1件だけで、これはオーナーがClaude Codeを起動しないと確認できない。）**
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-07-26 α版インストール導線の整備＝実装完了・**コミット＆プッシュ済み**・**オーナーのサブマシン実機検証は 2026-07-27 に全項目合格**）
+
+> **配布・導入まわりについては本ブロックが引き続き正本。** 生成機能そのものの正本は**上の「2026-07-28 NAG」ブロック**（旧・正本だった「2026-07-14 Clip Chain拡張」ブロックはそちらに置き換わった）。二系統が並走している（配布・導入は本ブロック、生成機能は上の2026-07-28ブロックが正）。それ以降の▶節はすべて歴史記録。
+
+### ✅ 最初に読むこと — 作業ツリーの状態（2026-07-27 更新。旧「未コミット警告」は役目を終えた）
+
+**下記の実装はすべてコミット＆プッシュ済みである。** `Nz-LTX23-backend` と
+`Nz-LTX23-frontend-AviUtl2` は、いずれも 2026-07-27 時点で `origin/main` と同期済みであり、
+作業ツリーはクリーン（`nothing to commit, working tree clean`）だった。以後のコミットについては
+個々のハッシュを本書に転記せず、`git log` を参照すること（転記するとすぐ古くなるため）。
+
+コミットは **`git add -A` による一括コミット**で行われ、懸念されていた壊れた中間コミットは回避された。
+バックエンド側のコミットには `config.yaml => config.yaml.example` のリネーム・`.gitignore` への追加・
+`setup.bat` / `run.bat` / `scripts/setup.ps1` の新設・`NzLTX23-1.0.0-rc1.au2pkg.zip` の同梱が
+**すべて同一コミットに入っている**。
+
+> **（歴史記録）2026-07-26 時点では全変更が未コミットで、しかも `git index` には `config.yaml` と
+> `wheels/.gitkeep` の削除だけがステージ済みという中途半端な状態だった。** そのまま素の `git commit` を
+> 打っていれば、「`config.yaml` は消えたが `config.yaml.example` も `.gitignore` の追加も入っていない」
+> コミット——**[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-37 が
+> 「絶対に避けろ」と書いている壊れた中間コミットそのもの**——ができるところだった。
+> 「ひな型の追加・`.gitignore` への追加・`git rm --cached` は**同一コミットで**行う（分けると中間の
+> コミットを引いた人が詰む）」という原則は、今後同種の作業をするときも必ず守ること。なお本プロジェクトの
+> 慣行として、**コミットとプッシュはオーナーが手動で行う**。
 
 ### 完了している内容
 
-- **モデルの再ホストが完了**（HuggingFace `Rootport` アカウント・**4リポジトリ**）。`Nz-LTX23-weights`（LTX本体5点＋**IC-LoRA 2点**＝7ファイル・24,196,952,364 B）／`Nz-Gemma3-12B`（11ファイル・7,339,810,357 B）／`Nz-DWPose`（**新設**・前処理器2点・352,756,773 B）／`Nz-Sulphur2`（自家変換GGUF 1点・インストーラの取得対象外）。全リポジトリが Public 非 Gated で、**HFアカウントもトークンも不要**。
-- **`install_ltx.ps1` は 3 リポジトリから合計 20 ファイル・約30GB（29.7GiB）を取得する。** 従来インストーラの管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も**自動取得の対象になった**（手動配置は不要）。step 6 の検証表は 10 → **14 項目**。
+- **モデルの再ホストが完了**（HuggingFace `Rootport` アカウント・**4リポジトリ**）。`Nz-LTX23-weights`（LTX本体5点＋**IC-LoRA 3点＋VDA深度前処理器2点**＝10ファイル・25,219,475,913 B。2026-08-03 に Deblur と VDA を追加）／`Nz-Gemma3-12B`（11ファイル・7,339,810,357 B）／`Nz-DWPose`（**新設**・前処理器2点・352,756,773 B）／`Nz-Sulphur2`（自家変換GGUF 1点・インストーラの取得対象外）。全リポジトリが Public 非 Gated で、**HFアカウントもトークンも不要**。
+- **`install_ltx.ps1` は 3 リポジトリから、5 回のダウンロード呼び出しで合計 23 ファイル・32,912,043,043 バイト（約30.7GiB）を取得する。** 従来インストーラの管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も**自動取得の対象になった**（手動配置は不要）。step 6 の検証表は 10 → **16 項目**。
 - **エンドユーザー入口 `setup.bat` / `run.bat` を新設**（前提ツールは git のみ。`uv` と `ffmpeg`/`ffprobe` は `tools/` へ取り込む）。`config.yaml` は追跡外化し `config.yaml.example` から複製する。フロントエンドの `.au2pkg.zip`（378,689 B）をバックエンドリポジトリ直下に同梱。
-- **正本**: フロントエンド側 [`Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`LTX23_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
+- **従来は Gated リポジトリにあった spatial upsampler と Gemma tokenizer 一式も、この再ホストで非 Gated になった**（ブラウザでのライセンス承諾とアクセストークンの発行が不要になった）。`install_ltx.ps1` からトークン関連の引数（`-HfToken`）と、ログイン補助スクリプト `scripts/hf_login.ps1` は削除済み。
+- **本番トランスフォーマー GGUF の配置も整理した。** 旧取得元は `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダ構造だったため `install_ltx.ps1` がダウンロード後に1階層上へ移動していたが、新リポジトリは最初から `models/ltx-2.3-gguf/` **直下**の構造で持っているので、この移動処理そのものを削除した。
+  **旧 `install_ltx.ps1` でインストールした環境がサブフォルダ配置のまま残っている場合は、手動で移動すること**（再実行しても自動では直らない）。
+
+  ```powershell
+  Move-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1\*.gguf" "models\ltx-2.3-gguf\"
+  Remove-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1" -Force
+  ```
+
+  サブフォルダ配置でも再帰スキャンでモデル自体は認識されるが、以後の公式手順・ドキュメントの既定パスは直下を前提にする。`config.yaml` に `model.gguf_transformer_path` を明示指定している場合は直下のパス（既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）へ書き換えること。指定していない場合はコード側の既定値が既に直下パスを指すため編集不要。
+- **正本**: フロントエンド側 [`Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`LTX23_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
+
+### 実機検証の結果（2026-07-27・全項目合格）
+
+オーナーがサブマシンで実機検証を行い、**全項目に合格した**。検証環境は **RAM 32GB／RTX 3080 mobile（VRAM 16GB・Ampere 世代）／AviUtl2 を導入していない新規環境**で、AviUtl2 は **2026-07-25 更新の公開最新版**（開発機の v2.0.54 より新しい）を新規に導入した。合格したのは次の 9 項目である。
+
+1. `setup.bat` でのインストール。
+2. `run.bat` でのサーバー起動。
+3. ブラウザで WebUI を開く。
+4. `smoke_test` サイズの動画生成。
+5. **IC-LoRA DWPose（pose-control）768p・257 フレーム** — コンソールに `loras=pose-control(strength=1)` と表示され、エラーなく**制御された動画の生成に成功**。
+6. **IC-LoRA canny 768p・257 フレーム** — 同様に成功。
+7. `NzLTX23.aux2` を AviUtl2 のプレビュー画面から D&D でインストール。
+8. 再起動後、Nz-LTX23 の操作パネル表示を確認。
+9. タイムラインからの動画生成と、生成済み動画を右クリックからタイムラインへ配置。
+
+この結果から確定したこと:
+
+- **RAM 32GB で、最小構成の生成どころか 768p／257 フレームの IC-LoRA 制御生成まで動く**（「32GB の実測データが存在しない」という従来の制約は解消した。ただし**この 1 台での実測合格**であり、あらゆる 32GB 環境での動作保証ではない）。
+- **Ampere（`sm_86`）での実動を確認した**（従来は理論上の互換のみ）。
+- **`config.yaml` の自動複製経路が初めて実際に通った。** 公開リポジトリに `config.yaml` は無いため新規環境では `.example` からの複製が必ず走り、real バックエンドで生成できたことがそのまま「正しく複製された」証拠になる。
+- **2026-07-25 更新版の AviUtl2 との互換を実証した**（開発機は v2.0.54 固定だが、より新しい版で全機能が動作した）。
+
+なお **`Ctrl+C` で停止したときの日本語表示は依然として未検証**である（`README.md` §1「サーバーの止め方」は `Ctrl+C` を意図的に案内していない）。
 
 ### 残っていること
 
-1. **コミット**（上記のとおり `git add -A` で一括。オーナーが手動で行う）。
-2. **オーナーの実機検証**（サブマシンでの `setup.bat`→`run.bat`→生成、およびAviUtl2へのD&D導入）。とくに **`config.yaml` が無い状態からの複製経路は一度も実行されたことがない**ので、そこを見ること（`README.md` §1）。
-3. **コード側の設計・実装の未了はない。**
+1. **README の文面をオーナーが手書きで仕上げる**（冒頭に置く「スピードガイド」。備忘の正本＝[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-4）。
+2. **リポジトリを public にする。**
+3. コミット＆プッシュは完了済み（上記「作業ツリーの状態」）。実機検証も完了済み（上記）。**コード側の設計・実装の未了はない。**
 
 ---
 
@@ -77,7 +209,7 @@ Clip Chain拡張の完結を受けて、次セッションの課題は以下の2
 
 > **2026-07-15追記**: フロントエンドのバックエンド追随はより広い範囲を[`FRONTEND_CATCHUP_WORKORDER.md`](FRONTEND_CATCHUP_WORKORDER.md)（2026-07-15新設）で正本化した。上記②（バッチA2Vパリティ）は同書のグループ2に統合済み。課題①（チャンク化アップサンプル）は上記のとおり実装完了・実機ゲート合格済み。
 
-なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は[`LONGFORM_RESEARCH_TOPICS.md`](LONGFORM_RESEARCH_TOPICS.md)（長尺動画の品質と上限の研究課題ノート、2026-07-15新設）にまとめた。
+なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は、**2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-42・§3-43へ移設した**。あわせて、実運用で得た経験則（連結点の歪みの正体・キャラクター設計のドリフト・「1クリップ最長×連結4〜5個」という実用最適解）と調査の一次情報URLは[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）」節へ吸収し、両者をまとめていた旧ノート`LONGFORM_RESEARCH_TOPICS.md`（2026-07-15新設）は削除した。
 
 ---
 
@@ -556,19 +688,21 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 ### 基盤マイルストーン（すべて完了・mainマージ済）
 
 - **720p 達成＋連続生成 commit 枯渇解決**（2026-06-30）: 1280×768 二段を本番 API で完走（~167–171s・RTX 4070 Ti SUPER 16GB）→任意で 1280×720 crop。連続マルチジョブも commit 枯渇せず PASS。レシピ＝comp=1（component-files/Path B）＋`LTX_KEEP_RESIDENT=0`＋bs=8＋vae 512/64。正本=VERIFICATION_LOG §10・[`SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md)。解像度×尺の能力＝[`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md)（尺 cap 257→481f(20s) 緩和・解像度別 spill-free frames=720p:257/1080p:153/1440p:81 を `/api/v1/config` の `limits.spill_free_frames` に露出）=§10.6。
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
 - **I2V マルチジョブ＋音声 連続 実機 PASS**（2026-07-02）=§10.7。**音声 Phase 1**（native joint audio・AAC/48kHz/stereo・crop 後も保持）=§9.8。
 - **load/encode 16GB fit**: `--te-offload`（Gemma encode ピーク低減・既定 ON）=§11／`--dit-cpu-load`（transformer load スパイク除去・既定 ON・transformer ブロックを直接 CPU 構築）=§12＝512×320 で whole-job ceiling 16,944→~9.2GB。残るのは den2（denoise stage2）の解像度×尺スケーリング軸のみ（バグでない・`RESOLUTION_DURATION_CAPABILITY.md §8` が正本）。
 - **残課題A（worker 再利用 crash）解決**=§9.7: 真因＝`BlockSwapService._installed_transformers` の per-job リーク（append し続け解放しない）。修正＝install() で append 前に `clear()`（keep-latest）＋`_do_generate()` 完了直後に `gc.collect(); torch.cuda.empty_cache()`。6ジョブ実機 PASS・出力 byte 一致。真因確定の経緯（当初 mmap 破損説→棄却→Windows commit（仮想メモリ）枯渇で確定）=§8。
 - **de-fork（engine first-party 化）**=§13: 旧同梱フォーク backend→`engine/` パッケージ（`worker`/`pipeline`/`gguf`/`gemma`/`transformer`）へ採用・アルゴリズム不変・43GB モノリス物理削除（`checkpoint_path` は reference-only 化）・全段 SHA256 一致。**QAT 回収**=§14: Gemma を text-only（`Gemma3ForCausalLM`・vision 無し）化し 22.7GB の QAT dir を物理削除・gemma_root は ~40MB tokenizer-only dir（`models/gemma-3-12b-it-tokenizer/`）に差替え・models/ 50.9→28.15GB・byte 完全一致。
-- **keep=1 常駐モード＝調査 CLOSE**（16GB で原理的 non-viable・利得は既存経路で捕捉済み・既定 keep=0 不変）=§15。**dead-code 整理**（text-only/de-fork の残 no-op 除去・byte-match ゲート）=§16。**Phase 5(A) 配線**（Approach W 常駐サブプロセスワーカー・`@@LTX@@` JSON-lines プロトコル・app `.venv` は torch 非 import）=§6・**Phase 5(B)**（denoise 直前 `empty_cache` で shared 溢れ 3969→742MB）=§7。
-- **install スクリプト**: `scripts/install_ltx.ps1` は冪等クリーンインストーラ（2026-07-02 全面書き換え済＝現行の正・両venv・現行~30GBのみDL）。**モデル取得は 2026-07-26 に 3 リポジトリ・20 ファイル・31,889,519,494 B（約29.7GiB）へ更新**＝`Rootport/Nz-LTX23-weights`（LTX本体5点＋IC-LoRA 2点）／`Rootport/Nz-Gemma3-12B`（11点）／`Rootport/Nz-DWPose`（前処理器2点・新設）。いずれも Public 非 Gated でトークン不要、内部構造が `models/` と 1 対 1 のため後処理なしで展開される。**従来インストーラ管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も自動取得の対象になった**（手動配置は不要）ため、step 6 の PASS/MISSING 検証表は 10 → **14 項目**（IC-LoRA 2＋DWPose 2 を追加）。この 4 点は `_real_available()` の判定対象ではない＝欠けても mock に落ちず、`config.yaml` と `gradio_ui/adapters.py` が 3 アダプタを無条件に見せるため、選んだ瞬間 404 という分かりにくい壊れ方をする。だから検証表であえて名指しする。**冪等ガードは `-Check` による「ディレクトリ単位の独立判定」**＝`@{ Dir=…; Min=… }` を展開先ディレクトリの数だけ並べ、**全部がそれぞれ自分の `Min` を満たしたときだけ SKIP**（1つでも下回れば再DL）。**合計を単一しきい値と比べる旧 `-CheckDir`＋`MinBytes` は 2026-07-26 に廃止**＝大ファイル1つが丸ごと欠けた兄弟 dir を覆い隠すため（Gemma で実発現：7.3GB GGUF だけで合計を超え、トークナイザ dir 全欠落でも SKIP → 検証表 `gemma_root` MISSING → exit 1 → 再実行しても直らない復旧不能デッドロック）。各 `Min` は「**そのディレクトリ**の合計 −**そのディレクトリ内で step 6 の検証表が個別にゲートしている最小ファイル**」より上・想定合計より少し下に置く（＝検証表が MISSING にできる欠落は必ずガードも割る、という対応を作る）。検証表が個別に見ないファイル（`gemma_root` は dir 全体を 20MB で 1 行）は捕捉不要（狙うと 35 バイト幅の窓になり破綻）。`models/ltx-2.3-gguf/` は自家変換 GGUF が同居しサイズ判定が緩むが、これは検証表が受け持つ。`hf download --include` は **1 つの `--include` に全パターンを並べる**こと（`nargs="*"` のため flag を繰り返すと最後の組しか効かない。ただしこれは `huggingface_hub 0.36.2` 固有で、1.20.1 では逆に単一 flag 複数パターンが無視される＝venv の同パッケージを上げたら書き換えが要る）。**GPU アーキの自動判定（`nvidia-smi` 読み取り・`-GpuArch` 引数）は 2026-07-26 に廃止**＝全アーキで SDPA 固定のため分岐する理由が無く、アーキ別のプリビルド wheel 自動導入も行わない（`scripts/build_xformers.ps1` は手動ツールとして残す）。**エンジン venv の再同期を 2026-07-26 に追加**＝従来は `.venv-engine` が存在するだけでブロックごとスキップし、freeze が変わっても二度と適用されなかった（＝「`git pull` したら `setup.bat` 再実行」が機能しない）。現行は freeze 本文＋スクリプト内の3つの git rev（`diffusers`/`ltx-core`/`ltx-pipelines`）を連結した SHA-256 を `.venv-engine/.nz-engine-state`（追跡外・完了マーカー兼用）と突き合わせ、**一致するときだけ SKIP**する。マーカー不在は「再適用」に倒す（中断遺残と、この仕組み以前に作られた venv を救うため）。2段構えの適用処理（git pin 先行インストール → cu128 index ＋ `--index-strategy unsafe-best-match` で freeze 適用）は `Invoke-EngineFreezeApply` に切り出し、新規作成パスと再適用パスの両方から呼ぶ。`-RunSmoke` では `uv sync --extra dev` を明示（素の `uv sync` が optional の dev extra を刈り取り `.venv` から pytest が消えるため）。**エンドユーザー入口として `setup.bat` / `run.bat` を 2026-07-26 に新設**＝`setup.bat`→`scripts/setup.ps1`（前提ツール `uv`/`ffmpeg` を `tools/` へ取り込み・`config.yaml` を `.example` から複製・`logs/setup_<日時>.log` へ記録・事前チェックは警告のみ）→`install_ltx.ps1` を `&` で呼ぶ。`run.bat`→**リポジトリ直下の** `run.ps1`（移動禁止＝`$PSScriptRoot` 依存）。`.bat` は純 ASCII・CRLF・末尾 `pause` で日本語は `.ps1` 側（`.gitattributes` に `*.bat text eol=crlf`）。`config.yaml` は追跡外化し `config.yaml.example` を配布。互換メモ＝torch は必ず cu128 index から／attention＝**SDPA 固定**（xformers/flash-attn はインストールも import もしない。ただし `sageattention==1.0.6` だけは `engine/engine-venv-pyproject.toml`・`engine/venv-engine.freeze.txt` に必須依存として載っており `.venv-engine` に実際に入っているが、バックエンドのコードからは一切 import されていない＝死重依存。削除は `.venv-engine` 再構築を伴うためリリース後に棚卸し＝フロント側 `PENDING_TASKS.md` §4-25）／Blackwell は R570+ ドライバ（全世代 R570+ 推奨）。
+- **keep=1 常駐モード＝調査 CLOSE**（16GB で原理的 non-viable・利得は既存経路で捕捉済み・既定 keep=0 不変）=§15。※この「keep=1 は non-viable」という結論は §47 のバグ修正と §48 の製品化で覆った。現在の正本は §48。**dead-code 整理**（text-only/de-fork の残 no-op 除去・byte-match ゲート）=§16。**Phase 5(A) 配線**（Approach W 常駐サブプロセスワーカー・`@@LTX@@` JSON-lines プロトコル・app `.venv` は torch 非 import）=§6・**Phase 5(B)**（denoise 直前 `empty_cache` で shared 溢れ 3969→742MB）=§7。
+- **install スクリプト**: `scripts/install_ltx.ps1` は冪等クリーンインストーラ（2026-07-02 全面書き換え済＝現行の正・両venv・現行~30GBのみDL）。**モデル取得は 2026-07-26 に 3 リポジトリ化し、2026-08-03 現在は 5 回のダウンロード呼び出し・23 ファイル・32,912,043,043 B（約30.7GiB）**＝`Rootport/Nz-LTX23-weights`（LTX本体5点＋IC-LoRA 3点＋VDA深度前処理器2点）／`Rootport/Nz-Gemma3-12B`（11点）／`Rootport/Nz-DWPose`（前処理器2点・新設）。いずれも Public 非 Gated でトークン不要、内部構造が `models/` と 1 対 1 のため後処理なしで展開される。**従来インストーラ管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も自動取得の対象になった**（手動配置は不要）ため、step 6 の PASS/MISSING 検証表は 10 → **16 項目**（IC-LoRA 2＋DWPose 2＋Deblur 1＋VDA 1 を追加）。この 6 点は `_real_available()` の判定対象ではない＝欠けても mock に落ちず、`config.yaml` と `gradio_ui/adapters.py` が 5 アダプタを無条件に見せるため、選んだ瞬間 404 という分かりにくい壊れ方をする。だから検証表であえて名指しする。**冪等ガードは `-Check` による「ディレクトリ単位の独立判定」**＝`@{ Dir=…; Min=… }` を展開先ディレクトリの数だけ並べ、**全部がそれぞれ自分の `Min` を満たしたときだけ SKIP**（1つでも下回れば再DL）。**合計を単一しきい値と比べる旧 `-CheckDir`＋`MinBytes` は 2026-07-26 に廃止**＝大ファイル1つが丸ごと欠けた兄弟 dir を覆い隠すため（Gemma で実発現：7.3GB GGUF だけで合計を超え、トークナイザ dir 全欠落でも SKIP → 検証表 `gemma_root` MISSING → exit 1 → 再実行しても直らない復旧不能デッドロック）。各 `Min` は「**そのディレクトリ**の合計 −**そのディレクトリ内で step 6 の検証表が個別にゲートしている最小ファイル**」より上・想定合計より少し下に置く（＝検証表が MISSING にできる欠落は必ずガードも割る、という対応を作る）。検証表が個別に見ないファイル（`gemma_root` は dir 全体を 20MB で 1 行）は捕捉不要（狙うと 35 バイト幅の窓になり破綻）。`models/ltx-2.3-gguf/` は自家変換 GGUF が同居しサイズ判定が緩むが、これは検証表が受け持つ。`hf download --include` は **1 つの `--include` に全パターンを並べる**こと（`nargs="*"` のため flag を繰り返すと最後の組しか効かない。ただしこれは `huggingface_hub 0.36.2` 固有で、1.20.1 では逆に単一 flag 複数パターンが無視される＝venv の同パッケージを上げたら書き換えが要る）。**GPU アーキの自動判定（`nvidia-smi` 読み取り・`-GpuArch` 引数）は 2026-07-26 に廃止**＝全アーキで SDPA 固定のため分岐する理由が無く、アーキ別のプリビルド wheel 自動導入も行わない（`scripts/build_xformers.ps1` は手動ツールとして残す）。**エンジン venv の再同期を 2026-07-26 に追加**＝従来は `.venv-engine` が存在するだけでブロックごとスキップし、freeze が変わっても二度と適用されなかった（＝「`git pull` したら `setup.bat` 再実行」が機能しない）。現行は freeze 本文＋スクリプト内の3つの git rev（`diffusers`/`ltx-core`/`ltx-pipelines`）を連結した SHA-256 を `.venv-engine/.nz-engine-state`（追跡外・完了マーカー兼用）と突き合わせ、**一致するときだけ SKIP**する。マーカー不在は「再適用」に倒す（中断遺残と、この仕組み以前に作られた venv を救うため）。2段構えの適用処理（git pin 先行インストール → cu128 index ＋ `--index-strategy unsafe-best-match` で freeze 適用）は `Invoke-EngineFreezeApply` に切り出し、新規作成パスと再適用パスの両方から呼ぶ。`-RunSmoke` では `uv sync --extra dev` を明示（素の `uv sync` が optional の dev extra を刈り取り `.venv` から pytest が消えるため）。**エンドユーザー入口として `setup.bat` / `run.bat` を 2026-07-26 に新設**＝`setup.bat`→`scripts/setup.ps1`（前提ツール `uv`/`ffmpeg` を `tools/` へ取り込み・`config.yaml` を `.example` から複製・`logs/setup_<日時>.log` へ記録・事前チェックは警告のみ）→`install_ltx.ps1` を `&` で呼ぶ。`run.bat`→**リポジトリ直下の** `run.ps1`（移動禁止＝`$PSScriptRoot` 依存）。`.bat` は純 ASCII・CRLF・末尾 `pause` で日本語は `.ps1` 側（`.gitattributes` に `*.bat text eol=crlf`）。`config.yaml` は追跡外化し `config.yaml.example` を配布。互換メモ＝torch は必ず cu128 index から／attention＝**既定は SDPA・ジョブ単位で SageAttention を選べる**（xformers/flash-attn は引き続きインストールも import もしない。**2026-07-31 更新**＝以前ここに書いていた「SDPA 固定」「`sageattention==1.0.6` は死重依存」という記述は、次の2段階の変更で古くなった。①2026-07-28 の依存整理（`VERIFICATION_LOG.md` §40.1）で旧世代の `sageattention` 1.0.6 と `triton-windows` 3.6.0 を削除した。②2026-07-31 の Acceleration〔生成の高速化〕機能〔同 §43〕で、**実際の消費者があるものとして** `sageattention` **2.2.0**〔woct0rdho 版の Windows 用ビルド済み wheel を直リンクで固定〕と `triton-windows==3.5.1.post24` を標準同梱へ戻した。`sageattention` は `engine/venv-engine.freeze.txt` の直リンク pin 経由でのみ入り、`engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも載せていない＝**`-ResolveLatest` を使った環境では動作保証外**。エンドユーザーに Visual Studio は要求しない〔triton-windows が TinyCC/ptxas を同梱〕。既定のジョブは従来どおり SDPA で、`sage` を選んだジョブだけが差し替わる）／Blackwell は R570+ ドライバ（全世代 R570+ 推奨）。
 
 ### 凍結してある契約・構成（不変・壊さない）
 
 - **凍結 API 契約**: ÷64 解像度（`api/models.py`）・8n+1 フレーム・T2V/最小I2V（frame_idx0・conditioning≤1）・distilled 8step/CFG1.0・`GET /status` の `vram_optimization`（`services/low_vram.py` `_STATUS_KEYS`）・`metadata.json` スキーマ・limits/generation_presets。**加算的変更のみ許可**（optional フィールド・省略時 byte 同一が定型ゲート）。
 - **2プロセス・2venv**: app=`./.venv`（torch 無し・FastAPI/Gradio/mock backend）／engine=`./.venv-engine`（torch 2.9.1+cu128＋`ltx_core`/`ltx_pipelines`@`00dc53d`＋`gguf`）。同一インタプリタで共存させない（双方が `services` トップレベルパッケージを持つため）。
 - **本番 env**: `LTX_KEEP_RESIDENT=0` 既定（keep=1 だと 720p の Gemma 移動で native crash・§10.2）／`use_component_files: true`（Path B）／`te_offload`・`dit_cpu_load` 既定 ON。設定は `config.yaml` が正。起動＝`python -m engine.worker`（別プロセス・別venv・`cwd=root`）。
-- **本番モデル（実行に要る ~28GB）**: GGUF transformer Q4_K_M ~17GB＋GGUF Gemma Q4_K_M ~7.3GB（`ggml-org/gemma-3-12b-it-GGUF`）＋component VAE/audio/projection ~3.9GB＋spatial upsampler ~0.95GB＋tokenizer-only gemma_root ~40MB。43GB モノリス・QAT dir は削除済。**インストーラはこれに IC-LoRA 2点（1.22GiB）＋DWPose 前処理器 2点（0.33GiB）を加えた ~30GB（29.7GiB）を取得する**（後者2種は `_real_available()` の対象外＝生成の中核ではないが、欠けると IC-LoRA 選択時に 404 になる）。
+  - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
+- **本番モデル（実行に要る ~28GB）**: GGUF transformer Q4_K_M ~17GB＋GGUF Gemma Q4_K_M ~7.3GB（`ggml-org/gemma-3-12b-it-GGUF`）＋component VAE/audio/projection ~3.9GB＋spatial upsampler ~0.95GB＋tokenizer-only gemma_root ~40MB。43GB モノリス・QAT dir は削除済。**インストーラはこれに IC-LoRA 2点（1.22GiB）＋DWPose 前処理器 2点（0.33GiB）＋Deblur 1点（0.91GiB）＋VDA 深度前処理器 2点（0.12GiB）を加えた ~33GB（30.7GiB）を取得する**（後者4種は `_real_available()` の対象外＝生成の中核ではないが、欠けると IC-LoRA 選択時に 404 になる）。
 - **回帰基準 SHA**: T2V(seed=12345, "a calm ocean wave…") 512×320/49f=`23844b4e…6bb7bf`／最小I2V=`a511eda4…c217`／peak_vram_mb 8440。IC-LoRA 付き出力の基準 SHA=`735a6de9…272`（旧 `outputs/ic_lora_phaseA/spike.mp4` `8e10aa59…` は旧コード出力＝照合に使わない）。
 
 ### アーキテクチャ（二層・壊さない）
@@ -578,10 +712,13 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 
 ### 将来項目・未着手（現行スコープ外・記録のみ）
 
-- **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝ユーザーのプラグイン開発環境整備待ちでブロック中。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。
-- **Phase 3 残パリティ**（未着手・spec §13.4）: Gap Fill／Retake（大規模）・生成キュー・延長尺(~30s)・text-only プロンプト強化・negative/CFG/STG/sigma schedule/denoise loop/seed lock 露出・空間アップスケーラのユーザー操作露出・LoRA/attention tiling 再導入（de-fork で削除）。**negative/CFG/pipeline は worker 未配線＝GUI 露出禁止（継続）。**
-- **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝遠い将来。現状 `services/ltx_runner.py` の payload がこれらをエンジンに渡さず常に distilled 経路のため GUI は当該オプションを表示するが無効化＋「バックエンド対応待ち」注記。着手の入口＝非蒸留×量子化 dev 重み（`unsloth/LTX-2.3-GGUF` の `ltx-2.3-22b-dev-Q4_K_M.gguf` 等）＝[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節。
-- **VLM(vision) 再導入**（enhance_i2v・フレームを見た Gap Fill 提案）＝QAT text-only 化を巻き戻すため計画外・要件化時に別途判断。
+**2026-07-27の整理で、本節に列挙していた将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 現在の所在は次のとおり（同書は番号だけでなくファイル名を添えて参照すること）。
+
+- **Phase 3 残パリティのうち、非蒸留(dev)モデル向けの生成つまみ一式**（negative／CFG／ステップ数／STG／sigma schedule／denoise loop／seed lock／延長尺~30s／空間アップスケーラのユーザー操作露出）＝同書**§4-1**。**negative／CFG／`pipeline` は worker 未配線＝GUI 露出禁止（継続）**という現行制約も同項へ転記済み。
+- **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝同書**§4-28**（2026-08-04に§3-2から降格。着手の入口＝`services/ltx_runner.py` の payload 未配線箇所・非蒸留×量子化 dev 重み・計算コスト~7〜12倍まで転記済み。背景資料は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節）。
+- **Gap Fill**＝同書**§3-10**／**Retake・Inpaint**＝同書**§4-12**／**attention tiling の本番投入**＝同書**§4-2**／**VLM(vision) 再導入**（enhance_i2v・フレームを見た Gap Fill 提案。QAT text-only 化を巻き戻すため計画外）＝同書**§4-5**。
+- **本節にのみ残る（台帳に未収録の）項目**: 生成キュー、text-only プロンプト強化（spec §13.4 由来）。いずれも**台帳へは起票しない**——前者は下記「やらない」のユーザー決定（「1ジョブ＋busy 409」が正しい設計）およびタイムライン側の「順番待ちは作らない（バグ温床）」決定（[`TIMELINE_ALPHA_REQUIREMENTS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)）と衝突し、後者は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) E節でユーザー決定「不要」と重複するため。
+- **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝当時はユーザーのプラグイン開発環境整備待ちでブロック中と記録していた（現在は別リポジトリ `Nz-LTX23-frontend-AviUtl2` で実装済み）。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。
 - **やらない（削除済みスコープ・ユーザー決定・spec §13.5）**: ①1080p アップスケール「機能」（＝外部ツール推奨。内部二段 upsampler は生成の仕組みゆえ残す）②多人数インフラ（本格ジョブキュー/認証/インターネット公開/永続 DB＝単一ユーザー想定で不要・現状の「1ジョブ＋busy 409」が正しい設計）。
 
 ### 運用ルール（最新の正・memory にも記録）

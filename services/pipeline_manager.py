@@ -80,14 +80,16 @@ def _prompt_for_log(prompt: str, limit: int = _PROMPT_LOG_MAX) -> str:
 
 
 def _loras_for_log(specs, resolved) -> str:
-    """``name(strength=R[, effective=E])`` per adapter, or ``none``.
+    """``name(strength=R[, effective=E][, audio=A[, effective=E]])`` per adapter,
+    or ``none``.
 
     ``specs`` are the request ``LoraSpec``s (friendly NAME + the REQUESTED
-    strength); ``resolved`` are the registry ``(path, effective_strength,
-    preprocess)`` triples in the SAME order (see ``LoraRegistry.resolve`` —
-    ``effective`` folds in the alpha/rank convolution). ``effective`` is only
-    shown when it actually differs from the requested strength, so the common
-    scale==1.0 case stays terse.
+    strength); ``resolved`` are the registry ``ResolvedLora``s in the SAME order
+    (see ``LoraRegistry.resolve`` — ``effective`` folds in the alpha/rank
+    convolution). ``effective`` is only shown when it actually differs from the
+    requested strength, so the common scale==1.0 case stays terse. The
+    ``audio=`` segment is appended only when the resolved audio_strength is not
+    None (video-axis-only jobs keep the exact prior rendering).
     """
     if not specs:
         return "none"
@@ -95,12 +97,37 @@ def _loras_for_log(specs, resolved) -> str:
     for i, spec in enumerate(specs):
         eff = resolved[i][1] if i < len(resolved) else None
         if eff is not None and abs(float(eff) - float(spec.strength)) > 1e-6:
-            parts.append(
-                f"{spec.name}(strength={spec.strength:g}, effective={float(eff):g})"
-            )
+            part = f"{spec.name}(strength={spec.strength:g}, effective={float(eff):g})"
         else:
-            parts.append(f"{spec.name}(strength={spec.strength:g})")
+            part = f"{spec.name}(strength={spec.strength:g})"
+        audio_eff = resolved[i][3] if i < len(resolved) and len(resolved[i]) > 3 else None
+        if audio_eff is not None:
+            requested_audio = getattr(spec, "audio_strength", None)
+            if requested_audio is not None and abs(
+                float(audio_eff) - float(requested_audio)
+            ) > 1e-6:
+                part += f", audio={requested_audio:g}, effective={float(audio_eff):g}"
+            else:
+                part += f", audio={float(audio_eff):g}"
+        parts.append(part)
     return ", ".join(parts)
+
+
+def _lora_metadata_entry(spec, registry: LoraRegistry) -> dict:
+    """One ``ic_lora.loras[]`` row: ``name``/``strength``/``preprocess`` (Phase
+    B/C, unchanged) plus ``audio_strength`` — added only when the spec carries
+    one (``None`` before WP4 adds the field to ``LoraSpec``), so a video-axis-
+    only job's metadata keeps its exact prior key set.
+    """
+    entry = {
+        "name": spec.name,
+        "strength": spec.strength,
+        "preprocess": registry.preprocess_for(spec.name),
+    }
+    audio_strength = getattr(spec, "audio_strength", None)
+    if audio_strength is not None:
+        entry["audio_strength"] = audio_strength
+    return entry
 
 
 class PipelineManager:
@@ -159,6 +186,66 @@ class PipelineManager:
         return self.low_vram.status_block(
             low_vram_disabled_required=self.config.limits.low_vram_disabled_required
         )
+
+    # Acceleration backends advertised by GET /status. Only ``attention_backend``
+    # is a real implementation choice; the MOCK request field (vae_mode) is
+    # deliberately NOT advertised here — /status describes what the server can
+    # actually DO.
+    ATTENTION_BACKENDS = ["sdpa", "sage"]
+
+    def acceleration_status_block(self) -> dict:
+        """The ``acceleration`` block for GET /status.
+
+        Sibling of :meth:`vram_status_block` (the FROZEN ``vram_optimization``
+        block is untouched by this feature). This method is the single place the
+        sage-availability TRUTH TABLE lives:
+
+        =========================  ==========================================
+        server state               ``sage_available``
+        =========================  ==========================================
+        mock backend               ``False`` (no engine exists at all)
+        pipeline not loaded        engine-venv FILE probe
+        pipeline loaded            the WORKER's own import probe (authoritative)
+        load failed / unloaded     engine-venv FILE probe (no live worker)
+        =========================  ==========================================
+
+        The two probe routes are intentionally different answers to different
+        questions: the file probe says "sage COULD be importable", the worker's
+        says "sage IS importable in the process that would use it" (it catches
+        a DLL/ABI failure the file probe cannot see). ``pipeline_loaded`` in the
+        same /status payload already tells a client which route produced the
+        value, so no extra ``sage_source`` field is exposed.
+        """
+        return {
+            "attention_backends": list(self.ATTENTION_BACKENDS),
+            "sage_available": self._sage_available(),
+            # Block-swap prefetch (backend §44). Judged by the SAME formula as
+            # the real gate (services/ltx_runner.py's block-swap-blocks-on-GPU
+            # expression), NOT the display-only ``low_vram.block_swap`` bool —
+            # that bool is never read on the real path and defaults to False,
+            # which would make this field lie in the default configuration.
+            "block_swap_prefetch_available": self._block_swap_prefetch_available(),
+        }
+
+    def _sage_available(self) -> bool:
+        if self.runner.is_mock:
+            return False
+        worker_value = self.runner.worker_sage_available
+        if worker_value is not None:
+            return worker_value
+        return self.runner.sage_available
+
+    def _block_swap_prefetch_available(self) -> bool:
+        """True iff block swap is actually active on the real worker.
+
+        Mirrors ``services/ltx_runner.py``'s
+        ``self.low_vram.block_swap_blocks_on_gpu or 8`` expression exactly (the
+        ``load`` payload's ``block_swap_blocks_on_gpu``), so this can never
+        disagree with what the worker was actually told to do.
+        """
+        if self.runner.is_mock:
+            return False
+        return int(self.low_vram.block_swap_blocks_on_gpu or 8) > 0
 
     def _base_model_name(self) -> str:
         """Filename of the transformer weight (GGUF) that would actually load.
@@ -317,7 +404,9 @@ class PipelineManager:
             # kind conflicts (mirroring conditioning images), so these re-resolve
             # the same objects for the runner hop.
             lora_paths = [
-                self.lora_registry.resolve(spec.name, spec.strength)
+                self.lora_registry.resolve(
+                    spec.name, spec.strength, getattr(spec, "audio_strength", None)
+                )
                 for spec in job.request.loras
             ]
             reference_video_path = (
@@ -537,7 +626,9 @@ class PipelineManager:
             # re-resolves the same style objects for the runner hop. Empty list
             # when the chain requested no loras (byte-identical default path).
             lora_paths = [
-                self.lora_registry.resolve(spec.name, spec.strength)
+                self.lora_registry.resolve(
+                    spec.name, spec.strength, getattr(spec, "audio_strength", None)
+                )
                 for spec in chain.loras
             ]
 
@@ -641,6 +732,13 @@ class PipelineManager:
                     peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
                     chain_meta=meta, v2v_provenance=v2v_provenance,
                     a2v_provenance=a2v_provenance,
+                    attention_used=outcome.attention_used,
+                    block_swap_prefetch_used=outcome.block_swap_prefetch_used,
+                    keep_resident_used=outcome.keep_resident_used,
+                    fused_gguf_dequant_kernel_used=(
+                        outcome.fused_gguf_dequant_kernel_used
+                    ),
+                    peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                 )
 
             result = JobResult(
@@ -686,7 +784,10 @@ class PipelineManager:
     def _write_chain_metadata(
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
-        v2v_provenance=None, a2v_provenance=None,
+        v2v_provenance=None, a2v_provenance=None, attention_used=None,
+        block_swap_prefetch_used=None, keep_resident_used=None,
+        fused_gguf_dequant_kernel_used=None,
+        peak_vram_reserved_mb=None,
     ) -> None:
         cm = chain_meta or {}
         metadata = {
@@ -699,6 +800,12 @@ class PipelineManager:
             "request": chain.model_dump(),
             "generation_mode": "chain",
             "seed_used": seed_used,
+            # Acceleration: see the same keys in :meth:`_write_metadata`.
+            "attention_used": attention_used,
+            "block_swap_prefetch_used": block_swap_prefetch_used,
+            "keep_resident_used": keep_resident_used,
+            "fused_gguf_dequant_kernel_used": fused_gguf_dequant_kernel_used,
+            "peak_vram_reserved_mb": peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
             "chain": {
@@ -788,6 +895,33 @@ class PipelineManager:
             "request": req.model_dump(),
             "generation_mode": outcome.generation_mode,
             "seed_used": outcome.seed_used,
+            # Acceleration: the attention backend the engine ACTUALLY ran with
+            # ("sdpa" | "sage" | "sage->sdpa"), reported by the worker's done
+            # event. Unconditional like seed_used — an always-present key is the
+            # point: it makes "the request asked for sage but sdpa ran" visible
+            # instead of inferable only from logs. None on the mock backend.
+            "attention_used": outcome.attention_used,
+            # Acceleration: whether block-swap prefetch ACTUALLY ran ("off" |
+            # "on" | "on->off"), same relay discipline as attention_used above.
+            "block_swap_prefetch_used": outcome.block_swap_prefetch_used,
+            # Acceleration: whether the cross-job CPU-skeleton cache actually
+            # stayed resident ("off" | "on" | "on->off"), same relay discipline
+            # again. This is the ONLY machine-readable place a worker-side
+            # auto-downgrade (see engine/worker._resolve_keep_resident) becomes
+            # visible — the real-device gate judges on this field, not on logs.
+            "keep_resident_used": outcome.keep_resident_used,
+            # Acceleration: whether the fused Triton GGUF dequantization kernel
+            # actually ran ("off" | "on" | "on->off"), same relay discipline
+            # again. "on->off" means the job asked for it but it never applied
+            # (Triton missing, kernel exception latched, self-check mismatch, or
+            # no eligible tensor) — the real-device gate judges on this field.
+            "fused_gguf_dequant_kernel_used": (
+                outcome.fused_gguf_dequant_kernel_used
+            ),
+            # torch.cuda.max_memory_reserved()-based, additive alongside the
+            # vram_optimization block's peak_vram_mb (max_memory_allocated-
+            # based) — this feature's VRAM-risk signal (§44).
+            "peak_vram_reserved_mb": outcome.peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": outcome.backend,
             "output": {
@@ -808,14 +942,7 @@ class PipelineManager:
                 # Phase C: additive ``preprocess`` field (control-signal kind per
                 # adapter). Existing ``name``/``strength``/``reference_video_id``
                 # keys are unchanged so Phase B metadata parsers keep working.
-                "loras": [
-                    {
-                        "name": spec.name,
-                        "strength": spec.strength,
-                        "preprocess": self.lora_registry.preprocess_for(spec.name),
-                    }
-                    for spec in req.loras
-                ],
+                "loras": [_lora_metadata_entry(spec, self.lora_registry) for spec in req.loras],
                 "reference_video_id": req.reference_video_id,
             }
             # Control-adjustability overrides: record only when meaningful

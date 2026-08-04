@@ -30,7 +30,7 @@ class IcLoraEntry(BaseModel):
     """
 
     path: str
-    preprocess: Literal["none", "canny", "dwpose"] = "none"
+    preprocess: Literal["none", "canny", "dwpose", "depth"] = "none"
 
 
 class ServerConfig(BaseModel):
@@ -52,11 +52,19 @@ class ModelConfig(BaseModel):
     # Step 7 (real LTX) runtime paths. Populated by scripts/install_ltx.ps1 and
     # consumed only by services/ltx_runner.py. None until the model is installed.
     ltx_repo_dir: str = "./vendor/LTX-2"  # reference only (upstream LTX-2 clone).
-    # reference-only. The 43GB monolith it named was physically deleted in
-    # Stage 3; the GGUF + component-file path never opens it (proven by a rename
-    # test: load still passed). Kept because it is still passed in the worker
-    # payload for the DistilledPipeline signature (path stored, not read).
-    checkpoint_path: str | None = None
+    # NOTE (2026-07-28, PENDING_TASKS.md 3-26): there used to be a
+    # `checkpoint_path: str | None = None` field here, pointing at the 43GB
+    # monolith physically deleted in Stage 3. It was removed after confirming it
+    # is genuinely inert config: services/ltx_runner.py always sent the worker
+    # payload's checkpoint_path as "" whenever this field was unset (its only
+    # real-world state, since nothing in config.yaml ever set it to a live
+    # path), and DistilledPipeline never opens that string -- it only requires
+    # it to be a non-None str so ModelLedger.build_model_builders()
+    # (ltx_pipelines/utils/model_ledger.py) populates the lazy builder objects
+    # that engine/pipeline/fast_video_pipeline.py's GGUF/component re-sourcing
+    # later overwrites via dataclasses.replace(). services/ltx_runner.py now
+    # hardcodes that same "" directly (see its _build_load_payload), so the
+    # worker payload is byte-identical to before with no config knob needed.
     spatial_upsampler_path: str | None = None
     # tokenizer-only dir (~40MB). The GGUF Gemma path needs only the tokenizer/
     # processor files: DistilledPipeline is built with gemma_root=None so the wheel's

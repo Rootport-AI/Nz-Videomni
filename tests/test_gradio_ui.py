@@ -342,7 +342,10 @@ def test_chain_generate_btn_click_chain_has_disable_generate_restore_stages():
     chain_btn = next(c for c, k, a in registry if k == "btn_concat" and a == "value")
 
     start, middle, end = _click_chain(demo, chain_btn)
-    assert middle.fn is not None and middle.fn.__name__ == "generate_chain"
+    # Acceleration: the middle stage is now the ``chain_dispatch`` closure,
+    # which forwards the appended attention selector to ``generate_chain`` as a
+    # keyword (same shape as the Generate tab's ``dispatch`` above).
+    assert middle.fn is not None and middle.fn.__name__ == "chain_dispatch"
     assert end.fn is not None and end.fn.__name__ == "_restore"
     assert any(o._id == chain_btn._id for o in start.outputs)
     assert any(o._id == chain_btn._id for o in end.outputs)
@@ -535,3 +538,368 @@ def test_batch_prompt_foolproof_reason_codes_localize():
         out = _batch_start_reason("prompt-rows-empty:3", lang)
         assert out == LABELS[lang]["batch_msg_prompt_rows_empty"].format(n="3")
         assert "3" in out
+
+
+# --------------------------------------------------------------------------- #
+# NAG (Normalized Attention Guidance / non-CFG Negative): the shared
+# accordion above gr.Tabs() replaces the two old per-tab greyed-out Negative
+# textboxes with ONE shared textbox + toggle + method radio + 3 sliders.
+# --------------------------------------------------------------------------- #
+def test_exactly_one_negative_textbox_and_it_is_disabled_by_default():
+    demo = _demo()
+    negatives = [c for c in demo.blocks.values()
+                 if isinstance(c, gr.Textbox)
+                 and c.label == LABELS["en"]["lbl_negative"]]
+    assert len(negatives) == 1, "the two old per-tab Negative textboxes must be gone"
+    assert negatives[0].interactive is False
+    assert negatives[0].value == "blurry, low quality, distorted"
+
+
+def test_nag_accordion_exists_closed_by_default():
+    demo = _demo()
+    acc = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Accordion)
+               and c.label == LABELS["en"]["nag_accordion"])
+    assert acc.open is False
+
+
+def test_nag_sliders_have_expected_defaults_and_ranges():
+    demo = _demo()
+    sliders = {s.label: s for s in demo.blocks.values() if isinstance(s, gr.Slider)}
+    scale = sliders[LABELS["en"]["nag_lbl_scale"]]
+    tau = sliders[LABELS["en"]["nag_lbl_tau"]]
+    alpha = sliders[LABELS["en"]["nag_lbl_alpha"]]
+    assert (scale.minimum, scale.maximum, scale.value) == (1.0, 20.0, 11.0)
+    assert (tau.minimum, tau.maximum, tau.value) == (1.0, 10.0, 2.5)
+    assert (alpha.minimum, alpha.maximum, alpha.value) == (0.0, 1.0, 0.25)
+
+
+def test_nag_enable_toggle_flips_negative_textbox_interactivity():
+    demo = _demo()
+    fn = demo.on_nag_enable_toggle
+    assert fn(True)["interactive"] is True
+    assert fn(False)["interactive"] is False
+
+
+def test_nag_method_change_toggles_group_visibility():
+    demo = _demo()
+    fn = demo.on_nag_method_change
+    nag_upd, vsf_upd = fn("vsf")
+    assert nag_upd["visible"] is False
+    assert vsf_upd["visible"] is True
+    nag_upd2, vsf_upd2 = fn("nag")
+    assert nag_upd2["visible"] is True
+    assert vsf_upd2["visible"] is False
+
+
+def test_nag_method_choices_translate_on_language_switch():
+    demo = _demo()
+    registry = demo.label_registry
+    nag_method = next(c for c, k, a in registry if k == "nag_lbl_method" and a == "label")
+
+    updates = demo.switch_language("ja", {})
+    idx = [c for c, _k, _a in registry].index(nag_method)
+    upd = updates[idx]
+    assert upd["choices"] == [
+        (LABELS["ja"]["nag_method_nag"], "nag"),
+        (LABELS["ja"]["nag_method_vsf"], "vsf"),
+    ]
+
+
+def test_vsf_group_hidden_and_nag_group_shown_by_default():
+    demo = _demo()
+    groups = [c for c in demo.blocks.values() if isinstance(c, gr.Group)]
+    nag_groups = [g for g in groups if "nag-group" in (g.elem_classes or [])]
+    vsf_groups = [g for g in groups if "vsf-group" in (g.elem_classes or [])]
+    assert len(nag_groups) == 1 and len(vsf_groups) == 1
+    assert nag_groups[0].visible is True
+    assert vsf_groups[0].visible is False
+
+
+def test_vsf_scale_slider_has_expected_defaults_and_range():
+    demo = _demo()
+    sliders = {s.label: s for s in demo.blocks.values() if isinstance(s, gr.Slider)}
+    scale = sliders[LABELS["en"]["vsf_lbl_scale"]]
+    assert (scale.minimum, scale.maximum, scale.value) == (0, 10, 1.5)
+
+
+def test_vsf_scale_info_registered_and_translates_on_language_switch():
+    # vsf_scale carries an `info=` string (Wave 4 review item 7): registered as
+    # a SECOND registry entry (same component, attr="info") next to the
+    # existing label entry, so switch_language must update both without the
+    # components colliding in the outputs list.
+    demo = _demo()
+    registry = demo.label_registry
+
+    scale_label_entries = [
+        (c, k, a) for c, k, a in registry if k == "vsf_lbl_scale" and a == "label"
+    ]
+    scale_info_entries = [
+        (c, k, a) for c, k, a in registry if k == "vsf_lbl_scale_info" and a == "info"
+    ]
+    assert len(scale_info_entries) == 1
+    # Same underlying component as the label registration, not a stray copy.
+    assert scale_info_entries[0][0] is scale_label_entries[0][0]
+
+    updates = demo.switch_language("ja", {})
+    assert len(updates) == len(registry) + 2  # matches the pinned-arity contract
+
+    scale_info_idx = next(
+        i for i, (c, k, a) in enumerate(registry)
+        if k == "vsf_lbl_scale_info" and a == "info"
+    )
+    assert updates[scale_info_idx]["info"] == LABELS["ja"]["vsf_lbl_scale_info"]
+    # The label update (same component, earlier registry position) still
+    # fires too -- the two registrations don't clobber each other.
+    scale_label_idx = next(
+        i for i, (c, k, a) in enumerate(registry)
+        if k == "vsf_lbl_scale" and a == "label"
+    )
+    assert updates[scale_label_idx]["label"] == LABELS["ja"]["vsf_lbl_scale"]
+
+
+# --------------------------------------------------------------------------- #
+# Acceleration section (Settings tab). Everything here is real except the VAE
+# radio, a DISABLED placeholder that is not wired into any handler input, so it
+# can never reach a payload.
+# --------------------------------------------------------------------------- #
+def test_acceleration_attention_radio_values_and_default():
+    demo = _demo()
+    en = LABELS["en"]
+    radios = [c for c in demo.blocks.values()
+              if isinstance(c, gr.Radio) and c.label == en["accel_lbl_attention"]]
+    assert len(radios) == 1, "attention radio not found"
+    radio = radios[0]
+    # VALUES are the API literals; the visible choice strings are fixed,
+    # untranslated text (so switch_language needs no extra branch).
+    assert [v for _l, v in radio.choices] == ["sdpa", "sage"]
+    assert [label for label, _v in radio.choices] == ["sdpa", "sage attention"]
+    assert radio.value == "sdpa"
+    assert radio.interactive is not False
+    assert radio.info == en["accel_info_attention"]
+
+
+def test_acceleration_mock_controls_are_disabled():
+    # The VAE radio is the ONLY remaining mock in this section: the old
+    # fused_gguf_dequant_gemm checkbox was removed outright (owner ruling
+    # 2026-08-04) and the real fused-dequant kernel toggle took its place.
+    en = LABELS["en"]
+    assert "accel_lbl_fused_gguf" not in en, "old mock label must be gone"
+
+    demo = _demo()
+    vae = [c for c in demo.blocks.values()
+           if isinstance(c, gr.Radio) and c.label == en["accel_lbl_vae"]]
+    assert len(vae) == 1, "VAE radio not found"
+    assert vae[0].interactive is False
+    assert [v for _l, v in vae[0].choices] == ["default", "prune_vaed"]
+
+
+def test_acceleration_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_section_title", "value"),
+                      ("accel_lbl_attention", "label"),
+                      ("accel_info_attention", "info"),
+                      ("accel_lbl_vae", "label")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
+    # The selector must be an INPUT of both generate flows -- a section that
+    # renders but is not wired is exactly the "displayed only" trap.
+    demo = _demo()
+    en = LABELS["en"]
+    radio = next(c for c in demo.blocks.values()
+                 if isinstance(c, gr.Radio) and c.label == en["accel_lbl_attention"])
+    deps_with_radio = [d for d in demo.fns.values()
+                       if radio in getattr(d, "inputs", [])]
+    assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
+    # And it is the FOURTH-TO-LAST input of each: the APPENDED wiring discipline
+    # put it last when it was the only Acceleration control, then the
+    # block-swap prefetch checkbox went after it, the keep-resident checkbox
+    # after that, and the fused-dequant checkbox after that. This index is the
+    # canary for a wiring list and a handler signature drifting apart.
+    for dep in deps_with_radio:
+        assert dep.inputs[-4] is radio
+
+
+# --------------------------------------------------------------------------- #
+# Block-swap prefetch checkbox (Settings tab). Same reg/i18n/wiring pattern as
+# the attention selector above; S4 (2026-08-01) flipped the shared
+# gradio_ui.handlers.BLOCK_SWAP_PREFETCH_DEFAULT constant to True once the
+# real-device gate (bit-exact output + VRAM headroom, G1-G7) passed.
+# --------------------------------------------------------------------------- #
+def test_block_swap_prefetch_checkbox_default_and_label():
+    from gradio_ui.handlers import BLOCK_SWAP_PREFETCH_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_prefetch"]]
+    assert len(boxes) == 1, "block-swap prefetch checkbox not found"
+    box = boxes[0]
+    assert box.value is BLOCK_SWAP_PREFETCH_DEFAULT
+    assert box.value is True, "on by default post-S4 (real-device gate passed)"
+    assert box.interactive is not False
+    assert box.info == en["accel_info_prefetch"]
+
+
+def test_block_swap_prefetch_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_prefetch", "label"),
+                      ("accel_info_prefetch", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+# --------------------------------------------------------------------------- #
+# keep-resident checkbox (Settings tab, §48). Same reg/i18n/wiring pattern as
+# the two controls above, but default OFF -- it parks ~20GB in main memory, so
+# the owner's rule is "never on unless asked, and say 64GB+ in the note".
+# --------------------------------------------------------------------------- #
+def test_keep_resident_checkbox_default_and_label():
+    from gradio_ui.handlers import KEEP_RESIDENT_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == en["accel_lbl_keep_resident"]]
+    assert len(boxes) == 1, "keep-resident checkbox not found"
+    box = boxes[0]
+    assert box.value is KEEP_RESIDENT_DEFAULT
+    assert box.value is False, "off by default (owner decision: ~20GB resident)"
+    # NOT gated/disabled: whether the machine has the RAM is not something the
+    # server can answer, so the note informs and the user decides.
+    assert box.interactive is not False
+    assert box.info == en["accel_info_keep_resident"]
+
+
+def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox)
+               and c.label == en["accel_lbl_keep_resident"])
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
+    # SECOND-TO-LAST since §1-11 appended the fused-dequant checkbox after it.
+    for dep in deps:
+        assert dep.inputs[-2] is box
+
+
+def test_keep_resident_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_keep_resident", "label"),
+                      ("accel_info_keep_resident", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
+    # Same "displayed only" trap check as the attention radio: the checkbox
+    # must actually be an INPUT of both generate flows.
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_prefetch"])
+    deps_with_box = [d for d in demo.fns.values()
+                     if box in getattr(d, "inputs", [])]
+    assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
+    # And it is the THIRD-TO-LAST input of each: APPENDED after
+    # attention_backend, then the keep-resident checkbox (§48) and the
+    # fused-dequant checkbox (§1-11) were appended after IT.
+    for dep in deps_with_box:
+        assert dep.inputs[-3] is box
+
+
+# --------------------------------------------------------------------------- #
+# Fused GGUF dequantization kernel checkbox (Settings tab, §1-11). It INHERITED
+# the screen position of the removed fused_gguf_dequant_gemm mock, but unlike
+# that placeholder it is a real, wired control with an interactive checkbox.
+# Default ON since 2026-08-04 (§51: real-device gates G1-G8 passed and the owner
+# approved the flip, which moved api/models.py + this mirror + MCP together).
+# --------------------------------------------------------------------------- #
+def test_fused_dequant_checkbox_default_and_label():
+    from gradio_ui.handlers import FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == en["accel_lbl_fused_dequant"]]
+    assert len(boxes) == 1, "fused-dequant checkbox not found"
+    box = boxes[0]
+    assert box.value is FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+    assert box.value is True, "on by default since the gates passed (§51)"
+    # NOT gated client-side: the server degrades to the eager implementation on
+    # its own, so a client-side lockout would only be a second, drifting source
+    # of truth (same reasoning as the attention selector).
+    assert box.interactive is not False
+    assert box.info == en["accel_info_fused_dequant"]
+
+
+def test_fused_dequant_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_fused_dequant", "label"),
+                      ("accel_info_fused_dequant", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_fused_dequant_checkbox_is_wired_last_into_generate_and_chain():
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox)
+               and c.label == en["accel_lbl_fused_dequant"])
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
+    for dep in deps:
+        assert dep.inputs[-1] is box
+
+
+def test_generate_and_chain_trailing_inputs_order_is_locked():
+    """The last FIVE inputs of both generate flows, in exact order.
+
+    ui.py's ``chain_dispatch`` peels the trailing Acceleration values off with
+    NEGATIVE indices (``args[:-4]`` + ``args[-4]``..``args[-1]``), so appending
+    one more input without shifting every index silently mis-wires the chain
+    handler: the values still arrive, just under the wrong parameter names, and
+    nothing raises. ``vsf_scale`` is included as the boundary element -- it is
+    the last POSITIONAL argument the handler receives, i.e. exactly where the
+    ``args[:-4]`` slice must stop.
+    """
+    demo = _demo()
+    en = LABELS["en"]
+
+    def _one(cls, label_key):
+        found = [c for c in demo.blocks.values()
+                 if isinstance(c, cls) and c.label == en[label_key]]
+        assert len(found) == 1, f"expected exactly one {label_key}"
+        return found[0]
+
+    expected = [
+        _one(gr.Slider, "vsf_lbl_scale"),
+        _one(gr.Radio, "accel_lbl_attention"),
+        _one(gr.Checkbox, "accel_lbl_prefetch"),
+        _one(gr.Checkbox, "accel_lbl_keep_resident"),
+        _one(gr.Checkbox, "accel_lbl_fused_dequant"),
+    ]
+    deps = [d for d in demo.fns.values()
+            if expected[-1] in getattr(d, "inputs", [])]
+    assert len(deps) == 2, "expected exactly the generate + chain flows"
+    for dep in deps:
+        assert list(dep.inputs[-5:]) == expected

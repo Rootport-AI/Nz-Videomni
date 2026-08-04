@@ -827,9 +827,13 @@ mock pytest 13 passed（app `.venv`・凍結経路不変）。アーティファ
 - **→ encode ピークが解像度・フレーム数に非依存である**ことを確認（§5/RESOLUTION_DURATION_CAPABILITY §1 の「天井＝固定費」と整合、その固定費を te-offload が下げた形）。
 
 ### 11.5 ★スコープ注意（次セッションが誤解しないよう明記）
+
+- **（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節の「peak ② の低減は将来課題」は同書**§4-3**（VRAMの残レバー3件）の①にあたる。以下の実測記録は不変。
 - **全体ジョブ `peak_vram_mb` は両モードとも 16,944 で不変**＝**16GB の天井は denoise / transformer-load 段（peak ②）で決まり、`--te-offload` はそこに触れない**。te-offload が下げるのは **Gemma text-encode ピーク（peak ①）** のみで、encode 時の shared 溢れを消すだけ。**peak ② の低減は将来課題**（§7.9 の「transformer を直接 CPU ロード」と地続き）。2つのピークは逐次で、その max がジョブ天井を決めるという前セッションの所見（§7.9）どおり。
 
 ### 11.6 チューニングレバー
+
+- **（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節の`layers_on_gpu`未露出は同書**§4-3**の②にあたる。以下の実測記録は不変。
 - `GemmaLayerOffloadService(layers_on_gpu=2)`：**1 に下げると encode ピークがさらに下がる**／3-4 に上げるとピークと速度をトレード。**現状ハードコード**（`config.yaml` 未露出）。露出は任意の将来課題。
 
 ### 11.7 テスト
@@ -977,6 +981,8 @@ construction-required で削除不可」として温存していた（§13.3）�
 
 ## 15. ★keep=1 常駐モード新設 ＝ 調査完了につき CLOSE（2026-07-02・コード読解＋Web リサーチ）
 
+> ※この「keep=1 は non-viable」という結論は §47 のバグ修正と §48 の製品化で覆った。現在の正本は §48 である。
+
 **結論: 当初構想の keep=1（＝GGUF モデルをジョブ間 GPU 常駐させ「毎ジョブ再ビルドによる gen 時間漸増」を消す）は、16GB では原理的に non-viable。しかも狙った利得は既存経路（`--dit-cpu-load` / `--te-offload` ＋ OS の RAM/mmap キャッシュ）で概ね捕捉済み。よって本タスクは「新規実装せず・調査結論を記録して close」とする。** 現行の既定 `LTX_KEEP_RESIDENT=0`（keep=0）は不変。将来の必要が生じたら §15.4 の道筋（GPU 常駐ではなく層ストリーミング）で再着手する。
 
 > 本節は HANDOFF「次の一手メニュー」「Phase 1 やることリスト」の keep_resident 恒久化項目と、`NEXT_SESSION_WORKORDER.md` タスク③ をクローズする。
@@ -1001,6 +1007,8 @@ construction-required で削除不可」として温存していた（§13.3）�
 - ∴ **当初構想の keep=1 は「16GB で誤ったターゲット」**。単一ユーザー逐次運用（クリップ連結含む）では現行 keep=0 で十分（§10.7 で I2V×4＋音声 連続 PASS 済）。
 
 ### 15.4 将来やるなら（Phase 3・GPU 常駐ではなく層ストリーミング）
+
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節のopt-in層ストリーミングは同書**§4-3**の③にあたる。本節の調査結論・実測記録そのものは不変。
 もし長尺連結で漸増が実害化したら、**opt-in の「CPU 正本温存＋GPU は限定サブセット＋残りを層ストリーミング」**（＝ComfyUI-GGUF / HF accelerate 方式）で再着手する。これは既存の `--dit-cpu-load` / te-offload 経路の延長で、フル GPU 常駐（crash 源）を避ける唯一の 16GB fit 経路。断片化緩和（`expandable_segments` 等）も別レバーとして併検討。**いずれも計測前提**（`torch.cuda.max_memory_allocated` ＋ WDDM Dedicated/Shared ＋ committed bytes）。
 
 ### 15.5 一次情報
@@ -1439,6 +1447,8 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 
 ### 23.5 持ち越し（将来項目）
 
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 1点目（`two_stage_hq`の実効化）は同書**§4-28**（2026-08-04に§3-2から降格）、残る4点は同書**§4-6**（バックエンド同梱Gradio UIの残4件）にあたる。以下の記録は不変。
+
 - バックエンドでの pipeline／guidance_scale 消費（`two_stage_hq` の実効化）。
 - `GET /jobs/{id}/metadata`（新規エンドポイント不追加の方針で見送り）。
 - `gr.BrowserState` による言語／テーマの永続化（固定secret＋実機検証が必要）。
@@ -1487,12 +1497,16 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 
 ### 24.5 持ち越し（将来項目）
 
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** stage2の音声タイル継ぎ目とfpsリサンプルの全体変換は同書**§4-7**（V2V／チェーンの音声まわりの残件3点）にあたる。1点目（音声継ぎ目のクリック根治）は§24.7のv1.1で対処済みで、残った浅い凹みが§4-7の③。以下の記録は不変。
+
 - 音声継ぎ目のクリック根治（源の実音声とデコード音声のノイズフロア差）: v1 は 30ms フェードで緩和・G3 試聴の結果次第で「サーバー側結合出力＋真のクロスフェード」オプションを検討。
 - stage2 の音声タイル継ぎ目（既知・チェーン由来 backlog と同族・V2V 固有ではない）。
 - fps リサンプルが全体変換（末尾だけの部分変換に最適化可能・単一ユーザーでは実害小）。VFR 源は未ストレステスト。
 - mock の音声数値は 0 固定（実バックエンドと差異あり・docstring 記載済み）。
 
 ### 24.6 得られた知見
+
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 本節3点目の`RetakePipeline`在中の知見は、同書**§4-12**（Retake・Inpaint）の「土台」根拠として引用されている。以下の知見の記録は不変。
 
 - **実写・圧縮素材の VAE latent 混入リスクは杞憂だった**（h264-crf35 でも継ぎ目連続・色ドリフトむしろ最小）。
 - **causal VAE の先頭 latent 規約**: 末尾 kv 個だけの切り出し注入は先頭アンカー規約とずれる → **context 丸ごと凍結ヘッド**にすれば規約が一致（ComfyUI extend と同運用）。
@@ -1520,6 +1534,8 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 **回帰**: T2V/I2V byte-match は各実装後に維持（`23844b4e…`/`a511eda4…`）。同一シード V2V 出力も VRAM 修正・サイドカー追加の前後でバイト一致。pytest **191 passed / 1 skipped**。
 
 **将来項目（記録）**: ①**音声スムージングの UI チェックボックス**（ユーザー要望 2026-07-04）: 将来の GUI V2V 露出時に「結合出力」機能へ ON/OFF を付ける（ON=ハンドル有なら真クロスフェード/無ければフェードペア・OFF=ハード連結。API/エンジン不変＝結合はクライアント側の関心事）②残余の浅い凹みのさらなる平坦化（ノイズフロア整合等）③モデル管理（A1111 風）=[`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`](MODEL_MANAGEMENT_FUTURE_WORKORDER.md)。
+
+> **（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 上記①（音声スムージングのUIチェックボックス）はGUI露出とともに実装済み、②（残余の浅い凹みの平坦化）は同書**§4-7**の③、③（モデル管理）は2026-07-05に実装完了（§26）。③のリンク先だった`MODEL_MANAGEMENT_FUTURE_WORKORDER.md`は2026-07-27の文書整理で削除しており、現在の正本は[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)である。
 
 **✅G3 最終試聴 PASS（ユーザー・2026-07-05）**: G3v4（音楽プロンプト継続×ハンドル真クロスフェード・`outputs/v2v_e2e/E2E-A4/`）で「音の繋ぎ目はかなり滑らかになった。自然音やスローテンポの EDM ならまず繋ぎ目に気付かない。音楽や会話の途中なら気づくが、それは現在の生成 AI の性能の限界」＝**合格**。参考: G3v4 の計測は下請けエージェントが生 wav から独立再計算しても完全一致（二重検証済み）。**V2V の目視/試聴ゲートは全クローズ** → push/main マージへ（ユーザー事前決定の条件成立）。
 
@@ -2089,6 +2105,7 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 
 1. **precedence**: pydantic のスキーマ検証がエンドポイントより先に走るため、`clips>=2` ＋ `reference_video_id` の複合誤設定は、コード付きの `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` ではなく汎用の `VALIDATION_ERROR`（422）になる。
 2. `reference_video_id` ＋ スタイル系 LoRA のみ（control 系を含まない）はスキーマ上は受理されるが、worker 側の `_set_ic_job` で `RuntimeError`（ジョブ失敗）になる。単発 `/generate` の既存挙動をそのまま写像したものであり、GUI からは到達不能（アダプタ欄が control 系のみを選択肢に持つため）＝直接 API 経由のみ。早期422化は将来の改善余地として残す。
+   - **→ ✅ 解消（2026-08-03）**: IC-LoRA Depth／Deblur 追加（§49）で新設した **`REFERENCE_REQUIRES_CONTROL_LORA`（422）**により、この組み合わせは**単発・チェーンの両方でリクエスト時点で拒否**されるようになった。「アップロードもジョブ開始も済んだあとにワーカー内で落ちる」経路は消えている。**解消は §49.7 の G2（mock 通し）で実機確認済み**（項目5）。ここで挙げていた「早期422化は将来の改善余地」は**クローズ**である。
 3. `GET /jobs/{id}` の応答の `request` ブロックは chain 固有フィールド（`source_audio`／`loras`／`reference_video_id` 等）を載せない（`JobResponse.request` が `to_clip_request` 経由の `GenerateRequest` 形のため）。§30 の `loras` 追加時からの既存の表現上の制約であり、今回の退行ではない。正式な記録は `metadata.json` 側。
 4. **既知の無害事象（GPU実機目視ゲート中に観測・2026-07-12）**: 2本目のジョブ完了直後にサーバーログへ `ERROR asyncio: ... ConnectionResetError [WinError 10054]`（`_ProactorBasePipeTransport._call_connection_lost`）が1回出力された。これは Windows の asyncio proactor がクライアント（ブラウザ）側の強制切断を後処理する際の既知の無害なノイズであり、直後に再接続し以降のジョブも正常完走した。機能影響なし・対応不要（オーナー判断で無視と決定）。
 
@@ -2263,7 +2280,7 @@ Docs更新: `README.md`（Batch A2V節の開始前チェック説明）・`BATCH
 
 ## 37. ★V2V Join機能（末尾トリム方式）の実機検証＋IC-LoRA×A2V併用のreal GPU生成完走＝オーナー実機ゲート全項目合格（2026-07-21）
 
-> **正本＝本節。** V2V Join復活（API拡張＝コミット `d22706e`、本書はコード非対象なので詳細は `LTX23_Backend_Specification.md` §6.1／§6.3、フロント側の実装増分はI1〜I6）の、オーナー立ち会いによるrealバックエンド・実GPUでの実機検証記録。詳細な経緯・修正差分・実機ログはフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。
+> **正本＝本節。** V2V Join復活（API拡張＝コミット `d22706e`、本書はコード非対象なので詳細は `LTX23_Backend_Specification.md` §6.1／§6.3、フロント側の実装増分はI1〜I6）の、オーナー立ち会いによるrealバックエンド・実GPUでの実機検証記録。詳細な経緯・修正差分・実機ログはフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。
 
 本機: 同上（i7-13700／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11）。
 
@@ -2283,7 +2300,7 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 実機検証の過程で、fps注意文が「project 24 / video 24なのに did not match」という誤情報を表示する不具合が発覚した。
 
 - **真因**: バックエンドのJoin処理自体は全ケースで成功していた（正規化・トリム・atomic rename とも仕様どおり動作）。不具合の所在はフロント側の文言設計——正規化（`JoinResponse.source_normalized`）は解像度差だけでも発火する（fps差の有無を問わない）仕様なのに、注意文はfps不一致を前提とした文言しか出さず、しかもソース側の実測fpsを表示していなかった。
-- **修正**: フロント側で注意文を発火理由別の3部品（ソースfps明示の文言／fps非言及の正規化文言／プロジェクトfps推奨行）へ分岐する形に改修し、同日中に再検証まで完了した。バックエンド側は無改修。詳細は `PENDING_TASKS.md` §3-29・`DEVLOG.md` §45。
+- **修正**: フロント側で注意文を発火理由別の3部品（ソースfps明示の文言／fps非言及の正規化文言／プロジェクトfps推奨行）へ分岐する形に改修し、同日中に再検証まで完了した。バックエンド側は無改修。詳細は `PENDING_TASKS_CLOSED.md` §3-29・`DEVLOG.md` §45。
 
 ### 37.3 IC-LoRA×A2V併用のreal GPU生成完走
 
@@ -2291,4 +2308,1602 @@ realバックエンド・実GPUでオーナーが以下を確認し、**全項�
 
 ### 37.4 参照
 
-詳細な経緯・実機ログ・フロント側の修正差分はフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。バックエンド側のV2V継続初回実装は本ログ§24、2026-07-21のAPI拡張（`is_v2v`／`joined`／`source_tail_seconds`／`trimmed_source_seconds`／`source_fps`）はコミット `d22706e`（`LTX23_Backend_Specification.md` §6.1／§6.3に反映済み）。
+詳細な経緯・実機ログ・フロント側の修正差分はフロント側 `Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md` §3-27〜§3-29・`Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md` §44〜§45を参照。バックエンド側のV2V継続初回実装は本ログ§24、2026-07-21のAPI拡張（`is_v2v`／`joined`／`source_tail_seconds`／`trimmed_source_seconds`／`source_fps`）はコミット `d22706e`（`LTX23_Backend_Specification.md` §6.1／§6.3に反映済み）。
+
+---
+
+## 38. ★NAG（非CFGネガティブプロンプト）機能＝実装完了・機械検証（selfcheck・pytest）全PASS・**実機ゲート全項目合格（2026-07-29 オーナー実機確認で完了）**（2026-07-28実装／2026-07-29実機ゲート完了）
+
+> **正本＝本節。** 蒸留版 LTX 2.3 は CFG（Classifier-Free Guidance。正負2パスのdenoiseでネガティブプロンプトを効かせる従来手法）が `guidance_scale=1.0` に凍結されているため、従来型のネガティブプロンプトはこれまで完全な no-op だった。NAG（Normalized Attention Guidance, arXiv:2505.21179）は、cross-attention（テキストと映像/音声の対応を取る注意機構）の出力レベルで正プロンプト出力と負プロンプト出力を外挿・正規化・ブレンドすることで、CFGの2パス化なしに1パスのままネガティブプロンプトを効かせる非CFG手法。適用範囲は単発Generate（`POST /generate`）・Clip Chain（`POST /generate/chain`）・バッチA2V（内部的に行ごとに`/generate/chain`を叩く）の全経路。Wave 0〜3（エンジンコア→エンジン配線→API/runner→GUI）を段階的に実装し、本節（Wave 4）で実機ゲート前の最終ドキュメント化を行う。
+
+### 38.1 決定事項
+
+1. **式の規約**: 先行実装 [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) の `LTX2_NAG`（`nodes/ltxv_nodes.py`）実コードを取得・精読し、その規約に完全準拠する設計にした。正プロンプト出力を Z⁺、負プロンプト出力を Z⁻ とすると、外挿式は `Z̃ = s・Z⁺ − (s−1)・Z⁻`（`s`=nag_scale）。以降、L1ノルム比 `R = ‖Z̃‖₁ / ‖Z⁺‖₁` に対して `min(R, τ)/R`（`τ`=nag_tau）でノルムを頭打ちにし、`α`（nag_alpha）で正出力とブレンドしてから、per-head ゲート（`2・sigmoid(to_gate_logits(x))`）→ `to_out` という順で結合する（結合はゲートより前）。既定値 `scale=11.0 / tau=2.5 / alpha=0.25` も KJNodes の既定値をそのまま踏襲した。
+2. **非対称設計の根拠**: 実装時の敵対的レビュー（Opusサブエージェントによる17件指摘）で「negative側にもAdaLN変調を掛けて対称化すべき」という指摘が上がったが、採用しなかった。理由は、本番で使う3種のGGUF量子化モデルすべてが `cross_attention_adaln: true` をメタデータに埋め込んでおり、実際の推論では positive context が毎ステップ `context*(1+scale_kv)+shift_kv` の変調を受けてからattentionに渡る一方、KJNodes参照実装のコードを直接照合したところ、そちらも同じ非対称（positiveは変調済み・NAGのnegative contextは生のまま）で動いていることを確認したため。既定値11.0/2.5/0.25はこの非対称の下でチューニングされた値であり、対称化すると参照実装から意味的に乖離してしまう。指摘は2体の独立検証エージェント（ローカルコード確認＋KJNodes実物のWeb取得）で裏取りした上で不採用と判断した。
+3. **空ネガティブは422**: `nag_enabled=True` かつ `negative_prompt` が空（または空白のみ）の場合、両リクエストモデル（`GenerateRequest`/`GenerateChainRequest`）のバリデータが `ValueError("nag_enabled requires a non-empty negative_prompt")` を送出し、`422 VALIDATION_ERROR` として返る。GUI側にも同内容のprecheckトースト（`nag_msg_negative_required`）があり、API呼び出し自体を行わずに止める。
+4. **UIルール**: 共有プロンプト欄の直下（Generate/Clip Chain両タブの外）に「Negative Prompt」アコーディオンを新設し一本化した。中の入力欄（`negative`、既定値`"blurry, low quality, distorted"`）は「non-CFG Negative」チェックボックスがONのときだけ編集可能になり、OFFの間は非活性（グレーアウト）表示のまま既定文字列が残る。「NAG / Other」ラジオはOtherを選ぶと即座にNAGへ復帰しトースト通知が出る簡易フォールバック（Other方式の実体は未実装。§38.5参照）。
+5. **無効時バイト一致の構造保証**: `NagState`が「未要求」の場合、`NagService.install()`は先頭のbool判定1回で即returnし、cross-attentionのforwardへのパッチを一切当てない。したがって`nag_enabled=False`のジョブは、エンジン内部の挙動がNAG導入前とバイト単位で完全に一致する（パッチ自体が存在しないため、恒等短絡のような数値的な作り込みに依存しない構造的な保証）。同様にworkerペイロードも無効時は`payload["nag"]`キー自体が存在しない加算方式で、既存のkey-order契約テストが無改修で通っている。
+
+### 38.2 実装箇所一覧
+
+- **`engine/transformer/nag_service.py`（新規）**: NAGコア。`NagParams`（negative_prompt/scale/tau/alpha の frozen dataclass）、`NagState`（1ジョブ分のミュータブル状態）、`encode_negative(text_encoder, prompt)`（negativeを1回エンコードし映像・音声両方のcontextを返す共通ヘルパ）、`nag_combine(z_pos, z_neg, scale, tau, alpha)`（§38.1の式。冒頭に`alpha==0.0 or scale==1.0`の恒等短絡）、`_make_nag_forward`（cross-attention forwardの等価展開パッチ。pe/mask/perturbationが非Noneなど想定外の呼び出しはRuntimeErrorでfail-loud）、`NagService(state_provider).install(transformer)`（未要求なら即return 0、要求済みでcontext未設定ならRuntimeError）。
+- **`engine/transformer/nag_selfcheck.py`（新規）**: `.venv-engine`のpythonで直接実行するエンジンvenv用の自己検証（pytest非収集）。6項目は§38.3参照。
+- **`engine/pipeline/fast_video_pipeline.py`**: `__init__`末尾で`_install_nag()`を無条件に呼び`ledger.transformer`をラップ（block-swap/GGUFラップの後、最後に足す）。`_set_nag_job`（IC-LoRAの`_set_ic_job`と同型）。`_run_inference`の`try:`開始位置を既存4本のモジュールグローバル差し替え区間の前に前倒しし、`encode_text`パッチを含む計5本すべてを`finally`復元の傘に入れた（既存の潜在欠陥＝パッチ適用中の例外でグローバルが復元されない問題も同時に解消）。`_make_nag_encode_text`がpositiveを素通ししつつ同じ生きたtext_encoderでnegativeを1回追加エンコードする。`generate`/`generate_chain`のシグネチャ末尾に`nag: NagParams | None = None`を追加し、両方とも`try/finally: self._nag.reset()`。
+- **`engine/pipeline/chain_pipeline.py`**: `run_chain`に`nag=None`引数を追加。positiveエンコードループ直後・`del text_encoder`直前（text_encoder生存中）でnegativeエンコードを実施。stage-1/2とも同一transformer・同一negativeを共用。
+- **`engine/worker.py`**: `_resolve_nag(msg)`でNagParamsを復元し、`_do_generate`/`_do_generate_chain`から`_PIPE.generate(...)`/`generate_chain(...)`へ渡す。ログ行に`nag=on/off`を出力。
+- **`api/models.py`**: `GenerateRequest`/`GenerateChainRequest`双方に`nag_enabled: bool = False`・`nag_scale: float = Field(11.0, ge=1.0, le=20.0)`・`nag_tau: float = Field(2.5, ge=1.0, le=10.0)`・`nag_alpha: float = Field(0.25, ge=0.0, le=1.0)`を追加。`negative_prompt`に`max_length=2000`（promptと同じ上限。これまでno-opだったため上限が無かった）。バリデータに§38.1の3の相互検証。`to_clip_request`（本番経路＝`services/job_store.py`の`create_chain_if_idle`が毎回呼ぶ）に4フィールドを転記。
+- **`services/ltx_runner.py`**: `_RealBackend.generate`/`generate_chain`のペイロード末尾に、有効時のみ`payload["nag"] = {negative_prompt, scale, tau, alpha}`を加算（無効時はキー自体が存在しない）。
+- **`gradio_ui/i18n.py`**: `nag_accordion`/`nag_note`/`nag_enable`/`nag_lbl_method`/`nag_method_nag`/`nag_method_other`/`nag_msg_fallback`/`nag_lbl_scale`/`nag_lbl_tau`/`nag_lbl_alpha`/`nag_msg_negative_required`をen/ja両方に新設。既存`info_negative`の文言差し替え。
+- **`gradio_ui/ui.py`**: 旧・タブ内グレーアウトNegative Prompt欄（Generate/Chain両方）を撤去し、共有プロンプト直下・Tabsの外に共通アコーディオンを新設。`on_nag_enable_toggle`（interactive切替のみ）・`on_nag_method_change`（"nag"以外を選ぶと即NAGへ復帰＋トースト）ハンドラを追加。
+- **`gradio_ui/handlers.py`**: `build_a2v_chain_payload`・単発`generate`ハンドラ・chainハンドラそれぞれの末尾にnag 4値を追加し、有効時のみペイロードへ加算。
+
+### 38.3 機械検証の結果
+
+**エンジンvenvでのselfcheck（`.venv-engine`のpythonで`python -m engine.transformer.nag_selfcheck`を実行）＝6/6 PASS**（本節作成時に再実行し確認済み）:
+
+```
+[PASS] nag_combine matches KJNodes reference (bf16+fp32, both clamp branches)
+[PASS] identity short-circuit (alpha=0 / scale=1) is the same z_pos object
+[PASS] zero-norm degenerate inputs produce no NaN/Inf
+[PASS] real BasicAVTransformerBlock: OFF no-op, ON matches reference, fail-loud shapes
+[PASS] NagService.install() on fake transformer with NAG off is a no-op
+[PASS] NagService.install() raises when requested but negative context not encoded
+
+6/6 checks passed
+```
+
+4番目の「real BasicAVTransformerBlock」チェックは、モックではなく実物の`BasicAVTransformerBlock`を`cross_attention_adaln=True`・`apply_gated_attention=True`（＝本番3モデルの実際の構成）でCPU上に小サイズ構築し、(a) NAG OFFではパッチ0件・出力がビット一致、(b) NAG ONでは「positiveは変調済み・negativeは生」という非対称を踏まえた手書き参照計算と一致、(c) 結合順（NAG→ゲート→to_out）が正しいこと、の3点を検証している。
+
+**アプリvenvでのpytest（`.venv\Scripts\python.exe -m pytest -q`）＝658 passed / 6 skipped**（skipはいずれも`torch`未導入によるエンジン系テストの収集スキップ＝アプリvenvに元々torchを入れない設計のための既知スキップで、NAG関連ではない）。Wave 0〜3合計で新規テスト+37件程度を追加した一方、**既存テストの改修は「positional `_chain_args`ヘルパ」と「i18nキー一覧」の2件に限定**した。これは狙って達成した性質で、NAGが既存の生成経路に対して純粋な加算的拡張（無効時は挙動もペイロードも従来と不変）であることの、テストスイート側からの裏付けになっている。
+
+### 38.4 実機ゲート表（2026-07-29 オーナー実機確認で全項目合格）
+
+以下は承認済み計画書の「実機検証チェックリスト」を転記したもの。**2026-07-29、オーナーの実機確認により全項目合格した。**
+
+| ゲート | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| G0（最重要） | 回帰: NAG OFFで単発T2V/I2V/A2V/chain 2clips/バッチ2行 | 出力mp4のSHA256が変更前とバイト一致・peak VRAMも同値 | ✅ 合格（2026-07-29 オーナー実機確認。単発T2V/I2Vは下記2026-07-28追記のとおり機械検証でも裏付け済み） |
+| G1 | ログ | `NAG installed on <実測数> cross-attention modules ...`（期待96）が1ジョブ1回出力される（chainでも1回） | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G2 | 恒等 | alpha=0 / scale=1でOFFと一致（恒等短絡によりビット一致が期待値。cuBLAS差ならPSNR≥50dB許容＋要因記録） | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G3（オーナー目視） | 効果 | 同一seedでOFF/ONのSHA256が異なり、negativeの概念が抑制され、破綻がない（破綻時はalpha 0.25→0.15、scale 11→5で再確認） | ✅ 合格（2026-07-28） |
+| G4 | 音声到達 | 音声寄りnegativeで音声トラックが変化することを聴取確認 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G5 | コスト | VRAM増分ピーク（z_neg＋z_gの2テンソル分、768p stage-2タイルで約+350MB目安・16GB内）と時間増（cross-attentionは倍だがself-attention支配のため全体数%〜15%程度の見込み）を実測。バッチA2Vは行ごとにGemmaロード＋negativeエンコードが加算されるため行あたりの時間増も実測 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G6 | 経路網羅 | ONで単発T2V/I2V/A2V/chain/chain+V2V/chain+IC-LoRA/バッチ/chunked_upsampleすべて完走 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| G7 | 併用非干渉 | IC-LoRA＋NAG、block-swap小窓＋NAG、GGUF既定経路のいずれも問題なく完走 | ✅ 合格（2026-07-29 オーナー実機確認） |
+| V-UI | 目視6項目 | 共有アコーディオンが両タブから見える／旧2欄消滅／チェックOFFグレーアウト・ONで解除／Other→NAG復帰トースト／言語切替追従／有効＋空negativeはトーストのみでジョブ不発 | ✅ 合格（2026-07-29 オーナー実機確認） |
+
+**2026-07-28追記（G3合格）**: オーナーがGradio経由2ジョブ（`423d19ca-1228-4621-a48f-09862fdcc5a0`／`74c4a11f-66ab-4b5e-ae30-f158ddea9920`）・AviUtl2経由2ジョブ（`2637bcc9-edd0-484d-b49e-a97787cc5f3c`／`77f028ce-45b0-464f-9b53-9b0d3b32238c`）でOFF/ON比較を実施し、NAG=Enableでnegative_promptに書いた内容が出力から目に見えて減ることを確認した（G3合格）。G0/G1/G2/G4〜G7・V-UIは引き続き未実施。
+
+**2026-07-28追記（G0部分合格、§40の依存整理バッチ実機回帰と同時実施）**: §40.6の実GPU SHA回帰（MCP経由、job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`＝T2V／job `3d231fc1-4cad-49d8-9026-8ddf45419f11`＝I2V）は、依存整理バッチ（§40.1〜40.3）だけでなくNAG機能そのものについても「OFF時は出力に一切触れない」ことの裏付けになる。両ジョブとも基準SHA256・peak_vram_mbと完全一致し、T2Vのリクエストエコーで`nag_enabled=false`を確認済み。**したがってG0は単発T2V／単発I2Vの2経路に限り部分合格とする。A2V・chain 2clips・バッチ2行のG0、およびG1/G2/G4〜G7・V-UIは引き続き未実施のまま**（過大評価を避けるため、G0行は「部分合格」表記に留め全合格とはしない）。
+
+**2026-07-29追記（残ゲート全項目合格・オーナー実機確認完了）**: オーナーが2026-07-29に実機確認を行い、「結果は合格」と確認した。これを受けて、G0（A2V・chain 2clips・バッチ2行を含む残り経路）・G1・G2・G4・G5・G6・G7・V-UIの残り全項目を合格とした。個別ゲートのSHA256・VRAM増分などの数値は本追記の時点では記録していない（必要であれば別途実測記録を追加する）。
+
+**§38は2026-07-29、オーナーの実機検証完了（全ゲート合格）を受けてクローズする。**
+
+---
+
+## 39. ★MCPサーバー（`mcp_server/`）＝実装完了・機械検証（pytest）全PASS・**実機検証をエージェント経由で全項目実施（2026-08-04）。残るはClaude Code本体のUI（承認ダイアログ・`/mcp`画面）の目視のみ**（2026-07-28実装／2026-08-04実機検証）
+
+> **正本＝本節。** Claude Code 等の MCP（Model Context Protocol）クライアントから、Web の操作パネルと同等の操作をできるようにする `mcp_server/` パッケージ（22ツール）の実装記録。設計判断の詳細は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md)、利用者向け説明は [`../README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節を参照。実装計画そのものはオーナーのプランファイル（リポジトリ外）が正本で、Wave 0〜6（依存追加＋骨組み→system完成→uploads/submit_generate→jobs 7本→submit_chain→outputs→batch_planning）を順に実装し、本節（Wave 7）でドキュメント化と最終機械検証を行った。
+
+### 39.1 実装物
+
+- `mcp_server/`（新設・7ファイル＋`tools/`サブパッケージ6ファイル＝計13ファイル）: `__init__.py` / `__main__.py`（`Path(__file__)`起点でsys.path自己解決）/ `settings.py`（`LTX_MCP_*`環境変数→`config.yaml`の順で解決）/ `client.py`（`BackendClient`＝httpx.AsyncClient＋エラー翻訳）/ `params.py` / `paths.py` / `batch_planning.py` / `server.py`（`build_server()`＋日本語instructions）/ `tools/{system,uploads,generate,jobs,outputs,batch}.py`。
+- `pyproject.toml` / `requirements.txt`: `mcp>=1.28,<2` をmain依存として追記。
+- `scripts/setup.ps1`: セットアップ完了時に絶対パス入り `.mcp.json` を生成する `New-McpJson` 関数を追加。`.gitignore` に `.mcp.json` を追加（マシン固有の絶対パスを含むためコミット対象外）。
+- `tests/conftest.py`: `_build_app(tmp_path)` を抽出し `mcp_app` フィクスチャを追加（既存 `client` フィクスチャの外形は不変・15ファイルが依存する契約を維持）。
+- `tests/test_mcp_*.py`（新規7ファイル）: `test_mcp_registration.py` / `test_mcp_tools_system.py` / `test_mcp_errors.py` / `test_mcp_tools_generate.py` / `test_mcp_tools_jobs.py` / `test_mcp_outputs.py` / `test_mcp_batch_planning.py`。
+- `gradio_ui/handlers.py` / `gradio_ui/manifest.py`: 写経元であることを示すコメントを追加（ロジック自体は無変更）。
+
+### 39.2 pytest推移（Wave別・退行ゼロ）
+
+Wave 0〜6を順に実装するにつれ、アプリvenv（`.venv\Scripts\python.exe -m pytest -q`）のテスト総数は次のように増加した（NAG機能完了時点の658 passed/6 skippedを起点に、MCPサーバーのテストのみを加算した）。
+
+```
+658 → 675 → 699 → 736
+```
+
+W7（本節作成時点）で最終確認した結果は **736 tests / 730 passed / 6 skipped / 0 failed / 0 errors**（`--junitxml`集計）。skipの6件はいずれも `torch` 未導入によるエンジン系テストの収集スキップで、アプリvenvに元々torchを入れない設計のための既知スキップ（NAGの回でも同数出ており、MCP関連ではない）。既存テストへの改修は最小限（`tests/conftest.py`の`_build_app`抽出のみ）で、新規7ファイルはすべて加算的に追加された。
+
+### 39.3 stdout清浄性の確認
+
+MCPの `stdio` トランスポートはJSON-RPCを標準出力に流すため、`mcp_server/`配下のどこかで意図せず標準出力に書き込みが発生すると、プロトコル全体が即座に壊れる。この清浄性を次のコマンドで機械的に確認した。
+
+```powershell
+.venv\Scripts\python.exe -m mcp_server < NUL
+```
+
+標準入力を即座に閉じることでサーバーが起動直後に終了する状態を作り、標準出力バイト数を計測したところ **0 バイト**（終了コード0）だった。ドキュメント作成による変更後に再実行しても結果は変わらず、退行が無いことを確認した。
+
+### 39.4 22ツール登録の確認
+
+`tests/test_mcp_registration.py::test_tool_name_set_matches_expected` が、`mcp.shared.memory.create_connected_server_and_client_session` 経由の実MCPプロトコル往復で `mcp.list_tools()` を呼び、返ってきたツール名の集合が `EXPECTED_TOOLS`（22個・system 6/uploads 3/generate 2/jobs 7/outputs 3/batch 1）と厳密一致することをアサートしている。同ファイルの別テストは、全ツールに空でない説明文があること、`dict[str, Any]`を返すツールの結果が`{"result": ...}`でラップされず`structuredContent`にそのまま入ること（FastMCP 1.28の構造化出力の仕様どおり）も検証済み。
+
+### 39.5 実機実叩き（Claude Codeからの操作）＝未実施 → **§39.6で実施済み（Claude Code UIの承認導線を除く）**
+
+**本節作成時点で、Claude Code など実際のMCPクライアントからの操作は一つも行っていない。** ここまでの検証はすべてモックバックエンド（`httpx.ASGITransport`）を使ったオフラインのpytestであり、実際のバックエンドプロセス（`run.bat`）と実際のMCPクライアントを組み合わせた実機ゲートは、オーナーの確認待ちである。
+
+以下は承認済み計画書「W7」の実機検証チェックリストを転記したもの。**全項目未実施**（2026-07-28時点。**2026-08-04に承認ゲートを除く全項目を実施＝§39.6**）。
+
+| ゲート | 内容 | 状態 |
+|---|---|---|
+| 承認ゲート | リポジトリフォルダをClaude Codeで開く→ワークスペース信頼確認→プロジェクトスコープMCPサーバーの承認（⏸ Pending approval）が出て、承認すると解除される | ⬜ 未実施（**エージェントからは検証不能**＝§39.6） |
+| 22ツール表示 | `/mcp` コマンドで `nz-ltx23` サーバーと22個のツールが一覧表示される | 暫定✅ 2026-07-28（下記注記参照）→ **§39.6で再実施済み** |
+| T2V submit+poll | `submit_generate`（画像なし）→`wait_for_job`を繰り返し呼んで完了確認 | 暫定✅ 2026-07-28（job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`、§40.6参照）→ **§39.6で再実施済み** |
+| I2V | `upload_image`→`submit_generate`（`conditioning_images`指定）→完了確認 | 暫定✅ 2026-07-28（job `3d231fc1-4cad-49d8-9026-8ddf45419f11`、§40.6参照）→ **§39.6で再実施済み** |
+| A2Vバッチ1行 | `plan_a2v_batch`→1行分`upload_audio`→`submit_chain`→`wait_for_job`→`save_job_video` | ⬜ 未実施 → **§39.6で実施済み** |
+| join | V2V継続ジョブに対して`join_job`を呼び、`joined.mp4`が生成される | ⬜ 未実施 → **§39.6で実施済み** |
+| purge dry_run | `purge_terminal_jobs(dry_run=true)`が実際には何も削除せず対象一覧のみ返す | ⬜ 未実施 → **§39.6で実施済み** |
+| JOB_BUSY挙動 | ジョブ実行中に別の`submit_generate`/`submit_chain`を呼ぶと409 JOB_BUSY相当のエラーがエージェントに伝わる | 暫定✅ 2026-07-28（I2V実行中に409「`JOB_BUSY: A job is already running (Phase 1 allows one concurrent job)`」をライブ確認）→ **§39.6で再実施済み** |
+| api_key設定時の再起動 | `--api-key`指定でバックエンドを起動した状態でMCP経由の操作がBearer認証込みで通る | ⬜ 未実施 → **§39.6で実施済み** |
+
+**2026-07-28追記（「暫定✅」の位置づけ）**: 上表の「暫定✅」は、オーナー承認済みのエージェントがMCPクライアント（`mcp==1.28.1`、stdioトランスポート、実バックエンド＝ltx-distilled・RTX 4070 Ti SUPER）を自前のスクリプトから直接叩いて確認したもので、**Claude Code本体のUI（承認ダイアログ・`/mcp`コマンドの実画面）を経由した確認ではない**。オーナー判断により「MCP経由で実バックエンドを回せることが確認できれば暫定合格と見做す」ため✅としているが、Claude Code UIの承認導線そのものの実地確認はまだ済んでいない。**未実施のまま残る項目**: 承認ゲート（Claude Code UI経由のPending approval導線）、A2Vバッチ1行、join、purge dry_run、api_key設定時の再起動、submit_chain単体、cancel/delete、save_job_video、load/unload_pipeline、upload_video/upload_audio、list_jobs。
+
+**2026-08-04追記**: 直前の段落が挙げた「未実施のまま残る項目」11件のうち、**承認ゲート（Claude Code UI経由のPending approval導線）を除く10件を §39.6 で実施し、全項目合格**した。§39.6 の実施方法もこの段落と同じ「エージェントが自前スクリプトからMCPクライアントを叩く」経路であり、**Claude Code本体のUIを経由した確認ではない点も変わらない**（同じ限界を引き継ぐ）。
+
+**§39は実機ゲート未実施の状態でクローズしない。** → **2026-08-04に §39.6 で実施済み**。残るのはClaude Code本体のUIでしか確認できない承認導線1件だけで、これはエージェントからは原理的に検証できない（オーナーが実際にClaude Codeでリポジトリを開いたときに確認する項目）。
+
+### 39.6 実機検証（2026-08-04・オーナーの実施指示による）
+
+オーナーの指示により、稼働中の実バックエンド（`127.0.0.1:18620`・ltx-distilled・RTX 4070 Ti SUPER・**GGUF逆量子化の1カーネル化＝`fused_gguf_dequant_kernel` を既定onへ反転した後のコード**、§51）に対して、§39.5に残っていた未実施項目を検証担当エージェントが実施した。
+
+実施方法は §39.5 の「暫定✅」と同じ経路で、**MCPの stdio トランスポートで `.venv\Scripts\python.exe -m mcp_server` を子プロセスとして起動し、`mcp` パッケージのクライアントから実プロトコル往復（`initialize` → `tools/list` → `tools/call`）でツールを呼ぶ**。検証スクリプトはリポジトリ外の作業フォルダに置いたので、リポジトリには何も足していない。生成条件はいずれも軽量（384×256・17〜33フレーム・24fps＝`generation_presets.smoke_test` 相当）にしてGPUの占有を最小限にした。
+
+#### 検証結果＝実施した全項目が合格
+
+| 項目 | 使ったツール | 結果 |
+|---|---|---|
+| 22ツール列挙 | プロトコルの `tools/list` | ✅ ちょうど22個。説明文が空のツールは0件（§39.4のpytestと同じ集合を実プロセスでも確認） |
+| stdout清浄性の再確認 | `python -m mcp_server < NUL` | ✅ 標準出力**0バイト**・終了コード0（§39.3から退行なし。§40以降の改修が入った現行コードでも維持） |
+| 状態系5本 | `backend_status` / `get_config` / `list_models` / `list_loras` / `list_jobs` | ✅ 実サーバーの応答をそのまま返す（`pipeline_loaded: true`、`acceleration.sage_available: true`、`block_swap_prefetch_available: true`、モデル台帳4カテゴリ、ジョブ一覧と件数集計） |
+| T2V submit+poll（既定値） | `submit_generate` → `wait_for_job` | ✅ job `a1a85190-a62f-41e2-8e4e-9358326198a3`（70.8秒・出力23,262バイト）。メタデータのechoは **`fused_gguf_dequant_kernel_used="on"`**（既定on＝§51.5の反転がMCP経路にも効いている） |
+| 新引数を明示offで指定 | 同上（`fused_gguf_dequant_kernel=false`） | ✅ job `616590bc-d616-4911-8368-d1a2716c2a37`。echoは **`"off"`**。同一シード（1234）の出力`output.mp4`は **既定onのjobとSHA256完全一致**＝§51の「ビット単位で不変」をMCP経路からも再確認 |
+| I2V | `upload_image` → `submit_generate`（`conditioning_images`） | ✅ job `7da5f00d-0c21-4615-849c-64a59151ee09`（53.7秒）。384×256のPNGをアップロードしフレーム0に条件付け |
+| JOB_BUSY挙動 | ジョブ実行中に `submit_generate` | ✅ `JOB_BUSY: A job is already running (Phase 1 allows one concurrent job)` がツールエラーとしてクライアントへ伝わる |
+| `wait_for_job` のタイムアウト分岐 | `wait_for_job(timeout_sec=45)` | ✅ 45秒で `timed_out: true` ＋ hint「同じ引数でもう一度呼んでください」を返し、**エラーにせず**同じ引数の再呼び出しで続きから待てる（全生成ジョブで2回以上この分岐を通った） |
+| 出力の取得と保存 | `get_job_video_path` / `save_job_video` | ✅ 絶対パス・`exists: true`・実サイズを返し、任意フォルダへコピーできる（`no_clobber` の既定で連番回避） |
+| `submit_chain` 単体＋V2V | `upload_video` → `submit_chain(source_video_id=…)` | ✅ job `c6487fb9-e0d8-4026-9f9e-3cf14e81ef1a`（78.4秒）。既存の生成物をアップロードし、`context_frames=25` / `clips[0].num_frames=33` で継続生成 |
+| join | `join_job` → `get_joined_video_path` → `save_job_video(which="joined")` | ✅ `joined.mp4` が生成された（199,683バイト・`join_mode="handle_crossfade"`・`finished: true`）。`get_joined_video_path` は `joined: true` を返す |
+| A2Vバッチ1行 | `plan_a2v_batch` → `upload_audio` → `submit_chain(source_audio_id=…)` → `wait_for_job` → `save_job_video` | ✅ job `8df6d50a-ba37-4159-9d64-54d6643c5927`（78.9秒）。計画→アップロード→投入→待機→保存の一連が計画書どおりの部品接続で通った |
+| バッチ計画の走査規約 | `plan_a2v_batch`（HTTP不使用） | ✅ mtime昇順・`image_dir` の同stem画像の自動紐付け・`skip_reason` の2種（21秒のwavが `over-481f`、mp3が `wav-only-alpha`）をいずれも仕様どおり確認。`counts` は total 3 / plannable 1 / skipped 2 |
+| cancel | `cancel_job` | ✅ running中の呼び出しで `cancel_requested: true` ＋ ベストエフォートである旨の note。**実際にもジョブは最終的に `cancelled` になった**。終端後に再度呼ぶと `JOB_ALREADY_TERMINAL: … — delete_job を使ってください` で拒否 |
+| delete | `delete_job` | ✅ `deleted: true`、以後 `job_status` は `JOB_NOT_FOUND`（対象はこの検証で作った使い捨てジョブ `4c1e0d81-c98f-471b-a700-eb872404f702`のみ） |
+| purge dry_run | `purge_terminal_jobs(dry_run=true)` | ✅ `attempted: 5 / deleted: 0 / dry_run: true` を返すだけで、**ジョブ件数も `outputs/` のフォルダも一切変化なし**（前後の `list_jobs` が同一） |
+| load / unload | `load_pipeline` / `unload_pipeline` | ✅ 読み込み済みでの `load_pipeline` は POST せず `no_op: true`。`unload_pipeline` で `pipeline_loaded: false` / `state: "unloaded"`、再 `load_pipeline` で `state: "ready"`（**検証前の「読み込み済み」状態へ復帰させて終了**） |
+| エラー系8件 | 各種 | ✅ 下表 |
+| api_key設定時の動作 | 別プロセス＋Bearer | ✅ 下記 |
+| 承認ゲート（Claude Code UI） | — | ⬜ **検証不能**（下記「検証できなかった項目」） |
+
+#### エラー系8件＝すべて意図した1行メッセージへ翻訳される
+
+計画D7の「非2xxはすべて `CODE: message — detail` の単一 `ToolError` にする」が実経路でも成立することを確認した。サーバー側で弾かれるものと、POSTの前にMCP側で弾くものの両方を含む。
+
+| 入力 | 返ってきたエラー |
+|---|---|
+| `num_frames=20`（8n+1でない） | `VALIDATION_ERROR: Request validation failed — [… 'num_frames must be 8n+1' …]` |
+| `width=300`（64の倍数でない） | `VALIDATION_ERROR: … 'width must be a multiple of 64' …` |
+| `crop_width` だけ指定 | `CROP_SIZE_INCOMPLETE: crop_width と crop_height は両方指定するか、両方省略してください`（**POST前にMCP側が拒否**） |
+| 存在しないjob_id | `JOB_NOT_FOUND: job not found: …` |
+| 存在しない画像ファイル | `FILE_NOT_FOUND: …`（**アップロード前のローカル事前チェック**） |
+| 未完了ジョブの `save_job_video` | `VIDEO_NOT_FOUND: … が見つかりません (which=output、ジョブが未完了か join未実行の可能性があります)` |
+| 存在しないwavフォルダ | `WAV_DIR_NOT_FOUND: …` |
+| クリップ1件だけの通常チェーン | `VALIDATION_ERROR: … 'chain requires at least 2 clips' …` |
+
+#### api_key（Bearer認証）の検証方法と結果
+
+**オーナーの稼働中サーバーは止めずに**、別ポートで2つ目のバックエンドを一時起動して確認した（`--config` に `port: 18621`・`log_dir` を作業フォルダに変えた設定の写しを渡し、`--api-key testkey123` 付きで起動）。MCPサーバー側は `LTX_MCP_BASE_URL` / `LTX_MCP_API_KEY` の環境変数でそこへ向けた（§39.1の設定解決の経路そのもの）。確認後、この2つ目のプロセスは停止し、稼働中サーバーが無事であることも確認済み。
+
+- **`/status` は認証の対象外**である点が実測でわかった。`require_auth`（`api/deps.py`）が付いているのは生成・ジョブ・アップロード・パイプラインの各ルートだけで、`GET /status` には付いていない。したがって `backend_status` だけではBearerの成否を判定できない。そこで**保護されたルートを使う** `upload_image`（`POST /upload/image`）で判定した。
+- 正しい鍵: `upload_image` が成功（`image_id` が返る）。`backend_status` の `api_key_configured` も `true`。
+- 誤った鍵（`wrong-key`）: `UNAUTHORIZED: Invalid or missing API key` に翻訳されて返る。
+- 空文字の鍵（`LTX_MCP_API_KEY=""`）: `api_key_configured` は `false`（設定解決の「環境変数が空なら鍵なし扱い」が効いている）、保護ルートは `UNAUTHORIZED`。**期待どおりの挙動**。
+
+#### 新規発見＝実バックエンド稼働中はpytestが1件だけ落ちる（環境依存・コードの退行ではない）
+
+検証のついでにMCP関連のpytest（7ファイル・98件）を回したところ、**`tests/test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false` の1件だけが失敗**した（他97件はPASS）。原因はこのテストが「バックエンドが**起動していない**こと」を前提に `reachable: false` をアサートしている点にあり、実バックエンドが既定ポートで動いていると `reachable: true` になって落ちる。`LTX_MCP_BASE_URL=http://127.0.0.1:18999`（未使用ポート）を与えて同じテストを回すとPASSするので、**コードの退行ではなく実行環境の前提のずれ**と確定した。§39.2の「736 tests 全PASS」も実バックエンド未起動時の計測である（§49.5と同じ注記）。テスト側を環境非依存にする改修は本検証の範囲外なので、事実の記録にとどめる。
+
+#### 検証できなかった項目（粉飾せずに残す）
+
+- **承認ゲート（Claude Code UI経由のPending approval導線）**: エージェントからは**検証不能**。Claude Codeでリポジトリフォルダを開いたときのワークスペース信頼確認と、プロジェクトスコープMCPサーバーの承認ダイアログは、Claude Code本体のUI操作でしか発生しない。同じ理由で `/mcp` コマンドの実画面での22ツール表示も未確認のまま（**ツール集合そのものは上表のとおりプロトコル越しに22個ちょうどで確認済み**なので、残るのは画面表示の目視のみ）。§39.5の「暫定✅」がもともと抱えていた限界と同一で、今回もそこは動いていない。
+- **`.mcp.json` を使った実際のClaude Code起動**: 上と同じ理由で未確認。ただし `.mcp.json` の中身（絶対パスの `python.exe` ＋ `-m mcp_server` ＋ `PYTHONUTF8=1`）と等価なコマンドラインで子プロセスを起動して全ツールを叩いているので、**設定ファイルが指す起動方法そのものは動作する**ことは言える。
+
+#### この検証で `outputs/` に残ったジョブ
+
+いずれも軽量な検証用の生成物で、削除して構わない（オーナー判断）。`purge_terminal_jobs` の dry_run はこの5件を対象として数えた。
+
+| job_id | 種別 | 備考 |
+|---|---|---|
+| `a1a85190-a62f-41e2-8e4e-9358326198a3` | t2v | `fused_gguf_dequant_kernel_used="on"`（既定） |
+| `616590bc-d616-4911-8368-d1a2716c2a37` | t2v | 同 `"off"`。上と出力SHA256一致 |
+| `7da5f00d-0c21-4615-849c-64a59151ee09` | i2v | 条件付け画像あり |
+| `c6487fb9-e0d8-4026-9f9e-3cf14e81ef1a` | chain（V2V） | `joined.mp4` も同フォルダにある |
+| `8df6d50a-ba37-4159-9d64-54d6643c5927` | chain（A2V） | 検証用の合成wav（1.3秒）から生成 |
+
+なお `cancel` / `delete` の検証に使ったジョブ `4c1e0d81-c98f-471b-a700-eb872404f702` は `delete_job` で記録ごと削除済み（出力フォルダも残っていない）。
+
+#### 注意記録
+
+- 今回の2本のT2V（fused on 70.8秒 / off 92.0秒）は**速度比較として読んではいけない**。単発1本ずつの計測で交互対比較になっておらず、直前のジョブの残留状態にも影響される。速度の正本は§51.4の交互対比較である。
+- V2Vの `source_video.context_frames` は **25以上・8n+1・`clips[0].num_frames` 未満**という3条件があるため、17フレームの短い動画は継続元にできない（`context_frames must be >= 25` で弾かれる）。今回は既存の長めの生成物を継続元にした。この制約はツールの説明文には「8n+1・既定73」までしか書かれていないので、短い動画で試すと最初の1回は必ずエラーになる。
+
+---
+
+## 40. ★依存整理バッチ（未使用パッケージの削除＋`uv sync --extra dev`常時化＋`checkpoint_path`後始末）＝実装完了・機械検証全PASS・**実機SHA回帰 全項目合格（2026-07-28）**
+
+> **正本＝本節。** フロントエンド側の起票・経緯は [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-5・§3-25・§3-26（本節との対応関係もそちらに明記）。着手はNAG（§38）の実機ゲート完了後の別バッチとして実施した（同時実施だとSHA不一致が出た場合にNAGと依存削除のどちらが原因か切り分けられなくなるため）。
+
+### 40.1 未使用依存パッケージの削除（`.venv-engine`）
+
+`.venv-engine`の依存表に残っていた、2026-06-30のフォーク取り込み（`4ea5c4b`）由来で消費側コードが翌日の大掃除（`d0d3df5`）で削除済みの「フォーク由来の化石」を棚卸しし、確認済み未使用10件＋追加調査で特定した確実な孤児9件＝**計19エントリ**を`engine/engine-venv-pyproject.toml`と`engine/venv-engine.freeze.txt`から削除した。
+
+**確認済み未使用10件（内訳）**: `sageattention` 1.0.6（77KB）／`triton-windows` 3.6.0（129MB）／`imageio`＋`imageio-ffmpeg`（計約85MB）／`peft`（2.3MB）／`fastapi`・`uvicorn`・`python-multipart`のエンジンvenv側重複コピー（計約1MB）／`pynvml`／`ftfy`。
+
+**追加の確実な孤児9件**: 同じ棚卸しの過程で、上記10件とは別の観点（コードから一度もimportされない・消費側が既に削除済み）で特定した9パッケージ。残り9件は上記10件と同じ基準（全ソースgrepで参照ゼロを確認）で選定した。
+
+**sageattentionも削除する理由**: 入っているのは旧世代1.0.6で、将来の高速推論モードは現行世代（SageAttention 2系）の新規選定になるため温存価値がない。フォーク元のコード自体に「有効化すると2倍遅くなる原因を調査中（既定OFF）」と記されていた。
+
+> **2026-07-31追記（`sageattention`／`triton-windows` の再導入）**: 上記19エントリのうちこの2つは、Acceleration（生成の高速化）機能の実装にともなって**エンジン用仮想環境へ戻した**（§43.3）。**当時の判断と矛盾はしない。** 2026-07-28にここで削除したのは旧世代の `sageattention` **1.0.6**＝コードから一度も import されない死重依存であり、再導入したのは現行世代の **2.2.0**（torch 2.9.1+cu128 向けのビルド済み wheel を直リンクで固定）で、`engine/transformer/sage_attention_service.py` という**実際の消費者がある**。「実消費者のない依存は置かない」という本節の基準はそのまま維持されている。上の一文が予告していた「将来の高速推論モードは現行世代の新規選定になる」という見立てが、そのとおりに実現した形である。
+
+**保留（削除しない）**: `sentencepiece`／`protobuf`の2つ。Gemmaトークナイザのフォールバック経路で使われる可能性を静的解析で否定しきれず、壊れたときの症状（トークナイザロード失敗）が致命的なわりに節約が小さい（2026-07-28オーナー決定）。
+
+**サイズ・エントリ数の変化**: `engine/venv-engine.freeze.txt`のエントリ数は**69→50**。`.venv-engine`の実ディスク使用量は約230MB縮小（**4.98GB→4.77GB**）。
+
+### 40.2 `uv sync`が「任意の依存」を黙って刈り取る問題への対処
+
+アプリ用仮想環境（`./.venv`）で、`uv sync`（`--extra dev`無し）を実行すると`dev` extra（`pytest`・推移的依存の`iniconfig`／`pluggy`）が**警告なく削除される**仕様が確認されていた（`uv sync`は要求された状態へ環境を合わせにいく道具で、明示しないextraは「入っていてはいけないもの」とみなして刈り取るため）。
+
+**対処（実施済み）**: `scripts/install_ltx.ps1`のアプリvenv同期ステップを常に`uv sync --extra dev`にした。従来は`-RunSmoke`指定時だけ追加で`uv sync --extra dev`を走らせる特別扱いだったが、ステップ本体が常時`--extra dev`になったことでこの特別扱いは冗長になったため撤去した。数MBの追加でエンドユーザー環境にも`pytest`が入るが、「`git pull`後に`setup.bat`を再実行するとテストが消える」罠を仕組みで塞ぐことを優先した（実害の実績: 2026-07-28のNAG実装作業でもこの罠を踏み、手動`uv sync --extra dev`での復旧が必要だった）。
+
+### 40.3 `checkpoint_path`の後始末
+
+`checkpoint_path`（物理削除済みの43GBモノリスを指す参照専用キー）を`config.py`の`ModelConfig`・`config.yaml`・`config.yaml.example`の3箇所から完全に削除した。
+
+調査の結果、`config.py`のコメントにあった「`DistilledPipeline`のシグネチャのために保持している」という制約は外せると確定した。`ModelLedger.build_model_builders`が要求するのは「`None`でない文字列」であることだけで、その文字列が実際に開かれることは無い（GGUF＋componentファイル経路では一切参照されない）。そのため`services/ltx_runner.py`側で、worker payloadへ渡す`checkpoint_path`を直値の`""`にハードコードするよう変更し（証跡コメントをコード上に残した）、設定削除の前後でworker payloadがバイト同一であることを確認した。
+
+### 40.4 機械検証の結果
+
+- **エンジンimport確認**: `.venv-engine`再構築後、`engine`パッケージ一式のimportが正常に通ることを確認。
+- **`engine.transformer.nag_selfcheck`**: 6/6 PASS（§38.3と同一の自己検証。依存削除後も退行なし）。
+- **アプリvenv pytest**: 736 tests / 730 passed / 6 skipped（§39.2と同数。退行ゼロ）。
+- **`uv sync --extra dev`の存続確認**: セットアップ経路を再実行しても`dev` extra（pytest/iniconfig/pluggy）が消えないことを確認（§40.2の対処が機能している）。
+
+### 40.5 判明した2点（NOTE）
+
+1. **インストーラのfreeze適用は加算的（additive）**: `install_ltx.ps1`のfreeze同期は「無いものを入れる」動作であり、「入っているものを消す」動作ではない。したがって、この変更より前に`.venv-engine`を作った既存ユーザーの環境からは、削除対象の19パッケージは自動では消えない。実害の無い残留物として残るのみで、新規インストール環境は最初からクリーンな状態になる。
+2. **`torchvision`は要調査のまま保留**: メタデータの依存グラフ上は必須の要求元（requirer）が見当たらないが、明示依存かつ既存の記載であるため今回の削除対象には含めなかった。将来あらためて確認する対象として記録する。
+
+### 40.6 オーナー実機チェックリスト（実GPU SHA回帰・全項目合格）
+
+依存削除・`uv sync`変更・`checkpoint_path`削除のいずれも「出力に触れないはずの変更」であることを、実GPUでのバイト一致回帰で最終確認する。
+
+| # | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| 1 | T2V回帰 | 既存の基準seed/paramsで生成し、出力mp4のSHA256が変更前の基準と一致・peak VRAMも同値 | ✅ 合格（2026-07-28。job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`、SHA256 `23844b4eebd107ccba8c5534eb65bab86575cca0b9050cb6c7e680a4506bb7bf`＝基準と完全一致、peak_vram_mb **8440**＝基準一致） |
+| 2 | 最小I2V回帰 | 同上（最小I2Vの基準ケースで実施） | ✅ 合格（2026-07-28。job `3d231fc1-4cad-49d8-9026-8ddf45419f11`、SHA256 `a511eda431cf0d0942cee97fa130f45e55fc3236833cbf9ea743ea7f4715c217`＝基準と完全一致、peak_vram_mb **9525**＝基準一致） |
+| 3 | 合格後の後始末 | 1・2が合格したら、フロントエンド側台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-5／§3-25／§3-26をクローズする | ✅ 実施済み（2026-07-28、本節作成と同日にフロントエンド側台帳をクローズ。[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md)へ移設済み） |
+
+**2026-07-28追記（実GPU SHA回帰PASS）**: オーナー承認のもと、エージェントがMCPサーバー（`mcp_server/`）経由（`mcp==1.28.1`のstdioクライアントスクリプト、実バックエンド＝ltx-distilled、GPU＝RTX 4070 Ti SUPER）で実施。Claude Code UIの承認フローは通していない（この点は§39の暫定注記を参照）が、生成そのものは実プロセス・実GPUを通しており、出力SHA256とpeak_vram_mbの一致という合否基準に照らして**正式PASS**として扱う。
+
+- **T2V**: job `b1645c1d-bdfa-441d-922e-39ba90ae90e1`。パラメータ＝基準（prompt "a calm ocean wave..."／512×320／49f／8steps／seed12345）。リクエストエコーで`nag_enabled=false`を確認（§38 NAG機能の非干渉も同時に裏付け）。出力SHA256は§13.1以来の基準値と完全一致・peak_vram_mbも基準一致。
+- **最小I2V**: job `3d231fc1-4cad-49d8-9026-8ddf45419f11`。条件画像は`outputs/qat_reclaim_baseline/cond_image_512x320.png`をmanifestとバイト一致確認したうえで`upload_image`ツール経由でアップロードしたもの。出力SHA256・peak_vram_mbともに基準一致。
+- **副産物（JOB_BUSY実地確認）**: I2Vジョブ実行中に別ジョブ投入を試みたところ、ライブで409「`JOB_BUSY: A job is already running (Phase 1 allows one concurrent job)`」を受信・確認（§39のJOB_BUSY行の実地裏付けを兼ねる）。
+- **この回帰が持つ副次的な意味**: これらの基準SHA自体はNAG（§38）実装より前から存在する値のため、今回のバイト一致は「依存整理（§40.1〜40.3）が出力に触れていないこと」だけでなく、「単発T2V／最小I2Vにおいて NAG OFF 時の出力がバイト不変であること」も同時に裏付けている（＝§38.4 G0 の単発T2V／I2V分に相当。A2V／chain／バッチのG0は未実施のまま）。
+
+**§40は実機SHA回帰が未実施の状態でクローズしない。** →**2026-07-28時点でチェックリスト1〜3すべて合格・完了。** 依存整理バッチ（§40.1〜40.3）の実機確認はこれで完結する。
+
+> **2026-07-31追記（§43との関係）**: 2026-07-31の Acceleration 機能で `sageattention`／`triton-windows` の2件を再導入した（§40.1の追記・§43.3）。この依存構成の変更に対する実機確認は、**本節と同じ形のSHA回帰を繰り返すのではなく、§43 の G9（インストーラを再適用して完走し `sage_available: true` になること）で吸収・代替する**。再導入した2パッケージは既定のジョブでは import すらされない位置にあり、既定経路が従来とバイト同一であることは §43.4 のペイロード完全一致テスト群が構造的に固定しているためである（判断の根拠は §43.7）。
+
+---
+
+## 41. ★VSF（Value Sign Flip）による非CFGネガティブプロンプト第2方式＝実装完了・機械検証（selfcheck・pytest）全PASS・**全ゲート合格・テーマ完結（2026-07-29）**（実用域はscale1.5〜5。AdaLNモードのデバッグスイッチは§41.10で撤去済み。フロントエンド目視ゲートまでの完結は§41.11）
+
+> **正本＝本節。** NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法。台帳 `PENDING_TASKS.md` §3-46で調査・起票していたもので、着手条件（NAGの実機確認全合格）は2026-07-29に成立し、同日中に実装・機械検証・実機ゲート（機械検証分）まで完了した。オーナー承認済みの計画書（`reactive-weaving-umbrella.md`、Opus調査2本＋敵対的レビュー2ラウンドを経た最終版）に沿ってWave 0（chain基準SHA取得）→Wave 1（エンジン）→Wave 2（API/MCP）→Wave 3（Gradio UI）→Wave 4（敵対的コードレビュー＋全テスト）→Wave 5（MCP経由の実機テスト）→Wave 6（本節・ドキュメント）の順で実施した。範囲はバックエンド＋Gradio UI（React側フロントエンドは対象外・未着手）。
+
+### 41.1 設計根拠
+
+1. **中核式**（arXiv:2508.10931）: `Z = softmax(Q·[K⁺;K⁻]ᵀ/√d) · [V⁺; −α·V⁻]`。正負のコンテキストを連結し**1回のattention**で処理する点がNAG（正負2回計算して外挿・混合）と根本的に異なる。負側のV（value）だけを−α倍（符号反転×スケール）する。softmax分母を正負で共有すること自体が「正側の減衰＋負側の符号反転」の二重作用を生む本質で、NAGのような正規化・ゲート機構は設計上存在しない。
+2. **最大のリスクは質量不均衡**: attn2（cross-attention）に届く正コンテキストは常に(B, 1024, 4096)（実トークン＋学習済みlearnable register。実トークンは先頭詰め）。負側は実トークン数Nにスライスすると通常十数トークンしかなく、負側が奪えるsoftmax質量mは素朴には1%オーダーになりうる。「実装は成功するが効かない」が最大の失敗様式と想定し、対策として①負側softmax質量mの直接ログによる効き検出②`vsf_scale`の上限を論文実装の10から100へ拡大（出力の負項は−α·m·V̄⁻なので、mが小さくてもαで一次補正できる）の2点を設計に組み込んだ。
+3. **効き検出はmログ、動画PSNRは使わない**: NAG実測でON/OFFペアがPSNR 15.5dB／12.0dB（ほぼ別動画相当）だったことから、拡散過程は微小摂動でも軌道が発散し閾値を置けないと判断済み（§38関連の実測）。VSFでも同じ理由でPSNRを合否判定に使わず、負側softmax質量mの実測ログを一次指標とした（目視比較の物差しとしてPSNR値は併記する）。
+4. **β（負側ロジットへの加算バイアス）は第1弾から除外**: 論文の第2ノブだが、一次効果はα（scale）で代替可能・floatマスクをSDPAに渡すとflashカーネルが外れ性能/VRAMが未知・全レイヤー貫通のフィールド増という3点から見送った。mの実測後、αで不足と判明した場合に限り第2弾として追加する設計（全フィールド末尾追加運用のため後付けコストはゼロ）。
+5. **負側スライスは無条件・エンコード時に実施**: パディング位置には学習済みregisterが実データとして詰まっており、反転混入は明確に有害。トークナイザの重み合計から実トークン数Nを求め、本番エンコードと厳密一致することを確認済み。スライスはエンコード地点（方式を知っている場所）で行い、状態には**スライス済みテンソルをそのまま**格納する。音声connectorも同一構造のため`audio_attn2`にも同じスライスを適用する。
+6. **AdaLN非対称は第一級の実験対象**: 正コンテキストのみ`apply_cross_attention_adaln`で毎ステップ変調される。論文はこの論点に無言のため、`raw`（負は生のまま。NAGと同じ非対称）／`modulated`（負も同じ変調を通す）／`v_scale`（Kは生のままVのみ変調係数でスケール補正）の3モードを実装しデバッグ用ラジオとして公開、実機A/Bで判断材料を得る方針にした。`apply_cross_attention_adaln`はforward時にLOAD_GLOBAL解決されるモジュールグローバルのため、パッチ窓はdenoise全体を覆う必要がある（モデル構築呼び出しだけを囲むとパッチが一度も呼ばれない失敗様式）。
+7. **既存NAGインフラを流用**: `NagState`・`encode_negative`・`_cross_attn_modules`・`install`・per-headゲート＋`to_out`テール・fail-loudガードを共有。`q_norm`/`k_norm`はRMSNorm（位置独立）のため射影後個別正規化→連結は厳密に等価。attention実体はSDPA（xformers/flash_attn不在を確認済み）でK/V長≠Q長を許容する。
+8. **OFF時無害はパッチ0件の構造保証**（NAGと同じ設計思想）。`vsf_scale=0`によるビット一致は原理的に不成立のため、そのようなゲートは作らない。
+
+### 41.2 API（3フィールド）
+
+`GenerateRequest`/`GenerateChainRequest`両方＋`to_clip_request`転記＋MCP `submit_generate`/`submit_chain`末尾に以下3フィールドを追加した。
+
+- `neg_method: Literal["nag","vsf"] = "nag"`（既定はNAGのまま。既存挙動は不変）
+- `vsf_scale: float`（範囲0〜100・既定1.5。論文実装の上限10ではなく100に拡大——1024:Nの質量不均衡下で不足しうるため。UIに「0でも無効化にはならない」と明記）
+- `vsf_adaln: Literal["raw","modulated","v_scale"] = "raw"`（デバッグ用と明記）
+- `nag_enabled`は非CFGネガのマスタートグルとして維持し、空negativeの422バリデータは無改修で両方式をカバーする。
+- 見送った候補: `vsf_offset`（β。第2弾へ延期）、`vsf_slice_pos`（正側register除去は学習済みインタフェースの9割を消すOOD操作で結果が解釈不能。同じ問いにはmログが上位互換で答える）。
+
+### 41.3 実装箇所一覧
+
+- **`engine/transformer/vsf_service.py`（新規）**: `VsfParams`（negative_prompt/scale/adaln_modeのfrozen dataclass。未知adaln_modeはfail-loud）、`_make_vsf_forward`（NAGと同じfail-loudガード・同じテール。連結1回attention本体はマスクを渡さない設計）、負側softmax質量mの平均をINFOログに出力する仕組み（N/Lk/shift_kv.shapeも同時ログ）、`adaln_stash_window()`（contextmanager。`apply_cross_attention_adaln`を退避→係数スタッシュ付きラッパへ差し替え→finallyで復元＋delattr。開くのはVSF要求時かつmode≠rawのときのみ）。importは`vsf_service→nag_service`の一方向のみ（循環import回避）。
+- **`engine/transformer/nag_service.py`（拡張）**: `NagState._params`の型をunion化（`NagParams | VsfParams`）。`encode_negative`にオプション引数`slice_to_real_tokens: bool = False`を追加（既存呼び出しは無変更で挙動不変）。
+- **`engine/pipeline/fast_video_pipeline.py`**: `_install_nag`ラップ内で`isinstance(params, VsfParams)`により`VsfService`/`NagService`を1行分岐。単発生成の`self.pipeline(...)`実行（denoise全体）を`with adaln_stash_window():`で覆う。`compile_transformer`の非互換コメントの主語を「NAG」→「NAG/VSF」に更新。
+- **`engine/pipeline/chain_pipeline.py`**: `run_chain`の`ledger.transformer()`取得から全セグメントのdenoise・アップサンプル完了までを同じ`adaln_stash_window()`で覆う（`_run_inference`の既存グローバル5本傘には手を入れない）。
+- **`engine/worker.py`**: `_resolve_nag`が`nag.method`欠落時`"nag"`にフォールバック。ログを`neg=off|nag|vsf`に拡張。
+- **`api/models.py`**: 上記3フィールドを`GenerateRequest`/`GenerateChainRequest`双方に追加し、`to_clip_request`へも転記（漏れるとチェーン500になるため重点確認済み）。
+- **`services/ltx_runner.py`**: `payload["nag"]`に`method`/`vsf_scale`/`vsf_adaln`を加算（単発・chain両方、`if nag_enabled:`の内側のためOFF時はバイト不変）。
+- **`mcp_server/tools/generate.py`**: `submit_generate`/`submit_chain`のシグネチャ**末尾**に3引数を追加（既存テストが全位置引数のため途中挿入を避けた）。日本語`Args:` docstring（inputSchema生成元）も同時更新。
+- **`gradio_ui/ui.py`**: 方式ラジオ「Other」→「VSF」に変更。NAG用3スライダとVSF用グループ（`vsf_scale`スライダ・デバッグ用Accordion内にAdaLNラジオ3択）を`on_nag_method_change`のvisible出し分けで切替。言語切替再構築にも対応。
+- **`gradio_ui/handlers.py`**: 単発`generate`は末尾追加、chain `generate_chain`は契約どおり`nag_alpha`と`src_audio`のあいだに挿入。payload加算箇所は`if nag_enabled:`ブロック内に方式に関わらず常に`neg_method`/`vsf_scale`/`vsf_adaln`を追記。
+- **`gradio_ui/batch.py`**: `BatchSnapshot`へキーワード追加＋転記。
+- **`gradio_ui/i18n.py`**: en/ja両方に`nag_method_vsf`/`vsf_lbl_scale`/`vsf_lbl_adaln`等を追加、廃止キー`nag_method_other`/`nag_msg_fallback`を削除。
+- **`engine/transformer/vsf_selfcheck.py`（新規）**: `.venv-engine`用のエンジンvenvセルフチェック（5項目、41.4参照）。
+
+### 41.4 機械検証の結果
+
+**エンジンvenvでのselfcheck**: `vsf_selfcheck` 5/5 PASS（連結1回attentionが手書き参照式と一致／エンコード時スライスの正当性／AdaLN 3モードが実物`BasicAVTransformerBlock`経由で各々参照式と一致・モンキーパッチが実際に呼ばれることまで検証／OFF時パッチ0件＋`attn.forward`と`apply_cross_attention_adaln`グローバルのidentity検査／fail-loud＝形状ガード・未知adaln_mode・`shift_kv`shape[1]!=1）。`nag_selfcheck`回帰6/6も維持（退行なし）。
+
+**アプリvenvでのpytest**: 763 passed / 6 skipped（skipは既存の`torch`未導入によるエンジン系テストの収集スキップ、VSF関連ではない）。意図的に更新した既存テストは計画どおり4本のみ（フォールバック→visible出し分けテスト、choices期待値、i18nキー一覧、payload末尾契約`[-4:]`→`[-7:]`）で、それ以外は加算的拡張。
+
+**その他**: `.gitignore`の`tools/`パターンが`mcp_server/tools/`（MCPツール実装一式）をgitから不可視にしていた致命欠陥を本Wave中に発見・`/tools/`へ修正済み（MCP実装セッション由来の先行欠陥。VSF自体のバグではない）。**オーナーへ: 次回コミット時に`git add mcp_server/tools/`が必要。**
+
+### 41.5 実機ゲート表（2026-07-29・親エージェントがMCP経由で実施）
+
+| ゲート | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| G0（単発） | 回帰: 単発T2V/I2V | 出力SHA256が既存基準（§40.6）と一致 | ✅ 合格（T2V=`23844b4e…`一致・最小I2V=`a511eda4…`一致） |
+| G0（chain OFF） | chain（chunked_upsample=false）の基準一致 | Wave 0で取得した基準SHA `E9E809C0…`と一致 | ✅ 合格 |
+| G0（chain chunked） | chain（chunked_upsample=true）の新旧エンジン比較 | 旧エンジンと新エンジンで同一SHA | ✅ 合格（`D37AF079…`同値。chain SHA基準は途中で条件不一致騒ぎがあったが、真因はMCP `submit_chain`の`chunked_upsample`既定がtrue（操作パネル準拠の意図的設計）でWave 0基準（既定false）と条件が違ったこと。退行ではない） |
+| VSF疎通 | `neg_method="vsf"`小サイズ1本 | 完走＋エコー`neg_method=="vsf"`＋ログ`VSF installed on 96 cross-attention modules`が1回＋mログ確認 | ✅ 合格（raw時m実測: video約0.8〜1.2%・audio約0.5%。N_neg=8, L_k=1032, 正コンテキスト(1,1024,4096)。質量不均衡の事前予測が的中。mはscale非依存＝理論どおり） |
+| AdaLN 3モード | 単発raw/modulated/v_scale各1本＋chain modulated1本 | 完走＋全SHA相互に異なる（実効あり） | ✅ 合格（modulatedはmを約4倍に増加。block1 video 0.84%→3.5%。stashログ`shift_kv=(1,1,4096)`でshape[1]==1も実証） |
+| 経路網羅 | chain 2clip・A2V（audio_source=yes）・NAG回帰（neg=nag） | 全て完走・NAG回帰にVSFログが出ない | ✅ 合格 |
+| NAG対VSF効き比較 | オーナー指定の基準セット2組でOFF/NAG/VSF比較生成 | 完走・比較セット収集 | ✅ 合格（下記41.6参照） |
+| 目視評価 | 上記成果物をオーナーが目視し効き具合・scale適正値・AdaLNモードを判断 | オーナー確認 | ✅ 合格（2026-07-29 完結。既定=raw・実用域scale1.5〜5・上限10縮退済み・全経路成立） |
+
+### 41.6 目視評価セット
+
+比較用の成果物一式をHugging Faceの非公開datasetへアップロード済み: https://huggingface.co/datasets/Rootport/Nz-LTX23-vsf-eval-20260729 （比較セット2組=OFF/NAG/VSF s5/VSF s15、scale梯子1.5/5/15/40、AdaLNモード比較、経路確認、README比較表付き）。オーナーが外出先から確認できるようREADMEに条件（seed・方式・パラメータ・m値・NAGの参考PSNR 15.5/12.0dBを物差しに併記）の比較表を添えている。
+
+性能面の気づきとして、scale=15の1280×768出力はファイルサイズ約42MB（NAG版約6MB）と突出しており、高scaleでの高周波成分増加（ノイズ／破綻の可能性）の兆候として目視で要確認と記録した。
+
+### 41.7 教訓
+
+- **chain系のSHA基準比較は、比較対象のchunked_upsampleの値を必ず明記すること。** MCP `submit_chain`の既定値（true）とWave 0基準取得時の生HTTP既定値（false）が食い違っていたために「G0不一致」と見えた騒ぎが発生したが、条件を揃えたら一致し、退行ではないことが判明した。今後同種の基準比較を行う際は、比較対象のリクエスト全条件（既定値を含む）を明記する。
+- **`.gitignore`のパターンは、後から追加したディレクトリと衝突しないか定期的に確認すること。** `tools/`という広すぎるパターンが、後発の`mcp_server/tools/`を不可視化していた。ワイルドカードに近いignoreパターンを書くときは、将来同名のサブディレクトリが生まれる可能性を考慮する。
+
+### 41.8 残タスク（オーナー）
+
+1. ~~HFの動画を目視して効き具合・scale適正値・AdaLNモードを判断する。~~ → 2026-07-29に第1ラウンド実施済み。結果は41.9参照。AdaLNモードはscale5での再実験待ち。
+2. ~~判断後に既定値を確定し、デバッグスイッチ（AdaLNラジオ等）を縮退するかどうかを決める（別途承認が必要）。~~ → `vsf_scale`のAPI上限100→10への縮退は決定済み（41.9参照）。AdaLNラジオ自体は縮退第3弾で撤去し、決着した（41.10参照）。
+3. βノブ（`vsf_offset`）は、mの実測を踏まえてもαだけでは不足すると判明した場合に限り第2弾として起票する。
+4. コミット（`git add mcp_server/tools/`を含む。§41.4のgitignore修正参照）。
+5. フロントエンド（React）追随は別セッションで行う（本Waveの範囲外）。
+
+### 41.9 目視評価の結果（2026-07-29 オーナー実施・追記）
+
+HFの非公開dataset（41.6のリンク）をオーナーが実際に目視した結果、部分合格（scale次第で効果あり・高scaleは非実用）という実態が判明した。全滅でも全面合格でもない。
+
+**セット1（雨の街）**: OFF・NAGは従来どおり合格。VSF scale5は「室内で会話する男女」の映像に変化した——正プロンプトからの意味ドリフトで、メタデータでプロンプト自体が正しいことは確認済み。scale15はノイズだらけで収束せず、非実用と判断した。
+
+**セット2（図書館）**: OFF・NAG合格。**VSF scale5はネガティブプロンプトの排除効果が明確に確認でき、合格。** 画像認識でも半袖→長袖・長い黒髪→短い非黒髪への変化を確認した。ただし場面が図書館から屋内家庭風へ、人物も年配の男女へドリフトしている。scale15はセット1と同様にノイズ崩壊した。
+
+**scaleの梯子（1.5／5／15／40）**: 意味のある動画として成立していたのはscale1.5と5のみ（いずれもかなり高品質）。15以上はノイズ崩壊で非実用。scale5では「プロンプトに無い女性が海岸に出現する」というドリフトの兆候も見られた。
+
+**AdaLN 3モード比較（raw／modulated／v_scale）**: 比較に使ったscale15がすでに崩壊領域だったため、3モードいずれも崩壊した映像となり、モード間の優劣は**判定不能**だった。scale5で撮り直して再実験することが決定した（実施中）。
+
+**分析と結論**:
+- VSFは予想以上に敏感な技術であることが実測で判明した。実用レンジは**scale1.5〜5**に収まる。
+- scale5ではネガの排除力は明確な一方、正プロンプトへの忠実度低下（意味ドリフト）という代償を伴う。これは論文が主張する性格（排除力はNAGより強いが、正忠実度はNAGが上）どおりの結果であり、VSFの設計上の特性として想定内。
+- scale15以上は8ステップ蒸留で収束しない。理屈としては、VSFにはNAGのような再正規化機構が無いため、共有softmaxに大きな負のV（value）を混ぜるほど出力ノルムが崩れる。論文の実証レンジ（≤10・実用値は1.5〜1.7）を超えた領域はやはり使えないという今回の実測結果と整合する。
+- 41.1で立てた仮説「負側softmax質量m≈1%だから、scaleを大きくして一次補正できる」は、**scaleを上げるより先に忠実度の崩壊が起こるため成立しないこと**が実測で確定した。質量不均衡の懸念は「効かない」ではなく「（scale1.5〜5の範囲で）軽く効く」方向に収まったことになる。
+
+**決定事項**:
+1. AdaLN 3モードはscale5で再生成し、判定をやり直す（実施中）。
+2. `vsf_scale`のAPI上限を100→**10**へ縮退する（別担当が実施中。既定値1.5は不変）。
+
+**2026-07-29 追記（第2ラウンド・完結）**
+
+**AdaLN 3モードのscale 5再実験の判定（完結）**:
+- 3モードとも収束・高品質。ドリフトの強さは raw（海岸＋女性1人）＜ modulated／v_scale（海岸で会話する女性2人。modulatedは透かし風ロゴも出現）。
+- modulatedが負側の注意質量mを約4倍にするログ実測とドリフトの強さが整合。
+- エージェントの1フレーム目画像認識とオーナーの動画目視が全件一致（「短い動画なら1フレーム画像認識でそこそこ信頼できる」という運用知見も得た）。
+- **判定: 既定は raw を維持**（ドリフト最小。NAGと同じ非対称構成がVSFでも最も素直だった）。→ デバッグスイッチ縮退の第3弾（`vsf_adaln`の撤去）へ進むことをオーナーが決定。
+
+**path再実験（scale 5 raw）の結果**:
+- 初回のscale 15版は崩壊域だったため配線証明にしかならず、chain 2クリップとA2V（音声駆動）を実用域scale 5で取り直した。
+- 両経路とも収束し一貫した映像として成立＝実用域での経路成立を確認。A2Vのリップシンクもオーナー目視で暫定合格。
+- 新知見: **両経路とも2Dアニメ調へスタイルが転じた**（chainは夕日の海上で料理する3人のアニメキャラ＝海・夕日の意味核は保持。A2Vは会話する2人のアニメ調女性）。ネガティブの blurry / low quality / distorted から遠ざかる圧が、ノイズやボケの少ないフラットなアニメ表現へ押し出した可能性がある。scale 5のドリフトは「実写→アニメの様式転換」として現れることがある。
+- HFデータセットに `path_chain2clip_s5_raw.mp4`／`path_a2v_s5_raw.mp4`／`adaln_s5_modulated.mp4`／`adaln_s5_v_scale.mp4` を追加済み（README更新済み）。
+
+**目視ゲートの最終状態**: §41.5のゲート表の目視行を「✅ 合格（2026-07-29 完結。既定=raw・実用域scale1.5〜5・上限10縮退済み・全経路成立）」に更新。
+
+### 41.10 デバッグスイッチ縮退第3弾（vsf_adaln撤去・2026-07-29完結）
+
+41.9でAdaLNモードの判定が「既定rawを維持・ドリフト最小」で完結したことを受け、オーナー決定によりデバッグ実験用スイッチ`vsf_adaln`を全レイヤー（engine／API／runner／MCP／Gradio UI／i18n／テスト）から撤去した（引き算の原則）。実験の過程そのものは歴史記録としてコミット`f2124e1`に保存済みのため、コード上は消えても経緯は追跡可能。
+
+**縮退後のVSF API**: `neg_method`（`"nag"|"vsf"`）＋`vsf_scale`（0〜10。上限100→10への縮退は41.9で決定済み）の2フィールドに確定した。`VsfParams`もnegative_prompt＋scaleの2フィールドのみとなった。正味570行削減（+328/-898・22ファイル）。
+
+**機械検証**:
+- pytest 753 passed（vsf_adaln関連4テスト削除により757→753。新規の失敗・スキップ増なし）。
+- `vsf_selfcheck` 5/5（AdaLNモード検査は対象自体が消滅したため削除）。
+- `nag_selfcheck` 6/6（NAG側は無影響であることを確認）。
+- `chain_pipeline.py`のインデント復元箇所は、空白無視diff（`git diff -w`相当）でロジック混入がゼロであることを確認済み。
+
+**実機再検証（MCP経由）**:
+- G0回帰: 単発T2V基準SHA `23844b4e…`が縮退前と一致。
+- G0回帰: chain（chunked_upsample=false）基準SHA `E9E809C0…`が縮退前と一致。
+- **VSF scale5疎通は、縮退前の同条件ジョブとSHA-256が1ビット一致（`CD9024EF…`）**——`vsf_adaln`撤去がraw計算経路を一切変えていないことをバイト単位で証明した。
+- mログ（負側softmax質量）も従来値どおり（video約0.8〜1.2%）を確認。
+
+以上により、VSFテーマは実装・目視評価・デバッグスイッチ縮退まで完結した。残るのはフロントエンド（React／AviUtl2連携UI）の追随のみ（台帳は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-46）。
+
+### 41.11 フロントエンド目視ゲート合格・テーマ完結（2026-07-29）
+
+オーナーがAviUtl2の操作パネルからVSFの実機テストを実施し、全件を合格と判定した。エージェントも3ジョブの冒頭フレームを画像認識で確認し、オーナーの判定と一致した。
+
+- `1a710694`（基準・ネガなし・seed 100652868）: 黒いワンピースの女性、背景に建物群。
+- `f88bce4a`（VSF scale1.5・同一seed・ネガ「blurry, low quality, distorted, watermark, text, black outfits, buildings.」）: 服が水色系に変わり、背景の建物が消えた。正プロンプト（雨の公園を歩く女性・木・芝・濡れ）の要素は全て健在。
+- `556c35bd`（VSF scale1.5・品質系ネガのみ・seed -1）: 高品質でプロンプトに完全準拠。
+
+同一seedでの比較により、ネガティブプロンプトの排除力と正プロンプトへの忠実度保持が両立することを実証し、既定scale 1.5の妥当性を裏付けた。
+
+これをもってVSFテーマ（バックエンド実装・Gradio UI・デバッグスイッチ縮退・フロントエンド追随・目視ゲート）は**全クローズ**とした。台帳は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55（フロントエンド側の完結記録）。
+
+**将来の再訪条件（オーナー決定）**: コミュニティからWan等の動画生成AIにおけるVSFのscaleベストプラクティスの報告が出てきたとき、LTX 2.3への応用可否と既定値1.5の見直しを検討する。現状の1.5は問題ないと判断している。
+
+## 42. ★`POST /upload/video` のリボン範囲トリム（`trim_start_sec` / `trim_duration_sec` 加算＋`cut_range_mp4` 新設）＝実装完了・機械検証（pytest）全PASS・**実機ゲート全項目合格（2026-08-01 オーナー実機確認で完了）**（2026-07-30実装／2026-08-01実機ゲート完了）
+
+> **正本＝本節**（バックエンド側の検証記録）。機能全体の作業指示書はフロントエンド側の[`V2V_RIBBON_TRIM_WORKORDER.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/V2V_RIBBON_TRIM_WORKORDER.md)、台帳は同[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-6。AviUtl2のタイムラインに置いた動画オブジェクト（リボン）が元動画ファイルの一部しか占めていないとき、その範囲だけを切り出したmp4をV2Vの冒頭クリップにするための**バックエンド側の受け口**を実装した。凍結表（`LTX23_Backend_Specification.md` §6.1）外エンドポイントへの追加専用拡張であり、`source_tail_seconds`（§37のJoin拡張）と同じ作法に従う。
+
+### 42.1 実装箇所（4ファイル）
+
+- **`services/video_io.py`**: `cut_range_mp4(src, out, start_sec, duration_sec)` を新設した。既存の `cut_tail_mp4` のクローンだが**リサンプルを一切しない**点が決定的に異なる——ユーザーがタイムラインで見ている素材そのものを渡したいので、ソースの実測fps（`probe_fps`）をそのまま `-r` に据え、切り出す窓だけを変える。窓の指定は時間シークではなく `select='between(n\,start\,end)'` のフレーム番号選択で行い（VFR素材でもずれない既存流儀）、`start_frame = round(start_sec * source_fps)` / `n = round(duration_sec * source_fps)` / `end = min(total-1, start+n-1)` と**フレーム空間で完結**させている。音声があれば `atrim=start=…:end=…` で同じ窓へ揃えてAAC再エンコードする。戻り値は `{source_fps, total_frames, start_frame, end_frame, written_frames}`。`FFmpegError` を送出するのは①fpsが計測できない②尺が0フレームに丸まる③開始位置がソース末尾以降——の3ケースのみで、**末尾を超える要求は失敗ではなくクランプ**（残りだけを書く）。
+  - 単位に関する意図的なヘッジ: 公開シグネチャは**秒**だが内部で即フレームへ変換しているため、実機調査の結果「AviUtl2の`再生位置`はフレーム単位だった」と判明した場合でも、`start_frame`/`num_frames` を受け取る引数を足して換算を短絡させるだけで済み、選択ロジックは動かさなくてよい（関数のdocstringにも明記した）。
+- **`services/video_upload_store.py`**: `VideoUploadStore.save()` にキーワード引数 `trim_start_sec` / `trim_duration_sec` を追加した。判定は純ヘルパ `_trim_window()` に閉じ込め、**「使える窓」でなければ `None` を返して従来の保存経路へ素通しする**——片方だけ指定・非数値・NaN／inf・`start < 0`・`duration <= 0` がすべてここで吸収される。使える窓があるときも、**まず受信バイト列を `input{ext}` へそのまま書いてから**兄弟の一時ファイル（`_input.tmp.mp4`。`_` 始まりなので `path_for` の `glob("input.*")` に決して掛からない）へ切り出し、成功したときだけ `os.replace` で `input.mp4` へ差し替える。したがって`FFmpegError`／`OSError` はすべて「無傷の元アップロードを `trimmed=False` で返す」へ縮退する。mkv/webm等を入力にトリムした場合は保存が `input.mp4` へ正規化され（元の `input.mkv` は削除。`path_for` が一意になるよう `input.*` を1本に保つ）、`content_type` も `video/mp4` に、`size_bytes` は切り出し後の実サイズに差し替わる。
+- **`api/uploads.py`**: `upload_video` に `trim_start_sec: float | None = Query(None)` / `trim_duration_sec: float | None = Query(None)` を追加した。**`ge=`／`le=` を意図的に付けていない**——範囲外や非有限の値でバリデーションエラー（422）を新設してしまうと、それまで成功していたリクエストが失敗に変わるため、判定はストア側に委ねて「黙って素通し」に統一する意図をコメントで明記している。あわせて `context.video_upload_store.save` の呼び出しを `run_in_threadpool` 経由へ変更した（トリム経路はffmpegへshell outするので、そのままawaitしないとイベントループ＝他の全APIが切り出しのあいだ止まる）。
+- **`api/models.py`**: `UploadVideoResponse` に `trimmed: bool = False` を加算した。既存クライアントは無視するだけで済み、トリム引数なしのアップロードは常に `False` を返す。
+
+### 42.2 機械検証の結果（pytest 776 passed / 6 skipped）
+
+**アプリvenvでのpytest**: `776 passed, 6 skipped`（skipは既存の`torch`未導入によるエンジン系テストの収集スキップで、本件とは無関係）。§41.10時点の753件から23件増（新規2ファイル分）で、既存テストの削除・書き換えはゼロ＝完全に加算的な拡張である。
+
+**`tests/test_video_io.py`（`cut_range_mp4` の単体、5テスト＋パラメータ展開3ケース）**:
+
+| 検証内容 | 合格条件と結果 |
+|---|---|
+| フレーム精度 | 10fps・6色フレームの素材で `[0.2s, +0.3s)` を要求 → `start_frame=2` / `end_frame=4` / `written_frames=3`、`frame_count(out)==3`。さらに**出力の各フレームを`extract_frame_at`で取り出して平均色を突き合わせ、元素材のフレーム2・3・4であることを色で確認**（「3フレーム書けた」だけでなく「正しい3フレームを書いた」ことの検証） |
+| 末尾超過のクランプ | 6フレーム素材のフレーム4から10秒を要求 → 失敗せず残り2フレーム（`end_frame=5`）を書く |
+| 非正の窓 | `duration_sec` が `0.0` / `-1.0` / `0.01`（10fpsで0フレームに丸まる）の3通りで `FFmpegError` |
+| 開始位置がソース末尾以降 | `start_sec=100.0` で `FFmpegError` |
+| ソースfpsの保存 | 30fps素材から0.5秒を切り出し → `source_fps≈30`・**出力の実測fpsも≈30**（リサンプルしていないこと）・`frame_count==15` |
+| 音声窓の一致 | 24fps・2.0秒・440Hzトーン付き素材から `[0.5s, +1.0s)` → `start_frame=12` / `end_frame=35`、`frame_count==24`、音声ストリーム存置、かつ**出力の実測尺が1.0秒±0.15**（音声が丸ごと通っていない＝同じ窓へ切られていること） |
+
+**`tests/test_upload_video_trim.py`（エンドポイント契約、6テスト＋パラメータ展開10ケース）**:
+
+- **無トリム時の`cut_range_mp4`未呼び出し＋バイト等価**: `cut_range_mp4` を「呼ばれたら `AssertionError`」のスタンドインへ差し替えた状態でクエリなしPOST → 200・`trimmed=False`・`size_bytes==len(payload)`、かつ**保存ファイルが投稿バイト列と完全一致**。「トリム引数を足したがOFF経路は1バイトも変わっていない」ことを機械的に固定している。
+- **トリム引数の素通し確認**: `trim_start_sec=1.0&trim_duration_sec=2.0` → 呼び出し1回・引数が `(1.0, 2.0)` のまま到達・入力は `input.mp4`・出力先の名前が `_` 始まり、応答は `trimmed=True`・`stored_path` が `/input.mp4` 終わり、ディレクトリ内に残るのは `input.mp4` 1本のみ（一時ファイルが片付いている）。
+- **片方だけ指定**: `trim_start_sec` のみ／`trim_duration_sec` のみの2ケースとも、`cut_range_mp4` は呼ばれず200・`trimmed=False`・バイト等価。
+- **ffmpeg失敗のフォールバック**: 一時ファイルを半端に書いてから `FFmpegError` を投げるスタブで、200・`trimmed=False`・**元アップロードが無傷**・`input.*` が1本・一時ファイルが除去済み。
+- **nan / inf / 負値 / 0以下の素通し**: `(nan,2.0)` `(1.0,nan)` `(inf,2.0)` `(1.0,inf)` `(-1.0,2.0)` `(1.0,0.0)` `(1.0,-2.0)` の7ケースで `cut_range_mp4` に**到達しない**ことをスタブのアサーションで固定し、いずれも200・`trimmed=False`・バイト等価。8ケース目の `(1e30, 1e30)`（有限だが荒唐無稽）だけは意図どおりffmpegまで到達し、そこでの失敗が200・`trimmed=False` へ縮退する。
+- **mkv入力の正規化**: `clip.mkv` をトリム付きでPOST → `trimmed=True`・`content_type` が `video/mp4`・`stored_path` が `/input.mp4`・ディレクトリの `input.*` は1本のみ・`path_for` の拡張子が `.mp4`。
+- **実ffmpegでのE2E**: 10fps・10フレームの実mp4を生成して `[0.2s, +0.3s)` をPOST → 保存ファイルの `frame_count` が実測3・`size_bytes` が実ファイルサイズと一致・元ファイルとサイズが異なる（本当に切られている）。続けて `(1e30, 1.0)` をPOSTし、ffmpeg内で失敗して200・`trimmed=False`・**保存バイト列が投稿バイト列と一致**することも同じテスト内で確認している。
+
+### 42.3 実機ゲート（**全項目合格・クローズ（2026-08-01）**）
+
+**2026-08-01のオーナー実機確認で、フロントエンドの[`REAL_BACKEND_CHECKLIST.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.12の全5項目が合格した。** クローズ記録はフロントエンドの[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) **§3-59**（※同書§3-58はAcceleration＝本書§43なので混同しないこと）。
+
+- **①実機採取・解析**: AviUtl2の`動画ファイル`エフェクトの`再生位置`項目の生値は`開始,終了,再生範囲,0`という**4フィールドのCSV**で、先頭2値は**素材時間軸の秒**（プロジェクトfpsに依存しない）と確定した。切り出し尺は`min(リボンの秒数, 終了−開始, 素材の残り)`の3項クランプになった。確定事実の全文はフロントエンドの[`V2V_RIBBON_TRIM_WORKORDER.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/V2V_RIBBON_TRIM_WORKORDER.md) §4。採取用の調査コードは解析完了後に全撤去済み（採取依頼書[`V2V_TRIM_PROBE_GUIDE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/V2V_TRIM_PROBE_GUIDE.md)は歴史記録になった）。
+- **②非退行**（2026-07-31）: リボン＝素材全体のとき従来と同一（無トリム時バイト等価）。§42.2で機械的に固定していた性質が実機でも確認された。
+- **③短尺ゲート**: 短すぎるリボンではクライアント側でGenerateが止まり案内が出る。**本エンドポイントに422を新設していない設計（§42.4の教訓）と合わせて、製品UIから422を起こす経路は存在しないままである。**
+- **④トリム後Joinの中身連続性**（本改修の決め手）: 末尾を削ったリボンのV2Vで「切られた位置から続き」が生成される。改修前は`source_tail_seconds`が残す末尾と生成の文脈が**元動画ファイルそのものの末尾**になっていた。
+- **⑤IC-LoRA参照動画の範囲反映**（2026-08-01に追加した拡張分）: `reference_video_id`も同じ`POST /upload/video`＋同じトリムクエリを通るため、**バックエンドは無改修**で拡張が完結した（フロントエンドの呼び出し側の配線のみ）。リボンでクリップした区間が正しく参照されることを実機で確認した。
+
+### 42.4 教訓
+
+- **既存エンドポイントへ任意引数を足すときは、「不正値でも新しいエラー応答を作らない」を先に決めてから`Query()`を書くこと。** `ge=0` のような一見自然な制約を付けると、それまで200だったリクエストが422になり得る（クライアントが古い・値の導出にバグがある、のどちらでも起こる）。本件は制約をゼロにして判定をストア側の純ヘルパへ移し、「使えない窓＝トリムしない」に一本化した。
+- **ffmpegへshell outする処理を`async def`の中で直接呼ばないこと。** `run_in_threadpool` を挟まないと、切り出しのあいだイベントループが止まり、進捗ポーリングを含む他の全APIが無応答になる。同期I/Oを足すときは呼び出し側の非同期性を必ず確認する。
+
+---
+
+## 43. ★Acceleration（生成の高速化）機能＝SageAttention 2.2.0 のジョブ単位切替＋モック2項目＝実装完了・機械検証（selfcheck・pytest・型検査・doctest）全PASS・**実機ゲート全項目合格（2026-08-01 オーナー実機確認で完了）**（2026-07-31実装／2026-08-01実機ゲート完了）
+
+> **正本＝本節。** 操作パネル（AviUtl2連携UI）とGradio UIの設定画面に「Acceleration（生成の高速化）」という区画を新設し、生成そのものを速くする切替を3項目ぶん置いた。3項目のうち**実装があるのは attention（注意機構）の実装選択だけ**で、残る2項目は将来の実装枠として置いた**モック（受理はするが効果が無い）**である。attention の選択肢は `sdpa`（PyTorch標準の実装。既定）と `sage`（[SageAttention 2.2.0](https://github.com/thu-ml/SageAttention)＝量子化を使って注意機構の計算そのものを速くする外部カーネル）の2つ。着手条件は2026-07-31の実機スパイク（本節43.5）で「本環境で安全に動き、720pの生成が実測1.17倍速くなり、VRAMは増えない」ことを確認できたことで、オーナー承認済みの計画書（`wise-waddling-dragon.md`、敵対的レビュー1ラウンドと調査エージェント10件の裏取りを経た rev.2）に沿って STEP 1（エンジン）→ STEP 2（APIスキーマ・runner・能力公開）→ STEP 3（Gradio UI）→ STEP 4（MCP公開）→ STEP 5（インストーラ標準同梱）→ STEP 6（フロントエンド）→ STEP 7（本節・ドキュメント）の順で実施した。
+
+### 43.1 決定事項
+
+1. **既定は `sdpa` のまま据え置く**。理由は3つある。①**アップデートで生成結果を黙って変えない**——`sage` は数値精度が異なるため、同じシードを指定しても生成結果の細部が変わる（構図は同じで、細かな質感やノイズの出方が変わる）。既定を差し替えると、利用者が「昨日と同じ設定なのに絵が違う」という説明のつかない体験をすることになる。②`sdpa` は常に正しい参照実装であり、比較の基準として動かさない価値がある。③切替はUIの1クリックで済み、その選択はブラウザ側に保存されるため、速度を取りたい利用者が払うコストが小さい。
+2. **切替の単位はジョブ**。サーバーの再起動もパイプラインの再読み込みも要らない。リクエスト（`GenerateRequest` / `GenerateChainRequest`）のフィールド `attention_backend` を毎回のジョブが持ち、worker がそのジョブの実行直前に注意機構を差し替える。設定ファイルや起動オプションでの固定は導入していない。
+3. **モック2項目は「受理するが効かない」ことを構造で担保する**。`fused_gguf_dequant_gemm`（GGUFの逆量子化と行列積を1つの計算に融合する案）と `vae_mode`（映像を復元するVAEの実装選択。`prune_vaed` は枝刈り版デコーダ）はリクエストとしては受け取るが、**workerへ渡すペイロードにも `GET /status` にも一切載せない**。UI側は常に無効（グレーアウト）表示で、押しても何も起こらない。過去に `fp8_transformer` が「表示はあるが挙動を変えない」状態で長く残った反省から、**実際に使われた方式を後から検証できる仕組み**（下記5）を同時に入れた。`vae_mode` は既存の `vae_tiling`（VRAM節約のためにVAEをタイル分割する設定）とは無関係で、コード上のコメントにもその旨を明記した。
+4. **MCPには実装のある1項目だけを公開する**。`submit_generate` / `submit_chain` の引数に `attention_backend` を追加し、モック2件は追加しない（実装のない切替をエージェントに見せても意味がないため。`two_stage_hq` の `pipeline` と同じ考え方）。
+5. **実際に使われた方式をメタデータに記録する**。worker の完了イベントに `attention_used` を載せ、`seed_used` とまったく同じ経路で `outputs/{job_id}/metadata.json` のトップレベルへ書き出す。値は `"sdpa"` / `"sage"` / `"sage->sdpa"`（sage を要求したが利用不可で降格した）の3種。**実機ゲートの合否判定はログではなくこの値を根拠にした。**
+6. **sage が使えないときはジョブを落とさず降格する**。NAG（§38）や VSF（§41）は「要求したのに条件が揃わなければ 422 で止める」fail-loud の規律だが、Acceleration は**速度の最適化**であって生成結果の意味を変える機能ではないため、規律をあえて変えている。sageattention が導入されていない環境で `sage` を指定しても、警告を1行出して `sdpa` で完走する（この理由はコード上のコメントにも残した）。
+
+### 43.2 実装箇所一覧
+
+- **`engine/transformer/sage_attention_service.py`（新規）**: sage の本体。`SageState`（そのジョブで要求された backend 文字列だけを持つ）、`probe_sage()`（sageattention が実際に import できるかを1回だけ確かめてモジュール変数へキャッシュする。失敗した import を Python 自身はキャッシュしないため必須）、`SageAttentionService.install()`（transformer の各ブロックが持つ `attention_function` を sage 版へ差し替える）。**差し替え対象は48ブロック×6種（`attn1`／`attn2`／`audio_attn1`／`audio_attn2`／`audio_to_video_attn`／`video_to_audio_attn`）＝288モジュール**（NAG が96なのは cross-attention だけを対象にするためで、数が違うのは正しい）。head_dim が sage の対応外であるといった**静的に判定できる条件はインストール時に判定し、対象外のモジュールにはラップ自体を張らない**。実行時に見るのは「マスク付きの呼び出しかどうか」と dtype/device だけにした。
+- **`engine/transformer/sage_selfcheck.py`（新規）**: エンジン用仮想環境（`.venv-engine`）のpythonで直接実行する自己検証（pytestからは収集されない）。3項目＝①`sdpa` と `sage` の出力が数値的に一致すること（コサイン類似度 ≥0.999）②フォールバック行列（マスク付き・非対応dtype等でSDPAへ戻ること）③install件数が288であること。NAG/VSF の selfcheck のような大型のものにはせず、G0の単一成果物として必要な3点に絞った。
+- **`engine/pipeline/fast_video_pipeline.py`**: `_install_nag()` の直後に `_install_sage()` を追加（毎回のビルドで `ledger.transformer` をラップする）。`_set_sage_job()` は `_set_nag_job` と同じ位置に置くため**例外を投げない実装**にし、`finally` でリセットする。**インストールの順序は結果に影響しない**——NAG は `attn.forward` を、sage は `attn.attention_function` を差し替えるので、触る属性が独立しているため。
+- **`engine/pipeline/chain_pipeline.py` / `engine/worker.py`**: chain 側は `generate_chain()` で設定する（NAG が `run_chain` の中で設定しているのは負プロンプトのエンコード順序の制約によるもので、この非対称は相互参照コメントで固定した）。worker には `_resolve_attention()`（未知の値は fail-loud、sage が使えなければ降格）、ジョブ開始ログへの `attn=` 表示、`ready` イベントへの `sage_available` 付与、`done` イベントへの `attention_used` 付与を入れた。**利用可否のプローブはパイプライン構築より前に `try/except BaseException` で完全に囲んで実行し、結果をキャッシュする**（DLLの読み込み失敗やABI不一致が起きてもworkerの起動そのものは絶対に落とさないため）。
+- **`api/models.py`**: `GenerateRequest` / `GenerateChainRequest` の両方に `attention_backend`（`"sdpa"` / `"sage"`、既定 `"sdpa"`）・`fused_gguf_dequant_gemm`（bool、既定 `false`）・`vae_mode`（`"default"` / `"prune_vaed"`、既定 `"default"`）の3フィールドを追加し、`to_clip_request()` にも3つとも転記した（転記漏れの実害はジョブ記録の表示欠落だが、再現性のためのメタデータが正しくなくなるので必須）。
+- **`services/ltx_runner.py`**: `attention_backend` が `"sdpa"` でないときだけ worker ペイロードへ加算する（既定のジョブはペイロードのキーが1つも増えない＝従来とバイト同一）。加えて、engine用仮想環境の site-packages に `sageattention/` と `triton/` が両方あるかを見るファイル存在チェック（`sage_available`、1回だけ評価してキャッシュ）、worker の `ready` からの受領、`done` の `attention_used` の中継を実装した。
+- **`services/pipeline_manager.py`**: `acceleration_status_block()` を新設し、利用可否の真理値表（mock時は `false`／未ロード時はファイル存在チェック／ロード成功時はworker自身の import 判定／ロード失敗・解放後はファイル存在チェック）をこの1箇所に集約した。凍結済みの `vram_optimization` には一切触れていない。metadata.json への `attention_used` の書き出しもここ。
+- **`api/status.py`**: `GET /status` のトップレベルに `"acceleration": {"attention_backends": ["sdpa","sage"], "sage_available": bool}` を追加した。判定経路を示す `sage_source` のような追加フィールドは設けていない（同じ応答の `pipeline_loaded` を見ればどちらの経路の値かが分かるため）。
+- **`mcp_server/tools/generate.py`**: `submit_generate` / `submit_chain` の引数末尾に `attention_backend` を追加。日本語のdocstring（MCPのツール定義の生成元）に「同一シードでも生成結果の細部が変わる」旨と、`backend_status` の `acceleration.sage_available` で利用可否を確認できることを明記した。
+- **`gradio_ui/i18n.py` / `ui.py` / `handlers.py` / `batch.py`**: Settings タブの Behavior と Server config viewer のあいだに Acceleration 区画を新設（①モックのチェックボックス〔無効〕②attention のラジオ③モックのラジオ〔無効〕）。ペイロードへの加算は単発・chain・`build_a2v_chain_payload` の3経路に入れた。**Gradio のバッチはハンドラの引数ではなくスナップショット（`BatchSnapshot`）経由で設定を受け取る**ため、そこへの配線も忘れずに行った（ここが漏れるとバッチだけ永久に `sdpa` のまま、という「表示だけ」の罠の再演になる）。
+- **インストーラ関連（`scripts/install_ltx.ps1` / `engine/venv-engine.freeze.txt` / `engine/engine-venv-pyproject.toml`）**: 43.3の「依存の再導入」を参照。
+
+### 43.3 依存の標準同梱（2026-07-28に削除したものの再導入）
+
+sage を使うには外部パッケージが要るため、**`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24 をエンジン用仮想環境の標準同梱に戻した**。
+
+- `sageattention` は [woct0rdho 版の Windows 用ビルド済み wheel](https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/) を**直リンクで固定**して導入する（`sageattention-2.2.0+cu128torch2.9.1.post6-cp310-abi3-win_amd64.whl`）。torch 2.9.1+cu128 に合わせてビルドされた ABI 固定の wheel であるため、`engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも**載せていない**——`-ResolveLatest`（依存を最新へ解決し直すオプション）は未検証の新しい torch を引く経路であり、この wheel とは互換にならないため。**`-ResolveLatest` を使った環境では sage の動作は保証外**である旨をコメントに明記した。`triton-windows` のみ `dependencies` に載せている（バージョンの固定は freeze 側が持つ）。
+- `triton-windows` は TinyCC と ptxas を同梱しており、**エンドユーザーに Visual Studio の導入を要求しない**ことを確認済み。
+- **§40.1 で削除した19エントリのうち2つを戻したことになるが、当時の判断と矛盾しない。** §40.1 が削除したのは旧世代の `sageattention` **1.0.6**（フォーク由来で、コードから一度も import されていない死重依存）であり、今回入れるのは現行世代の 2.2.0 で、`engine/transformer/sage_attention_service.py` という**実際の消費者がある**。「実消費者のない依存は置かない」という当時の基準はそのまま守られている。同旨の追記を §40.1 にも入れた。
+- **ハッシュが変わるため、導入済みの環境では次回の `setup.bat` 実行時に freeze の再適用が1回走る**（`.venv-engine/.nz-engine-state` との突き合わせによる冪等ガード）。パッケージの差分自体はほぼ無いため、実測では監査（audit）で止まる短時間の処理になる。「即座に終了」ではない点に注意。
+
+### 43.4 機械検証の結果
+
+- **エンジン用仮想環境の selfcheck**: `sage_selfcheck` **3/3 PASS**（数値パリティ cos≥0.999／フォールバック行列／install件数288）。
+- **バックエンドの pytest**（アプリ用仮想環境）: **817 passed / 6 skipped**。§42.2 のベースライン776件に新規41本を加算したもので、既存テストの削除はゼロ。skip の6件は従来どおり torch 未導入によるエンジン系テストの収集スキップで、本件とは無関係。
+- **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
+- **フロントエンドの vitest**: **1585 passed / 10 skipped**（直前の1545件から+40本。前回値の出典はフロントエンド [`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §54.9）。
+- **ネイティブ（`.aux2`）の doctest**: **267ケース全PASS**。
+
+新規テストの重点は「**既定のジョブでは何も増えない**」ことの固定に置いた。worker ペイロードの完全一致断言（`build_a2v_chain_payload` の完全dict一致1本＋キー順序断言5本）と、MCP側の `set(body.keys()) ==` の完全一致断言が既存のトリップワイヤとして張られており、既定時にキーが1つも増えないことをこれらが無改修のまま通ることで担保している。加えて `to_clip_request()` の3フィールド転記を直接検査するテストと、モック2件が worker ペイロードにも `/status` にも現れないことを証明するテストを置いた。
+
+### 43.5 実機ゲート表（2026-07-31〜2026-08-01・全項目合格）
+
+生成テストはMCP経由でエージェントが実施し、目視はオーナーが実施した（既存の運用どおり）。
+
+| ゲート | 内容 | 合格条件 | 状態 |
+|---|---|---|---|
+| G0 | selfcheck | エンジン用仮想環境で `sage_selfcheck` が全PASS（数値パリティ・フォールバック行列・install件数288） | ✅ 合格（3/3） |
+| G1 | pytest 回帰 | ベースライン776 passed / 6 skipped を下回らず、新規テストも全緑 | ✅ 合格（**817 passed / 6 skipped**） |
+| G2 | 能力公開（ロード前） | `GET /status` に `acceleration` があり `sage_available: true`、凍結済みの `vram_optimization` のキー集合が不変 | ✅ 合格 |
+| G3 | 能力公開（ロード後） | パイプライン読み込み後は worker 自身の判定値へ切り替わり、workerログにも記録される | ✅ 合格 |
+| G4 | 単発 sage（Gradio） | 720p固定シードで成功し、`metadata.json` の `attention_used` が `"sage"`、`sdpa` 比1.15倍以上、VRAM同等、差は細部のみ | ✅ 合格（下記の実測。**平均1.167倍**・peak VRAM差0.08%以内・同一シードでPSNR約27〜28dB） |
+| G5 | IC-LoRA のフォールバック | control系IC-LoRA＋`conditioning_attention_strength=0.6`＋sage で成功し、マスク経路のフォールバックがログに残り、品質は同等 | ✅ 合格（`attention_used="sage"`、マスクフォールバックのINFOログがジョブ内でちょうど1回） |
+| G5.5 | sage × NAG | NAG有効＋sage で成功・品質同等 | ✅ 合格 |
+| G5.6 | sage × VSF | `neg_method="vsf"`＋sage で成功・品質同等 | ✅ 合格 |
+| G6 | chain ＋ sage | 2クリップ以上の720pが成功し、継ぎ目に破綻がない | ✅ 合格（2クリップ×121フレーム・720p） |
+| G7 | 未導入時の縮退 | sageattention を一時退避 → `sage_available: false`、API直叩きで `sage` を指定しても `sdpa` へ降格して完走し、メタデータが `"sage->sdpa"` になる（検証後に復元） | ✅ 合格 |
+| G8 | フロント目視（AviUtl2実機） | 区画の表示・日英の文言・モック2件のグレーアウト・sage での生成・選択の保持 | ✅ 合格（2026-08-01 オーナー実機確認。下記の実測を含む） |
+| G9 | インストーラ | `.nz-engine-state` を削除して再実行し、wheel の直リンク取得と freeze の再適用が1回走って完走する | ✅ 合格（監査止まりで完走・wheel直リンクは HTTP 200 応答） |
+
+**スパイク（2026-07-31・実装着手前の可否判定。RTX 4070 Ti SUPER）**: 720p（1280×768・257フレーム）の生成が end-to-end で **261.4秒 → 224.3秒（1.17倍）**、2段目（stage2）は **32.76 → 20.95 秒/ステップ（1.56倍）**。VRAMのピークは同一。
+
+**G4の本計測**: `sdpa` と `sage` を交互に流した対比較3組で **1.143 / 1.171 / 1.188（平均1.167倍）**。peak VRAM の差は0.08%以内。同一シードでの `sdpa` 版と `sage` 版のPSNRは約27〜28dBで、構図は同一・細部のみが異なる。
+
+**オーナー実機（2026-08-01）**: i2v（画像からの動画生成）＋NAG、1344×1728・153フレームで **460.63秒 → 366.85秒（1.26倍）**。Settings の3項目の見た目・文言も合格。
+
+### 43.6 計測手順の注意（**これを外すと偽のFAILが出る**）
+
+速度の比較をやり直すときは、次の2点を必ず守ること。**単純に「1本目に `sdpa`、2本目に `sage`」を流して比べると 1.09倍程度にしか見えず、合格基準（1.15倍以上）を割って偽のFAILになる。**
+
+1. **worker プロセスの初回ジョブだけが約8%速い。** 原因は特定していないが再現性のある挙動で、比較の1本目に有利な下駄を履かせてしまう。したがって **`sdpa` と `sage` を交互に流す対比較**（sdpa→sage→sdpa→sage…）を行い、隣り合う組どうしで比べること。
+2. **`sage` の計測は2ジョブ目以降で行う。** sage は内部で triton を使い、その初回だけ JIT コンパイル（実行時のカーネル生成）が走るため、1本目には無関係な時間が乗る。
+
+### 43.7 §40（依存整理バッチ）との関係
+
+§40.6 の実機SHA回帰は「依存構成を変えたときに出力がバイト単位で変わらないことを確かめる」ためのチェックリストだったが、**今回の依存の再導入（43.3）については、本節の G9（インストーラの再適用が完走し、`sage_available: true` になること）で吸収・代替する**。理由は、今回追加した2パッケージが「既定のジョブでは import すらされない」位置にあり（`attention_backend != "sdpa"` のときだけ触る）、既定経路のバイト不変性は §43.4 の pytest 側のペイロード完全一致テスト群が構造的に固定しているため、実GPUでのSHA再取得は同じ事実を高いコストで二重に確かめるだけになるからである。§40 側にも同旨の追記を入れた。
+
+### 43.8 既知の無関係な事象（記録のみ）
+
+`GET /status` の `gpu` ブロックが常に `available: false` を返す。これはアプリ用仮想環境（`./.venv`）にCUDA版のtorchを入れない**2プロセス／2仮想環境という構成そのものに由来する既存の挙動**で、今回の改修とは一切関係がない。ただし Acceleration の検証中に `/status` を何度も読むことになり、「GPUが見えていないから sage も効いていないのでは」と紛らわしいため、無関係であることをここに明記しておく（実際のGPU情報はエンジン側のworkerプロセスが持っている）。
+
+### 43.9 残タスク
+
+1. コミットはオーナー判断（本節作成時点で未コミット）。
+2. モック2項目（fused GGUF dequant + GEMM／PruneVAED）の実装は将来課題として起票済み（フロントエンド側台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49・§3-50）。
+3. `sage` を既定にするかどうかの再検討は、フィールドでの安定実績が溜まってからの判断事項として起票済み（同 §4-22。現状は再現性を優先して `sdpa` 既定）。
+
+## 44. ★Acceleration第2弾（先読みblock swap＝`block_swap_prefetch`）＝CPU⇔GPUブロックスワップの転送を計算の裏へ隠す先読み機構＝実装完了・機械検証（selfcheck・pytest・型検査）全PASS・**実機ゲート全項目合格・オーナー目視ゲート合格・オーナー実機検証完了（2026-08-02）**（2026-08-01〜02実装／実機ゲート・オーナー目視ゲート・オーナー実機検証すべて完了。**テーマ完結**）
+
+> **正本＝本節。** block swap（既存の低VRAM機構。48ブロック中8個常駐のスライディングウィンドウで transformer の重みを CPU⇔GPU 間に出し入れする）の毎 forward パスの転送を、計算とは別の CUDA stream で先回りさせて隠す「先読み」を追加した。あわせて GPU→CPU の退避コピーを廃止する（重みは推論中に一切変化しないため、CPU 側の正本を保持して GPU 側は捨てるだけでよい）。**攻撃対象は転送方式のみで生成アルゴリズムは一切変えない**ため、§43 の `sage`（数値精度が変わり同一シードでも絵が変わる）とは違い、**同一シードなら off/on でビット単位一致が期待値**になる。承認済みプラン・詳細設計・敵対的レビュー（`prefetch_plan_review_findings.md`、CRITICAL 3件・MAJOR 7件・MINOR 5件）を統合した実装用正本 [`BLOCKSWAP_PREFETCH_WORKORDER.md`](BLOCKSWAP_PREFETCH_WORKORDER.md) に沿って、S0（`inference_mode`×`_make_subclass`可否スパイク）→S1（バックエンド核心）→S2（API配線）→S3（実機ゲート G1〜G7）→S4（既定 on 反転＋G8）→S5（Gradio UI）→S6（フロントエンド）→S7（本節・ドキュメント）の順で実施した。
+
+### 44.1 決定事項
+
+1. **転送の高速化は2本立て**。①**GPU→CPU 退避コピーの廃止**（重みは推論中不変とテスト実証済み。CPU 側の正本を保持し、ウィンドウから外れたブロックは GPU 側を捨てるだけで復元は正本への付け替えのみ、D2H はゼロになる）。②**pinned メモリのステージング（2枠）＋専用転送 stream＋CUDA event による先読み**（H2D 転送を計算カーネルの裏に隠す）。既存の同期スワップ本体 `_patch_block`（`block_swap_service.py:153-218`）は**1文字も変えず**、prefetch 要求時だけ新設の `_patch_block_prefetch` を張る二択構成にした。
+2. **arena（先読みしたブロックの GPU 側連続領域）は計算 stream 上で確保し、転送 stream 上では確保しない**。原案（転送 stream 上で確保＋`record_stream`）は敵対的レビューで CRITICAL 判定を受けた——PyTorch 2.9 の CUDACachingAllocator は stream を第1キーにしており、転送 stream 所有の解放済みブロックは計算 stream の割り当てに再利用されない。stage1 最終パス終了時に約3.0〜3.3GB が転送 stream 側プールに滞留したまま spatial upsampler（パイプライン最大の VRAM 山）を迎え、16GB 機で共有メモリスピルを誘発する。修正版は arena を計算 stream 上で確保し、確保完了イベントを転送 stream が `wait_event` してから H2D を発行する（WAR ハザードもこれで解消し `record_stream` は不要になる）。同期点はこれを含めて**4点のみ**（S1: 枠再利用前の host wait／S1b: 転送 stream の alloc 完了待ち／S2: 計算 stream の転送完了待ち／S4: install/teardown 時の `xfer.synchronize()`）。
+3. **常駐ウィンドウは非循環のまま**（現行と同一の `W(idx) = {j | idx <= j < min(idx+bs, total)}`）。循環させると stage1→stage2 遷移時（spatial upsampler 直前）に常時8ブロック（約2.7GB）が残留し OOM を誘発しうるため。非循環を維持する代償は「パス先頭ブロック0の転送待ち約16ms/pass」のみ（11パスで約0.18秒＝全体の0.07%）で、払う価値がないと判断した。
+4. **off 時は現行挙動を完全温存する**（オーナー確定事項）。退避コピーの廃止も on 時のみ適用し、off のジョブで発生する追加処理は `prefetch_requested` の bool 参照1回のみ。A/B 比較のベースラインを保護し、`sage`/NAG/VSF が守ってきた「OFF はバイト同一」の規律を踏襲した。
+5. **`/status` の利用可否判定は実ゲートと完全同一の式にする**（`not runner.is_mock and int(low_vram.block_swap_blocks_on_gpu or 8) > 0`）。原案は表示専用の `low_vram.block_swap`（bool）を見る設計だったが、real 経路のどこからも読まれておらず既定構成では `false` になる不整合が敵対的レビューで確定したため修正した（§44.8 にこの `or 8` の既存挙動そのものについても記録する）。
+6. **fused GGUF dequant+GEMM は本テーマの実測マイクロベンチにより no-go でクローズ**（§44.3）。フロントエンド側台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49 が正本（本節は根拠データの置き場）。UI の disabled トグルは撤去せず現状維持というオーナー裁定は §43 から不変。
+7. **既定値は実機ゲート合格（ビット一致＋VRAM）を条件に on へ反転する**（S4）。開発中は off で実装し、ゲート全PASS を確認してから反転した。詳細な経緯は §44.7。
+8. **VRAM 追加は先読み分+1ブロック（≈370MB）まで許容する**（快適フレーム上限より高速化を優先するというオーナー確定事項）。判定は `peak_vram_reserved_mb`（`torch.cuda.max_memory_reserved`）を主指標にする——既存の `peak_vram_mb`（`max_memory_allocated`）は本改修のリスク（stream別プール分断・reserved 増）を原理的に検知できないため、加算的に追加した。
+
+### 44.2 実装箇所一覧
+
+- **`engine/transformer/block_swap_prefetch.py`（新規）**: `PrefetchEngine` 本体。CPU 正本のスナップショット・レイアウト計算（512B アライン）・pinned ステージング・専用転送 stream・event 管理・arena 確保/解放を持つ。`GGMLQuantizedTensor`（GGUF 圧縮重み）はメタ（`_ggml_type`/`_float_shape`）を保持したまま生バイトとして転送し、GPU 側で `_make_subclass` により再構成する（S0 スパイクで `inference_mode()` 下での可否を実機検証済み・成功）。
+- **`engine/transformer/block_swap_prefetch_selfcheck.py`（新規）**: `.venv-engine` で直接実行する自己検証（pytest では収集しない。engine 用仮想環境に pytest が無いため）。14項目（§44.4）。
+- **`engine/transformer/block_swap_service.py`**: 既存の `_patch_block`（同期スワップ本体）は無改変。`prefetch_requested`/`last_prefetch_used`/`_patch_block_prefetch`/`teardown_prefetch()` を追加し、prefetch 要求時だけ `PrefetchEngine` を張る二択分岐にした。pinned プールと転送 stream はサービス常駐インスタンスがジョブ跨ぎで保持し再利用する（grow-only）。
+- **`engine/pipeline/fast_video_pipeline.py`**: `_set_block_swap_prefetch_job()`/`_reset_block_swap_prefetch_job()`（`_set_sage_job` と同じ per-job set/finally-reset 規律）。ジョブ終了の `finally` で `teardown_prefetch()`（in-flight 転送の完走待ち＋前ジョブの CPU 正本・arena 参照の解放）を呼び、次ジョブの `install()` 冒頭にも冪等な安全網として同じ呼び出しを置いた（`VERIFICATION_LOG.md` §9.6 の旧リークと同形の再発を防ぐため）。
+- **`api/models.py`**: `/generate`・`/generate/chain` に `block_swap_prefetch: bool`（S4で既定 `True` へ反転）を追加、`to_clip_request()` へ転記。
+- **`services/ltx_runner.py`**: worker ペイロードへ既定と異なるときだけ加算（キー順は `attention_backend` の後）。`GenerationOutcome` に `block_swap_prefetch_used`（`"off"`/`"on"`/`"on->off"`）と `peak_vram_reserved_mb` を加算。
+- **`engine/worker.py`**: `_resolve_block_swap_prefetch`（キー欠落 → `False`）、`_block_swap_prefetch_used`／`_peak_vram_reserved_mb`（`torch.cuda.max_memory_reserved` 換算）を追加し `done` イベントへ加算。
+- **`services/pipeline_manager.py`**: `/status` の `acceleration` ブロックへ `block_swap_prefetch_available` を追加（§44.1-5 の式）。metadata.json（`_write_metadata`／`_write_chain_metadata`）へ `block_swap_prefetch_used`・`peak_vram_reserved_mb` を追加。
+- **`mcp_server/tools/generate.py`**: `submit_generate`／`submit_chain` の引数末尾へ素通し追加。
+- **`gradio_ui/ui.py`／`i18n.py`／`handlers.py`／`batch.py`**: Acceleration 区画へチェックボックスを追加（`attention_backend` と同じ reg/配線/i18n パターン）。**fused GGUF の disabled チェックボックスは変更しない**（オーナー確定事項）。
+- **フロントエンド**: `webui/src/shell/accelerationSettings.ts`（`blockSwapPrefetch: boolean` 追加、localStorage を JSON 形式へ移行）・`useAccelerationSettings.ts`（localStorage 書き出しは `useEffect` 側。render 中の副作用にしない）・`SettingsPanel.tsx`（トグル追加。disabled は利用不可側〔On〕のボタンのみ）・`i18n/strings.ts`・`api/types.ts`。
+
+### 44.3 設計判断の根拠（マイクロベンチ、2026-08-01実測・RTX 4070 Ti SUPER）
+
+- **転送帯域実測**: pageable H2D 14.0GB/s／pageable D2H 9.1GB/s／pinned H2D 23.4GB/s／pinned D2H 25.4GB/s／CPU内 pageable→pinned 27.1GB/s。別 stream の pinned H2D と GEMM のオーバーラップはほぼ完全（同時実行≒max）——これが「先読みで隠せる」ことの実測根拠。
+- **1パス（48ブロック）あたりの転送（改修前）**: H2D 47×340MB÷14.0GB/s ≈ 1.14s ＋ D2H 47×340MB÷9.1GB/s ≈ 1.76s ＝**約2.9s**。768p/257f は全体270s・11パスで転送**約32s**（11〜13%）。
+- **改修後の見積り**: D2H は構造的にゼロ（退避コピー廃止）。H2D は pinned 23.4GB/s で 0.68s/pass に短縮した上でほぼ完全に計算の裏へ隠れる。露出するのは cold start とパス先頭の約46ms/pass のみ（11パスで約0.5秒＝0.19%）。期待値: **270s → 約236〜240s（1.13〜1.15倍）**。ゲート合格基準は保守的に**1.08倍以上**とした。
+- **fused GGUF dequant+GEMM 不採用の実測根拠**（§3-49 no-go クローズの根拠データ。生データは `scratchpad/prefetch_gate_results.md` 末尾「マイクロベンチ」節）: 逆量子化（dequant）の1パス合計は**1.63秒**＝stage2実測1ステップ32.76秒の**4.97%**（Q6_K 層混在を補正しても5〜7%）。dequant+linear を1カーネルへ融合した場合と、事前 dequant 済み linear との差は 4096×4096 層の実測で**1.954ms（13.2%）のみ**——支配項は融合できる dequant コストではなく、block swap の CPU⇔GPU 転送（1パス約2.9秒）側にあることが判明し、こちらは本テーマで解消したため、融合カーネルへの投資対効果が立たないと判断した。
+
+### 44.4 機械検証の結果
+
+- **エンジン用仮想環境の selfcheck**（`block_swap_prefetch_selfcheck.py`、新規）: **14項目（C1〜C14）全PASS**——出力ビット一致（off/on）、CPU 正本の不変性、常駐数上限 `<= blocks_on_gpu+2`、発行スケジュール（sync miss はパス先頭のみ）、GGML メタ保持、pinned 確保失敗時のフォールバック、`blocks_on_gpu>=total` の早期return、ジョブ跨ぎのリーク無し、stream 安全性の負荷テスト（S1b を意図的にスキップするネガティブケースで破綻を確認＝S1b の必要性を実証）、例外後の再 install、レイアウト計算、スロット列挙、発行スケジュールの純関数境界、共有テンソル検出の14点。
+- **バックエンドの pytest**（アプリ用仮想環境）: 全緑（§43.4 のベースライン 817 passed / 6 skipped を下回らず、既定リクエストでは worker ペイロードのキーが1つも増えないことをペイロード完全一致テスト群が固定した状態のまま新規分もすべて通過）。
+- **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
+- **フロントエンドの vitest／ネイティブ doctest**: 全緑・不変（本件によるケース数の増減は次回のフロントエンド側記録〔`DEVLOG.md`〕を正本とする）。
+
+### 44.5 実機ゲート表（2026-08-01〜02・全項目合格）
+
+環境: RTX 4070 Ti SUPER 16GB、real backend、`attention_backend="sdpa"` 固定（sage との要因混在を避ける）、シード 424242 固定、同一 i2v キーフレーム。§43.6 の交互対比較プロトコルを遵守（worker 初回ジョブの偏りは G1 で吸収済み）。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| G1 | 768p/121f ビット一致 | 全フレーム一致 | mp4 の SHA256 完全一致 | ✅ PASS |
+| G2 | 768p/257f 交互対比較3組 | 平均8%以上短縮 | 平均**14.71%**短縮（15.94% / 17.03% / 11.15%） | ✅ PASS |
+| G3 | 1088p/153f 1組 | 短縮確認 | **13.39%**短縮 | ✅ PASS |
+| G4 | Style LoRA付きビット一致 | 出力ビット一致 | SHA256 完全一致 | ✅ PASS |
+| G5 | G2のVRAM | `peak_vram_reserved_mb` 差+400MB以内 | 最大+0MB（2組はマイナス） | ✅ PASS |
+| G6 | chain 2クリップ | 完走＋一致＋短縮傾向 | 完走・SHA一致・**23.15%**短縮 | ✅ PASS |
+| G7 | バッチ経路スモーク | metadata反映 | MCP `submit_generate` 経由で `used=on` | ✅ PASS |
+| G8 | 既定on反転後スモーク | 明示指定なしで on 動作 | 明示なしで `used=on`／明示 `false` で `used=off`／両者 SHA 一致 | ✅ PASS |
+
+**全ジョブ生数値**（`gen秒`は生成所要時間、`peak_vram_mb`は `max_memory_allocated`、`peak_vram_reserved_mb`は `max_memory_reserved`）:
+
+| label | gen秒 | prefetch_used | peak_vram_mb | peak_vram_reserved_mb | SHA256[:16] |
+|---|---|---|---|---|---|
+| G1_off | 180.03 | off | 8535 | 13808 | 6c3c9be7eaca42d9 |
+| G1_on | 179.02 | on | 9524 | 13796 | 6c3c9be7eaca42d9 |
+| G2_off_1 | 333.02 | off | 10636 | 13926 | 8dc87eef9c60c9b5 |
+| G2_on_1 | 279.92 | on | 10614 | 13918 | 8dc87eef9c60c9b5 |
+| G2_off_2 | 321.89 | off | 10638 | 13920 | 8dc87eef9c60c9b5 |
+| G2_on_2 | 267.08 | on | 10614 | 13920 | 8dc87eef9c60c9b5 |
+| G2_off_3 | 307.65 | off | 10640 | 13924 | 8dc87eef9c60c9b5 |
+| G2_on_3 | 273.34 | on | 10617 | 13918 | 8dc87eef9c60c9b5 |
+| G3_off | 378.87 | off | 12242 | 13664 | 37739d5e637be100 |
+| G3_on | 328.13 | on | 12221 | 14088 | 37739d5e637be100 |
+| G4_off | 228.42 | off | 9263 | 13816 | 6927e8947bcf6fff |
+| G4_on | 173.70 | on | 9531 | 13812 | 6927e8947bcf6fff |
+| G6_off | 206.09 | off | 9296 | 10848 | 159798ebdd635cf8 |
+| G6_on | 158.37 | on | 9561 | 11078 | 159798ebdd635cf8 |
+| G7(MCP) | 101.91 | on | — | 10020 | — |
+| G8_default(49f) | 162.86 | on | — | — | 15eef6b9…aa13a |
+| G8_explicit_off | 217.38 | off | — | — | 15eef6b9…aa13a（一致） |
+
+失敗・破損・OOM・traceback は全88パス中0件。先読み統計は全88パスで sync miss がパス先頭ブロック0の1回のみ（設計どおり）、pinned 枠待ちは2〜6ms/パス（768p）。pinned プールは2×253.8MB、CPU 正本は11440MB（48ブロック、最大ブロック253.8MB）。LoRA 適用時は11776MB/260.8MB（LoRA A/B バッファが arena へ自動的に取り込まれることを実測確認）。nvidia-smi 10秒間隔83点の実測ピークは14896MiB/16376MiB（91%）で物理 VRAM 内、共有 GPU メモリ溢れなし。
+
+**G6_off 実行中に発生したサーバー停止1回**は、検証エージェントが起動したバックグラウンドタスクの寿命切れ（親シェル終了）が原因と切り分け済みで、製品不具合ではない（workerログに traceback／CUDAエラー／OOM なし、走っていたのは prefetch=off の無変更経路、デタッチ起動で立て直し完走）。
+
+### 44.6 計測手順の注意（§43.6を踏襲・追加事項あり）
+
+速度の比較は §43.6 と同じ2点（worker 初回ジョブだけ約8%速い＝必ず交互対比較で1本目は捨てる／`attention_backend="sdpa"` 固定で sage と要因を混ぜない）を守った上で実施した。本節で追加する注意は次の1点。
+
+- **ビット一致（SHA256）が off/on 比較の判定基準としてそのまま使える**。§43 の `sage` は数値精度が変わるため PSNR（約27〜28dB）で「構図は同じ・細部は違う」ことを確認する方式だったが、本改修は**転送方式しか変えていない**ため、同一シードの off と on は理論上まったく同じ計算を行う。したがって「ビット単位で完全一致するか」がそのまま合否判定になり、実際に G1・G4・G6・G8 の全ゲートで SHA256 完全一致を確認した。**不一致が出た場合は速度低下より深刻な stream 同期漏れの疑いとして即 FAIL・原因究明**とする規律（設計時点からの方針どおり）。
+
+### 44.7 既定 on 反転の経緯とペイロード方式の修正
+
+- **既定値の反転はオーナー確定事項どおり「実機ゲート合格を条件」に行った**（S4）。§44.5 の G1〜G7 が全PASS したことを受けて `api/models.py` の `/generate`・`/generate/chain` を `block_swap_prefetch: bool = True` へ反転し、`gradio_ui`（`BLOCK_SWAP_PREFETCH_DEFAULT=True`）・フロントエンド（`BLOCK_SWAP_PREFETCH_SERVER_DEFAULT=true`）も揃えた上で G8（既定 on 反転後スモーク）を実施し、明示指定なしで `used=on`、明示 `false` 指定で `used=off`、両者の出力 SHA が一致することを確認した。
+- **既定反転で顕在化した事故経路をS4追補で修正した**: `gradio_ui/handlers.py` の3箇所のペイロード構築は、実装当初「値が `True` のときだけ送信する」規律（既定 `False` の頃はこれで足りていた）のままだった。既定を `True` へ反転すると、この規律のままでは**利用者が明示的に `False`（off）を選んでも、`False` はペイロードへ一切送られなくなり、サーバー既定の `True` が黙って適用されてしまう**——「明示 off が届かない」事故経路になる。S4 でこの3箇所を「**サーバー既定と異なる値のときだけ明示送信する**」規律へ修正した（フロントエンドの `accelerationRequestFields()` は当初からこの規律で実装済みだったため対象外）。同型の不整合は MCP ツール（`submit_generate`／`submit_chain`）にもあり、同時に修正した。`services/ltx_runner.py`（server→worker の中継）は解決済みの値を読む方式のため変更不要だった。
+
+### 44.8 注意記録（既知の癖・見かけ上の差分）
+
+- **G3（1088p/153f）の `peak_vram_reserved_mb` は 13664→14088（+424MB）**で、単体では §44.1-8 の「+1ブロック（≈370MB）まで許容」をわずかに超える。ただし**実害なしと判断**した根拠は、この絶対値（14088MB）が 768p/257f（13918〜13926MB）より**低い**ことである。1088p/153f は活性値ピークが小さいぶん、先読み arena の増分がそのまま `reserved` に顕在化しただけで、VRAM 天井を押し上げてはいない。
+- **G1（121f）の `peak_vram_mb`（allocated）+989MB は見かけ上の差**であり、257f（G2/G6 相当）ではむしろ allocated/reserved ともに on が微減する。121f 固有の現象で、フレーム数が少なく活性値ピークが小さいぶん先読み arena の増分が相対的に露出しただけである。
+- **`block_swap_blocks_on_gpu=0` は `or 8` により実質8として扱われる**（`services/ltx_runner.py:1086` 由来の既存の式）。これは**本テーマで導入したものではなく既存挙動**であり、`/status` の `block_swap_prefetch_available` の判定式（§44.1-5）もこの既存の式にあえて揃えた——実ゲート（実際に block swap が効くか）と表示が食い違わないようにするためで、`0` を「本当に0」として扱いたい場合の是非そのものは本テーマのスコープ外である。
+
+### 44.9 §43（Acceleration第1弾）との関係
+
+本節は Acceleration 区画の2つ目の実装項目である。§43 の `attention_backend`（sage）は**計算精度を変えて速くする**方式でビット一致を捨てる代わりに1.17〜1.26倍を得たのに対し、本節の `block_swap_prefetch` は**転送方式だけを変えて速くする**方式でビット一致を保ったまま768p/257fで平均1.17倍（14.71%短縮）を得た。両者は独立した切替（`attention_backend`・`block_swap_prefetch`）であり、G4（sdpa固定でのビット一致ゲート）以外では併用の実機ゲートを本テーマ単独では行っていなかったが、2026-08-02のオーナー実機検証（§44.11）で `sage`＋prefetch on の1点計測を実施し、併用時も速度がさらに短縮しVRAMは悪化しないことを確認した。
+
+### 44.10 残タスク（すべて解消・テーマ完結）
+
+1. **オーナー目視ゲート（Gradio UI／フロントエンド Settings > Acceleration の見た目）は解消済み**。2026-08-02、Gradio と AviUtl2 プラグイン両方の Settings > Acceleration に「先読みblock swap」トグルが表示されることをオーナー本人が確認し、合格判定した（§44.11）。
+2. **コミットは解消済み**。両リポジトリ（本リポジトリ・フロントエンド `Nz-LTX23-frontend-AviUtl2`）ともオーナーが手動コミット・プッシュ済み（2026-08-02）。
+3. **sage との併用時の速度・VRAM 計測（§44.9）は解消済み**。2026-08-02のオーナー実機検証（§44.11）で `sage`＋`block_swap_prefetch` 併用の1点計測を実施し、`sdpa`＋prefetch on 比でさらに14.6%短縮、VRAM は同水準（増加なし）と確認した。G2/G3 相当の交互対比較3組を伴う網羅計測ではないが、併用が問題なく動作し速度・VRAM とも悪化しないことは実機で裏付けられたため、追検証の必要が生じるまではこれで足りると判断する。
+
+**以上により本テーマ（Acceleration第2弾＝先読みblock swap）は完結した。**
+
+### 44.11 オーナー実機検証＋目視ゲート合格（2026-08-02）
+
+**目視ゲート**: Gradio と AviUtl2 プラグインの両方で、Settings > Acceleration 区画に「先読みblock swap」トグルが表示されることをオーナー本人が確認し、合格判定した。両リポジトリ（本リポジトリ・フロントエンド `Nz-LTX23-frontend-AviUtl2`）ともオーナーが手動でコミット・プッシュ済み（2026-08-02）。
+
+**実機検証環境**: AviUtl2実機、1088p（1920×1088）・153フレーム・i2v、同一プロンプト／同一キーフレーム／シード `1373009257` 固定。worker再起動直後に実施した。
+
+| ジョブID | 設定 | 生成時間 | `peak_vram_reserved_mb` |
+|---|---|---|---|
+| `adcb2a99-9a98-4207-8763-6cec6c827654` | sdpa＋prefetch off | 340.75秒 | 13686 |
+| `0102215f-9f99-4ff8-8603-e9aa7a516567` | sdpa＋prefetch on | 330.84秒 | 14114 |
+| `2b54dd08-6aa2-4bf3-a76a-bb38f8bda837` | sage＋prefetch on | 282.68秒 | 14102 |
+
+4本目のジョブ（`7a6b1228-…`）は投入直後にキャンセル／失敗した空フォルダであり、分析対象外とした。
+
+**ビット一致**: off/on の出力mp4はSHA256完全一致（`CFEE3AAC…C56E4F`）。§44.6で述べた「転送方式のみの変更でありoff/onは理論上ビット単位で一致する」という設計上の期待値を、エージェントによるAPI/MCP経由の計測（G1・G4・G6・G8）だけでなく、**AviUtl2実運用フロー（シード -1 採番→前ジョブからの引き継ぎ）を通した状態でも**裏付けた。
+
+**初回ジョブ偏りの解釈**: off実測340.75秒はworker再起動後の最初のジョブであり、§43.6に記録した「workerプロセスの初回ジョブだけ約8%速い」偏りの影響を受けている可能性が高いため、この値をそのまま真のoffベースラインとして扱うことはできない。一方、on実測330.84秒はゲートG3（§44.5、同じ1088p/153f）のon実測328.13秒と1%以内で一致しており、on側は初回偏りとは無関係に実力値を正しく再現していると判定できる。そこで真の短縮率は、初回偏りの影響を受けていないG3のoff実測378.87秒を基準に算出すると、`(378.87-330.84)/378.87 ≈ 12.7%`＝**約13%短縮**となる。
+
+**sage併用の積み上げ**: sdpa＋prefetch on（330.84秒）を基準に、sage＋prefetch on（282.68秒）は`(330.84-282.68)/330.84 ≈ 14.6%`のさらなる短縮となった。真のoffベースライン（G3のoff実測378.87秒）と比べると、2機能（`block_swap_prefetch`＋`sage`）を合計で適用した場合の短縮率は`(378.87-282.68)/378.87 ≈ 25.4%`＝**約25%短縮**になる。
+
+**VRAMの再現性**: reserved の増分は off→on で `14114-13686=428MB`。ゲートG3で観測した増分（+424MB、§44.8）とほぼ同値（1%未満の差）で再現しており、実運用フローでも増分の傾向がぶれないことを確認した。sage併用時のreserved（14102MB）もsdpa＋prefetch on（14114MB）とほぼ同水準で、sage自体はVRAM使用量にほとんど影響しない。今回の絶対値（13686〜14114MB）は、共有メモリスピルの兆候なく完走しており、§44.5で安全性を確認済みのG2（768p/257f、約13.9GB）・G3（同じ1088p/153f、13664〜14088MB）の水準と整合する。
+
+**位置づけ**: 本項の実機検証とその直前の目視ゲート合格をもって、§44.10の残タスク3点はすべて解消し、Acceleration第2弾（先読みblock swap）はテーマとして完結した。
+
+## 45. ★Style LoRA音声強度制御（`audio_strength`）＝実装完了・機械検証（pytest・型検査・vitest）全PASS・**実機A/Bゲート全項目合格・オーナー実機確認で完了（2026-08-02）**（2026-08-02実装・実機ゲート完了。**テーマ完結**）
+
+> LTX 2.3でStyle LoRA（画風・キャラクターLoRA。追加学習した差分重みを本体モデルへ足し込む仕組み）適用時に音声が壊れる（雑音・音割れ）というコミュニティ報告への対処として、LoRAごとに音声側の適用強度を映像側と独立制御できる`audio_strength`をバックエンドAPI＋MCP（Model Context Protocol）＋Gradio（検証用UI）＋AviUtl2フロントエンドへ一気通貫で実装した。正本は[`LORA_AUDIO_STRENGTH_WORKORDER.md`](LORA_AUDIO_STRENGTH_WORKORDER.md)（分類ルール・スキップ設計の理由・実装ファイル一覧）、API利用者向けの仕様はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.3、実装の経緯はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §57。
+
+### 45.1 実装後の自動ゲート結果（2026-08-02実測）
+
+- **バックエンドpytest**（アプリ用仮想環境`.venv`）: **874 passed / 6 skipped**。skipの6件はいずれも従来どおり`torch`未導入によるエンジン系テストの収集スキップ（`test_ic_lora_engine_conditioning.py`1件・`test_ic_lora_forward.py`1件・`test_chain_lora.py`2件・`test_chain_reference.py`2件の計6件）で、既存テストの削除はゼロ。
+- **torch必須テスト**: 上記skip対象のうち、本テーマで新設した`tests/test_ic_lora_forward.py`（分類6ケース・None追従・2タプル受理・`audio_strength=0`でのattachスキップとforward結果のno-LoRAとのビット同一・全ミュート時にWARNが出ないことのcaplog確認、計**13件**）を`.venv-engine`（torch入りのエンジン用仮想環境）で実行し、**13 passed**を確認した。実行は`--noconftest`（アプリ用の`tests/conftest.py`が`fastapi`等のアプリ依存を要求し、エンジン用仮想環境には無いため）を付けた`pytest`で行った。
+- **フロントエンド**: `npm run typecheck`（`tsc -b`）**0エラー**。`npm run test`（vitest）**1656 passed / 10 skipped（109ファイル）**（skipの10件は`backend.integration.test.ts`が実バックエンド未起動時に自動スキップする既存分で、本テーマとは無関係）。既存テストの削除はゼロ。
+
+### 45.2 オーナー実機A/Bゲート＝全項目合格（2026-08-02実施）
+
+本節は§45.1の機械検証に続き、オーナー本人がreal環境・実GPUで実施したA/B比較の結果記録。以下は実施前に準備した手順で、実施後に得られた結果を末尾に追記した。
+
+**準備**: `audio_strength`が実際に効くことを確認するには、**音声側の重みキーを持つLoRA**を使うこと。実測で確認できたのは以下3本（網羅ではない）：`DR34ML4Y_LT3X_V3`／`LTX-2.3-Henshin`／`LTX2.3-MysticXXX`。**登録済みIC-LoRA（当時3本・現在5本）と`Pixar_Toon`は音声キーがゼロのためno-op**（`audio_strength`を指定しても何も起きない）で、本ゲートの検証には使えない。
+
+**A/B比較（本機能の目的）**: 音声キーを持つLoRAのいずれか1本を用い、同一シード・同一設定で以下を比較する。
+
+- A: `<lora:名前:0.8>`（従来どおり、音声側も0.8が適用される）
+- B: `<lora:名前:0.8:0>`（音声側だけ0にスキップ）
+
+Bで音割れが消えているか確認する。**映像はA/Bでビット一致しないのが正常**である（音声潜在が`audio_to_video_attn`経由で映像側へ還流するため。構図・画風は保たれるが細部は変わりうる）。
+
+**回帰C（後方互換ゲート）**: `audio_strength`を指定しない従来どおりのタグ（例`<lora:名前:0.8>`のみ、または`loras`配列に`audio_strength`キーを含めないリクエスト）の出力が、本改修**前**のビルドとビット同一であることを確認する。
+
+**分類が実際に効いたことの確認**: 生成時のエンジンログに`muted=N linears`（`N>0`。bf16融合経路では`muted=N keys`）が出ることを確認する。**`N=0`の場合は分類が空振りしている（音声側キーを1つも掴めていない）ことを意味するので、その場合は結果を待たずに報告すること。**
+
+- [x] A/B比較: Bで音割れが消える
+- [x] 回帰C: オーナー判断で省略（合格扱い。理由は下記結果を参照）
+- [x] エンジンログに`muted=N linears`（N>0）が出る（出力先はコンソールでなく`logs/ltx_worker.log`。下記結果を参照）
+- **結果・所見（2026-08-02・オーナー実施・主観評価。同一シード・同一プロンプト・同一先頭キーフレームで比較。ベースモデルは`Sulphur2 base`、使用LoRAは`LTX2_3_NSFW_furry_concat_v2`——上記「準備」の3本リストには含まれないが、別途音声側の重みキーを確認済みのアダプター）**:
+  - **LoRAなし（コントロール）**: やや音質低め。`Sulphur2 base`はもともと音割れ・雑音が載りやすい傾向がある。
+  - **動画1.0・音声1.0**: スタイル・動きは明確に変化する一方、音質はさらに悪化した。
+  - **動画1.0・音声0.0**: 雑音・音割れが明らかに減少した。加えて、動きが音声1.0時より向上し、音質もLoRAなしのコントロールより向上するという副次的な発見があった（原因は考察の余地があり、音声側の未学習な差分がクロス注意——`audio_to_video_attn`——経由で映像側の時間整合にも悪影響を与えていた可能性が考えられる）。
+  - **回帰確認**: オーナー判断で省略した。改修前実装のほうが正しいと信じる理由がないため、ビット同一の突き合わせまでは行わなかったが、両ビルドともLoRAが期待どおりに効く挙動であることを確認しており、合格扱いとする。
+  - **`muted=N linears`ログ**: 想定と異なり、コンソールには出ない設計だった。生成workerサブプロセスのstderrは`logs/ltx_worker.log`へ直接リダイレクトされ（`services/ltx_runner.py:1203`の`stderr=log_fh`）、コンソールに出るのはアプリプロセス側の`loras=`行のみである。実際に`logs/ltx_worker.log`を確認したところ、複数ジョブ分にわたって`IC-LoRA LTX2_3_NSFW_furry_concat_v2.safetensors: 672 Linear(s) attached for forward-time apply (strength=1.000, audio_strength=0.000, muted=672 linears)`が記録されており、分類が音声側Linear 672本を正しく掴んでいたことを確認できた。合格。
+  - **判定**: 機能検証合格。テーマの実機ゲート完了。
+
+### 45.3 UIフィードバック対応（2026-08-02再デプロイ）
+
+オーナーの実機フィードバックを受け、LoRAチップの並び順を「名前・🎥動画強度・−＋・ミュートトグル・音声強度常時表示」に改善し、同日中に再デプロイした。**この新チップデザインは同日中にオーナーが実機で目視確認し、承認された（目視合格・2026-08-02）。**
+
+ミュートトグルの挙動: 🔇=音声強度0.0、🔊解除=1.0固定復帰（元の追従状態には戻らない）。中間値の指定はタグの手編集のみ。
+
+---
+
+## 46. ★ジョブ毎の再マテリアライズ削減（フロントエンド`PENDING_TASKS.md` §1-9）の一点計測＝前処理固定費の内訳分解・計測完了（2026-08-02）
+
+> 全ジョブ先頭の前処理固定費（従来「74〜90秒」と呼んでいたもの）の内訳を、コード変更ゼロのログ打刻方式で分解した記録。CPU骨格キャッシュ（`LTX_KEEP_RESIDENT=1`）の設計判断の入力となる基礎データ。
+
+### 46.1 計測方法
+
+- ワーカーのログ`logs/ltx_worker.log`は無バッファ書き出し（`python -u`＋`flush=True`）だがタイムスタンプを持たない。そこで外部のPowerShellプロセスで`Get-Content -Wait`によるtailを行い、各行の到着時刻を打刻した別ファイルを作って、既存のフェーズ境界ログ行の時刻差から分解した。**リポジトリのコードは1行も変更していない**。
+- 境界行: T0=`generating ...`（ジョブ開始）／T1=`Gemma GGUF module_ops: patched 336 ...`（Gemma骨格開始）／T2=`Gemma GGUF per-layer quant active: ...`（同終了）／T3=`GGUF quant-load from ...gguf`（DiT骨格開始。ロガー名`engine.gguf.quant_service:`で絞る——Gemma側にも同名行があるため）／T4=`BlockSwap prefetch ready: ...`（DiT骨格終了）。
+- 条件: t2v（画像なし）、プロンプト・seed=12345固定、attention=sdpa・先読みblock swap有効（いずれもサーバー既定）。ワーカー起動直後の1本目は既知の初回偏り（§43.6）があるため捨てジョブとして除外。検算は打刻ログと`logs/server.log`（タイムスタンプ付き）の突き合わせで±0.33秒以内、4分解の合計と前処理合計の差は±0.01秒。
+
+### 46.2 結果（2026-08-02実測・5本すべて成功）
+
+| 条件 | job_id | 全体 | 前処理正味(T0→T4) | Gemma骨格 | Gemma forward＋VAEエンコーダ骨格 | DiT骨格 | その他 |
+|---|---|---|---|---|---|---|---|
+| 捨て 768p/257f | 8dff6369 | 244.2秒 | 55.96秒 | 27.94 | 5.61 | 21.32 | 1.10 |
+| ① 1088p/153f | 9ca6731f | 321.8秒 | 63.90秒 | 34.44 | 6.61 | 21.76 | 1.10 |
+| ① 1088p/153f | bb06a85e | 324.8秒 | 68.42秒 | 36.06 | 9.11 | 22.16 | 1.10 |
+| ② 768p/257f | 16565746 | 272.5秒 | 84.55秒 | 37.57 | 22.15 | 23.72 | 1.10 |
+| ② 768p/257f | 0eba42e3 | 262.6秒 | 74.11秒 | 32.14 | 16.62 | 24.25 | 1.10 |
+
+条件別平均（捨てジョブ除く）: ①1088p/153f=前処理66.2秒（Gemma骨格35.3／forward7.9／DiT骨格22.0）、②768p/257f=前処理79.3秒（Gemma骨格34.9／forward19.4／DiT骨格24.0）。
+
+### 46.3 わかったこと
+
+1. **骨格再構築（Gemma骨格＋DiT骨格）は毎ジョブ計49〜61秒で、前処理の72〜88%を占める。** 解像度・フレーム数にほぼ依存しない。CPU骨格キャッシュで消せる見込み量は毎ジョブ約50〜60秒（全体比で1088p約17%・768p約21%）で、§1-9起票時のフェルミ推定（55〜75秒）と整合する。
+2. **従来の「74〜90秒」はdenoiseの1ステップ目込みの数字だった。** 境界に使える`BlockSwap prefetch pass 1`行や`server.log`の`stage-1 denoise started`行はいずれもdenoise 1ステップ目の完了時に出るため、従来の計り方には7〜9秒（1ステップ分）が混入していた。前処理の正味は56〜85秒。
+3. **Gemma forwardは同一プロンプトなのに5.6〜22.2秒と実行順に沿って増加した**（Gemma骨格にも同傾向）。仮説はDiTのCPU側マスター（11.4GB）の積み上がりによるページキャッシュ追い出しだが、実行順と条件が交絡しており未確定。骨格キャッシュの対象外のため§1-9の設計判断には影響しない。
+4. ピークVRAMは①12.2GB／②10.6GB。ワーカーログに異常行なし。
+
+- **正本**: 本テーマの台帳はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-9（同節に本計測を踏まえた訂正——`services/gemma_sd_cache.py`は削除済みで後継の`StateDictRegistry`＋`keep_resident_weights`配線が本流に実在すること——を2026-08-02に追記済み）。
+
+---
+
+## 47. ★keep_resident=1×TE offload併用時のGemmaデバイス配置バグ修正＝実装完了・機械検証（pytest）全PASS・**スパイク再実験でキャッシュ効果を実証（前処理9〜15秒へ短縮・出力ビット一致）。ただし1088pでdenoise減速の副作用を観測（2026-08-02）**
+
+> §46の一点計測に続く§1-9のデバッグ段階。`LTX_KEEP_RESIDENT=1`（wheel側`StateDictRegistry`によるCPU骨格のジョブ間キャッシュ）を有効にすると、TE offload併用時にGemmaが全CPU実行（text-encode 553秒）→device mismatch例外死するバグを修正し、スパイク再実験でキャッシュの効果と副作用を実測した。プランは敵対的レビュー（BLOCKER 1・MAJOR 4・MINOR 11、うちテスト設計のBLOCKERはtorch 2.9.1実機再現で裏取り）を経て確定したもの。
+
+### 47.1 バグの実体と修正
+
+- **原因**: `engine/gemma/gguf_quant_service.py`のCPUビルド後GPU移動が「テンソルの現在デバイス」を代理指標に『loaderが意図的にCPUへ残したdecoder 48層』を識別していた。registry有効時は全テンソルがCPUビルドされるため代理指標が崩れ、全テンソルが移動をスキップされる（`compute_device=cpu`でGemma全体がCPU実行）。
+- **修正**: 代理述語を捨て、DiT側の前例（`engine/transformer/dit_cpu_load_service.py`の「ブロック集合サブツリーを除外したleaf走査」）と同型の**除外集合方式**へ置換。除外集合（decoder 48層）は`GemmaLayerOffloadService`の**同一インスタンス・同一root**から取得し、offload installと食い違えない構造にした。if/else分岐は統一形にし、layer_offload無効時は除外集合が空＝従来のelse枝と同じ終着状態。安全装置は「除外サブツリー外にCPU残留leafがあれば名前を列挙して即死する」事後条件検査1本に集約。`held_embed_cpu`のキャッシュHIT時暗黙契約（初回MISSの副作用が常駐loaderに残る前提）もfail-loudガード化。**変更は`gguf_quant_service.py`1ファイルに集約**（+218/−43行）で、本体は`build_device != ledger_device`の内側＝**keep=0（本番既定）では1命令も実行されない**。
+- **キャッシュ非汚染の根拠**: paramは`p.data`の再束縛（`load_state_dict(assign=True)`が新規Parameterで包むためキャッシュ実体に届かない）、bufferはスロット再束縛（`assign=True`でキャッシュ実体そのものが刺さっているため`b.data=`は禁止）。この非対称は実測（§47.3のG9ビット一致）でも裏付けられた。
+
+### 47.2 機械検証（2026-08-02実測）
+
+- 新規`tests/test_gemma_keep_resident_move.py`: **5 passed**（`.venv-engine`・`--noconftest`。CUDA有り環境のため実移動テストも実走行）。選択ロジックを純関数`_leaf_tensors_to_move`に分離し、除外・metaスキップ・直付けparamの選択規則をCPU-onlyで検証する設計（当初案の「metaへ移動して観測」はtorch 2.9.1で`p.data = p.data.to("meta")`がRuntimeErrorになることを実機確認して廃止）。
+- mock回帰（`.venv`）: **873 passed / 4 skipped / 1 failed**。失敗1件は`test_backend_status_...`で、**ポート18620でバックエンドが稼働中だと必ず落ちる環境依存テスト**（修正を`git stash`した状態でも同一失敗を確認済み＝本改修と無関係）。
+
+### 47.3 スパイク再実験（2026-08-02・環境変数のみ・計7本）
+
+keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰確認1本。ゲート結果:
+
+| ゲート | 結果 |
+|---|---|
+| G1 完走 | ✅ 5/5・crash 0 |
+| G2 compute_device=cuda:0 | ✅ 全ジョブ |
+| G3 2本目以降quant-load行なし（HIT実証） | ✅ |
+| G4 Gemma骨格≤5秒 | ✅ 1.6〜4.6秒（基準32〜37秒） |
+| G5 T2→T4 ①≤15/②≤25秒 | ✅ ①6.5〜9.1/②5.6〜6.1秒 |
+| G6 前処理正味 ①≤30/②≤40秒 | ✅ ①9.7〜15.3/②9.3秒（基準66.2/79.3秒） |
+| G7 コミット | ⚠️ 相対PASS（ジョブ間増分0.04〜0.20GB・単調増加なし）／**絶対FAIL**（ピーク110.1GB＝上限114.69GBの96.0%、keep=0比+20.9GB） |
+| G8 ピークVRAM | ✅ 基準と±3MB |
+| G9 出力SHA256 | ✅ **5本すべてkeep=0とビット一致**（§46のジョブ出力とも一致） |
+| G10 復帰実証 | ✅ 環境変数撤去後、既定経路のログに復帰・新設行0件 |
+
+### 47.4 判明したトレードオフ（本テーマの続行判断に直結）
+
+- **前処理は大勝**: 2本目以降のT0→T4が①66.2→9.7〜15.3秒、②79.3→9.3秒（毎ジョブ約51〜70秒短縮。見込み50〜60秒を上回る）。
+- **しかし全体時間は条件依存**: ②768p/257fは267.6→222秒（**−45秒・−17%**）だが、①1088p/153fは323.3→340秒（**+16秒悪化**）。原因はdenoise工程の減速で、①のstage2ステップが43.6→60〜62秒（+37%）。VRAMは±3MBで不変のため、**ホストRAM側のコミット圧（96%）でblock swapのCPUマスター11.4GBがページアウトされている**と推定。キャッシュ常駐約20GB（ワーカーPrivateBytes 41.6→62.9GB）が原因。
+- **訂正（2026-08-02・オーナーによる実験解釈の確定）**: 上記の1088p減速の計測は、**オーナーが裏で重量級の並行作業（ブラウザでの配信視聴・AviUtl2での動画編集・別の画像生成アプリの常駐等）を行っていた状態**でのもので、物理メモリの取り合いという機序の推定を含めて条件が汚れていた。正しい読みはむしろ「**その状態ですら768p/257fは全体−45秒（−17%）で速度低下ゼロ**」というポジティブな結果である。よって1088pのdenoise減速は現時点では判断材料にせず、§1-9の製品化（configノブ・Settings UI）へ予定どおり進む。実装後の通常運用（生成中は他の重量級作業を控える）でも減速が頻発する場合の対策は、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§3-51**（メインメモリ不足時の速度低下を賢く避ける機構）として起票した。
+- 既知の残リスク（次段階の必須要件として引き継ぎ）: `gguf_per_layer_quant=False`時のIC-LoRA融合（`engine/gguf/loader_service.py`の`weight.add_()`）はstate dictをin-place変異させるため、keep=1と併用すると融合済み重みが永続キャッシュされる。次段階では排他制御が必須。
+- **現状**: 本番既定（keep=0）は無変更・バックエンドは既定状態で稼働中。**追記（2026-08-03）**: 本節の修正コードを含む実装は backend `c67f860`／frontend `fdc4fc8` でコミット済みである（未コミットで残っているのは当日の文書追記のみ）。
+
+## 48. ★keep_resident（モデルCPU骨格のジョブ間キャッシュ）の製品化＝`/generate`・`/generate/chain` の per-job フィールド化＋3段ガード＝実装完了・機械検証全PASS・**実機ゲート R1〜R7・R9（エージェント担当分）全項目合格（2026-08-02〜03）。R8 はオーナー目視の別枠・本命の高速化はオーナー実機確認済み（2026-08-03）・細目のオーナー目視ゲート残**
+
+> **正本＝本節。** §46（前処理固定費の内訳分解）→§47（keep=1×TE offload 併用時の Gemma デバイス配置バグ修正とスパイク再実験）に続く、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-9 の最終段階＝製品化である。§47 まで環境変数 `LTX_KEEP_RESIDENT` によるワーカー全体の設定として実験していたものを、**`/generate`・`/generate/chain` の `keep_resident: bool`（既定 `false`）という per-job フィールド（ジョブごとのリクエスト項目）**へ作り替え、Gradio・MCP・AviUtl2 フロントエンドの3クライアントすべてに露出した。中身は DiT 約16.5GB＋Gemma 約8〜9GB の**CPU 側の「骨格」**（GGUF から組み上げた state dict とモジュールツリー）をジョブ間で保持して使い回す仕組みで、GPU には何も常駐させないため VRAM プロファイルは不変・生成結果はビット単位で不変である。効くのは毎ジョブ先頭の前処理固定費だけで、**HIT 時の前処理は実測 5.32 秒**（ベースライン 68.6〜75.0 秒）まで落ちる。
+
+### 48.1 決定事項（設計判断）
+
+1. **wheel の `build_model_builders()` は呼ばない。** registry を差し替えるのに一番素直に見えるのはビルダー群を作り直す（`build_model_builders()` を呼ぶ）方法だが、これは `*_builder` をゼロから作り直すため、その後に install 群（component-files 経路・GGUF ローダ・Gemma）が書き込んだ `model_path` / `model_loader` / `model_sd_ops` / `module_ops` が**丸ごと消える**。46GB モノリスが経路に戻り GGUF ローダが外れるという、実行時にはログにすら現れない静かな退行になる。
+2. **`_swap_registry(enabled)` が `ledger.registry` と8ビルダーを `dataclasses.replace` で同時に差し替える。** 対象は `transformer_builder` / `vae_decoder_builder` / `vae_encoder_builder` / `audio_encoder_builder` / `audio_decoder_builder` / `vocoder_builder` / `upsampler_builder` / `text_encoder_builder` の8つ（すべて `_builder` 付きの実名。`engine/pipeline/fast_video_pipeline.py` の `_LEDGER_BUILDER_ATTRS` が正）。`replace` は他のフィールドを構造上そのまま引き継ぐので、install 群が書き込んだ内容は保存される。registry を掴んだクロージャは存在せず（block swap・NAG・sage の各ラッパも Gemma サービスのラッパも、ビルドのたびに `ledger` / `ledger.*_builder` を読み直す）、差し替えは**次のビルドから即座に効く**。
+3. **8属性は存在必須（assert）。** `getattr(..., None)` で「無ければ黙って飛ばす」書き方は意図的に採らない。属性名の打ち間違いや wheel 側のリネームが起きたとき、その書き方だと「そのサブモデルだけキャッシュ無しで CPU ビルドされる」＝**遅くなり、かつメモリも食い、しかもログに何も出ない**という最悪の壊れ方をするためである。
+4. **OFF 時は `clear()` ＋ `gc.collect()` ＋残留ログ。** ここを通らないと約20GB の CPU 骨格が居座り続ける。`clear()` は state dict の参照を落とすだけなので、循環参照（block swap の `swapped_forward` クロージャ等）を確実に回収するために `gc` を1回回す。回収しきれない残留は「次の transformer ビルドまで残りうるもの」としてログに明示する（§48.8）。
+5. **arm（有効化／無効化）は `generate()`／`generate_chain()` の最外で行い、引数は `keep_resident: bool | None = None`。** `None` は「触らない＝現在の状態を維持」を意味する。これは §47 までのスパイクスクリプト（create 時に `keep_resident_weights=True` を張って直接 `generate()` を呼ぶ書き方）との互換のためで、既存の呼び出し側が壊れない。
+6. **create 時の `keep_resident_weights=True` は廃止し、install 群の後の `_swap_registry(True)` へ一本化した。** create 時点で張ると install 群より前に registry が刺さり、1 の問題と同じ経路をもう一本作ってしまう。実装を1本にするため、ワーカーは常に `keep_resident_weights=False` でパイプラインを作り、以後は per-job の arm だけで制御する。
+7. **ジョブ終了時にリセットしない。** これは `_set_nag_job` / `_set_sage_job` / `_set_block_swap_prefetch_job` に対する唯一の非対称である——**キャッシュが次のジョブまで残ることそのものが機能**だからである。解放されるのは、後続のジョブが明示的に `keep_resident=False` を要求したとき（＝リクエストでフィールドを省略した場合がまさにこれ）か、ワーカーが死んだときだけである。
+8. **モデル切替時のキャッシュ無効化は、`reload()` のワーカー kill によって構造的に保証される。** `services/pipeline_manager.py` の `reload()` はワーカープロセスごと落とすため、モデルを切り替えたあとに古い重みがこのキャッシュから配られることは原理的に起こりえない。§1-9 が要件に挙げていた「キャッシュの無効化条件」は、新しい仕掛けを足さずにこの既存の構造で満たされている。
+9. **arm は決して例外を投げない。** `_set_keep_resident_job` は `generate()` の try/finally の**外側**で走るため、ここで落ちると本来走れるジョブが死ぬ。切替に失敗しても「キャッシュされないだけで生成は走る」ほうが良いので、失敗はログに落として続行し、状態フラグは実際に成功した切替でのみ進める（次のジョブが同じ遷移を再試行する）。
+10. **RAM 監視・自動降格は作らない**（オーナー判断・2026-08-02）。「メモリが減ってきたら自動でキャッシュを捨てる」類の機構は、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§3-51** へ先送りした。本節のスコープは「利用者が明示的に on/off する」までである。
+
+### 48.2 実装箇所一覧
+
+- **`engine/pipeline/fast_video_pipeline.py`**: `_swap_registry(enabled)`（本体）・`_set_keep_resident_job(enabled)`（arm）・`_keep_resident_enabled` / `_keep_resident_registry` の2状態・`_LEDGER_BUILDER_ATTRS`（8属性）。`generate()`／`generate_chain()` に `keep_resident: bool | None = None` を追加。
+- **`api/models.py`**: `KEEP_RESIDENT_DEFAULT = False` と、`/generate`・`/generate/chain` の `keep_resident: bool`。`to_clip_request()` へ転記。
+- **`services/ltx_runner.py`**: worker ペイロードへ**既定と異なるとき（＝`True` のとき）だけ**加算。`GenerationOutcome` に `keep_resident_used` を追加。**env の `setdefault("LTX_KEEP_RESIDENT", ...)` は削除**（§48.7）。
+- **`engine/worker.py`**: `_resolve_keep_resident(msg, bs_prefetch)`（キー欠落 → `False`。3段ガードもここ＝§48.3）と `_keep_resident_used(msg, effective)`（`"off"` / `"on"` / `"on->off"`）。**env 読みは `False` 固定へ**。パイプライン生成は常に `keep_resident_weights=False`。
+- **`services/pipeline_manager.py`**: metadata.json（`_write_metadata`／`_write_chain_metadata`）へ `keep_resident_used` を追加。**`GET /status` には載せない**（§48.7 末尾）。
+- **`mcp_server/tools/generate.py`**: `submit_generate`／`submit_chain` の引数へ追加。既定と異なるときだけペイロードへ載せる（§44.7 で確立した規律に揃えた）。
+- **`gradio_ui/handlers.py`／`batch.py`／`ui.py`／`i18n.py`**: Settings タブの Acceleration 区画へチェックボックスを追加。バッチは実行開始時のスナップショットに含める。
+- **フロントエンド**（`Nz-LTX23-frontend-AviUtl2`）: `webui/src/shell/accelerationSettings.ts`（`keepResident: boolean`・`KEEP_RESIDENT_SERVER_DEFAULT=false`・`accelerationRequestFields()` が ON のときだけ `keep_resident` を載せる）・`useAccelerationSettings.ts`（localStorage 永続化）・`SettingsPanel.tsx`（2ボタントグル＋ON のときだけ出るヒント）・`i18n/strings.ts`（en/ja）・`api/types.ts`。詳細はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §58。
+
+### 48.3 ガード表（`engine/worker.py::_resolve_keep_resident`）
+
+`keep_resident=1` と噛み合わない設定を、ワーカー側で3段に分けて止める。**正しさに関わるものだけを 422 相当のエラーにし、メモリの都合にすぎないものは警告して自動 off にする**という切り分けである。自動 off は metadata.json の `keep_resident_used` に `"on->off"` として残り、ログには必ず理由を明示する。
+
+| # | 条件 | 挙動 | 理由 |
+|---|---|---|---|
+| **G-A** | `gguf_per_layer_quant=False` × `keep_resident=1` | **`RuntimeError`（ジョブを止める）** | bf16 融合経路の IC-LoRA 適用は state dict を in-place で書き換える（`engine/gguf/loader_service.py` の `weight.add_()`）。永続キャッシュと併用すると**融合済みの重みがキャッシュに焼き付いて次のジョブへ漏れる**＝速度ではなく**正しさ**の問題なので、黙って降格せず止める。 |
+| **G-B** | `dit_cpu_load=False` × `keep_resident=1` | **warn ＋ auto-off**（`"on->off"`） | block swap の退避コピーとキャッシュが同居して CPU 側に重みが二重化する。生成結果は変わらないのでジョブは完走させ、キャッシュだけ諦める。 |
+| **G-C** | `block_swap_prefetch=False` × `keep_resident=1` | **warn ＋ auto-off**（`"on->off"`） | 同期スワップは毎ステップ GPU→CPU の退避コピーを行うため、キャッシュと合わせて実測 +11.4GB の二重化になりコミット（仮想メモリ）を圧迫する。先読み block swap（§44）は退避コピーを構造的に廃止しているので、そちらが on ならこの問題は起きない。 |
+
+### 48.4 機械検証の結果
+
+- **バックエンドの pytest（モック・アプリ venv）**: **899 passed**（**実バックエンド稼働中**の計測）。失敗1件は `test_backend_status_...` で、**ポート 18620 でバックエンドが稼働中だと必ず落ちる既知の環境依存テスト**（§47.2 と同一。本改修と無関係であることは確認済み）。
+- **エンジン用仮想環境の新規テスト**（`.venv-engine` ＋ `--noconftest`）: **27 passed**。内訳は `tests/test_gemma_keep_resident_move.py` **5**（§47 の Gemma 移動選択ロジック）／`tests/test_registry_swap.py` **14**（8属性の同時差し替え・`replace` による他フィールド保存・属性欠落時の assert・OFF 時の `clear()`＋`gc`）／`tests/test_worker_keep_resident_resolve.py` **8**（キー欠落＝off・G-A の raise・G-B/G-C の auto-off と `"on->off"` 表記）。
+- **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
+- **フロントエンドの vitest**: **1675 passed**（**実バックエンド稼働中**の計測）。失敗7件は実バックエンドを起動しているときだけ走る `backend.integration.test.ts` の統合テストで、これも既知の環境依存である。
+- **フロントエンドの lint**: **0**（エラーなし）。
+
+### 48.5 実機ゲート表（2026-08-02 深夜〜08-03 未明・R1〜R7・R9〔エージェント担当分〕全項目合格。R8 はオーナー目視の別枠）
+
+環境: RTX 4070 Ti SUPER 16GB／System RAM 64GB、real backend。**清浄環境**（SD 系プロセスをはじめ重量級の並行作業なし。§47.4 の計測が汚れていた反省を踏まえ、開始前に確認した）。**全10ジョブ完走・crash 0**。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| R1 | ON 2本＋計測用1本の連続投入 | 1本目 MISS → 2本目以降 HIT | 2本目以降は `quant-load` 行が消失、metadata は `"on"`。**HIT 時の前処理 5.32 秒**（ベースライン 68.6〜75.0 秒） | ✅ PASS |
+| R2 | ON 4本の出力一致 | 全本 SHA256 一致 | 4本すべて `FE549395…AA02D5`（§47 の参照値と一致） | ✅ PASS |
+| R3 | フィールドを省略したジョブ（＝OFF）でキャッシュが解放されるか | `"off"`＋解放ログ＋RAM 返却＋出力一致 | metadata `"off"`・解放ログ出力・**PrivateBytes 49.98GB → 30.54GB（19.4GB 解放）**・SHA256 一致（キャッシュを使わなくてもビット一致） | ✅ PASS |
+| R4 | ON → OFF → ON の再ウォームアップ | MISS が復活し再びキャッシュされる | MISS 復活（前処理 74.98 秒）・SHA256 一致 | ✅ PASS |
+| R5a | G-C ガード（`block_swap_prefetch=false` × ON） | 完走＋`"on->off"`＋理由付き警告 | 完走・`keep_resident_used="on->off"`・理由を明示した WARNING | ✅ PASS |
+| R5b | G-B ガード（`dit_cpu_load=false` × ON） | 同上 | 完走・`"on->off"`・理由付き WARNING（`config.yaml` の一時編集で再現させ、**バイト一致で復元済み**） | ✅ PASS |
+| R6 | chain（`/generate/chain`）で ON | 完走＋chain metadata に反映 | 完走・chain の metadata に `"on"`（`to_clip_request` の転記を確認） | ✅ PASS |
+| R7 | コミット（仮想メモリ）のピーク | 記録のみ（閾値判定なし） | ピーク **99.75GB / 114.69GB＝87.0%**。ON/OFF のアイドル差 **+19.0GB** | ✅ PASS（記録） |
+| R9 | MCP 経由 | スキーマに `keep_resident` があり完走する | 自前の stdio クライアントで `submit_generate` の引数スキーマを確認＋完走・metadata `"on"`・**HIT 時の前処理 7.82 秒** | ✅ PASS |
+
+- **R1 のベースライン 68.6〜75.0 秒の出所**: 本ゲート中に発生した MISS ジョブ（1本目と R4 の再ウォームアップ）の実測である。§46.2 の 66.2／79.3 秒とは**計測条件が別**（あちらは §46 の一点計測ジョブの条件別平均）なので、両者を同じ数列として並べて比較してはならない。
+- **R7 で §47.3 の G7 絶対基準（コミット 90% 閾値）を引き継がず「記録のみ」としたのは**、①当時の 96% が並行重量作業下の汚れた計測だったこと（§47.4 の訂正）、②RAM を見て自動で振る舞いを変える機構は作らないというオーナー方針（2026-08-02・§48.1-10）——の2点による。閾値による合否判定を置くと、作らないと決めた自動判定の代わりを人手で運用することになるためである。
+- **Gradio 同梱 UI のトグルは mock テストのみ**である（実機での操作確認は行っていない。Gradio 側の実機確認はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-6 の Gradio 残件と同じ扱い）。
+- **R7 のピークの読み方**: 87.0% という数字は **G-C の auto-off が起きたジョブの最中**に記録されたもので、`clear()` 直後のコミット返却の遅れと、キャッシュを捨てたことによる再ビルドとが一過性に重なった瞬間である。定常状態の値ではないため、上限に対する余裕の評価にそのまま使ってはならない。ON/OFF のアイドル差 +19.0GB のほうが、キャッシュが常時占有する量として実態に近い。
+- **R8 は本表に無い**。R8 はフロントエンドの実機目視ゲートで、**オーナーが行う残ゲート**である（§48.9）。
+- **MCP の Claude Code UI 経由の実機確認は別枠のまま**である。§39.5 の既存方針（エージェントが自前スクリプトで MCP クライアントを叩いた確認は「暫定✅」とし、Claude Code 本体の UI＝承認ダイアログや `/mcp` の実画面は別途オーナーが通す）を変更していない。R9 は前者に相当する。
+
+### 48.6 メモリの実測値まとめ
+
+| 観測点 | 値 |
+|---|---|
+| キャッシュが占有する CPU RAM（ワーカー PrivateBytes の ON/OFF 差） | **約19.4GB**（R3 の解放実測 49.98GB → 30.54GB） |
+| 同上（アイドル時の ON/OFF 差） | **+19.0GB**（R7） |
+| コミットのピーク | **99.75GB / 114.69GB＝87.0%**（R7。G-C auto-off ジョブ中の一過性） |
+| ピーク VRAM | **不変**（GPU には何も常駐させない設計。§47.3 の G8 で ±3MB を確認済み） |
+| HIT 時の前処理 | **5.32 秒**（R1）／**7.82 秒**（R9・MCP 経由）。ベースラインは 68.6〜75.0 秒 |
+
+- **名目サイズ（DiT 約16.5GB＋Gemma 約8〜9GB＝計25〜27GB）と実測19.4GB の差について**: 19.4GB は**ワーカープロセスの PrivateBytes の ON/OFF 差の実測**であり、モデルの名目サイズの合計ではない。骨格が保持するのは量子化済み state dict とモジュールツリーであること、また OS のページキャッシュや共有マップに落ちる分がプライベート領域に計上されないことから、実測が名目合計を下回る。利用者向けの案内はこの実測（約20GB）を採る。
+
+この実測をもって、利用者向けの案内は「**メモリ 64GB 以上を推奨（約20GB を常時占有します）。生成結果は変わりません**」に統一した（フロントエンドのヒント文・Gradio・MCP のツール説明・`README.md` すべて同じ趣旨）。
+
+- **UI 文言の「約70秒→約10秒」という丸めの根拠**: HIT 時の前処理は本ゲートで 5.32 秒（R1）／7.82 秒（R9）、§47.3 のスパイクでは 9.3〜15.3 秒だった。利用者向けの文言はこの幅の**上側を含むように保守的に丸めて**「約70秒→約10秒」としてある（実測の最良値である 5.32 秒をそのまま謳わない）。
+
+### 48.7 env 経路（`LTX_KEEP_RESIDENT`）撤去の移行メモ
+
+**`LTX_KEEP_RESIDENT` は撤去した。真実源（single source of truth）は per-job フィールドへ一本化されている。**
+
+- `services/ltx_runner.py` がワーカーの env へ入れていた `setdefault("LTX_KEEP_RESIDENT", "0")` を削除した。
+- `engine/worker.py` の env 読みは `False` 固定へ置き換えた（パイプライン生成時の `keep_resident_weights` は常に `False`）。
+- **旧手順の `$env:LTX_KEEP_RESIDENT="1"` は無効である。**設定しても何も起こらない。今後は `POST /generate`・`POST /generate/chain` の `keep_resident` フィールド（既定 `false`）で指定する。Gradio・MCP・AviUtl2 フロントエンドからは Settings の Acceleration 区画のトグルで切り替える。
+- 本ログ内の各節の実験条件・環境記述（**§9・§10・§15・§20〜§36 など**。§10.2・§46・§47 を含む）に出てくる `LTX_KEEP_RESIDENT` の記述は、当時の実験手順を記録した歴史であり書き換えていない。同様の理由で `Docs/RESOLUTION_DURATION_CAPABILITY.md`・`Docs/SCALEUP_16GB_RESEARCH.md`・`Docs/NEXT_SESSION_HANDOFF.md`・`Docs/NEXT_SESSION_WORKORDER.md`・`Docs/IC_LORA_PHASE_A_STATUS.md` の該当箇所には本文を書き換えず注記を1行だけ添えた。
+- **`GET /status` には意図的に載せていない。** `/status` は「サーバーが実際にできること」を書く場所であり、`keep_resident` は能力ゲート（使える／使えないの判定）を持たない——このマシンに RAM があるかどうかという利用者側の選択にすぎないためである。`attention_backend` の `sage_available` や `block_swap_prefetch_available` のような可否フラグは存在せず、クライアント側もボタンを封じない。
+
+### 48.8 既知の残留・注意記録
+
+- **OFF 時のコミット返却には遅れがある。** `clear()` ＋ `gc.collect()` を通した直後でも、OS がコミットを返すまでには間があり、その最中に次のジョブが再ビルドを始めると一過性にピークが立つ（R7 の 87.0% がまさにこれ）。異常ではない。
+- **OFF 時に完全にはゼロにならない残留がある。** 実測で残りうるのは、先読み block swap が ON のときの DiT 分（次の `install()` まで）・pinned プール・`held_embed_cpu` **約1.9GB** の3つ。解放ログ自体にこの3点を書き出してあるので、RAM の減り方が期待と違うときはまずログを見ればよい。
+- **G-B の再現には `config.yaml` の一時編集が必要だった。** `dit_cpu_load` はリクエストから切れないためで、検証後に**バイト一致で復元済み**であることを確認している。
+- **LoRA 併用 × keep=1 の実機確認は未実施である。** R1〜R9 はすべて素の T2V で、LoRA を付けたジョブは一度も流していない。G-A ガードが止めるのは `gguf_per_layer_quant=False`（bf16 融合経路）だけで、**通常の per-layer quant 経路の LoRA は毎ジョブ attach/detach されキャッシュを汚染しない**——設計上は安全だが、実測はまだ取っていない。実機確認の項目はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1 に起票した。
+- **`keep_resident_used` は3値**（`"off"` / `"on"` / `"on->off"`）。`"on->off"` は G-B / G-C の auto-off が起きたことを意味し、`metadata.json` に残る。速度が期待どおり出ないときは、まずここを見ると原因が切り分けられる。
+
+### 48.9 残るオーナーゲート（R8＝フロントエンド実機目視）
+
+以下はオーナー本人の目視・操作でしか判定できないため、本テーマは**細目のオーナー目視ゲート待ち**の状態である。ただし**本命にあたる 7（実 GPU での高速化）は 2026-08-03 にオーナーが実機で確認して合格**しており、残っているのは見た目・文言・永続化・4経路といった細目である。フロントエンド側のチェックリストは[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1／§2-2 に「何を操作して確認するか → どうなれば合格か」の形で起票済み。
+
+1. Settings > Acceleration に「モデル骨格の常駐（ジョブ間キャッシュ）」トグルが表示される。※フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10**（prefetch 連動グレーアウト。2026-08-04にオーナー目視合格し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-62へ移設・クローズ）を実装したあとは合格条件が変わる（先読み block swap が off のときだけグレーアウトしているのが正しい姿になる）。
+2. **既定が off** である（初回起動時・localStorage が空のとき）。
+3. **ON にしたときだけ**ヒント文（「メモリ64GB以上を推奨…生成結果は変わりません」）が出る。
+4. localStorage に永続化され、AviUtl2 を再起動しても選択が保たれる。
+5. **4経路すべて**（Create／Chain／バッチA2V／バッチi2v-long）で、ON のときリクエストに `keep_resident` キーが載る。
+6. 日本語・英語の両方で文言が自然である。
+
+### 48.10 オーナー実機の三者併用交互対比較（768p/257f、2026-08-03記録）
+
+オーナーが768p/257fで attention・block_swap_prefetch・keep_resident の交互対比較を実機実施した（実施日時2026-08-02 22:18〜22:42・UTC、metadata.jsonの`created_at`で確認）。4ジョブとも1280x768・257フレーム・t2v・同一プロンプト・8ステップ・seed 1687351733・LoRAなし・distilledで条件を揃えている。
+
+| attention | block_swap_prefetch | keep_resident | 生成時間 | ジョブID（先頭8桁） |
+|---|---|---|---|---|
+| sdpa | off | off | 257.31秒 | 12f0fa3d |
+| sage | on | off | 202.04秒 | fe6db822 |
+| sage | on | on（1回目＝キャッシュ MISS・構築） | 228.63秒 | b152172b |
+| sage | on | on（2回目＝HIT） | 165.0秒 | 263c64b4 |
+
+- 全部offに対し、フルスタック定常（HIT）は約36%短縮。try1の+26.6秒は骨格キャッシュ構築の入場料である（`keep_resident_used="on"`・ガード降格なし）。
+- sageの3ジョブの`output.mp4`はSHA-256完全一致（`926CE1BD8CA627F8...`）——§44（prefetch）・§48（keep_resident）で個別に確認済みのビット一致性が、768p/257fでの三者併用でも保たれることをオーナー実機で裏付けた。
+- これは768p/257fにおける attention・prefetch・keep_resident 三者併用の初の実測である。
+
+この165.0秒を分母にした§3-49（fused GGUF dequant+GEMM）の再検算: 逆量子化の見た目の割合は約11%に育つが、融合で実際に削れるBF16往復分は約2.3秒=約1.4%のままで、クローズ判断は不変（2026-08-03ディスカッション）。
+7. 実 GPU で、2本目以降の生成が体感で速くなる（前処理の待ちが消える）。→ **✅ 合格（2026-08-03・オーナー実機確認）。「生成が大幅に高速化すること」を確認。**
+
+**フォローアップ（2026-08-03 オーナー指示）**: prefetch=off 時の UI 連動グレーアウトをフロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10** として起票した。§48.3 の G-C（`block_swap_prefetch=False` × `keep_resident=1` → warn ＋ auto-off）はサーバー側の安全装置として正しく働いているが、利用者から見ると「トグルを On にしたのに効かない」という見え方になりうる。そこでフロントエンド側で、先読み block swap が off のあいだは骨格常駐トグルを自動的に off にしてグレーアウト（操作不能）にし、prefetch を on に戻すと解除する。**本節のガードそのものは変更しない**（UI の見せ方だけの改修である）。
+
+**追補（2026-08-03ディスカッション・attn2 K/Vキャッシュ案の検討）**: テキストcross-attention（attn2）のK/V射影はプロンプト不変ゆえ全11パスでキャッシュ可能ではないかという案を検討した（成立すればto_k/to_vのper-layer逆量子化スキップ込みで約2秒/ジョブ・ビット一致の見込みだった）。判定は**no-go**。本番3種のGGUF（distilled/Sulphur/10Eros）すべてがメタデータで`cross_attention_adaln: true`を設定していることをGGUFバイナリから直接読んで実測確認した（wheelの`model_configurator.py`はキー欠落時のみFalseを返すのみ）。このためattn2へ渡るコンテキストは各ブロックの`prompt_scale_shift_table`＋タイムステップ由来のscale/shiftで毎ステップ変調され、射影入力がパスごとに異なるため素朴なキャッシュは数学的に不成立である。変種（蒸留スケジュールのシグマ固定を利用した同一プロンプトのジョブ間キャッシュ）も、キャッシュ実体約2.2GB（11パス×48ブロック×2射影×256トークン×4096次元）に対し利得約2秒で見送った。位置づけは§3-49（fused GGUF dequant+GEMM）と同様、「さらなる高速化が必要になったとき」の再訪候補ですらなく、前提条件（AdaLN変調）が崩れない限り不成立という記録である。
+
+---
+
+## 49. ★IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加＝実装完了・機械検証（pytest・自己診断・型検査・vitest）全PASS・**G0〜G4・G-fix1〜G-fix3の全ゲート合格（2026-08-04）。テーマ完結（残：ヒント文言の表現修正のみ）**（2026-08-03実装・2026-08-04全ゲート合格）
+
+> **正本＝[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)**（経緯・確定方針・公式ワークフロー解読結果・実装内容・残ゲートの定義）。本節はその**実測値の記録**である。フロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8 に残っていた未対応IC-LoRA 4種のうち、Depth と Deblur の2種を製品化した。前処理器は **Video-Depth-Anything Small（vits・Apache-2.0）**、Deblur は Lightricks 公式 `LTX-2.3-22b-IC-LoRA-Deblur`。**G0・G1・G2・自動テスト・再ホスト検証・Deblur OOM修正の完走確認・参照動画ローダーのreserved膨張根治（第3修正・§49.10）に加え、G-fix3（Deblur品質目視）とG4（既存canny/pose/upscalerの回帰）も2026-08-04にオーナー実機で合格し、全ゲートが揃った（§49.11）。残るのはヒント文言（不正確な「出力と同じ解像度で処理」という表現の削除）の修正のみである。第3修正・G-fix3・G4に対応する実装・テスト差分のコミット・プッシュは未実施。デプロイも未実施。** → **実施済み（2026-08-04、`e273052`〜`9701fbe`）。ヒント文言の修正を含め、コミット・プッシュ・webuiの再ビルド／再デプロイまで完了している。**
+
+### 49.1 一次資料の実測（公式ワークフローJSONの直接解読・Deblurのヘッダ実測）
+
+**公式ComfyUIワークフロー `LTX-2.3_ICLoRA_Union_Control_Distilled.json`** をJSONとして直接解読し、深度前処理ノードのパラメータ実値を読み出した（推測なしの転記）。
+
+| 項目 | 実値 | 本実装 |
+|---|---|---|
+| モデル種別 | `vits`（Small） | 同一 |
+| `input_size` | `518` | 同一 |
+| `max_res` | `960` | 同一 |
+| 精度 | `fp32`（autocast無効） | 同一 |
+| 出力形式 | グレースケール（近＝白） | 同一（クリップ全体でのmin-max正規化1回） |
+
+**留保**: 同ワークフローで実際に配線が完成しているのは **canny 経路のみ**で、depth と pose のノードは「例示」の位置づけである。したがって上表は「公式が depth に使うと示している前処理器とその値」の一次資料としては有効だが、「公式が動作保証している完成品の depth 経路」ではない。**G1 で公式実装との数値比較を合格条件に採らなかった理由の一つがこれである**（§49.3 末尾）。
+
+**Deblurアダプタの safetensors ヘッダ実測**（`ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`・906,071,437バイト）:
+
+| キー | 実測 | 帰結 |
+|---|---|---|
+| `reference_downscale_factor` | **実在・値 `"1"`** | 既存のメタデータキー判定がそのまま `kind=control` へ自動分類する。**configスキーマの拡張は不要**と確定 |
+| `reference_temporal_scale_factor` | **無し** | 動作中wheelが時間係数を適用できない制約に抵触しない。方針の再検討は不要 |
+
+値が **1**（参照を縮小せずに条件付けに使う）であることが、エンジン側の縮小係数ガード緩和（§49.4）が必要になった直接の理由であり、同時に Deblur の VRAM 増（stage-1 の総トークン数が、**参照なしを1として、縮小係数2で1.25倍・係数1で2.0倍＝既存の制御系比で約1.6倍**）の理由でもある。**VRAM の実測は G3 で行う（未実施）。** → **§49.11で実測済み（ジョブ全体ピーク13.9GB）。**
+
+### 49.2 G0 前処理単体スモーク（2026-08-03実測・エンジン用仮想環境＋GPU）
+
+エンジン用仮想環境（**torch 2.9.1／numpy 2.4、xformers・decord は無し**）で、**追加インストールを一切せずに動く**ことを確認した。
+
+| 観測点 | 実測 |
+|---|---|
+| xformers不在フォールバックの実体 | **素のsoftmax実体化**（N×Nのスコア行列を丸ごと確保する上流実装）。1920×1088で **reserved 14.7GB** |
+| SDPAへ差し替えた場合 | **約4.4GB**（reserved）。**速度も向上** |
+| 差し替えによる数値差 | **fp16の許容誤差の1/20以下** |
+| 本実装のVRAM | **約4GB固定** |
+| 本実装のスループット | **1280×768で約15fps** |
+| `easydict` | キーワード引数の入れ物としてしか使われていない → 素の `dict` へ置換（エンジン用仮想環境に未導入のため） |
+
+- **この実測を受けて SDPA 化を「任意の最適化」ではなく必須として実装に組み込んだ**（`vda/video_depth_anything/dinov2_layers/attention.py` と `vda/video_depth_anything/motion_module/attention.py` の2箇所）。後者は上流が `baddbmm` の `alpha` としてスケールを掛けており、それが必ずしも `1/sqrt(head_dim)` ではないため、SDPA へは `scale=self.scale` を**明示的に**渡してある。前者は SDPA が同じ `1/sqrt(head_dim)` を内部で掛けるので明示の `q * self.scale` を落とした。
+- あわせて xformers の import ガードを3ファイルから削除した。ガードが握る `except ImportError` 分岐は素の `print(...)` を実行するもので、**ワーカーの標準出力はフレーム化されたプロトコル通信路**であるため、そこへ文字列が漏れると通信が壊れる。削除後に残る経路は、xformers が無いときに上流が元々通っていた経路そのもの＝本スモークが実測した構成である。
+
+### 49.3 G1 深度制御信号の性質ゲート＝全項目PASS（2026-08-03実測）
+
+`engine/preprocess/depth_g1_gate.py`（本テーマで新設）で実施。**本番と同じ経路**（`get_processor("depth")` ＋ `driver.preprocess_video`）を1回走らせ、mp4へ書き出す直前のフレームを取り出して測る作りなので、測定対象は実ジョブが生成するものと同一である。条件は**実クリップ 1280×720・41フレーム**。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| (a) | 近い被写体が白か（近／遠の矩形を指定して平均輝度を比較） | 近 > 遠 ＋ 余裕 | 近 **184.07** ／ 遠 **15.49** | ✅ PASS |
+| (b) | 静止画素のフリッカ（元動画がほぼ動いていない画素だけで測ったフレーム間の深度の揺れ） | 閾値 **2.0** 以下 | 平均 **0.561** ／ p95 **0.693** | ✅ PASS |
+| (c) | mp4書き出し往復の階調劣化（バンディング） | PSNR 閾値 **6.0** 以上 | **35.67dB** | ✅ PASS |
+| — | 速度 | 記録のみ | 41フレームを **4.35秒** | ✅ PASS（記録） |
+
+- **(b) が「静止画素だけ」で測る理由**: 連続フレームの生の差分は、フリッカと**本物の動き**を混同する。元動画側の差分が小さい画素（`--static-delta` 未満）に限れば、そこは深度も動いてはならないので、フリッカだけを取り出せる。
+- **(c) の閾値 6.0 の出所**: ドライバの既存エンコーダ（`mp4v` fourcc。canny/pose が既に通っている経路）の実測から較正した値である。**この項目が捕まえるのはコーデック由来の一般的な劣化ではなく、階調の崩壊**である。生き残った異なるグレー階調の数を数えるバンディング指標も併せて出している。
+- **(a) は矩形を指定しない場合、報告のみで合否判定しない**（絵としての最終判断はオーナーの目視＝G3に委ねる設計）。
+- **公式実装との数値比較を G1 に採らなかった理由**: ①比較には別環境の構築が必要、②§49.1 のとおり公式ワークフローの depth 経路は配線が完成しておらず、突き合わせ先として信頼できる基準にならない——の2点。最終的な絵の正しさは既存の `outputs/visual_review/` 運用に従い G3 のオーナー目視で判定する。
+
+### 49.4 実装箇所一覧（設計判断の要点つき）
+
+- **`engine/pipeline/fast_video_pipeline.py`**: 縮小係数の読み取りを**先頭1本のみ → 全LoRA走査**へ。wheel の読み取り関数は「1と宣言されている」場合と「キー自体が無い」場合の**両方で1を返す**ため、`safetensors` のヘッダを別途開いて**キーの存在そのもの**を確かめ、**キーを持つLoRAだけが投票**する方式にした。宣言値が2種類以上あれば矛盾としてエラー（**1と2の混在も矛盾**——参照動画は1つの解像度で1回だけ読まれるので、片方のアダプタに訓練時と違うスケールの参照を黙って食わせることになる）。**どのLoRAもキーを持たなければエラー**。あわせて `factor <= 1` 拒否を **`factor >= 1` 許容**へ緩め、下流の `assert` を**明示的な検証と例外**へ置換した（`python -O` では assert が消えるため）。割り切れ判定には手を触れていない（係数1では元々発火しない）。チェーン側は同メソッドを共用するため独自修正は不要。
+- **`api/errors.py`・`api/generate.py`・`api/generate_chain.py`**: 新エラー **`REFERENCE_REQUIRES_CONTROL_LORA`（422）**。ガード緩和で消える「参照動画＋画風LoRAのみ」の誤用検出を、**API層の逆方向チェック**として作り直した（**単発・チェーンの両方**）。従来はこの誤用を縮小係数ガードが偶然弾いていたが、それは**アップロードもジョブ開始も済んだあとで落ちる**という不親切な失敗の仕方だった。フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§4-11 の①**を本テーマの副産物として解消したことになる。
+- **`engine/preprocess/vda/`（新規）**: Video-Depth-Anything の**推論コアのみ**をベンダリング（git追跡対象。`vendor/` は `.gitignore` 除外のため使えない）。Apache-2.0 の `LICENSE` 全文と、**改変点の完全な一覧を含む `README.md`** を同梱。クラス名・モジュール構成・属性名・コンストラクタ引数は**一切不変**（`strict=True` で読み込むため）。改変は4点のみ＝①相対import化（`from utils.util import ...` は `sys.path` 上の別の `utils` へ黙って結びつく危険があった）②`easydict` 除去 ③SDPA化2箇所（§49.2）④xformers import ガード削除3ファイル（§49.2）。上流の `run.py` / `app.py` / `benchmark/` / `loss/` / `utils/dc_utils.py`（`decord`・`matplotlib`・`imageio` を引き込む）は取り込んでいない。`.pth` は git 外・インストーラ経由。
+- **`engine/preprocess/depth.py`（新規）**: `DepthProcessor`。公式 `infer_video_depth`（**32フレームの移動窓・10フレームの重なり・窓どうしの整合処理**）をそのまま呼ぶ薄いラッパー。重いimport（torchvision＋DINOv2スタック）は `_ensure_loaded()` 内に**遅延**（DWPose と同じ作法。トップレベルのimport失敗が canny/pose を道連れにするのを防ぐ）。ジョブごとにロードし、制御動画を書き終えたら `release()` でGPUから追い出す（16GBぎりぎりの生成デノイズ中に深度の重みを残さない）。
+- **`engine/preprocess/base.py`・`driver.py`・`__init__.py`**: 新プロトコル **`VideoProcessor`（クリップ単位）** を `FrameProcessor`（フレーム単位）と並置し、ドライバがどちらを持つかで分岐する。深度は時間方向の移動窓とクリップ全体の正規化を使うため1枚ずつでは処理できない。**`frame_cap`**（デコード打ち切り）を追加——深度は与えられた分をすべて正規化に使うので、生成で使わないフレームまで処理すると時間を無駄にするうえ**グレーの割り当てレンジがずれる**。
+- **`engine/worker.py`**: `_preprocess_frame_cap(msg)`。**単発＝`num_frames`／チェーン＝`clips[0]["num_frames"]`**（参照条件は先頭クリップのstage-1にしか付かないため）。キーが無ければ `None`（全デコード＝従来どおり）。**`frame_cap` は `preprocess == "depth"` のときだけ渡す**ので、**canny/dwpose の経路はバイト不変**であり、ログ行も `cap=` の部分は該当するときにしか付かない（Phase C で記録した実行ログと文字単位で一致し続ける）。
+- **`config.yaml.example`・`config.py`・`services/lora_registry.py`**: `depth-control`（**union-control のファイルを共用**・`preprocess: depth`）と `deblur`（前処理不要のため**文字列形式**でパスのみ）の2エントリ登録。`IcLoraEntry.preprocess` のリテラル型に `"depth"` 追加。**Gradio の静的フォールバック一覧には手を触れていない**（`/config` 不達時だけの死に枝と確認済み）。
+- **`gradio_ui/adapters.py`・`i18n.py`・`ui.py`**: `ADAPTER_FRIENDLY` に2件、英日それぞれ**ヒント3種**（アスペクト比／Depth の推奨値／Deblur の書式とVRAM）。**アダプタ選択に連動して出し分ける仕組みは既存に無く、そのためだけの新UI機構は足していない**（既存の `note_ref128` と同じ常時表示の注記）。
+- **フロントエンド**（`Nz-LTX23-frontend-AviUtl2`）: `webui/src/i18n/strings.ts`（英日の同内容ヒント3種）／`GenerationForm.tsx`（参照動画セクションに3行）／`api/types.ts`（`"depth"`）／`bridge/mockBridge.ts`（`depth-control` マップ形式＋`deblur` 文字列形式のフィクスチャ）。**選択肢そのものは `/config` 経由で自動的に増える。** 詳細は[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §59。
+
+**値の自動セットはしない**（オーナー決定）。深度の推奨 0.6 は**ヒント文の表示のみ**である。またヒント文は、推奨 0.6 の対象が **②`conditioning_attention_strength`（制御追従度）**であり **③LoRAアダプタ強度は 1.0 のまま**であるという区別を明記している（③を下げると参照が滲み込む＝bleed-through と公式が警告している）。3つのノブの切り分けは **§28.1** で照合済みで、0.6 の出典は Lightricks 公式ドキュメントの記載である。
+
+### 49.5 自動テストの結果（2026-08-03実測・いずれも**実バックエンド未起動時**の計測）
+
+| 対象 | 結果 | 着手前 |
+|---|---|---|
+| アプリ用仮想環境の pytest | **910 passed / 9 skipped** | 900 passed |
+| エンジン用仮想環境（`tests/test_ic_lora_engine_conditioning.py` ＋ forward 系・`--noconftest`） | **28 passed** | 15 passed |
+| `engine/preprocess/preprocess_selfcheck.py`（前処理の自己診断） | **11 / 11 PASS** | 新規 |
+| Gradio 系テスト | **277 緑** | — |
+| フロントエンド vitest | **1673 緑** | — |
+| フロントエンド `npm run typecheck`（`tsc -b`） | **0エラー** | — |
+
+- **`preprocess_selfcheck.py` を pytest ではなくスクリプトにした理由**: エンジン用仮想環境には `fastapi` が無いため `tests/conftest.py` を収集できず、アプリ用仮想環境には `cv2` も `torch` も無い。`block_swap_prefetch_selfcheck.py` と同じ切り分けである。GPU も重みも不要で、ドライバは偽のプロセッサで、`DepthProcessor` は純粋な配列変換ヘルパだけを叩く。11項目の内容は、`get_processor` の解決と不正値の拒否／深度だけが `VideoProcessor` であること（canny/dwpose の誤ルーティングが起こりえないこと）／クリップ単位分岐が全フレームを1回で順序どおり渡すこと／`frame_cap` の先頭切り出し／`frame_cap=None` の従来動作／FPSと解像度の保存／両分岐＋失敗時の `release()` 実行／フレーム数不一致の loud fail／`_inference_size` の 960 境界と偶数化／`_to_control_frames` の近＝白・クリップ全体正規化・3チャンネル同一・元解像度復元／チェックポイントの探索先の一致。
+- **フロントエンド `npm run typecheck`（`tsc -b`）を使っている**のは既存の規律どおりで、`npx tsc --noEmit -p .` は偽合格するため使わない。
+
+### 49.6 再ホストの検証（2026-08-03）
+
+`Rootport/Nz-LTX23-weights`（既存の公開・非gatedリポジトリ）へ2ディレクトリを追加。**上流とのSHA-256一致・匿名（ログイン無し）でのダウンロード成功・README／NOTICE の更新**をいずれも確認済み。
+
+| ディレクトリ | 内容 | サイズ |
+|---|---|---|
+| `ltx-2.3-ic-lora-deblur/` | `ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | 906,071,437バイト |
+| `preprocessors-vda/` | `video_depth_anything_vits.pth` ＋ `LICENSE`（Apache-2.0 全文） | 116,452,112バイト（2ファイル計） |
+
+`LICENSE` を同梱しているのは、これが重みリポジトリ内の他ファイル（LTX-2 Community Licence）と**異なるライセンス**であり、`.pth` と必ず一緒に運ばれる必要があるためである。
+
+**`scripts/install_ltx.ps1`**: 独立したダウンロード呼び出しを2本追加し、検証表（`$required`）を **14項目 → 16項目**へ拡張した。
+
+> **兄弟ディレクトリ方式を採った理由（容量チェックの構造的な罠）**: インストーラのスキップ判定は Check ディレクトリの**再帰的サイズ合計**である。Deblur の906MBを既存の `models/ltx-2.3-ic-lora/` の**中**に置くと、同ディレクトリの合計は 1,308,930,638 → 2,215,002,075 になる。すると **654MB の union-control ファイルを失っているマシンでも合計 1,560,536,723 となり、既存の Min 値 1,000,000,000 を上回ってスキップ**してしまう。以後は再実行のたびに「union-control MISSING」が出続け、しかも自力では直せない恒久的な行き詰まりになる。これは Gemma tokenizer で実際に起きた事故の**逆方向の再発**である（あちらは大きなファイルが不在の兄弟**ディレクトリ**を覆い隠した。こちらは新しいファイルが不在の兄弟**ファイル**を覆い隠す）。新しい Check ディレクトリは自分の中身だけで測られるので、この事故が構造的に起こりえない。
+>
+> **命名も僅差で助かっている**: `models/preprocessors-vda` は DWPose の `models/preprocessors` の**兄弟**であって子ではないため、互いのサイズ合計が混ざらない。もし `models/preprocessors/vda/` にしていたら、その116MBが DWPose の判定を水増しし、欠けた135MBの `dw-ll_ucoco` を覆い隠していた。ダウンロード対象を絞る glob も `preprocessors/*` は `preprocessors-vda/...` に一致しないため混線しない。
+>
+> **Min 値**: `ltx-2.3-ic-lora-deblur` = **900,000,000**（唯一のファイルが検証表の対象なので、失えば 0 に落ちて再ダウンロードが走る）／`preprocessors-vda` = **110,000,000**（`LICENSE` の 11,356バイトは検証表の対象外＝欠けても MISSING にならないため、**LICENSE の有無で判定が変わらない**値を選んだ。両方あり＝116,452,112でSKIP、LICENSEのみ欠損＝116,440,756でもSKIP、`.pth` 欠損＝11,356でダウンロード）。**疑似環境で3ケースの実測トレースと反例テストを実施済み。**
+
+### 49.7 G2 mock 通し＝全項目PASS（2026-08-03実施）
+
+**実施方法**は §23.3／§34.5 の前例に倣った——scratchpad へコピーした**隔離 config**（`backend: "mock"`・**ポート 18902**・出力先とアップロード先も scratchpad へ隔離）で**実 uvicorn を起動**し、HTTP 経由で叩く。**リポジトリ側のファイルおよび `outputs/`・`uploads/` への書き込みはゼロ**であることを確認済みである。
+
+| # | 内容 | 合格条件 | 実測 | 判定 |
+|---|---|---|---|---|
+| 1 | `depth-control` ＋ 参照動画 ＋ `conditioning_attention_strength=0.6` の**単発生成** | 202 → `completed`・metadata に正記録 | 202 → `completed`。`metadata.json` に `preprocess: depth`／参照ID／`0.6` が正しく記録された | ✅ PASS |
+| 2 | `deblur` ＋ 参照動画の**単発生成** | 202 → `completed` | 202 → `completed` | ✅ PASS |
+| 3 | **1クリップ chain**（Create 画面の A2V 相当。`clips[0]["num_frames"]` 側の分岐を通る） | 202 → `completed` | 202 → `completed`（`num_frames=25`） | ✅ PASS |
+| 4 | **2クリップ chain ＋ 制御系** | 422 で拒否（既存仕様の維持） | **422 `LORA_CONTROL_UNSUPPORTED_IN_CHAIN`** | ✅ PASS |
+| 5 | 参照動画 ＋ **画風系 LoRA のみ** | 422 で拒否（§49.4 の新設チェック） | **単発・chain の両方で 422 `REFERENCE_REQUIRES_CONTROL_LORA`** | ✅ PASS |
+| 6 | `/config`・`/loras` への新2件の出現 | 2件が出現し、kind が正しい | 両エンドポイントに出現。**`deblur` は実メタデータ由来で `kind: control`**（§49.1 の `reference_downscale_factor="1"` による自動分類が実サーバー上でも効いていることの確認） | ✅ PASS |
+
+- **項目3 の `num_frames=25` について**: 17 で投げると **422** になるが、これは `overlap_frames=3` との**既存の境界バリデーション**が正しく働いた結果であり、**本改修のバグではない**。25 で正常に完走する。
+- **項目5 は §34.6 の既知事項#2 を解消したことの実機確認である。** 従来「`reference_video_id` ＋ 画風系 LoRA のみ」はスキーマ上受理されてワーカー内の `_set_ic_job` で `RuntimeError` になっていた（早期422化は将来の改善余地として残されていた）。§49.4 で新設した `REFERENCE_REQUIRES_CONTROL_LORA` によりリクエスト時点の 422 になったことを、実サーバーで確認した。§34.6 側にも解消を追記済み。
+- **`control_depth.mp4` の実生成確認は G2 の対象外である。** **mock エンジンは設計上、前処理を実行しない**（`_MockBackend` は `lora_paths`／`reference_video_path` を受理はするが無視する）。深度前処理が実際に動いて制御動画が書き出されることの確認は **G3 の対象**として残る（前処理そのものの性質は §49.3 の G1 で実測済み）。
+
+### 49.8 残ゲート（**G3・G4とも全項目合格。テーマ完結**）— G3／G4
+
+定義の正本は[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md) §7。実測・進捗は本節以降（§49.9〜§49.11）に記録する。
+
+| ゲート | 内容 | 状態 |
+|---|---|---|
+| **G3** オーナー実機 real | ①`depth-control` 通常経路を1本以上（制御追従度 0.6 を出発点に、元の動きや構図を保ったまま内容が置き換わることを目視）②`depth-control` の A2V 経由を1本以上 ③`deblur` を1本以上（**デフォーカスぼけ**の素材で。§49.1 のプロンプト2段構成）④**Deblur の VRAM 実測**——`reference_downscale_factor=1` のため stage-1 の総トークン数が、**参照なしを1として、縮小係数2で1.25倍・係数1で2.0倍（既存の制御系比で約1.6倍）**になる。スピルの起きない解像度・フレーム数の表と突き合わせ、**ヒント文の VRAM 記述を確定させる**（現在は具体値のない固定文言）。**あわせて `control_depth.mp4` が実際に書き出されることの確認もここに含まれる**（G2 は mock のため前処理が走らない） | ✅ **全項目合格**——①②は2026-08-03合格。③はOOM原因究明のうえ修正・完走確認済みで、**目視によるG-fix3判定も2026-08-04合格**（§49.11）。④VRAM実測は完了・reserved膨張は第3修正で根治（SHA完全一致確認済み。§49.10）・ヒント文はピーク13.9GBのため**警告不要**とオーナー裁定（§49.11。文言修正自体は別途残作業） |
+| **G4** 既存アダプタの回帰 | `canny-control`・`pose-control`・`pixel-spatial-upscaler-x2` が本改修前と同一に動くこと。**縮小係数2の経路がバイト不変**であることを確認する（§49.4 でメタデータ読み取りを全走査に変え、ドライバに `frame_cap` を足しているため） | ✅ **合格（2026-08-04）**。基準3本（`24c67fd`）と現行3本（`e273052`）がSHA-256完全一致（§49.11） |
+
+**デプロイは未実施である。** 初期実装のコミット・プッシュ済み（backend `fd6d43f` / frontend `d375028`、2026-08-03）。**Deblur OOM修正はコミット済み（backend `e45a27b`）。§49.10の参照動画ローダー修正（第3修正）と§49.11のG-fix3・G4に対応する実装・テスト差分は、機械検証・実機ゲートまで完了しているが、コミット・プッシュは未実施**（`git status`にエンジンパイプライン・テストの差分が残っている）。 → **実施済み（2026-08-04、`e273052`〜`9701fbe`）。コミット・プッシュ済みで、webuiも再ビルド・再デプロイ済み。**
+
+### 49.9 Deblur参照エンコードOOMの原因究明と修正（2026-08-03）
+
+**経緯**: §49.8のG3でDeblur（係数1）1280x768/257fがOOM（ジョブ`92a95e94`）した件を調査した。落下地点は**参照動画のVAEエンコード**（非タイル・`torch.cuda.empty_cache()`の保護外）と特定した。
+
+**第1修正（不合格）**: 係数1のときだけ参照動画のVAEエンコードをタイル化し、あわせて事前クリーンアップを入れた。しかしG-fix1の再走（1280x768/257f・ジョブ`447084b7`）は`tiled_encode`実行中にOOMし**不合格**だった。この失敗を解析したところ真因が判明した——**torch 2.9.1のbf16 Conv3dは、入力がcontiguousレイアウトのときim2colフォールバックを取り**、「入力ch×27×出力体積×2B」というサイズの一時行列を確保する（実測がオフライン予測と比率1.00で一致）。タイル化だけでは、タイルがcontiguousレイアウトを経由する限りこの一時行列の確保を避けられない。
+
+**第2修正（合格）**: 係数1のときだけ、参照エンコーダのConv3d重み**42本**を`channels_last_3d`へ切り替え、cuDNNの直接カーネル経路（im2colを経由しない）へ載せた。`finally`節で**元のcontiguousへ復元**する——同一ジョブのstage2で行うキーフレーム再エンコードがビット一致を要求するためである。復元後にも`empty_cache()`によるクリーンアップを入れてある。この変換により非ビット一致となるのは**係数1の参照潜在のみ**（rel_rms 1.2e-2／cos 0.99993）で、実測は許容範囲内である。
+
+**ジョブ台帳**（すべてseed 424242・同一プロンプト）:
+
+| ジョブID | 位置づけ | 条件 | 結果 | SHA |
+|---|---|---|---|---|
+| `c322130d` | G-fix0（修正前基準・非タイル） | 896x512/121f | 122.93秒で完走 | `180a5f57...` |
+| `4202415b` | 中間（第1修正のみ・タイルcontiguous） | 896x512/121f | 完走。**記録上無効（最終比較には使わない）・出力ファイルは保持** | `651e7cc6...` |
+| `447084b7` | 第1修正のみでのG-fix1 | 1280x768/257f | `tiled_encode`実行中にOOMで**不合格**（この失敗の解析でim2col真因が確定） | — |
+| `bda91a2b` | G-fix1再走（第2修正込み・合格） | 1280x768/257f | **270.02秒で完走** | `9a8a047d...` |
+| `d486cbee` | 小条件最終A/B | 896x512/121f | 143.22秒で完走（`c322130d`との目視比較用ペア） | `31f077d8...` |
+| `b2bec008` | chain経由1クリップ+deblur | 1クリップ・deblur | **136.13秒で完走**（chain配線・復元→stage2再利用の統合確認。復元失敗ログゼロ） | — |
+
+**実測（`bda91a2b`）**: 参照エンコード区間はallocatedが**1450→peak 3006MB**（差分約1.56GB＝オフライン予測1.2GB＋動画テンソル0.36GBとほぼ一致）。変換したConv3dは42本。
+
+**未解決の観察（要追跡・調査中）**: `bda91a2b`（大条件）の参照エンコード中、**reservedが39,846MBまで膨張**した（実確保3GBの13倍）。Windowsは`expandable_segments`に非対応であり、36タイルの形状ばらつきでセグメントが蓄積し、WDDM経由でホストへ溢れつつ完走したと見られる。オーナーのタスクマネージャ観察（専用GPU天井→共有GPUメモリ上昇→回収→健全化）と整合する。小条件（`d486cbee`）はreserved 2,780MBで問題ない。参考として、旧OOM（`92a95e94`）時の別観察は、専用15.7/16GB・共有40.3GB・RAM100%（`keep_resident=on`の19.4GB常駐も寄与）だった。
+
+> **訂正（§49.10）**: 上記の「断片化／タイル形状ばらつき」という推定は誤りだった。真因は参照動画ローダー（wheel の `load_video_conditioning`）がフレームを1枚ずつGPU上で`torch.cat`連結する実装であることによる、確保総量がフレーム数の2乗に比例する膨張だった。第3修正（CPU組み立て版への置換）で根治し、SHA完全一致まで確認済み。詳細は§49.10。
+
+### 49.10 参照動画ローダーの2乗則膨張の特定と根治（第3修正、2026-08-04）
+
+**真因確定**: §49.9末尾の「未解決の観察」として残っていたreserved 39.8GB膨張の犯人は、第2修正（channels_last_3d切替）が扱ったタイル処理やレイアウトではなく、**wheel側の`load_video_conditioning`がフレームを1枚ずつGPU上で`torch.cat`連結する実装**だった。連結を重ねるたびに確保総量が増えていくため、**確保総量はフレーム数の2乗に比例**する。640×384×257フレームでの理論値46.4GBは、オフライン実測46.8GBとほぼ一致した。**Deblur固有の問題ではなく**、縮小係数2（既存の canny/pose 等）でも本番条件で+2.2GBの膨張を実測しており、Windows環境では共有メモリへ溢れ続けて青天井になる性質を持つ。§49.9の「断片化・タイル形状ばらつき」という旧推定は誤りだったため、ここで訂正する。
+
+**修正内容**: `_load_video_conditioning_cpu`を`engine/pipeline/common.py`へ公開名`load_video_conditioning_cpu`として移設し、chain側に重複していた同等の定義を削除して両パイプライン（fast／chain）で共用する形にした。fast側の参照読み込みをこのCPU組み立て版へ差し替え、縮小係数2以上の枝でのみ`.to(device)`を1回追加する。テストはmetaデバイス方式の転送検証を1本追加し、エンジンvenv **32 passed**・アプリvenvは全緑（既知の環境依存1件を除く）。
+
+**ゲート実測（2026-08-04、すべてseed 424242）**:
+
+- **G-3rd-α（オフライン）**: ローダー置換前後の潜在は、縮小係数1・係数2の両方で`torch.equal`=True（ビット完全一致）。ローダー区間のreservedは、係数1でwheel版47,488MB→CPU版660MB、係数2で4,810MB→648MBへ縮小した。
+- **G-3rd-0（実装前基準）**: upscaler＋参照896×512/121fがジョブ`fecff551`（SHA `8630ca90...`）で完走。小条件deblurの再実行はジョブ`df8831da`でSHAが`d486cbee`と完全一致し、再現性n=2が成立してSHAゲートが有効化された。
+- **G-3rd-1（修正後）**: 3本ともSHA完全一致——upscaler=ジョブ`edfdc50f`（`8630ca90...`一致）、小条件deblur=ジョブ`eceea948`（`31f077d8...`一致）、大条件deblur 1280×768/257f=ジョブ`d4bedb69`（`9a8a047d...`一致、249.70秒で完走）。大条件のジョブ全体peak reservedは**39,846MB→13,932MB**に縮小し、参照エンコード区間のreserved増分は**38,162MB→1,348MB**に縮小した。
+
+**ゲート判定の注記（較正ミスの記録）**: 計画時点の数値目標「区間reserved増分が数十MB級／1GB未満」は、オフラインの**ローダー単体**計測を根拠にした較正ミスだった。本番ログの計測区間はローダーとエンコード本体の両方を含み、エンコード本体が正当に2.2〜3.2GBの実確保を使うため、reservedがその約1.1倍に収まる現状はアロケータとして健全である（病理だった「実確保の13倍」という乖離が1.13倍へ正常化した）。よって**G-3rd-1は合格**と判定する。残存の主因はエンコード本体の正常な作業領域と、既知のスコープ外項目（縮小係数2 untiledのim2col問題。[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)記載済み）である。
+
+**付随の解消**: `peak_vram_reserved_mb`の計測汚染も解消し、大条件の13,932MBが実態を表す値になった。
+
+**残作業**: 第3修正自体のコミット・プッシュは未実施（`git status`に`engine/pipeline/common.py`・`chain_pipeline.py`・`fast_video_pipeline.py`・テストの差分が残っている）。**目視によるG-fix3判定とG4（既存アダプタの回帰）は§49.11で実施し、いずれも合格した。** デプロイは引き続き未実施。 → **実施済み（2026-08-04、`e273052`〜`9701fbe`）。第3修正・G-fix3・G4に対応する差分はコミット・プッシュ済みで、webuiも再ビルド・再デプロイ済み。**
+
+**テスト**: エンジンvenv **31 passed**（新規：channels_last変換／contiguous復元ヘルパーの往復ビット一致を確かめるCPUテスト）。アプリvenvは全緑（既知の環境依存1件を除く）。
+
+**注記**: `StateDictRegistry`がGPU常駐に変わる変更が入った場合、本修正（Conv3d重みのレイアウト切替と復元）の安全性——重み参照が他ジョブ・他経路と分離されていること——を再検証すること。
+
+### 49.11 G4（既存アダプタの回帰）合格・G-fix3（Deblur品質目視）合格（2026-08-04）
+
+**G4＝既存 canny/pose/upscaler の回帰・バイト不変**: テーマ着手前コミット `24c67fd` を基準に、共通条件（896×512/121f・シード424242・8ステップ・sage/prefetch on・resident off・同一プロンプト・参照動画バイト一致〔機械照合済み〕）で基準3本を生成し、現行コミット `e273052` で同一条件のまま3本を再生成して突き合わせた。**3本ともSHA-256完全一致。**
+
+| アダプタ | 基準（`24c67fd`）ジョブID | 現行（`e273052`）ジョブID | 判定 |
+|---|---|---|---|
+| canny-control | `d770eceb` | `6c1b866e` | ✅ SHA-256完全一致 |
+| pose-control | `70c3d305` | `e809ead7` | ✅ SHA-256完全一致 |
+| pixel-spatial-upscaler-x2 | `fb87dce7` | `77462587` | ✅ SHA-256完全一致 |
+
+**手順**: `config.yaml`のdepth／deblurエントリを一時退避 → `24c67fd`をcheckoutして基準3本を生成 → mainへ復帰・config復元 → 現行3本を再生成 → SHA突き合わせ。
+
+**G-fix3＝Deblur品質目視・合格**: A/Bペア（`c322130d`対`eceea948`、同一シード）で視覚差なし。タイル継ぎ目のちらつきは知覚不能レベル。大条件`d4bedb69`もデブラー効果が正しく出ており品質問題なし（いずれもオーナー主観評価）。
+
+**ヒント文言の方針確定**: Deblurのピーク実測13.9GB（既存アダプタ比+約0.4GB）は16GB推奨環境に収まるため、**VRAM警告は不要**とオーナーが裁定した。ヒント文中の不正確な「出力と同じ解像度で処理」という表現の削除は、別途実施する残作業として残る。
+
+**本節をもって §49 の G0〜G4・G-fix1〜G-fix3 はすべて合格し、本テーマは完結する。** 残るのはヒント文言の表現修正と、§49.10（第3修正）・本節（G-fix3・G4）に対応する実装・テスト差分のコミット・プッシュ・デプロイのみである。 → **実施済み（2026-08-04、`e273052`〜`9701fbe`）。第3修正・G-fix3・G4に対応する差分はコミット・プッシュ済みで、webuiも再ビルド・再デプロイ済み。**
+
+---
+
+## 50. ★GGUF逆量子化の分解計測（fused dequantカーネルの採否判断）＝Phase 0マイクロベンチ＋Phase 2実機プローブ計測 完了・**判定＝GO**（2026-08-04）
+
+> **正本＝本節。** 逆量子化（dequantization。GGUFファイルの中で圧縮された形で持っている重みを、計算に使える形式へ展開する処理）が1ジョブ中で何秒使っているのかを、マイクロベンチ（小さな処理を単体で繰り返し測るベンチマーク）と実機計測の両方から確定させた記録である。台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49 の再訪条件が成立したことを受けたもので、[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) が「次の一歩」として掲げていた分解計測の実施にあたる。**結論は GO**——逆量子化の1カーネル化で**1ジョブあたり約20.1秒（現ベースライン約146秒の約14%）**の短縮が見込め、GO基準（3.0秒）を大きく上回った。実装は別プランの承認後に行う。本計測のために一時的に入れた計測プローブ（probe。処理時間を記録するためだけの計測用コード）は**撤去済み**で、リポジトリのコードは計測前と1バイトも違わない状態に戻してある。
+
+### 50.1 目的と経緯
+
+- **再訪条件の成立**: §3-49（fused GGUF dequant+GEMM）は2026-08-01に「削減できる絶対量が約2.3秒しかない」としてクローズしていた。§48.10で三者併用フルスタックが165秒まで縮み、以後は1〜2秒級の改善を積み上げる段階に入ったため、**2026-08-04にオーナー裁定で再訪**した。
+- **今回の対象は「GEMM融合」ではない**。文字通りの fused dequant+GEMM（逆量子化と行列積〔GEMM。General Matrix Multiply、行列同士の掛け算〕を1つのカーネル〔GPU上で走る処理のかたまり〕に融合する案）は、行列積側を自作カーネルで置き換えることになり cuBLAS に速度で勝てないため **no-go のまま**である。今回測ったのは、その手前にある「**逆量子化処理そのものを1カーネルにまとめる**」という、より小さく安全な案の採否である。
+- 現状の逆量子化は、PyTorchの通常演算（eager実行）を積み重ねた実装になっており、1回の呼び出しで **18〜33個ものカーネル**を起動し、そのたびに中間データをGPUメモリへ書き出しては読み直している。これを1つのカーネルにまとめれば、中間データの往復も、カーネル起動の回数も、まとめて消える。
+
+### 50.2 Phase 0＝マイクロベンチ（逆量子化カーネル単体の天井測定）
+
+融合後にどれだけ速くなるかの**下限**を、実際に測って確定させた。手書きカーネルを書く前に `torch.compile`（PyTorchの自動融合コンパイラ）で同じ計算を融合させ、その速度を「手書きカーネルなら最低でもこれくらいは出る」という下限値として使う方法である。
+
+- 環境: RTX 4070 Ti SUPER・torch 2.9.1+cu128・triton-windows 3.5.1。ベンチプロセスでは `TORCH_COMPILE_DISABLE` を外している（本番はこれを1に固定しているため、後述のとおり本番実装では `torch.compile` は使えない）。
+- 入力は毎回別バッファへ回して作業セットを約150MB（L2キャッシュ48MBの3倍超）にし、実際の逐層逆量子化と同じ「キャッシュに載っていない重みを読む」条件を再現した。
+- 実測したメモリ帯域（DRAMの読み書き速度の上限）は **611.9 GB/s**（カタログ値672 GB/sの91%）。以下の「理論天井」はこの実測値を基準にしている。
+
+**形状の分布**（`LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）: 量子化テンソルは全1632本がひとつの `transformer_blocks.N` の塔の中にあり（4096次元＝映像ストリーム、2048次元＝音声ストリーム。1パスで両方が動く）、**1632本すべてがDiTの1回のforward（順伝播）ごとに逆量子化される**。
+
+| 量子化形式 | テンソル数 | 要素数 | 量子化要素に占める割合 |
+|---|---|---|---|
+| Q4_K | 1242 | 12,182,224,896 | 65.7% |
+| Q6_K | 322 | 5,595,201,536 | 30.2% |
+| Q5_K | 68 | 772,931,584 | 4.2% |
+| **合計** | **1632** | **18,550,358,016** | 100% |
+
+**代表形状の実測**（50回の中央値・CUDAイベント計測。「カーネル数」は1回の呼び出しで起動されるカーネルの個数）:
+
+| 形式 | 形状 | eager ms | カーネル数 | 融合後 ms | カーネル数 | 速度比 R |
+|---|---|---|---|---|---|---|
+| Q4_K | (32, 2048) | 0.286 | 27 | 0.106 | 2 | **×2.7** |
+| Q4_K | (32, 4096) | 0.705 | 27 | 0.070 | 2 | **×10.0** |
+| Q4_K | (2048, 2048) | 0.368 | 27 | 0.069 | 2 | **×5.3** |
+| Q4_K | (2048, 4096) | 0.569 | 27 | 0.067 | 2 | **×8.5** |
+| Q4_K | (4096, 4096) | 1.397 | 27 | 0.080 | 2 | **×17.4** |
+| Q4_K | (16384, 4096) | 5.427 | 27 | 0.286 | 2 | **×19.0** |
+| Q5_K | (32, 2048) | 0.410 | 33 | 0.068 | 2 | **×6.1** |
+| Q5_K | (32, 4096) | 0.417 | 33 | 0.068 | 2 | **×6.2** |
+| Q5_K | (2048, 2048) | 0.430 | 33 | 0.069 | 2 | **×6.2** |
+| Q5_K | (2048, 4096) | 1.711 | 33 | 0.099 | 2 | **×17.3** |
+| Q5_K | (4096, 4096) | 2.324 | 33 | 0.074 | 2 | **×31.6** |
+| Q5_K | (16384, 4096) | 9.104 | 33 | 0.300 | 2 | **×30.3** |
+| Q6_K | (2048, 2048) | 0.312 | 18 | 0.062 | 2 | **×5.0** |
+| Q6_K | (2048, 4096) | 1.577 | 18 | 0.068 | 2 | **×23.1** |
+| Q6_K | (4096, 4096) | 2.159 | 18 | 0.086 | 2 | **×25.0** |
+| Q6_K | (4096, 16384) | 8.651 | 18 | 0.332 | 2 | **×26.1** |
+
+**実際の呼び出し回数で重み付けした速度比**（1パス1632回の内訳をそのまま重みにしたもの）:
+
+| 形式 | 1パスあたり呼び出し数 | eager ms/パス | 融合後 ms/パス | R |
+|---|---|---|---|---|
+| Q4_K | 1242 | 1131.3 | 104.9 | ×10.79 |
+| Q6_K | 322 | 712.3 | 34.9 | ×20.41 |
+| Q5_K | 68 | 111.9 | 5.9 | ×18.83 |
+| **合計** | **1632** | **1955.4** | **145.7** | **R = ×13.42** |
+
+- **加重速度比 R = 13.42。** 絶対値では、逆量子化は現状 **1パスあたり1.96秒**のGPU時間を使っており、融合すれば146ミリ秒＝約1.81秒の短縮になる。
+- **理論天井**: すべての呼び出しが611.9 GB/sの帯域上限で、カーネル起動の待ち時間ゼロで動いたとすると1パス80.2ミリ秒＝**R_max = ×24.4**。`torch.compile` はすでにこの天井の55%に達しており、大きな形状では帯域上限の94〜98%（例: Q4_K (16384,4096) で601 GB/s／上限612 GB/s）に到達している＝**メモリ帯域の理論限界に達している**状態である。残る差はすべて小さい形状のカーネル起動の下限（1回あたり0.05〜0.07ミリ秒）によるもので、手書きカーネルが `torch.compile` を大きく上回る余地は小さい。つまり R = 13.42 は**堅実な下限**として使える。
+- **数値の一致**: 16構成すべてで融合版の出力は eager と**ビット単位で完全一致**（bf16のビットパターンの相違0個、最大絶対差0.0、NaN 0個）。`view(torch.float16)` による型の読み替えやニブル（4ビット）シフトの連鎖を Inductor が壊さないことを確認した。
+- **初回コンパイルの費用**: モデルが必要とするのは16通りの（形式, 形状）の組み合わせで、キャッシュが空の状態からの合計コンパイル時間は **11.1秒**（初回1.2秒・中央値0.6秒・最大1.2秒）。2回目以降はディスクキャッシュが効いてほぼ0秒。手書きカーネルなら0秒である。
+- **`max-autotune` は採らない**: より攻めた最適化モードである `max-autotune` は、この処理では一貫して**遅かった**（加重 R が 13.42 → 9.25 に低下）。CUDA graph trees が有効になり呼び出しごとに入力コピーのカーネルが1つ増えるためで、入力バッファを回している本ワークロードではそのコピーは純粋な無駄になる。
+- **Windows固有の不具合を1件踏んだ**（将来 `torch.compile` を本番経路で検討する場合の申し送り）: `mode="max-autotune"` は当初**すべての形状**で `OverflowError: Python int too large to convert to C long` を出して失敗した。発生元は `torch/_inductor/runtime/static_cuda_launcher.py:244`（`_StaticCudaLauncher._launch_kernel`）で、64ビット値をC言語の `long`（Windowsでは32ビット）へ入れようとしたことによる。`torch._inductor.config.use_static_cuda_launcher = False` で回避した。通常モードの `torch.compile` はこの問題の影響を受けない。
+
+### 50.3 Phase 2＝実機計測の方法（一時プローブ・撤去済み）
+
+「1パス1.96秒」が実際のジョブでどれだけの合計になるのかを、本番と同じ経路で測った。
+
+- **計測プローブの設計**: `engine/profiling/dequant_probe.py`（一時ファイル）を新設し、`engine/worker.py` から**環境変数 `LTX_PROFILE_DEQUANT` が設定されているときだけ import する**5行を追加した。未設定なら import すらされないため、通常運用の経路には一切の影響がない。
+- **走行中に同期を挟まない**: CUDAイベント（GPU上に打つ時刻の印）を**40,000個まとめて事前確保**しておき、計測中は印を打つだけ・時間の読み出しはジョブ完了後にまとめて行う設計にした。走行の途中でCPUとGPUを待ち合わせる（同期する）処理を入れると、それ自体が計測を歪めるためである。実際に使ったイベントは36,884個で、プールの枯渇は起きていない。
+- **計測対象**: (a) 逆量子化1回ごとのGPU時間とCPU側の発行時間、(b) 逐層量子化の linear（全結合層）forward 全体の同、(c) フェーズ（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／動画エンコード）ごとの壁時計時間。GEMM（行列積本体）の時間は「linear全体 − 逆量子化」の差として導出した。
+- **条件**: 1280×768・257フレーム・t2v・8ステップ・seed 1687351733・LoRAなし・distilled・attention=sage・block_swap_prefetch=on・keep_resident=on。§48.10 の三者併用フルスタック（165.0秒の行）と**同一条件・同一プロンプト**である。
+- **撤去**: 計測完了後、`engine/worker.py` の5行と `engine/profiling/` ディレクトリを削除した。撤去後の `git diff engine/worker.py` は**差分ゼロ**である。
+
+**ジョブ表**（6本。J0〜J3がプローブあり、J4・J5がプローブなしの対照）:
+
+| ラベル | ジョブID | プローブ | 骨格キャッシュ | 生成時間 | 出力SHA-256 |
+|---|---|---|---|---|---|
+| J0 | `0943db83-a964-4ed3-9951-6a2ecaa8e77c` | あり | MISS（構築） | 198.73秒 | ✅一致 |
+| J1 | `7ddac942-1258-4778-86fb-f0de04fc9dc7` | あり | HIT | 147.60秒 | ✅一致 |
+| J2 | `6f98fc1e-f315-4794-b8b2-285dfaf943cc` | あり | HIT | 145.49秒 | ✅一致 |
+| J3 | `9a01ec9e-0c3f-489f-9cb1-5a156bf105f3` | あり | HIT | 145.25秒 | ✅一致 |
+| J4 | `c8945dfc-19f0-4608-acfc-a76706582d70` | なし | MISS（構築） | 195.56秒 | ✅一致 |
+| J5 | `adba0643-eeb9-49a0-8b82-4a70f9b9425e` | なし | HIT | 146.52秒 | ✅一致 |
+
+出力フォルダは `outputs/<ジョブID>/` である。SHA-256は6本すべてが `926CE1BD8CA627F8637141FCDFE0E5147A34F9E7582C58D47B5543E0AA817B87` で完全一致した（§48.10の `263c64b4` と同じ値＝**プローブは出力に影響していない**）。
+
+### 50.4 Phase 2の結果（本命数値）
+
+代表値は HIT 3本の中央値である **J1** を採る（逆量子化GPU合計で J1=21.77／J2=21.83／J3=21.67 秒の中央値）。
+
+| 指標 | 実測 |
+|---|---|
+| **逆量子化のGPU合計 D** | **21.77秒/ジョブ**（呼び出し18,288回） |
+| うち Q4_K | 12.71秒（13,950回） |
+| うち Q6_K | 7.82秒（3,590回） |
+| うち Q5_K | 1.23秒（748回） |
+| フェーズ別: テキストエンコード | 0.97秒（336回） |
+| フェーズ別: stage1 denoise | 15.14秒（13,056回） |
+| フェーズ別: stage2 denoise | 5.66秒（4,896回） |
+| linear forward 全体のGPU時間 | 71.74秒 |
+| うちGEMM（差として導出） | 49.97秒 |
+| ジョブ全体の壁時計 | 147.60秒 |
+
+**フェーズ別の壁時計**（同 J1）:
+
+| フェーズ | 秒数 |
+|---|---|
+| テキストエンコード（Gemma） | 3.81 |
+| stage1 denoise | 47.37 |
+| アップサンプル | 0.34 |
+| stage2 denoise | 55.11 |
+| 音声VAEデコード | 0.17 |
+| 映像VAEデコード（7回） | 33.07 |
+| 動画エンコード（ファイル書き出し） | 36.77 |
+
+- **読み方の注意**: 映像VAEデコードの33.07秒は動画エンコードの36.77秒の**内側**に含まれる（デコードした分から順に書き出す構造のため、単純に足すと二重計上になる）。フェーズの合計が壁時計を超えて見えるのはこのためである。
+- **検出されたパス数は12**（パス0＝Gemmaのテキストエンコード336回、パス1〜11＝DiTのforward 11回×1632回）。11パス＝stage1の8ステップ＋stage2の3ステップで、`1632 × 11 + 336 = 18,288` と呼び出し数が完全に一致する。
+- **denoise部分だけを取ると**、逆量子化は 15.14+5.66 = **20.80秒**を11パスで使っており、1パスあたり **1.89秒**。Phase 0のマイクロベンチが予測した1.96秒/パスと**3.6%の差**で一致した（別々の方法による相互検証）。
+
+### 50.5 副次発見(1)＝CPU側の発行時間がGPU実行時間を大きく上回る
+
+今回もっとも重要な発見である。
+
+| 指標 | GPU実行時間 | CPU側の発行時間 |
+|---|---|---|
+| 逆量子化 | 21.77秒 | **93.19秒** |
+| linear forward 全体 | 71.74秒 | **94.67秒** |
+
+- 逆量子化はGPU上で21.8秒しか動いていないのに、**CPU側（Pythonの実行とカーネル発行）に93.2秒**かかっている。1回の呼び出しで18〜33個のカーネルを発行するため、GPUが計算する時間よりもCPUが「命令を出す」時間のほうが長くなっている。
+- さらに linear forward 全体のCPU発行時間94.67秒は、denoise 2ステージの壁時計（47.37+55.11＝**102.48秒**）のほぼ全部を占める。**denoiseはGPUの計算力ではなく、CPU側のカーネル発行で律速している**というのが実態である（Windows の WDDM ドライバモデルはカーネル発行のオーバーヘッドが大きく、Phase 0の小形状で見えた「起動律速」と同じ現象がジョブ規模で現れている）。
+- したがって1カーネル化は、GPU時間21.8秒を削るだけでなく、**CPU発行の93.2秒側も同時に削る**ことになる。カーネル発行の回数は18〜33回から2回へ落ちるため、CPU側の削減率はGPU側と同等かそれ以上になる可能性が高い。**期待削減20.1秒は上振れしうる**、というのが本発見の意味である（本節の判定はこの上振れを一切当てにせず、GPU時間だけで計算している）。
+
+### 50.6 副次発見(2)＝ベースラインが§48.10より約19秒速い
+
+今回のHITジョブは **145.25〜147.60秒**で、§48.10に記録された同一条件の165.0秒より**約19秒速い**。
+
+- プローブの有無とは無関係である。プローブなしの対照 J5 も **146.52秒**で同じ水準だった。
+- 推定原因は**計測環境の清浄さ**である。§47.4でオーナー自身が確定させたとおり、§48.10の計測時はブラウザでの配信視聴・AviUtl2での動画編集・別の画像生成アプリの常駐といった重量級の並行作業が走っていた。今回はエージェント単独の清浄な環境で走らせている。
+- **判定への影響**: 期待削減の絶対量（20.1秒）は分母によらないが、割合表示は分母次第で変わる。本節では保守的に**今回の実測ベースライン146秒を分母**として「約14%」と記載している（165秒を分母にすれば約12%）。
+
+### 50.7 検証ゲートの結果
+
+| ゲート | 基準 | 結果 |
+|---|---|---|
+| G-A 出力の同一性 | 6本すべてSHA-256一致 | ✅ 全6本が `926CE1BD8CA627F8637141FCDFE0E5147A34F9E7582C58D47B5543E0AA817B87`（§48.10の `263c64b4` とも一致） |
+| G-B プローブの計測侵襲 | 生成時間の差が1%以内 | ✅ **0.41秒＝0.28%**（プローブあり HIT 3本の平均146.11秒 対 プローブなし J5 の146.52秒）。しかも符号は**プローブありのほうが速い**＝完全にノイズの範囲内 |
+| G-C 相互検証 | 2つの独立な方法の値が一致 | ✅ マイクロベンチ外挿 1.96秒/パス 対 実機実測 1.89秒/パス（差3.6%） |
+| G-D イベントプールの健全性 | 枯渇しないこと | ✅ 40,000個中36,884個使用・枯渇0 |
+
+### 50.8 判定＝GO
+
+期待削減 S を、Phase 2の実測 D と Phase 0の加重速度比 R から計算する。
+
+```
+S = D × (1 − 1/R) = 21.77 × (1 − 1/13.42) = 20.15 秒
+```
+
+- **S ≈ 20.1秒／ジョブ**（現ベースライン約146秒の**約14%**）。**GO基準の3.0秒を6.7倍上回る**ため、判定は **GO** である。
+- この数字は次の点でいずれも保守的である: (a) `torch.compile` の速度を手書きカーネルの下限として使っている、(b) §50.5のCPU発行時間の削減を一切勘定に入れていない、(c) 分母に今回の速いベースライン146秒を採っている。
+- **実装方式は Triton による自作カーネル**とする。本番のワーカーは `TORCH_COMPILE_DISABLE=1` を強制しているため（`engine/worker.py:119` の `os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")`、および `services/ltx_runner.py:1166` の `env["TORCH_COMPILE_DISABLE"] = "1"`）、`torch.compile` をそのまま本番経路へ持ち込むことはできない。Triton なら初回コンパイル11.1秒の入場料も不要になる。
+- **実装は本節の範囲外**である。別プランを立て、承認を得てから着手すること。
+
+### 50.9 生データ
+
+計測の一次データを本節に取り込んでおく（§44.3で外部ファイルの生データを失った教訓による。**外部ファイル参照にはしない**）。
+
+**(a) Phase 0＝実測メモリ帯域（`clone()` の読み書き）**
+
+| サイズ | GB/s |
+|---|---|
+| 8 MB | 1280.3（L2に載る外れ値。DRAMの値ではない） |
+| 32 MB | 642.5 |
+| 128 MB | 612.5 |
+| 512 MB | 611.9 |
+
+**(b) Phase 0＝形状ごとの詳細**（`amp` は「最小限必要なバイト数の何倍を実際に動かしているか」。eager が中間データをどれだけ無駄に往復させているかの指標）
+
+| 形式 | 形状 | 要素数 | 最小転送量 | eager ms | eager GB/s | amp | eagerカーネル数 | CPU発行 ms | 融合 ms | 融合 GB/s | 帯域上限比 | R | コンパイル秒 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Q4_K | (32, 2048) | 65,536 | 0.2 MB | 0.286 | 0.6 | 1041× | 27 | 0.288 | 0.106 | 1.6 | 0% | ×2.7 | 1.2 |
+| Q4_K | (32, 4096) | 131,072 | 0.3 MB | 0.705 | 0.5 | 1285× | 27 | 0.313 | 0.070 | 4.8 | 1% | ×10.0 | 0.6 |
+| Q4_K | (2048, 2048) | 4,194,304 | 10.7 MB | 0.368 | 29.2 | 21× | 27 | 0.348 | 0.069 | 155.9 | 25% | ×5.3 | 0.6 |
+| Q4_K | (2048, 4096) | 8,388,608 | 21.5 MB | 0.569 | 37.8 | 16× | 27 | 0.562 | 0.067 | 321.9 | 53% | ×8.5 | 0.6 |
+| Q4_K | (4096, 4096) | 16,777,216 | 43.0 MB | 1.397 | 30.8 | 20× | 27 | 1.359 | 0.080 | 534.7 | 87% | ×17.4 | 0.6 |
+| Q4_K | (16384, 4096) | 67,108,864 | 172.0 MB | 5.427 | 31.7 | 19× | 27 | 5.191 | 0.286 | 601.0 | 98% | ×19.0 | 0.6 |
+| Q5_K | (32, 2048) | 65,536 | 0.2 MB | 0.410 | 0.4 | 1425× | 33 | 0.382 | 0.068 | 2.6 | 0% | ×6.1 | 0.6 |
+| Q5_K | (32, 4096) | 131,072 | 0.4 MB | 0.417 | 0.8 | 724× | 33 | 0.398 | 0.068 | 5.2 | 1% | ×6.2 | 0.6 |
+| Q5_K | (2048, 2048) | 4,194,304 | 11.3 MB | 0.430 | 26.2 | 23× | 33 | 0.430 | 0.069 | 162.5 | 27% | ×6.2 | 0.6 |
+| Q5_K | (2048, 4096) | 8,388,608 | 22.5 MB | 1.711 | 13.2 | 46× | 33 | 0.934 | 0.099 | 228.1 | 37% | ×17.3 | 0.6 |
+| Q5_K | (4096, 4096) | 16,777,216 | 45.1 MB | 2.324 | 19.4 | 32× | 33 | 2.232 | 0.074 | 612.6 | 100% | ×31.6 | 0.7 |
+| Q5_K | (16384, 4096) | 67,108,864 | 180.4 MB | 9.104 | 19.8 | 31× | 33 | 8.684 | 0.300 | 600.9 | 98% | ×30.3 | 0.6 |
+| Q6_K | (2048, 2048) | 4,194,304 | 11.8 MB | 0.312 | 37.9 | 16× | 18 | 0.312 | 0.062 | 191.0 | 31% | ×5.0 | 0.9 |
+| Q6_K | (2048, 4096) | 8,388,608 | 23.7 MB | 1.577 | 15.0 | 41× | 18 | 1.543 | 0.068 | 346.5 | 57% | ×23.1 | 0.7 |
+| Q6_K | (4096, 4096) | 16,777,216 | 47.3 MB | 2.159 | 21.9 | 28× | 18 | 2.087 | 0.086 | 547.8 | 90% | ×25.0 | 0.7 |
+| Q6_K | (4096, 16384) | 67,108,864 | 189.3 MB | 8.651 | 21.9 | 28× | 18 | 8.322 | 0.332 | 570.2 | 93% | ×26.1 | 0.7 |
+
+**(c) Phase 0＝`max-autotune`（主要形状のみ・不採用の根拠）**
+
+| 形式 | 形状 | 通常モード ms | max-autotune ms | カーネル数 | コンパイル秒 | ビット一致 |
+|---|---|---|---|---|---|---|
+| Q4_K | (2048, 2048) | 0.069 | 0.081 | 3 | 0.9 | ✅ |
+| Q4_K | (4096, 4096) | 0.080 | 0.084 | 3 | 0.9 | ✅ |
+| Q4_K | (16384, 4096) | 0.286 | 0.415 | 4 | 1.4 | ✅ |
+| Q5_K | (2048, 2048) | 0.069 | 0.078 | 3 | 1.1 | ✅ |
+| Q5_K | (4096, 4096) | 0.074 | 0.081 | 3 | 1.0 | ✅ |
+| Q5_K | (16384, 4096) | 0.300 | 0.465 | 5 | 1.1 | ✅ |
+| Q6_K | (2048, 2048) | 0.062 | 0.116 | 3 | 1.7 | ✅ |
+| Q6_K | (4096, 4096) | 0.086 | 0.240 | 3 | 1.6 | ✅ |
+| Q6_K | (4096, 16384) | 0.332 | 1.008 | 5 | 3.0 | ✅ |
+
+**(d) Phase 0＝支配的な形状の内訳**（1パス1632本の内訳。「本数×形状」）
+
+- Q4_K: 414×(2048,2048)、276×(4096,4096)、138×(32,4096)、138×(32,2048)、92×(2048,4096)、46×ずつ (16384,4096)/(8192,2048)/(2048,8192)/(4096,2048)
+- Q6_K: 138×(2048,2048)、92×(4096,4096)、46×(4096,16384)、46×(2048,4096)
+- Q5_K: 68本が細かく分散
+
+**(e) Phase 2＝ジョブごとの主要数値**（単位はミリ秒。カッコ内は呼び出し回数）
+
+| 指標 | J0（MISS） | J1（HIT・代表） | J2（HIT） | J3（HIT） |
+|---|---|---|---|---|
+| 壁時計（プローブ計測） | 194,838 | 147,596 | 145,479 | 145,241 |
+| 逆量子化GPU合計 | 29,084.1（18,289） | **21,765.2（18,288）** | 21,832.0（18,288） | 21,667.6（18,288） |
+| 逆量子化CPU発行合計 | 100,284.8 | **93,186.0** | 93,299.2 | 93,226.5 |
+| ├ Q4_K（型12） | 12,820.6（13,950） | 12,713.6（13,950） | 12,789.3（13,950） | 12,648.4（13,950） |
+| ├ Q6_K（型14） | 15,037.2（3,591） | 7,824.0（3,590） | 7,803.4（3,590） | 7,799.1（3,590） |
+| └ Q5_K（型13） | 1,226.4（748） | 1,227.6（748） | 1,239.2（748） | 1,220.0（748） |
+| ├ フェーズ: テキストエンコード | 970.7（336） | 966.2（336） | 970.1（336） | 973.7（336） |
+| ├ フェーズ: stage1 | 15,192.3（13,056） | 15,140.4（13,056） | 15,239.6（13,056） | 15,056.9（13,056） |
+| └ フェーズ: stage2 | 5,695.1（4,896） | 5,658.6（4,896） | 5,622.3（4,896） | 5,637.0（4,896） |
+| linear forward GPU合計 | 71,919.5（18,596） | 71,737.7（18,596） | 71,871.5（18,596） | 71,700.2（18,596） |
+| linear forward CPU発行合計 | 94,753.6 | 94,671.9 | 94,789.5 | 94,678.7 |
+| GEMM（linear − 逆量子化） | 42,835.3 | **49,972.6** | 50,039.5 | 50,032.6 |
+| 検出パス数 | 12 | 12 | 12 | 12 |
+| イベント使用数／プール | 36,885／40,000 | 36,884／40,000 | 36,884／40,000 | 36,884／40,000 |
+
+J0はキャッシュMISS（骨格構築）を含む1本目で、骨格構築中の逆量子化が「パス0」の外側（`other` 分類、7,226ms）に計上されている。Q6_KのGPU時間がJ0だけ突出して大きい（15,037ms 対 7,8xx ms）のは、この骨格構築時の初回逆量子化が同じカウンタに混ざるためである。**代表値には使わない**。
+
+**(f) Phase 2＝J1のパスごとの逆量子化GPU時間**（単位ミリ秒。パス0＝Gemma、パス1〜8＝stage1、パス9〜11＝stage2）
+
+| パス | 呼び出し | GPU ms | CPU発行 ms |
+|---|---|---|---|
+| 0 | 336 | 966.2 | 929.8 |
+| 1 | 1632 | 2011.9 | 5144.2 |
+| 2 | 1632 | 1889.3 | 5045.1 |
+| 3 | 1632 | 1926.9 | 5088.8 |
+| 4 | 1632 | 1877.0 | 5037.2 |
+| 5 | 1632 | 1878.3 | 5036.9 |
+| 6 | 1632 | 1849.9 | 5017.4 |
+| 7 | 1632 | 1864.4 | 5027.1 |
+| 8 | 1632 | 1842.7 | 5016.7 |
+| 9 | 1632 | 1897.1 | 17310.9 |
+| 10 | 1632 | 1890.3 | 17299.0 |
+| 11 | 1632 | 1871.1 | 17233.0 |
+
+stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねているのは、stage2の解像度が上がりGEMM本体の実行が長くなるため、その裏でCPUが次のカーネルを発行し終えても待たされる時間が計上されるためである（GPU時間は各パスほぼ一定＝逆量子化の仕事量は解像度に依存しない）。
+
+**(g) Phase 2＝条件とメタデータ**（J1の `metadata.json` より）
+
+1280×768・257フレーム・24fps・t2v・8ステップ・seed 1687351733（`seed_used` も同値）・LoRAなし・distilled・`attention_used="sage"`・`block_swap_prefetch_used="on"`・`keep_resident_used="on"`・`peak_vram_reserved_mb=13902`・`generation_time_seconds=147.6`。プロンプトは§48.10と同一（`263c64b4` のもの）。
+
+### 50.10 残課題
+
+1. **台帳§3-49の書き換え**（オーナー判断後）→ **実施済み（2026-08-04）**。旧§3-49（fused GGUF、再訪条件つきクローズ）はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11「Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化）」として起票し直した（本節のGO判定を受けたもの・未着手・プランモード承認待ち）。クローズ経緯はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-61に保存済み。
+2. **Triton実装は別プラン** → **実施済み（2026-08-04）。実装・機械検証・実機ゲート・既定値反転の正本は §51 である。**
+3. **UIトグルの名称案**: 「Fused GGUF Dequantization Kernel」。既存の `fused_gguf_dequant_gemm`（`metadata.json` に残っている旧名のフィールド）とは意味が異なるため、名前を流用しないこと → **その方針どおり別名 `fused_gguf_dequant_kernel` で実装し、旧 `fused_gguf_dequant_gemm` のほうは2026-08-04のオーナー裁定で完全撤去した（§51.1）。**
+4. **プローブは撤去済み**。再計測が必要になった場合は本節50.3の設計（イベント事前確保・走行中同期なし・環境変数ガード）をそのまま再実装すればよい。
+
+---
+
+## 51. ★Acceleration第5弾（GGUF逆量子化の1カーネル化＝`fused_gguf_dequant_kernel`）＝Tritonカーネル3本による逆量子化の融合＝実装完了・機械検証（selfcheck・pytest・型検査・vitest）全PASS・**実機ゲートG1〜G8全項目合格・既定onへ反転済み（オーナー承認2026-08-04）**（2026-08-04実装／同日ゲート合格・既定反転。残：オーナー目視のみ）
+
+> **正本＝本節。** §50の分解計測で「逆量子化（dequantization。GGUFファイルの中で圧縮された形で持っている重みを、計算に使える形式へ展開する処理）が1ジョブあたり実測21.77秒のGPU時間を使っている」ことが確定し、判定がGOになったのを受けて実装したものである。やったことは一言でいえば「**これまで18〜33個の細かいGPU処理に分かれていた展開作業を、量子化形式ごとに1個の自作GPU処理（Tritonカーネル）へまとめた**」。**生成結果は1ビットも変わらない**（現行実装とのビット単位一致を必須要件として設計・検証している）ことが、この機能の設計上の中心的な約束である。台帳はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11。
+
+### 51.1 実装サマリ
+
+- **新規モジュール3本**（`engine/gguf/`）
+  - `dequant_triton.py`（234行）: 製品側の窓口。`enabled()` / `dequant()` / `set_job()` / `reset_job()` / `last_used()` の5つだけを公開し、状態（要求の有無・降格の掛かり方・呼び出し回数・型ごとの自己検証済みフラグ）をこのモジュール内に閉じ込めている。Tritonの読み込みは遅延（実際に必要になるまでimportしない）で、失敗したという事実もキャッシュする。
+  - `dequant_triton_kernels.py`（314行）: Q4_K・Q5_K・Q6_Kの3本のTritonカーネル本体。
+  - `dequant_triton_selfcheck.py`（698行）: 自己検証スクリプト（C1〜C10。§51.2）。
+- **既存コードへの差し込みは1箇所だけ**: `engine/gguf/quant_service.py` の `dequantize_ggml_tensor` に「Tritonで試す→戻り値が `None` なら従来実装へ落ちる」という分岐を入れた（`:47` のimportと `:128-130`）。K量子化3形式・GPU上のテンソル・出力がbf16、という3条件すべてを満たすときだけ新経路に入る。GemmaのembeddingのようにCPU上で展開されるものは条件で弾かれ、従来どおりに動く。
+- **落ちない設計**: Tritonが無い環境・カーネルが例外を出した場合・後述の自己検証で数値が一致しなかった場合、いずれも**黙って従来実装へ降格し、生成そのものは絶対に止めない**。警告はジョブにつき1回だけ出す。
+- **型ごとの初回自己検証**: プロセス内で各量子化形式が初めて呼ばれたとき1回だけ、同じ入力を従来実装でも計算してビット単位で突き合わせる（費用は1ミリ秒未満）。「例外は拾えるが、間違った数値は拾えない」という穴を塞ぐための仕掛けである。
+- **切替はジョブ単位で独立**: APIフィールド `fused_gguf_dequant_kernel`、実際に効いたかの記録は `metadata.json` の `fused_gguf_dequant_kernel_used`（`"off"` / `"on"` / `"on->off"`。`"on->off"` は「要求したが実際には適用されなかった」）。他のAcceleration項目（`attention_backend`・`block_swap_prefetch`・`keep_resident`）とは互いに独立で、どれか一つの状態に依存しない。
+- **旧 `fused_gguf_dequant_gemm` は完全撤去した**（オーナー裁定2026-08-04）。受理するだけで生成に何の影響も与えていなかったモック項目で、API（`api/models.py`）・Gradio UI・i18nの2キー・フロントエンド（設定パネルのJSX・型・テスト）から削除し、新しいトグルが画面上の同じ位置を引き継いだ。**2026-08-01の「無効化したまま残す」という裁定（§43・§44.1-6）は、この裁定で上書きされた**。pydanticの既定が `extra=ignore` のため、古いクライアントが旧フィールドを送ってきてもAPIは壊れない。モック作法そのものは `vae_mode` が残るので失われない。
+
+### 51.2 STEP1＝自己検証（selfcheck）の結果＝C1〜C10全PASS
+
+`.venv-engine\Scripts\python.exe -m engine.gguf.dequant_triton_selfcheck` で実行する（engine用の仮想環境にはpytestが無いため、テストモジュールではなく単体スクリプトの形にしてある。sage・block swap prefetchと同じ作法）。**10項目すべてPASS・skipゼロ・終了コード0**。
+
+| 番号 | 何を証明するか | 結果 |
+|---|---|---|
+| C1 | 実際に同梱している2つのGGUFファイルから（形式, 形状）の組み合わせを**機械的に全列挙**し、総当たりでビット一致を確認 | ✅ **31形状すべて一致**（Q4_K 14／Q5_K 10／Q6_K 7。最大は Gemma の Q6_K 262144×3840） |
+| C2 | 手で組み立てた境界値ブロック（6ビットのスケール梱包 0x00/0x0F/0x3F/**0x80**/**0xFF**、qhの全ビット位置、Q6_Kの符号付きスケールの0x7F/0x80跨ぎ、fp16のゼロ・非正規化数・最小正規化数・最大正規化数） | ✅ 一致 |
+| C3 | CPU上のテンソルはTritonに渡らず、従来実装から無変更で戻る | ✅ |
+| C4 | IC-LoRAの `bf16 += delta` という上書き加算がオン／オフで同一。要素数が256の倍数でない形状（大きなバッファの一部を切り出した形）も含む | ✅ |
+| C5 | カーネルに例外を注入すると、10回の呼び出しすべてが従来実装の結果と一致し、降格の記録（latch）は1回・警告も1回だけ | ✅ |
+| C6 | 機能を要求したが対象テンソルが1本も無かったジョブは `"on->off"` と記録する | ✅ |
+| C7 | 降格の記録が次のジョブへ持ち越されない | ✅ |
+| C8 | 1ジョブ分の形状を連続で流しても新規コンパイルが発生しない | ✅ |
+| C9 | 先読みblock swapのアリーナ（512バイト境界に整列した大きな連続領域の途中を切り出したテンソル）でもC1と同じ結果 | ✅ |
+| C10 | `enable_fp_fusion=True`（浮動小数点の積和融合を許す設定）にした対照実験の記録 | ✅ 3形式ともビット一致。ただし**保険として製品では `False` を明示したまま維持**する |
+
+**検証力の裏取り（変異テスト）**: 「全部PASSするのは、テストが甘いからではないか」を確かめるため、わざとカーネルを壊して自己検証が落ちることを確認した。Q6_Kの符号拡張（スケールのバイトを符号付きとして読む処理）を落とすと**10項目中6項目がFAIL**する。テストは実際に間違いを検出できる。
+
+**速度（カーネル単体）**: 加重速度比 **R = 18.89**（1パスあたり eager 1823.7ミリ秒 → 融合後 96.6ミリ秒）。§50.2で `torch.compile` を下限の目安として測った R = 13.42 を上回った。
+
+**`BLOCKS_PER_PROG` の凍結**: 1つのプログラムが担当するブロック数を4/8/16/32でスイープし、**8** で凍結した（`dequant_triton_kernels.py:89`）。`triton.autotune` は使っていない。
+
+**初回コンパイル（JIT）の実費**: キャッシュが空の状態からの合計 **0.81秒**（Q4_K 483ミリ秒／Q5_K 184ミリ秒／Q6_K 147ミリ秒）。キャッシュが効いた2回目以降は0.12秒。形状に依存しない設計（ブロック数を実行時引数にした）にしてあるため、**1プロセスにつき1形式1回しかコンパイルが起きない**（`do_not_specialize` を明示）。Tritonのキャッシュ置き場は既定のまま（`~/.triton/cache`）で、環境変数による設定は追加していない。§50.2で `torch.compile` について記録した「16通りで合計11.1秒」という入場料が、Tritonの手書きカーネルでは0.81秒に下がったことになる。
+
+### 51.3 テストゲート
+
+| 対象 | コマンド | 結果 |
+|---|---|---|
+| バックエンド本体 | `.venv\Scripts\python.exe -m pytest -q` | ✅ **942件中941件PASS**。唯一のFAILは `test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false` で、これは「バックエンドに到達できないこと」を前提にするテストであり、実機ゲートのためにサーバーを起動したままにしていた環境要因である（コード起因ではない） |
+| エンジン仮想環境 | `.venv-engine\Scripts\python.exe -m pytest --noconftest tests\test_worker_fused_dequant_resolve.py` | ✅ **9件PASS** |
+| フロントエンド型検査 | `npm run typecheck`（＝`tsc -b`） | ✅ エラーなし |
+| フロントエンド単体テスト | `npm run test`（vitest） | ✅ **1700件PASS**（109ファイル）。別枠の `backend.integration.test.ts`（10件）は実機バックエンドが同じポートを占有している状態では走らせられないため対象外 |
+
+**新設した回帰テストのうち要点**: ①単発・chain・バッチA2Vの**3経路すべてでキーがワイヤーに載る**ことを、バックエンド側（`test_gradio_batch_runner.py`）とフロントエンド側（`fusedGgufDequantKernel.paths.test.ts`）の両方で押さえた。バッチA2Vだけは配線漏れが他のすべての自動テストをすり抜ける経路なので、専用の1本を置いてある。②chainの入力リストは末尾から数える添字で受け渡す作りのため、末尾の並び順を固定する回帰テストを更新した。
+
+### 51.4 実機ゲート G1〜G8（全項目合格）
+
+共通条件は§50.3と同一である（1280×768・257フレーム・t2v・8ステップ・seed `1687351733`・LoRAなし・distilled・`attention_backend=sage`・`block_swap_prefetch=on`・`keep_resident=on`）。既知の基準SHA-256は `926CE1BD8CA627F8637141FCDFE0E5147A34F9E7582C58D47B5543E0AA817B87`（§48.10・§50.3と同じ値）。
+
+| ゲート | 合格基準 | 結果 |
+|---|---|---|
+| G1 ビット一致 | OFF 1本・ON 1本の両方が既知SHAと完全一致 | ✅ A1（off）・A2（on）とも一致 |
+| G2 速度 | O,F,O,F,O,F,O の交互7本でONの中央値がOFFの中央値より5秒以上短い・SHA全一致 | ✅ **25.28秒短縮（約17.5%）**・7本すべてSHA一致 |
+| G3 echo | 全ジョブのmetadataでON側が `"on"`・OFF側が `"off"`。`"on->off"` が1本でも出たらFAIL | ✅ 該当なし |
+| G4 IC-LoRA併用 | canny-control＋参照映像あり、OFF→ONの1対でSHA完全一致＋ON側 `"on"` | ✅ SHA一致・**64.89秒→38.40秒** |
+| G5 降格証明 | sdpa条件で、Tritonのディレクトリを一時的に退避した状態でONを要求 → 完走・両者のSHAが互いに一致・`"on->off"`・警告は1本だけ | ✅（詳細は下記） |
+| G6 先読みblock swap off併用 | 完走・`"on"`・prefetch offの既知SHAと一致 | ✅ **233.70秒→207.45秒** |
+| G7 chain | 2クリップのchainをONで完走・`"on"` | ✅ 34.24秒 |
+| G8 バッチ | バッチA2V 1行をONで実行・完走・metadataのechoが `"on"` | ✅ 25.81秒 |
+
+**全ジョブ表**（`generation_time_seconds` は `metadata.json` の値。「骨格」は `keep_resident` のキャッシュがHITしたかMISSしたか）
+
+| ラベル | ジョブID | 条件 | 生成時間 | echo | attention | prefetch | keep_resident | peak reserved MB | 骨格 | 出力SHA-256 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| A0（捨て） | `f76a699e-565a-454a-9da5-a6871ca38e67` | off | 198.74秒 | off | sage | on | on | 13912 | MISS | `926CE1BD…B87` |
+| A1 | `68da98a8-4b6a-48b6-a20e-b4b3409763d2` | off | **148.96秒** | off | sage | on | on | 13902 | HIT | `926CE1BD…B87` |
+| A2 | `048d6f34-091e-4bed-97ee-c96ae2b4276d` | **on** | **120.06秒** | on | sage | on | on | 13914 | HIT | `926CE1BD…B87` |
+| A3 | `6407eaea-68f2-4d5d-96ca-b321b638bcd0` | off | **144.51秒** | off | sage | on | on | 13916 | HIT | `926CE1BD…B87` |
+| A4 | `e2c878e1-a773-40b1-8061-8649661994f8` | **on** | **119.12秒** | on | sage | on | on | 13914 | HIT | `926CE1BD…B87` |
+| A5 | `bbb2cef1-58cf-41f5-9911-8a7509166912` | off | **144.38秒** | off | sage | on | on | 13916 | HIT | `926CE1BD…B87` |
+| A6 | `032a923f-e4aa-4535-a361-c6127ce74ee7` | **on** | **119.23秒** | on | sage | on | on | 13914 | HIT | `926CE1BD…B87` |
+| G4 off | `9f2227a8-ac45-4afb-9b25-36d8392fa211` | off・IC-LoRA | 64.89秒 | off | sage | on | on | 12380 | HIT | `CC88642E…05C` |
+| G4 on | `96e2e3f9-a9ba-491e-9b90-76714aa149a5` | **on**・IC-LoRA | **38.40秒** | on | sage | on | on | 12380 | HIT | `CC88642E…05C` |
+| G6 off | `ae52d070-be49-4b5c-be38-94bdd3a82da2` | off・prefetch off | 233.70秒 | off | sage | off | on→off | 13932 | MISS | `926CE1BD…B87` |
+| G6 on | `c0b48394-201e-46b0-bd00-d65dd3676cee` | **on**・prefetch off | **207.45秒** | on | sage | off | on→off | 13920 | MISS | `926CE1BD…B87` |
+| G5 off | `da673d87-eee7-4c10-a4f1-dd6edf7b4a8f` | off・sdpa・Tritonあり | 271.72秒 | off | sdpa | on | on | 13914 | MISS | `73B629D9…754` |
+| G5 on | `ec6bfcea-408b-4133-b76d-ef8418bbe695` | on要求・sdpa・**Triton退避** | 233.89秒 | **on→off** | sdpa | on | on | 13912 | MISS | `73B629D9…754` |
+| G7 | `4baa2d38-c2b6-49a5-a857-5df61ca726ce` | **on**・2クリップchain | 34.24秒 | on | sage | on | on | 12292 | HIT | `78B07CA1…643` |
+| G8 | `09461cfd-8524-4a7d-8617-a58e191a33cd` | **on**・バッチA2V 1行 | 25.81秒 | on | sage | on | on | 11896 | HIT | `17F4C1B6…678` |
+
+SHA-256の全桁: `926CE1BD8CA627F8637141FCDFE0E5147A34F9E7582C58D47B5543E0AA817B87`（768p/257f t2v・sage）、`73B629D972F2A05A80C95F9F196B04810372C96280766D3478F7C3B03E76E754`（同・sdpa）、`CC88642E55663C17B8BA983859C42A220837026745DCF12ACC9D8A162D3AA05C`（G4のIC-LoRA条件）、`78B07CA17974FF0277DDD231798F4472022BE387703A502B57B46D67E9087643`（G7のchain）、`17F4C1B69DBD4280DD9C2071342D98802719FB7FAFF949417B5ECD759960B678`（G8のバッチA2V）。
+
+**G2の統計（本命の速度数値）**
+
+| 条件 | 3本の実測 | 中央値 |
+|---|---|---|
+| OFF（A1・A3・A5） | 148.96 / 144.51 / 144.38 秒 | **144.51秒** |
+| ON（A2・A4・A6） | 120.06 / 119.12 / 119.23 秒 | **119.23秒** |
+
+- 差は **25.28秒＝約17.5%短縮**。合格基準（5秒以上）を大きく上回った。
+- §50.8の期待値（GPU時間だけから計算した約20.1秒）を**5秒ほど上回っている**。これは§50.5で予告したとおりで、1カーネル化はGPUの計算時間だけでなく**CPU側がカーネルを発行する時間（実測93.2秒）も同時に削る**ため、上振れが実際に現れた形である。
+- 交互（off→on→off→on…）で7本走らせたのは、速度の比較だけでなく**状態がジョブをまたいで漏れていないことの検証**を兼ねている。7本すべてでechoが要求どおりに切り替わり、出力SHAも全一致した。
+
+**G5（降格証明）の詳細**: sageはTritonに依存するため、Tritonを取り除いた状態でsage条件のゲートは実施できない。そこで**attention=sdpa条件**で行った。`.venv-engine` の `triton` ディレクトリを一時的に別名へ退避してサーバーを起動し、ONを要求した1本が完走することを確認したうえで、必ず元に戻す手順にしてある（実施後の復旧も確認済み）。結果は、①完走、②echoが `"on->off"`、③出力SHAが同条件のOFF（Tritonあり）と**互いに完全一致**（`73B629D9…754`）、④ワーカーログの該当警告は**2本のみ**で、その内訳は「Tritonのカーネルを読み込めなかった」という診断1本と「このジョブでは無効にして従来実装へ落ちる。生成は続行、遅くなるだけ」という降格通知1本である（同じ警告が繰り返し出ないことの確認）。生ログの該当行:
+
+```
+[ltx_worker] engine.gguf.dequant_triton: Triton dequant kernels unavailable: ModuleNotFoundError: No module named 'triton'
+[ltx_worker] engine.gguf.dequant_triton: Fused GGUF dequant kernel disabled for this job (Triton kernels could not be imported) - falling back to the eager PyTorch dequant. The job continues, only slower.
+```
+
+**G6の補足**: `keep_resident_used` が `"on→off"` になっているのは、`block_swap_prefetch=off` との併用時に骨格キャッシュを自動的に降格させる既存のガード（§48の `_resolve_keep_resident`、メインメモリの二重確保を避けるためのもの）が想定どおり働いた結果である。本テーマとは無関係の既知挙動で、OFF/ON両方に等しくかかっている。
+
+**VRAM**: `peak_vram_reserved_mb`（予約量）は off/on で**実質不変**（A1 13902 対 A2 13914 など、揺らぎの範囲）。一方 `peak_vram_mb`（実確保量）は **10617MB → 10230MB＝約386MB減**した。中間データの往復が消えたぶんだけ確保量が減っており、VRAMの観点でも悪化はない。
+
+### 51.5 既定値の反転（オーナー承認2026-08-04）と最終検証
+
+**裁定**: 実装計画では「STEP2の段階では既定off（既定のリクエストのキー集合を1つも増やさない純粋な加算にするため）とし、実機ゲート全PASSを確認したうえでオーナー承認を得てからonへ反転する」と定めていた。G1〜G8が全項目合格したことを受け、**2026-08-04にオーナーが既定onを承認**した。§44のS4（`block_swap_prefetch` の既定on反転）とまったく同じ前例に従う。
+
+**反転した3箇所**（3つを同じ変更でまとめて動かすのが規律）:
+
+1. `api/models.py` の `FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True`（`/generate`・`/generate/chain` の2つのFieldとMCPツールのimport元を兼ねる正本）
+2. `gradio_ui/handlers.py` のミラー定数（Gradioはサーバーと同居していてもHTTP越しのクライアントなので、importせず自前のミラーを持つ）
+3. フロントエンド `webui/src/shell/accelerationSettings.ts` の `FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT = true`
+
+**送信規律の向きが反転する点に注意**: クライアント側（Gradio・MCP・フロントエンド）はいずれも「**サーバー既定と異なるときだけ明示的に送る**」という規律で書いてあるため、反転前は「onのときだけ送る」だったものが、反転後は「**offのときだけ送る**」になる。この規律で書いてあったからこそ、反転にあたって送信ロジック自体は1行も変えずに済んだ（§44.7が「値がTrueのときだけ送る」実装で踏んだ事故＝明示offが届かない、という落とし穴を最初から避けてある）。なお `services/ltx_runner.py`（サーバー→ワーカーの中継）だけは「解決済みの値がTrueなら送る」方式のままでよい（既定onになった結果、既定のジョブでもワーカーへキーが載るようになった）。凍結してあった「既定リクエストのキー集合」テスト2箇所は、この反転にあわせて `fused_gguf_dequant_kernel` を追加した——**このキー集合が増えてよいのは「実機ゲート合格後の既定反転」のときだけ**であり、そのことをテスト本体のコメントに明記してある（現在この例外に該当するのは `block_swap_prefetch` と `fused_gguf_dequant_kernel` の2つだけ）。
+
+**最終検証（実機1本）**: 反転後のコードでサーバーを再起動し、**Accelerationのフィールドを一切載せない既定のペイロード**（プロンプト・解像度・フレーム数・シードのみ。§50.3と同一条件）で1本生成した。
+
+| 項目 | 結果 |
+|---|---|
+| ジョブID | `9e87c5f2-4380-4bd7-a47a-70161b47845f` |
+| 送信したペイロード | `prompt` / `width` / `height` / `num_frames` / `frame_rate` / `num_inference_steps` / `guidance_scale` / `seed` / `pipeline` の9項目のみ（Accelerationのフィールドは1つも送っていない） |
+| 生成時間 | 200.22秒（骨格キャッシュはMISS＝サーバー再起動直後の1本目） |
+| `fused_gguf_dequant_kernel_used` | ✅ **`"on"`**（＝**既定onが実機で効いていることの証明**） |
+| `attention_used` | ✅ `"sdpa"`（既定のまま） |
+| `keep_resident_used` / `block_swap_prefetch_used` | `"off"` / `"on"`（それぞれの既定どおり） |
+| `peak_vram_reserved_mb` | 13922（`peak_vram_mb` は 10229） |
+| 出力SHA-256 | ✅ `73B629D972F2A05A80C95F9F196B04810372C96280766D3478F7C3B03E76E754` |
+| `metadata.json` の `request` エコー | `fused_gguf_dequant_kernel: true`（送っていないのにtrueで記録される＝サーバー既定が反映されている）。旧 `fused_gguf_dequant_gemm` は**現れない**（撤去済みの確認） |
+| 判定 | ✅ **合格**（完走・echo `"on"`・SHAが基準値と完全一致） |
+
+比較の基準値はG5のOFF側（`da673d87`、sdpa・Tritonあり）である。sdpa条件でのビット一致の基準として、同じSHA-256（`73B629D9…754`）になることを合格条件にした。参考までに生成時間は 271.72秒 → 200.22秒（どちらも骨格キャッシュMISSの1本目）で、**71.5秒＝約26%短縮**しているが、この2本は `keep_resident` の指定が異なる（前者on・後者は既定のoff）ため、速度の正式な数値は交互対比較で測ったG2の**約17.5%**を採る。
+
+### 51.6 残課題
+
+1. **オーナー目視ゲートのみ**。確認していただきたいのは次の4点である。
+   - 設定タブのAcceleration区画に「Fused GGUF Dequantization Kernel（日本語表示では「GGUF逆量子化の1カーネル化」）」の切替が、**既定でOn（有効）** の状態で表示されること。日本語／英語の切替で文言が正しく変わること。
+   - 旧項目「Fused GGUF dequant + GEMM」（常時グレーアウトされていたモック）が**消えていること**。
+   - On/Offを切り替えると表示が追随し、アプリを閉じて開き直しても選んだ状態が残ること（localStorageへの保存）。
+   - その状態で生成が完走し、体感で速くなっていること。
+2. **コミットはオーナーの手動作業**（本リポジトリ・フロントエンド `Nz-LTX23-frontend-AviUtl2` の両方）。

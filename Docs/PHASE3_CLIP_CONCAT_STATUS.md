@@ -79,6 +79,43 @@
 - **ユーザー目視: 継ぎ目を発見できず**（「本当に連結したのか」と確認要請→metadata一次情報で `kind: chain`・num_clips 2・seam junction=72 を検証済み＝**本物の連結**）。512×320時代のChain A（継ぎ目は自然だが判別可能）より品質が上がり、**720p級＋トレイラー風では継ぎ目が実質不可視**という強い結果。
 - backlog 4-6（背景歪み・ワイプ・看板変化）は本runの範囲（5.4s・2セグ）では**再発せず**。ただし尺・セグメント数がChain B（22s・4セグ）より小さいため、完全な切り分けには長尺での再現確認が必要（将来課題のまま）。
 
+## 実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）
+
+> **出自**: Clip Chain拡張（上限24クリップ）とチャンク化アップサンプルの実機ゲート後に、オーナーが8クリップ級の長尺生成を使い込んで得た観察記録である。もとは`LONGFORM_RESEARCH_TOPICS.md`（2026-07-15新設）§1として単独ノートに置いていたが、内容がクリップ連結の品質特性そのものであるため、2026-07-27の整理で本書へ吸収し、同ノートは削除した。将来の研究課題（単発生成へのチャンク化＋タイル化の移植／クリップ毎のキャラクター特徴注入）は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-42・§3-43が正本。
+
+- **チャンク化アップサンプル導入により、768p長尺チェーンのVRAM問題は解決済み。** 8クリップの実運用でピークVRAMは9397〜9529MBに収まり、総尺（クリップ数）に依存しない挙動を確認した。対して一括方式（チャンク化オフ）は同規模の生成で16377MB付近に張り付く（16GBカードの物理上限ぎりぎり）。詳細は[`CHUNKED_UPSAMPLE_WORKORDER.md`](CHUNKED_UPSAMPLE_WORKORDER.md)「GPU実機ゲート結果」節を参照。
+
+- **「10秒おきに景色がぐにっと歪む」現象の正体は、クリップの連結点（クロスフェード連結、240フレーム＝10秒間隔）であり、アップサンプルのチャンク境界ではない。** チャンク化をオフにしたジョブでも同じ現象が発生し、メタデータに記録された連結点の間隔と歪みの発生間隔が一致することから特定した。見えやすさは題材に依存する。カメラが移動し続ける散歩シーンでは歪みが目立つが、静的な舞台（黒猫のオーケストラのような、カメラも被写体もあまり動かない構図）ではほぼ気づかないレベルだった。
+
+- **キャラクター設計のドリフト（連結を重ねるごとに絵柄が少しずつ変質していく現象）を確認した。** 連結を重ねるほど直前のクリップとの差異が累積し、8クリップ級の長尺では最初と最後でかなり別の絵柄になる。画面外に一度消えたキャラクターが、次に画面へ戻ってきたときに違うデザインになっている現象も観察された。これは構造的な制約に起因する。クリップ連結時に前のクリップから持ち越されるのはオーバーラップ3latentフレーム（約0.5秒ぶんの潜在表現＝VAEで圧縮された内部データ）のみであり、それ以外の情報（キャラクターの見た目の全体像）は各クリップが新規に生成し直しているため、少しずつ「解釈」がずれていく。
+
+- **経験則の結論（オーナー判断）。** 長尺を目指すなら、「1クリップをできるだけ長く（現在の上限は481フレーム＝20秒）し、連結数は4〜5個程度に抑える」のが実用上の最適解である。481フレーム×4クリップ（合計79秒）は実機ゲートで完走済み・ピークVRAM 9408MBを実証済み（[`CHUNKED_UPSAMPLE_WORKORDER.md`](CHUNKED_UPSAMPLE_WORKORDER.md)「GPU実機ゲート結果」節のゲートB）。連結数を増やすほどドリフトと連結点の歪みの両方が積み重なるため、同じ総尺を狙うなら「少数の長いクリップ」の方が「多数の短いクリップ」より画質面で有利という経験則になる。
+
+- **1クリップの尺の上限について。** API上の481フレーム上限は、VRAM都合ではなく、モデルの学習上の尺天井（約20秒）に合わせた設計値である。`chain_math.py`のコメントに「trained 20s ceiling（学習時の20秒天井）」と明記されており（stage-2タイル設計＝22latentフレームのタイルが動画・音声のRoPE位置エンコーディング＝時間的な位置情報をこの天井の十分内側に収める設計の根拠として記載）、`api/models.py:84`のコメントにも同じ20秒キャップの由来が記されている。コミュニティの実測報告では、実用上のスイートスポットはさらに手前の10〜15秒とされ、高解像度になるほど早く品質が破綻する。自リポジトリの実測でも、704×1280（縦長）は12〜13秒あたりで崩壊が確認されている（[`LTX23_REFERENCE.md`](LTX23_REFERENCE.md)の1行目付近、該当記述はファイル12行目）。
+
+**上記backlog #1・#4との関係**: 2026-07-03に512×320で記録した「タイル継ぎ目の少し後のドリフト」（backlog #1）と「Chain B 167-182fの背景歪み」（backlog #4）は、当時タイル継ぎ目由来と推定していた。2026-07-14〜15の観察で判明したのは**クリップ連結点（240フレーム間隔）由来の歪み**であり、両者は別地点の現象として切り分けが必要なまま残っている（backlog #4-6の720p級再検証は未実施＝[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-45）。
+
+### キャラクター特徴注入研究の一次情報（台帳`PENDING_TASKS.md` §3-43の出典）
+
+上のドリフト観察を受けて2026-07-15に行った調査の一次情報。研究課題そのものの正本は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-43。
+
+- https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients
+- https://ltx.io/blog/how-to-use-ic-lora-in-ltx-2
+- https://docs.ltx.io/open-source-model/usage-guides/ic-lo-ra
+- https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/discussions/3 （不具合報告）
+- https://huggingface.co/LiconStudio/LTX-2.3-Multiple-Subject-Reference
+- https://github.com/ID-LoRA/ID-LoRA-LTX2.3-ComfyUI
+- https://github.com/ali-vilab/VACE
+- https://github.com/Phantom-video/Phantom
+- https://github.com/Tencent-Hunyuan/HunyuanCustom
+- https://comfyui-wiki.com/en/news/2025-04-06-skyreels-a2-open-source
+- https://ip-adapter.github.io/
+- https://instantid.github.io/
+- https://github.com/Mikubill/sd-webui-controlnet/discussions/1236
+- https://fal.ai/models/fal-ai/ltx2-video-trainer
+- https://ltx.io/model/ltx-trainer
+- https://github.com/Lightricks/ComfyUI-LTXVideo/blob/master/looping_sampler.md
+
 ## リポジトリ状態
 
 - **main へ merge・push 済**（merge `2cc4cac`）。元 branch `feature/phase3-clip-concat` は merge 済で役目を終えた。

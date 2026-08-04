@@ -12,6 +12,7 @@ from api.errors import (
     job_busy,
     lora_preprocess_conflict,
     lora_requires_reference,
+    reference_requires_control_lora,
     reference_resolution_invalid,
 )
 from api.models import GenerateRequest, GenerateResponse, JobStatus
@@ -56,15 +57,22 @@ def generate(
     # deep in the worker).
     if request.reference_video_id is not None:
         context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
-        # All CONTROL adapters use reference_downscale_factor=2, so the reference
-        # is consumed at half output resolution on the 64-grid -- width/height not
-        # divisible by 128 crashes the worker's VAE encode.
+        # CONTROL adapters declare reference_downscale_factor=2 (union-control
+        # family) or 1 (deblur). Under factor 2 the reference is consumed at half
+        # output resolution on the 64-grid, so width/height not divisible by 128
+        # crashes the worker's VAE encode. The check is applied to every reference
+        # request (merely conservative for factor 1, which needs only 64).
         if request.width % 128 != 0 or request.height % 128 != 0:
             raise reference_resolution_invalid(request.width, request.height)
     # Resolve every requested adapter (404 unknown/missing) and inspect its kind:
     #   * a CONTROL adapter derives its conditioning from a reference video, so it
     #     requires reference_video_id (S1: replaces the old all-or-nothing rule,
     #     which is now kind-aware -- a STYLE/character adapter needs no reference);
+    #   * conversely a reference video is ONLY consumable through a control
+    #     adapter (its downscale factor comes from that adapter's metadata), so a
+    #     reference + style-only request is rejected here. Until the factor guard
+    #     was relaxed to accept factor 1, the engine happened to catch this misuse
+    #     deep in the job; this endpoint check is now the only one;
     #   * a single reference video can only be turned into ONE control signal, so
     #     >1 distinct non-"none" preprocess kind is a conflict (Phase C).
     preprocess_kinds: set[str] = set()
@@ -78,6 +86,8 @@ def generate(
             preprocess_kinds.add(entry.preprocess)
     if control_names and request.reference_video_id is None:
         raise lora_requires_reference(control_names)
+    if request.reference_video_id is not None and not control_names:
+        raise reference_requires_control_lora([spec.name for spec in request.loras])
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
 

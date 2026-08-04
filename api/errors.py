@@ -192,6 +192,22 @@ def lora_requires_reference(names: list[str]) -> APIError:
     )
 
 
+def reference_requires_control_lora(names: list[str]) -> APIError:
+    """The reverse of :func:`lora_requires_reference`: a ``reference_video_id``
+    was supplied but not one requested adapter is CONTROL-type. A reference
+    video is only ever consumed through a control adapter (the reference
+    downscale factor is read from that adapter's metadata), so a
+    reference + style-only request has nothing to feed the video to. 422 — the
+    request is well-formed; the required companion input (a control adapter) is
+    what is missing."""
+    return APIError(
+        "REFERENCE_REQUIRES_CONTROL_LORA",
+        "a reference_video_id requires at least one control-type IC-LoRA",
+        422,
+        detail=f"requested loras, none of them control-type: {sorted(names)}",
+    )
+
+
 def lora_control_unsupported_in_chain(names: list[str]) -> APIError:
     """Chain LoRA: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler
     — it derives its conditioning from a reference video) was requested on a
@@ -235,10 +251,10 @@ def lora_preprocess_conflict(kinds: list[str]) -> APIError:
 
 
 def reference_resolution_invalid(width: int, height: int) -> APIError:
-    """Phase C: registered IC-LoRA adapters use reference_downscale_factor=2, so
-    the reference video is consumed at half the output resolution on VAE's
-    64-grid. If width/height are not divisible by 128, that half-resolution
-    reference lands off the 64-grid and the worker's VAE encode fails with an
+    """Phase C: the reference video is consumed on the VAE's 64-grid. The
+    downscale factor is 2 (union-control family) or 1 (deblur); the divisible-by-128
+    requirement is unchanged either way. If width/height are not divisible by 128,
+    the reference lands off the 64-grid and the worker's VAE encode fails with an
     unfriendly einops error deep in the job -- reject it up front instead."""
     return APIError(
         "REFERENCE_RESOLUTION_INVALID",

@@ -44,6 +44,7 @@ from typing import Any
 
 import torch
 
+from engine.gguf import dequant_triton
 from engine.gguf.ic_lora_common import IC_LORA_SPECS_ATTR as _IC_LORA_SPECS_ATTR
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,12 @@ _GGML_Q8_K  = 15
 _GGML_IQ4_NL = 20
 _GGML_IQ4_XS = 22
 _GGML_BF16  = 30
+
+# The three K-quant types the fused Triton kernels cover. Everything else keeps
+# the eager path unconditionally — Q4_K/Q5_K/Q6_K are 100% of the quantised
+# tensors in the shipped DiT and Gemma GGUFs, so the remaining types are not
+# worth a kernel each.
+_TRITON_TYPES = (_GGML_Q4_K, _GGML_Q5_K, _GGML_Q6_K)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Per-type dequantisation (pure PyTorch, runs on CUDA)
@@ -106,6 +113,24 @@ def dequantize_ggml_tensor(
         return _dequant_q2_k(raw, original_shape, out_dtype)
     if ggml_type == _GGML_Q3_K:
         return _dequant_q3_k(raw, original_shape, out_dtype)
+    # Fused Triton dequant — opt-in per job, and a pure accelerator: it returns
+    # None for every failure mode (no Triton, kernel raised, first-call
+    # bit-exactness check failed) after latching itself off for the rest of the
+    # job, and the eager kernels below run instead. Guards, in order: only the
+    # three K-quant types have kernels; `raw.is_cuda` because Gemma's embedding
+    # dequantises on CPU and a Triton launch there would raise once per tensor
+    # just to be caught; only bf16 output is wired up; and `enabled()` is False
+    # unless this job asked for it.
+    if (
+        ggml_type in _TRITON_TYPES
+        and raw.is_cuda
+        and out_dtype is torch.bfloat16
+        and dequant_triton.enabled()
+    ):
+        fused = dequant_triton.dequant(raw, ggml_type, original_shape, out_dtype)
+        if fused is not None:
+            return fused
+
     if ggml_type == _GGML_Q4_K:
         return _dequant_q4_k(raw, original_shape, out_dtype)
     if ggml_type == _GGML_Q5_K:

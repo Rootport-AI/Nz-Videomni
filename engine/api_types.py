@@ -75,6 +75,27 @@ class GenerateChainParams(TypedDict, total=False):
 
     ``source`` is optional (absent/null for a normal chain); when present the
     ``clips`` list may be length 1.
+
+    NAG (non-CFG negative prompt guidance, Wave 1): both this op and
+    ``generate`` also accept an optional ``nag`` block —
+    ``{negative_prompt: str, scale: float, tau: float, alpha: float}`` — present
+    ONLY when the request enabled NAG (see engine/transformer/nag_service.py
+    and engine/worker.py's ``_resolve_nag``). Absent/omitted ``nag`` -> the
+    payload is byte-identical to before NAG existed. Not declared as a
+    TypedDict field here (mirrors the existing ``reference_video`` block, which
+    is also a plain untyped dict) — see ``_resolve_nag`` for the keys it reads.
+
+    VSF (Value Sign Flip, arXiv:2508.10931, Wave 1/2): the second non-CFG
+    negative-prompt method, selected via the same ``nag`` block above. Two
+    additional keys ride alongside the four above (present whenever ``nag`` is
+    present, regardless of method — the API layer always sends them):
+    ``method: "nag" | "vsf"`` (worker key is ``"method"``, NOT ``"neg_method"``
+    — the API field is named ``neg_method`` but the wire key mirrors the
+    engine's existing ``nag`` block naming) and ``vsf_scale: float`` (the
+    negative-side V multiplier α). ``scale`` / ``tau`` / ``alpha`` above are
+    still sent unconditionally but are read by the engine only when
+    ``method == "nag"``. ``method`` missing (older payload) falls back to
+    ``"nag"`` in ``_resolve_nag``.
     """
 
     width: int

@@ -1336,7 +1336,7 @@ def test_build_adapter_choices_from_config_with_unknown_key():
 def test_build_adapter_choices_fallback_when_no_ic_loras():
     values = [v for _label, v in build_adapter_choices({})]
     assert values == [ADAPTER_NONE, "pixel-spatial-upscaler-x2",
-                      "canny-control", "pose-control"]
+                      "canny-control", "pose-control", "depth-control", "deblur"]
 
 
 # --------------------------------------------------------------------------- #
@@ -1723,7 +1723,14 @@ def test_chain_per_clip_prompt_lora_is_preserved():
 def test_prompt_unification_i18n_keys_present_both_langs():
     from gradio_ui import LABELS
 
-    for k in ("info_negative",):
+    for k in (
+        "info_negative",
+        "nag_accordion", "nag_note", "nag_enable",
+        "nag_lbl_method", "nag_method_nag", "nag_method_vsf",
+        "nag_lbl_scale", "nag_lbl_tau", "nag_lbl_alpha",
+        "nag_msg_negative_required",
+        "vsf_lbl_scale", "vsf_lbl_scale_info",
+    ):
         assert LABELS["en"].get(k), f"missing EN: {k}"
         assert LABELS["ja"].get(k), f"missing JA: {k}"
 
@@ -2705,3 +2712,1065 @@ def test_build_a2v_chain_payload_coerces_numeric_types():
     assert payload["seed"] == 9
     # negative_prompt=None coalesces to "" exactly like the handler branch.
     assert payload["negative_prompt"] == ""
+
+
+# --------------------------------------------------------------------------- #
+# NAG (Normalized Attention Guidance / non-CFG Negative) -- additive keys on
+# build_a2v_chain_payload, the single/chain handlers' request bodies, and the
+# precheck that rejects an enabled-but-empty negative prompt with zero API
+# calls (same discipline as every other precheck above).
+# --------------------------------------------------------------------------- #
+def test_build_a2v_chain_payload_nag_enabled_appends_six_keys_in_order():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-7",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        nag_scale=9.0,
+        nag_tau=3.0,
+        nag_alpha=0.4,
+        neg_method="vsf",
+        vsf_scale=2.0,
+    )
+    assert list(payload.keys())[-6:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale",
+    ]
+    assert payload["nag_enabled"] is True
+    assert payload["nag_scale"] == 9.0
+    assert payload["nag_tau"] == 3.0
+    assert payload["nag_alpha"] == 0.4
+    assert payload["neg_method"] == "vsf"
+    assert payload["vsf_scale"] == 2.0
+
+
+def test_build_a2v_chain_payload_nag_default_omits_all_six_keys():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-8",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale"):
+        assert key not in payload
+
+
+def test_generate_handler_nag_enabled_adds_body_fields():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nag"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "blurry", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        nag_enabled=True, nag_scale=9.0, nag_tau=3.0, nag_alpha=0.4,
+    )
+    _run_until_job_started(gen)
+    assert captured["nag_enabled"] is True
+    assert captured["nag_scale"] == 9.0
+    assert captured["nag_tau"] == 3.0
+    assert captured["nag_alpha"] == 0.4
+
+
+def test_generate_handler_vsf_enabled_adds_body_fields():
+    # neg_method/vsf_scale reach the request body ALONGSIDE the four
+    # nag_* keys whenever nag_enabled is True, regardless of which method is
+    # actually selected (the key-order contract stays simple).
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-vsf"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "blurry", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        nag_enabled=True, neg_method="vsf", vsf_scale=2.5,
+    )
+    _run_until_job_started(gen)
+    assert captured["neg_method"] == "vsf"
+    assert captured["vsf_scale"] == 2.5
+
+
+def test_generate_handler_nag_default_omits_body_fields():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nonag"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale"):
+        assert key not in captured
+
+
+def test_generate_nag_enabled_empty_negative_precheck_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "   ", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
+        nag_enabled=True,
+    ))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+def test_chain_handler_nag_enabled_adds_body_fields_positional_order():
+    # Exercises the POSITIONAL contract (chunked_upsample -> nag x4 ->
+    # src_audio) that ui.py's click inputs / _chain_args rely on.
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nag"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    # _chain_args (this file's helper) stops at ``config``; nag_* are passed as
+    # keywords directly to ``chain`` (they sit further along the signature,
+    # after the S6/mode params this helper never fills in).
+    gen = chain(*_chain_args(negative="blurry", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), nag_enabled=True, nag_scale=8.0, nag_tau=4.0, nag_alpha=0.5)
+    _run_chain_until_started(gen)
+    assert captured["nag_enabled"] is True
+    assert captured["nag_scale"] == 8.0
+    assert captured["nag_tau"] == 4.0
+    assert captured["nag_alpha"] == 0.5
+
+
+def test_chain_handler_vsf_enabled_adds_body_fields():
+    # Calls `chain` with vsf_* as KEYWORD arguments (see _chain_args's docstring
+    # below), so this only checks the resulting request body's fields, not
+    # positional order. The positional contract itself (chunked_upsample ->
+    # nag x4 -> neg_method/vsf_scale -> src_audio) is verified against
+    # ui.py's actual click-handler wiring by tests/test_gradio_v2v_a2v.py's
+    # `_chain_args` helper.
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-vsf"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(negative="blurry", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), nag_enabled=True, neg_method="vsf", vsf_scale=3.0)
+    _run_chain_until_started(gen)
+    assert captured["neg_method"] == "vsf"
+    assert captured["vsf_scale"] == 3.0
+
+
+def test_chain_handler_nag_default_omits_body_fields():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nonag"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale"):
+        assert key not in captured
+
+
+def test_chain_nag_enabled_empty_negative_precheck_zero_calls():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(202, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    out = list(chain(*_chain_args(negative="", clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), nag_enabled=True))
+    assert calls["n"] == 0
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+
+
+# --------------------------------------------------------------------------- #
+# Acceleration (attention_backend): the Settings-tab selector reaches every
+# request body, but ONLY when it differs from the "sdpa" default -- the sdpa
+# payload must stay byte-identical to the pre-Acceleration contract the
+# exact-match / key-order tests above lock in. Passed as a KEYWORD everywhere
+# (it sits at the very end of each handler signature, after src_audio for the
+# chain handler), so no positional helper needed changing.
+# --------------------------------------------------------------------------- #
+def test_accel_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_section_title", "accel_note",
+                "accel_lbl_fused_dequant", "accel_info_fused_dequant",
+                "accel_lbl_attention", "accel_info_attention",
+                "accel_lbl_vae", "accel_info_unimplemented"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The sage caveat must actually say the output changes + name the speedup.
+    assert "1.2-1.6x" in LABELS["en"]["accel_info_attention"]
+    assert "1.2〜1.6倍" in LABELS["ja"]["accel_info_attention"]
+
+
+def test_build_a2v_chain_payload_sage_appends_attention_backend_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-accel-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        attention_backend="sage",
+    )
+    assert payload["attention_backend"] == "sage"
+    assert list(payload.keys())[-1] == "attention_backend"
+
+
+def test_build_a2v_chain_payload_sage_sits_after_the_nag_block():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-accel-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+    )
+    assert list(payload.keys())[-7:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_attention_backend():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-accel-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    assert "attention_backend" not in payload
+    # Explicitly passing the default must be indistinguishable from omitting it.
+    assert payload == build_a2v_chain_payload(
+        audio_id="aud-accel-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        attention_backend="sdpa",
+    )
+
+
+def test_generate_handler_sage_adds_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-sage"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        attention_backend="sage",
+    )
+    _run_until_job_started(gen)
+    assert captured["attention_backend"] == "sage"
+    # Appended last, after the (absent here) NAG block.
+    assert list(captured.keys())[-1] == "attention_backend"
+
+
+def test_generate_handler_default_omits_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-sdpa"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "attention_backend" not in captured
+
+
+def test_generate_handler_a2v_forwards_attention_backend(tmp_path):
+    # The A2V branch builds its body through build_a2v_chain_payload -- the
+    # selector must survive that hop too.
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-accel"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-sage"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), attention_backend="sage",
+    )
+    # The A2V branch yields an "uploading audio" line BEFORE the POST, so this
+    # drives the generator to the job-started yield instead of using
+    # _run_until_job_started (which stops at the first yield).
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["attention_backend"] == "sage"
+
+
+def test_chain_handler_sage_adds_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-sage"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), attention_backend="sage")
+    _run_chain_until_started(gen)
+    assert captured["attention_backend"] == "sage"
+    assert list(captured.keys())[-1] == "attention_backend"
+
+
+def test_chain_handler_default_omits_attention_backend():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-sdpa"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "attention_backend" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Block-swap prefetch (block_swap_prefetch): the Settings-tab checkbox added
+# alongside attention_backend. S4 (2026-08-01) flipped BOTH the API's own
+# pydantic default (api/models.py) AND this module's mirror constant to True
+# -- the real-device gate (bit-exact output + VRAM headroom, G1-G7) passed and
+# the owner confirmed "gate green -> default on". The payload discipline
+# flipped WITH it: a request now reaches the body ONLY when it differs from
+# gradio_ui.handlers.BLOCK_SWAP_PREFETCH_DEFAULT (no longer "only when True"
+# -- that pattern would have silently gone inert on this flip, since an
+# explicit "off" would then never reach the wire and the server's new True
+# default would turn it back on behind the caller's back). Appended right
+# after attention_backend so the default payload stays byte-identical to the
+# pre-prefetch contract either way.
+# --------------------------------------------------------------------------- #
+def test_block_swap_prefetch_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_prefetch", "accel_info_prefetch"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+
+
+def test_block_swap_prefetch_default_constant_is_true():
+    from gradio_ui.handlers import BLOCK_SWAP_PREFETCH_DEFAULT
+
+    assert BLOCK_SWAP_PREFETCH_DEFAULT is True
+
+
+def test_build_a2v_chain_payload_prefetch_off_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        block_swap_prefetch=False,
+    )
+    assert payload["block_swap_prefetch"] is False
+    assert list(payload.keys())[-1] == "block_swap_prefetch"
+
+
+def test_build_a2v_chain_payload_prefetch_sits_after_attention_backend():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+    )
+    assert list(payload.keys())[-8:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend", "block_swap_prefetch",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_block_swap_prefetch():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    assert "block_swap_prefetch" not in payload
+    # Explicitly passing the default (True, post-S4) must be indistinguishable
+    # from omitting it.
+    assert payload == build_a2v_chain_payload(
+        audio_id="aud-prefetch-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        block_swap_prefetch=True,
+    )
+
+
+def test_build_a2v_chain_payload_explicit_off_sends_false():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-prefetch-4",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        block_swap_prefetch=False,
+    )
+    assert payload["block_swap_prefetch"] is False
+
+
+def test_generate_handler_prefetch_off_adds_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-prefetch"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        block_swap_prefetch=False,
+    )
+    _run_until_job_started(gen)
+    assert captured["block_swap_prefetch"] is False
+    # Appended last, after the (absent here) attention_backend key.
+    assert list(captured.keys())[-1] == "block_swap_prefetch"
+
+
+def test_generate_handler_default_omits_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-noprefetch"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "block_swap_prefetch" not in captured
+
+
+def test_generate_handler_a2v_forwards_block_swap_prefetch(tmp_path):
+    # The A2V branch builds its body through build_a2v_chain_payload -- the
+    # checkbox must survive that hop too.
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-prefetch"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-prefetch"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), block_swap_prefetch=False,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["block_swap_prefetch"] is False
+
+
+def test_chain_handler_prefetch_off_adds_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-prefetch"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), block_swap_prefetch=False)
+    _run_chain_until_started(gen)
+    assert captured["block_swap_prefetch"] is False
+    assert list(captured.keys())[-1] == "block_swap_prefetch"
+
+
+def test_chain_handler_default_omits_block_swap_prefetch():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-noprefetch"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "block_swap_prefetch" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# keep-resident (keep_resident): the Settings-tab checkbox added after the
+# block-swap prefetch one. SAME "only when it differs from the mirrored server
+# default" rule -- but the default is OFF here, so the key rides only on a
+# CHECKED box. Reading these tests as a copy of the prefetch block above and
+# expecting the OFF case to send the key is the mistake to avoid; the rule is
+# shared, the direction is not.
+# --------------------------------------------------------------------------- #
+def test_keep_resident_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_keep_resident", "accel_info_keep_resident"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The owner-specified memory guidance must be in BOTH languages -- it is
+    # the whole reason this option ships with a note instead of a gate.
+    assert "64GB" in LABELS["ja"]["accel_info_keep_resident"]
+    assert "64GB" in LABELS["en"]["accel_info_keep_resident"]
+
+
+def test_keep_resident_default_constant_is_false():
+    from gradio_ui.handlers import KEEP_RESIDENT_DEFAULT
+
+    assert KEEP_RESIDENT_DEFAULT is False
+
+
+def test_build_a2v_chain_payload_keep_resident_on_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-keepres-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        keep_resident=True,
+    )
+    assert payload["keep_resident"] is True
+    assert list(payload.keys())[-1] == "keep_resident"
+
+
+def test_build_a2v_chain_payload_keep_resident_sits_after_prefetch():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-keepres-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+        keep_resident=True,
+    )
+    assert list(payload.keys())[-9:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend", "block_swap_prefetch",
+        "keep_resident",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_keep_resident():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kw = dict(
+        audio_id="aud-keepres-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    payload = build_a2v_chain_payload(**kw)
+    assert "keep_resident" not in payload
+    # Explicitly passing the default (False) is indistinguishable from omitting
+    # it -- the wire shape of "off" IS "absent", which is also what tells the
+    # worker to release the cache.
+    assert payload == build_a2v_chain_payload(**kw, keep_resident=False)
+
+
+def test_generate_handler_keep_resident_on_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-keepres"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        keep_resident=True,
+    )
+    _run_until_job_started(gen)
+    assert captured["keep_resident"] is True
+    assert list(captured.keys())[-1] == "keep_resident"
+
+
+def test_generate_handler_default_omits_keep_resident():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nokeepres"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "keep_resident" not in captured
+
+
+def test_generate_handler_a2v_forwards_keep_resident(tmp_path):
+    # The A2V branch goes through build_a2v_chain_payload -- the checkbox must
+    # survive that hop too (this is the one that silently drops in a copy-paste).
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-keepres"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-keepres"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), keep_resident=True,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["keep_resident"] is True
+
+
+def test_chain_handler_keep_resident_on_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-keepres"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), keep_resident=True)
+    _run_chain_until_started(gen)
+    assert captured["keep_resident"] is True
+    assert list(captured.keys())[-1] == "keep_resident"
+
+
+def test_chain_handler_default_omits_keep_resident():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nokeepres"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "keep_resident" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Fused GGUF dequantization kernel (fused_gguf_dequant_kernel, §1-11): the
+# Settings-tab checkbox appended after keep-resident. SAME "only when it
+# differs from the mirrored server default" rule, and the SAME direction as
+# keep-resident (default off -> the key rides only on a CHECKED box). It took
+# over the screen position of the removed fused_gguf_dequant_gemm mock, but it
+# is a real wired control -- unlike that placeholder it reaches the wire.
+# --------------------------------------------------------------------------- #
+def test_fused_dequant_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_fused_dequant", "accel_info_fused_dequant"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The old mock's keys must be GONE in both languages (owner ruling
+    # 2026-08-04: complete removal, not a rename-in-place).
+    for lang in ("en", "ja"):
+        assert "accel_lbl_fused_gguf" not in LABELS[lang]
+    # ...but the shared "not implemented" info line stays: the VAE radio, the
+    # section's remaining mock, still uses it.
+    assert LABELS["en"]["accel_info_unimplemented"].strip()
+    assert LABELS["ja"]["accel_info_unimplemented"].strip()
+
+
+def test_fused_dequant_default_constant_is_true():
+    # 2026-08-04 (§51): flipped to True once the real-device gates G1-G8 passed
+    # and the owner approved -- so the checkbox ships CHECKED and the "send only
+    # when it differs from the default" rule emits the key only when UNCHECKED.
+    from gradio_ui.handlers import FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    assert FUSED_GGUF_DEQUANT_KERNEL_DEFAULT is True
+
+
+def test_build_a2v_chain_payload_fused_dequant_off_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-fdq-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        fused_gguf_dequant_kernel=False,
+    )
+    assert payload["fused_gguf_dequant_kernel"] is False
+    assert list(payload.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_build_a2v_chain_payload_fused_dequant_sits_after_keep_resident():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-fdq-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+        keep_resident=True,
+        fused_gguf_dequant_kernel=False,
+    )
+    assert list(payload.keys())[-10:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend", "block_swap_prefetch",
+        "keep_resident", "fused_gguf_dequant_kernel",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_fused_dequant():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kw = dict(
+        audio_id="aud-fdq-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    payload = build_a2v_chain_payload(**kw)
+    assert "fused_gguf_dequant_kernel" not in payload
+    # ...and an explicit True is the same wire shape as omitting it (the server
+    # default is True since 2026-08-04).
+    assert payload == build_a2v_chain_payload(**kw,
+                                              fused_gguf_dequant_kernel=True)
+
+
+def test_generate_handler_fused_dequant_off_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-fdq"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        fused_gguf_dequant_kernel=False,
+    )
+    _run_until_job_started(gen)
+    assert captured["fused_gguf_dequant_kernel"] is False
+    assert list(captured.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_generate_handler_default_omits_fused_dequant():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nofdq"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "fused_gguf_dequant_kernel" not in captured
+
+
+def test_generate_handler_a2v_forwards_fused_dequant(tmp_path):
+    # The A2V branch goes through build_a2v_chain_payload -- the checkbox must
+    # survive that hop too (the one that silently drops in a copy-paste).
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-fdq"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-fdq"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), fused_gguf_dequant_kernel=False,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["fused_gguf_dequant_kernel"] is False
+
+
+def test_chain_handler_fused_dequant_off_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-fdq"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), fused_gguf_dequant_kernel=False)
+    _run_chain_until_started(gen)
+    assert captured["fused_gguf_dequant_kernel"] is False
+    assert list(captured.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_chain_handler_default_omits_fused_dequant():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nofdq"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "fused_gguf_dequant_kernel" not in captured

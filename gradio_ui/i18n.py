@@ -38,7 +38,71 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_prompt": "Prompt (single generation & clip-chain shared base)",
         "ph_prompt": "A bustling downtown at dusk; crowds weave through the alleys as neon signs flicker on — like a scene from a movie trailer",
         "lbl_negative": "Negative prompt",
-        "info_negative": "Disabled: the distilled model runs at CFG=1, so negative prompts have no effect.",
+        "info_negative": ("Editable while non-CFG Negative is on; applied via NAG "
+                          "(the distilled model runs at CFG=1, so a plain negative "
+                          "prompt has no effect)."),
+        # --- NAG (Normalized Attention Guidance) accordion ---
+        "nag_accordion": "Negative Prompt",
+        "nag_note": ("Two non-CFG negative-prompt methods, both working even "
+                     "though the distilled model runs at CFG=1. NAG (Normalized "
+                     "Attention Guidance) computes attention (the cross-attention "
+                     "mechanism) twice and blends the result, so its compute "
+                     "cost is roughly double. VSF (Value Sign Flip) mixes the "
+                     "negative signal into a single attention pass instead, so "
+                     "it adds almost no extra cost."),
+        "nag_enable": "non-CFG Negative",
+        "nag_lbl_method": "Method",
+        "nag_method_nag": "NAG",
+        "nag_method_vsf": "VSF",
+        "nag_lbl_scale": "NAG scale",
+        "nag_lbl_tau": "NAG tau (norm clamp)",
+        "nag_lbl_alpha": "NAG alpha (blend)",
+        "nag_msg_negative_required": "Enter a negative prompt, or turn off non-CFG Negative.",
+        # --- VSF (Value Sign Flip) — 2nd non-CFG negative method: positive and
+        # negative contexts are concatenated into ONE attention pass, and the
+        # negative side's V (value) is sign-flipped and scaled by vsf_scale.
+        "vsf_lbl_scale": "VSF scale",
+        "vsf_lbl_scale_info": ("VSF (Value Sign Flip) strength. Wan-measured value: "
+                               "1.7. Even 0 does not disable VSF — use the Method "
+                               "selector or the non-CFG Negative checkbox to turn "
+                               "it off."),
+        # --- Acceleration (Settings tab): per-job speed options. All of them
+        # are implemented except the VAE radio, which is a disabled placeholder
+        # that never reaches a request payload.
+        # NOTE: the VAE selector is unrelated to the server's ``vae_tiling``
+        # (a VRAM-saving tile split).
+        "accel_section_title": "Acceleration",
+        "accel_note": ("Speed options applied per generation job. They take "
+                       "effect immediately — no restart needed."),
+        "accel_lbl_fused_dequant": "Fused GGUF Dequantization Kernel",
+        "accel_info_fused_dequant": ("Merges GGUF dequantization into a single "
+                                     "kernel to speed up generation. The output "
+                                     "is exactly the same (bit-for-bit identical "
+                                     "for the same seed) — only the speed "
+                                     "changes. Falls back to the previous "
+                                     "implementation on its own when it cannot "
+                                     "run."),
+        "accel_lbl_attention": "Attention",
+        "accel_info_attention": ("Changes fine details of the output even with "
+                                 "the same seed (different numerical "
+                                 "precision). Roughly 1.2-1.6x faster."),
+        "accel_lbl_vae": "VAE",
+        "accel_info_unimplemented": ("Not implemented yet — shown for a future "
+                                     "release; selecting it has no effect."),
+        "accel_lbl_prefetch": "Block-swap prefetch",
+        "accel_info_prefetch": ("Hides the CPU<->GPU weight-transfer time behind the "
+                                "computation (block swap only). The output is "
+                                "bit-identical to having it off — only the speed "
+                                "changes. Roughly 10-13% faster; no effect when block "
+                                "swap is disabled."),
+        "accel_lbl_keep_resident": "Keep the model skeleton resident (cross-job cache)",
+        "accel_info_keep_resident": ("64GB or more of memory recommended. Keeps the "
+                                     "model's CPU-side skeleton between jobs, greatly "
+                                     "shortening the preparation phase from the second "
+                                     "generation onward (measured: about 70s -> about "
+                                     "10s). Uses about 20GB of main memory while "
+                                     "resident. The output does not change (bit-for-bit "
+                                     "identical for the same seed)."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -83,6 +147,21 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_ref_video": "Reference video (mp4/mov/webm/mkv, max 200 MB)",
         "note_ref128": ("When using a reference video, the output width and height must be "
                         "multiples of 128 (e.g. 1280×768); generation will not start otherwise."),
+        "note_iclora_aspect": ("The reference video is simply resized to the output resolution, "
+                               "so a mismatched aspect ratio will distort it (most noticeable "
+                               "with Depth control)."),
+        "note_iclora_depth": ("Depth control: the official recommendation is Control adherence "
+                              "= 0.6. Keep Adapter strength at 1.0 — lowering it can make "
+                              "the reference bleed through (these are two different sliders)."),
+        "note_iclora_deblur": ("Deblur: write the prompt in two parts, e.g. \"Reference shows "
+                               "<scene>, heavily out of focus with soft defocused blur and no "
+                               "fine detail. Edited shows the same scene in sharp focus with "
+                               "crisp detail and clean edges. DEBLUR <scene>. Subject identity, "
+                               "framing, and background geometry are identical to the reference; "
+                               "only focus and sharpness differ between reference and edited.\" "
+                               "It removes defocus blur (out-of-focus shots), not motion blur. "
+                               "The reference video is used for conditioning without "
+                               "downscaling."),
         # --- generate: right column ---
         "btn_generate": "Generate",
         # Feature 3: shown on generate_btn / chain_generate_btn while a
@@ -396,6 +475,8 @@ LABELS: dict[str, dict[str, str]] = {
                              "<lora:...> token(s) and retry."),
         "lora_warn_weight_clamp": ("LoRA <{name}> weight {given} is out of range (0–2.0); "
                                    "clamped to {clamped}."),
+        "lora_warn_audio_weight_clamp": ("LoRA <{name}> audio-side weight {given} is out of range "
+                                         "(0–2.0); clamped to {clamped}."),
         "lora_msg_list_failed": ("Failed to look up the LoRA list for the <lora:...> tokens: "
                                  "{err}"),
         # --- Batch A2V ---
@@ -489,7 +570,64 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_prompt": "プロンプト(単発生成・クリップ連結の共通ベース)",
         "ph_prompt": "夕暮れの賑やかな下町、行き交う人々、ネオンが灯りはじめる路地。映画のワンシーンのように——",
         "lbl_negative": "ネガティブプロンプト",
-        "info_negative": "無効: 蒸留モデルはCFG=1で動作するため、ネガティブプロンプトは効きません。",
+        "info_negative": ("non-CFG Negative がオンのあいだ編集できます。適用は NAG "
+                          "経由です（蒸留モデルは CFG=1 動作のため、通常のネガティブ"
+                          "プロンプトは効きません）。"),
+        # --- NAG (Normalized Attention Guidance) アコーディオン ---
+        "nag_accordion": "ネガティブプロンプト",
+        "nag_note": ("非CFGのネガティブプロンプト方式が2つあります。蒸留モデルは "
+                     "CFG=1 動作ですが、どちらも作用します。NAG（Normalized "
+                     "Attention Guidance）はattention（注意機構）を2回計算して"
+                     "ブレンドする方式で、計算コストが約2倍になります。VSF"
+                     "（Value Sign Flip）は1回の計算に負の指示を混ぜ込む方式で、"
+                     "追加コストはほとんどありません。"),
+        "nag_enable": "non-CFG Negative",
+        "nag_lbl_method": "方式",
+        "nag_method_nag": "NAG",
+        "nag_method_vsf": "VSF",
+        "nag_lbl_scale": "NAG スケール",
+        "nag_lbl_tau": "NAG tau（ノルム上限）",
+        "nag_lbl_alpha": "NAG alpha（ブレンド）",
+        "nag_msg_negative_required": "ネガティブプロンプトを入力するか、non-CFG Negative をオフにしてください。",
+        # --- VSF（Value Sign Flip）— 非CFGネガティブの第2方式。正負のコンテキ
+        # ストを連結して1回のattentionで処理し、負側のV（value）だけを符号反転
+        # してvsf_scale倍する方式です。
+        "vsf_lbl_scale": "VSFスケール",
+        "vsf_lbl_scale_info": ("VSF（Value Sign Flip）の強さです。Wanでの実測値は"
+                               "1.7。0にしても無効化にはなりません——無効化は「方式」"
+                               "の切り替えか non-CFG Negative のチェックOFFで行って"
+                               "ください。"),
+        # --- Acceleration（設定タブ）: ジョブ単位の高速化設定。VAEのラジオ
+        # だけが無効化した表示専用（リクエストには一切載りません）で、それ
+        # 以外は実装済みです。
+        # 注意: ここのVAE選択は、サーバ側の vae_tiling（VRAM節約のためのタイル
+        # 分割）とは無関係です。
+        "accel_section_title": "生成の高速化",
+        "accel_note": ("生成ジョブごとに適用される高速化の設定です。再起動は"
+                       "不要で、次の生成からすぐに反映されます。"),
+        "accel_lbl_fused_dequant": "GGUF逆量子化の1カーネル化",
+        "accel_info_fused_dequant": ("逆量子化を1つのカーネルにまとめて生成を"
+                                     "高速化します。出力は完全に一致します"
+                                     "（同じシードならビット単位で同一）。速度"
+                                     "だけが変わります。実行できない環境では"
+                                     "自動的に従来の実装へ戻ります。"),
+        "accel_lbl_attention": "Attention（注意機構）の実装",
+        "accel_info_attention": ("同じシードでも生成結果の細部が変わります"
+                                 "（数値精度が異なるため）。速度は約1.2〜1.6倍"),
+        "accel_lbl_vae": "VAE（潜在表現と映像を相互変換する部品）",
+        "accel_info_unimplemented": ("まだ実装されていません。将来の実装に備えて"
+                                     "表示しているだけで、選んでも効果はありません。"),
+        "accel_lbl_prefetch": "ブロック入れ替えの先読み",
+        "accel_info_prefetch": ("重みをCPUとGPUのあいだで運ぶ時間を、計算の裏に隠します"
+                                "（ブロック入れ替えを使っているときだけ効きます）。"
+                                "生成結果はオフのときと完全に同一で、速度だけが変わります。"
+                                "約10〜13%短縮。ブロック入れ替えが無効な設定では何も起きません。"),
+        "accel_lbl_keep_resident": "モデル骨格の常駐（ジョブ間キャッシュ）",
+        "accel_info_keep_resident": ("メモリ64GB以上を推奨。モデルのCPU側骨格をジョブ間で"
+                                     "保持し、2回目以降の生成の前処理を大幅に短縮します"
+                                     "（実測 約70秒→約10秒）。メインメモリを約20GB常駐で"
+                                     "使用します。生成結果は変わりません"
+                                     "（同じシードならビット単位で同一）。"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",
@@ -533,6 +671,20 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_ref_video": "参照動画 (mp4/mov/webm/mkv・最大200MB)",
         "note_ref128": ("参照動画を使う場合、出力の幅と高さは128の倍数にしてください"
                         "(例: 1280×768)。満たさない場合は生成を開始しません。"),
+        "note_iclora_aspect": ("参照動画は出力解像度へ単純にリサイズされるため、アスペクト比が"
+                               "異なると映像が歪みます（特にDepth controlで目立ちます）。"),
+        "note_iclora_depth": ("Depth control: 公式推奨は制御追従度（control adherence）="
+                              "0.6です。アダプタ強度（LoRA強度）は1.0のままにしてください——"
+                              "下げると参照が滲み込みます（この2つは別のつまみです）。"),
+        "note_iclora_deblur": ("Deblur: プロンプトは2段構成で書きます。例（公式モデルカードより）: "
+                               "「Reference shows <場面の説明>, heavily out of focus with soft "
+                               "defocused blur and no fine detail. Edited shows the same scene "
+                               "in sharp focus with crisp detail and clean edges. DEBLUR "
+                               "<場面の説明>. Subject identity, framing, and background geometry "
+                               "are identical to the reference; only focus and sharpness differ "
+                               "between reference and edited.」対象はデフォーカスぼけ（ピンぼけ）"
+                               "のみで、モーションブラーには効きません。参照動画は縮小せずに"
+                               "条件付けに使われます。"),
         # --- generate: right column ---
         "btn_generate": "生成",
         # 機能3: generate_btn / chain_generate_btnの生成中に表示（ボタンは無効化）。
@@ -809,6 +961,8 @@ LABELS: dict[str, dict[str, str]] = {
                              "<lora:...> の記述を修正するか削除して再試行してください。"),
         "lora_warn_weight_clamp": ("LoRA <{name}> の重み {given} が範囲外（0〜2.0）です。"
                                    "{clamped} に丸めました。"),
+        "lora_warn_audio_weight_clamp": ("LoRA <{name}> の音声側の重み {given} が範囲外（0〜2.0）"
+                                         "です。{clamped} に丸めました。"),
         "lora_msg_list_failed": "<lora:...> を解決するためのLoRA一覧取得に失敗しました: {err}",
         # --- Batch A2V ---
         "batch_accordion": "バッチA2V",

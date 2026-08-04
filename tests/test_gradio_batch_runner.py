@@ -1,4 +1,4 @@
-"""Unit tests for the Batch A2V execution engine (gradio_ui/batch.py).
+﻿"""Unit tests for the Batch A2V execution engine (gradio_ui/batch.py).
 
 Driven fully offline: ApiClient is fed an ``httpx.MockTransport`` (the
 ``_make_client`` pattern from tests/test_gradio_handlers.py) and the runner is
@@ -27,7 +27,11 @@ from gradio_ui.batch import (
     compose_prompt,
     get_runner,
 )
-from gradio_ui.handlers import suggest_frames_for_audio
+from gradio_ui.handlers import (
+    make_chain_handler,
+    make_generate_handler,
+    suggest_frames_for_audio,
+)
 from gradio_ui.manifest import (
     IMAGE_SHARED,
     STAT_DONE,
@@ -818,3 +822,328 @@ def test_start_allows_no_shared_image_when_all_rows_have_own_image(tmp_path):
 
 def test_get_runner_is_singleton():
     assert get_runner() is get_runner()
+
+
+# --------------------------------------------------------------------------- #
+# NAG (Normalized Attention Guidance / non-CFG Negative): BatchSnapshot's four
+# nag_* fields must reach every row's /generate/chain payload (via
+# build_a2v_chain_payload) when enabled, and stay entirely absent by default.
+# --------------------------------------------------------------------------- #
+def test_batch_nag_enabled_snapshot_adds_four_keys_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, negative="blurry",
+                     nag_enabled=True, nag_scale=9.0, nag_tau=3.0, nag_alpha=0.4)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["nag_enabled"] is True
+    assert p["nag_scale"] == 9.0
+    assert p["nag_tau"] == 3.0
+    assert p["nag_alpha"] == 0.4
+
+
+def test_batch_vsf_enabled_snapshot_adds_two_keys_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, negative="blurry",
+                     nag_enabled=True, neg_method="vsf", vsf_scale=2.0)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["neg_method"] == "vsf"
+    assert p["vsf_scale"] == 2.0
+
+
+def test_batch_default_snapshot_omits_nag_keys_from_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    for key in ("nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+                "neg_method", "vsf_scale"):
+        assert key not in p
+
+
+# --------------------------------------------------------------------------- #
+# Acceleration: the batch runner builds every row's payload from the SNAPSHOT,
+# not from handler arguments, so attention_backend has to travel through
+# BatchSnapshot -- otherwise an overnight batch would silently stay on sdpa
+# while the UI claims sage is selected.
+# --------------------------------------------------------------------------- #
+def test_batch_sage_snapshot_adds_attention_backend_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, attention_backend="sage")
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["attention_backend"] == "sage"
+    assert list(p.keys())[-1] == "attention_backend"
+
+
+def test_batch_default_snapshot_omits_attention_backend(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "attention_backend" not in p
+
+
+# --------------------------------------------------------------------------- #
+# Block-swap prefetch: same reasoning as attention_backend above -- the
+# snapshot is the only path from the Settings-tab checkbox into a batch row's
+# payload, so an overnight batch would silently drift from the checkbox
+# without this wiring. S4 (2026-08-01) flipped the default to True (real-
+# device gate G1-G7 passed); the payload now reaches the wire only when the
+# snapshot's value DIFFERS from BLOCK_SWAP_PREFETCH_DEFAULT (build_a2v_chain_payload's
+# discipline), so it is the OFF case that now appends the key.
+# --------------------------------------------------------------------------- #
+def test_batch_prefetch_off_snapshot_adds_block_swap_prefetch_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, block_swap_prefetch=False)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["block_swap_prefetch"] is False
+    assert list(p.keys())[-1] == "block_swap_prefetch"
+
+
+def test_batch_default_snapshot_omits_block_swap_prefetch(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "block_swap_prefetch" not in p
+
+
+# --------------------------------------------------------------------------- #
+# keep-resident: same snapshot-is-the-only-path reasoning again. This is the
+# setting a batch benefits from MOST (every row after the first is a cache
+# HIT), so a dropped wire here is a large silent regression -- and, being
+# default-off, it is the CHECKED case that appends the key.
+# --------------------------------------------------------------------------- #
+def test_batch_keep_resident_snapshot_adds_key_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, keep_resident=True)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["keep_resident"] is True
+    assert list(p.keys())[-1] == "keep_resident"
+
+
+def test_batch_default_snapshot_omits_keep_resident(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "keep_resident" not in p
+
+
+# --------------------------------------------------------------------------- #
+# Fused GGUF dequantization kernel (§1-11): same snapshot-is-the-only-path
+# reasoning once more. Default ON since 2026-08-04 (§51), so it is the
+# UNCHECKED case that appends the key -- and it is appended LAST, after
+# keep_resident.
+# --------------------------------------------------------------------------- #
+def test_batch_fused_dequant_off_snapshot_adds_key_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, fused_gguf_dequant_kernel=False)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["fused_gguf_dequant_kernel"] is False
+    assert list(p.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_batch_default_snapshot_omits_fused_dequant(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "fused_gguf_dequant_kernel" not in p
+
+
+def test_fused_dequant_reaches_the_wire_on_all_three_backend_paths(tmp_path):
+    """§1-11 regression: single, chain AND batch all put the key on the wire.
+
+    The three paths assemble their bodies in three DIFFERENT places
+    (``make_generate_handler``'s own dict, ``make_chain_handler``'s own dict,
+    and ``build_a2v_chain_payload`` reached through ``BatchSnapshot``), so a
+    per-path unit test can pass while one path quietly drops the flag -- the
+    batch one especially, since nothing else in the batch flow would notice.
+    This test walks all three end to end against a mock transport and asserts
+    the key is actually in the JSON body each time. Since the 2026-08-04 flip
+    (§51) the server default is ON, so the case that PUTS the key on the wire
+    is the unchecked one -- the assertion is on ``False``.
+    """
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-3paths"})
+        if path.endswith("/generate") or path.endswith("/generate/chain"):
+            bodies.append(json.loads(request.content))
+            return httpx.Response(202, json={"job_id": f"job-{len(bodies)}"})
+        if path.endswith("/video"):
+            return httpx.Response(200, content=b"MP4DATA")
+        if "/jobs/" in path:
+            return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(404, json={"error": f"unexpected {path}"})
+
+    api = _make_client(handler)
+
+    # 1) single generate (T2V): 5 disabled keyframe slots -> 20 flat positionals.
+    gen = make_generate_handler(api)(
+        "a calm river", "", *([False, None, 0, 0.8] * 5),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        fused_gguf_dequant_kernel=False,
+    )
+    for _out in gen:
+        if bodies:
+            gen.close()
+            break
+
+    # 2) chain (2 clips): 11 leading positionals, then 24 clip slots (slot 1
+    # carries image + strength), then the config state.
+    chain_args = ["a calm river", "", 512, 320, False, 0, 0, 24.0, -1, 3, 0.5]
+    chain_args.extend([True, "", 121, None, 0.8])          # clip 1
+    chain_args.extend([True, "", 121])                     # clip 2
+    for _i in range(22):                                   # clips 3..24 (off)
+        chain_args.extend([False, "", 121])
+    chain_args.append(None)                                # config state
+    cgen = make_chain_handler(api)(*chain_args,
+                                   fused_gguf_dequant_kernel=False)
+    for out in cgen:
+        if out[1]:
+            cgen.close()
+            break
+
+    # 3) batch A2V (one row) through the runner + snapshot.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    snap = _snapshot(wav_dir, tmp_path / "out", fused_gguf_dequant_kernel=False)
+    started, reason = BatchRunner().start(snap, _rows(("a.wav",)), api, sync=True)
+    assert started is True, reason
+
+    assert len(bodies) == 3, f"expected 3 submissions, got {len(bodies)}"
+    for i, body in enumerate(bodies):
+        assert body.get("fused_gguf_dequant_kernel") is False, (
+            f"path #{i + 1} did not send fused_gguf_dequant_kernel: "
+            f"{sorted(body)}"
+        )

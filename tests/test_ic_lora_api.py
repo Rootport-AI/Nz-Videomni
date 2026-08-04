@@ -36,6 +36,10 @@ FAKE_MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
 REGISTERED_LORA = "pixel-spatial-upscaler-x2"
 CANNY_LORA = "canny-control"
 POSE_LORA = "pose-control"
+# A CONTROL-kind adapter in the plain ``lora_client`` fixture: a reference video
+# is only accepted alongside one (REFERENCE_REQUIRES_CONTROL_LORA), and the
+# dummy metadata-less file REGISTERED_LORA points at classifies as STYLE.
+CONTROL_LORA = "union-control"
 
 
 def _make_args(config_path: str) -> argparse.Namespace:
@@ -57,7 +61,10 @@ def lora_client(tmp_path):
         "server": {"log_dir": (tmp_path / "logs").as_posix()},
         "model": {
             "backend": "mock",
-            "ic_loras": {REGISTERED_LORA: lora_file.as_posix()},  # absolute -> used as-is
+            "ic_loras": {
+                REGISTERED_LORA: lora_file.as_posix(),  # absolute -> used as-is
+                CONTROL_LORA: {"path": lora_file.as_posix(), "preprocess": "canny"},
+            },
         },
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
@@ -162,7 +169,7 @@ def _base_payload(**over) -> dict:
 def test_generate_with_loras_and_reference_completes(lora_client):
     vid = _upload_video(lora_client)
     payload = _base_payload(
-        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        loras=[{"name": CONTROL_LORA, "strength": 1.0}],
         reference_video_id=vid,
     )
     r = lora_client.post("/api/v1/generate", json=payload)
@@ -175,10 +182,10 @@ def test_generate_with_loras_and_reference_completes(lora_client):
     ctx = lora_client.app_context
     meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
     # Additive request fields recorded.
-    assert meta["request"]["loras"][0]["name"] == REGISTERED_LORA
+    assert meta["request"]["loras"][0]["name"] == CONTROL_LORA
     assert meta["request"]["reference_video_id"] == vid
     # Additive ic_lora block present for a lora job.
-    assert meta["ic_lora"]["loras"][0]["name"] == REGISTERED_LORA
+    assert meta["ic_lora"]["loras"][0]["name"] == CONTROL_LORA
     assert meta["ic_lora"]["reference_video_id"] == vid
 
 
@@ -215,6 +222,43 @@ def test_reference_without_loras_422(lora_client):
     assert "requires at least one lora" in r.text
 
 
+def test_reference_with_style_only_loras_422(lora_client):
+    """The reverse direction of test_control_lora_without_reference_422: a
+    reference video with STYLE-only adapters has nothing to consume it (the
+    reference downscale factor is read from a CONTROL adapter's metadata) ->
+    422 REFERENCE_REQUIRES_CONTROL_LORA. Until the engine's factor guard was
+    relaxed to accept factor 1 this misuse was caught deep in the job; this
+    endpoint check is now the only one."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        width=512, height=256,  # 128-divisible, so the resolution check passes first
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "REFERENCE_REQUIRES_CONTROL_LORA"
+    assert REGISTERED_LORA in r.json()["error"]["detail"]
+
+
+def test_reference_with_style_plus_control_accepted(lora_client):
+    """A STYLE adapter alongside a CONTROL adapter satisfies the check (the
+    combo that A2V/IC-LoRA co-use relies on) -- only style-ONLY is rejected."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        width=512, height=256,
+        loras=[
+            {"name": REGISTERED_LORA, "strength": 1.0},
+            {"name": CONTROL_LORA, "strength": 1.0},
+        ],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job = lora_client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+
+
 def test_unknown_adapter_name_404(lora_client):
     vid = _upload_video(lora_client)
     payload = _base_payload(
@@ -248,7 +292,8 @@ def test_unknown_reference_video_404(lora_client):
 
 
 def test_reference_resolution_not_divisible_by_128_422(lora_client):
-    """All registered adapters use reference_downscale_factor=2, so the
+    """CONTROL adapters declare reference_downscale_factor=2 (union-control
+    family, incl. the one registered here) or 1 (deblur); under factor 2 the
     reference is consumed at half output resolution on the 64-grid -- 512x320
     (320 % 128 != 0) is rejected up front instead of crashing the worker's VAE
     encode deep in the job (real failure reproduced during Phase C prep)."""
@@ -271,7 +316,7 @@ def test_reference_resolution_divisible_by_128_completes(lora_client):
     payload = _base_payload(
         width=512,
         height=256,
-        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        loras=[{"name": CONTROL_LORA, "strength": 1.0}],
         reference_video_id=vid,
     )
     r = lora_client.post("/api/v1/generate", json=payload)
@@ -295,6 +340,72 @@ def test_lora_strength_out_of_range_422(lora_client):
     vid = _upload_video(lora_client)
     payload = _base_payload(
         loras=[{"name": REGISTERED_LORA, "strength": 5.0}],  # > 2.0 bound
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
+def test_lora_strength_zero_still_rejected_422(lora_client):
+    """Regression: strength keeps its gt=0.0 bound (only audio_strength gains
+    a ge=0.0 allowance) -- strength: 0 must still 422."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 0.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
+def test_lora_audio_strength_omitted_completes(lora_client):
+    """Omitting audio_strength behaves exactly as before (audio side follows
+    strength) -- 202 as usual."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": CONTROL_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+
+
+def test_lora_audio_strength_zero_accepted(lora_client):
+    """audio_strength=0.0 is explicitly allowed (mutes the audio-side LoRA
+    weights) -- unlike strength, ge=0.0 not gt=0.0."""
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": CONTROL_LORA, "strength": 1.0, "audio_strength": 0.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+
+
+def test_lora_audio_strength_upper_bound_accepted(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": CONTROL_LORA, "strength": 1.0, "audio_strength": 2.0}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+
+
+def test_lora_audio_strength_above_max_422(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0, "audio_strength": 2.1}],
+        reference_video_id=vid,
+    )
+    r = lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422
+
+
+def test_lora_audio_strength_below_min_422(lora_client):
+    vid = _upload_video(lora_client)
+    payload = _base_payload(
+        loras=[{"name": REGISTERED_LORA, "strength": 1.0, "audio_strength": -0.1}],
         reference_video_id=vid,
     )
     r = lora_client.post("/api/v1/generate", json=payload)
@@ -343,7 +454,7 @@ def test_strength_fields_accept_range(lora_client):
     for value in (0.0, 1.0):
         payload = _base_payload(
             width=512, height=256,  # 128-divisible reference resolution
-            loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+            loras=[{"name": CONTROL_LORA, "strength": 1.0}],
             reference_video_id=vid,
             conditioning_attention_strength=value,
             reference_video_strength=value,
@@ -355,7 +466,7 @@ def test_strength_fields_accept_range(lora_client):
         for bad in (-0.1, 1.1):
             payload = _base_payload(
                 width=512, height=256,
-                loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+                loras=[{"name": CONTROL_LORA, "strength": 1.0}],
                 reference_video_id=vid,
                 **{field: bad},
             )
@@ -367,7 +478,7 @@ def test_strength_fields_in_request_dump(lora_client):
     vid = _upload_video(lora_client)
     payload = _base_payload(
         width=512, height=256,
-        loras=[{"name": REGISTERED_LORA, "strength": 1.0}],
+        loras=[{"name": CONTROL_LORA, "strength": 1.0}],
         reference_video_id=vid,
         conditioning_attention_strength=0.6,
         reference_video_strength=0.8,
@@ -400,10 +511,11 @@ def test_registry_string_entry_resolves_backward_compat(tmp_path):
         {"model": {"ic_loras": {REGISTERED_LORA: lora_file.as_posix()}}}
     )
     registry = LoraRegistry(config)
-    path, strength, preprocess = registry.resolve(REGISTERED_LORA, 1.0)
+    path, strength, preprocess, audio_strength = registry.resolve(REGISTERED_LORA, 1.0)
     assert path == lora_file.resolve()
     assert strength == 1.0
     assert preprocess == "none"
+    assert audio_strength is None
 
 
 def test_registry_dict_entry_resolves_with_preprocess(tmp_path):
@@ -421,10 +533,11 @@ def test_registry_dict_entry_resolves_with_preprocess(tmp_path):
         }
     )
     registry = LoraRegistry(config)
-    path, strength, preprocess = registry.resolve(POSE_LORA, 1.0)
+    path, strength, preprocess, audio_strength = registry.resolve(POSE_LORA, 1.0)
     assert path == control_file.resolve()
     assert strength == 1.0
     assert preprocess == "dwpose"
+    assert audio_strength is None
 
 
 def test_generate_with_dict_valued_adapter_completes(mixed_registry_client):

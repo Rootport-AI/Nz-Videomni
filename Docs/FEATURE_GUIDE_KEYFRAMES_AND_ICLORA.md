@@ -61,20 +61,39 @@ IC-LoRA は、LTX 公式が提供する「参照動画を手がかりに新し�
 
 「踊っている女性の動きだけを写し取り、中身をロボットやアニメキャラに差し替える」という、看板になっている能力はこちらです。
 
-ただしこの系統は、参照動画をそのまま入力しません。事前に動画を制御信号——骨格の棒人間動画（DWPose というツールで生成）、深度マップ、輪郭線、動きの軌跡など——へ変換してから渡す必要があります。ComfyUI のワークフローでも、この変換は LoRA の手前に置かれる独立した前処理ノード（DWPose 等）です。「DWPose が要るはず」という記憶は正しいです。
+ただしこの系統は、参照動画をそのまま入力しません。事前に動画を制御信号——骨格の棒人間動画（DWPose というツールで生成）、深度マップ（手前と奥の距離を明暗で表した白黒映像）、輪郭線、動きの軌跡など——へ変換してから渡す必要があります。ComfyUI のワークフローでも、この変換は LoRA の手前に置かれる独立した前処理ノード（DWPose 等）です。「DWPose が要るはず」という記憶は正しいです。
+
+**この変換は、いまはサーバー側が自動で行います。** 利用者は従来どおり生の動画をアップロードするだけで、どの制御信号に変換するかはアダプタの選択（`canny-control` / `pose-control` / `depth-control`）で決まります。
 
 ### 系統2：参照系（Upscaler / Deblur / Colorization など）
 
-参照動画をそのまま入力できる系統です。アップスケール（Pixel-Spatial-Upscaler）、ブレ除去、白黒映像の着色、画面外の描き足し（In/Outpainting）、HDR 化、口の動きの差し替え（LipDub）などが含まれます。
+参照動画をそのまま入力できる系統です。アップスケール（Pixel-Spatial-Upscaler）、ブレ除去（Deblur）、白黒映像の着色、画面外の描き足し（In/Outpainting）、HDR 化、口の動きの差し替え（LipDub）などが含まれます。
 
 ### 現在使えるもの
 
-| 系統 | 現状 |
-|---|---|
-| 参照系 | 使えます。第1弾として2倍アップスケーラー（Pixel-Spatial-Upscaler x2）を搭載 |
-| 制御系 | 未対応。DWPose 等の前処理工程がシステムにまだ無い |
+| アダプタ名 | 系統 | 何をするか | 前処理 |
+|---|---|---|---|
+| `pixel-spatial-upscaler-x2` | 参照系 | 解像度を2倍に拡大しつつディテールを描き足す | 不要 |
+| `canny-control` | 制御系 | 参照動画の輪郭線を写し取り、中身を差し替える | 輪郭抽出（Canny） |
+| `pose-control` | 制御系 | 参照動画の人物の姿勢・動きを写し取る | 骨格推定（DWPose） |
+| `depth-control` | 制御系 | 参照動画の奥行き構造（手前と奥の関係）を写し取る | 深度推定（Video-Depth-Anything Small） |
+| `deblur` | 参照系 | ピンぼけした動画をくっきりさせる | 不要 |
 
-つまり現時点で通っているのは参照系のルートだけです。「踊り→ロボット」のような制御系の能力には外部の前処理段の追加が必要で、これが次の開発フェーズ（Phase C）の最有力候補に位置づけられています。
+`canny-control` / `pose-control` / `depth-control` の3つは、**同一の Union-Control アダプタファイル**を指しています。どの制御信号を入れるかを前処理の種別で切り替えているだけで、モデルは1つです。
+
+**`depth-control` と `deblur` は実機で確認済みです。**
+
+**使うときの注意（新しい2つについて）**
+
+- **参照動画のアスペクト比**は出力の比に合わせてください。参照動画は出力解像度へ単純にリサイズされるため、比が違うと映像が歪みます（`depth-control` で特に目立ちます）。
+- **`depth-control` の推奨設定**は、制御追従度（`conditioning_attention_strength`＝参照にどれだけ厳密に従わせるかの強さ）を **0.6** にすることです。公式ドキュメントの記載に基づきます。**アダプタ強度（LoRA の強さ）のほうは 1.0 のままにしてください。** この2つは別のつまみで、後者を下げると参照が滲み込みます。
+- **`deblur` のプロンプトは2段構成**で書きます。前半で参照動画の状態（ピンぼけしている）を述べ、`DEBLUR` という語を挟んで、後半で望む結果（同じ場面がくっきりしている）を述べる書式です。**効くのはデフォーカスぼけ（ピンぼけ）だけ**で、モーションブラー（被写体ぶれ・手ぶれ）には効きません。また参照動画を縮小せずに条件付けへ使うため、他のアダプタより **VRAM 消費が大きくなります**。
+
+### まだ使えないもの
+
+Motion-Track（動きの軌跡追従）と In-Outpainting（画面外の描き足し）の2種は未対応です。需要が確認できていないためで、技術的に塞がれているわけではありません。あわせて `conditioning_attention_mask`（参照条件を画面の場所ごとに効かせ分けるマスク）の API 露出も未着手です。管理はフロントエンドの台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8 で行っています。
+
+なお、旧 19b 世代のアダプタは、適用してもエラーは出ませんが**視覚効果がゼロ**と報告されており、流用できません。
 
 ### アップスケールで人物が別人になった件
 
@@ -86,6 +105,6 @@ IC-LoRA は、LTX 公式が提供する「参照動画を手がかりに新し�
 
 <small>
 
-**出典**：LTX 公式ドキュメント（IC-LoRA の使い方・各アダプタ）／Lightricks の Hugging Face モデルカード（Pixel-Spatial-Upscaler・Pose・Motion-Track）／ComfyUI ワークフロー（RunComfy・ltxworkflow）／当プロジェクト VERIFICATION_LOG §17・§21。
+**出典**：LTX 公式ドキュメント（IC-LoRA の使い方・各アダプタ）／Lightricks の Hugging Face モデルカード（Pixel-Spatial-Upscaler・Pose・Motion-Track・Deblur）／ComfyUI ワークフロー（RunComfy・ltxworkflow・公式 `LTX-2.3_ICLoRA_Union_Control_Distilled.json`）／当プロジェクト `VERIFICATION_LOG.md` §17・§21・§22・§28.1・§49／[`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)（制御系の完成物）／[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)（depth-control・deblur の正本）。
 
 </small>

@@ -51,7 +51,13 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from .handlers import build_a2v_chain_payload, suggest_frames_for_audio
+from .handlers import (
+    BLOCK_SWAP_PREFETCH_DEFAULT,
+    FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+    KEEP_RESIDENT_DEFAULT,
+    build_a2v_chain_payload,
+    suggest_frames_for_audio,
+)
 from .manifest import (
     IMAGE_SHARED,
     STAT_DONE,
@@ -145,6 +151,36 @@ class BatchSnapshot:
         poll_interval   seconds between GET /jobs/{id} polls.
         poll_timeout_s  per-row polling ceiling in seconds (a row that has not
                         reached a terminal state by then is marked Failed).
+
+    NAG (non-CFG Negative)
+        nag_enabled, nag_scale, nag_tau, nag_alpha — forwarded to
+        build_a2v_chain_payload for every row; defaults reproduce the pre-NAG
+        payload (NAG off) byte-for-byte.
+        neg_method, vsf_scale — the method selector + VSF's own
+        param, forwarded the same way (only reach the payload when
+        nag_enabled is True, per build_a2v_chain_payload's discipline).
+
+    Acceleration
+        attention_backend  "sdpa" (default) or "sage". Snapshotted from the
+                     Settings-tab selector so an overnight batch uses the SAME
+                     backend the single-generate path would have used —
+                     forgetting this wiring is exactly how a speed option ends
+                     up being "displayed only" for batch runs. Reaches the
+                     payload only when it differs from "sdpa".
+        block_swap_prefetch  Snapshotted from the Settings-tab checkbox, same
+                     reasoning as attention_backend. Reaches the payload only
+                     when it differs from the API's own default (now True).
+        keep_resident  Snapshotted from the Settings-tab checkbox, same
+                     reasoning again. The API default is OFF, so this one
+                     reaches the payload only when True. For a batch it is the
+                     setting that matters most (every row after the first is a
+                     cache HIT) — and also the one that parks ~20GB of main
+                     memory for the whole overnight run.
+        fused_gguf_dequant_kernel  Snapshotted from the Settings-tab checkbox,
+                     same reasoning again. The API default is ON since
+                     2026-08-04 (§51), so this one reaches the payload only
+                     when False. The output is bit-identical either way — only
+                     the speed changes.
     """
 
     wav_dir: str
@@ -166,6 +202,16 @@ class BatchSnapshot:
     reference_strength: float = 1.0
     poll_interval: float = 2.0
     poll_timeout_s: float = 7200.0
+    nag_enabled: bool = False
+    nag_scale: float = 11.0
+    nag_tau: float = 2.5
+    nag_alpha: float = 0.25
+    neg_method: str = "nag"
+    vsf_scale: float = 1.5
+    attention_backend: str = "sdpa"
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
 
 
 # --------------------------------------------------------------------------- #
@@ -408,6 +454,16 @@ class BatchRunner:
                 reference_video_id=ref_id,
                 control_adherence=snap.control_adherence,
                 reference_strength=snap.reference_strength,
+                nag_enabled=snap.nag_enabled,
+                nag_scale=snap.nag_scale,
+                nag_tau=snap.nag_tau,
+                nag_alpha=snap.nag_alpha,
+                neg_method=snap.neg_method,
+                vsf_scale=snap.vsf_scale,
+                attention_backend=snap.attention_backend,
+                block_swap_prefetch=snap.block_swap_prefetch,
+                keep_resident=snap.keep_resident,
+                fused_gguf_dequant_kernel=snap.fused_gguf_dequant_kernel,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

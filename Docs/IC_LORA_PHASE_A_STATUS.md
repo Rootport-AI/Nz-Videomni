@@ -21,6 +21,8 @@
 
 i7-13700（**AVX2のみ・AVX512-BF16/AMX無し**）／RTX 4070 Ti SUPER 16GB／System RAM 64GB／Windows 11／`LTX_KEEP_RESIDENT=0`。
 
+※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
+
 ## 何を作ったか
 
 - **`engine/gguf/loader_service.py`**:

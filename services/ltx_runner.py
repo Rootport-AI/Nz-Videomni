@@ -51,6 +51,7 @@ from api.errors import lora_preprocess_conflict
 from api.models import GenerateRequest
 from config import AppConfig
 from services import gpu_info, video_io
+from services.lora_registry import ResolvedLora
 from services.low_vram import LowVramSettings, safe_memory_cleanup
 
 logger = logging.getLogger("ltx.runner")
@@ -209,23 +210,42 @@ MOCK_BACKEND = "mock"
 REAL_BACKEND = "ltx-distilled"
 
 
-def _resolve_reference_preprocess(lora_paths: list[tuple[Path, float, str]]) -> str:
+def _resolve_reference_preprocess(lora_paths: list[ResolvedLora]) -> str:
     """Phase C: derive the single control-preprocess kind for the one reference
     video from the resolved loras of a job.
 
-    ``lora_paths`` entries are ``(path, strength, preprocess)`` (see
-    ``services.lora_registry.LoraRegistry.resolve``). All-``"none"`` (Phase B
-    reference-only adapters, or no loras) -> ``"none"``. Exactly one non-``"none"``
-    kind -> that kind. More than one distinct kind is a conflict: a single
-    uploaded reference video can only be converted into ONE control signal, so
-    this raises ``LORA_PREPROCESS_CONFLICT`` (400) -- the same check the API
-    layer (``api/generate.py``) already performs up front; this is the
-    defensive re-check at the runner hop.
+    ``lora_paths`` entries are ``ResolvedLora`` (``path``, ``strength``,
+    ``preprocess``, ``audio_strength``; see
+    ``services.lora_registry.LoraRegistry.resolve``) — index access (``lp[2]``)
+    so plain 3-tuples from legacy/test call sites are still accepted. All-
+    ``"none"`` (Phase B reference-only adapters, or no loras) -> ``"none"``.
+    Exactly one non-``"none"`` kind -> that kind. More than one distinct kind is
+    a conflict: a single uploaded reference video can only be converted into ONE
+    control signal, so this raises ``LORA_PREPROCESS_CONFLICT`` (400) -- the
+    same check the API layer (``api/generate.py``) already performs up front;
+    this is the defensive re-check at the runner hop.
     """
-    kinds = {preprocess for _, _, preprocess in lora_paths if preprocess != "none"}
+    kinds = {lp[2] for lp in lora_paths if lp[2] != "none"}
     if len(kinds) > 1:
         raise lora_preprocess_conflict(sorted(kinds))
     return next(iter(kinds)) if kinds else "none"
+
+
+def _lora_payload_entry(lp) -> dict:
+    """One worker-payload lora dict: ``{"path", "strength"}`` plus
+    ``"audio_strength"`` when the resolved entry carries one.
+
+    Index access (``lp[0]``/``lp[1]``) + ``getattr(lp, "audio_strength", None)``
+    so a plain 3-tuple (legacy/test call sites, no ``audio_strength`` field at
+    all) still works — only a real ``ResolvedLora`` with a non-None
+    ``audio_strength`` adds the key, keeping a no-audio job's payload
+    byte-identical to before.
+    """
+    entry = {"path": str(lp[0]), "strength": float(lp[1])}
+    audio_strength = getattr(lp, "audio_strength", None)
+    if audio_strength is not None:
+        entry["audio_strength"] = float(audio_strength)
+    return entry
 
 
 @dataclass
@@ -238,6 +258,41 @@ class GenerationOutcome:
     # Phase 3 WP4 masked AV-latent chain: junction pixel-frame indices + full
     # geometry (from chain_math / the engine). None for single-clip generate.
     chain_metadata: dict | None = None
+    # Acceleration: the attention backend the engine ACTUALLY ran with
+    # ("sdpa" | "sage" | "sage->sdpa" when it fell back). Reported by the
+    # worker's terminal ``done`` event and carried to metadata.json exactly like
+    # ``seed_used``, so "the request said sage" and "sage actually ran" can never
+    # silently diverge (the fp8 "displayed but not applied" trap). None on the
+    # mock backend and on any worker that predates the field.
+    attention_used: str | None = None
+    # Acceleration: whether block-swap prefetch ACTUALLY ran ("off" | "on" |
+    # "on->off" when it fell back to the synchronous path). Reported by the
+    # worker's terminal ``done`` event and carried to metadata.json exactly like
+    # ``attention_used``. None on the mock backend and on any worker that
+    # predates the field.
+    block_swap_prefetch_used: str | None = None
+    # Acceleration: whether the cross-job CPU-skeleton cache ACTUALLY stayed
+    # resident for this job ("off" | "on" | "on->off" when a worker-side guard
+    # auto-downgraded it — see engine/worker.py's ``_resolve_keep_resident``).
+    # Same relay discipline as ``block_swap_prefetch_used``: the worker's
+    # terminal ``done`` event carries it into metadata.json, which is the ONLY
+    # way to tell "the request asked for it" from "it actually ran" without
+    # reading worker logs. None on the mock backend and on any worker that
+    # predates the field.
+    keep_resident_used: str | None = None
+    # Acceleration: whether the fused Triton GGUF dequantization kernel ACTUALLY
+    # ran for this job ("off" | "on" | "on->off" when it was requested but never
+    # applied — Triton unavailable, a kernel exception latched the fallback, the
+    # first-call self-check mismatched, or no eligible tensor existed). Same
+    # relay discipline as ``block_swap_prefetch_used``. None on the mock backend
+    # and on any worker that predates the field.
+    fused_gguf_dequant_kernel_used: str | None = None
+    # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
+    # peak_vram_mb (which is max_memory_allocated-based and cannot see
+    # allocator-reserved-but-unallocated growth from stream-separate pools).
+    # Additive — does not replace peak_vram_mb. None on the mock backend and on
+    # any worker that predates the field.
+    peak_vram_reserved_mb: int | None = None
 
 
 class LTXRunner:
@@ -252,6 +307,9 @@ class LTXRunner:
         self.config = config
         self.low_vram = low_vram
         self._backend: _MockBackend | _RealBackend | None = None
+        # Acceleration capability probe result (see ``sage_available``); None
+        # until the first read, then cached for the process lifetime.
+        self._sage_probe_cache: bool | None = None
 
     @property
     def loaded(self) -> bool:
@@ -293,7 +351,7 @@ class LTXRunner:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -319,7 +377,7 @@ class LTXRunner:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -335,9 +393,10 @@ class LTXRunner:
         exclusive with ``source_tail_path`` (enforced at the API layer).
 
         ``lora_paths`` (style/character IC-LoRA, additive): resolved
-        ``(path, strength, preprocess)`` triples applied uniformly across the whole
-        chain (every clip / stage). Empty/None -> no loras (byte-identical default);
-        the mock ignores them, the real backend forwards them to the worker.
+        ``ResolvedLora`` (``path``, ``strength``, ``preprocess``, ``audio_strength``)
+        entries applied uniformly across the whole chain (every clip / stage).
+        Empty/None -> no loras (byte-identical default); the mock ignores them,
+        the real backend forwards them to the worker.
 
         ``reference_video_path`` (Phase C reference-video CONTROL IC-LoRA, ALPHA
         scope — clips=1 only, enforced by the schema/endpoint): mirrors
@@ -387,11 +446,11 @@ class LTXRunner:
         """True only if the engine python, worker script and every file the real
         GGUF + component-file path actually loads are present.
 
-        The GGUF + component-file recipe never opens the 43GB monolith
-        (``checkpoint_path``): it is passed to the worker as a reference-only
-        payload field (the wheel's lazy builders receive it but the GGUF/component
-        installs replace every loader), so it is deliberately NOT gated here. The
-        (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
+        The GGUF + component-file recipe never opens the 43GB monolith. The
+        worker payload's ``checkpoint_path`` field is a hardcoded ``""`` (see
+        ``_build_load_payload``) — the wheel's lazy builders receive it but the
+        GGUF/component installs replace every loader — so there is no path here
+        to gate. The (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
         with gemma_root=None so the wheel's weight glob is bypassed,
         but the engine still loads the tokenizer/processor module_ops from this dir,
         so a missing dir must fail fast in the app layer rather than crash deep in
@@ -429,6 +488,84 @@ class LTXRunner:
             return True
         except Exception:
             return False
+
+    # ------------------------------------------- acceleration (SageAttention)
+
+    @property
+    def sage_available(self) -> bool:
+        """Pre-load capability probe: is SageAttention installed in the ENGINE venv?
+
+        Same discipline as :meth:`_real_available` — a pure FILE-EXISTENCE check
+        that NEVER imports anything. sageattention/triton live only in the engine
+        venv (they pull in torch), so importing them here would break the
+        torch-free app venv; and a failed import is not cached by Python, so the
+        import route would also re-pay the cost on every ``GET /status`` poll.
+
+        WINDOWS VENV LAYOUT is assumed, matching ``model.engine_python``'s own
+        default (``./.venv-engine/Scripts/python.exe``): the interpreter's
+        grandparent is the venv root and its packages live in
+        ``<venv>/Lib/site-packages``. Both ``sageattention/`` and ``triton/`` are
+        required — the sage kernels are Triton-backed, so sageattention alone is
+        not usable.
+
+        This answers "COULD sage run" before a worker exists. Once the worker is
+        up, its own import-time probe (reported on the ``ready`` event) is
+        authoritative — see ``_RealBackend.sage_available`` and
+        ``PipelineManager.acceleration_status_block``.
+
+        Evaluated ONCE and cached for the process lifetime: GET /status polls
+        every 10s, and installing sageattention into the engine venv requires a
+        server restart to take effect anyway.
+        """
+        if self._sage_probe_cache is None:
+            self._sage_probe_cache = self._probe_sage_files()
+        return self._sage_probe_cache
+
+    def _probe_sage_files(self) -> bool:
+        try:
+            engine_python = self.config.model.engine_python
+            if not engine_python:
+                return False
+            venv_root = self.config._abs(engine_python).parent.parent
+            site_packages = venv_root / "Lib" / "site-packages"
+            return (
+                (site_packages / "sageattention").is_dir()
+                and (site_packages / "triton").is_dir()
+            )
+        except Exception:
+            return False
+
+    @property
+    def worker_sage_available(self) -> bool | None:
+        """The LOADED worker's OWN sage probe result, or None when unknown.
+
+        None means "no loaded worker has told us anything" — no backend, an
+        unloaded/dead backend, the mock (which has no engine), or a worker that
+        predates the ``ready.sage_available`` field. Callers fall back to the
+        file-existence :attr:`sage_available` in that case.
+        """
+        backend = self._backend
+        if backend is None or not backend.loaded:
+            return None
+        value = getattr(backend, "sage_available", None)
+        return None if value is None else bool(value)
+
+    @property
+    def is_mock(self) -> bool:
+        """True when the mock backend is (or, before any load, would be) active.
+
+        The mock has no engine at all, so it can never run sage regardless of
+        what the engine venv contains. Before the first ``load()`` there is no
+        backend instance yet, so the CONFIGURED choice decides; ``auto`` is
+        deliberately not resolved here (resolving it means the full
+        ``_real_available`` file sweep) — an auto install without the real stack
+        also has no engine venv, so the file probe reports False anyway.
+        """
+        if isinstance(self._backend, _MockBackend):
+            return True
+        if self._backend is not None:
+            return False
+        return (self.config.model.backend or "auto").strip().lower() == "mock"
 
 
 class _MockBackend:
@@ -480,7 +617,7 @@ class _MockBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -489,7 +626,8 @@ class _MockBackend:
         ``conditioning_images`` empty -> T2V; one entry -> minimal I2V using the
         resolved image path as the start frame (frame_idx=0, Phase 1).
 
-        ``lora_paths`` (now ``(path, strength, preprocess)`` triples, Phase C) /
+        ``lora_paths`` (now ``ResolvedLora`` entries — ``path``, ``strength``,
+        ``preprocess``, ``audio_strength``, Phase C/S1) /
         ``reference_video_path`` are the Phase B/C IC-LoRA inputs; the mock
         backend accepts (and ignores) them so the full route completes GPU-free —
         the real weight patch (and the preprocess -> control-signal conversion)
@@ -558,7 +696,7 @@ class _MockBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -829,6 +967,10 @@ class _RealBackend:
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._log_path: Path | None = None
+        # Acceleration: the worker's OWN import-time SageAttention probe, taken
+        # from the ``ready`` event. None until a worker reports it (and again
+        # after unload) — see LTXRunner.worker_sage_available.
+        self.sage_available: bool | None = None
 
     @property
     def loaded(self) -> bool:
@@ -940,12 +1082,17 @@ class _RealBackend:
         selection = selection or {}
         model = self.config.model
 
-        # checkpoint_path (43GB monolith) is reference-only: the GGUF + component-file
-        # path never opens it. It is still forwarded to the worker as a payload field
-        # (the wheel's lazy builders expect it), so resolve to a project-rooted
-        # absolute WITHOUT an existence check — it may be physically absent while the
-        # real path still works.
-        checkpoint_path = str(self.config._abs(model.checkpoint_path)) if model.checkpoint_path else ""
+        # checkpoint_path: hardcoded "" (2026-07-28, PENDING_TASKS.md 3-26; the
+        # ModelConfig field this used to read no longer exists — see config.py's
+        # NOTE next to spatial_upsampler_path for the full evidence chain). The
+        # GGUF + component-file path never opens this string; it is forwarded
+        # only because DistilledPipeline requires a non-None str so
+        # ModelLedger.build_model_builders() populates the lazy builder objects
+        # that the GGUF/component re-sourcing later overwrites via
+        # dataclasses.replace(). "" satisfies that "not None" requirement and
+        # keeps this payload byte-identical to every prior config state (no
+        # config.yaml value ever set this to anything else in practice).
+        checkpoint_path = ""
         # gemma_root (tokenizer-only ~40MB) IS load-bearing: DistilledPipeline is
         # built with gemma_root=None so the wheel's weight glob (model*.safetensors)
         # is bypassed, but the engine loads the tokenizer/processor
@@ -1027,15 +1174,16 @@ class _RealBackend:
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
         env["PYTHONPATH"] = str(project_root)
-        # Phase 1 gate: the worker reads LTX_COMPONENT_FILES (mirrors LTX_KEEP_RESIDENT).
+        # Phase 1 gate: the worker reads LTX_COMPONENT_FILES.
         env["LTX_COMPONENT_FILES"] = "1" if use_component_files else "0"
-        # Default keep-resident-weights OFF. At 720p the keep-resident path builds
-        # Gemma on CPU then does an out-of-place .to(cuda) move (momentary
-        # double-residence) that overruns the 16GB card and hard-crashes the
-        # worker (native, no traceback) during text-encode. This single-user /
-        # single-job local server does not need cross-job weight reuse, so default
-        # to 0; an explicit LTX_KEEP_RESIDENT in the environment still wins.
-        env.setdefault("LTX_KEEP_RESIDENT", "0")
+        # NOTE (§48): the old ``LTX_KEEP_RESIDENT`` env var is GONE. Keep-resident
+        # weights are now a PER-JOB request field (``GenerateRequest.keep_resident``)
+        # carried on the generate payload, so there is exactly one source of truth
+        # and the setting can be flipped without a 60-90s worker reload. The worker
+        # creates the pipeline with keep_resident_weights=False unconditionally and
+        # arms/disarms the registry per job. An LTX_KEEP_RESIDENT left over in
+        # someone's environment is now inert (it is neither set nor read) — the
+        # reproduction steps in §10.2/§46/§47 that export it are historical.
         # Sequential per-layer CPU offload of the GGUF Gemma during text-encode
         # (caps the ~15GB encode peak). On by default; the worker reads this and
         # keeps the 48 Gemma decoder layers CPU-resident, streaming them to GPU
@@ -1090,7 +1238,13 @@ class _RealBackend:
 
         kind = event.get("event")
         if kind == "ready":
-            logger.info("LTX worker ready.")
+            # Acceleration (additive): the worker's own SageAttention probe,
+            # run inside the engine venv where the import can actually be
+            # attempted. Absent on a pre-acceleration worker -> stays None and
+            # the app falls back to LTXRunner's file-existence probe.
+            raw_sage = event.get("sage_available")
+            self.sage_available = None if raw_sage is None else bool(raw_sage)
+            logger.info("LTX worker ready. sage_available=%s", self.sage_available)
             return
         if kind == "error":
             detail = event.get("detail", "")
@@ -1128,6 +1282,10 @@ class _RealBackend:
         finally:
             self._proc = None
             self.pipeline = None
+            # The worker-reported capability dies with the worker: a later
+            # /status must fall back to the file probe rather than keep quoting
+            # a dead process (the engine venv may have changed meanwhile).
+            self.sage_available = None
             safe_memory_cleanup()
 
     # -------------------------------------------------------------- generate
@@ -1138,7 +1296,7 @@ class _RealBackend:
         output_dir: Path,
         progress_callback: ProgressCallback | None = None,
         conditioning_image_paths: list[Path] | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -1180,9 +1338,10 @@ class _RealBackend:
             progress_callback(None, None, 0.05)
 
         # Phase B/C IC-LoRA (forward-time weight patch). ``loras`` is the list of
-        # (adapter safetensors path, strength, preprocess) resolved by the
-        # registry; empty list -> the worker passes ic_loras=[] (explicit clean
-        # detach per Stage 1 semantics). ``reference_video`` is the raw reference
+        # ResolvedLora (adapter safetensors path, strength, preprocess,
+        # audio_strength) resolved by the registry; empty list -> the worker
+        # passes ic_loras=[] (explicit clean detach per Stage 1 semantics).
+        # ``reference_video`` is the raw reference
         # (Pixel-Spatial-Upscaler: used as-is / Union-Control: converted to a
         # control signal by the worker per ``preprocess``). The reference
         # conditioning ``strength`` defaults to 1.0 (official guidance) but is
@@ -1193,7 +1352,7 @@ class _RealBackend:
         # ``conditioning_attention_strength`` an ``attention_strength`` key is
         # spliced in (control-adherence override); it is entirely absent
         # otherwise so an omitted-field job's payload stays byte-identical.
-        loras_payload = [{"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths]
+        loras_payload = [_lora_payload_entry(lp) for lp in lora_paths]
         preprocess = _resolve_reference_preprocess(lora_paths)
         if reference_video_path is not None:
             ref_strength = (
@@ -1227,6 +1386,56 @@ class _RealBackend:
             "reference_video": reference_payload,
             "output_path": str(target),
         }
+        # NAG (additive): only present when enabled, so a non-NAG job's payload
+        # stays byte-identical to pre-NAG (regression contract, mirrors the
+        # reference_video/loras additive style above).
+        if request.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": request.negative_prompt,
+                "scale": float(request.nag_scale),
+                "tau": float(request.nag_tau),
+                "alpha": float(request.nag_alpha),
+            }
+            # VSF (additive, method switch): worker key is "method" (not
+            # "neg_method") — scale/tau/alpha above stay unconditional since the
+            # engine only reads them when method=="nag".
+            payload["nag"]["method"] = request.neg_method
+            payload["nag"]["vsf_scale"] = request.vsf_scale
+
+        # Acceleration (additive): the attention backend is sent ONLY when it is
+        # not the default, so a default job's payload stays byte-identical to
+        # pre-acceleration (regression contract, same style as nag above). The
+        # worker fails loud on an unknown value and degrades sage -> sdpa when
+        # the import is unavailable.
+        #
+        # The MOCK field (request.vae_mode) is deliberately NEVER put on the
+        # wire: the engine does not consume it, and shipping an inert key is
+        # exactly the "displayed but not applied" trap this design exists to
+        # avoid. It still shows up in metadata.json / GET /jobs via
+        # model_dump() — that is intentional (same as the two_stage_hq pipeline
+        # value), and no exclude() trickery is used.
+        if request.attention_backend != "sdpa":
+            payload["attention_backend"] = request.attention_backend
+        # block_swap_prefetch: same additive contract as attention_backend above
+        # — sent only when True, so a default job's payload stays byte-identical
+        # to pre-acceleration.
+        if request.block_swap_prefetch:
+            payload["block_swap_prefetch"] = True
+        # keep_resident: same additive contract, but the DEFAULT IS OFF here —
+        # so "sent only when True" is also "sent only when it differs from the
+        # default", and an omitted key on the worker side means off (which is
+        # additionally the explicit trigger that FREES the cache). A default
+        # job's payload therefore stays byte-identical to pre-keep_resident.
+        if request.keep_resident:
+            payload["keep_resident"] = True
+        # fused_gguf_dequant_kernel: same additive contract, but as of
+        # 2026-08-04 the DEFAULT IS ON (§51: gates G1-G8 passed, owner approved
+        # the flip) — so, exactly like block_swap_prefetch above, the key rides
+        # on a DEFAULT job too and only disappears when the caller explicitly
+        # turns it off (the frozen default-key-set test lists it for that
+        # reason). An omitted key still means off on the worker side.
+        if request.fused_gguf_dequant_kernel:
+            payload["fused_gguf_dequant_kernel"] = True
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1271,6 +1480,15 @@ class _RealBackend:
             peak_vram_mb=peak_vram_mb,
             generation_mode=mode,
             backend=REAL_BACKEND,
+            # Acceleration: what the engine ACTUALLY ran with (same relay as
+            # seed_used). None on a worker that predates the field.
+            attention_used=event.get("attention_used"),
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            keep_resident_used=event.get("keep_resident_used"),
+            fused_gguf_dequant_kernel_used=event.get(
+                "fused_gguf_dequant_kernel_used"
+            ),
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
     def generate_chain(
@@ -1282,7 +1500,7 @@ class _RealBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
-        lora_paths: list[tuple[Path, float, str]] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
@@ -1299,10 +1517,11 @@ class _RealBackend:
         the ``v2v`` sub-dict, returned as-is in ``chain_metadata``.
 
         Style/character IC-LoRA: when ``lora_paths`` is non-empty an additive
-        ``loras`` block ([{path, strength}, ...]) is added to the worker payload
-        (mirrors the single-generate ``loras_payload``). The strengths apply
-        uniformly to every clip/stage. Absent for a no-lora chain (payload
-        byte-identical to before); the worker clears any stale LoRA regardless.
+        ``loras`` block ([{path, strength[, audio_strength]}, ...]) is added to
+        the worker payload (mirrors the single-generate ``loras_payload``). The
+        strengths apply uniformly to every clip/stage. Absent for a no-lora
+        chain (payload byte-identical to before); the worker clears any stale
+        LoRA regardless.
 
         Reference-video CONTROL IC-LoRA (Phase C, ALPHA scope — clips=1 only,
         enforced by the schema/endpoint): when ``reference_video_path`` is set an
@@ -1311,6 +1530,12 @@ class _RealBackend:
         single-generate ``reference_payload`` (see :meth:`_RealBackend.generate`).
         Absent when no reference video was requested, so the payload stays
         byte-identical to before that case.
+
+        NAG (Normalized Attention Guidance, ADDITIVE/optional): when
+        ``chain.nag_enabled`` an additive ``nag`` block ({negative_prompt, scale,
+        tau, alpha}) is added to the worker payload, applying uniformly across
+        every clip/stage. Absent for a non-NAG chain (payload byte-identical to
+        before).
         """
         if not self.loaded:
             self.load()
@@ -1368,15 +1593,14 @@ class _RealBackend:
         # engine truncates to the timeline). Absent for a normal / V2V chain.
         if source_audio_path is not None:
             payload["audio_source"] = {"path": str(source_audio_path)}
-        # Style/character IC-LoRA (additive): (path, strength) per adapter, applied
-        # uniformly across the chain. Only added when non-empty so a no-lora chain
-        # payload is byte-identical to before (the worker parses msg.get("loras",
-        # []) and clears stale LoRA either way). preprocess is dropped — control
-        # adapters are rejected at the API layer, so every entry here is style.
+        # Style/character IC-LoRA (additive): (path, strength[, audio_strength])
+        # per adapter, applied uniformly across the chain. Only added when
+        # non-empty so a no-lora chain payload is byte-identical to before (the
+        # worker parses msg.get("loras", []) and clears stale LoRA either way).
+        # preprocess is dropped — control adapters are rejected at the API
+        # layer, so every entry here is style.
         if lora_paths:
-            payload["loras"] = [
-                {"path": str(p), "strength": float(s)} for p, s, _pp in lora_paths
-            ]
+            payload["loras"] = [_lora_payload_entry(lp) for lp in lora_paths]
         # Reference-video CONTROL IC-LoRA (additive, ALPHA scope — clips=1 only):
         # mirrors the single-generate ``reference_payload`` (see :meth:`generate`
         # above). Only added when a reference video was requested, so a chain
@@ -1397,6 +1621,39 @@ class _RealBackend:
                     chain.conditioning_attention_strength
                 )
             payload["reference_video"] = reference_payload
+
+        # NAG (additive): only present when enabled, so a non-NAG chain's payload
+        # stays byte-identical to pre-NAG (regression contract).
+        if chain.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": chain.negative_prompt,
+                "scale": float(chain.nag_scale),
+                "tau": float(chain.nag_tau),
+                "alpha": float(chain.nag_alpha),
+            }
+            # VSF (additive, method switch): worker key is "method" (not
+            # "neg_method") — scale/tau/alpha above stay unconditional since the
+            # engine only reads them when method=="nag".
+            payload["nag"]["method"] = chain.neg_method
+            payload["nag"]["vsf_scale"] = chain.vsf_scale
+
+        # Acceleration (additive): mirrors the single-generate block in
+        # :meth:`generate` — sent only when non-default (byte-identical default
+        # payload), and the MOCK field is never put on the wire. See there
+        # for the full rationale.
+        if chain.attention_backend != "sdpa":
+            payload["attention_backend"] = chain.attention_backend
+        # block_swap_prefetch: same additive contract as attention_backend above.
+        if chain.block_swap_prefetch:
+            payload["block_swap_prefetch"] = True
+        # keep_resident: mirrors the single-generate block (default OFF, so the
+        # key is sent only when True and an omission means off/free-the-cache).
+        if chain.keep_resident:
+            payload["keep_resident"] = True
+        # fused_gguf_dequant_kernel: mirrors the single-generate block (default
+        # ON since 2026-08-04, so the key rides on a default chain job too).
+        if chain.fused_gguf_dequant_kernel:
+            payload["fused_gguf_dequant_kernel"] = True
 
         with self._lock:
             try:
@@ -1428,6 +1685,14 @@ class _RealBackend:
             generation_mode="chain",
             backend=REAL_BACKEND,
             chain_metadata=event.get("chain"),
+            # Acceleration: same relay as the single-generate path above.
+            attention_used=event.get("attention_used"),
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            keep_resident_used=event.get("keep_resident_used"),
+            fused_gguf_dequant_kernel_used=event.get(
+                "fused_gguf_dequant_kernel_used"
+            ),
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
     def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:

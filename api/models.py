@@ -55,6 +55,18 @@ BLOCK_SWAP_PREFETCH_DEFAULT = True
 # 自前のミラー定数を持つ——変えるときは両方＋MCPを同じ変更で動かすこと。
 KEEP_RESIDENT_DEFAULT = False
 
+# fused_gguf_dequant_kernel（GGUF 逆量子化の Triton 1カーネル化）の既定値。
+# **on**（2026-08-04: 実機ゲート G1〜G8 全PASS、オーナー承認「ゲート緑なら
+# 既定ON」。block_swap_prefetch の S4 と同じ前例。実測は backend
+# Docs/VERIFICATION_LOG.md §51）。block_swap_prefetch と同じ向き＝既定 True
+# なので、クライアントは「明示 False のときだけ送る」。名前付き定数にしている
+# 理由は BLOCK_SWAP_PREFETCH_DEFAULT / KEEP_RESIDENT_DEFAULT と同じ：この2つの
+# Field 既定と mcp_server/tools/generate.py の import 元を1箇所に集約するため。
+# gradio_ui/handlers.py だけは（HTTP越しのクライアントなので）import せず自前の
+# ミラー定数を持つ——**変えるときは正本（ここ）＋gradio_ui のミラー＋MCP の
+# import 元の3点を同じ変更で動かすこと**。
+FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -174,15 +186,24 @@ class GenerateRequest(BaseModel):
     # 環境依存ではなくメモリ量の問題で、サーバーからは判定できないため）。
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
 
-    # ─── モック2件（受理のみ・エンジン未消費）───
-    # 以下2つは UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
+    # fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
+    # Triton の1カーネルに融合し、純 PyTorch 実装の多段テンソル演算を置き換える。
+    # 実測で逆量子化そのものが1ジョブあたり約21.8秒（GPU）を占めていた。
+    # 【重要】block_swap_prefetch と同じく **生成結果は変わらない**（現行実装との
+    # ビット一致を必須要件として実装・検証している）。Triton 不在・カーネル例外・
+    # 自己検証不一致のいずれでも黙って従来実装へ降格し、生成は落とさない。
+    # 実際に効いたかどうかは metadata.json の fused_gguf_dequant_kernel_used で
+    # 確認できる（"off" / "on" / "on->off"。"on->off" は「要求したが実際には
+    # 適用されなかった」）。GET /status には載せない（keep_resident と同じ規律）。
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    # ─── モック1件（受理のみ・エンジン未消費）───
+    # 以下は UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
     # 受け取っても生成は何も変わらない。ワーカーペイロードにも GET /status にも
     # 載せない（載せると「設定したのに効いていない」罠になる）。一方、
     # model_dump() 経由の metadata.json / GET /jobs の request には自然に現れる
     # ——two_stage_hq の pipeline と同じ既存前例で、exclude 等の細工はしない。
     #
-    # fused_gguf_dequant_gemm: GGUF の逆量子化と GEMM を1カーネルに融合する案。
-    fused_gguf_dequant_gemm: bool = False
     # vae_mode: VAE の実装選択（"prune_vaed" は枝刈り版 VAE デコーダ）。
     # 既存の vram.vae_tiling（VRAM 節約のためのタイル分割）とは**無関係**——
     # 名前が似ているだけで、こちらは VAE 実装そのものの差し替えを指す。
@@ -225,7 +246,8 @@ class GenerateRequest(BaseModel):
     # validated below to require ``loras``).
     #
     # ``conditioning_attention_strength`` — control adherence: how strictly the
-    # output follows the IC-LoRA control signal (canny edges / pose skeleton).
+    # output follows the IC-LoRA control signal (canny edges / pose skeleton /
+    # depth map).
     # Upstream name kept. None ⇒ omitted ⇒ the engine builds no attention wrapper
     # ⇒ byte-identical to today.
     conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)
@@ -433,9 +455,9 @@ class GenerateChainRequest(BaseModel):
 
     # Acceleration（生成高速化）— 詳細は GenerateRequest の同名フィールドを参照。
     # チェーンでは全クリップ・全ステージ共通で1つの設定が効く。sage 有効時は
-    # 同一シードでも生成結果の細部が変わる点、モック2件（fused_gguf_dequant_gemm /
-    # vae_mode）が受理のみでエンジン未消費である点、vae_mode が既存 vae_tiling と
-    # 無関係である点も、すべて GenerateRequest と同じ。
+    # 同一シードでも生成結果の細部が変わる点、モック1件（vae_mode）が受理のみで
+    # エンジン未消費である点、vae_mode が既存 vae_tiling と無関係である点も、
+    # すべて GenerateRequest と同じ。
     attention_backend: Literal["sdpa", "sage"] = "sdpa"
     # block_swap_prefetch: 詳細は GenerateRequest の同名フィールドを参照。
     # 既定on（S4, 2026-08-01）。offにすると従来の同期スワップになる。
@@ -444,7 +466,9 @@ class GenerateChainRequest(BaseModel):
     # （メインメモリ約20GB常駐・64GB以上推奨）。チェーンでも1つの設定が
     # チェーン全体に効く（骨格キャッシュはジョブ単位ではなくワーカー単位）。
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
-    fused_gguf_dequant_gemm: bool = False
+    # fused_gguf_dequant_kernel: 詳細は GenerateRequest の同名フィールドを参照。
+    # 既定on（GenerateRequest と同じ）。チェーンでも1つの設定がチェーン全体に効く。
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
     vae_mode: Literal["default", "prune_vaed"] = "default"
 
     width: int = Field(512, ge=256, le=4096)
@@ -684,9 +708,9 @@ class GenerateChainRequest(BaseModel):
         negative_prompt would fail GenerateRequest's own validator).
 
         The acceleration fields (``attention_backend``, ``block_swap_prefetch``,
-        ``keep_resident``, and the two mock fields ``fused_gguf_dequant_gemm`` /
-        ``vae_mode``) are
-        transcribed for the same reason: they do not fail validation when
+        ``keep_resident``, ``fused_gguf_dequant_kernel``, and the mock field
+        ``vae_mode``) are transcribed for the same reason: they do not fail
+        validation when
         dropped, so an omission would silently mis-report a chain job's
         reproducibility metadata (GET /jobs' ``request`` and metadata.json would
         claim sdpa/default for a sage chain).
@@ -706,7 +730,7 @@ class GenerateChainRequest(BaseModel):
             attention_backend=self.attention_backend,
             block_swap_prefetch=self.block_swap_prefetch,
             keep_resident=self.keep_resident,
-            fused_gguf_dequant_gemm=self.fused_gguf_dequant_gemm,
+            fused_gguf_dequant_kernel=self.fused_gguf_dequant_kernel,
             vae_mode=self.vae_mode,
             width=self.width,
             height=self.height,

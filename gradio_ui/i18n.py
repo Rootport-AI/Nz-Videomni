@@ -66,15 +66,22 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7. Even 0 does not disable VSF — use the Method "
                                "selector or the non-CFG Negative checkbox to turn "
                                "it off."),
-        # --- Acceleration (Settings tab): per-job speed options. Only the
-        # attention selector is implemented; the fused-GGUF checkbox and the VAE
-        # radio are disabled placeholders that never reach a request payload.
+        # --- Acceleration (Settings tab): per-job speed options. All of them
+        # are implemented except the VAE radio, which is a disabled placeholder
+        # that never reaches a request payload.
         # NOTE: the VAE selector is unrelated to the server's ``vae_tiling``
         # (a VRAM-saving tile split).
         "accel_section_title": "Acceleration",
         "accel_note": ("Speed options applied per generation job. They take "
                        "effect immediately — no restart needed."),
-        "accel_lbl_fused_gguf": "Fused GGUF dequant + GEMM",
+        "accel_lbl_fused_dequant": "Fused GGUF Dequantization Kernel",
+        "accel_info_fused_dequant": ("Merges GGUF dequantization into a single "
+                                     "kernel to speed up generation. The output "
+                                     "is exactly the same (bit-for-bit identical "
+                                     "for the same seed) — only the speed "
+                                     "changes. Falls back to the previous "
+                                     "implementation on its own when it cannot "
+                                     "run."),
         "accel_lbl_attention": "Attention",
         "accel_info_attention": ("Changes fine details of the output even with "
                                  "the same seed (different numerical "
@@ -590,15 +597,20 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7。0にしても無効化にはなりません——無効化は「方式」"
                                "の切り替えか non-CFG Negative のチェックOFFで行って"
                                "ください。"),
-        # --- Acceleration（設定タブ）: ジョブ単位の高速化設定。実装済みは
-        # attention の選択のみで、GGUFの融合チェックボックスとVAEのラジオは
-        # 無効化した表示専用（リクエストには一切載りません）。
+        # --- Acceleration（設定タブ）: ジョブ単位の高速化設定。VAEのラジオ
+        # だけが無効化した表示専用（リクエストには一切載りません）で、それ
+        # 以外は実装済みです。
         # 注意: ここのVAE選択は、サーバ側の vae_tiling（VRAM節約のためのタイル
         # 分割）とは無関係です。
         "accel_section_title": "生成の高速化",
         "accel_note": ("生成ジョブごとに適用される高速化の設定です。再起動は"
                        "不要で、次の生成からすぐに反映されます。"),
-        "accel_lbl_fused_gguf": "GGUFの逆量子化と行列積の融合",
+        "accel_lbl_fused_dequant": "GGUF逆量子化の1カーネル化",
+        "accel_info_fused_dequant": ("逆量子化を1つのカーネルにまとめて生成を"
+                                     "高速化します。出力は完全に一致します"
+                                     "（同じシードならビット単位で同一）。速度"
+                                     "だけが変わります。実行できない環境では"
+                                     "自動的に従来の実装へ戻ります。"),
         "accel_lbl_attention": "Attention（注意機構）の実装",
         "accel_info_attention": ("同じシードでも生成結果の細部が変わります"
                                  "（数値精度が異なるため）。速度は約1.2〜1.6倍"),

@@ -263,9 +263,9 @@ def test_chain_payload_omits_nag_by_default(tmp_path):
 # ─────────────────────────────────────────────────────────────────────────────
 # Acceleration — conditional ``attention_backend`` worker-payload key.
 #
-# Contract: the key appears ONLY for a non-default backend, and the two MOCK
-# request fields (fused_gguf_dequant_gemm / vae_mode) never reach the wire at
-# all — an inert payload key would be the "displayed but not applied" trap.
+# Contract: the key appears ONLY for a non-default backend, and the MOCK
+# request field (vae_mode) never reaches the wire at all — an inert payload key
+# would be the "displayed but not applied" trap.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -286,18 +286,16 @@ def test_generate_payload_omits_attention_backend_by_default(tmp_path):
 
 
 def test_generate_payload_never_carries_mock_acceleration_fields(tmp_path):
-    # Both mock fields set to NON-default values, plus sage so the acceleration
-    # branch definitely runs: the mock fields must still be absent everywhere in
-    # the payload (they are accepted by the API but never consumed by the engine).
+    # The mock field set to a NON-default value, plus sage so the acceleration
+    # branch definitely runs: the mock field must still be absent everywhere in
+    # the payload (it is accepted by the API but never consumed by the engine).
     captured: list[dict] = []
     be = _capturing_backend(captured)
     req = _nag_request(
         attention_backend="sage",
-        fused_gguf_dequant_gemm=True,
         vae_mode="prune_vaed",
     )
     be.generate(req, tmp_path / "out")
-    assert "fused_gguf_dequant_gemm" not in captured[0]
     assert "vae_mode" not in captured[0]
     assert captured[0]["attention_backend"] == "sage"  # the real one did go
 
@@ -323,21 +321,20 @@ def test_chain_payload_never_carries_mock_acceleration_fields(tmp_path):
     be = _capturing_backend(captured)
     req = _chain_request(
         attention_backend="sage",
-        fused_gguf_dequant_gemm=True,
         vae_mode="prune_vaed",
     )
     be.generate_chain(req, tmp_path / "out")
-    assert "fused_gguf_dequant_gemm" not in captured[0]
     assert "vae_mode" not in captured[0]
     assert captured[0]["attention_backend"] == "sage"
 
 
 def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     # Byte-identical contract, stated positively: a fully-default request's key
-    # set must be exactly the pre-acceleration one, MODULO block_swap_prefetch
-    # -- S4 (2026-08-01) flipped that field's own pydantic default to True (the
-    # real-device gate passed), so a fully-default request now DOES carry it
-    # (value True). attention_backend/fused_gguf_dequant_gemm/vae_mode still
+    # set must be exactly the pre-acceleration one, MODULO the two fields whose
+    # own pydantic default was later flipped to True once their real-device
+    # gate passed -- block_swap_prefetch (S4, 2026-08-01) and
+    # fused_gguf_dequant_kernel (§51, 2026-08-04). A fully-default request
+    # therefore carries both (value True). attention_backend/vae_mode still
     # default to their pre-acceleration values and stay absent.
     captured: list[dict] = []
     be = _capturing_backend(captured)
@@ -345,9 +342,10 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     assert set(captured[0]) == {
         "op", "prompt", "seed", "height", "width", "num_frames", "frame_rate",
         "num_steps", "images", "loras", "reference_video", "output_path",
-        "block_swap_prefetch",
+        "block_swap_prefetch", "fused_gguf_dequant_kernel",
     }
     assert captured[0]["block_swap_prefetch"] is True
+    assert captured[0]["fused_gguf_dequant_kernel"] is True
 
     captured_chain: list[dict] = []
     be2 = _capturing_backend(captured_chain)
@@ -356,8 +354,10 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
         "op", "width", "height", "frame_rate", "num_steps", "seed",
         "overlap_frames", "overlap_strength", "chunked_upsample",
         "output_path", "clips", "block_swap_prefetch",
+        "fused_gguf_dequant_kernel",
     }
     assert captured_chain[0]["block_swap_prefetch"] is True
+    assert captured_chain[0]["fused_gguf_dequant_kernel"] is True
 
 
 def test_attention_used_is_relayed_from_the_done_event(tmp_path):
@@ -567,15 +567,21 @@ def test_chain_payload_omits_keep_resident_by_default(tmp_path):
 def test_default_payload_key_set_is_unchanged_by_keep_resident(tmp_path):
     # The regression contract, stated positively and INDEPENDENTLY of the
     # feature's own tests: adding keep_resident must not have grown the
-    # default-request key set by even one key (the block_swap_prefetch flip is
-    # the cautionary precedent -- there, a default request DID grow a key).
+    # default-request key set by even one key.
+    #
+    # Two entries here are NOT "adding a feature grew the key set" but "a
+    # server default was deliberately flipped to on after its real-device gate
+    # passed", which is the only sanctioned way this set may grow:
+    #   * block_swap_prefetch -- flipped 2026-08-01 (§44 S4)
+    #   * fused_gguf_dequant_kernel -- flipped 2026-08-04 (§51, gates G1-G8)
+    # Every other feature must still leave a default request byte-identical.
     captured: list[dict] = []
     be = _capturing_backend(captured)
     be.generate(_nag_request(), tmp_path / "single")
     assert set(captured[0]) == {
         "op", "prompt", "seed", "height", "width", "num_frames", "frame_rate",
         "num_steps", "images", "loras", "reference_video", "output_path",
-        "block_swap_prefetch",
+        "block_swap_prefetch", "fused_gguf_dequant_kernel",
     }
 
     captured_chain: list[dict] = []
@@ -585,6 +591,7 @@ def test_default_payload_key_set_is_unchanged_by_keep_resident(tmp_path):
         "op", "width", "height", "frame_rate", "num_steps", "seed",
         "overlap_frames", "overlap_strength", "chunked_upsample",
         "output_path", "clips", "block_swap_prefetch",
+        "fused_gguf_dequant_kernel",
     }
 
 
@@ -620,3 +627,118 @@ def test_keep_resident_used_is_relayed_from_the_done_event(tmp_path):
     )
     outcome3 = be3.generate(_nag_request(), tmp_path / "out3")
     assert outcome3.keep_resident_used is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# fused_gguf_dequant_kernel (fused Triton GGUF dequantization, §1-11) —
+# conditional worker-payload key. Since the 2026-08-04 default flip (§51: gates
+# G1-G8 passed, owner approved) the shape is block_swap_prefetch's, NOT
+# keep_resident's: the server default is ON, so the key rides on a DEFAULT
+# request too and only disappears when the caller explicitly turns it off. The
+# worker's missing-key fallback is still False (absent == off).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_generate_payload_carries_fused_dequant_when_true(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(fused_gguf_dequant_kernel=True), tmp_path / "out")
+    assert captured[0]["fused_gguf_dequant_kernel"] is True
+    # Key-order contract: appended after keep_resident, which is itself after
+    # block_swap_prefetch.
+    captured_all: list[dict] = []
+    be_all = _capturing_backend(captured_all)
+    be_all.generate(
+        _nag_request(
+            attention_backend="sage",
+            block_swap_prefetch=True,
+            keep_resident=True,
+            fused_gguf_dequant_kernel=True,
+        ),
+        tmp_path / "out_all",
+    )
+    keys = list(captured_all[0].keys())
+    assert keys.index("keep_resident") < keys.index("fused_gguf_dequant_kernel")
+
+
+def test_generate_payload_carries_fused_dequant_by_default(tmp_path):
+    # The 2026-08-04 flip: GenerateRequest's own pydantic default is True, so a
+    # request that never touches the field forwards True to the worker.
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(), tmp_path / "out")
+    assert captured[0]["fused_gguf_dequant_kernel"] is True
+
+
+def test_generate_payload_omits_fused_dequant_when_explicitly_off(tmp_path):
+    captured_off: list[dict] = []
+    be_off = _capturing_backend(captured_off)
+    be_off.generate(
+        _nag_request(fused_gguf_dequant_kernel=False), tmp_path / "out_off"
+    )
+    assert "fused_gguf_dequant_kernel" not in captured_off[0]
+
+
+def test_chain_payload_carries_fused_dequant_when_true(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(
+        _chain_request(keep_resident=True, fused_gguf_dequant_kernel=True),
+        tmp_path / "out",
+    )
+    assert captured[0]["fused_gguf_dequant_kernel"] is True
+    keys = list(captured[0].keys())
+    assert keys.index("keep_resident") < keys.index("fused_gguf_dequant_kernel")
+
+
+def test_chain_payload_carries_fused_dequant_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(_chain_request(), tmp_path / "out")
+    assert captured[0]["fused_gguf_dequant_kernel"] is True
+
+
+def test_chain_payload_omits_fused_dequant_when_explicitly_off(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(
+        _chain_request(fused_gguf_dequant_kernel=False), tmp_path / "out"
+    )
+    assert "fused_gguf_dequant_kernel" not in captured[0]
+
+
+def test_fused_dequant_used_is_relayed_from_the_done_event(tmp_path):
+    # Same relay discipline as keep_resident_used: metadata.json's
+    # fused_gguf_dequant_kernel_used is the judging criterion for the G1-G8
+    # real-device gates, so the relay gets its own guard on both paths.
+    be = _capturing_backend([])
+    be._read_worker_events = (  # type: ignore[attr-defined]
+        lambda cb, chain, prefix: {
+            "event": "done", "seed_used": 7, "peak_vram_mb": 100,
+            "fused_gguf_dequant_kernel_used": "on->off",
+        }
+    )
+    outcome = be.generate(
+        _nag_request(fused_gguf_dequant_kernel=True), tmp_path / "out"
+    )
+    assert outcome.fused_gguf_dequant_kernel_used == "on->off"
+
+    be2 = _capturing_backend([])
+    be2._read_worker_events = (  # type: ignore[attr-defined]
+        lambda cb, chain, prefix: {
+            "event": "done", "seed_used": 7,
+            "fused_gguf_dequant_kernel_used": "on",
+        }
+    )
+    outcome2 = be2.generate_chain(
+        _chain_request(fused_gguf_dequant_kernel=True), tmp_path / "out2"
+    )
+    assert outcome2.fused_gguf_dequant_kernel_used == "on"
+
+    # A worker predating the field -> None (never a fabricated "off").
+    be3 = _capturing_backend([])
+    be3._read_worker_events = (  # type: ignore[attr-defined]
+        lambda cb, chain, prefix: {"event": "done", "seed_used": 7}
+    )
+    outcome3 = be3.generate(_nag_request(), tmp_path / "out3")
+    assert outcome3.fused_gguf_dequant_kernel_used is None

@@ -37,6 +37,12 @@ Protocol (one JSON object per line; parent -> worker):
    # A MISSING key means off AND is the explicit "free the cache" trigger —
    # see _resolve_keep_resident (which can also auto-downgrade it):
    keep_resident,
+   # fused_gguf_dequant_kernel (optional, default False): runs the GGUF K-quant
+   # dequantization (Q4_K/Q5_K/Q6_K) through a fused Triton kernel instead of
+   # the multi-step pure-PyTorch path. Present on BOTH generate ops. Output is
+   # bit-identical on/off (a mismatch self-check and an exception latch both
+   # fall back to the eager path) — see _resolve_fused_dequant:
+   fused_gguf_dequant_kernel,
    # Phase B/C IC-LoRA (forward-time weight patch); loras always present (may be []),
    # reference_video null unless a reference is supplied. preprocess (Phase C):
    # "none" -> raw reference used as-is (Phase B); "canny"/... -> converted to a
@@ -68,7 +74,7 @@ other logging goes to STDERR.
   @@LTX@@{"event":"ready","sage_available":true|false}
   @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,"attention_used":...,
           "block_swap_prefetch_used":...,"keep_resident_used":...,
-          "peak_vram_reserved_mb":...}
+          "fused_gguf_dequant_kernel_used":...,"peak_vram_reserved_mb":...}
   @@LTX@@{"event":"error","detail":...}
 
 ``ready.sage_available`` is this process's SageAttention probe (see
@@ -90,6 +96,14 @@ cache: "off", "on", or "on->off" when the job asked for it but a worker-side
 guard downgraded it (see ``_resolve_keep_resident`` — the reason is always
 spelled out in a WARNING on STDERR, because "on->off" alone does not say
 WHICH guard fired). Bit-identical output either way (§47.3 G9).
+
+``done.fused_gguf_dequant_kernel_used`` is the same idea for the fused Triton
+GGUF dequantization kernel: "off", "on", or "on->off" when the job asked for it
+but it never actually applied (Triton unavailable, a kernel raised and latched
+the eager fallback, the first-call bit-comparison self-check mismatched, or the
+job dequantized no eligible tensor at all) — see
+``FastVideoPipeline.fused_gguf_dequant_kernel_used()``. Like block-swap
+prefetch, it is a pure implementation switch: bit-identical output either way.
 
 ``done.peak_vram_reserved_mb`` is ``torch.cuda.max_memory_reserved()`` in MB,
 reported ADDITIVELY alongside the existing ``peak_vram_mb`` (which is
@@ -637,6 +651,27 @@ def _keep_resident_used(msg: dict, effective: bool) -> str:
     return "on->off" if bool(msg.get("keep_resident", False)) else "off"
 
 
+def _resolve_fused_dequant(msg: dict) -> bool:
+    """Resolve a job's ``fused_gguf_dequant_kernel``. Missing key -> False.
+
+    Same relaxed regime as ``_resolve_block_swap_prefetch``: a speed knob, not a
+    correctness precondition, so an invalid type is coerced by ``bool()`` rather
+    than failing the job loudly.
+    """
+    return bool(msg.get("fused_gguf_dequant_kernel", False))
+
+
+def _fused_gguf_dequant_kernel_used() -> str:
+    """The ``done`` event's ``fused_gguf_dequant_kernel_used``: "off" / "on" /
+    "on->off" (requested but never actually applied — Triton unavailable, a
+    kernel exception latched the eager fallback, the self-check mismatched, or
+    no eligible tensor was dequantized). Reads the pipeline's per-job record,
+    mirroring ``_block_swap_prefetch_used`` above.
+    """
+    assert _PIPE is not None
+    return _PIPE.fused_gguf_dequant_kernel_used()
+
+
 def _peak_vram_reserved_mb() -> int:
     """``torch.cuda.max_memory_reserved()`` in MB. The existing ``peak_vram_mb``
     (``max_memory_allocated``-based) cannot see allocator-reserved-but-unused
@@ -697,13 +732,16 @@ def _do_generate(msg: dict) -> None:
     # bit-identical): absent -> False, byte-identical to before. May raise
     # (G-A) or auto-off (G-B/G-C) — see _resolve_keep_resident.
     keep_res, _keep_res_reason = _resolve_keep_resident(msg, bs_prefetch)
+    # Fused Triton GGUF dequantization (speed only, output bit-identical):
+    # absent -> False, byte-identical to before this feature existed.
+    fused_dequant = _resolve_fused_dequant(msg)
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
         f"neg={_neg_label(nag)} attn={attention} bsprefetch={bs_prefetch} "
-        f"keepresident={keep_res}"
+        f"keepresident={keep_res} fuseddequant={fused_dequant}"
     )
     # F2: single-generate runs the wheel's two denoising loops back-to-back
     # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
@@ -729,6 +767,7 @@ def _do_generate(msg: dict) -> None:
             # 常に明示的な bool を渡す（None="触らない"はスパイク互換用の
             # 既定であって、ワーカーからは使わない）。
             keep_resident=keep_res,
+            fused_gguf_dequant_kernel=fused_dequant,
         )
     finally:
         progress_shim.end_op()
@@ -741,11 +780,13 @@ def _do_generate(msg: dict) -> None:
     attention_used = _attention_used(attention, attn_degraded)
     bs_prefetch_used = _block_swap_prefetch_used()
     keep_res_used = _keep_resident_used(msg, keep_res)
+    fused_dequant_used = _fused_gguf_dequant_kernel_used()
     peak_reserved = _peak_vram_reserved_mb()
     _log(
         f"GENERATED_OK peak_vram_mb={peak} attention_used={attention_used} "
         f"block_swap_prefetch_used={bs_prefetch_used} "
         f"keep_resident_used={keep_res_used} "
+        f"fused_gguf_dequant_kernel_used={fused_dequant_used} "
         f"peak_vram_reserved_mb={peak_reserved} -> {output_path}"
     )
     _emit(
@@ -755,6 +796,7 @@ def _do_generate(msg: dict) -> None:
         attention_used=attention_used,
         block_swap_prefetch_used=bs_prefetch_used,
         keep_resident_used=keep_res_used,
+        fused_gguf_dequant_kernel_used=fused_dequant_used,
         peak_vram_reserved_mb=peak_reserved,
     )
 
@@ -861,6 +903,9 @@ def _do_generate_chain(msg: dict) -> None:
     # Cross-job CPU-skeleton cache: absent -> False; may raise (G-A) or
     # auto-off (G-B/G-C). Same helper as the single-generate path.
     keep_res, _keep_res_reason = _resolve_keep_resident(msg, bs_prefetch)
+    # Fused Triton GGUF dequantization (speed only, output bit-identical):
+    # absent -> False. Same helper as the single-generate path.
+    fused_dequant = _resolve_fused_dequant(msg)
 
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
@@ -869,7 +914,8 @@ def _do_generate_chain(msg: dict) -> None:
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
-        f"bsprefetch={bs_prefetch} keepresident={keep_res}"
+        f"bsprefetch={bs_prefetch} keepresident={keep_res} "
+        f"fuseddequant={fused_dequant}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -896,6 +942,7 @@ def _do_generate_chain(msg: dict) -> None:
         attention_backend=attention,
         block_swap_prefetch=bs_prefetch,
         keep_resident=keep_res,
+        fused_gguf_dequant_kernel=fused_dequant,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
@@ -905,11 +952,13 @@ def _do_generate_chain(msg: dict) -> None:
     attention_used = _attention_used(attention, attn_degraded)
     bs_prefetch_used = _block_swap_prefetch_used()
     keep_res_used = _keep_resident_used(msg, keep_res)
+    fused_dequant_used = _fused_gguf_dequant_kernel_used()
     peak_reserved = _peak_vram_reserved_mb()
     _log(
         f"CHAIN_OK peak_vram_mb={peak} attention_used={attention_used} "
         f"block_swap_prefetch_used={bs_prefetch_used} "
         f"keep_resident_used={keep_res_used} "
+        f"fused_gguf_dequant_kernel_used={fused_dequant_used} "
         f"peak_vram_reserved_mb={peak_reserved} -> {output_path}"
     )
     _emit(
@@ -920,6 +969,7 @@ def _do_generate_chain(msg: dict) -> None:
         attention_used=attention_used,
         block_swap_prefetch_used=bs_prefetch_used,
         keep_resident_used=keep_res_used,
+        fused_gguf_dequant_kernel_used=fused_dequant_used,
         peak_vram_reserved_mb=peak_reserved,
     )
 

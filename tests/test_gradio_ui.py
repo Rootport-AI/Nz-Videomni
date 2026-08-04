@@ -659,9 +659,9 @@ def test_vsf_scale_info_registered_and_translates_on_language_switch():
 
 
 # --------------------------------------------------------------------------- #
-# Acceleration section (Settings tab). Only the attention selector is real; the
-# fused-GGUF checkbox and the VAE radio are DISABLED placeholders that are not
-# wired into any handler input, so they can never reach a payload.
+# Acceleration section (Settings tab). Everything here is real except the VAE
+# radio, a DISABLED placeholder that is not wired into any handler input, so it
+# can never reach a payload.
 # --------------------------------------------------------------------------- #
 def test_acceleration_attention_radio_values_and_default():
     demo = _demo()
@@ -680,14 +680,13 @@ def test_acceleration_attention_radio_values_and_default():
 
 
 def test_acceleration_mock_controls_are_disabled():
-    demo = _demo()
+    # The VAE radio is the ONLY remaining mock in this section: the old
+    # fused_gguf_dequant_gemm checkbox was removed outright (owner ruling
+    # 2026-08-04) and the real fused-dequant kernel toggle took its place.
     en = LABELS["en"]
-    boxes = [c for c in demo.blocks.values()
-             if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_fused_gguf"]]
-    assert len(boxes) == 1, "fused-GGUF checkbox not found"
-    assert boxes[0].value is False
-    assert boxes[0].interactive is False
+    assert "accel_lbl_fused_gguf" not in en, "old mock label must be gone"
 
+    demo = _demo()
     vae = [c for c in demo.blocks.values()
            if isinstance(c, gr.Radio) and c.label == en["accel_lbl_vae"]]
     assert len(vae) == 1, "VAE radio not found"
@@ -718,13 +717,13 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     deps_with_radio = [d for d in demo.fns.values()
                        if radio in getattr(d, "inputs", [])]
     assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
-    # And it is the THIRD-TO-LAST input of each: the APPENDED wiring discipline
+    # And it is the FOURTH-TO-LAST input of each: the APPENDED wiring discipline
     # put it last when it was the only Acceleration control, then the
-    # block-swap prefetch checkbox went after it, and the keep-resident
-    # checkbox after that. This index is the canary for a wiring list and a
-    # handler signature drifting apart.
+    # block-swap prefetch checkbox went after it, the keep-resident checkbox
+    # after that, and the fused-dequant checkbox after that. This index is the
+    # canary for a wiring list and a handler signature drifting apart.
     for dep in deps_with_radio:
-        assert dep.inputs[-3] is radio
+        assert dep.inputs[-4] is radio
 
 
 # --------------------------------------------------------------------------- #
@@ -790,8 +789,9 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
                and c.label == en["accel_lbl_keep_resident"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
+    # SECOND-TO-LAST since §1-11 appended the fused-dequant checkbox after it.
     for dep in deps:
-        assert dep.inputs[-1] is box
+        assert dep.inputs[-2] is box
 
 
 def test_keep_resident_labels_switch_language():
@@ -815,8 +815,91 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     deps_with_box = [d for d in demo.fns.values()
                      if box in getattr(d, "inputs", [])]
     assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
-    # And it is the SECOND-TO-LAST input of each: APPENDED after
-    # attention_backend, and the keep-resident checkbox (§48) was later
-    # appended after IT.
+    # And it is the THIRD-TO-LAST input of each: APPENDED after
+    # attention_backend, then the keep-resident checkbox (§48) and the
+    # fused-dequant checkbox (§1-11) were appended after IT.
     for dep in deps_with_box:
-        assert dep.inputs[-2] is box
+        assert dep.inputs[-3] is box
+
+
+# --------------------------------------------------------------------------- #
+# Fused GGUF dequantization kernel checkbox (Settings tab, §1-11). It INHERITED
+# the screen position of the removed fused_gguf_dequant_gemm mock, but unlike
+# that placeholder it is a real, wired control with an interactive checkbox.
+# Default ON since 2026-08-04 (§51: real-device gates G1-G8 passed and the owner
+# approved the flip, which moved api/models.py + this mirror + MCP together).
+# --------------------------------------------------------------------------- #
+def test_fused_dequant_checkbox_default_and_label():
+    from gradio_ui.handlers import FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == en["accel_lbl_fused_dequant"]]
+    assert len(boxes) == 1, "fused-dequant checkbox not found"
+    box = boxes[0]
+    assert box.value is FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+    assert box.value is True, "on by default since the gates passed (§51)"
+    # NOT gated client-side: the server degrades to the eager implementation on
+    # its own, so a client-side lockout would only be a second, drifting source
+    # of truth (same reasoning as the attention selector).
+    assert box.interactive is not False
+    assert box.info == en["accel_info_fused_dequant"]
+
+
+def test_fused_dequant_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_fused_dequant", "label"),
+                      ("accel_info_fused_dequant", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_fused_dequant_checkbox_is_wired_last_into_generate_and_chain():
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox)
+               and c.label == en["accel_lbl_fused_dequant"])
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
+    for dep in deps:
+        assert dep.inputs[-1] is box
+
+
+def test_generate_and_chain_trailing_inputs_order_is_locked():
+    """The last FIVE inputs of both generate flows, in exact order.
+
+    ui.py's ``chain_dispatch`` peels the trailing Acceleration values off with
+    NEGATIVE indices (``args[:-4]`` + ``args[-4]``..``args[-1]``), so appending
+    one more input without shifting every index silently mis-wires the chain
+    handler: the values still arrive, just under the wrong parameter names, and
+    nothing raises. ``vsf_scale`` is included as the boundary element -- it is
+    the last POSITIONAL argument the handler receives, i.e. exactly where the
+    ``args[:-4]`` slice must stop.
+    """
+    demo = _demo()
+    en = LABELS["en"]
+
+    def _one(cls, label_key):
+        found = [c for c in demo.blocks.values()
+                 if isinstance(c, cls) and c.label == en[label_key]]
+        assert len(found) == 1, f"expected exactly one {label_key}"
+        return found[0]
+
+    expected = [
+        _one(gr.Slider, "vsf_lbl_scale"),
+        _one(gr.Radio, "accel_lbl_attention"),
+        _one(gr.Checkbox, "accel_lbl_prefetch"),
+        _one(gr.Checkbox, "accel_lbl_keep_resident"),
+        _one(gr.Checkbox, "accel_lbl_fused_dequant"),
+    ]
+    deps = [d for d in demo.fns.values()
+            if expected[-1] in getattr(d, "inputs", [])]
+    assert len(deps) == 2, "expected exactly the generate + chain flows"
+    for dep in deps:
+        assert list(dep.inputs[-5:]) == expected

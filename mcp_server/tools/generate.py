@@ -4,14 +4,17 @@
 フィールド（``pipeline`` / ``num_inference_steps`` / ``guidance_scale`` /
 ``crf``）は計画D8により出さない -- ``two_stage_hq`` は現状モックのみで、
 distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える意味がないため。
-同じ理由で ``fused_gguf_dequant_gemm`` / ``vae_mode`` も出さない -- どちらも
-Acceleration機能のうち現状モック（受理のみで効果が無い）の2項目であり、
-``two_stage_hq`` の ``pipeline`` と同様に実装のない切替をクライアントへ見せて
-も意味がないため（計画D1）。一方で同じAcceleration機能のうち実装がある
+同じ理由で ``vae_mode`` も出さない -- Acceleration機能のうち現状モック（受理
+のみで効果が無い）の唯一の項目であり、``two_stage_hq`` の ``pipeline`` と同様に
+実装のない切替をクライアントへ見せても意味がないため（計画D1）。一方で同じ
+Acceleration機能のうち実装がある
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
 ``block_swap_prefetch``（既定on。backend §44、実装は先読み block swap。
 offにすると従来の同期スワップになる。S4, 2026-08-01: 実機ゲートG1〜G7全PASS
-を条件にオーナーが確定した既定反転）は公開する。
+を条件にオーナーが確定した既定反転）、``keep_resident``（既定off。ジョブ間の
+CPU骨格キャッシュ）、``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
+Triton 1カーネル化。出力はビット単位で不変。§51, 2026-08-04: 実機ゲート
+G1〜G8全PASSを条件にオーナーが確定した既定反転）は公開する。
 
 送信ボディは「Noneまたは空は送らない」を徹底する（計画のペイロード契約）。
 ``crop_width`` / ``crop_height`` は両方指定 or 両方省略のみを許す（片側だけの
@@ -28,7 +31,11 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
-from api.models import BLOCK_SWAP_PREFETCH_DEFAULT, KEEP_RESIDENT_DEFAULT
+from api.models import (
+    BLOCK_SWAP_PREFETCH_DEFAULT,
+    FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+    KEEP_RESIDENT_DEFAULT,
+)
 from mcp_server.client import get_client
 from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 
@@ -60,6 +67,7 @@ async def submit_generate(
     attention_backend: str = "sdpa",
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -149,6 +157,17 @@ async def submit_generate(
             との併用では自動的にoffへ降格します（メインメモリ二重化の回避）。
             実際に効いたかはジョブ完了後のメタデータの ``keep_resident_used``
             （``"off"`` / ``"on"`` / ``"on->off"``）に記録されます。
+        fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
+            Tritonの1カーネルにまとめて高速化します（**既定on**。実機で
+            約17.5%短縮）。
+            ``attention_backend`` と違い**生成結果は変わりません**（現行実装
+            とのビット一致を必須要件として検証しています。同一シードならビット
+            単位で同一）。Tritonが無い・カーネルが例外を出した・起動時の自己
+            検証で不一致だった、のいずれでも黙って従来実装へ降格し、生成は
+            落としません。実際に効いたかはジョブ完了後のメタデータの
+            ``fused_gguf_dequant_kernel_used``（``"off"`` / ``"on"`` /
+            ``"on->off"``。``"on->off"`` は「要求したが実際には適用されな
+            かった」）に記録されます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -195,6 +214,13 @@ async def submit_generate(
     # future default flip.
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         payload["keep_resident"] = keep_resident
+    # fused_gguf_dequant_kernel: same rule again (FUSED_GGUF_DEQUANT_KERNEL_
+    # DEFAULT flipped to True on 2026-08-04, so the key now rides only on an
+    # explicit False -- the rule is unchanged, which is exactly why it was
+    # written as a comparison rather than a "send when True" branch), and
+    # appended last so the default payload's key order is untouched.
+    if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+        payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -258,6 +284,7 @@ async def submit_chain(
     attention_backend: str = "sdpa",
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -343,6 +370,9 @@ async def submit_chain(
             推奨**。生成結果は変わりません。チェーンでも1つの設定がチェーン
             全体に効きます——骨格キャッシュはジョブ単位ではなくワーカー単位で
             持つためです）。
+        fused_gguf_dequant_kernel: submit_generate と同じ意味（**既定on**。
+            生成結果は変わりません＝現行実装とビット一致。実行できない環境では
+            黙って従来実装へ降格します。チェーン全体・全ステージ共通で効きます）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -387,6 +417,9 @@ async def submit_chain(
     # an explicit True).
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         payload["keep_resident"] = keep_resident
+    # fused_gguf_dequant_kernel: same rule as submit_generate, appended last.
+    if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+        payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

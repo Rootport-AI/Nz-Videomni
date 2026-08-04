@@ -1336,7 +1336,7 @@ def test_build_adapter_choices_from_config_with_unknown_key():
 def test_build_adapter_choices_fallback_when_no_ic_loras():
     values = [v for _label, v in build_adapter_choices({})]
     assert values == [ADAPTER_NONE, "pixel-spatial-upscaler-x2",
-                      "canny-control", "pose-control"]
+                      "canny-control", "pose-control", "depth-control", "deblur"]
 
 
 # --------------------------------------------------------------------------- #
@@ -2954,7 +2954,8 @@ def test_chain_nag_enabled_empty_negative_precheck_zero_calls():
 def test_accel_i18n_keys_present_in_both_languages():
     from gradio_ui.i18n import LABELS
 
-    for key in ("accel_section_title", "accel_note", "accel_lbl_fused_gguf",
+    for key in ("accel_section_title", "accel_note",
+                "accel_lbl_fused_dequant", "accel_info_fused_dequant",
                 "accel_lbl_attention", "accel_info_attention",
                 "accel_lbl_vae", "accel_info_unimplemented"):
         for lang in ("en", "ja"):
@@ -3567,3 +3568,209 @@ def test_chain_handler_default_omits_keep_resident():
     ]))
     _run_chain_until_started(gen)
     assert "keep_resident" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Fused GGUF dequantization kernel (fused_gguf_dequant_kernel, §1-11): the
+# Settings-tab checkbox appended after keep-resident. SAME "only when it
+# differs from the mirrored server default" rule, and the SAME direction as
+# keep-resident (default off -> the key rides only on a CHECKED box). It took
+# over the screen position of the removed fused_gguf_dequant_gemm mock, but it
+# is a real wired control -- unlike that placeholder it reaches the wire.
+# --------------------------------------------------------------------------- #
+def test_fused_dequant_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_fused_dequant", "accel_info_fused_dequant"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The old mock's keys must be GONE in both languages (owner ruling
+    # 2026-08-04: complete removal, not a rename-in-place).
+    for lang in ("en", "ja"):
+        assert "accel_lbl_fused_gguf" not in LABELS[lang]
+    # ...but the shared "not implemented" info line stays: the VAE radio, the
+    # section's remaining mock, still uses it.
+    assert LABELS["en"]["accel_info_unimplemented"].strip()
+    assert LABELS["ja"]["accel_info_unimplemented"].strip()
+
+
+def test_fused_dequant_default_constant_is_true():
+    # 2026-08-04 (§51): flipped to True once the real-device gates G1-G8 passed
+    # and the owner approved -- so the checkbox ships CHECKED and the "send only
+    # when it differs from the default" rule emits the key only when UNCHECKED.
+    from gradio_ui.handlers import FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    assert FUSED_GGUF_DEQUANT_KERNEL_DEFAULT is True
+
+
+def test_build_a2v_chain_payload_fused_dequant_off_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-fdq-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        fused_gguf_dequant_kernel=False,
+    )
+    assert payload["fused_gguf_dequant_kernel"] is False
+    assert list(payload.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_build_a2v_chain_payload_fused_dequant_sits_after_keep_resident():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-fdq-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        nag_enabled=True,
+        neg_method="vsf",
+        vsf_scale=2.0,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+        keep_resident=True,
+        fused_gguf_dequant_kernel=False,
+    )
+    assert list(payload.keys())[-10:] == [
+        "nag_enabled", "nag_scale", "nag_tau", "nag_alpha",
+        "neg_method", "vsf_scale", "attention_backend", "block_swap_prefetch",
+        "keep_resident", "fused_gguf_dequant_kernel",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_fused_dequant():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kw = dict(
+        audio_id="aud-fdq-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    payload = build_a2v_chain_payload(**kw)
+    assert "fused_gguf_dequant_kernel" not in payload
+    # ...and an explicit True is the same wire shape as omitting it (the server
+    # default is True since 2026-08-04).
+    assert payload == build_a2v_chain_payload(**kw,
+                                              fused_gguf_dequant_kernel=True)
+
+
+def test_generate_handler_fused_dequant_off_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-fdq"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        fused_gguf_dequant_kernel=False,
+    )
+    _run_until_job_started(gen)
+    assert captured["fused_gguf_dequant_kernel"] is False
+    assert list(captured.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_generate_handler_default_omits_fused_dequant():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nofdq"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "fused_gguf_dequant_kernel" not in captured
+
+
+def test_generate_handler_a2v_forwards_fused_dequant(tmp_path):
+    # The A2V branch goes through build_a2v_chain_payload -- the checkbox must
+    # survive that hop too (the one that silently drops in a copy-paste).
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-fdq"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-fdq"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), fused_gguf_dequant_kernel=False,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["fused_gguf_dequant_kernel"] is False
+
+
+def test_chain_handler_fused_dequant_off_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-fdq"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), fused_gguf_dequant_kernel=False)
+    _run_chain_until_started(gen)
+    assert captured["fused_gguf_dequant_kernel"] is False
+    assert list(captured.keys())[-1] == "fused_gguf_dequant_kernel"
+
+
+def test_chain_handler_default_omits_fused_dequant():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nofdq"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "fused_gguf_dequant_kernel" not in captured

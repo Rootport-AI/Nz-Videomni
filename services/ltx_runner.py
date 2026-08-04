@@ -280,6 +280,13 @@ class GenerationOutcome:
     # reading worker logs. None on the mock backend and on any worker that
     # predates the field.
     keep_resident_used: str | None = None
+    # Acceleration: whether the fused Triton GGUF dequantization kernel ACTUALLY
+    # ran for this job ("off" | "on" | "on->off" when it was requested but never
+    # applied — Triton unavailable, a kernel exception latched the fallback, the
+    # first-call self-check mismatched, or no eligible tensor existed). Same
+    # relay discipline as ``block_swap_prefetch_used``. None on the mock backend
+    # and on any worker that predates the field.
+    fused_gguf_dequant_kernel_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).
@@ -1401,12 +1408,12 @@ class _RealBackend:
         # worker fails loud on an unknown value and degrades sage -> sdpa when
         # the import is unavailable.
         #
-        # The two MOCK fields (request.fused_gguf_dequant_gemm / request.vae_mode)
-        # are deliberately NEVER put on the wire: the engine does not consume
-        # them, and shipping an inert key is exactly the "displayed but not
-        # applied" trap this design exists to avoid. They still show up in
-        # metadata.json / GET /jobs via model_dump() — that is intentional (same
-        # as the two_stage_hq pipeline value), and no exclude() trickery is used.
+        # The MOCK field (request.vae_mode) is deliberately NEVER put on the
+        # wire: the engine does not consume it, and shipping an inert key is
+        # exactly the "displayed but not applied" trap this design exists to
+        # avoid. It still shows up in metadata.json / GET /jobs via
+        # model_dump() — that is intentional (same as the two_stage_hq pipeline
+        # value), and no exclude() trickery is used.
         if request.attention_backend != "sdpa":
             payload["attention_backend"] = request.attention_backend
         # block_swap_prefetch: same additive contract as attention_backend above
@@ -1421,6 +1428,14 @@ class _RealBackend:
         # job's payload therefore stays byte-identical to pre-keep_resident.
         if request.keep_resident:
             payload["keep_resident"] = True
+        # fused_gguf_dequant_kernel: same additive contract, but as of
+        # 2026-08-04 the DEFAULT IS ON (§51: gates G1-G8 passed, owner approved
+        # the flip) — so, exactly like block_swap_prefetch above, the key rides
+        # on a DEFAULT job too and only disappears when the caller explicitly
+        # turns it off (the frozen default-key-set test lists it for that
+        # reason). An omitted key still means off on the worker side.
+        if request.fused_gguf_dequant_kernel:
+            payload["fused_gguf_dequant_kernel"] = True
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1470,6 +1485,9 @@ class _RealBackend:
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
+            fused_gguf_dequant_kernel_used=event.get(
+                "fused_gguf_dequant_kernel_used"
+            ),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
@@ -1621,7 +1639,7 @@ class _RealBackend:
 
         # Acceleration (additive): mirrors the single-generate block in
         # :meth:`generate` — sent only when non-default (byte-identical default
-        # payload), and the two MOCK fields are never put on the wire. See there
+        # payload), and the MOCK field is never put on the wire. See there
         # for the full rationale.
         if chain.attention_backend != "sdpa":
             payload["attention_backend"] = chain.attention_backend
@@ -1632,6 +1650,10 @@ class _RealBackend:
         # key is sent only when True and an omission means off/free-the-cache).
         if chain.keep_resident:
             payload["keep_resident"] = True
+        # fused_gguf_dequant_kernel: mirrors the single-generate block (default
+        # ON since 2026-08-04, so the key rides on a default chain job too).
+        if chain.fused_gguf_dequant_kernel:
+            payload["fused_gguf_dequant_kernel"] = True
 
         with self._lock:
             try:
@@ -1667,6 +1689,9 @@ class _RealBackend:
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
+            fused_gguf_dequant_kernel_used=event.get(
+                "fused_gguf_dequant_kernel_used"
+            ),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 

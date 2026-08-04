@@ -59,6 +59,17 @@ BLOCK_SWAP_PREFETCH_DEFAULT = True
 # feature that parks ~20GB in main memory (64GB+ recommended).
 KEEP_RESIDENT_DEFAULT = False
 
+# Acceleration: fused GGUF dequantization kernel (Triton, Q4_K/Q5_K/Q6_K)
+# checkbox default. Mirrors api/models.py's FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+# for the same reason as the two constants above (this module talks to the
+# backend purely over HTTP, so it does not import from api/) — **change the
+# canonical constant in api/models.py, this mirror and the MCP import site in
+# one move**. Same direction as block_swap_prefetch (server default ON since
+# 2026-08-04, after real-device gates G1-G8 passed and the owner approved the
+# flip), so the "send only when it differs from the default" discipline below
+# emits the key only when the box is UNCHECKED.
+FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
+
 
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
@@ -419,6 +430,7 @@ def build_a2v_chain_payload(
     attention_backend="sdpa",
     block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident=KEEP_RESIDENT_DEFAULT,
+    fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -454,7 +466,10 @@ def build_a2v_chain_payload(
     ``keep_resident`` is appended after it under the SAME "differs from the
     default" rule -- but since its default is off, that rule emits the key only
     when the box is CHECKED (the mirror image of block_swap_prefetch; do not
-    read the two tests as one pattern)."""
+    read the two tests as one pattern).
+    ``fused_gguf_dequant_kernel`` is appended LAST under the same rule, with
+    the same direction as block_swap_prefetch since 2026-08-04 (§51 flipped the
+    server default to on -> the key rides only on an UNCHECKED box)."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -502,10 +517,15 @@ def build_a2v_chain_payload(
     # frozen key order.
     if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
         chain_payload["block_swap_prefetch"] = bool(block_swap_prefetch)
-    # keep-resident (additive, conditional): same rule, appended last. Default
-    # off -> the key appears only when the box is checked.
+    # keep-resident (additive, conditional): same rule. Default off -> the key
+    # appears only when the box is checked.
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         chain_payload["keep_resident"] = bool(keep_resident)
+    # fused GGUF dequantization kernel (additive, conditional): same rule,
+    # appended last. Default ON since 2026-08-04 -> the key rides only on an
+    # UNCHECKED box.
+    if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+        chain_payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
     return chain_payload
 
 
@@ -541,7 +561,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # Acceleration (ADDITIVE, last): the Settings-tab keep-resident
                  # checkbox. Same discipline again -- keyword-only from ui.py's
                  # dispatch(), appended after block_swap_prefetch.
-                 keep_resident=KEEP_RESIDENT_DEFAULT):
+                 keep_resident=KEEP_RESIDENT_DEFAULT,
+                 # Acceleration (ADDITIVE, last): the Settings-tab fused GGUF
+                 # dequantization kernel checkbox. Same discipline again --
+                 # keyword-only from ui.py's dispatch(), appended after
+                 # keep_resident.
+                 fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -770,6 +795,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 attention_backend=attention_backend,
                 block_swap_prefetch=block_swap_prefetch,
                 keep_resident=keep_resident,
+                fused_gguf_dequant_kernel=fused_gguf_dequant_kernel,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -855,6 +881,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # box -- the mirror image of the line above, despite the identical shape.
         if keep_resident != KEEP_RESIDENT_DEFAULT:
             payload["keep_resident"] = bool(keep_resident)
+        # fused GGUF dequantization kernel (additive, conditional): appended
+        # last, same rule; its default is ON since 2026-08-04, so the key rides
+        # only on an UNCHECKED box (the same direction as block_swap_prefetch).
+        if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+            payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -963,7 +994,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # Acceleration (ADDITIVE, last): the keep-resident
                        # checkbox, appended after block_swap_prefetch and
                        # forwarded as a KEYWORD by ui.py's chain_dispatch.
-                       keep_resident=KEEP_RESIDENT_DEFAULT):
+                       keep_resident=KEEP_RESIDENT_DEFAULT,
+                       # Acceleration (ADDITIVE, last): the fused GGUF
+                       # dequantization kernel checkbox, appended after
+                       # keep_resident and forwarded as a KEYWORD by ui.py's
+                       # chain_dispatch.
+                       fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1284,10 +1320,15 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # default is True).
         if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
             payload["block_swap_prefetch"] = bool(block_swap_prefetch)
-        # keep-resident (additive, conditional): appended last, same rule (the
-        # default is off, so the key rides only on a checked box).
+        # keep-resident (additive, conditional): same rule (the default is off,
+        # so the key rides only on a checked box).
         if keep_resident != KEEP_RESIDENT_DEFAULT:
             payload["keep_resident"] = bool(keep_resident)
+        # fused GGUF dequantization kernel (additive, conditional): appended
+        # last, same rule but the OPPOSITE direction from keep_resident since
+        # 2026-08-04 (default on -> emitted only when unchecked).
+        if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+            payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
 
         try:
             resp = api.generate_chain(payload)

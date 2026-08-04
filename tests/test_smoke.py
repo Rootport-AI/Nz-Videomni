@@ -162,7 +162,6 @@ def test_metadata_records_attention_used(client):
         "seed": 42,
         "pipeline": "distilled",
         "attention_backend": "sage",
-        "fused_gguf_dequant_gemm": True,
         "vae_mode": "prune_vaed",
     }
     r = client.post("/api/v1/generate", json=payload)
@@ -176,11 +175,10 @@ def test_metadata_records_attention_used(client):
     )
     assert "attention_used" in meta
     assert meta["attention_used"] is None  # mock backend ran no engine attention
-    # The request dump DOES carry all three fields, mocks included -- same
+    # The request dump DOES carry both fields, the mock included -- same
     # precedent as the two_stage_hq pipeline value; only the worker payload and
-    # /status keep the mocks out.
+    # /status keep the mock out.
     assert meta["request"]["attention_backend"] == "sage"
-    assert meta["request"]["fused_gguf_dequant_gemm"] is True
     assert meta["request"]["vae_mode"] == "prune_vaed"
 
 
@@ -278,6 +276,68 @@ def test_chain_metadata_records_block_swap_prefetch_used(client):
     assert "peak_vram_reserved_mb" in meta
     assert meta["peak_vram_reserved_mb"] is None
     assert meta["request"]["block_swap_prefetch"] is True
+
+
+def test_metadata_records_fused_gguf_dequant_kernel_used(client):
+    # Mirrors test_metadata_records_block_swap_prefetch_used (§1-11): the
+    # EFFECTIVE value (from the worker's done event) is recorded, not the raw
+    # request value. The mock backend runs no engine -> null, but the KEY must be
+    # present unconditionally on BOTH metadata writers (single + chain), since an
+    # absent key would let the real path regress unnoticed.
+    payload = {
+        "prompt": "A red ball rolling on a white floor",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 42,
+        "pipeline": "distilled",
+        "fused_gguf_dequant_kernel": True,
+    }
+    r = client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "fused_gguf_dequant_kernel_used" in meta
+    assert meta["fused_gguf_dequant_kernel_used"] is None  # mock backend
+    # The request dump carries the raw requested value regardless.
+    assert meta["request"]["fused_gguf_dequant_kernel"] is True
+
+
+def test_chain_metadata_records_fused_gguf_dequant_kernel_used(client):
+    # Same key on the chain writer (a separate metadata builder -- it does not
+    # share _write_metadata, so it needs its own guard).
+    payload = {
+        "prompt": "a serene mountain lake at dawn",
+        "width": 384,
+        "height": 256,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "pipeline": "distilled",
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 25}, {"num_frames": 25}],
+        "fused_gguf_dequant_kernel": True,
+    }
+    r = client.post("/api/v1/generate/chain", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "fused_gguf_dequant_kernel_used" in meta
+    assert meta["fused_gguf_dequant_kernel_used"] is None
+    assert meta["request"]["fused_gguf_dequant_kernel"] is True
 
 
 def test_upload_image(client, png_bytes):

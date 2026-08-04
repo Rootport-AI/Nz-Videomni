@@ -448,6 +448,43 @@ def test_submit_generate_keep_resident_on_included_in_body():
     assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
 
 
+def test_submit_generate_fused_dequant_off_included_in_body():
+    # fused_gguf_dequant_kernel (§1-11): default ON since 2026-08-04 (§51), so
+    # the OFF call is the one that reaches the wire. Sent LAST of the
+    # Acceleration keys, so the default body's key set stays frozen.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            fused_gguf_dequant_kernel=False,
+        )
+    )
+
+    body = captured["body"]
+    assert body["fused_gguf_dequant_kernel"] is False
+
+    # ...and the default (True) is indistinguishable from omitting it.
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            fused_gguf_dequant_kernel=True,
+        )
+    )
+    body = captured["body"]
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+
+
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
@@ -752,6 +789,44 @@ def test_submit_chain_keep_resident_on_included_in_body():
             "a prompt",
             [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
             keep_resident=False,
+        )
+    )
+    assert set(captured["body"].keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
+
+
+def test_submit_chain_fused_dequant_off_included_in_body():
+    # §1-11, default ON since 2026-08-04 (§51) -> only the OFF call reaches the
+    # wire; the default call must leave the frozen chain key set untouched.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            fused_gguf_dequant_kernel=False,
+        )
+    )
+    assert captured["body"]["fused_gguf_dequant_kernel"] is False
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            fused_gguf_dequant_kernel=True,
         )
     )
     assert set(captured["body"].keys()) == {

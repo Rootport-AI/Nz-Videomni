@@ -28,6 +28,7 @@ from .formatting import (
 )
 from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
+    FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     a2v_audio_change_handler,
     delete_finished_jobs,
@@ -1017,22 +1018,28 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                  precision=0, minimum=1), "lbl_timeout")
 
                 # ---- Acceleration (per-job speed options; no restart) ----
-                # Only the attention selector is implemented. The fused-GGUF
-                # checkbox and the VAE radio are DISABLED placeholders: they are
-                # not handler inputs and never enter a request payload, so there
-                # is no "displayed only" trap where a greyed-out control silently
-                # claims to do something. NOTE: the VAE selector is unrelated to
-                # the server's vae_tiling (a VRAM-saving tile split).
+                # Everything here is implemented except the VAE radio, which is
+                # a DISABLED placeholder: it is not a handler input and never
+                # enters a request payload, so there is no "displayed only" trap
+                # where a greyed-out control silently claims to do something.
+                # NOTE: the VAE selector is unrelated to the server's vae_tiling
+                # (a VRAM-saving tile split).
                 reg(gr.Markdown(f"### {L('accel_section_title')}"),
                     "accel_section_title", "value")
                 reg(gr.Markdown(L("accel_note"), elem_classes=["note"]),
                     "accel_note", "value")
-                accel_fused_gguf = reg(gr.Checkbox(
-                    value=False, interactive=False,
-                    label=L("accel_lbl_fused_gguf"),
-                    info=L("accel_info_unimplemented"),
-                ), "accel_lbl_fused_gguf")
-                reg(accel_fused_gguf, "accel_info_unimplemented", "info")
+                # 実装のあるつまみ（GGUF逆量子化の Triton 1カーネル化）。位置は
+                # 撤去した旧モック accel_fused_gguf（受理のみで効果の無かった
+                # fused_gguf_dequant_gemm）をそのまま継承している。
+                # 利用可否はクライアント側でゲートしない（attention と同じ理由
+                # ＝サーバが Triton 不在・例外・自己検証不一致のいずれでも黙って
+                # 従来実装へ降格するので、二つ目の真理の源を作らない）。
+                accel_fused_dequant = reg(gr.Checkbox(
+                    value=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+                    label=L("accel_lbl_fused_dequant"),
+                    info=L("accel_info_fused_dequant"),
+                ), "accel_lbl_fused_dequant")
+                reg(accel_fused_dequant, "accel_info_fused_dequant", "info")
                 # The radio's VALUES are the API literals ("sdpa"/"sage"); the
                 # displayed choice strings are deliberately fixed, untranslated
                 # text so switch_language needs no extra branch (only the label
@@ -1048,15 +1055,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_attention"),
                 ), "accel_lbl_attention")
                 reg(attention_backend, "accel_info_attention", "info")
-                # 実装のあるつまみは attention に続いてここが2つ目。
                 # 利用可否は API 側が黙って no-op にするのでクライアント側で
-                # ゲートしない（attention と同じ理由。:1027-1031 参照）。
+                # ゲートしない（attention と同じ理由。すぐ上の attention_backend
+                # の注釈を参照）。
                 accel_prefetch = reg(gr.Checkbox(
                     value=BLOCK_SWAP_PREFETCH_DEFAULT, label=L("accel_lbl_prefetch"),
                     info=L("accel_info_prefetch"),
                 ), "accel_lbl_prefetch")
                 reg(accel_prefetch, "accel_info_prefetch", "info")
-                # 実装のあるつまみ3つ目。ここもクライアント側でゲートしない
+                # ここもクライアント側でゲートしない
                 # （利用可否ではなく「積んでいるメモリ量しだい」で、サーバから
                 # は判定できない。既定offのまま説明文で「64GB以上推奨」と伝え、
                 # 判断はユーザーに委ねる方針＝オーナー確定）。
@@ -1258,7 +1265,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_img_dir_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
-                     accel_keep_resident_v):
+                     accel_keep_resident_v, accel_fused_dequant_v):
             if not batch_enable_v:
                 # Single-generation path: byte-identical delegation (first 40
                 # positionals ARE the generate() signature); nag_*/neg_method/
@@ -1281,7 +1288,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     neg_method=nag_method_v, vsf_scale=vsf_scale_v,
                     attention_backend=attention_backend_v,
                     block_swap_prefetch=accel_prefetch_v,
-                    keep_resident=accel_keep_resident_v)
+                    keep_resident=accel_keep_resident_v,
+                    fused_gguf_dequant_kernel=accel_fused_dequant_v)
                 return
 
             rows = batch_rows_v or []
@@ -1387,6 +1395,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 attention_backend=attention_backend_v or "sdpa",
                 block_swap_prefetch=bool(accel_prefetch_v),
                 keep_resident=bool(accel_keep_resident_v),
+                fused_gguf_dequant_kernel=bool(accel_fused_dequant_v),
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1419,8 +1428,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             dispatch,
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
             # vsf_scale, then the Acceleration attention selector, the
-            # block-swap prefetch checkbox and the keep-resident checkbox,
-            # are APPENDED at the very end,
+            # block-swap prefetch checkbox, the keep-resident checkbox and the
+            # fused-dequant checkbox, are APPENDED at the very end,
             # after every pre-existing positional (matching dispatch()'s
             # signature order, which appends them after batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
@@ -1433,7 +1442,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_img_dir,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident],
+                    accel_keep_resident, accel_fused_dequant],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1865,19 +1874,25 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             chain_clip_inputs.extend(_slot)
 
         # Acceleration: the attention selector, the block-swap prefetch
-        # checkbox AND the keep-resident checkbox are APPENDED at the very end
-        # of the chain inputs list below (attention_backend, accel_prefetch,
-        # accel_keep_resident). generate_chain keeps
+        # checkbox, the keep-resident checkbox AND the fused-dequant checkbox
+        # are APPENDED at the very end of the chain inputs list below, in that
+        # order (attention_backend, accel_prefetch, accel_keep_resident,
+        # accel_fused_dequant). generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
-        # _chain_args), so the three trailing values cannot be delivered
+        # _chain_args), so the four trailing values cannot be delivered
         # positionally -- this thin wrapper peels them off and forwards them as
         # KEYWORDS, the same discipline the Generate tab's dispatch() uses.
+        # NOTE: every negative index below is tied to the LENGTH of that
+        # trailing block. Appending one more Acceleration input means shifting
+        # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
+        # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-3],
-                                      attention_backend=args[-3],
-                                      block_swap_prefetch=args[-2],
-                                      keep_resident=args[-1])
+            yield from chain_generate(*args[:-4],
+                                      attention_backend=args[-4],
+                                      block_swap_prefetch=args[-3],
+                                      keep_resident=args[-2],
+                                      fused_gguf_dequant_kernel=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -1893,9 +1908,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
             # The Acceleration attention selector, the block-swap prefetch
-            # checkbox and the keep-resident checkbox are APPENDED last (in
-            # that order) and reach the handler as keywords via chain_dispatch
-            # above.
+            # checkbox, the keep-resident checkbox and the fused-dequant
+            # checkbox are APPENDED last (in that order) and reach the handler
+            # as keywords via chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -1904,7 +1919,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident],
+                    accel_keep_resident, accel_fused_dequant],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),

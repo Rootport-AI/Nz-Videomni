@@ -188,9 +188,9 @@ class PipelineManager:
         )
 
     # Acceleration backends advertised by GET /status. Only ``attention_backend``
-    # is a real implementation; the two MOCK request fields
-    # (fused_gguf_dequant_gemm / vae_mode) are deliberately NOT advertised here —
-    # /status describes what the server can actually DO.
+    # is a real implementation choice; the MOCK request field (vae_mode) is
+    # deliberately NOT advertised here — /status describes what the server can
+    # actually DO.
     ATTENTION_BACKENDS = ["sdpa", "sage"]
 
     def acceleration_status_block(self) -> dict:
@@ -735,6 +735,9 @@ class PipelineManager:
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
                     keep_resident_used=outcome.keep_resident_used,
+                    fused_gguf_dequant_kernel_used=(
+                        outcome.fused_gguf_dequant_kernel_used
+                    ),
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                 )
 
@@ -783,6 +786,7 @@ class PipelineManager:
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
+        fused_gguf_dequant_kernel_used=None,
         peak_vram_reserved_mb=None,
     ) -> None:
         cm = chain_meta or {}
@@ -800,6 +804,7 @@ class PipelineManager:
             "attention_used": attention_used,
             "block_swap_prefetch_used": block_swap_prefetch_used,
             "keep_resident_used": keep_resident_used,
+            "fused_gguf_dequant_kernel_used": fused_gguf_dequant_kernel_used,
             "peak_vram_reserved_mb": peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
@@ -905,6 +910,14 @@ class PipelineManager:
             # auto-downgrade (see engine/worker._resolve_keep_resident) becomes
             # visible — the real-device gate judges on this field, not on logs.
             "keep_resident_used": outcome.keep_resident_used,
+            # Acceleration: whether the fused Triton GGUF dequantization kernel
+            # actually ran ("off" | "on" | "on->off"), same relay discipline
+            # again. "on->off" means the job asked for it but it never applied
+            # (Triton missing, kernel exception latched, self-check mismatch, or
+            # no eligible tensor) — the real-device gate judges on this field.
+            "fused_gguf_dequant_kernel_used": (
+                outcome.fused_gguf_dequant_kernel_used
+            ),
             # torch.cuda.max_memory_reserved()-based, additive alongside the
             # vram_optimization block's peak_vram_mb (max_memory_allocated-
             # based) — this feature's VRAM-risk signal (§44).

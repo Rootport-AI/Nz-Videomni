@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Final, cast
 import torch
 
 from engine.api_types import ImageConditioningInput
+from engine.gguf import dequant_triton
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
 from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
@@ -207,6 +208,14 @@ class LTXFastVideoPipeline:
         # the job that just finished (read back by the worker).
         self._block_swap_prefetch_requested = False
         self._block_swap_prefetch_used = "off"
+
+        # ── Fused Triton GGUF dequantization state ─────────────────────────────
+        # Same lifetime rules as prefetch (armed at the entry point, reset in its
+        # finally), but the state itself lives in ``engine/gguf/dequant_triton``
+        # as MODULE globals — the dequantization call sites are plain functions
+        # deep inside the GGUF loaders with no pipeline handle to reach. There is
+        # therefore nothing to mirror on the instance: the pipeline only forwards
+        # arm/reset and reads the finished job's verdict back out.
 
         # ── keep_resident（ジョブ間のCPU骨格キャッシュ）state ──────────────────
         # 上の3つ（NAG/sage/prefetch）と決定的に違うのは**ジョブ終了時に
@@ -555,6 +564,38 @@ class LTXFastVideoPipeline:
         """
         return self._block_swap_prefetch_used
 
+    def _set_fused_dequant_job(self, enabled: bool) -> None:
+        """Arm the fused Triton GGUF dequantization kernels for the upcoming job.
+
+        NEVER raises, for exactly the reason spelled out in ``_set_sage_job``:
+        this runs outside generate()'s try block, so an exception here would skip
+        the matching reset and leak the request into the next job on a resident
+        worker. ``set_job`` itself only assigns module globals (no import, no
+        CUDA), so there is nothing here that can fail — the discipline is kept
+        anyway because the call ORDER is what makes it safe.
+        """
+        dequant_triton.set_job(bool(enabled))
+
+    def _reset_fused_dequant_job(self) -> None:
+        """End-of-job counterpart: freeze this job's verdict and disarm.
+
+        The verdict ("off" / "on" / "on->off") is computed inside
+        ``dequant_triton.reset_job()`` from the request, the exception latch and
+        the number of tensors actually dequantized on Triton — a job that asked
+        for the kernels but dequantized nothing eligible is a degradation, same
+        as a latch.
+        """
+        dequant_triton.reset_job()
+
+    def fused_gguf_dequant_kernel_used(self) -> str:
+        """What the last finished job's GGUF dequantization actually did: "off",
+        "on", or "on->off" (asked for, but fell back to the eager PyTorch path).
+
+        Like ``block_swap_prefetch_used`` above, this is the snapshot taken by
+        the reset in the entry point's finally, not live state.
+        """
+        return dequant_triton.last_used()
+
     def _swap_registry(self, enabled: bool) -> None:
         """Arm (``True``) / disarm (``False``) the cross-job CPU-skeleton cache.
 
@@ -867,6 +908,13 @@ class LTXFastVideoPipeline:
             # Always False at create time; the per-job value is written by
             # _set_block_swap_prefetch_job before the transformer is built.
             service.prefetch_requested = self._block_swap_prefetch_requested
+            # (No equivalent line is needed for the fused GGUF dequantization
+            # kernels: unlike sage/prefetch — whose per-job request has to be
+            # re-applied to each freshly built service instance — that state
+            # lives in dequant_triton's MODULE globals, which the transformer
+            # rebuild does not touch. The GGUF weights are dequantized DURING
+            # this build, i.e. after _set_fused_dequant_job armed the flag at
+            # the entry point, so the build itself is already covered.)
             # Wrap model_ledger.transformer() persistently so block swap is
             # re-installed on every build (model_ledger never caches the model).
             original_transformer = self.pipeline.model_ledger.transformer
@@ -1502,6 +1550,7 @@ class LTXFastVideoPipeline:
         attention_backend: str = "sdpa",
         block_swap_prefetch: bool = False,
         keep_resident: bool | None = None,
+        fused_gguf_dequant_kernel: bool = False,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -1530,6 +1579,11 @@ class LTXFastVideoPipeline:
         # Block-swap prefetch, armed alongside sage for the same reason (no
         # ordering constraint, and its reset lives in the finally below).
         self._set_block_swap_prefetch_job(block_swap_prefetch)
+        # Fused Triton GGUF dequantization, armed alongside prefetch for the same
+        # reason (no ordering constraint, and its reset lives in the finally
+        # below). Must be armed BEFORE the try, because the transformer build
+        # that dequantizes the GGUF weights happens inside it.
+        self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         # keep_resident: ``None`` = 触らない（現在の状態を維持）。ワーカーは
         # 常に明示的な bool を渡すが、outputs/ 配下のスパイクスクリプトは
         # create時に keep_resident_weights=True を張って直接 generate() を
@@ -1585,6 +1639,10 @@ class LTXFastVideoPipeline:
             # transfer state down (drains the stream, frees the arenas and the
             # CPU masters) so nothing survives into the next job.
             self._reset_block_swap_prefetch_job()
+            # Same again for the fused GGUF dequantization kernels; reset also
+            # snapshots this job's verdict for
+            # fused_gguf_dequant_kernel_used() below.
+            self._reset_fused_dequant_job()
 
     @torch.inference_mode()
     def generate_chain(
@@ -1609,6 +1667,7 @@ class LTXFastVideoPipeline:
         attention_backend: str = "sdpa",
         block_swap_prefetch: bool = False,
         keep_resident: bool | None = None,
+        fused_gguf_dequant_kernel: bool = False,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -1661,11 +1720,17 @@ class LTXFastVideoPipeline:
         armed here for the same "outermost entry point" reason, but with NO
         counterpart in the finally — the whole point of the CPU-skeleton cache
         is that it survives the job. See ``_set_keep_resident_job``.
+
+        ``fused_gguf_dequant_kernel`` (additive): armed here and reset in the
+        finally, same discipline as ``block_swap_prefetch``. One arm covers the
+        whole chain because the chain builds (and therefore dequantizes) the
+        transformer exactly once.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
         self._set_sage_job(attention_backend)
         self._set_block_swap_prefetch_job(block_swap_prefetch)
+        self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
 
@@ -1696,6 +1761,7 @@ class LTXFastVideoPipeline:
             self._nag.reset()
             self._sage.reset()
             self._reset_block_swap_prefetch_job()
+            self._reset_fused_dequant_job()
 
     @torch.inference_mode()
     def warmup(self, output_path: str) -> None:

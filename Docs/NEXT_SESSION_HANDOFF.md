@@ -16,7 +16,7 @@
 >
 > - **§44 先読み block swap**（テーマ完結・既定 ON）／**§45 `audio_strength`**（Style LoRA の音割れ対策・実機A/B合格でテーマ完結）／**§48 モデル骨格の常駐（`keep_resident`）**（本命の高速化はオーナー実機確認済み・残るのは細目のオーナー目視ゲート）。
 > - **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加。実装完了・G0／G1／G2 全PASS・コミット＆プッシュ済み（backend `fd6d43f` / frontend `d375028`）。G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）も2026-08-04に合格し、テーマ完結。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。**
-> - フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 骨格常駐トグルのprefetch連動グレーアウトも実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）・目視待ち。記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §60。
+> - フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 だった骨格常駐トグルのprefetch連動グレーアウトは実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）で、2026-08-04にオーナー目視合格し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-62へ移設・クローズ済み。記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §60。
 >
 > pytest の現在のベースラインは **910 passed / 9 skipped**（§49.5）。IC-LoRA は現在5エントリ（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`。うち union-control の1ファイルを3つの論理名で共用）。
 
@@ -715,7 +715,7 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 **2026-07-27の整理で、本節に列挙していた将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 現在の所在は次のとおり（同書は番号だけでなくファイル名を添えて参照すること）。
 
 - **Phase 3 残パリティのうち、非蒸留(dev)モデル向けの生成つまみ一式**（negative／CFG／ステップ数／STG／sigma schedule／denoise loop／seed lock／延長尺~30s／空間アップスケーラのユーザー操作露出）＝同書**§4-1**。**negative／CFG／`pipeline` は worker 未配線＝GUI 露出禁止（継続）**という現行制約も同項へ転記済み。
-- **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝同書**§3-2**（着手の入口＝`services/ltx_runner.py` の payload 未配線箇所・非蒸留×量子化 dev 重み・計算コスト~7〜12倍まで転記済み。背景資料は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節）。
+- **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝同書**§4-28**（2026-08-04に§3-2から降格。着手の入口＝`services/ltx_runner.py` の payload 未配線箇所・非蒸留×量子化 dev 重み・計算コスト~7〜12倍まで転記済み。背景資料は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節）。
 - **Gap Fill**＝同書**§3-10**／**Retake・Inpaint**＝同書**§4-12**／**attention tiling の本番投入**＝同書**§4-2**／**VLM(vision) 再導入**（enhance_i2v・フレームを見た Gap Fill 提案。QAT text-only 化を巻き戻すため計画外）＝同書**§4-5**。
 - **本節にのみ残る（台帳に未収録の）項目**: 生成キュー、text-only プロンプト強化（spec §13.4 由来）。いずれも**台帳へは起票しない**——前者は下記「やらない」のユーザー決定（「1ジョブ＋busy 409」が正しい設計）およびタイムライン側の「順番待ちは作らない（バグ温床）」決定（[`TIMELINE_ALPHA_REQUIREMENTS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)）と衝突し、後者は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) E節でユーザー決定「不要」と重複するため。
 - **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝当時はユーザーのプラグイン開発環境整備待ちでブロック中と記録していた（現在は別リポジトリ `Nz-LTX23-frontend-AviUtl2` で実装済み）。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。

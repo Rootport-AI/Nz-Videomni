@@ -57,7 +57,7 @@
 
 ## D. 高品質モード（遠い将来・ユーザー決定で当面は着手しない） → 台帳へ移設済み
 
-**本節の内容は2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-2（`two_stage_hq`）へ移設した。以後の管理は同書で行う。** 同項には、ここでの「品質」の定義（解像度ではなく生成の忠実度。distilled＝8ステップ・CFG無効／dev＝30〜50ステップ・CFG有効）、着手の入口（未配線箇所＝`services/ltx_runner.py`のworkerペイロードに`pipeline`／`guidance_scale`／`negative_prompt`が無い／入口の重み＝`unsloth/LTX-2.3-GGUF`の`ltx-2.3-22b-dev-Q4_K_M.gguf`・HF表示~14.3GB／計算コスト~7〜12倍で16GB実測が必須）まで転記済み。
+**本節の内容は2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-2（`two_stage_hq`。2026-08-04に同書§4-28へ降格）へ移設した。以後の管理は同書で行う。** 同項には、ここでの「品質」の定義（解像度ではなく生成の忠実度。distilled＝8ステップ・CFG無効／dev＝30〜50ステップ・CFG有効）、着手の入口（未配線箇所＝`services/ltx_runner.py`のworkerペイロードに`pipeline`／`guidance_scale`が無い／入口の重み＝`unsloth/LTX-2.3-GGUF`の`ltx-2.3-22b-dev-Q4_K_M.gguf`・HF表示~14.3GB／計算コスト~7〜12倍で16GB実測が必須）まで転記済み。
 
 **本節にのみ残す補足**: 公式fp8にも dev 版がある（`Lightricks/LTX-2.3-fp8`）。コミュニティ言及「dev は動きとプロンプト追従が良い／distilled は画は良いが動きが乏しい」（HF RuneXX/LTX-2.3-Workflows #71）。多様性の定量比較は未確認。
 

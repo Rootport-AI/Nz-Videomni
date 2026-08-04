@@ -60,7 +60,7 @@
 
 ## スコープ外（Phase Cではやらない・Phase D以降）
 
-**未対応アダプタ4種（depth・Motion-Track・In-Outpainting・Deblur）と19b世代アダプタの流用不可は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8へ移設した。以後の管理は同書で行う**（depthの前処理器選定が未収束だった経緯と、後の調査で公式ComfyUIワークフローがVideo-Depth-Anythingを採用済みと判明した事実も同項に転記済み）。
+**未対応アダプタ4種（depth・Motion-Track・In-Outpainting・Deblur）と19b世代アダプタの流用不可は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8へ移設した。以後の管理は同書で行う**（うちdepthとDeblurの2種は2026-08-04に実装完結し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-63へクローズ済み。§4-8に残るのはMotion-Track・In-Outpaintingと`conditioning_attention_mask`）（depthの前処理器選定が未収束だった経緯と、後の調査で公式ComfyUIワークフローがVideo-Depth-Anythingを採用済みと判明した事実も同項に転記済み）。
 
 > **2026-08-03追記**: 上記4種のうち**DepthとDeblurは2026-08-03に着手し、実装を完了した**（`depth-control`・`deblur` の2アダプタとVideo-Depth-Anything Small前処理器。**ただしオーナー実機ゲートは未実施** → 2026-08-04に合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.11））。**正本は[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)**（検証記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49）。未対応として残るのはMotion-TrackとIn-Outpaintingの2種である。
 

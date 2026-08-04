@@ -2,10 +2,10 @@
 
 > **【ステータス 2026-08-04】全ゲート合格・テーマ完全完結。** 実装完了・機械検証（pytest・自己診断・型検査・vitest）全PASS・G1ゲート（深度前処理の性質チェック）全項目PASS・G2ゲート（モック通し）全項目PASS。初期実装はコミット・プッシュ済み（backend `fd6d43f` / frontend `d375028`）。**G3（オーナー実機real）は全項目合格**（Depth通常経路・A2V経由は2026-08-03、Deblurは2026-08-04にオーナー実機確認。参照動画の特徴を踏襲した動画・くっきりした出力をいずれも問題なく生成）。**Deblurは実機で一度OOM**（`t2v` 1280x768/257f、ジョブ`92a95e94`、生成開始約50秒後にCUDA out of memory）したが、**原因を究明し修正済み**（落下地点＝参照動画のVAEエンコード、真因＝torch 2.9.1のbf16 Conv3dのim2colフォールバック。係数1のときだけchannels_last_3dへ切り替え・復元する対処で1280x768/257fが270.02秒で完走することを実機ゲートで確認。ジョブ台帳・実測はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.9）。**目視によるG-fix3判定（くっきりした出力かどうかの確認）も2026-08-04に合格した**（A/Bペア`c322130d`対`eceea948`で視覚差なし。大条件`d4bedb69`も品質問題なし）。また大条件の参照エンコード中にVRAM reservedが実確保の13倍まで膨張する現象を観測していたが、**真因（参照動画ローダーのGPU cat連結による2乗則膨張）を特定し、第3修正（CPU組み立て版への置換）で根治した**（SHA完全一致確認済み。バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.10）。Deblurのピーク実測13.9GB（既存アダプタ比+約0.4GB）は16GB推奨環境に収まるため**VRAM警告は不要**とオーナーが裁定した（ヒント文中の不正確な「出力と同じ解像度で処理」という表現は2026-08-04に「縮小せずに条件付けに使う」へ置換済み）。**G4（既存canny/pose/upscalerの回帰）も2026-08-04に合格**——改修前コミット`24c67fd`と現行`e273052`で同一条件3本ずつ生成しSHA-256完全一致（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.11）。第3修正・G-fix3・G4に対応する差分は `e273052`〜`9701fbe` でコミット・プッシュ済み。webuiも再ビルド・再デプロイ済み。
 >
-> 併読: [`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)（制御系IC-LoRAと前処理段そのものの完成物。本テーマはその上に2アダプタを足したもの）／[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（LoRA適用機構）／フロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8（起票元）／機械検証と実測値の記録＝本リポジトリ[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49。
+> 併読: [`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)（制御系IC-LoRAと前処理段そのものの完成物。本テーマはその上に2アダプタを足したもの）／[`IC_LORA_PHASE_B_STATUS.md`](IC_LORA_PHASE_B_STATUS.md)（LoRA適用機構）／フロントエンド台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8（起票元。本テーマの完結記録は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-63）／機械検証と実測値の記録＝本リポジトリ[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49。
 
 - 作成: 2026-08-03（実装と同時に起票）
-- 正本ポインタ: 本テーマの仕様・設計判断＝**本書**／実測値と検証記録＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49／未対応アダプタの台帳＝フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8
+- 正本ポインタ: 本テーマの仕様・設計判断＝**本書**／実測値と検証記録＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49／未対応アダプタの台帳＝フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8／本テーマの完結記録＝同[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-63
 
 ---
 
@@ -277,5 +277,5 @@ Min値は既存の規則（「ディレクトリ合計 −（検証表が見る�
 - [`IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)（制御系IC-LoRAと前処理段の完成物。本テーマの土台）
 - [`FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md`](FEATURE_GUIDE_KEYFRAMES_AND_ICLORA.md)（利用者向けのIC-LoRA系統解説）
 - [`../LTX23_Backend_Specification.md`](../LTX23_Backend_Specification.md) §5.1b・§11.2（重みの配置と `ic_loras` の登録表）
-- フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§4-8**（未対応IC-LoRAの台帳。本テーマの起票元）／**§4-11**（参照動画まわりの早期バリデーション。①を本テーマで解消）／**§4-25**（マスク動画の受け口。`conditioning_attention_mask` の相互参照先）
+- フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§4-8**（未対応IC-LoRAの台帳。本テーマの起票元。完結記録は同`PENDING_TASKS_CLOSED.md` §3-63）／**§4-11**（参照動画まわりの早期バリデーション。①を本テーマで解消）／**§4-25**（マスク動画の受け口。`conditioning_attention_mask` の相互参照先）
 - 上流: [Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything)（Apache-2.0・Bytedance Ltd.）／Lightricks `LTX-2.3-22b-IC-LoRA-Deblur`（モデルカード）／公式ワークフロー `LTX-2.3_ICLoRA_Union_Control_Distilled.json`

@@ -1447,7 +1447,7 @@ spike同条件（1024×640/25f・x2 strength1.0・参照条件付け・seed12345
 
 ### 23.5 持ち越し（将来項目）
 
-**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 1点目（`two_stage_hq`の実効化）は同書**§3-2**、残る4点は同書**§4-6**（バックエンド同梱Gradio UIの残4件）にあたる。以下の記録は不変。
+**（2026-07-27追記）以後の将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 1点目（`two_stage_hq`の実効化）は同書**§4-28**（2026-08-04に§3-2から降格）、残る4点は同書**§4-6**（バックエンド同梱Gradio UIの残4件）にあたる。以下の記録は不変。
 
 - バックエンドでの pipeline／guidance_scale 消費（`two_stage_hq` の実効化）。
 - `GET /jobs/{id}/metadata`（新規エンドポイント不追加の方針で見送り）。
@@ -3257,7 +3257,7 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 
 以下はオーナー本人の目視・操作でしか判定できないため、本テーマは**細目のオーナー目視ゲート待ち**の状態である。ただし**本命にあたる 7（実 GPU での高速化）は 2026-08-03 にオーナーが実機で確認して合格**しており、残っているのは見た目・文言・永続化・4経路といった細目である。フロントエンド側のチェックリストは[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1／§2-2 に「何を操作して確認するか → どうなれば合格か」の形で起票済み。
 
-1. Settings > Acceleration に「モデル骨格の常駐（ジョブ間キャッシュ）」トグルが表示される。※フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10**（prefetch 連動グレーアウト）を実装したあとは合格条件が変わる（先読み block swap が off のときだけグレーアウトしているのが正しい姿になる）。
+1. Settings > Acceleration に「モデル骨格の常駐（ジョブ間キャッシュ）」トグルが表示される。※フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-10**（prefetch 連動グレーアウト。2026-08-04にオーナー目視合格し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-62へ移設・クローズ）を実装したあとは合格条件が変わる（先読み block swap が off のときだけグレーアウトしているのが正しい姿になる）。
 2. **既定が off** である（初回起動時・localStorage が空のとき）。
 3. **ON にしたときだけ**ヒント文（「メモリ64GB以上を推奨…生成結果は変わりません」）が出る。
 4. localStorage に永続化され、AviUtl2 を再起動しても選択が保たれる。

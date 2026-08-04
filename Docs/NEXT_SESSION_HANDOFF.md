@@ -2,12 +2,20 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-03 時点のテーマ一覧＝**本ブロックが日付として最新**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-04＝**本ブロックが日付として最新**）
+
+> **最新は §51 GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）。** Q4_K・Q5_K・Q6_Kの逆量子化をTritonカーネル3本へ融合したもので、**実装完了・機械検証全PASS・実機ゲートG1〜G8全項目合格・既定on**（オーナー承認済み）。生成結果はビット単位で不変。実測は**25.28秒短縮（約17.5%）**。正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §51、台帳はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11。
+>
+> **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加はテーマ完結。** G3・G4ともオーナー実機で合格し、コミット・プッシュ・デプロイまで完了している（`e273052`〜`9701fbe`）。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-03 時点のテーマ一覧）
 
 > **2026-08-03 時点で走っている／終わったテーマは次の4つ。** いずれも正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) の該当節である。
 >
 > - **§44 先読み block swap**（テーマ完結・既定 ON）／**§45 `audio_strength`**（Style LoRA の音割れ対策・実機A/B合格でテーマ完結）／**§48 モデル骨格の常駐（`keep_resident`）**（本命の高速化はオーナー実機確認済み・残るのは細目のオーナー目視ゲート）。
-> - **最新は §49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加。実装完了・G0／G1／G2 全PASS・コミット＆プッシュ済み（backend `fd6d43f` / frontend `d375028`）。ただし G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）は未実施＝実機ゲート待ちで、デプロイも未実施。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。**
+> - **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加。実装完了・G0／G1／G2 全PASS・コミット＆プッシュ済み（backend `fd6d43f` / frontend `d375028`）。G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）も2026-08-04に合格し、テーマ完結。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。**
 > - フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 骨格常駐トグルのprefetch連動グレーアウトも実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）・目視待ち。記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §60。
 >
 > pytest の現在のベースラインは **910 passed / 9 skipped**（§49.5）。IC-LoRA は現在5エントリ（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`。うち union-control の1ファイルを3つの論理名で共用）。
@@ -16,7 +24,7 @@
 
 ## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-01 Acceleration（生成の高速化）機能＝SageAttention 2.2.0 のジョブ単位切替＋モック2項目＝**実装・機械検証・実機ゲート（G0〜G9）すべて完了・オーナー実機目視も合格**）（**生成機能の正本**）
 
-> **（当時の記録）本ブロックは2026-08-01時点の記録である。日付として最新なのは上の2026-08-03ブロック。**
+> **（当時の記録）本ブロックは2026-08-01時点の記録である。日付として最新なのは冒頭の2026-08-04ブロック。**
 >
 > **生成機能についてはこのブロックが正本。以降の▶節（直下の2026-07-29 VSFブロック・2026-07-28 NAGブロック・2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-29 VSF」ブロックは本ブロックに置き換わった（NAG・VSFはいずれも非CFGネガティブプロンプトの方式として現役のまま）。
 >
@@ -39,7 +47,7 @@
 ### 次セッションの残課題（2026-08-01起票）
 
 1. **コミットはオーナー指示待ち。** 本ブロック作成時点で未コミット。
-2. **モック2項目の実装**（fused GGUF dequant + GEMM／PruneVAED）は将来課題として起票済み（[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-49・§3-50）。
+2. **モック2項目の実装**（fused GGUF dequant + GEMM／PruneVAED）は将来課題として起票済み。fused GGUF dequant + GEMM は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) **§3-61（no-go再確認のうえクローズ済み）**で、後継の「逆量子化の1カーネル化」が[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-11＝実装完了**。PruneVAED は同 §3-50。
 3. **`sage` を既定にするかどうかの再検討**は、フィールドでの安定実績が溜まってからの判断事項として起票済み（同 §4-22）。現状は再現性を優先して `sdpa` 既定。
 4. **無関係だが紛らわしい既知事象**: `GET /status` の `gpu` ブロックは常に `available: false` を返す。アプリ用仮想環境にCUDA版torchを入れない2プロセス構成に由来する既存の挙動で、今回の改修とは無関係（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.8）。
 
@@ -92,7 +100,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 
 ### MCPサーバー実装完了の追記（2026-07-28・NAGとは別系統・並走）
 
-上記NAGとは別に、同日のセッションでClaude Code等のMCPクライアントからバックエンドを操作するための `mcp_server/` パッケージ（Web操作パネル相当の22ツール）を実装した。Wave 0〜7を完了し、pytestは658→675→699→**736**（730 passed / 6 skipped、退行ゼロ）、`echo "" | python -m mcp_server` のstdoutが0バイトであることも確認済み。`.mcp.json`は`scripts/setup.ps1`が絶対パス入りで自動生成する方式にし、`.gitignore`に追加済み。**ただし実機（Claude Codeからの実際の操作）での検証はまだ一つも行っていない。** 承認ゲート→22ツール表示→T2V/I2V/A2Vバッチ/join/purge dry_run/JOB_BUSY挙動/api_key再起動の実機チェックリストは[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §39に転記済み（全項目⬜未実施）。設計判断の記録は新設の[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md)、利用者向け説明は[`../README.md`](../README.md)「AIエージェント連携（MCPサーバー）」節（§8）を参照。次セッションでオーナーの実機確認を行うこと。
+上記NAGとは別に、同日のセッションでClaude Code等のMCPクライアントからバックエンドを操作するための `mcp_server/` パッケージ（Web操作パネル相当の22ツール）を実装した。Wave 0〜7を完了し、pytestは658→675→699→**736**（730 passed / 6 skipped、退行ゼロ）、`echo "" | python -m mcp_server` のstdoutが0バイトであることも確認済み。`.mcp.json`は`scripts/setup.ps1`が絶対パス入りで自動生成する方式にし、`.gitignore`に追加済み。**ただし実機（Claude Codeからの実際の操作）での検証はまだ一つも行っていない。** 承認ゲート→22ツール表示→T2V/I2V/A2Vバッチ/join/purge dry_run/JOB_BUSY挙動/api_key再起動の実機チェックリストは[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §39に転記済み（全項目⬜未実施）。設計判断の記録は新設の[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md)、利用者向け説明は[`../README.md`](../README.md)「AIエージェント連携（MCPサーバー）」節（§8）を参照。次セッションでオーナーの実機確認を行うこと。**（2026-08-04追記＝本段落は当時の記録。実機検証はその後 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §39.6 で実施され、Claude Code UIの承認導線を除く全項目が合格した。残るのは承認ダイアログと`/mcp`画面の目視1件だけで、これはオーナーがClaude Codeを起動しないと確認できない。）**
 
 ---
 
@@ -126,6 +134,16 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 - **モデルの再ホストが完了**（HuggingFace `Rootport` アカウント・**4リポジトリ**）。`Nz-LTX23-weights`（LTX本体5点＋**IC-LoRA 3点＋VDA深度前処理器2点**＝10ファイル・25,219,475,913 B。2026-08-03 に Deblur と VDA を追加）／`Nz-Gemma3-12B`（11ファイル・7,339,810,357 B）／`Nz-DWPose`（**新設**・前処理器2点・352,756,773 B）／`Nz-Sulphur2`（自家変換GGUF 1点・インストーラの取得対象外）。全リポジトリが Public 非 Gated で、**HFアカウントもトークンも不要**。
 - **`install_ltx.ps1` は 3 リポジトリから、5 回のダウンロード呼び出しで合計 23 ファイル・32,912,043,043 バイト（約30.7GiB）を取得する。** 従来インストーラの管理外だった `models/ltx-2.3-ic-lora/` と `models/preprocessors/` も**自動取得の対象になった**（手動配置は不要）。step 6 の検証表は 10 → **16 項目**。
 - **エンドユーザー入口 `setup.bat` / `run.bat` を新設**（前提ツールは git のみ。`uv` と `ffmpeg`/`ffprobe` は `tools/` へ取り込む）。`config.yaml` は追跡外化し `config.yaml.example` から複製する。フロントエンドの `.au2pkg.zip`（378,689 B）をバックエンドリポジトリ直下に同梱。
+- **従来は Gated リポジトリにあった spatial upsampler と Gemma tokenizer 一式も、この再ホストで非 Gated になった**（ブラウザでのライセンス承諾とアクセストークンの発行が不要になった）。`install_ltx.ps1` からトークン関連の引数（`-HfToken`）と、ログイン補助スクリプト `scripts/hf_login.ps1` は削除済み。
+- **本番トランスフォーマー GGUF の配置も整理した。** 旧取得元は `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダ構造だったため `install_ltx.ps1` がダウンロード後に1階層上へ移動していたが、新リポジトリは最初から `models/ltx-2.3-gguf/` **直下**の構造で持っているので、この移動処理そのものを削除した。
+  **旧 `install_ltx.ps1` でインストールした環境がサブフォルダ配置のまま残っている場合は、手動で移動すること**（再実行しても自動では直らない）。
+
+  ```powershell
+  Move-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1\*.gguf" "models\ltx-2.3-gguf\"
+  Remove-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1" -Force
+  ```
+
+  サブフォルダ配置でも再帰スキャンでモデル自体は認識されるが、以後の公式手順・ドキュメントの既定パスは直下を前提にする。`config.yaml` に `model.gguf_transformer_path` を明示指定している場合は直下のパス（既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）へ書き換えること。指定していない場合はコード側の既定値が既に直下パスを指すため編集不要。
 - **正本**: フロントエンド側 [`Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`LTX23_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
 
 ### 実機検証の結果（2026-07-27・全項目合格）

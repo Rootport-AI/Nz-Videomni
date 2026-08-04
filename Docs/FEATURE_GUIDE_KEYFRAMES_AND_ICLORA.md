@@ -81,7 +81,7 @@ IC-LoRA は、LTX 公式が提供する「参照動画を手がかりに新し�
 
 `canny-control` / `pose-control` / `depth-control` の3つは、**同一の Union-Control アダプタファイル**を指しています。どの制御信号を入れるかを前処理の種別で切り替えているだけで、モデルは1つです。
 
-**`depth-control` と `deblur` は 2026-08-03 に追加したもので、まだオーナーの実機確認（実 GPU での生成テスト）を通していません。** 正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md) です。
+**`depth-control` と `deblur` は実機で確認済みです。**
 
 **使うときの注意（新しい2つについて）**
 

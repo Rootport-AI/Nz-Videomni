@@ -7,10 +7,10 @@ LTX 2.3 動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動
 V2V（元動画からの継続生成）・A2V（音声から動画生成）・IC-LoRA／スタイルLoRA などを加算的に拡張しています。
 API 契約・スキーマの詳細仕様は [`LTX23_Backend_Specification.md`](LTX23_Backend_Specification.md) を参照してください。
 
-> **現状（2026-07-01）**: 実エンジンは **first-party の `engine/` パッケージ**（GGUF 量子化トランスフォーマー + block-swap +
-> GGUF Gemma 逐次オフロード + DiT CPU 構築 + VAE タイリング）で、**RTX 4070 Ti SUPER 16GB 実機で 720p 級（1280×768→クロップ）
-> の T2V/最小I2V 生成に成功**しています（`Docs/VERIFICATION_LOG.md`）。GPU / モデルウェイトが無い環境では自動的に **モック
-> backend**（合成クリップ）へフォールバックし、API・ジョブ管理・Gradio・テストまで完全に疎通します。
+> 実エンジンは **first-party の `engine/` パッケージ**（GGUF 量子化トランスフォーマー + block-swap +
+> GGUF Gemma 逐次オフロード + DiT CPU 構築 + VAE タイリング）です。**VRAM 16GB の実機で 720p 級（1280×768）の生成に対応**します。
+> GPU / モデルウェイトが無い環境では自動的に **モック backend**（合成クリップ）へフォールバックし、
+> API・ジョブ管理・Gradio・テストまで完全に疎通します。
 >
 > 公式 `ltx_pipelines` の safetensors ローダは本機(16GB/Windows)で native crash するため**不採用**で、GGUF + component-file
 > 経路にしています。詳しい設計判断・実測は `Docs/VERIFICATION_LOG.md` と `engine/VENDOR_NOTICE.md` が一次情報です。
@@ -73,7 +73,7 @@ API 契約・スキーマの詳細仕様は [`LTX23_Backend_Specification.md`](L
    起動が終わると、このアドレスが囲み枠つきの案内としてもう一度表示されるので、それをブラウザの
    アドレス欄に入力してください。
 3. **表示されたアドレスをブラウザで開く。** これで Web の操作画面（Gradio UI）が使えます。
-4. **AviUtl2 から使う場合**は、このリポジトリの直下にある **`NzLTX23-1.0.0-rc1.au2pkg.zip`** を、
+4. **AviUtl2 から使う場合**は、このリポジトリの **`AviUtl2-Plugin\NzLTX23.aux2`** を、
    **AviUtl2 のプレビュー画面へドラッグ＆ドロップ**してください。AviUtl2 公式のプラグイン導入方法です
    （本体添付の `aviutl2.txt` に記載があります）。
 5. **AviUtl2 を再起動する。** 上部メニューから Nz-LTX23 を開けるようになります。
@@ -255,7 +255,8 @@ provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR
 > という更新手順は、この仕組みで成り立っています。
 
 必要なモデル（`setup.bat` / `install_ltx.ps1` が自動でダウンロードします。上5行は `config.yaml` の
-`model:` が参照し、相対パスは PROJECT_ROOT 基準で絶対化されます。下4行のうち IC-LoRA 2 種は `model.ic_loras:` が参照し、
+`model:` が参照し、相対パスは PROJECT_ROOT 基準で絶対化されます。下4行のうち IC-LoRA 系の 2 行
+（IC-LoRA 2点・Deblur 1点）は `model.ic_loras:` が参照し、
 DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`・`engine/preprocess/depth.py` がそれぞれ固定パスで読みます）:
 
 | 要素 | 既定パス | 概算 | 取得元リポジトリ | 役割 |
@@ -282,20 +283,14 @@ DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`�
 UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）が出るのに、
 選んだ瞬間に 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
 
-> **削除済み（2026-07-01 の refactor）**: (1) 46GB モノリス `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B ＝ 約 43GiB。
-> 資料によって「43GB」と書かれていることがあるが、GiB 表記の同一ファイルを指す）を物理削除。
-> `checkpoint_path`（このモノリスへの参照専用パス）は2026-07-28に`config.model`から削除しました（死んだ設定と
-> 確認済み・詳細は[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §40）。worker payload へは
-> `services/ltx_runner.py`が直値の`""`をハードコードして渡すようになっており、GGUF+component 経路では
-> 以前と同じく一切開かれません。(2) **22.7GB の QAT Gemma dir `models/gemma-3-12b-it-qat/` も物理削除**。
-> Gemma を **text-only（`Gemma3ForCausalLM`・vision 無し）** で構築するよう作り替えたため（`engine/gemma/text_encoder_configurator.py`）、
-> wheel が build 時に重みシャードを glob する必要が無くなり、`gemma_root` は上記 ~40MB の tokenizer-only dir で足ります。full-QAT
-> baseline と出力バイト一致で検証済み（`Docs/VERIFICATION_LOG.md` §14）。
->
 > 生成の中核として実際にロードされるモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + tokenizer dir＝28.15GiB）で、
 > ComfyUI の GGUF 16GB レシピと同等のフットプリントです。`install_ltx.ps1` はこれに IC-LoRA 2点（1.22GiB）・DWPose 前処理器 2点（0.33GiB）・Deblur 1点（0.91GiB）・
 > Video-Depth-Anything 2点（0.12GiB）を加えた **約 33GB（30.7GiB）** をダウンロードします。後者4種は無くても T2V/I2V の生成自体は成立しますが、`config.yaml` が IC-LoRA を
 > 無条件に登録するため、欠けていると UI から選んだときに 404 になります（上の検証テーブルの説明を参照）。
+>
+> この構成に至るまでに物理削除した重量物（モノリス safetensors・QAT Gemma dir）の経緯は
+> [`LTX23_Backend_Specification.md`](LTX23_Backend_Specification.md) §5.2 と
+> [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §14・§40 にあります。
 
 backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「`./.venv-engine` の python・
 `engine/worker.py`・上記ロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です
@@ -309,35 +304,9 @@ UI/API のドロップダウンに列挙されます。サブフォルダに入�
 衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
 （`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
 
-> **取得元の変更について（2026-07-26）**: モデルの入手先を、配布元が入り混じった上流リポジトリ群から、
-> 本プロジェクトが再ホストした **3つの公開リポジトリ**（[`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights)・
-> [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B)・[`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose)）へ
-> 一本化しました。従来は spatial upsampler と
-> Gemma の tokenizer 一式が Gated リポジトリにあり、ブラウザでのライセンス承諾とアクセストークンの発行が
-> 必須でしたが、**現在はアカウントもトークンも不要**です。`install_ltx.ps1` からトークン関連の引数
-> （`-HfToken`）と、ログイン補助スクリプト `scripts/hf_login.ps1` は削除済みです。
->
-> **IC-LoRA（`models/ltx-2.3-ic-lora/`）と DWPose 前処理器（`models/preprocessors/`）も、この一本化で
-> `install_ltx.ps1` の取得対象になりました。** 以前は上流から手で落として置く前提の、インストーラの管理外の
-> ファイルでしたが、現在は他のモデルと同じく自動でダウンロード・検証されます。手動配置の手順は不要です。
->
-> 併せて、本番トランスフォーマー GGUF の配置も整理しました。従来の取得元は
-> `models/ltx-2.3-gguf/LTX-2.3-distilled-1.1/` というサブフォルダの中にファイルを置く構造だったため、
-> `install_ltx.ps1` がダウンロード後に1階層上へ移動していました。新しいリポジトリは最初から
-> `models/ltx-2.3-gguf/` **直下**の構造で持っているので、この移動処理そのものを削除しています。
->
-> そのため、**古い `install_ltx.ps1` でインストールした環境がサブフォルダ配置のまま残っている場合は、
-> 手動で移動してください**（再実行しても自動では直りません）。
->
-> ```powershell
-> Move-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1\*.gguf" "models\ltx-2.3-gguf\"
-> Remove-Item "models\ltx-2.3-gguf\LTX-2.3-distilled-1.1" -Force
-> ```
->
-> サブフォルダ配置でも再帰スキャンでモデル自体は認識されますが、以後の公式手順・ドキュメントの既定パスは
-> 直下を前提にします。`config.yaml` に `model.gguf_transformer_path` を明示的に指定している場合は、直下のパス
-> （既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）に合わせて書き換えてください。
-> 指定していない場合はコード側の既定値が既に直下パスを指すため、`config.yaml` の編集は不要です。
+> **モデルの取得元**は上の表のとおり、本プロジェクトが再ホストした3つの公開リポジトリです。
+> 再ホストの経緯と、旧インストーラで導入した環境（`models/ltx-2.3-gguf/` のサブフォルダ配置）の直し方は
+> [`Docs/NEXT_SESSION_HANDOFF.md`](Docs/NEXT_SESSION_HANDOFF.md)「2026-07-26 α版インストール導線の整備」ブロックにあります。
 
 選択は UI の「Models」設定タブのドロップダウン、または API `GET /models`（登録名の一覧確認）→
 `POST /pipeline/load`（body `{"models": {"transformer": "<登録名>"}}`）で行います。選択が現在ロード中のものと
@@ -439,6 +408,7 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
                     │   engine/gguf/  (GGUF dequant/loader)      │
                     │   engine/gemma/ (GGUF Gemma + 層オフロード) │
                     │   engine/transformer/ (block-swap, dit-cpu)│
+                    │   engine/preprocess/ (canny/dwpose/depth)  │
                     │   → output.mp4 を共有 output dir に直接書く │
                     └──────────────────────────────────────────┘
 ```
@@ -583,15 +553,17 @@ $env:PYTHONPATH = (Get-Location).Path
 ### 生成の高速化（Acceleration）
 
 生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめました
-（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は4つあり、**実際に効くのは
-「Attention（注意機構の実装）」と「Block-swap prefetch（先読みblock swap）」の2つ**です。残る2つは将来の実装枠
-として場所だけ確保してあり、常にグレーアウトしていて押せません。
+（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は5つあり、**実際に効くのは
+「Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化）」「Attention（注意機構の実装）」
+「Block-swap prefetch（先読みblock swap）」「モデル骨格の常駐（keep_resident）」の4つ**です。残る1つは
+将来の実装枠として場所だけ確保してあり、常にグレーアウトしていて押せません。
 
 | 項目 | 選択肢 | 状態 |
 |------|--------|------|
-| fused GGUF dequant + GEMM（GGUFの逆量子化と行列積の融合） | On / Off | **未実装**（グレーアウト・将来対応予定） |
+| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on（2026-08-04） |
 | Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` |
 | Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on |
+| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off |
 | VAE（映像の復元処理） | Default / PruneVAED | **未実装**（グレーアウト・将来対応予定） |
 
 **選び方**: `sdpa` は PyTorch 標準の実装で、これまでどおりの結果が出ます。`sage` は
@@ -644,6 +616,19 @@ prefetch」トグルで、Attention と同じくジョブ単位で切り替え�
 同期スワップへ戻ります（block swap 自体が無効な設定では、on/off にかかわらず何も起きません）。詳しい設計判断・
 マイクロベンチ・実機ゲートの実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §44 を参照してください。
 
+### GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）
+
+GGUF ファイルの中で圧縮された形で持っている重みを計算に使える形へ展開する処理（逆量子化）を、**これまでの18〜33個の
+細かい GPU 処理から、量子化形式ごとに1個の GPU 処理へまとめた**機能です。Settings の Acceleration 区画にある
+「Fused GGUF Dequantization Kernel」トグルで、他の項目と同じくジョブ単位で切り替えられます。**既定は on**
+（2026-08-04、実機ゲート全項目合格を受けて反転）。
+
+先読みblock swap と同じく、**展開の手順しか変えないので出力は変わりません**——同じシードなら off/on でビット単位で
+完全に同じ動画になります。実測（768p/257フレーム、交互対比較3組）で**約17.5%短縮**（144.5秒 → 119.2秒）。この環境で
+動かせない場合（Triton が入っていない等）は自動的に従来の方法へ戻り、生成そのものは止まりません。実際に効いたかどうかは
+生成後のメタデータの `fused_gguf_dequant_kernel_used`（`"off"` / `"on"` / `"on->off"`）で確認できます。詳しい設計判断・
+自己検証・実機ゲートの実測値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §51 を参照してください。
+
 ### モデル骨格の常駐（`keep_resident`）
 
 生成のたびに作り直している**モデルの「骨格」**（GGUF ファイルから組み上げた重みの一覧とモジュールの構造。DiT 約
@@ -693,12 +678,11 @@ GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・複�
 
 ---
 
-## 7. 制限事項（2026-08-01 現在）
+## 7. 制限事項（2026-08-04 現在）
 
 - **動作確認済みのハードウェアは 2 構成です**。
   - **開発機**: RTX 4070 Ti SUPER 16GB（Ada Lovelace）／メインメモリ 64GB／ページファイル 48GB。日常的な開発と検証はすべてこの 1 台で行っています。
   - **サブマシン**: RTX 3080 mobile 16GB（Ampere）／メインメモリ 32GB。**AviUtl2 を導入していない新規環境**で、2026-07-27 に一通りの導入から生成までを実測し、全項目に成功しました（`setup.bat` での導入 → `run.bat` での起動 → ブラウザで WebUI を開く → `smoke_test` サイズの生成 → **IC-LoRA の DWPose（pose-control）と canny をそれぞれ 768p・257 フレームで制御生成** → `NzLTX23.aux2` を AviUtl2 のプレビュー画面へドラッグ＆ドロップして導入 → 再起動後に操作パネルを表示 → タイムラインからの生成と、生成済み動画の右クリックからのタイムライン配置）。このとき AviUtl2 は **2026-07-25 更新の公開最新版**（開発機で使っている v2.0.54 より新しい版）を新規に導入しており、最新版との互換もあわせて確認できています。
-  - **このときのプラグイン導入は、`.au2pkg.zip` を展開して取り出した `NzLTX23.aux2` 単体をドラッグ＆ドロップする形で行いました。** §1 の手順 4 に書いた `.au2pkg.zip` そのもののドラッグ＆ドロップ（AviUtl2 公式のプラグイン導入方法）は、この実測では通していません。
   - 残る GPU 世代（Turing・Hopper・Blackwell）は、torch 2.9.1+cu128 が同梱するカーネルの一覧と CUDA のバイナリ互換性から**理論上は動作するはずですが、実機では未検証**です。
 - **メインメモリ 32GB では、上記サブマシン 1 台での実測合格があります**。§1 に載せたコミットの実測値（アイドル比 +48GB、連続実行でジョブごとに +12〜15GB）は 64GB の開発機で採取したものですが、32GB の環境でも、最小構成の生成だけでなく **768p・257 フレームの IC-LoRA 制御生成まで実際に通りました**（2026-07-27）。ただしこれは**この 1 台での実測結果**であり、あらゆる 32GB 環境での動作を保証するものではありません。§1 の「メインメモリとページファイル」の案内は引き続き必ず守ってください。他の 32GB 環境で試された結果を共有していただけると助かります。
 - **`low_vram_mode=true` がデフォルト**。16GB 環境前提。`low_vram_mode=false` は高VRAM/クラウド用の任意検証で、16GB成功は保証しません。
@@ -710,11 +694,10 @@ GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・複�
 - **旧「未実装（Phase 2以降）」一覧の現状**（Phase 1 当時の一覧はその後の拡張で大半が実装済みになりました）:
   - **実装済み**: 複数キーフレームI2V（キーフレーム画像・最大5枚・任意 `frame_idx`）／V2V（元動画からの継続生成）／A2V（音声から動画生成）／クリップ連結（`POST /generate/chain`）／IC-LoRA・スタイルLoRA（`<lora:...>` 記法含む）／1080p の直接生成（`FHD_1080p` プリセット。なお「1080p アップスケール機能」としての提供は仕様書 §13.5 でスコープ削除）／簡易認証（`--api-key` 指定時の Bearer 認証・任意）。
   - **引き続き未実装**: 終了フレーム指定（キーフレームは末尾近傍まで＝`frame_idx` は `num_frames-8` にクランプされ、最終フレームちょうどの条件付けはできない）／本格的なジョブキュー（単一ユーザー想定のため「1ジョブ＋busy 409」を正式仕様とし、仕様書 §13.5 でスコープ削除）／AviUtl2 拡張フロントエンド（別リポジトリで開発・本リポジトリは汎用 REST API のまま）。
-- **MCPサーバー（§8）はモック検証のみ完了しており、実機（Claude Code からの実際の操作）での検証は未実施**です。同時1ジョブ制約は MCP 経由でも変わらず、複数エージェント/複数セッションからの並行操作は非対応です。
-- **「生成の高速化（Acceleration）」の4項目のうち、2項目は未実装です**（2026-08-02 現在）。設定画面には場所だけ確保してありますが、常にグレーアウトしていて選べません。実際に効くのは「Attention（注意機構の実装）」と「Block-swap prefetch（先読みblock swap）」の2つです（§5「生成の高速化（Acceleration）」）。
-  - **fused GGUF dequant + GEMM**（GGUF の逆量子化と行列積を1つの計算に融合する案）: 未実装。
-  - **PruneVAED**（枝刈りを施した VAE デコーダ＝映像の復元処理の軽量版）: 未実装。
-  - API 上は `fused_gguf_dequant_gemm` / `vae_mode` というフィールドを受け取りますが、**値は生成に一切影響しません**（ジョブの記録には残りますが、エンジンへは渡していません）。MCP のツールにもこの2項目は公開していません。
+- **MCPサーバー（§8）は実機検証済みです**（2026-08-04）。実際に動いているバックエンドに対して MCP クライアントから22ツールを叩き、生成（T2V・I2V・V2V・A2V）・ジョブ操作（待機・キャンセル・削除・一括削除の空実行）・出力保存・`join`・パイプラインの読み込み/解放・`--api-key` 指定時の Bearer 認証まで、全項目が通ることを確認しました。**ただし Claude Code 本体の画面から操作した確認ではありません**——初回の承認ダイアログ（⏸ Pending approval）と `/mcp` コマンドの表示だけは、Claude Code を人が起動しないと確認できないため未確認のまま残っています（ツールが22個ちょうどであること自体は通信の中身で確認済みです）。詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §39.6。なお同時1ジョブ制約は MCP 経由でも変わらず、複数エージェント/複数セッションからの並行操作は非対応です。
+- **「生成の高速化（Acceleration）」の5項目のうち、1項目は未実装です**（2026-08-04 現在）。設定画面には場所だけ確保してありますが、常にグレーアウトしていて選べません。実際に効くのは「Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化）」「Attention（注意機構の実装）」「Block-swap prefetch（先読みblock swap）」「モデル骨格の常駐（keep_resident）」の4つです（§5「生成の高速化（Acceleration）」）。
+  - **PruneVAED**（枝刈りを施した VAE デコーダ＝映像の復元処理の軽量版）: 未実装。API 上は `vae_mode` というフィールドを受け取りますが、**値は生成に一切影響しません**（ジョブの記録には残りますが、エンジンへは渡していません）。MCP のツールにもこの項目は公開していません。
+  - **fused GGUF dequant + GEMM**（GGUF の逆量子化と行列積を1つの計算に融合する案）は**採否検討の結果 no-go** です。ただしその手前にある「逆量子化そのものの1カーネル化」は実装され、既定 on になりました（上記の1項目目）。受理するだけだった旧フィールド `fused_gguf_dequant_gemm` は 2026-08-04 に撤去済みです。
 
 ---
 
@@ -762,8 +745,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用） |
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend`（`"sdpa"`＝既定／`"sage"`）で生成の高速化を選べる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく `attention_backend` を指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化4項目を指定できる |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく `attention_backend` ほか生成の高速化4項目を指定できる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
 | `wait_for_job` | ジョブが終端状態になるまで待つ（最大45秒でタイムアウト） |
@@ -798,7 +781,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **`attention_backend="sage"` を指定すると、同じシードでも生成結果の細部が変わります**（§5「生成の高速化（Acceleration）」）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、使えない環境で指定した場合はエラーにならず `"sdpa"` へ降格して完走します。実際に使われた方式は生成後のメタデータの `attention_used` に記録されます。「生成の高速化」の残る2項目（fused GGUF dequant + GEMM／PruneVAED）はモック＝未実装のため、MCP のツールには公開していません。
+- **`attention_backend="sage"` を指定すると、同じシードでも生成結果の細部が変わります**（§5「生成の高速化（Acceleration）」）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、使えない環境で指定した場合はエラーにならず `"sdpa"` へ降格して完走します。実際に使われた方式は生成後のメタデータの `attention_used` に記録されます。「生成の高速化」の残る1項目（PruneVAED）はモック＝未実装のため、MCP のツールには公開していません（実装のある `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` は公開しています）。
 
 ---
 

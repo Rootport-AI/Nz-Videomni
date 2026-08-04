@@ -468,10 +468,10 @@ if ($CloneUpstreamReference) {
 #   what stops the two repos' identically-named cards from landing in models/ and
 #   overwriting each other.
 #
-#   NOTE (why Check is separate from LocalDir): all three calls below pass
+#   NOTE (why Check is separate from LocalDir): all five calls below pass
 #   LocalDir = "models", so sizing the guard on LocalDir would see the ~24GB LTX
-#   download and then wrongly SKIP the Gemma and DWPose ones. Check instead names
-#   the subdirectories that THIS repo expands into.
+#   download and then wrongly SKIP the Gemma, DWPose, Deblur and VDA ones. Check
+#   instead names the subdirectories that THIS repo expands into.
 #
 #   NOTE (the guard is PER-DIRECTORY -- read before adding a repo): every Check
 #   entry carries its OWN Min, and EACH one must clear it independently or the
@@ -779,7 +779,7 @@ $required = @(
     @{ Label = "spatial_upsampler";       Rel = "models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors";                      IsDir = $false; Min = [long]800000000 }
     @{ Label = "gemma_root (tokenizer dir)"; Rel = "models/gemma-3-12b-it-tokenizer";                                             IsDir = $true;  Min = [long]20000000 }
     @{ Label = "ic_lora pixel-spatial-upscaler-x2"; Rel = "models/ltx-2.3-ic-lora/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors"; IsDir = $false; Min = [long]600000000 }
-    @{ Label = "ic_lora union-control (canny/pose)"; Rel = "models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"; IsDir = $false; Min = [long]600000000 }
+    @{ Label = "ic_lora union-control (canny/pose/depth)"; Rel = "models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"; IsDir = $false; Min = [long]600000000 }
     @{ Label = "dwpose detector (yolox_l)"; Rel = "models/preprocessors/yolox_l.torchscript.pt";                                  IsDir = $false; Min = [long]200000000 }
     @{ Label = "dwpose estimator (dw-ll_ucoco)"; Rel = "models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt";                 IsDir = $false; Min = [long]120000000 }
     @{ Label = "ic_lora deblur";          Rel = "models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors";       IsDir = $false; Min = [long]800000000 }

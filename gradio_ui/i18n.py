@@ -153,8 +153,8 @@ LABELS: dict[str, dict[str, str]] = {
                                "framing, and background geometry are identical to the reference; "
                                "only focus and sharpness differ between reference and edited.\" "
                                "It removes defocus blur (out-of-focus shots), not motion blur. "
-                               "Because the reference is processed at full output resolution, it "
-                               "uses more VRAM than the other adapters."),
+                               "The reference video is used for conditioning without "
+                               "downscaling."),
         # --- generate: right column ---
         "btn_generate": "Generate",
         # Feature 3: shown on generate_btn / chain_generate_btn while a
@@ -671,8 +671,8 @@ LABELS: dict[str, dict[str, str]] = {
                                "<場面の説明>. Subject identity, framing, and background geometry "
                                "are identical to the reference; only focus and sharpness differ "
                                "between reference and edited.」対象はデフォーカスぼけ（ピンぼけ）"
-                               "のみで、モーションブラーには効きません。参照動画を出力と同じ解像度で"
-                               "処理するため、他のアダプタよりVRAM消費が大きくなります。"),
+                               "のみで、モーションブラーには効きません。参照動画は縮小せずに"
+                               "条件付けに使われます。"),
         # --- generate: right column ---
         "btn_generate": "生成",
         # 機能3: generate_btn / chain_generate_btnの生成中に表示（ボタンは無効化）。

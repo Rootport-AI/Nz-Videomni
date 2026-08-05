@@ -175,9 +175,14 @@ def test_metadata_records_attention_used(client):
     )
     assert "attention_used" in meta
     assert meta["attention_used"] is None  # mock backend ran no engine attention
-    # The request dump DOES carry both fields, the mock included -- same
-    # precedent as the two_stage_hq pipeline value; only the worker payload and
-    # /status keep the mock out.
+    # vae_mode_used rides the same route (PrunaVAED, §3-50): null on the mock
+    # backend, which decodes nothing, but the KEY must be present so a real-path
+    # regression cannot hide.
+    assert "vae_mode_used" in meta
+    assert meta["vae_mode_used"] is None
+    # The request dump carries both request fields verbatim -- same precedent as
+    # the two_stage_hq pipeline value; the *_used keys above are what say which
+    # of them actually took effect.
     assert meta["request"]["attention_backend"] == "sage"
     assert meta["request"]["vae_mode"] == "prune_vaed"
 

@@ -485,6 +485,61 @@ def test_submit_generate_fused_dequant_off_included_in_body():
     assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
 
 
+def test_submit_generate_vae_mode_prune_vaed_included_in_body():
+    # vae_mode (§3-50, PrunaVAED): exposed to MCP on 2026-08-05 once the
+    # real-device gates G1-G7 passed (owner ruling 0-8; before that the tool
+    # deliberately hid it because the field was a mock). Default is "default"
+    # and it is PERMANENT (0-11) -- so the "prune_vaed" call is the one that
+    # reaches the wire, appended after fused_gguf_dequant_kernel so the default
+    # body's key set stays frozen.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            vae_mode="prune_vaed",
+        )
+    )
+
+    body = captured["body"]
+    assert body["vae_mode"] == "prune_vaed"
+
+    # ...and the default ("default") is indistinguishable from omitting it.
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            vae_mode="default",
+        )
+    )
+    body = captured["body"]
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+
+
+def test_submit_generate_input_schema_exposes_vae_mode_enum():
+    # G9 (§9 of PRUNAVAED_WORKORDER.md): the schema must carry vae_mode with
+    # exactly the two API literals and a "default" default -- an agent reads
+    # only the schema to learn the switch exists.
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_generate")
+    prop = tool.inputSchema["properties"]["vae_mode"]
+    assert prop["enum"] == ["default", "prune_vaed"]
+    assert prop["default"] == "default"
+
+
 def test_submit_generate_crop_single_sided_raises_before_any_http_call():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
@@ -833,6 +888,57 @@ def test_submit_chain_fused_dequant_off_included_in_body():
         "prompt", "width", "height", "frame_rate", "seed",
         "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
     }
+
+
+def test_submit_chain_vae_mode_prune_vaed_included_in_body():
+    # §3-50: same rule and same direction as submit_generate above. In a chain
+    # one vae_mode applies to every clip and every stage (api/models.py:456-460).
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            vae_mode="prune_vaed",
+        )
+    )
+    assert captured["body"]["vae_mode"] == "prune_vaed"
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            vae_mode="default",
+        )
+    )
+    assert set(captured["body"].keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
+
+
+def test_submit_chain_input_schema_exposes_vae_mode_enum():
+    # G9: same schema contract as submit_generate.
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_chain")
+    prop = tool.inputSchema["properties"]["vae_mode"]
+    assert prop["enum"] == ["default", "prune_vaed"]
+    assert prop["default"] == "default"
 
 
 def test_submit_chain_payload_contract_key_set_unchanged_with_default_block_swap_prefetch():

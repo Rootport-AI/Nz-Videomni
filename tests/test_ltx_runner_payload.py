@@ -285,10 +285,11 @@ def test_generate_payload_omits_attention_backend_by_default(tmp_path):
     assert "attention_backend" not in captured[0]
 
 
-def test_generate_payload_never_carries_mock_acceleration_fields(tmp_path):
-    # The mock field set to a NON-default value, plus sage so the acceleration
-    # branch definitely runs: the mock field must still be absent everywhere in
-    # the payload (it is accepted by the API but never consumed by the engine).
+def test_generate_payload_carries_vae_mode_when_pruned(tmp_path):
+    # PrunaVAED (§3-50) turned vae_mode from a mock into a real engine field on
+    # 2026-08-05: a non-default value now DOES ride the wire (this assert was
+    # the exact inverse until then). Sent alongside sage so the acceleration
+    # branch as a whole is exercised.
     captured: list[dict] = []
     be = _capturing_backend(captured)
     req = _nag_request(
@@ -296,8 +297,17 @@ def test_generate_payload_never_carries_mock_acceleration_fields(tmp_path):
         vae_mode="prune_vaed",
     )
     be.generate(req, tmp_path / "out")
+    assert captured[0]["vae_mode"] == "prune_vaed"
+    assert captured[0]["attention_backend"] == "sage"
+
+
+def test_generate_payload_omits_vae_mode_by_default(tmp_path):
+    # The additive half of the same contract: the default value never appears,
+    # so a default job's payload is byte-identical to pre-PrunaVAED.
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(), tmp_path / "out")
     assert "vae_mode" not in captured[0]
-    assert captured[0]["attention_backend"] == "sage"  # the real one did go
 
 
 def test_chain_payload_carries_attention_backend_when_sage(tmp_path):
@@ -316,7 +326,9 @@ def test_chain_payload_omits_attention_backend_by_default(tmp_path):
     assert "attention_backend" not in captured[0]
 
 
-def test_chain_payload_never_carries_mock_acceleration_fields(tmp_path):
+def test_chain_payload_carries_vae_mode_when_pruned(tmp_path):
+    # Chain mirror of test_generate_payload_carries_vae_mode_when_pruned: one
+    # vae_mode covers every clip and every stage of the chain.
     captured: list[dict] = []
     be = _capturing_backend(captured)
     req = _chain_request(
@@ -324,8 +336,15 @@ def test_chain_payload_never_carries_mock_acceleration_fields(tmp_path):
         vae_mode="prune_vaed",
     )
     be.generate_chain(req, tmp_path / "out")
-    assert "vae_mode" not in captured[0]
+    assert captured[0]["vae_mode"] == "prune_vaed"
     assert captured[0]["attention_backend"] == "sage"
+
+
+def test_chain_payload_omits_vae_mode_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(_chain_request(), tmp_path / "out")
+    assert "vae_mode" not in captured[0]
 
 
 def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
@@ -334,8 +353,10 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     # own pydantic default was later flipped to True once their real-device
     # gate passed -- block_swap_prefetch (S4, 2026-08-01) and
     # fused_gguf_dequant_kernel (§51, 2026-08-04). A fully-default request
-    # therefore carries both (value True). attention_backend/vae_mode still
-    # default to their pre-acceleration values and stay absent.
+    # therefore carries both (value True). attention_backend and vae_mode are
+    # real engine fields too, but their defaults were never flipped ("sdpa" /
+    # "default"), so they stay absent — vae_mode's default is permanently off
+    # because the pruned decoder changes the picture (§3-50).
     captured: list[dict] = []
     be = _capturing_backend(captured)
     be.generate(_nag_request(), tmp_path / "single")

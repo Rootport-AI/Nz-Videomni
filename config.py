@@ -99,6 +99,20 @@ class ModelConfig(BaseModel):
     component_audio_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
     component_text_projection_path: str = "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
 
+    # PrunaVAED: 枝刈り版の映像VAEデコーダ（デコーダ部のみ・約690MB）。
+    # vae_mode="prune_vaed" のジョブでだけ読まれる。モデルレジストリには
+    # 参加させない（サブディレクトリ＋"video" を含まないファイル名の二重防御。
+    # services/model_registry.py:82-87 の name_hint 走査を参照——vae/ 直下の
+    # 「"video" を含み "audio" を含まない」.safetensors は映像VAEとして自動
+    # 登録されてしまい、デコーダ単体のファイルがそこに現れると利用者がサーバー
+    # 全体の映像VAEとして選べてエンコーダ側のビルダーが壊れる。走査は
+    # recursive=False なのでサブディレクトリは対象外＝二重の防御）。
+    # 上の3つと違い**存在は必須ではない**: 欠けているとき枝刈りを頼んだジョブは
+    # 既定デコーダへ降格して完走する（vae_mode_used="on->off"）。
+    component_video_vae_pruned_path: str = (
+        "./models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors"
+    )
+
     # IC-LoRA adapter registry (Phase B, extended Phase C). Maps a server-side
     # adapter NAME (what the API accepts in GenerateRequest.loras[].name — never
     # a filesystem path) to either a bare safetensors path (string, legacy Phase B

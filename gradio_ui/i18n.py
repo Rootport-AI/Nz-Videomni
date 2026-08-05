@@ -66,9 +66,7 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7. Even 0 does not disable VSF — use the Method "
                                "selector or the non-CFG Negative checkbox to turn "
                                "it off."),
-        # --- Acceleration (Settings tab): per-job speed options. All of them
-        # are implemented except the VAE radio, which is a disabled placeholder
-        # that never reaches a request payload.
+        # --- Acceleration (Settings tab): per-job speed options.
         # NOTE: the VAE selector is unrelated to the server's ``vae_tiling``
         # (a VRAM-saving tile split).
         "accel_section_title": "Acceleration",
@@ -87,8 +85,12 @@ LABELS: dict[str, dict[str, str]] = {
                                  "the same seed (different numerical "
                                  "precision). Roughly 1.2-1.6x faster."),
         "accel_lbl_vae": "VAE",
-        "accel_info_unimplemented": ("Not implemented yet — shown for a future "
-                                     "release; selecting it has no effect."),
+        "accel_info_vae": ("PrunaVAED is a pruned decoder that speeds up video "
+                           "reconstruction. Output quality may be slightly reduced."),
+        # accel_info_unimplemented was removed on 2026-08-05 (PRUNAVAED_
+        # WORKORDER.md §6.1, STEP 7): the VAE radio was the last control using
+        # it, and it now carries accel_info_vae above. Acceleration has no mock
+        # controls left, so the "not implemented yet" line has no owner.
         "accel_lbl_prefetch": "Block-swap prefetch",
         "accel_info_prefetch": ("Hides the CPU<->GPU weight-transfer time behind the "
                                 "computation (block swap only). The output is "
@@ -597,9 +599,7 @@ LABELS: dict[str, dict[str, str]] = {
                                "1.7。0にしても無効化にはなりません——無効化は「方式」"
                                "の切り替えか non-CFG Negative のチェックOFFで行って"
                                "ください。"),
-        # --- Acceleration（設定タブ）: ジョブ単位の高速化設定。VAEのラジオ
-        # だけが無効化した表示専用（リクエストには一切載りません）で、それ
-        # 以外は実装済みです。
+        # --- Acceleration（設定タブ）: ジョブ単位の高速化設定。
         # 注意: ここのVAE選択は、サーバ側の vae_tiling（VRAM節約のためのタイル
         # 分割）とは無関係です。
         "accel_section_title": "生成の高速化",
@@ -615,8 +615,12 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_info_attention": ("同じシードでも生成結果の細部が変わります"
                                  "（数値精度が異なるため）。速度は約1.2〜1.6倍"),
         "accel_lbl_vae": "VAE（潜在表現と映像を相互変換する部品）",
-        "accel_info_unimplemented": ("まだ実装されていません。将来の実装に備えて"
-                                     "表示しているだけで、選んでも効果はありません。"),
+        "accel_info_vae": ("枝刈り版（PrunaVAED）を選ぶと映像の復元が速くなります。"
+                           "出力品質がわずかに低下する可能性があります。"),
+        # accel_info_unimplemented は 2026-08-05 に削除した（PRUNAVAED_
+        # WORKORDER.md §6.1 の STEP 7）。最後の利用者だった VAE ラジオが
+        # accel_info_vae へ移り、Acceleration からモックが1件も無くなったため、
+        # 「まだ実装されていません」という説明文の持ち主が居なくなった。
         "accel_lbl_prefetch": "ブロック入れ替えの先読み",
         "accel_info_prefetch": ("重みをCPUとGPUのあいだで運ぶ時間を、計算の裏に隠します"
                                 "（ブロック入れ替えを使っているときだけ効きます）。"

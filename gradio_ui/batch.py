@@ -181,6 +181,10 @@ class BatchSnapshot:
                      2026-08-04 (§51), so this one reaches the payload only
                      when False. The output is bit-identical either way — only
                      the speed changes.
+        vae_mode  Snapshotted from the Settings-tab VAE radio (PrunaVAED,
+                     §3-50), same reasoning again. The default is "default"
+                     and never flips (owner ruling 0-11), so this one reaches
+                     the payload only when "prune_vaed" is selected.
     """
 
     wav_dir: str
@@ -212,6 +216,7 @@ class BatchSnapshot:
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+    vae_mode: str = "default"
 
 
 # --------------------------------------------------------------------------- #
@@ -464,6 +469,7 @@ class BatchRunner:
                 block_swap_prefetch=snap.block_swap_prefetch,
                 keep_resident=snap.keep_resident,
                 fused_gguf_dequant_kernel=snap.fused_gguf_dequant_kernel,
+                vae_mode=snap.vae_mode,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

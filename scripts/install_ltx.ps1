@@ -589,9 +589,11 @@ if ($SkipModels) {
     #    individually by the step 6 table, so each Min sits above
     #    (dir total - smallest file in that dir):
     #      ltx-2.3            995,743,560 , 1 file          -> Min   900,000,000
-    #      ltx-2.3-components 4,129,262,838, smallest 364,855,188
-    #                                        (4,129,262,838-364,855,188=3,764,407,650)
-    #                                                        -> Min 4,000,000,000
+    #      ltx-2.3-components 4,819,275,350, smallest 364,855,188
+    #                                        (PrunaVAED decoder added, PRUNAVAED_WORKORDER.md
+    #                                        section 7: 4,129,262,838 + ~690MB pruned decoder)
+    #                                        (4,819,275,350-364,855,188=4,454,420,162)
+    #                                                        -> Min 4,500,000,000
     #      ltx-2.3-gguf       17,763,015,328, 1 file        -> Min 17,000,000,000
     #      ltx-2.3-ic-lora    1,308,930,638, smallest 654,465,286
     #                                        (leaves 654,465,352)
@@ -602,7 +604,7 @@ if ($SkipModels) {
         -LocalDir "models" `
         -Check @(
             @{ Dir = "models/ltx-2.3";            Min = [long]   900000000 }
-            @{ Dir = "models/ltx-2.3-components"; Min = [long]  4000000000 }
+            @{ Dir = "models/ltx-2.3-components"; Min = [long]  4500000000 }
             @{ Dir = "models/ltx-2.3-gguf";       Min = [long] 17000000000 }
             @{ Dir = "models/ltx-2.3-ic-lora";    Min = [long]  1000000000 }
         )
@@ -774,6 +776,7 @@ $required = @(
     @{ Label = "gguf_transformer";        Rel = "models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf";                       IsDir = $false; Min = [long]17000000000 }
     @{ Label = "gguf_gemma";              Rel = "models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf";                           IsDir = $false; Min = [long]7000000000 }
     @{ Label = "component_video_vae";     Rel = "models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors";                  IsDir = $false; Min = [long]1000000000 }
+    @{ Label = "component_video_vae_pruned"; Rel = "models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors";  IsDir = $false; Min = [long]680000000 }
     @{ Label = "component_audio_vae";     Rel = "models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors";                  IsDir = $false; Min = [long]200000000 }
     @{ Label = "component_text_projection"; Rel = "models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"; IsDir = $false; Min = [long]1500000000 }
     @{ Label = "spatial_upsampler";       Rel = "models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors";                      IsDir = $false; Min = [long]800000000 }
@@ -826,6 +829,7 @@ $installedPaths = @"
   gguf_transformer:          "./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
   gguf_gemma:                "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
   component_video_vae:       "./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"
+  component_video_vae_pruned:"./models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors"
   component_audio_vae:       "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
   component_text_projection: "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
   spatial_upsampler:         "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"

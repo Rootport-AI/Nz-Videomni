@@ -12,7 +12,9 @@ Uses the same mock backend as the rest of the suite (no GPU, no models).
 from __future__ import annotations
 
 import argparse
+import json
 
+import httpx
 import pytest
 import yaml
 
@@ -679,10 +681,13 @@ def test_acceleration_attention_radio_values_and_default():
     assert radio.info == en["accel_info_attention"]
 
 
-def test_acceleration_mock_controls_are_disabled():
-    # The VAE radio is the ONLY remaining mock in this section: the old
-    # fused_gguf_dequant_gemm checkbox was removed outright (owner ruling
-    # 2026-08-04) and the real fused-dequant kernel toggle took its place.
+def test_acceleration_no_mock_controls_remain():
+    # PrunaVAED (§3-50, 2026-08-05): the VAE radio was the last remaining mock
+    # in this section (the old fused_gguf_dequant_gemm checkbox was removed
+    # outright on 2026-08-04). It is now a real, wired control -- Acceleration
+    # has zero mocks left. The display label was also corrected from
+    # "PruneVAED" to "PrunaVAED" (the API value "prune_vaed" is unchanged --
+    # an external contract).
     en = LABELS["en"]
     assert "accel_lbl_fused_gguf" not in en, "old mock label must be gone"
 
@@ -690,8 +695,10 @@ def test_acceleration_mock_controls_are_disabled():
     vae = [c for c in demo.blocks.values()
            if isinstance(c, gr.Radio) and c.label == en["accel_lbl_vae"]]
     assert len(vae) == 1, "VAE radio not found"
-    assert vae[0].interactive is False
+    assert vae[0].interactive is not False
     assert [v for _l, v in vae[0].choices] == ["default", "prune_vaed"]
+    assert [label for label, _v in vae[0].choices] == ["Default", "PrunaVAED"]
+    assert vae[0].info == en["accel_info_vae"]
 
 
 def test_acceleration_labels_switch_language():
@@ -701,7 +708,8 @@ def test_acceleration_labels_switch_language():
     for key, attr in (("accel_section_title", "value"),
                       ("accel_lbl_attention", "label"),
                       ("accel_info_attention", "info"),
-                      ("accel_lbl_vae", "label")):
+                      ("accel_lbl_vae", "label"),
+                      ("accel_info_vae", "info")):
         idx = next(i for i, (_c, k, a) in enumerate(registry)
                    if k == key and a == attr)
         assert updates[idx][attr] == LABELS["ja"][key]
@@ -717,13 +725,14 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     deps_with_radio = [d for d in demo.fns.values()
                        if radio in getattr(d, "inputs", [])]
     assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
-    # And it is the FOURTH-TO-LAST input of each: the APPENDED wiring discipline
+    # And it is the FIFTH-TO-LAST input of each: the APPENDED wiring discipline
     # put it last when it was the only Acceleration control, then the
     # block-swap prefetch checkbox went after it, the keep-resident checkbox
-    # after that, and the fused-dequant checkbox after that. This index is the
-    # canary for a wiring list and a handler signature drifting apart.
+    # after that, the fused-dequant checkbox after that, and the VAE radio
+    # (PrunaVAED, §3-50) after that. This index is the canary for a wiring
+    # list and a handler signature drifting apart.
     for dep in deps_with_radio:
-        assert dep.inputs[-4] is radio
+        assert dep.inputs[-5] is radio
 
 
 # --------------------------------------------------------------------------- #
@@ -789,9 +798,10 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
                and c.label == en["accel_lbl_keep_resident"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
-    # SECOND-TO-LAST since §1-11 appended the fused-dequant checkbox after it.
+    # THIRD-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
+    # and §3-50 (PrunaVAED) appended the VAE radio after that.
     for dep in deps:
-        assert dep.inputs[-2] is box
+        assert dep.inputs[-3] is box
 
 
 def test_keep_resident_labels_switch_language():
@@ -815,11 +825,12 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     deps_with_box = [d for d in demo.fns.values()
                      if box in getattr(d, "inputs", [])]
     assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
-    # And it is the THIRD-TO-LAST input of each: APPENDED after
-    # attention_backend, then the keep-resident checkbox (§48) and the
-    # fused-dequant checkbox (§1-11) were appended after IT.
+    # And it is the FOURTH-TO-LAST input of each: APPENDED after
+    # attention_backend, then the keep-resident checkbox (§48), the
+    # fused-dequant checkbox (§1-11) and the VAE radio (PrunaVAED, §3-50) were
+    # appended after IT.
     for dep in deps_with_box:
-        assert dep.inputs[-3] is box
+        assert dep.inputs[-4] is box
 
 
 # --------------------------------------------------------------------------- #
@@ -859,7 +870,7 @@ def test_fused_dequant_labels_switch_language():
         assert updates[idx][attr] == LABELS["ja"][key]
 
 
-def test_fused_dequant_checkbox_is_wired_last_into_generate_and_chain():
+def test_fused_dequant_checkbox_is_wired_into_generate_and_chain():
     demo = _demo()
     en = LABELS["en"]
     box = next(c for c in demo.blocks.values()
@@ -867,20 +878,35 @@ def test_fused_dequant_checkbox_is_wired_last_into_generate_and_chain():
                and c.label == en["accel_lbl_fused_dequant"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
+    # SECOND-TO-LAST since §3-50 (PrunaVAED) appended the VAE radio after it.
     for dep in deps:
-        assert dep.inputs[-1] is box
+        assert dep.inputs[-2] is box
+
+
+def test_vae_radio_is_wired_into_generate_and_chain():
+    # Same "displayed only" trap check as the other Acceleration controls: the
+    # radio must actually be an INPUT of both generate flows, and it is now
+    # the LAST Acceleration control (appended after fused-dequant).
+    demo = _demo()
+    en = LABELS["en"]
+    radio = next(c for c in demo.blocks.values()
+                 if isinstance(c, gr.Radio) and c.label == en["accel_lbl_vae"])
+    deps = [d for d in demo.fns.values() if radio in getattr(d, "inputs", [])]
+    assert len(deps) >= 2, "VAE radio not wired into 2 flows"
+    for dep in deps:
+        assert dep.inputs[-1] is radio
 
 
 def test_generate_and_chain_trailing_inputs_order_is_locked():
-    """The last FIVE inputs of both generate flows, in exact order.
+    """The last SIX inputs of both generate flows, in exact order.
 
     ui.py's ``chain_dispatch`` peels the trailing Acceleration values off with
-    NEGATIVE indices (``args[:-4]`` + ``args[-4]``..``args[-1]``), so appending
+    NEGATIVE indices (``args[:-5]`` + ``args[-5]``..``args[-1]``), so appending
     one more input without shifting every index silently mis-wires the chain
     handler: the values still arrive, just under the wrong parameter names, and
     nothing raises. ``vsf_scale`` is included as the boundary element -- it is
     the last POSITIONAL argument the handler receives, i.e. exactly where the
-    ``args[:-4]`` slice must stop.
+    ``args[:-5]`` slice must stop.
     """
     demo = _demo()
     en = LABELS["en"]
@@ -897,9 +923,244 @@ def test_generate_and_chain_trailing_inputs_order_is_locked():
         _one(gr.Checkbox, "accel_lbl_prefetch"),
         _one(gr.Checkbox, "accel_lbl_keep_resident"),
         _one(gr.Checkbox, "accel_lbl_fused_dequant"),
+        _one(gr.Radio, "accel_lbl_vae"),
     ]
     deps = [d for d in demo.fns.values()
             if expected[-1] in getattr(d, "inputs", [])]
     assert len(deps) == 2, "expected exactly the generate + chain flows"
     for dep in deps:
-        assert list(dep.inputs[-5:]) == expected
+        assert list(dep.inputs[-6:]) == expected
+
+
+# --------------------------------------------------------------------------- #
+# vae_mode (PrunaVAED, §3-50) reaching the request payload: single-generate
+# (T2V and A2V branches), chain, and batch (which shares the A2V branch's
+# build_a2v_chain_payload builder). Same offline ``httpx.MockTransport``
+# pattern tests/test_gradio_handlers.py and tests/test_gradio_batch_runner.py
+# use to assert on the exact JSON body without a live server.
+# --------------------------------------------------------------------------- #
+def _make_client(handler, *, api_key: str | None = "secret"):
+    from gradio_ui.api_client import ApiClient
+
+    transport = httpx.MockTransport(handler)
+    hc = httpx.Client(transport=transport)
+    return ApiClient("http://test", api_key=api_key, client=hc)
+
+
+def _kf_args():
+    """20 flat (enabled, image, frame_idx, strength) args, all 5 slots empty --
+    matches tests/test_gradio_handlers.py's helper of the same purpose."""
+    return [False, None, 0, 0.8] * 5
+
+
+def _run_until_job_started(gen):
+    first = next(gen)
+    gen.close()
+    return first
+
+
+def test_vae_mode_reaches_single_generate_payload_when_pruned():
+    from gradio_ui.handlers import make_generate_handler
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-prunavaed"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        vae_mode="prune_vaed",
+    )
+    _run_until_job_started(gen)
+    assert captured["vae_mode"] == "prune_vaed"
+    # Appended last, after the (absent here) Acceleration/NAG blocks.
+    assert list(captured.keys())[-1] == "vae_mode"
+
+
+def test_vae_mode_default_omitted_from_single_generate_payload():
+    from gradio_ui.handlers import make_generate_handler
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-default-vae"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "vae_mode" not in captured
+
+
+def _chain_positional_args(clips, config=None):
+    """Flatten a small list of {"enabled", "prompt", "frames"} clip dicts into
+    generate_chain's 24-slot positional signature (slot 1 additionally carries
+    image + strength). Mirrors tests/test_gradio_handlers.py's ``_chain_args``,
+    trimmed to just what these tests need."""
+    filled = list(clips) + [None] * (24 - len(clips))
+    args = ["Base prompt", "", 1280, 768, False, 0, 0, 24.0, -1, 3, 0.5]
+    for i, spec in enumerate(filled[:24]):
+        spec = spec or {}
+        enabled = spec.get("enabled", False)
+        p = spec.get("prompt", "")
+        frames = spec.get("frames", 121)
+        if i == 0:
+            args.extend([enabled, p, frames, spec.get("image"), spec.get("strength", 0.8)])
+        else:
+            args.extend([enabled, p, frames])
+    args.append(config)
+    return args
+
+
+def _run_chain_until_started(gen):
+    outs = []
+    for out in gen:
+        outs.append(out)
+        if out[1]:
+            gen.close()
+            break
+    return outs
+
+
+def test_vae_mode_reaches_chain_payload_when_pruned():
+    from gradio_ui.handlers import make_chain_handler
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-prunavaed"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_positional_args([
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), vae_mode="prune_vaed")
+    _run_chain_until_started(gen)
+    assert captured["vae_mode"] == "prune_vaed"
+    assert list(captured.keys())[-1] == "vae_mode"
+
+
+def test_vae_mode_default_omitted_from_chain_payload():
+    from gradio_ui.handlers import make_chain_handler
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-default-vae"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_positional_args([
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "vae_mode" not in captured
+
+
+def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
+    # The batch runner's A2V rows go through the SAME build_a2v_chain_payload
+    # the single-generate A2V branch uses (gradio_ui/batch.py:441-467), with
+    # vae_mode snapshotted from BatchSnapshot -- so this exercises the exact
+    # wiring dispatch()'s BatchSnapshot(...) construction in ui.py relies on.
+    import wave
+
+    from gradio_ui.batch import BatchRunner, BatchSnapshot
+    from gradio_ui.manifest import STAT_WAITING, BatchRow
+
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    wav_path = wav_dir / "a.wav"
+    with wave.open(str(wav_path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(100)
+        w.writeframes(b"\x00\x00" * 100)
+    out_dir = tmp_path / "out"
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-vae-1"})
+        if path.endswith("/generate/chain"):
+            captured.update(json.loads(request.content))
+            return httpx.Response(202, json={"job_id": "job-batch-vae"})
+        if "/jobs/" in path:
+            return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(404, json={"error": "unexpected"})
+
+    api = _make_client(handler)
+    snap = BatchSnapshot(
+        wav_dir=str(wav_dir), out_dir=str(out_dir),
+        prompt_common="base", negative="", prompt_mode="add",
+        width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
+        loras=[], shared_images=[], use_adapter=False, ref_video_path=None,
+        control_adherence=1.0, reference_strength=1.0,
+        poll_interval=0.0, poll_timeout_s=30.0,
+        vae_mode="prune_vaed",
+    )
+    rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
+
+    runner = BatchRunner()
+    started, _ = runner.start(snap, rows, api, sync=True)
+    assert started is True
+    assert captured["vae_mode"] == "prune_vaed"
+
+
+def test_vae_mode_default_omitted_from_batch_payload(tmp_path):
+    import wave
+
+    from gradio_ui.batch import BatchRunner, BatchSnapshot
+    from gradio_ui.manifest import STAT_WAITING, BatchRow
+
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    wav_path = wav_dir / "a.wav"
+    with wave.open(str(wav_path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(100)
+        w.writeframes(b"\x00\x00" * 100)
+    out_dir = tmp_path / "out"
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-vae-2"})
+        if path.endswith("/generate/chain"):
+            captured.update(json.loads(request.content))
+            return httpx.Response(202, json={"job_id": "job-batch-default-vae"})
+        if "/jobs/" in path:
+            return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(404, json={"error": "unexpected"})
+
+    api = _make_client(handler)
+    snap = BatchSnapshot(
+        wav_dir=str(wav_dir), out_dir=str(out_dir),
+        prompt_common="base", negative="", prompt_mode="add",
+        width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
+        loras=[], shared_images=[], use_adapter=False, ref_video_path=None,
+        control_adherence=1.0, reference_strength=1.0,
+        poll_interval=0.0, poll_timeout_s=30.0,
+    )
+    rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
+
+    runner = BatchRunner()
+    started, _ = runner.start(snap, rows, api, sync=True)
+    assert started is True
+    assert "vae_mode" not in captured

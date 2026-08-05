@@ -3,18 +3,22 @@
 ``api/models.py`` の ``GenerateRequest`` の表面をほぼそのまま公開するが、隠し
 フィールド（``pipeline`` / ``num_inference_steps`` / ``guidance_scale`` /
 ``crf``）は計画D8により出さない -- ``two_stage_hq`` は現状モックのみで、
-distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える意味がないため。
-同じ理由で ``vae_mode`` も出さない -- Acceleration機能のうち現状モック（受理
-のみで効果が無い）の唯一の項目であり、``two_stage_hq`` の ``pipeline`` と同様に
-実装のない切替をクライアントへ見せても意味がないため（計画D1）。一方で同じ
-Acceleration機能のうち実装がある
+distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える意味がないため
+（``two_stage_hq`` 系の非公開理由はそのまま存置する）。一方でAcceleration機能は
+**5項目すべて**を公開する --
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
 ``block_swap_prefetch``（既定on。backend §44、実装は先読み block swap。
 offにすると従来の同期スワップになる。S4, 2026-08-01: 実機ゲートG1〜G7全PASS
 を条件にオーナーが確定した既定反転）、``keep_resident``（既定off。ジョブ間の
 CPU骨格キャッシュ）、``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
 Triton 1カーネル化。出力はビット単位で不変。§51, 2026-08-04: 実機ゲート
-G1〜G8全PASSを条件にオーナーが確定した既定反転）は公開する。
+G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mode``（既定
+``"default"``、``"prune_vaed"`` で枝刈り版デコーダ。§3-50, 2026-08-05 に
+モックから実機能へ転換）を公開する。
+``vae_mode`` はかつて「現状モック（受理のみで効果が無い）なので出さない」
+（計画D1）として除外していたが、2026-08-05 のオーナー裁定で公開へ転じた
+（実装と実機ゲートG1〜G7の合格を待ってからの最終ステップ。
+``PRUNAVAED_WORKORDER.md`` §0-8・§6.3）。
 
 送信ボディは「Noneまたは空は送らない」を徹底する（計画のペイロード契約）。
 ``crop_width`` / ``crop_height`` は両方指定 or 両方省略のみを許す（片側だけの
@@ -26,7 +30,7 @@ G1〜G8全PASSを条件にオーナーが確定した既定反転）は公開す
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -68,6 +72,7 @@ async def submit_generate(
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+    vae_mode: Literal["default", "prune_vaed"] = "default",
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -168,6 +173,17 @@ async def submit_generate(
             ``fused_gguf_dequant_kernel_used``（``"off"`` / ``"on"`` /
             ``"on->off"``。``"on->off"`` は「要求したが実際には適用されな
             かった」）に記録されます。
+        vae_mode: 映像VAE（潜在表現と映像を相互変換する部品）の**デコーダ**の
+            実装選択。``"default"``（既定）または ``"prune_vaed"``。
+            ``"prune_vaed"`` は枝刈り版（PrunaVAED）で、映像の復元が速くなる
+            代わりに**出力品質がわずかに低下する可能性があります**
+            （Acceleration のうち唯一「絵が変わる」つまみです）。
+            **既定は ``"default"`` であり、既定のままなら従来と完全に同じ
+            です**（キーはサーバーへ送られません）。枝刈り版の重みが導入され
+            ていない環境では黙って既定デコーダへ降格し、生成は落としません。
+            実際に何で復元したかはジョブ完了後のメタデータの ``vae_mode_used``
+            （``"off"`` / ``"on"`` / ``"on->off"``。``"on->off"`` は「頼んだが
+            重みが無かったので既定で完走した」）に記録されます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -221,6 +237,13 @@ async def submit_generate(
     # appended last so the default payload's key order is untouched.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel
+    # vae_mode (§3-50, 2026-08-05): same "differs from the server's own
+    # default" rule, expressed against the "default" literal because the
+    # server declares it inline (api/models.py:213) rather than through a
+    # shared constant. Appended after fused_gguf_dequant_kernel so the default
+    # body's key set and order stay frozen. Mirrors gradio_ui/handlers.py:908.
+    if vae_mode != "default":
+        payload["vae_mode"] = vae_mode
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -285,6 +308,7 @@ async def submit_chain(
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+    vae_mode: Literal["default", "prune_vaed"] = "default",
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -373,6 +397,11 @@ async def submit_chain(
         fused_gguf_dequant_kernel: submit_generate と同じ意味（**既定on**。
             生成結果は変わりません＝現行実装とビット一致。実行できない環境では
             黙って従来実装へ降格します。チェーン全体・全ステージ共通で効きます）。
+        vae_mode: submit_generate と同じ意味（``"default"``（既定）または
+            ``"prune_vaed"``。枝刈り版は映像の復元が速くなる代わりに**出力品質
+            がわずかに低下する可能性があります**。**既定は ``"default"`` で、
+            既定のままなら従来と完全に同じです**。チェーン全体・全クリップ・
+            全ステージ共通で効きます。結果は ``vae_mode_used`` に記録されます）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -420,6 +449,10 @@ async def submit_chain(
     # fused_gguf_dequant_kernel: same rule as submit_generate, appended last.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel
+    # vae_mode: same rule as submit_generate (compared against the "default"
+    # literal), appended after it. Mirrors gradio_ui/handlers.py:537.
+    if vae_mode != "default":
+        payload["vae_mode"] = vae_mode
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

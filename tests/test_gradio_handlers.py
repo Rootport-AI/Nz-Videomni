@@ -2957,7 +2957,7 @@ def test_accel_i18n_keys_present_in_both_languages():
     for key in ("accel_section_title", "accel_note",
                 "accel_lbl_fused_dequant", "accel_info_fused_dequant",
                 "accel_lbl_attention", "accel_info_attention",
-                "accel_lbl_vae", "accel_info_unimplemented"):
+                "accel_lbl_vae", "accel_info_vae"):
         for lang in ("en", "ja"):
             assert key in LABELS[lang], f"missing {lang} label for {key}"
             assert LABELS[lang][key].strip()
@@ -3589,10 +3589,12 @@ def test_fused_dequant_i18n_keys_present_in_both_languages():
     # 2026-08-04: complete removal, not a rename-in-place).
     for lang in ("en", "ja"):
         assert "accel_lbl_fused_gguf" not in LABELS[lang]
-    # ...but the shared "not implemented" info line stays: the VAE radio, the
-    # section's remaining mock, still uses it.
-    assert LABELS["en"]["accel_info_unimplemented"].strip()
-    assert LABELS["ja"]["accel_info_unimplemented"].strip()
+    # The shared "not implemented" info line is gone too (§3-50, 2026-08-05):
+    # the VAE radio was its last user and it now carries accel_info_vae, so
+    # Acceleration has no mock controls -- and no orphan strings -- left.
+    for lang in ("en", "ja"):
+        assert "accel_info_unimplemented" not in LABELS[lang]
+        assert LABELS[lang]["accel_info_vae"].strip()
 
 
 def test_fused_dequant_default_constant_is_true():

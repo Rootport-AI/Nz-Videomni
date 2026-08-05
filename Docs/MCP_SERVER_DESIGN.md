@@ -6,7 +6,7 @@
 
 **MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` に新設し、既存の FastAPI バックエンド（`/api/v1/*`）を **22個のツール**として公開した。Web の操作パネル（`gradio_ui/`）が使える操作は一通りツール化してあり、パネルと同等の操作性が MCP 経由でも成立する（AviUtl2 のタイムライン連携は対象外——これはフロントエンド側の責務であり、本パッケージは扱わない）。
 
-## 2. 主要な設計判断（D1〜D11）
+## 2. 主要な設計判断（D1〜D12）
 
 以下は実装計画で決定した設計判断の要約。番号は計画書の通し番号に対応する。
 
@@ -23,6 +23,7 @@
 | D9 | `cancel_job` / `delete_job` は実行前にGETで状態を確認し、意図（キャンセルしたい／削除したい）と実際の状態が食い違えばエラーにする。破壊的な操作には `destructiveHint` を付け、`purge_terminal_jobs` には `dry_run` を用意する | `DELETE /jobs/{id}` は「実行中ならキャンセル・終端済みなら削除（出力フォルダのrmtree含む）」という**1エンドポイント2動作**の設計になっている。この二面性を暗黙に踏ませず、エージェントが意図しない削除をしないためのガード |
 | D10 | `list_jobs` はプロンプト全文などを含まない要約射影を返す。全文が要る場合は `job_status` を使う | 全ジョブぶんのプロンプト全文（最大2000字）を毎回返すとトークンを大きく消費するため |
 | D11 | docstring・`instructions` は日本語（ツール名・引数名は英語のまま）。同時1ジョブ制約（409 JOB_BUSY）を `instructions` と両submitツールのdocstringの両方に明記する | エージェントの学習・利用者の可読性のため日本語で統一。409を連発させないための注意書きを、サーバー起動時の案内文と個々のツール説明の両方に重ねて置いた |
+| D12（2026-08-05追加） | **Acceleration（生成の高速化）の5フィールドは全て公開する**。`submit_generate` / `submit_chain` の両方に、`attention_backend`（`"sdpa"` / `"sage"`・既定 `"sdpa"`）・`block_swap_prefetch`（bool・既定 `true`）・`keep_resident`（bool・既定 `false`）・`fused_gguf_dequant_kernel`（bool・既定 `true`）・`vae_mode`（`"default"` / `"prune_vaed"`・既定 `"default"`）を出す | 当初 `vae_mode` だけは D8 の趣旨（実体の無いフィールドをエージェントに触らせない）に沿って**モックである間は除外**していたが、2026-08-05 に実機能へ転換したため除外理由が消滅した。同日のオーナー裁定（「外出先から操作したいときに便利なので公開まで進みたい」）で公開へ転じ、実装と実機ゲート G1〜G7 の合格を待ってから最終ステップとして実施した。**ツールの本数は22本のまま不変**（フィールドの追加であってツールの追加ではない）。検証記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.10-b、設計の正本は [`PRUNAVAED_WORKORDER.md`](PRUNAVAED_WORKORDER.md) §6.3 |
 
 ## 3. `.mcp.json` 絶対パス生成方式の経緯
 

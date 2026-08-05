@@ -90,6 +90,7 @@ class LTXFastVideoPipeline:
         component_video_vae_path: str = "",
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
+        component_video_vae_pruned_path: str = "",
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
         *,
@@ -115,6 +116,7 @@ class LTXFastVideoPipeline:
             component_video_vae_path=component_video_vae_path,
             component_audio_vae_path=component_audio_vae_path,
             component_text_projection_path=component_text_projection_path,
+            component_video_vae_pruned_path=component_video_vae_pruned_path,
             te_offload_text_encoder=te_offload_text_encoder,
             dit_cpu_load=dit_cpu_load,
             ic_loras=ic_loras,
@@ -141,6 +143,7 @@ class LTXFastVideoPipeline:
         component_video_vae_path: str = "",
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
+        component_video_vae_pruned_path: str = "",
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
         *,
@@ -229,6 +232,17 @@ class LTXFastVideoPipeline:
         self._keep_resident_enabled = False
         self._keep_resident_registry: object | None = None
 
+        # ── PrunaVAED（枝刈り映像VAEデコーダ）state ─────────────────────────────
+        # ジョブ単位のトグル。``_set_vae_mode_job`` が毎ジョブ必ず明示設定する
+        # ので、prefetch/sage のような finally 側のリセットは**持たない**
+        # （持たなくても前ジョブの選択が残らない。§4.3）。この文字列は直前の
+        # ジョブが実際に何で復元したか（"off" / "on" / "on->off"）で、
+        # ワーカーが done イベントへ載せるために読む。
+        self._vae_mode_used = "off"
+        # 既定ビルダーのスナップショット。``__init__`` の最後（無条件位置）で
+        # 撮る。
+        self._default_vae_builder: object | None = None
+
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
         # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
         # standalone sources are all present BEFORE constructing DistilledPipeline
@@ -260,6 +274,11 @@ class LTXFastVideoPipeline:
         self._component_video_vae_path = component_video_vae_path
         self._component_audio_vae_path = component_audio_vae_path
         self._component_text_projection_path = component_text_projection_path
+        # PrunaVAED（枝刈り版の映像VAEデコーダ、約690MB）の置き場所。空文字＝
+        # 未設定で、その場合 vae_mode="prune_vaed" のジョブは既定デコーダへ降格
+        # する。存在確認は**ここでは行わない**（ジョブ単位で行う。
+        # ``_set_vae_mode_job`` の docstring 参照）。
+        self._component_video_vae_pruned_path = component_video_vae_pruned_path
         # TE per-layer offload: stream the GGUF-quantized Gemma decoder layers
         # CPU->GPU per window during encode (caps the ~15 GB encode peak). Default ON;
         # when OFF the Gemma layers are all GPU-resident (today's exact behavior).
@@ -381,6 +400,19 @@ class LTXFastVideoPipeline:
         # out-of-place で移される（VRAM中立）。
         if keep_resident_weights:
             self._swap_registry(True)
+
+        # ── PrunaVAED: 既定の映像VAEデコーダのビルダーを1本だけ控える ──────────
+        # 枝刈り側はジョブ毎にここから ``dataclasses.replace`` で作る（保持
+        # しない＝同期ずれの余地を作らない。§4.3）。
+        #
+        # **位置が load-bearing**: ``_install_component_sources()`` の直後では
+        # なく、ここ（無条件位置）に置く。前者は ``use_component_files=True``
+        # の構成でしか走らないので、直後に置くと単一ファイル構成のサーバーで
+        # 枝刈りビルダーが作られない。上の ``_swap_registry(True)`` より**後**
+        # なのも意図的で、ここで撮ったスナップショットの ``registry`` は撮った
+        # 時点のもので固定される——だからこそ ``_set_vae_mode_job`` は代入の
+        # たびに ``registry=ledger.registry`` を注入し直す（§4.4）。
+        self._default_vae_builder = self.pipeline.model_ledger.vae_decoder_builder
 
         # NOTE: attention-tiling and LoRA install branches (guarded by
         # attention_tile_size > 0 / loras) were removed during the engine
@@ -707,6 +739,81 @@ class LTXFastVideoPipeline:
                 "keep_resident switch to %s FAILED (%r) — the job continues with "
                 "keep_resident=%s", enabled, exc, self._keep_resident_enabled,
             )
+
+    def _set_vae_mode_job(self, mode: str) -> None:
+        """ジョブ単位の映像VAEデコーダ選択（"default" / "prune_vaed"）。
+
+        sage / prefetch と同じ per-job set 規律に従うが、**reset は持たない**
+        ——毎ジョブ必ず明示設定するので、前ジョブの選択が残る余地が無いため
+        （§8 E7）。``keep_resident`` の「リセットしない」例外とは理由が違う
+        （あちらは残ること自体が機能）ので混同しないこと。
+
+        **重みの存在確認をジョブ単位で行う理由**: パイプライン構築は load オペ
+        で1回きりなので、構築時に確認しても利用者が起動後にファイルを消した／
+        戻した場合に追随できない。ジョブ単位なら**ワーカーを再起動せずに**
+        着脱へ追随できる（§8 E5）。
+
+        **どちらの分岐でも ``registry=ledger.registry`` を注入し直す**のは、
+        ``self._default_vae_builder`` が ``__init__`` の1回きりで撮った
+        スナップショットで、その中の ``registry`` 参照が撮った時点のもので
+        固定されるからである。``keep_resident`` の ON/OFF が後から切り替わると
+        ``_swap_registry`` がレジストリを差し替えるので、注入し直さないと
+        「キャッシュが効かない」か「解放済みのレジストリを掴む」に化ける
+        （§4.4）。注入し直すぶんには呼び出し順序を気にする必要が無い。
+
+        既定デコーダと枝刈りデコーダは**パスが違う**ため
+        ``StateDictRegistry`` のキャッシュキー（``sha256(解決済みパス群 +
+        sd_ops.name)``）が衝突せず、``keep_resident`` ON なら両方の state_dict
+        が同じレジストリに同居する＝ジョブ間で切り替えてもディスクを読み直さ
+        ない（オーナー確定事項 0-3 のハードゲート）。
+        """
+        import dataclasses
+        import logging
+
+        from engine.vae.pruned_video_decoder import PrunedVideoDecoderConfigurator
+
+        log = logging.getLogger(__name__)
+        ledger = self.pipeline.model_ledger
+        want_pruned = mode == "prune_vaed"
+        path = self._component_video_vae_pruned_path
+        have_pruned = want_pruned and bool(path) and os.path.exists(path)
+
+        if have_pruned:
+            ledger.vae_decoder_builder = dataclasses.replace(
+                self._default_vae_builder,
+                model_path=path,
+                model_class_configurator=PrunedVideoDecoderConfigurator,
+                # 素通し。変換器がモジュール相対の素キーを直接出力するので
+                # SDOps は要らない。**名前だけの SDOps を作ってはならない**
+                # ——matcher を1つも持たない SDOps は「何もしない」ではなく
+                # 「全キーを捨てる」であり（sd_ops.py:92-97、``any([])`` は
+                # False）、``strict=False`` の静かな失敗に直行する（§4.1）。
+                model_sd_ops=None,
+                registry=ledger.registry,
+            )
+        else:
+            ledger.vae_decoder_builder = dataclasses.replace(
+                self._default_vae_builder, registry=ledger.registry
+            )
+            if want_pruned:
+                log.warning(
+                    "PrunaVAED decoder not found at %s - falling back to the "
+                    "default decoder for this job", path,
+                )
+
+        self._vae_mode_used = "on" if have_pruned else ("on->off" if want_pruned else "off")
+
+    def vae_mode_used(self) -> str:
+        """What the last job's video VAE decoder actually was: "off" (the stock
+        decoder), "on" (PrunaVAED), or "on->off" (PrunaVAED asked for, but the
+        weight file was missing so the stock decoder ran).
+
+        Read by the worker exactly like ``block_swap_prefetch_used`` above —
+        and for the same reason: the downgrade is decided INSIDE the pipeline
+        (the per-job file-existence check), so the worker cannot compute it
+        from the request alone the way ``_keep_resident_used`` does.
+        """
+        return self._vae_mode_used
 
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
@@ -1551,6 +1658,7 @@ class LTXFastVideoPipeline:
         block_swap_prefetch: bool = False,
         keep_resident: bool | None = None,
         fused_gguf_dequant_kernel: bool = False,
+        vae_mode: str = "default",
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (backward compat — the Phase A harness supplies loras at create()).
@@ -1592,6 +1700,10 @@ class LTXFastVideoPipeline:
         # ``_set_keep_resident_job`` のdocstring参照）。
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
+        # 映像VAEデコーダの選択。keep_resident の**後**に置くのは読みやすさの
+        # ためだけで、順序の制約は無い（`_set_vae_mode_job` は代入のたびに
+        # registry を注入し直すので、_swap_registry との前後を問わない。§4.4）。
+        self._set_vae_mode_job(vae_mode)
 
         try:
             tiling_config = default_tiling_config(
@@ -1668,6 +1780,7 @@ class LTXFastVideoPipeline:
         block_swap_prefetch: bool = False,
         keep_resident: bool | None = None,
         fused_gguf_dequant_kernel: bool = False,
+        vae_mode: str = "default",
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
 
@@ -1725,6 +1838,13 @@ class LTXFastVideoPipeline:
         finally, same discipline as ``block_swap_prefetch``. One arm covers the
         whole chain because the chain builds (and therefore dequantizes) the
         transformer exactly once.
+
+        ``vae_mode`` ("default" / "prune_vaed", additive): armed here too, and
+        it is load-bearing that this call is NOT forgotten — the chain's decoder
+        is created at ``chain_pipeline.py``'s ``ledger.video_decoder()``, a
+        different call site from the single-generate one, and both are reached
+        only through the ledger builder this sets (§8 E2). One setting covers
+        every clip and every stage of the chain.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
@@ -1733,6 +1853,7 @@ class LTXFastVideoPipeline:
         self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
+        self._set_vae_mode_job(vae_mode)
 
         try:
             return run_chain(

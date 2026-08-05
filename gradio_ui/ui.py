@@ -1018,10 +1018,6 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                  precision=0, minimum=1), "lbl_timeout")
 
                 # ---- Acceleration (per-job speed options; no restart) ----
-                # Everything here is implemented except the VAE radio, which is
-                # a DISABLED placeholder: it is not a handler input and never
-                # enters a request payload, so there is no "displayed only" trap
-                # where a greyed-out control silently claims to do something.
                 # NOTE: the VAE selector is unrelated to the server's vae_tiling
                 # (a VRAM-saving tile split).
                 reg(gr.Markdown(f"### {L('accel_section_title')}"),
@@ -1072,13 +1068,22 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_keep_resident"),
                 ), "accel_lbl_keep_resident")
                 reg(accel_keep_resident, "accel_info_keep_resident", "info")
+                # Display name: "PruneVAED" -> "PrunaVAED" (correct product name
+                # per PRUNAVAED_WORKORDER.md §6.1). The API literal value
+                # "prune_vaed" is an external contract and is unchanged.
+                # PrunaVAED (§3-50): pruned video-VAE decoder, real as of
+                # 2026-08-05. Wired the same way as attention_backend/
+                # accel_prefetch/accel_keep_resident/accel_fused_dequant above
+                # -- see dispatch()/chain_dispatch() below for how the selected
+                # value reaches vae_mode in the request payload (single, chain
+                # AND batch, via handlers.py / batch.py's BatchSnapshot).
                 accel_vae = reg(gr.Radio(
-                    choices=[("Default", "default"), ("PruneVAED", "prune_vaed")],
-                    value="default", interactive=False,
+                    choices=[("Default", "default"), ("PrunaVAED", "prune_vaed")],
+                    value="default",
                     label=L("accel_lbl_vae"),
-                    info=L("accel_info_unimplemented"),
+                    info=L("accel_info_vae"),
                 ), "accel_lbl_vae")
-                reg(accel_vae, "accel_info_unimplemented", "info")
+                reg(accel_vae, "accel_info_vae", "info")
 
                 # ---- Server config viewer (raw /config + spill-free table) ----
                 reg(gr.Markdown(f"### {L('h_server')}"), "h_server", "value")
@@ -1265,7 +1270,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_img_dir_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
-                     accel_keep_resident_v, accel_fused_dequant_v):
+                     accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v):
             if not batch_enable_v:
                 # Single-generation path: byte-identical delegation (first 40
                 # positionals ARE the generate() signature); nag_*/neg_method/
@@ -1289,7 +1294,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     attention_backend=attention_backend_v,
                     block_swap_prefetch=accel_prefetch_v,
                     keep_resident=accel_keep_resident_v,
-                    fused_gguf_dequant_kernel=accel_fused_dequant_v)
+                    fused_gguf_dequant_kernel=accel_fused_dequant_v,
+                    vae_mode=accel_vae_v)
                 return
 
             rows = batch_rows_v or []
@@ -1396,6 +1402,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 block_swap_prefetch=bool(accel_prefetch_v),
                 keep_resident=bool(accel_keep_resident_v),
                 fused_gguf_dequant_kernel=bool(accel_fused_dequant_v),
+                vae_mode=accel_vae_v or "default",
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1428,10 +1435,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             dispatch,
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
             # vsf_scale, then the Acceleration attention selector, the
-            # block-swap prefetch checkbox, the keep-resident checkbox and the
-            # fused-dequant checkbox, are APPENDED at the very end,
-            # after every pre-existing positional (matching dispatch()'s
-            # signature order, which appends them after batch_img_dir_v).
+            # block-swap prefetch checkbox, the keep-resident checkbox, the
+            # fused-dequant checkbox AND the VAE radio (PrunaVAED, §3-50), are
+            # APPENDED at the very end, after every pre-existing positional
+            # (matching dispatch()'s signature order, which appends them after
+            # batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1442,7 +1450,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_img_dir,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident, accel_fused_dequant],
+                    accel_keep_resident, accel_fused_dequant, accel_vae],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1874,13 +1882,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             chain_clip_inputs.extend(_slot)
 
         # Acceleration: the attention selector, the block-swap prefetch
-        # checkbox, the keep-resident checkbox AND the fused-dequant checkbox
-        # are APPENDED at the very end of the chain inputs list below, in that
-        # order (attention_backend, accel_prefetch, accel_keep_resident,
-        # accel_fused_dequant). generate_chain keeps
+        # checkbox, the keep-resident checkbox, the fused-dequant checkbox AND
+        # the VAE radio (PrunaVAED, §3-50) are APPENDED at the very end of the
+        # chain inputs list below, in that order (attention_backend,
+        # accel_prefetch, accel_keep_resident, accel_fused_dequant,
+        # accel_vae). generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
-        # _chain_args), so the four trailing values cannot be delivered
+        # _chain_args), so the five trailing values cannot be delivered
         # positionally -- this thin wrapper peels them off and forwards them as
         # KEYWORDS, the same discipline the Generate tab's dispatch() uses.
         # NOTE: every negative index below is tied to the LENGTH of that
@@ -1888,11 +1897,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
         # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-4],
-                                      attention_backend=args[-4],
-                                      block_swap_prefetch=args[-3],
-                                      keep_resident=args[-2],
-                                      fused_gguf_dequant_kernel=args[-1])
+            yield from chain_generate(*args[:-5],
+                                      attention_backend=args[-5],
+                                      block_swap_prefetch=args[-4],
+                                      keep_resident=args[-3],
+                                      fused_gguf_dequant_kernel=args[-2],
+                                      vae_mode=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -1908,9 +1918,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
             # The Acceleration attention selector, the block-swap prefetch
-            # checkbox, the keep-resident checkbox and the fused-dequant
-            # checkbox are APPENDED last (in that order) and reach the handler
-            # as keywords via chain_dispatch above.
+            # checkbox, the keep-resident checkbox, the fused-dequant checkbox
+            # AND the VAE radio (PrunaVAED, §3-50) are APPENDED last (in that
+            # order) and reach the handler as keywords via chain_dispatch
+            # above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -1919,7 +1930,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident, accel_fused_dequant],
+                    accel_keep_resident, accel_fused_dequant, accel_vae],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),

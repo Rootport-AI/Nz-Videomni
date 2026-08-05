@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 
 import main
 from api.errors import APIError
-from config import AppConfig
+from config import PROJECT_ROOT, AppConfig
 from services.low_vram import build_low_vram_settings
 from services.ltx_runner import _RealBackend
 from services.model_registry import DEFAULT_NAME, precheck_model_file
@@ -51,6 +51,11 @@ GOLDEN_PAYLOAD_KEYS = [
     "component_video_vae_path",
     "component_audio_vae_path",
     "component_text_projection_path",
+    # PrunaVAED (§3-50, 2026-08-05): the pruned video VAE decoder's path. Rides
+    # the load payload like the other component paths, but is NOT required to
+    # exist (a job asking for it downgrades instead) and is NOT swappable
+    # through the model registry.
+    "component_video_vae_pruned_path",
     "gguf_per_layer_quant",
     "block_swap_blocks_on_gpu",
     "vae_spatial_tile_size",
@@ -102,6 +107,16 @@ def _golden(cfg: AppConfig, gemma_root, paths) -> dict:
         "component_video_vae_path": str(paths["vv"]),
         "component_audio_vae_path": str(paths["av"]),
         "component_text_projection_path": str(paths["tp"]),
+        # Not overridden by the fixture, so this is the config DEFAULT resolved
+        # against the project root — spelled out here rather than read back off
+        # the config, so a silent change to the default location trips the test.
+        # The file need not exist (and does not, in this fixture).
+        "component_video_vae_pruned_path": str(
+            (
+                PROJECT_ROOT
+                / "models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors"
+            ).resolve()
+        ),
         "gguf_per_layer_quant": True,
         "block_swap_blocks_on_gpu": 8,  # low_vram default None -> `or 8`
         "vae_spatial_tile_size": 0,

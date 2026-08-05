@@ -287,6 +287,14 @@ class GenerationOutcome:
     # relay discipline as ``block_swap_prefetch_used``. None on the mock backend
     # and on any worker that predates the field.
     fused_gguf_dequant_kernel_used: str | None = None
+    # Acceleration: which video VAE decoder ACTUALLY ran for this job ("off" =
+    # the stock decoder, "on" = the pruned PrunaVAED one, "on->off" when it was
+    # requested but its weight file was absent so the stock decoder ran). Same
+    # relay discipline as ``block_swap_prefetch_used``, but note this is the one
+    # acceleration field whose "on" CHANGES THE PIXELS — which is exactly why
+    # recording what actually ran matters here more than anywhere else. None on
+    # the mock backend and on any worker that predates the field.
+    vae_mode_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).
@@ -1120,6 +1128,18 @@ class _RealBackend:
         component_text_projection_path = self._require_path(
             model.component_text_projection_path, "component_text_projection_path"
         )
+        # PrunaVAED (pruned video VAE decoder): resolved but NOT required to
+        # exist — deliberately not via _require_path and not in the
+        # real-backend availability probe. It is read only by a job that asks
+        # for vae_mode="prune_vaed", and a missing file downgrades THAT job to
+        # the stock decoder (vae_mode_used="on->off") instead of preventing the
+        # whole server from loading. Not swappable through the model registry
+        # either (see config.py's comment on the field).
+        component_video_vae_pruned_path = (
+            str(self.config._abs(model.component_video_vae_pruned_path))
+            if model.component_video_vae_pruned_path
+            else ""
+        )
 
         return {
             "op": "load",
@@ -1132,6 +1152,7 @@ class _RealBackend:
             "component_video_vae_path": component_video_vae_path,
             "component_audio_vae_path": component_audio_vae_path,
             "component_text_projection_path": component_text_projection_path,
+            "component_video_vae_pruned_path": component_video_vae_pruned_path,
             "gguf_per_layer_quant": bool(model.gguf_per_layer_quant),
             "block_swap_blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or 8,
             "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
@@ -1407,13 +1428,6 @@ class _RealBackend:
         # pre-acceleration (regression contract, same style as nag above). The
         # worker fails loud on an unknown value and degrades sage -> sdpa when
         # the import is unavailable.
-        #
-        # The MOCK field (request.vae_mode) is deliberately NEVER put on the
-        # wire: the engine does not consume it, and shipping an inert key is
-        # exactly the "displayed but not applied" trap this design exists to
-        # avoid. It still shows up in metadata.json / GET /jobs via
-        # model_dump() — that is intentional (same as the two_stage_hq pipeline
-        # value), and no exclude() trickery is used.
         if request.attention_backend != "sdpa":
             payload["attention_backend"] = request.attention_backend
         # block_swap_prefetch: same additive contract as attention_backend above
@@ -1436,6 +1450,15 @@ class _RealBackend:
         # reason). An omitted key still means off on the worker side.
         if request.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # vae_mode: same additive contract, default "default" — so the key rides
+        # ONLY on a job that explicitly asks for the pruned decoder, and a
+        # default job's payload stays byte-identical to pre-PrunaVAED. Until
+        # 2026-08-05 this field was a MOCK that was deliberately never put on
+        # the wire; it is now consumed by the engine (§3-50). An environment
+        # without the weight file still completes the job — the worker reports
+        # vae_mode_used="on->off".
+        if request.vae_mode != "default":
+            payload["vae_mode"] = request.vae_mode
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1488,6 +1511,7 @@ class _RealBackend:
             fused_gguf_dequant_kernel_used=event.get(
                 "fused_gguf_dequant_kernel_used"
             ),
+            vae_mode_used=event.get("vae_mode_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
@@ -1639,8 +1663,7 @@ class _RealBackend:
 
         # Acceleration (additive): mirrors the single-generate block in
         # :meth:`generate` — sent only when non-default (byte-identical default
-        # payload), and the MOCK field is never put on the wire. See there
-        # for the full rationale.
+        # payload). See there for the full rationale.
         if chain.attention_backend != "sdpa":
             payload["attention_backend"] = chain.attention_backend
         # block_swap_prefetch: same additive contract as attention_backend above.
@@ -1654,6 +1677,11 @@ class _RealBackend:
         # ON since 2026-08-04, so the key rides on a default chain job too).
         if chain.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # vae_mode: mirrors the single-generate block (default "default", so the
+        # key is sent only when the pruned decoder is explicitly asked for). One
+        # value covers every clip and every stage of the chain.
+        if chain.vae_mode != "default":
+            payload["vae_mode"] = chain.vae_mode
 
         with self._lock:
             try:
@@ -1692,6 +1720,7 @@ class _RealBackend:
             fused_gguf_dequant_kernel_used=event.get(
                 "fused_gguf_dequant_kernel_used"
             ),
+            vae_mode_used=event.get("vae_mode_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 

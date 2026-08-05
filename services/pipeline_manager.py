@@ -738,6 +738,7 @@ class PipelineManager:
                     fused_gguf_dequant_kernel_used=(
                         outcome.fused_gguf_dequant_kernel_used
                     ),
+                    vae_mode_used=outcome.vae_mode_used,
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                 )
 
@@ -786,7 +787,7 @@ class PipelineManager:
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
-        fused_gguf_dequant_kernel_used=None,
+        fused_gguf_dequant_kernel_used=None, vae_mode_used=None,
         peak_vram_reserved_mb=None,
     ) -> None:
         cm = chain_meta or {}
@@ -805,6 +806,7 @@ class PipelineManager:
             "block_swap_prefetch_used": block_swap_prefetch_used,
             "keep_resident_used": keep_resident_used,
             "fused_gguf_dequant_kernel_used": fused_gguf_dequant_kernel_used,
+            "vae_mode_used": vae_mode_used,
             "peak_vram_reserved_mb": peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
@@ -918,6 +920,12 @@ class PipelineManager:
             "fused_gguf_dequant_kernel_used": (
                 outcome.fused_gguf_dequant_kernel_used
             ),
+            # Acceleration: which video VAE decoder actually ran ("off" = stock,
+            # "on" = pruned PrunaVAED, "on->off" = asked for but the weight file
+            # was missing). Same relay discipline again — and the one field here
+            # that also documents WHY two runs with the same seed can differ in
+            # fine detail, since the pruned decoder is not bit-identical.
+            "vae_mode_used": outcome.vae_mode_used,
             # torch.cuda.max_memory_reserved()-based, additive alongside the
             # vram_optimization block's peak_vram_mb (max_memory_allocated-
             # based) — this feature's VRAM-risk signal (§44).

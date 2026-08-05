@@ -431,6 +431,7 @@ def build_a2v_chain_payload(
     block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident=KEEP_RESIDENT_DEFAULT,
     fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+    vae_mode="default",
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -469,7 +470,11 @@ def build_a2v_chain_payload(
     read the two tests as one pattern).
     ``fused_gguf_dequant_kernel`` is appended LAST under the same rule, with
     the same direction as block_swap_prefetch since 2026-08-04 (§51 flipped the
-    server default to on -> the key rides only on an UNCHECKED box)."""
+    server default to on -> the key rides only on an UNCHECKED box).
+    ``vae_mode`` (PrunaVAED, §3-50) is appended after it, same "differs from
+    the default" rule. Its default ("default") never changes (owner ruling
+    0-11: no later default-flip step for this one, unlike the toggles above),
+    so the key rides only when the pruned decoder ("prune_vaed") is chosen."""
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -526,6 +531,11 @@ def build_a2v_chain_payload(
     # UNCHECKED box.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         chain_payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
+    # vae_mode (additive, conditional): appended last, same rule. Default
+    # "default" never changes (owner ruling 0-11), so the key rides only when
+    # the pruned decoder is selected.
+    if vae_mode != "default":
+        chain_payload["vae_mode"] = vae_mode
     return chain_payload
 
 
@@ -566,7 +576,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # dequantization kernel checkbox. Same discipline again --
                  # keyword-only from ui.py's dispatch(), appended after
                  # keep_resident.
-                 fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT):
+                 fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+                 # Acceleration (ADDITIVE, last): the Settings-tab VAE radio
+                 # (PrunaVAED, §3-50). Same discipline again -- keyword-only
+                 # from ui.py's dispatch(), appended after
+                 # fused_gguf_dequant_kernel.
+                 vae_mode="default"):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -796,6 +811,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 block_swap_prefetch=block_swap_prefetch,
                 keep_resident=keep_resident,
                 fused_gguf_dequant_kernel=fused_gguf_dequant_kernel,
+                vae_mode=vae_mode,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -886,6 +902,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # only on an UNCHECKED box (the same direction as block_swap_prefetch).
         if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
             payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
+        # vae_mode (additive, conditional): appended last, same rule. Default
+        # "default" never changes (owner ruling 0-11), so the key rides only
+        # when the pruned decoder (PrunaVAED, "prune_vaed") is selected.
+        if vae_mode != "default":
+            payload["vae_mode"] = vae_mode
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -999,7 +1020,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # dequantization kernel checkbox, appended after
                        # keep_resident and forwarded as a KEYWORD by ui.py's
                        # chain_dispatch.
-                       fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT):
+                       fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+                       # Acceleration (ADDITIVE, last): the VAE radio
+                       # (PrunaVAED, §3-50), appended after
+                       # fused_gguf_dequant_kernel and forwarded as a KEYWORD
+                       # by ui.py's chain_dispatch.
+                       vae_mode="default"):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1329,6 +1355,11 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # 2026-08-04 (default on -> emitted only when unchecked).
         if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
             payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
+        # vae_mode (additive, conditional): appended last, same rule. Default
+        # "default" never changes (owner ruling 0-11), so the key rides only
+        # when the pruned decoder (PrunaVAED, "prune_vaed") is selected.
+        if vae_mode != "default":
+            payload["vae_mode"] = vae_mode
 
         try:
             resp = api.generate_chain(payload)

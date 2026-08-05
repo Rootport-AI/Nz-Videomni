@@ -197,16 +197,19 @@ class GenerateRequest(BaseModel):
     # 適用されなかった」）。GET /status には載せない（keep_resident と同じ規律）。
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
 
-    # ─── モック1件（受理のみ・エンジン未消費）───
-    # 以下は UI/API の枠だけ先に確定させたもので、**エンジンは一切読まない**。
-    # 受け取っても生成は何も変わらない。ワーカーペイロードにも GET /status にも
-    # 載せない（載せると「設定したのに効いていない」罠になる）。一方、
-    # model_dump() 経由の metadata.json / GET /jobs の request には自然に現れる
-    # ——two_stage_hq の pipeline と同じ既存前例で、exclude 等の細工はしない。
-    #
-    # vae_mode: VAE の実装選択（"prune_vaed" は枝刈り版 VAE デコーダ）。
+    # vae_mode: 映像VAE**デコーダ**の実装選択。"prune_vaed" は枝刈り版
+    # （PrunaVAED）で、映像の復元が速くなる代わりに**出力品質がわずかに低下
+    # する可能性がある**——Acceleration のうち唯一「絵が変わる」つまみであり、
+    # 既定は恒久 off である（2026-08-05 実装、§3-50。それ以前はモック＝受理
+    # のみでエンジン未消費だった）。既定と違うときだけワーカーへ送る加算的
+    # コントラクトで、実際に何で復元したかは metadata.json の vae_mode_used
+    # （"off" / "on" / "on->off"）で確認できる。"on->off" は「枝刈りを頼んだが
+    # 重みファイルが無かったので既定デコーダで完走した」。GET /status には
+    # 載せない（keep_resident と同じ規律——重みの有無は「環境の能力」とは
+    # 性質が違う）。
     # 既存の vram.vae_tiling（VRAM 節約のためのタイル分割）とは**無関係**——
     # 名前が似ているだけで、こちらは VAE 実装そのものの差し替えを指す。
+    # タイル設定はチャンネル幅に依存しないので枝刈り版でも一切変わらない。
     vae_mode: Literal["default", "prune_vaed"] = "default"
 
     # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
@@ -455,9 +458,9 @@ class GenerateChainRequest(BaseModel):
 
     # Acceleration（生成高速化）— 詳細は GenerateRequest の同名フィールドを参照。
     # チェーンでは全クリップ・全ステージ共通で1つの設定が効く。sage 有効時は
-    # 同一シードでも生成結果の細部が変わる点、モック1件（vae_mode）が受理のみで
-    # エンジン未消費である点、vae_mode が既存 vae_tiling と無関係である点も、
-    # すべて GenerateRequest と同じ。
+    # 同一シードでも生成結果の細部が変わる点、vae_mode="prune_vaed" も同様に
+    # 絵が変わる点、vae_mode が既存 vae_tiling と無関係である点も、すべて
+    # GenerateRequest と同じ。
     attention_backend: Literal["sdpa", "sage"] = "sdpa"
     # block_swap_prefetch: 詳細は GenerateRequest の同名フィールドを参照。
     # 既定on（S4, 2026-08-01）。offにすると従来の同期スワップになる。
@@ -708,9 +711,8 @@ class GenerateChainRequest(BaseModel):
         negative_prompt would fail GenerateRequest's own validator).
 
         The acceleration fields (``attention_backend``, ``block_swap_prefetch``,
-        ``keep_resident``, ``fused_gguf_dequant_kernel``, and the mock field
-        ``vae_mode``) are transcribed for the same reason: they do not fail
-        validation when
+        ``keep_resident``, ``fused_gguf_dequant_kernel`` and ``vae_mode``) are
+        transcribed for the same reason: they do not fail validation when
         dropped, so an omission would silently mis-report a chain job's
         reproducibility metadata (GET /jobs' ``request`` and metadata.json would
         claim sdpa/default for a sage chain).

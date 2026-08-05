@@ -18,7 +18,11 @@ run on this Windows + 16GB box):
 Protocol (one JSON object per line; parent -> worker):
   {"op": "load", checkpoint_path, gemma_root, upsampler_path,
    gguf_transformer_path, gguf_gemma_path, gguf_per_layer_quant,
-   block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size}
+   block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size,
+   # component_video_vae_pruned_path (optional): the PrunaVAED decoder file.
+   # Unlike the other component paths this one is NOT required to exist — a
+   # job asking for vae_mode="prune_vaed" downgrades when it is missing:
+   component_video_vae_pruned_path}
   {"op": "generate", prompt, seed, height, width, num_frames, frame_rate,
    num_steps, images:[{path,frame_idx,strength}...], output_path,
    # attention_backend (optional, default "sdpa"): "sdpa" | "sage". Present on
@@ -43,6 +47,12 @@ Protocol (one JSON object per line; parent -> worker):
    # bit-identical on/off (a mismatch self-check and an exception latch both
    # fall back to the eager path) — see _resolve_fused_dequant:
    fused_gguf_dequant_kernel,
+   # vae_mode (optional, default "default"): "default" | "prune_vaed". Selects
+   # the video VAE DECODER for this job — the pruned PrunaVAED decoder is
+   # faster but NOT bit-identical (the only knob here that changes pixels).
+   # Present on BOTH generate ops; an unknown value is fatal, a missing weight
+   # file is not (it degrades to "on->off") — see _resolve_vae_mode:
+   vae_mode,
    # Phase B/C IC-LoRA (forward-time weight patch); loras always present (may be []),
    # reference_video null unless a reference is supplied. preprocess (Phase C):
    # "none" -> raw reference used as-is (Phase B); "canny"/... -> converted to a
@@ -74,7 +84,8 @@ other logging goes to STDERR.
   @@LTX@@{"event":"ready","sage_available":true|false}
   @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,"attention_used":...,
           "block_swap_prefetch_used":...,"keep_resident_used":...,
-          "fused_gguf_dequant_kernel_used":...,"peak_vram_reserved_mb":...}
+          "fused_gguf_dequant_kernel_used":...,"vae_mode_used":...,
+          "peak_vram_reserved_mb":...}
   @@LTX@@{"event":"error","detail":...}
 
 ``ready.sage_available`` is this process's SageAttention probe (see
@@ -104,6 +115,14 @@ the eager fallback, the first-call bit-comparison self-check mismatched, or the
 job dequantized no eligible tensor at all) — see
 ``FastVideoPipeline.fused_gguf_dequant_kernel_used()``. Like block-swap
 prefetch, it is a pure implementation switch: bit-identical output either way.
+
+``done.vae_mode_used`` is the same idea for the video VAE decoder: "off" (the
+stock decoder ran), "on" (the pruned PrunaVAED decoder ran), or "on->off" when
+the job asked for PrunaVAED but its weight file was absent, so the stock decoder
+ran instead — see ``FastVideoPipeline.vae_mode_used()``. UNLIKE every other
+knob above, this one DOES change the generated pixels when it is on: PrunaVAED
+is a pruned + distilled decoder and is not bit-identical to the stock one by
+design (that is why its default is permanently off).
 
 ``done.peak_vram_reserved_mb`` is ``torch.cuda.max_memory_reserved()`` in MB,
 reported ADDITIVELY alongside the existing ``peak_vram_mb`` (which is
@@ -342,6 +361,10 @@ def _do_load(msg: dict) -> None:
         component_video_vae_path=msg.get("component_video_vae_path", ""),
         component_audio_vae_path=msg.get("component_audio_vae_path", ""),
         component_text_projection_path=msg.get("component_text_projection_path", ""),
+        # PrunaVAED (pruned video VAE decoder). Absent/empty -> every
+        # vae_mode="prune_vaed" job downgrades to the stock decoder; the file's
+        # existence is re-checked PER JOB, not here (see _set_vae_mode_job).
+        component_video_vae_pruned_path=msg.get("component_video_vae_pruned_path", ""),
         # cpu_text_encode intentionally NOT set -> GGUF Gemma path wins.
     )
     _log("PIPELINE_CREATED_OK")
@@ -672,6 +695,52 @@ def _fused_gguf_dequant_kernel_used() -> str:
     return _PIPE.fused_gguf_dequant_kernel_used()
 
 
+def _resolve_vae_mode(msg: dict) -> str:
+    """Resolve a job's ``vae_mode`` -> "default" | "prune_vaed".
+
+    Missing key -> "default": the payload is additive, so every caller that
+    predates this feature (and every default request, which does not send the
+    key at all) resolves to exactly the behaviour it always had.
+
+    An UNKNOWN value fails the job loudly, like ``_resolve_attention`` and
+    UNLIKE the boolean speed knobs (``_resolve_block_swap_prefetch`` /
+    ``_resolve_fused_dequant``, which coerce with ``bool()``). Two reasons:
+    this is an ENUM, so there is a genuine "unknown value" concept; and the
+    API's ``Literal["default","prune_vaed"]`` already rejects anything else
+    with a 422, so a strange value arriving here can only mean the app and the
+    engine disagree about the protocol. Quietly falling back to the default
+    would then record a truthful-looking ``vae_mode_used`` for a job that
+    ignored the request.
+
+    Note this differs from "PrunaVAED is a speed knob, so do not kill jobs for
+    it" — that principle governs the WEIGHT-FILE-MISSING case, which is not
+    fatal at all: it degrades inside the pipeline to ``"on->off"`` (see
+    ``LTXFastVideoPipeline._set_vae_mode_job``).
+    """
+    mode = str(msg.get("vae_mode", "default"))
+    if mode not in ("default", "prune_vaed"):
+        raise RuntimeError(
+            f"worker: unknown vae_mode {mode!r} — expected 'default' or "
+            "'prune_vaed'."
+        )
+    return mode
+
+
+def _vae_mode_used() -> str:
+    """The ``done`` event's ``vae_mode_used``: "off" (the stock video VAE
+    decoder ran), "on" (PrunaVAED ran), or "on->off" (PrunaVAED was requested
+    but its weight file was missing, so the stock decoder ran).
+
+    Reads the pipeline's per-job record, mirroring ``_block_swap_prefetch_used``
+    above — NOT ``_keep_resident_used``, which computes its verdict from the
+    request alone. The difference is where the downgrade is decided: this
+    feature's only downgrade is the per-job weight-file existence check, and
+    that lives inside the pipeline.
+    """
+    assert _PIPE is not None
+    return _PIPE.vae_mode_used()
+
+
 def _peak_vram_reserved_mb() -> int:
     """``torch.cuda.max_memory_reserved()`` in MB. The existing ``peak_vram_mb``
     (``max_memory_allocated``-based) cannot see allocator-reserved-but-unused
@@ -735,13 +804,17 @@ def _do_generate(msg: dict) -> None:
     # Fused Triton GGUF dequantization (speed only, output bit-identical):
     # absent -> False, byte-identical to before this feature existed.
     fused_dequant = _resolve_fused_dequant(msg)
+    # Video VAE decoder selection: absent -> "default", byte-identical to before
+    # this feature existed. Unlike the knobs above this one CHANGES THE PIXELS
+    # (the pruned decoder is not bit-identical to the stock one by design).
+    vae_mode = _resolve_vae_mode(msg)
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
         f"neg={_neg_label(nag)} attn={attention} bsprefetch={bs_prefetch} "
-        f"keepresident={keep_res} fuseddequant={fused_dequant}"
+        f"keepresident={keep_res} fuseddequant={fused_dequant} vae={vae_mode}"
     )
     # F2: single-generate runs the wheel's two denoising loops back-to-back
     # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
@@ -768,6 +841,7 @@ def _do_generate(msg: dict) -> None:
             # 既定であって、ワーカーからは使わない）。
             keep_resident=keep_res,
             fused_gguf_dequant_kernel=fused_dequant,
+            vae_mode=vae_mode,
         )
     finally:
         progress_shim.end_op()
@@ -781,12 +855,14 @@ def _do_generate(msg: dict) -> None:
     bs_prefetch_used = _block_swap_prefetch_used()
     keep_res_used = _keep_resident_used(msg, keep_res)
     fused_dequant_used = _fused_gguf_dequant_kernel_used()
+    vae_mode_used = _vae_mode_used()
     peak_reserved = _peak_vram_reserved_mb()
     _log(
         f"GENERATED_OK peak_vram_mb={peak} attention_used={attention_used} "
         f"block_swap_prefetch_used={bs_prefetch_used} "
         f"keep_resident_used={keep_res_used} "
         f"fused_gguf_dequant_kernel_used={fused_dequant_used} "
+        f"vae_mode_used={vae_mode_used} "
         f"peak_vram_reserved_mb={peak_reserved} -> {output_path}"
     )
     _emit(
@@ -797,6 +873,7 @@ def _do_generate(msg: dict) -> None:
         block_swap_prefetch_used=bs_prefetch_used,
         keep_resident_used=keep_res_used,
         fused_gguf_dequant_kernel_used=fused_dequant_used,
+        vae_mode_used=vae_mode_used,
         peak_vram_reserved_mb=peak_reserved,
     )
 
@@ -906,6 +983,10 @@ def _do_generate_chain(msg: dict) -> None:
     # Fused Triton GGUF dequantization (speed only, output bit-identical):
     # absent -> False. Same helper as the single-generate path.
     fused_dequant = _resolve_fused_dequant(msg)
+    # Video VAE decoder selection: absent -> "default". Same helper (and same
+    # fail-loud-on-unknown regime) as the single-generate path. One setting
+    # covers every clip and every stage of the chain.
+    vae_mode = _resolve_vae_mode(msg)
 
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
@@ -915,7 +996,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"audio_source={'yes' if audio_source else 'no'} "
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
         f"bsprefetch={bs_prefetch} keepresident={keep_res} "
-        f"fuseddequant={fused_dequant}"
+        f"fuseddequant={fused_dequant} vae={vae_mode}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -943,6 +1024,7 @@ def _do_generate_chain(msg: dict) -> None:
         block_swap_prefetch=bs_prefetch,
         keep_resident=keep_res,
         fused_gguf_dequant_kernel=fused_dequant,
+        vae_mode=vae_mode,
     )
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
@@ -953,12 +1035,14 @@ def _do_generate_chain(msg: dict) -> None:
     bs_prefetch_used = _block_swap_prefetch_used()
     keep_res_used = _keep_resident_used(msg, keep_res)
     fused_dequant_used = _fused_gguf_dequant_kernel_used()
+    vae_mode_used = _vae_mode_used()
     peak_reserved = _peak_vram_reserved_mb()
     _log(
         f"CHAIN_OK peak_vram_mb={peak} attention_used={attention_used} "
         f"block_swap_prefetch_used={bs_prefetch_used} "
         f"keep_resident_used={keep_res_used} "
         f"fused_gguf_dequant_kernel_used={fused_dequant_used} "
+        f"vae_mode_used={vae_mode_used} "
         f"peak_vram_reserved_mb={peak_reserved} -> {output_path}"
     )
     _emit(
@@ -970,6 +1054,7 @@ def _do_generate_chain(msg: dict) -> None:
         block_swap_prefetch_used=bs_prefetch_used,
         keep_resident_used=keep_res_used,
         fused_gguf_dequant_kernel_used=fused_dequant_used,
+        vae_mode_used=vae_mode_used,
         peak_vram_reserved_mb=peak_reserved,
     )
 

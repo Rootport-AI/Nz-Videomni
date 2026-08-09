@@ -131,6 +131,103 @@ def crop_mp4(input_path: Path, output_path: Path, width: int, height: int) -> Pa
     return output_path
 
 
+# The outpainting sentinel colour, RGB(102, 255, 0) = #66FF00. The official
+# ComfyUI node paints it under the mask before diffusion
+# (``LTXVInpaintPreprocess``, uploads/_outpaint_verify/vanish_nodes.py:92) and
+# the In-Outpainting IC-LoRA was trained to replace exactly this colour. Black
+# would collide with genuinely dark scene content; this green does not occur in
+# natural footage.
+OUTPAINT_GREEN_HEX = "0x66FF00"
+
+
+def pad_green_mp4(
+    input_path: Path,
+    output_path: Path,
+    *,
+    canvas_width: int,
+    canvas_height: int,
+    pad_left: int,
+    pad_top: int,
+    frame_rate: float,
+    num_frames: int,
+) -> Path:
+    """Place ``input_path`` inside a green canvas and write a LOSSLESS, video-only
+    MP4 with EXACTLY ``num_frames`` frames at ``frame_rate`` fps.
+
+    This is the outpainting pre-processing step (`Docs/OUTPAINTING_DESIGN_NOTES.md`
+    §3-2 step 1): the source video is centred/aligned inside a larger canvas and
+    the surrounding pad band is filled with the sentinel green the In-Outpainting
+    IC-LoRA was trained on. The result is what `engine/pipeline/outpaint_pipeline`
+    feeds BOTH as the IC-LoRA reference AND as the ``image_b`` side of the two
+    Laplacian-pyramid blends, so three properties are load-bearing:
+
+    * **Lossless RGB.** ``libx264rgb -crf 0 -pix_fmt rgb24`` keeps the green at
+      exactly (102, 255, 0). A yuv420p round trip shifts it by several units and
+      chroma-subsamples the pad/keep boundary, which is precisely where the model
+      has to decide what is sentinel and what is content. ``ffv1`` is the
+      fallback for ffmpeg builds without libx264rgb (also lossless RGB).
+    * **Exact frame count.** The blends pair frame *i* of the generation with
+      frame *i* of this canvas, and stage 2 asserts its initial latent matches the
+      target shape (``ltx_core/tools.py:106`` ``create_initial_state``), so a
+      canvas that is even one frame short crashes the job deep inside the
+      denoiser. ``tpad=stop=-1:stop_mode=clone`` extends the last frame
+      indefinitely and ``-frames:v`` cuts at exactly ``num_frames`` — the source
+      is normally long enough (the app validates that) and this is the structural
+      backstop against VFR/rounding losing a frame in the ``fps`` filter.
+    * **Video only.** ``-an``: the audio never travels through this file. The
+      engine reads the ORIGINAL upload for the frozen-audio guidance, which
+      avoids both a lossy re-encode and the "codec X has no tag in the MP4
+      container" failure that ``-c:a copy`` hits on PCM/Vorbis/FLAC audio inside
+      a user-supplied container.
+
+    The source is NOT resized: the caller has already verified that its
+    resolution equals the keep rectangle (canvas minus pads).
+    """
+    exe = ffmpeg_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # fps first: the pad/tpad geometry is per frame, so normalising the cadence
+    # before extending keeps `-frames:v` counting output frames, not source ones.
+    #
+    # ``format=rgb24`` before ``pad`` is NOT cosmetic. ffmpeg specifies the pad
+    # colour in RGB but applies it in the filter chain's current pixel format —
+    # for a normal yuv420p input that means the sentinel is converted RGB -> YUV
+    # here and YUV -> RGB again at the rgb24 encoder, and the round trip lands on
+    # (101, 253, 0) instead of (102, 255, 0) (measured). The IC-LoRA was trained
+    # on the exact colour, so the chain is forced into RGB before the pad is
+    # painted and stays there through the lossless encode.
+    vf = (
+        f"fps={frame_rate},"
+        f"format=rgb24,"
+        f"pad={canvas_width}:{canvas_height}:{pad_left}:{pad_top}:color={OUTPAINT_GREEN_HEX},"
+        f"tpad=stop=-1:stop_mode=clone"
+    )
+
+    def _run(vcodec: list[str]) -> subprocess.CompletedProcess:
+        cmd = [
+            exe, "-y",
+            "-i", str(input_path),
+            "-vf", vf,
+            "-map", "0:v",
+            "-an",
+            *vcodec,
+            "-frames:v", str(int(num_frames)),
+            str(output_path),
+        ]
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    proc = _run(["-c:v", "libx264rgb", "-pix_fmt", "rgb24", "-crf", "0"])
+    if proc.returncode != 0:
+        # Second lossless-RGB option for builds compiled without libx264rgb.
+        fallback = _run(["-c:v", "ffv1", "-pix_fmt", "rgb24"])
+        if fallback.returncode != 0:
+            raise FFmpegError(
+                f"ffmpeg green-pad failed (libx264rgb code {proc.returncode}, "
+                f"ffv1 code {fallback.returncode}): {fallback.stderr[-2000:]}"
+            )
+    return output_path
+
+
 def has_audio_stream(path: Path) -> bool:
     """True if ``path`` has at least one audio stream (via ffprobe)."""
     exe = shutil.which("ffprobe")

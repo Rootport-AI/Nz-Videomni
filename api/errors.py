@@ -250,6 +250,54 @@ def lora_preprocess_conflict(kinds: list[str]) -> APIError:
     )
 
 
+def outpaint_preprocess_conflict(kinds: list[str]) -> APIError:
+    """§1-13: outpainting hands the engine a green-padded CANVAS as the reference
+    video, so a control adapter that would first run it through a preprocessor
+    (canny / dwpose / depth) is incoherent — the edge map or depth map of a
+    sentinel-green border is meaningless, and the In-Outpainting IC-LoRA expects
+    the raw pixels. Only ``preprocess: none`` control adapters can outpaint."""
+    return APIError(
+        "OUTPAINT_PREPROCESS_CONFLICT",
+        "outpaint requires a control lora with no reference preprocessing "
+        "(the green canvas must reach the model as raw pixels)",
+        422,
+        detail=f"requested preprocess kinds: {sorted(kinds)}",
+    )
+
+
+def outpaint_source_mismatch(
+    expected: tuple[int, int], actual: tuple[int, int] | None
+) -> APIError:
+    """§1-13: ``width``/``height`` are the final canvas and the four pads are cut
+    out of it, so the keep rectangle is fully determined by the request. If the
+    reference video's own resolution differs, the source would be silently
+    rescaled and centre-cropped into the canvas (``resize_and_center_crop``),
+    quietly breaking outpainting's one invariant — that the original pixels come
+    through untouched. Reject instead of rescaling."""
+    got = "unreadable (ffprobe unavailable or failed)" if actual is None else f"{actual[0]}x{actual[1]}"
+    return APIError(
+        "OUTPAINT_SOURCE_MISMATCH",
+        "the reference video's resolution must equal the outpaint keep region "
+        "(width/height minus the pads)",
+        422,
+        detail=f"keep region {expected[0]}x{expected[1]}, reference video {got}",
+    )
+
+
+def outpaint_source_too_short(available: int, required: int) -> APIError:
+    """§1-13: the two blends pair frame *i* of the generation with frame *i* of
+    the green canvas, and stage 2 asserts its initial latent matches the target
+    shape, so a source shorter than ``num_frames`` cannot be honoured — the tail
+    would be a frozen clone of the last frame while the request claims real
+    footage. Reject up front instead of failing deep inside the denoiser."""
+    return APIError(
+        "OUTPAINT_SOURCE_TOO_SHORT",
+        "num_frames exceeds the reference video's own frame count",
+        422,
+        detail=f"reference video has {available} frames, request needs {required}",
+    )
+
+
 def reference_resolution_invalid(width: int, height: int) -> APIError:
     """Phase C: the reference video is consumed on the VAE's 64-grid. The
     downscale factor is 2 (union-control family) or 1 (deblur); the divisible-by-128

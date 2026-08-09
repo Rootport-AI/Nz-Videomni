@@ -68,6 +68,10 @@ Protocol (one JSON object per line; parent -> worker):
    # spatial upsample runs in halo-padded temporal chunks (VRAM-bounded for long
    # 768p chains). Omitted/false -> the one-shot upsample path is byte-identical.
    chunked_upsample,
+   # stage2_window (optional, default "standard"): stage-2 tile geometry preset,
+   # resolved via chain_math.STAGE2_WINDOW_PRESETS. Omitted -> the frozen 22/18
+   # layout, byte-identical to before this knob existed.
+   stage2_window,
    clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...],
    # V2V continuation (optional; null unless continuing an uploaded video). When
    # present, clips may be length 1; clips[0].num_frames is the TOTAL clip-0
@@ -726,6 +730,30 @@ def _resolve_vae_mode(msg: dict) -> str:
     return mode
 
 
+def _resolve_stage2_window(msg: dict) -> tuple[int, int]:
+    """Resolve a chain job's ``stage2_window`` -> ``(v_tile, v_adv)``.
+
+    Missing key -> the default preset, i.e. the frozen (22, 18) layout every
+    chain used before this knob existed (the payload is additive: the app only
+    sends the key for a NON-default window).
+
+    An unknown value fails the job loudly, the same regime as
+    ``_resolve_vae_mode`` / ``_resolve_attention`` and deliberately UNLIKE the
+    boolean speed knobs: this one changes the OUTPUT (different tile seams,
+    different pixels), so quietly falling back to "standard" would record a
+    truthful-looking metadata ``v_tile`` for a job that ignored the request.
+    ``chain_math.resolve_stage2_window`` already raises ValueError on an unknown
+    name; it is re-raised as RuntimeError to match this module's other
+    protocol-mismatch failures.
+    """
+    import chain_math
+
+    try:
+        return chain_math.resolve_stage2_window(msg.get("stage2_window"))
+    except ValueError as exc:
+        raise RuntimeError(f"worker: {exc}") from exc
+
+
 def _vae_mode_used() -> str:
     """The ``done`` event's ``vae_mode_used``: "off" (the stock video VAE
     decoder ran), "on" (PrunaVAED ran), or "on->off" (PrunaVAED was requested
@@ -809,42 +837,86 @@ def _do_generate(msg: dict) -> None:
     # (the pruned decoder is not bit-identical to the stock one by design).
     vae_mode = _resolve_vae_mode(msg)
 
+    outpaint = msg.get("outpaint")
+
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
+        f"outpaint={'yes' if outpaint else 'no'} "
         f"neg={_neg_label(nag)} attn={attention} bsprefetch={bs_prefetch} "
         f"keepresident={keep_res} fuseddequant={fused_dequant} vae={vae_mode}"
     )
-    # F2: single-generate runs the wheel's two denoising loops back-to-back
-    # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
-    # the loop-invocation count within this op (see engine/progress_shim.py).
-    progress_shim.begin_single_op()
-    try:
-        _PIPE.generate(
-            prompt=msg["prompt"],
-            seed=seed,
-            height=int(msg["height"]),
-            width=int(msg["width"]),
-            num_frames=int(msg["num_frames"]),
-            frame_rate=msg["frame_rate"],
-            images=images,
-            output_path=output_path,
-            num_steps=int(msg["num_steps"]),
-            ic_loras=ic_loras,
-            ic_reference=ic_reference,
-            ic_attention_strength=attn_strength,
-            nag=nag,
-            attention_backend=attention,
-            block_swap_prefetch=bs_prefetch,
-            # 常に明示的な bool を渡す（None="触らない"はスパイク互換用の
-            # 既定であって、ワーカーからは使わない）。
-            keep_resident=keep_res,
-            fused_gguf_dequant_kernel=fused_dequant,
-            vae_mode=vae_mode,
+
+    # Every knob the two entry points share, built ONCE. Splatting the same dict
+    # into both calls is what makes it structurally impossible for the outpaint
+    # branch to quietly miss one — dropping e.g. keep_resident or vae_mode would
+    # not fail, it would silently leak the previous job's state.
+    common = dict(
+        prompt=msg["prompt"],
+        seed=seed,
+        num_frames=int(msg["num_frames"]),
+        frame_rate=msg["frame_rate"],
+        output_path=output_path,
+        num_steps=int(msg["num_steps"]),
+        ic_loras=ic_loras,
+        ic_reference=ic_reference,
+        ic_attention_strength=attn_strength,
+        nag=nag,
+        attention_backend=attention,
+        block_swap_prefetch=bs_prefetch,
+        # 常に明示的な bool を渡す（None="触らない"はスパイク互換用の
+        # 既定であって、ワーカーからは使わない）。
+        keep_resident=keep_res,
+        fused_gguf_dequant_kernel=fused_dequant,
+        vae_mode=vae_mode,
+    )
+
+    meta = None
+    if outpaint is not None:
+        # Outpainting (§1-13). ``reference_video.path`` is already the green
+        # canvas the app built, so ic_reference above points at it and this
+        # branch only has to hand run_outpaint the geometry it needs to rebuild
+        # the blend mask. Unlike the wheel's single generate, run_outpaint drives
+        # its two stages itself and tags them explicitly, so the shim's
+        # loop-counting inference (begin_single_op) must NOT be used here.
+        from engine.outpaint.canvas import OutpaintGeometry
+
+        geometry = OutpaintGeometry(
+            canvas_width=int(outpaint["canvas_width"]),
+            canvas_height=int(outpaint["canvas_height"]),
+            pad_left=int(outpaint["pad_left"]),
+            pad_right=int(outpaint["pad_right"]),
+            pad_top=int(outpaint["pad_top"]),
+            pad_bottom=int(outpaint["pad_bottom"]),
         )
-    finally:
-        progress_shim.end_op()
+        assert ic_reference is not None, (
+            "outpaint requires a reference video (the green canvas); the API "
+            "layer enforces this before the job is created"
+        )
+        meta = _PIPE.generate_outpaint(
+            canvas_path=ic_reference[0],
+            source_path=outpaint.get("source_path"),
+            geometry=geometry,
+            blend_dilation_stage1=int(outpaint.get("blend_dilation_stage1", 5)),
+            blend_dilation_stage2=int(outpaint.get("blend_dilation_stage2", 2)),
+            freeze_source_audio=bool(outpaint.get("freeze_source_audio", True)),
+            **common,
+        )
+    else:
+        # F2: single-generate runs the wheel's two denoising loops back-to-back
+        # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
+        # the loop-invocation count within this op (see engine/progress_shim.py).
+        progress_shim.begin_single_op()
+        try:
+            _PIPE.generate(
+                height=int(msg["height"]),
+                width=int(msg["width"]),
+                images=images,
+                **common,
+            )
+        finally:
+            progress_shim.end_op()
 
     peak = torch.cuda.max_memory_allocated(DEV) // (1024 * 1024)
 
@@ -875,6 +947,10 @@ def _do_generate(msg: dict) -> None:
         fused_gguf_dequant_kernel_used=fused_dequant_used,
         vae_mode_used=vae_mode_used,
         peak_vram_reserved_mb=peak_reserved,
+        # Outpainting geometry/blend/audio record, mirroring how the chain path
+        # relays its own ``chain=meta``. Absent on every other job, so a plain
+        # generate's done event stays byte-identical.
+        **({} if meta is None else {"outpaint": meta["outpaint"]}),
     )
 
     # Resident-reuse: free the just-finished job's transient allocations before
@@ -970,6 +1046,11 @@ def _do_generate_chain(msg: dict) -> None:
     # long 768p chain fits in 16GB VRAM.
     chunked_upsample = bool(msg.get("chunked_upsample", False))
 
+    # Stage-2 window preset (additive; absent -> the frozen (22, 18) geometry,
+    # byte-identical to before). One window covers every stage-2 tile of the
+    # chain — see _resolve_stage2_window.
+    stage2_v_tile, stage2_v_adv = _resolve_stage2_window(msg)
+
     # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
     # identical to before this feature existed.
     nag = _resolve_nag(msg)
@@ -996,7 +1077,8 @@ def _do_generate_chain(msg: dict) -> None:
         f"audio_source={'yes' if audio_source else 'no'} "
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
         f"bsprefetch={bs_prefetch} keepresident={keep_res} "
-        f"fuseddequant={fused_dequant} vae={vae_mode}"
+        f"fuseddequant={fused_dequant} vae={vae_mode} "
+        f"stage2win={stage2_v_tile}/{stage2_v_adv}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -1019,6 +1101,8 @@ def _do_generate_chain(msg: dict) -> None:
         ic_reference=ic_reference,
         ic_attention_strength=ic_attn,
         chunked_upsample=chunked_upsample,
+        stage2_v_tile=stage2_v_tile,
+        stage2_v_adv=stage2_v_adv,
         nag=nag,
         attention_backend=attention,
         block_swap_prefetch=bs_prefetch,

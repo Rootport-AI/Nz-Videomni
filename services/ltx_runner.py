@@ -362,7 +362,14 @@ class LTXRunner:
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
+        outpaint_source_path: Path | None = None,
     ) -> GenerationOutcome:
+        """``outpaint_source_path`` (§1-13, additive): the ORIGINAL uploaded video
+        for an outpainting job. ``reference_video_path`` already points at the
+        green-padded canvas pipeline_manager built from it; this second path is
+        what the engine reads the frozen-guidance AUDIO from, because the canvas
+        is deliberately written video-only (see ``video_io.pad_green_mp4``).
+        ``None`` for every non-outpaint job."""
         if self._backend is None or not self._backend.loaded:
             self.load()
         assert self._backend is not None
@@ -374,6 +381,7 @@ class LTXRunner:
             lora_paths=lora_paths,
             reference_video_path=reference_video_path,
             seed=seed,
+            outpaint_source_path=outpaint_source_path,
         )
 
     def generate_chain(
@@ -628,6 +636,7 @@ class _MockBackend:
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
+        outpaint_source_path: Path | None = None,
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
 
@@ -640,6 +649,12 @@ class _MockBackend:
         backend accepts (and ignores) them so the full route completes GPU-free —
         the real weight patch (and the preprocess -> control-signal conversion)
         lives in the engine worker.
+
+        ``outpaint_source_path`` (§1-13) is accepted and ignored for the same
+        reason: the mock never opens a video. It does honour the outpaint
+        GEOMETRY though — ``request.width``/``height`` are already the canvas, so
+        the placeholder comes out at the extended size and ``_render_frames``
+        outlines where the source footage would have gone.
         """
         if not self._loaded:
             self.load()
@@ -732,9 +747,18 @@ class _MockBackend:
 
         chain = chain_request
         seed = int(seed) if seed is not None else resolve_seed(chain.seed)
+        # Stage-2 window preset: resolved HERE too, not just in the real
+        # backend. The mock's junction metadata comes from the same
+        # ``compute_chain_layout``, so omitting this would make every mock-backed
+        # test pass with standard-window geometry no matter what the request
+        # asked for — a silent false green on the whole feature.
+        v_tile, v_adv = chain_math.resolve_stage2_window(
+            getattr(chain, "stage2_window", None)
+        )
         layout = chain_math.compute_chain_layout(
             [c.num_frames for c in chain.clips], chain.frame_rate,
             kv=chain.overlap_frames,
+            v_tile=v_tile, v_adv=v_adv,
             source_context_px=source_context_frames,
         )
         gpu_info.reset_peak_vram()
@@ -940,6 +964,20 @@ class _MockBackend:
             cy = int(h * (0.5 + 0.3 * math.sin(t * 2 * math.pi)))
             r = max(6, min(w, h) // 12)
             draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ball_color)
+            # Outpainting (§1-13): the clip is already the CANVAS size (width /
+            # height ARE the canvas), so the only thing the placeholder has to
+            # add is where the original footage would have sat — otherwise a
+            # mock outpaint run is indistinguishable from a plain one and the
+            # geometry could be wrong all the way to the real backend. The keep
+            # rectangle is outlined in the sentinel green so the marker names
+            # the feature it belongs to.
+            if request.outpaint is not None:
+                op = request.outpaint
+                draw.rectangle(
+                    [op.pad_left, op.pad_top, w - op.pad_right - 1, h - op.pad_bottom - 1],
+                    outline=(102, 255, 0),
+                    width=3,
+                )
             frames.append(frame)
 
             # emulate diffusion step progress (0.10 -> 0.90 across steps)
@@ -1320,6 +1358,7 @@ class _RealBackend:
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
+        outpaint_source_path: Path | None = None,
     ) -> GenerationOutcome:
         if not self.loaded:
             self.load()
@@ -1459,6 +1498,27 @@ class _RealBackend:
         # vae_mode_used="on->off".
         if request.vae_mode != "default":
             payload["vae_mode"] = request.vae_mode
+        # Outpainting (§1-13): same additive contract — the key is absent from
+        # every non-outpaint job, so their payloads stay byte-identical. Its
+        # presence is ALSO the switch that routes the worker to
+        # ``generate_outpaint`` instead of ``generate``, so it carries the full
+        # geometry (the engine must rebuild the blend mask) rather than a flag.
+        # ``reference_video.path`` above is already the green canvas; the
+        # ``source_path`` here is the original upload, read only for audio.
+        if request.outpaint is not None:
+            op = request.outpaint
+            payload["outpaint"] = {
+                "source_path": str(outpaint_source_path) if outpaint_source_path else None,
+                "canvas_width": request.width,
+                "canvas_height": request.height,
+                "pad_left": op.pad_left,
+                "pad_right": op.pad_right,
+                "pad_top": op.pad_top,
+                "pad_bottom": op.pad_bottom,
+                "blend_dilation_stage1": op.blend_dilation_stage1,
+                "blend_dilation_stage2": op.blend_dilation_stage2,
+                "freeze_source_audio": op.freeze_source_audio,
+            }
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -1682,6 +1742,12 @@ class _RealBackend:
         # value covers every clip and every stage of the chain.
         if chain.vae_mode != "default":
             payload["vae_mode"] = chain.vae_mode
+        # stage2_window: same additive contract as the acceleration keys above —
+        # sent ONLY when the request opted off "standard", so a default chain's
+        # worker payload stays byte-identical to before this knob existed
+        # (tests/test_ltx_runner_payload.py pins the exact key set).
+        if chain.stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
+            payload["stage2_window"] = chain.stage2_window
 
         with self._lock:
             try:

@@ -31,6 +31,22 @@ from config import LimitsConfig
 # SourceVideoSpec.validate_context_frames.
 _LIMITS_DEFAULTS = LimitsConfig()
 
+# Outpainting (§1-13): the smallest keep-rectangle side we accept.
+#
+# The Laplacian-pyramid blend dilates its mask AFTER shrinking it to a 64px long
+# side, so a radius of r pixels there costs ``r * canvas_long_side / 64`` real
+# pixels — about 150px at a 1920px canvas with the official r=5. That dilation
+# grows the *generated* region inward, so a keep rectangle smaller than roughly
+# twice that is entirely replaced by generated content and the "keep" promise
+# becomes a lie. 256 is the flat floor that stops the pathological case.
+#
+# ``engine/outpaint/canvas.py`` carries the same number as a defence-in-depth
+# check. It is duplicated rather than shared because the app venv and the engine
+# venv never import each other (services/ltx_runner.py's module docstring); the
+# API is the enforcing layer, so drift can only ever make the engine stricter —
+# a loud ValueError, never a silently wrong result.
+OUTPAINT_MIN_KEEP_SIDE = 256
+
 # block_swap_prefetch's own default (S4, 2026-08-01: real-device gate G1-G7
 # passed, owner confirmed "gate green -> default on"). Named (unlike most
 # Field defaults in this file) because it is the SINGLE SOURCE this module's
@@ -107,6 +123,58 @@ class LoraSpec(BaseModel):
                 "(no '/', '\\' or '..')"
             )
         return self
+
+
+class OutpaintSpec(BaseModel):
+    """Canvas extension (outpainting), §1-13. Reproduces the official Lightricks
+    ``LTX-2.3_ICLoRA_Outpaint_Two_Stage_Distilled`` ComfyUI workflow.
+
+    Geometry contract: ``GenerateRequest.width`` / ``height`` are the FINAL
+    CANVAS, and the four pads are cut out of it — the keep rectangle is
+    ``width - pad_left - pad_right`` by ``height - pad_top - pad_bottom`` and
+    must equal the reference video's own resolution (the endpoint verifies this
+    with ffprobe and rejects a mismatch). Deriving the canvas from the pads
+    instead would give geometry two sources of truth, and the existing
+    128-multiple rule already applies to ``width``/``height``, so the canvas is
+    the natural place to anchor it. The source video is never resized.
+
+    ``align_h`` / ``align_v`` are deliberately NOT part of this contract: the
+    alignment choice is a UI affordance for *distributing* the pads, and pads do
+    not determine an alignment uniquely, so the four numbers are both the more
+    precise and the only necessary record.
+    """
+
+    pad_left: int = Field(0, ge=0, le=4096)
+    pad_right: int = Field(0, ge=0, le=4096)
+    pad_top: int = Field(0, ge=0, le=4096)
+    pad_bottom: int = Field(0, ge=0, le=4096)
+
+    # Laplacian-pyramid blend dilation for the two blends (after stage 1 at half
+    # resolution, and after stage 2 at full resolution). The official workflow's
+    # own values are 5 and 2 (nodes 5266 / 5226) and its note calls this "the
+    # most important parameter".
+    #
+    # This IS surfaced in the UI (2026-08-09; it was withheld when the field was
+    # first added). The AviUtl2 WebUI's Outpainting panel shows it as a single
+    # "マスクブラー" (mask blur) slider over this very 0-15 stage-1 range, with
+    # stage 2 following at the workflow's own 5:2 ratio so the two can never
+    # drift apart. Two things stay hidden behind that one control: the numbers
+    # the user reads are the resulting band in full-resolution pixels (the step
+    # count means nothing without a canvas size), and both keys are omitted from
+    # the request entirely while they sit at these defaults — so a server that
+    # predates the fields still accepts a default outpaint request.
+    blend_dilation_stage1: int = Field(5, ge=0, le=15)
+    blend_dilation_stage2: int = Field(2, ge=0, le=15)
+
+    # Freeze the source video's own audio latent across both stages. The
+    # official workflow does this and notes "Frozen audio helps guiding
+    # outpainting to be consistent with the sounds in the video" (node 5392);
+    # turning it off lets the model invent audio for the widened frame instead.
+    freeze_source_audio: bool = True
+
+    @property
+    def total_pad(self) -> int:
+        return self.pad_left + self.pad_right + self.pad_top + self.pad_bottom
 
 
 class GenerateRequest(BaseModel):
@@ -261,6 +329,10 @@ class GenerateRequest(BaseModel):
     # unchanged (the runner still emits strength=1.0 when this is None).
     reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)
 
+    # Outpainting (§1-13, ADDITIVE/optional). ``None`` ⇒ the request is
+    # byte-identical to before. See OutpaintSpec for the geometry contract.
+    outpaint: OutpaintSpec | None = None
+
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
         if self.width % 64 != 0:
@@ -330,6 +402,41 @@ class GenerateRequest(BaseModel):
             )
         if self.nag_enabled and not self.negative_prompt.strip():
             raise ValueError("nag_enabled requires a non-empty negative_prompt")
+
+        # ── Outpainting (§1-13) ───────────────────────────────────────────────
+        # One flat check per rule (no nesting): every failure names exactly what
+        # the caller got wrong.
+        if self.outpaint is not None:
+            op = self.outpaint
+            if not self.reference_video_id:
+                raise ValueError(
+                    "outpaint requires reference_video_id (the video whose "
+                    "canvas is being extended)"
+                )
+            if op.total_pad == 0:
+                raise ValueError(
+                    "outpaint requires at least one non-zero pad (nothing would "
+                    "be extended otherwise)"
+                )
+            if self.conditioning_images:
+                raise ValueError(
+                    "outpaint and conditioning_images are mutually exclusive "
+                    "(the source video already fixes the frame content)"
+                )
+            if self.crop_output is not None:
+                raise ValueError(
+                    "outpaint and crop_output are mutually exclusive (cropping "
+                    "the result would cut off the region that was just extended)"
+                )
+            keep_width = self.width - op.pad_left - op.pad_right
+            keep_height = self.height - op.pad_top - op.pad_bottom
+            if keep_width < OUTPAINT_MIN_KEEP_SIDE or keep_height < OUTPAINT_MIN_KEEP_SIDE:
+                raise ValueError(
+                    f"outpaint keep region {keep_width}x{keep_height} is smaller "
+                    f"than {OUTPAINT_MIN_KEEP_SIDE}px on a side; the blend's mask "
+                    "dilation reaches roughly a tenth of the canvas's long side "
+                    "inward and would consume it entirely"
+                )
         return self
 
     @property
@@ -541,6 +648,22 @@ class GenerateChainRequest(BaseModel):
     # path untouched (owner decision: off = zero regression).
     chunked_upsample: bool = False
 
+    # Stage-2 window preset (ADDITIVE/optional — a request omitting this field is
+    # byte-identical to before). "standard" keeps the frozen 22/18 stage-2 tile
+    # layout; "high_resolution" switches to 19/12 (a shorter window with a wider
+    # 7-frame overlap), which costs ~14% fewer attention tokens per tile and so
+    # keeps high resolutions inside the comfortable budget
+    # (chain_math.CHAIN_COMFORT_TOKEN_BUDGET) instead of spilling. It advances
+    # less per tile, so the same timeline gets MORE seams — hence opt-in, never
+    # the default (owner decision 2026-08-09, §3-57 sweep + follow-up).
+    #
+    # Named for the geometry, NOT for a duration: the window's advance is a
+    # LATENT-frame count, so its wall-clock length depends on frame_rate. The UI
+    # is what renders it as seconds for the frame rate actually chosen.
+    # chain_math.STAGE2_WINDOW_PRESETS is the single source of truth for the
+    # numbers behind each name.
+    stage2_window: Literal["standard", "high_resolution"] = "standard"
+
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
         if self.width % 64 != 0:
@@ -641,10 +764,38 @@ class GenerateChainRequest(BaseModel):
         # engine and the metadata agree; it also raises on a degenerate audio
         # overlap (clips too short for a continuous crossfade).
         import chain_math
+        # Stage-2 window preset -> the (v_tile, v_adv) the engine will actually
+        # tile with. Passed EXPLICITLY so this validator's geometry matches the
+        # engine's even when the request opted into a non-default window; the
+        # default resolves to the same (22, 18) compute_chain_layout would have
+        # used on its own, so an omitted stage2_window is byte-identical.
+        stage2_v_tile, stage2_v_adv = chain_math.resolve_stage2_window(self.stage2_window)
+
+        # V2V x non-default window: the frozen source head must leave stage-2
+        # TILE 0 something to generate. The public
+        # config.limits.v2v_context_frames_max (145) is sized for the standard
+        # window (ceiling 161) and is deliberately NOT changed here — the
+        # narrower "high_resolution" window (ceiling 137) needs its own check,
+        # or a 145-frame context would freeze tile 0 completely (an untested
+        # degenerate that compute_chain_layout's own `n_ctx_v > v_tile` guard
+        # would still wave through, since 19 is not > 19).
+        if self.source_video is not None:
+            max_ctx = chain_math.stage2_max_context_px(stage2_v_tile)
+            if self.source_video.context_frames > max_ctx:
+                raise ValueError(
+                    f"source_video.context_frames ({self.source_video.context_frames}) "
+                    f"must be <= {max_ctx} when stage2_window={self.stage2_window!r} "
+                    "(a longer frozen head would fill the whole first stage-2 "
+                    "window, leaving nothing to generate). Shorten context_frames "
+                    'or switch stage2_window back to "standard".'
+                )
+
         try:
             layout = chain_math.compute_chain_layout(
                 [c.num_frames for c in self.clips], self.frame_rate,
                 kv=self.overlap_frames,
+                v_tile=stage2_v_tile,
+                v_adv=stage2_v_adv,
                 source_context_px=(
                     self.source_video.context_frames if self.source_video else None
                 ),

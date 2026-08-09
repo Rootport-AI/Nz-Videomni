@@ -41,13 +41,104 @@ from dataclasses import dataclass, field
 VIDEO_TIME_FACTOR = 8            # temporal VAE compression (causal +1 keyframe)
 AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 
-# ── Stage-2 tile layout (video-latent domain), hard-frozen from the S2 spike ──
-# 22 latent frames per tile keeps BOTH video and audio temporal RoPE positions
-# well under the trained 20s ceiling (each tile restarts local positions at 0);
-# advance 18 -> 4-frame overlap between consecutive stage-2 tiles.
-STAGE2_V_TILE = 22
-STAGE2_V_ADV = 18
+# ── Stage-2 window presets (video-latent domain) ─────────────────────────────
+# ``(v_tile, v_adv)`` per selectable stage-2 window; the overlap ("のり代") is
+# always the derived ``kt_v = v_tile - v_adv``.
+#
+#   "standard"        (22, 18) -> kt_v 4.  The S2-spike default, unchanged since
+#       Phase 3 WP4. 22 latent frames per tile keeps BOTH video and audio
+#       temporal RoPE positions well under the trained 20s ceiling (each tile
+#       restarts local positions at 0); advance 18 -> 4-frame overlap between
+#       consecutive stage-2 tiles.
+#   "high_resolution" (19, 12) -> kt_v 7.  Opt-in only (§3-57 sweep + follow-up,
+#       owner decision 2026-08-09). A 19-frame window costs ~14% fewer attention
+#       tokens per tile, which keeps high resolutions (>= ~1216x1664) inside the
+#       comfortable budget below instead of spilling; the wider 7-frame overlap
+#       is what the follow-up run added to suppress the "morphing" the bare
+#       19/4 window showed on owner review. It advances less per tile, so a
+#       chain of the same length gets MORE seams — hence opt-in, not default.
+#       See Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §1 and
+#       outputs/stage2_window_sweep/SWEEP_RESULTS.md.
+#
+# BOTH advances are multiples of 3, which is what keeps the 24fps video/audio
+# advance rounding exact. A future preset MUST honour that too.
+STAGE2_WINDOW_PRESETS: dict[str, tuple[int, int]] = {
+    "standard": (22, 18),
+    "high_resolution": (19, 12),
+}
+STAGE2_WINDOW_DEFAULT = "standard"
+
+STAGE2_V_TILE, STAGE2_V_ADV = STAGE2_WINDOW_PRESETS[STAGE2_WINDOW_DEFAULT]
 STAGE2_KT_V = STAGE2_V_TILE - STAGE2_V_ADV   # 4
+
+
+# ── ORDERING CONSTRAINT (do not move this block below `def compute_chain_layout`)
+# ``compute_chain_layout``'s ``v_tile: int = STAGE2_V_TILE`` / ``v_adv: int =
+# STAGE2_V_ADV`` default arguments are bound to whatever those names hold at
+# `def`-EVALUATION time (Python evaluates default-argument expressions once, at
+# function definition, not at call time). So the preset table, the two derived
+# STAGE2_* constants and everything below MUST stay ABOVE that `def`:
+# reassigning STAGE2_V_TILE afterwards — or monkeypatching it from outside the
+# module — would NOT change the function's defaults. ``tests/test_stage2_window.py``
+# pins this by asserting the bound defaults equal the "standard" preset.
+def resolve_stage2_window(name: str | None) -> tuple[int, int]:
+    """Resolve a stage-2 window preset NAME to its ``(v_tile, v_adv)``.
+
+    ``None`` / ``""`` -> the default preset (so every caller that simply has no
+    opinion produces byte-identical geometry to before this knob existed). An
+    unknown name raises ValueError: the window changes the OUTPUT, so a typo
+    must fail loudly rather than silently fall back to the default.
+    """
+    key = name or STAGE2_WINDOW_DEFAULT
+    try:
+        return STAGE2_WINDOW_PRESETS[key]
+    except KeyError as exc:
+        raise ValueError(
+            f"unknown stage2_window {name!r}; expected one of "
+            f"{sorted(STAGE2_WINDOW_PRESETS)}"
+        ) from exc
+
+
+# ── Comfortable per-tile attention-token budget (§1-14) ──────────────────────
+# ONE stage-2 tile attends over ``(width/32) * (height/32) * v_tile`` latent
+# tokens (32 = the video VAE's spatial compression factor). Past roughly this
+# many tokens the attention working set stops fitting the comfortable VRAM
+# envelope and the run starts paying for it — measured on the §3-57 spill arm
+# (outputs/stage2_window_sweep/SWEEP_RESULTS.md §2b): 44,880 tokens cost
+# +1,277MB peak VRAM and +27% wall clock against 38,760 at the same resolution;
+# 47,840 cost +2,309MB and +32% against 36,800. 40,000 sits between the clean
+# and spilling measurements of both pairs.
+#
+# This is a SEPARATE axis from ``config.limits.spill_free_frames`` (the
+# server-published comfortable per-clip FRAME cap for a resolution): that one
+# bounds how LONG one clip may be, this one bounds how WIDE one stage-2 window
+# is. A chain can satisfy one and violate the other.
+CHAIN_COMFORT_TOKEN_BUDGET = 40_000
+
+
+def chain_window_tokens(width: int, height: int, v_tile: int) -> int:
+    """Attention tokens ONE stage-2 tile spans at ``width x height``.
+
+    ``(width // 32) * (height // 32) * v_tile``. Compare against
+    :data:`CHAIN_COMFORT_TOKEN_BUDGET`. Chain-specific: a single ``/generate``
+    refines the whole clip in one window, so its budget is a different number.
+    """
+    return (width // 32) * (height // 32) * v_tile
+
+
+def stage2_max_context_px(v_tile: int) -> int:
+    """Largest 8n+1 V2V context span that leaves tile 0 something to generate.
+
+    The variant-B hard-freeze covers stage-2 TILE 0 only, so the frozen head
+    must fit inside it — but a head that fills it EXACTLY (``n_ctx_v ==
+    v_tile``) leaves tile 0 100% frozen, an untested degenerate. This is the
+    ceiling for ``n_ctx_v <= v_tile - 1``: 161 for the standard window (above
+    ``config.limits.v2v_context_frames_max`` = 145, so it never binds there)
+    and 137 for "high_resolution" (below 145, so it DOES bind — see
+    ``api/models.py``'s GenerateChainRequest cross-validation).
+    """
+    return px_from_v_latent(v_tile - 1)
+
 
 # Default continuity params (new semantics: overlap_frames == K_v LATENT frames).
 DEFAULT_OVERLAP_FRAMES = 3       # K_v (video latent overlap), S1-validated

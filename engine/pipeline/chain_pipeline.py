@@ -37,6 +37,8 @@ from typing import TYPE_CHECKING
 import torch
 
 from chain_math import (
+    STAGE2_V_ADV,
+    STAGE2_V_TILE,
     VIDEO_TIME_FACTOR,
     ChainLayout,
     audio_segment_windows,
@@ -417,6 +419,8 @@ def run_chain(
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
     chunked_upsample: bool = False,
+    stage2_v_tile: int | None = None,
+    stage2_v_adv: int | None = None,
     nag: NagParams | VsfParams | None = None,
 ) -> dict:
     """Run a masked AV-latent chain to ONE mp4. Returns metadata incl. junctions.
@@ -449,6 +453,12 @@ def run_chain(
     that). ``ic_reference=None`` -> the chain is byte-identical to before: the
     ``_set_ic_job`` below is called with ``(loras, None, 1.0)`` (stale-clear
     semantics preserved) and no reference latent is injected.
+
+    ``stage2_v_tile`` / ``stage2_v_adv`` (stage-2 window, additive): the tile
+    geometry ``compute_chain_layout`` lays the stage-2 pass out with. ``None``
+    (both) -> ``chain_math.STAGE2_V_TILE`` / ``STAGE2_V_ADV``, i.e. byte-identical
+    to before this knob existed. The caller resolves the preset NAME
+    (``chain_math.resolve_stage2_window``); this function only ever sees numbers.
 
     ``nag`` (NAG negative-prompt guidance, additive): always set explicitly
     (``None`` included — the same stale-clear discipline as ``ic_loras`` above),
@@ -493,8 +503,16 @@ def run_chain(
 
     clip_frames = [c.num_frames for c in clips]
     src_ctx_px = int(source.context_frames) if source is not None else None
+    # Stage-2 window geometry: ``None`` -> the module defaults, so the layout
+    # (and therefore every pixel downstream) is byte-identical to before this
+    # knob existed. The caller resolved the preset NAME; only the resolved
+    # numbers reach here, keeping this function preset-agnostic.
+    v_tile = STAGE2_V_TILE if stage2_v_tile is None else int(stage2_v_tile)
+    v_adv = STAGE2_V_ADV if stage2_v_adv is None else int(stage2_v_adv)
     layout: ChainLayout = compute_chain_layout(
-        clip_frames, frame_rate, kv=kv, source_context_px=src_ctx_px
+        clip_frames, frame_rate, kv=kv,
+        v_tile=v_tile, v_adv=v_adv,
+        source_context_px=src_ctx_px,
     )
     n_ctx_v = layout.n_ctx_v  # 0 when source is None
     ka_list = layout.ka_list

@@ -218,7 +218,8 @@ def slot_step_state(count, delta, min_open, max_slots,
 
 
 def compute_chain_duration_label(enabled_flags, frames_list, fps,
-                                 overlap_frames, lang: str = _DEFAULT_LANG) -> str:
+                                 overlap_frames, lang: str = _DEFAULT_LANG,
+                                 stage2_window=None) -> str:
     """Estimated total chain duration for the currently-enabled clips, shown
     under the "Clip list" heading. Uses the SAME geometry as the server
     (``chain_math.compute_chain_layout`` + ``MAX_CHAIN_TOTAL_PIXEL_FRAMES``, the
@@ -227,7 +228,14 @@ def compute_chain_duration_label(enabled_flags, frames_list, fps,
     slot order. Degenerate geometry (e.g. the overlap not fitting inside a tiny
     clip) is swallowed and rendered as the neutral ``chain_est_none`` placeholder,
     since this is a live readout, not a submit-time gate. An over-cap total gets
-    the ``chain_est_over`` warning wording. Returns a Markdown string."""
+    the ``chain_est_over`` warning wording. Returns a Markdown string.
+
+    ``stage2_window`` (ADDITIVE, appended AFTER ``lang`` because ``ui.py`` wires
+    this function's arguments POSITIONALLY through Gradio ``inputs=[...]``):
+    the stage-2 window preset NAME; ``None`` -> the default, i.e. the exact
+    geometry this readout used before the knob existed. See
+    ``gradio_ui/validation.check_chain_total`` for why this is plumbed through
+    even though this tab has no window selector yet."""
     import chain_math
 
     flags = list(enabled_flags or [])
@@ -249,7 +257,9 @@ def compute_chain_duration_label(enabled_flags, frames_list, fps,
             return L("chain_est_none", lang)
         kv = (int(overlap_frames) if overlap_frames is not None
               else chain_math.DEFAULT_OVERLAP_FRAMES)
-        layout = chain_math.compute_chain_layout(clip_frames, fps_v, kv=kv)
+        v_tile, v_adv = chain_math.resolve_stage2_window(stage2_window)
+        layout = chain_math.compute_chain_layout(clip_frames, fps_v, kv=kv,
+                                                 v_tile=v_tile, v_adv=v_adv)
     except (ValueError, TypeError, ZeroDivisionError):
         return L("chain_est_none", lang)
 
@@ -273,7 +283,8 @@ def _chain_preset_clip_recommendation(width, height, fallback_num_frames,
 
 
 def _chain_preset_total_warning(recommended_frames, n_enabled_clips, fps,
-                                 overlap_frames, lang: str = _DEFAULT_LANG):
+                                 overlap_frames, lang: str = _DEFAULT_LANG,
+                                 stage2_window=None):
     """Chain-total-timeline warning for ``n_enabled_clips`` clips all set to
     ``recommended_frames``. Uses the SAME geometry as the server
     (``chain_math.compute_chain_layout`` + ``MAX_CHAIN_TOTAL_PIXEL_FRAMES``,
@@ -293,7 +304,11 @@ def _chain_preset_total_warning(recommended_frames, n_enabled_clips, fps,
         fps_v = float(fps) if fps else 24.0
         kv = int(overlap_frames) if overlap_frames is not None else chain_math.DEFAULT_OVERLAP_FRAMES
         clip_frames = [int(recommended_frames)] * int(n_enabled_clips)
-        layout = chain_math.compute_chain_layout(clip_frames, fps_v, kv=kv)
+        # ``stage2_window`` (ADDITIVE, after ``lang`` — see
+        # ``compute_chain_duration_label``): ``None`` -> the default preset.
+        v_tile, v_adv = chain_math.resolve_stage2_window(stage2_window)
+        layout = chain_math.compute_chain_layout(clip_frames, fps_v, kv=kv,
+                                                 v_tile=v_tile, v_adv=v_adv)
     except (ValueError, TypeError):
         return gr.update(value="", visible=False)
 

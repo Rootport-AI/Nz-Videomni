@@ -432,6 +432,7 @@ if ($CloneUpstreamReference) {
 #    so no HuggingFace account, login or token is involved anywhere:
 #      Rootport/Nz-LTX23-weights -> ltx-2.3/, ltx-2.3-components/, ltx-2.3-gguf/,
 #                                   ltx-2.3-ic-lora/, ltx-2.3-ic-lora-deblur/,
+#                                   ltx-2.3-ic-lora-in-outpainting/,
 #                                   preprocessors-vda/
 #      Rootport/Nz-Gemma3-12B    -> gemma-3-12b-it-gguf/, gemma-3-12b-it-tokenizer/
 #      Rootport/Nz-DWPose        -> preprocessors/
@@ -699,6 +700,33 @@ if ($SkipModels) {
             @{ Dir = "models/ltx-2.3-ic-lora-deblur"; Min = [long] 900000000 }
         )
 
+    # 4b) IC-LoRA In-Outpainting, 1 file / 1,308,778,338 B:
+    #      ltx-2.3-ic-lora-in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors
+    #    The official Lightricks adapter behind the Edit tab's Outpainting panel
+    #    (canvas extension, PENDING_TASKS.md 1-13). Like deblur it needs NO
+    #    preprocessor -- the green-padded canvas is handed to it as-is, which is
+    #    why config.yaml registers `in-outpainting:` in the bare STRING form.
+    #    Feeding it through canny/depth would hand the model an edge map of a
+    #    sentinel colour, so api/generate.py rejects that combination outright.
+    #
+    #    Its OWN Check directory for exactly the reason spelled out in call 4: the
+    #    guard is a recursive size sum, so dropping 1.3GB into an existing
+    #    directory would let its guard pass while a sibling file was missing. The
+    #    repo stores it at ltx-2.3-ic-lora-in-outpainting/ so it expands here as a
+    #    sibling of ltx-2.3-ic-lora/ with no post-processing.
+    #
+    #    Min sizing (same rule as call 4): one file, and that file IS gated by the
+    #    step 6 table, so the window is (1,308,778,338 - 1,308,778,338 = 0) up to
+    #    its own size -> 1,300,000,000. Losing it drops the dir to 0 and a
+    #    truncated download lands under the Min; both re-trigger.
+    Invoke-ModelDownload -Name "IC-LoRA In-Outpainting (1 file)" `
+        -Repo "Rootport/Nz-LTX23-weights" `
+        -Include @("ltx-2.3-ic-lora-in-outpainting/*") `
+        -LocalDir "models" `
+        -Check @(
+            @{ Dir = "models/ltx-2.3-ic-lora-in-outpainting"; Min = [long] 1300000000 }
+        )
+
     # 5) Video-Depth-Anything preprocessor model, 2 files / 116,452,112 B:
     #      preprocessors-vda/video_depth_anything_vits.pth  (116.4MB)
     #      preprocessors-vda/LICENSE                        (11,356 B, Apache-2.0)
@@ -786,6 +814,7 @@ $required = @(
     @{ Label = "dwpose detector (yolox_l)"; Rel = "models/preprocessors/yolox_l.torchscript.pt";                                  IsDir = $false; Min = [long]200000000 }
     @{ Label = "dwpose estimator (dw-ll_ucoco)"; Rel = "models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt";                 IsDir = $false; Min = [long]120000000 }
     @{ Label = "ic_lora deblur";          Rel = "models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors";       IsDir = $false; Min = [long]800000000 }
+    @{ Label = "ic_lora in-outpainting";  Rel = "models/ltx-2.3-ic-lora-in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"; IsDir = $false; Min = [long]1200000000 }
     @{ Label = "vda depth model (vits)";  Rel = "models/preprocessors-vda/video_depth_anything_vits.pth";                         IsDir = $false; Min = [long]110000000 }
 )
 

@@ -76,6 +76,12 @@ model:
       preprocess: depth
     # 前処理不要の制御アダプタ（ぼけた参照動画をそのまま渡す）＝文字列形式
     deblur: "./models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors"
+    # Outpainting（画面の描き足し, §1-13）。公式 In-Outpainting IC-LoRA。
+    # 参照として渡すのは「緑で外周を塗ったキャンバス動画」で、これを canny や
+    # depth に変換してはいけない（緑は前処理の対象ではなくセンチネル）ため、
+    # preprocess を持たない文字列形式で登録する。ヘッダに
+    # reference_downscale_factor=1 があるので registry が control に自動分類する。
+    in-outpainting: "./models/ltx-2.3-ic-lora-in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"
 
 vram:
   # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。

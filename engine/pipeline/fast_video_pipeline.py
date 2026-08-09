@@ -1775,6 +1775,8 @@ class LTXFastVideoPipeline:
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
         chunked_upsample: bool = False,
+        stage2_v_tile: int | None = None,
+        stage2_v_adv: int | None = None,
         nag: NagParams | VsfParams | None = None,
         attention_backend: str = "sdpa",
         block_swap_prefetch: bool = False,
@@ -1839,6 +1841,12 @@ class LTXFastVideoPipeline:
         whole chain because the chain builds (and therefore dequantizes) the
         transformer exactly once.
 
+        ``stage2_v_tile`` / ``stage2_v_adv`` (additive, ``None`` = the frozen
+        (22, 18) default): the stage-2 tile geometry, passed straight through to
+        ``run_chain`` — nothing is armed on the pipeline for it, unlike the
+        acceleration knobs below, because it is pure layout arithmetic that
+        ``chain_math.compute_chain_layout`` resolves inside ``run_chain``.
+
         ``vae_mode`` ("default" / "prune_vaed", additive): armed here too, and
         it is load-bearing that this call is NOT forgotten — the chain's decoder
         is created at ``chain_pipeline.py``'s ``ledger.video_decoder()``, a
@@ -1876,7 +1884,88 @@ class LTXFastVideoPipeline:
                     1.0 if ic_attention_strength is None else ic_attention_strength
                 ),
                 chunked_upsample=chunked_upsample,
+                stage2_v_tile=stage2_v_tile,
+                stage2_v_adv=stage2_v_adv,
                 nag=nag,
+            )
+        finally:
+            self._nag.reset()
+            self._sage.reset()
+            self._reset_block_swap_prefetch_job()
+            self._reset_fused_dequant_job()
+
+    @torch.inference_mode()
+    def generate_outpaint(
+        self,
+        *,
+        prompt: str,
+        canvas_path: str,
+        source_path: str | None,
+        geometry,
+        num_frames: int,
+        frame_rate: float,
+        num_steps: int,
+        seed: int,
+        output_path: str,
+        ic_loras: list[IcLoraEntry] | None = None,
+        ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float | None = None,
+        blend_dilation_stage1: int = 5,
+        blend_dilation_stage2: int = 2,
+        freeze_source_audio: bool = True,
+        progress=None,
+        nag: NagParams | VsfParams | None = None,
+        attention_backend: str = "sdpa",
+        block_swap_prefetch: bool = False,
+        keep_resident: bool | None = None,
+        fused_gguf_dequant_kernel: bool = False,
+        vae_mode: str = "default",
+    ) -> dict:
+        """Canvas extension (outpainting, §1-13) -> ONE mp4.
+
+        Delegates to :func:`engine.pipeline.outpaint_pipeline.run_outpaint`,
+        which reuses THIS pipeline's ledger/components/low-VRAM machinery the
+        same way ``run_chain`` does. ``canvas_path`` is the green-padded canvas
+        the app built; ``ic_reference`` already points at it.
+
+        The acceleration knobs follow ``generate_chain``'s split exactly: ``nag``
+        is armed INSIDE run_outpaint (whoever encodes the negative prompt must
+        also set it, or NagService.install() rejects the job), everything else is
+        armed here at the outermost entry point where its ``finally`` reset also
+        lives. ``keep_resident`` deliberately has no reset — surviving the job is
+        what the CPU-skeleton cache is for.
+        """
+        from engine.pipeline.outpaint_pipeline import run_outpaint
+
+        self._set_sage_job(attention_backend)
+        self._set_block_swap_prefetch_job(block_swap_prefetch)
+        self._set_fused_dequant_job(fused_gguf_dequant_kernel)
+        if keep_resident is not None:
+            self._set_keep_resident_job(keep_resident)
+        self._set_vae_mode_job(vae_mode)
+
+        try:
+            return run_outpaint(
+                self,
+                prompt=prompt,
+                canvas_path=canvas_path,
+                source_path=source_path,
+                geometry=geometry,
+                num_frames=num_frames,
+                frame_rate=frame_rate,
+                num_steps=num_steps,
+                seed=seed,
+                output_path=output_path,
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=(
+                    1.0 if ic_attention_strength is None else ic_attention_strength
+                ),
+                blend_dilation_stage1=blend_dilation_stage1,
+                blend_dilation_stage2=blend_dilation_stage2,
+                freeze_source_audio=freeze_source_audio,
+                nag=nag,
+                progress=progress,
             )
         finally:
             self._nag.reset()

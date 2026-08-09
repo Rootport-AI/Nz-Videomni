@@ -18,19 +18,33 @@ MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544; mirrors api/models.py
 
 
 def check_chain_total(clip_frames, fps, overlap_frames, lang: str = _DEFAULT_LANG,
-                      source_context_px=None):
+                      source_context_px=None, stage2_window=None):
     """``source_context_px`` (ADDITIVE, V2V): forwarded to
     ``compute_chain_layout`` so a V2V chain's precheck runs the same frozen-head
     geometry the server does (incl. the stage-2 tile-fit invariant raise, which
     surfaces here as the localized geometry message). ``None`` keeps the
-    pre-V2V arithmetic byte-identical."""
+    pre-V2V arithmetic byte-identical.
+
+    ``stage2_window`` (ADDITIVE): the stage-2 window preset NAME the request will
+    carry. ``None`` -> the default preset, i.e. exactly the geometry this
+    function computed before the knob existed. This Gradio tab has no window
+    selector today, so it always resolves to "standard" in practice; the
+    parameter exists so the precheck can never silently diverge from the server
+    if one is ever added — the two must agree byte-for-byte (that is this
+    module's entire reason to exist).
+
+    NOTE on argument order: ``stage2_window`` is appended AFTER ``lang``
+    deliberately. ``lang`` is passed POSITIONALLY by ``handlers.py``, so
+    inserting anything before it would silently shift every existing call."""
     import chain_math
     try:
         kwargs = {}
         if source_context_px is not None:
             kwargs["source_context_px"] = int(source_context_px)
+        v_tile, v_adv = chain_math.resolve_stage2_window(stage2_window)
         layout = chain_math.compute_chain_layout(
-            [int(f) for f in clip_frames], float(fps), kv=int(overlap_frames), **kwargs,
+            [int(f) for f in clip_frames], float(fps), kv=int(overlap_frames),
+            v_tile=v_tile, v_adv=v_adv, **kwargs,
         )
     except ValueError as exc:
         return L("msg_chain_geometry", lang).format(err=exc)

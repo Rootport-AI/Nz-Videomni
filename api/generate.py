@@ -12,6 +12,9 @@ from api.errors import (
     job_busy,
     lora_preprocess_conflict,
     lora_requires_reference,
+    outpaint_preprocess_conflict,
+    outpaint_source_mismatch,
+    outpaint_source_too_short,
     reference_requires_control_lora,
     reference_resolution_invalid,
 )
@@ -90,6 +93,31 @@ def generate(
         raise reference_requires_control_lora([spec.name for spec in request.loras])
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
+
+    # ── Outpainting (§1-13) ──────────────────────────────────────────────────
+    # The shape-only rules (pads, exclusivity, keep-region floor) live in the
+    # pydantic validator; the three below need the registry or the file on disk,
+    # so they belong here — the same split the control-adapter checks above use.
+    if request.outpaint is not None:
+        if preprocess_kinds:
+            raise outpaint_preprocess_conflict(sorted(preprocess_kinds))
+        from services import video_io
+
+        op = request.outpaint
+        keep = (
+            request.width - op.pad_left - op.pad_right,
+            request.height - op.pad_top - op.pad_bottom,
+        )
+        ref_path = context.video_upload_store.path_for(request.reference_video_id)
+        actual = video_io.probe_resolution(ref_path)
+        if actual != keep:
+            raise outpaint_source_mismatch(keep, actual)
+        # Frame count is authoritative for the blend pairing (see
+        # outpaint_source_too_short). ffprobe is required for outpainting — it was
+        # already required a line above, so this raises rather than degrading.
+        available = video_io.frame_count(ref_path)
+        if available < request.num_frames:
+            raise outpaint_source_too_short(available, request.num_frames)
 
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_if_idle(request)

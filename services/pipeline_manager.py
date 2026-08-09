@@ -415,6 +415,38 @@ class PipelineManager:
                 else None
             )
 
+            # Outpainting (§1-13): build the green-padded canvas and hand THAT to
+            # the runner as the reference video. Substituting the path here is
+            # what keeps the whole IC-LoRA chain below untouched — the engine's
+            # ``_resolve_ic_reference`` and ``_reference_conditioning_for_stage``
+            # never learn that outpainting exists, they just encode whatever
+            # reference they were given. The canvas lands next to the output (the
+            # same place ``control_<preprocess>.mp4`` goes) rather than in
+            # uploads/, which STORAGE_POLICY.md reserves for material the user
+            # may delete at any time.
+            outpaint_source_path = None
+            if job.request.outpaint is not None:
+                op = job.request.outpaint
+                outpaint_source_path = reference_video_path
+                canvas_path = output_dir / "outpaint_canvas.mp4"
+                video_io.pad_green_mp4(
+                    reference_video_path,
+                    canvas_path,
+                    canvas_width=job.request.width,
+                    canvas_height=job.request.height,
+                    pad_left=op.pad_left,
+                    pad_top=op.pad_top,
+                    frame_rate=job.request.frame_rate,
+                    num_frames=job.request.num_frames,
+                )
+                reference_video_path = canvas_path
+                logger.info(
+                    "Job %s outpaint canvas %dx%d pads l/r/t/b=%d/%d/%d/%d -> %s",
+                    job.job_id, job.request.width, job.request.height,
+                    op.pad_left, op.pad_right, op.pad_top, op.pad_bottom,
+                    canvas_path.name,
+                )
+
             # Console job-info line (owner requirement): base weight file + LoRAs
             # (name/requested/effective strength) + prompt, so LoRA application is
             # visible from the uvicorn console (the worker's per-adapter attach
@@ -445,6 +477,7 @@ class PipelineManager:
                 lora_paths=lora_paths,
                 reference_video_path=reference_video_path,
                 seed=seed,
+                outpaint_source_path=outpaint_source_path,
             )
 
             elapsed = time.time() - started
@@ -825,6 +858,14 @@ class PipelineManager:
                 "all_junctions": cm.get("all_junctions", []),
                 "video_tiles": cm.get("video_tiles", []),
                 "n_tiles": cm.get("n_tiles"),
+                # Stage-2 window: the preset NAME the request asked for plus the
+                # geometry the engine actually laid out with (both backends
+                # return chain_math.ChainLayout.to_dict(), which already carries
+                # v_tile/kt_v). Recording both is what makes a GPU gate able to
+                # prove the opt-in reached the engine.
+                "stage2_window": getattr(chain, "stage2_window", "standard"),
+                "v_tile": cm.get("v_tile"),
+                "kt_v": cm.get("kt_v"),
             },
             "output": {
                 "path": f"outputs/{job.job_id}/output.mp4",

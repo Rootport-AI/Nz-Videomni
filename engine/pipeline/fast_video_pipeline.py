@@ -1771,6 +1771,7 @@ class LTXFastVideoPipeline:
         progress=None,
         source=None,
         audio_source=None,
+        retake=None,
         ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
@@ -1793,8 +1794,13 @@ class LTXFastVideoPipeline:
         the source tail is frozen as clip-0's head and trimmed from the output.
         ``audio_source`` (optional ``AudioSourceSpec``) enables audio-to-video:
         the uploaded audio is frozen over the whole timeline and the video is
-        driven off it (mutually exclusive with ``source``). Returns metadata
-        incl. segment/tile junction pixel-frame indices.
+        driven off it (mutually exclusive with ``source``).
+        ``retake`` (optional ``RetakeSpec``) enables temporal inpainting: an
+        app-cut window's two ends stay frozen while its middle is regenerated,
+        and the WHOLE window is delivered (mutually exclusive with both of the
+        above). Like ``source``/``audio_source`` it is a pure pass-through —
+        nothing is armed on this pipeline for it. Returns metadata incl.
+        segment/tile junction pixel-frame indices.
 
         ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
         audio_strength)`` adapters applied via the forward-time weight patch
@@ -1878,6 +1884,7 @@ class LTXFastVideoPipeline:
                 progress=progress,
                 source=source,
                 audio_source=audio_source,
+                retake=retake,
                 ic_loras=ic_loras,
                 ic_reference=ic_reference,
                 ic_attention_strength=(

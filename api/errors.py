@@ -105,6 +105,30 @@ def source_audio_too_short(detail: str | None = None) -> APIError:
     )
 
 
+def retake_video_not_found(video_id: str) -> APIError:
+    """Retake: the ``retake.video_id`` does not resolve to a stored upload.
+    Mirrors :func:`source_video_not_found` (404) with its own stable code so a
+    client can tell a missing retake source from a missing continuation video."""
+    return APIError("RETAKE_VIDEO_NOT_FOUND", f"retake.video_id not found: {video_id}", 404)
+
+
+def retake_window_out_of_range(detail: str | None = None) -> APIError:
+    """Retake: the requested window does not fit the uploaded video.
+
+    Either ``window_start_sec + clips[0].num_frames`` runs past the end of the
+    upload (at the request frame rate), or ``regenerate_audio=False`` was asked
+    for on an upload with no audio stream to keep. Rejected up front (422) before
+    any GPU work — mirrors :func:`source_video_too_short`. The window's own
+    geometry (8n+1, [73, 169], glue grids) is a schema/``chain_math`` 422 and
+    never reaches here."""
+    return APIError(
+        "RETAKE_WINDOW_OUT_OF_RANGE",
+        "the requested retake window does not fit the uploaded video",
+        422,
+        detail=detail,
+    )
+
+
 def job_not_joinable(job_id: str, detail: str | None = None) -> APIError:
     """V2V join: the target job is not a V2V continuation job (its metadata has
     no ``v2v`` block — a plain chain / A2V / single generate), so there is no

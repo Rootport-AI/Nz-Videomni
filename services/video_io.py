@@ -524,6 +524,138 @@ def cut_range_mp4(
     }
 
 
+def cut_window_mp4(
+    src: Path,
+    out: Path,
+    window_start_sec: float,
+    num_frames: int,
+    fps: float,
+) -> dict:
+    """Write to ``out`` EXACTLY ``num_frames`` frames of ``src`` starting at
+    ``window_start_sec``, at ``fps`` — the retake window the engine consumes.
+
+    A third cutter next to :func:`cut_tail_mp4` and :func:`cut_range_mp4` because
+    its CONTRACT is different from both, not just its arguments:
+
+      * it RESAMPLES when the source cadence differs (``cut_range_mp4`` never
+        does — it deliberately preserves the material's own cadence), reusing
+        ``cut_tail_mp4``'s two-pass shape;
+      * it is FRAME-EXACT OR IT FAILS. ``cut_range_mp4`` clamps a too-long
+        request to the remainder and reports a PREDICTED ``written_frames``;
+        here the frame count is load-bearing geometry (the whole window must be
+        8n+1 and must land on one stage-2 tile), so the written file is
+        re-probed with :func:`frame_count` and a mismatch raises;
+      * it encodes for a VAE round trip rather than for delivery — see the
+        codec note below.
+
+    CODEC CHOICE (deliberate, not defaults): ``-crf 12`` instead of the usual 23
+    and CFR output. The window's two glue bands are re-encoded, VAE-encoded and
+    then frozen bit-exact, so whatever this file loses is a permanent ceiling on
+    the frozen ends' quality — the one place in the pipeline where the
+    intermediate's fidelity shows up in the deliverable. Audio is written as
+    PCM when the container/build accepts it (``pcm_s16le``), falling back to AAC
+    192k, for the same reason: a lossy intermediate would be baked into the
+    frozen audio latents.
+
+    Returns ``{source_fps, resampled, total_frames, start_frame, written_frames,
+    has_audio}`` where ``written_frames`` is MEASURED, not predicted. Raises
+    :class:`FFmpegError` on an unprobeable frame rate, a window that runs past
+    the end of the (resampled) source, or a frame-count mismatch.
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    if num_frames <= 0:
+        raise FFmpegError(f"cut_window_mp4: num_frames must be >= 1 (got {num_frames})")
+    source_fps = probe_fps(src)
+    if source_fps is None or source_fps <= 0:
+        raise FFmpegError(f"cut_window_mp4: could not probe a usable frame rate for {src}")
+    resampled = abs(source_fps - float(fps)) > 1e-3
+
+    work = src
+    tmp_resampled: Path | None = None
+    if resampled:
+        tmp_resampled = out.parent / (out.stem + "_resampled.mp4")
+        rs_cmd = [
+            exe, "-y", "-i", str(src),
+            "-vf", f"fps={fps}",
+            "-map", "0:v", "-map", "0:a?",
+            "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
+            "-fps_mode", "cfr", "-r", str(fps),
+            "-c:a", "aac", "-b:a", "192k",
+            str(tmp_resampled),
+        ]
+        proc = subprocess.run(rs_cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise FFmpegError(
+                f"ffmpeg fps-resample failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+            )
+        work = tmp_resampled
+
+    try:
+        total = frame_count(work)
+        # The window is defined on the timeline the REQUEST fps describes, which
+        # is the cadence ``work`` now has.
+        start = max(0, round(window_start_sec * float(fps)))
+        end = start + num_frames - 1
+        if end > total - 1:
+            raise FFmpegError(
+                f"cut_window_mp4: window [{start}, {end}] runs past the source "
+                f"(after resample={resampled} it has {total} frames)"
+            )
+        with_audio = has_audio_stream(work)
+
+        parts = [f"[0:v]select='between(n\\,{start}\\,{end})',setpts=PTS-STARTPTS[v]"]
+        aout = None
+        if with_audio:
+            start_t = start / float(fps)
+            end_t = (end + 1) / float(fps)
+            parts.append(f"[0:a]atrim=start={start_t}:end={end_t},asetpts=PTS-STARTPTS[a]")
+            aout = "[a]"
+        filter_complex = ";".join(parts)
+
+        def _cut(audio_args: list[str]) -> subprocess.CompletedProcess:
+            cmd = [exe, "-y", "-i", str(work), "-filter_complex", filter_complex,
+                   "-map", "[v]"]
+            if aout is not None:
+                cmd += ["-map", aout] + audio_args
+            cmd += [
+                "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
+                "-fps_mode", "cfr", "-r", str(fps),
+                str(out),
+            ]
+            return subprocess.run(cmd, capture_output=True, text=True)
+
+        # PCM first; fall back to AAC 192k when this ffmpeg/container pair
+        # refuses it (decided by the actual build, never guessed).
+        proc = _cut(["-c:a", "pcm_s16le"])
+        if proc.returncode != 0 and aout is not None:
+            proc = _cut(["-c:a", "aac", "-b:a", "192k"])
+        if proc.returncode != 0:
+            raise FFmpegError(
+                f"ffmpeg window-cut failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+            )
+    finally:
+        if tmp_resampled is not None:
+            tmp_resampled.unlink(missing_ok=True)
+
+    # MEASURED, not predicted: the engine's whole geometry rests on this count.
+    written = frame_count(out)
+    if written != num_frames:
+        raise FFmpegError(
+            f"cut_window_mp4 wrote {written} frames but {num_frames} were "
+            f"requested (start_frame={start}, fps={fps}, resampled={resampled})"
+        )
+    return {
+        "source_fps": source_fps,
+        "resampled": resampled,
+        "total_frames": total,
+        "start_frame": start,
+        "written_frames": written,
+        "has_audio": has_audio_stream(out),
+    }
+
+
 def concat_mp4s(
     clip_paths: list[Path],
     output_path: Path,

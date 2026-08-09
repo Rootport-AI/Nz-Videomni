@@ -20,6 +20,7 @@ from api.errors import (
     lora_requires_reference,
     reference_requires_control_lora,
     reference_resolution_invalid,
+    retake_video_not_found,
     source_audio_not_found,
     source_video_not_found,
 )
@@ -69,6 +70,21 @@ def generate_chain(
             [c.num_frames for c in request.clips],
             request.frame_rate,
             request.overlap_frames,
+        )
+
+    # Retake: resolve the source video (404) and preflight the window (422 when
+    # it runs past the upload, or when regenerate_audio=False was asked for on a
+    # silent upload) BEFORE reserving a job — same up-front-failure discipline as
+    # source_video/source_audio above. The window's GEOMETRY was already settled
+    # by the schema + chain_math; what is checked here is only whether the
+    # uploaded material actually contains it.
+    if request.retake is not None:
+        try:
+            context.video_upload_store.path_for(request.retake.video_id)
+        except APIError:
+            raise retake_video_not_found(request.retake.video_id)
+        context.pipeline_manager.preflight_retake_window(
+            request.retake, request.clips[0].num_frames, request.frame_rate
         )
 
     # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE, ALPHA

@@ -971,7 +971,12 @@ def _do_generate_chain(msg: dict) -> None:
     seams AND tile seams) for the review harness.
     """
     assert _PIPE is not None, "generate_chain before load"
-    from engine.pipeline.chain_pipeline import AudioSourceSpec, ChainClipSpec, SourceSpec
+    from engine.pipeline.chain_pipeline import (
+        AudioSourceSpec,
+        ChainClipSpec,
+        RetakeSpec,
+        SourceSpec,
+    )
 
     output_path = msg["output_path"]
     seed = int(msg["seed"])
@@ -1017,6 +1022,26 @@ def _do_generate_chain(msg: dict) -> None:
         except KeyError as exc:
             raise ValueError(
                 f"generate_chain: audio_source requires path (missing key {exc})"
+            ) from exc
+
+    # Retake (temporal inpainting): optional window (an mp4 that is ALREADY the
+    # frame-exact, CFR window the app cut). Mutually exclusive with source and
+    # audio_source (asserted in run_chain + 422 at the API layer). Absent ->
+    # byte-identical to before.
+    retake = None
+    rt = msg.get("retake")
+    if rt:
+        try:
+            retake = RetakeSpec(
+                path=str(rt["path"]),
+                head_px=int(rt["head_px"]),
+                tail_px=int(rt["tail_px"]),
+                regenerate_audio=bool(rt["regenerate_audio"]),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: retake requires path, head_px, tail_px and "
+                f"regenerate_audio (missing key {exc})"
             ) from exc
 
     # Style/character IC-LoRA (forward-time weight patch, applied across the whole
@@ -1075,6 +1100,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"overlap={msg.get('overlap_frames')}/{msg.get('overlap_strength')} "
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
+        f"retake={'yes(' + str(retake.head_px) + '/' + str(retake.tail_px) + ',audio=' + ('regen' if retake.regenerate_audio else 'keep') + ')' if retake else 'no'} "
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
         f"bsprefetch={bs_prefetch} keepresident={keep_res} "
         f"fuseddequant={fused_dequant} vae={vae_mode} "
@@ -1097,6 +1123,7 @@ def _do_generate_chain(msg: dict) -> None:
         progress=_progress,
         source=source,
         audio_source=audio_source,
+        retake=retake,
         ic_loras=ic_loras,
         ic_reference=ic_reference,
         ic_attention_strength=ic_attn,

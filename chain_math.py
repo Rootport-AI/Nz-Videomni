@@ -140,6 +140,35 @@ def stage2_max_context_px(v_tile: int) -> int:
     return px_from_v_latent(v_tile - 1)
 
 
+# ── Retake (temporal inpainting) window bounds ───────────────────────────────
+# Retake regenerates the MIDDLE of an existing clip while both ends stay frozen.
+# The whole window is refined as ONE stage-2 tile (the both-side freeze was only
+# ever validated in that degenerate geometry — VERIFICATION_LOG §55.2/§55.3), so
+# the window must fit a single tile: ``n_tiles == 1``. That is exactly
+# ``px_from_v_latent(v_tile)`` = 169 px frames for the standard (22, 18) window
+# (177 already splits into 2 tiles). Note this is the sibling of
+# :func:`stage2_max_context_px` above but WITHOUT its ``- 1``: V2V needs tile 0
+# to have something left to generate after the frozen head, whereas retake
+# deliberately fills the whole tile — its free middle is carved out INSIDE the
+# window by the glue bands, not by leaving tile space over.
+#
+# The floor is a quality bound, not a geometric one: below ~73 px frames the
+# free middle left between the 25/24 default glue bands stops being enough
+# material to regenerate anything meaningful (owner decision 2026-08-09,
+# PENDING_TASKS.md §1-17).
+RETAKE_WINDOW_MIN_PX = 73
+
+
+def retake_max_window_px(v_tile: int) -> int:
+    """Largest retake window (8n+1 px frames) that stays ONE stage-2 tile.
+
+    169 for the standard (22, 18) preset. ``config.limits.retake_window_max_frames``
+    publishes the standard-preset number to clients; this function is the
+    geometry-truth an engine/validator uses for whatever ``v_tile`` is in play.
+    """
+    return px_from_v_latent(v_tile)
+
+
 # Default continuity params (new semantics: overlap_frames == K_v LATENT frames).
 DEFAULT_OVERLAP_FRAMES = 3       # K_v (video latent overlap), S1-validated
 DEFAULT_OVERLAP_STRENGTH = 0.5   # stage-1 carry overlap strength, S1-validated
@@ -223,6 +252,25 @@ def px_from_v_latent(n_latent: int) -> int:
     return (n_latent - 1) * VIDEO_TIME_FACTOR + 1
 
 
+def v_tail_latents(tail_px: int) -> int:
+    """Video latent frames a ``tail_px``-pixel TAIL band occupies (``tail_px // 8``).
+
+    Deliberately NOT :func:`v_latent_frames` — the head/tail grids are different
+    because the video VAE is CAUSAL. Latent 0 is a lone keyframe covering pixel
+    0 only, and latent k>=1 covers pixels ``8k-7 .. 8k``. So:
+
+      * a HEAD band must be ``8n+1`` px (0, then whole groups of 8) and occupies
+        ``v_latent_frames(head_px)`` = ``(head_px - 1)//8 + 1`` latents,
+      * a TAIL band must be a MULTIPLE OF 8 px (whole groups of 8 counted back
+        from the end, never touching the keyframe) and occupies ``tail_px // 8``
+        latents.
+
+    169/25/24 -> 4 head latents and 3 tail latents. The asymmetry is why the
+    default glue is 25/24 rather than 25/25 (VERIFICATION_LOG §55.5).
+    """
+    return tail_px // VIDEO_TIME_FACTOR
+
+
 def a_frames_for_px(pixel_frames: int, fps: float) -> int:
     """Audio latent-frame count for a pixel span at ``fps``."""
     return round(pixel_frames / float(fps) * AUDIO_LATENTS_PER_SEC)
@@ -276,6 +324,16 @@ class ChainLayout:
     v2v_context_junction_px: int | None = None
     new_frames_px: int = 0                  # delivered new pixel frames (post-trim)
 
+    # ── retake (temporal inpainting) geometry ────────────────────────────────
+    # PRIMARY DATA ONLY — deliberately just the two inputs. Every derived number
+    # (n_head_v / n_tail_v / n_head_a / n_tail_a / free_middle) is recomputed by
+    # a pure function inside :meth:`to_dict` rather than stored here, so there is
+    # exactly ONE definition of each and no way for a stored copy to drift out of
+    # step with the function the engine calls. Both None on every non-retake
+    # chain (the ``retake`` sub-dict is then absent from ``to_dict``).
+    retake_window_px: int | None = None      # == clip_frames[0] (the whole window)
+    retake_glue_px: tuple[int, int] | None = None   # (head_px, tail_px)
+
     def to_dict(self) -> dict:
         d = {
             "clip_frames": self.clip_frames,
@@ -309,6 +367,25 @@ class ChainLayout:
                 "v2v_context_junction_px": self.v2v_context_junction_px,
                 "new_frames_px": self.new_frames_px,
             }
+        if self.retake_glue_px is not None:
+            head_px, tail_px = self.retake_glue_px
+            window_px = int(self.retake_window_px or 0)
+            n_head_a, n_tail_a = retake_audio_glue_latents(
+                window_px=window_px, head_px=head_px, tail_px=tail_px,
+                fps=self.fps, a_win=self.a_total,
+            )
+            d["retake"] = {
+                "window_px": window_px,
+                "head_px": head_px,
+                "tail_px": tail_px,
+                "n_head_v": v_latent_frames(head_px),
+                "n_tail_v": v_tail_latents(tail_px),
+                "n_head_a": n_head_a,
+                "n_tail_a": n_tail_a,
+                # PIXEL-domain span that is actually regenerated: [head_px,
+                # window_px - tail_px). Reported as a 2-list for JSON.
+                "free_middle_px": [head_px, window_px - tail_px],
+            }
         return d
 
 
@@ -320,6 +397,7 @@ def compute_chain_layout(
     v_tile: int = STAGE2_V_TILE,
     v_adv: int = STAGE2_V_ADV,
     source_context_px: int | None = None,
+    retake_glue_px: tuple[int, int] | None = None,
 ) -> ChainLayout:
     """Resolve the full chain geometry from clip pixel-frame counts + fps + K_v.
 
@@ -339,6 +417,16 @@ def compute_chain_layout(
       * the source->new junction index (untrimmed timeline) for metadata/harness.
     clip_frames[0] is the TOTAL clip-0 timeline (context head + new tail); the
     frozen context occupies its first ``n_ctx_v`` stage-1 latent frames.
+
+    ``retake_glue_px`` (temporal inpainting, mutually exclusive with
+    ``source_context_px``): ``(head_px, tail_px)`` glue bands frozen at BOTH ends
+    of a SINGLE-clip window whose length is ``clip_frames[0]``. This is the
+    SINGLE SOURCE OF TRUTH for the whole retake geometry — the app validator, the
+    engine and the mock all resolve the frozen band sizes from here, so they
+    cannot disagree. All the geometric rejections live here (window bounds and
+    8n+1 grid, head 8n+1 / tail multiple-of-8, a free middle in BOTH the video
+    and the audio latent domains, and the ``n_tiles == 1`` invariant the both-side
+    freeze was validated under). ``None`` -> byte-identical to before.
     """
     n = len(clip_frames)
     if n < 1:
@@ -374,6 +462,54 @@ def compute_chain_layout(
         new_frames_px = clip_frames[0] - source_context_px
         v2v_context_junction_px = source_context_px - 1
 
+    # ── retake: window + glue-band validation (video-latent domain) ──────────
+    retake_window_px: int | None = None
+    if retake_glue_px is not None:
+        if source_context_px is not None:
+            raise ValueError(
+                "retake_glue_px and source_context_px are mutually exclusive "
+                "(a retake window freezes BOTH ends of one clip; a V2V "
+                "continuation freezes the head of clip 0 and generates onward)"
+            )
+        if n != 1:
+            raise ValueError(
+                f"retake requires exactly 1 clip (the window itself); got {n}"
+            )
+        retake_window_px = int(clip_frames[0])
+        head_px, tail_px = (int(retake_glue_px[0]), int(retake_glue_px[1]))
+        max_window_px = retake_max_window_px(v_tile)
+        if (retake_window_px - 1) % VIDEO_TIME_FACTOR != 0:
+            raise ValueError(
+                f"retake window must be 8n+1 pixel frames (got {retake_window_px})"
+            )
+        if not (RETAKE_WINDOW_MIN_PX <= retake_window_px <= max_window_px):
+            raise ValueError(
+                f"retake window ({retake_window_px}) must be within "
+                f"[{RETAKE_WINDOW_MIN_PX}, {max_window_px}] for v_tile={v_tile}: "
+                "the whole window is refined as ONE stage-2 tile (that is the "
+                "only geometry the both-side freeze was validated under)"
+            )
+        # Head on the 8n+1 grid, tail on the multiple-of-8 grid — see
+        # :func:`v_tail_latents` for why the two ends differ (causal VAE).
+        if (head_px - 1) % VIDEO_TIME_FACTOR != 0:
+            raise ValueError(f"retake head_px must be 8n+1 (got {head_px})")
+        if head_px < 9:
+            raise ValueError(
+                f"retake head_px must be >= 9 (got {head_px}): a 1-frame head "
+                "freezes only the lone keyframe latent"
+            )
+        if tail_px % VIDEO_TIME_FACTOR != 0:
+            raise ValueError(
+                f"retake tail_px must be a multiple of 8 (got {tail_px})"
+            )
+        if tail_px < VIDEO_TIME_FACTOR:
+            raise ValueError(f"retake tail_px must be >= 8 (got {tail_px})")
+        if head_px + tail_px >= retake_window_px:
+            raise ValueError(
+                f"retake glue bands ({head_px} + {tail_px}) must leave a free "
+                f"middle inside the {retake_window_px}-frame window"
+            )
+
     seg_latent = [v_latent_frames(f) for f in clip_frames]
     seg_audio = [a_frames_for_px(f, fps) for f in clip_frames]
 
@@ -387,6 +523,31 @@ def compute_chain_layout(
     f_total = sum(seg_latent) - (n - 1) * kv
     total_px = px_from_v_latent(f_total)
     a_total = a_frames_for_px(total_px, fps)
+
+    # ── retake: free-middle checks in BOTH latent domains ────────────────────
+    # The pixel-domain ``head_px + tail_px < window_px`` check above is NOT
+    # sufficient: the two latent grids quantise differently (video 8:1 with a
+    # causal keyframe, audio 25 latents/sec), so a pixel middle that looks free
+    # can still leave zero free latents on one side. Both are checked here,
+    # after ``f_total`` / ``a_total`` are known.
+    if retake_glue_px is not None:
+        head_px, tail_px = (int(retake_glue_px[0]), int(retake_glue_px[1]))
+        n_head_v = v_latent_frames(head_px)
+        n_tail_v = v_tail_latents(tail_px)
+        if n_head_v + n_tail_v >= f_total:
+            raise ValueError(
+                f"retake glue leaves no free VIDEO middle: n_head_v={n_head_v} + "
+                f"n_tail_v={n_tail_v} >= f_total={f_total}"
+            )
+        n_head_a, n_tail_a = retake_audio_glue_latents(
+            window_px=int(retake_window_px or 0), head_px=head_px,
+            tail_px=tail_px, fps=fps, a_win=a_total,
+        )
+        if n_head_a + n_tail_a >= a_total:
+            raise ValueError(
+                f"retake glue leaves no free AUDIO middle: n_head_a={n_head_a} + "
+                f"n_tail_a={n_tail_a} >= a_total={a_total}"
+            )
 
     # Per-join audio overlap K_a so assembled audio == a_total EXACTLY:
     #   sum(a_seg) - sum(ka) = a_total  =>  sum(ka) = sum(a_seg) - a_total.
@@ -414,6 +575,12 @@ def compute_chain_layout(
         ve = min(vs + v_tile, f_total)
         v_tiles.append((vs, ve - vs))
     n_tiles = len(v_tiles)
+    # Retake's whole reason for a window cap: the both-side freeze was only ever
+    # validated on a SINGLE stage-2 tile (VERIFICATION_LOG §55.2). The window
+    # bound above is derived from exactly this, so a failure here means the
+    # bound and the tiler have drifted apart — an assert, not a user-facing
+    # ValueError.
+    assert retake_glue_px is None or n_tiles == 1, (n_tiles, retake_window_px, v_tile)
 
     # audio tiles, time-aligned to the video advance
     audio_adv = round(v_adv * VIDEO_TIME_FACTOR / float(fps) * AUDIO_LATENTS_PER_SEC)
@@ -491,6 +658,11 @@ def compute_chain_layout(
         trim_px=trim_px,
         v2v_context_junction_px=v2v_context_junction_px,
         new_frames_px=new_frames_px,
+        retake_window_px=retake_window_px,
+        retake_glue_px=(
+            None if retake_glue_px is None
+            else (int(retake_glue_px[0]), int(retake_glue_px[1]))
+        ),
     )
 
 
@@ -533,3 +705,89 @@ def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
         if i < len(layout.ka_list):
             start += alen - layout.ka_list[i]
     return windows
+
+
+# ── retake: audio glue rounding ("H-A1′") + tail token addressing ────────────
+# The audio patchifier is CAUSAL (``is_causal=True``), so audio latent ``i`` does
+# NOT cover the naive ``[i/25, (i+1)/25)`` second — it covers
+# ``[max(4i-3,0)/100, (4i+1)/100)``, i.e. the same 1/25s width shifted 0.75
+# frames EARLIER. Machine-checked against the wheel's own
+# ``get_patch_grid_bounds`` (VERIFICATION_LOG §55.2).
+#
+# RESIDUAL UNCERTAINTY, recorded on purpose (VERIFICATION_LOG §55.6): what is
+# verified is the PATCHIFIER's declared support, NOT that the audio VAE ENCODER
+# actually responds over that same span. The alignment probe (``runs/align/``)
+# came back INDETERMINATE — all 7 probes missed both the naive and the causal
+# prediction by 1-3 frames. Do not write "the causal model was confirmed".
+# The scanning rule below is chosen precisely so that swapping
+# :func:`audio_latent_support_sec` for a better time-support model automatically
+# updates the frozen band sizes with no other change.
+def audio_latent_support_sec(i: int) -> tuple[float, float]:
+    """Time span (seconds) audio latent frame ``i`` actually supports.
+
+    ``[max(4i - 3, 0)/100, (4i + 1)/100)`` — the wheel's causal patch grid.
+    """
+    return max(4 * i - 3, 0) / 100.0, (4 * i + 1) / 100.0
+
+
+def retake_audio_glue_latents(
+    *, window_px: int, head_px: int, tail_px: int, fps: float, a_win: int
+) -> tuple[int, int]:
+    """Frozen audio-latent counts ``(n_head_a, n_tail_a)`` for the glue bands.
+
+    The rule ("H-A1′") is stated as an INTENT and solved by SCANNING rather than
+    by a rounding formula: freeze only those audio latents whose whole time
+    support lies inside the frozen VIDEO band. Nothing that overlaps the
+    regenerated middle is ever frozen.
+
+    Why not the obvious "floor the head, ceil the tail" formula: measured against
+    the real causal support that rule overshoots into the regenerated middle by
+    up to 30 ms in 379 of 508 grid combinations (75%); symmetric rounding
+    overshoots in 100% of them, by up to 46.7 ms. The scan overshoots in none,
+    at the price of under-freezing by at most 35 ms — under one audio latent
+    frame and shorter than one 24fps video frame (VERIFICATION_LOG §55.2).
+
+    Pure geometry; ``a_win`` is the window's total audio-latent count
+    (``ChainLayout.a_total``).
+    """
+    eps = 1e-9
+    head_s = head_px / float(fps)
+    tail_start_s = (window_px - tail_px) / float(fps)
+
+    # Head: the longest run of leading latents that ENDS inside the head band.
+    n_head = 0
+    for i in range(a_win):
+        if audio_latent_support_sec(i)[1] <= head_s + eps:
+            n_head = i + 1
+        else:
+            break
+    # Tail: the longest run of trailing latents that STARTS inside the tail band.
+    first_tail = a_win
+    for i in range(a_win - 1, -1, -1):
+        if audio_latent_support_sec(i)[0] >= tail_start_s - eps:
+            first_tail = i
+        else:
+            break
+    n_head = max(0, min(n_head, a_win))
+    first_tail = max(0, min(first_tail, a_win))
+    return n_head, a_win - first_tail
+
+
+def retake_tail_token_range(latent_frames: int, hw: int, n_tail: int) -> tuple[int, int]:
+    """ABSOLUTE ``[lo, hi)`` video token range of the trailing ``n_tail`` latents.
+
+    ``hw`` is the LATENT height*width (patch size 1), so latent frame ``f``
+    occupies tokens ``[f*hw, (f+1)*hw)``.
+
+    NEGATIVE INDEXING IS FORBIDDEN HERE. Conditioning items APPEND tokens at the
+    end of the token dimension, so ``mask[:, -n_tail*hw:]`` grabs conditioning
+    tokens instead of the last video latents and silently under-freezes the tail.
+    For the same reason the caller's bound check must be against
+    ``latent_frames * hw`` and never against ``mask.shape[1]`` (which may already
+    be longer, so it would not defend anything). VERIFICATION_LOG §55.2.
+    """
+    if not (0 < n_tail <= latent_frames):
+        raise ValueError(
+            f"n_tail must be within (0, latent_frames={latent_frames}]; got {n_tail}"
+        )
+    return (latent_frames - n_tail) * hw, latent_frames * hw

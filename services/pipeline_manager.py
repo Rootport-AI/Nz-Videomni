@@ -19,10 +19,17 @@ from api.errors import (
     gpu_oom,
     generation_failed,
     pipeline_load_failed,
+    retake_window_out_of_range,
     source_audio_too_short,
     source_video_too_short,
 )
-from api.models import JobResult, JobStatus, SourceAudioSpec, SourceVideoSpec
+from api.models import (
+    JobResult,
+    JobStatus,
+    RetakeSpec,
+    SourceAudioSpec,
+    SourceVideoSpec,
+)
 from config import AppConfig
 from services import gpu_info, video_io
 from services.audio_upload_store import AudioUploadStore
@@ -543,6 +550,51 @@ class PipelineManager:
                 )
             )
 
+    # ------------------------------------------------- retake window preflight
+
+    def preflight_retake_window(
+        self, retake: RetakeSpec, window_frames: int, request_frame_rate: float
+    ) -> None:
+        """Validate an uploaded retake source BEFORE a job is created.
+
+        Two checks, both about the MATERIAL rather than the geometry (the window
+        length, the 8n+1 grid and the glue-band grids were already settled by the
+        schema and ``chain_math.compute_chain_layout``):
+
+        1. the window ``[window_start_sec, +window_frames)`` must fit inside the
+           upload once resampled to ``request_frame_rate`` — same effective-frame
+           estimate :meth:`preflight_source_video` uses, with
+           ``video_io.cut_window_mp4``'s measured frame count as the frame-exact
+           backstop;
+        2. ``regenerate_audio=False`` asks to keep the window's own audio, which
+           a silent upload cannot supply.
+
+        The video_id is assumed already resolved (the endpoint 404s first).
+        """
+        src_path = self.video_upload_store.path_for(retake.video_id)
+        n_src = video_io.frame_count(src_path)
+        src_fps = video_io.probe_fps(src_path)
+        if src_fps and abs(src_fps - float(request_frame_rate)) > 1e-3:
+            effective = int(round(n_src * float(request_frame_rate) / src_fps))
+        else:
+            effective = n_src
+        start_frame = round(float(retake.window_start_sec) * float(request_frame_rate))
+        if start_frame + window_frames > effective:
+            raise retake_window_out_of_range(
+                detail=(
+                    f"window starts at frame {start_frame} and needs "
+                    f"{window_frames} frames, but the source has {n_src} frames "
+                    f"@ {src_fps} fps (~{effective} @ {request_frame_rate} fps)"
+                )
+            )
+        if not retake.regenerate_audio and not video_io.has_audio_stream(src_path):
+            raise retake_window_out_of_range(
+                detail=(
+                    "regenerate_audio=false keeps the window's ORIGINAL audio, "
+                    f"but upload {retake.video_id} has no audio stream"
+                )
+            )
+
     # --------------------------------------------------- A2V source preflight
 
     def preflight_source_audio(
@@ -719,6 +771,32 @@ class PipelineManager:
                 )
                 a2v_provenance = {"source_audio_id": chain.source_audio.audio_id}
 
+            # Retake: cut the window the engine consumes (frame-exact, CFR, at
+            # the request fps; resampled if the upload's cadence differs). The
+            # engine never cuts or resamples — same division of labour as the
+            # V2V tail above. Provenance records WHERE the window came from so a
+            # result can be traced back to the frames it was made of.
+            retake_window_path = None
+            retake_provenance = None
+            if chain.retake is not None:
+                rt_src = self.video_upload_store.path_for(chain.retake.video_id)
+                retake_window_path = output_dir / "_retake_window.mp4"
+                cut = video_io.cut_window_mp4(
+                    rt_src, retake_window_path,
+                    float(chain.retake.window_start_sec),
+                    int(chain.clips[0].num_frames),
+                    chain.frame_rate,
+                )
+                retake_provenance = {
+                    "retake_video_id": chain.retake.video_id,
+                    "source_fps": cut["source_fps"],
+                    "resampled": cut["resampled"],
+                    "window_start_sec": float(chain.retake.window_start_sec),
+                    "window_start_frame": cut["start_frame"],
+                    "written_frames": cut["written_frames"],
+                    "upload_has_audio": cut["has_audio"],
+                }
+
             def on_progress(step, total, progress, stage=None, clip=None, clip_count=None):
                 job.current_step = step
                 job.total_steps = total
@@ -739,6 +817,7 @@ class PipelineManager:
                 source_tail_path=source_tail_path,
                 source_context_frames=source_context_frames,
                 source_audio_path=source_audio_path,
+                retake_window_path=retake_window_path,
                 lora_paths=lora_paths,
                 reference_video_path=reference_video_path,
                 seed=seed,
@@ -765,6 +844,7 @@ class PipelineManager:
                     peak_vram_mb=outcome.peak_vram_mb, total_frames=total_frames,
                     chain_meta=meta, v2v_provenance=v2v_provenance,
                     a2v_provenance=a2v_provenance,
+                    retake_provenance=retake_provenance,
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
                     keep_resident_used=outcome.keep_resident_used,
@@ -818,7 +898,8 @@ class PipelineManager:
     def _write_chain_metadata(
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
-        v2v_provenance=None, a2v_provenance=None, attention_used=None,
+        v2v_provenance=None, a2v_provenance=None, retake_provenance=None,
+        attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
         fused_gguf_dequant_kernel_used=None, vae_mode_used=None,
         peak_vram_reserved_mb=None,
@@ -890,6 +971,13 @@ class PipelineManager:
         a2v = cm.get("a2v")
         if a2v is not None:
             metadata["a2v"] = {**a2v, **(a2v_provenance or {})}
+        # Retake (additive): only present when a retake was requested, so a
+        # normal chain's metadata key set is byte-unchanged. The engine's (or
+        # mock's) chain.retake sub-dict — geometry + runtime + freeze_proof —
+        # plus the app-side provenance (which upload, which frames, resampled?).
+        retake = cm.get("retake")
+        if retake is not None:
+            metadata["retake"] = {**retake, **(retake_provenance or {})}
         video_io.save_metadata(metadata_path, metadata)
 
     # ------------------------------------------------------------ finalize

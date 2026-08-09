@@ -393,6 +393,7 @@ class LTXRunner:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -407,6 +408,14 @@ class LTXRunner:
         frozen as the chain's audio latent and its original waveform is muxed onto
         the output; the terminal ``chain.a2v`` sub-dict pins the contract. Mutually
         exclusive with ``source_tail_path`` (enforced at the API layer).
+
+        ``retake_window_path`` (retake / temporal inpainting, additive): the
+        app-cut window mp4 (frame-exact, CFR, at the request fps — the engine
+        never cuts or resamples). The glue-band sizes and the regenerate_audio
+        flag are NOT separate arguments: they ride on ``chain_request.retake``,
+        the same convention ``stage2_window`` uses. Mutually exclusive with both
+        ``source_tail_path`` and ``source_audio_path`` (enforced at the API
+        layer). None -> byte-identical to before, payload key set included.
 
         ``lora_paths`` (style/character IC-LoRA, additive): resolved
         ``ResolvedLora`` (``path``, ``strength``, ``preprocess``, ``audio_strength``)
@@ -431,6 +440,7 @@ class LTXRunner:
             source_tail_path=source_tail_path,
             source_context_frames=source_context_frames,
             source_audio_path=source_audio_path,
+            retake_window_path=retake_window_path,
             lora_paths=lora_paths,
             reference_video_path=reference_video_path,
             seed=seed,
@@ -719,6 +729,7 @@ class _MockBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -755,11 +766,19 @@ class _MockBackend:
         v_tile, v_adv = chain_math.resolve_stage2_window(
             getattr(chain, "stage2_window", None)
         )
+        # Retake: resolved HERE too, for the same reason as the stage-2 window
+        # above — the mock's geometry metadata comes from the same
+        # compute_chain_layout, so omitting it would let every mock-backed test
+        # pass with plain-chain geometry no matter what the request asked for.
+        retake = getattr(chain, "retake", None)
         layout = chain_math.compute_chain_layout(
             [c.num_frames for c in chain.clips], chain.frame_rate,
             kv=chain.overlap_frames,
             v_tile=v_tile, v_adv=v_adv,
             source_context_px=source_context_frames,
+            retake_glue_px=(
+                None if retake is None else (int(retake.head_px), int(retake.tail_px))
+            ),
         )
         gpu_info.reset_peak_vram()
         if progress_callback:
@@ -772,6 +791,8 @@ class _MockBackend:
             start_image = start_image.resize((chain.width, chain.height))
 
         # V2V: the delivered mp4 is the NEW part only (context trimmed off front).
+        # Retake deliberately does NOT appear here: its deliverable is the WHOLE
+        # window (no trim), and layout.total_px already IS the window length.
         n_out = layout.new_frames_px if source_context_frames is not None else layout.total_px
         frames = self._render_chain_frames(
             width=chain.width, height=chain.height, n=n_out,
@@ -836,6 +857,36 @@ class _MockBackend:
                 "handle_context_seconds": round(handle_context_seconds, 6),
             })
             chain_metadata["v2v"] = v2v
+
+        # Retake: mirror the engine's chain.retake sub-dict. The GEOMETRY half is
+        # already there (ChainLayout.to_dict()); this adds the runtime half with
+        # the SAME key set the real engine emits — with ONE deliberate exception:
+        # ``freeze_proof`` is absent. That number can only be produced by looking
+        # at real latents, and the mock has none; emitting 0.0 would fabricate a
+        # passing proof of the one thing this feature actually has to prove. Tests
+        # assert the difference in both directions.
+        if retake is not None:
+            window_has_audio = bool(
+                retake_window_path is not None
+                and video_io.has_audio_stream(retake_window_path)
+            )
+            rt = dict(chain_metadata.get("retake", {}))
+            rt.update({
+                "regenerate_audio": bool(retake.regenerate_audio),
+                "source_had_audio": window_has_audio,
+                # The mock freezes nothing, but it reports what the engine WOULD
+                # have frozen, so the contract shape stays checkable: a band only
+                # exists when there is audio to put in it.
+                "audio_frozen": bool(
+                    window_has_audio
+                    and (rt.get("n_head_a", 0) > 0 or rt.get("n_tail_a", 0) > 0)
+                ),
+                "muxed_original_waveform": bool(
+                    not retake.regenerate_audio and window_has_audio
+                ),
+                "decoded_frames_px": int(layout.total_px),
+            })
+            chain_metadata["retake"] = rt
 
         # A2V: mirror the engine's chain.a2v sub-dict (geometry from ChainLayout +
         # a ffprobe of the uploaded audio). The mock does NOT decode/mux audio, so
@@ -1584,6 +1635,7 @@ class _RealBackend:
         source_tail_path: Path | None = None,
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -1677,6 +1729,17 @@ class _RealBackend:
         # engine truncates to the timeline). Absent for a normal / V2V chain.
         if source_audio_path is not None:
             payload["audio_source"] = {"path": str(source_audio_path)}
+        # Retake (additive): the app-cut window plus the glue geometry. The
+        # ``is not None`` guard on BOTH the path and the request block is what
+        # keeps a non-retake chain's payload key set byte-identical
+        # (tests/test_ltx_runner_payload.py pins that set in two places).
+        if retake_window_path is not None and getattr(chain, "retake", None) is not None:
+            payload["retake"] = {
+                "path": str(retake_window_path),
+                "head_px": int(chain.retake.head_px),
+                "tail_px": int(chain.retake.tail_px),
+                "regenerate_audio": bool(chain.retake.regenerate_audio),
+            }
         # Style/character IC-LoRA (additive): (path, strength[, audio_strength])
         # per adapter, applied uniformly across the chain. Only added when
         # non-empty so a no-lora chain payload is byte-identical to before (the

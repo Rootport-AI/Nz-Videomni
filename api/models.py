@@ -530,6 +530,61 @@ class SourceAudioSpec(BaseModel):
     audio_id: str = Field(..., min_length=1)
 
 
+class RetakeSpec(BaseModel):
+    """Retake — regenerate the MIDDLE of an existing clip (temporal inpainting).
+
+    ``video_id`` is an existing upload from POST /upload/video. The server cuts
+    the window ``[window_start_sec, window_start_sec + clips[0].num_frames)`` out
+    of it (``video_io.cut_window_mp4``, frame-exact, resampled to ``frame_rate``
+    if needed) and hands ONLY that window to the engine, which regenerates its
+    middle while holding ``head_px`` frames at the front and ``tail_px`` frames at
+    the back frozen through both stages. The delivered mp4 is the WHOLE window,
+    untrimmed: the glue bands are the overlap material the timeline lays back
+    over the original, which is what puts the quality seam at the window's outer
+    edge instead of at the edit point.
+
+    ``clips[0].num_frames`` is the SINGLE source for the window length — there is
+    deliberately no second length field here to disagree with it. Its legal range
+    ([73, 169] frames for the default stage-2 window) is published as
+    ``config.limits.retake_window_min_frames`` / ``retake_window_max_frames`` and
+    enforced by ``chain_math.compute_chain_layout``.
+
+    ``head_px`` must be 8n+1 and ``tail_px`` a multiple of 8 — the two ends sit on
+    DIFFERENT latent grids because the video VAE is causal
+    (``chain_math.v_tail_latents``). The 25/24 defaults are the calibrated
+    recommendation from VERIFICATION_LOG §55.5; wider is not monotonically
+    better (49/48 measurably weakened the audio seam).
+
+    ``regenerate_audio`` False keeps the window's ORIGINAL waveform and muxes it
+    back verbatim (the vocoder is skipped); it then requires the upload to
+    actually have an audio stream (422 up front if not).
+
+    Mutually exclusive with ``source_video``, ``source_audio``,
+    ``reference_video_id`` and ``clips[0].conditioning_images`` — all of them want
+    to own the ends of the one clip.
+    """
+
+    video_id: str = Field(..., min_length=1)
+    window_start_sec: float = Field(..., ge=0.0)
+    head_px: int = Field(25, ge=9)
+    tail_px: int = Field(24, ge=8)
+    regenerate_audio: bool = True
+
+    @model_validator(mode="after")
+    def validate_glue_grids(self) -> "RetakeSpec":
+        if (self.head_px - 1) % 8 != 0:
+            raise ValueError(
+                "retake.head_px must be 8n+1 (the head band starts at the causal "
+                "VAE's lone keyframe latent)"
+            )
+        if self.tail_px % 8 != 0:
+            raise ValueError(
+                "retake.tail_px must be a multiple of 8 (the tail band is whole "
+                "latent groups counted back from the end)"
+            )
+        return self
+
+
 class GenerateChainRequest(BaseModel):
     """A chain of clips assembled into ONE continuous masked AV-latent timeline.
 
@@ -617,6 +672,11 @@ class GenerateChainRequest(BaseModel):
     # :class:`SourceAudioSpec`. Mutually exclusive with ``source_video``.
     source_audio: SourceAudioSpec | None = None
 
+    # Retake — temporal inpainting (ADDITIVE/optional; a request omitting this
+    # field is byte-identical to before, right down to the worker payload, which
+    # only grows a "retake" key when this is set). See :class:`RetakeSpec`.
+    retake: RetakeSpec | None = None
+
     # Style/character IC-LoRA (ADDITIVE/optional — a request omitting this field is
     # byte-identical to before). Same ``LoraSpec`` type/validation as
     # ``GenerateRequest.loras``; the strengths apply uniformly to EVERY clip and
@@ -698,17 +758,50 @@ class GenerateChainRequest(BaseModel):
         if self.source_audio is not None and len(self.clips) != 1:
             raise ValueError("source_audio requires exactly 1 clip in v1")
 
+        # Retake owns BOTH ends of the one and only clip, so it cannot share the
+        # timeline with any other head/end claimant. Rejected up front, in the
+        # same style as the source_audio/source_video pair above.
+        if self.retake is not None:
+            if self.source_video is not None:
+                raise ValueError(
+                    "retake and source_video are mutually exclusive (a retake "
+                    "freezes both ends of an existing window; a V2V continuation "
+                    "freezes clip 0's head and generates onward)"
+                )
+            if self.source_audio is not None:
+                raise ValueError(
+                    "retake and source_audio are mutually exclusive (both want to "
+                    "own the chain's audio latent)"
+                )
+            if self.reference_video_id is not None:
+                raise ValueError(
+                    "retake and reference_video_id are mutually exclusive (a "
+                    "control adapter's reference conditioning would compete with "
+                    "the frozen retake glue bands)"
+                )
+            if self.clips[0].conditioning_images:
+                raise ValueError(
+                    "retake is mutually exclusive with clips[0].conditioning_images "
+                    "(the window's own frames already occupy the frozen ends)"
+                )
+            # The window IS the clip; clips[0].num_frames is its length.
+            if len(self.clips) != 1:
+                raise ValueError("retake requires exactly 1 clip (the window itself)")
+
         # Clip-count floor: WITHOUT a source (video OR audio) OR a reference-video
         # control adapter, a chain needs >= 2 clips (a single clip is just
         # /generate) — preserve the pre-V2V rejection. WITH a source_video the
         # frozen source head IS the prior segment, WITH a source_audio a single
         # clip is the whole timeline, and WITH reference_video_id the chain is
-        # ALPHA-scoped to exactly 1 clip (enforced below) — so 1 clip is OK in all
-        # three cases.
+        # ALPHA-scoped to exactly 1 clip (enforced below), and WITH a retake the
+        # single clip IS the window being repaired — so 1 clip is OK in all four
+        # cases. (Forgetting the retake term here would 422 EVERY retake request
+        # before it reached any of its own validation.)
         if (
             self.source_video is None
             and self.source_audio is None
             and self.reference_video_id is None
+            and self.retake is None
             and len(self.clips) < 2
         ):
             raise ValueError("chain requires at least 2 clips")
@@ -790,6 +883,20 @@ class GenerateChainRequest(BaseModel):
                     'or switch stage2_window back to "standard".'
                 )
 
+        # Retake x non-default window: a retake window is refined as ONE stage-2
+        # tile, which is the only geometry the both-side freeze was validated
+        # under (VERIFICATION_LOG §55.2/§55.3). The narrower "high_resolution"
+        # window would split a 169-frame window into 2 tiles and the frozen tail
+        # would then only cover the LAST tile — a silent quality failure, so the
+        # combination is refused outright rather than quietly re-bounded.
+        if self.retake is not None and self.stage2_window != "standard":
+            raise ValueError(
+                f"retake requires stage2_window='standard' (got "
+                f"{self.stage2_window!r}): the retake window must be refined as a "
+                "single stage-2 window, and the narrower one would split it in "
+                "two so the frozen tail covered only the final piece."
+            )
+
         try:
             layout = chain_math.compute_chain_layout(
                 [c.num_frames for c in self.clips], self.frame_rate,
@@ -798,6 +905,14 @@ class GenerateChainRequest(BaseModel):
                 v_adv=stage2_v_adv,
                 source_context_px=(
                     self.source_video.context_frames if self.source_video else None
+                ),
+                # Window length + glue-band geometry (8n+1 window in
+                # [73, 169], head/tail grids, a free middle in BOTH latent
+                # domains) is validated THERE, so the validator, the engine and
+                # the mock cannot disagree. Its ValueError surfaces as 422.
+                retake_glue_px=(
+                    None if self.retake is None
+                    else (self.retake.head_px, self.retake.tail_px)
                 ),
             )
         except ValueError as exc:
@@ -869,6 +984,13 @@ class GenerateChainRequest(BaseModel):
         claim sdpa/default for a sage chain).
         The chain's OWN worker payload is built from the chain request, not from
         this per-clip copy — this transcription only feeds the stored record.
+
+        ``retake`` is deliberately NOT transcribed, following the same precedent
+        as ``source_video`` / ``source_audio`` / ``reference_video_id``: it has no
+        counterpart on ``GenerateRequest``, so there is nothing to drop it INTO,
+        and dropping it changes no validation outcome. The authoritative copy is
+        ``JobRecord.chain_request``, which ``run_chain_job`` reads and which the
+        worker payload is built from.
         """
         clip = self.clips[index]
         return GenerateRequest(

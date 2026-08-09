@@ -258,6 +258,17 @@ class LimitsConfig(BaseModel):
     v2v_context_frames_default: int = 73
     v2v_context_frames_min: int = 25
     v2v_context_frames_max: int = 145
+    # Retake window length (POST /generate/chain, clips[0].num_frames when a
+    # ``retake`` block is present). Published via /config so a UI can bound its
+    # window control. 8n+1 like every other frame count. COUPLED TO THE DEFAULT
+    # STAGE-2 WINDOW: 169 == chain_math.retake_max_window_px(STAGE2_V_TILE=22),
+    # i.e. the largest window that still refines as ONE stage-2 window. If retake
+    # is ever allowed with stage2_window="high_resolution" (v_tile=19), the real
+    # ceiling drops to 145 and these fixed numbers stop matching — which is why
+    # that combination is a 422 today. The geometry truth stays in chain_math;
+    # these two only publish the standard-preset numbers.
+    retake_window_min_frames: int = 73
+    retake_window_max_frames: int = 169
 
 
 class OutputConfig(BaseModel):

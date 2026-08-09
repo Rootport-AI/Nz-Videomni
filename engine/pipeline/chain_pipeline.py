@@ -44,6 +44,7 @@ from chain_math import (
     audio_segment_windows,
     compute_chain_layout,
     plan_upsample_chunks,
+    retake_tail_token_range,
 )
 from engine import progress_shim
 from engine.api_types import ImageConditioningInput
@@ -60,6 +61,14 @@ if TYPE_CHECKING:
     from engine.gguf.ic_lora_common import IcLoraEntry
 
 DTYPE = torch.bfloat16
+
+# Stage-1 denoise-mask value for a retake's two glue bands. 0.0 == HARD freeze.
+# Both 0.0 and 0.5 passed the spike; 0.0 is the owner-chosen default because it
+# is the value that makes the stage-1 bands bit-exact and therefore machine-
+# provable by ``freeze_proof`` (VERIFICATION_LOG §55.3). Named rather than
+# inlined so the freeze-proof's "which checks must be zero" rule below reads off
+# the same constant the denoise used.
+RETAKE_STAGE1_MASK_VALUE = 0.0
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +124,41 @@ class AudioSourceSpec:
     """
 
     path: str
+
+
+@dataclass
+class RetakeSpec:
+    """Retake (temporal inpainting) — regenerate the MIDDLE of an existing clip.
+
+    * ``path``: an mp4 that is ALREADY the exact window the app cut out of the
+      user's material — 8n+1 frames, CFR, at the request fps. THE ENGINE NEVER
+      CUTS OR RESAMPLES. That division of labour is deliberate and mirrors
+      :class:`SourceSpec`: the app owns "which pixels", the engine owns "what
+      happens to them". ``services/video_io.cut_window_mp4`` is the cutter, and
+      it verifies the frame count it wrote by re-probing the file.
+    * ``head_px`` / ``tail_px``: the GLUE bands kept frozen at the two ends of
+      the window. Their defaults (25 / 24) are the calibrated recommendation
+      from VERIFICATION_LOG §55.5 — 9/8 leaves too little material to hold the
+      ends, and 49/48 weakens the audio seam, so wider is NOT monotonically
+      better. The two are ASYMMETRIC because the video VAE is causal: a head
+      band must be 8n+1 pixels and a tail band a multiple of 8
+      (``chain_math.v_tail_latents``).
+    * ``regenerate_audio``: True (v1 default) regenerates the audio inside the
+      free middle along with the video. False keeps the ORIGINAL window
+      waveform and muxes it back verbatim — in that mode the vocoder is skipped
+      entirely (there is no point rendering audio that is about to be thrown
+      away).
+
+    Mutually exclusive with :class:`SourceSpec` (V2V) AND :class:`AudioSourceSpec`
+    (A2V) — all three want to own the same latent ends. Asserted in
+    :func:`run_chain`; also 422 at the API layer, together with the
+    reference-video and clip-0 conditioning-image exclusions.
+    """
+
+    path: str
+    head_px: int = 25
+    tail_px: int = 24
+    regenerate_audio: bool = True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -197,6 +241,9 @@ def _denoise_av_with_carry(
     freeze_ka: int,
     mask_value: float,
     device: torch.device,
+    freeze_tail_v: int = 0,
+    freeze_tail_a: int = 0,
+    tail_mask_value: float | None = None,
 ):
     """Reimpl of helpers.denoise_audio_video with an overlap-freeze mask.
 
@@ -206,11 +253,27 @@ def _denoise_av_with_carry(
     (re-pins mask<1 tokens each step), and unpatchifies. Verbatim mechanics from
     the s1/s2 spikes (which faithfully reimplement the wheel helpers) with an
     added optional ``video_conditionings`` (empty for T2V segments/tiles).
+
+    ``freeze_tail_v`` / ``freeze_tail_a`` (retake, additive): ALSO freeze the
+    trailing N latent frames, so the middle is regenerated between two frozen
+    ends. Both default to 0 -> every pre-retake call site keeps the exact
+    head-only behaviour it had (the two ``if`` conditions below degenerate to
+    the original ``if freeze_k? > 0``). ``tail_mask_value`` defaults to
+    ``mask_value``; it exists so a future caller can hold the two ends at
+    different strengths, which is what the spike's stage-1 0.5 arm exercised.
+
+    The tail range is ABSOLUTE (``chain_math.retake_tail_token_range``), never
+    ``m[:, -k*hw:]`` — see that function for why negative indexing silently
+    under-freezes once conditioning tokens have been appended. The two-sided
+    freeze itself was validated in VERIFICATION_LOG §55.3, with three ablation
+    arms proving the causality.
     """
     from ltx_core.tools import AudioLatentTools, VideoLatentTools
     from ltx_core.types import AudioLatentShape, VideoLatentShape
     from ltx_pipelines.utils.helpers import simple_denoising_func, state_with_conditionings
     from ltx_pipelines.utils.samplers import euler_denoising_loop
+
+    tail_mv = mask_value if tail_mask_value is None else tail_mask_value
 
     # ── VIDEO ──
     vshape = VideoLatentShape.from_pixel_shape(
@@ -220,12 +283,26 @@ def _denoise_av_with_carry(
     )
     vtools = VideoLatentTools(components.video_patchifier, vshape, output_shape.fps)
     vstate = vtools.create_initial_state(device, DTYPE, initial_video_latent)
-    if freeze_kv > 0:
-        hw = vshape.height * vshape.width
+    # hw / v_tokens are hoisted OUT of the freeze branch (they are plain geometry
+    # and the tail block needs them too); the bound that matters is the VIDEO
+    # token span, not ``m.shape[1]``, which conditioning items may already have
+    # extended.
+    hw = vshape.height * vshape.width
+    v_tokens = vshape.frames * hw
+    if freeze_kv > 0 or freeze_tail_v > 0:
         m = vstate.denoise_mask.clone()
-        assert m.shape[1] >= vshape.frames * hw
-        m[:, : freeze_kv * hw, ...] = float(mask_value)
+        assert m.shape[1] >= v_tokens, (m.shape[1], v_tokens)
+        if freeze_kv > 0:
+            m[:, : freeze_kv * hw, ...] = float(mask_value)
+        if freeze_tail_v > 0:
+            lo, hi = retake_tail_token_range(vshape.frames, hw, freeze_tail_v)
+            assert 0 <= lo < hi <= v_tokens, (lo, hi, v_tokens)
+            m[:, lo:hi, ...] = float(tail_mv)
         vstate = dataclasses.replace(vstate, denoise_mask=m)
+    # ORDERING (load-bearing): every mask edit above happens BEFORE this call,
+    # exactly where the head-only freeze already sat. state_with_conditionings
+    # appends conditioning tokens, so editing after it would address the wrong
+    # tokens on the tail side.
     vstate = state_with_conditionings(vstate, video_conditionings or [], vtools)
     vstate = noiser(vstate, noise_scale)
 
@@ -233,10 +310,16 @@ def _denoise_av_with_carry(
     ashape = AudioLatentShape.from_video_pixel_shape(output_shape)
     atools = AudioLatentTools(components.audio_patchifier, ashape)
     astate = atools.create_initial_state(device, DTYPE, initial_audio_latent)
-    if freeze_ka > 0:
+    if freeze_ka > 0 or freeze_tail_a > 0:
         m = astate.denoise_mask.clone()
-        assert m.shape[1] >= ashape.frames
-        m[:, :freeze_ka, ...] = float(mask_value)
+        assert m.shape[1] >= ashape.frames, (m.shape[1], ashape.frames)
+        if freeze_ka > 0:
+            m[:, :freeze_ka, ...] = float(mask_value)
+        if freeze_tail_a > 0:
+            # hw == 1 in the audio token domain (one token per latent frame).
+            lo, hi = retake_tail_token_range(ashape.frames, 1, freeze_tail_a)
+            assert 0 <= lo < hi <= ashape.frames, (lo, hi, ashape.frames)
+            m[:, lo:hi, ...] = float(tail_mv)
         astate = dataclasses.replace(astate, denoise_mask=m)
     astate = state_with_conditionings(astate, [], atools)
     astate = noiser(astate, noise_scale)
@@ -360,6 +443,116 @@ def _encode_source_heads(
     return src_head_v_half, src_head_v_full, src_head_a, freeze_ka, had_audio
 
 
+def _encode_retake_window(
+    *,
+    retake: "RetakeSpec",
+    layout: ChainLayout,
+    width: int,
+    height: int,
+    video_encoder,
+    tiling_cfg,
+    ledger,
+    device: torch.device,
+):
+    """VAE-encode the WHOLE retake window at both resolutions (+ its audio).
+
+    Returns ``(rt_v_half, rt_v_full, rt_a, had_audio, orig_wf, sampling_rate)``.
+
+    WHY THE WHOLE WINDOW AND NOT JUST THE TWO GLUE BANDS: the video VAE is
+    causal and temporally strided, so a standalone encode of the last 25 pixels
+    would make ITS latent 0 a fresh keyframe — both the wrong index mapping and
+    the wrong content. One full-window encode yields correctly-aligned latents
+    for both ends at once (spike ``d1_both_side_freeze.py`` lines 561-566). The
+    same argument applies to the audio encode.
+
+    Both video encodes go through ``tiled_encode`` for the same reason
+    :func:`_encode_source_heads` does: an untiled full-res encode would OOM at
+    720p.
+
+    AUDIO ADJUDICATION (owner decision, VERIFICATION_LOG §55.6):
+      * window HAS audio but encodes to fewer than ``a_total`` latent frames ->
+        HARD FAIL. A short encode puts the tail glue at the wrong index and
+        would silently invalidate the freeze; that is worse than a failed job.
+      * window has NO audio -> continue with no audio freeze at all
+        (``had_audio=False``), recorded in the metadata rather than raised.
+      * ``regenerate_audio=False`` -> the underrun hard-fail does NOT apply: the
+        delivered audio is the original waveform, so a short/absent encode can
+        only under-freeze latents that are about to be discarded.
+    """
+    from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
+    from ltx_core.types import Audio
+    from ltx_pipelines.utils.helpers import cleanup_memory
+    from ltx_pipelines.utils.media_io import decode_audio_from_file
+
+    window_px = int(layout.retake_window_px or 0)
+    f_total = layout.f_total
+    a_win = layout.a_total
+
+    # ── half-res window (stage-1) ──
+    win_half = load_video_conditioning_cpu(
+        video_path=retake.path, height=height // 2, width=width // 2,
+        frame_cap=window_px, dtype=DTYPE, device=device,
+    )
+    rt_v_half = video_encoder.tiled_encode(win_half, tiling_cfg).detach().clone()
+    del win_half
+    cleanup_memory()
+    assert rt_v_half.shape[2] == f_total, (rt_v_half.shape[2], f_total)
+
+    # ── full-res window (stage-2 variant-B hard freeze) ──
+    win_full = load_video_conditioning_cpu(
+        video_path=retake.path, height=height, width=width,
+        frame_cap=window_px, dtype=DTYPE, device=device,
+    )
+    rt_v_full = video_encoder.tiled_encode(win_full, tiling_cfg).detach().clone()
+    del win_full
+    cleanup_memory()
+    assert rt_v_full.shape[2] == f_total, (rt_v_full.shape[2], f_total)
+
+    # ── window audio ──
+    rt_a = None
+    orig_wf = None
+    sampling_rate = 0
+    src_audio = decode_audio_from_file(retake.path, device)
+    had_audio = src_audio is not None
+    if had_audio:
+        wf = src_audio.waveform                    # (1, channels, samples)
+        if wf.dim() == 2:                          # defensive; loader returns 3-D
+            wf = wf.unsqueeze(0)
+        # The audio VAE encoder's conv_in is stereo-only (weight [128,2,3,3]),
+        # so a mono window must be duplicated — same normalisation the A2V path
+        # does, and the mux writer needs stereo too.
+        if wf.shape[1] == 1:
+            wf = wf.repeat(1, 2, 1)
+        sampling_rate = int(src_audio.sampling_rate)
+        # Kept on CPU for a possible verbatim re-mux (regenerate_audio=False).
+        orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+        audio_encoder = ledger.audio_encoder()
+        enc = vae_encode_audio(
+            Audio(waveform=wf.to(DTYPE), sampling_rate=sampling_rate), audio_encoder, None,
+        )
+        avail = int(enc.shape[2])
+        if avail < a_win:
+            if retake.regenerate_audio:
+                raise ValueError(
+                    f"retake window audio encoded to {avail} audio-latent frames "
+                    f"< a_total={a_win} required by the {window_px}-frame window; "
+                    "the tail glue would land on the wrong latent index"
+                )
+            logger.warning(
+                "chain retake: window audio encoded to %d < a_total=%d, but "
+                "regenerate_audio=False — continuing with NO audio freeze "
+                "(the delivered audio is the original waveform).",
+                avail, a_win,
+            )
+            had_audio = False
+        else:
+            rt_a = enc[:, :, :a_win, :].detach().clone()
+        del audio_encoder, enc
+        del src_audio, wf
+        cleanup_memory()
+    return rt_v_half, rt_v_full, rt_a, had_audio, orig_wf, sampling_rate
+
+
 def _chunked_upsample_cpu(assembled_v, video_encoder, upsampler, upsample_video_fn, device, progress=None):
     """Temporal-chunked spatial upsample. Returns the upscaled latent on CPU.
 
@@ -415,6 +608,7 @@ def run_chain(
     progress: ProgressFn | None = None,
     source: "SourceSpec | None" = None,
     audio_source: "AudioSourceSpec | None" = None,
+    retake: "RetakeSpec | None" = None,
     ic_loras: list[IcLoraEntry] | None = None,
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
@@ -433,6 +627,12 @@ def run_chain(
     ``audio_source`` (audio-to-video, additive to the ``audio_source=None`` path,
     which stays byte-identical) freezes an uploaded audio latent over the whole
     timeline and drives the video off it; mutually exclusive with ``source``.
+
+    ``retake`` (temporal inpainting, additive — ``None`` keeps every other path
+    byte-identical) takes an app-cut window (ONE clip, 8n+1 frames, <= one
+    stage-2 tile) and regenerates only its MIDDLE, holding the head and tail glue
+    bands frozen through BOTH stages. The delivered mp4 is the WHOLE window,
+    untrimmed. Mutually exclusive with ``source`` and ``audio_source``.
 
     ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
     audio_strength)`` adapters applied via the forward-time weight patch across
@@ -475,6 +675,11 @@ def run_chain(
     assert not (source is not None and audio_source is not None), (
         "run_chain: source (V2V) and audio_source (A2V) are mutually exclusive"
     )
+    # Retake owns BOTH ends of the one and only clip, so it can share the
+    # timeline with neither of the other two (the API layer 422s this first).
+    assert sum(x is not None for x in (source, audio_source, retake)) <= 1, (
+        "run_chain: source (V2V), audio_source (A2V) and retake are mutually exclusive"
+    )
     from ltx_core.components.diffusion_steps import EulerDiffusionStep
     from ltx_core.components.noisers import GaussianNoiser
     from ltx_core.model.audio_vae import decode_audio as vae_decode_audio
@@ -513,8 +718,19 @@ def run_chain(
         clip_frames, frame_rate, kv=kv,
         v_tile=v_tile, v_adv=v_adv,
         source_context_px=src_ctx_px,
+        retake_glue_px=(
+            None if retake is None else (int(retake.head_px), int(retake.tail_px))
+        ),
     )
     n_ctx_v = layout.n_ctx_v  # 0 when source is None
+    # Retake glue sizes — the SINGLE source of truth is the layout, so the app
+    # validator, the mock and this engine cannot disagree about which latents
+    # are frozen. All zero on every non-retake path.
+    rt_geo = layout.to_dict().get("retake") or {}
+    n_head_v = int(rt_geo.get("n_head_v", 0))
+    n_tail_v = int(rt_geo.get("n_tail_v", 0))
+    n_head_a = int(rt_geo.get("n_head_a", 0))
+    n_tail_a = int(rt_geo.get("n_tail_a", 0))
     ka_list = layout.ka_list
     v_tiles = layout.v_tiles
     a_tiles = layout.a_tiles
@@ -650,6 +866,25 @@ def run_chain(
         gc.collect()
         torch.cuda.empty_cache()
 
+    # ── retake: encode the WHOLE window (both resolutions + audio) once ───────
+    rt_v_half = rt_v_full = rt_a = None
+    rt_orig_wf = None
+    rt_sr = 0
+    retake_had_audio = False
+    if retake is not None:
+        (rt_v_half, rt_v_full, rt_a, retake_had_audio,
+         rt_orig_wf, rt_sr) = _encode_retake_window(
+            retake=retake, layout=layout, width=width, height=height,
+            video_encoder=video_encoder, tiling_cfg=tiling_cfg,
+            ledger=ledger, device=device,
+        )
+        if not retake_had_audio:
+            # No audio to freeze -> the glue bands are video-only (recorded in
+            # the metadata; NOT an error — owner adjudication §55.6).
+            n_head_a = n_tail_a = 0
+        gc.collect()
+        torch.cuda.empty_cache()
+
     stepper = EulerDiffusionStep()
     stage1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(device)
 
@@ -662,7 +897,44 @@ def run_chain(
         progress_shim.set_phase("stage1_denoise", outer_index=i, outer_total=n)
         seg_shape = VideoPixelShape(1, clip_frames[i], height // 2, width // 2, frame_rate)
         noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
-        if i == 0 and source is not None:
+        # Tail freeze is retake-only; 0 everywhere else keeps every pre-retake
+        # branch below exactly as it was.
+        ftv = fta = 0
+        if i == 0 and retake is not None:
+            # ── retake: freeze BOTH ends of the single window segment ────────
+            # The init tensor carries the ORIGINAL window's stage-1-res latents
+            # at the two glue bands and zeros in the middle; the mask (built in
+            # _denoise_av_with_carry from fkv/ftv/fka/fta) is what actually
+            # holds them. Stage-1 mask value is 0.0 — a HARD freeze. 0.5 also
+            # passed the spike (the band drifts 0.62-0.93 at stage 1 but
+            # reconverges at stage 2); 0.0 is the owner-chosen default because
+            # it makes the stage-1 bands bit-exact and therefore PROVABLE
+            # (VERIFICATION_LOG §55.3).
+            from ltx_core.types import AudioLatentShape as _ALShape
+            from ltx_core.types import VideoLatentShape as _VLShape
+            v_half_shape = _VLShape.from_pixel_shape(
+                seg_shape,
+                latent_channels=components.video_latent_channels,
+                scale_factors=components.video_scale_factors,
+            ).to_torch_shape()
+            init_v = torch.zeros(tuple(v_half_shape), dtype=DTYPE, device=device)
+            init_v[:, :, :n_head_v] = rt_v_half[:, :, :n_head_v].to(DTYPE)
+            init_v[:, :, layout.f_total - n_tail_v:] = (
+                rt_v_half[:, :, layout.f_total - n_tail_v:].to(DTYPE)
+            )
+            if n_head_a > 0 or n_tail_a > 0:
+                a_shape = _ALShape.from_video_pixel_shape(seg_shape).to_torch_shape()
+                init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
+                init_a[:, :, :n_head_a] = rt_a[:, :, :n_head_a].to(DTYPE)
+                init_a[:, :, layout.a_total - n_tail_a:] = (
+                    rt_a[:, :, layout.a_total - n_tail_a:].to(DTYPE)
+                )
+            else:
+                init_a = None
+            fkv, fka = n_head_v, n_head_a
+            ftv, fta = n_tail_v, n_tail_a
+            conds = []  # retake & conditioning_images are mutually exclusive (app-enforced)
+        elif i == 0 and source is not None:
             # video-to-video: freeze the source tail as clip-0's head (same
             # carry mechanism as an inter-clip join; mask = 1-overlap_strength).
             from ltx_core.types import AudioLatentShape as _ALShape
@@ -740,6 +1012,10 @@ def run_chain(
         # (mask 0.0) over the whole segment — the video branch above is untouched
         # (v1 A2V is single-clip: fkv==0, so mask 0.0 does not touch the video).
         seg_mask_value = stage1_mask_value
+        if retake is not None:
+            # HARD freeze at stage 1 (see the retake branch above); the same
+            # value covers head and tail, so tail_mask_value stays None.
+            seg_mask_value = RETAKE_STAGE1_MASK_VALUE
         if audio_source is not None:
             ws, wl = a_seg_windows[i]
             a_shape = AudioLatentShape.from_video_pixel_shape(seg_shape).to_torch_shape()
@@ -754,6 +1030,7 @@ def run_chain(
             noiser=noiser, stepper=stepper, sigmas=stage1_sigmas, noise_scale=1.0,
             initial_video_latent=init_v, initial_audio_latent=init_a,
             freeze_kv=fkv, freeze_ka=fka, mask_value=seg_mask_value, device=device,
+            freeze_tail_v=ftv, freeze_tail_a=fta,
         )
         seg_v.append(vstate.latent.detach().clone())
         seg_a.append(astate.latent.detach().clone())
@@ -818,7 +1095,28 @@ def run_chain(
         if upscaled_v.device.type == "cpu":
             init_v = init_v.to(device)
         init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
-        if i == 0 and source is not None:
+        ftv = fta = 0
+        if i == 0 and retake is not None:
+            # ── retake stage 2: re-write AND re-freeze both ends ─────────────
+            # Re-freezing here is MANDATORY, not belt-and-braces: stage 2
+            # re-noises with noise_scale = sigmas[0] (~0.909), so an unfrozen
+            # band would have the stage-1 freeze destroyed outright (spike
+            # d1_both_side_freeze.py:663-669). Variant B: the bands come from
+            # the FULL-res re-encode of the original, never from the upsampled
+            # stage-1 approximation — the same choice the V2V head makes below.
+            fkv, fka = n_head_v, n_head_a
+            ftv, fta = n_tail_v, n_tail_a
+            mv = 0.0
+            init_v[:, :, :n_head_v] = rt_v_full[:, :, :n_head_v].to(DTYPE)
+            init_v[:, :, layout.f_total - n_tail_v:] = (
+                rt_v_full[:, :, layout.f_total - n_tail_v:].to(DTYPE)
+            )
+            if n_head_a > 0 or n_tail_a > 0:
+                init_a[:, :, :n_head_a] = rt_a[:, :, :n_head_a].to(DTYPE)
+                init_a[:, :, layout.a_total - n_tail_a:] = (
+                    rt_a[:, :, layout.a_total - n_tail_a:].to(DTYPE)
+                )
+        elif i == 0 and source is not None:
             # video-to-video variant B: hard-freeze (mask 0.0) the source head at
             # tile-0's leading region using the FULL-res VAE re-encode, mirroring
             # how i>=1 tile joins freeze their leading kt_v. This is the one
@@ -858,11 +1156,58 @@ def run_chain(
             noise_scale=float(stage2_sigmas[0]),
             initial_video_latent=init_v, initial_audio_latent=init_a,
             freeze_kv=fkv, freeze_ka=fka, mask_value=mv, device=device,
+            freeze_tail_v=ftv, freeze_tail_a=fta,
         )
         refined_v.append(vstate2.latent.detach().clone())
         refined_a.append(astate2.latent.detach().clone())
         if progress:
             progress("tile", i, n_tiles)
+
+    # ── retake FREEZE PROOF (latent domain; computed while the sources live) ──
+    # 8 numbers = {stage 1, stage 2} x {video, audio} x {head, tail}, each the
+    # max-abs difference between what came OUT of the denoise and what was
+    # frozen IN. This is the ONE check that looks at the latents themselves
+    # rather than at pixels, and it is what the spike's main arm passed on all
+    # counts (VERIFICATION_LOG §55.3). Stage 2 is always a hard freeze (mask
+    # 0.0), so its four MUST be exactly 0; the stage-1 four are required to be 0
+    # only when the stage-1 mask value was 0.0 (at 0.5 the band is a deliberate
+    # 50% blend and a non-zero difference is correct).
+    #
+    # OBSERVATION ONLY — deliberately never raises. A wrong number here means
+    # degraded output, not a corrupt job, and turning a metadata probe into a
+    # new crash path would be a worse trade. ``pass`` carries the verdict.
+    # The audio four are None (not 0.0) when the window had no audio: there is
+    # nothing to compare, and inventing a 0.0 would fake a passing proof.
+    retake_meta: dict | None = None
+    if retake is not None:
+        def _mad(a, b) -> float:
+            return float((a.float() - b.float()).abs().max().item())
+
+        s1_v, s1_a = seg_v[0], seg_a[0]
+        f2_v, f2_a = refined_v[0], refined_a[0]
+        f_tot, a_tot = layout.f_total, layout.a_total
+        has_a = retake_had_audio and rt_a is not None and (n_head_a > 0 or n_tail_a > 0)
+        checks: dict[str, float | None] = {
+            "s1_video_head": _mad(s1_v[:, :, :n_head_v], rt_v_half[:, :, :n_head_v]),
+            "s1_video_tail": _mad(s1_v[:, :, f_tot - n_tail_v:],
+                                  rt_v_half[:, :, f_tot - n_tail_v:]),
+            "s2_video_head": _mad(f2_v[:, :, :n_head_v], rt_v_full[:, :, :n_head_v]),
+            "s2_video_tail": _mad(f2_v[:, :, f_tot - n_tail_v:],
+                                  rt_v_full[:, :, f_tot - n_tail_v:]),
+            "s1_audio_head": _mad(s1_a[:, :, :n_head_a], rt_a[:, :, :n_head_a]) if has_a else None,
+            "s1_audio_tail": _mad(s1_a[:, :, a_tot - n_tail_a:],
+                                  rt_a[:, :, a_tot - n_tail_a:]) if has_a else None,
+            "s2_audio_head": _mad(f2_a[:, :, :n_head_a], rt_a[:, :, :n_head_a]) if has_a else None,
+            "s2_audio_tail": _mad(f2_a[:, :, a_tot - n_tail_a:],
+                                  rt_a[:, :, a_tot - n_tail_a:]) if has_a else None,
+        }
+        expected_zero = [k for k in checks if k.startswith("s2_")]
+        if RETAKE_STAGE1_MASK_VALUE == 0.0:
+            expected_zero += [k for k in checks if k.startswith("s1_")]
+        checks["pass"] = all(
+            checks[k] == 0.0 for k in expected_zero if checks[k] is not None
+        )
+        retake_meta = {"freeze_proof": checks}
 
     torch.cuda.synchronize()
     del transformer, video_encoder
@@ -886,10 +1231,14 @@ def run_chain(
         progress("decode", 0, 1)
     gen = torch.Generator(device=device).manual_seed(base_seed)
     decoded_video = vae_decode_video(final_v, ledger.video_decoder(), tiling_cfg, gen)
-    # A2V muxes the ORIGINAL waveform, so the vocoder is skipped entirely; every
-    # other path decodes model audio exactly as before (byte-identical).
+    # A2V muxes the ORIGINAL waveform and a retake with regenerate_audio=False
+    # re-muxes the window's own waveform, so in BOTH cases the vocoder is
+    # skipped entirely — there is no point rendering audio that is discarded.
+    _skip_vocoder = audio_source is not None or (
+        retake is not None and not retake.regenerate_audio
+    )
     decoded_audio = (
-        None if audio_source is not None
+        None if _skip_vocoder
         else vae_decode_audio(final_a, ledger.audio_decoder(), ledger.vocoder())
     )
     v2v_meta: dict | None = None
@@ -923,6 +1272,45 @@ def run_chain(
         }
         torch.cuda.synchronize()
         del decoded_video
+        torch.cuda.empty_cache()
+    elif retake is not None:
+        # ── retake: deliver the WHOLE WINDOW, untrimmed. ──────────────────────
+        # The glue bands are NOT cut off. They are the overlap material the
+        # timeline needs to lay this clip back over the original — the app puts
+        # the seam at the window's outer edge, not at the regenerated region's
+        # boundary, so the VAE round-trip's quality step never lands on the edit
+        # point. That is also why NO audio-handle sidecar is emitted (unlike
+        # V2V): the duplicate material a client would need for a true overlapped
+        # crossfade is already inside this mp4. And no 30ms head fade either —
+        # there is no butt-join here to guard against a click at.
+        from ltx_core.types import Audio
+
+        out_audio = decoded_audio
+        if not retake.regenerate_audio and rt_orig_wf is not None:
+            # Re-mux the window's OWN waveform verbatim, trimmed to the timeline.
+            n_mux = int(round(total_px / float(frame_rate) * rt_sr))
+            mux_wf = rt_orig_wf[:, :n_mux].contiguous()
+            out_audio = Audio(waveform=mux_wf.to(torch.float32), sampling_rate=rt_sr)
+        chunks = video_chunks_number(total_px, tiling_cfg)
+        encode_video_output(
+            video=decoded_video, audio=out_audio, fps=int(frame_rate),
+            output_path=str(output_path), video_chunks_number_value=chunks,
+        )
+        retake_meta = dict(retake_meta or {})
+        retake_meta.update({
+            "regenerate_audio": bool(retake.regenerate_audio),
+            "source_had_audio": bool(retake_had_audio),
+            # Distinct from source_had_audio: the window can carry an audio
+            # stream and still end up with no frozen band (regenerate_audio=False
+            # with a short encode — see _encode_retake_window).
+            "audio_frozen": bool(n_head_a > 0 or n_tail_a > 0),
+            "muxed_original_waveform": bool(
+                not retake.regenerate_audio and rt_orig_wf is not None
+            ),
+            "decoded_frames_px": int(total_px),
+        })
+        torch.cuda.synchronize()
+        del decoded_video, decoded_audio
         torch.cuda.empty_cache()
     elif source is None:
         # ── source-less path: BYTE-IDENTICAL to today (gated). ────────────────
@@ -1044,6 +1432,11 @@ def run_chain(
         # merge the runtime v2v fields into the geometry v2v sub-dict from
         # ChainLayout.to_dict() (single unified ``chain.v2v`` for the done event).
         meta.setdefault("v2v", {}).update(v2v_meta)
+    if retake_meta is not None:
+        # Merge the runtime retake fields into the geometry ``retake`` sub-dict
+        # that ChainLayout.to_dict() already put there (one unified
+        # ``chain.retake`` for the done event) — the same shape as v2v above.
+        meta.setdefault("retake", {}).update(retake_meta)
     if a2v_meta is not None:
         # additive audio-to-video sub-dict (mirrors the v2v block; source-less +
         # v2v paths never set it, so those metas are unchanged).

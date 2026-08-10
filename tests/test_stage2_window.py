@@ -195,23 +195,41 @@ def test_omitted_window_is_identical_to_explicit_standard():
 #     set of configurations;
 #   * at 23.976 and 30fps they do NOT — in BOTH directions (each window rejects
 #     a handful the other accepts). Those are enumerated explicitly.
-#   * for a SINGLE clip — the only shape A2V can take (api/models.py: "source_audio
-#     requires exactly 1 clip in v1") — the two windows never diverge at any rate.
-#     This is the load-bearing one: the A2V length preflight
-#     (chain_math.audio_latents_required -> services/pipeline_manager.py) resolves
-#     a_total on the DEFAULT window, so a divergence there would mean a chain that
-#     passes preflight and then 422s only because of the opt-in window.
+#   * a SINGLE clip diverges too, at 23.976 with a long clip. That used to be
+#     invisible here because 321 was missing from the clip-length list below, and
+#     it used to MATTER because the A2V length preflight
+#     (chain_math.audio_latents_required -> services/pipeline_manager.py) resolved
+#     a_total by building a whole layout on the DEFAULT window: a config the
+#     request's own window accepts could still raise inside preflight and surface
+#     as a 500. Since §1-16 (long A2V) that preflight computes a_total directly
+#     and never touches the stage-2 window, so a divergence is now just an
+#     ordinary 422 from the validator, on the window the request asked for.
+#     ``test_audio_latents_required_survives_every_window_divergence`` pins that.
 _UI_FPS = [12.0, 15.0, 23.976, 24.0, 25.0, 29.97, 30.0, 48.0, 50.0, 59.94, 60.0]
-_UI_CLIP_FRAMES = [9, 49, 121, 241, 361, 481]
+_UI_CLIP_FRAMES = [9, 49, 121, 241, 321, 361, 481]
 _UI_CLIP_COUNTS = [1, 2, 3, 4, 8, 12, 24]
 _UI_KV = [1, 3, 8]
 
 # The COMPLETE set of (clip_frames, n_clips, kv) where the two windows disagree,
-# per frame rate. Measured 2026-08-09 over the space above. Every entry is a
-# pre-existing audio-rounding fragility surfaced as a 422, not a new failure mode.
+# per frame rate. Measured 2026-08-09, re-measured 2026-08-10 with 321 added to
+# the clip-length list. Every entry is a pre-existing audio-rounding fragility
+# surfaced as a 422, not a new failure mode.
 KNOWN_WINDOW_DIVERGENCES: dict[float, set[tuple[int, int, int]]] = {
-    23.976: {(49, 8, 3), (121, 2, 3), (121, 8, 3), (241, 3, 8)},
-    30.0: {(121, 24, 8), (241, 24, 8), (361, 24, 8), (481, 24, 8)},
+    23.976: {
+        (49, 8, 3), (121, 2, 3), (121, 8, 3), (241, 3, 8),
+        (321, 1, 1), (321, 1, 3), (321, 1, 8), (321, 2, 8), (321, 3, 8),
+    },
+    30.0: {
+        (121, 24, 8), (241, 24, 8), (321, 2, 8), (321, 8, 8),
+        (361, 24, 8), (481, 24, 8),
+    },
+}
+
+# Same thing restricted to ONE clip: (clip_frames, kv) per frame rate. Kept
+# separate because the single-clip case is the one A2V used to be limited to,
+# and it is still the shape most likely to reach the length preflight.
+KNOWN_SINGLE_CLIP_DIVERGENCES: dict[float, set[tuple[int, int]]] = {
+    23.976: {(321, 1), (321, 3), (321, 8)},
 }
 
 
@@ -253,21 +271,46 @@ def test_at_24fps_the_two_windows_never_diverge():
 
 
 @pytest.mark.parametrize("fps", _UI_FPS)
-def test_single_clip_never_diverges_between_windows(fps):
-    """A2V is single-clip only, and its length preflight resolves a_total on the
-    DEFAULT window. If a single-clip config ever raised on one window and not the
-    other, an A2V job could pass preflight and then 422 purely because of the
-    stage-2 window choice."""
+def test_single_clip_window_divergence_set_is_exactly_the_measured_one(fps):
+    """Single-clip divergences, enumerated. At 24fps (and everywhere except
+    23.976 x 321 frames) there are none. The 23.976/321 entries are the "long
+    single clip" hole: the DEFAULT window raises "audio reassembly 334 != a_total
+    335" while high_resolution accepts. It is a plain pre-GPU 422 from the
+    validator on whichever window the request chose — see the next test for why
+    it can no longer become a 500 in the A2V length preflight."""
     std_tile, std_adv = chain_math.STAGE2_WINDOW_PRESETS["standard"]
     hi_tile, hi_adv = chain_math.STAGE2_WINDOW_PRESETS["high_resolution"]
+    diverged: set[tuple[int, int]] = set()
     for nf in _UI_CLIP_FRAMES:
         for kv in _UI_KV:
             std = _raises([nf], fps, kv, std_tile, std_adv)
             hi = _raises([nf], fps, kv, hi_tile, hi_adv)
-            assert (std is None) == (hi is None), (
-                f"single-clip divergence at fps={fps} nf={nf} kv={kv}: "
-                f"standard={std!r} high_resolution={hi!r}"
-            )
+            if (std is None) != (hi is None):
+                diverged.add((nf, kv))
+    assert diverged == KNOWN_SINGLE_CLIP_DIVERGENCES.get(fps, set()), (
+        f"single-clip stage-2 window divergence set changed at fps={fps}. "
+        "If this is an intended geometry change, update "
+        "KNOWN_SINGLE_CLIP_DIVERGENCES."
+    )
+
+
+@pytest.mark.parametrize("fps", _UI_FPS)
+def test_audio_latents_required_survives_every_window_divergence(fps):
+    """The A2V length preflight is window-INDEPENDENT (§1-16).
+
+    ``chain_math.audio_latents_required`` computes a_total straight from the clip
+    lengths, fps and K_v, so it must return a number for every configuration in
+    the UI space — including the ones one stage-2 window rejects. When it still
+    resolved a whole ChainLayout on the DEFAULT window, the divergent configs
+    above raised inside ``services/pipeline_manager.preflight_source_audio`` and
+    came back as a 500 instead of a 422 or a job."""
+    for nf in _UI_CLIP_FRAMES:
+        for n in _UI_CLIP_COUNTS:
+            for kv in _UI_KV:
+                if kv >= chain_math.v_latent_frames(nf):
+                    continue  # genuinely impossible geometry; 422 by design
+                required = chain_math.audio_latents_required([nf] * n, fps, kv=kv)
+                assert required > 0
 
 
 def test_the_nonstandard_fps_failures_actually_exist():

@@ -671,7 +671,11 @@ def compute_chain_layout(
 # uploaded audio long enough?) and the engine (how many audio-latent frames to
 # slice off the VAE-encoded upload, and which global window each stage-1 segment
 # freezes). Both are pure functions of the same geometry ``compute_chain_layout``
-# already resolves, so app and engine agree byte-for-byte.
+# resolves — ``audio_latents_required`` recomputes a_total from the same three
+# lines, ``audio_segment_windows`` reads a resolved layout — so app and engine
+# agree byte-for-byte. They cover 1..24 clips: with several clips the uploaded
+# audio is still ONE track over the whole assembled timeline, and each stage-1
+# segment freezes its own window on it.
 def audio_latents_required(
     clip_frames: list[int], fps: float, kv: int = DEFAULT_OVERLAP_FRAMES
 ) -> int:
@@ -683,8 +687,33 @@ def audio_latents_required(
     that VAE-encodes to fewer than this many latent frames is a truncation error
     at the caller (video length is authoritative; audio is truncated, never
     padded — matches upstream a2vid).
+
+    Computes a_total DIRECTLY (seg_latent -> f_total -> total_px -> a_total)
+    instead of resolving a whole :class:`ChainLayout`. a_total depends only on
+    the clip lengths, fps and K_v — never on the stage-2 window (``v_tile`` /
+    ``v_adv``) — so this function has NO business running the layout's stage-2
+    audio-tile reassembly check. Routing it through ``compute_chain_layout``
+    used to drag that window-dependent check into the A2V length PREFLIGHT,
+    where a config the request's own window accepts could still raise here and
+    surface as a 500 (measured: a single 321-frame clip @ 23.976fps, which the
+    DEFAULT window rejects and ``high_resolution`` accepts). The stage-2
+    reassembly check still runs — in the request validator, on the window the
+    request actually asked for.
+
+    The K_v floor is kept verbatim (same ValueError text as
+    ``compute_chain_layout``): it is pure clip geometry, window-independent, and
+    callers already expect a chain with K_v >= a clip's latent length to fail.
     """
-    return compute_chain_layout(clip_frames, fps, kv=kv).a_total
+    if len(clip_frames) < 1:
+        raise ValueError("chain requires at least one clip")
+    seg_latent = [v_latent_frames(f) for f in clip_frames]
+    if any(kv >= L for L in seg_latent):
+        raise ValueError(
+            f"overlap_frames (K_v={kv}) must be < every clip's stage-1 latent "
+            f"frames {seg_latent}"
+        )
+    f_total = sum(seg_latent) - (len(seg_latent) - 1) * kv
+    return a_frames_for_px(px_from_v_latent(f_total), fps)
 
 
 def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
@@ -696,7 +725,8 @@ def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     ``ka_list[i]`` (the same per-join audio crossfade the engine assembles with),
     so segment ``i`` starts at ``sum(seg_audio[:i]) - sum(ka_list[:i])`` and the
     last window ends exactly at ``a_total``. For a single clip this reduces to
-    ``[(0, a_total)]``. Pure function of a resolved :class:`ChainLayout`.
+    ``[(0, a_total)]``. Pure function of a resolved :class:`ChainLayout`, and
+    clip-count agnostic — this is what long A2V (2..24 clips) rides on.
     """
     windows: list[tuple[int, int]] = []
     start = 0
@@ -705,6 +735,43 @@ def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
         if i < len(layout.ka_list):
             start += alen - layout.ka_list[i]
     return windows
+
+
+def freeze_mask_values(
+    mask_value: float,
+    tail_mask_value: float | None = None,
+    audio_mask_value: float | None = None,
+) -> tuple[float, float, float, float]:
+    """Resolve the four frozen-band strengths a chain denoise step writes.
+
+    Returns ``(video_head, video_tail, audio_head, audio_tail)`` for
+    ``engine.pipeline.chain_pipeline._denoise_av_with_carry``. A "strength" here
+    is the denoise-mask value the frozen band is pinned to: ``1 - overlap_strength``
+    for an ordinary carry-over seam, ``0.0`` for a hard freeze.
+
+    Two independent overrides, both defaulting to ``None`` = "same as
+    ``mask_value``", so every pre-override call site is bit-identical:
+
+    * ``tail_mask_value`` — the retake two-sided freeze; splits HEAD from TAIL.
+    * ``audio_mask_value`` — long A2V; splits VIDEO from AUDIO. The uploaded
+      audio window must be hard-frozen (0.0) while the video seam keeps carrying
+      over at the user's ``overlap_strength``. Collapsing the two into one
+      ``mask_value=0.0`` (what pre-long-A2V A2V did, harmlessly, because a
+      single clip freezes no video head at all) would weld every segment seam
+      shut from clip 2 onward and discard ``overlap_strength`` without a word.
+
+    Given BOTH overrides the TAIL one wins on the audio tail. That pairing is
+    retake + A2V, which the API rejects outright, so this is a definition rather
+    than a behaviour anything relies on.
+
+    Pure, so the app venv can test it without torch.
+    """
+    v_head = float(mask_value)
+    a_head = v_head if audio_mask_value is None else float(audio_mask_value)
+    if tail_mask_value is None:
+        return v_head, v_head, a_head, a_head
+    tail = float(tail_mask_value)
+    return v_head, tail, a_head, tail
 
 
 # ── retake: audio glue rounding ("H-A1′") + tail token addressing ────────────

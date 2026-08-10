@@ -346,14 +346,17 @@ LABELS: dict[str, dict[str, str]] = {
                       "clearly, tense and intimate mood, film grain, 35mm.`\n\n"
                       "Clear speech works best, and clips somewhat longer than 5-6 seconds tend "
                       "to be more stable."),
-        "a2v_cap_panel": ("A2V uses exactly ONE clip (the audio drives that whole clip). The audio "
+        "a2v_cap_panel": ("A2V here uses ONE clip (the audio drives that whole clip). The audio "
                           "must be at least as long as the video — shorter audio is rejected. Your "
-                          "uploaded audio is kept as-is in the output."),
+                          "uploaded audio is kept as-is in the output. To drive several chained "
+                          "clips with one audio track, use the AviUtl2 plug-in window."),
         # --- clip chain: A2V flow messages ---
         "a2v_msg_audio_required": "Please select a source audio file for A2V.",
         "a2v_msg_bad_extension": "Audio type not allowed. Allowed: {exts}",
         "a2v_msg_too_large": "Audio exceeds the {limit} MB limit.",
-        "a2v_msg_clip_count": "A2V uses exactly 1 clip — enable clip 1 only.",
+        "a2v_msg_clip_count": ("A2V on this screen uses 1 clip — enable clip 1 only. "
+                               "For one audio across several chained clips, use the AviUtl2 "
+                               "plug-in window."),
         "a2v_msg_uploading": "Uploading audio…",
         # Client-side length precheck (wav only): the attached audio is shorter
         # than the video timeline this Frames/Frame-rate setting produces, so the
@@ -849,14 +852,16 @@ LABELS: dict[str, dict[str, str]] = {
                       "shallow depth of field, subtle head movement, lips articulating each word "
                       "clearly, tense and intimate mood, film grain, 35mm.`\n\n"
                       "音声は明瞭な発話を、動画の尺は5〜6秒よりやや長めにすると安定しやすくなります。"),
-        "a2v_cap_panel": ("A2Vではクリップをちょうど1個使います（1本の音声がそのクリップ全体を駆動します）。"
+        "a2v_cap_panel": ("この画面のA2Vはクリップを1個だけ使います（1本の音声がそのクリップ全体を駆動します）。"
                           "音声は動画の長さ以上必要で、短い音声は拒否されます。"
-                          "出力にはアップロードした音声がそのまま入ります。"),
+                          "出力にはアップロードした音声がそのまま入ります。"
+                          "1本の音声で連結した複数クリップを駆動したい場合は、AviUtl2プラグインの画面を使ってください。"),
         # --- clip chain: A2V flow messages ---
         "a2v_msg_audio_required": "A2Vに使う元音声を選択してください。",
         "a2v_msg_bad_extension": "音声の形式が許可されていません。許可形式: {exts}",
         "a2v_msg_too_large": "音声が上限 {limit} MB を超えています。",
-        "a2v_msg_clip_count": "A2Vではクリップ1のみを有効にしてください（ちょうど1個）。",
+        "a2v_msg_clip_count": ("この画面のA2Vではクリップ1のみを有効にしてください（1個だけ）。"
+                               "1本の音声で複数クリップを駆動したい場合は、AviUtl2プラグインの画面を使ってください。"),
         "a2v_msg_uploading": "音声をアップロード中…",
         # クライアント側の長さ事前チェック（wavのみ）。この Frames/Frame rate 設定が
         # 生む動画尺に対して添付音声が短く、サーバーが 422 SOURCE_AUDIO_TOO_SHORT で

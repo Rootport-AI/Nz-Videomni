@@ -6,6 +6,11 @@ real worker does (geometry from :mod:`chain_math`), so the additive contract
 (upload endpoint, schema, endpoint 404/422, mutual exclusion, metadata a2v block)
 is pinned without weights. Frozen-API discipline: a request omitting source_audio
 is byte-shape identical to before (regression test below).
+
+Long A2V (PENDING_TASKS §1-16): one uploaded audio drives 1..24 clips. There is
+no per-clip audio upload — ``chain_math.audio_segment_windows`` tiles the ONE
+global audio latent across the stage-1 segments — so the multi-clip cases below
+differ from the single-clip ones only in how much audio the length gate demands.
 """
 
 from __future__ import annotations
@@ -155,15 +160,6 @@ def test_a2v_conflicts_with_source_video_422(client):
     assert "mutually exclusive" in r.text
 
 
-def test_a2v_requires_single_clip_422(client):
-    r = _run_chain(
-        client, [{"num_frames": 49}, {"num_frames": 49}],
-        source_audio={"audio_id": "a"},
-    )
-    assert r.status_code == 422
-    assert "exactly 1 clip" in r.text
-
-
 def test_a2v_source_too_short_422(client, tmp_path):
     # [49]@24fps needs a_total=51 audio-latent frames (~2.04s). A 1s upload
     # encodes to ~25 frames < 51 -> rejected up front.
@@ -172,6 +168,21 @@ def test_a2v_source_too_short_422(client, tmp_path):
     r = _run_chain(client, [{"num_frames": 49}], source_audio={"audio_id": aid})
     assert r.status_code == 422
     assert r.json()["error"]["code"] == "SOURCE_AUDIO_TOO_SHORT"
+
+
+def test_a2v_multi_clip_source_too_short_422(client, tmp_path):
+    """Long A2V uses the SAME length gate: [241,241]@24fps kv=2 assembles to 473
+    pixel frames -> a_total=493 (~19.7s), so a 1s upload is still rejected up
+    front. The clip-count guard is gone; the length guard is not."""
+    wav = _make_wav(tmp_path / "short2.wav", seconds=1.0)
+    aid = _upload_audio(client, wav)
+    r = _run_chain(
+        client, [{"num_frames": 241}, {"num_frames": 241}],
+        source_audio={"audio_id": aid},
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "SOURCE_AUDIO_TOO_SHORT"
+    assert chain_math.audio_latents_required([241, 241], 24.0, kv=2) == 493
 
 
 # -------------------------------------------------------------------- (d) 404
@@ -225,6 +236,80 @@ def test_a2v_mock_e2e(client, tmp_path):
     assert meta["request"]["source_audio"]["audio_id"] == aid
 
 
+def test_a2v_multi_clip_accepted(client, tmp_path):
+    """Long A2V: 2 clips + one source audio is ACCEPTED (the old "exactly 1 clip
+    in v1" guard is gone). [121,121]@24fps kv=2 -> a_total=243 (~9.72s)."""
+    wav = _make_wav(tmp_path / "voice2.wav", seconds=10.0)
+    aid = _upload_audio(client, wav)
+
+    r = _run_chain(
+        client, [{"num_frames": 121}, {"num_frames": 121}],
+        source_audio={"audio_id": aid},
+    )
+    assert r.status_code == 202, r.text
+    assert r.json()["num_clips"] == 2
+
+
+def test_a2v_multi_clip_mock_e2e(client, tmp_path):
+    """3 clips driven by ONE uploaded audio run to completion, and the metadata
+    a2v block reports the geometry of the WHOLE assembled timeline (not of one
+    clip): [121,121,121]@24fps kv=2 -> 345 pixel frames -> a_total=359 (14.36s)."""
+    layout = chain_math.compute_chain_layout([121, 121, 121], 24.0, kv=2)
+    assert (layout.total_px, layout.a_total) == (345, 359)
+
+    wav = _make_wav(tmp_path / "long.wav", seconds=14.4, sr=16000, channels=1)
+    aid = _upload_audio(client, wav)
+
+    clips = [{"num_frames": 121}, {"num_frames": 121}, {"num_frames": 121}]
+    r = _run_chain(client, clips, source_audio={"audio_id": aid})
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["num_clips"] == 3
+    job_id = body["job_id"]
+
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = client.app_context
+    out = ctx.config.output_dir / job_id / "output.mp4"
+    assert out.exists() and out.stat().st_size > 0
+
+    meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    a2v = meta["a2v"]
+    assert a2v["a_total"] == layout.a_total
+    assert a2v["encoded_audio_frames_available"] >= a2v["a_total"]
+    assert a2v["muxed_original_waveform"] is True
+    assert a2v["vocoder_skipped"] is True
+    assert a2v["source_audio_id"] == aid
+    # the request echo keeps all three clips AND the single source audio
+    assert len(meta["request"]["clips"]) == 3
+    assert meta["request"]["source_audio"]["audio_id"] == aid
+
+
+def test_a2v_multi_clip_with_start_image_mock_e2e(client, tmp_path, png_bytes):
+    """Start-frame image + source audio + several clips combine (none of the
+    three features blocks the others). Pins that the A2V unblock did not create
+    a new conflict with clip-0 conditioning."""
+    up = client.post("/api/v1/upload/image", files={"file": ("k.png", png_bytes, "image/png")})
+    assert up.status_code == 200, up.text
+    image_id = up.json()["image_id"]
+
+    wav = _make_wav(tmp_path / "voice3.wav", seconds=10.0)
+    aid = _upload_audio(client, wav)
+
+    clips = [
+        {
+            "num_frames": 121,
+            "conditioning_images": [{"image_id": image_id, "frame_idx": 0, "strength": 0.8}],
+        },
+        {"num_frames": 121},
+    ]
+    r = _run_chain(client, clips, source_audio={"audio_id": aid})
+    assert r.status_code == 202, r.text
+    job = client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+
+
 def test_a2v_allows_clip0_conditioning(client, tmp_path, png_bytes):
     """source_audio + clip-0 conditioning image is ALLOWED (no added restriction)."""
     up = client.post("/api/v1/upload/image", files={"file": ("k.png", png_bytes, "image/png")})
@@ -252,6 +337,75 @@ def test_a2v_geometry_matches_audio_latents_required():
     pure function — pin that identity so app/engine never drift."""
     layout = chain_math.compute_chain_layout([49], 24.0, kv=2)
     assert chain_math.audio_latents_required([49], 24.0, kv=2) == layout.a_total
+
+
+def test_a2v_segment_windows_tile_the_global_timeline():
+    """Long A2V's whole geometry, spelled out with numbers so the front end's TS
+    mirror has a reference implementation to check itself against.
+
+    Worked example — clips [121, 121, 121] @ 24 fps, K_v = 2:
+
+        seg_latent  = [16, 16, 16]        (121 -> (121-1)//8 + 1)
+        f_total     = 16*3 - 2*2 = 44  -> total_px = 43*8 + 1 = 345
+        a_total     = round(345/24 * 25) = 359
+        seg_audio   = [126, 126, 126]     (round(121/24 * 25))
+        ka_list     = [10, 9]             (sum(seg_audio) - a_total = 19, split)
+        windows     = [(0, 126), (116, 126), (233, 126)]
+
+    Every window is a slice of the ONE uploaded audio latent; the invariants
+    below are what make that slicing a tiling: it starts at 0, it ends exactly on
+    a_total, and consecutive windows overlap by exactly the same per-join K_a the
+    assembler crossfades with.
+    """
+    cases = [
+        ([121, 121, 121], 24.0, 2, [(0, 126), (116, 126), (233, 126)]),
+        ([49, 49], 24.0, 2, [(0, 51), (42, 51)]),
+        ([49, 73, 121], 24.0, 2, [(0, 51), (41, 76), (108, 126)]),   # unequal clips
+        ([121, 121], 30.0, 3, [(0, 101), (87, 101)]),                # non-24fps
+        ([121], 24.0, 2, [(0, 126)]),                                # degenerate: 1 clip
+    ]
+    for clip_frames, fps, kv, expected in cases:
+        layout = chain_math.compute_chain_layout(clip_frames, fps, kv=kv)
+        windows = chain_math.audio_segment_windows(layout)
+        assert len(windows) == len(clip_frames)
+        # (a) the first window starts at the head of the global timeline
+        assert windows[0][0] == 0
+        # (b) the last window ends exactly on a_total (no gap, no overrun)
+        assert windows[-1][0] + windows[-1][1] == layout.a_total
+        # (c) consecutive windows overlap by exactly ka_list[i]
+        for i in range(len(windows) - 1):
+            overlap = (windows[i][0] + windows[i][1]) - windows[i + 1][0]
+            assert overlap == layout.ka_list[i], (clip_frames, fps, kv, i, overlap)
+        # every window is a valid slice of the a_total-long uploaded latent
+        for start, length in windows:
+            assert 0 <= start and start + length <= layout.a_total
+        if clip_frames == [121, 121, 121] and fps == 24.0 and kv == 2:
+            assert layout.seg_audio == [126, 126, 126]
+            assert layout.ka_list == [10, 9]
+        assert windows == expected
+
+
+def test_a2v_multi_clip_freezes_the_audio_window_but_not_the_video_seam():
+    """The long-A2V engine fix, at the granularity that is testable without GPU.
+
+    A stage-1 A2V segment calls ``_denoise_av_with_carry`` with
+    ``mask_value = 1 - overlap_strength`` and ``audio_mask_value = 0.0``. From
+    clip 2 onward the video head freeze is non-zero, so the two must NOT share
+    one value: the audio window is hard-frozen while the video seam keeps
+    carrying over at the user's overlap_strength. Before the fix both were 0.0,
+    which welded every seam shut and discarded overlap_strength silently."""
+    stage1_mask_value = 1.0 - 0.5          # overlap_strength = 0.5
+    v_head, v_tail, a_head, a_tail = chain_math.freeze_mask_values(
+        stage1_mask_value, None, 0.0
+    )
+    assert (v_head, v_tail) == (0.5, 0.5)  # seam still blends
+    assert (a_head, a_tail) == (0.0, 0.0)  # uploaded audio hard-frozen
+
+    # No override -> one value everywhere: every pre-A2V call site unchanged.
+    assert chain_math.freeze_mask_values(0.5) == (0.5, 0.5, 0.5, 0.5)
+    # retake's two-sided split is unaffected by the new modality split.
+    assert chain_math.freeze_mask_values(0.3, 0.7) == (0.3, 0.7, 0.3, 0.7)
+    assert chain_math.freeze_mask_values(0.0, None, None) == (0.0, 0.0, 0.0, 0.0)
 
 
 def test_a2v_preflight_boundary(client, tmp_path):

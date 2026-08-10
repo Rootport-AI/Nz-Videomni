@@ -521,10 +521,12 @@ class SourceAudioSpec(BaseModel):
     match the audio (lip-sync) while the ORIGINAL waveform is muxed back onto the
     output (no vocoder). Video length is authoritative: the audio is truncated to
     the timeline, never padded — a too-short upload is rejected up front (422
-    SOURCE_AUDIO_TOO_SHORT). v1 exposes no trimming controls (audio_start_time /
-    audio_max_duration) and is limited to a single clip (see the request
-    validator). Mutually exclusive with ``source_video`` (A2V + V2V is out of
-    v1 scope).
+    SOURCE_AUDIO_TOO_SHORT). No trimming controls are exposed (audio_start_time /
+    audio_max_duration). ONE audio spans 1..24 clips (long A2V, §1-16): the
+    encoded latent covers the whole assembled timeline and
+    ``chain_math.audio_segment_windows`` hands each stage-1 segment its own
+    window on it. Mutually exclusive with ``source_video`` (A2V + V2V is out of
+    v1 scope) and with ``retake`` (both would own the chain's audio latent).
     """
 
     audio_id: str = Field(..., min_length=1)
@@ -753,10 +755,13 @@ class GenerateChainRequest(BaseModel):
                 "(A2V and V2V cannot be combined in v1)"
             )
 
-        # A2V is limited to EXACTLY one clip in v1 (multi-clip audio window split
-        # is out of scope). The single frozen audio latent spans the one clip.
-        if self.source_audio is not None and len(self.clips) != 1:
-            raise ValueError("source_audio requires exactly 1 clip in v1")
+        # A2V accepts 1..24 clips (long A2V). The uploaded audio is ONE track
+        # spanning the whole assembled timeline; chain_math.audio_segment_windows
+        # hands each stage-1 segment its own window on that global audio latent
+        # (consecutive windows overlap by the same per-join K_a the assembler
+        # crossfades with), so no per-clip audio upload exists — and none is
+        # needed. The old "exactly 1 clip" guard was a v1 scope limit, not a
+        # geometric one; it is gone.
 
         # Retake owns BOTH ends of the one and only clip, so it cannot share the
         # timeline with any other head/end claimant. Rejected up front, in the

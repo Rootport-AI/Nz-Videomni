@@ -6,6 +6,8 @@
 - 裏取り: 上流 pin `00dc53d` の `A2VidPipelineTwoStage` 読解＋我々のチェーン機構（V2V で main マージ済 merge `18296b2`）の再確認（2026-07-05・本書 §1・file:line）
 - 鉄則: システム Python 不可触・凍結 API は加算的拡張のみ・wheel 不可触・実験前に仮説→裏取り・回帰 byte-match をゲートに使う・GPU 計測は dedicated+shared 両監視
 
+> **2026-08-10 追記（長尺A2V＝台帳 §1-16）**: v1 の「クリップちょうど1個」制約は撤廃した。1本のアップロード音声が 1〜24 クリップの連結タイムライン全体を駆動する。音声ファイルを分割する必要はなく、`chain_math.audio_segment_windows` がステージ1の各セグメントへ「その区間が担当する音声窓」を割り当てる（隣り合う窓は、映像の連結と同じ K_a だけ重なる）。エンジン側では `_denoise_av_with_carry` に `audio_mask_value` を追加し、**音声窓だけをハード凍結（0.0）して映像の継ぎ目は従来どおり overlap_strength でブレンドする**ようにした。以下の本文は 2026-07-05 時点の設計記録であり、単クリップ前提の記述には該当箇所ごとに追記を入れてある。検証記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §56。
+
 ---
 
 ## 0. 一行サマリ
@@ -62,10 +64,12 @@
 }
 ```
 
+> 2026-08-10 追記: `clips` は `source_audio` 有りでも **1〜24 個**（上限は通常のチェーンと同じ）。音声は常に1本で、タイムライン全体を覆う。
+
 - `api/models.py` に `SourceAudioSpec{audio_id}` ＋ `GenerateChainRequest.source_audio` を追加（`SourceVideoSpec` :191／:282 前例）。
 - **新エンドポイントは作らない**（Q1）。省略時は byte 同一。
 - バリデータ（すべて 422 事前検出・加算的）:
-  - `source_audio` 有り時のみ `clips` の min を 1 に緩和（無し時は従来通り＝旧クライアント不変）。
+  - `source_audio` 有り時のみ `clips` の min を 1 に緩和（無し時は従来通り＝旧クライアント不変）。**2026-08-10 追記: 上限側の「ちょうど1個」制約は撤廃済み（1〜24 個）。**
   - **`source_audio` と `source_video` は排他**（422・V2V と A2V を同時に混ぜない・v1 スコープ）。
   - `source_audio` と `conditioning_images` の**併用は許可**（Q2）。
   - エラーコード追加: `SOURCE_AUDIO_NOT_FOUND`（404・`audio_id` 不在）／`SOURCE_AUDIO_TOO_SHORT`（422・音声がタイムライン尺に足りない＝**動画尺が主・切り詰めのみ**の帰結）。
@@ -79,11 +83,16 @@
   - `audio_segment_windows(layout)`＝凍結すべき音声窓（v1 は 1 クリップなので全長 1 窓）。
 - `compute_chain_layout` の**構造は変更しない**（音声窓の算出を純関数として足すのみ）。
 
+> **2026-08-10 追記（長尺A2V の本線）**: `audio_segment_windows` はもともとクリップ数に依存しない書き方になっており、これが長尺 A2V の中核である。セグメント `i` の窓は `(sum(seg_audio[:i]) - sum(ka_list[:i]), seg_audio[i])`＝グローバル音声タイムライン上の開始位置と長さで、①先頭窓は 0 から始まり ②末尾窓は `a_total` ちょうどで終わり ③隣接窓は `ka_list[i]`（映像の連結に使うのと同じ音声のり代）だけ重なる。つまり窓の集合はアップロード音声 latent を過不足なくタイル張りする。数値例（[121,121,121] @24fps・K_v=2）は `tests/test_a2v_chain.py::test_a2v_segment_windows_tile_the_global_timeline` に書いてある。
+>
+> あわせて `audio_latents_required` は `compute_chain_layout` を呼ぶのをやめ、`a_total`（`seg_latent`→`f_total`→`total_px`→`a_frames_for_px`）を直接計算するようにした。`a_total` はステージ2の窓（`v_tile`／`v_adv`）に依存しないので、長さの事前検査がステージ2タイルの検算を巻き込む理由がない。巻き込んでいたせいで、**リクエスト側の窓なら通る構成が事前検査で例外になり 500 になる穴**（実測: 321フレーム1クリップ・23.976fps）が単クリップ A2V にも残っていた。これも同時に塞がった。
+
 ### 2.3 エンジン（chain_pipeline の加算的拡張）
 
 - `chain_pipeline.py` に `AudioSourceSpec{path}` を追加（`SourceSpec` :61 とは**別型**）＋ `run_chain(..., audio_source=None)` を追加。
 - **音声エンコードは一度だけ**: `_encode_source_heads`（:346-349）と同一呼出型で `decode_audio_from_file`→`encode_audio`→latent。encode 後は即解放（WDDM 定石・audio_encoder 実測 45.7MB）。
 - **Stage1／Stage2 両方**で該当窓を `freeze_ka=全長`・`mask_value=0.0` で凍結（§1.2＝上流 `denoise_video_only` の Stage1/Stage2 両凍結と等価）。
+  - **2026-08-10 追記**: ステージ1では `mask_value=0.0` ではなく `audio_mask_value=0.0` を渡す形に変えた。`_denoise_av_with_carry` は凍結の強さを「映像の先頭／映像の末尾／音声の先頭／音声の末尾」の4本に分けて解決するようになっており（純関数 `chain_math.freeze_mask_values`）、`audio_mask_value` 省略時は4本とも `mask_value` ＝従来と1ビットも変わらない。複数クリップでは2本目以降の映像先頭が `freeze_kv = K_v > 0` になるため、単一の `mask_value=0.0` を使い続けると**映像の継ぎ目まで完全凍結され、overlap_strength が無言で無効化される**。ステージ2は元から全経路 `mask_value=0.0`（ハード凍結）なので変更していない。
 - **出力音声**: vocoder をスキップし、**原波形を** `n_samples = round(total_px / fps * sr)` **に切って** `encode_video_output`（`common.py:65-80`）へ渡して mux（Q8・上流 :246-248 準拠）。**トリム／audio_handle 経路は通らない**。
 - worker プロトコル: `generate_chain` op に optional `audio_source` ブロックを追加（V2V 前例と同型）。
 
@@ -97,7 +106,8 @@
 
 - ÷64・8n+1・総フレーム上限・16GB 天井・SDPA 一択・torch 2.9.1+cu128 固定・2プロセス/2venv・巨大ディスク要求禁止＝すべて不変。
 - **蒸留パイプライン＝CFG/negative 不可**（worker 未配線・露出禁止・継続）。
-- **スコープ外（v1）の5点**（複数クリップA2Vの音声窓割り／A2V＋V2V同時指定〔422で排他〕／vocoder音声の返却／`audio_start_time`・`audio_max_duration`の露出／`modality_scale`の露出）は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-9へ移設した。**以後の管理は同書で行う。** いずれも凍結APIへの加算的拡張として後から足せる形は保たれている。
+- **スコープ外（v1）の4点**（A2V＋V2V同時指定〔422で排他〕／vocoder音声の返却／`audio_start_time`・`audio_max_duration`の露出／`modality_scale`の露出）は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-9へ移設した。**以後の管理は同書で行う。** いずれも凍結APIへの加算的拡張として後から足せる形は保たれている。
+  - **2026-08-10 更新**: 5点目だった「複数クリップA2Vの音声窓割り」は台帳 §1-16（長尺A2V）として**実装済み**のため、このリストから外した。予告どおり凍結APIへの加算的拡張のみで足りている（新しいリクエストフィールドはゼロ・削除したのはバリデータのガード1本）。
 - 同じくv1でスコープ外としていた**GUI露出**（音声スムージングON/OFFチェックボックス要件＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.7将来項目①）は、その後実装済み。
 
 ---
@@ -119,7 +129,7 @@
 ## 実装スライス（V2V 前例に従う）— 進捗ログ（S0 以降を追記）
 
 1. **S0 スパイク**: ✅**GO（2026-07-05・G0 4基準すべて PASS）**。独立プローブ `outputs/a2v_spike/probe_a2v.py`（n=1・704×448・121f・seed固定・main/wheel 不可触）で実証。①shape 整合・crash 無し（stage1 音声凍結の max drift=**0.000e+00**＝ハード凍結が厳密に成立）②VRAM: torch ピーク **8858.7MB**／nvidia-smi dedicated ピーク **~11.2GB**・**共有溢れ無し** ③出力音声==入力 wav（Pearson r=1.0000/0.9999・差は AAC 損失のみ）④**同一 seed・異なる2音声→全フレーム平均絶対差 3.94%（per-frame MAD 9.22–12.70・全フレーム非ゼロ）**、目視で口の形・頭部姿勢が明確に相違＝**蒸留経路でも凍結音声がクロスアテンション経由で動画を駆動**（§1.4 の最大リスク解消・fallback 不要）。1本 ~122秒。詳細＝`outputs/a2v_spike/SPIKE_REPORT.md`（outputs は git 管理外のため数値は本書へ転記）。**技術知見: 音声 VAE エンコーダは stereo(2ch)入力必須（conv_in=[128,2,3,3]）・mux の `_write_audio` も stereo 前提** → S1 では mono 入力を stereo へ複製する正規化が必要。
-2. **S1 コア（エンジン側）**: ✅**完了（2026-07-05・commit `b59d0fb`・G1 全 PASS）**。`chain_pipeline.py` に `AudioSourceSpec`／`run_chain(audio_source=)`＝音声を一度だけエンコード（mono→stereo 複製正規化・encoder 即解放）→Stage1 各セグメント＋Stage2 各タイルの音声窓を `mask_value=0.0` でハード凍結→vocoder スキップ・原波形を動画尺へ切って**ストリーム mux**（lazy デコードチャンクをそのまま `encode_video_output` へ＝WDDM 定石維持。監督レビューで実体化を差し戻し修正済み）。`chain_math.py` に `audio_latents_required`／`audio_segment_windows`（app/engine 幾何の単一情報源・ユニットテスト 8 本）。`worker.py` が payload `audio_source:{path}` を受理し `done.chain.a2v` を返す。**既知の制限（v1 設計どおり）**: n>1 の A2V は `_denoise_av_with_carry` の mask_value が映像 carry と共有のため未対応（API 層で n=1 を強制・コード内に文書化）。**G1 回帰（GPU 実生成・2026-07-05）**: T2V `23844b4e…6bb7bf`／I2V `a511eda4…c217`／チェーン no-source `f706057a…0ea1` すべて基準 SHA-256 と**バイト完全一致**・pytest **199 passed/1 skipped**（基準 191+新規 8）・peak_vram_mb=8440（§22/§24 記録と同値）・OOM/spill なし。
+2. **S1 コア（エンジン側）**: ✅**完了（2026-07-05・commit `b59d0fb`・G1 全 PASS）**。`chain_pipeline.py` に `AudioSourceSpec`／`run_chain(audio_source=)`＝音声を一度だけエンコード（mono→stereo 複製正規化・encoder 即解放）→Stage1 各セグメント＋Stage2 各タイルの音声窓を `mask_value=0.0` でハード凍結→vocoder スキップ・原波形を動画尺へ切って**ストリーム mux**（lazy デコードチャンクをそのまま `encode_video_output` へ＝WDDM 定石維持。監督レビューで実体化を差し戻し修正済み）。`chain_math.py` に `audio_latents_required`／`audio_segment_windows`（app/engine 幾何の単一情報源・ユニットテスト 8 本）。`worker.py` が payload `audio_source:{path}` を受理し `done.chain.a2v` を返す。**既知の制限（v1 設計どおり）**: n>1 の A2V は `_denoise_av_with_carry` の mask_value が映像 carry と共有のため未対応（API 層で n=1 を強制・コード内に文書化）。**〔2026-08-10 解消済み — 台帳 §1-16。`audio_mask_value` を足して映像と音声の凍結強度を分離し、API のガードを撤廃した。冒頭の追記を参照。〕** **G1 回帰（GPU 実生成・2026-07-05）**: T2V `23844b4e…6bb7bf`／I2V `a511eda4…c217`／チェーン no-source `f706057a…0ea1` すべて基準 SHA-256 と**バイト完全一致**・pytest **199 passed/1 skipped**（基準 191+新規 8）・peak_vram_mb=8440（§22/§24 記録と同値）・OOM/spill なし。
 3. **S2 API/テスト**: ✅**完了（2026-07-05・commit `e37a9ef`・G2 mock 側 PASS）**。`services/audio_upload_store.py`（video store クローン・`uploads/audios/{id}`）・`POST /upload/audio`＋`UploadAudioResponse`・`SourceAudioSpec{audio_id}`＋バリデータ（**A2V×V2V 排他 422・clips ちょうど1つ 422・source_audio 有り時のみ床緩和**・conditioning_images 併用可）・`SOURCE_AUDIO_NOT_FOUND(404)`／`SOURCE_AUDIO_TOO_SHORT(422)`・`preflight_source_audio`（ffprobe 尺 vs `chain_math.audio_latents_required`=単一情報源・ffprobe 不能時はエンジンの a2v_avail ガードが最終防壁）・runner payload `audio_source:{path}`・mock backend が実エンジンと同一キー構成の `chain.a2v` を合成・metadata に加算的 `a2v` ブロック（+`source_audio_id` 来歴）。**pytest 212 passed/1 skipped**（199+新規13）。**G2 mock スモーク PASS**（実 uvicorn: upload 200→chain 202→completed→a2v メタ正・2クリップ422／不在404／A2V+V2V 422 全確認）。G2 実機側は S3 で消化。
 4. **S3 実機 e2e ＋ G3 素材**: ✅**完了（2026-07-05・commit `8cc793e`・G2 実機側 PASS）**。REST 経由実機（RTX 4070 Ti SUPER・`main.py --port 18620`・config 不変）で source_audio 付き chain 完走: TTS 11.19s wav→upload→chain（704×448/121f）→completed **117.1s**・peak_vram_mb=**8440**・nvidia-smi dedicated peak 14371MB・shared 平坦（spill なし）・音声 Pearson r=1.0000/RMS 比 0.9989・a2v メタ正。negative 実機**4件**（A2V+V2V 422／不在 404／2クリップ 422／短音声 422 `SOURCE_AUDIO_TOO_SHORT`）全緑。**G3 候補生成（720p 級＝1280×768 生成→crop 1280×720・121f・映画トレイラー風）**: ケースA（セリフ・男声TTSナレーション）=job `0bab3830`・175.14s・worker peak 9519MB・nvidia-smi 14885MB・音声 r=0.9999→`outputs/a2v_g3/caseA_speech_1280x720_121f.mp4`／ケースB（音楽のみ・過去 LTX 生成物の音声流用）=job `93fffd3b`・185.84s・worker peak 9525MB・nvidia-smi 14715MB・音声 r=0.9999→`outputs/a2v_g3/caseB_music_1280x720_121f.mp4`。全 run で OOM/spill なし。**残 OPEN は G3 試聴（ユーザー・客観PASS≠目視ゲート）**。数値正本＝VERIFICATION_LOG §25／`outputs/a2v_e2e/E2E_REPORT.md`。
 

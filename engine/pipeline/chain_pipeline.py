@@ -43,6 +43,7 @@ from chain_math import (
     ChainLayout,
     audio_segment_windows,
     compute_chain_layout,
+    freeze_mask_values,
     plan_upsample_chunks,
     retake_tail_token_range,
 )
@@ -244,6 +245,7 @@ def _denoise_av_with_carry(
     freeze_tail_v: int = 0,
     freeze_tail_a: int = 0,
     tail_mask_value: float | None = None,
+    audio_mask_value: float | None = None,
 ):
     """Reimpl of helpers.denoise_audio_video with an overlap-freeze mask.
 
@@ -262,6 +264,17 @@ def _denoise_av_with_carry(
     ``mask_value``; it exists so a future caller can hold the two ends at
     different strengths, which is what the spike's stage-1 0.5 arm exercised.
 
+    ``audio_mask_value`` (long A2V, additive) splits the freeze STRENGTH per
+    MODALITY the way ``tail_mask_value`` splits it per END: the video mask keeps
+    ``mask_value`` while the AUDIO mask uses this value. Defaults to ``None`` ->
+    ``mask_value``, so every pre-A2V call site is bit-identical. It exists
+    because a multi-clip A2V segment must HARD-freeze its uploaded audio window
+    (0.0) while the video seam still carries over at the user's
+    ``overlap_strength``; passing 0.0 as the single ``mask_value`` would freeze
+    the video seam solid and silently discard ``overlap_strength``. The two
+    overrides are resolved into the four band strengths by the pure
+    :func:`chain_math.freeze_mask_values`.
+
     The tail range is ABSOLUTE (``chain_math.retake_tail_token_range``), never
     ``m[:, -k*hw:]`` — see that function for why negative indexing silently
     under-freezes once conditioning tokens have been appended. The two-sided
@@ -273,7 +286,13 @@ def _denoise_av_with_carry(
     from ltx_pipelines.utils.helpers import simple_denoising_func, state_with_conditionings
     from ltx_pipelines.utils.samplers import euler_denoising_loop
 
-    tail_mv = mask_value if tail_mask_value is None else tail_mask_value
+    # The four frozen bands' strengths, resolved by the pure (torch-free) helper
+    # so the app venv can regression-test the overrides. Both overrides default
+    # to None -> all four are ``mask_value`` -> bit-identical to the pre-override
+    # behaviour.
+    v_head_mv, v_tail_mv, a_head_mv, a_tail_mv = freeze_mask_values(
+        mask_value, tail_mask_value, audio_mask_value
+    )
 
     # ── VIDEO ──
     vshape = VideoLatentShape.from_pixel_shape(
@@ -293,11 +312,11 @@ def _denoise_av_with_carry(
         m = vstate.denoise_mask.clone()
         assert m.shape[1] >= v_tokens, (m.shape[1], v_tokens)
         if freeze_kv > 0:
-            m[:, : freeze_kv * hw, ...] = float(mask_value)
+            m[:, : freeze_kv * hw, ...] = v_head_mv
         if freeze_tail_v > 0:
             lo, hi = retake_tail_token_range(vshape.frames, hw, freeze_tail_v)
             assert 0 <= lo < hi <= v_tokens, (lo, hi, v_tokens)
-            m[:, lo:hi, ...] = float(tail_mv)
+            m[:, lo:hi, ...] = v_tail_mv
         vstate = dataclasses.replace(vstate, denoise_mask=m)
     # ORDERING (load-bearing): every mask edit above happens BEFORE this call,
     # exactly where the head-only freeze already sat. state_with_conditionings
@@ -314,12 +333,12 @@ def _denoise_av_with_carry(
         m = astate.denoise_mask.clone()
         assert m.shape[1] >= ashape.frames, (m.shape[1], ashape.frames)
         if freeze_ka > 0:
-            m[:, :freeze_ka, ...] = float(mask_value)
+            m[:, :freeze_ka, ...] = a_head_mv
         if freeze_tail_a > 0:
             # hw == 1 in the audio token domain (one token per latent frame).
             lo, hi = retake_tail_token_range(ashape.frames, 1, freeze_tail_a)
             assert 0 <= lo < hi <= ashape.frames, (lo, hi, ashape.frames)
-            m[:, lo:hi, ...] = float(tail_mv)
+            m[:, lo:hi, ...] = a_tail_mv
         astate = dataclasses.replace(astate, denoise_mask=m)
     astate = state_with_conditionings(astate, [], atools)
     astate = noiser(astate, noise_scale)
@@ -1008,10 +1027,16 @@ def run_chain(
             fkv, fka = kv, ka_i
             conds = []
         # audio-to-video (additive): override the audio init/freeze with the
-        # uploaded audio latent's window for this segment and HARD-freeze it
-        # (mask 0.0) over the whole segment — the video branch above is untouched
-        # (v1 A2V is single-clip: fkv==0, so mask 0.0 does not touch the video).
+        # uploaded audio latent's window for this segment and HARD-freeze that
+        # window (audio mask 0.0) over the whole segment. The VIDEO mask is left
+        # at the ordinary ``stage1_mask_value`` (= 1 - overlap_strength), which is
+        # what makes LONG A2V (2..24 clips) correct: from i>=1 the video head
+        # freeze is fkv == kv > 0, so reusing 0.0 as the single mask_value would
+        # weld every segment seam shut and silently discard overlap_strength.
+        # At i == 0 (fkv == 0) the video mask addresses nothing, so single-clip
+        # A2V is bit-identical to the pre-long-A2V behaviour.
         seg_mask_value = stage1_mask_value
+        seg_audio_mask_value: float | None = None
         if retake is not None:
             # HARD freeze at stage 1 (see the retake branch above); the same
             # value covers head and tail, so tail_mask_value stays None.
@@ -1022,7 +1047,7 @@ def run_chain(
             init_a = torch.zeros(tuple(a_shape), dtype=DTYPE, device=device)
             init_a[:, :, :wl] = a2v_a[:, :, ws:ws + wl].to(DTYPE)
             fka = wl
-            seg_mask_value = 0.0
+            seg_audio_mask_value = 0.0
         vctx, actx = seg_ctx[i]
         vstate, astate = _denoise_av_with_carry(
             output_shape=seg_shape, components=components, transformer=transformer,
@@ -1031,6 +1056,7 @@ def run_chain(
             initial_video_latent=init_v, initial_audio_latent=init_a,
             freeze_kv=fkv, freeze_ka=fka, mask_value=seg_mask_value, device=device,
             freeze_tail_v=ftv, freeze_tail_a=fta,
+            audio_mask_value=seg_audio_mask_value,
         )
         seg_v.append(vstate.latent.detach().clone())
         seg_a.append(astate.latent.detach().clone())

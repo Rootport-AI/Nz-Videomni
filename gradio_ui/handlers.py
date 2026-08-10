@@ -1111,9 +1111,11 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         ]
         enabled = [(p, nf, img, strg) for en, p, nf, img, strg in raw_slots if en]
 
-        # Clip-count floor mirrors the API validator: plain chain needs 2-24,
-        # V2V allows 1-24 (the frozen source tail IS the prior segment), A2V is
-        # exactly 1 (one frozen audio latent spans one clip).
+        # Clip-count floor: plain chain needs 2-24, V2V allows 1-24 (the frozen
+        # source tail IS the prior segment). A2V is capped at 1 HERE ONLY — the
+        # API's "exactly 1 clip" guard was lifted for long A2V (§1-16), but this
+        # GUI has no per-clip audio timeline to show, so long A2V stays with the
+        # AviUtl2 front end and Gradio keeps offering the single-clip form.
         if mode == MODE_V2V:
             if not (1 <= len(enabled) <= 24):
                 yield _precheck_reject(L("v2v_msg_clip_count", lang)), "", None

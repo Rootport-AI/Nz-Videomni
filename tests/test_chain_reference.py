@@ -1,20 +1,26 @@
-"""Reference-video CONTROL IC-LoRA on a chain (Phase C chain support, ALPHA
-scope — owner decision 2026-07-11): a ``GenerateChainRequest`` may now carry
-``reference_video_id`` / ``conditioning_attention_strength`` /
-``reference_video_strength`` exactly like a single ``/generate``, but ONLY when
-the chain is exactly 1 clip (a per-clip reference video is out of scope, demoted
-to a later research item). Mutually exclusive with ``source_video``.
+"""Reference-video CONTROL IC-LoRA on a chain (Phase C chain support; 1..24
+clips — owner decision 2026-08-11 lifted the old 2026-07-11 "exactly 1 clip"
+ALPHA scope): a ``GenerateChainRequest`` may now carry ``reference_video_id`` /
+``conditioning_attention_strength`` / ``reference_video_strength`` exactly like
+a single ``/generate``, on ANY clip count. A long reference video is auto-sliced
+per stage-1 segment server-side (``chain_math.video_segment_windows``, tested in
+test_chain_math_reference.py); this API-layer test suite only checks that the
+endpoint no longer rejects >1 clip. Mutually exclusive with ``source_video``.
+The one remaining clip-count restriction is a depth-preprocess control adapter,
+still rejected on >1 clip (422 ``LORA_DEPTH_CHAIN_UNSUPPORTED`` — the depth
+preprocessor is a whole-clip design that cannot process a chain-length
+reference).
 
 Coverage, mirroring tests/test_chain_lora.py's structure:
   (a) API branch coverage — schema (422, pydantic-level) vs endpoint (404/422,
-      APIError-level) rejections, and the clips=1+control+reference happy path;
+      APIError-level) rejections, and the clips=1+control+reference happy path,
+      PLUS the multi-clip acceptance (canny/pose) and multi-clip depth rejection;
   (b) real-backend payload — ``_RealBackend.generate_chain``'s additive
       ``reference_video`` block (present only when a reference video was
       requested; ``attention_strength`` present only when set);
-  (c) ``chain_pipeline.run_chain`` plumbing — ``_set_ic_job`` receives
-      ``ic_reference``/``ic_attention_strength``, and (best-effort) clip-0's
-      stage-1 conditioning is built via ``pipe._reference_conditioning_for_stage``
-      when a reference is present;
+  (c) ``chain_pipeline.run_chain`` plumbing — MOVED to
+      tests/test_chain_reference_engine.py, the venv that can actually run it
+      (see the marker below where it used to live);
   (d) mock e2e — A2V + control adapter + reference video (clips=1) completes and
       the recorded metadata carries ``reference_video_id`` + ``loras``.
 
@@ -28,7 +34,6 @@ from __future__ import annotations
 import argparse
 import json
 import struct
-import sys
 import threading
 import types
 import wave
@@ -44,6 +49,7 @@ from services.ltx_runner import _RealBackend
 
 STYLE_LORA = "style-adapter"
 CANNY_LORA = "canny-control"
+DEPTH_LORA = "depth-control"
 
 # A tiny but non-empty mp4-ish blob (the video store validates extension/size
 # only; the mock backend never opens it).
@@ -74,6 +80,10 @@ def chain_ref_client(tmp_path):
             "ic_loras": {
                 STYLE_LORA: style_file.as_posix(),
                 CANNY_LORA: {"path": control_file.as_posix(), "preprocess": "canny"},
+                # Same file as the canny entry (one Union-Control adapter, several
+                # preprocess kinds) -- only the ``preprocess`` label differs, which
+                # is all the depth-chain-unsupported check reads.
+                DEPTH_LORA: {"path": control_file.as_posix(), "preprocess": "depth"},
             },
         },
         "output": {"dir": (tmp_path / "outputs").as_posix()},
@@ -227,17 +237,62 @@ def test_reference_with_empty_loras_422_schema(chain_ref_client):
     assert "requires at least one lora" in r.text
 
 
-def test_reference_with_two_clips_422_schema(chain_ref_client):
-    """reference_video_id is alpha-scoped to exactly 1 clip; a 2-clip chain
-    carrying one is rejected at the schema level regardless of loras."""
+def test_reference_with_two_clips_accepted(chain_ref_client):
+    """reference_video_id is now accepted on any clip count (owner decision
+    2026-08-11 lifted the old "exactly 1 clip" ALPHA scope) -- a 2-clip chain
+    carrying a non-depth control adapter + reference completes."""
     vid = _upload_video(chain_ref_client)
     r = _run_chain(
         chain_ref_client, [{"num_frames": 25}, {"num_frames": 25}],
         loras=[{"name": CANNY_LORA, "strength": 1.0}],
         reference_video_id=vid,
     )
+    assert r.status_code == 202, r.text
+    job = chain_ref_client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+
+
+def test_reference_with_many_clips_accepted(chain_ref_client):
+    """A longer chain (4 clips) with a control adapter + reference also
+    completes -- not just the 2-clip boundary case above."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client,
+        [{"num_frames": 25} for _ in range(4)],
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    assert r.status_code == 202, r.text
+    job = chain_ref_client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+
+
+def test_depth_reference_with_two_clips_422(chain_ref_client):
+    """The one remaining clip-count restriction: a depth-preprocess control
+    adapter is still rejected on a >1-clip chain (owner decision 2026-08-11 —
+    the depth preprocessor cannot process a chain-length reference)."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}, {"num_frames": 25}],
+        loras=[{"name": DEPTH_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
     assert r.status_code == 422, r.text
-    assert "exactly 1 clip" in r.text
+    assert r.json()["error"]["code"] == "LORA_DEPTH_CHAIN_UNSUPPORTED"
+
+
+def test_depth_reference_with_one_clip_accepted(chain_ref_client):
+    """A depth-preprocess control adapter is still fine on a 1-clip chain (the
+    pre-existing single-clip alpha behaviour is unchanged)."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[{"name": DEPTH_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    assert r.status_code == 202, r.text
+    job = chain_ref_client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
 
 
 def test_reference_with_source_video_422_schema(chain_ref_client):
@@ -363,234 +418,16 @@ def test_chain_payload_omits_reference_when_none(tmp_path):
 
 
 # ------------------------------------------------- (c) run_chain plumbing
-
-
-_LTX_STUB_MODULES = {
-    "ltx_core": {},
-    "ltx_core.components": {},
-    "ltx_core.model": {},
-    "ltx_core.text_encoders": {},
-    "ltx_pipelines": {},
-    "ltx_pipelines.utils": {},
-    "ltx_core.components.diffusion_steps": {"EulerDiffusionStep": object},
-    "ltx_core.components.noisers": {"GaussianNoiser": object},
-    "ltx_core.model.audio_vae": {
-        "decode_audio": lambda *a, **k: None,
-        "encode_audio": lambda *a, **k: None,
-    },
-    "ltx_core.model.upsampler": {"upsample_video": lambda *a, **k: None},
-    "ltx_core.model.video_vae": {"decode_video": lambda *a, **k: None},
-    "ltx_core.text_encoders.gemma": {
-        "encode_text": lambda te, prompts: [(object(), object())]
-    },
-    "ltx_core.types": {
-        "AudioLatentShape": object,
-        "VideoLatentShape": object,
-        "VideoPixelShape": object,
-        "Audio": object,
-    },
-    "ltx_pipelines.utils.constants": {
-        "DISTILLED_SIGMA_VALUES": [1.0],
-        "STAGE_2_DISTILLED_SIGMA_VALUES": [1.0],
-    },
-    "ltx_pipelines.utils.helpers": {"cleanup_memory": lambda *a, **k: None},
-}
-
-
-class _StopBeforeBuild(Exception):
-    """Raised by the fake video_encoder() to halt run_chain right after the
-    IC-LoRA state is set but before any heavy build."""
-
-
-def _run_chain_capturing_set_ic_job(monkeypatch, ic_loras, ic_reference=None,
-                                     ic_attention_strength=1.0):
-    """Drive engine.pipeline.chain_pipeline.run_chain far enough to observe the
-    _set_ic_job call ordering, GPU-free, with ltx_core stubbed out. Returns the
-    ordered call log. (Mirrors tests/test_chain_lora.py's helper of the same
-    name, extended with ic_reference/ic_attention_strength passthrough.)"""
-    torch = pytest.importorskip("torch")
-    for name, attrs in _LTX_STUB_MODULES.items():
-        mod = types.ModuleType(name)
-        for k, v in attrs.items():
-            setattr(mod, k, v)
-        monkeypatch.setitem(sys.modules, name, mod)
-
-    import engine.pipeline.chain_pipeline as cp
-
-    monkeypatch.setattr(torch.cuda, "reset_peak_memory_stats", lambda *a, **k: None)
-    monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: None)
-    monkeypatch.setattr(torch.cuda, "empty_cache", lambda *a, **k: None)
-    monkeypatch.setattr(cp, "default_tiling_config", lambda **k: object())
-
-    calls: list = []
-
-    class FakeLedger:
-        def text_encoder(self):
-            calls.append("text_encoder")
-            return object()
-
-        def video_encoder(self):
-            calls.append("video_encoder")
-            raise _StopBeforeBuild()
-
-        def transformer(self):
-            calls.append("transformer")
-            raise _StopBeforeBuild()
-
-    class FakeDP:
-        device = "cpu"
-        model_ledger = FakeLedger()
-        pipeline_components = object()
-
-    class FakePipe:
-        pipeline = FakeDP()
-        _vae_spatial_tile_size = 0
-        _vae_temporal_tile_size = 0
-
-        def _set_ic_job(self, loras, ref, attn):
-            calls.append(("set_ic_job", list(loras), ref, attn))
-
-    clips = [
-        cp.ChainClipSpec(prompt="a", num_frames=25, images=[]),
-        cp.ChainClipSpec(prompt="b", num_frames=25, images=[]),
-    ]
-    with pytest.raises(_StopBeforeBuild):
-        cp.run_chain(
-            FakePipe(), clips=clips, width=384, height=256, frame_rate=24.0,
-            num_steps=8, seed=1, overlap_frames=2, overlap_strength=0.5,
-            output_path="x.mp4", ic_loras=ic_loras,
-            ic_reference=ic_reference, ic_attention_strength=ic_attention_strength,
-        )
-    return calls
-
-
-def test_run_chain_sets_ic_reference_and_attention_strength(monkeypatch):
-    """run_chain forwards ic_reference/ic_attention_strength to _set_ic_job
-    (before the transformer is built), alongside the style loras."""
-    calls = _run_chain_capturing_set_ic_job(
-        monkeypatch, ic_loras=[("/p/style.safetensors", 0.7)],
-        ic_reference=("/p/ref.mp4", 1.0), ic_attention_strength=0.8,
-    )
-    set_calls = [c for c in calls if isinstance(c, tuple) and c[0] == "set_ic_job"]
-    assert set_calls == [
-        ("set_ic_job", [("/p/style.safetensors", 0.7)], ("/p/ref.mp4", 1.0), 0.8)
-    ]
-    assert calls.index(set_calls[0]) < calls.index("video_encoder")
-
-
-class _LenientShape:
-    """A permissive stand-in for the stubbed ltx_core VideoPixelShape/
-    VideoLatentShape (bare ``object`` cannot be called with constructor args)."""
-
-    def __init__(self, *a, **k):
-        pass
-
-
-class _LenientNoiser:
-    """A permissive stand-in for the stubbed GaussianNoiser (bare ``object``
-    cannot be called with keyword args)."""
-
-    def __init__(self, *a, **k):
-        pass
-
-
-def _run_chain_capturing_stage1_reference(monkeypatch, *, num_clips=1):
-    """Drive run_chain past the video_encoder/transformer build (unlike
-    ``_run_chain_capturing_set_ic_job``, which stops there) into the stage-1
-    per-segment loop, halting exactly at clip-0's ic_reference conditioning
-    build via a FakePipe._reference_conditioning_for_stage that raises to stop.
-    Returns the ordered call log."""
-    torch = pytest.importorskip("torch")
-    stub_modules = dict(_LTX_STUB_MODULES)
-    stub_modules["ltx_core.types"] = {
-        "AudioLatentShape": _LenientShape,
-        "VideoLatentShape": _LenientShape,
-        "VideoPixelShape": _LenientShape,
-        "Audio": object,
-    }
-    stub_modules["ltx_core.components.noisers"] = {"GaussianNoiser": _LenientNoiser}
-    # _build_video_conditionings imports these at module-import time even when
-    # ``images`` ends up empty (the early-return happens AFTER the imports), so
-    # they must resolve even though this test never actually builds a keyframe
-    # conditioning.
-    stub_modules["ltx_pipelines.utils.args"] = {"ImageConditioningInput": object}
-    stub_modules["ltx_pipelines.utils.helpers"] = {
-        "cleanup_memory": lambda *a, **k: None,
-        "image_conditionings_by_adding_guiding_latent": lambda *a, **k: [],
-        "image_conditionings_by_replacing_latent": lambda *a, **k: [],
-    }
-    for name, attrs in stub_modules.items():
-        mod = types.ModuleType(name)
-        for k, v in attrs.items():
-            setattr(mod, k, v)
-        monkeypatch.setitem(sys.modules, name, mod)
-
-    import engine.pipeline.chain_pipeline as cp
-
-    monkeypatch.setattr(torch.cuda, "reset_peak_memory_stats", lambda *a, **k: None)
-    monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: None)
-    monkeypatch.setattr(torch.cuda, "empty_cache", lambda *a, **k: None)
-    monkeypatch.setattr(cp, "default_tiling_config", lambda **k: object())
-
-    calls: list = []
-
-    class _StopAtReference(Exception):
-        pass
-
-    class FakeLedger:
-        def text_encoder(self):
-            calls.append("text_encoder")
-            return object()
-
-        def video_encoder(self):
-            calls.append("video_encoder")
-            return object()
-
-        def transformer(self):
-            calls.append("transformer")
-            return object()
-
-    class FakeDP:
-        device = "cpu"
-        model_ledger = FakeLedger()
-        pipeline_components = object()
-
-    class FakePipe:
-        pipeline = FakeDP()
-        _vae_spatial_tile_size = 0
-        _vae_temporal_tile_size = 0
-
-        def _set_ic_job(self, loras, ref, attn):
-            calls.append(("set_ic_job", list(loras), ref, attn))
-
-        def _reference_conditioning_for_stage(self, **kwargs):
-            calls.append("reference_conditioning_for_stage")
-            raise _StopAtReference()
-
-    clips = [
-        cp.ChainClipSpec(prompt=f"clip{i}", num_frames=25, images=[])
-        for i in range(num_clips)
-    ]
-    with pytest.raises(_StopAtReference):
-        cp.run_chain(
-            FakePipe(), clips=clips, width=384, height=256, frame_rate=24.0,
-            num_steps=8, seed=1, overlap_frames=2, overlap_strength=0.5,
-            output_path="x.mp4", ic_loras=[],
-            ic_reference=("/p/ref.mp4", 1.0), ic_attention_strength=1.0,
-        )
-    return calls
-
-
-def test_run_chain_injects_reference_conditioning_once_at_clip0(monkeypatch):
-    """When ic_reference is set, clip-0's stage-1 conditioning is built via
-    pipe._reference_conditioning_for_stage exactly once (the single-generate
-    path's "stage-1 only" semantics, reused verbatim for the chain's clip-0)."""
-    calls = _run_chain_capturing_stage1_reference(monkeypatch, num_clips=1)
-    assert calls.count("reference_conditioning_for_stage") == 1
-    # ordering: video_encoder/transformer are built before the stage-1 loop
-    # reaches the reference-conditioning call.
-    assert calls.index("video_encoder") < calls.index("reference_conditioning_for_stage")
-    assert calls.index("transformer") < calls.index("reference_conditioning_for_stage")
+#
+# MOVED to tests/test_chain_reference_engine.py (§1-15 B6). Driving run_chain
+# needs torch, which only the ENGINE venv has -- and the engine venv cannot even
+# COLLECT this module (no fastapi), so the ltx-stub tests that used to live here
+# were skipped in one venv and unreachable in the other, i.e. never actually
+# executed (they had rotted: their FakePipe predates ``pipe._set_nag_job``). The
+# replacements run for real and cover the new per-clip injection:
+#   test_run_chain_injects_reference_once_per_clip           (n clips -> n calls)
+#   test_run_chain_stops_injecting_when_reference_runs_out
+#   test_run_chain_forwards_reference_to_set_ic_job_before_the_build
 
 
 # --------------------------------------------------------------- (d) mock e2e
@@ -622,3 +459,152 @@ def test_a2v_control_reference_clips1_completes_and_records(chain_ref_client, tm
     assert meta["request"]["reference_video_id"] == vid
     assert meta["request"]["loras"][0]["name"] == CANNY_LORA
     assert meta["request"]["loras"][0]["strength"] == 1.0
+
+
+# ------------------------------------------------- (e) §1-15 ic_lora metadata block
+
+
+def test_metadata_ic_lora_block_absent_without_reference(chain_ref_client):
+    """A referenceless chain's metadata carries no ic_lora key at all (byte-
+    identical to before this feature -- mirrors _write_metadata's own guard)."""
+    r = _run_chain(chain_ref_client, [{"num_frames": 25}, {"num_frames": 25}])
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert chain_ref_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    ctx = chain_ref_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "ic_lora" not in meta
+
+
+def test_metadata_ic_lora_block_records_segment_windows(chain_ref_client):
+    """A multi-clip chain with a reference records the per-clip
+    reference_segment_windows + reference_frames_needed, pinned against a
+    direct call to the same chain_math.video_segment_windows the block is
+    built from."""
+    import chain_math
+
+    vid = _upload_video(chain_ref_client)
+    clip_frames = [25, 25, 25]
+    r = _run_chain(
+        chain_ref_client,
+        [{"num_frames": f} for f in clip_frames],
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+        overlap_frames=2,
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert chain_ref_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = chain_ref_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    ic_lora = meta["ic_lora"]
+    assert ic_lora["reference_video_id"] == vid
+    assert ic_lora["loras"][0]["name"] == CANNY_LORA
+
+    layout = chain_math.compute_chain_layout(clip_frames, BASE["frame_rate"], kv=2)
+    expected_windows = [list(w) for w in chain_math.video_segment_windows(layout)]
+    assert ic_lora["reference_segment_windows"] == expected_windows
+    assert len(expected_windows) == 3
+    assert ic_lora["reference_frames_needed"] == layout.total_px
+
+
+def test_metadata_ic_lora_block_records_strength_overrides_when_set(chain_ref_client):
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+        conditioning_attention_strength=0.4,
+        reference_video_strength=0.7,
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert chain_ref_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    ctx = chain_ref_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    ic_lora = meta["ic_lora"]
+    assert ic_lora["conditioning_attention_strength"] == 0.4
+    assert ic_lora["reference_video_strength"] == 0.7
+
+
+def test_metadata_ic_lora_omits_strength_overrides_when_unset(chain_ref_client):
+    """Mirrors _write_metadata's own precedent: an omitted override field keeps
+    the block's key set byte-unchanged rather than writing a null."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    ctx = chain_ref_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    ic_lora = meta["ic_lora"]
+    assert "conditioning_attention_strength" not in ic_lora
+    assert "reference_video_strength" not in ic_lora
+
+
+def test_metadata_ic_lora_omits_reference_frames_available_for_an_unprobeable_upload(chain_ref_client):
+    """FAKE_MP4 (every other test in this module) is not a real, ffprobe-
+    decodable file -- the best-effort frame_count() probe fails, and the
+    metadata write must degrade by omitting the key rather than failing the
+    (already-completed) job."""
+    vid = _upload_video(chain_ref_client)
+    r = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert chain_ref_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    ctx = chain_ref_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert "reference_frames_available" not in meta["ic_lora"]
+
+
+def test_metadata_ic_lora_records_reference_frames_available_for_a_real_upload(chain_ref_client, tmp_path):
+    """With a real, ffprobe-decodable upload, reference_frames_available is
+    present and matches the source's actual (short-of-the-timeline) frame
+    count -- the number a reviewer cross-checks against
+    reference_frames_needed to see whether every clip got its reference."""
+    from PIL import Image
+
+    from services import video_io as video_io_mod
+
+    frames = [Image.new("RGB", (64, 64), (i * 40 % 256, 80, 160)) for i in range(9)]
+    src = tmp_path / "ref_real.mp4"
+    video_io_mod.encode_frames_to_mp4(frames, src, frame_rate=24.0)
+    r = chain_ref_client.post(
+        "/api/v1/upload/video",
+        files={"file": ("ref_real.mp4", src.read_bytes(), "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    vid = r.json()["video_id"]
+
+    rr = _run_chain(
+        chain_ref_client, [{"num_frames": 25}],
+        loras=[{"name": CANNY_LORA, "strength": 1.0}],
+        reference_video_id=vid,
+    )
+    assert rr.status_code == 202, rr.text
+    job_id = rr.json()["job_id"]
+    assert chain_ref_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    ctx = chain_ref_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["ic_lora"]["reference_frames_available"] == 9
+    assert meta["ic_lora"]["reference_frames_needed"] == 25  # single clip -> total_px == num_frames

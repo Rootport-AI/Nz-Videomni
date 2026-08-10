@@ -630,9 +630,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # reference-video CONTROL adapter (the dropdown above =
         # canny/pose/upscaler) are both wired into the chain payload below
         # (``loras`` + ``reference_video_id`` / S3 strength keys) and applied
-        # to the clip. The server allows a control adapter on a chain only
-        # when it carries exactly one clip -- true here since this handler
-        # always sends a single ChainClip.
+        # to the clip. A control adapter's reference_video_id is now accepted on
+        # any chain clip count (1..24), so this always-single-clip handler needs
+        # no clip-count reasoning here anymore -- the only remaining server-side
+        # clip-count restriction is depth-preprocess adapters on >1 clip, moot
+        # for this handler's single ChainClip.
         use_audio = bool(src_audio)
         if use_audio:
             # Length precheck (wav only): the server rejects audio that
@@ -1225,9 +1227,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # block). Only the SHARED prompt is scanned — per-clip prompts are left as
         # authored (out of scope). GET /loras runs ONLY when a token is present,
         # so a token-free prompt makes no extra call and the payload is
-        # byte-identical. A reference-video CONTROL token (canny/pose/upscaler) is
-        # left to the server's 422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN (rendered via
-        # format_api_error) — the chain has no reference video to drive it. ---
+        # byte-identical. This Chained-tab handler has no reference-video field of
+        # its own (multi-clip chains now accept one via the API, but this UI does
+        # not yet offer the upload), so a reference-video CONTROL token
+        # (canny/pose/upscaler/depth) is left to the server's 422 (rendered via
+        # format_api_error): LORA_REQUIRES_REFERENCE, or LORA_DEPTH_CHAIN_UNSUPPORTED
+        # for a depth token on a >1-clip chain. ---
         send_prompt = prompt
         chain_loras: list[dict] = []
         if _LORA_TOKEN_RE.search(prompt or ""):

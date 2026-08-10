@@ -74,12 +74,25 @@ def test_get_loras_shape(loras_client):
     loras = {e["name"]: e for e in r.json()["loras"]}
     assert set(loras) == {"Pixar_Toon", "union-ctrl"}  # broken file excluded
     for e in loras.values():
-        assert set(e) == {"name", "kind", "has_thumbnail", "exists", "source"}
+        assert set(e) == {
+            "name", "kind", "has_thumbnail", "exists", "source",
+            "preprocess", "reference_downscale_factor",
+        }
     assert loras["Pixar_Toon"]["kind"] == "style"
     assert loras["Pixar_Toon"]["has_thumbnail"] is True
     assert loras["Pixar_Toon"]["source"] == "scan"
+    # A directory-scanned entry always registers with preprocess "none" (only
+    # config.model.ic_loras dict entries carry a Phase-C preprocess kind), and
+    # its header has no reference_downscale_factor key either.
+    assert loras["Pixar_Toon"]["preprocess"] == "none"
+    assert loras["Pixar_Toon"]["reference_downscale_factor"] is None
     assert loras["union-ctrl"]["kind"] == "control"
     assert loras["union-ctrl"]["has_thumbnail"] is False
+    # union-ctrl is detected as control PURELY by its header's
+    # reference_downscale_factor (no config.ic_loras registration in this
+    # fixture) -- kind=="control" via the header, not a config preprocess.
+    assert loras["union-ctrl"]["preprocess"] == "none"
+    assert loras["union-ctrl"]["reference_downscale_factor"] == 2.0
 
 
 def test_reload_counts(loras_client):

@@ -126,6 +126,59 @@ def chain_window_tokens(width: int, height: int, v_tile: int) -> int:
     return (width // 32) * (height // 32) * v_tile
 
 
+# ── Comfortable stage-1 attention-token budget with a reference (§1-15) ──────
+# The sibling of CHAIN_COMFORT_TOKEN_BUDGET above, on a DIFFERENT axis: that one
+# bounds ONE stage-2 tile, this one bounds ONE stage-1 segment. Stage 1 runs at
+# HALF resolution and denoises a whole clip in a single pass (no tiling), so
+# without a reference it is never the bottleneck — but an IC-LoRA reference is
+# patchified alongside the clip and ADDS tokens to that same single pass, which
+# is what makes stage 1 bind first on a referenced chain.
+#
+# 25,000 is PROVISIONAL, derived from the two measured statements in
+# Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §6: at 1152x1536 a referenced clip tops out
+# around 361 frames (= 24,840 tokens by the formula below at scale 2), and
+# keeping 481 frames requires dropping to roughly 328 stage-1 patches
+# (= 25,010 tokens). Both land just either side of 25,000. Calibrate it on the
+# real-hardware gate (plan G4) and update this constant with the measured knee.
+CHAIN_STAGE1_COMFORT_TOKEN_BUDGET = 25_000
+
+
+def chain_stage1_tokens(
+    width: int, height: int, v_latent: int, ref_scale: int | None = None
+) -> int:
+    """Attention tokens ONE stage-1 segment spans at ``width x height``.
+
+    ``width``/``height`` are the OUTPUT (full) resolution; stage 1 runs at half
+    of it, and the video VAE plus patchifier put one latent token per 32 output
+    pixels of that halved frame — hence ``(width // 2 // 32) * (height // 2 // 32)``
+    spatial patches, times ``v_latent`` (the segment's stage-1 video latent
+    frames, ``v_latent_frames(clip_frames[i])``).
+
+    ``ref_scale`` is the adapter's ``reference_downscale_factor`` (``None`` = no
+    IC-LoRA reference on this segment). A reference is patchified from its OWN
+    shape (``engine/pipeline/reference_video_cond.py``) and appended to the same
+    attention sequence, so it adds ``ref_spatial * v_latent`` tokens on top:
+    ``scale=2`` (the union-control adapters) contributes a quarter of the spatial
+    patches, ``scale=1`` (deblur) contributes exactly as many as the clip itself
+    — i.e. it doubles the segment.
+
+    The integer divisions are applied in that exact order and are NOT simplified
+    away on the "resolutions are multiples of 128 anyway" assumption: the budget
+    is also consulted while the user is still dragging a resolution slider.
+    Compare the result against :data:`CHAIN_STAGE1_COMFORT_TOKEN_BUDGET`.
+    ``webui/src/shell/tokenBudget.ts`` mirrors this function verbatim, so any
+    change here must be mirrored there.
+    """
+    half_w = width // 2
+    half_h = height // 2
+    spatial = (half_w // 32) * (half_h // 32)
+    tokens = spatial * v_latent
+    if ref_scale:
+        ref_spatial = ((half_w // ref_scale) // 32) * ((half_h // ref_scale) // 32)
+        tokens += ref_spatial * v_latent
+    return tokens
+
+
 def stage2_max_context_px(v_tile: int) -> int:
     """Largest 8n+1 V2V context span that leaves tile 0 something to generate.
 
@@ -734,6 +787,46 @@ def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
         windows.append((start, alen))
         if i < len(layout.ka_list):
             start += alen - layout.ka_list[i]
+    return windows
+
+
+def video_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
+    """Per stage-1 segment ``(start_px, len_px)`` window on the GLOBAL reference
+    timeline.
+
+    The clip-wise IC-LoRA reference (§1-15) is ONE long uploaded video laid over
+    the assembled chain timeline; this says which pixel-frame slice of it belongs
+    to stage-1 segment ``i``. Segment ``i`` begins at global stage-1 latent
+    ``s_i = sum(seg_latent[:i]) - i * kv`` (the same accumulation
+    ``segment_seam_junctions`` uses, one K_v earlier — that one reports the first
+    NEW latent, i.e. ``s_i + kv``). The video VAE is CAUSAL: latent 0 covers
+    pixel 0 alone and latent ``f >= 1`` covers pixels ``8f-7 .. 8f``, so a
+    segment's LOCAL pixel 0 sits at global pixel ``8 * s_i`` and the segment
+    spans its own ``clip_frames[i]`` pixel frames from there.
+
+    Windows are per STAGE-1 SEGMENT because that is the only place a reference is
+    injected: LoRAs are applied to the stage-1 ledger only, and stage 2 refines
+    the already-assembled timeline with no reference conditioning at all.
+
+    No V2V / retake terms appear here on purpose. A reference is mutually
+    exclusive with ``source_video`` and with retake at the API level
+    (``api/models.py``), so a layout that carries ``source_context_px`` /
+    ``retake_glue_px`` can never reach this function with a reference attached —
+    there is no trimmed head to compensate for.
+
+    Adjacent windows overlap by exactly ``8 * kv - 7`` pixel frames (17 at the
+    default K_v=3), which is precisely the pixel span the K_v latent carry-over
+    covers — so the reference the two neighbours see across a seam is the same
+    footage, and the seam stays consistent for free. For a single clip this
+    reduces to ``[(0, clip_frames[0])]``, identical to the single-clip
+    ``/generate`` path. With 8n+1 clip lengths the last window ends exactly at
+    ``total_px - 1``, i.e. the windows need exactly ``total_px`` reference frames.
+    Pure function of a resolved :class:`ChainLayout`, clip-count agnostic (1..24).
+    """
+    windows: list[tuple[int, int]] = []
+    for i, clip_px in enumerate(layout.clip_frames):
+        s_i = sum(layout.seg_latent[:i]) - i * layout.kv
+        windows.append((VIDEO_TIME_FACTOR * s_i, clip_px))
     return windows
 
 

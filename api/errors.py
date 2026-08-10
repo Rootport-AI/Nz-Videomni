@@ -232,22 +232,24 @@ def reference_requires_control_lora(names: list[str]) -> APIError:
     )
 
 
-def lora_control_unsupported_in_chain(names: list[str]) -> APIError:
-    """Chain LoRA: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler
-    — it derives its conditioning from a reference video) was requested on a
-    chain with clips >= 2. A chain only ever carries a ``reference_video_id`` when
-    it is exactly 1 clip (ALPHA scope — a per-clip reference video is out of v1
-    scope), so a control adapter on a multi-clip chain can never be satisfied and
-    is rejected outright; only STYLE/character adapters are accepted there.
-    Mirrors :func:`lora_requires_reference` (422) — the request is well-formed but
-    the adapter kind is unsupported on this route."""
+def lora_depth_chain_unsupported(names: list[str]) -> APIError:
+    """Chain LoRA (owner decision 2026-08-11): a depth-preprocess CONTROL IC-LoRA
+    (Video-Depth-Anything) was requested on a chain with clips > 1. Multi-clip
+    reference-video conditioning is otherwise supported (chain_math.
+    video_segment_windows slices one long reference into per-clip windows), but
+    the depth preprocessor is a whole-clip, all-frames-in-memory design (32-frame
+    windows + full-clip min-max normalization) that cannot be chunked to a
+    chain-length reference without OOM or breaking its normalization — so it is
+    v1-scoped to single-clip chains and single-shot /generate only. Mirrors
+    :func:`lora_requires_reference` (422) — the request is well-formed but the
+    adapter kind is unsupported on this route."""
     return APIError(
-        "LORA_CONTROL_UNSUPPORTED_IN_CHAIN",
-        "control-type IC-LoRA is not supported on a chain request "
-        "(reference-video conditioning is out of chain scope; use a "
-        "style/character LoRA)",
+        "LORA_DEPTH_CHAIN_UNSUPPORTED",
+        "depth-type IC-LoRA is not supported on a multi-clip chain in this "
+        "version (the depth preprocessor cannot process a chain-length "
+        "reference); use pose/canny/deblur, or a single clip.",
         422,
-        detail=f"control loras rejected on chain: {sorted(names)}",
+        detail=f"depth loras rejected on multi-clip chain: {sorted(names)}",
     )
 
 

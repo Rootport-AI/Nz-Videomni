@@ -80,6 +80,50 @@ def encode_video_output(
     )
 
 
+def iter_video_conditioning_cpu(
+    *,
+    video_path: str,
+    height: int,
+    width: int,
+    frame_cap: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> Iterator[torch.Tensor]:
+    """Frame-by-frame generator behind :func:`load_video_conditioning_cpu`.
+
+    Yields ONE (1,C,1,H,W) CPU tensor per decoded frame, in decode order, having
+    run the exact same per-frame ops on the exact same device as the whole-tensor
+    loader below — ``decode_video_from_file`` -> ``resize_and_center_crop`` on
+    float32 -> ``normalize_latent`` to ``dtype`` -> ``.to("cpu")``. The loader is
+    literally ``torch.cat(list(this), dim=2)``, so the two are byte-identical by
+    construction; nothing about the numerics, the order, the dtype or the device
+    changed when this generator was split out (§1-15 B4).
+
+    Split out for the clip-wise chain reference (§1-15): a 24-clip chain needs
+    24 DIFFERENT overlapping pixel windows of one long reference video, and
+    materialising the whole video just to slice it would cost the full
+    ``total_px`` (up to 11544 frames) on CPU at once. ``chain_pipeline``'s window
+    generator consumes this stream lazily instead, holding at most
+    ``max(clip_frames)`` frames.
+
+    The GPU-side per-frame temporaries are released BEFORE the yield, so a slow
+    consumer never pins a decoded frame on the device.
+    """
+    from ltx_pipelines.utils.media_io import (
+        decode_video_from_file,
+        normalize_latent,
+        resize_and_center_crop,
+    )
+
+    for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
+        # Same ops, same device (GPU), same dtype flow as load_video_conditioning.
+        frame = resize_and_center_crop(f.to(torch.float32), height, width)
+        frame = normalize_latent(frame, device, dtype)
+        frame_cpu = frame.to("cpu")
+        del f, frame
+        yield frame_cpu
+
+
 def load_video_conditioning_cpu(
     *,
     video_path: str,
@@ -120,21 +164,23 @@ def load_video_conditioning_cpu(
     (its accumulator never gets a first frame), whereas this twin raises from
     ``torch.cat`` on an empty list. Both are failure paths for callers that
     require pixels; no production caller feeds a 0-frame source.
-    """
-    from ltx_pipelines.utils.media_io import (
-        decode_video_from_file,
-        normalize_latent,
-        resize_and_center_crop,
-    )
 
-    frames_cpu: list[torch.Tensor] = []
-    for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
-        # Same ops, same device (GPU), same dtype flow as load_video_conditioning.
-        frame = resize_and_center_crop(f.to(torch.float32), height, width)
-        frame = normalize_latent(frame, device, dtype)
-        frames_cpu.append(frame.to("cpu"))
-        del f, frame
-    return torch.cat(frames_cpu, dim=2)
+    The per-frame work lives in :func:`iter_video_conditioning_cpu`; this is the
+    single ``torch.cat`` over it, so the two cannot drift apart.
+    """
+    return torch.cat(
+        list(
+            iter_video_conditioning_cpu(
+                video_path=video_path,
+                height=height,
+                width=width,
+                frame_cap=frame_cap,
+                dtype=dtype,
+                device=device,
+            )
+        ),
+        dim=2,
+    )
 
 
 class DistilledNativePipeline:

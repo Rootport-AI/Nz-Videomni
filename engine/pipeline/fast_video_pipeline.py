@@ -1130,16 +1130,47 @@ class LTXFastVideoPipeline:
         if cond_height != full_height // 2:
             return []  # stage 2 (or unexpected res) — reference added at stage 1 only
 
-        import logging
-
-        from ltx_core.conditioning import (
-            ConditioningItemAttentionStrengthWrapper,
-            VideoConditionByReferenceLatent,
-        )
         from engine.pipeline.common import load_video_conditioning_cpu
-        from ltx_pipelines.utils.helpers import cleanup_memory
 
         ref_path, ref_strength = self._ic_reference
+        scale, ref_height, ref_width = self._reference_pixel_dims(
+            cond_height, int(cond_kwargs["width"])
+        )
+
+        # CPU-assembled reference pixels: the wheel's load_video_conditioning
+        # cats the growing tensor ON THE GPU, so its allocation volume grows
+        # with the SQUARE of the frame count (measured 46.8GB reserved at
+        # 640x384x257). Numerics are bit-identical — see the docstring.
+        #
+        # The decode now sits just OUTSIDE the encode's measured/logged interval
+        # (§1-15 B5 moved it out of _reference_conditioning_from_pixels, which the
+        # chain feeds already-decoded windows). Log-line only: the decode holds one
+        # frame at a time on the GPU and produces the same CPU tensor as before, so
+        # neither the encode's inputs nor its outputs move a bit.
+        video = load_video_conditioning_cpu(
+            video_path=ref_path,
+            height=ref_height,
+            width=ref_width,
+            frame_cap=num_frames,
+            dtype=cond_kwargs["dtype"],
+            device=cond_kwargs["device"],
+        )
+        conds = self._reference_conditioning_from_pixels(
+            video, cond_kwargs=cond_kwargs, scale=scale, strength=ref_strength
+        )
+        del video  # the callee dropped its own reference; drop this frame's too
+        return conds
+
+    def _reference_pixel_dims(self, cond_height: int, cond_width: int) -> tuple[int, int, int]:
+        """``(scale, ref_height, ref_width)``: the size the reference video is
+        decoded at for a conditioning built at ``cond_height x cond_width``.
+
+        Split out of ``_reference_conditioning_for_stage`` (§1-15 B5) so the chain
+        path — which decodes its OWN per-clip pixel windows out of one long
+        reference and then calls ``_reference_conditioning_from_pixels`` directly —
+        resolves the decode size through the same guards and the same arithmetic.
+        Pure; the two guards below are moved verbatim, not re-derived.
+        """
         scale = self._ic_reference_downscale_factor
         if scale is None or scale < 1:
             raise RuntimeError(
@@ -1147,19 +1178,49 @@ class LTXFastVideoPipeline:
                 "_set_ic_job must resolve it before the reference conditioning "
                 "is built."
             )
-
-        cond_width = int(cond_kwargs["width"])
-        video_encoder = cond_kwargs["video_encoder"]
-        dtype = cond_kwargs["dtype"]
-        device = cond_kwargs["device"]
-
         if cond_height % scale != 0 or cond_width % scale != 0:
             raise ValueError(
                 f"Stage-1 dims ({cond_height}x{cond_width}) must be divisible by "
                 f"reference_downscale_factor ({scale})"
             )
-        ref_height = cond_height // scale
-        ref_width = cond_width // scale
+        return scale, cond_height // scale, cond_width // scale
+
+    def _reference_conditioning_from_pixels(
+        self,
+        video: torch.Tensor,
+        *,
+        cond_kwargs: dict,
+        scale: int,
+        strength: float,
+    ) -> list:
+        """VAE-encode already-decoded reference PIXELS into ``[conditioning]``.
+
+        The back half of ``_reference_conditioning_for_stage``, split out verbatim
+        (§1-15 B5): the channels_last_3d switch for factor-1 adapters, the
+        tiled/untiled encode branch, the restore in ``finally`` and the
+        attention-strength wrapper. ``video`` is a CPU (1,C,F,H,W) tensor at
+        ``_reference_pixel_dims`` resolution.
+
+        NO stage discriminator here on purpose — that check MUST stay in the
+        ``_reference_conditioning_for_stage`` wrapper. Moving it inside would make
+        the chain path (which builds its own half-res windows and calls this
+        directly) either always empty or, worse, attach a reference to stage 2.
+
+        The chain calls this once per stage-1 segment with that segment's window
+        of the long reference; the single-generate path calls it once with the
+        whole video. The returned latents stay on ``device`` — the conditioning's
+        ``apply_to`` indexes against the latent state's device.
+        """
+        import logging
+
+        from ltx_core.conditioning import (
+            ConditioningItemAttentionStrengthWrapper,
+            VideoConditionByReferenceLatent,
+        )
+        from ltx_pipelines.utils.helpers import cleanup_memory
+
+        video_encoder = cond_kwargs["video_encoder"]
+        device = cond_kwargs["device"]
 
         # ONE predicate for both the measurement and the layout switch below:
         # ``device`` may arrive as a plain string (so compare
@@ -1215,18 +1276,6 @@ class LTXFastVideoPipeline:
                 _alloc_before = torch.cuda.memory_allocated() // _mb
                 _reserved_before = torch.cuda.memory_reserved() // _mb
 
-            # CPU-assembled reference pixels: the wheel's load_video_conditioning
-            # cats the growing tensor ON THE GPU, so its allocation volume grows
-            # with the SQUARE of the frame count (measured 46.8GB reserved at
-            # 640x384x257). Numerics are bit-identical — see the docstring.
-            video = load_video_conditioning_cpu(
-                video_path=ref_path,
-                height=ref_height,
-                width=ref_width,
-                frame_cap=num_frames,
-                dtype=dtype,
-                device=device,
-            )
             if scale == 1:
                 # Factor-1 adapters (deblur) feed the reference at 4x the pixel
                 # count of the factor-2 ones, and the untiled encode's
@@ -1292,7 +1341,7 @@ class LTXFastVideoPipeline:
         cond = VideoConditionByReferenceLatent(
             latent=encoded_video,
             downscale_factor=scale,
-            strength=ref_strength,
+            strength=strength,
         )
         if self._ic_attention_strength < 1.0:
             cond = ConditioningItemAttentionStrengthWrapper(

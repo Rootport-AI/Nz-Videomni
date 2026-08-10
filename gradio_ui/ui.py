@@ -611,11 +611,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # accordion: Audio-to-Video (案A). Attaching an audio
                         # file routes generate() down the A2V path (src_audio,
                         # the handler's last positional input). Style LoRAs
-                        # (<lora:> tokens) and keyframe images CAN combine with
-                        # audio (wired into the chain payload's ``loras``); only
-                        # the reference-video CONTROL adapter above cannot (a
-                        # chain has no reference_video_id — the handler prechecks
-                        # that one conflict).
+                        # (<lora:> tokens), keyframe images, AND the
+                        # reference-video CONTROL adapter above (dropdown +
+                        # ref_video) can all combine with audio -- this handler
+                        # always sends a single-clip chain, and a chain now
+                        # accepts a reference_video_id on any clip count
+                        # (1..24 -- owner decision 2026-08-11), so a 1-clip A2V
+                        # chain is unaffected either way. All three are wired
+                        # into the chain payload below (``loras`` +
+                        # ``reference_video_id`` / S3 strength keys).
                         with gr.Accordion(L("gen_a2v_accordion"), open=False) as gen_a2v_accordion:
                             reg(gen_a2v_accordion, "gen_a2v_accordion", "label")
                             reg(gr.Markdown(L("gen_a2v_note"), elem_classes=["note"]),

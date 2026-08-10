@@ -205,6 +205,72 @@ def test_cut_range_mp4_trims_audio_to_the_same_window(tmp_path):
     assert out_dur is not None and abs(out_dur - 1.0) < 0.15
 
 
+# ------------------------------------ cut_range_mp4 (start_frame/num_frames, §1-15)
+
+
+def test_cut_range_mp4_start_frame_and_num_frames_short_circuit_seconds(color_mp4, tmp_path):
+    """start_frame/num_frames replace the seconds->frames conversion outright;
+    start_sec/duration_sec are ignored (and can be junk) for the side that has
+    a frame value. Mirrors test_cut_range_mp4_is_frame_exact's expectation
+    (frames 2,3,4) but reached via the frame-count args."""
+    out = tmp_path / "range_frames.mp4"
+    info = video_io.cut_range_mp4(
+        color_mp4, out, start_sec=999.0, duration_sec=-5.0,
+        start_frame=2, num_frames=3,
+    )
+
+    assert info["start_frame"] == 2
+    assert info["end_frame"] == 4
+    assert info["written_frames"] == 3
+    assert video_io.frame_count(out) == 3
+    for out_idx, src_idx in enumerate((2, 3, 4)):
+        png = tmp_path / f"rf{out_idx}.png"
+        video_io.extract_frame_at(out, out_idx, png)
+        assert _closest_color_index(_avg_rgb(png)) == src_idx
+
+
+def test_cut_range_mp4_num_frames_clamps_past_the_end(color_mp4, tmp_path):
+    # 6-frame source; asking for 100 frames from frame 4 -> the remainder (4,5).
+    out = tmp_path / "clamped_frames.mp4"
+    info = video_io.cut_range_mp4(
+        color_mp4, out, start_sec=0.0, duration_sec=0.0,
+        start_frame=4, num_frames=100,
+    )
+    assert info["start_frame"] == 4
+    assert info["end_frame"] == len(_COLORS) - 1
+    assert info["written_frames"] == 2
+    assert video_io.frame_count(out) == 2
+
+
+def test_cut_range_mp4_num_frames_zero_or_negative_raises(color_mp4, tmp_path):
+    with pytest.raises(video_io.FFmpegError):
+        video_io.cut_range_mp4(
+            color_mp4, tmp_path / "bad.mp4", start_sec=0.0, duration_sec=1.0,
+            start_frame=0, num_frames=0,
+        )
+
+
+def test_cut_range_mp4_start_frame_past_the_end_raises(color_mp4, tmp_path):
+    with pytest.raises(video_io.FFmpegError):
+        video_io.cut_range_mp4(
+            color_mp4, tmp_path / "oob.mp4", start_sec=0.0, duration_sec=1.0,
+            start_frame=999, num_frames=1,
+        )
+
+
+def test_cut_range_mp4_start_frame_only_still_uses_duration_sec(color_mp4, tmp_path):
+    """Only start_frame given -> the frame-count args are independent: the
+    seconds side still governs when its counterpart is omitted."""
+    out = tmp_path / "start_frame_only.mp4"
+    # 0.3s @10fps -> 3 frames, starting at frame 1 -> frames 1,2,3.
+    info = video_io.cut_range_mp4(
+        color_mp4, out, start_sec=999.0, duration_sec=0.3, start_frame=1,
+    )
+    assert info["start_frame"] == 1
+    assert info["end_frame"] == 3
+    assert info["written_frames"] == 3
+
+
 # ------------------------------------------------------------- join_v2v tests
 
 

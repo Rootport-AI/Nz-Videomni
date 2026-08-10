@@ -245,6 +245,7 @@ from engine.api_types import ImageConditioningInput  # noqa: E402
 from engine.transformer.nag_service import NagParams  # noqa: E402
 from engine.transformer.sage_attention_service import probe_sage  # noqa: E402
 from engine.transformer.vsf_service import VsfParams  # noqa: E402
+import chain_math  # noqa: E402
 
 _log("imported LTXFastVideoPipeline + ImageConditioningInput")
 
@@ -376,21 +377,42 @@ def _do_load(msg: dict) -> None:
 
 
 def _preprocess_frame_cap(msg: dict) -> int | None:
-    """Frames the depth preprocessor should decode: the generation length.
+    """Frames the reference preprocessor should decode: the generation length.
 
-    Depth normalises over the whole clip it is given, so decoding footage the
-    generation will never use both costs time and shifts the gray range. The
-    generation length is ``num_frames`` for a single generate and
-    ``clips[0]["num_frames"]`` for a chain — clip 0 because a reference is only
-    ever attached to the first clip's stage-1 conditioning. Returns None (decode
-    everything, the pre-existing behaviour) when neither key is present.
+    Depth normalises over the whole clip it is given (and canny/dwpose simply
+    waste decode time on footage the generation will never use), so this caps
+    the preprocessor's input to exactly what stage-1 can consume. The
+    generation length is ``num_frames`` for a single generate. For a chain
+    (§1-15, clip-wise IC-LoRA reference) a reference is attached to EVERY
+    clip's stage-1 conditioning, sliced per-segment via
+    ``chain_math.video_segment_windows`` — so the cap is the PIXEL TOTAL the
+    chain's stage-1 ledger spans across all clips, not just clip 0. The
+    per-segment slicing (which window of these frames a given clip actually
+    sees) happens downstream in ``engine/pipeline/chain_pipeline.py``; this
+    cap only bounds how much of the source the decoder reads. Returns None
+    (decode everything, the pre-existing behaviour) when neither key is
+    present.
+
+    NOTE (depth specifically): the API layer rejects depth-preprocess
+    references on chains with more than one clip (422
+    ``LORA_DEPTH_CHAIN_UNSUPPORTED`` — depth's whole-clip VideoProcessor
+    normalisation does not chunk safely, see B7 in the §1-15 plan), so a
+    depth job only ever reaches this branch with exactly one clip, where the
+    formula above reduces to the pre-existing single-clip value
+    (``clips[0]["num_frames"]``, since ``seg_latent`` has one element and the
+    ``- (n-1)*kv`` term vanishes). The multi-clip total_px path is real for
+    canny/dwpose only.
     """
     if "num_frames" in msg:
         return int(msg["num_frames"])
-    clips = msg.get("clips") or []
-    if clips and "num_frames" in clips[0]:
-        return int(clips[0]["num_frames"])
-    return None
+    raw_clips = msg.get("clips") or []
+    clip_frames = [int(c["num_frames"]) for c in raw_clips if "num_frames" in c]
+    if not clip_frames or len(clip_frames) != len(raw_clips):
+        return None
+    kv = int(msg.get("overlap_frames", chain_math.DEFAULT_OVERLAP_FRAMES))
+    seg_latent = [chain_math.v_latent_frames(f) for f in clip_frames]
+    f_total = sum(seg_latent) - (len(seg_latent) - 1) * kv
+    return chain_math.px_from_v_latent(f_total)
 
 
 def _resolve_ic_reference(
@@ -412,9 +434,14 @@ def _resolve_ic_reference(
     (``get_processor`` raises). Extracted verbatim from _do_generate so the
     single-generate and chain paths resolve the reference identically.
 
-    ``frame_cap`` is forwarded to the driver ONLY for the whole-clip processors
-    (depth); canny/dwpose keep decoding the full source, byte-identical to
-    before this parameter existed.
+    ``frame_cap`` is forwarded to the driver for EVERY preprocess kind. depth
+    is a whole-clip ``VideoProcessor`` (normalises over everything it is
+    given, so capping also avoids shifting the gray range); canny/dwpose are
+    per-frame ``FrameProcessor``s and produce byte-identical output either
+    way — capping them only skips decoding/processing frames the generation
+    will never use (relevant once a reference can span the 11544f chain
+    upload ceiling instead of one clip). ``None`` (no ``num_frames``/``clips``
+    key in ``msg``) still decodes the whole source, unchanged.
     """
     ic_reference = None
     attn_strength = 1.0
@@ -432,14 +459,16 @@ def _resolve_ic_reference(
             control_path = os.path.join(
                 os.path.dirname(output_path), f"control_{preprocess}.mp4"
             )
-            cap = frame_cap if preprocess == "depth" else None
+            cap = frame_cap
             t0 = time.perf_counter()
             n_frames = preprocess_video(
                 Path(ref_path), Path(control_path), processor, frame_cap=cap
             )
             elapsed = time.perf_counter() - t0
-            # cap= is appended only when one applies, so the canny/dwpose log
-            # line stays character-identical to the Phase C recorded runs.
+            # cap= is appended only when one applies (frame_cap is None for a
+            # bare reference_video with no num_frames/clips context, e.g. a
+            # future caller that omits it — every worker.py call site today
+            # always supplies one).
             _log(
                 f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
                 f"frames={n_frames}"

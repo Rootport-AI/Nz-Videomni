@@ -15,7 +15,7 @@ from api.deps import get_context, require_auth
 from api.errors import (
     APIError,
     job_busy,
-    lora_control_unsupported_in_chain,
+    lora_depth_chain_unsupported,
     lora_preprocess_conflict,
     lora_requires_reference,
     reference_requires_control_lora,
@@ -87,9 +87,9 @@ def generate_chain(
             request.retake, request.clips[0].num_frames, request.frame_rate
         )
 
-    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE, ALPHA
-    # scope — clips=1 only, schema-enforced): validate the reference video up
-    # front, mirroring api/generate.py 57-63.
+    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE, 1..24
+    # clips — owner decision 2026-08-11): validate the reference video up front,
+    # mirroring api/generate.py 57-63.
     if request.reference_video_id is not None:
         context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
         # All CONTROL adapters use reference_downscale_factor=2, so the reference
@@ -102,12 +102,15 @@ def generate_chain(
     # requested adapter (404 unknown/missing) up front — same discipline as
     # api/generate.py — and inspect its kind:
     #   * a CONTROL adapter (union-control / pixel-spatial-upscaler) derives its
-    #     conditioning from a reference video. In v1 a chain only carries a
-    #     reference_video_id when it is exactly 1 clip (schema-enforced), so a
-    #     control adapter on a >1-clip chain is still rejected outright
-    #     (LORA_CONTROL_UNSUPPORTED_IN_CHAIN, unchanged pre-alpha behaviour); on a
-    #     1-clip chain it instead needs the reference_video_id, exactly like the
-    #     single-generate check (LORA_REQUIRES_REFERENCE);
+    #     conditioning from a reference video, on any clip count (1..24 — owner
+    #     decision 2026-08-11 lifted the old 1-clip-only ALPHA scope): it needs
+    #     the reference_video_id, exactly like the single-generate check
+    #     (LORA_REQUIRES_REFERENCE);
+    #   * a depth-preprocess CONTROL adapter is the one exception: it remains
+    #     rejected outright on a >1-clip chain (LORA_DEPTH_CHAIN_UNSUPPORTED) —
+    #     the depth preprocessor (Video-Depth-Anything) is a whole-clip design
+    #     that cannot process a chain-length reference (owner decision
+    #     2026-08-11; the engine-side chunking to lift this is a later item);
     #   * conversely a reference video is ONLY consumable through a control
     #     adapter (its downscale factor comes from that adapter's metadata), so a
     #     reference + style-only chain is rejected here
@@ -117,6 +120,7 @@ def generate_chain(
     #     api/generate.py).
     preprocess_kinds: set[str] = set()
     control_names: list[str] = []
+    depth_names: list[str] = []
     for spec in request.loras:
         context.lora_registry.resolve(spec.name, spec.strength)  # 404 if unknown/missing
         entry = context.lora_registry.info(spec.name)
@@ -124,9 +128,11 @@ def generate_chain(
             control_names.append(spec.name)
         if entry.preprocess != "none":
             preprocess_kinds.add(entry.preprocess)
+        if entry.preprocess == "depth":
+            depth_names.append(spec.name)
+    if depth_names and len(request.clips) > 1:
+        raise lora_depth_chain_unsupported(depth_names)
     if control_names:
-        if len(request.clips) != 1:
-            raise lora_control_unsupported_in_chain(control_names)
         if request.reference_video_id is None:
             raise lora_requires_reference(control_names)
     if request.reference_video_id is not None and not control_names:

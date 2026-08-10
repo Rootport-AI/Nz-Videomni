@@ -382,10 +382,10 @@ LABELS: dict[str, dict[str, str]] = {
                                           "Re-upload the audio file."),
         "apierr_SOURCE_AUDIO_TOO_SHORT": ("The audio is shorter than the video timeline. Use longer "
                                           "audio or fewer frames."),
-        "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": ("A control adapter (canny/pose/upscaler) cannot be "
-                                                     "used on a chain of 2 or more clips. Use a "
-                                                     "style/character LoRA instead, or reduce the "
-                                                     "chain to a single clip."),
+        "apierr_LORA_DEPTH_CHAIN_UNSUPPORTED": ("A depth-type control adapter cannot be used on a chain "
+                                                "of 2 or more clips (the depth preprocessor can't "
+                                                "process a chain-length reference). Use pose/canny/"
+                                                "deblur instead, or reduce the chain to a single clip."),
         "apierr_JOB_NOT_JOINABLE": ("This job is not a V2V continuation, so there is nothing to "
                                     "join it to."),
         "apierr_JOIN_FAILED": "Joining failed on the server. Check the server logs.",
@@ -882,7 +882,7 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_SOURCE_VIDEO_TOO_SHORT": "元動画のフレーム数が参照フレーム数に足りません。参照フレーム数を減らすか、長い動画を使ってください。",
         "apierr_SOURCE_AUDIO_NOT_FOUND": "元音声がサーバー上に見つかりません。音声を再アップロードしてください。",
         "apierr_SOURCE_AUDIO_TOO_SHORT": "音声が動画の長さに足りません。長い音声を使うか、フレーム数を減らしてください。",
-        "apierr_LORA_CONTROL_UNSUPPORTED_IN_CHAIN": "制御アダプタ（canny/pose/アップスケーラ）は2つ以上のクリップを連結するチェーンでは使えません。スタイル/キャラクターLoRAを使うか、クリップを1つにしてください。",
+        "apierr_LORA_DEPTH_CHAIN_UNSUPPORTED": "深度（depth）系の制御アダプタは、2つ以上のクリップを連結するチェーンでは使えません（深度の前処理はチェーン全体分の参照を扱えません）。pose/canny/deblurを使うか、クリップを1つにしてください。",
         "apierr_JOB_NOT_JOINABLE": "このジョブはV2V継続ではないため、結合する相手がありません。",
         "apierr_JOIN_FAILED": "サーバー側で結合に失敗しました。サーバーのログを確認してください。",
         "apierr_JOINED_NOT_READY": "結合版はまだ作成されていません。先に「結合版を作成」を実行してください。",

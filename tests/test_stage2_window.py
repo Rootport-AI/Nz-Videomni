@@ -455,6 +455,74 @@ def test_worker_resolve_stage2_window():
         _resolve_stage2_window({"stage2_window": "nope"})
 
 
+# ── §1-15 reference preprocess frame cap ────────────────────────────────────
+def test_preprocess_frame_cap_single_generate_uses_num_frames():
+    pytest.importorskip("torch")
+    from engine.worker import _preprocess_frame_cap
+
+    assert _preprocess_frame_cap({"num_frames": 121}) == 121
+
+
+def test_preprocess_frame_cap_absent_is_none():
+    """No num_frames and no clips -> None (decode everything, pre-existing
+    behaviour for a bare reference_video with no generation-length context)."""
+    pytest.importorskip("torch")
+    from engine.worker import _preprocess_frame_cap
+
+    assert _preprocess_frame_cap({}) is None
+    assert _preprocess_frame_cap({"clips": []}) is None
+
+
+def test_preprocess_frame_cap_single_clip_chain_matches_the_old_clip0_value():
+    """Regression: a 1-clip chain (the only shape this cap covered before
+    §1-15, and the only shape a depth reference can still reach post-422) must
+    resolve to exactly the same number as the old ``clips[0]["num_frames"]``
+    read — the formula's ``- (n-1)*kv`` term vanishes for n=1."""
+    pytest.importorskip("torch")
+    from engine.worker import _preprocess_frame_cap
+
+    for num_frames in (9, 121, 241, 481):
+        msg = {"clips": [{"num_frames": num_frames}], "overlap_frames": 3}
+        assert _preprocess_frame_cap(msg) == num_frames
+
+
+def test_preprocess_frame_cap_multi_clip_chain_is_the_chain_total_px():
+    """A multi-clip chain caps to chain_math's own total_px for the same
+    (clip_frames, kv) — pinned against ``compute_chain_layout`` directly so a
+    future change to either side shows up as a diff, not a silent drift."""
+    pytest.importorskip("torch")
+    import chain_math
+    from engine.worker import _preprocess_frame_cap
+
+    cases = [
+        ([121, 121, 121], 3),
+        ([241, 121, 361], 1),
+        ([9] * 24, 1),
+    ]
+    for clip_frames, kv in cases:
+        msg = {
+            "clips": [{"num_frames": f} for f in clip_frames],
+            "overlap_frames": kv,
+        }
+        expected = chain_math.compute_chain_layout(clip_frames, 24.0, kv=kv).total_px
+        assert _preprocess_frame_cap(msg) == expected
+
+
+def test_preprocess_frame_cap_missing_overlap_frames_defaults_to_dev3():
+    """``overlap_frames`` is always present on a real chain worker payload
+    (``int(msg["overlap_frames"])`` a few lines below the cap's only call
+    site), but the cap helper itself is defensive and falls back to
+    ``chain_math.DEFAULT_OVERLAP_FRAMES`` (K_v=3) rather than raising."""
+    pytest.importorskip("torch")
+    import chain_math
+    from engine.worker import _preprocess_frame_cap
+
+    msg = {"clips": [{"num_frames": 121}, {"num_frames": 121}]}
+    assert chain_math.DEFAULT_OVERLAP_FRAMES == 3
+    expected = chain_math.compute_chain_layout([121, 121], 24.0, kv=3).total_px
+    assert _preprocess_frame_cap(msg) == expected
+
+
 # ── mock backend + metadata ─────────────────────────────────────────────────
 def _run_chain_job(client, **overrides) -> dict:
     """Submit a chain through the REST API (mock backend) and return the written

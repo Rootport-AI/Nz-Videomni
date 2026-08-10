@@ -1659,13 +1659,18 @@ class _RealBackend:
         chain (payload byte-identical to before); the worker clears any stale
         LoRA regardless.
 
-        Reference-video CONTROL IC-LoRA (Phase C, ALPHA scope — clips=1 only,
-        enforced by the schema/endpoint): when ``reference_video_path`` is set an
-        additive ``reference_video`` block ({path, strength, preprocess[,
-        attention_strength]}) is added to the worker payload, mirroring the
-        single-generate ``reference_payload`` (see :meth:`_RealBackend.generate`).
-        Absent when no reference video was requested, so the payload stays
-        byte-identical to before that case.
+        Reference-video CONTROL IC-LoRA (Phase C; 1..24 clips — owner decision
+        2026-08-11 lifted the old clips=1 ALPHA scope, except a depth-preprocess
+        adapter, still rejected on >1 clip at the API layer): when
+        ``reference_video_path`` is set an additive ``reference_video`` block
+        ({path, strength, preprocess[, attention_strength]}) is added to the
+        worker payload, mirroring the single-generate ``reference_payload`` (see
+        :meth:`_RealBackend.generate`). ONE path is sent regardless of clip
+        count -- the engine slices the single long reference into each stage-1
+        segment's own window (chain_math.video_segment_windows); a reference
+        shorter than the timeline just runs out (later segments generate
+        without one). Absent when no reference video was requested, so the
+        payload stays byte-identical to before that case.
 
         NAG (Normalized Attention Guidance, ADDITIVE/optional): when
         ``chain.nag_enabled`` an additive ``nag`` block ({negative_prompt, scale,
@@ -1740,18 +1745,21 @@ class _RealBackend:
                 "tail_px": int(chain.retake.tail_px),
                 "regenerate_audio": bool(chain.retake.regenerate_audio),
             }
-        # Style/character IC-LoRA (additive): (path, strength[, audio_strength])
-        # per adapter, applied uniformly across the chain. Only added when
-        # non-empty so a no-lora chain payload is byte-identical to before (the
-        # worker parses msg.get("loras", []) and clears stale LoRA either way).
-        # preprocess is dropped — control adapters are rejected at the API
-        # layer, so every entry here is style.
+        # Style/character AND control IC-LoRA (additive): (path, strength[,
+        # audio_strength]) per adapter, applied uniformly across the chain. Only
+        # added when non-empty so a no-lora chain payload is byte-identical to
+        # before (the worker parses msg.get("loras", []) and clears stale LoRA
+        # either way). ``preprocess`` is dropped here -- it is derived separately
+        # below (via ``_resolve_reference_preprocess``) and only matters when a
+        # reference video is also present, since a control adapter without one is
+        # already rejected at the API layer (LORA_REQUIRES_REFERENCE).
         if lora_paths:
             payload["loras"] = [_lora_payload_entry(lp) for lp in lora_paths]
-        # Reference-video CONTROL IC-LoRA (additive, ALPHA scope — clips=1 only):
-        # mirrors the single-generate ``reference_payload`` (see :meth:`generate`
-        # above). Only added when a reference video was requested, so a chain
-        # without one keeps a byte-identical payload.
+        # Reference-video CONTROL IC-LoRA (additive; 1..24 clips — owner decision
+        # 2026-08-11, except a depth-preprocess adapter which is still API-layer
+        # rejected on >1 clip): mirrors the single-generate ``reference_payload``
+        # (see :meth:`generate` above). Only added when a reference video was
+        # requested, so a chain without one keeps a byte-identical payload.
         if reference_video_path is not None:
             ref_strength = (
                 1.0

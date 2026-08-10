@@ -442,6 +442,9 @@ def cut_range_mp4(
     out: Path,
     start_sec: float,
     duration_sec: float,
+    *,
+    start_frame: int | None = None,
+    num_frames: int | None = None,
 ) -> dict:
     """Write to ``out`` an mp4 holding EXACTLY the ``[start_sec, start_sec +
     duration_sec)`` window of ``src``, at ``src``'s own measured frame rate.
@@ -450,14 +453,17 @@ def cut_range_mp4(
     same material the user sees on the timeline ribbon, so the source cadence is
     preserved verbatim (``-r src_fps``) and only the frame window changes.
 
-    UNIT NOTE (deliberate hedge): the public signature takes SECONDS, but this
-    function internally converts to frames immediately
+    UNIT NOTE (deliberate hedge, now exercised): the public signature takes
+    SECONDS, but this function internally converts to frames immediately
     (``start_frame = round(start_sec * src_fps)``) and does all of its work in
-    frame space via the ``select`` filter. If the caller's unit ever turns out to
-    be frames rather than seconds (the AviUtl2 timeline probe is what decides
-    this), the change is a purely additive signature -- an extra
-    ``start_frame``/``num_frames`` pair short-circuiting the conversion -- and
-    none of the selection logic below has to move.
+    frame space via the ``select`` filter. ``start_frame``/``num_frames`` are the
+    additive short-circuit this note always promised: when given, each one
+    replaces the corresponding seconds->frames conversion outright (``start_sec``/
+    ``duration_sec`` are ignored for the side that has a frame value), and none of
+    the selection logic below has to move. §1-15's upload-time frame-count trim
+    (``services/video_upload_store.save``'s ``max_frames``) is the first caller —
+    it wants "first N frames", which is a frame count, not a duration computed
+    from a frame rate that may not even matter to it.
 
     The window is inclusive on both ends in frame space
     (``select='between(n,start,end)'``) and ``end`` is clamped to the last
@@ -478,9 +484,13 @@ def cut_range_mp4(
     if source_fps is None or source_fps <= 0:
         raise FFmpegError(f"cut_range_mp4: could not probe a usable frame rate for {src}")
 
-    start = max(0, round(start_sec * source_fps))
-    n = round(duration_sec * source_fps)
+    start = max(0, int(start_frame)) if start_frame is not None else max(
+        0, round(start_sec * source_fps)
+    )
+    n = int(num_frames) if num_frames is not None else round(duration_sec * source_fps)
     if n <= 0:
+        if num_frames is not None:
+            raise FFmpegError(f"cut_range_mp4: num_frames={num_frames} must be positive")
         raise FFmpegError(
             f"cut_range_mp4: duration_sec={duration_sec} maps to {n} frames at {source_fps} fps"
         )

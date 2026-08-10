@@ -30,7 +30,7 @@ import dataclasses
 import gc
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -46,12 +46,14 @@ from chain_math import (
     freeze_mask_values,
     plan_upsample_chunks,
     retake_tail_token_range,
+    video_segment_windows,
 )
 from engine import progress_shim
 from engine.api_types import ImageConditioningInput
 from engine.pipeline.common import (
     default_tiling_config,
     encode_video_output,
+    iter_video_conditioning_cpu,
     load_video_conditioning_cpu,
     video_chunks_number,
 )
@@ -222,6 +224,68 @@ def _build_video_conditionings(
         conds += _add_guide(images=guide_imgs, height=height, width=width,
                             video_encoder=video_encoder, dtype=DTYPE, device=device)
     return conds
+
+
+def _iter_reference_windows(
+    frame_iter: Iterable[torch.Tensor],
+    windows: list[tuple[int, int]],
+) -> Iterator[torch.Tensor | None]:
+    """Cut ONE long reference video into the per-segment pixel windows §1-15 needs.
+
+    Yields EXACTLY ``len(windows)`` items, one per stage-1 segment, in order: a
+    (1,C,F,H,W) CPU tensor built by ``torch.cat``-ing that window's frames, or
+    ``None`` when the reference ran out before the window began. ``frame_iter``
+    supplies one (1,C,1,H,W) CPU frame per PIXEL frame in decode order —
+    :func:`engine.pipeline.common.iter_video_conditioning_cpu` in production, a
+    fake iterator in the tests (which is the whole point of the split: it lets a
+    unit test assert the window OFFSETS, not just the window arithmetic).
+
+    ``windows`` comes from ``chain_math.video_segment_windows`` and is
+    ``(start_px, len_px)`` on the GLOBAL reference timeline, monotonically
+    increasing in ``start_px``, with adjacent windows OVERLAPPING by ``8*kv - 7``
+    frames (the K_v carry band). This walks the stream once: skip up to the next
+    window's start, buffer its length, yield, then keep the overlap tail for the
+    next window. Peak buffer is therefore ``max(clip_frames)`` frames — not the
+    whole (up to 11544-frame) reference.
+
+    Short-reference policy (owner: "missing reference -> generate without one",
+    never an error): a window the stream only partially covers yields the frames
+    it DOES have — the wheel's VAE crops the tail of a non-8n+1 pixel run itself
+    (video_vae.py), so there is no need to round the partial length down; only
+    the zero-frame case has to be avoided, and that yields ``None``. Every window
+    after the stream is drained yields ``None`` too.
+    """
+    it = iter(frame_iter)
+    buf: list[torch.Tensor] = []   # consecutive frames, buf[0] is global frame ``base``
+    base = 0                       # global index of buf[0]; == frames consumed when buf is empty
+    exhausted = False
+
+    for start, length in windows:
+        # 1. drop the frames this window has left behind (the previous window's
+        #    non-overlapping head), then skip forward if it starts beyond them.
+        if start > base:
+            drop = min(start - base, len(buf))
+            if drop:
+                del buf[:drop]
+                base += drop
+        while base < start and not exhausted:   # buf is empty here by construction
+            nxt = next(it, None)
+            if nxt is None:
+                exhausted = True
+                break
+            base += 1
+        # 2. top the buffer up to this window's length.
+        while len(buf) < length and not exhausted:
+            nxt = next(it, None)
+            if nxt is None:
+                exhausted = True
+                break
+            buf.append(nxt)
+        # 3. hand out what we have (never a 0-frame tensor).
+        if not buf:
+            yield None
+            continue
+        yield torch.cat(buf[: min(length, len(buf))], dim=2)
 
 
 def _denoise_av_with_carry(
@@ -662,16 +726,25 @@ def run_chain(
     pipeline, so ``ic_loras=None/[]`` is a genuine "no LoRA" (byte-identical to
     before) rather than a leak of the last job's.
 
-    ``ic_reference`` / ``ic_attention_strength`` (α, additive): a control-adapter
+    ``ic_reference`` / ``ic_attention_strength`` (additive): a control-adapter
     reference video ``(path, strength)`` plus its conditioning_attention_strength
-    knob. When present, the reference latent is appended to clip-0's STAGE-1
-    conditioning ONLY (via ``pipe._reference_conditioning_for_stage`` — the same
-    builder the single ``generate()`` path uses on its stage-1 pass), so the
-    reference drives the whole timeline through the carry/crossfade exactly like a
-    single generate. Accepted only for clips=1 chains (α; the API layer enforces
-    that). ``ic_reference=None`` -> the chain is byte-identical to before: the
-    ``_set_ic_job`` below is called with ``(loras, None, 1.0)`` (stale-clear
-    semantics preserved) and no reference latent is injected.
+    knob, for ANY clip count 1..24 (§1-15; the old "clips=1 only" alpha scope was
+    lifted 2026-08-11). ONE long reference is laid over the assembled timeline and
+    auto-sliced per stage-1 segment: segment ``i`` gets pixel window
+    ``chain_math.video_segment_windows(layout)[i]`` == ``(8*s_i, clip_frames[i])``,
+    decoded LAZILY (``_iter_reference_windows`` over
+    ``iter_video_conditioning_cpu``) and VAE-encoded right before that segment
+    denoises, via ``pipe._reference_conditioning_from_pixels`` — the same encoder
+    path the single ``generate()`` uses on its stage-1 pass. Adjacent windows
+    overlap by exactly the K_v carry band, so neighbours see the same footage
+    across a seam. STAGE 1 ONLY; stage-2 tiles never get a reference. A reference
+    shorter than the timeline is NOT an error: the windows it no longer covers are
+    simply generated without one (partial windows keep the frames they do have).
+    For clips=1 this reduces to the historical single window ``(0,
+    clip_frames[0])``. ``ic_reference=None`` -> the chain is byte-identical to
+    before: the ``_set_ic_job`` below is called with ``(loras, None, 1.0)``
+    (stale-clear semantics preserved), no decode is opened and no reference latent
+    is injected.
 
     ``stage2_v_tile`` / ``stage2_v_adv`` (stage-2 window, additive): the tile
     geometry ``compute_chain_layout`` lays the stage-2 pass out with. ``None``
@@ -698,6 +771,14 @@ def run_chain(
     # timeline with neither of the other two (the API layer 422s this first).
     assert sum(x is not None for x in (source, audio_source, retake)) <= 1, (
         "run_chain: source (V2V), audio_source (A2V) and retake are mutually exclusive"
+    )
+    # A reference is API-exclusive with BOTH V2V and retake (api/models.py), and
+    # the per-segment injection below LEANS on that: it sits after the i==0 branch
+    # chain, so a reference reaching a retake/V2V chain would append conditioning to
+    # branches whose comments (and behaviour) say they have none. Assert rather than
+    # branch — the exclusivity is the invariant, not a case to handle.
+    assert ic_reference is None or (source is None and retake is None), (
+        "run_chain: ic_reference is mutually exclusive with source (V2V) and retake"
     )
     from ltx_core.components.diffusion_steps import EulerDiffusionStep
     from ltx_core.components.noisers import GaussianNoiser
@@ -856,8 +937,8 @@ def run_chain(
     # transformer build; set it here (explicitly, empty list = clear) so THIS
     # chain's style adapters — and ONLY this chain's — apply. Clearing on the empty
     # path is the stale-detach that keeps a prior single generate()'s LoRA from
-    # bleeding into the chain denoise (mirrors generate()'s _set_ic_job call). α:
-    # a control-adapter reference (clips=1 only) is forwarded here too so
+    # bleeding into the chain denoise (mirrors generate()'s _set_ic_job call). A
+    # control-adapter reference (any clip count — §1-15) is forwarded here too so
     # _set_ic_job resolves its downscale factor + attention wrapper exactly as the
     # single path; ic_reference=None keeps the historical (None, 1.0) stale-clear.
     pipe._set_ic_job(list(ic_loras or []), ic_reference, ic_attention_strength)
@@ -903,6 +984,46 @@ def run_chain(
             n_head_a = n_tail_a = 0
         gc.collect()
         torch.cuda.empty_cache()
+
+    # ── clip-wise IC-LoRA reference (§1-15): ONE lazy decode of the long
+    # reference, cut into the per-stage-1-segment windows chain_math computed.
+    # Constructed here (the video_encoder exists; the loop is next) but NOT
+    # consumed: both generators are lazy, so the first frame is decoded only when
+    # segment 0 asks for its window and each later window is decoded+encoded just
+    # before the segment that needs it — no silent multi-minute block up front, and
+    # at most max(clip_frames) reference frames buffered at a time.
+    ref_windows: Iterator[torch.Tensor | None] | None = None
+    ref_scale = 1
+    ref_strength = 1.0
+    ref_cond_kwargs: dict = {}
+    if ic_reference is not None:
+        ref_path, ref_strength = ic_reference
+        ref_px_windows = video_segment_windows(layout)
+        # Same guards + same arithmetic the single generate() path uses, reached
+        # through the shared helper so the two cannot drift.
+        ref_scale, ref_h, ref_w = pipe._reference_pixel_dims(height // 2, width // 2)
+        ref_cond_kwargs = {
+            "height": height // 2,
+            "width": width // 2,
+            "video_encoder": video_encoder,
+            "dtype": DTYPE,
+            "device": device,
+            # factor-1 references (deblur) are tiled-encoded there.
+            "tiling_config": tiling_cfg,
+        }
+        ref_windows = _iter_reference_windows(
+            iter_video_conditioning_cpu(
+                video_path=ref_path,
+                height=ref_h,
+                width=ref_w,
+                # The last window's end == everything the chain can consume
+                # (== layout.total_px for 8n+1 clips); decoding beyond it is waste.
+                frame_cap=ref_px_windows[-1][0] + ref_px_windows[-1][1],
+                dtype=DTYPE,
+                device=device,
+            ),
+            ref_px_windows,
+        )
 
     stepper = EulerDiffusionStep()
     stage1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(device)
@@ -981,29 +1102,6 @@ def run_chain(
                 clips[0].images, height=height // 2, width=width // 2,
                 video_encoder=video_encoder, device=device,
             )
-            # α control-adapter reference (additive): append the reference latent
-            # to clip-0's STAGE-1 conditioning ONLY — the same "stage-1 once"
-            # semantics as single generate() (which routes through
-            # pipe._reference_conditioning_for_stage on its stage-1 pass and
-            # returns [] on stage 2). Reuse that exact builder with the HALF-res
-            # cond_kwargs (height//2, width//2, DTYPE, device, video_encoder) so
-            # the downscale/encode is byte-for-byte the single path's. Never
-            # injected on the V2V head branch above (source & reference are
-            # API-exclusive) nor on the stage-2 tiles below.
-            if ic_reference is not None:
-                conds += pipe._reference_conditioning_for_stage(
-                    full_height=height,
-                    num_frames=clip_frames[0],
-                    cond_kwargs={
-                        "height": height // 2,
-                        "width": width // 2,
-                        "video_encoder": video_encoder,
-                        "dtype": DTYPE,
-                        "device": device,
-                        # factor-1 references (deblur) are tiled-encoded there.
-                        "tiling_config": tiling_cfg,
-                    },
-                )
         else:
             ka_i = ka_list[i - 1]
             prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
@@ -1026,6 +1124,28 @@ def run_chain(
             init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
             fkv, fka = kv, ka_i
             conds = []
+        # ── clip-wise IC-LoRA reference (§1-15, additive) ─────────────────────
+        # THIS segment's window of the long reference, decoded + VAE-encoded right
+        # here (one window per iteration, never pre-batched) and appended to
+        # whatever conditioning the branch above produced — which for i >= 1 is the
+        # empty list that used to make every clip but the first unconditioned.
+        # ``ref_windows is None`` (no reference) leaves every branch above exactly
+        # as it was; clips=1 yields the single (0, clip_frames[0]) window, i.e. the
+        # historical clip-0-only injection. ``None`` from the generator == the
+        # reference ran out: that segment generates WITHOUT one (owner decision:
+        # never an error). The encoded latent stays on the GPU —
+        # VideoConditionByReferenceLatent.apply_to indexes it against the latent
+        # state's device, so a CPU copy would break, not save.
+        if ref_windows is not None:
+            ref_px = next(ref_windows, None)
+            if ref_px is not None:
+                conds = conds + pipe._reference_conditioning_from_pixels(
+                    ref_px,
+                    cond_kwargs=ref_cond_kwargs,
+                    scale=ref_scale,
+                    strength=ref_strength,
+                )
+                del ref_px
         # audio-to-video (additive): override the audio init/freeze with the
         # uploaded audio latent's window for this segment and HARD-freeze that
         # window (audio mask 0.0) over the whole segment. The VIDEO mask is left

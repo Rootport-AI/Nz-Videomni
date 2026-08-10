@@ -21,7 +21,7 @@ from pathlib import Path
 
 from api.errors import reference_video_not_found, upload_invalid_type, upload_too_large
 from config import AppConfig
-from services.video_io import FFmpegError, cut_range_mp4
+from services.video_io import FFmpegError, cut_range_mp4, frame_count
 
 logger = logging.getLogger("ltx.video_upload_store")
 
@@ -95,6 +95,7 @@ class VideoUploadStore:
         filename: str,
         trim_start_sec: float | None = None,
         trim_duration_sec: float | None = None,
+        max_frames: int | None = None,
     ) -> StoredVideo:
         """Store an uploaded video, optionally keeping only one time window of it.
 
@@ -108,6 +109,18 @@ class VideoUploadStore:
         failure (missing binary, unprobeable source, bad window) leaves the
         original upload untouched and simply returns it with ``trimmed=False``
         -- the endpoint never gains a new error response because of trimming.
+
+        ``max_frames`` (§1-15: the 11544f chain-reference upload ceiling) is a
+        SEPARATE, lower-priority mechanism: an explicit trim window always wins
+        (the V2V source-video upload path is unchanged by this parameter). When
+        no trim window applies and ``max_frames`` is given, the stored file's
+        frame count is measured (:func:`services.video_io.frame_count`) and, ONLY
+        if it exceeds ``max_frames``, the first ``max_frames`` frames are cut out
+        the same tmp-then-``os.replace`` way the trim path does. At or under the
+        limit nothing runs -- no re-encode, ``trimmed=False``, byte-identical to
+        the plain store. A failed probe or cut (ffprobe/ffmpeg missing, unreadable
+        source) degrades the same way the trim path does: the untouched original
+        comes back with ``trimmed=False`` rather than a new error response.
         """
         ext = Path(filename).suffix.lower()
         if ext not in self.allowed:
@@ -129,6 +142,15 @@ class VideoUploadStore:
 
         window = _trim_window(trim_start_sec, trim_duration_sec)
         if window is None:
+            if max_frames is not None and int(max_frames) > 0:
+                return self._apply_max_frames(
+                    video_id=video_id,
+                    dest_dir=dest_dir,
+                    dest=dest,
+                    filename=filename,
+                    data=data,
+                    max_frames=int(max_frames),
+                )
             return StoredVideo(
                 video_id=video_id,
                 path=dest,
@@ -170,6 +192,72 @@ class VideoUploadStore:
         finally:
             # Best effort: a leftover temp file is harmless (its "_" prefix keeps
             # it out of path_for's glob) and must never fail the upload.
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError as exc:  # pragma: no cover - defensive
+                logger.warning("could not remove trim temp file %s: %s", tmp, exc)
+
+        return StoredVideo(
+            video_id=video_id,
+            path=final,
+            content_type=content_type,
+            original_filename=filename,
+            size_bytes=size_bytes,
+            trimmed=trimmed,
+        )
+
+    def _apply_max_frames(
+        self,
+        *,
+        video_id: str,
+        dest_dir: Path,
+        dest: Path,
+        filename: str,
+        data: bytes,
+        max_frames: int,
+    ) -> StoredVideo:
+        """§1-15 upload-time frame-count ceiling: keep only the first
+        ``max_frames`` frames of ``dest`` when it has more than that.
+
+        Mirrors the trim path's tmp-then-``os.replace`` swap and its
+        degrade-to-the-untouched-original failure handling (:func:`save`'s
+        docstring), but measures with :func:`services.video_io.frame_count`
+        instead of taking a caller-given window, and does nothing at all
+        (no probe result needed beyond the one comparison, no re-encode) when
+        the upload is already at or under the limit.
+        """
+        ext = dest.suffix.lower()
+        content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
+        final = dest
+        size_bytes = len(data)
+        trimmed = False
+        tmp = dest_dir / _TRIM_TMP_NAME
+        try:
+            total = frame_count(dest)
+            if total > max_frames:
+                info = cut_range_mp4(
+                    dest, tmp, 0.0, 0.0, start_frame=0, num_frames=max_frames
+                )
+                target = dest_dir / "input.mp4"
+                os.replace(tmp, target)
+                if dest != target:
+                    dest.unlink(missing_ok=True)
+                final = target
+                content_type = "video/mp4"
+                size_bytes = final.stat().st_size
+                trimmed = True
+                logger.info(
+                    "max_frames-trimmed uploaded video %s to the first %d frames "
+                    "(had %d) -> frames %s..%s",
+                    video_id, max_frames, total, info["start_frame"], info["end_frame"],
+                )
+        except (FFmpegError, OSError) as exc:
+            logger.warning(
+                "max_frames trim failed for %s (max_frames=%s); storing the "
+                "untrimmed upload instead: %s",
+                video_id, max_frames, exc,
+            )
+        finally:
             try:
                 tmp.unlink(missing_ok=True)
             except OSError as exc:  # pragma: no cover - defensive

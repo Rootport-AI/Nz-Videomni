@@ -2,13 +2,16 @@
 
 Additive to the frozen chain contract: ``GenerateChainRequest.loras`` (same
 ``LoraSpec`` type as ``GenerateRequest.loras``) applies style/character adapters
-uniformly across the whole chain. Control (reference-video) adapters are out of
-chain scope and rejected up front. A chain omitting ``loras`` is byte-identical
-to before.
+uniformly across the whole chain. Control (reference-video) adapters are
+supported on any clip count when paired with a ``reference_video_id`` (owner
+decision 2026-08-11, see tests/test_chain_reference.py for the reference-video
+coverage); WITHOUT one, a control adapter is rejected up front regardless of
+clip count. A chain omitting ``loras`` is byte-identical to before.
 
 Coverage:
   (a) schema — ``loras`` defaults empty, accepts specs, path-like name rejected;
-  (b) endpoint — a control adapter on a chain is 422; a style adapter completes;
+  (b) endpoint — a control adapter on a chain without a reference is 422; a
+      style adapter completes;
   (c) plumbing — the mock e2e records ``loras`` in the request dump, and the real
       backend puts a ``loras`` block on the worker payload (absent when empty);
   (d) stale-clear — ``chain_pipeline.run_chain`` calls ``pipe._set_ic_job`` (with
@@ -149,18 +152,22 @@ def test_chain_loras_in_request_dump_roundtrips():
 # --------------------------------------------------------------- (b) endpoint
 
 
-def test_chain_control_lora_rejected_422(chain_lora_client):
-    """A CONTROL adapter on a MULTI-CLIP chain (clips>=2) is still rejected up
-    front: reference-video IC-LoRA conditioning is only wired into stage-1's
-    clip-0, so a chain of 2+ clips carrying a control adapter is unsupported
-    regardless of whether ``reference_video_id`` is present."""
+def test_chain_control_lora_without_reference_rejected_422(chain_lora_client):
+    """A CONTROL adapter on a MULTI-CLIP chain (clips>=2) WITHOUT a
+    ``reference_video_id`` is still rejected up front -- but as of owner decision
+    2026-08-11 (multi-clip reference support, see tests/test_chain_reference.py),
+    the reason is simply the ordinary "control needs a reference" rule
+    (LORA_REQUIRES_REFERENCE), same as a 1-clip chain or a single /generate. The
+    old clip-count-specific rejection (LORA_CONTROL_UNSUPPORTED_IN_CHAIN) is
+    gone -- a control adapter + reference_video_id together on 2+ clips now
+    completes (see test_chain_reference.test_reference_with_two_clips_accepted)."""
     r = _run_chain(
         chain_lora_client,
         [{"num_frames": 25}, {"num_frames": 25}],
         loras=[{"name": CANNY_LORA, "strength": 1.0}],
     )
     assert r.status_code == 422, r.text
-    assert r.json()["error"]["code"] == "LORA_CONTROL_UNSUPPORTED_IN_CHAIN"
+    assert r.json()["error"]["code"] == "LORA_REQUIRES_REFERENCE"
 
 
 def test_chain_unknown_lora_404(chain_lora_client):

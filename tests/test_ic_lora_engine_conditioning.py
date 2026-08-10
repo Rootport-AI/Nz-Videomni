@@ -112,8 +112,16 @@ def stub_ltx(monkeypatch):
     return cond_mod
 
 
-class _FakePipe:
-    """Minimal object exposing only the attributes the method reads."""
+class _FakePipe(LTXFastVideoPipeline):
+    """Minimal object exposing only the attributes the method reads.
+
+    Subclasses the real class (its ``__init__`` is replaced, so nothing heavy is
+    built) purely so the method under test can reach its own SIBLING helpers:
+    §1-15 B5 split ``_reference_conditioning_for_stage`` into a stage-gate wrapper
+    that delegates to ``_reference_pixel_dims`` + ``_reference_conditioning_from_pixels``
+    (the latter is what the chain path calls per clip). A bare duck type would no
+    longer carry those.
+    """
 
     def __init__(self, attn_strength: float, scale: int = 2) -> None:
         self._ic_reference = ("ref.mp4", 1.0)

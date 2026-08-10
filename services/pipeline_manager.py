@@ -727,6 +727,20 @@ class PipelineManager:
                 self.video_upload_store.path_for(chain.reference_video_id)
                 if chain.reference_video_id else None
             )
+            # §1-15 metadata provenance: the reference upload's actual measured
+            # frame count, best-effort (an ffprobe failure here must not turn a
+            # completed job into a 500 — the job already ran successfully with
+            # whatever the engine itself decoded). Absent entirely when there is
+            # no reference, so a non-reference chain's metadata is unaffected.
+            reference_provenance = None
+            if reference_video_path is not None:
+                reference_provenance = {}
+                try:
+                    reference_provenance["reference_frames_available"] = (
+                        video_io.frame_count(reference_video_path)
+                    )
+                except (video_io.FFmpegError, OSError):
+                    pass
 
             # Console job-info line (owner requirement): base weight + LoRAs +
             # base prompt (clip overrides propagate from it). Mirrors run_job so
@@ -845,6 +859,7 @@ class PipelineManager:
                     chain_meta=meta, v2v_provenance=v2v_provenance,
                     a2v_provenance=a2v_provenance,
                     retake_provenance=retake_provenance,
+                    reference_provenance=reference_provenance,
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
                     keep_resident_used=outcome.keep_resident_used,
@@ -899,6 +914,7 @@ class PipelineManager:
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, retake_provenance=None,
+        reference_provenance=None,
         attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
         fused_gguf_dequant_kernel_used=None, vae_mode_used=None,
@@ -978,6 +994,62 @@ class PipelineManager:
         retake = cm.get("retake")
         if retake is not None:
             metadata["retake"] = {**retake, **(retake_provenance or {})}
+        # §1-15 (clip-wise IC-LoRA reference, additive): only present when a
+        # reference video was actually used, so a normal (or style-loras-only)
+        # chain's metadata key set is byte-unchanged. Mirrors _write_metadata's
+        # single-generate ``ic_lora`` block (same ``loras``/``reference_video_id``/
+        # conditioning_attention_strength/reference_video_strength shape), plus
+        # the geometry that block has no equivalent for: WHICH slice of the one
+        # long reference lands on each stage-1 segment. The mock backend ignores
+        # the reference entirely, so this is the only way a real-device gate can
+        # confirm "clip i actually got the right window" without eyeballing the
+        # video (§1-15 plan, B9).
+        if chain.reference_video_id:
+            ic_lora_block: dict = {
+                "loras": [
+                    _lora_metadata_entry(spec, self.lora_registry) for spec in chain.loras
+                ],
+                "reference_video_id": chain.reference_video_id,
+            }
+            if chain.conditioning_attention_strength is not None:
+                ic_lora_block["conditioning_attention_strength"] = (
+                    chain.conditioning_attention_strength
+                )
+            if chain.reference_video_strength is not None:
+                ic_lora_block["reference_video_strength"] = chain.reference_video_strength
+            # Per-clip reference windows: chain_math.video_segment_windows is a
+            # pure function of clip_frames/fps/kv, all echoed verbatim on the
+            # request, so recomputing it here (rather than threading the
+            # engine's internal ChainLayout through the runner boundary) is
+            # guaranteed to match what chain_pipeline.py actually sliced with.
+            # Reference is mutually exclusive with source_video/retake at the
+            # API layer (api/models.py), so the plain layout (no
+            # source_context_px/retake_glue_px) is always the right one here.
+            try:
+                layout = chain_math.compute_chain_layout(
+                    [c.num_frames for c in chain.clips], chain.frame_rate,
+                    kv=chain.overlap_frames,
+                )
+            except ValueError:
+                # A geometrically impossible request would have 422'd at the API
+                # layer before generation ever ran, so this recomputation cannot
+                # actually fail for a job that got this far -- guarded anyway so
+                # a metadata write is never what turns a finished job into a 500.
+                pass
+            else:
+                windows = chain_math.video_segment_windows(layout)
+                ic_lora_block["reference_segment_windows"] = [list(w) for w in windows]
+                # The reference frame count the windows need in full (the last
+                # window's end + 1 — see video_segment_windows's own docstring).
+                # Compared against reference_provenance's measured
+                # reference_frames_available, this is what tells a reviewer
+                # whether every clip got its reference or the upload ran out
+                # partway (owner-confirmed behaviour: not an error, later
+                # segments just generate unconditioned).
+                ic_lora_block["reference_frames_needed"] = layout.total_px
+            if reference_provenance:
+                ic_lora_block.update(reference_provenance)
+            metadata["ic_lora"] = ic_lora_block
         video_io.save_metadata(metadata_path, metadata)
 
     # ------------------------------------------------------------ finalize

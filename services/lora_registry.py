@@ -77,6 +77,15 @@ class LoraEntryInfo:
     has_thumbnail: bool  # a sibling <stem>.png exists
     source: str  # "config" | "scan"
     exists: bool
+    # §1-15 (clip-wise IC-LoRA reference): the safetensors header's own
+    # ``reference_downscale_factor`` (union-control=2, deblur=1) — the SAME
+    # value ``engine/pipeline``'s ``_ic_reference_downscale_factor`` reads at
+    # generation time (test_ic_lora_engine_conditioning.py), just surfaced here
+    # too so the WebUI can size its stage-1 comfort-budget estimate
+    # (tokenBudget.ts's ``chainStage1Tokens``) BEFORE a job is ever submitted.
+    # None when the header carries no such key (style LoRAs; a config control
+    # entry whose header is missing/unreadable) or the value is unparsable.
+    reference_downscale_factor: float | None = None
 
     def as_dict(self) -> dict:
         """GET /loras row (mirrors ModelEntryInfo.as_dict — no path leak)."""
@@ -86,6 +95,13 @@ class LoraEntryInfo:
             "has_thumbnail": self.has_thumbnail,
             "exists": self.exists,
             "source": self.source,
+            # §1-15 additive fields (both new on GET /loras; an old FE build
+            # simply ignores unknown keys, so this is safe to always include —
+            # unlike webui/src/api/types.ts's LoraEntry.preprocess, which marks
+            # it OPTIONAL only because an OLDER SERVER may omit it, not because
+            # this server ever leaves it out).
+            "preprocess": self.preprocess,
+            "reference_downscale_factor": self.reference_downscale_factor,
         }
 
 
@@ -240,6 +256,7 @@ class LoraRegistry:
         # control adapter regardless of what the header says).
         kind = "control" if preprocess != "none" else "style"
         scale = 1.0
+        ref_downscale: float | None = None
         if exists:
             try:
                 header = _read_safetensors_header(abs_path)
@@ -257,8 +274,13 @@ class LoraRegistry:
                     exc,
                 )
             else:
-                if "reference_downscale_factor" in _metadata(header):
+                md = _metadata(header)
+                if "reference_downscale_factor" in md:
                     kind = "control"
+                    try:
+                        ref_downscale = float(md["reference_downscale_factor"])
+                    except (TypeError, ValueError):
+                        ref_downscale = None
                 scale = _alpha_scale(header)
         return LoraEntryInfo(
             name=name,
@@ -269,6 +291,7 @@ class LoraRegistry:
             has_thumbnail=has_thumbnail,
             source=source,
             exists=exists,
+            reference_downscale_factor=ref_downscale,
         )
 
     # ----------------------------------------------------------------- reads

@@ -687,17 +687,25 @@ class GenerateChainRequest(BaseModel):
     # loras (no exclusivity guard).
     loras: list[LoraSpec] = Field(default_factory=list)
 
-    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE/optional,
-    # ALPHA scope — owner decision 2026-07-11): a chain MAY now carry a
-    # ``reference_video_id`` like a single ``/generate``, but ONLY when the chain
-    # is exactly 1 clip in v1 (a per-clip reference video is out of scope, demoted
-    # to a later research item). Mutually exclusive with ``source_video``: the
-    # frozen V2V source head and a reference-conditioned control adapter would
-    # otherwise compete for clip 0's head. Same type/bounds as
-    # ``GenerateRequest.reference_video_id`` / ``conditioning_attention_strength``
-    # / ``reference_video_strength`` (see there for field-level rationale); the
-    # control-vs-style adapter kind check still needs the registry, so it stays at
-    # the endpoint (api/generate_chain.py), mirroring the single-generate check.
+    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE/optional):
+    # a chain MAY carry a ``reference_video_id`` like a single ``/generate``, on
+    # ANY clip count in 1..24 (owner decision 2026-08-11 — the per-clip-window
+    # v1 scope limit from 2026-07-11 is lifted). One long reference video covers
+    # the WHOLE assembled timeline; the server auto-slices it into per-clip
+    # windows for each stage-1 segment (chain_math.video_segment_windows), so no
+    # per-clip upload exists or is needed. A reference shorter than the timeline
+    # is not an error — segments past the end of the reference simply generate
+    # without one (mirrors the existing A2V "audio runs out" behaviour). The one
+    # exception is a depth-preprocess control adapter (Video-Depth-Anything is a
+    # whole-clip design that cannot be windowed): that combination is still
+    # rejected on >1 clip, at the endpoint (LORA_DEPTH_CHAIN_UNSUPPORTED). Mutually
+    # exclusive with ``source_video``: the frozen V2V source head and a
+    # reference-conditioned control adapter would otherwise compete for clip 0's
+    # head. Same type/bounds as ``GenerateRequest.reference_video_id`` /
+    # ``conditioning_attention_strength`` / ``reference_video_strength`` (see
+    # there for field-level rationale); the control-vs-style adapter kind check
+    # still needs the registry, so it stays at the endpoint
+    # (api/generate_chain.py), mirroring the single-generate check.
     reference_video_id: str | None = None
     conditioning_attention_strength: float | None = Field(None, ge=0.0, le=1.0)
     reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)
@@ -797,11 +805,11 @@ class GenerateChainRequest(BaseModel):
         # control adapter, a chain needs >= 2 clips (a single clip is just
         # /generate) — preserve the pre-V2V rejection. WITH a source_video the
         # frozen source head IS the prior segment, WITH a source_audio a single
-        # clip is the whole timeline, and WITH reference_video_id the chain is
-        # ALPHA-scoped to exactly 1 clip (enforced below), and WITH a retake the
-        # single clip IS the window being repaired — so 1 clip is OK in all four
-        # cases. (Forgetting the retake term here would 422 EVERY retake request
-        # before it reached any of its own validation.)
+        # clip is the whole timeline, WITH reference_video_id a single clip is a
+        # (now legacy, still supported) 1-clip reference-conditioned chain, and
+        # WITH a retake the single clip IS the window being repaired — so 1 clip
+        # is OK in all four cases. (Forgetting the retake term here would 422
+        # EVERY retake request before it reached any of its own validation.)
         if (
             self.source_video is None
             and self.source_audio is None
@@ -932,17 +940,28 @@ class GenerateChainRequest(BaseModel):
                 f"cap {MAX_CHAIN_TOTAL_PIXEL_FRAMES} (reduce clip count or lengths)"
             )
 
-        # Reference-video CONTROL IC-LoRA (alpha, clips=1 only): mirrors
+        # Reference-video CONTROL IC-LoRA: mirrors
         # GenerateRequest.validate_ltx_constraints (api/models.py:173-188) plus the
-        # v1 clip-count cap and the V2V exclusivity below. The reverse still holds
-        # unconditionally: a reference video only ever conditions a lora.
+        # V2V exclusivity below. The reverse still holds unconditionally: a
+        # reference video only ever conditions a lora.
         if self.reference_video_id and not self.loras:
             raise ValueError(
                 "reference_video_id requires at least one lora (the reference "
                 "video only conditions an IC-LoRA)"
             )
-        if self.reference_video_id and len(self.clips) != 1:
-            raise ValueError("reference_video_id requires exactly 1 clip in v1")
+
+        # A reference video accepts 1..24 clips (multi-clip chain support). The
+        # old "exactly 1 clip in v1" guard was a v1 scope limit, not a geometric
+        # one; it is gone (owner decision 2026-08-11 — mirrors the A2V clip-count
+        # note above). A long reference video is ONE upload spanning the whole
+        # assembled timeline; chain_math.video_segment_windows hands each
+        # stage-1 segment its own pixel-frame window on that reference (segments
+        # past the end of a too-short reference just generate without one — no
+        # error). The only remaining clip-count restriction is depth-preprocess
+        # control adapters on >1 clip, enforced at the endpoint
+        # (api/generate_chain.py) where the adapter's registry entry is
+        # resolved, not here.
+
         # IC-LoRA control-adjustability fields only apply to a lora job.
         if self.conditioning_attention_strength is not None and not self.loras:
             raise ValueError(

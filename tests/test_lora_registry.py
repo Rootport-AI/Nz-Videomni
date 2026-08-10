@@ -166,6 +166,70 @@ def test_scan_name_collision_retreats_to_parent(tmp_path):
     assert reg.info("loras__clash").source == "scan"
 
 
+# --------------------------------------------------------------------------- #
+# §1-15: reference_downscale_factor + preprocess exposed via as_dict()
+# --------------------------------------------------------------------------- #
+
+def test_as_dict_exposes_reference_downscale_factor_and_preprocess(tmp_path):
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(
+        lora_dir / "union-control.safetensors",
+        metadata={"reference_downscale_factor": "2"},
+    )
+    reg = LoraRegistry(
+        _config(
+            tmp_path,
+            ic_loras={
+                "canny-control": {
+                    "path": str(lora_dir / "union-control.safetensors"),
+                    "preprocess": "canny",
+                }
+            },
+            lora_dir=lora_dir,
+        )
+    )
+    row = reg.info("canny-control").as_dict()
+    assert row["preprocess"] == "canny"
+    assert row["reference_downscale_factor"] == pytest.approx(2.0)
+
+
+def test_as_dict_reference_downscale_factor_none_for_style_lora(tmp_path):
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(lora_dir / "Pixar_Toon.safetensors", metadata={"x": "1"})
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    row = reg.info("Pixar_Toon").as_dict()
+    assert row["preprocess"] == "none"
+    assert row["reference_downscale_factor"] is None
+
+
+def test_as_dict_reference_downscale_factor_one_for_deblur_style_adapter(tmp_path):
+    """Deblur needs no preprocessing (preprocess="none", a plain string config
+    entry) but its header still carries reference_downscale_factor=1, and that
+    value must survive even though it doesn't affect ``kind`` (already
+    "control" via the metadata key's mere presence)."""
+    lora_dir = tmp_path / "loras"
+    weight = _write_safetensors(
+        lora_dir / "deblur.safetensors", metadata={"reference_downscale_factor": "1"}
+    )
+    reg = LoraRegistry(_config(tmp_path, ic_loras={"deblur": str(weight)}, lora_dir=lora_dir))
+    row = reg.info("deblur").as_dict()
+    assert row["kind"] == "control"
+    assert row["preprocess"] == "none"
+    assert row["reference_downscale_factor"] == pytest.approx(1.0)
+
+
+def test_reference_downscale_factor_unparsable_is_none(tmp_path):
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(
+        lora_dir / "weird.safetensors",
+        metadata={"reference_downscale_factor": "not-a-number"},
+    )
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    info = reg.info("weird")
+    assert info.kind == "control"  # key presence alone still drives kind
+    assert info.reference_downscale_factor is None  # but the value itself is unusable
+
+
 def test_config_preprocess_is_control_even_without_metadata(tmp_path):
     """A config dict entry with preprocess != none is control regardless of what
     (if anything) the header says — and a broken-header config entry is KEPT."""

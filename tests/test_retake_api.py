@@ -106,15 +106,49 @@ def test_two_clip_chain_without_any_source_still_requires_two_clips(client):
         # clip count
         ([{"num_frames": 169}, {"num_frames": 169}], {"retake": _retake()},
          "retake requires exactly 1 clip"),
-        # stage-2 window
+        # stage-2 window: no longer refused outright -- the WINDOW ceiling
+        # narrows to retake_max_window_px(19) = 145 instead, so the 169 that is
+        # legal on the standard preset is now rejected by the length bound.
         ([{"num_frames": 169}], {"retake": _retake(), "stage2_window": "high_resolution"},
-         "retake requires stage2_window='standard'"),
+         "[73, 145]"),
     ],
 )
 def test_422_matrix(client, clips, over, needle):
     r = _post(client, clips, **over)
     assert r.status_code == 422, r.text
     assert needle in r.text, r.text
+
+
+# ── the retake window ceiling follows the stage-2 window preset ─────────────
+# chain_math.retake_max_window_px(v_tile): 169 for "standard" (v_tile=22), 145
+# for "high_resolution" (v_tile=19). The invariant is unchanged -- the window is
+# still refined as ONE stage-2 tile -- but it is enforced by BOUNDING the window
+# per preset rather than by refusing the combination outright.
+@pytest.mark.parametrize(
+    "frames, window, accepted, needle",
+    [
+        (169, "standard", True, None),
+        (177, "standard", False, "[73, 169]"),
+        (145, "high_resolution", True, None),
+        # 8n+1 steps, so 146 is not expressible: 153 is the first over the bar.
+        (153, "high_resolution", False, "[73, 145]"),
+        (73, "high_resolution", True, None),       # the floor is preset-independent
+        (65, "high_resolution", False, "[73, 145]"),
+    ],
+)
+def test_window_ceiling_follows_the_stage2_window_preset(
+    client, frames, window, accepted, needle
+):
+    r = _post(client, [{"num_frames": frames}],
+              retake=_retake(), stage2_window=window)
+    if accepted:
+        # Geometry passed; the request then dies on the unknown video_id, which
+        # is exactly as far as this test needs it to get (no upload, no mock run).
+        assert r.status_code == 404, r.text
+        assert "RETAKE_VIDEO_NOT_FOUND" in r.text
+    else:
+        assert r.status_code == 422, r.text
+        assert needle in r.text, r.text
 
 
 def test_negative_window_start_is_rejected(client):
@@ -185,6 +219,35 @@ def test_mock_e2e_delivers_the_whole_window_and_the_metadata_contract(client, tm
     # the cut window is kept next to the output as provenance
     assert (out_dir / "_retake_window.mp4").exists()
     assert video_io.frame_count(out_dir / "_retake_window.mp4") == 169
+
+
+@pytest.mark.skipif(not _HAS_FFMPEG, reason="ffmpeg/ffprobe not on PATH")
+def test_mock_e2e_runs_a_145f_window_on_the_narrow_stage2_window(client, tmp_path):
+    """The newly-allowed combination all the way through the mock backend: the
+    145-frame ceiling of stage2_window="high_resolution" still refines as ONE
+    stage-2 tile, and the delivered window is the whole 145 frames."""
+    vid = _upload_window_source(client, tmp_path)
+    r = _post(client, [{"num_frames": 145}],
+              retake=_retake(video_id=vid, window_start_sec=1.0),
+              stage2_window="high_resolution")
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    out_dir = ctx.config.output_dir / job_id
+    meta = json.loads((out_dir / "metadata.json").read_text("utf-8"))
+    assert meta["chain"]["stage2_window"] == "high_resolution"
+    assert meta["chain"]["v_tile"] == 19
+    # ONE stage-2 tile -- the whole point of the per-preset ceiling.
+    assert len(meta["chain"]["video_tiles"]) == 1
+    rt = meta["retake"]
+    assert (rt["window_px"], rt["head_px"], rt["tail_px"]) == (145, 25, 24)
+    assert rt["free_middle_px"] == [25, 121]
+    assert rt["decoded_frames_px"] == 145
+
+    from services import video_io
+    assert video_io.frame_count(out_dir / "output.mp4") == 145
 
 
 @pytest.mark.skipif(not _HAS_FFMPEG, reason="ffmpeg/ffprobe not on PATH")

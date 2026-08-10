@@ -883,19 +883,21 @@ class GenerateChainRequest(BaseModel):
                     'or switch stage2_window back to "standard".'
                 )
 
-        # Retake x non-default window: a retake window is refined as ONE stage-2
-        # tile, which is the only geometry the both-side freeze was validated
-        # under (VERIFICATION_LOG §55.2/§55.3). The narrower "high_resolution"
-        # window would split a 169-frame window into 2 tiles and the frozen tail
-        # would then only cover the LAST tile — a silent quality failure, so the
-        # combination is refused outright rather than quietly re-bounded.
-        if self.retake is not None and self.stage2_window != "standard":
-            raise ValueError(
-                f"retake requires stage2_window='standard' (got "
-                f"{self.stage2_window!r}): the retake window must be refined as a "
-                "single stage-2 window, and the narrower one would split it in "
-                "two so the frozen tail covered only the final piece."
-            )
+        # Retake x non-default window: ALLOWED. The invariant is unchanged — a
+        # retake window must still be refined as ONE stage-2 tile, which is the
+        # only geometry the both-side freeze was validated under
+        # (VERIFICATION_LOG §55.2/§55.3) — but it is now enforced by BOUNDING the
+        # window instead of refusing the combination: compute_chain_layout below
+        # checks the window against chain_math.retake_max_window_px(v_tile), i.e.
+        # 169 for "standard" (v_tile=22) and 145 for "high_resolution"
+        # (v_tile=19). ``stage2_v_tile`` is resolved above and passed in, so that
+        # bound follows the request's own preset. A 169-frame window under
+        # "high_resolution" — the case the old blanket 422 existed to stop,
+        # because it would split into 2 tiles and freeze only the last one — is
+        # therefore still a 422, now with the concrete ceiling in the message.
+        # config.limits.retake_window_{min,max}_frames keeps publishing the
+        # STANDARD-preset numbers; a client that offers the narrower window is
+        # responsible for mirroring the 145 ceiling (see config.py).
 
         try:
             layout = chain_math.compute_chain_layout(
@@ -907,9 +909,11 @@ class GenerateChainRequest(BaseModel):
                     self.source_video.context_frames if self.source_video else None
                 ),
                 # Window length + glue-band geometry (8n+1 window in
-                # [73, 169], head/tail grids, a free middle in BOTH latent
-                # domains) is validated THERE, so the validator, the engine and
-                # the mock cannot disagree. Its ValueError surfaces as 422.
+                # [73, retake_max_window_px(v_tile)] — 169 for "standard", 145
+                # for "high_resolution" — head/tail grids, a free middle in BOTH
+                # latent domains) is validated THERE, so the validator, the
+                # engine and the mock cannot disagree. Its ValueError surfaces
+                # as 422.
                 retake_glue_px=(
                     None if self.retake is None
                     else (self.retake.head_px, self.retake.tail_px)

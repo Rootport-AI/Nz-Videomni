@@ -1327,6 +1327,8 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 4. **その他パリティ項目（段階的）**: 生成キュー（逐次・cancel）／延長尺（〜30s）／プロンプト強化（**text-only 版のみ**＝T2V 用）／STG・sigma schedule・denoise loop・negative・seed lock 等の露出／空間アップスケーラのユーザー操作露出／LoRA 再導入（de-fork で削除済のため）／attention tiling 再導入。
 
 > **→ 進捗追記（2026-07-11 時点）**: 上記 1（多キーフレーム・任意 frame_idx・複数条件・per-item strength の露出）と 2（クリップ連結＝`POST /generate/chain`）は**実装済み**。4 のうち「LoRA 再導入」も**実装済み**（IC-LoRA＋画風/キャラクターのスタイル LoRA。`GET /loras`／`<lora:...>` 記法／チェーンへの `loras` 加算＝VERIFICATION_LOG §32）。本節は起票当時のロードマップ記録として残す。
+>
+> **→ 進捗追記（2026-08-10 時点）**: 3のRetakeは2026-08-09〜10に実装済み（`Docs/VERIFICATION_LOG.md` §55系）。Gap Fillは未着手。
 
 ### 13.4b Phase 4 — 高度な条件付け（IC-LoRA / V2V）
 

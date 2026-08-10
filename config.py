@@ -260,13 +260,20 @@ class LimitsConfig(BaseModel):
     v2v_context_frames_max: int = 145
     # Retake window length (POST /generate/chain, clips[0].num_frames when a
     # ``retake`` block is present). Published via /config so a UI can bound its
-    # window control. 8n+1 like every other frame count. COUPLED TO THE DEFAULT
-    # STAGE-2 WINDOW: 169 == chain_math.retake_max_window_px(STAGE2_V_TILE=22),
-    # i.e. the largest window that still refines as ONE stage-2 window. If retake
-    # is ever allowed with stage2_window="high_resolution" (v_tile=19), the real
-    # ceiling drops to 145 and these fixed numbers stop matching — which is why
-    # that combination is a 422 today. The geometry truth stays in chain_math;
-    # these two only publish the standard-preset numbers.
+    # window control. 8n+1 like every other frame count. THESE TWO PUBLISH THE
+    # "standard" STAGE-2 WINDOW'S NUMBERS: 169 ==
+    # chain_math.retake_max_window_px(STAGE2_V_TILE=22), the largest window that
+    # still refines as ONE stage-2 window.
+    #
+    # The ceiling is NOT a constant any more: retake is allowed with
+    # stage2_window="high_resolution" (v_tile=19), where the real ceiling drops
+    # to retake_max_window_px(19) = 145. The server enforces the per-preset
+    # bound in chain_math.compute_chain_layout (a longer window is a 422 naming
+    # the concrete ceiling); a CLIENT that offers the narrower window must
+    # mirror the same 8*v_tile-7 formula for its own slider bound rather than
+    # trusting retake_window_max_frames unconditionally. The floor (73) is
+    # preset-independent — it is a quality bound, not a geometric one. The
+    # geometry truth stays in chain_math.
     retake_window_min_frames: int = 73
     retake_window_max_frames: int = 169
 

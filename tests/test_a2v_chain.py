@@ -329,6 +329,69 @@ def test_a2v_allows_clip0_conditioning(client, tmp_path, png_bytes):
     assert job["status"] == "completed", job
 
 
+# ------------------------------------------------- (e2) full_length window §1-19
+
+
+def test_a2v_full_length_window_mock_e2e(client, tmp_path):
+    """The a2v window: ``stage2_window="full_length"`` (61/61 -> kt_v 0) turns a
+    481-frame single-clip A2V chain into ONE stage-2 tile over the whole
+    timeline — no tile seam at all, i.e. the same refine pass plain
+    ``POST /generate`` does. 481f @24fps -> 61 latent frames -> a_total=501
+    (20.04s), so the uploaded audio must be at least that long."""
+    layout = chain_math.compute_chain_layout(
+        [481], 24.0, kv=2, v_tile=61, v_adv=61
+    )
+    assert (layout.f_total, layout.total_px, layout.n_tiles) == (61, 481, 1)
+
+    wav = _make_wav(tmp_path / "full.wav", seconds=21.0, sr=16000, channels=1)
+    aid = _upload_audio(client, wav)
+
+    r = _run_chain(
+        client, [{"num_frames": 481}],
+        source_audio={"audio_id": aid}, stage2_window="full_length",
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    chain_meta = meta["chain"]
+    assert chain_meta["stage2_window"] == "full_length"
+    assert chain_meta["v_tile"] == 61
+    assert chain_meta["kt_v"] == 0
+    assert chain_meta["n_tiles"] == 1
+    assert chain_meta["video_tiles"] == [[0, 61]]
+    # The whole point: a seamless timeline.
+    assert chain_meta["tile_seam_junctions"] == []
+    assert meta["a2v"]["a_total"] == layout.a_total
+
+
+def test_a2v_default_window_is_still_the_tiled_one(client, tmp_path):
+    """Non-regression baseline for the above: an A2V request that does NOT send
+    ``stage2_window`` keeps the frozen 22/18 tiled window (the new preset is
+    opt-in on the wire, even though the WebUI/Gradio now always send it)."""
+    wav = _make_wav(tmp_path / "plain.wav", seconds=21.0, sr=16000, channels=1)
+    aid = _upload_audio(client, wav)
+
+    r = _run_chain(client, [{"num_frames": 481}], source_audio={"audio_id": aid})
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["chain"]["stage2_window"] == "standard"
+    assert meta["chain"]["v_tile"] == 22
+    assert meta["chain"]["kt_v"] == 4
+    assert meta["chain"]["n_tiles"] > 1
+
+
 # ---------------------------------------------------------------- (f) geometry
 
 

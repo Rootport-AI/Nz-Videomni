@@ -732,7 +732,16 @@ class GenerateChainRequest(BaseModel):
     # is what renders it as seconds for the frame rate actually chosen.
     # chain_math.STAGE2_WINDOW_PRESETS is the single source of truth for the
     # numbers behind each name.
-    stage2_window: Literal["standard", "high_resolution"] = "standard"
+    #
+    # "full_length" (61/61 -> kt_v 0) is the a2v (audio-to-video) window (§1-19):
+    # 61 latent frames == 481 pixel frames == the ChainClip.num_frames ceiling, so
+    # a ONE-clip chain always fits in a SINGLE stage-2 tile and its stage-2 becomes
+    # exactly what plain POST /generate does — no tile seam anywhere on the
+    # timeline. It is restricted below to 1 clip + source_audio, the shape the
+    # Single/Batch a2v flow builds. It deliberately does NOT bound how long that
+    # clip may comfortably be: that axis is config.limits.spill_free_frames (the
+    # per-resolution comfortable frame cap the server publishes), not this one.
+    stage2_window: Literal["standard", "high_resolution", "full_length"] = "standard"
 
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
@@ -876,6 +885,33 @@ class GenerateChainRequest(BaseModel):
         # default resolves to the same (22, 18) compute_chain_layout would have
         # used on its own, so an omitted stage2_window is byte-identical.
         stage2_v_tile, stage2_v_adv = chain_math.resolve_stage2_window(self.stage2_window)
+
+        # "full_length" (the zero-overlap, single-tile a2v window, §1-19) is only
+        # geometrically valid on the shape the a2v flow builds. Two independent
+        # checks, each with its own message, so the 422 says which one failed.
+        if self.stage2_window == chain_math.STAGE2_WINDOW_FULL_LENGTH:
+            if len(self.clips) != 1:
+                raise ValueError(
+                    f'stage2_window="full_length" requires exactly 1 clip (got '
+                    f"{len(self.clips)}): the window spans the WHOLE timeline as "
+                    "one stage-2 tile, which only fits inside the 481-frame "
+                    "per-clip ceiling when there is a single clip"
+                )
+            if self.source_audio is None:
+                # Scope limit, not geometry: a 1-clip chain without audio would
+                # tile fine, but the window is unlocked for the a2v flow only
+                # (owner decision §1-19). THIS is the line to delete if a
+                # non-A2V single-clip chain ever wants the same whole-timeline
+                # stage-2.
+                raise ValueError(
+                    'stage2_window="full_length" requires source_audio (it is '
+                    "the audio-to-video window; every other chain shape keeps "
+                    'the tiled "standard" window)'
+                )
+            # No source_video / retake exclusivity check here on purpose: both
+            # are ALREADY mutually exclusive with source_audio further up (the
+            # source_audio x source_video pair and the retake x source_audio
+            # pair), so those combinations 422 before reaching this block.
 
         # V2V x non-default window: the frozen source head must leave stage-2
         # TILE 0 something to generate. The public

@@ -435,10 +435,20 @@ def build_a2v_chain_payload(
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
-    distilled quality contract, ``overlap_frames=3``/``overlap_strength=0.5``, and
-    ``source_audio.audio_id``. A pure function (primitives + ID strings in, dict
-    out) with NO Gradio / gr.* / ApiClient dependency, so the batch runner can
-    build the byte-identical payload off the UI thread.
+    distilled quality contract, ``overlap_frames=3``/``overlap_strength=0.5``,
+    ``source_audio.audio_id`` and the ``stage2_window``. A pure function
+    (primitives + ID strings in, dict out) with NO Gradio / gr.* / ApiClient
+    dependency, so the batch runner can build the byte-identical payload off the
+    UI thread.
+
+    ``stage2_window`` is ALWAYS ``"full_length"`` here (§1-19): a2v is a one-clip
+    chain, and 61 latent frames == 481 pixel frames == the per-clip ceiling, so
+    that window degenerates to a single stage-2 tile and the refine pass covers
+    the whole timeline exactly like plain ``POST /generate``. Unlike every
+    optional key below, this one is NOT the API's default ("standard"), so it is
+    unconditional and always present — the a2v body is deliberately no longer
+    byte-identical to the pre-§1-19 one, and the exact-match tests in
+    tests/test_gradio_handlers.py carry it.
 
     Optional keys reproduce the Generate-tab A2V branch exactly: ``conditioning_images``
     only when non-empty, ``loras`` only when the combined list is non-empty, and
@@ -475,6 +485,8 @@ def build_a2v_chain_payload(
     the default" rule. Its default ("default") never changes (owner ruling
     0-11: no later default-flip step for this one, unlike the toggles above),
     so the key rides only when the pruned decoder ("prune_vaed") is chosen."""
+    import chain_math   # same function-local import style as the helpers above
+
     clip_entry: dict = {"num_frames": int(num_frames)}
     if conditioning_images:
         clip_entry["conditioning_images"] = conditioning_images
@@ -493,6 +505,7 @@ def build_a2v_chain_payload(
         "overlap_strength": 0.5,
         "clips": [clip_entry],
         "source_audio": {"audio_id": audio_id},
+        "stage2_window": chain_math.STAGE2_WINDOW_FULL_LENGTH,
     }
     if loras:
         chain_payload["loras"] = loras

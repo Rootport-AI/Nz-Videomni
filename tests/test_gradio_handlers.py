@@ -2543,6 +2543,12 @@ def test_a2v_msg_frames_adjusted_i18n_keys_present():
 # so these lock the exact keys + key ORDER + the optional-key gating (loras only
 # when non-empty, conditioning_images only when present, reference_* only under
 # an adapter and each strength only below 1.0).
+#
+# ``stage2_window`` is the one NON-optional addition (§1-19): a2v is always a
+# one-clip chain, so it always asks for the "full_length" window. It is not the
+# API's default ("standard"), so unlike every gated key above it rides on EVERY
+# a2v body, last in the base dict — right after ``source_audio`` and therefore
+# BEFORE ``loras`` / the reference keys.
 # --------------------------------------------------------------------------- #
 def test_build_a2v_chain_payload_minimal_no_loras_no_ref_no_cond():
     from gradio_ui.handlers import build_a2v_chain_payload
@@ -2576,6 +2582,7 @@ def test_build_a2v_chain_payload_minimal_no_loras_no_ref_no_cond():
         "overlap_strength": 0.5,
         "clips": [{"num_frames": 113}],
         "source_audio": {"audio_id": "aud-1"},
+        "stage2_window": "full_length",
     }
     # Optional keys must be entirely absent on the byte-identical baseline path.
     assert "loras" not in payload
@@ -2586,6 +2593,7 @@ def test_build_a2v_chain_payload_minimal_no_loras_no_ref_no_cond():
         "prompt", "negative_prompt", "width", "height", "crop_output",
         "frame_rate", "num_inference_steps", "guidance_scale", "seed",
         "pipeline", "overlap_frames", "overlap_strength", "clips", "source_audio",
+        "stage2_window",
     ]
 
 
@@ -2629,8 +2637,9 @@ def test_build_a2v_chain_payload_adds_loras_only_when_non_empty():
         loras=loras,
     )
     assert payload["loras"] == loras
-    # loras is appended AFTER source_audio (last of the base dict).
+    # loras is appended AFTER the base dict, whose last key is stage2_window.
     assert list(payload.keys())[-1] == "loras"
+    assert list(payload.keys())[-2] == "stage2_window"
     assert "reference_video_id" not in payload
 
 
@@ -2712,6 +2721,33 @@ def test_build_a2v_chain_payload_coerces_numeric_types():
     assert payload["seed"] == 9
     # negative_prompt=None coalesces to "" exactly like the handler branch.
     assert payload["negative_prompt"] == ""
+
+
+def test_build_a2v_chain_payload_always_requests_the_full_length_window():
+    """§1-19: a2v is a one-clip chain, so its stage-2 always runs as ONE tile
+    over the whole timeline (61/61) instead of the 22/18 tiling. The key is
+    unconditional — it is NOT the API default, so it has to be on the wire — and
+    it sits immediately after ``source_audio``, i.e. last in the base dict."""
+    import chain_math
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-7",
+        num_frames=481,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=320,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=3,
+    )
+    assert payload["stage2_window"] == "full_length"
+    # The value comes from chain_math, not a literal in the builder.
+    assert payload["stage2_window"] == chain_math.STAGE2_WINDOW_FULL_LENGTH
+    keys = list(payload.keys())
+    assert keys[keys.index("source_audio") + 1] == "stage2_window"
+    assert keys[-1] == "stage2_window"
 
 
 # --------------------------------------------------------------------------- #

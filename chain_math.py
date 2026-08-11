@@ -59,14 +59,37 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 #       chain of the same length gets MORE seams — hence opt-in, not default.
 #       See Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §1 and
 #       outputs/stage2_window_sweep/SWEEP_RESULTS.md.
+#   "full_length"     (61, 61) -> kt_v 0, i.e. NO のり代 and no seam at all.
+#       61 latent frames == 481 pixel frames == the hard per-clip ceiling
+#       (``ChainClip.num_frames <= 481``), so on a ONE-clip chain f_total can
+#       never exceed 61 and the tiler degenerates to a SINGLE tile covering the
+#       whole timeline. That makes stage-2 here exactly what plain ``POST
+#       /generate`` does — one refine pass over everything — which is the point:
+#       the Single/Batch a2v (audio-to-video) flow IS a one-clip chain, so this
+#       window makes its stage-2 equivalent to the single-shot one (§1-19). It
+#       is for that flow only: api/models.py enforces exactly 1 clip plus a
+#       source_audio before it can be selected.
 #
-# BOTH advances are multiples of 3, which is what keeps the 24fps video/audio
-# advance rounding exact. A future preset MUST honour that too.
+# The advance of a preset that can produce TWO OR MORE tiles (kt_v > 0) MUST be
+# a multiple of 3: that is what keeps the 24fps video/audio advance rounding
+# exact ACROSS A TILE SEAM. "full_length" is exempt because it cannot have a
+# seam — it degenerates to one tile, so it never enters the ``n_tiles > 1``
+# audio-reassembly checks below, and ``kt_a`` / ``audio_adv`` are read by
+# chain_pipeline.py only from its ``i >= 1`` tile branch (and from ``i *
+# audio_adv``, which is 0 for the lone tile i=0). Its ``kt_a`` is in fact
+# NEGATIVE at 24fps (audio_adv=508 vs a_len_full=501 -> kt_a=-7; the value is
+# fps-dependent) and that is inert for exactly those reasons. Any NEW preset
+# with kt_v > 0 must still honour the multiple-of-3 rule.
 STAGE2_WINDOW_PRESETS: dict[str, tuple[int, int]] = {
     "standard": (22, 18),
     "high_resolution": (19, 12),
+    "full_length": (61, 61),
 }
 STAGE2_WINDOW_DEFAULT = "standard"
+# The zero-overlap, single-tile window above, by name. Callers that need to
+# compare against it (api/models.py's clip-count + source_audio guard, the
+# Gradio A2V payload builder) MUST use this constant rather than the literal.
+STAGE2_WINDOW_FULL_LENGTH = "full_length"
 
 STAGE2_V_TILE, STAGE2_V_ADV = STAGE2_WINDOW_PRESETS[STAGE2_WINDOW_DEFAULT]
 STAGE2_KT_V = STAGE2_V_TILE - STAGE2_V_ADV   # 4
@@ -480,6 +503,12 @@ def compute_chain_layout(
     8n+1 grid, head 8n+1 / tail multiple-of-8, a free middle in BOTH the video
     and the audio latent domains, and the ``n_tiles == 1`` invariant the both-side
     freeze was validated under). ``None`` -> byte-identical to before.
+
+    A ZERO-のり代 window (``v_adv == v_tile``, i.e. ``kt_v == 0`` — currently only
+    the "full_length" preset) is SINGLE-TILE ONLY: with no overlap between tiles
+    there is nothing to hard-freeze and blend at a seam, so a timeline long
+    enough to need a second tile raises ValueError below. That guard is what
+    keeps "full_length" honest no matter which caller resolved the preset.
     """
     n = len(clip_frames)
     if n < 1:
@@ -628,6 +657,26 @@ def compute_chain_layout(
         ve = min(vs + v_tile, f_total)
         v_tiles.append((vs, ve - vs))
     n_tiles = len(v_tiles)
+    # Zero-のり代 window (kt_v == 0, i.e. the "full_length" preset): tile i>=1's
+    # leading overlap is what gets hard-frozen and blended, so with NO overlap a
+    # second tile would butt straight onto the first with nothing shared — a
+    # visible cut, not a seam. Such a window is only ever valid when it
+    # degenerates to ONE tile.
+    # A user-facing ValueError, NOT an assert: api/models.py rejects the
+    # combination first (422), but the preset NAME reaches this function from
+    # other, non-API paths too — the Gradio precheck/label helpers
+    # (gradio_ui/validation.py:44, gradio_ui/presets.py:260,309) take it as a
+    # plain argument — so a well-behaved exception (which the API layer turns
+    # into a 422 anyway) is the right shape, not an internal invariant crash.
+    if kt_v == 0 and n_tiles > 1:
+        raise ValueError(
+            f"zero-overlap stage-2 window (v_tile={v_tile}, v_adv={v_adv}, "
+            f"kt_v=0) produced {n_tiles} tiles for f_total={f_total} "
+            f"({total_px} pixel frames): the \"full_length\" window is for ONE "
+            "tile only (a single clip of at most 61 latent = 481 pixel frames), "
+            "because with no のり代 there is nothing to freeze and blend at a "
+            "tile seam"
+        )
     # Retake's whole reason for a window cap: the both-side freeze was only ever
     # validated on a SINGLE stage-2 tile (VERIFICATION_LOG §55.2). The window
     # bound above is derived from exactly this, so a failure here means the

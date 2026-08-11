@@ -22,24 +22,41 @@ from api.models import GenerateChainRequest
 
 # ── preset table ─────────────────────────────────────────────────────────────
 def test_preset_table_contents_and_derived_overlap():
-    """The two presets and their DERIVED overlap (kt_v = v_tile - v_adv)."""
+    """The three presets and their DERIVED overlap (kt_v = v_tile - v_adv)."""
     assert chain_math.STAGE2_WINDOW_PRESETS == {
         "standard": (22, 18),
         "high_resolution": (19, 12),
+        "full_length": (61, 61),
     }
     assert chain_math.STAGE2_WINDOW_DEFAULT == "standard"
     kt = {name: v_tile - v_adv
           for name, (v_tile, v_adv) in chain_math.STAGE2_WINDOW_PRESETS.items()}
     # standard keeps the S2-spike 4-frame overlap; high_resolution is the
-    # follow-up run's wider 7-frame overlap ("のり代7").
-    assert kt == {"standard": 4, "high_resolution": 7}
+    # follow-up run's wider 7-frame overlap ("のり代7"); full_length has NO
+    # overlap because it has no seam to overlap across (§1-19).
+    assert kt == {"standard": 4, "high_resolution": 7, "full_length": 0}
 
 
-def test_every_preset_advance_is_a_multiple_of_three():
+def test_every_multi_tile_preset_advance_is_a_multiple_of_three():
     """The 24fps video/audio advance rounding is only exact when the stage-2
-    advance is a multiple of 3 — a guard for any FUTURE preset added here."""
-    for name, (_v_tile, v_adv) in chain_math.STAGE2_WINDOW_PRESETS.items():
+    advance is a multiple of 3 — a guard for any FUTURE preset added here.
+
+    The rule is about the ROUNDING AGREEING ACROSS A TILE SEAM, so it applies to
+    presets that can actually produce two or more tiles (kt_v > 0). A window
+    with kt_v == 0 degenerates to a single tile — it can never have a seam — so
+    it is exempt; ``test_full_length_kt_a_is_negative_and_inert`` records what
+    its (unused) audio numbers come out as."""
+    exempt: set[str] = set()
+    for name, (v_tile, v_adv) in chain_math.STAGE2_WINDOW_PRESETS.items():
+        if v_tile - v_adv == 0:
+            exempt.add(name)
+            continue
         assert v_adv % 3 == 0, f"preset {name!r} advance {v_adv} is not a multiple of 3"
+    # Pin WHICH presets take the exemption, so it cannot quietly widen: only
+    # full_length, and only because its advance equals its tile size.
+    assert exempt == {"full_length"}
+    v_tile, v_adv = chain_math.STAGE2_WINDOW_PRESETS["full_length"]
+    assert v_adv == v_tile
 
 
 def test_module_constants_are_the_standard_preset():
@@ -598,3 +615,168 @@ def test_api_rejects_v2v_high_resolution_over_ceiling(client):
         **_V2V_CHAIN, "stage2_window": "high_resolution",
     })
     assert response.status_code == 422, response.text
+
+
+# ── full_length (§1-19) ─────────────────────────────────────────────────────
+# The a2v window: 61/61 -> kt_v 0, i.e. NO のり代 and therefore no tile seam.
+# 61 latent frames == 481 pixel frames == ChainClip.num_frames's own ceiling, so
+# on a ONE-clip chain the tiler always degenerates to a single tile spanning the
+# whole timeline — stage-2 becomes exactly what plain POST /generate does.
+_A2V_FULL = {
+    "prompt": "a woman speaking",
+    "width": 512,
+    "height": 320,
+    "frame_rate": 24.0,
+    "clips": [{"num_frames": 481}],
+    "source_audio": {"audio_id": "aud_1"},
+    "stage2_window": "full_length",
+}
+
+
+def test_resolve_stage2_window_full_length():
+    assert chain_math.resolve_stage2_window("full_length") == (61, 61)
+    assert chain_math.STAGE2_WINDOW_FULL_LENGTH == "full_length"
+    assert chain_math.STAGE2_WINDOW_PRESETS[chain_math.STAGE2_WINDOW_FULL_LENGTH] == (61, 61)
+    # It is NOT the default — an omitted window is still the tiled 22/18 one.
+    assert chain_math.STAGE2_WINDOW_DEFAULT != chain_math.STAGE2_WINDOW_FULL_LENGTH
+
+
+def test_full_length_layout_is_one_tile_over_the_whole_timeline():
+    """481 pixel frames (the per-clip maximum) @24fps -> 61 latent frames, which
+    is exactly the window: ONE tile, no tile seam anywhere."""
+    layout = chain_math.compute_chain_layout([481], 24.0, kv=3, v_tile=61, v_adv=61)
+    assert (layout.v_tile, layout.v_adv, layout.kt_v) == (61, 61, 0)
+    assert layout.f_total == 61
+    assert layout.total_px == 481
+    assert layout.n_tiles == 1
+    assert layout.v_tiles == [(0, 61)]
+    assert layout.tile_seam_junctions == []
+    # A single clip has no segment seam either, so the whole junction list — the
+    # thing the mock/metadata publish — is empty: a seamless timeline.
+    assert layout.segment_seam_junctions == []
+    assert layout.all_junctions == []
+    # ONE audio tile spanning the full audio latent length.
+    assert layout.a_tiles == [(0, layout.a_total)]
+
+
+@pytest.mark.parametrize("num_frames", [121, 49])
+def test_full_length_short_clips_degenerate_to_one_tile(num_frames):
+    """Below the ceiling the window simply clips to the timeline: still one
+    tile, whose length IS the clip's latent length (not a padded 61)."""
+    layout = chain_math.compute_chain_layout(
+        [num_frames], 24.0, kv=3, v_tile=61, v_adv=61
+    )
+    expected_latent = chain_math.v_latent_frames(num_frames)
+    assert layout.n_tiles == 1
+    assert layout.v_tiles == [(0, expected_latent)]
+    assert layout.tile_seam_junctions == []
+    assert layout.f_total == expected_latent
+
+
+def test_full_length_kt_a_is_negative_and_inert():
+    """RECORD, not a requirement: with v_adv == v_tile the audio advance (508 @
+    24fps) OVERSHOOTS one tile's audio length (501), so the derived kt_a is
+    NEGATIVE (-7). It is fps-dependent (23.976 -> -7, 30 -> -6, 12 -> -15).
+
+    Harmless because it is never read: chain_math's own audio-reassembly checks
+    live under ``n_tiles > 1``, and engine/pipeline/chain_pipeline.py reads
+    ``kt_a`` only inside its ``i >= 1`` tile branch. The one place ``audio_adv``
+    is used for tile 0 is ``i * audio_adv``, which is 0."""
+    for fps, expected_kt_a in [(24.0, -7), (23.976, -7), (30.0, -6), (12.0, -15)]:
+        layout = chain_math.compute_chain_layout(
+            [481], fps, kv=3, v_tile=61, v_adv=61
+        )
+        assert layout.n_tiles == 1
+        assert layout.kt_a == expected_kt_a, (fps, layout.kt_a)
+
+
+def test_full_length_rejects_a_timeline_that_needs_two_tiles():
+    """The wall that keeps the window honest wherever the preset NAME comes
+    from: with kt_v == 0 a second tile would butt onto the first with nothing
+    shared to freeze and blend, so chain_math refuses outright."""
+    with pytest.raises(ValueError, match="zero-overlap stage-2 window"):
+        chain_math.compute_chain_layout(
+            [481, 481], 24.0, kv=3, v_tile=61, v_adv=61
+        )
+
+
+# ── full_length x the API contract ──────────────────────────────────────────
+def test_api_accepts_full_length_single_clip_with_audio():
+    req = GenerateChainRequest(**_A2V_FULL)
+    assert req.stage2_window == "full_length"
+    assert len(req.clips) == 1
+
+
+def test_api_rejects_full_length_on_two_clips():
+    """The clip-count guard fires BEFORE chain_math's own wall, so the user gets
+    the actionable message rather than the geometry one."""
+    with pytest.raises(ValidationError) as excinfo:
+        GenerateChainRequest(**{
+            **_A2V_FULL,
+            "clips": [{"num_frames": 481}, {"num_frames": 481}],
+        })
+    message = str(excinfo.value)
+    assert "full_length" in message
+    assert "exactly 1 clip" in message
+
+
+def test_api_rejects_full_length_without_source_audio():
+    """A 1-clip chain WITHOUT audio would tile fine; the window is unlocked for
+    the a2v flow only (§1-19), so this is a scope 422, not a geometry one. The
+    clip here also carries a reference_video_id + lora so it is a legitimately
+    valid 1-clip chain in every OTHER respect."""
+    payload = {k: v for k, v in _A2V_FULL.items() if k != "source_audio"}
+    with pytest.raises(ValidationError) as excinfo:
+        GenerateChainRequest(**{
+            **payload,
+            "reference_video_id": "vid_1",
+            "loras": [{"name": "canny", "strength": 1.0}],
+        })
+    message = str(excinfo.value)
+    assert "full_length" in message
+    assert "source_audio" in message
+
+
+def test_api_accepts_full_length_with_a_reference_video_ic_lora():
+    """A2V x IC-LoRA is a supported combination, so the new guard must NOT
+    reject a reference video riding along with the audio."""
+    req = GenerateChainRequest(**{
+        **_A2V_FULL,
+        "reference_video_id": "vid_1",
+        "loras": [{"name": "canny", "strength": 1.0}],
+    })
+    assert req.stage2_window == "full_length"
+    assert req.reference_video_id == "vid_1"
+
+
+def test_full_length_reaches_the_worker_payload(tmp_path):
+    """The window is non-default, so the additive worker key must ride along."""
+    captured: list[dict] = []
+    be = _capturing_real_backend(captured)
+    be.generate_chain(GenerateChainRequest(**_A2V_FULL), tmp_path / "out")
+    assert captured[0]["stage2_window"] == "full_length"
+
+
+def test_worker_resolves_full_length_without_any_engine_change():
+    """engine/ is UNTOUCHED by §1-19: the worker resolves the new name purely
+    through chain_math's preset table, so (61, 61) arrives for free."""
+    pytest.importorskip("torch")
+    from engine.worker import _resolve_stage2_window
+
+    assert _resolve_stage2_window({"stage2_window": "full_length"}) == (61, 61)
+
+
+def test_full_length_accepts_a_config_the_standard_window_rejects():
+    """DELIBERATE BEHAVIOUR WIDENING, recorded here on purpose.
+
+    23.976fps x 321 frames on ONE clip is a known audio-rounding casualty of the
+    standard window (``KNOWN_SINGLE_CLIP_DIVERGENCES`` above): it 422s with
+    "audio reassembly ... != a_total". full_length ACCEPTS it, because that
+    check lives under ``n_tiles > 1`` and full_length never has a second tile.
+    Intended: the seam-consistency check has nothing to check when there is no
+    seam."""
+    assert (321, 3) in KNOWN_SINGLE_CLIP_DIVERGENCES[23.976]
+    assert _raises([321], 23.976, 3, 22, 18) is not None      # standard: 422
+    assert _raises([321], 23.976, 3, 61, 61) is None          # full_length: OK
+    layout = chain_math.compute_chain_layout([321], 23.976, kv=3, v_tile=61, v_adv=61)
+    assert layout.n_tiles == 1

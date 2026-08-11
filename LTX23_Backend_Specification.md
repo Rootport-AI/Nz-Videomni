@@ -40,8 +40,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.8** |
-| 日付 | **2026-08-04** |
+| 版 | **v0.5.10** |
+| 日付 | **2026-08-11** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
@@ -62,6 +62,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.7b | 2026-08-03 | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加を反映。**§5.1b**（Deblur 1 点・VDA 深度前処理器 2 点を取得対象に追加し、検証表を 14 → **16 項目**へ）／**§11.2**（`model.ic_loras` を `depth-control`・`deblur` を含む **5 エントリ**へ）。凍結 API 契約（§6）への変更は無い（登録済みアダプタ名が増えただけで、`loras[].name` の解決方式は不変）。仕様・設計判断の正本は `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`、実測と検証記録は `Docs/VERIFICATION_LOG.md` §49。 |
 | v0.5.8 | 2026-08-04 | `fused_gguf_dequant_kernel`（GGUF 逆量子化の Triton 1カーネル化）の追加と、旧モック `fused_gguf_dequant_gemm` の完全撤去を反映。**§6.2**（`GenerateRequest` の表から `fused_gguf_dequant_gemm` の行を削除し、実装のある `fused_gguf_dequant_kernel`〔既定 `true`〕の行を追加。補足の「モック2件」を「モック1件（`vae_mode`）」へ書き換え、既定 `true` のフィールドが2つになったことに伴う worker ペイロードの記述も更新）／**§6.5b**（`/status` にモックを載せない理由の記述を1件構成へ更新）／**§6.6**（`metadata.json` トップレベルに `fused_gguf_dequant_kernel_used` を追加）。凍結 API 契約（§6）への変更は、加算1件と**受理のみで生成に一切影響しなかったモック1件の削除**である（pydantic の `extra=ignore` により、旧フィールドを送る古いクライアントがあっても API は壊れない）。既定 `true` への反転は実機ゲート G1〜G8 全項目合格を条件にオーナーが承認した（`block_swap_prefetch` の前例と同じ手順）。実装・機械検証・実機ゲート状況の正本は `Docs/VERIFICATION_LOG.md` §51、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
 | v0.5.9 | 2026-08-05 | **PrunaVAED（枝刈り版の映像VAEデコーダ）の実装**を反映。2026-07-31 から Acceleration 区画で唯一モックのまま残っていた `vae_mode` が実機能になり、**モックは1件も無くなった**。**§6.2**（`GenerateRequest` の `vae_mode` の行を「モック」から実装済みの記述へ全面書き換え。降格が環境ではなく重みファイルの有無で決まること・既定が恒久 off であること・実測値〔768p/257f で −12.54秒／`peak_vram_reserved_mb` −2,635MB／PSNR 36.06dB／SSIM 0.9854〕を明記）／**§6.2 の Acceleration 補足**（「モック1件」の記述を撤去し、モックの作法そのものは将来の枠のために記述として残す。`vae_mode` の降格セマンティクスと恒久 off の項を追加）／**§6.5b**（`/status` の acceleration ブロックに `vae_mode` を載せない理由を「モックだから」から「環境依存の可否ではなく、しかもジョブ単位で変わる判定だから」へ差し替え）／**§13.x の Gradio Settings タブ記述**（プレースホルダ表記の撤去）。表示名を **PruneVAED → PrunaVAED** へ訂正した（上流の正式名称の誤記だったため）が、**API のフィールド値 `"prune_vaed"` は既存の外部コントラクトなので改名していない**。凍結 API 契約（§6）への変更は無く、既定 `"default"` のジョブの worker ペイロードはバイト同一のままである（既定反転を行わないため鍵集合が増えない）。あわせて**MCP サーバーのツール引数へ `vae_mode` を公開**した（§12b。実機ゲート G1〜G7 の合格を待ってからの最終ステップ＝G9 として実施し合格。`submit_generate` / `submit_chain` の両方に列挙値2つで現れ、**ツール本数22は不変**。設計判断は `Docs/MCP_SERVER_DESIGN.md` D12）。実装・機械検証・実機ゲート G1〜G7＋G9 の正本は `Docs/VERIFICATION_LOG.md` §52、仕様と設計判断の正本は `Docs/PRUNAVAED_WORKORDER.md`、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
+| v0.5.10 | 2026-08-11 | **長尺IC-LoRA（クリップ別の参照動画）の実装**を反映。チェーン（`POST /generate/chain`）の `reference_video_id` が2026-07-11の解禁時点で持っていた「clips=1本限定」を撤廃し、**長い参照動画を1本だけ添付すると各クリップが担当する区間をサーバーが自動で切り出してstage-1にのみ注入する**方式へ拡張した。**§6.2**（`GenerateChainRequest` の`reference_video_id`系3フィールドの補足段落を新設し、`chain_math.video_segment_windows`の幾何・stage-1限定・参照不足時の穏当な劣化を明記）／**§6.8**（`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`〔422、2クリップ以上での制御系IC-LoRA拒否〕を削除し、深度前処理〔Video-Depth-Anything〕がメモリに載らないことに由来する `LORA_DEPTH_CHAIN_UNSUPPORTED`〔422、2クリップ以上での`depth-control`拒否のみ〕へ置換。canny/pose等の他アダプタは多クリップで受理されるようになった）。あわせて `GET /loras` の各行へ `preprocess`／`reference_downscale_factor` を追加し、`metadata.json` へ `ic_lora` ブロック（`reference_segment_windows`等）を追加した（いずれも凍結表未掲載のADDITIVE要素）。凍結 API 契約（§6）への変更は、エラーコード1件の置換（他クライアントへの実害なし——旧コードはこの状況でしか出ず、出なくなっただけ）と、フィールドの制約緩和（1クリップ限定→1〜24クリップ）のみで、キーの追加・型変更は無い。実装・機械検証・実機ゲートG1〜G10の正本は `Docs/VERIFICATION_LOG.md` §57、利用者向け説明は `README.md`「Gradio UI」節、フロントエンド側の実装記録はフロントエンド`Docs/DEVLOG.md` §72・§73。 |
 
 ### 0.2 スコープ
 
@@ -537,6 +538,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 > **`keep_resident` の補足（2026-08-03追加）**: 本フィールドも NAG・Acceleration の各フィールドと同じく `GenerateChainRequest` に同一の名前・型・デフォルトで存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。既定（`false`）のジョブは worker ペイロードのキーが1つも増えない（`true` のときだけ加算する方式）。**`GET /status` には意図的に載せていない**——`/status` は「サーバーが実際にできること」を書く場所であり、`keep_resident` は `sage_available` のような可否判定（能力ゲート）を持たないためである（このマシンに十分なメモリがあるかという利用者側の選択にすぎない）。旧来の環境変数 `LTX_KEEP_RESIDENT` は**撤去済み**で、真実源は本フィールドへ一本化されている（§9.2、[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48）。
 
+> **チェーンの参照動画（長尺IC-LoRA）の補足（2026-08-11追加）**: `GenerateChainRequest` の `reference_video_id`／`conditioning_attention_strength`／`reference_video_strength`（§6.2の3フィールドと同義。§6.3ではなく`GenerateChainRequest`固有のため本節で補足する）は、**2026-07-11の解禁時点では「clips=1本限定」だったが、2026-08-11に多クリップへ拡張された**。長い参照動画を1本だけ添付すると、`chain_math.video_segment_windows`（開始＝8×そのクリップのグローバルな潜在開始位置／長さ＝そのクリップのフレーム数）に従って各クリップが担当する区間をサーバーが自動で切り出し、stage-1（低解像度で全体の動きを作る第1段階）にのみ注入する。stage-2 には入らないため VRAM の天井は悪化しない。隣り合う窓は `8kv−7` ピクセルフレーム重なるため、つなぎ目の参照映像が前後のクリップで自動的に一致する。参照が生成の尺より短ければ、足りないぶんのクリップは参照なしで生成される（422にはしない）。**`depth-control` のみ2クリップ以上で明示422**（`LORA_DEPTH_CHAIN_UNSUPPORTED`、§6.8）。あわせて `GET /loras`（`api/loras.py::list_loras`。凍結表未掲載のADDITIVEエンドポイント、詳細はフロントエンド`Docs/API_REFERENCE.md` §3.6）が返す各アダプタの行に `preprocess`（前処理種別。`depth`かどうかの判定に使う）と `reference_downscale_factor`（参照動画の内部ダウンスケール倍率。2または1）を追加し、`metadata.json`（§6.6）のトップレベルに `ic_lora` ブロック（`reference_segment_windows`＝各クリップが実際に参照した区間の配列 等）を追加した。詳細な設計判断・実測・実機ゲートG1〜G10の正本は[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §57。
+
 - `width`/`height` は two-stage distilled が stage-1 を半解像度で生成し 2x アップサンプルするため **64 の倍数**（32 からの意図的な厳格化。960x540 等の非 64 表示サイズは `crop_output` で得る）。
 - バリデータ失敗はすべて 422（`VALIDATION_ERROR` エンベロープ、§6.8）。
 - 派生プロパティ `generation_mode` は `conditioning_images` が空なら `"t2v"`、あれば `"i2v"`（フィールドではなく `@property`）。
@@ -884,7 +887,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 | `MODEL_INCOMPATIBLE` | 422 | 選択ファイルが互換性の事前チェックに失敗（拡張子違い・GGUF でない・safetensors ヘッダ破損） |
 | `LORA_REQUIRES_REFERENCE` | 422 | 制御系 IC-LoRA を `reference_video_id` 無しで要求した |
 | `REFERENCE_REQUIRES_CONTROL_LORA` | 422 | `reference_video_id` を渡したが、要求アダプタに制御系が1つも無い（逆方向チェック） |
-| `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` | 422 | 2クリップ以上のチェーンで制御系 IC-LoRA を要求した（スタイル系のみ受理） |
+| `LORA_DEPTH_CHAIN_UNSUPPORTED` | 422 | 2クリップ以上のチェーンで `depth-control`（深度制御）アダプタを要求した。深度マップを作る前処理が全編一括設計でメモリに載らないため、depth系のみ多クリップ非対応（**2026-08-11・長尺IC-LoRA実装で `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` を置換**。他の制御系〔canny/pose〕・参照系〔upscaler/deblur〕アダプタは多クリップで受理される。クリップ1本のチェーンと単発生成は depth 込みで従来どおり使える） |
 | `LORA_THUMBNAIL_NOT_FOUND` | 404 | サムネイル（`<stem>.png`）を持たないアダプタ、または未知のアダプタ名 |
 | `LORA_PREPROCESS_CONFLICT` | 400 | 1本の参照動画に対して2種類以上の制御前処理を要求した（canny と pose の同時指定など） |
 | `REFERENCE_RESOLUTION_INVALID` | 422 | 参照動画を使うジョブで `width`/`height` が 128 の倍数でない |
@@ -1245,7 +1248,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - **preset** ドロップダウン（`GET /config` の `generation_presets`＝§11.4 の6種を解像度・フレーム数のラベル付きで列挙。選択で width/height/num_frames/crop を一括反映）。
 - **crop width / height**（0=none。両方 >0 のとき `crop_output` を送る）/ **seed**（-1=random）。
 - **キーフレーム画像アコーディオン**: 固定5スロット（I2Vの多段誘導）。**A2V（音声から動画生成）と併用時も5枚すべて配線済み**で、`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内にクランプされる（`frame_idx=0` は開始フレーム扱い）。
-- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。**スタイルLoRA（画風・キャラクター系。`<lora:...>` 記法）とは併用できる**（2026-07-11 に解禁。`GenerateChainRequest.loras` の加算＝VERIFICATION_LOG §32。それ以前は排他だった）。**参照動画を要する control 系 IC-LoRA（canny／pose 等）も、`clips` がちょうど1つのチェーン（A2V を含む）に限り併用できる**（α版・2026-07-11 に解禁＝VERIFICATION_LOG §34。詳細は §13.4b の追記を参照）。`clips` が2つ以上のチェーン（Clip Chain タブでの複数クリップ連結）では従来どおり併用不可で、指定すると `422 LORA_CONTROL_UNSUPPORTED_IN_CHAIN` で拒否される。
+- **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。**スタイルLoRA（画風・キャラクター系。`<lora:...>` 記法）とは併用できる**（2026-07-11 に解禁。`GenerateChainRequest.loras` の加算＝VERIFICATION_LOG §32。それ以前は排他だった）。**参照動画を要する control 系 IC-LoRA（canny／pose 等）も、`clips` がちょうど1つのチェーン（A2V を含む）に限り併用できる**（α版・2026-07-11 に解禁＝VERIFICATION_LOG §34。詳細は §13.4b の追記を参照）。`clips` が2つ以上のチェーン（Clip Chain タブでの複数クリップ連結）についても、2026-08-11に長尺IC-LoRAとして多クリップ解禁した（`chain_math.video_segment_windows` による自動区間切り出し・stage-1のみ注入・§6.2／§6.8／VERIFICATION_LOG §57）。深度前処理（Video-Depth-Anything）がメモリに載らない `depth-control` アダプタのみ、2クリップ以上で `422 LORA_DEPTH_CHAIN_UNSUPPORTED` で拒否される（他の制御系・参照系アダプタは多クリップで受理される）。
   - **音声長の事前チェック**: 添付が `.wav` の場合、送信前にクライアント側で長さを測定し、その設定（フレーム数・fps）が必要とする秒数に足りなければ、必要秒数を明示して送信を拒否する（API 呼び出しゼロ）。`.wav` 以外（mp3/m4a等）はクライアント側で測定できないためこのチェックをスキップし、サーバーの `422 SOURCE_AUDIO_TOO_SHORT` に委ねる（このエラーもヒント付きで表示される）。
   - **Frames の自動調整**: `.wav` を添付すると、その音声長に収まる最大の 8n+1 値を自動計算して num_frames へ入力し、トースト通知で知らせる（既存の値は上書きされる）。計算式は `((floor(音声秒数×fps)-1)//8)*8+1` を起点に、音声側の latent フレーム数（`chain_math.audio_latents_required`）で検算しながら 8 刻みで縮小し、最終的に `[9, 481]` へクランプする。`.wav` 以外の添付・クリア時は何もしない。
 - **生成中はボタンをグレーアウト**: 「生成」ボタンはクリック直後に無効化され、ラベルが "Generating..." / "生成中…" に切り替わる。生成完了・失敗いずれの場合も必ずボタンが再有効化・ラベル復帰する（click→無効化→生成→復元 の3段イベント連鎖。Clip Chain タブの「Generate chain」ボタンも同じ挙動）。

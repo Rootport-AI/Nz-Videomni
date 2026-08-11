@@ -91,7 +91,9 @@ IC-LoRA は、LTX 公式が提供する「参照動画を手がかりに新し�
 
 ### まだ使えないもの
 
-Motion-Track（動きの軌跡追従）と In-Outpainting（画面外の描き足し）の2種は未対応です。需要が確認できていないためで、技術的に塞がれているわけではありません。あわせて `conditioning_attention_mask`（参照条件を画面の場所ごとに効かせ分けるマスク）の API 露出も未着手です。管理はフロントエンドの台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8 で行っています。
+Motion-Track（動きの軌跡追従）は未対応です。需要が確認できていないためで、技術的に塞がれているわけではありません。あわせて `conditioning_attention_mask`（参照条件を画面の場所ごとに効かせ分けるマスク）の API 露出も未着手です。管理はフロントエンドの台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-8 で行っています。
+
+In-Outpainting（画面外の描き足し）は実装済みです（Editタブのサブタブで稼働。台帳CLOSED §3-70参照）。
 
 なお、旧 19b 世代のアダプタは、適用してもエラーは出ませんが**視覚効果がゼロ**と報告されており、流用できません。
 

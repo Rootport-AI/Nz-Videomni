@@ -92,9 +92,12 @@ def generate_chain(
     # mirroring api/generate.py 57-63.
     if request.reference_video_id is not None:
         context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
-        # All CONTROL adapters use reference_downscale_factor=2, so the reference
-        # is consumed at half output resolution on the 64-grid -- width/height not
-        # divisible by 128 crashes the worker's VAE encode (mirrors api/generate.py).
+        # CONTROL adapters declare reference_downscale_factor=2 (union-control
+        # family) or 1 (deblur). Under factor 2 the reference is consumed at half
+        # output resolution on the 64-grid, so width/height not divisible by 128
+        # crashes the worker's VAE encode. The check is applied to every reference
+        # request (merely conservative for factor 1, which needs only 64) --
+        # mirrors api/generate.py.
         if request.width % 128 != 0 or request.height % 128 != 0:
             raise reference_resolution_invalid(request.width, request.height)
 

@@ -4733,7 +4733,7 @@ Gradio 側の「A2V はクリップ 1 個」という事前チェックは**維�
 
 ---
 
-## 57. ★長尺 IC-LoRA（1 本の参照動画で連結クリップを駆動する）— 実装完了・機械検証は全 PASS（pytest 1189 件＋エンジン 55 件、vitest 2232 件、mock 実サーバー通し）。**実機ゲート G1〜G8 は全 PASS**（2026-08-11。G4 は同日中に較正計測を実施。G1・G6 のオーナー目視も同日中に合格し、実機ゲート全項目が完全決着した）。**追加で G9・G10（factor=1 のタイル化エンコード経路の多クリップ実測）も同日中に全 PASS**（§57.8）
+## 57. ★長尺 IC-LoRA（1 本の参照動画で連結クリップを駆動する）— 実装完了・機械検証は全 PASS（pytest 1189 件＋エンジン 55 件、vitest 2232 件、mock 実サーバー通し）。**実機ゲート G1〜G8 は全 PASS**（2026-08-11。G4 は同日中に較正計測を実施。G1・G6 のオーナー目視も同日中に合格し、実機ゲート全項目が完全決着した）。**追加で G9・G10（factor=1 のタイル化エンコード経路の多クリップ実測）も同日中に全 PASS**（§57.8）。**2026-08-11 夕、目視フィードバック改修バッチ・微修正バッチを経た最終目視で全項目合格し、テーマは完全クローズした**（[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-78）
 
 台帳 [`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-15「クリップ別の参照動画（長尺 IC-LoRA）」である（実装完了にともない同書 §2 のテスト待ちへ移設済み。§1-15 は欠番）。設計の出所は [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 4-(2)・5・6 節。画面側の記録は [`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §72 にある。
 

@@ -2,24 +2,24 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-12 Single a2vの全長stage-2化＝§1-19＝**実装・機械検証・デプロイ完了。残るはオーナー実機ゲート（G-B1〜G-B7）とクローズ処理のみ**）（**本ブロックが日付として最新**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-12 **同日3テーマの実機ゲートが決着。§1-19 全長stage-2化とOutpaintingセンタリングは完結、快適上限マーカーは「線の太さ」修正後の再確認だけが残る**）（**本ブロックが日付として最新**）
+
+以下は§1-19実装時点の記録。
 
 > **本ブロックが「日付として最新」の座を継ぐ。** 以下の▶節（2026-08-04ブロック以降）はすべて歴史記録として残す。2026-08-04以降にも複数のテーマ（VSFの残課題整理・骨格常駐トグル・PrunaVAED・stage-2窓プリセット`high_resolution`〔§53〕・Outpainting〔§54〕・Retake〔§55〕・長尺A2V〔§56〕・長尺IC-LoRA〔§57〕等）が完結しているが、本ブロックはそれらを遡って書き足すものではない。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
 > **今回完了した内容**: SingleタブのA2V（音声から動画を生成する機能）は内部的に1クリップのチェーンとして実行されるため、これまでstage-2（アップスケール工程）が潜在22フレームの固定窓によるタイル処理になっていた。その結果、隠れたつなぎ目・チェーンと同じ約1.86メガピクセルの解像度上限・警告や切替手段の不在という3点の乖離が生じていた（設計根拠の正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7の棲み分け原則）。これを解消するため、stage-2窓プリセットへ**`"full_length"`（潜在61フレーム＝481フレーム相当、前進61、のり代0、タイル数1）**を追加し、SingleとBatchのA2Vが常にこの全長窓で動くようにした。エンジン（GPU側コード）は差分ゼロで、`chain_math.py`のプリセット追加・`api/models.py`のバリデーション拡張・`gradio_ui/handlers.py`のペイロード追随・フロントエンドの型とビルダー改修（合計数十〜数百行）で実現した。
 >
-> **実装・機械検証・デプロイはすべて完了している。** バックエンドpytest 1185 passed/20 skipped、フロントエンドvitest 2261 passed/10 skipped・typecheckクリーン。`build.ps1`→`deploy.ps1`でビルド・配置済みで、実機とバックエンドリポジトリ配布コピーのSHA-256は3値一致（`4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`。2026-08-12のセンタリングのデプロイで更新済み、さらに同日の快適上限マーカーのデプロイで更新。現行値はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §76）。**コミットは未実施。**
+> **実装・機械検証・デプロイはすべて完了している。** バックエンドpytest 1185 passed/20 skipped、フロントエンドvitest 2261 passed/10 skipped・typecheckクリーン。`build.ps1`→`deploy.ps1`でビルド・配置済みで、実機とバックエンドリポジトリ配布コピーのSHA-256は3値一致（`4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`。2026-08-12のセンタリングのデプロイで更新済み、さらに同日の快適上限マーカーのデプロイで更新。現行値はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §76）。**コミットは2026-08-12に実施済み（両リポジトリ）。**
 >
-> **残っているのはオーナーによる実機ゲート（G-B1〜G-B7）だけ**である。詳細は台帳フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1、実装・機械検証・kt_a負値やトークン予算の技術記録の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58、設計根拠の研究ノートは[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 8節。
+> **§1-19はオーナー実機ゲートまで完了し、テーマは完結した（2026-08-12）。** G-B1〜G-B4は全PASS（完走・`chain.v_tile=61`／`n_tiles=1`・VRAMが単発生成と同等）。G-B5・G-B6（つなぎ目の目視比較）は、G-B1の合格と「潜在22窓の時代からつなぎ目はほとんど判別できなかった」というオーナー所見により**推定合格**とした。任意G-B7（12fps×481f）は「想定していない使用方法」として**未確認のままクローズ**。**`config.yaml`の`spill_free_frames`テーブルの更新は不要と確定**した。台帳§1-19と§2-1は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-80へ移設・削除済み。実装・機械検証・実機ゲート結果・kt_a負値やトークン予算の技術記録の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58、設計根拠の研究ノートは[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 8節。
 >
 > 次セッションへの引き継ぎ事項:
 >
-> 1. **実機ゲートG-B1〜G-B6は必須、G-B7は任意。** 960×576/481f・1280×768/257f・1280×768/481f（対照）・1920×1088/153fの完走とVRAM同等性確認（G-B1〜G-B4）、512×320/481fでのつなぎ目ゼロの目視確認（G-B5）、改修前生成物との比較によるつなぎ目消失の判定（G-B6）、任意で12fps×481fの音声破綻観測（G-B7）。合格基準の詳細は台帳[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1を参照。
-> 2. **実測が`config.yaml`の`spill_free_frames`テーブル（182〜187行）とずれた場合のみ**、同テーブルを実測値へ更新する追加作業が発生する。A2Vは音声VAE分がVRAMに乗るため、快適上限が下がる可能性が最有力の追加作業として想定されている。
-> 3. **オーナーの実機ゲートが全項目合格したら**、台帳§1-19を[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md)へクローズ移設し、§2-1のチェックリストを見出しごと削除する（長尺IC-LoRA〔§3-78〕・長尺A2V〔§3-74〕と同じクローズ作法）。
-> 4. **コミットが未実施。** 次セッションでオーナーの承認を得てコミット・プッシュを行うこと。
-> 5. **同日、別セッションでOutpaintingのセンタリング（描き足す量を対称に保つチェックボックス）を実装した。** フロントエンドのみの改修でバックエンドは無改修。実装・機械検証・**デプロイ・コミット済み**であり、残るのはオーナー目視ゲートG-C1〜G-C5のみ（本件G-B1〜G-B7とは別）。詳細はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §75を参照。**本ブロック記載のSHA-256（`4C9B0EE9...`）は§74時点の値であり、センタリングのデプロイ後（新値`E13EC924...`）は一致しない。さらに、同日の快適上限マーカー（§1-20。下記6.）のデプロイでもう一段更新されている（最新値`00036A8C...`）。**
-> 6. **同日、さらに別セッションでChainedの快適上限マーカー（解像度スライダーに「ここまでが快適」の線を引く。§1-20）を実装した。** バックエンドは`config.py`の`LimitsConfig.chain_comfort_token_budget`配信化と`config.yaml.example`の記載補完のみ（検証用に`chain_comfort_token_budget`基準点1792×1024の実機3Run実測込み）、線の描画自体はフロントエンドの改修。**実装・機械検証・デプロイ・コミット済み**であり、残るのはオーナー目視ゲートG-D1〜G-D10のみ（本件・§75のセンタリングとは別）。詳細はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-3、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §76、本リポジトリ[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59を参照。
+> 1. **§1-19（全長stage-2化）は完結済み。追加の実機作業は無い。** コミット・プッシュも済んでいる。
+> 2. **コミット・プッシュは2026-08-12に実施済み**（両リポジトリ各1コミット。フロントエンドの太さ修正〔下記4.〕も同じ束に入っている）。
+> 3. **同日、別セッションで実装したOutpaintingのセンタリング（描き足す量を対称に保つチェックボックス）も完結した。** フロントエンドのみの改修でバックエンドは無改修。**オーナー目視ゲートG-C1〜G-C5は全項目合格**（G-C1ではレビューで直した横並びレイアウトも実機で確認済み）。記録は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-81、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §75。**本ブロック記載のSHA-256（`4C9B0EE9...`）は§74時点の値であり、センタリングのデプロイ後（`E13EC924...`）・快適上限マーカーのデプロイ後（`00036A8C...`）・その太さ修正版の再デプロイ後（`A5492D40...`＝現行値）とは一致しない。**
+> 4. **実機作業として唯一の残件は、Chainedの快適上限マーカー（§1-20）の「線の太さ」の再確認である。** バックエンドは`config.py`の`LimitsConfig.chain_comfort_token_budget`配信化と`config.yaml.example`の記載補完のみで、線の描画自体はフロントエンドの改修。**オーナー目視ゲートG-D1〜G-D10のうち不合格は「線が帯に見える」1点だけ**で、原因はCSSの`background`ショートハンドが`background-clip: content-box`を初期値へ巻き戻していた実バグだった。`background-color`での指定に改め、あわせて可視線をSingleタブのネイティブ目盛りと同じ1pxへ細くしてある。**この修正を含む再ビルド・再デプロイは2026-08-12に完了済みで、実機に入っているのはSHA-256 `A5492D40146C745FD25B8FBFACE3711D78E16B892303D1B700B61BC53AB04352`（ビルド成果物・実機・バックエンドリポジトリ配布コピーの3値一致）である。オーナーはAviUtl2を起動してG-D1・G-D1-2の太さだけを見直せばよい。** 減光仕様（旧G-D5）はオーナー判定により削除済み、ツールチップ（G-D10）は維持で確定。詳細はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-3、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §76.1、本リポジトリ[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59.6。
 
 ---
 

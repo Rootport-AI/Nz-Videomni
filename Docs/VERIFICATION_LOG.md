@@ -4890,7 +4890,7 @@ SingleタブのA2V（音声から動画を生成する機能）は、内部的�
 
 ### 58.6 デプロイ
 
-`build.ps1 -Config Release` → `deploy.ps1 -Config Release`が成功し、実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzLTX23\NzLTX23.aux2`）とバックエンドリポジトリ配布コピーの2箇所へ配置した。SHA-256は3値一致: `4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`。
+`build.ps1 -Config Release` → `deploy.ps1 -Config Release`が成功し、実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzLTX23\NzLTX23.aux2`）とバックエンドリポジトリ配布コピーの2箇所へ配置した。SHA-256は3値一致: `4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`（2026-08-12のセンタリングのデプロイで更新済み。現行値はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §75.2）。
 
 ### 58.7 kt_a負値の技術記録（研究ノート向け）
 
@@ -4914,7 +4914,7 @@ SingleタブのA2V（音声から動画を生成する機能）は、内部的�
 
 1. **低フレームレート×481フレームでは、1窓の音声潜在が学習上限20秒相当を超える**（12fpsで約40秒）。秒数を基準にしたガードは作らない方針でオーナー確定済み。任意の実機観測項目（台帳§2-1のG-B7）として残すのみ。
 2. **Gradio版GUIのプリチェック（`validation.py`・`presets.py`）は旧窓前提のまま**。非24fpsの一部構成（23.976fps×321f等）をGradioのa2vから投げると、サーバー本体は受理するのに、プリチェックが先に止めてしまう可能性がある。**WebUI（AviUtl2連携フロントエンド）経路には影響しない。**
-3. **Batchタブのスキップ機能は解像度を見ない一律481フレーム上限**（サーバー絶対上限のミラー、フロントエンド`manifestMerge.ts`）。全長化との数値整合は取れている（481＝潜在61＝全長窓1枚分）が、Singleのような解像度別の快適上限警告はBatchには無い。これは今回の改修より前からの既存の差である。
+3. **Batchタブのスキップ機能は解像度を見ない**（フロントエンド`manifestMerge.ts`）。**上限は「SingleタブのDURATION値と481フレームの小さいほう」**で、481はサーバー絶対上限へのクランプとしてのみ効く（**2026-08-12訂正**: 本項は当初「一律481フレーム上限」と書いていたが、フロントエンドは2026-07-19のコミット`9324f05`で既にDURATION連動になっており、現行コードと食い違っていた。バックエンド同梱のGradio GUI側は`gradio_ui/manifest.py`の`MAX_FRAMES = 481`固定のままで、この連動に未追随である——優先度が低いためオーナー判断で見送り、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-29へ起票した）。全長化との数値整合は取れている（481＝潜在61＝全長窓1枚分）が、Singleのような解像度別の快適上限警告はBatchには無い。これは今回の改修より前からの既存の差である。
 
 ### 58.10 実機ゲート — 未実施（オーナー実機テスト待ち）
 

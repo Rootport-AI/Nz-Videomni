@@ -8,7 +8,7 @@
 >
 > **今回完了した内容**: SingleタブのA2V（音声から動画を生成する機能）は内部的に1クリップのチェーンとして実行されるため、これまでstage-2（アップスケール工程）が潜在22フレームの固定窓によるタイル処理になっていた。その結果、隠れたつなぎ目・チェーンと同じ約1.86メガピクセルの解像度上限・警告や切替手段の不在という3点の乖離が生じていた（設計根拠の正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7の棲み分け原則）。これを解消するため、stage-2窓プリセットへ**`"full_length"`（潜在61フレーム＝481フレーム相当、前進61、のり代0、タイル数1）**を追加し、SingleとBatchのA2Vが常にこの全長窓で動くようにした。エンジン（GPU側コード）は差分ゼロで、`chain_math.py`のプリセット追加・`api/models.py`のバリデーション拡張・`gradio_ui/handlers.py`のペイロード追随・フロントエンドの型とビルダー改修（合計数十〜数百行）で実現した。
 >
-> **実装・機械検証・デプロイはすべて完了している。** バックエンドpytest 1185 passed/20 skipped、フロントエンドvitest 2261 passed/10 skipped・typecheckクリーン。`build.ps1`→`deploy.ps1`でビルド・配置済みで、実機とバックエンドリポジトリ配布コピーのSHA-256は3値一致（`4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`）。**コミットは未実施。**
+> **実装・機械検証・デプロイはすべて完了している。** バックエンドpytest 1185 passed/20 skipped、フロントエンドvitest 2261 passed/10 skipped・typecheckクリーン。`build.ps1`→`deploy.ps1`でビルド・配置済みで、実機とバックエンドリポジトリ配布コピーのSHA-256は3値一致（`4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`。2026-08-12のセンタリングのデプロイで更新済み。現行値はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §75.2）。**コミットは未実施。**
 >
 > **残っているのはオーナーによる実機ゲート（G-B1〜G-B7）だけ**である。詳細は台帳フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-1、実装・機械検証・kt_a負値やトークン予算の技術記録の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58、設計根拠の研究ノートは[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 8節。
 >
@@ -18,6 +18,7 @@
 > 2. **実測が`config.yaml`の`spill_free_frames`テーブル（182〜187行）とずれた場合のみ**、同テーブルを実測値へ更新する追加作業が発生する。A2Vは音声VAE分がVRAMに乗るため、快適上限が下がる可能性が最有力の追加作業として想定されている。
 > 3. **オーナーの実機ゲートが全項目合格したら**、台帳§1-19を[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md)へクローズ移設し、§2-1のチェックリストを見出しごと削除する（長尺IC-LoRA〔§3-78〕・長尺A2V〔§3-74〕と同じクローズ作法）。
 > 4. **コミットが未実施。** 次セッションでオーナーの承認を得てコミット・プッシュを行うこと。
+> 5. **同日、別セッションでOutpaintingのセンタリング（描き足す量を対称に保つチェックボックス）を実装した。** フロントエンドのみの改修でバックエンドは無改修。実装・機械検証・**デプロイ・コミット済み**であり、残るのはオーナー目視ゲートG-C1〜G-C5のみ（本件G-B1〜G-B7とは別）。詳細はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §75を参照。**本ブロック記載のSHA-256（`4C9B0EE9...`）は§74時点の値であり、センタリングのデプロイ後（新値`E13EC924...`）は一致しない。**
 
 ---
 

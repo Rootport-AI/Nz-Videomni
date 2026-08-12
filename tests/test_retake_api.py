@@ -301,3 +301,12 @@ def test_config_publishes_the_window_bounds(client):
     limits = client.get("/api/v1/config").json()["limits"]
     assert limits["retake_window_min_frames"] == 73
     assert limits["retake_window_max_frames"] == 169
+
+
+def test_config_publishes_the_chain_comfort_token_budget(client):
+    """2026-08-12: the Chained screen draws its resolution guides from this
+    served value, so it has to actually reach the wire — a field added to
+    ``LimitsConfig`` but never published would leave the client silently on its
+    own mirrored fallback. Advisory only: the server judges nothing by it."""
+    limits = client.get("/api/v1/config").json()["limits"]
+    assert limits["chain_comfort_token_budget"] == 40000

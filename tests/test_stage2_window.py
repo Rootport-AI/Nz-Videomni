@@ -113,6 +113,14 @@ TOKEN_TABLE = [
     (1216, 1664, 22, 43_472, False),   # portrait high-res: over on standard...
     (1216, 1664, 19, 37_544, True),    # ...and inside the budget on 19.
     (1280, 768, 22, 21_120, True),     # the sweep's quality arm — comfortable
+    # The 16:9-ish comfortable point the WebUI draws as the standard window's
+    # resolution guide (owner decision 2026-08-12). Confirmed on real hardware:
+    # 3 runs at 1792x1024 peaked at 11,846MB / 11,847MB actually allocated with
+    # no super-linear cost against 1280x768 (Docs/VERIFICATION_LOG.md §59). The
+    # neighbours one 64-step up are all over budget (1856x1024 = 40,832), which
+    # is what makes this a GUIDE and not just some resolution that happens to
+    # fit; the WebUI's `shell/tokenBudget.test.ts` pins that other side.
+    (1792, 1024, 22, 39_424, True),
 ]
 
 
@@ -125,6 +133,17 @@ def test_chain_window_tokens_expected_values(width, height, v_tile, expected, wi
 
 def test_comfort_budget_value():
     assert chain_math.CHAIN_COMFORT_TOKEN_BUDGET == 40_000
+
+
+def test_config_default_budget_is_the_chain_math_constant():
+    """``config.LimitsConfig`` PUBLISHES this budget so a client can draw its
+    resolution guides from a served number instead of hard-coding one
+    (2026-08-12). The served default must stay the same object of truth as the
+    geometry constant — if someone edits one of the two, this goes red."""
+    from config import LimitsConfig
+
+    assert LimitsConfig().chain_comfort_token_budget == \
+        chain_math.CHAIN_COMFORT_TOKEN_BUDGET == 40_000
 
 
 def test_high_resolution_window_is_the_documented_escape_hatch():

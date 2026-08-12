@@ -15,6 +15,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field
 
+from chain_math import CHAIN_COMFORT_TOKEN_BUDGET
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
@@ -276,6 +278,16 @@ class LimitsConfig(BaseModel):
     # geometry truth stays in chain_math.
     retake_window_min_frames: int = 73
     retake_window_max_frames: int = 169
+    # Comfortable attention-token ceiling for ONE stage-2 window of a chain,
+    # published so a client can draw its resolution guides from a served number
+    # instead of hard-coding one. PURELY CLIENT ADVICE: the server never
+    # consults this — no request is rejected, clamped or altered by it — which
+    # is why it lives here rather than in any validation path. The default
+    # mirrors chain_math.CHAIN_COMFORT_TOKEN_BUDGET, the single source of truth
+    # (a token is (width//32) * (height//32) per window latent frame). Lower it
+    # on a smaller GPU / raise it on a larger one to move the client's guides;
+    # the geometry itself does not change.
+    chain_comfort_token_budget: int = CHAIN_COMFORT_TOKEN_BUDGET
 
 
 class OutputConfig(BaseModel):

@@ -212,6 +212,16 @@ limits:
   v2v_context_frames_default: 73
   v2v_context_frames_min: 25
   v2v_context_frames_max: 145
+  # §1-17 Retake の窓長（POST /generate/chain の clips[0].num_frames）。/config で公開。
+  # いずれも 8n+1。169 = stage-2 の 1 窓に収まる最大（standard 窓 v_tile=22）で、
+  # high_resolution 窓（v_tile=19）では実上限が 145 へ下がる（サーバが 422 で拒否）。
+  retake_window_min_frames: 73
+  retake_window_max_frames: 169
+  # 快適な stage-2 1 窓あたりの注意トークン上限。/config で公開し、クライアントが
+  # 解像度スライダーの目安線を引くために使う。サーバはこの値で何も判定しない
+  # （拒否も丸めもしない）純粋な助言値。トークン = (幅//32) × (高さ//32) × 窓の潜在フレーム数。
+  # VRAM 容量に応じて上下してよい（小さい GPU なら下げ、大きい GPU なら上げる）。
+  chain_comfort_token_budget: 40000
 
 output:
   dir: "./outputs"

@@ -415,6 +415,23 @@ def test_overlap_one_is_still_fine_without_an_end_source():
     assert cm.compute_chain_layout(DEFAULT_CHAIN, FPS, kv=1).total_px == 97
 
 
+def test_degenerate_audio_overlap_names_the_kv_one_cause_and_the_fix():
+    # The raw "degenerate audio overlap" rejection the kv >= 2 rule pre-empts is
+    # still reachable WITHOUT an end source — and only ever at kv=1 (the
+    # exhaustive sweep above is what establishes "only"). Its message must
+    # therefore carry the same guidance the end-source check does, or the user
+    # is told a number is degenerate with no way to act on it.
+    with pytest.raises(ValueError) as exc:
+        cm.compute_chain_layout([257, 257], 30.0, kv=1)
+    msg = str(exc.value)
+    assert msg.startswith("degenerate audio overlap")
+    # The cause: overlap_frames = 1 exhausted the audio budget at this rate.
+    assert "overlap_frames" in msg
+    assert "audio overlap budget" in msg
+    # The fix, worded as in the end-source kv >= 2 rejection.
+    assert "Raise overlap_frames to 2 or more." in msg
+
+
 @pytest.mark.parametrize("end_px", [8, 72, 136])
 def test_kv_sweep_never_degenerates_the_audio_overlap(end_px):
     # The exhaustive claim the kv >= 2 rule rests on: with an end source and

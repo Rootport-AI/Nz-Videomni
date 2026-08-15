@@ -852,7 +852,11 @@ def compute_chain_layout(
         if sum_ka < n_join:
             raise ValueError(
                 f"degenerate audio overlap (sum_ka={sum_ka} < joins={n_join}); "
-                "clips too short for a continuous audio crossfade"
+                "clips too short for a continuous audio crossfade. In practice "
+                f"this is only reachable with overlap_frames (K_v) = 1 (got "
+                f"{kv}): with a 1-latent のり代 the audio overlap budget at "
+                f"{fps}fps is already exhausted, so nothing is left to spread "
+                "over the joins. Raise overlap_frames to 2 or more."
             )
         base_ka = sum_ka // n_join
         rem_ka = sum_ka % n_join

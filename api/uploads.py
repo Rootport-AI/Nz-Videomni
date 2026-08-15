@@ -78,6 +78,10 @@ async def upload_video(
         content_type=stored.content_type,
         size_bytes=stored.size_bytes,
         trimmed=stored.trimmed,
+        # Measured only when max_frames was sent, else None on both (see
+        # VideoUploadStore.save). Pure transcription -- the store owns the rules.
+        frame_count=stored.frame_count,
+        fps=stored.fps,
     )
 
 

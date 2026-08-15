@@ -129,6 +129,30 @@ def retake_window_out_of_range(detail: str | None = None) -> APIError:
     )
 
 
+def end_source_not_found(source_id: str) -> APIError:
+    """End source: the ``end_source.video_id`` / ``image_id`` does not resolve to
+    a stored upload. ONE code for both stores — from a client's point of view the
+    end source is one slot that happens to accept either kind, and the id it sent
+    is echoed in the message, so splitting this into two codes would only add a
+    branch nobody can act on differently."""
+    return APIError("END_SOURCE_NOT_FOUND", f"end_source id not found: {source_id}", 404)
+
+
+def end_source_too_short(detail: str | None = None) -> APIError:
+    """End source: the stored video has fewer frames (after any fps resample)
+    than the requested ``context_frames`` PLUS the one primer frame the causal
+    VAE spends on its lone keyframe latent, so there is no full tail band to
+    freeze. Rejected up front (422) before any GPU work — mirrors
+    :func:`source_video_too_short`. Never raised for an image end source: a still
+    is looped to whatever length is asked for."""
+    return APIError(
+        "END_SOURCE_TOO_SHORT",
+        "end source video has fewer frames than context_frames + 1",
+        422,
+        detail=detail,
+    )
+
+
 def job_not_joinable(job_id: str, detail: str | None = None) -> APIError:
     """V2V join: the target job is not a V2V continuation job (its metadata has
     no ``v2v`` block — a plain chain / A2V / single generate), so there is no

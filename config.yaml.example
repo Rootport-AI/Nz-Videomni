@@ -212,6 +212,18 @@ limits:
   v2v_context_frames_default: 73
   v2v_context_frames_min: 25
   v2v_context_frames_max: 145
+  # 素材（末尾）（POST /generate/chain の end_source.context_frames）。/config で公開。
+  # 8 の倍数（8n+1 ではない。末尾帯は因果 VAE のキーフレーム潜在に触れず、末尾から
+  # 8 個組で数えるため。chain_math.v_tail_latents 参照）。
+  # 136 は自動決定される帯長の上限であって、幾何の上限ではない。136 = 17 潜在フレーム
+  # ≒ 24fps で 5.67 秒。帯はクリップ列の後ろに内部セグメントとして継ぎ足され、stage-2 の
+  # タイルを何枚またいでもよいため（凍結計画の正本は chain_math の end_tile_bands）、
+  # 窓ごとの上限（旧 high_resolution = 88）は撤廃した。136 は未計測領域を避けるための
+  # 運用上限で、どの stage-2 窓でも同じ値。引き上げるときは設定変更に加えて実機での
+  # 品質確認が要る。
+  end_context_frames_default: 72
+  end_context_frames_min: 8
+  end_context_frames_max: 136
   # §1-17 Retake の窓長（POST /generate/chain の clips[0].num_frames）。/config で公開。
   # いずれも 8n+1。169 = stage-2 の 1 窓に収まる最大（standard 窓 v_tile=22）で、
   # high_resolution 窓（v_tile=19）では実上限が 145 へ下がる（サーバが 422 で拒否）。

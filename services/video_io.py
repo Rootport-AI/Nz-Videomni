@@ -666,6 +666,79 @@ def cut_window_mp4(
     }
 
 
+def still_image_mp4(
+    src: Path,
+    out: Path,
+    num_frames: int,
+    fps: float,
+) -> dict:
+    """Write to ``out`` EXACTLY ``num_frames`` identical frames of the still
+    ``src``, at ``fps`` — a silent video the end-source path can feed to the
+    engine through the SAME code path an uploaded video takes.
+
+    That is the whole reason this exists: an end source may be a picture, but the
+    engine only ever freezes a decoded video tail, so the picture is turned into
+    a video HERE (app side, with ffmpeg) rather than teaching the engine a second
+    kind of input. There is deliberately no cutter counterpart — a video end
+    source is cut by :func:`cut_window_mp4` with ``window_start_sec=0.0``, whose
+    contract (fps resample, crf 12, CFR, MEASURED frame count) is already exactly
+    what this path needs.
+
+    THE CALLER MUST PASS ``context_frames + 1``, never ``context_frames``. The
+    causal video VAE spends the first frame on its lone keyframe latent, which is
+    not part of the tail band; a file one frame short would leave the band's
+    latents empty.
+
+    Frames are written as ``-crf 12`` yuv420p CFR for the same reason
+    :func:`cut_window_mp4` does: the material is VAE-encoded and then frozen, so
+    whatever this intermediate loses is a permanent ceiling on the frozen tail's
+    quality. No audio track is produced (v1 freezes video only). Odd-sized
+    stills are scaled to the nearest even width/height — libx264 + yuv420p cannot
+    encode an odd dimension — and an alpha channel is simply dropped by the
+    yuv420p conversion.
+
+    Returns ``{written_frames, width, height}`` where ``written_frames`` is
+    MEASURED, not predicted. Raises :class:`FFmpegError` on a failed encode or a
+    frame-count mismatch.
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    if num_frames <= 0:
+        raise FFmpegError(f"still_image_mp4: num_frames must be >= 1 (got {num_frames})")
+
+    cmd = [
+        exe, "-y",
+        "-loop", "1", "-framerate", str(fps), "-i", str(src),
+        "-frames:v", str(int(num_frames)),
+        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        "-an",
+        "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
+        "-fps_mode", "cfr", "-r", str(fps),
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg still-image encode failed (code {proc.returncode}): "
+            f"{proc.stderr[-2000:]}"
+        )
+
+    # MEASURED, not predicted: the engine's tail geometry rests on this count.
+    written = frame_count(out)
+    if written != num_frames:
+        raise FFmpegError(
+            f"still_image_mp4 wrote {written} frames but {num_frames} were "
+            f"requested (fps={fps})"
+        )
+    size = probe_resolution(out)
+    return {
+        "written_frames": written,
+        "width": size[0] if size else None,
+        "height": size[1] if size else None,
+    }
+
+
 def concat_mp4s(
     clip_paths: list[Path],
     output_path: Path,

@@ -616,3 +616,84 @@ def test_chain_to_clip_request_transcribes_keep_resident():
     model = GenerateChainRequest(**{**CHAIN_BASE, "keep_resident": True})
     assert model.to_clip_request(0).keep_resident is True
     assert GenerateChainRequest(**CHAIN_BASE).to_clip_request(0).keep_resident is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EndSourceSpec (end source — the chain's LAST frames come from an upload).
+# Schema-level only; the geometry cross-checks (does the band fit the final clip
+# / the last stage-2 tile?) live in chain_math and are covered by
+# tests/test_end_source_chain.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_end_source_spec_defaults_to_72_context_frames():
+    from api.models import EndSourceSpec
+
+    spec = EndSourceSpec(video_id="vid")
+    assert spec.context_frames == 72
+    assert spec.image_id is None
+
+
+def test_end_source_spec_accepts_an_image_id_instead():
+    from api.models import EndSourceSpec
+
+    spec = EndSourceSpec(image_id="img", context_frames=8)
+    assert spec.video_id is None
+    assert spec.context_frames == 8
+
+
+def test_end_source_spec_rejects_both_ids():
+    import pytest
+    from api.models import EndSourceSpec
+
+    with pytest.raises(ValueError, match="exactly one of video_id / image_id"):
+        EndSourceSpec(video_id="vid", image_id="img")
+
+
+def test_end_source_spec_rejects_neither_id():
+    import pytest
+    from api.models import EndSourceSpec
+
+    with pytest.raises(ValueError, match="exactly one of video_id / image_id"):
+        EndSourceSpec()
+
+
+def test_end_source_spec_rejects_non_multiple_of_8():
+    # The tail grid is a MULTIPLE of 8, not the head grid's 8n+1: 73 is a legal
+    # head span and an illegal tail span, which is exactly the confusion this
+    # check exists to catch.
+    import pytest
+    from api.models import EndSourceSpec
+
+    with pytest.raises(ValueError, match="multiple of 8"):
+        EndSourceSpec(video_id="vid", context_frames=73)
+
+
+def test_end_source_spec_enforces_the_published_bounds():
+    import pytest
+    from api.models import EndSourceSpec
+    from config import LimitsConfig
+
+    limits = LimitsConfig()
+    with pytest.raises(ValueError, match=f">= {limits.end_context_frames_min}"):
+        EndSourceSpec(video_id="vid", context_frames=4)
+    with pytest.raises(ValueError, match=f"<= {limits.end_context_frames_max}"):
+        EndSourceSpec(video_id="vid", context_frames=144)
+    # Both ends of the published range are themselves legal.
+    assert EndSourceSpec(video_id="v", context_frames=8).context_frames == 8
+    assert EndSourceSpec(video_id="v", context_frames=136).context_frames == 136
+
+
+def test_chain_to_clip_request_does_not_transcribe_end_source():
+    # Deliberate, following the retake / source_video precedent: GenerateRequest
+    # has no counterpart to drop it into, and the authoritative copy lives on
+    # JobRecord.chain_request (plus metadata["request"] via model_dump).
+    from api.models import GenerateChainRequest
+
+    model = GenerateChainRequest(**{
+        **CHAIN_BASE,
+        "clips": [{"num_frames": 25}, {"num_frames": 41}],
+        "end_source": {"video_id": "vid", "context_frames": 24},
+    })
+    assert model.end_source is not None
+    assert not hasattr(model.to_clip_request(0), "end_source")

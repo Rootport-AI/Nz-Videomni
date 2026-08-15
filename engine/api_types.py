@@ -63,6 +63,26 @@ class SourceVideoPayload(TypedDict, total=False):
     context_frames: int
 
 
+class EndSourcePayload(TypedDict, total=False):
+    """Optional END source (the chain ENDS on this material) on ``generate_chain``.
+
+    * path: an mp4 the app has ALREADY cut to ``context_frames + 1`` frames at
+      the request fps (a still image is turned into a video by the app too, so
+      the engine only ever sees a video). The engine does NOT cut and does NOT
+      resample — the same division of labour ``source`` and ``retake`` follow.
+      The extra leading frame is the causal VAE's keyframe primer and never
+      reaches the output; the delivered tail is frames 1..context_frames.
+    * context_frames: the frozen TAIL band in pixel frames, a MULTIPLE OF 8 (a
+      tail band is counted back from the end in whole groups of 8 — the head
+      grid's 8n+1 does not apply). It is frozen at the very end of the assembled
+      timeline, and UNLIKE the V2V head nothing is trimmed: the output length is
+      exactly the same as it would be without an end source.
+    """
+
+    path: str
+    context_frames: int
+
+
 class GenerateChainParams(TypedDict, total=False):
     """Keys on the worker ``generate_chain`` op.
 
@@ -75,6 +95,12 @@ class GenerateChainParams(TypedDict, total=False):
 
     ``source`` is optional (absent/null for a normal chain); when present the
     ``clips`` list may be length 1.
+
+    ``end_source`` is optional in the same way (absent for every chain that does
+    not end on supplied material) and combines with ``source`` — start + end
+    together is an interpolation. When it is present the ``chain`` dict on
+    ``done`` also carries an ``end_source`` sub-dict (geometry from
+    ``ChainLayout.to_dict()`` plus the engine's ``freeze_proof``).
 
     NAG (non-CFG negative prompt guidance, Wave 1): both this op and
     ``generate`` also accept an optional ``nag`` block —
@@ -108,6 +134,7 @@ class GenerateChainParams(TypedDict, total=False):
     output_path: str
     clips: list[ChainClipPayload]
     source: SourceVideoPayload
+    end_source: EndSourcePayload
 
 
 # ============================================================

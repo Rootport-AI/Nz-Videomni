@@ -21,7 +21,7 @@ from pathlib import Path
 
 from api.errors import reference_video_not_found, upload_invalid_type, upload_too_large
 from config import AppConfig
-from services.video_io import FFmpegError, cut_range_mp4, frame_count
+from services.video_io import FFmpegError, cut_range_mp4, frame_count, probe_fps
 
 logger = logging.getLogger("ltx.video_upload_store")
 
@@ -63,6 +63,16 @@ def _trim_window(start_sec: float | None, duration_sec: float | None) -> tuple[f
 
 
 class StoredVideo:
+    """A stored upload, plus what we happen to KNOW about it.
+
+    ``frame_count`` / ``fps`` describe the file AS STORED (post-cut when a cut
+    ran). Both are ``None`` unless the caller asked for measurement by passing
+    ``max_frames`` -- see :meth:`VideoUploadStore.save` for the per-path rules.
+    "Unknown" is a first-class answer here: nothing in the store may spend an
+    ffprobe on an upload that did not ask for one, and no probe failure may turn
+    a working upload into an error.
+    """
+
     def __init__(
         self,
         video_id: str,
@@ -71,6 +81,8 @@ class StoredVideo:
         original_filename: str,
         size_bytes: int,
         trimmed: bool = False,
+        frame_count: int | None = None,
+        fps: float | None = None,
     ):
         self.video_id = video_id
         self.path = path
@@ -78,6 +90,8 @@ class StoredVideo:
         self.original_filename = original_filename
         self.size_bytes = size_bytes
         self.trimmed = trimmed
+        self.frame_count = frame_count
+        self.fps = fps
 
 
 class VideoUploadStore:
@@ -121,6 +135,26 @@ class VideoUploadStore:
         the plain store. A failed probe or cut (ffprobe/ffmpeg missing, unreadable
         source) degrades the same way the trim path does: the untouched original
         comes back with ``trimmed=False`` rather than a new error response.
+
+        MEASUREMENT (``StoredVideo.frame_count`` / ``.fps``, surfaced by
+        ``UploadVideoResponse``). ``max_frames`` doubles as the "please measure
+        this" opt-in: it is only ever sent by the slots that need the real length
+        of the material (the end source's automatic band length, the chain
+        reference). Uploads WITHOUT it are byte-for-byte unchanged -- no extra
+        ffprobe, both fields ``None``. The paths:
+
+        * no trim window, no ``max_frames`` -> ``(None, None)``, nothing probed;
+        * ``max_frames``, upload at or under it -> ``(total, probe_fps())``,
+          reusing the frame count the ceiling comparison already measured and
+          spending ONE added ffprobe for the rate;
+        * a cut ran (either the trim window or the ``max_frames`` ceiling) ->
+          ``(info["written_frames"], info["source_fps"])`` straight out of
+          :func:`services.video_io.cut_range_mp4`, no added probe. The trim
+          window fills these only when ``max_frames`` was also sent, which is
+          exactly the end-source-with-ribbon-trim case (the window wins over the
+          ceiling, so that upload would otherwise measure nothing);
+        * any probe or cut failure -> ``(None, None)``. Callers must treat
+          "unknown" as a real answer and fall back, never as an error.
         """
         ext = Path(filename).suffix.lower()
         if ext not in self.allowed:
@@ -168,6 +202,12 @@ class VideoUploadStore:
         content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
         size_bytes = len(data)
         trimmed = False
+        measured_frames: int | None = None
+        measured_fps: float | None = None
+        # Only an upload that asked to be measured (``max_frames``) gets the two
+        # fields filled; see save()'s docstring. The window itself wins over the
+        # ceiling, so this branch is where end-source-plus-ribbon-trim lands.
+        measure = max_frames is not None and int(max_frames) > 0
         try:
             info = cut_range_mp4(dest, tmp, start_sec, duration_sec)
             target = dest_dir / "input.mp4"
@@ -178,6 +218,9 @@ class VideoUploadStore:
             content_type = "video/mp4"
             size_bytes = final.stat().st_size
             trimmed = True
+            if measure:
+                measured_frames = int(info["written_frames"])
+                measured_fps = float(info["source_fps"])
             logger.info(
                 "trimmed uploaded video %s to [%.3fs, +%.3fs) -> frames %s..%s of %s",
                 video_id, start_sec, duration_sec,
@@ -204,6 +247,8 @@ class VideoUploadStore:
             original_filename=filename,
             size_bytes=size_bytes,
             trimmed=trimmed,
+            frame_count=measured_frames,
+            fps=measured_fps,
         )
 
     def _apply_max_frames(
@@ -225,12 +270,20 @@ class VideoUploadStore:
         instead of taking a caller-given window, and does nothing at all
         (no probe result needed beyond the one comparison, no re-encode) when
         the upload is already at or under the limit.
+
+        This is also the path that MEASURES the upload for the caller (see
+        :meth:`save`): the ceiling comparison already needs the frame count, so
+        the only added work is one :func:`services.video_io.probe_fps` on the
+        under-the-limit branch. After a cut, both numbers come out of
+        ``cut_range_mp4``'s own info and nothing extra is probed.
         """
         ext = dest.suffix.lower()
         content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
         final = dest
         size_bytes = len(data)
         trimmed = False
+        measured_frames: int | None = None
+        measured_fps: float | None = None
         tmp = dest_dir / _TRIM_TMP_NAME
         try:
             total = frame_count(dest)
@@ -246,11 +299,22 @@ class VideoUploadStore:
                 content_type = "video/mp4"
                 size_bytes = final.stat().st_size
                 trimmed = True
+                # The cut file's own length/rate -- NOT ``total``, which counted
+                # the frames we just threw away.
+                measured_frames = int(info["written_frames"])
+                measured_fps = float(info["source_fps"])
                 logger.info(
                     "max_frames-trimmed uploaded video %s to the first %d frames "
                     "(had %d) -> frames %s..%s",
                     video_id, max_frames, total, info["start_frame"], info["end_frame"],
                 )
+            else:
+                # Under the ceiling: the file is stored verbatim, so the count we
+                # just measured IS its length. The rate is the one added probe
+                # this whole feature costs (probe_fps returns None rather than
+                # raising when ffprobe is missing or the value is degenerate).
+                measured_frames = total
+                measured_fps = probe_fps(dest)
         except (FFmpegError, OSError) as exc:
             logger.warning(
                 "max_frames trim failed for %s (max_frames=%s); storing the "
@@ -270,6 +334,8 @@ class VideoUploadStore:
             original_filename=filename,
             size_bytes=size_bytes,
             trimmed=trimmed,
+            frame_count=measured_frames,
+            fps=measured_fps,
         )
 
     def stored_relpath(self, stored: StoredVideo) -> str:

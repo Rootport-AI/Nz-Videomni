@@ -394,6 +394,8 @@ class LTXRunner:
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
         retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -416,6 +418,17 @@ class LTXRunner:
         the same convention ``stage2_window`` uses. Mutually exclusive with both
         ``source_tail_path`` and ``source_audio_path`` (enforced at the API
         layer). None -> byte-identical to before, payload key set included.
+
+        ``end_source_path`` / ``end_source_context_frames`` (end source,
+        additive): the app-prepared ``_end_source.mp4`` (a cut video or a looped
+        still — the engine only ever sees a video) plus the length of the tail
+        band frozen from it. The file holds ``context_frames + 1`` frames: the
+        extra leading frame is the causal VAE's primer and never reaches the
+        output. The delivered length is UNCHANGED (unlike the V2V head, nothing
+        is trimmed). Mutually exclusive with ``retake_window_path`` and
+        ``source_audio_path``, combinable with ``source_tail_path`` (enforced at
+        the API layer). None -> byte-identical to before, payload key set
+        included.
 
         ``lora_paths`` (style/character IC-LoRA, additive): resolved
         ``ResolvedLora`` (``path``, ``strength``, ``preprocess``, ``audio_strength``)
@@ -441,6 +454,8 @@ class LTXRunner:
             source_context_frames=source_context_frames,
             source_audio_path=source_audio_path,
             retake_window_path=retake_window_path,
+            end_source_path=end_source_path,
+            end_source_context_frames=end_source_context_frames,
             lora_paths=lora_paths,
             reference_video_path=reference_video_path,
             seed=seed,
@@ -730,6 +745,8 @@ class _MockBackend:
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
         retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -746,12 +763,17 @@ class _MockBackend:
         additive) is likewise accepted and ignored — the mock has no weights to
         patch against the reference either.
 
+        THE MOCK MP4'S LENGTH IS ALWAYS ``layout.new_frames_px`` (== ``total_px -
+        trim_px``), for every chain shape — see the comment at the call site. So a
+        V2V continuation is the NEW part only (matching the engine's context trim)
+        and an end source's mp4 is LONGER than the clips by exactly the frozen
+        band (the band is an internal segment appended after the clips).
+
         V2V continuation (``source_tail_path`` / ``source_context_frames``): mirror
         the engine geometry via ``compute_chain_layout(source_context_px=...)`` —
-        the mock mp4 holds ``new_frames_px`` frames (the NEW part only, matching the
-        engine's context trim) and ``chain.v2v`` carries the same key set the real
-        worker emits so pytest can pin the contract without a GPU. The mock has no
-        audio pipeline, so the audio-sample numerics are reported as 0.
+        ``chain.v2v`` carries the same key set the real worker emits so pytest can
+        pin the contract without a GPU. The mock has no audio pipeline, so the
+        audio-sample numerics are reported as 0.
         """
         if not self._loaded:
             self.load()
@@ -771,6 +793,11 @@ class _MockBackend:
         # compute_chain_layout, so omitting it would let every mock-backed test
         # pass with plain-chain geometry no matter what the request asked for.
         retake = getattr(chain, "retake", None)
+        # End source: likewise resolved HERE — the frozen tail band adds a whole
+        # internal segment to the layout (and with it a junction, a stage-2 tile
+        # boundary and the timeline's own length), so a mock that skipped it
+        # would report a different geometry AND a shorter mp4 than the engine.
+        end_source = getattr(chain, "end_source", None)
         layout = chain_math.compute_chain_layout(
             [c.num_frames for c in chain.clips], chain.frame_rate,
             kv=chain.overlap_frames,
@@ -779,6 +806,7 @@ class _MockBackend:
             retake_glue_px=(
                 None if retake is None else (int(retake.head_px), int(retake.tail_px))
             ),
+            end_context_px=end_source_context_frames,
         )
         gpu_info.reset_peak_vram()
         if progress_callback:
@@ -790,10 +818,23 @@ class _MockBackend:
             start_image = Image.open(clip0_conditioning_paths[0]).convert("RGB")
             start_image = start_image.resize((chain.width, chain.height))
 
-        # V2V: the delivered mp4 is the NEW part only (context trimmed off front).
-        # Retake deliberately does NOT appear here: its deliverable is the WHOLE
-        # window (no trim), and layout.total_px already IS the window length.
-        n_out = layout.new_frames_px if source_context_frames is not None else layout.total_px
+        # The delivered length, for EVERY chain shape, is one expression:
+        # ``total_px - trim_px``. ``chain_math`` already folds each feature into
+        # one of those two terms, so there is nothing left to branch on here:
+        #
+        # * plain chain / retake — trim_px is 0 and total_px IS the deliverable
+        #   (a retake's deliverable is its whole window);
+        # * V2V — the frozen source head is trimmed off the FRONT, which is
+        #   exactly trim_px;
+        # * end source — the frozen band is an internal segment APPENDED after
+        #   the user's clips, so total_px is already clips + band and the mp4 is
+        #   correspondingly LONGER than the clips asked for. (In v1 the band was
+        #   carved out of the clips and the length was unchanged; that is the
+        #   behavioural change this line encodes.)
+        #
+        # ``layout.new_frames_px`` is that same subtraction, computed once in
+        # chain_math so the validator, the mock and the engine cannot disagree.
+        n_out = layout.new_frames_px
         frames = self._render_chain_frames(
             width=chain.width, height=chain.height, n=n_out,
             seed=seed, start_image=start_image, progress_callback=progress_callback,
@@ -887,6 +928,26 @@ class _MockBackend:
                 "decoded_frames_px": int(layout.total_px),
             })
             chain_metadata["retake"] = rt
+
+        # End source: mirror the engine's chain.end_source sub-dict. The GEOMETRY
+        # half is already there (ChainLayout.to_dict()); this adds the runtime
+        # half — with the SAME deliberate exception retake makes: ``freeze_proof``
+        # is absent. That number can only be produced by comparing real latents
+        # before and after the denoise, and the mock has none; emitting 0.0 would
+        # fabricate a passing proof of the one thing this feature actually has to
+        # prove. Tests assert the difference in both directions.
+        if end_source_context_frames is not None:
+            es = dict(chain_metadata.get("end_source", {}))
+            es.update({
+                "kind": (
+                    "image"
+                    if end_source is not None and end_source.image_id is not None
+                    else "video"
+                ),
+                "cut_path": str(end_source_path) if end_source_path else None,
+                "decoded_frames_px": int(layout.total_px),
+            })
+            chain_metadata["end_source"] = es
 
         # A2V: mirror the engine's chain.a2v sub-dict (geometry from ChainLayout +
         # a ffprobe of the uploaded audio). The mock does NOT decode/mux audio, so
@@ -1636,6 +1697,8 @@ class _RealBackend:
         source_context_frames: int | None = None,
         source_audio_path: Path | None = None,
         retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -1651,6 +1714,13 @@ class _RealBackend:
         block ({path, context_frames}) is added to the worker payload (the app has
         already cut the fps-correct tail). The worker's ``done.chain`` then carries
         the ``v2v`` sub-dict, returned as-is in ``chain_metadata``.
+
+        End source: when ``end_source_path`` is set, an additive ``end_source``
+        block ({path, context_frames}) is added to the worker payload (the app has
+        already cut or synthesised the ``context_frames + 1``-frame material). The
+        worker's ``done.chain`` then carries the ``end_source`` sub-dict —
+        including the ``freeze_proof`` only real latents can produce — returned
+        as-is in ``chain_metadata``.
 
         Style/character IC-LoRA: when ``lora_paths`` is non-empty an additive
         ``loras`` block ([{path, strength[, audio_strength]}, ...]) is added to
@@ -1744,6 +1814,16 @@ class _RealBackend:
                 "head_px": int(chain.retake.head_px),
                 "tail_px": int(chain.retake.tail_px),
                 "regenerate_audio": bool(chain.retake.regenerate_audio),
+            }
+        # End source (additive): the app-prepared tail material (a cut video or a
+        # looped still — the engine sees only a video) plus the band length. The
+        # ``is not None`` guard on BOTH values is what keeps a chain without an
+        # end source byte-identical, payload key set included
+        # (tests/test_ltx_runner_payload.py pins that set in two places).
+        if end_source_path is not None and end_source_context_frames is not None:
+            payload["end_source"] = {
+                "path": str(end_source_path),
+                "context_frames": int(end_source_context_frames),
             }
         # Style/character AND control IC-LoRA (additive): (path, strength[,
         # audio_strength]) per adapter, applied uniformly across the chain. Only

@@ -1821,6 +1821,7 @@ class LTXFastVideoPipeline:
         source=None,
         audio_source=None,
         retake=None,
+        end_source=None,
         ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
         ic_attention_strength: float | None = None,
@@ -1850,6 +1851,15 @@ class LTXFastVideoPipeline:
         above). Like ``source``/``audio_source`` it is a pure pass-through —
         nothing is armed on this pipeline for it. Returns metadata incl.
         segment/tile junction pixel-frame indices.
+
+        ``end_source`` (optional ``EndSourceSpec``, additive) is the mirror of
+        ``source`` at the far end: the app-cut material is VAE-encoded and frozen
+        as the TAIL of the last stage-1 segment and the last stage-2 tile, so the
+        chain ENDS on it. UNLIKE ``source`` nothing is trimmed — the delivered
+        length is exactly what it would be without one. Combinable with
+        ``source`` (start + end = interpolation), mutually exclusive with
+        ``retake`` and ``audio_source``. Another pure pass-through; ``None``
+        keeps every other path byte-identical.
 
         ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
         audio_strength)`` adapters applied via the forward-time weight patch
@@ -1934,6 +1944,7 @@ class LTXFastVideoPipeline:
                 source=source,
                 audio_source=audio_source,
                 retake=retake,
+                end_source=end_source,
                 ic_loras=ic_loras,
                 ic_reference=ic_reference,
                 ic_attention_strength=(

@@ -216,6 +216,20 @@ def stage2_max_context_px(v_tile: int) -> int:
     return px_from_v_latent(v_tile - 1)
 
 
+# NOTE: there is deliberately NO ``stage2_max_end_context_px`` sibling of
+# :func:`stage2_max_context_px` above. A V2V head IS bound by tile 0's size (it
+# is frozen into that one tile and nothing else can be frozen there), but an end
+# source is NOT bound by any tile: since the switch to the INTERNAL-SEGMENT
+# design its band may span as many stage-2 tiles as it likes, because the band
+# lives at the very END of the timeline and therefore always intersects a tile
+# on that tile's own tail — the one place a hard freeze is already the validated
+# shape (see :func:`compute_chain_layout`'s ``end_tile_bands``). The published
+# ceiling of 136 pixel frames (``config.limits.end_context_frames_max``) is
+# therefore an OPERATIONAL cap — the longest band the real-hardware gate has
+# actually looked at, and one internal segment of at most 20 latent frames —
+# not a geometric one, and it no longer varies per stage-2 window.
+
+
 # ── Retake (temporal inpainting) window bounds ───────────────────────────────
 # Retake regenerates the MIDDLE of an existing clip while both ends stay frozen.
 # The whole window is refined as ONE stage-2 tile (the both-side freeze was only
@@ -364,13 +378,22 @@ class ChainLayout:
     v_adv: int
     kt_v: int
 
-    # stage-1
+    # stage-1 — SEGMENTS, not clips.
+    # A chain with an end source runs ONE MORE stage-1 segment than the user
+    # asked for: the layout appends an internal band segment after the last clip
+    # (see ``compute_chain_layout``). ``seg_frames`` is that full segment list
+    # and EVERYTHING below is derived from it — seg_latent / seg_audio /
+    # f_total / total_px / a_total / ka_list / the stage-2 tiles / the
+    # junctions. ``clip_frames`` above stays the request's own echo and never
+    # grows an entry, so ``len(seg_frames) - len(clip_frames)`` is 1 with an end
+    # source and 0 without one.
+    seg_frames: list[int]           # per-segment pixel frames (clips + band)
     seg_latent: list[int]           # per-segment stage-1 video latent frames
     seg_audio: list[int]            # per-segment stage-1 audio latent frames
     f_total: int                    # assembled video latent frames
     total_px: int                   # assembled pixel frames
     a_total: int                    # assembled audio latent frames
-    ka_list: list[int]              # per-join audio overlap (len = n_clips - 1)
+    ka_list: list[int]              # per-join audio overlap (len = n_seg - 1)
 
     # stage-2 tiles
     v_tiles: list[tuple[int, int]]  # (start_latent, len_latent)
@@ -409,6 +432,42 @@ class ChainLayout:
     # chain (the ``retake`` sub-dict is then absent from ``to_dict``).
     retake_window_px: int | None = None      # == clip_frames[0] (the whole window)
     retake_glue_px: tuple[int, int] | None = None   # (head_px, tail_px)
+
+    # ── end source (tail freeze) geometry ────────────────────────────────────
+    # Populated ONLY when ``compute_chain_layout`` is called with
+    # ``end_context_px`` (an uploaded video / still is frozen as the TAIL of the
+    # WHOLE chain, mirroring what ``source_context_px`` does to its head). All
+    # None/0/[] on every other chain, and ``to_dict`` then omits the
+    # ``end_source`` sub-dict entirely.
+    end_context_px: int | None = None   # frozen tail pixel span (multiple of 8)
+    n_end_v: int = 0                    # frozen video-latent tail frames
+    # 0-based pixel index of the LAST NEWLY GENERATED frame — i.e. the last
+    # frame of the user's own clips, immediately before the internal band
+    # segment — on the UNTRIMMED timeline. The new->end-source boundary is
+    # end_source_junction_px / +1, the same convention as
+    # ``v2v_context_junction_px``, and the value is by construction the LAST
+    # entry of ``segment_seam_junctions`` (the internal segment's own seam);
+    # ``compute_chain_layout`` asserts the two agree. The untrimmed basis is the
+    # choice even when a start source cuts ``trim_px`` frames off the front of
+    # the delivered mp4: the delivered-basis index is exactly this minus
+    # ``trim_px``, so a second field would only be a derived copy able to drift.
+    end_source_junction_px: int | None = None
+    # The INTERNAL band segment appended after the user's clips: ``kv`` latent
+    # frames of carry-over from the last clip plus the ``n_end_v`` band latents,
+    # i.e. ``end_segment_latent == kv + n_end_v`` and ``end_segment_px ==
+    # px_from_v_latent(end_segment_latent)`` (== ``seg_frames[-1]``).
+    end_segment_px: int = 0
+    end_segment_latent: int = 0
+    # Stage-2 hard-freeze plan, ONE ENTRY PER TILE, in tile order: ``(t, off)``
+    # where ``t`` is how many band latents this tile ends on and ``off`` is the
+    # offset ONE PAST the last band latent it holds. The engine writes
+    # ``end_v_full[..., off - t : off]`` into that tile's LAST ``t`` latents.
+    # ``t == 0`` means the band does not reach this tile at all — and then
+    # ``off`` is <= 0 and MUST be ignored (it is kept as computed rather than
+    # zeroed so the entry is the raw output of the one formula, with no second
+    # rule to keep in step). The single source of truth: the engine must never
+    # re-derive this arithmetic.
+    end_tile_bands: list[tuple[int, int]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = {
@@ -462,6 +521,29 @@ class ChainLayout:
                 # window_px - tail_px). Reported as a 2-list for JSON.
                 "free_middle_px": [head_px, window_px - tail_px],
             }
+        if self.end_context_px is not None:
+            d["end_source"] = {
+                "end_context_px": self.end_context_px,
+                "n_end_v": self.n_end_v,
+                "end_source_junction_px": self.end_source_junction_px,
+                # Frames the caller must CUT from (or synthesise for) the
+                # upload: one more than the frozen band, because the causal
+                # video VAE spends the first frame as the lone keyframe latent
+                # and only frames 1..end_context_px reach the output.
+                "cut_frames": self.end_context_px + 1,
+                # The internal band segment and the per-tile freeze plan, so a
+                # finished job's metadata.json shows exactly what was frozen
+                # where without anyone recomputing it.
+                "end_segment_px": self.end_segment_px,
+                "end_segment_latent": self.end_segment_latent,
+                "end_tile_bands": [list(b) for b in self.end_tile_bands],
+                # What the user's clips alone add up to: ``total_px ==
+                # clips_total_px + end_context_px`` is the identity the whole
+                # internal-segment design exists to guarantee, and this is the
+                # number the app's "of which the last N frames are the source"
+                # breakdown is built from.
+                "clips_total_px": self.total_px - self.end_context_px,
+            }
         return d
 
 
@@ -474,6 +556,7 @@ def compute_chain_layout(
     v_adv: int = STAGE2_V_ADV,
     source_context_px: int | None = None,
     retake_glue_px: tuple[int, int] | None = None,
+    end_context_px: int | None = None,
 ) -> ChainLayout:
     """Resolve the full chain geometry from clip pixel-frame counts + fps + K_v.
 
@@ -504,18 +587,62 @@ def compute_chain_layout(
     and the audio latent domains, and the ``n_tiles == 1`` invariant the both-side
     freeze was validated under). ``None`` -> byte-identical to before.
 
+    ``end_context_px`` (end source, mutually exclusive with ``retake_glue_px``):
+    the mirror of ``source_context_px`` at the far end — the first
+    ``end_context_px + 1`` frames of an uploaded video (or a still turned into
+    one) are VAE-encoded and their latents frozen as the TAIL of the assembled
+    timeline, so the chain ENDS on that material. It must be a MULTIPLE OF 8
+    pixel frames because a tail band is counted back from the end in whole
+    groups of 8 and never reaches the lone keyframe latent
+    (:func:`v_tail_latents`) — the head grid's 8n+1 does not apply here.
+    ``None`` -> byte-identical to before.
+
+    THE BAND IS AN INTERNAL SEGMENT, NOT A BITE OUT OF THE LAST CLIP. This
+    function appends ONE segment of its own — ``kv`` latents of carry-over from
+    the last clip plus the ``n_end_v`` band latents, at most 20 latent frames
+    all told — to ``seg_frames``, and derives every downstream number from
+    there. Three consequences worth stating, because they are the reason the
+    design was changed:
+
+      * the user's clips mean what they say (they are the NEW material) and the
+        delivered length grows by exactly the band: ``total_px ==
+        clips_total_px + end_context_px``, asserted below;
+      * no clip is ever required to be "long enough to hold the band", so the
+        stage-1 length rejection this function used to raise is GONE — with the
+        band in its own segment that check would be true of every request;
+      * a one-shot stage-1 pass longer than the 481-frame per-clip ceiling can
+        no longer arise from an end source, since the extra length arrives as
+        its own short segment rather than as a longer final clip.
+
+    THE BAND MAY SPAN SEVERAL STAGE-2 TILES. It sits at the very END of the
+    timeline, so its intersection with any tile is necessarily that tile's own
+    TAIL — the shape retake already validated — and a tile the band swallows
+    whole is simply fully frozen (its audio is still refined). ``end_tile_bands``
+    below is the single source of truth for what each tile writes; the engine
+    must not re-derive it. There is consequently no per-window ceiling here at
+    all: ``config.limits.end_context_frames_max`` (136) is an operational cap on
+    territory the real-hardware gate has looked at, not a geometric bound.
+
+    ``kv >= 2`` IS REQUIRED with an end source. The extra segment consumes one
+    more join's worth of the audio overlap budget (``sum_ka`` below), and at
+    ``kv == 1`` that budget is already so thin that the existing "degenerate
+    audio overlap" rejection fires at the higher frame rates. An exhaustive
+    sweep (275,400 clip/fps/window combinations) puts every such failure at
+    ``kv == 1`` and none at ``kv >= 2``, so a single extra condition below buys
+    the whole family a clear message instead of a confusing one.
+
     A ZERO-のり代 window (``v_adv == v_tile``, i.e. ``kt_v == 0`` — currently only
     the "full_length" preset) is SINGLE-TILE ONLY: with no overlap between tiles
     there is nothing to hard-freeze and blend at a seam, so a timeline long
     enough to need a second tile raises ValueError below. That guard is what
     keeps "full_length" honest no matter which caller resolved the preset.
     """
-    n = len(clip_frames)
-    if n < 1:
+    n_clips = len(clip_frames)
+    if n_clips < 1:
         raise ValueError("chain requires at least one clip")
     kt_v = v_tile - v_adv
 
-    n_ctx_v = n_ctx_a = trim_px = new_frames_px = 0
+    n_ctx_v = n_ctx_a = trim_px = 0
     v2v_context_junction_px: int | None = None
     if source_context_px is not None:
         if source_context_px < 1:
@@ -541,8 +668,10 @@ def compute_chain_layout(
             )
         n_ctx_a = a_frames_for_px(source_context_px, fps)
         trim_px = source_context_px
-        new_frames_px = clip_frames[0] - source_context_px
         v2v_context_junction_px = source_context_px - 1
+        # ``new_frames_px`` is NOT computed here: it is the DELIVERED length,
+        # i.e. everything the decode produces minus the trimmed head, and that
+        # needs ``total_px`` (see below).
 
     # ── retake: window + glue-band validation (video-latent domain) ──────────
     retake_window_px: int | None = None
@@ -553,9 +682,9 @@ def compute_chain_layout(
                 "(a retake window freezes BOTH ends of one clip; a V2V "
                 "continuation freezes the head of clip 0 and generates onward)"
             )
-        if n != 1:
+        if n_clips != 1:
             raise ValueError(
-                f"retake requires exactly 1 clip (the window itself); got {n}"
+                f"retake requires exactly 1 clip (the window itself); got {n_clips}"
             )
         retake_window_px = int(clip_frames[0])
         head_px, tail_px = (int(retake_glue_px[0]), int(retake_glue_px[1]))
@@ -592,19 +721,99 @@ def compute_chain_layout(
                 f"middle inside the {retake_window_px}-frame window"
             )
 
-    seg_latent = [v_latent_frames(f) for f in clip_frames]
-    seg_audio = [a_frames_for_px(f, fps) for f in clip_frames]
+    # ── end source: exclusivity + tail-grid validation ───────────────────────
+    n_end_v = 0
+    end_source_junction_px: int | None = None
+    if end_context_px is not None:
+        if retake_glue_px is not None:
+            raise ValueError(
+                "end_context_px and retake_glue_px are mutually exclusive (a "
+                "retake window already freezes the tail of the single clip it "
+                "regenerates; an end source freezes the tail of the whole chain)"
+            )
+        if end_context_px % VIDEO_TIME_FACTOR != 0:
+            raise ValueError(
+                f"end_context_px must be a multiple of {VIDEO_TIME_FACTOR} (got "
+                f"{end_context_px}): a TAIL band is counted back from the end in "
+                "whole groups of 8 pixel frames and never touches the causal "
+                "VAE's lone keyframe latent, so the head grid's 8n+1 does not "
+                "apply here (see v_tail_latents)"
+            )
+        if end_context_px < VIDEO_TIME_FACTOR:
+            raise ValueError(
+                f"end_context_px must be >= {VIDEO_TIME_FACTOR} (got "
+                f"{end_context_px}): a shorter band occupies zero video latent "
+                "frames, so nothing would be frozen at all"
+            )
+        if kv < 2:
+            raise ValueError(
+                f"end_context_px ({end_context_px}) needs overlap_frames "
+                f"(K_v) >= 2; got {kv}. An end source runs one extra stage-1 "
+                "segment for the band, and every join spends part of the audio "
+                "overlap budget (sum_ka): with a 1-latent のり代 that budget is "
+                "already exhausted at the higher frame rates, so the chain "
+                "would be refused for 'degenerate audio overlap' instead. "
+                "Raise overlap_frames to 2 or more."
+            )
+        n_end_v = v_tail_latents(end_context_px)
 
-    if any(kv >= L for L in seg_latent):
+    # ── the K_v floor, checked against the USER's clips ──────────────────────
+    # Deliberately before the internal band segment is appended: that segment is
+    # exempt by construction (its kv + n_end_v latents are strictly more than
+    # kv, since n_end_v >= 1), so checking the clips alone is equivalent — and
+    # it keeps the message listing the clips the caller actually sent.
+    clip_latent = [v_latent_frames(f) for f in clip_frames]
+    if any(kv >= L for L in clip_latent):
         raise ValueError(
             f"overlap_frames (K_v={kv}) must be < every clip's stage-1 latent "
-            f"frames {seg_latent}"
+            f"frames {clip_latent}"
         )
 
+    # What the user's clips alone assemble to — kept for the identity assert
+    # below and for ``to_dict``'s ``clips_total_px``.
+    clips_total_px = px_from_v_latent(sum(clip_latent) - (n_clips - 1) * kv)
+
+    # ── segments = clips (+ the internal band segment) ───────────────────────
+    # The band gets a segment of its own rather than eating into the last clip:
+    # ``kv`` latents of carry-over from that clip (so stage 1 continues the
+    # motion it just generated) plus the ``n_end_v`` band latents. Everything
+    # downstream is derived from ``seg_frames``; ``clip_frames`` is never
+    # touched, so the clip lengths the user chose keep meaning "new material".
+    seg_frames = list(clip_frames)
+    end_segment_px = end_segment_latent = 0
+    if end_context_px is not None:
+        end_segment_latent = kv + n_end_v
+        end_segment_px = px_from_v_latent(end_segment_latent)
+        seg_frames.append(end_segment_px)
+    n_seg = len(seg_frames)
+
+    seg_latent = [v_latent_frames(f) for f in seg_frames]
+    seg_audio = [a_frames_for_px(f, fps) for f in seg_frames]
+
     # ── assembled stage-1 length ─────────────────────────────────────────────
-    f_total = sum(seg_latent) - (n - 1) * kv
+    f_total = sum(seg_latent) - (n_seg - 1) * kv
     total_px = px_from_v_latent(f_total)
     a_total = a_frames_for_px(total_px, fps)
+
+    # The identity the internal-segment design exists for: the band EXTENDS the
+    # timeline the clips describe by exactly its own length and never eats into
+    # them. (Algebraically: the extra segment contributes kv + n_end_v latents
+    # and its join gives kv of them back, so f_total grows by n_end_v, i.e.
+    # total_px grows by 8 * n_end_v == end_context_px.) An assert, not a
+    # ValueError: no input can break it, only a code change can.
+    assert total_px == clips_total_px + (end_context_px or 0), (
+        total_px, clips_total_px, end_context_px
+    )
+
+    # Delivered pixel frames: everything the decode produces, minus the head a
+    # V2V continuation trims off the front (``trim_px`` is 0 otherwise, so this
+    # is simply ``total_px``). NOT ``clip_frames[0] - source_context_px``, which
+    # was only ever right for a ONE-clip continuation and under-reported every
+    # longer one. Note the name is now slightly narrower than the meaning: with
+    # an end source the delivered mp4 also contains the frozen band, which is
+    # not "new" material — it is still delivered, and the mock's output length,
+    # the app's prediction and the join arithmetic all want this number.
+    new_frames_px = total_px - trim_px
 
     # ── retake: free-middle checks in BOTH latent domains ────────────────────
     # The pixel-domain ``head_px + tail_px < window_px`` check above is NOT
@@ -633,10 +842,13 @@ def compute_chain_layout(
 
     # Per-join audio overlap K_a so assembled audio == a_total EXACTLY:
     #   sum(a_seg) - sum(ka) = a_total  =>  sum(ka) = sum(a_seg) - a_total.
+    # With an end source the internal band segment adds one more join here, and
+    # that is the ONE place it costs anything: hence the ``kv >= 2`` condition
+    # above, which keeps the budget out of the degenerate range.
     ka_list: list[int] = []
-    if n > 1:
+    if n_seg > 1:
         sum_ka = sum(seg_audio) - a_total
-        n_join = n - 1
+        n_join = n_seg - 1
         if sum_ka < n_join:
             raise ValueError(
                 f"degenerate audio overlap (sum_ka={sum_ka} < joins={n_join}); "
@@ -684,6 +896,39 @@ def compute_chain_layout(
     # ValueError.
     assert retake_glue_px is None or n_tiles == 1, (n_tiles, retake_window_px, v_tile)
 
+    # ── end source: which stage-2 tiles the band crosses ─────────────────────
+    # Retake's ``n_tiles == 1`` invariant deliberately does NOT apply here, and
+    # neither does any "the band must fit in one tile" rule: the band occupies
+    # the global latents ``[B, f_total)`` with ``B = f_total - n_end_v``, and
+    # because it sits at the very END of the timeline every tile that reaches it
+    # reaches it on that TILE'S OWN TAIL — a trailing hard freeze, which is the
+    # shape both retake and the stage-2 seam blend were validated under. A tile
+    # the band swallows whole ends up fully frozen; that is admissible (its
+    # audio is still refined) and merely wasteful.
+    #
+    # ``t`` is how many band latents this tile ends on, ``off`` the offset ONE
+    # PAST the last band latent it holds, so the engine writes
+    # ``end_v_full[..., off - t : off]`` into the tile's last ``t`` frames.
+    # NEITHER CLAMP MAY BE DROPPED: ``max(0, ...)`` is what makes tiles before
+    # the band no-ops (their ``off`` goes negative), and ``min(vlen, ...)`` is
+    # what stops a tile shorter than the band from claiming more latents than it
+    # has. ``off`` is meaningless when ``t == 0`` and must be ignored there.
+    end_tile_bands: list[tuple[int, int]] = []
+    if end_context_px is not None:
+        band_start = f_total - n_end_v
+        for vs, vlen in v_tiles:
+            off = vs + vlen - band_start
+            t = max(0, min(vlen, off))
+            end_tile_bands.append((t, off))
+        # The last tile always ends ON the timeline's end, so it always holds
+        # the band's last latent and its ``off`` is the whole band.
+        assert end_tile_bands[-1][1] == n_end_v, (end_tile_bands, n_end_v)
+        assert end_tile_bands[-1][0] > 0, (end_tile_bands, n_end_v)
+        # The last frame of NEW material: the internal band segment starts right
+        # after it, so this index is also the last segment seam (asserted once
+        # the junctions are known, below).
+        end_source_junction_px = total_px - end_context_px - 1
+
     # audio tiles, time-aligned to the video advance
     audio_adv = round(v_adv * VIDEO_TIME_FACTOR / float(fps) * AUDIO_LATENTS_PER_SEC)
     a_len_full = a_frames_for_px(px_from_v_latent(v_tile), fps)
@@ -710,11 +955,22 @@ def compute_chain_layout(
             raise ValueError("last audio tile does not reach a_total")
 
     # ── junctions (0-based last-frame-of-segment; boundary J / J+1) ───────────
-    # Segment i's first NEW latent frame = sum_{k<i} L[k] - (i-1)*K_v.
+    # Segment i's first NEW latent frame = sum_{k<i} L[k] - (i-1)*K_v. With an
+    # end source the internal band segment contributes ONE MORE seam here, and
+    # that seam is exactly the new->band boundary.
     segment_seam_junctions: list[int] = []
-    for i in range(1, n):
+    for i in range(1, n_seg):
         new_latent = sum(seg_latent[:i]) - (i - 1) * kv
         segment_seam_junctions.append(px_from_v_latent(new_latent) - 1)
+
+    # ... which is the same index ``end_source_junction_px`` states from the
+    # other direction (total_px - end_context_px - 1). Two derivations, one
+    # number: if they ever disagree the band and the segment boundary have
+    # drifted apart, which no input can cause — hence an assert.
+    if end_source_junction_px is not None:
+        assert segment_seam_junctions[-1] == end_source_junction_px, (
+            segment_seam_junctions, end_source_junction_px
+        )
 
     # Tile i>=1 fresh content begins at global latent vs_i + kt_v.
     tile_seam_junctions: list[int] = []
@@ -739,6 +995,7 @@ def compute_chain_layout(
         v_tile=v_tile,
         v_adv=v_adv,
         kt_v=kt_v,
+        seg_frames=seg_frames,
         seg_latent=seg_latent,
         seg_audio=seg_audio,
         f_total=f_total,
@@ -765,6 +1022,12 @@ def compute_chain_layout(
             None if retake_glue_px is None
             else (int(retake_glue_px[0]), int(retake_glue_px[1]))
         ),
+        end_context_px=end_context_px,
+        n_end_v=n_end_v,
+        end_source_junction_px=end_source_junction_px,
+        end_segment_px=end_segment_px,
+        end_segment_latent=end_segment_latent,
+        end_tile_bands=end_tile_bands,
     )
 
 

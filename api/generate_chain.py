@@ -14,6 +14,7 @@ from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import (
     APIError,
+    end_source_not_found,
     job_busy,
     lora_depth_chain_unsupported,
     lora_preprocess_conflict,
@@ -86,6 +87,31 @@ def generate_chain(
         context.pipeline_manager.preflight_retake_window(
             request.retake, request.clips[0].num_frames, request.frame_rate
         )
+
+    # End source: resolve the upload (404) and, for a VIDEO, preflight its length
+    # (422 when it cannot supply context_frames + 1 frames) BEFORE reserving a
+    # job — same up-front-failure discipline as the blocks above. The id resolves
+    # against a DIFFERENT store depending on which kind was sent (the schema
+    # guarantees exactly one of the two is set): videos live in the reference/
+    # continuation video store, stills in the conditioning-image store. An image
+    # needs no length check at all — it is looped to whatever length the band
+    # asks for. The tail band's GEOMETRY was already settled by the schema +
+    # chain_math; what is checked here is only whether the uploaded material
+    # actually contains it.
+    if request.end_source is not None:
+        if request.end_source.video_id is not None:
+            try:
+                context.video_upload_store.path_for(request.end_source.video_id)
+            except APIError:
+                raise end_source_not_found(request.end_source.video_id)
+            context.pipeline_manager.preflight_end_source(
+                request.end_source, request.frame_rate
+            )
+        else:
+            try:
+                context.upload_store.path_for(request.end_source.image_id)
+            except APIError:
+                raise end_source_not_found(request.end_source.image_id)
 
     # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE, 1..24
     # clips — owner decision 2026-08-11): validate the reference video up front,

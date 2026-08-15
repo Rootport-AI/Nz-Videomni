@@ -271,6 +271,76 @@ def test_cut_range_mp4_start_frame_only_still_uses_duration_sec(color_mp4, tmp_p
     assert info["written_frames"] == 3
 
 
+# ------------------------------------- still_image_mp4 (end source, image kind)
+#
+# An end source may be a picture, but the engine only ever freezes a decoded
+# video tail — so the picture becomes a video here. The frame count is
+# load-bearing geometry (the caller passes context_frames + 1, the extra frame
+# being the causal VAE's primer), so it is MEASURED, not predicted.
+
+
+def test_still_image_mp4_writes_exactly_the_requested_frames(tmp_path):
+    png = tmp_path / "still.png"
+    Image.new("RGB", (64, 48), (200, 60, 30)).save(png)
+    out = tmp_path / "still.mp4"
+    info = video_io.still_image_mp4(png, out, num_frames=9, fps=24.0)
+    assert info["written_frames"] == 9
+    assert video_io.frame_count(out) == 9
+    fps = video_io.probe_fps(out)
+    assert fps is not None and abs(fps - 24.0) < 0.5
+
+
+def test_still_image_mp4_frames_are_identical(tmp_path):
+    # Every frame is the same picture: a "still" that drifted would break the
+    # whole premise of freezing 8 identical tail frames.
+    png = tmp_path / "flat.png"
+    Image.new("RGB", (64, 48), (20, 180, 90)).save(png)
+    out = tmp_path / "flat.mp4"
+    video_io.still_image_mp4(png, out, num_frames=9, fps=24.0)
+    first = tmp_path / "f0.png"
+    last = tmp_path / "f8.png"
+    video_io.extract_frame_at(out, 0, first)
+    video_io.extract_frame_at(out, 8, last)
+    assert np.allclose(_avg_rgb(first), _avg_rgb(last), atol=3.0)
+
+
+def test_still_image_mp4_rounds_odd_dimensions_down_to_even(tmp_path):
+    # libx264 + yuv420p cannot encode an odd width/height, so the encode would
+    # fail outright without the trunc() scale.
+    png = tmp_path / "odd.png"
+    Image.new("RGB", (65, 47), (10, 40, 200)).save(png)
+    out = tmp_path / "odd.mp4"
+    info = video_io.still_image_mp4(png, out, num_frames=9, fps=24.0)
+    assert info["written_frames"] == 9
+    assert (info["width"], info["height"]) == (64, 46)
+
+
+def test_still_image_mp4_accepts_rgba_png(tmp_path):
+    # Alpha is simply dropped by the yuv420p conversion; what matters is that an
+    # uploaded PNG with a transparency channel does not fail the encode.
+    png = tmp_path / "alpha.png"
+    Image.new("RGBA", (64, 48), (255, 120, 0, 128)).save(png)
+    out = tmp_path / "alpha.mp4"
+    info = video_io.still_image_mp4(png, out, num_frames=9, fps=24.0)
+    assert info["written_frames"] == 9
+    assert video_io.frame_count(out) == 9
+
+
+def test_still_image_mp4_writes_no_audio_stream(tmp_path):
+    png = tmp_path / "silent.png"
+    Image.new("RGB", (64, 48), (90, 90, 90)).save(png)
+    out = tmp_path / "silent.mp4"
+    video_io.still_image_mp4(png, out, num_frames=9, fps=24.0)
+    assert video_io.has_audio_stream(out) is False
+
+
+def test_still_image_mp4_rejects_non_positive_frame_count(tmp_path):
+    png = tmp_path / "zero.png"
+    Image.new("RGB", (64, 48), (0, 0, 0)).save(png)
+    with pytest.raises(video_io.FFmpegError):
+        video_io.still_image_mp4(png, tmp_path / "zero.mp4", num_frames=0, fps=24.0)
+
+
 # ------------------------------------------------------------- join_v2v tests
 
 

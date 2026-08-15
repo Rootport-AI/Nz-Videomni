@@ -31,6 +31,13 @@ pinned in the ``max_frames`` section below:
    failure handling.
 7. An explicit trim window always wins over ``max_frames`` when both are sent
    (the V2V ribbon-trim path is unaffected by this feature).
+
+The end source's automatic band length adds ``frame_count`` / ``fps`` to the
+response (the server measures the material so the app does not have to guess).
+``max_frames`` doubles as the opt-in, so the rules are pinned per PATH in the
+last section: an upload that did not ask to be measured must not pay for an
+extra ffprobe and must report both as null, and every probe/cut failure must
+report null rather than an error.
 """
 
 from __future__ import annotations
@@ -442,6 +449,206 @@ def test_explicit_trim_window_wins_over_max_frames(client, monkeypatch):
     assert len(calls) == 1
     _src, _out, start_sec, duration_sec = calls[0]
     assert (start_sec, duration_sec) == (1.0, 2.0)
+
+
+# ── UploadVideoResponse.frame_count / fps (end source's automatic band) ─────
+def _no_probe_allowed(path):
+    raise AssertionError(f"probe_fps must not be called; got {path!r}")
+
+
+def _install_recording_probe(monkeypatch, value=24.0) -> list:
+    calls: list = []
+
+    def fake(path):
+        calls.append(path)
+        return value
+
+    monkeypatch.setattr(video_upload_store, "probe_fps", fake)
+    return calls
+
+
+def test_plain_upload_reports_no_measurement_and_never_probes(client, monkeypatch):
+    """The path every ordinary upload takes: no query arguments at all. Both
+    fields are null and NOTHING is probed -- the response is byte-identical to
+    what it was before the two fields existed."""
+    monkeypatch.setattr(video_upload_store, "cut_range_mp4", _no_cut_allowed)
+    monkeypatch.setattr(video_upload_store, "probe_fps", _no_probe_allowed)
+
+    def boom(p):
+        raise AssertionError("frame_count must not be called without max_frames")
+
+    monkeypatch.setattr(video_upload_store, "frame_count", boom)
+
+    r = client.post("/api/v1/upload/video", files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["frame_count"] is None
+    assert body["fps"] is None
+
+
+def test_trim_window_without_max_frames_reports_no_measurement(client, monkeypatch):
+    """The V2V ribbon-trim upload did not ask to be measured, so it is not --
+    even though the cut it ran happens to know both numbers. Keeping this path
+    unchanged is the point; the end source always sends max_frames as well (see
+    the test below)."""
+    _install_recording_cut(monkeypatch)
+    monkeypatch.setattr(video_upload_store, "probe_fps", _no_probe_allowed)
+
+    r = client.post(
+        "/api/v1/upload/video",
+        params={"trim_start_sec": 1.0, "trim_duration_sec": 2.0},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed"] is True
+    assert body["frame_count"] is None
+    assert body["fps"] is None
+
+
+def test_max_frames_under_the_limit_reports_the_stored_length_and_one_probe(client, monkeypatch):
+    """Nothing was cut, so the file's length IS the count the ceiling comparison
+    already measured. The rate costs exactly ONE added ffprobe -- the entire
+    runtime price of the feature."""
+    monkeypatch.setattr(video_upload_store, "cut_range_mp4", _no_cut_allowed)
+    monkeypatch.setattr(video_upload_store, "frame_count", lambda p: 137)
+    probes = _install_recording_probe(monkeypatch, 30.0)
+
+    r = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 685},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed"] is False
+    assert body["frame_count"] == 137
+    assert body["fps"] == 30.0
+    assert len(probes) == 1
+
+
+def test_max_frames_truncation_reports_the_cut_files_numbers(client, monkeypatch):
+    """After a cut the answer must describe what was KEPT (685), never the
+    original length (2000) -- the band length is derived from it, and an
+    over-reported count would ask the engine for frames that are not there.
+    cut_range_mp4 already returns both, so no extra probe runs."""
+    calls = _install_recording_cut_with_frames(monkeypatch)
+    monkeypatch.setattr(video_upload_store, "frame_count", lambda p: 2000)
+    monkeypatch.setattr(video_upload_store, "probe_fps", _no_probe_allowed)
+
+    r = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 685},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed"] is True
+    assert body["frame_count"] == 685  # written_frames, not the 2000 we had
+    assert body["fps"] == 30.0  # source_fps from the cut's own info
+    assert len(calls) == 1
+
+
+def test_trim_window_with_max_frames_reports_the_cut_files_numbers(client, monkeypatch):
+    """End source + ribbon trim: the app sends BOTH, the window wins over the
+    ceiling, and the measurement still has to come back -- otherwise the band
+    length would fall back to a duration estimate on the one path that trims."""
+    _install_recording_cut(monkeypatch)
+    monkeypatch.setattr(video_upload_store, "probe_fps", _no_probe_allowed)
+
+    r = client.post(
+        "/api/v1/upload/video",
+        params={"trim_start_sec": 1.0, "trim_duration_sec": 2.0, "max_frames": 685},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed"] is True
+    assert body["frame_count"] == 60  # the recording stand-in's written_frames
+    assert body["fps"] == 30.0
+
+
+def test_measurement_failures_report_unknown_not_an_error(client, monkeypatch):
+    """Every failure mode degrades to (null, null) with HTTP 200. "Unknown" is a
+    real answer the client falls back from; a 4xx/5xx here would turn a working
+    upload into a broken one."""
+    # (a) the probe itself fails
+    monkeypatch.setattr(video_upload_store, "cut_range_mp4", _no_cut_allowed)
+    monkeypatch.setattr(
+        video_upload_store, "frame_count",
+        lambda p: (_ for _ in ()).throw(FFmpegError("ffprobe not found on PATH")),
+    )
+    r = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 685},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["frame_count"] is None
+    assert r.json()["fps"] is None
+
+    # (b) the cut fails after a successful probe: the untouched original comes
+    # back, and the count we measured describes a file we did NOT keep... except
+    # we did keep it -- but it is still reported unknown, deliberately, so the
+    # fallback path is the one exercised whenever anything went wrong.
+    monkeypatch.setattr(video_upload_store, "frame_count", lambda p: 2000)
+
+    def boom(src, out, start_sec, duration_sec, *, start_frame=None, num_frames=None):
+        raise FFmpegError("ffmpeg not found on PATH")
+
+    monkeypatch.setattr(video_upload_store, "cut_range_mp4", boom)
+    r2 = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 685},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["frame_count"] is None
+    assert r2.json()["fps"] is None
+
+    # (c) ffprobe present but the rate is unreadable -> a count without a rate
+    monkeypatch.setattr(video_upload_store, "cut_range_mp4", _no_cut_allowed)
+    monkeypatch.setattr(video_upload_store, "frame_count", lambda p: 137)
+    monkeypatch.setattr(video_upload_store, "probe_fps", lambda p: None)
+    r3 = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 685},
+        files={"file": ("clip.mp4", FAKE_MP4, "video/mp4")},
+    )
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["frame_count"] == 137
+    assert r3.json()["fps"] is None
+
+
+def test_real_ffmpeg_measurement_end_to_end(client, tmp_path):
+    """No stand-ins: a real 10-frame 10 fps mp4 through both max_frames paths."""
+    src = tmp_path / "src.mp4"
+    frames = [Image.new("RGB", (64, 64), (i * 20 % 256, 90, 160)) for i in range(10)]
+    video_io.encode_frames_to_mp4(frames, src, frame_rate=10.0)
+    payload = src.read_bytes()
+
+    r_under = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 20},
+        files={"file": ("src.mp4", payload, "video/mp4")},
+    )
+    assert r_under.status_code == 200, r_under.text
+    assert r_under.json()["frame_count"] == 10
+    assert abs(r_under.json()["fps"] - 10.0) < 0.01
+
+    r_over = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 4},
+        files={"file": ("src.mp4", payload, "video/mp4")},
+    )
+    assert r_over.status_code == 200, r_over.text
+    body = r_over.json()
+    assert body["trimmed"] is True
+    assert body["frame_count"] == 4
+    stored = client.app_context.video_upload_store.path_for(body["video_id"])
+    # the reported count really is the stored file's own length
+    assert video_io.frame_count(stored) == body["frame_count"]
+    assert abs(body["fps"] - 10.0) < 0.01
 
 
 def test_real_ffmpeg_max_frames_end_to_end(client, tmp_path):

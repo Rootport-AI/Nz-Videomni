@@ -16,6 +16,7 @@ from pathlib import Path
 
 import chain_math
 from api.errors import (
+    end_source_too_short,
     gpu_oom,
     generation_failed,
     pipeline_load_failed,
@@ -24,6 +25,7 @@ from api.errors import (
     source_video_too_short,
 )
 from api.models import (
+    EndSourceSpec,
     JobResult,
     JobStatus,
     RetakeSpec,
@@ -550,6 +552,61 @@ class PipelineManager:
                 )
             )
 
+    # ----------------------------------------------------- end source preflight
+
+    def preflight_end_source(
+        self, end_source: EndSourceSpec, request_frame_rate: float
+    ) -> None:
+        """Validate an uploaded end source BEFORE a job is created.
+
+        The mirror of :meth:`preflight_source_video`, with one difference that is
+        the whole point of the feature's +1 primer: the material must supply
+        ``context_frames + 1`` frames, not ``context_frames``. The causal video
+        VAE spends the FIRST frame on its lone keyframe latent, which is not part
+        of the frozen tail band, so a file exactly ``context_frames`` long would
+        cut one frame short of a full band (422 END_SOURCE_TOO_SHORT).
+
+        An IMAGE end source returns immediately: a still is looped to whatever
+        length the band asks for, so there is nothing about its length to reject.
+        The endpoint only calls this for a video anyway; the guard is here so the
+        method is safe to call with either kind. The id is assumed already
+        resolved (the endpoint 404s first), and the band's geometry (multiple of
+        8, within [8,136], overlap >= 2) is enforced by the schema and
+        ``chain_math.compute_chain_layout``.
+
+        THE ASYMMETRY WITH THE APP IS DELIBERATE. This check resamples with
+        ``round`` and asks for ``context_frames + 1``; the app derives the band
+        length from the server-measured frame count with a ``floor`` and one
+        frame of slack, i.e. it is strictly MORE conservative. So on an
+        app-driven request this never fires — it exists for the frame-exact case
+        and for callers that pick ``context_frames`` themselves (the Gradio UI,
+        scripts, a stale client). Do NOT "fix" the two into agreement: matching
+        the app's rounding here would only move the boundary, and matching this
+        one there would let the app propose bands the material cannot fill.
+        """
+        if end_source.video_id is None:
+            return
+        src_path = self.video_upload_store.path_for(end_source.video_id)
+        n_src = video_io.frame_count(src_path)
+        src_fps = video_io.probe_fps(src_path)
+        # Frame count after resampling to the request fps — same estimate
+        # preflight_source_video uses; video_io.cut_window_mp4's MEASURED count is
+        # the frame-exact backstop.
+        if src_fps and abs(src_fps - float(request_frame_rate)) > 1e-3:
+            effective = int(round(n_src * float(request_frame_rate) / src_fps))
+        else:
+            effective = n_src
+        required = int(end_source.context_frames) + 1
+        if effective < required:
+            raise end_source_too_short(
+                detail=(
+                    f"end source has {n_src} frames @ {src_fps} fps "
+                    f"(~{effective} @ {request_frame_rate} fps) < "
+                    f"context_frames={end_source.context_frames} + 1 primer frame "
+                    f"= {required}"
+                )
+            )
+
     # ------------------------------------------------- retake window preflight
 
     def preflight_retake_window(
@@ -811,6 +868,46 @@ class PipelineManager:
                     "upload_has_audio": cut["has_audio"],
                 }
 
+            # End source: prepare the ONE mp4 the engine freezes as the chain's
+            # tail. Both kinds converge on the same file so the engine never
+            # learns about images: a video is cut from its FRONT (the first
+            # context_frames+1 frames — the mirror of the V2V tail cut, and the
+            # "keep the head, drop the rest" truncation the owner specified for
+            # over-long uploads), a still is looped to the same length. The +1 is
+            # the causal VAE's primer frame: it is consumed as the lone keyframe
+            # latent and never appears in the output, so the delivered mp4 ends
+            # with the material's frames 1..context_frames.
+            end_source_path = None
+            end_source_context_frames = None
+            end_source_provenance = None
+            if chain.end_source is not None:
+                end_source_context_frames = int(chain.end_source.context_frames)
+                cut_frames = end_source_context_frames + 1
+                end_source_path = output_dir / "_end_source.mp4"
+                if chain.end_source.video_id is not None:
+                    es_src = self.video_upload_store.path_for(chain.end_source.video_id)
+                    cut = video_io.cut_window_mp4(
+                        es_src, end_source_path, 0.0, cut_frames, chain.frame_rate,
+                    )
+                    end_source_provenance = {
+                        "kind": "video",
+                        "end_source_video_id": chain.end_source.video_id,
+                        "source_fps": cut["source_fps"],
+                        "resampled": cut["resampled"],
+                        "written_frames": cut["written_frames"],
+                        "upload_has_audio": cut["has_audio"],
+                    }
+                else:
+                    es_src = self.upload_store.path_for(chain.end_source.image_id)
+                    still = video_io.still_image_mp4(
+                        es_src, end_source_path, cut_frames, chain.frame_rate,
+                    )
+                    end_source_provenance = {
+                        "kind": "image",
+                        "end_source_image_id": chain.end_source.image_id,
+                        "written_frames": still["written_frames"],
+                    }
+
             def on_progress(step, total, progress, stage=None, clip=None, clip_count=None):
                 job.current_step = step
                 job.total_steps = total
@@ -832,6 +929,8 @@ class PipelineManager:
                 source_context_frames=source_context_frames,
                 source_audio_path=source_audio_path,
                 retake_window_path=retake_window_path,
+                end_source_path=end_source_path,
+                end_source_context_frames=end_source_context_frames,
                 lora_paths=lora_paths,
                 reference_video_path=reference_video_path,
                 seed=seed,
@@ -859,6 +958,7 @@ class PipelineManager:
                     chain_meta=meta, v2v_provenance=v2v_provenance,
                     a2v_provenance=a2v_provenance,
                     retake_provenance=retake_provenance,
+                    end_source_provenance=end_source_provenance,
                     reference_provenance=reference_provenance,
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
@@ -914,6 +1014,7 @@ class PipelineManager:
         self, *, job, chain, metadata_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, retake_provenance=None,
+        end_source_provenance=None,
         reference_provenance=None,
         attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
@@ -994,6 +1095,15 @@ class PipelineManager:
         retake = cm.get("retake")
         if retake is not None:
             metadata["retake"] = {**retake, **(retake_provenance or {})}
+        # End source (additive): only present when an end_source was requested, so
+        # a normal chain's metadata key set is byte-unchanged. The engine's (or
+        # mock's) chain.end_source sub-dict — geometry + runtime (+ freeze_proof
+        # from the real engine, which the mock deliberately never fabricates) —
+        # plus the app-side provenance (which upload, which kind, how many frames
+        # were actually cut/synthesised).
+        end_source = cm.get("end_source")
+        if end_source is not None:
+            metadata["end_source"] = {**end_source, **(end_source_provenance or {})}
         # §1-15 (clip-wise IC-LoRA reference, additive): only present when a
         # reference video was actually used, so a normal (or style-loras-only)
         # chain's metadata key set is byte-unchanged. Mirrors _write_metadata's

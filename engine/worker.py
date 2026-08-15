@@ -79,7 +79,14 @@ Protocol (one JSON object per line; parent -> worker):
    # tail cut at the request fps (the app guarantees this — the engine does not
    # resample). The source tail is VAE-encoded (tiled) and frozen as clip-0's
    # head; the delivered mp4 is the NEW part only (context trimmed off the front):
-   source:{path, context_frames}|null}
+   source:{path, context_frames}|null,
+   # End source (optional; null unless the chain must END on supplied material).
+   # ``path`` is ALREADY the context_frames+1-frame cut at the request fps (a
+   # still image was turned into a video by the app — the engine never sees an
+   # image here). Its latents are frozen as the TAIL of the last stage-1 segment
+   # and the last stage-2 tile. UNLIKE ``source`` nothing is trimmed: the output
+   # length is unchanged. Combines with ``source`` (start+end = interpolation):
+   end_source:{path, context_frames}|null}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
@@ -1003,6 +1010,7 @@ def _do_generate_chain(msg: dict) -> None:
     from engine.pipeline.chain_pipeline import (
         AudioSourceSpec,
         ChainClipSpec,
+        EndSourceSpec,
         RetakeSpec,
         SourceSpec,
     )
@@ -1073,6 +1081,25 @@ def _do_generate_chain(msg: dict) -> None:
                 f"regenerate_audio (missing key {exc})"
             ) from exc
 
+    # End source: optional material the chain must END on (an mp4 the app has
+    # ALREADY cut to context_frames+1 frames at the request fps; a still image
+    # was turned into a video app-side). Mutually exclusive with retake and
+    # audio_source, combinable with source (asserted in run_chain + 422 at the
+    # API layer). Absent -> byte-identical to before.
+    end_source = None
+    es = msg.get("end_source")
+    if es:
+        try:
+            end_source = EndSourceSpec(
+                path=str(es["path"]),
+                context_frames=int(es["context_frames"]),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: end_source requires path and context_frames "
+                f"(missing key {exc})"
+            ) from exc
+
     # Style/character IC-LoRA (forward-time weight patch, applied across the whole
     # chain). Always parsed EXPLICITLY (even []): an explicit empty list is the
     # authoritative "no LoRA this chain" -> clean detach, clearing any stale LoRA
@@ -1130,6 +1157,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
         f"retake={'yes(' + str(retake.head_px) + '/' + str(retake.tail_px) + ',audio=' + ('regen' if retake.regenerate_audio else 'keep') + ')' if retake else 'no'} "
+        f"end_source={'yes(ctx=' + str(end_source.context_frames) + ')' if end_source else 'no'} "
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
         f"bsprefetch={bs_prefetch} keepresident={keep_res} "
         f"fuseddequant={fused_dequant} vae={vae_mode} "
@@ -1153,6 +1181,7 @@ def _do_generate_chain(msg: dict) -> None:
         source=source,
         audio_source=audio_source,
         retake=retake,
+        end_source=end_source,
         ic_loras=ic_loras,
         ic_reference=ic_reference,
         ic_attention_strength=ic_attn,

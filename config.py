@@ -260,6 +260,28 @@ class LimitsConfig(BaseModel):
     v2v_context_frames_default: int = 73
     v2v_context_frames_min: int = 25
     v2v_context_frames_max: int = 145
+    # End source (POST /generate/chain end_source.context_frames): how many
+    # pixel frames at the very END of the chain come from the uploaded video /
+    # still. Advertised via /config so a UI can build the control. A MULTIPLE OF
+    # 8, not 8n+1 — a tail band is counted back from the end in whole latent
+    # groups and never touches the causal VAE's lone keyframe latent (see
+    # chain_math.v_tail_latents).
+    #
+    # 136 IS THE OPERATIONAL CEILING ON THE AUTOMATIC BAND LENGTH, NOT A
+    # GEOMETRIC LIMIT. The band is a whole internal segment appended after the
+    # user's clips and may span as many stage-2 tiles as it needs
+    # (ChainLayout.end_tile_bands is the per-tile freeze plan), so no window
+    # geometry bounds it any more — the old "8*(v_adv-1), 88 under
+    # high_resolution" rule and its per-request 422 are both gone. 136 == 17
+    # latent frames ~= 5.67 s at 24 fps is simply the edge of the measured
+    # region, kept so nobody ships an unvalidated one. Raising it is a config
+    # edit plus a real-run quality gate, and it applies to every stage-2 window
+    # preset alike, so a client can now trust end_context_frames_max
+    # unconditionally (unlike retake_window_max_frames, which really is
+    # preset-dependent). The geometry truth stays in chain_math.
+    end_context_frames_default: int = 72
+    end_context_frames_min: int = 8
+    end_context_frames_max: int = 136
     # Retake window length (POST /generate/chain, clips[0].num_frames when a
     # ``retake`` block is present). Published via /config so a UI can bound its
     # window control. 8n+1 like every other frame count. THESE TWO PUBLISH THE

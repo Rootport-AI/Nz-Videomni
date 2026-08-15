@@ -451,6 +451,11 @@ class GenerateRequest(BaseModel):
 # length. This cap bounds that term: it is a sanity ceiling = 24 clips × 481f
 # (the max clip count × the frozen per-clip cap), documented so a UI cannot
 # request an unbounded timeline.
+#
+# It is charged on what the CLIPS assemble to, not on the delivered mp4 — see the
+# comparison in GenerateChainRequest's validator. An end source's frozen band is
+# appended on top of the clips and is deliberately not counted, so that attaching
+# one can never turn a previously accepted chain into a 422.
 MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544
 
 
@@ -587,6 +592,96 @@ class RetakeSpec(BaseModel):
         return self
 
 
+class EndSourceSpec(BaseModel):
+    """End source — the chain ENDS with an uploaded video / still image.
+
+    The mirror of :class:`SourceVideoSpec` at the other end of the timeline.
+    Exactly ONE of ``video_id`` (an upload from POST /upload/video, the same
+    store the continuation source uses) or ``image_id`` (POST /upload/image) is
+    given; the app turns either into one ``_end_source.mp4`` — a still is looped
+    into a silent video server-side — so the engine sees a SINGLE code path.
+    Its frames are VAE-encoded and hard-frozen as the last ``context_frames``
+    pixel frames of the whole chain, exactly the way a retake freezes its glue
+    bands.
+
+    ``context_frames`` is a MULTIPLE OF 8, not 8n+1. The two ends sit on
+    DIFFERENT latent grids because the video VAE is causal: latent 0 is a lone
+    keyframe covering pixel 0 only, so a HEAD band is 8n+1 while a TAIL band is
+    whole groups of 8 counted back from the end and never touches that keyframe
+    (``chain_math.v_tail_latents``). Bounded
+    [config.limits.end_context_frames_min, ...max] = [8, 136].
+
+    136 IS AN OPERATIONAL CAP, NOT A GEOMETRIC ONE. The band is free to span
+    several stage-2 tiles (``ChainLayout.end_tile_bands`` is the per-tile freeze
+    plan), so no window geometry limits it any more; 136 == 17 latent frames
+    ~= 5.67 s at 24 fps is simply where measurement stops, kept to avoid
+    shipping an unvalidated region. Raising it is a config edit plus a real-run
+    quality gate, not a geometry change. There is likewise NO per-window
+    cross-check on the request any more (the v1 "88 under high_resolution" rule
+    is gone with the geometry that produced it).
+
+    OVERLAP >= 2 IS REQUIRED. The internal band segment costs one more audio
+    crossfade, and at ``overlap_frames == 1`` the audio-overlap budget is already
+    marginal — an exhaustive sweep found every degenerate case confined to kv=1.
+    ``chain_math.compute_chain_layout`` rejects the combination (422) with a
+    message telling the caller to raise the overlap; it is not re-checked here.
+
+    THE +1 PRIMER: the app cuts (or synthesises) ``context_frames + 1`` frames,
+    not ``context_frames``. The causal video VAE spends the material's FIRST
+    frame on its lone keyframe latent, which is not part of the tail band — so
+    frame 0 of the upload never appears in the output and the delivered mp4 ends
+    with the upload's frames 1..context_frames.
+
+    OUTPUT LENGTH GROWS BY THE BAND. A clip's ``num_frames`` is purely NEWLY
+    GENERATED material; the band is an INTERNAL segment ``chain_math`` appends
+    after the last clip, so the delivered length is ``sum(clip frames) - overlaps
+    + context_frames`` — the identity ``total_px == clips_total_px +
+    end_context_px`` that ``compute_chain_layout`` asserts. (This is the reverse
+    of ``source_video``, which trims its frozen head OFF the delivered mp4, and
+    the reverse of v1, which carved the band out of the clips themselves.)
+
+    Mutually exclusive with ``retake`` (it already owns both ends of its one
+    window), ``source_audio`` (v1 freezes video only, so an A2V chain's audio
+    and a frozen video tail would disagree) and ``reference_video_id`` (a
+    control adapter's per-segment conditioning competes with the frozen band).
+    It MAY be combined with ``source_video`` — a start source and an end source
+    together are an interpolation, the intended headline use — and with
+    ``clips[0].conditioning_images`` unconditionally: the clips never reach the
+    band, so a keyframe cannot collide with it.
+    """
+
+    video_id: str | None = Field(None, min_length=1)
+    image_id: str | None = Field(None, min_length=1)
+    context_frames: int = Field(72)
+
+    @model_validator(mode="after")
+    def validate_end_source(self) -> "EndSourceSpec":
+        if (self.video_id is None) == (self.image_id is None):
+            raise ValueError(
+                "end_source requires exactly one of video_id / image_id "
+                "(a still is turned into a video server-side, so the two are "
+                "alternatives, never a pair)"
+            )
+        cf = self.context_frames
+        cf_min = _LIMITS_DEFAULTS.end_context_frames_min
+        cf_max = _LIMITS_DEFAULTS.end_context_frames_max
+        if cf < cf_min:
+            raise ValueError(f"end_source.context_frames must be >= {cf_min}")
+        if cf > cf_max:
+            raise ValueError(
+                f"end_source.context_frames must be <= {cf_max} "
+                "(config.limits.end_context_frames_max — an OPERATIONAL cap on "
+                "the measured range, not a geometric limit; see config.py)"
+            )
+        if cf % 8 != 0:
+            raise ValueError(
+                "end_source.context_frames must be a multiple of 8 (a tail band "
+                "is whole latent groups counted back from the end — the head "
+                "grid's 8n+1 does not apply)"
+            )
+        return self
+
+
 class GenerateChainRequest(BaseModel):
     """A chain of clips assembled into ONE continuous masked AV-latent timeline.
 
@@ -678,6 +773,12 @@ class GenerateChainRequest(BaseModel):
     # field is byte-identical to before, right down to the worker payload, which
     # only grows a "retake" key when this is set). See :class:`RetakeSpec`.
     retake: RetakeSpec | None = None
+
+    # End source — the chain ENDS with an uploaded video / still (ADDITIVE/
+    # optional; a request omitting this field is byte-identical to before, right
+    # down to the worker payload, which only grows an "end_source" key when this
+    # is set). See :class:`EndSourceSpec`.
+    end_source: EndSourceSpec | None = None
 
     # Style/character IC-LoRA (ADDITIVE/optional — a request omitting this field is
     # byte-identical to before). Same ``LoraSpec`` type/validation as
@@ -810,20 +911,50 @@ class GenerateChainRequest(BaseModel):
             if len(self.clips) != 1:
                 raise ValueError("retake requires exactly 1 clip (the window itself)")
 
+        # An end source freezes the tail of the WHOLE chain, so it cannot share
+        # the timeline with anything else that claims an end or the audio track.
+        # Rejected up front, in the same style as the retake block above. NOT
+        # exclusive with source_video (start + end IS the interpolation use case)
+        # nor with clips[0].conditioning_images (a keyframe is legal as long as it
+        # stays out of the frozen band — checked once the layout is known below).
+        if self.end_source is not None:
+            if self.retake is not None:
+                raise ValueError(
+                    "retake and end_source are mutually exclusive (a retake "
+                    "window already freezes the tail of the single clip it "
+                    "regenerates; an end source freezes the tail of the whole "
+                    "chain)"
+                )
+            if self.source_audio is not None:
+                raise ValueError(
+                    "end_source and source_audio are mutually exclusive (v1 "
+                    "freezes the end source's VIDEO only, so a driving audio "
+                    "track and a frozen video tail would disagree at the end)"
+                )
+            if self.reference_video_id is not None:
+                raise ValueError(
+                    "end_source and reference_video_id are mutually exclusive (a "
+                    "control adapter's per-segment reference conditioning would "
+                    "compete with the frozen end-source band)"
+                )
+
         # Clip-count floor: WITHOUT a source (video OR audio) OR a reference-video
         # control adapter, a chain needs >= 2 clips (a single clip is just
         # /generate) — preserve the pre-V2V rejection. WITH a source_video the
         # frozen source head IS the prior segment, WITH a source_audio a single
         # clip is the whole timeline, WITH reference_video_id a single clip is a
         # (now legacy, still supported) 1-clip reference-conditioned chain, and
-        # WITH a retake the single clip IS the window being repaired — so 1 clip
-        # is OK in all four cases. (Forgetting the retake term here would 422
-        # EVERY retake request before it reached any of its own validation.)
+        # WITH a retake the single clip IS the window being repaired, and WITH an
+        # end_source a single clip is "a 5-second video that ends with this"
+        # (owner decision) — so 1 clip is OK in all five cases. (Forgetting the
+        # retake term here would 422 EVERY retake request before it reached any
+        # of its own validation.)
         if (
             self.source_video is None
             and self.source_audio is None
             and self.reference_video_id is None
             and self.retake is None
+            and self.end_source is None
             and len(self.clips) < 2
         ):
             raise ValueError("chain requires at least 2 clips")
@@ -932,6 +1063,16 @@ class GenerateChainRequest(BaseModel):
                     'or switch stage2_window back to "standard".'
                 )
 
+        # NO end-source x window cross-validation here (deleted with the v2
+        # internal-band design). The v1 mirror of the V2V check above capped
+        # end_source.context_frames at 8*(v_adv-1) — 136 standard / 88
+        # "high_resolution" — because the band had to fit inside the LAST stage-2
+        # tile alongside its carry-over. The band may now span as many tiles as it
+        # needs (``chain_math`` publishes the per-tile plan in
+        # ``ChainLayout.end_tile_bands``), so there is no window-derived ceiling
+        # left to check: 136 survives only as the OPERATIONAL cap in
+        # config.limits.end_context_frames_max.
+
         # Retake x non-default window: ALLOWED. The invariant is unchanged — a
         # retake window must still be refined as ONE stage-2 tile, which is the
         # only geometry the both-side freeze was validated under
@@ -967,14 +1108,41 @@ class GenerateChainRequest(BaseModel):
                     None if self.retake is None
                     else (self.retake.head_px, self.retake.tail_px)
                 ),
+                # The frozen tail band's own geometry (multiple of 8, >= 8, free
+                # stage-1 latents left in the FINAL clip, free stage-2 latents
+                # left in the LAST tile) is validated THERE, so the validator,
+                # the engine and the mock cannot disagree. Its ValueError —
+                # which names the concrete frame count the final clip would need
+                # — surfaces as 422.
+                end_context_px=(
+                    None if self.end_source is None
+                    else self.end_source.context_frames
+                ),
             )
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
-        if layout.total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
+        # The cap is on the USER'S OWN CLIPS, not on the delivered timeline. An
+        # end source appends an internal band segment AFTER the clips, so
+        # ``layout.total_px == clips_total_px + end_context_px``; charging the
+        # band against the cap would newly reject chains that are accepted today
+        # (the kv=1 maximum, 24 clips x 481 frames == 11521 px, plus a 136-frame
+        # band == 11657 > 11544). ``clips_total_px`` is the same subtraction
+        # ``ChainLayout.to_dict`` publishes, and it is simply ``total_px`` on
+        # every chain without an end source, so the existing accept/reject
+        # boundary is preserved byte-for-byte there.
+        clips_total_px = layout.total_px - (layout.end_context_px or 0)
+        if clips_total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
             raise ValueError(
-                f"chain total timeline {layout.total_px} pixel frames exceeds the "
+                f"chain total timeline {clips_total_px} pixel frames exceeds the "
                 f"cap {MAX_CHAIN_TOTAL_PIXEL_FRAMES} (reduce clip count or lengths)"
             )
+
+        # NO end-source x clip-0-keyframe collision check here (deleted with the
+        # v2 internal-band design). In v1 the band was carved OUT OF the clips, so
+        # a clip-0 keyframe could land inside it and be silently overwritten. The
+        # band now lives in an internal segment APPENDED AFTER every clip, so no
+        # clip frame — clip 0's least of all — can ever reach it: the test would
+        # be identically false for every request.
 
         # Reference-video CONTROL IC-LoRA: mirrors
         # GenerateRequest.validate_ltx_constraints (api/models.py:173-188) plus the
@@ -1055,6 +1223,7 @@ class GenerateChainRequest(BaseModel):
         and dropping it changes no validation outcome. The authoritative copy is
         ``JobRecord.chain_request``, which ``run_chain_job`` reads and which the
         worker payload is built from.
+        ``end_source`` follows that same precedent for the same reasons.
         """
         clip = self.clips[index]
         return GenerateRequest(
@@ -1104,6 +1273,17 @@ class UploadVideoResponse(BaseModel):
     # clients simply ignore it, and an upload without trim arguments always
     # reports False.
     trimmed: bool = False
+    # What the STORED file measures (post-cut when a cut ran). Both None unless
+    # the upload asked to be measured by sending ``max_frames`` -- an ordinary
+    # upload spends no extra ffprobe and its response is unchanged. Also None
+    # whenever a probe or cut failed: "unknown" is a legitimate answer and the
+    # client is expected to fall back (the end source estimates the band length
+    # from the media duration instead) rather than treat it as an error.
+    # The end source's automatic band length is computed FROM these numbers, so
+    # they must describe the file the server actually kept, never the original
+    # upload -- see services/video_upload_store.VideoUploadStore.save.
+    frame_count: int | None = None
+    fps: float | None = None
 
 
 class UploadAudioResponse(BaseModel):

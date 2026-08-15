@@ -700,6 +700,59 @@ def test_generate_payload_omits_fused_dequant_when_explicitly_off(tmp_path):
     assert "fused_gguf_dequant_kernel" not in captured_off[0]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# end_source (the chain's last frames come from an uploaded video / still) —
+# conditional worker-payload block, guarded on BOTH the path and the frame count
+# so a chain without one keeps the key set pinned above byte-identical.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_chain_payload_carries_end_source_when_prepared(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(
+        # The final clip has to leave free latents past the 24-frame frozen band
+        # (chain_math enforces it), hence the longer second clip.
+        _chain_request(
+            clips=[{"num_frames": 25}, {"num_frames": 41}],
+            end_source={"video_id": "vid", "context_frames": 24},
+        ),
+        tmp_path / "out",
+        end_source_path=tmp_path / "_end_source.mp4",
+        end_source_context_frames=24,
+    )
+    assert captured[0]["end_source"] == {
+        "path": str(tmp_path / "_end_source.mp4"),
+        "context_frames": 24,
+    }
+
+
+def test_chain_payload_omits_end_source_by_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(_chain_request(), tmp_path / "out")
+    assert "end_source" not in captured[0]
+
+
+def test_chain_payload_omits_end_source_when_only_one_half_is_given(tmp_path):
+    # Half-configured is not "nearly configured": the engine would have a path
+    # with no band length (or the reverse), so the block is left off entirely.
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate_chain(
+        _chain_request(), tmp_path / "out",
+        end_source_path=tmp_path / "_end_source.mp4",
+    )
+    assert "end_source" not in captured[0]
+
+    captured2: list[dict] = []
+    be2 = _capturing_backend(captured2)
+    be2.generate_chain(
+        _chain_request(), tmp_path / "out2", end_source_context_frames=24,
+    )
+    assert "end_source" not in captured2[0]
+
+
 def test_chain_payload_carries_fused_dequant_when_true(tmp_path):
     captured: list[dict] = []
     be = _capturing_backend(captured)

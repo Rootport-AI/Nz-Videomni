@@ -15,7 +15,7 @@ import wave
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, ImageCms
 
 from services import video_io
 
@@ -46,6 +46,15 @@ def _avg_rgb(png_path) -> np.ndarray:
 def _closest_color_index(avg: np.ndarray) -> int:
     dists = [np.linalg.norm(avg - np.array(c, dtype=np.float64)) for c in _COLORS]
     return int(np.argmin(dists))
+
+
+def _icc_png(path, size=(64, 48), color=(200, 60, 30)):
+    """Write a PNG that carries an embedded ICC profile (as a camera/editor
+    exported picture does). The profile survives into any mp4 encoded from it as
+    stream side data, which is what used to break ``frame_count``."""
+    icc = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    Image.new("RGB", size, color).save(path, icc_profile=icc)
+    return path
 
 
 def test_frame_count_matches_encoded_frames(color_mp4):
@@ -339,6 +348,42 @@ def test_still_image_mp4_rejects_non_positive_frame_count(tmp_path):
     Image.new("RGB", (64, 48), (0, 0, 0)).save(png)
     with pytest.raises(video_io.FFmpegError):
         video_io.still_image_mp4(png, tmp_path / "zero.mp4", num_frames=0, fps=24.0)
+
+
+# --------------------------------------------- ICC profile regression (§3-82)
+#
+# A picture exported by a camera or an editor usually carries an ICC profile.
+# ffmpeg copies it into the encoded mp4 as stream side data, and ffprobe's CSV
+# writer then appends an empty field for it -- ``frame_count`` received "9," and
+# raised "unparsable output". Real uploads hit this; the synthetic PIL images
+# used everywhere else in this file do not, because they carry no profile.
+
+
+def test_frame_count_parses_a_file_whose_stream_carries_an_icc_profile(tmp_path):
+    png = _icc_png(tmp_path / "icc.png")
+    out = tmp_path / "icc.mp4"
+    info = video_io.still_image_mp4(png, out, num_frames=9, fps=24.0)
+    assert info["written_frames"] == 9
+    assert video_io.frame_count(out) == 9
+
+
+def test_upload_measurement_parses_a_video_carrying_an_icc_profile(client, tmp_path):
+    """The upload store measures via ``frame_count`` and degrades to "unknown"
+    on any failure -- so the CSV bug showed up here as a null frame count for
+    every ICC-bearing upload, not as an error."""
+    png = _icc_png(tmp_path / "icc_upload.png")
+    src = tmp_path / "icc_upload.mp4"
+    video_io.still_image_mp4(png, src, num_frames=9, fps=24.0)
+
+    r = client.post(
+        "/api/v1/upload/video",
+        params={"max_frames": 100},  # far above the clip: measure only, no cut
+        files={"file": ("icc.mp4", src.read_bytes(), "video/mp4")},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["trimmed"] is False
+    assert body["frame_count"] == 9
 
 
 # ------------------------------------------------------------- join_v2v tests

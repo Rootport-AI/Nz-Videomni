@@ -595,6 +595,10 @@ class RetakeSpec(BaseModel):
 class EndSourceSpec(BaseModel):
     """End source — the chain ENDS with an uploaded video / still image.
 
+    EXPERIMENTAL / NOT RECOMMENDED. The generated clip reliably crossfades into
+    the material instead of arriving at it, so this field is not exposed in the
+    app's UI; it is kept for a future fix. Prefer leaving ``end_source`` unset.
+
     The mirror of :class:`SourceVideoSpec` at the other end of the timeline.
     Exactly ONE of ``video_id`` (an upload from POST /upload/video, the same
     store the continuation source uses) or ``image_id`` (POST /upload/image) is

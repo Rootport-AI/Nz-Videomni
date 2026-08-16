@@ -4,8 +4,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.5** |
-| 日付 | **2026-07-28**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
+| 版 | **v0.5.12** |
+| 日付 | **2026-08-16**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
 ## 目次
@@ -40,7 +40,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.11** |
+| 版 | **v0.5.12** |
 | 日付 | **2026-08-16** |
 | 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
@@ -64,6 +64,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.9 | 2026-08-05 | **PrunaVAED（枝刈り版の映像VAEデコーダ）の実装**を反映。2026-07-31 から Acceleration 区画で唯一モックのまま残っていた `vae_mode` が実機能になり、**モックは1件も無くなった**。**§6.2**（`GenerateRequest` の `vae_mode` の行を「モック」から実装済みの記述へ全面書き換え。降格が環境ではなく重みファイルの有無で決まること・既定が恒久 off であること・実測値〔768p/257f で −12.54秒／`peak_vram_reserved_mb` −2,635MB／PSNR 36.06dB／SSIM 0.9854〕を明記）／**§6.2 の Acceleration 補足**（「モック1件」の記述を撤去し、モックの作法そのものは将来の枠のために記述として残す。`vae_mode` の降格セマンティクスと恒久 off の項を追加）／**§6.5b**（`/status` の acceleration ブロックに `vae_mode` を載せない理由を「モックだから」から「環境依存の可否ではなく、しかもジョブ単位で変わる判定だから」へ差し替え）／**§13.x の Gradio Settings タブ記述**（プレースホルダ表記の撤去）。表示名を **PruneVAED → PrunaVAED** へ訂正した（上流の正式名称の誤記だったため）が、**API のフィールド値 `"prune_vaed"` は既存の外部コントラクトなので改名していない**。凍結 API 契約（§6）への変更は無く、既定 `"default"` のジョブの worker ペイロードはバイト同一のままである（既定反転を行わないため鍵集合が増えない）。あわせて**MCP サーバーのツール引数へ `vae_mode` を公開**した（§12b。実機ゲート G1〜G7 の合格を待ってからの最終ステップ＝G9 として実施し合格。`submit_generate` / `submit_chain` の両方に列挙値2つで現れ、**ツール本数22は不変**。設計判断は `Docs/MCP_SERVER_DESIGN.md` D12）。実装・機械検証・実機ゲート G1〜G7＋G9 の正本は `Docs/VERIFICATION_LOG.md` §52、仕様と設計判断の正本は `Docs/PRUNAVAED_WORKORDER.md`、利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。 |
 | v0.5.10 | 2026-08-11 | **長尺IC-LoRA（クリップ別の参照動画）の実装**を反映。チェーン（`POST /generate/chain`）の `reference_video_id` が2026-07-11の解禁時点で持っていた「clips=1本限定」を撤廃し、**長い参照動画を1本だけ添付すると各クリップが担当する区間をサーバーが自動で切り出してstage-1にのみ注入する**方式へ拡張した。**§6.2**（`GenerateChainRequest` の`reference_video_id`系3フィールドの補足段落を新設し、`chain_math.video_segment_windows`の幾何・stage-1限定・参照不足時の穏当な劣化を明記）／**§6.8**（`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`〔422、2クリップ以上での制御系IC-LoRA拒否〕を削除し、深度前処理〔Video-Depth-Anything〕がメモリに載らないことに由来する `LORA_DEPTH_CHAIN_UNSUPPORTED`〔422、2クリップ以上での`depth-control`拒否のみ〕へ置換。canny/pose等の他アダプタは多クリップで受理されるようになった）。あわせて `GET /loras` の各行へ `preprocess`／`reference_downscale_factor` を追加し、`metadata.json` へ `ic_lora` ブロック（`reference_segment_windows`等）を追加した（いずれも凍結表未掲載のADDITIVE要素）。凍結 API 契約（§6）への変更は、エラーコード1件の置換（他クライアントへの実害なし——旧コードはこの状況でしか出ず、出なくなっただけ）と、フィールドの制約緩和（1クリップ限定→1〜24クリップ）のみで、キーの追加・型変更は無い。実装・機械検証・実機ゲートG1〜G10の正本は `Docs/VERIFICATION_LOG.md` §57、利用者向け説明は `README.md`「Gradio UI」節、フロントエンド側の実装記録はフロントエンド`Docs/DEVLOG.md` §72・§73。 |
 | v0.5.11 | 2026-08-16 | **End source（素材（末尾））の実装**を反映。`POST /generate/chain` に `end_source`（`EndSourceSpec`）を追加し、指定した動画・静止画でチェーンが終わるようにした。**§6.8**（`END_SOURCE_NOT_FOUND`〔404〕・`END_SOURCE_TOO_SHORT`〔422〕の2件を追加）。凍結 API 契約（§6）への変更は既存フィールドの意味変更を伴わない加算のみ。契約の詳細はフロントエンド`Docs/API_REFERENCE.md` §5.2、実測は`Docs/VERIFICATION_LOG.md` §60が正本。 |
+| v0.5.12 | 2026-08-16 | **end source のUI非公開化**（オーナー裁定）と、**ICCプロファイル起因のフレーム数解析バグの修正**を反映。end source は目視ゲートで「本体はプロンプトどおりに進み、そこからクロスフェードで素材へ接続する」結果になることが分かったため、フロントエンドのUIからは非公開にし、**API（`POST /generate/chain` の `end_source`）と内部実装はそのまま温存**した——**凍結 API 契約（§6）への変更は無い**（受理するフィールド・エラーコードとも不変）。API 消費者向けに「実験的・使用非推奨」の注記を MCP サーバーの `INSTRUCTIONS`・`submit_chain` の docstring・`EndSourceSpec` の docstring・フロントエンド`Docs/API_REFERENCE.md` §5.2 へ追加した。あわせて `services/video_io.py` の `frame_count()` が ffprobe を呼ぶ書式を `csv=p=0` から `default=nokey=1:noprint_wrappers=1` へ改めた（ICCプロファイルが出力mp4の side data として残ると空フィールドが付き、フレーム数の解析に失敗していた。end source 固有ではなく `frame_count()` を使う全経路に共通する既存バグ）。経緯と目視ゲートの結果は`Docs/VERIFICATION_LOG.md` §60、裁定の正本はフロントエンド`Docs/PENDING_TASKS_CLOSED.md` §3-82・§3-86。 |
 
 ### 0.2 スコープ
 

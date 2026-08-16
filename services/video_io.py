@@ -859,8 +859,11 @@ def frame_count(mp4: Path) -> int:
         "-count_frames",
         "-show_entries",
         "stream=nb_read_frames",
+        # NOTE: must not use ``csv=p=0`` here. When the stream carries side data
+        # (e.g. an ICC profile inherited from the source image/video), the CSV
+        # writer appends extra empty fields and emits unparsable output like "9,".
         "-of",
-        "csv=p=0",
+        "default=nokey=1:noprint_wrappers=1",
         str(mp4),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)

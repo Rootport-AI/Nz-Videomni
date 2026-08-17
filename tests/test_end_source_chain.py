@@ -10,22 +10,25 @@ end_source block) is pinned without weights.
 
 Two things this file guards that are easy to get wrong:
 
-  * OUTPUT LENGTH GROWS BY THE BAND. A clip's ``num_frames`` is purely NEWLY
-    GENERATED material; the band is an internal segment ``chain_math`` appends
-    AFTER the last clip, so the delivered mp4 holds ``clips_total_px +
-    context_frames`` frames. (v1 carved the band out of the clips and kept the
-    length unchanged — the v2 tests below are the visible evidence of that
-    change. V2V still trims its own frozen head off the FRONT, so a chain with
+  * OUTPUT LENGTH DEPENDS ON THE MODE, and the mode is the CLIP COUNT:
+      - ONE clip -> ``"in_window"``: the band is the clip's OWN tail, so the
+        delivered mp4 is exactly ``num_frames`` frames, of which the last
+        ``context_frames`` are the material.
+      - TWO OR MORE clips -> ``"internal_segment"``: the band is a segment
+        ``chain_math`` appends AFTER the last clip, so the mp4 holds
+        ``clips_total_px + context_frames`` frames.
+    (V2V still trims its own frozen head off the FRONT in both, so a chain with
     both is ``total_px - trim_px``.)
   * THE +1 PRIMER. The app always cuts/synthesises ``context_frames + 1``
     frames because the causal video VAE spends the first one on its lone
-    keyframe latent.
+    keyframe latent. Mode-independent.
 
-Several v1 REJECTIONS are gone with the geometry that justified them — the band
-no longer has to fit inside the final clip or inside the last stage-2 tile, and
-it cannot collide with a clip-0 keyframe. Those tests are kept below, INVERTED:
-the same requests that used to 422 must now be accepted, which is what stops the
-old rules being reintroduced by accident.
+Several v1 REJECTIONS are gone with the geometry that justified them — in the
+internal-segment mode the band no longer has to fit inside the final clip or
+inside the last stage-2 tile, and it cannot collide with a clip-0 keyframe.
+Those tests are kept below, INVERTED: the same requests that used to 422 must
+now be accepted, which is what stops the old rules being reintroduced by
+accident. They are all MULTI-CLIP, because that is the mode they belong to.
 
 Frozen-API discipline: a request omitting end_source is byte-shape identical to
 before (regression test below).
@@ -112,8 +115,9 @@ def test_chain_without_end_source_regression(client):
 
 
 def test_end_source_video_mock_e2e(client, tmp_path):
-    """Video end source: 202 -> completed, the delivered mp4 is the clips PLUS the
-    band, and the metadata end_source block carries geometry + runtime +
+    """Video end source on ONE clip ("in_window" mode): 202 -> completed, the
+    delivered mp4 is the clip itself with its last frames frozen onto the
+    material, and the metadata end_source block carries geometry + runtime +
     provenance — but never a fabricated freeze_proof."""
     src = _make_source_mp4(tmp_path / "src24.mp4", n_frames=40, fps=24.0)
     vid = _upload_video(client, src)
@@ -127,22 +131,24 @@ def test_end_source_video_mock_e2e(client, tmp_path):
     layout = chain_math.compute_chain_layout([49], 24.0, kv=2, end_context_px=24)
     ctx = client.app_context
     out = ctx.config.output_dir / job_id / "output.mp4"
-    # THE headline behaviour change: one 49-frame clip + a 24-frame band is a
-    # 73-frame mp4. In v1 this very assertion read "== 49".
-    assert video_io.frame_count(out) == layout.total_px == 49 + 24 == 73
+    # THE headline property of the in-window mode: a 49-frame clip plus a
+    # 24-frame band is a 49-frame mp4 — the band is the clip's own tail, so the
+    # requested length is the delivered length.
+    assert video_io.frame_count(out) == layout.total_px == 49
 
     meta = _metadata(client, job_id)
     es = meta["end_source"]
     # geometry (from chain_math)
+    assert es["mode"] == "in_window"
     assert es["end_context_px"] == 24
     assert es["n_end_v"] == layout.n_end_v == 3
-    assert es["end_source_junction_px"] == layout.end_source_junction_px
+    assert es["end_source_junction_px"] == layout.end_source_junction_px == 24
     assert es["cut_frames"] == 25  # context_frames + 1 primer
-    # the internal band segment, and the identity it exists to guarantee
-    assert es["clips_total_px"] == 49
-    assert es["clips_total_px"] + es["end_context_px"] == layout.total_px
-    assert es["end_segment_latent"] == layout.end_segment_latent == 2 + 3  # kv + n_end_v
-    assert es["end_segment_px"] == layout.end_segment_px
+    # the identity this mode exists to guarantee: the clips ARE the timeline
+    assert es["clips_total_px"] == 49 == layout.total_px
+    # ...and no band segment was appended at all
+    assert es["end_segment_latent"] == layout.end_segment_latent == 0
+    assert es["end_segment_px"] == layout.end_segment_px == 0
     # the stage-2 freeze plan reaches exactly the end of the band
     assert layout.end_tile_bands[-1][1] == layout.n_end_v
     assert es["end_tile_bands"] == [list(b) for b in layout.end_tile_bands]
@@ -160,6 +166,36 @@ def test_end_source_video_mock_e2e(client, tmp_path):
     # the app-cut material really is context_frames + 1 frames long
     cut = ctx.config.output_dir / job_id / "_end_source.mp4"
     assert video_io.frame_count(cut) == 25
+
+
+def test_in_window_mock_e2e_at_the_experiment_geometry(client, tmp_path):
+    """The exact shape the real-hardware experiment submits (one 169-frame clip,
+    24-frame band), end to end through the mock. Guards the three statements a
+    finished job is machine-checked on: the output is the requested length, the
+    metadata says which mode ran, and no band segment was appended."""
+    src = _make_source_mp4(tmp_path / "src.mp4", n_frames=60, fps=24.0)
+    vid = _upload_video(client, src)
+    r = _run_chain(
+        client, [{"num_frames": 169}],
+        end_source={"video_id": vid, "context_frames": 24},
+    )
+    job_id = _completed(client, r)
+
+    layout = chain_math.compute_chain_layout([169], 24.0, kv=2, end_context_px=24)
+    ctx = client.app_context
+    out = ctx.config.output_dir / job_id / "output.mp4"
+    assert video_io.frame_count(out) == 169 == layout.total_px
+
+    es = _metadata(client, job_id)["end_source"]
+    assert es["mode"] == "in_window"
+    assert es["end_segment_latent"] == 0
+    assert es["end_segment_px"] == 0
+    assert es["clips_total_px"] == 169
+    assert es["end_source_junction_px"] == 144      # 169 - 24 - 1
+    assert es["end_tile_bands"] == [[3, 3]]         # one stage-2 tile
+    # The mock still has no latents, so it must not claim a freeze proof.
+    assert "freeze_proof" not in es
+    assert video_io.frame_count(ctx.config.output_dir / job_id / "_end_source.mp4") == 25
 
 
 def test_end_source_video_resample_is_recorded(client, tmp_path):
@@ -188,11 +224,12 @@ def test_end_source_image_mock_e2e(client, png_bytes):
     layout = chain_math.compute_chain_layout([49], 24.0, kv=2, end_context_px=8)
     ctx = client.app_context
     out = ctx.config.output_dir / job_id / "output.mp4"
-    assert video_io.frame_count(out) == layout.total_px == 49 + 8 == 57
+    assert video_io.frame_count(out) == layout.total_px == 49
 
     meta = _metadata(client, job_id)
     es = meta["end_source"]
     assert es["kind"] == "image"
+    assert es["mode"] == "in_window"
     assert es["end_context_px"] == 8
     assert es["n_end_v"] == 1
     assert es["cut_frames"] == 9
@@ -203,25 +240,29 @@ def test_end_source_image_mock_e2e(client, png_bytes):
 
 
 def test_end_source_default_context_frames_is_72(client, tmp_path):
-    """context_frames omitted -> the published default (72). The clip no longer
-    has to be long enough to "hold" it — the band extends the timeline instead."""
+    """context_frames omitted -> the published default (72). On one clip the band
+    is that clip's last 72 frames, so a 97-frame request delivers 97 frames: 25
+    newly generated, then the material."""
     src = _make_source_mp4(tmp_path / "long.mp4", n_frames=80, fps=24.0)
     vid = _upload_video(client, src)
     r = _run_chain(client, [{"num_frames": 97}], end_source={"video_id": vid})
     job_id = _completed(client, r)
     meta = _metadata(client, job_id)
     assert meta["request"]["end_source"]["context_frames"] == 72
+    assert meta["end_source"]["mode"] == "in_window"
     assert meta["end_source"]["end_context_px"] == 72
     assert meta["end_source"]["cut_frames"] == 73
     assert meta["end_source"]["clips_total_px"] == 97
     ctx = client.app_context
     out = ctx.config.output_dir / job_id / "output.mp4"
-    assert video_io.frame_count(out) == 97 + 72 == 169
+    assert video_io.frame_count(out) == 97
 
 
 def test_end_source_allows_a_single_clip(client, tmp_path):
     """"A five-second video that ENDS with this" is a single clip + end source —
-    the >= 2 clip floor is lifted for it, exactly as it is for a start source."""
+    the >= 2 clip floor is lifted for it, exactly as it is for a start source.
+    It is also the shape that selects the in-window mode, so the accepted job
+    must actually report that mode rather than quietly running the old one."""
     src = _make_source_mp4(tmp_path / "src.mp4", n_frames=40, fps=24.0)
     vid = _upload_video(client, src)
     r = _run_chain(
@@ -230,6 +271,10 @@ def test_end_source_allows_a_single_clip(client, tmp_path):
     )
     assert r.status_code == 202, r.text
     assert r.json()["num_clips"] == 1
+    job_id = _completed(client, r)
+    es = _metadata(client, job_id)["end_source"]
+    assert es["mode"] == "in_window"
+    assert es["end_segment_latent"] == 0
 
 
 def test_end_source_with_source_video_is_allowed(client, tmp_path):
@@ -251,12 +296,15 @@ def test_end_source_with_source_video_is_allowed(client, tmp_path):
     )
     ctx = client.app_context
     out = ctx.config.output_dir / job_id / "output.mp4"
-    # V2V still trims its own frozen head off the FRONT; the end source adds no
-    # trim of its own, so the delivered length is the V2V one, unchanged.
-    assert video_io.frame_count(out) == layout.new_frames_px
+    # One clip -> in-window mode, so the 73-frame window holds the frozen head,
+    # the free middle AND the frozen band. V2V still trims its own head off the
+    # FRONT and the end source adds no trim of its own, so 73 - 25 == 48 frames
+    # are delivered: 24 newly generated, then the 24-frame band.
+    assert video_io.frame_count(out) == layout.new_frames_px == 48
 
     meta = _metadata(client, job_id)
     assert meta["v2v"]["source_video_id"] == start_id
+    assert meta["end_source"]["mode"] == "in_window"
     assert meta["end_source"]["end_source_video_id"] == end_id
     assert meta["end_source"]["end_source_junction_px"] == layout.end_source_junction_px
 
@@ -476,20 +524,31 @@ def test_end_source_above_the_old_high_resolution_ceiling_is_allowed(client, tmp
 def test_end_source_at_the_published_ceiling_under_high_resolution_202(client, tmp_path):
     """136 is now an OPERATIONAL cap that applies to every stage-2 window alike,
     so the narrowest published window must accept it too (v1 capped this preset
-    at 88). This is the geometry the H12 real-run gate then judges for quality."""
+    at 88). This is the geometry the H12 real-run gate then judges for quality.
+
+    TWO clips deliberately: the claim "136 is the operational maximum" belongs to
+    the internal-segment mode, where the band gets a segment of its own and the
+    clips need not be long enough to hold it. (A single clip could not take a
+    136-frame band unless it were longer than the band itself — in the in-window
+    mode the band is carved out of the clip.) This is therefore also the
+    multi-clip mode's end-to-end pin: if the preserved v2 path ever moves, this
+    test is what notices. Two 25-frame clips keep the last stage-2 tile shorter
+    than the band, which is what makes the straddle assertions below bite."""
     src = _make_source_mp4(tmp_path / "src.mp4", n_frames=160, fps=24.0)
     vid = _upload_video(client, src)
     r = _run_chain(
-        client, [{"num_frames": 49}],
+        client, [{"num_frames": 25}, {"num_frames": 25}],
         stage2_window="high_resolution",
         end_source={"video_id": vid, "context_frames": 136},
     )
     job_id = _completed(client, r)
     meta = _metadata(client, job_id)
+    assert meta["end_source"]["mode"] == "internal_segment"
     assert meta["end_source"]["end_context_px"] == 136
     assert meta["end_source"]["n_end_v"] == 17
+    assert meta["end_source"]["clips_total_px"] == 41
     ctx = client.app_context
-    assert video_io.frame_count(ctx.config.output_dir / job_id / "output.mp4") == 49 + 136
+    assert video_io.frame_count(ctx.config.output_dir / job_id / "output.mp4") == 41 + 136
     # ...and this is a genuine STRADDLING band: two tiles each carry part of it,
     # which is the whole reason the per-window ceiling could be dropped. (The
     # per-tile counts SUM TO MORE than n_end_v -- stage-2 tiles overlap, so a

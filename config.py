@@ -267,6 +267,18 @@ class LimitsConfig(BaseModel):
     # groups and never touches the causal VAE's lone keyframe latent (see
     # chain_math.v_tail_latents).
     #
+    # THE CLIP COUNT PICKS THE GEOMETRY. ONE clip -> "in_window": the band is
+    # the clip's OWN tail and THE OUTPUT LENGTH DOES NOT CHANGE. TWO OR MORE ->
+    # "internal_segment" (NOT RECOMMENDED): the band is appended after the clips
+    # and the output grows by it. THE 136 PARAGRAPH BELOW DESCRIBES THE LATTER
+    # GEOMETRY.
+    #
+    # THE DEFAULT 72 IS THE CONTRACT'S DEFAULT, NOT A RECOMMENDED VALUE. The
+    # real-run comparison settled on an 8-frame anchor (a longer band spends the
+    # window re-rendering the material and costs the generator its invention),
+    # and the frontend always sends context_frames=8 explicitly. Sources of
+    # truth: Docs/VERIFICATION_LOG.md §61 and api.models.EndSourceSpec.
+    #
     # 136 IS THE OPERATIONAL CEILING ON THE AUTOMATIC BAND LENGTH, NOT A
     # GEOMETRIC LIMIT. The band is a whole internal segment appended after the
     # user's clips and may span as many stage-2 tiles as it needs

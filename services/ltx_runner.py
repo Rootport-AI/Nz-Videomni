@@ -826,11 +826,15 @@ class _MockBackend:
         #   (a retake's deliverable is its whole window);
         # * V2V — the frozen source head is trimmed off the FRONT, which is
         #   exactly trim_px;
-        # * end source — the frozen band is an internal segment APPENDED after
-        #   the user's clips, so total_px is already clips + band and the mp4 is
-        #   correspondingly LONGER than the clips asked for. (In v1 the band was
-        #   carved out of the clips and the length was unchanged; that is the
-        #   behavioural change this line encodes.)
+        # * end source, "in_window" mode (ONE clip) — the band is that clip's own
+        #   tail, so total_px IS the clip length and the mp4 is exactly as long as
+        #   the user asked for;
+        # * end source, "internal_segment" mode (2+ clips) — the band is a segment
+        #   APPENDED after the user's clips, so total_px is already clips + band
+        #   and the mp4 is correspondingly LONGER than the clips asked for.
+        #
+        # Neither of those is branched on here: chain_math folds the mode into
+        # total_px, so the mock follows both automatically.
         #
         # ``layout.new_frames_px`` is that same subtraction, computed once in
         # chain_math so the validator, the mock and the engine cannot disagree.

@@ -6,7 +6,7 @@
 
 **MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` に新設し、既存の FastAPI バックエンド（`/api/v1/*`）を **22個のツール**として公開した。Web の操作パネル（`gradio_ui/`）が使える操作は一通りツール化してあり、パネルと同等の操作性が MCP 経由でも成立する（AviUtl2 のタイムライン連携は対象外——これはフロントエンド側の責務であり、本パッケージは扱わない）。
 
-## 2. 主要な設計判断（D1〜D12）
+## 2. 主要な設計判断（D1〜D13）
 
 以下は実装計画で決定した設計判断の要約。番号は計画書の通し番号に対応する。
 
@@ -24,6 +24,7 @@
 | D10 | `list_jobs` はプロンプト全文などを含まない要約射影を返す。全文が要る場合は `job_status` を使う | 全ジョブぶんのプロンプト全文（最大2000字）を毎回返すとトークンを大きく消費するため |
 | D11 | docstring・`instructions` は日本語（ツール名・引数名は英語のまま）。同時1ジョブ制約（409 JOB_BUSY）を `instructions` と両submitツールのdocstringの両方に明記する | エージェントの学習・利用者の可読性のため日本語で統一。409を連発させないための注意書きを、サーバー起動時の案内文と個々のツール説明の両方に重ねて置いた |
 | D12（2026-08-05追加） | **Acceleration（生成の高速化）の5フィールドは全て公開する**。`submit_generate` / `submit_chain` の両方に、`attention_backend`（`"sdpa"` / `"sage"`・既定 `"sdpa"`）・`block_swap_prefetch`（bool・既定 `true`）・`keep_resident`（bool・既定 `false`）・`fused_gguf_dequant_kernel`（bool・既定 `true`）・`vae_mode`（`"default"` / `"prune_vaed"`・既定 `"default"`）を出す | 当初 `vae_mode` だけは D8 の趣旨（実体の無いフィールドをエージェントに触らせない）に沿って**モックである間は除外**していたが、2026-08-05 に実機能へ転換したため除外理由が消滅した。同日のオーナー裁定（「外出先から操作したいときに便利なので公開まで進みたい」）で公開へ転じ、実装と実機ゲート G1〜G7 の合格を待ってから最終ステップとして実施した。**ツールの本数は22本のまま不変**（フィールドの追加であってツールの追加ではない）。検証記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.10-b、設計の正本は [`PRUNAVAED_WORKORDER.md`](PRUNAVAED_WORKORDER.md) §6.3 |
+| D13（2026-08-17追加） | **`submit_chain` に end source（素材（末尾））の3引数を公開する**——`end_source_video_id` / `end_source_image_id` / `end_source_context_frames`（8の倍数・既定72）。2つのIDの同時指定は POST 前に `END_SOURCE_XOR_VIOLATION` として弾く。docstring と `INSTRUCTIONS` には**「クリップ1件のときが推奨（窓内モード）・2件以上は非推奨」**と明記する | 2026-08-16 時点では「生成結果が素材へクロスフェードする」既知問題のため**あえて送信できないようにしていた**が、翌日の窓内モード（`in_window`）実装でその問題が解消し、除外理由が消滅した。実機実験4ラウンド20ジョブは、まさにこの3引数を使って MCP の実プロトコル経由で実施している（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61）。**ツールの本数は22本のまま不変**（フィールドの追加であってツールの追加ではない） |
 
 ## 3. `.mcp.json` 絶対パス生成方式の経緯
 

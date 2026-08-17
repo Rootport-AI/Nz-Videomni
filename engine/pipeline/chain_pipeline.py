@@ -178,16 +178,30 @@ class EndSourceSpec:
       whole groups of 8 and never reaches the lone keyframe latent, so the head
       grid's 8n+1 does not apply.
 
-    THE BAND IS APPENDED, NOT CARVED OUT OF THE LAST CLIP. ``compute_chain_layout``
-    gives it an INTERNAL SEGMENT of its own — ``kv`` latents of carry-over from the
-    last clip plus the ``n_end_v`` band latents — appended to ``seg_frames`` after
-    the user's clips. So the clips keep meaning "the NEW material", the delivered
-    length is ``clips total + context_frames`` (nothing is trimmed, unlike a V2V
-    head, which is cut off), and no clip ever has to be "long enough to hold the
-    band". ``config.limits.end_context_frames_max`` (136) is an OPERATIONAL ceiling
-    on the region the real-hardware gate has looked at, NOT a geometric one: the
-    band may span as many stage-2 tiles as it needs (``layout.end_tile_bands`` is
-    the per-tile freeze plan), and a tile it swallows whole is simply fully frozen.
+    WHERE THE BAND LIVES DEPENDS ON THE CLIP COUNT — ``compute_chain_layout``
+    decides it once and reports it as ``layout.end_source_mode``:
+
+      * ONE CLIP -> ``"in_window"``. The band is that clip's OWN last ``n_end_v``
+        latents; nothing is appended and the delivered length is the clip length,
+        unchanged. Stage 1 denoises a one-clip chain as a SINGLE window, so the
+        frozen band is inside the window every generated latent attends over — the
+        clip can steer towards the material rather than being crossfaded onto it.
+        The band therefore eats into the clip's own free latents, and chain_math
+        rejects (422) a clip that has none left once a V2V head is also frozen.
+      * TWO OR MORE CLIPS -> ``"internal_segment"``. THE BAND IS APPENDED, NOT
+        CARVED OUT OF THE LAST CLIP: it gets a segment of its own — ``kv`` latents
+        of carry-over from the last clip plus the ``n_end_v`` band latents —
+        appended to ``seg_frames`` after the user's clips. The clips keep meaning
+        "the NEW material" and the delivered length is ``clips total +
+        context_frames``. Nothing attends across that segment boundary, which is
+        why this mode reliably crossfades into the material; it is kept unchanged
+        but is not the recommended shape.
+
+    In BOTH modes nothing is trimmed (unlike a V2V head, which is cut off) and
+    ``config.limits.end_context_frames_max`` (136) is an OPERATIONAL ceiling on the
+    region the real-hardware gate has looked at, NOT a geometric one: the band may
+    span as many stage-2 tiles as it needs (``layout.end_tile_bands`` is the
+    per-tile freeze plan), and a tile it swallows whole is simply fully frozen.
 
     WHY THE FILE CARRIES ONE EXTRA FRAME (the "+1 primer"): the video VAE is
     causal. Latent 0 is a keyframe built from pixel frame 0 alone, and latent
@@ -587,12 +601,16 @@ def _encode_end_source(
     """VAE-encode the end material into the frozen TAIL latents (end source).
 
     Returns ``(end_v_half, end_v_full)`` — the half-res band stage 1 freezes at
-    the end of its LAST segment (the internal band segment chain_math appended)
-    and the FULL-res band stage 2 re-writes and re-freezes in EVERY tile the band
-    reaches, one slice per tile out of ``layout.end_tile_bands`` (variant B, the
-    same choice the V2V head makes in :func:`_encode_source_heads`). Both returned
-    tensors are the WHOLE band; stage 2 indexes into ``end_v_full``, stage 1 writes
-    ``end_v_half`` in one piece because the band segment holds all of it.
+    the end of its LAST stage-1 segment and the FULL-res band stage 2 re-writes
+    and re-freezes in EVERY tile the band reaches, one slice per tile out of
+    ``layout.end_tile_bands`` (variant B, the same choice the V2V head makes in
+    :func:`_encode_source_heads`). Both returned tensors are the WHOLE band;
+    stage 2 indexes into ``end_v_full``, stage 1 writes ``end_v_half`` in one
+    piece because that last segment holds all of it in EITHER end-source mode —
+    it is the appended internal band segment when there are 2+ clips
+    (``layout.end_source_mode == "internal_segment"``) and the user's single clip
+    itself when there is 1 (``"in_window"``). NOTHING HERE DEPENDS ON THE MODE:
+    the encode is of the material, not of the timeline.
 
     Both encodes consume the WHOLE app-cut file — ``context_frames + 1`` pixel
     frames — and then drop latent 0. That primer frame is what makes the
@@ -833,13 +851,21 @@ def run_chain(
 
     ``end_source`` (end source, additive — ``None`` keeps every other path
     byte-identical) freezes app-cut material as the TAIL of the timeline, so the
-    chain ENDS on it. chain_math APPENDS an internal segment for the band (see
-    :class:`EndSourceSpec`), so stage 1 runs ``n_seg = len(clips) + 1`` segments
-    and the band is the last one's tail; stage 2 then re-writes and re-freezes the
-    band in EVERY tile it reaches, driven by ``layout.end_tile_bands``. The output
-    is NOT trimmed (unlike ``source``, whose frozen head is cut off) and is longer
-    than the clips by exactly the band. Mutually exclusive with ``retake`` and
-    ``audio_source``, combinable with ``source`` — start + end is an
+    chain ENDS on it. TWO MODES, chosen by chain_math from the clip count and
+    reported as ``layout.end_source_mode`` (see :class:`EndSourceSpec`):
+
+      * ONE clip -> ``"in_window"``: no extra segment, ``n_seg == len(clips) == 1``
+        and the band is that one segment's own tail, so it sits inside the single
+        stage-1 denoise window. The output length is the clip length, unchanged.
+      * TWO OR MORE clips -> ``"internal_segment"``: chain_math APPENDS a segment
+        for the band, so stage 1 runs ``n_seg == len(clips) + 1`` and the band is
+        the appended segment's tail. The output is longer than the clips by
+        exactly the band.
+
+    Either way stage 2 then re-writes and re-freezes the band in EVERY tile it
+    reaches, driven by ``layout.end_tile_bands``, and the output is NOT trimmed
+    (unlike ``source``, whose frozen head is cut off). Mutually exclusive with
+    ``retake`` and ``audio_source``, combinable with ``source`` — start + end is an
     interpolation between two given ends.
 
     ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
@@ -968,15 +994,19 @@ def run_chain(
     # Frozen TAIL latents of the end source — 0 when end_source is None, which is
     # what keeps every write/slice below inert on the ordinary path.
     n_end_v = layout.n_end_v
-    # STAGE-1 SEGMENT COUNT, which is NOT the clip count once an end source is in
-    # play: chain_math appends an internal band segment to ``seg_frames`` (kv carry
-    # + the band), so ``n_seg == n + 1`` there and ``n_seg == n`` everywhere else.
-    # The loop, the seeds and the progress denominator all run on ``n_seg``; ``n``
-    # survives only as the number of USER clips (metadata ``n_clips``, clip-0
-    # conditioning), which is what a client counts.
+    # STAGE-1 SEGMENT COUNT, which is NOT the clip count in the end source's
+    # ``internal_segment`` mode: there chain_math appends an internal band segment
+    # to ``seg_frames`` (kv carry + the band), so ``n_seg == n + 1``. In its
+    # ``in_window`` mode (one clip — the band is that clip's own tail) and on every
+    # chain without an end source, ``n_seg == n``. The loop, the seeds and the
+    # progress denominator all run on ``n_seg``; ``n`` survives only as the number
+    # of USER clips (metadata ``n_clips``, clip-0 conditioning), which is what a
+    # client counts.
     seg_frames = layout.seg_frames
     n_seg = len(seg_frames)
-    assert n_seg == n + (1 if end_source is not None else 0), (n_seg, n)
+    assert n_seg == n + (
+        1 if layout.end_source_mode == "internal_segment" else 0
+    ), (n_seg, n, layout.end_source_mode)
     # Retake glue sizes — the SINGLE source of truth is the layout, so the app
     # validator, the mock and this engine cannot disagree about which latents
     # are frozen. All zero on every non-retake path.
@@ -1041,8 +1071,10 @@ def run_chain(
     # that same scene, and its audio (the one modality still generated freely there)
     # should read as a continuation of it, not as a scene change. Reusing the tuple
     # costs ZERO extra text encodes: this appends a reference, and the encoder was
-    # already freed above. Inert without an end source.
-    if end_source is not None:
+    # already freed above. ONLY ``internal_segment`` mode has such a segment — this
+    # list must stay one entry per stage-1 segment, so appending in ``in_window``
+    # mode (where seg_frames == clip_frames) would leave it one too long.
+    if layout.end_source_mode == "internal_segment":
         seg_ctx.append(seg_ctx[-1])
 
     # ── audio-to-video: encode the uploaded waveform to a frozen audio latent ──
@@ -1306,33 +1338,58 @@ def run_chain(
             init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
             fkv, fka = kv, ka_i
             conds = []
-        # ── end source (additive): freeze the BAND SEGMENT's TAIL ─────────────
+        # ── end source (additive): freeze the LAST SEGMENT's TAIL ─────────────
         # Deliberately an INDEPENDENT if, not another elif: an end source does not
         # replace any branch above, it ADDS a frozen band at the far end of the
-        # last segment — here always on top of the carry the ``else`` branch just
-        # built. THE LAST SEGMENT IS THE INTERNAL BAND SEGMENT (i == n_seg - 1),
-        # never a user clip, and it is always i >= 1 (n_seg == n + 1 >= 2), so the
-        # carry branch has necessarily created ``init_v`` already — the band
-        # segment is kv latents of carry-over followed by exactly this band. That
-        # is why the "materialise zeros if the scratch branch left init_v as None"
-        # arm the earlier design needed is gone: it is now unreachable.
+        # last segment, on top of whatever that branch built.
+        #
+        # WHAT "THE LAST SEGMENT" IS depends on the mode, and that is the only
+        # difference between the two here:
+        #
+        #   * ``internal_segment`` (2+ clips) — it is the appended BAND SEGMENT,
+        #     never a user clip, and always i >= 1 (n_seg == n + 1 >= 2), so the
+        #     carry branch above has necessarily built ``init_v``: kv latents of
+        #     carry-over followed by exactly this band.
+        #   * ``in_window`` (1 clip) — it is the user's ONLY clip, i == 0, so any
+        #     of the three i==0 branches may have run. The V2V and retake ones
+        #     leave a real ``init_v``; the plain t2v one leaves it None, and the
+        #     band still has to be written somewhere. Hence the zeros arm below,
+        #     which the internal-segment design had made unreachable.
         if end_source is not None and i == n_seg - 1:
-            # THE INDEX IS THIS SEGMENT'S OWN LATENT LENGTH — never
+            if init_v is None:
+                # Only the plain t2v scratch branch can land here (i == 0 with no
+                # source and no retake), which exists only in ``in_window`` mode.
+                assert layout.end_source_mode == "in_window", layout.end_source_mode
+                v_half_shape = VideoLatentShape.from_pixel_shape(
+                    seg_shape,
+                    latent_channels=components.video_latent_channels,
+                    scale_factors=components.video_scale_factors,
+                ).to_torch_shape()
+                init_v = torch.zeros(tuple(v_half_shape), dtype=DTYPE, device=device)
+                # ``init_a`` stays None on purpose: no audio is frozen by an end
+                # source, and create_initial_state fills a None audio init with
+                # zeros itself. The mask is what freezes, and fka/fta are 0 here.
+            # THE INDEX IS THIS SEGMENT'S OWN LATENT LENGTH — never blindly
             # ``layout.f_total``. f_total is the length of the WHOLE assembled
-            # timeline; it only coincides with a segment's length in retake's
-            # degenerate one-clip/one-tile shape, which is why the retake branch
-            # above can get away with it. Copying that idiom here would freeze a
-            # band at the wrong position (or out of range) on any multi-clip chain.
-            # Here ``seg_L == kv + n_end_v`` (== layout.end_segment_latent), so the
-            # write lands immediately after the carried-over head.
+            # timeline; it coincides with a segment's length only when there is
+            # exactly one segment (retake's degenerate shape, and ``in_window``
+            # mode). Copying that idiom into the multi-clip mode would freeze the
+            # band at the wrong position (or out of range).
             seg_L = init_v.shape[2]
-            assert seg_L == layout.end_segment_latent, (seg_L, layout.end_segment_latent)
+            if layout.end_source_mode == "in_window":
+                assert seg_L == layout.f_total, (seg_L, layout.f_total)
+            else:
+                assert seg_L == layout.end_segment_latent, (
+                    seg_L, layout.end_segment_latent
+                )
             init_v[:, :, seg_L - n_end_v:] = end_v_half.to(init_v.dtype)
             ftv = n_end_v
-            # The two ends now want DIFFERENT strengths: the head is an ordinary
-            # carry at 1 - overlap_strength (or a V2V context head), while the
-            # tail must be a HARD freeze so the chain really lands on the given
-            # material. That split is exactly what tail_mask_value is for.
+            # The two ends want DIFFERENT strengths whenever this segment has a
+            # head at all (an inter-segment carry at 1 - overlap_strength, or a
+            # V2V context head), while the tail must be a HARD freeze so the
+            # chain really lands on the given material. That split is exactly
+            # what tail_mask_value is for. A plain t2v in-window segment has no
+            # frozen head (fkv == 0), so only the tail value is doing anything.
             seg_tail_mask_value = 0.0
         # ── clip-wise IC-LoRA reference (§1-15, additive) ─────────────────────
         # THIS segment's window of the long reference, decoded + VAE-encoded right

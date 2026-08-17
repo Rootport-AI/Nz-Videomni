@@ -1,22 +1,36 @@
 """End source (tail freeze) geometry — the pure ``chain_math`` layer.
 
 Pins the numbers the app validator, the engine and the mock ALL resolve from
-``compute_chain_layout(end_context_px=...)``. An end source appends an INTERNAL
-band segment after the user's clips and hard-freezes its ``end_context_px``
-pixel frames onto uploaded material, so if any expectation here moves the freeze
-band lands on the wrong latents — a silent quality failure, not a crash, exactly
-like retake (see tests/test_retake_math.py and VERIFICATION_LOG §55).
+``compute_chain_layout(end_context_px=...)``. An end source hard-freezes
+``end_context_px`` pixel frames of uploaded material at the end of the timeline,
+so if any expectation here moves the freeze band lands on the wrong latents — a
+silent quality failure, not a crash, exactly like retake (see
+tests/test_retake_math.py and VERIFICATION_LOG §55).
 
-The three pillars this file exists to defend:
+THERE ARE TWO MODES, decided by the CLIP COUNT alone and reported as
+``end_source_mode``. Almost every test below is therefore parametrised over one
+of the two clip-set constants rather than a mixed one:
 
-  1. OUTPUT = CLIPS + BAND. The band is its own segment, so the user's clip
-     lengths keep meaning "new material" and the delivered length grows by
-     exactly the band (``total_px == clips_total_px + end_context_px``).
+  * ``MULTI_CLIP_SETS`` -> ``"internal_segment"``: the band gets a stage-1
+    segment of its own appended after the clips, so OUTPUT = CLIPS + BAND. The
+    older of the two designs, preserved unchanged.
+  * ``SINGLE_CLIP_SETS`` -> ``"in_window"``: the band is the one clip's own
+    tail, so OUTPUT = THE CLIP, unchanged, and nothing is appended
+    (``seg_frames == clip_frames``, ``end_segment_latent == 0``). Stage 1
+    denoises that clip as a single window, so the band is inside the window the
+    generated latents attend over — the reason the mode exists.
+
+The pillars this file defends, across both modes:
+
+  1. THE OUTPUT-LENGTH IDENTITY OF WHICHEVER MODE IS IN PLAY, and that
+     ``clips_total_px`` states it from the other side.
   2. THE BAND MAY STRADDLE STAGE-2 TILES. ``end_tile_bands`` is the single
      source of truth for what each tile freezes, clamps included.
-  3. NOTHING IS REJECTED FOR "not fitting" ANY MORE. The v1 rejections (final
-     clip too short / final tile too short / per-window ceiling) are gone; the
-     one NEW rejection is ``kv >= 2``.
+  3. NOTHING IS REJECTED FOR "not fitting" A TILE OR A CLIP in
+     ``internal_segment`` mode (the v1 rejections are gone; the one rejection
+     there is ``kv >= 2``). ``in_window`` mode adds exactly ONE rejection of its
+     own — the band plus a V2V head must leave the clip a free latent — because
+     without it the engine crashes at 500 instead of answering 422.
 """
 
 from __future__ import annotations
@@ -43,12 +57,15 @@ MULTI_TILE_CHAIN = [161, 169]
 # Frame rates the app can generate at (the webui's whole list).
 ALL_FPS = (23.976, 24.0, 25.0, 29.97, 30.0, 48.0, 50.0, 59.94, 60.0)
 
-# Representative clip layouts: one clip, the default pair, long pairs, a ragged
-# triple, the 8-clip and 4-clip shapes long chains use.
-CLIP_SETS = (
-    [49],
+# Representative clip layouts, SPLIT BY MODE rather than tested through a
+# condition: the two modes have different output-length identities, so a shared
+# constant would force every sweep body to branch. The union is the historical
+# CLIP_SETS, so nothing dropped out of the coverage when they were separated.
+#
+# The default pair, long pairs, a ragged triple, the 8-clip and 4-clip shapes
+# long chains use -> "internal_segment".
+MULTI_CLIP_SETS = (
     [49, 49],
-    [169],
     [105, 113],
     [257, 257],
     [121, 121, 121],
@@ -56,6 +73,13 @@ CLIP_SETS = (
     [481, 481],
     [49] * 8,
     [257] * 4,
+)
+
+# The shortest legal clip and the one-latent-clip length the real-hardware
+# experiment uses -> "in_window".
+SINGLE_CLIP_SETS = (
+    [49],
+    [169],
 )
 
 BOTH_WINDOWS = ("standard", "high_resolution")
@@ -70,6 +94,14 @@ KNOWN_AUDIO_TILING_MESSAGES = (
     "audio tile",
     "audio overlap mismatch",
 )
+
+# The ONE rejection "in_window" mode adds: with a single clip the band is carved
+# out of that clip's own latents, so a short clip and a long band can leave
+# nothing to generate. The single-clip sweeps below tolerate it the same way
+# they tolerate the audio-tiling quirk — the sweeps are about the geometry of
+# the accepted cases, and which combinations are accepted is pinned separately
+# by the boundary test.
+NO_FREE_LATENTS_MESSAGE = "leaves the clip no free video latents"
 
 
 def _clips_only_total_px(clips: list[int], fps: float, kv: int) -> int:
@@ -130,6 +162,7 @@ def test_end_source_sub_dict_shape():
     assert layout.to_dict()["end_source"] == {
         "end_context_px": 72,
         "n_end_v": 9,                    # 72 // 8 (tail grid)
+        "mode": "internal_segment",      # two clips
         "end_source_junction_px": 80,    # 153 - 72 - 1
         "cut_frames": 73,                # the causal VAE's +1 primer
         "end_segment_px": 89,            # px_from_v_latent(3 + 9)
@@ -139,8 +172,25 @@ def test_end_source_sub_dict_shape():
     }
 
 
+def test_end_source_sub_dict_shape_in_window():
+    # The same dict for the OTHER mode: same keys, and the three that state
+    # "where the band lives" all say "inside the clip" instead.
+    layout = cm.compute_chain_layout([169], FPS, end_context_px=24)
+    assert layout.to_dict()["end_source"] == {
+        "end_context_px": 24,
+        "n_end_v": 3,                    # 24 // 8
+        "mode": "in_window",             # one clip
+        "end_source_junction_px": 144,   # 169 - 24 - 1
+        "cut_frames": 25,
+        "end_segment_px": 0,             # no appended segment...
+        "end_segment_latent": 0,         # ...at all
+        "end_tile_bands": [[3, 3]],
+        "clips_total_px": 169,           # == total_px: the band is IN the clip
+    }
+
+
 # ── pillar 1: output length identity ─────────────────────────────────────────
-@pytest.mark.parametrize("clips", CLIP_SETS)
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS)
 @pytest.mark.parametrize("end_px", [8, 24, 72, 136])
 def test_output_length_is_clips_plus_band(clips, end_px):
     for fps, kv, window in itertools.product(ALL_FPS, (2, 3, 5), BOTH_WINDOWS):
@@ -170,6 +220,40 @@ def test_output_length_is_clips_plus_band(clips, end_px):
         assert (
             layout.to_dict()["end_source"]["clips_total_px"] == clips_only.total_px
         )
+        assert layout.end_source_mode == "internal_segment"
+
+
+@pytest.mark.parametrize("clips", SINGLE_CLIP_SETS)
+@pytest.mark.parametrize("end_px", [8, 24, 72, 136])
+def test_output_length_is_the_clip_itself_in_window(clips, end_px):
+    """The OTHER half of pillar 1: with one clip the band is the clip's own tail,
+    so the output length is the clip length and nothing is appended."""
+    for fps, kv, window in itertools.product(ALL_FPS, (2, 3, 5), BOTH_WINDOWS):
+        if any(kv >= cm.v_latent_frames(c) for c in clips):
+            continue
+        v_tile, v_adv = cm.resolve_stage2_window(window)
+        try:
+            layout = cm.compute_chain_layout(
+                clips, fps, kv=kv, v_tile=v_tile, v_adv=v_adv,
+                end_context_px=end_px,
+            )
+        except ValueError as exc:   # audio-tiling quirk, or the band is too long
+            assert (
+                NO_FREE_LATENTS_MESSAGE in str(exc)
+                or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
+            ), exc
+            continue
+        clips_only = cm.compute_chain_layout(
+            clips, fps, kv=kv, v_tile=v_tile, v_adv=v_adv
+        )
+        assert layout.end_source_mode == "in_window"
+        assert layout.total_px == clips_only.total_px == clips[0]
+        assert layout.f_total == clips_only.f_total
+        assert layout.seg_frames == clips
+        assert layout.end_segment_px == layout.end_segment_latent == 0
+        # ...and the number published to clients is the whole timeline, because
+        # the band is not an addition to it.
+        assert layout.to_dict()["end_source"]["clips_total_px"] == layout.total_px
 
 
 def test_default_chain_pins_every_derived_number():
@@ -242,19 +326,25 @@ def _naive_bands(layout: cm.ChainLayout) -> list[tuple[int, int]]:
     return out
 
 
-@pytest.mark.parametrize("clips", CLIP_SETS)
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS + SINGLE_CLIP_SETS)
 @pytest.mark.parametrize("end_px", [8, 40, 72, 136])
 @pytest.mark.parametrize("window", BOTH_WINDOWS)
 def test_end_tile_bands_match_a_naive_intersection_and_cover_the_band(
     clips, end_px, window
 ):
+    # Pillar 2 is the one thing the two modes share verbatim — the band sits at
+    # the end of the timeline either way — so this sweep runs over BOTH clip-set
+    # constants, tolerating each mode's own rejections.
     v_tile, v_adv = cm.resolve_stage2_window(window)
     try:
         layout = cm.compute_chain_layout(
             clips, FPS, v_tile=v_tile, v_adv=v_adv, end_context_px=end_px
         )
     except ValueError as exc:
-        assert any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES), exc
+        assert (
+            NO_FREE_LATENTS_MESSAGE in str(exc)
+            or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
+        ), exc
         return
     assert len(layout.end_tile_bands) == layout.n_tiles
     assert layout.end_tile_bands == _naive_bands(layout)
@@ -291,12 +381,27 @@ def test_two_tile_straddle_is_pinned():
 
 
 def test_three_tile_straddle_is_pinned():
-    # A 160-frame band on a single 169-frame clip: 20 band latents spread over
-    # tiles 1 and 2 while tile 0 never reaches them.
-    layout = cm.compute_chain_layout([169], FPS, end_context_px=160)
+    # A 160-frame band on clips that assemble to 169 pixel frames: 20 band
+    # latents spread over tiles 1 and 2 while tile 0 never reaches them.
+    # (``internal_segment`` mode, hence two clips — [97, 89] assembles to the
+    # same 22 latents a lone 169-frame clip would, so the tile geometry is
+    # exactly the one this test has always pinned.)
+    layout = cm.compute_chain_layout([97, 89], FPS, end_context_px=160)
+    assert layout.to_dict()["end_source"]["clips_total_px"] == 169
     assert layout.f_total == 42 and layout.n_end_v == 20
     assert layout.v_tiles == [(0, 22), (18, 22), (36, 6)]
     assert layout.end_tile_bands == [(0, 0), (18, 18), (6, 20)]
+
+
+def test_three_tile_straddle_is_pinned_in_window():
+    # The same property in ``in_window`` mode, where the timeline is the clip:
+    # a 337-frame clip is three tiles and a 136-frame band reaches the last two.
+    layout = cm.compute_chain_layout([337], FPS, end_context_px=136)
+    assert layout.end_source_mode == "in_window"
+    assert layout.total_px == 337
+    assert layout.f_total == 43 and layout.n_end_v == 17
+    assert layout.v_tiles == [(0, 22), (18, 22), (36, 7)]
+    assert layout.end_tile_bands == [(0, -4), (14, 14), (7, 17)]
 
 
 def test_tiles_before_the_band_carry_a_zero_length_write():
@@ -320,7 +425,7 @@ def test_a_fully_frozen_tile_is_admissible():
 
 
 # ── junctions ────────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("clips", CLIP_SETS)
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS)
 @pytest.mark.parametrize("end_px", [8, 72, 136])
 def test_junction_is_the_last_new_frame_and_the_internal_segment_seam(clips, end_px):
     try:
@@ -343,6 +448,27 @@ def test_junction_is_the_last_new_frame_and_the_internal_segment_seam(clips, end
     )
 
 
+@pytest.mark.parametrize("clips", SINGLE_CLIP_SETS)
+@pytest.mark.parametrize("end_px", [8, 72, 136])
+def test_junction_in_window_is_an_interior_index_with_no_seam(clips, end_px):
+    """In ``in_window`` mode the junction is where the material STARTS inside the
+    one continuous window — NOT a seam. The segment list must stay seamless:
+    creating a join there is exactly what this mode exists to avoid."""
+    try:
+        layout = cm.compute_chain_layout(clips, FPS, end_context_px=end_px)
+    except ValueError as exc:
+        assert NO_FREE_LATENTS_MESSAGE in str(exc), exc
+        return
+    assert layout.segment_seam_junctions == []
+    assert layout.end_source_junction_px == layout.total_px - end_px - 1
+    assert layout.end_source_junction_px == clips[0] - end_px - 1
+    assert layout.total_px - 1 - layout.end_source_junction_px == end_px
+    # The clips' own end IS the timeline's end here, so the junction is strictly
+    # inside it rather than sitting at clips_total_px - 1.
+    assert 0 <= layout.end_source_junction_px < layout.total_px - 1
+    assert layout.to_dict()["end_source"]["clips_total_px"] == layout.total_px
+
+
 def test_cut_frames_is_one_more_than_the_band():
     # The causal VAE spends the upload's frame 0 as the lone keyframe latent, so
     # the caller must always cut/synthesise one frame more than it freezes.
@@ -356,14 +482,20 @@ def test_cut_frames_is_one_more_than_the_band():
 
 def test_junction_on_the_untrimmed_timeline_when_a_start_source_trims_the_front():
     # Deliberately UNTRIMMED-basis: the delivered mp4 starts trim_px later, and
-    # that index is derivable, so no second field is stored.
+    # that index is derivable, so no second field is stored. One clip, so this is
+    # ``in_window`` mode: the 169 frames hold the frozen head, the free middle
+    # and the frozen band all at once, and the timeline does not grow.
     layout = cm.compute_chain_layout(
         [169], FPS, source_context_px=73, end_context_px=72
     )
-    assert layout.total_px == 169 + 72
+    assert layout.end_source_mode == "in_window"
+    assert layout.total_px == 169
     assert layout.trim_px == 73
-    assert layout.end_source_junction_px == 168          # untrimmed basis
-    assert layout.end_source_junction_px - layout.trim_px == 95   # delivered basis
+    assert layout.end_source_junction_px == 96           # untrimmed basis
+    assert layout.end_source_junction_px - layout.trim_px == 23   # delivered basis
+    # The delivered mp4 is the 96 frames after the trim, of which the last 72 are
+    # the material — i.e. 24 newly generated frames reach the viewer.
+    assert layout.new_frames_px == 169 - 73 == 96
 
 
 # ── grid rejections (unchanged from v1) ──────────────────────────────────────
@@ -439,9 +571,10 @@ def test_kv_sweep_never_degenerates_the_audio_overlap(end_px):
     # frame rate the app offers, on every window. (Pre-existing stage-2 audio
     # TILING rejections are a different, end-source-independent family and are
     # tolerated here — see KNOWN_AUDIO_TILING_MESSAGES.)
+    all_sets = MULTI_CLIP_SETS + SINGLE_CLIP_SETS
     checked = 0
     for kv, fps, clips, window in itertools.product(
-        range(2, 9), ALL_FPS, CLIP_SETS, BOTH_WINDOWS
+        range(2, 9), ALL_FPS, all_sets, BOTH_WINDOWS
     ):
         if any(kv >= cm.v_latent_frames(c) for c in clips):
             continue
@@ -456,20 +589,26 @@ def test_kv_sweep_never_degenerates_the_audio_overlap(end_px):
             assert "degenerate audio overlap" not in str(exc), (
                 kv, fps, clips, window, str(exc)
             )
-            assert any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES), exc
+            assert (
+                NO_FREE_LATENTS_MESSAGE in str(exc)
+                or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
+            ), exc
             continue
         assert min(layout.ka_list, default=1) >= 1
     assert checked > 500
 
     # At 24fps — the rate the app actually generates at — nothing is rejected at
-    # all across the same sweep.
-    for kv, clips, window in itertools.product(range(2, 9), CLIP_SETS, BOTH_WINDOWS):
+    # all across the same sweep, apart from single clips too short for the band.
+    for kv, clips, window in itertools.product(range(2, 9), all_sets, BOTH_WINDOWS):
         if any(kv >= cm.v_latent_frames(c) for c in clips):
             continue
         v_tile, v_adv = cm.resolve_stage2_window(window)
-        cm.compute_chain_layout(
-            clips, FPS, kv=kv, v_tile=v_tile, v_adv=v_adv, end_context_px=end_px
-        )
+        try:
+            cm.compute_chain_layout(
+                clips, FPS, kv=kv, v_tile=v_tile, v_adv=v_adv, end_context_px=end_px
+            )
+        except ValueError as exc:
+            assert len(clips) == 1 and NO_FREE_LATENTS_MESSAGE in str(exc), exc
 
 
 # ── the v1 rejections that are GONE (inverted into "this passes") ────────────
@@ -503,17 +642,39 @@ def test_the_narrow_window_accepts_the_full_136_band():
     assert sum(t for t, _ in layout.end_tile_bands) >= 17
 
 
-def test_start_and_end_source_that_used_to_meet_in_the_middle_now_fit():
+def test_start_and_end_source_that_meet_in_the_middle_fit_with_two_clips():
     # v1: "no free stage-1 latents" — the head and the band shared clip 0's
-    # latents. Now the band has its own segment, so only the V2V head has to fit
-    # inside the clip (that check is unchanged).
-    layout = cm.compute_chain_layout([169], FPS, source_context_px=105, end_context_px=72)
+    # latents. In ``internal_segment`` mode the band has its own segment, so only
+    # the V2V head has to fit inside clip 0 (that check is unchanged).
+    layout = cm.compute_chain_layout(
+        [169, 169], FPS, source_context_px=105, end_context_px=72
+    )
+    assert layout.end_source_mode == "internal_segment"
     assert layout.n_ctx_v == 14 and layout.n_end_v == 9
-    assert layout.total_px == 169 + 72
-    assert layout.seg_frames == [169, 89]
+    assert layout.seg_frames == [169, 169, 89]
+    assert layout.total_px == layout.to_dict()["end_source"]["clips_total_px"] + 72
     # ...while a head that fills its clip completely is still rejected.
     with pytest.raises(ValueError, match="must be < clip 0"):
-        cm.compute_chain_layout([169], FPS, source_context_px=169, end_context_px=72)
+        cm.compute_chain_layout(
+            [169, 169], FPS, source_context_px=169, end_context_px=72
+        )
+
+
+def test_start_and_end_source_that_meet_in_the_middle_are_rejected_in_window():
+    # The SAME request with one clip is the inverse: ``in_window`` mode carves
+    # the band out of the clip the V2V head is already frozen into, and 14 + 9
+    # fills all 22 of the clip's latents. That must be a 422 here rather than a
+    # 500 from the engine's tail-token range.
+    with pytest.raises(ValueError) as exc:
+        cm.compute_chain_layout([169], FPS, source_context_px=105, end_context_px=72)
+    msg = str(exc.value)
+    assert NO_FREE_LATENTS_MESSAGE in msg
+    assert "n_ctx_v=14" in msg and "n_end_v=9" in msg
+    # A shorter head leaves room, and then the timeline is still just the clip.
+    layout = cm.compute_chain_layout([169], FPS, source_context_px=73, end_context_px=72)
+    assert layout.n_ctx_v == 10 and layout.n_end_v == 9
+    assert layout.total_px == 169
+    assert layout.seg_frames == [169]
 
 
 def test_start_and_end_source_fit_together_on_one_long_clip():
@@ -555,7 +716,13 @@ def test_new_frames_px_still_matches_the_one_clip_continuation():
 @pytest.mark.parametrize(
     "clips,ctx",
     [
-        ([49], None), ([49], 25),
+        # The single-clip rows are 169 rather than 49 frames: with one clip the
+        # band is frozen INSIDE the clip, and a 49-frame clip is 7 stage-1
+        # latents — too few to hold a 72-frame band at all (that rejection is
+        # pinned by its own boundary test). The identity under test is unrelated
+        # to the clip length. A 49-frame single-clip continuation without an end
+        # source is still pinned by the test just above.
+        ([169], None), ([169], 25),
         ([49, 49], None), ([49, 49], 25),
         ([257, 257], None), ([257, 257], 73), ([257, 257], 145),
         ([169, 257, 257], 73),
@@ -592,6 +759,157 @@ def test_total_length_cap_geometry_is_pinned():
     # accepted envelope, it only stops the band from eating into it.
     assert biggest.total_px <= 24 * 481
     assert biggest.f_total == cm.v_latent_frames(11473)
+
+
+# ── the mode switch itself ───────────────────────────────────────────────────
+def test_the_clip_count_alone_picks_the_mode_and_the_segment_list():
+    """One clip -> ``in_window`` and NOTHING is appended; two -> the historical
+    ``internal_segment``. Nothing else about the request participates, and a
+    chain without an end source has no mode at all."""
+    one = cm.compute_chain_layout([169], FPS, end_context_px=72)
+    assert one.end_source_mode == "in_window"
+    assert one.seg_frames == [169] == one.clip_frames
+    assert one.seg_latent == [22]
+    assert one.end_segment_px == 0 and one.end_segment_latent == 0
+    assert one.ka_list == []            # one segment -> no join at all
+
+    two = cm.compute_chain_layout([169, 169], FPS, end_context_px=72)
+    assert two.end_source_mode == "internal_segment"
+    assert two.seg_frames == [169, 169, 89]
+    assert two.clip_frames == [169, 169]
+    assert two.end_segment_latent == 3 + 9
+
+    # The same clip counts, band aside, must be seg_frames-identical to a chain
+    # with no end source — i.e. ``in_window`` really appends nothing.
+    plain_one = cm.compute_chain_layout([169], FPS)
+    assert plain_one.seg_frames == one.seg_frames
+    assert plain_one.total_px == one.total_px
+    assert plain_one.v_tiles == one.v_tiles
+    assert plain_one.end_source_mode is None
+
+    # ...and the switch is insensitive to everything but the clip count.
+    for kwargs in ({"kv": 4}, {"source_context_px": 25}, {"fps": 30.0}):
+        fps = kwargs.pop("fps", FPS)
+        assert cm.compute_chain_layout(
+            [169], fps, end_context_px=72, **kwargs
+        ).end_source_mode == "in_window"
+
+
+# ── the ONE rejection "in_window" mode adds ──────────────────────────────────
+def test_in_window_band_that_fills_the_clip_is_rejected_at_the_boundary():
+    """A 49-frame clip is 7 stage-1 latents. A 48-frame band takes 6 of them and
+    leaves exactly one free -> accepted; 56 takes all 7 -> rejected, because the
+    denoiser would have nothing to generate (and the engine would raise a 500
+    from ``retake_tail_token_range`` instead of the API answering 422)."""
+    ok = cm.compute_chain_layout([49], FPS, end_context_px=48)
+    assert ok.f_total == 7 and ok.n_end_v == 6
+    assert ok.total_px == 49
+    assert ok.end_tile_bands == [(6, 6)]
+
+    with pytest.raises(ValueError) as exc:
+        cm.compute_chain_layout([49], FPS, end_context_px=56)
+    msg = str(exc.value)
+    # (a) what ran out, in the layout's own terms
+    assert NO_FREE_LATENTS_MESSAGE in msg
+    assert "n_end_v=7" in msg and "n_ctx_v=0" in msg and "f_total=7" in msg
+    # (b) the concrete clip length that WOULD work: 8 free-ish latents == 57 px
+    assert "57 pixel frames" in msg
+    assert cm.compute_chain_layout([57], FPS, end_context_px=56).total_px == 57
+    # (c) all three ways out, so the app can quote the message verbatim
+    assert "Lengthen the clip" in msg
+    assert "shorten context_frames" in msg
+    assert "two or more clips" in msg
+    # ...and the same band is fine the moment there are two clips (that mode
+    # appends a segment for it instead of carving it out).
+    assert cm.compute_chain_layout([49, 49], FPS, end_context_px=56).total_px == 81 + 56
+
+
+def test_in_window_rejection_does_not_leak_into_the_other_mode():
+    # The check is scoped to one clip. A multi-clip chain whose CLIPS are just as
+    # short keeps working, because the band never touches them.
+    layout = cm.compute_chain_layout([49, 49], FPS, end_context_px=136)
+    assert layout.end_source_mode == "internal_segment"
+    assert layout.total_px == 81 + 136
+
+
+# ── the experiment geometry, pinned ──────────────────────────────────────────
+@pytest.mark.parametrize("clip_px", [169, 337, 481])
+@pytest.mark.parametrize("end_px", [8, 16, 24])
+def test_in_window_output_length_never_moves(clip_px, end_px):
+    """The headline promise of the mode: ask for N frames, get N frames, whatever
+    the band. (The real-hardware experiment sweeps exactly this grid.)"""
+    layout = cm.compute_chain_layout([clip_px], FPS, end_context_px=end_px)
+    assert layout.total_px == clip_px
+    assert layout.new_frames_px == clip_px          # nothing is trimmed either
+    assert layout.to_dict()["end_source"]["clips_total_px"] == clip_px
+    assert layout.end_source_junction_px == clip_px - end_px - 1
+    assert layout.duration_sec == round(clip_px / FPS, 3)
+
+
+def test_the_real_hardware_experiment_geometry_is_pinned():
+    """The exact numbers the MCP experiment's machine check compares against, so
+    a geometry drift is caught here rather than after 30 minutes of GPU time.
+    Experiment A is one 169-frame clip at three band widths; experiment B keeps
+    the band at 24 and grows the clip across 3 and 4 stage-2 tiles."""
+    # A-1 / A-2 / A-3: one stage-2 tile, band at its tail.
+    for end_px, n_end_v in ((8, 1), (16, 2), (24, 3)):
+        a = cm.compute_chain_layout([169], FPS, end_context_px=end_px)
+        assert a.f_total == 22
+        assert a.v_tiles == [(0, 22)]
+        assert a.end_tile_bands == [(n_end_v, n_end_v)]
+        assert a.n_tiles == 1
+    a3 = cm.compute_chain_layout([169], FPS, end_context_px=24)
+    assert a3.end_source_junction_px == 144
+    assert a3.segment_seam_junctions == []
+
+    # B-2: 337 frames == 3 stage-2 tiles; the band lands on the last one only.
+    b2 = cm.compute_chain_layout([337], FPS, end_context_px=24)
+    assert b2.total_px == 337 and b2.f_total == 43
+    assert b2.end_tile_bands == [(0, -18), (0, 0), (3, 3)]
+    assert b2.end_source_junction_px == 312
+
+    # B-3: 481 frames == 4 tiles, same story.
+    b3 = cm.compute_chain_layout([481], FPS, end_context_px=24)
+    assert b3.total_px == 481 and b3.f_total == 61
+    assert b3.end_tile_bands == [(0, -36), (0, -18), (0, 0), (3, 3)]
+    assert b3.end_source_junction_px == 456
+
+    # A-4 reuses the archived v2 job's parameters (169 + 72) — the direct
+    # old/new comparison — and is still one tile.
+    a4 = cm.compute_chain_layout([169], FPS, end_context_px=72)
+    assert a4.total_px == 169 and a4.end_tile_bands == [(9, 9)]
+
+
+# ── both ends frozen in the same window ──────────────────────────────────────
+def test_a_head_and_a_band_may_share_one_window_until_they_meet():
+    """``source_video`` + ``end_source`` on one clip is retake's both-ends shape:
+    legal while a free latent remains, rejected the moment it does not."""
+    ok = cm.compute_chain_layout([169], FPS, source_context_px=73, end_context_px=72)
+    assert ok.n_ctx_v == 10 and ok.n_end_v == 9 and ok.f_total == 22
+    assert ok.n_ctx_v + ok.n_end_v < ok.f_total     # 19 < 22
+    assert ok.total_px == 169
+    assert ok.trim_px == 73
+    # The frozen head is at the FRONT and the band at the BACK of one window,
+    # and the junction sits after the trim (what the layout asserts internally).
+    assert ok.end_source_junction_px == 96 >= ok.trim_px
+
+    with pytest.raises(ValueError, match=NO_FREE_LATENTS_MESSAGE):
+        cm.compute_chain_layout([169], FPS, source_context_px=105, end_context_px=72)
+
+
+def test_overlap_one_is_rejected_in_window_mode_too():
+    """The ``kv >= 2`` rule is kept in BOTH modes even though a one-clip chain has
+    no join for the audio budget to be spent on. Deliberately conservative: the
+    accepted range does not widen, and the frontend keeps ONE rule for the whole
+    feature. Pinned so relaxing it is a decision, not an accident."""
+    with pytest.raises(ValueError) as exc:
+        cm.compute_chain_layout([169], FPS, kv=1, end_context_px=24)
+    msg = str(exc.value)
+    assert msg.startswith("end_context_px")
+    assert ">= 2" in msg
+    # kv=2 is the first accepted value, and it is a genuinely join-free layout.
+    layout = cm.compute_chain_layout([169], FPS, kv=2, end_context_px=24)
+    assert layout.ka_list == [] and layout.total_px == 169
 
 
 def test_band_never_shortens_the_clips_the_user_asked_for():

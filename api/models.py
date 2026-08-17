@@ -595,10 +595,6 @@ class RetakeSpec(BaseModel):
 class EndSourceSpec(BaseModel):
     """End source — the chain ENDS with an uploaded video / still image.
 
-    EXPERIMENTAL / NOT RECOMMENDED. The generated clip reliably crossfades into
-    the material instead of arriving at it, so this field is not exposed in the
-    app's UI; it is kept for a future fix. Prefer leaving ``end_source`` unset.
-
     The mirror of :class:`SourceVideoSpec` at the other end of the timeline.
     Exactly ONE of ``video_id`` (an upload from POST /upload/video, the same
     store the continuation source uses) or ``image_id`` (POST /upload/image) is
@@ -608,12 +604,42 @@ class EndSourceSpec(BaseModel):
     pixel frames of the whole chain, exactly the way a retake freezes its glue
     bands.
 
+    THE CLIP COUNT SELECTS ONE OF TWO GEOMETRIES. ``chain_math`` decides it in
+    one place and publishes it as the layout's (and the metadata's)
+    ``end_source.mode``; nothing about the request says which.
+
+    ONE CLIP -> ``"in_window"``. The band is the clip's OWN last
+    ``context_frames`` pixel frames, so THE OUTPUT LENGTH IS THE CLIP LENGTH,
+    UNCHANGED: ``num_frames`` is the total, of which the last ``context_frames``
+    are the material and the rest is newly generated. A one-clip chain is
+    denoised by stage 1 as a SINGLE window, which is the point of the mode — the
+    frozen band is inside the window every generated latent attends over, so the
+    motion can steer towards the material over the whole clip. The band eats
+    into the clip's own latents, so a clip with nothing left to generate once the
+    band (and a ``source_video`` head, if any) is frozen is REJECTED by
+    ``chain_math.compute_chain_layout`` with a 422 naming the clip length that
+    would work. The upload must still hold ``context_frames + 1`` frames.
+
+    TWO OR MORE CLIPS -> ``"internal_segment"``. NOT RECOMMENDED: nothing
+    attends across the band's own segment boundary, so the generated material
+    reliably CROSSFADES into the end source rather than arriving at it. The
+    mode is preserved byte-for-byte for compatibility, but prefer a single
+    clip. Its geometry is described under "OUTPUT LENGTH" below.
+
     ``context_frames`` is a MULTIPLE OF 8, not 8n+1. The two ends sit on
     DIFFERENT latent grids because the video VAE is causal: latent 0 is a lone
     keyframe covering pixel 0 only, so a HEAD band is 8n+1 while a TAIL band is
     whole groups of 8 counted back from the end and never touches that keyframe
     (``chain_math.v_tail_latents``). Bounded
     [config.limits.end_context_frames_min, ...max] = [8, 136].
+
+    8 IS THE RECOMMENDED VALUE, AND THE DEFAULT OF 72 IS NOT. 72 is what the
+    contract defaults to; the 2026-08-17 real-run comparison (8 / 16 / 24 / 72
+    over three clip lengths) settled on an 8-frame anchor, because a longer band
+    spends the denoising window re-rendering the material and costs the
+    generator its invention. The frontend always sends ``context_frames: 8``
+    explicitly rather than letting the default apply. See
+    Docs/VERIFICATION_LOG.md §61.
 
     136 IS AN OPERATIONAL CAP, NOT A GEOMETRIC ONE. The band is free to span
     several stage-2 tiles (``ChainLayout.end_tile_bands`` is the per-tile freeze
@@ -624,11 +650,14 @@ class EndSourceSpec(BaseModel):
     cross-check on the request any more (the v1 "88 under high_resolution" rule
     is gone with the geometry that produced it).
 
-    OVERLAP >= 2 IS REQUIRED. The internal band segment costs one more audio
-    crossfade, and at ``overlap_frames == 1`` the audio-overlap budget is already
-    marginal — an exhaustive sweep found every degenerate case confined to kv=1.
-    ``chain_math.compute_chain_layout`` rejects the combination (422) with a
-    message telling the caller to raise the overlap; it is not re-checked here.
+    OVERLAP >= 2 IS REQUIRED, IN BOTH MODES. In ``internal_segment`` mode the
+    band's segment costs one more audio crossfade, and at ``overlap_frames == 1``
+    the audio-overlap budget is already marginal — an exhaustive sweep found
+    every degenerate case confined to kv=1. In ``in_window`` mode that reason
+    does not apply (one clip has no join at all) and the rule is kept anyway, so
+    the feature has ONE rule rather than a per-mode exception; see
+    ``compute_chain_layout``'s docstring. It rejects the combination (422) with
+    a message telling the caller to raise the overlap; it is not re-checked here.
 
     THE +1 PRIMER: the app cuts (or synthesises) ``context_frames + 1`` frames,
     not ``context_frames``. The causal video VAE spends the material's FIRST
@@ -636,22 +665,39 @@ class EndSourceSpec(BaseModel):
     frame 0 of the upload never appears in the output and the delivered mp4 ends
     with the upload's frames 1..context_frames.
 
-    OUTPUT LENGTH GROWS BY THE BAND. A clip's ``num_frames`` is purely NEWLY
-    GENERATED material; the band is an INTERNAL segment ``chain_math`` appends
-    after the last clip, so the delivered length is ``sum(clip frames) - overlaps
-    + context_frames`` — the identity ``total_px == clips_total_px +
-    end_context_px`` that ``compute_chain_layout`` asserts. (This is the reverse
-    of ``source_video``, which trims its frozen head OFF the delivered mp4, and
-    the reverse of v1, which carved the band out of the clips themselves.)
+    OUTPUT LENGTH — the one number the two modes genuinely disagree on.
+
+      * ``in_window`` (one clip): UNCHANGED. ``total_px == clips_total_px ==
+        num_frames``; the band is the clip's own tail, so asking for 169 frames
+        with a 24-frame band yields a 169-frame mp4 whose last 24 frames are the
+        material and whose first 145 are new.
+      * ``internal_segment`` (2+ clips): GROWS BY THE BAND. A clip's
+        ``num_frames`` is purely NEWLY GENERATED material and the band is an
+        INTERNAL segment ``chain_math`` appends after the last clip, so the
+        delivered length is ``sum(clip frames) - overlaps + context_frames`` —
+        the identity ``total_px == clips_total_px + end_context_px`` that
+        ``compute_chain_layout`` asserts.
+
+    Neither mode TRIMS anything, which is the reverse of ``source_video``: it
+    cuts its frozen head OFF the delivered mp4.
 
     Mutually exclusive with ``retake`` (it already owns both ends of its one
     window), ``source_audio`` (v1 freezes video only, so an A2V chain's audio
     and a frozen video tail would disagree) and ``reference_video_id`` (a
     control adapter's per-segment conditioning competes with the frozen band).
     It MAY be combined with ``source_video`` — a start source and an end source
-    together are an interpolation, the intended headline use — and with
-    ``clips[0].conditioning_images`` unconditionally: the clips never reach the
-    band, so a keyframe cannot collide with it.
+    together are an interpolation, the intended headline use; in ``in_window``
+    mode both frozen ends share the one clip, so the clip has to be long enough
+    to hold them and still generate something (the 422 above).
+
+    It may also be combined with ``clips[0].conditioning_images``, and there is
+    deliberately NO collision check between a keyframe and the band. In
+    ``internal_segment`` mode no clip frame can reach the band at all, so the
+    check would be identically false. In ``in_window`` mode a keyframe COULD
+    land inside the band, where the freeze would simply overwrite it — an
+    accepted gap, recorded as a follow-up in the frontend's PENDING_TASKS §3
+    rather than fixed here, because adding the rejection means reversing three
+    existing statements (a test, this comment and VERIFICATION_LOG) at once.
     """
 
     video_id: str | None = Field(None, min_length=1)
@@ -1126,27 +1172,30 @@ class GenerateChainRequest(BaseModel):
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         # The cap is on the USER'S OWN CLIPS, not on the delivered timeline. An
-        # end source appends an internal band segment AFTER the clips, so
-        # ``layout.total_px == clips_total_px + end_context_px``; charging the
-        # band against the cap would newly reject chains that are accepted today
-        # (the kv=1 maximum, 24 clips x 481 frames == 11521 px, plus a 136-frame
-        # band == 11657 > 11544). ``clips_total_px`` is the same subtraction
-        # ``ChainLayout.to_dict`` publishes, and it is simply ``total_px`` on
-        # every chain without an end source, so the existing accept/reject
-        # boundary is preserved byte-for-byte there.
-        clips_total_px = layout.total_px - (layout.end_context_px or 0)
+        # end source in ``internal_segment`` mode appends a band segment AFTER
+        # the clips, so ``layout.total_px == clips_total_px + end_context_px``;
+        # charging the band against the cap would newly reject chains that are
+        # accepted today (the kv=1 maximum, 24 clips x 481 frames == 11521 px,
+        # plus a 136-frame band == 11657 > 11544). ``ChainLayout.clips_total_px``
+        # is the SINGLE definition of that subtraction — the same property
+        # ``to_dict`` publishes, so the validator and the metadata can never
+        # disagree — and it is simply ``total_px`` both on a chain without an end
+        # source and in the ``in_window`` mode (where the band is part of the
+        # clip and must NOT be subtracted a second time).
+        clips_total_px = layout.clips_total_px
         if clips_total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
             raise ValueError(
                 f"chain total timeline {clips_total_px} pixel frames exceeds the "
                 f"cap {MAX_CHAIN_TOTAL_PIXEL_FRAMES} (reduce clip count or lengths)"
             )
 
-        # NO end-source x clip-0-keyframe collision check here (deleted with the
-        # v2 internal-band design). In v1 the band was carved OUT OF the clips, so
-        # a clip-0 keyframe could land inside it and be silently overwritten. The
-        # band now lives in an internal segment APPENDED AFTER every clip, so no
-        # clip frame — clip 0's least of all — can ever reach it: the test would
-        # be identically false for every request.
+        # NO end-source x clip-0-keyframe collision check here. In the
+        # ``internal_segment`` mode the band lives in a segment APPENDED AFTER
+        # every clip, so no clip frame — clip 0's least of all — can reach it and
+        # the test would be identically false. In the ``in_window`` mode a
+        # keyframe CAN land inside the band (it is the clip's own tail) and the
+        # freeze would overwrite it; that gap is knowingly left open for now —
+        # see EndSourceSpec's docstring and the frontend PENDING_TASKS §3 entry.
 
         # Reference-video CONTROL IC-LoRA: mirrors
         # GenerateRequest.validate_ltx_constraints (api/models.py:173-188) plus the

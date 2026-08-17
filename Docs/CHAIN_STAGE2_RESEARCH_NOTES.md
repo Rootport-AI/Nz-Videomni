@@ -471,7 +471,7 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 
 ## 10. 【2026-08-16】End source（素材（末尾））— 帯を「内部区画」にしたら幾何の制約がすべて消えた
 
-「この画像・動画で終わる動画」を作る機能である。実装と機械ゲートの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60、台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-82であり、本節は研究ノートとしての位置づけ——**幾何の制約がなぜ消えたのか**と、**その代わりに何を払ったのか**を残す。
+「この画像・動画で終わる動画」を作る機能である。**本節が扱うのはクリップ2本以上で使われる旧方式（内部区画）であり、現行の推奨経路ではない**——2026-08-17に、クリップ1本のときは帯をクリップ自身の末尾に置く**窓内モード**（`in_window`）へ作り替えた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61）。本節の一般式（タイル別の凍結計画`end_tile_bands`）は**両モード共通で今も使われている**が、「帯が独立したセグメントである」という前提の議論は旧方式だけの話である。実装と機械ゲートの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60、台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-82であり、本節は研究ノートとしての位置づけ——**幾何の制約がなぜ消えたのか**と、**その代わりに何を払ったのか**を残す。
 
 ### 帯は必ず「末尾」にある、という一点だけで一般式が書ける
 

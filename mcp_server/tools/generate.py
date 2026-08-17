@@ -309,6 +309,9 @@ async def submit_chain(
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     vae_mode: Literal["default", "prune_vaed"] = "default",
+    end_source_video_id: str | None = None,
+    end_source_image_id: str | None = None,
+    end_source_context_frames: int = 72,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -347,9 +350,23 @@ async def submit_chain(
         とは併用できます。
       * ``conditioning_images`` はどのモードでもクリップ0のみ有効です
         （クリップ1以降は前クリップの潜在表現を引き継ぐ後続セグメントのため）。
-      * chain APIの ``end_source``（素材（末尾））は使用非推奨です。生成結果が
-        素材へクロスフェードしてしまう既知の問題があり、アプリの画面にも公開
-        していないため、このツールからも送信できません。
+      * ``end_source_video_id`` / ``end_source_image_id``（素材（末尾））は
+        **クリップが1件のときに推奨**します（窓内モード）。指定した素材の
+        先頭 ``end_source_context_frames`` フレーム（8の倍数。**8を推奨**
+        します——実機比較で最良で、錨が長いほど窓を素材の再現に費やし
+        生成の創造性が下がります。**既定の72は契約上の既定値であって
+        推奨値ではありません**）がクリップ自身の末尾フレームとして
+        凍結され、生成は1つのデノイズ窓の中でその素材へ到達するように行わ
+        れます。出力の長さは変わりません（凍結フレームはクリップの内側に
+        収まります）。素材は ``end_source_context_frames + 1`` フレーム以上
+        必要です（因果VAEのプライマ1枚分）。
+        クリップが**2件以上のチェーンでの ``end_source`` は非推奨**です
+        （旧方式: 帯を独立区画として後ろに継ぎ足すため、生成結果が素材へ
+        クロスフェード接続になる既知の問題があります）。指定自体は受理され
+        ますが、実験用途以外には使わないでください。
+        ``retake`` / ``source_audio_id`` / ``reference_video_id`` とは排他
+        です。``source_video_id`` とは併用できます（頭と尾の両方を固定して
+        補間する構図になります）。
 
     その他:
       * ``loras`` はチェーン全体・全ステージに一律で効きます（クリップごとの
@@ -410,6 +427,14 @@ async def submit_chain(
             がわずかに低下する可能性があります**。**既定は ``"default"`` で、
             既定のままなら従来と完全に同じです**。チェーン全体・全クリップ・
             全ステージ共通で効きます。結果は ``vae_mode_used`` に記録されます）。
+        end_source_video_id: 末尾を凍結する素材の動画ID（``upload_video`` で
+            取得）。``end_source_image_id`` とは同時に指定できません。
+        end_source_image_id: 末尾を凍結する素材の画像ID（``upload_image`` で
+            取得）。``end_source_video_id`` とは同時に指定できません。
+        end_source_context_frames: 素材の先頭から凍結するフレーム数（8の
+            倍数）。**8を推奨**（実機比較で最良。錨が長いほど素材の再現に
+            窓を費やし、創造性が下がる）。**既定の72は契約上の既定値で
+            あって推奨値ではない**。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -418,6 +443,11 @@ async def submit_chain(
         raise ToolError(
             "SOURCE_XOR_VIOLATION: source_video_id と source_audio_id は同時に"
             "指定できません（V2V継続とA2Vはv1では併用できません）"
+        )
+    if end_source_video_id is not None and end_source_image_id is not None:
+        raise ToolError(
+            "END_SOURCE_XOR_VIOLATION: end_source_video_id と "
+            "end_source_image_id は同時に指定できません"
         )
     if (crop_width is None) != (crop_height is None):
         raise ToolError(
@@ -473,6 +503,16 @@ async def submit_chain(
         }
     if source_audio_id:
         payload["source_audio"] = {"audio_id": source_audio_id}
+    if end_source_video_id:
+        payload["end_source"] = {
+            "video_id": end_source_video_id,
+            "context_frames": end_source_context_frames,
+        }
+    elif end_source_image_id:
+        payload["end_source"] = {
+            "image_id": end_source_image_id,
+            "context_frames": end_source_context_frames,
+        }
 
     if loras:
         payload["loras"] = [lora.model_dump(exclude_none=True) for lora in loras]

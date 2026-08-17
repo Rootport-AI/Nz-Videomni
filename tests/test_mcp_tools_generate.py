@@ -624,6 +624,26 @@ def test_submit_chain_source_xor_violation_raises_before_any_http_call():
     assert "SOURCE_XOR_VIOLATION" in str(exc_info.value)
 
 
+def test_submit_chain_end_source_xor_violation_raises_before_any_http_call():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
+
+    set_client(_client_for_handler(handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_chain,
+                "p",
+                [ChainClipArg(num_frames=169)],
+                end_source_video_id="video-1",
+                end_source_image_id="image-1",
+            )
+        )
+
+    assert "END_SOURCE_XOR_VIOLATION" in str(exc_info.value)
+
+
 def test_submit_chain_crop_single_sided_raises_before_any_http_call():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
@@ -674,6 +694,33 @@ def test_submit_chain_payload_contract_defaults_only_and_chunked_upsample_always
     assert "source_audio" not in body
     assert "loras" not in body
     assert "reference_video_id" not in body
+    assert "end_source" not in body
+
+
+def test_submit_chain_end_source_video_id_included_in_body():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 1},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=169)],
+            end_source_video_id="v-1",
+            end_source_context_frames=24,
+        )
+    )
+
+    body = captured["body"]
+    assert body["end_source"] == {"video_id": "v-1", "context_frames": 24}
 
 
 def test_submit_chain_loras_without_audio_strength_omits_key():

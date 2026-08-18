@@ -1197,22 +1197,22 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | プリセット | width | height | crop_output | num_frames |
 |-----------|------:|------:|-------------|----------:|
 | `smoke_test` | 384 | 256 | null | 17 |
-| `minimal` | 512 | 320 | null | 49 |
-| `small` | 960 | 576 | `{960, 540}` | 121 |
-| `standard_720p` | 1280 | 768 | `{1280, 720}` | 257 |
-| `FHD_1080p` | 1920 | 1088 | `{1920, 1080}` | 153 |
-| `WQHD_1440p` | 2560 | 1472 | `{2560, 1440}` | 81 |
+| `minimal` | 512 | 320 | null | 481 |
+| `small` | 960 | 576 | `{960, 540}` | 481 |
+| `standard_720p` | 1280 | 768 | `{1280, 720}` | 361 |
+| `FHD_1080p` | 1920 | 1088 | `{1920, 1080}` | 169 |
+| `WQHD_1440p` | 2560 | 1472 | `{2560, 1440}` | 89 |
 
-> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は `limits.spill_free_frames`（§11.7）の解像度別快適上限（spill-free 実測値）と一致させてある。
+> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は、2026-08-19に`single_comfort_token_budget`（44,880・全高速化on時の快適上限線）の逆算式で引き上げた値である（旧値257/153/81は`limits.spill_free_frames`（§11.7、全高速化on以外向けのフォールバック用・据え置き）の解像度別快適上限と一致していたが、現在はプリセットとspill_free_framesは別々の数値になっている）。詳細はバックエンド`Docs/COMFORT_LIMIT_TABLE.md`。
 
 ### 11.5 generation_defaults
 Gradio / API の初期値。
 | キー | 実値 |
 |-----|------|
-| `width` | `512` |
-| `height` | `320` |
+| `width` | `1280` |
+| `height` | `768` |
 | `crop_output` | `null` |
-| `num_frames` | `49` |
+| `num_frames` | `361` |
 | `frame_rate` | `24.0` |
 | `num_inference_steps` | `8` |
 | `guidance_scale` | `1.0` |

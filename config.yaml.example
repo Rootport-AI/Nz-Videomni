@@ -144,28 +144,28 @@ generation_presets:
     crop_output:
       width: 1280
       height: 720
-    num_frames: 257 # limits.spill_free_frames["1280x768"] 実測快適上限と一致
+    num_frames: 361 # 賢い快適上限マーカー（single_comfort_token_budget=44880）の算出値に引き上げ（2026-08-19）。旧値257はlimits.spill_free_frames["1280x768"]の実測快適上限（コースな5点表・全加速オン以外向けフォールバック）と一致していたが、式ベースの正確な値に更新
   FHD_1080p:
     width: 1920
     height: 1088
     crop_output:
       width: 1920
       height: 1080
-    num_frames: 153
+    num_frames: 169 # 賢い快適上限マーカー算出値（2026-08-19）
   WQHD_1440p:
     width: 2560
     height: 1472
     crop_output:
       width: 2560
       height: 1440
-    num_frames: 81
+    num_frames: 89 # 賢い快適上限マーカー算出値（2026-08-19）
 
 generation_defaults:
   # Gradio/API の初期値。standard_720p プリセットと完全一致させる。width/height は64の倍数。
   width: 1280
   height: 768
   crop_output: null   # 既定OFF。プリセット選択時はプリセットの値が適用される。
-  num_frames: 257
+  num_frames: 361
   frame_rate: 24.0
   num_inference_steps: 8
   guidance_scale: 1.0

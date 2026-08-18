@@ -14,7 +14,7 @@
 | **1440p** | 2560×1472 | ✅（限界点） | **~5秒** | 11分 |
 | **4K(2160p)** | 3840×2176 | ❌ | **~2秒** | — |
 
-- **生成サイズは必ず ÷64**（two-stage distilled の契約）。**表示解像度へは中央 crop**（例 1088→1080、1472→1440、2176→2160）。crop は既定 OFF＝既定で生成サイズのまま配信（[api/models.py] `crop_output`）。
+- **生成サイズは必ず ÷64**（two-stage distilled の契約）。**表示解像度へは中央 crop**（例 1088→1080、1472→1440、2176→2160）。crop は既定 OFF＝既定で生成サイズのまま配信（[api/models.py] `crop_output`）。config.yaml の generation_defaults も既定OFF（2026-08-18変更）。
 - **音声は joint で自動生成**（AAC/48kHz/stereo）。発話・効果音・音楽はプロンプト依存（ベストエフォート）。
 - 設定: **use_component_files=true（Path B）/ LTX_KEEP_RESIDENT=0 / block_swap_blocks_on_gpu=8 / vae_spatial_tile_size=512 / vae_temporal_tile_size=64**（＝本番デフォルト）。
   - ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝上記の keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。

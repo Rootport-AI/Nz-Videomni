@@ -310,3 +310,13 @@ def test_config_publishes_the_chain_comfort_token_budget(client):
     own mirrored fallback. Advisory only: the server judges nothing by it."""
     limits = client.get("/api/v1/config").json()["limits"]
     assert limits["chain_comfort_token_budget"] == 40000
+
+
+def test_config_publishes_the_single_comfort_token_budget(client):
+    """2026-08-18: Create's smart comfort marker (all-five-accelerations-on
+    only, else it falls back to spill_free_frames) draws its ceiling from this
+    served value — a field added to ``LimitsConfig`` but never published would
+    leave the client silently on its own mirrored fallback. Advisory only: the
+    server judges nothing by it. See Docs/COMFORT_LIMIT_TABLE.md."""
+    limits = client.get("/api/v1/config").json()["limits"]
+    assert limits["single_comfort_token_budget"] == 44880

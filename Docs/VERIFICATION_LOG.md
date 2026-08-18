@@ -5573,3 +5573,42 @@ E1で末尾が軽くなったことは末端タイル仮説を**部分的に**�
 **End sourceはクリップ1本で使うことを推奨し、複数クリップは推奨外の使い方と見做す。複数クリップ時の品質劣化（継ぎ目のモーフ・音楽の不統一）は仕様として許容する。** 警告文（「クリップが2本以上のときは、クリップの境目で映像や音声の質が下がることがあります。」）のUI実装は、オーナーの次のUI改修バッチと同時に行う（本セッションでは実装しない。起票はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1）。
 
 この裁定により、End source第2段階・第3弾のオーナー目視・試聴ゲートは決着した。UI実機確認（G1-R4・R2-9〜R2-11）とG1-R2/R3の目視は品質の合否とは独立の作業のため、フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2に残す。設計面の考察（初期値問題と境界値問題の非対称・意味的距離・末端タイル・手動リレー）の正本はバックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、台帳の完結記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84である。
+
+---
+
+## 66. ★Singleタブの賢い快適上限マーカー（`single_comfort_token_budget`の新設）＝実装完了・機械検証全PASS（オーナー目視は未実施）（2026-08-18）
+
+本節は`Docs/COMFORT_LIMIT_TABLE.md`が§6④で引き渡していた設計判断（Chained用`chain_comfort_token_budget`とは別鍵を新設するか、同じ鍵で出し分けるか）の決着と、それを使ったSingleタブ（Create画面）のフレーム数スライダーの快適上限マーカーの実装記録である。台帳ではフロントエンド`Docs/PENDING_TASKS_CLOSED.md` §3-12として旧研究課題からクローズ済み。
+
+### 66.1 何の話か
+
+Singleタブのフレーム数スライダーの快適上限マーカーは、従来`spill_free_frames`（3解像度キーのテーブル）を面積最近傍で丸めるだけで、プリセット解像度の間では粗くしか動かなかった。2026-08-18の実機検証（4段階・21ジョブ）で、**5つの高速化トグル（sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が全てonの構成に限り**、快適上限のトークン線が**44,880**であることが3解像度×縦横両向きで較正された（正本`Docs/COMFORT_LIMIT_TABLE.md`）。この線を任意の解像度・縦横比で1フレーム単位（8n+1グリッド）で正しく引けるよう、逆算式ベースのマーカーへ置き換えた。
+
+### 66.2 決着した設計判断（鍵の分離）
+
+`Docs/COMFORT_LIMIT_TABLE.md` §6④が引き渡していた論点——`chain_comfort_token_budget`と同じ鍵を使い回すか、別鍵を新設するか——は**別鍵の新設**で決着した。`config.py`の`LimitsConfig`へ`single_comfort_token_budget: int = 44880`をリテラルとして追加した（`chain_comfort_token_budget`のように`chain_math`の定数を写す形ではない——単発`/generate`はstage-2タイル分割の無い別ジオメトリで、写すべき対応物がそもそも存在しないため）。`config.yaml.example`にも同じ密度の日本語コメント付きで追記したが、**実運用`config.yaml`には追記していない**（`chain_comfort_token_budget`の前例と同じく、Pydantic既定値のみで配信する設計。yamlへ書くと将来の定数調整が実機に届かなくなるため）。`GET /config`は`model_dump()`をそのまま返す実装のため、配線は不要で自動的に`limits`ブロックへ載る。
+
+### 66.3 実装内容（フロントエンド概要）
+
+詳細はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §84が正本。要点は次の3つ。
+
+- **逆算式1本**（`webui/src/modes/single/spillUtils.ts`の`singleComfortFrames`）: `cells = floor(幅/32)*floor(高さ/32)` → `潜在フレーム数上限 = floor(予算/cells)` → `フレーム数 = 8*(潜在フレーム数上限-1)+1` → `[minNumFrames, maxNumFrames]`へclamp。60行の表を焼き込まず、都度計算する設計（`COMFORT_LIMIT_TABLE.md` §1.3の式そのもの）。
+- **全on判定**（`webui/src/shell/accelerationSettings.ts`の`isFullAcceleration`）: 5条件すべてが真のときだけ賢い値を使い、1つでもoffなら既存の`spill_free_frames`ベースのマーカーへフォールバックする。sageは`sageAvailable`の3値（`true`/`false`/`null`）を、既存の「明示的な`false`にだけ反応する」規律のまま扱う——`null`（`/status`未着または旧サーバー）は効果的にonとみなし、着信直後にマーカーが跳ぶちらつきを避ける。
+- **フィールド名・文言**: `spillThresholdFrames`のフィールド名は据え置き（改名の連鎖を避ける）。超過時の警告文言だけを新設キー`single.comfortWarningSmart`で出し分ける（既定構成の警告文「2〜4倍遅くなります」はスマートマーカー時は事実と食い違うため）。
+
+### 66.4 機械検証
+
+| 項目 | 結果 |
+|---|---|
+| backend `pytest tests/test_stage2_window.py tests/test_retake_api.py`（関連2ファイル） | **117 passed / 7 skipped**（18.7秒） |
+| backend `pytest`（全件・アプリ用仮想環境） | **1721 passed / 20 skipped / 1 failed**（192.3秒。失敗1件はMCP `backend_status`の`reachable`判定が実機バックエンド到達可能な本環境で反転する既存の環境依存フレークで、本テーマとは無関係） |
+| frontend `npm run typecheck`（`tsc -b --noEmit`） | **0エラー** |
+| frontend `npm test`（vitest・関連3ファイルのみ） | **104 passed / 104**（`spillUtils.test.ts`・`accelerationSettings.test.ts`・`useGenerationForm.test.ts`） |
+| frontend `npm test`（vitest・全件） | **2472 passed / 2480**（失敗8件は`JobsContext.test.tsx`の既知409起因フレーク2ファイル分で、本テーマとは無関係） |
+| frontend `npm run lint`（oxlint） | **31 warning / 0 error**（ベースライン維持） |
+
+バックエンドの追加テストは3本（すべて`tests/test_stage2_window.py`・`tests/test_retake_api.py`）。①`LimitsConfig().single_comfort_token_budget == 44_880`の固定（`test_config_default_single_comfort_token_budget`）、②`single_comfort_token_budget`と`chain_comfort_token_budget`が別鍵・別値であることの回帰（`test_single_and_chain_comfort_budgets_are_separate_keys`）、③`GET /config`の応答に`single_comfort_token_budget`が実際に載ることの表明（`test_config_publishes_the_single_comfort_token_budget`）——型に足しただけで配信されていなければ、クライアントは黙って自前のフォールバックで動いてしまうため。フロントエンド側は検算表（1920×1088→169・1280×768→361・768×1280→361・2560×1472→89・1472×2560→89・512×320→481・4096×4096→9の7点固定）を含む`spillUtils.test.ts`、5条件の判定と実効オブジェクト要求を検証する`accelerationSettings.test.ts`、鍵取り違えの回帰（`single_comfort_token_budget`と`chain_comfort_token_budget`を両方持つconfigで全on→361であることの表明）を含む`useGenerationForm.test.ts`で担保している。
+
+### 66.5 状態
+
+実装・機械検証は完了。デプロイ・オーナー目視ゲート（フロントエンド`Docs/PENDING_TASKS.md` §2-4）は別途。

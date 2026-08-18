@@ -322,6 +322,27 @@ class LimitsConfig(BaseModel):
     # on a smaller GPU / raise it on a larger one to move the client's guides;
     # the geometry itself does not change.
     chain_comfort_token_budget: int = CHAIN_COMFORT_TOKEN_BUDGET
+    # Comfortable attention-token ceiling for ONE Create (single-shot
+    # `/generate`) request. A single request refines its whole clip in ONE
+    # pass (no stage-2 tiling), which is a DIFFERENT workload from
+    # chain_comfort_token_budget above (one chain stage-2 window) — the two
+    # are separate axes with separate calibrated values, never to be confused.
+    # PURELY CLIENT ADVICE, same discipline as chain_comfort_token_budget: the
+    # server never consults this — no request is rejected, clamped or altered
+    # by it. Published only so the WebUI's Create screen can draw a smart,
+    # resolution-exact comfort marker instead of its coarse 5-key
+    # spill_free_frames lookup; the client only switches to this derivation
+    # while all five acceleration toggles (sage, block_swap_prefetch,
+    # keep_resident, fused_gguf_dequant_kernel, vae_mode=prune_vaed) are on —
+    # with even one off it falls back to spill_free_frames instead.
+    # Literal (no chain_math constant to mirror): calibrated 2026-08-18 from a
+    # 4-stage/21-job real-device run across 3 resolutions x both orientations.
+    # The token formula is the same as chain_comfort_token_budget's:
+    # (width//32) * (height//32) * latent frame count. 44,880 is the largest
+    # common comfortable value, anchored at M2 = 1920x1088, 169 frames
+    # (exactly 44,880 tokens). Source of truth and the full derivation table:
+    # Docs/COMFORT_LIMIT_TABLE.md.
+    single_comfort_token_budget: int = 44880
 
 
 class OutputConfig(BaseModel):

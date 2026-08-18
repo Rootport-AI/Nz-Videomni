@@ -867,6 +867,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `phase1_max_concurrent_jobs` | `1` | 単一ジョブ |
 | `low_vram_disabled_required` | `false` | status に反映 |
 | `spill_free_frames` | 下記マップ | 解像度別「溢れない」フレーム数（クライアント UI 警告用） |
+| `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。下記参照 |
 
 `spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）:
 ```yaml
@@ -875,6 +876,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 "2560x1472": 81    # 1440p
 ```
 API は 481f まで受理するが、この値を超えると shared メモリへ溢れて低速化（OOM はしない）。クライアント UI が警告する用途。実測根拠は `Docs/RESOLUTION_DURATION_CAPABILITY.md §8.4/§8.6` を参照（数値網羅表は複製しない）。
+
+**`single_comfort_token_budget`**（既定 `44880`、2026-08-18追加）は「単発 `/generate` 1発が快適に収まる注意トークン数の上限」。トークン数＝`(幅÷32) × (高さ÷32) × 潜在フレーム数`で、Chained 用の `chain_comfort_token_budget`（既定 `40000`）とは**別の物理条件から出た別の鍵**（単発は stage-2 タイル分割なしで全体を1パスで精製するため、1回の仕上げ工程分の予算であるチェーン側とはワークロードが異なる）。**サーバーはこの値で一切の判定をしない**（拒否も丸めもしない）——WebUI の Create 画面が、5つの高速化トグル（sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が全て on のときだけこの値から解像度ぴったりのフレーム数上限を逆算してスライダーに表示し、1つでも off なら従来の `spill_free_frames` へフォールバックする、という用途に限定した助言専用の公開値である。44,880 は 2026-08-18 の4段階・21ジョブ実機検証（3解像度×縦横両向き）で較正された値で、正本は `Docs/COMFORT_LIMIT_TABLE.md`。
 
 ### 6.8 エラーコード
 
@@ -1111,6 +1114,8 @@ VRAM が溢れ始めない最長尺は解像度別に異なり、`GET /api/v1/co
 
 これを超えると WDDM shared へ溢れて **~2–4x 低速化**（OOM せず完走）。天井付近の生成時間は解像度に依らず ~334–344秒（~5.7分）に収束する（RES-DUR §8.6）。720p は API `num_frames≤257` が物理溢れ境界より手前で効くため、実運用では 257f が溢れない最長となる。
 
+上表は**既定構成（高速化トグルのいずれか1つ以上が off）のときの快適上限**である。5つの高速化トグル（sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が**全て on**の全on構成では、より高い線（44,880トークン）まで快適であることが2026-08-18の実機検証で確認されており、`GET /api/v1/config` の `limits.single_comfort_token_budget`（§6.7・§11.7）として別鍵で配信している。WebUI の Create 画面はこの2本の値を条件で出し分けており、正本は `Docs/COMFORT_LIMIT_TABLE.md`。
+
 ### 10.3 1080p 長尺は非実用 → 720p 生成 + 外部アップスケール推奨
 
 1080p の長尺は生成時間が**非線形に**伸びる（spill による PCIe 帯域律速ページング。RES-DUR §8.2 で、フレーム増に対する時間比が 1.22 → 3.20 に膨張することを実証）。20s 級は ~40分に達し commit リスクもあるため非実用である。したがって **720p で生成し、外部アップスケーラで 1080p 化する**運用を推奨する。
@@ -1226,7 +1231,7 @@ Gradio / API の初期値。
 | `normalize_to_png` | `true` | PNG 正規化（EXIF orientation 反映・RGB 変換） |
 
 ### 11.7 limits
-§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=5`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`={"1280x768":257,"1920x1088":153,"2560x1472":81}）。
+§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=5`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`={"1280x768":257,"1920x1088":153,"2560x1472":81}, `single_comfort_token_budget=44880`）。
 
 ### 11.8 output
 | キー | 実値 | 説明 |

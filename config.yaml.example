@@ -164,9 +164,7 @@ generation_defaults:
   # Gradio/API の初期値。standard_720p プリセットと完全一致させる。width/height は64の倍数。
   width: 1280
   height: 768
-  crop_output:
-    width: 1280
-    height: 720
+  crop_output: null   # 既定OFF。プリセット選択時はプリセットの値が適用される。
   num_frames: 257
   frame_rate: 24.0
   num_inference_steps: 8
@@ -239,6 +237,21 @@ limits:
   # （拒否も丸めもしない）純粋な助言値。トークン = (幅//32) × (高さ//32) × 窓の潜在フレーム数。
   # VRAM 容量に応じて上下してよい（小さい GPU なら下げ、大きい GPU なら上げる）。
   chain_comfort_token_budget: 40000
+  # Create（単発 `/generate`）1 発が快適に収まる注意トークン上限。/config で公開。
+  # chain_comfort_token_budget とは別軸（1 発は stage-2 タイル分割なしで全体を
+  # 1 パスで精製するため、ワークロードが異なる）。サーバはこの値で何も判定しない
+  # 純粋な助言値。式は同じ: トークン = (幅//32) × (高さ//32) × 潜在フレーム数。
+  # WebUI の Create 画面は、5 つの高速化トグル（sage・block_swap_prefetch・
+  # keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が全て on の
+  # ときだけこの値から賢いマーカーを算出し、1 つでも off なら従来の
+  # spill_free_frames へフォールバックする。44,880 は 2026-08-18 の4段階・21
+  # ジョブ実機検証（3解像度×縦横）で較正された最大の共通快適値。正本は
+  # Docs/COMFORT_LIMIT_TABLE.md。
+  #
+  # 注意: このコメントは example のみに書く。実運用 config.yaml には追記しない
+  # ——chain_comfort_token_budget も実運用 yaml には無く Pydantic 既定値のまま
+  # 配信されている前例に倣う（yaml に書くと将来の定数調整が実機に届かなくなる）。
+  single_comfort_token_budget: 44880
 
 output:
   dir: "./outputs"

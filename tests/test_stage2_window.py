@@ -146,6 +146,33 @@ def test_config_default_budget_is_the_chain_math_constant():
         chain_math.CHAIN_COMFORT_TOKEN_BUDGET == 40_000
 
 
+def test_config_default_single_comfort_token_budget():
+    """``config.LimitsConfig.single_comfort_token_budget`` is a LITERAL (no
+    chain_math constant to mirror — a single `/generate` refines its whole
+    clip in one pass, a different geometry from a chain's stage-2 window).
+    Pinned here so an accidental edit doesn't silently drift the value the
+    WebUI's Create screen calibrates its smart comfort marker against
+    (Docs/COMFORT_LIMIT_TABLE.md)."""
+    from config import LimitsConfig
+
+    assert LimitsConfig().single_comfort_token_budget == 44_880
+
+
+def test_single_and_chain_comfort_budgets_are_separate_keys():
+    """Regression: single_comfort_token_budget (Create, one-shot) and
+    chain_comfort_token_budget (Chained, one stage-2 window) are DIFFERENT
+    config keys with DIFFERENT calibrated values covering different
+    workloads. A client that reads the wrong key for the wrong screen would
+    still type-check and still run — this is the guard that would go red on
+    that mistake instead."""
+    from config import LimitsConfig
+
+    limits = LimitsConfig()
+    assert limits.single_comfort_token_budget == 44_880
+    assert limits.chain_comfort_token_budget == 40_000
+    assert limits.single_comfort_token_budget != limits.chain_comfort_token_budget
+
+
 def test_high_resolution_window_is_the_documented_escape_hatch():
     """The whole point of the opt-in: a resolution that overshoots the budget on
     the standard window fits on the high_resolution one."""

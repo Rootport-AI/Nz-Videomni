@@ -156,6 +156,16 @@ def test_end_source_video_mock_e2e(client, tmp_path):
     # the stage-2 freeze plan reaches exactly the end of the band
     assert layout.end_tile_bands[-1][1] == layout.n_end_v
     assert es["end_tile_bands"] == [list(b) for b in layout.end_tile_bands]
+    # ...and its AUDIO twin, which the mock publishes for the same reason: the
+    # geometry comes from chain_math, so the mock follows it for free.
+    assert es["n_end_a"] == layout.n_end_a == 24
+    assert layout.end_tile_bands_a[-1][1] == layout.n_end_a
+    assert es["end_tile_bands_a"] == [list(b) for b in layout.end_tile_bands_a]
+    # RUNTIME audio keys are the engine's; the mock freezes nothing, so it must
+    # not claim to have frozen audio any more than it claims a freeze proof.
+    assert "audio_frozen" not in es
+    assert "n_end_a_frozen" not in es
+    assert "end_tile_bands_a_frozen" not in es
     # runtime (mock) + provenance (app-side)
     assert es["kind"] == "video"
     assert es["decoded_frames_px"] == layout.total_px
@@ -197,6 +207,8 @@ def test_in_window_mock_e2e_at_the_experiment_geometry(client, tmp_path):
     assert es["clips_total_px"] == 169
     assert es["end_source_junction_px"] == 144      # 169 - 24 - 1
     assert es["end_tile_bands"] == [[3, 3]]         # one stage-2 tile
+    assert es["n_end_a"] == 24                      # the causal scan, not 25
+    assert es["end_tile_bands_a"] == [[24, 24]]     # the same single tile
     # The mock still has no latents, so it must not claim a freeze proof.
     assert "freeze_proof" not in es
     assert video_io.frame_count(ctx.config.output_dir / job_id / "_end_source.mp4") == 25

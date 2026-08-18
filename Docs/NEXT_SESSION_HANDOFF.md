@@ -2,16 +2,31 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-18 **End source 第2段階（逆順Chained）を実装。クリップ2本以上へ拡張**）（**本ブロックが日付として最新**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-18 **End source 第3弾（錨への素材音声の凍結）を実装**）（**本ブロックが日付として最新**）
 
-> **本ブロックが「日付として最新」の座を継ぐ。** 以下の▶節（2026-08-17ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
+> **本ブロックが「日付として最新」の座を継ぐ。** 以下の▶節（2026-08-18の逆順Chainedブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
-> 1. **End sourceはクリップ2本以上へ拡張された（逆順Chained、`"reverse"`）。** クリップ本数だけで挙動が決まり、**クリップ1本＝窓内モード（`in_window`）／クリップ2本以上＝逆順Chained（`"reverse"`）**の2経路が推奨になった。逆順Chainedは Stage-1 のみをタイムライン末尾から先頭へ依存順に生成し、各セグメントは自分より未来側のセグメントの頭を自分の尾のりしろとして凍結する（正順チェーンの頭凍結を鏡写しにした形で、新規の凍結機構は無い）。**出力の尺はどちらのモードでもクリップ合計のまま**で、旧方式（`"internal_segment"`＝帯を後ろに継ぎ足して尺が伸びる方式）は通常のAPIリクエストからは到達不能になった（削除はしていない）。実装・機械検証・実機ゲートM1〜M7（全7ジョブ合格）の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64、設計正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11。
+> 1. **End sourceの錨（末尾の凍結フレーム）が、素材の音声も凍結するようになった。** 窓内モード・逆順Chainedいずれの錨クリップでも、素材に音声トラックがあれば**常にその音声を凍結する**——新設のトグル・フィールドは無く、`EndSourceSpec`のフィールド数は増えていない（オーナー判断: v1で音声トグルのラジオボタン〔モック〕を撤去した以上、素材音声の取り込みは選べる機能ではなく本体仕様であるべき）。**`strength`は映像専用のつまみになった**（音声のマスク値は`strength`の値に関わらず常に0.0）。
+> 2. **フォールバックは「音声トラック無し／デコード不能」のときのみ。** 音声潜在が必要数より少ない端数構成はエラーにせず取れた分だけ凍結し（案B）、デジタル無音の検出はしない（無音の素材は無音のまま凍結される）。画像end source（静止画）は元々音声を持たないため本改修の対象外で、従来どおり自由生成にフォールバックする。
+> 3. **配信される錨区間の音声は原波形のmuxではなく、音声VAE＋ボコーダを1往復した音になる。** cross-attentionを効かせるには潜在である必要があるため（同じ曲だが少しこもった音になるのが仕様）。
+> 4. **機械検証・機械ゲートA1〜A9は全合格。** backend pytestは1,739件中、環境依存の既知1件のみ失敗、frontend typecheck/lint/vitest(2,480件)も全PASS（既知失敗はいずれも本テーマと無関係）。切り戻し用のモジュール定数`END_SOURCE_FREEZE_AUDIO`（既定`true`）を`false`にすると、本改修より前とバイト完全同一の出力に戻ることをA8bで機械証明済み。実装・機械検証・機械ゲート結果の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §65。
+> 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2、フロントエンド側の実装記録（文言のみ・ロジック無改修）は同[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §82が正本。**
+> 6. **実機作業の残件はオーナーの試聴ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2）。まだ未実施。試聴の観点は錨区間の一致・自由区間へのBGM波及・音声版の早着・帯の入口やタイル継ぎ目のクリック・逆順生成での音楽構造・無音素材での聴感の6点。
+> 7. **【同日追記】オーナー目視・試聴ゲートが完了し、End source実用化テーマは裁定で完結した。** T1（1クリップ）の試聴は成功（End sourceと同じ曲調のBGM）、T2/T3（複数クリップ）は最終クリップのみ同じ雰囲気になり他は独立した音楽になることを確認。映像側（round5の第2弾ジョブ）は全条件で末尾（錨直前）に系統的なモーフ、中間の継ぎ目はシード依存で分散（綺麗〜非実用まで）という結果になった。原因の切り分け実験E0/E1（standard窓 vs. high_resolution窓）で、末尾モーフは末端タイル仮説で部分的に説明できるが、タイル割りの変更は根本解決にならないと判明した。**オーナー裁定: End sourceはクリップ1本での使用を推奨し、複数クリップは推奨外の使い方と見做す。複数クリップ時の品質劣化は仕様として許容する。** 根治にはモデル側の到着時刻拘束能力が要る（現行LTX 2.3には無い）。品質重視の複数クリップワークフローは**手動リレー**（クリップ1本ずつend sourceで生成し、生成物を次の素材にして過去へ遡り、AviUtl2タイムライン上で組み合わせる）。詳細・実験結果・考察の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7・§65.8、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、台帳の完結記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
+> 8. **残作業**: (a) UI警告文の実装——「クリップが2本以上のときは、クリップの境目で映像や音声の質が下がることがあります。」の文言は確定済みで、**オーナーの次のUI改修バッチと同時に実装する**（起票はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-22）。(b) 品質の合否とは独立したUI実機確認（G1-R4・R2-9〜R2-11）とG1-R2/R3・一部のV/試聴観点は同[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2に未実施のまま残っている。(c) 新規研究課題2件を起票した——到着時刻の拘束（同§3-91、将来モデルの能力待ち）、グローバル音声パス（同§3-92、音声だけ全長一括生成する再設計・大掛かり）。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-18＝本ブロックは日付として最新ではない。上記の第3弾ブロック参照）　**End source 第2段階（逆順Chained）を実装。クリップ2本以上へ拡張**
+
+> 以下の▶節（2026-08-17ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
+>
+> 1. **End sourceはクリップ2本以上へ拡張された（逆順Chained、`"reverse"`）。** クリップ本数だけで挙動が決まり、**クリップ1本＝窓内モード（`in_window`）／クリップ2本以上＝逆順Chained（`"reverse"`）**の2経路がAPIとして受理されるようになった（**2026-08-18注**: 当時の記述「2経路が推奨」は誤り。同日のち、オーナー裁定によって推奨は「クリップ1本＝窓内モード」の1本のみとなり、逆順Chainedは受理されるが推奨外という扱いに確定した。フロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84、上記の第3弾ブロック参照）。逆順Chainedは Stage-1 のみをタイムライン末尾から先頭へ依存順に生成し、各セグメントは自分より未来側のセグメントの頭を自分の尾のりしろとして凍結する（正順チェーンの頭凍結を鏡写しにした形で、新規の凍結機構は無い）。**出力の尺はどちらのモードでもクリップ合計のまま**で、旧方式（`"internal_segment"`＝帯を後ろに継ぎ足して尺が伸びる方式）は通常のAPIリクエストからは到達不能になった（削除はしていない）。実装・機械検証・実機ゲートM1〜M7（全7ジョブ合格）の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64、設計正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11。
 > 2. **同日、錨の固定強度`end_source.strength`も追加した（バッチ1、逆順Chainedより先行実装）。** 0.0〜1.0・既定1.0で、既定値は従来とバイト単位で厳密同値。1.0未満にすると**Stage-1のマスク値だけ**が緩み、**Stage-2は常にハード凍結**するため最終フレームは常に素材どおりになる。実装・機械検証・実機ゲートG1-R1〜G1-R3の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §63。
 > 3. **MCPの`submit_chain`は4引数構成になった。** `end_source_video_id` / `end_source_image_id` / `end_source_context_frames` に加え、`end_source_strength`が増えた（ツール本数22は不変）。`INSTRUCTIONS`とdocstringは「クリップ何件でも使える・1件＝窓内モード／2件以上＝逆順Chained・出力の長さはどちらもクリップ合計」という記述へ更新済み。
 > 4. **受理範囲の後方非互換変更が2点ある**（新しいエラーコードは増やさず422 `VALIDATION_ERROR`）。①`source_video`（素材（冒頭））×`end_source`×2クリップ以上を拒否（真ん中クリップの頭・尾二重凍結という未検証の形を避けるため）。②最終クリップの潜在数が`kv + n_end_v`以下になる構成を拒否（逆向きに運ぶべき新規生成内容がゼロになるため。旧方式では通っていた構成が逆順Chainedでは422になる点に注意）。
 > 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2・§5.4、フロントエンド側の実装記録は同[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §80（strength）・§81（逆順Chained）が正本。**
-> 6. **実機作業の残件はオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2、該当項目は同§3-84）。
+> 6. **実機作業の残件はオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2、テーマ完結の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84）。
 
 ---
 
@@ -35,7 +50,7 @@
 > 以下の▶節（2026-08-12ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
 > 1. **Chainedの快適上限マーカーは完結した。** 唯一の残件だった「線の太さ」の再確認（G-D1・G-D1-2）を2026-08-16にオーナーが実施し、**白い線・赤い線ともネイティブの目盛りと同等の細さで表示され合格**した。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59.7とフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-85。
-> 2. **End source（素材（末尾））は、目視ゲートの結果を受けてUIからは非公開になった。** 生成結果が例外なく「本体はプロンプトどおりに進み、そこからクロスフェードで素材へ接続する」形になるためで、**APIと内部実装は将来の改修に備えて温存**している（バックエンドは無改修）。裁定と経緯は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.12〜§60.14、実用化の研究テーマはフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-84。
+> 2. **End source（素材（末尾））は、目視ゲートの結果を受けてUIからは非公開になった。** 生成結果が例外なく「本体はプロンプトどおりに進み、そこからクロスフェードで素材へ接続する」形になるためで、**APIと内部実装は将来の改修に備えて温存**している（バックエンドは無改修）。裁定と経緯は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.12〜§60.14、実用化の研究テーマはフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
 > 3. **`services/video_io.py`の`frame_count()`のffprobe書式を直した**（`csv=p=0`→`default=nokey=1:noprint_wrappers=1`）。ICCプロファイル付きの素材で空フィールドが混ざりフレーム数の解析に失敗していた既存バグで、end source固有ではない（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.13）。
 > 4. **実機作業の残件は無い。** 台帳フロントエンド`PENDING_TASKS.md`の「2. 実装済み・ユーザーのテスト待ち」は空になったため節ごと削除してある。
 

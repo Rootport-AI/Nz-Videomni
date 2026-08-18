@@ -908,6 +908,14 @@ class PipelineManager:
                         "kind": "image",
                         "end_source_image_id": chain.end_source.image_id,
                         "written_frames": still["written_frames"],
+                        # Stated rather than omitted: the video branch above
+                        # always publishes this key, so a consumer that reads it
+                        # to decide "is there material audio to freeze?" would
+                        # otherwise have to treat "absent" as an answer. A still
+                        # has no audio, and :func:`video_io.still_image_mp4`
+                        # writes none. The authoritative record of what the
+                        # ENGINE did with it is ``end_source.audio_frozen``.
+                        "upload_has_audio": False,
                     }
 
             def on_progress(step, total, progress, stage=None, clip=None, clip_count=None):

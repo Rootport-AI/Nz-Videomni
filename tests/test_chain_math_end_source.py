@@ -181,12 +181,14 @@ def test_no_end_source_key_when_end_context_is_none():
     assert "end_source" not in plain.to_dict()
     assert plain.end_context_px is None
     assert plain.n_end_v == 0
+    assert plain.n_end_a == 0
     assert plain.end_source_junction_px is None
     assert plain.seg_frames == DEFAULT_CHAIN        # segments == clips exactly
     assert plain.seg_latent == [7, 7]
     assert plain.end_segment_px == 0
     assert plain.end_segment_latent == 0
     assert plain.end_tile_bands == []
+    assert plain.end_tile_bands_a == []
     _assert_tables(plain, reverse=False)
 
 
@@ -221,6 +223,7 @@ def test_end_source_sub_dict_shape():
     assert layout.to_dict()["end_source"] == {
         "end_context_px": 72,
         "n_end_v": 9,                    # 72 // 8 (tail grid)
+        "n_end_a": 73,                   # the causal scan, NOT round(72/24*25)
         "mode": "reverse",               # two clips
         "generation_order": [1, 0],      # last clip first
         "end_source_junction_px": 248,   # 321 - 72 - 1
@@ -228,6 +231,7 @@ def test_end_source_sub_dict_shape():
         "end_segment_px": 0,             # nothing is appended...
         "end_segment_latent": 0,         # ...at all
         "end_tile_bands": [[0, -10], [8, 8], [5, 9]],
+        "end_tile_bands_a": [[0, -85], [65, 65], [34, 73]],
         "clips_total_px": 321,           # == total_px: the band is IN the clips
     }
 
@@ -239,6 +243,7 @@ def test_end_source_sub_dict_shape_in_window():
     assert layout.to_dict()["end_source"] == {
         "end_context_px": 24,
         "n_end_v": 3,                    # 24 // 8
+        "n_end_a": 24,                   # the causal scan, NOT round(24/24*25)
         "mode": "in_window",             # one clip
         "generation_order": [0],
         "end_source_junction_px": 144,   # 169 - 24 - 1
@@ -246,6 +251,7 @@ def test_end_source_sub_dict_shape_in_window():
         "end_segment_px": 0,             # no appended segment...
         "end_segment_latent": 0,         # ...at all
         "end_tile_bands": [[3, 3]],
+        "end_tile_bands_a": [[24, 24]],
         "clips_total_px": 169,           # == total_px: the band is IN the clip
     }
 
@@ -260,6 +266,7 @@ def test_end_source_sub_dict_shape_internal_segment():
     assert layout.to_dict()["end_source"] == {
         "end_context_px": 72,
         "n_end_v": 9,
+        "n_end_a": 73,
         "mode": "internal_segment",
         "generation_order": [0, 1, 2],   # clips, then the appended band segment
         "end_source_junction_px": 80,    # 153 - 72 - 1
@@ -267,6 +274,7 @@ def test_end_source_sub_dict_shape_internal_segment():
         "end_segment_px": 89,            # px_from_v_latent(3 + 9)
         "end_segment_latent": 12,        # kv + n_end_v
         "end_tile_bands": [[9, 9]],      # one tile, band at its tail
+        "end_tile_bands_a": [[73, 73]],  # one tile, audio band at its tail
         "clips_total_px": 81,            # what [49, 49] alone assembles to
     }
 
@@ -1361,3 +1369,253 @@ def test_the_reverse_carry_holds_both_ends_at_the_seam_strength():
     v_head, v_tail, a_head, a_tail = cm.freeze_mask_values(0.5, None, 0.0)
     assert (v_head, v_tail) == (0.5, 0.5)
     assert (a_head, a_tail) == (0.0, 0.0)
+
+
+# ── pillar 5: the band's AUDIO (n_end_a / end_tile_bands_a) ──────────────────
+# The material's own audio is frozen over the same band its video is, so the
+# geometry grows an audio twin of every number pillar 2 pins. What makes it a
+# pillar of its own rather than a footnote is that the two grids do NOT move
+# together: video latents advance in groups of 8 pixel frames, audio latents at
+# 25 per second, so the audio band's width is a SCAN over the causal patch grid
+# and its per-tile plan can be nonzero where the video's is zero.
+
+
+def _naive_bands_a(layout: cm.ChainLayout) -> list[tuple[int, int]]:
+    """The audio counterpart of :func:`_naive_bands`, written the same long way."""
+    band_lo = layout.a_total - layout.n_end_a
+    band_hi = layout.a_total
+    out: list[tuple[int, int]] = []
+    for as_, alen in layout.a_tiles:
+        lo, hi = max(as_, band_lo), min(as_ + alen, band_hi)
+        out.append((max(0, hi - lo), as_ + alen - band_lo))
+    return out
+
+
+@pytest.mark.parametrize(
+    "clips, fps, kv, end_px, mode, n_end_v, a_total, n_end_a",
+    [
+        ([169], 24.0, 3, 72, "in_window", 9, 176, 74),
+        ([169, 169], 24.0, 1, 8, "reverse", 1, 351, 7),
+        ([169, 169, 169], 24.0, 1, 72, "reverse", 9, 526, 74),
+        ([121], 30.0, 2, 48, "in_window", 6, 101, 39),
+        ([241], 60.0, 2, 136, "in_window", 17, 100, 55),
+    ],
+)
+def test_n_end_a_pinned_values(clips, fps, kv, end_px, mode, n_end_v, a_total, n_end_a):
+    """The five worked examples the design was settled on. If any of these moves,
+    the frozen audio lands on different latents than the ones the design and the
+    real-hardware gate were written against."""
+    layout = cm.compute_chain_layout(clips, fps, kv=kv, end_context_px=end_px)
+    assert layout.end_source_mode == mode
+    assert (layout.n_end_v, layout.a_total, layout.n_end_a) == (n_end_v, a_total, n_end_a)
+
+
+def test_n_end_a_is_the_causal_scan_and_not_a_rounding():
+    """``round(end_context_px / fps * 25)`` is a DIFFERENT number, and using it
+    would push the frozen band into freely generated material. Stated on a case
+    where the two disagree, so the scan cannot be quietly replaced."""
+    layout = cm.compute_chain_layout([169], FPS, end_context_px=72)
+    naive = round(72 / FPS * cm.AUDIO_LATENTS_PER_SEC)
+    assert naive == 75 and layout.n_end_a == 74
+    # Every frozen latent's support starts at or after the band's start time —
+    # the property the scan buys and the rounding loses.
+    band_start_s = (layout.total_px - 72) / FPS
+    first = layout.a_total - layout.n_end_a
+    assert cm.audio_latent_support_sec(first)[0] >= band_start_s - 1e-9
+    assert cm.audio_latent_support_sec(first - 1)[0] < band_start_s - 1e-9
+    assert cm.audio_latent_support_sec(layout.a_total - naive)[0] < band_start_s - 1e-9
+
+
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS + SINGLE_CLIP_SETS)
+@pytest.mark.parametrize("end_px", [8, 40, 72, 136])
+def test_n_end_a_boundaries_hold_across_the_grid(clips, end_px):
+    """The three things the engine's writes depend on, over every fps, K_v and
+    stage-2 window the app can ask for: the band is non-empty and fits the
+    timeline, it leaves the last segment room for the のり代 that segment's
+    neighbour takes out of it, and no frozen latent reaches back before the
+    band's start time."""
+    checked = 0
+    for fps, kv, window in itertools.product(ALL_FPS, (1, 2, 3, 5), BOTH_WINDOWS):
+        if any(kv >= cm.v_latent_frames(c) for c in clips):
+            continue
+        v_tile, v_adv = cm.resolve_stage2_window(window)
+        try:
+            layout = cm.compute_chain_layout(
+                clips, fps, kv=kv, v_tile=v_tile, v_adv=v_adv, end_context_px=end_px
+            )
+        except ValueError as exc:
+            assert (
+                NO_FREE_LATENTS_MESSAGE in str(exc)
+                or NOTHING_TO_CARRY_MESSAGE in str(exc)
+                or "degenerate audio overlap" in str(exc)
+                or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
+            ), exc
+            continue
+        checked += 1
+        assert 0 < layout.n_end_a <= layout.a_total
+        # Slack against the のり代 taken out of the last segment's head. Two
+        # latents is the measured minimum over the whole reachable grid; pinning
+        # the bound (not merely "they do not overlap") is what would catch the
+        # geometry drifting towards the degenerate case.
+        ka_last = layout.ka_list[-1] if layout.ka_list else 0
+        assert layout.n_end_a + ka_last + 2 <= layout.seg_audio[-1]
+        # A start source's frozen audio head and this tail share one window in
+        # the in-window mode; they must not meet there either.
+        assert layout.n_ctx_a + layout.n_end_a < layout.a_total
+        band_start_s = (layout.total_px - end_px) / float(fps)
+        first = layout.a_total - layout.n_end_a
+        assert cm.audio_latent_support_sec(first)[0] >= band_start_s - 1e-9
+    # A parametrisation where NOTHING was accepted proves nothing, and the only
+    # legitimate reason for that is a band at least as long as the clip it would
+    # have to fit inside.
+    assert checked or end_px >= min(clips)
+
+
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS + SINGLE_CLIP_SETS)
+@pytest.mark.parametrize("end_px", [8, 40, 72, 136])
+@pytest.mark.parametrize("window", BOTH_WINDOWS)
+def test_end_tile_bands_a_match_a_naive_intersection_and_cover_the_band(
+    clips, end_px, window
+):
+    """Pillar 2's sweep, on the audio grid: one entry per tile, both clamps
+    honoured, the writes covering the WHOLE band, and the last tile holding its
+    end — the properties the stage-2 audio freeze depends on."""
+    v_tile, v_adv = cm.resolve_stage2_window(window)
+    try:
+        layout = cm.compute_chain_layout(
+            clips, FPS, v_tile=v_tile, v_adv=v_adv, end_context_px=end_px
+        )
+    except ValueError as exc:
+        assert (
+            NO_FREE_LATENTS_MESSAGE in str(exc)
+            or NOTHING_TO_CARRY_MESSAGE in str(exc)
+            or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
+        ), exc
+        return
+    assert len(layout.end_tile_bands_a) == layout.n_tiles
+    assert layout.end_tile_bands_a == _naive_bands_a(layout)
+
+    covered: set[int] = set()
+    for (t, off), (as_, alen) in zip(layout.end_tile_bands_a, layout.a_tiles):
+        assert 0 <= t <= alen                      # the min(alen, ...) clamp
+        if t == 0:
+            continue
+        assert 0 <= off - t < off <= layout.n_end_a
+        covered |= set(range(off - t, off))
+    assert covered == set(range(layout.n_end_a))
+    assert layout.end_tile_bands_a[-1][1] == layout.n_end_a
+    assert layout.end_tile_bands_a[-1][0] > 0
+
+
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS + SINGLE_CLIP_SETS)
+@pytest.mark.parametrize("end_px", [8, 72, 136])
+def test_tail_tile_bands_reproduces_the_video_plan_it_replaced(clips, end_px):
+    """``end_tile_bands`` is now the shared :func:`chain_math.tail_tile_bands`
+    applied to the video grid. Calling it directly must give the stored list back
+    — that equality is what makes the extraction a no-op for every video path
+    validated before it."""
+    for window in BOTH_WINDOWS:
+        v_tile, v_adv = cm.resolve_stage2_window(window)
+        try:
+            layout = cm.compute_chain_layout(
+                clips, FPS, v_tile=v_tile, v_adv=v_adv, end_context_px=end_px
+            )
+        except ValueError:
+            continue
+        assert layout.end_tile_bands == cm.tail_tile_bands(
+            layout.v_tiles, layout.f_total, layout.n_end_v
+        )
+        assert layout.end_tile_bands_a == cm.tail_tile_bands(
+            layout.a_tiles, layout.a_total, layout.n_end_a
+        )
+
+
+def test_a_short_encode_recuts_the_audio_plan_to_what_was_frozen():
+    """What the engine does when the material yields fewer audio latents than the
+    band covers: it re-cuts the per-tile plan to the width it actually froze, with
+    the SAME pure function. The recut plan must still be a valid tail plan — every
+    write inside the narrower band, the whole of it covered, the last tile holding
+    its end."""
+    layout = cm.compute_chain_layout([169, 169, 169], FPS, kv=1, end_context_px=72)
+    assert layout.n_tiles > 1
+    assert cm.tail_tile_bands(
+        layout.a_tiles, layout.a_total, layout.n_end_a
+    ) == layout.end_tile_bands_a
+    for frozen in (1, 7, layout.n_end_a - 1):
+        recut = cm.tail_tile_bands(layout.a_tiles, layout.a_total, frozen)
+        assert len(recut) == layout.n_tiles
+        covered: set[int] = set()
+        for (t, off), (as_, alen) in zip(recut, layout.a_tiles):
+            assert 0 <= t <= alen
+            if t == 0:
+                continue
+            assert 0 <= off - t < off <= frozen
+            covered |= set(range(off - t, off))
+        assert covered == set(range(frozen))
+        assert recut[-1][1] == frozen and recut[-1][0] > 0
+
+
+def test_the_video_and_audio_tile_plans_are_computed_independently():
+    """Neither list is derivable from the other: a tile's audio count is not its
+    video count, nor a fixed multiple of it, and a tile the video band misses
+    entirely still gets its own audio entry. This is why the engine reads each
+    from its own list."""
+    layout = cm.compute_chain_layout([169, 169], FPS, end_context_px=72)
+    tv = [t for t, _ in layout.end_tile_bands]
+    ta = [t for t, _ in layout.end_tile_bands_a]
+    assert tv == [0, 8, 5] and ta == [0, 65, 34]
+    assert len(tv) == len(ta) == layout.n_tiles
+    # The offsets differ too — each one indexes into ITS OWN band tensor.
+    assert [off for _, off in layout.end_tile_bands] != [
+        off for _, off in layout.end_tile_bands_a
+    ]
+
+
+def test_the_tile_plan_encodes_no_coupling_between_the_two_grids():
+    """``t == 0`` on one grid does NOT imply ``t == 0`` on the other. No reachable
+    layout is known to show it (the audio band's start time never precedes the
+    video band's, so a tile that misses the video band misses the audio one too),
+    but nothing in the geometry PROMISES that — and a promise is what an engine
+    that nested the audio write inside ``if t > 0:`` would be relying on. Stated
+    against the pure function directly, on the two grids' shapes."""
+    video_tiles = [(0, 10), (6, 10)]      # 16 latents, band = the last 4
+    audio_tiles = [(0, 40), (24, 40)]     # 64 latents, band = the last 40
+    assert cm.tail_tile_bands(video_tiles, 16, 4) == [(0, -2), (4, 4)]
+    assert cm.tail_tile_bands(audio_tiles, 64, 40) == [(16, 16), (40, 40)]
+
+
+# ── the audio tail's mask value: hard at every strength ──────────────────────
+@pytest.mark.parametrize("strength", [0.0, 0.5, 0.9, 1.0])
+def test_the_audio_tail_is_hard_frozen_whatever_the_strength_is(strength):
+    """``end_source.strength`` is a VIDEO knob. The engine passes ``1 - strength``
+    as the video tail and 0.0 as the audio tail, and this is where those two are
+    resolved — the pairing no combination of the older overrides could express."""
+    mask_value = 0.5  # an ordinary carry-over seam (overlap_strength default)
+    v_head, v_tail, a_head, a_tail = cm.freeze_mask_values(
+        mask_value,
+        tail_mask_value=1.0 - strength,
+        audio_mask_value=None,
+        audio_tail_mask_value=0.0,
+    )
+    assert v_head == mask_value
+    assert v_tail == 1.0 - strength
+    assert a_head == mask_value          # the head is still an ordinary seam
+    assert a_tail == 0.0                 # ...and the band is still hard-frozen
+
+
+@pytest.mark.parametrize("mask_value", [0.0, 0.3, 0.5, 1.0])
+@pytest.mark.parametrize("tail", [None, 0.0, 0.25, 1.0])
+@pytest.mark.parametrize("audio", [None, 0.0, 0.75])
+def test_the_fourth_argument_is_inert_when_absent(mask_value, tail, audio):
+    """Every pre-end-source-audio call site must be bit-identical: passing None
+    (or nothing at all) for the fourth argument reproduces the three-argument
+    result exactly, over the whole cross product of the older two."""
+    old = cm.freeze_mask_values(mask_value, tail, audio)
+    assert cm.freeze_mask_values(mask_value, tail, audio, None) == old
+    assert cm.freeze_mask_values(
+        mask_value, tail, audio, audio_tail_mask_value=None
+    ) == old
+    # ...and when it IS given it changes the audio tail and NOTHING else.
+    v_head, v_tail, a_head, a_tail = cm.freeze_mask_values(mask_value, tail, audio, 0.0)
+    assert (v_head, v_tail, a_head) == old[:3]
+    assert a_tail == 0.0

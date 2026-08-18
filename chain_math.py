@@ -470,6 +470,18 @@ class ChainLayout:
     # ``end_source`` sub-dict entirely.
     end_context_px: int | None = None   # frozen tail pixel span (multiple of 8)
     n_end_v: int = 0                    # frozen video-latent tail frames
+    # Frozen AUDIO-latent tail frames — the material's own audio, taken from the
+    # same file the video band comes from. Resolved by the causal scan
+    # :func:`audio_tail_latents`, NOT by ``round(end_context_px / fps * 25)``:
+    # those two disagree, and only the scan keeps the band from reaching back
+    # into freely generated material.
+    #
+    # THE AUDIO IS ALWAYS HARD-FROZEN, IN STAGE 1 AS WELL AS STAGE 2:
+    # ``EndSourceSpec.strength`` is a VIDEO-only knob (mask ``1 - strength`` on
+    # the video tail, ``0.0`` on the audio tail — see
+    # :func:`freeze_mask_values`), so a soft-strength job still lands on the
+    # material's own audio.
+    n_end_a: int = 0
     # WHICH END-SOURCE MODE this layout is in. ``None`` on every chain without an
     # end source; otherwise decided by the CLIP COUNT alone:
     #
@@ -530,6 +542,12 @@ class ChainLayout:
     # rule to keep in step). The single source of truth: the engine must never
     # re-derive this arithmetic.
     end_tile_bands: list[tuple[int, int]] = field(default_factory=list)
+    # The SAME plan on the AUDIO grid (``a_tiles`` / ``a_total`` / ``n_end_a``),
+    # produced by the same :func:`tail_tile_bands`. Kept as its own list rather
+    # than derived from ``end_tile_bands``: the two grids advance at different
+    # rates, so a tile can hold zero video band latents and a nonzero audio band
+    # (or the other way round) and the engine must write each from its own entry.
+    end_tile_bands_a: list[tuple[int, int]] = field(default_factory=list)
 
     @property
     def clips_total_px(self) -> int:
@@ -602,6 +620,10 @@ class ChainLayout:
             d["end_source"] = {
                 "end_context_px": self.end_context_px,
                 "n_end_v": self.n_end_v,
+                # The band's AUDIO width. Geometry only: how many latents the
+                # band COVERS, not how many the engine managed to encode out of
+                # the material (that is the engine's ``n_end_a_frozen``).
+                "n_end_a": self.n_end_a,
                 # "in_window" (one clip), "reverse" (two or more) or the
                 # API-unreachable "internal_segment". Published in EVERY mode so
                 # a finished job's metadata says outright which geometry it ran.
@@ -623,6 +645,7 @@ class ChainLayout:
                 "end_segment_px": self.end_segment_px,
                 "end_segment_latent": self.end_segment_latent,
                 "end_tile_bands": [list(b) for b in self.end_tile_bands],
+                "end_tile_bands_a": [list(b) for b in self.end_tile_bands_a],
                 # What the user's clips alone add up to, and the number the
                 # app's "of which the last N frames are the source" breakdown is
                 # built from. ``internal_segment`` mode guarantees ``total_px ==
@@ -895,6 +918,10 @@ def compute_chain_layout(
 
     # ── end source: exclusivity + tail-grid validation ───────────────────────
     n_end_v = 0
+    # Resolved with the stage-2 tiles further down (it needs ``a_total``, which
+    # the segment budget below settles first); 0 keeps every end-source-less
+    # path free of it.
+    n_end_a = 0
     end_source_junction_px: int | None = None
     end_source_mode: str | None = None
     if end_context_px is not None:
@@ -1170,42 +1197,11 @@ def compute_chain_layout(
     # ValueError.
     assert retake_glue_px is None or n_tiles == 1, (n_tiles, retake_window_px, v_tile)
 
-    # ── end source: which stage-2 tiles the band crosses ─────────────────────
-    # Retake's ``n_tiles == 1`` invariant deliberately does NOT apply here, and
-    # neither does any "the band must fit in one tile" rule: the band occupies
-    # the global latents ``[B, f_total)`` with ``B = f_total - n_end_v``, and
-    # because it sits at the very END of the timeline every tile that reaches it
-    # reaches it on that TILE'S OWN TAIL — a trailing hard freeze, which is the
-    # shape both retake and the stage-2 seam blend were validated under. A tile
-    # the band swallows whole ends up fully frozen; that is admissible (its
-    # audio is still refined) and merely wasteful.
-    #
-    # ``t`` is how many band latents this tile ends on, ``off`` the offset ONE
-    # PAST the last band latent it holds, so the engine writes
-    # ``end_v_full[..., off - t : off]`` into the tile's last ``t`` frames.
-    # NEITHER CLAMP MAY BE DROPPED: ``max(0, ...)`` is what makes tiles before
-    # the band no-ops (their ``off`` goes negative), and ``min(vlen, ...)`` is
-    # what stops a tile shorter than the band from claiming more latents than it
-    # has. ``off`` is meaningless when ``t == 0`` and must be ignored there.
-    end_tile_bands: list[tuple[int, int]] = []
-    if end_context_px is not None:
-        band_start = f_total - n_end_v
-        for vs, vlen in v_tiles:
-            off = vs + vlen - band_start
-            t = max(0, min(vlen, off))
-            end_tile_bands.append((t, off))
-        # The last tile always ends ON the timeline's end, so it always holds
-        # the band's last latent and its ``off`` is the whole band.
-        assert end_tile_bands[-1][1] == n_end_v, (end_tile_bands, n_end_v)
-        assert end_tile_bands[-1][0] > 0, (end_tile_bands, n_end_v)
-        # The last frame of NEW material, stated from the tail — the same
-        # expression in both modes. In ``internal_segment`` mode the band's own
-        # segment starts right after it, so the index is ALSO the last segment
-        # seam; in ``in_window`` mode there is no seam there at all. Both are
-        # checked once the junctions are known, below.
-        end_source_junction_px = total_px - end_context_px - 1
-
-    # audio tiles, time-aligned to the video advance
+    # audio tiles, time-aligned to the video advance.
+    # RESOLVED BEFORE THE END-SOURCE BANDS BELOW because the band's AUDIO plan
+    # needs ``a_tiles``; the block is moved WHOLE, reassembly check included, and
+    # depends on nothing but ``v_tiles`` / ``f_total`` / ``fps``, all of which are
+    # already final here.
     audio_adv = round(v_adv * VIDEO_TIME_FACTOR / float(fps) * AUDIO_LATENTS_PER_SEC)
     a_len_full = a_frames_for_px(px_from_v_latent(v_tile), fps)
     kt_a = a_len_full - audio_adv
@@ -1229,6 +1225,74 @@ def compute_chain_layout(
             raise ValueError(f"audio reassembly {a_reassembled} != a_total {a_total}")
         if a_tiles[-1][0] + a_tiles[-1][1] != a_total:
             raise ValueError("last audio tile does not reach a_total")
+
+    # ── end source: which stage-2 tiles the band crosses ─────────────────────
+    # Retake's ``n_tiles == 1`` invariant deliberately does NOT apply here, and
+    # neither does any "the band must fit in one tile" rule: the band occupies
+    # the global latents ``[B, f_total)`` with ``B = f_total - n_end_v``, and
+    # because it sits at the very END of the timeline every tile that reaches it
+    # reaches it on that TILE'S OWN TAIL — a trailing hard freeze, which is the
+    # shape both retake and the stage-2 seam blend were validated under. A tile
+    # the band swallows whole ends up fully frozen; that is admissible (its
+    # audio is still refined) and merely wasteful.
+    #
+    # ``tail_tile_bands`` states the arithmetic (and the two clamps) once; the
+    # VIDEO and AUDIO grids just hand it their own tiles. The two results are
+    # INDEPENDENT — a tile may hold no video band latents and some audio ones —
+    # so the engine reads each from its own list.
+    end_tile_bands: list[tuple[int, int]] = []
+    end_tile_bands_a: list[tuple[int, int]] = []
+    if end_context_px is not None:
+        end_tile_bands = tail_tile_bands(v_tiles, f_total, n_end_v)
+        # The band's AUDIO width, by the causal scan rather than by rounding —
+        # see :func:`audio_tail_latents`. The window is the WHOLE timeline: the
+        # band ends at ``total_px`` in every reachable mode, and the last
+        # segment's own audio latents are the timeline's last ones by index.
+        n_end_a = audio_tail_latents(
+            window_px=total_px, tail_px=end_context_px, fps=fps, a_win=a_total
+        )
+        end_tile_bands_a = tail_tile_bands(a_tiles, a_total, n_end_a)
+        # The last tile always ends ON the timeline's end, so it always holds
+        # the band's last latent and its ``off`` is the whole band. Stated for
+        # both grids: the engine writes the last tile's tail from each.
+        assert end_tile_bands[-1][1] == n_end_v, (end_tile_bands, n_end_v)
+        assert end_tile_bands[-1][0] > 0, (end_tile_bands, n_end_v)
+        assert end_tile_bands_a[-1][1] == n_end_a, (end_tile_bands_a, n_end_a)
+        assert end_tile_bands_a[-1][0] > 0, (end_tile_bands_a, n_end_a)
+        # The audio band and whatever the LAST SEGMENT freezes at its head are
+        # written into that segment's latents from opposite ends, so they must
+        # not overlap. ``ka_list[-1]`` is that head in both directions: the
+        # のり代 the previous segment takes back out of it under ``reverse``, the
+        # forward carry into the appended band segment under the legacy mode.
+        #
+        # The mode decides whether the inequality is strict. In the two reachable
+        # modes the last segment is a USER CLIP with free audio left over
+        # (measured minimum slack across the reachable grid: 2 latents), whereas
+        # ``internal_segment`` sizes its appended segment to be exactly のり代 +
+        # band, so there the two ends TILE the segment and equality is the
+        # designed state — the same thing its video side does with
+        # ``kv + n_end_v``.
+        #
+        # Unreachable by any input either way — the video-side 422s fire long
+        # before the audio budget gets tight — hence asserts, not ValueErrors.
+        if end_source_mode == "internal_segment":
+            assert n_end_a + ka_list[-1] <= seg_audio[-1], (
+                n_end_a, ka_list, seg_audio
+            )
+        else:
+            assert n_end_a + (ka_list[-1] if ka_list else 0) < seg_audio[-1], (
+                n_end_a, ka_list, seg_audio
+            )
+        # Same statement for a START source's frozen audio head against this
+        # tail: with V2V + end source on one clip both bands live in the ONE
+        # segment. Measured minimum slack over the reachable grid is 4 latents.
+        assert n_ctx_a + n_end_a < a_total, (n_ctx_a, n_end_a, a_total)
+        # The last frame of NEW material, stated from the tail — the same
+        # expression in both modes. In ``internal_segment`` mode the band's own
+        # segment starts right after it, so the index is ALSO the last segment
+        # seam; in ``in_window`` mode there is no seam there at all. Both are
+        # checked once the junctions are known, below.
+        end_source_junction_px = total_px - end_context_px - 1
 
     # ── junctions (0-based last-frame-of-segment; boundary J / J+1) ───────────
     # Segment i's first NEW latent frame = sum_{k<i} L[k] - (i-1)*K_v. In the
@@ -1374,11 +1438,13 @@ def compute_chain_layout(
         ),
         end_context_px=end_context_px,
         n_end_v=n_end_v,
+        n_end_a=n_end_a,
         end_source_mode=end_source_mode,
         end_source_junction_px=end_source_junction_px,
         end_segment_px=end_segment_px,
         end_segment_latent=end_segment_latent,
         end_tile_bands=end_tile_bands,
+        end_tile_bands_a=end_tile_bands_a,
     )
 
 
@@ -1493,10 +1559,42 @@ def video_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     return windows
 
 
+def tail_tile_bands(
+    tiles: list[tuple[int, int]], total_latents: int, n_tail: int
+) -> list[tuple[int, int]]:
+    """Per-tile ``(t, off)`` freeze plan for a band on the timeline's TAIL.
+
+    ``tiles`` is a ``(start, len)`` list in the SAME latent domain as
+    ``total_latents`` and ``n_tail`` — video (``v_tiles`` / ``f_total`` /
+    ``n_end_v``) or audio (``a_tiles`` / ``a_total`` / ``n_end_a``). ``t`` is how
+    many band latents this tile ends on, ``off`` the offset ONE PAST the last
+    band latent it holds, so the engine writes ``band[..., off - t : off]`` into
+    the tile's last ``t`` latents.
+
+    NEITHER CLAMP MAY BE DROPPED: ``max(0, ...)`` is what makes tiles before the
+    band no-ops (their ``off`` goes negative), and ``min(tlen, ...)`` is what
+    stops a tile shorter than the band from claiming more latents than it has.
+    ``off`` is meaningless when ``t == 0`` and must be ignored there — it is kept
+    as computed rather than zeroed so the entry is the raw output of the one
+    formula, with no second rule to keep in step.
+
+    The VIDEO and AUDIO plans are INDEPENDENT: the two grids advance at different
+    rates, so ``t == 0`` on a tile's video band does not imply ``t == 0`` on its
+    audio band (and the engine must not nest one write inside the other's guard).
+    """
+    band_start = total_latents - n_tail
+    bands: list[tuple[int, int]] = []
+    for ts, tlen in tiles:
+        off = ts + tlen - band_start
+        bands.append((max(0, min(tlen, off)), off))
+    return bands
+
+
 def freeze_mask_values(
     mask_value: float,
     tail_mask_value: float | None = None,
     audio_mask_value: float | None = None,
+    audio_tail_mask_value: float | None = None,
 ) -> tuple[float, float, float, float]:
     """Resolve the four frozen-band strengths a chain denoise step writes.
 
@@ -1505,7 +1603,7 @@ def freeze_mask_values(
     is the denoise-mask value the frozen band is pinned to: ``1 - overlap_strength``
     for an ordinary carry-over seam, ``0.0`` for a hard freeze.
 
-    Two independent overrides, both defaulting to ``None`` = "same as
+    Three independent overrides, all defaulting to ``None`` = "same as
     ``mask_value``", so every pre-override call site is bit-identical:
 
     * ``tail_mask_value`` — the retake two-sided freeze; splits HEAD from TAIL.
@@ -1515,19 +1613,29 @@ def freeze_mask_values(
       ``mask_value=0.0`` (what pre-long-A2V A2V did, harmlessly, because a
       single clip freezes no video head at all) would weld every segment seam
       shut from clip 2 onward and discard ``overlap_strength`` without a word.
+    * ``audio_tail_mask_value`` — the end source's frozen band; splits the TAIL
+      itself BY MODALITY. The material's audio is ALWAYS hard-frozen (0.0) while
+      the video tail honours the user's ``strength`` as ``1 - strength``, and
+      neither override above can express that pair: ``tail_mask_value`` alone
+      drags the audio tail to the video's value, and ``audio_mask_value`` alone
+      drags the audio HEAD (an ordinary carry seam) to 0.0 with it.
 
-    Given BOTH overrides the TAIL one wins on the audio tail. That pairing is
-    retake + A2V, which the API rejects outright, so this is a definition rather
-    than a behaviour anything relies on.
+    Given ``tail_mask_value`` AND ``audio_mask_value`` the TAIL one wins on the
+    audio tail. That pairing is retake + A2V, which the API rejects outright, so
+    it is a definition rather than a behaviour anything relies on.
+    ``audio_tail_mask_value``, when given, wins over both.
 
     Pure, so the app venv can test it without torch.
     """
     v_head = float(mask_value)
     a_head = v_head if audio_mask_value is None else float(audio_mask_value)
     if tail_mask_value is None:
-        return v_head, v_head, a_head, a_head
-    tail = float(tail_mask_value)
-    return v_head, tail, a_head, tail
+        v_tail, a_tail = v_head, a_head
+    else:
+        v_tail = a_tail = float(tail_mask_value)
+    if audio_tail_mask_value is not None:
+        a_tail = float(audio_tail_mask_value)
+    return v_head, v_tail, a_head, a_tail
 
 
 # ── retake: audio glue rounding ("H-A1′") + tail token addressing ────────────
@@ -1553,6 +1661,56 @@ def audio_latent_support_sec(i: int) -> tuple[float, float]:
     return max(4 * i - 3, 0) / 100.0, (4 * i + 1) / 100.0
 
 
+def audio_head_latents(*, head_px: int, fps: float, a_win: int) -> int:
+    """Audio latents whose WHOLE support lies inside a leading ``head_px`` band.
+
+    The head half of the scan rule described in
+    :func:`retake_audio_glue_latents` — the longest run of LEADING latents that
+    ENDS inside the band. Pure geometry; ``a_win`` is the window's total
+    audio-latent count.
+    """
+    eps = 1e-9
+    head_s = head_px / float(fps)
+    n_head = 0
+    for i in range(a_win):
+        if audio_latent_support_sec(i)[1] <= head_s + eps:
+            n_head = i + 1
+        else:
+            break
+    return max(0, min(n_head, a_win))
+
+
+def audio_tail_latents(
+    *, window_px: int, tail_px: int, fps: float, a_win: int
+) -> int:
+    """Audio latents whose WHOLE support lies inside a trailing ``tail_px`` band.
+
+    The tail half of the scan rule described in
+    :func:`retake_audio_glue_latents` — the longest run of TRAILING latents that
+    STARTS inside the band.
+
+    THE ONE DEFINITION OF "HOW MANY AUDIO LATENTS DOES A TAIL BAND COVER", shared
+    by retake's tail glue and by the end source's frozen band
+    (``ChainLayout.n_end_a``, computed with ``window_px = total_px`` and
+    ``tail_px = end_context_px``). A naive ``round(tail_px / fps * 25)`` is NOT
+    the same number: the audio patchifier is causal, so a latent's support sits
+    0.75 frames earlier than its index suggests and the scan is what keeps the
+    frozen band from reaching back into freely generated material.
+
+    Pure geometry; ``a_win`` is the window's total audio-latent count
+    (``ChainLayout.a_total``).
+    """
+    eps = 1e-9
+    tail_start_s = (window_px - tail_px) / float(fps)
+    first_tail = a_win
+    for i in range(a_win - 1, -1, -1):
+        if audio_latent_support_sec(i)[0] >= tail_start_s - eps:
+            first_tail = i
+        else:
+            break
+    return a_win - max(0, min(first_tail, a_win))
+
+
 def retake_audio_glue_latents(
     *, window_px: int, head_px: int, tail_px: int, fps: float, a_win: int
 ) -> tuple[int, int]:
@@ -1570,30 +1728,19 @@ def retake_audio_glue_latents(
     at the price of under-freezing by at most 35 ms — under one audio latent
     frame and shorter than one 24fps video frame (VERIFICATION_LOG §55.2).
 
+    A thin wrapper over :func:`audio_head_latents` / :func:`audio_tail_latents`
+    since the end source needs the tail half on its own: ONE definition of each
+    scan, so a stored copy cannot drift.
+
     Pure geometry; ``a_win`` is the window's total audio-latent count
     (``ChainLayout.a_total``).
     """
-    eps = 1e-9
-    head_s = head_px / float(fps)
-    tail_start_s = (window_px - tail_px) / float(fps)
-
-    # Head: the longest run of leading latents that ENDS inside the head band.
-    n_head = 0
-    for i in range(a_win):
-        if audio_latent_support_sec(i)[1] <= head_s + eps:
-            n_head = i + 1
-        else:
-            break
-    # Tail: the longest run of trailing latents that STARTS inside the tail band.
-    first_tail = a_win
-    for i in range(a_win - 1, -1, -1):
-        if audio_latent_support_sec(i)[0] >= tail_start_s - eps:
-            first_tail = i
-        else:
-            break
-    n_head = max(0, min(n_head, a_win))
-    first_tail = max(0, min(first_tail, a_win))
-    return n_head, a_win - first_tail
+    return (
+        audio_head_latents(head_px=head_px, fps=fps, a_win=a_win),
+        audio_tail_latents(
+            window_px=window_px, tail_px=tail_px, fps=fps, a_win=a_win
+        ),
+    )
 
 
 def retake_tail_token_range(latent_frames: int, hw: int, n_tail: int) -> tuple[int, int]:

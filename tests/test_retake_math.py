@@ -127,6 +127,62 @@ def test_scan_holds_over_the_whole_legal_grid():
                     )
 
 
+def _glue_latents_before_the_split(*, window_px, head_px, tail_px, fps, a_win):
+    """The pre-refactor body of ``retake_audio_glue_latents``, VERBATIM.
+
+    The end source needed the tail scan on its own, so the two loops moved into
+    :func:`chain_math.audio_head_latents` / :func:`chain_math.audio_tail_latents`
+    and the retake entry point became a wrapper. This copy is what the wrapper is
+    measured against below: retake's non-regression is then a machine fact rather
+    than a reading of the diff. It must NOT be updated to follow the module — if
+    the two ever disagree, the module moved and retake moved with it.
+    """
+    eps = 1e-9
+    head_s = head_px / float(fps)
+    tail_start_s = (window_px - tail_px) / float(fps)
+    n_head = 0
+    for i in range(a_win):
+        if cm.audio_latent_support_sec(i)[1] <= head_s + eps:
+            n_head = i + 1
+        else:
+            break
+    first_tail = a_win
+    for i in range(a_win - 1, -1, -1):
+        if cm.audio_latent_support_sec(i)[0] >= tail_start_s - eps:
+            first_tail = i
+        else:
+            break
+    n_head = max(0, min(n_head, a_win))
+    first_tail = max(0, min(first_tail, a_win))
+    return n_head, a_win - first_tail
+
+
+def test_the_split_into_head_and_tail_scans_returns_the_same_numbers():
+    """Exhaustive over every fps the app can generate at and every legal
+    window/head/tail on the grid: the wrapper's pair equals the old body's pair,
+    and each half equals the wrapper's corresponding entry."""
+    checked = 0
+    for fps in (23.976, 24.0, 25.0, 29.97, 30.0, 48.0, 50.0, 59.94, 60.0):
+        for window in range(73, 258, 8):
+            a_win = cm.a_frames_for_px(window, fps)
+            for head in range(9, window, 16):
+                for tail in range(8, window - head, 16):
+                    kw = dict(
+                        window_px=window, head_px=head, tail_px=tail,
+                        fps=fps, a_win=a_win,
+                    )
+                    got = cm.retake_audio_glue_latents(**kw)
+                    assert got == _glue_latents_before_the_split(**kw), kw
+                    assert got[0] == cm.audio_head_latents(
+                        head_px=head, fps=fps, a_win=a_win
+                    )
+                    assert got[1] == cm.audio_tail_latents(
+                        window_px=window, tail_px=tail, fps=fps, a_win=a_win
+                    )
+                    checked += 1
+    assert checked > 1000
+
+
 # ── head/tail latent asymmetry (causal VAE) ──────────────────────────────────
 def test_head_and_tail_use_different_latent_grids():
     assert cm.v_latent_frames(25) == 4        # head: 8n+1 px -> (px-1)//8+1

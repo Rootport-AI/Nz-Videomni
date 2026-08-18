@@ -632,6 +632,12 @@ class EndSourceSpec(BaseModel):
     governs those reverse seams exactly as it governs forward ones. Two
     combinations are refused in this mode; see the 422 list below.
 
+    ONE CLIP IS THE RECOMMENDED USAGE (owner ruling, 2026-08-18). ``reverse``
+    (two or more clips) IS ACCEPTED BUT NOT RECOMMENDED: real-run gates showed a
+    systematic morph at clip seams and at the tail (just before the anchor),
+    which is accepted as a spec-level trade-off rather than treated as a defect.
+    See Docs/VERIFICATION_LOG.md §64.7 / §65.8.
+
     (A third mode, ``"internal_segment"``, is the historical two-or-more-clips
     design in which the band was APPENDED and the delivered length grew by
     ``context_frames``. IT IS NO LONGER REACHABLE: a request that would have got
@@ -685,7 +691,10 @@ class EndSourceSpec(BaseModel):
     so the delivered last frame is the material either way: in the returned
     ``freeze_proof``, ``s2_video_tail`` is therefore always 0.0, while
     ``s1_video_tail`` being non-zero is EXPECTED (not a bug) whenever
-    ``strength < 1.0`` — see ``freeze_proof.s1_expected_zero``.
+    ``strength < 1.0`` — see ``freeze_proof.s1_expected_zero``. IT IS A
+    VIDEO-ONLY KNOB: the material's audio band is hard-frozen in both stages at
+    every strength, so ``s1_audio_tail`` / ``s2_audio_tail`` are 0.0 regardless
+    (and ``s1_expected_zero`` speaks for the video pair alone).
 
     THE +1 PRIMER: the app cuts (or synthesises) ``context_frames + 1`` frames,
     not ``context_frames``. The causal video VAE spends the material's FIRST
@@ -702,10 +711,17 @@ class EndSourceSpec(BaseModel):
     either, which is the reverse of ``source_video``: that one cuts its frozen
     head OFF the delivered mp4.
 
+    THE MATERIAL'S AUDIO COMES WITH IT. A video end source with an audio track
+    has that track frozen over the band alongside the video — no field, no
+    toggle; a still image (or a video with no audio) simply has none and the
+    tail's audio is generated freely. ``strength`` governs the VIDEO band only:
+    the audio band is hard-frozen at every strength.
+
     Mutually exclusive with ``retake`` (it already owns both ends of its one
-    window), ``source_audio`` (v1 freezes video only, so an A2V chain's audio
-    and a frozen video tail would disagree) and ``reference_video_id`` (a
-    control adapter's per-segment conditioning competes with the frozen band).
+    window), ``source_audio`` (a driving audio track owns the whole timeline's
+    audio and would collide with the band's frozen audio) and
+    ``reference_video_id`` (a control adapter's per-segment conditioning
+    competes with the frozen band).
 
     THE TWO 422s THAT BELONG TO ``reverse`` MODE ALONE (both from
     ``chain_math.compute_chain_layout``):
@@ -1010,9 +1026,10 @@ class GenerateChainRequest(BaseModel):
                 )
             if self.source_audio is not None:
                 raise ValueError(
-                    "end_source and source_audio are mutually exclusive (v1 "
-                    "freezes the end source's VIDEO only, so a driving audio "
-                    "track and a frozen video tail would disagree at the end)"
+                    "end_source and source_audio are mutually exclusive (a "
+                    "driving audio track owns the whole timeline's audio, while "
+                    "an end source freezes the material's own audio over the "
+                    "band — the two would collide at the end)"
                 )
             if self.reference_video_id is not None:
                 raise ValueError(

@@ -692,7 +692,10 @@ def still_image_mp4(
     Frames are written as ``-crf 12`` yuv420p CFR for the same reason
     :func:`cut_window_mp4` does: the material is VAE-encoded and then frozen, so
     whatever this intermediate loses is a permanent ceiling on the frozen tail's
-    quality. No audio track is produced (v1 freezes video only). Odd-sized
+    quality. No audio track is produced — a still image has none to carry, so a
+    still end source is the one case where the engine freezes video alone and
+    the tail's audio is generated freely (a VIDEO end source hands its own audio
+    track over with it, cut by :func:`cut_window_mp4`). Odd-sized
     stills are scaled to the nearest even width/height — libx264 + yuv420p cannot
     encode an odd dimension — and an alpha channel is simply dropped by the
     yuv420p conversion.

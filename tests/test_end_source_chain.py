@@ -10,25 +10,29 @@ end_source block) is pinned without weights.
 
 Two things this file guards that are easy to get wrong:
 
-  * OUTPUT LENGTH DEPENDS ON THE MODE, and the mode is the CLIP COUNT:
+  * OUTPUT LENGTH IS THE CLIPS' OWN TOTAL, whichever mode the clip count picks:
       - ONE clip -> ``"in_window"``: the band is the clip's OWN tail, so the
         delivered mp4 is exactly ``num_frames`` frames, of which the last
         ``context_frames`` are the material.
-      - TWO OR MORE clips -> ``"internal_segment"``: the band is a segment
-        ``chain_math`` appends AFTER the last clip, so the mp4 holds
-        ``clips_total_px + context_frames`` frames.
-    (V2V still trims its own frozen head off the FRONT in both, so a chain with
-    both is ``total_px - trim_px``.)
+      - TWO OR MORE clips -> ``"reverse"``: the band is the LAST clip's own
+        tail and the clips are generated last-to-first towards it, so the mp4
+        holds ``clips_total_px`` frames — the same length those clips would
+        deliver with no end source at all.
+    (V2V still trims its own frozen head off the FRONT, so a chain with both is
+    ``total_px - trim_px``; that pair is single-clip only now.)
   * THE +1 PRIMER. The app always cuts/synthesises ``context_frames + 1``
     frames because the causal video VAE spends the first one on its lone
     keyframe latent. Mode-independent.
 
-Several v1 REJECTIONS are gone with the geometry that justified them — in the
-internal-segment mode the band no longer has to fit inside the final clip or
-inside the last stage-2 tile, and it cannot collide with a clip-0 keyframe.
-Those tests are kept below, INVERTED: the same requests that used to 422 must
-now be accepted, which is what stops the old rules being reintroduced by
-accident. They are all MULTI-CLIP, because that is the mode they belong to.
+The retired ``internal_segment`` geometry delivered ``clips_total_px +
+context_frames``, so THE FRAME COUNT ALONE DISCRIMINATES the two designs — the
+multi-clip tests below assert it for exactly that reason.
+
+Two v1 REJECTIONS stay gone (the band may span as many stage-2 tiles as it
+needs, and it cannot collide with a clip-0 keyframe), and their INVERTED tests
+are kept below so the old rules cannot be reintroduced by accident. A third —
+"the band must fit inside the final clip" — is back in ``reverse`` mode for a
+different reason, and has a boundary test of its own.
 
 Frozen-API discipline: a request omitting end_source is byte-shape identical to
 before (regression test below).
@@ -475,26 +479,63 @@ def test_end_source_context_frames_above_max_422(client):
     assert "136" in r.text
 
 
-def test_end_source_longer_than_the_final_clip_is_allowed(client, tmp_path):
-    """INVERTED v1 test. Two 25-frame clips assemble to 41 pixel frames, which v1
-    refused to hang a 24-frame band on ("must be at least 41 pixel frames long"):
-    the band had to leave free latents inside the FINAL CLIP. It now gets a
-    segment of its own, so the clips can be as short as they like and the output
-    is simply 41 + 24."""
+def test_last_clip_too_short_for_the_band_is_rejected_at_the_boundary(client, tmp_path):
+    """``reverse`` mode puts the band back INSIDE the last clip, so that clip has
+    to hold the band AND the のり代 the clip before it takes from its head. With
+    K_v=2 and a 24-frame band (3 latents) the last clip needs 6 latents == 41
+    pixel frames: 33 is refused, 41 is accepted and delivers the clips' own total.
+
+    (This is the one v1 rejection the internal-segment mode had removed and this
+    mode brings back — for a different reason. v1 refused because the band had to
+    fit in the final clip's stage-2 tile; this refuses because the latents the
+    reverse carry hands BACKWARDS would otherwise be frozen material rather than
+    newly generated content.)"""
     src = _make_source_mp4(tmp_path / "src.mp4", n_frames=40, fps=24.0)
     vid = _upload_video(client, src)
-    r = _run_chain(
-        client, [{"num_frames": 25}, {"num_frames": 25}],
-        end_source={"video_id": vid, "context_frames": 24},
-    )
+    end_source = {"video_id": vid, "context_frames": 24}
+
+    r = _run_chain(client, [{"num_frames": 33}, {"num_frames": 33}], end_source=end_source)
+    assert r.status_code == 422
+    assert "41 pixel frames" in r.text
+    assert "nothing to carry backwards" in r.text
+
+    r = _run_chain(client, [{"num_frames": 41}, {"num_frames": 41}], end_source=end_source)
     job_id = _completed(client, r)
     meta = _metadata(client, job_id)
-    assert meta["end_source"]["clips_total_px"] == 41
+    layout = chain_math.compute_chain_layout([41, 41], 24.0, kv=2, end_context_px=24)
+    assert meta["end_source"]["clips_total_px"] == layout.total_px
     ctx = client.app_context
-    assert video_io.frame_count(ctx.config.output_dir / job_id / "output.mp4") == 65
-    # The clip count still counts the USER's clips; the band segment is not one.
+    out = ctx.config.output_dir / job_id / "output.mp4"
+    assert video_io.frame_count(out) == layout.total_px
     assert meta["chain"]["num_clips"] == 2
-    assert meta["chain"]["clip_num_frames"] == [25, 25]
+    assert meta["chain"]["clip_num_frames"] == [41, 41]
+
+
+def test_start_and_end_source_together_need_a_single_clip(client, tmp_path):
+    """A start source and an end source interpolate BETWEEN two materials, which
+    stays accepted on ONE clip. On a chain it would leave clip 0 frozen at both
+    ends (head from the source video, tail from the reverse のり代) — refused
+    rather than shipped untested."""
+    src = _make_source_mp4(tmp_path / "src.mp4", n_frames=120, fps=24.0)
+    start_id = _upload_video(client, src)
+    end_id = _upload_video(client, src)
+    end_source = {"video_id": end_id, "context_frames": 24}
+    source_video = {"video_id": start_id, "context_frames": 25}
+
+    r = _run_chain(
+        client, [{"num_frames": 169}, {"num_frames": 169}],
+        source_video=source_video, end_source=end_source,
+    )
+    assert r.status_code == 422
+    assert "cannot be combined" in r.text
+
+    # The same pair on ONE clip is the interpolation case and is unchanged.
+    r = _run_chain(
+        client, [{"num_frames": 169}],
+        source_video=source_video, end_source=end_source,
+    )
+    job_id = _completed(client, r)
+    assert _metadata(client, job_id)["end_source"]["mode"] == "in_window"
 
 
 # ------------------------------------------------- (g) stage-2 window ceiling
@@ -526,29 +567,28 @@ def test_end_source_at_the_published_ceiling_under_high_resolution_202(client, t
     so the narrowest published window must accept it too (v1 capped this preset
     at 88). This is the geometry the H12 real-run gate then judges for quality.
 
-    TWO clips deliberately: the claim "136 is the operational maximum" belongs to
-    the internal-segment mode, where the band gets a segment of its own and the
-    clips need not be long enough to hold it. (A single clip could not take a
-    136-frame band unless it were longer than the band itself — in the in-window
-    mode the band is carved out of the clip.) This is therefore also the
-    multi-clip mode's end-to-end pin: if the preserved v2 path ever moves, this
-    test is what notices. Two 25-frame clips keep the last stage-2 tile shorter
-    than the band, which is what makes the straddle assertions below bite."""
+    TWO clips deliberately, so this doubles as the ``reverse`` mode's end-to-end
+    pin at the ceiling. 153-frame clips are the shortest that can take a
+    136-frame band at K_v=2 (20 latents against 2 + 17), and they leave the last
+    stage-2 tile shorter than the band, which is what makes the straddle
+    assertions below bite."""
     src = _make_source_mp4(tmp_path / "src.mp4", n_frames=160, fps=24.0)
     vid = _upload_video(client, src)
     r = _run_chain(
-        client, [{"num_frames": 25}, {"num_frames": 25}],
+        client, [{"num_frames": 153}, {"num_frames": 153}],
         stage2_window="high_resolution",
         end_source={"video_id": vid, "context_frames": 136},
     )
     job_id = _completed(client, r)
     meta = _metadata(client, job_id)
-    assert meta["end_source"]["mode"] == "internal_segment"
+    assert meta["end_source"]["mode"] == "reverse"
     assert meta["end_source"]["end_context_px"] == 136
     assert meta["end_source"]["n_end_v"] == 17
-    assert meta["end_source"]["clips_total_px"] == 41
+    # The band is the LAST CLIP'S OWN TAIL, so the delivered length is the clips'
+    # own total — it does NOT grow by the band.
+    assert meta["end_source"]["clips_total_px"] == 297
     ctx = client.app_context
-    assert video_io.frame_count(ctx.config.output_dir / job_id / "output.mp4") == 41 + 136
+    assert video_io.frame_count(ctx.config.output_dir / job_id / "output.mp4") == 297
     # ...and this is a genuine STRADDLING band: two tiles each carry part of it,
     # which is the whole reason the per-window ceiling could be dropped. (The
     # per-tile counts SUM TO MORE than n_end_v -- stage-2 tiles overlap, so a
@@ -575,9 +615,10 @@ def test_published_ceiling_is_operational_not_geometric():
 
 def test_total_timeline_cap_is_charged_on_the_clips_only(client, tmp_path, monkeypatch):
     """MAX_CHAIN_TOTAL_PIXEL_FRAMES bounds what the USER asked to generate, not
-    what gets delivered. The band is appended after the clips, so charging it
-    against the cap would newly reject chains that are accepted today (the kv=1
-    maximum 24x481 == 11521 px plus a 136 band == 11657 > 11544).
+    what gets delivered. ``clips_total_px`` is the ONE definition of that
+    subtraction, and it is what the cap is charged on — which is why it keeps
+    holding after the mode change made the two numbers equal in every reachable
+    mode: the property, not the coincidence, is what is pinned.
 
     The real cap is unreachable by construction (11544 is the naive sum, and
     every overlap makes the assembled timeline shorter), so it is lowered here to
@@ -620,43 +661,129 @@ def test_maximum_chain_plus_a_full_band_is_accepted(client, tmp_path):
     )
     from api.models import MAX_CHAIN_TOTAL_PIXEL_FRAMES
 
-    assert layout.total_px - 136 <= MAX_CHAIN_TOTAL_PIXEL_FRAMES
+    assert layout.clips_total_px <= MAX_CHAIN_TOTAL_PIXEL_FRAMES
+    # ...and in ``reverse`` mode the band is inside those clips, so the DELIVERED
+    # length is under the cap too (the retired geometry's was 136 frames longer).
+    assert layout.total_px == layout.clips_total_px
 
 
 # --------------------------------------- (g3) one source of truth for the band
 
 
-def test_end_segment_latent_agrees_across_layout_mock_and_metadata(client, tmp_path):
-    """The internal band segment is described in exactly ONE place (chain_math).
-    Pinned across all three layers a client can observe it through: the layout
-    object, the mock runner's output length, and the job's metadata.json. If the
-    engine or the mock ever re-derives the arithmetic, this test is what breaks.
-    """
+def test_reverse_mode_agrees_across_layout_mock_and_metadata(client, tmp_path):
+    """The multi-clip band is described in exactly ONE place (chain_math). Pinned
+    across all three layers a client can observe it through: the layout object,
+    the job's metadata.json, and the mock runner's output length. If the engine or
+    the mock ever re-derives the arithmetic, this test is what breaks.
+
+    ALSO THE NEW/OLD DISCRIMINATOR. The delivered length is the CLIPS' OWN TOTAL;
+    the retired ``internal_segment`` geometry delivered that plus the 72-frame
+    band, so the frame count alone says which one ran."""
     src = _make_source_mp4(tmp_path / "src.mp4", n_frames=120, fps=24.0)
     vid = _upload_video(client, src)
     r = _run_chain(
-        client, [{"num_frames": 49}, {"num_frames": 49}],
+        client, [{"num_frames": 169}, {"num_frames": 169}],
         end_source={"video_id": vid, "context_frames": 72},
     )
     job_id = _completed(client, r)
 
-    layout = chain_math.compute_chain_layout([49, 49], 24.0, kv=2, end_context_px=72)
+    layout = chain_math.compute_chain_layout([169, 169], 24.0, kv=2, end_context_px=72)
+    plain = chain_math.compute_chain_layout([169, 169], 24.0, kv=2)
     meta = _metadata(client, job_id)
     es = meta["end_source"]
 
-    # layer 1: the layout itself
-    assert layout.end_segment_latent == layout.kv + layout.n_end_v == 2 + 9
-    assert layout.seg_frames[-1] == layout.end_segment_px
-    assert len(layout.seg_frames) == len(layout.clip_frames) + 1
+    # layer 1: the layout itself — nothing is appended, so the geometry is the
+    # end-source-less chain's own, and the schedule runs backwards.
+    assert layout.end_source_mode == "reverse"
+    assert layout.seg_frames == layout.clip_frames == [169, 169]
+    assert layout.end_segment_latent == layout.end_segment_px == 0
+    assert layout.total_px == plain.total_px == layout.clips_total_px
+    assert layout.seg_generation_order == [1, 0]
+    assert layout.seg_head_source == [None, None]
+    assert layout.seg_tail_source == [1, None]
     # layer 2: the metadata (ChainLayout.to_dict, carried through the runner)
-    assert es["end_segment_latent"] == layout.end_segment_latent
-    assert es["end_segment_px"] == layout.end_segment_px
-    # ...and the clip count is still the USER's, not the segment count
+    assert es["mode"] == "reverse"
+    assert es["generation_order"] == [1, 0]
+    assert es["end_segment_latent"] == 0 and es["end_segment_px"] == 0
+    assert es["clips_total_px"] == layout.total_px
     assert meta["chain"]["num_clips"] == 2
-    # layer 3: the delivered mp4's own length
+    # layer 3: the delivered mp4's own length — the clips' total, NOT + 72.
     ctx = client.app_context
     out = ctx.config.output_dir / job_id / "output.mp4"
-    assert video_io.frame_count(out) == es["clips_total_px"] + 72 == layout.total_px
+    assert video_io.frame_count(out) == layout.total_px
+    assert video_io.frame_count(out) != layout.total_px + 72
+
+
+def test_reverse_mode_accepts_overlap_one(client, tmp_path):
+    """K_v == 1 is the ``reverse`` mode's INTENDED のり代 (one shared latent per
+    seam) and is accepted, while the same request on ONE clip still gets the
+    ``kv >= 2`` rejection. The mode's exemption and the in-window rule are pinned
+    together so neither can drift into the other."""
+    src = _make_source_mp4(tmp_path / "src.mp4", n_frames=40, fps=24.0)
+    vid = _upload_video(client, src)
+    end_source = {"video_id": vid, "context_frames": 8}
+
+    r = _run_chain(
+        client, [{"num_frames": 169}] * 3, overlap_frames=1, end_source=end_source,
+    )
+    job_id = _completed(client, r)
+    meta = _metadata(client, job_id)
+    layout = chain_math.compute_chain_layout([169] * 3, 24.0, kv=1, end_context_px=8)
+    assert meta["end_source"]["mode"] == "reverse"
+    assert meta["end_source"]["generation_order"] == [2, 1, 0]
+    assert layout.total_px == 505
+    ctx = client.app_context
+    out = ctx.config.output_dir / job_id / "output.mp4"
+    assert video_io.frame_count(out) == 505
+
+    r = _run_chain(
+        client, [{"num_frames": 169}], overlap_frames=1, end_source=end_source,
+    )
+    assert r.status_code == 422
+    assert ">= 2" in r.text
+
+
+# ----------------------------------------------------------- (i) strength (batch 1)
+
+
+def test_end_source_strength_defaults_to_1_0(client, tmp_path):
+    """strength omitted -> the published default (1.0), echoed in the request
+    AND in the mock's runtime end_source block (contract passthrough, not an
+    observed effect -- the mock has no latents to soften)."""
+    src = _make_source_mp4(tmp_path / "src.mp4", n_frames=40, fps=24.0)
+    vid = _upload_video(client, src)
+    r = _run_chain(
+        client, [{"num_frames": 49}],
+        end_source={"video_id": vid, "context_frames": 24},
+    )
+    job_id = _completed(client, r)
+    meta = _metadata(client, job_id)
+    assert meta["request"]["end_source"]["strength"] == 1.0
+    assert meta["end_source"]["strength"] == 1.0
+
+
+def test_end_source_strength_explicit_value_round_trips(client, tmp_path):
+    """An explicit strength rides the same block as context_frames / video_id and
+    round-trips unchanged through both the request echo and the mock's runtime
+    end_source block."""
+    src = _make_source_mp4(tmp_path / "src.mp4", n_frames=40, fps=24.0)
+    vid = _upload_video(client, src)
+    r = _run_chain(
+        client, [{"num_frames": 49}],
+        end_source={"video_id": vid, "context_frames": 24, "strength": 0.4},
+    )
+    job_id = _completed(client, r)
+    meta = _metadata(client, job_id)
+    assert meta["request"]["end_source"]["strength"] == 0.4
+    assert meta["end_source"]["strength"] == 0.4
+
+
+def test_end_source_strength_out_of_range_422(client):
+    r = _run_chain(
+        client, [{"num_frames": 49}],
+        end_source={"video_id": "v", "context_frames": 24, "strength": 1.5},
+    )
+    assert r.status_code == 422
 
 
 # --------------------------------------------------------- (h) the cut contract

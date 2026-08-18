@@ -267,11 +267,12 @@ class LimitsConfig(BaseModel):
     # groups and never touches the causal VAE's lone keyframe latent (see
     # chain_math.v_tail_latents).
     #
-    # THE CLIP COUNT PICKS THE GEOMETRY. ONE clip -> "in_window": the band is
-    # the clip's OWN tail and THE OUTPUT LENGTH DOES NOT CHANGE. TWO OR MORE ->
-    # "internal_segment" (NOT RECOMMENDED): the band is appended after the clips
-    # and the output grows by it. THE 136 PARAGRAPH BELOW DESCRIBES THE LATTER
-    # GEOMETRY.
+    # THE CLIP COUNT PICKS THE GEOMETRY, AND THE OUTPUT LENGTH DOES NOT CHANGE
+    # EITHER WAY. ONE clip -> "in_window": the band is the clip's OWN tail. TWO
+    # OR MORE -> "reverse": the band is the LAST clip's own tail and the clips
+    # are generated last-to-first towards it. (The historical "internal_segment"
+    # geometry, which appended the band and grew the output by it, is no longer
+    # reachable from the API.)
     #
     # THE DEFAULT 72 IS THE CONTRACT'S DEFAULT, NOT A RECOMMENDED VALUE. The
     # real-run comparison settled on an 8-frame anchor (a longer band spends the
@@ -280,8 +281,7 @@ class LimitsConfig(BaseModel):
     # truth: Docs/VERIFICATION_LOG.md §61 and api.models.EndSourceSpec.
     #
     # 136 IS THE OPERATIONAL CEILING ON THE AUTOMATIC BAND LENGTH, NOT A
-    # GEOMETRIC LIMIT. The band is a whole internal segment appended after the
-    # user's clips and may span as many stage-2 tiles as it needs
+    # GEOMETRIC LIMIT. The band may span as many stage-2 tiles as it needs
     # (ChainLayout.end_tile_bands is the per-tile freeze plan), so no window
     # geometry bounds it any more — the old "8*(v_adv-1), 88 under
     # high_resolution" rule and its per-request 422 are both gone. 136 == 17

@@ -85,8 +85,11 @@ Protocol (one JSON object per line; parent -> worker):
    # still image was turned into a video by the app — the engine never sees an
    # image here). Its latents are frozen as the TAIL of the last stage-1 segment
    # and the last stage-2 tile. UNLIKE ``source`` nothing is trimmed: the output
-   # length is unchanged. Combines with ``source`` (start+end = interpolation):
-   end_source:{path, context_frames}|null}
+   # length is the clips' own total whether there is one clip (the band is that
+   # clip's tail) or several (the chain is generated last-to-first towards it).
+   # ``strength`` (0..1, default 1.0) softens the STAGE-1 tail freeze only.
+   # Combines with ``source`` (start+end = interpolation) on ONE clip only:
+   end_source:{path, context_frames, strength}|null}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
@@ -1093,6 +1096,7 @@ def _do_generate_chain(msg: dict) -> None:
             end_source = EndSourceSpec(
                 path=str(es["path"]),
                 context_frames=int(es["context_frames"]),
+                strength=float(es.get("strength", 1.0)),
             )
         except KeyError as exc:
             raise ValueError(
@@ -1157,7 +1161,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
         f"retake={'yes(' + str(retake.head_px) + '/' + str(retake.tail_px) + ',audio=' + ('regen' if retake.regenerate_audio else 'keep') + ')' if retake else 'no'} "
-        f"end_source={'yes(ctx=' + str(end_source.context_frames) + ')' if end_source else 'no'} "
+        f"end_source={'yes(ctx=' + str(end_source.context_frames) + ',s=' + str(end_source.strength) + ')' if end_source else 'no'} "
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
         f"bsprefetch={bs_prefetch} keepresident={keep_res} "
         f"fuseddequant={fused_dequant} vae={vae_mode} "

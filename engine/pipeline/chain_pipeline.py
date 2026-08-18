@@ -188,16 +188,23 @@ class EndSourceSpec:
         clip can steer towards the material rather than being crossfaded onto it.
         The band therefore eats into the clip's own free latents, and chain_math
         rejects (422) a clip that has none left once a V2V head is also frozen.
-      * TWO OR MORE CLIPS -> ``"internal_segment"``. THE BAND IS APPENDED, NOT
-        CARVED OUT OF THE LAST CLIP: it gets a segment of its own — ``kv`` latents
-        of carry-over from the last clip plus the ``n_end_v`` band latents —
-        appended to ``seg_frames`` after the user's clips. The clips keep meaning
-        "the NEW material" and the delivered length is ``clips total +
-        context_frames``. Nothing attends across that segment boundary, which is
-        why this mode reliably crossfades into the material; it is kept unchanged
-        but is not the recommended shape.
+      * TWO OR MORE CLIPS -> ``"reverse"``. The same promise on a chain: the band
+        is the LAST clip's own tail, nothing is appended and the delivered length
+        is the clips' own total. What differs is the stage-1 SCHEDULE — the
+        segments are generated last-to-first and each freezes the next one's head
+        as its own tail, so the chain is generated TOWARDS the material. The
+        three tables ``layout.seg_generation_order`` / ``seg_head_source`` /
+        ``seg_tail_source`` are what the stage-1 loop reads; it never tests the
+        mode name.
+      * ``"internal_segment"`` is the historical two-or-more-clips design, in
+        which THE BAND WAS APPENDED as a segment of its own and the delivered
+        length grew by the band. Nothing attends across that segment boundary,
+        which is why it reliably crossfaded into the material rather than
+        arriving at it. It is no longer reachable from the API; the code is kept
+        whole and stays under test through ``compute_chain_layout``'s
+        ``end_source_mode_override``.
 
-    In BOTH modes nothing is trimmed (unlike a V2V head, which is cut off) and
+    In EVERY mode nothing is trimmed (unlike a V2V head, which is cut off) and
     ``config.limits.end_context_frames_max`` (136) is an OPERATIONAL ceiling on the
     region the real-hardware gate has looked at, NOT a geometric one: the band may
     span as many stage-2 tiles as it needs (``layout.end_tile_bands`` is the
@@ -215,6 +222,14 @@ class EndSourceSpec:
     frame never appears: the delivered tail is the material's frames
     1..context_frames.
 
+    * ``strength``: 1.0 (default) is a HARD freeze, byte-identical to before
+      this field existed. Below 1.0 the stage-1 tail mask value becomes
+      ``1.0 - strength`` instead of ``0.0``, softening only how hard stage 1
+      is pinned to the material. STAGE 2 ALWAYS HARD-FREEZES (mask 0.0)
+      REGARDLESS OF THIS VALUE, so the delivered last frame is the material
+      either way; ``strength`` only changes how much stage 1 is allowed to
+      drift from it before stage 2 re-pins it.
+
     Mutually exclusive with :class:`RetakeSpec` (which already owns both ends of
     its single window) and :class:`AudioSourceSpec` (which owns the whole audio
     timeline). COMBINABLE with :class:`SourceSpec`: a start source plus an end
@@ -224,6 +239,7 @@ class EndSourceSpec:
 
     path: str
     context_frames: int
+    strength: float = 1.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -606,11 +622,11 @@ def _encode_end_source(
     ``layout.end_tile_bands`` (variant B, the same choice the V2V head makes in
     :func:`_encode_source_heads`). Both returned tensors are the WHOLE band;
     stage 2 indexes into ``end_v_full``, stage 1 writes ``end_v_half`` in one
-    piece because that last segment holds all of it in EITHER end-source mode —
-    it is the appended internal band segment when there are 2+ clips
-    (``layout.end_source_mode == "internal_segment"``) and the user's single clip
-    itself when there is 1 (``"in_window"``). NOTHING HERE DEPENDS ON THE MODE:
-    the encode is of the material, not of the timeline.
+    piece because that last segment holds all of it in EVERY end-source mode —
+    the user's last clip under ``"in_window"`` / ``"reverse"``, the appended
+    internal band segment under the API-unreachable ``"internal_segment"``.
+    NOTHING HERE DEPENDS ON THE MODE: the encode is of the material, not of the
+    timeline.
 
     Both encodes consume the WHOLE app-cut file — ``context_frames + 1`` pixel
     frames — and then drop latent 0. That primer frame is what makes the
@@ -620,9 +636,10 @@ def _encode_end_source(
     a file of the wrong length would silently freeze the wrong latents.
 
     Video ONLY (v1): the audio of an end source is deliberately not encoded and
-    not frozen — the tail's audio is generated freely, which the UI states
-    outright. Adding it later is a matter of an audio band here plus
-    ``freeze_tail_a`` at both call sites, not a redesign.
+    not frozen — the tail's audio is generated freely, which the webui's end
+    source panel notes to the user in a line of static copy (not a mode toggle;
+    there is no audio mode to pick). Adding it later is a matter of an audio
+    band here plus ``freeze_tail_a`` at both call sites, not a redesign.
 
     Both encodes go through ``tiled_encode`` for the same reason the two
     functions around it do: an untiled full-res encode would OOM at 720p.
@@ -935,10 +952,13 @@ def run_chain(
         "run_chain: end_source and audio_source (A2V) are mutually exclusive"
     )
     # A reference is API-exclusive with V2V, retake AND end source (api/models.py),
-    # and the per-segment injection below LEANS on that: it sits after the i==0
-    # branch chain, so a reference reaching such a chain would append conditioning to
-    # branches whose comments (and behaviour) say they have none. Assert rather than
-    # branch — the exclusivity is the invariant, not a case to handle.
+    # and the per-segment injection below LEANS on that TWICE: it sits after the
+    # head-branch chain, so a reference reaching such a chain would append
+    # conditioning to branches whose comments (and behaviour) say they have none —
+    # and its window generator is consumed strictly in ascending segment order,
+    # which the end source's ``reverse`` schedule does not follow (asserted again
+    # at the generator's construction site). Assert rather than branch — the
+    # exclusivity is the invariant, not a case to handle.
     assert ic_reference is None or (
         source is None and retake is None and end_source is None
     ), (
@@ -997,11 +1017,11 @@ def run_chain(
     # STAGE-1 SEGMENT COUNT, which is NOT the clip count in the end source's
     # ``internal_segment`` mode: there chain_math appends an internal band segment
     # to ``seg_frames`` (kv carry + the band), so ``n_seg == n + 1``. In its
-    # ``in_window`` mode (one clip — the band is that clip's own tail) and on every
-    # chain without an end source, ``n_seg == n``. The loop, the seeds and the
-    # progress denominator all run on ``n_seg``; ``n`` survives only as the number
-    # of USER clips (metadata ``n_clips``, clip-0 conditioning), which is what a
-    # client counts.
+    # ``in_window`` and ``reverse`` modes (the band is the LAST clip's own tail)
+    # and on every chain without an end source, ``n_seg == n``. The loop, the
+    # seeds and the progress denominator all run on ``n_seg``; ``n`` survives only
+    # as the number of USER clips (metadata ``n_clips``, clip-0 conditioning),
+    # which is what a client counts.
     seg_frames = layout.seg_frames
     n_seg = len(seg_frames)
     assert n_seg == n + (
@@ -1203,6 +1223,15 @@ def run_chain(
     ref_strength = 1.0
     ref_cond_kwargs: dict = {}
     if ic_reference is not None:
+        # THE GENERATOR IS CONSUMED ONCE, IN ASCENDING WINDOW ORDER: it walks the
+        # decode stream forwards and cannot go back, so a stage-1 schedule that
+        # visits the segments out of order would hand each one the WRONG window.
+        # A reference is API-exclusive with the end source (the only mode with
+        # such a schedule), so this cannot happen — asserted rather than assumed,
+        # because the failure would be a silently mismatched reference.
+        assert layout.seg_generation_order == list(range(n_seg)), (
+            layout.seg_generation_order
+        )
         ref_path, ref_strength = ic_reference
         ref_px_windows = video_segment_windows(layout)
         # Same guards + same arithmetic the single generate() path uses, reached
@@ -1235,23 +1264,40 @@ def run_chain(
     stage1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(device)
 
     # ── STAGE 1: per-segment (half-res) with carry+freeze. ────────────────────
-    seg_v: list[torch.Tensor] = []
-    seg_a: list[torch.Tensor] = []
-    for i in range(n_seg):
+    # THE LOOP RUNS IN GENERATION ORDER, NOT TIMELINE ORDER. ``i`` is always the
+    # TIMELINE index (it picks the seed, the prompt, the clip and the slot the
+    # result is stored in); ``order_idx`` is only how far through the schedule we
+    # are. On every mode but the end source's ``reverse`` the two coincide and
+    # ``seg_generation_order`` is ``[0..n_seg)``, so this is the same loop it has
+    # always been. The slots are PRE-ALLOCATED because a reverse schedule fills
+    # them out of order — the assembly below asserts none stayed empty.
+    seg_v: list[torch.Tensor | None] = [None] * n_seg
+    seg_a: list[torch.Tensor | None] = [None] * n_seg
+    # What stage 1 ACTUALLY did, recorded as it goes: the order it visited the
+    # segments in and the four freeze widths each one ran with. Every other
+    # end-source number in the metadata is a copy of a ``chain_math`` value, so
+    # this is the only record that can show the engine really ran the schedule
+    # the layout declared (published under ``end_source`` in the meta below).
+    stage1_order: list[int] = []
+    stage1_freezes: list[dict] = []
+    for order_idx, i in enumerate(layout.seg_generation_order):
         # F2: tag the upcoming wheel denoising loop with its chain position so
         # the per-step tqdm shim events carry segment context (observation only).
+        # The TIMELINE index is the useful tag here — the observer wants to know
+        # which part of the video is being made, not where we are in the queue.
         progress_shim.set_phase("stage1_denoise", outer_index=i, outer_total=n_seg)
-        # SHAPE COMES FROM ``layout.seg_frames``, NOT ``clip_frames``: with an end
-        # source the last entry is the internal band segment, which has no clip of
-        # its own. Without one the two lists are equal element-for-element, so this
-        # is byte-identical on every other path.
+        # SHAPE COMES FROM ``layout.seg_frames``, NOT ``clip_frames``: in the end
+        # source's legacy ``internal_segment`` mode the last entry is the appended
+        # band segment, which has no clip of its own. Everywhere else the two
+        # lists are equal element-for-element, so this is byte-identical there.
         seg_shape = VideoPixelShape(1, seg_frames[i], height // 2, width // 2, frame_rate)
         noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
-        # Tail freeze is retake-and-end-source-only; 0 everywhere else keeps every
-        # other branch below exactly as it was. ``seg_tail_mask_value`` is
-        # initialised here (not next to seg_mask_value further down) because the
-        # end-source block sits earlier — None means "hold the tail at the same
-        # strength as the head", which is what every pre-end-source caller did.
+        # Tail freeze is retake / end source / the reverse のり代 only; 0 everywhere
+        # else keeps every other branch below exactly as it was.
+        # ``seg_tail_mask_value`` is initialised here (not next to seg_mask_value
+        # further down) because the two blocks that set it sit earlier — None
+        # means "hold the tail at the same strength as the head", which is what
+        # every pre-end-source caller did AND what the reverse carry wants.
         ftv = fta = 0
         seg_tail_mask_value: float | None = None
         if i == 0 and retake is not None:
@@ -1308,17 +1354,17 @@ def run_chain(
                 init_a = None
             fkv, fka = n_ctx_v, freeze_ka
             conds = []  # source & conditioning_images are mutually exclusive (app-enforced)
-        elif i == 0:
-            init_v = init_a = None
-            fkv = fka = 0
-            # clip-0 conditioning at HALF resolution (stage-1).
-            conds = _build_video_conditionings(
-                clips[0].images, height=height // 2, width=width // 2,
-                video_encoder=video_encoder, device=device,
-            )
-        else:
-            ka_i = ka_list[i - 1]
-            prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
+        elif layout.seg_head_source[i] is not None:
+            # ── forward carry: freeze the PREVIOUS segment's tail as this head ─
+            # ``h`` is that previous segment, read from the layout's table rather
+            # than assumed to be ``i - 1``. On every schedule that existed before
+            # the table it IS ``i - 1``, so this branch is unchanged there; in the
+            # end source's ``reverse`` mode the table is all-None and the branch
+            # never fires (every head is free).
+            h = layout.seg_head_source[i]
+            ka_i = ka_list[h]      # the join between h and i
+            prev_v, prev_a = seg_v[h], seg_a[h]
+            assert prev_v is not None and prev_a is not None, (i, h)
             # Size the init tensors from the CURRENT segment's latent shapes —
             # NOT zeros_like(prev_*). The previous segment may have a different
             # num_frames (unequal clip lengths are legal), so its latent shape
@@ -1338,28 +1384,107 @@ def run_chain(
             init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
             fkv, fka = kv, ka_i
             conds = []
+        else:
+            # ── free head: nothing is frozen at the front of this segment ─────
+            # The historical ``i == 0`` case, now stated as "no head source". In
+            # the end source's ``reverse`` mode EVERY segment lands here, which is
+            # the mode's premise: each one invents its own opening and is steered
+            # only by what it must END on.
+            init_v = init_a = None
+            fkv = fka = 0
+            # Clip-0 conditioning at HALF resolution (stage-1), and ONLY on the
+            # TIMELINE's first clip — the keyframes belong to the start of the
+            # video, not to whichever segment happens to be generated first. In
+            # ``reverse`` mode that segment is generated LAST, which is exactly
+            # what the API contract already says (``clips[0].conditioning_images``).
+            conds = (
+                _build_video_conditionings(
+                    clips[0].images, height=height // 2, width=width // 2,
+                    video_encoder=video_encoder, device=device,
+                )
+                if i == 0 else []
+            )
+        # ── reverse carry (additive): freeze the NEXT segment's HEAD as this ──
+        #    segment's TAIL — the mirror image of the forward carry above.
+        # Another INDEPENDENT if for the same reason the end-source block below
+        # is one: it does not replace a branch, it adds a frozen band at the far
+        # end of whatever that branch built. ``seg_tail_source`` is all-None on
+        # every mode but ``reverse``, so this is inert everywhere else.
+        #
+        # The strength is deliberately NOT set here: leaving ``seg_tail_mask_value``
+        # at None makes ``chain_math.freeze_mask_values`` hold the tail at the same
+        # ``1 - overlap_strength`` as a forward seam, for video AND audio alike.
+        # That is the mirror: the user's one "seam blend" knob governs both
+        # directions. IT HOLDS ONLY WHILE ``audio_mask_value`` IS ALSO None —
+        # ``freeze_mask_values`` returns all four bands as ``mask_value`` only in
+        # that case. A2V is what would set it, and A2V is API-exclusive with an
+        # end source, so the two never meet; unlocking that pair means revisiting
+        # this line.
+        t_src = layout.seg_tail_source[i]
+        if t_src is not None:
+            next_v, next_a = seg_v[t_src], seg_a[t_src]
+            # The schedule's whole promise, checked rather than trusted: the
+            # segment we are borrowing from has already been generated.
+            assert next_v is not None and next_a is not None, (i, t_src)
+            # The join on THIS segment's tail side is ``ka_list[i]`` — the
+            # forward carry's ``ka_list[h]`` is the one on its head side. Getting
+            # these two the wrong way round would misalign the audio crossfade.
+            ka_i = ka_list[i]
+            if init_v is None:
+                v_shape = VideoLatentShape.from_pixel_shape(
+                    seg_shape,
+                    latent_channels=components.video_latent_channels,
+                    scale_factors=components.video_scale_factors,
+                ).to_torch_shape()
+                init_v = torch.zeros(
+                    tuple(v_shape), dtype=next_v.dtype, device=next_v.device
+                )
+            if init_a is None:
+                a_shape = AudioLatentShape.from_video_pixel_shape(
+                    seg_shape).to_torch_shape()
+                init_a = torch.zeros(
+                    tuple(a_shape), dtype=next_a.dtype, device=next_a.device
+                )
+            init_v[:, :, init_v.shape[2] - kv:] = next_v[:, :, :kv]
+            init_a[:, :, init_a.shape[2] - ka_i:] = next_a[:, :, :ka_i]
+            ftv, fta = kv, ka_i
         # ── end source (additive): freeze the LAST SEGMENT's TAIL ─────────────
         # Deliberately an INDEPENDENT if, not another elif: an end source does not
         # replace any branch above, it ADDS a frozen band at the far end of the
         # last segment, on top of whatever that branch built.
         #
-        # WHAT "THE LAST SEGMENT" IS depends on the mode, and that is the only
-        # difference between the two here:
+        # THE CONDITION IS THE TIMELINE INDEX, NOT THE GENERATION ORDER: the band
+        # belongs at the end of the VIDEO. In ``reverse`` mode that segment is the
+        # one generated FIRST, which is the whole point of the schedule.
         #
-        #   * ``internal_segment`` (2+ clips) — it is the appended BAND SEGMENT,
-        #     never a user clip, and always i >= 1 (n_seg == n + 1 >= 2), so the
-        #     carry branch above has necessarily built ``init_v``: kv latents of
-        #     carry-over followed by exactly this band.
+        # WHAT "THE LAST SEGMENT" IS depends on the mode:
+        #
+        #   * ``internal_segment`` (API-unreachable) — it is the appended BAND
+        #     SEGMENT, never a user clip, and always i >= 1 (n_seg == n + 1 >= 2),
+        #     so the carry branch above has necessarily built ``init_v``: kv
+        #     latents of carry-over followed by exactly this band.
         #   * ``in_window`` (1 clip) — it is the user's ONLY clip, i == 0, so any
         #     of the three i==0 branches may have run. The V2V and retake ones
         #     leave a real ``init_v``; the plain t2v one leaves it None, and the
         #     band still has to be written somewhere. Hence the zeros arm below,
         #     which the internal-segment design had made unreachable.
+        #   * ``reverse`` (2+ clips) — it is the user's LAST clip, whose head is
+        #     free and whose tail is this band, so it too arrives with ``init_v``
+        #     None and takes the same zeros arm. A start source cannot reach it
+        #     (chain_math 422s that combination) and the reverse carry cannot have
+        #     claimed the same tail (``seg_tail_source[-1] is None``, asserted in
+        #     chain_math and again here).
         if end_source is not None and i == n_seg - 1:
+            # The band and a reverse carry would write the SAME latents; the
+            # layout guarantees they never both apply, and this is where that
+            # guarantee is spent.
+            assert layout.seg_tail_source[i] is None, (i, layout.seg_tail_source)
             if init_v is None:
-                # Only the plain t2v scratch branch can land here (i == 0 with no
-                # source and no retake), which exists only in ``in_window`` mode.
-                assert layout.end_source_mode == "in_window", layout.end_source_mode
+                # Only a free-head branch can land here (i == 0 with no source and
+                # no retake, or the last clip of a ``reverse`` schedule).
+                assert layout.end_source_mode in ("in_window", "reverse"), (
+                    layout.end_source_mode
+                )
                 v_half_shape = VideoLatentShape.from_pixel_shape(
                     seg_shape,
                     latent_channels=components.video_latent_channels,
@@ -1373,11 +1498,13 @@ def run_chain(
             # ``layout.f_total``. f_total is the length of the WHOLE assembled
             # timeline; it coincides with a segment's length only when there is
             # exactly one segment (retake's degenerate shape, and ``in_window``
-            # mode). Copying that idiom into the multi-clip mode would freeze the
+            # mode). Copying that idiom into a multi-segment mode would freeze the
             # band at the wrong position (or out of range).
             seg_L = init_v.shape[2]
             if layout.end_source_mode == "in_window":
                 assert seg_L == layout.f_total, (seg_L, layout.f_total)
+            elif layout.end_source_mode == "reverse":
+                assert seg_L == layout.seg_latent[-1], (seg_L, layout.seg_latent)
             else:
                 assert seg_L == layout.end_segment_latent, (
                     seg_L, layout.end_segment_latent
@@ -1386,11 +1513,14 @@ def run_chain(
             ftv = n_end_v
             # The two ends want DIFFERENT strengths whenever this segment has a
             # head at all (an inter-segment carry at 1 - overlap_strength, or a
-            # V2V context head), while the tail must be a HARD freeze so the
+            # V2V context head), while the tail defaults to a HARD freeze so the
             # chain really lands on the given material. That split is exactly
             # what tail_mask_value is for. A plain t2v in-window segment has no
             # frozen head (fkv == 0), so only the tail value is doing anything.
-            seg_tail_mask_value = 0.0
+            # ``end_source.strength`` softens the tail alone (stage 2 always
+            # hard-freezes regardless): mask value ``1.0 - strength``, clamped
+            # the same way ``stage1_mask_value`` clamps ``overlap_strength``.
+            seg_tail_mask_value = 1.0 - max(0.0, min(1.0, float(end_source.strength)))
         # ── clip-wise IC-LoRA reference (§1-15, additive) ─────────────────────
         # THIS segment's window of the long reference, decoded + VAE-encoded right
         # here (one window per iteration, never pre-batched) and appended to
@@ -1451,12 +1581,25 @@ def run_chain(
             tail_mask_value=seg_tail_mask_value,
             audio_mask_value=seg_audio_mask_value,
         )
-        seg_v.append(vstate.latent.detach().clone())
-        seg_a.append(astate.latent.detach().clone())
+        seg_v[i] = vstate.latent.detach().clone()
+        seg_a[i] = astate.latent.detach().clone()
+        stage1_order.append(i)
+        stage1_freezes.append(
+            {"seg": i, "fkv": int(fkv), "ftv": int(ftv),
+             "fka": int(fka), "fta": int(fta)}
+        )
         if progress:
-            progress("stage1", i, n_seg)
+            # The NUMERATOR IS THE SCHEDULE POSITION, not the timeline index: a
+            # progress bar must go forwards, and under ``reverse`` the timeline
+            # index counts down.
+            progress("stage1", order_idx, n_seg)
 
     # ── Assemble ONE continuous stage-1 AV latent. ────────────────────────────
+    # Assembly is TIMELINE order, always — it knows nothing about the schedule.
+    # The slots were pre-allocated, so this is where a schedule that skipped one
+    # would show up (and it would show up as a shape error much later otherwise).
+    assert all(x is not None for x in seg_v), layout.seg_generation_order
+    assert all(x is not None for x in seg_a), layout.seg_generation_order
     assembled_v = seg_v[0]
     for i in range(1, n_seg):
         assembled_v = _crossfade_concat(assembled_v, seg_v[i], kv)
@@ -1709,11 +1852,12 @@ def run_chain(
 
     # ── end source FREEZE PROOF (latent domain; the mirror of the retake block) ─
     # 2 numbers = {stage 1, stage 2} x {video tail}, each the max-abs difference
-    # between what came OUT and what was frozen IN. Both ends are HARD freezes
-    # (stage-1 tail_mask_value 0.0, stage-2 mask 0.0), so both MUST be exactly
-    # 0.0 — there is no "deliberate blend" arm to excuse a non-zero the way the
-    # retake stage-1 pair has. There is no audio pair because only video is frozen
-    # (see _encode_end_source).
+    # between what came OUT and what was frozen IN. Stage 2 is ALWAYS a HARD
+    # freeze (mask 0.0), so its number MUST be exactly 0.0. Stage 1 is a HARD
+    # freeze only when ``end_source.strength >= 1.0`` (mask 0.0); below that the
+    # band is a deliberate soft blend and a non-zero s1 difference is correct —
+    # the same shape the retake stage-1 pair has. There is no audio pair because
+    # only video is frozen (see _encode_end_source).
     #
     # THE MEASUREMENT IS END-TO-END, AND THAT IS THE WHOLE POINT OF ITS POSITION
     # HERE (after the tiles are reassembled, before the decode). The band now
@@ -1723,13 +1867,20 @@ def run_chain(
     # timeline that entered the upsample and the ONE assembled stage-2 timeline
     # that is about to be decoded — every crossfade included.
     #
-    # WHY EXACTLY 0.0 IS ATTAINABLE (and what it depends on): every write is a
-    # bf16 copy of the encoder's own output, the denoise mask 0.0 returns those
-    # latents untouched, and a crossfade over two identical values is the identity
-    # even through its fp32 intermediate (see the stage-2 write site's note). The
-    # proof therefore rests on the bf16/fp32 rounding argument, not on a tolerance:
-    # if the pipeline ever moved to a dtype where ``a*(1-x) + a*x != a``, these
-    # would go small-but-nonzero and the assertion to relax would be "== 0.0".
+    # WHY EXACTLY 0.0 IS ATTAINABLE (and what it depends on) AT A MASK VALUE OF
+    # 0.0: every write is a bf16 copy of the encoder's own output, the denoise
+    # mask 0.0 returns those latents untouched, and a crossfade over two
+    # identical values is the identity even through its fp32 intermediate (see
+    # the stage-2 write site's note). The proof therefore rests on the bf16/fp32
+    # rounding argument, not on a tolerance: if the pipeline ever moved to a
+    # dtype where ``a*(1-x) + a*x != a``, these would go small-but-nonzero and
+    # the assertion to relax would be "== 0.0".
+    #
+    # ``s1_expected_zero`` records the judgement basis in the metadata itself
+    # (rather than only in ``pass``), because — unlike the retake stage-1 verdict,
+    # which turns on a module constant — this one turns on a per-request value:
+    # reading only ``pass`` from a log would risk misreading "the freeze was
+    # proven" when the correct reading is "a soft blend behaved as configured".
     #
     # OBSERVATION ONLY — never raises, for the same reason the retake proof does
     # not: a wrong number means degraded output, not a corrupt job.
@@ -1739,20 +1890,35 @@ def run_chain(
             return float((a.float() - b.float()).abs().max().item())
 
         # Each slice is taken off ITS OWN tensor's length (the same rule the two
-        # write sites follow); here both happen to be the full timeline.
+        # write sites follow); here both happen to be the full timeline. The s1
+        # number is always computed, even when a soft blend makes it nonzero by
+        # design — it is the observed drift, not merely a pass/fail bit.
+        s1_expected_zero = float(end_source.strength) >= 1.0
         end_checks: dict[str, float | bool] = {
             "s1_video_tail": _mad_end(s1_assembled_tail, end_v_half),
             "s2_video_tail": _mad_end(
                 final_v[:, :, final_v.shape[2] - n_end_v:], end_v_full
             ),
         }
-        end_checks["pass"] = (
-            end_checks["s1_video_tail"] == 0.0 and end_checks["s2_video_tail"] == 0.0
+        end_checks["pass"] = end_checks["s2_video_tail"] == 0.0 and (
+            not s1_expected_zero or end_checks["s1_video_tail"] == 0.0
         )
         end_source_meta = {
             "freeze_proof": end_checks,
             "context_frames": int(end_source.context_frames),
             "source_path": str(end_source.path),
+            "strength": float(end_source.strength),
+            "s1_expected_zero": s1_expected_zero,
+            # WHAT STAGE 1 ACTUALLY DID, as opposed to what the geometry said it
+            # should: the order the segments were generated in and the four
+            # freeze widths each ran with. Every other end-source number in this
+            # metadata (``mode``, ``generation_order``, ``end_tile_bands``, ...)
+            # is a copy of a ``chain_math`` value, so those agreeing proves only
+            # that the layout is self-consistent. These two come from the loop
+            # itself, which is why the reverse schedule's machine gate reads them
+            # and not the layout's own ``generation_order``.
+            "stage1_order": list(stage1_order),
+            "stage1_freezes": list(stage1_freezes),
             # Tiles whose video was entirely inside the band (cost observation).
             "end_fully_frozen_tiles": list(end_fully_frozen_tiles),
         }

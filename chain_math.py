@@ -383,12 +383,12 @@ class ChainLayout:
     kt_v: int
 
     # stage-1 — SEGMENTS, not clips.
-    # A chain in the end source's INTERNAL-SEGMENT mode (two or more clips) runs
-    # ONE MORE stage-1 segment than the user asked for: the layout appends an
-    # internal band segment after the last clip (see ``compute_chain_layout``).
-    # In the IN-WINDOW mode (exactly one clip) it does not — the band is the
-    # clip's own tail — so the segments are the clips exactly, as on a chain
-    # with no end source at all. ``seg_frames`` is that full segment list and
+    # A chain in the end source's INTERNAL-SEGMENT mode runs ONE MORE stage-1
+    # segment than the user asked for: the layout appends an internal band
+    # segment after the last clip (see ``compute_chain_layout``). In the
+    # IN-WINDOW and REVERSE modes it does not — the band is the last clip's own
+    # tail — so the segments are the clips exactly, as on a chain with no end
+    # source at all. ``seg_frames`` is that full segment list and
     # EVERYTHING below is derived from it — seg_latent / seg_audio / f_total /
     # total_px / a_total / ka_list / the stage-2 tiles / the junctions.
     # ``clip_frames`` above stays the request's own echo and never grows an
@@ -401,6 +401,28 @@ class ChainLayout:
     total_px: int                   # assembled pixel frames
     a_total: int                    # assembled audio latent frames
     ka_list: list[int]              # per-join audio overlap (len = n_seg - 1)
+
+    # ── stage-1 SCHEDULE: the three tables that decouple "which segment" from
+    # "when it is generated" and "where its frozen ends come from" ────────────
+    # The engine's stage-1 loop used to run ``for i in range(n_seg)``, where the
+    # index meant FOUR things at once: the timeline position, the generation
+    # order, the direction of the dependency and the seed. These tables split the
+    # middle two out; the timeline position and the seed stay the index itself,
+    # so seeds, prompts and metadata are unaffected by their existence.
+    #
+    #   * ``seg_generation_order`` — the timeline indices in the order stage 1
+    #     must produce them. A permutation of ``range(n_seg)``.
+    #   * ``seg_head_source`` — for each segment, the timeline index whose TAIL is
+    #     frozen as this segment's HEAD (the ordinary forward carry), or None.
+    #   * ``seg_tail_source`` — for each segment, the timeline index whose HEAD is
+    #     frozen as this segment's TAIL (the reverse carry), or None.
+    #
+    # On every mode but ``reverse`` these are exactly what the old loop did:
+    # ``[0..n_seg)``, ``[None, 0, 1, ...]`` and all-None. That equivalence is what
+    # makes their introduction a no-op on every path validated before them.
+    seg_generation_order: list[int]
+    seg_head_source: list[int | None]
+    seg_tail_source: list[int | None]
 
     # stage-2 tiles
     v_tiles: list[tuple[int, int]]  # (start_latent, len_latent)
@@ -448,8 +470,8 @@ class ChainLayout:
     # ``end_source`` sub-dict entirely.
     end_context_px: int | None = None   # frozen tail pixel span (multiple of 8)
     n_end_v: int = 0                    # frozen video-latent tail frames
-    # WHICH OF THE TWO END-SOURCE MODES this layout is in. ``None`` on every
-    # chain without an end source; otherwise decided by the CLIP COUNT alone:
+    # WHICH END-SOURCE MODE this layout is in. ``None`` on every chain without an
+    # end source; otherwise decided by the CLIP COUNT alone:
     #
     #   * ``"in_window"`` (exactly ONE clip) — the band is the clip's OWN last
     #     ``n_end_v`` latents. No extra segment is appended, ``total_px`` is the
@@ -458,11 +480,19 @@ class ChainLayout:
     #     frozen band is inside that window and visible to the attention over
     #     the entire clip — which is the point of the mode: the generated motion
     #     can steer TOWARDS the material instead of being crossfaded into it.
-    #   * ``"internal_segment"`` (two or more clips) — the historical design:
-    #     the band gets a stage-1 segment of its own appended after the last
-    #     clip, and the delivered length grows by exactly the band. Kept
-    #     unchanged, but it is the mode whose output crossfades into the
-    #     material, so it is not recommended.
+    #   * ``"reverse"`` (two or more clips) — the same promise on a chain: the
+    #     band is the LAST clip's own tail and nothing is appended, so
+    #     ``total_px`` is the clips' own total. What changes is the stage-1
+    #     SCHEDULE, not the geometry: the segments are generated last-to-first
+    #     (``seg_generation_order``) and each one freezes the NEXT one's head as
+    #     its own tail (``seg_tail_source``), so the whole chain is generated
+    #     towards the material instead of crossfading onto it.
+    #   * ``"internal_segment"`` — the historical two-or-more-clips design: the
+    #     band gets a stage-1 segment of its own appended after the last clip and
+    #     the delivered length grows by exactly the band. NO LONGER REACHABLE
+    #     FROM THE API (``reverse`` replaced it); kept whole, and reachable from
+    #     ``compute_chain_layout``'s ``end_source_mode_override``, so the rollback
+    #     is one line and the geometry stays under test.
     end_source_mode: str | None = None
     # 0-based pixel index of the LAST NEWLY GENERATED frame — i.e. the last
     # frame before the frozen band — on the UNTRIMMED timeline. The
@@ -508,9 +538,9 @@ class ChainLayout:
         The ONE definition of that subtraction, so ``to_dict`` and the API's
         total-length cap cannot disagree about whether the band counts. Only
         ``internal_segment`` mode appends the band to the timeline, so only
-        there is it subtracted back out; in ``in_window`` mode the band is part
-        of the clip itself and on a chain with no end source there is nothing to
-        subtract, so both are simply ``total_px``.
+        there is it subtracted back out; in ``in_window`` and ``reverse`` modes
+        the band is part of a clip itself and on a chain with no end source
+        there is nothing to subtract, so all three are simply ``total_px``.
         """
         if self.end_source_mode == "internal_segment":
             return self.total_px - (self.end_context_px or 0)
@@ -572,11 +602,15 @@ class ChainLayout:
             d["end_source"] = {
                 "end_context_px": self.end_context_px,
                 "n_end_v": self.n_end_v,
-                # "in_window" (one clip — the band is the clip's own tail) or
-                # "internal_segment" (two or more clips — the band is appended
-                # as its own segment). Published in BOTH modes so a finished
-                # job's metadata says outright which geometry it ran.
+                # "in_window" (one clip), "reverse" (two or more) or the
+                # API-unreachable "internal_segment". Published in EVERY mode so
+                # a finished job's metadata says outright which geometry it ran.
                 "mode": self.end_source_mode,
+                # The stage-1 schedule, so a finished job can be checked against
+                # the order it was supposed to run in ([n-1 .. 0] under
+                # ``reverse``, ascending everywhere else). Published under the
+                # end-source key only: a chain without one is byte-unchanged.
+                "generation_order": self.seg_generation_order,
                 "end_source_junction_px": self.end_source_junction_px,
                 # Frames the caller must CUT from (or synthesise for) the
                 # upload: one more than the frozen band, because the causal
@@ -610,6 +644,7 @@ def compute_chain_layout(
     source_context_px: int | None = None,
     retake_glue_px: tuple[int, int] | None = None,
     end_context_px: int | None = None,
+    end_source_mode_override: str | None = None,
 ) -> ChainLayout:
     """Resolve the full chain geometry from clip pixel-frame counts + fps + K_v.
 
@@ -650,10 +685,14 @@ def compute_chain_layout(
     (:func:`v_tail_latents`) — the head grid's 8n+1 does not apply here.
     ``None`` -> byte-identical to before.
 
-    THERE ARE TWO END-SOURCE MODES, chosen by the CLIP COUNT alone and reported
-    as ``end_source_mode``. Everything else about the end source — the tail
-    grid, the ``+1`` primer, ``end_tile_bands``, the stage-2 freeze — is common
-    to both.
+    THE END-SOURCE MODE IS CHOSEN BY THE CLIP COUNT ALONE — one clip ->
+    ``"in_window"``, two or more -> ``"reverse"`` — and reported as
+    ``end_source_mode``. Everything else about the end source — the tail grid,
+    the ``+1`` primer, ``end_tile_bands``, the stage-2 freeze — is common to
+    every mode, and so is the output-length promise: the band is always the LAST
+    CLIP'S OWN TAIL, so ``total_px == clips_total_px``. A third mode,
+    ``"internal_segment"``, is the historical two-or-more-clips design and is no
+    longer reachable from the API; see ``end_source_mode_override`` below.
 
     MODE "in_window" — EXACTLY ONE CLIP. The band is the clip's OWN last
     ``n_end_v`` latents: nothing is appended, ``seg_frames == clip_frames``,
@@ -670,8 +709,32 @@ def compute_chain_layout(
     mirror of retake's free-middle rule and the one NEW rejection this mode
     adds).
 
-    MODE "internal_segment" — TWO OR MORE CLIPS. THE BAND IS AN INTERNAL
-    SEGMENT, NOT A BITE OUT OF THE LAST CLIP. This function appends ONE segment
+    MODE "reverse" — TWO OR MORE CLIPS. The same promise as ``in_window``,
+    extended to a chain: NOTHING IS APPENDED (``seg_frames == clip_frames``,
+    ``end_segment_px`` / ``end_segment_latent`` stay 0, ``total_px ==
+    clips_total_px``) and the band is the LAST clip's own tail. The geometry is
+    therefore identical to a chain with no end source at all; what the mode adds
+    is a STAGE-1 SCHEDULE, published as the three tables ``seg_generation_order``
+    / ``seg_head_source`` / ``seg_tail_source``:
+
+      * the segments are generated LAST TO FIRST, so the segment that carries the
+        band is produced before anything that has to lead into it;
+      * every segment's head is FREE, and its tail is frozen from the head of the
+        segment after it (``seg_tail_source``) — the exact mirror of the forward
+        carry, at the same ``1 - overlap_strength`` strength;
+      * the assembly, the stage-2 pass and the decode never learn about any of
+        this: they read the timeline in its own order, as always.
+
+    Two rejections belong to this mode alone (both below): the LAST clip must be
+    long enough that ``kv + n_end_v`` does not eat all of it — otherwise the
+    reverse carry would hand the previous segment frozen material rather than
+    newly generated content — and a ``source_context_px`` (start source) is
+    refused outright, because a start AND an end source on a chain would make
+    clip 0 frozen at both ends, a combination nothing has run.
+
+    MODE "internal_segment" — THE HISTORICAL TWO-OR-MORE-CLIPS DESIGN, NO LONGER
+    REACHABLE FROM THE API. THE BAND IS AN INTERNAL SEGMENT, NOT A BITE OUT OF
+    THE LAST CLIP. This function appends ONE segment
     of its own — ``kv`` latents of carry-over from the last clip plus the
     ``n_end_v`` band latents, at most 20 latent frames all told — to
     ``seg_frames``, and derives every downstream number from there. Three
@@ -688,7 +751,16 @@ def compute_chain_layout(
         no longer arise from an end source, since the extra length arrives as
         its own short segment rather than as a longer final clip.
 
-    THE BAND MAY SPAN SEVERAL STAGE-2 TILES (both modes). It sits at the very END of the
+    ``end_source_mode_override`` FORCES A MODE INSTEAD OF DERIVING IT, AND EXISTS
+    FOR TESTS AND FOR THE ROLLBACK ONLY. It is deliberately NOT plumbed through
+    the API, the engine or the mock: no request can select a mode, which is what
+    keeps "the clip count decides" a single rule rather than a negotiable one.
+    Its two uses are (a) keeping the ``internal_segment`` geometry — now
+    API-unreachable — under test rather than letting dead code rot, and (b)
+    making the rollback the one-line change of the decision below. ``None``
+    (every production caller) -> the derived mode.
+
+    THE BAND MAY SPAN SEVERAL STAGE-2 TILES (every mode). It sits at the very END of the
     timeline, so its intersection with any tile is necessarily that tile's own
     TAIL — the shape retake already validated — and a tile the band swallows
     whole is simply fully frozen (its audio is still refined). ``end_tile_bands``
@@ -697,7 +769,7 @@ def compute_chain_layout(
     all: ``config.limits.end_context_frames_max`` (136) is an operational cap on
     territory the real-hardware gate has looked at, not a geometric bound.
 
-    ``kv >= 2`` IS REQUIRED with an end source, IN BOTH MODES. In
+    ``kv >= 2`` IS REQUIRED with an end source, EXCEPT IN ``reverse`` MODE. In
     ``internal_segment`` mode the reason is concrete: the extra segment consumes
     one more join's worth of the audio overlap budget (``sum_ka`` below), and at
     ``kv == 1`` that budget is already so thin that the existing "degenerate
@@ -706,14 +778,22 @@ def compute_chain_layout(
     ``kv == 1`` and none at ``kv >= 2``, so a single extra condition below buys
     the whole family a clear message instead of a confusing one.
 
-    IN ``in_window`` MODE THAT REASON IS GONE — a one-clip chain has no join at
-    all, so ``kv`` never reaches the audio budget — and the rule is DELIBERATELY
-    KEPT ANYWAY. Two grounds, both conservative rather than geometric: widening
-    the accepted range is a behaviour change nothing in this work needs, and the
-    frontend applies one ``endSourceNeedsOverlap`` rule to the whole feature
-    (owner's standing preference: UI rules stay simple, without per-mode
-    exceptions), so relaxing it here alone would put the app and the API out of
-    step. Revisit only with a reason to widen the range.
+    ``reverse`` MODE IS EXEMPT BECAUSE THAT REASON DOES NOT SURVIVE IT: it
+    appends no segment, so ``n_join == n_clips - 1`` and its consumption of the
+    audio budget is EXACTLY that of a chain with no end source — a chain that has
+    always accepted ``kv == 1``. The exemption is not a relaxation of the safety
+    net either: the raw ``sum_ka < n_join`` rejection below still stands and is
+    what actually refuses the thin combinations. And ``kv == 1`` is not a corner
+    here but the mode's INTENDED value — the reverse carry is one shared latent
+    per seam.
+
+    IN ``in_window`` MODE THE ``internal_segment`` REASON IS GONE TOO — a
+    one-clip chain has no join at all, so ``kv`` never reaches the audio budget —
+    and the rule is DELIBERATELY KEPT ANYWAY. Two grounds, both conservative
+    rather than geometric: widening the accepted range is a behaviour change
+    nothing in this work needs, and it is the mode whose band is carved out of a
+    single clip's latents, where a wider carry is not a cost anyone asked to pay.
+    Revisit only with a reason to widen the range.
 
     A ZERO-のり代 window (``v_adv == v_tile``, i.e. ``kt_v == 0`` — currently only
     the "full_length" preset) is SINGLE-TILE ONLY: with no overlap between tiles
@@ -724,6 +804,14 @@ def compute_chain_layout(
     n_clips = len(clip_frames)
     if n_clips < 1:
         raise ValueError("chain requires at least one clip")
+    # Checked here rather than where it is applied, so a typo fails on every
+    # call and not only on the ones that happen to carry an end source.
+    if end_source_mode_override is not None and end_source_mode_override not in (
+        "in_window", "reverse", "internal_segment"
+    ):
+        raise ValueError(
+            f"unknown end_source_mode_override {end_source_mode_override!r}"
+        )
     kt_v = v_tile - v_adv
 
     n_ctx_v = n_ctx_a = trim_px = 0
@@ -830,7 +918,16 @@ def compute_chain_layout(
                 f"{end_context_px}): a shorter band occupies zero video latent "
                 "frames, so nothing would be frozen at all"
             )
-        if kv < 2:
+        # THE ONE PLACE THE MODE IS DECIDED (see this function's docstring).
+        # Everything downstream — here, the engine, the mock, the API validator
+        # — reads ``layout.end_source_mode`` rather than re-testing the clip
+        # count, so there is exactly one rule and no way for two callers to
+        # disagree about which geometry a request is in. THE CLIP COUNT IS THE
+        # WHOLE INPUT; the override is a test/rollback hatch no request reaches.
+        end_source_mode = "in_window" if n_clips == 1 else "reverse"
+        if end_source_mode_override is not None:
+            end_source_mode = end_source_mode_override
+        if kv < 2 and end_source_mode != "reverse":
             raise ValueError(
                 f"end_context_px ({end_context_px}) needs overlap_frames "
                 f"(K_v) >= 2; got {kv}. An end source runs one extra stage-1 "
@@ -841,12 +938,6 @@ def compute_chain_layout(
                 "Raise overlap_frames to 2 or more."
             )
         n_end_v = v_tail_latents(end_context_px)
-        # THE ONE PLACE THE MODE IS DECIDED (see this function's docstring).
-        # Everything downstream — here, the engine, the mock, the API validator
-        # — reads ``layout.end_source_mode`` rather than re-testing the clip
-        # count, so there is exactly one rule and no way for two callers to
-        # disagree about which geometry a request is in.
-        end_source_mode = "in_window" if n_clips == 1 else "internal_segment"
 
     # ── the K_v floor, checked against the USER's clips ──────────────────────
     # Deliberately before the internal band segment is appended: that segment is
@@ -971,6 +1062,48 @@ def compute_chain_layout(
             "two or more clips."
         )
 
+    # ── end source, "reverse" mode: the LAST clip must still generate content ─
+    # Its tail holds the band (n_end_v latents) and its HEAD is what the previous
+    # segment freezes as its own tail (kv latents), so ``kv + n_end_v`` of it is
+    # spoken for. If that leaves nothing, the kv latents the reverse carry hands
+    # backwards are the frozen material itself rather than newly generated
+    # content — the chain would be crossfading the upload into its own middle,
+    # which is precisely what this mode exists to avoid.
+    #
+    # A 422 naming the clip length that works, for the same reason the in-window
+    # check is one: the request can reach it, and the alternative is a 500 from
+    # deep inside stage 1.
+    if end_source_mode == "reverse" and kv + n_end_v >= clip_latent[-1]:
+        min_clip_px = px_from_v_latent(kv + n_end_v + 1)
+        raise ValueError(
+            f"end_context_px ({end_context_px}) leaves the LAST clip nothing to "
+            f"carry backwards: the frozen tail band (n_end_v={n_end_v}) plus the "
+            f"のり代 the previous clip takes from its head (K_v={kv}) already fill "
+            f"all {clip_latent[-1]} of that clip's stage-1 latent frames. With "
+            "two or more clips the band is the last clip's OWN tail and the "
+            "clips are generated last-to-first, so the last clip must be at "
+            f"least {min_clip_px} pixel frames long for this combination. "
+            "Lengthen the last clip, shorten context_frames, or lower "
+            "overlap_frames."
+        )
+
+    # ── end source, "reverse" mode: a START source is refused ────────────────
+    # A start source and an end source on ONE clip is the interpolation case,
+    # implemented and validated (the in-window check above is what guards it).
+    # On a CHAIN it would freeze clip 0 at BOTH ends — its head from the source
+    # video and its tail from the reverse carry — a shape nothing has run and
+    # which no check above defends. Refused outright rather than accepted
+    # untested; the two-sided middle clip is the next increment's scope.
+    if end_source_mode == "reverse" and source_context_px is not None:
+        raise ValueError(
+            "source_video (start source) and end_context_px (end source) cannot "
+            f"be combined on {n_clips} clips: with two or more clips the chain "
+            "is generated last-to-first, so clip 0 would be frozen at BOTH ends "
+            "(its head by the start source, its tail by the reverse のり代) — a "
+            "combination that has never been generated. Use exactly ONE clip for "
+            "a start+end interpolation, or drop one of the two sources."
+        )
+
     # Per-join audio overlap K_a so assembled audio == a_total EXACTLY:
     #   sum(a_seg) - sum(ka) = a_total  =>  sum(ka) = sum(a_seg) - a_total.
     # In ``internal_segment`` mode the band's segment adds one more join here,
@@ -978,7 +1111,10 @@ def compute_chain_layout(
     # condition above, which keeps the budget out of the degenerate range.
     # ``in_window`` mode has a single segment and therefore no join at all
     # (``kv >= 2`` is kept there for the conservative reasons the docstring
-    # gives, not for this budget).
+    # gives, not for this budget). ``reverse`` mode appends nothing, so its
+    # joins are the clips' own — the same budget an end-source-less chain
+    # spends, which is why it is exempt from ``kv >= 2`` and why the rejection
+    # just below is the only audio guard it needs.
     ka_list: list[int] = []
     if n_seg > 1:
         sum_ka = sum(seg_audio) - a_total
@@ -1110,6 +1246,12 @@ def compute_chain_layout(
     # they ever disagree the band and the segment boundary have drifted apart,
     # which no input can cause — hence an assert.
     #
+    # ``reverse``: the band is the LAST clip's own tail, so it is NOT a seam
+    # either — it must sit strictly AFTER the last segment seam (inside the last
+    # clip) and strictly inside the timeline. That ordering is what the free-
+    # latent rejection above buys, and asserting it here is what stops a future
+    # geometry change from letting the band swallow a seam silently.
+    #
     # ``in_window``: there is deliberately NO seam — the band is not joined on,
     # which is the mode's whole reason to exist — so the segment list must be
     # seamless and the junction must merely be a real interior index of the
@@ -1120,6 +1262,12 @@ def compute_chain_layout(
             assert segment_seam_junctions[-1] == end_source_junction_px, (
                 segment_seam_junctions, end_source_junction_px
             )
+        elif end_source_mode == "reverse":
+            assert (
+                segment_seam_junctions[-1]
+                < end_source_junction_px
+                < total_px - 1
+            ), (segment_seam_junctions, end_source_junction_px, total_px)
         else:
             assert segment_seam_junctions == [], segment_seam_junctions
             assert 0 <= end_source_junction_px < total_px - 1, (
@@ -1145,6 +1293,48 @@ def compute_chain_layout(
         set(_spread(segment_seam_junctions) + _spread(tile_seam_junctions))
     )
 
+    # ── the stage-1 schedule: generation order + the two dependency tables ────
+    # Pure functions of the mode and the segment count, deliberately written as
+    # ONE two-branch expression rather than as per-mode special cases: everything
+    # that is not ``reverse`` gets exactly what the engine's old
+    # ``for i in range(n_seg)`` loop did — ascending order, each segment's head
+    # carried from the previous one, no tail dependency at all. That is what
+    # makes these tables inert on every path that existed before them.
+    #
+    # ``reverse`` mirrors it end for end: descending order, no head dependency
+    # (every head is free — the timeline's first clip is the only one whose head
+    # a keyframe can condition, and it is generated last), and each segment's
+    # tail carried from the segment AFTER it. The last segment has no tail source
+    # because that is where the end source's own band goes.
+    if end_source_mode == "reverse":
+        seg_generation_order = list(range(n_seg - 1, -1, -1))
+        seg_head_source: list[int | None] = [None] * n_seg
+        seg_tail_source: list[int | None] = [
+            (i + 1 if i + 1 < n_seg else None) for i in range(n_seg)
+        ]
+    else:
+        seg_generation_order = list(range(n_seg))
+        seg_head_source = [None] + list(range(n_seg - 1))
+        seg_tail_source = [None] * n_seg
+
+    # Three invariants the engine's loop leans on, so a wrong table fails here
+    # rather than as a wrong picture. No input can break them — only a code
+    # change can — hence asserts.
+    #   (1) the order visits every segment exactly once;
+    #   (2) whatever a segment depends on is already generated when it runs;
+    #   (3) the end source's band and a reverse carry never fight over the same
+    #       tail (the engine writes both into the same latents).
+    assert sorted(seg_generation_order) == list(range(n_seg)), seg_generation_order
+    _order_pos = {seg: pos for pos, seg in enumerate(seg_generation_order)}
+    for i in range(n_seg):
+        for src in (seg_head_source[i], seg_tail_source[i]):
+            assert src is None or _order_pos[src] < _order_pos[i], (
+                i, src, seg_generation_order
+            )
+    assert end_context_px is None or seg_tail_source[n_seg - 1] is None, (
+        seg_tail_source, end_context_px
+    )
+
     return ChainLayout(
         clip_frames=list(clip_frames),
         fps=float(fps),
@@ -1159,6 +1349,9 @@ def compute_chain_layout(
         total_px=total_px,
         a_total=a_total,
         ka_list=ka_list,
+        seg_generation_order=seg_generation_order,
+        seg_head_source=seg_head_source,
+        seg_tail_source=seg_tail_source,
         v_tiles=v_tiles,
         a_tiles=a_tiles,
         audio_adv=audio_adv,

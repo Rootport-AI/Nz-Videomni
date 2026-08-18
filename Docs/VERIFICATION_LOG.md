@@ -5334,4 +5334,119 @@ Chainedタブの幅・高さスライダーには目安が何も無く、いま�
 
 **繋ぎ位置の発見**: 出力末尾の実質的な重なりは9f（凍結8f＋直前1fの最適解が素材1フレーム目の内容になるため）である。オーナーの目視では10fに見えるが、これは数え方の±1、または直前1フレームの微小な準複製で説明できる差にとどまる。**厳密な繋ぎ位置は`end_source_junction_px`+1の直前で出力を切る**。3件とも同一位置になっており、素材・シード非依存の幾何的性質であることを確認した。
 
+## 63. ★End source第2段階・バッチ1（錨の固定強度`strength`＋v1音声モックの撤去）＝実装完了・機械検証全PASS・実機ゲートG1-R1〜G1-R3合格（オーナー目視は起床後）（2026-08-18）
+
+本節は第2段階（逆順Chained）を2バッチに分けたうちの**バッチ1**（錨の強度をStage-1だけソフト化できるようにする改修＋音声モックの撤去）の記録である。幾何（`chain_math.py`）とStage-2には一切触れていない小改修で、単独でデプロイして完結させた。バッチ2（逆順Chained本体）は別節（§64）で扱う。
+
+### 63.1 結論
+
+- `EndSourceSpec`に`strength`（0.0〜1.0、既定1.0）を新設した。既定値1.0は**従来と厳密同値**（Stage-1・Stage-2ともハード凍結、マスク値0.0）である。1.0未満にすると**Stage-1だけ**マスク値が`1.0 - strength`へ緩み、素材への「なじみ方」が緩やかになる。**Stage-2は`strength`の値に関わらず常にハード凍結**（マスク値0.0）するため、配信される最終フレームは常に素材どおりになる。
+- freeze proof（凍結の証明）の判定を、Retakeと同型の条件分岐へ書き換えた。`s2_video_tail`は無条件にゼロを期待し、`s1_video_tail`は`strength >= 1.0`のときだけゼロを期待する。判定基準そのものを`end_source_meta`へ`s1_expected_zero`（真偽値）として記録するようにした——`pass`だけを見て「凍結は証明された」と誤読される穴を塞ぐための判定基準の保存である。`s1_video_tail`の数値自体は`strength < 1.0`でも必ず出す（ソフト凍結のドリフト量そのものの観測値）。
+- v1時代の音声モック（「動画のみ」/「動画+音声」のラジオボタン）をUIから撤去した。フロントエンドは実装当初から音声を素材とは独立に生成しており、ラジオはどちらを選んでも挙動が変わらない死んだ選択肢だった。「音声は素材からは取り込まれず、独立して生成されます。」という注記1行だけは残した。
+- 実機検証で、既定値1.0が§61.6のR-1と**同一入力・同一シード**の再走に対して出力mp4**バイト完全一致**であることを確認した。既定値がバイト単位で従来と同値であることの最も強い回帰証明である。
+
+### 63.2 実装内容
+
+**バックエンド**: `engine/pipeline/chain_pipeline.py`の`EndSourceSpec`に`strength`フィールドを追加し、Stage-1の`seg_tail_mask_value`算出（`1.0 - max(0.0, min(1.0, strength))`）とfreeze proof判定を上記のとおり条件分岐化した。`engine/worker.py`・`api/models.py`（`strength: float = Field(1.0, ge=0.0, le=1.0)`）・`services/pipeline_manager.py`・`services/ltx_runner.py`（実・モック両方）・`mcp_server/tools/generate.py`へ配線した。モックも本物の契約経路を通す規律に従い、実と同じ`strength`引数を受けてペイロードへ反映する。
+
+**フロントエンド**: `ChainEndSourcePanel.tsx`に強度スライダーを新設し、v1音声モックの`<fieldset>`ブロックを削除した。`chainUtils.ts`へ`MIN/MAX/DEFAULT_END_SOURCE_STRENGTH`（0.0/1.0/1.0）と、リクエストの`end_source.strength`を既定値でも常に明示送信する配線を追加した。`useChainForm.ts`へ`endSourceStrength`/`setEndSourceStrength`のstateを追加した。実装記録の正本はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §80、API契約の記述は同[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2である。
+
+### 63.3 機械検証
+
+| 項目 | 結果 |
+|---|---|
+| backend `pytest` | 1,508件中 1,488 passed / 20 skipped / 0 failed |
+| frontend `npm run typecheck` / `npm run lint` / `npm test` | 全PASS |
+| G1-M3（モック実サーバー通し） | `metadata.json`に`end_source.strength`が出ることを確認・合格 |
+
+### 63.4 実機ゲート結果（2026-08-18）
+
+| # | ジョブID | 構成 | 所要時間 | 結果 |
+|---|---|---|---|---|
+| G1-R1 | `4c8b9cf9-fc10-44bb-b90f-7859caa80e8b` | `strength=1.0`（既定）。§61.6のR-1（`2e8c85bb…`）と**同一入力・同一シード**で再走 | 89.0s | 出力mp4が**MD5一致（`138688e1df71a63b852b1903caf9ad28`）・全フレームハッシュ一致・バイト完全一致**。既定値1.0が従来と厳密同値であることの回帰証明。freeze proof全ゼロ・pass |
+| G1-R2 | `c35f6726-6825-46b7-8d88-9fac6fd6323c` | `strength=0.5` | 96.6s | `s1_video_tail=0.848`・`s2_video_tail=0.0`・pass・`s1_expected_zero:false` |
+| G1-R3 | `94b4276c-2365-40a7-a55f-731074844dd9` | `strength=0.0` | 90.2s | `s1_video_tail=5.734`。G1-R2（0.848）と比べ、強度を下げるほどドリフトが増える単調な関係を確認 |
+
+基準線・比較用として、以下2本もバッチ1のデプロイ前に実施した（バッチ2の実機検証で使う）。
+
+| # | ジョブID | 構成 | 所要時間 | 位置づけ |
+|---|---|---|---|---|
+| B-0 | `e070d42c-b8d4-4437-b67a-fc0aa11ace06` | クリップ1本・169f・1280×768（窓内モード） | 168.6s | End sourceの音声評価の基準線。オーナー試聴待ち |
+| R2-0 | `96839ad5-dc3a-4300-a6b6-ef400f8b3898` | 497f・旧方式`internal_segment`・kv=2 | 378.0s | バッチ2（逆順Chained）とのA/B比較用の旧側（デプロイ前の現行ビルドで生成） |
+
+### 63.5 未完了事項
+
+オーナーの目視（G1-R2/R3の見え方・G1-R4のUIスライダー確認・B-0の試聴）は起床後に実施する。本節は機械検証と実機ゲートG1-R1〜G1-R3の記録までであり、上記の目視ゲートが揃うまでバッチ1は完結していない。
+
 **オーナーの追加観察（2026-08-17）**: AviUtl2のフレーム表示は1始まりであることを踏まえた上で、出力の**162〜169フレーム目が素材の2〜9フレーム目とピクセル単位で一致**（生成側にVAE往復由来の微小なぼやけがある点を除く）し、**161フレーム目は素材の1フレーム目の準複製**（早期収束）であることを透明度重ねで確認した。これは上記の早期収束仮説を観察的に裏付ける。**厳密な繋ぎ**: 出力を160フレームで切り、素材の1フレーム目をその直後（161フレーム目相当の位置）に置く——一般式は`lead = 出力長 − 錨 − 1`（169fクリップ・錨8fなら160）。フロントエンドの系統E（末尾合わせ）はこの厳密値へ補正済み（`webui/src/shell/AppShell.tsx`・`webui/src/modes/chained/ChainedScreen.tsx`。従来の`出力長−8`は素材1フレーム寄りに1フレームずれていた）。
+
+## 64. ★End source第2段階・バッチ2（逆順Chained・案B）＝複数クリップへの実用化。実装完了・機械検証全PASS・実機ゲートM1〜M7全7ジョブ合格（オーナー目視は起床後）（2026-08-18）
+
+本節は第2段階（逆順Chained）を2バッチに分けたうちの**バッチ2＝本体**の記録である。バッチ1（錨の固定強度`strength`＋v1音声モックの撤去）は§63。**§61（窓内モード）はクリップ1本の正本のまま変わらない**——本節が扱うのはクリップ**2本以上**にEnd sourceを拡張する経路である。
+
+### 64.1 結論
+
+- クリップ2本以上＋`end_source`の生成方式を、旧方式（`internal_segment`＝内部区画。§60の歴史記録）から**逆順Chained**（`"reverse"`）へ切り替えた。設計候補は§62の偵察実験を経て、バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11の**案B（Stage-1のみ依存順に生成→潜在のまま連結→既存の一括Stage-2）**を採用した。
+- モード判定は**クリップ本数のみ**で決まる（クリップ1本→`in_window`、2本以上→`reverse`）。旧方式（`internal_segment`）はAPIから到達不能な死蔵コードとして温存し、削除は実機検証後にオーナーが判断する（今回は削除しない）。
+- Stage-1のループを、`chain_math`が発行する3本の表（`seg_generation_order`＝生成順・`seg_head_source`＝頭を凍結する元・`seg_tail_source`＝尾を凍結する元）で駆動するよう分解した。エンジンのループ自体はモード名を一切参照しない。逆向きのりしろ（クリップ間で共有される重なり潜在）の凍結は、既存の`freeze_mask_values`が`tail_mask_value=None`のとき4値すべてを自動的に鏡写しソフト凍結にする仕組みをそのまま流用し、**新パラメータ・新分岐ゼロ**で実現した。
+- 逆向きのりしろの幅は`overlap_frames`（kv）そのもので、既定値を**1潜在**にした（約8ピクセルフレーム相当）。凍結強度は既存の`overlap_strength`（既定0.5）がそのまま逆順の継ぎ目にも鏡写しで効く——正順と同じつまみが逆順にも作用する。
+- `overlap_frames >= 2`必須の制約を`reverse`モードだけ免除した。内部区画を追加しないため音声のりしろ予算（`sum_ka`）の消費が素のチェーンと同一（`n_join == n_clips − 1`）になり、免除の根拠が成立する。
+- `reverse`専用の受理検査を2本新設した——いずれも422（`VALIDATION_ERROR`。新しいエラーコードは増やしていない）：①最終クリップの潜在数が`kv + n_end_v`以下になる構成（逆向きに運ぶ新規生成内容がゼロになる）を拒否、②`source_video`（素材（冒頭））×`end_source`×2クリップ以上を拒否（真ん中クリップが頭・尾の両方で凍結される、誰も走らせたことのない二重凍結の形を避けるため。Start＋End併用は次弾のスコープ）。
+- Stage-1ループ自身に実行記録（`stage1_order`・`stage1_freezes`）を積み、幾何の計算値（`generation_order`）だけでなく**エンジンが実際に逆順で走ったこと**を`metadata.json`から確認できるようにした（機械ゲートM7の根拠。M2〜M6はすべて`chain_math`の計算値の写しであり、エンジンの実行そのものを証明できるのはM7だけである）。
+- Stage-2・組み立て（`_crossfade_concat`）・`audio_segment_windows`／`video_segment_windows`は**無改修**。フロントエンドの出力長計算（`computeOutputFrames`）も**無改修**——逆順モードの帯も最終クリップの内側にあり、旧方式のような加算ロジックは結局不要だった。
+
+### 64.2 実装内容
+
+**バックエンド**:
+- `chain_math.py`: モード判定を「クリップ1本→`in_window`／2本以上→`reverse`」へ拡張し、3本の表（`seg_generation_order`／`seg_head_source`／`seg_tail_source`）を`ChainLayout`へ新設。`overlap_frames >= 2`拒否を`end_source_mode != "reverse"`で括り免除。`reverse`専用受理検査2本（最終クリップの自由潜在検査・`source_video`×`end_source`×2クリップ以上の拒否）を新設。継ぎ目の検算assertを`reverse`分岐へ拡張。切り戻し・テスト専用のキーワード専用引数`end_source_mode_override`（既定`None`・APIには一切露出しない）を追加。`to_dict()`の`end_source`サブ辞書へ`generation_order`を出力（素のチェーンのメタデータは1バイトも変わらない）。
+- `engine/pipeline/chain_pipeline.py`: Stage-1ループを`for order_idx, i in enumerate(layout.seg_generation_order)`へ書き換え、`seg_v`/`seg_a`をappendから事前確保（`[None] * n_seg`）へ変更。頭の凍結分岐を`layout.seg_head_source[i] is not None`条件へ一般化（従来構成では`h == i-1`で完全同値、意味を変えない）。逆向きキャリーを独立した加算的`if`として新設（`seg_tail_source[i]`が`None`でなければ、その頭の映像・音声潜在を自セグメント末尾へ凍結。`tail_mask_value`は`None`のまま渡し鏡写しソフト凍結を自動発生させる）。各セグメントの実行記録（`{"seg": i, "fkv": ..., "ftv": ..., "fka": ..., "fta": ...}`）を`stage1_freezes`として蓄積し、`stage1_order`とともに`end_source_meta`へ出力。`ref_windows`の昇順消費前提を守るための排他assert（`layout.seg_generation_order == list(range(n_seg))`）を追加。
+- `api/models.py`・`worker.py`・`services/pipeline_manager.py`・`services/ltx_runner.py`・`mcp_server/`: バッチ2での新規APIフィールドは無し（モード切り替えと受理範囲の変更のみ）。`mcp_server/server.py`の`INSTRUCTIONS`と`submit_chain`のdocstringを「クリップ1件＝窓内モード／2件以上＝逆順Chained。出力の長さはどちらもクリップ合計」へ更新した。
+
+**フロントエンド**: クリップ1枚制限を撤去（`endSourceSingleClipOnly`理由コード・`canAddClip`の`!hasEndSource`条件を削除）。「素材（末尾）×2本以上」への遷移の瞬間に`overlapFrames`を1へ、逆方向の遷移（1本へ戻す・素材を外す）で従来既定へ復帰させる対称の遷移effectを新設。品質警告（クリップ長169f/145fが望ましいという警告）を`clips.length === 1`条件で複数クリップには出さないよう変更（この警告はクリップ1本の実験結果に基づくものであり、複数クリップの逆順Chainedには適用されないため）。`endSourceNeedsOverlap`（`overlap_frames >= 2`必須ゲート）を`clips.length === 1`条件で窓内モード限定へ縮小し、音声のりしろ予算（`sum_ka >= n_join`相当）の鏡と、最終クリップの潜在数検査の鏡をUI側に新設した（サーバー側の新設受理検査2本がGenerateボタンを押すまで見えないのを防ぐため）。詳細な実装記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §81、API契約は同[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2が正本。
+
+### 64.3 機械検証
+
+| 項目 | 結果 |
+|---|---|
+| backend `pytest` | 1,536件PASS。`tests/test_chain_math_end_source.py`（幾何の網羅テスト）は新モード前提へ**全面改訂**——旧方式の期待値は`end_source_mode_override="internal_segment"`で固定して削除せず残存させ、切り戻しの保険・死蔵コードの退行検知に使う |
+| 失敗 | 実バックエンド稼働中の既知1件のみ（`test_mcp_registration.py`、§61.4・§63.3と同じ環境依存。本テーマとは無関係） |
+| 既存チェーンテストの非退行 | `test_chain.py`・`test_v2v_chain.py`・`test_a2v_chain.py`・`test_chain_reference.py`・Retake・stage2_window関連スイートは**無改修で全PASS**——3表の導入が既存経路（素のチェーン・V2V・A2V・IC-LoRA・Retake・窓内モード）と同値であることの証明 |
+| frontend `npm run typecheck` / `npm run lint` | 全PASS |
+| frontend `npm test` | 2,480件PASS（既知7件のみ失敗。§3-89の`JOB_BUSY`起因で本テーマとは無関係） |
+
+### 64.4 実機ゲート結果（2026-08-18、MCP実プロトコル経由・同時1ジョブ）
+
+機械ゲートM1〜M7は次のとおり定義した——M1: `freeze_proof.pass == true`（`s2_video_tail`は無条件ゼロ、`strength < 1.0`のジョブは`s1_expected_zero == false`かつ`s1_video_tail != 0.0`まで確認）。M2: `end_source.mode`が期待どおり。M3: `generation_order`が期待どおり。M4: `end_segment_latent == 0`（旧方式に落ちていない証明）。M5: 配信mp4の実フレーム数＝クリップ合計。M6: `end_tile_bands`が幾何どおり。M7: `stage1_order`（エンジンの実測）が`generation_order`（幾何の宣言）と一致し、`stage1_freezes`が期待形であること（**エンジンが本当に逆順で走ったことを証明できるのはM7だけ**）。
+
+**全7ジョブでM1〜M7全項目合格・失敗0。**
+
+| # | ジョブID | 構成 | 所要時間 | 主な確認事項 |
+|---|---|---|---|---|
+| R2-1 | `5b63a2b4-c89c-47e5-8ae3-e6893d9696e5` | 2クリップ×169f・kv=1・`overlap_strength=0.5`・錨8f・`strength=1.0`・シード固定 | 291.5s | VRAM 15790MB・出力337f・`generation_order=[1,0]` |
+| R2-2a | `7e5caba7-9002-44a7-8b5a-97e5cf2566c2` | R2-1と`overlap_strength`だけ変更（0.5→1.0＝Stage-1ハード相当の統制比較） | 301.0s | 凍結強度の効きの強弱比較用 |
+| R2-3a | `4f7eba1d-5d31-4b52-a3eb-343ed743ca78` | R2-1とシードだけ変更（seed 314159） | — | 再現性確認 |
+| R2-3b | `fd75b06d-6d0d-458d-9b99-8025775e8a5c` | R2-1とシードだけ変更（seed 987654） | — | 再現性確認 |
+| R2-4 | `f688d4a5-dd59-4d1d-87c4-fd95b3ad48f0` | 3クリップ×169f・kv=1（§62.2にあたる幾何の具体例そのもの） | 367.8s | VRAM 14094MB・出力505f・`generation_order=[2,1,0]`。継ぎ目2箇所の累積・逆向き2段リレーの検証 |
+| R2-5 | `9e099ec8-35ad-4b71-b5b3-8d075228b0bc` | 3クリップ・クリップごとに異なるプロンプト | — | プロンプトが正しいクリップに当たり、タイムライン順に正しく記録されていることを確認 |
+| R2-8 | `d9094447-20c4-476f-a454-4d9f517f14a5` | `strength=0.5`×3クリップ（バッチ1×バッチ2の組み合わせ） | — | `s1_video_tail=0.853515625`（≠0＝ソフト凍結が実際に効いた証拠）・`s2_video_tail=0.0`・`pass:true` |
+
+**M7の実測**: 全ジョブで`stage1_order == generation_order`が一致。非末尾セグメント（2番目以降に生成される）は`fkv=0`・`ftv=1`（次に生成されるセグメントへ自分の頭を渡す）・`fka=0`・`fta=1`（kv=1相当）、末尾セグメント（タイムライン最終＝最初に生成される）は`fkv=0`・`ftv=1`（錨凍結）・`fta=0`——タイムライン末尾は音声側の逆向きキャリーの受け手ではなく錨（素材）だけを凍結するという期待どおりの形になっている。
+
+**M6の実測**: 2クリップ構成`end_tile_bands=[[0,-20],[0,-2],[1,1]]`・接合位置328。3クリップ構成`end_tile_bands=[[0,-41],[0,-23],[0,-5],[1,1]]`・接合位置496。いずれも幾何の計算どおり。
+
+基準線・比較用として、以下2本はバッチ1のデプロイ前（§63.4）に実施済みのものをそのまま使う: **B-0**（`e070d42c-b8d4-4437-b67a-fc0aa11ace06`、クリップ1本・169f・窓内モード・音声あり。End sourceの音声評価の基準線・オーナー試聴待ち）、**R2-0**（`96839ad5-dc3a-4300-a6b6-ef400f8b3898`、497f・旧方式`internal_segment`・kv=2。バッチ2とのA/B比較用の旧側で、デプロイ前の現行ビルドで生成した）。
+
+### 64.5 未実施の実機検証（条件未成立）
+
+- **R2-2b**（kv=1→2の統制比較。R2-1のV5＝音声の目視が不合格だったときのみ実行する診断専用条件で、既定値選定のための幅比較ではない）。
+- **R2-6**（4〜5クリップ・オーナーの実題材による実用判定。素材が未準備）。
+
+### 64.6 オーナー目視ゲート待ち
+
+本節は機械検証と実機ゲートM1〜M7の記録までであり、以下のオーナー目視が揃うまでバッチ2は完結していない。項目の一覧はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2に起票してある。
+
+- **V1〜V6**（最終フレーム・クリップ境界・タイムライン先頭クリップの冒頭・継ぎ目直前の静止帯・音声・全体の6観点。対象は本節の7ジョブ＋Hugging Faceのプライベートデータセット`Rootport/Nz-LTX23-eval-clips`の`round5-reverse`フォルダ）。
+- **R2-7**（旧方式R2-0と本節R2-4の新旧A/B目視——旧方式コード（`internal_segment`）削除判断の材料）。
+- **R2-9〜R2-11**（UI実機確認: 右クリック→「これで終わる動画」→クリップを2本に増やす→Generateの一連の流れ、素材を外したときのクリップ数の床が戻ること、バッチi2v-longタブのブロック文言が従来どおりであること）。
+
+なお、バッチ1側の残件（G1-R2/R3の見え方・G1-R4のUIスライダー確認・B-0の試聴）は§63.5のとおり別途起床後に実施する。

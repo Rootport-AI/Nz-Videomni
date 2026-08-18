@@ -880,8 +880,10 @@ class PipelineManager:
             end_source_path = None
             end_source_context_frames = None
             end_source_provenance = None
+            end_source_strength = None
             if chain.end_source is not None:
                 end_source_context_frames = int(chain.end_source.context_frames)
+                end_source_strength = float(chain.end_source.strength)
                 cut_frames = end_source_context_frames + 1
                 end_source_path = output_dir / "_end_source.mp4"
                 if chain.end_source.video_id is not None:
@@ -931,6 +933,7 @@ class PipelineManager:
                 retake_window_path=retake_window_path,
                 end_source_path=end_source_path,
                 end_source_context_frames=end_source_context_frames,
+                end_source_strength=end_source_strength,
                 lora_paths=lora_paths,
                 reference_video_path=reference_video_path,
                 seed=seed,

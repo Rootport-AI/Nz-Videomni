@@ -396,6 +396,7 @@ class LTXRunner:
         retake_window_path: Path | None = None,
         end_source_path: Path | None = None,
         end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -430,6 +431,11 @@ class LTXRunner:
         the API layer). None -> byte-identical to before, payload key set
         included.
 
+        ``end_source_strength`` (additive, 0.0..1.0): softens ONLY stage 1's
+        freeze of the band (stage 2 always hard-freezes regardless). None ->
+        treated as 1.0, a hard freeze byte-identical to before this field
+        existed.
+
         ``lora_paths`` (style/character IC-LoRA, additive): resolved
         ``ResolvedLora`` (``path``, ``strength``, ``preprocess``, ``audio_strength``)
         entries applied uniformly across the whole chain (every clip / stage).
@@ -456,6 +462,7 @@ class LTXRunner:
             retake_window_path=retake_window_path,
             end_source_path=end_source_path,
             end_source_context_frames=end_source_context_frames,
+            end_source_strength=end_source_strength,
             lora_paths=lora_paths,
             reference_video_path=reference_video_path,
             seed=seed,
@@ -747,6 +754,7 @@ class _MockBackend:
         retake_window_path: Path | None = None,
         end_source_path: Path | None = None,
         end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -826,15 +834,17 @@ class _MockBackend:
         #   (a retake's deliverable is its whole window);
         # * V2V — the frozen source head is trimmed off the FRONT, which is
         #   exactly trim_px;
-        # * end source, "in_window" mode (ONE clip) — the band is that clip's own
-        #   tail, so total_px IS the clip length and the mp4 is exactly as long as
-        #   the user asked for;
-        # * end source, "internal_segment" mode (2+ clips) — the band is a segment
-        #   APPENDED after the user's clips, so total_px is already clips + band
-        #   and the mp4 is correspondingly LONGER than the clips asked for.
+        # * end source, "in_window" mode (ONE clip) and "reverse" mode (2+ clips)
+        #   — the band is the LAST clip's own tail, so total_px IS the clips'
+        #   total and the mp4 is exactly as long as the user asked for;
+        # * end source, "internal_segment" mode (API-unreachable) — the band is a
+        #   segment APPENDED after the user's clips, so total_px is already clips
+        #   + band and the mp4 is correspondingly LONGER than the clips asked for.
         #
-        # Neither of those is branched on here: chain_math folds the mode into
-        # total_px, so the mock follows both automatically.
+        # None of those is branched on here: chain_math folds the mode into
+        # total_px, so the mock follows all of them automatically. That is also
+        # the mock's own regression check — if it ever needs an ``if mode ==``,
+        # the geometry has stopped being the single source of truth.
         #
         # ``layout.new_frames_px`` is that same subtraction, computed once in
         # chain_math so the validator, the mock and the engine cannot disagree.
@@ -950,6 +960,12 @@ class _MockBackend:
                 ),
                 "cut_path": str(end_source_path) if end_source_path else None,
                 "decoded_frames_px": int(layout.total_px),
+                # Contract passthrough only — the mock has no latents to soften,
+                # so it reports what was asked for rather than any observed
+                # effect (freeze_proof stays absent, same reasoning as above).
+                "strength": (
+                    1.0 if end_source_strength is None else float(end_source_strength)
+                ),
             })
             chain_metadata["end_source"] = es
 
@@ -1703,6 +1719,7 @@ class _RealBackend:
         retake_window_path: Path | None = None,
         end_source_path: Path | None = None,
         end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
@@ -1724,7 +1741,9 @@ class _RealBackend:
         already cut or synthesised the ``context_frames + 1``-frame material). The
         worker's ``done.chain`` then carries the ``end_source`` sub-dict —
         including the ``freeze_proof`` only real latents can produce — returned
-        as-is in ``chain_metadata``.
+        as-is in ``chain_metadata``. ``end_source_strength`` rides on that same
+        block ({path, context_frames, strength}); None -> 1.0, a hard stage-1
+        freeze byte-identical to before this field existed.
 
         Style/character IC-LoRA: when ``lora_paths`` is non-empty an additive
         ``loras`` block ([{path, strength[, audio_strength]}, ...]) is added to
@@ -1828,6 +1847,9 @@ class _RealBackend:
             payload["end_source"] = {
                 "path": str(end_source_path),
                 "context_frames": int(end_source_context_frames),
+                "strength": (
+                    1.0 if end_source_strength is None else float(end_source_strength)
+                ),
             }
         # Style/character AND control IC-LoRA (additive): (path, strength[,
         # audio_strength]) per adapter, applied uniformly across the chain. Only

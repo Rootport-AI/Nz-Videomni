@@ -2,16 +2,29 @@
 
 ---
 
-## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-17 **End sourceを窓内モードへ作り替えて実用化。UIにも復活**）（**本ブロックが日付として最新**）
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-18 **End source 第2段階（逆順Chained）を実装。クリップ2本以上へ拡張**）（**本ブロックが日付として最新**）
 
-> **本ブロックが「日付として最新」の座を継ぐ。** 以下の▶節（2026-08-16ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
+> **本ブロックが「日付として最新」の座を継ぐ。** 以下の▶節（2026-08-17ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
-> 1. **End source（素材（末尾））は実用化された。前日のUI非公開の裁定は取り消されている。** クリップ1本＋`end_source`のとき、素材をクリップ**自身の末尾**として凍結し、stage-1の1つのデノイズ窓の中に同居させる**窓内モード**（`in_window`）へ作り替えた。生成は最初から素材へ向かって進み、**出力の尺は伸びない**（＝クリップの`num_frames`そのもの）。クリップ2本以上は旧方式（内部区画）へ落ち、こちらは温存だが**非推奨**である。実装・機械検証・実機実験4ラウンド20ジョブの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61（v2の歴史記録は同§60）。
+> 1. **End sourceはクリップ2本以上へ拡張された（逆順Chained、`"reverse"`）。** クリップ本数だけで挙動が決まり、**クリップ1本＝窓内モード（`in_window`）／クリップ2本以上＝逆順Chained（`"reverse"`）**の2経路が推奨になった。逆順Chainedは Stage-1 のみをタイムライン末尾から先頭へ依存順に生成し、各セグメントは自分より未来側のセグメントの頭を自分の尾のりしろとして凍結する（正順チェーンの頭凍結を鏡写しにした形で、新規の凍結機構は無い）。**出力の尺はどちらのモードでもクリップ合計のまま**で、旧方式（`"internal_segment"`＝帯を後ろに継ぎ足して尺が伸びる方式）は通常のAPIリクエストからは到達不能になった（削除はしていない）。実装・機械検証・実機ゲートM1〜M7（全7ジョブ合格）の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64、設計正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11。
+> 2. **同日、錨の固定強度`end_source.strength`も追加した（バッチ1、逆順Chainedより先行実装）。** 0.0〜1.0・既定1.0で、既定値は従来とバイト単位で厳密同値。1.0未満にすると**Stage-1のマスク値だけ**が緩み、**Stage-2は常にハード凍結**するため最終フレームは常に素材どおりになる。実装・機械検証・実機ゲートG1-R1〜G1-R3の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §63。
+> 3. **MCPの`submit_chain`は4引数構成になった。** `end_source_video_id` / `end_source_image_id` / `end_source_context_frames` に加え、`end_source_strength`が増えた（ツール本数22は不変）。`INSTRUCTIONS`とdocstringは「クリップ何件でも使える・1件＝窓内モード／2件以上＝逆順Chained・出力の長さはどちらもクリップ合計」という記述へ更新済み。
+> 4. **受理範囲の後方非互換変更が2点ある**（新しいエラーコードは増やさず422 `VALIDATION_ERROR`）。①`source_video`（素材（冒頭））×`end_source`×2クリップ以上を拒否（真ん中クリップの頭・尾二重凍結という未検証の形を避けるため）。②最終クリップの潜在数が`kv + n_end_v`以下になる構成を拒否（逆向きに運ぶべき新規生成内容がゼロになるため。旧方式では通っていた構成が逆順Chainedでは422になる点に注意）。
+> 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2・§5.4、フロントエンド側の実装記録は同[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §80（strength）・§81（逆順Chained）が正本。**
+> 6. **実機作業の残件はオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2、該当項目は同§3-84）。
+
+---
+
+## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-17＝本ブロックは日付として最新ではない。2026-08-18ブロック参照）　**End sourceを窓内モードへ作り替えて実用化。UIにも復活**
+
+> 以下の▶節（2026-08-16ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
+>
+> 1. **End source（素材（末尾））は実用化された。前日のUI非公開の裁定は取り消されている。** クリップ1本＋`end_source`のとき、素材をクリップ**自身の末尾**として凍結し、stage-1の1つのデノイズ窓の中に同居させる**窓内モード**（`in_window`）へ作り替えた。生成は最初から素材へ向かって進み、**出力の尺は伸びない**（＝クリップの`num_frames`そのもの）。クリップ2本以上は旧方式（内部区画）へ落ち、こちらは温存だが**非推奨**である（**2026-08-18注**: 翌日にクリップ2本以上は逆順Chainedへ切り替わり、この非推奨判定は旧方式にのみ残る。2026-08-18ブロック参照）。実装・機械検証・実機実験4ラウンド20ジョブの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61（v2の歴史記録は同§60）。
 > 2. **オーナー裁定は「錨は8フレーム・クリップ長はstage-2タイル1枚以内」である。** 錨を長くすると窓の大部分を素材の再現に費やして創造性が落ちる。クリップがタイル1枚（標準169フレーム・高解像度145フレーム）を超えると境界でモーフ・ちらつきが出るが、**サーバーは判定せずフロントエンドが警告するだけ**で、ブロックはしない。
 > 3. **既知の限界**: 素材が本体のシーンと意味論的に遠いと、クロスフェード／カットで繋がる（モデルの限界であって機構の不具合ではない）。
-> 4. **バックエンドは改修している**（前日までの「無改修」ではない）——`chain_math.py`・`engine/pipeline/chain_pipeline.py`・`api/models.py`・`mcp_server/`。MCPの`submit_chain`には`end_source_video_id` / `end_source_image_id` / `end_source_context_frames`の3引数が増えた（ツール本数22は不変）。
+> 4. **バックエンドは改修している**（前日までの「無改修」ではない）——`chain_math.py`・`engine/pipeline/chain_pipeline.py`・`api/models.py`・`mcp_server/`。MCPの`submit_chain`には`end_source_video_id` / `end_source_image_id` / `end_source_context_frames`の3引数が増えた（ツール本数22は不変。**2026-08-18注**: 翌日に`end_source_strength`が加わり4引数になった）。
 > 5. **付随して既存問題を1件見つけた**: V2V併用時に`metadata.json`と`job_status`の`duration_seconds`がトリム前の値を返す（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61.10、起票はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-88）。
-> 6. **実機作業の残件はオーナーの目視ゲート8項目**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-5）。
+> 6. **実機作業の残件はオーナーの目視ゲート8項目**（フロントエンド`PENDING_TASKS.md` §2（当時の§2-5、現在は§2へ再設））。
 
 ---
 

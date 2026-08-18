@@ -720,7 +720,72 @@ def test_submit_chain_end_source_video_id_included_in_body():
     )
 
     body = captured["body"]
-    assert body["end_source"] == {"video_id": "v-1", "context_frames": 24}
+    assert body["end_source"] == {"video_id": "v-1", "context_frames": 24, "strength": 1.0}
+
+
+def test_submit_chain_end_source_strength_included_in_body():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 1},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=169)],
+            end_source_video_id="v-1",
+            end_source_context_frames=24,
+            end_source_strength=0.4,
+        )
+    )
+
+    body = captured["body"]
+    assert body["end_source"] == {"video_id": "v-1", "context_frames": 24, "strength": 0.4}
+
+
+def test_submit_chain_end_source_strength_included_for_image_id_too():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 1},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=169)],
+            end_source_image_id="i-1",
+            end_source_context_frames=8,
+            end_source_strength=0.0,
+        )
+    )
+
+    body = captured["body"]
+    assert body["end_source"] == {"image_id": "i-1", "context_frames": 8, "strength": 0.0}
+
+
+def test_submit_chain_input_schema_exposes_end_source_strength():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_chain")
+    prop = tool.inputSchema["properties"]["end_source_strength"]
+    assert prop["default"] == 1.0
 
 
 def test_submit_chain_loras_without_audio_strength_omits_key():

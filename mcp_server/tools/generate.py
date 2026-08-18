@@ -312,6 +312,7 @@ async def submit_chain(
     end_source_video_id: str | None = None,
     end_source_image_id: str | None = None,
     end_source_context_frames: int = 72,
+    end_source_strength: float = 1.0,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -351,22 +352,28 @@ async def submit_chain(
       * ``conditioning_images`` はどのモードでもクリップ0のみ有効です
         （クリップ1以降は前クリップの潜在表現を引き継ぐ後続セグメントのため）。
       * ``end_source_video_id`` / ``end_source_image_id``（素材（末尾））は
-        **クリップが1件のときに推奨**します（窓内モード）。指定した素材の
+        **クリップが何件でも使えます**。指定した素材の
         先頭 ``end_source_context_frames`` フレーム（8の倍数。**8を推奨**
         します——実機比較で最良で、錨が長いほど窓を素材の再現に費やし
         生成の創造性が下がります。**既定の72は契約上の既定値であって
-        推奨値ではありません**）がクリップ自身の末尾フレームとして
-        凍結され、生成は1つのデノイズ窓の中でその素材へ到達するように行わ
-        れます。出力の長さは変わりません（凍結フレームはクリップの内側に
-        収まります）。素材は ``end_source_context_frames + 1`` フレーム以上
+        推奨値ではありません**）が最後のクリップの末尾フレームとして
+        凍結されます。素材は ``end_source_context_frames + 1`` フレーム以上
         必要です（因果VAEのプライマ1枚分）。
-        クリップが**2件以上のチェーンでの ``end_source`` は非推奨**です
-        （旧方式: 帯を独立区画として後ろに継ぎ足すため、生成結果が素材へ
-        クロスフェード接続になる既知の問題があります）。指定自体は受理され
-        ますが、実験用途以外には使わないでください。
+        クリップが1件のときは窓内モードで、生成は1つのデノイズ窓の中で
+        その素材へ到達するように行われます。2件以上のときは逆順Chained
+        で、最後のクリップから順に生成し、各クリップは1つ後ろのクリップの
+        冒頭を自分の末尾として引き継ぎます（継ぎ目の強さは
+        ``overlap_strength`` が正順と同じように効きます）。
+        **出力の長さはどちらの場合もクリップの合計**であって、素材の分だけ
+        伸びることはありません。
         ``retake`` / ``source_audio_id`` / ``reference_video_id`` とは排他
-        です。``source_video_id`` とは併用できます（頭と尾の両方を固定して
-        補間する構図になります）。
+        です。``source_video_id`` との併用は**クリップ1件のときだけ**受理
+        されます（頭と尾の両方を固定して補間する構図）。2件以上との併用は
+        422で拒否されます。
+      * ``end_source_strength``（既定1.0）は1.0で素材どおりに終わります
+        （既定）。下げるとStage-1での素材へのなじみ方が緩くなりますが、
+        Stage-2で改めて固定されるため最終フレームは常に素材どおりになり
+        ます。
 
     その他:
       * ``loras`` はチェーン全体・全ステージに一律で効きます（クリップごとの
@@ -435,6 +442,10 @@ async def submit_chain(
             倍数）。**8を推奨**（実機比較で最良。錨が長いほど素材の再現に
             窓を費やし、創造性が下がる）。**既定の72は契約上の既定値で
             あって推奨値ではない**。
+        end_source_strength: 素材（末尾）の固定強度（0〜1、既定1.0）。
+            1.0＝素材どおりに終わる（既定）。下げるとStage-1での素材への
+            なじみ方が緩くなりますが、Stage-2で改めて固定されるため最終
+            フレームは常に素材どおりになります。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -507,11 +518,13 @@ async def submit_chain(
         payload["end_source"] = {
             "video_id": end_source_video_id,
             "context_frames": end_source_context_frames,
+            "strength": end_source_strength,
         }
     elif end_source_image_id:
         payload["end_source"] = {
             "image_id": end_source_image_id,
             "context_frames": end_source_context_frames,
+            "strength": end_source_strength,
         }
 
     if loras:

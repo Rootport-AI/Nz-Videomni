@@ -213,11 +213,11 @@ limits:
   v2v_context_frames_min: 25
   v2v_context_frames_max: 145
   # 素材（末尾）（POST /generate/chain の end_source.context_frames）。/config で公開。
-  # クリップ 1 本なら窓内モード（in_window）＝帯はクリップの内側にあり出力の尺は変わらない。
-  # 2 本以上は内部区画方式（非推奨）＝帯をクリップ列の後ろに継ぎ足すので尺が伸びる。
-  # 以下の 136 の説明は後者の幾何の話である。既定の 72 は契約上の既定値であって推奨値では
+  # 2 本以上は逆順Chained（reverse）＝帯は最終クリップ自身の末尾にあり、出力の尺は変わらない。
+  # 旧方式（internal_segment）はAPIから到達不能。クリップ 1 本なら窓内モード（in_window）＝
+  # 帯はクリップの内側にあり出力の尺は変わらない。既定の 72 は契約上の既定値であって推奨値では
   # ない——実機比較の結論は錨 8 フレームで、フロントエンドは常に 8 を明示送信する。
-  # 正本は Docs/VERIFICATION_LOG.md §61 と api.models.EndSourceSpec。
+  # 正本は Docs/VERIFICATION_LOG.md §61・§63・§64 と api.models.EndSourceSpec。
   # 8 の倍数（8n+1 ではない。末尾帯は因果 VAE のキーフレーム潜在に触れず、末尾から
   # 8 個組で数えるため。chain_math.v_tail_latents 参照）。
   # 136 は自動決定される帯長の上限であって、幾何の上限ではない。136 = 17 潜在フレーム

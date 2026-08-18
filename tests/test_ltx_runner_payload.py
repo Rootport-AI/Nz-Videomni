@@ -724,6 +724,7 @@ def test_chain_payload_carries_end_source_when_prepared(tmp_path):
     assert captured[0]["end_source"] == {
         "path": str(tmp_path / "_end_source.mp4"),
         "context_frames": 24,
+        "strength": 1.0,
     }
 
 

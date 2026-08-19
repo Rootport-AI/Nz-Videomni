@@ -45,7 +45,14 @@
     Which build output to deploy: Release (default) or Debug.
 
 .PARAMETER PluginDir
-    Root plugin directory. Defaults to D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin.
+    Root plugin directory on the local AviUtl2 installation. An empty string
+    (the default during the 2026-08 Nz-Videomni migration) skips the local
+    AviUtl2 deploy entirely -- both the .aux2 copy and the Language file copy --
+    following the same convention as the empty-string skip of $DistDir. The
+    migration removes the old NzLTX23 plugin from the local AviUtl2 by hand and
+    installs the renamed NzVideomni.aux2 by drag-and-drop, so deploying over the
+    old layout automatically would be wrong. Once the new local plugin path is
+    settled, set it here to restore the normal two-target deploy.
 
 .PARAMETER DistDir
     Distribution copy inside the backend repo (2026-07-31, owner decision):
@@ -58,7 +65,7 @@
 param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
-    [string]$PluginDir = "D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin",
+    [string]$PluginDir = "",
     [string]$DistDir = "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin"
 )
 
@@ -74,12 +81,17 @@ if (-not (Test-Path $aux2)) {
 }
 
 # Abort if AviUtl2 is running (the plugin file would be locked / not reloaded).
-$running = Get-Process -Name "aviutl2" -ErrorAction SilentlyContinue
-if ($running) {
-    Write-Error ("AviUtl2 is currently running (PID $($running.Id -join ', ')). " +
-        "Close it before deploying, otherwise the .aux2 is locked and the new build " +
-        "will not be loaded.")
-    exit 1
+# Only relevant when the local AviUtl2 deploy actually runs: with $PluginDir
+# empty nothing inside the AviUtl2 installation is touched, and the running
+# host holds no lock on the distribution copy under $DistDir.
+if ($PluginDir) {
+    $running = Get-Process -Name "aviutl2" -ErrorAction SilentlyContinue
+    if ($running) {
+        Write-Error ("AviUtl2 is currently running (PID $($running.Id -join ', ')). " +
+            "Close it before deploying, otherwise the .aux2 is locked and the new build " +
+            "will not be loaded.")
+        exit 1
+    }
 }
 
 # --- embedded-only guard: refuse non-embedded builds, before touching the ----
@@ -125,34 +137,38 @@ if (-not $embedded) {
     exit 1
 }
 
-# --- clean up the old single-file layout (avoid a double load) --------------
-$legacy = Join-Path $PluginDir "NzVideomni.aux2"
-if (Test-Path $legacy) {
-    Write-Host "Removing stale legacy plugin: $legacy"
-    Remove-Item -Path $legacy -Force
-}
+if ($PluginDir) {
+    # --- clean up the old single-file layout (avoid a double load) --------------
+    $legacy = Join-Path $PluginDir "NzVideomni.aux2"
+    if (Test-Path $legacy) {
+        Write-Host "Removing stale legacy plugin: $legacy"
+        Remove-Item -Path $legacy -Force
+    }
 
-# --- deploy into the NzVideomni subfolder --------------------------------------
-$destDir = Join-Path $PluginDir "NzVideomni"
-$webuiDir = Join-Path $destDir "webui"
-if (-not (Test-Path $destDir)) {
-    Write-Host "Creating plugin directory: $destDir"
-    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-}
+    # --- deploy into the NzVideomni subfolder --------------------------------------
+    $destDir = Join-Path $PluginDir "NzVideomni"
+    $webuiDir = Join-Path $destDir "webui"
+    if (-not (Test-Path $destDir)) {
+        Write-Host "Creating plugin directory: $destDir"
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    }
 
-$destAux2 = Join-Path $destDir "NzVideomni.aux2"
-Copy-Item -Path $aux2 -Destination $destAux2 -Force
-Write-Host "Deployed plugin:"
-Write-Host "  from $aux2"
-Write-Host "  to   $destAux2"
+    $destAux2 = Join-Path $destDir "NzVideomni.aux2"
+    Copy-Item -Path $aux2 -Destination $destAux2 -Force
+    Write-Host "Deployed plugin:"
+    Write-Host "  from $aux2"
+    Write-Host "  to   $destAux2"
 
-# --- clean up a stale non-embedded-era Web UI folder, if any ----------------
-# The .aux2 deployed above is guaranteed embedded (checked earlier), so it
-# does not read from an on-disk webui\ folder. Remove any leftover from an
-# earlier non-embedded deploy so it doesn't linger as dead weight.
-if (Test-Path $webuiDir) {
-    Remove-Item -Path $webuiDir -Recurse -Force
-    Write-Host "Removed stale on-disk Web UI folder: $webuiDir"
+    # --- clean up a stale non-embedded-era Web UI folder, if any ----------------
+    # The .aux2 deployed above is guaranteed embedded (checked earlier), so it
+    # does not read from an on-disk webui\ folder. Remove any leftover from an
+    # earlier non-embedded deploy so it doesn't linger as dead weight.
+    if (Test-Path $webuiDir) {
+        Remove-Item -Path $webuiDir -Recurse -Force
+        Write-Host "Removed stale on-disk Web UI folder: $webuiDir"
+    }
+} else {
+    Write-Host "PluginDir is empty; skipping the local AviUtl2 plugin deploy."
 }
 
 # --- distribution copy into the backend repo (git-clone-and-drag-drop) ------
@@ -182,19 +198,23 @@ if ($DistDir) {
 }
 
 # --- deploy the native Language files (Language\ is a sibling of Plugin\) ---
-$languageSrc = Join-Path $RepoRoot "Language"
-$languageDir = Join-Path (Split-Path -Parent $PluginDir) "Language"
-if (Test-Path $languageSrc) {
-    if (-not (Test-Path $languageDir)) {
-        Write-Host "Creating language directory: $languageDir"
-        New-Item -ItemType Directory -Force -Path $languageDir | Out-Null
+if ($PluginDir) {
+    $languageSrc = Join-Path $RepoRoot "Language"
+    $languageDir = Join-Path (Split-Path -Parent $PluginDir) "Language"
+    if (Test-Path $languageSrc) {
+        if (-not (Test-Path $languageDir)) {
+            Write-Host "Creating language directory: $languageDir"
+            New-Item -ItemType Directory -Force -Path $languageDir | Out-Null
+        }
+        Get-ChildItem -Path $languageSrc -Filter "*.NzVideomni.aul2" | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination (Join-Path $languageDir $_.Name) -Force
+        }
+        Write-Host "Deployed language files:"
+        Write-Host "  from $languageSrc"
+        Write-Host "  to   $languageDir"
+    } else {
+        Write-Warning "Language folder not found ($languageSrc); skipping language file deploy."
     }
-    Get-ChildItem -Path $languageSrc -Filter "*.NzVideomni.aul2" | ForEach-Object {
-        Copy-Item -Path $_.FullName -Destination (Join-Path $languageDir $_.Name) -Force
-    }
-    Write-Host "Deployed language files:"
-    Write-Host "  from $languageSrc"
-    Write-Host "  to   $languageDir"
 } else {
-    Write-Warning "Language folder not found ($languageSrc); skipping language file deploy."
+    Write-Host "PluginDir is empty; skipping the local AviUtl2 Language file deploy."
 }

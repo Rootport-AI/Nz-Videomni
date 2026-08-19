@@ -338,7 +338,7 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 Nz-Videomni/
 ├─ setup.bat / run.bat     エンドユーザー向け入口（純 ASCII・CRLF・末尾 pause）
 ├─ run.ps1                 起動本体（**直下固定**・$PSScriptRoot 依存）
-├─ AviUtl2-Plugin/         NzLTX23.aux2（フロントエンド配布物・**git 追跡**）
+├─ AviUtl2-Plugin/         NzVideomni.aux2（フロントエンド配布物・**git 追跡**）
 ├─ main.py                 アプリ起動（./.venv, FastAPI）
 ├─ gradio_ui/              検証用 /ui（ui.py / handlers.py / presets.py / i18n.py ほか）
 ├─ mcp_server/             MCPサーバー（§12b・./.venv で動くクライアント層）

@@ -206,7 +206,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 
 コミットは **`git add -A` による一括コミット**で行われ、懸念されていた壊れた中間コミットは回避された。
 バックエンド側のコミットには `config.yaml => config.yaml.example` のリネーム・`.gitignore` への追加・
-`setup.bat` / `run.bat` / `scripts/setup.ps1` の新設・`NzLTX23-1.0.0-rc1.au2pkg.zip` の同梱が
+`setup.bat` / `run.bat` / `scripts/setup.ps1` の新設・`NzVideomni-1.0.0-rc1.au2pkg.zip` の同梱が
 **すべて同一コミットに入っている**。
 
 > **（歴史記録）2026-07-26 時点では全変更が未コミットで、しかも `git index` には `config.yaml` と
@@ -245,7 +245,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 4. `smoke_test` サイズの動画生成。
 5. **IC-LoRA DWPose（pose-control）768p・257 フレーム** — コンソールに `loras=pose-control(strength=1)` と表示され、エラーなく**制御された動画の生成に成功**。
 6. **IC-LoRA canny 768p・257 フレーム** — 同様に成功。
-7. `NzLTX23.aux2` を AviUtl2 のプレビュー画面から D&D でインストール。
+7. `NzVideomni.aux2` を AviUtl2 のプレビュー画面から D&D でインストール。
 8. 再起動後、Nz-Videomni の操作パネル表示を確認。
 9. タイムラインからの動画生成と、生成済み動画を右クリックからタイムラインへ配置。
 

@@ -1,7 +1,8 @@
 # 未着手タスク台帳
 
 - 作成: 2026-07-15／最終更新: 2026-08-19
-- 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳**。フロントエンド（`Nz-Videomni-frontend-AviUtl2`）を軸に据えつつ、バックエンド（`Nz-Videomni`）側の将来項目もここへ一本化している。優先度の高い順に次の4つへ分けている（運用ルールは末尾「本台帳の位置づけ」節）。
+- 置き場所: 本台帳はモノレポ統合に伴い、リポジトリ直下の `Docs/` へ移動した。
+- 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳**。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分けている（運用ルールは末尾「本台帳の位置づけ」節）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
   2. **実装済み・ユーザーのテスト待ち** — 実装は完了しているが、オーナー本人による実機・目視・実GPUでのテストがまだ済んでいないもの。現在は該当項目が無いため節を削除してある（項目が発生した時点で立て直す）。
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
@@ -46,7 +47,7 @@
 - **EditタブのRetake／Outpaintingの使い方**も1節設ける（対象機能は`Docs/PENDING_TASKS_CLOSED.md` §3-73・同§3-70）。
 
 - **状態**: 未着手（オーナーが手書きするための備忘録。README執筆時に読み返し、書き終えた時点でクローズする）。**これがα版公開前に残っている唯一の作業である**（旧§1-2「リリース対応」の実装・実機検証はすべてクローズ済み）。
-- **出典**: 2026-07-26のオーナーディスカッション、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（旧§1-2のクローズ記録）、[`Nz-Videomni/README.md`](../../../README.md) §1（要求スペック）。
+- **出典**: 2026-07-26のオーナーディスカッション、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（旧§1-2のクローズ記録）、[`Nz-Videomni/README.md`](../README.md) §1（要求スペック）。
 
 ---
 
@@ -62,21 +63,21 @@
 
 - **概要**: 仮オブジェクトを右クリックし、その仮オブジェクトに紐づく進行中の生成ジョブを中止できるようにする。α版では土台（jobIDと仮オブジェクトの対応づけ）だけを用意し、機能自体は入れていない。
 - **なぜ後回しか**: ジョブの中止はサーバー側の改修が必要で、フロントエンドだけでは完結しないため（現行のバックエンドは「1ジョブ＋実行中は409」の単純な設計で、実行中ジョブを外から止める口を持たない）。
-- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md)「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
+- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
 - **状態**: 将来の改修項目（着手時期未定。バックエンドの改修を伴う）。
 
 #### 3-28. 失敗した仮オブジェクトの自動片付け
 
 - **概要**: 生成が失敗した仮オブジェクトを自動で削除するモード。α版は「残す」方針で、テキストを`❌失敗：理由`（例:`いま別の生成中です`／`音声が短すぎます`）へ書き換えるところまでで止めている。
 - **なぜ後回しか**: 失敗の理由をユーザーに見せ続けるほうがα版では親切であり、自動削除は「気づかないうちに消える」副作用を伴うため。将来は任意機能（設定で選ぶ形）として足す想定。
-- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md)（失敗時の扱い・優先順位の階層）、[`TIMELINE_FEATURE_CANDIDATES.md`](TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
+- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)（失敗時の扱い・優先順位の階層）、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
 - **状態**: 将来の改修項目（着手時期未定）。
 
 #### 3-29. 孤児（セッションまたぎ）仮オブジェクトの自動掃除
 
 - **概要**: プロジェクトを閉じて開き直したあとに宙に浮いて残った仮オブジェクトを、自動で掃除するモード。α版はプロジェクト読み込み時に検出して「再生成しますか？」と提案するところまでで、削除はユーザー操作に委ねている。
 - **なぜ後回しか**: 検出そのものは実装済みで、自動削除だけがスコープ外という位置づけのため。§3-28と同じく「勝手に消える」副作用を避ける判断による。
-- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md)「孤児（セッションまたぎ）」「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
+- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)「孤児（セッションまたぎ）」「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
 - **状態**: 将来の改修項目（着手時期未定）。
 
 #### 3-47. バッチA2Vランナーの孤児化とrunLock滞留（Create画面リマウント時）（起票：2026-07-30）
@@ -84,7 +85,7 @@
 - **トリガー**: 実運用でロックが解けない事象が起きたとき／バッチA2Vに手を入れる改修を再開するとき。
 - **概要**: バッチA2Vのランナーはフック内の`useRef`が保持しているため、走行中にCreate画面が`remountTokens`で`key`リマウントされると孤児化する。孤児化自体は従来からの既存問題だが、2026-07-30に新設した共有ロック（`webui/src/shell/runLock.ts`。バッチA2Vとバッチi2v-longの相互排除）によって「**ロックがアプリ再読み込みまで解放されない**」という滞留が上乗せされた。滞留中はChain画面のバッチi2v-longのStartが`lockedByOther`でブロックされ続ける（理由は画面に表示されるため無言の故障にはならない）。
 - **解消方法**: バッチi2v-longと同じく、ランナーをモジュールレベルのシングルトン（`modes/batch-i2v-long/runtime.ts`と同型）へ移す。i2v-long側は最初からこの方式で回避してある。
-- **出典**: [`BATCH_I2V_WORKORDER.md`](BATCH_I2V_WORKORDER.md) §6.5、[`DEVLOG.md`](DEVLOG.md) §54、`webui/src/modes/batch/useBatchForm.ts`・`webui/src/shell/runLock.ts`。
+- **出典**: [`BATCH_I2V_WORKORDER.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_I2V_WORKORDER.md) §6.5、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §54、`webui/src/modes/batch/useBatchForm.ts`・`webui/src/shell/runLock.ts`。
 - **状態**: 将来の改修項目（トリガー待ち）。
 
 #### 3-48. ジョブ一覧（JobLedger）の多数件描画（50件級バッチ完走後）（起票：2026-07-31）
@@ -92,7 +93,7 @@
 - **トリガー**: 実運用で50枚級のバッチ（バッチi2v-long／バッチA2V）を回したとき、画面右のジョブ一覧がもたつく・レイアウトが崩れると感じたら対応する。
 - **内容**: ジョブ一覧はCreate/Chain両画面に常駐し、バックエンドの`GET /jobs`（保持上限なし）を2秒ごとに読んで全件を描画する。50件超のジョブが溜まったときの描画・スクロール性能は未計測。バッチのScan表側の50件超スクロールは2026-07-31にオーナー実機で問題なしを確認済みで、残るのはジョブ一覧側のみ。専用の検証時間を取る価値がない軽微事項として、実運用トリガー待ちでクローズした（2026-07-31オーナー決定）。
 - **解消方法の候補**: 一覧の表示上限＋「もっと見る」、仮想化、完了ジョブの折りたたみ等（発生時に規模を見て選ぶ）。
-- **出典**: [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.13、[`DEVLOG.md`](DEVLOG.md) §54。
+- **出典**: [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.13、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §54。
 - **状態**: 将来の改修項目（トリガー待ち）。
 
 #### 3-50.（欠番）PruneVAED（枝刈り版VAEデコーダ）の実装 → 本書§1-12を経て[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-66へクローズ移設（2026-08-05に§1-12へ移動、2026-08-08にクローズ）
@@ -102,95 +103,95 @@
 #### 3-51. メインメモリ不足時の速度低下を賢く避ける機構（起票：2026-08-02）
 
 - **概要**: CPU骨格キャッシュ（§1-9。2026-08-06に[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-64へクローズ移設したため、本書§1-9は欠番）を有効にした状態で物理メモリが不足すると、block swapのCPU側マスター（約11.4GB。denoiseの毎ステップ全ブロックを読む熱い経路）がページファイルへ追い出され、denoiseがSSD読み戻しに律速されて遅くなることがある。これを賢く避ける機構（例: マスターのピン留め＝page-locked化で追い出し対象から外し、denoise中は暇なキャッシュ側に追い出しを引き受けさせる。ほかにキャッシュ対象の絞り込み等）の検討。
-- **経緯**: 2026-08-02のスパイク再実験で、1088p/153fのstage2 denoiseが1ステップ43.6→60秒（+37%）に減速し全体+16秒の悪化を観測した（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §47.4）。ただしこの計測は**オーナーが裏で重量級の並行作業（ブラウザ配信視聴・動画編集・別の画像生成アプリ等）を行っていた状態**でのもので、機序（ページアウト）の推定も含めて条件が汚れている。むしろ「その状態でも768p/257fは全体−45秒で速度低下ゼロ」というポジティブな読みが正しい、というのがオーナーの判断（2026-08-02）。
-- **着手条件**: §1-9（上記のとおり[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-64）の実装後、**通常運用（生成中は他の重量級作業を控える）でもdenoise減速が頻発する**と分かったとき。**前段の「§1-9の実装後」は2026-08-03に成立した**（`keep_resident`がper-jobフィールドとして製品化され、RAM監視・自動降格は本項へ先送りすることがオーナー判断で確定した。バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §48）。残る条件は後段の「通常運用でも減速が頻発するか」だけで、これは実運用の観察待ちである。着手時はまずハードページフォルト（`\Memory\Pages Input/sec`等）のstage2実行中の直接計測で機序を確定させてから対策の設計に進む。
+- **経緯**: 2026-08-02のスパイク再実験で、1088p/153fのstage2 denoiseが1ステップ43.6→60秒（+37%）に減速し全体+16秒の悪化を観測した（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §47.4）。ただしこの計測は**オーナーが裏で重量級の並行作業（ブラウザ配信視聴・動画編集・別の画像生成アプリ等）を行っていた状態**でのもので、機序（ページアウト）の推定も含めて条件が汚れている。むしろ「その状態でも768p/257fは全体−45秒で速度低下ゼロ」というポジティブな読みが正しい、というのがオーナーの判断（2026-08-02）。
+- **着手条件**: §1-9（上記のとおり[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-64）の実装後、**通常運用（生成中は他の重量級作業を控える）でもdenoise減速が頻発する**と分かったとき。**前段の「§1-9の実装後」は2026-08-03に成立した**（`keep_resident`がper-jobフィールドとして製品化され、RAM監視・自動降格は本項へ先送りすることがオーナー判断で確定した。バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。残る条件は後段の「通常運用でも減速が頻発するか」だけで、これは実運用の観察待ちである。着手時はまずハードページフォルト（`\Memory\Pages Input/sec`等）のstage2実行中の直接計測で機序を確定させてから対策の設計に進む。
 - **状態**: 将来の研究課題（着手時期未定・着手条件つき）。
 
 #### 3-53. 生成時間の小粒最適化の積み上げ（起票：2026-08-03、§4から昇格：2026-08-04）
 
-- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。**分解計測は完了している**（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声の内訳。バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §50）。
+- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。**分解計測は完了している**（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声の内訳。バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50）。
 - **現ベースライン（2026-08-05更新）**: **119秒**（§1-11＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-65の1カーネル化が既定onになった後の実測。分解計測当時の146秒からの更新値）。
-  - **映像VAEデコードは決着した**。分解計測当時「次の候補」に挙げていた**33.1秒**は、§1-12（PrunaVAED。2026-08-08に[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-66へクローズ移設したため、本書§1-12は欠番）の実装で**32.5秒→20.2秒＝1.61倍**まで縮み、ジョブ合計では平均12.54秒（10.5%）の短縮になった（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §52.8）。**ただし既定OFFの選択制**なので、既定のジョブの分母は縮んでいない点に注意。
+  - **映像VAEデコードは決着した**。分解計測当時「次の候補」に挙げていた**33.1秒**は、§1-12（PrunaVAED。2026-08-08に[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-66へクローズ移設したため、本書§1-12は欠番）の実装で**32.5秒→20.2秒＝1.61倍**まで縮み、ジョブ合計では平均12.54秒（10.5%）の短縮になった（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.8）。**ただし既定OFFの選択制**なので、既定のジョブの分母は縮んでいない点に注意。
   - **残る最大の候補は動画エンコード（x264）36.8秒**である。§1-12（CLOSED §3-66）のG6で「デコードが速くなってもエンコード側が律速になれば頭打ちになる」という懸念を実測で確かめたところ、この条件では顕在化しなかった（合計短縮の98.1%がデコード区間で説明できた）——**つまりエンコード側にはまだ手つかずの余地が残っている**という読みになる。
-- **候補一覧の正本**: バックエンド[`ACCELERATION_RESEARCH_NOTES.md`](../../../Docs/ACCELERATION_RESEARCH_NOTES.md)。
+- **候補一覧の正本**: バックエンド[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)。
 - **状態**: 将来の改修項目（着手はオーナー判断待ち。2026-08-04にオーナー承認で§4から昇格）。
 
 ### 研究課題（上の改修項目より優先度が下）
 
 #### 3-1. バッチA2Vのα版で意図的に省略した機能
 
-バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能）の実装時、α版としてスコープ外に見送った機能で、現在も残っているのは次の4点。出典: [`DEVLOG.md`](DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
+バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能）の実装時、α版としてスコープ外に見送った機能で、現在も残っているのは次の4点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
 
 - **バッチでの参照動画**: IC-LoRA用の参照動画系フィールド（Gradio原典`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`）に相当する設定がバッチ経路に無い（`webui/src/modes/batch/batchRunner.ts`の実装ノートに「No reference-video (control IC-LoRA) adapter support」と明記）。
 - **開始前の一括妥当性検証（preflight）**: Gradio原典の`_validate`相当にあたる、画像/プロンプトのfoolproof preflightは未実装。
 - **行ごとの`<lora:>`タグ非対応**: 各行のプロンプト欄に書いた`<lora:名:強度>`は、タグとして解釈されず**ただの文字列**として送られる。LoRAは共通プロンプト側からしか効かない仕様（`composeRowPrompt`と`setRowPromptLocal`のいずれも`parseLoraPrompt`を通していない）。着手条件は**ユーザーからの要望があったとき**。
 - **行ごとのAdd／Replace切替**: 共通プロンプトと行プロンプトの合成方式（Add＝連結／Replace＝行で置き換え）は、現状バッチ全体で1つの設定（`promptMode`）であり、行ごとには切り替えられない。
 
-なお本節の項目は、2026-07-15のオーナー方針（Gradio同梱UIとのパリティは最終的に全項目を実装対象とする）のもとでは、いずれ実装側へ戻る前提の記録である（[`WEBVIEW2_PARITY_BACKLOG.md`](WEBVIEW2_PARITY_BACKLOG.md)）。
+なお本節の項目は、2026-07-15のオーナー方針（Gradio同梱UIとのパリティは最終的に全項目を実装対象とする）のもとでは、いずれ実装側へ戻る前提の記録である（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。
 
 #### 3-4. A2Vのリップシンク品質の改善（コミュニティ先行報告の取り込み）
 
 - **概要**: A2V（音声から動画を生成する機能）のリップシンク（口の動きと音声の一致）品質について、コミュニティの先行報告を統合したレポートがバックエンド側にある。画角を寄せる・音声を前処理する・モーション制御ガイドをoffに切り替える、といったプロンプトやUX面の改善余地が挙がっているが、フロントエンド側でどう反映するかの方針はまだ未確定。
-- **出典**: [`Nz-Videomni/Docs/A2V_LIPSYNC_COMMUNITY_RESEARCH.md`](../../../Docs/A2V_LIPSYNC_COMMUNITY_RESEARCH.md)。
+- **出典**: [`Nz-Videomni/Docs/A2V_LIPSYNC_COMMUNITY_RESEARCH.md`](A2V_LIPSYNC_COMMUNITY_RESEARCH.md)。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-5. `webui/package.json`のversionが`0.0.0`のまま（優先度降格：2026-07-17）
 
 - **概要**: `webui/package.json`の`version`フィールドが初期値`0.0.0`のまま放置されている。プロダクト版数（現行1.0.0-rc1）と連動していない。
-- **なぜ**: 実害は小さいが、バージョン文字列の一次ソースが`native/src/bridge_core.h`の`kPluginVersion`と`scripts/package.ps1 -Version`の2箇所に集約されている（[`DEVLOG.md`](DEVLOG.md) §10.3）一方で、`webui/package.json`だけがこの管理から外れている状態。
+- **なぜ**: 実害は小さいが、バージョン文字列の一次ソースが`native/src/bridge_core.h`の`kPluginVersion`と`scripts/package.ps1 -Version`の2箇所に集約されている（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §10.3）一方で、`webui/package.json`だけがこの管理から外れている状態。
 - **対応予定**: オーナーがα版リリースを決断した時点で、リリース準備の一環として修正する。
 - **優先度降格**: 2026-07-17、セクション1から将来の研究課題へ移動。
 
 #### 3-8. 仮オブジェクトの完了時自動置換（`resolveProvisional`配線）のβ版送り（2026-07-19オーナー決定）
 
 - **概要**: 生成の投入時にタイムラインへ置いた仮オブジェクトを、ジョブ完了時に生成結果の動画へ自動で差し替える機能。α版は手動挿入（操作パネルの🎞ボタン、および右クリックの「⬇ この生成結果を今すぐ挿入」）に留め、自動置換はβ版以降へ送っている。
-- **現行機構（起票時からの変化）**: 起票時に配線対象としていた`webui/src/timeline/provisionalFlow.ts`（`runProvisionalFlow`）は、配線されないままの試作モジュールとして**撤去済み**（[`DEVLOG.md`](DEVLOG.md) 35.2）。現在の仮オブジェクトは`webui/src/timeline/provisionalReservation.ts`とブリッジRPC`updateProvisionalReservation`（予約席の更新）で成り立っているため、着手する場合は**この現行機構の上に自動置換を載せる**（旧`provisionalFlow.ts`を復活させる話ではない）。
+- **現行機構（起票時からの変化）**: 起票時に配線対象としていた`webui/src/timeline/provisionalFlow.ts`（`runProvisionalFlow`）は、配線されないままの試作モジュールとして**撤去済み**（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) 35.2）。現在の仮オブジェクトは`webui/src/timeline/provisionalReservation.ts`とブリッジRPC`updateProvisionalReservation`（予約席の更新）で成り立っているため、着手する場合は**この現行機構の上に自動置換を載せる**（旧`provisionalFlow.ts`を復活させる話ではない）。
 - **経緯**: 2026-07-19、タイムライン右クリックのUI/UX再設計ディスカッション（論点A）でオーナーが決定した。自動置換は再設計方針（「仮オブジェクトは編集時のヒントに徹する」）との整合も含めてβ版以降にあらためて検討する。
 - **付随して先送りされる実機検証項目**（いずれも`native/src`に`REALDEVICE-VERIFY`注記として現存し、未検証のまま残っている）:
-  - `register_project_load_handler`の発火確認（手動での「ファイル→開く」で発火するか）。**この項目の管理は本節へ一元化する**（従来は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第8節#9と二重管理になっていた）。前提の更新（2026-07-27）: 起票当時は「beta52ではエントリが未提供なので検証できない」と書いていたが、**実機はその後v2.0.54ポータブルへ移行し、さらに2026-07-25公開版でも全機能の動作が確認されている**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-20・§3-38）。したがって「検証できない」は現在は当てはまらず、実機で確かめられる。`native/src/plugin.cpp`は登録前に関数ポインタのnull検査を行い、未提供なら警告を出して孤児スキャンをユーザー操作起点へ縮退させる作りで、この警告文言だけが`(beta52)`のまま古い（着手時に文言も直すこと）。なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計のため、未検証でも実害は小さい。
+  - `register_project_load_handler`の発火確認（手動での「ファイル→開く」で発火するか）。**この項目の管理は本節へ一元化する**（従来は[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節#9と二重管理になっていた）。前提の更新（2026-07-27）: 起票当時は「beta52ではエントリが未提供なので検証できない」と書いていたが、**実機はその後v2.0.54ポータブルへ移行し、さらに2026-07-25公開版でも全機能の動作が確認されている**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-20・§3-38）。したがって「検証できない」は現在は当てはまらず、実機で確かめられる。`native/src/plugin.cpp`は登録前に関数ポインタのnull検査を行い、未提供なら警告を出して孤児スキャンをユーザー操作起点へ縮退させる作りで、この警告文言だけが`(beta52)`のまま古い（着手時に文言も直すこと）。なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計のため、未検証でも実害は小さい。
   - `ReplaceObjectEditProc`のアンドゥ挙動（delete+createが1ステップにまとまるか）。
   - `UpdateObjectTextEditProc`のカーソル依存書込の実機挙動。
   - `ExtractAudioWorker`の残検証（音声抽出のsolo分離は本書§4-21を参照）。※`CutoutRangeWorker`（範囲選択切り抜き）は製品UIから呼ぶ配線が無いため実機検証の対象外（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48。配線を再検討するときの入口は本書§3-34）。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §7.6、§7.7、§33.1、§33.3、35.2、`native/src/plugin.cpp`・`native/src/bridge.cpp`の`REALDEVICE-VERIFY`注記。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §7.6、§7.7、§33.1、§33.3、35.2、`native/src/plugin.cpp`・`native/src/bridge.cpp`の`REALDEVICE-VERIFY`注記。
 - **状態**: 将来の研究課題（β版以降、着手時期未定）。
 
 #### 3-10. Fill the gap（タイムライン隙間埋め）の実装
 
-- **概要**: タイムライン上のクリップとクリップの間の隙間を、AI生成動画で自動的に埋める機能。右クリック再設計の第2段階候補として挙がっている（[`DEVLOG.md`](DEVLOG.md) §33.11 論点）。先行調査は完了済みで、[`GAP_FILL_RESEARCH.md`](GAP_FILL_RESEARCH.md)に記録した。
+- **概要**: タイムライン上のクリップとクリップの間の隙間を、AI生成動画で自動的に埋める機能。右クリック再設計の第2段階候補として挙がっている（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §33.11 論点）。先行調査は完了済みで、[`GAP_FILL_RESEARCH.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/GAP_FILL_RESEARCH.md)に記録した。
 - **第一実装の推奨方式**: 隙間の片側（前クリップの末尾フレームまたは後クリップの先頭フレーム）をキーフレーム条件にしたi2v（画像から動画生成）＋プロンプトで生成する。生成尺は隙間の長さ以上になる最小の8n+1グリッド値（フレーム数が8の倍数＋1になる位置しか指定できない制約に合わせた尺）へ切り上げ、生成後は先頭を隙間の長さぴったりで使い余りを切り捨てるヘッドトリム方式でタイムラインへ配置する。隙間が生成可能な最大尺を超える場合は、生成そのものを禁止する（競合ツールLTX Desktopと同じ割り切り）。
 - **将来拡張**: 終端フレーム（後ろのクリップに繋げたい場合）は、次クリップの先頭フレームを起点にi2v生成してから時間反転（逆再生）させて配置する方式が、現行バックエンド無改修で実現できる見込み。動画→動画の隙間で両側に真に接続する生成（前クリップ末尾と後クリップ先頭の両方をoverlap条件として使う独自拡張）は、バックエンド改修が必要な将来課題として残る。
 - **バックエンド側の正体（2026-07-27に現物で確認）**: 「終了フレームを条件にできない」の実体は、凍結APIのバリデータが**キーフレーム位置を`num_frames - 8`で頭打ちにしている**ことである（`Nz-Videomni/api/models.py`。8n+1グリッドの最後のlatentフレーム開始位置に丸めるための意図的なクランプで、単発生成とチェーンの両方に同じ処理がある）。下層のwheelは任意位置の条件付けに対応しており、**塞いでいるのはAPI層**なので、着手はAPI層の加算的な拡張から始めることになる。あわせて、**隙間が生成可能な最大尺を超える場合の分割連結生成**（複数回に分けて生成し繋ぐ）も、上の「生成そのものを禁止する」割り切りを緩めるときの選択肢として本項で扱う。
-- **出典**: [`GAP_FILL_RESEARCH.md`](GAP_FILL_RESEARCH.md)、[`DEVLOG.md`](DEVLOG.md) §33。
+- **出典**: [`GAP_FILL_RESEARCH.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/GAP_FILL_RESEARCH.md)、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §33。
 - **状態**: 将来の研究課題（第2段階以降、着手時期未定）。
 
 #### 3-11. 操作パネルの状態復帰（起票：2026-07-20）
 
 - **概要**: AviUtl2再起動後、操作パネル（Create画面のメインプロンプト欄等）は終了前の状態を復帰しない。
 - **なぜ優先度低か**: 「生成中にAviUtl2を閉じる」という事故自体がレアケースであることと、生成済み動画をエクスプローラーから手動でタイムラインへ挿入するといったフォールバックが常に存在することから、優先度は低く、あったら便利という水準にとどまる。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §37。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §37。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-13. 素材fpsの取得と操作パネルへの流し込み（SDK制約により当面はグレーアウト保留）
 
 - **概要**: 右クリックプリフィルのSettings方針「素材に合わせる」を、fpsについても選択オブジェクトが参照する素材そのもののフレームレート（例えば30フレーム毎秒で撮影した動画素材を、プロジェクト24フレーム毎秒のタイムラインに置いている場合の30という値）で操作パネルへ流し込めるようにすること。サイズ軸は選択素材の実寸（`mediaWidth`/`mediaHeight`）を取得できるため既に実現しているが、fps軸は素材fpsを取得する手段が無く、**プロジェクト全体のフレームレート**（`timeline.getSelection`が返す`rate`/`scale`から求めた値）を代用している。
 - **2026-07-22の調査結論（当初案の否決）**: 起票当初は「`timeline.getSelection`の応答に`mediaFps`フィールドを追加する（ブリッジ契約v10候補）」という軽い拡張で済むと見込んでいた。しかし第2波バッチ（X1）の調査で、**AviUtl2 SDKの`get_media_info`が返す`MEDIA_INFO`構造体には素材のフレームレート（fps）を表すフィールドが無く、fpsを逆算できるフレーム総数のフィールドも無い**ことが確定した。したがって`get_media_info`の戻り値を`getSelection`へ流すだけでは実現できず、`get_media_info`拡張では実現不可と結論づけた。真の素材fpsを得るには、入力プラグイン経由で素材ファイルを自前で解析する中規模のネイティブ実装が必要になる。
-- **当面の措置（X1）**: FPS軸の選択肢「素材に合わせる」は機能実装を見送り、Settingsのボタンをグレーアウトして残置する（撤去はしない）。保存済み設定値が「素材」だった場合はfps軸を「プロジェクトに合わせる」へ自動フォールバックする。サイズ軸の3択は従来どおり有効（素材実寸は取得できるため）。詳細は`PENDING_TASKS_CLOSED.md` §3-33の上に置いた第2波の記録および[`DEVLOG.md`](DEVLOG.md) §47を参照。
+- **当面の措置（X1）**: FPS軸の選択肢「素材に合わせる」は機能実装を見送り、Settingsのボタンをグレーアウトして残置する（撤去はしない）。保存済み設定値が「素材」だった場合はfps軸を「プロジェクトに合わせる」へ自動フォールバックする。サイズ軸の3択は従来どおり有効（素材実寸は取得できるため）。詳細は`PENDING_TASKS_CLOSED.md` §3-33の上に置いた第2波の記録および[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §47を参照。
 - **なぜ後回しか**: 現状の「プロジェクトfpsを代用する」挙動は、多くの制作フローでは素材とプロジェクトのfpsが一致しているため実害が小さい。真の素材fps取得は入力プラグイン経由の自前解析という中規模のネイティブ実装を要するため、単独では優先度が低い。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §41.7・§47、[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5-13、[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13、`AviUtl_ExEdit2 SDK`の`get_media_info`／`MEDIA_INFO`。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §41.7・§47、[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §5-13、[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.13、`AviUtl_ExEdit2 SDK`の`get_media_info`／`MEDIA_INFO`。
 - **状態**: 将来の研究課題（着手時期未定）。**復活条件**: 入力プラグイン経由で素材ファイルを自前解析するネイティブ実装に着手すると判断がついたとき。
 
 #### 3-15. 右クリックメニュー訳文の磨き込み（起票：2026-07-20）
 
-- **概要**: 右クリックメニュー（現在は**オブジェクト9項目・レイヤー5項目**。`native/src/plugin.cpp`の`kObjectMenuItems`／`kLayerMenuItems`で確認）の日本語訳は、`Language/Japanese.NzVideomni.aul2`に仕様書（[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第3節）の提案訳をそのまま入れたもので、G4実機ゲートでオーナーが実機確認しα版としては合格と判定した。ただし、訳文としての自然さ・簡潔さにはまだ磨き込みの余地がある（オーナー所感）。
+- **概要**: 右クリックメニュー（現在は**オブジェクト9項目・レイヤー5項目**。`native/src/plugin.cpp`の`kObjectMenuItems`／`kLayerMenuItems`で確認）の日本語訳は、`Language/Japanese.NzVideomni.aul2`に仕様書（[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第3節）の提案訳をそのまま入れたもので、G4実機ゲートでオーナーが実機確認しα版としては合格と判定した。ただし、訳文としての自然さ・簡潔さにはまだ磨き込みの余地がある（オーナー所感）。
 - **補足**: 起票後に追加した2項目（「⬇ この生成結果を今すぐ挿入」＝`insertProvisionalResult`、「⬇ 最新の生成結果をここに挿入」＝`insertLatestResultHere`）の訳文も`Japanese.NzVideomni.aul2`へ投入済みで、訳の抜けは無い。磨き込みの対象は14項目すべて。
 - **状態**: 将来の研究課題（β版以降。着手時期未定）。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §41.13、`native/src/plugin.cpp`、`Language/Japanese.NzVideomni.aul2`。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §41.13、`native/src/plugin.cpp`、`Language/Japanese.NzVideomni.aul2`。
 
 #### 3-16. V2V結合のUnjoin表示状態がリロードで失われる（起票：2026-07-21）
 
 - **概要**: Join機能の復活実装（`PENDING_TASKS_CLOSED.md` §3-26）では、Join済みかどうかの判定をサーバー側の連結済み動画ファイル（`joined.mp4`）の存在ベースで行う設計のため、「Unjoinして連結前の動画を表示中」という状態はwebuiのメモリ上にしか存在しない。WebUIをリロード（またはAviUtl2を再起動）すると、連結済みの表示に戻る。
 - **判断**: 2026-07-21にオーナーが「許容する」と判断した。Unjoinは削除ではなく表示の切り替えだけという仕様のため実害は小さいが、将来直すかもしれない不自然な挙動として記録しておく。
-- **出典**: 2026-07-21のオーナー要件確定、[`JOIN_FEATURE_RESEARCH.md`](JOIN_FEATURE_RESEARCH.md)第4部。
+- **出典**: 2026-07-21のオーナー要件確定、[`JOIN_FEATURE_RESEARCH.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/JOIN_FEATURE_RESEARCH.md)第4部。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-21. 操作パネルの自動表示（起票：2026-07-22）
@@ -198,7 +199,7 @@
 - **概要**: 生成起点の右クリック後に、操作パネル（Create画面のプロンプト欄等）を自動で前面へ表示・アクティブ化できると、右クリックからGenerateまでの導線が滑らかになる。
 - **見送りの理由（2026-07-22調査）**: AviUtl2 SDKの`plugin2.h`全917行を精査した結果、プラグインウィンドウの表示/アクティブ化を行うAPIが存在しないことを確認した。Win32の`ShowWindow`を直接叩く手段は考えられるが、AviUtl2本体のドッキング/タブ管理と衝突するリスクがあり、実機検証なしに安全性を保証できない。α版では見送るとオーナーが判断した。
 - **復活条件**: AviUtl2本体側にプラグインウィンドウの表示APIが追加された場合、または`ShowWindow`直叩きの安全性を実機で検証する工数を割く判断をした場合。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §46.8、`AviUtl_ExEdit2 SDK`の`plugin2.h`。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §46.8、`AviUtl_ExEdit2 SDK`の`plugin2.h`。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 ### 再訪条件つきでクローズした項目（トリガーが成立したら着手する）
@@ -215,7 +216,7 @@
 
 #### 3-32. 422の別経路ができたとき → 予約詰まりの再検証
 
-**新しい422経路へ実操作で到達できると分かったとき、または短クリップのクライアント側ゲート（X3）を緩める改修をしたとき** → 422後に仮オブジェクトの予約が詰まらないことを実機で確認する（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-45）。2026-08-03に新しい422経路`REFERENCE_REQUIRES_CONTROL_LORA`が単発・chainの両方へ新設された（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §49.7）が、フロントエンドは参照動画に制御LoRAの同伴を必須とするゲートを持つため、通常の操作ではこの422に到達しない。**このゲートを迂回して実操作で422を出せると分かったら、予約詰まりの再検証を実施する**。
+**新しい422経路へ実操作で到達できると分かったとき、または短クリップのクライアント側ゲート（X3）を緩める改修をしたとき** → 422後に仮オブジェクトの予約が詰まらないことを実機で確認する（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-45）。2026-08-03に新しい422経路`REFERENCE_REQUIRES_CONTROL_LORA`が単発・chainの両方へ新設された（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.7）が、フロントエンドは参照動画に制御LoRAの同伴を必須とするゲートを持つため、通常の操作ではこの422に到達しない。**このゲートを迂回して実操作で422を出せると分かったら、予約詰まりの再検証を実施する**。
 
 #### 3-33. アップロードに時間がかかる状況ができたとき → `referenceUploading`ゲートの再検証
 
@@ -243,7 +244,7 @@
 
 #### 3-46. コミュニティでWan等のVSF scaleベストプラクティスが報告されたとき → 既定値1.5の見直し
 
-**コミュニティからWan等の動画生成AIにおけるVSF（Value Sign Flip。非CFGネガティブプロンプトの第2方式）のscaleベストプラクティスの報告が出てきたとき** → LTX 2.3への応用可否と既定値1.5の見直しを検討する（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55とbackend [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §41）。2026-07-29のオーナー実機テストで、同一seed比較によりネガの排除力と正プロンプト保持の両立が実証され、既定scale1.5の妥当性は裏付け済みのため、現状の1.5は問題ないと判断している。
+**コミュニティからWan等の動画生成AIにおけるVSF（Value Sign Flip。非CFGネガティブプロンプトの第2方式）のscaleベストプラクティスの報告が出てきたとき** → LTX 2.3への応用可否と既定値1.5の見直しを検討する（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55とbackend [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41）。2026-07-29のオーナー実機テストで、同一seed比較によりネガの排除力と正プロンプト保持の両立が実証され、既定scale1.5の妥当性は裏付け済みのため、現状の1.5は問題ないと判断している。
 
 ### 新規に起票した研究課題（2026-07-27の棚卸しで台帳外から集約）
 
@@ -251,50 +252,50 @@
 
 - **概要**: 完成したクリップを右クリックして「もう一度作り直す」「別の生成結果へ差し替える」導線。実現には、完了クリップに生成ジョブのID（jobIDタグ）を付ける基盤が要る。現状`ReplaceObjectEditProc`（`native/src/bridge.cpp`）は完了クリップの生成時に`set_object_name`を呼んでおらず、クリップから元のジョブを逆引きできない。
 - **統合**: Library画面の履歴から同じ条件で再送信する導線（regenerateの受け皿）も、同じ「過去のジョブをもう一度回す」テーマなので本項へまとめる。
-- **出典**: [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第9節、[`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md)「次セッションへの引き継ぎ」1・5。
+- **出典**: [`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第9節、[`DEVELOPMENT_PLAN.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVELOPMENT_PLAN.md)「次セッションへの引き継ぎ」1・5。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-40. チェーン投入系の導線（構築中のチェーンへ素材やテキストを送る）
 
 - **概要**: タイムラインで選んだテキストや画像を、いま組み立てているチェーン（Clip Chain）の**特定のクリップへ**送る導線。「どのクリップに入れるかをどう指定するか」の設計そのものが未着手のため、UIを描く前に方式の検討が要る。
 - **統合**: 選択オブジェクトの「素材そのもの」の自動投入（切り出し→レンダリング→アップロードして素材IDをプリフィルへ載せる）も、同じ「素材をチェーンへ流し込む」テーマなので本項へまとめる。現在はファイルピッカーでユーザーが素材を供給する前提で配線している。
-- **出典**: [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第9節、[`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md)「次セッションへの引き継ぎ」2。
+- **出典**: [`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第9節、[`DEVELOPMENT_PLAN.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVELOPMENT_PLAN.md)「次セッションへの引き継ぎ」2。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-41. 入力素材の自動リサイズ（レターボックス）
 
 - **概要**: 生成サイズと縦横比が違う入力素材を、引き伸ばして切り取るのではなく**縦横比を保ったまま余白を足して収める**（レターボックス）方式。`deriveGenerationParams`の継ぎ目に差し込む設計で、β版以降の想定。
 - **土台**: 上流のwheelに`resize_and_reflect_pad`（縦横比を保って縮小し、足りない側を鏡像で埋める関数）と`ResizeMode.REFLECT_PAD`が実在するが、**当方のコード（`api/`・`services/`・`engine/`・`gradio_ui/`）からは一度も呼ばれていない**——つまり使われていないフックが既にある状態。
-- **出典**: [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md)「次セッションへの引き継ぎ」4・第7-5節、`Nz-Videomni/vendor/LTX-2`の`ltx_pipelines/utils/media_io.py`。
+- **出典**: [`DEVELOPMENT_PLAN.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVELOPMENT_PLAN.md)「次セッションへの引き継ぎ」4・第7-5節、`Nz-Videomni/vendor/LTX-2`の`ltx_pipelines/utils/media_io.py`。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-42. 長尺の快適上限の引き上げ（単発生成へのチャンク化＋タイル化の移植）
 
 - **概要**: 単発生成（t2v／i2v／a2v／v2v共通の`/generate`）には解像度ごとに「VRAMが溢れない快適上限」があり（1280×768→257フレーム、1920×1088→153フレーム、2560×1472→81フレーム）、超えると共有メモリへ溢れて大幅に遅くなる。原因は「一括アップサンプル」と「フル解像度の一括仕上げデノイズ」の2工程と実測で特定済みで、どちらもClip Chain側には対策（チャンク化アップサンプル／stage-2の22latent固定窓によるタイル化）が実装・実機検証済みで存在する。研究課題は、この**2つをセットで**単発生成のパイプラインへ移植できるかの検証である（片方だけでは上限は伸びない）。
 - **移植後の推定（フェルミ推定・実測前の目安）**: small（960×576）121→約481／standard_720p（1280×768）257→481（いずれもAPI上限に到達）／FHD_1080p（1920×1088）153→約300（最も実測が必要）／WQHD_1440p（2560×1472）81→約100〜150（下振れリスク大）。実験は1080pを153→241→361→481と昇順に振るところから始めるのが最小確認パス。
-- **出典**: 2026-07-14〜15の長尺研究（旧「研究課題A」。正本は本項。移設元の研究課題ノート`LONGFORM_RESEARCH_TOPICS.md`は2026-07-27に削除し、同ノートにあった実運用の経験則は[`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](../../../Docs/PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）」節へ移した）。
-- **タイル化の先行実施（2026-08-03）**: IC-LoRA参照動画のVAEエンコードについては、本テーマの最小スライスとしてタイル化を実施した（Deblur OOM対応。正本はバックエンド[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](../../../Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md)）。
+- **出典**: 2026-07-14〜15の長尺研究（旧「研究課題A」。正本は本項。移設元の研究課題ノート`LONGFORM_RESEARCH_TOPICS.md`は2026-07-27に削除し、同ノートにあった実運用の経験則は[`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）」節へ移した）。
+- **タイル化の先行実施（2026-08-03）**: IC-LoRA参照動画のVAEエンコードについては、本テーマの最小スライスとしてタイル化を実施した（Deblur OOM対応。正本はバックエンド[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)）。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-43. クリップ毎のキャラクター特徴注入（キャラ設計ドリフト対策）
 
 - **概要**: 長いチェーンでクリップが進むほど登場人物の見た目がずれていく（ドリフト）問題への対策。参照シートからキャラクターの同一性を注入する**公式のIngredients IC-LoRA**（`Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients`。ユーザー側の追加学習は不要）が既に存在するため、研究は2段階になる——①既存のIC-LoRA機構でそのまま動くかの検証②現行の「参照はクリップ0のstage-1のみ・1クリップ構成限定」という制約を外すAPI・エンジンの拡張。
 - **当面の緩和策（改修不要）**: キャラクターLoRAを学習してチェーン全体へ一様適用すれば、現行の仕組みのままでドリフトを大きく引き戻せる。
-- **出典**: 2026-07-15の長尺研究（旧「研究課題B」。正本は本項。調査時の一次情報URL 16本は[`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](../../../Docs/PHASE3_CLIP_CONCAT_STATUS.md)「キャラクター特徴注入研究の一次情報」節にある。移設元の研究課題ノート`LONGFORM_RESEARCH_TOPICS.md`は2026-07-27に削除した）。
+- **出典**: 2026-07-15の長尺研究（旧「研究課題B」。正本は本項。調査時の一次情報URL 16本は[`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「キャラクター特徴注入研究の一次情報」節にある。移設元の研究課題ノート`LONGFORM_RESEARCH_TOPICS.md`は2026-07-27に削除した）。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-44. FFNチャンキング（残り唯一の未実装VRAMレバー）
 
 - **概要**: Transformer内部のFFN（全結合層）が隠れ次元を4倍に広げるときの巨大な中間テンソルを、シーケンス方向に分割して計算する省メモリ手法。VRAM削減レバーの棚卸しでは、二段パイプライン・attentionタイル・VAEの空間/時間タイル・block-swapがいずれも実装済みなのに対し、**FFNチャンキングだけが未実装**である。主に長尺（シーケンス長が支配的な領域）向けで、720pの空間スケールには必須ではない。
 - **参考値**: コミュニティ実装（LTX-2専用の`ffn_chunks`）は600フレームで8・800フレームで12〜16・900フレーム以上で16〜24を推奨し、最大で約8分の1までピークを削減すると謳う。ただし実績は24GB環境のみで、GGUF・block-swapとの併用可否は記載が無い。
-- **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](../../../Docs/SCALEUP_16GB_RESEARCH.md) §2（レバー棚卸し）・付録A。
+- **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md) §2（レバー棚卸し）・付録A。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-45. クリップ連結の画質backlog（①〜⑥）
 
 - **概要**: クリップ連結（Clip Chain）は機能としては成立しているが、磨き代として6件の品質特性が記録されている。①タイル継ぎ目の少し後で起きる微妙なドリフト②発話チェーンの境界で口が約0.25秒閉じて開くアーティファクト③検証ハーネスの発話開始検出の偽陽性疑い④背景がぐにゃりと歪む区間⑤巨大なアーティファクトが画面をワイプし人物が消失する区間（最重度）⑥看板の形が瞬間的に変わる。
 - **止まっている理由**: ④〜⑥は「低解像度起因の可能性があるため、720p級での再検証結果と合流させて判断する」というオーナー決定（2026-07-03）が出たまま、**その再検証がまだ実施されていない**。高解像度チェーンの実証（1280×768・2セグメント）では④〜⑥は再発しなかったが、尺・セグメント数が発見時より小さく切り分けには足りていない。
-- **出典**: [`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](../../../Docs/PHASE3_CLIP_CONCAT_STATUS.md)「既知の品質特性・チューニング backlog」「高解像度チェーン実証」。
+- **出典**: [`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「既知の品質特性・チューニング backlog」「高解像度チェーン実証」。
 - **状態**: 将来の研究課題（着手時期未定。まず長尺・多セグメントでの720p再検証が要る）。
 
 #### 3-52. 失敗ジョブでmetadata.jsonが書かれない問題（起票：2026-08-03）
@@ -339,14 +340,14 @@
 - **新規ロジックは1つだけ**: クリップ内のローカルなフレーム位置を、連結後タイムラインのグローバル位置へ変換する処理。**stage-1だけに入れるのは不可**（stage-2はσ0.909から作り直すため、クリップ0とだけ非対称になり2本目以降の構図が緩む）。両段へ対称に注入する。
 - **UI方針（オーナー2026-08-06）**: クリップカード内に「Keyframes／キーフレーム制御」のon/offボタンを置き、onのときだけスライダー等を表示する（クリップ枠が最大24あるため常時表示は冗長）。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) 2・4-(1)・5節。
+- **出典**: バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 2・4-(1)・5節。
 
 #### 3-59. Outpainting（動画キャンバス拡張）のチェーン対応（長尺化）（起票：2026-08-09）
 
 - **概要**: 現在のOutpaintingは単発生成と同じ経路なので、扱える尺も単発生成と同じ枠に収まる（仕上げ工程を時間方向に分割しない）。長い動画のキャンバスを広げたいという要望に応えるには、クリップ連結（Chain）と同じ分割の仕組みへ載せる必要がある。
 - **何が要るか**: 緑キャンバスの生成とラプラシアンピラミッドのブレンドを、連結の窓ごとに繰り返す形へ拡張すること。ブレンドは窓の外縁とも干渉するため、継ぎ目が二重になる（連結の継ぎ目とブレンドの帯）点の設計が要る。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-70、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §54.7。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-70、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §54.7。
 
 #### 3-60.（欠番）モック環境へのIn-Outpainting LoRAの追加 → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-79へ（2026-08-11、長尺IC-LoRAの微修正バッチ〔mockフィクスチャへのin-outpainting追加〕の副産物として解消・クローズ）
 
@@ -355,7 +356,7 @@
 - **概要**: ブレンドが効く幅は`膨張半径 × キャンバス長辺 ÷ 64`で決まるため、キャンバスが大きいほど広くなる（長辺1920・既定値なら片側約150画素）。一方でAPIが要求する保持領域の下限は**キャンバス寸法によらず256画素の固定値**なので、大きなキャンバスでは「下限は満たすのに、保持領域が丸ごと混ぜ合わせの帯に飲み込まれる」構成を作れてしまう。実機ゲートの芯部PSNR測定も同じ理由で不能になる（左右150画素ずつで300画素を使うため）。
 - **決めるべきこと**: APIの下限をキャンバス長辺（と膨張半径）に連動させるかどうか。**オーナー判断が要る未決事項**として`Nz-Videomni/uploads/_outpaint_verify/RUNBOOK_W2.md`に残してある。
 - **状態**: 将来の研究課題（オーナー判断待ち）。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-70、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §54.5・§54.7。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-70、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §54.5・§54.7。
 
 #### 3-62. RetakeのLoRA対応（v1で見送った解禁の検討）（起票：2026-08-10）
 
@@ -363,7 +364,7 @@
 - **なぜ見送ったか**: 確定したAPIの契約にLoRAが入っていないため。技術的にRetakeとLoRAが両立しないという裏取りをしたわけではなく、**v1の範囲を切った結果**である（2026-08-05の調査メモでは「LoRAは併用可、IC-LoRAは不可」と読めている。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73の該当行）。
 - **着手時に確かめること**: (1)凍結帯のあるパイプラインでLoRAを適用したときに、**凍結が本当に1ビットも動かないまま**か（`freeze_proof`が0.0を保つか）。(2)Style LoRAの音声強度（`audio_strength`）のように音声側に効くものを、音声も作り直す設定と組み合わせたときの挙動。(3)IC-LoRAは`reference_video_id`との排他があるため対象外でよいか。
 - **状態**: 将来の改修項目（着手時期未定・ユーザー要望が出たときが自然な着手条件）。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §68、`webui/src/modes/edit/useRetakeForm.ts`（`buildRequest`のコメント）、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §55.14。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §68、`webui/src/modes/edit/useRetakeForm.ts`（`buildRequest`のコメント）、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §55.14。
 
 #### 3-63. Editタブの素材自動読み込みが二重にアップロードする（Retakeの右クリック時にも旧Outpainting側が走る）（起票：2026-08-10）
 
@@ -371,7 +372,7 @@
 - **影響**: **無害だが無駄**。アップロードは`uploads/`（一時ファイル置き場）へ行くので保存領域の方針には反しないし、機能的な誤動作も起きない。ただし大きな動画では待ち時間と容量が二重にかかる。
 - **解消方法**: 自動読み込みの一発処理に「自分の担当する用途で入ってきたときだけ走る」条件を足す（`initialIntent`の用途を見る）。両フォームが同じ`useSourceUpload`の作法で書かれているので、条件の置き場所は左右対称になるはずである。
 - **状態**: 将来の改修項目（着手時期未定・Edit系のフォームに手を入れるときに一緒に直すのが自然）。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §68、`webui/src/modes/edit/useOutpaintForm.ts`（`one-shot right-click auto-load`のブロック）・`EditScreen.tsx`。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §68、`webui/src/modes/edit/useOutpaintForm.ts`（`one-shot right-click auto-load`のブロック）・`EditScreen.tsx`。
 
 #### 3-71. チェーン生成の非標準フレームレート422問題（起票：2026-08-10）
 
@@ -380,7 +381,7 @@
 - **これはA2V固有の問題ではない**。音声を添付していない素のチェーン生成にも同じ検算が掛かるので、**チェーン全体にかかる既存の制約**である。長尺A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。起票当時は本書§1-16。2026-08-10のクローズで移設）の実装では、音声を添付しているときだけ**この検算をTypeScriptへ写したもの**（`chainLayoutError`）を使って先回りし、「↔️再生時間の自動調整」が422になる構成を吐かないようにした。**本項の課題は、この先回りを素のチェーン全体へ広げること**である。
 - **恒久的な解決はバックエンド側**にある。タイル割りそのものを丸め誤差に対して頑健にすれば、フロントエンドの先回りは要らなくなる（フロントエンドの写しは、あくまでサーバーの挙動を追いかけているだけなので、両方を直すと二重管理になる）。
 - **状態**: 将来の改修項目（着手時期未定）。
-- **出典**: 長尺A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。起票当時は本書§1-16）の敵対的レビューとその実測、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §56、[`DEVLOG.md`](DEVLOG.md) §70、`webui/src/modes/chained/chainUtils.ts`（`chainLayoutError`の設計コメント）。
+- **出典**: 長尺A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。起票当時は本書§1-16）の敵対的レビューとその実測、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §56、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §70、`webui/src/modes/chained/chainUtils.ts`（`chainLayoutError`の設計コメント）。
 
 #### 3-72. 非整数フレームレートの音ズレ（動画エンコード時のフレームレート切り捨て）（起票：2026-08-10）
 
@@ -388,39 +389,39 @@
 - **どこに存在するか**: 特定の機能の問題ではなく、**チェーン生成・単発生成・Outpainting（動画のキャンバス拡張）を含む全生成経路に共通して存在する既存の実装**である。したがってA2V（音声から動画を生成する機能）だけの話でもない。
 - **なぜ後回しか**: 修正がvendorパッケージ（`media_io`）の改修と、その再配布を伴うため。長尺A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。起票当時は本書§1-16）の実装範囲には含めず、**その機能の既知の限界として文書に明記したうえで**本項へ起票した。
 - **状態**: 将来の改修項目（着手時期未定）。
-- **出典**: 長尺A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。起票当時は本書§1-16）の敵対的レビューとその実測、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §56、[`DEVLOG.md`](DEVLOG.md) §70。
+- **出典**: 長尺A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。起票当時は本書§1-16）の敵対的レビューとその実測、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §56、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §70。
 
 #### 3-75. depth系IC-LoRAを多クリップのチェーンでも使えるようにする（深度前処理のチャンク化）（起票：2026-08-11）
 
-- **概要**: 長尺IC-LoRA（クリップ別の参照動画。実装記録は[`DEVLOG.md`](DEVLOG.md) §72）では、canny（輪郭線）・dwpose（姿勢）・deblur（ぼけ除去）の制御アダプタは複数クリップのチェーンでも使えるが、**depth（深度）系だけはクリップ2本以上で422（`LORA_DEPTH_CHAIN_UNSUPPORTED`）にして見送った**。本項はその解禁を検討するもの。
+- **概要**: 長尺IC-LoRA（クリップ別の参照動画。実装記録は[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §72）では、canny（輪郭線）・dwpose（姿勢）・deblur（ぼけ除去）の制御アダプタは複数クリップのチェーンでも使えるが、**depth（深度）系だけはクリップ2本以上で422（`LORA_DEPTH_CHAIN_UNSUPPORTED`）にして見送った**。本項はその解禁を検討するもの。
 - **何が塞いでいるか**: 深度マップを作るVideo-Depth-Anythingの前処理が**全編を一度にメモリへ載せる設計**（`driver.py`のVideoProcessor分岐が全フレームをリストへ溜める）であること。単発生成やクリップ1本のチェーンなら扱える尺だが、チェーン全体の総フレーム数（上限11544フレーム）では入出力を合わせて数十GBになり、メモリが尽きる。
 - **素朴なチャンク化では壊れる論点が2つある**: (1)**時間の整合**——Video-Depth-Anythingは32フレームの窓を10フレーム重ねながら全編を順に舐める設計で、単純に区切ると継ぎ目で深度が飛ぶ。(2)**全編の正規化**——出力は全編を通した最小値・最大値で正規化されるため、区切って別々に正規化すると、明るさ（＝奥行きの尺度）がチャンクごとに食い違う。したがって「重なりを取りながら流し、正規化の統計だけは全編で1回に揃える」といった設計が要る。
 - **v1で422にした経緯**: 2026-08-11のオーナー判断。実装当日の敵対的レビューでメモリ不足が実コードから裏づけられ、チャンク化を同時にやると本体（参照動画の自動スライス）の完成が遅れるため、**明示エラーで見送って別項目へ切り出す**と決めた。クリップ1本のチェーンと単発生成では従来どおりdepth系を使える。
 - **状態**: 将来の改修項目（着手時期未定・depth系をチェーンで使いたいという要望が出たときが自然な着手条件）。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §72、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §57、`Nz-Videomni`の`api/generate_chain.py`（422の新設箇所）・`engine/worker.py`（前処理のフレーム上限）。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §72、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57、`Nz-Videomni`の`api/generate_chain.py`（422の新設箇所）・`engine/worker.py`（前処理のフレーム上限）。
 
 #### 3-76. 参照動画VAEエンコードのタイル化（長尺IC-LoRAの真のVRAM膝）（起票：2026-08-11）
 
-- **概要**: 長尺IC-LoRAの実機ゲートG4（stage-1負荷閾値の較正。バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §57.6）で判明した事実として、**参照つき長尺クリップのVRAM消費で本当に効いているのはstage-1本体ではなく、参照動画のVAEエンコード**である。stage-1自体の所要時間はトークン数に対して滑らかに伸び膝（急変点）が無いのに対し、参照動画のエンコードはタイル化されておらず、361フレーム以上でエンコード単価が急変する（241fの0.0205秒/フレーム→481fで0.1263秒/フレーム、6.17倍）。ジョブ全体のVRAMピークもこのエンコード区間のピークと完全一致している。
+- **概要**: 長尺IC-LoRAの実機ゲートG4（stage-1負荷閾値の較正。バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57.6）で判明した事実として、**参照つき長尺クリップのVRAM消費で本当に効いているのはstage-1本体ではなく、参照動画のVAEエンコード**である。stage-1自体の所要時間はトークン数に対して滑らかに伸び膝（急変点）が無いのに対し、参照動画のエンコードはタイル化されておらず、361フレーム以上でエンコード単価が急変する（241fの0.0205秒/フレーム→481fで0.1263秒/フレーム、6.17倍）。ジョブ全体のVRAMピークもこのエンコード区間のピークと完全一致している。
 - **見込み**: このエンコード処理をタイル化すれば、急変（スピル）そのものが消える可能性が高い。現行の暫定閾値25000トークン（1152×1536で361フレームが上限）は据え置きで確定したが、これはあくまで「現状のスピル位置に合わせた安全側の運用」であり、タイル化すればより長い参照つきクリップを同じVRAM予算で扱えるようになる見込みがある。
 - **状態**: 将来の改修項目（着手時期未定・参照つき高解像度長尺クリップの需要が具体的に出たときが自然な着手条件）。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §57.6のG4段落（2026-08-11の実GPU計測）。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57.6のG4段落（2026-08-11の実GPU計測）。
 
 #### 3-77. sysmem fallback無効環境への配慮（長尺IC-LoRAのstage-1負荷閾値）（起票：2026-08-11）
 
 - **概要**: 長尺IC-LoRAの実機ゲートG4（§3-76と同時に判明）で確認した暫定閾値25000トークンの「無害さ」は、**NVIDIAのsysmem fallback（VRAM不足時にシステムメモリへ自動退避する機能）が有効であることが前提**になっている。この機能を切る「Prefer No Sysmem Fallback」設定の機体では、361フレーム＋参照（1152×1536）は即座にOOMになり、その場合に安全な実質閾値は18900トークン相当まで下がる。
 - **選択肢**: (1)警告閾値そのものを環境依存（sysmem fallback設定を検出、または安全側の18900トークンへ一律に下げる）にする、(2)README等でsysmem fallback設定を有効にしておくよう案内する、のいずれか（併用も可）。現行の25000トークンという値自体は「sysmem fallbackが有効な環境」を前提にした据え置き判断であることを明記しておく必要がある。
 - **状態**: 将来の改修項目（着手時期未定・「Prefer No Sysmem Fallback」設定の環境でOOMが実際に報告されたときが自然な着手条件）。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §57.6のG4段落（2026-08-11の実GPU計測）。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57.6のG4段落（2026-08-11の実GPU計測）。
 
 #### 3-87. End sourceのUI/UX調整（起票：2026-08-17）
 
 - **概要**: End source第1段階（窓内モード）で見送ったUI/UX調整の置き場。**残っているのは次の2件**である。
   1. **末尾の凍結フレームを出力mp4から切り落とす改修**（現行は出力に含める・Retakeと同じ重ね置き規律）。着手する場合は、仮オブジェクト（配置系統E＝末尾合わせ）の位置計算と、「予想出力: ≈n秒（m フレーム）」の表示も同時に控除側へ揃える必要がある（切り落とさない現行仕様では、出力＝クリップ長という今の表示が正しい）。**この条件は複数クリップの逆順Chainedでも同じ**（帯は最終クリップの内側にあるため、着手する場合は逆順Chainedの出力計算も同時に控除側へ揃える必要がある）。
   2. **キーフレーム（`conditioning_images`）×末尾の凍結フレームの重なりを422で拒否する検査**。窓内モードでは凍結フレームがクリップの内側にあるため、キーフレームが静かに上書きされうる。導入時はバックエンドの既存テスト・`api/models.py`のコメント・`VERIFICATION_LOG.md`の「衝突検査は消滅した」記述の3点セットを同時に反転させる必要がある。
-- **第1段階で実装済みになった項目（起票時の一覧から除外）**: 予想出力への帯加算の削除（出力＝クリップ長）、クリップ長がstage-2タイル1枚を超えたときの品質警告、v2（内部区画）前提だったフロントエンドのコードと説明コメントの窓内モード対応、仮オブジェクト（配置系統E）の位置の±1補正（`出力長−9`への厳密化）。いずれも[`DEVLOG.md`](DEVLOG.md) §79。
+- **第1段階で実装済みになった項目（起票時の一覧から除外）**: 予想出力への帯加算の削除（出力＝クリップ長）、クリップ長がstage-2タイル1枚を超えたときの品質警告、v2（内部区画）前提だったフロントエンドのコードと説明コメントの窓内モード対応、仮オブジェクト（配置系統E）の位置の±1補正（`出力長−9`への厳密化）。いずれも[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §79。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（実用化本体・オーナー裁定によるテーマ完結の記録）、[`DEVLOG.md`](DEVLOG.md) §79、同[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-82（v2の経緯）。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（実用化本体・オーナー裁定によるテーマ完結の記録）、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §79、同[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-82（v2の経緯）。
 
 #### 3-88. V2V併用時に`duration_seconds`がトリム前の値を返す（バックエンドの既存挙動）（起票：2026-08-17）
 
@@ -428,7 +429,7 @@
 - **影響**: 現在のフロントエンドはこの値を尺の表示に使っていないため実害は出ていないが、**将来ジョブ一覧などで尺を表示すると必ずズレる**。値を信じる側から見ると原因が分かりにくい種類の不一致なので、先に起票しておく。
 - **想定される直し方**: エンコード後の実フレーム数（もしくはトリム後のフレーム数）から計算し直す。トリム量はバックエンド側が持っているため、フロントエンドでの補正は避けたい（同じ計算の写しが増える）。
 - **状態**: 将来の改修項目（着手時期未定・尺の表示機能を作るときが自然な着手条件）。バックエンドの改修が必要。
-- **出典**: 2026-08-17のEnd source第1段階の実機実験ラウンド3・4で再現確認（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §61.10）。
+- **出典**: 2026-08-17のEnd source第1段階の実機実験ラウンド3・4で再現確認（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61.10）。
 
 #### 3-89. バックエンド統合テストが「稼働中だがジョブ実行中」で7件落ちる（起票：2026-08-17）
 
@@ -437,15 +438,15 @@
 - **改善案**: 到達性の判定（`isBackendReachable`）を拡張し、`GET /status`の`queue.running > 0`（および`queue.pending > 0`）のときも`describe.skipIf`でスキップする。理由を1行表示するスキップ用の`it`は既にある枠組みをそのまま使える。**テストの内容自体は変えない**（サーバーを止める・ジョブを消すといった共有資源への干渉は、このファイルの既存の禁止事項である）。
 - **バックエンドにも同種のものが1件ある**: `tests/test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false`は「バックエンドが起動していないこと」を前提に`reachable=false`を検査するため、**実バックエンドを起動していると必ず落ちる**（2026-08-17の全件実行で確認。1,498件中この1件だけが赤）。直し方も同じ筋で、到達できてしまう環境では検査対象を切り替えるか、テスト側で接続先を確実に届かない先へ固定する。
 - **状態**: 将来の改修項目（着手時期未定）。フロントエンド・バックエンドとも**テストのみの変更**で、実装には触れない。
-- **出典**: 2026-08-17のEnd source第2弾（UI露出）の機械検証で観測（[`DEVLOG.md`](DEVLOG.md) §79の検証行。`npm test`は2450 passed / 7 failedで、失敗はすべて本ファイル）。
+- **出典**: 2026-08-17のEnd source第2弾（UI露出）の機械検証で観測（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §79の検証行。`npm test`は2450 passed / 7 failedで、失敗はすべて本ファイル）。
 
 #### 3-90. Start source＋End source併用（真ん中クリップの両側条件付け）（起票：2026-08-18）
 
-- **概要**: End source第2段階・バッチ2（逆順Chained）のスコープ外として先送りした拡張。素材（冒頭）＝Start sourceと素材（末尾）＝End sourceを同時に指定し、複数クリップのタイムラインの**前半を正順・後半を逆順で生成し、真ん中のクリップだけを両側（頭と尾の両方）から条件付けする**構想。バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11の場合分け仕様に「両方＝前半正順＋後半逆順＋真ん中両側条件付け（真ん中m=⌊N/2⌋+1、後ろ寄り）」として当初から想定されていた形。
+- **概要**: End source第2段階・バッチ2（逆順Chained）のスコープ外として先送りした拡張。素材（冒頭）＝Start sourceと素材（末尾）＝End sourceを同時に指定し、複数クリップのタイムラインの**前半を正順・後半を逆順で生成し、真ん中のクリップだけを両側（頭と尾の両方）から条件付けする**構想。バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11の場合分け仕様に「両方＝前半正順＋後半逆順＋真ん中両側条件付け（真ん中m=⌊N/2⌋+1、後ろ寄り）」として当初から想定されていた形。
 - **現在の受理範囲**: バッチ2の実装は`source_video`（素材（冒頭））×`end_source`（素材（末尾））×2クリップ以上の組み合わせを**422で明示的に拒否**している（誰も走らせたことのない「真ん中クリップの二重凍結」という形を、検証なしに受理しないための安全策）。クリップ1本での併用（補間ケース）は第1段階から実装済みで、この拒否には含まれない。
 - **拡張の見通し**: 逆順Chainedの実装は、Stage-1のループを`chain_math`が発行する3本の表（`seg_generation_order`＝生成順・`seg_head_source`＝頭を凍結する元・`seg_tail_source`＝尾を凍結する元）で駆動する設計にしてある。Start＋End併用は、この3本の表の**作り方（前半を正順の値、後半を逆順の値、真ん中を両側とも埋める）を変えるだけでエンジン無改修のまま拡張できる**見通しである——真ん中クリップの両側凍結自体はRetakeの両側凍結と同型で、部品はすでにある。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11（場合分け仕様・2026-08-18追記の技術的未知への回答）、同[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §64.1（新設受理検査②の拒否根拠）。
+- **出典**: バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（場合分け仕様・2026-08-18追記の技術的未知への回答）、同[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.1（新設受理検査②の拒否根拠）。
 
 #### 3-91. 到着時刻の拘束（逆順Chainedの継ぎ目の構造的な脆さの根治・将来モデルの能力待ち）（起票：2026-08-18）
 
@@ -453,7 +454,7 @@
 - **根治に要るもの**: モデル側が、生成過程の中で「この潜在は時刻tに到着する」という拘束をかけられる能力。現行のLTX 2.3にはこの能力が無く、既存の凍結機構（マスク値による部分的な条件付け）を組み合わせても構造的に埋められない種類の欠落だと考えられる。
 - **着手条件**: 将来のモデル世代交代（例: LTX 2.5等）でこの種の能力が追加されたときに再検討する。現時点では調査・実装のどちらも着手しない。
 - **状態**: 将来の研究課題（着手時期未定・モデル側の能力待ち）。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §64.7・§65.8（実機ゲート結果と考察の正本）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11（考察の正本）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7・§65.8（実機ゲート結果と考察の正本）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（考察の正本）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）。
 
 #### 3-92. グローバル音声パス（音声だけ全長一括生成する再設計）（起票：2026-08-18）
 
@@ -461,7 +462,7 @@
 - **見込まれる効果**: 音声の一貫性（曲調・テンポ）がクリップ境界をまたいで保たれるようになる可能性がある。ただし映像側のセグメント分割・Stage-1のループ構造には手を入れない前提で、音声だけを独立した生成単位に切り出せるかどうかは未検証。
 - **規模感**: **大掛かりな再設計になる見込み**。現行のチェーン機構は映像・音声を同じセグメント単位で扱う設計になっており、音声だけを分離するには`chain_math`の幾何・エンジンのStage-1ループ・凍結スケジュールの複数箇所に影響が及ぶ可能性が高い。着手前に設計調査（音声VAEの時間支持区間・チャンク境界の扱い・既存のA2V経路との関係整理）が要る。
 - **状態**: 将来の研究課題（着手時期未定・規模が大きいため設計調査を先に行う）。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §65.8（試聴結果と考察の正本）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11（考察の正本）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §65.8（試聴結果と考察の正本）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（考察の正本）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）。
 
 #### 3-95. 快適上限の適用拡大（Singleの賢いマーカー以外への波及、起票：2026-08-18）
 
@@ -470,16 +471,16 @@
 - **⑤ Outpaintingの単発トークン予算（`COMFORT_TOKEN_BUDGET = 40_000`）の較正**: `webui/src/modes/edit/outpaintGeometry.ts`が持つOutpainting専用の単発トークン予算40,000は、今回の44,880（純テキスト生成・全on構成限定の実測アンカー）とは適用範囲が異なる別軸（元動画のVAEエンコードとマスクを伴う別ワークロード）として据え置いた。この40,000自体の実測較正はまだ行っていない。
 - **④ Single a2v・参照動画つき生成の快適上限**: 実測が無いまま。上記③のA2V wavの検討とあわせて実測が必要になる可能性がある。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12（Singleマーカー本体の実装記録）、バックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §6④（Outpainting予算据え置きの経緯）、`webui/src/timeline/deriveDuration.ts`・`webui/src/modes/single/useGenerationForm.ts`（A2V wav自動調整）・`webui/src/modes/edit/outpaintGeometry.ts`。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12（Singleマーカー本体の実装記録）、バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §6④（Outpainting予算据え置きの経緯）、`webui/src/timeline/deriveDuration.ts`・`webui/src/modes/single/useGenerationForm.ts`（A2V wav自動調整）・`webui/src/modes/edit/outpaintGeometry.ts`。
 
 #### 3-96. End source付き連結クリップの改善研究（起票：2026-08-19）
 
 - **概要**: End source（素材（末尾））実用化テーマの完結（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84）後、オーナーの指示により新規に起票した研究課題。複数クリップ時の継ぎ目品質という残課題そのものを、より使いやすい形で解決する方法を実用の中で探る。
 - **観察結果（R2-7のA/B、2026-08-19）**: 旧方式（正順・内部区画。`internal_segment`）は中間クリップの継ぎ目が目立たず音声の区切りも不明瞭だが、素材への接続部で強烈なクロスフェードとモーフが出る。逆順Chainedはちょうど裏返しで、素材への接続は綺麗な一方、中間の継ぎ目はシード依存で荒れる。両ジョブは同一プロンプト・同一素材で生成しており、この差はプロンプトの違いによるものではなく構造的である——正順の継ぎ目は**初期値問題**（過去のセグメントが確定し、モデルの自然な生成方向へ続けるだけでよい）、逆順の継ぎ目は**到着時刻の拘束が無い境界値問題**（§3-91参照）に由来する。
-- **改善候補の方向性（オーナー方針）**: 新方式（逆順Chained）と旧方式（正順・内部区画）をラジオボタン等で切り替えられるようにする案を含め、**よりユーザーフレンドリーな改善方法を実用の中で探る**。ただし旧方式は現在APIから到達不能の死蔵状態である——`chain_math.py`の`end_source_mode_override`はテスト・切り戻し専用のキーワード専用引数で、APIには一切露出していない（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §64.2）。したがって切替UIを作る場合は、まずこの引数（またはそれに相当する経路）をAPIへ露出する設計が新たに要る。
-- **関連する既記録**: 「本体は正順Chained→最終クリップだけEnd sourceで補間して仕上げる」という実用手順（全継ぎ目を初期値問題側＝綺麗な側で構成できる構成。出荷済み機能の組み合わせで実現可能・実機検証は未実施）も、本研究課題の材料の一つである。手順の正本はバックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11の【2026-08-19】節。
+- **改善候補の方向性（オーナー方針）**: 新方式（逆順Chained）と旧方式（正順・内部区画）をラジオボタン等で切り替えられるようにする案を含め、**よりユーザーフレンドリーな改善方法を実用の中で探る**。ただし旧方式は現在APIから到達不能の死蔵状態である——`chain_math.py`の`end_source_mode_override`はテスト・切り戻し専用のキーワード専用引数で、APIには一切露出していない（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.2）。したがって切替UIを作る場合は、まずこの引数（またはそれに相当する経路）をAPIへ露出する設計が新たに要る。
+- **関連する既記録**: 「本体は正順Chained→最終クリップだけEnd sourceで補間して仕上げる」という実用手順（全継ぎ目を初期値問題側＝綺麗な側で構成できる構成。出荷済み機能の組み合わせで実現可能・実機検証は未実施）も、本研究課題の材料の一つである。手順の正本はバックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11の【2026-08-19】節。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §64.7のR2-7追記（A/Bの記録）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](../../../Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）、本書§3-91（到着時刻の拘束）。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7のR2-7追記（A/Bの記録）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）、本書§3-91（到着時刻の拘束）。
 
 ---
 
@@ -495,46 +496,46 @@
 - **何が塞いでいるか**: 塞ぎ方が2種類ある。
   - **ステップ数**は`services/ltx_runner.py`が組み立てるworkerペイロードへ`num_steps`として**配線済み**だが、API層（`api/models.py`のバリデータ）が`pipeline="distilled"`のとき**8ステップ・CFG 1.0を強制**するため値を動かせない。露出するにはこの強制を解く必要がある。
   - **CFG（`guidance_scale`）と`pipeline`**は、そもそもworkerペイロードへ**未配線**のため、GUIへ露出すること自体が禁止（露出すると「操作できるのに効かない」死んだUIになる）。
-- **例外的な解禁**: **ネガティブプロンプトのみ、2026-07-28にNAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）経由で解禁済み**（バックエンドコミット2ae497b。`nag_*`フィールドがCFGを迂回してworkerへ配線されたため。詳細は[`DEVLOG.md`](DEVLOG.md)の該当節）。
+- **例外的な解禁**: **ネガティブプロンプトのみ、2026-07-28にNAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）経由で解禁済み**（バックエンドコミット2ae497b。`nag_*`フィールドがCFGを迂回してworkerへ配線されたため。詳細は[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md)の該当節）。
 - **相互参照**: 上記3点の復活条件は**§4-28**（`two_stage_hq`）と同じで、非蒸留モデルを動かせるハイスペックマシンを用意したとき。
-- **出典**: [`Nz-Videomni/Docs/NEXT_SESSION_HANDOFF.md`](../../../Docs/NEXT_SESSION_HANDOFF.md)「将来項目・未着手」（Phase 3 残パリティ）、[`Nz-Videomni/Docs/A2V_DESIGN.md`](../../../Docs/A2V_DESIGN.md) §2.5、[`API_REFERENCE.md`](API_REFERENCE.md) §7（NAG解禁の追記、2026-07-28）。
+- **出典**: [`Nz-Videomni/Docs/NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)「将来項目・未着手」（Phase 3 残パリティ）、[`Nz-Videomni/Docs/A2V_DESIGN.md`](A2V_DESIGN.md) §2.5、[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §7（NAG解禁の追記、2026-07-28）。
 
 ### 4-2. attention tilingの本番投入
 
 - **概要**: attention（注意機構）の計算を分割してピークVRAMを抑える仕組み。SDPAへのグローバルパッチとして**実装・配線は済んでいるが、既定はOFFのまま**（`config.yaml`の`attention_tile_size`が`null`）で、本番の生成経路では一度も使っていない。
 - **何が塞いでいるか**: 現行の16GB運用が二段パイプライン＋block-swapで足りており、ONにする動機と実測がまだ無い。高解像度側へ踏み込むときに、推奨値（256／512／1024／2048）で効果と副作用を測るところから。
-- **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](../../../Docs/SCALEUP_16GB_RESEARCH.md) §2、`Nz-Videomni/config.yaml`。
+- **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md) §2、`Nz-Videomni/config.yaml`。
 
 ### 4-3. VRAMの残レバー3件
 
 - **概要**: ①**peak②の低減**——ジョブ全体のVRAM天井はdenoise／transformerロード段（peak②）で決まり、`--te-offload`はここに触れない。②**`layers_on_gpu`が未露出**——Gemmaの層オフロードは`layers_on_gpu=2`のハードコードで、1に下げればencodeピークがさらに下がり3〜4に上げれば速度と交換できるが、`config.yaml`から触れない。③**opt-inの層ストリーミング**——「CPUに正本を置き、GPUには限定サブセットだけ載せて残りを層ごとに流す」方式（ComfyUI-GGUF／HF accelerateと同型）。
 - **何が塞いでいるか**: いずれも現行の16GB運用では実害が出ておらず、着手には計測環境（`torch.cuda.max_memory_allocated`＋WDDMのDedicated／Shared＋committed bytes）の用意が前提になる。③は長尺連結でメモリの漸増が実害化したときの再着手先として記録されている。
-- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §11.5・§11.6・§15。
+- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §11.5・§11.6・§15。
 
 ### 4-4. VRAM 8GB環境での能力見積り（参考メモ）
 
 - **概要**: VRAM 8GBのGPUで何が動くかのフェルミ推定表（480p約177フレーム／720p約73〜81フレーム／1080p約33フレーム／1440p約9フレーム／4Kは静止画1枚のみ）。実測ではなく16GBの実測枠組みからの外挿で、Windowsのメモリ断片化により**実値はこれより低くなりうる楽観的上限**として扱う前提。
 - **何が塞いでいるか**: 8GB対応は現プロジェクトの対象外というオーナー方針。要件化されたときの入口として残す。着手時の有効な調整軸は`block_swap_blocks_on_gpu`（本番既定の8から減らすとベースラインVRAMが下がり上限フレームが増えるが、代償としてPCIeストリーミングが増えて低速化する）。
-- **出典**: [`Nz-Videomni/Docs/RESOLUTION_DURATION_CAPABILITY.md`](../../../Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.5。
+- **出典**: [`Nz-Videomni/Docs/RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) §8.5。
 
 ### 4-5. VLM（画像を見る言語モデル）の再導入
 
 - **概要**: 入力画像をモデルに見せてプロンプトを補強する`enhance_i2v`や、フレームを見たうえでの隙間埋め提案。
 - **何が塞いでいるか**: テキストエンコーダのGemmaを**text-only化してVRAMを22.7GB回収した**現行構成と正面から衝突する。巻き戻す判断が必要なため計画外で、要件化されたときに別途判断する。
-- **出典**: [`Nz-Videomni/Docs/NEXT_SESSION_HANDOFF.md`](../../../Docs/NEXT_SESSION_HANDOFF.md)「将来項目・未着手」、[`Nz-Videomni/Docs/PHASE3_NEXT_WORK_SURVEY.md`](../../../Docs/PHASE3_NEXT_WORK_SURVEY.md)。
+- **出典**: [`Nz-Videomni/Docs/NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)「将来項目・未着手」、[`Nz-Videomni/Docs/PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
 
 ### 4-6. バックエンド同梱Gradio UIの残4件
 
 - **概要**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）。
 - **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。
-- **既知の差分（2026-08-11起票）**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する改修（フロントエンド[`DEVLOG.md`](DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針とした。
-- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](DEVLOG.md) §73。
+- **既知の差分（2026-08-11起票）**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する改修（フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針とした。
+- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73。
 
 ### 4-7. V2V／チェーンの音声まわりの残件3点
 
 - **概要**: ①stage-2の音声タイル継ぎ目（チェーン由来のbacklogと同族でV2V固有ではない）②fpsリサンプルが**全体変換**になっている（末尾のcontext区間だけの部分変換に最適化できる。単一ユーザーでは実害小。可変フレームレート素材は未ストレステスト）③ハンドル方式のクロスフェード窓に残る**浅い一時的な凹み**（深さ0.42。源とハンドルが同一音楽の別レンダのため位相干渉が部分的に残る）。
 - **何が塞いでいるか**: ①②③とも、オーナーの試聴で実用上受容済み。③はノイズフロア整合などの追加手段が候補として挙がっている段階。
-- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §24.5・§24.7、[`Nz-Videomni/Docs/V2V_AUDIO_JOIN_RESEARCH.md`](../../../Docs/V2V_AUDIO_JOIN_RESEARCH.md) §4。
+- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.5・§24.7、[`Nz-Videomni/Docs/V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md) §4。
 
 ### 4-8. 未対応のIC-LoRAアダプタ（Motion-Track）＋`conditioning_attention_mask`の露出
 
@@ -549,19 +550,19 @@
 
 - **概要**: 参照条件の効かせ方を画面の場所ごとに絞るマスク。Phase Cのスコープ外項目として唯一未着手のまま残っている。2026-08-03のDepth／Deblur追加でも**明示的にスコープ外**と確定した。
 - **何が塞いでいるか**: マスク動画をどう受け取るかの入口設計が未着手であること。→ **§4-25**（AviUtl2側で作成したマスク動画のバックエンド接続）が本命の前提で、この露出はその第一の応用先にあたる。
-- **出典**: [`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](../../../Docs/IC_LORA_PHASE_C_STATUS.md)「スコープ外」（着手時の入口）、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_RESEARCH.md`](../../../Docs/IC_LORA_PHASE_C_RESEARCH.md)。
+- **出典**: [`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)「スコープ外」（着手時の入口）、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)。
 
 ### 4-9. A2V API層の残5点
 
 - **概要**: v1のスコープ外として明示された5点——①複数クリップのA2V（音声の窓割り）②A2VとV2Vの同時指定（現在は422で排他）③vocoderで生成した音声の返却（現在は原波形をそのまま多重化する一択）④`audio_start_time`／`audio_max_duration`の露出（音声のトリミング）⑤`modality_scale`の露出。
 - **何が塞いでいるか**: いずれもv1の設計時点で意図的に落としたもので、需要が確認できていない。凍結APIへの加算的拡張として後から足せる形は保たれている。
-- **出典**: [`Nz-Videomni/Docs/A2V_DESIGN.md`](../../../Docs/A2V_DESIGN.md) §2.5。
+- **出典**: [`Nz-Videomni/Docs/A2V_DESIGN.md`](A2V_DESIGN.md) §2.5。
 
 ### 4-10. 120クリップ級の長尺チェーン構想
 
 - **概要**: クリップ連結の上限をさらに大きく（120クリップ級＝理論上8時間）伸ばす構想。当初案として挙がったが、**チェーンが不可分の単一ジョブである**（途中で失敗すると全部やり直し）というリスクの指摘を受けて撤回し、上限は24に落ち着いた。
 - **何が塞いでいるか**: やるとしても「固定枠の拡張」という現行方式ではなく、バッチA2Vと同じ**表＋状態管理のUI＋区間分割生成して繋ぐ再開可能な仕組み**として、別の設計課題で扱うべきものと位置づけられている。
-- **出典**: [`Nz-Videomni/Docs/CHAIN_UI_EXPANSION_WORKORDER.md`](../../../Docs/CHAIN_UI_EXPANSION_WORKORDER.md)。
+- **出典**: [`Nz-Videomni/Docs/CHAIN_UI_EXPANSION_WORKORDER.md`](CHAIN_UI_EXPANSION_WORKORDER.md)。
 
 ### 4-11. 参照動画まわりの早期バリデーション（1件）
 
@@ -575,49 +576,49 @@
 - **現在の扱い（2026-08-18更新）**: **本項はタイムライン設計当時の入口の記録であり、実務上の受け皿は移っている**——Retakeは実装まで終わってクローズ済み（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73）。窓の長尺化という続きの構想は起票していたが（旧§1-18）、End sourceの実装により幾何的に等価な代替（AviUtl2の動画編集＋Chainedタブ）が成立したためオーナー裁定で起票取り下げ・クローズした（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-93）。Inpaintは§3-55（前提の§3-54待ち）である。着手の判断は必ずそちらを見ること。
 - **概要**: 生成済み動画の一部の時間区間だけを作り直すRetakeと、映像の一部の領域を塗り替えるInpaint。タイムライン設計の当初から「さらに先の将来」として位置づけられている。
 - **何が塞いでいるか**: 大規模な機能追加になること。**土台としては、固定しているwheel（`ltx_pipelines`）に`RetakePipeline`（動画から初期latentを作りmaskで部分デノイズする）が実在する**ので、ゼロからの発明にはならない。
-- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md)「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](TIMELINE_FEATURE_CANDIDATES.md)、[`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §24.6。
+- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)、[`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.6。
 
 ### 4-13. 時間アップスケーラ（temporal upscaler x2）
 
 - **概要**: LTX 2.3には空間アップスケーラ（x2）と並んで**時間方向のアップスケーラ（x2）**が公式に存在するが、本プロジェクトは空間側だけを導入しており、時間側は取得も配線もしていない。フレーム数を後段で2倍に増やす（＝滑らかにする）用途にあたる。
 - **何が塞いでいるか**: 需要が未確認で、モデルの追加取得（ダウンロード容量の増加）とVRAM影響の実測が要る。
-- **出典**: [`Nz-Videomni/Docs/LTX23_REFERENCE.md`](../../../Docs/LTX23_REFERENCE.md)（モデル変種一覧）、`Nz-Videomni`の`config.yaml`（`spatial_upsampler_path`のみ存在）。
+- **出典**: [`Nz-Videomni/Docs/LTX23_REFERENCE.md`](LTX23_REFERENCE.md)（モデル変種一覧）、`Nz-Videomni`の`config.yaml`（`spatial_upsampler_path`のみ存在）。
 
 ### 4-14. バッチA2VパネルのCrop欄が未露出
 
 - **概要**: Crop出力（最終出力を指定サイズへ切り出す）の入力欄は、Create画面とChain画面には実装済みだが、**バッチA2Vのパネルには無い**。送信側は`buildA2vChainPayload`が常に`crop_output`を組み立てているため、バッチはCreate側の値をそのまま使う形になっている。
 - **何が塞いでいるか**: Crop欄の新設時に「本流2画面に限定する」とスコープを切った名残で、関連ギャップとして認識だけされていた。
-- **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](WEBVIEW2_PARITY_BACKLOG.md) N1、[`DEVLOG.md`](DEVLOG.md) §12（パリティ実装 第1〜3陣のN1）。
+- **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N1、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §12（パリティ実装 第1〜3陣のN1）。
 
 ### 4-15. Gradio側バッチが`chunked_upsample`を送っていない（逆方向の差分）
 
 - **概要**: バックエンド同梱Gradioのバッチ実行経路は、チェーンリクエストに`chunked_upsample`（省メモリ経路）を明示送信していない。フロントエンドのバッチA2Vは常に明示送信しており、**この点だけはフロントのほうが進んでいる**（逆方向の差分）。
 - **何が塞いでいるか**: バックエンド側の凍結方針。製品の入口はフロントエンドなので実害が小さい。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §9.9-1、[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.9。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.9-1、[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.9。
 
 ### 4-16. Join（V2V結合）の既知の縮退3ケース
 
 - **概要**: joined動画を🎞で挿入するとき、位置指定つき挿入と仮オブジェクトの自動削除が効かず、カーソル位置への素挿入へ穏当に縮退する場合が3つある——①Chain画面での手動v2v②WebUIリロード後（jobId→元動画位置の揮発マップが消える）③マウント時に`job.joined`から復元した連結済み表示（トリム済み秒数が不明で位置計算できない）。
 - **何が塞いでいるか**: 実装時に**でっち上げの位置を使うより素挿入のほうが安全**と判断して受容した設計。直すには位置マップの永続化が要る。
-- **出典**: [`JOIN_FEATURE_RESEARCH.md`](JOIN_FEATURE_RESEARCH.md) 第4部、[`DEVLOG.md`](DEVLOG.md) §44.2・§44.4。
+- **出典**: [`JOIN_FEATURE_RESEARCH.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/JOIN_FEATURE_RESEARCH.md) 第4部、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §44.2・§44.4。
 
 ### 4-17. ブリッジ契約v5の6メソッド＋イベントが契約書に未収録（文書債務）
 
-- **概要**: [`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md)は契約v5のうち`timeline.getSelection`と`timeline.menuInvoked`しか収録しておらず、残る6メソッド（`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`）とイベント`timeline.projectLoaded`が未収録のまま。**実装はC++側・`types.ts`側とも揃っている**ので機能の欠落ではなく、文書だけの債務である。
-- **何が塞いでいるか**: 収録には各メソッドの引数・応答形式を実装から起こす手間がかかる一方、当面の正本は`webui/src/bridge/types.ts`と[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5で足りている。
-- **出典**: [`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §0冒頭の2026-07-08注記および§4.14.1。
+- **概要**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)は契約v5のうち`timeline.getSelection`と`timeline.menuInvoked`しか収録しておらず、残る6メソッド（`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`）とイベント`timeline.projectLoaded`が未収録のまま。**実装はC++側・`types.ts`側とも揃っている**ので機能の欠落ではなく、文書だけの債務である。
+- **何が塞いでいるか**: 収録には各メソッドの引数・応答形式を実装から起こす手間がかかる一方、当面の正本は`webui/src/bridge/types.ts`と[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §5で足りている。
+- **出典**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §0冒頭の2026-07-08注記および§4.14.1。
 
 ### 4-18. 図形オブジェクトのエイリアス実書式
 
 - **概要**: AviUtl2の図形オブジェクトを`create_object_from_alias`で作るための正確な書式が未取得（同梱プリセットが空で、実機ダンプが要る）。effect名が`図形`で項目が`図形の種類`・`色`・`ライン幅`等であることまでは判明している。
 - **何が塞いでいるか**: **仮オブジェクトはテキストで作る方針**（テキストの書式は確認済み）なので、図形の書式は現状どこからも必要とされていない。図形を使う機能を作ると決めたときに実機ダンプする。
-- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md)（未確定事項・図形／テキスト生成）。
+- **出典**: [`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)（未確定事項・図形／テキスト生成）。
 
 ### 4-19. SDK可否表をv2.0.54基準で取り直す
 
-- **概要**: [`SDK_REFERENCE.md`](SDK_REFERENCE.md) §10の「本体バージョン整合表」は**beta52基準**（2026-07-07時点）で書かれた、API追加日からの状況証拠ベースの可否判定である。実機ランタイムはその後v2.0.54ポータブルへ移行しており、v2.0.54での動作実績は取り直しが要る。
+- **概要**: [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §10の「本体バージョン整合表」は**beta52基準**（2026-07-07時点）で書かれた、API追加日からの状況証拠ベースの可否判定である。実機ランタイムはその後v2.0.54ポータブルへ移行しており、v2.0.54での動作実績は取り直しが要る。
 - **何が塞いでいるか**: 右クリック再設計で実際に使うAPIは実機で一次確認済み（同書の「実機確定知見」節）で、実務上の困りごとが出ていない。表全体の取り直しは網羅的な実機作業になる。
-- **出典**: [`SDK_REFERENCE.md`](SDK_REFERENCE.md) 冒頭注記・§10。
+- **出典**: [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) 冒頭注記・§10。
 
 ### 4-20. オブジェクトメニューの種別フィルタ
 
@@ -630,7 +631,7 @@
 - **再訪条件**: ユーザーから「mix経路では不要な音が混ざる」という具体的な不満・要望が出たとき。
 - **概要**: タイムライン右クリックの「動画の音声をa2v（音声から動画生成）へ送る」で、対象レイヤー以外を自動無効化して単独音声を抽出するsolo分離モード。
 - **何が塞いでいるか**: 実機検証済みのmix経路（タイムライン全体の音をそのまま録る）で実用上十分であり、不要な音はユーザーがレイヤーを手動無効化すれば代替できる。solo分離は実機未検証・コミュニティ参考実装なしでリスクが高く、需要も未確認。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §33.6。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §33.6。
 
 ### 4-22. SageAttentionを既定にするかどうかの再検討（起票：2026-08-01）
 
@@ -641,22 +642,22 @@
   2. **`sdpa`は常に正しい参照実装**であり、比較の基準として動かさない価値がある。
   3. **切替のコストが小さい**。UIの1クリックで済み、選択は保存される。
 - **切り替えるとしたら何を決めるか**: 既存プロジェクトの再現性をどう扱うか（既定変更の告知方法、あるいは「以前と同じ結果が欲しいなら`sdpa`」の案内の出し方）。`sageattention`未導入環境での降格挙動はすでに実装済みなので、そちらは追加作業にならない。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §43.1・§43.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58、[`DEVLOG.md`](DEVLOG.md) §55。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.1・§43.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §55。
 
 ### 4-23. OutputsとUploadsの保存領域一本化（「同じジョブのものは同じディレクトリへ」案）（起票：2026-08-01）
 
 - **概要**: バックエンドの保存領域は現在、成果物の`outputs/{job_id}/`（output.mp4＋metadata.json）と、入力素材の`uploads/`（画像/動画/音声の3系統・UUIDディレクトリ）に分かれている。オーナーから「同じジョブで使ったものは同じディレクトリに保存するほうが、ユーザーが後からファイル整理しやすいのでは」という提案があり議論した（2026-08-01）。
 - **スコープ外とした理由**: ①アップロードはジョブ誕生前に起きるためジョブディレクトリへ直接置けず、ステージング＋移動の機構が要る。②1つのアップロードを複数ジョブが使い回す実態がある（バッチの画像/参照動画キャッシュ・画面再マウント時のスロット引き継ぎ）ため、ジョブごとのコピーは大きな動画の重複を生む。③参考にしたSD WebUIの思想はむしろ「outputsだけが永続で、入力・中間物は保存しない」であり、一本化はその方向とも一致しない。
-- **代わりの現方針**: 「**Outputsは宝物、Uploadsは事実上の一時ファイル置き場**」という区別を設計原則として確立した（正本: [`Nz-Videomni/Docs/STORAGE_POLICY.md`](../../../Docs/STORAGE_POLICY.md)）。将来の軽い改善候補として「起動時に古いuploadsを自動掃除（年齢ベースGC）」がある（同書に記載）。
+- **代わりの現方針**: 「**Outputsは宝物、Uploadsは事実上の一時ファイル置き場**」という区別を設計原則として確立した（正本: [`Nz-Videomni/Docs/STORAGE_POLICY.md`](STORAGE_POLICY.md)）。将来の軽い改善候補として「起動時に古いuploadsを自動掃除（年齢ベースGC）」がある（同書に記載）。
 - **再訪条件**: 上記の現方針で実運用上の不都合が出たとき。
-- **出典**: 2026-08-01のオーナーディスカッション、[`Nz-Videomni/Docs/STORAGE_POLICY.md`](../../../Docs/STORAGE_POLICY.md)。
+- **出典**: 2026-08-01のオーナーディスカッション、[`Nz-Videomni/Docs/STORAGE_POLICY.md`](STORAGE_POLICY.md)。
 
 ### 4-24. Style LoRAの音声強度制御を4軸へ拡張する「Style LoRA Advanced mode」（起票：2026-08-02）
 
 - **概要**: 音声強度制御（`audio_strength`）は実装完結（2026-08-02、映像軸・音声軸の**2軸**で確定）。LTX 2.3の実構造ではクロス注意の方向別に軸を分けると4軸まで取りうるが、「どちらのストリームに書き込むか」で2軸へ畳み込んで実装した。
 - **スコープ外とした理由**: 4軸のほうが厳密だが、2軸のほうがユーザーが理解しやすく使いやすいと判断した（UX優先）。クロス注意の方向別に個別制御したいという需要は未確認。
 - **再訪条件**: リップシンクにかかわるStyle LoRA需要を発見したとき。既定の2軸UIは維持したまま「Style LoRA Advanced mode」を新設して4軸指定を追加する形を想定。
-- **出典**: バックエンド[`LORA_AUDIO_STRENGTH_WORKORDER.md`](../../../Docs/LORA_AUDIO_STRENGTH_WORKORDER.md) §1・§3。
+- **出典**: バックエンド[`LORA_AUDIO_STRENGTH_WORKORDER.md`](LORA_AUDIO_STRENGTH_WORKORDER.md) §1・§3。
 
 ### 4-25. AviUtl2側で作成したマスク動画のバックエンド接続（起票：2026-08-03）
 
@@ -672,26 +673,26 @@
 - **概要**: canny-control・pose-control等、複数の前処理種別を同じ参照動画に併用したい需要への対応。単一制御に限定しているのは当方の3箇所のみ——①APIスキーマの`reference_video_id`が単数（`api/models.py`）②前処理種が2種以上だと400 `LORA_PREPROCESS_CONFLICT`で拒否（`api/generate.py`）③エンジン側の`_ic_reference`が単一タプル（`engine/pipeline/fast_video_pipeline.py`）。
 - **2026-08-03のWeb調査結果**: (a) 複数信号を1本の動画に重ね描き合成して渡す方式は、公式・コミュニティとも実例ゼロ（モデルカード・HFディスカッション全件・公式ドキュメント・GitHub issueに報告なし）。(b) 公式ドキュメントの「Union」はチェックポイント差し替え不要の意味で、詳細チュートリアル（ltxworkflow.com）は複数モード同時実行をVRAM問題として明示的に非推奨としている。(c) 実現するなら公式ComfyUIの`LTXVAddGuideMulti`ノードと同様の「制御動画を複数本、独立に条件付けする」方式が本筋で、その場合は上記3箇所の拡張が正面から必要になる。
 - **何が塞いでいるか**: 公式が実運用で非推奨としており、需要の証拠も薄いため。
-- **出典**: [`DEVLOG.md`](DEVLOG.md) §15.2、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](../../../Docs/IC_LORA_PHASE_C_STATUS.md)、`Nz-Videomni`の`api/models.py`・`api/generate.py`・`engine/pipeline/fast_video_pipeline.py`、[LTX公式 IC-LoRA Adapters](https://docs.ltx.io/open-source-model/integration-tools/ic-lo-ra-adapters)、[ltxworkflow.com IC-LoRAガイド](https://ltxworkflow.com/resources/tutorials/ic-lora-ltx-2-3-complete-guide)、[ComfyUI-LTXVideo issue #479](https://github.com/Lightricks/ComfyUI-LTXVideo/issues/479)（いずれも2026-08-03調査）。
+- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §15.2、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)、`Nz-Videomni`の`api/models.py`・`api/generate.py`・`engine/pipeline/fast_video_pipeline.py`、[LTX公式 IC-LoRA Adapters](https://docs.ltx.io/open-source-model/integration-tools/ic-lo-ra-adapters)、[ltxworkflow.com IC-LoRAガイド](https://ltxworkflow.com/resources/tutorials/ic-lora-ltx-2-3-complete-guide)、[ComfyUI-LTXVideo issue #479](https://github.com/Lightricks/ComfyUI-LTXVideo/issues/479)（いずれも2026-08-03調査）。
 
 ### 4-28. `two_stage_hq`（非量子化モデル用の高品質パイプラインモード）（起票：2026-07-15、§3から降格：2026-08-04）
 
 - **概要**: 品質モード`two_stage_hq`は、非量子化モデル（量子化していないフル精度のモデル）を動かすためのモードとして、API列挙型（`pipeline: Literal["distilled","two_stage_hq"]`）とGradio UIのラジオに**モック（枠）だけ**用意されている機能。現行の唯一の実働パイプライン`distilled`も内部的にはtwo-stage（Stage1半解像度→x2アップスケール→Stage2）だが、これはフル精度モデル向けの高品質種別である`two_stage_hq`とは別物なので混同しないこと。
 - **何が塞いでいるか**: **非量子化モデルを動かせるハイスペックマシンをオーナーが所有していないこと**（**§4-1**と同根）。着手はそうしたマシンを用意したあと、バックエンド側（`engine/`）からの再開発になる。計算コストはステップ増（8→30〜50）とCFGの2回forwardで**約7〜12倍**になり、活性値も増えるためVRAM 16GBでの実測が必須。
 - **着手するときの入口**: ①未配線箇所は`Nz-Videomni/services/ltx_runner.py`が組み立てるworkerペイロード——`op: "generate"`の辞書に`pipeline`と`guidance_scale`が入っておらず、常にdistilled経路になる（ステップ数の扱いは§4-1を参照）。②入口となる重みは非蒸留×量子化のGGUFが実在する（`unsloth/LTX-2.3-GGUF`の`ltx-2.3-22b-dev-Q4_K_M.gguf`、HF表示約14.3GB。現行のdistilled Q4と同クラス・同じ22Bアーキ）。
-- **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](WEBVIEW2_PARITY_BACKLOG.md) N12、`Nz-Videomni`の`api/models.py`（pipeline列挙型）・`gradio_ui/i18n.py`（「バックエンド未対応」ラベル）・`services/ltx_runner.py`（generateペイロード）、[`Nz-Videomni/Docs/FEATURE_RESEARCH_2026-07-04.md`](../../../Docs/FEATURE_RESEARCH_2026-07-04.md) D節。
+- **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N12、`Nz-Videomni`の`api/models.py`（pipeline列挙型）・`gradio_ui/i18n.py`（「バックエンド未対応」ラベル）・`services/ltx_runner.py`（generateペイロード）、[`Nz-Videomni/Docs/FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節。
 
 ### 4-29. Gradio側バッチのスキップ判定が481フレーム固定のまま（逆方向の差分）（起票：2026-08-12）
 
-- **概要**: バッチa2v（audio to video、音声から動画を生成する機能）のスキップ判定の上限が、**フロントエンドは「SingleタブのDURATION（生成するフレーム数）の値と481フレームの小さいほう」**（`webui/src/modes/batch/manifestMerge.ts`の`scanToRows`／`rejudgeRows`。2026-07-19のコミット`9324f05`で連動済み。481はサーバー絶対上限へのクランプとしてのみ効く）なのに対し、**バックエンド同梱のGradio GUIは`MAX_FRAMES = 481`固定**（`gradio_ui/manifest.py`の`over_frame_limit()`）で、この連動に追随していない。**フロントエンドのほうが進んでいる逆方向の差分**であり、§4-15と同型である。表（CSV）へ書かれるスキップ理由コードも異なる（フロントエンド`over-cap`／Gradio`over-481f`。同じ音声フォルダを両方のGUIで扱うと相手側のコードには説明文が出ないが、フロントエンドはStart時に全行を再判定して自前のコードへ書き直すため実害は表示だけにとどまる。[`Nz-Videomni/Docs/BATCH_A2V_CSV_SPEC.md`](../../../Docs/BATCH_A2V_CSV_SPEC.md)の理由コード一覧は、追随の有無にかかわらず既に現状と食い違っていたため2026-08-12に修正済みである）。
+- **概要**: バッチa2v（audio to video、音声から動画を生成する機能）のスキップ判定の上限が、**フロントエンドは「SingleタブのDURATION（生成するフレーム数）の値と481フレームの小さいほう」**（`webui/src/modes/batch/manifestMerge.ts`の`scanToRows`／`rejudgeRows`。2026-07-19のコミット`9324f05`で連動済み。481はサーバー絶対上限へのクランプとしてのみ効く）なのに対し、**バックエンド同梱のGradio GUIは`MAX_FRAMES = 481`固定**（`gradio_ui/manifest.py`の`over_frame_limit()`）で、この連動に追随していない。**フロントエンドのほうが進んでいる逆方向の差分**であり、§4-15と同型である。表（CSV）へ書かれるスキップ理由コードも異なる（フロントエンド`over-cap`／Gradio`over-481f`。同じ音声フォルダを両方のGUIで扱うと相手側のコードには説明文が出ないが、フロントエンドはStart時に全行を再判定して自前のコードへ書き直すため実害は表示だけにとどまる。[`Nz-Videomni/Docs/BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)の理由コード一覧は、追随の有無にかかわらず既に現状と食い違っていたため2026-08-12に修正済みである）。
 - **何が塞いでいるか**: バックエンドの凍結方針と、「製品の入口はフロントエンド」という位置づけ。2026-08-12にオーナーが優先度は低いと判断して見送った。
 - **相互参照**: §4-6（Gradio GUIの残件。in-outpaintingをアダプタのドロップダウンから除外した改修も同じくWebUIのみに効く）、§4-15（`chunked_upsample`の逆方向差分）。
-- **出典**: 2026-08-12のオーナーディスカッションと調査、[`DEVLOG.md`](DEVLOG.md) §75.1、`webui/src/modes/batch/manifestMerge.ts`・`webui/src/modes/batch/useBatchForm.ts`、`Nz-Videomni`の`gradio_ui/manifest.py`。
+- **出典**: 2026-08-12のオーナーディスカッションと調査、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §75.1、`webui/src/modes/batch/manifestMerge.ts`・`webui/src/modes/batch/useBatchForm.ts`、`Nz-Videomni`の`gradio_ui/manifest.py`。
 
 ### 4-30. stage-1の快適予算（参照動画つき）の配信化（起票：2026-08-12）
 
 - **概要**: 快適上限マーカー（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-85）で`CHAIN_COMFORT_TOKEN_BUDGET`（stage-2の快適予算40,000トークン）を`GET /config`の`limits.chain_comfort_token_budget`として配信化したが、**その兄弟である`CHAIN_STAGE1_COMFORT_TOKEN_BUDGET`（参照動画つきstage-1の快適予算25,000トークン）は今回のスコープ外**とし、フロントエンドのミラー定数のままにしてある。同じパターンで後日配信化できる（`config.py`の`LimitsConfig`へ1鍵足し、フロントは`resolveChainComfortBudget`と同型のリゾルバを通して読む）。
-- **何が塞いでいるか**: 何も塞いでいない。今回の改修範囲を絞った結果であり、必要が生じた時点（VRAM容量の異なる機体で25,000線を調整したくなった時点）で着手すればよい。25,000は実機ゲートで実測の急変点と一致することが確認済みの暫定値である（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §57のG4）。
+- **何が塞いでいるか**: 何も塞いでいない。今回の改修範囲を絞った結果であり、必要が生じた時点（VRAM容量の異なる機体で25,000線を調整したくなった時点）で着手すればよい。25,000は実機ゲートで実測の急変点と一致することが確認済みの暫定値である（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57のG4）。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-85（快適上限マーカーの実装記録）、`Nz-Videomni/chain_math.py`、`webui/src/shell/tokenBudget.ts`。
 
 ---
@@ -709,7 +710,7 @@
 - 項目の実装が完了したら「2. 実装済み・ユーザーのテスト待ち」へ移す（上記チェックリスト形式で記載する）。オーナーのテスト（実機・目視・実GPU）に合格したら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移すか、本書から除去する。正本側の更新にも合わせること。
 - **全項目が合格して空になった節は、見出しごと削除する**（2026-08-10のオーナー決定。空節の見出しだけを残しておく旧規約は同日に廃止した）。合格記録は本書に残さず[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ一本化し、他文書からの参照もそちらへ付け替える。**節番号の再採番はしない**——過去の文書・記憶が番号で参照しているため、削除した節の番号は欠番のままにする。
 - **本書に断りなく現れる略号の凡例**（初めて読む人向け）:
-  - **W1〜W9／X1〜X6／Y1〜Y3**＝フロントエンド微調整バッチの第1〜第3波。2026-07-22に実装し、2026-07-25までにオーナー実機ゲートへ合格した（[`DEVLOG.md`](DEVLOG.md) §46〜§48）。
-  - **G0・G1・G4…**＝各テーマの実機ゲート（オーナーが実機で通す確認項目）の番号。番号と内容の対応は**テーマごとに独立**しているので、必ずそのテーマの正本（[`DEVLOG.md`](DEVLOG.md)の該当節・各WORKORDER・バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md)）で引くこと。
-  - **N1〜N13**＝バックエンド同梱のGradio UIに対するパリティ（同等機能）項目の番号（[`WEBVIEW2_PARITY_BACKLOG.md`](WEBVIEW2_PARITY_BACKLOG.md)）。
+  - **W1〜W9／X1〜X6／Y1〜Y3**＝フロントエンド微調整バッチの第1〜第3波。2026-07-22に実装し、2026-07-25までにオーナー実機ゲートへ合格した（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §46〜§48）。
+  - **G0・G1・G4…**＝各テーマの実機ゲート（オーナーが実機で通す確認項目）の番号。番号と内容の対応は**テーマごとに独立**しているので、必ずそのテーマの正本（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md)の該当節・各WORKORDER・バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)）で引くこと。
+  - **N1〜N13**＝バックエンド同梱のGradio UIに対するパリティ（同等機能）項目の番号（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。
 - **他文書から本書や`PENDING_TASKS_CLOSED.md`を参照するときは、必ずファイル名を添えて書く。行番号は書かない**（本書は頻繁に増減するため、行番号はすぐ古くなる。過去に節番号の振り替えも起きており、番号だけでは新旧どちらを指すのか判別できないため）。

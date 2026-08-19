@@ -4,7 +4,7 @@
 - 対象: `Nz-Videomni-frontend-AviUtl2`（本リポジトリ）とAviUtl2実機
 - 本書の位置づけ: **手順書のみ**。本書を作成したセッションではバックエンドの起動・実際の生成・デプロイは一切行っていない。オーナーが実GPU環境で後日まとめて実行するための案内である。
 - バックエンド（`Nz-Videomni`）は**凍結方針**のため、本書の作成にあたっては変更していない（既存手順を読み取って引用・参照するのみ）。ただし凍結は絶対の禁止ではなく、V2V結合（Join）機能の復活のために2026-07-21に限定解除してAPIを拡張した実績がある（[`API_REFERENCE.md`](API_REFERENCE.md) §3.17・§3.18・§6）。
-- 更新: 2026-07-19（オーナー申告に基づくマトリクス更新。「mockでしか検証していない」という当初の前提を是正——詳細は§1.1。2026-07-19、後日明言のなかった残り6細部の最終判定を反映——§4.3/§4.6/§4.8/§4.9・第6節。同日さらに、reuseIfPresentリロード後保険経路・危険ゾーン〔N4〕表示有無の合格とAPIキーバッジ〔N13〕のα版スコープ外クローズを反映——§4.7/§4.8・第6節）。2026-07-20、右クリック再設計第2段階（[`DEVLOG.md`](DEVLOG.md) §41）でminimal/smallプリセットが481フレーム化されたことを受け、§4.1に確認行を追加。2026-07-27、§4.5のcutoutRange併用を「未配線につき検証対象外」として決着（§1.1・§4.5・第6節を整合。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48）。2026-07-28、NAG（Normalized Attention Guidance）フロントエンド追随（[`DEVLOG.md`](DEVLOG.md)の該当節）に伴い§4.11を新設。2026-07-30、V2Vリボン範囲トリム（§1-6）とバッチi2v-long（§1-7）の実装完了に伴い§4.12・§4.13を新設（既存項目のチェック済み欄を書き換えないよう、§4.5の内側の細目である前者も独立節として追加した。[`DEVLOG.md`](DEVLOG.md) §54）。2026-07-31、§4.13が全項目合格しクローズ（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-57）。2026-08-01、§4.12が全5項目合格しクローズ（同§3-59。⑤＝IC-LoRA参照動画への拡張分は同日追加した項目。[`DEVLOG.md`](DEVLOG.md) §56）。項目別結果表と総合判定も同日に整合させた。2026-08-05、§4.10（ドラッグ＆ドロップ5項目）がオーナー実機で全項目合格しクローズ（`Docs/PENDING_TASKS.md` §2-1からは除去済み）。これにより§4.1〜§4.13すべてが全項目合格した。2026-08-09、Stage-2のクリップ長の選択（`stage2_window`）とOutpainting（動画キャンバス拡張）を実装したが、**本書には項目を追加していない**——どちらも同日中に専用の実機ゲート（バックエンド`outputs/stage2_window_optin/RUNBOOK.md`・`uploads/_outpaint_verify/RUNBOOK_W2.md`）とオーナーの実機確認まで通り、本書が受け皿とする「未消化の細部」が残らなかったためである。合格記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-68〜§3-70、測定値の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §53・§54。2026-08-10、Retakeを実装。本書には項目を追加していない——**同日中にオーナーの目視・実機確認が全項目合格し**、本書が受け皿とする「未消化の細部」が残らなかったためである。合格記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73と[`DEVLOG.md`](DEVLOG.md) §68・§69・§71、実GPUゲートの測定値はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §55（最後まで残っていた最小窓73フレームの仕様判断も同日に「73フレーム維持・注意文で伝える」で確定し、テーマは完結した）。**同日、台帳の運用が変わり、全項目が合格して空になった節は見出しごと削除することになった**（`PENDING_TASKS.md`末尾「本台帳の位置づけ」・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭）。これにより本書が長く参照してきた`PENDING_TASKS.md` §2-1（実GPU細部）は削除されている——**本書中の§2-1への言及はすべて当時の記録であり、現在の参照先は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-67である。**
+- 更新: 2026-07-19（オーナー申告に基づくマトリクス更新。「mockでしか検証していない」という当初の前提を是正——詳細は§1.1。2026-07-19、後日明言のなかった残り6細部の最終判定を反映——§4.3/§4.6/§4.8/§4.9・第6節。同日さらに、reuseIfPresentリロード後保険経路・危険ゾーン〔N4〕表示有無の合格とAPIキーバッジ〔N13〕のα版スコープ外クローズを反映——§4.7/§4.8・第6節）。2026-07-20、右クリック再設計第2段階（[`DEVLOG.md`](DEVLOG.md) §41）でminimal/smallプリセットが481フレーム化されたことを受け、§4.1に確認行を追加。2026-07-27、§4.5のcutoutRange併用を「未配線につき検証対象外」として決着（§1.1・§4.5・第6節を整合。[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-48）。2026-07-28、NAG（Normalized Attention Guidance）フロントエンド追随（[`DEVLOG.md`](DEVLOG.md)の該当節）に伴い§4.11を新設。2026-07-30、V2Vリボン範囲トリム（§1-6）とバッチi2v-long（§1-7）の実装完了に伴い§4.12・§4.13を新設（既存項目のチェック済み欄を書き換えないよう、§4.5の内側の細目である前者も独立節として追加した。[`DEVLOG.md`](DEVLOG.md) §54）。2026-07-31、§4.13が全項目合格しクローズ（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-57）。2026-08-01、§4.12が全5項目合格しクローズ（同§3-59。⑤＝IC-LoRA参照動画への拡張分は同日追加した項目。[`DEVLOG.md`](DEVLOG.md) §56）。項目別結果表と総合判定も同日に整合させた。2026-08-05、§4.10（ドラッグ＆ドロップ5項目）がオーナー実機で全項目合格しクローズ（`Docs/PENDING_TASKS.md` §2-1からは除去済み）。これにより§4.1〜§4.13すべてが全項目合格した。2026-08-09、Stage-2のクリップ長の選択（`stage2_window`）とOutpainting（動画キャンバス拡張）を実装したが、**本書には項目を追加していない**——どちらも同日中に専用の実機ゲート（バックエンド`outputs/stage2_window_optin/RUNBOOK.md`・`uploads/_outpaint_verify/RUNBOOK_W2.md`）とオーナーの実機確認まで通り、本書が受け皿とする「未消化の細部」が残らなかったためである。合格記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-68〜§3-70、測定値の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §53・§54。2026-08-10、Retakeを実装。本書には項目を追加していない——**同日中にオーナーの目視・実機確認が全項目合格し**、本書が受け皿とする「未消化の細部」が残らなかったためである。合格記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-73と[`DEVLOG.md`](DEVLOG.md) §68・§69・§71、実GPUゲートの測定値はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §55（最後まで残っていた最小窓73フレームの仕様判断も同日に「73フレーム維持・注意文で伝える」で確定し、テーマは完結した）。**同日、台帳の運用が変わり、全項目が合格して空になった節は見出しごと削除することになった**（`PENDING_TASKS.md`末尾「本台帳の位置づけ」・[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)冒頭）。これにより本書が長く参照してきた`PENDING_TASKS.md` §2-1（実GPU細部）は削除されている——**本書中の§2-1への言及はすべて当時の記録であり、現在の参照先は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-67である。**
 
 ## 1. 目的と前提
 
@@ -15,7 +15,7 @@
 - **エージェントによる自動テスト・デプロイ疎通確認は`config.model.backend=mock`（合成クリップを返すダミーの生成エンジン）経由**。これはGPUを占有しない安全策として意図的な選択であり、API・スキーマ・ジョブ管理の疎通確認が目的。
 - **オーナー自身は当初から`Nz-Videomni`を`./run.ps1`で起動して検証してきた**。`model.backend: "auto"`（既定値）により、モデル一式が揃っている本機では自動的に`real`バックエンドが選ばれるため、オーナーの検証は最初から実GPUでの本物の生成エンジンを使用している。
 
-2026-07-18、オーナーから「realエンジンで検証済みの機能」の申告があり、Create/Chain両タブの主要機能（T2V・I2V・IC-LoRA・単発A2V・バッチA2V・Chain Clips連結・Chain V2V・chunked_upsample常用）についてrealバックエンドでの合格が確認された（詳細は第4節・第6節、[`DEVLOG.md`](DEVLOG.md) §19・§21、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-14）。同日、モデル管理（4.8）についても、オーナーの実機ロード操作をサーバーログ（`POST /api/v1/pipeline/load 200`→モデル切替→`LTX worker ready`→切替後モデルでのt2v生成完走）で裏付けて合格を追加した。これによりマトリクス9項目は**9/9すべてで少なくとも基本パスが合格**した。
+2026-07-18、オーナーから「realエンジンで検証済みの機能」の申告があり、Create/Chain両タブの主要機能（T2V・I2V・IC-LoRA・単発A2V・バッチA2V・Chain Clips連結・Chain V2V・chunked_upsample常用）についてrealバックエンドでの合格が確認された（詳細は第4節・第6節、[`DEVLOG.md`](DEVLOG.md) §19・§21、[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-14）。同日、モデル管理（4.8）についても、オーナーの実機ロード操作をサーバーログ（`POST /api/v1/pipeline/load 200`→モデル切替→`LTX worker ready`→切替後モデルでのt2v生成完走）で裏付けて合格を追加した。これによりマトリクス9項目は**9/9すべてで少なくとも基本パスが合格**した。
 
 本書の位置づけは「realでの検証が未実施であることを示す文書」ではなく、**「第4節の実GPU通しマトリクスのうち、オーナー申告・ログ証跡でまだカバーされていない各項目内の個別技術チェックを洗い出し、潰していくための文書」**へ改める。個別技術チェックのうち6点は、オーナーが「後日確認する」と明言した（2026-07-18決定）ため、ブロッカー扱いではなく`Docs/PENDING_TASKS.md` §2-1の「実装済み・テスト待ち」区分に整理していた。**2026-07-19、この6点のうち4点（IC-LoRA強度スライダー・wav自動調整細目・冒頭キーフレームなし品質確認・バッチのnoClobber付番）は「以前のセッションで確認済み」とオーナーが追加申告して合格し、あわせて開始前チェック・予想出力尺一致・reuseIfPresent通常再挿入・出力フォルダ自動作成も合格した**（詳細は`Docs/PENDING_TASKS_CLOSED.md` §3-16・§3-17）。後日確認明言分として残っていたのはChain V2VのcutoutRange併用と短いクリップでのoverlap_frames制約（`kv>=L`）の2点だったが、後者は2026-07-22に機能面合格でクローズし（`Docs/PENDING_TASKS_CLOSED.md` §3-33）、前者は**2026-07-27に「製品UIから実行する経路が無い（未配線）」と判明して検証対象外で決着した**（§4.5、`Docs/PENDING_TASKS_CLOSED.md` §3-48）。**あわせて、後日明言のなかった残り6細部（IC-LoRA 128グリッドUI・A2Vの5スロット全体併用・スタイルLoRA併用・短すぎる音声の事前ブロック・モデル管理の409排他/危険ゾーンunload→再ロード・chunked_upsampleの768p級ストレステスト）も2026-07-19のオーナー最終判定ですべて合格した**（詳細は`Docs/PENDING_TASKS_CLOSED.md` §3-18）。α版リリース前に残項目を解消すべき**最終ゲート**という位置づけ自体は変わらない。
 
@@ -59,7 +59,7 @@ README §1「必要なモデル（`config.yaml`の`model:`が参照）」の表�
 - [ ] IC-LoRA Deblur 1点（`models/LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`、~0.91GiB）。`deblur`アダプタの実体で、前処理は不要。
 - [ ] VDA深度前処理器 2点（`models/Preprocessors/VDA/{video_depth_anything_vits.pth,LICENSE}`、~0.12GiB）。`depth-control`が参照動画から深度を起こすときに使う。`engine/preprocess/depth.py`が絶対パスで読むため配置は変更不可（`LICENSE`はApache-2.0の全文で`.pth`と必ず一緒に置く）。
 
-**取得総量は約33GB（30.7GiB）。** `install_ltx.ps1`の最後に出るPASS/MISSING検証テーブルは**18項目**で、上記4種類も名指しで表示する（旧レイアウトのまま残っている環境は、`setup.bat`の再実行で上記の新しい配置へ自動的に移行される）。ここが全項目PASSであることが、本節の確認としてはもっとも確実である（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36）。詳細な配置規約・自動認識の仕組みはREADME §1「追加のtransformer GGUF / LoRAを配置する」節を参照。
+**取得総量は約33GB（30.7GiB）。** `install_ltx.ps1`の最後に出るPASS/MISSING検証テーブルは**18項目**で、上記4種類も名指しで表示する（旧レイアウトのまま残っている環境は、`setup.bat`の再実行で上記の新しい配置へ自動的に移行される）。ここが全項目PASSであることが、本節の確認としてはもっとも確実である（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-36）。詳細な配置規約・自動認識の仕組みはREADME §1「追加のtransformer GGUF / LoRAを配置する」節を参照。
 
 ### 2.3 GPU要件
 
@@ -115,7 +115,7 @@ curl http://127.0.0.1:18620/api/v1/config
 - [x] 生成完了後にプレビューが表示される
 - [x] タイムラインへの挿入（プロビジョナル→本挿入の一連の流れ）が成功する
 - [x] 生成された動画の内容がプロンプトに沿っている（目視で破綻がない）
-- [x] **minimal 481f・small 481fプリセット（2026-07-20追加、右クリック再設計第2段階）**: `Nz-Videomni/config.yaml`の`generation_presets.minimal`（512×320）・`small`（960×576）が49／121フレームから481フレーム（20秒@24fps上限）へ引き上げられた（[`DEVLOG.md`](DEVLOG.md) §41.1）。その後のG4実機ゲートでsmall（960×576）の481f生成にわずかな共有メモリ使用が観測され、一時保守側の457フレームへ変更した（[`DEVLOG.md`](DEVLOG.md) §41.1a）が、オーナーがログを確認した結果、速度低下を伴わない無害なベースライン（`RESOLUTION_DURATION_CAPABILITY.md` §8.2）と確定したため481フレームへ復帰した（[`DEVLOG.md`](DEVLOG.md) §41.1b）。**合格（2026-07-20）**。G4実機ゲートは全9項目合格でクローズ済みで、本項の詳細な経緯は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-23（第2段階のクローズまとめ）に集約されている。本行は実GPUマトリクスの一項目として存在のみ記録する。
+- [x] **minimal 481f・small 481fプリセット（2026-07-20追加、右クリック再設計第2段階）**: `Nz-Videomni/config.yaml`の`generation_presets.minimal`（512×320）・`small`（960×576）が49／121フレームから481フレーム（20秒@24fps上限）へ引き上げられた（[`DEVLOG.md`](DEVLOG.md) §41.1）。その後のG4実機ゲートでsmall（960×576）の481f生成にわずかな共有メモリ使用が観測され、一時保守側の457フレームへ変更した（[`DEVLOG.md`](DEVLOG.md) §41.1a）が、オーナーがログを確認した結果、速度低下を伴わない無害なベースライン（`RESOLUTION_DURATION_CAPABILITY.md` §8.2）と確定したため481フレームへ復帰した（[`DEVLOG.md`](DEVLOG.md) §41.1b）。**合格（2026-07-20）**。G4実機ゲートは全9項目合格でクローズ済みで、本項の詳細な経緯は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-23（第2段階のクローズまとめ）に集約されている。本行は実GPUマトリクスの一項目として存在のみ記録する。
 
 ### 4.2 単発 I2V（画像/キーフレーム条件）
 
@@ -150,7 +150,7 @@ curl http://127.0.0.1:18620/api/v1/config
 
 - [x] 既存動画（`source_video`）をアップロードし、続きを生成できる
 - [x] 元動画との接続部分（junction）が自然につながっている
-- [x] ~~`timeline.cutoutRange`（範囲選択切り抜き）と組み合わせた実際の使用フローが成立する~~（**未配線につき検証対象外（2026-07-27決着）**: `CutoutRangeWorker`・`cutoutRangeAndUpload`は実装済みだが製品UIから呼ぶ配線が無く、実機で発火させる手段が無い。α版では未配線のままとし、実装済みコードは残置するとオーナーが決定した。経緯・将来配線するときの判断材料は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48、機能自体の管理は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md)第9節のスコープ外一覧）
+- [x] ~~`timeline.cutoutRange`（範囲選択切り抜き）と組み合わせた実際の使用フローが成立する~~（**未配線につき検証対象外（2026-07-27決着）**: `CutoutRangeWorker`・`cutoutRangeAndUpload`は実装済みだが製品UIから呼ぶ配線が無く、実機で発火させる手段が無い。α版では未配線のままとし、実装済みコードは残置するとオーナーが決定した。経緯・将来配線するときの判断材料は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-48、機能自体の管理は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md)第9節のスコープ外一覧）
 
 ### 4.6 単発 A2V（グループ3でCreateへ移設・音声添付欄・distilled・`/generate/chain`）
 
@@ -202,7 +202,7 @@ curl http://127.0.0.1:18620/api/v1/config
 
 ### 4.10 ドラッグ＆ドロップ（ブリッジ契約v7、`ui.resolveDroppedFiles`）
 
-**確認状況**: **全5項目合格（2026-08-05オーナー実機確認）**。フロントエンド台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1に起票していたチェックリストは、合格に伴い同書からは除去済み（跡地の記録は本節）。
+**確認状況**: **全5項目合格（2026-08-05オーナー実機確認）**。[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1に起票していたチェックリストは、合格に伴い同書からは除去済み（跡地の記録は本節）。
 
 - [x] 参照動画欄（IC-LoRA、Create画面）へ動画ファイルをドラッグ＆ドロップすると、実パスが解決されて添付される
 - [x] A2V音声欄（Create画面）へ音声ファイルをドラッグ＆ドロップすると、実パスが解決されて添付され、wav長からのFrames自動調整も発火する
@@ -214,7 +214,7 @@ curl http://127.0.0.1:18620/api/v1/config
 
 ### 4.11 NAG（Normalized Attention Guidance、ネガティブプロンプトの効き、2026-07-28追加）
 
-**確認状況: 全項目合格・クローズ（2026-07-29）**。オーナー実機確認で下記3項目とも合格し、あわせてNAGアコーディオンUIの目視ゲートも合格した。クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-51・§3-54、バックエンド側のゲートG0〜G7の記録は[`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §38。
+**確認状況: 全項目合格・クローズ（2026-07-29）**。オーナー実機確認で下記3項目とも合格し、あわせてNAGアコーディオンUIの目視ゲートも合格した。クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-51・§3-54、バックエンド側のゲートG0〜G7の記録は[`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §38。
 
 NAGは4.1〜4.9のような特定の生成モード専用ではなく、Create/Chain/Batchの3経路すべてに横断的に乗る追加パラメータのため、単独項目として本節に置く（4.9のchunked_upsample・4.10のドラッグ＆ドロップと同じ扱い）。
 
@@ -222,11 +222,11 @@ NAGは4.1〜4.9のような特定の生成モード専用ではなく、Create/C
 - [x] scaleスライダーを既定11.0から動かし、値を上げるほど効果が強まる（下げるほど弱まる）方向性が体感できることを確認する
 - [x] Create・Chain・Batchの3経路それぞれでNAGを有効化して生成し、いずれも問題なく完走することを確認する（Batchは3-1で確定済みの「Create設定を無言で自動適用」仕様どおりに効くことも併せて確認する）
 
-対応していた台帳側の項目は`PENDING_TASKS.md` §2-1「⑧NAGで実GPUのネガティブプロンプトが実際に効くこと」で、合格に伴い[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-51へ移設済みである（**同書§2-1そのものが2026-08-10に節ごと削除された**ため、現在の参照先は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)である）。
+対応していた台帳側の項目は`PENDING_TASKS.md` §2-1「⑧NAGで実GPUのネガティブプロンプトが実際に効くこと」で、合格に伴い[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-51へ移設済みである（**同書§2-1そのものが2026-08-10に節ごと削除された**ため、現在の参照先は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)である）。
 
 ### 4.12 V2Vリボン範囲トリム（2026-07-30追加、§1-6）
 
-**確認状況: 全項目合格・クローズ（2026-08-01）**。①採取解析・②非退行（2026-07-31）・③短尺ゲート・④トリム後Joinの中身連続性・⑤IC-LoRA参照動画の範囲反映の5項目すべてがオーナー実機で合格した（⑤は同日に右クリック#2「IC-LoRA参照動画」へ同じトリムを広げた拡張分）。**経緯・確定事実・実装記録の正本**: [`V2V_RIBBON_TRIM_WORKORDER.md`](V2V_RIBBON_TRIM_WORKORDER.md) §0（状態）・§4（`再生位置`の確定事実）・§7-3（⑤の拡張）、[`DEVLOG.md`](DEVLOG.md) §56、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-59（クローズ記録。起票時は`PENDING_TASKS.md` §1-6。**§3-58はAccelerationなので混同しないこと**）、[`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §42（バックエンド側）。
+**確認状況: 全項目合格・クローズ（2026-08-01）**。①採取解析・②非退行（2026-07-31）・③短尺ゲート・④トリム後Joinの中身連続性・⑤IC-LoRA参照動画の範囲反映の5項目すべてがオーナー実機で合格した（⑤は同日に右クリック#2「IC-LoRA参照動画」へ同じトリムを広げた拡張分）。**経緯・確定事実・実装記録の正本**: [`V2V_RIBBON_TRIM_WORKORDER.md`](V2V_RIBBON_TRIM_WORKORDER.md) §0（状態）・§4（`再生位置`の確定事実）・§7-3（⑤の拡張）、[`DEVLOG.md`](DEVLOG.md) §56、[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-59（クローズ記録。起票時は`PENDING_TASKS.md` §1-6。**§3-58はAccelerationなので混同しないこと**）、[`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §42（バックエンド側）。
 
 タイムライン上の動画オブジェクト（リボン）が元動画ファイルの一部しか占めていないとき、その範囲だけを切り出したmp4を冒頭クリップとして送る機能。§4.5（Chain: V2V）の内側の細目だが、既存項目のチェック済み欄を書き換えないよう独立した節として置く。**①が済むまで②〜④は発火しなかった**（判定関数`decideSourceTrim`はリボンの再生位置が読めないかぎり必ず「トリムしない」を返すため）点だけ、下の各項の日付を読むときの前提として書き添えておく。
 
@@ -243,9 +243,9 @@ NAGは4.1〜4.9のような特定の生成モード専用ではなく、Create/C
 
 ### 4.13 バッチi2v-long（2026-07-30追加、§1-7）
 
-**確認状況: 全項目合格・クローズ（2026-07-31）**。基本フロー5点は2026-07-30合格。行ごとプロンプト・STATUS修正（[`DEVLOG.md`](DEVLOG.md) §54.8）・中止挙動・相互ロック両方向（§54.9の修正後）・バッチ完走は2026-07-31合格。JobLedger 50件超のみ実運用トリガー待ちへ分離（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-48）。クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-57。
+**確認状況: 全項目合格・クローズ（2026-07-31）**。基本フロー5点は2026-07-30合格。行ごとプロンプト・STATUS修正（[`DEVLOG.md`](DEVLOG.md) §54.8）・中止挙動・相互ロック両方向（§54.9の修正後）・バッチ完走は2026-07-31合格。JobLedger 50件超のみ実運用トリガー待ちへ分離（[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-48）。クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-57。
 
-Chain画面の下部にある「バッチi2v-long（プロトタイプ）」節から、画像フォルダを指定して**画像1枚ごとにClip Chain（`POST /generate/chain`）を1本ずつ直列生成**する機能。生成パラメータはすべてChain画面の現在の設定を無言借用する（この節自身はサイズ・尺・seedの欄を持たない）。バックエンドは無改修。実装の正本は[`BATCH_I2V_WORKORDER.md`](BATCH_I2V_WORKORDER.md)、台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-57（起票時は`PENDING_TASKS.md` §1-7 →同§2-1。クローズで移設した）。
+Chain画面の下部にある「バッチi2v-long（プロトタイプ）」節から、画像フォルダを指定して**画像1枚ごとにClip Chain（`POST /generate/chain`）を1本ずつ直列生成**する機能。生成パラメータはすべてChain画面の現在の設定を無言借用する（この節自身はサイズ・尺・seedの欄を持たない）。バックエンドは無改修。実装の正本は[`BATCH_I2V_WORKORDER.md`](BATCH_I2V_WORKORDER.md)、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-57（起票時は`PENDING_TASKS.md` §1-7 →同§2-1。クローズで移設した）。
 
 - [x] **スキャン**（2026-07-30合格）: 画像フォルダを📁または手打ち＋フォーカス外し（onBlur）で指定し、Scanを押す。→ 合格は、`GET /config`の`upload.allowed_image_extensions`に一致する画像だけが**ファイル名昇順**（`img2.png`が`img10.png`より前に来る自然順）で行になり、`#`が1から連番で振られること。`upload.max_image_size_mb`を超える画像は、開始前から`Failed`＋サイズ超過の説明文で並ぶこと（実行の何十分後ではなく事前に分かること）。
 - [x] **直列生成**（2026-07-30合格）: Chain画面のクリップ構成（2本以上）とプロンプトを整えてから開始する。→ 合格は、行が1つずつ`Generating`→`Done`と進み、**同時に2本以上のジョブが投入されないこと**（1枚ごとに`POST /generate/chain`→`GET /jobs/{id}`ポーリング完了→ダウンロードの順で進む）。409（サーバー混雑）は最大3回試行（あいだに3秒待つ）まで自動でやり直し、それでも通らなければその行だけが`Failed`になり、後続は続行される。
@@ -253,7 +253,7 @@ Chain画面の下部にある「バッチi2v-long（プロトタイプ）」節�
 - [x] **行ごとプロンプト（2026-07-30の再設計分。2026-07-31合格——①②を実機確認、③④⑤は未個別確認だが自動テストでピン済み）**: Scan後、表の`プロンプト`列に**画像ごとに違う文**を入力する（📝を押すと、その行にChain画面の共通プロンプトがそのまま流し込まれる）。add/replaceのラジオはバッチ全体で1つ。→ 合格は、①出来上がった動画が**行ごとに違うプロンプトの内容**になっていること（addなら共通プロンプト＋その行の文、replaceならその行の文だけ）、②行の文が空の行は共通プロンプトだけで生成されること、③共通プロンプトも行の文も空の行があるとStartが無効になり、理由に**その行番号（`#3`のような形）**が出ること、④走行中とScan中は入力欄と📝が押せないこと、⑤再Scanすると入力した行プロンプトが消えること（ステートレス設計。仕様どおりで故障ではない）。
 - [x] **中止挙動（現在の1枚は完走保存）（2026-07-31合格——現在生成中の1枚の完了時に停止・再Startで中断直後の画像から再開を実機確認）**: 生成中にStopを押す。→ 合格は、**いま生成中の1枚はそのまま完走してDoneとして保存され**、それ以降の行は`Waiting`のまま残ること。`DELETE /jobs/{id}`は送られない設計である（バックエンドは実行中のchainジョブを途中で止められず、DELETEしてもGPU時間は丸ごと消費した末に完成品を捨てるだけになるため）。したがって**Stopの反応には現在の1枚が終わるまでの時間（数十分になり得る）がかかる**のが仕様どおりで、故障ではない。後で再度Startすれば`Waiting`/`Failed`の行だけが処理される（`Done`行は再実行されない）。
 - [x] **バッチA2Vとの相互ロック（2026-07-31合格——[`DEVLOG.md`](DEVLOG.md) §54.9の実バグ2件修正後、両方向とも案内文つきでStart無効化を実機確認）**: Create画面のバッチA2Vを走らせたまま、Chain画面のバッチi2v-longのStartを見る（および逆方向）。→ 合格は、**Startが無効化され、理由ノートに「もう一方のバッチが走っている」旨の行が表示されること**（黙って何も起きないのではなく、理由が読めること）。片方が終われば他方のStartが自動で押せるようになる。
-- [x] **JobLedger 50件超での描画確認（2026-07-31クローズ——実運用トリガー待ちへ移行）**: バッチのScan表側は50件超の画像フォルダでスクロール含め問題なしをオーナー実機で確認済み。画面右のジョブ一覧（JobLedger）側は「実運用で50枚級バッチを回したとき、もたつく・崩れると感じたら対応する」形でクローズ（専用の検証時間を取る価値がない軽微事項というオーナー判断）。追跡は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-48。
+- [x] **JobLedger 50件超での描画確認（2026-07-31クローズ——実運用トリガー待ちへ移行）**: バッチのScan表側は50件超の画像フォルダでスクロール含め問題なしをオーナー実機で確認済み。画面右のジョブ一覧（JobLedger）側は「実運用で50枚級バッチを回したとき、もたつく・崩れると感じたら対応する」形でクローズ（専用の検証時間を取る価値がない軽微事項というオーナー判断）。追跡は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-48。
 
 ## 5. 既知のブロッカーと解消状況
 
@@ -275,7 +275,7 @@ Chain画面の下部にある「バッチi2v-long（プロトタイプ）」節�
 - Chainタブ: プリセット選択／CROP OUTPUT／t2vクリップ連結／i2v（冒頭キーフレーム）クリップ連結／v2v続き生成——すべて合格。chunked_upsampleは常時Enabledで使用。
 - モデル管理: 追加でオーナーの実機ロード操作をサーバーログ（`POST /pipeline/load 200`→`LTX worker ready`→切替後モデルでのt2v生成完走）で確認し合格。
 - 各カテゴリ内の細部7点（IC-LoRA強度スライダー・Chain V2Vのcutoutrange併用・wav自動調整の細部・バッチの再開/noClobber・冒頭キーフレームなし品質確認・短いクリップでのoverlap_frames制約・Chainのclip/clip_count進捗表示）は、オーナーが「後日確認する」と明言（2026-07-18決定）。ブロッカーではなくテスト待ち項目として整理。
-- 出典: オーナーからの2026-07-18申告、[`DEVLOG.md`](DEVLOG.md) §19・§21、[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1。
+- 出典: オーナーからの2026-07-18申告、[`DEVLOG.md`](DEVLOG.md) §19・§21、[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1。
 
 ### 実行ログテンプレート
 

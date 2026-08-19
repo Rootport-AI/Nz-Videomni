@@ -86,7 +86,7 @@ API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`
 > **この案内に `Ctrl+C` を書き足さないでください（意図的な省略です）。** `Ctrl+C` で止めると、`cmd` が
 > `Terminate batch job (Y/N)?` という英語のプロンプトを返すことがあり、本プロジェクトの想定利用者
 > （PowerShell を自分で開けないリテラシー）はここで手が止まります。× で閉じる 1 通りだけを案内する、
-> というのが決定事項です（フロントエンド側 `Docs/PENDING_TASKS_CLOSED.md` §3-37）。
+> というのが決定事項です（`Docs/PENDING_TASKS_CLOSED.md` §3-37）。
 
 #### AviUtl2 から使うときの注意（重要）
 

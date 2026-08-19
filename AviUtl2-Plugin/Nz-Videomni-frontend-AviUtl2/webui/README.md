@@ -7,9 +7,9 @@ single-shot audio-to-video, plus keyframes and style/control LoRA selection),
 **Chained** (multi-clip chains with presets, per-clip LoRAs, and optional
 chunked upsampling), **Edit** (video-editing tools, with its own sub-tab row —
 **Retake** (regenerates a selected span of an existing video; shipped
-2026-08-10, see `Docs/PENDING_TASKS.md` §1-17), **Outpainting** (shipped
-2026-08-09, `Docs/PENDING_TASKS_CLOSED.md` §3-70) and a disabled
-**Inpainting** placeholder (`Docs/PENDING_TASKS.md` §3-55)), and **Inventory**
+2026-08-10, see `../../../Docs/PENDING_TASKS.md` §1-17), **Outpainting** (shipped
+2026-08-09, `../../../Docs/PENDING_TASKS_CLOSED.md` §3-70) and a disabled
+**Inpainting** placeholder (`../../../Docs/PENDING_TASKS.md` §3-55)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus a batch-A2V section (stateless folder-scan-driven bulk

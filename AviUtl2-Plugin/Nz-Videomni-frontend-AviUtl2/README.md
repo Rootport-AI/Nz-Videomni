@@ -120,7 +120,7 @@ name and `package.ini`).
   placement with a pre-shifted frame, so native gained no new placement kind).
   The backend's older band-appending path (`internal_segment`) is now
   unreachable from any request the UI can build. See `Docs/API_REFERENCE.md`
-  §5.2, `Docs/DEVLOG.md` §80 / §81, and `Docs/PENDING_TASKS_CLOSED.md` §3-82 /
+  §5.2, `Docs/DEVLOG.md` §80 / §81, and `../../Docs/PENDING_TASKS_CLOSED.md` §3-82 /
   §3-86 (the v2 history and the withdrawal).
 - Concatenate up to 24 clips into a single generation
   (`MAX_CHAIN_TOTAL_FRAMES` = 24 × 481 = 11544 frames), with an estimated

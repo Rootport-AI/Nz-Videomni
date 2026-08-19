@@ -1,6 +1,6 @@
 # クリップ連結（Clip Chain）の stage-2 と条件付け 研究ノート
 
-本書は、クリップ連結（Clip Chain＝複数のクリップを1本の連続した動画としてつないで生成する機能）の内部構造について、2026-08-05〜06の調査で分かったことを集約する置き場である。台帳（フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md)）は優先度順の一覧を保つための文書なので、調査の中身は本書に置き、台帳側は本書への相対リンクで委譲する。実装の実測値そのものの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の各節であり、本書は「なぜ今こうなっているか」と「次に何を足せるか」を見比べるための整理用ノートという位置づけである。
+本書は、クリップ連結（Clip Chain＝複数のクリップを1本の連続した動画としてつないで生成する機能）の内部構造について、2026-08-05〜06の調査で分かったことを集約する置き場である。台帳（[`PENDING_TASKS.md`](PENDING_TASKS.md)）は優先度順の一覧を保つための文書なので、調査の中身は本書に置き、台帳側は本書への相対リンクで委譲する。実装の実測値そのものの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の各節であり、本書は「なぜ今こうなっているか」と「次に何を足せるか」を見比べるための整理用ノートという位置づけである。
 
 ## 現在地（2026-08-06時点）
 
@@ -108,7 +108,7 @@ VRAM（グラフィックスメモリ）から溢れて共有メモリへ退避�
 
 **「プリセットに用意されている解像度なのに、クリップ連結で選ぶと溢れる」** という状態は、利用者に説明のしようがない。§1-14の警告はこれを見えるようにはするが、あくまで対症療法である。恒久策は次の窓サイズの自動選択になる。
 
-> **【2026-08-09 更新】** 自動選択は不採用になり（1-A節）、**この警告のほうが恒久策として残った**（台帳の§1-14はそのまま製品化してクローズ。[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-68）。さらに 1-B 節のとおり、**クリップ長を縮めても溢れそのものは消えない**ことが実測で分かっている。
+> **【2026-08-09 更新】** 自動選択は不採用になり（1-A節）、**この警告のほうが恒久策として残った**（台帳の§1-14はそのまま製品化してクローズ。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-68）。さらに 1-B 節のとおり、**クリップ長を縮めても溢れそのものは消えない**ことが実測で分かっている。
 
 ### 現状のUIギャップ
 
@@ -286,7 +286,7 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 | --- | --- | --- |
 | プロンプト | クリップごとに指定可。ただしstage-2はクリップ0の1本のみ | `chain_pipeline.py` 548・788行 |
 | キーフレーム画像（`conditioning_images`） | **クリップ0のみ**・最大5枚。frame>0もクリップ0の中でなら可（UIは1枚・frame 0固定） | [`api/models.py`](../api/models.py) 624〜633行 |
-| 参照音声（A2V＝音声から動画を作る機能） | **1〜24クリップ**（2026-08-10・長尺A2Vで「クリップが1本のときだけ」を撤廃）。連結タイムライン全体に音声を1本添付し、各クリップが担当する音声潜在窓を`chain_math.audio_segment_windows`がサーバー側で自動割り当てる | [`api/models.py`](../api/models.py)、フロントエンド`PENDING_TASKS_CLOSED.md` §3-74 |
+| 参照音声（A2V＝音声から動画を作る機能） | **1〜24クリップ**（2026-08-10・長尺A2Vで「クリップが1本のときだけ」を撤廃）。連結タイムライン全体に音声を1本添付し、各クリップが担当する音声潜在窓を`chain_math.audio_segment_windows`がサーバー側で自動割り当てる | [`api/models.py`](../api/models.py)、`PENDING_TASKS_CLOSED.md` §3-74 |
 | 参照動画（IC-LoRA control系＝参照動画から輪郭線や骨格を読み取って条件付けするアダプタ） | **1〜24クリップ**（2026-08-11・長尺IC-LoRAで「クリップが1本のときだけ」を撤廃）。長い参照動画を1本添付すると、各クリップが担当する区間を`chain_math.video_segment_windows`がサーバー側で自動的に切り出す。参照はstage-1にのみ注入する（単発生成も同じ意味論）。**`depth-control`のみ例外で2本以上は引き続き422 `LORA_DEPTH_CHAIN_UNSUPPORTED`**（深度前処理が全編一括設計でメモリに載らないため。旧`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`はこの改修で削除済み） | [`api/models.py`](../api/models.py)、[`api/generate_chain.py`](../api/generate_chain.py)、[`api/errors.py`](../api/errors.py)、`chain_pipeline.py`、`chain_math.py`の`video_segment_windows`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57 |
 | スタイルLoRA | チェーン全体に一律。クリップごとの強度指定はv1では採らないというオーナー裁定 | — |
 
@@ -314,7 +314,7 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 - **切り出しはサーバー側で自動的に行うべき**である。8n+1というフレーム数の刻みや、重なり幅の計算をユーザーにさせるのは現実的でない。
 - **VRAMの上限は悪化しない。** 参照はstage-2には入らないので、前節で見た22窓のトークン計算には影響しない。
 - 台帳の§1-15として起票した。
-  - > **【2026-08-11 完全クローズ】この案はここに書いたとおりの形で実装された。** 長い参照動画1本をトップレベルの1フィールドで受け取り、`chain_math.video_segment_windows`が各クリップの担当窓（開始＝8×グローバル潜在開始位置、長さ＝クリップのフレーム数、隣接窓は`8kv−7`ピクセルフレームの重なり）を計算して、stage-1にのみ遅延スライスで注入する。切り出しはフレーム番号ベース（fpsは見ない）で、参照が尽きた分は参照なしで生成する。**ただしdepth系のアダプタ×多クリップだけはv1で見送り、明示的な422（`LORA_DEPTH_CHAIN_UNSUPPORTED`）にした**（Video-Depth-Anythingの前処理が全編一括設計でメモリに載らないため。解禁の検討は台帳[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-75）。実装と機械検証の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57、画面側は[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §72・§73。**実機ゲートG1〜G10（6節が名指しした上限の検証はG4）は全PASSし、2026-08-11夕のオーナー最終目視で全項目合格して完全クローズした**（[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-78）。
+  - > **【2026-08-11 完全クローズ】この案はここに書いたとおりの形で実装された。** 長い参照動画1本をトップレベルの1フィールドで受け取り、`chain_math.video_segment_windows`が各クリップの担当窓（開始＝8×グローバル潜在開始位置、長さ＝クリップのフレーム数、隣接窓は`8kv−7`ピクセルフレームの重なり）を計算して、stage-1にのみ遅延スライスで注入する。切り出しはフレーム番号ベース（fpsは見ない）で、参照が尽きた分は参照なしで生成する。**ただしdepth系のアダプタ×多クリップだけはv1で見送り、明示的な422（`LORA_DEPTH_CHAIN_UNSUPPORTED`）にした**（Video-Depth-Anythingの前処理が全編一括設計でメモリに載らないため。解禁の検討は台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-75）。実装と機械検証の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57、画面側は[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §72・§73。**実機ゲートG1〜G10（6節が名指しした上限の検証はG4）は全PASSし、2026-08-11夕のオーナー最終目視で全項目合格して完全クローズした**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-78）。
 
 ### (3) クリップごとの参照音声（長尺A2V）
 
@@ -387,7 +387,7 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 
 ### この原則に照らした未着手の項目
 
-- **§1-19「Single a2vの全長stage-2化」（2026-08-11起票）は、この原則をa2vへ広げる試みである。** stage-2の窓プリセットに「全長」（潜在61フレーム＝481フレーム相当）を足してタイル数を1へ退化させ、Single a2vを他のSingleモードと同じ包絡線（解像度は柔軟・フレーム数でVRAMを調整）へ乗せる。**【2026-08-12追記】実装完了。詳細は8節、台帳[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-19・§2-1（実機ゲート待ち）。**
+- **§1-19「Single a2vの全長stage-2化」（2026-08-11起票）は、この原則をa2vへ広げる試みである。** stage-2の窓プリセットに「全長」（潜在61フレーム＝481フレーム相当）を足してタイル数を1へ退化させ、Single a2vを他のSingleモードと同じ包絡線（解像度は柔軟・フレーム数でVRAMを調整）へ乗せる。**【2026-08-12追記】実装完了。詳細は8節、台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-19・§2-1（実機ゲート待ち）。**
 - **§3-42「窓方式の単発生成への移植」は逆向きの案**（Singleへ窓を入れて両者の天井を揃える。6節末）である。§1-19が「a2vをSingle側の性質へ寄せる」のに対し、§3-42は「Singleへ長さの柔軟性を足す」ものなので、両者は反対向きだが排他ではない。**どちらを進める場合も、上の「相互補完であり、どちらも上位互換ではない」という前提は崩さないこと。**
 
 ---
@@ -471,7 +471,7 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 
 ## 10. 【2026-08-16】End source（素材（末尾））— 帯を「内部区画」にしたら幾何の制約がすべて消えた
 
-「この画像・動画で終わる動画」を作る機能である。**本節が扱うのはクリップ2本以上で使われる旧方式（内部区画）であり、現行の推奨経路ではない**——2026-08-17に、クリップ1本のときは帯をクリップ自身の末尾に置く**窓内モード**（`in_window`）へ作り替えた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61）。本節の一般式（タイル別の凍結計画`end_tile_bands`）は**両モード共通で今も使われている**が、「帯が独立したセグメントである」という前提の議論は旧方式だけの話である。実装と機械ゲートの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60、台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-82であり、本節は研究ノートとしての位置づけ——**幾何の制約がなぜ消えたのか**と、**その代わりに何を払ったのか**を残す。
+「この画像・動画で終わる動画」を作る機能である。**本節が扱うのはクリップ2本以上で使われる旧方式（内部区画）であり、現行の推奨経路ではない**——2026-08-17に、クリップ1本のときは帯をクリップ自身の末尾に置く**窓内モード**（`in_window`）へ作り替えた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61）。本節の一般式（タイル別の凍結計画`end_tile_bands`）は**両モード共通で今も使われている**が、「帯が独立したセグメントである」という前提の議論は旧方式だけの話である。実装と機械ゲートの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60、台帳の記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-82であり、本節は研究ノートとしての位置づけ——**幾何の制約がなぜ消えたのか**と、**その代わりに何を払ったのか**を残す。
 
 ### 帯は必ず「末尾」にある、という一点だけで一般式が書ける
 
@@ -558,7 +558,7 @@ Start sourceのみ＝全クリップ正順（現行Chained）／End sourceのみ
   1. **チェーン格子での頭自由生成の品質**: 機構としては全7ジョブで完走し、Stage-1の実行記録（`stage1_order`・`stage1_freezes`）がエンジンの実際の逆順実行と幾何の宣言（`generation_order`）の一致を証明した（M7）。品質（崩壊・多安定な開幕選択の程度）の判定はV1〜V3のオーナー目視待ち。
   2. **逆向きキャリーの凍結強度**: 正順の`freeze_mask_values`が`tail_mask_value=None`のとき4値すべてを鏡写しにする既存の仕組みがそのまま働き、新パラメータ・新分岐ゼロで動作した（機構としては成立）。ソフト凍結（`1−overlap_strength`）で十分か、ハード凍結が要るかは、R2-2a（`overlap_strength`の統制比較）のオーナー目視待ち。
   3. **音声のりしろの鏡写し規則**: **機構としては成立**——`ka_list[i]`（自分の尾側の継ぎ目）を使った逆向きの音声キャリーが、既存の音声のりしろ予算（`sum_ka`）の消費と整合すること（`n_join == n_clips − 1`で素のチェーンと同一）を確認した。R2-8では`fka`/`fta`の消費が期待どおりであることをM7で確認済み。**品質（クリック・途切れの有無）はV5のオーナー目視待ち**。
-- **Start＋End併用（真ん中クリップの両側条件付け）は未実装**（次弾のスコープ）。バッチ2では`source_video`×`end_source`×2クリップ以上を422で明示的に拒否している（§64.1の受理検査②）。3本の表（`seg_generation_order`／`seg_head_source`／`seg_tail_source`）による設計はこの拡張を見越しており、上の「場合分け仕様」に挙げた「前半正順＋後半逆順＋真ん中両側条件付け」の形は、表の作り方を変えるだけでエンジン無改修のまま拡張できる見通しである。フロントエンド台帳への起票はフロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-90。
+- **Start＋End併用（真ん中クリップの両側条件付け）は未実装**（次弾のスコープ）。バッチ2では`source_video`×`end_source`×2クリップ以上を422で明示的に拒否している（§64.1の受理検査②）。3本の表（`seg_generation_order`／`seg_head_source`／`seg_tail_source`）による設計はこの拡張を見越しており、上の「場合分け仕様」に挙げた「前半正順＋後半逆順＋真ん中両側条件付け」の形は、表の作り方を変えるだけでエンジン無改修のまま拡張できる見通しである。台帳への起票は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-90。
 
 ### 【2026-08-18】第3弾（錨への素材音声の凍結）— 音声版タイル帯`end_tile_bands_a`は映像版と同じ式を音声グリッドに適用するだけで足りた
 
@@ -566,7 +566,7 @@ Start sourceのみ＝全クリップ正順（現行Chained）／End sourceのみ
 
 ### 【2026-08-18】逆順Chainedの実機知見とオーナー裁定 — テーマ完結
 
-オーナーの目視・試聴ゲート（対象は§64.7・§65.8の全ジョブ）と、末尾モーフの原因を切り分けた追加実験E0/E1（standard窓 vs. high_resolution窓。job IDと結果は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §65.8）を経て、**End sourceは「クリップ1本で使う」ことが推奨、「複数クリップ」は推奨外の使い方であるとオーナーが裁定した**。複数クリップ時に継ぎ目・末尾で生じる品質劣化は仕様として許容する。実装・機械検証・実機ゲート結果の正本は引き続き[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64・§65であり、本節は**研究ノートとしての考察**を残す。台帳の完結記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
+オーナーの目視・試聴ゲート（対象は§64.7・§65.8の全ジョブ）と、末尾モーフの原因を切り分けた追加実験E0/E1（standard窓 vs. high_resolution窓。job IDと結果は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §65.8）を経て、**End sourceは「クリップ1本で使う」ことが推奨、「複数クリップ」は推奨外の使い方であるとオーナーが裁定した**。複数クリップ時に継ぎ目・末尾で生じる品質劣化は仕様として許容する。実装・機械検証・実機ゲート結果の正本は引き続き[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64・§65であり、本節は**研究ノートとしての考察**を残す。台帳の完結記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84。
 
 - **モーフは2種類の別現象である。** (a) **末尾（錨直前）のモーフ**は全条件で一貫・系統的に出現する。上の「残る技術的未知」1に書いた末端タイル仮説（錨がStage-2の半端な末端タイルに孤立し、のり代と錨に挟まれた自由領域が約2潜在しかないという仮説）は、E0/E1の比較で**部分的に確認**された——high_resolution窓（末端がフルサイズタイルになるE1）では末尾モーフが軽くなったが、代わりにクリップ境界とStage-2タイル境界と思われる2箇所に新たなモーフが現れた。**タイル割りの変更は綺麗な解決策にならない**という結論になる。(b) **中間の継ぎ目のモーフ**はシード依存・確率的である（同一パラメータでシードだけ変えたR2-3a/R2-3bで、片方は綺麗・片方はちらつきを伴い非実用というほど結果が割れた）。
 - **正順の継ぎ目と逆順の継ぎ目は、数学的な性質が異なる。** 正順Chainedの継ぎ目は**初期値問題**（過去のセグメントが確定し、そこからモデルの自然な生成方向〔過去→未来〕へ続けるだけでよい）であるのに対し、**逆順の継ぎ目は境界値問題**（未来側のセグメントが確定した状態から、モデルの生成方向とは逆に過去側へ「渡って」いく必要があり、到着時刻の拘束が無い）である。この非対称が逆順継ぎ目の構造的な脆さの由来だと考えられる。上記「残る技術的未知」2で立てた「錨8fが早着する」という早着仮説（§62.4）そのものではない（本テーマの実験では静止帯が一度も観察されていない）が、**同じ「到着時刻の拘束の欠如」ファミリー**の現象である。根本解決はモデル側の能力（生成過程で到着時刻を拘束できること。将来のモデル、たとえばLTX 2.5等の世代交代で改善が見込めるかを注視する）待ちであり、現行の機構をこれ以上詰めても頭打ちになる可能性が高い。
@@ -596,15 +596,15 @@ Start sourceのみ＝全クリップ正順（現行Chained）／End sourceのみ
 
 ## 次の一歩
 
-台帳（[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md)）へ起票した5件が本書の出口である。**2026-08-09にこのうち2件が決着した。**
+台帳（[`PENDING_TASKS.md`](PENDING_TASKS.md)）へ起票した5件が本書の出口である。**2026-08-09にこのうち2件が決着した。**
 
-- ~~§1-14 チェーン経路の解像度警告~~ → **実装・合格・クローズ**（[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-68）
-- ~~§1-15 クリップごとの参照動画（長尺IC-LoRA。上記4-(2)。上限の検証は6節）~~ → **実装・合格・クローズ**（2026-08-11夕の最終目視で全項目合格。同[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-78。実装・実機ゲートG1〜G10の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57。6節が名指しした上限の検証は実機ゲートG4にあたる）
-- ~~§1-16 クリップごとの参照音声（長尺A2V。上記4-(3)）~~ → **実装・合格・クローズ**（2026-08-10のオーナー目視ゲート6項目すべてに合格。同[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-74。実装と検証の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §56）
-- ~~§3-57 stage-2の窓サイズ最適化~~ → **縮小して実装・合格・クローズ**（同[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-69。自動選択は不採用、手動2択で決着）
+- ~~§1-14 チェーン経路の解像度警告~~ → **実装・合格・クローズ**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-68）
+- ~~§1-15 クリップごとの参照動画（長尺IC-LoRA。上記4-(2)。上限の検証は6節）~~ → **実装・合格・クローズ**（2026-08-11夕の最終目視で全項目合格。同[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-78。実装・実機ゲートG1〜G10の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57。6節が名指しした上限の検証は実機ゲートG4にあたる）
+- ~~§1-16 クリップごとの参照音声（長尺A2V。上記4-(3)）~~ → **実装・合格・クローズ**（2026-08-10のオーナー目視ゲート6項目すべてに合格。同[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。実装と検証の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §56）
+- ~~§3-57 stage-2の窓サイズ最適化~~ → **縮小して実装・合格・クローズ**（同[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-69。自動選択は不採用、手動2択で決着）
 - §3-58 中間クリップのキーフレーム（上記4-(1)。VRAMへの影響は6節）— 未着手
-- ~~§1-19 Single a2vの全長stage-2化（2026-08-11に新規起票。6節の適用範囲の整理と7節の棲み分け原則が出口になったもの）~~ → **完結（2026-08-12）。8節が正本。オーナー実機ゲートはG-B1〜G-B4が全PASS、G-B5・G-B6は推定合格、任意G-B7は未確認クローズで決着し、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-80、判定の詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58.10へ移した**
+- ~~§1-19 Single a2vの全長stage-2化（2026-08-11に新規起票。6節の適用範囲の整理と7節の棲み分け原則が出口になったもの）~~ → **完結（2026-08-12）。8節が正本。オーナー実機ゲートはG-B1〜G-B4が全PASS、G-B5・G-B6は推定合格、任意G-B7は未確認クローズで決着し、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-80、判定の詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58.10へ移した**
 
-**順序について書いてあったこと（「まず窓サイズの可否を決めるのが良い」）は、そのとおりに実行して決着した。** 結果として上限計算は動かず（既定は潜在22フレームのまま）、§1-14の警告は予算40,000トークンのまま恒久策として残っている。その後、§1-16は2026-08-10に実装・オーナー目視ゲート合格・クローズまで進み、§1-15も2026-08-11に実装から実機ゲートG1〜G10・オーナー最終目視まで完結してクローズした。**当初の5件のうち未着手のまま残っているのは§3-58の1件だけ**で、これに窓サイズの決着による前提の変更は無い。なお§1-15の実機ゲートG4の実測からは、2026-08-11付で新たに§3-76（参照動画VAEエンコードのタイル化。真のVRAM膝）・§3-77（sysmem fallback無効環境への配慮）の2件が将来課題として起票されている。**さらに同日、6節の適用範囲の整理と7節の棲み分け原則を出口として§1-19（Single a2vの全長stage-2化）を新規に起票し、2026-08-12に実装・機械検証・デプロイまで完了した**（8節。2026-08-12のオーナー実機ゲートまで決着し完結。記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-80）。
+**順序について書いてあったこと（「まず窓サイズの可否を決めるのが良い」）は、そのとおりに実行して決着した。** 結果として上限計算は動かず（既定は潜在22フレームのまま）、§1-14の警告は予算40,000トークンのまま恒久策として残っている。その後、§1-16は2026-08-10に実装・オーナー目視ゲート合格・クローズまで進み、§1-15も2026-08-11に実装から実機ゲートG1〜G10・オーナー最終目視まで完結してクローズした。**当初の5件のうち未着手のまま残っているのは§3-58の1件だけ**で、これに窓サイズの決着による前提の変更は無い。なお§1-15の実機ゲートG4の実測からは、2026-08-11付で新たに§3-76（参照動画VAEエンコードのタイル化。真のVRAM膝）・§3-77（sysmem fallback無効環境への配慮）の2件が将来課題として起票されている。**さらに同日、6節の適用範囲の整理と7節の棲み分け原則を出口として§1-19（Single a2vの全長stage-2化）を新規に起票し、2026-08-12に実装・機械検証・デプロイまで完了した**（8節。2026-08-12のオーナー実機ゲートまで決着し完結。記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-80）。
 
-なお2026-08-16以降、本書は§10（End sourceの内部区画方式）・§11（逆順Chained）を追加している。**End sourceテーマは2026-08-18のオーナー裁定（クリップ1本を推奨、複数クリップは推奨外・品質劣化は仕様として許容）をもって完結した**。§11末尾の【2026-08-18】追記が研究ノートとしての正本、台帳の完結記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84である。
+なお2026-08-16以降、本書は§10（End sourceの内部区画方式）・§11（逆順Chained）を追加している。**End sourceテーマは2026-08-18のオーナー裁定（クリップ1本を推奨、複数クリップは推奨外・品質劣化は仕様として許容）をもって完結した**。§11末尾の【2026-08-18】追記が研究ノートとしての正本、台帳の完結記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84である。

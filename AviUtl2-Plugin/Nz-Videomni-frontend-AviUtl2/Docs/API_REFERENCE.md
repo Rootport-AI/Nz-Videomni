@@ -202,7 +202,7 @@ multipart `file`。制御LoRAの参照動画 / V2V継続元 / 素材（末尾）
 - `video_id` を `/generate` の `reference_video_id`、`/generate/chain` の `source_video.video_id`、または同 `end_source.video_id` に渡す。
 - 制約: max 200MB、`.mp4/.mov/.webm/.mkv`(`config.yaml`の`upload.max_video_size_mb`／`upload.allowed_video_extensions`)。再エンコードせず保存(下記のトリム引数を指定した場合を除く)。タイムアウト300秒推奨。
 
-**任意のクエリ引数 `trim_start_sec` / `trim_duration_sec`(2026-07-30追加、V2Vリボン範囲トリム。台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-59＝2026-08-01にクローズ済み。起票時は`PENDING_TASKS.md` §1-6)**
+**任意のクエリ引数 `trim_start_sec` / `trim_duration_sec`(2026-07-30追加、V2Vリボン範囲トリム。台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-59＝2026-08-01にクローズ済み。起票時は`PENDING_TASKS.md` §1-6)**
 
 タイムライン上のリボンが元動画ファイルの一部しか占めていないとき、その範囲だけを切り出してアップロードするための引数。**クエリ文字列**で渡す(ボディではない)。**V2V継続元と IC-LoRA参照動画(`reference_video_id`)の両方が同じ引数を使う**(2026-08-01、フロントエンドが同じ判定関数`decideSourceTrim`を両経路へ適用するようになった。バックエンドは両者を区別しない)。
 
@@ -219,13 +219,13 @@ multipart `file`。制御LoRAの参照動画 / V2V継続元 / 素材（末尾）
 - **未指定時は従来リクエストとバイト単位で同一**: 2引数を送らなければ`cut_range_mp4`は呼ばれず、受信バイト列がそのまま保存される。ブリッジ側も`query`を省略するとURLが完全に不変になる(契約v10、[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.5)。この等価性はバックエンドの`tests/test_upload_video_trim.py`とWebUIの`ChainScreen.prefill.test.tsx`の両方で機械的に固定してある。
 - 検証記録: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §42。凍結契約表との関係は`Nz-Videomni/Videomni_Backend_Specification.md` §6.1の補足(本エンドポイントは凍結表に未掲載のADDITIVEエンドポイント)。
 
-**任意のクエリ引数 `max_frames`(2026-08-11追加、長尺IC-LoRAの参照動画アップロード用。台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-78)**
+**任意のクエリ引数 `max_frames`(2026-08-11追加、長尺IC-LoRAの参照動画アップロード用。台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-78)**
 
 チェーンの総尺上限(`MAX_CHAIN_TOTAL_PIXEL_FRAMES = 11544`、§5.2)を超える参照動画をアップロードしようとした場合に、先頭をその値へ切り詰めるための引数。**int \| null、既定`null`**。実測フレーム数が指定値以下なら**一切変換しない**(再エンコードしないため画質は劣化しない)。超過したときだけ先頭を切り出す。`trim_start_sec`/`trim_duration_sec`と同様クエリ文字列で渡し、応答の`trimmed`は実際に切り詰めが発生したときだけ`true`になる。フロントエンドは右クリック#19(長尺IC-LoRA、[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §3-4)経由のアップロードで`11544`を渡す。
 
 **素材（末尾）のアップロードでは`max_frames=685`を渡す**(2026-08-16)。読み取るのは素材の先頭`context_frames+1`フレームだけなので、それ以上を`uploads/`へ残す理由がない——685は素材のフレームレートが生成側より高くても余裕がある値として選んだもので、窓内モード(§5.2)で実際に読むのは先頭9フレームだけになった今も**値は据え置いている**（下げても得るものが無く、フレームレートの高い素材を新たに弾く副作用だけが出るため）。**トリム(`trim_start_sec`/`trim_duration_sec`)と併用するときは`max_frames`が無視される既存仕様**があるため、フロントエンド側でトリムの秒数も`685/生成fps`でクランプしている。
 
-**応答の `frame_count` / `fps`(2026-08-16追加。素材（末尾）が最低長9フレームを満たすかの判定に使う。台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-82)**
+**応答の `frame_count` / `fps`(2026-08-16追加。素材（末尾）が最低長9フレームを満たすかの判定に使う。台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-82)**
 
 | フィールド | 型 | 意味 |
 |---|---|---|
@@ -372,11 +372,11 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 | `overlap_strength` | float `0.5` | 0.0-1.0。つなぎ目ブレンド強度 |
 | `clips` | list(必須) | **1-24本**(2026-07-14に8本から拡張)。`source_video`/`source_audio`/`reference_video_id`/`retake`/`end_source`のいずれも無ければ最低2本 |
 | `source_video` | `{video_id, context_frames}` \| null | V2V継続（素材（冒頭）＝start source） |
-| `end_source` | `{video_id, image_id, context_frames, strength}` \| null | End source（素材（末尾）、2026-08-16追加。台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-82）。**添付した動画・静止画へ繋がる動画を生成する**。`video_id`と`image_id`はどちらか一方（静止画はサーバー側で無音動画へ変換され、以降は1本の経路になる）。**`clips`が1本のときと2本以上のときで挙動が変わる**（1本＝窓内モード／2本以上＝逆順Chained。どちらも出力尺はクリップ合計／旧方式`internal_segment`は到達不能）。`strength`は2026-08-18追加。詳細は下記**EndSourceSpec** |
-| `source_audio` | `{audio_id}` \| null | A2V（音声から動画を生成する機能）。source_videoと排他。**クリップ1〜24本**（2026-08-10に「clips=1本限定」を撤廃。台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-74。記録当時は`PENDING_TASKS.md` §1-16で、2026-08-10のテーマ完結でクローズ移設）。連結タイムライン全体に対して**音声を1本だけ**添付し、各クリップが担当する音声潜在窓はサーバーが自動で割り当てる（`chain_math.audio_segment_windows`）。**クライアント側で音声を分割する必要はない**（分割ファイルを作らないのがフロントエンドの仕様でもある） |
+| `end_source` | `{video_id, image_id, context_frames, strength}` \| null | End source（素材（末尾）、2026-08-16追加。台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-82）。**添付した動画・静止画へ繋がる動画を生成する**。`video_id`と`image_id`はどちらか一方（静止画はサーバー側で無音動画へ変換され、以降は1本の経路になる）。**`clips`が1本のときと2本以上のときで挙動が変わる**（1本＝窓内モード／2本以上＝逆順Chained。どちらも出力尺はクリップ合計／旧方式`internal_segment`は到達不能）。`strength`は2026-08-18追加。詳細は下記**EndSourceSpec** |
+| `source_audio` | `{audio_id}` \| null | A2V（音声から動画を生成する機能）。source_videoと排他。**クリップ1〜24本**（2026-08-10に「clips=1本限定」を撤廃。台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-74。記録当時は`PENDING_TASKS.md` §1-16で、2026-08-10のテーマ完結でクローズ移設）。連結タイムライン全体に対して**音声を1本だけ**添付し、各クリップが担当する音声潜在窓はサーバーが自動で割り当てる（`chain_math.audio_segment_windows`）。**クライアント側で音声を分割する必要はない**（分割ファイルを作らないのがフロントエンドの仕様でもある） |
 | `loras` | list `[]` | 2026-07-03解禁・2026-07-11に全面解禁。登録済みLoRA名参照(§5.3)。チェーン全クリップ・全ステージに一律適用(クリップ別の強さ指定は無い)。**2026-08-02、`LoraSpec`へ`audio_strength`追加**(§5.3参照) |
 | `chunked_upsample` | bool `false` | チャンク化アップサンプル(halo overlap＋CPU offload)へのopt-in。既定`false`=旧来の一括アップサンプル(VRAM消費が総尺に比例)。長尺/高解像度chainを16GBに収めるための2026-07-14追加機能 |
-| `reference_video_id` | str \| null | 制御LoRA用参照動画(§5.1と同義、2026-07-11にchainへ解禁・alphaスコープ)。**loras必須・source_videoと排他**。**2026-08-11、「clips=1本限定」を撤廃し1〜24クリップへ拡張**(長尺IC-LoRA。台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-78。記録当時は`PENDING_TASKS.md` §1-15)。長い参照動画を1本だけ添付すると、各クリップが担当する区間をサーバーが`chain_math.video_segment_windows`で自動的に切り出し、stage-1(低解像度で全体の動きを作る第1段階)にのみ注入する(stage-2には入らずVRAM天井は不変)。参照が生成の尺より短ければ、足りない分は参照なしで生成される(エラーにしない)。**`depth-control`のみ2クリップ以上で例外的に422**(`LORA_DEPTH_CHAIN_UNSUPPORTED`、§2)——深度前処理が全編一括設計でメモリに載らないため。フロント側は選択アダプタの`preprocess`(§3.6)が`"depth"`かどうかでチェーン2クリップ以上の組み合わせを先回りブロックする |
+| `reference_video_id` | str \| null | 制御LoRA用参照動画(§5.1と同義、2026-07-11にchainへ解禁・alphaスコープ)。**loras必須・source_videoと排他**。**2026-08-11、「clips=1本限定」を撤廃し1〜24クリップへ拡張**(長尺IC-LoRA。台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-78。記録当時は`PENDING_TASKS.md` §1-15)。長い参照動画を1本だけ添付すると、各クリップが担当する区間をサーバーが`chain_math.video_segment_windows`で自動的に切り出し、stage-1(低解像度で全体の動きを作る第1段階)にのみ注入する(stage-2には入らずVRAM天井は不変)。参照が生成の尺より短ければ、足りない分は参照なしで生成される(エラーにしない)。**`depth-control`のみ2クリップ以上で例外的に422**(`LORA_DEPTH_CHAIN_UNSUPPORTED`、§2)——深度前処理が全編一括設計でメモリに載らないため。フロント側は選択アダプタの`preprocess`(§3.6)が`"depth"`かどうかでチェーン2クリップ以上の組み合わせを先回りブロックする |
 | `conditioning_attention_strength` | float \| null | 0.0-1.0、loras必須(§5.1と同義) |
 | `reference_video_strength` | float \| null | 0.0-1.0、loras必須(§5.1と同義) |
 | `negative_prompt` | str `""` | §5.1と同義。**2026-07-28、NAG経由で条件付き解禁** |
@@ -425,7 +425,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 - **のりしろ1×短いクリップ構成で既存の音声のりしろ枯渇422が新たに到達可能になる**: ③のりしろ1×短いクリップ構成では、既存の『音声のりしろ枯渇』422（`chain_math`の`sum_ka < n_join`）が逆順Chainedで初めて到達可能になる（窓内モードでは`kv >= 2`必須が覆い隠していた）。フロントエンドは`endSourceAudioOverlapBudget`ゲートで先回りブロックする。
 - **`metadata.json`の新出キー（2026-08-18）**: `end_source.mode`に`"reverse"`が加わった。`end_source.generation_order`（幾何が宣言する生成順。3クリップなら`[2,1,0]`）、`end_source.stage1_order`（Stage-1ループが実際に生成した順の実測値。`generation_order`と一致することがエンジンの正しい実行の証明）、`end_source.stage1_freezes`（各セグメントの実行時凍結記録の配列。`{seg, fkv, ftv, fka, fta}`）が新出。
 - **`metadata.json`の新出キー（第3弾・錨への素材音声の凍結、2026-08-18追加）**: `end_source.n_end_a`（錨区間が凍結する音声潜在の本数、幾何計算値）・`end_source.end_tile_bands_a`（音声版Stage-2タイル帯、幾何版）・`end_source.audio_frozen`（真偽値。音声つき素材ならtrue）・`end_source.audio_fallback_reason`（`null`／`"no_audio"`。partialはこのキーではなく`audio_frozen=true`＋`n_end_a_frozen < n_end_a`で表現する）・`end_source.n_end_a_frozen`（実際に凍結した音声潜在の本数。端数不足以外は`n_end_a`と一致）・`end_source.end_tile_bands_a_frozen`（実効タイル帯。端数不足で再計算されたときだけ`end_tile_bands_a`と異なる）・`end_source.end_fully_frozen_tiles_a`（音声帯が全数凍結されたタイルの番号一覧）が新出。`freeze_proof`へ`s1_audio_tail`/`s2_audio_tail`（無条件ゼロ期待。`s1_expected_zero`は映像専用の判定基準で音声には適用されない）が加わった。
-- **旧方式（`internal_segment`）の契約**: 配信尺は `クリップ合計 − のりしろ + context_frames`（恒等式 `total_px == clips_total_px + end_context_px`）で、**`source_video`とは逆向き**（あちらは凍結した頭を配信尺から差し引く）。帯はstage-2のタイルを何枚またいでもよく（`ChainLayout.end_tile_bands`）、総尺上限`MAX_CHAIN_TOTAL_PIXEL_FRAMES`にも数えない。**2026-08-18から、通常のAPIリクエストではこの方式に到達できない**（クリップ2本以上は逆順Chainedへ切り替わったため）。実装はテスト・切り戻し専用として温存してあり、削除の判断は実機検証後にオーナーが行う。経緯は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-82／バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §60。
+- **旧方式（`internal_segment`）の契約**: 配信尺は `クリップ合計 − のりしろ + context_frames`（恒等式 `total_px == clips_total_px + end_context_px`）で、**`source_video`とは逆向き**（あちらは凍結した頭を配信尺から差し引く）。帯はstage-2のタイルを何枚またいでもよく（`ChainLayout.end_tile_bands`）、総尺上限`MAX_CHAIN_TOTAL_PIXEL_FRAMES`にも数えない。**2026-08-18から、通常のAPIリクエストではこの方式に到達できない**（クリップ2本以上は逆順Chainedへ切り替わったため）。実装はテスト・切り戻し専用として温存してあり、削除の判断は実機検証後にオーナーが行う。経緯は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-82／バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §60。
 
 **総尺上限**: `MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24×481 = 11544`(`api/models.py`の同名モジュール定数、2026-07-14に`8×481=3848`から拡張)。**`end_source`の帯（旧方式のみ発生）はこの上限に数えない**（2026-08-16）。窓内モード・逆順Chainedとも凍結分がクリップの内側にあるため、そもそも加算する帯が存在しない。
 

@@ -294,23 +294,28 @@ function Show-InstallFailureHelp {
     Write-Info '会社や学校の回線ではダウンロードが失敗することがあります。'
     Write-Info ('ウイルス対策ソフトが原因のときは tools フォルダ（' + $ToolsDir + '）を除外設定に追加して再実行してください。')
 
+    # 導入スクリプトの点検は「フォルダの合計サイズ」ではなく「1 個ずつのファイル」を
+    # 見るようになった（2026-08-19）。そのため回復手順も「フォルダごと削除」ではなく
+    # 「欠けている 1 ファイルだけ削除」で足りる。フォルダごとの削除を案内すると、
+    # 利用者自身の資産（下記）を巻き添えにするので、もう案内しない。
     Write-Host ''
-    Write-Info 'モデルが一部だけ欠けている場合は、下のフォルダを削除して setup.bat を再実行すると取り直します。'
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3'))
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3-components'))
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3-ic-lora'))
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\gemma-3-12b-it-gguf'))
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\gemma-3-12b-it-tokenizer'))
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\preprocessors'))
+    Write-Host ('-' * 74) -ForegroundColor Yellow
+    Write-Warn ('models\LTX23 をフォルダごと削除しないでください: ' + (Join-Path $ProjectRoot 'models\LTX23'))
+    Write-Info 'ここには、配布物に含まれない＝二度と取り直せないあなたの資産が同居しています。'
+    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\LTX23\StyleLoRA') + '  … あなたが集めた LoRA（全部）')
+    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\LTX23\Weights') + '  … あなたが自分で変換した GGUF')
+    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\LTX23\IC-LoRA\pixel-spatial-upscaler') + '  … x4 の拡大アダプタ')
+    Write-Info 'x4 の拡大アダプタは配布元にも存在しません。消すと入手手段がありません。'
+    Write-Host ('-' * 74) -ForegroundColor Yellow
 
-    # models\ltx-2.3-gguf だけは上のリストに入れてはいけない。ここには利用者が自分で
-    # 用意した GGUF（当プロジェクトの配布物に含まれず、取り直せないもの）が同居しうる。
-    # フォルダごと消させると、再取得できない資産を失わせることになる。
     Write-Host ''
-    Write-Warn ('次のフォルダはフォルダごと削除しないでください: ' + (Join-Path $ProjectRoot 'models\ltx-2.3-gguf'))
-    Write-Info '  自分で用意した GGUF が同居していることがあり、それは取り直せません。'
-    Write-Info '  取り直せるのは次の 1 ファイルだけです。消すならこれだけにしてください。'
-    Write-Info ('  ' + (Join-Path $ProjectRoot 'models\ltx-2.3-gguf\LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf'))
+    Write-Info 'モデルが一部だけ欠けているときの直しかたは、次の 1 手順だけです。'
+    Write-Info '  1. 上の英語の一覧表で MISSING と書かれた行を探します。'
+    Write-Info '  2. その行に書かれているファイルを 1 個だけ削除します（フォルダではありません）。'
+    Write-Info '  3. setup.bat をもう一度実行します。そのファイルだけ取り直します。'
+    Write-Info 'すべて PASS になるまで、この 1 手順を繰り返してください。'
+    Write-Info '公式ファイルは 1 個ずつ点検しているので、1 個消せば必ず取り直されます。'
+    Write-Info '（フォルダを消す必要はありません。消しても速くはならず、失うものだけが増えます。）'
 }
 
 # ===========================================================================
@@ -392,6 +397,7 @@ try {
     $env:PATH = $UvDir + ';' + $FfmpegBin + ';' + $env:PATH
 
     Write-Head 'Python 環境とモデルを用意します'
+    Write-Info '既存のモデルがあれば新しいフォルダ構成へ移動します（コピーではないため数秒で終わります）。'
     Write-Info 'ここから先は英語表示になります。'
     Write-Host ''
 

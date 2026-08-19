@@ -12,18 +12,24 @@
 
 .DESCRIPTION
     Steps (each skip-guarded / idempotent):
+      0. Load + validate scripts/manifests/*.json  (the single source of truth
+         for downloads, the on-disk layout, migration, the verification table
+         and models/INSTALLED_PATHS.txt).
       1. Prereqs (git, uv; ffmpeg + ffprobe warn) + process-scoped env isolation.
-      2. uv-managed Python 3.12.
-      3. App venv  .venv        (torch-FREE; `uv sync` of root pyproject.toml).
-      4. Engine venv .venv-engine (torch 2.9.1+cu128 stack). DEFAULT = deterministic
+      2. Migrate an existing pre-2026-08 models/ tree to the base-model-first
+         layout, and rewrite config.yaml's model paths to match.
+      3. uv-managed Python 3.12.
+      4. App venv  .venv        (torch-FREE; `uv sync` of root pyproject.toml).
+      5. Engine venv .venv-engine (torch 2.9.1+cu128 stack). DEFAULT = deterministic
          FREEZE path (reproduces the VALIDATED stack all verification ran on).
          Re-applied automatically whenever the pinned dependency set changes, so
          "git pull, then re-run this" actually updates the venv.
          -ResolveLatest opts into a fresh resolve (UNVALIDATED newer torch).
-      5. Model downloads (~31GB, 5 guarded items) via .venv-engine's hf.exe,
-         pulled from three PUBLIC, NON-GATED repos. No HuggingFace account,
-         login or token is required at any point.
-      6. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt.
+      6. Model downloads (~31GB) via .venv-engine's hf.exe, driven entirely by
+         the manifests: staged into models\.dl\ and then remapped into place.
+      7. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt,
+         both generated from the manifests' `files` arrays.
+      8. Optional -RunSmoke.
 
     The GGUF + component-file recipe is the ONLY supported real path. It never
     opens the old 46GB monolith (ltx-2.3-22b-distilled-1.1.safetensors) or the
@@ -34,6 +40,39 @@
     now a hardcoded "" in services/ltx_runner.py.
 
 .NOTES
+    LAYOUT + GUARD DOCTRINE (2026-08-19 rewrite)
+    --------------------------------------------
+    models/ is BASE-MODEL-FIRST:  models/<BaseModel>/<Category>/...
+    (models/LTX23/Weights, models/LTX23/TextEncoder, models/Preprocessors/DWPose,
+    ...). The folder IS the declaration -- where a file sits says which base model
+    it belongs to, so nothing has to fingerprint weights.
+
+    Every guard in this script is now PER EXPECTED FILE (manifest `files[]`, each
+    with its own `min`), never a per-directory recursive total. The old
+    directory-total guards are gone, and with them two whole classes of bug:
+
+      * A directory total cannot decide "present" when two different repos feed
+        the SAME directory. models/LTX23/TextEncoder is filled by BOTH
+        Rootport/Nz-LTX23-weights (text projection) and Rootport/Nz-Gemma3-12B
+        (the GGUF) -- with a directory-total guard, whichever downloads first
+        pushes the directory over the floor and the post-download re-check of the
+        other one throws, making a fresh install fail 100% of the time.
+      * A directory total is inflated by files the user brought themselves
+        (self-converted GGUFs in Weights/, LoRAs in StyleLoRA/), which can hide a
+        missing OFFICIAL file forever. The old script documented that as an
+        accepted, unfixable limitation for models/ltx-2.3-gguf/. Per-file guards
+        make it structurally impossible: an official file that is absent is
+        always downloaded, and a user file never affects any verdict.
+
+    Consequently there is NO LONGER any constraint on how directories are
+    arranged relative to each other. The old "each repo needs its OWN sibling
+    check directory, never a child" rule (models/preprocessors-vda deliberately
+    kept a SIBLING of models/preprocessors, IC-LoRA deblur/in-outpainting kept
+    out of models/ltx-2.3-ic-lora/) existed ONLY to keep recursive size sums from
+    masking each other. It is void: the new layout nests all four IC-LoRA
+    adapters under models/LTX23/IC-LoRA/ and both preprocessors under
+    models/Preprocessors/, and nothing can mask anything.
+
     ATTENTION BACKEND (no GPU-specific knob)
     ----------------------------------------
     PyTorch SDPA remains the attention backend on EVERY arch (Ada / Ampere /
@@ -55,6 +94,7 @@
 
 .EXAMPLE
     ./scripts/install_ltx.ps1                       # full install
+    ./scripts/install_ltx.ps1 -DryRun               # print the migration plan only
     ./scripts/install_ltx.ps1 -ResolveLatest        # fresh (unvalidated) engine resolve
     ./scripts/install_ltx.ps1 -SkipModels           # venvs only, no downloads
     ./scripts/install_ltx.ps1 -RunSmoke             # + mock GPU-free smoke test
@@ -72,7 +112,13 @@ param(
     [switch] $CloneUpstreamReference,
     # Convenience skips.
     [switch] $SkipModels,
-    [switch] $SkipVenv
+    [switch] $SkipVenv,
+    # Print the models/ migration plan (and the config.yaml lines that would be
+    # rewritten) and exit 0 WITHOUT touching a single byte on disk.
+    [switch] $DryRun,
+    # Leave an existing models/ tree exactly as it is (no migration, no
+    # config.yaml rewrite).
+    [switch] $SkipMigrate
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,6 +134,10 @@ $env:UV_PYTHON_INSTALL_DIR = "$ProjectRoot\.python"
 if (-not $env:UV_CACHE_DIR) { $env:UV_CACHE_DIR = "$ProjectRoot\.uv_cache" }
 if (-not $env:HF_HOME) { $env:HF_HOME = "$ProjectRoot\hf_home" }
 if (-not $env:PYTORCH_CUDA_ALLOC_CONF) { $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" }
+
+$ModelsDir = "$ProjectRoot\models"
+$ManifestDir = "$ProjectRoot\scripts\manifests"
+$StagingRoot = "$ModelsDir\.dl"
 
 # ----------------------------------------------------------------------------
 # Small helpers
@@ -111,18 +161,193 @@ function Format-Size([long] $bytes) {
     return "$bytes B"
 }
 
-# Total bytes of a file, or of every file under a directory (0 if missing).
-function Get-PathSize([string] $absPath) {
-    if (-not (Test-Path $absPath)) { return [long] 0 }
-    $item = Get-Item $absPath
-    if ($item.PSIsContainer) {
-        $sum = (Get-ChildItem $absPath -Recurse -File -ErrorAction SilentlyContinue |
-            Measure-Object -Property Length -Sum).Sum
-        if ($null -eq $sum) { return [long] 0 }
-        return [long] $sum
-    }
+# Size of ONE file (0 when absent / when the path is a directory).
+function Get-FileSize([string] $absPath) {
+    if (-not (Test-Path -LiteralPath $absPath)) { return [long] 0 }
+    $item = Get-Item -LiteralPath $absPath -Force
+    if ($item.PSIsContainer) { return [long] 0 }
     return [long] $item.Length
 }
+
+# Sum of the files DIRECTLY inside a directory (NOT recursive). The only
+# consumer is the tokenizer `kind:"dir"` manifest row, which is gated as a whole
+# because its ten files run from 35 B to 33 MB and the seven tiny ones are not
+# individually catchable. Nothing else in this script measures a directory.
+function Get-DirectChildSize([string] $absPath) {
+    if (-not (Test-Path -LiteralPath $absPath)) { return [long] 0 }
+    $item = Get-Item -LiteralPath $absPath -Force
+    if (-not $item.PSIsContainer) { return [long] 0 }
+    $sum = (Get-ChildItem -LiteralPath $absPath -File -Force -ErrorAction SilentlyContinue |
+        Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $sum) { return [long] 0 }
+    return [long] $sum
+}
+
+# ----------------------------------------------------------------------------
+# Path helpers. Every manifest path is stored with '/' separators and is
+# relative to models/. We normalise to '/' before any comparison so that a
+# Windows '\' path and a manifest path always compare the same way.
+# ----------------------------------------------------------------------------
+function ConvertTo-SlashPath([string] $p) { return $p.Replace('\', '/') }
+
+# Reject anything that could escape models/ or hard-code a drive.
+function Test-RelPathSafe([string] $p) {
+    if ([string]::IsNullOrWhiteSpace($p)) { return $false }
+    if ($p -match '\\') { return $false }
+    if ($p -match '^[A-Za-z]:') { return $false }
+    if ($p.StartsWith('/')) { return $false }
+    foreach ($seg in ($p -split '/')) {
+        if ($seg -eq '' -or $seg -eq '.' -or $seg -eq '..') { return $false }
+    }
+    return $true
+}
+
+# PATH-SEPARATOR-BOUNDARY prefix test: "ltx-2.3" matches "ltx-2.3/x" but NEVER
+# "ltx-2.3-gguf/x". This boundary rule is what lets the migrate table carry both
+# `ltx-2.3` and `ltx-2.3-gguf` as independent entries. Case-insensitive on
+# purpose: NTFS is, so an on-disk "preprocessors" and a manifest "Preprocessors"
+# name the same directory.
+function Test-UnderPrefix([string] $rel, [string] $prefix) {
+    if ($rel -eq $prefix) { return $true }
+    return $rel.StartsWith($prefix + '/', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+# LONGEST-MATCH-WINS remap. Returns the new models-relative path, or $null when
+# no entry claims this file. The remainder after the matched prefix is carried
+# over verbatim, which is why sub-folders nobody configured (VAE/prunavaed/,
+# IC-LoRA/pixel-spatial-upscaler/'s user-supplied x4, every LoRA thumbnail)
+# survive with no per-file rules at all.
+function Resolve-MapTarget {
+    param(
+        [Parameter(Mandatory)] [string] $Rel,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Pairs
+    )
+    $best = $null
+    foreach ($m in $Pairs) {
+        if (Test-UnderPrefix $Rel $m.from) {
+            if (($null -eq $best) -or ($m.from.Length -gt $best.from.Length)) { $best = $m }
+        }
+    }
+    if ($null -eq $best) { return $null }
+    if ($Rel.Length -le $best.from.Length) { return $best.to }
+    return ($best.to + '/' + $Rel.Substring($best.from.Length + 1))
+}
+
+# ----------------------------------------------------------------------------
+# 0) Manifests: load + validate.
+#
+#    scripts/manifests/*.json is the ONE place that knows the layout. Each file
+#    declares, for one base model (or the shared preprocessor set):
+#      downloads[] : name / repo / include globs / map[] / files[]
+#      migrate[]   : from -> to, for an existing pre-2026-08 tree
+#    `files[]` is the single source of truth used THREE times over -- as the
+#    pre-download guard, as the post-download re-check, and as the step 7
+#    verification table + INSTALLED_PATHS.txt. Adding a base model later
+#    (LTX 2.5, Wan 2.x, ...) is a new JSON file and no change here.
+#
+#    Files are processed in FILENAME order, so the numeric prefixes
+#    (00-, 10-, ...) fix the order deterministically.
+#
+#    Validation is fail-loud and runs on EVERY invocation, before anything else
+#    can act on a bad table: schema must be 1, every path must be relative and
+#    inside models/, and every `files[].path` must live under one of that same
+#    download's `map[].to` -- otherwise the remap would drop the file somewhere
+#    the guard never looks and the install would loop forever.
+# ----------------------------------------------------------------------------
+function Import-ModelManifests {
+    param([Parameter(Mandatory)] [string] $Dir)
+
+    if (-not (Test-Path -LiteralPath $Dir)) { throw "Manifest directory not found: $Dir" }
+    $files = @(Get-ChildItem -LiteralPath $Dir -Filter "*.json" -File | Sort-Object Name)
+    if ($files.Count -eq 0) { throw "No manifests found in $Dir (expected at least one *.json)." }
+
+    $loaded = @()
+    foreach ($f in $files) {
+        # ReadAllText with an explicit UTF8 encoding still honours a BOM, so the
+        # manifests can be saved either way without breaking ConvertFrom-Json
+        # (a leading U+FEFF is a parse error).
+        $raw = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)
+        try {
+            $obj = $raw | ConvertFrom-Json
+        } catch {
+            throw "Manifest $($f.Name) is not valid JSON: $($_.Exception.Message)"
+        }
+        Test-ManifestShape -Manifest $obj -Name $f.Name
+        $loaded += [pscustomobject]@{ Name = $f.Name; Data = $obj }
+    }
+    return $loaded
+}
+
+function Test-ManifestShape {
+    param(
+        [Parameter(Mandatory)] $Manifest,
+        [Parameter(Mandatory)] [string] $Name
+    )
+    if ($Manifest.schema -ne 1) {
+        throw "Manifest ${Name}: unsupported schema '$($Manifest.schema)' (this installer understands schema 1)."
+    }
+    if ([string]::IsNullOrWhiteSpace($Manifest.id)) { throw "Manifest ${Name}: missing 'id'." }
+    if ($Manifest.id -notmatch '^[A-Za-z0-9._-]+$') {
+        throw "Manifest ${Name}: 'id' must be a plain filename-safe token (it names the staging directory)."
+    }
+    if (-not $Manifest.downloads) { throw "Manifest ${Name}: missing 'downloads'." }
+
+    $n = 0
+    foreach ($dl in @($Manifest.downloads)) {
+        $n++
+        $where = "${Name} downloads[$n]"
+        if ([string]::IsNullOrWhiteSpace($dl.name)) { throw "${where}: missing 'name'." }
+        if ([string]::IsNullOrWhiteSpace($dl.repo)) { throw "${where}: missing 'repo'." }
+        if (-not $dl.include) { throw "${where}: missing 'include'." }
+        if (-not $dl.map) { throw "${where}: missing 'map'." }
+        if (-not $dl.files) { throw "${where}: missing 'files'." }
+
+        foreach ($m in @($dl.map)) {
+            if (-not (Test-RelPathSafe $m.from)) { throw "${where}: map.from '$($m.from)' is not a safe relative path." }
+            if (-not (Test-RelPathSafe $m.to)) { throw "${where}: map.to '$($m.to)' is not a safe relative path." }
+        }
+        foreach ($fl in @($dl.files)) {
+            if (-not (Test-RelPathSafe $fl.path)) { throw "${where}: files.path '$($fl.path)' is not a safe relative path." }
+            if ([string]::IsNullOrWhiteSpace($fl.label)) { throw "${where}: files.path '$($fl.path)' has no 'label'." }
+            if ($null -eq $fl.min) { throw "${where}: files.path '$($fl.path)' has no 'min'." }
+            if ($fl.kind -and ($fl.kind -ne 'dir')) { throw "${where}: files.path '$($fl.path)' has unknown kind '$($fl.kind)'." }
+            $covered = $false
+            foreach ($m in @($dl.map)) {
+                if (Test-UnderPrefix $fl.path $m.to) { $covered = $true; break }
+            }
+            if (-not $covered) {
+                throw "${where}: files.path '$($fl.path)' is not under any map.to of the same download. The remap would never place it there, so its guard could never be satisfied."
+            }
+        }
+    }
+
+    foreach ($mg in @($Manifest.migrate)) {
+        if (-not (Test-RelPathSafe $mg.from)) { throw "${Name}: migrate.from '$($mg.from)' is not a safe relative path." }
+        if (-not (Test-RelPathSafe $mg.to)) { throw "${Name}: migrate.to '$($mg.to)' is not a safe relative path." }
+    }
+}
+
+Write-Step "Model manifests"
+$Manifests = Import-ModelManifests -Dir $ManifestDir
+
+# Aggregate every manifest's migrate table into ONE list. A `from` may appear
+# only once across ALL manifests: two base models both claiming the same old
+# directory would make the destination depend on file order, which is exactly
+# the kind of silent surprise a 74GB move must not have.
+$MigrateAll = @()
+$seenFrom = @{}
+foreach ($mf in $Manifests) {
+    foreach ($mg in @($mf.Data.migrate)) {
+        $key = $mg.from.ToLowerInvariant()
+        if ($seenFrom.ContainsKey($key)) {
+            throw "Duplicate migrate.from '$($mg.from)' (in $($mf.Name) and $($seenFrom[$key])). Each legacy directory may have exactly one destination."
+        }
+        $seenFrom[$key] = $mf.Name
+        $MigrateAll += [pscustomobject]@{ from = $mg.from; to = $mg.to }
+    }
+}
+$manifestNames = ($Manifests | ForEach-Object { $_.Name }) -join ', '
+Write-Ok "$($Manifests.Count) manifest(s) validated: $manifestNames  ($($MigrateAll.Count) migrate entries)"
 
 # ----------------------------------------------------------------------------
 # 1) Prerequisites
@@ -155,7 +380,436 @@ Write-Host "root   : $ProjectRoot"
 Write-Host "HF_HOME: $env:HF_HOME"
 
 # ----------------------------------------------------------------------------
-# 2) uv-managed Python 3.12  (skip if an in-project cpython-3.12 is already present)
+# 2) Migrate an existing models/ tree to the base-model-first layout, then bring
+#    config.yaml along with it.
+#
+#    Design (all four points are load-bearing):
+#
+#    (a) NOTHING MOVES UNTIL EVERY PRE-FLIGHT GUARD PASSES. The plan is built
+#        with zero side effects, then checked (same volume, no reparse points,
+#        no destination collisions), then printed, then executed. A 74GB tree
+#        must never be left half-moved because the 40th file hit a surprise.
+#
+#    (b) MOVE, NEVER OVERWRITE. Move-Item runs WITHOUT -Force here. A
+#        destination that already exists is a collision the user must resolve --
+#        it is by definition a file we did not put there. (The download remap in
+#        step 6 is the deliberate opposite; see the asymmetry note there.)
+#
+#    (c) IDEMPOTENT + CRASH-SAFE. The log is appended one line per file as the
+#        move happens, so an interrupted run leaves an accurate record; a re-run
+#        simply re-plans whatever is still in the old place and moves the rest.
+#        Files that already sit under a destination prefix are recognised as
+#        DONE, not re-moved into a doubled path.
+#
+#    (d) NTFS CASE COLLISION (found the hard way on the reference machine).
+#        Windows resolves models\Preprocessors and models\preprocessors to the
+#        SAME directory, so a repo that ships models/Preprocessors/... lands its
+#        files inside the user's existing lowercase models/preprocessors/ and the
+#        new tree quietly never appears. -eq cannot see this (PowerShell string
+#        comparison is case-insensitive); -ceq can. So before ANY content moves
+#        we compare each destination's top-level component against the real
+#        on-disk directory names with -ceq and, on a case-only mismatch, fix the
+#        NAME with a two-stage rename (X -> __case_fix_* -> X). Two stages are
+#        required: a direct rename to a case-variant of the same name is a no-op
+#        on NTFS. No file inside is touched -- this is a directory-entry rename,
+#        instantaneous even for 74GB.
+# ----------------------------------------------------------------------------
+
+# The destination prefixes, used to recognise "already migrated" files.
+$MigrateTos = @($MigrateAll | ForEach-Object { $_.to })
+# Distinct top-level component of every destination (LTX23, Preprocessors, ...).
+$MigrateTopDirs = @($MigrateTos | ForEach-Object { ($_ -split '/')[0] } | Select-Object -Unique)
+
+# Case-only mismatches between what we want and what is on disk (see (d)).
+function Get-CaseFixPlan {
+    param([Parameter(Mandatory)] [string[]] $WantNames)
+    $out = @()
+    if (-not (Test-Path -LiteralPath $ModelsDir)) { return $out }
+    $onDisk = @(Get-ChildItem -LiteralPath $ModelsDir -Directory -Force -ErrorAction SilentlyContinue)
+    foreach ($want in $WantNames) {
+        foreach ($d in $onDisk) {
+            # -eq  : same name ignoring case  -> NTFS says these are one directory
+            # -ceq : same name including case -> nothing to fix
+            if (($d.Name -eq $want) -and -not ($d.Name -ceq $want)) {
+                $out += [pscustomobject]@{ Old = $d.Name; New = $want }
+            }
+        }
+    }
+    return $out
+}
+
+function Invoke-CaseFix {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Plan)
+    foreach ($c in $Plan) {
+        $tmp = "__case_fix_" + [guid]::NewGuid().ToString("N").Substring(0, 8)
+        Rename-Item -LiteralPath (Join-Path $ModelsDir $c.Old) -NewName $tmp
+        Rename-Item -LiteralPath (Join-Path $ModelsDir $tmp) -NewName $c.New
+    }
+}
+
+# Build the move plan. Pure: reads the tree, writes nothing.
+#   MOVE    - matched a migrate.from, destination differs
+#   DONE    - already under a migrate.to prefix (or already at its target)
+#   DROP    - inside a .cache/ segment (HuggingFace download bookkeeping)
+#   KEEP    - matched nothing; left exactly where it is
+function New-MigrationPlan {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $CaseFix)
+
+    $moves = @(); $drops = @(); $keeps = @(); $done = 0
+    if (-not (Test-Path -LiteralPath $ModelsDir)) {
+        return [pscustomobject]@{ Moves = $moves; Drops = $drops; Keeps = $keeps; Done = $done }
+    }
+    # Map an on-disk top-level name to the name it will have after the case fix,
+    # so a -DryRun (which renames nothing) still prints the real destination.
+    $rename = @{}
+    foreach ($c in $CaseFix) { $rename[$c.Old] = $c.New }
+
+    $all = @(Get-ChildItem -LiteralPath $ModelsDir -Recurse -File -Force -ErrorAction SilentlyContinue)
+    foreach ($f in $all) {
+        $rel = ConvertTo-SlashPath $f.FullName.Substring($ModelsDir.Length + 1)
+        $segs = $rel -split '/'
+        if ($rename.ContainsKey($segs[0])) {
+            $segs[0] = $rename[$segs[0]]
+            $rel = $segs -join '/'
+        }
+        # The staging area is step 6's business, never migration's.
+        if ($segs[0] -eq '.dl') { continue }
+        # HuggingFace leaves .cache/huggingface/ next to every download: lock and
+        # .metadata bookkeeping for a cache root we are about to invalidate by
+        # moving the payload. It is regenerated on demand, so it is dropped
+        # rather than carried into the new tree.
+        if ($segs -contains '.cache') { $drops += $rel; continue }
+
+        $atDest = $false
+        foreach ($t in $MigrateTos) { if (Test-UnderPrefix $rel $t) { $atDest = $true; break } }
+        if ($atDest) { $done++; continue }
+
+        $target = Resolve-MapTarget -Rel $rel -Pairs $MigrateAll
+        if ($null -eq $target) { $keeps += $rel; continue }
+        if ($target -eq $rel) { $done++; continue }
+
+        $moves += [pscustomobject]@{
+            Rel    = $rel
+            Target = $target
+            Src    = $f.FullName
+            Dst    = (Join-Path $ModelsDir ($target -replace '/', '\'))
+            Size   = [long] $f.Length
+        }
+    }
+    return [pscustomobject]@{ Moves = @($moves); Drops = @($drops); Keeps = @($keeps); Done = $done }
+}
+
+function Test-MigrationSafety {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Moves)
+
+    if (-not (Test-Path -LiteralPath $ModelsDir)) { return }
+
+    # Same volume. Everything we move stays inside models/, so a cross-volume
+    # move (= a silent 74GB COPY, hours instead of seconds, and a half-full disk)
+    # can only sneak in through a junction/symlink pointing off-volume. Reject
+    # every reparse point rather than trying to decide which ones are benign.
+    $links = @(Get-ChildItem -LiteralPath $ModelsDir -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.LinkType })
+    $modelsItem = Get-Item -LiteralPath $ModelsDir -Force
+    if ($modelsItem.LinkType) { $links = @($modelsItem) + $links }
+    if ($links.Count -gt 0) {
+        $names = ($links | ForEach-Object { "$($_.FullName) [$($_.LinkType)]" }) -join "; "
+        throw "models/ contains junction(s)/symlink(s): $names. Migration refuses to run because a move across them can silently become a multi-hour copy onto another volume. Resolve them (or re-run with -SkipMigrate and move the files by hand) first."
+    }
+
+    # Destination collisions. NO -Force anywhere in migration, so an existing
+    # destination is a hard stop: whatever is there is not ours to overwrite.
+    $collide = @()
+    foreach ($m in $Moves) {
+        if (Test-Path -LiteralPath $m.Dst) { $collide += "$($m.Rel) -> $($m.Target)" }
+    }
+    # ...including collisions the plan would create with itself.
+    $byTarget = @{}
+    foreach ($m in $Moves) {
+        $k = $m.Target.ToLowerInvariant()
+        if ($byTarget.ContainsKey($k)) { $collide += "$($byTarget[$k]) and $($m.Rel) both -> $($m.Target)" }
+        $byTarget[$k] = $m.Rel
+    }
+    if ($collide.Count -gt 0) {
+        throw "Migration would overwrite existing files, which it never does. Resolve these by hand and re-run: $($collide -join '; ')"
+    }
+
+    # MAX_PATH. Not fatal (this project is normally installed near a drive root
+    # and the new layout is SHORTER than the old one), but worth saying out loud.
+    foreach ($m in $Moves) {
+        if ($m.Dst.Length -gt 250) {
+            Write-Warning "Destination path is $($m.Dst.Length) characters, close to the classic 260-character limit: $($m.Dst)"
+        }
+    }
+}
+
+# Bottom-up removal of directories the migration emptied. -Recurse is NEVER used
+# (it would delete a directory that still holds something we failed to move);
+# only genuinely empty directories go, deepest first, and only inside the legacy
+# source roots. Any directory that is a destination -- or an ancestor of one --
+# is protected outright.
+function Remove-EmptyLegacyDirs {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Migrate)
+
+    $protect = @{}
+    foreach ($m in $Migrate) {
+        $acc = $ModelsDir
+        foreach ($seg in ($m.to -split '/')) {
+            $acc = Join-Path $acc $seg
+            $protect[$acc.ToLowerInvariant()] = $true
+        }
+    }
+    $protect[$ModelsDir.ToLowerInvariant()] = $true
+
+    $removed = @()
+    foreach ($m in $Migrate) {
+        $root = Join-Path $ModelsDir ($m.from -replace '/', '\')
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $cands = @(Get-ChildItem -LiteralPath $root -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+            Sort-Object { $_.FullName.Length } -Descending)
+        $cands += @(Get-Item -LiteralPath $root -Force)
+        # ...and then the ancestors of the source root, up to but never including
+        # models/ itself. A migrate.from can be two levels deep
+        # (ltx-2.3-components/vae), and without this the now-empty
+        # models/ltx-2.3-components/ would be left behind for every user.
+        $anc = Split-Path -Parent $root
+        while ($anc -and ($anc.Length -gt $ModelsDir.Length) -and $anc.StartsWith($ModelsDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+            if (Test-Path -LiteralPath $anc) { $cands += @(Get-Item -LiteralPath $anc -Force) }
+            $anc = Split-Path -Parent $anc
+        }
+        foreach ($d in $cands) {
+            if ($protect.ContainsKey($d.FullName.ToLowerInvariant())) { continue }
+            if (-not (Test-Path -LiteralPath $d.FullName)) { continue }
+            $n = @(Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue).Count
+            if ($n -eq 0) {
+                Remove-Item -LiteralPath $d.FullName -Force
+                $removed += (ConvertTo-SlashPath $d.FullName.Substring($ModelsDir.Length + 1))
+            }
+        }
+    }
+    return $removed
+}
+
+# ----------------------------------------------------------------------------
+# config.yaml follow-up.
+#
+# WHY THIS IS NOT OPTIONAL: spatial_upsampler_path, gemma_root and the six
+# ic_loras entries exist ONLY in config.yaml, and LTXRunner._real_available()
+# requires them. If they still point at the emptied legacy directories after a
+# migration, backend:"auto" silently DOWNGRADES TO MOCK -- generation keeps
+# "working", it just stops being real. So the paths are rewritten in the same
+# breath as the move.
+#
+# Scope discipline: a config.yaml.bak is written first; only path tokens that
+# start with models/ AND match the migrate table are touched; comments are left
+# alone (a '#' outside quotes ends the live part of the line); every other
+# value, key, blank line and byte is preserved, as is the file's BOM state.
+# ----------------------------------------------------------------------------
+function Convert-ConfigModelPaths {
+    param(
+        [Parameter(Mandatory)] [string] $Text,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Migrate
+    )
+    # A models/ path token: optional "./" or ".\", then models, then a separator,
+    # then anything that is not a quote, whitespace or '#'. Because the token
+    # cannot contain whitespace it can never span a line, so the replacement
+    # leaves every CR/LF exactly where it was.
+    $pattern = '(?:\.[\\/])?models[\\/][^"\x27\s#]+'
+
+    $evaluator = {
+        param($mt)
+        $orig = $mt.Value
+
+        # Is this token inside a comment? Walk the line prefix tracking double
+        # quotes; a '#' seen outside quotes means everything after it is a
+        # comment and must not be rewritten.
+        $ls = 0
+        if ($mt.Index -gt 0) {
+            $ls = $Text.LastIndexOfAny([char[]]@("`n", "`r"), $mt.Index - 1) + 1
+        }
+        $prefix = $Text.Substring($ls, $mt.Index - $ls)
+        $inQuote = $false
+        for ($i = 0; $i -lt $prefix.Length; $i++) {
+            $ch = $prefix[$i]
+            if ($ch -eq '"') { $inQuote = -not $inQuote }
+            elseif (($ch -eq '#') -and (-not $inQuote)) { return $orig }
+        }
+
+        $norm = ConvertTo-SlashPath $orig
+        $lead = ''
+        if ($norm.StartsWith('./')) { $lead = './'; $norm = $norm.Substring(2) }
+        if (-not $norm.StartsWith('models/')) { return $orig }
+        $rel = $norm.Substring('models/'.Length)
+        $target = Resolve-MapTarget -Rel $rel -Pairs $Migrate
+        if ($null -eq $target) { return $orig }
+        return ($lead + 'models/' + $target)
+    }
+
+    $newText = [regex]::Replace($Text, $pattern, $evaluator)
+
+    $oldLines = $Text -split "`r`n|`n|`r"
+    $newLines = $newText -split "`r`n|`n|`r"
+    $changes = @()
+    for ($i = 0; $i -lt [Math]::Min($oldLines.Count, $newLines.Count); $i++) {
+        if ($oldLines[$i] -cne $newLines[$i]) {
+            $changes += [pscustomobject]@{ Line = ($i + 1); Old = $oldLines[$i].Trim(); New = $newLines[$i].Trim() }
+        }
+    }
+    return [pscustomobject]@{ Text = $newText; Changes = @($changes) }
+}
+
+if ($SkipMigrate) {
+    Write-Step "Migrate models/ to the base-model-first layout"
+    Write-Skip "-SkipMigrate given"
+    if ($DryRun) { Write-Host "`n-DryRun: nothing was changed." -ForegroundColor Cyan; exit 0 }
+} else {
+    Write-Step "Migrate models/ to the base-model-first layout"
+
+    $caseFix = @(Get-CaseFixPlan -WantNames $MigrateTopDirs)
+    $plan = New-MigrationPlan -CaseFix $caseFix
+
+    $modelsVolume = "(models/ does not exist yet)"
+    if (Test-Path -LiteralPath $ModelsDir) {
+        $modelsVolume = [System.IO.Path]::GetPathRoot((Get-Item -LiteralPath $ModelsDir -Force).FullName)
+    }
+    $rootVolume = [System.IO.Path]::GetPathRoot($ProjectRoot)
+
+    Write-Host ""
+    Write-Host "  layout   : base-model-first (models/<BaseModel>/<Category>)"
+    Write-Host "  volume   : project $rootVolume / models $modelsVolume  (same volume => rename, not copy)"
+    foreach ($c in $caseFix) {
+        Write-Host ("  CASEFIX  models\{0}  ->  models\{1}   (NTFS case-only rename, no file is touched)" -f $c.Old, $c.New) -ForegroundColor Yellow
+    }
+
+    $moveBytes = [long] 0
+    foreach ($m in $plan.Moves) { $moveBytes += $m.Size }
+
+    Write-Host ""
+    Write-Host ("  MOVE {0} file(s), {1}" -f $plan.Moves.Count, (Format-Size $moveBytes))
+    foreach ($m in ($plan.Moves | Sort-Object Rel)) {
+        Write-Host ("    {0,10}  {1}  ->  {2}" -f (Format-Size $m.Size), $m.Rel, $m.Target)
+    }
+    if ($plan.Drops.Count -gt 0) {
+        Write-Host ""
+        Write-Host ("  DROP {0} HuggingFace .cache bookkeeping file(s) (regenerated on demand)" -f $plan.Drops.Count) -ForegroundColor DarkGray
+    }
+    if ($plan.Keeps.Count -gt 0) {
+        Write-Host ""
+        Write-Host ("  KEEP {0} file(s) that match no migrate entry (left exactly where they are):" -f $plan.Keeps.Count) -ForegroundColor DarkGray
+        foreach ($k in ($plan.Keeps | Sort-Object)) { Write-Host "    $k" -ForegroundColor DarkGray }
+    }
+    if ($plan.Done -gt 0) {
+        Write-Host ""
+        Write-Host ("  DONE {0} file(s) already in the new layout" -f $plan.Done) -ForegroundColor DarkGray
+    }
+
+    # config.yaml preview / rewrite is prepared here so -DryRun can show it too.
+    $configPath = "$ProjectRoot\config.yaml"
+    $configResult = $null
+    $configHasBom = $false
+    if (Test-Path -LiteralPath $configPath) {
+        $bytes = [System.IO.File]::ReadAllBytes($configPath)
+        $configHasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+        $cfgText = [System.Text.Encoding]::UTF8.GetString($bytes)
+        if ($configHasBom) { $cfgText = $cfgText.Substring(1) }
+        $configResult = Convert-ConfigModelPaths -Text $cfgText -Migrate $MigrateAll
+    }
+
+    Write-Host ""
+    if ($null -eq $configResult) {
+        Write-Host "  config.yaml : not present (nothing to rewrite)" -ForegroundColor DarkGray
+    } elseif ($configResult.Changes.Count -eq 0) {
+        Write-Host "  config.yaml : no legacy model paths found (nothing to rewrite)" -ForegroundColor DarkGray
+    } else {
+        Write-Host ("  config.yaml : {0} line(s) to rewrite (a config.yaml.bak is written first)" -f $configResult.Changes.Count)
+        foreach ($c in $configResult.Changes) {
+            Write-Host ("    line {0,4}  - {1}" -f $c.Line, $c.Old) -ForegroundColor DarkGray
+            Write-Host ("    line {0,4}  + {1}" -f $c.Line, $c.New) -ForegroundColor Green
+        }
+    }
+
+    if ($DryRun) {
+        Write-Host ""
+        Write-Host "-DryRun: plan only. Nothing on disk was read-modified, renamed, moved or deleted." -ForegroundColor Cyan
+        exit 0
+    }
+
+    if (($caseFix.Count -eq 0) -and ($plan.Moves.Count -eq 0) -and ($plan.Drops.Count -eq 0) -and
+        ($null -eq $configResult -or $configResult.Changes.Count -eq 0)) {
+        Write-Host ""
+        Write-Skip "models/ is already in the base-model-first layout"
+    } else {
+        # Pre-flight: every guard passes before the first byte moves.
+        Test-MigrationSafety -Moves $plan.Moves
+
+        # The case fix has to happen before content moves, and it invalidates the
+        # absolute source paths captured in the plan (models\preprocessors\x.pt
+        # becomes models\Preprocessors\x.pt). NTFS resolves both spellings to the
+        # same file, so the captured paths keep working -- but re-plan anyway so
+        # the log records exactly what is on disk.
+        if ($caseFix.Count -gt 0) {
+            Invoke-CaseFix -Plan $caseFix
+            $plan = New-MigrationPlan -CaseFix @()
+            Test-MigrationSafety -Moves $plan.Moves
+        }
+
+        New-Item -ItemType Directory -Force -Path "$ProjectRoot\logs" | Out-Null
+        $migLog = "$ProjectRoot\logs\model_migration_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+        # One Add-Content call per file: it opens, writes and closes, so the line
+        # is on disk before the next move starts. A crash mid-migration therefore
+        # leaves a log that is accurate to the last completed move -- which is
+        # what a manual reverse-replay needs.
+        Add-Content -LiteralPath $migLog -Value "# models/ migration to the base-model-first layout" -Encoding utf8
+        Add-Content -LiteralPath $migLog -Value "# started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  root=$ProjectRoot" -Encoding utf8
+        foreach ($c in $caseFix) {
+            Add-Content -LiteralPath $migLog -Value ("CASEFIX`tmodels/{0}`tmodels/{1}" -f $c.Old, $c.New) -Encoding utf8
+        }
+
+        $moved = 0
+        foreach ($m in $plan.Moves) {
+            $parent = Split-Path -Parent $m.Dst
+            if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+            # NO -Force. See design note (b): a pre-existing destination is a
+            # collision Test-MigrationSafety already refused, and if one appears
+            # between plan and execution we want the throw, not an overwrite.
+            Move-Item -LiteralPath $m.Src -Destination $m.Dst
+            Add-Content -LiteralPath $migLog -Value ("MOVE`t{0}`t{1}`t{2}" -f $m.Rel, $m.Target, $m.Size) -Encoding utf8
+            $moved++
+        }
+
+        $dropped = 0
+        foreach ($d in $plan.Drops) {
+            $abs = Join-Path $ModelsDir ($d -replace '/', '\')
+            if (Test-Path -LiteralPath $abs) {
+                Remove-Item -LiteralPath $abs -Force
+                Add-Content -LiteralPath $migLog -Value ("DROP`t{0}" -f $d) -Encoding utf8
+                $dropped++
+            }
+        }
+
+        $removedDirs = Remove-EmptyLegacyDirs -Migrate $MigrateAll
+        foreach ($rd in $removedDirs) {
+            Add-Content -LiteralPath $migLog -Value ("RMDIR`t{0}" -f $rd) -Encoding utf8
+        }
+
+        if ($null -ne $configResult -and $configResult.Changes.Count -gt 0) {
+            Copy-Item -LiteralPath $configPath -Destination "$configPath.bak" -Force
+            # WriteAllText with an explicit UTF8Encoding keeps the file's original
+            # BOM state (Set-Content/Out-File would not) and writes nothing else.
+            $enc = New-Object System.Text.UTF8Encoding($configHasBom)
+            [System.IO.File]::WriteAllText($configPath, $configResult.Text, $enc)
+            Add-Content -LiteralPath $migLog -Value ("CONFIG`tconfig.yaml`t{0} line(s) rewritten, backup at config.yaml.bak" -f $configResult.Changes.Count) -Encoding utf8
+            Write-Ok "config.yaml rewritten ($($configResult.Changes.Count) line(s)); previous version saved as config.yaml.bak"
+        }
+
+        Add-Content -LiteralPath $migLog -Value "# finished $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Encoding utf8
+        Write-Ok "moved $moved file(s), dropped $dropped cache file(s), removed $($removedDirs.Count) empty legacy dir(s)"
+        Write-Host "  log: $migLog"
+    }
+}
+
+# ----------------------------------------------------------------------------
+# 3) uv-managed Python 3.12  (skip if an in-project cpython-3.12 is already present)
 # ----------------------------------------------------------------------------
 Write-Step "Python 3.12 (uv-managed, in-project)"
 $py312 = Get-ChildItem "$ProjectRoot\.python" -Filter "cpython-3.12*" -Directory -ErrorAction SilentlyContinue |
@@ -169,7 +823,7 @@ if ($py312) {
 }
 
 # ----------------------------------------------------------------------------
-# 3) App venv .venv  (torch-FREE; plain `uv sync` of root pyproject.toml)
+# 4) App venv .venv  (torch-FREE; plain `uv sync` of root pyproject.toml)
 # ----------------------------------------------------------------------------
 $appPy = "$ProjectRoot\.venv\Scripts\python.exe"
 if ($SkipVenv) {
@@ -203,7 +857,7 @@ if ($SkipVenv) {
 }
 
 # ----------------------------------------------------------------------------
-# 4) Engine venv .venv-engine  (torch cu128 stack)
+# 5) Engine venv .venv-engine  (torch cu128 stack)
 #
 #    There is NO committed uv.lock -> we must NEVER use `uv sync --frozen`.
 #    DEFAULT = deterministic FREEZE path: reproduces the VALIDATED torch
@@ -401,7 +1055,7 @@ $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
 #
 # sageattention, the optional second backend, is NOT installed here either --
 # it was re-added 2026-07-31 as one of the $engineDirectPins pinned wheels
-# above (step 4), alongside triton-windows (its runtime JIT dependency, in
+# above (step 5), alongside triton-windows (its runtime JIT dependency, in
 # engine/venv-engine.freeze.txt) which bundles its own TinyCC/ptxas and needs
 # no Visual Studio on the end-user machine. It was removed as dead weight in
 # the 2026-07-28 cleanup (PENDING_TASKS.md 3-25) and came back once the
@@ -427,24 +1081,36 @@ if ($CloneUpstreamReference) {
 }
 
 # ----------------------------------------------------------------------------
-# 5) Model downloads (~31GB) via the engine venv's hf.exe.
-#    Everything comes from THREE self-hosted repos that are PUBLIC and NON-GATED,
-#    so no HuggingFace account, login or token is involved anywhere:
-#      Rootport/Nz-LTX23-weights -> ltx-2.3/, ltx-2.3-components/, ltx-2.3-gguf/,
-#                                   ltx-2.3-ic-lora/, ltx-2.3-ic-lora-deblur/,
-#                                   ltx-2.3-ic-lora-in-outpainting/,
-#                                   preprocessors-vda/
-#      Rootport/Nz-Gemma3-12B    -> gemma-3-12b-it-gguf/, gemma-3-12b-it-tokenizer/
-#      Rootport/Nz-DWPose        -> preprocessors/
-#    All three repos mirror this project's models/ layout 1:1, so each one expands
-#    straight into models/ with no post-processing (no flattening, no renames).
-#    Each item guards on a minimum on-disk size -> SKIP; else download.
-# ----------------------------------------------------------------------------
-
-# One download item. `LocalDir` is relative-to-root and is where the repo expands
-# (both repos below expand into models/, since their internal layout already
-# matches ours). `Include` is one or more glob patterns passed under a SINGLE
-# --include flag.
+# 6) Model downloads (~31GB) via the engine venv's hf.exe, driven by the
+#    manifests. Everything comes from self-hosted repos that are PUBLIC and
+#    NON-GATED, so no HuggingFace account, login or token is involved anywhere.
+#
+#    Per download entry:
+#      guard  -- every `files[]` row must exist and be at least its own `min`.
+#                All rows pass => SKIP. This is a PER-FILE test; see the guard
+#                doctrine in .NOTES for why directory totals are gone.
+#      stage  -- fetch into models\.dl\<manifest-id>-<n>\ (same volume as
+#                models/, inside .gitignore's models/** block). Downloading
+#                straight into the final tree is not possible any more: the
+#                repos still ship the OLD directory names, so their contents
+#                have to be remapped, and a staging area is what makes that a
+#                pure rename instead of a merge into live user data.
+#      remap  -- move each staged file to map[]'s destination.
+#      verify -- re-test the same `files[]` rows; throw if anything is short.
+#      clean  -- only after all of the above succeeds is the staging directory
+#                removed. On failure it is LEFT IN PLACE so the next run resumes
+#                the HuggingFace download instead of re-fetching 17GB.
+#
+#   FORCE ASYMMETRY -- READ BEFORE CHANGING EITHER SIDE.
+#   The remap below moves with -Force; the step 2 migration moves WITHOUT it.
+#   That is deliberate and the two must not be made to match:
+#     * step 6 writes only files the manifest names as OFFICIAL, freshly
+#       downloaded from the pinned repo. Overwriting is the POINT -- it is how a
+#       truncated or corrupted official file gets replaced by re-running.
+#     * step 2 moves the USER'S existing tree, including files nothing here has
+#       ever produced (self-converted GGUFs, purchased LoRAs, an x4 upscaler that
+#       does not exist in any repo). Overwriting there destroys unrecoverable
+#       data, so a collision must stop the install instead.
 #
 #   NOTE (argparse nargs gotcha, carried over from the old script): `hf download
 #   --include` is nargs="*". Repeating the flag (--include A --include B) makes
@@ -457,8 +1123,8 @@ if ($CloneUpstreamReference) {
 #   "Ignoring --include since filenames have been explicitly set." and silently
 #   drops files (spatial upscaler went missing in testing). If that venv's
 #   huggingface_hub is ever upgraded, switch this to repeated --include flags.
-#   The per-directory Min guard below does catch the resulting short download, but
-#   the thrown error gives no hint that a version bump is the cause -- look here
+#   The per-file guard below does catch the resulting short download, but the
+#   thrown error gives no hint that a version bump is the cause -- look here
 #   first.
 #
 #   NOTE (glob semantics, verified live against both repos): --include matches with
@@ -466,364 +1132,166 @@ if ($CloneUpstreamReference) {
 #   "ltx-2.3-components/*" reaches the nested vae/ and text_encoders/ files two
 #   levels down. Just as importantly, the repo-root card files (LICENSE /
 #   NOTICE.md / README.md / .gitattributes) match NO "<dir>/*" pattern -- which is
-#   what stops the two repos' identically-named cards from landing in models/ and
-#   overwriting each other.
-#
-#   NOTE (why Check is separate from LocalDir): all five calls below pass
-#   LocalDir = "models", so sizing the guard on LocalDir would see the ~24GB LTX
-#   download and then wrongly SKIP the Gemma, DWPose, Deblur and VDA ones. Check
-#   instead names the subdirectories that THIS repo expands into.
-#
-#   NOTE (the guard is PER-DIRECTORY -- read before adding a repo): every Check
-#   entry carries its OWN Min, and EACH one must clear it independently or the
-#   download runs. This is deliberate, and it replaced a single combined MinBytes
-#   compared against the SUM of the directories. The sum form is unsafe: one large
-#   file can stand in for an entirely missing sibling directory. The Gemma repo
-#   really had that bug -- its 7.3GB GGUF alone cleared the combined threshold, so
-#   a wholly absent tokenizer dir still SKIPped here, while the step 6 table below
-#   reported gemma_root MISSING and exited 1. Re-running changed nothing: a
-#   permanent, unrecoverable deadlock. Per-directory Mins make that class of
-#   mistake structurally impossible.
-#
-#   How to size one Min: the per-file step 6 table is the real correctness gate,
-#   so a Min is correct when losing anything THAT TABLE would flag drops the
-#   directory below it. In practice, set Min just under the directory's full
-#   expected size, and always ABOVE (directory total - smallest file the table
-#   checks inside it). Files the table never inspects individually do not have to
-#   be catchable -- losing one cannot produce a MISSING row, so it cannot deadlock.
-#   (Concretely: the tokenizer dir is gated only as a whole, at 20MB, so the
-#   35-byte added_tokens.json is not separately catchable and does not need to be.
-#   Chasing it would have forced a 35-byte-wide threshold window.) Each call below
-#   shows its own arithmetic.
-#
-#   Caveat, deliberately accepted for models/ltx-2.3-gguf/ only: that directory
-#   also holds any extra self-converted transformer GGUFs the user dropped in
-#   (10Eros / Sulphur, ~16.5GB each), so its size can float over any threshold even
-#   with the real file gone. No size guard can fix that one; the step 6 table can,
-#   and does.
-function Invoke-ModelDownload {
-    param(
-        [Parameter(Mandatory)] [string]      $Name,
-        [Parameter(Mandatory)] [string]      $Repo,
-        [Parameter(Mandatory)] [string[]]    $Include,   # glob(s), one --include
-        [Parameter(Mandatory)] [string]      $LocalDir,  # relative to root
-        # One entry per directory this repo expands into:
-        #   @{ Dir = "<path relative to root>"; Min = <bytes> }
-        # Checked INDEPENDENTLY -- sizes are never summed against a single floor.
-        [Parameter(Mandatory)] [hashtable[]] $Check
-    )
-    $absLocal = Join-Path $ProjectRoot $LocalDir
+#   what stops the repos' identically-named cards from landing in the staging
+#   directory, where the remap would throw on them as unmapped.
+# ----------------------------------------------------------------------------
 
-    # Returns Short = the entries that are under their own Min (EMPTY when every
-    # entry passes, which is the only "present" verdict), plus Total = the combined
-    # size, used solely for the human-readable message.
-    function Test-CheckSet {
-        param([hashtable[]] $Set)
-        $short = @()
-        $total = [long] 0
-        foreach ($c in $Set) {
-            $sz = Get-PathSize (Join-Path $ProjectRoot $c.Dir)
-            $total += $sz
-            if ($sz -lt [long] $c.Min) {
-                $short += "$($c.Dir) ($(Format-Size $sz) < $(Format-Size ([long] $c.Min)))"
-            }
+# One `files[]` row -> its size on disk. `kind:"dir"` sums the DIRECT children;
+# everything else is a plain file length.
+function Get-ManifestEntrySize {
+    param([Parameter(Mandatory)] $Entry)
+    $abs = Join-Path $ModelsDir ($Entry.path -replace '/', '\')
+    if ($Entry.kind -eq 'dir') { return (Get-DirectChildSize $abs) }
+    return (Get-FileSize $abs)
+}
+
+# The rows that are absent or under their own min. EMPTY means "present".
+function Get-ShortEntries {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Files)
+    $short = @()
+    foreach ($fl in $Files) {
+        $sz = Get-ManifestEntrySize -Entry $fl
+        if ($sz -lt [long] $fl.min) {
+            $short += "$($fl.path) ($(Format-Size $sz) < $(Format-Size ([long] $fl.min)))"
         }
-        return [pscustomobject]@{ Short = @($short); Total = $total }
     }
-
-    $state = Test-CheckSet -Set $Check
-    if ($state.Short.Count -eq 0) {
-        $dirs = ($Check | ForEach-Object { $_.Dir }) -join ', '
-        Write-Skip "$Name  ($(Format-Size $state.Total) already present in $dirs)"
-        return
-    }
-    if (-not (Test-Path $hfExe)) {
-        throw "hf.exe not found at $hfExe. The engine venv must be created first (do not pass -SkipVenv)."
-    }
-    New-Item -ItemType Directory -Force -Path $absLocal | Out-Null
-
-    # Single --include with ALL patterns (see nargs note above).
-    $argv = @("download", $Repo)
-    $argv += @("--include") + $Include
-    $argv += @("--local-dir", $absLocal)
-
-    Write-Do "$Name  download $Repo"
-    & $hfExe @argv
-    if ($LASTEXITCODE -ne 0) {
-        throw "Download of '$Name' failed. The repo is public and needs no token, so check your network first, then the include globs against https://huggingface.co/$Repo/tree/main"
-    }
-    $state = Test-CheckSet -Set $Check
-    if ($state.Short.Count -gt 0) {
-        throw "'$Name' downloaded but these directories are smaller than expected: $($state.Short -join '; '). Check the include globs."
-    }
-    Write-Ok "$Name  ($(Format-Size $state.Total))"
+    return @($short)
 }
 
 if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
 } else {
-    Write-Step "Model downloads (~31GB total, 3 public repos, no token needed)"
+    Write-Step "Model downloads (~31GB total, public repos, no token needed)"
 
-    # 1) LTX-2.3 weights, 7 files / 24,196,952,364 B:
-    #      ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors            (0.93GB)
-    #      ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors        (1.35GB)
-    #      ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors        (0.34GB)
-    #      ltx-2.3-components/text_encoders/..._text_projection_bf16...   (2.15GB)
-    #      ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf            (16.54GB)
-    #      ltx-2.3-ic-lora/pixel-spatial-upscaler/...-x2-0.9.safetensors   (0.65GB)
-    #      ltx-2.3-ic-lora/union-control/...-union-control-ref0.5...       (0.65GB)
-    #    Already laid out exactly as the project wants them, so this expands into
-    #    models/ verbatim -- in particular the transformer GGUF arrives directly in
-    #    models/ltx-2.3-gguf/ and the old "flatten one level up" fixup is gone.
-    #    The 2 IC-LoRA adapters back four of the entries config.yaml registers
-    #    under ic_loras: -- pixel-spatial-upscaler-x2 (resolution boost), plus the
-    #    ONE union-control file published three times, as canny-control (edge-
-    #    outline guidance), pose-control (skeleton guidance) and depth-control
-    #    (depth-map guidance). They are not optional in practice:
-    #    gradio_ui/adapters.py lists those names from a static
-    #    fallback even when nothing is registered, so a fresh install without these
-    #    files puts the adapters in the UI that 404 the moment they are picked.
-    #    The x4 upscaler variant is deliberately not in the repo (unregistered).
-    #    One pattern covers both nested files: `*` crosses '/' (glob note above).
-    #    Per-directory Mins (see the sizing rule above); every file below is gated
-    #    individually by the step 6 table, so each Min sits above
-    #    (dir total - smallest file in that dir):
-    #      ltx-2.3            995,743,560 , 1 file          -> Min   900,000,000
-    #      ltx-2.3-components 4,819,275,350, smallest 364,855,188
-    #                                        (PrunaVAED decoder added, PRUNAVAED_WORKORDER.md
-    #                                        section 7: 4,129,262,838 + ~690MB pruned decoder)
-    #                                        (4,819,275,350-364,855,188=4,454,420,162)
-    #                                                        -> Min 4,500,000,000
-    #      ltx-2.3-gguf       17,763,015,328, 1 file        -> Min 17,000,000,000
-    #      ltx-2.3-ic-lora    1,308,930,638, smallest 654,465,286
-    #                                        (leaves 654,465,352)
-    #                                                        -> Min 1,000,000,000
-    Invoke-ModelDownload -Name "LTX-2.3 weights + IC-LoRA (7 files)" `
-        -Repo "Rootport/Nz-LTX23-weights" `
-        -Include @("ltx-2.3/*", "ltx-2.3-components/*", "ltx-2.3-gguf/*", "ltx-2.3-ic-lora/*") `
-        -LocalDir "models" `
-        -Check @(
-            @{ Dir = "models/ltx-2.3";            Min = [long]   900000000 }
-            @{ Dir = "models/ltx-2.3-components"; Min = [long]  4500000000 }
-            @{ Dir = "models/ltx-2.3-gguf";       Min = [long] 17000000000 }
-            @{ Dir = "models/ltx-2.3-ic-lora";    Min = [long]  1000000000 }
-        )
+    foreach ($mf in $Manifests) {
+        $idx = 0
+        foreach ($dl in @($mf.Data.downloads)) {
+            $idx++
+            $short = Get-ShortEntries -Files @($dl.files)
+            if ($short.Count -eq 0) {
+                $total = [long] 0
+                foreach ($fl in @($dl.files)) { $total += (Get-ManifestEntrySize -Entry $fl) }
+                Write-Skip "$($dl.name)  ($(Format-Size $total) already present)"
+                continue
+            }
+            if (-not (Test-Path $hfExe)) {
+                throw "hf.exe not found at $hfExe. The engine venv must be created first (do not pass -SkipVenv)."
+            }
 
-    # 2) Gemma-3-12B, 11 files / 7,339,810,357 B:
-    #      gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf                 (6.80GB)
-    #      gemma-3-12b-it-tokenizer/  (10 small files, ~38MB)
-    #    The tokenizer dir is tokenizer/preprocessor config ONLY -- the repo holds
-    #    no multi-GB model-*.safetensors, so there is nothing here to exclude.
-    #    THIS is the repo the old single-sum guard broke on: the GGUF is
-    #    7,300,574,976 B on its own, already over the former MinBytes 7,200,000,000,
-    #    so a completely missing tokenizer dir SKIPped here and then failed step 6
-    #    forever. Per-directory Mins:
-    #      gemma-3-12b-it-gguf      7,300,574,976, 1 file -> Min 7,300,000,000
-    #      gemma-3-12b-it-tokenizer    39,235,381, 10 files -> Min    39,000,000
-    #    The tokenizer Min is set against what step 6 actually gates -- that dir as
-    #    a WHOLE, at 20MB. Losing any of the three files big enough to matter
-    #    (tokenizer.json 33,384,570 / tokenizer.model 4,689,074 /
-    #    tokenizer_config.json 1,157,001) drops the dir under 39,000,000 and
-    #    re-downloads. The seven tiny files (35 B .. 1,615 B) are not individually
-    #    catchable, and do not need to be: step 6 never looks at them one by one,
-    #    so their loss cannot produce a MISSING row. Sizing for them instead would
-    #    demand a 35-byte-wide window (>39,235,346 and <=39,235,381).
-    Invoke-ModelDownload -Name "Gemma-3-12B GGUF + tokenizer set (11 files)" `
-        -Repo "Rootport/Nz-Gemma3-12B" `
-        -Include @("gemma-3-12b-it-gguf/*", "gemma-3-12b-it-tokenizer/*") `
-        -LocalDir "models" `
-        -Check @(
-            @{ Dir = "models/gemma-3-12b-it-gguf";      Min = [long] 7300000000 }
-            @{ Dir = "models/gemma-3-12b-it-tokenizer"; Min = [long]   39000000 }
-        )
+            $stage = Join-Path $StagingRoot ("{0}-{1}" -f $mf.Data.id, $idx)
+            New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
-    # 3) DWPose preprocessor models, 2 files / 352,756,773 B:
-    #      preprocessors/yolox_l.torchscript.pt              (207.6MB)
-    #      preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt  (128.8MB)
-    #    These two TorchScript modules are the pose estimator behind the
-    #    pose-control IC-LoRA: yolox_l finds the people, dw-ll_ucoco turns each one
-    #    into the skeleton image that is fed to the adapter. engine/preprocess/
-    #    dwpose.py loads BOTH from models/preprocessors/ by an absolute path built
-    #    from its own file location, so this layout is not negotiable.
-    #    Single directory, so this one was never at risk of the cross-directory
-    #    masking above; it keeps the same 340,000,000, which is above
-    #    (352,756,773 - smaller file 135,059,124 = 217,697,649) and below the full
-    #    352,756,773, so either file going missing re-triggers the download.
-    Invoke-ModelDownload -Name "DWPose preprocessor models (2 files)" `
-        -Repo "Rootport/Nz-DWPose" `
-        -Include @("preprocessors/*") `
-        -LocalDir "models" `
-        -Check @(
-            @{ Dir = "models/preprocessors"; Min = [long] 340000000 }
-        )
+            # Single --include with ALL patterns (see nargs note above).
+            $argv = @("download", $dl.repo)
+            $argv += @("--include") + @($dl.include)
+            $argv += @("--local-dir", $stage)
 
-    # 4) IC-LoRA Deblur, 1 file / 906,071,437 B:
-    #      ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors  (906MB)
-    #    Sharpens a blurry reference video. It needs NO preprocessor at all: the
-    #    blurry clip is handed to the adapter as-is, which is why nothing else ships
-    #    alongside it. That is also why config.yaml registers `deblur:` in the bare
-    #    STRING form (just a path), not the mapping form with a `preprocess:` key
-    #    that canny-/pose-/depth-control use.
-    #
-    #    WHY THIS IS A SEPARATE CALL WITH ITS OWN DIRECTORY, and NOT one more glob
-    #    bolted onto call 1 above / one more file inside models/ltx-2.3-ic-lora/:
-    #    the guard is a RECURSIVE size sum over the Check directory (Get-PathSize).
-    #    Dropping a fresh 906MB file into models/ltx-2.3-ic-lora/ would lift that
-    #    directory from 1,308,930,638 to 2,215,002,075 -- so a machine that had LOST
-    #    the 654MB union-control file would still sit at 1,560,536,723, clear the
-    #    existing Min of 1,000,000,000, and SKIP. Step 6 would then report
-    #    "ic_lora union-control MISSING" on every single re-run with no way to fix
-    #    it: exactly the permanent deadlock the Gemma tokenizer hit (see the
-    #    per-directory Min note above), just arrived from the opposite direction --
-    #    there a big file masked an absent SIBLING DIRECTORY, here a NEW file would
-    #    mask an absent sibling FILE. A brand-new Check directory can only ever be
-    #    measured against its own contents, which makes that impossible by
-    #    construction. Same reasoning applies to call 5 below.
-    #    (Repo side: the file is stored at ltx-2.3-ic-lora-deblur/ in
-    #    Rootport/Nz-LTX23-weights precisely so it expands here, a SIBLING of
-    #    ltx-2.3-ic-lora/, with no post-processing.)
-    #
-    #    Min sizing (same rule as above -- above (dir total - smallest file the step
-    #    6 table checks in that dir), at or below the dir total):
-    #      ltx-2.3-ic-lora-deblur 906,071,437, 1 file, and that one file IS gated by
-    #                             the step 6 table (906,071,437-906,071,437 = 0)
-    #                                                     -> Min 900,000,000
-    #    i.e. losing the only file drops the dir to 0 and re-triggers the download;
-    #    a truncated one lands under 900,000,000 and does too. Mirrors the
-    #    models/ltx-2.3 entry in call 1, which gates a single ~1GB file the same way.
-    Invoke-ModelDownload -Name "IC-LoRA Deblur (1 file)" `
-        -Repo "Rootport/Nz-LTX23-weights" `
-        -Include @("ltx-2.3-ic-lora-deblur/*") `
-        -LocalDir "models" `
-        -Check @(
-            @{ Dir = "models/ltx-2.3-ic-lora-deblur"; Min = [long] 900000000 }
-        )
+            Write-Do "$($dl.name)  download $($dl.repo)  (missing: $($short -join '; '))"
+            & $hfExe @argv
+            if ($LASTEXITCODE -ne 0) {
+                throw "Download of '$($dl.name)' failed. The repo is public and needs no token, so check your network first, then the include globs against https://huggingface.co/$($dl.repo)/tree/main  (staging kept at $stage so the next run resumes)"
+            }
 
-    # 4b) IC-LoRA In-Outpainting, 1 file / 1,308,778,338 B:
-    #      ltx-2.3-ic-lora-in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors
-    #    The official Lightricks adapter behind the Edit tab's Outpainting panel
-    #    (canvas extension, PENDING_TASKS.md 1-13). Like deblur it needs NO
-    #    preprocessor -- the green-padded canvas is handed to it as-is, which is
-    #    why config.yaml registers `in-outpainting:` in the bare STRING form.
-    #    Feeding it through canny/depth would hand the model an edge map of a
-    #    sentinel colour, so api/generate.py rejects that combination outright.
-    #
-    #    Its OWN Check directory for exactly the reason spelled out in call 4: the
-    #    guard is a recursive size sum, so dropping 1.3GB into an existing
-    #    directory would let its guard pass while a sibling file was missing. The
-    #    repo stores it at ltx-2.3-ic-lora-in-outpainting/ so it expands here as a
-    #    sibling of ltx-2.3-ic-lora/ with no post-processing.
-    #
-    #    Min sizing (same rule as call 4): one file, and that file IS gated by the
-    #    step 6 table, so the window is (1,308,778,338 - 1,308,778,338 = 0) up to
-    #    its own size -> 1,300,000,000. Losing it drops the dir to 0 and a
-    #    truncated download lands under the Min; both re-trigger.
-    Invoke-ModelDownload -Name "IC-LoRA In-Outpainting (1 file)" `
-        -Repo "Rootport/Nz-LTX23-weights" `
-        -Include @("ltx-2.3-ic-lora-in-outpainting/*") `
-        -LocalDir "models" `
-        -Check @(
-            @{ Dir = "models/ltx-2.3-ic-lora-in-outpainting"; Min = [long] 1300000000 }
-        )
+            # Remap staging -> final layout.
+            $staged = @(Get-ChildItem -LiteralPath $stage -Recurse -File -Force -ErrorAction SilentlyContinue)
+            foreach ($sf in $staged) {
+                $rel = ConvertTo-SlashPath $sf.FullName.Substring($stage.Length + 1)
+                if (($rel -split '/') -contains '.cache') {
+                    # HuggingFace bookkeeping for a cache root that dies with the
+                    # staging directory. Dropped silently, on purpose.
+                    Remove-Item -LiteralPath $sf.FullName -Force
+                    continue
+                }
+                $target = Resolve-MapTarget -Rel $rel -Pairs @($dl.map)
+                if ($null -eq $target) {
+                    throw "'$($dl.name)' downloaded '$rel', which no map entry claims. Refusing to guess where it belongs -- widen the map (or narrow the include globs) in $($mf.Name). Staging kept at $stage."
+                }
+                $dst = Join-Path $ModelsDir ($target -replace '/', '\')
+                $parent = Split-Path -Parent $dst
+                if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+                # -Force HERE ONLY. See the force-asymmetry note above.
+                Move-Item -LiteralPath $sf.FullName -Destination $dst -Force
+            }
 
-    # 5) Video-Depth-Anything preprocessor model, 2 files / 116,452,112 B:
-    #      preprocessors-vda/video_depth_anything_vits.pth  (116.4MB)
-    #      preprocessors-vda/LICENSE                        (11,356 B, Apache-2.0)
-    #    The Small (vits) checkpoint behind the depth-control IC-LoRA: it turns the
-    #    reference video into the grayscale depth map that is then fed to the SAME
-    #    union-control adapter canny/pose already use. engine/preprocess/depth.py
-    #    loads it from models/preprocessors-vda/ by an absolute path built from its
-    #    own file location, so this layout is not negotiable (mirrors dwpose.py).
-    #    The bundled LICENSE is the Apache-2.0 text this checkpoint ships under --
-    #    a DIFFERENT licence from everything else in the weights repo (which is
-    #    LTX-2 Community Licence), so it must travel with the .pth, not be dropped.
-    #
-    #    Separate Check directory for the same structural reason as call 4, and
-    #    NOTE the near-miss in the naming: models/preprocessors-vda is a SIBLING of
-    #    the DWPose models/preprocessors, not a child, so neither directory's
-    #    recursive sum can ever see the other's bytes. (Had it been named
-    #    models/preprocessors/vda/, its 116MB would have padded the DWPose guard and
-    #    masked a missing 135MB dw-ll_ucoco.) The include glob is likewise distinct:
-    #    fnmatch's "preprocessors/*" does not match "preprocessors-vda/...".
-    #
-    #    Min sizing: the step 6 table gates ONLY the .pth inside this dir (LICENSE is
-    #    documentation -- losing it produces no MISSING row, so per the sizing rule
-    #    it does not have to be catchable, and making it so would demand an
-    #    11,356-byte-wide window). So the Min only has to sit above
-    #    (116,452,112 - 116,440,756 = 11,356) and at/below the .pth's own size, so
-    #    that the verdict is identical with or without the LICENSE file present:
-    #      preprocessors-vda      116,452,112, 2 files    -> Min 110,000,000
-    #    Both files present = 116,452,112 -> SKIP. LICENSE alone missing =
-    #    116,440,756 -> still SKIP (nothing step 6 checks is gone). .pth missing or
-    #    truncated = 11,356 (or < 110,000,000) -> download.
-    Invoke-ModelDownload -Name "Video-Depth-Anything Small preprocessor (2 files)" `
-        -Repo "Rootport/Nz-LTX23-weights" `
-        -Include @("preprocessors-vda/*") `
-        -LocalDir "models" `
-        -Check @(
-            @{ Dir = "models/preprocessors-vda"; Min = [long] 110000000 }
-        )
+            $short = Get-ShortEntries -Files @($dl.files)
+            if ($short.Count -gt 0) {
+                throw "'$($dl.name)' downloaded but these expected files are missing or short: $($short -join '; '). Check the include globs and the map in $($mf.Name). Staging kept at $stage."
+            }
+
+            Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+            $total = [long] 0
+            foreach ($fl in @($dl.files)) { $total += (Get-ManifestEntrySize -Entry $fl) }
+            Write-Ok "$($dl.name)  ($(Format-Size $total))"
+        }
+    }
+
+    # Drop the staging root when nothing is left in it (a kept staging directory
+    # from a failed run must survive, so this is conditional).
+    if (Test-Path -LiteralPath $StagingRoot) {
+        if (@(Get-ChildItem -LiteralPath $StagingRoot -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+            Remove-Item -LiteralPath $StagingRoot -Force
+        }
+    }
 }
 
 # ----------------------------------------------------------------------------
-# 6) Verification + regenerate models/INSTALLED_PATHS.txt
+# 7) Verification + regenerate models/INSTALLED_PATHS.txt
 #
-#    $required is derived DIRECTLY from services/ltx_runner.py (referenced by
-#    FUNCTION NAME only -- line numbers here went stale once already):
-#      * LTXRunner._real_available(): engine_python, gemma_root,
-#        spatial_upsampler_path, gguf_transformer_path, gguf_gemma_path, and the
-#        3 component_* files; plus engine_dir/worker.py.
-#      * env/launch _RealBackend._require_path(): the same load-bearing files.
-#    The 46GB monolith is not gated here: it is no longer a config option at all
-#    (checkpoint_path was removed from config.yaml 2026-07-28, PENDING_TASKS.md
-#    3-26) and the GGUF+component path never opened it even before that.
-#    We ALSO check the app venv python (needed to run the server) and the smoke
-#    test file when -RunSmoke.
+#    The model rows come STRAIGHT from the manifests' `files[]` -- the same
+#    array that guards the downloads in step 6. There is no second list to keep
+#    in sync any more: a file is guarded, verified and published in
+#    INSTALLED_PATHS.txt from one declaration.
 #
-#    The 6 IC-LoRA / preprocessor rows at the end are a deliberate widening:
-#    _real_available() does not look at them (their absence downgrades no backend to
-#    mock), but config.yaml registers every ic_loras: entry unconditionally and
+#    Three rows are the script's own, because they are not models:
+#      engine_python / app_python  -- the two interpreters
+#      engine worker.py            -- the engine entry point
+#    They match what services/ltx_runner.py's LTXRunner._real_available() and
+#    _RealBackend._require_path() demand (referenced by FUNCTION NAME only --
+#    line numbers here went stale once already). The 46GB monolith is not gated:
+#    it is no longer a config option at all (checkpoint_path was removed from
+#    config.yaml 2026-07-28, PENDING_TASKS.md 3-26).
+#
+#    The IC-LoRA / preprocessor rows are a deliberate widening: _real_available()
+#    does not look at them (their absence downgrades no backend to mock), but
+#    config.yaml registers every ic_loras: entry unconditionally and
 #    gradio_ui/adapters.py falls back to the same names even when nothing is
-#    registered. A missing file there is therefore invisible until a user picks the
-#    adapter and gets a 404, which is exactly the failure this table exists to
-#    convert into an up-front, named MISSING. The last two rows extend that same
-#    protection to the adapters added 2026-08 (deblur, and depth-control -- whose
-#    404 would come from the missing VDA checkpoint rather than from the adapter
-#    file, since depth-control re-uses the union-control weights). All source repos
-#    guard tightly enough (see the per-directory Min note in step 5) that a MISSING
-#    here is cleared by re-running.
+#    registered. A missing file there is invisible until a user picks the adapter
+#    and gets a 404 -- which is exactly the failure this table converts into an
+#    up-front, named MISSING. Because the guards are now per-file, a MISSING here
+#    is ALWAYS cleared by re-running: the guard for that one file cannot be
+#    satisfied by anything else, so the download runs.
 # ----------------------------------------------------------------------------
 Write-Step "Verification (required load-bearing artifacts)"
 
 # Each row: label | project-relative path | isDir | minBytes (0 => existence-only)
 $required = @(
-    @{ Label = "engine_python";           Rel = ".venv-engine/Scripts/python.exe";                                                 IsDir = $false; Min = [long]0 }
-    @{ Label = "app_python";              Rel = ".venv/Scripts/python.exe";                                                        IsDir = $false; Min = [long]0 }
-    @{ Label = "engine worker.py";        Rel = "engine/worker.py";                                                                IsDir = $false; Min = [long]0 }
-    @{ Label = "gguf_transformer";        Rel = "models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf";                       IsDir = $false; Min = [long]17000000000 }
-    @{ Label = "gguf_gemma";              Rel = "models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf";                           IsDir = $false; Min = [long]7000000000 }
-    @{ Label = "component_video_vae";     Rel = "models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors";                  IsDir = $false; Min = [long]1000000000 }
-    @{ Label = "component_video_vae_pruned"; Rel = "models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors";  IsDir = $false; Min = [long]680000000 }
-    @{ Label = "component_audio_vae";     Rel = "models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors";                  IsDir = $false; Min = [long]200000000 }
-    @{ Label = "component_text_projection"; Rel = "models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"; IsDir = $false; Min = [long]1500000000 }
-    @{ Label = "spatial_upsampler";       Rel = "models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors";                      IsDir = $false; Min = [long]800000000 }
-    @{ Label = "gemma_root (tokenizer dir)"; Rel = "models/gemma-3-12b-it-tokenizer";                                             IsDir = $true;  Min = [long]20000000 }
-    @{ Label = "ic_lora pixel-spatial-upscaler-x2"; Rel = "models/ltx-2.3-ic-lora/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors"; IsDir = $false; Min = [long]600000000 }
-    @{ Label = "ic_lora union-control (canny/pose/depth)"; Rel = "models/ltx-2.3-ic-lora/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"; IsDir = $false; Min = [long]600000000 }
-    @{ Label = "dwpose detector (yolox_l)"; Rel = "models/preprocessors/yolox_l.torchscript.pt";                                  IsDir = $false; Min = [long]200000000 }
-    @{ Label = "dwpose estimator (dw-ll_ucoco)"; Rel = "models/preprocessors/dw-ll_ucoco_384_bs5.torchscript.pt";                 IsDir = $false; Min = [long]120000000 }
-    @{ Label = "ic_lora deblur";          Rel = "models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors";       IsDir = $false; Min = [long]800000000 }
-    @{ Label = "ic_lora in-outpainting";  Rel = "models/ltx-2.3-ic-lora-in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"; IsDir = $false; Min = [long]1200000000 }
-    @{ Label = "vda depth model (vits)";  Rel = "models/preprocessors-vda/video_depth_anything_vits.pth";                         IsDir = $false; Min = [long]110000000 }
+    @{ Label = "engine_python";    Rel = ".venv-engine/Scripts/python.exe"; IsDir = $false; Min = [long]0 }
+    @{ Label = "app_python";       Rel = ".venv/Scripts/python.exe";        IsDir = $false; Min = [long]0 }
+    @{ Label = "engine worker.py"; Rel = "engine/worker.py";                IsDir = $false; Min = [long]0 }
 )
+foreach ($mf in $Manifests) {
+    foreach ($dl in @($mf.Data.downloads)) {
+        foreach ($fl in @($dl.files)) {
+            $required += @{
+                Label = [string] $fl.label
+                Rel   = "models/" + $fl.path
+                IsDir = ($fl.kind -eq 'dir')
+                Min   = [long] $fl.min
+            }
+        }
+    }
+}
 
 $rows = @()
 $anyMissing = $false
 foreach ($r in $required) {
-    $abs = Join-Path $ProjectRoot $r.Rel
-    $exists = Test-Path $abs
-    $size = if ($exists) { Get-PathSize $abs } else { [long]0 }
+    $abs = Join-Path $ProjectRoot ($r.Rel -replace '/', '\')
+    $exists = Test-Path -LiteralPath $abs
+    $size = [long]0
+    if ($exists) {
+        $size = if ($r.IsDir) { Get-DirectChildSize $abs } else { Get-FileSize $abs }
+    }
     $ok = $exists -and ($size -ge $r.Min)
     if (-not $ok) { $anyMissing = $true }
     $rows += [pscustomobject]@{
@@ -844,33 +1312,41 @@ foreach ($row in $rows) {
 }
 
 # ----------------------------------------------------------------------------
-# Regenerate models/INSTALLED_PATHS.txt to match the CURRENT config.yaml (GGUF +
-# component recipe). NO monolith, NO QAT. This supersedes the stale file that
-# still referenced the deleted 46GB monolith + old gemma-3-12b-it-qat dir.
+# Regenerate models/INSTALLED_PATHS.txt from the SAME manifest rows: every
+# `files[]` entry that carries a `key` is a config.yaml model: key, and the list
+# below is therefore guaranteed to agree with the table above.
 # ----------------------------------------------------------------------------
+$pathRows = @()
+foreach ($mf in $Manifests) {
+    foreach ($dl in @($mf.Data.downloads)) {
+        foreach ($fl in @($dl.files)) {
+            if ($fl.key) { $pathRows += [pscustomobject]@{ Key = [string] $fl.key; Value = "./models/" + $fl.path } }
+        }
+    }
+}
+$pathRows += [pscustomobject]@{ Key = "engine_python"; Value = "./.venv-engine/Scripts/python.exe" }
+
+$keyWidth = ($pathRows | ForEach-Object { $_.Key.Length } | Measure-Object -Maximum).Maximum
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm"
-$installedPaths = @"
-# Regenerated by scripts/install_ltx.ps1 at $stamp
-# GGUF + component-file recipe (matches config.yaml -> model:). The 46GB monolith
-# and 22.7GB QAT Gemma are intentionally absent (deleted; never re-downloaded).
-# The monolith path is no longer a config option at all (checkpoint_path was
-# removed from config.yaml 2026-07-28, PENDING_TASKS.md 3-26, confirmed dead).
-  gguf_transformer:          "./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
-  gguf_gemma:                "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
-  component_video_vae:       "./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"
-  component_video_vae_pruned:"./models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors"
-  component_audio_vae:       "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
-  component_text_projection: "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
-  spatial_upsampler:         "./models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
-  gemma_root:                "./models/gemma-3-12b-it-tokenizer"
-  engine_python:             "./.venv-engine/Scripts/python.exe"
-"@
-$installedPaths | Out-File -FilePath "$ProjectRoot\models\INSTALLED_PATHS.txt" -Encoding utf8
+$sb = New-Object System.Text.StringBuilder
+[void] $sb.AppendLine("# Regenerated by scripts/install_ltx.ps1 at $stamp")
+[void] $sb.AppendLine("# layout: base-model-first (models/<BaseModel>/<Category>)")
+[void] $sb.AppendLine("# Generated from scripts/manifests/*.json -- the same rows that guard the")
+[void] $sb.AppendLine("# downloads and drive the verification table. GGUF + component-file recipe")
+[void] $sb.AppendLine("# (matches config.yaml -> model:). The 46GB monolith and the 22.7GB QAT Gemma")
+[void] $sb.AppendLine("# are intentionally absent (deleted; never re-downloaded).")
+foreach ($pr in $pathRows) {
+    [void] $sb.AppendLine(("  {0}: {1}""{2}""" -f $pr.Key, (' ' * ($keyWidth - $pr.Key.Length)), $pr.Value))
+}
+[System.IO.File]::WriteAllText("$ModelsDir\INSTALLED_PATHS.txt", $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "`nRegenerated models/INSTALLED_PATHS.txt" -ForegroundColor Cyan
 
 if ($anyMissing) {
     Write-Host ""
     Write-Warning "One or more required artifacts are MISSING (see table above)."
+    Write-Warning "Each MISSING row names ONE file. Deleting that single file and re-running is"
+    Write-Warning "always enough -- never delete a whole models/ folder, it holds your own LoRAs"
+    Write-Warning "and self-converted GGUFs, which no repo can give back."
     if ($SkipModels) { Write-Warning "You passed -SkipModels; re-run without it to fetch models." }
     if ($SkipVenv) { Write-Warning "You passed -SkipVenv; re-run without it to build the venvs." }
     exit 1
@@ -878,15 +1354,15 @@ if ($anyMissing) {
 Write-Ok "All required artifacts present."
 
 # ----------------------------------------------------------------------------
-# Optional mock, GPU-free smoke test (uses the app venv).
+# 8) Optional mock, GPU-free smoke test (uses the app venv).
 # ----------------------------------------------------------------------------
 if ($RunSmoke) {
     Write-Step "Smoke test (mock, GPU-free)"
     if (-not (Test-Path $appPy)) { throw "App venv python not found for smoke test: $appPy" }
-    # No extra `uv sync --extra dev` needed here (2026-07-28): step 3 now always
+    # No extra `uv sync --extra dev` needed here (2026-07-28): step 4 now always
     # syncs with --extra dev, so pytest / iniconfig / pluggy are already present
     # by the time this branch runs. The special-case re-sync that used to live
-    # here was made redundant by that step-3 change and has been removed.
+    # here was made redundant by that step-4 change and has been removed.
     & $appPy -m pytest -q tests/test_smoke.py
     if ($LASTEXITCODE -ne 0) { throw "Smoke test failed." }
     Write-Ok "Smoke test passed."

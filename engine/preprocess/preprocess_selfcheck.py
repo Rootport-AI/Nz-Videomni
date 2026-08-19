@@ -30,7 +30,8 @@ What the checks prove, in one line each:
       the aspect preserved and both edges even.
   C10 DepthProcessor._to_control_frames: near=white, clip-wide (not per-frame)
       normalisation, 3 identical channels, uint8, resized back to the source.
-  C11 The checkpoint the wrapper expects is where the wrapper looks for it.
+  C11 The checkpoint the wrapper expects is where the wrapper looks for it
+      (models/Preprocessors/VDA/ under the base-model-first layout).
 """
 
 from __future__ import annotations
@@ -337,7 +338,7 @@ def check_c10_control_frames() -> None:
 
 def check_c11_checkpoint_location() -> None:
     assert _CHECKPOINT_PATH.name == "video_depth_anything_vits.pth", _CHECKPOINT_PATH
-    assert _CHECKPOINT_PATH.parent.name == "preprocessors-vda", _CHECKPOINT_PATH
+    assert _CHECKPOINT_PATH.parent.name == "VDA", _CHECKPOINT_PATH
     assert _CHECKPOINT_PATH.exists(), f"checkpoint not installed at {_CHECKPOINT_PATH}"
     # release() on a never-loaded processor is a no-op, not an AttributeError.
     DepthProcessor().release()

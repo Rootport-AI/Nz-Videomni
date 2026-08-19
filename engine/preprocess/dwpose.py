@@ -38,9 +38,11 @@ import numpy as np
 import torch
 
 # Project root = engine/preprocess/dwpose.py -> parents[2]. The two TorchScript
-# models live under ``models/preprocessors/`` (placed there in Gate 0). Resolved
-# from this file (not cwd) so the path holds regardless of the worker's chdir.
-_MODELS_DIR = Path(__file__).resolve().parents[2] / "models" / "preprocessors"
+# models live under ``models/Preprocessors/DWPose/`` (base-model-first layout:
+# preprocessors are shared across base models, so they sit outside LTX23/).
+# Resolved from this file (not cwd) so the path holds regardless of the
+# worker's chdir.
+_MODELS_DIR = Path(__file__).resolve().parents[2] / "models" / "Preprocessors" / "DWPose"
 _POSE_MODEL_PATH = _MODELS_DIR / "dw-ll_ucoco_384_bs5.torchscript.pt"
 _DETECTOR_MODEL_PATH = _MODELS_DIR / "yolox_l.torchscript.pt"
 

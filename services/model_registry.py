@@ -52,14 +52,18 @@ class CategorySpec:
     extensions: tuple[str, ...]  # accepted weight-file extensions
     # How many parents above the DEFAULT FILE the scan roots at. 1 = the file's
     # own directory. The transformer default lives directly in
-    # models/ltx-2.3-gguf/*.gguf, and sibling releases (other quantizations /
+    # models/LTX23/Weights/*.gguf, and sibling releases (other quantizations /
     # fine-tunes) get their own subdirectories, so parent_levels=1 combined
     # with recursive=True still discovers them without also pulling in
-    # unrelated GGUFs from elsewhere under models/ (e.g. the Gemma GGUF).
+    # unrelated GGUFs from elsewhere under models/ (e.g. the Gemma GGUF, which
+    # lives in the SIBLING models/LTX23/TextEncoder/ — outside this scan root).
+    # The base-model-first layout keeps that separation intact: Weights/ holds
+    # transformer GGUFs only, and the drop-in guidance file put_GGUF_here.txt
+    # is filtered out by the extension check.
     parent_levels: int = 1
     recursive: bool = False
     # Filename classifier for categories sharing one directory: the video and
-    # audio VAEs both live in models/ltx-2.3-components/vae/, so a scanned
+    # audio VAEs both live in models/LTX23/VAE/, so a scanned
     # filename must contain this hint ("video"/"audio") AND not the opposite
     # hint. Ambiguous/unclassifiable files are skipped with a log line; config
     # registration is the authoritative override (design ruling §9-2).

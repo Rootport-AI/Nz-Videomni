@@ -76,8 +76,8 @@ _SCALE_FIELDS = {_GGML_Q4_K: [(0, 2), (2, 4)], _GGML_Q5_K: [(0, 2), (2, 4)],
                  _GGML_Q6_K: [(208, 210)]}
 
 _MODELS = [
-    Path("models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"),
-    Path("models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"),
+    Path("models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"),
+    Path("models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf"),
 ]
 
 # The eager reference is computed in slices of at most this many elements. It

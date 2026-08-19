@@ -39,10 +39,14 @@ import numpy as np
 import torch
 
 # Project root = engine/preprocess/depth.py -> parents[2]. The checkpoint lives
-# in its OWN directory (sibling of models/preprocessors/, not a child) so the
-# installer's per-directory size check cannot be fooled by the other's files.
-# Resolved from this file (not cwd) so the path holds regardless of chdir.
-_MODELS_DIR = Path(__file__).resolve().parents[2] / "models" / "preprocessors-vda"
+# under ``models/Preprocessors/VDA/``, a sibling of DWPose/ inside the shared
+# Preprocessors category. The old reason for the sibling split (a per-DIRECTORY
+# installer size check that one preprocessor's files could fool for the other)
+# is void: the installer now guards per EXPECTED FILE (manifest ``files``), so
+# neighbouring files can no longer mask a missing checkpoint. The split is kept
+# purely as layout hygiene. Resolved from this file (not cwd) so the path holds
+# regardless of chdir.
+_MODELS_DIR = Path(__file__).resolve().parents[2] / "models" / "Preprocessors" / "VDA"
 _CHECKPOINT_PATH = _MODELS_DIR / "video_depth_anything_vits.pth"
 
 # ``vits`` architecture constants — these MUST match the checkpoint (loaded with

@@ -114,7 +114,7 @@ def _golden(cfg: AppConfig, gemma_root, paths) -> dict:
         "component_video_vae_pruned_path": str(
             (
                 PROJECT_ROOT
-                / "models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors"
+                / "models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors"
             ).resolve()
         ),
         "gguf_per_layer_quant": True,

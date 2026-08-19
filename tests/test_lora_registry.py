@@ -40,7 +40,8 @@ def _write_safetensors(path, metadata=None, tensors=None, data_bytes=16):
 
 
 def _config(tmp_path, ic_loras=None, lora_dir=None):
-    """AppConfig whose lora_dir is a tmp dir (never the real ./models/loras)."""
+    """AppConfig whose lora_dir is a tmp dir (never the real
+    ./models/LTX23/StyleLoRA)."""
     return AppConfig.model_validate(
         {
             "model": {

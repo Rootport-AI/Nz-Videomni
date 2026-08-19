@@ -7,7 +7,7 @@ Run with the ENGINE venv (needs torch + ltx_core; the app venv has neither, and
 
 ``PATH`` defaults to config.yaml's ``model.component_video_vae_pruned_path``
 (itself defaulting to
-``models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors``).
+``models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors``).
 
 Same conventions as the other ``*_selfcheck`` modules: every check either PASSes
 or FAILs loudly, and the exit code is 0 only when all of them pass. ONE extra
@@ -59,7 +59,7 @@ from engine.vae.pruned_video_decoder import (
 )
 
 DEFAULT_PATH = os.path.join(
-    "models", "ltx-2.3-components", "vae", "prunavaed",
+    "models", "LTX23", "VAE", "prunavaed",
     "PrunaVAED-decoder-bf16.safetensors",
 )
 

@@ -44,7 +44,6 @@ class ServerConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    checkpoint_dir: str = "./models"
     checkpoint_name: str = "ltx-2.3-22b-distilled"
     text_encoder: str = "google/gemma-3-12b-it-qat-q4_0-unquantized"
     pipeline_type: str = "distilled"
@@ -67,22 +66,28 @@ class ModelConfig(BaseModel):
     # later overwrites via dataclasses.replace(). services/ltx_runner.py now
     # hardcodes that same "" directly (see its _build_load_payload), so the
     # worker payload is byte-identical to before with no config knob needed.
-    spatial_upsampler_path: str | None = None
+    # Spatial upsampler (x2). Default is a real path under the base-model-first
+    # layout (models/LTX23/Upscaler/): it used to be None, which made the file
+    # config.yaml-only -- and a stale config.yaml then silently demoted
+    # backend:"auto" to mock via _real_available(). A real default keeps a fresh
+    # checkout honest about what the installer puts on disk.
+    spatial_upsampler_path: str = "./models/LTX23/Upscaler/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
     # tokenizer-only dir (~40MB). The GGUF Gemma path needs only the tokenizer/
     # processor files: DistilledPipeline is built with gemma_root=None so the wheel's
     # weight glob (model*.safetensors) is bypassed and the engine
     # rebuilds a shard-less text-encoder builder, loading tokenizer/processor
     # module_ops from this dir (globs only tokenizer.model + preprocessor_config.json).
     # The directory must still exist (gated below) -- it is the tokenizer source, not
-    # a loaded weight checkpoint.
-    gemma_root: str | None = None
+    # a loaded weight checkpoint. Real default (was None) for the same reason as
+    # spatial_upsampler_path above: no silent mock demotion from a stale config.
+    gemma_root: str = "./models/LTX23/TextEncoder/tokenizer"
     backend: str = "auto"  # "auto" | "mock" | "real"
 
     # Phase 5 (real GGUF engine) runtime paths. Consumed only by the
     # subprocess-worker real backend in services/ltx_runner.py. Defaults are the
     # spike-proven 16GB recipe (Q4_K_M transformer + Q4_K_M GGUF Gemma on GPU).
-    gguf_transformer_path: str = "./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
-    gguf_gemma_path: str = "./models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf"
+    gguf_transformer_path: str = "./models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+    gguf_gemma_path: str = "./models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf"
     # First-party engine package (project root ./engine). ltx_runner launches
     # `python -m engine.worker` with this on PYTHONPATH.
     engine_dir: str = "./engine"
@@ -97,14 +102,14 @@ class ModelConfig(BaseModel):
     # 46GB monolith for VAE/audio (and, later, text projection). Resolved via
     # AppConfig._abs (relative -> project-rooted absolute). Consumed by the real
     # worker / reuse harness only when vram.use_component_files is True.
-    component_video_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_video_vae_bf16.safetensors"
-    component_audio_vae_path: str = "./models/ltx-2.3-components/vae/LTX23_audio_vae_bf16.safetensors"
-    component_text_projection_path: str = "./models/ltx-2.3-components/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
+    component_video_vae_path: str = "./models/LTX23/VAE/LTX23_video_vae_bf16.safetensors"
+    component_audio_vae_path: str = "./models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors"
+    component_text_projection_path: str = "./models/LTX23/TextEncoder/ltx-2.3_text_projection_bf16.safetensors"
 
     # PrunaVAED: 枝刈り版の映像VAEデコーダ（デコーダ部のみ・約690MB）。
     # vae_mode="prune_vaed" のジョブでだけ読まれる。モデルレジストリには
     # 参加させない（サブディレクトリ＋"video" を含まないファイル名の二重防御。
-    # services/model_registry.py:82-87 の name_hint 走査を参照——vae/ 直下の
+    # services/model_registry.py:82-87 の name_hint 走査を参照——VAE/ 直下の
     # 「"video" を含み "audio" を含まない」.safetensors は映像VAEとして自動
     # 登録されてしまい、デコーダ単体のファイルがそこに現れると利用者がサーバー
     # 全体の映像VAEとして選べてエンコーダ側のビルダーが壊れる。走査は
@@ -112,7 +117,7 @@ class ModelConfig(BaseModel):
     # 上の3つと違い**存在は必須ではない**: 欠けているとき枝刈りを頼んだジョブは
     # 既定デコーダへ降格して完走する（vae_mode_used="on->off"）。
     component_video_vae_pruned_path: str = (
-        "./models/ltx-2.3-components/vae/prunavaed/PrunaVAED-decoder-bf16.safetensors"
+        "./models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors"
     )
 
     # IC-LoRA adapter registry (Phase B, extended Phase C). Maps a server-side
@@ -134,7 +139,7 @@ class ModelConfig(BaseModel):
     # are style adapters unless their safetensors metadata carries
     # ``reference_downscale_factor`` (then control). Absent/empty directory -> no
     # scan entries (fresh checkout tolerated).
-    lora_dir: str = "./models/loras"
+    lora_dir: str = "./models/LTX23/StyleLoRA"
 
     # Model-management registries (additive, Docs/MODEL_MANAGEMENT_DESIGN.md).
     # Category-scoped NAME -> path maps mirroring ic_loras: a server-side model
@@ -379,10 +384,6 @@ class AppConfig(BaseModel):
     @property
     def log_dir(self) -> Path:
         return self._abs(self.server.log_dir)
-
-    @property
-    def checkpoint_dir(self) -> Path:
-        return self._abs(self.model.checkpoint_dir)
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:

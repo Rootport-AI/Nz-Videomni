@@ -1115,7 +1115,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # for show_copy_button) only renders when show_label is True, so
                 # the box carries the section title as its label (existing key --
                 # i18n.py stays untouched).
-                reg(gr.Textbox(value="models\\ltx-2.3-gguf",
+                reg(gr.Textbox(value="models\\LTX23\\Weights",
                                label=L("model_section_title"), interactive=False,
                                buttons=["copy"], elem_classes=["base-url-box"]),
                     "model_section_title")

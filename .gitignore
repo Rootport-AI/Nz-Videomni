@@ -74,6 +74,8 @@ uv.lock
 # The template that ships with the repo is config.yaml.example; setup.bat and
 # run.bat copy it into place when config.yaml is missing.
 config.yaml
+# The backup install_ltx.ps1 writes before it rewrites model paths in config.yaml.
+config.yaml.bak
 
 # Prerequisite tools fetched by setup.bat (uv + ffmpeg/ffprobe), ~378 MB on disk.
 # Leading slash: root-only, so this must never shadow mcp_server/tools/ (the

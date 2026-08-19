@@ -450,14 +450,15 @@ function Invoke-CaseFix {
 # Build the move plan. Pure: reads the tree, writes nothing.
 #   MOVE    - matched a migrate.from, destination differs
 #   DONE    - already under a migrate.to prefix (or already at its target)
-#   DROP    - inside a .cache/ segment (HuggingFace download bookkeeping)
+#   DROP    - inside a .cache/ segment (HuggingFace download bookkeeping); the
+#             .cache directories themselves are dropped too (DropDirs)
 #   KEEP    - matched nothing; left exactly where it is
 function New-MigrationPlan {
     param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $CaseFix)
 
-    $moves = @(); $drops = @(); $keeps = @(); $done = 0
+    $moves = @(); $drops = @(); $dropDirs = @(); $keeps = @(); $done = 0
     if (-not (Test-Path -LiteralPath $ModelsDir)) {
-        return [pscustomobject]@{ Moves = $moves; Drops = $drops; Keeps = $keeps; Done = $done }
+        return [pscustomobject]@{ Moves = $moves; Drops = $drops; DropDirs = $dropDirs; Keeps = $keeps; Done = $done }
     }
     # Map an on-disk top-level name to the name it will have after the case fix,
     # so a -DryRun (which renames nothing) still prints the real destination.
@@ -496,7 +497,30 @@ function New-MigrationPlan {
             Size   = [long] $f.Length
         }
     }
-    return [pscustomobject]@{ Moves = @($moves); Drops = @($drops); Keeps = @($keeps); Done = $done }
+    # The bookkeeping DIRECTORIES go as well, not just the files inside them.
+    # Dropping only the files leaves an empty .cache/huggingface/download/ husk,
+    # which keeps the legacy source root non-empty and therefore un-removable by
+    # Remove-EmptyLegacyDirs -- observed in the field as an empty
+    # models/ltx-2.3-components/ surviving a fully successful migration.
+    # This is the ONLY -Recurse deletion in the migration, and it is aimed at a
+    # directory whose entire contents are droppable by definition.
+    foreach ($d in @(Get-ChildItem -LiteralPath $ModelsDir -Recurse -Directory -Force -ErrorAction SilentlyContinue)) {
+        $rel = ConvertTo-SlashPath $d.FullName.Substring($ModelsDir.Length + 1)
+        $segs = $rel -split '/'
+        if ($rename.ContainsKey($segs[0])) {
+            $segs[0] = $rename[$segs[0]]
+            $rel = $segs -join '/'
+        }
+        if ($segs[0] -eq '.dl') { continue }
+        # Only the topmost .cache of a chain: the recursive delete takes the rest.
+        if ($segs[$segs.Count - 1] -ne '.cache') { continue }
+        $nested = $false
+        for ($i = 0; $i -lt ($segs.Count - 1); $i++) { if ($segs[$i] -eq '.cache') { $nested = $true; break } }
+        if ($nested) { continue }
+        $dropDirs += $rel
+    }
+
+    return [pscustomobject]@{ Moves = @($moves); Drops = @($drops); DropDirs = @($dropDirs); Keeps = @($keeps); Done = $done }
 }
 
 function Test-MigrationSafety {
@@ -544,9 +568,10 @@ function Test-MigrationSafety {
 }
 
 # Bottom-up removal of directories the migration emptied. -Recurse is NEVER used
-# (it would delete a directory that still holds something we failed to move);
-# only genuinely empty directories go, deepest first, and only inside the legacy
-# source roots. Any directory that is a destination -- or an ancestor of one --
+# here (it would delete a directory that still holds something we failed to
+# move); only genuinely empty directories go, deepest first, and only inside the
+# legacy source roots. The single -Recurse in this script is the .cache drop,
+# which runs before this and is what makes those roots empty in the first place. Any directory that is a destination -- or an ancestor of one --
 # is protected outright.
 function Remove-EmptyLegacyDirs {
     param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Migrate)
@@ -689,9 +714,10 @@ if ($SkipMigrate) {
     foreach ($m in ($plan.Moves | Sort-Object Rel)) {
         Write-Host ("    {0,10}  {1}  ->  {2}" -f (Format-Size $m.Size), $m.Rel, $m.Target)
     }
-    if ($plan.Drops.Count -gt 0) {
+    if ($plan.Drops.Count -gt 0 -or $plan.DropDirs.Count -gt 0) {
         Write-Host ""
-        Write-Host ("  DROP {0} HuggingFace .cache bookkeeping file(s) (regenerated on demand)" -f $plan.Drops.Count) -ForegroundColor DarkGray
+        Write-Host ("  DROP {0} HuggingFace .cache bookkeeping file(s) in {1} .cache directory/ies (regenerated on demand; the directories go too)" -f $plan.Drops.Count, $plan.DropDirs.Count) -ForegroundColor DarkGray
+        foreach ($dd in ($plan.DropDirs | Sort-Object)) { Write-Host "    $dd" -ForegroundColor DarkGray }
     }
     if ($plan.Keeps.Count -gt 0) {
         Write-Host ""
@@ -735,6 +761,7 @@ if ($SkipMigrate) {
     }
 
     if (($caseFix.Count -eq 0) -and ($plan.Moves.Count -eq 0) -and ($plan.Drops.Count -eq 0) -and
+        ($plan.DropDirs.Count -eq 0) -and
         ($null -eq $configResult -or $configResult.Changes.Count -eq 0)) {
         Write-Host ""
         Write-Skip "models/ is already in the base-model-first layout"
@@ -787,6 +814,19 @@ if ($SkipMigrate) {
             }
         }
 
+        # The .cache directories themselves, after their files are logged. This
+        # runs BEFORE Remove-EmptyLegacyDirs so the legacy source roots are
+        # genuinely empty by the time it looks at them.
+        $droppedDirs = 0
+        foreach ($dd in $plan.DropDirs) {
+            $abs = Join-Path $ModelsDir ($dd -replace '/', '\')
+            if (Test-Path -LiteralPath $abs) {
+                Remove-Item -LiteralPath $abs -Recurse -Force
+                Add-Content -LiteralPath $migLog -Value ("DROPDIR`t{0}" -f $dd) -Encoding utf8
+                $droppedDirs++
+            }
+        }
+
         $removedDirs = Remove-EmptyLegacyDirs -Migrate $MigrateAll
         foreach ($rd in $removedDirs) {
             Add-Content -LiteralPath $migLog -Value ("RMDIR`t{0}" -f $rd) -Encoding utf8
@@ -803,7 +843,7 @@ if ($SkipMigrate) {
         }
 
         Add-Content -LiteralPath $migLog -Value "# finished $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Encoding utf8
-        Write-Ok "moved $moved file(s), dropped $dropped cache file(s), removed $($removedDirs.Count) empty legacy dir(s)"
+        Write-Ok "moved $moved file(s), dropped $dropped cache file(s) in $droppedDirs .cache dir(s), removed $($removedDirs.Count) empty legacy dir(s)"
         Write-Host "  log: $migLog"
     }
 }

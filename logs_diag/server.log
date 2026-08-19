@@ -1,5 +1,0 @@
-2026-07-03 08:07:10,003 WARNING ltx: PYTORCH_CUDA_ALLOC_CONF is not set. Consider $env:PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" to reduce OOM.
-2026-07-03 08:07:14,230 INFO ltx: Starting server on 127.0.0.1:18777  (UI: http://127.0.0.1:18777/ui)
-2026-07-03 08:07:14,545 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
-2026-07-03 08:07:14,771 INFO httpx: HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
-2026-07-03 08:10:41,635 INFO httpx: HTTP Request: GET http://127.0.0.1:18777/api/v1/status "HTTP/1.1 200 OK"

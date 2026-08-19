@@ -1,24 +1,0 @@
-S:\OriginalApps\12_Nz-LTX23-backend\.venv-engine\Lib\site-packages\torch\cuda\__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
-  import pynvml  # type: ignore[import]
-[spike 13:36:09] patched device_supports_fp8 -> False (pure bf16)
-[spike 13:36:11] torch 2.9.1+cu128 cuda=True keep_resident=0
-[PHASE 13:36:11.360] BEFORE create (spike)              max_alloc=     0.0MB reserved=     2.0MB
-[PHASE 13:36:11.374] AFTER create (spike)               max_alloc=     0.0MB reserved=     2.0MB
-Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
-Uninitialized parameters or buffers: ['model.model.embed_tokens.weight']
-[PHASE 13:36:31.223] BEFORE encode_text                 max_alloc=  6051.6MB reserved=  6116.0MB
-[PHASE 13:36:35.215] AFTER encode_text                  max_alloc=  8440.9MB reserved= 10020.0MB
-sd_ops application failed: cannot import name 'apply_sd_ops' from 'ltx_core.loader.sd_ops' (S:\OriginalApps\12_Nz-LTX23-backend\.venv-engine\Lib\site-packages\ltx_core\loader\sd_ops.py) \u2014 using raw keys
-[PHASE 13:56:38.808] BEFORE denoise stage1              max_alloc=  8440.9MB reserved=  2084.0MB
-[spike 13:56:38] [ref-cond] ref_latent=(1, 128, 4, 5, 8) latent (1, 640, 128) -> (1, 800, 128)
-  0%|          | 0/8 [00:00<?, ?it/s] 12%|#2        | 1/8 [00:51<06:01, 51.65s/it] 25%|##5       | 2/8 [01:21<03:54, 39.04s/it] 38%|###7      | 3/8 [01:42<02:32, 30.57s/it] 50%|#####     | 4/8 [01:56<01:36, 24.24s/it] 62%|######2   | 5/8 [02:16<01:07, 22.59s/it] 75%|#######5  | 6/8 [02:32<00:40, 20.48s/it] 88%|########7 | 7/8 [02:48<00:18, 18.86s/it]100%|##########| 8/8 [02:55<00:00, 15.07s/it]100%|##########| 8/8 [02:55<00:00, 21.93s/it]
-[PHASE 13:59:34.288] AFTER denoise stage1               max_alloc=  8915.0MB reserved=  9204.0MB
-[PHASE 13:59:36.100] BEFORE denoise stage2              max_alloc=  8915.0MB reserved=  2294.0MB
-  0%|          | 0/3 [00:00<?, ?it/s] 33%|###3      | 1/3 [00:09<00:18,  9.09s/it] 67%|######6   | 2/3 [00:17<00:08,  8.56s/it]100%|##########| 3/3 [00:24<00:00,  7.89s/it]100%|##########| 3/3 [00:24<00:00,  8.13s/it]
-[PHASE 14:00:00.493] AFTER denoise stage2               max_alloc=  9102.2MB reserved=  9534.0MB
-[PHASE 14:00:02.383] BEFORE vae_decode_video            max_alloc=  9102.2MB reserved=  2442.0MB
-[PHASE 14:00:02.384] AFTER vae_decode_video             max_alloc=  2364.2MB reserved=  2442.0MB
-  0%|          | 0/1 [00:00<?, ?it/s]100%|##########| 1/1 [00:00<00:00,  6.19it/s]100%|##########| 1/1 [00:00<00:00,  6.15it/s]
-[spike 14:00:06] wrote s:\OriginalApps\12_Nz-LTX23-backend\outputs\ic_lora_phaseA\result_spike.json
-[spike 14:00:06] spike written -> s:\OriginalApps\12_Nz-LTX23-backend\outputs\ic_lora_phaseA\spike.mp4 (create=0.0s gen=1435.2s)
-[spike 14:00:06] spike: RUN_DONE

@@ -16,6 +16,8 @@ uploads/*
 !uploads/.gitkeep
 logs/*
 !logs/.gitkeep
+# 過去のデバッグ生ログ。旧パスの写り込みがあり、追跡する価値がない。
+logs_diag/
 models/*
 !models/.gitkeep
 

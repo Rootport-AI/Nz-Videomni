@@ -1,20 +1,0 @@
-S:\OriginalApps\12_Nz-LTX23-backend\.venv-engine\Lib\site-packages\torch\cuda\__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
-  import pynvml  # type: ignore[import]
-[spike 12:21:01] patched device_supports_fp8 -> False (pure bf16)
-[spike 12:21:03] torch 2.9.1+cu128 cuda=True keep_resident=0
-Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
-Uninitialized parameters or buffers: ['model.model.embed_tokens.weight']
-  0%|          | 0/8 [00:00<?, ?it/s] 12%|#2        | 1/8 [00:05<00:40,  5.75s/it] 25%|##5       | 2/8 [00:10<00:30,  5.01s/it] 38%|###7      | 3/8 [00:14<00:23,  4.73s/it] 50%|#####     | 4/8 [00:19<00:18,  4.62s/it] 62%|######2   | 5/8 [00:23<00:13,  4.57s/it] 75%|#######5  | 6/8 [00:28<00:09,  4.54s/it] 88%|########7 | 7/8 [00:32<00:04,  4.52s/it]100%|##########| 8/8 [00:37<00:00,  4.60s/it]100%|##########| 8/8 [00:37<00:00,  4.66s/it]
-  0%|          | 0/3 [00:00<?, ?it/s] 33%|###3      | 1/3 [00:05<00:10,  5.20s/it] 67%|######6   | 2/3 [00:10<00:05,  5.22s/it]100%|##########| 3/3 [00:15<00:00,  5.18s/it]100%|##########| 3/3 [00:15<00:00,  5.19s/it]
-  0%|          | 0/2 [00:00<?, ?it/s] 50%|#####     | 1/2 [00:00<00:00, 13.65it/s]
-[spike 12:22:37] per_layer_true: sha256=9a65e4b11ade714c2d59f03b79bb64b2840bbcebf9b9b4a9dcd7f4b9b643ce0c create=0.0s gen=94.2s
-Uninitialized parameters or buffers: ['model.model.embed_tokens.weight']
-sd_ops application failed: cannot import name 'apply_sd_ops' from 'ltx_core.loader.sd_ops' (S:\OriginalApps\12_Nz-LTX23-backend\.venv-engine\Lib\site-packages\ltx_core\loader\sd_ops.py) \u2014 using raw keys
-  0%|          | 0/8 [00:00<?, ?it/s] 12%|#2        | 1/8 [01:28<10:22, 88.90s/it] 25%|##5       | 2/8 [01:44<04:35, 45.98s/it] 38%|###7      | 3/8 [01:56<02:32, 30.41s/it] 50%|#####     | 4/8 [02:08<01:31, 22.87s/it] 62%|######2   | 5/8 [02:18<00:54, 18.33s/it] 75%|#######5  | 6/8 [02:26<00:29, 14.90s/it] 88%|########7 | 7/8 [02:33<00:12, 12.31s/it]100%|##########| 8/8 [02:40<00:00, 10.47s/it]100%|##########| 8/8 [02:40<00:00, 20.01s/it]
-  0%|          | 0/3 [00:00<?, ?it/s] 33%|###3      | 1/3 [00:08<00:17,  8.82s/it] 67%|######6   | 2/3 [00:15<00:07,  7.42s/it]100%|##########| 3/3 [00:21<00:00,  6.96s/it]100%|##########| 3/3 [00:21<00:00,  7.23s/it]
-  0%|          | 0/2 [00:00<?, ?it/s] 50%|#####     | 1/2 [00:00<00:00, 10.44it/s]
-[spike 12:27:20] per_layer_false: sha256=9a65e4b11ade714c2d59f03b79bb64b2840bbcebf9b9b4a9dcd7f4b9b643ce0c create=0.0s gen=282.7s
-[spike 12:27:20] PARITY MATCH
-[spike 12:27:20] wrote s:\OriginalApps\12_Nz-LTX23-backend\outputs\ic_lora_phaseA\result_parity.json
-[spike 12:27:20] parity: RUN_DONE
-EXITCODE=0

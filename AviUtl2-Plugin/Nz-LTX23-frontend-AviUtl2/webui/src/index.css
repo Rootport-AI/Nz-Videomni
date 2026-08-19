@@ -1,0 +1,119 @@
+/* N8: dark既定・手動light・localStorage単独（shell/ThemeContext.tsx）。
+   `:root[data-theme="light"]` が下の light パレットで上書きする — 色変数の
+   みテーマ差があり、非色トークン（font-family等）は共有のまま。 */
+:root {
+  color-scheme: dark;
+
+  --bg: #1a1a1c;
+  --bg-raised: #232326;
+  --border: #3a3a3f;
+  --text: #e6e6e9;
+  --text-muted: #9a9aa2;
+  --accent: #3a86e0;
+  --accent-bg: rgba(58, 134, 224, 0.16);
+  --accent-border: rgba(58, 134, 224, 0.5);
+  --success: #3fbf6f;
+  --success-bg: rgba(63, 191, 111, 0.16);
+  --danger: #e0533a;
+  --danger-bg: rgba(224, 83, 58, 0.16);
+  /* Amber "caution" tone (toast-warning, spill/busy badges, mild warning
+     banners) — was a bare `#d9a441`/`rgba(217, 164, 65, …)` sprinkled across
+     several CSS files; N8 pulls it into the same variable system as
+     accent/success/danger so it can carry a light-theme value too. */
+  --warning: #d9a441;
+  --warning-bg: rgba(217, 164, 65, 0.16);
+  --warning-border: rgba(217, 164, 65, 0.5);
+  /* 快適上限の目安線（`CommonGenerationFields` のサイズスライダー）。本文色に
+     追従させるので :root だけで両テーマぶんを兼ねる — 既定のダークではほぼ白、
+     ライトでは黒い線になる。リテラルの白は使わない。相方の赤い上限線は
+     `--danger` をそのまま使う。 */
+  --marker-comfort: var(--text);
+  /* range のつまみ幅。目安線はつまみの中心が届く範囲に合わせて置くため、その
+     補正量をここ一箇所で調整する（ブラウザ既定のつまみに合わせた実測値）。 */
+  --range-thumb-w: 16px;
+
+  font-family:
+    system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f4f4f6;
+  --bg-raised: #ffffff;
+  --border: #d3d3da;
+  --text: #1b1b1f;
+  --text-muted: #62626b;
+  --accent: #2f74c8;
+  --accent-bg: rgba(47, 116, 200, 0.12);
+  --accent-border: rgba(47, 116, 200, 0.45);
+  --success: #2f9d57;
+  --success-bg: rgba(47, 157, 87, 0.14);
+  --danger: #cf3f27;
+  --danger-bg: rgba(207, 63, 39, 0.12);
+  --warning: #b8791f;
+  --warning-bg: rgba(184, 121, 31, 0.14);
+  --warning-border: rgba(184, 121, 31, 0.45);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+}
+
+/* Shared "icon action button" chrome: a ~32px square button with an emoji
+ * glyph, used for the small per-item action buttons scattered across the app
+ * (keyframe card remove/pick/capture, chain clip card actions, job card
+ * actions, …). Promoted from `KeyframeCard.css`'s `.kfc-action-button`
+ * (2026-07-18) — same recipe, just no longer scoped to one component. */
+.icon-action-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.icon-action-button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.icon-action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

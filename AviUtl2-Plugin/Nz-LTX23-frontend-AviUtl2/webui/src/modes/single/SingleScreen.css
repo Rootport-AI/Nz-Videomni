@@ -1,0 +1,483 @@
+/* U-R1 MJ-2: with the job rail removed, the right column would otherwise
+ * stretch to fill the whole freed width (`1fr`), leaving the Generate button +
+ * ledger floating far from the right edge. Cap BOTH columns and
+ * `space-between` them so the panel stays a sane width and pins to the right
+ * edge (the owner's core requirement: nothing to its right), the form pins
+ * left, and only a super-wide window opens a gap between them. */
+.single-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(280px, 440px);
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Container query (not a window-width media query) against the `mode-body`
+ * container named on `AppShell.css`'s `.app-mode-body` (this element's
+ * parent) — the job rail can squeeze this column down well before the
+ * window itself is narrow, so window width alone doesn't reliably signal
+ * "not enough room" here. Paired with `styles/formAccordion.css`'s matching
+ * `@container` on `.generation-column`, which lifts the whole generation
+ * panel above the form once this collapses to one column. Threshold picked
+ * from the two `.single-layout` track floors (280px + 280px) plus the 20px
+ * gap and some slack. */
+@container mode-body (max-width: 680px) {
+  .single-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* M7b (task brief §5: "狭幅（~360px）… CSSを点検・修正"): below this, the
+ * two-up width/height row (`SizeFields` in `CommonGenerationFields.tsx`) gets
+ * cramped enough to be worth stacking instead of squeezing side by side —
+ * applies to both Create and Chain, which share these classes verbatim. (The
+ * keyframe card's own narrow-width stacking now lives in `KeyframeCard.css`.) */
+@media (max-width: 420px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .field-inline {
+    flex-wrap: wrap;
+  }
+}
+
+.generation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-inline .field-label {
+  min-width: 80px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Width/height sliders stack vertically (rather than sharing a field-row)
+ * so each slider gets the full row width — needed for precise dragging now
+ * that the generation size ceiling reaches 4096. */
+.size-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ⑤ seed 🎲/♻ buttons sitting inline next to the seed number input
+ * (`CommonGenerationFields.FrameRateSeedFields`). */
+.seed-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.field-hint-error {
+  color: var(--danger);
+}
+
+.prompt-input {
+  resize: vertical;
+  min-height: 72px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.prompt-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="number"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  width: 100px;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+  width: 100%;
+}
+
+/* 快適上限の目安線（`CommonGenerationFields.SizeSlider`）。datalist は色を
+ * 指定できず、トラックのグラデーション塗りはネイティブのつまみを失うため、
+ * 相対配置のラッパーの上に絶対配置の縦線を重ねる方式にした。 */
+.size-slider-wrap {
+  position: relative;
+  display: block;
+}
+
+/* 線を出すときだけ、スライダーの上に線ぶんの帯を空ける（線が無い画面＝
+ * Create/Retake では高さが1pxも変わらない）。 */
+.size-slider-wrap-marked {
+  padding-top: 10px;
+}
+
+/* A-1（2026-08-12・敵対的レビュー）: 当たり判定を可視線より広く取る。要素の
+ * 実幅は11px（左右5pxの透明パディング＋中央1pxの可視線）にして、背景色は
+ * `background-clip: content-box` で中央1pxのcontent-boxにだけ塗る。padding
+ * は左右対称なので `translateX(-50%)` によるcenter合わせは可視線の中心の
+ * ままズレない（総幅が奇数なので中心が半ピクセルに落ちてアンチエイリアスが
+ * かかるが、Singleタブのネイティブ datalist の目盛りも同じく細く柔らかい
+ * 描画なので見た目は揃う）。`pointer-events: none` は削除済み — この帯は
+ * `.size-slider-wrap-marked` が確保した上側10pxの余白内（top:0/height:10px）
+ * にあり、レンジ入力のトラック（その下）とは重ならないため、ここを
+ * hover/クリック可能にしてもスライダー操作の妨げにはならない。 */
+.size-marker {
+  position: absolute;
+  top: 0;
+  height: 10px;
+  width: 11px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  background-clip: content-box;
+  /* つまみは端で半分ぶん内側に留まるので、その半径を足した範囲へ写像する。
+   * `--marker-pos` は 0〜1 の無単位値でインライン注入される。 */
+  left: calc(var(--range-thumb-w) / 2 + var(--marker-pos) * (100% - var(--range-thumb-w)));
+  transform: translateX(-50%);
+}
+
+/* 色は必ず `background-color` で指定すること。`background` ショートハンドを
+ * 使うと、上の `.size-marker` で指定した `background-clip: content-box` が
+ * 未指定サブプロパティとして初期値 `border-box` へ戻され、透明パディングごと
+ * 11px幅が塗られて線ではなく帯に見える（2026-08-12の実機ゲートG-D1で実際に
+ * 発現したバグ。同詳細度なのでソース後方のこちらが勝つ）。 */
+.size-marker-comfort {
+  background-color: var(--marker-comfort);
+}
+
+.size-marker-limit {
+  background-color: var(--danger);
+}
+
+.warning-banner {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+}
+
+/* M3 spill-free warning (task brief §5): a milder amber, distinct from the
+ * red danger banner above — this is a caution, not an error. */
+.warning-banner-mild {
+  margin-top: 6px;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+/* W7: the "why can't I press Generate?" note under the button. The reasons are
+ * a compact bulleted list; a single reason still reads fine as one bullet. */
+.generate-reasons-note .generate-reasons-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Horizontal Generate/Stop row — now only `BatchSection.tsx`'s (see its own
+ * doc comment). `GenerateButtonBar` used to reuse this too but moved to the
+ * vertically-stacked `.generate-bar` (`styles/formAccordion.css`) so it
+ * survives the right column's ~280px floor; kept here verbatim since Batch's
+ * Generate+Stop pair still wants the horizontal layout. */
+.generate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.generate-row .generate-button {
+  flex: 1;
+  margin-top: 0;
+}
+
+.secondary-button {
+  appearance: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.secondary-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-button {
+  appearance: none;
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preset-button:hover:not(:disabled) {
+  background: var(--accent-border);
+}
+
+.preset-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.generate-button {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.status-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge-busy {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.mode-badge-row {
+  display: flex;
+}
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.mode-badge-i2v {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* U2: the keyframes heading row carries a live "N / max" counter to its
+   right (`create.keyframes.count`). The counter keeps the muted hint look
+   rather than the uppercase label styling. */
+.keyframes-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.keyframes-count {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.keyframes-add-row {
+  display: flex;
+}
+
+/* Keyframe timeline rework follow-up (2026-07-18): the add row is down to a
+ * single full-width "Add keyframe" action (capture/choose-file moved onto
+ * each card itself), styled to match the same weight as the
+ * `.form-accordion` blocks stacked below it (`styles/formAccordion.css`)
+ * rather than the small inline `.secondary-button` chrome. */
+.keyframes-add-button {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text);
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.keyframes-add-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.keyframes-add-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Keyframe timeline rework (2026-07-18): vertical rhythm for the new panel's
+ * three stacked regions — the timeline bar, the card column, then the add-row.
+ * The old per-card frame (`.keyframe-card`, `.keyframe-fields`,
+ * `.keyframe-remove`) is gone; each card now styles itself via
+ * `KeyframeCard.css` (`.kfc-*`), and the bar via `KeyframeTimeline.css`. */
+.keyframes-panel {
+  gap: 10px;
+}
+
+.keyframe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keyframe-thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.keyframe-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.keyframe-thumb-filename {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+.keyframe-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: keyframe-spin 0.8s linear infinite;
+}
+
+@keyframes keyframe-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.input-warning {
+  border-color: var(--danger) !important;
+  outline: 1px solid var(--danger);
+}
+
+/* M7b (Mock/AVIUTL2_DESIGN_BRIEF.md §5-2 / §11): grayed-out, permanently
+ * disabled control chrome. Originally covered both the Negative prompt and
+ * CFG-scale placeholders in `CommonGenerationFields.tsx`'s `ReservedFields`;
+ * the negative-prompt textarea is gone (NAG unlocked a real one, 2026-07-28),
+ * so this now styles the CFG display there, PLUS `shell/NagAccordion.tsx`'s
+ * permanently-disabled "Other" method radio — a cross-module reuse of this
+ * class (see that component's own doc comment for why). `not-allowed` on the
+ * wrapping label surfaces the "why is this greyed out" tooltip even while
+ * hovering the disabled control itself. */
+.field-reserved {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.field-reserved input {
+  cursor: not-allowed;
+}
+
+.link-button {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}

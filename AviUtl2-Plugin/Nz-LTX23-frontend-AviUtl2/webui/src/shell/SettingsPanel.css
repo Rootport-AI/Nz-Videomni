@@ -1,0 +1,197 @@
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 2000;
+}
+
+.settings-panel {
+  width: min(92vw, 360px);
+  max-height: min(85vh, 480px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.settings-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-panel-head h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.settings-lang-toggle {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Y2: the X6 shared heading over the size/fps prefill-policy toggles sits
+ * directly in `.settings-panel`'s flex column (not inside a `.field`), so
+ * the column's own `gap: 14px` alone put it equidistant from THEME above
+ * and its own group below — making it read as belonging to THEME. Pull it
+ * away from THEME and tuck it toward its own group instead: with the 14px
+ * gap, effective spacing becomes 14+6=20px above and 14-4=10px below (still
+ * positive, so it never overlaps the `role="group"` toggle beneath it).
+ * Numbers are a reasonable first pass — nudge if it still looks off on a
+ * real device. */
+.settings-group-heading {
+  margin-top: 6px;
+  margin-bottom: -4px;
+}
+
+.settings-url-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  width: 100%;
+}
+
+.settings-url-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.settings-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Narrow hosts (task brief §5: "~360px") — the overlay's own padding plus
+ * `min(92vw, 360px)` already keeps the panel from overflowing; stack the
+ * action buttons full-width for easier tapping at that width. */
+@media (max-width: 360px) {
+  .settings-panel-actions {
+    flex-direction: column-reverse;
+  }
+
+  .settings-panel-actions button {
+    width: 100%;
+  }
+}
+
+/* Model management (S1): the Settings panel's "Models" section. A top
+ * divider sets it visually apart from the connection-settings fields above —
+ * a model swap is a slower, more consequential action (rebuilds the engine),
+ * so it deliberately doesn't look like just another form field. */
+.models-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.models-section h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.models-actions {
+  justify-content: flex-start;
+}
+
+/* N11: spill-free frame-count table — plain borders, no library, matching
+ * this app's dependency-light approach. */
+.spill-free-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.spill-free-table th,
+.spill-free-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* N10: raw /config JSON viewer — scrolls internally instead of growing the
+ * whole settings panel, since a real config's presets/limits/upload sections
+ * can run well past the panel's own `max-height`. */
+.raw-config-json {
+  overflow: auto;
+  max-height: 200px;
+  margin: 0;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: pre;
+}
+
+/* N4: "danger zone" section — pipeline unload + bulk purge of terminal jobs.
+ * Reuses `.models-section`'s layout/spacing but tints the divider and
+ * heading with `--danger` so it visually reads as a riskier area than the
+ * sections above it, without a second CSS layout system. */
+.danger-section {
+  border-top-color: var(--danger);
+}
+
+.danger-section h3 {
+  color: var(--danger);
+}
+
+/* Mirrors `.primary-button`'s shape/sizing (App.css) but in the danger
+ * palette (`--danger`/`--danger-bg`, same variables `.field-hint-error` and
+ * the badge/error styles across the app already use). */
+.btn-danger {
+  appearance: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    opacity 0.15s;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.btn-danger:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
+
+/* The two-step inline confirmation row (confirmation text + cancel/confirm
+ * buttons) that replaces a danger-zone action's trigger button in place. */
+.danger-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

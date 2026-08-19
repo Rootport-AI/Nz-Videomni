@@ -1,0 +1,257 @@
+/* Chain mode reuses Create's `.single-layout`/`.generation-form`/`.field*`
+ * classes verbatim (see SingleScreen.css) — only genuinely new structure
+ * gets its own rules here. */
+
+.clip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  /* Previously capped at max-height:420px + overflow-y:auto (up to 24 clips,
+   * M6/M7c, would otherwise push the Generate button off the bottom of the
+   * panel). The Generate button has since moved to the right-hand
+   * `.generation-column` (U-R1), so that's no longer a concern — the list now
+   * grows the panel itself and the page scrolls instead, avoiding a second,
+   * cramped inner scrollbar. */
+}
+
+.clip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.clip-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clip-prompt-input {
+  resize: vertical;
+  min-height: 40px;
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.clip-remove {
+  flex: none;
+}
+
+/* §1-16 長尺A2V: the "🎵 which slice of the track is this clip?" badge in a
+ * clip card's header. `margin-right: auto` absorbs the header's free space so
+ * the badge sits right next to the clip label while ❌ stays pinned to the
+ * right edge (the header is `justify-content: space-between`, which would
+ * otherwise centre a three-child row). */
+.clip-card-audio-window {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Owner redesign (2026-07-18): the SOURCE card is now a card-wide drop target
+ * (`SourceInputPanel.tsx`'s own `useFileDrop`, no wrapping `DropZone`), with
+ * its choose/change + clear buttons collapsed to two emoji icon buttons
+ * pinned to the top-right corner (`.source-input-actions`) — same recipe as
+ * `KeyframeCard.css`'s `.kfc-card`/`.kfc-actions`. `position: relative` anchors
+ * that absolute column; `padding-right` reserves space so the heading/note
+ * text never runs underneath it. */
+.source-section {
+  position: relative;
+  padding: 10px;
+  padding-right: 46px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+/* Card-wide drag-over highlight — mirrors `.kfc-card-dragover`. */
+.source-section-dragover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+/* --- Action buttons: two ~32px squares stacked in the top-right corner,
+ * 🔁 clear above 📁 choose/change (owner-specified order) --- */
+.source-input-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* `SourceInputPanel`'s thumbnail + controls row: the thumbnail
+ * (`.keyframe-thumb`, 64x64) stays a fixed size in every state — image
+ * attached, video attached, or nothing yet. `.source-input-controls` renders
+ * the SAME two-part shape regardless of state: one `.field-inline` slider row
+ * (STRENGTH for an image, CONTEXT FRAMES for a video — both trimmed to
+ * "label + slider + a short numeric readout", never a sentence, so neither
+ * can grow taller than the other) plus one `.source-input-note` line below it
+ * for whichever prose applies (video's `contextFramesHint` sentence, the "no
+ * source selected" hint, or nothing in image mode) — so the panel's overall
+ * footprint never changes when switching between them. */
+.source-input-body {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 6px;
+}
+
+.source-input-controls {
+  flex: 1;
+  min-width: 0;
+  /* Floors the whole controls column at the thumbnail's height so it never
+   * looks shorter than the thumbnail it sits beside, regardless of state. */
+  min-height: 64px;
+}
+
+/* The one line of prose that varies in length by mode/state (see
+ * `SourceInputPanel.tsx`'s `noteText`): video's `contextFramesHint` sentence
+ * is the longest and may wrap onto a second line in a narrow panel, while
+ * image mode has none (just a reserved space) and the unselected state has
+ * the short "no source selected" hint. `min-height`, sized for two lines of
+ * `.field-hint`'s 12px text, keeps this row's height constant across every
+ * unselected/image/video transition instead of following whichever one
+ * happens to be showing — the actual fix for the panel reflowing that a
+ * sentence-length hint living inline with the slider used to cause. */
+.source-input-note {
+  display: block;
+  min-height: 2.4em;
+}
+
+/* --- §1-16 長尺A2V: Chain's own audio card (`ChainAudioPanel.tsx`) ---------
+ * Structure is `.source-section`'s verbatim (card-wide drop target, the same
+ * top-right `.source-input-actions` column, the same thumbnail + controls
+ * row), so only the genuinely new bits are below. */
+
+/* The controls column holds one more thing than SOURCE's does — the ↔️ button
+ * above the slider — so give them a little breathing room instead of letting
+ * the button sit flush against the file name. */
+.chain-audio-section .source-input-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chain-audio-adjust {
+  align-self: flex-start;
+}
+
+/* A long file name must not widen the card (the flex column would otherwise
+ * grow to fit it). */
+.chain-audio-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The card's single always-mounted note line (see `ChainAudioPanel.tsx`'s doc
+ * comment): five different sentences of very different lengths can occupy it,
+ * so its height is reserved here — three lines of `.field-hint`'s 12px text,
+ * enough for the longest (the 24-clip-ceiling note) at the panel's width —
+ * rather than following whichever one happens to be showing. */
+.chain-audio-note {
+  display: block;
+  min-height: 3.6em;
+  margin-top: 6px;
+}
+
+/* The amber "you probably didn't mean this" variant, matching
+ * `.warning-banner-mild`'s palette. The red variant reuses
+ * `.field-hint-error`. */
+.chain-audio-note-warning {
+  color: var(--warning);
+}
+
+/* --- §1-15 参照動画: Chain's own reference-video card
+ * (`ChainReferencePanel.tsx`) --- Structure is `.source-section`'s verbatim
+ * (card-wide drop target, the same top-right `.source-input-actions` column,
+ * the same thumbnail + controls row), same as `.chain-audio-section` above —
+ * only the genuinely new bits are below. */
+
+/* A long file name must not widen the card — same fix as
+ * `.chain-audio-filename`. */
+.chain-reference-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The card's single always-mounted priority note line (see
+ * `ChainReferencePanel.tsx`'s doc comment): four sentences of different
+ * lengths can occupy it, so its height is reserved here rather than following
+ * whichever one happens to be showing. Two tiers only (no amber "warning" —
+ * that lives in `ChainedScreen`'s own stage-1 comfort-budget banner instead),
+ * so unlike `.chain-audio-note` there is no `-warning` variant. */
+.chain-reference-note {
+  display: block;
+  min-height: 2.4em;
+  margin-top: 6px;
+}
+
+/* --- 素材（末尾）: Chain's own end-source card (`ChainEndSourcePanel.tsx`) ---
+ * Structure is `.source-section`'s verbatim (card-wide drop target, the same
+ * top-right `.source-input-actions` column, the same thumbnail + controls row),
+ * same as `.chain-audio-section`/`.chain-reference-section` above — only the
+ * genuinely new bits are below. */
+
+/* A long file name must not widen the card — same fix as
+ * `.chain-reference-filename`. */
+.chain-end-source-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The card's single always-mounted priority note line (see
+ * `ChainEndSourcePanel.tsx`'s doc comment): five sentences of different lengths
+ * can occupy it — the two conflicts, the still-image warning, the attached
+ * video's frame readout, the unattached hint — so its height is reserved here
+ * rather than following whichever one happens to be showing. Two tiers only
+ * (plain / `.field-hint-error`), like `.chain-reference-note`. */
+.chain-end-source-note {
+  display: block;
+  min-height: 2.4em;
+  margin-top: 6px;
+}
+
+/* Sprint 2 item 9: the chain preset dropdown — same input chrome as
+ * `.clip-prompt-input` so it reads as part of the same form language. */
+.field-select {
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+/* W3 レイアウト再構成 (2026-08-11): a plain rule between the reference/A2V
+ * accordion pair above and the "つなぎ目のブレンド" overlap section below —
+ * the two accordions read as an "inputs" group and everything past this line
+ * reads as a "how the clips stitch together" group. Uses the theme's own
+ * border color so it stays visible (if faint) in both themes without its own
+ * dark-mode override. */
+.chained-section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}

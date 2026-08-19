@@ -1,0 +1,204 @@
+/* Edit モード（2026-08-09 新設）。サブタブ列＋プレースホルダのパネル。
+ * 見た目は `shell/AppShell.css` の `.mode-tab` 系をそのまま写しており、
+ * メインタブとサブタブが同じ質感で並ぶようにしてある（新しい色は足さない）。 */
+
+.edit-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.edit-subtabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.edit-subtab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.edit-subtab:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.edit-subtab--active {
+  color: var(--text);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* モックのサブタブ（Inpainting）。`.mode-tab:disabled` と同じ薄さ＋
+ * `cursor: not-allowed`（Windows では標準の🚫カーソルになる）で、
+ * ホバーの強調は `:not(:disabled)` により出ない。 */
+.edit-subtab:disabled {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 2カラム化（オーナー指示 第2バッチ、2026-08-09）。Edit も Create/Chain と同じ
+ * `.single-layout`（`modes/single/SingleScreen.css`）＋ `.generation-column`
+ * （`styles/formAccordion.css`）で組んであり、ここにはその **左側の器** しか
+ * 足さない —— グリッドの列幅も、680px の `@container` でのスタックも、生成列を
+ * フォームより上へ持ち上げる `order: -1` も、すべて借用元の規則がそのまま効く
+ * （新しいブレークポイントは作らない）。
+ *
+ * 器を1枚かませているのは、サブパネルを直接グリッドの子にすると「隠れている方
+ * は display:none だから列を取らない」という副作用に頼ることになるため。将来
+ * 2枚同時に見せた瞬間に3列へ崩れる作りにはしない。 */
+.edit-form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* `.edit-subpanel` には display 系を **書かない**。書くと UA の
+ * `[hidden] { display: none }` に勝ってしまい、隠したはずのパネルが
+ * 見えてしまう（`AppShell.tsx` の素の <div> ラッパと同じ理由）。 */
+
+/* §1-17 Retake の注意文リスト。既定の `<ul>` の字下げと点だけを外して、
+   周りの `.field-hint` と同じ見え方に揃える（新しい色や余白は足さない）。 */
+.retake-notices {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.edit-panel h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+/* --- Outpainting パネル（2026-08-09） -------------------------------------
+ * 既存クラス（`.field` / `.field-hint` / `.source-section` / `.warning-banner`
+ * など）はそのまま流用し、ここには Outpainting 固有の並べ方だけを足す。
+ * 新しい色は定義せず、`index.css` のテーマ変数だけを参照する（ダーク/ライト
+ * 両対応がそれだけで成立する）。 */
+
+/* `.outpaint-panel` にはもう幅の指定を置かない。2カラム化（2026-08-09）で
+ * このパネルは `.single-layout` の左トラック（280〜420px）に入り、幅はその
+ * トラックが決めるようになったため —— ここに残っていた `max-width: 720px` は
+ * トラックより広い値で、効かないか、狭幅で1列になったときだけ効くという
+ * 二重基準になっていた。プレビューの高さ上限は `.outpaint-preview-svg` 側に
+ * あり、そちらは幅に依存しないのでそのまま。 */
+
+/* 素材カード（と尺・シード行）の見た目は既存の画面から **借用** している。
+ * 新しい規則は足さず、借用元をここに書き残しておく（クラス名もそのまま使う）:
+ *   - `.source-section` / `.source-section-dragover` / `.source-input-actions`
+ *     / `.source-input-body` / `.source-input-controls`
+ *       … `modes/chained/ChainedScreen.css`（Chain の SOURCE カード）
+ *   - `.keyframe-thumb` / `.keyframe-thumb-filename` / `.keyframe-spinner`
+ *       … `modes/single/SingleScreen.css`（キーフレームのサムネイル枠 64x64）
+ *   - `.field-row`（フレーム数とフレームレートの横並び）／`.seed-actions`
+ *       … `modes/single/SingleScreen.css`
+ *   - サムネイルの絵柄そのもの（再生ボタン風のアイコン）
+ *       … `shell/thumbnailPlaceholders.ts` の `VIDEO_PLACEHOLDER_DATA_URL`
+ * どちらの CSS もアプリ起動時に読み込まれる（両画面は常時マウントされている）
+ * ので、ここで再定義はしない —— 同じ見た目を 2 か所で持たないため。 */
+
+/* ラジオ 1 系統を 1 行に並べる枠。fieldset の既定の枠線は外す（グループ名は
+ * legend が担うので枠線は不要）。
+ *
+ * 使い手は現在 `RetakePanel` の映像／音声ラジオだけである。Outpainting の初期配置
+ * ラジオ 2 系統のために作った規則だが、その機構は 2026-08-11 に撤去された（パッド
+ * が 0 起点・1px 刻みになり、アライメント自体が無くなった）。クラス名に outpaint
+ * が残っているのはそのためで、改名は Retake 側まで巻き込むので行っていない。 */
+.outpaint-align-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+}
+
+.outpaint-align-group > legend {
+  padding: 0;
+}
+
+/* pad スライダー 4 本。狭いときは 1 列に落ちる。 */
+.outpaint-pads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 16px;
+}
+
+.outpaint-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 素材未読込のときの空枠（2026-08-09、オーナー指示で説明文を廃止）。文字は
+ * 出さず、同じ場所に同じ高さの箱だけを残す —— 素材が届いた瞬間に下の項目が
+ * 飛び上がらないようにするため。高さは `.outpaint-preview-svg` の上限
+ * (260px) より低く取ってあり、枠だけがパネルを押し広げることはない。 */
+.outpaint-preview-empty {
+  min-height: 120px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+/* viewBox がキャンバス寸法なので、縦横比は SVG 側が保つ。高さだけ上限を決めて
+ * おけば、極端に縦長の指定でもパネルを押し広げない。 */
+.outpaint-preview-svg {
+  width: 100%;
+  max-height: 260px;
+  overflow: visible;
+}
+
+.outpaint-preview-canvas {
+  fill: none;
+  stroke: var(--accent-border);
+}
+
+.outpaint-preview-source {
+  fill: var(--accent-bg);
+  stroke: none;
+}
+
+.outpaint-preview-band {
+  fill: none;
+  stroke: var(--warning-border);
+}
+
+.outpaint-preview-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 凡例に色見本（`::before` の小さな四角）は **置かない**。凡例の文そのものが
+ * 「青い四角：…」「青線：…」「破線：…」と見た目を名指ししているので、四角を
+ * 足すと同じことを 2 回言うことになるため。 */

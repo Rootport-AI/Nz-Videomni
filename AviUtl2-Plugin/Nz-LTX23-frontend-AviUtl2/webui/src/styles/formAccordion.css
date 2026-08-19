@@ -1,0 +1,153 @@
+/* Shared `<details className="form-accordion">` chrome — generalizes
+ * `modes/batch/BatchSection.css`'s `.batch-section`/`.batch-section-summary`
+ * look (border/radius/raised background, custom ▸/▾ marker replacing the
+ * native `<details>` triangle) into a reusable, unstyled-content-agnostic
+ * wrapper so other screens can collapse a block of form fields the same way
+ * without duplicating the rules. Uses the app's CSS custom properties
+ * (`index.css`'s `:root`/`:root[data-theme="light"]`) so it tracks both
+ * themes automatically — this codebase toggles themes via `data-theme`
+ * rather than `prefers-color-scheme`, so no media query is needed here. */
+
+.form-accordion {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.form-accordion-summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+
+.form-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.form-accordion-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--text-muted);
+}
+
+.form-accordion[open] > .form-accordion-summary::before {
+  content: "▾";
+}
+
+.form-accordion-summary:hover {
+  color: var(--accent);
+}
+
+.form-accordion-summary:hover::before {
+  color: var(--accent);
+}
+
+.form-accordion-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.form-accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+/* The Create/Chain screens' right-hand generation panel: ONE card holding
+ * `GenerateButtonBar` on top and the job ledger (`jobs/JobLedger.tsx`, fed by
+ * `jobs/JobsContext.tsx`'s `GET /jobs` poll) below it (mirroring the Gradio
+ * UI's right column: generate button → progress → job → video stacked in a
+ * single card). The card chrome lives here on the column itself — same
+ * recipe as `App.css`'s `.card` — and any `.card` nested directly inside is
+ * un-carded below so the whole column reads as a single panel rather than a
+ * button floating above a separate card. */
+.generation-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  /* U-R1 ledger-height rework: `.single-layout` no longer sets
+   * `align-items: start`, so grid's default `stretch` makes both columns the
+   * same height — the ledger card matches the left form's height (the
+   * owner's "同丈" ask) via that grid stretch, not via anything set here.
+   * Runaway page height when the job list is huge is instead capped by
+   * `.job-ledger-body`'s `flex: 1 1 0` (jobs.css), which keeps the ledger's
+   * own content out of this column's intrinsic height so the row's height
+   * always follows the left form. Do NOT reintroduce a `max-height` on this
+   * column (or anything else on the stretch path from `.single-layout` down
+   * to `.job-ledger-body`) — that has broken the 同丈 layout twice before.
+   * `min-height: 0` lets the inner `.job-ledger-body` shrink and scroll
+   * instead of overflowing. */
+  min-height: 0;
+}
+
+/* Un-card any direct-child `.card` (App.css) sitting in this column so the
+ * whole column reads as one panel rather than nested cards. U-R1 MN-7:
+ * scoped to `>` direct children only — the ledger's own `.job-card`s are
+ * deeper descendants and must keep their card chrome. `max-width: none`
+ * matters for anything (like the old preview) that carried App.css's
+ * `max-width: 360px`. */
+.generation-column > .card {
+  max-width: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+/* …but the submit-error row keeps its tinted-box emphasis (it'd be an
+ * invisible state cue if the blanket un-carding above stripped it too). Same
+ * specificity as the rule above — wins by source order. */
+.generation-column > .card-error {
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  padding: 12px;
+}
+
+/* Below the breakpoint, the form and this panel stack into a single grid
+ * column in DOM order — which would put the panel (and its Generate button)
+ * below the whole form. `order: -1` lifts the WHOLE panel above the form
+ * instead: the button and the job/preview area move together as one card,
+ * never splitting apart (the old `display: contents` +
+ * `.generate-button-bar-order { order: -1 }` scheme sent the button up
+ * alone, orphaning it from the panel).
+ *
+ * The breakpoint is a container query on the `mode-body` container
+ * (`container-name` set on `AppShell.css`'s `.app-mode-body`, the parent of
+ * `.single-layout`) rather than a window-width media query — U-R1: with the
+ * rail gone the container is now the full window, so this fires only on a
+ * genuinely narrow window / docked panel. See `SingleScreen.css`'s matching
+ * `@container` on `.single-layout` for the paired column collapse. */
+@container mode-body (max-width: 680px) {
+  .generation-column {
+    order: -1;
+  }
+}
+
+/* `GenerateButtonBar`: full-width Generate button stacked above a
+ * free-wrapping hint line. Previously reused `SingleScreen.css`'s horizontal
+ * `.generate-row` (still used as-is by `BatchSection.tsx`'s Generate/Stop
+ * row), but at this column's ~280px floor a horizontal row with a
+ * `white-space: nowrap` hint next to a flexed button overflowed its card —
+ * see `GenerateButtonBar.tsx`'s doc comment. */
+.generate-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.generate-bar .generate-button {
+  margin-top: 0;
+}
+
+.generate-bar-hint {
+  white-space: normal;
+  overflow-wrap: break-word;
+}

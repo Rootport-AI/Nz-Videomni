@@ -1,0 +1,102 @@
+/* I8 §3-4 (※): generic confirmation modal (the Chain-discard prompt). Layout/
+ * palette mirror `modes/single/KeyframeShrinkModal.css` (itself derived from
+ * `SettingsPanel.css`) so every floating surface in the app reads the same;
+ * kept under its own `confirm-` prefix rather than sharing kfm's classes so the
+ * shell doesn't depend on a modes/single stylesheet. */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 2000;
+}
+
+.confirm-dialog {
+  width: min(92vw, 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.confirm-title {
+  font-size: 15px;
+  margin: 0;
+  color: var(--text);
+}
+
+.confirm-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.confirm-apply-button {
+  appearance: none;
+  border: 1px solid var(--accent-border);
+  color: #fff;
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
+}
+
+.confirm-apply-button:hover {
+  filter: brightness(1.15);
+}
+
+.confirm-apply-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.confirm-cancel-button {
+  appearance: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: transparent;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.confirm-cancel-button:hover {
+  background: var(--bg);
+}
+
+.confirm-cancel-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 360px) {
+  .confirm-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-actions button {
+    width: 100%;
+  }
+}

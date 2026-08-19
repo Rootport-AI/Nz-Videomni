@@ -1,0 +1,96 @@
+.lora-chip-row {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lora-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.lora-chip-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Chip reorder (owner real-device review, 2026-08-02): plain text, not a
+ * button — sits right before the video-strength value, mirroring
+ * `.lora-chip-strength`'s font but without the monospace (it's an icon, not
+ * a number). */
+.lora-chip-video-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.lora-chip-strength {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--text-muted);
+}
+
+/* Style LoRA音声強度制御 (2026-08-02); reordered to sit right of the mute
+ * toggle (owner real-device review, 2026-08-02) and now ALWAYS shown
+ * (previously only for a 3-argument tag) — mirrors `.lora-chip-strength`'s
+ * look but dimmed further while muted (audio_strength === 0), matching the
+ * mute toggle's own dimmed state below. */
+.lora-chip-audio {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.lora-chip-audio-muted {
+  opacity: 0.5;
+}
+
+.lora-chip-btn,
+.lora-chip-remove,
+.lora-chip-audio-toggle {
+  appearance: none;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  border-radius: 50%;
+  font-size: 12px;
+  padding: 0;
+}
+
+.lora-chip-btn:hover,
+.lora-chip-remove:hover,
+.lora-chip-audio-toggle:hover {
+  background: var(--accent-border);
+}
+
+/* Style LoRA音声強度制御 (2026-08-02): dimmed while muted (audio_strength ===
+ * 0), same visual language as `.lora-chip-audio-muted`'s badge — the toggle
+ * itself always shows 🔊/🔇, so the dimming is what signals "currently
+ * muted" at a glance rather than relying on the emoji alone. */
+.lora-chip-audio-toggle-muted {
+  opacity: 0.5;
+}
+
+.lora-chip-remove {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.lora-chip-remove:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}

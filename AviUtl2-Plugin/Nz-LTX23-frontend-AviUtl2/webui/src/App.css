@@ -1,0 +1,159 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Tool-version dropdown (2026-08-19, mock): sits where the old <h1> title
+   sat, so it borrows that title's exact type (size/weight/letter-spacing) —
+   a bare <select> does not inherit those from the page by default in every
+   browser, so they are repeated here rather than relied on. No other
+   <select> in this app overrides its native chrome (background/border/
+   arrow) either, so this one does not start doing that — only the font. */
+.app-title-select {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge-checking {
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.badge-connected {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.badge-disconnected {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* N13: neutral "not applicable/not configured" tone — distinct from
+   `.badge-checking`'s pending state (same muted text color, but a raised
+   background so the two don't read as the same status at a glance). */
+.badge-neutral {
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+
+.primary-button {
+  appearance: none;
+  border: 1px solid var(--accent-border);
+  color: #fff;
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
+}
+
+.primary-button:hover:not(:disabled) {
+  /* N8: was a hardcoded lighter blue (`#4a93ea`) that only matched the dark
+     palette's `--accent`. `brightness()` derives the hover shade from
+     whichever `--accent` is active instead of hand-picking a second hex per
+     theme. */
+  filter: brightness(1.15);
+}
+
+.primary-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.primary-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.card h2 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-error {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.error-code {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--danger);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.edit-info-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  row-gap: 8px;
+  column-gap: 16px;
+}
+
+.edit-info-row {
+  display: contents;
+}
+
+.edit-info-row dt {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.edit-info-row dd {
+  margin: 0;
+  font-family: ui-monospace, Consolas, monospace;
+  text-align: right;
+}

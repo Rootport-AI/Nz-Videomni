@@ -1,0 +1,113 @@
+/* §1-17 Retake の「撮り直す区間」バー（modes/edit/RangeBand.tsx）。
+   色はすべて index.css のテーマ変数を通しているので、明/暗の切り替えに自動で
+   追随する（新しい色は足さない）。寸法・重ねの作りは
+   modes/single/KeyframeTimeline.css を写している。 */
+
+.range-band {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.range-band-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* 1 層目: 素材全長帯。バーの全幅が素材ファイルの長さ。 */
+.range-band-track {
+  position: relative;
+  width: 100%;
+  min-width: 240px;
+  height: 18px;
+  margin: 14px 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border) 55%, transparent);
+  overflow: visible;
+  touch-action: none;
+}
+
+/* 2 層目: 窓。ドラッグの本体。 */
+.range-band-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  box-sizing: border-box;
+  cursor: grab;
+  touch-action: none;
+}
+
+.range-band-window-dragging {
+  cursor: grabbing;
+  border-color: var(--accent);
+}
+
+/* 3 層目: 糊代帯。窓の内側の両端。**見せるだけ**で、ポインタは素通りさせて
+   下の窓本体のドラッグへ渡す（DOM 上も窓の子ではなく兄弟にしてある）。 */
+.range-band-glue {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--text-muted) 45%, transparent),
+    color-mix(in srgb, var(--text-muted) 45%, transparent) 3px,
+    transparent 3px,
+    transparent 7px
+  );
+}
+
+.range-band-glue-head {
+  border-radius: 4px 0 0 4px;
+}
+
+.range-band-glue-tail {
+  border-radius: 0 4px 4px 0;
+}
+
+/* 4 層目: ハンドル 2 つ。 */
+.range-band-handle {
+  position: absolute;
+  top: -5px;
+  width: 12px;
+  height: 28px;
+  margin-left: -6px;
+  border: 1px solid var(--accent-border);
+  border-radius: 3px;
+  background: var(--bg-raised);
+  cursor: ew-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.range-band-handle:hover,
+.range-band-handle:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.range-band-handle:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-border);
+}
+
+/* 読み出しの主表示（タイムラインの何フレーム目を撮り直すか）。副表示の
+   `.range-band-readout` より一段強く出す —— ここが一番見てほしい行。 */
+.range-band-placement {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.range-band-readout {
+  margin: 0;
+  color: var(--text);
+}
+
+.range-band-note {
+  margin: 0;
+}

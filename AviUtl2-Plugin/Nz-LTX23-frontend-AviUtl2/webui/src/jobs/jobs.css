@@ -1,0 +1,198 @@
+/* U-R1: the always-on job ledger inside Create/Chain's generation panel
+ * (replaces the old right-hand `.job-rail`). Always expanded — the body just
+ * scrolls in place once it outgrows its capped height. */
+.job-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  /* Fill the generation column's remaining height below its heading so the
+   * ledger card ends flush with the left form (grid `stretch`, now that
+   * `.single-layout` dropped `align-items: start`). `min-height: 0` lets the
+   * scrolling body inside actually shrink. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.job-ledger-heading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.job-ledger-body {
+  overflow-y: auto;
+  /* Height model: the 同丈 (same-height) match with the left form comes
+   * entirely from `.single-layout`'s grid `stretch` (formAccordion.css) —
+   * nothing in this file sets a height to make that happen. What this file IS
+   * responsible for is stopping a huge job list from inflating the page:
+   * `flex: 1 1 0` uses a zero flex-basis so this body's own content (however
+   * tall) doesn't count toward `.generation-column`'s intrinsic height —
+   * only the flex space actually handed down from the stretched column does.
+   * With `min-height: 0` that lets the body shrink below its content and
+   * scroll internally instead of pushing the page to thousands of pixels
+   * tall. Do NOT change this back to `flex: 1 1 auto` or add a `max-height`
+   * here or on `.generation-column` — both have broken this layout before. */
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.job-ledger-empty {
+  padding: 8px 0;
+}
+
+.job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.job-list-item {
+  min-width: 0;
+}
+
+.job-list-item--highlighted .job-card {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border);
+}
+
+.job-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.job-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  gap: 8px;
+}
+
+.job-card-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.job-card-id {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Seed used for this job (⑤): `#<seed>` when known, otherwise the "random"
+ * word. Same muted monospace look as the job id it sits next to. */
+.job-card-seed {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.job-card-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.job-card-play {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.job-card-play:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.job-card-video {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 6px;
+  background: #000;
+}
+
+.badge-queued {
+  color: var(--text-muted);
+  background: var(--bg-raised);
+}
+
+.badge-running {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.badge-completed {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.badge-failed,
+.badge-cancelled {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.badge-clip {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.join-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.join-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* I5: the two trim-length radios (120/240 frames) sit in a row under their
+ * shared label, mirroring the batch prompt-mode radio row. */
+.join-trim-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* U-R1 MJ-3: on a narrow window / docked panel the generation panel stacks
+ * above the form (`order: -1` in formAccordion.css). Shrink the ledger's
+ * scroll area there so it never eats the screen and buries the form below it.
+ * Container query on the same `mode-body` container the sibling breakpoints
+ * use. */
+@container mode-body (max-width: 680px) {
+  .job-ledger-body {
+    /* Below this width the form and ledger stack in one column (`order: -1`
+     * in formAccordion.css) instead of sitting in the two-column grid, so
+     * `.generation-column` is no longer grid-stretched to a set height — it's
+     * just auto height. The base rule's `flex: 1 1 0` assumes a stretched
+     * flex parent handing down real space; without one, a zero basis has
+     * nothing to grow from and this body collapses to 0 height, making the
+     * ledger disappear. Restoring `flex: 1 1 auto` here lets it size from its
+     * own content again, and `max-height: 25vh` (below) caps that so the
+     * stacked ledger still can't push the form off-screen. */
+    flex: 1 1 auto;
+    max-height: 25vh;
+  }
+}

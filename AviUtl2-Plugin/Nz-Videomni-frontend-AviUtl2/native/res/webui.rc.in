@@ -1,0 +1,10 @@
+// webui.rc.in - CMake-configured resource script (see CMakeLists.txt,
+// NZVIDEOMNI_EMBED_WEBUI). Embeds the single-file Web UI (webui/dist-single/
+// index.html, or an override supplied through NZVIDEOMNI_WEBUI_SINGLE_HTML) as a
+// named RCDATA resource. webview_host.cpp looks this up at runtime with
+// FindResourceW(module, L"NZVIDEOMNI_WEBUI_INDEX", RT_RCDATA); when present it is
+// served from memory and the on-disk webui\ folder is not required.
+//
+// @NZVIDEOMNI_WEBUI_SINGLE_HTML_RC@ is a build-time absolute path with backslashes
+// doubled for the RC string literal.
+NZVIDEOMNI_WEBUI_INDEX RCDATA "@NZVIDEOMNI_WEBUI_SINGLE_HTML_RC@"

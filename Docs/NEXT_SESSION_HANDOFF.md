@@ -38,6 +38,7 @@
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
+| フロントエンド [`Mock/AVIUTL2_DESIGN_BRIEF.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Mock/AVIUTL2_DESIGN_BRIEF.md) | **フロントエンドのデザインブリーフの正本。** バックエンド側の[`AVIUTL2_DESIGN_BRIEF.md`](AVIUTL2_DESIGN_BRIEF.md)は別物の凍結スナップショットであり、これとは区別すること |
 
 **アーカイブ文書**（歴史の保管庫。内容は当時のままで、更新しない）
 

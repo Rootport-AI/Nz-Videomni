@@ -1,3 +1,4 @@
 # Batch files must stay CRLF. cmd.exe mis-parses LF-only .bat on some systems,
 # so keep git from normalising them.
 *.bat text eol=crlf
+put_*_here.txt text eol=crlf

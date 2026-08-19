@@ -1,0 +1,1 @@
+﻿テキストエンコーダの .gguf を置く場所です(直下のみ自動認識)。text projection と tokenizer/ はインストーラが配置します。

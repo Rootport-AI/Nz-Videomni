@@ -1,0 +1,1 @@
+﻿Gemma の tokenizer 一式(約40MB)。インストーラが配置します。

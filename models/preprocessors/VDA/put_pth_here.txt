@@ -1,0 +1,1 @@
+﻿Video-Depth-Anything の .pth と LICENSE。インストーラが配置します。

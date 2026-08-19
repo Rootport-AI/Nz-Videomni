@@ -1,0 +1,1 @@
+﻿ここに .gguf を置くと自動認識されます(サブフォルダ可)。safetensors形式のモデルは Nz-GGUF-Converter-LTX23 でGGUFに変換してから置いてください。

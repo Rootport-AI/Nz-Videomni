@@ -24,7 +24,9 @@
 
 ## 2. 文書の地図（どれを読み、どれを直すか）
 
-**生きた文書**（現在の仕様・手順を書くもの。読む人は必ずここを見る）
+文書は3つに分ける。**①生きた文書**（現状を現在形で書く。随時更新する）／**②追記専用の記録簿**（過去の記述は書き換えない。新しい記録を必ず追記する）／**③凍結文書**（一切触らない）。
+
+### ① 生きた文書（現在の仕様・手順を書くもの。読む人は必ずここを見る）
 
 | 文書 | 役割 |
 |------|------|
@@ -40,15 +42,21 @@
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
 | フロントエンド [`Mock/AVIUTL2_DESIGN_BRIEF.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Mock/AVIUTL2_DESIGN_BRIEF.md) | **フロントエンドのデザインブリーフの正本。** バックエンド側の[`AVIUTL2_DESIGN_BRIEF.md`](AVIUTL2_DESIGN_BRIEF.md)は別物の凍結スナップショットであり、これとは区別すること |
 
-**アーカイブ文書**（歴史の保管庫。内容は当時のままで、更新しない）
+### ② 追記専用の記録簿（過去の記述は書き換えない。新しい記録を必ず追記する）
 
 - [`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md) — 過去の引き継ぎエントリ
 - [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) — 実機検証の全経緯。**各テーマの最新状態は必ずここの該当節（節末尾の「状態」表記）で確認する**
 - [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) — クローズ済み項目の完了記録
 - フロントエンド `Docs/DEVLOG.md` — フロントエンド側の実装ログ
-- 各 `*_WORKORDER.md` / `*_STATUS.md` / `*_RESEARCH.md` と、完了済み・凍結済みの設計書（[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)、[`AVIUTL2_DESIGN_BRIEF.md`](AVIUTL2_DESIGN_BRIEF.md) など。**当時の記述のままなので、旧ディレクトリ構成や旧モデル配置が残っている**）
 
-> **歴史はアーカイブ側に書く。** 生きた文書には現在の姿だけを現在形で書き、経緯はアーカイブ文書に委ねること。
+### ③ 凍結文書（一切触らない。当時の記述のままなので、旧ディレクトリ構成や旧モデル配置が残っている）
+
+- 各 `*_WORKORDER.md` / `*_STATUS.md`
+- 完了済み・凍結済みの設計書（[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)、バックエンド側の[`AVIUTL2_DESIGN_BRIEF.md`](AVIUTL2_DESIGN_BRIEF.md) など）
+
+> **歴史は②・③側に書く（②は追記、③は不変）。** 生きた文書（①）には現在の姿だけを現在形で書き、経緯は②・③の文書に委ねること。
+>
+> **凡例**: ここに挙がっていない `Docs/` の文書は原則アーカイブ扱い（②または③のいずれか）。例外は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §0.3 の SSOT 表に載っているもの（アーカイブ形式の文書が仕様の正本を兼ねる場合がある。例: [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)）。
 
 ---
 
@@ -67,8 +75,8 @@
 作業ディレクトリは `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/`。
 
 - ビルド: `powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Config Release`。Web UI（`webui/`）の `npm run build:single` を先に走らせ、その単一 HTML を `.aux2` へ埋め込む（**埋め込みが既定**）。出力は `build\ninja-release\NzVideomni.aux2`。
-- デプロイ: `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -Config Release`。**2箇所へ配る**——実機の AviUtl2 インストール先（既定 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin` の `NzVideomni\NzVideomni.aux2`。`Language\*.NzVideomni.aul2` も同じインストール先へ）と、**本リポジトリの配布用コピー `AviUtl2-Plugin\NzVideomni.aux2`**。後者を忘れると、利用者が受け取るプラグインだけが古いままになる。
-- 型検査は `npm run typecheck`（`webui/` で実行）。`npx tsc --noEmit` は偽の合格を出すので使わないこと。
+- デプロイ: `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -Config Release`。**2箇所へ配る**——実機の AviUtl2 インストール先（既定 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin` の `NzVideomni\NzVideomni.aux2`。`Language\*.NzVideomni.aul2` は同じAviUtl2インストールの`data\Language\`〔`Plugin\`の兄弟〕へ）と、**本リポジトリの配布用コピー `AviUtl2-Plugin\NzVideomni.aux2`**。後者を忘れると、利用者が受け取るプラグインだけが古いままになる。
+- 機械検証は3点セット（いずれも `webui/` で実行）: 型検査 `npm run typecheck`（`npx tsc --noEmit` は偽の合格を出すので使わないこと）・テスト `npm run test -- --run`（vitest）・静的検査 `npm run lint`。
 - `.aux2` はビルドスクリプト経由でのみ作る（ninja を直接叩くと Web UI の埋め込みが更新されない）。
 
 ### MCP サーバー
@@ -106,8 +114,7 @@ models/
 - **End source（素材（末尾）＝添付した画像・動画へ繋がる動画の生成）テーマは完結している。** オーナー裁定により、**クリップ1本での使用が推奨**、複数クリップは受理されるが推奨外（品質劣化は仕様として許容）。品質重視で複数クリップを繋ぐ場合の実用手順は「正順 Chained ＋最終クリップだけ補間仕上げ」で、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11 と `README.md` の手動リレー節に記載がある（**実機検証は未実施**）。
 - **Single タブの賢い快適上限マーカーも完結している。** 5つの高速化トグルが全て on のときだけ `limits.single_comfort_token_budget`（44,880）からの逆算式でマーカーを引き、1つでも off なら従来の `spill_free_frames` へフォールバックする。
 - **台帳の「1. 近日中の改修項目」に残っているのは §1-4 だけ**——オーナー自身が README のスピードガイドを書く作業であり、AI エージェントが実装するタスクではない。次に着手する候補は「3. 将来の研究課題」から選ぶ（直近の起票は §3-96 End source 付き連結クリップの改善研究、§3-95 快適上限の適用拡大、§3-54／§3-55 の軽量ユーティリティAI と Inpainting）。
-- **プリセットのフレーム数を引き上げ済み**（720p 361 / FHD 169 / WQHD 89、既定 361）。`config.yaml`・`config.yaml.example`・フロントエンドの `defaultConfig.ts` の3点を一致させてある。反映はバックエンド再起動後。
-- **ヘッダーのモデル名ドロップダウン（「LTX 2.3」既定 ／「LTX 2.5」はモック）を新設済み。** オーナーの目視確認は次回セッション以降。
+- **プリセットのフレーム数引き上げとヘッダーのモデル名ドロップダウン新設は実装済み・オーナーの実機テスト待ち。** 確認待ちの項目と合格条件は[`PENDING_TASKS.md`](PENDING_TASKS.md) §2（§2-1・§2-2）が正——本書には内容を重複させない。
 
 ---
 
@@ -119,3 +126,5 @@ models/
 - **環境隔離を厳守する。** システム Python は触らない。依存はすべてプロジェクト配下の venv に閉じ込める。
 - **人間向けの説明は普通のまともな日本語で書く。** 内部の略語は避け、使うときは短い解説を添える。結論を先に書く。
 - 検証は交互対比較・機械検証・実機ゲートの順で積み上げ、結果は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ、課題の増減は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ記録する。
+- **目視検証**: 720p級（1280×768）以上＋映画トレイラー風プロンプト＋「賑やかな町＋セリフ」題材で行う（512×320級は顔溶けで判断不能）。客観PASSとユーザー目視ゲートを混同しない。実験前に仮説→裏取り（手当たり次第の実験禁止）。
+- **サブエージェント**: Opus以下を使う（Fable5禁止）・非破壊・能動ポーリング監視（ウォッチャー待ち停止禁止）・異常時は続行せず報告。GPU計測の一次ソースは`logs/ltx_worker.log`の`peak_vram_mb`。

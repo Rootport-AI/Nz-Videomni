@@ -1,4 +1,4 @@
-# LTX 2.3 バックエンド仕様書
+# Nz-Videomni バックエンド仕様書（LTX 2.3 対応）
 
 LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio）
 
@@ -95,9 +95,10 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | `config.yaml.example` | 配布されるひな型。**リポジトリに入っているのはこちらだけ**で、`config.yaml` は `setup.bat` / `run.bat` がここから複製する |
 | `Docs/VERIFICATION_LOG.md` | 実機検証の全経緯・実測 peak_vram/秒数・SHA256 バイト一致・設計判断の根拠 |
 | `Docs/MCP_SERVER_DESIGN.md` | MCPサーバー（`mcp_server/`）の設計判断（ツール分割・非同期化・エラー翻訳・`.mcp.json` 生成方式 等） |
-| `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md` | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の仕様・設計判断 |
+| `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`（アーカイブ形式だが仕様の正本として現役） | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の仕様・設計判断 |
 | `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
+| `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値と逆算式の正本 |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
 | `Docs/NEXT_SESSION_HANDOFF.md` | セッション間の引き継ぎ（リポジトリの形・文書の地図・開発の基本操作・直近の状況）。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |

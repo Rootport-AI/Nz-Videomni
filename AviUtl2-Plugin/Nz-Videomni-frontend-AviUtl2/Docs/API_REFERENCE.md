@@ -4,7 +4,7 @@
 
 関連ドキュメント: [SDK_REFERENCE.md](SDK_REFERENCE.md) ／ [WEB_RESEARCH.md](WEB_RESEARCH.md) ／ [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) ／ [BRIDGE_CONTRACT.md](BRIDGE_CONTRACT.md) ／ [DEVLOG.md](DEVLOG.md)
 
-対象: `Nz-Videomni`（REST API）。**基本方針は凍結**（フロントエンド側の都合でバックエンドAPIを変えない）だが、**V2V結合(Join)機能の復活のために限定的な解除・拡張を行った実績がある**（`POST /jobs/{job_id}/join` の `source_tail_seconds`、応答の `trimmed_source_seconds`／`source_fps` など。本文§3.17・§3.18・§6に反映済み）。したがって「変更禁止」ではなく「必要が確定した箇所だけをオーナー承認のうえで拡張する」という運用である。本ドキュメントはフロントエンド(`.aux2`プラグイン)実装のための一次参照であり、`gradio_ui/api_client.py` ・ `gradio_ui/handlers.py` ・ `Videomni_Backend_Specification.md` ・ [`../Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md)（デザインブリーフの生きた正本・**必読**。リポジトリ直下の`Docs/AVIUTL2_DESIGN_BRIEF.md`はv2時点で凍結した歴史的スナップショット、オーナー決定2026-08-11）を根拠資料とする。
+対象: `Nz-Videomni`（REST API）。**基本方針は凍結**（フロントエンド側の都合でバックエンドAPIを変えない）だが、**V2V結合(Join)機能の復活のために限定的な解除・拡張を行った実績がある**（`POST /jobs/{job_id}/join` の `source_tail_seconds`、応答の `trimmed_source_seconds`／`source_fps` など。本文§3.17・§3.18・§6に反映済み）。したがって「変更禁止」ではなく「必要が確定した箇所だけをオーナー承認のうえで拡張する」という運用である。本ドキュメントはフロントエンド(`.aux2`プラグイン)実装のための一次参照であり、`gradio_ui/api_client.py` ・ `gradio_ui/handlers.py` ・ `Videomni_Backend_Specification.md` ・ [`../Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md)（デザインブリーフの生きた正本・**必読**。モノレポ直下の`Docs/AVIUTL2_DESIGN_BRIEF.md`（凍結スナップショット。v2時点で凍結、オーナー決定2026-08-11）は別物）を根拠資料とする。
 
 ---
 

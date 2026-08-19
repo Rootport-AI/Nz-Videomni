@@ -205,7 +205,7 @@ N = (W/32) × (H/32) × (1 + (F-1)/8)
 
 ### 8.5 （参考・将来課題）8GB VRAM での capability フェルミ推定 → 台帳へ移設済み
 
-> ⚠️ **8GB対応は現プロジェクトの当面の対象外。** 本節にあったフェルミ推定表（480p ~177f／720p ~73–81f／1080p ~33f／1440p ~9f／4Kは静止画1枚のみ。実測ではなく §8.4 の枠組みを 8GB へ外挿した**楽観的上限**）は、2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-4へ移設した。**以後の管理は同書で行う。** 16GB の実測正本は本書§8.4・§8.6（本節の外挿元）。8GB での有効な調整軸（`block_swap_blocks_on_gpu` を 8 から減らす）も同書 §4-4 へ収録済み。
+> ⚠️ **8GB対応は現プロジェクトの当面の対象外。** 本節にあったフェルミ推定表（480p ~177f／720p ~73–81f／1080p ~33f／1440p ~9f／4Kは静止画1枚のみ。実測ではなく §8.4 の枠組みを 8GB へ外挿した**楽観的上限**）は、2026-07-27の整理で[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §4-4へ移設した。**以後の管理は同書で行う。** 16GB の実測正本は本書§8.4・§8.6（本節の外挿元）。8GB での有効な調整軸（`block_swap_blocks_on_gpu` を 8 から減らす）も同書 §4-4 へ収録済み。
 
 ### 8.6 直接実測スイープ（2026-07-01・16GB本番設定・dedicated/shared 実測）
 QAT/text-only リファクタ後、本番 production path で 480p–4K × 2–20秒の **11本を生成**し、**専用(dedicated)・共有(shared) GPU メモリを perf-counter で実測**（RTX 4070 Ti SUPER の LUID にロック・全11本成功/OOMゼロ）。これが §8.4 の「溢れない尺」を式外挿でなく直接確定した根拠。データ＝`outputs/vram_sweep/sweep_manifest.json`。

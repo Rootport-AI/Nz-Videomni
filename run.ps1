@@ -1,4 +1,4 @@
-﻿# run.ps1 — Nz-LTX23 バックエンドの起動（run.bat から呼び出される本体）
+﻿# run.ps1 — Nz-Videomni バックエンドの起動（run.bat から呼び出される本体）
 #
 # このファイルは必ずリポジトリ直下に置くこと。$PSScriptRoot を基準に
 # .python / .venv / main.py を探しているため、scripts\ などへ移すと
@@ -26,7 +26,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 
-try { $Host.UI.RawUI.WindowTitle = 'Nz-LTX23 サーバー（この画面は閉じないでください）' } catch { }
+try { $Host.UI.RawUI.WindowTitle = 'Nz-Videomni サーバー（この画面は閉じないでください）' } catch { }
 
 # Keep uv-managed Python inside the project (process-scoped).
 $env:UV_PYTHON_INSTALL_DIR = "$PSScriptRoot\.python"

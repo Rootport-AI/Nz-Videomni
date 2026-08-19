@@ -1,6 +1,6 @@
 # 生成高速化 研究ノート
 
-本書は、生成の高速化にまつわるアイディアと検討結果を集約する置き場である。台帳（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)）は優先度順の一覧を保つための文書であり、高速化ネタを検討するたびにそこへ長文を書き足すと台帳が肥大化する。そこで個々のアイディアの概要・見込み・前提条件・リスクは本書に置き、台帳側は本書への相対リンク1本（§3-53）で委譲する。**個々の実測値そのものの正本は各テーマの[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節**であり、本書はそれらを見比べて次に着手する候補を選ぶための整理用ノートという位置づけである。
+本書は、生成の高速化にまつわるアイディアと検討結果を集約する置き場である。台帳（フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md)）は優先度順の一覧を保つための文書であり、高速化ネタを検討するたびにそこへ長文を書き足すと台帳が肥大化する。そこで個々のアイディアの概要・見込み・前提条件・リスクは本書に置き、台帳側は本書への相対リンク1本（§3-53）で委譲する。**個々の実測値そのものの正本は各テーマの[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節**であり、本書はそれらを見比べて次に着手する候補を選ぶための整理用ノートという位置づけである。
 
 ## 現在地（2026-08-04時点）
 
@@ -17,7 +17,7 @@
 
 ### 1. fused GGUF dequant+GEMM（GEMM融合はno-go継続。「逆量子化の1カーネル化」は**実装完了・既定on**）
 
-GGUFの逆量子化（dequantization）と行列積（GEMM）を1カーネルへ融合し、中間データの書き出しを省く案。2026-08-01に実装せずクローズ済み（正本＝台帳[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-61、根拠データ＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §44.3）。
+GGUFの逆量子化（dequantization）と行列積（GEMM）を1カーネルへ融合し、中間データの書き出しを省く案。2026-08-01に実装せずクローズ済み（正本＝台帳[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-61、根拠データ＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §44.3）。
 
 **2026-08-03の再検算**: 165秒（三者併用フルスタック時のジョブ全体）を分母に取ると、逆量子化の見た目の割合は約11%まで育つ。しかし融合カーネルで実際に削れるのは一時BF16の往復分のみで、その量は変わらず約2.3秒＝**約1.4%**にとどまる。分母（ジョブ全体の生成時間）が縮んだことで割合の見え方は変わるが、削減できる絶対量は不変なので、クローズ判断は変わらない（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48.10）。
 
@@ -28,7 +28,7 @@ GGUFの逆量子化（dequantization）と行列積（GEMM）を1カーネルへ
 - 副産物として、**CPU側のカーネル発行時間がGPU実行時間を大きく上回っている**ことが判明した（逆量子化でCPU 93.2秒 対 GPU 21.8秒）。denoiseはGPUの計算力ではなくCPUの発行で律速している。1カーネル化はこちらも同時に削るため、期待削減20.1秒は上振れしうる。
 - 実装方式は**Triton自作カーネル**（本番は`TORCH_COMPILE_DISABLE=1`固定のため`torch.compile`は使えない）。
 
-**2026-08-04に実装完了・既定on**（正本＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §51、台帳＝[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11）。Q4_K・Q5_K・Q6_Kの3本のTritonカーネルへ融合し、実機ゲートG1〜G8全項目に合格した。**実測短縮は25.28秒＝約17.5%**で、期待値の20.1秒を上回った（CPU側のカーネル発行時間も同時に削れたため）。生成結果はビット単位で不変。
+**2026-08-04に実装完了・既定on**（正本＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §51、台帳＝[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11）。Q4_K・Q5_K・Q6_Kの3本のTritonカーネルへ融合し、実機ゲートG1〜G8全項目に合格した。**実測短縮は25.28秒＝約17.5%**で、期待値の20.1秒を上回った（CPU側のカーネル発行時間も同時に削れたため）。生成結果はビット単位で不変。
 
 ### 2. テキストcross-attentionのK/Vキャッシュ
 
@@ -108,4 +108,4 @@ sigma・タイムステップ埋め込み・RoPEのsin-cos・position IDなど�
 - **その次は後処理の動画エンコード（x264）の36.77秒**。分母としては最大だが、生成そのものではなくファイル書き出しの時間である。
 - (1)プロンプト埋め込みのジョブ間キャッシュ: 土台となるテキストエンコードは**3.81秒**と判明した。全部消せたとしても上限3.8秒で、しかも同一プロンプト運用に限られる。**優先度は下がる**。
 
-台帳の対応項目: フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-53（2026-08-04に§4-27から昇格）。
+台帳の対応項目: フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-53（2026-08-04に§4-27から昇格）。

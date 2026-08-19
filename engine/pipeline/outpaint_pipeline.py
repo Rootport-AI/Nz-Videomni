@@ -4,7 +4,7 @@ Reproduces the official Lightricks ComfyUI workflow
 ``LTX-2.3_ICLoRA_Outpaint_Two_Stage_Distilled.json`` (a copy lives in
 ``uploads/_outpaint_verify/``) on top of THIS repo's low-VRAM pipeline. Design
 context and the decision record are in
-``../../Nz-LTX23-frontend-AviUtl2/Docs/OUTPAINTING_DESIGN_NOTES.md``.
+``../../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/OUTPAINTING_DESIGN_NOTES.md``.
 
 Why this is a separate module rather than a flag on the single-generate path:
 ``LTXFastVideoPipeline._run_inference`` delegates two levels down into the

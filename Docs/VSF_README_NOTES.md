@@ -73,4 +73,4 @@ LTX 2.3では、正のプロンプト情報は注意計算に渡る直前に**Ad
 - VSF論文: arXiv:2508.10931（参考実装 github.com/weathon/VSF は実験的段階のため、実装の正本は論文の式とした）
 - NAG論文: arXiv:2505.21179
 - 検証の正本: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41（設計根拠41.1〜、実機ゲート41.5、目視評価41.9、縮退41.10）
-- 目視評価に使った動画セット: Hugging Face `Rootport/Nz-LTX23-vsf-eval-20260729`（非公開データセット・比較表つき）
+- 目視評価に使った動画セット: Hugging Face `Rootport/Nz-Videomni-vsf-eval-20260729`（非公開データセット・比較表つき）

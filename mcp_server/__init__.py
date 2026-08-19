@@ -1,4 +1,4 @@
-"""Nz-LTX23 MCP server (AI-agent facing bridge over the existing HTTP API).
+"""Nz-Videomni MCP server (AI-agent facing bridge over the existing HTTP API).
 
 Import-only: this module must have zero side effects (no logging config, no
 network, no filesystem access) so ``import mcp_server`` is always safe from

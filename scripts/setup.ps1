@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Nz-LTX23 バックエンドの導入スクリプト（setup.bat から呼び出される本体）。
+    Nz-Videomni バックエンドの導入スクリプト（setup.bat から呼び出される本体）。
 
 .DESCRIPTION
     PowerShell を自分で開けない利用者でも、setup.bat をダブルクリックするだけで
@@ -267,7 +267,7 @@ function New-McpJson {
     }
     $mcpConfig = [ordered]@{
         mcpServers = [ordered]@{
-            'nz-ltx23' = [ordered]@{
+            'nz-videomni' = [ordered]@{
                 command = $pythonExe
                 args    = @('-m', 'mcp_server')
                 env     = [ordered]@{ PYTHONUTF8 = '1' }
@@ -316,7 +316,7 @@ function Show-InstallFailureHelp {
 # ===========================================================================
 # ここから本編
 # ===========================================================================
-try { $Host.UI.RawUI.WindowTitle = 'Nz-LTX23 セットアップ（setup.bat）' } catch { }
+try { $Host.UI.RawUI.WindowTitle = 'Nz-Videomni セットアップ（setup.bat）' } catch { }
 
 New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 
@@ -352,7 +352,7 @@ $exitCode = 0
 try {
     Write-Host ''
     Write-Host '========================================================================' -ForegroundColor Cyan
-    Write-Host '   Nz-LTX23 バックエンド セットアップ' -ForegroundColor Cyan
+    Write-Host '   Nz-Videomni バックエンド セットアップ' -ForegroundColor Cyan
     Write-Host '========================================================================' -ForegroundColor Cyan
     Write-Host ''
     Write-Info ('作業フォルダ: ' + $ProjectRoot)

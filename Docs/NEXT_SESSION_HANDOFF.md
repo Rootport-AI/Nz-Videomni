@@ -6,11 +6,11 @@
 
 > **本ブロックが「日付として最新」の座を継ぐ。** 以下の▶節（2026-08-18の第3弾ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
-> 1. **End sourceテーマ（第1段階・第2段階＝逆順Chained・第3弾＝錨音声凍結）は、オーナーの目視・試聴ゲート込みで完結した。** バッチ1（錨の固定強度）はG1-R2〜R4すべて合格（正本[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §63.6）。バッチ2（逆順Chained）はV1・V3・V5・V6・R2-9（仮オブジェクトの位置合わせ・ブレンド幅スライダー自動1化を含む）・R2-10・R2-11すべて合格、R2-7（旧方式との新旧A/B目視）も実施済みで、正順の継ぎ目（初期値問題）と逆順の継ぎ目（境界値問題）が構造的に裏返しの関係にあることが確認された（正本同§64.7）。第3弾（錨音声凍結）は(3)〜(7)全項目クローズし試聴ゲート込みで完結した（正本同§65.9）。**残作業は無い**——フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2は全項目完了につき節ごと削除済み、台帳の完結記録は同[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
+> 1. **End sourceテーマ（第1段階・第2段階＝逆順Chained・第3弾＝錨音声凍結）は、オーナーの目視・試聴ゲート込みで完結した。** バッチ1（錨の固定強度）はG1-R2〜R4すべて合格（正本[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §63.6）。バッチ2（逆順Chained）はV1・V3・V5・V6・R2-9（仮オブジェクトの位置合わせ・ブレンド幅スライダー自動1化を含む）・R2-10・R2-11すべて合格、R2-7（旧方式との新旧A/B目視）も実施済みで、正順の継ぎ目（初期値問題）と逆順の継ぎ目（境界値問題）が構造的に裏返しの関係にあることが確認された（正本同§64.7）。第3弾（錨音声凍結）は(3)〜(7)全項目クローズし試聴ゲート込みで完結した（正本同§65.9）。**残作業は無い**——フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2は全項目完了につき節ごと削除済み、台帳の完結記録は同[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
 > 2. **新規研究課題§3-96（End source付き連結クリップの改善研究）を起票した。** R2-7のA/B結果を踏まえ、新方式（逆順Chained）と旧方式（正順・内部区画）の切替UI等、よりユーザーフレンドリーな改善方法を実用の中で探る課題。旧方式は現在APIから到達不能の死蔵状態（`end_source_mode_override`はテスト専用でAPI非露出）で、削除はせず比較材料として温存する（オーナー裁定）。「正順Chained＋最終クリップだけ補間仕上げ」という実用手順（全継ぎ目を綺麗な側で構成できる・出荷済み機能の組み合わせ・実機検証は未実施）を研究ノート[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11へ追記した。README.mdの手動リレー節にも、この手順を「手動リレーの上位互換になる可能性がある・未実機検証」として追記済み。
-> 3. **賢い快適上限マーカー（Singleタブ、§2-4）も全10項目合格でクローズした。** 正本[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §66.6、台帳[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-12。**文言修正2件の要望が別途出ており、フロントエンド`strings.ts`等の改修が別エージェントによって進行中**（本ドキュメント整備の対象外・コードは未触）。反映され次第、別途記録する。
+> 3. **賢い快適上限マーカー（Singleタブ、§2-4）も全10項目合格でクローズした。** 正本[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §66.6、台帳[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-12。**文言修正2件の要望が別途出ており、フロントエンド`strings.ts`等の改修が別エージェントによって進行中**（本ドキュメント整備の対象外・コードは未触）。反映され次第、別途記録する。
 > 4. **以上により、2026-08-16〜19のセッションで走っていたテーマはEnd source（全段階）・賢い快適上限マーカーともほぼ完結し、残る作業は新規起票した§3-96（将来課題）と、進行中の文言修正・小改修だけになった。** 本ドキュメント整備の時点で、フロントエンドの一部ファイル（`strings.ts`等）に別エージェントによる**未コミットの変更が存在する**——次セッションはコミット状況を`git status`で確認してから作業を始めること。
-> 5. **【同日追記4】上記3の文言修正2件と、あわせて小改修2件（プリセットのフレーム数引き上げ・ツール名ドロップダウンのモック新設）が実装完了した。** ①文言修正2件（`single.comfortWarningSmart`・Settingsの`spillFreeHint`）はオーナー確定文言へ差し替え済み。②`standard_720p`/`FHD_1080p`/`WQHD_1440p`のプリセットのフレーム数を、`single_comfort_token_budget`（44,880）の逆算式で257→361・153→169・81→89へ引き上げ、`generation_defaults`も361へ揃えた（`config.yaml`・`config.yaml.example`・フロントエンド`defaultConfig.ts`の3点一致。**反映はバックエンド再起動後**）。`limits.spill_free_frames`（全高速化on以外向けのフォールバック表）は意図的に据え置き。③ヘッダーの「Nz-LTX23」表示を「LTX 2.3」（既定）／「LTX 2.5」（モック・選択しても無言で2.3へ戻る）のドロップダウンへ置き換えた。詳細はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §85、プリセット値の設計判断は本リポジトリ[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md)。オーナー目視確認は次回セッション以降。
+> 5. **【同日追記4】上記3の文言修正2件と、あわせて小改修2件（プリセットのフレーム数引き上げ・ツール名ドロップダウンのモック新設）が実装完了した。** ①文言修正2件（`single.comfortWarningSmart`・Settingsの`spillFreeHint`）はオーナー確定文言へ差し替え済み。②`standard_720p`/`FHD_1080p`/`WQHD_1440p`のプリセットのフレーム数を、`single_comfort_token_budget`（44,880）の逆算式で257→361・153→169・81→89へ引き上げ、`generation_defaults`も361へ揃えた（`config.yaml`・`config.yaml.example`・フロントエンド`defaultConfig.ts`の3点一致。**反映はバックエンド再起動後**）。`limits.spill_free_frames`（全高速化on以外向けのフォールバック表）は意図的に据え置き。③ヘッダーの「Nz-Videomni」表示を「LTX 2.3」（既定）／「LTX 2.5」（モック・選択しても無言で2.3へ戻る）のドロップダウンへ置き換えた。詳細はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §85、プリセット値の設計判断は本リポジトリ[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md)。オーナー目視確認は次回セッション以降。
 >
 > 以下は2026-08-18時点の記録（本ブロックにより「日付として最新」の座を譲る）。
 
@@ -22,12 +22,12 @@
 > 2. **フォールバックは「音声トラック無し／デコード不能」のときのみ。** 音声潜在が必要数より少ない端数構成はエラーにせず取れた分だけ凍結し（案B）、デジタル無音の検出はしない（無音の素材は無音のまま凍結される）。画像end source（静止画）は元々音声を持たないため本改修の対象外で、従来どおり自由生成にフォールバックする。
 > 3. **配信される錨区間の音声は原波形のmuxではなく、音声VAE＋ボコーダを1往復した音になる。** cross-attentionを効かせるには潜在である必要があるため（同じ曲だが少しこもった音になるのが仕様）。
 > 4. **機械検証・機械ゲートA1〜A9は全合格。** backend pytestは1,739件中、環境依存の既知1件のみ失敗、frontend typecheck/lint/vitest(2,480件)も全PASS（既知失敗はいずれも本テーマと無関係）。切り戻し用のモジュール定数`END_SOURCE_FREEZE_AUDIO`（既定`true`）を`false`にすると、本改修より前とバイト完全同一の出力に戻ることをA8bで機械証明済み。実装・機械検証・機械ゲート結果の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §65。
-> 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2、フロントエンド側の実装記録（文言のみ・ロジック無改修）は同[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §82が正本。**
-> 6. **実機作業の残件はオーナーの試聴ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2）。まだ未実施。試聴の観点は錨区間の一致・自由区間へのBGM波及・音声版の早着・帯の入口やタイル継ぎ目のクリック・逆順生成での音楽構造・無音素材での聴感の6点。
-> 7. **【同日追記】オーナー目視・試聴ゲートが完了し、End source実用化テーマは裁定で完結した。** T1（1クリップ）の試聴は成功（End sourceと同じ曲調のBGM）、T2/T3（複数クリップ）は最終クリップのみ同じ雰囲気になり他は独立した音楽になることを確認。映像側（round5の第2弾ジョブ）は全条件で末尾（錨直前）に系統的なモーフ、中間の継ぎ目はシード依存で分散（綺麗〜非実用まで）という結果になった。原因の切り分け実験E0/E1（standard窓 vs. high_resolution窓）で、末尾モーフは末端タイル仮説で部分的に説明できるが、タイル割りの変更は根本解決にならないと判明した。**オーナー裁定: End sourceはクリップ1本での使用を推奨し、複数クリップは推奨外の使い方と見做す。複数クリップ時の品質劣化は仕様として許容する。** 根治にはモデル側の到着時刻拘束能力が要る（現行LTX 2.3には無い）。品質重視の複数クリップワークフローは**手動リレー**（クリップ1本ずつend sourceで生成し、生成物を次の素材にして過去へ遡り、AviUtl2タイムライン上で組み合わせる）。詳細・実験結果・考察の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7・§65.8、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、台帳の完結記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
-> 8. **残作業**: (a) UI警告文の実装——「クリップが2本以上のときは、クリップの境目で映像や音声の質が下がることがあります。」の文言は確定済みで、**オーナーの次のUI改修バッチと同時に実装する**（起票はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-22）。(b) 品質の合否とは独立したUI実機確認（G1-R4・R2-9〜R2-11）とG1-R2/R3・一部のV/試聴観点は同[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2に未実施のまま残っている。(c) 新規研究課題2件を起票した——到着時刻の拘束（同§3-91、将来モデルの能力待ち）、グローバル音声パス（同§3-92、音声だけ全長一括生成する再設計・大掛かり）。
-> 9. **【同日追記2】UIバッチ3件が完了した。** ①(a)で予告した警告文をオーナー確定版の文言（「素材（末尾）つきで複数クリップを連結すると、生成結果の品質が低下します。」）で実装済み。②CROP OUTPUTの既定をOFFへ変更した（`config.yaml`・`config.yaml.example`とも`generation_defaults.crop_output: null`——**反映はバックエンド再起動後**）。③§1-18（Retake窓の長尺化構想）はEnd sourceの実装で幾何的に等価な代替（AviUtl2動画編集＋Chainedタブ）が成立したためオーナー裁定で起票取り下げ・クローズ。台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-93（§1-18）・§3-94（§1-22）、フロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §83が実装記録の正本。**あわせて快適上限テーマ**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-12）の資料調査が完了し、本リポジトリ[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md)（フェルミ推定の表・60パターン）を新設した——実機検証の範囲と線引きの値（既定40,000トークン据え置きか）はオーナーとディスカッション中。
-> 10. **【同日追記3】快適上限テーマ（Singleタブの賢いマーカー）が実装完了した。** ディスカッションの結論は「別鍵の新設」——`config.py`の`LimitsConfig`へ`single_comfort_token_budget: int = 44880`を独立フィールドとして新設し（`chain_comfort_token_budget`=40,000とは別鍵・別値）、`GET /config`の`limits`へ自動露出させた。フロントエンドは5つの高速化トグル全onのときだけこの値から逆算式でマーカーを引き、1つでもoffなら従来の`spill_free_frames`へフォールバックする。機械検証は全PASS（バックエンドpytest追加3本含め1721 passed / 20 skipped / 既知1失敗、フロントエンドvitest 2472 passed / 2480、既知失敗はいずれも本テーマと無関係）。台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-12（クローズ）。**残るのはオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-4）とデプロイのみ。実装・機械検証の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §66。
+> 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2、フロントエンド側の実装記録（文言のみ・ロジック無改修）は同[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §82が正本。**
+> 6. **実機作業の残件はオーナーの試聴ゲート**（フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2）。まだ未実施。試聴の観点は錨区間の一致・自由区間へのBGM波及・音声版の早着・帯の入口やタイル継ぎ目のクリック・逆順生成での音楽構造・無音素材での聴感の6点。
+> 7. **【同日追記】オーナー目視・試聴ゲートが完了し、End source実用化テーマは裁定で完結した。** T1（1クリップ）の試聴は成功（End sourceと同じ曲調のBGM）、T2/T3（複数クリップ）は最終クリップのみ同じ雰囲気になり他は独立した音楽になることを確認。映像側（round5の第2弾ジョブ）は全条件で末尾（錨直前）に系統的なモーフ、中間の継ぎ目はシード依存で分散（綺麗〜非実用まで）という結果になった。原因の切り分け実験E0/E1（standard窓 vs. high_resolution窓）で、末尾モーフは末端タイル仮説で部分的に説明できるが、タイル割りの変更は根本解決にならないと判明した。**オーナー裁定: End sourceはクリップ1本での使用を推奨し、複数クリップは推奨外の使い方と見做す。複数クリップ時の品質劣化は仕様として許容する。** 根治にはモデル側の到着時刻拘束能力が要る（現行LTX 2.3には無い）。品質重視の複数クリップワークフローは**手動リレー**（クリップ1本ずつend sourceで生成し、生成物を次の素材にして過去へ遡り、AviUtl2タイムライン上で組み合わせる）。詳細・実験結果・考察の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7・§65.8、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、台帳の完結記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
+> 8. **残作業**: (a) UI警告文の実装——「クリップが2本以上のときは、クリップの境目で映像や音声の質が下がることがあります。」の文言は確定済みで、**オーナーの次のUI改修バッチと同時に実装する**（起票はフロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-22）。(b) 品質の合否とは独立したUI実機確認（G1-R4・R2-9〜R2-11）とG1-R2/R3・一部のV/試聴観点は同[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2に未実施のまま残っている。(c) 新規研究課題2件を起票した——到着時刻の拘束（同§3-91、将来モデルの能力待ち）、グローバル音声パス（同§3-92、音声だけ全長一括生成する再設計・大掛かり）。
+> 9. **【同日追記2】UIバッチ3件が完了した。** ①(a)で予告した警告文をオーナー確定版の文言（「素材（末尾）つきで複数クリップを連結すると、生成結果の品質が低下します。」）で実装済み。②CROP OUTPUTの既定をOFFへ変更した（`config.yaml`・`config.yaml.example`とも`generation_defaults.crop_output: null`——**反映はバックエンド再起動後**）。③§1-18（Retake窓の長尺化構想）はEnd sourceの実装で幾何的に等価な代替（AviUtl2動画編集＋Chainedタブ）が成立したためオーナー裁定で起票取り下げ・クローズ。台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-93（§1-18）・§3-94（§1-22）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §83が実装記録の正本。**あわせて快適上限テーマ**（フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-12）の資料調査が完了し、本リポジトリ[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md)（フェルミ推定の表・60パターン）を新設した——実機検証の範囲と線引きの値（既定40,000トークン据え置きか）はオーナーとディスカッション中。
+> 10. **【同日追記3】快適上限テーマ（Singleタブの賢いマーカー）が実装完了した。** ディスカッションの結論は「別鍵の新設」——`config.py`の`LimitsConfig`へ`single_comfort_token_budget: int = 44880`を独立フィールドとして新設し（`chain_comfort_token_budget`=40,000とは別鍵・別値）、`GET /config`の`limits`へ自動露出させた。フロントエンドは5つの高速化トグル全onのときだけこの値から逆算式でマーカーを引き、1つでもoffなら従来の`spill_free_frames`へフォールバックする。機械検証は全PASS（バックエンドpytest追加3本含め1721 passed / 20 skipped / 既知1失敗、フロントエンドvitest 2472 passed / 2480、既知失敗はいずれも本テーマと無関係）。台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-12（クローズ）。**残るのはオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-4）とデプロイのみ。実装・機械検証の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §66。
 
 ---
 
@@ -35,12 +35,12 @@
 
 > 以下の▶節（2026-08-17ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
-> 1. **End sourceはクリップ2本以上へ拡張された（逆順Chained、`"reverse"`）。** クリップ本数だけで挙動が決まり、**クリップ1本＝窓内モード（`in_window`）／クリップ2本以上＝逆順Chained（`"reverse"`）**の2経路がAPIとして受理されるようになった（**2026-08-18注**: 当時の記述「2経路が推奨」は誤り。同日のち、オーナー裁定によって推奨は「クリップ1本＝窓内モード」の1本のみとなり、逆順Chainedは受理されるが推奨外という扱いに確定した。フロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84、上記の第3弾ブロック参照）。逆順Chainedは Stage-1 のみをタイムライン末尾から先頭へ依存順に生成し、各セグメントは自分より未来側のセグメントの頭を自分の尾のりしろとして凍結する（正順チェーンの頭凍結を鏡写しにした形で、新規の凍結機構は無い）。**出力の尺はどちらのモードでもクリップ合計のまま**で、旧方式（`"internal_segment"`＝帯を後ろに継ぎ足して尺が伸びる方式）は通常のAPIリクエストからは到達不能になった（削除はしていない）。実装・機械検証・実機ゲートM1〜M7（全7ジョブ合格）の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64、設計正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11。
+> 1. **End sourceはクリップ2本以上へ拡張された（逆順Chained、`"reverse"`）。** クリップ本数だけで挙動が決まり、**クリップ1本＝窓内モード（`in_window`）／クリップ2本以上＝逆順Chained（`"reverse"`）**の2経路がAPIとして受理されるようになった（**2026-08-18注**: 当時の記述「2経路が推奨」は誤り。同日のち、オーナー裁定によって推奨は「クリップ1本＝窓内モード」の1本のみとなり、逆順Chainedは受理されるが推奨外という扱いに確定した。フロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84、上記の第3弾ブロック参照）。逆順Chainedは Stage-1 のみをタイムライン末尾から先頭へ依存順に生成し、各セグメントは自分より未来側のセグメントの頭を自分の尾のりしろとして凍結する（正順チェーンの頭凍結を鏡写しにした形で、新規の凍結機構は無い）。**出力の尺はどちらのモードでもクリップ合計のまま**で、旧方式（`"internal_segment"`＝帯を後ろに継ぎ足して尺が伸びる方式）は通常のAPIリクエストからは到達不能になった（削除はしていない）。実装・機械検証・実機ゲートM1〜M7（全7ジョブ合格）の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64、設計正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11。
 > 2. **同日、錨の固定強度`end_source.strength`も追加した（バッチ1、逆順Chainedより先行実装）。** 0.0〜1.0・既定1.0で、既定値は従来とバイト単位で厳密同値。1.0未満にすると**Stage-1のマスク値だけ**が緩み、**Stage-2は常にハード凍結**するため最終フレームは常に素材どおりになる。実装・機械検証・実機ゲートG1-R1〜G1-R3の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §63。
 > 3. **MCPの`submit_chain`は4引数構成になった。** `end_source_video_id` / `end_source_image_id` / `end_source_context_frames` に加え、`end_source_strength`が増えた（ツール本数22は不変）。`INSTRUCTIONS`とdocstringは「クリップ何件でも使える・1件＝窓内モード／2件以上＝逆順Chained・出力の長さはどちらもクリップ合計」という記述へ更新済み。
 > 4. **受理範囲の後方非互換変更が2点ある**（新しいエラーコードは増やさず422 `VALIDATION_ERROR`）。①`source_video`（素材（冒頭））×`end_source`×2クリップ以上を拒否（真ん中クリップの頭・尾二重凍結という未検証の形を避けるため）。②最終クリップの潜在数が`kv + n_end_v`以下になる構成を拒否（逆向きに運ぶべき新規生成内容がゼロになるため。旧方式では通っていた構成が逆順Chainedでは422になる点に注意）。
-> 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2・§5.4、フロントエンド側の実装記録は同[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §80（strength）・§81（逆順Chained）が正本。**
-> 6. **実機作業の残件はオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2、テーマ完結の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84）。
+> 5. **契約の詳細はフロントエンド[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.2・§5.4、フロントエンド側の実装記録は同[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §80（strength）・§81（逆順Chained）が正本。**
+> 6. **実機作業の残件はオーナーの目視ゲート**（フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-2、テーマ完結の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84）。
 
 ---
 
@@ -52,7 +52,7 @@
 > 2. **オーナー裁定は「錨は8フレーム・クリップ長はstage-2タイル1枚以内」である。** 錨を長くすると窓の大部分を素材の再現に費やして創造性が落ちる。クリップがタイル1枚（標準169フレーム・高解像度145フレーム）を超えると境界でモーフ・ちらつきが出るが、**サーバーは判定せずフロントエンドが警告するだけ**で、ブロックはしない。
 > 3. **既知の限界**: 素材が本体のシーンと意味論的に遠いと、クロスフェード／カットで繋がる（モデルの限界であって機構の不具合ではない）。
 > 4. **バックエンドは改修している**（前日までの「無改修」ではない）——`chain_math.py`・`engine/pipeline/chain_pipeline.py`・`api/models.py`・`mcp_server/`。MCPの`submit_chain`には`end_source_video_id` / `end_source_image_id` / `end_source_context_frames`の3引数が増えた（ツール本数22は不変。**2026-08-18注**: 翌日に`end_source_strength`が加わり4引数になった）。
-> 5. **付随して既存問題を1件見つけた**: V2V併用時に`metadata.json`と`job_status`の`duration_seconds`がトリム前の値を返す（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61.10、起票はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-88）。
+> 5. **付随して既存問題を1件見つけた**: V2V併用時に`metadata.json`と`job_status`の`duration_seconds`がトリム前の値を返す（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61.10、起票はフロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-88）。
 > 6. **実機作業の残件はオーナーの目視ゲート8項目**（フロントエンド`PENDING_TASKS.md` §2（当時の§2-5、現在は§2へ再設））。
 
 ---
@@ -63,8 +63,8 @@
 
 > 以下の▶節（2026-08-12ブロック以降）はすべて歴史記録として残す。**各テーマの最新状態は必ず[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節（節末尾の『状態』表記が正）を参照すること。**
 >
-> 1. **Chainedの快適上限マーカーは完結した。** 唯一の残件だった「線の太さ」の再確認（G-D1・G-D1-2）を2026-08-16にオーナーが実施し、**白い線・赤い線ともネイティブの目盛りと同等の細さで表示され合格**した。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59.7とフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-85。
-> 2. **End source（素材（末尾））は、目視ゲートの結果を受けてUIからは非公開になった。** 生成結果が例外なく「本体はプロンプトどおりに進み、そこからクロスフェードで素材へ接続する」形になるためで、**APIと内部実装は将来の改修に備えて温存**している（バックエンドは無改修）。裁定と経緯は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.12〜§60.14、実用化の研究テーマはフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
+> 1. **Chainedの快適上限マーカーは完結した。** 唯一の残件だった「線の太さ」の再確認（G-D1・G-D1-2）を2026-08-16にオーナーが実施し、**白い線・赤い線ともネイティブの目盛りと同等の細さで表示され合格**した。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59.7とフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-85。
+> 2. **End source（素材（末尾））は、目視ゲートの結果を受けてUIからは非公開になった。** 生成結果が例外なく「本体はプロンプトどおりに進み、そこからクロスフェードで素材へ接続する」形になるためで、**APIと内部実装は将来の改修に備えて温存**している（バックエンドは無改修）。裁定と経緯は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.12〜§60.14、実用化の研究テーマはフロントエンド[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-84。
 > 3. **`services/video_io.py`の`frame_count()`のffprobe書式を直した**（`csv=p=0`→`default=nokey=1:noprint_wrappers=1`）。ICCプロファイル付きの素材で空フィールドが混ざりフレーム数の解析に失敗していた既存バグで、end source固有ではない（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.13）。
 > 4. **実機作業の残件は無い。** 台帳フロントエンド`PENDING_TASKS.md`の「2. 実装済み・ユーザーのテスト待ち」は空になったため節ごと削除してある。
 
@@ -78,22 +78,22 @@
 >
 > **今回完了した内容**: SingleタブのA2V（音声から動画を生成する機能）は内部的に1クリップのチェーンとして実行されるため、これまでstage-2（アップスケール工程）が潜在22フレームの固定窓によるタイル処理になっていた。その結果、隠れたつなぎ目・チェーンと同じ約1.86メガピクセルの解像度上限・警告や切替手段の不在という3点の乖離が生じていた（設計根拠の正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7の棲み分け原則）。これを解消するため、stage-2窓プリセットへ**`"full_length"`（潜在61フレーム＝481フレーム相当、前進61、のり代0、タイル数1）**を追加し、SingleとBatchのA2Vが常にこの全長窓で動くようにした。エンジン（GPU側コード）は差分ゼロで、`chain_math.py`のプリセット追加・`api/models.py`のバリデーション拡張・`gradio_ui/handlers.py`のペイロード追随・フロントエンドの型とビルダー改修（合計数十〜数百行）で実現した。
 >
-> **実装・機械検証・デプロイはすべて完了している。** バックエンドpytest 1185 passed/20 skipped、フロントエンドvitest 2261 passed/10 skipped・typecheckクリーン。`build.ps1`→`deploy.ps1`でビルド・配置済みで、実機とバックエンドリポジトリ配布コピーのSHA-256は3値一致（`4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`。2026-08-12のセンタリングのデプロイで更新済み、さらに同日の快適上限マーカーのデプロイで更新。現行値はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §76）。**コミットは2026-08-12に実施済み（両リポジトリ）。**
+> **実装・機械検証・デプロイはすべて完了している。** バックエンドpytest 1185 passed/20 skipped、フロントエンドvitest 2261 passed/10 skipped・typecheckクリーン。`build.ps1`→`deploy.ps1`でビルド・配置済みで、実機とバックエンドリポジトリ配布コピーのSHA-256は3値一致（`4C9B0EE915AFA7F5B82AEFBF8897A5D74EE05263178A834FF79A01E9A5227B2C`。2026-08-12のセンタリングのデプロイで更新済み、さらに同日の快適上限マーカーのデプロイで更新。現行値はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §76）。**コミットは2026-08-12に実施済み（両リポジトリ）。**
 >
-> **§1-19はオーナー実機ゲートまで完了し、テーマは完結した（2026-08-12）。** G-B1〜G-B4は全PASS（完走・`chain.v_tile=61`／`n_tiles=1`・VRAMが単発生成と同等）。G-B5・G-B6（つなぎ目の目視比較）は、G-B1の合格と「潜在22窓の時代からつなぎ目はほとんど判別できなかった」というオーナー所見により**推定合格**とした。任意G-B7（12fps×481f）は「想定していない使用方法」として**未確認のままクローズ**。**`config.yaml`の`spill_free_frames`テーブルの更新は不要と確定**した。台帳§1-19と§2-1は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-80へ移設・削除済み。実装・機械検証・実機ゲート結果・kt_a負値やトークン予算の技術記録の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58、設計根拠の研究ノートは[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 8節。
+> **§1-19はオーナー実機ゲートまで完了し、テーマは完結した（2026-08-12）。** G-B1〜G-B4は全PASS（完走・`chain.v_tile=61`／`n_tiles=1`・VRAMが単発生成と同等）。G-B5・G-B6（つなぎ目の目視比較）は、G-B1の合格と「潜在22窓の時代からつなぎ目はほとんど判別できなかった」というオーナー所見により**推定合格**とした。任意G-B7（12fps×481f）は「想定していない使用方法」として**未確認のままクローズ**。**`config.yaml`の`spill_free_frames`テーブルの更新は不要と確定**した。台帳§1-19と§2-1は[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-80へ移設・削除済み。実装・機械検証・実機ゲート結果・kt_a負値やトークン予算の技術記録の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §58、設計根拠の研究ノートは[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 8節。
 >
 > 次セッションへの引き継ぎ事項:
 >
 > 1. **§1-19（全長stage-2化）は完結済み。追加の実機作業は無い。** コミット・プッシュも済んでいる。
 > 2. **コミット・プッシュは2026-08-12に実施済み**（両リポジトリ各1コミット。フロントエンドの太さ修正〔下記4.〕も同じ束に入っている）。
-> 3. **同日、別セッションで実装したOutpaintingのセンタリング（描き足す量を対称に保つチェックボックス）も完結した。** フロントエンドのみの改修でバックエンドは無改修。**オーナー目視ゲートG-C1〜G-C5は全項目合格**（G-C1ではレビューで直した横並びレイアウトも実機で確認済み）。記録は[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-81、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §75。**本ブロック記載のSHA-256（`4C9B0EE9...`）は§74時点の値であり、センタリングのデプロイ後（`E13EC924...`）・快適上限マーカーのデプロイ後（`00036A8C...`）・その太さ修正版の再デプロイ後（`A5492D40...`＝現行値）とは一致しない。**
-> 4. **実機作業として唯一の残件は、Chainedの快適上限マーカー（§1-20）の「線の太さ」の再確認である。** バックエンドは`config.py`の`LimitsConfig.chain_comfort_token_budget`配信化と`config.yaml.example`の記載補完のみで、線の描画自体はフロントエンドの改修。**オーナー目視ゲートG-D1〜G-D10のうち不合格は「線が帯に見える」1点だけ**で、原因はCSSの`background`ショートハンドが`background-clip: content-box`を初期値へ巻き戻していた実バグだった。`background-color`での指定に改め、あわせて可視線をSingleタブのネイティブ目盛りと同じ1pxへ細くしてある。**この修正を含む再ビルド・再デプロイは2026-08-12に完了済みで、実機に入っているのはSHA-256 `A5492D40146C745FD25B8FBFACE3711D78E16B892303D1B700B61BC53AB04352`（ビルド成果物・実機・バックエンドリポジトリ配布コピーの3値一致）である。オーナーはAviUtl2を起動してG-D1・G-D1-2の太さだけを見直せばよい。** 減光仕様（旧G-D5）はオーナー判定により削除済み、ツールチップ（G-D10）は維持で確定。詳細はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-3、[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §76.1、本リポジトリ[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59.6。
+> 3. **同日、別セッションで実装したOutpaintingのセンタリング（描き足す量を対称に保つチェックボックス）も完結した。** フロントエンドのみの改修でバックエンドは無改修。**オーナー目視ゲートG-C1〜G-C5は全項目合格**（G-C1ではレビューで直した横並びレイアウトも実機で確認済み）。記録は[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-81、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §75。**本ブロック記載のSHA-256（`4C9B0EE9...`）は§74時点の値であり、センタリングのデプロイ後（`E13EC924...`）・快適上限マーカーのデプロイ後（`00036A8C...`）・その太さ修正版の再デプロイ後（`A5492D40...`＝現行値）とは一致しない。**
+> 4. **実機作業として唯一の残件は、Chainedの快適上限マーカー（§1-20）の「線の太さ」の再確認である。** バックエンドは`config.py`の`LimitsConfig.chain_comfort_token_budget`配信化と`config.yaml.example`の記載補完のみで、線の描画自体はフロントエンドの改修。**オーナー目視ゲートG-D1〜G-D10のうち不合格は「線が帯に見える」1点だけ**で、原因はCSSの`background`ショートハンドが`background-clip: content-box`を初期値へ巻き戻していた実バグだった。`background-color`での指定に改め、あわせて可視線をSingleタブのネイティブ目盛りと同じ1pxへ細くしてある。**この修正を含む再ビルド・再デプロイは2026-08-12に完了済みで、実機に入っているのはSHA-256 `A5492D40146C745FD25B8FBFACE3711D78E16B892303D1B700B61BC53AB04352`（ビルド成果物・実機・バックエンドリポジトリ配布コピーの3値一致）である。オーナーはAviUtl2を起動してG-D1・G-D1-2の太さだけを見直せばよい。** 減光仕様（旧G-D5）はオーナー判定により削除済み、ツールチップ（G-D10）は維持で確定。詳細はフロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §2-3、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §76.1、本リポジトリ[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §59.6。
 
 ---
 
 ## ▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶ 最新ステータス（2026-08-04＝本ブロックは日付として最新ではない。2026-08-12ブロック参照）
 
-> **最新は §51 GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）。** Q4_K・Q5_K・Q6_Kの逆量子化をTritonカーネル3本へ融合したもので、**実装完了・機械検証全PASS・実機ゲートG1〜G8全項目合格・既定on**（オーナー承認済み）。生成結果はビット単位で不変。実測は**25.28秒短縮（約17.5%）**。正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §51、台帳はフロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11。
+> **最新は §51 GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）。** Q4_K・Q5_K・Q6_Kの逆量子化をTritonカーネル3本へ融合したもので、**実装完了・機械検証全PASS・実機ゲートG1〜G8全項目合格・既定on**（オーナー承認済み）。生成結果はビット単位で不変。実測は**25.28秒短縮（約17.5%）**。正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §51、台帳はフロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-11。
 >
 > **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加はテーマ完結。** G3・G4ともオーナー実機で合格し、コミット・プッシュ・デプロイまで完了している（`e273052`〜`9701fbe`）。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。
 
@@ -105,7 +105,7 @@
 >
 > - **§44 先読み block swap**（テーマ完結・既定 ON）／**§45 `audio_strength`**（Style LoRA の音割れ対策・実機A/B合格でテーマ完結）／**§48 モデル骨格の常駐（`keep_resident`）**（本命の高速化はオーナー実機確認済み・残るのは細目のオーナー目視ゲート）。
 > - **§49 IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の追加。実装完了・G0／G1／G2 全PASS・コミット＆プッシュ済み（backend `fd6d43f` / frontend `d375028`）。G3（オーナー実機 real）・G4（既存 canny/pose/upscaler の回帰）も2026-08-04に合格し、テーマ完結。正本は [`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)。**
-> - フロントエンド[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 だった骨格常駐トグルのprefetch連動グレーアウトは実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）で、2026-08-04にオーナー目視合格し[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-62へ移設・クローズ済み。記録はフロントエンド[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §60。
+> - フロントエンド[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-10 だった骨格常駐トグルのprefetch連動グレーアウトは実装・デプロイ・コミット＆プッシュ済み（frontend `b39eaa0` / backend `e583c03`）で、2026-08-04にオーナー目視合格し[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-62へ移設・クローズ済み。記録はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §60。
 >
 > pytest の現在のベースラインは **910 passed / 9 skipped**（§49.5）。IC-LoRA は現在5エントリ（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`。うち union-control の1ファイルを3つの論理名で共用）。
 
@@ -117,7 +117,7 @@
 >
 > **生成機能についてはこのブロックが正本。以降の▶節（直下の2026-07-29 VSFブロック・2026-07-28 NAGブロック・2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-29 VSF」ブロックは本ブロックに置き換わった（NAG・VSFはいずれも非CFGネガティブプロンプトの方式として現役のまま）。
 >
-> 実装・機械検証・実機ゲートの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43。APIフィールドは [`../LTX23_Backend_Specification.md`](../LTX23_Backend_Specification.md) §6.2・§6.5b（v0.5.6）、利用者向け説明は [`../README.md`](../README.md)「生成の高速化（Acceleration）」節。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-58（クローズ済み）。
+> 実装・機械検証・実機ゲートの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43。APIフィールドは [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2・§6.5b（v0.5.6）、利用者向け説明は [`../README.md`](../README.md)「生成の高速化（Acceleration）」節。台帳は [`../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-58（クローズ済み）。
 
 ### 本日完了した内容の要約
 
@@ -136,7 +136,7 @@
 ### 次セッションの残課題（2026-08-01起票）
 
 1. **コミットはオーナー指示待ち。** 本ブロック作成時点で未コミット。
-2. **モック2項目の実装**（fused GGUF dequant + GEMM／PruneVAED）は将来課題として起票済み。fused GGUF dequant + GEMM は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) **§3-61（no-go再確認のうえクローズ済み）**で、後継の「逆量子化の1カーネル化」が[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-11＝実装完了**。PruneVAED は同 §3-50。
+2. **モック2項目の実装**（fused GGUF dequant + GEMM／PruneVAED）は将来課題として起票済み。fused GGUF dequant + GEMM は[`../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) **§3-61（no-go再確認のうえクローズ済み）**で、後継の「逆量子化の1カーネル化」が[`../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) **§1-11＝実装完了**。PruneVAED は同 §3-50。
 3. **`sage` を既定にするかどうかの再検討**は、フィールドでの安定実績が溜まってからの判断事項として起票済み（同 §4-22）。現状は再現性を優先して `sdpa` 既定。
 4. **無関係だが紛らわしい既知事象**: `GET /status` の `gpu` ブロックは常に `available: false` を返す。アプリ用仮想環境にCUDA版torchを入れない2プロセス構成に由来する既存の挙動で、今回の改修とは無関係（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.8）。
 
@@ -148,13 +148,13 @@
 >
 > **なお、本ブロック本文に出てくる「pytest 763 passed/6 skipped」は2026-07-29時点の数字である。** 現在のベースラインは **910 passed / 9 skipped**（2026-08-03・IC-LoRA Depth／Deblur まで反映。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §49.5）。
 >
-> **2026-07-29追記: フロントエンド（React／AviUtl2連携UI）の目視ゲートもオーナーが実機で全件合格と判定し、VSFテーマは実装・機械検証・実機ゲート・デバッグスイッチ縮退・フロントエンド追随・目視ゲートのすべてが完了、残課題なしで全クローズした。詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳のクローズ記録は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55。将来の再訪条件（コミュニティのVSF scaleベストプラクティス報告が出たとき、既定値1.5を見直すか検討）も同節に記載。**
+> **2026-07-29追記: フロントエンド（React／AviUtl2連携UI）の目視ゲートもオーナーが実機で全件合格と判定し、VSFテーマは実装・機械検証・実機ゲート・デバッグスイッチ縮退・フロントエンド追随・目視ゲートのすべてが完了、残課題なしで全クローズした。詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳のクローズ記録は[`../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55。将来の再訪条件（コミュニティのVSF scaleベストプラクティス報告が出たとき、既定値1.5を見直すか検討）も同節に記載。**
 >
-> 正式なワークオーダーは本セッション実行時点でオーナーのプランファイル（`reactive-weaving-umbrella.md`、リポジトリ外）が正本で、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41。台帳は [`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55（クローズ済み）。
+> 正式なワークオーダーは本セッション実行時点でオーナーのプランファイル（`reactive-weaving-umbrella.md`、リポジトリ外）が正本で、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41。台帳は [`../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55（クローズ済み）。
 
 ### 本日完了した内容の要約
 
-NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法として、VSF（Value Sign Flip, arXiv:2508.10931）を実装した。VSFは正負のコンテキストを連結して1回のattentionで処理し、負側のV（value）だけを−scale倍する方式で、NAGより排除力が強い一方、正プロンプト忠実度はNAGが上という性格違いのため、方式を選べるUI（`neg_method: "nag"|"vsf"`）にした。エンジン新規モジュール `engine/transformer/vsf_service.py`（連結1回attention・負側V×(−scale)・エンコード時実トークンスライス・AdaLN 3モード〔raw/modulated/v_scale〕をデバッグ用に切替可能なスタッシュ窓contextmanager・負側softmax質量mのINFOログ）を中心に、`nag_service.py`拡張・両パイプライン配線・`worker.py`分岐・API 3フィールド（`neg_method`/`vsf_scale`/`vsf_adaln`）・MCP `submit_generate`/`submit_chain`末尾3引数・Gradio UI（方式ラジオ・スライダー出し分け・デバッグアコーディオン）まで一気通貫で配線した。敵対的レビュー2ラウンド（計画時）＋コードレビュー1回（実装後）を実施し、指摘は全て修正済み。エンジンvenvのselfcheckが`vsf_selfcheck` 5/5・`nag_selfcheck`回帰6/6でPASS、アプリvenvのpytestが763 passed/6 skipped（既存テストの改修は計画どおり4本のみ）。**実機ゲートはMCP経由で親エージェント自身が実施し、G0回帰（単発T2V/I2V・chain OFF/chunked双方）・VSF疎通＋mログ実測・AdaLN 3モード・経路網羅（chain/A2V/NAG回帰）・NAG対VSF効き比較セット収集まで全て合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.5）。目視評価用の成果物一式はHugging Faceの非公開datasetへアップロード済み: https://huggingface.co/datasets/Rootport/Nz-LTX23-vsf-eval-20260729 。**残るのはオーナーによる目視評価のみ**（効き具合・scale適正値・AdaLNモードの判断）。
+NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法として、VSF（Value Sign Flip, arXiv:2508.10931）を実装した。VSFは正負のコンテキストを連結して1回のattentionで処理し、負側のV（value）だけを−scale倍する方式で、NAGより排除力が強い一方、正プロンプト忠実度はNAGが上という性格違いのため、方式を選べるUI（`neg_method: "nag"|"vsf"`）にした。エンジン新規モジュール `engine/transformer/vsf_service.py`（連結1回attention・負側V×(−scale)・エンコード時実トークンスライス・AdaLN 3モード〔raw/modulated/v_scale〕をデバッグ用に切替可能なスタッシュ窓contextmanager・負側softmax質量mのINFOログ）を中心に、`nag_service.py`拡張・両パイプライン配線・`worker.py`分岐・API 3フィールド（`neg_method`/`vsf_scale`/`vsf_adaln`）・MCP `submit_generate`/`submit_chain`末尾3引数・Gradio UI（方式ラジオ・スライダー出し分け・デバッグアコーディオン）まで一気通貫で配線した。敵対的レビュー2ラウンド（計画時）＋コードレビュー1回（実装後）を実施し、指摘は全て修正済み。エンジンvenvのselfcheckが`vsf_selfcheck` 5/5・`nag_selfcheck`回帰6/6でPASS、アプリvenvのpytestが763 passed/6 skipped（既存テストの改修は計画どおり4本のみ）。**実機ゲートはMCP経由で親エージェント自身が実施し、G0回帰（単発T2V/I2V・chain OFF/chunked双方）・VSF疎通＋mログ実測・AdaLN 3モード・経路網羅（chain/A2V/NAG回帰）・NAG対VSF効き比較セット収集まで全て合格した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.5）。目視評価用の成果物一式はHugging Faceの非公開datasetへアップロード済み: https://huggingface.co/datasets/Rootport/Nz-Videomni-vsf-eval-20260729 。**残るのはオーナーによる目視評価のみ**（効き具合・scale適正値・AdaLNモードの判断）。
 
 途中、`.gitignore`の`tools/`パターンが`mcp_server/tools/`（MCPツール実装一式・別セッション由来）を不可視化していた致命的な欠陥を発見し`/tools/`へ修正した。**次回コミット時は`git add mcp_server/tools/`を忘れないこと。**
 
@@ -164,7 +164,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 2. ~~**既定値確定後、デバッグスイッチ（AdaLNラジオ等）を縮退するかどうかは別途承認が必要。**~~ → オーナー決定により縮退第3弾として`vsf_adaln`を全レイヤーから撤去済み。VSF APIは`neg_method`＋`vsf_scale`（0〜10）の2フィールドに確定した（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.10）。実験の歴史はコミット`f2124e1`に保存。
 3. **βノブ（`vsf_offset`）は未実装のまま。** mの実測（video約0.8〜1.2%・audio約0.5%、raw時）を踏まえてもαだけでは不足すると判明した場合に限り、第2弾として起票する。
 4. **コミットはオーナー指示待ち。** `mcp_server/tools/`を含む`git add`が必要（上記gitignore修正参照）。
-5. ~~**フロントエンド（React）追随は本Waveの範囲外・未着手のまま残っている。**~~ → 2026-07-29中に追随実装＋オーナー実機目視ゲートまで完結し、VSFテーマは全クローズした（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳は[`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55）。残タスクはない。
+5. ~~**フロントエンド（React）追随は本Waveの範囲外・未着手のまま残っている。**~~ → 2026-07-29中に追随実装＋オーナー実機目視ゲートまで完結し、VSFテーマは全クローズした（詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41.11、台帳は[`../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-55）。残タスクはない。
 
 ---
 
@@ -172,7 +172,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 
 > **生成機能についてはこのブロックが正本。以降の▶節（本ブロック直下の2026-07-26配布・導入ブロックを除く）はすべて歴史記録。** 配布・導入まわりは直下の「2026-07-26 α版インストール導線の整備」ブロックが引き続き正（そちらは本ブロックと独立に併走している）。旧「生成機能の正本」だった「2026-07-14 Clip Chain拡張」ブロックは本ブロックに置き換わった。
 >
-> 正式なワークオーダーは本セッション実行時点でリポジトリ外（オーナーのプランファイル）にあり、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38。API フィールドは [`../LTX23_Backend_Specification.md`](../LTX23_Backend_Specification.md) §6.2（v0.5.3）、利用者向け説明は [`../README.md`](../README.md)「非CFGネガティブプロンプト（NAG）」節。
+> 正式なワークオーダーは本セッション実行時点でリポジトリ外（オーナーのプランファイル）にあり、実装・機械検証・実機ゲートチェックリストの正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §38。API フィールドは [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2（v0.5.3）、利用者向け説明は [`../README.md`](../README.md)「非CFGネガティブプロンプト（NAG）」節。
 
 ### 本日完了した内容の要約
 
@@ -199,8 +199,8 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 
 ### ✅ 最初に読むこと — 作業ツリーの状態（2026-07-27 更新。旧「未コミット警告」は役目を終えた）
 
-**下記の実装はすべてコミット＆プッシュ済みである。** `Nz-LTX23-backend` と
-`Nz-LTX23-frontend-AviUtl2` は、いずれも 2026-07-27 時点で `origin/main` と同期済みであり、
+**下記の実装はすべてコミット＆プッシュ済みである。** 当時まだ別々だったバックエンド（現 `Nz-Videomni`）と
+フロントエンド（現 `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/`）の両リポジトリは、いずれも 2026-07-27 時点で `origin/main` と同期済みであり、
 作業ツリーはクリーン（`nothing to commit, working tree clean`）だった。以後のコミットについては
 個々のハッシュを本書に転記せず、`git log` を参照すること（転記するとすぐ古くなるため）。
 
@@ -212,7 +212,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 > **（歴史記録）2026-07-26 時点では全変更が未コミットで、しかも `git index` には `config.yaml` と
 > `wheels/.gitkeep` の削除だけがステージ済みという中途半端な状態だった。** そのまま素の `git commit` を
 > 打っていれば、「`config.yaml` は消えたが `config.yaml.example` も `.gitignore` の追加も入っていない」
-> コミット——**[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-37 が
+> コミット——**[`PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-37 が
 > 「絶対に避けろ」と書いている壊れた中間コミットそのもの**——ができるところだった。
 > 「ひな型の追加・`.gitignore` への追加・`git rm --cached` は**同一コミットで**行う（分けると中間の
 > コミットを引いた人が詰む）」という原則は、今後同種の作業をするときも必ず守ること。なお本プロジェクトの
@@ -233,7 +233,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
   ```
 
   サブフォルダ配置でも再帰スキャンでモデル自体は認識されるが、以後の公式手順・ドキュメントの既定パスは直下を前提にする。`config.yaml` に `model.gguf_transformer_path` を明示指定している場合は直下のパス（既定値 `./models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`）へ書き換えること。指定していない場合はコード側の既定値が既に直下パスを指すため編集不要。
-- **正本**: フロントエンド側 [`Docs/PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`LTX23_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
+- **正本**: フロントエンド側 [`Docs/PENDING_TASKS_CLOSED.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-36（再ホストと取得元差し替え）・§3-37（`setup.bat`/`run.bat`・`.au2pkg.zip` 同梱・**コミット分割の注意**）、再ホスト作業の手順書＝[`Nz-HF-Rehost/README.md`](../../Nz-HF-Rehost/README.md)、本書の基盤アーカイブ「install スクリプト」項、`Videomni_Backend_Specification.md` §2.5／§5.1b、`README.md` §1。
 
 ### 実機検証の結果（2026-07-27・全項目合格）
 
@@ -246,7 +246,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 5. **IC-LoRA DWPose（pose-control）768p・257 フレーム** — コンソールに `loras=pose-control(strength=1)` と表示され、エラーなく**制御された動画の生成に成功**。
 6. **IC-LoRA canny 768p・257 フレーム** — 同様に成功。
 7. `NzLTX23.aux2` を AviUtl2 のプレビュー画面から D&D でインストール。
-8. 再起動後、Nz-LTX23 の操作パネル表示を確認。
+8. 再起動後、Nz-Videomni の操作パネル表示を確認。
 9. タイムラインからの動画生成と、生成済み動画を右クリックからタイムラインへ配置。
 
 この結果から確定したこと:
@@ -260,7 +260,7 @@ NAG（§38）に続く2つ目の非CFGネガティブプロンプト手法とし
 
 ### 残っていること
 
-1. **README の文面をオーナーが手書きで仕上げる**（冒頭に置く「スピードガイド」。備忘の正本＝[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-4）。
+1. **README の文面をオーナーが手書きで仕上げる**（冒頭に置く「スピードガイド」。備忘の正本＝[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §1-4）。
 2. **リポジトリを public にする。**
 3. コミット＆プッシュは完了済み（上記「作業ツリーの状態」）。実機検証も完了済み（上記）。**コード側の設計・実装の未了はない。**
 
@@ -298,7 +298,7 @@ Clip Chain拡張の完結を受けて、次セッションの課題は以下の2
 
 > **2026-07-15追記**: フロントエンドのバックエンド追随はより広い範囲を[`FRONTEND_CATCHUP_WORKORDER.md`](FRONTEND_CATCHUP_WORKORDER.md)（2026-07-15新設）で正本化した。上記②（バッチA2Vパリティ）は同書のグループ2に統合済み。課題①（チャンク化アップサンプル）は上記のとおり実装完了・実機ゲート合格済み。
 
-なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は、**2026-07-27の整理で[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-42・§3-43へ移設した**。あわせて、実運用で得た経験則（連結点の歪みの正体・キャラクター設計のドリフト・「1クリップ最長×連結4〜5個」という実用最適解）と調査の一次情報URLは[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）」節へ吸収し、両者をまとめていた旧ノート`LONGFORM_RESEARCH_TOPICS.md`（2026-07-15新設）は削除した。
+なお、長尺化まわりの将来研究課題（単発生成へのチャンク化移植・クリップ毎のキャラクター特徴注入など、いずれも「すぐには改修しない」オーナー確定事項）は、**2026-07-27の整理で[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md) §3-42・§3-43へ移設した**。あわせて、実運用で得た経験則（連結点の歪みの正体・キャラクター設計のドリフト・「1クリップ最長×連結4〜5個」という実用最適解）と調査の一次情報URLは[`PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則（2026-07-14〜15・オーナーの長尺使い込み観察）」節へ吸収し、両者をまとめていた旧ノート`LONGFORM_RESEARCH_TOPICS.md`（2026-07-15新設）は削除した。
 
 ---
 
@@ -573,7 +573,7 @@ Enableチェック（既定オフ）をオンにすると Generate ボタンが�
 
 ### 本日完了した内容の要約
 
-Gradio WebGUI の使い勝手改修一式。主戦場は `gradio_ui/` だが、**GUI だけの改修ではない**: プリセット再編と動画 GGUF の配置変更に伴い `config.py`・`config.yaml`・`services/model_registry.py`・`scripts/install_ltx.ps1`・テストにも同期変更が入っている（凍結 API 契約そのものは不変）。詳細は `LTX23_Backend_Specification.md` §11.4/§12.2 と `README.md`（Gradio UI 節・モデル配置節）に反映済み。
+Gradio WebGUI の使い勝手改修一式。主戦場は `gradio_ui/` だが、**GUI だけの改修ではない**: プリセット再編と動画 GGUF の配置変更に伴い `config.py`・`config.yaml`・`services/model_registry.py`・`scripts/install_ltx.ps1`・テストにも同期変更が入っている（凍結 API 契約そのものは不変）。詳細は `Videomni_Backend_Specification.md` §11.4/§12.2 と `README.md`（Gradio UI 節・モデル配置節）に反映済み。
 
 1. **Frames / Duration / Frame rate の統合パネル**（`gr.Group` 内・横3カラム）。中央カラムは入力欄を持たず、num_frames と frame_rate から算出した Duration（"N.NNs"）をアクセントカラーで常時表示。
 2. **`gr.Number` のサーバー側 `minimum` 撤去 ＋ ページロード時 JS で `min` 属性付与**（width/height/num_frames 対象）。手入力途中（例: "80" と打つ途中の "8"）で最小値未満エラーが飛ぶ Gradio の不具合を根治。手入力は自由・スピナー矢印のみ 64刻み/8n+1刻みでスナップ。サーバー側の 8n+1・÷64 検証は従来どおり有効。
@@ -801,13 +801,13 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 
 ### 将来項目・未着手（現行スコープ外・記録のみ）
 
-**2026-07-27の整理で、本節に列挙していた将来項目の管理は[`PENDING_TASKS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 現在の所在は次のとおり（同書は番号だけでなくファイル名を添えて参照すること）。
+**2026-07-27の整理で、本節に列挙していた将来項目の管理は[`PENDING_TASKS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/PENDING_TASKS.md)へ一本化した。** 現在の所在は次のとおり（同書は番号だけでなくファイル名を添えて参照すること）。
 
 - **Phase 3 残パリティのうち、非蒸留(dev)モデル向けの生成つまみ一式**（negative／CFG／ステップ数／STG／sigma schedule／denoise loop／seed lock／延長尺~30s／空間アップスケーラのユーザー操作露出）＝同書**§4-1**。**negative／CFG／`pipeline` は worker 未配線＝GUI 露出禁止（継続）**という現行制約も同項へ転記済み。
 - **高品質モード（`two_stage_hq`・pipeline/guidance_scale 消費）**＝同書**§4-28**（2026-08-04に§3-2から降格。着手の入口＝`services/ltx_runner.py` の payload 未配線箇所・非蒸留×量子化 dev 重み・計算コスト~7〜12倍まで転記済み。背景資料は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節）。
 - **Gap Fill**＝同書**§3-10**／**Retake・Inpaint**＝同書**§4-12**／**attention tiling の本番投入**＝同書**§4-2**／**VLM(vision) 再導入**（enhance_i2v・フレームを見た Gap Fill 提案。QAT text-only 化を巻き戻すため計画外）＝同書**§4-5**。
-- **本節にのみ残る（台帳に未収録の）項目**: 生成キュー、text-only プロンプト強化（spec §13.4 由来）。いずれも**台帳へは起票しない**——前者は下記「やらない」のユーザー決定（「1ジョブ＋busy 409」が正しい設計）およびタイムライン側の「順番待ちは作らない（バグ温床）」決定（[`TIMELINE_ALPHA_REQUIREMENTS.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)）と衝突し、後者は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) E節でユーザー決定「不要」と重複するため。
-- **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝当時はユーザーのプラグイン開発環境整備待ちでブロック中と記録していた（現在は別リポジトリ `Nz-LTX23-frontend-AviUtl2` で実装済み）。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。
+- **本節にのみ残る（台帳に未収録の）項目**: 生成キュー、text-only プロンプト強化（spec §13.4 由来）。いずれも**台帳へは起票しない**——前者は下記「やらない」のユーザー決定（「1ジョブ＋busy 409」が正しい設計）およびタイムライン側の「順番待ちは作らない（バグ温床）」決定（[`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)）と衝突し、後者は[`FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) E節でユーザー決定「不要」と重複するため。
+- **Phase 2 ＝ AviUtl2 拡張機能統合**（＝本プロジェクトの最終ゴール・「早く統合して使いながら育てる」early-integration 方針）＝当時はユーザーのプラグイン開発環境整備待ちでブロック中と記録していた（現在はモノレポ内 `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` で実装済み）。REST API は AviUtl2 専用にしない（DaVinci Resolve 等も想定）。spec §0.1/1.3。
 - **やらない（削除済みスコープ・ユーザー決定・spec §13.5）**: ①1080p アップスケール「機能」（＝外部ツール推奨。内部二段 upsampler は生成の仕組みゆえ残す）②多人数インフラ（本格ジョブキュー/認証/インターネット公開/永続 DB＝単一ユーザー想定で不要・現状の「1ジョブ＋busy 409」が正しい設計）。
 
 ### 運用ルール（最新の正・memory にも記録）
@@ -819,4 +819,4 @@ Fable5 親＋Opus 子の並行オーケストレーション（フェーズ1＝3
 
 ### 旧・詳細設計/リファレンスのポインタ
 
-- LTX 2.3 一般リファレンス=[`LTX23_REFERENCE.md`](LTX23_REFERENCE.md)（解像度契約 ÷32/÷64・2段・VAE 32×圧縮・VRAM 重み支配・720p=1280×768→crop）。設計比較=[`DESIGN_COMPARISON_and_direction.md`](DESIGN_COMPARISON_and_direction.md)（fp4_mixed 不採用・GGUF Q4 採用が結論）。公式 offload+fp8 戦略の破棄理由=[`note.md`](note.md)。設計正本=`../LTX23_Backend_Specification.md`（v0.5）。
+- LTX 2.3 一般リファレンス=[`LTX23_REFERENCE.md`](LTX23_REFERENCE.md)（解像度契約 ÷32/÷64・2段・VAE 32×圧縮・VRAM 重み支配・720p=1280×768→crop）。設計比較=[`DESIGN_COMPARISON_and_direction.md`](DESIGN_COMPARISON_and_direction.md)（fp4_mixed 不採用・GGUF Q4 採用が結論）。公式 offload+fp8 戦略の破棄理由=[`note.md`](note.md)。設計正本=`../Videomni_Backend_Specification.md`（v0.5）。

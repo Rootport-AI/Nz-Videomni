@@ -16,10 +16,10 @@ from mcp.server.fastmcp import FastMCP
 
 from mcp_server.tools import register_all
 
-SERVER_NAME = "nz-ltx23"
+SERVER_NAME = "nz-videomni"
 
 INSTRUCTIONS = """\
-Nz-LTX23 バックエンド（LTX 2.3 動画生成）を操作するためのツール群です。
+Nz-Videomni バックエンド（LTX 2.3 動画生成）を操作するためのツール群です。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。

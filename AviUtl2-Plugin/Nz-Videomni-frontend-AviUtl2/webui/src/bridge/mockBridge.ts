@@ -175,14 +175,14 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
   transformer: [
     {
       name: "default",
-      path: "models/ltx-2.3-gguf/ltx-2.3-13b-distilled-q8_0.gguf",
+      path: "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
       is_default: true,
       exists: true,
       source: "config",
     },
     {
-      name: "ltx-2.3-13b-distilled-q4_k_m",
-      path: "models/ltx-2.3-gguf/ltx-2.3-13b-distilled-q4_k_m.gguf",
+      name: "Sulphur-2-base-distil-Q4_K_M",
+      path: "models/LTX23/Weights/Sulphur-2-base-distil-Q4_K_M.gguf",
       is_default: false,
       exists: true,
       source: "scan",
@@ -191,14 +191,14 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
   text_encoder: [
     {
       name: "default",
-      path: "models/ltx-2.3-components/gemma-2-2b-it-Q8_0.gguf",
+      path: "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
       is_default: true,
       exists: true,
       source: "config",
     },
     {
-      name: "gemma-2-2b-it-Q4_K_M",
-      path: "models/ltx-2.3-components/gemma-2-2b-it-Q4_K_M.gguf",
+      name: "gemma-3-12b-it-Q8_0",
+      path: "models/LTX23/TextEncoder/gemma-3-12b-it-Q8_0.gguf",
       is_default: false,
       exists: false,
       source: "scan",
@@ -207,14 +207,14 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
   video_vae: [
     {
       name: "default",
-      path: "models/ltx-2.3-components/vae/ltx-2.3-video-vae.safetensors",
+      path: "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
       is_default: true,
       exists: true,
       source: "config",
     },
     {
-      name: "video_vae_fp16",
-      path: "models/ltx-2.3-components/vae/video_vae_fp16.safetensors",
+      name: "LTX23_video_vae_fp16",
+      path: "models/LTX23/VAE/LTX23_video_vae_fp16.safetensors",
       is_default: false,
       exists: true,
       source: "scan",
@@ -223,14 +223,14 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
   audio: [
     {
       name: "default",
-      path: "models/ltx-2.3-components/vae/ltx-2.3-audio-vae.safetensors",
+      path: "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
       is_default: true,
       exists: true,
       source: "config",
     },
     {
-      name: "audio_vae_alt",
-      path: "models/ltx-2.3-components/vae/audio_vae_alt.safetensors",
+      name: "LTX23_audio_vae_fp16",
+      path: "models/LTX23/VAE/LTX23_audio_vae_fp16.safetensors",
       is_default: false,
       exists: true,
       source: "scan",

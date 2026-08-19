@@ -14,7 +14,7 @@ describe("useModels", () => {
     if (result.current.list.status !== "ready") throw new Error("unreachable");
 
     expect(result.current.list.models.categories.transformer.entries.map((e) => e.name)).toEqual(
-      expect.arrayContaining(["default", "ltx-2.3-13b-distilled-q4_k_m"]),
+      expect.arrayContaining(["default", "Sulphur-2-base-distil-Q4_K_M"]),
     );
     expect(result.current.selection).toEqual({
       transformer: "default",
@@ -44,7 +44,7 @@ describe("useModels", () => {
     await waitFor(() => expect(result.current.list.status).toBe("ready"));
 
     act(() => {
-      result.current.setSelection("transformer", "ltx-2.3-13b-distilled-q4_k_m");
+      result.current.setSelection("transformer", "Sulphur-2-base-distil-Q4_K_M");
     });
     act(() => {
       result.current.loadPipeline();
@@ -53,11 +53,11 @@ describe("useModels", () => {
 
     await waitFor(() => expect(result.current.load.status).toBe("done"));
     if (result.current.load.status !== "done") throw new Error("unreachable");
-    expect(result.current.load.models.transformer).toBe("ltx-2.3-13b-distilled-q4_k_m");
+    expect(result.current.load.models.transformer).toBe("Sulphur-2-base-distil-Q4_K_M");
 
     await waitFor(() => {
       if (result.current.list.status !== "ready") throw new Error("not ready");
-      expect(result.current.list.models.categories.transformer.active).toBe("ltx-2.3-13b-distilled-q4_k_m");
+      expect(result.current.list.models.categories.transformer.active).toBe("Sulphur-2-base-distil-Q4_K_M");
     });
   });
 
@@ -85,7 +85,7 @@ describe("useModels", () => {
     await waitFor(() => expect(result.current.list.status).toBe("ready"));
 
     act(() => {
-      result.current.setSelection("text_encoder", "gemma-2-2b-it-Q4_K_M");
+      result.current.setSelection("text_encoder", "gemma-3-12b-it-Q8_0");
     });
     act(() => {
       result.current.loadPipeline();

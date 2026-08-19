@@ -1021,7 +1021,7 @@ export const en = {
     reloading: "Reloading…",
     reloadToast: (total: number, styles: number, controls: number): string =>
       `Reloaded LoRAs: ${total} total (${styles} style, ${controls} control).`,
-    emptyLoras: "No LoRAs found. Drop files into models/loras and Reload.",
+    emptyLoras: "No LoRAs found. Drop files into models/LTX23/StyleLoRA and Reload.",
     loadError: "Could not load the LoRA list.",
     loadingLoras: "Loading LoRAs…",
     addedToast: (name: string): string => `Added <lora:${name}:1.0:1.0> to the prompt.`,
@@ -2351,7 +2351,7 @@ export const ja: Strings = {
     reloading: "再読み込み中…",
     reloadToast: (total: number, styles: number, controls: number): string =>
       `LoRAを再読み込みしました: 合計 ${total} 件（画風 ${styles} 件、制御 ${controls} 件）。`,
-    emptyLoras: "LoRAが見つかりません。models/loras にファイルを置いてから再読み込みしてください。",
+    emptyLoras: "LoRAが見つかりません。models/LTX23/StyleLoRA にファイルを置いてから再読み込みしてください。",
     loadError: "LoRA一覧を取得できませんでした。",
     loadingLoras: "LoRAを読み込み中…",
     addedToast: (name: string): string => `プロンプトに <lora:${name}:1.0:1.0> を追加しました。`,

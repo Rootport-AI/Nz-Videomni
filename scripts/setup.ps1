@@ -99,17 +99,17 @@ function New-StagingDir {
 # 事前チェック（すべて警告のみ。ここで処理を止めない）
 # ---------------------------------------------------------------------------
 function Test-FreeSpace {
-    # 必要容量の表記は README §1「必要な空き容量の内訳」と揃えること（約 38〜40 GB）。
-    # $needGB はその上端＝判定のしきい値。
-    $needGB = 40
+    # 必要容量の表記は README §1「必要な空き容量の内訳」と揃えること（約 40〜41 GB）。
+    # $needGB はそこへ安全側の余裕を足したしきい値。
+    $needGB = 45
     try {
         $qualifier = Split-Path -Qualifier $ProjectRoot          # 例: "S:"
         $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='" + $qualifier + "'")
         if (-not $disk) { Write-Warn '空き容量を確認できませんでした。'; return }
         $freeGB = [Math]::Round($disk.FreeSpace / 1GB, 1)
-        Write-Info ($qualifier + ' ドライブの空き容量: ' + $freeGB + ' GB（必要: 約 38〜40 GB）')
+        Write-Info ($qualifier + ' ドライブの空き容量: ' + $freeGB + ' GB（必要: 約 40〜41 GB）')
         if ($freeGB -lt $needGB) {
-            Write-Warn '空き容量が不足気味です（モデル 約 30 GB＋Python 環境 7〜8 GB＋道具類 約 0.4 GB）。'
+            Write-Warn '空き容量が不足気味です（モデル 約 33 GB＋Python 環境 7〜8 GB＋道具類 約 0.4 GB）。'
             Write-Info '足りないと途中で失敗します。不要なファイルを整理してから実行してください。'
         } else {
             Write-Good '空き容量は足りています。'
@@ -368,7 +368,7 @@ try {
     Test-Gpu
 
     Write-Head 'これから行うこと'
-    Write-Info '1. 道具（uv / ffmpeg）を用意  2. 専用 Python 環境（約 7〜8 GB）  3. モデル取得（約 30 GB）'
+    Write-Info '1. 道具（uv / ffmpeg）を用意  2. 専用 Python 環境（約 7〜8 GB）  3. モデル取得（約 33 GB）'
     Write-Info '初回はモデル取得に時間がかかります（回線速度により 1〜3 時間）。'
     Write-Info '途中で閉じても、再実行で続きから再開します。'
     Write-Info 'スリープすると通信が止まるので、電源設定でスリープを「なし」にしてください。'

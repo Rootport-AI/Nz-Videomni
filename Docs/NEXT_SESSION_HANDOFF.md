@@ -16,7 +16,7 @@
 | `Docs/` | プロジェクト全体の文書と課題台帳 |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/` | フロントエンド固有の文書（ブリッジ契約・API リファレンス・実装ログほか） |
 
-**旧フロントエンドリポジトリ `Nz-LTX23-frontend-AviUtl2` は凍結してある。** ディスク上には残っているが、以後の変更はすべて本リポジトリで行うこと。
+**旧フロントエンドリポジトリ `Nz-LTX23-frontend-AviUtl2`（GitHub 上の名称は不変）は凍結してある。** ディスク上のローカルフォルダは `_frozen_Nz-LTX23-frontend-AviUtl2` へリネーム済み（旧相対リンクが本機でだけ解決してしまう事故を防ぐため）。以後の変更はすべて本リポジトリで行うこと。
 
 **名前の使い分け**: 製品ブランドは **Nz-Videomni**（識別子は `NzVideomni` / `nz-videomni`）。**LTX 2.3・LTX23 はモデルの名前**であり、こちらは今後も残る（`models/LTX23/`・HuggingFace の `Rootport/Nz-LTX23-weights`・`Nz-GGUF-Converter-LTX23` など）。将来 LTX 2.5 や Wan 2.x といった別のモデルも載せられる基盤を目指しているため、製品名からモデル名を外してある。
 

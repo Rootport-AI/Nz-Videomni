@@ -75,7 +75,7 @@ API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`
 
 1. **`setup.bat` をダブルクリックする。**
    黒い画面が開き、道具の取り込み（`uv` / `ffmpeg`）→ 専用の Python 環境の作成 → モデルのダウンロード
-   （約 30GB）が順に進みます。所要時間の目安は、光回線（下り 90〜100Mbps）でおよそ 50 分、
+   （約 33GB）が順に進みます。所要時間の目安は、光回線（下り 90〜100Mbps）でおよそ 50 分、
    30Mbps 程度の回線ではおよそ 2 時間半です。
    **途中でこの画面を閉じても構いません。** もう一度 `setup.bat` を実行すれば続きから再開します。
    ただし途中でパソコンがスリープすると通信が止まるので、長時間そのままにする場合は、電源の設定で
@@ -148,7 +148,7 @@ AviUtl2 のプラグインは、バックエンドのサーバーを自分で起
 | GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
 | GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
 | メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（約 20GB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」） |
-| ストレージ | **このフォルダを置くドライブに約 38〜40GB**（モデル 約 30.7GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
+| ストレージ | **このフォルダを置くドライブに約 40〜41GB**（モデル 約 32.51GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
 | attention（注意機構の計算方法） | 既定は全世代で **SDPA**（PyTorch 標準の実装）。**2026-07-31 から、生成のたびに SageAttention へ切り替えられます**（§5「生成の高速化（Acceleration）」）。xformers・flash-attn は引き続き導入も使用もしません |
 
 #### 対応する GPU 世代
@@ -185,20 +185,20 @@ attention は全世代で PyTorch の SDPA を既定にしており、xformers �
 
 #### 必要な空き容量の内訳
 
-このフォルダの中に入るものは、実測で次のとおりです。合計 **約 38〜40GB** を見てください。
-この「約 38〜40GB」が本プロジェクトで統一している必要容量の数字で、`setup.bat`（`scripts/setup.ps1`）が
-起動時に出す空き容量の案内・失敗時の案内も同じ数字を使います（判定のしきい値はその上端の 40GB）。
+このフォルダの中に入るものは、実測で次のとおりです。合計 **約 40〜41GB** を見てください。
+この「約 40〜41GB」が本プロジェクトで統一している必要容量の数字で、`setup.bat`（`scripts/setup.ps1`）が
+起動時に出す空き容量の案内・失敗時の案内も同じ数字を使います（判定のしきい値はここに余裕を足した 45GB）。
 
 | 中身 | 実測サイズ | 備考 |
 |------|-----------|------|
-| `models/`（モデル一式） | 約 30.7 GiB | `models/LTX23/` に GGUF transformer（`Weights/`）＋ GGUF Gemma と tokenizer（`TextEncoder/`）＋ VAE 一式（`VAE/`）＋ アップサンプラ（`Upscaler/`）＋ IC-LoRA 2点（1.22 GiB）と Deblur 1点（0.91 GiB）（`IC-LoRA/`）、`models/Preprocessors/` に DWPose 前処理器 2点（0.33 GiB）と Video-Depth-Anything 2点（0.12 GiB）。フォルダの意味は下の「models フォルダの構成」を参照 |
+| `models/`（モデル一式） | 約 32.51 GiB | `models/LTX23/` に GGUF transformer（`Weights/`）＋ GGUF Gemma と tokenizer（`TextEncoder/`）＋ VAE 一式（`VAE/`、枝刈りデコーダ PrunaVAED を含め計 2.34 GiB）＋ アップサンプラ（`Upscaler/`）＋ IC-LoRA 2点（1.22 GiB）と Deblur 1点（0.91 GiB）と In-Outpainting 1点（1.22 GiB）（`IC-LoRA/`）、`models/Preprocessors/` に DWPose 前処理器 2点（0.33 GiB）と Video-Depth-Anything 2点（0.12 GiB）。フォルダの意味は下の「models フォルダの構成」を参照 |
 | Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、2つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
 | `tools/`（`uv` ＋ `ffmpeg`） | 約 0.4 GiB（実測 378 MB） | `setup.bat` が取り込む前提ツール。ffmpeg のダウンロードは約 104 MB だが、展開後はこの大きさになる |
 
-> **ページファイル用の 60GB は、この 38〜40GB の代わりにはなりません。** ページファイルは
+> **ページファイル用の 60GB は、この 40〜41GB の代わりにはなりません。** ページファイルは
 > 別のドライブに置いていても構わない性質のもので（Windows の既定では C ドライブ）、
 > 用途もまったく別です。**両方**必要だと考えてください。たとえばこのフォルダを D ドライブへ
-> 置き、ページファイルが C ドライブにあるなら、D に 38〜40GB・C に 60GB の空きが要ります。
+> 置き、ページファイルが C ドライブにあるなら、D に 40〜41GB・C に 60GB の空きが要ります。
 
 #### メインメモリとページファイル（最重要）
 
@@ -302,8 +302,10 @@ UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose
 
 > 生成の中核として実際にロードされるモデルは合計 **~28GB**（GGUF transformer + GGUF Gemma + components + upscaler + tokenizer dir＝28.15GiB）で、
 > ComfyUI の GGUF 16GB レシピと同等のフットプリントです。`install_ltx.ps1` はこれに IC-LoRA 2点（1.22GiB）・DWPose 前処理器 2点（0.33GiB）・Deblur 1点（0.91GiB）・
-> Video-Depth-Anything 2点（0.12GiB）を加えた **約 33GB（30.7GiB）** をダウンロードします。後者4種は無くても T2V/I2V の生成自体は成立しますが、`config.yaml` が IC-LoRA を
-> 無条件に登録するため、欠けていると UI から選んだときに 404 になります（上の検証テーブルの説明を参照）。
+> Video-Depth-Anything 2点（0.12GiB）・PrunaVAED 枝刈りデコーダ 1点（0.64GiB、`vae_mode=prune_vaed` 選択時のみ読み込み）・In-Outpainting 1点（1.22GiB）を加えた
+> **約 33GB（32.51GiB）** をダウンロードします。IC-LoRA・DWPose・Deblur・VDA・In-Outpainting は無くても T2V/I2V の生成自体は成立しますが、`config.yaml` が IC-LoRA を
+> 無条件に登録するため、欠けていると UI から選んだときに 404 になります。PrunaVAED は `vae_mode=prune_vaed` を選ばない限り読み込まれないため影響しません
+> （上の検証テーブルの説明を参照）。
 >
 > この構成に至るまでに物理削除した重量物（モノリス safetensors・QAT Gemma dir）の経緯は
 > [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §5.2 と

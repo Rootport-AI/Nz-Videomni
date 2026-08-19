@@ -45,14 +45,13 @@
     Which build output to deploy: Release (default) or Debug.
 
 .PARAMETER PluginDir
-    Root plugin directory on the local AviUtl2 installation. An empty string
-    (the default during the 2026-08 Nz-Videomni migration) skips the local
+    Root plugin directory on the local AviUtl2 installation. Defaults to the
+    real machine's Plugin folder. Pass an empty string to skip the local
     AviUtl2 deploy entirely -- both the .aux2 copy and the Language file copy --
-    following the same convention as the empty-string skip of $DistDir. The
-    migration removes the old NzLTX23 plugin from the local AviUtl2 by hand and
-    installs the renamed NzVideomni.aux2 by drag-and-drop, so deploying over the
-    old layout automatically would be wrong. Once the new local plugin path is
-    settled, set it here to restore the normal two-target deploy.
+    following the same convention as the empty-string skip of $DistDir. This
+    empty-string skip is a permanent feature (not migration-specific): it lets
+    a deploy run against only the distribution copy ($DistDir) when the local
+    AviUtl2 installation should not be touched.
 
 .PARAMETER DistDir
     Distribution copy inside the backend repo (2026-07-31, owner decision):
@@ -65,7 +64,7 @@
 param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
-    [string]$PluginDir = "",
+    [string]$PluginDir = "D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin",
     [string]$DistDir = "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin"
 )
 

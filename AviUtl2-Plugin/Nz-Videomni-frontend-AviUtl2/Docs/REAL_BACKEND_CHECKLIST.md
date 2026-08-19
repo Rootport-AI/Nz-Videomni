@@ -1,7 +1,7 @@
 # 実バックエンド（real backend）通し確認チェックリスト
 
 - 作成: 2026-07-15（グループ3・項目13の最終ゲート用手順書として新規作成）
-- 対象: `Nz-Videomni-frontend-AviUtl2`（本リポジトリ）とAviUtl2実機
+- 対象: フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`（モノレポ `Nz-Videomni` の一部）とAviUtl2実機
 - 本書の位置づけ: **手順書のみ**。本書を作成したセッションではバックエンドの起動・実際の生成・デプロイは一切行っていない。オーナーが実GPU環境で後日まとめて実行するための案内である。
 - バックエンド（`Nz-Videomni`）は**凍結方針**のため、本書の作成にあたっては変更していない（既存手順を読み取って引用・参照するのみ）。ただし凍結は絶対の禁止ではなく、V2V結合（Join）機能の復活のために2026-07-21に限定解除してAPIを拡張した実績がある（[`API_REFERENCE.md`](API_REFERENCE.md) §3.17・§3.18・§6）。
 - 更新: 2026-07-19（オーナー申告に基づくマトリクス更新。「mockでしか検証していない」という当初の前提を是正——詳細は§1.1。2026-07-19、後日明言のなかった残り6細部の最終判定を反映——§4.3/§4.6/§4.8/§4.9・第6節。同日さらに、reuseIfPresentリロード後保険経路・危険ゾーン〔N4〕表示有無の合格とAPIキーバッジ〔N13〕のα版スコープ外クローズを反映——§4.7/§4.8・第6節）。2026-07-20、右クリック再設計第2段階（[`DEVLOG.md`](DEVLOG.md) §41）でminimal/smallプリセットが481フレーム化されたことを受け、§4.1に確認行を追加。2026-07-27、§4.5のcutoutRange併用を「未配線につき検証対象外」として決着（§1.1・§4.5・第6節を整合。[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-48）。2026-07-28、NAG（Normalized Attention Guidance）フロントエンド追随（[`DEVLOG.md`](DEVLOG.md)の該当節）に伴い§4.11を新設。2026-07-30、V2Vリボン範囲トリム（§1-6）とバッチi2v-long（§1-7）の実装完了に伴い§4.12・§4.13を新設（既存項目のチェック済み欄を書き換えないよう、§4.5の内側の細目である前者も独立節として追加した。[`DEVLOG.md`](DEVLOG.md) §54）。2026-07-31、§4.13が全項目合格しクローズ（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-57）。2026-08-01、§4.12が全5項目合格しクローズ（同§3-59。⑤＝IC-LoRA参照動画への拡張分は同日追加した項目。[`DEVLOG.md`](DEVLOG.md) §56）。項目別結果表と総合判定も同日に整合させた。2026-08-05、§4.10（ドラッグ＆ドロップ5項目）がオーナー実機で全項目合格しクローズ（`Docs/PENDING_TASKS.md` §2-1からは除去済み）。これにより§4.1〜§4.13すべてが全項目合格した。2026-08-09、Stage-2のクリップ長の選択（`stage2_window`）とOutpainting（動画キャンバス拡張）を実装したが、**本書には項目を追加していない**——どちらも同日中に専用の実機ゲート（バックエンド`outputs/stage2_window_optin/RUNBOOK.md`・`uploads/_outpaint_verify/RUNBOOK_W2.md`）とオーナーの実機確認まで通り、本書が受け皿とする「未消化の細部」が残らなかったためである。合格記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-68〜§3-70、測定値の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §53・§54。2026-08-10、Retakeを実装。本書には項目を追加していない——**同日中にオーナーの目視・実機確認が全項目合格し**、本書が受け皿とする「未消化の細部」が残らなかったためである。合格記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-73と[`DEVLOG.md`](DEVLOG.md) §68・§69・§71、実GPUゲートの測定値はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §55（最後まで残っていた最小窓73フレームの仕様判断も同日に「73フレーム維持・注意文で伝える」で確定し、テーマは完結した）。**同日、台帳の運用が変わり、全項目が合格して空になった節は見出しごと削除することになった**（`PENDING_TASKS.md`末尾「本台帳の位置づけ」・[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)冒頭）。これにより本書が長く参照してきた`PENDING_TASKS.md` §2-1（実GPU細部）は削除されている——**本書中の§2-1への言及はすべて当時の記録であり、現在の参照先は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-67である。**
@@ -309,7 +309,7 @@ config.yaml model.backend:
 
 ### スクリーンショット置き場の推奨
 
-本リポジトリはgit管理下（`main`ブランチ、活発なコミット履歴あり。`Docs/DEVELOPMENT_PLAN.md:73`も「git init済み」と明記）である。スクショは`Docs/`配下に専用フォルダ（例: `Docs/screenshots/real_backend_2026-XX-XX/`）を作成して格納するか、オーナーが別途指定する場所に置く。本書自体にはスクショを埋め込まず、パス参照のみ記録すること。
+本リポジトリ（モノレポ `Nz-Videomni`）はgit管理下（`main`ブランチ、活発なコミット履歴あり。`Docs/DEVELOPMENT_PLAN.md:73`も「git init済み」と明記）である。スクショは`Docs/`配下に専用フォルダ（例: `Docs/screenshots/real_backend_2026-XX-XX/`）を作成して格納するか、オーナーが別途指定する場所に置く。本書自体にはスクショを埋め込まず、パス参照のみ記録すること。
 
 ### 総合判定
 

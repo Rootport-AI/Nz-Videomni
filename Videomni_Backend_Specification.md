@@ -4,8 +4,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.17** |
-| 日付 | **2026-08-18**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
+| 版 | **v0.5.18** |
+| 日付 | **2026-08-19**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
 ## 目次
@@ -99,8 +99,12 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
-| `Docs/NEXT_SESSION_HANDOFF.md` | プロジェクトのゴール像・フェーズ別ロードマップ・設計対話の決定・削除スコープ |
+| `Docs/NEXT_SESSION_HANDOFF.md` | セッション間の引き継ぎ（リポジトリの形・文書の地図・開発の基本操作・直近の状況）。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` |
+| `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
+| `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` | クリップ連結（Clip Chain）の内部構造と Stage-2 固定窓アーキテクチャの設計正本 |
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
+| `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` | API 利用者（フロントエンド実装者）向けの解説と全ルート一覧。**契約そのものの正本は本書 §6** |
+| `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md` | AviUtl2 プラグインの native ↔ Web UI 間 JSON-RPC 契約 |
 | `engine/VENDOR_NOTICE.md` | `engine/` の由来・provenance・依存再現手順・ライセンス帰属 |
 
 > **乖離時の原則**: 本文の数値（秒数・GB・上限フレーム等）は**代表値**であり、正確な網羅・最新実測は上表の該当 Docs が正。乖離を見つけたら Docs を正とし、Docs 側を更新すること。
@@ -345,7 +349,14 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 Nz-Videomni/
 ├─ setup.bat / run.bat     エンドユーザー向け入口（純 ASCII・CRLF・末尾 pause）
 ├─ run.ps1                 起動本体（**直下固定**・$PSScriptRoot 依存）
-├─ AviUtl2-Plugin/         NzVideomni.aux2（フロントエンド配布物・**git 追跡**）
+├─ AviUtl2-Plugin/         AviUtl2 拡張フロントエンド（本リポジトリに同居＝モノレポ）
+│   ├─ NzVideomni.aux2     ビルド済みプラグイン＝配布物（**git 追跡**）
+│   └─ Nz-Videomni-frontend-AviUtl2/
+│                          そのソース。native/（C++・WebView2 ホスト）/
+│                          webui/（React + TypeScript）/ Language/ /
+│                          scripts/（build.ps1 / deploy.ps1 / package.ps1）/
+│                          Docs/（BRIDGE_CONTRACT.md・API_REFERENCE.md ほか）
+├─ Docs/                   プロジェクト全体の文書と課題台帳（PENDING_TASKS.md）
 ├─ main.py                 アプリ起動（./.venv, FastAPI）
 ├─ gradio_ui/              検証用 /ui（ui.py / handlers.py / presets.py / i18n.py ほか）
 ├─ mcp_server/             MCPサーバー（§12b・./.venv で動くクライアント層）
@@ -478,7 +489,7 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 ## §6 【凍結】API 契約
 
-本章は Phase 1 の外部 API 契約を凍結・自己完結で定義する正本である。将来のフロントエンド（AviUtl2 / DaVinci Resolve 等）や後続 Phase が破壊されないよう、ここに記した識別子・パス・enum 値・JSON キー・バリデータは**そのまま実装（`api/models.py`, `api/*.py`, `services/*`）と一致する**。値・フィールド名は英語のままコードに合わせ、変更しない。
+本章は Phase 1 の外部 API 契約を凍結・自己完結で定義する正本である。フロントエンド（AviUtl2 拡張・将来の DaVinci Resolve 等）や後続 Phase が破壊されないよう、ここに記した識別子・パス・enum 値・JSON キー・バリデータは**そのまま実装（`api/models.py`, `api/*.py`, `services/*`）と一致する**。値・フィールド名は英語のままコードに合わせ、変更しない。
 
 全エンドポイントは `/api/v1` プレフィックス配下にマウントされる（`main.py` の `app.include_router(api_router, prefix="/api/v1")`）。エラー時は共通エンベロープ（§6.8）で返る。
 
@@ -572,7 +583,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 > - **全モード共通**: `context_frames` は**8の倍数**（8n+1 ではない）で [8,136]、既定72。両端が別の格子に乗るのは映像VAEが因果的で、潜在0が画素0だけを覆う単独のキーフレームだからである。素材は `context_frames + 1` フレーム以上必要（先頭1枚は因果VAEのキーフレーム潜在に消費され、出力には現れない）。総尺上限 `MAX_CHAIN_TOTAL_PIXEL_FRAMES` は**帯を除いたクリップ合計**に掛かる。`retake` / `source_audio` / `reference_video_id` とはどのモードでも排他。**クリップ長がstage-2のタイル1枚（`standard`なら169フレーム、`high_resolution`なら145フレーム）に収まることが望ましいという品質上の助言（422ではない）は、クリップ1本（窓内モード）の実験結果に基づくものであり、逆順Chainedには適用されない**（フロントエンドの警告バナーもクリップ1本のときだけ表示する）。
 > - **錨の固定強度 `strength`（2026-08-18追加）**: `context_frames` と対になるフィールドで、0.0〜1.0・既定1.0。1.0は**stage-1もハード凍結**（従来と同値・マスク値0.0）。1.0未満では**stage-1のマスク値だけ**`1.0 - strength` に緩み、素材への「なじみ方」が緩やかになる。**stage-2は`strength`の値に関わらず常にハード凍結**（マスク値0.0）するため、配信される最終フレームは常に素材どおりである。`overlap_strength`（生成物同士の継ぎ目のブレンド強度）とは役割が別——あちらは生成セグメント間の継ぎ目、こちらは素材そのものへの継ぎ目を制御する。`metadata.json`の`end_source.freeze_proof`は、`s2_video_tail`を無条件ゼロ、`s1_video_tail`を`strength >= 1.0`のときのみゼロと期待するよう判定を分け、判定基準を`s1_expected_zero`として同ブロックへ記録する。
 > - **錨への素材音声の凍結（第3弾、2026-08-18追加）**: 素材（`video_id`側）に音声トラックがあれば、**窓内モード・逆順Chainedいずれの錨クリップでも常にその音声が凍結される**。新設のトグル・フィールドは無く、`EndSourceSpec`のフィールド数は増えていない——素材に音声があれば常に取り込む、という本体仕様である。**凍結は`strength`の値に関わらず常にハード**（マスク値0.0）で、`strength`は**映像専用**のつまみになった。凍結する音声潜在の本数`n_end_a`は、Retakeの尾側のりしろ凍結と共有するスキャン規則（因果パッチファイアの支持区間の開始時刻が帯の開始時刻以降にある潜在を末尾から連続して数える）で決まり、単純な丸め式ではない。素材ファイルの末尾基準でスライスするため、素材の潜在格子とタイムラインの格子の位相が一般に一致せず**最大1潜在（40ミリ秒）の位置ずれ**が許容として残る。フォールバック（自由生成）は「音声トラック無し／デコード不能」のときのみで、`audio_frozen=false`・`audio_fallback_reason="no_audio"`になる。音声潜在が必要数より少なく取得できた構成（端数不足）はエラーにせず**取れた分だけ凍結する**（`audio_frozen=true`のまま`n_end_a_frozen < n_end_a`で表現）。**デジタル無音の検出はしない**——無音の素材は無音のまま凍結される。画像end source（静止画）は元々音声を持たないため本改修の対象外で、従来どおりのフォールバック経路に自動的に乗る。配信される錨区間の音声は原波形のmuxではなく**音声VAE＋ボコーダを1往復した音**（同じ曲だが少しこもった音になるのが仕様）。`metadata.json`の`end_source`ブロックへ`n_end_a`・`end_tile_bands_a`（音声版Stage-2タイル帯、幾何版）・`audio_frozen`・`audio_fallback_reason`・`n_end_a_frozen`・`end_tile_bands_a_frozen`（実効帯）・`end_fully_frozen_tiles_a`が新出し、`freeze_proof`へ`s1_audio_tail`/`s2_audio_tail`（無条件ゼロ期待）が加わった。切り戻しはモジュール定数`END_SOURCE_FREEZE_AUDIO`（既定`true`）——`false`で本改修より前とバイト完全同一の出力に戻ることを機械証明済み。実装・機械検証・機械ゲートA1〜A9の正本は`Docs/VERIFICATION_LOG.md` §65。
-> - **オーナー裁定（2026-08-18、テーマ完結）**: 実機ゲート後のオーナー目視・試聴で、複数クリップ（逆順Chained）はクリップの境目・末尾（錨直前）に系統的なモーフが出ることを確認した。これを受け、**End sourceはクリップ1本での使用を推奨し、複数クリップは推奨外の使い方と位置づける**。複数クリップ時の品質劣化は仕様として許容し、根治にはモデル側の到着時刻拘束能力が要る（現行のLTX 2.3には無い）。UI上の警告文はフロントエンドの次のUI改修バッチで実装予定（本版の時点では未実装）。品質を重視して複数クリップを終端付きで繋ぎたい場合は、クリップ1本の窓内モードを1本ずつ使い、生成物を次の素材にして過去へ遡って生成する**手動リレー**（AviUtl2タイムラインで組み合わせる）が実用的な回避策になる。実験結果・考察の正本は`Docs/VERIFICATION_LOG.md` §64.7・§65.8、`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §11。
+> - **オーナー裁定（2026-08-18、テーマ完結）**: 実機ゲート後のオーナー目視・試聴で、複数クリップ（逆順Chained）はクリップの境目・末尾（錨直前）に系統的なモーフが出ることを確認した。これを受け、**End sourceはクリップ1本での使用を推奨し、複数クリップは推奨外の使い方と位置づける**。複数クリップ時の品質劣化は仕様として許容し、根治にはモデル側の到着時刻拘束能力が要る（現行のLTX 2.3には無い）。UI上の警告文（「素材（末尾）つきで複数クリップを連結すると、生成結果の品質が低下します。」）はフロントエンドに実装済み。品質を重視して複数クリップを終端付きで繋ぎたい場合は、クリップ1本の窓内モードを1本ずつ使い、生成物を次の素材にして過去へ遡って生成する**手動リレー**（AviUtl2タイムラインで組み合わせる）が実用的な回避策になる。実験結果・考察の正本は`Docs/VERIFICATION_LOG.md` §64.7・§65.8、`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §11。
 > - **凍結 API 契約への影響**: 2026-08-16 の追加そのものは加算のみだったが、**2026-08-17 の窓内モードで単一クリップの意味と受理範囲が変わった**（改版履歴 v0.5.13）。**2026-08-18 の`strength`追加は既存フィールドの意味変更を伴わない加算のみ**（改版履歴 v0.5.14）。**同日の逆順Chained追加で、クリップ2本以上の意味と受理範囲も変わった**（改版履歴 v0.5.15）。**同日の錨への素材音声の凍結追加でも、既存フィールドの意味が変わった**（改版履歴 v0.5.16）。いずれもキーの追加・型変更・エラーコードの増減は無い。**同日のオーナー裁定（推奨経路をクリップ1本の窓内モードのみへ絞る）自体は API 契約への変更を伴わない**（改版履歴 v0.5.17。受理するフィールド・エラーコードとも不変で、推奨区分の記述訂正のみ）。
 > - 詳細な設計判断・実装内容・実機実験4ラウンド20ジョブの正本は[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §61（v2＝内部区画方式の歴史記録は同 §60）、`strength`（バッチ1）の実装・機械検証・実機ゲートは同 §63、逆順Chained（バッチ2）の実装・機械検証・実機ゲートM1〜M7は同 §64、逆順Chainedの設計正本は`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §11、錨への素材音声の凍結（第3弾）の実装・機械検証・機械ゲートA1〜A9は同 §65、**オーナー目視・試聴結果とオーナー裁定（推奨経路の確定・テーマ完結）の正本は同 §64.7・§65.8**、契約の記述はフロントエンド`Docs/API_REFERENCE.md` §5.2、台帳の完結記録は`Docs/PENDING_TASKS_CLOSED.md` §3-84。
 
@@ -1269,7 +1280,7 @@ Gradio / API の初期値。
 
 ### 12.1 設計方針
 
-**UI は LTX を直接呼ばない。** 将来のフロントエンド（AviUtl2, DaVinci Resolve）と同じく、**自身の REST API（`/api/v1/*`）を HTTP で叩く**薄いクライアントである。
+**UI は LTX を直接呼ばない。** フロントエンド（AviUtl2 拡張・将来の DaVinci Resolve）と同じく、**自身の REST API（`/api/v1/*`）を HTTP で叩く**薄いクライアントである。
 
 ```text
 [optional] POST /api/v1/upload/image  -> image_id

@@ -112,7 +112,7 @@ VRAM（グラフィックスメモリ）から溢れて共有メモリへ退避�
 
 ### 現状のUIギャップ
 
-フロントエンドのspill警告は、単発生成用のしきい値テーブルを「面積が最も近いキー」へ丸め込んで解決している（[`webui/src/modes/create/spillUtils.ts`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/create/spillUtils.ts) 16〜41行の`resolveSpillFreeFrames`、および[`webui/src/timeline/deriveDuration.ts`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/timeline/deriveDuration.ts) 97行）。
+フロントエンドのspill警告は、単発生成用のしきい値テーブルを「面積が最も近いキー」へ丸め込んで解決している（[`webui/src/modes/single/spillUtils.ts`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/single/spillUtils.ts) 16〜41行の`resolveSpillFreeFrames`、および[`webui/src/timeline/deriveDuration.ts`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/timeline/deriveDuration.ts) 97行）。
 
 1216x1664（面積2,023,424）に最も近いキーは1920x1088（面積2,088,960）なので、**153フレームという上限が返り、それを下回っている限り警告が出ない**。しかしチェーン経路では上で見たとおりフレーム数と無関係に溢れる。つまり**チェーン特有の下限を誰も見ていない**というギャップがある。これは台帳の§1-14として起票した。
 

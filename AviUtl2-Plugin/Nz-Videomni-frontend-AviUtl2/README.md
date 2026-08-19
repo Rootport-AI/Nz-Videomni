@@ -1,8 +1,14 @@
 # Nz-Videomni (AviUtl2 frontend)
 
-A general-purpose AviUtl2 plugin (`.aux2`) that acts as a thin frontend for an
-LTX 2.3 video-generation backend (`Nz-Videomni`, developed separately and
-frozen from this repository's perspective — it is never modified here).
+A general-purpose AviUtl2 plugin (`.aux2`) that acts as a thin frontend for the
+`Nz-Videomni` LTX 2.3 video-generation backend.
+
+This directory is the frontend half of the **Nz-Videomni monorepo**: the backend
+lives at the repository root (two levels up), and this tree — plus the built
+`AviUtl2-Plugin\NzVideomni.aux2` next to it — is the plugin. Backend changes are
+made at the repository root, not here; the two halves ship together. (The old
+standalone frontend repository `Nz-LTX23-frontend-AviUtl2` is frozen.)
+
 `NzVideomni.aux2` registers a dockable window titled **Nz-Videomni** and hosts a
 **WebView2**-based React/TypeScript Web UI over a JSON-RPC bridge
 (`window.chrome.webview.postMessage` / `PostWebMessageAsJson`).
@@ -229,7 +235,10 @@ the Chain screen no longer carries its own copy of either.)
   `package.ini` / `package.txt`) into `dist/NzVideomni-<version>.au2pkg.zip` in
   the layout AviUtl2 expects (`Plugin/NzVideomni/`, `Language/`).
 
-## Repository layout
+## Directory layout
+
+Paths below are relative to this directory
+(`AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\` in the monorepo).
 
 ```
 CMakeLists.txt           Root build (plugin + tests)
@@ -250,11 +259,21 @@ native/
                           wav_probe, strconv, http_client, wic_png, ...)
 scripts/                  build.ps1, deploy.ps1, package.ps1, run-aviutl.ps1
 Language/                 *.NzVideomni.aul2 (native UI strings, English/Japanese)
-webui/                    Web UI (React/TypeScript, developed separately;
+webui/                    Web UI (React/TypeScript, its own npm project;
                           built to webui/dist or the single-file
                           webui/dist-single/index.html)
 Docs/                     BRIDGE_CONTRACT.md, API_REFERENCE.md, DEVLOG.md, ...
 aviutl2_sdk/              Vendored AviUtl2 SDK headers/samples (read-only)
+```
+
+Elsewhere in the monorepo:
+
+```
+..\NzVideomni.aux2        The built plugin, tracked in git and shipped to users
+                          (deploy.ps1 refreshes it; see Deploy below)
+..\..\                    Backend (main.py, api/, services/, engine/, ...)
+..\..\Docs\               Project-wide docs and the task ledger
+                          (PENDING_TASKS.md)
 ```
 
 ## Prerequisites
@@ -347,15 +366,30 @@ a non-embedded build; the on-disk `Plugin\NzVideomni\webui\` folder layout from
 early development is gone (see `Docs/DEVLOG.md` for the embedded-only-operation
 switch).
 
-AviUtl2 currently runs from a **portable install** (kept off the C: drive for
-disk-space reasons), so all deploy targets sit under a `data\` folder next to
-`aviutl2.exe`, e.g. `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\`. `deploy.ps1`
-defaults `-PluginDir` at that install's `data\Plugin` folder:
+**`deploy.ps1` writes to two places**, and both matter:
+
+1. **The live AviUtl2 install** (`-PluginDir`), for testing the build by hand.
+   AviUtl2 currently runs from a **portable install** (kept off the C: drive for
+   disk-space reasons), so its targets sit under a `data\` folder next to
+   `aviutl2.exe`. `-PluginDir` defaults to
+   `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin`.
+2. **The monorepo's distribution copy** (`-DistDir`), i.e.
+   `AviUtl2-Plugin\NzVideomni.aux2` — the git-tracked file end users install.
+   The default is the absolute path
+   `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin`, so pass
+   `-DistDir` explicitly if your clone lives somewhere else.
+   **Forgetting this copy means users keep getting the old plugin**, which is
+   why deploy.ps1 does it automatically rather than leaving it to a later
+   manual step. (Skipped automatically when the build carries a `[PROBE]`
+   marker, so instrumented builds never leak into the distribution copy.)
+
+Pass an empty string to either flag to skip that destination.
 
 ```powershell
-# Deploys the embedded .aux2 (build.ps1's default output):
+# Deploys the embedded .aux2 (build.ps1's default output) to:
 #   <install>\data\Plugin\NzVideomni\NzVideomni.aux2
 #   <install>\data\Language\*.NzVideomni.aul2 (from Language\)
+#   ..\NzVideomni.aux2  (the monorepo distribution copy)
 # Also removes the old single-file <install>\data\Plugin\NzVideomni.aux2
 # (avoids a double load), and any stale <install>\data\Plugin\NzVideomni\webui\
 # folder left over from an earlier non-embedded deploy.
@@ -363,9 +397,8 @@ defaults `-PluginDir` at that install's `data\Plugin` folder:
 powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -Config Release
 ```
 
-(`scripts\deploy.ps1`'s built-in `-PluginDir` default already points at the
-portable install's `data\Plugin` folder, so the flag above is only needed to
-override it for a different install location.)
+(Both defaults are built into `scripts\deploy.ps1`, so the flags are only needed
+to override them — e.g. `-PluginDir` for a different AviUtl2 install.)
 
 ## Release packaging (embedded single-file build)
 
@@ -433,3 +466,12 @@ window menu. Plugin log lines appear in AviUtl2's in-app Log view **and** in
 - `Docs/BRIDGE_CONTRACT.md` — full native/Web UI JSON-RPC contract reference.
 - `Docs/API_REFERENCE.md` / `Docs/SDK_REFERENCE.md` — backend HTTP API and
   AviUtl2 SDK notes.
+
+Elsewhere in the monorepo:
+
+- `..\..\README.md` — backend setup, startup, `models/` layout, API overview.
+- `..\..\Videomni_Backend_Specification.md` — the frozen API contract (§6) and
+  the backend's own specification.
+- `..\..\Docs\PENDING_TASKS.md` — the project-wide task ledger (backend and
+  frontend alike); start a session by reading it.
+- `..\..\Docs\NEXT_SESSION_HANDOFF.md` — the current handoff note.

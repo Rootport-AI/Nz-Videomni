@@ -1,10 +1,10 @@
-# LTX23 バックエンド API リファレンス
+# Nz-Videomni バックエンド API リファレンス
 
 最終更新: 2026-08-18 / 出典: 調査エージェント報告(2026-07-07)。§12はフロントエンド実装完了(1.0.0-rc1)に伴う追記(2026-07-08)。§5.2・§12.4はバックエンドのchain拡張(clips24枠・chunked_upsample・chainへのloras/reference_video_id全面解禁)とポーリングタイムアウト延長に伴う追記・修正(2026-07-15)。§12.2は「未解消の穴」がN2/N3実装で解消済みになったことの追記(2026-07-17)。§5.1・§5.2・§7はNAG（Normalized Attention Guidance）解禁(バックエンドコミット2ae497b)に伴う追記(2026-07-28)。§10はバックエンド新設のMCPサーバー(`mcp_server/`、このAPIのもう一つのクライアント)に伴う追記(2026-07-28)。§5.1・§5.2・§7はVSF（Value Sign Flip。NAGに続く2つ目の非CFGネガティブプロンプト手法）の`neg_method`/`vsf_scale`追加とフロントエンド追随完了に伴う追記(2026-07-29)。§3.1・§5.1・§5.2・§7はAcceleration（生成の高速化。`attention_backend`＝SageAttentionのジョブ単位切替と、モックの`vae_mode`）の追加とフロントエンド追随・実機ゲート合格に伴う追記(2026-08-01)。§5.1・§5.2はモデル骨格のジョブ間キャッシュ(`keep_resident`。前処理の待ち時間を2本目以降から消す代わりにメインメモリを約20GB占有する切替)の追加とフロントエンド追随・エージェント実機ゲート合格に伴う追記(2026-08-03)。§5.1・§5.2・§7.1はGGUF逆量子化の1カーネル化(`fused_gguf_dequant_kernel`。生成結果を変えずに約17.5%短縮する切替)の追加と既定on反転に伴う追記と修正(2026-08-04)。§3.2・§5.2はRetake(`retake`)とStage-2クリップ長連動の窓上限を追記(2026-08-10)。§5.2・§5.4は長尺A2V（クリップ連結でのA2V＝音声から動画を生成する機能の複数クリップ解禁。`source_audio`の「clips=1本限定」撤廃）に伴う修正(2026-08-10)。§3.6・§5.2・§7はチェーン（`/generate/chain`）の参照動画（IC-LoRA）の複数クリップ解禁（長尺IC-LoRA。`reference_video_id`の「clips=1本限定」撤廃と`depth-control`専用の新エラーコード`LORA_DEPTH_CHAIN_UNSUPPORTED`追加、`GET /loras`への`preprocess`/`reference_downscale_factor`追加）に伴う追記(2026-08-11)。§2・§3.10・§5.2はEnd source（素材（末尾）。`/generate/chain`の`end_source`と、`POST /upload/video`応答の`frame_count`/`fps`）の追加に伴う追記(2026-08-16)。§5.2は同機能の**窓内モード**化（クリップ1本＝素材をクリップ自身の末尾として凍結し出力尺は変わらない・推奨／2本以上＝旧方式・非推奨）に伴う全面書き換え(2026-08-17)。§5.2は錨の固定強度`strength`（既定1.0・Stage-1のみソフト化可能・Stage-2は常にハード凍結）追加に伴う追記(2026-08-18)。§5.2・§5.4は同機能の逆順Chained化（クリップ2本以上＝`reverse`。出力尺はクリップ合計のまま・新422・旧方式は到達不能化）に伴う全面改稿(2026-08-18)。§5.2は同機能の第3弾（錨への素材音声の凍結。素材に音声トラックがあれば窓内モード・逆順Chainedいずれの錨クリップでも常にその音声を凍結し、`strength`は映像専用のつまみになった）に伴う追記(2026-08-18)。§3.2はSingleタブの賢い快適上限マーカー（`limits.single_comfort_token_budget`＝44880の新設。5つの高速化トグル全onのときだけ有効で、1つでもoffなら`spill_free_frames`が正）の追加に伴う追記(2026-08-18)。
 
 関連ドキュメント: [SDK_REFERENCE.md](SDK_REFERENCE.md) ／ [WEB_RESEARCH.md](WEB_RESEARCH.md) ／ [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) ／ [BRIDGE_CONTRACT.md](BRIDGE_CONTRACT.md) ／ [DEVLOG.md](DEVLOG.md)
 
-対象: `Nz-Videomni`（REST API）。**基本方針は凍結**（フロントエンド側の都合でバックエンドAPIを変えない）だが、**V2V結合(Join)機能の復活のために限定的な解除・拡張を行った実績がある**（`POST /jobs/{job_id}/join` の `source_tail_seconds`、応答の `trimmed_source_seconds`／`source_fps` など。本文§3.17・§3.18・§6に反映済み）。したがって「変更禁止」ではなく「必要が確定した箇所だけをオーナー承認のうえで拡張する」という運用である。本ドキュメントはフロントエンド(`.aux2`プラグイン)実装のための一次参照であり、`gradio_ui/api_client.py` ・ `gradio_ui/handlers.py` ・ `Videomni_Backend_Specification.md` ・ [`Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md)（生きた正本。backend側の同名文書はv2時点で凍結した歴史的スナップショット、オーナー決定2026-08-11）を根拠資料とする。
+対象: `Nz-Videomni`（REST API）。**基本方針は凍結**（フロントエンド側の都合でバックエンドAPIを変えない）だが、**V2V結合(Join)機能の復活のために限定的な解除・拡張を行った実績がある**（`POST /jobs/{job_id}/join` の `source_tail_seconds`、応答の `trimmed_source_seconds`／`source_fps` など。本文§3.17・§3.18・§6に反映済み）。したがって「変更禁止」ではなく「必要が確定した箇所だけをオーナー承認のうえで拡張する」という運用である。本ドキュメントはフロントエンド(`.aux2`プラグイン)実装のための一次参照であり、`gradio_ui/api_client.py` ・ `gradio_ui/handlers.py` ・ `Videomni_Backend_Specification.md` ・ `Mock/AVIUTL2_DESIGN_BRIEF.md`（デザインブリーフの生きた正本。**この`Mock/`フォルダはgitの管理対象外**で、旧フロントエンドリポジトリ`Nz-LTX23-frontend-AviUtl2`のローカル作業ツリーにのみ存在する。リポジトリ直下の`Docs/AVIUTL2_DESIGN_BRIEF.md`はv2時点で凍結した歴史的スナップショット、オーナー決定2026-08-11）を根拠資料とする。
 
 ---
 
@@ -15,7 +15,7 @@
   - `./.venv`(torch無し): FastAPIアプリ本体。API・ジョブ管理・Gradio検証UI・モックbackend。
   - `./.venv-engine`(torch+cu128): 実推論worker。アプリが `subprocess` として自動spawnするため、**フロントエンドは engine を直接意識する必要はない**。
 - **backend選択**: `config.model.backend` = `auto` / `mock` / `real`(`config.yaml`の`model.backend`)。`auto`はGPU+モデルがあれば`real`、無ければ`mock`(合成クリップ)。**モックでもAPI・スキーマ・出力構造は実物と同一**なので、フロントはbackendの別を意識せず開発できる。開発中のE2E確認は原則mockバックエンドで行う。
-- 一次資料: `Videomni_Backend_Specification.md`(API契約詳細)、`Docs/RESOLUTION_DURATION_CAPABILITY.md`(解像度別性能実測)、[`Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md)(本フロントエンド専用の設計ブリーフ。§5「変えてはいけない制約」、§4「性能の現実」が必読)。
+- 一次資料: `Videomni_Backend_Specification.md`(API契約詳細)、`Docs/RESOLUTION_DURATION_CAPABILITY.md`(解像度別性能実測)、`Mock/AVIUTL2_DESIGN_BRIEF.md`(本フロントエンド専用の設計ブリーフ。§5「変えてはいけない制約」、§4「性能の現実」が必読)。
 
 ## 1. 起動・接続
 
@@ -492,9 +492,9 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 
 > **UIに出してはいけない機能**
 >
-> [`Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md) §5「変えてはいけない制約」の項目1が明示: 以下はAPIにフィールドはあるが engine に繋がっていないため、**UIコントロールとして表出させてはならない**（グレーアウト等で「場所のみ確保」は可）:
+> `Mock/AVIUTL2_DESIGN_BRIEF.md` §5「変えてはいけない制約」の項目1が明示: 以下はAPIにフィールドはあるが engine に繋がっていないため、**UIコントロールとして表出させてはならない**（グレーアウト等で「場所のみ確保」は可）:
 >
-> - ~~ネガティブプロンプト(`negative_prompt`)~~ → **2026-07-28、NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）経由で条件付き解禁**（バックエンドコミット2ae497b）。CFGを迂回する専用の`nag_*`フィールド一式が実際にengineへ配線されたための解禁で、下のCFG/ステップ数/pipelineの禁止は変わらず有効（NAGはこれらを迂回する別経路のため）。フロント側の実装・UI詳細は`Docs/DEVLOG.md`の該当節、[`Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md) §5・§11参照。**2026-07-29には方式選択が`neg_method`で解禁され、VSF（Value Sign Flip。正負のコンテキストを連結し1回のattentionで済ませつつ負側のVだけ符号反転×スケールする、NAGに続く2つ目の非CFGネガティブプロンプト手法）も選べるようになった**（`vsf_scale`、0-10、既定1.5）。フロントはNAG/VSFの方式をラジオで選び、方式に応じたスライダー(NAG: scale/tau/alpha、VSF: vsf_scale)を出し分ける。
+> - ~~ネガティブプロンプト(`negative_prompt`)~~ → **2026-07-28、NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）経由で条件付き解禁**（バックエンドコミット2ae497b）。CFGを迂回する専用の`nag_*`フィールド一式が実際にengineへ配線されたための解禁で、下のCFG/ステップ数/pipelineの禁止は変わらず有効（NAGはこれらを迂回する別経路のため）。フロント側の実装・UI詳細は`Docs/DEVLOG.md`の該当節、`Mock/AVIUTL2_DESIGN_BRIEF.md` §5・§11参照。**2026-07-29には方式選択が`neg_method`で解禁され、VSF（Value Sign Flip。正負のコンテキストを連結し1回のattentionで済ませつつ負側のVだけ符号反転×スケールする、NAGに続く2つ目の非CFGネガティブプロンプト手法）も選べるようになった**（`vsf_scale`、0-10、既定1.5）。フロントはNAG/VSFの方式をラジオで選び、方式に応じたスライダー(NAG: scale/tau/alpha、VSF: vsf_scale)を出し分ける。
 > - CFG/ガイダンス強度スライダー(`guidance_scale`): distilled固定1.0。**引き続き禁止**
 > - 品質モード切替(`pipeline: two_stage_hq`): 実質distilledのみ。**引き続き禁止**
 > - 生成ステップ数変更(`num_inference_steps`): 8固定。**引き続き禁止**

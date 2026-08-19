@@ -20,8 +20,8 @@ time, so the Generate button just disables itself while one is running). The
 tab bar also has a **Toolbox** tab, the one remaining disabled placeholder
 with no panel behind it yet. It
 runs inside AviUtl2's WebView2 control and
-talks to the AviUtl2 host and the LTX23 backend entirely through the native
-JSON-RPC bridge described below (no direct network calls from the page).
+talks to the AviUtl2 host and the Nz-Videomni backend entirely through the
+native JSON-RPC bridge described below (no direct network calls from the page).
 
 It runs both:
 

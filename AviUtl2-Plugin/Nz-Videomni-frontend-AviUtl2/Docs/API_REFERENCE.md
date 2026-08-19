@@ -176,7 +176,7 @@ workerを停止しVRAM解放。ジョブ実行中は `409`。応答 `{"pipeline_
 - `kind`: `"style"`(画風・キャラ、参照動画不要) / `"control"`(制御、参照動画必須)。フロントでタブ分けに使う。
 - `preprocess`(str \| null、**2026-08-11追加**): 制御系アダプタの前処理種別(`"canny"`/`"pose"`/`"depth"`等)。styleアダプタや前処理不要の参照系(`deblur`等)は`null`。フロントは**このフィールドの値が`"depth"`かどうか**でチェーン(2クリップ以上)を選ぶ操作を先回りブロックする(`LORA_DEPTH_CHAIN_UNSUPPORTED`、§2)。
 - `reference_downscale_factor`(int \| null、**2026-08-11追加**): 参照動画の内部ダウンスケール倍率(`2`または`1`)。union-control系は`2`、`deblur`等のタイル化エンコード経路は`1`。
-- 呼ぶたび `config.model.lora_dir`(既定 `./models/loras`)を再スキャン。
+- 呼ぶたび `config.model.lora_dir`(既定 `./models/LTX23/StyleLoRA`)を再スキャン。
 
 ### 3.7 `POST /loras/reload`(`api/loras.py::reload_loras`)— 認証不要
 

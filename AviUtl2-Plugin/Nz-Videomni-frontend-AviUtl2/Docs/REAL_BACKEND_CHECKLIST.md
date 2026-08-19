@@ -46,20 +46,20 @@ README §1「必要なモデル（`config.yaml`の`model:`が参照）」の表�
 
 **生成の中核（欠けると`_real_available()`がFalseになり`mock`へ落ちる）— 合計 ~28GB**:
 
-- [ ] GGUF transformer (Q4_K_M)（`models/ltx-2.3-gguf/` 直下、~17GB）
-- [ ] GGUF Gemma (Q4_K_M)（`models/gemma-3-12b-it-gguf/`、~7.3GB）
-- [ ] component VAE / audio / text-projection（`models/ltx-2.3-components/`、~3.9GB）
-- [ ] spatial upsampler（`models/ltx-2.3/`、~0.95GB）
-- [ ] Gemma tokenizer dir（`models/gemma-3-12b-it-tokenizer/`、~40MB）
+- [ ] GGUF transformer (Q4_K_M)（`models/LTX23/Weights/` 直下、~17GB）
+- [ ] GGUF Gemma (Q4_K_M)（`models/LTX23/TextEncoder/`、~7.3GB）
+- [ ] component VAE / audio / text-projection（`models/LTX23/VAE/` と `models/LTX23/TextEncoder/`、~3.9GB）
+- [ ] spatial upsampler（`models/LTX23/Upscaler/`、~0.95GB）
+- [ ] Gemma tokenizer dir（`models/LTX23/TextEncoder/tokenizer/`、~40MB）
 
 **IC-LoRAと前処理器（欠けても`mock`には落ちないが、UIから選んだ瞬間404になる）— 合計 ~2.58GiB**:
 
-- [ ] IC-LoRA 2点（`models/ltx-2.3-ic-lora/{pixel-spatial-upscaler,union-control}/`、~1.22GiB）。`config.yaml`の`ic_loras:`が登録する5アダプタ（`pixel-spatial-upscaler-x2`／`canny-control`／`pose-control`／`depth-control`／`deblur`。中3つは同一のunion-controlファイルを3つの名前で公開したもの）のうち4つの実体。
-- [ ] DWPose前処理器 2点（`models/preprocessors/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt`、~0.33GiB）。`pose-control`が参照動画から骨格を起こすときに使う。`engine/preprocess/dwpose.py`が絶対パスで読むため配置は変更不可。
-- [ ] IC-LoRA Deblur 1点（`models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`、~0.91GiB）。`deblur`アダプタの実体で、前処理は不要。
-- [ ] VDA深度前処理器 2点（`models/preprocessors-vda/{video_depth_anything_vits.pth,LICENSE}`、~0.12GiB）。`depth-control`が参照動画から深度を起こすときに使う。`engine/preprocess/depth.py`が絶対パスで読むため配置は変更不可（`LICENSE`はApache-2.0の全文で`.pth`と必ず一緒に置く）。
+- [ ] IC-LoRA 2点（`models/LTX23/IC-LoRA/{pixel-spatial-upscaler,union-control}/`、~1.22GiB）。`config.yaml`の`ic_loras:`が登録する5アダプタ（`pixel-spatial-upscaler-x2`／`canny-control`／`pose-control`／`depth-control`／`deblur`。中3つは同一のunion-controlファイルを3つの名前で公開したもの）のうち4つの実体。
+- [ ] DWPose前処理器 2点（`models/Preprocessors/DWPose/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt`、~0.33GiB）。`pose-control`が参照動画から骨格を起こすときに使う。`engine/preprocess/dwpose.py`が絶対パスで読むため配置は変更不可。
+- [ ] IC-LoRA Deblur 1点（`models/LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`、~0.91GiB）。`deblur`アダプタの実体で、前処理は不要。
+- [ ] VDA深度前処理器 2点（`models/Preprocessors/VDA/{video_depth_anything_vits.pth,LICENSE}`、~0.12GiB）。`depth-control`が参照動画から深度を起こすときに使う。`engine/preprocess/depth.py`が絶対パスで読むため配置は変更不可（`LICENSE`はApache-2.0の全文で`.pth`と必ず一緒に置く）。
 
-**取得総量は約33GB（30.7GiB）。** `install_ltx.ps1`の最後に出るPASS/MISSING検証テーブルは**16項目**で、上記4種類も名指しで表示する。ここが全項目PASSであることが、本節の確認としてはもっとも確実である（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36）。詳細な配置規約・自動認識の仕組みはREADME §1「追加のtransformer GGUF / LoRAを配置する」節を参照。
+**取得総量は約33GB（30.7GiB）。** `install_ltx.ps1`の最後に出るPASS/MISSING検証テーブルは**18項目**で、上記4種類も名指しで表示する（旧レイアウトのまま残っている環境は、`setup.bat`の再実行で上記の新しい配置へ自動的に移行される）。ここが全項目PASSであることが、本節の確認としてはもっとも確実である（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36）。詳細な配置規約・自動認識の仕組みはREADME §1「追加のtransformer GGUF / LoRAを配置する」節を参照。
 
 ### 2.3 GPU要件
 

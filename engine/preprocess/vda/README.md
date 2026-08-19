@@ -33,7 +33,7 @@ The upstream directory layout (`video_depth_anything/` + `utils/`) is preserved
 so a future upstream diff stays readable.
 
 The `.pth` checkpoint is **not** in git. It is installed to
-`models/preprocessors-vda/video_depth_anything_vits.pth` (see
+`models/Preprocessors/VDA/video_depth_anything_vits.pth` (see
 `scripts/install_ltx.ps1`).
 
 ## Modifications (this is the complete list)

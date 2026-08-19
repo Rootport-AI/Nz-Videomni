@@ -180,7 +180,7 @@ attention は全世代で PyTorch の SDPA を既定にしており、xformers �
 
 | 中身 | 実測サイズ | 備考 |
 |------|-----------|------|
-| `models/`（モデル一式） | 約 30.7 GiB | GGUF transformer ＋ GGUF Gemma ＋ component ファイル群 ＋ アップサンプラ ＋ tokenizer ＋ IC-LoRA 2点（1.22 GiB）＋ DWPose 前処理器 2点（0.33 GiB）＋ Deblur 1点（0.91 GiB）＋ Video-Depth-Anything 2点（0.12 GiB） |
+| `models/`（モデル一式） | 約 30.7 GiB | `models/LTX23/` に GGUF transformer（`Weights/`）＋ GGUF Gemma と tokenizer（`TextEncoder/`）＋ VAE 一式（`VAE/`）＋ アップサンプラ（`Upscaler/`）＋ IC-LoRA 2点（1.22 GiB）と Deblur 1点（0.91 GiB）（`IC-LoRA/`）、`models/Preprocessors/` に DWPose 前処理器 2点（0.33 GiB）と Video-Depth-Anything 2点（0.12 GiB）。フォルダの意味は下の「models フォルダの構成」を参照 |
 | Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、2つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
 | `tools/`（`uv` ＋ `ffmpeg`） | 約 0.4 GiB（実測 378 MB） | `setup.bat` が取り込む前提ツール。ffmpeg のダウンロードは約 104 MB だが、展開後はこの大きさになる |
 
@@ -262,25 +262,30 @@ DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`�
 
 | 要素 | 既定パス | 概算 | 取得元リポジトリ | 役割 |
 |------|----------|------|------------------|------|
-| GGUF transformer (Q4_K_M) | `models/ltx-2.3-gguf/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 本番トランスフォーマー |
-| GGUF Gemma (Q4_K_M) | `models/gemma-3-12b-it-gguf/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | text encoder（GPU 推論・逐次オフロード） |
-| component VAE / audio / text-projection | `models/ltx-2.3-components/{vae,text_encoders}/*.safetensors` | ~3.9GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 46GB モノリスを置換する小単体ファイル |
-| spatial upsampler | `models/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 2段生成の x2 アップサンプラ |
-| Gemma tokenizer dir (`gemma_root`) | `models/gemma-3-12b-it-tokenizer/` | ~40MB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
-| IC-LoRA 2点 | `models/ltx-2.3-ic-lora/{pixel-spatial-upscaler,union-control}/*.safetensors` | ~1.2GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `config.yaml` の `ic_loras:` が登録するアダプタの実体（`pixel-spatial-upscaler-x2` と、同一の union-control ファイルを3つの名前で公開した `canny-control` / `pose-control` / `depth-control`） |
-| DWPose 前処理器 2点 | `models/preprocessors/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt` | ~0.34GB | [`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose) | `pose-control` アダプタが参照動画から骨格を起こすときに使う姿勢推定モデル（`engine/preprocess/dwpose.py` が絶対パスで読む） |
-| IC-LoRA Deblur 1点 | `models/ltx-2.3-ic-lora-deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | ~0.91GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | ピンぼけした動画をくっきりさせる `deblur` アダプタの実体。前処理を必要とせず、ぼけた参照動画をそのまま渡す（2026-08-03 追加） |
-| VDA 深度前処理器 2点 | `models/preprocessors-vda/video_depth_anything_vits.pth` ＋ `LICENSE` | ~0.12GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `depth-control` アダプタが参照動画から深度マップ（手前と奥の距離を明暗で表した白黒映像）を起こすときに使う Video-Depth-Anything Small（`engine/preprocess/depth.py` が絶対パスで読む）。同梱の `LICENSE` は Apache-2.0 の全文で、この重みだけライセンスが異なるため必ず一緒に置かれる（2026-08-03 追加） |
+| GGUF transformer (Q4_K_M) | `models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | ~17GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 本番トランスフォーマー |
+| GGUF Gemma (Q4_K_M) | `models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf` | ~7.3GB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | text encoder（GPU 推論・逐次オフロード） |
+| component VAE / audio / text-projection | `models/LTX23/VAE/*.safetensors`（映像・音声 VAE と `prunavaed/` の枝刈りデコーダ）＋ `models/LTX23/TextEncoder/ltx-2.3_text_projection_bf16.safetensors` | ~3.9GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 46GB モノリスを置換する小単体ファイル |
+| spatial upsampler | `models/LTX23/Upscaler/ltx-2.3-spatial-upscaler-x2-1.1.safetensors` | ~0.95GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 2段生成の x2 アップサンプラ |
+| Gemma tokenizer dir (`gemma_root`) | `models/LTX23/TextEncoder/tokenizer/` | ~40MB | [`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B) | tokenizer/preprocessor のみ（`tokenizer.model` 等）。**重みは含まない**（text encoder は上の GGUF Gemma が供給） |
+| IC-LoRA 2点 | `models/LTX23/IC-LoRA/{pixel-spatial-upscaler,union-control}/*.safetensors` | ~1.2GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `config.yaml` の `ic_loras:` が登録するアダプタの実体（`pixel-spatial-upscaler-x2` と、同一の union-control ファイルを3つの名前で公開した `canny-control` / `pose-control` / `depth-control`） |
+| DWPose 前処理器 2点 | `models/Preprocessors/DWPose/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt` | ~0.34GB | [`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose) | `pose-control` アダプタが参照動画から骨格を起こすときに使う姿勢推定モデル（`engine/preprocess/dwpose.py` が絶対パスで読む） |
+| IC-LoRA Deblur 1点 | `models/LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | ~0.91GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | ピンぼけした動画をくっきりさせる `deblur` アダプタの実体。前処理を必要とせず、ぼけた参照動画をそのまま渡す（2026-08-03 追加） |
+| VDA 深度前処理器 2点 | `models/Preprocessors/VDA/video_depth_anything_vits.pth` ＋ `LICENSE` | ~0.12GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `depth-control` アダプタが参照動画から深度マップ（手前と奥の距離を明暗で表した白黒映像）を起こすときに使う Video-Depth-Anything Small（`engine/preprocess/depth.py` が絶対パスで読む）。同梱の `LICENSE` は Apache-2.0 の全文で、この重みだけライセンスが異なるため必ず一緒に置かれる（2026-08-03 追加） |
 
 上記9要素はすべて、本プロジェクトが再ホストした **3つの公開リポジトリ**（`Rootport/Nz-LTX23-weights`・
 `Rootport/Nz-Gemma3-12B`・`Rootport/Nz-DWPose`）から取得します。いずれも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、
 **HuggingFace のアカウントもアクセストークンも一切必要ありません**。`setup.bat`（内部で
-`scripts/install_ltx.ps1` を呼びます）を実行すれば、5回のダウンロード（合計 23 ファイル・32,912,043,043 バイト＝約 30.7GiB）で全部揃います。
-3リポジトリの内部構造は上表の `models/` 配下と 1 対 1 で一致させてあるので、
-`models/` へそのまま展開されます（配置換えやリネームは発生しません）。
+`scripts/install_ltx.ps1` を呼びます）を実行すれば、6回のダウンロードで全部揃います。
+
+取得の手順は、どのファイルをどこへ置くかを宣言した**manifest**（`scripts/manifests/*.json`）が決めています。
+リポジトリの中身はまず一時置き場（`models/.dl/`）へ落とし、そのあと manifest の対応表にしたがって
+上表の場所へ移動します（3リポジトリの内部構造は旧フォルダ構成の名残なので、そのまま展開すると
+新しい構成にはなりません）。一時置き場は成功するまで消さないので、途中で失敗しても再実行すれば
+ダウンロード済みの分は再取得されません。
 
 **IC-LoRA・DWPose 前処理器・VDA 深度前処理器も `install_ltx.ps1` が自動で取得します（手動配置は不要です）。** インストールの最後に出る
-検証テーブル（16 項目）は、これらも含めて 1 ファイルずつ PASS/MISSING を表示します。ここが MISSING のまま気づかないと、
+検証テーブル（18 項目）は、これらも含めて 1 ファイルずつ PASS/MISSING を表示します（表の行は manifest の
+期待ファイル定義から作られるので、ダウンロードを守るサイズ判定と必ず同じ内容になります）。ここが MISSING のまま気づかないと、
 UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）が出るのに、
 選んだ瞬間に 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
 
@@ -299,15 +304,16 @@ backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行い�
 
 ### 追加の transformer GGUF / LoRA を配置する
 
-**transformer GGUF**: `models/ltx-2.3-gguf/` **直下**に `.gguf` を置くだけで、ファイル名から自動認識され
+**transformer GGUF**: `models/LTX23/Weights/` **直下**に `.gguf` を置くだけで、ファイル名から自動認識され
 UI/API のドロップダウンに列挙されます。サブフォルダに入れても再帰スキャンで拾われます（[`services/model_registry.py`](services/model_registry.py) の
 `CATEGORY_SPECS["transformer"]`、`recursive=True`）。登録名はファイル名（拡張子除く）で、既定の登録名と
 衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
 （`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
 
 > **モデルの取得元**は上の表のとおり、本プロジェクトが再ホストした3つの公開リポジトリです。
-> 再ホストの経緯と、旧インストーラで導入した環境（`models/ltx-2.3-gguf/` のサブフォルダ配置）の直し方は
-> [`Docs/NEXT_SESSION_HANDOFF.md`](Docs/NEXT_SESSION_HANDOFF.md)「2026-07-26 α版インストール導線の整備」ブロックにあります。
+> 再ホストの経緯は [`Docs/NEXT_SESSION_HANDOFF.md`](Docs/NEXT_SESSION_HANDOFF.md)「2026-07-26 α版インストール導線の整備」
+> ブロックにあります（当時の記述は旧フォルダ構成を前提にしています。旧構成のまま残っている環境は
+> `setup.bat` の再実行で自動的に新しい構成へ移ります。下の「models フォルダの構成」を参照）。
 
 選択は UI の「Models」設定タブのドロップダウン、または API `GET /models`（登録名の一覧確認）→
 `POST /pipeline/load`（body `{"models": {"transformer": "<登録名>"}}`）で行います。選択が現在ロード中のものと
@@ -322,11 +328,55 @@ LTXネイティブの生キーであること、(3) `embeddings_connector` 層�
 `config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）は
 `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。
 
-`models/loras/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、
+`models/LTX23/StyleLoRA/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、
 `POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または
 Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0.05〜2、0は不可）。**音声側の適用強度だけを映像側と別に指定したい場合は `<lora:名前:映像の強度:音声の強度>` の第3引数（0〜2。音声側だけ0=適用しないを指定できる）を使います。省略時は音声側も映像側の値に追従します（後方互換）。詳細は `Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`。** ComfyUI 形式
 （`diffusion_model.` プレフィックス＋ `lora_A`/`lora_B`）に対応し、量子化 GGUF モデルにもそのまま適用できます
 （実行時加算方式のため、モデル側の量子化と衝突しません）。
+
+### models フォルダの構成
+
+`models/` は「どのベースモデルのものか」を最上位で分ける構成になっています。置き場所がそのまま
+「このファイルは LTX 2.3 用です」という宣言になるため、将来ほかのベースモデルが増えても、
+ファイルの中身を見分ける仕組みを足さずに並べていけます。
+
+```
+models/
+├─ Preprocessors/            ベースモデルに依存しない前処理器（共用）
+│   ├─ DWPose/               yolox_l.torchscript.pt, dw-ll_ucoco_384_bs5.torchscript.pt
+│   └─ VDA/                  video_depth_anything_vits.pth（＋ LICENSE）
+└─ LTX23/                    LTX 2.3 のためのファイル一式
+    ├─ Weights/              transformer の GGUF（公式・自家変換とも。サブフォルダも再帰的に認識）
+    ├─ TextEncoder/          gemma-3-12b-it-Q4_K_M.gguf ＋ ltx-2.3_text_projection_bf16.safetensors
+    │   └─ tokenizer/        tokenizer 一式（重みは含まない）
+    ├─ VAE/                  映像 VAE・音声 VAE
+    │   └─ prunavaed/        枝刈りデコーダ（PrunaVAED）
+    ├─ Upscaler/             ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+    ├─ StyleLoRA/            利用者が用意する画風・キャラクター系 LoRA
+    └─ IC-LoRA/              pixel-spatial-upscaler / union-control / deblur / in-outpainting
+```
+
+各フォルダには `put_〇〇_here.txt` という案内ファイルが1つ入っています。ファイル名がそのまま
+「ここに置ける形式」の掲示になっているので、手に入れたファイルの置き場所に迷ったときの目印にしてください
+（この案内ファイル自体はモデルの読み込み対象にはなりません）。
+
+**すでに古い構成で使っている場合**、`setup.bat` を再実行すると自動で新しい構成へ移ります。
+中身を**移動するだけ**（同じドライブ内なので数秒で終わり、再ダウンロードは発生しません）で、
+移動先に同名のファイルがある場合は上書きせずその場で止まります。自分で置いた LoRA・自家変換 GGUF・
+x4 アップスケーラーなども、対応表に無いものはそのまま持ち上がります。実行のたびに、何をどこへ移すかの
+一覧が画面に出て、1ファイル1行の記録が `logs\model_migration_日付_時刻.log` に残ります。
+
+> **元に戻したいとき**: 上の移行ログの `MOVE` 行は「移動元」「移動先」の順に並んだ表になっているので、
+> ログを下から順に読み、各行の移動先を移動元へ戻す（PowerShell なら
+> `Move-Item -LiteralPath models\<移動先> -Destination models\<移動元>`）だけで、移行前の配置に戻せます。
+> `CONFIG` 行がある場合は `config.yaml.bak` を `config.yaml` へ戻してください。ただし、この作業は
+> **古いコードへ戻す場合にだけ意味があります**（現在のコードは新しい構成のパスを見にいくため）。
+
+> **`config.yaml` を自分で編集している場合の注意**: 移行時に、`model:` 配下のモデルパスだけを
+> インストーラが新しい構成へ自動的に書き換えます（書き換えた行はすべて画面に表示されます）。
+> 書き換える前の内容は `config.yaml.bak` として同じ場所に残るので、必要ならそこから戻せます。
+> パス以外の設定値には触れません。この書き換えを行わないと、`backend: "auto"` がモデルを見つけられず
+> エラーも出さないまま mock（実際には生成しない模擬動作）へ降格してしまうため、安全のために自動化しています。
 
 ---
 

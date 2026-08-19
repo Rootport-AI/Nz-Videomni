@@ -1,0 +1,144 @@
+﻿{
+  "schema": 1,
+  "id": "LTX23",
+  "downloads": [
+    {
+      "name": "LTX-2.3 weights + IC-LoRA (7 files)",
+      "repo": "Rootport/Nz-LTX23-weights",
+      "include": ["ltx-2.3/*", "ltx-2.3-components/*", "ltx-2.3-gguf/*", "ltx-2.3-ic-lora/*"],
+      "map": [
+        { "from": "ltx-2.3-gguf", "to": "LTX23/Weights" },
+        { "from": "ltx-2.3", "to": "LTX23/Upscaler" },
+        { "from": "ltx-2.3-components/vae", "to": "LTX23/VAE" },
+        { "from": "ltx-2.3-components/text_encoders", "to": "LTX23/TextEncoder" },
+        { "from": "ltx-2.3-ic-lora", "to": "LTX23/IC-LoRA" }
+      ],
+      "files": [
+        {
+          "path": "LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+          "min": 17000000000,
+          "label": "gguf_transformer",
+          "key": "gguf_transformer",
+          "_min": "公式17,763,015,328Bの1ファイル(約4%下)"
+        },
+        {
+          "path": "LTX23/Upscaler/ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+          "min": 900000000,
+          "label": "spatial_upsampler",
+          "key": "spatial_upsampler",
+          "_min": "公式995,743,560Bの1ファイル(約10%下)"
+        },
+        {
+          "path": "LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+          "min": 1400000000,
+          "label": "component_video_vae",
+          "key": "component_video_vae",
+          "_min": "公式1,452,258,578Bの1ファイル(約4%下)"
+        },
+        {
+          "path": "LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+          "min": 350000000,
+          "label": "component_audio_vae",
+          "key": "component_audio_vae",
+          "_min": "公式364,855,188Bの1ファイル(約4%下)"
+        },
+        {
+          "path": "LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors",
+          "min": 650000000,
+          "label": "component_video_vae_pruned",
+          "key": "component_video_vae_pruned",
+          "_min": "公式690,047,968Bの1ファイル(約6%下)。枝刈り版デコーダで自動認識の対象外、vae_mode=prune_vaed時のみ読まれる"
+        },
+        {
+          "path": "LTX23/TextEncoder/ltx-2.3_text_projection_bf16.safetensors",
+          "min": 2200000000,
+          "label": "component_text_projection",
+          "key": "component_text_projection",
+          "_min": "公式2,312,149,072Bの1ファイル(約5%下)"
+        },
+        {
+          "path": "LTX23/IC-LoRA/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
+          "min": 600000000,
+          "label": "ic_lora pixel-spatial-upscaler-x2",
+          "_min": "公式654,465,286Bの1ファイル(約8%下)。x4版(ユーザー資産)は同フォルダ内・filesの対象外"
+        },
+        {
+          "path": "LTX23/IC-LoRA/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+          "min": 600000000,
+          "label": "ic_lora union-control (canny/pose/depth)",
+          "_min": "公式654,465,352Bの1ファイル(約8%下)"
+        }
+      ]
+    },
+    {
+      "name": "Gemma-3-12B GGUF + tokenizer set (11 files)",
+      "repo": "Rootport/Nz-Gemma3-12B",
+      "include": ["gemma-3-12b-it-gguf/*", "gemma-3-12b-it-tokenizer/*"],
+      "map": [
+        { "from": "gemma-3-12b-it-gguf", "to": "LTX23/TextEncoder" },
+        { "from": "gemma-3-12b-it-tokenizer", "to": "LTX23/TextEncoder/tokenizer" }
+      ],
+      "files": [
+        {
+          "path": "LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+          "min": 7000000000,
+          "label": "gguf_gemma",
+          "key": "gguf_gemma",
+          "_min": "公式7,300,574,976Bの1ファイル(約4%下)"
+        },
+        {
+          "kind": "dir",
+          "path": "LTX23/TextEncoder/tokenizer",
+          "min": 39000000,
+          "label": "gemma_root (tokenizer dir)",
+          "key": "gemma_root",
+          "_min": "公式合計39,235,311B(直下10ファイル)。tokenizer.json/tokenizer.model/tokenizer_config.jsonの3点が主要ボリュームで、残り7点(35B〜1,615B)は個別に検知不能なため対象外"
+        }
+      ]
+    },
+    {
+      "name": "IC-LoRA Deblur (1 file)",
+      "repo": "Rootport/Nz-LTX23-weights",
+      "include": ["ltx-2.3-ic-lora-deblur/*"],
+      "map": [
+        { "from": "ltx-2.3-ic-lora-deblur", "to": "LTX23/IC-LoRA/deblur" }
+      ],
+      "files": [
+        {
+          "path": "LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors",
+          "min": 850000000,
+          "label": "ic_lora deblur",
+          "_min": "公式906,071,437Bの1ファイル(約6%下)"
+        }
+      ]
+    },
+    {
+      "name": "IC-LoRA In-Outpainting (1 file)",
+      "repo": "Rootport/Nz-LTX23-weights",
+      "include": ["ltx-2.3-ic-lora-in-outpainting/*"],
+      "map": [
+        { "from": "ltx-2.3-ic-lora-in-outpainting", "to": "LTX23/IC-LoRA/in-outpainting" }
+      ],
+      "files": [
+        {
+          "path": "LTX23/IC-LoRA/in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors",
+          "min": 1250000000,
+          "label": "ic_lora in-outpainting",
+          "_min": "公式1,308,778,338Bの1ファイル(約4%下)"
+        }
+      ]
+    }
+  ],
+  "migrate": [
+    { "from": "ltx-2.3-gguf", "to": "LTX23/Weights" },
+    { "from": "ltx-2.3", "to": "LTX23/Upscaler" },
+    { "from": "ltx-2.3-components/vae", "to": "LTX23/VAE" },
+    { "from": "ltx-2.3-components/text_encoders", "to": "LTX23/TextEncoder" },
+    { "from": "gemma-3-12b-it-gguf", "to": "LTX23/TextEncoder" },
+    { "from": "gemma-3-12b-it-tokenizer", "to": "LTX23/TextEncoder/tokenizer" },
+    { "from": "ltx-2.3-ic-lora", "to": "LTX23/IC-LoRA" },
+    { "from": "ltx-2.3-ic-lora-deblur", "to": "LTX23/IC-LoRA/deblur" },
+    { "from": "ltx-2.3-ic-lora-in-outpainting", "to": "LTX23/IC-LoRA/in-outpainting" },
+    { "from": "loras", "to": "LTX23/StyleLoRA" }
+  ]
+}

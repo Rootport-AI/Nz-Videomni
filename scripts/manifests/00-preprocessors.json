@@ -1,0 +1,48 @@
+﻿{
+  "schema": 1,
+  "id": "Preprocessors",
+  "downloads": [
+    {
+      "name": "DWPose preprocessor models (2 files)",
+      "repo": "Rootport/Nz-DWPose",
+      "include": ["preprocessors/*"],
+      "map": [
+        { "from": "preprocessors", "to": "Preprocessors/DWPose" }
+      ],
+      "files": [
+        {
+          "path": "Preprocessors/DWPose/yolox_l.torchscript.pt",
+          "min": 200000000,
+          "label": "dwpose detector (yolox_l)",
+          "_min": "公式217,697,649Bの1ファイル(約8%下)"
+        },
+        {
+          "path": "Preprocessors/DWPose/dw-ll_ucoco_384_bs5.torchscript.pt",
+          "min": 120000000,
+          "label": "dwpose estimator (dw-ll_ucoco)",
+          "_min": "公式135,059,124Bの1ファイル(約11%下)"
+        }
+      ]
+    },
+    {
+      "name": "Video-Depth-Anything Small preprocessor (2 files)",
+      "repo": "Rootport/Nz-LTX23-weights",
+      "include": ["preprocessors-vda/*"],
+      "map": [
+        { "from": "preprocessors-vda", "to": "Preprocessors/VDA" }
+      ],
+      "files": [
+        {
+          "path": "Preprocessors/VDA/video_depth_anything_vits.pth",
+          "min": 110000000,
+          "label": "vda depth model (vits)",
+          "_min": "公式116,440,756Bの1ファイル(約6%下。同梱LICENSEはガード対象外)"
+        }
+      ]
+    }
+  ],
+  "migrate": [
+    { "from": "preprocessors", "to": "Preprocessors/DWPose" },
+    { "from": "preprocessors-vda", "to": "Preprocessors/VDA" }
+  ]
+}

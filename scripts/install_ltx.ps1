@@ -17,7 +17,9 @@
          and models/INSTALLED_PATHS.txt).
       1. Prereqs (git, uv; ffmpeg + ffprobe warn) + process-scoped env isolation.
       2. Migrate an existing pre-2026-08 models/ tree to the base-model-first
-         layout, and rewrite config.yaml's model paths to match.
+         layout, rewrite config.yaml's model paths to match, and delete the
+         retired model.* key lines config.py no longer honours (they would
+         otherwise log a WARNING on every server start).
       3. uv-managed Python 3.12.
       4. App venv  .venv        (torch-FREE; `uv sync` of root pyproject.toml).
       5. Engine venv .venv-engine (torch 2.9.1+cu128 stack). DEFAULT = deterministic
@@ -735,7 +737,70 @@ function Remove-EmptyLegacyDirs {
 # start with models/ AND match the migrate table are touched; comments are left
 # alone (a '#' outside quotes ends the live part of the line); every other
 # value, key, blank line and byte is preserved, as is the file's BOM state.
+#
+# The one other config edit is the deprecated-key sweep below.
 # ----------------------------------------------------------------------------
+
+# The model.* keys config.py stopped honouring in the §3-97 P3b move of the
+# weight paths into the base-model descriptors. MUST stay identical to
+# config.py's DEPRECATED_MODEL_KEYS. A config.yaml that still carries one boots
+# fine and generates fine -- the value is simply ignored -- but config.py logs
+# one WARNING per leftover key on EVERY start, which is exactly the noise a
+# person re-running setup.bat should stop seeing. The WARNING itself stays in
+# config.py for the environments that never re-run the installer.
+$DeprecatedModelKeys = @(
+    'gguf_transformer_path',
+    'gguf_gemma_path',
+    'component_video_vae_path',
+    'component_audio_vae_path',
+    'component_text_projection_path',
+    'component_video_vae_pruned_path',
+    'spatial_upsampler_path',
+    'gemma_root'
+)
+
+# Delete whole lines carrying a deprecated model.* key -- that line only,
+# trailing inline comment included. Standalone comment lines around it (which
+# may explain neighbouring keys too) are never touched, and neither is any key
+# outside the top-level `model:` block.
+function Remove-DeprecatedModelKeys {
+    param(
+        [Parameter(Mandatory)] [string] $Text,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Keys
+    )
+    if ($Keys.Count -eq 0) { return [pscustomobject]@{ Text = $Text; Removals = @() } }
+
+    # Split so that each element KEEPS its own line terminator (zero-width
+    # lookbehind). Rejoining the survivors with '' therefore reproduces the
+    # file byte-for-byte apart from the deleted lines -- CRLF stays CRLF, LF
+    # stays LF, and a missing final newline stays missing.
+    # The CR half of a CRLF must NOT be a split point (that would cut the pair
+    # in two and leave the orphaned LF behind as a blank line when the CR half
+    # is deleted), hence: after any LF, or after a CR that no LF follows.
+    $lines = [regex]::Split($Text, '(?<=\n)|(?<=\r)(?!\n)')
+    $keyRx = [regex] ('^\s+(?:' + (($Keys | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\s*:')
+
+    $kept = New-Object System.Collections.Generic.List[string]
+    $removals = @()
+    $inModel = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+        $content = $line -replace '(\r\n|\n|\r)$', ''
+        # Block tracking: `model:` at column 0 opens it, the next column-0 key
+        # closes it. Column-0 comments and blank lines are neutral (a comment
+        # between two model keys must not end the block).
+        if ($content -match '^model\s*:') { $inModel = $true }
+        elseif ($content -match '^[^\s#]') { $inModel = $false }
+
+        if ($inModel -and $keyRx.IsMatch($content)) {
+            $removals += [pscustomobject]@{ Line = ($i + 1); Text = $content.Trim() }
+            continue
+        }
+        $kept.Add($line)
+    }
+    return [pscustomobject]@{ Text = ($kept -join ''); Removals = @($removals) }
+}
+
 function Convert-ConfigModelPaths {
     param(
         [Parameter(Mandatory)] [string] $Text,
@@ -786,7 +851,13 @@ function Convert-ConfigModelPaths {
             $changes += [pscustomobject]@{ Line = ($i + 1); Old = $oldLines[$i].Trim(); New = $newLines[$i].Trim() }
         }
     }
-    return [pscustomobject]@{ Text = $newText; Changes = @($changes) }
+
+    # The deprecated-key sweep runs AFTER the diff above so the reported line
+    # numbers still refer to the file as it is on disk (the rewrite is
+    # line-preserving; only this step changes the line count).
+    $swept = Remove-DeprecatedModelKeys -Text $newText -Keys $DeprecatedModelKeys
+
+    return [pscustomobject]@{ Text = $swept.Text; Changes = @($changes); Removals = @($swept.Removals) }
 }
 
 if ($SkipMigrate) {
@@ -850,13 +921,16 @@ if ($SkipMigrate) {
     Write-Host ""
     if ($null -eq $configResult) {
         Write-Host "  config.yaml : not present (nothing to rewrite)" -ForegroundColor DarkGray
-    } elseif ($configResult.Changes.Count -eq 0) {
-        Write-Host "  config.yaml : no legacy model paths found (nothing to rewrite)" -ForegroundColor DarkGray
+    } elseif ($configResult.Changes.Count -eq 0 -and $configResult.Removals.Count -eq 0) {
+        Write-Host "  config.yaml : no legacy model paths or retired keys found (nothing to rewrite)" -ForegroundColor DarkGray
     } else {
-        Write-Host ("  config.yaml : {0} line(s) to rewrite (a config.yaml.bak is written first)" -f $configResult.Changes.Count)
+        Write-Host ("  config.yaml : {0} line(s) to rewrite, {1} retired key line(s) to delete (a config.yaml.bak is written first)" -f $configResult.Changes.Count, $configResult.Removals.Count)
         foreach ($c in $configResult.Changes) {
             Write-Host ("    line {0,4}  - {1}" -f $c.Line, $c.Old) -ForegroundColor DarkGray
             Write-Host ("    line {0,4}  + {1}" -f $c.Line, $c.New) -ForegroundColor Green
+        }
+        foreach ($r in $configResult.Removals) {
+            Write-Host ("    line {0,4}  DEL {1}" -f $r.Line, $r.Text) -ForegroundColor Yellow
         }
     }
 
@@ -868,7 +942,7 @@ if ($SkipMigrate) {
 
     if (($caseFix.Count -eq 0) -and ($plan.Moves.Count -eq 0) -and ($plan.Drops.Count -eq 0) -and
         ($plan.DropDirs.Count -eq 0) -and
-        ($null -eq $configResult -or $configResult.Changes.Count -eq 0)) {
+        ($null -eq $configResult -or ($configResult.Changes.Count -eq 0 -and $configResult.Removals.Count -eq 0))) {
         Write-Host ""
         Write-Skip "models/ is already in the base-model-first layout"
     } else {
@@ -938,14 +1012,17 @@ if ($SkipMigrate) {
             Add-Content -LiteralPath $migLog -Value ("RMDIR`t{0}" -f $rd) -Encoding utf8
         }
 
-        if ($null -ne $configResult -and $configResult.Changes.Count -gt 0) {
+        if ($null -ne $configResult -and ($configResult.Changes.Count -gt 0 -or $configResult.Removals.Count -gt 0)) {
             Copy-Item -LiteralPath $configPath -Destination "$configPath.bak" -Force
             # WriteAllText with an explicit UTF8Encoding keeps the file's original
             # BOM state (Set-Content/Out-File would not) and writes nothing else.
             $enc = New-Object System.Text.UTF8Encoding($configHasBom)
             [System.IO.File]::WriteAllText($configPath, $configResult.Text, $enc)
-            Add-Content -LiteralPath $migLog -Value ("CONFIG`tconfig.yaml`t{0} line(s) rewritten, backup at config.yaml.bak" -f $configResult.Changes.Count) -Encoding utf8
-            Write-Ok "config.yaml rewritten ($($configResult.Changes.Count) line(s)); previous version saved as config.yaml.bak"
+            Add-Content -LiteralPath $migLog -Value ("CONFIG`tconfig.yaml`t{0} line(s) rewritten, {1} retired key line(s) deleted, backup at config.yaml.bak" -f $configResult.Changes.Count, $configResult.Removals.Count) -Encoding utf8
+            foreach ($r in $configResult.Removals) {
+                Add-Content -LiteralPath $migLog -Value ("CONFIGDEL`tconfig.yaml`tline {0}`t{1}" -f $r.Line, $r.Text) -Encoding utf8
+            }
+            Write-Ok "config.yaml rewritten ($($configResult.Changes.Count) path line(s), $($configResult.Removals.Count) retired key line(s) deleted); previous version saved as config.yaml.bak"
         }
 
         Add-Content -LiteralPath $migLog -Value "# finished $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Encoding utf8

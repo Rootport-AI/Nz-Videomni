@@ -9,6 +9,7 @@ files; the client fixture (conftest) does the same for the whole app.
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
@@ -235,6 +236,35 @@ def test_shared_vae_dir_video_audio_classification(tmp_path):
     assert "custom_audio_vae" not in video_names
     for skipped in ("mystery_weights", "video_audio_combo"):
         assert skipped not in video_names and skipped not in audio_names
+
+
+def test_shared_vae_dir_scan_is_silent_about_the_sibling_category(tmp_path, caplog):
+    """The healthy two-file layout must log NOTHING.
+
+    video_vae and audio share one scan directory, so each necessarily walks
+    past the other's file. That is the design working, not something the owner
+    can act on — the startup log must not mention it (see _scan_category)."""
+    cfg = _config_with_layout(tmp_path)
+    vae_dir = tmp_path / "models" / "components" / "vae"
+    _touch(vae_dir / "custom_video_vae.safetensors")
+    _touch(vae_dir / "custom_audio_vae.safetensors")
+    with caplog.at_level(logging.INFO, logger="ltx.models"):
+        ModelRegistry(cfg)
+    assert [r for r in caplog.records if "not classifiable" in r.getMessage()] == []
+
+
+def test_scan_reports_a_file_no_category_can_classify_once(tmp_path, caplog):
+    """A file NEITHER hint claims really is invisible until it is registered,
+    so it still gets its notice — exactly one, not one per category that
+    shares the directory."""
+    cfg = _config_with_layout(tmp_path)
+    vae_dir = tmp_path / "models" / "components" / "vae"
+    _touch(vae_dir / "mystery_weights.safetensors")
+    with caplog.at_level(logging.INFO, logger="ltx.models"):
+        ModelRegistry(cfg)
+    notices = [r for r in caplog.records if "not classifiable" in r.getMessage()]
+    assert len(notices) == 1
+    assert "mystery_weights.safetensors" in notices[0].getMessage()
 
 
 def test_unclassifiable_file_exposed_via_explicit_config(tmp_path):

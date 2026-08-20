@@ -19,7 +19,7 @@ import logging
 
 import yaml
 
-from config import DEPRECATED_MODEL_KEYS, AppConfig, load_config
+from config import DEPRECATED_MODEL_KEYS, PROJECT_ROOT, AppConfig, load_config
 from conftest import base_model_descriptor, build_model_layout, write_model_file
 from services.base_models import BaseModelDescriptor, load_base_models
 from services.engines.ltx.adapter import REQUIRED_ASSETS, SELECTION_FIELDS
@@ -129,6 +129,19 @@ def test_deprecated_key_list_covers_every_removed_field():
     }
     for key in DEPRECATED_MODEL_KEYS:
         assert not hasattr(AppConfig().model, key)
+
+
+def test_installer_sweeps_exactly_the_deprecated_keys():
+    """scripts/install_ltx.ps1 deletes these lines from an existing config.yaml
+    so a re-run of setup.bat ends the per-boot WARNING. Its own copy of the
+    list must not drift from this one — a key missing there keeps warning
+    forever, a key too many would delete a live setting."""
+    import re
+
+    script = (PROJECT_ROOT / "scripts" / "install_ltx.ps1").read_text(encoding="utf-8")
+    block = re.search(r"\$DeprecatedModelKeys = @\((.*?)\)", script, re.S)
+    assert block, "the installer no longer declares $DeprecatedModelKeys"
+    assert set(re.findall(r"'([^']+)'", block.group(1))) == set(DEPRECATED_MODEL_KEYS)
 
 
 def _runner(tmp_path, descriptor: dict):

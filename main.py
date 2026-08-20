@@ -16,6 +16,8 @@ import os
 import re
 import socket
 import warnings
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
@@ -264,6 +266,28 @@ def suppress_starlette_422_deprecation() -> None:
         )
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Startup/shutdown for the app (FastAPI's lifespan, not the retired
+    ``@app.on_event`` hooks, which emit a DeprecationWarning on every boot).
+
+    Gradio's ``mount_gradio_app`` wraps whatever ``lifespan_context`` the app
+    already has (gradio/routes.py::mount_gradio_app), so this still runs first
+    and the queue startup second — the same order the event hooks gave.
+    """
+    # Starlette runs sync endpoints (and BackgroundTasks) on anyio's default
+    # worker-thread pool, whose default cap is 40. With the real backend now
+    # off on its own daemon threads, this pool only serves the many small
+    # sync handlers (polling GET /jobs, self-issued POSTs, video fetches);
+    # raise the ceiling to 200 so a burst of those never queues behind a
+    # saturated pool and appears to hang.
+    try:
+        anyio.to_thread.current_default_thread_limiter().total_tokens = 200
+    except Exception:  # pragma: no cover - never fatal to startup
+        logger.warning("Could not raise the anyio thread limiter", exc_info=True)
+    yield
+
+
 def build_app(args: argparse.Namespace) -> FastAPI:
     config = load_config(args.config)
 
@@ -304,7 +328,7 @@ def build_app(args: argparse.Namespace) -> FastAPI:
             'Consider $env:PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" to reduce OOM.'
         )
 
-    app = FastAPI(title="LTX-AviUtl2-Bridge", version="0.4.0")
+    app = FastAPI(title="LTX-AviUtl2-Bridge", version="0.4.0", lifespan=_lifespan)
 
     runtime = RuntimeInfo(
         host=host,
@@ -331,19 +355,6 @@ def build_app(args: argparse.Namespace) -> FastAPI:
         )
 
     register_exception_handlers(app)
-
-    @app.on_event("startup")
-    async def _raise_thread_limiter() -> None:
-        # Starlette runs sync endpoints (and BackgroundTasks) on anyio's default
-        # worker-thread pool, whose default cap is 40. With the real backend now
-        # off on its own daemon threads, this pool only serves the many small
-        # sync handlers (polling GET /jobs, self-issued POSTs, video fetches);
-        # raise the ceiling to 200 so a burst of those never queues behind a
-        # saturated pool and appears to hang.
-        try:
-            anyio.to_thread.current_default_thread_limiter().total_tokens = 200
-        except Exception:  # pragma: no cover - never fatal to startup
-            logger.warning("Could not raise the anyio thread limiter", exc_info=True)
 
     app.include_router(api_router, prefix="/api/v1")
     ui_mounted = mount_gradio(app, runtime)

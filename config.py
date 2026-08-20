@@ -30,6 +30,12 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 #: would load with its values SILENTLY IGNORED, which is exactly the kind of
 #: quiet mismatch that made a stale path demote the backend to mock before. So
 #: :func:`load_config` names each survivor once, at WARNING.
+#:
+#: ``scripts/install_ltx.ps1`` carries the same list (``$DeprecatedModelKeys``)
+#: and DELETES those lines from an existing config.yaml, so re-running
+#: setup.bat is what ends the warning for good. The warning stays here for the
+#: environments that never re-run the installer; a contract test
+#: (tests/test_base_model_contract.py) keeps the two lists identical.
 DEPRECATED_MODEL_KEYS: tuple[str, ...] = (
     "gguf_transformer_path",
     "gguf_gemma_path",

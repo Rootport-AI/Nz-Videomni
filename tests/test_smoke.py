@@ -779,3 +779,40 @@ def test_thread_start_failure_fails_job_and_frees_guard(thread_dispatch_client, 
     monkeypatch.undo()
     r2 = client.post("/api/v1/generate", json=payload)
     assert r2.status_code == 202
+
+
+# --------------------------------------------------------------------------- #
+# app startup wiring
+# --------------------------------------------------------------------------- #
+
+def test_app_uses_lifespan_not_the_deprecated_on_event_hooks(tmp_path):
+    """Startup work lives in ``main._lifespan``.
+
+    FastAPI's ``@app.on_event`` is deprecated and prints a DeprecationWarning
+    on every single boot -- noise in the very first lines the owner sees. The
+    behaviour is unchanged; only the hook shape is.
+    """
+    import warnings
+
+    from conftest import _build_app
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        app = _build_app(tmp_path)
+
+    assert [w for w in caught if "on_event" in str(w.message)] == []
+    assert app.router.on_startup == []
+    assert app.router.on_shutdown == []
+
+
+def test_lifespan_raises_the_anyio_thread_limiter():
+    """The one thing the old startup hook did, unchanged: 40 -> 200 workers."""
+    import anyio
+
+    import main
+
+    async def _run() -> float:
+        async with main._lifespan(None):  # type: ignore[arg-type]
+            return anyio.to_thread.current_default_thread_limiter().total_tokens
+
+    assert anyio.run(_run) == 200

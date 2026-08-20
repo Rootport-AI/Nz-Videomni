@@ -335,6 +335,10 @@ class ModelRegistry:
         request — a newly downloaded file appears without a restart."""
         active_base = self._active_base
         registry: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
+        # Files already named in a "cannot classify this" notice during THIS
+        # rescan. Categories share scan directories, so without it one orphan
+        # file would be announced once per category that walks past it.
+        notified: set[Path] = set()
         for base_id, descriptor in self.base_models.items():
             per_category: dict[str, dict[str, tuple[str, str]]] = {}
             for category, spec in descriptor.categories.items():
@@ -372,7 +376,19 @@ class ModelRegistry:
                     for path, _source in entries.values()
                     if path
                 }
-                for found in self._scan_category(category, spec):
+                # The name hints declared by this base model's OTHER categories.
+                # A file that one of them claims is not "unclassifiable" — it is
+                # simply someone else's file in a shared scan directory (the
+                # audio VAE seen while scanning video_vae, and vice versa), so
+                # the scan must stay silent about it. See _scan_category.
+                sibling_hints = frozenset(
+                    other.name_hint
+                    for name, other in descriptor.categories.items()
+                    if name != category and other.name_hint is not None
+                )
+                for found in self._scan_category(
+                    category, spec, sibling_hints=sibling_hints, notified=notified
+                ):
                     if found.resolve() in known_paths:
                         continue  # the default / an explicit registration covers it
                     name = found.stem
@@ -392,8 +408,29 @@ class ModelRegistry:
             registry[base_id] = per_category
         self._registry = registry
 
-    def _scan_category(self, category: str, spec: CategoryDescriptor) -> list[Path]:
-        """Discover weight files for one category across ALL its scan roots."""
+    def _scan_category(
+        self,
+        category: str,
+        spec: CategoryDescriptor,
+        *,
+        sibling_hints: frozenset[str] = frozenset(),
+        notified: set[Path] | None = None,
+    ) -> list[Path]:
+        """Discover weight files for one category across ALL its scan roots.
+
+        ``sibling_hints`` are the name hints of the base model's OTHER
+        categories. They only silence the "cannot classify this file" notice:
+        a file another category claims by name (the audio VAE met while
+        scanning video_vae, in the directory the two share) is normal traffic,
+        not something the owner has to act on. A file NO hint claims still gets
+        the notice — that one really is invisible until it is registered.
+
+        ``notified`` is the caller's per-rescan set of already-announced files,
+        so one orphan file yields one notice however many categories walk past
+        it. Omitted -> a local one (a standalone call announces its own finds).
+        """
+        if notified is None:
+            notified = set()
         found: list[Path] = []
         seen: set[Path] = set()
         for root in spec.scan:
@@ -412,13 +449,18 @@ class ModelRegistry:
                     continue
                 if not _hint_matches(path.name, spec.name_hint):
                     if spec.name_hint is not None:
-                        logger.info(
-                            "model scan: %s not classifiable as '%s' by filename "
-                            "(register it explicitly in config model.%s to expose it)",
-                            path.name,
-                            spec.name_hint,
-                            CONFIG_REGISTRATION_FIELDS.get(category, category),
+                        claimed_elsewhere = any(
+                            _hint_matches(path.name, hint) for hint in sibling_hints
                         )
+                        if not claimed_elsewhere and path not in notified:
+                            notified.add(path)
+                            logger.info(
+                                "model scan: %s not classifiable as '%s' by filename "
+                                "(register it explicitly in config model.%s to expose it)",
+                                path.name,
+                                spec.name_hint,
+                                CONFIG_REGISTRATION_FIELDS.get(category, category),
+                            )
                     continue
                 if path in seen:  # overlapping scan roots list a file once
                     continue

@@ -5655,3 +5655,37 @@ Singleタブのフレーム数スライダーの快適上限マーカーは、�
 **文言修正の要望が2件出ている**（別エージェントが`webui/src/i18n/strings.ts`等を実装中のため、本ドキュメント整備では変更内容そのものは扱わない。修正が反映され次第、別途記録する）。マーカー計算・実装ロジック自体への指摘ではない。
 
 以上により**§66（Singleタブの賢い快適上限マーカー）はオーナー目視ゲート込みで完結する（2026-08-19）**。台帳の記録はフロントエンド[`PENDING_TASKS_CLOSED.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS_CLOSED.md) §3-12。
+
+---
+
+## 67. マルチエンジン設計調査 — GGUF KVメタデータ・venv容量の実測記録（2026-08-20）
+
+本節は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)（マルチエンジン設計の正本、台帳§3-97・§3-98）の調査過程で行った実測2件の記録である。設計書側は本節への参照に整理し、詳細数値は本節に一本化する（敵対的レビュー2026-08-20指摘L-6）。
+
+### 67.1 GGUF KVメタデータの実測
+
+`models/LTX23/Weights/` の transformer 用GGUF 3ファイル全てのKVヘッダを確認した。
+
+| ファイル | 由来 | `general.architecture` | `model_version` | `config`（埋め込みJSON） | 備考 |
+|---|---|---|---|---|---|
+| `LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | 公式重みから変換 | `ltxv` | `2.3.0` | 4,756バイト | `general.quantization_version`=`2`／`general.file_type`=`15`。`license`・`encrypted_wandb_properties`は上流由来 |
+| `10Eros-v1.2-Q4_K_M.gguf` | 利用者の自家変換 | `ltxv` | `2.3.0` | 同一規約 | 変換ツール `Nz-GGUF-Converter-LTX23` が同じKVを付与することを確認 |
+| `Sulphur-2-base-distil-Q4_K_M.gguf` | 利用者の自家変換 | `ltxv` | `2.3.0` | 同一規約 | 同上 |
+
+参考として、テキストエンコーダの `models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf` も確認した。`general.architecture = gemma3`、KVの総数は40個（transformer側は7個）。カテゴリが異なれば `general.architecture` の値もKVの構成量も明確に異なることを確認している。
+
+**結論**: 公式配布・自家変換のいずれも同一のKV規約（`general.architecture` + `model_version`）を満たしており、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §2.2〜§2.4が前提とする「規約として保証できる」という主張の裏付けになっている。
+
+### 67.2 仮想環境の容量実測
+
+`.venv`（アプリ用・torch無し）・`.venv-engine`（LTX推論用・torch+cu128）・`.uv_cache`（`uv`のパッケージダウンロードキャッシュ）の3者を比較した。
+
+| 対象 | 論理サイズ | 備考 |
+|---|---|---|
+| `.venv` | 277MiB | torch を含まないアプリ側スタック |
+| `.venv-engine` | 5.1GiB | torch 2.9.1+cu128 を含む推論側スタック |
+| `.uv_cache` | 7.2GiB | `uv` がダウンロードした実体の置き場 |
+
+`.venv-engine` 配下のファイルと `.uv_cache` 配下の対応する実体を比較し、**ハードリンク**（同一inode・別名）で共有されていることを確認した。パッケージ管理ツール `uv` はダウンロードした実体を `.uv_cache/` に1つだけ保持し、各仮想環境からはそこへハードリンクを張る方式で運用しているため、`.venv-engine` が示す5.1GiBという論理サイズは、実体の物理消費量を表していない（実体は `.uv_cache` 側に既にある）。
+
+**結論**: 同じ torch バージョンを使う限り、2本目のエンジン用仮想環境（例: 将来の `.venv-wan`）を作っても物理的なディスク消費はほとんど増えない、という[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.3の主張はこの実測で裏付けられている。

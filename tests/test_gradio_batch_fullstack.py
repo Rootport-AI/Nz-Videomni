@@ -75,6 +75,9 @@ def _build_app_client(base_dir: Path) -> ApiClient:
         "model": {"backend": "mock"},
         "output": {"dir": (base_dir / "outputs").as_posix()},
         "upload": {"dir": (base_dir / "uploads").as_posix()},
+        # §3-97 P5: the runtime-state file, in tmp like every other
+        # writable location -- never the repository's own state.json.
+        "state_file": (base_dir / "state.json").as_posix(),
     }
     cfg_path = base_dir / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")

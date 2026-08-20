@@ -152,6 +152,12 @@ def _build_app(tmp_path):
         },
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        # Runtime state (§3-97 P5). Left at its default, every test that loads
+        # the pipeline would write the REPOSITORY's own state.json -- polluting
+        # the working tree and, worse, letting one test's selection leak into
+        # the next run's startup. Points at tmp_path like every other writable
+        # location the app owns.
+        "state_file": (tmp_path / "state.json").as_posix(),
     }
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")

@@ -77,6 +77,14 @@ config.yaml
 # The backup install_ltx.ps1 writes before it rewrites model paths in config.yaml.
 config.yaml.bak
 
+# Server RUNTIME STATE (services/runtime_state.py): the last active base model
+# and model selection, rewritten on every successful pipeline load. Per-machine
+# and disposable -- deleting it just brings back the shipped defaults -- so it
+# must never be committed. The .bad sibling is the copy set aside when the file
+# turns out to be unreadable.
+/state.json
+/state.json.bad
+
 # Prerequisite tools fetched by setup.bat (uv + ffmpeg/ffprobe), ~378 MB on disk.
 # Leading slash: root-only, so this must never shadow mcp_server/tools/ (the
 # MCP server's own source package) or any other nested tools/ directory.

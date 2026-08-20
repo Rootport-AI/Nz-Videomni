@@ -41,6 +41,7 @@ from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
 from services.ltx_runner import LTXRunner, resolve_seed
 from services.model_registry import CATEGORIES, DEFAULT_NAME
+from services.runtime_state import RuntimeState
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
 
@@ -156,6 +157,9 @@ class PipelineManager:
         lora_registry: LoraRegistry | None = None,
         audio_upload_store: AudioUploadStore | None = None,
         descriptor: BaseModelDescriptor | None = None,
+        runtime_state: RuntimeState | None = None,
+        active_base_model: str | None = None,
+        active_models: dict[str, str] | None = None,
     ):
         self.config = config
         self.job_store = job_store
@@ -174,6 +178,19 @@ class PipelineManager:
         # back through ``self.runner.descriptor`` so there is ONE resolution
         # rule, not two.
         self.runner = LTXRunner(config, self.low_vram, descriptor)
+        # Server runtime state (§3-97 P5): the file that remembers the last
+        # active base model + selection across restarts. Defaulted so existing
+        # constructions (tests, tools) keep working; the app always injects the
+        # one it read at startup. Written on a successful load/reload ONLY —
+        # see :meth:`_remember`.
+        self.runtime_state = runtime_state or RuntimeState(config.state_path)
+        # The base model this pipeline currently serves. Injected by the app
+        # from the runtime state; None here means "whatever the runner's
+        # descriptor turns out to be", resolved LAZILY (see the property) so
+        # constructing a manager still reads no manifest file. The
+        # request-level axis that CHANGES it is POST /pipeline/load's
+        # ``base_model`` (P6).
+        self._active_base_model: str | None = active_base_model
         self.state = self.STATE_UNLOADED
         self._lock = threading.Lock()
         # Model management: the category NAME used by the last successful load
@@ -181,7 +198,15 @@ class PipelineManager:
         # retained while the worker is unloaded — load-state questions belong to
         # ``pipeline_loaded`` (design ruling §9-6). Never updated on a failed
         # swap-load (the previous successful selection stays authoritative).
-        self.active_models: dict[str, str] = {c: DEFAULT_NAME for c in CATEGORIES}
+        # ``active_models`` (P5): seeded from the runtime state when the app
+        # injects one, so a restart resumes the operator's last combination
+        # instead of reverting to the shipped defaults. Always spans the full
+        # CATEGORIES set — a remembered name for a category this build does not
+        # know is dropped, and a category the state never mentioned falls back
+        # to "default", so the map's SHAPE is the same on every boot.
+        self.active_models: dict[str, str] = {
+            c: (active_models or {}).get(c, DEFAULT_NAME) for c in CATEGORIES
+        }
         # The resolved ABSOLUTE paths behind active_models' non-default names
         # (empty while everything is default). A selection-less load() reuses
         # these, so auto-load-on-generate after an unload keeps the active
@@ -193,6 +218,19 @@ class PipelineManager:
     @property
     def loaded(self) -> bool:
         return self.runner.loaded
+
+    @property
+    def active_base_model(self) -> str:
+        """Id of the base model this pipeline serves.
+
+        Read-only from the outside: it changes only through a SUCCESSFUL
+        ``load``/``reload`` that named a different base model. Retained across
+        an unload, exactly like ``active_models`` — "what is selected" and
+        "what is loaded right now" are separate questions (design ruling §9-6).
+        """
+        if self._active_base_model is None:
+            self._active_base_model = self.runner.descriptor.id
+        return self._active_base_model
 
     @property
     def pipeline_type(self) -> str:
@@ -350,6 +388,7 @@ class PipelineManager:
         if active_names:
             self.active_models = dict(active_names)
         self._active_selection_paths = dict(selection)
+        self._remember()
 
     def reload(
         self, selection: dict[str, str], active_names: dict[str, str]
@@ -383,11 +422,28 @@ class PipelineManager:
         self.active_models = dict(active_names)
         self._active_selection_paths = dict(selection)
         self.state = self.STATE_READY
+        self._remember()
 
     def unload(self) -> None:
         with self._lock:
             self.runner.unload()
             self.state = self.STATE_UNLOADED
+
+    def _remember(self) -> None:
+        """Persist the combination that just loaded (§3-97 P5).
+
+        Called from the SUCCESS path of ``load``/``reload`` and nowhere else:
+
+        * a FAILED load must not overwrite the last combination that worked —
+          the whole point of the file is to come back to something loadable;
+        * an UNLOAD must not either. Unloading is "free the VRAM", not "forget
+          my choice" (``active_models`` survives it for the same reason), so a
+          restart after an unload still resumes the last selection.
+
+        :meth:`RuntimeState.save` never raises — a state file that cannot be
+        written is a WARNING, not a failed load.
+        """
+        self.runtime_state.save(self.active_base_model, self.active_models)
 
     def _cleanup_after_error(self) -> None:
         try:

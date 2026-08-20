@@ -368,6 +368,13 @@ class AppConfig(BaseModel):
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
 
+    # Server RUNTIME STATE file (§3-97 P5, services/runtime_state.py): the last
+    # active base model + per-base category selection, so a restart resumes the
+    # combination the operator had chosen. Top level rather than inside a
+    # section because it belongs to no one subsystem — and it is a CACHE, not a
+    # setting: deleting it is always safe. Project root by default, gitignored.
+    state_file: str = "./state.json"
+
     # ----- convenience path helpers (always absolute, project-rooted) -----
 
     def _abs(self, value: str) -> Path:
@@ -395,6 +402,11 @@ class AppConfig(BaseModel):
     def models_dir(self) -> Path:
         """Root of the model store; descriptor paths are relative to it."""
         return self._abs(self.model.models_dir)
+
+    @property
+    def state_path(self) -> Path:
+        """Absolute path of the runtime-state file (see :attr:`state_file`)."""
+        return self._abs(self.state_file)
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:

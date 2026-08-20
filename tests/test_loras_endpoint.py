@@ -58,6 +58,9 @@ def loras_client(tmp_path):
         "model": {"backend": "mock", "lora_dir": lora_dir.as_posix()},
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        # §3-97 P5: the runtime-state file, in tmp like every other
+        # writable location -- never the repository's own state.json.
+        "state_file": (tmp_path / "state.json").as_posix(),
     }
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")

@@ -91,10 +91,18 @@ describe("i18n dictionaries (en/ja)", () => {
   });
 
   it("ja translates user-facing copy rather than reusing the English text verbatim", () => {
-    // Spot-check a representative sample across namespaces — the brand name
-    // itself is deliberately identical, everything else should differ.
-    expect(ja.toolVersion.ltx23).toBe(en.toolVersion.ltx23);
-    expect(ja.toolVersion.ltx25).toBe(en.toolVersion.ltx25);
+    // Spot-check a representative sample across namespaces.
+    // The base-model dropdown's option LABELS are no longer in these
+    // dictionaries at all — they are the server's `display_name`s (§3-97 P7),
+    // so what is translatable here is the surrounding copy.
+    expect(ja.toolVersion.ariaLabel).not.toBe(en.toolVersion.ariaLabel);
+    expect(ja.toolVersion.notInstalled("LTX 2.5", "install-LTX25.bat")).not.toBe(
+      en.toolVersion.notInstalled("LTX 2.5", "install-LTX25.bat"),
+    );
+    // …and the proper noun inside it survives translation untouched, which is
+    // what the old `ltx23`/`ltx25` literals used to pin.
+    expect(ja.toolVersion.optionNotInstalled("LTX 2.5")).toContain("LTX 2.5");
+    expect(en.toolVersion.optionNotInstalled("LTX 2.5")).toContain("LTX 2.5");
     // 2026-08 タブ改称: modes ラベルは en/ja とも "Single"/"Chained"/"Inventory" の
     // 同一表記が仕様（オーナー決定）。翻訳差分アサーションの対象外。
     expect(ja.modes.single).toBe(en.modes.single);

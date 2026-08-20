@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge as defaultBridge, TIMELINE_PROJECT_LOADED_EVENT } from "../bridge";
 import type { NativeBridge } from "../bridge";
 import {
@@ -23,6 +23,7 @@ import { LanguageProvider, useStrings } from "../i18n/LanguageContext";
 import { JobsProvider, useJobsContext } from "../jobs/JobsContext";
 import { hasActiveJob } from "../jobs/useJobsPoll";
 import { downloadAndInsertVideo } from "../jobs/downloadAndInsert";
+import { createApiClient } from "../api/client";
 import type { ApiClient } from "../api/client";
 import type { JobResponse } from "../api/types";
 import type { ControlLoraSelection } from "../lora/controlLoras";
@@ -53,6 +54,7 @@ import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
+import { useBaseModels } from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
 import "./AppShell.css";
@@ -163,11 +165,19 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const [prompt, setPrompt] = useState("");
   const [highlightedJobId, setHighlightedJobId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Tool-version dropdown (2026-08-19, mock): replaces the old static
-  // "Nz-Videomni" header title. "LTX 2.5" is not a real, backed model yet —
-  // selecting it silently snaps back to "LTX 2.3" (no toast, no persistence;
-  // see the `onChange` below and `strings.toolVersion`'s own doc comment).
-  const [toolVersion, setToolVersion] = useState<"LTX 2.3" | "LTX 2.5">("LTX 2.3");
+  // Header base-model dropdown (§3-97 P7): really wired since the multi-engine
+  // groundwork — the hook owns the list, the displayed value and the
+  // switch-is-load call; this component owns only the rendering and the one
+  // toast per user action (`handleBaseModelChange` below).
+  //
+  // Bound to the injected `nativeBridge` when there is one, so a test can hand
+  // it a fixture server with a specific install state; production passes no
+  // bridge and the hook falls back to the app-wide singleton.
+  const baseModelDeps = useMemo(
+    () => (nativeBridge ? { apiClient: createApiClient(nativeBridge) } : {}),
+    [nativeBridge],
+  );
+  const baseModels = useBaseModels(baseModelDeps);
 
   // Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): a single persistent slot
   // above the operation panel. One note at a time — `showNote` REPLACES whatever
@@ -270,6 +280,49 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const accelerationControls = useAccelerationSettings(blockSwapPrefetchAvailability(statusBody));
 
   const toasts = useToasts();
+  // Header base-model switch (§3-97 P7). One toast per user action, raised from
+  // the outcome the hook RETURNS rather than from a state-change effect — an
+  // effect watching hook state would have to guess whether a given render's
+  // state belongs to the switch the user just made or a stale one.
+  //
+  // The failure copy is split by kind because the remedies genuinely differ:
+  // wait for a job / wait for a load / install a batch file / read what the
+  // server said. A 422's wording comes from the server verbatim: it names the
+  // actual incompatibility (`Docs/MULTI_ENGINE_DESIGN.md` §2.5 — "no
+  // foolproofing, solve it with error quality").
+  const handleBaseModelChange = useCallback(
+    (id: string) => {
+      void (async () => {
+        const outcome = await baseModels.switchBaseModel(id);
+        switch (outcome.kind) {
+          case "switched": {
+            const option = baseModels.options.find((o) => o.id === outcome.id);
+            toasts.push({ kind: "success", message: strings.toolVersion.switched(option?.displayName ?? outcome.id) });
+            return;
+          }
+          case "not-installed":
+            toasts.push({
+              kind: "warning",
+              message: strings.toolVersion.notInstalled(outcome.displayName, outcome.installer),
+            });
+            return;
+          case "busy":
+            toasts.push({ kind: "warning", message: strings.toolVersion.switchFailedBusy });
+            return;
+          case "loading":
+            toasts.push({ kind: "warning", message: strings.toolVersion.switchFailedLoading });
+            return;
+          case "rejected":
+            toasts.push({ kind: "error", message: strings.toolVersion.switchFailedRejected(outcome.reason) });
+            return;
+          case "failed":
+            toasts.push({ kind: "error", message: strings.toolVersion.switchFailed(outcome.message) });
+            return;
+        }
+      })();
+    },
+    [baseModels, toasts, strings],
+  );
   // IME composition guard for the auto-migration effect below: a control-LoRA
   // tag typed mid-composition (e.g. Japanese IME) must not be migrated out
   // from under the still-uncommitted input. A ref (not state) because it must
@@ -986,18 +1039,34 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        {/* Tool-version dropdown (2026-08-19, mock — owner-directed): occupies
-            the old static "Nz-Videomni" title's spot. Selecting "LTX 2.5" has no
-            real effect yet; the onChange below immediately reverts it to
-            "LTX 2.3", silently (no toast/warning). */}
+        {/* Base-model dropdown (§3-97 P7), in the old static "Nz-Videomni"
+            title's spot. Options and labels come from the server's
+            `base_models[]`; picking one loads it immediately. Disabled while a
+            switch is in flight (a second pick would only earn a 409
+            PIPELINE_LOADING) and while a generation job holds the queue (the
+            server would answer 409 JOB_BUSY) — pre-empting both guards here
+            keeps the user out of an error they cannot act on, while the server
+            still enforces them for anyone else. */}
         <select
           className="app-title-select"
           aria-label={strings.toolVersion.ariaLabel}
-          value={toolVersion}
-          onChange={() => setToolVersion("LTX 2.3")}
+          value={baseModels.current}
+          disabled={baseModels.switching || serverStatus.kind === "busy"}
+          onChange={(e) => handleBaseModelChange(e.target.value)}
         >
-          <option value="LTX 2.3">{strings.toolVersion.ltx23}</option>
-          <option value="LTX 2.5">{strings.toolVersion.ltx25}</option>
+          {baseModels.options.length === 0 ? (
+            <option value="">{strings.toolVersion.unknown}</option>
+          ) : (
+            baseModels.options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.installed
+                  ? option.displayName
+                  : option.present
+                    ? strings.toolVersion.optionPartial(option.displayName)
+                    : strings.toolVersion.optionNotInstalled(option.displayName)}
+              </option>
+            ))
+          )}
         </select>
         <StatusHeader state={serverStatus} onRetry={retry} />
         <ModeTabs mode={mode} onChange={handleModeChange} />

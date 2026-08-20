@@ -12,15 +12,39 @@
 import type { MaterialKind } from "../timeline/menuRouting";
 
 export const en = {
-  /** Header tool-version dropdown (2026-08-19, mock): replaces the old static
-   * "Nz-Videomni" title in the same spot. "LTX 2.3"/"LTX 2.5" are proper nouns —
-   * deliberately identical in `en`/`ja`, same as the old `appTitle` was. Picking
-   * "LTX 2.5" is a MOCK with no real backing model swap yet: `AppShell` snaps
-   * the value silently back to "LTX 2.3" the instant it changes, no toast. */
+  /** Header BASE MODEL dropdown, in the old static "Nz-Videomni" title's spot.
+   * Really wired since the multi-engine groundwork (§3-97 P7): picking an entry
+   * runs `POST /pipeline/load` for that base model right away, and on any
+   * failure the selection returns to the base model still loaded
+   * (`shell/useBaseModels.ts`, `Docs/MULTI_ENGINE_DESIGN.md` §6).
+   *
+   * The OPTION LABELS are not in here — they are the server's
+   * `base_models[].display_name` ("LTX 2.3", …), so adding a base model is a
+   * descriptor change on the server and nothing else. The `ltx23`/`ltx25`
+   * literals this block used to carry were removed with the mock they served. */
   toolVersion: {
-    ariaLabel: "Tool version",
-    ltx23: "LTX 2.3",
-    ltx25: "LTX 2.5",
+    ariaLabel: "Base model",
+    /** Stand-in label while the list has not arrived, or on a backend too old
+     * to declare any base model. */
+    unknown: "Base model",
+    /** Option label for a base model with NO weights on disk. */
+    optionNotInstalled: (displayName: string): string => `${displayName} (not installed)`,
+    /** Option label for a partial install — some categories are still missing,
+     * so it is selectable but the server will refuse it with the specifics. */
+    optionPartial: (displayName: string): string => `${displayName} (partly installed)`,
+    switched: (displayName: string): string => `Switched to ${displayName}.`,
+    /** Guard 2: no request was made — installing is a batch file's job, never
+     * the server's (§6.2). */
+    notInstalled: (displayName: string, installer: string): string =>
+      `${displayName} is not installed. Run ${installer} to install it.`,
+    /** Guard 1: 409 JOB_BUSY. */
+    switchFailedBusy: "Cannot switch the base model while a job is running.",
+    /** Guard 3: 409 PIPELINE_LOADING. */
+    switchFailedLoading: "The server is still loading a model. Wait for it to finish, then try again.",
+    /** 422: `reason` is the server's own `detail`, shown verbatim. */
+    switchFailedRejected: (reason: string): string => `Could not switch the base model: ${reason}`,
+    /** Anything else (unknown id, transport failure, unexpected status). */
+    switchFailed: (message: string): string => `Could not switch the base model: ${message}`,
   },
   connection: {
     checking: "Connecting…",
@@ -50,6 +74,9 @@ export const en = {
     offline: "Server offline",
     online: "Server online",
     busy: "Busy",
+    /** `GET /status`'s `state === "loading"` — the server is rebuilding its
+     * worker, which takes minutes and must not read as "ready" (§6.5). */
+    loadingModels: "Loading models…",
     error: "Status error",
     retry: "Retry",
   },
@@ -1807,9 +1834,17 @@ export type Strings = typeof en;
 
 export const ja: Strings = {
   toolVersion: {
-    ariaLabel: "ツールのバージョン",
-    ltx23: "LTX 2.3",
-    ltx25: "LTX 2.5",
+    ariaLabel: "ベースモデル",
+    unknown: "ベースモデル",
+    optionNotInstalled: (displayName: string): string => `${displayName}（未導入）`,
+    optionPartial: (displayName: string): string => `${displayName}（一部未導入）`,
+    switched: (displayName: string): string => `${displayName}へ切り替えました。`,
+    notInstalled: (displayName: string, installer: string): string =>
+      `${displayName}はまだ導入されていません。${installer}を実行して導入してください。`,
+    switchFailedBusy: "生成中はベースモデルを切り替えられません。",
+    switchFailedLoading: "モデルの読み込み中です。完了してから切り替えてください。",
+    switchFailedRejected: (reason: string): string => `ベースモデルを切り替えられませんでした: ${reason}`,
+    switchFailed: (message: string): string => `ベースモデルを切り替えられませんでした: ${message}`,
   },
   connection: {
     checking: "接続中…",
@@ -1839,6 +1874,7 @@ export const ja: Strings = {
     offline: "サーバー未起動",
     online: "サーバー稼働中",
     busy: "生成中",
+    loadingModels: "モデル読み込み中…",
     error: "状態取得エラー",
     retry: "再試行",
   },

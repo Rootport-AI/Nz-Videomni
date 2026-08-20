@@ -15,6 +15,18 @@ export type ServerStatusState =
    * BACKEND_TIMEOUT): the backend process is not running or not responding. */
   | { kind: "offline"; message: string }
   | { kind: "online"; status: StatusResponse }
+  /** Reachable, and the server is rebuilding its worker — `GET /status`'s
+   * `state === "loading"` (multi-engine groundwork §3-97 P6;
+   * `Docs/MULTI_ENGINE_DESIGN.md` §6.5).
+   *
+   * This is checked BEFORE `busy` below, and the order is the whole point.
+   * A load takes minutes and `pipeline_loaded` stays `false` throughout, so
+   * without this the badge sat on plain "online" the entire time — which
+   * reads as "ready, go ahead and generate" and earns the user a failure.
+   * Loading is also the stronger claim of the two when both could apply:
+   * a queue count is stale bookkeeping next to a worker that is being torn
+   * down and rebuilt. */
+  | { kind: "loading-models"; status: StatusResponse }
   /** Reachable, but a job is currently occupying the single-job queue. */
   | { kind: "busy"; status: StatusResponse }
   /** Reachable bridge and backend, but an unexpected error code came back. */
@@ -61,7 +73,9 @@ export function useServerStatus(intervalMs = DEFAULT_INTERVAL_MS, deps: UseServe
     try {
       const status = await client.getStatus();
       if (!mountedRef.current) return;
-      if (status.queue.running > 0) {
+      if (status.state === "loading") {
+        setState({ kind: "loading-models", status });
+      } else if (status.queue.running > 0) {
         setState({ kind: "busy", status });
       } else {
         setState({ kind: "online", status });

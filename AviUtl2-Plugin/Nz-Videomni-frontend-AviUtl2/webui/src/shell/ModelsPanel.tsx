@@ -2,7 +2,7 @@ import { useStrings } from "../i18n/LanguageContext";
 import type { ApiClient } from "../api/client";
 import type { ModelCategory, ModelEntry } from "../api/types";
 import { MODEL_DEFAULT_NAME } from "../api/types";
-import { MODEL_CATEGORIES, useModels } from "./useModels";
+import { useModels } from "./useModels";
 import "./SettingsPanel.css";
 
 export interface ModelsPanelProps {
@@ -90,7 +90,7 @@ export function ModelsPanel({ apiClient }: ModelsPanelProps) {
 
   let loadSummary: string | null = null;
   if (load.status === "done") {
-    loadSummary = strings.models.loadSuccess(MODEL_CATEGORIES.map((c) => `${c}=${load.models[c]}`).join(", "));
+    loadSummary = strings.models.loadSuccess(models.categoryOrder.map((c) => `${c}=${load.models[c]}`).join(", "));
   }
 
   let errorMessage: string | null = null;
@@ -108,7 +108,7 @@ export function ModelsPanel({ apiClient }: ModelsPanelProps) {
         <p className="field-hint field-hint-error">{strings.models.fetchError}</p>
       )}
 
-      {MODEL_CATEGORIES.map((category) => (
+      {models.categoryOrder.map((category) => (
         <ModelCategoryField
           key={category}
           category={category}

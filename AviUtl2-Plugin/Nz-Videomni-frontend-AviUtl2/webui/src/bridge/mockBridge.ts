@@ -238,6 +238,38 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
   ],
 };
 
+/** Multi-engine (§3-97): the BASE MODELS this fixture server declares, in the
+ * order `GET /models` returns them. `LTX23` is the one that actually works;
+ * `LTX25` exists so the header dropdown's interesting paths — the install
+ * guidance, and the server's "next phase" refusal — can be exercised without
+ * a real 22B download. How much of `LTX25` is on disk is the
+ * {@link MockBridgeOptions.ltx25Install} knob. */
+const MOCK_BASE_MODELS = [
+  { id: "LTX23", display_name: "LTX 2.3", engine_family: "ltx" },
+  { id: "LTX25", display_name: "LTX 2.5", engine_family: "ltx" },
+] as const;
+
+const MOCK_DEFAULT_BASE_MODEL = "LTX23";
+
+/** Verbatim from `services/engines/ltx/adapter.py`'s `check_kv`: the KV
+ * metadata in an LTX 2.5 transformer says `ltxv 2.5.0`, and the ltx adapter
+ * only implements `2.3` so far. The WebUI shows this `detail` unchanged
+ * (`shell/useBaseModels.ts`), which is the whole reason it is reproduced here
+ * literally rather than paraphrased. */
+const MOCK_LTX25_INCOMPATIBLE_DETAIL =
+  "このtransformerはltxv 2.5.0です。LTX 2.5エンジンは次段階(PENDING_TASKS §3-98)で実装予定のため、まだ読み込めません。";
+
+/** Which of `LTX25`'s per-category default files are on disk, per install
+ * state. `"partial"` (the default) mirrors what P8's real-device gate sets up:
+ * the transformer hard-linked into place and nothing else, i.e. `present` but
+ * not `installed` — the state that makes the dropdown entry SELECTABLE and so
+ * reaches the server's 422. */
+const MOCK_LTX25_PRESENT_CATEGORIES: Record<"none" | "partial" | "full", readonly MockModelCategory[]> = {
+  none: [],
+  partial: ["transformer"],
+  full: MOCK_MODEL_CATEGORIES,
+};
+
 /** Progress "stage" labels a job cycles through while running, per
  * Docs/API_REFERENCE.md §4. */
 const MOCK_STAGES = ["encode", "stage1_denoise", "denoise", "decode"] as const;
@@ -650,6 +682,26 @@ export interface MockBridgeOptions {
   /** V2V Join: the `source_fps` `POST /jobs/{id}/join` returns (default 24,
    * matching the previous fixed response). `null` models an unprobeable source. */
   joinSourceFps?: number | null;
+  /** Multi-engine (§3-97 P7): how much of the `LTX25` base model this fixture
+   * server has on disk, which decides what picking it in the header dropdown
+   * does. `"partial"` (default) → `present: true, installed: false`, so the
+   * WebUI does call the server and gets the 422 "next phase" refusal.
+   * `"none"` → `present: false`, so the WebUI short-circuits with the
+   * `install-LTX25.bat` guidance and never issues a request. `"full"` models a
+   * complete install (still 422s — the engine, not the files, is what's
+   * missing). `LTX23` is always fully installed. */
+  ltx25Install?: "none" | "partial" | "full";
+  /** Multi-engine (§3-97 P7): the base model ids this fixture ENGINE can
+   * actually run, which is a separate axis from
+   * {@link MockBridgeOptions.ltx25Install} (files on disk). Defaults to
+   * `["LTX23"]`, matching today's server: an LTX25 transformer's GGUF metadata
+   * says `ltxv 2.5.0` and the ltx adapter implements `2.3` only, so loading it
+   * fails the precheck with 422 `MODEL_INCOMPATIBLE` no matter how complete
+   * the install is. A test that needs the SUCCESS path — the dropdown landing
+   * on a different base model — passes `["LTX23", "LTX25"]`, modelling the
+   * world after §3-98 ships; that is also the one-line change this fixture's
+   * default will take then. */
+  supportedBaseModels?: readonly string[];
 }
 
 /** Contract v5 default `timeline.getSelection` snapshot — a single selected
@@ -749,6 +801,14 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     video_vae: "default",
     audio: "default",
   };
+  /** Multi-engine (§3-97 P6): the base model the fixture pipeline is on,
+   * mirroring `PipelineManager.active_base_model`. Only a SUCCESSFUL
+   * `POST /pipeline/load` moves it — the LTX25 refusal below leaves it put,
+   * which is what lets a test assert the WebUI's selection reverted to the
+   * base model still loaded rather than to a coincidence. */
+  let activeBaseModel: string = MOCK_DEFAULT_BASE_MODEL;
+  const ltx25Present = new Set<string>(MOCK_LTX25_PRESENT_CATEGORIES[options.ltx25Install ?? "partial"]);
+  const supportedBaseModels = new Set<string>(options.supportedBaseModels ?? [MOCK_DEFAULT_BASE_MODEL]);
   /** Mutable backend URL, seeded from `options.baseUrl` — `settings.set`
    * (contract v4, M7b) updates this in place, and `backend.getBaseUrl`
    * reflects the current value so a saved settings change is immediately
@@ -816,6 +876,13 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         port: 18620,
         pipeline_loaded: true,
         pipeline_type: "distilled",
+        // Multi-engine (§3-97 P6): the pipeline's own state machine
+        // (`unloaded`/`loading`/`ready`/`running`/`error`). The fixture
+        // pipeline is always loaded and its loads are instantaneous, so it
+        // only ever reports the two settled states — a test that needs the
+        // `loading` badge builds its own `/status` body.
+        state: activeNonTerminal ? "running" : "ready",
+        base_model: activeBaseModel,
         gpu: {
           available: true,
           name: "NVIDIA GeForce RTX 4070 Ti SUPER (mock)",
@@ -873,17 +940,54 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
    * last successful `/pipeline/load` set), matching the real endpoint's
    * "rescans on every call" contract closely enough for UI testing. */
   function handleModels(): ResultOf<"backend.request"> {
-    const categories = Object.fromEntries(
-      MOCK_MODEL_CATEGORIES.map((category) => [
-        category,
-        {
-          default: "default",
-          active: activeModels[category],
-          entries: MOCK_MODEL_ENTRIES[category],
-        },
-      ]),
-    );
-    return { status: 200, body: { categories } };
+    // Multi-engine (§3-97 P3a): the base-model layer is built first, and the
+    // legacy top-level `categories` block is then set to the ACTIVE base
+    // model's own block — which is exactly what it always was back when there
+    // was only one base model, so a client that only knows the old shape (the
+    // Gradio UI) keeps working unchanged.
+    const base_models = MOCK_BASE_MODELS.map((base) => {
+      const isActive = base.id === activeBaseModel;
+      const isLtx23 = base.id === MOCK_DEFAULT_BASE_MODEL;
+      const present = (category: MockModelCategory) => isLtx23 || ltx25Present.has(category);
+      const missing = MOCK_MODEL_CATEGORIES.filter((c) => !present(c));
+      return {
+        id: base.id,
+        display_name: base.display_name,
+        engine_family: base.engine_family,
+        active: isActive,
+        installed: missing.length === 0,
+        present: missing.length < MOCK_MODEL_CATEGORIES.length,
+        missing_categories: missing,
+        categories: Object.fromEntries(
+          MOCK_MODEL_CATEGORIES.map((category) => [
+            category,
+            {
+              default: "default",
+              // Only the active base model has a live selection; every other
+              // one is listed at its defaults until it is actually loaded.
+              active: isActive ? activeModels[category] : "default",
+              entries: isLtx23
+                ? MOCK_MODEL_ENTRIES[category]
+                : [
+                    {
+                      name: "default",
+                      path: `models/${base.id}/${category}/default.gguf`,
+                      is_default: true,
+                      exists: present(category),
+                      source: "config" as const,
+                    },
+                  ],
+            },
+          ]),
+        ),
+      };
+    });
+
+    const activeBlock = base_models.find((b) => b.active) ?? base_models[0];
+    return {
+      status: 200,
+      body: { categories: activeBlock?.categories ?? {}, active_base_model: activeBaseModel, base_models },
+    };
   }
 
   /** `POST /pipeline/load` fixture (Docs/API_REFERENCE.md §3.3,
@@ -898,10 +1002,31 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
   function handlePipelineLoad(body: object | undefined): ResultOf<"backend.request"> {
     const req = (body ?? {}) as Record<string, unknown>;
     const requested = (req.models ?? {}) as Record<string, string>;
+    const requestedBase = typeof req.base_model === "string" ? req.base_model : undefined;
 
-    if (Object.keys(requested).length === 0) {
-      // Legacy bodyless load: response shape unchanged, no `models` key.
-      return { status: 200, body: { pipeline_loaded: true, pipeline_type: "distilled", state: "loaded" } };
+    if (Object.keys(requested).length === 0 && requestedBase === undefined) {
+      // Legacy bodyless load: response shape unchanged, no `models` key, no
+      // `base_model` key. Note the `base_model === undefined` half of the
+      // condition — without it a `{base_model}`-only call (which is exactly
+      // what the header dropdown sends) would be swallowed by this early
+      // return and silently do nothing, the trap called out in
+      // `Docs/MULTI_ENGINE_DESIGN.md` §5.5(a).
+      return { status: 200, body: { pipeline_loaded: true, pipeline_type: "distilled", state: "ready" } };
+    }
+
+    // Unknown base model is rejected before the job guard, mirroring the
+    // server's order (`api/pipeline.py` resolves the descriptor first).
+    if (requestedBase !== undefined && !MOCK_BASE_MODELS.some((b) => b.id === requestedBase)) {
+      return {
+        status: 404,
+        body: {
+          error: {
+            code: "MODEL_NOT_FOUND",
+            message: `unknown model name '${requestedBase}' in category 'base_model'`,
+            detail: `unknown base model; known: ${JSON.stringify(MOCK_BASE_MODELS.map((b) => b.id))}`,
+          },
+        },
+      };
     }
 
     if (activeJobId) {
@@ -942,13 +1067,39 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
       }
     }
 
+    // The engine is chosen from the weight file's own GGUF metadata, never
+    // from what the client asked for (§2.1): a base model whose transformer
+    // says `ltxv 2.5.0` is refused because the ltx adapter implements 2.3
+    // only. Nothing is committed — `activeBaseModel` stays put, so the WebUI
+    // reverts its dropdown to a base model that really is loaded.
+    const effectiveBase = requestedBase ?? activeBaseModel;
+    if (!supportedBaseModels.has(effectiveBase)) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "MODEL_INCOMPATIBLE",
+            message: "selected model 'transformer/default' failed the compatibility precheck",
+            detail: MOCK_LTX25_INCOMPATIBLE_DETAIL,
+          },
+        },
+      };
+    }
+
     for (const [category, name] of Object.entries(requested)) {
       activeModels[category as MockModelCategory] = name;
     }
+    activeBaseModel = effectiveBase;
 
     return {
       status: 200,
-      body: { pipeline_loaded: true, pipeline_type: "distilled", state: "loaded", models: { ...activeModels } },
+      body: {
+        pipeline_loaded: true,
+        pipeline_type: "distilled",
+        state: "ready",
+        base_model: activeBaseModel,
+        models: { ...activeModels },
+      },
     };
   }
 

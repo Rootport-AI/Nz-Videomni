@@ -19,6 +19,12 @@ export function StatusHeader({ state, onRetry }: { state: ServerStatusState; onR
       );
     case "online":
       return <span className="badge badge-connected">{strings.serverStatus.online}</span>;
+    case "loading-models":
+      // Same busy styling as a running job — both mean "the server is working,
+      // don't submit" — but its own wording, because the remedy differs: a job
+      // finishes on its own schedule, a model load is something the user just
+      // started and is waiting out (Docs/MULTI_ENGINE_DESIGN.md §6.5).
+      return <span className="badge badge-busy">{strings.serverStatus.loadingModels}</span>;
     case "busy":
       return <span className="badge badge-busy">{strings.serverStatus.busy}</span>;
     case "error":

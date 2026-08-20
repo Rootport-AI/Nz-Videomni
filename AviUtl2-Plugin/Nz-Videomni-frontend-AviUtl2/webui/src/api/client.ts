@@ -45,12 +45,26 @@ export class BackendApiError extends Error {
   /** HTTP status the backend returned, or 0 for a pure transport failure
    * (bridge unreachable/timeout/missing) that never reached the backend. */
   readonly httpStatus: number;
+  /** The envelope's optional `detail` string — the SPECIFIC reason behind a
+   * generic `message` (`api/errors.py`'s `APIError.to_envelope`, which omits
+   * the key entirely when unset). `message` alone is often a template
+   * ("selected model 'transformer/default' failed the compatibility
+   * precheck") while `detail` carries the sentence actually worth showing
+   * ("このtransformerはltxv 2.5.0です。…"), so `shell/useBaseModels.ts` shows
+   * `detail` verbatim for a 422 rather than paraphrasing it client-side.
+   *
+   * `undefined` when absent OR when the backend sent the LIST form (the
+   * `VALIDATION_ERROR` envelope's `detail` is an array of
+   * `{loc,msg,type}` — see {@link BackendErrorEnvelope}); only the string
+   * form is captured, so a reader never has to type-test it. */
+  readonly detail: string | undefined;
 
-  constructor(code: string, message: string, httpStatus: number) {
+  constructor(code: string, message: string, httpStatus: number, detail?: string) {
     super(message);
     this.name = "BackendApiError";
     this.code = code;
     this.httpStatus = httpStatus;
+    this.detail = detail;
   }
 }
 
@@ -97,8 +111,17 @@ export interface ApiClient {
    * from the live one forces a worker rebuild (unload -> load), which can
    * legitimately take minutes — `timeoutMs: 600_000` is set unconditionally
    * (mirrors `gradio_ui/api_client.py`'s 600s httpx timeout for the same
-   * call), well past the bridge's default ~10s WinHTTP timeout. */
-  loadPipeline(models: Partial<Record<ModelCategory, string>>): Promise<PipelineLoadResponse>;
+   * call), well past the bridge's default ~10s WinHTTP timeout.
+   *
+   * Multi-engine (§3-97 P6): `baseModel` switches the BASE MODEL and is
+   * omitted from the body entirely when not given, so every pre-existing call
+   * site keeps sending a byte-identical request. `loadPipeline({}, "LTX25")`
+   * — an empty selection plus a base model — is the header dropdown's call:
+   * the server resolves that base's own categories itself. */
+  loadPipeline(
+    models: Partial<Record<ModelCategory, string>>,
+    baseModel?: string,
+  ): Promise<PipelineLoadResponse>;
   /** N4 "danger zone": `POST /pipeline/unload` — tears down the loaded engine
    * without loading a replacement, freeing its VRAM. Same active-job guard as
    * `loadPipeline` (409 `JOB_BUSY` while a generation job is running); no
@@ -134,7 +157,8 @@ export function createApiClient(nativeBridge: NativeBridge): ApiClient {
       return body as T;
     }
     if (isErrorEnvelope(body)) {
-      throw new BackendApiError(body.error.code, body.error.message, status);
+      const detail = typeof body.error.detail === "string" ? body.error.detail : undefined;
+      throw new BackendApiError(body.error.code, body.error.message, status, detail);
     }
     throw new BackendApiError("UNKNOWN_ERROR", `Unexpected backend response (HTTP ${status})`, status);
   }
@@ -152,8 +176,11 @@ export function createApiClient(nativeBridge: NativeBridge): ApiClient {
     getLoras: () => call<LorasListResponse>("GET", "/loras"),
     reloadLoras: () => call<LorasReloadResponse>("POST", "/loras/reload"),
     getModels: () => call<ModelsResponse>("GET", "/models"),
-    loadPipeline: (models) =>
-      call<PipelineLoadResponse>("POST", "/pipeline/load", { body: { models }, timeoutMs: 600_000 }),
+    loadPipeline: (models, baseModel) =>
+      call<PipelineLoadResponse>("POST", "/pipeline/load", {
+        body: { models, ...(baseModel ? { base_model: baseModel } : {}) },
+        timeoutMs: 600_000,
+      }),
     unloadPipeline: () => call<PipelineUnloadResponse>("POST", "/pipeline/unload"),
   };
 }
@@ -184,5 +211,6 @@ export const joinJob: ApiClient["joinJob"] = (jobId, body) => apiClient.joinJob(
 export const getLoras: ApiClient["getLoras"] = () => apiClient.getLoras();
 export const reloadLoras: ApiClient["reloadLoras"] = () => apiClient.reloadLoras();
 export const getModels: ApiClient["getModels"] = () => apiClient.getModels();
-export const loadPipeline: ApiClient["loadPipeline"] = (models) => apiClient.loadPipeline(models);
+export const loadPipeline: ApiClient["loadPipeline"] = (models, baseModel) =>
+  apiClient.loadPipeline(models, baseModel);
 export const unloadPipeline: ApiClient["unloadPipeline"] = () => apiClient.unloadPipeline();

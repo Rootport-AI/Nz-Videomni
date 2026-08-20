@@ -561,6 +561,27 @@ export interface StatusResponse {
   pipeline_type: string | null;
   gpu: GpuInfo;
   queue: QueueInfo;
+  /** Optional (defensive): the pipeline's own state machine, one of
+   * `"unloaded" | "loading" | "ready" | "running" | "error"`
+   * (`services/pipeline_manager.py`'s `STATE_*` constants, surfaced by
+   * `GET /status` since the multi-engine groundwork §3-97 P6). Typed as a bare
+   * `string` on purpose — an unknown future value must not become a type
+   * error, and every reader compares against a literal it knows.
+   *
+   * Why it exists: `pipeline_loaded` is `false` BOTH while nothing is loaded
+   * and while a load is in flight, so before this field the WebUI could not
+   * tell "idle" from "busy loading a base model" and showed the plain
+   * "server online" badge for the several minutes a swap takes
+   * (`Docs/MULTI_ENGINE_DESIGN.md` §5.5(b)/§6.5). `modes/single/useServerStatus.ts`
+   * is the single reader; absent (older backend) simply means the old
+   * behaviour, never an error. */
+  state?: string;
+  /** Optional (defensive): the id of the base model the pipeline is currently
+   * on (`"LTX23"`, …), retained across an unload. Same additive/optional rule
+   * as {@link StatusResponse.state}. `shell/useBaseModels.ts` drives the
+   * header dropdown off `GET /models` instead (which carries the selectable
+   * list too), so this is currently diagnostic/forward-compat only. */
+  base_model?: string | null;
   /** Optional (defensive): the acceleration capability block (backend §43,
    * 2026-07-31). Absent from every backend older than that commit, so every
    * reader must treat it — and each field inside it — as optional and never
@@ -728,8 +749,13 @@ export interface BackendErrorEnvelope {
   };
 }
 
-/** Fixed category order for model management (Docs/API_REFERENCE.md §3.3/§3.5,
- * `services/model_registry.py:69-97` `CATEGORIES`). `transformer` is the
+/** The model categories this WebUI knows how to render (Docs/API_REFERENCE.md
+ * §3.3/§3.5, `services/model_registry.py`'s `CATEGORIES`). Since the
+ * multi-engine groundwork (§3-97 P3a) the category SET is declared per base
+ * model in its descriptor (`scripts/manifests/<base>.json`'s `categories`) and
+ * the DISPLAY ORDER comes from the server response — see
+ * `shell/useModels.ts`'s `categoryOrder`. This union is kept as the typed
+ * shape of the per-category selection state. `transformer` is the
  * video-generation GGUF, `text_encoder` the Gemma GGUF, `video_vae`/`audio`
  * the safetensors VAE components (`audio` also carries the vocoder — see
  * `services/model_registry.py`'s module docstring). */
@@ -769,12 +795,59 @@ export interface ModelCategoryBlock {
   entries: ModelEntry[];
 }
 
+/** One entry of `GET /models`'s `base_models[]` — a declared BASE MODEL (the
+ * unit the user picks in the header dropdown), with its own three-layer model
+ * listing and its install state (`api/models_registry.py`'s `list_models`,
+ * multi-engine groundwork §3-97 P3a; `Docs/MULTI_ENGINE_DESIGN.md` §5.1).
+ *
+ * `installed` vs `present` is the distinction the dropdown is built on:
+ *  - `present: false` — not a single default file is on disk. Selecting it
+ *    must NOT hit the API at all; the WebUI answers with the "run
+ *    `install-<id>.bat`" guidance (`Docs/MULTI_ENGINE_DESIGN.md` §6.2 guard 2).
+ *  - `present: true, installed: false` — a PARTIAL install (some categories
+ *    still listed in `missing_categories`). Selecting it does go to the
+ *    server, which fails loud with a specific reason.
+ *  - `installed: true` — every category's default file is there.
+ *
+ * `categories` mirrors the top-level {@link ModelsResponse.categories} block
+ * for THIS base model, keyed in the descriptor's own declaration order (which
+ * is why `shell/useModels.ts` reads its display order from here rather than
+ * from a client-side constant). Only the active base model carries real
+ * `active` names; every other one reports `"default"` throughout. */
+export interface BaseModelBlock {
+  /** Descriptor id — the value `PipelineLoadRequest.base_model` takes, and the
+   * `<id>` in the `install-<id>.bat` guidance (e.g. `"LTX23"`, `"LTX25"`). */
+  id: string;
+  /** Human-facing label (e.g. `"LTX 2.3"`). The dropdown renders THIS, never
+   * a hard-coded literal — adding a base model is a server-side descriptor
+   * change only. */
+  display_name: string;
+  /** Inference-engine lineage (`"ltx"`, …). Diagnostic here: the server picks
+   * the engine from the weight file's own GGUF metadata, never from anything
+   * the WebUI sends (`Docs/MULTI_ENGINE_DESIGN.md` §2.1). */
+  engine_family: string;
+  active: boolean;
+  installed: boolean;
+  present: boolean;
+  missing_categories: string[];
+  categories: Record<string, ModelCategoryBlock>;
+}
+
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,
- * `api/models_registry.py:26-40`). Rescans the model directories on every
- * call, so a newly downloaded file appears without a server restart —
- * refetching this is the WebUI's only "detect new models" action. */
+ * `api/models_registry.py`'s `list_models`). Rescans the model directories on
+ * every call, so a newly downloaded file appears without a server restart —
+ * refetching this is the WebUI's only "detect new models" action.
+ *
+ * `categories` is UNCHANGED and always describes the ACTIVE base model,
+ * exactly as it always described the only one; the base-model layer was added
+ * beside it (§3-97 P3a), never on top of it. Both new fields are optional here
+ * purely defensively — a backend older than the multi-engine groundwork omits
+ * them, and every reader must fall back rather than assume presence. */
 export interface ModelsResponse {
   categories: Record<ModelCategory, ModelCategoryBlock>;
+  /** Id of the base model `categories` describes. */
+  active_base_model?: string;
+  base_models?: BaseModelBlock[];
 }
 
 /** Optional body for `POST /pipeline/load` (Docs/API_REFERENCE.md §3.3,
@@ -785,6 +858,13 @@ export interface ModelsResponse {
  * client-supplied path (`/`, `\`, `..` are rejected server-side). */
 export interface PipelineLoadRequest {
   models?: Partial<Record<ModelCategory, string>>;
+  /** Multi-engine (§3-97 P6): switch the pipeline to this BASE MODEL id. Omit
+   * to stay on the current one. Valid on its own — `{"base_model": "LTX25"}`
+   * with no `models` block is the "just switch base models" call the header
+   * dropdown makes, and the server resolves every category from that base's
+   * descriptor defaults / remembered selection. Unknown id → 404
+   * `MODEL_NOT_FOUND`. */
+  base_model?: string;
 }
 
 /** `POST /pipeline/load`'s response (Docs/API_REFERENCE.md §3.3,
@@ -797,6 +877,11 @@ export interface PipelineLoadResponse {
   pipeline_type: string | null;
   state: string;
   models?: Record<ModelCategory, string>;
+  /** Multi-engine (§3-97 P6): the base model the pipeline ended up on.
+   * Present on exactly the same condition as `models` — the legacy bodyless
+   * path's response still carries neither, preserving its byte-identical
+   * golden snapshot. */
+  base_model?: string;
 }
 
 /** `POST /pipeline/unload`'s response (N4 "danger zone": explicit engine

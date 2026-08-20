@@ -177,6 +177,36 @@ def test_base_model_layer_is_purely_additive(tmp_path):
     assert base["categories"] == body["categories"]
 
 
+def test_category_display_order_comes_from_the_descriptor_as_an_array(tmp_path):
+    """The dropdown order the WebUI renders is the DESCRIPTOR's declaration
+    order, published as ``category_order`` — an array, because object key order
+    is not something a client can rely on after transport (the WebUI reaches
+    this response through the AviUtl2 plugin's WebView2 message channel, and on
+    2026-08-20 the Settings dropdowns came out alphabetised there).
+
+    The second descriptor declares its categories in a deliberately odd order —
+    neither alphabetical nor the ``CATEGORIES`` literal's — so an order taken
+    from anywhere but the descriptor fails here.
+    """
+    manifest_dir, models_dir = _build_layout(tmp_path)
+    scrambled = base_model_descriptor("LTX25")
+    scrambled["display_name"] = "LTX 2.5"
+    declared = ["audio", "video_vae", "transformer", "text_encoder"]
+    scrambled["categories"] = {c: scrambled["categories"][c] for c in declared}
+    (manifest_dir / "20-ltx25.json").write_text(json.dumps(scrambled), encoding="utf-8")
+
+    with _client(tmp_path, manifest_dir, models_dir) as c:
+        body = c.get("/api/v1/models").json()
+
+    ltx23, ltx25 = body["base_models"]
+    assert ltx25["category_order"] == declared
+    assert list(ltx25["categories"]) == declared
+    # ...and the first descriptor keeps ITS own order, which is the shipped
+    # exchange-frequency one (see test_base_model_contract.py for the pin).
+    assert ltx23["category_order"] == ["transformer", "text_encoder", "video_vae", "audio"]
+    assert list(ltx23["categories"]) == ltx23["category_order"]
+
+
 def test_partly_installed_base_model_is_listed_as_such(tmp_path):
     """A second base model whose weights are not downloaded stays listed, with
     installed=False and the categories that are missing named."""

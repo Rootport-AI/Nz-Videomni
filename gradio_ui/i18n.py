@@ -440,8 +440,11 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_purge_failed": "Failed to delete jobs: {err}",
         # --- settings tab: model management (model_ prefix) ---
         "model_section_title": "Models",
-        "model_cat_transformer": "Video model (transformer)",
-        "model_cat_text_encoder": "Text encoder (Gemma)",
+        # "checkpoint", not the internal component name, and no engine name on
+        # the text encoder (owner ruling 2026-08-20 — same wording as the
+        # AviUtl2 WebUI's `webui/src/i18n/strings.ts`).
+        "model_cat_transformer": "Video model (checkpoint)",
+        "model_cat_text_encoder": "Text encoder",
         "model_cat_video_vae": "Video VAE",
         "model_cat_audio": "Audio model (audio VAE + vocoder)",
         "model_btn_refresh": "Refresh model list",
@@ -935,8 +938,8 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_purge_failed": "ジョブの削除に失敗しました: {err}",
         # --- settings tab: model management (model_ prefix) ---
         "model_section_title": "モデル",
-        "model_cat_transformer": "動画モデル (transformer)",
-        "model_cat_text_encoder": "テキストエンコーダ (Gemma)",
+        "model_cat_transformer": "動画モデル (checkpoint)",
+        "model_cat_text_encoder": "テキストエンコーダ",
         "model_cat_video_vae": "動画VAE",
         "model_cat_audio": "音声モデル (音声VAE+ボコーダ)",
         "model_btn_refresh": "モデル一覧を更新",

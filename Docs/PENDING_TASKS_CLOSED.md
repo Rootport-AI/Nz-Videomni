@@ -1078,3 +1078,14 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **実機での確認（2026-08-20）**: LTX 2.3のスモーク生成（384×256／17フレーム）の`metadata.json`に上記のブロックが出力され、既存フィールドはいずれも不変であることを確認した。記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68のG9。
 - **状態**: **実装完了・実機確認済み・クローズ（2026-08-20）**。
 - **正本・出典**: `services/pipeline_manager.py`（`_write_metadata`・`_write_chain_metadata`）、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §8.3（P0の位置づけ）、[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68。
+
+### 3-101. ヘッダーのベースモデルドロップダウンのオーナー目視3点（起票：2026-08-20、合格クローズ：2026-08-20）（旧§2-5〜§2-7からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-5・§2-6・§2-7（同書の当該3項目は本節へ移して除去。§2-8は原因判明・修正のうえ再確認待ちとして存置し、あわせて§2-9を新設した）。
+- **合格した3項目**（2026-08-20、オーナー実機目視）:
+  - **§2-5 ドロップダウンの表示**: ヘッダーに「LTX 2.3」と「LTX 2.5（一部未導入）」の2項目が出ること。LTX 2.5はtransformerだけが手元にあるため「（未導入）」ではなく「（一部未導入）」になる。
+  - **§2-6 LTX 2.5 を選んだときの fail loud**: 422の`detail`（「このtransformerはltxv 2.5.0です。…」）がトーストに出て、表示がLTX 2.3へ戻ること。**無言で戻らない**ことが要点で、これはモック時代の仕様の逆転にあたる（本書§3-99）。
+  - **§2-7 生成中はドロップダウンが無効化される**: 生成ジョブ実行中にグレーアウトすること。フロントエンドの自動テストでは作れない状態（`AppShell`内の`useServerStatus()`がアプリ全体のシングルトンを見る作りのため）で、**目視でしか確認できない項目**だった。
+- **同じ目視で見つかった不具合2件**: (1) Settingsのモデル選択欄の並びが交換頻度順からアルファベット順へ退行していた、(2) 短い（約8秒の）モデル読み込みで「モデル読み込み中…」バッジが出ない。**どちらも同日中に修正済み**で、再確認は[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-9・§2-8に残してある（`.aux2`の配置がAviUtl2起動中のため保留になっており、配置後の再確認が要る）。修正の内容と根本原因の調査経過はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §87。
+- **状態**: **3項目とも合格・クローズ（2026-08-20）**。
+- **正本・出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6、[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68（§68.8が目視項目）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §86・§87。

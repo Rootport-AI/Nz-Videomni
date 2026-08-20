@@ -1802,9 +1802,14 @@ export const en = {
   models: {
     sectionTitle: "Models",
     hint: "Selections apply when you press Load. \"default\" is the stock configuration.",
+    /** Owner ruling 2026-08-20 on the wording: "checkpoint" rather than the
+     * internal component name "transformer", because that is what the model
+     * sites (CivitAI et al.) call the file the user downloads; and no engine
+     * name on the text encoder, so a base model that ships something other
+     * than Gemma needs no string change here. */
     categories: {
-      transformer: "Video model (transformer)",
-      text_encoder: "Text encoder (Gemma)",
+      transformer: "Video model (checkpoint)",
+      text_encoder: "Text encoder",
       video_vae: "Video VAE",
       audio: "Audio model (audio VAE + vocoder)",
     },
@@ -2790,8 +2795,8 @@ export const ja: Strings = {
     sectionTitle: "モデル",
     hint: "選択は「読込」ボタンで反映されます。default は標準構成です。",
     categories: {
-      transformer: "動画モデル (transformer)",
-      text_encoder: "テキストエンコーダ (Gemma)",
+      transformer: "動画モデル (checkpoint)",
+      text_encoder: "テキストエンコーダ",
       video_vae: "動画VAE",
       audio: "音声モデル (音声VAE+ボコーダ)",
     },

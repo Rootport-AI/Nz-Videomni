@@ -358,6 +358,7 @@ for _ in range(spec.parent_levels):
       "installed": true,            // 全カテゴリのファイルが実在する
       "present": true,              // 1つ以上のカテゴリのファイルが実在する
       "missing_categories": [],
+      "category_order": ["transformer", "text_encoder", "video_vae", "audio"],  // 表示順(2026-08-20追加)
       "categories": { ... }
     },
     { "id": "LTX25", "installed": false, "present": true,
@@ -367,6 +368,8 @@ for _ in range(spec.parent_levels):
 ```
 
 置き換えにしなかった理由は、**`categories` を読んでいる既存の利用者が実在するから**である。Gradio 側のアダプタ（`gradio_ui/adapters.py`）がこの構造を直接読んでおり、置き換えにすればそこを同時に直す必要が出る。加算なら**その利用者は1文字も変えずに生き続ける**。実際、第1段階の実装で `gradio_ui/` には一切手を入れていない。
+
+**`category_order` を配列で足した理由（2026-08-20の追補）**: カテゴリの表示順の正本は記述子（`scripts/manifests/<base>.json` の `categories` のキー順＝交換頻度順）であり、`categories` オブジェクトのキー順にもその並びがそのまま出ている。ところが**JSONオブジェクトのキー順は転送を越えて保たれるとは限らない**。実際、P7でSettingsの並び順をサーバー応答由来に切り替えた直後、AviUtl2側のWebUIでは並びがアルファベット順（`audio` / `text_encoder` / `transformer` / `video_vae`）になっていた——サーバーはcurlで見るかぎり記述子順で返しており、Python側もフロントエンドのコードも順序を保っている。両端が正しいのに順序が失われる以上、疑いは唯一検証できていない区間、すなわちAviUtl2プラグインのWebView2メッセージ経路に残る。**配列の要素順にはこの曖昧さが無い**ので、順序は配列で運び、受け手はキー順に依存しない、という形にした。オブジェクト側の並びは従来どおり（利便のため）維持している。
 
 `installed` と `present` を別のフィールドにしたのは、**「未導入」と「一部だけ導入済み」を利用者に区別して見せるため**である。LTX 2.5 は transformer だけが手元にあり残り3カテゴリが無いという状態が実際に起きる（第1段階の検証環境がまさにその状態だった）。`present: false` なら「まだ導入されていません」と案内してAPIを叩かず、`present: true` かつ `installed: false` なら「一部未導入」と表示したうえで**サーバーに理由を言わせる**（§6.2）——フロントエンドが勝手に「たぶん無理だろう」と短絡しない、というのがこの2フィールドの目的である。
 

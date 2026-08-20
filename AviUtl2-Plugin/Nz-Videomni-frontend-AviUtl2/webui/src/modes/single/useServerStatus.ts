@@ -32,9 +32,25 @@ export type ServerStatusState =
   /** Reachable bridge and backend, but an unexpected error code came back. */
   | { kind: "error"; message: string };
 
-const DEFAULT_INTERVAL_MS = 10_000;
+/** Poll period. 2.5s, NOT the 10s this used to be (2026-08-20).
+ *
+ * The badge is the only thing that tells the user the engine is being rebuilt,
+ * and a rebuild is not always long: swapping one GGUF checkpoint on a warm
+ * machine takes about 8 seconds (`Docs/VERIFICATION_LOG.md` §68.5 measured
+ * exactly that for default -> Sulphur). At 10s a whole rebuild could start and
+ * finish between two polls, so `loading-models` was never rendered — which is
+ * what the owner saw. 2.5s puts at least three polls inside an 8s load.
+ *
+ * A single-step interval rather than a fast/slow state machine, deliberately:
+ * a two-speed poller can only speed up AFTER it has seen `state === "loading"`
+ * once, which is precisely the observation the short load denies it. `GET
+ * /status` is a cheap read (`api/status.py`: in-memory fields plus one
+ * `torch.cuda.mem_get_info`; ~2ms round trip on the real machine, per the
+ * plugin log) against localhost, and the job ledger already polls every 2s
+ * next to it, so this changes no order of magnitude. */
+const DEFAULT_INTERVAL_MS = 2_500;
 
-/** Polls server connectivity on mount and every `intervalMs` (default 10s),
+/** Polls server connectivity on mount and every `intervalMs` (default 2.5s),
  * per Docs/API_REFERENCE.md §11 step 1. Two independent failure axes are
  * distinguished: the native bridge being unreachable (checked via `ping`)
  * vs. the backend HTTP server being unreachable (checked via `GET /status`,

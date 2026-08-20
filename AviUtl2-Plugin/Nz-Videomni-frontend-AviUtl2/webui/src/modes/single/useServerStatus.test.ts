@@ -1,10 +1,17 @@
-import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { createApiClient } from "../../api/client";
+import type { ApiClient } from "../../api/client";
+import type { NativeBridge } from "../../bridge";
+import type { StatusResponse } from "../../api/types";
 import { useServerStatus } from "./useServerStatus";
 
 describe("useServerStatus", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("reports 'bridge-unavailable' when ping fails (native bridge itself unreachable)", async () => {
     const mockBridge = createMockBridge({ delayMs: 0, failPing: true });
     const apiClient = createApiClient(mockBridge);
@@ -52,6 +59,60 @@ describe("useServerStatus", () => {
     await waitFor(() => {
       expect(result.current.state.kind).toBe("busy");
     });
+  });
+
+  it("reports 'loading-models' while the server rebuilds its worker", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const base = await createApiClient(bridge).getStatus();
+    const apiClient: ApiClient = {
+      ...createApiClient(bridge),
+      getStatus: async () => ({ ...base, state: "loading" }) as StatusResponse,
+    };
+    const { result } = renderHook(() =>
+      useServerStatus(60_000, { nativeBridge: bridge as NativeBridge, apiClient }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe("loading-models");
+    });
+  });
+
+  it("the DEFAULT poll period catches an 8-second model load", async () => {
+    // The real regression (2026-08-20): a checkpoint swap on a warm machine
+    // takes ~8s (Docs/VERIFICATION_LOG.md §68.5), and the old 10s period could
+    // put the whole rebuild between two polls — the badge never appeared. The
+    // load window below (1s..9s after mount) is placed to be missed by a 10s
+    // poll on purpose, so this test fails if the default goes back up.
+    const bridge = createMockBridge({ delayMs: 0 });
+    const base = await createApiClient(bridge).getStatus();
+    const LOAD_START_MS = 1_000;
+    const LOAD_END_MS = 9_000;
+
+    vi.useFakeTimers();
+    const mountedAt = Date.now();
+    const apiClient: ApiClient = {
+      ...createApiClient(bridge),
+      getStatus: async () => {
+        const elapsed = Date.now() - mountedAt;
+        const loading = elapsed >= LOAD_START_MS && elapsed < LOAD_END_MS;
+        return { ...base, state: loading ? "loading" : "ready" } as StatusResponse;
+      },
+    };
+
+    // No `intervalMs` argument: this exercises the SHIPPED default.
+    const { result } = renderHook(() =>
+      useServerStatus(undefined, { nativeBridge: bridge as NativeBridge, apiClient }),
+    );
+
+    let sawLoadingBadge = false;
+    for (let elapsed = 0; elapsed < LOAD_END_MS; elapsed += 250) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+      if (result.current.state.kind === "loading-models") sawLoadingBadge = true;
+    }
+
+    expect(sawLoadingBadge).toBe(true);
   });
 
   it("retry() re-runs the check on demand", async () => {

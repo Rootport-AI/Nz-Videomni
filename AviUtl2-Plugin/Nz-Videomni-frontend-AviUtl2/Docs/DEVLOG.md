@@ -3147,3 +3147,29 @@ LTX 2.3でStyle LoRA（画風・キャラクターLoRA）適用時に音声出�
 - **上の積み残し（生成中の無効化）は、P8でも自動では確認できなかった。** これはテストの都合ではなく**確認手段そのものの制約**である——確かめるには実際に生成ジョブを走らせながらAviUtl2のヘッダーを目で見る必要があり、エージェントにはそれができない。したがって**オーナーの目視ゲートへ引き継ぐ**：バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68.8 の3番目の項目がこれにあたる。同節には他に「ドロップダウンの2項目表示」「LTX 2.5選択時の422トーストとLTX 2.3への復帰」「読み込み中バッジ」の3点が並んでいる。
 - **サーバー側の振る舞いは実機で確認済み**なので、目視で見るのは「UIがそれをどう見せるか」だけである。たとえば422の文面は、§68.4に実機の応答全文が記録されている（本節が「サーバーの`detail`をそのまま出す」と書いたとおりの文字列が、実際にサーバーから返っている）。
 - **状態**: 実装・機械検証・デプロイまで完了（2026-08-20）。残るのはオーナーの目視4点のみ（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68.8）。
+
+## 87. オーナー目視で出た2件の修正 — カテゴリ表示順の退行と「モデル読み込み中」バッジの取りこぼし（2026-08-20）
+
+**やったこと**: §86（P7）の実配線を実機で見たオーナーから上がった2件を直した。どちらも「実装は入っているのに、利用者の目に届いていない」種類の不具合である。
+
+### (1) Settingsのモデル選択欄の並び順が交換頻度順から崩れていた
+
+- **症状**: 並びが「音声モデル／テキストエンコーダ／動画モデル／動画VAE」——カテゴリ名（`audio`/`text_encoder`/`transformer`/`video_vae`）のアルファベット順そのものになっていた。あるべき並びは**交換頻度順**（動画モデル→テキストエンコーダ→動画VAE→音声モデル）である。
+- **調べたこと（順に潰した）**: 記述子`scripts/manifests/10-ltx23.json`・`20-ltx25.json`のキー順＝交換頻度順で**正しい**。`services/base_models.py`の読み込みは宣言順を保つ（`dict`の挿入順）。`api/models_registry.py`の組み立ても記述子順のまま。**実機で動いているバックエンドへ直接`curl`した応答も記述子順**（`transformer`,`text_encoder`,`video_vae`,`audio`）。フロントエンドの`useModels.ts`／`ModelsPanel.tsx`は`Object.keys`をそのまま使っており、JSのオブジェクトは文字列キーの挿入順を保つ。ビルド済みバンドルと配布済み`.aux2`の中身もソースと一致していた。ネイティブ側も`nlohmann::ordered_json`（`bridge_core.h`の`json_t`）で統一されていて、順序を壊す実装は無い。
+- **残った疑い**: 両端が正しいのに順序が失われているのだから、疑いは**唯一こちらで検証できない区間**——AviUtl2プラグインのWebView2メッセージ経路（`PostWebMessageAsJson`でホストからページへ渡す所）に残る。ここを確かめるにはAviUtl2を動かして目で見るしかなく、しかも今回それはできない（後述のとおり起動中）。
+- **直し方**: 疑いの当否に依存しない形にした。**表示順をJSONの「配列」で運ぶ**——`GET /models`の`base_models[]`に`category_order`（記述子の宣言順そのまま）を加算し、フロントエンドはこの配列を読む。**配列の要素順はどんな転送でも保たれる**ので、オブジェクトのキー順がどこかで並べ替えられても表示順は動かない。キー順は従来どおり同じ並びで送り続ける（既存の利用者のため）が、**表示順の根拠としては使わない**。
+- **回帰テスト**: バックエンドは「記述子がわざと変な順（`audio`/`video_vae`/`transformer`/`text_encoder`）で宣言したベースモデルを、応答がそのとおりに返すか」を`tests/test_models_endpoint_compat.py`で、「出荷している記述子2本が交換頻度順を宣言しているか」を`tests/test_base_model_contract.py`で固定した。フロントエンドは`useModels.test.ts`で**キー順をアルファベット順に並べ替えた応答**（＝実機で起きたことの再現）を食わせ、それでも`categoryOrder`が交換頻度順になることを固定した。`category_order`が無い旧バックエンド向けのフォールバック（キー順→定数）も1本置いた。
+- **文言も同時に変えた**（オーナー指定）: 「動画モデル (transformer)」→**「動画モデル (checkpoint)」**（CivitAI等の流儀に合わせ、利用者が普段見る呼び名にする）、「テキストエンコーダ (Gemma)」→**「テキストエンコーダ」**（他エンジン対応時にUIの文言を触らなくて済むように、エンジン名を落とす）。EN/JA両方と、バックエンド同梱のGradio UI（`gradio_ui/i18n.py`）も揃えた。
+
+### (2) 「モデル読み込み中…」バッジが短い読み込みで出ない
+
+- **症状**: Settingsで`default`→`Sulphur`へ切り替える（実測約8秒。バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68.5に同じ8秒の記録がある）とバッジが変化しない。
+- **裏取り**: 配線は正しい。`GET /status`の`state`は読み込みの**全期間**`"loading"`であり（`services/pipeline_manager.py`の`reload`はロック内で`STATE_LOADING`にしてから戻る）、`useServerStatus`の分岐も`queue.running`より前に`state === "loading"`を見ている。プラグインのHTTPワーカーは4本あるので、読み込み中の`POST`が`/status`のポーリングを塞ぐこともない。**残る差は周期だけ**で、`DEFAULT_INTERVAL_MS`が10秒固定だったため、8秒の読み込みがまるごとポーリングの隙間に落ちうる。
+- **直し方**: **周期を2.5秒に短縮した（(a)案）**。(b)「`loading`を見ている間だけ速くする」は、**その`loading`を1度も観測できないのが今回の症状**なので原理的に効かない。(c)「`POST /pipeline/load`を出した側が即時refresh＋高頻度化」は効くが、Settingsのパネルとヘッダーのバッジという別々の持ち主の間に新しい配線を1本増やすことになり、**例外を増やさない**という方針に反する。`GET /status`はメモリ上の値＋`torch.cuda.mem_get_info`1回だけの軽い読み取りで、実機のプラグインログでも往復**約2ms**、しかも相手はlocalhostである。ジョブ台帳のポーリングが既に2秒周期で回っている隣で2.5秒にしても桁は変わらない。
+- **副作用の確認**: `useServerStatus`の利用者はヘッダーのバッジ（`StatusHeader`）、生成中のドロップダウン無効化（`serverStatus.kind === "busy"`）、`/status`本文から読む機能フラグ（sage・block swap prefetch）の3つで、いずれも**同じ値がより新しくなるだけ**である。判定式も分岐も変えていない。
+- **回帰テスト**: タイマーをモックし、「マウント1秒後から9秒間だけ`state: "loading"`を返すサーバー」に対して**既定の周期のまま**バッジが1度以上立つことを固定した。この窓は10秒周期だと確実に取りこぼす位置に置いてあるので、既定値を10秒へ戻すとこのテストが落ちる。
+
+- **実装ファイル**: `webui/src/shell/useModels.ts`・`useModels.test.ts`、`webui/src/api/types.ts`、`webui/src/bridge/mockBridge.ts`、`webui/src/i18n/strings.ts`、`webui/src/modes/single/useServerStatus.ts`・`useServerStatus.test.ts`（バックエンド側は`api/models_registry.py`、`gradio_ui/i18n.py`、`tests/`2本）。
+- **検証**: `npm run typecheck` **0エラー** ／ `npm run test -- --run` **2490 passed（132ファイル）**（実機バックエンド前提の`src/api/backend.integration.test.ts`は除外。理由は下記）／ `npm run lint` **0 error**（警告31件はベースライン維持）／ `npm run build:single` **成功**（631.37 kB）。バックエンドは`pytest` **1806 passed / 20 skipped**（前回1804＋新規2）。
+- **`.aux2`は再ビルドしてデプロイした**: 作業中はAviUtl2が起動していた（`deploy.ps1`は起動中の配置を拒否する仕様）が、ビルド完了時点で終了していたため`build.ps1 -Config Release` → `deploy.ps1`まで通した。実機（`...\Plugin\NzVideomni\`）とリポジトリ配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）の2か所へ配布し、ビルド成果物を含む3つのSHA-256が一致することを確認済み。新しい文言（`Video model (checkpoint)`）と`category_order`が埋め込みリソースに入っていることもバイト検索で確認した。
+- **積み残し**: (1)の真因（WebView2メッセージ経路が本当にキー順を並べ替えるのか）は**未確定のまま**である。今回の修正は真因に依存せず効くが、原因そのものを確かめるにはAviUtl2上での目視が要る。**他の場所でサーバー応答のキー順に依存している箇所は無い**ことは確認済みで（依存していたのはこの1か所だけ）、実害は残っていない。

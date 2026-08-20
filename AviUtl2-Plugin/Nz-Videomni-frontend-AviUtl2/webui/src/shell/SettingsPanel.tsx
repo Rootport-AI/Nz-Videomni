@@ -67,7 +67,7 @@ export interface SettingsPanelProps {
    * no relationship to any other row (a server without the pruned weights
    * degrades per job on its own). */
   onVaeModeChange: (value: VaeMode) => void;
-  /** `AppShell`'s existing `useServerStatus` state (the same 10s poll the
+  /** `AppShell`'s existing `useServerStatus` state (the same `/status` poll the
    * header badge reads) — the ONLY source of sage availability. No separate
    * capability hook/fetch exists on purpose; see
    * `shell/useAccelerationSettings.ts`. */

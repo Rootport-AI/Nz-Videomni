@@ -810,10 +810,10 @@ export interface ModelCategoryBlock {
  *  - `installed: true` — every category's default file is there.
  *
  * `categories` mirrors the top-level {@link ModelsResponse.categories} block
- * for THIS base model, keyed in the descriptor's own declaration order (which
- * is why `shell/useModels.ts` reads its display order from here rather than
- * from a client-side constant). Only the active base model carries real
- * `active` names; every other one reports `"default"` throughout. */
+ * for THIS base model. Only the active base model carries real `active` names;
+ * every other one reports `"default"` throughout. The DISPLAY ORDER is
+ * {@link BaseModelBlock.category_order}, never this object's key order — see
+ * that field. */
 export interface BaseModelBlock {
   /** Descriptor id — the value `PipelineLoadRequest.base_model` takes, and the
    * `<id>` in the `install-<id>.bat` guidance (e.g. `"LTX23"`, `"LTX25"`). */
@@ -830,6 +830,22 @@ export interface BaseModelBlock {
   installed: boolean;
   present: boolean;
   missing_categories: string[];
+  /** The order to render this base model's category dropdowns in: the
+   * descriptor's own declaration order (`scripts/manifests/<base>.json`),
+   * published as an ARRAY on purpose.
+   *
+   * `categories` below carries the same order in its keys, but a JSON
+   * OBJECT's key order does not reliably survive the trip to this WebUI: the
+   * response reaches us through the AviUtl2 plugin's WebView2 message channel,
+   * and on 2026-08-20 the Settings dropdowns rendered alphabetised
+   * (audio / text_encoder / transformer / video_vae) from a response the
+   * server had emitted in descriptor order. An array's element order has no
+   * such ambiguity, so this — not `Object.keys(categories)` — is what
+   * `shell/useModels.ts` renders by.
+   *
+   * Optional purely defensively: a backend older than this fix omits it, and
+   * `resolveCategoryOrder` falls back rather than assuming presence. */
+  category_order?: string[];
   categories: Record<string, ModelCategoryBlock>;
 }
 

@@ -269,7 +269,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // or a tab switch can never leave two screens submitting with different
   // attention backends.
   // §1-10 (2026-08-03): the hook also needs the block-swap-prefetch capability
-  // flag off the 10s `/status` poll above, so keep-resident can be folded down
+  // flag off the `/status` poll above, so keep-resident can be folded down
   // to its effective value for readers. Three-valued (see
   // `blockSwapPrefetchAvailability`) — `null` never disables anything.
   // Smart comfort marker (2026-08-18): `statusBody` is pulled out so
@@ -1192,7 +1192,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
           onVaeModeChange={accelerationControls.setVaeMode}
           // The panel reads sage availability straight off this existing
-          // 10s /status poll — no capability fetch of its own.
+          // shared /status poll — no capability fetch of its own.
           serverStatus={serverStatus}
         />
       )}

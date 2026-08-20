@@ -67,7 +67,7 @@ export interface UseAccelerationSettingsResult {
  *
  * There is deliberately no capability hook alongside this one: whether the
  * server has SageAttention / block-swap prefetch installed already arrives on
- * the `GET /status` `AppShell` polls every 10s (`useServerStatus`), and
+ * the `GET /status` `AppShell` polls on a timer (`useServerStatus`), and
  * `sageAvailability` / `blockSwapPrefetchAvailability`
  * (`shell/accelerationSettings.ts`) read it out of that existing state.
  * `blockSwapPrefetchAvailable` is that same three-valued flag, handed in by

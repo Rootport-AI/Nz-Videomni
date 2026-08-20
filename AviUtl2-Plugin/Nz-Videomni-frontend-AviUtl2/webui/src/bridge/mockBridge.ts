@@ -958,6 +958,11 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         installed: missing.length === 0,
         present: missing.length < MOCK_MODEL_CATEGORIES.length,
         missing_categories: missing,
+        // The display order as an ARRAY, exactly as the real endpoint sends it
+        // (api/models_registry.py). `shell/useModels.ts` renders by this and
+        // not by the `categories` key order below — see its
+        // `resolveCategoryOrder`.
+        category_order: [...MOCK_MODEL_CATEGORIES],
         categories: Object.fromEntries(
           MOCK_MODEL_CATEGORIES.map((category) => [
             category,

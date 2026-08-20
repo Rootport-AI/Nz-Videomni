@@ -18,16 +18,31 @@ import { MODEL_DEFAULT_NAME } from "../api/types";
 export const MODEL_CATEGORIES: readonly ModelCategory[] = ["transformer", "text_encoder", "video_vae", "audio"];
 
 /** Reads the display order out of a `GET /models` response: the ACTIVE base
- * model's own `categories` keys, which the server emits in the descriptor's
- * declaration order (unlike the top-level `categories` block, which is keyed
- * by the fixed server-side literal). Falls back to the top-level block's keys,
- * then to {@link MODEL_CATEGORIES}. Anything the WebUI has no renderer for is
- * dropped, and known categories the server omitted are NOT re-added — a base
- * model that genuinely has three categories must show three dropdowns. */
+ * model's `category_order` — the descriptor's declaration order, published as
+ * an ARRAY.
+ *
+ * IT MUST BE THE ARRAY, NOT THE `categories` OBJECT'S KEYS. The server emits
+ * both in descriptor order, but a JSON object's key order does not reliably
+ * survive the trip into this WebUI (the response comes through the AviUtl2
+ * plugin's WebView2 message channel): on 2026-08-20 the Settings dropdowns
+ * rendered alphabetised — audio / text_encoder / transformer / video_vae —
+ * from a response the server had emitted transformer-first, which is how the
+ * owner's exchange-frequency order regressed the moment this panel started
+ * following the server instead of a local constant. See `api/types.ts`'s
+ * `BaseModelBlock.category_order` and `api/models_registry.py`'s docstring.
+ *
+ * Falls back, in order, to the active base model's `categories` keys, the
+ * top-level block's keys, and finally {@link MODEL_CATEGORIES} — so a backend
+ * older than this fix still renders something sensible. Anything the WebUI has
+ * no renderer for is dropped, and known categories the server omitted are NOT
+ * re-added — a base model that genuinely has three categories must show three
+ * dropdowns. */
 function resolveCategoryOrder(models: ModelsResponse | null): readonly ModelCategory[] {
   const known = new Set<string>(MODEL_CATEGORIES);
   const activeBlock = models?.base_models?.find((b) => b.id === models.active_base_model) ?? undefined;
-  const keys = activeBlock ? Object.keys(activeBlock.categories) : Object.keys(models?.categories ?? {});
+  const keys =
+    activeBlock?.category_order ??
+    (activeBlock ? Object.keys(activeBlock.categories) : Object.keys(models?.categories ?? {}));
   const order = keys.filter((k): k is ModelCategory => known.has(k));
   return order.length > 0 ? order : MODEL_CATEGORIES;
 }

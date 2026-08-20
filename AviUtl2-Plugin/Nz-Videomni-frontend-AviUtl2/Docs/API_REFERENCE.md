@@ -163,7 +163,24 @@ workerを停止しVRAM解放。ジョブ実行中は `409`。応答 `{"pipeline_
     "text_encoder": {...}, "video_vae": {...}, "audio": {...} } }
 ```
 
-カテゴリ固定4種(`services/model_registry.py`の`CATEGORY_SPECS`／`CATEGORIES`)。呼ぶたびディスク再スキャン。
+呼ぶたびディスク再スキャン。上の`categories`ブロックは**現在アクティブなベースモデル**のもので、形も並びも従来のまま(`services/model_registry.py`の`CATEGORIES`)。マルチエンジン土台(§3-97 P3a)で**加算**された層が次の2つである。
+
+```jsonc
+{
+  "categories": { ... },            // 上のとおり。従来の利用者(gradio_ui)はここだけ読めばよい
+  "active_base_model": "LTX23",
+  "base_models": [
+    { "id": "LTX23", "display_name": "LTX 2.3", "engine_family": "ltx",
+      "active": true, "installed": true, "present": true, "missing_categories": [],
+      "category_order": ["transformer", "text_encoder", "video_vae", "audio"],
+      "categories": { ... } }
+  ]
+}
+```
+
+- **`category_order`(2026-08-20追加)**: そのベースモデルのカテゴリを**画面に並べる順**。正本は記述子`scripts/manifests/<base>.json`の`categories`のキー順で、既定は交換頻度順(動画モデル→テキストエンコーダ→動画VAE→音声モデル)である。
+  - **配列で渡しているのは意図的である。** `categories`オブジェクトのキー順も同じ並びで送っているが、**JSONオブジェクトのキー順は転送を越えて保たれるとは限らない**——AviUtl2プラグイン経由のWebUIでは、サーバーが記述子順で送った応答が受け側でアルファベット順(`audio`/`text_encoder`/`transformer`/`video_vae`)になっていた実例がある(2026-08-20)。配列の要素順にはその曖昧さが無いので、**表示順はこの配列を読むこと**。キー順に依存してはならない。
+- `installed`(全カテゴリの既定ファイルが実在) / `present`(1つ以上実在＝一部導入) / `missing_categories`(不足カテゴリ名)。「未導入」と「一部導入」を利用者に区別して見せるための2フィールドである。
 
 ### 3.6 `GET /loras`(`api/loras.py::list_loras`)— 認証不要
 

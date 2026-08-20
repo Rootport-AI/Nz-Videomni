@@ -1,8 +1,26 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { ApiClient } from "../api/client";
 import { createApiClient } from "../api/client";
 import { createMockBridge } from "../bridge/mockBridge";
+import type { ModelsResponse } from "../api/types";
 import { useModels } from "./useModels";
+
+const DESCRIPTOR_ORDER = ["transformer", "text_encoder", "video_vae", "audio"];
+
+/** A client whose `GET /models` is the mock fixture put through `mutate` —
+ * used below to reproduce a response that reached the WebUI with its object
+ * keys reordered, which no fixture can produce on its own. */
+function clientWithModels(mutate: (models: ModelsResponse) => ModelsResponse): ApiClient {
+  const real = createApiClient(createMockBridge({ delayMs: 0 }));
+  return { ...real, getModels: async () => mutate(await real.getModels()) };
+}
+
+/** Rebuilds an object with its keys in `order` (JS keeps string-key insertion
+ * order, so this really does change what `Object.keys` returns). */
+function reKey<T>(obj: Record<string, T>, order: readonly string[]): Record<string, T> {
+  return Object.fromEntries(order.map((k) => [k, obj[k] as T]));
+}
 
 describe("useModels", () => {
   it("fetches GET /models on mount, all-default selection, entries per category", async () => {
@@ -22,6 +40,54 @@ describe("useModels", () => {
       video_vae: "default",
       audio: "default",
     });
+  });
+
+  it("categoryOrder follows the server's category_order array", async () => {
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0 }));
+    const { result } = renderHook(() => useModels({ apiClient }));
+    await waitFor(() => expect(result.current.list.status).toBe("ready"));
+
+    expect(result.current.categoryOrder).toEqual(DESCRIPTOR_ORDER);
+  });
+
+  it("categoryOrder ignores the categories object's key order (2026-08-20 regression)", async () => {
+    // The response the WebUI actually received on the real device had its
+    // category keys alphabetised somewhere between the server and here (the
+    // AviUtl2 plugin's WebView2 message channel is the only step that is not
+    // ours). Reproduce exactly that: keys scrambled, `category_order` intact.
+    const scrambled = ["audio", "text_encoder", "transformer", "video_vae"];
+    const apiClient = clientWithModels((models) => ({
+      ...models,
+      categories: reKey(models.categories, scrambled) as ModelsResponse["categories"],
+      base_models: (models.base_models ?? []).map((b) => ({
+        ...b,
+        categories: reKey(b.categories, scrambled),
+      })),
+    }));
+
+    const { result } = renderHook(() => useModels({ apiClient }));
+    await waitFor(() => expect(result.current.list.status).toBe("ready"));
+
+    expect(result.current.categoryOrder).toEqual(DESCRIPTOR_ORDER);
+  });
+
+  it("categoryOrder falls back to the key order when the server sends no category_order", async () => {
+    // A backend older than the fix. Nothing else to go on, so the object's key
+    // order is used as-is rather than a client-side constant overriding what
+    // the server declared.
+    const declared = ["video_vae", "transformer", "audio", "text_encoder"];
+    const apiClient = clientWithModels((models) => ({
+      ...models,
+      base_models: (models.base_models ?? []).map(({ category_order: _dropped, ...b }) => ({
+        ...b,
+        categories: reKey(b.categories, declared),
+      })),
+    }));
+
+    const { result } = renderHook(() => useModels({ apiClient }));
+    await waitFor(() => expect(result.current.list.status).toBe("ready"));
+
+    expect(result.current.categoryOrder).toEqual(declared);
   });
 
   it("refresh() re-fetches so a newly detected entry (or active mark) shows up", async () => {

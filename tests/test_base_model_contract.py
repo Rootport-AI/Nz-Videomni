@@ -45,6 +45,19 @@ def _shipped() -> dict[str, BaseModelDescriptor]:
     return load_base_models(AppConfig().manifest_dir)
 
 
+#: The order the Settings dropdowns are meant to read top-to-bottom: how often
+#: a user swaps that category, most-swapped first (owner ruling 2026-08-20).
+#: The descriptors' ``categories`` key order IS that order — GET /models
+#: publishes it as ``base_models[].category_order`` and the WebUI renders by it,
+#: so a manifest reshuffle silently reshuffles the UI.
+EXCHANGE_FREQUENCY_ORDER = ("transformer", "text_encoder", "video_vae", "audio")
+
+
+def test_shipped_descriptors_declare_categories_in_exchange_frequency_order():
+    for base_id, descriptor in _shipped().items():
+        assert tuple(descriptor.categories) == EXCHANGE_FREQUENCY_ORDER, base_id
+
+
 def test_selection_fields_cover_every_declared_category():
     """§4.4: the descriptor's category set IS the payload's swappable set.
 

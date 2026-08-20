@@ -155,6 +155,17 @@ class ModelConfig(BaseModel):
     video_vaes: dict[str, str] = Field(default_factory=dict)
     audio_models: dict[str, str] = Field(default_factory=dict)
 
+    # Multi-engine foundation (Docs/MULTI_ENGINE_DESIGN.md §4/§5.1). The base
+    # models this server knows about are declared by the JSON descriptors in
+    # ``manifest_dir`` (services/base_models.py), and every path inside a
+    # descriptor is relative to ``models_dir`` — the root of the model store.
+    # Named models_dir (not checkpoint_dir): it is the directory the installer
+    # populates, not a single checkpoint. Both are directories, not weight
+    # files, and both stay in config: the installer and the server must agree
+    # on WHERE to look, while WHAT to look for moved into the descriptors.
+    manifest_dir: str = "./scripts/manifests"
+    models_dir: str = "./models"
+
 
 class VramConfig(BaseModel):
     low_vram_mode: bool = True
@@ -384,6 +395,16 @@ class AppConfig(BaseModel):
     @property
     def log_dir(self) -> Path:
         return self._abs(self.server.log_dir)
+
+    @property
+    def manifest_dir(self) -> Path:
+        """Directory holding the base-model descriptors (scripts/manifests)."""
+        return self._abs(self.model.manifest_dir)
+
+    @property
+    def models_dir(self) -> Path:
+        """Root of the model store; descriptor paths are relative to it."""
+        return self._abs(self.model.models_dir)
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:

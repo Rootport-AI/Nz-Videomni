@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from config import AppConfig
 from services.audio_upload_store import AudioUploadStore
+from services.base_models import BaseModelDescriptor, load_base_models
 from services.job_store import JobStore
 from services.join_manager import JoinManager
 from services.lora_registry import LoraRegistry
@@ -37,11 +38,17 @@ class AppContext:
     video_upload_store: VideoUploadStore = field(init=False)
     audio_upload_store: AudioUploadStore = field(init=False)
     lora_registry: LoraRegistry = field(init=False)
+    #: Base-model descriptors, loaded ONCE at startup from
+    #: ``config.model.manifest_dir`` and shared by everything that needs them
+    #: (registry now; the pipeline/engine layer in a later phase). A broken or
+    #: missing descriptor fails the server at boot, not per request.
+    base_models: dict[str, BaseModelDescriptor] = field(init=False)
     model_registry: ModelRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
     join_manager: JoinManager = field(init=False)
 
     def __post_init__(self) -> None:
+        self.base_models = load_base_models(self.config.manifest_dir)
         self.upload_store = UploadStore(self.config)
         self.video_upload_store = VideoUploadStore(self.config)
         self.audio_upload_store = AudioUploadStore(self.config)
@@ -49,7 +56,7 @@ class AppContext:
             self.config, self.job_store, self.video_upload_store
         )
         self.lora_registry = LoraRegistry(self.config)
-        self.model_registry = ModelRegistry(self.config)
+        self.model_registry = ModelRegistry(self.config, base_models=self.base_models)
         self.pipeline_manager = PipelineManager(
             self.config,
             self.job_store,

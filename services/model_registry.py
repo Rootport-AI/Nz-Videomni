@@ -1,19 +1,29 @@
-"""Category-scoped model registry (model management S1).
+"""Category-scoped model registry (model management S1, multi-engine P3a).
 
 Mirrors :mod:`services.lora_registry`: resolves a server-side model NAME (what
 ``GET /models`` lists and what ``POST /pipeline/load`` accepts in its optional
-``models`` block) to a weight file on disk, per fixed category. Names come from
-three sources, in priority order:
+``models`` block) to a weight file on disk, per category, per BASE MODEL.
 
-1. the injected ``"default"`` entry — always present, pointing at the SAME
-   fixed default-path field of :class:`config.ModelConfig` that the worker
-   payload is built from today, so "no selection" stays byte-identical;
+Base models and their categories come from the JSON descriptors in
+``config.model.manifest_dir`` (:mod:`services.base_models`) — the registry
+itself hard-codes nothing about LTX 2.3's layout any more. Every descriptor
+path is relative to ``config.model.models_dir``. Names within one
+(base model, category) come from three sources, in priority order:
+
+1. the injected ``"default"`` entry — always present, pointing at the
+   descriptor's ``default_file`` for that category, which is the VERBATIM
+   transcription of the fixed default path the worker payload is built from
+   today, so "no selection" stays byte-identical;
 2. explicit ``config.yaml`` registrations (``model.transformers`` /
    ``text_encoders`` / ``video_vaes`` / ``audio_models``, name -> path) — the
-   authoritative way to expose a file the scanner cannot classify;
-3. directory scanning of the EXISTING layout (no re-organization): each
-   category scans the directory its default file lives in, so a fine-tune
-   dropped next to the stock weight shows up without any config edit.
+   authoritative way to expose a file the scanner cannot classify. These maps
+   have no base-model axis, so they apply to the ACTIVE base model only (P3a:
+   the first descriptor; the pipeline-driven active base arrives with the API
+   axis in a later phase);
+3. directory scanning of every ``scan`` root the descriptor declares for that
+   category, so a fine-tune dropped next to the stock weight shows up without
+   any config edit. Multiple roots per category are supported, which is what
+   lets two base models list their own transformers side by side.
 
 Category design (see Docs/MODEL_MANAGEMENT_DESIGN.md §0): the ``audio``
 category is ONE file/entry on purpose — the engine sources the audio VAE
@@ -22,7 +32,7 @@ file (engine/pipeline/fast_video_pipeline.py ``_install_component_sources``).
 
 Fail loud, no silent skip (lora_registry precedent):
   * path-like name -> MODEL_NOT_FOUND (a name is never treated as a path);
-  * unknown category / unknown name -> MODEL_NOT_FOUND (404);
+  * unknown base model / category / name -> MODEL_NOT_FOUND (404);
   * registered name whose file is missing on disk -> MODEL_FILE_MISSING (422).
 """
 
@@ -32,73 +42,35 @@ import json
 import logging
 import struct
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from api.errors import APIError, model_file_missing, model_incompatible, model_not_found
 from config import PROJECT_ROOT, AppConfig
+from services.base_models import BaseModelDescriptor, CategoryDescriptor, load_base_models
 
 logger = logging.getLogger("ltx.models")
 
 #: Reserved name of the injected per-category default entry.
 DEFAULT_NAME = "default"
 
+#: Fixed category order (dropdown/GET /models order). A LITERAL, not derived
+#: from a descriptor: three modules import it to validate request categories
+#: and to build the legacy two-layer ``GET /models`` block, and that contract
+#: is the 4 categories LTX 2.3 declares. Making the SET of categories itself
+#: descriptor-driven is deliberately out of scope until a second base model
+#: actually needs a different set (Docs/MULTI_ENGINE_DESIGN.md §4.1, S-6).
+CATEGORIES: tuple[str, ...] = ("transformer", "text_encoder", "video_vae", "audio")
 
-@dataclass(frozen=True)
-class CategorySpec:
-    """Static wiring of one dropdown category to the existing config layout."""
-
-    default_field: str  # ModelConfig field holding today's fixed default path
-    config_field: str  # ModelConfig dict field with explicit registrations
-    extensions: tuple[str, ...]  # accepted weight-file extensions
-    # How many parents above the DEFAULT FILE the scan roots at. 1 = the file's
-    # own directory. The transformer default lives directly in
-    # models/LTX23/Weights/*.gguf, and sibling releases (other quantizations /
-    # fine-tunes) get their own subdirectories, so parent_levels=1 combined
-    # with recursive=True still discovers them without also pulling in
-    # unrelated GGUFs from elsewhere under models/ (e.g. the Gemma GGUF, which
-    # lives in the SIBLING models/LTX23/TextEncoder/ — outside this scan root).
-    # The base-model-first layout keeps that separation intact: Weights/ holds
-    # transformer GGUFs only, and the drop-in guidance file put_GGUF_here.txt
-    # is filtered out by the extension check.
-    parent_levels: int = 1
-    recursive: bool = False
-    # Filename classifier for categories sharing one directory: the video and
-    # audio VAEs both live in models/LTX23/VAE/, so a scanned
-    # filename must contain this hint ("video"/"audio") AND not the opposite
-    # hint. Ambiguous/unclassifiable files are skipped with a log line; config
-    # registration is the authoritative override (design ruling §9-2).
-    name_hint: str | None = None
-
-
-CATEGORY_SPECS: dict[str, CategorySpec] = {
-    "transformer": CategorySpec(
-        default_field="gguf_transformer_path",
-        config_field="transformers",
-        extensions=(".gguf",),
-        parent_levels=1,
-        recursive=True,
-    ),
-    "text_encoder": CategorySpec(
-        default_field="gguf_gemma_path",
-        config_field="text_encoders",
-        extensions=(".gguf",),
-    ),
-    "video_vae": CategorySpec(
-        default_field="component_video_vae_path",
-        config_field="video_vaes",
-        extensions=(".safetensors",),
-        name_hint="video",
-    ),
-    "audio": CategorySpec(
-        default_field="component_audio_vae_path",
-        config_field="audio_models",
-        extensions=(".safetensors",),
-        name_hint="audio",
-    ),
+#: Category -> the ``config.model`` field holding explicit name->path
+#: registrations for it. This map is config's, not a descriptor's: the config
+#: sections have no base-model axis (see the module docstring, source 2).
+CONFIG_REGISTRATION_FIELDS: dict[str, str] = {
+    "transformer": "transformers",
+    "text_encoder": "text_encoders",
+    "video_vae": "video_vaes",
+    "audio": "audio_models",
 }
-
-#: Fixed category order (dropdown/GET /models order).
-CATEGORIES: tuple[str, ...] = tuple(CATEGORY_SPECS)
 
 _OPPOSITE_HINT = {"video": "audio", "audio": "video"}
 
@@ -129,6 +101,23 @@ _GGUF_MAGIC = b"GGUF"
 _MAX_SAFETENSORS_HEADER = 100 * 1024 * 1024
 
 
+@lru_cache(maxsize=1)
+def _shipped_categories() -> dict[str, CategoryDescriptor]:
+    """Categories of the FIRST shipped base-model descriptor.
+
+    Transitional (P3a): :func:`precheck_model_file` is a module-level function
+    with no access to config or to the registry instance, yet it must stop
+    keying its extension check off a hard-coded table. Reading the repository's
+    own shipped descriptors keeps it descriptor-driven and deterministic (they
+    are tracked files, not runtime state) without changing its signature —
+    which six existing tests call positionally. The proper fix, passing the
+    caller's descriptor in as a keyword argument, lands together with the
+    return-value change in the config-removal phase.
+    """
+    descriptors = load_base_models(PROJECT_ROOT / "scripts" / "manifests")
+    return next(iter(descriptors.values())).categories
+
+
 def precheck_model_file(category: str, name: str, path: Path) -> None:
     """Cheap compatibility precheck BEFORE the worker is (re)started.
 
@@ -140,17 +129,17 @@ def precheck_model_file(category: str, name: str, path: Path) -> None:
 
     Raises ``model_incompatible`` (422) on any failure.
     """
-    spec = CATEGORY_SPECS.get(category)
-    if spec is None:
+    descriptor = _shipped_categories().get(category)
+    if descriptor is None:
         raise model_not_found(
             category, name, detail=f"unknown category; known: {list(CATEGORIES)}"
         )
     suffix = path.suffix.lower()
-    if suffix not in spec.extensions:
+    if suffix not in descriptor.extensions:
         raise model_incompatible(
             category,
             name,
-            detail=f"expected one of {list(spec.extensions)}, got '{path.suffix}'",
+            detail=f"expected one of {list(descriptor.extensions)}, got '{path.suffix}'",
         )
     try:
         with path.open("rb") as fh:
@@ -195,117 +184,204 @@ def _hint_matches(filename: str, hint: str | None) -> bool:
 
 
 class ModelRegistry:
-    """Per-category name -> path registry with existing-layout scanning."""
+    """Base-model -> category -> name -> path registry, descriptor-driven."""
 
-    def __init__(self, config: AppConfig):
+    def __init__(
+        self,
+        config: AppConfig,
+        base_models: dict[str, BaseModelDescriptor] | None = None,
+    ):
         self.config = config
-        # category -> name -> (path-as-configured-or-scanned, source)
-        self._registry: dict[str, dict[str, tuple[str, str]]] = {}
+        # Injected by AppContext (loaded once at startup); loaded here when the
+        # registry is built standalone (tests, tools).
+        self.base_models: dict[str, BaseModelDescriptor] = (
+            base_models if base_models is not None else load_base_models(config.manifest_dir)
+        )
+        if not self.base_models:
+            raise RuntimeError("no base-model descriptors available for the model registry")
+        # base model id -> category -> name -> (raw path, source)
+        self._registry: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
         self.rescan()
 
-    # ------------------------------------------------------------------ scan
+    # ------------------------------------------------------------ base models
+
+    @property
+    def base_model_ids(self) -> list[str]:
+        """Declared base-model ids, in manifest-filename order."""
+        return list(self.base_models)
+
+    @property
+    def default_base_model(self) -> str:
+        """The base model used when a caller names none — the first descriptor.
+
+        P3a: the pipeline has no base-model axis yet, so "first" IS "active".
+        """
+        return next(iter(self.base_models))
+
+    def descriptor(self, base_model: str | None = None) -> BaseModelDescriptor:
+        return self.base_models[self._base_id(base_model)]
+
+    def _base_id(self, base_model: str | None) -> str:
+        if base_model is None:
+            return self.default_base_model
+        if base_model not in self.base_models:
+            raise model_not_found(
+                "base_model",
+                base_model,
+                detail=f"unknown base model; known: {self.base_model_ids}",
+            )
+        return base_model
+
+    # ------------------------------------------------------------------ paths
+
+    def _models_root(self) -> Path:
+        return self.config.models_dir
+
+    def _models_abs(self, rel: str) -> Path:
+        """Descriptor-relative path -> absolute path under the model store."""
+        return self.config._abs((Path(self.config.model.models_dir) / rel).as_posix())
+
+    def _store_path(self, rel: str) -> str:
+        """The RAW string stored in the registry for a descriptor-relative path.
+
+        Normalized to ``<models_dir>/<rel>`` with POSIX separators, i.e.
+        ``models/LTX23/Weights/....gguf`` for the shipped ``models_dir``. That
+        keeps :meth:`_display_path` emitting exactly the project-relative
+        strings clients have always seen, while ``config._abs`` still resolves
+        it (an absolute ``models_dir`` — as tests use — simply yields an
+        absolute raw path, which displays as a bare filename, as before).
+        """
+        return (Path(self.config.model.models_dir) / rel).as_posix()
+
+    def _store_scanned(self, path: Path) -> str:
+        """Same normalization for a path found by scanning: expressed relative
+        to the model store when it lives there, verbatim otherwise."""
+        try:
+            rel = path.relative_to(self._models_root())
+        except ValueError:
+            return str(path)
+        return self._store_path(rel.as_posix())
+
+    # ------------------------------------------------------------------- scan
 
     def rescan(self) -> None:
-        """Rebuild the registry: default entry + config entries + a fresh
-        directory scan. Cheap (a few directory listings), so GET /models runs
-        it per request — a newly downloaded file appears without a restart."""
-        registry: dict[str, dict[str, tuple[str, str]]] = {}
-        for category, spec in CATEGORY_SPECS.items():
-            entries: dict[str, tuple[str, str]] = {}
-            default_path = getattr(self.config.model, spec.default_field) or ""
-            entries[DEFAULT_NAME] = (default_path, "config")
+        """Rebuild the registry: for every base model, per declared category,
+        the default entry + config entries + a fresh directory scan of all its
+        scan roots. Cheap (a few directory listings), so GET /models runs it per
+        request — a newly downloaded file appears without a restart."""
+        active_base = self.default_base_model
+        registry: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
+        for base_id, descriptor in self.base_models.items():
+            per_category: dict[str, dict[str, tuple[str, str]]] = {}
+            for category, spec in descriptor.categories.items():
+                entries: dict[str, tuple[str, str]] = {}
+                # The default entry always exists, even for a category whose
+                # descriptor declares no default_file yet (a base model that is
+                # only partly published): it then resolves to MODEL_FILE_MISSING
+                # instead of vanishing from the listing.
+                entries[DEFAULT_NAME] = (
+                    self._store_path(spec.default_file) if spec.default_file else "",
+                    "config",
+                )
 
-            configured: dict[str, str] = getattr(self.config.model, spec.config_field) or {}
-            for name, rel in configured.items():
-                if name == DEFAULT_NAME:
-                    # "default" is reserved for the injected entry (the byte-
-                    # identical guarantee); shadowing it would silently change
-                    # what "no selection" means. Refuse + log, keep serving.
-                    logger.warning(
-                        "model.%s: entry name 'default' is reserved (ignored); "
-                        "the default always maps to model.%s",
-                        spec.config_field,
-                        spec.default_field,
+                config_field = CONFIG_REGISTRATION_FIELDS.get(category)
+                if config_field and base_id == active_base:
+                    configured: dict[str, str] = (
+                        getattr(self.config.model, config_field, None) or {}
                     )
-                    continue
-                entries[name] = (rel, "config")
+                    for name, rel in configured.items():
+                        if name == DEFAULT_NAME:
+                            # "default" is reserved for the injected entry (the
+                            # byte-identical guarantee); shadowing it would
+                            # silently change what "no selection" means. Refuse
+                            # + log, keep serving.
+                            logger.warning(
+                                "model.%s: entry name 'default' is reserved (ignored); "
+                                "the default always maps to the descriptor's default_file",
+                                config_field,
+                            )
+                            continue
+                        entries[name] = (rel, "config")
 
-            known_paths = {
-                self.config._abs(path).resolve()
-                for path, _source in entries.values()
-                if path
-            }
-            for found in self._scan_category(spec):
-                if found.resolve() in known_paths:
-                    continue  # the default / an explicit registration already covers it
-                name = found.stem
-                if name in entries:
-                    name = f"{found.parent.name}__{found.stem}"
-                if name in entries:
-                    logger.warning(
-                        "model scan (%s): name collision for %s (ignored)",
-                        category,
-                        found,
-                    )
-                    continue
-                entries[name] = (str(found), "scan")
+                known_paths = {
+                    self.config._abs(path).resolve()
+                    for path, _source in entries.values()
+                    if path
+                }
+                for found in self._scan_category(category, spec):
+                    if found.resolve() in known_paths:
+                        continue  # the default / an explicit registration covers it
+                    name = found.stem
+                    if name in entries:
+                        name = f"{found.parent.name}__{found.stem}"
+                    if name in entries:
+                        logger.warning(
+                            "model scan (%s/%s): name collision for %s (ignored)",
+                            base_id,
+                            category,
+                            found,
+                        )
+                        continue
+                    entries[name] = (self._store_scanned(found), "scan")
 
-            registry[category] = entries
+                per_category[category] = entries
+            registry[base_id] = per_category
         self._registry = registry
 
-    def _scan_category(self, spec: CategorySpec) -> list[Path]:
-        """Discover weight files for one category in the existing layout."""
-        default_path = getattr(self.config.model, spec.default_field) or ""
-        if not default_path:
-            return []
-        base = self.config._abs(default_path)
-        for _ in range(spec.parent_levels):
-            base = base.parent
-        if not base.is_dir():
-            return []
+    def _scan_category(self, category: str, spec: CategoryDescriptor) -> list[Path]:
+        """Discover weight files for one category across ALL its scan roots."""
         found: list[Path] = []
-        candidates = base.rglob("*") if spec.recursive else base.iterdir()
-        for path in sorted(candidates):
-            if not path.is_file():
+        seen: set[Path] = set()
+        for root in spec.scan:
+            base = self._models_abs(root)
+            if not base.is_dir():
                 continue
-            rel_parts = path.relative_to(base).parts
-            # Skip HF download caches (.cache/) and any dot-directories/files.
-            if any(part.startswith(".") for part in rel_parts):
-                continue
-            if path.suffix.lower() not in spec.extensions:
-                continue
-            if not _hint_matches(path.name, spec.name_hint):
-                if spec.name_hint is not None:
-                    logger.info(
-                        "model scan: %s not classifiable as '%s' by filename "
-                        "(register it explicitly in config model.%s to expose it)",
-                        path.name,
-                        spec.name_hint,
-                        spec.config_field,
-                    )
-                continue
-            found.append(path)
+            candidates = base.rglob("*") if spec.recursive else base.iterdir()
+            for path in sorted(candidates):
+                if not path.is_file():
+                    continue
+                rel_parts = path.relative_to(base).parts
+                # Skip HF download caches (.cache/) and any dot-directories/files.
+                if any(part.startswith(".") for part in rel_parts):
+                    continue
+                if path.suffix.lower() not in spec.extensions:
+                    continue
+                if not _hint_matches(path.name, spec.name_hint):
+                    if spec.name_hint is not None:
+                        logger.info(
+                            "model scan: %s not classifiable as '%s' by filename "
+                            "(register it explicitly in config model.%s to expose it)",
+                            path.name,
+                            spec.name_hint,
+                            CONFIG_REGISTRATION_FIELDS.get(category, category),
+                        )
+                    continue
+                if path in seen:  # overlapping scan roots list a file once
+                    continue
+                seen.add(path)
+                found.append(path)
         return found
 
     # ----------------------------------------------------------------- reads
 
-    def categories(self) -> list[str]:
-        return list(CATEGORIES)
+    def categories(self, *, base_model: str | None = None) -> list[str]:
+        """Declared category names of one base model, in declaration order."""
+        return list(self.descriptor(base_model).categories)
 
-    def default_name(self, category: str) -> str:
+    def default_name(self, category: str, *, base_model: str | None = None) -> str:
         return DEFAULT_NAME
 
-    def names(self, category: str) -> list[str]:
+    def names(self, category: str, *, base_model: str | None = None) -> list[str]:
         """Registered names, ``"default"`` first, the rest sorted."""
-        entries = self._registry.get(category, {})
+        entries = self._registry.get(self._base_id(base_model), {}).get(category, {})
         rest = sorted(n for n in entries if n != DEFAULT_NAME)
         return [DEFAULT_NAME] + rest if DEFAULT_NAME in entries else rest
 
-    def entries(self, category: str) -> list[ModelEntryInfo]:
+    def entries(self, category: str, *, base_model: str | None = None) -> list[ModelEntryInfo]:
         """GET /models rows for one category (default first, rest sorted)."""
-        entries = self._registry.get(category, {})
+        entries = self._registry.get(self._base_id(base_model), {}).get(category, {})
         infos: list[ModelEntryInfo] = []
-        for name in self.names(category):
+        for name in self.names(category, base_model=base_model):
             raw, source = entries[name]
             abs_path = self.config._abs(raw) if raw else None
             infos.append(
@@ -318,6 +394,20 @@ class ModelRegistry:
                 )
             )
         return infos
+
+    def default_file_presence(self, *, base_model: str | None = None) -> dict[str, bool]:
+        """Category -> "this base model's default file is on disk".
+
+        Drives the installed/partly-installed badge of ``GET /models``: a base
+        model whose descriptor declares no ``default_file`` for a category (not
+        published yet) counts as missing it, same as a declared-but-absent file.
+        """
+        descriptor = self.descriptor(base_model)
+        return {
+            category: bool(spec.default_file)
+            and self._models_abs(spec.default_file).exists()
+            for category, spec in descriptor.categories.items()
+        }
 
     def _display_path(self, raw: str) -> str:
         """Project-relative display path; an absolute path outside the project
@@ -334,23 +424,27 @@ class ModelRegistry:
 
     # --------------------------------------------------------------- resolve
 
-    def resolve(self, category: str, name: str) -> Path:
-        """Resolve ``(category, name)`` -> absolute weight-file path.
+    def resolve(self, category: str, name: str, *, base_model: str | None = None) -> Path:
+        """Resolve ``(base model, category, name)`` -> absolute weight-file path.
 
-        Raises ``model_not_found`` (404) for an unknown category, a path-like
-        name, or an unknown name; ``model_file_missing`` (422) for a registered
-        name whose file is absent on disk.
+        Raises ``model_not_found`` (404) for an unknown base model, an unknown
+        category, a path-like name, or an unknown name; ``model_file_missing``
+        (422) for a registered name whose file is absent on disk.
         """
-        if category not in self._registry:
+        base_id = self._base_id(base_model)
+        per_category = self._registry.get(base_id, {})
+        if category not in per_category:
             raise model_not_found(
-                category, name, detail=f"unknown category; known: {list(CATEGORIES)}"
+                category, name, detail=f"unknown category; known: {list(per_category)}"
             )
         if "/" in name or "\\" in name or ".." in name:
             raise model_not_found(category, name, detail="model name must not be a path")
-        entry = self._registry[category].get(name)
+        entry = per_category[category].get(name)
         if entry is None:
             raise model_not_found(
-                category, name, detail=f"known models: {self.names(category)}"
+                category,
+                name,
+                detail=f"known models: {self.names(category, base_model=base_model)}",
             )
         raw, _source = entry
         if not raw:

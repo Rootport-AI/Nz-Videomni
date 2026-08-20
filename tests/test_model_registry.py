@@ -1,16 +1,20 @@
 """Model-management S1: ModelRegistry (services) + GET /models (API).
 
-All tests are mock/tmp-dir based — no GPU, no real model files. The client
-fixture (conftest) boots the app with backend=mock against a temp config, so
-GET /models exercises the real registry against the (absent) default layout.
+All tests are mock/tmp-dir based — no GPU, no real model files. The registry is
+descriptor-driven (services/base_models.py), so each test writes a tmp
+base-model descriptor and a tmp models tree instead of pointing config fields at
+files; the client fixture (conftest) does the same for the whole app.
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from api.errors import APIError
-from config import AppConfig
+from config import PROJECT_ROOT, AppConfig
+from services.base_models import load_base_models
 from services.model_registry import (
     CATEGORIES,
     DEFAULT_NAME,
@@ -22,35 +26,85 @@ from services.model_registry import (
 # helpers
 # --------------------------------------------------------------------------- #
 
+#: Category -> default file, relative to the tmp models_dir. Mirrors the shipped
+#: LTX 2.3 layout in shape: the transformer default sits directly in its own
+#: (recursively scanned) directory, and the two VAEs share one.
+LAYOUT_DEFAULTS: dict[str, str] = {
+    "transformer": "ltx-gguf/LTX-Q4_K_M.gguf",
+    "text_encoder": "gemma-gguf/gemma-Q4_K_M.gguf",
+    "video_vae": "components/vae/LTX_video_vae_bf16.safetensors",
+    "audio": "components/vae/LTX_audio_vae_bf16.safetensors",
+}
+
+LAYOUT_DESCRIPTOR = {
+    "schema": 2,
+    "id": "LTXTEST",
+    "display_name": "LTX Test",
+    "engine_family": "ltx",
+    "categories": {
+        "transformer": {
+            "scan": ["ltx-gguf"],
+            "extensions": [".gguf"],
+            "recursive": True,
+            "default_file": LAYOUT_DEFAULTS["transformer"],
+        },
+        "text_encoder": {
+            "scan": ["gemma-gguf"],
+            "extensions": [".gguf"],
+            "default_file": LAYOUT_DEFAULTS["text_encoder"],
+        },
+        "video_vae": {
+            "scan": ["components/vae"],
+            "extensions": [".safetensors"],
+            "name_hint": "video",
+            "default_file": LAYOUT_DEFAULTS["video_vae"],
+        },
+        "audio": {
+            "scan": ["components/vae"],
+            "extensions": [".safetensors"],
+            "name_hint": "audio",
+            "default_file": LAYOUT_DEFAULTS["audio"],
+        },
+    },
+    "default_selection": {c: DEFAULT_NAME for c in LAYOUT_DEFAULTS},
+}
+
+
 def _touch(path, size: int = 4):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\0" * size)
     return path
 
 
-def _config_with_layout(tmp_path) -> AppConfig:
-    """A config whose 4 default paths point into a tmp models layout that
-    mirrors the real one (transformer default directly in its models dir,
-    sibling releases in subdirectories; video/audio VAEs sharing one
-    directory)."""
-    gguf_dir = tmp_path / "models" / "ltx-gguf"
-    default_tr = _touch(gguf_dir / "LTX-Q4_K_M.gguf")
-    te_dir = tmp_path / "models" / "gemma-gguf"
-    default_te = _touch(te_dir / "gemma-Q4_K_M.gguf")
-    vae_dir = tmp_path / "models" / "components" / "vae"
-    default_vv = _touch(vae_dir / "LTX_video_vae_bf16.safetensors")
-    default_au = _touch(vae_dir / "LTX_audio_vae_bf16.safetensors")
+def _write_descriptor(tmp_path, descriptor: dict | None = None):
+    manifest_dir = tmp_path / "manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    (manifest_dir / "10-base.json").write_text(
+        json.dumps(descriptor or LAYOUT_DESCRIPTOR), encoding="utf-8"
+    )
+    return manifest_dir
+
+
+def _config(tmp_path, descriptor: dict | None = None) -> AppConfig:
+    """A config wired to a tmp descriptor + tmp models dir (no real weights)."""
+    manifest_dir = _write_descriptor(tmp_path, descriptor)
     return AppConfig.model_validate(
         {
             "model": {
                 "backend": "mock",
-                "gguf_transformer_path": str(default_tr),
-                "gguf_gemma_path": str(default_te),
-                "component_video_vae_path": str(default_vv),
-                "component_audio_vae_path": str(default_au),
+                "manifest_dir": manifest_dir.as_posix(),
+                "models_dir": (tmp_path / "models").as_posix(),
             }
         }
     )
+
+
+def _config_with_layout(tmp_path) -> AppConfig:
+    """:func:`_config` plus the four default weight files on disk."""
+    cfg = _config(tmp_path)
+    for rel in LAYOUT_DEFAULTS.values():
+        _touch(tmp_path / "models" / rel)
+    return cfg
 
 
 # --------------------------------------------------------------------------- #
@@ -68,21 +122,38 @@ def test_default_entry_always_present(tmp_path):
         assert entries[0].source == "config"
 
 
-def test_resolve_default_matches_config_field(tmp_path):
-    """resolve(cat, "default") must be exactly the config default path — the
-    byte-identical guarantee for the no-selection load."""
+def test_resolve_default_matches_descriptor_default_file(tmp_path):
+    """resolve(cat, "default") must be exactly the descriptor's default_file —
+    the byte-identical guarantee for the no-selection load."""
     cfg = _config_with_layout(tmp_path)
     reg = ModelRegistry(cfg)
-    assert reg.resolve("transformer", DEFAULT_NAME) == cfg._abs(
-        cfg.model.gguf_transformer_path
-    )
-    assert reg.resolve("text_encoder", DEFAULT_NAME) == cfg._abs(cfg.model.gguf_gemma_path)
-    assert reg.resolve("video_vae", DEFAULT_NAME) == cfg._abs(
-        cfg.model.component_video_vae_path
-    )
-    assert reg.resolve("audio", DEFAULT_NAME) == cfg._abs(
-        cfg.model.component_audio_vae_path
-    )
+    for category, rel in LAYOUT_DEFAULTS.items():
+        assert reg.resolve(category, DEFAULT_NAME) == cfg._abs(
+            (tmp_path / "models" / rel).as_posix()
+        )
+
+
+def test_shipped_descriptor_default_files_match_config_defaults():
+    """P3a invariant: every default_file in the SHIPPED LTX 2.3 descriptor is a
+    verbatim transcription of the config default path the worker payload is
+    still built from, so moving the registry onto descriptors cannot have
+    changed which file "default" means."""
+    cfg = AppConfig()
+    descriptor = next(iter(load_base_models(cfg.manifest_dir).values()))
+    config_defaults = {
+        "transformer": cfg.model.gguf_transformer_path,
+        "text_encoder": cfg.model.gguf_gemma_path,
+        "video_vae": cfg.model.component_video_vae_path,
+        "audio": cfg.model.component_audio_vae_path,
+    }
+    assert set(descriptor.categories) == set(config_defaults)
+    for category, config_path in config_defaults.items():
+        descriptor_path = cfg.models_dir / descriptor.categories[category].default_file
+        assert descriptor_path == cfg._abs(config_path)
+        # ...and the stored form still displays as the project-relative path.
+        assert descriptor_path.relative_to(PROJECT_ROOT).as_posix() == (
+            cfg._abs(config_path).relative_to(PROJECT_ROOT).as_posix()
+        )
 
 
 def test_reserved_default_name_in_config_is_ignored(tmp_path):
@@ -90,9 +161,9 @@ def test_reserved_default_name_in_config_is_ignored(tmp_path):
     other = _touch(tmp_path / "models" / "ltx-gguf" / "other" / "shadow.gguf")
     cfg.model.transformers = {"default": str(other)}
     reg = ModelRegistry(cfg)
-    # "default" still resolves to the fixed default field, not the shadow.
+    # "default" still resolves to the descriptor's default_file, not the shadow.
     assert reg.resolve("transformer", DEFAULT_NAME) == cfg._abs(
-        cfg.model.gguf_transformer_path
+        (tmp_path / "models" / LAYOUT_DEFAULTS["transformer"]).as_posix()
     )
 
 
@@ -196,11 +267,12 @@ def test_rescan_picks_up_new_files_without_rebuild(tmp_path):
 def test_missing_scan_dirs_are_tolerated(tmp_path):
     """Defaults pointing at absent files/dirs (fresh checkout without models/)
     must not crash the registry — the default entry just reports exists=False."""
-    cfg = AppConfig.model_validate({"model": {"backend": "mock"}})
+    cfg = _config(tmp_path)  # descriptor written, but no models tree at all
     reg = ModelRegistry(cfg)
     for cat in CATEGORIES:
         entries = reg.entries(cat)
         assert entries[0].name == DEFAULT_NAME
+        assert entries[0].exists is False
 
 
 # --------------------------------------------------------------------------- #

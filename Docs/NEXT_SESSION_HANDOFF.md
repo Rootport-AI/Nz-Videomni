@@ -37,6 +37,7 @@
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結（Clip Chain）の内部構造と現行アーキテクチャの設計正本 |
 | [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) / [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) | 解像度×尺の能力（spill-free 閾値・生成時間）と快適上限の各正本 |
 | [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) / [`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) / [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) | 高速化候補の整理・LTX 2.3 の一般知識・MCP サーバー設計の各正本 |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。実装は未着手**（起票は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-97・§3-98） |
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
@@ -53,6 +54,14 @@
 
 - 各 `*_WORKORDER.md` / `*_STATUS.md`
 - 完了済み・凍結済みの設計書（[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)、バックエンド側の[`AVIUTL2_DESIGN_BRIEF.md`](AVIUTL2_DESIGN_BRIEF.md) など）
+
+### 参考資料（③の一種。当時のまま収蔵する下調べで、設計の正本ではない）
+
+上の3分類のうち **③凍結文書の一種**として扱う。設計の正本と取り違えないよう、ここに個別に挙げておく。
+
+| 文書 | 備考 |
+|------|------|
+| [`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) | オーナーによる 2026-08-20 共有の LTX 2.5 事前調査。**マルチエンジン設計の議論より前に行われた調査であり、設計の正本ではない。**設計の正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)（①生きた文書）。本文は改変せず収蔵してあるので、更新するのではなく、新しい知見は設計正本側へ書く |
 
 > **歴史は②・③側に書く（②は追記、③は不変）。** 生きた文書（①）には現在の姿だけを現在形で書き、経緯は②・③の文書に委ねること。
 >

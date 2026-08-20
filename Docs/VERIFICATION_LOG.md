@@ -5689,3 +5689,177 @@ Singleタブのフレーム数スライダーの快適上限マーカーは、�
 `.venv-engine` 配下のファイルと `.uv_cache` 配下の対応する実体を比較し、**ハードリンク**（同一inode・別名）で共有されていることを確認した。パッケージ管理ツール `uv` はダウンロードした実体を `.uv_cache/` に1つだけ保持し、各仮想環境からはそこへハードリンクを張る方式で運用しているため、`.venv-engine` が示す5.1GiBという論理サイズは、実体の物理消費量を表していない（実体は `.uv_cache` 側に既にある）。
 
 **結論**: 同じ torch バージョンを使う限り、2本目のエンジン用仮想環境（例: 将来の `.venv-wan`）を作っても物理的なディスク消費はほとんど増えない、という[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.3の主張はこの実測で裏付けられている。
+
+---
+
+## 68. ★マルチエンジン土台（台帳§3-97 第1段階）＝ゲートG0〜G12 全合格（2026-08-20）
+
+本節は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)が設計する「推論エンジン切り替えの土台づくり」を、9つのコミット（P0〜P7）＋実機フェーズ（P8）に分けて実装した際の検証記録である。各段に1つずつゲートを置き、**前の段が合格しない限り次の段へ進まない**という進め方をした。設計側の実績表は同書§8.3、台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-97。
+
+### 68.1 ゲート一覧と結果
+
+| ゲート | 対応する段 | 何を確かめたか | 結果 |
+|---|---|---|---|
+| G0 | P0 `29ec4c6` | pytest 全緑＋`metadata.json`の`models`ブロックの新規テスト2本 | 合格 |
+| G1 | P1 `e32c824` | `install_ltx.ps1 -DryRun -SkipVenv` が3記述子の検証で完走・`INSTALLED_PATHS.txt` が現行とバイト一致・BOM付きJSONを`utf-8-sig`でPythonから読めること | 合格 |
+| G2 | P2 `13c3437` | `services/gguf_kv.py` の新規テスト緑＋**実ファイル4本**で期待どおりのKVが読めること | 合格（§68.2） |
+| G3 | P3a `302a694` | pytest 全緑＋`GET /models`の`categories`ブロックのバイト一致回帰テスト | 合格 |
+| G4 | P4 `5df32d8` | `git diff --stat` に `tests/` の変更が**ゼロ**であること（引っ越しが移動のみである証明）＋torch無しの`.venv`でshimがimportできること | 合格 |
+| G5 | P3b `e55f8f5` | pytest 全緑（tests差分は所定の2ファイルのみ）＋ゴールデンスナップショットのリテラル無変更をdiffで目視 | 合格 |
+| G6 | P5 `550bd41` | `state.json`の新規テスト＋リポジトリ直下にテスト実行で生成されないこと | 合格 |
+| G7 | P6 `669604d` | 新規6観点（base_modelのみ送信／no-op／二重load 409／未知404／バイト同一／auto-load時の失敗文言） | 合格 |
+| G8 | P7 `2134509` | typecheck 0エラー／vitest 2486 passed・10 skipped（133ファイル）／lint 0エラー／`build:single` 成功 | 合格 |
+| **G9** | P8 | **LTX 2.3 の回帰ゼロ**（実機・実GPU） | 合格（§68.3） |
+| **G10** | P8 | **LTX 2.5 への切替が fail loud する**（実機） | 合格（§68.4） |
+| **G11** | P8 | **`state.json` の再起動復元と破損時のfail-safe**（実機） | 合格（§68.5） |
+| **G12** | P8 | **`NzVideomni.aux2` の再ビルドと2か所デプロイ** | 合格（§68.6） |
+
+バックエンドのテストは最終時点（P8の文書更新後）で **1804 passed・20 skipped（収集1824件）・失敗0・エラー0**（`.venv\Scripts\python.exe -m pytest`、所要177.5秒）。フロントエンドは **2486 passed・10 skipped（133ファイル）**。
+
+### 68.2 G2 — GGUF KVの実ファイル確認（4本）
+
+§67.1のLTX 2.3系3本に加え、**LTX 2.5のQ4_K GGUFを実測した**のがこの段の追加分である。
+
+| ファイル | `general.architecture` | `model_version` |
+|---|---|---|
+| `LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf` | `ltxv` | `2.3.0` |
+| `10Eros-v1.2-Q4_K_M.gguf` | `ltxv` | `2.3.0` |
+| `Sulphur-2-base-distil-Q4_K_M.gguf` | `ltxv` | `2.3.0` |
+| `ltx-2.5-22b-distilled-transformer-Q4_K.gguf` | `ltxv` | **`2.5.0`** |
+
+**この4本目が2段契約（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §2.2）の必要性そのものの証拠である**——1段目の`general.architecture`は4本とも`ltxv`で同じであり、2.3と2.5を区別しているのは2段目の`model_version`だけである。
+
+実装上の注意点として、**KVの並び順はファイルごとに違う**ことも確認した。`license`や埋め込み`config`（数KB）が先に来る場合があるので、パーサは目的のキーが揃うまで読み飛ばす必要がある（揃った時点で読み止める）。
+
+### 68.3 G9 — LTX 2.3 の回帰ゼロ（実機・実GPU、2026-08-20）
+
+**環境**: `run.ps1` で起動（ポート18620）、`config.yaml` は無変更（廃止済みキーが2行残っている実機そのままの状態）。
+
+**起動時の確認**
+
+- 撤去済みconfigキーの残存に対する起動WARNINGが**実際に発火した**（`model.spatial_upsampler_path` と `model.gemma_root` の2件）。文面は「廃止され、記述子(scripts/manifests)側へ移りました。値は無視されます。」で、**サーバーは正常に起動し続けた**（Pydanticの`extra='ignore'`により残存キーはエラーにならない、という設計どおり）。
+- `GET /api/v1/status` → 200、`state: "unloaded"`、`base_model: "LTX23"`。
+- `GET /api/v1/models` → `active_base_model: "LTX23"`。`base_models[]` は2件。
+
+  | id | installed | present | missing_categories |
+  |---|---|---|---|
+  | `LTX23` | true | true | （なし） |
+  | `LTX25` | **false** | **true** | `text_encoder` / `video_vae` / `audio` |
+
+  LTX 2.5 は transformer だけが実在する「一部未導入」として正しく現れた。
+
+**スモーク生成（T2V、384×256／17フレーム／seed 12345）**
+
+- `job_id`: `713ff845-29af-4f21-9953-0f74147f5328`
+- 所要 **66.42秒**（`created_at` 07:19:59Z → `completed_at` 07:21:05Z）、`peak_vram_mb` 8442・`peak_vram_reserved_mb` 8972、`attention_used: sdpa`
+- **`server.log` に `Backend auto-selected: REAL.`（16:19:59,251）を確認**——mockへ無音で降格していないことの直接の証拠。
+- `logs/ltx_worker.log` に `GENERATED_OK ... -> outputs/713ff845-.../output.mp4` を確認。
+- **注記**: 計画では `Backend auto-selected: REAL` を `ltx_worker.log` で確認するとしていたが、この行を出すのは**アプリ側プロセス**なので実際の出力先は `logs/server.log` である（`ltx_worker.log` はワーカー側の出力）。確認自体は成立している。
+
+**`metadata.json` の `models` ブロック**（新設部分のみ抜粋）
+
+```jsonc
+"models": {
+  "base_model": "LTX23",
+  "selection": {
+    "transformer":  { "name": "default", "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf" },
+    "text_encoder": { "name": "default", "file": "gemma-3-12b-it-Q4_K_M.gguf" },
+    "video_vae":    { "name": "default", "file": "LTX23_video_vae_bf16.safetensors" },
+    "audio":        { "name": "default", "file": "LTX23_audio_vae_bf16.safetensors" }
+  }
+}
+```
+
+`"default"` が実ファイル名まで解決されている（P0の宿題がP3bで解消済み）。既存フィールド（`generation_mode`・`seed_used`・`attention_used`・`vram_optimization`・`output` ほか）はいずれも従来どおりで、**加算のみ**であることを確認した。
+
+### 68.4 G10 — LTX 2.5 への切替が fail loud する（実機、2026-08-20）
+
+事前準備として、LTX 2.5 の Q4_K GGUF を `models/LTX25/Weights/` へ**NTFSハードリンク**で配置した（変換ツールのステージング出力 `..\Nz-GGUF-Converter-LTX23\release-staging\ltx-2.5-gguf\diffusion_models\` と同一ドライブのため、物理消費はゼロ）。サイズ **10,706,310,592バイト**を確認。
+
+**`POST /api/v1/pipeline/load` に `{"base_model":"LTX25"}` を送信** → **HTTP 422**。応答本文は次のとおり（全文）。
+
+```json
+{"error":{"code":"MODEL_INCOMPATIBLE","message":"selected model 'transformer/default' failed the compatibility precheck","detail":"このtransformerはltxv 2.5.0です。LTX 2.5エンジンは次段階(PENDING_TASKS §3-98)で実装予定のため、まだ読み込めません。"}}
+```
+
+**この422が、ベースモデル変更時に全カテゴリ（`"default"`を含む）をprecheck＋KV判定する設計が効いていることの証拠である。** `transformer` は `"default"` のままなので、従来の「defaultは選択に載せない」規律のままでは中身を一度も読まずに通過していた。
+
+**切替失敗が環境を壊していないことの確認**
+
+- `GET /status` → `base_model` は **`LTX23` のまま**（`state: "ready"`・`pipeline_loaded: true`）。
+- `GET /models` → `active_base_model: "LTX23"`、`LTX23.active: true` / `LTX25.active: false`。
+- 続けて **LTX 2.3 でもう1本スモーク生成**（384×256／17フレーム／seed 777、`job_id` `9e3b415c-cded-485d-894a-37c872891cd2`）→ **completed・73.82秒**。失敗した切替がワーカーやパイプラインの状態を壊していないことを確認した。
+
+### 68.5 G11 — `state.json` の再起動復元と破損時のfail-safe（実機、2026-08-20）
+
+**(1) 非defaultの選択を保存する**
+
+`POST /pipeline/load` に `{"models":{"transformer":"Sulphur-2-base-distil-Q4_K_M"}}` → 200（8秒）。応答は
+`{"pipeline_loaded":true,"pipeline_type":"distilled","state":"ready","base_model":"LTX23","models":{"transformer":"Sulphur-2-base-distil-Q4_K_M","text_encoder":"default","video_vae":"default","audio":"default"}}`。
+
+生成された `state.json`:
+
+```json
+{ "schema": 1, "active_base_model": "LTX23",
+  "selections": { "LTX23": { "transformer": "Sulphur-2-base-distil-Q4_K_M",
+                             "text_encoder": "default", "video_vae": "default", "audio": "default" } } }
+```
+
+**(2) 再起動して復元されることを確かめる**
+
+サーバーを停止 → 再起動 → `GET /models` の `categories.transformer.active` が **`Sulphur-2-base-distil-Q4_K_M` のまま**であることを確認（`active_base_model` も `LTX23`）。
+
+続けて**ボディ無しの** `POST /pipeline/load` を送り、ログで実際に読まれたファイルを確認した。
+
+```
+ltx.runner: Model-management overrides: {'transformer': '...\models\LTX23\Weights\Sulphur-2-base-distil-Q4_K_M.gguf'}
+[ltx_worker] GGUFQuantLoaderService installed: Sulphur-2-base-distil-Q4_K_M.gguf — weights stay compressed in VRAM
+```
+
+**表示だけでなく実際にロードされるファイルまで復元されている**ことを確認した（P5とP6の合流点で見つかった不整合を `61cf8e7` で手当てした箇所がここに効いている）。なおボディ無しロードの応答は `{"pipeline_loaded","pipeline_type","state"}` の3キーのままで、旧クライアント互換が保たれている。
+
+**(3) 既定へ戻す**
+
+`{"models":{"transformer":"default"}}` → 200。`state.json` の `transformer` が `"default"` へ更新されたことを確認。
+
+**(4) 破損時のfail-safe**
+
+サーバーを停止し、`state.json` を `{ this is not json ` という壊れた内容で上書きしてから再起動した。
+
+- 起動ログに WARNING が出た（全文）:
+  `WARNING ltx.state: サーバー実行時状態 ...\state.json は読み込めませんでした (Expecting property name enclosed in double quotes: line 1 column 3 (char 2)) state.json.bad に退避しました。既定の組み合わせで起動します。`
+- 壊れた内容は `state.json.bad` へ退避され、`state.json` 自体は消えた。
+- `GET /status` は 200（`state: "unloaded"`・`base_model: "LTX23"`）、`GET /models` の4カテゴリすべてが `active: "default"` へ戻った。**サーバーは正常に起動している。**
+
+検証後、`state.json.bad` は削除して掃除した。
+
+### 68.6 G12 — `NzVideomni.aux2` の再ビルドと配布（2026-08-20）
+
+- `scripts\build.ps1 -Config Release` → Web UI の単一ファイルビルド（`dist-single/index.html` 631.34 kB）を埋め込んで `NzVideomni.aux2` をリンク。
+- `scripts\deploy.ps1` → 2か所へ配布。実機 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と、リポジトリ配布コピー `AviUtl2-Plugin\NzVideomni.aux2`。**両者のSHA-256が一致**（`AB82091E...39CB5E92`、1,239,552バイト）。
+- **バイト検索による中身の確認**（新文言が入り、モック時代の文言が消えていること）:
+
+  | 探した文字列 | 結果 |
+  |---|---|
+  | `Base model` / `ベースモデル` | 検出（新しいaria-label） |
+  | `Tool version` / `ツールのバ`（旧 `ツールのバージョン`） | **不検出**（モック時代のaria-labelは消えた） |
+  | `loading-models` / `Loading models` / `モデル読み込み中` | 検出（新設のヘッダーバッジ） |
+  | `partly installed` / `一部未導入` | 検出（一部導入の選択肢ラベル） |
+  | `切り替えられません` | 検出（切替失敗時の文言） |
+
+  デプロイ前に `Get-Process aviutl2` が空であることを確認済み（AviUtl2は起動していなかった）。
+
+### 68.7 検証後の後始末
+
+サーバーは停止し、ポート18620にlistenerが無いこと・`python` プロセスが残っていないことを確認した。`state.json` と `state.json.bad` はいずれも削除し、`git status` はクリーンな状態に戻してある（`.gitignore` に `/state.json`・`/state.json.bad` があるため、そもそもgitには現れない）。
+
+### 68.8 エージェントでは検証できない項目（オーナーの実機確認待ち）
+
+以下はAviUtl2本体を起動して目で見る必要があるため、本節の対象外である。台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-5〜§2-8として起票した。
+
+1. **§2-5** ヘッダーのドロップダウンに「LTX 2.3」「LTX 2.5（一部未導入）」の2項目が出ること。
+2. **§2-6** 「LTX 2.5（一部未導入）」を選ぶと、§68.4の422の`detail`がトーストで表示され、表示が「LTX 2.3」へ戻ること（**無言で戻ったら不合格**——旧モックの挙動）。
+3. **§2-7** 生成中はドロップダウンが無効化されること（P7からの申し送り事項。フロントエンドの自動テストでは`useServerStatus()`の作りの都合で確認できない）。
+4. **§2-8** モデル読み込み中にヘッダーバッジが「モデル読み込み中…」になること。
+
+`.aux2` は§68.6のとおりデプロイ済みなので、**AviUtl2を起動し直せばそのまま確認できる**（サーバーも起動しておくこと）。

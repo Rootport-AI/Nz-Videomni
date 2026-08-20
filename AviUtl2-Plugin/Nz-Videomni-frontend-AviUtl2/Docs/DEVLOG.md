@@ -3139,4 +3139,11 @@ LTX 2.3でStyle LoRA（画風・キャラクターLoRA）適用時に音声出�
 - **実装ファイル**: `webui/src/shell/useBaseModels.ts`（新設）・`useBaseModels.test.ts`（新設）、`webui/src/shell/AppShell.tsx`（配線・トースト）、`webui/src/shell/AppShell.toolVersion.test.tsx`（全面書き換え）、`webui/src/shell/useModels.ts`（`categoryOrder`）・`ModelsPanel.tsx`、`webui/src/modes/single/useServerStatus.ts`・`StatusHeader.tsx`、`webui/src/api/types.ts`（`BaseModelBlock`新設ほかオプショナル加算）・`client.ts`（`loadPipeline`の第2引数・`BackendApiError.detail`）、`webui/src/i18n/strings.ts`（EN/JA）、`webui/src/bridge/mockBridge.ts`、`webui/src/i18n/strings.test.ts`（削除したリテラルのアサーション差し替え）。
 - **検証**: `npm run typecheck`**0エラー**、`npm run test -- --run`**2486 passed / 10 skipped（133ファイル全緑）**（前回2482→+4。内訳はこのテーマで新設・書き換えた分）、`npm run lint`**0 error**（警告はベースライン維持）、`npm run build:single`**成功**（631.34 kB）。
 - **積み残し**: 「生成ジョブ実行中はドロップダウンを無効化する」ガードは実装済み（`serverStatus.kind === "busy"`）だが、**自動テストは書けていない**——`AppShell`内の`useServerStatus()`はテスト用に注入したブリッジではなくアプリ全体のシングルトンを見る既存の作りのため、テストからこの状態を作れない。実機ゲート側（§3-97のP8）で確認する。
-- **状態**: 実装・機械検証は完了（ソースのみコミット）。ビルド成果物のデプロイと実機ゲートは§3-97のP8で行う。
+
+**P8での追記（2026-08-20）**
+
+- **デプロイは完了した**。`build.ps1 -Config Release` → `deploy.ps1` で、実機（`...\aviutl2_v2.0.54\data\Plugin\NzVideomni\`）とリポジトリ配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）の2か所へ配布した。両者のSHA-256は一致（1,239,552バイト）。
+- **本節の文言が実際に`.aux2`へ入っていることをバイト検索で確認した**。`Base model`／`ベースモデル`／`loading-models`／`Loading models`／`モデル読み込み中`／`partly installed`／`一部未導入`／`切り替えられません` を検出、モック時代の`Tool version`／`ツールのバージョン`は**不検出**。埋め込みリソースが古いまま配布される、という事故が起きていないことの確認である。
+- **上の積み残し（生成中の無効化）は、P8でも自動では確認できなかった。** これはテストの都合ではなく**確認手段そのものの制約**である——確かめるには実際に生成ジョブを走らせながらAviUtl2のヘッダーを目で見る必要があり、エージェントにはそれができない。したがって**オーナーの目視ゲートへ引き継ぐ**：バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68.8 の3番目の項目がこれにあたる。同節には他に「ドロップダウンの2項目表示」「LTX 2.5選択時の422トーストとLTX 2.3への復帰」「読み込み中バッジ」の3点が並んでいる。
+- **サーバー側の振る舞いは実機で確認済み**なので、目視で見るのは「UIがそれをどう見せるか」だけである。たとえば422の文面は、§68.4に実機の応答全文が記録されている（本節が「サーバーの`detail`をそのまま出す」と書いたとおりの文字列が、実際にサーバーから返っている）。
+- **状態**: 実装・機械検証・デプロイまで完了（2026-08-20）。残るのはオーナーの目視4点のみ（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68.8）。

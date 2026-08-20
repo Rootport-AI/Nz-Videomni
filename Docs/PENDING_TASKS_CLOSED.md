@@ -1055,3 +1055,26 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **自動テスト側の置き換え**: `webui/src/shell/AppShell.toolVersion.test.tsx`を全面書き換えした（旧テストは「無言で戻る」を明示的にpinしていたので、仕様逆転とともに反転させる必要があった）。新しい条件は「選択肢はサーバーの`base_models[]`由来」「切替成功で表示値が変わる」「未導入を選ぶと導入案内が出てAPIを一切叩かず表示は動かない」「422はサーバーの`detail`をそのまま出して表示を戻す」の4本。あわせて`webui/src/shell/useBaseModels.test.ts`を新設した（成功／JOB_BUSY／PIPELINE_LOADING／422／未導入／404・通信断／base_models非対応の古いサーバー）。
 - **状態**: **破棄・クローズ（2026-08-20）**。§2からは見出しごと除去した（同節には§2-2が残るため節自体は存置）。
 - **正本・出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.1・§6.2（切替＝即ロードと4つのガード）、[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-97（土台・P7/P8）・§3-98（LTX 2.5対応）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §85（モック版の実装記録）・§86（実配線の実装記録）。
+
+### 3-100. metadata.jsonへの使用モデル情報の追加（起票：2026-08-20、実装クローズ：2026-08-20）（旧§1-23からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-23（同書§1-23は欠番）。マルチエンジン土台（同書§3-97）の第1段階の最初のコミット（P0、`29ec4c6`）として同梱した——本項は§3-97に依存しない独立の小改修だが、同じ`services/pipeline_manager.py`を触るため、先に単独で入れて差分を切り分けた。
+- **解決した問題**: 生成物の`metadata.json`に「どのモデルで生成したか」が記録されておらず、公式GGUF／Sulphur／10Erosといった使用モデルの判別が後からできなかった。原因は`_write_metadata`と`_write_chain_metadata`が、同一インスタンスがすでに保持している`active_models`をmetadata辞書へ含め忘れていただけ、という単純な欠落だった。
+- **実装内容**: 上記2関数（単発生成・チェーン生成の両方）に`models`ブロックを加算した。**名前だけでなく実ファイル名も併記する**——`active_models`の値は登録名（例: `"default"`）であり、`"default"`だけでは自己説明にならないため、`_active_selection_paths`が持つ実パスのファイル名を併記する。
+
+  ```jsonc
+  "models": {
+    "base_model": "LTX23",
+    "selection": {
+      "transformer":  { "name": "default", "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf" },
+      "text_encoder": { "name": "default", "file": "gemma-3-12b-it-Q4_K_M.gguf" },
+      "video_vae":    { "name": "default", "file": "LTX23_video_vae_bf16.safetensors" },
+      "audio":        { "name": "default", "file": "LTX23_audio_vae_bf16.safetensors" }
+    }
+  }
+  ```
+
+- **2段階に分けた理由**: P0の時点では`selection`だけを書き、`base_model`は書かなかった。当時の「ベースモデル名」に相当するものはtransformerのファイル名であり、`selection`と重複したうえ、後段（P6）で新設する記述子idの`base_model`と**同じ名前で違う意味**になってしまうためである。記述子idの`base_model`はP3bで加算し、あわせて`"default"`の`file`を実ファイル名へ解決するようにした（P0の時点では`null`だった）。
+- **実機での確認（2026-08-20）**: LTX 2.3のスモーク生成（384×256／17フレーム）の`metadata.json`に上記のブロックが出力され、既存フィールドはいずれも不変であることを確認した。記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68のG9。
+- **状態**: **実装完了・実機確認済み・クローズ（2026-08-20）**。
+- **正本・出典**: `services/pipeline_manager.py`（`_write_metadata`・`_write_chain_metadata`）、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §8.3（P0の位置づけ）、[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §68。

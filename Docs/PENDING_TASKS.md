@@ -15,7 +15,7 @@
 ## 1. 近日中の改修項目
 
 実装・修正の内容が具体的で、近く着手すべきもの。黄金のルール：「outputsは宝物置き場、uploadsは事実上の一時ファイル置き場」。このシステムではジョブごとに発生したファイルがoutputsおよびuploadsに保存される。ユーザーがディレクトリを整理するときに迷わないよう、貴重なものはoutputs、雑に消せるものはuploadsに置く。今後、新たな機能を追加するときも、貴重な生成物をuploadsに置くような設計は避けること。
-**本節に現存するのは§1-4・§1-23の2件**。§1-4はオーナー自身がREADMEを書く作業（AIエージェントが実装するタスクではない）、§1-23は実装が具体的で着手可能な独立小改修。クローズした項目の番号は再採番せず欠番のままにしてある——移設先と欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
+**本節に現存するのは§1-4の1件のみ**。§1-4はオーナー自身がREADMEを書く作業（AIエージェントが実装するタスクではない）。§1-23（metadata.jsonへの使用モデル情報の追加）は2026-08-20に実装してクローズし、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-100へ移した。クローズした項目の番号は再採番せず欠番のままにしてある——移設先と欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
 
 ### 1-4. READMEのスピードガイド執筆（旧§1-2「リリース対応」の唯一の残作業）（起票：2026-07-26）
 
@@ -49,15 +49,6 @@
 - **状態**: 未着手（オーナーが手書きするための備忘録。README執筆時に読み返し、書き終えた時点でクローズする）。**これがα版公開前に残っている唯一の作業である**（旧§1-2「リリース対応」の実装・実機検証はすべてクローズ済み）。
 - **出典**: 2026-07-26のオーナーディスカッション、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（旧§1-2のクローズ記録）、[`Nz-Videomni/README.md`](../README.md) §1（要求スペック）。
 
-### 1-23. metadata.jsonへの使用モデル情報の追加（起票：2026-08-20）
-
-- **目的**: 生成物のmetadata.jsonに「どのモデルで生成したか」が記録されておらず、公式GGUF／Sulphur／10Erosといった使用モデルの判別が後からできない。
-- **事実（2026-08-20調査済み）**: 原因はconfig構造ではない。`services/pipeline_manager.py`の`_write_metadata`（`:1211`）と`_write_chain_metadata`（`:1024`）が、**同一インスタンスがすでに保持している`self.active_models`（`:177`）をmetadata辞書へ含め忘れているだけ**、という単純な欠落である。
-- **実装方針**: 上記2関数の両方に、使用モデル情報を追加する。**名前だけでなく実ファイル名も併記すること**——`active_models`の値は名前（例: `"default"`）であり、`"default"`だけでは自己説明にならないため。実パス（実ファイル名の元）は`self._active_selection_paths`（`:182`）にすでに保持されている。単発生成・チェーン生成の両方に対応する。
-- **なぜ独立して着手できるか**: マルチエンジン土台（§3-97）の完成を待つ必要のない、独立した小改修である。`active_models`はマルチエンジン化後も引き続き「実際に読み込まれているモデルの選択」を表す実行時状態であり、本項の実装がマルチエンジン化の設計と衝突する余地は無い。
-- **状態**: 未着手（実装内容は具体的で、すぐ着手できる）。
-- **出典**: 2026-08-20の調査、`services/pipeline_manager.py`（`_write_metadata`・`_write_chain_metadata`・`active_models`・`_active_selection_paths`）。
-
 ---
 
 ## 2. 実装済み・ユーザーのテスト待ち
@@ -68,6 +59,16 @@
 
 - [ ] **2-2. 実機反映の確認（要バックエンド再起動）**: バックエンドを再起動したうえで、Singleタブの各プリセット選択時のフレーム数上限が720p 361／FHD 169／WQHD 89（既定361）になっていることを確認する → 表示値が一致すれば合格。`config.yaml`・`config.yaml.example`・フロントエンド`defaultConfig.ts`の3点は実装時点で一致させてある。
   - **経緯**: 快適上限マーカーの較正値（`single_comfort_token_budget`=44,880）からの逆算。設計正本=[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md)、実装記録=フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §85。
+
+### ヘッダーのベースモデルドロップダウン（マルチエンジン土台§3-97のP7・P8）
+
+**前提**: `.aux2` は2026-08-20に再ビルド・デプロイ済み（実機とリポジトリ配布コピーの2か所）。**AviUtl2を起動し直せばそのまま確認できる**。サーバー側の振る舞いは実機で確認済みで（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68）、ここで見るのは「UIがそれをどう見せるか」だけである。
+
+- [ ] **2-5. ドロップダウンの表示**: ヘッダーのドロップダウンを開く → 「**LTX 2.3**」と「**LTX 2.5（一部未導入）**」の2項目が出れば合格。（LTX 2.5 は transformer だけが手元にあるため「一部未導入」になる。「（未導入）」ではない。）
+- [ ] **2-6. LTX 2.5 を選んだときの fail loud**: 「LTX 2.5（一部未導入）」を選ぶ → 「ベースモデルを切り替えられませんでした: このtransformerはltxv 2.5.0です。LTX 2.5エンジンは次段階(PENDING_TASKS §3-98)で実装予定のため、まだ読み込めません。」というトーストが出て、**表示が「LTX 2.3」へ戻れば合格**。無言で戻ったら不合格（旧モックの挙動が残っている）。
+- [ ] **2-7. 生成中はドロップダウンが無効化される**: 生成ジョブを1本走らせ、実行中にヘッダーのドロップダウンを操作しようとする → **無効（グレーアウトして選べない）なら合格**。これはフロントエンドの自動テストでは確認できない項目である（`AppShell`内の`useServerStatus()`がテスト用ブリッジではなくアプリ全体のシングルトンを見る作りのため。フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §86の「積み残し」）。
+- [ ] **2-8. 読み込み中バッジ**: モデルの読み込み中（切替直後やサーバー起動後の初回生成時）にヘッダーの状態バッジを見る → 「**モデル読み込み中…**」と出れば合格。生成中と同じ色で文言だけが違う。
+  - **経緯・正本**: 設計=[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6、実装記録=フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §86、実機検証=[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68（目視項目は§68.8）。旧§2-1（モック時代の目視条件）は仕様逆転により破棄済み（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-99）。
 
 ---
 
@@ -502,7 +503,25 @@
 - **状態**: 将来の研究課題（着手時期未定）。
 - **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7のR2-7追記（A/Bの記録）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）、本書§3-91（到着時刻の拘束）。
 
-#### 3-97. マルチエンジン土台（ベースモデル概念の導入）（起票：2026-08-20）
+#### 3-97. マルチエンジン土台（ベースモデル概念の導入）（起票：2026-08-20、第1段階＝土台の実装完了：2026-08-20）
+
+**現在の状態: 第1段階（土台）は完了した。本項が残っているのは、§3-98（LTX 2.5の推論実装）で「抽象が正しかったか」を実証するまで、テーマとしては閉じないためである。**
+
+土台として実装したのは次の9点で、いずれも実機ゲート（G9〜G12）に合格している。詳細は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §8.3の実績表、実機の測定値は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68。
+
+- 記述子schema 2（`scripts/manifests/10-ltx23.json`・`20-ltx25.json`）とインストーラの1/2両受理。
+- GGUF KVパーサ`services/gguf_kv.py`の新設と、`general.architecture`＋`model_version`の2段判別。
+- モデルレジストリの記述子駆動・多ルート化。`GET /models`の加算3層化。
+- `services/ltx_runner.py`→`services/engines/ltx/adapter.py`の引っ越し（`services/ltx_runner.py`は再エクスポートshimとして存置）。
+- config.yamlからのモデル既定パス撤去（記述子へ移管）と、廃止キー残存時の起動WARNING。
+- `state.json`の新設（リポジトリ直下・git追跡外・破損時は`.bad`へ退避して既定続行）。
+- `POST /pipeline/load`の`base_model`軸、ロード中の409 `PIPELINE_LOADING`、`GET /status`の`state`・`base_model`。
+- `metadata.json`の`models`ブロック（§1-23の同梱。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-100）。
+- フロントエンドのヘッダードロップダウン実配線（旧§2-1のモックを置換。同[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-99）。
+
+**残っているのは§3-98だけである。** LTX 2.5 は「導入済みなら選択でき、ロードしようとすると『次段階で実装予定』と明示して422で止まる」ところまで実装済みで、実際に読み込めるようになるのが§3-98である。
+
+以下は起票時の記述（設計の要点として引き続き有効）。
 
 - **目的**: 複数の動画生成AI（LTX 2.3／LTX 2.5／将来のWan 2.x等）をヘッダーのドロップダウンで切り替えられるようにするための土台を作る。「利用者に見える単位＝ベースモデル」と「推論実装の単位＝エンジン系統」を分離し、ベースモデルの追加が記述ファイル1本の追加で済む形にする。
 - **設計正本**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)。責任分界・概念モデル・層構成・UX仕様・段階分割・既存コードの写像表はすべて同書が正。本項では要点だけを掲げる。
@@ -517,8 +536,8 @@
 - **v1スコープ外**: エンジン別のUIパラメータ制約の切り替え（`8n+1` グリッド等。`chain_math.py:41-42` の定数に由来する規約がAPIバリデーションまで連動している。ただし規約は`chain_math.py`だけでなく`api/models.py`の独立リテラル5箇所とフロントエンド側の独立実装にも散在しており、エンジン別化は定数差し替えだけでは済まない——敵対的レビュー2026-08-20指摘S-5、詳細は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §7参照）。作業順序は「土台づくり → LTX 2.5実装・切替成功 → UI調整」。
 - **検証方針**: 抽象の正しさは2例目で実証する。**土台の先行整備しすぎ（過剰抽象化）を戒める**——1例しか無いうちに凝った作りにすると、2例目で作り直しになる。したがって本項は§3-98と抱き合わせで進める。第1段階の完了判定は「既存の全テストが通り、LTX 2.3の振る舞いが一切変わらないこと」。
 - **関連**: §3-98（LTX 2.5対応）が本項の直接の実証相手。ヘッダーのモデル名ドロップダウン（旧§2-1。モックで、選ぶと無言で戻るものだった）は本項のP7で実体を得た（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-99）。[`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md)（凍結）が現行4カテゴリのドロップダウンの設計記録。
-- **状態**: 将来の研究課題（着手時期未定・設計は確定済み・実装は未着手）。
-- **出典**: 2026-08-20のオーナー設計ディスカッション、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)。
+- **状態**: **第1段階（土台）は実装完了・実機ゲート合格（2026-08-20）。§3-98（2例目による実証）待ちのため本項は存置する。** 第2段階が完了した時点で本項と§3-98をまとめてクローズする。
+- **出典**: 2026-08-20のオーナー設計ディスカッション、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68（実機ゲートG9〜G12）。
 
 #### 3-98. LTX 2.5対応（マルチエンジン土台の2例目）（起票：2026-08-20）
 
@@ -532,10 +551,12 @@
   - 記述ファイル `scripts/manifests/20-ltx25.json` と、導入用の `install-LTX25.bat` の新設。
   - ltxアダプタへのLTX 2.5読み込み分岐——Gemma 4＋projection、split components、Dual CFG、Euler ancestral、Conv VAE／DiffVAE といった2.3との差分（詳細は参考資料）。
   - 低VRAM実行方式の対応——CPU常駐＋block swap＋layer streaming＋tiled decode の骨格は2.3から引き継ぐ。
+  - **LoRA（`lora_dir`・`ic_loras`）のベースモデル軸対応**——§3-97の第1段階では**意図的に対象外にした**。現在の`config.yaml`の`lora_dir`と`ic_loras`はベースモデル軸を持たず、どのベースモデルを選んでいても同じ1本のディレクトリ・同じ登録名を見る。含めなかったのは、LoRAが「モデルの読み込み時」ではなく「ジョブごとの適用時」に効く別系統の資産であり、4カテゴリ（transformer／text_encoder／video_vae／audio）とライフサイクルが違うためである。**LTX 2.3用のLoRAをLTX 2.5に当てても意味のある結果にならない**ので、2.5用のLoRAが実在するようになる本項の時点で、記述子側（`assets`または新設のLoRAブロック）へ寄せるかどうかを判断する。第1段階で`models/LTX23/StyleLoRA/`というベースモデル配下のレイアウトにはなっているため、移行の下地はある。
+  - 記述ファイル`scripts/manifests/20-ltx25.json`の`downloads`追記——第1段階では**空配列のまま**にしてある（重み未配布のため）。`text_encoder`／`video_vae`／`audio`の`default_file`も未記入で、探索先（`scan`・`extensions`）だけを宣言してある。カテゴリ構成が確定した時点で埋める（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §10の唯一の残未決事項）。
 - **完了の判定**: ドロップダウンで LTX 2.3 ↔ 2.5 を往復でき、双方で生成が成功すること。
 - **関連**: §3-97（土台）。ヘッダーの「LTX 2.5」選択肢（旧§2-1）は§3-97のP7で実配線になり、本項で初めて実際に読み込めるようになる（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-99）。本書§3-91（到着時刻の拘束）は「将来のモデル世代交代（例: LTX 2.5等）でこの種の能力が追加されたとき」を着手条件としているため、本項の実装中にLTX 2.5の能力を確かめる機会がある。
-- **状態**: 将来の研究課題（着手時期未定・§3-97と抱き合わせ）。
-- **出典**: 2026-08-20のオーナー設計ディスカッションと事前調査、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)。
+- **状態**: **未着手。ただし§3-97の第1段階（土台）は2026-08-20に完了しており、本項は着手可能な状態にある。** LTX 2.5のQ4_K GGUF（10,706,310,592バイト）は`models/LTX25/Weights/`へ配置済みで、`GET /models`に「一部未導入」（transformerのみ実在）として現れ、選ぶと422「LTX 2.5エンジンは次段階で実装予定」で止まる——**ここから先を作るのが本項である**。
+- **出典**: 2026-08-20のオーナー設計ディスカッションと事前調査、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68のG10（422で止まることの実機確認）。
 
 ---
 

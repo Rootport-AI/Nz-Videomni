@@ -47,14 +47,112 @@ from typing import Callable
 from PIL import Image, ImageDraw
 
 import chain_math
-from api.errors import lora_preprocess_conflict
+from api.errors import lora_preprocess_conflict, model_incompatible
 from api.models import GenerateRequest
 from config import AppConfig
 from services import gpu_info, video_io
+from services.base_models import BaseModelDescriptor, load_base_models
 from services.lora_registry import ResolvedLora
 from services.low_vram import LowVramSettings, safe_memory_cleanup
 
 logger = logging.getLogger("ltx.runner")
+
+#: Model-management category -> the worker load-payload field it overrides.
+#: THE mapping, not a copy of one: ``_RealBackend._build_load_payload`` reads
+#: this dict to place both the descriptor's ``default_file`` and any selection
+#: override, so a category that is not here cannot reach the worker at all.
+#: Pinned to the base-model descriptor by a contract test (the descriptor's
+#: category set must equal this key set), which is what keeps a new category in
+#: a manifest from silently doing nothing.
+SELECTION_FIELDS: dict[str, str] = {
+    "transformer": "gguf_transformer_path",
+    "text_encoder": "gguf_gemma_path",
+    "video_vae": "component_video_vae_path",
+    "audio": "component_audio_vae_path",
+}
+
+#: Fixed (non-selectable) descriptor assets this engine needs, in payload order.
+#: ``component_video_vae_pruned_path`` is deliberately NOT here — it is optional
+#: (see ``_build_load_payload``) while these three must exist.
+REQUIRED_ASSETS: tuple[str, ...] = (
+    "gemma_root",
+    "spatial_upsampler_path",
+    "component_text_projection_path",
+)
+
+#: LTX generation this adapter can actually run, as the first two segments of
+#: the transformer GGUF's ``model_version`` KV ("2.3.0" -> "2.3"). The LTX 2.5
+#: inference path is the NEXT stage (PENDING_TASKS §3-98); until it exists, a
+#: 2.5 weight file must fail loud at load time instead of being handed to a
+#: worker that would mis-run it.
+SUPPORTED_MODEL_VERSIONS: frozenset[str] = frozenset({"2.3"})
+
+#: ``general.architecture`` value of every LTX weight file (2.3 and 2.5 alike).
+LTX_ARCHITECTURE = "ltxv"
+
+
+def _minor_version(version: str) -> str:
+    """``"2.5.0"`` -> ``"2.5"`` (the patch segment never selects an engine)."""
+    return ".".join(version.strip().split(".")[:2])
+
+
+def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
+    """Rule on the GGUF KV metadata of a model about to be loaded (§2.2).
+
+    The two-step contract, judged ONLY for the ``transformer`` category (the
+    file that defines the generation; VAEs and text encoders carry no such
+    stamp and are not gated here):
+
+    1. ``general.architecture`` — the engine FAMILY. Anything other than
+       ``ltxv`` is a different model lineage entirely and is refused (422).
+    2. ``model_version`` — the LTX generation. Only
+       :data:`SUPPORTED_MODEL_VERSIONS` can be run today; a newer one is
+       refused with a message that names the next stage rather than pretending
+       the file is broken.
+
+    A MISSING key is a WARNING, not a refusal: both keys are present in every
+    file the project's own converter produces, but a hand-made or third-party
+    GGUF may lack them, and rejecting all of those would be a bigger regression
+    than letting the engine's own loader have the last word (design §2.5).
+
+    ``kv`` comes from ``services.model_registry.precheck_model_file`` — the
+    header was already read there, so this function does no file I/O.
+    """
+    if category != "transformer":
+        return
+    architecture = (kv.get("general.architecture") or "").strip()
+    if not architecture:
+        logger.warning(
+            "model '%s' declares no general.architecture in its GGUF header; "
+            "loading it anyway (the engine's own loader has the last word).",
+            name,
+        )
+    elif architecture != LTX_ARCHITECTURE:
+        raise model_incompatible(
+            category,
+            name,
+            detail=(
+                f"'{architecture}'系のモデルです。LTXエンジンは"
+                f"'{LTX_ARCHITECTURE}'のみ扱えます。"
+            ),
+        )
+    version = (kv.get("model_version") or "").strip()
+    if not version:
+        logger.warning(
+            "model '%s' declares no model_version in its GGUF header; loading "
+            "it anyway (assuming it matches this engine's LTX generation).",
+            name,
+        )
+        return
+    if _minor_version(version) not in SUPPORTED_MODEL_VERSIONS:
+        raise model_incompatible(
+            category,
+            name,
+            detail=(
+                f"このtransformerはltxv {version}です。LTX 2.5エンジンは次段階"
+                "(PENDING_TASKS §3-98)で実装予定のため、まだ読み込めません。"
+            ),
+        )
 
 
 def resolve_seed(requested: int) -> int:
@@ -309,15 +407,42 @@ class LTXRunner:
     Public contract (unchanged): ``LTXRunner(config, low_vram)``, properties
     ``loaded`` / ``pipeline_type``, methods ``load`` / ``unload`` /
     ``generate(...) -> GenerationOutcome``.
+
+    ``descriptor`` (keyword, additive) is the BASE MODEL this runner serves —
+    where every fixed weight path now comes from (§3-97 P3b). The app injects
+    the one it loaded at startup (``AppContext.base_models``); omitted, it is
+    read lazily from ``config.manifest_dir`` so the standalone constructions
+    (tests, outputs/ drivers) keep working unchanged. Switching base model at
+    runtime is the API axis's job (P6), not this constructor's.
     """
 
-    def __init__(self, config: AppConfig, low_vram: LowVramSettings):
+    def __init__(
+        self,
+        config: AppConfig,
+        low_vram: LowVramSettings,
+        descriptor: BaseModelDescriptor | None = None,
+    ):
         self.config = config
         self.low_vram = low_vram
+        self._descriptor = descriptor
         self._backend: _MockBackend | _RealBackend | None = None
         # Acceleration capability probe result (see ``sage_available``); None
         # until the first read, then cached for the process lifetime.
         self._sage_probe_cache: bool | None = None
+
+    @property
+    def descriptor(self) -> BaseModelDescriptor:
+        """The base-model descriptor backing this runner.
+
+        Resolved lazily (never in ``__init__``) so merely constructing a runner
+        — which several capability probes do — reads no files: a caller that
+        only asks ``sage_available`` must not fail because the manifests are
+        unreadable. The lazy default is the FIRST declared descriptor, matching
+        ``ModelRegistry.default_base_model``.
+        """
+        if self._descriptor is None:
+            self._descriptor = next(iter(load_base_models(self.config.manifest_dir).values()))
+        return self._descriptor
 
     @property
     def loaded(self) -> bool:
@@ -482,11 +607,11 @@ class LTXRunner:
                     "(check torch+CUDA, ltx_pipelines install, and model paths)."
                 )
             logger.info("Backend forced to REAL (model.backend=real).")
-            return _RealBackend(self.config, self.low_vram)
+            return _RealBackend(self.config, self.low_vram, self.descriptor)
         # auto
         if self._real_available():
             logger.info("Backend auto-selected: REAL.")
-            return _RealBackend(self.config, self.low_vram)
+            return _RealBackend(self.config, self.low_vram, self.descriptor)
         logger.info("Backend auto-selected: MOCK (real stack/model unavailable).")
         return _MockBackend(self.config, self.low_vram)
 
@@ -494,17 +619,27 @@ class LTXRunner:
         """True only if the engine python, worker script and every file the real
         GGUF + component-file path actually loads are present.
 
+        WHICH files those are comes from the base-model descriptor: the four
+        categories' ``default_file`` plus the three required ``assets``
+        (:data:`REQUIRED_ASSETS`). ``component_video_vae_pruned_path`` is
+        deliberately NOT gated — a job that asks for the pruned decoder
+        downgrades to the stock one, so its absence must not demote the whole
+        server to mock.
+
         The GGUF + component-file recipe never opens the 43GB monolith. The
         worker payload's ``checkpoint_path`` field is a hardcoded ``""`` (see
         ``_build_load_payload``) — the wheel's lazy builders receive it but the
         GGUF/component installs replace every loader — so there is no path here
-        to gate. The (tokenizer-only ~40MB) ``gemma_root`` IS gated: DistilledPipeline is built
-        with gemma_root=None so the wheel's weight glob is bypassed,
-        but the engine still loads the tokenizer/processor module_ops from this dir,
-        so a missing dir must fail fast in the app layer rather than crash deep in
-        the encode path. The load-bearing files are the tokenizer gemma_root, the
-        GGUF transformer/Gemma, the spatial upsampler, and the 3 standalone component
-        files (use_component_files is fixed True in config.yaml).
+        to gate. The (tokenizer-only ~40MB) ``gemma_root`` IS gated:
+        DistilledPipeline is built with gemma_root=None so the wheel's weight
+        glob is bypassed, but the engine still loads the tokenizer/processor
+        module_ops from this dir, so a missing dir must fail fast in the app
+        layer rather than crash deep in the encode path.
+
+        A False answer is LOGGED WITH THE MISSING PATHS. This probe is the
+        silent-mock-demotion trap: 'auto' falls back to the mock, generation
+        keeps "working", and without this list nothing on screen says which
+        file was the reason.
 
         Deliberately does NOT import torch / ltx_* (those live only in the engine
         venv, not the app venv). Any failure/missing is swallowed -> False (so
@@ -513,29 +648,50 @@ class LTXRunner:
         """
         model = self.config.model
         try:
-            required = [
-                model.engine_python,
-                model.gemma_root,
-                model.spatial_upsampler_path,
-                model.gguf_transformer_path,
-                model.gguf_gemma_path,
-                model.component_video_vae_path,
-                model.component_audio_vae_path,
-                model.component_text_projection_path,
+            descriptor = self.descriptor
+            required: dict[str, str | None] = {
+                "engine_python": model.engine_python,
+            }
+            for category, spec in descriptor.categories.items():
+                required[category] = (
+                    self._models_path(spec.default_file) if spec.default_file else None
+                )
+            for asset in REQUIRED_ASSETS:
+                value = descriptor.assets.get(asset)
+                required[asset] = self._models_path(value) if value else None
+
+            missing = [
+                f"{label} (not declared by base model '{descriptor.id}')"
+                if not path
+                else f"{label}: {self.config._abs(path)}"
+                for label, path in required.items()
+                if not path or not self.config._abs(path).exists()
             ]
-            if any(not p for p in required):
-                return False
-            for p in required:
-                if not self.config._abs(p).exists():
-                    return False
             if not model.engine_dir:
-                return False
-            worker = self.config._abs(model.engine_dir) / "worker.py"
-            if not worker.exists():
+                missing.append("engine_dir (not configured)")
+            else:
+                worker = self.config._abs(model.engine_dir) / "worker.py"
+                if not worker.exists():
+                    missing.append(f"engine worker: {worker}")
+            if missing:
+                logger.warning(
+                    "real backend unavailable — %d required file(s) missing: %s",
+                    len(missing),
+                    ", ".join(missing),
+                )
                 return False
             return True
         except Exception:
+            logger.warning("real backend availability probe failed", exc_info=True)
             return False
+
+    def _models_path(self, rel: str) -> str:
+        """Descriptor-relative path -> a path ``config._abs`` can resolve.
+
+        Same normalization as ``ModelRegistry._store_path``: descriptor paths
+        are relative to ``model.models_dir``, never to the project root.
+        """
+        return (Path(self.config.model.models_dir) / rel).as_posix()
 
     # ------------------------------------------- acceleration (SageAttention)
 
@@ -1138,9 +1294,17 @@ class _RealBackend:
     _LOAD_TIMEOUT_S = 600.0
     _SHUTDOWN_TIMEOUT_S = 30.0
 
-    def __init__(self, config: AppConfig, low_vram: LowVramSettings):
+    def __init__(
+        self,
+        config: AppConfig,
+        low_vram: LowVramSettings,
+        descriptor: BaseModelDescriptor,
+    ):
         self.config = config
         self.low_vram = low_vram
+        #: The base model whose ``default_file``s and ``assets`` this worker is
+        #: built from (§3-97 P3b) — the only source of fixed weight paths.
+        self.descriptor = descriptor
         self.pipeline = None  # back-compat attribute; always None for this backend
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
@@ -1163,6 +1327,40 @@ class _RealBackend:
         if not resolved.exists():
             raise RuntimeError(f"model.{label} not found: {resolved}")
         return str(resolved)
+
+    def _models_path(self, rel: str) -> str:
+        """Descriptor-relative path -> a path ``config._abs`` can resolve
+        (mirrors ``ModelRegistry._store_path``: relative to ``models_dir``)."""
+        return (Path(self.config.model.models_dir) / rel).as_posix()
+
+    def _require_models_file(self, rel: str | None, label: str) -> str:
+        """Absolute path of a descriptor-declared file, which MUST exist.
+
+        Same fail-fast contract as :meth:`_require_path` (the config-sourced
+        sibling), phrased against the base model: an undeclared or absent file
+        stops the load here, in the app layer, instead of crashing the worker's
+        native loader minutes later.
+        """
+        if not rel:
+            raise RuntimeError(
+                f"base model '{self.descriptor.id}' declares no {label} "
+                "(required for the real backend)."
+            )
+        resolved = self.config._abs(self._models_path(rel))
+        if not resolved.exists():
+            raise RuntimeError(f"base model '{self.descriptor.id}' {label} not found: {resolved}")
+        return str(resolved)
+
+    def _require_asset(self, key: str) -> str:
+        """Absolute path of a fixed (non-selectable) descriptor asset."""
+        return self._require_models_file(self.descriptor.assets.get(key), f"asset '{key}'")
+
+    def _require_default_file(self, category: str) -> str:
+        """Absolute path of a category's descriptor ``default_file``."""
+        spec = self.descriptor.categories.get(category)
+        return self._require_models_file(
+            spec.default_file if spec else None, f"default file for category '{category}'"
+        )
 
     def _stderr_tail(self, n: int = 2000) -> str:
         """Best-effort tail of the worker stderr log (for error messages)."""
@@ -1236,29 +1434,30 @@ class _RealBackend:
 
     # ------------------------------------------------------------------ load
 
-    # payload_fieldの唯一の定義は_build_load_payload本体(直下)。カテゴリ→
-    # フィールドの対応表を別定数に持つとdriftするため置かない(P3bで実際に
-    # 使われる形のSELECTION_FIELDSが入る予定)。
-
     def _build_load_payload(self, selection: dict[str, str] | None = None) -> dict:
         """Build the ``{"op": "load"}`` worker payload (pure — no process I/O).
 
         ``selection`` maps a model-management category to an ABSOLUTE weight
         path, already resolved + prechecked by the API layer. Categories absent
-        from ``selection`` (or a ``None``/empty selection) resolve from the
-        config default fields exactly as before, so the no-selection payload is
-        BYTE-IDENTICAL to the pre-model-management payload. Key set AND
-        insertion order are part of that contract, pinned by the golden
-        snapshot in tests/test_model_swap_load.py — do not reorder.
+        from ``selection`` (or a ``None``/empty selection) resolve from the base
+        model's ``default_file`` / ``assets`` (§3-97 P3b — they used to be fixed
+        ``config.model`` fields holding the very same paths), so the
+        no-selection payload is BYTE-IDENTICAL to the pre-model-management
+        payload. Key set AND insertion order are part of that contract, pinned
+        by the golden snapshot in tests/test_model_swap_load.py — do not
+        reorder.
+
+        Which category feeds which payload field is :data:`SELECTION_FIELDS`,
+        read here rather than transcribed — there is no second table to drift.
         """
         selection = selection or {}
         model = self.config.model
 
         # checkpoint_path: hardcoded "" (2026-07-28, PENDING_TASKS.md 3-26; the
         # ModelConfig field this used to read no longer exists — see config.py's
-        # NOTE next to spatial_upsampler_path for the full evidence chain). The
-        # GGUF + component-file path never opens this string; it is forwarded
-        # only because DistilledPipeline requires a non-None str so
+        # NOTE on checkpoint_path for the full evidence chain). The GGUF +
+        # component-file path never opens this string; it is forwarded only
+        # because DistilledPipeline requires a non-None str so
         # ModelLedger.build_model_builders() populates the lazy builder objects
         # that the GGUF/component re-sourcing later overwrites via
         # dataclasses.replace(). "" satisfies that "not None" requirement and
@@ -1271,38 +1470,46 @@ class _RealBackend:
         # module_ops from this dir (tokenizer.model + preprocessor_config.json), so a
         # missing dir must fail fast here rather than crash deep in the encode path.
         # Forwarded to the worker as a payload field exactly as before.
-        gemma_root = self._require_path(model.gemma_root, "gemma_root")
+        gemma_root = self._require_asset("gemma_root")
 
-        upsampler_path = self._require_path(model.spatial_upsampler_path, "spatial_upsampler_path")
+        upsampler_path = self._require_asset("spatial_upsampler_path")
 
-        def _swappable(category: str, field: str) -> str:
-            override = selection.get(category)
-            if override:
-                return str(override)
-            return self._require_path(getattr(model, field), field)
-
-        gguf_transformer_path = _swappable("transformer", "gguf_transformer_path")
-        gguf_gemma_path = _swappable("text_encoder", "gguf_gemma_path")
-
-        # Component-file re-sourcing. Fixed on in config.yaml; the 3 standalone
-        # files replace the monolith for VAE/audio (+ text projection connectors),
+        # Every SELECTABLE path in one pass, keyed by the payload field
+        # SELECTION_FIELDS assigns to that category: an explicit selection wins,
+        # otherwise the base model's own default_file. Reading the mapping here
+        # (instead of transcribing it) is what makes the contract test between
+        # SELECTION_FIELDS and the descriptor's category set meaningful — a
+        # category missing from the mapping cannot reach the worker at all.
+        # Component-file re-sourcing (video/audio VAE) rides the same route:
+        # fixed on in config.yaml, the standalone files replace the monolith,
         # so they are load-bearing and always validated for existence.
-        component_video_vae_path = _swappable("video_vae", "component_video_vae_path")
-        component_audio_vae_path = _swappable("audio", "component_audio_vae_path")
-        component_text_projection_path = self._require_path(
-            model.component_text_projection_path, "component_text_projection_path"
-        )
-        # PrunaVAED (pruned video VAE decoder): resolved but NOT required to
-        # exist — deliberately not via _require_path and not in the
-        # real-backend availability probe. It is read only by a job that asks
-        # for vae_mode="prune_vaed", and a missing file downgrades THAT job to
-        # the stock decoder (vae_mode_used="on->off") instead of preventing the
-        # whole server from loading. Not swappable through the model registry
-        # either (see config.py's comment on the field).
+        swapped = {
+            field: (
+                str(selection[category])
+                if selection.get(category)
+                else self._require_default_file(category)
+            )
+            for category, field in SELECTION_FIELDS.items()
+        }
+        component_text_projection_path = self._require_asset("component_text_projection_path")
+        # PrunaVAED (pruned video VAE decoder, ~690MB, decoder half only):
+        # resolved but NOT required to exist — deliberately not via
+        # _require_models_file and not in the real-backend availability probe.
+        # It is read only by a job that asks for vae_mode="prune_vaed", and a
+        # missing file downgrades THAT job to the stock decoder
+        # (vae_mode_used="on->off") instead of preventing the whole server from
+        # loading.
+        #
+        # It is also deliberately NOT a registry category: it sits in a
+        # SUBDIRECTORY (VAE/prunavaed/) and its filename contains neither
+        # "video" nor "audio", which is a double defence against the video_vae
+        # name_hint scan (services/model_registry.py) — a decoder-only file
+        # offered as the server-wide video VAE would break the encoder-side
+        # builder, and the scan is non-recursive so the subdirectory is out of
+        # reach anyway.
+        pruned_rel = self.descriptor.assets.get("component_video_vae_pruned_path")
         component_video_vae_pruned_path = (
-            str(self.config._abs(model.component_video_vae_pruned_path))
-            if model.component_video_vae_pruned_path
-            else ""
+            str(self.config._abs(self._models_path(pruned_rel))) if pruned_rel else ""
         )
 
         return {
@@ -1310,11 +1517,11 @@ class _RealBackend:
             "checkpoint_path": checkpoint_path,
             "gemma_root": gemma_root,
             "upsampler_path": upsampler_path,
-            "gguf_transformer_path": gguf_transformer_path,
-            "gguf_gemma_path": gguf_gemma_path,
+            "gguf_transformer_path": swapped["gguf_transformer_path"],
+            "gguf_gemma_path": swapped["gguf_gemma_path"],
             # Phase 1 component-file paths (gate via LTX_COMPONENT_FILES env).
-            "component_video_vae_path": component_video_vae_path,
-            "component_audio_vae_path": component_audio_vae_path,
+            "component_video_vae_path": swapped["component_video_vae_path"],
+            "component_audio_vae_path": swapped["component_audio_vae_path"],
             "component_text_projection_path": component_text_projection_path,
             "component_video_vae_pruned_path": component_video_vae_pruned_path,
             "gguf_per_layer_quant": bool(model.gguf_per_layer_quant),

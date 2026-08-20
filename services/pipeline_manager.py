@@ -35,6 +35,7 @@ from api.models import (
 from config import AppConfig
 from services import gpu_info, video_io
 from services.audio_upload_store import AudioUploadStore
+from services.base_models import BaseModelDescriptor
 from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
@@ -154,6 +155,7 @@ class PipelineManager:
         video_upload_store: VideoUploadStore | None = None,
         lora_registry: LoraRegistry | None = None,
         audio_upload_store: AudioUploadStore | None = None,
+        descriptor: BaseModelDescriptor | None = None,
     ):
         self.config = config
         self.job_store = job_store
@@ -166,7 +168,12 @@ class PipelineManager:
         self.audio_upload_store = audio_upload_store or AudioUploadStore(config)
         self.lora_registry = lora_registry or LoraRegistry(config)
         self.low_vram = build_low_vram_settings(config)
-        self.runner = LTXRunner(config, self.low_vram)
+        # ``descriptor``: the base model this pipeline serves (§3-97 P3b). The
+        # app injects the first descriptor it loaded at startup; None lets the
+        # runner resolve it lazily from config.manifest_dir (tests/tools). Read
+        # back through ``self.runner.descriptor`` so there is ONE resolution
+        # rule, not two.
+        self.runner = LTXRunner(config, self.low_vram, descriptor)
         self.state = self.STATE_UNLOADED
         self._lock = threading.Lock()
         # Model management: the category NAME used by the last successful load
@@ -260,18 +267,53 @@ class PipelineManager:
         """Filename of the transformer weight (GGUF) that would actually load.
 
         A model-management swap records the selected transformer path in
-        ``_active_selection_paths``; otherwise the config default applies. Only
-        the basename is surfaced (no path leak) — e.g.
-        ``LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`` — so the operator can tell from
-        the console which base weight a job ran on. Falls back to the configured
-        ``checkpoint_name`` when no GGUF path is set.
+        ``_active_selection_paths``; otherwise the BASE MODEL's own
+        ``default_file`` applies (§3-97 P3b — this used to read a config field
+        holding the same path). Only the basename is surfaced (no path leak) —
+        e.g. ``LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`` — so the operator can
+        tell from the console which base weight a job ran on. Falls back to the
+        configured ``checkpoint_name`` when the base model declares no
+        transformer default.
         """
-        path = self._active_selection_paths.get("transformer") or (
-            self.config.model.gguf_transformer_path
-        )
+        path = self._active_selection_paths.get("transformer") or self._default_file("transformer")
         if path:
             return Path(path).name
         return self.config.model.checkpoint_name or "unknown"
+
+    def _default_file(self, category: str) -> str | None:
+        """The active base model's ``default_file`` for ``category`` (or None).
+
+        ``models_dir``-relative, and used only for its BASENAME here — the
+        console line and metadata.json want the file's name, never its path.
+        """
+        spec = self.runner.descriptor.categories.get(category)
+        return spec.default_file if spec else None
+
+    def _models_metadata_block(self) -> dict:
+        """The ``models`` block of metadata.json (§1-23 + §3-97 P3b).
+
+        ``base_model`` is the descriptor id of the base model that ran (P3b:
+        always the active one — the request-level base-model axis arrives with
+        the API phase). ``selection`` is per category: the NAME the user sees
+        plus the FILE that name resolved to. A category still on ``"default"``
+        now records the base model's ``default_file`` basename instead of null,
+        which is what makes an old output reproducible after the default
+        changes.
+        """
+        return {
+            "base_model": self.runner.descriptor.id,
+            "selection": {
+                cat: {
+                    "name": name,
+                    "file": (
+                        Path(p).name
+                        if (p := self._active_selection_paths.get(cat) or self._default_file(cat))
+                        else None
+                    ),
+                }
+                for cat, name in self.active_models.items()
+            },
+        }
 
     # ------------------------------------------------------------ lifecycle
 
@@ -1084,27 +1126,10 @@ class PipelineManager:
                 "file_size_bytes": file_size,
             },
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=peak_vram_mb),
-            # §1-23 (PENDING_TASKS.md): which model file actually backed this
-            # generation, per category. ``file`` is the selected file's
-            # basename (None for a category still on "default" -- P3b will
-            # resolve default's file to a real name via the base-model
-            # descriptor). Deliberately NOT recording ``base_model`` here:
-            # see MULTI_ENGINE_DESIGN.md and PENDING_TASKS §1-23 P0 -- a
-            # descriptor-id ``base_model`` field is added later (P6) and would
-            # collide in name with this one if written prematurely.
-            "models": {
-                "selection": {
-                    cat: {
-                        "name": name,
-                        "file": (
-                            Path(p).name
-                            if (p := self._active_selection_paths.get(cat))
-                            else None
-                        ),
-                    }
-                    for cat, name in self.active_models.items()
-                },
-            },
+            # §1-23 (PENDING_TASKS.md): which base model and which model file
+            # actually backed this generation, per category. See
+            # ``_models_metadata_block``.
+            "models": self._models_metadata_block(),
             "environment": self._environment_block(),
         }
         # V2V continuation (additive): only present when a source_video was used,
@@ -1283,22 +1308,9 @@ class PipelineManager:
                 "file_size_bytes": file_size,
             },
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=outcome.peak_vram_mb),
-            # §1-23 (PENDING_TASKS.md): see the identical block + comment in
-            # _write_chain_metadata for the rationale (name, file, why
-            # base_model is deliberately absent here).
-            "models": {
-                "selection": {
-                    cat: {
-                        "name": name,
-                        "file": (
-                            Path(p).name
-                            if (p := self._active_selection_paths.get(cat))
-                            else None
-                        ),
-                    }
-                    for cat, name in self.active_models.items()
-                },
-            },
+            # §1-23 (PENDING_TASKS.md): the same block as _write_chain_metadata
+            # writes — see ``_models_metadata_block``.
+            "models": self._models_metadata_block(),
             "environment": self._environment_block(),
         }
         # Phase B IC-LoRA: additive block, only present for lora jobs so non-lora

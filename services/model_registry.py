@@ -42,12 +42,12 @@ import json
 import logging
 import struct
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 from api.errors import APIError, model_file_missing, model_incompatible, model_not_found
 from config import PROJECT_ROOT, AppConfig
 from services.base_models import BaseModelDescriptor, CategoryDescriptor, load_base_models
+from services.gguf_kv import GgufParseError, read_gguf_kv
 
 logger = logging.getLogger("ltx.models")
 
@@ -95,84 +95,115 @@ class ModelEntryInfo:
         }
 
 
-_GGUF_MAGIC = b"GGUF"
 # A safetensors JSON header beyond this is implausible for these models and
 # more likely a corrupt/foreign file than a real header.
 _MAX_SAFETENSORS_HEADER = 100 * 1024 * 1024
 
-
-@lru_cache(maxsize=1)
-def _shipped_categories() -> dict[str, CategoryDescriptor]:
-    """Categories of the FIRST shipped base-model descriptor.
-
-    Transitional (P3a): :func:`precheck_model_file` is a module-level function
-    with no access to config or to the registry instance, yet it must stop
-    keying its extension check off a hard-coded table. Reading the repository's
-    own shipped descriptors keeps it descriptor-driven and deterministic (they
-    are tracked files, not runtime state) without changing its signature —
-    which six existing tests call positionally. The proper fix, passing the
-    caller's descriptor in as a keyword argument, lands together with the
-    return-value change in the config-removal phase.
-    """
-    descriptors = load_base_models(PROJECT_ROOT / "scripts" / "manifests")
-    return next(iter(descriptors.values())).categories
+#: The weight-file types the precheck knows how to look inside. NOT a
+#: category->extension table (that is the descriptor's job) — just "which
+#: structural check does this suffix get".
+_STRUCTURAL_CHECKS: frozenset[str] = frozenset({".gguf", ".safetensors"})
 
 
-def precheck_model_file(category: str, name: str, path: Path) -> None:
+#: The KV keys the GGUF precheck lifts out of a transformer header, and hands
+#: back to the caller for the engine-generation ruling (§2.2's two-step
+#: contract: ``general.architecture`` = engine family, ``model_version`` =
+#: variant). Reading them costs one header scan that already happens here, so
+#: the caller never re-opens the file. WHAT they mean is the engine adapter's
+#: business (``services.engines.ltx.adapter.check_kv``), not the registry's.
+GGUF_ENGINE_KV_KEYS = frozenset({"general.architecture", "model_version"})
+
+
+def precheck_model_file(
+    category: str,
+    name: str,
+    path: Path,
+    *,
+    descriptor: CategoryDescriptor | None = None,
+) -> dict[str, str]:
     """Cheap compatibility precheck BEFORE the worker is (re)started.
 
-    Reads only a few bytes: GGUF magic for .gguf, and the 8-byte length +
-    JSON header parse for .safetensors (weights are never loaded). This stops
-    "right extension, wrong file" inputs from reaching the engine's native
-    loaders (where they would crash without a friendly error). Deep key/shape
-    validation stays with the engine's fail-fast load path (design §5.2).
+    Reads only a few bytes: the GGUF header's KV section for .gguf, and the
+    8-byte length + JSON header parse for .safetensors (weights are never
+    loaded). This stops "right extension, wrong file" inputs from reaching the
+    engine's native loaders (where they would crash without a friendly error).
+    Deep key/shape validation stays with the engine's fail-fast load path
+    (design §5.2).
 
-    Raises ``model_incompatible`` (422) on any failure.
+    ``descriptor`` (KEYWORD-ONLY, additive) is the CATEGORY descriptor of the
+    base model the file is being selected for. Given one, the file's extension
+    must be one this category accepts — the "a .safetensors cannot be the
+    transformer" gate, which only a descriptor can state. Without one there is
+    no category gate at all (the caller has not said which base model it means,
+    and this module refuses to guess with a hard-coded table): the file's own
+    suffix then picks the structural check, and any other suffix is rejected.
+
+    Returns the GGUF KV metadata read along the way (``{}`` for safetensors and
+    for a GGUF that declares none of :data:`GGUF_ENGINE_KV_KEYS`). Raises
+    ``model_incompatible`` (422) on any failure, including a malformed GGUF
+    header (:class:`services.gguf_kv.GgufParseError`).
     """
-    descriptor = _shipped_categories().get(category)
-    if descriptor is None:
-        raise model_not_found(
-            category, name, detail=f"unknown category; known: {list(CATEGORIES)}"
-        )
     suffix = path.suffix.lower()
-    if suffix not in descriptor.extensions:
+    if descriptor is not None and suffix not in descriptor.extensions:
         raise model_incompatible(
             category,
             name,
             detail=f"expected one of {list(descriptor.extensions)}, got '{path.suffix}'",
         )
+    if suffix not in _STRUCTURAL_CHECKS:
+        raise model_incompatible(
+            category,
+            name,
+            detail=f"unsupported weight-file type '{path.suffix}' "
+            f"(expected one of {sorted(_STRUCTURAL_CHECKS)})",
+        )
     try:
-        with path.open("rb") as fh:
-            if suffix == ".gguf":
-                magic = fh.read(4)
-                if magic != _GGUF_MAGIC:
-                    raise model_incompatible(
-                        category, name, detail=f"not a GGUF file (magic {magic!r})"
-                    )
-            else:  # .safetensors
-                raw = fh.read(8)
-                if len(raw) != 8:
-                    raise model_incompatible(
-                        category, name, detail="file too small for a safetensors header"
-                    )
-                (header_len,) = struct.unpack("<Q", raw)
-                size = path.stat().st_size
-                if header_len == 0 or header_len > size - 8 or header_len > _MAX_SAFETENSORS_HEADER:
-                    raise model_incompatible(
-                        category,
-                        name,
-                        detail=f"implausible safetensors header length {header_len}",
-                    )
-                try:
-                    json.loads(fh.read(header_len).decode("utf-8"))
-                except Exception as exc:
-                    raise model_incompatible(
-                        category, name, detail=f"unparsable safetensors header: {exc}"
-                    ) from exc
+        if suffix == ".gguf":
+            return _precheck_gguf(category, name, path)
+        _precheck_safetensors(category, name, path)
+        return {}
     except APIError:
         raise
     except OSError as exc:
         raise model_incompatible(category, name, detail=f"unreadable file: {exc}") from exc
+
+
+def _precheck_gguf(category: str, name: str, path: Path) -> dict[str, str]:
+    """Parse the GGUF header far enough to read the engine-selection KV.
+
+    Supersedes the old 4-byte magic sniff: :func:`~services.gguf_kv.read_gguf_kv`
+    checks the magic itself and then walks only the KV section (never the
+    tensor data), so the stronger check costs the same single header read.
+    """
+    try:
+        return read_gguf_kv(path, set(GGUF_ENGINE_KV_KEYS))
+    except GgufParseError as exc:
+        raise model_incompatible(
+            category, name, detail=f"not a readable GGUF file: {exc}"
+        ) from exc
+
+
+def _precheck_safetensors(category: str, name: str, path: Path) -> None:
+    with path.open("rb") as fh:
+        raw = fh.read(8)
+        if len(raw) != 8:
+            raise model_incompatible(
+                category, name, detail="file too small for a safetensors header"
+            )
+        (header_len,) = struct.unpack("<Q", raw)
+        size = path.stat().st_size
+        if header_len == 0 or header_len > size - 8 or header_len > _MAX_SAFETENSORS_HEADER:
+            raise model_incompatible(
+                category,
+                name,
+                detail=f"implausible safetensors header length {header_len}",
+            )
+        try:
+            json.loads(fh.read(header_len).decode("utf-8"))
+        except Exception as exc:
+            raise model_incompatible(
+                category, name, detail=f"unparsable safetensors header: {exc}"
+            ) from exc
 
 
 def _hint_matches(filename: str, hint: str | None) -> bool:

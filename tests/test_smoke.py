@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import TEST_BASE_MODEL_ID, TEST_DEFAULT_FILES
+
 
 def test_status_reports_low_vram(client):
     r = client.get("/api/v1/status")
@@ -346,11 +348,11 @@ def test_chain_metadata_records_fused_gguf_dequant_kernel_used(client):
 
 
 def test_metadata_records_models_selection(client):
-    # §1-23 (PENDING_TASKS.md): metadata.json records which model file backed
-    # this generation, per category. With no /pipeline/load call, every
-    # category is still on the "default" name and has no resolved selection
-    # path -> file is None (P3b resolves default's file to a real name via
-    # the base-model descriptor).
+    # §1-23 (PENDING_TASKS.md): metadata.json records which base model and
+    # which model file backed this generation, per category. With no
+    # /pipeline/load call every category is still on the "default" name, and
+    # (§3-97 P3b) "default" now resolves to the base model's own default_file,
+    # so the FILE is a real name rather than null.
     payload = {
         "prompt": "A red ball rolling on a white floor",
         "width": 384,
@@ -370,13 +372,15 @@ def test_metadata_records_models_selection(client):
     meta = json.loads(
         (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
     )
-    assert meta["models"]["selection"]["transformer"] == {"name": "default", "file": None}
+    assert meta["models"]["selection"]["transformer"] == {
+        "name": "default",
+        "file": Path(TEST_DEFAULT_FILES["transformer"]).name,
+    }
     assert set(meta["models"]["selection"]) == {
         "transformer", "text_encoder", "video_vae", "audio",
     }
-    # base_model is deliberately absent in P0 (see the comment in
-    # pipeline_manager.py::_write_metadata) -- name collision avoidance.
-    assert "base_model" not in meta["models"]
+    # The base model that ran, by descriptor id (§3-97 P3b).
+    assert meta["models"]["base_model"] == TEST_BASE_MODEL_ID
 
 
 def test_chain_metadata_records_models_selection(client):
@@ -403,11 +407,14 @@ def test_chain_metadata_records_models_selection(client):
     meta = json.loads(
         (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
     )
-    assert meta["models"]["selection"]["transformer"] == {"name": "default", "file": None}
+    assert meta["models"]["selection"]["transformer"] == {
+        "name": "default",
+        "file": Path(TEST_DEFAULT_FILES["transformer"]).name,
+    }
     assert set(meta["models"]["selection"]) == {
         "transformer", "text_encoder", "video_vae", "audio",
     }
-    assert "base_model" not in meta["models"]
+    assert meta["models"]["base_model"] == TEST_BASE_MODEL_ID
 
 
 def test_upload_image(client, png_bytes):

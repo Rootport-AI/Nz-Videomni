@@ -24,15 +24,38 @@ from fastapi.testclient import TestClient
 import main
 from api.errors import APIError
 from config import PROJECT_ROOT, AppConfig
+from conftest import build_model_layout
+from services.base_models import BaseModelDescriptor, CategoryDescriptor
 from services.low_vram import build_low_vram_settings
 from services.ltx_runner import _RealBackend
 from services.model_registry import DEFAULT_NAME, precheck_model_file
+
+#: A structurally valid, empty GGUF header: magic, version 3, tensor_count 0,
+#: kv_count 0. The precheck now PARSES the header (it reads the engine-selection
+#: KV out of it), so a stub has to be a real header rather than four magic bytes
+#: followed by zeros — those zeros read as GGUF version 0 and are rejected, which
+#: is the point.
+GGUF_STUB = b"GGUF" + struct.pack("<IQQ", 3, 0, 0)
 
 
 def _touch(path, data: bytes = b"\0\0\0\0"):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
+
+
+def _gguf(path, **kv: str):
+    """Write a minimal GGUF file carrying the given string KV entries."""
+    body = b"".join(
+        _gguf_string(key) + struct.pack("<I", 8) + _gguf_string(value)
+        for key, value in kv.items()
+    )
+    return _touch(path, b"GGUF" + struct.pack("<IQQ", 3, 0, len(kv)) + body)
+
+
+def _gguf_string(text: str) -> bytes:
+    raw = text.encode("utf-8")
+    return struct.pack("<Q", len(raw)) + raw
 
 
 # --------------------------------------------------------------------------- #
@@ -63,9 +86,30 @@ GOLDEN_PAYLOAD_KEYS = [
 ]
 
 
+#: Where the PrunaVAED decoder sits inside the model store, as the SHIPPED
+#: descriptor declares it (scripts/manifests/10-ltx23.json ``assets``). The
+#: golden payload's pruned path is the only one that is NOT a fixture file (it
+#: need not exist), so the fixture below hands the backend this exact location
+#: — and tests/test_base_model_contract.py
+#: (``test_shipped_ltx23_asset_paths_match_the_removed_config_fields``) is what
+#: keeps the constant honest about the real descriptor.
+PRUNED_DECODER_REL = "models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors"
+
+
 @pytest.fixture()
 def real_paths(tmp_path):
-    """A config whose every payload-relevant path exists (dummy files)."""
+    """A BASE MODEL whose every payload-relevant path exists (dummy files).
+
+    The fixed weight paths moved out of config into the base-model descriptor
+    (§3-97 P3b), so this builds a descriptor instead of a config block. It is
+    constructed in Python rather than written as JSON on purpose: a descriptor
+    normally spells its paths relative to ``models_dir``, and this fixture needs
+    its files scattered across tmp_path (they are the historical config values,
+    verbatim). ``models_dir`` joined with an ABSOLUTE path yields that absolute
+    path, so each entry below resolves exactly where the fixture put it, while
+    the pruned decoder stays a project-relative path — proving the same builder
+    resolves both.
+    """
     m = tmp_path / "m"
     gemma_root = m / "tokenizer"
     gemma_root.mkdir(parents=True)
@@ -77,21 +121,41 @@ def real_paths(tmp_path):
         "av": _touch(m / "components" / "vae" / "audio_vae.safetensors"),
         "tp": _touch(m / "components" / "te" / "text_projection.safetensors"),
     }
-    cfg = AppConfig.model_validate(
-        {
-            "model": {
-                "backend": "mock",
-                "gemma_root": str(gemma_root),
-                "spatial_upsampler_path": str(paths["ups"]),
-                "gguf_transformer_path": str(paths["tr"]),
-                "gguf_gemma_path": str(paths["te"]),
-                "component_video_vae_path": str(paths["vv"]),
-                "component_audio_vae_path": str(paths["av"]),
-                "component_text_projection_path": str(paths["tp"]),
-            }
-        }
+    descriptor = BaseModelDescriptor(
+        id="LTXFIXTURE",
+        display_name="LTX fixture",
+        engine_family="ltx",
+        categories={
+            "transformer": _category("transformer", ".gguf", paths["tr"]),
+            "text_encoder": _category("text_encoder", ".gguf", paths["te"]),
+            "video_vae": _category("video_vae", ".safetensors", paths["vv"]),
+            "audio": _category("audio", ".safetensors", paths["av"]),
+        },
+        assets={
+            "gemma_root": str(gemma_root),
+            "spatial_upsampler_path": str(paths["ups"]),
+            "component_text_projection_path": str(paths["tp"]),
+            # Relative to models_dir (which is the project default here), i.e.
+            # the shipped location — and deliberately NOT created on disk: the
+            # pruned decoder is the one payload path that need not exist.
+            "component_video_vae_pruned_path": PRUNED_DECODER_REL.split("/", 1)[1],
+        },
     )
-    return cfg, gemma_root, paths
+    cfg = AppConfig.model_validate({"model": {"backend": "mock"}})
+    return cfg, gemma_root, paths, descriptor
+
+
+def _category(name: str, extension: str, default_file) -> CategoryDescriptor:
+    return CategoryDescriptor(
+        name=name,
+        scan=(str(default_file.parent),),
+        extensions=(extension,),
+        default_file=str(default_file),
+    )
+
+
+def _backend(cfg, descriptor) -> _RealBackend:
+    return _RealBackend(cfg, build_low_vram_settings(cfg), descriptor)
 
 
 def _golden(cfg: AppConfig, gemma_root, paths) -> dict:
@@ -125,8 +189,8 @@ def _golden(cfg: AppConfig, gemma_root, paths) -> dict:
 
 
 def test_load_payload_byte_identical_without_selection(real_paths):
-    cfg, gemma_root, paths = real_paths
-    backend = _RealBackend(cfg, build_low_vram_settings(cfg))
+    cfg, gemma_root, paths, descriptor = real_paths
+    backend = _backend(cfg, descriptor)
     p_none = backend._build_load_payload(None)
     p_empty = backend._build_load_payload({})
     golden = _golden(cfg, gemma_root, paths)
@@ -136,8 +200,8 @@ def test_load_payload_byte_identical_without_selection(real_paths):
 
 
 def test_load_payload_selection_overrides_only_named_field(real_paths):
-    cfg, gemma_root, paths = real_paths
-    backend = _RealBackend(cfg, build_low_vram_settings(cfg))
+    cfg, gemma_root, paths, descriptor = real_paths
+    backend = _backend(cfg, descriptor)
     alt = _touch(paths["tr"].parent.parent / "alt" / "alt-Q6.gguf")
     p = backend._build_load_payload({"transformer": str(alt)})
     golden = _golden(cfg, gemma_root, paths)
@@ -149,8 +213,8 @@ def test_load_payload_selection_overrides_only_named_field(real_paths):
 
 
 def test_load_payload_all_four_categories_map_to_expected_fields(real_paths):
-    cfg, _gemma_root, paths = real_paths
-    backend = _RealBackend(cfg, build_low_vram_settings(cfg))
+    cfg, _gemma_root, paths, descriptor = real_paths
+    backend = _backend(cfg, descriptor)
     sel = {
         "transformer": "X_TR",
         "text_encoder": "X_TE",
@@ -171,12 +235,38 @@ def test_load_payload_all_four_categories_map_to_expected_fields(real_paths):
 # --------------------------------------------------------------------------- #
 
 def test_precheck_gguf_magic(tmp_path):
-    good = _touch(tmp_path / "good.gguf", b"GGUF" + b"\0" * 16)
+    good = _touch(tmp_path / "good.gguf", GGUF_STUB)
     precheck_model_file("transformer", "good", good)  # no raise
     bad = _touch(tmp_path / "bad.gguf", b"XXXX" + b"\0" * 16)
     with pytest.raises(APIError) as ei:
         precheck_model_file("transformer", "bad", bad)
     assert ei.value.code == "MODEL_INCOMPATIBLE" and ei.value.status_code == 422
+
+
+def test_precheck_returns_gguf_engine_kv(tmp_path):
+    """The header read that already happens here hands the engine-selection KV
+    back to the caller, so nothing has to re-open the file (§2.2)."""
+    path = _gguf(
+        tmp_path / "kv.gguf",
+        **{"general.architecture": "ltxv", "model_version": "2.3.0"},
+    )
+    assert precheck_model_file("transformer", "kv", path) == {
+        "general.architecture": "ltxv",
+        "model_version": "2.3.0",
+    }
+    # A GGUF without those keys is not an error here (check_kv rules on that).
+    assert precheck_model_file("transformer", "bare", _touch(tmp_path / "b.gguf", GGUF_STUB)) == {}
+    # safetensors carry no such metadata at all.
+    st = _touch(tmp_path / "vae.safetensors", struct.pack("<Q", 2) + b"{}")
+    assert precheck_model_file("video_vae", "vae", st) == {}
+
+
+def test_precheck_rejects_unknown_weight_file_type(tmp_path):
+    """Without a descriptor there is no category gate, but the file still has
+    to be a type this precheck can look inside."""
+    with pytest.raises(APIError) as ei:
+        precheck_model_file("transformer", "x", _touch(tmp_path / "weights.bin"))
+    assert ei.value.code == "MODEL_INCOMPATIBLE"
 
 
 def test_precheck_safetensors_header(tmp_path):
@@ -192,10 +282,17 @@ def test_precheck_safetensors_header(tmp_path):
 
 
 def test_precheck_extension_category_mismatch(tmp_path):
+    """The category gate is the DESCRIPTOR's statement about which extensions a
+    category accepts, so the caller passes the category descriptor in (P3b —
+    the module no longer keeps a table of its own)."""
     st = _touch(tmp_path / "weights.safetensors", struct.pack("<Q", 2) + b"{}")
+    transformer = CategoryDescriptor(
+        name="transformer", scan=("Weights",), extensions=(".gguf",)
+    )
     with pytest.raises(APIError) as ei:
-        precheck_model_file("transformer", "weights", st)
+        precheck_model_file("transformer", "weights", st, descriptor=transformer)
     assert ei.value.code == "MODEL_INCOMPATIBLE"
+    assert ei.value.status_code == 422
 
 
 # --------------------------------------------------------------------------- #
@@ -214,12 +311,13 @@ def swap_client(tmp_path):
     """Like conftest's client, plus a transformers registry with a valid-magic
     alt GGUF, a registered-but-absent ghost, and a wrong-magic file."""
     weights = tmp_path / "weights"
-    alt = _touch(weights / "alt-transformer.gguf", b"GGUF" + b"\0" * 16)
+    alt = _touch(weights / "alt-transformer.gguf", GGUF_STUB)
     _touch(weights / "bad-magic.gguf", b"XXXX" + b"\0" * 16)
     cfg = {
         "server": {"log_dir": (tmp_path / "logs").as_posix()},
         "model": {
             "backend": "mock",
+            **build_model_layout(tmp_path),  # hermetic descriptor + models dir
             "transformers": {
                 "alt": alt.as_posix(),
                 "ghost": (weights / "ghost.gguf").as_posix(),  # never created

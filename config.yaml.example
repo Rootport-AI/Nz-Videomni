@@ -24,38 +24,29 @@ server:
 model:
   # 本番経路は GGUF 量子化トランスフォーマー + 小単体 component ファイル
   # （VAE / audio / text-projection）+ GGUF Gemma。43GB モノリスと QAT Gemma の
-  # 実読み込みは廃止済み。QAT gemma_root は重み glob バイパス（gemma_root=None 構築）で
-  # tokenizer 群のみ必要になった（下記 checkpoint_path / gemma_root のインライン注記参照）。
+  # 実読み込みは廃止済み。
+  #
+  # 【重要】既定の重みファイルのパスは、ここではなく「ベースモデル記述子」
+  # （scripts/manifests/*.json）が正本です。トランスフォーマー・GGUF Gemma・
+  # VAE 2種・text projection・アップスケーラー・tokenizer ディレクトリは、
+  # 記述子の categories[].default_file と assets に書かれています。
+  # ここに古い gguf_transformer_path / gemma_root などが残っていても、
+  # 起動時に警告が出るだけで値は使われません（削除して構いません）。
   checkpoint_name: "ltx-2.3-22b-distilled-1.1"
   text_encoder: "google/gemma-3-12b-it-qat-q4_0-unquantized"
   pipeline_type: "distilled"
   auto_load_on_generate: true
   reload_interval: 0
 
-  # ランタイムパス。services/ltx_runner.py（→ engine worker payload）のみが参照。
-  # これらは DistilledPipeline 構築のために worker payload に載るが、GGUF +
-  # component 経路では重みとして開かれない（下記インライン注記の通り）。
-  # 相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
+  # ランタイムパス。相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
   ltx_repo_dir: "./vendor/LTX-2"   # reference only（上流LTX-2クローン）。
-  # 2026-07-28 削除済み（PENDING_TASKS.md §3-26）: ここには以前 checkpoint_path
-  # キー（43GB モノリスの参照専用パス、Stage3 で物理削除済み）があった。調査の結果
-  # 完全に無害な死んだ設定と確定したため削除した——services/ltx_runner.py は
-  # このキーが未設定のときも常に worker payload の checkpoint_path を ""（空文字）
-  # として送っており（実運用で他の値になったことは一度も無い）、DistilledPipeline
-  # 側もその文字列を一切開かない。渡す理由は「None でない str」であることだけ
-  # （ModelLedger.build_model_builders が checkpoint_path is not None を条件に
-  # 後で dataclasses.replace で上書きされる遅延ビルダーを作るため）で、""でその
-  # 条件は満たされる。services/ltx_runner.py 側は同じ "" を直接ハードコードして
-  # いるので、この設定を削除しても worker payload はバイト同一のまま。
-  spatial_upsampler_path: "./models/LTX23/Upscaler/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
-  # GGUF Gemma 経路では tokenizer 群のみ必要。DistilledPipeline を gemma_root=None で
-  # 構築し wheel の重み glob（model*.safetensors）をバイパス済 → Gemma LM 重みは GGUF 供給、
-  # text-only（Gemma3ForCausalLM）なので vision 構造は存在しない。engine 側が shard 抜き
-  # builder を組み直し、tokenizer/processor の
-  # module_ops をこの dir から読む（tokenizer.model + preprocessor_config.json のみ glob）。
-  # 実体は ~40MB の tokenizer-only dir（旧 22.7GB QAT dir は回収済＝物理削除, merge 826e76f）。
-  gemma_root: "./models/LTX23/TextEncoder/tokenizer"
   backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
+
+  # ベースモデル記述子の置き場と、モデル置き場のルート。記述子の中のパスは
+  # すべて models_dir からの相対で書かれている（この2つだけが「どこを見るか」
+  # の設定で、「何を見るか」は記述子側）。
+  manifest_dir: "./scripts/manifests"
+  models_dir: "./models"
 
   # IC-LoRA アダプタ登録（Phase B、Phase C で拡張）。API の GenerateRequest.loras[].name は
   # ここに登録された「名前」で解決する（生パスは受けない）。セクション不在＝loras 要求は

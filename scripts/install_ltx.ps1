@@ -723,12 +723,13 @@ function Remove-EmptyLegacyDirs {
 # ----------------------------------------------------------------------------
 # config.yaml follow-up.
 #
-# WHY THIS IS NOT OPTIONAL: spatial_upsampler_path, gemma_root and the six
-# ic_loras entries exist ONLY in config.yaml, and LTXRunner._real_available()
-# requires them. If they still point at the emptied legacy directories after a
-# migration, backend:"auto" silently DOWNGRADES TO MOCK -- generation keeps
-# "working", it just stops being real. So the paths are rewritten in the same
-# breath as the move.
+# WHY THIS IS NOT OPTIONAL: the six ic_loras entries (and lora_dir) exist ONLY
+# in config.yaml. If they still point at the emptied legacy directories after a
+# migration, picking an adapter 404s. The weight paths that used to be here too
+# (spatial_upsampler_path, gemma_root, ...) moved into the base-model
+# descriptors in §3-97 P3b and are migrated by the descriptor's own `migrate`
+# table instead, but rewriting the surviving config paths is still done in the
+# same breath as the move.
 #
 # Scope discipline: a config.yaml.bak is written first; only path tokens that
 # start with models/ AND match the migrate table are touched; comments are left
@@ -1391,9 +1392,12 @@ if ($SkipModels) {
 #    Three rows are the script's own, because they are not models:
 #      engine_python / app_python  -- the two interpreters
 #      engine worker.py            -- the engine entry point
-#    They match what services/ltx_runner.py's LTXRunner._real_available() and
+#    They match what the engine adapter's LTXRunner._real_available() and
 #    _RealBackend._require_path() demand (referenced by FUNCTION NAME only --
-#    line numbers here went stale once already). The 46GB monolith is not gated:
+#    line numbers here went stale once already); every OTHER row comes from the
+#    base-model descriptor, which is where those file paths now live (§3-97
+#    P3b) -- _real_available() reads the same categories/assets this table is
+#    generated from. The 46GB monolith is not gated:
 #    it is no longer a config option at all (checkpoint_path was removed from
 #    config.yaml 2026-07-28, PENDING_TASKS.md 3-26).
 #
@@ -1458,8 +1462,11 @@ foreach ($row in $rows) {
 
 # ----------------------------------------------------------------------------
 # Regenerate models/INSTALLED_PATHS.txt from the SAME manifest rows: every
-# `files[]` entry that carries a `key` is a config.yaml model: key, and the list
-# below is therefore guaranteed to agree with the table above.
+# `files[]` entry that carries a `key` is a path the SERVER resolves by name --
+# a base-model descriptor `categories[].default_file` or `assets` entry (the
+# `key` is that asset key / category, not a config.yaml key any more: the fixed
+# default paths left config.yaml in §3-97 P3b). The list below is therefore
+# guaranteed to agree with the table above.
 # ----------------------------------------------------------------------------
 $pathRows = @()
 foreach ($mf in $Manifests) {
@@ -1478,7 +1485,8 @@ $sb = New-Object System.Text.StringBuilder
 [void] $sb.AppendLine("# layout: base-model-first (models/<BaseModel>/<Category>)")
 [void] $sb.AppendLine("# Generated from scripts/manifests/*.json -- the same rows that guard the")
 [void] $sb.AppendLine("# downloads and drive the verification table. GGUF + component-file recipe")
-[void] $sb.AppendLine("# (matches config.yaml -> model:). The 46GB monolith and the 22.7GB QAT Gemma")
+[void] $sb.AppendLine("# (matches the base-model descriptor: scripts/manifests/*.json -> categories/assets).")
+[void] $sb.AppendLine("# The 46GB monolith and the 22.7GB QAT Gemma")
 [void] $sb.AppendLine("# are intentionally absent (deleted; never re-downloaded).")
 foreach ($pr in $pathRows) {
     [void] $sb.AppendLine(("  {0}: {1}""{2}""" -f $pr.Key, (' ' * ($keyWidth - $pr.Key.Length)), $pr.Value))

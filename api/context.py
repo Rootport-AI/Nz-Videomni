@@ -40,7 +40,7 @@ class AppContext:
     lora_registry: LoraRegistry = field(init=False)
     #: Base-model descriptors, loaded ONCE at startup from
     #: ``config.model.manifest_dir`` and shared by everything that needs them
-    #: (registry now; the pipeline/engine layer in a later phase). A broken or
+    #: (the model registry and the pipeline/engine layer alike). A broken or
     #: missing descriptor fails the server at boot, not per request.
     base_models: dict[str, BaseModelDescriptor] = field(init=False)
     model_registry: ModelRegistry = field(init=False)
@@ -64,6 +64,11 @@ class AppContext:
             self.video_upload_store,
             self.lora_registry,
             audio_upload_store=self.audio_upload_store,
+            # The engine layer builds its worker payload from the base model's
+            # descriptor (§3-97 P3b). P3b pins that to the FIRST declared
+            # descriptor — the same one ``ModelRegistry.default_base_model``
+            # picks; making it switchable per request is the API axis (P6).
+            descriptor=next(iter(self.base_models.values())),
         )
 
 

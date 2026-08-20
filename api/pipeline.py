@@ -69,7 +69,17 @@ def load_pipeline(
         if name == DEFAULT_NAME:
             continue
         path = registry.resolve(category, name)  # MODEL_NOT_FOUND / MODEL_FILE_MISSING
-        precheck_model_file(category, name, path)  # MODEL_INCOMPATIBLE (422)
+        # The category descriptor of the ACTIVE base model states which
+        # extensions this category accepts. The returned GGUF KV metadata is
+        # what the engine-generation ruling (check_kv) will judge on once the
+        # base-model axis reaches this endpoint (§3-97 P6); until then the
+        # precheck's own structural verdict is all this call needs.
+        precheck_model_file(  # MODEL_INCOMPATIBLE (422)
+            category,
+            name,
+            path,
+            descriptor=registry.descriptor().categories.get(category),
+        )
         selection[category] = str(path)
 
     if pm.loaded and effective == pm.active_models:

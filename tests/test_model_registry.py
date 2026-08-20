@@ -133,21 +133,27 @@ def test_resolve_default_matches_descriptor_default_file(tmp_path):
         )
 
 
+#: The four fixed default paths ``config.model`` held before P3b moved them into
+#: the base-model descriptor. A LITERAL transcription on purpose: the point of
+#: the test below is that the descriptor still names the very same files, so
+#: reading them back off anything descriptor-driven would prove nothing.
+HISTORICAL_CONFIG_DEFAULTS: dict[str, str] = {
+    "transformer": "./models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+    "text_encoder": "./models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+    "video_vae": "./models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+    "audio": "./models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+}
+
+
 def test_shipped_descriptor_default_files_match_config_defaults():
-    """P3a invariant: every default_file in the SHIPPED LTX 2.3 descriptor is a
-    verbatim transcription of the config default path the worker payload is
-    still built from, so moving the registry onto descriptors cannot have
-    changed which file "default" means."""
+    """P3a/P3b invariant: every default_file in the SHIPPED LTX 2.3 descriptor
+    is a verbatim transcription of the config default path the worker payload
+    used to be built from, so moving first the registry and then the engine
+    adapter onto descriptors cannot have changed which file "default" means."""
     cfg = AppConfig()
     descriptor = next(iter(load_base_models(cfg.manifest_dir).values()))
-    config_defaults = {
-        "transformer": cfg.model.gguf_transformer_path,
-        "text_encoder": cfg.model.gguf_gemma_path,
-        "video_vae": cfg.model.component_video_vae_path,
-        "audio": cfg.model.component_audio_vae_path,
-    }
-    assert set(descriptor.categories) == set(config_defaults)
-    for category, config_path in config_defaults.items():
+    assert set(descriptor.categories) == set(HISTORICAL_CONFIG_DEFAULTS)
+    for category, config_path in HISTORICAL_CONFIG_DEFAULTS.items():
         descriptor_path = cfg.models_dir / descriptor.categories[category].default_file
         assert descriptor_path == cfg._abs(config_path)
         # ...and the stored form still displays as the project-relative path.
@@ -346,6 +352,9 @@ def test_get_config_gains_only_additive_registry_keys(client):
     model = r.json()["model"]
     for key in ("transformers", "text_encoders", "video_vaes", "audio_models"):
         assert model[key] == {}
-    # Spot-check pre-existing frozen keys are still present.
-    for key in ("gguf_transformer_path", "gguf_gemma_path", "ic_loras", "backend"):
+    # Spot-check pre-existing frozen keys are still present. The fixed default
+    # WEIGHT paths are deliberately no longer among them (P3b moved them into
+    # the base-model descriptors); what stays is the two DIRECTORIES that say
+    # where to look, plus the registries and the backend switch.
+    for key in ("manifest_dir", "models_dir", "ic_loras", "backend"):
         assert key in model

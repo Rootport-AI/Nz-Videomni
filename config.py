@@ -9,6 +9,7 @@ are applied in ``main.py`` on top of the loaded ``ServerConfig``.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
@@ -17,8 +18,28 @@ from pydantic import BaseModel, Field
 
 from chain_math import CHAIN_COMFORT_TOKEN_BUDGET
 
+logger = logging.getLogger("ltx.config")
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+
+#: ``model:`` keys that USED to hold a fixed default weight path and were moved
+#: into the base-model descriptors (``scripts/manifests/*.json``, see
+#: :mod:`services.base_models`) by the multi-engine foundation (§3-97 P3b).
+#: Pydantic ignores unknown keys, so an old ``config.yaml`` still loads — but it
+#: would load with its values SILENTLY IGNORED, which is exactly the kind of
+#: quiet mismatch that made a stale path demote the backend to mock before. So
+#: :func:`load_config` names each survivor once, at WARNING.
+DEPRECATED_MODEL_KEYS: tuple[str, ...] = (
+    "gguf_transformer_path",
+    "gguf_gemma_path",
+    "component_video_vae_path",
+    "component_audio_vae_path",
+    "component_text_projection_path",
+    "component_video_vae_pruned_path",
+    "spatial_upsampler_path",
+    "gemma_root",
+)
 
 
 class IcLoraEntry(BaseModel):
@@ -53,6 +74,8 @@ class ModelConfig(BaseModel):
     # Step 7 (real LTX) runtime paths. Populated by scripts/install_ltx.ps1 and
     # consumed only by services/ltx_runner.py. None until the model is installed.
     ltx_repo_dir: str = "./vendor/LTX-2"  # reference only (upstream LTX-2 clone).
+    backend: str = "auto"  # "auto" | "mock" | "real"
+
     # NOTE (2026-07-28, PENDING_TASKS.md 3-26): there used to be a
     # `checkpoint_path: str | None = None` field here, pointing at the 43GB
     # monolith physically deleted in Stage 3. It was removed after confirming it
@@ -63,31 +86,20 @@ class ModelConfig(BaseModel):
     # it to be a non-None str so ModelLedger.build_model_builders()
     # (ltx_pipelines/utils/model_ledger.py) populates the lazy builder objects
     # that engine/pipeline/fast_video_pipeline.py's GGUF/component re-sourcing
-    # later overwrites via dataclasses.replace(). services/ltx_runner.py now
+    # later overwrites via dataclasses.replace(). The engine adapter now
     # hardcodes that same "" directly (see its _build_load_payload), so the
     # worker payload is byte-identical to before with no config knob needed.
-    # Spatial upsampler (x2). Default is a real path under the base-model-first
-    # layout (models/LTX23/Upscaler/): it used to be None, which made the file
-    # config.yaml-only -- and a stale config.yaml then silently demoted
-    # backend:"auto" to mock via _real_available(). A real default keeps a fresh
-    # checkout honest about what the installer puts on disk.
-    spatial_upsampler_path: str = "./models/LTX23/Upscaler/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
-    # tokenizer-only dir (~40MB). The GGUF Gemma path needs only the tokenizer/
-    # processor files: DistilledPipeline is built with gemma_root=None so the wheel's
-    # weight glob (model*.safetensors) is bypassed and the engine
-    # rebuilds a shard-less text-encoder builder, loading tokenizer/processor
-    # module_ops from this dir (globs only tokenizer.model + preprocessor_config.json).
-    # The directory must still exist (gated below) -- it is the tokenizer source, not
-    # a loaded weight checkpoint. Real default (was None) for the same reason as
-    # spatial_upsampler_path above: no silent mock demotion from a stale config.
-    gemma_root: str = "./models/LTX23/TextEncoder/tokenizer"
-    backend: str = "auto"  # "auto" | "mock" | "real"
 
-    # Phase 5 (real GGUF engine) runtime paths. Consumed only by the
-    # subprocess-worker real backend in services/ltx_runner.py. Defaults are the
-    # spike-proven 16GB recipe (Q4_K_M transformer + Q4_K_M GGUF Gemma on GPU).
-    gguf_transformer_path: str = "./models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
-    gguf_gemma_path: str = "./models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf"
+    # WHERE THE FIXED DEFAULT WEIGHT PATHS WENT (§3-97 P3b): the eight fields
+    # that used to spell out the transformer / GGUF Gemma / VAE / text-projection
+    # / spatial-upsampler / tokenizer paths live in the BASE-MODEL DESCRIPTORS
+    # (scripts/manifests/*.json -> services/base_models.py) now, as
+    # ``categories[].default_file`` and ``assets``. A weight path is a property
+    # of a base model, not of this server, so a second base model is a new JSON
+    # file rather than a second set of config keys. See DEPRECATED_MODEL_KEYS
+    # above for what a leftover key in an old config.yaml does (nothing, loudly).
+    # Only the two DIRECTORIES below (manifest_dir / models_dir) stay here.
+
     # First-party engine package (project root ./engine). ltx_runner launches
     # `python -m engine.worker` with this on PYTHONPATH.
     engine_dir: str = "./engine"
@@ -97,28 +109,6 @@ class ModelConfig(BaseModel):
     # ./.venv. Dependency snapshot: engine/venv-engine.freeze.txt.
     engine_python: str = "./.venv-engine/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
-
-    # Component-file re-sourcing (Phase 1): standalone small files replacing the
-    # 46GB monolith for VAE/audio (and, later, text projection). Resolved via
-    # AppConfig._abs (relative -> project-rooted absolute). Consumed by the real
-    # worker / reuse harness only when vram.use_component_files is True.
-    component_video_vae_path: str = "./models/LTX23/VAE/LTX23_video_vae_bf16.safetensors"
-    component_audio_vae_path: str = "./models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors"
-    component_text_projection_path: str = "./models/LTX23/TextEncoder/ltx-2.3_text_projection_bf16.safetensors"
-
-    # PrunaVAED: 枝刈り版の映像VAEデコーダ（デコーダ部のみ・約690MB）。
-    # vae_mode="prune_vaed" のジョブでだけ読まれる。モデルレジストリには
-    # 参加させない（サブディレクトリ＋"video" を含まないファイル名の二重防御。
-    # services/model_registry.py:82-87 の name_hint 走査を参照——VAE/ 直下の
-    # 「"video" を含み "audio" を含まない」.safetensors は映像VAEとして自動
-    # 登録されてしまい、デコーダ単体のファイルがそこに現れると利用者がサーバー
-    # 全体の映像VAEとして選べてエンコーダ側のビルダーが壊れる。走査は
-    # recursive=False なのでサブディレクトリは対象外＝二重の防御）。
-    # 上の3つと違い**存在は必須ではない**: 欠けているとき枝刈りを頼んだジョブは
-    # 既定デコーダへ降格して完走する（vae_mode_used="on->off"）。
-    component_video_vae_pruned_path: str = (
-        "./models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors"
-    )
 
     # IC-LoRA adapter registry (Phase B, extended Phase C). Maps a server-side
     # adapter NAME (what the API accepts in GenerateRequest.loras[].name — never
@@ -417,4 +407,25 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         return AppConfig()
     with cfg_path.open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
+    _warn_deprecated_model_keys(raw)
     return AppConfig.model_validate(raw)
+
+
+def _warn_deprecated_model_keys(raw: Any) -> None:
+    """Name every ``model:`` key that moved into the base-model descriptors.
+
+    Pydantic's default ``extra='ignore'`` means such a key is harmless — the
+    file still loads and the server still starts. It is also invisible, which
+    is the problem: the operator edits a path, nothing changes, and the reason
+    is nowhere on screen. One WARNING per surviving key says where it went.
+    """
+    model = raw.get("model") if isinstance(raw, dict) else None
+    if not isinstance(model, dict):
+        return
+    for key in DEPRECATED_MODEL_KEYS:
+        if key in model:
+            logger.warning(
+                "config.yaml の model.%s は廃止され、記述子(scripts/manifests)側へ"
+                "移りました。値は無視されます。",
+                key,
+            )

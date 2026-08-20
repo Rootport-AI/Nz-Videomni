@@ -286,8 +286,8 @@ def build_app(args: argparse.Namespace) -> FastAPI:
     # Last line of defence (plan Phase 5-1): load_config() falls back to the
     # code defaults WITHOUT raising when config.yaml is absent, and those
     # defaults differ enough from the real file (empty ic_loras/presets, no
-    # spatial_upsampler_path / gemma_root) that _real_available() answers False
-    # and the backend silently drops to MOCK. Say so, once, in Japanese.
+    # engine venv path) that the backend can silently drop to MOCK. Say so,
+    # once, in Japanese.
     _config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
     if not _config_path.exists():
         logger.warning(

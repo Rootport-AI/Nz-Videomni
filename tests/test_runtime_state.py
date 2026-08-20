@@ -231,6 +231,79 @@ def test_startup_resumes_the_remembered_selection(tmp_path):
         assert models["categories"]["audio"]["active"] == "default"
 
 
+def test_startup_resolves_the_remembered_names_to_real_paths(tmp_path):
+    """P6b: restoring the NAMES alone would make the server REPORT "alt" while
+    a body-less load (and auto-load-on-generate) still sent the DEFAULT file —
+    silent, and only visible in the generated video. The paths are resolved at
+    startup so the two halves can never disagree."""
+    state_file = tmp_path / "state.json"
+    _write(state_file, {
+        "schema": SCHEMA_VERSION,
+        "active_base_model": "LTX23",
+        "selections": {"LTX23": {"transformer": "alt"}},
+    })
+    weights = tmp_path / "models" / "LTX23" / "Weights"
+    weights.mkdir(parents=True, exist_ok=True)
+    (weights / "alt.gguf").write_bytes(b"GGUF" + b"\0" * 16)
+
+    app = _app(tmp_path, state_file=state_file)
+    pm = app.state.context.pipeline_manager
+    # Seeded before any request: the path is there from construction.
+    assert pm._active_selection_paths["transformer"].endswith("alt.gguf")
+    with TestClient(app) as c:
+        assert c.post("/api/v1/pipeline/load").status_code == 200  # BODY-LESS
+    # ...and that is what actually reached the worker.
+    selection = pm.runner._backend.last_selection
+    assert selection is not None
+    assert selection["transformer"].endswith("alt.gguf")
+
+
+def test_a_remembered_name_that_vanished_falls_back_to_default(tmp_path, caplog):
+    """The model store legitimately changes between runs (a file moved, a
+    config registration removed). That is a WARNING naming the lost name and a
+    fallback to "default" — never a failed boot, and never a silent revert."""
+    state_file = tmp_path / "state.json"
+    _write(state_file, {
+        "schema": SCHEMA_VERSION,
+        "active_base_model": "LTX23",
+        "selections": {"LTX23": {"transformer": "gone-away", "audio": "default"}},
+    })
+    with caplog.at_level(logging.WARNING, logger="ltx.state"):
+        app = _app(tmp_path, state_file=state_file)
+    pm = app.state.context.pipeline_manager
+    assert pm.active_models["transformer"] == "default"
+    assert pm._active_selection_paths == {}
+    assert any("gone-away" in r.getMessage() for r in caplog.records)
+    with TestClient(app) as c:
+        assert c.post("/api/v1/pipeline/load").status_code == 200
+        models = c.get("/api/v1/models").json()
+        assert models["categories"]["transformer"]["active"] == "default"
+    # The state file is not rewritten by the fallback itself -- the next
+    # successful load is what updates it, and it just did.
+    written = json.loads(state_file.read_text(encoding="utf-8"))
+    assert written["selections"]["LTX23"]["transformer"] == "default"
+
+
+def test_a_remembered_name_whose_file_is_gone_falls_back_too(tmp_path, caplog):
+    """The other half of the same failure: the NAME is still registered (it is
+    in config.yaml), but the weight file behind it is no longer on disk."""
+    state_file = tmp_path / "state.json"
+    _write(state_file, {
+        "schema": SCHEMA_VERSION,
+        "active_base_model": "LTX23",
+        "selections": {"LTX23": {"transformer": "ghost"}},
+    })
+    with caplog.at_level(logging.WARNING, logger="ltx.state"):
+        app = _app(
+            tmp_path,
+            state_file=state_file,
+            transformers={"ghost": (tmp_path / "never-created.gguf").as_posix()},
+        )
+    pm = app.state.context.pipeline_manager
+    assert pm.active_models["transformer"] == "default"
+    assert any("ghost" in r.getMessage() for r in caplog.records)
+
+
 def test_startup_falls_back_to_the_first_base_model(tmp_path, caplog):
     state_file = tmp_path / "state.json"
     _write(state_file, {

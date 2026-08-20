@@ -161,6 +161,7 @@ class PipelineManager:
         runtime_state: RuntimeState | None = None,
         active_base_model: str | None = None,
         active_models: dict[str, str] | None = None,
+        active_selection_paths: dict[str, str] | None = None,
         model_registry: ModelRegistry | None = None,
     ):
         self.config = config
@@ -219,7 +220,14 @@ class PipelineManager:
         # (empty while everything is default). A selection-less load() reuses
         # these, so auto-load-on-generate after an unload keeps the active
         # (possibly swapped) combination instead of silently reverting.
-        self._active_selection_paths: dict[str, str] = {}
+        #
+        # SEEDED TOGETHER WITH ``active_models`` OR NOT AT ALL. The two are one
+        # fact in two halves — the names a client sees and the files the worker
+        # gets — and the app resolves the restored names to paths before
+        # construction (AppContext._restore_selection) precisely so a restart
+        # can never leave this half empty while the other half claims a
+        # non-default selection.
+        self._active_selection_paths: dict[str, str] = dict(active_selection_paths or {})
 
     # --------------------------------------------------------------- status
 

@@ -10,13 +10,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from api.errors import APIError
 from config import AppConfig
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor, load_base_models
 from services.job_store import JobStore
 from services.join_manager import JoinManager
 from services.lora_registry import LoraRegistry
-from services.model_registry import ModelRegistry
+from services.model_registry import DEFAULT_NAME, ModelRegistry
 from services.pipeline_manager import PipelineManager
 from services.runtime_state import RuntimeState
 from services.upload_store import UploadStore
@@ -68,7 +69,12 @@ class AppContext:
         active_base = self._restore_active_base_model()
         # The registry answers base-less calls with the ACTIVE base model, so
         # it has to start on the restored one too, not on the first descriptor.
+        # It also has to happen BEFORE the selection is resolved below: the
+        # ``config.yaml`` name->path registrations attach to whichever base
+        # model is active, so a name registered there is only resolvable once
+        # the registry is on the right one.
         self.model_registry.set_active_base_model(active_base)
+        active_models, selection_paths = self._restore_selection(active_base)
         self.pipeline_manager = PipelineManager(
             self.config,
             self.job_store,
@@ -84,16 +90,59 @@ class AppContext:
             descriptor=self.base_models[active_base],
             runtime_state=self.runtime_state,
             active_base_model=active_base,
-            # The remembered category NAMES of THAT base model. Not resolved to
-            # paths here on purpose: a name that no longer exists is caught by
-            # ``ModelRegistry.resolve``'s 404 when the next load actually asks
-            # for it, which keeps startup free of model-store I/O and of a
-            # second, divergent copy of the resolution rules.
-            active_models=self.runtime_state.selection_for(active_base),
+            # The remembered category NAMES of THAT base model, AND the paths
+            # they resolve to. Both, always together — see
+            # :meth:`_restore_selection` for why the names alone would be a lie.
+            active_models=active_models,
+            active_selection_paths=selection_paths,
             # Needed to look up the descriptor of a base model a load switches
             # TO, and to publish the new active base back (P6).
             model_registry=self.model_registry,
         )
+
+    def _restore_selection(self, base_model: str) -> tuple[dict[str, str], dict[str, str]]:
+        """The remembered selection of ``base_model``, as NAMES *and* PATHS.
+
+        RESOLVING AT STARTUP IS THE WHOLE POINT. ``PipelineManager`` carries
+        two halves of one fact: ``active_models`` (the names GET /models shows)
+        and ``_active_selection_paths`` (the files a body-less load actually
+        sends the worker). Restoring only the names would make the two disagree
+        for the entire window between boot and the first load that carries an
+        explicit ``models`` block — the server would REPORT "alt" while LOADING
+        the default file, which is the worst kind of wrong: silent, and only
+        visible in the generated video.
+
+        A name that no longer resolves — deleted from ``config.yaml``, or its
+        weight file moved away — is NOT an error either: the model store
+        legitimately changes between runs. That category falls back to
+        ``"default"`` with a WARNING naming it, so the operator can see WHY the
+        combination they left on is not the one they came back to. The state
+        file is left alone; it is rewritten by the next successful load.
+        """
+        remembered = self.runtime_state.selection_for(base_model)
+        names: dict[str, str] = {}
+        paths: dict[str, str] = {}
+        for category, name in remembered.items():
+            if name == DEFAULT_NAME:
+                names[category] = name
+                continue
+            try:
+                path = self.model_registry.resolve(
+                    category, name, base_model=base_model
+                )
+            except APIError as exc:
+                logger.warning(
+                    "state.json の '%s' (%s) は現在解決できないため default へ"
+                    "戻します: %s",
+                    name,
+                    category,
+                    exc.detail or exc.message,
+                )
+                names[category] = DEFAULT_NAME
+                continue
+            names[category] = name
+            paths[category] = str(path)
+        return names, paths
 
     def _restore_active_base_model(self) -> str:
         """The base model to start on: the remembered one, else the first.

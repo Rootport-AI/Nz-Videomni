@@ -1084,6 +1084,27 @@ class PipelineManager:
                 "file_size_bytes": file_size,
             },
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=peak_vram_mb),
+            # §1-23 (PENDING_TASKS.md): which model file actually backed this
+            # generation, per category. ``file`` is the selected file's
+            # basename (None for a category still on "default" -- P3b will
+            # resolve default's file to a real name via the base-model
+            # descriptor). Deliberately NOT recording ``base_model`` here:
+            # see MULTI_ENGINE_DESIGN.md and PENDING_TASKS §1-23 P0 -- a
+            # descriptor-id ``base_model`` field is added later (P6) and would
+            # collide in name with this one if written prematurely.
+            "models": {
+                "selection": {
+                    cat: {
+                        "name": name,
+                        "file": (
+                            Path(p).name
+                            if (p := self._active_selection_paths.get(cat))
+                            else None
+                        ),
+                    }
+                    for cat, name in self.active_models.items()
+                },
+            },
             "environment": self._environment_block(),
         }
         # V2V continuation (additive): only present when a source_video was used,
@@ -1262,6 +1283,22 @@ class PipelineManager:
                 "file_size_bytes": file_size,
             },
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=outcome.peak_vram_mb),
+            # §1-23 (PENDING_TASKS.md): see the identical block + comment in
+            # _write_chain_metadata for the rationale (name, file, why
+            # base_model is deliberately absent here).
+            "models": {
+                "selection": {
+                    cat: {
+                        "name": name,
+                        "file": (
+                            Path(p).name
+                            if (p := self._active_selection_paths.get(cat))
+                            else None
+                        ),
+                    }
+                    for cat, name in self.active_models.items()
+                },
+            },
             "environment": self._environment_block(),
         }
         # Phase B IC-LoRA: additive block, only present for lora jobs so non-lora

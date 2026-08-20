@@ -345,6 +345,71 @@ def test_chain_metadata_records_fused_gguf_dequant_kernel_used(client):
     assert meta["request"]["fused_gguf_dequant_kernel"] is True
 
 
+def test_metadata_records_models_selection(client):
+    # §1-23 (PENDING_TASKS.md): metadata.json records which model file backed
+    # this generation, per category. With no /pipeline/load call, every
+    # category is still on the "default" name and has no resolved selection
+    # path -> file is None (P3b resolves default's file to a real name via
+    # the base-model descriptor).
+    payload = {
+        "prompt": "A red ball rolling on a white floor",
+        "width": 384,
+        "height": 256,
+        "num_frames": 17,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 42,
+        "pipeline": "distilled",
+    }
+    r = client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["models"]["selection"]["transformer"] == {"name": "default", "file": None}
+    assert set(meta["models"]["selection"]) == {
+        "transformer", "text_encoder", "video_vae", "audio",
+    }
+    # base_model is deliberately absent in P0 (see the comment in
+    # pipeline_manager.py::_write_metadata) -- name collision avoidance.
+    assert "base_model" not in meta["models"]
+
+
+def test_chain_metadata_records_models_selection(client):
+    # Same key on the chain writer (a separate metadata builder -- it does not
+    # share _write_metadata, so it needs its own guard).
+    payload = {
+        "prompt": "a serene mountain lake at dawn",
+        "width": 384,
+        "height": 256,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "pipeline": "distilled",
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 25}, {"num_frames": 25}],
+    }
+    r = client.post("/api/v1/generate/chain", json=payload)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["models"]["selection"]["transformer"] == {"name": "default", "file": None}
+    assert set(meta["models"]["selection"]) == {
+        "transformer", "text_encoder", "video_vae", "audio",
+    }
+    assert "base_model" not in meta["models"]
+
+
 def test_upload_image(client, png_bytes):
     r = client.post("/api/v1/upload/image", files={"file": ("first.png", png_bytes, "image/png")})
     assert r.status_code == 200

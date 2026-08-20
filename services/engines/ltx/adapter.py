@@ -444,6 +444,28 @@ class LTXRunner:
             self._descriptor = next(iter(load_base_models(self.config.manifest_dir).values()))
         return self._descriptor
 
+    def set_descriptor(self, descriptor: BaseModelDescriptor) -> None:
+        """Point this runner at ANOTHER base model (§3-97 P6).
+
+        The backend captured its descriptor when it was constructed
+        (``_RealBackend.__init__``) and builds every weight path in its load
+        payload from it, so re-pointing the runner has to DISCARD the backend,
+        not just swap a field — otherwise the next load would send the old base
+        model's paths. Dropping it also re-runs :meth:`_select_backend`, which
+        is correct: whether the REAL stack is available is a question about the
+        new base model's files, not the old one's.
+
+        Any live pipeline is unloaded first (a base-model change is by
+        definition a worker rebuild). Re-pointing at the base model already in
+        effect is a cheap no-op — it must not tear down a loaded worker.
+        """
+        if self._descriptor is not None and self._descriptor.id == descriptor.id:
+            self._descriptor = descriptor
+            return
+        self.unload()
+        self._descriptor = descriptor
+        self._backend = None
+
     @property
     def loaded(self) -> bool:
         return self._backend is not None and self._backend.loaded

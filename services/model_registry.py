@@ -230,6 +230,10 @@ class ModelRegistry:
         )
         if not self.base_models:
             raise RuntimeError("no base-model descriptors available for the model registry")
+        # The base model an unqualified call means (see ``active_base_model``).
+        # Starts on the first descriptor; the app moves it to the remembered
+        # one at startup and the pipeline moves it on every successful load.
+        self._active_base: str = next(iter(self.base_models))
         # base model id -> category -> name -> (raw path, source)
         self._registry: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
         self.rescan()
@@ -243,18 +247,47 @@ class ModelRegistry:
 
     @property
     def default_base_model(self) -> str:
-        """The base model used when a caller names none — the first descriptor.
+        """The base model to fall back to: the FIRST declared descriptor.
 
-        P3a: the pipeline has no base-model axis yet, so "first" IS "active".
+        Only a fallback — what an unqualified call actually means is
+        :attr:`active_base_model`. The two coincide until something switches
+        the active one (a remembered state at startup, a load with a
+        ``base_model`` axis after that).
         """
         return next(iter(self.base_models))
+
+    @property
+    def active_base_model(self) -> str:
+        """The base model an unqualified call means, and the one ``GET /models``
+        describes in its legacy two-layer ``categories`` block.
+
+        Kept in step with ``PipelineManager.active_base_model`` — the pipeline
+        publishes here on every successful load (§3-97 P6). It is the pipeline
+        that owns the truth; this copy exists so the registry can answer
+        base-less calls and so the listing follows without every caller having
+        to thread the id through.
+        """
+        return self._active_base
+
+    def set_active_base_model(self, base_model: str) -> None:
+        """Switch the active base model. Unknown id -> MODEL_NOT_FOUND (404).
+
+        Rescans, because the ``config.yaml`` name->path registrations have no
+        base-model axis of their own and therefore always belong to whichever
+        base model is active (see the module docstring, source 2).
+        """
+        base_id = self._base_id(base_model)
+        if base_id == self._active_base:
+            return
+        self._active_base = base_id
+        self.rescan()
 
     def descriptor(self, base_model: str | None = None) -> BaseModelDescriptor:
         return self.base_models[self._base_id(base_model)]
 
     def _base_id(self, base_model: str | None) -> str:
         if base_model is None:
-            return self.default_base_model
+            return self._active_base
         if base_model not in self.base_models:
             raise model_not_found(
                 "base_model",
@@ -300,7 +333,7 @@ class ModelRegistry:
         the default entry + config entries + a fresh directory scan of all its
         scan roots. Cheap (a few directory listings), so GET /models runs it per
         request — a newly downloaded file appears without a restart."""
-        active_base = self.default_base_model
+        active_base = self._active_base
         registry: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
         for base_id, descriptor in self.base_models.items():
             per_category: dict[str, dict[str, tuple[str, str]]] = {}

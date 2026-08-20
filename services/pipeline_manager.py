@@ -20,6 +20,7 @@ from api.errors import (
     gpu_oom,
     generation_failed,
     pipeline_load_failed,
+    pipeline_loading,
     retake_window_out_of_range,
     source_audio_too_short,
     source_video_too_short,
@@ -40,7 +41,7 @@ from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
 from services.ltx_runner import LTXRunner, resolve_seed
-from services.model_registry import CATEGORIES, DEFAULT_NAME
+from services.model_registry import CATEGORIES, DEFAULT_NAME, ModelRegistry
 from services.runtime_state import RuntimeState
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
@@ -160,6 +161,7 @@ class PipelineManager:
         runtime_state: RuntimeState | None = None,
         active_base_model: str | None = None,
         active_models: dict[str, str] | None = None,
+        model_registry: ModelRegistry | None = None,
     ):
         self.config = config
         self.job_store = job_store
@@ -184,6 +186,12 @@ class PipelineManager:
         # one it read at startup. Written on a successful load/reload ONLY —
         # see :meth:`_remember`.
         self.runtime_state = runtime_state or RuntimeState(config.state_path)
+        # The model registry, needed for exactly two things: looking up the
+        # descriptor of a base model a load asks to switch TO, and publishing
+        # the new active base back to it afterwards. None for the standalone
+        # constructions (tests, outputs/ drivers) that never pass a
+        # ``base_model`` — see :meth:`_apply_base_model`.
+        self.model_registry = model_registry
         # The base model this pipeline currently serves. Injected by the app
         # from the runtime state; None here means "whatever the runner's
         # descriptor turns out to be", resolved LAZILY (see the property) so
@@ -359,6 +367,7 @@ class PipelineManager:
         self,
         selection: dict[str, str] | None = None,
         active_names: dict[str, str] | None = None,
+        base_model: str | None = None,
     ) -> None:
         """Load the pipeline (model management: optionally with overrides).
 
@@ -368,8 +377,13 @@ class PipelineManager:
         reuses the last successful selection (all-default on boot), keeping the
         legacy call — and auto-load-on-generate — behaviorally unchanged while
         honoring a previous swap.
+
+        ``base_model`` (§3-97 P6) switches the BASE MODEL this pipeline serves.
+        None — every pre-P6 caller — keeps the current one, so nothing about
+        the legacy paths changes.
         """
         with self._lock:
+            self._reject_while_loading()
             if self.runner.loaded:
                 self.state = self.STATE_READY
                 return
@@ -377,10 +391,13 @@ class PipelineManager:
         if selection is None:
             selection = dict(self._active_selection_paths)
             active_names = dict(self.active_models)
+        rollback = None
         try:
+            rollback = self._apply_base_model(base_model)
             self.runner.load(selection=selection or None)
             self.state = self.STATE_READY
         except Exception as exc:
+            self._restore_base_model(rollback)
             self.state = self.STATE_ERROR
             self._cleanup_after_error()
             logger.exception("Pipeline load failed")
@@ -391,7 +408,10 @@ class PipelineManager:
         self._remember()
 
     def reload(
-        self, selection: dict[str, str], active_names: dict[str, str]
+        self,
+        selection: dict[str, str],
+        active_names: dict[str, str],
+        base_model: str | None = None,
     ) -> None:
         """Swap-load (model management): force a worker rebuild with a new
         model selection.
@@ -402,13 +422,21 @@ class PipelineManager:
         NO automatic fallback (design ruling §9-1): the pipeline stays
         unloaded, ``active_models`` keeps the previous successful selection,
         and the error tells the user how to recover.
+
+        ``base_model`` (§3-97 P6): see :meth:`load`. A base-model change is
+        always a rebuild, so it necessarily comes through here or through a
+        ``load`` of an unloaded pipeline.
         """
         with self._lock:
+            self._reject_while_loading()
             self.runner.unload()
             self.state = self.STATE_LOADING
+        rollback = None
         try:
+            rollback = self._apply_base_model(base_model)
             self.runner.load(selection=selection or None)
         except Exception as exc:
+            self._restore_base_model(rollback)
             self.state = self.STATE_ERROR
             self._cleanup_after_error()
             logger.exception("Pipeline swap-load failed")
@@ -425,12 +453,66 @@ class PipelineManager:
         self._remember()
 
     def unload(self) -> None:
+        # NO ``_reject_while_loading()`` HERE, DELIBERATELY (§3-97 P6). A load
+        # that dies in a way ``except Exception`` cannot see — a BaseException,
+        # a killed thread — leaves ``state`` stuck at "loading", and the 409
+        # guard would then reject every load/reload forever. Unload is the one
+        # door kept unlocked so the operator can always get back to a clean
+        # ``unloaded`` state without restarting the server. Unloading during a
+        # real in-flight load is harmless anyway: it takes the same lock, so it
+        # can only run between the load's own locked sections.
         with self._lock:
             self.runner.unload()
             self.state = self.STATE_UNLOADED
 
+    def _reject_while_loading(self) -> None:
+        """409 if a load is already in flight. CALLED ONLY UNDER ``_lock``.
+
+        A model load takes minutes and runs OUTSIDE the lock (holding it for
+        the whole load would block GET /status), so the in-flight window is
+        wide and a second load arriving inside it is ordinary — a double-click
+        on the frontend's Load button. Letting it through would start a second
+        worker build on top of the first.
+        """
+        if self.state == self.STATE_LOADING:
+            raise pipeline_loading(
+                detail="現在モデルを読み込んでいます。完了までお待ちください。"
+            )
+
+    def _apply_base_model(self, base_model: str | None):
+        """Point the runner at ``base_model``; return the descriptor to roll
+        back to, or None when nothing changed.
+
+        Done BEFORE the load (the runner builds its payload from the
+        descriptor) but rolled back if the load fails, so a failed switch does
+        not leave the manager claiming a base model it never managed to load —
+        the same discipline ``active_models`` follows (design ruling §9-1).
+        """
+        if base_model is None or base_model == self.active_base_model:
+            return None
+        if self.model_registry is None:
+            raise RuntimeError(
+                "a base-model switch needs the model registry; this "
+                "PipelineManager was built without one"
+            )
+        previous = self.runner.descriptor
+        self.runner.set_descriptor(self.model_registry.descriptor(base_model))
+        self._active_base_model = base_model
+        logger.info("Base model switched to '%s'", base_model)
+        return previous
+
+    def _restore_base_model(self, rollback) -> None:
+        if rollback is None:
+            return
+        self.runner.set_descriptor(rollback)
+        self._active_base_model = rollback.id
+
     def _remember(self) -> None:
-        """Persist the combination that just loaded (§3-97 P5).
+        """Publish the combination that just loaded (§3-97 P5/P6).
+
+        Two destinations: the model REGISTRY (so ``GET /models`` and every
+        base-less resolve follow the active base model from the next request
+        on) and the STATE FILE (so the next start does).
 
         Called from the SUCCESS path of ``load``/``reload`` and nowhere else:
 
@@ -443,6 +525,8 @@ class PipelineManager:
         :meth:`RuntimeState.save` never raises — a state file that cannot be
         written is a WARNING, not a failed load.
         """
+        if self.model_registry is not None:
+            self.model_registry.set_active_base_model(self.active_base_model)
         self.runtime_state.save(self.active_base_model, self.active_models)
 
     def _cleanup_after_error(self) -> None:

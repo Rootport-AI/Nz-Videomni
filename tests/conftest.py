@@ -59,13 +59,19 @@ def default_files(base_id: str = TEST_BASE_MODEL_ID) -> dict[str, str]:
     """Category -> default weight file, relative to ``models_dir``."""
     return {c: f"{base_id}/{rel}" for c, rel in TEST_DEFAULT_FILES.items()}
 
-_GGUF_STUB = b"GGUF" + b"\0" * 16
+#: A structurally VALID, empty GGUF header: magic, version 3, tensor_count 0,
+#: kv_count 0. It has to parse, not merely start with the right four bytes:
+#: ``precheck_model_file`` walks the KV section (that is where the engine-
+#: generation ruling gets ``general.architecture`` / ``model_version`` from),
+#: and a base-model switch prechecks every category's DEFAULT file too -- so a
+#: four-magic-bytes-and-zeros stub would 422 as "GGUF version 0".
+_GGUF_STUB = b"GGUF" + struct.pack("<IQQ", 3, 0, 0)
 _SAFETENSORS_STUB = struct.pack("<Q", 2) + b"{}"
 
 
 def write_model_file(path: Path) -> Path:
-    """Create a stub weight file whose first bytes pass ``precheck_model_file``
-    (GGUF magic / a parsable safetensors header) -- no weights, no size."""
+    """Create a stub weight file that passes ``precheck_model_file``
+    (a parsable GGUF / safetensors header) -- no weights, no size."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(_GGUF_STUB if path.suffix == ".gguf" else _SAFETENSORS_STUB)
     return path

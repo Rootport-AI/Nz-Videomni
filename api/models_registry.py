@@ -19,8 +19,9 @@ base-model layer WITHOUT reshaping anything that existed. The top-level
 one. Added alongside it:
 
 ``active_base_model``
-    Id of the base model the ``categories`` block describes. P3a pins it to the
-    first descriptor; the pipeline-driven active base arrives with the API axis.
+    Id of the base model the ``categories`` block describes — the one the
+    pipeline is on (P6: ``POST /pipeline/load``'s ``base_model`` axis moves it,
+    and the runtime state restores it at startup).
 ``base_models[]``
     Every declared base model with its own three-layer listing, plus install
     state: ``installed`` (every category's default file is on disk),
@@ -58,7 +59,10 @@ def _category_block(
 def list_models(context: AppContext = Depends(get_context)) -> dict:
     registry = context.model_registry
     registry.rescan()
-    active_base = registry.default_base_model
+    # The PIPELINE owns which base model is active (P6); the registry keeps a
+    # copy so base-less calls resolve consistently. Read from the pipeline here
+    # so the listing can never lag a switch by one request.
+    active_base = context.pipeline_manager.active_base_model
     active = context.pipeline_manager.active_models
 
     base_models = []

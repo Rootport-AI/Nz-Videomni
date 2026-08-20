@@ -23,6 +23,15 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
         "port": context.runtime.port,
         "pipeline_loaded": pm.loaded,
         "pipeline_type": pm.pipeline_type if pm.loaded else None,
+        # ADDITIVE (§3-97 P6). ``pipeline_loaded`` is a bool and therefore
+        # cannot express the state a base-model switch spends minutes in:
+        # "loading". ``state`` is the full lifecycle value (unloaded / loading
+        # / ready / running / error) a client needs to show a progress state
+        # and to keep its Load button disabled meanwhile. ``base_model`` is the
+        # descriptor id currently in effect — retained across an unload, like
+        # GET /models' ``active``, because it is a SELECTION, not a load state.
+        "state": pm.state,
+        "base_model": pm.active_base_model,
         "gpu": gpu_info.get_gpu_info(),
         "vram_optimization": pm.vram_status_block(),
         # Acceleration capability (ADDITIVE, top level — the FROZEN

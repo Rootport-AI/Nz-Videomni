@@ -375,6 +375,28 @@ def pipeline_load_failed(detail: str | None = None) -> APIError:
     return APIError("PIPELINE_LOAD_FAILED", "Failed to load the pipeline", 503, detail=detail)
 
 
+def pipeline_loading(detail: str | None = None) -> APIError:
+    """A load/reload arrived while one is already in flight (§3-97 P6).
+
+    409, the same "you are asking at the wrong moment" family as
+    :func:`job_busy` — nothing is wrong with the request, it just has to wait.
+    A model load takes minutes, so a double-click on the frontend's Load button
+    is the ordinary way to reach this, not an exotic race.
+
+    THE MESSAGE IS BILINGUAL ON PURPOSE. Auto-load-on-generate calls the same
+    load path from inside a job, where this error is re-wrapped as
+    ``generation_failed(detail=str(exc))`` — and ``str(APIError)`` is the
+    MESSAGE, not the detail. The Japanese half is therefore the only part that
+    survives into what the operator reads on a failed job.
+    """
+    return APIError(
+        "PIPELINE_LOADING",
+        "The pipeline is already loading (モデルの読み込み中です)",
+        409,
+        detail=detail,
+    )
+
+
 def gpu_oom(job_id: str | None = None, detail: str | None = None) -> APIError:
     return APIError(
         "GPU_OOM",

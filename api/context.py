@@ -66,6 +66,9 @@ class AppContext:
         self.lora_registry = LoraRegistry(self.config)
         self.model_registry = ModelRegistry(self.config, base_models=self.base_models)
         active_base = self._restore_active_base_model()
+        # The registry answers base-less calls with the ACTIVE base model, so
+        # it has to start on the restored one too, not on the first descriptor.
+        self.model_registry.set_active_base_model(active_base)
         self.pipeline_manager = PipelineManager(
             self.config,
             self.job_store,
@@ -87,6 +90,9 @@ class AppContext:
             # for it, which keeps startup free of model-store I/O and of a
             # second, divergent copy of the resolution rules.
             active_models=self.runtime_state.selection_for(active_base),
+            # Needed to look up the descriptor of a base model a load switches
+            # TO, and to publish the new active base back (P6).
+            model_registry=self.model_registry,
         )
 
     def _restore_active_base_model(self) -> str:

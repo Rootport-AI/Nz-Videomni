@@ -1,6 +1,49 @@
 ﻿{
-  "schema": 1,
+  "schema": 2,
   "id": "LTX23",
+  "display_name": "LTX 2.3",
+  "engine_family": "ltx",
+
+  "categories": {
+    "transformer": {
+      "scan": ["LTX23/Weights"],
+      "extensions": [".gguf"],
+      "recursive": true,
+      "default_file": "LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+    },
+    "text_encoder": {
+      "scan": ["LTX23/TextEncoder"],
+      "extensions": [".gguf"],
+      "default_file": "LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf"
+    },
+    "video_vae": {
+      "scan": ["LTX23/VAE"],
+      "extensions": [".safetensors"],
+      "name_hint": "video",
+      "default_file": "LTX23/VAE/LTX23_video_vae_bf16.safetensors"
+    },
+    "audio": {
+      "scan": ["LTX23/VAE"],
+      "extensions": [".safetensors"],
+      "name_hint": "audio",
+      "default_file": "LTX23/VAE/LTX23_audio_vae_bf16.safetensors"
+    }
+  },
+
+  "assets": {
+    "gemma_root": "LTX23/TextEncoder/tokenizer",
+    "spatial_upsampler_path": "LTX23/Upscaler/ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+    "component_text_projection_path": "LTX23/TextEncoder/ltx-2.3_text_projection_bf16.safetensors",
+    "component_video_vae_pruned_path": "LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors"
+  },
+
+  "default_selection": {
+    "transformer": "default",
+    "text_encoder": "default",
+    "video_vae": "default",
+    "audio": "default"
+  },
+
   "downloads": [
     {
       "name": "LTX-2.3 weights + IC-LoRA (7 files)",

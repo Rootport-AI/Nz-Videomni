@@ -1,0 +1,40 @@
+﻿{
+  "schema": 2,
+  "id": "LTX25",
+  "display_name": "LTX 2.5",
+  "engine_family": "ltx",
+  "_note": "重み未配布。downloadsは§3-98で追加予定(scripts/install_ltx.ps1はSkipするだけで済む -- downloads:[]は空扱い)。categoriesのdefault_fileはtransformerのみ判明済み(GGUF変換ツールのステージング出力先と一致させてある); text_encoder/video_vae/audioは構成未確定のためscan/extensionsのみ宣言する。",
+
+  "categories": {
+    "transformer": {
+      "scan": ["LTX25/Weights"],
+      "extensions": [".gguf"],
+      "recursive": true,
+      "default_file": "LTX25/Weights/ltx-2.5-22b-distilled-transformer-Q4_K.gguf"
+    },
+    "text_encoder": {
+      "scan": ["LTX25/TextEncoder"],
+      "extensions": [".gguf"]
+    },
+    "video_vae": {
+      "scan": ["LTX25/VAE"],
+      "extensions": [".safetensors"],
+      "name_hint": "video"
+    },
+    "audio": {
+      "scan": ["LTX25/VAE"],
+      "extensions": [".safetensors"],
+      "name_hint": "audio"
+    }
+  },
+
+  "default_selection": {
+    "transformer": "default",
+    "text_encoder": "default",
+    "video_vae": "default",
+    "audio": "default"
+  },
+
+  "downloads": [],
+  "migrate": []
+}

@@ -283,14 +283,23 @@ function Test-ManifestShape {
         [Parameter(Mandatory)] $Manifest,
         [Parameter(Mandatory)] [string] $Name
     )
-    if ($Manifest.schema -ne 1) {
-        throw "Manifest ${Name}: unsupported schema '$($Manifest.schema)' (this installer understands schema 1)."
+    if ($Manifest.schema -ne 1 -and $Manifest.schema -ne 2) {
+        throw "Manifest ${Name}: unsupported schema '$($Manifest.schema)' (this installer understands schema 1 or 2)."
     }
     if ([string]::IsNullOrWhiteSpace($Manifest.id)) { throw "Manifest ${Name}: missing 'id'." }
     if ($Manifest.id -notmatch '^[A-Za-z0-9._-]+$') {
         throw "Manifest ${Name}: 'id' must be a plain filename-safe token (it names the staging directory)."
     }
-    if (-not $Manifest.downloads) { throw "Manifest ${Name}: missing 'downloads'." }
+    # schema 1 keeps the original strict rule (a schema-1 manifest with no
+    # downloads is almost certainly a mistake). schema 2 base-model descriptors
+    # are allowed an empty (or absent) 'downloads' -- a base model whose weights
+    # are not yet distributed (e.g. LTX 2.5, see scripts/manifests/20-ltx25.json)
+    # still needs to validate and load so its 'categories'/'default_selection'
+    # are visible to the registry, even though there is nothing to download yet
+    # (S-2 / F2, MULTI_ENGINE_DESIGN.md §4.3).
+    if ($Manifest.schema -eq 1 -and -not $Manifest.downloads) {
+        throw "Manifest ${Name}: missing 'downloads'."
+    }
 
     $n = 0
     foreach ($dl in @($Manifest.downloads)) {
@@ -325,10 +334,106 @@ function Test-ManifestShape {
         if (-not (Test-RelPathSafe $mg.from)) { throw "${Name}: migrate.from '$($mg.from)' is not a safe relative path." }
         if (-not (Test-RelPathSafe $mg.to)) { throw "${Name}: migrate.to '$($mg.to)' is not a safe relative path." }
     }
+
+    # A manifest that carries 'engine_family' is a BASE MODEL descriptor (as
+    # opposed to a shared-asset manifest like 00-preprocessors.json, which has
+    # no engine_family and is validated by the rules above only). See
+    # MULTI_ENGINE_DESIGN.md §4.2/§4.3.
+    if ($Manifest.engine_family) {
+        Test-BaseModelShape -Manifest $Manifest -Name $Name
+    }
+}
+
+# Validates the fields that ONLY a base-model descriptor (schema 2,
+# 'engine_family' present) carries: display_name / engine_family / categories /
+# assets / default_selection (MULTI_ENGINE_DESIGN.md §4.3). Called from
+# Test-ManifestShape, never standalone, so $Manifest has already passed the
+# schema/id/downloads/migrate checks above.
+function Test-BaseModelShape {
+    param(
+        [Parameter(Mandatory)] $Manifest,
+        [Parameter(Mandatory)] [string] $Name
+    )
+    if ([string]::IsNullOrWhiteSpace($Manifest.display_name)) {
+        throw "Manifest ${Name}: missing 'display_name' (required when 'engine_family' is present)."
+    }
+    if ($Manifest.engine_family -notmatch '^[a-z0-9_]+$') {
+        throw "Manifest ${Name}: 'engine_family' must match ^[a-z0-9_]+`$, got '$($Manifest.engine_family)'."
+    }
+    if (-not $Manifest.categories) {
+        throw "Manifest ${Name}: missing 'categories' (required when 'engine_family' is present)."
+    }
+
+    # Every downloads[].files[].path in this SAME manifest, for the drift check
+    # below (default_file / assets must name a file the downloads table actually
+    # produces -- otherwise the descriptor and the download table have silently
+    # diverged). Skipped entirely when downloads is empty (a not-yet-distributed
+    # base model like LTX 2.5 has nothing to drift against yet).
+    $hasDownloads = (@($Manifest.downloads)).Count -gt 0
+    $filePaths = @{}
+    foreach ($dl in @($Manifest.downloads)) {
+        foreach ($fl in @($dl.files)) { $filePaths[[string] $fl.path] = $true }
+    }
+
+    $catNames = @($Manifest.categories.PSObject.Properties.Name)
+    if ($catNames.Count -eq 0) {
+        throw "Manifest ${Name}: 'categories' has no entries."
+    }
+    foreach ($catName in $catNames) {
+        $cat = $Manifest.categories.$catName
+        $where = "${Name} categories.$catName"
+        if (-not $cat.scan -or @($cat.scan).Count -eq 0) {
+            throw "${where}: 'scan' must be a non-empty array."
+        }
+        foreach ($s in @($cat.scan)) {
+            if (-not (Test-RelPathSafe $s)) { throw "${where}: scan entry '$s' is not a safe relative path." }
+        }
+        if (-not $cat.extensions -or @($cat.extensions).Count -eq 0) {
+            throw "${where}: 'extensions' must be a non-empty array."
+        }
+        foreach ($e in @($cat.extensions)) {
+            if ($e -notmatch '^\.') { throw "${where}: extension '$e' must start with '.'." }
+        }
+        if ($cat.default_file) {
+            if (-not (Test-RelPathSafe $cat.default_file)) {
+                throw "${where}: 'default_file' is not a safe relative path."
+            }
+            if ($hasDownloads -and -not $filePaths.ContainsKey([string] $cat.default_file)) {
+                throw "${where}: 'default_file' ('$($cat.default_file)') does not match any downloads[].files[].path in $Name -- descriptor drift."
+            }
+        }
+    }
+
+    if ($Manifest.assets) {
+        foreach ($prop in @($Manifest.assets.PSObject.Properties)) {
+            $val = [string] $prop.Value
+            if (-not (Test-RelPathSafe $val)) {
+                throw "${Name} assets.$($prop.Name): '$val' is not a safe relative path."
+            }
+            if ($hasDownloads -and -not $filePaths.ContainsKey($val)) {
+                throw "${Name} assets.$($prop.Name): '$val' does not match any downloads[].files[].path in $Name -- descriptor drift."
+            }
+        }
+    }
+
+    if ($Manifest.default_selection) {
+        foreach ($prop in @($Manifest.default_selection.PSObject.Properties)) {
+            if ($catNames -notcontains $prop.Name) {
+                throw "${Name} default_selection: key '$($prop.Name)' is not a declared category."
+            }
+        }
+    }
 }
 
 Write-Step "Model manifests"
 $Manifests = Import-ModelManifests -Dir $ManifestDir
+
+# One line summarising the base models (schema 2, 'engine_family' present)
+# this run knows about -- the ones that will populate the header dropdown
+# (MULTI_ENGINE_DESIGN.md §1/§4.2). Shared-asset manifests (00-preprocessors,
+# no engine_family) are counted in $Manifests.Count above but not listed here.
+$BaseModelNames = @($Manifests | Where-Object { $_.Data.engine_family } | ForEach-Object { $_.Data.display_name })
+Write-Ok "base models: $($BaseModelNames -join ', ')"
 
 # Aggregate every manifest's migrate table into ONE list. A `from` may appear
 # only once across ALL manifests: two base models both claiming the same old

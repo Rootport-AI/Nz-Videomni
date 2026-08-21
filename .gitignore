@@ -1,6 +1,10 @@
 # Environment isolation — never commit the local interpreter / venv
 .venv/
 .venv-engine/
+# LTX 2.5 engine interpreter. A SECOND engine venv, not a replacement: the two
+# stacks need incompatible transformers majors (4.57 vs 5.x), so they cannot
+# share one interpreter. Built by scripts/install_ltx.ps1 (Ensure-EngineVenv).
+.venv-engine-ltx25/
 .python/
 
 # Python

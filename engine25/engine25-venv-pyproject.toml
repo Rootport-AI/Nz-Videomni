@@ -1,0 +1,66 @@
+[project]
+name = "ltx25-engine"
+version = "1.0.0"
+description = "LTX-2.5 Video Generation Engine (separate venv from the 2.3 engine)"
+requires-python = ">=3.12"
+# ---------------------------------------------------------------------------
+# WHY A SECOND ENGINE VENV AT ALL
+#
+# This file is the LTX 2.5 sibling of engine/engine-venv-pyproject.toml. The two
+# stacks CANNOT share one interpreter: official LTX-2 v1.2.0 requires
+# transformers 5.x (Gemma 4), while the 2.3 engine is pinned to transformers
+# 4.57.6 -- one venv cannot hold both. So .venv-engine (2.3) and
+# .venv-engine-ltx25 (2.5) are built side by side and never touch each other.
+#
+# HOW THIS RESOLVES -- READ BEFORE EDITING (the "M2 correction")
+#
+# The 2.3 file expresses its pinned torch via `[[tool.uv.index]] cu128` +
+# `[tool.uv.sources] torch/torchaudio = { index = "pytorch-cu128" }`. That
+# pattern was TRIED here first and does NOT work for this dependency set: the
+# official LTX-2 git packages carry their own uv index configuration (cu132),
+# and the two collide during resolution. The verified recipe is instead:
+#
+#   * declare ltx-core / ltx-pipelines as PEP 508 DIRECT URLs right in
+#     `dependencies` below (no [tool.uv.sources] table in this file at all), and
+#   * install with  --no-sources
+#                   --index https://download.pytorch.org/whl/cu128
+#                   --index-strategy unsafe-best-match
+#
+# `--no-sources` is what keeps the dependency-side uv tables out of the picture;
+# the explicit cu128 `--index` (plus unsafe-best-match, same known uv torchaudio
+# bug as the 2.3 stack) is what supplies the CUDA builds.
+#
+# BOTH torch AND torchaudio must carry the exact `+cu128` local version below.
+# Leaving torchaudio unpinned was measured to drag in torchaudio 2.11, which
+# then pulls a matching torch and silently defeats the 2.9.1 pin.
+#
+# scripts/install_ltx.ps1 (Ensure-EngineVenv) applies all of this for real
+# users; the resolved result is frozen in engine25/venv-engine-ltx25.freeze.txt,
+# which is the DEFAULT deterministic install path. This file is only consulted
+# by the opt-in -ResolveLatest route.
+#
+# DELIBERATELY ABSENT (do not add without a plan change):
+#   sageattention  -- LTX 2.5 v1 runs on SDPA only.
+#   triton-windows -- nothing imports it here; the wheel's triton use is a lazy
+#                     fallback, confirmed to degrade cleanly when absent.
+#   diffusers      -- 2.3-only dependency; the 2.5 pipeline does not use it.
+#   natten         -- only the diffusion-decoder VAE wants it; v1 uses Conv VAE.
+# openimageio is NOT listed either, but for the opposite reason: it is a hard
+# transitive requirement of `ltx_pipelines.distilled` and a real Windows wheel
+# exists (3.1.16.0, cp312, win_amd64), so it arrives on its own.
+# ---------------------------------------------------------------------------
+dependencies = [
+    "torch==2.9.1+cu128",
+    "torchaudio==2.9.1+cu128",
+    # Official LTX-2 v1.2.0 == d151147788a9284cca791edc6ce898007e727fe6.
+    # Pinned by full SHA, not the v1.2.0 tag, so the resolution cannot move.
+    "ltx-core @ git+https://github.com/Lightricks/LTX-2.git@d151147788a9284cca791edc6ce898007e727fe6#subdirectory=packages/ltx-core",
+    "ltx-pipelines @ git+https://github.com/Lightricks/LTX-2.git@d151147788a9284cca791edc6ce898007e727fe6#subdirectory=packages/ltx-pipelines",
+    # Gemma 4 support landed in transformers 5.8. The upper bound is the
+    # validated ceiling (5.14.1 is what this stack resolved and was frozen at).
+    "transformers>=5.8,<5.15",
+    # GGUF reader for the Q4 transformer + Q4/Q6 text encoder.
+    "gguf>=0.10.0",
+    # The 4 non-quantized weights (VAEs + spatial upscaler) stay safetensors.
+    "safetensors>=0.7.0",
+]

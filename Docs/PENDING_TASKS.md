@@ -552,13 +552,16 @@
   - GGUF変換プロファイルの追加——変換元は公式の非量子化BF16蒸留Transformer（`ltx-2.5-22b-distilled-transformer-bf16.safetensors`）。INT8 ConvRot版は別形式なので使わない。コンバータ本体は作り直さず、`Nz-GGUF-Converter-LTX23` へLTX 2.5用のプロファイルと検証規則を足す。
   - GGUF KVメタデータの書き出しを規約として保証——`general.architecture` ＋ `model_version` を必須にする（§3-97のエンジン判別が依存する契約）。
   - 記述ファイル `scripts/manifests/20-ltx25.json` と、導入用の `install-LTX25.bat` の新設。
-  - ltxアダプタへのLTX 2.5読み込み分岐——Gemma 4＋projection、split components、Dual CFG、Euler ancestral、Conv VAE／DiffVAE といった2.3との差分（詳細は参考資料）。
+  - ltxアダプタへのLTX 2.5読み込み分岐——Gemma 4＋projection、split components、Dual CFG、Euler ancestral、Conv VAE／DiffVAE といった2.3との差分（詳細は参考資料）。具体的な変更対象は`services\engines\ltx\adapter.py`の`SUPPORTED_MODEL_VERSIONS: frozenset[str] = frozenset({"2.3"})`（現行88行目）で、ここに`"2.5"`を加えるのがゲート解除の中心。
+  - **両GGUFと安定版safetensors 4本の`models/LTX25/`配下への配置（フォルダ新設含む）**——本項の前提作業。下記「状態」欄のとおり2026-08-21時点で`Nz-GGUF-Converter-LTX23\output\`に生成済み・検証合格済みだが、`models/LTX25/`側へはまだ1つも配置されていない（`Weights/`は空、`TextEncoder/`・`VAE/`は未作成）。配置はオーナー作業だが、着手前に完了しているかを必ず確認すること。
   - 低VRAM実行方式の対応——CPU常駐＋block swap＋layer streaming＋tiled decode の骨格は2.3から引き継ぐ。
   - **LoRA（`lora_dir`・`ic_loras`）のベースモデル軸対応**——§3-97の第1段階では**意図的に対象外にした**。現在の`config.yaml`の`lora_dir`と`ic_loras`はベースモデル軸を持たず、どのベースモデルを選んでいても同じ1本のディレクトリ・同じ登録名を見る。含めなかったのは、LoRAが「モデルの読み込み時」ではなく「ジョブごとの適用時」に効く別系統の資産であり、4カテゴリ（transformer／text_encoder／video_vae／audio）とライフサイクルが違うためである。**LTX 2.3用のLoRAをLTX 2.5に当てても意味のある結果にならない**ので、2.5用のLoRAが実在するようになる本項の時点で、記述子側（`assets`または新設のLoRAブロック）へ寄せるかどうかを判断する。第1段階で`models/LTX23/StyleLoRA/`というベースモデル配下のレイアウトにはなっているため、移行の下地はある。
   - 記述ファイル`scripts/manifests/20-ltx25.json`の`downloads`追記——第1段階では**空配列のまま**にしてある（重み未配布のため）。`text_encoder`／`video_vae`／`audio`の`default_file`も未記入で、探索先（`scan`・`extensions`）だけを宣言してある。カテゴリ構成が確定した時点で埋める（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §10の唯一の残未決事項）。
 - **完了の判定**: ドロップダウンで LTX 2.3 ↔ 2.5 を往復でき、双方で生成が成功すること。
 - **関連**: §3-97（土台）。ヘッダーの「LTX 2.5」選択肢（旧§2-1）は§3-97のP7で実配線になり、本項で初めて実際に読み込めるようになる（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-99）。本書§3-91（到着時刻の拘束）は「将来のモデル世代交代（例: LTX 2.5等）でこの種の能力が追加されたとき」を着手条件としているため、本項の実装中にLTX 2.5の能力を確かめる機会がある。
-- **状態**: **未着手。ただし§3-97の第1段階（土台）は2026-08-20に完了しており、本項は着手可能な状態にある。** LTX 2.5のQ4_K GGUF（10,706,310,592バイト）は`models/LTX25/Weights/`へ配置済みで、`GET /models`に「一部未導入」（transformerのみ実在）として現れ、選ぶと422「LTX 2.5エンジンは次段階で実装予定」で止まる——**ここから先を作るのが本項である**。
+- **状態**: **未着手。ただし§3-97の第1段階（土台）は2026-08-20に完了しており、本項は着手可能な状態にある。**
+  - **2026-08-21更新（重み側の前提が変わった）**: 起票時にここへ書いていた「LTX 2.5のQ4_K GGUF（10,706,310,592バイト）は`models/LTX25/Weights/`へ配置済み」は**旧・不良GGUF**（connector 258テンソルが欠落し、本来あるべきテンソル数に対し4,091テンソルしか含まない不良品）についての記述で、このGGUFはオーナーが撤去済み。現在は正しいtransformer GGUF（4,349テンソル、14,738,670,368バイト、SHA-256`4ead2a7dbae374639794b717517a3d1938bb8a16629957467e617ee99f22cf98`）と、新たに変換したtext encoder GGUF（686テンソル、9,231,374,624バイト）の両方が`Nz-GGUF-Converter-LTX23\output\`に生成済み・全検証合格済みとなっている。**ただしどちらも`models/LTX25/`配下へはまだ配置されていない**（`Weights/`フォルダは空、`TextEncoder/`・`VAE/`フォルダは未作成）——上記「主要な作業塊」に前提作業として追記済み。したがって`GET /models`は現時点でも「一部未導入」のままであり、選んでも422「LTX 2.5エンジンは次段階で実装予定」で止まる状態に変わりはない。詳細な成果物一覧・SHA・技術申し送りは[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)「2026-08-21追加調査」8節・9節を参照。
+  - **ここから先を作るのが本項である**。
 - **出典**: 2026-08-20のオーナー設計ディスカッションと事前調査、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68のG10（422で止まることの実機確認）。
 
 ---

@@ -4,9 +4,9 @@
 itself. What is pinned here:
 
 * a body carrying ONLY ``base_model`` switches — and, on the way, runs the full
-  resolve -> precheck -> KV ruling over EVERY category, which is what makes an
-  LTX 2.5 selection fail loud with the "next stage" message instead of reaching
-  a worker that would mis-run it;
+  resolve -> precheck -> KV ruling over EVERY category, which is what makes a
+  base model whose weights belong to ANOTHER engine fail loud instead of
+  reaching a worker that would mis-run them;
 * an unchanged base model with an all-default selection still produces NO
   payload override, so the golden byte-identical load is untouched;
 * a second load arriving while one is in flight is a 409, and an auto-load from
@@ -217,13 +217,23 @@ def test_a_bodyless_load_is_unaffected_by_the_new_axis(client23):
 # the KV ruling, reached through the API
 # --------------------------------------------------------------------------- #
 
-def test_selecting_ltx25_is_refused_with_the_next_stage_message(client25):
+def test_selecting_2_5_weights_under_an_ltx_2_3_descriptor_is_refused(client25):
+    """§3-98 P3c. This fixture's second base model declares
+    ``engine_family: "ltx"`` (the 2.3 engine) but its transformer GGUF is an
+    ``ltxv 2.5.0`` file — one of the two CROSSED cells of the family x KV table.
+
+    Until the 2.5 engine existed, the refusal came from the 2.3 adapter and
+    said "the LTX 2.5 engine is coming in a later stage". That stage is now
+    here, so the ruling has moved up a level and changed meaning: the file and
+    the base model belong to DIFFERENT ENGINES, and the message says which base
+    model to pick instead. The four-cell table itself is pinned in
+    tests/test_engine_dispatch.py."""
     r = client25.post("/api/v1/pipeline/load", json={"base_model": LTX25_ID})
     assert r.status_code == 422, r.text
     error = r.json()["error"]
     assert error["code"] == "MODEL_INCOMPATIBLE"
     assert "ltxv 2.5.0" in error["detail"]
-    assert "次段階" in error["detail"] and "§3-98" in error["detail"]
+    assert "LTX 2.5" in error["detail"] and "選んでください" in error["detail"]
 
 
 def test_a_refused_switch_leaves_the_base_model_untouched(client25):

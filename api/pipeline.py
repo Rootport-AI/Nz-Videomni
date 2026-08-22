@@ -18,9 +18,10 @@ selection: "no override" is what keeps the worker payload byte-identical to the
 pre-model-management one. But when the base model CHANGES, every default is a
 different file, and skipping it would hand the engine the new base model's
 weights without ever having looked inside them — which is exactly where the
-GGUF KV ruling (``check_kv``: is this an ``ltxv`` file, and is it a generation
-this engine can run?) has to fire. So a base change resolves, prechecks and
-rules on all four categories, and passes them all as explicit paths.
+GGUF KV ruling (``services.engines.check_kv``: does this file's engine FAMILY
+match the base model being selected, and can that family run this generation?)
+has to fire. So a base change resolves, prechecks and rules on all four
+categories, and passes them all as explicit paths.
 
 The price is stated openly (design note U4): after a base-model change the
 selection is never empty again, so a later body-less load is "the same VALUES"
@@ -36,7 +37,7 @@ from pydantic import BaseModel
 from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import job_busy, model_not_found
-from services.engines.ltx import adapter
+from services import engines
 from services.model_registry import DEFAULT_NAME, precheck_model_file
 
 router = APIRouter()
@@ -125,12 +126,14 @@ def load_pipeline(
             path,
             descriptor=descriptor.categories.get(category),
         )
-        # §2.2's second step: architecture + generation. Refuses a foreign
-        # lineage, and refuses an LTX generation this build cannot run yet
-        # (LTX 2.5 -> "next stage"). Imported as the module, not via a family
-        # registry: one adapter exists, and a registry dict would drag every
-        # future adapter into this import (design ruling, P4).
-        adapter.check_kv(category, name, kv)
+        # §2.2's second step, now family-aware (§3-98 P3c). ``engines.check_kv``
+        # first rules on WHICH ENGINE the file belongs to — the KV is the judge,
+        # the chosen base model is what it is judged against — and refuses a
+        # mismatch with a message naming the base model to pick instead. Only
+        # then does the family's own adapter rule on architecture + generation.
+        # The dispatcher imports adapters lazily, so this endpoint still pulls
+        # in exactly one engine: the one being loaded.
+        engines.check_kv(descriptor, category, name, kv)
         selection[category] = str(path)
 
     if pm.loaded and not base_changed and effective == pm.active_models:

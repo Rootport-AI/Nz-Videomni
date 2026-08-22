@@ -37,6 +37,7 @@ from config import AppConfig
 from services import gpu_info, video_io
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor
+from services.engines import runner_class_for
 from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
@@ -180,7 +181,14 @@ class PipelineManager:
         # runner resolve it lazily from config.manifest_dir (tests/tools). Read
         # back through ``self.runner.descriptor`` so there is ONE resolution
         # rule, not two.
-        self.runner = LTXRunner(config, self.low_vram, descriptor)
+        #
+        # WHICH RUNNER CLASS depends on the descriptor's engine family (§3-98
+        # P3c). A None descriptor keeps ``LTXRunner``: resolving the family
+        # would mean loading the manifests here, and constructing a manager is
+        # deliberately free of file reads — the lazy default is the first
+        # declared base model, which is LTX 2.3.
+        runner_cls = LTXRunner if descriptor is None else runner_class_for(descriptor.engine_family)
+        self.runner = runner_cls(config, self.low_vram, descriptor)
         # Server runtime state (§3-97 P5): the file that remembers the last
         # active base model + selection across restarts. Defaulted so existing
         # constructions (tests, tools) keep working; the app always injects the
@@ -504,7 +512,7 @@ class PipelineManager:
                 "PipelineManager was built without one"
             )
         previous = self.runner.descriptor
-        self.runner.set_descriptor(self.model_registry.descriptor(base_model))
+        self._point_runner_at(self.model_registry.descriptor(base_model))
         self._active_base_model = base_model
         logger.info("Base model switched to '%s'", base_model)
         return previous
@@ -512,8 +520,49 @@ class PipelineManager:
     def _restore_base_model(self, rollback) -> None:
         if rollback is None:
             return
-        self.runner.set_descriptor(rollback)
+        self._point_runner_at(rollback)
         self._active_base_model = rollback.id
+
+    def _point_runner_at(self, descriptor: BaseModelDescriptor) -> None:
+        """Aim ``self.runner`` at ``descriptor`` — replacing the runner OBJECT
+        when the engine family changes (§3-98 P3c).
+
+        WITHIN one family, ``set_descriptor`` is the whole story: it discards
+        the backend (so the next load builds its payload from the new base
+        model's paths) and unloads any live worker.
+
+        ACROSS families it cannot be, because the runner class itself is the
+        thing that differs — a different worker module, a different venv, a
+        different load payload. Re-pointing an ``LTXRunner`` at an LTX 2.5
+        descriptor would spawn the 2.3 worker on 2.5 weights.
+
+        THE OLD WORKER IS SHUT DOWN FIRST, and this is the ONE place that can
+        do it: the moment the old runner object is dropped, nothing holds a
+        handle on its subprocess any more, and a stranded engine process keeps
+        its VRAM. ``unload`` sends ``shutdown``, waits, then terminates and
+        kills — so by the time it returns the process is gone whether or not it
+        cooperated. Both the apply and the rollback path come through here, so
+        a failed switch cannot leave two workers behind either.
+        """
+        target_cls = runner_class_for(descriptor.engine_family)
+        # Exact type, not isinstance: LTX25Runner SUBCLASSES LTXRunner, so an
+        # isinstance test would silently keep the 2.3 runner for a 2.5 switch.
+        if type(self.runner) is target_cls:
+            self.runner.set_descriptor(descriptor)
+            return
+        logger.info(
+            "Engine family change: %s -> %s (unloading the previous worker first)",
+            type(self.runner).__name__,
+            target_cls.__name__,
+        )
+        self.runner.unload()
+        if self.runner.loaded:  # pragma: no cover - unload's finally always clears it
+            logger.error(
+                "previous %s still reports loaded after unload; the old worker "
+                "process may have survived the switch",
+                type(self.runner).__name__,
+            )
+        self.runner = target_cls(self.config, self.low_vram, descriptor)
 
     def _remember(self) -> None:
         """Publish the combination that just loaded (§3-97 P5/P6).

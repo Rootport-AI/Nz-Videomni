@@ -107,7 +107,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | `Docs/NEXT_SESSION_HANDOFF.md` | セッション間の引き継ぎ（リポジトリの形・文書の地図・開発の基本操作・直近の状況）。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
 | `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` | クリップ連結（Clip Chain）の内部構造と Stage-2 固定窓アーキテクチャの設計正本 |
-| `Docs/MULTI_ENGINE_DESIGN.md` | **マルチエンジン化の設計正本**（複数の動画生成AIをドロップダウンで切り替える機能。ベースモデル／エンジン系統の2軸分離・記述子拡張・`EngineRunner` 分離・状態の3層憲章・API の加算方針）。**第1段階（土台）は 2026-08-20 に実装済み**で、その API 面は本書 §6.9 が正本（加算のみ・凍結契約は不変）。起票は `Docs/PENDING_TASKS.md` §3-97・§3-98。参考資料（設計の正本ではない）として `Docs/LTX25_RESEARCH_NOTES.md` |
+| `Docs/MULTI_ENGINE_DESIGN.md` | **マルチエンジン化の設計正本**（複数の動画生成AIをドロップダウンで切り替える機能。ベースモデル／エンジン系統の2軸分離・記述子拡張・`EngineRunner` 分離・状態の3層憲章・API の加算方針）。**第1段階（土台）は 2026-08-20 に実装済み**で、その API 面は本書 §6.9 が正本（加算のみ・凍結契約は不変）。起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97・§3-98（2026-08-22 にクローズ移設。生きている後続課題は `Docs/PENDING_TASKS.md` §3-102・§3-103）。参考資料（設計の正本ではない）として `Docs/LTX25_RESEARCH_NOTES.md` |
 | `scripts/manifests/*.json`（ベースモデル記述子） | **どのベースモデルが何のファイルでできているか**の正本（`schema: 2`＋`engine_family`。`categories[].default_file`＝カテゴリ別の既定の重み・`assets`＝tokenizer/アップサンプラ等の固定ファイル・`default_selection`・インストーラ用の `downloads` / `migrate`）。**2026-08-20 以降、モデルの既定パスは `config.yaml` ではなくこちらが正本**（§4.3・§5.1・§11.2）。読み手は `services/base_models.py` |
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` | API 利用者（フロントエンド実装者）向けの解説と全ルート一覧。**契約そのものの正本は本書 §6** |
@@ -987,7 +987,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 
 **結論から言うと、凍結 API 契約は壊れていない。** 本節に記す変更はすべて**加算**であり、**既存フィールドの意味・型・既定の応答形は 1 つも変わっていない**。既存のクライアントは 1 文字も直さずに動き続ける。
 
-足されたのは「どのベースモデル（LTX 2.3 / LTX 2.5 / 将来の別モデル）で動かすか」という**新しい軸**である。従来からあったカテゴリ別のモデル選択（transformer / text_encoder / video_vae / audio）は「1 つのベースモデルの**中**でどのファイルを使うか」という軸で、両者は直交する。ベースモデルの実体は**記述子**（`scripts/manifests/*.json`。§4.3・§5.1）であり、ベースモデルを 1 つ増やすことは JSON を 1 本足すことである。設計正本は `Docs/MULTI_ENGINE_DESIGN.md`、起票は `Docs/PENDING_TASKS.md` §3-97。
+足されたのは「どのベースモデル（LTX 2.3 / LTX 2.5 / 将来の別モデル）で動かすか」という**新しい軸**である。従来からあったカテゴリ別のモデル選択（transformer / text_encoder / video_vae / audio）は「1 つのベースモデルの**中**でどのファイルを使うか」という軸で、両者は直交する。ベースモデルの実体は**記述子**（`scripts/manifests/*.json`。§4.3・§5.1）であり、ベースモデルを 1 つ増やすことは JSON を 1 本足すことである。設計正本は `Docs/MULTI_ENGINE_DESIGN.md`、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97。
 
 #### (a) `GET /status` — `state` と `base_model` を加算
 
@@ -1147,7 +1147,7 @@ LTX 2.5 の第 1 版（v1）が持っているのは **基本生成（T2V／I2V�
 
 `ready` イベントには `sampler` を載せる。LTX 2.5 の値は **`"euler_ancestral"`** で、これは好みではなく事実の報告である——公式のパイプラインは safetensors のヘッダからしかモデルの世代を読めず、GGUF を渡すと警告だけ出して決定的な Euler へ落ちる（＝別世代の生成になる）ため、明示的に設定したうえで**実際に保持している値**をここに出している。`sage_available` はこの系統では恒久的に `false`（SageAttention を入れていない）。
 
-設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69、起票は `Docs/PENDING_TASKS.md` §3-98（v1 の範囲外として先送りした機能は同 §3-102）。
+設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98（v1 の範囲外として先送りした機能は `Docs/PENDING_TASKS.md` §3-102）。
 
 ---
 

@@ -1,0 +1,1 @@
+﻿テキストエンコーダの .gguf を置く場所です(直下のみ自動認識)。tokenizer/processor のメタデータはGGUFの中に入っており、隣に並ぶ .assets.safetensors は engine25 が自動生成します(消しても作り直されます)。

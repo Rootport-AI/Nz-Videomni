@@ -114,6 +114,15 @@ class ModelConfig(BaseModel):
     # (now-deleted) fork tree in Stage 2b. Separate from the app's torch-free
     # ./.venv. Dependency snapshot: engine/venv-engine.freeze.txt.
     engine_python: str = "./.venv-engine/Scripts/python.exe"
+    # Interpreter for the LTX 2.5 worker (§3-98). A SECOND venv, not a second
+    # setting for the same one: .venv-engine-ltx25 holds official LTX-2 v1.2.0 +
+    # transformers 5.x, which cannot coexist with 2.3's transformers 4.57 in one
+    # environment — that incompatibility is the whole reason the 2.5 engine is a
+    # separate process tree. ``engine_dir`` has no 2.5 twin because the engine25
+    # package location is fixed (it ships in this repository); only the
+    # interpreter is an installation detail an operator may have to point
+    # elsewhere. Consumed by services/engines/ltx25/adapter.py.
+    engine_python_ltx25: str = "./.venv-engine-ltx25/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
 
     # IC-LoRA adapter registry (Phase B, extended Phase C). Maps a server-side

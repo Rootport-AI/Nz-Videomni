@@ -397,6 +397,30 @@ def pipeline_loading(detail: str | None = None) -> APIError:
     )
 
 
+def feature_unsupported(feature: str, detail: str | None = None) -> APIError:
+    """The request asks for something THIS base model's engine cannot do (§3-98).
+
+    422, not 400: the request is perfectly well-formed and would have been
+    accepted by another base model — what makes it unrunnable is the engine
+    currently selected. That is also why the code is stable and the feature is
+    NAMED: the frontend disables the controls it knows about up front
+    (``unsupported_features`` on GET /models), and this is the server-side
+    backstop for everything that still slips through — a stale page, a script,
+    the MCP server, a base-model switch between page load and submit.
+
+    THE MESSAGE IS BILINGUAL for the same reason as :func:`pipeline_loading`:
+    when a job path re-wraps this as ``generation_failed(detail=str(exc))``,
+    only the MESSAGE survives into what the operator reads.
+    """
+    return APIError(
+        "FEATURE_UNSUPPORTED",
+        f"'{feature}' is not supported by the selected base model "
+        f"(選択中のベースモデルでは使えない機能です)",
+        422,
+        detail=detail,
+    )
+
+
 def gpu_oom(job_id: str | None = None, detail: str | None = None) -> APIError:
     return APIError(
         "GPU_OOM",

@@ -38,8 +38,18 @@ What :func:`verify` checks
      * ``SDOps`` still has ``allowed_keys`` + ``with_additional_allowed_keys``
        (the connector drop depends on it) and ``ModuleOps`` its 3 fields.
      * ``create_meta_model`` still takes ``(configurator, metadata, module_ops)``.
-     * ``DistilledPipeline.__init__`` still has a REQUIRED positional ``loras``.
+     * ``DistilledPipeline.__init__`` still has a REQUIRED positional ``loras``,
+       still assigns ``self.stage`` / ``self.prompt_encoder`` /
+       ``self.use_ancestral_sampler`` (the three engine25 substitutes or asserts
+       after construction), and ``__call__`` still takes the generation
+       parameters the v1 contract maps onto.
+     * ``PromptEncoder.__init__`` still takes ``text_encoder_builder`` -- the
+       public injection point that lets GGUF weights sit behind the official
+       prompt encoder without forking it.
      * ``ModelPaths.from_split`` still takes ``text_encoder_path``.
+     * ``DISTILLED_SIGMAS`` / ``STAGE_2_DISTILLED_SIGMAS`` are still 8 + 3 steps,
+       and ``encode_video`` / ``get_video_chunks_number`` /
+       ``ImageConditioningInput`` still have the shape the mp4 write depends on.
      * ``Disposable`` still exposes ``dispose``.
 
 The F1 canary (``Disposable.dispose`` metas storage via
@@ -98,6 +108,12 @@ from ltx_core.model.transformer import (
     X0Model,
 )
 from ltx_core.model.transformer.modality import Modality
+from ltx_core.model.video_vae import (
+    AUTO_TILING,
+    AutoTiling,
+    TilingConfig,
+    get_video_chunks_number,
+)
 from ltx_core.quantization import QuantizationPolicy
 
 # ---------------------------------------------------------------------------
@@ -120,19 +136,26 @@ from ltx_core.text_encoders.gemma.encoders.encoder_configurator import (
 # ---------------------------------------------------------------------------
 # ltx_pipelines
 # ---------------------------------------------------------------------------
-from ltx_pipelines.distilled import DistilledPipeline
+from ltx_pipelines.distilled import DistilledPipeline, should_use_ancestral_sampler
+from ltx_pipelines.utils.args import ImageConditioningInput
 from ltx_pipelines.utils.blocks import DiffusionStage, PromptEncoder
+from ltx_pipelines.utils.constants import DISTILLED_SIGMAS, STAGE_2_DISTILLED_SIGMAS
 from ltx_pipelines.utils.gpu_model import gpu_model
 from ltx_pipelines.utils.helpers import cleanup_memory
+from ltx_pipelines.utils.media_io import encode_video
 from ltx_pipelines.utils.model_paths import ModelPaths
 from ltx_pipelines.utils.types import OffloadMode
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "AUTO_TILING",
+    "DISTILLED_SIGMAS",
     "EMBEDDINGS_PROCESSOR_KEY_OPS",
     "LTXV_MODEL_COMFY_RENAMING_MAP",
+    "STAGE_2_DISTILLED_SIGMAS",
     "AllocatorTrimStrategy",
+    "AutoTiling",
     "ContentMatching",
     "ContentReplacement",
     "DiffusionStage",
@@ -143,6 +166,7 @@ __all__ = [
     "FuseRule",
     "GemmaAssets",
     "GemmaTextEncoderConfigurator",
+    "ImageConditioningInput",
     "LTXModel",
     "LTXModelConfigurator",
     "LTXModelProtocol",
@@ -161,6 +185,7 @@ __all__ = [
     "SingleGPUModelBuilder",
     "StateDict",
     "StateDictLoader",
+    "TilingConfig",
     "X0Model",
     "_build_gemma4_unified_llm_key_ops",
     "_check_uninitialized",
@@ -169,13 +194,16 @@ __all__ = [
     "bf16_fuse_rule",
     "cleanup_memory",
     "create_meta_model",
+    "encode_video",
     "gemma_model_type",
     "get_gemma_ops",
+    "get_video_chunks_number",
     "gpu_model",
     "load_state_dict",
     "module_registry_key",
     "read_model_metadata",
     "resolve_gemma_weight_paths",
+    "should_use_ancestral_sampler",
     "verify",
 ]
 
@@ -337,9 +365,108 @@ def verify() -> None:
         _fail("DistilledPipeline.__init__", "the `loras` parameter is gone")
     if loras_param.default is not inspect.Parameter.empty:
         _fail("DistilledPipeline.__init__", "`loras` gained a default; engine25 passes it explicitly by contract")
-    _require_params(ModelPaths.from_split, "ModelPaths.from_split", "transformer_path", "text_encoder_path")
-    _require_params(PromptEncoder.__init__, "PromptEncoder.__init__", "model_paths", "dtype", "device")
+    _require_params(
+        ModelPaths.from_split,
+        "ModelPaths.from_split",
+        "transformer_path",
+        "text_encoder_path",
+        "video_vae_path",
+        "audio_vae_path",
+        "duration_head_path",
+    )
+    # `text_encoder_builder` is the PUBLIC injection point engine25 assembles the
+    # pipeline through: without it the only way to put GGUF weights behind the
+    # official prompt encoder would be to fork the class.
+    _require_params(
+        PromptEncoder.__init__,
+        "PromptEncoder.__init__",
+        "model_paths",
+        "dtype",
+        "device",
+        "text_encoder_builder",
+        "alloc_trim_strategy",
+    )
     _require_params(gpu_model, "gpu_model", "model", "alloc_trim_strategy")
+
+    # --- Phase 2d: assembly surface -----------------------------------------
+    _require_params(
+        DistilledPipeline.__init__,
+        "DistilledPipeline.__init__",
+        "model_paths",
+        "spatial_upsampler_path",
+        "device",
+        "registry",
+        "offload_mode",
+    )
+    _require_params(
+        DistilledPipeline.__call__,
+        "DistilledPipeline.__call__",
+        "prompt",
+        "seed",
+        "height",
+        "width",
+        "frame_rate",
+        "images",
+        "num_frames",
+        "tiling_config",
+        "stage_1_sigmas",
+        "stage_2_sigmas",
+    )
+    # The three attributes engine25 substitutes / asserts after construction.
+    # They are set in ``__init__``'s body, so the only cheap pre-build check is
+    # that the names still appear there; a rename would otherwise surface as a
+    # silently ignored assignment (Python creates the attribute either way).
+    try:
+        pipeline_init_source = inspect.getsource(DistilledPipeline.__init__)
+    except OSError:  # pragma: no cover -- source unavailable (zipped install)
+        pipeline_init_source = ""
+    if pipeline_init_source:
+        for attr in ("self.stage", "self.prompt_encoder", "self.use_ancestral_sampler"):
+            if attr not in pipeline_init_source:
+                _fail("DistilledPipeline.__init__", f"no longer assigns {attr!r}")
+    # The stage call contract Ltx25DiffusionStage's progress override forwards.
+    _require_params(
+        DiffusionStage.__call__,
+        "DiffusionStage.__call__",
+        "denoiser",
+        "sigmas",
+        "noiser",
+        "width",
+        "height",
+        "frames",
+        "fps",
+        "video",
+        "audio",
+        "stepper",
+        "loop",
+    )
+    # The distilled schedules: 8 stage-1 steps + 3 stage-2 steps. A schedule
+    # change is a generation change, not a refactor, so it is asserted.
+    if tuple(DISTILLED_SIGMAS.shape) != (9,):
+        _fail("DISTILLED_SIGMAS", f"has {tuple(DISTILLED_SIGMAS.shape)} entries, expected (9,) = 8 steps")
+    if tuple(STAGE_2_DISTILLED_SIGMAS.shape) != (4,):
+        _fail(
+            "STAGE_2_DISTILLED_SIGMAS",
+            f"has {tuple(STAGE_2_DISTILLED_SIGMAS.shape)} entries, expected (4,) = 3 steps",
+        )
+    # Output side.
+    if tuple(getattr(ImageConditioningInput, "_fields", ())) != ("path", "frame_idx", "strength", "crf"):
+        _fail(
+            "ImageConditioningInput",
+            f"fields are {getattr(ImageConditioningInput, '_fields', None)}, "
+            f"expected ('path', 'frame_idx', 'strength', 'crf')",
+        )
+    _require_params(
+        encode_video,
+        "media_io.encode_video",
+        "video",
+        "fps",
+        "audio",
+        "output_path",
+        "video_chunks_number",
+    )
+    _require_params(get_video_chunks_number, "get_video_chunks_number", "num_frames", "tiling_config")
+    _require_params(should_use_ancestral_sampler, "should_use_ancestral_sampler", "transformer_path")
 
     # 3. F1 canary -- logged, never asserted (see module docstring).
     try:

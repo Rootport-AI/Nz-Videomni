@@ -1,18 +1,18 @@
 # Nz-Videomni
 
-LTX 2.3 動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用に Gradio UI(`/ui`) を同梱します。
+LTX 2.3 / LTX 2.5 の動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用に Gradio UI(`/ui`) を同梱します。
 AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）も同じリポジトリに入っており、`AviUtl2-Plugin/` 以下がそれです。API は汎用設計なので、DaVinci Resolve など他のフロントエンドからも使えます。
 
 > **リポジトリの構成（モノレポ）**
 >
 > | 場所 | 中身 |
 > |------|------|
-> | リポジトリ直下 | バックエンド（`main.py` / `api/` / `services/` / `engine/` / `gradio_ui/` / `mcp_server/`） |
+> | リポジトリ直下 | バックエンド（`main.py` / `api/` / `services/` / `engine/` / `engine25/` / `gradio_ui/` / `mcp_server/`） |
 > | `AviUtl2-Plugin/NzVideomni.aux2` | ビルド済みの AviUtl2 プラグイン（配布物。利用者はこれを AviUtl2 へドラッグ＆ドロップします） |
 > | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` | そのプラグインのソース（C++ の `native/` ＋ React/TypeScript の `webui/`） |
 > | `Docs/` | プロジェクト全体の文書と課題台帳 |
 >
-> **Nz-Videomni は製品の名前、LTX 2.3 はモデルの名前**です。将来 LTX 2.5 や Wan 2.x など別のモデルも載せられる基盤を目指しているため、製品名にモデル名を含めていません。
+> **Nz-Videomni は製品の名前、LTX 2.3 はモデルの名前**です。**LTX 2.5 には 2026-08-22 に対応しました**（画面上部のドロップダウンで切り替えます。対応範囲は基本生成〔テキストから動画・画像から動画〕まで）。さらに Wan 2.x など別のモデルも載せられる基盤を目指しているため、製品名にモデル名を含めていません。
 
 **Phase 1**（T2V + 最小I2V を同一MVP）の凍結 API を土台に、その後キーフレーム誘導・クリップ連結（`POST /generate/chain`）・
 V2V（元動画からの継続生成）・end source（素材（末尾）＝添付した画像・動画へ**繋がる**動画の生成——§7参照）・A2V（音声から動画生成）・IC-LoRA／スタイルLoRA
@@ -40,17 +40,20 @@ API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`
   Windows の環境変数設定は書き換えません。
 - 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.python` / `tools` 含む）を削除するだけで完全に元に戻ります。
 
-### 2つの venv（重要）
+### venv の構成（重要）
 
-このバックエンドは **2プロセス・2venv 構成**です。両者は別インタプリタで、共存させません。
+このバックエンドは **アプリ1プロセス＋エンジン系統ごとのワーカー**という構成です。いずれも別インタプリタで、共存させません。
 
 | venv | 役割 | 主要依存 |
 |------|------|----------|
 | `./.venv` | FastAPI アプリ（`main.py`・API・ジョブ・Gradio・モック backend） | FastAPI / Pydantic / Pillow / ffmpeg 呼び出し。**torch は入れない** |
-| `./.venv-engine` | 実エンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines`@`00dc53d` + `gguf`） |
+| `./.venv-engine` | LTX 2.3 用のエンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines`@`00dc53d` + `gguf`） |
+| `./.venv-engine-ltx25` | LTX 2.5 用のエンジン worker（`engine25/worker.py`） | **torch 2.9.1+cu128** + 公式 v1.2.0 の推論スタック + `transformers` 5.x |
 
-アプリ(`./.venv`)は torch も LTX も import しません。実生成は `./.venv-engine` の python で
-`python -m engine.worker` を **subprocess** として起動し、JSON-lines プロトコルで駆動します（下記アーキテクチャ参照）。
+エンジン系統ごとに venv を分けているのは、LTX 2.3 と LTX 2.5 が要求するパッケージのバージョンが同居できないためです。**worker は同時に1つだけ動き**、モデルを切り替えると古い worker を終了させてから新しい worker を起こします。
+
+アプリ(`./.venv`)は torch も LTX も import しません。実生成は、選ばれているモデルに対応する python で
+worker を **subprocess** として起動し、JSON-lines プロトコルで駆動します（下記アーキテクチャ参照）。
 `.venv-engine` の依存スナップショットは [`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt) に凍結してあります
 （`uv.lock` は fork 撤去時に失われたため）。
 
@@ -313,7 +316,7 @@ UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose
 
 backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「`./.venv-engine` の python・
 `engine/worker.py`・上記ロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です
-（[`services/ltx_runner.py`](services/ltx_runner.py) `_real_available`）。
+（[`services/engines/ltx/adapter.py`](services/engines/ltx/adapter.py) `_real_available`。旧パス `services/ltx_runner.py` は再エクスポート用の薄い層として残っています）。
 
 ### 追加の transformer GGUF / LoRA を配置する
 
@@ -350,15 +353,15 @@ Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します�
 ### models フォルダの構成
 
 `models/` は「どのベースモデルのものか」を最上位で分ける構成になっています。置き場所がそのまま
-「このファイルは LTX 2.3 用です」という宣言になるため、将来ほかのベースモデルが増えても、
-ファイルの中身を見分ける仕組みを足さずに並べていけます。
+「このファイルは LTX 2.3 用です」という宣言になるため、ベースモデルが増えても、
+ファイルの中身を見分ける仕組みを足さずに並べていけます。**LTX 2.5 への対応で、実際に `LTX23/` と `LTX25/` の2つが並んでいます。**
 
 ```
 models/
 ├─ Preprocessors/            ベースモデルに依存しない前処理器（共用）
 │   ├─ DWPose/               yolox_l.torchscript.pt, dw-ll_ucoco_384_bs5.torchscript.pt
 │   └─ VDA/                  video_depth_anything_vits.pth（＋ LICENSE）
-└─ LTX23/                    LTX 2.3 のためのファイル一式
+├─ LTX23/                    LTX 2.3 のためのファイル一式
     ├─ Weights/              transformer の GGUF（公式・自家変換とも。サブフォルダも再帰的に認識）
     ├─ TextEncoder/          gemma-3-12b-it-Q4_K_M.gguf ＋ ltx-2.3_text_projection_bf16.safetensors
     │   └─ tokenizer/        tokenizer 一式（重みは含まない）
@@ -367,7 +370,15 @@ models/
     ├─ Upscaler/             ltx-2.3-spatial-upscaler-x2-1.1.safetensors
     ├─ StyleLoRA/            利用者が用意する画風・キャラクター系 LoRA
     └─ IC-LoRA/              pixel-spatial-upscaler / union-control / deblur / in-outpainting
+└─ LTX25/                    LTX 2.5 のためのファイル一式
+    ├─ Weights/              transformer の GGUF
+    ├─ TextEncoder/          Gemma 4 の GGUF（tokenizer は GGUF の中に入っています）
+    ├─ VAE/                  映像 VAE（畳み込みデコーダ版）・音声 VAE
+    │   └─ diffvae/          拡散デコーダ版の映像 VAE（現在は使いません・退避先）
+    └─ Upscaler/             空間アップスケーラ
 ```
+
+**LTX 2.5 の重みは `setup.bat` の取得対象ではありません**（§1 の約33GBには含まれません）。手に入れたファイルを上のフォルダへ置くと認識されます。
 
 各フォルダには `put_〇〇_here.txt` という案内ファイルが1つ入っています。ファイル名がそのまま
 「ここに置ける形式」の掲示になっているので、手に入れたファイルの置き場所に迷ったときの目印にしてください
@@ -459,7 +470,8 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 │   services/ (job_store, upload_store,          │
 │              pipeline_manager, video_io,       │
 │              low_vram, gpu_info)               │
-│   services/ltx_runner.py  ── 唯一の LTX 接点    │
+│   services/engines/<系統>/adapter.py ── 唯一の  │
+│                              推論エンジン接点   │
 │        ├─ _MockBackend  (合成クリップ・GPU不要) │
 │        └─ _RealBackend  ── subprocess.Popen ──┐ │
 └───────────────────────────────────────────────┼─┘
@@ -773,8 +785,9 @@ GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・複�
 
 ---
 
-## 7. 制限事項（2026-08-05 現在）
+## 7. 制限事項（2026-08-22 現在）
 
+- **LTX 2.5 で使えるのは基本生成（テキストから動画・画像から動画）だけです**。クリップ連結・撮り直し（Retake）・素材（末尾）・V2V・A2V・キャンバス拡張（Outpainting）・LoRA 各種・NAG・PrunaVAED は LTX 2.5 では使えず、要求すると 422 で断ります（AviUtl2 の画面側でも該当するタブとパネルが灰色になります）。**LTX 2.3 を選んでいるあいだは、これらはすべて従来どおり使えます。** LTX 2.5 での対応は今後の課題です（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102）。
 - **動作確認済みのハードウェアは 2 構成です**。
   - **開発機**: RTX 4070 Ti SUPER 16GB（Ada Lovelace）／メインメモリ 64GB／ページファイル 48GB。日常的な開発と検証はすべてこの 1 台で行っています。
   - **サブマシン**: RTX 3080 mobile 16GB（Ampere）／メインメモリ 32GB。**AviUtl2 を導入していない新規環境**で、2026-07-27 に一通りの導入から生成までを実測し、全項目に成功しました（`setup.bat` での導入 → `run.bat` での起動 → ブラウザで WebUI を開く → `smoke_test` サイズの生成 → **IC-LoRA の DWPose（pose-control）と canny をそれぞれ 768p・257 フレームで制御生成** → `NzVideomni.aux2` を AviUtl2 のプレビュー画面へドラッグ＆ドロップして導入 → 再起動後に操作パネルを表示 → タイムラインからの生成と、生成済み動画の右クリックからのタイムライン配置）。このとき AviUtl2 は **2026-07-25 更新の公開最新版**（開発機で使っている v2.0.54 より新しい版）を新規に導入しており、最新版との互換もあわせて確認できています。

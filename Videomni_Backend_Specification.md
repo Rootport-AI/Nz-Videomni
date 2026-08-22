@@ -1,11 +1,11 @@
-# Nz-Videomni バックエンド仕様書（LTX 2.3 対応）
+# Nz-Videomni バックエンド仕様書（LTX 2.3 ／ LTX 2.5 対応）
 
-LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio）
+LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio）
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.21** |
-| 日付 | **2026-08-20**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
+| 版 | **v0.5.22** |
+| 日付 | **2026-08-22**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
 ## 目次
@@ -73,8 +73,8 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.18 | 2026-08-19 | **`models/` のベースモデル優先レイアウトへの移行**と、それに伴うインストーラの manifest 駆動化を反映（API への変更は無い）。`models/<ベースモデル>/<カテゴリ>` を最上位の構造にし（`models/LTX23/` と、ベースモデル非依存の `models/Preprocessors/`）、「置き場所がそのまま所属の宣言になる」形にした。**§2.5**（manifest 駆動のステージング＋リマップ方式へ全面改訂。「各リポジトリの内部構造は `models/` と 1 対 1 なのでそのまま展開される」という v0.5.1 以来の記述を失効させた。既存インストールの自動移行と `config.yaml` の自動追随の 2 節を新設）／**§2.5 の冪等の粒度**（サイズガードをディレクトリ合計から**期待ファイル単位**へ転換。TextEncoder が 2 リポジトリ供給になったこと・Weights に利用者の自家変換 GGUF が同居することの 2 点で合計方式が破綻するため）／**§4.4**（ディレクトリ構成に新レイアウトのツリー）／**§5.1**（既定パスと `INSTALLED_PATHS.txt` の行数を 8 → **9 行**へ。manifest からの機械生成である旨を明記）／**§5.1b**（既定パス・In-Outpainting の行を追加・検証表を 16 → **18 項目**へ・「新規の重みは兄弟ディレクトリへ」という制約を**失効理由つきで置換**・取得総量の実測値と他所の概数が古い旨の注記）／**§11.2**（`checkpoint_dir` の行を削除、8 フィールドの既定値を新パスへ、`ic_loras` を 6 エントリへ）／**§13 の Settings タブ**（GGUF の置き場所案内）。利用者向け説明は `README.md`「models フォルダの構成」（自動移行・手動逆再生手順・`config.yaml` 自動書き換えの注意を含む）。 |
 | v0.5.19 | 2026-08-20 | **容量概数の実測ベース見直し**（オーナー承認済み。API・実装への変更は無い、文書のみの更新）。§5.1b に長らく残っていた「他所の概数の見直しは別途オーナー判断」の保留注記を解消し、PrunaVAED・In-Outpainting 追加後の実測値（34,910,858,075 B＝32.51GiB）へ揃えた。**§0.1 目次・§5 見出し**（取得量を「~30GB」→「~33GB」へ）／**§2.5**（「現行 ~30GB モデルセット」→「~33GB」）／**§4.4**（ディレクトリツリー注記を「~30GB」→「~33GB」）／**§5.1b**（保留注記を見直し済みの記述へ全面差し替え。`setup.ps1` の必要容量を 38〜40GB→**40〜41GB**、しきい値 `$needGB` を 40→**45** へ変更したことを記録）。あわせて `README.md`（§1 の内訳表・ハードウェア要件表・冒頭のかんたんインストール節・§1b の「生成の中核」注記）と `scripts/setup.ps1`（`$needGB` と画面表示文言）を実測ベースへ更新した。Python 環境（約7〜8GiB）と `tools/`（約0.4GiB）の概数は今回の変更対象外で不変（前者はハードリンク共有により単純合算できない旨が既に §5.1b の隣接記述にある）。実測手順・新旧対比は本コミットのコミットメッセージを参照。 |
 | v0.5.20 | 2026-08-20 | **マルチエンジン化の設計正本を新設**（文書のみの更新。API・実装への変更は無い）。複数の動画生成AI（LTX 2.3／LTX 2.5／将来の Wan 2.x 等）をヘッダーのドロップダウンで切り替える機能の設計を `Docs/MULTI_ENGINE_DESIGN.md` として起こし、**§0.3 の SSOT 地図へ1行追加**した。**実装は未着手であり、本書 §6 の凍結 API 契約は現時点で一切変わっていない**——同設計が予定している `POST /pipeline/load` への `base_model` 追加と `GET /status` への `state` 追加は、いずれも既存フィールドの意味を変えない加算であり、実装時に改めて本書へ反映する。あわせて、オーナーによる LTX 2.5 事前調査を `Docs/LTX25_RESEARCH_NOTES.md` へ参考資料（設計の正本ではない）として収蔵し、`Docs/PENDING_TASKS.md` §3-97（マルチエンジン土台）・§3-98（LTX 2.5 対応）へ起票、`Docs/NEXT_SESSION_HANDOFF.md` §2 の文書地図へ両文書を登録した。 |
-| v0.5.21 | 2026-08-20 | **マルチエンジン土台（§3-97 第1段階）の実装を反映**。前版 v0.5.20 が「実装時に改めて反映する」と予告した内容が現物になった。**凍結 API 契約（§6）への変更はすべて加算のみ**で、既存フィールドの意味・型・既定の応答形は1つも変わっていない（本文の該当箇所にその旨を明記した）。**§6＝新設 §6.9**（ベースモデル軸の加算をまとめて記述。`GET /status` の `state`／`base_model`、`POST /pipeline/load` の `base_model`、`GET /models` の3層化、`metadata.json` の `models` ブロック、`POST /pipeline/unload` が不変であること）／**§6.1**（`POST /pipeline/load` の主なステータス欄を実装どおりに補い、`GET /models` を凍結表未掲載の加算エンドポイントとして補足へ追加）／**§6.6**（`metadata.json` の表へ `models` の行を追加）／**§6.8**（新設エラーコード `PIPELINE_LOADING`〔409〕の行を追加。あわせて長らく古かったファクトリ件数を実数へ訂正）。**モデル既定パスの出所が `config.yaml` から記述子（`scripts/manifests/*.json`）へ移った**ことに追随して、**§2.5**（移行ステップが書き換える対象の記述を現状へ訂正）／**§4.2**（`load` ペイロードの値の出所が記述子であることを補足へ追加）／**§4.3**（`_real_available()` の材料表を記述子駆動へ全面書き換え）／**§5.1**（既定パスの正本が記述子であることへ訂正）／**§7.6**（同上）／**§11.2**（撤去された 8 キーの行を削除し、`manifest_dir` / `models_dir` を追加）／**§11.9＝新設**（トップレベルの `state_file` と `state.json`）を更新した。あわせて **`services/ltx_runner.py` が `services/engines/ltx/adapter.py` へ引っ越した**（旧パスは再エクスポート shim として存置＝既存の import は全て生きる）ことに追随し、本書中の参照をすべて新パスへ改めた（§1.2・§4.1 の図・§4.2・§4.3・§4.4 のツリー・§5.2・§5.5・§6.2 の注・§6.5b の行番号引用・§7・§7.4・§7.5〔コンストラクタ引数に記述子が加わった〕・§9.2・§11.2 の注・§13.4・付録B）。あわせて付録B.1 の用語集へ「ベースモデル」「エンジン系統」「記述子」「GGUF KV」の 4 語を追加した。実装・実機検証の記録は各コミット（`13c3437`〜`2134509`）と `Docs/MULTI_ENGINE_DESIGN.md`、起票は `Docs/PENDING_TASKS.md` §3-97。 |
-| v0.5.22 | 2026-08-22 | **LTX 2.5（エンジン系統 `ltx25`）の v1 実装を反映**。LTX 2.5 は当初の見立てと違い `ltx` 系統の別ベースモデルではなく、**専用の仮想環境（`.venv-engine-ltx25`）と専用ワーカー（`engine25/`）を持つ別のエンジン系統**として新設された（理由と経緯は `Docs/MULTI_ENGINE_DESIGN.md` §3.3 の訂正節）。**凍結 API 契約（§6）への変更はここでもすべて加算のみ**で、LTX 2.3 だけを使う既存クライアントから見た応答は 1 バイトも変わらない。**§0.1 版メタ**（対象欄を2モデル・エンジン系統ごとのワーカー構成へ）／**§4.3**（mock の `backend` 表記が系統ごとに変わること）／**§6.8**（新設エラーコード `FEATURE_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 35→36 件へ訂正）／**§6.6**・**§7.5**（`backend` の値に `"ltx25-distilled"` と `"mock-ltx25"` を追記）／**§6.10＝新設**（LTX 2.5 の対応範囲。`GET /models` の `unsupported_features`、`GenerateRequest` 全 28 フィールドの 4 分類〔422系 8／無視 7／動作 8／従属 5〕、ロードペイロードの `deterministic`、ready イベントの `sampler`）を更新した。実装・実機検証の記録は各コミット（`62d67b0`〜`7c29ca3`）と `Docs/VERIFICATION_LOG.md` §69、起票は `Docs/PENDING_TASKS.md` §3-98。 |
+| v0.5.21 | 2026-08-20 | **マルチエンジン土台（§3-97 第1段階）の実装を反映**。前版 v0.5.20 が「実装時に改めて反映する」と予告した内容が現物になった。**凍結 API 契約（§6）への変更はすべて加算のみ**で、既存フィールドの意味・型・既定の応答形は1つも変わっていない（本文の該当箇所にその旨を明記した）。**§6＝新設 §6.9**（ベースモデル軸の加算をまとめて記述。`GET /status` の `state`／`base_model`、`POST /pipeline/load` の `base_model`、`GET /models` の3層化、`metadata.json` の `models` ブロック、`POST /pipeline/unload` が不変であること）／**§6.1**（`POST /pipeline/load` の主なステータス欄を実装どおりに補い、`GET /models` を凍結表未掲載の加算エンドポイントとして補足へ追加）／**§6.6**（`metadata.json` の表へ `models` の行を追加）／**§6.8**（新設エラーコード `PIPELINE_LOADING`〔409〕の行を追加。あわせて長らく古かったファクトリ件数を実数へ訂正）。**モデル既定パスの出所が `config.yaml` から記述子（`scripts/manifests/*.json`）へ移った**ことに追随して、**§2.5**（移行ステップが書き換える対象の記述を現状へ訂正）／**§4.2**（`load` ペイロードの値の出所が記述子であることを補足へ追加）／**§4.3**（`_real_available()` の材料表を記述子駆動へ全面書き換え）／**§5.1**（既定パスの正本が記述子であることへ訂正）／**§7.6**（同上）／**§11.2**（撤去された 8 キーの行を削除し、`manifest_dir` / `models_dir` を追加）／**§11.9＝新設**（トップレベルの `state_file` と `state.json`）を更新した。あわせて **`services/ltx_runner.py` が `services/engines/ltx/adapter.py` へ引っ越した**（旧パスは再エクスポート shim として存置＝既存の import は全て生きる）ことに追随し、本書中の参照をすべて新パスへ改めた（§1.2・§4.1 の図・§4.2・§4.3・§4.4 のツリー・§5.2・§5.5・§6.2 の注・§6.5b の行番号引用・§7・§7.4・§7.5〔コンストラクタ引数に記述子が加わった〕・§9.2・§11.2 の注・§13.4・付録B）。あわせて付録B.1 の用語集へ「ベースモデル」「エンジン系統」「記述子」「GGUF KV」の 4 語を追加した。実装・実機検証の記録は各コミット（`13c3437`〜`2134509`）と `Docs/MULTI_ENGINE_DESIGN.md`、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97。 |
+| v0.5.22 | 2026-08-22 | **LTX 2.5（エンジン系統 `ltx25`）の v1 実装を反映**。LTX 2.5 は当初の見立てと違い `ltx` 系統の別ベースモデルではなく、**専用の仮想環境（`.venv-engine-ltx25`）と専用ワーカー（`engine25/`）を持つ別のエンジン系統**として新設された（理由と経緯は `Docs/MULTI_ENGINE_DESIGN.md` §3.3 の訂正節）。**凍結 API 契約（§6）への変更はここでもすべて加算のみ**で、LTX 2.3 だけを使う既存クライアントから見た応答は 1 バイトも変わらない。**§0.1 版メタ**（対象欄を2モデル・エンジン系統ごとのワーカー構成へ）／**§4.3**（mock の `backend` 表記が系統ごとに変わること）／**§6.8**（新設エラーコード `FEATURE_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 35→36 件へ訂正）／**§6.6**・**§7.5**（`backend` の値に `"ltx25-distilled"` と `"mock-ltx25"` を追記）／**§6.10＝新設**（LTX 2.5 の対応範囲。`GET /models` の `unsupported_features`、`GenerateRequest` 全 28 フィールドの 4 分類〔422系 8／無視 7／動作 8／従属 5〕、ロードペイロードの `deterministic`、ready イベントの `sampler`）を更新した。実装・実機検証の記録は各コミット（`62d67b0`〜`7c29ca3`）と `Docs/VERIFICATION_LOG.md` §69、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98。 |
 
 ### 0.2 スコープ
 
@@ -94,7 +94,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | 正本（SSOT） | 何の正本か |
 |--------------|-----------|
 | **本書 §6** | 凍結 API 契約・スキーマ・enum・エラーコード（この文書が正本） |
-| `README.md` | 起動・2venv・セットアップ導線・API 概要・生成テスト手順 |
+| `README.md` | 起動・venv 構成・セットアップ導線・API 概要・生成テスト手順 |
 | `config.yaml` | 実行時設定の実値（presets / limits / vram ノブ / モデルパス）。**git 追跡外**（2026-07-26〜） |
 | `config.yaml.example` | 配布されるひな型。**リポジトリに入っているのはこちらだけ**で、`config.yaml` は `setup.bat` / `run.bat` がここから複製する |
 | `Docs/VERIFICATION_LOG.md` | 実機検証の全経緯・実測 peak_vram/秒数・SHA256 バイト一致・設計判断の根拠 |
@@ -161,16 +161,17 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | パッケージ管理 | **uv** | Python 本体もプロジェクト内へ |
 | 動画エンコード | ffmpeg（`scripts/setup.ps1` が `tools/ffmpeg` へ取り込む） | MP4 保存・クロップ用。`run.ps1` が `tools/ffmpeg/bin` をプロセスの `PATH` 先頭へ足すため、システムの `PATH` へ通す必要はない（§2.4） |
 
-### 2.2 2プロセス・2venv 構成（概要）
+### 2.2 アプリ1プロセス＋エンジン系統ごとのワーカー構成（概要）
 
-このバックエンドは **2プロセス・2venv 構成**である（詳細なアーキテクチャは §4）。
+このバックエンドは **アプリ1プロセス＋エンジン系統ごとのワーカー**という構成である（詳細なアーキテクチャは §4）。**ワーカーは同時に1つだけ生き**、ベースモデルを切り替えると旧ワーカーを落としてから新ワーカーを起こす。
 
 | venv | 役割 | 主要依存 |
 |------|------|----------|
 | `./.venv` | FastAPI アプリ（`main.py`・API・ジョブ・Gradio・mock backend） | FastAPI / Pydantic / Pillow / ffmpeg 呼び出し。**torch は入れない** |
-| `./.venv-engine` | 実エンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines` @ `00dc53d` + `gguf`） |
+| `./.venv-engine` | LTX 2.3（エンジン系統 `ltx`）の worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines` @ `00dc53d` + `gguf`） |
+| `./.venv-engine-ltx25` | LTX 2.5（エンジン系統 `ltx25`）の worker（`engine25/worker.py`） | **torch 2.9.1+cu128** + 公式 v1.2.0 の推論スタック + `transformers` 5.x（Gemma 4） |
 
-両者は別インタプリタで、同一インタプリタに共存させない。アプリ側は torch も LTX も import せず、実生成は `./.venv-engine` の python で `python -m engine.worker` を subprocess として起動する（詳細は §4）。
+いずれも別インタプリタで、同一インタプリタに共存させない（**エンジン系統ごとに venv を分けているのは、公式パッケージの世代差と `transformers` の要求バージョンが同居できないためである**。`Docs/MULTI_ENGINE_DESIGN.md` §3.3・§5.3）。アプリ側は torch も LTX も import せず、実生成はエンジン系統に対応する python で worker を subprocess として起動する（詳細は §4）。
 
 ### 2.3 環境分離ポリシー（最重要制約）
 
@@ -196,7 +197,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 ### 2.5 インストール導線
 
-セットアップの実体は `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。manifest 読み込みと妥当性検証 → 前提チェック → **既存 `models/` の新レイアウトへの移行と `config.yaml` の追随** → 両 venv 構築 → 現行 ~33GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全）に行う。手順とモデル内訳は **§5** / `README.md` §1 を参照（§16 は受け入れテスト）。
+セットアップの実体は `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。manifest 読み込みと妥当性検証 → 前提チェック → **既存 `models/` の新レイアウトへの移行と `config.yaml` の追随** → 各 venv の構築（アプリ＋エンジン系統ごと） → 現行 ~33GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全）に行う。手順とモデル内訳は **§5** / `README.md` §1 を参照（§16 は受け入れテスト）。
 
 **既存インストールの自動移行（2026-08-19 新設）**: 旧レイアウト（`models/ltx-2.3-gguf/` 等）で導入済みの環境は、`setup.bat` の再実行で新レイアウトへ**移動のみ**で移る（同一ボリュームのリネームなので数十 GB でも数秒・再ダウンロードは発生しない）。移行は manifest の `migrate` 表（12 エントリ）に対する**パス区切り境界の前方一致・最長一致**で判定し、残余パスは移動先へ連結するため、サブフォルダや利用者が自分で置いたファイル（LoRA・自家変換 GGUF・x4 アップスケーラ）は無設定のまま持ち上がる。事前ガード（同一ボリューム／ジャンクション検査／衝突は throw＝`-Force` 不使用／パス長警告）が全通過するまで 1 ファイルも動かさず、実行は 1 ファイル 1 行の即時ログ（`logs\model_migration_*.log`）を残す。`.cache/`（HuggingFace の帳簿）はディレクトリごと破棄し、空になった旧ディレクトリだけを削除する（`-Recurse` を使うのは `.cache` の破棄のみ）。`-DryRun` は計画表を出して何も変更せず exit 0、`-SkipMigrate` は移行自体を飛ばす。ロールバック用スイッチは**意図的に作っていない**（コードの revert と組にならないロールバックは安全性を上げないため。代替はログからの手動逆再生で、手順は `README.md`「models フォルダの構成」にある）。
 
@@ -265,9 +266,9 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 ## §4 アーキテクチャ
 
-本バックエンドは **2プロセス・2venv 構成**である。凍結された API 層（`./.venv`, torch 無し）と、実 LTX 推論を担うエンジン worker（`./.venv-engine`, torch 2.9.1+cu128）を分離し、両者を小さな JSON-lines プロトコルで結ぶ。この分離により「API・ジョブ管理・Gradio・pytest は torch 無しでも常に疎通し、実生成は隔離された別インタプリタで動く」という契約が成立する。
+本バックエンドは **アプリ1プロセス＋エンジン系統ごとのワーカー**という構成である。凍結された API 層（`./.venv`, torch 無し）と、実推論を担うエンジン worker（LTX 2.3 は `./.venv-engine`、LTX 2.5 は `./.venv-engine-ltx25`。いずれも torch 2.9.1+cu128）を分離し、両者を小さな JSON-lines プロトコルで結ぶ。この分離により「API・ジョブ管理・Gradio・pytest は torch 無しでも常に疎通し、実生成は隔離された別インタプリタで動く」という契約が成立する。**ワーカーは同時に1つだけ生きる。**
 
-### 4.1 2プロセス図
+### 4.1 プロセス分離の図
 
 ```text
 [Gradio /ui]──HTTP──┐
@@ -285,22 +286,24 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
                                                  │  JSON-lines（@@LTX@@ フレーム）
                                                  ▼  stdin / stdout（mp4 はパイプを通らない）
                     ┌──────────────────────────────────────────────┐
-                    │ engine worker (./.venv-engine, torch 2.9.1+cu128)│
-                    │   python -m engine.worker                       │
-                    │   engine/pipeline/fast_video_pipeline.py        │
-                    │   engine/gguf/        (GGUF dequant / loader)   │
-                    │   engine/gemma/       (GGUF Gemma + 層オフロード)│
-                    │   engine/transformer/ (block-swap / dit-cpu)    │
-                    │   → output.mp4 を共有 outputs/ dir へ直接書く    │
+                    │ engine worker（エンジン系統ごとに1つ・同時に1つだけ）│
+                    │  ltx  : ./.venv-engine        python -m engine.worker │
+                    │           engine/pipeline/fast_video_pipeline.py     │
+                    │           engine/gguf/    (GGUF dequant / loader)    │
+                    │           engine/gemma/   (GGUF Gemma + 層オフロード) │
+                    │           engine/transformer/ (block-swap / dit-cpu) │
+                    │  ltx25: ./.venv-engine-ltx25  python -m engine25.worker │
+                    │   → output.mp4 を共有 outputs/ dir へ直接書く         │
                     └──────────────────────────────────────────────┘
 ```
 
 | venv | 役割 | 主要依存 |
 |------|------|----------|
 | `./.venv` | FastAPI アプリ（`main.py` / API / ジョブ / Gradio / mock backend） | fastapi / uvicorn / gradio / pydantic / pillow。**torch は入れない** |
-| `./.venv-engine` | 実エンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core` / `ltx_pipelines` @rev `00dc53d` + `gguf`） |
+| `./.venv-engine` | LTX 2.3（`ltx`）の worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core` / `ltx_pipelines` @rev `00dc53d` + `gguf`） |
+| `./.venv-engine-ltx25` | LTX 2.5（`ltx25`）の worker（`engine25/worker.py`） | **torch 2.9.1+cu128** + 公式 v1.2.0 の推論スタック + `transformers` 5.x（Gemma 4） |
 
-アプリ（`./.venv`）は real backend を選んでも torch も `ltx_*` も import しない。実生成は `./.venv-engine` の python で `python -m engine.worker` を **subprocess** として常駐起動し、プロトコルで駆動する。
+アプリ（`./.venv`）は real backend を選んでも torch も `ltx_*` も import しない。実生成は、選ばれているベースモデルのエンジン系統に対応する python で worker を **subprocess** として常駐起動し、プロトコルで駆動する。
 
 ### 4.2 プロセス間通信（JSON-lines / `@@LTX@@` プロトコル）
 
@@ -389,7 +392,7 @@ Nz-Videomni/
 │                          runtime_state.py（state.json）/
 │                          engines/ltx/adapter.py（唯一の LTX 接点・mock/real
 │                          backend。旧 ltx_runner.py は再エクスポート shim）
-├─ engine/                 first-party 実エンジン（./.venv-engine で実行）
+├─ engine/                 LTX 2.3（系統 ltx）の実エンジン（./.venv-engine で実行）
 │   ├─ worker.py           常駐 worker（python -m engine.worker）
 │   ├─ pipeline/           fast_video_pipeline.py（低VRAM機構の配線点）
 │   ├─ gguf/               GGUF dequant / loader サービス
@@ -398,6 +401,9 @@ Nz-Videomni/
 │   ├─ preprocess/         参照動画の制御信号を起こす前処理（canny / dwpose / depth）
 │   ├─ VENDOR_NOTICE.md    provenance
 │   └─ venv-engine.freeze.txt / engine-venv-pyproject.toml（venv 再現）
+├─ engine25/               LTX 2.5（系統 ltx25）の実エンジン（./.venv-engine-ltx25 で実行）
+│                          worker.py（python -m engine25.worker）ほか。
+│                          engine/ とは1バイトも共有しない独立ツリー
 ├─ scripts/                setup.ps1（setup.bat の本体）/ install_ltx.ps1 /
 │   │                      build_xformers.ps1 ...
 │   └─ manifests/          ベースモデル記述子（10-ltx23.json / 20-ltx25.json）と
@@ -407,10 +413,14 @@ Nz-Videomni/
 ├─ tests/                  pytest（mock 強制・torch 無し）
 ├─ models/                 ベースモデル優先レイアウト（取得 ~33GB, §5）。フォルダ＝所属の宣言
 │   ├─ Preprocessors/     ベースモデル非依存の前処理器: DWPose/ ・ VDA/
-│   └─ LTX23/             LTX 2.3 一式: Weights/（transformer GGUF・再帰スキャン）/
-│                         TextEncoder/（Gemma GGUF＋text projection＋tokenizer/）/
-│                         VAE/（映像・音声＋prunavaed/）/ Upscaler/ /
-│                         StyleLoRA/（利用者の LoRA）/ IC-LoRA/（4 サブフォルダ）
+│   ├─ LTX23/             LTX 2.3 一式: Weights/（transformer GGUF・再帰スキャン）/
+│   │                     TextEncoder/（Gemma GGUF＋text projection＋tokenizer/）/
+│   │                     VAE/（映像・音声＋prunavaed/）/ Upscaler/ /
+│   │                     StyleLoRA/（利用者の LoRA）/ IC-LoRA/（4 サブフォルダ）
+│   └─ LTX25/             LTX 2.5 一式: Weights/（transformer GGUF）/
+│                         TextEncoder/（Gemma 4 GGUF）/
+│                         VAE/（映像 VAE〔畳み込みデコーダ版〕・音声 VAE＋diffvae/）/
+│                         Upscaler/
 │                         各フォルダの `put_*_here.txt` は git 追跡（空フォルダの
 │                         プレースホルダ兼「置ける形式」の掲示）
 ├─ outputs/                outputs/{job_id}/output.mp4 + metadata.json
@@ -444,6 +454,8 @@ Nz-Videomni/
 ## §5 モデル構成（実行 ~28GB・取得 ~33GB）
 
 ### 5.1 実行に本当に要る構成
+
+**以下はベースモデル LTX 2.3（記述子 `10-ltx23.json`）の構成である**——他のベースモデルの構成は各記述子が正本であり、LTX 2.5 の内訳は `Docs/VERIFICATION_LOG.md` §69.8 にある（LTX 2.5 の重みはインストーラの取得対象ではなく、下の「取得 ~33GB」にも含まれない）。
 
 本番経路（GGUF + component-file）が実際にロードするのは以下の要素で、合計 **~28GB**（実測 28.15GiB）である。**既定パスの正本は 2026-08-20 からベースモデル記述子（`scripts/manifests/*.json`）**で、記述子の中では `config.model.models_dir`（既定 `./models`）からの相対パスとして書かれ、`config._abs` が PROJECT_ROOT 基準で絶対化する（旧来の `config.model.*_path` 8 キーは撤去済み＝§11.2）。厳密なファイル別サイズは `models/INSTALLED_PATHS.txt` を正とする。同ファイルは manifest の `files[]` のうち `key`（＝`config.yaml` の `model:` キー）を持つ行から機械生成され、列挙するのは **9 行**である: 本表の 5 要素を展開したもの（component ファイルが video VAE / audio VAE / text-projection の 3 行に分かれる）**7 行**＋ PrunaVAED の枝刈りデコーダ `component_video_vae_pruned`（§6.2 `vae_mode`。既定 off だが取得・検証の対象）＋ `engine_python`（`./.venv-engine/Scripts/python.exe`）（2026-07-28、`checkpoint_path`の行は`config.yaml`からの削除に伴い消えた・§5.5）。**§5.1b の IC-LoRA / 前処理器は含まない**（`key` を持たないため）。
 
@@ -810,7 +822,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 （GET /status 全体の形は `api/status.py` を参照。`gpu` ブロックは `gpu_info.get_gpu_info()`、`queue` は `mode="single_job_in_memory"` に `job_store.counts()`=`pending/running/completed/failed` を展開。`version`="0.4.0"（API 実装のバージョン文字列であり、本仕様書の版 v0.5 とは別物）。）
 
-> **`gpu.available` が常に `false` になる件（既知・仕様どおり）**: `GET /status` の `gpu` ブロックは、アプリ用仮想環境（`./.venv`、torch 無し）から見た値を返すため、実機でも `available: false` になる。2プロセス／2仮想環境という構成（§2）に由来する既存の挙動で、実際の GPU はエンジン側 worker プロセスが握っている。紛らわしいが不具合ではない。
+> **`gpu.available` が常に `false` になる件（既知・仕様どおり）**: `GET /status` の `gpu` ブロックは、アプリ用仮想環境（`./.venv`、torch 無し）から見た値を返すため、実機でも `available: false` になる。アプリと worker をプロセス・仮想環境ごと分けている構成（§2）に由来する既存の挙動で、実際の GPU はエンジン側 worker プロセスが握っている。紛らわしいが不具合ではない。
 
 ### 6.5b GET /status の `acceleration`（**非凍結**・2026-07-31追加）
 
@@ -1024,7 +1036,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 - `base_model` 指定時の応答は `{"pipeline_loaded", "pipeline_type", "state", "base_model", "models"}`。
 - **未知の `base_model` は 404 `MODEL_NOT_FOUND`**（既知の id 一覧を `detail` に入れる）。カテゴリ名の検証も**切替先の**記述子から引くため、切替先に存在しないカテゴリを名指しすると同じく 404 になる。
 - **ベースモデルが変わるときは、`"default"` のままのカテゴリも含めて全カテゴリを解決・事前チェックする。** ベースモデルが変われば既定のファイル自体が別物になるので、素通しすると「中身を一度も見ないまま新しい重みをエンジンへ渡す」ことになるためである。ベースモデルが変わらない場合は従来どおり、`"default"` のカテゴリはペイロードへ上書きを出さない（＝全既定のロードは従来とバイト同一）。
-- **事前チェックは 2 段**である。①`precheck_model_file`（拡張子・GGUF/safetensors のヘッダ健全性 → 不適合は 422 `MODEL_INCOMPATIBLE`）、②`adapter.check_kv`（transformer カテゴリのみ。GGUF の KV メタデータを読み、`general.architecture` が `ltxv` でなければ 422、`model_version` の世代が本エンジンの対応外〔現在は 2.3 のみ〕なら 422。キーが無い場合は WARNING を出して通す）。KV の読み取りは依存パッケージ無しの自前パーサ（`services/gguf_kv.py`）がヘッダだけを読むもので、巨大なテンソル本体には触れない。
+- **事前チェックは 2 段**である。①`precheck_model_file`（拡張子・GGUF/safetensors のヘッダ健全性 → 不適合は 422 `MODEL_INCOMPATIBLE`）、②`adapter.check_kv`（transformer カテゴリのみ。GGUF の KV メタデータを読み、`general.architecture` が `ltxv` でなければ 422、`model_version` の世代がそのアダプタの対応外なら 422〔`ltx` 系統のアダプタが受けるのは 2.3 のみ。2.5 の重みは別系統 `ltx25` が受けるため、文面は「ベースモデルに『LTX 2.5』を選んでください」と案内する〕。キーが無い場合は WARNING を出して通す）。KV の読み取りは依存パッケージ無しの自前パーサ（`services/gguf_kv.py`）がヘッダだけを読むもので、巨大なテンソル本体には触れない。
 - **ロード中の二重ロードは 409 `PIPELINE_LOADING`**（新設・下記 (f)）。実行中ジョブがあるときの 409 `JOB_BUSY` は従来どおり。
 - **切り替えに失敗したときはフォールバックしない。** 記述子ごと元のベースモデルへ戻し、エラーを返す（黙って別のモデルで動かさない、という既存のモデル選択と同じ規律）。
 
@@ -1538,7 +1550,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 
 ### 12b.1 位置づけ（アーキテクチャへの影響なし）
 
-`mcp_server/` は Gradio UI と同じ**クライアント層**に属する。§4 の「2プロセス・2venv」構成そのものは変わらない——MCPサーバーは `./.venv`（torch 無し）の中で動く追加のプロセスで、既存の `/api/v1/*` を `httpx` 経由で叩くだけであり、バックエンド自身は起動しない（起動確認は `backend_status` ツールが行う）。凍結 API 契約（§6）への変更も無い。
+`mcp_server/` は Gradio UI と同じ**クライアント層**に属する。§4 の「アプリ1プロセス＋エンジン系統ごとのワーカー」構成そのものは変わらない——MCPサーバーは `./.venv`（torch 無し）の中で動く追加のプロセスで、既存の `/api/v1/*` を `httpx` 経由で叩くだけであり、バックエンド自身は起動しない（起動確認は `backend_status` ツールが行う）。凍結 API 契約（§6）への変更も無い。
 
 ### 12b.2 ツールの概要
 
@@ -1787,7 +1799,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **mock backend** | GPU/モデル無しで合成クリップを返す backend。API/スキーマ/出力構造は real と同一で、テスト・GPU 無し開発に使う。 |
 | **MCP（Model Context Protocol）** | AIエージェントが外部ツールを呼び出すための標準規格。本プロジェクトは `mcp_server/` パッケージで22個のツールを公開する（§12b）。 |
 | **ベースモデル（base model）** | 利用者から見た「どの動画生成AIか」の単位（LTX 2.3 / LTX 2.5 / 将来の別モデル）。実体は記述子 1 本＝`scripts/manifests/*.json` で、`GET /status` の `base_model`・`POST /pipeline/load` の `base_model`・`GET /models` の `base_models[]` に現れる（§6.9）。 |
-| **エンジン系統（engine family）** | 推論実装の単位（記述子の `engine_family`。現在は `"ltx"` のみ）。ベースモデル→エンジン系統は多対1で、**どのエンジンで動かすかはサーバーが重みファイルの GGUF KV メタデータから判定する**（UI の選択値では決めない）。 |
+| **エンジン系統（engine family）** | 推論実装の単位（記述子の `engine_family`。現在は `"ltx"`〔LTX 2.3〕と `"ltx25"`〔LTX 2.5〕の2系統）。ベースモデル→エンジン系統は多対1で、**どのエンジンで動かすかはサーバーが重みファイルの GGUF KV メタデータから判定する**（UI の選択値では決めない）。 |
 | **記述子（base-model descriptor）** | ベースモデル 1 件が何のファイルでできているかを宣言する JSON（`schema: 2`＋`engine_family`）。`categories[].default_file`＝カテゴリ別の既定の重み、`assets`＝tokenizer・アップサンプラ等の固定ファイル。**2026-08-20 以降、モデル既定パスの正本**（§4.3・§5.1・§11.2）。 |
 | **GGUF KV（メタデータ）** | GGUF ファイルのヘッダにある key-value 群。本プロジェクトはロード前に `general.architecture`（`ltxv` か）と `model_version`（対応世代か）の 2 つだけを読み、不適合を 422 で止める。読み手は依存パッケージ無しの自前パーサ `services/gguf_kv.py`（巨大なテンソル本体には触れない）。 |
 

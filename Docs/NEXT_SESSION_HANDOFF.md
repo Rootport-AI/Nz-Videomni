@@ -37,7 +37,7 @@
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結（Clip Chain）の内部構造と現行アーキテクチャの設計正本 |
 | [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) / [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) | 解像度×尺の能力（spill-free 閾値・生成時間）と快適上限の各正本 |
 | [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) / [`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) / [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) | 高速化候補の整理・LTX 2.3 の一般知識・MCP サーバー設計の各正本 |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。実装は未着手**（起票は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-97・§3-98） |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-97・§3-98） |
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
@@ -61,7 +61,7 @@
 
 | 文書 | 備考 |
 |------|------|
-| [`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) | オーナーによる 2026-08-20 共有の LTX 2.5 事前調査。**マルチエンジン設計の議論より前に行われた調査であり、設計の正本ではない。**設計の正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)（①生きた文書）。本文は改変せず収蔵してあるので、更新するのではなく、新しい知見は設計正本側へ書く |
+| [`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) | オーナーによる 2026-08-20 共有の LTX 2.5 事前調査。**マルチエンジン設計の議論より前に行われた調査であり、設計の正本ではない。**設計の正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)（①生きた文書）。本文は改変せず収蔵してあるので、更新するのではなく、新しい知見は設計正本側へ書く。**末尾に「§3-98 v1実装完了」の1章だけ足してある**——調査時の想定と実装結果の差分を一覧にしたもので、本文を読む前にこちらを見ると当時の記述のどこが失効しているか分かる |
 
 > **歴史は②・③側に書く（②は追記、③は不変）。** 生きた文書（①）には現在の姿だけを現在形で書き、経緯は②・③の文書に委ねること。
 >
@@ -74,7 +74,7 @@
 ### バックエンド
 
 - 導入は `setup.bat`（中身は `scripts/setup.ps1` → `scripts/install_ltx.ps1`）、起動は `run.bat`（中身は `run.ps1`）。どちらもリポジトリ直下固定。
-- **2プロセス・2venv 構成**。アプリは `./.venv`（torch 無し）、実推論 worker は `./.venv-engine`（torch+cu128）。
+- **アプリ1プロセス＋エンジン系統ごとのワーカー構成**。アプリは `./.venv`（torch 無し）、LTX 2.3 の worker は `./.venv-engine`（torch+cu128）と `engine/`、LTX 2.5 の worker は `./.venv-engine-ltx25` と `engine25/`。**エンジン系統ごとに仮想環境とワーカーが1つずつある**（同居できない依存を持つため。理由は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §3.3・§5.3）。ワーカーは同時に1つだけ生き、ベースモデルを切り替えると旧ワーカーを落としてから新ワーカーを起こす。
 - テストは `.\.venv\Scripts\python.exe -m pytest -q`。
 - `config.yaml` は **git 追跡外**。配布されるのは `config.yaml.example` で、`setup.bat` / `run.bat` が無いときだけ複製する。**両者は同期させること。**
 - `config.yaml` を書き換えたときの反映は**バックエンド再起動後**である。
@@ -107,6 +107,11 @@ models/
 │   ├─ Upscaler/         空間アップスケーラ
 │   ├─ StyleLoRA/        利用者が持ち込む画風・キャラクター LoRA
 │   └─ IC-LoRA/          deblur / in-outpainting / pixel-spatial-upscaler / union-control
+├─ LTX25/                LTX 2.5 一式
+│   ├─ Weights/          transformer の GGUF
+│   ├─ TextEncoder/      Gemma 4 GGUF（tokenizer は GGUF の中。隣の *.assets.safetensors は自動生成物）
+│   ├─ VAE/              映像 VAE（畳み込みデコーダ版）＋音声 VAE ＋ diffvae/（拡散デコーダ版・退避先）
+│   └─ Upscaler/         空間アップスケーラ
 └─ Preprocessors/        ベースモデルに依存しない前処理器: DWPose/ ・ VDA/
 ```
 
@@ -118,16 +123,27 @@ models/
 
 ---
 
-## 5. 直近の状況（2026-08-19 現在）
+## 5. 直近の状況（2026-08-22 現在）
 
-- **End source（素材（末尾）＝添付した画像・動画へ繋がる動画の生成）テーマは完結している。** オーナー裁定により、**クリップ1本での使用が推奨**、複数クリップは受理されるが推奨外（品質劣化は仕様として許容）。品質重視で複数クリップを繋ぐ場合の実用手順は「正順 Chained ＋最終クリップだけ補間仕上げ」で、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11 と `README.md` の手動リレー節に記載がある（**実機検証は未実施**）。
-- **Single タブの賢い快適上限マーカーも完結している。** 5つの高速化トグルが全て on のときだけ `limits.single_comfort_token_budget`（44,880）からの逆算式でマーカーを引き、1つでも off なら従来の `spill_free_frames` へフォールバックする。
-- **台帳の「1. 近日中の改修項目」に残っているのは §1-4 だけ**——オーナー自身が README のスピードガイドを書く作業であり、AI エージェントが実装するタスクではない。次に着手する候補は「3. 将来の研究課題」から選ぶ（直近の起票は §3-96 End source 付き連結クリップの改善研究、§3-95 快適上限の適用拡大、§3-54／§3-55 の軽量ユーティリティAI と Inpainting）。
-- **プリセットのフレーム数引き上げとヘッダーのモデル名ドロップダウン新設は実装済み・オーナーの実機テスト待ち。** 確認待ちの項目と合格条件は[`PENDING_TASKS.md`](PENDING_TASKS.md) §2（§2-1・§2-2）が正——本書には内容を重複させない。
+**LTX 2.5 が動くようになった。** ヘッダーのドロップダウンで LTX 2.3 ↔ 2.5 を往復でき、双方で生成が成功する（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-98 の v1）。実機ゲート H1〜H9 は全合格で、16GB の回避策は 1 段も使っていない（LTX 2.5 側の最悪フェーズの VRAM ピークは 7.00 GiB）。実測は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69 が正本。
 
-**2026-08-21追記**: マルチエンジン第1段階（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-97）は完了済み。LTX 2.5の重み準備も完了した——transformer GGUF・text encoder GGUFの両方を自前で変換し、全検証に合格済み（safetensors 4本はGGUF化せずそのまま使う方針で、こちらも検証済みダウンロード済み）。**次のテーマは§3-98（LTX 2.5推論エンジン実装）で、着手可能な状態にある。** ただし成果物はまだ`models/LTX25/`へ配置されていない（配置はオーナー作業）。
+**LTX 2.5 は別のエンジン系統になった。** 当初は「ltx 系統の別ベースモデルとして載る」見立てだったが、公式パッケージの世代差と `transformers` のバージョン要件（Gemma 3 と Gemma 4）が同居できないため、**専用の仮想環境 `.venv-engine-ltx25` ＋専用ワーカー `engine25/`** を持つ系統 `ltx25` として新設した。**`engine/` と `.venv-engine`（LTX 2.3 側）は 1 バイトも触っていない。**
 
-次セッションで着手する場合の読む順序: **①本書§2（文書の地図） → ②[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-98（着手条件・作業塊） → ③[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)（設計正本） → ④[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)「2026-08-21追加調査」（成果物の所在・技術申し送りは8節・9節） → ⑤converter側`LTX25_CONVERSION_MODE_SPEC.md`（GGUFの消費契約）**。
+**LTX 2.5 の v1 は基本生成（T2V／I2V）だけである。** クリップ連結・Retake・End source・V2V・A2V・Outpainting・LoRA 各種・NAG・PrunaVAED はまだ無く、要求すると 422 で断り、画面側でもタブとパネルが灰色になる。後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102。
+
+### 残っているオーナー作業（5件）
+
+1. **AviUtl2 での目視確認**（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-10〜§2-12）。LTX 2.5 で生成できること・扱えない機能が灰色になること・2.3 へ戻すと元どおりになること。**バックエンドと AviUtl2 の両方を起動し直してから**確認する。
+2. **push の承認。** エージェントはコミットまでで止めてある（本リポジトリと `Nz-GGUF-Converter-LTX23` の両方）。
+3. **§3-97（マルチエンジン土台）をクローズしてよいかの判断。** 2例目による実証は済んだので形式上の条件は満たしているが、上の 1 の結果を見て §3-98 とまとめて判断する。
+4. **変換ツールリポジトリ（`Nz-GGUF-Converter-LTX23`）の push 判断。** transformer GGUF へ `gemma_source_checkpoint` KV を足して再出力した変更が入っている（出力そのものは配置済み）。
+5. **再ホストするなら、その前に LTX-2.x Community License の本文確認。** 派生モデルの再配布に関する条項が量子化版に適用されるかどうかが未確認のまま残っている（[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 7節）。
+
+### 次に着手する候補
+
+台帳の「1. 近日中の改修項目」に残っているのは §1-4 だけ（オーナー自身が README のスピードガイドを書く作業であり、AI エージェントが実装するタスクではない）。したがって次のテーマは「3. 将来の研究課題」から選ぶ。**LTX 2.5 の続きを進めるなら §3-102**（v1 で扱わなかった機能の 2.5 対応）で、そのほかの直近の起票は §3-103（拡散デコーダ版 VAE と決定性）・§3-104（インストーラの `-ResolveLatest` の不具合）・§3-105（2.3 ワーカーの 2 ジョブ目以降のせり上がり）・§3-96・§3-95・§3-54／§3-55。
+
+LTX 2.5 まわりに着手する場合の読む順序: **①本書§2（文書の地図） → ②[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-98・§3-102 → ③[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §3.3・§5.3・§5.6（設計正本） → ④[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69（実測と、設計へ持ち帰る事実は §69.19） → ⑤[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（API 契約）**。
 
 ---
 

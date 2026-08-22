@@ -40,9 +40,9 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.21** |
-| 日付 | **2026-08-20** |
-| 対象 | LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセス/2venv・FastAPI + Gradio） |
+| 版 | **v0.5.22** |
+| 日付 | **2026-08-22** |
+| 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
 
 本書は前版 v04 の**全面改訂版**である。v04 は当初計画（公式 `ltx_pipelines` safetensors ローダ + fp8-cast + cu129 + xformers 前提）の章立てを引きずっていたため、本 v0.5 では **実装現実に合わせて章立てから書き直した**。
@@ -74,6 +74,7 @@ LTX 2.3 動画生成 REST API バックエンド（16GB VRAM 向け・2プロセ
 | v0.5.19 | 2026-08-20 | **容量概数の実測ベース見直し**（オーナー承認済み。API・実装への変更は無い、文書のみの更新）。§5.1b に長らく残っていた「他所の概数の見直しは別途オーナー判断」の保留注記を解消し、PrunaVAED・In-Outpainting 追加後の実測値（34,910,858,075 B＝32.51GiB）へ揃えた。**§0.1 目次・§5 見出し**（取得量を「~30GB」→「~33GB」へ）／**§2.5**（「現行 ~30GB モデルセット」→「~33GB」）／**§4.4**（ディレクトリツリー注記を「~30GB」→「~33GB」）／**§5.1b**（保留注記を見直し済みの記述へ全面差し替え。`setup.ps1` の必要容量を 38〜40GB→**40〜41GB**、しきい値 `$needGB` を 40→**45** へ変更したことを記録）。あわせて `README.md`（§1 の内訳表・ハードウェア要件表・冒頭のかんたんインストール節・§1b の「生成の中核」注記）と `scripts/setup.ps1`（`$needGB` と画面表示文言）を実測ベースへ更新した。Python 環境（約7〜8GiB）と `tools/`（約0.4GiB）の概数は今回の変更対象外で不変（前者はハードリンク共有により単純合算できない旨が既に §5.1b の隣接記述にある）。実測手順・新旧対比は本コミットのコミットメッセージを参照。 |
 | v0.5.20 | 2026-08-20 | **マルチエンジン化の設計正本を新設**（文書のみの更新。API・実装への変更は無い）。複数の動画生成AI（LTX 2.3／LTX 2.5／将来の Wan 2.x 等）をヘッダーのドロップダウンで切り替える機能の設計を `Docs/MULTI_ENGINE_DESIGN.md` として起こし、**§0.3 の SSOT 地図へ1行追加**した。**実装は未着手であり、本書 §6 の凍結 API 契約は現時点で一切変わっていない**——同設計が予定している `POST /pipeline/load` への `base_model` 追加と `GET /status` への `state` 追加は、いずれも既存フィールドの意味を変えない加算であり、実装時に改めて本書へ反映する。あわせて、オーナーによる LTX 2.5 事前調査を `Docs/LTX25_RESEARCH_NOTES.md` へ参考資料（設計の正本ではない）として収蔵し、`Docs/PENDING_TASKS.md` §3-97（マルチエンジン土台）・§3-98（LTX 2.5 対応）へ起票、`Docs/NEXT_SESSION_HANDOFF.md` §2 の文書地図へ両文書を登録した。 |
 | v0.5.21 | 2026-08-20 | **マルチエンジン土台（§3-97 第1段階）の実装を反映**。前版 v0.5.20 が「実装時に改めて反映する」と予告した内容が現物になった。**凍結 API 契約（§6）への変更はすべて加算のみ**で、既存フィールドの意味・型・既定の応答形は1つも変わっていない（本文の該当箇所にその旨を明記した）。**§6＝新設 §6.9**（ベースモデル軸の加算をまとめて記述。`GET /status` の `state`／`base_model`、`POST /pipeline/load` の `base_model`、`GET /models` の3層化、`metadata.json` の `models` ブロック、`POST /pipeline/unload` が不変であること）／**§6.1**（`POST /pipeline/load` の主なステータス欄を実装どおりに補い、`GET /models` を凍結表未掲載の加算エンドポイントとして補足へ追加）／**§6.6**（`metadata.json` の表へ `models` の行を追加）／**§6.8**（新設エラーコード `PIPELINE_LOADING`〔409〕の行を追加。あわせて長らく古かったファクトリ件数を実数へ訂正）。**モデル既定パスの出所が `config.yaml` から記述子（`scripts/manifests/*.json`）へ移った**ことに追随して、**§2.5**（移行ステップが書き換える対象の記述を現状へ訂正）／**§4.2**（`load` ペイロードの値の出所が記述子であることを補足へ追加）／**§4.3**（`_real_available()` の材料表を記述子駆動へ全面書き換え）／**§5.1**（既定パスの正本が記述子であることへ訂正）／**§7.6**（同上）／**§11.2**（撤去された 8 キーの行を削除し、`manifest_dir` / `models_dir` を追加）／**§11.9＝新設**（トップレベルの `state_file` と `state.json`）を更新した。あわせて **`services/ltx_runner.py` が `services/engines/ltx/adapter.py` へ引っ越した**（旧パスは再エクスポート shim として存置＝既存の import は全て生きる）ことに追随し、本書中の参照をすべて新パスへ改めた（§1.2・§4.1 の図・§4.2・§4.3・§4.4 のツリー・§5.2・§5.5・§6.2 の注・§6.5b の行番号引用・§7・§7.4・§7.5〔コンストラクタ引数に記述子が加わった〕・§9.2・§11.2 の注・§13.4・付録B）。あわせて付録B.1 の用語集へ「ベースモデル」「エンジン系統」「記述子」「GGUF KV」の 4 語を追加した。実装・実機検証の記録は各コミット（`13c3437`〜`2134509`）と `Docs/MULTI_ENGINE_DESIGN.md`、起票は `Docs/PENDING_TASKS.md` §3-97。 |
+| v0.5.22 | 2026-08-22 | **LTX 2.5（エンジン系統 `ltx25`）の v1 実装を反映**。LTX 2.5 は当初の見立てと違い `ltx` 系統の別ベースモデルではなく、**専用の仮想環境（`.venv-engine-ltx25`）と専用ワーカー（`engine25/`）を持つ別のエンジン系統**として新設された（理由と経緯は `Docs/MULTI_ENGINE_DESIGN.md` §3.3 の訂正節）。**凍結 API 契約（§6）への変更はここでもすべて加算のみ**で、LTX 2.3 だけを使う既存クライアントから見た応答は 1 バイトも変わらない。**§0.1 版メタ**（対象欄を2モデル・エンジン系統ごとのワーカー構成へ）／**§4.3**（mock の `backend` 表記が系統ごとに変わること）／**§6.8**（新設エラーコード `FEATURE_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 35→36 件へ訂正）／**§6.6**・**§7.5**（`backend` の値に `"ltx25-distilled"` と `"mock-ltx25"` を追記）／**§6.10＝新設**（LTX 2.5 の対応範囲。`GET /models` の `unsupported_features`、`GenerateRequest` 全 28 フィールドの 4 分類〔422系 8／無視 7／動作 8／従属 5〕、ロードペイロードの `deterministic`、ready イベントの `sampler`）を更新した。実装・実機検証の記録は各コミット（`62d67b0`〜`7c29ca3`）と `Docs/VERIFICATION_LOG.md` §69、起票は `Docs/PENDING_TASKS.md` §3-98。 |
 
 ### 0.2 スコープ
 
@@ -352,6 +353,8 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 - `checkpoint_path`（43GB モノリス。本書中の「46GB モノリス」と**同一ファイル**＝§5.2 の表記注記）は2026-07-28に`config.model`から削除済みで、記述子にも対応物は無い。`services/engines/ltx/adapter.py`が worker payload へ渡す値は直値の`""`にハードコードされており（`DistilledPipeline`構築のシグネチャを満たすためだけの存在）、GGUF + component 経路では一切開かれないため、ここでも**あえてゲートしない**（§5 参照）。逆に `gemma_root` は tokenizer/processor の module_ops をこの dir から読むため load-bearing で、欠けていればアプリ層で fail-fast させる。
 
 **MockBackend の用途**: GPU / モデルウェイトの無い環境（開発・CI・pytest）向けの合成クリップ生成。`tests/conftest.py` が `model.backend="mock"` を強制する。API・スキーマ・出力構造（`outputs/{job_id}/output.mp4` + `metadata.json`）は real と同一で、`GenerationOutcome.backend` の値だけが異なる（mock=`"mock"`, real=`"ltx-distilled"`）。
+
+> **エンジン系統ごとの `backend` 表記 【2026-08-22】**: LTX 2.5（エンジン系統 `ltx25`）を選んでいるときは、real が `"ltx25-distilled"`、**mock が `"mock-ltx25"`** になる。**mock のクラス自体は LTX 2.3 のものを共有している**——合成のグラデーションクリップは「どのエンジンが描いたはずか」を何も語らないので、2.5 用に複製しても中身の無い写しにしかならないためである。変えたのは表記だけで、これにより **GPU をまったく使わない実行でも `metadata.json` だけを見てどちらのエンジンが選ばれていたかが分かる**（2.3 ↔ 2.5 の往復の確認に使う）。
 
 ### 4.4 ディレクトリ構成
 
@@ -856,7 +859,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `fused_gguf_dequant_kernel_used` | str \| null（**2026-08-04追加**。GGUF 逆量子化の1カーネル化が実際に効いたか＝`"off"` / `"on"` / `"on->off"`〔on を要求したが実際には適用されなかった。Triton 不在・カーネル例外での降格・型ごとの初回自己検証の不一致・対象テンソル0件のいずれか〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`。実機ゲートの判定基準もこのフィールドである。詳細は `Docs/VERIFICATION_LOG.md` §51） |
 | `peak_vram_reserved_mb` | int \| null（**2026-08-02追加**。`torch.cuda.max_memory_reserved` 換算 MB。既存の `vram_optimization.peak_vram_mb`〔`max_memory_allocated`〕はstream別プール分断・reserved増を検知できないため、先読み block swap のVRAMリスクを見る指標として加算した。既存フィールドは置換していない） |
 | `generation_time_seconds` | `round(elapsed, 2)` |
-| `backend` | outcome.backend（mock は `"mock"`、real は `"ltx-distilled"`） |
+| `backend` | outcome.backend（LTX 2.3: mock は `"mock"`、real は `"ltx-distilled"`／LTX 2.5: mock は `"mock-ltx25"`、real は `"ltx25-distilled"`） |
 | `output` | `{path, resolution, duration_seconds, frame_rate, file_size_bytes}` |
 | `vram_optimization` | `LowVramSettings.metadata_block(peak_vram_mb=...)`（6 キー、下記） |
 | `models` | dict（**2026-08-20追加**。どのベースモデルの、どの重みファイルで生成したかの記録＝`{"base_model": "<記述子id>", "selection": {カテゴリ: {"name": 登録名, "file": 実ファイル名}}}`。`_write_metadata`（単発）と `_write_chain_metadata`（チェーン）の**両方**に出る。`selection` の 4 カテゴリは常に揃い、`"default"` のままのカテゴリも記述子の `default_file` の実ファイル名を記録するため、既定が将来差し替わっても過去の出力を再現できる。詳細は §6.9(e)） |
@@ -938,7 +941,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 ```
 （`job_id`・`detail` は非 None のときだけ含まれる。）
 
-実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 35 件**あり、本表はそのうち 30 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 5 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE` と Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT` は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正した）:
+実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 36 件**あり、本表はそのうち 31 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 5 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE` と Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT` は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正した）:
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
@@ -970,6 +973,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 | `VIDEO_NOT_READY` | 409 | ジョブが completed 前に video 要求 |
 | `PIPELINE_LOAD_FAILED` | 503 | パイプラインロード失敗 |
 | `PIPELINE_LOADING` | 409 | すでにロード中のパイプラインに対して重ねてロードを要求した（**2026-08-20 新設**。`POST /pipeline/load` と内部の reload のみ。`POST /pipeline/unload` にはあえて置いていない＝`loading` に張り付いたときの唯一の復帰路として温存。§6.9(f)） |
+| `FEATURE_UNSUPPORTED` | 422 | 選択中のベースモデルのエンジンが持っていない機能を要求した（**2026-08-22 新設**。現在これを出すのは LTX 2.5＝エンジン系統 `ltx25` だけで、LTX 2.3 は 1 つも宣言していないため素通りする。ジョブを作る前に、他のどの検証よりも先に判定する。`detail` に該当フィールド名または機能名が入る。§6.10） |
 | `GPU_OOM` | 503 | 生成中の CUDA OOM |
 | `GENERATION_FAILED` | 503 | 生成中の非 OOM 例外 |
 | `UNAUTHORIZED` | 401 | api_key 設定時の Bearer 不一致/欠落（`deps.require_auth`） |
@@ -1079,6 +1083,72 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 
 最後に使ったベースモデルと、ベースモデル別の最後の選択の組み合わせは、リポジトリ直下の `state.json`（git 追跡外・§11.9）に保存され、サーバーを再起動しても復元される。**API 契約の一部ではない**（どのエンドポイントにも現れない）が、`GET /status` の `base_model` と `GET /models` の `active_base_model` が再起動後に既定へ戻らない理由がこれである。
 
+### 6.10 LTX 2.5（エンジン系統 `ltx25`）の対応範囲（2026-08-22）
+
+**結論から言うと、ここでも凍結 API 契約は壊れていない。** 加算されたのは `GET /models` の 1 フィールドと、エラーコード 1 つだけである。**LTX 2.3 だけを使うクライアントから見た応答は 1 バイトも変わらない**——LTX 2.3 は「使えない機能」を 1 つも宣言していないため、加算されたフィールドは空配列になり、新しいエラーコードも出ない。
+
+#### (a) v1 の対応範囲
+
+LTX 2.5 の第 1 版（v1）が持っているのは **基本生成（T2V／I2V）＋畳み込みデコーダ版の映像 VAE ＋ VRAM 16GB 運用** だけである。クリップ連結（Chained）・Retake・End source・V2V・A2V・Outpainting・LoRA 各種・NAG・PrunaVAED といった機能は**まだ無い**。無いものを黙って無視するのではなく、**ジョブを作る前に 422 で断る**。
+
+#### (b) `GET /models` — `base_models[]` へ `unsupported_features` を加算
+
+```jsonc
+"base_models": [
+  {
+    "id": "LTX25",
+    "display_name": "LTX 2.5",
+    "engine_family": "ltx25",
+    "unsupported_features": [        // 加算。このエンジンが扱えない機能の名前
+      "chain", "retake", "end_source", "v2v", "a2v",
+      "two_stage_hq", "outpaint", "loras", "reference_video",
+      "nag", "prune_vaed", "sage_attention", "keep_resident"
+    ],
+    "...": "id / display_name / active / installed / present / categories は §6.9(c) のまま"
+  }
+]
+```
+
+- **省略は「制限なし」であって「全部だめ」ではない。** このフィールドを持たない古いバックエンドに対しても、クライアントは「制限なし」として扱うこと。
+- **LTX 2.3 は空配列**である（`"unsupported_features": []`）。
+- 先頭 5 つ（`chain` / `retake` / `end_source` / `v2v` / `a2v`）は**リクエストのフィールドではなく丸ごとのエンドポイント**である。いずれも `POST /generate/chain` から来るので、拒否も 1 箇所で行う。
+- **これは先回りであって強制ではない。** クライアントがこのフィールドを無視して要求を出しても、下記 (c) のとおりサーバー側が断る。
+
+#### (c) `FEATURE_UNSUPPORTED`（422）
+
+| code | HTTP | 送出条件 |
+|------|:---:|---------|
+| `FEATURE_UNSUPPORTED` | 422 | 選択中のベースモデルのエンジンが持っていない機能を要求した |
+
+メッセージは `"'{feature}' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)"`。**判定はジョブを作る前・他のどの検証よりも先**に行う（素材の有無より先に答えないと、利用者は直しようのないものを直しに行くことになるため）。**拒否されたリクエストではジョブが 1 件も作られない。**
+
+#### (d) `GenerateRequest` の各フィールドの扱い（4 分類・全 28 件）
+
+**`GenerateRequest` のフィールドは、必ず次の 4 分類のいずれか 1 つに属する。** この網羅性は pytest が `GenerateRequest.model_fields` と突き合わせて機械検証しており、将来フィールドが増えたらそのテストが落ちて対応表の更新が強制される。
+
+| 分類 | 件数 | フィールド | 扱い |
+|---|---:|---|---|
+| **422 系** | 8 | `pipeline`（`"distilled"` 以外）／`outpaint`／`loras`／`reference_video_id`／`nag_enabled`／`vae_mode`（`"default"` 以外）／`attention_backend`（`"sdpa"` 以外）／`keep_resident` | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**——クライアントは毎回スキーマ全体を送るため、既定値のまま届いたフィールドは利用者が求めたものではない |
+| **無視＋ログ** | 7 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`／`fused_gguf_dequant_kernel`／`block_swap_prefetch` | ジョブは通常どおり走る。値は効かず、ワーカーのログに理由が 1 行残る。前 3 つは蒸留版 2.5 に CFG（プロンプトへの従い具合の制御）もステップ数の概念も無いため、後 2 つは LTX 2.3 側のコードパスの名前でエンジン系統 `ltx25` がそれを持たないため |
+| **動作** | 8 | `prompt`／`width`／`height`／`num_frames`／`frame_rate`／`seed`／`conditioning_images`／`crop_output` | そのまま効く。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）で、エンジンに依存しないため**動作させる**（黙って消さない） |
+| **従属** | 5 | `nag_scale`／`nag_tau`／`nag_alpha`（`nag_enabled` に従属）／`conditioning_attention_strength`／`reference_video_strength`（`loras` に従属） | 上位のフィールドが既定のままなら意味を持たない。**上位が 422 系にあるため、これらが意味を持つリクエストは上位の時点で既に断られている**（＝走るジョブに到達できない。だから「無視」とは別扱いにしてある） |
+
+`GET /loras` は変更していない。連結生成（`POST /generate/chain`）は分類以前の話で、**エンドポイントごと一括で 422** になる。
+
+#### (e) ワーカーのロードペイロードと `ready` イベント（参考・API 契約ではない）
+
+エンジン系統 `ltx25` のロードペイロードは、4 カテゴリのパス＋空間アップスケーラのパス（計 5 本）に、次の 3 つを加えたものである。
+
+| キー | 既定 | 意味 |
+|---|---|---|
+| `blocks_on_gpu` | 8 | GPU に常駐させる DiT ブロックの数。16GB が厳しいときに 8→6→4 と下げる手順の最上段。既存の低 VRAM 設定から上書きできる |
+| `cache_weights` | `true` | stage-2 のためにディスクから 14.7GB を読み直さないよう、ホスト RAM 側へ重みを保持する。**約 14.7GB の RAM を追加で使う**ので、RAM の厳しい環境では `false` にできる |
+| `deterministic` | `true` | cuDNN のアルゴリズム選択を固定する。**これが無いと、同じシードでも音声トラックが実行ごとに変わる**（音声 VAE のボコーダが転置畳み込みをアトミック加算で畳み込むため）。実測で速度コストは無い（`Docs/VERIFICATION_LOG.md` §69.18） |
+
+`ready` イベントには `sampler` を載せる。LTX 2.5 の値は **`"euler_ancestral"`** で、これは好みではなく事実の報告である——公式のパイプラインは safetensors のヘッダからしかモデルの世代を読めず、GGUF を渡すと警告だけ出して決定的な Euler へ落ちる（＝別世代の生成になる）ため、明示的に設定したうえで**実際に保持している値**をここに出している。`sage_available` はこの系統では恒久的に `false`（SageAttention を入れていない）。
+
+設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69、起票は `Docs/PENDING_TASKS.md` §3-98（v1 の範囲外として先送りした機能は同 §3-102）。
+
 ---
 
 ## §7 ジョブ管理と Pipeline / Runner
@@ -1145,7 +1215,7 @@ generate(
 | `seed_used` | int | 実使用シード（`seed=-1` は**親プロセス**で乱数解決し決定性を担保） |
 | `peak_vram_mb` | int \| None | ピーク VRAM（real は worker が報告、無ければ None） |
 | `generation_mode` | str | `"t2v"` / `"i2v"` |
-| `backend` | str | mock=`"mock"` / real=`"ltx-distilled"`（`MOCK_BACKEND` / `REAL_BACKEND`） |
+| `backend` | str | **LTX 2.3**: mock=`"mock"` / real=`"ltx-distilled"`（`MOCK_BACKEND` / `REAL_BACKEND`）。**LTX 2.5**: mock=`"mock-ltx25"` / real=`"ltx25-distilled"`（`MOCK_BACKEND_25` / `REAL_BACKEND_25`。§4.3） |
 
 - `output_path` は必ず `output_dir/"output.mp4"`。`crop_output` 指定時、real backend は worker にフルサイズを `_full.mp4` へ書かせ、ffmpeg で中央クロップして `output.mp4` を生成する。
 - metadata.json は runner の責務ではなく PipelineManager が書く。

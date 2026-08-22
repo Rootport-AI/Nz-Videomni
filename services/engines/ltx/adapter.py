@@ -416,6 +416,27 @@ class LTXRunner:
     runtime is the API axis's job (P6), not this constructor's.
     """
 
+    # ------------------------------------------------------------------ seams
+    # §3-98 P3a. The nine (plus supporting) attributes below are THE override
+    # points a sibling engine family subclasses this facade through; every one
+    # of them holds the LTX 2.3 value here, so this class behaves exactly as it
+    # did before they existed. Bound after both backend classes are defined
+    # (they are declared further down this module) — see the assignment block at
+    # the end of the file.
+
+    #: The real backend class this family spawns. Also the holder of
+    #: :data:`REQUIRED_ASSETS` and of the engine-dir / engine-python resolution
+    #: this facade's availability probe consults, so a family declares those
+    #: facts ONCE, on its backend.
+    _REAL_BACKEND_CLS: type
+    #: The GPU-less backend class. LTX 2.5 deliberately REUSES 2.3's — a second
+    #: synthetic-clip renderer would be a copy with nothing to say (§3-98 plan,
+    #: "やらない"). Only the label below differs.
+    _MOCK_BACKEND_CLS: type
+    #: ``GenerationOutcome.backend`` the mock reports. The one thing that must
+    #: differ per family, so a metadata.json says WHICH engine's mock ran.
+    _MOCK_BACKEND_LABEL: str = MOCK_BACKEND
+
     def __init__(
         self,
         config: AppConfig,
@@ -621,7 +642,7 @@ class LTXRunner:
         choice = (self.config.model.backend or "auto").strip().lower()
         if choice == "mock":
             logger.info("Backend forced to MOCK (model.backend=mock).")
-            return _MockBackend(self.config, self.low_vram)
+            return self._new_mock()
         if choice == "real":
             if not self._real_available():
                 raise RuntimeError(
@@ -629,13 +650,19 @@ class LTXRunner:
                     "(check torch+CUDA, ltx_pipelines install, and model paths)."
                 )
             logger.info("Backend forced to REAL (model.backend=real).")
-            return _RealBackend(self.config, self.low_vram, self.descriptor)
+            return self._REAL_BACKEND_CLS(self.config, self.low_vram, self.descriptor)
         # auto
         if self._real_available():
             logger.info("Backend auto-selected: REAL.")
-            return _RealBackend(self.config, self.low_vram, self.descriptor)
+            return self._REAL_BACKEND_CLS(self.config, self.low_vram, self.descriptor)
         logger.info("Backend auto-selected: MOCK (real stack/model unavailable).")
-        return _MockBackend(self.config, self.low_vram)
+        return self._new_mock()
+
+    def _new_mock(self) -> _MockBackend:
+        """The mock backend instance, labelled for THIS engine family."""
+        return self._MOCK_BACKEND_CLS(
+            self.config, self.low_vram, backend_label=self._MOCK_BACKEND_LABEL
+        )
 
     def _real_available(self) -> bool:
         """True only if the engine python, worker script and every file the real
@@ -668,17 +695,17 @@ class LTXRunner:
         'auto' falls back to mock and ``import services.ltx_runner`` stays safe
         in the torch-less app venv).
         """
-        model = self.config.model
+        backend_cls = self._REAL_BACKEND_CLS
         try:
             descriptor = self.descriptor
             required: dict[str, str | None] = {
-                "engine_python": model.engine_python,
+                backend_cls._ENGINE_PYTHON_LABEL: backend_cls._engine_python_value(self.config),
             }
             for category, spec in descriptor.categories.items():
                 required[category] = (
                     self._models_path(spec.default_file) if spec.default_file else None
                 )
-            for asset in REQUIRED_ASSETS:
+            for asset in backend_cls.REQUIRED_ASSETS:
                 value = descriptor.assets.get(asset)
                 required[asset] = self._models_path(value) if value else None
 
@@ -689,10 +716,11 @@ class LTXRunner:
                 for label, path in required.items()
                 if not path or not self.config._abs(path).exists()
             ]
-            if not model.engine_dir:
+            engine_dir = backend_cls._engine_dir_value(self.config)
+            if not engine_dir:
                 missing.append("engine_dir (not configured)")
             else:
-                worker = self.config._abs(model.engine_dir) / "worker.py"
+                worker = self.config._abs(engine_dir) / "worker.py"
                 if not worker.exists():
                     missing.append(f"engine worker: {worker}")
             if missing:
@@ -749,7 +777,7 @@ class LTXRunner:
 
     def _probe_sage_files(self) -> bool:
         try:
-            engine_python = self.config.model.engine_python
+            engine_python = self._REAL_BACKEND_CLS._engine_python_value(self.config)
             if not engine_python:
                 return False
             venv_root = self.config._abs(engine_python).parent.parent
@@ -787,7 +815,7 @@ class LTXRunner:
         ``_real_available`` file sweep) — an auto install without the real stack
         also has no engine venv, so the file probe reports False anyway.
         """
-        if isinstance(self._backend, _MockBackend):
+        if isinstance(self._backend, self._MOCK_BACKEND_CLS):
             return True
         if self._backend is not None:
             return False
@@ -795,11 +823,33 @@ class LTXRunner:
 
 
 class _MockBackend:
-    """Synthetic-clip backend (no GPU, no weights). Original Phase-1 logic."""
+    """Synthetic-clip backend (no GPU, no weights). Original Phase-1 logic.
 
-    def __init__(self, config: AppConfig, low_vram: LowVramSettings):
+    SHARED BY EVERY ENGINE FAMILY (§3-98 P3b). A synthetic gradient clip says
+    nothing about which engine would have rendered it, so a second copy of this
+    class for LTX 2.5 would be a copy with no content of its own. The ONE fact
+    that must still differ is what ``GenerationOutcome.backend`` reports, so the
+    label is a constructor argument (``backend_label``) rather than a hardcoded
+    constant — an omitted argument keeps the historical ``"mock"``.
+    """
+
+    #: Class-level default for :attr:`backend_label`, so an instance built
+    #: WITHOUT ``__init__`` (tests drive ``generate_chain`` on a hand-assembled
+    #: ``__new__`` object) still reports the historical label instead of
+    #: raising. ``__init__`` shadows it per instance.
+    backend_label: str = MOCK_BACKEND
+
+    def __init__(
+        self,
+        config: AppConfig,
+        low_vram: LowVramSettings,
+        *,
+        backend_label: str = MOCK_BACKEND,
+    ):
         self.config = config
         self.low_vram = low_vram
+        #: ``GenerationOutcome.backend`` of every clip this instance renders.
+        self.backend_label = backend_label
         self.pipeline = None
         self._loaded = False
         # Model management (tests/observability): the selection passed to the
@@ -917,7 +967,7 @@ class _MockBackend:
             seed_used=seed,
             peak_vram_mb=peak,
             generation_mode=mode,
-            backend=MOCK_BACKEND,
+            backend=self.backend_label,
         )
 
     def generate_chain(
@@ -1180,7 +1230,7 @@ class _MockBackend:
             seed_used=seed,
             peak_vram_mb=peak,
             generation_mode="chain",
-            backend=MOCK_BACKEND,
+            backend=self.backend_label,
             chain_metadata=chain_metadata,
         )
 
@@ -1315,6 +1365,46 @@ class _RealBackend:
     _PREFIX = "@@LTX@@"
     _LOAD_TIMEOUT_S = 600.0
     _SHUTDOWN_TIMEOUT_S = 30.0
+
+    # ------------------------------------------------------------------ seams
+    # §3-98 P3a. Everything about this class that is a fact about the LTX 2.3
+    # ENGINE rather than about "how to talk to a worker subprocess" is named
+    # here, so a sibling family (engine25) inherits the process plumbing —
+    # spawn, frame, read, unload — and restates only these. Every value below
+    # is the 2.3 one, so this class behaves exactly as it did before the seams.
+
+    #: Model-management category -> worker load-payload field. See the
+    #: module-level :data:`SELECTION_FIELDS`, which this is THE binding of;
+    #: ``_build_load_payload`` reads it through ``self`` so a subclass's table
+    #: reaches the payload without re-implementing the builder.
+    SELECTION_FIELDS: dict[str, str] = SELECTION_FIELDS
+    #: Fixed (non-selectable) descriptor assets this engine requires. Read
+    #: through the backend CLASS by ``LTXRunner._real_available`` too, so a
+    #: family declares its required assets exactly once.
+    REQUIRED_ASSETS: tuple[str, ...] = REQUIRED_ASSETS
+    #: ``python -m <this>`` — the worker entry point inside the engine venv.
+    _WORKER_MODULE: str = "engine.worker"
+    #: Worker stderr log filename under ``config.log_dir``. Distinct per family
+    #: on purpose: after a 2.3<->2.5 swap BOTH logs must survive for the
+    #: round-trip gate to be checkable.
+    _LOG_NAME: str = "ltx_worker.log"
+    #: Fixed engine package directory for this family, or None to take
+    #: ``config.model.engine_dir`` (2.3 keeps its configurable one).
+    _ENGINE_DIR_VALUE: str | None = None
+    #: The ``config.model`` key that names this family's interpreter — used
+    #: verbatim in the "not configured / not found" messages, so an operator is
+    #: told which key to fix.
+    _ENGINE_PYTHON_LABEL: str = "engine_python"
+
+    @classmethod
+    def _engine_python_value(cls, config: AppConfig) -> str | None:
+        """The interpreter that runs THIS family's worker."""
+        return config.model.engine_python
+
+    @classmethod
+    def _engine_dir_value(cls, config: AppConfig) -> str | None:
+        """The engine package directory of THIS family."""
+        return cls._ENGINE_DIR_VALUE or config.model.engine_dir
 
     def __init__(
         self,
@@ -1511,7 +1601,7 @@ class _RealBackend:
                 if selection.get(category)
                 else self._require_default_file(category)
             )
-            for category, field in SELECTION_FIELDS.items()
+            for category, field in self.SELECTION_FIELDS.items()
         }
         component_text_projection_path = self._require_asset("component_text_projection_path")
         # PrunaVAED (pruned video VAE decoder, ~690MB, decoder half only):
@@ -1552,36 +1642,20 @@ class _RealBackend:
             "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
         }
 
-    def load(self, selection: dict[str, str] | None = None) -> None:
-        if self.loaded:
-            return
+    def _build_child_env(self, project_root: Path) -> dict[str, str]:
+        """The worker subprocess's environment (§3-98 P3a seam).
 
-        model = self.config.model
+        Inherit, force the 16GB-load-bearing CUDA + compile knobs, unbuffered
+        IO, and set PYTHONPATH to the project root so the worker's ``engine.*``
+        package (and the venv-installed ltx_core/ltx_pipelines) resolve when
+        launched as ``python -m engine.worker``.
 
-        # Resolve + validate the engine python and worker script.
-        engine_python = self._require_path(model.engine_python, "engine_python")
-        if not model.engine_dir:
-            raise RuntimeError("model.engine_dir is not configured (required for the real backend).")
-        engine_dir = self.config._abs(model.engine_dir)
-        if not engine_dir.exists():
-            raise RuntimeError(f"model.engine_dir not found: {engine_dir}")
-        worker = engine_dir / "worker.py"
-        if not worker.exists():
-            raise RuntimeError(f"LTX worker script not found: {worker}")
-        # The worker is launched as `python -m engine.worker`, so its imports
-        # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
-        project_root = self.config._abs(".")
-
-        # Full worker payload: validates the model paths and applies any
-        # model-management selection overrides (byte-identical when absent).
-        payload = self._build_load_payload(selection)
-
-        use_component_files = bool(self.config.vram.use_component_files)
-
-        # Child env: inherit, force the 16GB-load-bearing CUDA + compile knobs,
-        # unbuffered IO, and set PYTHONPATH to the project root so the worker's
-        # `engine.*` package (and the venv-installed ltx_core/ltx_pipelines)
-        # resolve when launched as `python -m engine.worker`.
+        A sibling engine family overrides this WHOLE method rather than editing
+        the dict afterwards: every ``LTX_*`` variable below is a 2.3 knob read
+        by 2.3's worker, and inheriting them into another engine's process
+        would be exactly the borrowed-assumption bug the separate engine exists
+        to avoid.
+        """
         env = dict(os.environ)
         env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         env["TORCH_COMPILE_DISABLE"] = "1"
@@ -1589,7 +1663,7 @@ class _RealBackend:
         env.pop("PYTHONPATH", None)
         env["PYTHONPATH"] = str(project_root)
         # Phase 1 gate: the worker reads LTX_COMPONENT_FILES.
-        env["LTX_COMPONENT_FILES"] = "1" if use_component_files else "0"
+        env["LTX_COMPONENT_FILES"] = "1" if bool(self.config.vram.use_component_files) else "0"
         # NOTE (§48): the old ``LTX_KEEP_RESIDENT`` env var is GONE. Keep-resident
         # weights are now a PER-JOB request field (``GenerateRequest.keep_resident``)
         # carried on the generate payload, so there is exactly one source of truth
@@ -1607,13 +1681,14 @@ class _RealBackend:
         # GPU, removing the ~16.9GB load-time GPU spike. On by default; the worker
         # reads this and keeps the blocks CPU-resident for block-swap streaming.
         env["LTX_DIT_CPU_LOAD"] = "1" if self.low_vram.dit_cpu_load else "0"
+        return env
 
-        # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
-        # the worker emits lots of tqdm/log output while we block on stdout).
-        log_dir = self.config.log_dir
-        log_dir.mkdir(parents=True, exist_ok=True)
-        self._log_path = log_dir / "ltx_worker.log"
+    def _log_load_start(self, engine_python: str, engine_dir: Path, payload: dict) -> None:
+        """The one INFO line that opens a worker launch (§3-98 P3a seam).
 
+        It quotes payload FIELDS, and a payload's fields are family-specific —
+        which is why this is an override point rather than an inline call.
+        """
         logger.info(
             "Loading pipeline (REAL worker). python=%s engine_dir=%s block_swap=%s ckpt=%s",
             engine_python,
@@ -1621,13 +1696,48 @@ class _RealBackend:
             payload["block_swap_blocks_on_gpu"],
             payload["checkpoint_path"],
         )
+
+    def load(self, selection: dict[str, str] | None = None) -> None:
+        if self.loaded:
+            return
+
+        # Resolve + validate the engine python and worker script.
+        engine_python = self._require_path(
+            self._engine_python_value(self.config), self._ENGINE_PYTHON_LABEL
+        )
+        engine_dir_rel = self._engine_dir_value(self.config)
+        if not engine_dir_rel:
+            raise RuntimeError("model.engine_dir is not configured (required for the real backend).")
+        engine_dir = self.config._abs(engine_dir_rel)
+        if not engine_dir.exists():
+            raise RuntimeError(f"model.engine_dir not found: {engine_dir}")
+        worker = engine_dir / "worker.py"
+        if not worker.exists():
+            raise RuntimeError(f"LTX worker script not found: {worker}")
+        # The worker is launched as `python -m engine.worker`, so its imports
+        # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
+        project_root = self.config._abs(".")
+
+        # Full worker payload: validates the model paths and applies any
+        # model-management selection overrides (byte-identical when absent).
+        payload = self._build_load_payload(selection)
+
+        env = self._build_child_env(project_root)
+
+        # stderr -> a log file (NOT a pipe; piping stderr risks a deadlock when
+        # the worker emits lots of tqdm/log output while we block on stdout).
+        log_dir = self.config.log_dir
+        log_dir.mkdir(parents=True, exist_ok=True)
+        self._log_path = log_dir / self._LOG_NAME
+
+        self._log_load_start(engine_python, engine_dir, payload)
         if selection:
             logger.info("Model-management overrides: %s", selection)
 
         log_fh = open(self._log_path, "a", encoding="utf-8")
         try:
             self._proc = subprocess.Popen(
-                [engine_python, "-u", "-m", "engine.worker"],
+                [engine_python, "-u", "-m", self._WORKER_MODULE],
                 cwd=str(project_root),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -2277,6 +2387,16 @@ class _RealBackend:
                     progress_callback(idx, total, round(frac, 3), stage, **clip_kwargs)
                 else:
                     progress_callback(None, None, round(frac, 3), stage, **clip_kwargs)
+
+
+# The facade's backend-class seams, bound now that both classes exist. Kept
+# here rather than inside the class body because ``LTXRunner`` is declared
+# FIRST (it is the file's public face) and Python evaluates a class body at
+# definition time — a forward reference in the body would be a NameError.
+# Declared (annotation-only) up in the class so a family that forgets to bind
+# them fails with a clear AttributeError instead of silently inheriting 2.3's.
+LTXRunner._REAL_BACKEND_CLS = _RealBackend
+LTXRunner._MOCK_BACKEND_CLS = _MockBackend
 
 
 def _hue_gradient(w: int, h: int, hue: int) -> Image.Image:

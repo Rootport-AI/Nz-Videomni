@@ -6,7 +6,7 @@
 
 **MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` に新設し、既存の FastAPI バックエンド（`/api/v1/*`）を **22個のツール**として公開した。Web の操作パネル（`gradio_ui/`）が使える操作は一通りツール化してあり、パネルと同等の操作性が MCP 経由でも成立する（AviUtl2 のタイムライン連携は対象外——これはフロントエンド側の責務であり、本パッケージは扱わない）。
 
-## 2. 主要な設計判断（D1〜D14）
+## 2. 主要な設計判断（D1〜D15）
 
 以下は実装計画で決定した設計判断の要約。番号は計画書の通し番号に対応する。
 
@@ -26,6 +26,7 @@
 | D12（2026-08-05追加） | **Acceleration（生成の高速化）の5フィールドは全て公開する**。`submit_generate` / `submit_chain` の両方に、`attention_backend`（`"sdpa"` / `"sage"`・既定 `"sdpa"`）・`block_swap_prefetch`（bool・既定 `true`）・`keep_resident`（bool・既定 `false`）・`fused_gguf_dequant_kernel`（bool・既定 `true`）・`vae_mode`（`"default"` / `"prune_vaed"`・既定 `"default"`）を出す | 当初 `vae_mode` だけは D8 の趣旨（実体の無いフィールドをエージェントに触らせない）に沿って**モックである間は除外**していたが、2026-08-05 に実機能へ転換したため除外理由が消滅した。同日のオーナー裁定（「外出先から操作したいときに便利なので公開まで進みたい」）で公開へ転じ、実装と実機ゲート G1〜G7 の合格を待ってから最終ステップとして実施した。**ツールの本数は22本のまま不変**（フィールドの追加であってツールの追加ではない）。検証記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.10-b、設計の正本は [`PRUNAVAED_WORKORDER.md`](PRUNAVAED_WORKORDER.md) §6.3 |
 | D13（2026-08-17追加） | **`submit_chain` に end source（素材（末尾））の引数を公開する**——`end_source_video_id` / `end_source_image_id` / `end_source_context_frames`（8の倍数・既定72）。2つのIDの同時指定は POST 前に `END_SOURCE_XOR_VIOLATION` として弾く。docstring と `INSTRUCTIONS` には**「1件＝窓内モード／2件以上＝逆順Chained。出力の長さはどちらもクリップ合計」**と明記する（**2026-08-18注**: 引数は4引数（`end_source_strength`を追加）、文言も逆順Chainedに合わせて更新済み。詳細はD14） | 2026-08-16 時点では「生成結果が素材へクロスフェードする」既知問題のため**あえて送信できないようにしていた**が、翌日の窓内モード（`in_window`）実装でその問題が解消し、除外理由が消滅した。実機実験4ラウンド20ジョブは、まさにこの3引数を使って MCP の実プロトコル経由で実施している（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61）。**ツールの本数は22本のまま不変**（フィールドの追加であってツールの追加ではない） |
 | D14（2026-08-18追加） | **`submit_chain` の end source 引数を4引数（`end_source_strength`を2026-08-18に追加）へ拡張し、`INSTRUCTIONS` と docstring を逆順Chained対応へ更新する**。文言は「end_source はクリップ何件でも使える。クリップ1件のときは窓内モード、2件以上のときは逆順Chained（最後のクリップから順に生成し、各クリップが1つ後ろのクリップの冒頭を自分の末尾として引き継ぐ）になる。出力の長さはどちらの場合もクリップの合計」へ改めた。D13の「2件以上は非推奨」という案内は撤去した | 同日の逆順Chained実装（第2段階・バッチ2）でクリップ2本以上も推奨経路になったため、D13時点の「非推奨」案内は実態と食い違うようになった。`end_source_strength`（バッチ1で先行追加）も同日にツール引数へ公開した。**ツールの本数は22本のまま不変**（フィールドの追加であってツールの追加ではない）。実装・機械検証・実機ゲートの正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §63（strength）・§64（逆順Chained）。**【2026-08-22 追記】この「2件以上も推奨経路になった」という前提は、同じ2026-08-18の目視・試聴ゲートを経たオーナー裁定「End sourceはクリップ1本で使うのが推奨、複数クリップは推奨外」によって失効している**（裁定の正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11末尾・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84）。**機能としては引き続きクリップ何件でも受理する**ので引数の公開は不変だが、`INSTRUCTIONS`・docstring の文言を裁定に合わせるかどうかは未判断である |
+| D15（2026-08-22追加） | **ベースモデル軸（`base_model`）はMCPツールに出さない**。`load_pipeline` にベースモデルを選ぶ引数は無く、`list_models` もカテゴリ別の一覧を返すだけである。したがってMCP経由では**いま選ばれているベースモデルのまま**しか操作できない（切り替えはAviUtl2の操作パネルかAPI直叩きで行う） | LTX 2.5対応（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98）のv1スコープ判断。エージェントがベースモデルを切り替えるとワーカーが載せ替わり、**同時1ジョブ制約と相まって他の利用者の作業を止めうる**——D9（破壊的な操作にガードを置く）と同じ考え方で、v1では露出しないほうを選んだ。将来LTX 2.5でできることが増えたら、`load_pipeline` への引数追加（**ツール本数は22本のまま**）として足せる形は保たれている |
 
 ## 3. `.mcp.json` 絶対パス生成方式の経緯
 

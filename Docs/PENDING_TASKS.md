@@ -1,9 +1,9 @@
 # 未着手タスク台帳
 
 - 作成: 2026-07-15／最終更新: 2026-08-22
-- 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳**。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分けている（運用ルールは末尾「本台帳の位置づけ」節）。
+- 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳**。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分けている（**運用規則は末尾「本台帳の位置づけ（運用規則）」節に一本化**してある）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
-  2. **実装済み・ユーザーのテスト待ち** — 実装は完了しているが、オーナー本人による実機・目視・実GPUでのテストがまだ済んでいないもの。全項目が合格して空になった節は見出しごと削除する運用のため、その時点では本節が無い場合がある。
+  2. **実装済み・ユーザーのテスト待ち** — 実装は完了しているが、オーナー本人による実機・目視・実GPUでのテストがまだ済んでいないもの。全項目が合格して空になった節は見出しごと削除する運用のため、その時点では本節が無い場合がある（**現在は無い**）。復活させるときは**チェックリスト形式**で書く——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。経緯や完了宣言はここに書かず[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)か各出典へ落とし、本節からは「経緯: 〜」の一言参照にとどめる。テストではなく仕様の是非をオーナーが判断する項目は§2-3（オーナー判断待ち）に分離する。
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
 - **完了してクローズした項目は本書に残さず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。** 本書の「3.」と同書の「3.」は別物なので、**参照するときは番号だけで書かず、必ずファイル名を添えること**。
@@ -18,35 +18,15 @@
 
 ### 1-4. READMEのスピードガイド執筆（起票：2026-07-26）
 
-**この項目の位置づけ**: これは**AIエージェントが実装するタスクではない**。α版公開時に、オーナーがREADMEの冒頭へ手書きで「スピードガイド」（初めての人が最短でインストールから初回生成までたどり着くための案内）を書く予定であり、そこへ盛り込むべき事項を書くときに忘れないよう覚書として残すもの。オーナーがREADMEを書き終えた時点でクローズする。なお下記「インストール導線の前提」はREADMEの文面だけでなく`setup.bat`／`run.bat`の作り方そのものを縛るものなので、文面を書く前に一度読み返すこと。
-
-**想定ユーザー像（オーナー確定）**: PowerShellコマンドを打つことも難しい情報リテラシーを想定する。ダブルクリックとドラッグ＆ドロップだけでインストールが完結することを目指す。
-
-**READMEで解消する参照切れ3ターゲット**: `install_ltx.ps1`への誘導と、想定リテラシーに合わせた図解手順を書く際に、あわせて次の3箇所の参照切れを解消すること。
-
-- `requirements.txt`のREADME参照コメント（`# See README "7. LTX 2.3 のインストール".`） → README「7. LTX 2.3 のインストール」
-- `scripts/build_xformers.ps1`のREADME 7.2参照（`.PREREQUISITES`と`throw`メッセージ2本の計3箇所） → README「7.2」
-- `scripts/build_xformers.ps1`のREADME 7.3参照（`cl.exe`が見つからないときの`throw`メッセージ1箇所） → README「7.3」
-
-いずれも参照先の見出しが現存しない。しかもバックエンド`README.md`の現行の「7.」は**インストール手順ではなく「## 7. 制限事項」**（節の題名は更新のたびに日付部分が変わる）であるため、番号をたどった読者は制限事項の節（およびその下に存在しない7.2・7.3という小見出し）へ着地する。「見出しが無くて迷子になる」より紛らわしいぶん、解消の優先度は上がっている。
-
-**インストール導線の前提（README執筆時に読み返すこと）**: 実装済みの導線を縛っている前提は8点ある——自動更新は作らない／前提ツールはgitだけ／更新の単位はコミット／`run.bat`に`uv sync`を入れない／`.bat`は純ASCII・CRLF・末尾`pause`／`config.yaml`はgit追跡外＋`.example`から複製／Git LFSは使わない／日本語・空白を含むパスでも壊れない。詳細は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-37（`run.ps1`の設計は同§3-56）。
-
-**スピードガイドに書く内容（オーナーが手書きする際の備忘）**
-
-- **クローン先のパス**: `C:\Nz-Videomni`のような、ユーザープロファイルの外にある浅いパスを指定するよう案内する。デスクトップやドキュメントはWindows 11の既定でOneDriveと同期されるため、`models/`の約33GBがOneDriveへアップロードされ始める（`.gitignore`は無関係。OneDriveはgitではなくファイルシステムを見ている）。浅いパスにはWindowsの260文字パス長制限を避けられる利点もある。※オーナー判断: これはユーザー側の落ち度の範囲であり、過剰なフールプルーフ（防止機構）は不要。要求スペックの説明でストレージ空き容量に触れる際、あわせて注意喚起する程度でよい。
-- **ストレージの空き容量**: クローン先のドライブに**約40〜41GB**（モデル約32.51GiB＋Python環境7〜8GiB＋`tools/`約0.4GiB〔実測378MB〕。Python環境の実体はほぼ`.uv_cache/`にあり、2つの仮想環境はそこへのハードリンク〔同じ実体を指す別名〕で共有するため単純な足し算にはならない）。**これとは別に**、ページファイルを置いたドライブに60GB以上。ページファイルは別ドライブでもよい性質のもので、**40〜41GBの代わりにはならない**（両方必要）。
-- **ページファイル**: 「システム管理サイズ」のままにしておくよう案内する。無効化や固定の小サイズにしていると、生成の途中で**エラーメッセージもログも出さずにワーカーが落ちる**。実測では1ジョブあたりcommit（物理メモリとページファイルの合計使用量）が約48GB積み上がり、連続実行ではジョブごとに12〜15GBずつせり上がる。RAM 32GBの環境では物理メモリだけではまったく足りない。
-- **GPU要件**: VRAM 16GB以上。ドライバはR570以上を推奨（Blackwell世代では必須）。
-- **初回セットアップの所要時間**: モデルのダウンロードに**約50分**かかる（下り約90〜100Mbps）。途中で止まったように見えても待つよう案内する。この「約50分」がバックエンド`README.md` §1・`scripts/setup.ps1`と揃えた統一表記である。
-- **初回の実生成の確かめ方**: `install_ltx.ps1 -RunSmoke`はmockバックエンドで動きGPUに一切触れないため、**セットアップの成功は実生成の成功を意味しない**。初回の生成はWebGUIのプリセット`smoke_test`（384×256／17フレーム）を手で回して確かめるよう案内する。
-- **更新手順**: VSCodeのGUIで`git pull` → **その後に`setup.bat`をもう一度実行する**。
-- **gitのインストール手順**: GUIだけで完結する旨を明記する。
-- **ffmpegはユーザーの前提条件にならない**旨（`setup.bat`が`tools/ffmpeg/`へ取得する）。※内部的には`ffmpeg`と`ffprobe`の両方が必要で、`imageio-ffmpeg`は`ffprobe`を同梱しないため代替にならない（`ffprobe`が無いと音声トラックの有無判定が常に「無し」を返し、**エラーも出さずに音声が捨てられる**）。
-- **EditタブのRetake／Outpaintingの使い方**も1節設ける（対象機能は`Docs/PENDING_TASKS_CLOSED.md` §3-73・同§3-70）。
-
-- **状態**: 未着手（オーナーが手書きするための備忘録。README執筆時に読み返し、書き終えた時点でクローズする）。**これがα版公開前に残っている唯一の作業である。**
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56、[`Nz-Videomni/README.md`](../README.md) §1（要求スペック）。
+- **概要**: α版公開時に、オーナーがREADMEの冒頭へ手書きで「スピードガイド」（初めての人が最短でインストールから初回生成までたどり着くための案内）を書く。**AIエージェントが実装するタスクではない**。想定ユーザー像はオーナー確定で「PowerShellコマンドを打つことも難しいリテラシー」——ダブルクリックとドラッグ＆ドロップだけで完結することを目指す。**これがα版公開前に残っている唯一の作業である。**
+- **書く前に読み返すもの**: ①インストール導線を縛る前提8点（自動更新は作らない／前提ツールはgitだけ／更新の単位はコミット／`run.bat`に`uv sync`を入れない／`.bat`は純ASCII・CRLF・末尾`pause`／`config.yaml`はgit追跡外＋`.example`から複製／Git LFSは使わない／日本語・空白を含むパスでも壊れない）は、**READMEの文面だけでなく`setup.bat`／`run.bat`の作り方そのものを縛る**。②要求スペック・所要時間（モデルのダウンロード約50分）・更新手順・gitとffmpegの扱いは、すでに[`README.md`](../README.md) §1にある内容をやさしく言い直せばよい。
+- **他に記録の無い覚書（この4点だけは本書が唯一の置き場）**:
+  - **クローン先は`C:\Nz-Videomni`のような浅いパス**を案内する。デスクトップやドキュメントはWindows 11の既定でOneDriveと同期されるため、`models/`の30GB超がOneDriveへアップロードされ始める（`.gitignore`は無関係。OneDriveはgitではなくファイルシステムを見ている）。260文字パス長制限を避けられる利点もある。※オーナー判断: 過剰なフールプルーフは不要で、空き容量の説明のついでに注意喚起する程度でよい。
+  - **`install_ltx.ps1 -RunSmoke`はmockバックエンドで動きGPUに一切触れない**ため、**セットアップの成功は実生成の成功を意味しない**。初回の生成はWebGUIのプリセット`smoke_test`（384×256／17フレーム）を手で回して確かめるよう案内する。
+  - **EditタブのRetake／Outpaintingの使い方**にも1節設ける（対象機能は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73・同§3-70）。
+  - **参照切れ3ターゲットを同時に解消する**——`requirements.txt`のREADME参照コメント（`# See README "7. LTX 2.3 のインストール".`）と、`scripts/build_xformers.ps1`のREADME 7.2参照3箇所・7.3参照1箇所。いずれも参照先の見出しが現存せず、しかも現行の「7.」は**制限事項**の節なので、番号をたどった読者はまったく別の場所へ着地する。
+- **状態**: 未着手（オーナーが手書きするための備忘録。書き終えた時点でクローズする）。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（導線の前提と`run.ps1`の設計）、[`README.md`](../README.md) §1（要求スペック）。
 
 ---
 
@@ -120,6 +100,14 @@
 - **直し方の見込み**: 渡すパスをディレクトリではなく実ファイル（`--project` か、`pyproject.toml` として読める形）にすればよい。ただし**`-ResolveLatest` で得られる環境はそもそも未検証の新しいtorch（~2.11）である**ため、直したうえで実際に使うかどうかは別の判断になる。
 - **状態**: 未着手（将来の改修項目）。
 - **出典**: `scripts/install_ltx.ps1` の `Ensure-EngineVenv`、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（温存したまま持ち越した理由）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.3。
+
+#### 3-107. ストレージ必要容量の再実測（`.venv-engine-ltx25`追加後）（起票：2026-08-22）
+
+- **概要**: 「約40〜41GB」（モデル約32.51GiB＋Python環境7〜8GiB＋`tools/`約0.4GiB）という統一表記は、仮想環境が2つだった時期の実測値である。LTX 2.5用の3つ目（`.venv-engine-ltx25`）が加わったあと測り直していない。**開発機の実測では`.uv_cache/`だけで16.42GiB**（Python環境全体で7〜8GiBという旧記載の倍以上）に育っており、合計が約49GBになっている可能性がある。
+- **測り直しが要る理由と前提**: 開発機のキャッシュは何度も再構築を繰り返した結果なので、そのままユーザー環境の必要量とは言えない。**クリーンな環境（新規cloneから`setup.bat`を1回だけ）での実測が前提**であり、それまで数値は動かさない。
+- **直す先は3箇所**: [`README.md`](../README.md) §1（要求スペックの表と「必要な空き容量の内訳」）・[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §5.1b（取得総量と必要容量の注記）・`scripts/setup.ps1`の空き容量しきい値`$needGB = 45`（現在は40〜41GBに余裕を足した値なので、合計が増えるなら連動して見直す）。
+- **状態**: 未着手（将来の改修項目・クリーン環境での実測待ち）。
+- **出典**: [`README.md`](../README.md) §1（現行の数値と、再実測が未了である旨の注記）、`scripts/setup.ps1`。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -311,7 +299,7 @@
 
 #### 3-54. 軽量ユーティリティAIモジュール新設＋座標追尾→マスク作成（第一弾）（起票：2026-08-05）
 
-- **概要**: 重量級動画生成AI（LTX 2.3、将来のWan／Hunyuan／MiniMax H3等）とは別モジュールとして、OpenCVのトラッキングAPI系の軽量AI（MIL／KCF／CSRT等の古典系、DaSiamRPN／Nano／ViT等のDNN系）をサーバー上に常駐運用する。第一弾は座標追尾からマスク動画を作るところまでで、インペイントへの接続は後続の別項目（§3-55）とする。
+- **概要**: 重量級動画生成AI（LTX 2.3／LTX 2.5、将来のWan／Hunyuan／MiniMax H3等）とは別モジュールとして、OpenCVのトラッキングAPI系の軽量AI（MIL／KCF／CSRT等の古典系、DaSiamRPN／Nano／ViT等のDNN系）をサーバー上に常駐運用する。第一弾は座標追尾からマスク動画を作るところまでで、インペイントへの接続は後続の別項目（§3-55）とする。
 - **設計確定事項（オーナー合意済み）**:
   - (a) 重量級パイプラインの切替（ワーカー再起動）とは無関係に動く別モジュール構成とする。現行ワーカーに同居させると、パイプライン切替のたびに巻き添えで落ちてしまうため必須の要件。
   - (b) API名前空間を分離する（例: `/api/v1/utils/track`系）。どの重量級モデルが載っていても契約が不変であることを保証する。
@@ -448,7 +436,7 @@
 
 - **概要**: 逆順Chainedの中間の継ぎ目には、シード依存・確率的なモーフが出る（同一パラメータでシードだけ変えたR2-3a/R2-3bで結果が大きく割れる。バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7）。原因の考察は、正順Chainedの継ぎ目が**初期値問題**（過去のセグメントが確定し、モデルの自然な生成方向〔過去→未来〕へ続けるだけでよい）であるのに対し、逆順の継ぎ目は**境界値問題**（未来側が確定した状態から過去側へ生成方向とは逆に「渡って」いく必要があり、到着時刻の拘束が無い）であるという非対称に行き着いた。§62.4の早着仮説（静止画エリア）そのものではないが、同じ「到着時刻の拘束の欠如」ファミリーの現象である。
 - **根治に要るもの**: モデル側が、生成過程の中で「この潜在は時刻tに到着する」という拘束をかけられる能力。現行のLTX 2.3にはこの能力が無く、既存の凍結機構（マスク値による部分的な条件付け）を組み合わせても構造的に埋められない種類の欠落だと考えられる。
-- **着手条件**: 将来のモデル世代交代（例: LTX 2.5等）でこの種の能力が追加されたときに再検討する。現時点では調査・実装のどちらも着手しない。
+- **着手条件**: 将来のモデル世代交代でこの種の能力が追加されたときに再検討する。**LTX 2.5には対応済みだが、v1はクリップ連結そのものが未対応（422 `FEATURE_UNSUPPORTED`）のため本件は検証できていない**（連結の2.5対応は本書§3-102）。現時点では調査・実装のどちらも着手しない。
 - **状態**: 将来の研究課題（着手時期未定・モデル側の能力待ち）。
 - **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7・§65.8（実機ゲート結果と考察の正本）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（考察の正本）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）。
 
@@ -462,31 +450,26 @@
 
 #### 3-95. 快適上限の適用拡大（Singleの賢いマーカー以外への波及、起票：2026-08-18）
 
-- **概要**: Singleタブの賢い快適上限マーカー（全on構成限定・44,880トークン線。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12）が解決したのはフレーム数スライダーのマーカー表示1点だけで、同じ`resolveSpillFreeFrames`の粗い丸めに依存している他の経路は手つかずである。その据え置いた経路をまとめて扱う。
-- **①③ 右クリック尺／A2V wav自動調整との見た目の食い違い**: `webui/src/timeline/deriveDuration.ts`の右クリック直後の自動尺、および`useGenerationForm.ts`のA2V wav自動調整の天井は、いずれも`resolveSpillFreeFrames`のままである。全on構成では、これらが算出する値（例257）とマーカーが示す賢い上限（例361）が食い違って見える——右クリック尺は複数経路が共有する関数のため単純差し替えができず、A2V wavは「Single a2vは実際にはチェーンを投げる」という別経路の事情があるため、どちらも単純な差し替えが正しいとは限らない。着手するときはこの2点をセットで検討する。
-- **⑤ Outpaintingの単発トークン予算（`COMFORT_TOKEN_BUDGET = 40_000`）の較正**: `webui/src/modes/edit/outpaintGeometry.ts`が持つOutpainting専用の単発トークン予算40,000は、44,880（純テキスト生成・全on構成限定の実測アンカー）とは適用範囲が異なる別軸（元動画のVAEエンコードとマスクを伴う別ワークロード）である。この40,000自体の実測較正はまだ行っていない。
-- **④ Single a2v・参照動画つき生成の快適上限**: 実測が無いまま。上記③のA2V wavの検討とあわせて実測が必要になる可能性がある。
+- **概要**: Singleタブの賢い快適上限マーカー（全on構成限定・44,880トークン線）が直したのはフレーム数スライダーの表示1点だけで、同じ`resolveSpillFreeFrames`の粗い丸めに依存する他の3経路は手つかずである。その据え置いた経路をまとめて扱う。
+- **対象3件**: ①③右クリック直後の自動尺（`deriveDuration.ts`）とA2V wav自動調整（`useGenerationForm.ts`）——全on構成でマーカー（例361）と食い違う（例257）。前者は複数経路が共有する関数、後者は「Single a2vは実際にはチェーンを投げる」という事情があり、**どちらも単純な差し替えが正しいとは限らないのでセットで検討する**。④Single a2v・参照動画つき生成の快適上限は実測が無い。⑤Outpainting専用の単発トークン予算40,000（`outpaintGeometry.ts`）は別ワークロードの別軸で、実測較正が未了。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12（Singleマーカー本体の実装記録）、バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §6④（Outpainting予算の根拠）、`webui/src/timeline/deriveDuration.ts`・`webui/src/modes/single/useGenerationForm.ts`（A2V wav自動調整）・`webui/src/modes/edit/outpaintGeometry.ts`。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12（Singleマーカー本体の実装記録）、バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §6④（Outpainting予算の根拠）、`webui/src/timeline/deriveDuration.ts`・`webui/src/modes/single/useGenerationForm.ts`・`webui/src/modes/edit/outpaintGeometry.ts`。
 
 #### 3-96. End source付き連結クリップの改善研究（起票：2026-08-19）
 
-- **概要**: End source（素材（末尾））の複数クリップ時の継ぎ目品質という残課題を、より使いやすい形で解決する方法を実用の中で探る（本体テーマの完結記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84）。
-- **観察結果（R2-7のA/B）**: 旧方式（正順・内部区画。`internal_segment`）は中間クリップの継ぎ目が目立たず音声の区切りも不明瞭だが、素材への接続部で強烈なクロスフェードとモーフが出る。逆順Chainedはちょうど裏返しで、素材への接続は綺麗な一方、中間の継ぎ目はシード依存で荒れる。両ジョブは同一プロンプト・同一素材で生成しており、この差はプロンプトの違いによるものではなく構造的である——正順の継ぎ目は**初期値問題**（過去のセグメントが確定し、モデルの自然な生成方向へ続けるだけでよい）、逆順の継ぎ目は**到着時刻の拘束が無い境界値問題**（§3-91参照）に由来する。
-- **改善候補の方向性（オーナー方針）**: 新方式（逆順Chained）と旧方式（正順・内部区画）をラジオボタン等で切り替えられるようにする案を含め、**よりユーザーフレンドリーな改善方法を実用の中で探る**。ただし旧方式は現在APIから到達不能の死蔵状態である——`chain_math.py`の`end_source_mode_override`はテスト・切り戻し専用のキーワード専用引数で、APIには一切露出していない（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.2）。したがって切替UIを作る場合は、まずこの引数（またはそれに相当する経路）をAPIへ露出する設計が新たに要る。
-- **関連する既記録**: 「本体は正順Chained→最終クリップだけEnd sourceで補間して仕上げる」という実用手順（全継ぎ目を初期値問題側＝綺麗な側で構成できる構成。出荷済み機能の組み合わせで実現可能・実機検証は未実施）も、本研究課題の材料の一つである。手順の正本はバックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11。
+- **概要**: End source（素材（末尾））の複数クリップ時の継ぎ目品質を、より使いやすい形で解決する方法を実用の中で探る。旧方式（正順・内部区画）と新方式（逆順Chained）は継ぎ目の弱点がちょうど裏返しで、A/B目視でも構造的な差だと確認できている（理由は§3-91と同じ非対称）。
+- **判断材料**: 切替UIを作るなら、旧方式は現在APIから到達不能の死蔵状態（`chain_math.py`の`end_source_mode_override`はテスト・切り戻し専用のキーワード専用引数）なので、**APIへ露出する設計が新たに要る**。「本体は正順Chained→最終クリップだけEnd sourceで補間」という実用手順（未実機検証）も本項の材料である。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.7のR2-7追記（A/Bの記録）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）、本書§3-91（到着時刻の拘束）。
+- **出典**: バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（A/Bの考察と実用手順の正本）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.2（死蔵引数）・§64.7のR2-7追記（A/Bの記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（本体テーマの完結記録）、本書§3-91。
 
 #### 3-102. LTX 2.5でまだ使えない機能の対応（起票：2026-08-22）
 
-- **概要**: LTX 2.5（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98）で使えるのは基本生成（T2V／I2V）だけで、それ以外は422で明示的に断る。ここで断っている機能をLTX 2.5でも使えるようにするのが本項である。**1つのテーマとしてまとめて起票してあるが、着手は機能ごとに切り出してよい**（互いに独立しているため）。
-- **対象（現在422で断っているもの）**: クリップ連結（Chained）・Retake・End source・V2V・A2V の連結生成一族／`two_stage_hq`／Outpainting／Style LoRA と IC-LoRA（`loras`・`reference_video_id`）／NAG／PrunaVAED（`vae_mode`）／SageAttention（`attention_backend`）／常駐（`keep_resident`）。
-- **対象（現在は無視して先へ進めているもの）**: `negative_prompt`・`guidance_scale`・`num_inference_steps`・`neg_method`・`vsf_scale`・`fused_gguf_dequant_kernel`・`block_swap_prefetch`。**このうちネガティブプロンプト系は、蒸留版2.5にCFG（プロンプトへの従い具合の制御）そのものが無いため、単に配線すれば効くという性質のものではない**——実現方法から検討が要る。
-- **LoRAのベースモデル軸**: `config.yaml` の `lora_dir` と `ic_loras` はベースモデル軸を持たず、どのベースモデルを選んでいても同じ1本のディレクトリ・同じ登録名を見る。**LTX 2.3用のLoRAをLTX 2.5に当てても意味のある結果にならない**ので、2.5用のLoRAが実在するようになった時点で、記述子側（`assets`または新設のLoRAブロック）へ寄せるかどうかを判断する。`models/LTX23/StyleLoRA/` というベースモデル配下のレイアウトにはなっているため、移行の下地はある。
-- **着手の目安**: 機能が1つ実装できるたびにアダプタの対応表から外し、`GET /models` の `unsupported_features` から自動的に消えるようにしてある（表が正本で、APIもフロントエンドもそれを読むだけ）。**したがって作業の完了判定は「対応表から1行消えて、テストが対応表と実装のずれを検出しなくなること」である。**
+- **概要**: LTX 2.5で使えるのは基本生成（T2V／I2V）だけで、それ以外は422で断る。ここで断っている**8件**（連結生成一族＝Chained・Retake・End source・V2V・A2V／`two_stage_hq`／Outpainting／`loras`・`reference_video_id`／NAG／PrunaVAED／SageAttention／`keep_resident`）を2.5でも使えるようにするのが本項。**1テーマにまとめてあるが、着手は機能ごとに切り出してよい**（互いに独立しているため）。
+- **判断材料（1）ネガティブプロンプト系は配線では済まない**: 現在は無視して先へ進めている7フィールドのうち`negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`は、**蒸留版2.5にCFG（プロンプトへの従い具合の制御）そのものが無い**ため、実現方法から検討が要る。
+- **判断材料（2）LoRAにはベースモデル軸が無い**: `config.yaml`の`lora_dir`と`ic_loras`はどのベースモデルでも同じ1本のディレクトリ・同じ登録名を見る。**2.3用のLoRAを2.5に当てても意味のある結果にならない**ので、2.5用のLoRAが実在した時点で記述子側へ寄せるかを判断する（`models/LTX23/StyleLoRA/`というレイアウトなので下地はある）。
+- **完了判定**: 機能が1つ実装できるたびにアダプタの対応表（`services/engines/ltx25/adapter.py`の`REJECT_TABLE`）から1行外すと、`GET /models`の`unsupported_features`から自動的に消える。**「対応表から1行消えて、テストが対応表と実装のずれを検出しなくなること」が完了の合図である。**
 - **状態**: 未着手（将来の研究課題）。
-- **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）。
+- **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（4分類の全28件）。
 
 #### 3-103. 拡散デコーダ版の映像VAE（DiffVAE）を採用するかどうか（起票：2026-08-22）
 
@@ -516,7 +499,7 @@
 
 - **概要**: CFG（プロンプトへの従い具合）・ネガティブプロンプト・ステップ数・STG・sigmaスケジュール・denoiseループの選択・seedのロック・延長尺（約30秒）・空間アップスケーラのユーザー操作露出——といった、非蒸留（dev）モデルを前提とするつまみ一式。
 - **何が塞いでいるか**: 塞ぎ方が2種類ある。
-  - **ステップ数**は`services/ltx_runner.py`が組み立てるworkerペイロードへ`num_steps`として**配線済み**だが、API層（`api/models.py`のバリデータ）が`pipeline="distilled"`のとき**8ステップ・CFG 1.0を強制**するため値を動かせない。露出するにはこの強制を解く必要がある。
+  - **ステップ数**は`services/engines/ltx/adapter.py`（旧パス`services/ltx_runner.py`は再エクスポートのshim）が組み立てるworkerペイロードへ`num_steps`として**配線済み**だが、API層（`api/models.py`のバリデータ）が`pipeline="distilled"`のとき**8ステップ・CFG 1.0を強制**するため値を動かせない。露出するにはこの強制を解く必要がある。
   - **CFG（`guidance_scale`）と`pipeline`**は、そもそもworkerペイロードへ**未配線**のため、GUIへ露出すること自体が禁止（露出すると「操作できるのに効かない」死んだUIになる）。
 - **例外的な解禁**: **ネガティブプロンプトのみ、NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）経由で解禁済み**（`nag_*`フィールドがCFGを迂回してworkerへ配線されている）。
 - **相互参照**: 上記3点の復活条件は**§4-28**（`two_stage_hq`）と同じで、非蒸留モデルを動かせるハイスペックマシンを用意したとき。
@@ -546,9 +529,10 @@
 - **何が塞いでいるか**: テキストエンコーダのGemmaを**text-only化してVRAMを22.7GB回収した**現行構成と正面から衝突する。巻き戻す判断が必要なため計画外で、要件化されたときに別途判断する。
 - **出典**: [`Nz-Videomni/Docs/PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
 
-### 4-6. バックエンド同梱Gradio UIの残4件
+### 4-6. バックエンド同梱Gradio UIの残5件
 
-- **概要**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）。
+- **ベースモデル軸に未対応（2026-08-22追加）**: Gradio UIのコードには`base_model`への参照が1つも無く、**ヘッダーのドロップダウンに相当するベースモデル（LTX 2.3／LTX 2.5）の切り替え手段が無い**。`GET /models`の旧来の2層ブロックだけを読む実装のままなので壊れはせず、アクティブなベースモデルのカテゴリ一覧が出る（切り替えはWebUI側かAPI直叩きで行う）。v1のスコープ判断であり、製品の入口はフロントエンドという位置づけから優先度は低い。
+- **概要（従来からの4件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）。
 - **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。
 - **既知の差分**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する挙動（フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針である。
 - **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73。
@@ -688,17 +672,17 @@
 
 ### 4-26. Control系IC-LoRAの複数同時適用
 
-- **概要**: canny-control・pose-control等、複数の前処理種別を同じ参照動画に併用したい需要への対応。単一制御に限定しているのは当方の3箇所のみ——①APIスキーマの`reference_video_id`が単数（`api/models.py`）②前処理種が2種以上だと400 `LORA_PREPROCESS_CONFLICT`で拒否（`api/generate.py`）③エンジン側の`_ic_reference`が単一タプル（`engine/pipeline/fast_video_pipeline.py`）。
-- **Web調査の結果**: (a) 複数信号を1本の動画に重ね描き合成して渡す方式は、公式・コミュニティとも実例ゼロ（モデルカード・HFディスカッション全件・公式ドキュメント・GitHub issueに報告なし）。(b) 公式ドキュメントの「Union」はチェックポイント差し替え不要の意味で、詳細チュートリアル（ltxworkflow.com）は複数モード同時実行をVRAM問題として明示的に非推奨としている。(c) 実現するなら公式ComfyUIの`LTXVAddGuideMulti`ノードと同様の「制御動画を複数本、独立に条件付けする」方式が本筋で、その場合は上記3箇所の拡張が正面から必要になる。
+- **概要**: canny-control・pose-control等、複数の前処理種別を同じ参照動画に併用したい需要への対応。単一制御に限定しているのは当方の3箇所のみ——①`reference_video_id`が単数（`api/models.py`）②前処理種が2種以上だと400 `LORA_PREPROCESS_CONFLICT`（`api/generate.py`）③エンジン側の`_ic_reference`が単一タプル（`engine/pipeline/fast_video_pipeline.py`）。
+- **判断材料**: 複数信号を1本の動画へ重ね描きする方式は公式・コミュニティとも実例ゼロで、公式チュートリアルは複数モード同時実行をVRAM問題として明示的に非推奨としている。実現するなら公式ComfyUIの`LTXVAddGuideMulti`と同型の「制御動画を複数本、独立に条件付けする」方式が本筋で、上記3箇所の拡張が正面から必要になる（調査は2026-08-03）。
 - **何が塞いでいるか**: 公式が実運用で非推奨としており、需要の証拠も薄いため。
 - **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §15.2、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)、`Nz-Videomni`の`api/models.py`・`api/generate.py`・`engine/pipeline/fast_video_pipeline.py`、[LTX公式 IC-LoRA Adapters](https://docs.ltx.io/open-source-model/integration-tools/ic-lo-ra-adapters)、[ltxworkflow.com IC-LoRAガイド](https://ltxworkflow.com/resources/tutorials/ic-lora-ltx-2-3-complete-guide)、[ComfyUI-LTXVideo issue #479](https://github.com/Lightricks/ComfyUI-LTXVideo/issues/479)（いずれも2026-08-03調査）。
 
 ### 4-28. `two_stage_hq`（非量子化モデル用の高品質パイプラインモード）（起票：2026-07-15）
 
-- **概要**: 品質モード`two_stage_hq`は、非量子化モデル（量子化していないフル精度のモデル）を動かすためのモードとして、API列挙型（`pipeline: Literal["distilled","two_stage_hq"]`）とGradio UIのラジオに**モック（枠）だけ**用意されている機能。現行の唯一の実働パイプライン`distilled`も内部的にはtwo-stage（Stage1半解像度→x2アップスケール→Stage2）だが、これはフル精度モデル向けの高品質種別である`two_stage_hq`とは別物なので混同しないこと。
-- **何が塞いでいるか**: **非量子化モデルを動かせるハイスペックマシンをオーナーが所有していないこと**（**§4-1**と同根）。着手はそうしたマシンを用意したあと、バックエンド側（`engine/`）からの再開発になる。計算コストはステップ増（8→30〜50）とCFGの2回forwardで**約7〜12倍**になり、活性値も増えるためVRAM 16GBでの実測が必須。
-- **着手するときの入口**: ①未配線箇所は`Nz-Videomni/services/ltx_runner.py`が組み立てるworkerペイロード——`op: "generate"`の辞書に`pipeline`と`guidance_scale`が入っておらず、常にdistilled経路になる（ステップ数の扱いは§4-1を参照）。②入口となる重みは非蒸留×量子化のGGUFが実在する（`unsloth/LTX-2.3-GGUF`の`ltx-2.3-22b-dev-Q4_K_M.gguf`、HF表示約14.3GB。現行のdistilled Q4と同クラス・同じ22Bアーキ）。
-- **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N12、`Nz-Videomni`の`api/models.py`（pipeline列挙型）・`gradio_ui/i18n.py`（「バックエンド未対応」ラベル）・`services/ltx_runner.py`（generateペイロード）、[`Nz-Videomni/Docs/FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節。
+- **概要**: 品質モード`two_stage_hq`は、非量子化モデル向けの高品質パイプライン種別として、API列挙型（`pipeline: Literal["distilled","two_stage_hq"]`）とGradio UIのラジオに**モック（枠）だけ**用意されている機能。現行唯一の実働パイプライン`distilled`も内部的には二段（Stage1半解像度→x2アップスケール→Stage2）だが、**別物なので混同しないこと**。なおLTX 2.5では既定以外の`pipeline`は422で断る（本書§3-102）。
+- **何が塞いでいるか**: **非量子化モデルを動かせるハイスペックマシンをオーナーが所有していないこと**（**§4-1**と同根）。計算コストはステップ増（8→30〜50）とCFGの2回forwardで**約7〜12倍**になり、活性値も増えるためVRAM 16GBでの実測が必須。
+- **着手するときの入口**: ①未配線箇所は`services/engines/ltx/adapter.py`（旧パス`services/ltx_runner.py`は再エクスポートのshim）が組み立てるworkerペイロード——`op: "generate"`の辞書に`pipeline`と`guidance_scale`が無く、常にdistilled経路になる（ステップ数の扱いは§4-1）。②入口となる重みは非蒸留×量子化のGGUFが実在する（`unsloth/LTX-2.3-GGUF`の`ltx-2.3-22b-dev-Q4_K_M.gguf`、約14.3GB）。
+- **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N12、`Nz-Videomni`の`api/models.py`（pipeline列挙型）・`gradio_ui/i18n.py`（「バックエンド未対応」ラベル）・`services/engines/ltx/adapter.py`（generateペイロード）、[`Nz-Videomni/Docs/FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節。
 
 ### 4-29. Gradio側バッチのスキップ判定が481フレーム固定のまま（逆方向の差分）（起票：2026-08-12）
 
@@ -715,17 +699,16 @@
 
 ---
 
-## 本台帳の位置づけ
+## 本台帳の位置づけ（運用規則）
 
-本書は、このプロジェクトの未着手タスクを優先度順に一覧するための派生的な台帳である。フロントエンド（`Nz-Videomni-frontend-AviUtl2`）が軸だが、**バックエンド（`Nz-Videomni`）側の将来項目も本書へ一本化している**（各文書に散らばっていると、条件が成立したことに誰も気づけないため）。個々の項目の正本は各出典ドキュメント（`DEVLOG.md`・`API_REFERENCE.md`・`TIMELINE_ALPHA_REQUIREMENTS.md`・`REAL_BACKEND_CHECKLIST.md`・`WEBVIEW2_PARITY_BACKLOG.md`、およびバックエンド`Docs/`の各文書等）にある。運用は次のとおり。
+節の分け方と各節の意味は**冒頭の「位置づけ」に一本化**してある（本節では繰り返さない）。個々の項目の正本は各出典ドキュメント（`DEVLOG.md`・`API_REFERENCE.md`・`TIMELINE_ALPHA_REQUIREMENTS.md`・`REAL_BACKEND_CHECKLIST.md`・`WEBVIEW2_PARITY_BACKLOG.md`、およびバックエンド`Docs/`の各文書等）にあり、本書はそれを優先度順に一覧するための派生的な台帳である。運用は次のとおり。
 
-- 節は**優先度の高い順に4つ**——§1 近日中の改修項目 ＞ §2 実装済み・ユーザーのテスト待ち ＞ §3 将来の研究課題 ＞ §4 スコープ外。§3の内部はさらに「改修項目（先）＞研究課題（後）」に分かれる（オーナー指定の階層）。
-- 新たな未着手タスクが判明した場合は、出典を明記のうえ「1. 近日中の改修項目」「3. 将来の研究課題」「4. スコープ外」のいずれかへ追記する。§3と§4の線引きは、**前提が変われば着手しうるもの＝§3／当面は着手しないと判断済みのもの＝§4**とする。
+- 新たな未着手タスクが判明した場合は、出典を明記のうえ「1. 近日中の改修項目」「3. 将来の研究課題」「4. スコープ外」のいずれかへ追記する。§3と§4の線引きは、**前提が変われば着手しうるもの＝§3／当面は着手しないと判断済みのもの＝§4**とする。§3の内部はさらに「改修項目（先）＞研究課題（後）」に分かれる（オーナー指定の階層）。
 - **§4「スコープ外」の項目には「何が塞いでいるか」を必ず書く。** 前提が変わったかどうかを、あとから読んだ人が判定できるようにするため。**再訪の条件がはっきりしているものは、条件を行頭に置いて書く**（§3-30〜§3-38の書式）。
-- **1項目は「見出し＋本文2〜4行＋出典」を上限の目安にする。** 詳細は正本の文書へ置き、台帳は「次に何をすべきか」が読み取れる密度に保つ。
-- **本書には歴史的経緯を書かない**（オーナー決定・全節に適用）。**本書に載せてよいのは「これから何をするか」「そのための判断材料」「本台帳の運用規則」の3つだけ**であり、「過去に何があったか」は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の責任である。本書はオーナーやAIエージェントが「次に何をすべきか」を確認するために読む場所であり、歴史はノイズになる。クローズした項目は跡地の説明文を残さず削除し、記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（および`DEVLOG.md`等の出典）へ移す。旧番号の欠番はそのままでよい。
-- 「2. 実装済み・ユーザーのテスト待ち」は**チェックリスト形式で維持する**（各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行で書き、`- [ ]`の箇条書きと画面・機能ごとの小見出しでグルーピングする）。実装の経緯・根拠・完了宣言はここには書かず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の日付付きまとめ項目か各出典（`DEVLOG.md`等）へ落とし、§2からは「経緯: 〜」の一言参照にとどめる。テストではなく仕様の是非をオーナーが判断する項目は§2-3（オーナー判断待ち）に分離する。
-- 項目の実装が完了したら「2. 実装済み・ユーザーのテスト待ち」へ移す（上記チェックリスト形式で記載する）。オーナーのテスト（実機・目視・実GPU）に合格したら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移すか、本書から除去する。正本側の更新にも合わせること。
+- **1項目は「見出し＋本文2〜4行＋出典」を上限の目安にする。** 詳細は正本の文書へ置き、台帳は「次に何をすべきか」が読み取れる密度に保つ。**判断材料が他文書に無いときは、先に出典側（研究ノート等）へ書いてから本書を参照に切り替える**——縮約で記録が消えてよいわけではない。
+- **本書には歴史的経緯を書かない**（オーナー決定・全節に適用）。**本書に載せてよいのは「これから何をするか」「そのための判断材料」「本台帳の運用規則」の3つだけ**であり、「過去に何があったか」は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の責任である。本書はオーナーやAIエージェントが「次に何をすべきか」を確認するために読む場所であり、歴史はノイズになる。旧番号の欠番はそのままでよい。
+- **クローズした項目の跡地に説明文は残さない**（記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)および`DEVLOG.md`等の出典へ移す）。**例外は「読み違えを防ぐ1行」だけ**——たとえば「§3-98はv1（基本生成）のスコープでのクローズであり、残りは§3-102として生きている」のように、番号を見た人が誤った結論に至るのを防ぐ短い注記は置いてよい（§3冒頭の1行がこの例外にあたる）。
+- 項目の実装が完了したら「2. 実装済み・ユーザーのテスト待ち」へ移す（書式は冒頭の位置づけ2番を参照）。オーナーのテスト（実機・目視・実GPU）に合格したら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移すか、本書から除去する。正本側の更新にも合わせること。
 - **全項目が合格して空になった節は、見出しごと削除する**（オーナー決定）。合格記録は本書に残さず[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ一本化し、他文書からの参照もそちらへ付け替える。**節番号の再採番はしない**——過去の文書・記憶が番号で参照しているため、削除した節の番号は欠番のままにする。
 - **本書に断りなく現れる略号の凡例**（初めて読む人向け）:
   - **W1〜W9／X1〜X6／Y1〜Y3**＝フロントエンド微調整バッチの第1〜第3波（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §46〜§48）。

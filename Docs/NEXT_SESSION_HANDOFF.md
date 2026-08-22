@@ -10,7 +10,7 @@
 
 | 場所 | 中身 |
 |------|------|
-| リポジトリ直下 | バックエンド（`main.py` / `api/` / `services/` / `engine/` / `gradio_ui/` / `mcp_server/`）。REST API サーバー本体 |
+| リポジトリ直下 | バックエンド（`main.py` / `api/` / `services/` / `engine/`〔LTX 2.3〕/ `engine25/`〔LTX 2.5〕/ `gradio_ui/` / `mcp_server/`）。REST API サーバー本体 |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` | AviUtl2 拡張フロントエンドのソース（C++ プラグイン `native/` ＋ React/TypeScript の `webui/`） |
 | `AviUtl2-Plugin/NzVideomni.aux2` | ビルド済みのプラグイン本体（配布物・git 追跡。利用者はこれを AviUtl2 へドラッグ＆ドロップする） |
 | `Docs/` | プロジェクト全体の文書と課題台帳 |
@@ -37,7 +37,7 @@
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結（Clip Chain）の内部構造と現行アーキテクチャの設計正本 |
 | [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) / [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) | 解像度×尺の能力（spill-free 閾値・生成時間）と快適上限の各正本 |
 | [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) / [`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) / [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) | 高速化候補の整理・LTX 2.3 の一般知識・MCP サーバー設計の各正本 |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102・§3-103） |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) の4件＝§3-102〔v1 の範囲外の機能〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕） |
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
@@ -115,7 +115,8 @@ models/
 └─ Preprocessors/        ベースモデルに依存しない前処理器: DWPose/ ・ VDA/
 ```
 
-- 各フォルダの `put_*_here.txt`（全13本）は git 追跡。空フォルダのプレースホルダと「そこへ置ける形式」の掲示を兼ねる。
+- 各フォルダの `put_*_here.txt`（**全18本**。`git ls-files` 実測）は git 追跡。空フォルダのプレースホルダと「そこへ置ける形式」の掲示を兼ねる。
+- **LTX 2.5 の記述子（`scripts/manifests/20-ltx25.json`）は `downloads` が空**で、インストーラは LTX 2.5 のぶんを単に飛ばす（最後の検証テーブル 15 行にも LTX 2.5 は出ない）。**重みは現状オーナー環境にのみ存在し、HuggingFace への再ホストは LTX-2.x Community License の条項確認待ちである**（§5 の残作業）。期待するファイル名 5 本は記述子と[`../README.md`](../README.md) §1「models フォルダの構成」に書いてある。
 - インストーラ（`scripts/install_ltx.ps1`）は **`scripts/manifests/*.json` に駆動される**。manifest が取得元リポジトリ・展開先・期待ファイルを宣言し、スクリプト自体はモデル名を持たない。新しいモデルを足すときは manifest を足す。
 - **ガードは期待ファイル単位**である（ディレクトリ合計サイズではない）。`TextEncoder` が2つのリポジトリから供給されること、`Weights` に利用者の自家変換 GGUF が同居することの2点で、合計方式は破綻するため。
 - **旧レイアウトからの自動移行を持つ。** 旧配置のファイルを新配置へ移動し、`config.yaml` 内のモデルパスも自動で書き換える（書き換え前に `config.yaml.bak` を作る）。移動は上書きしない方式で、実行前に安全性チェック（シンボリックリンク・衝突）を通る。
@@ -139,7 +140,7 @@ models/
 
 ### 次に着手する候補
 
-台帳の「1. 近日中の改修項目」に残っているのは §1-4 だけ（オーナー自身が README のスピードガイドを書く作業であり、AI エージェントが実装するタスクではない）。したがって次のテーマは「3. 将来の研究課題」から選ぶ。**LTX 2.5 の続きを進めるなら §3-102**（v1 で扱わなかった機能の 2.5 対応）で、そのほかの直近の起票は §3-103（拡散デコーダ版 VAE と決定性）・§3-104（インストーラの `-ResolveLatest` の不具合）・§3-105（2.3 ワーカーの 2 ジョブ目以降のせり上がり）・§3-96・§3-95・§3-54／§3-55。
+台帳の「1. 近日中の改修項目」に残っているのは §1-4 だけ（オーナー自身が README のスピードガイドを書く作業であり、AI エージェントが実装するタスクではない）。したがって次のテーマは「3. 将来の研究課題」から選ぶ。**LTX 2.5 の続きを進めるなら §3-102**（v1 で扱わなかった機能の 2.5 対応）で、そのほかの直近の起票は §3-103（拡散デコーダ版 VAE と決定性）・§3-104（インストーラの `-ResolveLatest` の不具合）・§3-105（2.3 ワーカーの 2 ジョブ目以降のせり上がり）・§3-107（ストレージ必要容量の再実測）・§3-96・§3-95・§3-54／§3-55。
 
 LTX 2.5 まわりに着手する場合の読む順序: **①本書§2（文書の地図） → ②[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（v1 で何を作り何を作らなかったか）と[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102（残っている作業） → ③[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §3.3・§5.3・§5.6（設計正本） → ④[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69（実測と、設計へ持ち帰る事実は §69.19） → ⑤[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（API 契約）**。
 
@@ -154,4 +155,4 @@ LTX 2.5 まわりに着手する場合の読む順序: **①本書§2（文書�
 - **人間向けの説明は普通のまともな日本語で書く。** 内部の略語は避け、使うときは短い解説を添える。結論を先に書く。
 - 検証は交互対比較・機械検証・実機ゲートの順で積み上げ、結果は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ、課題の増減は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ記録する。
 - **目視検証**: 720p級（1280×768）以上＋映画トレイラー風プロンプト＋「賑やかな町＋セリフ」題材で行う（512×320級は顔溶けで判断不能）。客観PASSとユーザー目視ゲートを混同しない。実験前に仮説→裏取り（手当たり次第の実験禁止）。
-- **サブエージェント**: Opus以下を使う（Fable5禁止）・非破壊・能動ポーリング監視（ウォッチャー待ち停止禁止）・異常時は続行せず報告。GPU計測の一次ソースは`logs/ltx_worker.log`の`peak_vram_mb`。
+- **サブエージェント**: Opus以下を使う（Fable5禁止）・非破壊・能動ポーリング監視（ウォッチャー待ち停止禁止）・異常時は続行せず報告。GPU計測の一次ソースは**そのエンジン系統のワーカーログ**の`peak_vram_mb`——LTX 2.3なら`logs/ltx_worker.log`、LTX 2.5なら`logs/ltx25_worker.log`（アプリ側の`logs/server.log`とは別物）。

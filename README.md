@@ -32,13 +32,17 @@ API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`
 ## 0. 環境分離ポリシー（最重要・最初に読む）
 
 **このプロジェクトは PC のシステム Python 環境を一切汚しません。** Python 本体を含め、必要なものはすべて
-プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.python/`, `tools/`）に閉じ込めます（仕様書 2.5）。
+プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.python/`, `.uv_cache/`, `tools/`）に
+閉じ込めます（仕様書 2.5）。
 
 - グローバル/システムの `pip install` は **禁止**。必ず `uv` + プロジェクトローカル venv。
 - 環境変数（`PYTORCH_CUDA_ALLOC_CONF`, `UV_PYTHON_INSTALL_DIR`）は **そのプロセス内のみ**。永続化しない。
 - 前提ツール（`uv` / `ffmpeg` / `ffprobe`）も `tools/` に取り込み、`PATH` への追加は **そのプロセス内のみ**。
   Windows の環境変数設定は書き換えません。
-- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.python` / `tools` 含む）を削除するだけで完全に元に戻ります。
+- パッケージのダウンロードキャッシュも `.uv_cache/` としてプロジェクト内に置きます（システムのユーザープロファイル配下は使いません）。
+  3つの venv は、実体をここに置いてハードリンク（同じ実体を指す別名）で共有します。
+- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.venv-engine-ltx25` / `.python` / `.uv_cache` / `tools` 含む）を
+  削除するだけで完全に元に戻ります。
 
 ### venv の構成（重要）
 
@@ -150,7 +154,7 @@ AviUtl2 のプラグインは、バックエンドのサーバーを自分で起
 |------|------|
 | GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
 | GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
-| メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（約 20GB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」） |
+| メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（約 20GB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」）。**LTX 2.5 を使う場合も 64GB 以上を推奨**します——2.5 のワーカーは仕上げ工程のために重みをメインメモリへ持ち続ける設計（`cache_weights`、既定 on）で、**常駐が実測で約 25GiB** あるためです（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.19）。この既定を off にすれば常駐は減りますが、そのぶん仕上げ工程の作り直しに時間がかかります |
 | ストレージ | **このフォルダを置くドライブに約 40〜41GB**（モデル 約 32.51GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
 | attention（注意機構の計算方法） | 既定は全世代で **SDPA**（PyTorch 標準の実装）。**2026-07-31 から、生成のたびに SageAttention へ切り替えられます**（§5「生成の高速化（Acceleration）」）。xformers・flash-attn は引き続き導入も使用もしません |
 
@@ -195,8 +199,13 @@ attention は全世代で PyTorch の SDPA を既定にしており、xformers �
 | 中身 | 実測サイズ | 備考 |
 |------|-----------|------|
 | `models/`（モデル一式） | 約 32.51 GiB | `models/LTX23/` に GGUF transformer（`Weights/`）＋ GGUF Gemma と tokenizer（`TextEncoder/`）＋ VAE 一式（`VAE/`、枝刈りデコーダ PrunaVAED を含め計 2.34 GiB）＋ アップサンプラ（`Upscaler/`）＋ IC-LoRA 2点（1.22 GiB）と Deblur 1点（0.91 GiB）と In-Outpainting 1点（1.22 GiB）（`IC-LoRA/`）、`models/Preprocessors/` に DWPose 前処理器 2点（0.33 GiB）と Video-Depth-Anything 2点（0.12 GiB）。フォルダの意味は下の「models フォルダの構成」を参照 |
-| Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、2つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
+| Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.venv-engine-ltx25/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、3つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
 | `tools/`（`uv` ＋ `ffmpeg`） | 約 0.4 GiB（実測 378 MB） | `setup.bat` が取り込む前提ツール。ffmpeg のダウンロードは約 104 MB だが、展開後はこの大きさになる |
+
+> **この表の数値は、LTX 2.5 用の3つ目の仮想環境（`.venv-engine-ltx25`）が加わったあとの再実測がまだ済んでいません。**
+> 上の「約 7〜8 GiB」「合計 約 40〜41GB」は 2 つの仮想環境だった時期の実測値です。3 つ目のぶんは共有キャッシュ
+> （`.uv_cache/`）にも積み上がるため、実際にはこれより大きくなる可能性があります。**クリーンな環境で測り直すまで
+> 数値は動かさない**方針で、測り直しは課題として起票済みです（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-107）。
 
 > **ページファイル用の 60GB は、この 40〜41GB の代わりにはなりません。** ページファイルは
 > 別のドライブに置いていても構わない性質のもので（Windows の既定では C ドライブ）、
@@ -252,26 +261,32 @@ uv sync --extra dev   # テストも動かす場合。実行だけなら素の u
 `pyproject.toml` / [`requirements.txt`](requirements.txt) には FastAPI 側の依存のみ定義しています（`torch` は含みません）。
 これだけで **モック backend** で API/UI/テストが動きます（GPU 不要）。
 
-### エンジン venv（`./.venv-engine`, torch+cu128）と実モデル
+### エンジン venv（torch+cu128）と実モデル
 
-実生成には別途 `./.venv-engine`（torch 2.9.1+cu128 + LTX 推論スタック）と GGUF/component モデル群が必要です。
-`.venv-engine` は fork 撤去時に `./.venv-engine` へ退避済みで、依存は
-[`engine/engine-venv-pyproject.toml`](engine/engine-venv-pyproject.toml)（`[tool.uv.sources]` に torch cu128 index と
-`ltx-core`/`ltx-pipelines`/`diffusers` の git rev を記載）と
-[`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt)（`name==version` の完全スナップショット）から再構築できます。
-provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) を参照してください。
+実生成には、アプリ venv とは別に**エンジン系統ごとの venv**と GGUF/component モデル群が必要です。
 
-> **`setup.bat` を再実行したときのふるまい**: `.venv-engine` は「すでに存在するから飛ばす」のでは
+| venv | 対象 | 依存の宣言（再構築に使うファイル） |
+|------|------|------------------------------------|
+| `./.venv-engine` | LTX 2.3（`engine/worker.py`） | [`engine/engine-venv-pyproject.toml`](engine/engine-venv-pyproject.toml)（`[tool.uv.sources]` に torch cu128 index と `ltx-core`/`ltx-pipelines`/`diffusers` の git rev を記載）＋ [`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt)（`name==version` の完全スナップショット） |
+| `./.venv-engine-ltx25` | LTX 2.5（`engine25/worker.py`） | [`engine25/engine25-venv-pyproject.toml`](engine25/engine25-venv-pyproject.toml) ＋ [`engine25/venv-engine-ltx25.freeze.txt`](engine25/venv-engine-ltx25.freeze.txt)（同じ作法。公式 LTX-2 v1.2.0 ＋ `transformers` 5.x） |
+
+**2つに分かれているのは、LTX 2.3 と LTX 2.5 が要求するパッケージのバージョンが同居できないためです**（`transformers` 4.57 と
+5.x）。どちらも `setup.bat` が自動で作るので、通常は意識する必要はありません。
+`.venv-engine` の provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) を参照してください。
+
+> **`setup.bat` を再実行したときのふるまい**: エンジン venv は「すでに存在するから飛ばす」のでは
 > なく、**ピン留めされた依存の内容が前回と変わっていないときだけ飛ばします**。freeze ファイルの中身と、
-> `install_ltx.ps1` が持つ 3 つの git リビジョンの指定をまとめてハッシュにし、
-> `.venv-engine/.nz-engine-state` に記録した前回の値と突き合わせる方式です。`git pull` で依存が
+> `install_ltx.ps1` が持つ git リビジョンの指定をまとめてハッシュにし、
+> venv 内の `.nz-engine-state` に記録した前回の値と突き合わせる方式です（**2つのエンジン venv は
+> それぞれ独立に判定されます**）。`git pull` で依存が
 > 変わっていれば自動で貼り直され、記録が無い場合（前回の導入が途中で中断した場合や、この仕組みが
 > できる前に作られた環境）も貼り直しになります。「`git pull` のあとに `setup.bat` を再実行する」
 > という更新手順は、この仕組みで成り立っています。
 
-必要なモデル（`setup.bat` / `install_ltx.ps1` が自動でダウンロードします。上5行は `config.yaml` の
-`model:` が参照し、相対パスは PROJECT_ROOT 基準で絶対化されます。下4行のうち IC-LoRA 系の 2 行
-（IC-LoRA 2点・Deblur 1点）は `model.ic_loras:` が参照し、
+必要なモデル（`setup.bat` / `install_ltx.ps1` が自動でダウンロードします。**どのファイルがどこに要るかを宣言しているのは
+`config.yaml` ではなく「ベースモデル記述子」**＝`scripts/manifests/*.json` で、そこに書かれた相対パスは
+`config.yaml` の `model.models_dir`（既定 `./models`）を起点に解決されます。下から3行目までのうち IC-LoRA 系の 3 行は
+`config.yaml` の `model.ic_loras:` が登録名と結びつけ、
 DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`・`engine/preprocess/depth.py` がそれぞれ固定パスで読みます）:
 
 | 要素 | 既定パス | 概算 | 取得元リポジトリ | 役割 |
@@ -285,8 +300,9 @@ DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`�
 | DWPose 前処理器 2点 | `models/Preprocessors/DWPose/{yolox_l,dw-ll_ucoco_384_bs5}.torchscript.pt` | ~0.34GB | [`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose) | `pose-control` アダプタが参照動画から骨格を起こすときに使う姿勢推定モデル（`engine/preprocess/dwpose.py` が絶対パスで読む） |
 | IC-LoRA Deblur 1点 | `models/LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors` | ~0.91GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | ピンぼけした動画をくっきりさせる `deblur` アダプタの実体。前処理を必要とせず、ぼけた参照動画をそのまま渡す（2026-08-03 追加） |
 | VDA 深度前処理器 2点 | `models/Preprocessors/VDA/video_depth_anything_vits.pth` ＋ `LICENSE` | ~0.12GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | `depth-control` アダプタが参照動画から深度マップ（手前と奥の距離を明暗で表した白黒映像）を起こすときに使う Video-Depth-Anything Small（`engine/preprocess/depth.py` が絶対パスで読む）。同梱の `LICENSE` は Apache-2.0 の全文で、この重みだけライセンスが異なるため必ず一緒に置かれる（2026-08-03 追加） |
+| IC-LoRA In-Outpainting 1点 | `models/LTX23/IC-LoRA/in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors` | ~1.22GB | [`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights) | 動画のキャンバス拡張（Outpainting）で使う `in-outpainting` アダプタの実体（2026-08-08 追加） |
 
-上記9要素はすべて、本プロジェクトが再ホストした **3つの公開リポジトリ**（`Rootport/Nz-LTX23-weights`・
+上記10要素はすべて、本プロジェクトが再ホストした **3つの公開リポジトリ**（`Rootport/Nz-LTX23-weights`・
 `Rootport/Nz-Gemma3-12B`・`Rootport/Nz-DWPose`）から取得します。いずれも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、
 **HuggingFace のアカウントもアクセストークンも一切必要ありません**。`setup.bat`（内部で
 `scripts/install_ltx.ps1` を呼びます）を実行すれば、6回のダウンロードで全部揃います。
@@ -298,8 +314,9 @@ DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`�
 ダウンロード済みの分は再取得されません。
 
 **IC-LoRA・DWPose 前処理器・VDA 深度前処理器も `install_ltx.ps1` が自動で取得します（手動配置は不要です）。** インストールの最後に出る
-検証テーブル（18 項目）は、これらも含めて 1 ファイルずつ PASS/MISSING を表示します（表の行は manifest の
-期待ファイル定義から作られるので、ダウンロードを守るサイズ判定と必ず同じ内容になります）。ここが MISSING のまま気づかないと、
+検証テーブル（**15 項目**）は、これらも含めて 1 ファイルずつ PASS/MISSING を表示します（表の行は manifest の
+期待ファイル定義から作られるので、ダウンロードを守るサイズ判定と必ず同じ内容になります。**LTX 2.5 の記述子は
+期待ファイルを 1 件も宣言していない**ため、この 15 行はすべて LTX 2.3 と共用前処理器のものです）。ここが MISSING のまま気づかないと、
 UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）が出るのに、
 選んだ瞬間に 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
 
@@ -314,15 +331,24 @@ UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose
 > [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §5.2 と
 > [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §14・§40 にあります。
 
-backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「`./.venv-engine` の python・
-`engine/worker.py`・上記ロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です
-（[`services/engines/ltx/adapter.py`](services/engines/ltx/adapter.py) `_real_available`。旧パス `services/ltx_runner.py` は再エクスポート用の薄い層として残っています）。
+backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「そのエンジンの python・
+worker スクリプト・記述子が宣言するロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です
+（`_real_available`）。**判定材料は選んでいるベースモデルのエンジン系統ごとに違います**。
+
+| | LTX 2.3（エンジン系統 `ltx`） | LTX 2.5（エンジン系統 `ltx25`） |
+|---|---|---|
+| python | `config.yaml` の `model.engine_python`（既定 `./.venv-engine/Scripts/python.exe`） | `config.yaml` の `model.engine_python_ltx25`（既定 `./.venv-engine-ltx25/Scripts/python.exe`） |
+| worker | `model.engine_dir`（既定 `./engine`）の `worker.py` | `./engine25/worker.py`（**設定項目は無く固定**。`engine25/` は本リポジトリ同梱のため置き場所の選択肢がありません） |
+| 重み | 記述子 `scripts/manifests/10-ltx23.json` の 4 カテゴリ＋固定ファイル 3 点 | 記述子 `scripts/manifests/20-ltx25.json` の 4 カテゴリ＋固定ファイル 1 点（空間アップスケーラのみ） |
+| 実装 | [`services/engines/ltx/adapter.py`](services/engines/ltx/adapter.py)（旧パス `services/ltx_runner.py` は再エクスポート用の薄い層として残っています） | [`services/engines/ltx25/adapter.py`](services/engines/ltx25/adapter.py) |
 
 ### 追加の transformer GGUF / LoRA を配置する
 
-**transformer GGUF**: `models/LTX23/Weights/` **直下**に `.gguf` を置くだけで、ファイル名から自動認識され
-UI/API のドロップダウンに列挙されます。サブフォルダに入れても再帰スキャンで拾われます（[`services/model_registry.py`](services/model_registry.py) の
-`CATEGORY_SPECS["transformer"]`、`recursive=True`）。登録名はファイル名（拡張子除く）で、既定の登録名と
+**transformer GGUF**: `models/LTX23/Weights/`（LTX 2.5 なら `models/LTX25/Weights/`）**直下**に `.gguf` を置くだけで、
+ファイル名から自動認識され UI/API のドロップダウンに列挙されます。サブフォルダに入れても再帰スキャンで拾われます。
+**どこを・どの拡張子で・再帰するかを決めているのはベースモデル記述子**（`scripts/manifests/*.json` の
+`categories.transformer` の `scan` / `extensions` / `recursive`）で、スキャンを実行するのが
+[`services/model_registry.py`](services/model_registry.py) です。登録名はファイル名（拡張子除く）で、既定の登録名と
 衝突する場合は親フォルダ名が `親フォルダ名__ファイル名` の形で前置されます。`config.yaml` の編集は不要です
 （`model.transformers` への明示登録は、スキャンでは拾えないファイルを公開するための上書き用の代替手段です）。
 
@@ -380,6 +406,25 @@ models/
 
 **LTX 2.5 の重みは `setup.bat` の取得対象ではありません**（§1 の約33GBには含まれません）。手に入れたファイルを上のフォルダへ置くと認識されます。
 
+**LTX 2.5 が探すファイルは 5 本です**（記述子 `scripts/manifests/20-ltx25.json` が宣言している既定のファイル名。
+すべて `models/` からの相対パスです）。
+
+| 役割 | 期待するパスとファイル名 |
+|------|--------------------------|
+| transformer（本体） | `LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf` |
+| テキストエンコーダ（Gemma 4） | `LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf` |
+| 映像 VAE（畳み込みデコーダ版） | `LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors` |
+| 音声 VAE | `LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors` |
+| 空間アップスケーラ | `LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors` |
+
+> **現状、これらを配布したり自動で取得したりする仕組みはありません。** 記述子のダウンロード定義は空のままで、
+> `setup.bat` は LTX 2.5 のぶんを単に飛ばします（インストール最後の検証テーブルにも LTX 2.5 の行は出ません）。
+> LTX 2.5 の重みは現在オーナーの手元にしかなく、公開リポジトリへの再ホストはライセンス条項の確認待ちです。
+> **LTX 2.3 だけを使うぶんには何の影響もありません**（LTX 2.5 は「選べるが未導入」として画面に出ます）。
+>
+> テキストエンコーダのトークナイザは GGUF の中に入っているので別途置く必要はありません（隣に自動生成される
+> `*.assets.safetensors` はその展開結果で、消しても次回に作り直されます）。
+
 各フォルダには `put_〇〇_here.txt` という案内ファイルが1つ入っています。ファイル名がそのまま
 「ここに置ける形式」の掲示になっているので、手に入れたファイルの置き場所に迷ったときの目印にしてください
 （この案内ファイル自体はモデルの読み込み対象にはなりません）。
@@ -396,11 +441,21 @@ x4 アップスケーラーなども、対応表に無いものはそのまま�
 > `CONFIG` 行がある場合は `config.yaml.bak` を `config.yaml` へ戻してください。ただし、この作業は
 > **古いコードへ戻す場合にだけ意味があります**（現在のコードは新しい構成のパスを見にいくため）。
 
-> **`config.yaml` を自分で編集している場合の注意**: 移行時に、`model:` 配下のモデルパスだけを
-> インストーラが新しい構成へ自動的に書き換えます（書き換えた行はすべて画面に表示されます）。
-> 書き換える前の内容は `config.yaml.bak` として同じ場所に残るので、必要ならそこから戻せます。
-> パス以外の設定値には触れません。この書き換えを行わないと、`backend: "auto"` がモデルを見つけられず
-> エラーも出さないまま mock（実際には生成しない模擬動作）へ降格してしまうため、安全のために自動化しています。
+> **`config.yaml` を自分で編集している場合の注意**: 移行時に、インストーラが `config.yaml` へ加える変更は
+> **次の2種類だけ**です（どちらも実行前に `config.yaml.bak` を書き出すので、必要ならそこから戻せます。
+> 何行書き換え・何行削除するかは実行前に画面へ出ます）。
+>
+> 1. **`model:` 配下のモデルパスの書き換え**——旧構成のパスを新構成へ直します。これを行わないと
+>    `backend: "auto"` がモデルを見つけられず、エラーも出さないまま mock（実際には生成しない模擬動作）へ
+>    降格してしまうため、安全のために自動化しています。
+> 2. **廃止済みキーの行の削除**——モデルの既定パスを指定していた 8 つのキー
+>    （`gguf_transformer_path` / `gguf_gemma_path` / `component_video_vae_path` / `component_audio_vae_path` /
+>    `component_text_projection_path` / `component_video_vae_pruned_path` / `spatial_upsampler_path` / `gemma_root`）は、
+>    ベースモデル記述子へ移った結果**読まれなくなりました**。残っていても動作は壊れませんが、起動のたびに
+>    1キーにつき1本の警告が出続けるので、その行だけを消します（前後のコメント行や、`model:` の外にある
+>    同名キーには触れません）。
+>
+> **これら以外の設定値・コメント・空行には一切触れません。**
 
 ---
 
@@ -459,7 +514,8 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 
 ## 3. アーキテクチャ
 
-**2プロセス分離**（凍結 API 層 + 実エンジン worker）です。
+**2プロセス分離**（凍結 API 層 + 実エンジン worker）です。**worker は選んでいるベースモデルのエンジン系統によって
+中身が入れ替わります**（同時に生きているのは常に1つ）。
 
 ```text
 [Gradio /ui]──HTTP──┐
@@ -477,25 +533,31 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 └───────────────────────────────────────────────┼─┘
                                                  │  JSON-lines (@@LTX@@ frames)
                                                  ▼  stdin/stdout
-                    ┌──────────────────────────────────────────┐
-                    │ engine worker  (./.venv-engine, torch+cu128)│
-                    │   python -m engine.worker                  │
-                    │   engine/pipeline/fast_video_pipeline.py   │
-                    │   engine/gguf/  (GGUF dequant/loader)      │
-                    │   engine/gemma/ (GGUF Gemma + 層オフロード) │
-                    │   engine/transformer/ (block-swap, dit-cpu)│
-                    │   engine/preprocess/ (canny/dwpose/depth)  │
-                    │   → output.mp4 を共有 output dir に直接書く │
-                    └──────────────────────────────────────────┘
+   ┌─────────────────────────────────────────────┬──────────────────────────────────────┐
+   │ LTX 2.3 の worker（系統 `ltx`）              │ LTX 2.5 の worker（系統 `ltx25`）     │
+   │  ./.venv-engine, torch+cu128                │  ./.venv-engine-ltx25, torch+cu128    │
+   │  python -m engine.worker                    │  python -m engine25.worker            │
+   │  engine/pipeline/fast_video_pipeline.py     │  engine25/pipeline25.py               │
+   │  engine/gguf/  (GGUF dequant/loader)        │  engine25/gguf_transformer.py         │
+   │  engine/gemma/ (GGUF Gemma + 層オフロード)   │  engine25/gguf_gemma4.py（Gemma 4）    │
+   │  engine/transformer/ (block-swap, dit-cpu)  │  公式 LTX-2 v1.2.0 の推論スタック      │
+   │  engine/preprocess/ (canny/dwpose/depth)    │  （前処理器は持たない＝v1 の範囲外）    │
+   │  ログ: logs/ltx_worker.log                   │  ログ: logs/ltx25_worker.log          │
+   │  → output.mp4 を共有 output dir に直接書く   │  → 同じ（書き出し方は共通）            │
+   └─────────────────────────────────────────────┴──────────────────────────────────────┘
 ```
 
-- **`engine/` は first-party**（project root 直下・git 追跡）。旧・同梱フォーク `vendor/LTX-Desktop-LOW-VRAM` は
+- **`engine/`（LTX 2.3）と `engine25/`（LTX 2.5）はどちらも first-party**（project root 直下・git 追跡）。
+  旧・同梱フォーク `vendor/LTX-Desktop-LOW-VRAM` は
   refactor（Stage 2b）で完全削除済み。`engine/` の由来と provenance は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md)。
-  上流参照用の `vendor/LTX-2` は温存しています。
+  上流参照用の `vendor/LTX-2` は温存しています。**LTX 2.5 対応で `engine/` と `./.venv-engine` は 1 バイトも変更していません。**
 - **プロトコル**: アプリは real backend でも torch/LTX を import しません。`_RealBackend` が
-  `subprocess.Popen([engine_python, "-u", "-m", "engine.worker"], cwd=<root>, env["PYTHONPATH"]=<root>)` で worker を常駐起動
+  `subprocess.Popen([<そのエンジンの python>, "-u", "-m", "<engine.worker または engine25.worker>"], cwd=<root>, env["PYTHONPATH"]=<root>)`
+  で worker を常駐起動
   → `{"op":"load",...}` → `@@LTX@@{"event":"ready"}` → `{"op":"generate",...}` → `@@LTX@@{"event":"done",...}`。
   worker がモデルを **1度だけ**構築してジョブを使い回し、mp4 は worker が直接ディスクへ書きます（制御 JSON のみパイプを渡る）。
+  **この受け答えの作法は2系統で共通**で、違うのは起動する python とモジュール、ロードペイロードの項目名、
+  そして書き出すワーカーログの名前だけです。
 - **16GB 技術**（すべて `engine/` に実装・実測済み）: GGUF Q4_K_M transformer + block-swap（GPU 常駐 8 ブロック）+
   GGUF Gemma の逐次 per-layer CPU オフロード（`--te-offload`）+ DiT の CPU 構築（`--dit-cpu-load`）+ VAE タイリング +
   component-file 経路。512×320 で peak_vram ~9.2GB、720p（1280×768→crop）実証済み。
@@ -531,16 +593,26 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
   （OOM せず）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨。
   閾値の正本は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6。
 - Distilled は **8 steps / CFG=1.0** 固定。
-- 最小I2V は **画像1枚・`frame_idx=0` 固定**（画像なし=T2V、1枚=I2V）。
+- I2V のキーフレーム画像は **最大5枚**（画像なし=T2V、1枚以上=I2V）。`frame_idx` は `0`（開始フレーム）か 8n+1 で、
+  それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。
+  「1枚・`frame_idx=0` 固定」は Phase 1 当時の制約で、Phase 3 で解除済みです。
 - `crop_output` を指定すると、任意の非64サイズ（例 960×540, 1280×720）を中央クロップで得ます。
 
 ---
 
 ## 5. 16GB 向け生成テスト
 
+> **本節は LTX 2.3 を選んでいるときの説明です。LTX 2.5 を選んでいるときは一部が使えません。**
+> 生成の高速化（Acceleration）の5項目のうち、`sage attention`・モデル骨格の常駐（`keep_resident`）・PrunaVAED（`vae_mode`）は
+> **LTX 2.5 では既定値（`sdpa` / off / Default）しか受け付けず**、それ以外を指定すると 422 で断られます（降格はしません）。
+> 残る2項目（先読み block swap・GGUF逆量子化の1カーネル化）は**指定しても無視され、生成はそのまま通ります**——どちらも
+> LTX 2.3 側のコードパスの名前で、LTX 2.5 のエンジンはそれを持っていないためです。NAG・LoRA・A2V なども同様に
+> LTX 2.5 では使えません（§7「制限事項」の LTX 2.5 の項）。
+
 出力は `outputs/{job_id}/output.mp4` と `outputs/{job_id}/metadata.json` に保存されます。
-`peak_vram_mb` は `metadata.json` または `logs/ltx_worker.log` の `GENERATED_OK peak_vram_mb=` から取得できます
-（jobs API 応答には含まれません）。
+`peak_vram_mb` は `metadata.json` またはワーカーログの `GENERATED_OK peak_vram_mb=` から取得できます
+（jobs API 応答には含まれません）。**ワーカーログはエンジン系統ごとに別ファイル**で、LTX 2.3 は
+`logs/ltx_worker.log`、LTX 2.5 は `logs/ltx25_worker.log` です（切り替えても両方の記録が残るようにしてあります）。
 
 ### smoke_test (T2V, 384x256 / 17 frames)
 
@@ -560,6 +632,7 @@ curl http://127.0.0.1:18620/api/v1/jobs/<job_id>/video --output out.mp4
 # seed 固定で決定的に検証（別プロセスでもバイト一致することを実測済み）
 $body = '{"prompt":"a calm ocean wave rolling onto a sandy beach at sunset, cinematic","width":512,"height":320,"num_frames":49,"num_inference_steps":8,"guidance_scale":1.0,"pipeline":"distilled","seed":12345,"conditioning_images":[]}'
 # POST /api/v1/generate に body を送り、GET /api/v1/jobs/{id} で完了確認
+# ログは LTX 2.3 なら ltx_worker.log、LTX 2.5 なら ltx25_worker.log
 Select-String -Path logs/ltx_worker.log -Pattern "GENERATED_OK|LOAD_FAILED|GENERATE_FAILED"
 ```
 
@@ -587,7 +660,10 @@ curl -X POST http://127.0.0.1:18620/api/v1/generate \
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path
-& ".\.venv-engine\Scripts\python.exe" -m engine.worker   # {"op":"load",...} を stdin へ → @@LTX@@{"event":"ready"}
+& ".\.venv-engine\Scripts\python.exe" -m engine.worker   # LTX 2.3。{"op":"load",...} を stdin へ → @@LTX@@{"event":"ready"}
+
+# LTX 2.5 は別の仮想環境・別のモジュール（受け答えの作法は同じ）
+& ".\.venv-engine-ltx25\Scripts\python.exe" -m engine25.worker
 ```
 
 ### Gradio UI
@@ -629,17 +705,21 @@ $env:PYTHONPATH = (Get-Location).Path
 ### 生成の高速化（Acceleration）
 
 生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめました
-（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は5つあり、**5つとも実際に効きます**
+（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は5つあり、**LTX 2.3 では5つとも実際に効きます**
 （2026-08-05 に最後の1つ「VAE」が実装され、将来の実装枠として場所だけ確保してあったグレーアウトの項目は
 なくなりました）。
 
-| 項目 | 選択肢 | 状態 |
-|------|--------|------|
-| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on（2026-08-04） |
-| Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` |
-| Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on |
-| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off |
-| VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off。恒久的に off のままです）（2026-08-05） |
+| 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い |
+|------|--------|------------------|------------------|
+| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on（2026-08-04） | **無視される**（生成は通る） |
+| Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` | `sdpa` のみ。`sage` は **422** |
+| Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on | **無視される**（生成は通る。2.5 は独自の block-swap を持つため） |
+| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | off のみ。on は **422** |
+| VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off。恒久的に off のままです）（2026-08-05） | Default のみ。PrunaVAED は **422** |
+
+**「無視される」と「422」の違い**: 無視される2つは既定が on なので、ふつうに生成を頼むだけで自動的に付いてきます——
+これを断ると LTX 2.5 で何も作れなくなるため、黙って無視せず**ログに1行残したうえで生成を続けます**。残る3つは
+利用者が意図して on にしたときだけ付くので、効かないまま通すより断ったほうが親切だという判断です。
 
 **選び方**: `sdpa` は PyTorch 標準の実装で、これまでどおりの結果が出ます。`sage` は
 [SageAttention 2.2.0](https://github.com/thu-ml/SageAttention)（量子化を使って注意機構の計算そのものを速くする外部
@@ -657,11 +737,14 @@ $env:PYTHONPATH = (Get-Location).Path
 VRAM の使用量は実測で変わりません（ピークの差は 0.08% 以内）。長い動画や高い解像度ほど、二段目の比重が大きく
 なるぶん効きやすい傾向があります。
 
-> **⚠ `sage` を選ぶと、同じシードを指定しても生成結果の細部が変わります。** 計算に使う数値の精度が違うためで、
+> <a id="sage-seed-note"></a>**⚠ `sage` を選ぶと、同じシードを指定しても生成結果の細部が変わります。** 計算に使う数値の精度が違うためで、
 > 不具合ではありません。構図や被写体といった大枠は同じままで、質感やノイズの出方といった細かいところが変わります
 > （実測での差はPSNR で 27〜28dB 程度）。**以前つくった動画とまったく同じものを作り直したい場合は、`sdpa` を
 > 選んでください。** 既定を `sdpa` のままにしてあるのは、アップデートによって利用者の生成結果が黙って変わることを
-> 避けるためです。
+> 避けるためです。**この注意書きが `sage` についての正本**で、他の箇所（§8 の MCP 注意事項など）はここを参照します。
+>
+> **LTX 2.5 を選んでいるときは `sage` そのものが使えません**——降格ではなく 422 で断られます（LTX 2.5 用の仮想環境に
+> SageAttention を入れておらず、第1版は SDPA 専用というスコープ判断のためです。§7「制限事項」）。
 
 **入っていない環境ではどうなるか**: `sageattention` は `setup.bat` が標準で入れますが、何らかの事情で入っていない
 環境（古い手順で作った仮想環境など）では、`sage` を選んでも**エラーにはならず、自動的に `sdpa` に切り替わって
@@ -738,11 +821,14 @@ LTX-2.3 のエンジンが直接読める形（約690MB の単体ファイル）
 Settings の Acceleration 区画にある「VAE」の Default / PrunaVAED で、他の項目と同じくジョブ単位で切り替えられます。
 **既定は Default（off）** で、**今後も既定を PrunaVAED へ変えることはありません**（理由は次の注意書きのとおりです）。
 
-> **⚠ PrunaVAED を選ぶと、出力品質がわずかに低下する可能性があります。** 別のデコーダで映像を作るので、`sage` と
+> <a id="prunavaed-quality-note"></a>**⚠ PrunaVAED を選ぶと、出力品質がわずかに低下する可能性があります。** 別のデコーダで映像を作るので、`sage` と
 > 同じく「絵が変わる」種類の切替です。オーナーによる同一シードの見比べでは「劣化は肉眼ではほとんど分からない」水準
 > でしたが（客観指標では PSNR 36.06dB・SSIM 0.9854〔輝度〕）、**以前つくった動画とまったく同じものを作り直したい
 > 場合は Default を選んでください**。既定を Default のままにしてあるのは、アップデートによって利用者の生成結果が
-> 黙って変わることを避けるためです。
+> 黙って変わることを避けるためです。**この注意書きが PrunaVAED についての正本**で、他の箇所（§7・§8）はここを参照します。
+>
+> **LTX 2.5 を選んでいるときは PrunaVAED そのものが使えません**——重みファイルの有無にかかわらず 422 で断られます
+> （枝刈りデコーダは LTX 2.3 用のもので、LTX 2.5 には対応物がありません。§7「制限事項」）。
 
 **どれくらい速いか**: 720p（1280×768）・257 フレームの実測（交互対比較4組）で、**1本あたり平均 12.5 秒短縮**
 （119.2 秒 → 106.7 秒＝約10.5%）。映像の復元処理そのものは 32.5 秒 → 20.2 秒（**1.61 倍**）で、短縮のほぼ全部が
@@ -780,35 +866,113 @@ Settings の Acceleration 区画にある「VAE」の Default / PrunaVAED で、
 > ```
 
 pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`tests/conftest.py` が `model.backend="mock"` を強制するため、
-GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・複数画像・frame_idx≠0）とモックランナーによる生成疎通、
-`GET /status` の `vram_optimization` 契約を検証します。
+GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・キーフレーム画像の上限5枚・`frame_idx` の丸め）と
+モックランナーによる生成疎通、`GET /status` の `vram_optimization` 契約を検証します。
 
 ---
 
 ## 7. 制限事項（2026-08-22 現在）
 
-- **LTX 2.5 で使えるのは基本生成（テキストから動画・画像から動画）だけです**。クリップ連結・撮り直し（Retake）・素材（末尾）・V2V・A2V・キャンバス拡張（Outpainting）・LoRA 各種・NAG・PrunaVAED は LTX 2.5 では使えず、要求すると 422 で断ります（AviUtl2 の画面側でも該当するタブとパネルが灰色になります）。**LTX 2.3 を選んでいるあいだは、これらはすべて従来どおり使えます。** LTX 2.5 での対応は今後の課題です（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102）。
-- **動作確認済みのハードウェアは 2 構成です**。
-  - **開発機**: RTX 4070 Ti SUPER 16GB（Ada Lovelace）／メインメモリ 64GB／ページファイル 48GB。日常的な開発と検証はすべてこの 1 台で行っています。
-  - **サブマシン**: RTX 3080 mobile 16GB（Ampere）／メインメモリ 32GB。**AviUtl2 を導入していない新規環境**で、2026-07-27 に一通りの導入から生成までを実測し、全項目に成功しました（`setup.bat` での導入 → `run.bat` での起動 → ブラウザで WebUI を開く → `smoke_test` サイズの生成 → **IC-LoRA の DWPose（pose-control）と canny をそれぞれ 768p・257 フレームで制御生成** → `NzVideomni.aux2` を AviUtl2 のプレビュー画面へドラッグ＆ドロップして導入 → 再起動後に操作パネルを表示 → タイムラインからの生成と、生成済み動画の右クリックからのタイムライン配置）。このとき AviUtl2 は **2026-07-25 更新の公開最新版**（開発機で使っている v2.0.54 より新しい版）を新規に導入しており、最新版との互換もあわせて確認できています。
-  - 残る GPU 世代（Turing・Hopper・Blackwell）は、torch 2.9.1+cu128 が同梱するカーネルの一覧と CUDA のバイナリ互換性から**理論上は動作するはずですが、実機では未検証**です。
-- **メインメモリ 32GB では、上記サブマシン 1 台での実測合格があります**。§1 に載せたコミットの実測値（アイドル比 +48GB、連続実行でジョブごとに +12〜15GB）は 64GB の開発機で採取したものですが、32GB の環境でも、最小構成の生成だけでなく **768p・257 フレームの IC-LoRA 制御生成まで実際に通りました**（2026-07-27）。ただしこれは**この 1 台での実測結果**であり、あらゆる 32GB 環境での動作を保証するものではありません。§1 の「メインメモリとページファイル」の案内は引き続き必ず守ってください。他の 32GB 環境で試された結果を共有していただけると助かります。
+**この節は「できないこと・気をつけること」だけを集めた場所です。** 長いので、先に中身を並べておきます。
+
+| 節 | 内容 |
+|----|------|
+| [7.1](#limit-ltx25) | **LTX 2.5 を選んでいるときの制限**（使えない機能・無視される設定） |
+| [7.2](#limit-onejob) | **同時に走る生成は1本だけ**（409 の理由・キャンセルの効き方） |
+| [7.3](#limit-hardware) | 動作確認済みのハードウェア |
+| [7.4](#limit-server) | サーバーとファイルの扱い（設定・ジョブ履歴・保存領域・ログ） |
+| [7.5](#limit-generation) | 生成そのものの限界 |
+| [7.6](#limit-legacy) | 旧「未実装（Phase 2以降）」一覧の現状 |
+
+<a id="limit-ltx25"></a>
+### 7.1 LTX 2.5 を選んでいるときの制限
+
+**LTX 2.5 で使えるのは基本生成（テキストから動画・画像から動画）だけです。** 下記は要求すると **422 で断られます**
+（AviUtl2 の画面側でも該当するタブとパネルが灰色になるので、通常の操作でここへ到達することはありません）。
+
+| 断られる機能 | 対応するリクエスト項目 |
+|--------------|------------------------|
+| クリップ連結（Chained）・撮り直し（Retake）・素材（末尾）＝end source・V2V・A2V | `POST /generate/chain`（この5つは同じ入口を通るので、まとめて1箇所で断ります） |
+| キャンバス拡張（Outpainting） | `outpaint` |
+| LoRA 各種（スタイル LoRA・IC-LoRA）と参照動画 | `loras` / `reference_video_id` |
+| 非CFGネガティブプロンプト（NAG・VSF） | `nag_enabled` |
+| 枝刈り版の映像VAEデコーダ（PrunaVAED） | `vae_mode` |
+| SageAttention | `attention_backend` |
+| モデル骨格の常駐 | `keep_resident` |
+| 高品質パイプライン（`two_stage_hq`） | `pipeline` |
+
+**指定しても断らず、黙って無視して生成を続ける項目もあります**——先読み block swap（`block_swap_prefetch`）・
+GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）・ネガティブプロンプト系
+（`negative_prompt` / `guidance_scale` / `num_inference_steps` / `neg_method` / `vsf_scale`）です。
+前の2つは既定が on なので、断ると LTX 2.5 で何も作れなくなるためです（どちらも LTX 2.3 側のコードパスの名前で、
+LTX 2.5 のエンジンはそれを持っていません）。ネガティブプロンプト系は、蒸留版の LTX 2.5 に CFG
+（プロンプトへの従い具合の制御）そのものが無いためです。**無視したことは `logs/server.log` に1行残ります。**
+
+**LTX 2.3 を選んでいるあいだは、これらはすべて従来どおり使えます。** LTX 2.5 での対応は今後の課題です
+（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102）。**なお LTX 2.5 の重みは現在配布していません**
+（§1「models フォルダの構成」の LTX 2.5 の項）。
+
+<a id="limit-onejob"></a>
+### 7.2 同時に走る生成は1本だけ
+
+- **同時実行は 1 ジョブのみ**。実行中に新しい `POST /generate`（および `POST /generate/chain`）を投げると
+  **409 Conflict**（`JOB_BUSY`）が返ります。単一ユーザー向けのローカルツールという前提で、本格的なジョブキューは
+  作らない方針です（仕様書 §13.5 でスコープ削除）。
+- **実行中ジョブのキャンセルは best-effort**。PyTorch 推論を安全に中断できないため、`running` のジョブは推論完了後に
+  `cancelled` へ遷移します。まだ実行に移っていない `queued` のジョブは、`DELETE /jobs/{id}` で**即座に** `cancelled` に
+  なり単一ジョブガードが解放されます（2026-07-11 改修）。
+- **MCP サーバー（§8）経由でも同じ制約です。** 複数エージェント・複数セッションからの並行操作は非対応です。
+  MCP サーバー自体は実機検証済みで（2026-08-04・2026-08-06）、稼働中のバックエンドに対して22ツールを叩き、
+  生成（T2V・I2V・V2V・A2V）・ジョブ操作・出力保存・`join`・パイプラインの読み込み/解放・Bearer 認証まで
+  全項目が通ることを確認しています（Claude Code 本体の画面からの操作も含む。詳細は
+  [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §39.6）。
+
+<a id="limit-hardware"></a>
+### 7.3 動作確認済みのハードウェア
+
+**動作確認済みのハードウェアは 2 構成です。**
+
+- **開発機**: RTX 4070 Ti SUPER 16GB（Ada Lovelace）／メインメモリ 64GB／ページファイル 48GB。日常的な開発と検証はすべてこの 1 台で行っています。
+- **サブマシン**: RTX 3080 mobile 16GB（Ampere）／メインメモリ 32GB。**AviUtl2 を導入していない新規環境**で、2026-07-27 に一通りの導入から生成までを実測し、全項目に成功しました（`setup.bat` での導入 → `run.bat` での起動 → ブラウザで WebUI を開く → `smoke_test` サイズの生成 → **IC-LoRA の DWPose（pose-control）と canny をそれぞれ 768p・257 フレームで制御生成** → `NzVideomni.aux2` を AviUtl2 のプレビュー画面へドラッグ＆ドロップして導入 → 再起動後に操作パネルを表示 → タイムラインからの生成と、生成済み動画の右クリックからのタイムライン配置）。このとき AviUtl2 は **2026-07-25 更新の公開最新版**（開発機で使っている v2.0.54 より新しい版）を新規に導入しており、最新版との互換もあわせて確認できています。
+- 残る GPU 世代（Turing・Hopper・Blackwell）は、torch 2.9.1+cu128 が同梱するカーネルの一覧と CUDA のバイナリ互換性から**理論上は動作するはずですが、実機では未検証**です。
+
+**メインメモリ 32GB では、上記サブマシン 1 台での実測合格があります。** §1 に載せたコミットの実測値（アイドル比 +48GB、連続実行でジョブごとに +12〜15GB）は 64GB の開発機で採取したものですが、32GB の環境でも、最小構成の生成だけでなく **768p・257 フレームの IC-LoRA 制御生成まで実際に通りました**（2026-07-27）。ただしこれは**この 1 台での実測結果**であり、あらゆる 32GB 環境での動作を保証するものではありません。§1 の「メインメモリとページファイル」の案内は引き続き必ず守ってください。他の 32GB 環境で試された結果を共有していただけると助かります。**LTX 2.5 を使う場合は 64GB 以上を推奨**します（§1 のハードウェア要件）。
+
+<a id="limit-server"></a>
+### 7.4 サーバーとファイルの扱い
+
 - **`low_vram_mode=true` がデフォルト**。16GB 環境前提。`low_vram_mode=false` は高VRAM/クラウド用の任意検証で、16GB成功は保証しません。
-- 同時実行は **1ジョブのみ**。実行中の新規 `POST /generate` は **409 Conflict**。
 - ジョブ履歴は in-memory（再起動で消える）。`outputs/{job_id}/metadata.json` はディスクに残ります。
 - **`uploads/`（アップロードした画像・動画・音声）に自動削除はありません**。ディスクに残るファイルの区別と整理のしかたは [`Docs/STORAGE_POLICY.md`](Docs/STORAGE_POLICY.md) にまとめてあります（`outputs/` は成果物、`uploads/` は入力素材のキャッシュ）。
-- **実行中ジョブのキャンセルは best-effort**。PyTorch 推論を安全に中断できないため、`running` のジョブは推論完了後に `cancelled` へ遷移します。まだ実行に移っていない `queued` のジョブは、`DELETE /jobs/{id}` で**即座に** `cancelled` になり単一ジョブガードが解放されます（2026-07-11 改修）。
+- **ワーカーのログはエンジン系統ごとに別ファイル**です——LTX 2.3 は `logs/ltx_worker.log`、LTX 2.5 は `logs/ltx25_worker.log`。
+  アプリ側のログは `logs/server.log` で、LTX 2.5 が「この設定は無視した」と書くのもこちらです。切り替えても両方の記録が
+  残るように分けてあります。
+
+<a id="limit-generation"></a>
+### 7.5 生成そのものの限界
+
 - transformer は Q4_K_M 量子化のため、フル bf16 公式とビット一致ではありません（聴感・視感は良好）。
-- **旧「未実装（Phase 2以降）」一覧の現状**（Phase 1 当時の一覧はその後の拡張で大半が実装済みになりました）:
-  - **実装済み**: 複数キーフレームI2V（キーフレーム画像・最大5枚・任意 `frame_idx`）／V2V（元動画からの継続生成）／A2V（音声から動画生成）／クリップ連結（`POST /generate/chain`）／IC-LoRA・スタイルLoRA（`<lora:...>` 記法含む）／1080p の直接生成（`FHD_1080p` プリセット。なお「1080p アップスケール機能」としての提供は仕様書 §13.5 でスコープ削除）／簡易認証（`--api-key` 指定時の Bearer 認証・任意）。
-  - **2026-08-16に実装し、2026-08-17に窓内モードへ、2026-08-18に逆順Chainedへ拡張しました**: 終了フレーム指定は **end source（素材（末尾）。`POST /generate/chain` の `end_source`）** として実現しました。**添付した画像・動画へ繋がる動画**を作る機能で、**クリップの本数だけで挙動が決まります**。**クリップが1本のとき（窓内モード）**は、素材の先頭フレームがクリップ**自身の末尾**として凍結され、生成の最初から素材へ向かって進みます。**クリップが2本以上のとき（逆順Chained、2026-08-18追加）**は、stage-1のみをタイムライン末尾から先頭へ依存順に生成し、各セグメントが自分より未来側のセグメントの頭を自分の尾のりしろとして凍結します（正順チェーンの頭凍結を鏡写しにした形で、新規の凍結機構はありません）。**どちらのモードでも出力の尺は伸びず、クリップの合計そのもの**です——旧来の「帯をクリップ列の後ろへ継ぎ足し、素材へクロスフェードする」方式（`internal_segment`）は通常のAPIリクエストからは到達不能になりました（削除はしていません）。凍結するフレーム数（錨）は実機比較で**8フレームが最良**と分かっており、AviUtl2フロントエンドは常に8を送ります。素材（冒頭）＝`source_video` との併用は**クリップ1本のときのみ**可能で、冒頭と末尾を与えた補間になります（**クリップ2本以上との併用は2026-08-18から422で拒否**します。真ん中クリップが頭・尾の両方で凍結される未検証の形を避けるためです）。**既知の限界**: 素材が本体のシーンと意味論的に遠いと、クロスフェードやカットで繋がります（モデルの限界であり、素材の選び方で回避します）。また、クリップ1本（窓内モード）が仕上げ工程のタイル1枚（標準169フレーム・高解像度145フレーム）を超えると境界にちらつきが出るため、フロントエンドが警告を出します（サーバーは拒否せず、複数クリップの逆順Chainedには適用されません）。**推奨は「クリップ1本」です**（2026-08-18のオーナー裁定）。クリップ2本以上（逆順Chained）は受理されますが推奨外で、クリップの境目や末尾（錨直前）に映像のモーフ・音楽の不統一といった品質劣化が出ることがあり、これは仕様として許容しています——根治には生成過程で「到着時刻」を拘束できるモデル側の能力が要り、現行のLTX 2.3にはその能力がありません。品質を重視して複数クリップを終端付きで繋ぎたい場合は、下記「end sourceの手動リレー」を使ってください。詳細はフロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` §5.2・§5.4、実装と実機実験は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §61（窓内モード。旧方式の記録は同 §60）・§63（錨の固定強度`strength`）・§64（逆順Chained、実機ゲートM1〜M7）・§64.7／§65.8（目視・試聴結果とオーナー裁定）、設計面の考察は [`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md`](Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11。なお**キーフレーム画像による**最終フレームちょうどの条件付けは引き続きできません（`frame_idx` は `num_frames-8` にクランプされます）。
-  - **end sourceの手動リレー（品質重視の複数クリップワークフロー、2026-08-18）**: 逆順Chained（クリップ2本以上）の品質劣化を避けつつ複数クリップを終端付きで繋ぎたいときは、**end sourceをクリップ1本ずつ、生成物を次の素材として使い過去へ遡る**手順が使えます。①最後のシーンをend source（クリップ1本・窓内モード）で生成する。②その生成物の**冒頭**を次のend sourceの素材にして、1つ手前のシーンを生成する。③これを繰り返し、④出来上がった複数の動画をAviUtl2のタイムライン上で（重なる分をトリムしながら）並べます。**すべての継ぎ目が窓内モードの錨になる**ため、逆順Chainedの継ぎ目品質劣化を避けられます（音声錨の幅は映像の錨幅に比例し、錨8f〔UI既定〕なら音声7潜在≒約0.3秒・錨72fなら74潜在≒約3秒——音楽をしっかり引き継ぐには`context_frames`を大きくする必要があるが、UIは8固定のためAPI直叩きになります）。コード変更は不要で、既存機能の組み合わせです。
-  - **有望な手順（未実機検証）＝正順Chained＋補間仕上げ（2026-08-19、研究記録）**: 上の手動リレーより手間の少ない代替として、**「本体は通常の正順Chainedで最後まで生成し、最終クリップだけをend sourceで補間して仕上げる」**手順は試す価値があります。実機で確認のうえ採用してください。正順の継ぎ目は初期値問題ゆえ構造的に綺麗であることがA/B目視で確認できており（詳細下記）、本体の継ぎ目をすべて正順Chainedの綺麗な継ぎ目に任せ、弱点だった「素材への接続部」だけをend source（クリップ1本・窓内モード）で置き換えます。end sourceの生成回数が終端の1回で済むため、**手動リレーの上位互換になる可能性があります**。ただし**本手順はこのREADME更新の時点で実機検証を行っていません**——採用前に実機での通し確認をおすすめします。手順の詳細は[`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md`](Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11、A/B目視の根拠は[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §64.7のR2-7追記を参照してください。
-  - **引き続き未実装**: 本格的なジョブキュー（単一ユーザー想定のため「1ジョブ＋busy 409」を正式仕様とし、仕様書 §13.5 でスコープ削除）。なお AviUtl2 拡張フロントエンドは実装済みで、`AviUtl2-Plugin/` 以下に同居しています（バックエンドは引き続き汎用 REST API のままです）。
-- **MCPサーバー（§8）は実機検証済みです**（2026-08-04・2026-08-06）。実際に動いているバックエンドに対して MCP クライアントから22ツールを叩き、生成（T2V・I2V・V2V・A2V）・ジョブ操作（待機・キャンセル・削除・一括削除の空実行）・出力保存・`join`・パイプラインの読み込み/解放・`--api-key` 指定時の Bearer 認証まで、全項目が通ることを確認しました。**Claude Code 本体の画面からの操作（ワークスペース信頼確認・MCPサーバー承認・`/mcp` コマンドでの一覧表示）もオーナーが検証マシンで実機確認済みです**。詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §39.6。なお同時1ジョブ制約は MCP 経由でも変わらず、複数エージェント/複数セッションからの並行操作は非対応です。
-- **「生成の高速化（Acceleration）」の5項目は、2026-08-05 に全項目が実装済みになりました**。グレーアウトしていて選べない項目はもうありません（§5「生成の高速化（Acceleration）」）。
-  - **PrunaVAED**（枝刈りを施した VAE デコーダ＝映像の復元処理の軽量版）: **2026-08-05 に実装しました**（`vae_mode`）。**ただし既定は off で、今後も既定を変えることはありません**——別のデコーダで映像を作るので、**出力品質がわずかに低下する可能性がある**ためです。使うと 720p・257 フレームで1本あたり平均 12.5 秒短縮・VRAM 予約量が約 2.6GB 減ります。**旧称「PruneVAED」は上流の正式名称の誤記**で、表示名は PrunaVAED へ訂正しました（API の値 `"prune_vaed"` は外部仕様なので据え置きです）。
+- **キーフレーム画像で「最終フレームちょうど」を条件にすることはできません**（`frame_idx` は `num_frames-8` にクランプされます）。
+  末尾を指定したいときは end source（素材（末尾））を使ってください。
+- **end source の既知の限界**: 素材が本体のシーンと意味論的に遠いと、クロスフェードやカットで繋がります（モデルの限界で、
+  素材の選び方で回避します）。また**推奨はクリップ1本**で、クリップ2本以上は受理されますが継ぎ目や末尾に品質劣化が
+  出ることがあります（§7.6 と、正本の [`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md`](Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11）。
+- **「生成の高速化（Acceleration）」のうち2項目は、選ぶと絵が変わります**——`sage attention` と PrunaVAED です。
+  詳しくは §5 の[`sage` の注意書き](#sage-seed-note)と[PrunaVAED の注意書き](#prunavaed-quality-note)を参照してください
+  （どちらの注意書きにも、LTX 2.5 では 422 になることを併記してあります）。
+
+<a id="limit-legacy"></a>
+### 7.6 旧「未実装（Phase 2以降）」一覧の現状
+
+Phase 1 当時の「未実装」一覧は、その後の拡張で大半が実装済みになりました。
+
+- **実装済み**: 複数キーフレームI2V（キーフレーム画像・最大5枚・任意 `frame_idx`）／V2V（元動画からの継続生成）／A2V（音声から動画生成）／クリップ連結（`POST /generate/chain`）／IC-LoRA・スタイルLoRA（`<lora:...>` 記法含む）／1080p の直接生成（`FHD_1080p` プリセット。なお「1080p アップスケール機能」としての提供は仕様書 §13.5 でスコープ削除）／簡易認証（`--api-key` 指定時の Bearer 認証・任意）。
+- **終了フレーム指定 → end source（素材（末尾））として実現済み**（2026-08-16 実装、2026-08-17 窓内モード、2026-08-18 逆順Chained）。**添付した画像・動画へ繋がる動画**を作る機能で、**クリップの本数だけで挙動が決まり、どちらの場合も出力の尺は伸びません**（クリップの合計そのもの）。**推奨はクリップ1本**（2026-08-18 のオーナー裁定）。契約の詳細は仕様書 [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2 の `end_source` 補足とフロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` §5.2・§5.4、実装と実機実験は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §61・§63〜§65、設計面の考察は [`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md`](Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11 が正本です。
+- **複数クリップを品質重視で繋ぐ運用手順が2つあります**（どちらもコード変更不要・出荷済み機能の組み合わせ）。①**手動リレー**——end source をクリップ1本ずつ使い、生成物の冒頭を次の素材にして過去へ遡る。②**正順Chained＋補間仕上げ**（**未実機検証**）——本体は通常の正順Chainedで生成し、最終クリップだけを end source で仕上げる。②は生成回数が終端の1回で済むため①の上位互換になる可能性がありますが、採用前に実機での通し確認をおすすめします。**手順の正本は [`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md`](Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11**（音声錨の幅と `context_frames` の関係もそちらにあります）、A/B目視の根拠は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §64.7・§65.8 です。
+- **「生成の高速化（Acceleration）」の5項目は、2026-08-05 に全項目が実装済みになりました**。**LTX 2.3 を選んでいるあいだは、グレーアウトしていて選べない項目はもうありません**（§5「生成の高速化（Acceleration）」）。**LTX 2.5 を選んでいるときは §7.1 のとおり一部が使えず、画面でも灰色になります**——これは実装が無いからではなく、LTX 2.5 側にその機能がまだ無いためです。
+  - **PrunaVAED**（枝刈りを施した VAE デコーダ＝映像の復元処理の軽量版）: 2026-08-05 に実装（`vae_mode`）。**既定は off で、今後も既定を変えることはありません**。効果と注意点は §5 の[注意書き](#prunavaed-quality-note)が正本です。**旧称「PruneVAED」は上流の正式名称の誤記**で、表示名は PrunaVAED へ訂正しました（API の値 `"prune_vaed"` は外部仕様なので据え置きです）。
   - **fused GGUF dequant + GEMM**（GGUF の逆量子化と行列積を1つの計算に融合する案）は**採否検討の結果 no-go** です。ただしその手前にある「逆量子化そのものの1カーネル化」は実装され、既定 on になりました（§5 の1項目目）。受理するだけだった旧フィールド `fused_gguf_dequant_gemm` は 2026-08-04 に撤去済みです。
+- **引き続き未実装**: 本格的なジョブキュー（§7.2 のとおり「1ジョブ＋busy 409」を正式仕様としてスコープ削除）。なお AviUtl2 拡張フロントエンドは実装済みで、`AviUtl2-Plugin/` 以下に同居しています（バックエンドは引き続き汎用 REST API のままです）。
 
 ---
 
@@ -892,9 +1056,9 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **`attention_backend="sage"` を指定すると、同じシードでも生成結果の細部が変わります**（§5「生成の高速化（Acceleration）」）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、使えない環境で指定した場合はエラーにならず `"sdpa"` へ降格して完走します。実際に使われた方式は生成後のメタデータの `attention_used` に記録されます。
+- **`attention_backend="sage"` の注意**: 生成結果が同じシードでも変わります。詳しくは §5「生成の高速化（Acceleration）」の[注意書き](#sage-seed-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、LTX 2.3 で `sageattention` が入っていない環境ならエラーにならず `"sdpa"` へ降格して完走します。実際に使われた方式はメタデータの `attention_used` に記録されます。
 - **「生成の高速化（Acceleration）」の5項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode`。最後に残っていた `vae_mode` は 2026-08-05 に公開しました。ツールの本数は22個のまま変わっていません）。
-- **`vae_mode="prune_vaed"`（PrunaVAED）を指定した場合も、同じシードでの生成結果が変わります**（§5「枝刈り版の映像VAEデコーダ」）。`sage` と違って降格の可否は環境ではなく**枝刈りデコーダのファイルの有無**で決まり、無ければエラーにならず通常のデコーダで完走します。実際にどちらで生成されたかはメタデータの `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）に記録されます。**指定しなければ従来とまったく同じ**です（既定は `"default"` で、省略したときはこの項目自体がバックエンドへ送られません）。
+- **`vae_mode="prune_vaed"`（PrunaVAED）の注意**: こちらも生成結果が変わります。詳しくは §5「枝刈り版の映像VAEデコーダ」の[注意書き](#prunavaed-quality-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。`sage` と違って LTX 2.3 での降格の可否は環境ではなく**枝刈りデコーダのファイルの有無**で決まり、無ければエラーにならず通常のデコーダで完走します。実際にどちらで生成されたかはメタデータの `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）に記録されます。**指定しなければ従来とまったく同じ**です（既定は `"default"` で、省略したときはこの項目自体がバックエンドへ送られません）。
 
 ---
 

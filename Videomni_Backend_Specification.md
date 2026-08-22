@@ -4,7 +4,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.22** |
+| 版 | **v0.5.23** |
 | 日付 | **2026-08-22**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -40,7 +40,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.22** |
+| 版 | **v0.5.23** |
 | 日付 | **2026-08-22** |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
@@ -75,6 +75,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.20 | 2026-08-20 | **マルチエンジン化の設計正本を新設**（文書のみの更新。API・実装への変更は無い）。複数の動画生成AI（LTX 2.3／LTX 2.5／将来の Wan 2.x 等）をヘッダーのドロップダウンで切り替える機能の設計を `Docs/MULTI_ENGINE_DESIGN.md` として起こし、**§0.3 の SSOT 地図へ1行追加**した。**実装は未着手であり、本書 §6 の凍結 API 契約は現時点で一切変わっていない**——同設計が予定している `POST /pipeline/load` への `base_model` 追加と `GET /status` への `state` 追加は、いずれも既存フィールドの意味を変えない加算であり、実装時に改めて本書へ反映する。あわせて、オーナーによる LTX 2.5 事前調査を `Docs/LTX25_RESEARCH_NOTES.md` へ参考資料（設計の正本ではない）として収蔵し、`Docs/PENDING_TASKS.md` §3-97（マルチエンジン土台）・§3-98（LTX 2.5 対応）へ起票、`Docs/NEXT_SESSION_HANDOFF.md` §2 の文書地図へ両文書を登録した。 |
 | v0.5.21 | 2026-08-20 | **マルチエンジン土台（§3-97 第1段階）の実装を反映**。前版 v0.5.20 が「実装時に改めて反映する」と予告した内容が現物になった。**凍結 API 契約（§6）への変更はすべて加算のみ**で、既存フィールドの意味・型・既定の応答形は1つも変わっていない（本文の該当箇所にその旨を明記した）。**§6＝新設 §6.9**（ベースモデル軸の加算をまとめて記述。`GET /status` の `state`／`base_model`、`POST /pipeline/load` の `base_model`、`GET /models` の3層化、`metadata.json` の `models` ブロック、`POST /pipeline/unload` が不変であること）／**§6.1**（`POST /pipeline/load` の主なステータス欄を実装どおりに補い、`GET /models` を凍結表未掲載の加算エンドポイントとして補足へ追加）／**§6.6**（`metadata.json` の表へ `models` の行を追加）／**§6.8**（新設エラーコード `PIPELINE_LOADING`〔409〕の行を追加。あわせて長らく古かったファクトリ件数を実数へ訂正）。**モデル既定パスの出所が `config.yaml` から記述子（`scripts/manifests/*.json`）へ移った**ことに追随して、**§2.5**（移行ステップが書き換える対象の記述を現状へ訂正）／**§4.2**（`load` ペイロードの値の出所が記述子であることを補足へ追加）／**§4.3**（`_real_available()` の材料表を記述子駆動へ全面書き換え）／**§5.1**（既定パスの正本が記述子であることへ訂正）／**§7.6**（同上）／**§11.2**（撤去された 8 キーの行を削除し、`manifest_dir` / `models_dir` を追加）／**§11.9＝新設**（トップレベルの `state_file` と `state.json`）を更新した。あわせて **`services/ltx_runner.py` が `services/engines/ltx/adapter.py` へ引っ越した**（旧パスは再エクスポート shim として存置＝既存の import は全て生きる）ことに追随し、本書中の参照をすべて新パスへ改めた（§1.2・§4.1 の図・§4.2・§4.3・§4.4 のツリー・§5.2・§5.5・§6.2 の注・§6.5b の行番号引用・§7・§7.4・§7.5〔コンストラクタ引数に記述子が加わった〕・§9.2・§11.2 の注・§13.4・付録B）。あわせて付録B.1 の用語集へ「ベースモデル」「エンジン系統」「記述子」「GGUF KV」の 4 語を追加した。実装・実機検証の記録は各コミット（`13c3437`〜`2134509`）と `Docs/MULTI_ENGINE_DESIGN.md`、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97。 |
 | v0.5.22 | 2026-08-22 | **LTX 2.5（エンジン系統 `ltx25`）の v1 実装を反映**。LTX 2.5 は当初の見立てと違い `ltx` 系統の別ベースモデルではなく、**専用の仮想環境（`.venv-engine-ltx25`）と専用ワーカー（`engine25/`）を持つ別のエンジン系統**として新設された（理由と経緯は `Docs/MULTI_ENGINE_DESIGN.md` §3.3 の訂正節）。**凍結 API 契約（§6）への変更はここでもすべて加算のみ**で、LTX 2.3 だけを使う既存クライアントから見た応答は 1 バイトも変わらない。**§0.1 版メタ**（対象欄を2モデル・エンジン系統ごとのワーカー構成へ）／**§4.3**（mock の `backend` 表記が系統ごとに変わること）／**§6.8**（新設エラーコード `FEATURE_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 35→36 件へ訂正）／**§6.6**・**§7.5**（`backend` の値に `"ltx25-distilled"` と `"mock-ltx25"` を追記）／**§6.10＝新設**（LTX 2.5 の対応範囲。`GET /models` の `unsupported_features`、`GenerateRequest` 全 28 フィールドの 4 分類〔422系 8／無視 7／動作 8／従属 5〕、ロードペイロードの `deterministic`、ready イベントの `sampler`）を更新した。実装・実機検証の記録は各コミット（`62d67b0`〜`7c29ca3`）と `Docs/VERIFICATION_LOG.md` §69、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98。 |
+| v0.5.23 | 2026-08-22 | **記述と実装のずれの訂正（文書のみ。API・実装への変更は無い）**。敵対的レビューで確定した指摘を反映した。**§6.1**（認証が要る経路を「6 経路」→**9 経路**へ訂正〔`upload/video`・`upload/audio`・`generate/chain` の 3 件が漏れていた〕・`POST /generate` のステータス欄へ `422 FEATURE_UNSUPPORTED` を追加・`POST /generate/chain` の補足行を新設）。**§6.2**（`GenerateRequest` の表が 21 行しかなく実装の 28 フィールドと合っていなかったため、`neg_method` / `vsf_scale` / `loras` / `reference_video_id` / `conditioning_attention_strength` / `reference_video_strength` / `outpaint` の 7 行を補完。**凍結制約の列挙が実装と逆だった 2 件を訂正**——制約 6 は「1 枚まで」ではなく **5 枚まで**、制約 7 は「`frame_idx != 0` は 422」ではなく **8n+1 グリッドへスナップ＋クランプして受理**である〔いずれも Phase 3 で解除済みだった〕。あわせて LoRA・参照動画・outpaint の各検査を列挙へ追加し、`attention_backend` / `keep_resident` / `vae_mode` の行へ「LTX 2.5 では 422」を併記）。**§6.3**（`ConditioningImage.frame_idx` の「Phase 1 は 0 固定」を訂正し、**LoraSpec** と **OutpaintSpec** の表を新設）。**§6.5b**（sage の「降格して完走する」に対する LTX 2.5 の例外を明記）。**§6.9(c)**（`GET /models` の応答例へ、実装が常に返している `category_order` を補完）。**§6.10(d)**（無視したフィールドのログの出所を「ワーカーのログ」→**アプリ側のロガー**〔`ltx25.runner` → `logs/server.log`〕へ訂正）。**§4.2・§15.1**（ワーカーログが **2 本**〔`logs/ltx_worker.log`＝`ltx` 系統／`logs/ltx25_worker.log`＝`ltx25` 系統〕であることを明記）。**§4.3・§7.6**（`_real_available()` の判定材料を系統別の表へ——`ltx25` は必須 `assets` が 1 件〔空間アップスケーラ〕・worker は固定の `engine25/worker.py`）。**§7.4**（「`LTXRunner` は唯一のファサード」を訂正し、`LTX25Runner` が同格で実在することを明記）。**§9.2**（`ltx25` のワーカーには `LTX_*` を 1 つも渡さないことを明記）。**§11.2**（`model.engine_python_ltx25` の行を追加）。**§16.2・付録A・付録B.1**（I2V の「1 枚・`frame_idx=0` 固定」という旧記述を現行仕様へ訂正）。**§0.3・§6.10 末尾**（LTX 2.5 の生きた後続課題を 4 件へ更新）。**§5.1b**（容量の概数が `.venv-engine-ltx25` 追加前の値である旨の注記を追加。再実測は `Docs/PENDING_TASKS.md` §3-107）。 |
 
 ### 0.2 スコープ
 
@@ -107,7 +108,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/NEXT_SESSION_HANDOFF.md` | セッション間の引き継ぎ（リポジトリの形・文書の地図・開発の基本操作・直近の状況）。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
 | `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` | クリップ連結（Clip Chain）の内部構造と Stage-2 固定窓アーキテクチャの設計正本 |
-| `Docs/MULTI_ENGINE_DESIGN.md` | **マルチエンジン化の設計正本**（複数の動画生成AIをドロップダウンで切り替える機能。ベースモデル／エンジン系統の2軸分離・記述子拡張・`EngineRunner` 分離・状態の3層憲章・API の加算方針）。**第1段階（土台）は 2026-08-20 に実装済み**で、その API 面は本書 §6.9 が正本（加算のみ・凍結契約は不変）。起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97・§3-98（2026-08-22 にクローズ移設。生きている後続課題は `Docs/PENDING_TASKS.md` §3-102・§3-103）。参考資料（設計の正本ではない）として `Docs/LTX25_RESEARCH_NOTES.md` |
+| `Docs/MULTI_ENGINE_DESIGN.md` | **マルチエンジン化の設計正本**（複数の動画生成AIをドロップダウンで切り替える機能。ベースモデル／エンジン系統の2軸分離・記述子拡張・`EngineRunner` 分離・状態の3層憲章・API の加算方針）。**第1段階（土台）は 2026-08-20 に実装済み**で、その API 面は本書 §6.9 が正本（加算のみ・凍結契約は不変）。起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97・§3-98（2026-08-22 にクローズ移設。生きている後続課題は `Docs/PENDING_TASKS.md` の **4 件**＝§3-102〔v1 の範囲外の機能〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕）。参考資料（設計の正本ではない）として `Docs/LTX25_RESEARCH_NOTES.md` |
 | `scripts/manifests/*.json`（ベースモデル記述子） | **どのベースモデルが何のファイルでできているか**の正本（`schema: 2`＋`engine_family`。`categories[].default_file`＝カテゴリ別の既定の重み・`assets`＝tokenizer/アップサンプラ等の固定ファイル・`default_selection`・インストーラ用の `downloads` / `migrate`）。**2026-08-20 以降、モデルの既定パスは `config.yaml` ではなくこちらが正本**（§4.3・§5.1・§11.2）。読み手は `services/base_models.py` |
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` | API 利用者（フロントエンド実装者）向けの解説と全ルート一覧。**契約そのものの正本は本書 §6** |
@@ -328,7 +329,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 補足:
 - **`load` ペイロードの重みパスの出所は `config.yaml` ではなくベースモデル記述子である（2026-08-20〜）**。`_build_load_payload`（`services/engines/ltx/adapter.py:1459`）は、選択可能な 4 カテゴリ（transformer / text_encoder / video_vae / audio）については記述子の `categories[].default_file` を、固定ファイル（`gemma_root` / `upsampler_path` / `component_text_projection_path` / `component_video_vae_pruned_path`）については記述子の `assets` を読む。`POST /pipeline/load` でカテゴリ別の選択が明示された場合だけ、そのカテゴリの値が解決済みの絶対パスで上書きされる（カテゴリ→ペイロード項目名の対応表は同ファイルの `SELECTION_FIELDS`＝`adapter.py:67` が唯一の正本）。**キー集合と挿入順は従来どおり契約**で、ゴールデンスナップショット（`tests/test_model_swap_load.py`）が固定している。`checkpoint_path` だけは config にも記述子にも対応物が無く、直値の `""` がハードコードされる（§5.5）。
 - **seed は親（アプリ側）で解決**する（`request.seed >= 0` ならそのまま、`-1` なら乱数）。`done.seed_used` は worker から返るが決定性の基準は親が握る。
-- stderr は**パイプでなくログファイル** `logs/ltx_worker.log` へ流す（stderr をパイプすると、worker が大量の tqdm/log を吐く間に親が stdout でブロックしてデッドロックしうるため）。`GENERATED_OK peak_vram_mb=` 等の診断行はこのログに出る。
+- stderr は**パイプでなくログファイル**へ流す（stderr をパイプすると、worker が大量の tqdm/log を吐く間に親が stdout でブロックしてデッドロックしうるため）。`GENERATED_OK peak_vram_mb=` 等の診断行はこのログに出る。**行き先はエンジン系統ごとに別ファイル**で、`ltx`（LTX 2.3）は `logs/ltx_worker.log`、`ltx25`（LTX 2.5）は `logs/ltx25_worker.log` である（2.3 ↔ 2.5 を往復しても両方の記録が残るようにするため。§15.1）。
 - `load` タイムアウトは 600 秒。タイムアウトすると watchdog スレッドが worker を kill し、ブロック中の readline を返させる。
 - `crop_output` 指定時は、worker にフルサイズ mp4 を一時ファイル（`_full.mp4`）へ書かせ、アプリ側 ffmpeg ヘルパ（`services/video_io.crop_mp4`）が中央クロップして `output.mp4` を作る（→ §10 も参照）。
 
@@ -344,12 +345,12 @@ backend は `config.model.backend`（`auto` / `mock` / `real`, 既定 `auto`）�
 
 **確認する材料の正本は、2026-08-20 から `config.yaml` ではなくベースモデル記述子（`scripts/manifests/*.json`）である**。config に残るのは「どこを見るか」（`engine_python` / `engine_dir` / `models_dir`）だけで、「何を見るか」は記述子が宣言する:
 
-| 材料 | 出所 |
-|------|------|
-| エンジン python | `model.engine_python`（config） |
-| worker スクリプト | `model.engine_dir`/`worker.py` の存在（config） |
-| GGUF transformer / GGUF Gemma / component VIDEO VAE / component AUDIO VAE | 記述子の `categories[].default_file` 4 件（`models_dir` からの相対パス） |
-| Gemma tokenizer dir・spatial upsampler・component text-projection | 記述子の `assets` のうち必須 3 件（`adapter.py:77` の `REQUIRED_ASSETS`） |
+| 材料 | エンジン系統 `ltx`（LTX 2.3） | エンジン系統 `ltx25`（LTX 2.5） |
+|------|------|------|
+| エンジン python | `model.engine_python`（config） | `model.engine_python_ltx25`（config・§11.2） |
+| worker スクリプト | `model.engine_dir`（既定 `./engine`）/`worker.py` の存在 | `./engine25/worker.py` の存在（**config キーは無く固定値**。`engine25/` は本リポジトリ同梱のため設置場所の選択肢が無い） |
+| 4 カテゴリの既定の重み | 記述子の `categories[].default_file` 4 件（transformer / text_encoder / video_vae / audio。`models_dir` からの相対パス） | 同左（カテゴリ名も同じ。**カテゴリは製品の軸であってエンジン世代の属性ではない**ため、系統ごとに別語彙を作っていない） |
+| 固定ファイル（`assets`） | 必須 **3 件**＝Gemma tokenizer dir・spatial upsampler・component text-projection（`services/engines/ltx/adapter.py` の `REQUIRED_ASSETS`） | 必須 **1 件**＝spatial upsampler だけ（`services/engines/ltx25/adapter.py` の `REQUIRED_ASSETS`）。残り 2 件は 2.5 に対応物が無い——Gemma 4 のトークナイザ／プロセッサのメタデータは**テキストエンコーダの GGUF の中**にあり（`engine25/assets_export.py` が GGUF の隣へ書き出し、古くなれば作り直す）、独立した text-projection ファイルは 2.5 には存在しない |
 
 - **PrunaVAED の枝刈りデコーダ（`assets.component_video_vae_pruned_path`）はあえてゲートしない**。無いときは当該ジョブだけが通常デコーダへ降格すればよく（§6.2 `vae_mode`）、サーバー全体を mock へ落とす理由にならないため。
 - **`False` のときは欠落パスを列挙して WARNING を出す**。auto が黙って mock へ降格し「生成は動いているのに中身が別物」になる事故を、画面上で名指しできるようにするため。
@@ -474,6 +475,8 @@ Nz-Videomni/
 上表は `_real_available()` が実在を確認する「生成の中核」であり、これが揃えば real backend は成立する。一方 `scripts/install_ltx.ps1` は、2026-07-26 以降これに加えて次の 5 種類も取得する（**以前は上流から手で置く前提の、インストーラ管理外のファイルだった**）。3〜4 行目は 2026-08-03 の depth-control / deblur 追加分である（正本 `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。
 
 > **取得総量の数字について（2026-08-20 見直し済み）**: manifest の期待ファイル 15 行の実測合計は **34,910,858,075 B（32.51GiB）** である。本節に長らく書かれていた「~33GB（30.7GiB）」および §5 の見出し・目次・§2.5・`README.md` の概数（取得 ~30GB）は、PrunaVAED の枝刈りデコーダ（690MB）と In-Outpainting（1.31GB）が取得対象に加わる前の数字だったため、本行の実測値へ揃えた。**`setup.ps1` の必要容量も合わせて見直し済み**: モデル約 32.51GiB ＋ Python 環境 約 7〜8GiB（実体はほぼ `.uv_cache/`。数値自体は今回のインストーラ変更の影響を受けないため未変更）＋ `tools/` 約 0.4GiB の合計は **約 40〜41GB** となり旧しきい値 40GB を上回るため、判定のしきい値を安全側の余裕を足した **45GB** へ引き上げた（`scripts/setup.ps1` `$needGB`）。詳細は `README.md` §1「必要な空き容量の内訳」を参照。
+>
+> **【2026-08-22】この見直しは LTX 2.5 用の3つ目の仮想環境（`.venv-engine-ltx25`）が加わる前のものである。** Python 環境の「約 7〜8GiB」は venv が 2 つだった時期の値で、3 つ目のぶんは共有キャッシュ（`.uv_cache/`）にも積み上がるため、合計は上記より大きくなる可能性がある（開発機では `.uv_cache/` だけで 16.42GiB を実測）。**クリーン環境での再実測が済むまで数値は動かさない**方針で、再実測としきい値の見直しは `Docs/PENDING_TASKS.md` §3-107 として起票済み。なお **LTX 2.5 の重み自体は取得対象ではない**（記述子の `downloads` が空。上記 32.51GiB にも含まれない）。
 
 | 要素 | 既定パス | 概算 | 取得元 | 役割 |
 |------|----------|------|--------|------|
@@ -540,7 +543,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | POST | `/api/v1/pipeline/load` | パイプラインを明示ロード（任意ボディで**ベースモデル**とカテゴリ別モデルを選択可＝§6.9） | 要 | 200 / 404(MODEL_NOT_FOUND) / 409(JOB_BUSY, **PIPELINE_LOADING**) / 422(MODEL_FILE_MISSING, MODEL_INCOMPATIBLE) / 503(PIPELINE_LOAD_FAILED) |
 | POST | `/api/v1/pipeline/unload` | パイプラインをアンロード | 要 | 200 / 409(JOB_BUSY) |
 | POST | `/api/v1/upload/image` | 最小 I2V 用画像をアップロードし `image_id` を返す | 要 | 200 / 400(UPLOAD_INVALID_TYPE, UPLOAD_TOO_LARGE) |
-| POST | `/api/v1/generate` | 生成ジョブを開始し job_id を返す | 要 | **202** / 404(IMAGE_NOT_FOUND) / 409(JOB_BUSY) / 422(VALIDATION_ERROR) |
+| POST | `/api/v1/generate` | 生成ジョブを開始し job_id を返す | 要 | **202** / 404(IMAGE_NOT_FOUND) / 409(JOB_BUSY) / 422(VALIDATION_ERROR, **FEATURE_UNSUPPORTED**) |
 | GET | `/api/v1/jobs` | メモリ上のジョブ一覧を返す | 不要 | 200 |
 | GET | `/api/v1/jobs/{job_id}` | ジョブ状態を返す | 不要 | 200 / 404(JOB_NOT_FOUND) |
 | GET | `/api/v1/jobs/{job_id}/video` | 完了済み動画（`video/mp4`）を返す | 不要 | 200 / 404(JOB_NOT_FOUND) / 409(VIDEO_NOT_READY) |
@@ -550,13 +553,14 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 補足（実装どおり）:
 - `POST /generate` は成功時 **202 Accepted**（`status_code=202`）。レスポンス `status` は `queued`。
-- 認証が必要なのは `require_auth` 依存を持つ 6 経路のみ: `pipeline/load`, `pipeline/unload`, `upload/image`, `generate`, `jobs/{job_id}/join`, `DELETE /jobs/{job_id}`。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined` を含む）は認証不要。
+- 認証が必要なのは `require_auth` 依存を持つ **9 経路**: `pipeline/load`, `pipeline/unload`, `upload/image`, **`upload/video`**, **`upload/audio`**, `generate`, **`generate/chain`**, `jobs/{job_id}/join`, `DELETE /jobs/{job_id}`。うち後半の3つ（`upload/video` / `upload/audio` / `generate/chain`）は本表に未掲載の ADDITIVE エンドポイントで、掲載済みの6経路と同じ `require_auth` を持つ。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined` を含む）と `GET /models` / `GET /loras` は認証不要。
 - api_key 設定時に Bearer 不一致/欠落 → `401 UNAUTHORIZED`。
 - `POST /generate` は投入時にまず `conditioning_images` の各 `image_id` の実在を検証（`upload_store.path_for` が `IMAGE_NOT_FOUND`=404 を送出）、次に単一ジョブガードで 409。
 - `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。**`PIPELINE_LOADING`（409）は unload には置いていない**——ロード中に張り付いた状態から抜ける唯一の復帰路として温存してある（§6.9(f)）。
 - `GET /models`（`api/models_registry.py::list_models`）も本表に未掲載の ADDITIVE エンドポイントで、認証不要。カテゴリ別（transformer / text_encoder / video_vae / audio）に選択可能なモデル名を返す。**2026-08-20 に `active_base_model` と `base_models[]` を加算して 3 層構造になった**（従来の `categories` ブロックはキー・順序・値とも温存）。詳細は §6.9(c)。
 - `POST /upload/video`（`api/uploads.py::upload_video`）も本表に未掲載の ADDITIVE エンドポイント（Phase B の IC-LoRA 参照動画／V2V 継続元アップロード）で、**2026-07-30 に任意のクエリ引数 `trim_start_sec` / `trim_duration_sec`（いずれも `float | None`、既定 `None`）を加算した**——アップロードした動画のうち `[trim_start_sec, trim_start_sec + trim_duration_sec)` の区間だけを残してサーバー側で切り出す（フロントエンドのタイムライン上でリボンが元動画の一部しか占めていないときに、その範囲だけを冒頭クリップにするための機能）。作法は `source_tail_seconds` と同じ「凍結表外エンドポイントへの追加専用拡張」で、**2引数とも未指定なら旧リクエストとバイト単位で同一**（`services/video_upload_store.py` の切り出し経路そのものが走らず、受信バイト列がそのまま保存される）。`Query()` に `ge=`／`le=` を意図的に付けておらず、**片方だけ指定・NaN／inf・負の開始・0以下の尺・ffmpeg 失敗はすべて 422 や 500 にせず「トリムせずそのまま保存」へ穏当に劣化する**（本引数の加算で新しいエラー応答が生まれないことを保証する設計）。レスポンス `UploadVideoResponse` には `trimmed`（bool, 既定 `False`, `2026-07-30追加`——2引数が指定され、かつ切り出しが実際に成功したときだけ `True`）を加算した。**この2引数は V2V 継続元だけでなく IC-LoRA 参照動画（`reference_video_id`）のアップロードにも同じクエリのまま使われる**（`2026-08-01`——フロントエンドが同じ判定関数で両方の経路にトリムを適用するようになったため。バックエンドは両者を区別せず、`POST /upload/video` は1本のままである）。実装・機械検証・実機ゲートの記録は `Docs/VERIFICATION_LOG.md` §42。**2026-08-11 に任意のクエリ引数 `max_frames`（int \| None、既定 `None`）を追加**——`MAX_CHAIN_TOTAL_PIXEL_FRAMES` を超える参照動画の先頭を切り詰める引数（長尺IC-LoRA用）。**2026-08-16 にレスポンス `UploadVideoResponse` へ `frame_count`／`fps`（いずれも int/float \| None）を追加**——素材（末尾）の帯長をクライアント側で自動決定するための実測値。
 - `POST /jobs/{job_id}/join`・`GET /jobs/{job_id}/joined` は V2V（video-to-video 継続）専用の ADDITIVE エンドポイントで、V2V 継続機能そのものの実装時（§24）に新設され、**2026-07-21 に凍結の限定解除（オーナー承認・コミット `d22706e`）でリクエスト/レスポンスが拡張された**。リクエスト `JoinRequest` は `audio_smoothing`（bool, 既定 `true`＝クロスフェード）・`handle_crossfade_ms`（int, 既定 `300`, `0`〜`2000`）・`source_tail_seconds`（float, 既定 `5.0`, `2026-07-21追加`——結合前にソース動画の末尾 `N` 秒だけを残す tail-keep トリム。`0` はソースを全長のまま結合）。レスポンス `JoinResponse` は `job_id`・`joined_path`（結合後 mp4 のパス）・`join_mode`・`source_normalized`・`source_lufs`・`continuation_lufs_before`・`fade_ms_applied`・`handle_crossfade_ms_applied`・`handle_context_seconds`・`loudness_matched`・`trimmed_source_seconds`（float, `2026-07-21追加`——tail-keep で削られた秒数。挿入位置計算に使う）・`source_fps`（float \| null, `2026-07-21追加`——ソースの実測fps）を返す。ボディ省略（またはPOST時ボディ無し）は既定値でのスムーズ結合になる。
+- `POST /generate/chain`（`api/generate_chain.py::generate_chain`）も本表に未掲載の ADDITIVE エンドポイントで、クリップ連結・Retake・End source・V2V・A2V の**5系統すべてがこの1本を通る**。**2026-08-22 追加**: 選択中のベースモデルのエンジンが連結生成に対応していないときは、ジョブを作る前に `engines.reject_chain(...)` が **422 `FEATURE_UNSUPPORTED`** で断る（エンジン系統 `ltx25` が該当。5系統を1箇所でまとめて拒否する。§6.10(c)）。
 
 ### 6.2 GenerateRequest 全文
 
@@ -580,11 +584,18 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `nag_scale` | float | `11.0` | `ge=1.0, le=20.0` | **2026-07-28追加**。外挿の強さ |
 | `nag_tau` | float | `2.5` | `ge=1.0, le=10.0` | **2026-07-28追加**。ノルム頭打ち上限 |
 | `nag_alpha` | float | `0.25` | `ge=0.0, le=1.0` | **2026-07-28追加**。正出力とのブレンド比率 |
-| `attention_backend` | `Literal["sdpa","sage"]` | `"sdpa"` | enum | **2026-07-31追加**。attention（注意機構）の実装選択。`"sage"` は SageAttention 2.2.0（§5.4）。**実装あり**。sageattention 未導入の環境では 422 にせず `"sdpa"` へ降格して完走する |
+| `neg_method` | `Literal["nag","vsf"]` | `"nag"` | enum | **2026-07-29追加**。非CFGネガティブプロンプトの方式選択。`"vsf"` は VSF（Value Sign Flip, arXiv:2508.10931＝正負のコンテキストを連結して1回の attention で処理し、負側の V（value）だけを −α 倍する第2の非CFG手法）。マスタートグルは `nag_enabled` のままで、本フィールドはその内訳を切り替える。正本は `Docs/VERIFICATION_LOG.md` §41 |
+| `vsf_scale` | float | `1.5` | `ge=0.0, le=10.0` | **2026-07-29追加**。VSF の α（負側 V の反転倍率）。実用域は 1.5〜5。上限 10 は「15 以上で 8 ステップ蒸留が収束崩壊する」という実機検証に基づく |
+| `attention_backend` | `Literal["sdpa","sage"]` | `"sdpa"` | enum | **2026-07-31追加**。attention（注意機構）の実装選択。`"sage"` は SageAttention 2.2.0（§5.4）。**実装あり**。sageattention 未導入の環境では 422 にせず `"sdpa"` へ降格して完走する。**エンジン系統 `ltx25`（LTX 2.5）では例外で、既定 `"sdpa"` 以外を指定すると降格せず 422 `FEATURE_UNSUPPORTED` になる**（§6.10(d)） |
 | `block_swap_prefetch` | bool | `true` | — | **2026-08-02追加**。block swap（transformer のブロックを CPU⇔GPU 間で出し入れする既定の省VRAM機構）の転送を、計算とは別の CUDA stream で先回りさせて隠す先読み機能。**実装あり**。`attention_backend` と違い転送方式のみを変えるため、同一シードなら off/on で出力がビット単位一致する。block swap 自体が無効な設定（`vram.block_swap=false` / `block_swap_blocks_on_gpu=0` / 全ブロック数以上）では黙って no-op になる。詳細は `Docs/VERIFICATION_LOG.md` §44 |
-| `keep_resident` | bool | `false` | — | **2026-08-03追加**。モデルのCPU側「骨格」（GGUF から組み上げた state dict とモジュールツリー。DiT 約16.5GB＋Gemma 約8〜9GB）をジョブ間で保持して使い回し、2本目以降の前処理固定費を消す per-job フィールド（ジョブごとのリクエスト項目）。**実装あり**。GPU には何も常駐させないため VRAM プロファイルは不変で、同一シードなら off/on で出力がビット単位一致する（HIT 時の前処理は実測 5.32 秒。ベースラインは 68.6〜75.0 秒）。**メモリ 64GB 以上を推奨**（約20GB を常時占有する）。`gguf_per_layer_quant=false` との併用はジョブがエラーで停止し（bf16 融合経路の in-place な LoRA 融合がキャッシュを汚染するため）、`dit_cpu_load=false` / `block_swap_prefetch=false` との併用は警告のうえ自動 off になる。実際に効いたかは `metadata.json` の `keep_resident_used`（`"off"` / `"on"` / `"on->off"`）で確認する。詳細は `Docs/VERIFICATION_LOG.md` §48 |
+| `keep_resident` | bool | `false` | — | **2026-08-03追加**。モデルのCPU側「骨格」（GGUF から組み上げた state dict とモジュールツリー。DiT 約16.5GB＋Gemma 約8〜9GB）をジョブ間で保持して使い回し、2本目以降の前処理固定費を消す per-job フィールド（ジョブごとのリクエスト項目）。**実装あり**。GPU には何も常駐させないため VRAM プロファイルは不変で、同一シードなら off/on で出力がビット単位一致する（HIT 時の前処理は実測 5.32 秒。ベースラインは 68.6〜75.0 秒）。**メモリ 64GB 以上を推奨**（約20GB を常時占有する）。`gguf_per_layer_quant=false` との併用はジョブがエラーで停止し（bf16 融合経路の in-place な LoRA 融合がキャッシュを汚染するため）、`dit_cpu_load=false` / `block_swap_prefetch=false` との併用は警告のうえ自動 off になる。実際に効いたかは `metadata.json` の `keep_resident_used`（`"off"` / `"on"` / `"on->off"`）で確認する。詳細は `Docs/VERIFICATION_LOG.md` §48。**エンジン系統 `ltx25`（LTX 2.5）では `true` を指定すると 422 `FEATURE_UNSUPPORTED`**（§6.10(d)） |
 | `fused_gguf_dequant_kernel` | bool | `true` | — | **2026-08-04追加**。GGUF の K量子化（Q4_K / Q5_K / Q6_K）の逆量子化を Triton の1カーネルへ融合する高速化。**実装あり**。`attention_backend` と違い展開の手順しか変えないため、同一シードなら off/on で出力がビット単位一致する（必須要件として検証済み）。Triton 不在・カーネル例外・型ごとの初回自己検証の不一致のいずれでも黙って従来実装へ降格し、生成は落とさない。実際に効いたかは `metadata.json` の `fused_gguf_dequant_kernel_used`（`"off"` / `"on"` / `"on->off"`）で確認する。実測は 768p/257f で約17.5%短縮。既定は実機ゲート G1〜G8 合格を条件に 2026-08-04 に `false` から反転した。詳細は `Docs/VERIFICATION_LOG.md` §51。**同日、受理のみで生成に影響しなかった旧モック `fused_gguf_dequant_gemm` は完全撤去した**（オーナー裁定。pydantic の `extra=ignore` により旧クライアントが送っても API は壊れない） |
-| `vae_mode` | `Literal["default","prune_vaed"]` | `"default"` | enum | **2026-07-31追加（モックとして）・2026-08-05に実装**。映像VAEデコーダの選択。`"prune_vaed"` は PrunaVAED（Pruna AI 公開の枝刈り＋蒸留済みデコーダを当方で ltx-core native 形式へ変換した単体ファイル約690MB。`models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors`）。**実装あり**。`attention_backend="sage"` と同じく**出力の絵が変わる**（ビット一致しない）系の切替で、**既定は恒久 off**（ゲート合格後の既定反転は行わない。オーナー確定事項）。降格は環境ではなく**重みファイルの有無**で決まり、無ければ 422 にせず既定デコーダで完走する（存在確認はジョブ単位なので、サーバーを動かしたままファイルを着脱しても追随する）。実際に効いたかは `metadata.json` の `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）で確認する。実測は 768p/257f で **−12.54秒（−10.5%）**・`peak_vram_reserved_mb` **−2,635MB**・PSNR 36.06dB／SSIM 0.9854（輝度）。詳細は `Docs/VERIFICATION_LOG.md` §52。**フィールド値 `"prune_vaed"` は上流名称の誤記（正しくは PrunaVAED）に由来するが、既存の外部コントラクトなので改名しない**（表示名のみ訂正した）。既存の `vram_optimization.vae_tiling`（VRAM 節約のタイル分割）とは**無関係** |
+| `vae_mode` | `Literal["default","prune_vaed"]` | `"default"` | enum | **2026-07-31追加（モックとして）・2026-08-05に実装**。映像VAEデコーダの選択。`"prune_vaed"` は PrunaVAED（Pruna AI 公開の枝刈り＋蒸留済みデコーダを当方で ltx-core native 形式へ変換した単体ファイル約690MB。`models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors`）。**実装あり**。`attention_backend="sage"` と同じく**出力の絵が変わる**（ビット一致しない）系の切替で、**既定は恒久 off**（ゲート合格後の既定反転は行わない。オーナー確定事項）。降格は環境ではなく**重みファイルの有無**で決まり、無ければ 422 にせず既定デコーダで完走する（存在確認はジョブ単位なので、サーバーを動かしたままファイルを着脱しても追随する）。実際に効いたかは `metadata.json` の `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）で確認する。実測は 768p/257f で **−12.54秒（−10.5%）**・`peak_vram_reserved_mb` **−2,635MB**・PSNR 36.06dB／SSIM 0.9854（輝度）。詳細は `Docs/VERIFICATION_LOG.md` §52。**フィールド値 `"prune_vaed"` は上流名称の誤記（正しくは PrunaVAED）に由来するが、既存の外部コントラクトなので改名しない**（表示名のみ訂正した）。既存の `vram_optimization.vae_tiling`（VRAM 節約のタイル分割）とは**無関係**。**エンジン系統 `ltx25`（LTX 2.5）では例外で、既定 `"default"` 以外を指定すると重みの有無に関わらず 422 `FEATURE_UNSUPPORTED`**（§6.10(d)） |
+| `loras` | list[LoraSpec] | `[]` | — | **Phase B（IC-LoRA）／S1（スタイル LoRA）で追加**。サーバー側に登録済みのアダプタ**名**の配列（生パスは受け付けない）。登録は `config.yaml` の `model.ic_loras`（IC-LoRA）と `model.lora_dir` のスキャン（スタイル LoRA）。空配列なら従来リクエストとバイト単位で同一。詳細は §6.3 の LoraSpec |
+| `reference_video_id` | str \| null | `null` | — | **Phase B で追加**。`POST /upload/video` が返す ID。IC-LoRA の制御信号（canny / pose / depth 等）の元になる参照動画。**単独では指定できない**（`loras` が空だと 422。下記凍結制約）。逆向き（`loras` があれば参照動画が必須か）は**アダプタの種別しだい**で、判定は `api/generate.py` が登録簿を見て行う——CONTROL 系（union-control / pixel-spatial-upscaler）は必須、STYLE/キャラクター系は不要 |
+| `conditioning_attention_strength` | float \| null | `null` | `ge=0.0, le=1.0` | **Phase C で追加**。IC-LoRA の制御信号への追従の強さ（輪郭線・骨格・深度マップにどれだけ厳密に従うか）。`null`（省略）ならエンジンは注意ラッパーを組み立てず、従来とバイト単位で同一。**`loras` が空だと 422** |
+| `reference_video_strength` | float \| null | `null` | `ge=0.0, le=1.0` | **Phase C で追加**。参照条件そのものの強さ（`denoise_mask = 1 − s`）。公式は 1.0 のままを推奨しており、1.0 未満では参照映像が出力へ滲み出ることがある（承知のうえで露出）。`null` のときランナーは従来どおり `strength=1.0` を送る。**`loras` が空だと 422** |
+| `outpaint` | OutpaintSpec \| null | `null` | — | **2026-08-08追加（§1-13）**。動画のキャンバス拡張（Outpainting）の幾何指定。`null` なら従来リクエストとバイト単位で同一。`reference_video_id` が必須で、`conditioning_images` および `crop_output` とは排他（下記凍結制約）。詳細は §6.3 の OutpaintSpec |
 
 凍結制約（`model_validator(mode="after") validate_ltx_constraints`、順序どおり）:
 
@@ -593,9 +604,18 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 3. `(num_frames - 1) % 8 != 0` → `ValueError("num_frames must be 8n+1")`
 4. `crop_output` 指定時: `crop_output.width > width` / `crop_output.height > height` はそれぞれ ValueError（クロップは生成サイズ以下）
 5. `pipeline == "distilled"` のとき: `num_inference_steps != 8` → ValueError、`guidance_scale != 1.0` → ValueError（Phase 1 の distilled は 8 step / CFG=1.0 固定）
-6. `len(conditioning_images) > 1` → `ValueError("Phase 1 supports at most one conditioning image")`（最小 I2V は 1 枚まで）
-7. `conditioning_images` が 1 件のとき `frame_idx != 0` → `ValueError("Phase 1 supports only frame_idx=0 for I2V")`
-8. `nag_enabled` が true かつ `negative_prompt.strip()` が空 → `ValueError("nag_enabled requires a non-empty negative_prompt")`（**2026-07-28追加**）
+6. `len(conditioning_images) > 5` → `ValueError("at most 5 conditioning images are supported")`（**Phase 3 で 1 枚→5 枚へ拡張**。旧「Phase 1 supports at most one conditioning image」は撤去済み）
+7. `conditioning_images` の各要素の `frame_idx` を**その場で書き換える**（**Phase 3 で「0 固定」を解除**。旧「Phase 1 supports only frame_idx=0 for I2V」は撤去済み）。`frame_idx == 0` は開始フレーム（潜在置換経路）としてそのまま通す。`frame_idx > 0` は潜在フレームの開始画素＝8n+1 グリッドへスナップし（`(f-1)//8*8+1`。ComfyUI `LTXVAddGuide` と同じ規約）、`[1, num_frames-8]` へクランプする。**格子外・範囲外でも 422 にはせず、受理して丸める**（UI が自然な値を送ってきても壊れないための安全網。÷64 は空間方向の別の話で無関係）
+8. `reference_video_id` があって `loras` が空 → `ValueError("reference_video_id requires at least one lora ...")`（参照動画は IC-LoRA を条件付けるためだけに存在するため）。**逆向き（`loras` があれば参照動画が必須か）はここでは判定しない**——CONTROL 系アダプタは必須・STYLE/キャラクター系は不要という**種別依存**の規則なので、登録簿を読めるエンドポイント層（`api/generate.py`）が受け持つ
+9. `conditioning_attention_strength` が指定されていて `loras` が空 → ValueError
+10. `reference_video_strength` が指定されていて `loras` が空 → ValueError
+11. `nag_enabled` が true かつ `negative_prompt.strip()` が空 → `ValueError("nag_enabled requires a non-empty negative_prompt")`（**2026-07-28追加**）
+12. 以降は `outpaint` が指定されているときだけの5検査（**2026-08-08追加・§1-13**。ネストせず1規則1検査で、失敗のたびに何が悪いかを名指しする）:
+    - `reference_video_id` が無い → ValueError（キャンバスを広げる対象の動画が要る）
+    - `outpaint.total_pad == 0` → ValueError（4つの pad が全部 0 なら何も広がらない）
+    - `conditioning_images` との併用 → ValueError（元動画がすでに絵を固定しているため排他）
+    - `crop_output` との併用 → ValueError（せっかく広げた領域を切り落とすことになるため排他）
+    - 保持領域（`width - pad_left - pad_right` × `height - pad_top - pad_bottom`）のいずれかの辺が `OUTPAINT_MIN_KEEP_SIDE`（**256 画素**）未満 → ValueError（ブレンドのマスク膨張がキャンバス長辺の約1/10 まで内側へ届くため、保持領域が丸ごと飲み込まれる）
 
 > **NAGフィールドの補足（2026-07-28追加）**: 上記4フィールドは `GenerateRequest` に加えて `GenerateChainRequest`（`POST /generate/chain`。本書は§6ではPhase 1の単発生成のみを扱うため独立のスキーマ表は持たない）にも同一の名前・型・デフォルト・制約で存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。詳細な設計判断（式の規約・非対称設計の根拠・実装箇所一覧・実機ゲート）は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を正本とする。
 
@@ -642,11 +662,28 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | フィールド | 型 | デフォルト | 制約 |
 |-----------|----|-----------|------|
 | `image_id` | str | （必須） | — |
-| `frame_idx` | int | `0` | Phase 1 は 0 固定（バリデータ） |
+| `frame_idx` | int | `0` | **Phase 3 で 0 固定を解除**。`0` は開始フレーム（潜在置換経路）、`> 0` はキーフレームで、バリデータが 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプする（範囲外・格子外でも 422 にはしない。§6.2 の凍結制約 7） |
 | `strength` | float | `0.8` | `ge=0.0, le=1.0` |
 | `crf` | int \| null | `null` | — |
 
 > 注: `crf` はスキーマに存在するが、real backend の I2V 送信ペイロードでは **落とされる**（`services/engines/ltx/adapter.py` の `_RealBackend.generate` はフォークの `ImageConditioningInput` に crf が無いため `path/frame_idx/strength` のみ送る）。
+
+**LoraSpec**（`GenerateRequest.loras[]` の要素）
+| フィールド | 型 | デフォルト | 制約 |
+|-----------|----|-----------|------|
+| `name` | str | （必須） | `min_length=1, max_length=200`。**サーバー側の登録名のみ**——`/`・`\`・`..` を含むパス風の名前はバリデータが拒否する（クライアントが任意のファイルを指させないため） |
+| `strength` | float | `1.0` | `gt=0.0, le=2.0`（映像軸の適用強度。0 は不可） |
+| `audio_strength` | float \| null | `null` | `ge=0.0, le=2.0`（音声軸の適用強度。`null` なら `strength` に追従＝従来と同一挙動。**こちらは 0 を許容する**——映像目的のスタイル LoRA の音声側差分が音を壊す事例への対処。正本は `Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`） |
+
+**OutpaintSpec**（`GenerateRequest.outpaint`。2026-08-08追加・§1-13）
+| フィールド | 型 | デフォルト | 制約 |
+|-----------|----|-----------|------|
+| `pad_left` / `pad_right` / `pad_top` / `pad_bottom` | int | `0` | `ge=0, le=4096`。**`width`/`height` は最終キャンバス**で、4つの pad はそこから切り取る量である。保持矩形（`width - pad_left - pad_right` × `height - pad_top - pad_bottom`）は参照動画自身の解像度と一致していなければならず、エンドポイントが ffprobe で照合して食い違いを拒否する。元動画をリサイズすることはない |
+| `blend_dilation_stage1` | int | `5` | `ge=0, le=15`。ラプラシアンピラミッドのブレンド膨張（stage-1・半解像度後） |
+| `blend_dilation_stage2` | int | `2` | `ge=0, le=15`。同（stage-2・フル解像度後）。UI は stage-1 の1本のスライダーだけを見せ、stage-2 は公式ワークフローと同じ 5:2 の比率で追従させる |
+| `freeze_source_audio` | bool | `true` | 元動画の音声潜在を両ステージで凍結する。`false` にすると広げた画に合わせてモデルが音声を作り直す |
+
+> 注: `align_h` / `align_v`（寄せ方）は**意図的に契約に入れていない**。寄せ方は pad を配分するための UI の都合であり、pad の4数値のほうが正確かつ十分だからである。
 
 **UploadImageResponse**
 | フィールド | 型 |
@@ -850,6 +887,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 2つの経路は「import できる**はず**か」と「実際に使うプロセスで import **できる**か」という別々の問いへの答えであり、どちらの値かは同じ応答の `pipeline_loaded` を見れば判別できる。そのため判定経路を示す `sage_source` のような追加フィールドは設けていない。
 
 **クライアント側の作法**: `sage_available` が `false` でも `attention_backend="sage"` を送ること自体は許される（サーバーが `"sdpa"` へ降格して完走する）。値が取れない・不明な場合に UI 側で `sage` を封じる必要はない。
+
+> **エンジン系統 `ltx25`（LTX 2.5）だけは降格しない【2026-08-22】**: 上の「降格して完走する」は LTX 2.3（エンジン系統 `ltx`）の規律である。**LTX 2.5 を選んでいるときに `attention_backend="sage"` を送ると、降格ではなく 422 `FEATURE_UNSUPPORTED` になる**（§6.10(d)）。この系統の `sage_available` は探索結果ではなく**恒久的に `false`** で（`.venv-engine-ltx25` に SageAttention を入れておらず、v1 は SDPA 専用というスコープ判断）、`GET /models` の `unsupported_features` にも `sage_attention` が載る。降格ではなく拒否にしているのは、v1 で扱えない機能を黙って読み替えると「設定したのに効いていない」が見えなくなるためである。
 
 ### 6.6 metadata.json スキーマ
 
@@ -1055,6 +1094,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
       "installed": true,          // 全カテゴリの既定ファイルが実在する
       "present": true,            // 1つ以上実在する（部分導入）
       "missing_categories": [],
+      "category_order": ["transformer", "text_encoder", "video_vae", "audio"],  // 加算
       "categories": { "...": "そのベースモデル自身の3層リスト" }
     }
   ]
@@ -1062,6 +1102,8 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 ```
 
 **トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
+
+**`category_order`（配列）は `base_models[]` の各要素に必ず入る**（`api/models_registry.py::list_models` が常に出力する）。中身はそのベースモデルの記述子（`scripts/manifests/<base>.json`）の `categories` のキー宣言順そのもので、表示順の正本はこの配列である——JSON オブジェクトのキー順は転送の途中で保たれる保証が無いため、順序は**値として運ぶ**という決めにしてある。画面のモデル選択欄はこれを読み、交換頻度の高い順（動画モデル → テキストエンコーダ → 動画 VAE → 音声モデル）に並べる。
 
 #### (d) `POST /pipeline/unload` — 不変
 
@@ -1141,7 +1183,7 @@ LTX 2.5 の第 1 版（v1）が持っているのは **基本生成（T2V／I2V�
 | 分類 | 件数 | フィールド | 扱い |
 |---|---:|---|---|
 | **422 系** | 8 | `pipeline`（`"distilled"` 以外）／`outpaint`／`loras`／`reference_video_id`／`nag_enabled`／`vae_mode`（`"default"` 以外）／`attention_backend`（`"sdpa"` 以外）／`keep_resident` | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**——クライアントは毎回スキーマ全体を送るため、既定値のまま届いたフィールドは利用者が求めたものではない |
-| **無視＋ログ** | 7 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`／`fused_gguf_dequant_kernel`／`block_swap_prefetch` | ジョブは通常どおり走る。値は効かず、ワーカーのログに理由が 1 行残る。前 3 つは蒸留版 2.5 に CFG（プロンプトへの従い具合の制御）もステップ数の概念も無いため、後 2 つは LTX 2.3 側のコードパスの名前でエンジン系統 `ltx25` がそれを持たないため |
+| **無視＋ログ** | 7 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`／`fused_gguf_dequant_kernel`／`block_swap_prefetch` | ジョブは通常どおり走る。値は効かず、**アプリ側のロガー**（`ltx25.runner`＝`logs/server.log`）に理由が 1 行残る（ワーカーのログ `logs/ltx25_worker.log` ではない——判定も記録もアプリ側で完結し、無視するフィールドはワーカーへ送られないため）。**既定値のまま届いたフィールドは名指ししない**（利用者が選んでいないものを毎回並べると、その行自体が読み飛ばされるようになるため）。前 3 つは蒸留版 2.5 に CFG（プロンプトへの従い具合の制御）もステップ数の概念も無いため、後 2 つは LTX 2.3 側のコードパスの名前でエンジン系統 `ltx25` がそれを持たないため |
 | **動作** | 8 | `prompt`／`width`／`height`／`num_frames`／`frame_rate`／`seed`／`conditioning_images`／`crop_output` | そのまま効く。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）で、エンジンに依存しないため**動作させる**（黙って消さない） |
 | **従属** | 5 | `nag_scale`／`nag_tau`／`nag_alpha`（`nag_enabled` に従属）／`conditioning_attention_strength`／`reference_video_strength`（`loras` に従属） | 上位のフィールドが既定のままなら意味を持たない。**上位が 422 系にあるため、これらが意味を持つリクエストは上位の時点で既に断られている**（＝走るジョブに到達できない。だから「無視」とは別扱いにしてある） |
 
@@ -1159,7 +1201,7 @@ LTX 2.5 の第 1 版（v1）が持っているのは **基本生成（T2V／I2V�
 
 `ready` イベントには `sampler` を載せる。LTX 2.5 の値は **`"euler_ancestral"`** で、これは好みではなく事実の報告である——公式のパイプラインは safetensors のヘッダからしかモデルの世代を読めず、GGUF を渡すと警告だけ出して決定的な Euler へ落ちる（＝別世代の生成になる）ため、明示的に設定したうえで**実際に保持している値**をここに出している。`sage_available` はこの系統では恒久的に `false`（SageAttention を入れていない）。
 
-設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98（v1 の範囲外として先送りした機能は `Docs/PENDING_TASKS.md` §3-102）。
+設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98。**生きている後続課題は `Docs/PENDING_TASKS.md` の 4 件**——§3-102（v1 の範囲外として先送りした機能）・§3-103（拡散デコーダ版 VAE を採るかどうか）・§3-104（インストーラの `-ResolveLatest` が機能しない）・§3-105（LTX 2.3 ワーカーの 2 ジョブ目以降の時間・VRAM のせり上がり）。
 
 ---
 
@@ -1204,7 +1246,12 @@ LTX 2.5 の第 1 版（v1）が持っているのは **基本生成（T2V／I2V�
 - 完了後 `_finalize` で `JobResult` を組み、`_write_metadata` で **metadata.json を書くのは PipelineManager**（runner ではない）。
 - 例外処理: OOM（`_is_oom` 判定）は `GPU_OOM` + `_cleanup_after_error()`（unload + memory cleanup）、それ以外は `GENERATION_FAILED`。いずれもジョブは `failed`。
 
-**LTXRunner**（`services/engines/ltx/adapter.py`）: LTX 内部を知る唯一のファサード。mock / real の 2 backend を隠蔽。
+**エンジンのファサード**: `PipelineManager` から見た推論エンジンの接点は**エンジン系統ごとに 1 クラス**で、いずれも mock / real の 2 backend を隠蔽する。
+
+- **`LTXRunner`**（`services/engines/ltx/adapter.py`）: エンジン系統 `ltx`（LTX 2.3）のファサード。
+- **`LTX25Runner`**（`services/engines/ltx25/adapter.py`）: エンジン系統 `ltx25`（LTX 2.5）のファサード。**`LTXRunner` の置き換えではなく同格の兄弟**で、実装上は `LTXRunner` を継承し、アプリ側の共通部分（`@@LTX@@` プロトコル・サブプロセスの起動と後始末・進捗の受け取り・mock backend）をそのまま使い、**エンジン世代で本当に違う事実だけ**を上書きする——どの venv とどの `python -m` モジュールか（`engine25.worker`）、どのワーカーログへ書くか（§15.1）、どのカテゴリがどのペイロード項目になるか、子プロセスにどの環境変数を渡すか（§9.2）、そして v1 の対応範囲（§6.10）である。
+
+以下 §7.5 は `LTXRunner` の契約を書くが、**`LTX25Runner` も同じ公開プロパティ・同じメソッド・同じ `GenerationOutcome` を返す**（値が違うのは `backend` の文字列だけ。§4.3）。
 
 ### 7.5 LTXRunner の実契約
 
@@ -1239,7 +1286,15 @@ generate(
 - `real` → `_real_available()` が真でなければ `RuntimeError`、真なら `_RealBackend`。
 - `auto`（既定）→ `_real_available()` が真なら real、偽なら mock。
 
-`_real_available()` の判定材料（すべて存在必須。存在チェックする load-bearing ファイル群）: config 側の `engine_python` と `engine_dir/worker.py`、ベースモデル記述子側の 4 カテゴリの `default_file`（transformer / text_encoder / video_vae / audio）と必須 `assets` 3 件（`gemma_root`〔tokenizer-only〕/ `spatial_upsampler_path` / `component_text_projection_path`）。**2026-08-20 以降、後者の正本は `config.yaml` ではなく記述子である**（§4.3）。※ `checkpoint_path`（43GB モノリス）は reference-only のため**存在チェックしない**（worker payload に載るが GGUF+component 経路では開かれない）。※ PrunaVAED の枝刈りデコーダも**存在チェックしない**（欠けても当該ジョブが通常デコーダへ降格するだけ）。詳細は §4 に譲る。
+`_real_available()` の判定材料（すべて存在必須。存在チェックする load-bearing ファイル群）は**エンジン系統ごとに違う**。共通するのは「4 カテゴリの `default_file`（transformer / text_encoder / video_vae / audio）＋そのエンジン専用の python ＋ worker スクリプト」で、差は固定ファイル（記述子の `assets`）の本数である。
+
+| | エンジン系統 `ltx`（LTX 2.3） | エンジン系統 `ltx25`（LTX 2.5） |
+|---|---|---|
+| エンジン python | `model.engine_python` | `model.engine_python_ltx25` |
+| worker | `model.engine_dir`（既定 `./engine`）/`worker.py` | `./engine25/worker.py`（固定・config キー無し） |
+| 必須 `assets` | **3 件**: `gemma_root`〔tokenizer-only〕/ `spatial_upsampler_path` / `component_text_projection_path` | **1 件**: `spatial_upsampler_path` のみ |
+
+**2026-08-20 以降、カテゴリと `assets` の正本は `config.yaml` ではなく記述子である**（§4.3）。※ `checkpoint_path`（43GB モノリス）は reference-only のため**存在チェックしない**（worker payload に載るが GGUF+component 経路では開かれない）。※ PrunaVAED の枝刈りデコーダも**存在チェックしない**（欠けても当該ジョブが通常デコーダへ降格するだけ）。※ LTX 2.5 の音声 VAE は必ず要るが、`assets` ではなく**カテゴリ `audio` の既定ファイル**として既に検査されているため `REQUIRED_ASSETS` には入れていない（記述子に同じファイルを二重宣言しないため）。詳細は §4 に譲る。
 
 関連: §4（backend 実装詳細）, §6（API・metadata 契約）, §11（config.yaml）。
 
@@ -1296,7 +1351,7 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 ### 9.2 本番既定の組合せ
 
-本番 worker 起動時、`services/engines/ltx/adapter.py` は以下の env を子プロセスに設定する:
+本番 worker 起動時、`services/engines/ltx/adapter.py` は以下の env を子プロセスに設定する（**エンジン系統 `ltx`＝LTX 2.3 の話である**。`ltx25` については本節末尾の注記を参照）:
 
 - `LTX_KEEP_RESIDENT` は **2026-08-02 に撤去済み**（この env はもう設定されないし、設定しても読まれない）。モデル骨格のジョブ間常駐は、環境変数ではなく `POST /generate`・`POST /generate/chain` の per-job フィールド（ジョブごとのリクエスト項目）`keep_resident`（既定 `false`）で指定する。§6.2 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照。
 - `LTX_COMPONENT_FILES=1`（`config.vram.use_component_files=true` に連動 / comp=1）。
@@ -1306,6 +1361,8 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 `keep=0`（ジョブ毎再 materialize）と `comp=1`（Path B）の組合せが本番既定である理由は、**マルチジョブ連続生成での commit（仮想メモリ）枯渇回避**にある。`keep=1` は 720p の Gemma text-encode 中に out-of-place な `.to(cuda)` で瞬間二重在が発生し native crash する（VERIFICATION_LOG §10.2）。`comp=0` は毎ジョブ 46GB モノリスを再 materialize して job3 で commit 枯渇 crash（同 §10.3）。`comp=1/keep=0` は 46GB モノリスを使わず commit を束縛し、T2V・I2V ともマルチジョブ連続 + 音声で PASS 済（同 §10.3 / §10.7）。
 
 > **上段の keep=1 に関する記述は 2026-06-30 時点の判断である（2026-08-02 追記）。** その後 Gemma レイヤーオフロード導入後の構成で再検証し、native crash の原因だったデバイス移動の不具合を修正したうえで、`keep_resident` を per-job フィールドとして製品化した（既定は引き続き off）。現在の正しい理解は「本番既定は off のまま・利用者がジョブ単位で on にできる・on 時はメモリ 64GB 以上を推奨」であり、詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §47・§48 を正本とする。
+
+> **エンジン系統 `ltx25`（LTX 2.5）の worker には `LTX_*` を1つも渡さない【2026-08-22】**: `services/engines/ltx25/adapter.py` の `_build_child_env` が設定するのは、両系統で共通するプロセス衛生の 4 つ——`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1` / `PYTHONPATH=<project_root>`——**だけ**である。上段の `LTX_COMPONENT_FILES` / `LTX_TE_OFFLOAD` / `LTX_DIT_CPU_LOAD` はいずれも `engine/` の中のコードパスの名前で、`engine25/` はそれらを1つも読まない（独自のオフロードと block-swap 機構を持つ）。渡しても効かないうえ、ログ上は「設定されている」ように見えて誤解を招くため、意図的に渡していない。2.5 側の相当物（`blocks_on_gpu` / `te_layers_on_gpu` / `cache_weights`）は環境変数ではなく**ロードペイロード**に載る（プロトコル上で見えるほうがよいため。§6.10(e)）。
 
 ### 9.3 表示専用フィールド（worker へ非伝播）
 
@@ -1394,7 +1451,8 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `manifest_dir` | `"./scripts/manifests"` | **ベースモデル記述子の置き場**（2026-08-20 新設）。`schema: 2`＋`engine_family` を持つ JSON がベースモデル 1 件に対応する（§4.3・§5.1・§6.9） |
 | `models_dir` | `"./models"` | **モデル置き場のルート**（2026-08-20 新設）。記述子に書かれたパスはすべてここからの相対 |
 | `engine_dir` | `"./engine"` | 自前 engine パッケージ（`python -m engine.worker`） |
-| `engine_python` | `"./.venv-engine/Scripts/python.exe"` | engine worker を回す専用 venv インタプリタ（torch+cu128） |
+| `engine_python` | `"./.venv-engine/Scripts/python.exe"` | **エンジン系統 `ltx`（LTX 2.3）**の worker を回す専用 venv インタプリタ（torch+cu128） |
+| `engine_python_ltx25` | `"./.venv-engine-ltx25/Scripts/python.exe"` | **エンジン系統 `ltx25`（LTX 2.5）**の worker を回す専用 venv インタプリタ（2026-08-22 新設）。同じ設定の別値ではなく**2 本目の venv** である——公式 LTX-2 v1.2.0 ＋ `transformers` 5.x は LTX 2.3 の `transformers` 4.57 と同居できず、それがエンジンをプロセスごと分けている理由そのものだからである。**`engine_dir` に 2.5 版が無いのは意図的**で、`engine25/` パッケージは本リポジトリに同梱されるため設置場所の選択肢が無い（インタプリタだけが導入先を動かしうる要素である）。読み手は `services/engines/ltx25/adapter.py` |
 | `gguf_per_layer_quant` | `true` | GGUF 逐次レイヤー量子化 |
 | `lora_dir` | `"./models/LTX23/StyleLoRA"` | 画風・キャラクター LoRA のドロップイン置き場（`services/lora_registry.py` がスキャン） |
 | `transformers` / `text_encoders` / `video_vaes` / `audio_models` | `{}`（既定は空） | カテゴリ別モデルの**明示登録**（名前 → パス）。空でも記述子の既定とディレクトリスキャンで一覧は成立する（`GET /models`・§6.9(c)） |
@@ -1678,14 +1736,22 @@ AviUtl2 拡張機能との連携は**本プロジェクトの最終目的**で�
 
 ### 15.1 ログ出力
 
-アプリログは `logs/server.log`、実エンジン worker のログは `logs/ltx_worker.log` に出力する（`config.server.log_dir` 既定 `./logs`）。最低限、次を記録する。
+アプリログは `logs/server.log`、実エンジン worker のログは**エンジン系統ごとに 1 本ずつ**（`config.server.log_dir` 既定 `./logs`）。
+
+| ログ | 中身 |
+|------|------|
+| `logs/server.log` | アプリ 1 プロセス側のログ。API・ジョブ管理・パイプラインのライフサイクル。**LTX 2.5 が「このフィールドは無視した」と書くのもここ**（ロガー名 `ltx25.runner`。§6.10(d)） |
+| `logs/ltx_worker.log` | **エンジン系統 `ltx`（LTX 2.3）**の worker の stderr |
+| `logs/ltx25_worker.log` | **エンジン系統 `ltx25`（LTX 2.5）**の worker の stderr |
+
+**2 本に分けてあるのは、2.3 ↔ 2.5 を往復しても両方の記録が残るようにするため**である（1 本を共有すると、切り替えのたびに直前の系統の診断が読みにくくなる）。ベースモデルを切り替えると古い worker は終了するが、そのログファイルはそのまま残る。最低限、次を記録する。
 
 - サーバー起動時刻 / host / port / listen mode
 - GPU 名・VRAM 総量（GPU 情報）
 - パイプラインのロード開始/完了/失敗
 - ジョブ ID / 入力解像度・num_frames・seed
 - 生成の開始/完了/失敗・生成時間
-- **peak VRAM**（`ltx_worker.log` の `GENERATED_OK peak_vram_mb=`）
+- **peak VRAM**（ワーカーログの `GENERATED_OK peak_vram_mb=`。LTX 2.3 なら `ltx_worker.log`、LTX 2.5 なら `ltx25_worker.log`）
 - Low VRAM 設定
 - OOM 発生時の例外
 
@@ -1747,8 +1813,8 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 - **÷64**: width/height が 64 の倍数でないと 422（例 544=÷32 だが÷64 でない → reject）。
 - **8n+1**: num_frames が 8n+1 でないと 422。**cap=481**（=8×60+1=20s@24fps）を超えると 422。481 は許容、480（8n+1 でない）は 422。
-- **conditioning ≤ 1**: `conditioning_images` が 2 枚以上で 422。
-- **frame_idx=0**: conditioning の `frame_idx` が 0 以外で 422。
+- **conditioning ≤ 5**: `conditioning_images` が **6 枚以上**で 422（5 枚は受理。`tests/test_validation.py::test_too_many_conditioning_images` / `::test_five_conditioning_images_accepted`）。
+- **frame_idx のスナップ**: `frame_idx` が 0 以外でも **422 にはならず**、8n+1 グリッドへ丸めて `[1, num_frames-8]` にクランプされることを検査する（同 `::test_frame_idx_nonzero_accepted_and_snapped` / `::test_frame_idx_snap_and_clamp_math`）。
 - **distilled 固定値**: `num_inference_steps=8` 以外で 422。
 - **生成疎通**: mock runner で T2V/I2V が完了し、`metadata.json` の `generation_mode` / `seed_used` / `vram_optimization.low_vram_mode` / `peak_vram_mb` が入る。
 - **busy 409**: 実行中ジョブがある状態で新規 generate は 409（`JOB_BUSY`）。
@@ -1771,7 +1837,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | 生成サイズ（width/height） | **64 の倍数** | two-stage distilled が Stage1 を半解像度で生成し x2 アップサンプルするため÷64（÷32 由来は `Docs/LTX23_REFERENCE.md` §3）。検証は §6.7・`api/models.py` |
 | フレーム数 | **8n+1**（9, 17, 25, … 481） | 上限 cap=**481=20s@24fps**（旧 257 から緩和）。§6.7 |
 | distilled ステップ / CFG | **8 steps / CFG=1.0** 固定 | §6.7 |
-| 最小I2V | **画像1枚・`frame_idx=0` 固定**（画像なし=T2V） | §6.7 |
+| I2V のキーフレーム画像 | **最大5枚**・`frame_idx` は 0 または 8n+1（画像なし=T2V）。`0` は開始フレーム、`> 0` は 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプ（**422 にはせず丸める**）。Phase 3 で「1枚・`frame_idx=0` 固定」から拡張 | §6.2 の凍結制約 6・7、§6.7 の `max_conditioning_images` |
 | 非64 表示サイズ | **`crop_output` で中央クロップ**（例 1280×768→720, 960×576→540） | §8.2 |
 | 解像度別 spill-free フレーム（16GB 実測・代表値） | 720p(1280×768):**257** / 1080p(1920×1088):**153** / 1440p(2560×1472):**81** | 超えると shared へ溢れ ~2-4x 低速（OOM せず）。`GET /api/v1/config` の `limits.spill_free_frames`。正本＝`Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6 |
 | 解像度×尺の実用上限 | 解像度別に §10 / §6.7 を参照 | 1080p 長尺は非実用（~40分・commit リスク）→ **720p 生成 + 外部 upscale 推奨** |
@@ -1785,7 +1851,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | 用語 | 1行定義 |
 |------|---------|
 | **T2V** | Text-to-Video。プロンプトのみから動画生成（画像なし）。 |
-| **I2V（最小I2V）** | Image-to-Video。開始フレーム1枚（`frame_idx=0`）を条件に動画生成。Phase 1 は 1 枚・開始フレームのみ。 |
+| **I2V（最小I2V）** | Image-to-Video。開始フレーム1枚（`frame_idx=0`）を条件に動画生成。「最小I2V」は Phase 1 当時の 1 枚・開始フレーム限定の呼び名で、**現在はキーフレーム画像を最大5枚・任意位置（8n+1 へ丸め）で指定できる**（付録A・§6.2 の凍結制約 6・7）。 |
 | **distilled** | LTX-2.3 の蒸留パイプライン。8 steps / CFG=1.0 固定、内部 two-stage（Stage1 半解像度8step → x2 upscale → Stage2 4step）。 |
 | **two-stage / spatial upsampler** | distilled が最終解像度を作るための内部2段。x2 spatial upscaler（別チェックポイント）を使う。この二段目は生成の仕組みであり「1080p 機能」とは別（§13.5）。 |
 | **block-swap** | transformer のブロックを GPU 常駐（既定 8）とし残りを退避、重み VRAM を削る手法。 |

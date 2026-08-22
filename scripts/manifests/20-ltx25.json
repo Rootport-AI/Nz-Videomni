@@ -2,30 +2,37 @@
   "schema": 2,
   "id": "LTX25",
   "display_name": "LTX 2.5",
-  "engine_family": "ltx",
-  "_note": "重み未配布。downloadsは§3-98で追加予定(scripts/install_ltx.ps1はSkipするだけで済む -- downloads:[]は空扱い)。categoriesのdefault_fileはtransformerのみ判明済み(GGUF変換ツールのステージング出力先と一致させてある); text_encoder/video_vae/audioは構成未確定のためscan/extensionsのみ宣言する。",
+  "engine_family": "ltx25",
+  "_note": "重みは未配布のため downloads は空のまま(scripts/install_ltx.ps1はSkipするだけで済む)。§3-98 Phase 4で四カテゴリとアップスケーラの実ファイル名を確定させた。video_vaeの既定は畳み込みデコーダ版(conv)で、拡散デコーダ版は LTX25/VAE/diffvae/ へ退避してある(VAEのscanは非再帰なので自動認識されない)。テキストエンコーダのtokenizer/processorメタデータはGGUFの中に入っており(engine25/assets_export.pyがGGUFの隣に書き出す)、LTX 2.3の gemma_root / text_projection にあたる資産は2.5には存在しない。",
 
   "categories": {
     "transformer": {
       "scan": ["LTX25/Weights"],
       "extensions": [".gguf"],
       "recursive": true,
-      "default_file": "LTX25/Weights/ltx-2.5-22b-distilled-transformer-Q4_K.gguf"
+      "default_file": "LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf"
     },
     "text_encoder": {
       "scan": ["LTX25/TextEncoder"],
-      "extensions": [".gguf"]
+      "extensions": [".gguf"],
+      "default_file": "LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
     },
     "video_vae": {
       "scan": ["LTX25/VAE"],
       "extensions": [".safetensors"],
-      "name_hint": "video"
+      "name_hint": "video",
+      "default_file": "LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors"
     },
     "audio": {
       "scan": ["LTX25/VAE"],
       "extensions": [".safetensors"],
-      "name_hint": "audio"
+      "name_hint": "audio",
+      "default_file": "LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors"
     }
+  },
+
+  "assets": {
+    "spatial_upsampler_path": "LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
   },
 
   "default_selection": {

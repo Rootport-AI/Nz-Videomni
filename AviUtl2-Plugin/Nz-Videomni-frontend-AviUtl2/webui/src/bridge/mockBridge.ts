@@ -687,7 +687,8 @@ export interface MockBridgeOptions {
    * does. `"partial"` (default) → `present: true, installed: false`, so the
    * WebUI does call the server and gets the 422 "next phase" refusal.
    * `"none"` → `present: false`, so the WebUI short-circuits with the
-   * `install-LTX25.bat` guidance and never issues a request. `"full"` models a
+   * "not installed — see the setup guide" guidance and never issues a request.
+   * `"full"` models a
    * complete install (still 422s — the engine, not the files, is what's
    * missing). `LTX23` is always fully installed. */
   ltx25Install?: "none" | "partial" | "full";

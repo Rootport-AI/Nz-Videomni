@@ -91,7 +91,7 @@ describe("AppShell — header base-model dropdown", () => {
     expect(loadCalls(requests)).toHaveLength(1);
   });
 
-  it("an uninstalled base model is answered with the installer name, without calling the API", async () => {
+  it("an uninstalled base model is answered with setup guidance, without calling the API", async () => {
     const { select, container, requests } = await renderApp({ ltx25Install: "none" });
     const user = userEvent.setup();
 
@@ -100,10 +100,10 @@ describe("AppShell — header base-model dropdown", () => {
 
     await user.selectOptions(select, "LTX25");
 
-    expect(await toastText(container)).toContain("install-LTX25.bat");
+    expect(await toastText(container)).toContain("LTX 2.5 is not installed");
     expect(select.value).toBe("LTX23");
-    // Guard 2: nothing is on disk, so the server is never asked. Downloading
-    // is a batch file's job, never the server's (§6.2).
+    // Guard 2: nothing is on disk, so the server is never asked. Putting the
+    // weights in place is the setup procedure's job, never the server's (§6.2).
     expect(loadCalls(requests)).toHaveLength(0);
   });
 

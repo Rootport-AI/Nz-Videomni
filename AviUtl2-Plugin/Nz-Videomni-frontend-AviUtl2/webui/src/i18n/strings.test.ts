@@ -96,9 +96,7 @@ describe("i18n dictionaries (en/ja)", () => {
     // dictionaries at all — they are the server's `display_name`s (§3-97 P7),
     // so what is translatable here is the surrounding copy.
     expect(ja.toolVersion.ariaLabel).not.toBe(en.toolVersion.ariaLabel);
-    expect(ja.toolVersion.notInstalled("LTX 2.5", "install-LTX25.bat")).not.toBe(
-      en.toolVersion.notInstalled("LTX 2.5", "install-LTX25.bat"),
-    );
+    expect(ja.toolVersion.notInstalled("LTX 2.5")).not.toBe(en.toolVersion.notInstalled("LTX 2.5"));
     // …and the proper noun inside it survives translation untouched, which is
     // what the old `ltx23`/`ltx25` literals used to pin.
     expect(ja.toolVersion.optionNotInstalled("LTX 2.5")).toContain("LTX 2.5");

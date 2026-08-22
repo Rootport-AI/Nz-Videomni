@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, createApiClient } from "../api/client";
 import type { ApiClient } from "../api/client";
 import { createMockBridge } from "../bridge/mockBridge";
-import { baseModelInstaller, useBaseModels } from "./useBaseModels";
+import { useBaseModels } from "./useBaseModels";
 import type { BaseModelSwitchOutcome } from "./useBaseModels";
 
 /** A client that answers `GET /models` from the mock bridge (so the option
@@ -74,7 +74,6 @@ describe("useBaseModels", () => {
         kind: "not-installed",
         id: "LTX25",
         displayName: "LTX 2.5",
-        installer: "install-LTX25.bat",
       });
     });
 
@@ -182,7 +181,4 @@ describe("useBaseModels", () => {
     expect(result.current.options).toEqual([]);
   });
 
-  it("names the installer batch file after the descriptor id", () => {
-    expect(baseModelInstaller("LTX25")).toBe("install-LTX25.bat");
-  });
 });

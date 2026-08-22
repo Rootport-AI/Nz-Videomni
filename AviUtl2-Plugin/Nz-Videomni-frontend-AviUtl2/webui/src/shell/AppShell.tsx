@@ -303,7 +303,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           case "not-installed":
             toasts.push({
               kind: "warning",
-              message: strings.toolVersion.notInstalled(outcome.displayName, outcome.installer),
+              message: strings.toolVersion.notInstalled(outcome.displayName),
             });
             return;
           case "busy":

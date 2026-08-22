@@ -50,7 +50,7 @@ export type BaseModelSwitchOutcome =
   /** The server rebuilt the worker on the requested base model. */
   | { kind: "switched"; id: string }
   /** Guard 2: nothing on disk, so no request was made at all. */
-  | { kind: "not-installed"; id: string; displayName: string; installer: string }
+  | { kind: "not-installed"; id: string; displayName: string }
   /** Guard 1: 409 `JOB_BUSY` — a generation job holds the single-job queue. */
   | { kind: "busy" }
   /** Guard 3: 409 `PIPELINE_LOADING` — a load is already in flight. */
@@ -64,14 +64,6 @@ export type BaseModelSwitchOutcome =
   /** Anything else: 404 for an id the server does not know, a transport
    * failure, an unexpected status. */
   | { kind: "failed"; message: string };
-
-/** The batch file that installs a base model's weights. The server never
- * downloads anything itself (`Docs/MULTI_ENGINE_DESIGN.md` §6.2), so this name
- * is the whole of the "not installed" guidance. Derived from the descriptor id
- * — a base model added server-side needs no change here. */
-export function baseModelInstaller(id: string): string {
-  return `install-${id}.bat`;
-}
 
 export interface UseBaseModelsDeps {
   apiClient?: ApiClient;
@@ -161,12 +153,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
       // short-circuits: a PARTIAL install does go to the server, which fails
       // loud naming the category that is missing.
       if (option && !option.present) {
-        return {
-          kind: "not-installed",
-          id,
-          displayName: option.displayName,
-          installer: baseModelInstaller(id),
-        };
+        return { kind: "not-installed", id, displayName: option.displayName };
       }
 
       setPending(id);

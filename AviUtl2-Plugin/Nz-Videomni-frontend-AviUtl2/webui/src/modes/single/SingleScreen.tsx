@@ -78,6 +78,12 @@ export interface SingleScreenProps {
    * `nag`/`acceleration` above — every pre-existing direct-render test that
    * doesn't pass it keeps compiling. */
   sageAvailable?: boolean | null | undefined;
+  /** §3-98 P5: Batch A2V submits `POST /generate/chain`, which the loaded base
+   * model's engine may not support (LTX 2.5 v1 refuses the whole chain family
+   * with 422 `FEATURE_UNSUPPORTED`). `true` greys the panel's controls the same
+   * way its own runner state does — no new mechanism, just another reason.
+   * Omitted ⇒ available, so every direct-render test keeps compiling. */
+  batchUnavailable?: boolean | undefined;
 }
 
 /** The "Create" screen: T2V generation form (minus the prompt, which lives in
@@ -99,6 +105,7 @@ export function SingleScreen({
   nag,
   acceleration,
   sageAvailable,
+  batchUnavailable,
 }: SingleScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -123,6 +130,7 @@ export function SingleScreen({
       nag={nag}
       acceleration={acceleration}
       sageAvailable={sageAvailable}
+      batchUnavailable={batchUnavailable}
     />
   );
 }
@@ -142,6 +150,7 @@ interface SingleScreenBodyProps {
   nag?: NagSettings | undefined;
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
+  batchUnavailable?: boolean | undefined;
 }
 
 function SingleScreenBody({
@@ -159,6 +168,7 @@ function SingleScreenBody({
   nag,
   acceleration,
   sageAvailable,
+  batchUnavailable = false,
 }: SingleScreenBodyProps) {
   const strings = useStrings();
   const toasts = useToasts();
@@ -1019,6 +1029,9 @@ function SingleScreenBody({
         /* §1-7 相互ロック 第2段 (2026-07-31): the same job-slot gate the Chain
            screen already hands to Batch i2v-long. */
         hasActiveJob={hasActiveJob}
+        /* §3-98 P5: the loaded base model's engine cannot chain, so this
+           panel's every job would come back 422. */
+        unavailable={batchUnavailable}
       />
       {shrinkGuard.pendingShrink && (
         <KeyframeShrinkModal

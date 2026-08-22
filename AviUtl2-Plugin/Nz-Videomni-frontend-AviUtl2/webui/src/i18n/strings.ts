@@ -89,6 +89,11 @@ export const en = {
     chained: "Chained",
     edit: "Edit",
     inventory: "Inventory",
+    /** §3-98 P5: tooltip on a tab greyed out because the LOADED base model's
+     * engine cannot run it. Names no specific feature on purpose — the tab is
+     * the unit the user sees, and the server's own 422 spells out the detail
+     * for anything that still gets submitted. */
+    unsupportedByBaseModel: "Not available on the selected base model. Switch the base model in the header to use this tab.",
   },
   /** Edit mode (2026-08-09): the tab was promoted from a disabled mock to a
    * real one, and now hosts its own sub-tab row (Retake / Outpainting /
@@ -909,6 +914,9 @@ export const en = {
     /** §1-7 相互ロック 第2段: the backend's single job slot is busy — the same
      * gate Batch i2v-long's `blockReasons.jobActive` states. Blocks Start. */
     jobActive: "Another job is still running. Only one generation runs at a time — wait for it to finish before starting the batch.",
+    /** §3-98 P5: the loaded base model's engine cannot run chained generation,
+     * which is what every batch row is. Disables the whole panel. */
+    unavailableOnBaseModel: "Batch A2V is not available on the selected base model (it uses chained generation). Switch the base model in the header to use it.",
     /** Skip badge tooltips (owner decision 2026-07-19), keyed by
      * `BatchRow.skipReason` (`manifestMerge.ts`). Skip rows are excluded from
      * re-judging on Start, so raising DURATION/lowering FPS alone does not
@@ -1892,6 +1900,7 @@ export const ja: Strings = {
     chained: "Chained",
     edit: "Edit",
     inventory: "Inventory",
+    unsupportedByBaseModel: "選択中のベースモデルでは使えません。このタブを使うには、上のベースモデルを切り替えてください。",
   },
   edit: {
     subTabsAriaLabel: "編集ツールの切り替え",
@@ -2302,6 +2311,7 @@ export const ja: Strings = {
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",
     jobActive: "ほかの生成が実行中です。生成は同時に1つしか動かせません。終わるまで待ってから開始してください。",
+    unavailableOnBaseModel: "バッチA2Vは選択中のベースモデルでは使えません（連結生成を使うため）。使うには、上のベースモデルを切り替えてください。",
     skipReasons: {
       "wav-only-alpha": "wav形式でないか、長さを読み取れませんでした",
       "over-cap":

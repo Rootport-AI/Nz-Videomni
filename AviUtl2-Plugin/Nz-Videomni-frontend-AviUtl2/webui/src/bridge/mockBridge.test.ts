@@ -577,3 +577,54 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
     expect(missing).toEqual([]);
   });
 });
+
+// §3-98 P5: `GET /models` publishes, per base model, the feature names that
+// base model's ENGINE cannot run. The fixture must carry it the same way the
+// real endpoint does — the WebUI's greying reads these exact strings, so a
+// fixture that omitted the key (or invented its own names) would let the whole
+// feature ship broken while every UI test passed. Same "mock mirrors the real
+// contract" discipline as the config-parity guard above.
+describe("GET /models — unsupported_features (§3-98 P5)", () => {
+  async function getModels() {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const result = (await bridge.request("backend.request", {
+      method: "GET",
+      path: "/api/v1/models",
+    })) as { status: number; body: { base_models: { id: string; unsupported_features?: string[] }[] } };
+    expect(result.status).toBe(200);
+    return result.body;
+  }
+
+  it("emits the key for EVERY base model, empty where there is nothing to report", async () => {
+    const body = await getModels();
+    // Present-and-empty is a different fact from absent: absent means "this
+    // server is too old to say", which the WebUI must read as "no limits".
+    for (const base of body.base_models) {
+      expect(Array.isArray(base.unsupported_features), base.id).toBe(true);
+    }
+    expect(body.base_models.find((b) => b.id === "LTX23")?.unsupported_features).toEqual([]);
+  });
+
+  it("names LTX 2.5's v1 scope with the server's own feature names", async () => {
+    const body = await getModels();
+    const features = body.base_models.find((b) => b.id === "LTX25")?.unsupported_features ?? [];
+    // The chain family (whole endpoints) and the request-field half — the two
+    // halves `services/engines/ltx25/adapter.py` builds `UNSUPPORTED_FEATURES`
+    // from. Spelt out rather than counted so a rename on either side shows up.
+    expect(features).toEqual(
+      expect.arrayContaining([
+        "chain", "retake", "end_source", "v2v", "a2v",
+        "two_stage_hq", "outpaint", "loras", "reference_video",
+        "nag", "prune_vaed", "sage_attention", "keep_resident",
+      ]),
+    );
+  });
+
+  it("declares LTX 2.5 as its own engine family", async () => {
+    // It stopped being an `ltx` base model when engine25 shipped (§3-98 P3c:
+    // `FAMILY_BY_KV[("ltxv","2.5")] === "ltx25"`).
+    const body = await getModels();
+    const base = body.base_models.find((b) => b.id === "LTX25") as { engine_family?: string } | undefined;
+    expect(base?.engine_family).toBe("ltx25");
+  });
+});

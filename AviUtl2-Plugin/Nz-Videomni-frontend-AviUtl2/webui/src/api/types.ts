@@ -846,6 +846,24 @@ export interface BaseModelBlock {
    * Optional purely defensively: a backend older than this fix omits it, and
    * `resolveCategoryOrder` falls back rather than assuming presence. */
   category_order?: string[];
+  /** Feature names this base model's ENGINE cannot run (§3-98 Phase 5,
+   * `services/engines/ltx25/adapter.py`'s `UNSUPPORTED_FEATURES`). `[]` for a
+   * base model with no restrictions — LTX 2.3 sends exactly that, which is why
+   * nothing about the 2.3 response changed when this key was added.
+   *
+   * The WebUI greys out the tabs and panels it RECOGNISES here and ignores the
+   * rest; a name it has never heard of is not an error, just a feature this
+   * build has no control for. Enforcement is always the server's: `POST
+   * /generate` answers 422 `FEATURE_UNSUPPORTED` for anything that arrives
+   * anyway (a page left open across a base-model switch, a script).
+   *
+   * Optional purely defensively: a backend older than §3-98 P5 omits it, and
+   * "omitted" must read as "no restrictions", never as "everything is off".
+   *
+   * Known names at the time of writing: `chain`, `retake`, `end_source`,
+   * `v2v`, `a2v`, `two_stage_hq`, `outpaint`, `loras`, `reference_video`,
+   * `nag`, `prune_vaed`, `sage_attention`, `keep_resident`. */
+  unsupported_features?: string[];
   categories: Record<string, ModelCategoryBlock>;
 }
 

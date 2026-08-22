@@ -246,8 +246,36 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
  * {@link MockBridgeOptions.ltx25Install} knob. */
 const MOCK_BASE_MODELS = [
   { id: "LTX23", display_name: "LTX 2.3", engine_family: "ltx" },
-  { id: "LTX25", display_name: "LTX 2.5", engine_family: "ltx" },
+  { id: "LTX25", display_name: "LTX 2.5", engine_family: "ltx25" },
 ] as const;
+
+/** `unsupported_features` per base model, verbatim from the server
+ * (`services/engines/ltx25/adapter.py`'s `UNSUPPORTED_FEATURES`, published by
+ * `api/models_registry.py`). Reproduced rather than paraphrased for the same
+ * reason {@link MOCK_LTX25_INCOMPATIBLE_DETAIL} is: the WebUI's greying is
+ * driven by these exact strings, so a fixture that invented its own names
+ * would let a typo in the real mapping pass every test.
+ *
+ * LTX 2.3's empty array is the load-bearing half — it is what proves the
+ * ordinary case stays untouched. */
+const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
+  LTX23: [],
+  LTX25: [
+    "chain",
+    "retake",
+    "end_source",
+    "v2v",
+    "a2v",
+    "two_stage_hq",
+    "outpaint",
+    "loras",
+    "reference_video",
+    "nag",
+    "prune_vaed",
+    "sage_attention",
+    "keep_resident",
+  ],
+};
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";
 
@@ -964,6 +992,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         // not by the `categories` key order below — see its
         // `resolveCategoryOrder`.
         category_order: [...MOCK_MODEL_CATEGORIES],
+        // §3-98 P5: additive, always present, `[]` where there is nothing to
+        // report — matching the real endpoint, which emits the key for every
+        // base model precisely so "absent" and "empty" stay different facts.
+        unsupported_features: [...(MOCK_UNSUPPORTED_FEATURES[base.id] ?? [])],
         categories: Object.fromEntries(
           MOCK_MODEL_CATEGORIES.map((category) => [
             category,

@@ -54,7 +54,7 @@ import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
-import { useBaseModels } from "./useBaseModels";
+import { batchA2vDisabledFor, useBaseModels } from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
 import "./AppShell.css";
@@ -1030,6 +1030,21 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     setMode(next);
   }, []);
 
+  // §3-98 P5: the loaded base model's engine cannot run every mode. Greying the
+  // tab (below) is not enough on its own — the user can already BE on Chained
+  // when they switch base models, and a mode whose tab is disabled must not
+  // stay open behind it. Bounce back to Single, which every engine can serve.
+  //
+  // `disabledModes` is a memo in the hook, so this effect runs when the SET
+  // changes, not on every poll. `setMode` with the value it already has is a
+  // no-op in React, so the ordinary case (nothing disabled) costs nothing.
+  const disabledModes = baseModels.disabledModes;
+  useEffect(() => {
+    if (!disabledModes.includes(mode)) return;
+    setPendingIntent(null);
+    setMode("single");
+  }, [disabledModes, mode]);
+
   const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
   // W0 (2026-08-09): same one-shot hand-off as the two above — Edit is now a
@@ -1069,7 +1084,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           )}
         </select>
         <StatusHeader state={serverStatus} onRetry={retry} />
-        <ModeTabs mode={mode} onChange={handleModeChange} />
+        <ModeTabs mode={mode} onChange={handleModeChange} disabledModes={disabledModes} />
         <button
           type="button"
           className="icon-button settings-gear"
@@ -1128,6 +1143,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               nag={nagControls.nag}
               acceleration={accelerationControls.acceleration}
               sageAvailable={sageAvailability(statusBody)}
+              /* §3-98 P5 (M4): the Batch A2V section lives on this screen but
+                 submits chain jobs, so it follows the engine's feature scope
+                 rather than Create's own. */
+              batchUnavailable={batchA2vDisabledFor(baseModels.unsupportedFeatures)}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "chained"}>

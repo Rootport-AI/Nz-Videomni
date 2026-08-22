@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, BackendApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
 import type { BaseModelBlock } from "../api/types";
+import type { AppMode } from "./AppShell";
 
 /**
  * Backs the header's BASE MODEL dropdown (multi-engine groundwork §3-97 P7;
@@ -39,6 +40,64 @@ export interface BaseModelOption {
   /** At least one is — see {@link BaseModelBlock} for why the two differ. */
   present: boolean;
   missingCategories: string[];
+  /** Feature names this base model's engine cannot run — see
+   * {@link BaseModelBlock.unsupported_features}. `[]` on a backend that does
+   * not publish the key, which is the same thing as "no restrictions". */
+  unsupportedFeatures: string[];
+}
+
+/** Which mode tab each unsupported FEATURE takes down with it.
+ *
+ * The server names FEATURES (`chain`, `outpaint`, …) because that is what a
+ * request field is; the shell only has TABS. This table is the translation,
+ * and it deliberately lives next to the hook that receives the names rather
+ * than inside `ModeTabs` — the tabs render what they are told, they do not
+ * reason about engines.
+ *
+ * A mode is disabled when EVERY thing it can do is unsupported, not when any
+ * one is:
+ *
+ *  - **chained** is the chain endpoint and nothing else, so `chain` alone
+ *    settles it;
+ *  - **edit** hosts Retake and Outpainting (Inpainting is still a disabled
+ *    mock), so it survives as long as ONE of those two is runnable — a base
+ *    model that could outpaint but not retake would still have a use for the
+ *    tab;
+ *  - **single** and **inventory** are never listed. Single IS the baseline any
+ *    engine must serve, and Inventory only browses finished files — it issues
+ *    no generation at all, so no engine limitation can reach it.
+ */
+const MODE_REQUIREMENTS: ReadonlyArray<{ mode: AppMode; needsAnyOf: readonly string[] }> = [
+  { mode: "chained", needsAnyOf: ["chain"] },
+  { mode: "edit", needsAnyOf: ["retake", "outpaint"] },
+];
+
+/**
+ * The mode tabs that `unsupportedFeatures` makes unreachable. Pure, exported
+ * and tested directly: it is the one place a feature name turns into a greyed
+ * tab, and it must answer `[]` for the ordinary case (LTX 2.3 / an older
+ * backend) without any special-casing.
+ *
+ * Unknown names are ignored rather than treated as suspicious — a build of
+ * this WebUI is older than the server it talks to more often than the reverse.
+ */
+export function disabledModesFor(unsupportedFeatures: readonly string[]): AppMode[] {
+  const unsupported = new Set(unsupportedFeatures);
+  return MODE_REQUIREMENTS.filter(
+    ({ needsAnyOf }) => needsAnyOf.every((feature) => unsupported.has(feature)),
+  ).map(({ mode }) => mode);
+}
+
+/**
+ * Whether the Batch A2V panel (`modes/batch/BatchSection.tsx`) is unusable.
+ *
+ * Not a mode — it is a `<details>` section on the Create screen — so it cannot
+ * ride {@link disabledModesFor}, but the reasoning is the same shape: every row
+ * it queues is a `POST /generate/chain` carrying an audio source, so either
+ * limitation takes the whole panel down.
+ */
+export function batchA2vDisabledFor(unsupportedFeatures: readonly string[]): boolean {
+  return unsupportedFeatures.includes("chain") || unsupportedFeatures.includes("a2v");
 }
 
 /** What a switch attempt settled on. Returned by
@@ -80,6 +139,16 @@ export interface UseBaseModelsResult {
   /** A switch is in flight — disable the dropdown (a second pick would only
    * earn a 409 `PIPELINE_LOADING` from the server). */
   switching: boolean;
+  /** Feature names the LOADED base model's engine cannot run (§3-98 P5).
+   *
+   * Read off `active`, never off `current`: while a switch is in flight the
+   * pipeline is still the OLD base model, so greying the new one's limitations
+   * early would disable controls that still work — and, if the switch then
+   * fails, leave them disabled for a base model that never loaded. */
+  unsupportedFeatures: string[];
+  /** The mode tabs {@link unsupportedFeatures} makes unreachable — the shell
+   * greys these and bounces out of one if it is the current mode. */
+  disabledModes: AppMode[];
   /** Fire-and-await: see {@link BaseModelSwitchOutcome}. Never throws. */
   switchBaseModel: (id: string) => Promise<BaseModelSwitchOutcome>;
   /** Re-reads `GET /models`. Runs on mount and after a successful switch. */
@@ -93,6 +162,9 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     installed: block.installed,
     present: block.present,
     missingCategories: block.missing_categories,
+    // `?? []` is the whole backward-compatibility story: a backend older than
+    // §3-98 P5 omits the key, and "omitted" means "no restrictions".
+    unsupportedFeatures: block.unsupported_features ?? [],
   };
 }
 
@@ -177,10 +249,21 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     [client, options, refresh],
   );
 
+  const unsupportedFeatures = useMemo(
+    () => options.find((o) => o.id === active)?.unsupportedFeatures ?? [],
+    [options, active],
+  );
+  const disabledModes = useMemo(
+    () => disabledModesFor(unsupportedFeatures),
+    [unsupportedFeatures],
+  );
+
   return {
     options,
     current: pending ?? active,
     switching: pending !== null,
+    unsupportedFeatures,
+    disabledModes,
     switchBaseModel,
     refresh,
   };

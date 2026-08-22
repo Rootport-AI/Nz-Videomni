@@ -114,7 +114,13 @@ describe("AppShell — header base-model dropdown", () => {
     // driven by the `/status` poll, which in this harness runs against the
     // app-wide singleton bridge rather than the injected one, so it is not
     // reachable from here.)
-    const { select, container } = await renderApp({ delayMs: 40 });
+    // The in-flight window IS the fixture's `delayMs`, and the assertion below
+    // runs after it. 40ms was enough when this file ran alone and lost the race
+    // under the full suite (2026-08-22, flaky in CI-shaped runs, unrelated to
+    // what was being changed); 400ms buys an order of magnitude of headroom
+    // without making the test wait for it — the `waitFor` at the end settles as
+    // soon as the load resolves.
+    const { select, container } = await renderApp({ delayMs: 400 });
     const user = userEvent.setup();
 
     await user.selectOptions(select, "LTX25");

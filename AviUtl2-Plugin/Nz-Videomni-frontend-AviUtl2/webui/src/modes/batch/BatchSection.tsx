@@ -49,6 +49,18 @@ export interface BatchSectionProps {
    * same name; see `UseBatchFormDeps.hasActiveJob` for why the shared run lock
    * alone was not enough. */
   hasActiveJob?: boolean;
+  /** §3-98 P5: the loaded base model's engine cannot run this panel at all.
+   *
+   * Batch A2V is a `POST /generate/chain` driver, and LTX 2.5 (v1) refuses the
+   * whole chain family with 422 `FEATURE_UNSUPPORTED` — so every row this panel
+   * could queue would fail. Rides the SAME `disabled` flag the runner state
+   * already sets (no new mechanism, no new control), plus one explanation line
+   * in the same place `lockedByOther`/`jobActive` put theirs; a greyed panel
+   * with no stated reason is the thing those two lines exist to prevent.
+   *
+   * The server stays the enforcement: this flag only spares the user a request
+   * that was going to be refused. */
+  unavailable?: boolean;
 }
 
 /**
@@ -75,6 +87,7 @@ export function BatchSection({
   nag,
   acceleration,
   hasActiveJob = false,
+  unavailable = false,
 }: BatchSectionProps) {
   const strings = useStrings();
   const t = strings.batch;
@@ -90,7 +103,9 @@ export function BatchSection({
   // mirrors every other mode's `disabled` gate on "isGenerating". Also gated
   // on `isScanning` (L1 remediation): `scan()`'s async merge (`setRows`) can
   // land mid-edit and clobber it otherwise.
-  const disabled = form.runnerState !== "idle" || form.isScanning;
+  // §3-98 P5 joins the same flag: an engine that cannot chain makes every
+  // control here pointless, exactly as an in-flight run does.
+  const disabled = form.runnerState !== "idle" || form.isScanning || unavailable;
 
   return (
     <details className="batch-section">
@@ -216,9 +231,18 @@ export function BatchSection({
         {form.jobActive && form.runnerState === "idle" && !form.lockedByOther && (
           <p className="warning-banner">{t.jobActive}</p>
         )}
+        {/* §3-98 P5: stated FIRST in the reader's mind but rendered last on
+            purpose — it sits directly above the greyed Start button it
+            explains, the same placement the two lock lines above use. */}
+        {unavailable && <p className="warning-banner">{t.unavailableOnBaseModel}</p>}
 
         <div className="generate-row">
-          <button type="button" className="primary-button generate-button" disabled={!form.canStart} onClick={form.start}>
+          <button
+            type="button"
+            className="primary-button generate-button"
+            disabled={unavailable || !form.canStart}
+            onClick={form.start}
+          >
             {form.runnerState === "running" ? t.runningButton : form.runnerState === "stopping" ? t.stoppingButton : t.startButton}
           </button>
           {form.runnerState !== "idle" && (

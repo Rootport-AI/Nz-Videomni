@@ -4,6 +4,13 @@ import type { AppMode } from "./AppShell";
 export interface ModeTabsProps {
   mode: AppMode;
   onChange: (mode: AppMode) => void;
+  /** §3-98 P5: modes the LOADED base model's engine cannot run
+   * (`shell/useBaseModels.ts`'s `disabledModes`). Rendered with the SAME
+   * disabled treatment the Toolbox mock has had since Phase 6 — one greyed
+   * tab, not two visually different kinds of unavailable — because from the
+   * user's side the distinction ("not built yet" vs "not on this base model")
+   * is carried by the tooltip, not by a second style. Omitted ⇒ none. */
+  disabledModes?: readonly AppMode[];
 }
 
 /** モックタブの id。2026-08-09 に Edit が実タブへ昇格したので、残るモックは
@@ -25,8 +32,13 @@ type ModeTabSpec =
  * tabs (Toolbox / Edit) that were visual-only placeholders. 2026-08-09: **Edit
  * is now a real tab** — it has an `AppMode` value, a mounted panel
  * (`modes/edit/EditScreen.tsx`) and its own sub-tab row — so **Toolbox is the
- * only remaining mock**. The display order is unchanged. */
-export function ModeTabs({ mode, onChange }: ModeTabsProps) {
+ * only remaining mock**. The display order is unchanged.
+ *
+ * §3-98 P5 added a SECOND reason a tab can be greyed: the loaded base model's
+ * engine cannot run it (`disabledModes`). This component does not know what a
+ * base model is — it is handed a list of mode ids and renders them disabled.
+ * Deciding that list is `shell/useBaseModels.ts`'s `disabledModesFor`. */
+export function ModeTabs({ mode, onChange, disabledModes = [] }: ModeTabsProps) {
   const strings = useStrings();
   const tabs: ModeTabSpec[] = [
     { id: "toolbox", label: strings.modes.toolbox, disabled: true },
@@ -35,12 +47,26 @@ export function ModeTabs({ mode, onChange }: ModeTabsProps) {
     { id: "edit", label: strings.modes.edit },
     { id: "inventory", label: strings.modes.inventory },
   ];
+  // `Set<string>` rather than `Set<AppMode>` so the mock tab's id can be asked
+  // about too without a cast; it is never in the set, and the `tab.disabled ||`
+  // below is what narrows the union for the enabled branch.
+  const unsupported = new Set<string>(disabledModes);
 
   return (
     <nav className="mode-tabs" role="tablist" aria-label={strings.common.modeAriaLabel}>
       {tabs.map((tab) =>
-        tab.disabled ? (
-          <button key={tab.id} type="button" role="tab" aria-selected={false} disabled className="mode-tab">
+        tab.disabled || unsupported.has(tab.id) ? (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={false}
+            disabled
+            className="mode-tab"
+            // Only the base-model case gets a reason: the Toolbox mock is
+            // "not built yet", which its own absence of a panel already says.
+            {...(unsupported.has(tab.id) ? { title: strings.modes.unsupportedByBaseModel } : {})}
+          >
             {tab.label}
           </button>
         ) : (

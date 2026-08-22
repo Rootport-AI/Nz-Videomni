@@ -336,6 +336,90 @@ def test_generate_chain_is_refused(ltx25_paths):
     assert "Chained" in ei.value.detail
 
 
+def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
+    """The endpoint (P5) and the backend method must not be able to disagree:
+    both go through ``reject_chain``, so there is one message and one code."""
+    cfg, _paths, descriptor = ltx25_paths
+    with pytest.raises(APIError) as endpoint_side:
+        ltx25.reject_chain()
+    with pytest.raises(APIError) as backend_side:
+        _backend(cfg, descriptor).generate_chain(object(), output_dir=None)
+    assert endpoint_side.value.code == backend_side.value.code
+    assert endpoint_side.value.detail == backend_side.value.detail
+
+
+# --------------------------------------------------------------------------- #
+# 3b) the audit: every GenerateRequest field has exactly one home (M5)
+# --------------------------------------------------------------------------- #
+#
+# THE POINT OF THIS SECTION is that it fails when someone ADDS a request field.
+# A new field that nobody classified would otherwise be forwarded-or-not by
+# accident: silently dropped if the generate payload does not name it, silently
+# honoured if it does. Either way the user is not told. So the four declarations
+# in the adapter must, together, account for the schema exactly — and the way to
+# fix a failure here is to decide which of the four the new field belongs to,
+# not to widen the test.
+
+_CLASSIFICATIONS = {
+    "422 (REJECT_TABLE)": lambda: {f for f, _feat, _p in ltx25.REJECT_TABLE},
+    "ignore+log (IGNORED_FIELDS)": lambda: set(ltx25.IGNORED_FIELDS),
+    "honoured (HONOURED_FIELDS)": lambda: set(ltx25.HONOURED_FIELDS),
+    "governed by another field (GOVERNED_FIELDS)": lambda: set(ltx25.GOVERNED_FIELDS),
+}
+
+
+def test_every_generate_request_field_is_classified():
+    classified: set[str] = set()
+    for produce in _CLASSIFICATIONS.values():
+        classified |= produce()
+    unclassified = set(GenerateRequest.model_fields) - classified
+    assert not unclassified, (
+        "GenerateRequest gained field(s) the LTX 2.5 adapter says nothing about: "
+        f"{sorted(unclassified)}. Put each one in REJECT_TABLE, IGNORED_FIELDS, "
+        "HONOURED_FIELDS or GOVERNED_FIELDS in services/engines/ltx25/adapter.py "
+        "(and update Docs/ の対応表), then re-run."
+    )
+
+
+def test_the_four_classifications_do_not_overlap():
+    """Exactly one home each. Two homes means the answer depends on which check
+    runs first, which is how a field ends up both refused and forwarded."""
+    seen: dict[str, str] = {}
+    for label, produce in _CLASSIFICATIONS.items():
+        for field in produce():
+            assert field not in seen, f"{field} is in both {seen[field]} and {label}"
+            seen[field] = label
+
+
+def test_no_classification_names_a_field_the_schema_does_not_have():
+    """The reverse direction: a REMOVED or renamed request field must not sit in
+    the adapter's tables pretending to be guarded."""
+    fields = set(GenerateRequest.model_fields)
+    for label, produce in _CLASSIFICATIONS.items():
+        assert produce() <= fields, f"{label} names unknown field(s): {sorted(produce() - fields)}"
+
+
+def test_every_governor_is_itself_refused():
+    """A sub-parameter is only safe to leave unruled because its GOVERNOR is a
+    422 — otherwise a request could make it meaningful and this engine would act
+    on a value it never reads."""
+    refused = {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    for field, governor in ltx25.GOVERNED_FIELDS.items():
+        assert governor in refused, f"{field} is governed by {governor}, which is not refused"
+
+
+def test_honoured_fields_are_exactly_what_generate_acts_on(ltx25_paths):
+    """Not a transcription of the payload builder: the payload is BUILT here and
+    compared, so a field quietly dropped from ``generate`` fails this test."""
+    import inspect
+
+    source = inspect.getsource(ltx25._RealBackend25.generate)
+    # Six fields ride the payload verbatim; the other two are transformed
+    # (conditioning_images -> "images", crop_output -> ffmpeg post-process).
+    for field in ltx25.HONOURED_FIELDS:
+        assert f"request.{field}" in source, f"{field} is declared honoured but never read"
+
+
 # --------------------------------------------------------------------------- #
 # 4) seams
 # --------------------------------------------------------------------------- #

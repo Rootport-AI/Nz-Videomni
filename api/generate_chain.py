@@ -27,6 +27,7 @@ from api.errors import (
 )
 from api.generate import spawn_job_thread
 from api.models import GenerateChainRequest, GenerateChainResponse
+from services import engines
 
 router = APIRouter()
 
@@ -42,6 +43,13 @@ def generate_chain(
     background_tasks: BackgroundTasks,
     context: AppContext = Depends(get_context),
 ) -> GenerateChainResponse:
+    # ── Engine feature scope (§3-98 P5) ─────────────────────────────────────
+    # ONE refusal for the whole chain family. Chained, Retake, End source, V2V
+    # continuation and A2V are all shapes of THIS request, so an engine that
+    # cannot chain cannot serve any of them — and there is nothing in the body
+    # worth inspecting first. A no-op for LTX 2.3.
+    engines.reject_chain(context.pipeline_manager.active_engine_family)
+
     # Validate clip-0 conditioning images exist up front (only clip 0 may carry
     # them; the model validator already enforces that).
     for ci in request.clips[0].conditioning_images:

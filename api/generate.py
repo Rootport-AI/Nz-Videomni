@@ -19,6 +19,7 @@ from api.errors import (
     reference_resolution_invalid,
 )
 from api.models import GenerateRequest, GenerateResponse, JobStatus
+from services import engines
 from services.job_store import JobRecord, now_iso
 
 router = APIRouter()
@@ -51,6 +52,16 @@ def generate(
     background_tasks: BackgroundTasks,
     context: AppContext = Depends(get_context),
 ) -> GenerateResponse:
+    # ── Engine feature scope (§3-98 P5) ─────────────────────────────────────
+    # FIRST, before every other check. What the ACTIVE base model's engine can
+    # do is a property of the server, not of this request, so it is answered
+    # without touching the upload stores or the lora registry: telling a user
+    # "that reference video does not exist" for a request whose engine cannot
+    # consume reference videos at all would send them to fix the wrong thing.
+    # A no-op for LTX 2.3 (it declares no unsupported features), which is why
+    # every pre-existing test is unaffected — deliberately, not by luck.
+    engines.reject_unsupported(context.pipeline_manager.active_engine_family, request)
+
     # Validate conditioning images exist up front (minimal I2V).
     for ci in request.conditioning_images:
         context.upload_store.path_for(ci.image_id)  # raises IMAGE_NOT_FOUND

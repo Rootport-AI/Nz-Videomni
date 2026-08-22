@@ -178,6 +178,77 @@ def client(tmp_path):
         yield c
 
 
+# --------------------------------------------------------------------------- #
+# two engine families side by side (§3-98)
+#
+# Lives here rather than in one test file because two suites need the SAME
+# world: the dispatch tests (which runner object is in place) and the API
+# feature-guard tests (which requests the active engine refuses). A second copy
+# would be two worlds that drift -- and the whole point of the 2.3<->2.5 gates
+# is that both engines are described by one arrangement.
+# --------------------------------------------------------------------------- #
+
+
+def _gguf_string(text: str) -> bytes:
+    raw = text.encode("utf-8")
+    return struct.pack("<Q", len(raw)) + raw
+
+
+def write_gguf_with_kv(path: Path, **kv: str) -> Path:
+    """A parsable GGUF header carrying string KV entries and no tensors.
+
+    ``write_model_file``'s stub has an EMPTY kv section, which is enough for the
+    precheck but says nothing about the engine generation. The family ruling
+    reads ``general.architecture`` / ``model_version`` from here.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = b"".join(
+        _gguf_string(key) + struct.pack("<I", 8) + _gguf_string(value)
+        for key, value in kv.items()
+    )
+    path.write_bytes(b"GGUF" + struct.pack("<IQQ", 3, 0, len(kv)) + body)
+    return path
+
+
+@pytest.fixture()
+def two_family_client(tmp_path):
+    """LTX 2.3 (engine_family=ltx) and LTX 2.5 (engine_family=ltx25), both
+    installed, both on the mock backend. Starts on LTX 2.3 (first descriptor);
+    ``POST /pipeline/load {"base_model": "LTX25"}`` moves to the other."""
+    ltx23 = base_model_descriptor()
+    ltx25 = base_model_descriptor("LTX25")
+    ltx25["display_name"] = "LTX 2.5"
+    ltx25["engine_family"] = "ltx25"
+
+    fragment = build_model_layout(tmp_path, [ltx23, ltx25])  # 2.3側の重みを作る
+    models_dir = tmp_path / "models"
+    for category, spec in ltx25["categories"].items():
+        target = models_dir / spec["default_file"]
+        if category == "transformer":
+            write_gguf_with_kv(target, **{"general.architecture": "ltxv", "model_version": "2.5.0"})
+        else:
+            write_model_file(target)
+    # 2.3側のtransformerにも世代の刻印を入れる(往復の戻りでも照合が走る)。
+    write_gguf_with_kv(
+        models_dir / ltx23["categories"]["transformer"]["default_file"],
+        **{"general.architecture": "ltxv", "model_version": "2.3.0"},
+    )
+
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {"backend": "mock", **fragment},
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    app = main.build_app(_make_args(cfg_path.as_posix()))
+    with TestClient(app) as client:
+        client.app_context = app.state.context  # type: ignore[attr-defined]
+        yield client
+
+
 @pytest.fixture()
 def mcp_app(tmp_path):
     """Same app as ``client``, for MCP tool tests that talk to it via

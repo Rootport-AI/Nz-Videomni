@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 from api.errors import model_incompatible
 
 if TYPE_CHECKING:  # 実行時にはimportしない(上のdocstringの規約)
+    from api.models import GenerateRequest
     from services.base_models import BaseModelDescriptor
 
 #: (``general.architecture``, ``model_version``のminor) -> エンジン系統id。
@@ -158,3 +159,37 @@ def unsupported_features(family: str) -> tuple[str, ...]:
     持たないことが「全部だめ」を意味してはならない。
     """
     return tuple(getattr(_adapter(family), "UNSUPPORTED_FEATURES", ()))
+
+
+def reject_unsupported(family: str, request: GenerateRequest) -> None:
+    """この系統が走らせられないリクエストなら、その場で422にする(§3-98 P5)。
+
+    **判断はアダプタが持ち、ここは取り次ぐだけ**である。「LTX 2.5(v1)では
+    outpaintができない」というのはエンジンの事実であって、エンドポイントの
+    事情ではない。api/generate.py が系統名で分岐して機能表を持ち始めた瞬間に、
+    同じ表が2箇所に生まれて必ずずれる。
+
+    宣言していない系統(``ltx``)は素通り。``getattr`` で見に行くのは、
+    「制限を宣言しない」が既定であるという :func:`unsupported_features` と
+    同じ規約による——新しい系統を足した人が、この関数の存在を知らなくても
+    正しく動く側に倒れる。
+
+    エンドポイントから**関数として**呼ぶ(FastAPIの ``Depends`` にはしない)。
+    Dependsは引数の解決順に依存するため、リクエスト本文の検証と機能の可否の
+    どちらが先に効くかが読めなくなる。
+    """
+    guard = getattr(_adapter(family), "reject_unsupported", None)
+    if guard is not None:
+        guard(request)
+
+
+def reject_chain(family: str) -> None:
+    """連結生成(Chained/Retake/End source/V2V/A2V)を扱えない系統なら422。
+
+    :func:`reject_unsupported` と対になる、chain系エンドポイント用の入口。
+    引数にリクエストを取らないのは、chain系は**まるごと**扱えるか扱えないかの
+    どちらかであり、中身を見ても答えが変わらないからである。
+    """
+    guard = getattr(_adapter(family), "reject_chain", None)
+    if guard is not None:
+        guard()

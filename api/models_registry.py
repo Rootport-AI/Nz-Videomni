@@ -26,8 +26,10 @@ one. Added alongside it:
     Every declared base model with its own three-layer listing, plus install
     state: ``installed`` (every category's default file is on disk),
     ``present`` (at least one is — i.e. a partial install worth showing),
-    ``missing_categories`` (which ones are not), and ``category_order`` (the
-    descriptor's declaration order as an ARRAY — see below).
+    ``missing_categories`` (which ones are not), ``category_order`` (the
+    descriptor's declaration order as an ARRAY — see below) and
+    ``unsupported_features`` (§3-98 P5: feature names that base model's engine
+    cannot run — ``[]`` for LTX 2.3, so nothing about the 2.3 response changed).
 
 CATEGORY ORDER IS CARRIED BY AN ARRAY, NOT BY OBJECT KEY ORDER. Both
 ``categories`` blocks are emitted in declaration order and Python dicts keep
@@ -50,6 +52,7 @@ from fastapi import APIRouter, Depends
 
 from api.context import AppContext
 from api.deps import get_context
+from services import engines
 from services.model_registry import CATEGORIES, DEFAULT_NAME, ModelRegistry
 
 router = APIRouter()
@@ -94,6 +97,16 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 "installed": all(presence.values()),
                 "present": any(presence.values()),
                 "missing_categories": [c for c, ok in presence.items() if not ok],
+                # Feature names this base model's ENGINE cannot run (§3-98 P5).
+                # Purely ADDITIVE and per-base-model: LTX 2.3 declares none, so
+                # its entry is `[]` and a client that has never heard of this
+                # key is unaffected. The frontend greys out the controls it
+                # recognises; POST /generate refuses the rest with the matching
+                # FEATURE_UNSUPPORTED, so this list is a courtesy, never the
+                # enforcement (a page can be stale, a script never asked).
+                "unsupported_features": list(
+                    engines.unsupported_features(descriptor.engine_family)
+                ),
                 # The display order, as an array (see the module docstring on
                 # why object key order is not trusted to survive transport).
                 # Built from the descriptor's declaration order, which is the

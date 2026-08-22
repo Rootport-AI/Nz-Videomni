@@ -20,20 +20,14 @@ GPUも重みも要らない。ここでの「LTX 2.5のファイル」は ``mode
 
 from __future__ import annotations
 
-import argparse
 import logging
-import struct
 import subprocess
 import sys
 
 import pytest
-import yaml
-from fastapi.testclient import TestClient
 
-import main
 from api.errors import APIError
 from config import PROJECT_ROOT, AppConfig
-from conftest import base_model_descriptor, build_model_layout, write_model_file
 from services import engines
 from services.base_models import BaseModelDescriptor, CategoryDescriptor, load_base_models
 
@@ -224,62 +218,9 @@ def test_shipped_descriptors_match_their_familys_selection_fields():
 # --------------------------------------------------------------------------- #
 
 
-def _gguf_string(text: str) -> bytes:
-    raw = text.encode("utf-8")
-    return struct.pack("<Q", len(raw)) + raw
-
-
-def _write_gguf(path, **kv: str):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = b"".join(
-        _gguf_string(key) + struct.pack("<I", 8) + _gguf_string(value)
-        for key, value in kv.items()
-    )
-    path.write_bytes(b"GGUF" + struct.pack("<IQQ", 3, 0, len(kv)) + body)
-    return path
-
-
-@pytest.fixture()
-def two_family_client(tmp_path):
-    """LTX 2.3(engine_family=ltx)とLTX 2.5(engine_family=ltx25)が両方
-    インストール済みの状態。どちらもmockバックエンドで走る。"""
-    ltx23 = base_model_descriptor()
-    ltx25 = base_model_descriptor("LTX25")
-    ltx25["display_name"] = "LTX 2.5"
-    ltx25["engine_family"] = "ltx25"
-
-    fragment = build_model_layout(tmp_path, [ltx23, ltx25])  # 2.3側の重みを作る
-    models_dir = tmp_path / "models"
-    for category, spec in ltx25["categories"].items():
-        target = models_dir / spec["default_file"]
-        if category == "transformer":
-            _write_gguf(target, **{"general.architecture": "ltxv", "model_version": "2.5.0"})
-        else:
-            write_model_file(target)
-    # 2.3側のtransformerにも世代の刻印を入れる(往復の戻りでも照合が走る)。
-    _write_gguf(
-        models_dir / ltx23["categories"]["transformer"]["default_file"],
-        **{"general.architecture": "ltxv", "model_version": "2.3.0"},
-    )
-
-    cfg = {
-        "server": {"log_dir": (tmp_path / "logs").as_posix()},
-        "model": {"backend": "mock", **fragment},
-        "output": {"dir": (tmp_path / "outputs").as_posix()},
-        "upload": {"dir": (tmp_path / "uploads").as_posix()},
-        "state_file": (tmp_path / "state.json").as_posix(),
-    }
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    app = main.build_app(
-        argparse.Namespace(
-            listen=False, port=None, api_key=None, allow_all_cors=False,
-            config=cfg_path.as_posix(), te_offload=None, dit_cpu_load=None,
-        )
-    )
-    with TestClient(app) as client:
-        client.app_context = app.state.context  # type: ignore[attr-defined]
-        yield client
+#: ``two_family_client`` (LTX 2.3 + LTX 2.5 installed side by side, both on the
+#: mock backend) now lives in conftest.py — the API feature-guard suite needs
+#: the same world, and two copies of it would be two worlds that drift.
 
 
 def test_switching_family_replaces_the_runner_and_unloads_the_old_one(two_family_client):

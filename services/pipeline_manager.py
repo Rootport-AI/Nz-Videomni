@@ -257,6 +257,19 @@ class PipelineManager:
         return self._active_base_model
 
     @property
+    def active_engine_family(self) -> str:
+        """Engine family that would run a job submitted right now (§3-98 P5).
+
+        Read from the RUNNER's descriptor, not from ``active_base_model``: the
+        runner object is what actually holds the worker (``_point_runner_at``
+        replaces it when a switch crosses families), so its descriptor is the
+        engine that a job reaches — while ``active_base_model`` is a NAME the
+        client asked for, which can legitimately be a step ahead of the runner
+        during a load that has not committed yet.
+        """
+        return self.runner.descriptor.engine_family
+
+    @property
     def pipeline_type(self) -> str:
         return self.runner.pipeline_type
 

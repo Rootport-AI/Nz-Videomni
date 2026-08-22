@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NoReturn
 
 from api.errors import feature_unsupported, model_incompatible
 from api.models import GenerateRequest
@@ -147,6 +147,43 @@ IGNORED_FIELDS: dict[str, str] = {
     "block_swap_prefetch": "engine25 uses its own block-swap window",
 }
 
+#: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
+#: (see :meth:`_RealBackend25.generate`), ``conditioning_images`` becomes the
+#: ``images`` list, and ``crop_output`` is the app-side ffmpeg centre-crop that
+#: happens after the worker is done. Declared rather than merely implied so the
+#: model_fields audit below can name a home for every field.
+HONOURED_FIELDS: frozenset[str] = frozenset(
+    {
+        "prompt",
+        "width",
+        "height",
+        "num_frames",
+        "frame_rate",
+        "seed",
+        "conditioning_images",
+        "crop_output",
+    }
+)
+
+#: ``field -> the field that governs it``. These are SUB-PARAMETERS: each one is
+#: inert unless its governor is non-default, and every governor here is in
+#: :data:`REJECT_TABLE`. So they need no ruling of their own — a request that
+#: makes one of them meaningful is already refused, by the governor, before this
+#: field could have mattered. (``conditioning_attention_strength`` and
+#: ``reference_video_strength`` are not merely inert without ``loras``: the
+#: schema itself rejects them, api/models.py ``validate_ltx_constraints``.)
+#:
+#: The distinction is worth keeping rather than folding into
+#: :data:`IGNORED_FIELDS`: "ignored" promises a job runs anyway, which is false
+#: here — these cannot reach a running job at all.
+GOVERNED_FIELDS: dict[str, str] = {
+    "nag_scale": "nag_enabled",
+    "nag_tau": "nag_enabled",
+    "nag_alpha": "nag_enabled",
+    "conditioning_attention_strength": "loras",
+    "reference_video_strength": "loras",
+}
+
 #: Everything GET /models publishes as this engine's ``unsupported_features``
 #: (§3-98 Phase 5). The request-field features come from :data:`REJECT_TABLE`
 #: so the two can never disagree; the chain-family names are added because they
@@ -184,6 +221,28 @@ def reject_unsupported(request: GenerateRequest) -> None:
                     "この機能を使うにはベースモデルに「LTX 2.3」を選んでください。"
                 ),
             )
+
+
+def reject_chain() -> NoReturn:
+    """422 every member of the chain family (§3-98 Phase 5).
+
+    Chain, retake, end source, V2V continuation and A2V all arrive through the
+    ONE endpoint POST /generate/chain and the ONE backend method
+    :meth:`_RealBackend25.generate_chain`, so one refusal covers all five. It
+    takes no argument on purpose: nothing about the request can make this engine
+    able to chain, so inspecting one would suggest otherwise.
+
+    Lives at module level (like :func:`reject_unsupported`) so the API layer can
+    refuse before a job record is created, while the backend method keeps it as
+    the backstop for a payload that arrives another way.
+    """
+    raise feature_unsupported(
+        "chain",
+        detail=(
+            "LTX 2.5(v1)は連結生成(Chained・Retake・End source・V2V・A2V)に"
+            "対応していません。ベースモデルに「LTX 2.3」を選んでください。"
+        ),
+    )
 
 
 def _log_ignored(request: GenerateRequest) -> None:
@@ -493,14 +552,13 @@ class _RealBackend25(_RealBackend):
         Chain, retake, end source, V2V continuation and A2V all arrive through
         this ONE method, so one refusal covers them; engine25's worker carries
         the same refusal as a backstop for a payload that arrives another way.
+
+        Since Phase 5 the API layer refuses first (POST /generate/chain calls
+        :func:`reject_chain` before reserving a job), so this is now the second
+        line rather than the only one — hence the shared function: two places
+        that answer the same question must not be able to answer it differently.
         """
-        raise feature_unsupported(
-            "chain",
-            detail=(
-                "LTX 2.5(v1)は連結生成(Chained・Retake・End source・V2V・A2V)に"
-                "対応していません。ベースモデルに「LTX 2.3」を選んでください。"
-            ),
-        )
+        reject_chain()
 
 
 class LTX25Runner(LTXRunner):

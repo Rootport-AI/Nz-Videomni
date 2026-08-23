@@ -63,4 +63,13 @@ dependencies = [
     "gguf>=0.10.0",
     # The 4 non-quantized weights (VAEs + spatial upscaler) stay safetensors.
     "safetensors>=0.7.0",
+    # engine/preprocess: cv2 does every canny/dwpose/depth frame operation, and
+    # torchvision is imported in exactly one place (the VDA depth wrapper's
+    # Compose). Added 2026-08-24 so the 2.5 engine builds IC-LoRA control videos
+    # with the same code the 2.3 engine runs; cv2 4.13.0.92 is ABI-compatible
+    # with this stack's numpy 2.5.2 (verified). torchvision carries the exact
+    # `+cu128` local version for the same reason torch/torchaudio do above --
+    # an unpinned torchvision drags a matching newer torch in behind it.
+    "opencv-python-headless>=4.8.0",
+    "torchvision==0.24.1+cu128",
 ]

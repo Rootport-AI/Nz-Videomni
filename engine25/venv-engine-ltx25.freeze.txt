@@ -34,6 +34,12 @@
 # Their '+cu128' local versions are load-bearing on BOTH lines -- torchaudio left
 # unbounded was measured resolving to 2.11 and dragging a matching torch with it.
 #
+# NOTE: opencv-python-headless and torchvision are the engine/preprocess
+# dependencies (cv2 does every canny/dwpose/depth frame op; torchvision is used
+# only by the VDA depth wrapper's Compose), added 2026-08-24 so the 2.5 engine
+# can build IC-LoRA control videos with the same code the 2.3 engine runs.
+# cv2 4.13.0.92 was verified ABI-compatible with this venv's numpy 2.5.2.
+#
 # NOTE: no sageattention, no triton-windows, no diffusers, no natten here, and
 # that is deliberate -- see the header of engine25/engine25-venv-pyproject.toml
 # for the reason each one is out. OpenImageIO, by contrast, is present and
@@ -68,6 +74,7 @@ mdurl==0.1.2
 mpmath==1.3.0
 networkx==3.6.1
 numpy==2.5.2
+opencv-python-headless==4.13.0.92
 OpenImageIO==3.1.16.0
 packaging==26.3
 pillow==12.3.0
@@ -85,6 +92,7 @@ sympy==1.14.0
 tokenizers==0.22.2
 torch==2.9.1+cu128
 torchaudio==2.9.1+cu128
+torchvision==0.24.1+cu128
 tqdm==4.70.0
 transformers==5.14.1
 typer==0.27.1

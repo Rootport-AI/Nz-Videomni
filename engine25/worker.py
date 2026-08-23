@@ -53,18 +53,26 @@ Protocol (one JSON object per line; parent -> worker):
       an ffmpeg post-process the app applies to the finished mp4.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
-   [stage2_window]}
+   [stage2_window], [source], [audio_source]}
       One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
       body keys are the 2.3 chain op's, verbatim, because the app builds one
       payload shape for whichever engine is loaded. ``clips`` entries are
       {prompt, num_frames, images}; only clip 0 may carry images.
+      ``source`` = {path, context_frames} continues an existing video (V2V):
+      ``path`` is an mp4 the app has ALREADY cut to the requested frame rate,
+      and its first ``context_frames`` pixel frames are frozen as the head of
+      clip 0 and trimmed back off before delivery. ``audio_source`` = {path}
+      renders a timeline against a given audio track (A2V) and muxes that
+      waveform verbatim. The two are mutually exclusive. Both are optional and
+      ABSENT on a plain T2V/I2V chain, whose output is byte-identical to the
+      chain that shipped before they existed.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``source``, ``audio_source``, ``retake``, ``end_source``, ``loras``,
-      ``reference_video``, ``nag``, ``attention_backend``, ``keep_resident``,
-      ``vae_mode``, ``block_swap_prefetch``, ``fused_gguf_dequant_kernel``) is
-      REFUSED BY NAME rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
+      (``retake``, ``end_source``, ``loras``, ``reference_video``, ``nag``,
+      ``attention_backend``, ``keep_resident``, ``vae_mode``,
+      ``block_swap_prefetch``, ``fused_gguf_dequant_kernel``) is REFUSED BY NAME
+      rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
       The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
-      2.3's shape.
+      2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes ran.
   {"op": "shutdown"}
 
 Replies are framed with the SAME unique prefix as the 2.3 worker so the shared
@@ -111,7 +119,8 @@ The chain has its own (gate G2), same discipline, plus captured receipts::
     python -m engine25.worker --selftest-chain \\
         <the same five model paths> \\
         --output chain.mp4 --clips 2 --num-frames 25 \\
-        --width 320 --height 192 [--chunked-upsample] [--rounds 2]
+        --width 320 --height 192 [--chunked-upsample] [--rounds 2] \\
+        [--source tail.mp4 --context 25 | --audio-source track.wav]
 
 Its JSON report carries the mp4 digests, the ``done`` event verbatim (with its
 ``chain`` metadata) and the full ``progress`` series, so the event CONTRACT --
@@ -353,12 +362,19 @@ def _do_generate(msg: dict) -> None:
 #:
 #: REFUSED BY NAME, not ignored. Every one of them is already refused at the
 #: endpoint (``services/engines/ltx25/adapter.py``'s ``CHAIN_REJECT_TABLE``), and
-#: ``_RealBackend25.generate_chain`` builds its payload from a fixed literal that
-#: contains none of them -- so an arrival here is not a stray field, it is the
-#: reject table and the payload builder having drifted apart. Dropping it
-#: silently would hand the user a video that quietly ignored the LoRA / the
-#: source clip / the retake window they asked for, which is the one failure this
-#: engine must never produce.
+#: ``_RealBackend25.generate_chain`` builds its payload from a fixed literal --
+#: plus the additive ``source`` / ``audio_source`` blocks below -- that contains
+#: none of them, so an arrival here is not a stray field, it is the reject table
+#: and the payload builder having drifted apart. Dropping it silently would hand
+#: the user a video that quietly ignored the LoRA / the reference video / the
+#: retake window they asked for, which is the one failure this engine must never
+#: produce.
+#:
+#: ``source`` (V2V) and ``audio_source`` (A2V) USED to be on this list and are
+#: not any more: §3-102's second increment implemented both, so they are now
+#: read below into :class:`~engine25.chain25.SourceSpec` /
+#: :class:`~engine25.chain25.AudioSourceSpec`. What is left is what the engine
+#: still genuinely does not have.
 #:
 #: The test is MEMBERSHIP, not truthiness: ``{"loras": []}`` is as much a sign of
 #: drift as a populated list, and "the key was there but empty so we allowed it"
@@ -367,8 +383,6 @@ def _do_generate(msg: dict) -> None:
 #: ARE part of the contract and are ignored-and-logged (``IGNORED_FIELDS``),
 #: because the app sends them on every single job.
 CHAIN_UNSUPPORTED_KEYS = (
-    "source",
-    "audio_source",
     "retake",
     "end_source",
     "loras",
@@ -380,6 +394,30 @@ CHAIN_UNSUPPORTED_KEYS = (
     "block_swap_prefetch",
     "fused_gguf_dequant_kernel",
 )
+
+
+def _existing_media_path(raw: object, field: str) -> str:
+    """``str(raw)`` after checking it names a file that exists.
+
+    2.3's worker does not check (:mod:`engine.worker`'s chain op reads the two
+    blocks and hands the strings straight to the pipeline), and the app makes
+    the check nearly moot -- it writes ``_source_tail.mp4`` immediately before
+    the call and resolves the upload id for the audio. The check is here anyway
+    because of what the FAILURE looks like without it: the path is first opened
+    deep inside PyAV, and what the user is shown on the failed job is whatever
+    the demuxer says about a name it could not open. One ``ValueError`` at the
+    payload boundary names the field and the path instead, which is the same
+    fail-loud regime the rest of this reader uses.
+
+    A directory is rejected too (``is_file``, not ``exists``): a path that names
+    a folder is the same mistake and would fail just as obscurely.
+    """
+    path = str(raw)
+    if not Path(path).is_file():
+        raise ValueError(
+            f"generate_chain: {field} path is not an existing file: {path!r}"
+        )
+    return path
 
 
 def _do_generate_chain(msg: dict) -> None:
@@ -413,8 +451,10 @@ def _do_generate_chain(msg: dict) -> None:
         raise RuntimeError("generate_chain before load")
 
     from engine25.chain25 import (  # noqa: PLC0415 -- deliberately lazy (see module docstring)
+        AudioSourceSpec,
         ChainClipSpec,
         ChainSpec,
+        SourceSpec,
         run_chain,
     )
     from engine25.pipeline25 import image_conditionings  # noqa: PLC0415
@@ -436,6 +476,47 @@ def _do_generate_chain(msg: dict) -> None:
         for clip in raw_clips
     ]
 
+    # V2V continuation: optional ``source``, an mp4 that is ALREADY the tail of
+    # the user's video cut at the requested frame rate (the app's ``cut_tail_mp4``
+    # runs before the engine is called; the engine checks the rate rather than
+    # resampling). Read exactly as 2.3's chain op reads it -- same two keys, same
+    # ``KeyError`` -> ``ValueError`` translation -- because the app builds ONE
+    # chain payload shape for whichever engine is loaded.
+    source = None
+    src = msg.get("source")
+    if src:
+        try:
+            source = SourceSpec(
+                path=_existing_media_path(src["path"], "source"),
+                context_frames=int(src["context_frames"]),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: source requires path and context_frames "
+                f"(missing key {exc})"
+            ) from exc
+
+    # A2V: optional ``audio_source``, any media file with a decodable audio
+    # stream. Mutually exclusive with ``source`` -- asserted in ``run_chain`` and
+    # refused at the endpoint, so it is not re-stated here; this stays a payload
+    # reader rather than a second place that knows the rule.
+    #
+    # ``if asrc:`` rather than ``is not None`` is 2.3's truthiness test kept
+    # verbatim: an empty block is as much "no A2V" as an absent one, and the two
+    # workers reading the same payload differently is exactly the drift the
+    # refusal table above exists to catch.
+    audio_source = None
+    asrc = msg.get("audio_source")
+    if asrc:
+        try:
+            audio_source = AudioSourceSpec(
+                path=_existing_media_path(asrc["path"], "audio_source")
+            )
+        except KeyError as exc:
+            raise ValueError(
+                f"generate_chain: audio_source requires path (missing key {exc})"
+            ) from exc
+
     spec = ChainSpec(
         clips=clips,
         width=int(msg["width"]),
@@ -451,6 +532,8 @@ def _do_generate_chain(msg: dict) -> None:
         # only when the request opted off standard, so the default payload and
         # the default geometry stay one thing.
         stage2_window=msg.get("stage2_window") or None,
+        source=source,
+        audio_source=audio_source,
     )
 
     _log(
@@ -458,6 +541,10 @@ def _do_generate_chain(msg: dict) -> None:
         f"frames={[c.num_frames for c in clips]} seed={seed} "
         f"overlap={spec.overlap_frames}/{spec.overlap_strength} "
         f"chunked_upsample={spec.chunked_upsample} "
+        # Same two fields, same spelling, as 2.3's chain log line: the two
+        # engines' worker logs are read side by side when a chain is compared.
+        f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
+        f"audio_source={'yes' if audio_source else 'no'} "
         f"stage2win={spec.stage2_window or 'standard'}"
     )
 
@@ -767,6 +854,13 @@ def _selftest_chain(argv: list[str]) -> int:
     ``outer_index`` / ``outer_total`` positions, so "does a chain say which clip
     it is on" is answered by the run rather than by reading the code.
 
+    ``--source`` (V2V) and ``--audio-source`` (A2V) add the one payload block
+    each mode rides on, and are mutually exclusive here for the same reason they
+    are at the endpoint: a chain is either a continuation of a video or a
+    rendering of an audio track. Neither given, the payload's key set is
+    byte-identical to the one that shipped before the two modes existed, which
+    is what makes an unchanged digest evidence rather than a coincidence.
+
     ``stage2_window`` is deliberately not an argument: the default chain is what
     is under test, and the app sends that key only when a request opted off
     "standard". ``--rounds 2`` at an unchanged seed is the determinism probe.
@@ -807,6 +901,31 @@ def _selftest_chain(argv: list[str]) -> int:
         action="append",
         default=[],
         help="clip-0 conditioning image (repeatable): PATH[,FRAME_IDX[,STRENGTH]]",
+    )
+    # One mode or the other, never both -- argparse says so here, ``run_chain``
+    # asserts it, and the API refuses it. Three layers because the two are not
+    # merely unsupported together, they contradict each other.
+    origin = parser.add_mutually_exclusive_group()
+    origin.add_argument(
+        "--source",
+        default=None,
+        help="V2V: an mp4 that is ALREADY the fps-correct TAIL of the source video "
+        "(what the app's cut_tail_mp4 writes). Its first --context frames are frozen "
+        "as the head of clip 0 and trimmed back off before delivery",
+    )
+    origin.add_argument(
+        "--audio-source",
+        dest="audio_source",
+        default=None,
+        help="A2V: any media file with a decodable audio stream; its waveform is frozen "
+        "over the whole timeline and muxed into the output verbatim",
+    )
+    parser.add_argument(
+        "--context",
+        type=int,
+        default=73,
+        help="V2V context span in PIXEL frames (8n+1); read only with --source. "
+        "The app's default is 73",
     )
     parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
     args = parser.parse_args(argv)
@@ -855,6 +974,16 @@ def _selftest_chain(argv: list[str]) -> int:
                 "chunked_upsample": args.chunked_upsample,
                 "stage2_window": "standard (the key is omitted from the payload)",
                 "images": images,
+                # None/None is the plain-chain case whose digest gate G2(a)
+                # compares against the pre-V2V baseline.
+                "source": (
+                    None
+                    if args.source is None
+                    else {"path": args.source, "context_frames": args.context}
+                ),
+                "audio_source": (
+                    None if args.audio_source is None else {"path": args.audio_source}
+                ),
             },
             "rounds": [],
         }
@@ -872,28 +1001,33 @@ def _selftest_chain(argv: list[str]) -> int:
             out = str(base if args.rounds <= 1 else base.with_name(f"{base.stem}.r{index}{base.suffix}"))
             events.clear()
             round_started = time.perf_counter()
-            _do_generate_chain(
-                {
-                    "op": "generate_chain",
-                    "width": args.width,
-                    "height": args.height,
-                    "frame_rate": args.frame_rate,
-                    "num_steps": 8,
-                    "seed": args.seed,
-                    "overlap_frames": args.overlap_frames,
-                    "overlap_strength": args.overlap_strength,
-                    "chunked_upsample": args.chunked_upsample,
-                    "output_path": out,
-                    "clips": [
-                        {
-                            "prompt": prompts[i],
-                            "num_frames": args.num_frames,
-                            "images": images if i == 0 else [],
-                        }
-                        for i in range(args.clips)
-                    ],
-                }
-            )
+            payload: dict = {
+                "op": "generate_chain",
+                "width": args.width,
+                "height": args.height,
+                "frame_rate": args.frame_rate,
+                "num_steps": 8,
+                "seed": args.seed,
+                "overlap_frames": args.overlap_frames,
+                "overlap_strength": args.overlap_strength,
+                "chunked_upsample": args.chunked_upsample,
+                "output_path": out,
+                "clips": [
+                    {
+                        "prompt": prompts[i],
+                        "num_frames": args.num_frames,
+                        "images": images if i == 0 else [],
+                    }
+                    for i in range(args.clips)
+                ],
+            }
+            # ADDITIVE, exactly as the adapter builds them: absent unless asked
+            # for, so the plain chain's payload is the same dict it always was.
+            if args.source is not None:
+                payload["source"] = {"path": args.source, "context_frames": args.context}
+            if args.audio_source is not None:
+                payload["audio_source"] = {"path": args.audio_source}
+            _do_generate_chain(payload)
             seconds = time.perf_counter() - round_started
 
             done = next((e for e in events if e["event"] == "done"), None)
@@ -913,6 +1047,22 @@ def _selftest_chain(argv: list[str]) -> int:
 
             digest = hashlib.sha256(Path(out).read_bytes()).hexdigest()
             digests.append(digest)
+
+            # The V2V audio HANDLE: the full, untrimmed timeline audio the
+            # engine writes next to the mp4 for a later Join. Reported by
+            # measurement (does the file exist, how big is it) rather than by
+            # repeating the filename the metadata already states.
+            v2v_meta = chain_meta.get("v2v") or {}
+            handle = None
+            handle_name = v2v_meta.get("audio_handle_filename")
+            if handle_name:
+                handle_path = Path(out).with_name(str(handle_name))
+                exists = handle_path.is_file()
+                handle = {
+                    "path": str(handle_path),
+                    "exists": exists,
+                    "size_bytes": handle_path.stat().st_size if exists else None,
+                }
             report["rounds"].append(
                 {
                     "round": index,
@@ -935,6 +1085,14 @@ def _selftest_chain(argv: list[str]) -> int:
                         "expected_f_total": expected_f_total,
                         "expected_total_px": px_from_v_latent(expected_f_total),
                     },
+                    # The two mode blocks VERBATIM (``None`` on a plain chain,
+                    # which is itself the check that a plain chain grew no new
+                    # metadata): 16 keys for V2V, 8 for A2V, same names as 2.3's.
+                    "v2v": chain_meta.get("v2v"),
+                    "a2v": chain_meta.get("a2v"),
+                    "v2v_key_count": len(v2v_meta) or None,
+                    "a2v_key_count": len(chain_meta.get("a2v") or {}) or None,
+                    "audio_handle": handle,
                     "progress": {
                         "count": len(progress),
                         "with_outer": sum(1 for e in progress if e.get("outer_total") is not None),

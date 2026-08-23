@@ -73,6 +73,16 @@ What :func:`verify` checks
    arguments, ``LatentState.keyframes_mask`` + the helper that marks the first
    latent frame, ``LatentUpsampler``'s block count (from which halo=18 is
    derived, not remembered), and 25 audio latents per second.
+4. For §3-102's second stage (V2V + A2V), the MATERIAL-INGEST surface: the audio
+   encoder's lifecycle block (``AudioConditioner``), the waveform-to-latent
+   encoder (re-exported as ``vae_encode_audio``, because upstream has a second,
+   unrelated ``encode_audio`` that writes wav files), the two file decoders and
+   the three per-frame preprocessing ops chain25 assembles source pixels from on
+   CPU, ``VideoEncoder.tiled_encode``'s silent 8k+1 crop, the 80/24 decode
+   chunking a V2V trim has to be spliced across, and -- the one genuinely new
+   MECHANISM -- ``ModalitySpec(frozen=True)``: both the branch that zeroes the
+   whole denoise mask and the one that zeroes the scalar ``sigma`` with it, which
+   is what makes A2V's frozen audio different in kind from the carry band.
 
 The F1 canary (``Disposable.dispose`` metas storage via
 ``torch.empty_like(..., device="meta")``) is checked but only LOGGED, never
@@ -92,6 +102,14 @@ from typing import Any
 # ltx_core -- loader
 # ---------------------------------------------------------------------------
 from ltx_core.allocator_trim_strategy import AllocatorTrimStrategy
+# `validate_audio_waveform` is the stereo rule the mp4 mux enforces. It is NOT
+# re-exported: nothing outside this file calls it, and chain25 satisfies the rule
+# by construction (every waveform it muxes is duplicated to stereo on load). It
+# is imported so `verify` can pin the rule itself -- a future upstream that
+# accepted mono would make chain25's duplication silently unnecessary rather than
+# wrong, but one that demanded a different shape would break the mux at the very
+# end of a job.
+from ltx_core.color.audio_mux import validate_audio_waveform
 from ltx_core.components.diffusion_steps import EulerAncestralDiffusionStep, EulerDiffusionStep
 from ltx_core.components.noisers import GaussianNoiser
 from ltx_core.components.patchifiers import AudioPatchifier, VideoLatentPatchifier
@@ -126,6 +144,15 @@ from ltx_core.loader.single_gpu_model_builder import (
 # ---------------------------------------------------------------------------
 # ltx_core -- model
 # ---------------------------------------------------------------------------
+# `encode_audio` is an AMBIGUOUS name upstream: this one is the audio VAE's
+# waveform -> latent encoder, and `ltx_pipelines.utils.media_io.encode_audio` is
+# a wav WRITER. They are re-exported under different names on purpose -- 2.3
+# aliased the VAE one to `vae_encode_audio` at every call site for exactly this
+# reason, and engine25 keeps that name so a reader never has to check which one
+# a line means. `AudioProcessor` is verify-only (the mel front end
+# `vae_encode_audio` builds when the caller passes `audio_processor=None`).
+from ltx_core.model.audio_vae import AudioProcessor
+from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
 from ltx_core.model.disposable import Disposable, DisposableProtocol
 from ltx_core.model.model_protocol import LTXModelProtocol, ModelConfigurator
 from ltx_core.model.transformer import (
@@ -139,12 +166,15 @@ from ltx_core.model.upsampler import LatentUpsampler, upsample_video
 from ltx_core.model.video_vae import (
     AUTO_TILING,
     AutoTiling,
+    TileSizeConfig,
     TilingConfig,
+    VideoEncoder,
     get_video_chunks_number,
 )
 from ltx_core.quantization import QuantizationPolicy
 from ltx_core.tools import AudioLatentTools, LatentTools, VideoLatentTools
 from ltx_core.types import (
+    Audio,
     AudioLatentShape,
     LatentState,
     VideoLatentShape,
@@ -173,11 +203,18 @@ from ltx_core.text_encoders.gemma.encoders.encoder_configurator import (
 # ---------------------------------------------------------------------------
 from ltx_pipelines.distilled import DistilledPipeline, should_use_ancestral_sampler
 from ltx_pipelines.utils.args import ImageConditioningInput
+# `_build_state` is module-private upstream and is NOT re-exported: chain25 never
+# calls it. It is imported only so `verify` can read the branch that turns
+# `ModalitySpec(frozen=True)` into an all-zero denoise mask -- the mechanism A2V's
+# whole-timeline audio freeze rests on, and one that lives in an `if`, not in a
+# signature.
 from ltx_pipelines.utils.blocks import (
+    AudioConditioner,
     DiffusionStage,
     ImageConditioner,
     PromptEncoder,
     VideoUpsampler,
+    _build_state,
 )
 from ltx_pipelines.utils.constants import DISTILLED_SIGMAS, STAGE_2_DISTILLED_SIGMAS
 from ltx_pipelines.utils.denoisers import SimpleDenoiser
@@ -188,11 +225,19 @@ from ltx_pipelines.utils.helpers import (
     ensure_tiling_config,
     image_conditionings_by_adding_guiding_latent,
     image_conditionings_by_replacing_latent,
+    modality_from_latent_state,
     post_process_latent,
     state_with_conditionings,
     tiling_scale_factors_for_vae,
 )
-from ltx_pipelines.utils.media_io import encode_video
+from ltx_pipelines.utils.media_io import (
+    decode_audio_from_file,
+    decode_video_by_frame,
+    encode_video,
+    get_videostream_fps,
+    normalize_images,
+    resize_and_center_crop,
+)
 from ltx_pipelines.utils.model_paths import ModelPaths
 # `_ancestral_euler_denoising_loop` is module-private upstream and is NOT
 # re-exported: nothing outside this file calls it. It is imported only so
@@ -215,6 +260,8 @@ __all__ = [
     "LTXV_MODEL_COMFY_RENAMING_MAP",
     "STAGE_2_DISTILLED_SIGMAS",
     "AllocatorTrimStrategy",
+    "Audio",
+    "AudioConditioner",
     "AudioLatentShape",
     "AudioLatentTools",
     "AudioPatchifier",
@@ -258,8 +305,10 @@ __all__ = [
     "SingleGPUModelBuilder",
     "StateDict",
     "StateDictLoader",
+    "TileSizeConfig",
     "TilingConfig",
     "VideoConditionByMask",
+    "VideoEncoder",
     "VideoLatentPatchifier",
     "VideoLatentShape",
     "VideoLatentTools",
@@ -273,6 +322,8 @@ __all__ = [
     "bf16_fuse_rule",
     "cleanup_memory",
     "create_meta_model",
+    "decode_audio_from_file",
+    "decode_video_by_frame",
     "create_noised_state",
     "encode_video",
     "ensure_tiling_config",
@@ -281,19 +332,23 @@ __all__ = [
     "gemma_model_type",
     "get_gemma_ops",
     "get_video_chunks_number",
+    "get_videostream_fps",
     "gpu_model",
     "image_conditionings_by_adding_guiding_latent",
     "image_conditionings_by_replacing_latent",
     "load_state_dict",
     "module_registry_key",
+    "normalize_images",
     "post_process_latent",
     "read_model_metadata",
+    "resize_and_center_crop",
     "resolve_gemma_weight_paths",
     "should_use_ancestral_sampler",
     "state_with_conditionings",
     "tiling_scale_factors_for_vae",
     "upsample_video",
     "upsampler_builders",
+    "vae_encode_audio",
     "verify",
 ]
 
@@ -804,6 +859,135 @@ def verify() -> None:
         "vae_checkpoint_path",
     )
     _require_params(tiling_scale_factors_for_vae, "helpers.tiling_scale_factors_for_vae", "vae_checkpoint_path")
+
+    # (11) §3-102 second stage (V2V + A2V): the material-ingest surface.
+    #
+    # Everything below is about turning an UPLOADED file into a latent chain25
+    # can freeze. None of it is reached by a plain T2V/I2V chain, so a drift here
+    # would first show up as a wrong-looking continuation rather than a crash --
+    # which is why the shapes and the two `if` branches are pinned by name.
+
+    # (11a) The audio encoder's lifecycle block, the audio twin of
+    #       ImageConditioner. `Ltx25Pipeline` constructs it with
+    #       (checkpoint_path, dtype, device, registry=None) and drives it as
+    #       `audio_conditioner(fn)` exactly like the image one.
+    _require_params(
+        AudioConditioner.__init__, "blocks.AudioConditioner.__init__",
+        "checkpoint_path", "dtype", "device", "registry", "alloc_trim_strategy",
+    )
+    _require_params(AudioConditioner.__call__, "blocks.AudioConditioner.__call__", "fn")
+
+    # (11b) The waveform -> latent encoder, and the mel front end it builds when
+    #       the caller passes `audio_processor=None` (chain25 always does, so the
+    #       four constructor arguments below are read off the encoder every time).
+    #       NOT `media_io.encode_audio`, which is a wav writer -- see the import.
+    _require_params(vae_encode_audio, "audio_vae.encode_audio", "audio", "audio_encoder", "audio_processor")
+    _require_params(
+        AudioProcessor.__init__, "audio_vae.AudioProcessor.__init__",
+        "target_sample_rate", "mel_bins", "mel_hop_length", "n_fft",
+    )
+    # The encoder takes the waveform's dtype through to the mel transform, so
+    # chain25 casts to bf16 BEFORE the call rather than after. `Audio.to` is the
+    # only cast the encoder itself performs, and it is device-only.
+    _require_in_source(
+        _source_of(vae_encode_audio, "audio_vae.encode_audio"),
+        "audio_vae.encode_audio",
+        "audio_processor.waveform_to_mel(audio.to(device=device))",
+    )
+
+    # (11c) The decoders chain25 ingests material through. `decode_audio_from_file`
+    #       returning a 3-D (1, channels, samples) waveform is what makes
+    #       "channels is dim 1" -- and therefore the mono-to-stereo duplication --
+    #       correct; `decode_video_by_frame` is the ONLY 1.2.0 video decoder with
+    #       a `frame_cap`, which is how a tail context is read without decoding
+    #       the whole upload.
+    _require_params(
+        decode_audio_from_file, "media_io.decode_audio_from_file",
+        "path", "device", "start_time", "max_duration",
+    )
+    _require_in_source(
+        _source_of(decode_audio_from_file, "media_io.decode_audio_from_file"),
+        "media_io.decode_audio_from_file",
+        "torch.from_numpy(audio).to(device).unsqueeze(0)",
+    )
+    _require_params(
+        decode_video_by_frame, "media_io.decode_video_by_frame",
+        "path", "device", "starting_frame", "frame_cap",
+    )
+    _require_params(resize_and_center_crop, "media_io.resize_and_center_crop", "tensor", "height", "width")
+    _require_params(normalize_images, "media_io.normalize_images", "images", "device", "dtype")
+    # chain25 assembles the source pixels on CPU instead of calling
+    # `video_preprocess` (which cats on the GPU, O(F^2) in allocated volume). The
+    # per-frame maths must stay the official one for that to be a memory
+    # optimisation rather than a different preprocessing.
+    _require_in_source(
+        _source_of(normalize_images, "media_io.normalize_images"),
+        "media_io.normalize_images",
+        "(images / 127.5 - 1.0).to(device=device, dtype=dtype)",
+    )
+    _require_params(get_videostream_fps, "media_io.get_videostream_fps", "path")
+
+    # (11d) The VAE encode chain25 drives directly. `tiled_encode` accepts a CPU
+    #       tensor (that is the whole point of the CPU assembly) and CROPS a
+    #       frame count that is not 8k+1 with only a warning -- chain25 asserts
+    #       the count itself, so the pin here is on the crop still being the
+    #       silent behaviour it guards against.
+    _require_params(VideoEncoder.tiled_encode, "video_vae.VideoEncoder.tiled_encode", "video", "tiling_config")
+    _require_in_source(
+        _source_of(VideoEncoder.tiled_encode, "video_vae.VideoEncoder.tiled_encode"),
+        "video_vae.VideoEncoder.tiled_encode",
+        "frames_to_crop = (frames - 1) % self.video_scale_factors.time",
+        "video = video[:, :, :-frames_to_crop, ...]",
+    )
+    # The decode chunking chain25 shares with the encode. 80/24 is a stride of 56
+    # frames, which is what makes a V2V trim of 25..145 pixel frames land ACROSS
+    # chunk boundaries -- the reason `_drop_leading_frames` exists at all.
+    default_tiles = TileSizeConfig.default()
+    if (default_tiles.frames.tile_size, default_tiles.frames.overlap) != (80, 24):
+        _fail(
+            "TileSizeConfig.default",
+            f"temporal tiling is {default_tiles.frames.tile_size}/{default_tiles.frames.overlap}, "
+            f"expected 80/24 (chain25's leading-frame trim is written against that stride)",
+        )
+
+    # (11e) The FROZEN modality -- A2V's whole-timeline audio freeze. This is a
+    #       different mechanism from the band (`AudioHeadBandMask`), and
+    #       deliberately so: the band leaves `sigma` alone, while `frozen` zeroes
+    #       the scalar too. Both halves are pinned because A2V's correctness is
+    #       "the audio the model attends to is EXACTLY the upload", and a lost
+    #       `frozen` branch would degrade that to "mostly".
+    _require_in_source(
+        _source_of(_build_state, "blocks._build_state"),
+        "blocks._build_state",
+        "if spec.frozen:",
+        "denoise_mask=torch.zeros_like(state.denoise_mask)",
+        "frozen=True",
+    )
+    _require_in_source(
+        _source_of(modality_from_latent_state, "helpers.modality_from_latent_state"),
+        "helpers.modality_from_latent_state",
+        "if state.frozen:",
+        "sigma = torch.zeros_like(sigma)",
+    )
+    if "frozen" not in {f.name for f in dataclasses.fields(LatentState)}:
+        _fail("LatentState", "no longer has a `frozen` field; ModalitySpec(frozen=True) cannot reach the model")
+    # `create_initial_state` asserts the SHAPE of an initial latent and does NOT
+    # convert its dtype -- which is why every window slice chain25 hands in is
+    # cast explicitly rather than left to the stage.
+    _require_in_source(
+        _source_of(AudioLatentTools.create_initial_state, "AudioLatentTools.create_initial_state"),
+        "AudioLatentTools.create_initial_state",
+        "assert initial_latent.shape == self.target_shape.to_torch_shape()",
+    )
+
+    # (11f) The mux's stereo rule. chain25 muxes the ORIGINAL upload for A2V and
+    #       a trimmed vocoder render for V2V; both are duplicated to stereo on
+    #       load, which is only meaningful while this rule stands.
+    _require_in_source(
+        _source_of(validate_audio_waveform, "audio_mux.validate_audio_waveform"),
+        "audio_mux.validate_audio_waveform",
+        "if samples.ndim != 2 or 2 not in samples.shape:",
+    )
 
     # 4. F1 canary -- logged, never asserted (see module docstring).
     try:

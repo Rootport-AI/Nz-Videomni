@@ -105,6 +105,7 @@ from engine25.ltxcore_compat import (
     DISTILLED_SIGMAS,
     STAGE_2_DISTILLED_SIGMAS,
     AllocatorTrimStrategy,
+    AudioConditioner,
     AutoTiling,
     DistilledPipeline,
     ImageConditioningInput,
@@ -698,6 +699,26 @@ class Ltx25Pipeline:
         prompt_encoder.vram = self.vram
         pipeline.prompt_encoder = prompt_encoder
         self.prompt_encoder = prompt_encoder
+
+        # -- addition: the audio ENCODER's lifecycle block (§3-102 C1) ---------
+        # ``DistilledPipeline`` has an image conditioner (video encoder) and an
+        # audio DECODER, but no audio encoder: nothing in a plain generation ever
+        # turns a waveform into a latent. V2V and A2V both do, so the chain needs
+        # the block the official A2V pipeline uses -- same class, same arguments
+        # ``DistilledPipeline`` would have passed (``registry=None`` gives it the
+        # private ``cache_models=True, cache_weights=False`` registry the other
+        # conditioners get).
+        #
+        # Constructed unconditionally and eagerly, with no lazy wrapper: the
+        # constructor only builds a ``Builder``, opens no file and touches no
+        # GPU (``ltxcore_compat.verify`` pins that signature). The ~46MB encoder
+        # itself is built and freed inside ``audio_conditioner(fn)``, so a chain
+        # with neither a source video nor a source audio never loads it -- which
+        # is what a lazy mechanism would have bought, for the price of a
+        # mechanism.
+        self.audio_conditioner = AudioConditioner(
+            files.audio_vae, self.dtype, self.device, registry=None
+        )
 
         self.pipeline = pipeline
         self.vram.record("00_pipeline_build", time.perf_counter() - started)

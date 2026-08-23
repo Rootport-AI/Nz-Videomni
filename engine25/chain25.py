@@ -66,14 +66,39 @@ Two 2.5-only facts the band has to answer for:
   ``i >= 1`` that frame is carried-over content from the previous clip, so the
   mark is wrong; :class:`ClearKeyframesMask` removes it there.
 
-Scope (§3-102 first stage)
---------------------------
-Multi-clip T2V/I2V only: per-clip prompts, clip 0's conditioning images, the
-overlap knobs, ``chunked_upsample`` and ``stage2_window``. V2V, A2V, retake, end
-source, reference video, LoRA, NAG/VSF and the acceleration knobs are NOT here
-and are refused at the API. ``chain_math`` still computes their geometry; this
-file simply never passes those arguments, which is why every layout number it
-reads is the plain-chain one.
+Scope
+-----
+Multi-clip T2V/I2V, plus V2V and A2V (§3-102 second stage): per-clip prompts,
+clip 0's conditioning images, the overlap knobs, ``chunked_upsample``,
+``stage2_window``, ``source`` and ``audio_source``. Retake, end source,
+reference video, LoRA, NAG/VSF and the acceleration knobs are NOT here and are
+refused at the API. ``chain_math`` still computes their geometry; this file
+simply never passes those arguments.
+
+The two ways material gets frozen
+---------------------------------
+V2V and A2V both start from an uploaded file and both end up freezing latents,
+but they use DIFFERENT mechanisms, and the difference is not stylistic:
+
+* **V2V** freezes a HEAD BAND -- the same one an inter-clip carry uses, via
+  ``VideoConditionByMask`` / :class:`AudioHeadBandMask`. Stage 1 holds it at
+  ``1 - overlap_strength`` so the continuation can still bend toward it; stage 2
+  pins it outright, from a fresh FULL-resolution encode rather than from the
+  upsampled stage-1 latent. Only the head is affected; the rest of the timeline
+  is generated normally, and the frozen context is then trimmed off the decode
+  so the delivered mp4 is the new part alone.
+* **A2V** freezes the WHOLE AUDIO MODALITY, via the official
+  ``ModalitySpec(frozen=True, noise_scale=0.0, initial_latent=...)``. That is a
+  stronger statement than a full-length band would be: ``frozen`` also zeroes
+  the modality's scalar ``sigma``, so the prompt AdaLN and the cross-modality
+  gates see finished audio rather than audio at timestep zero. The video half
+  keeps its ordinary ``overlap_strength`` seams -- welding those shut is exactly
+  the long-A2V failure 2.3 recorded. The vocoder never runs: the ORIGINAL
+  waveform is muxed, so the delivered audio track is the upload by construction.
+
+With ``source`` and ``audio_source`` both ``None`` -- every plain T2V/I2V chain
+-- none of the branches either feature opens is taken, and the output is
+byte-identical to the chain that shipped before them (gate G1(a)).
 """
 
 from __future__ import annotations
@@ -93,6 +118,7 @@ import torch
 from chain_math import (
     VIDEO_TIME_FACTOR,
     ChainLayout,
+    audio_segment_windows,
     compute_chain_layout,
     plan_upsample_chunks,
     resolve_stage2_window,
@@ -102,6 +128,7 @@ from engine25.ltxcore_compat import (
     DISTILLED_SIGMAS,
     STAGE_2_DISTILLED_SIGMAS,
     AllocatorTrimStrategy,
+    Audio,
     AudioLatentShape,
     ConditioningItem,
     EulerAncestralDiffusionStep,
@@ -115,16 +142,22 @@ from engine25.ltxcore_compat import (
     VideoLatentShape,
     VideoPixelShape,
     cleanup_memory,
+    decode_audio_from_file,
+    decode_video_by_frame,
     encode_video,
     ensure_tiling_config,
     euler_ancestral_denoising_loop,
     get_video_chunks_number,
+    get_videostream_fps,
     gpu_model,
     image_conditionings_by_adding_guiding_latent,
     image_conditionings_by_replacing_latent,
+    normalize_images,
+    resize_and_center_crop,
     tiling_scale_factors_for_vae,
     upsample_video,
     upsampler_builders,
+    vae_encode_audio,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,6 +185,35 @@ ANCESTRAL_NOISE_SEED_OFFSET = 10000
 #: tile that starts on carried-over content. See the module docstring; the A/B
 #: behind the default is gate G1(c).
 CLEAR_KEYFRAMES_ON_CARRY = True
+
+#: The SAME question for a video-to-video head, whose answer is the OPPOSITE --
+#: which is why it is a separate constant rather than a reuse of the one above.
+#:
+#: An inter-clip carry starts on latent 0 of the previous clip's TAIL: ordinary
+#: content covering eight pixel frames, so the "this is a single pixel frame"
+#: marker is wrong and is cleared. A V2V head starts on latent 0 of a FRESH
+#: encode of the uploaded tail file, and the video VAE is causal -- its latent 0
+#: covers exactly one pixel frame. The marker is therefore CORRECT there, and
+#: clearing it would throw away a true fact about the tensor.
+#:
+#: ``False`` is the reasoned default and gate G1(e) is the measurement behind it.
+CLEAR_KEYFRAMES_ON_V2V_HEAD = False
+
+#: Tolerance on the source video's frame rate, in fps. The app re-encodes the
+#: tail to the requested rate before the engine ever sees it
+#: (``cut_tail_mp4``), so a mismatch here is a broken contract rather than a
+#: rounding artefact -- but ``average_rate`` is a ``Fraction`` and 23.976 is
+#: ``24000/1001``, so an exact comparison would reject a correct file. Anything
+#: larger than this means the frozen head and the generated continuation
+#: disagree about how long a frame is, which is a silent time-warp at the
+#: junction; hence a hard failure, not a warning.
+FPS_TOLERANCE = 1e-3
+
+#: Linear fade-in on the delivered V2V audio head, in seconds. 2.3's value,
+#: measured there: the vocoder render and the AAC noise floor meet at the
+#: client-side join and the step between them is audible as a click. The video
+#: needs no equivalent.
+V2V_AUDIO_FADE_IN_SECONDS = 0.030
 
 #: Stage-2 seed offset, mirroring 2.3: stage-1 segment ``i`` uses ``seed + i``,
 #: stage-2 tile ``i`` uses ``seed + 100 + i``, the decode uses ``seed``.
@@ -193,13 +255,60 @@ class ChainClipSpec:
 
 
 @dataclass
+class SourceSpec:
+    """Video-to-video continuation source (the uploaded video's tail).
+
+    Same two fields, same meanings, as 2.3's ``SourceSpec`` -- the app layer that
+    fills them in is engine-independent and already shipped.
+
+    * ``path``: an mp4 that is ALREADY the tail, cut at the requested frame rate.
+      The app guarantees that (``cut_tail_mp4`` runs before the engine is
+      called); this engine does not resample, and checks the rate rather than
+      trusting it. Its first ``context_frames`` pixel frames are VAE-encoded and
+      frozen as the head of clip 0's timeline, and the rest of clip 0 is the
+      generated continuation.
+    * ``context_frames``: the ``8n + 1`` pixel-frame context span, i.e.
+      ``source_context_px`` in :func:`chain_math.compute_chain_layout`.
+    """
+
+    path: str
+    context_frames: int
+
+
+@dataclass
+class AudioSourceSpec:
+    """Audio-to-video source (an uploaded audio file, or an A/V file's track).
+
+    ``path``: any media file with a decodable audio stream. Its waveform is
+    VAE-encoded once and the resulting latent is HARD-frozen over the WHOLE
+    timeline while only the video is denoised, so the model's cross-modal
+    attention drives the picture toward the given audio. The ORIGINAL waveform
+    -- never a vocoder render -- is what gets muxed into the delivered mp4,
+    truncated to the video's duration, so the output audio track IS the upload
+    by construction.
+
+    Mutually exclusive with :class:`SourceSpec`: one chain is either a
+    video-to-video continuation or an audio-to-video generation. A separate type
+    rather than a flag on ``SourceSpec`` because the two carry unrelated
+    payloads -- this one has no context span to speak of.
+    """
+
+    path: str
+
+
+@dataclass
 class ChainSpec:
     """One chain job: exactly the body keys of the ``generate_chain`` payload.
 
-    Deliberately nothing else. The 422'd features (V2V, A2V, retake, end source,
-    reference video, LoRA, NAG/VSF, the acceleration knobs) have no field here
-    at all, so "this engine does not do that" is visible in the type rather than
-    in a runtime branch -- and adding one later is a deliberate act.
+    Deliberately nothing else. The features this engine still refuses (retake,
+    end source, reference video, LoRA, NAG/VSF, the acceleration knobs) have no
+    field here at all, so "this engine does not do that" is visible in the type
+    rather than in a runtime branch -- and adding one later is a deliberate act.
+
+    ``source`` and ``audio_source`` are BOTH ``None`` on a plain multi-clip
+    T2V/I2V chain, and that case is byte-identical to the chain that shipped
+    before they existed (gate G1(a)): every branch they open is guarded on them
+    being present, and none of them touches the RNG.
 
     ``num_steps`` is carried and reported but never acted on, exactly as in 2.3:
     the distilled schedule is fixed at 8 + 3 sigmas.
@@ -216,6 +325,8 @@ class ChainSpec:
     num_steps: int = 0
     chunked_upsample: bool = False
     stage2_window: str | None = None
+    source: SourceSpec | None = None
+    audio_source: AudioSourceSpec | None = None
 
 
 @dataclass
@@ -496,6 +607,261 @@ def _chunked_upsample_cpu(
 
 
 # ---------------------------------------------------------------------------
+# Material ingest (V2V / A2V): uploaded file -> frozen latent
+# ---------------------------------------------------------------------------
+#
+# The four functions below are the whole of "read what the user uploaded". They
+# live here rather than in a module of their own because each is a handful of
+# lines whose ONLY caller is :func:`run_chain`, and because what they must be
+# checked against -- the shapes the stage builds, the layout's context counts --
+# is in this file.
+
+
+def _load_video_frames_cpu(
+    path: str,
+    *,
+    frame_cap: int,
+    height: int,
+    width: int,
+    device: torch.device,
+    expected_fps: float,
+) -> torch.Tensor:
+    """The leading ``frame_cap`` frames of ``path`` as ONE CPU ``(1,C,F,H,W)``.
+
+    The low-VRAM twin of the official ``media_io.video_preprocess``, and 2.3's
+    ``load_video_conditioning_cpu`` re-expressed on the 1.2.0 API. Same three
+    per-frame operations in the same order on the same device --
+    ``resize_and_center_crop`` on float32 -> ``normalize_images`` (``x/127.5-1``)
+    to ``DTYPE`` -- so the per-frame VALUES are the official ones; only the
+    assembly differs. ``video_preprocess`` grows its result with a ``torch.cat``
+    per frame ON THE GPU, allocating a fresh full-size buffer while the previous
+    one is still live, so the total allocated volume goes with the SQUARE of the
+    frame count; this moves each finished frame to CPU immediately and cats once,
+    holding at most one frame on the device. Gate G1(d) runs one frame generator
+    through both and compares with ``torch.equal``.
+
+    ``decode_video_by_frame`` is the decoder rather than ``decode_video_from_file``
+    for one reason: it is the only one in 1.2.0 that takes ``frame_cap``. A tail
+    context is 25..145 frames of a file that may be minutes long.
+
+    The frame-rate check is the SECOND line of defence. The app re-encodes the
+    tail to the requested rate before calling the engine, so a mismatch means
+    that contract is broken -- and the failure it would otherwise produce is a
+    silent one: a frozen head whose frames are a different duration from the
+    continuation's, i.e. a speed change exactly at the junction. Loud is the
+    only safe setting.
+    """
+    actual_fps = float(get_videostream_fps(path))
+    if abs(actual_fps - float(expected_fps)) > FPS_TOLERANCE:
+        raise ValueError(
+            f"source video frame rate mismatch: {path} is {actual_fps:.6f} fps but the chain "
+            f"runs at {float(expected_fps):.6f} fps (tolerance {FPS_TOLERANCE}). The tail must be "
+            f"re-encoded to the chain's rate before it reaches the engine."
+        )
+
+    frames: list[torch.Tensor] = []
+    for raw in decode_video_by_frame(path=path, device=device, frame_cap=int(frame_cap)):
+        frame = resize_and_center_crop(raw.to(torch.float32), height, width)
+        frames.append(normalize_images(frame, device, DTYPE).to("cpu"))
+        del raw, frame
+
+    if len(frames) != int(frame_cap):
+        raise ValueError(
+            f"source video too short: {path} yielded {len(frames)} frames but the requested "
+            f"context needs {int(frame_cap)}."
+        )
+    out = torch.cat(frames, dim=2)
+    del frames
+    return out
+
+
+def _encode_source_heads(
+    video_encoder: Any,
+    *,
+    source: SourceSpec,
+    layout: ChainLayout,
+    width: int,
+    height: int,
+    frame_rate: float,
+    tiling_config: Any,
+    scale_factors: Any,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """VAE-encode the source tail TWICE: ``(half_res_head, full_res_head)``.
+
+    Two encodes, not one plus a resize, because the two are used at different
+    stages and stage 2 must not inherit stage 1's approximation:
+
+    * the HALF-res head is stage 1's partially-frozen carry, and has to match the
+      half-resolution latent stage 1 works in;
+    * the FULL-res head is stage 2's HARD freeze, and comes from a fresh
+      full-resolution encode of the original file rather than from the upsampled
+      stage-1 latent. That is 2.3's "variant B", and the reason for it is
+      measured: variant A (freezing the upsampled approximation) drifts in colour
+      and tone across the junction.
+
+    Both go through ``tiled_encode`` -- mandatory, not tidiness: 2.3 measured the
+    untiled full-res head at ~+1GB, which OOMs at 720p. The tiling config is the
+    one already resolved for the DECODE, reused exactly as 2.3 reuses it, so the
+    encode and the decode chunk the same way.
+
+    ``tiled_encode`` CROPS a frame count that is not ``8k + 1`` with a warning and
+    carries on, which would silently shorten the context; the assertion below
+    fires first, and ``ltxcore_compat.verify`` pins that crop as the behaviour
+    being guarded against.
+    """
+    ctx_px = int(source.context_frames)
+    n_ctx_v = int(layout.n_ctx_v)
+    if (ctx_px - 1) % VIDEO_TIME_FACTOR != 0:
+        raise ValueError(
+            f"context_frames={ctx_px} is not 8n+1; the causal video VAE would silently "
+            f"crop it to {ctx_px - (ctx_px - 1) % VIDEO_TIME_FACTOR}."
+        )
+
+    heads: list[torch.Tensor] = []
+    for label, h, w in (("half", height // 2, width // 2), ("full", height, width)):
+        pixels = _load_video_frames_cpu(
+            source.path, frame_cap=ctx_px, height=h, width=w,
+            device=device, expected_fps=frame_rate,
+        )
+        encoded = video_encoder.tiled_encode(pixels, tiling_config)
+        del pixels
+        if encoded.shape[2] < n_ctx_v:
+            raise ChainError(
+                f"the {label}-res source encode produced {encoded.shape[2]} latent frames but the "
+                f"layout needs n_ctx_v={n_ctx_v}"
+            )
+        head = encoded[:, :, :n_ctx_v].detach().clone()
+        del encoded
+        cleanup_memory()
+
+        expected = VideoLatentShape.from_pixel_shape(
+            VideoPixelShape(1, ctx_px, h, w, frame_rate), scale_factors=scale_factors
+        ).to_torch_shape()
+        want = (expected[0], expected[1], n_ctx_v, expected[3], expected[4])
+        assert tuple(head.shape) == want, (label, tuple(head.shape), want)
+        heads.append(head)
+
+    src_half, src_full = heads
+    return src_half, src_full
+
+
+def _load_audio_stereo(path: str, device: torch.device) -> tuple[torch.Tensor, int] | None:
+    """``(waveform (1,2,N), sampling_rate)`` from any media file, or ``None``.
+
+    STEREO always. The audio VAE's ``conv_in`` has a two-channel weight and the
+    mp4 mux refuses anything that is not ``(2, N)``, so a mono upload has to be
+    duplicated -- and this is the one place that happens, for BOTH V2V and A2V.
+
+    That unification is a deliberate 2.5 change: 2.3 duplicated on its A2V path
+    and not on its V2V one, so a mono source video reached the encoder with one
+    channel. Nothing downstream distinguishes the two cases, so having two
+    behaviours was an accident of where the code grew, not a decision.
+    """
+    audio = decode_audio_from_file(path, device)
+    if audio is None:
+        return None
+    waveform = audio.waveform
+    if waveform.dim() == 2:                     # defensive; the loader returns 3-D
+        waveform = waveform.unsqueeze(0)
+    if waveform.shape[1] == 1:
+        waveform = waveform.repeat(1, 2, 1)
+    return waveform, int(audio.sampling_rate)
+
+
+def _encode_audio_latent(audio_encoder: Any, waveform: torch.Tensor, sampling_rate: int) -> torch.Tensor:
+    """Waveform ``(1,C,N)`` -> audio latent ``(1,8,T,16)``.
+
+    The ``.to(DTYPE)`` is on the WAVEFORM and happens here, before the call, not
+    inside the encoder: ``encode_audio`` computes its mel spectrogram in the
+    waveform's own dtype and only casts on the way into the network, so handing
+    it float32 would run the whole STFT in float32 and produce a different latent
+    from the one every other path in this engine produces. Resampling to the
+    encoder's 16kHz is the encoder's own business and is left to it.
+
+    Cloned because the caller outlives the encoder: ``AudioConditioner.__call__``
+    frees the model as soon as ``fn`` returns, and a view into its output buffer
+    would be a view into freed storage.
+    """
+    return vae_encode_audio(
+        Audio(waveform=waveform.to(DTYPE), sampling_rate=int(sampling_rate)),
+        audio_encoder,
+        None,
+    ).detach().clone()
+
+
+def _write_audio_handle(out_path: Path, waveform: torch.Tensor, sampling_rate: int) -> str | None:
+    """Write ``<stem>_audio_handle.wav`` beside the mp4. Returns its name, or ``None``.
+
+    FLOAT32, via ``scipy.io.wavfile``, and both halves of that matter. The handle
+    exists so a client join can crossfade over the context region, which means
+    mixing it with the ORIGINAL recording -- and 16-bit PCM (what the official
+    ``media_io.encode_audio`` writes, and what stdlib ``wave`` can write) would
+    quantise the material before that mix. 2.3 made the same choice for the same
+    reason, and Join reads the file 2.3 wrote.
+
+    Best-effort by design: the deliverable is the mp4, which is byte-identical
+    whether or not this succeeds. A missing sidecar costs a client the true
+    crossfade, not the clip -- so a failure here is logged and the job continues,
+    and ``audio_handle_filename`` is ``None`` in the metadata, which is exactly
+    what Join checks.
+    """
+    try:
+        import numpy as np                                    # noqa: PLC0415
+        from scipy.io import wavfile                          # noqa: PLC0415
+
+        handle_path = out_path.with_name(out_path.stem + "_audio_handle.wav")
+        samples = waveform.detach().to(torch.float32).cpu().numpy()    # (channels, samples)
+        wavfile.write(str(handle_path), int(sampling_rate), np.ascontiguousarray(samples.T))
+        return handle_path.name
+    except Exception as exc:  # noqa: BLE001 -- sidecar must never fail the job
+        logger.warning("chain: audio handle sidecar not written: %s", exc)
+        return None
+
+
+def _drop_leading_frames(
+    chunks: Iterator[torch.Tensor], trim_px: int, counters: dict[str, int]
+) -> Iterator[torch.Tensor]:
+    """Drop the first ``trim_px`` decoded frames, STREAMING.
+
+    V2V delivers the new part only, so the frozen context has to come off the
+    front of the decode. 2.3 did that by materialising the whole timeline and
+    slicing it; here the decode stays lazy and the trim is spliced into the
+    chunk stream instead -- the same WDDM discipline the rest of this file keeps,
+    since a full-length ``(F,H,W,3)`` tensor at production resolution is
+    gigabytes.
+
+    The splice has to handle a trim that lands INSIDE a chunk, and it always
+    will: decode chunks advance 56 frames at a time (tile 80, overlap 24) while
+    ``trim_px`` is 25..145, so the boundary essentially never coincides. Chunks
+    the trim consumes entirely are skipped rather than yielded empty -- the mp4
+    encoder reads the frame size off the FIRST chunk it receives, so a zero-frame
+    first chunk would take the width and height from nothing.
+
+    ``counters`` is filled in as the stream is consumed, so ``decoded_px`` and
+    ``new_px`` in the metadata are measurements of what was actually written
+    rather than a restatement of the layout's prediction. It is read after
+    ``encode_video`` returns, by which time the iterator is exhausted.
+    """
+    remaining = int(trim_px)
+    for chunk in chunks:
+        length = int(chunk.shape[0])
+        counters["decoded_px"] += length
+        if remaining >= length:
+            remaining -= length
+            continue
+        out = chunk[remaining:] if remaining > 0 else chunk
+        remaining = 0
+        counters["new_px"] += int(out.shape[0])
+        yield out
+    if remaining > 0:
+        raise ChainError(
+            f"the decode ended {remaining} frames before the {int(trim_px)}-frame V2V context "
+            f"was consumed (decoded {counters['decoded_px']} frames in total)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Small helpers
 # ---------------------------------------------------------------------------
 
@@ -681,17 +1047,33 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     frame_rate = float(spec.frame_rate)
     base_seed = int(spec.seed)
 
+    source = spec.source
+    audio_source = spec.audio_source
+    # Enforced at the API too (422), and by ``chain_math`` implicitly -- but the
+    # two write the SAME tensors with different intents (V2V freezes a head band,
+    # A2V freezes the whole audio modality), so a request that reached here with
+    # both would silently get one of them. An assertion is the cheapest way for
+    # that to be impossible rather than merely unlikely.
+    assert not (source is not None and audio_source is not None), (
+        "V2V (source) and A2V (audio_source) are mutually exclusive; one chain is a "
+        "video continuation or an audio-driven generation, never both."
+    )
+
     # ── Geometry: the SHARED pure module, called the way the app calls it ─────
-    # Same positional pair, same ``kv``, same resolved (v_tile, v_adv). The
-    # feature keywords the app also passes (source_context_px / retake_glue_px /
-    # end_context_px) are all None on every request this engine accepts, so
-    # omitting them is the same call -- gate G1(e) pins that against the app's
-    # own call sites rather than leaving it as a comment.
+    # Same positional pair, same ``kv``, same resolved (v_tile, v_adv), and now
+    # the same ``source_context_px`` -- which is None on every request without a
+    # source video, i.e. the same call the plain chain always made. The two
+    # remaining feature keywords (retake_glue_px / end_context_px) are still
+    # refused at the API, so omitting them is still the same call; gate G1(e)
+    # pins that against the app's own call sites rather than leaving it as a
+    # comment.
     v_tile, v_adv = resolve_stage2_window(spec.stage2_window)
+    source_context_px = None if source is None else int(source.context_frames)
     layout: ChainLayout = compute_chain_layout(
         [c.num_frames for c in clips], frame_rate,
         kv=kv,
         v_tile=v_tile, v_adv=v_adv,
+        source_context_px=source_context_px,
     )
     seg_frames = layout.seg_frames
     n_seg = len(seg_frames)
@@ -707,12 +1089,37 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     out_path = Path(spec.output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # ── Decode tiling, resolved ONCE for the whole timeline ───────────────────
+    # Moved ahead of everything else because V2V's source ENCODE reuses it (2.3
+    # does the same): the tail must be chunked the way the timeline is, and
+    # resolving it twice would be two chances to disagree. Sizing it from
+    # ``total_px`` and the FULL resolution is what makes it the decode's own
+    # chunking rather than a stage-2 tile's.
+    #
+    # Safe to hoist because it is deterministic for this checkpoint: the shipped
+    # 2.5 video VAE is a CONV VAE, so ``AUTO_TILING`` resolves through the
+    # aspect-only branch (768/64 spatial, 80/24 temporal) and reads no free-VRAM
+    # figure. A future DIFFUSION VAE would take the memory-aware branch, and
+    # THEN this position would matter -- it is called here with no models built,
+    # where the free-memory reading is at its most optimistic.
+    tiling_config = ensure_tiling_config(
+        AUTO_TILING,
+        scale_factors=tiling_scale_factors_for_vae(dp.video_decoder.checkpoint_path),
+        video_shape=VideoPixelShape(1, total_px, height, width, frame_rate),
+        vae_checkpoint_path=dp.video_decoder.checkpoint_path,
+        diffvae_optimization=dp.video_decoder.diffvae_optimization,
+        device=device,
+    )
+
     logger.info(
         "chain: %d clips %s -> %d px frames, %dx%d @ %.3f fps, kv=%d strength=%.3f, "
-        "%d stage-2 tiles (window %s = %d/%d), sampler=%s eta=%s clear_keyframes=%s, chunked_upsample=%s",
+        "%d stage-2 tiles (window %s = %d/%d), sampler=%s eta=%s clear_keyframes=%s, "
+        "chunked_upsample=%s, source=%s, audio_source=%s",
         n, [c.num_frames for c in clips], total_px, width, height, frame_rate, kv,
         spec.overlap_strength, n_tiles, spec.stage2_window or "standard", v_tile, v_adv,
         sampler, eta if sampler == "ancestral" else "-", clear_kf, spec.chunked_upsample,
+        "-" if source is None else f"{source.path} ctx={source.context_frames}",
+        "-" if audio_source is None else audio_source.path,
     )
 
     stage.begin_job()
@@ -738,36 +1145,142 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         }
         seg_ctx = [ctx_by_prompt[c.prompt] for c in clips]
 
+        # ── Material ingest: the uploaded audio, if any ───────────────────────
+        # BEFORE the video encoder and the transformer, because it is the
+        # cheapest model in the job (~46MB) and doing it here means it is never
+        # resident alongside either of them. ``AudioConditioner.__call__`` builds
+        # the encoder, runs the closure and frees it -- the audio twin of
+        # ``ImageConditioner`` and the same lifecycle the official A2V pipeline
+        # uses.
+        #
+        # V2V and A2V both land here, and take DIFFERENT amounts of the result:
+        # V2V keeps a head band (``n_ctx_a`` frames, short) and A2V keeps the
+        # whole timeline. They also differ on what a shortfall means, which is
+        # the interesting part -- see each branch.
+        a2v_a: torch.Tensor | None = None          # (1,8,a_total,16) frozen audio
+        a2v_orig_wf: torch.Tensor | None = None    # (2,N) CPU float32 -- the mux
+        a2v_sr = 0
+        a2v_avail = 0
+        a_seg_windows: list[tuple[int, int]] = []
+        src_a: torch.Tensor | None = None          # (1,8,freeze_ka,16) V2V head
+        freeze_ka = 0
+        source_had_audio = False
+
+        if audio_source is not None:
+            loaded = _load_audio_stereo(audio_source.path, device)
+            if loaded is None:
+                raise ValueError(
+                    f"audio_source has no decodable audio stream: {audio_source.path}"
+                )
+            wf, a2v_sr = loaded
+            a2v_orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+
+            vram.reset()
+            audio_started = time.perf_counter()
+            encoded_a = pipeline.audio_conditioner(
+                lambda encoder: _encode_audio_latent(encoder, wf, a2v_sr)
+            )
+            vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
+
+            a_total = int(layout.a_total)
+            a2v_avail = int(encoded_a.shape[2])
+            # A HARD failure, unlike the V2V underrun below, and the asymmetry is
+            # the point: here the audio is what the whole video is being
+            # generated FROM, so a timeline longer than the upload would have
+            # stretches with nothing driving them. The video length is
+            # authoritative and the audio is truncated to it, never padded --
+            # so "too short" has no sensible answer and is refused.
+            if a2v_avail < a_total:
+                raise ValueError(
+                    f"audio_source too short: encoded {a2v_avail} audio-latent frames < the "
+                    f"a_total={a_total} this {total_px}-pixel-frame timeline needs. The video "
+                    f"length is authoritative; audio is truncated, never padded."
+                )
+            a2v_a = encoded_a[:, :, :a_total].detach().clone()
+            del encoded_a, wf
+            cleanup_memory()
+            a_seg_windows = audio_segment_windows(layout)
+
+        elif source is not None:
+            loaded = _load_audio_stereo(source.path, device)
+            source_had_audio = loaded is not None
+            if loaded is not None:
+                wf, src_sr = loaded
+                vram.reset()
+                audio_started = time.perf_counter()
+                encoded_a = pipeline.audio_conditioner(
+                    lambda encoder: _encode_audio_latent(encoder, wf, src_sr)
+                )
+                vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
+
+                n_ctx_a = int(layout.n_ctx_a)
+                avail = int(encoded_a.shape[2])
+                freeze_ka = min(n_ctx_a, avail)
+                # A WARNING, not an error -- the opposite of A2V above. Here the
+                # audio is only continuity material for the junction: freezing
+                # fewer frames than asked for makes the join less smooth, it does
+                # not make the job meaningless. 2.3 chose the same, and
+                # ``audio_head_frozen`` in the metadata reports what happened.
+                if avail < n_ctx_a:
+                    logger.warning(
+                        "chain: source audio underrun -- only %d encoded audio-latent frames "
+                        "available but the context needs n_ctx_a=%d; freezing %d.",
+                        avail, n_ctx_a, freeze_ka,
+                    )
+                src_a = encoded_a[:, :, :freeze_ka].detach().clone() if freeze_ka > 0 else None
+                del encoded_a, wf
+                cleanup_memory()
+
         # ── Image conditioning: ONE encoder build for every resolution ────────
         # ``ImageConditioner.__call__(fn)`` builds the video encoder, calls
-        # ``fn(encoder)`` once and frees it, so the half-resolution stage-1 items
-        # and the full-resolution per-tile items are all made inside a single
-        # call. ``resolve_crf`` first, always: the checkpoint's own CRF is what
+        # ``fn(encoder)`` once and frees it, so the half-resolution stage-1 items,
+        # the full-resolution per-tile items AND the two V2V source heads are all
+        # made inside a single call -- one build of the ~1GB encoder for the whole
+        # job. ``resolve_crf`` first, always: the checkpoint's own CRF is what
         # the images must be re-compressed at, and ``crf=None`` reaches
         # ``load_image_and_preprocess`` as a hard failure.
+        #
+        # A V2V request never carries clip-0 images (the API refuses the pair) and
+        # an image request never carries a source, so in practice each call does
+        # one of the two jobs; the closure handles both because the block that
+        # OWNS the encoder should not have to know which.
         clip0_images: list[ImageConditioningInput] = list(clips[0].images)
         stage1_conds: list[ConditioningItem] = []
         tile_conds: list[list[ConditioningItem]] = [[] for _ in range(n_tiles)]
-        if clip0_images:
-            clip0_images = dp.image_conditioner.resolve_crf(clip0_images)
+        src_half: torch.Tensor | None = None
+        src_full: torch.Tensor | None = None
+        if clip0_images or source is not None:
+            if clip0_images:
+                clip0_images = dp.image_conditioner.resolve_crf(clip0_images)
 
-            def _build_all(encoder: Any) -> tuple[list, list[list]]:
-                half = _video_conditionings(
-                    clip0_images, height=height // 2, width=width // 2,
-                    video_encoder=encoder, device=device,
-                )
-                full = [
-                    _video_conditionings(
-                        _tile_images(clip0_images, vs, vlen), height=height, width=width,
+            def _build_all(encoder: Any) -> tuple[list, list[list], Any, Any]:
+                half: list[ConditioningItem] = []
+                full: list[list[ConditioningItem]] = [[] for _ in v_tiles]
+                if clip0_images:
+                    half = _video_conditionings(
+                        clip0_images, height=height // 2, width=width // 2,
                         video_encoder=encoder, device=device,
                     )
-                    for vs, vlen in v_tiles
-                ]
-                return half, full
+                    full = [
+                        _video_conditionings(
+                            _tile_images(clip0_images, vs, vlen), height=height, width=width,
+                            video_encoder=encoder, device=device,
+                        )
+                        for vs, vlen in v_tiles
+                    ]
+                head_half = head_full = None
+                if source is not None:
+                    head_half, head_full = _encode_source_heads(
+                        encoder,
+                        source=source, layout=layout, width=width, height=height,
+                        frame_rate=frame_rate, tiling_config=tiling_config,
+                        scale_factors=stage.video_scale_factors, device=device,
+                    )
+                return half, full, head_half, head_full
 
             vram.reset()
             conditioning_started = time.perf_counter()
-            stage1_conds, tile_conds = dp.image_conditioner(_build_all)
+            stage1_conds, tile_conds, src_half, src_full = dp.image_conditioner(_build_all)
             vram.record("11_image_conditioning", time.perf_counter() - conditioning_started)
 
         # ── STAGE 1: per-clip at half resolution, with the carry band ─────────
@@ -783,7 +1296,23 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
             init_v = init_a = None
             fkv = fka = 0
-            if i > 0:
+            seg_clear_kf = clear_kf
+            if i == 0 and source is not None:
+                # ── video-to-video: the source tail IS clip 0's head ──────────
+                # Exactly the inter-clip carry mechanism below, fed from a file
+                # instead of from a previous segment: same partial freeze
+                # (1 - overlap_strength), same band item, same order. The only
+                # difference is the keyframe marker, and it differs because the
+                # tensor genuinely differs -- see CLEAR_KEYFRAMES_ON_V2V_HEAD.
+                init_v = torch.zeros(tuple(v_shape.to_torch_shape()), dtype=DTYPE, device=device)
+                init_v[:, :, :layout.n_ctx_v] = src_half.to(DTYPE)
+                fkv = int(layout.n_ctx_v)
+                if freeze_ka > 0:
+                    init_a = torch.zeros(tuple(a_shape.to_torch_shape()), dtype=DTYPE, device=device)
+                    init_a[:, :, :freeze_ka] = src_a.to(DTYPE)
+                    fka = freeze_ka
+                seg_clear_kf = CLEAR_KEYFRAMES_ON_V2V_HEAD
+            elif i > 0:
                 # The carry: the previous clip's tail, in tensors sized from THIS
                 # clip's shapes (clip lengths may differ, so ``zeros_like(prev)``
                 # would be the wrong shape).
@@ -799,7 +1328,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
                 strength=float(spec.overlap_strength),
-                clear_keyframes=clear_kf,
+                clear_keyframes=seg_clear_kf,
             )
             # Clip 0's images are the TIMELINE's opening keyframes, so they go on
             # clip 0 only -- and AFTER the band items, which must see an
@@ -808,6 +1337,35 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
             noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
             video_context, audio_context = seg_ctx[i]
+
+            # ── audio-to-video: the WHOLE audio modality is frozen ────────────
+            # A different mechanism from the band above, deliberately. The band
+            # is a partial freeze over a few leading frames and leaves the
+            # modality's scalar ``sigma`` alone; ``frozen=True`` zeroes the
+            # denoise mask AND that scalar, so the prompt AdaLN and the
+            # cross-modality gates all see "this audio is finished". That is what
+            # the official A2V pipeline does, and A2V's contract -- the picture is
+            # driven by EXACTLY the uploaded audio -- is a statement about the
+            # whole timeline, not about a head.
+            #
+            # The VIDEO side keeps its ordinary ``overlap_strength`` band: the
+            # clip seams still have to crossfade. Welding them shut here is
+            # precisely the long-A2V bug 2.3 recorded, so ``band_a`` is discarded
+            # while ``band_v`` is not.
+            if audio_source is not None:
+                ws, wl = a_seg_windows[i]
+                assert wl == a_shape.frames, (i, wl, a_shape.frames)
+                audio_spec = ModalitySpec(
+                    context=audio_context,
+                    frozen=True,
+                    noise_scale=0.0,
+                    initial_latent=a2v_a[:, :, ws:ws + wl].contiguous().clone().to(DTYPE),
+                )
+            else:
+                audio_spec = ModalitySpec(
+                    context=audio_context, conditionings=band_a, initial_latent=init_a
+                )
+
             stage.announce(
                 STAGE_1_DENOISE,
                 vram_phase=f"21_stage1_denoise_c{i}",
@@ -825,9 +1383,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 video=ModalitySpec(
                     context=video_context, conditionings=conds_v, initial_latent=init_v
                 ),
-                audio=ModalitySpec(
-                    context=audio_context, conditionings=band_a, initial_latent=init_a
-                ),
+                audio=audio_spec,
                 **_stage1_sampler_kwargs(sampler, eta, seeds[i], pipeline.dtype),
             )
             seg_v.append(vstate.latent.detach().clone())
@@ -895,7 +1451,27 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
 
             fkv = fka = 0
-            if i > 0:
+            tile_clear_kf = clear_kf
+            if i == 0 and source is not None:
+                # ── video-to-video, "variant B": HARD-freeze the source head ──
+                # Same hard freeze the i>=1 tile joins below use, but fed from a
+                # FULL-RESOLUTION re-encode of the original file rather than from
+                # the upsampled stage-1 latent. Freezing the upsampled
+                # approximation ("variant A") was measured in 2.3 and produced a
+                # visible colour/tone drift across the junction; this is the fix,
+                # and it is why ``_encode_source_heads`` encodes twice.
+                #
+                # Note the strength: stage 1 held this head at
+                # ``1 - overlap_strength`` so the continuation could still bend
+                # toward it, while stage 2 pins it outright. Stage 2 re-noises at
+                # sigma[0] ~= 0.909, so anything less would simply be erased.
+                init_v[:, :, :layout.n_ctx_v] = src_full.to(DTYPE)
+                fkv = int(layout.n_ctx_v)
+                if freeze_ka > 0:
+                    init_a[:, :, :freeze_ka] = src_a.to(DTYPE)
+                    fka = freeze_ka
+                tile_clear_kf = CLEAR_KEYFRAMES_ON_V2V_HEAD
+            elif i > 0:
                 # HARD freeze (strength 1.0 -> denoise mask 0.0) of the leading
                 # overlap, overwritten from the previous tile's OUTPUT rather
                 # than from the upsampled stage-1 approximation. Re-freezing is
@@ -909,9 +1485,26 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
                 strength=1.0,
-                clear_keyframes=clear_kf,
+                clear_keyframes=tile_clear_kf,
             )
             conds_v = band_v + tile_conds[i]
+
+            # A2V again: this tile's window of the uploaded audio, frozen whole.
+            # It REPLACES ``init_a`` rather than being written into it -- there is
+            # no carry to preserve, because every tile's audio comes from the same
+            # source latent and the overlaps therefore already agree.
+            if audio_source is not None:
+                audio_spec2 = ModalitySpec(
+                    context=stage2_actx,
+                    frozen=True,
+                    noise_scale=0.0,
+                    initial_latent=a2v_a[:, :, as_:as_ + alen].contiguous().clone().to(DTYPE),
+                )
+            else:
+                audio_spec2 = ModalitySpec(
+                    context=stage2_actx, conditionings=band_a,
+                    noise_scale=noise_scale2, initial_latent=init_a,
+                )
 
             noiser2 = GaussianNoiser(
                 generator=torch.Generator(device=device).manual_seed(base_seed + STAGE2_SEED_OFFSET + i)
@@ -938,10 +1531,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                     context=stage2_vctx, conditionings=conds_v,
                     noise_scale=noise_scale2, initial_latent=init_v,
                 ),
-                audio=ModalitySpec(
-                    context=stage2_actx, conditionings=band_a,
-                    noise_scale=noise_scale2, initial_latent=init_a,
-                ),
+                audio=audio_spec2,
             )
             refined_v.append(vstate2.latent.detach().clone())
             refined_a.append(astate2.latent.detach().clone())
@@ -964,36 +1554,129 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         assert final_a.shape[2] == layout.a_total, (final_a.shape[2], layout.a_total)
 
         # ── ONE VAE decode -> ONE mp4 ─────────────────────────────────────────
-        # The tiling config is resolved for the WHOLE timeline (``total_px``),
-        # not per tile: this is the decode's own chunking, unrelated to the
-        # stage-2 tiles, and sizing it from a tile would under-tile the decode.
+        # ``tiling_config`` was resolved for the WHOLE timeline (``total_px``) at
+        # the top of this function -- the decode's own chunking, unrelated to the
+        # stage-2 tiles, and shared with the V2V source encode.
         if progress is not None:
             progress(STAGE_DECODE, 0, 1)
-        tiling_config = ensure_tiling_config(
-            AUTO_TILING,
-            scale_factors=tiling_scale_factors_for_vae(dp.video_decoder.checkpoint_path),
-            video_shape=VideoPixelShape(1, total_px, height, width, frame_rate),
-            vae_checkpoint_path=dp.video_decoder.checkpoint_path,
-            diffvae_optimization=dp.video_decoder.diffvae_optimization,
-            device=device,
-        )
         chunks = get_video_chunks_number(total_px, tiling_config)
         generator = torch.Generator(device=device).manual_seed(base_seed)
 
         vram.reset()
         decode_started = time.perf_counter()
         decoded_video = dp.video_decoder(final_v, tiling_config, generator)
-        decoded_audio = dp.audio_decoder(final_a)
         encode_fps = int(round(frame_rate))
-        encode_video(
-            video=_decode_progress(decoded_video, chunks, progress),
-            fps=encode_fps,
-            audio=decoded_audio,
-            output_path=str(out_path),
-            video_chunks_number=chunks,
-        )
+        v2v_meta: dict[str, Any] | None = None
+        a2v_meta: dict[str, Any] | None = None
+
+        if audio_source is not None:
+            # ── A2V: mux the ORIGINAL waveform; the vocoder never runs ────────
+            # Not an optimisation -- it is the contract. The delivered audio track
+            # IS the upload (truncated to the video's duration), so rendering the
+            # audio latent would produce a waveform that is then thrown away, and
+            # would leave the output one vocoder round-trip away from the file the
+            # user handed in. The video side still streams chunk by chunk.
+            n_mux = int(round(total_px / frame_rate * a2v_sr))
+            mux_wf = a2v_orig_wf[:, :n_mux].contiguous()
+            encode_video(
+                video=_decode_progress(decoded_video, chunks, progress),
+                fps=encode_fps,
+                audio=Audio(waveform=mux_wf.to(torch.float32), sampling_rate=a2v_sr),
+                output_path=str(out_path),
+                video_chunks_number=chunks,
+            )
+            a2v_meta = {
+                "source_audio_path": str(audio_source.path),
+                "a_total": int(layout.a_total),
+                "encoded_audio_frames_available": int(a2v_avail),
+                "muxed_original_waveform": True,
+                "vocoder_skipped": True,
+                "muxed_audio_samples": int(mux_wf.shape[-1]),
+                "audio_sampling_rate": int(a2v_sr),
+                "audio_channels": int(mux_wf.shape[0]),
+            }
+            del decoded_video, mux_wf
+
+        elif source is not None:
+            # ── V2V: deliver the NEW part only ───────────────────────────────
+            # The frozen context was generated so the continuation would have
+            # something to continue FROM; it is not part of what the user asked
+            # for, and the app lays this clip after the original on its timeline.
+            decoded_audio = dp.audio_decoder(final_a)
+            trim_px = int(layout.trim_px)
+            sr = int(decoded_audio.sampling_rate)
+            waveform = decoded_audio.waveform
+            if waveform.dim() == 3:
+                waveform = waveform.squeeze(0)          # (channels, samples)
+            n_trim_a = int(round(trim_px / frame_rate * sr))
+
+            # The audio HANDLE sidecar: the FULL, untrimmed, unfaded timeline
+            # audio next to the mp4. Both the source recording and this render
+            # depict the context region, so a client join that owns both can do a
+            # true overlapped equal-power crossfade there instead of a
+            # no-overlap fade pair, which leaves an energy valley. Purely
+            # additive -- the mp4 is byte-identical with or without it -- so a
+            # failure to write it is a warning, never a failed job.
+            audio_handle_filename = _write_audio_handle(out_path, waveform, sr)
+
+            new_wf = waveform[:, n_trim_a:].contiguous()
+            fade_n = min(int(round(V2V_AUDIO_FADE_IN_SECONDS * sr)), int(new_wf.shape[1]))
+            if fade_n > 1:
+                ramp = torch.linspace(0.0, 1.0, fade_n, device=new_wf.device, dtype=new_wf.dtype)
+                new_wf[:, :fade_n] = new_wf[:, :fade_n] * ramp
+
+            # The encoder's chunk total is taken from the DELIVERED length, not
+            # the decoded one, because that is what it will actually receive.
+            counters = {"decoded_px": 0, "new_px": 0}
+            new_chunks = get_video_chunks_number(int(layout.new_frames_px), tiling_config)
+            encode_video(
+                video=_decode_progress(
+                    _drop_leading_frames(decoded_video, trim_px, counters), new_chunks, progress
+                ),
+                fps=encode_fps,
+                audio=Audio(waveform=new_wf, sampling_rate=sr),
+                output_path=str(out_path),
+                video_chunks_number=new_chunks,
+            )
+            assert counters["decoded_px"] == total_px, (counters["decoded_px"], total_px)
+
+            v2v_meta = {
+                "context_frames": int(source.context_frames),
+                "n_ctx_v": int(layout.n_ctx_v),
+                "n_ctx_a": int(layout.n_ctx_a),
+                "freeze_ka": int(freeze_ka),
+                "trimmed_px": trim_px,
+                "trimmed_audio_samples": n_trim_a,
+                "audio_fade_in_samples": int(fade_n if fade_n > 1 else 0),
+                "source_had_audio": bool(source_had_audio),
+                # Distinct from source_had_audio: the file can HAVE an audio
+                # stream and still end up with a zero-frame frozen head, if the
+                # encoded source audio ran out before n_ctx_a (see the underrun
+                # warning). This key answers "did the head actually carry audio
+                # continuity" without ambiguity.
+                "audio_head_frozen": bool(freeze_ka > 0),
+                "new_frames_px": int(counters["new_px"]),
+                "decoded_frames_px": int(counters["decoded_px"]),
+                "v2v_context_junction_px": layout.v2v_context_junction_px,
+                "audio_handle_filename": audio_handle_filename,
+                "handle_context_seconds": round(trim_px / frame_rate, 6),
+            }
+            del decoded_video, decoded_audio, waveform, new_wf
+
+        else:
+            # ── the plain chain: unchanged, and byte-identical (gate G1(a)) ───
+            decoded_audio = dp.audio_decoder(final_a)
+            encode_video(
+                video=_decode_progress(decoded_video, chunks, progress),
+                fps=encode_fps,
+                audio=decoded_audio,
+                output_path=str(out_path),
+                video_chunks_number=chunks,
+            )
+            del decoded_video, decoded_audio
+
         vram.record("30_decode_encode", time.perf_counter() - decode_started)
-        del decoded_video, decoded_audio, final_v, final_a
+        del final_v, final_a
 
     wall = time.time() - started
 
@@ -1043,6 +1726,16 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             "phases": dict(vram.phases),
         },
     })
+    # The runtime V2V facts MERGE into the geometry sub-dict ``ChainLayout``
+    # already put there, rather than replacing it: the app reads ONE
+    # ``chain.v2v`` block and both halves belong in it. A2V has no geometry half
+    # -- the layout is the same one a plain chain gets -- so it is a plain
+    # assignment. Both key sets are 2.3's, name for name, because the app that
+    # reads them is engine-independent.
+    if v2v_meta is not None:
+        metadata.setdefault("v2v", {}).update(v2v_meta)
+    if a2v_meta is not None:
+        metadata["a2v"] = a2v_meta
     logger.info(
         "CHAIN_OK %.1fs peak=%sMB %d clips / %d tiles -> %s",
         wall, peak_mb, n, n_tiles, out_path,

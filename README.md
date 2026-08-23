@@ -1013,8 +1013,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 |---|---|
 | `backend_status` | バックエンドの疎通状況を確認する |
 | `get_config` | バックエンドの実効設定を取得する（`GET /config`） |
-| `list_models` | 選択可能なモデル（transformer / text_encoder / video_vae / audio）を一覧する |
-| `load_pipeline` | パイプライン（推論モデル一式）を読み込む（`POST /pipeline/load`） |
+| `list_models` | 選択可能なモデル（transformer / text_encoder / video_vae / audio）を一覧する。**ベースモデル（LTX 2.3 / LTX 2.5）の一覧・導入状況・いま選ばれているもの**もここで分かる |
+| `load_pipeline` | パイプライン（推論モデル一式）を読み込む（`POST /pipeline/load`）。`base_model` に `"LTX23"` / `"LTX25"` を渡すと**ベースモデルを切り替える** |
 | `unload_pipeline` | パイプラインをメモリから解放する |
 | `list_loras` | 選択可能な IC-LoRA アダプタを一覧する（`GET /loras`） |
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
@@ -1046,6 +1046,13 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 2. `submit_generate` の `conditioning_images` にその `image_id` を指定してジョブを登録する。
 3. 以降は T2V と同じ（`wait_for_job` → `get_job_video_path`）。
 
+**LTX 2.5 へ切り替えて T2V**:
+1. `list_models` で `base_models` を見て、切り替えたいベースモデルが `installed: true` であることを確認する（いま選ばれているものは `active_base_model`）。
+2. `load_pipeline(base_model="LTX25")` を呼ぶ。ワーカーの載せ替えが起きるので数秒〜十数秒かかります。
+3. `backend_status` の `status.state` が `ready`・`status.base_model` が `LTX25` になったことを確認する。
+4. 以降は T2V と同じ（`submit_generate` → `wait_for_job` → `get_job_video_path`）。**切り替え直後の1本目だけは通常の約2倍**かかるので、`wait_for_job` を多めに呼び直してください。
+5. LTX 2.3 へ戻すときは `load_pipeline(base_model="LTX23")`。
+
 **A2Vバッチ（音声フォルダの一括生成）**:
 1. `plan_a2v_batch` で音声フォルダを走査し、行ごとの計画（音声パス・提案フレーム数・同stem画像等）を得る。
 2. 各行について **順番に**（同時1ジョブ制約のため直列で）: `upload_audio` → `submit_chain` → `wait_for_job` を繰り返し呼ぶ → `save_job_video` で任意の出力フォルダへ保存する。
@@ -1054,6 +1061,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 
 - **同時実行は1ジョブまで**: ジョブ実行中に新しい `submit_generate` / `submit_chain` を呼ぶと **409 JOB_BUSY** になります。
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
+- **ベースモデルの切り替えは `load_pipeline` の `base_model` 引数で行います**（ツールは増えていません。22個のままです）。LTX 2.5 を選んでいる間に使えない機能は §7.1「[LTX 2.5 を選んでいるときの制限](#limit-ltx25)」を参照してください（ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。切り替えは**ワーカーの載せ替え**を伴い、ジョブ実行中は **409 JOB_BUSY** で断られます。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
 - **`attention_backend="sage"` の注意**: 生成結果が同じシードでも変わります。詳しくは §5「生成の高速化（Acceleration）」の[注意書き](#sage-seed-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、LTX 2.3 で `sageattention` が入っていない環境ならエラーにならず `"sdpa"` へ降格して完走します。実際に使われた方式はメタデータの `attention_used` に記録されます。

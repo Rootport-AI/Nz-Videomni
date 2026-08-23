@@ -6151,3 +6151,61 @@ H4と同じ条件・同じシードで、さらに2回生成した。
 **pushの実施**: 目視の合格を受けて、オーナーが両リポジトリ（`Nz-Videomni`と`Nz-GGUF-Converter-LTX23`）を手動でpushした。`origin/main`との同期も確認済みである。
 
 **台帳の決着**: 2例目による実証の残条件が満たされたため、**オーナーの承認により台帳§3-97（マルチエンジン土台）と§3-98（LTX 2.5対応）をクローズした**。記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98（本項目6の記録は同§3-106）。**§3-98のクローズはv1（基本生成）のスコープでのクローズ**であり、LTX 2.5でまだ使えない機能の対応は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102として生きた課題のまま残る。
+
+## 70. ★MCPサーバーのベースモデル軸開通（`load_pipeline` の `base_model` 引数）＝実装完了・機械検証全PASS・**実機往復1周 全ステップ合格**（2026-08-23）
+
+本節は、MCPサーバー（`mcp_server/`）から **LTX 2.3 / LTX 2.5 を切り替えられるようにした**ときの検証記録である。設計判断の正本は[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D15（同日改訂。「v1では出さない」という2026-08-22の判断を、オーナー裁定「Chained移植・IC-LoRA検証の実験をMCP経由で回せるように先に開通させる」で上書きした）。
+
+変更はごく薄い——**ツールは1本も増えていない（22本のまま）**。`load_pipeline` のシグネチャ末尾に `base_model` を足し、指定されたときは「読み込み済みなら何もしない」近道を通さずに必ず `POST /pipeline/load` を撃つようにし、bodyへ載せる。あとはdocstringと `INSTRUCTIONS` の整備だけである。`list_models` は**以前から** `active_base_model` と `base_models[]` を透過して返していた（docstringが説明していなかっただけ）ので、射影も加工も足していない。切替可否の判定はサーバー側の409/422に委ね、MCP側に事前ガードを二重には置いていない。
+
+### 70.1 機械検証
+
+| 対象 | 件数 | 結果 |
+|---|---:|---|
+| `tests/test_mcp_*.py`（7ファイル） | 111 | 失敗0・エラー0（従来107件＋新規4件） |
+| 全体 `pytest` | 1,936 | 失敗0・エラー0・skip 20 |
+
+新規4件の内訳は、`base_model` 指定時に事前の `GET /status` を撃たずbodyが `{"base_model": "LTX25"}` になること・`models` と同時指定で両方載ること・サーバーの409 JOB_BUSY封筒が `ToolError` に翻訳されること（以上は `httpx.MockTransport` で呼び出し列を固定）・**2ベースモデルが並ぶ実アプリ（`two_family_client`）に対する切替と `list_models` の透過**である。既存9件は1行も変更していない。サーバー側で既に固定済みの事項（切替の409/422・LTX 2.5のchain 422）はMCP側で再掲していない。
+
+### 70.2 実機往復の環境と実施方法
+
+| 項目 | 値 |
+|---|---|
+| GPU | NVIDIA GeForce RTX 4070 Ti SUPER（15.99 GiB） |
+| OS | Windows 11 |
+| 実施日 | 2026-08-23 |
+
+サーバーは `.venv\Scripts\python.exe main.py --config outputs\mcp-base-model-gate\_rt\config.mcp-gate.yaml` で起動した。**オーナーの実環境を汚さないため、configは複製して4キーだけを差し替えている**（ポート 18620→**18699**、ログ出力先、出力先、`state_file`）。`config.yaml`・`state.json`・`logs/` は無変更で、`model.backend` は `auto` のままである。環境変数は `run.ps1` と同じものを与えた（`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`、`PATH` の先頭に `tools/uv` と `tools/ffmpeg/bin`）。
+
+**MCPクライアント（Claude Code等）は使っていない。** `mcp_server.client.BackendClient` を `LTX_MCP_BASE_URL=http://127.0.0.1:18699` でこのサーバーへ向け、ツール関数（`system.list_models` / `system.load_pipeline` / `system.backend_status` / `generate.submit_generate` / `generate.submit_chain` / `jobs.wait_for_job` / `outputs.get_job_video_path`）を**そのまま `anyio.run` で呼ぶ**ドライバを書いて回した。`LTX_MCP_OUTPUT_DIR` ではなく `LTX_MCP_CONFIG` に同じ一時configを渡しているので、`get_job_video_path` が組み立てるパスも一時の出力先を指す。一次証拠は `outputs/mcp-base-model-gate/`（`report.json` と `_rt/` 配下のログ・mp4）に置いてある。
+
+### 70.3 往復1周の実測（本番の走行＝2周目）
+
+| # | ステップ | 所要 | 結果 |
+|---:|---|---:|---|
+| 1 | `list_models` | 0.18秒 | `active_base_model="LTX23"`。`base_models[]` は `LTX23`/`LTX25` の2件でどちらも `installed: true`。`unsupported_features` は LTX23 が0件・**LTX25が13件** |
+| 2 | `load_pipeline(base_model="LTX25")` | **5.57秒** | 200。応答に `base_model="LTX25"`・`state="ready"`・`models`（4カテゴリ全て `"default"`）・`finished: true` |
+| 3 | `backend_status` | 0.00秒 | `status.state="ready"`・`status.base_model="LTX25"`・`status.pipeline_type="distilled"` |
+| 4 | `submit_generate`（320×192／25フレーム／24fps／seed 20260823） | 0.00秒 | `job_id=5ccf82a9-4ba2-453e-b5fd-0a5afb13a25c` |
+| 5a | `wait_for_job`（1回目） | 46.09秒 | `status="running"`・`timed_out: true`・進捗 0.28 |
+| 5b | `wait_for_job`（2回目） | 32.06秒 | `status="completed"`・`timed_out: false`・進捗 1.0 |
+| 6 | `get_job_video_path` | 0.01秒 | `exists: true`・67,770バイト。ffprobe で h264 320×192 25フレーム＋AAC 48000 Hz を確認 |
+| 7 | `submit_chain`（最小引数・2クリップ） | 0.00秒 | **`ToolError`**: `FEATURE_UNSUPPORTED: 'chain' is not supported by the selected base model（選択中のベースモデルでは使えない機能です）— LTX 2.5(v1)は連結生成…` **ジョブは作られない**（APIの入口で断られる） |
+| 8 | `load_pipeline(base_model="LTX23")` | **8.00秒** | 200。応答に `base_model="LTX23"`・`state="ready"`・`finished: true` |
+| 9 | `backend_status` | 0.00秒 | `status.state="ready"`・`status.base_model="LTX23"` |
+
+ワーカー側の実測（`logs/ltx25_worker.log` の `GENERATE_REPORT`）は **77.14秒**・`backend="ltx25-distilled"`・**VRAM確保ピーク 6.743 GiB／予約ピーク 6.977 GiB**・RSSピーク 24.82 GiB。フェーズ別は プロンプトエンコード 17.75秒／stage-1 40.59秒／stage-2 13.87秒／デコード+mp4 0.36秒で、§69.11のH3（同条件で74.64秒）と整合する。
+
+**サーバー停止後、ポート18699は開放され、`python.exe` のプロセスは1つも残っていない**（`Get-NetTCPConnection` と `Get-Process` で確認）。
+
+### 70.4 1周目（冷えた状態）の実測と、途中で止まった理由
+
+同じ往復を、その直前に**LTX 2.5のワーカーが一度も起きていない状態**から1周している。`list_models` 0.17秒 → `load_pipeline(base_model="LTX25")` **15.10秒** → `backend_status`（ready・LTX25）→ `submit_generate` → `wait_for_job` 46.08秒（running・進捗 0.17）＋40.07秒（completed）→ `get_job_video_path`（`exists: true`・67,770バイト、`job_id=433d248a-bfef-441f-bc7f-28b7901bf9c3`）まで**すべて成功**した。
+
+**切替が15.10秒→5.57秒と冷温で3倍近く違う**のは§69.15と同じ現象で、`wait_sec` の既定45秒に対しては冷えた側でも十分な余裕がある。
+
+1周目は7番目（`submit_chain`）で止まったが、**これはドライバ側の問題であって製品側ではない**。`ToolError` は期待どおり送出されており、その**メッセージを標準出力へ印字する段**で `UnicodeEncodeError: 'cp932' codec can't encode character '—'` になった——`_raise_for_error` が組む `"CODE: message — detail"` のem-dashが、Windowsの既定コードページ（cp932）で書けなかったためである。`PYTHONIOENCODING=utf-8` を与えて回し直したのが§70.3の2周目にあたる。**MCPサーバー本体はstdioにUTF-8を使う（`.mcp.json` が `PYTHONUTF8=1` を渡している）ので、この落とし穴は実運用の経路には出ない。**
+
+### 70.5 ドライバを書く人向けの注意（今回踏んだ落とし穴）
+
+**`BackendClient` は `httpx.AsyncClient` を1つ抱え込むので、ツールごとに `anyio.run` を呼ぶと2本目で `RuntimeError: Event loop is closed` になる。** 1回目の `anyio.run` が閉じたループにクライアントが紐付いたままだからである。**往復全体を1つの `anyio.run`（＝1つのイベントループ）の中で回す**のが正しく、本番のMCPサーバーも1ループで動いているのでそちらが実態にも近い。テスト側でこれが表面化しないのは、各テストが `set_client` で自分のクライアントを毎回入れ直しているためである。

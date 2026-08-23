@@ -4,7 +4,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.23** |
+| 版 | **v0.5.25** |
 | 日付 | **2026-08-22**（v0.5 本体は 2026-07-02。以後の更新は §0.1 の改訂履歴を参照） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -40,7 +40,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.24** |
+| 版 | **v0.5.25** |
 | 日付 | **2026-08-22** |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元） |
@@ -77,6 +77,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.22 | 2026-08-22 | **LTX 2.5（エンジン系統 `ltx25`）の v1 実装を反映**。LTX 2.5 は当初の見立てと違い `ltx` 系統の別ベースモデルではなく、**専用の仮想環境（`.venv-engine-ltx25`）と専用ワーカー（`engine25/`）を持つ別のエンジン系統**として新設された（理由と経緯は `Docs/MULTI_ENGINE_DESIGN.md` §3.3 の訂正節）。**凍結 API 契約（§6）への変更はここでもすべて加算のみ**で、LTX 2.3 だけを使う既存クライアントから見た応答は 1 バイトも変わらない。**§0.1 版メタ**（対象欄を2モデル・エンジン系統ごとのワーカー構成へ）／**§4.3**（mock の `backend` 表記が系統ごとに変わること）／**§6.8**（新設エラーコード `FEATURE_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 35→36 件へ訂正）／**§6.6**・**§7.5**（`backend` の値に `"ltx25-distilled"` と `"mock-ltx25"` を追記）／**§6.10＝新設**（LTX 2.5 の対応範囲。`GET /models` の `unsupported_features`、`GenerateRequest` 全 28 フィールドの 4 分類〔422系 8／無視 7／動作 8／従属 5〕、ロードペイロードの `deterministic`、ready イベントの `sampler`）を更新した。実装・実機検証の記録は各コミット（`62d67b0`〜`7c29ca3`）と `Docs/VERIFICATION_LOG.md` §69、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98。 |
 | v0.5.23 | 2026-08-22 | **記述と実装のずれの訂正（文書のみ。API・実装への変更は無い）**。敵対的レビューで確定した指摘を反映した。**§6.1**（認証が要る経路を「6 経路」→**9 経路**へ訂正〔`upload/video`・`upload/audio`・`generate/chain` の 3 件が漏れていた〕・`POST /generate` のステータス欄へ `422 FEATURE_UNSUPPORTED` を追加・`POST /generate/chain` の補足行を新設）。**§6.2**（`GenerateRequest` の表が 21 行しかなく実装の 28 フィールドと合っていなかったため、`neg_method` / `vsf_scale` / `loras` / `reference_video_id` / `conditioning_attention_strength` / `reference_video_strength` / `outpaint` の 7 行を補完。**凍結制約の列挙が実装と逆だった 2 件を訂正**——制約 6 は「1 枚まで」ではなく **5 枚まで**、制約 7 は「`frame_idx != 0` は 422」ではなく **8n+1 グリッドへスナップ＋クランプして受理**である〔いずれも Phase 3 で解除済みだった〕。あわせて LoRA・参照動画・outpaint の各検査を列挙へ追加し、`attention_backend` / `keep_resident` / `vae_mode` の行へ「LTX 2.5 では 422」を併記）。**§6.3**（`ConditioningImage.frame_idx` の「Phase 1 は 0 固定」を訂正し、**LoraSpec** と **OutpaintSpec** の表を新設）。**§6.5b**（sage の「降格して完走する」に対する LTX 2.5 の例外を明記）。**§6.9(c)**（`GET /models` の応答例へ、実装が常に返している `category_order` を補完）。**§6.10(d)**（無視したフィールドのログの出所を「ワーカーのログ」→**アプリ側のロガー**〔`ltx25.runner` → `logs/server.log`〕へ訂正）。**§4.2・§15.1**（ワーカーログが **2 本**〔`logs/ltx_worker.log`＝`ltx` 系統／`logs/ltx25_worker.log`＝`ltx25` 系統〕であることを明記）。**§4.3・§7.6**（`_real_available()` の判定材料を系統別の表へ——`ltx25` は必須 `assets` が 1 件〔空間アップスケーラ〕・worker は固定の `engine25/worker.py`）。**§7.4**（「`LTXRunner` は唯一のファサード」を訂正し、`LTX25Runner` が同格で実在することを明記）。**§9.2**（`ltx25` のワーカーには `LTX_*` を 1 つも渡さないことを明記）。**§11.2**（`model.engine_python_ltx25` の行を追加）。**§16.2・付録A・付録B.1**（I2V の「1 枚・`frame_idx=0` 固定」という旧記述を現行仕様へ訂正）。**§0.3・§6.10 末尾**（LTX 2.5 の生きた後続課題を 4 件へ更新）。**§5.1b**（容量の概数が `.venv-engine-ltx25` 追加前の値である旨の注記を追加。再実測は `Docs/PENDING_TASKS.md` §3-107）。 |
 | v0.5.24 | 2026-08-22 | **付録B.1 の「エンジン系統」の定義を実装どおりに訂正（文書のみ。API・実装への変更は無い）**。「どのエンジンで動かすかはサーバーが重みファイルの GGUF KV メタデータから判定する（UI の選択値では決めない）」という記述は誤りだった。実装では**エンジン系統を決めるのは選択中のベースモデルの記述子（`engine_family`）**であり（`services/engines/__init__.py::runner_class_for`）、**GGUF KV は照合の材料**である——KV から導いた系統が記述子と食い違えば、自動で読み替えず 422 で選び直しを案内する（`services/engines/__init__.py::check_kv`）。§6.9(b) の事前チェック 2 段の記述はもともと正しく、訂正は付録B.1 の 1 行のみ。設計正本側の同じ誤りも同日に是正した（`Docs/MULTI_ENGINE_DESIGN.md` §2.1）。 |
+| v0.5.25 | 2026-08-23 | **MCPサーバーのベースモデル軸開通を反映（文書と MCP ツールの引数のみ。凍結 API 契約〔§6〕・バックエンド実装への変更は無い）**。`load_pipeline` に `base_model` 引数を追加し、MCP 経由でも LTX 2.3 / LTX 2.5 を切り替えられるようにした（**ツール本数は 22 本のまま不変**）。`list_models` は以前から `active_base_model` / `base_models[]` を透過して返しており、docstring がそれを説明していなかっただけである。**§12b.2**（ベースモデル軸の扱いと、設計判断の参照範囲を D1〜D11 → **D1〜D15** へ）を更新した。あわせて §0.1 版メタの版番号が**2 箇所でずれていた（:7 が v0.5.23、:43 が v0.5.24）のを本版で揃えた**。設計判断の正本は `Docs/MCP_SERVER_DESIGN.md` D15（同日改訂）、実機往復の記録は `Docs/VERIFICATION_LOG.md` §70。 |
 
 ### 0.2 スコープ
 
@@ -1613,7 +1614,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 
 ### 12b.2 ツールの概要
 
-**22個のツール**を6カテゴリ（system 6 / uploads 3 / generate 2 / jobs 7 / outputs 3 / batch 1）で公開する。全ツールは `async def` で実装され、ブロッキングI/O（ファイルコピー・wav走査等）は `anyio.to_thread.run_sync` で逃がす（MCP SDK 1.28 は同期ツールをイベントループ上で直接呼ぶため）。生成物は base64 埋め込みではなく常にローカル絶対パスで返す。ツール名の完全な一覧・1行説明・典型ワークフロー（T2V/I2V/A2Vバッチ）は `README.md` §8 を参照（本書では重複させない）。設計判断（依存を main 化した理由・非同期化の根拠・エラー封筒の翻訳規則・`.mcp.json` 絶対パス生成方式 等、D1〜D11）は `Docs/MCP_SERVER_DESIGN.md` が正本。
+**22個のツール**を6カテゴリ（system 6 / uploads 3 / generate 2 / jobs 7 / outputs 3 / batch 1）で公開する。全ツールは `async def` で実装され、ブロッキングI/O（ファイルコピー・wav走査等）は `anyio.to_thread.run_sync` で逃がす（MCP SDK 1.28 は同期ツールをイベントループ上で直接呼ぶため）。生成物は base64 埋め込みではなく常にローカル絶対パスで返す。ツール名の完全な一覧・1行説明・典型ワークフロー（T2V/I2V/A2Vバッチ）は `README.md` §8 を参照（本書では重複させない）。ベースモデル軸（LTX 2.3 / LTX 2.5 の切り替え）は**ツールを増やさず** `load_pipeline` の `base_model` 引数で扱う（`list_models` が返す `base_models[].id` を渡す。切替可否の判定はサーバー側の 409/422 が行う）。設計判断（依存を main 化した理由・非同期化の根拠・エラー封筒の翻訳規則・`.mcp.json` 絶対パス生成方式・ベースモデル軸の公開方針 等、D1〜D15）は `Docs/MCP_SERVER_DESIGN.md` が正本。
 
 ### 12b.3 依存とセットアップ導線
 

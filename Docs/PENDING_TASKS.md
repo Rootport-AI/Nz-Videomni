@@ -466,10 +466,11 @@
 
 - **概要**: LTX 2.5で使えるのは基本生成（T2V／I2V）だけで、それ以外は422で断る。ここで断っている**8件**（連結生成一族＝Chained・Retake・End source・V2V・A2V／`two_stage_hq`／Outpainting／`loras`・`reference_video_id`／NAG／PrunaVAED／SageAttention／`keep_resident`）を2.5でも使えるようにするのが本項。**1テーマにまとめてあるが、着手は機能ごとに切り出してよい**（互いに独立しているため）。
 - **判断材料（1）ネガティブプロンプト系は配線では済まない**: 現在は無視して先へ進めている7フィールドのうち`negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`は、**蒸留版2.5にCFG（プロンプトへの従い具合の制御）そのものが無い**ため、実現方法から検討が要る。
-- **判断材料（2）LoRAにはベースモデル軸が無い**: `config.yaml`の`lora_dir`と`ic_loras`はどのベースモデルでも同じ1本のディレクトリ・同じ登録名を見る。**2.3用のLoRAを2.5に当てても意味のある結果にならない**ので、2.5用のLoRAが実在した時点で記述子側へ寄せるかを判断する（`models/LTX23/StyleLoRA/`というレイアウトなので下地はある）。
+- **判断材料（2）LoRAにはベースモデル軸が無い**: `config.yaml`の`lora_dir`と`ic_loras`はどのベースモデルでも同じ1本のディレクトリ・同じ登録名を見る。**【2026-08-23 実測により訂正】** 起票時にここへ書いていた「2.3用のLoRAを2.5に当てても意味のある結果にならない」は**誤りだった**——LTX 2.3のStyle LoRAもIC-LoRAも、LTX 2.5の蒸留トランスフォーマーでそのまま機能する（鍵と形状は完全一致・重みも転移し・参照動画の条件付け経路も成立。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71）。**ただし強度は上げる必要がある**（Deblurは強度1.0だと元動画の46%しか復元せず、1.3で136%まで戻った）。**これは「ベースモデル軸が不要になった」という話ではない**——同じ登録名のまま既定強度をベースモデル別に分けたい、将来2.5専用のLoRAが出たときに置き場と選択肢を分けたい、という需要は残るので、記述子側へ寄せるかの判断は引き続き本項の課題である（`models/LTX23/StyleLoRA/`というレイアウトなので下地はある）。
+- **判断材料（3）Chained移植とSingle IC-LoRAの前提は実測済みである（2026-08-23）**: Chainedの窓サイズは「解像度別」ではなく**単一のトークン予算**で決めればよく（快適上限の線は約47,000トークン。1920×1088用に窓を19へ落とす2.3の後付けは2.5では不要）、**Chainedではチャンク化アップサンプルが必須**（1080pで約32秒・720pで約69秒を超える連結から要る）。IC-LoRAのgo/no-go判定は**go**である。実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71、設計への持ち帰り（窓プリセット案・実装時の注意3点）は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 11節。**窓の予算値そのものは未決定**で、着手テーマの実装計画で決める。
 - **完了判定**: 機能が1つ実装できるたびにアダプタの対応表（`services/engines/ltx25/adapter.py`の`REJECT_TABLE`）から1行外すと、`GET /models`の`unsupported_features`から自動的に消える。**「対応表から1行消えて、テストが対応表と実装のずれを検出しなくなること」が完了の合図である。**
 - **状態**: 未着手（将来の研究課題）。
-- **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（4分類の全28件）。
+- **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.9・**§71（窓サイズのスイープとIC-LoRA互換検証の実測）**、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) **11節（設計への持ち帰り）**、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（4分類の全28件）、本書§3-108（kohya形式LoRAのローダー非対応）。
 
 #### 3-103. 拡散デコーダ版の映像VAE（DiffVAE）を採用するかどうか（起票：2026-08-22）
 
@@ -486,6 +487,21 @@
 - **見立て**: `keep_resident` が off なので、ジョブごとにモデルの骨格を作り直している。その費用がOSのファイルキャッシュの状態に連動していると考えられる。**再マテリアライズ削減＝`keep_resident`（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-64）と地続きの話**なので、着手するならその実装記録から読むこと。
 - **状態**: 未着手（将来の研究課題）。**急いで直すべきものではない**——1本目が従来どおりの速さで、出力も変わらないため。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.16（6回の実測と既存ログとの突合）、同§68.3・§68.4（比較対象の実測）。
+
+#### 3-108. kohya形式のLoRAをエンジンのローダーが読めない（無音で空振りする・LTX 2.3／2.5共通）（起票：2026-08-23）
+
+- **概要**: LoRAのファイルには2つの書式がある。本プロジェクトのローダーが読めるのは`.lora_A.weight`／`.lora_B.weight`という鍵で重みを持つ**A/B形式**だけで、`.lora_down.weight`／`.lora_up.weight`＋`.alpha`という鍵を使う**kohya形式**（LoRA学習ツールkohya-ss由来の書式。配布LoRAでは珍しくない）は読めない。`engine/gguf/ic_lora_common.py`の`_SUFFIX_A = ".lora_A.weight"`が固定であるためで、**この読み分けはLTX 2.3・LTX 2.5の両系統が同じ関数を共有している。**
+- **いちばん悪いのは「静かに何も起こらない」ことである**: kohya形式のファイルを指定すると、ペアが1組も作られないまま生成が最後まで走り、**LoRAを指定していないのと同じ動画が出てくる**。警告はログに出るが、利用者にも呼び出し側にも失敗として伝わらない。**LTX 2.5対応で新しく壊れたのではなく、LTX 2.3でも以前からこの状態だったはずである**（読み分けの実装は2.3から変わっていない）。
+- **実測**: 手持ちのLoRA 14本のうち2本（`LTX2.3-MysticXXX`＝鍵3,684本、`SynthPussy_01_rank32`＝鍵1,728本）がkohya形式で、どちらもペア数0だった。残る12本はA/B形式で、形状不一致0・未解決鍵0で問題なく読める（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71.6）。
+- **やること（2段階。最低限は前者だけでもよい）**:
+  1. **失敗を声に出す（fail loud）**: ペアが1組も解決できなかったときは黙って進まず、書式が違う旨を伝えて断る。既存の`ic_loras`／`loras`の検証経路に乗せる。
+  2. **変換して受け入れる**: `lora_down`→`lora_A`・`lora_up`→`lora_B`の読み替えと、kohya形式が持つ`alpha`（`alpha ÷ rank`が実効の倍率になる）の反映を、ローダー側で吸収する。**`alpha`の扱いを間違えると効きの強さが静かにずれる**ので、ここは実装の要点になる。
+- **受入条件**:
+  - (a) kohya形式のファイルを指定した生成が、**無音で成功せず**、書式の違いを述べる明示的なエラーになる（少なくとも1本の実ファイルで確認する）。
+  - (b) A/B形式12本の既存の挙動が**1バイトも変わらない**（同一シード・同一条件でmp4のSHA-256が一致すること。LTX 2.3・LTX 2.5の両系統で1本ずつ確認する）。
+  - (c) 変換対応まで行う場合は、kohya形式のLoRAを当てた生成が**当てていない生成と目に見えて違う出力**になり（フレーム差分の平均絶対値で判定）、かつ`detach`後の出力が無LoRAの出力とSHA-256一致すること（残留ゼロ）。
+- **状態**: 未着手（将来の研究課題）。**急ぎではない**——既定で配布・同梱しているLoRAはすべてA/B形式であり、影響を受けるのは利用者が自分で持ち込んだkohya形式のファイルだけである。
+- **出典**: `engine/gguf/ic_lora_common.py`（`_SUFFIX_A`と`load_ic_lora_pairs`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71.6（14本の照合結果と、kohya形式2本を判定対象外とした理由）、本書§3-102（LoRAのベースモデル軸）。
 
 ---
 

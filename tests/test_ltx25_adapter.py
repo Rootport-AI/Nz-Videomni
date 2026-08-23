@@ -1,6 +1,6 @@
 """LTX 2.5 engine adapter — payload contract and v1 feature scope (§3-98 P3b).
 
-Three things are pinned here, none of which needs a GPU or a weight file:
+Four things are pinned here, none of which needs a GPU or a weight file:
 
 1. the ``{"op":"load"}`` payload engine25's worker receives — key SET, key
    ORDER and values, as a golden snapshot, the same discipline the 2.3 payload
@@ -10,18 +10,27 @@ Three things are pinned here, none of which needs a GPU or a weight file:
 2. the v1 feature scope: which ``GenerateRequest`` fields are a 422, which are
    ignored-and-logged, and — the part a table alone cannot state — that those
    two sets do not overlap and that ``crop_output`` is in NEITHER;
-3. the seams: LTX 2.5 reuses the 2.3 MOCK backend class rather than declaring
+3. the CHAIN scope and the ``{"op":"generate_chain"}`` payload (§3-102): the
+   same four-way field table and the same golden-snapshot discipline, applied
+   to ``GenerateChainRequest``. Until §3-102 this engine refused every chain,
+   so the chain schema needed no ruling at all; now a plain Chained job runs
+   and each of its 34 fields must have exactly one home;
+4. the seams: LTX 2.5 reuses the 2.3 MOCK backend class rather than declaring
    its own, which is a design ruling ("やらない" list) and therefore a test.
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
+import threading
+import types
+from pathlib import Path
 
 import pytest
 
 from api.errors import APIError
-from api.models import GenerateRequest
+from api.models import ChainClip, GenerateChainRequest, GenerateRequest
 from config import AppConfig
 from services.base_models import BaseModelDescriptor, CategoryDescriptor
 from services.engines.ltx import adapter as ltx23
@@ -307,10 +316,18 @@ def test_reject_table_covers_every_field_the_fixture_names():
     assert set(REQUEST_OVERRIDES) == {f for f, _feat, _p in ltx25.REJECT_TABLE}
 
 
-def test_unsupported_features_is_the_reject_table_plus_the_chain_family():
+def test_unsupported_features_is_both_reject_tables_without_chain_itself():
+    """Every feature name either table refuses must be published, or a control
+    the server 422s stays lit in the frontend."""
     features = set(ltx25.UNSUPPORTED_FEATURES)
     assert {feat for _f, feat, _p in ltx25.REJECT_TABLE} <= features
-    assert {"chain", "retake", "end_source", "v2v", "a2v"} <= features
+    assert {feat for _f, feat, _p in ltx25.CHAIN_REJECT_TABLE} <= features
+    # The four chain MODES this engine still cannot run stay published...
+    assert {"retake", "end_source", "v2v", "a2v"} <= features
+    # ...but "chain" itself LEFT with §3-102's first increment: a plain Chained
+    # job runs on this engine now, so publishing "no chain" would grey out a tab
+    # that works.
+    assert "chain" not in features
     assert len(ltx25.UNSUPPORTED_FEATURES) == len(features), "no duplicates"
 
 
@@ -327,25 +344,333 @@ def test_ignored_fields_are_logged_only_when_set(caplog):
     assert "negative_prompt" in messages[0] and "block_swap_prefetch" in messages[0]
 
 
-def test_generate_chain_is_refused(ltx25_paths):
+# --------------------------------------------------------------------------- #
+# 3c) chain feature scope — the GenerateChainRequest field table (§3-102)
+# --------------------------------------------------------------------------- #
+#
+# A SECOND four-way table, for a SECOND schema. Chained used to be refused
+# outright, so the whole of ``GenerateChainRequest`` needed no ruling at all;
+# now a plain chain runs and each of its 34 fields has to have a home. The
+# tests below are the chain twins of section 3 + 3b: the same coverage,
+# exclusivity and reverse-direction audits, plus a golden payload, because the
+# failure mode is the same one — a request field nobody classified is silently
+# dropped or silently honoured, and either way the user is not told.
+
+
+def _chain_request(**overrides) -> GenerateChainRequest:
+    """A minimal VALID two-clip chain, the shape section 3c's tables ride on."""
+    base: dict = {
+        "prompt": "a quiet harbour at first light",
+        "width": 512,
+        "height": 320,
+        "frame_rate": 24.0,
+        "seed": 123,
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 25}, {"num_frames": 25}],
+    }
+    base.update(overrides)
+    return GenerateChainRequest(**base)
+
+
+#: One VALID chain request body per refused field, same discipline as
+#: :data:`REQUEST_OVERRIDES`: the table drives real ``GenerateChainRequest``
+#: objects rather than asserting against itself, and several entries carry the
+#: companions the SCHEMA couples them to (retake and end_source own the whole
+#: timeline, so they need a single clip; NAG needs a negative prompt). Imported
+#: by tests/test_ltx25_api_guard.py, which drives the same table through HTTP.
+CHAIN_OVERRIDES: dict[str, dict] = {
+    "source_video": {
+        "clips": [{"num_frames": 49}, {"num_frames": 25}],
+        "source_video": {"video_id": "vid-1", "context_frames": 25},
+    },
+    "source_audio": {"source_audio": {"audio_id": "aud-1"}},
+    "retake": {
+        "clips": [{"num_frames": 73}],
+        "retake": {"video_id": "vid-1", "window_start_sec": 0.0},
+    },
+    "end_source": {
+        "clips": [{"num_frames": 73}],
+        "end_source": {"image_id": "img-1", "context_frames": 24},
+    },
+    # The schema couples a reference video to an IC-LoRA, so the pair travels
+    # together; the table's ORDER is what decides which of the two is named.
+    "reference_video_id": {"reference_video_id": "vid-123", "loras": _LORAS},
+    "loras": {"loras": _LORAS},
+    "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
+    "pipeline": {"pipeline": "two_stage_hq"},
+    "vae_mode": {"vae_mode": "prune_vaed"},
+    "attention_backend": {"attention_backend": "sage"},
+    "keep_resident": {"keep_resident": True},
+}
+
+
+def test_a_plain_chain_is_accepted():
+    """The headline of §3-102: a chain with nothing layered on it passes."""
+    for request in (
+        _chain_request(),
+        _chain_request(chunked_upsample=True),
+        _chain_request(stage2_window="high_resolution"),
+        _chain_request(crop_output={"width": 384, "height": 256}),
+        _chain_request(clips=[{"num_frames": 25, "prompt": "dusk"}, {"num_frames": 25}]),
+    ):
+        ltx25.reject_chain(request)  # no raise
+
+
+@pytest.mark.parametrize("field", list(CHAIN_OVERRIDES))
+def test_every_rejected_chain_field_raises_feature_unsupported(field):
+    request = _chain_request(**CHAIN_OVERRIDES[field])
+    # The field under test really is non-default for this request...
+    predicate = next(p for f, _feat, p in ltx25.CHAIN_REJECT_TABLE if f == field)
+    assert predicate(request)
+    # ...and the FIRST offender in table order is what the message names.
+    expected = next(feat for _f, feat, pred in ltx25.CHAIN_REJECT_TABLE if pred(request))
+    with pytest.raises(APIError) as ei:
+        ltx25.reject_chain(request)
+    assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
+    assert expected in ei.value.detail
+    assert "LTX 2.3" in ei.value.detail
+
+
+def test_the_chain_reject_table_covers_every_field_the_fixture_names():
+    """The parametrized test above is only as good as its request table."""
+    assert set(CHAIN_OVERRIDES) == {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+
+
+def test_the_chain_ignore_table_is_logged_only_when_set(caplog):
+    with caplog.at_level(logging.INFO, logger="ltx25.runner"):
+        ltx25._log_ignored(_chain_request(), ltx25.CHAIN_IGNORED_FIELDS)
+    assert not [r for r in caplog.records if "ignores" in r.getMessage()]
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="ltx25.runner"):
+        ltx25._log_ignored(
+            _chain_request(negative_prompt="blurry", block_swap_prefetch=False),
+            ltx25.CHAIN_IGNORED_FIELDS,
+        )
+    messages = [r.getMessage() for r in caplog.records if "ignores" in r.getMessage()]
+    assert len(messages) == 1
+    assert "negative_prompt" in messages[0] and "block_swap_prefetch" in messages[0]
+
+
+def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
+    """UNTIL §3-102 this refused EVERY chain. Now the refusal is field-by-field,
+    and it still happens without loading a worker — the ruling is a pure read of
+    the request, so a doomed chain must not pay for a model load."""
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
     with pytest.raises(APIError) as ei:
-        backend.generate_chain(object(), output_dir=None)
+        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["retake"]), output_dir=None)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
-    assert "Chained" in ei.value.detail
+    assert "LTX 2.3" in ei.value.detail
 
 
 def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
     """The endpoint (P5) and the backend method must not be able to disagree:
     both go through ``reject_chain``, so there is one message and one code."""
     cfg, _paths, descriptor = ltx25_paths
+    request = _chain_request(**CHAIN_OVERRIDES["source_audio"])
     with pytest.raises(APIError) as endpoint_side:
-        ltx25.reject_chain()
+        ltx25.reject_chain(request)
     with pytest.raises(APIError) as backend_side:
-        _backend(cfg, descriptor).generate_chain(object(), output_dir=None)
+        _backend(cfg, descriptor).generate_chain(request, output_dir=None)
     assert endpoint_side.value.code == backend_side.value.code
     assert endpoint_side.value.detail == backend_side.value.detail
+
+
+def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_path):
+    """The orchestrator hands every runner the same thirteen keywords. Nine of
+    them name material this engine cannot use, and every one is refused by the
+    table above — so a value arriving here means the table and this signature
+    have drifted apart. That is a bug, and it must not look like a job."""
+    cfg, _paths, descriptor = ltx25_paths
+    backend = _backend(cfg, descriptor)
+    with pytest.raises(RuntimeError, match="source_audio_path"):
+        backend.generate_chain(
+            _chain_request(), output_dir=tmp_path, source_audio_path=tmp_path / "a.wav"
+        )
+    with pytest.raises(RuntimeError, match="lora_paths"):
+        backend.generate_chain(
+            _chain_request(), output_dir=tmp_path, lora_paths=[object()]
+        )
+    # ...while the EMPTY list run_chain_job always builds for a no-lora chain is
+    # not "material" and must sail through. Checked on the no-subprocess harness
+    # so the assertion is about the guard, not about a worker spawn.
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(), output_dir=tmp_path / "ok", lora_paths=[]
+    )
+    assert captured[0]["op"] == "generate_chain"
+
+
+# --------------------------------------------------------------------------- #
+# 3d) golden chain payload — the worker contract, byte for byte
+# --------------------------------------------------------------------------- #
+#
+# Same discipline as section 1's load payload: the key SET and the key ORDER
+# are the contract (JSON preserves insertion order, so a reorder IS a byte
+# change), and the payload is BUILT here rather than transcribed.
+
+#: The default chain payload's key order. ``stage2_window`` is deliberately
+#: absent: it is additive and rides only when the request opted off "standard".
+GOLDEN_CHAIN_KEYS_25 = [
+    "op",
+    "width",
+    "height",
+    "frame_rate",
+    "num_steps",
+    "seed",
+    "overlap_frames",
+    "overlap_strength",
+    "chunked_upsample",
+    "output_path",
+    "clips",
+]
+
+
+def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
+    """A ``_RealBackend25`` with no subprocess behind it.
+
+    Mirrors the ``_RealBackend.__new__`` harness in
+    tests/test_ltx_runner_payload.py: ``loaded`` is a read-only property over
+    ``_proc.poll()``, so a live-looking fake proc makes it True and
+    ``generate_chain`` skips the spawn.
+    """
+    be = ltx25._RealBackend25.__new__(ltx25._RealBackend25)
+    be._proc = types.SimpleNamespace(poll=lambda: None)  # type: ignore[attr-defined]
+    be._lock = threading.Lock()
+
+    def _send(msg: dict) -> None:
+        captured.append(msg)
+        out = Path(msg["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"\x00" * 16)
+
+    be._send = _send  # type: ignore[attr-defined]
+    be._read_chain_events = lambda cb: {  # type: ignore[attr-defined]
+        "event": "done",
+        "seed_used": 123,
+        "peak_vram_mb": 7000,
+        "chain": {"total_px": 41, "num_clips": 2},
+    }
+    return be
+
+
+def test_chain_payload_golden_for_a_plain_two_clip_chain(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "out")
+
+    assert len(captured) == 1
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25
+    assert payload == {
+        "op": "generate_chain",
+        "width": 512,
+        "height": 320,
+        "frame_rate": 24.0,
+        "num_steps": 8,
+        "seed": 123,
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "chunked_upsample": False,
+        "output_path": str(tmp_path / "out" / "output.mp4"),
+        "clips": [
+            {"prompt": "a quiet harbour at first light", "num_frames": 25, "images": []},
+            {"prompt": "a quiet harbour at first light", "num_frames": 25, "images": []},
+        ],
+    }
+
+
+def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
+    """A per-clip prompt override wins over the global one, and ONLY clip 0 may
+    carry conditioning images (the schema enforces that; the payload shows it)."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    request = _chain_request(
+        clips=[
+            {
+                "num_frames": 25,
+                "prompt": "a harbour at dusk",
+                "conditioning_images": [{"image_id": "img-1", "frame_idx": 0, "strength": 0.9}],
+            },
+            {"num_frames": 25},
+        ]
+    )
+    be.generate_chain(
+        request,
+        output_dir=tmp_path / "out",
+        clip0_conditioning_paths=[tmp_path / "img-1.png"],
+    )
+
+    clips = captured[0]["clips"]
+    assert clips[0]["prompt"] == "a harbour at dusk"
+    assert clips[1]["prompt"] == "a quiet harbour at first light"
+    assert clips[0]["images"] == [
+        {"path": str(tmp_path / "img-1.png"), "frame_idx": 0, "strength": 0.9}
+    ]
+    assert clips[1]["images"] == []
+
+
+def test_chain_payload_carries_stage2_window_only_when_non_default(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "a")
+    assert "stage2_window" not in captured[0]
+
+    be.generate_chain(
+        _chain_request(stage2_window="high_resolution"), output_dir=tmp_path / "b"
+    )
+    assert captured[1]["stage2_window"] == "high_resolution"
+    # ...appended AFTER the golden keys, so the default key order is untouched.
+    assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + ["stage2_window"]
+
+
+def test_chain_payload_carries_chunked_upsample(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(_chain_request(chunked_upsample=True), output_dir=tmp_path / "out")
+    assert captured[0]["chunked_upsample"] is True
+
+
+def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    outcome = be.generate_chain(_chain_request(), output_dir=tmp_path / "out")
+
+    assert outcome.generation_mode == "chain"
+    assert outcome.backend == ltx25.REAL_BACKEND_25
+    assert outcome.chain_metadata == {"total_px": 41, "num_clips": 2}
+    assert outcome.seed_used == 123
+    assert outcome.peak_vram_mb == 7000
+    # The chain scope is SDPA-only, and every OTHER acceleration relay names a
+    # 2.3 code path this engine does not have — reporting "off" would claim the
+    # knob exists here and was left alone.
+    assert outcome.attention_used == "sdpa"
+    assert outcome.block_swap_prefetch_used is None
+    assert outcome.keep_resident_used is None
+    assert outcome.fused_gguf_dequant_kernel_used is None
+    assert outcome.vae_mode_used is None
+
+
+def test_chain_crop_output_is_an_app_side_post_process(tmp_path, monkeypatch):
+    """crop_output is honoured on a chain for the same reason it is on a single
+    job: it is ffmpeg, not the engine. The worker writes ``_full.mp4``."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    cropped: list[tuple] = []
+
+    def _fake_crop(src, dst, width, height):
+        cropped.append((Path(src).name, width, height))
+        Path(dst).write_bytes(b"\x00" * 16)
+
+    monkeypatch.setattr(ltx25.video_io, "crop_mp4", _fake_crop)
+    be.generate_chain(
+        _chain_request(crop_output={"width": 384, "height": 256}),
+        output_dir=tmp_path / "out",
+    )
+    assert Path(captured[0]["output_path"]).name == "_full.mp4"
+    assert cropped == [("_full.mp4", 384, 256)]
 
 
 # --------------------------------------------------------------------------- #
@@ -397,6 +722,87 @@ def test_no_classification_names_a_field_the_schema_does_not_have():
     fields = set(GenerateRequest.model_fields)
     for label, produce in _CLASSIFICATIONS.items():
         assert produce() <= fields, f"{label} names unknown field(s): {sorted(produce() - fields)}"
+
+
+# --------------------------------------------------------------------------- #
+# 3e) the same audit for the CHAIN schema (§3-102)
+# --------------------------------------------------------------------------- #
+
+_CHAIN_CLASSIFICATIONS = {
+    "422 (CHAIN_REJECT_TABLE)": lambda: {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE},
+    "ignore+log (CHAIN_IGNORED_FIELDS)": lambda: set(ltx25.CHAIN_IGNORED_FIELDS),
+    "honoured (CHAIN_HONOURED_FIELDS)": lambda: set(ltx25.CHAIN_HONOURED_FIELDS),
+    "governed (CHAIN_GOVERNED_FIELDS)": lambda: set(ltx25.CHAIN_GOVERNED_FIELDS),
+}
+
+
+def test_every_generate_chain_request_field_is_classified():
+    classified: set[str] = set()
+    for produce in _CHAIN_CLASSIFICATIONS.values():
+        classified |= produce()
+    unclassified = set(GenerateChainRequest.model_fields) - classified
+    assert not unclassified, (
+        "GenerateChainRequest gained field(s) the LTX 2.5 adapter says nothing "
+        f"about: {sorted(unclassified)}. Put each one in CHAIN_REJECT_TABLE, "
+        "CHAIN_IGNORED_FIELDS, CHAIN_HONOURED_FIELDS or CHAIN_GOVERNED_FIELDS "
+        "in services/engines/ltx25/adapter.py (and update Docs/ の対応表)."
+    )
+
+
+def test_the_four_chain_classifications_do_not_overlap():
+    seen: dict[str, str] = {}
+    for label, produce in _CHAIN_CLASSIFICATIONS.items():
+        for field in produce():
+            assert field not in seen, f"{field} is in both {seen[field]} and {label}"
+            seen[field] = label
+
+
+def test_no_chain_classification_names_a_field_the_schema_does_not_have():
+    fields = set(GenerateChainRequest.model_fields)
+    for label, produce in _CHAIN_CLASSIFICATIONS.items():
+        assert produce() <= fields, f"{label} names unknown field(s): {sorted(produce() - fields)}"
+
+
+def test_every_chain_governor_is_itself_refused():
+    refused = {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    for field, governor in ltx25.CHAIN_GOVERNED_FIELDS.items():
+        assert governor in refused, f"{field} is governed by {governor}, which is not refused"
+
+
+def test_chain_crop_output_is_honoured_not_refused_nor_dropped():
+    """The single path's ruling, restated for the chain schema: crop_output is
+    an ffmpeg post-process on the finished mp4, so it is engine-independent."""
+    assert "crop_output" in ltx25.CHAIN_HONOURED_FIELDS
+    assert "crop_output" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert "crop_output" not in ltx25.CHAIN_IGNORED_FIELDS
+
+
+def test_the_nested_chain_clip_fields_are_all_accounted_for():
+    """THE AUDIT ABOVE ONLY SEES THE TOP LEVEL. ``clips`` is classified as
+    honoured, which is a promise about ``ChainClip``'s OWN fields too — so they
+    get named here, and a new one fails this test rather than being silently
+    dropped from the payload the worker receives."""
+    assert set(ChainClip.model_fields) == {"prompt", "num_frames", "conditioning_images"}
+    # ...and each of the three really is read when the payload is built.
+    source = inspect.getsource(ltx25._RealBackend25.generate_chain)
+    assert "clip_prompt" in source  # prompt (override else the global one)
+    assert "num_frames" in source
+    assert "conditioning_images" in source
+
+
+#: ``field -> the text that proves it is read``. Only one field needs an entry:
+#: the global ``prompt`` is reached THROUGH the schema's own helper (a clip's
+#: override else the global one), so it never appears under its own name.
+_CHAIN_HONOURED_READS = {"prompt": "chain.clip_prompt("}
+
+
+def test_chain_honoured_fields_are_exactly_what_generate_chain_acts_on():
+    """Not a transcription of the payload builder: a field declared honoured but
+    never read fails here (the chain twin of the single-path test above)."""
+    source = inspect.getsource(ltx25._RealBackend25.generate_chain)
+    for field in ltx25.CHAIN_HONOURED_FIELDS:
+        needle = _CHAIN_HONOURED_READS.get(field, f"chain.{field}")
+        assert needle in source, f"{field} is declared honoured but never read"
 
 
 def test_every_governor_is_itself_refused():

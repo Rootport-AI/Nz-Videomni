@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 from api.errors import model_incompatible
 
 if TYPE_CHECKING:  # 実行時にはimportしない(上のdocstringの規約)
-    from api.models import GenerateRequest
+    from api.models import GenerateChainRequest, GenerateRequest
     from services.base_models import BaseModelDescriptor
 
 #: (``general.architecture``, ``model_version``のminor) -> エンジン系統id。
@@ -183,13 +183,22 @@ def reject_unsupported(family: str, request: GenerateRequest) -> None:
         guard(request)
 
 
-def reject_chain(family: str) -> None:
-    """連結生成(Chained/Retake/End source/V2V/A2V)を扱えない系統なら422。
+def reject_chain(family: str, request: GenerateChainRequest) -> None:
+    """この系統が走らせられない連結生成リクエストなら、その場で422にする。
 
     :func:`reject_unsupported` と対になる、chain系エンドポイント用の入口。
-    引数にリクエストを取らないのは、chain系は**まるごと**扱えるか扱えないかの
-    どちらかであり、中身を見ても答えが変わらないからである。
+    :func:`reject_unsupported` と同じく、**判断はアダプタが持ち、ここは
+    取り次ぐだけ**である。
+
+    かつては引数にリクエストを取らなかった。「chain系はまるごと扱えるか扱えない
+    かのどちらかで、中身を見ても答えが変わらない」からだった——LTX 2.5が連結生成
+    を一切できなかった頃の話である。いまは**系統によって中身で答えが変わる**:
+    素のChainedは2.5でも走り、V2V・A2V・Retake・End source・LoRA・参照動画は
+    走らない。だからリクエストを渡す。
+
+    宣言していない系統(``ltx``)は素通り、という :func:`reject_unsupported` と
+    同じ規約。
     """
     guard = getattr(_adapter(family), "reject_chain", None)
     if guard is not None:
-        guard()
+        guard(request)

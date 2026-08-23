@@ -14,13 +14,18 @@ restates only the facts that are genuinely different:
 * which payload field each model-management category feeds;
 * which child-process environment it gets (NONE of 2.3's ``LTX_*`` knobs — every
   one of them is read by 2.3's worker and would be a borrowed assumption here);
-* the v1 feature scope: single two-stage T2V/I2V, everything else refused.
+* the feature scope: single two-stage T2V/I2V and the plain Chained clip
+  chain; everything else refused.
 
 V1 SCOPE, STATED ONCE (owner ruling 2026-08-21). :data:`REJECT_TABLE` is the
 422 half and :data:`IGNORED_FIELDS` the ignore-and-log half of the
 ``GenerateRequest`` field table; ``crop_output`` is deliberately in NEITHER —
 it is an ffmpeg post-process the app applies to the finished mp4, so it is
 engine-independent and simply works (see :meth:`_RealBackend25.generate`).
+
+THE CHAIN SCHEMA HAS ITS OWN FOUR TABLES (``CHAIN_*``, §3-102). The rules are
+identical; the schemas are not, so one table forced to serve both would need a
+per-schema exception list — the very thing the audit tests exist to prevent.
 
 LIKE THE 2.3 ADAPTER, THIS FILE NEVER IMPORTS torch / ltx_* . They exist only
 inside ``.venv-engine-ltx25``; the app venv has neither, and every engine
@@ -32,10 +37,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Callable, NoReturn
+from typing import Callable
 
+import chain_math
 from api.errors import feature_unsupported, model_incompatible
-from api.models import GenerateRequest
+from api.models import GenerateChainRequest, GenerateRequest
 from config import AppConfig
 from services import video_io
 from services.engines.ltx.adapter import (
@@ -184,14 +190,113 @@ GOVERNED_FIELDS: dict[str, str] = {
     "reference_video_strength": "loras",
 }
 
+# --------------------------------------------------------------------------- #
+# chain feature scope (§3-102 第1段: Chained本体)
+# --------------------------------------------------------------------------- #
+#
+# THE SAME FOUR-WAY CLASSIFICATION as the single-``/generate`` table above,
+# applied to :class:`GenerateChainRequest`. A SECOND set of tables rather than a
+# reuse of the first, because the two schemas answer differently for the same
+# field name: ``num_inference_steps`` is ignored on both, but ``clips`` /
+# ``overlap_frames`` / ``stage2_window`` exist only here, and ``outpaint``
+# exists only there. One table forced to serve both would need a per-schema
+# exception list, which is the thing the audit test is meant to make impossible.
+
+#: The 422 half of the ``GenerateChainRequest`` field table: ``(field, feature,
+#: is_non_default)``. Same predicate discipline as :data:`REJECT_TABLE` — every
+#: one tests "DIFFERS FROM THE DEFAULT", never "is present", because the
+#: frontend sends the whole schema on every request.
+#:
+#: The first four are whole MODES layered on top of a chain (V2V continuation,
+#: A2V, Retake, End source); the rest are the same engine-level features the
+#: single path refuses. ``outpaint`` has no counterpart here — the chain schema
+#: has no such field at all.
+CHAIN_REJECT_TABLE: tuple[
+    tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
+] = (
+    ("source_video", "v2v", lambda r: r.source_video is not None),
+    ("source_audio", "a2v", lambda r: r.source_audio is not None),
+    ("retake", "retake", lambda r: r.retake is not None),
+    ("end_source", "end_source", lambda r: r.end_source is not None),
+    ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
+    ("loras", "loras", lambda r: bool(r.loras)),
+    ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
+    ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
+    ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
+    ("attention_backend", "sage_attention", lambda r: r.attention_backend != "sdpa"),
+    ("keep_resident", "keep_resident", lambda r: bool(r.keep_resident)),
+)
+
+#: The ignore-and-log half. Field-for-field the same seven as
+#: :data:`IGNORED_FIELDS` and for the same two reasons (the distilled schedule
+#: has no CFG and no step count to honour; the 2.3 acceleration knobs name code
+#: paths engine25 does not have) — spelled out rather than aliased so the audit
+#: test reads one schema against one table.
+CHAIN_IGNORED_FIELDS: dict[str, str] = {
+    "negative_prompt": "LTX 2.5 distilled runs without classifier-free guidance",
+    "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
+    "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
+    "neg_method": "no negative-prompt mechanism in the LTX 2.5 chain scope",
+    "vsf_scale": "no negative-prompt mechanism in the LTX 2.5 chain scope",
+    "fused_gguf_dequant_kernel": "2.3's Triton dequant kernel is not on this code path",
+    "block_swap_prefetch": "engine25 uses its own block-swap window",
+}
+
+#: Fields the chain path ACTS ON. Eight ride the worker payload verbatim (see
+#: :meth:`_RealBackend25.generate_chain`), ``prompt`` and ``clips`` together
+#: become the per-clip list (effective prompt / num_frames / clip-0 images), and
+#: ``crop_output`` is the app-side ffmpeg centre-crop applied to the finished
+#: mp4 — the same engine-independent ruling the single path makes.
+#:
+#: ``num_inference_steps`` is deliberately NOT here even though the payload
+#: carries a ``num_steps`` key built from it: the distilled schedule is fixed,
+#: so the engine records the number in metadata and denoises 8 + 3 steps
+#: regardless. "Honoured" would claim it changes the output; it does not.
+CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
+    {
+        "prompt",
+        "clips",
+        "width",
+        "height",
+        "crop_output",
+        "frame_rate",
+        "seed",
+        "overlap_frames",
+        "overlap_strength",
+        "chunked_upsample",
+        "stage2_window",
+    }
+)
+
+#: ``field -> the field that governs it``, exactly as :data:`GOVERNED_FIELDS`:
+#: each is inert unless its governor is non-default, and every governor here is
+#: in :data:`CHAIN_REJECT_TABLE`, so a request that could make one of them
+#: matter is already refused before this field is read. As in the single table,
+#: the two reference strengths name ``loras`` rather than ``reference_video_id``
+#: as their governor: the chain SCHEMA rejects them outright without a LoRA
+#: (api/models.py ``validate_chain_constraints``), so that is the field they
+#: actually depend on.
+CHAIN_GOVERNED_FIELDS: dict[str, str] = {
+    "nag_scale": "nag_enabled",
+    "nag_tau": "nag_enabled",
+    "nag_alpha": "nag_enabled",
+    "conditioning_attention_strength": "loras",
+    "reference_video_strength": "loras",
+}
+
+
 #: Everything GET /models publishes as this engine's ``unsupported_features``
 #: (§3-98 Phase 5). The request-field features come from :data:`REJECT_TABLE`
-#: so the two can never disagree; the chain-family names are added because they
-#: are not request FIELDS at all — they are whole endpoints/modes, refused at
-#: :meth:`_RealBackend25.generate_chain`, and the frontend needs their names to
-#: grey out the Chained and Edit tabs.
+#: so the two can never disagree; the four chain-family MODE names are added
+#: because they are not single-request FIELDS at all, and the frontend needs
+#: their names to grey out the Edit tab and the Chained tab's mode panels.
+#:
+#: ``"chain"`` LEFT THIS TUPLE with §3-102's first increment: a plain Chained
+#: job now runs on this engine, so publishing "no chain" would grey out a tab
+#: that works. The four modes that still cannot run — retake / end_source /
+#: v2v / a2v — stay, and they are enforced field-by-field by
+#: :data:`CHAIN_REJECT_TABLE` rather than by one blanket refusal.
 UNSUPPORTED_FEATURES: tuple[str, ...] = (
-    "chain",
     "retake",
     "end_source",
     "v2v",
@@ -223,29 +328,36 @@ def reject_unsupported(request: GenerateRequest) -> None:
             )
 
 
-def reject_chain() -> NoReturn:
-    """422 every member of the chain family (§3-98 Phase 5).
+def reject_chain(request: GenerateChainRequest) -> None:
+    """422 the first out-of-scope field of a chain ``request`` (§3-102).
 
-    Chain, retake, end source, V2V continuation and A2V all arrive through the
-    ONE endpoint POST /generate/chain and the ONE backend method
-    :meth:`_RealBackend25.generate_chain`, so one refusal covers all five. It
-    takes no argument on purpose: nothing about the request can make this engine
-    able to chain, so inspecting one would suggest otherwise.
+    UNTIL §3-102 THIS TOOK NO ARGUMENT and refused every chain outright, on the
+    grounds that nothing in the body could make this engine able to chain. That
+    is no longer true: a plain Chained job runs here now, and what is left out
+    of scope — V2V continuation, A2V, Retake, End source, LoRA, a reference
+    video, NAG and the acceleration knobs — is decided FIELD BY FIELD, exactly
+    like the single path. So the request has to be read.
+
+    Same first-offender-wins rule and same table discipline as
+    :func:`reject_unsupported`; see :data:`CHAIN_REJECT_TABLE`.
 
     Lives at module level (like :func:`reject_unsupported`) so the API layer can
     refuse before a job record is created, while the backend method keeps it as
     the backstop for a payload that arrives another way.
     """
-    raise feature_unsupported(
-        "chain",
-        detail=(
-            "LTX 2.5(v1)は連結生成(Chained・Retake・End source・V2V・A2V)に"
-            "対応していません。ベースモデルに「LTX 2.3」を選んでください。"
-        ),
-    )
+    for field, feature, is_non_default in CHAIN_REJECT_TABLE:
+        if is_non_default(request):
+            raise feature_unsupported(
+                feature,
+                detail=(
+                    f"LTX 2.5の連結生成(Chained)は{feature}に対応していません"
+                    f"(リクエストの{field}が既定値ではありません)。"
+                    "この機能を使うにはベースモデルに「LTX 2.3」を選んでください。"
+                ),
+            )
 
 
-def _log_ignored(request: GenerateRequest) -> None:
+def _log_ignored(request, table: dict[str, str] | None = None) -> None:
     """ONE log line naming every ignored field this request actually SET.
 
     Only non-default values are named: a default-valued field was not a choice
@@ -253,10 +365,16 @@ def _log_ignored(request: GenerateRequest) -> None:
     to skip the line. The default comes from the schema itself
     (``model_fields[...].default``) rather than a transcribed copy, so a
     changed default cannot make this lie.
+
+    ``table`` selects which of the two ignore tables to read
+    (:data:`IGNORED_FIELDS` for a single request, :data:`CHAIN_IGNORED_FIELDS`
+    for a chain). One function for both because the RULE is identical and only
+    the table differs — a second copy would be a second place to forget the
+    "name only what was actually set" discipline.
     """
     fields = type(request).model_fields
     named = []
-    for name, reason in IGNORED_FIELDS.items():
+    for name, reason in (IGNORED_FIELDS if table is None else table).items():
         spec = fields.get(name)
         if spec is None:
             continue
@@ -546,19 +664,179 @@ class _RealBackend25(_RealBackend):
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
-    def generate_chain(self, chain_request, output_dir: Path, **kwargs) -> GenerationOutcome:
-        """Refused: the whole chain family is out of the LTX 2.5 v1 scope.
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+    ) -> GenerationOutcome:
+        """One masked AV-latent clip chain via engine25's ``generate_chain`` op.
 
-        Chain, retake, end source, V2V continuation and A2V all arrive through
-        this ONE method, so one refusal covers them; engine25's worker carries
-        the same refusal as a backstop for a payload that arrives another way.
+        THE CALL SHAPE IS 2.3's, VERBATIM — ``services/pipeline_manager.py``
+        ``run_chain_job`` passes all thirteen keywords to whichever runner is
+        active, and a signature that dropped the ones this engine cannot serve
+        would make the orchestrator branch on the engine family. It does not,
+        and must not: the ORCHESTRATOR's job is to prepare material, the
+        ADAPTER's job is to rule on it.
 
-        Since Phase 5 the API layer refuses first (POST /generate/chain calls
-        :func:`reject_chain` before reserving a job), so this is now the second
-        line rather than the only one — hence the shared function: two places
-        that answer the same question must not be able to answer it differently.
+        Nine of those keywords name a mode outside this engine's scope
+        (V2V continuation, A2V, Retake, End source, LoRA, reference video).
+        Reaching this method with any of them set is already impossible —
+        :func:`reject_chain` refuses the request fields behind them at the
+        endpoint, and again on the line below — so a non-``None`` arrival means
+        the two tables have drifted apart, which is a bug worth a loud
+        ``RuntimeError`` rather than a silently ignored argument.
+
+        HONOURED, and worth naming: ``clip0_conditioning_paths`` (clip 0's I2V
+        keyframes — the only clip the schema lets carry them) and
+        ``crop_output``, the app-side ffmpeg centre-crop of the finished mp4,
+        which is engine-independent for a chain exactly as it is for a single
+        job.
         """
-        reject_chain()
+        chain = chain_request
+        # BEFORE the load, unlike :meth:`generate`. The ruling is a pure read of
+        # the request, so spawning a worker first would only mean a doomed
+        # request pays for a model load — and it keeps this refusal reachable
+        # without a subprocess, which is what lets a pytest hold it.
+        reject_chain(chain)
+        _log_ignored(chain, CHAIN_IGNORED_FIELDS)
+
+        # Fail loud, not silent: every one of these is refused above, so a value
+        # here means the reject table and this signature disagree about what the
+        # engine can do. ``lora_paths`` is tested for emptiness rather than for
+        # None because run_chain_job always builds a list (empty = no loras).
+        out_of_scope = {
+            "source_tail_path": source_tail_path,
+            "source_context_frames": source_context_frames,
+            "source_audio_path": source_audio_path,
+            "retake_window_path": retake_window_path,
+            "end_source_path": end_source_path,
+            "end_source_context_frames": end_source_context_frames,
+            "end_source_strength": end_source_strength,
+            "reference_video_path": reference_video_path,
+        }
+        supplied = [name for name, value in out_of_scope.items() if value is not None]
+        if lora_paths:
+            supplied.append("lora_paths")
+        if supplied:
+            raise RuntimeError(
+                "LTX 2.5 chain received out-of-scope material the feature table "
+                f"should have refused: {', '.join(sorted(supplied))}"
+            )
+
+        if not self.loaded:
+            self.load()
+
+        clip0_conditioning_paths = clip0_conditioning_paths or []
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.mp4"
+
+        # Resolved in the PARENT so seed_used is deterministic regardless of the
+        # worker, exactly as in the single path and in the 2.3 chain backend.
+        seed = int(seed) if seed is not None else resolve_seed(chain.seed)
+
+        # Only clip 0 may carry conditioning images (the schema validator
+        # enforces that), so every other clip's list is empty by construction.
+        clip0_images: list[dict] = []
+        if chain.clips[0].conditioning_images and clip0_conditioning_paths:
+            clip0_images = [
+                {"path": str(path), "frame_idx": ci.frame_idx, "strength": ci.strength}
+                for ci, path in zip(chain.clips[0].conditioning_images, clip0_conditioning_paths)
+            ]
+        clips_payload = [
+            {
+                "prompt": chain.clip_prompt(i),
+                "num_frames": chain.clips[i].num_frames,
+                "images": clip0_images if i == 0 else [],
+            }
+            for i in range(len(chain.clips))
+        ]
+
+        # crop_output: the worker writes the full-size mp4 to a temp file and the
+        # existing ffmpeg helper centre-crops it into output.mp4.
+        target = (output_dir / "_full.mp4") if chain.crop_output is not None else output_path
+
+        if progress_callback:
+            progress_callback(None, None, 0.03)
+
+        # The chain contract, whole. The key SET and ORDER are the byte contract
+        # (golden snapshot in tests/test_ltx25_adapter.py) and they deliberately
+        # match 2.3's chain op: the two workers are unrelated code, but the body
+        # of a chain job is the same geometry in both, and a needlessly different
+        # key set would make the two engines' chain metadata incomparable.
+        #
+        # ``num_steps`` rides even though the distilled schedule is fixed — the
+        # engine records it in metadata and denoises 8 + 3 regardless, which is
+        # why num_inference_steps is classified ignore-and-log, not honoured.
+        payload: dict = {
+            "op": "generate_chain",
+            "width": chain.width,
+            "height": chain.height,
+            "frame_rate": chain.frame_rate,
+            "num_steps": chain.num_inference_steps,
+            "seed": seed,
+            "overlap_frames": int(chain.overlap_frames),
+            "overlap_strength": float(chain.overlap_strength),
+            "chunked_upsample": bool(chain.chunked_upsample),
+            "output_path": str(target),
+            "clips": clips_payload,
+        }
+        # stage2_window: additive, sent ONLY when the request opted off
+        # "standard", so a default chain's payload stays byte-identical to the
+        # golden key set above (same contract as 2.3's).
+        if chain.stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
+            payload["stage2_window"] = chain.stage2_window
+
+        with self._lock:
+            try:
+                self._send(payload)
+            except Exception as exc:
+                raise RuntimeError("LTX 2.5 worker died: " + self._stderr_tail()) from exc
+            event = self._read_chain_events(progress_callback)
+
+        kind = event.get("event")
+        if kind == "error":
+            raise RuntimeError(event.get("detail", "LTX 2.5 worker chain generation failed"))
+        if kind != "done":
+            raise RuntimeError(f"LTX 2.5 worker returned unexpected event: {event!r}")
+
+        if chain.crop_output is not None:
+            video_io.crop_mp4(
+                target, output_path, chain.crop_output.width, chain.crop_output.height
+            )
+            target.unlink(missing_ok=True)
+
+        if not output_path.exists() or output_path.stat().st_size <= 0:
+            raise RuntimeError(f"LTX 2.5 worker produced no/empty chain output: {output_path}")
+
+        if progress_callback:
+            progress_callback(None, None, 1.0)
+
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=event.get("seed_used", seed),
+            peak_vram_mb=event.get("peak_vram_mb"),
+            generation_mode="chain",
+            backend=REAL_BACKEND_25,
+            chain_metadata=event.get("chain"),
+            # Same relay discipline as the single path: every acceleration field
+            # names a 2.3 code path this engine does not have, so reporting "off"
+            # would claim the knob exists here and was left alone. attention_used
+            # is the one worth stating positively — the chain scope is SDPA-only.
+            attention_used="sdpa",
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
+        )
 
 
 class LTX25Runner(LTXRunner):

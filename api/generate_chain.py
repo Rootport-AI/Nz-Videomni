@@ -43,12 +43,18 @@ def generate_chain(
     background_tasks: BackgroundTasks,
     context: AppContext = Depends(get_context),
 ) -> GenerateChainResponse:
-    # ── Engine feature scope (§3-98 P5) ─────────────────────────────────────
-    # ONE refusal for the whole chain family. Chained, Retake, End source, V2V
-    # continuation and A2V are all shapes of THIS request, so an engine that
-    # cannot chain cannot serve any of them — and there is nothing in the body
-    # worth inspecting first. A no-op for LTX 2.3.
-    engines.reject_chain(context.pipeline_manager.active_engine_family)
+    # ── Engine feature scope (§3-98 P5, widened §3-102) ─────────────────────
+    # Chained, Retake, End source, V2V continuation and A2V are all shapes of
+    # THIS request, and which of them an engine can serve is a FIELD-BY-FIELD
+    # answer, not one blanket yes/no — LTX 2.5 runs a plain Chained job but none
+    # of the four modes layered on it. Hence the body is passed. A no-op for
+    # LTX 2.3, which serves all of them.
+    #
+    # STAYS AHEAD OF THE UPLOAD LOOKUPS BELOW. "This engine cannot do that" is a
+    # fact about the server; "that video does not exist" is a fact about the
+    # request. Answering the second first would send the user to fix something
+    # that is not the problem.
+    engines.reject_chain(context.pipeline_manager.active_engine_family, request)
 
     # Validate clip-0 conditioning images exist up front (only clip 0 may carry
     # them; the model validator already enforces that).

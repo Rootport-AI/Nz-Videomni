@@ -37,7 +37,7 @@
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結（Clip Chain）の内部構造と現行アーキテクチャの設計正本 |
 | [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) / [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) | 解像度×尺の能力（spill-free 閾値・生成時間）と快適上限の各正本 |
 | [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) / [`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) / [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) | 高速化候補の整理・LTX 2.3 の一般知識・MCP サーバー設計の各正本 |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) の4件＝§3-102〔v1 の範囲外の機能。**連結生成は 2026-08-23 に対応済み・オーナー目視も合格**〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕。§3-110〔連結音声の音量〕は 2026-08-23 のオーナー試聴で決着し[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移した） |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) の5件＝§3-102〔v1 の範囲外の機能。**連結生成は 2026-08-23 に対応済み・オーナー目視も合格**〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕・§3-111〔ベースモデル別インストールバッチの整備〕。§3-110〔連結音声の音量〕は 2026-08-23 のオーナー試聴で決着し[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移した） |
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
@@ -116,7 +116,8 @@ models/
 ```
 
 - 各フォルダの `put_*_here.txt`（**全18本**。`git ls-files` 実測）は git 追跡。空フォルダのプレースホルダと「そこへ置ける形式」の掲示を兼ねる。
-- **LTX 2.5 の記述子（`scripts/manifests/20-ltx25.json`）は `downloads` が空**で、インストーラは LTX 2.5 のぶんを単に飛ばす（最後の検証テーブル 15 行にも LTX 2.5 は出ない）。**重みは現状オーナー環境にのみ存在し、HuggingFace への再ホストは LTX-2.x Community License の条項確認待ちである**（§5 の残作業）。期待するファイル名 5 本は記述子と[`../README.md`](../README.md) §1「models フォルダの構成」に書いてある。
+- **LTX 2.5 の記述子（`scripts/manifests/20-ltx25.json`）は `downloads` が空**で、インストーラは LTX 2.5 のぶんを単に飛ばす（最後の検証テーブル 15 行にも LTX 2.5 は出ない）。**これは意図した状態である**——`setup.bat` は本体のインストーラで、最初に試すAIとして LTX 2.3 だけを導入し、**別のベースモデルは専用のバッチ（`install-LTX25.bat` 等）で導入する**という設計になった（オーナー裁定 2026-08-23。[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2）。バッチ群の整備までは `downloads` を空のまま置くこと（埋めると `setup.bat` が LTX 2.5 まで取りにいく）。整備は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111。
+- **LTX 2.5 の重みは HuggingFace で公開済みである**（Public・非 Gated）。[`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights)（transformer GGUF・映像/音声 VAE・空間アップスケーラ）と[`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25)（Gemma 4 テキストエンコーダ GGUF）の2本立てで、**ライセンス確認も完了している**。ダウンロードして `models/LTX25/<カテゴリ>/` へ記述子の期待名のまま置けば、そのまま認識される。ファイル一覧と SHA-256 の正本は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節。期待するファイル名 5 本は記述子と[`../README.md`](../README.md) §1「models フォルダの構成」にも書いてある。
 - インストーラ（`scripts/install_ltx.ps1`）は **`scripts/manifests/*.json` に駆動される**。manifest が取得元リポジトリ・展開先・期待ファイルを宣言し、スクリプト自体はモデル名を持たない。新しいモデルを足すときは manifest を足す。
 - **ガードは期待ファイル単位**である（ディレクトリ合計サイズではない）。`TextEncoder` が2つのリポジトリから供給されること、`Weights` に利用者の自家変換 GGUF が同居することの2点で、合計方式は破綻するため。
 - **旧レイアウトからの自動移行を持つ。** 旧配置のファイルを新配置へ移動し、`config.yaml` 内のモデルパスも自動で書き換える（書き換え前に `config.yaml.bak` を作る）。移動は上書きしない方式で、実行前に安全性チェック（シンボリックリンク・衝突）を通る。
@@ -132,16 +133,17 @@ models/
 
 **LTX 2.5 で動くのは基本生成（T2V／I2V）とクリップ連結（Chained）である。** Retake・End source・V2V・A2V・Outpainting・LoRA 各種・NAG・PrunaVAED はまだ無く、要求すると 422 で断り、画面側でもタブとパネルが灰色になる（**未実装の機能を有効にしたまま Generate を押すと警告文とともに拒否される**ところまでオーナーの実機目視で確認済み）。**Chained タブは 2026-08-23 から LTX 2.5 でも開き、その中の4つのカード（素材（冒頭）の動画／素材（末尾）／参照動画／音声）だけが個別に灰色になる**（下の「2026-08-23追記（その3）」）。**連結生成はオーナーの実機目視でも合格済み**である（同「その4」）。後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102。
 
-### 残っているオーナー作業（2件）
+### 残っているオーナー作業（1件）
 
 1. **`git push`（押し込み待ち）。** 連結生成の実装（C1〜C4）と、その記録・目視結果を反映した文書のコミットは積んであるが、押し込みはオーナー承認のうえで行う運用のため未実施である。
-2. **再ホストするなら、その前に LTX-2.x Community License の本文確認。** 派生モデルの再配布に関する条項が量子化版に適用されるかどうかが未確認のまま残っている（[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 7節）。
+
+**LTX 2.5 の重みの公開は完了した。** ライセンスの確認も済み、[`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) と[`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25) の2リポジトリが Public・非 Gated で公開されている（詳細は §4 と[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節）。**ただし `setup.bat` は LTX 2.5 を取りにいかない**——本体のインストーラは LTX 2.3 だけを導入し、別のベースモデルは専用バッチで足す設計だからである（オーナー裁定 2026-08-23。[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2、起票は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111）。
 
 **連結生成の目視（6枚）と音声の試聴は 2026-08-23 に決着した（どちらも合格）。** 目視 W1〜W6 は全件合格で、オーナー自身が操作パネルの Chained タブから生成した複数本についても「繋ぎ目に違和感なし・プロンプトに追従」との評価である。音量の件（旧台帳 §3-110）は「プロンプト・seed・解像度に依存した症状で、実用上の問題なし」と判断され、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移してクローズした（**コード変更なし・再発時は再起票**）。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.10 が正本。
 
 2026-08-21 まで挙げていた残り 4 件（AviUtl2 での目視確認・本リポジトリの push・変換ツールリポジトリ `Nz-GGUF-Converter-LTX23` の push・§3-97 をクローズしてよいかの判断）は、**2026-08-22 にすべて片付いた**。目視は 6 項目とも合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.21）、push は両リポジトリともオーナーが手動で実施して `origin/main` との同期を確認済み、台帳 §3-97・§3-98 はオーナー承認のうえクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移した。
 
-**2026-08-23追記**: LTX 2.5 重みの HuggingFace 再ホストが完了した（`Rootport/Nz-LTX25-weights` ・ `Rootport/Nz-Gemma4-12B-LTX25` の2リポジトリ）。残作業は `scripts/manifests/20-ltx25.json` の `downloads` 追記と `setup.bat` 経由の動作検証で、詳細は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)の該当節を参照。
+**2026-08-23追記**: LTX 2.5 重みの HuggingFace 公開が完了した（`Rootport/Nz-LTX25-weights` ・ `Rootport/Nz-Gemma4-12B-LTX25` の2リポジトリ。Public・非 Gated・ライセンス確認済み）。**`scripts/manifests/20-ltx25.json` の `downloads` は当面空のまま**にする——同日のオーナー裁定で「`setup.bat` は本体＋LTX 2.3 のみ、別のベースモデルは専用バッチ（`install-LTX25.bat` 等）」という2階建ての導線に決まったためで、`downloads` を埋めるのはそのバッチ群を整備するスコープの仕事である（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111）。エントリ案と `install_ltx.ps1` の制約は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節にまとまっている。
 
 **2026-08-23追記（その3）**: **LTX 2.5 で連結生成（Chained）が動くようになった。** 台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102 の第1段にあたり、機械ゲートG1〜G4（バックエンド 1,986 本・フロントエンド 2,554 本のテスト全通過）と実機ゲートG5(a)〜(i) がすべて合格している。継ぎ目は実機33か所すべてで判定基準に届かず、同じシードでの再現もmp4のSHA-256一致で確認済み。1920×1088・2クリップ×169フレームでも16GBの回避策は1段も要らなかった（VRAM確保ピーク13.2 GiB＝溢れ判定は「快適」）。**実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72**（うち§72.7が今後の回帰の基準になる固定ベンチマークB1〜B4の台帳）、API契約は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(f)、方式の差分は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節。あわせて[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-110（LTX 2.5 の連結音声が 2.3 より約10倍大きい・原因未特定）を新規起票した。**押し込みはまだしていない（`git push` はオーナー承認のうえで）。**
 

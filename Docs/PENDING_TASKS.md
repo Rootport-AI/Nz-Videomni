@@ -536,6 +536,19 @@
 - **状態**: 未着手（将来の研究課題）。**急ぐ理由はない**——現状はLTX 2.3と同じ安全策を移植するだけであり、廃止は再訪条件が揃うまで着手しない。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71.4・§71.5・**§72.2(d)・§72.6**、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 11節、`CHUNKED_UPSAMPLE_WORKORDER.md`、オーナー裁定2026-08-23（同等化優先・機能改善は別スコープ）。
 
+#### 3-111. ベースモデル別インストールバッチ（`install-LTX25.bat`等）の整備（起票：2026-08-23）
+
+- **概要**: **新しいベースモデルを、専用のバッチファイルをダブルクリックするだけで導入できるようにする。** ダウンロード → `models/<ベースモデルID>/` への配置 → ヘッダーのドロップダウンで選べる状態、までが一続きで走るのが完成形である。最初の対象はLTX 2.5（`install-LTX25.bat`）。
+- **設計方針【オーナー裁定 2026-08-23】**: `setup.bat`は**Nz-Videomni本体のインストーラ**であり、「最初にお試しいただくAI」としてLTX 2.3だけを一緒に導入する。**別のベースモデルは、そのモデル専用のバッチで足す。** 設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2。
+- **判断材料（1）どのmanifestをどのバッチが担当するかのスイッチが要る**: 現行の`scripts/install_ltx.ps1`は`scripts/manifests/*.json`を**一括で読む**作りなので、`20-ltx25.json`の`downloads[]`を埋めた瞬間に`setup.bat`がLTX 2.5まで取りにいってしまう（本体を入れるだけで60GB超のダウンロードになる）。**案**: バッチ側が`-Manifest 20-ltx25.json`のように対象の記述子を指定して**同じ`install_ltx.ps1`を呼ぶ**——インストーラ本体を1本に保ったまま、担当範囲だけをバッチが決める形である。**したがって現状`downloads[]`が空なのは未整備ではなく意図した状態**であり、本項目に着手するまで空のまま置く。
+- **判断材料（2）ドロップダウンの有効化は自動である**: ベースモデル記述子は重みの有無にかかわらず常に読まれ、**`installed`は重みファイルが実在するかどうかで決まる**。つまりバッチがやるべきことは「取得して正しい場所に置く」だけで、UI側に何かを登録する処理は要らない。サイズ・SHAの検証も既存の`downloads[].files[]`の仕組みがそのまま使える（1行1ファイルの期待ファイル単位ガード）。
+- **判断材料（3）フロントエンドの案内文はバッチ実在後に名指しへ戻せる**: 未導入のベースモデルを選んだときの案内文は、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98の実装時点でバッチが存在しなかったため**バッチ名を出さない汎用文**にしてある（「導入手順に従って重みファイルを配置してから…」）。バッチが実在するようになったら、`install-LTX25.bat`を名指しする文面へ戻してよい（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2ガード(2)・§6.4）。
+- **判断材料（4）配布対象に含めないもの**: `*.assets.safetensors`（テキストエンコーダGGUFの中身からバックエンドが起動時に自動生成する付帯資産）と、台帳メタデータの`.manifest.json`は配布物ではない。拡散デコーダ版VAEも、エンジンが未接続のため公開リポジトリに入れていない（[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節。採否は本書§3-103）。
+- **判断材料（5）`downloads[]`のエントリ案はもう書いてある**: `Rootport/Nz-LTX25-weights`（4ファイル）と`Rootport/Nz-Gemma4-12B-LTX25`（1ファイル）の2エントリぶんのJSON案、および`install_ltx.ps1`側の制約5点（必須キー・記述子ドリフト検査が`downloads`非空で有効になること・ステージング領域の全ファイル回収・`include`の`<dir>/*`書式・`--include`複数パターンがhuggingface_hub 0.36系専用であること）が[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節にまとまっている。**着手時はまずここを読むこと。**
+- **受入条件**: (a) `setup.bat`は従来どおりLTX 2.3のぶんだけを取得し続けること（検証テーブルの行数と内容が変わらないこと）。(b) `install-LTX25.bat`を実行するとLTX 2.5の5ファイルが`models/LTX25/`の正しい位置に配置され、ヘッダーのドロップダウンで「LTX 2.5」が導入済みとして選べるようになること。(c) 二重取得が起きないこと（`setup.bat`と`install-LTX25.bat`を続けて実行しても、既に揃っているファイルを取り直さないこと）。
+- **状態**: 未着手（将来の研究課題）。**急ぎではない**——重みは公開済みで、README §1の手順に従って手で置けばLTX 2.5はそのまま使えるため、バッチが無いことで塞がっている機能は無い。
+- **出典**: オーナー裁定2026-08-23（本体インストーラとベースモデル別バッチの2階建て）、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2・§6.4、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節、`scripts/install_ltx.ps1`、`scripts/manifests/20-ltx25.json`、公開先は[`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights)と[`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25)。
+
 ---
 
 ## 4. スコープ外（さらに先の将来）

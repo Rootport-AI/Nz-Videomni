@@ -316,7 +316,8 @@ DWPose 前処理器と VDA 深度前処理器は `engine/preprocess/dwpose.py`�
 **IC-LoRA・DWPose 前処理器・VDA 深度前処理器も `install_ltx.ps1` が自動で取得します（手動配置は不要です）。** インストールの最後に出る
 検証テーブル（**15 項目**）は、これらも含めて 1 ファイルずつ PASS/MISSING を表示します（表の行は manifest の
 期待ファイル定義から作られるので、ダウンロードを守るサイズ判定と必ず同じ内容になります。**LTX 2.5 の記述子は
-期待ファイルを 1 件も宣言していない**ため、この 15 行はすべて LTX 2.3 と共用前処理器のものです）。ここが MISSING のまま気づかないと、
+期待ファイルを 1 件も宣言していない**ため、この 15 行はすべて LTX 2.3 と共用前処理器のものです。LTX 2.5 を
+`setup.bat` の対象外にしてあるのは設計上の意図で、下の「models フォルダの構成」を参照してください）。ここが MISSING のまま気づかないと、
 UI にはアダプタ名（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）が出るのに、
 選んだ瞬間に 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。
 
@@ -404,23 +405,33 @@ models/
     └─ Upscaler/             空間アップスケーラ
 ```
 
-**LTX 2.5 の重みは `setup.bat` の取得対象ではありません**（§1 の約33GBには含まれません）。手に入れたファイルを上のフォルダへ置くと認識されます。
+**LTX 2.5 の重みは、設計上 `setup.bat` の取得対象ではありません**（§1 の約33GBには含まれません）。`setup.bat` は Nz-Videomni 本体のインストーラで、
+「最初にお試しいただくAI」として LTX 2.3 だけを一緒に導入します。**別のベースモデルは、そのモデル専用のバッチファイル
+（`install-LTX25.bat` のようなもの）をダブルクリックして導入する**——という導線を予定しています。そのバッチ群はまだ用意できていないため、
+**当面は下記の2つの公開リポジトリから手でダウンロードし、`models/LTX25/<カテゴリ>/` へ置いてください**（ファイル名は下表の期待名のままにします）。
+置けばドロップダウンで「導入済み」になり、そのまま選べます（バッチ群の整備は[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-111）。
 
 **LTX 2.5 が探すファイルは 5 本です**（記述子 `scripts/manifests/20-ltx25.json` が宣言している既定のファイル名。
 すべて `models/` からの相対パスです）。
 
-| 役割 | 期待するパスとファイル名 |
-|------|--------------------------|
-| transformer（本体） | `LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf` |
-| テキストエンコーダ（Gemma 4） | `LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf` |
-| 映像 VAE（畳み込みデコーダ版） | `LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors` |
-| 音声 VAE | `LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors` |
-| 空間アップスケーラ | `LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors` |
+| 役割 | 期待するパスとファイル名 | 取得元リポジトリ |
+|------|--------------------------|------------------|
+| transformer（本体） | `LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
+| テキストエンコーダ（Gemma 4） | `LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf` | [`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25) |
+| 映像 VAE（畳み込みデコーダ版） | `LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
+| 音声 VAE | `LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
+| 空間アップスケーラ | `LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
 
-> **現状、これらを配布したり自動で取得したりする仕組みはありません。** 記述子のダウンロード定義は空のままで、
+**どちらのリポジトリも Public かつ非 Gated** なので、HuggingFace のアカウントもアクセストークンも要りません。
+リポジトリ内のフォルダ名（`Weights/` ・ `TextEncoder/` ・ `VAE/` ・ `Upscaler/`）は上表のフォルダ名とそのまま対応しているので、
+ダウンロードしたファイルを同じ名前のフォルダへ入れるだけで済みます。テキストエンコーダだけリポジトリが分かれているのは、
+基になったモデル（Gemma 4）のライセンスが異なるためです（LTX 2.3 で `Rootport/Nz-DWPose` を分けているのと同じ理由）。
+
+> **自動で取得する仕組みはまだありません（意図的にそうしてあります）。** 記述子のダウンロード定義は空のままで、
 > `setup.bat` は LTX 2.5 のぶんを単に飛ばします（インストール最後の検証テーブルにも LTX 2.5 の行は出ません）。
-> LTX 2.5 の重みは現在オーナーの手元にしかなく、公開リポジトリへの再ホストはライセンス条項の確認待ちです。
-> **LTX 2.3 だけを使うぶんには何の影響もありません**（LTX 2.5 は「選べるが未導入」として画面に出ます）。
+> これは「本体のインストーラは LTX 2.3 だけを導入し、別のベースモデルは専用のバッチで足す」という設計によるもので、
+> 重みが手に入らないからではありません——上表のとおり、重みは HuggingFace で公開済みです。
+> **LTX 2.3 だけを使うぶんには何の影響もありません**（LTX 2.5 は、重みを置くまで「選べるが未導入」として画面に出ます）。
 >
 > テキストエンコーダのトークナイザは GGUF の中に入っているので別途置く必要はありません（隣に自動生成される
 > `*.assets.safetensors` はその展開結果で、消しても次回に作り直されます）。
@@ -920,8 +931,10 @@ LTX 2.5 のエンジンはそれを持っていません）。ネガティブプ
 （プロンプトへの従い具合の制御）そのものが無いためです。**無視したことは `logs/server.log` に1行残ります。**
 
 **LTX 2.3 を選んでいるあいだは、これらはすべて従来どおり使えます。** LTX 2.5 での対応は今後の課題です
-（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102。**クリップ連結は 2026-08-23 に対応済みで、次に着手するのは V2V です**）。**なお LTX 2.5 の重みは現在配布していません**
-（§1「models フォルダの構成」の LTX 2.5 の項）。
+（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102。**クリップ連結は 2026-08-23 に対応済みで、次に着手するのは V2V です**）。**なお LTX 2.5 の重みは HuggingFace で公開済みですが、`setup.bat` の取得対象ではありません**——
+[`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) と
+[`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25) からダウンロードし、
+`models/LTX25/<カテゴリ>/` へ置くと認識されます（§1「models フォルダの構成」の LTX 2.5 の項）。
 
 <a id="limit-onejob"></a>
 ### 7.2 同時に走る生成は1本だけ

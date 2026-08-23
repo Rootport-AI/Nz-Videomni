@@ -37,7 +37,7 @@
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結（Clip Chain）の内部構造と現行アーキテクチャの設計正本 |
 | [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) / [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) | 解像度×尺の能力（spill-free 閾値・生成時間）と快適上限の各正本 |
 | [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) / [`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) / [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) | 高速化候補の整理・LTX 2.3 の一般知識・MCP サーバー設計の各正本 |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) の5件＝§3-102〔v1 の範囲外の機能。**連結生成は 2026-08-23 に対応済み**〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕・§3-110〔LTX 2.5 の連結音声の音量〕） |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) の4件＝§3-102〔v1 の範囲外の機能。**連結生成は 2026-08-23 に対応済み・オーナー目視も合格**〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕。§3-110〔連結音声の音量〕は 2026-08-23 のオーナー試聴で決着し[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移した） |
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
@@ -130,20 +130,22 @@ models/
 
 **LTX 2.5 は別のエンジン系統になった。** 当初は「ltx 系統の別ベースモデルとして載る」見立てだったが、公式パッケージの世代差と `transformers` のバージョン要件（Gemma 3 と Gemma 4）が同居できないため、**専用の仮想環境 `.venv-engine-ltx25` ＋専用ワーカー `engine25/`** を持つ系統 `ltx25` として新設した。**`engine/` と `.venv-engine`（LTX 2.3 側）は 1 バイトも触っていない。**
 
-**LTX 2.5 で動くのは基本生成（T2V／I2V）とクリップ連結（Chained）である。** Retake・End source・V2V・A2V・Outpainting・LoRA 各種・NAG・PrunaVAED はまだ無く、要求すると 422 で断り、画面側でもタブとパネルが灰色になる（**未実装の機能を有効にしたまま Generate を押すと警告文とともに拒否される**ところまでオーナーの実機目視で確認済み）。**Chained タブは 2026-08-23 から LTX 2.5 でも開き、その中の4つのカード（素材（冒頭）の動画／素材（末尾）／参照動画／音声）だけが個別に灰色になる**（下の「2026-08-23追記（その3）」）。後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102。
+**LTX 2.5 で動くのは基本生成（T2V／I2V）とクリップ連結（Chained）である。** Retake・End source・V2V・A2V・Outpainting・LoRA 各種・NAG・PrunaVAED はまだ無く、要求すると 422 で断り、画面側でもタブとパネルが灰色になる（**未実装の機能を有効にしたまま Generate を押すと警告文とともに拒否される**ところまでオーナーの実機目視で確認済み）。**Chained タブは 2026-08-23 から LTX 2.5 でも開き、その中の4つのカード（素材（冒頭）の動画／素材（末尾）／参照動画／音声）だけが個別に灰色になる**（下の「2026-08-23追記（その3）」）。**連結生成はオーナーの実機目視でも合格済み**である（同「その4」）。後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102。
 
-### 残っているオーナー作業（4件）
+### 残っているオーナー作業（2件）
 
-1. **連結生成の目視（6枚）。** [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§72.9** に見どころつきの表（W1〜W6）を用意してある。対象は `outputs/ltx25-chain-g5/` の継ぎ目画像で、**数値はすべて合格しているので残っているのは「画として良いか」の判断だけ**である。判断が出たら同節へ追記すること。
-2. **音声の試聴（1件）。** LTX 2.5 の連結音声が LTX 2.3 の約10倍の音量になっている（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.8(1)）。割れていないか・2.3 と並べて違和感が無いかを聴いて判断してほしい。**問題なしなら台帳 §3-110 はそのままクローズできる**（コード変更は不要）。
-3. **`git push`。** 連結生成の実装（C1〜C4）と本記録のコミットは積んであるが、押し込みはオーナー承認のうえで行う運用のため未実施である。
-4. **再ホストするなら、その前に LTX-2.x Community License の本文確認。** 派生モデルの再配布に関する条項が量子化版に適用されるかどうかが未確認のまま残っている（[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 7節）。
+1. **`git push`（押し込み待ち）。** 連結生成の実装（C1〜C4）と、その記録・目視結果を反映した文書のコミットは積んであるが、押し込みはオーナー承認のうえで行う運用のため未実施である。
+2. **再ホストするなら、その前に LTX-2.x Community License の本文確認。** 派生モデルの再配布に関する条項が量子化版に適用されるかどうかが未確認のまま残っている（[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 7節）。
+
+**連結生成の目視（6枚）と音声の試聴は 2026-08-23 に決着した（どちらも合格）。** 目視 W1〜W6 は全件合格で、オーナー自身が操作パネルの Chained タブから生成した複数本についても「繋ぎ目に違和感なし・プロンプトに追従」との評価である。音量の件（旧台帳 §3-110）は「プロンプト・seed・解像度に依存した症状で、実用上の問題なし」と判断され、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移してクローズした（**コード変更なし・再発時は再起票**）。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.10 が正本。
 
 2026-08-21 まで挙げていた残り 4 件（AviUtl2 での目視確認・本リポジトリの push・変換ツールリポジトリ `Nz-GGUF-Converter-LTX23` の push・§3-97 をクローズしてよいかの判断）は、**2026-08-22 にすべて片付いた**。目視は 6 項目とも合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.21）、push は両リポジトリともオーナーが手動で実施して `origin/main` との同期を確認済み、台帳 §3-97・§3-98 はオーナー承認のうえクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移した。
 
 **2026-08-23追記**: LTX 2.5 重みの HuggingFace 再ホストが完了した（`Rootport/Nz-LTX25-weights` ・ `Rootport/Nz-Gemma4-12B-LTX25` の2リポジトリ）。残作業は `scripts/manifests/20-ltx25.json` の `downloads` 追記と `setup.bat` 経由の動作検証で、詳細は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)の該当節を参照。
 
-**2026-08-23追記（その3・最新）**: **LTX 2.5 で連結生成（Chained）が動くようになった。** 台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102 の第1段にあたり、機械ゲートG1〜G4（バックエンド 1,986 本・フロントエンド 2,554 本のテスト全通過）と実機ゲートG5(a)〜(i) がすべて合格している。継ぎ目は実機33か所すべてで判定基準に届かず、同じシードでの再現もmp4のSHA-256一致で確認済み。1920×1088・2クリップ×169フレームでも16GBの回避策は1段も要らなかった（VRAM確保ピーク13.2 GiB＝溢れ判定は「快適」）。**実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72**（うち§72.7が今後の回帰の基準になる固定ベンチマークB1〜B4の台帳）、API契約は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(f)、方式の差分は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節。あわせて[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-110（LTX 2.5 の連結音声が 2.3 より約10倍大きい・原因未特定）を新規起票した。**押し込みはまだしていない（`git push` はオーナー承認のうえで）。**
+**2026-08-23追記（その3）**: **LTX 2.5 で連結生成（Chained）が動くようになった。** 台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102 の第1段にあたり、機械ゲートG1〜G4（バックエンド 1,986 本・フロントエンド 2,554 本のテスト全通過）と実機ゲートG5(a)〜(i) がすべて合格している。継ぎ目は実機33か所すべてで判定基準に届かず、同じシードでの再現もmp4のSHA-256一致で確認済み。1920×1088・2クリップ×169フレームでも16GBの回避策は1段も要らなかった（VRAM確保ピーク13.2 GiB＝溢れ判定は「快適」）。**実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72**（うち§72.7が今後の回帰の基準になる固定ベンチマークB1〜B4の台帳）、API契約は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(f)、方式の差分は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節。あわせて[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-110（LTX 2.5 の連結音声が 2.3 より約10倍大きい・原因未特定）を新規起票した。**押し込みはまだしていない（`git push` はオーナー承認のうえで）。**
+
+**2026-08-23追記（その4・最新）**: **連結生成のオーナー目視・試聴が決着し、どちらも合格した。** 目視は `outputs/ltx25-chain-g5/` の6件（W1〜W6）が全件合格で、さらにオーナー自身が AviUtl2 の操作パネルの Chained タブから複数の動画を生成し「繋ぎ目に違和感なし・プロンプトに追従」と評価している。音声音量の件は「プロンプト・seed・解像度に依存した症状で、自分が生成した768pの動画では特にうるさく感じなかった」との試聴結果により**実用上の問題なし（条件依存）**として決着し、台帳 §3-110 は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移してクローズした（**コードは1バイトも変えていない**。再発したら再起票する）。結果の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§72.10**。
 
 **2026-08-23追記（その2）**: **Chained の 2.5 移植と Single 版 IC-LoRA へ着手する前の前提実験が完了した**（製品コードは不変）。Stage-2 の窓は解像度別ではなく**単一のトークン予算**で決めればよく（快適上限の線は約 47,000 トークン、1920×1088 用に窓を 19 へ落とす 2.3 の後付けは 2.5 では不要、Chained ではチャンク化アップサンプルが必須）、**LTX 2.3 の LoRA・IC-LoRA 資産は 2.5 でそのまま使える（go。ただし強度を上げる必要がある）**。全ラン表・当てはめ式・実験2A/2B/2C の実測は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71 が正本、設計への持ち帰りは[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 11 節。**オーナーの目視が2枚（§71.10）未記入**で、あわせて[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108（kohya 形式 LoRA をローダーが読めない）を新規起票した。
 
@@ -151,9 +153,9 @@ models/
 
 台帳の「1. 近日中の改修項目」に残っているのは §1-4 だけ（オーナー自身が README のスピードガイドを書く作業であり、AI エージェントが実装するタスクではない）。したがって次のテーマは「3. 将来の研究課題」から選ぶ。
 
-**LTX 2.5 の続きを進めるなら §3-102 で、順番はもう決まっている**——オーナー裁定（2026-08-23）の段階分け「必須級 → 高速化技術の前倒し → 準必須級 → 実験的」に沿って、**V2V継続 → A2V → Style LoRA → IC-LoRA → 高速化技術**の順である。連結生成の本体（第1段）は 2026-08-23 に完了したので、次はこの一覧の先頭にあたる V2V継続になる。**Style LoRA と IC-LoRA は前提実験で go が出ており設計の入力も揃っている**（上の「2026-08-23追記（その2）」）。**回帰の物差しも用意してある**——固定ベンチマーク B1〜B4（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.7）を同じ条件で走らせ直せば、「速くなったが絵が変わっていないか」をmp4のSHA-256一致で判定できる。
+**次のテーマは §3-102 の「V2V継続（素材（冒頭）に動画を使って続きを作る）の LTX 2.5 対応」である。** 順番はもう決まっている——オーナー裁定（2026-08-23）の段階分け「必須級 → 高速化技術の前倒し → 準必須級 → 実験的」に沿って、**V2V継続 → A2V → Style LoRA → IC-LoRA → 高速化技術**の順である。連結生成の本体（第1段）は 2026-08-23 に完了しオーナー目視も合格したので、次はこの一覧の先頭にあたる V2V継続になる（断っているフィールドは `source_video` の1つで、アダプタの `CHAIN_REJECT_TABLE` から該当行が外れることが完了の合図である）。**Style LoRA と IC-LoRA は前提実験で go が出ており設計の入力も揃っている**（上の「2026-08-23追記（その2）」）。**回帰の物差しも用意してある**——固定ベンチマーク B1〜B4（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.7）を同じ条件で走らせ直せば、「速くなったが絵が変わっていないか」をmp4のSHA-256一致で判定できる。
 
-そのほかの直近の起票は §3-110（LTX 2.5 の連結音声の音量・まずオーナーの試聴待ち）・§3-103（拡散デコーダ版 VAE と決定性）・§3-104（インストーラの `-ResolveLatest` の不具合）・§3-105（2.3 ワーカーの 2 ジョブ目以降のせり上がり）・§3-107（ストレージ必要容量の再実測）・§3-108（kohya 形式 LoRA をローダーが読めない）・§3-109（チャンク化 upsample の廃止）・§3-96・§3-95・§3-54／§3-55。
+そのほかの直近の起票は §3-103（拡散デコーダ版 VAE と決定性）・§3-104（インストーラの `-ResolveLatest` の不具合）・§3-105（2.3 ワーカーの 2 ジョブ目以降のせり上がり）・§3-107（ストレージ必要容量の再実測）・§3-108（kohya 形式 LoRA をローダーが読めない）・§3-109（チャンク化 upsample の廃止）・§3-96・§3-95・§3-54／§3-55。
 
 LTX 2.5 まわりに着手する場合の読む順序: **①本書§2（文書の地図） → ②[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（v1 で何を作り何を作らなかったか）と[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102（残っている作業） → ③[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §3.3・§5.3・§5.6（設計正本） → ④[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69（実測と、設計へ持ち帰る事実は §69.19） → ⑤[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（API 契約）**。
 

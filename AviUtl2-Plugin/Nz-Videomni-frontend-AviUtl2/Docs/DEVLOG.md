@@ -3173,3 +3173,36 @@ LTX 2.3でStyle LoRA（画風・キャラクターLoRA）適用時に音声出�
 - **検証**: `npm run typecheck` **0エラー** ／ `npm run test -- --run` **2490 passed（132ファイル）**（実機バックエンド前提の`src/api/backend.integration.test.ts`は除外。理由は下記）／ `npm run lint` **0 error**（警告31件はベースライン維持）／ `npm run build:single` **成功**（631.37 kB）。バックエンドは`pytest` **1806 passed / 20 skipped**（前回1804＋新規2）。
 - **`.aux2`は再ビルドしてデプロイした**: 作業中はAviUtl2が起動していた（`deploy.ps1`は起動中の配置を拒否する仕様）が、ビルド完了時点で終了していたため`build.ps1 -Config Release` → `deploy.ps1`まで通した。実機（`...\Plugin\NzVideomni\`）とリポジトリ配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）の2か所へ配布し、ビルド成果物を含む3つのSHA-256が一致することを確認済み。新しい文言（`Video model (checkpoint)`）と`category_order`が埋め込みリソースに入っていることもバイト検索で確認した。
 - **積み残し**: (1)の真因（WebView2メッセージ経路が本当にキー順を並べ替えるのか）は**未確定のまま**である。今回の修正は真因に依存せず効くが、原因そのものを確かめるにはAviUtl2上での目視が要る。**他の場所でサーバー応答のキー順に依存している箇所は無い**ことは確認済みで（依存していたのはこの1か所だけ）、実害は残っていない。
+
+## 88. LTX 2.5でChainedタブ・V2V・A2V・Batch A2Vを開放した（バックエンド§3-102のC4）（2026-08-23）
+
+**やったこと**: LTX 2.5エンジンが連結生成・V2V継続・A2Vに対応したのに合わせ、フロントエンドの機能スコープを**「タブ全体を落とす」から「素材ごとに落とす」へ一段細かくした**うえで、対応済みになった機能のグレーアウトを外した。3コミットに分かれているが、話としては1つである。設計正本はバックエンド[`MULTI_ENGINE_DESIGN.md`](../../../Docs/MULTI_ENGINE_DESIGN.md) §5.6・§8.5、機械ゲートの記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §72.5（連結生成）・§73.5（V2V・A2V）。
+
+### (1) Chainedタブの開放と4パネルの個別グレーアウト（`de5442c`）
+
+- **`useBaseModels.ts`**: `unsupportedFeatures`から4つのbooleanを導出する純関数`chainPanelsDisabledFor`を新設した（既存の`batchA2vDisabledFor`と同じ作法）。`v2v`／`a2v`／`end_source`／`reference_video`をそれぞれ1パネルへ対応させる。**`chain`は見ない**——連結そのものができないベースモデルは`disabledModesFor`がタブごと落とすので、ここで重ねて判断すると**同じ裁定を2箇所で持つ**ことになるからである。`MODE_REQUIREMENTS`は無変更。
+- **`AppShell.tsx` / `ChainedScreen.tsx`**: 計算済みの4boolean（`v2vUnavailable`／`a2vUnavailable`／`endSourceUnavailable`／`referenceUnavailable`）を`ChainedScreen`へ渡し、`SourceInputPanel`／`ChainAudioPanel`／`ChainEndSourcePanel`／`ChainReferencePanel`の4枚を**既存の`disabled`機構**で無効化して、それぞれの上に理由を1行出す。**新しいUI部品は作っていない**——Batch A2Vが既に使っている`warning-banner`の書式に合わせた。
+- **切り替え前に取り付けてあった素材は消さない**。灰色になるだけで、送信そのものはサーバーの422 `FEATURE_UNSUPPORTED`でfail loudに断られる（LoRAタグやNAGと同じ扱い）。
+- **`mockBridge.ts`**: LTX25の`unsupported_features`から`chain`を外し、`handleGenerateChain`が**アクティブなベースモデルが宣言している機能に限り**、対応フィールドが非空なら本物と同形の422封筒を返すようにした。LTX 2.3は何も宣言しないので既存のChainedテスト群は1件も影響を受けない。
+- **テスト**: 2515 → **2538**（+23）。
+
+### (2) 素材（冒頭）欄は動画の口だけを閉じる（`33d28df`・(1)の追補）
+
+- **なぜ追補が要ったか**: (1)は`SourceInputPanel`を**パネルごと**無効化していたが、この欄は「クリップ1の開始画像（I2V）」と「V2Vの元動画」という**別々の素材を1枚のカードで兼ねている**。開始画像はLTX 2.5でも使える連結生成本体の一部なので、丸ごと落とすと対応済みのI2V連結がWebUIから組めなくなっていた（監督裁定）。そこで**半分だけ閉じる**形へ改めた。
+- **`useChainForm.ts`**: `SourceAttachOptions{imagesOnly}`を新設し、`pickSource(options?)`／`attachSourceByPath(..., options?)`が受け取るようにした。`imagesOnly`のときはネイティブのダイアログを`kind:"image"`で開くので、そもそも動画を選べない。別経路（打ち込んだパスなど）で動画が届いた場合は、**どちらのスロットにも触れずに**`sourceError="VIDEO_SOURCE_UNSUPPORTED"`で断る——既に付けてある開始画像が巻き添えで消えないよう、判定は分岐の前に置いた。**判定をパネルではなくフォームに置いた**のは、2つの取り付け経路がどちらも同じ`attachRoutedSource`へ合流するためで、パネル側に書くと同じ振り分けを二重に持つことになる。
+- **`SourceInputPanel.tsx`**: 新プロップ`videoUnavailable`。ドロップの受理拡張子から動画を外し（動画のドロップは既存の「非対応」行に落ちる）、選択ボタンは`imagesOnly`で呼び、ラベルも「画像を選択…」へ切り替える。CONTEXT FRAMESスライダー（動画が付いているときだけ現れる＝切り替え前の残留分）は無効化。**画像側の選択・クリア・強度・サムネイルはすべて有効のまま**。
+- **`ChainedScreen.tsx` / `i18n/strings.ts`**: `disabled`は元に戻し、`videoUnavailable={v2vUnavailable}`を渡す。理由文は「素材に動画を使うことだけが使えない／開始画像は影響を受けない」趣旨へ限定し、`chooseImageOnlyButton`をja/enへ1行ずつ追加した。
+- **テスト**: 2538 → **2544**（+6）。`SourceInputPanel.test.tsx`に「2.5でも開始画像は付く」「ダイアログは`kind:"image"`で開く」「動画は断られ、既存の開始画像は残る」「プロップ無しなら従来どおり動画も選べる」を追加した。
+
+### (3) V2V・A2V・Batch A2Vの開放（`05bdb9a`）
+
+- **製品コードは無変更で済んだ**。`mockBridge`が宣言するLTX 2.5の使えない機能一覧から`"v2v"`と`"a2v"`を外しただけで、グレーアウトはサーバー宣言駆動なので`chainPanelsDisabledFor`／`batchA2vDisabledFor`を1行も触らずにV2V素材パネル・A2V音声パネル・Batch A2V欄が復帰する。素材（末尾）と参照動画は宣言に残るので、これまでどおり個別に灰色のままになる。**(1)で「素材ごとに落とす」形にしておいたことが、ここで効いている。**
+- **`MOCK_CHAIN_FEATURE_FIELDS`の`source_video`／`source_audio`の行は残した**——422を決めるのは行の有無ではなく**宣言一覧のメンバシップ**で、行は「どの引数がどの機能名に属するか」を言っているだけだからである。
+- **テストは3本が丸ごと反転した**（「無効であること」を確かめていたものを「有効であること」を確かめる形へ書き換えた）: `AppShell.featureScope.test.tsx`（2.5でV2V・A2Vのパネルが有効・素材（末尾）と参照だけが理由文つきで灰色・ソース選択ボタンの説明が「画像または動画」へ復帰・Batch A2V欄が有効）／`mockBridge.test.ts`（`v2v`・`a2v`を422の一覧から外し、2.5で`source_video`／`source_audio`／1クリップ`full_length`のA2Vが202で通ること、素材（末尾）との併用は422のままであることを追加）／`useBaseModels.test.ts`（宣言に残る機能名`end_source`で確認する形へ変更）。LTX 2.3側のテストは無傷（宣言が空のままなので全機能が通る）。
+
+### 検証とデプロイ
+
+- **機械検証**: `npm run typecheck` **0エラー**、`npm run build`／`build:single` **成功**、vitest は(2)の時点で**2,544 passed / 10 skipped（合計2,554件・134ファイル）**（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §72.5）。(3)はテストの書き換えのみで、総数の増減は記録に残していない。
+- **`.aux2`は3回とも再ビルドして2箇所へ配った**（実機のAviUtl2インストール先の`Plugin\NzVideomni\NzVideomni.aux2`と、リポジトリの配布用コピー`AviUtl2-Plugin\NzVideomni.aux2`）。最終形は**1,245,184バイト**で両者一致している（同 §73.5）。**ビルドは必ず`build.ps1` → `deploy.ps1`を通すこと**（ninjaを直接叩くとWeb UIの埋め込みが更新されない）。
+- **バックエンド側の対応する記録**: MCPの説明文もこの日に2回直している（`ea6cff8`＝連結生成の解禁、`74baeea`＝V2V・A2Vの解禁と「A2Vはclipsがちょうど1件」という失効記述の訂正）。どちらも文言のみで、ツールの引数・振る舞いは1つも変えていない。
+- **状態**: 実装・機械検証・デプロイまで完了（2026-08-23）。**オーナーの実機確認も決着済み**——連結生成は2026-08-23、V2V継続とA2Vは2026-08-24に合格した（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §72.10・§73.10）。

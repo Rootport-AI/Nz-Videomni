@@ -1,7 +1,9 @@
 # Nz-Videomni (AviUtl2 frontend)
 
 A general-purpose AviUtl2 plugin (`.aux2`) that acts as a thin frontend for the
-`Nz-Videomni` LTX 2.3 video-generation backend.
+`Nz-Videomni` video-generation backend, which switches between the LTX 2.3 and
+LTX 2.5 base models — the plugin header carries a base-model dropdown that
+selects the active one (selecting a model makes the server load it).
 
 This directory is the frontend half of the **Nz-Videomni monorepo**: the backend
 lives at the repository root (two levels up), and this tree — plus the built

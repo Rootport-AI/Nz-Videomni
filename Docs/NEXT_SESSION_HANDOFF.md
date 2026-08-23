@@ -37,7 +37,7 @@
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結（Clip Chain）の内部構造と現行アーキテクチャの設計正本 |
 | [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) / [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) | 解像度×尺の能力（spill-free 閾値・生成時間）と快適上限の各正本 |
 | [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) / [`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) / [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) | 高速化候補の整理・LTX 2.3 の一般知識・MCP サーバー設計の各正本 |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。生きた後続は[`PENDING_TASKS.md`](PENDING_TASKS.md) の5件＝§3-102〔v1 の範囲外の機能。**連結生成・V2V継続・A2V〔長尺・バッチを含む〕は 2026-08-23 に対応済みで、オーナーの実機確認にも合格している**（連結生成は 2026-08-23、V2V継続と A2V は 2026-08-24。長尺A2V はオーナー裁定により合格扱い）。**次に着手するのは Style LoRA**〕・§3-103〔拡散デコーダ版 VAE〕・§3-104〔インストーラの `-ResolveLatest`〕・§3-105〔LTX 2.3 ワーカーの 2 ジョブ目以降のせり上がり〕・§3-111〔ベースモデル別インストールバッチの整備〕。§3-110〔連結音声の音量〕は 2026-08-23 のオーナー試聴で決着し[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-110 へ移した） |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | **マルチエンジン化（複数の動画生成AIをドロップダウンで切り替える）の設計正本。第1段階（土台）・第2段階（LTX 2.5）とも実装済み**（起票とクローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97・§3-98。**生きている後続課題の一覧は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3 が唯一の正本**なので、件数と項目番号はそちらで確認すること——本書を含む他の文書には数を書かない） |
 | フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) | API 利用者（フロントエンド実装者）向けの正本 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | ネイティブ ↔ Web UI の JSON-RPC 契約 |
 | フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) | 実バックエンド接続時の確認手順 |
@@ -129,7 +129,7 @@ models/
 
 **LTX 2.5 で使えるのは、基本生成（テキストから動画・画像から動画）・クリップ連結（Chained）・V2V継続（素材（冒頭）に動画を使って続きを作る）・A2V（音声から動画。Single・長尺・バッチのいずれも）である。** まだ無いのは Retake・素材（末尾）・Outpainting・LoRA 各種（スタイル LoRA・IC-LoRA）・NAG／VSF・高速化技術（SageAttention・`keep_resident`・PrunaVAED）で、要求すると 422 で断り、画面側でもパネルが灰色になる。**Chained タブは LTX 2.5 でも開き、その中で灰色のまま残るのは素材（末尾）と参照動画の2カードだけ**である（`unsupported_features` は10件）。後続は台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102。
 
-**ここまでは、すべてオーナーの実機確認に合格している。** 基本生成（v1）は 2026-08-22（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.21）、クリップ連結は 2026-08-23（同 §72.10）、V2V継続と A2V は 2026-08-24（同 §73.10）。**長尺A2V だけは実機検証を経ていないが、オーナー裁定により合格扱いである**——「長尺A2V はフロントエンド側で大半が解決する機能で、A2V と Chained が正しく作られていれば動くことが期待できるため」。機械ゲート・実機ゲートは全項目合格で、16GB の回避策は 1 段も使っていない（1920×1088・169フレームの V2V まで確認済み）。実測の正本は同 §69（v1）・§72（連結生成＋固定ベンチマーク B1〜B4）・§73（V2V・A2V＋固定ベンチマーク B5〜B8）、API 契約は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10、設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6・§8.5、方式の差分は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節である。
+**ここまでは、すべてオーナーの実機確認に合格している。** 基本生成（v1）は 2026-08-22（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.21）、クリップ連結は 2026-08-23（同 §72.10）、V2V継続と A2V は 2026-08-24（同 §73.10）。**長尺A2V はオーナー裁定で合格扱い**（裁定の全文と理由は同 §73.10(2)）。機械ゲート・実機ゲートは全項目合格で、16GB の回避策は 1 段も使っていない（1920×1088・169フレームの V2V まで確認済み）。実測の正本は同 §69（v1）・§72（連結生成＋固定ベンチマーク B1〜B4）・§73（V2V・A2V＋固定ベンチマーク B5〜B8）、API 契約は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10、設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6・§8.5、方式の差分は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節である。
 
 ### 残っているオーナー作業（1件）
 

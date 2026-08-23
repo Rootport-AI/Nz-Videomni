@@ -194,11 +194,14 @@ describe("useBaseModels", () => {
     // LTX 2.3 declares none — that empty array is the load-bearing half of
     // this feature, because it is what leaves the ordinary case untouched.
     expect(result.current.options[0]?.unsupportedFeatures).toEqual([]);
-    // §3-102: `chain` is no longer among them — LTX 2.5 chains now. `v2v` is
-    // the name that stands in its place: still declared, still greying
-    // something (the Chain screen's source-video panel).
+    // §3-102: `chain` is no longer among them — LTX 2.5 chains now — and its
+    // second stage took `v2v` and `a2v` with it. `end_source` is the name that
+    // stands in their place: still declared, still greying something (the Chain
+    // screen's 素材（末尾） panel).
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("chain");
-    expect(result.current.options[1]?.unsupportedFeatures).toContain("v2v");
+    expect(result.current.options[1]?.unsupportedFeatures).not.toContain("v2v");
+    expect(result.current.options[1]?.unsupportedFeatures).not.toContain("a2v");
+    expect(result.current.options[1]?.unsupportedFeatures).toContain("end_source");
     // LTX 2.3 is what is loaded, so nothing is disabled.
     expect(result.current.unsupportedFeatures).toEqual([]);
     expect(result.current.disabledModes).toEqual([]);
@@ -215,7 +218,7 @@ describe("useBaseModels", () => {
       await result.current.switchBaseModel("LTX25");
     });
 
-    expect(result.current.unsupportedFeatures).toContain("v2v");
+    expect(result.current.unsupportedFeatures).toContain("end_source");
     // §3-102: only Edit now — Chained is back, because `chain` left the list.
     expect(result.current.disabledModes).toEqual(["edit"]);
 

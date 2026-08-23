@@ -613,16 +613,20 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     expect(features).toEqual(
       expect.arrayContaining([
-        "retake", "end_source", "v2v", "a2v",
+        "retake", "end_source",
         "two_stage_hq", "outpaint", "loras", "reference_video",
         "nag", "prune_vaed", "sage_attention", "keep_resident",
       ]),
     );
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
-    // chains now, and its absence is what un-greys the Chained tab. Asserted
-    // negatively, because `arrayContaining` above would not notice it coming
-    // back.
+    // chains now, and its absence is what un-greys the Chained tab. §3-102
+    // second stage: `v2v` and `a2v` left with it — the engine takes a source
+    // video and a source audio track now, which is what un-greys the two Chain
+    // material panels and the Batch A2V section. All three asserted negatively,
+    // because `arrayContaining` above would not notice them coming back.
     expect(features).not.toContain("chain");
+    expect(features).not.toContain("v2v");
+    expect(features).not.toContain("a2v");
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {
@@ -660,8 +664,6 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
   /** Every field the fixture can refuse, with a value that counts as "the user
    * asked for this" — one case per row of `MOCK_CHAIN_FEATURE_FIELDS`. */
   const CASES: ReadonlyArray<{ feature: string; body: object }> = [
-    { feature: "v2v", body: { source_video: { video_id: "vid-1", context_frames: 73 } } },
-    { feature: "a2v", body: { source_audio: { audio_id: "aud-1" } } },
     { feature: "end_source", body: { end_source: { video_id: "vid-2", context_frames: 72 } } },
     { feature: "reference_video", body: { reference_video_id: "vid-3" } },
     { feature: "loras", body: { loras: [{ name: "style-a", strength: 0.8 }] } },
@@ -692,6 +694,56 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     const bridge = await ltx25Bridge();
     const result = await postChain(bridge, CHAIN_BODY);
     expect(result.status).toBe(202);
+  });
+
+  // §3-102 second stage: the two materials that just LEFT the declared list.
+  // Asserted as acceptances rather than by their absence from `CASES` above,
+  // because a row quietly dropped from a table proves nothing — only a request
+  // that actually carries the field and comes back 202 does.
+  it("accepts a V2V chain on LTX 2.5 — `source_video` is in scope now", async () => {
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      source_video: { video_id: "vid-1", context_frames: 73 },
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("accepts an A2V chain on LTX 2.5 — `source_audio` is in scope now", async () => {
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      source_audio: { audio_id: "aud-1" },
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("accepts the Single-tab A2V shape on LTX 2.5 — one clip, full_length", async () => {
+    // The shape the Single tab and Batch A2V both submit: a ONE-clip chain
+    // carrying an audio track. It is only legal because a source is attached
+    // (the fixture's own `hasSource` rule), so it is the case that would break
+    // first if `source_audio` were still being refused.
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      clips: [{ num_frames: 121 }],
+      stage2_window: "full_length",
+      source_audio: { audio_id: "aud-1" },
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("still refuses end_source / reference_video on an LTX 2.5 V2V chain", async () => {
+    // The other half of the same switch: opening V2V and A2V must not have
+    // opened the materials that are still out of scope.
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      source_video: { video_id: "vid-1", context_frames: 73 },
+      end_source: { video_id: "vid-2", context_frames: 72 },
+    });
+    expect(result.status).toBe(422);
+    expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
   });
 
   for (const { feature, body } of CASES) {
@@ -735,7 +787,7 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     const result = await postChain(bridge, {
       ...CHAIN_BODY,
       clips: [{ num_frames: 49 }],
-      source_audio: { audio_id: "aud-1" },
+      end_source: { video_id: "vid-2", context_frames: 72 },
     });
     expect(result.status).toBe(422);
     expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
@@ -743,7 +795,7 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
 
   it("creates no job when it refuses", async () => {
     const bridge = await ltx25Bridge();
-    await postChain(bridge, { ...CHAIN_BODY, source_audio: { audio_id: "aud-1" } });
+    await postChain(bridge, { ...CHAIN_BODY, end_source: { video_id: "vid-2", context_frames: 72 } });
     // The refusal must not take the single-job slot with it: a following, valid
     // chain has to be accepted rather than earning a 409 JOB_BUSY.
     const next = await postChain(bridge, CHAIN_BODY);

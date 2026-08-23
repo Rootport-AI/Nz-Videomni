@@ -260,16 +260,18 @@ const MOCK_BASE_MODELS = [
  * ordinary case stays untouched.
  *
  * §3-102 (LTX 2.5 Chained, first stage): `"chain"` is GONE from LTX25 — the
- * engine chains now. What it still cannot do are the individual materials a
- * chain can carry (`v2v`/`a2v`/`end_source`/`reference_video`) plus Retake, so
- * those names stay and `handleGenerateChain` refuses exactly them. */
+ * engine chains now.
+ *
+ * §3-102 second stage (V2V + A2V, incl. long A2V): `"v2v"` and `"a2v"` are gone
+ * too — the engine takes a source video and a source audio track now, so both
+ * Chain material panels and the Batch A2V section come back. What remains are
+ * the materials it still cannot carry (`end_source`/`reference_video`) plus
+ * Retake, and `handleGenerateChain` refuses exactly those. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   LTX23: [],
   LTX25: [
     "retake",
     "end_source",
-    "v2v",
-    "a2v",
     "two_stage_hq",
     "outpaint",
     "loras",
@@ -290,7 +292,10 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
  * The pair is what makes the refusal HONEST — the fixture never invents a
  * limitation, it only enforces what the same fixture already declared for the
  * ACTIVE base model. That is why LTX 2.3, whose array is empty, keeps sailing
- * through every one of these fields exactly as it always did. */
+ * through every one of these fields exactly as it always did — and why the
+ * `source_video` / `source_audio` rows stay put now that LTX 2.5 no longer
+ * declares `v2v` / `a2v`: the row only says which feature name a field belongs
+ * to, and membership in the declared list is what decides the 422. */
 const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{ field: string; feature: string }> = [
   { field: "source_video", feature: "v2v" },
   { field: "source_audio", feature: "a2v" },

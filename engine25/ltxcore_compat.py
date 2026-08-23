@@ -51,6 +51,28 @@ What :func:`verify` checks
        and ``encode_video`` / ``get_video_chunks_number`` /
        ``ImageConditioningInput`` still have the shape the mp4 write depends on.
      * ``Disposable`` still exposes ``dispose``.
+3. For §3-102 (Chained), a handful of BODIES as well as signatures. The chain
+   does not run ``DistilledPipeline.__call__``; it drives the same blocks itself
+   with a frozen carry band in front of every segment and tile, so three facts
+   that the pipeline would otherwise have guaranteed are asserted from source:
+     * ``euler_ancestral_denoising_loop`` still gates noise on
+       ``draw_noise=stepper.eta > 0``, and the driver still re-pins the
+       conditioned tokens (``post_process_latent``) on exactly that branch --
+       at ``eta == 0`` an ancestral chain's frozen band would drift with nothing
+       raising, which is why chain25 also asserts ``stepper.eta > 0``.
+     * ``create_noised_state`` still runs initial state -> conditionings ->
+       noiser IN THAT ORDER, and ``create_initial_state`` still clones the
+       initial latent into ``clean_latent``. That order is the whole reason
+       2.5's ``VideoConditionByMask`` reproduces 2.3's hand-edited mask.
+     * ``VideoConditionByMask.apply_to`` still computes
+       ``clean*inv + tokens*m`` / ``denoise_mask*inv + (1-strength)*m`` --
+       chain25's ``AudioHeadBandMask`` is a line-for-line audio twin of it.
+   Plus the surface chain25 drives directly: both denoising loops' keyword
+   names, ``ModalitySpec``'s fields, the ``replacing``/``guiding`` image pair
+   with ``resolve_crf``, ``ensure_tiling_config``'s three keyword-only
+   arguments, ``LatentState.keyframes_mask`` + the helper that marks the first
+   latent frame, ``LatentUpsampler``'s block count (from which halo=18 is
+   derived, not remembered), and 25 audio latents per second.
 
 The F1 canary (``Disposable.dispose`` metas storage via
 ``torch.empty_like(..., device="meta")``) is checked but only LOGGED, never
@@ -70,6 +92,11 @@ from typing import Any
 # ltx_core -- loader
 # ---------------------------------------------------------------------------
 from ltx_core.allocator_trim_strategy import AllocatorTrimStrategy
+from ltx_core.components.diffusion_steps import EulerAncestralDiffusionStep, EulerDiffusionStep
+from ltx_core.components.noisers import GaussianNoiser
+from ltx_core.components.patchifiers import AudioPatchifier, VideoLatentPatchifier
+from ltx_core.conditioning.item import ConditioningItem
+from ltx_core.conditioning.types.mask_cond import VideoConditionByMask
 from ltx_core.loader.fuse_loras import FuseRule, bf16_fuse_rule
 from ltx_core.loader.helpers import (
     as_path_list,
@@ -108,6 +135,7 @@ from ltx_core.model.transformer import (
     X0Model,
 )
 from ltx_core.model.transformer.modality import Modality
+from ltx_core.model.upsampler import LatentUpsampler, upsample_video
 from ltx_core.model.video_vae import (
     AUTO_TILING,
     AutoTiling,
@@ -115,6 +143,13 @@ from ltx_core.model.video_vae import (
     get_video_chunks_number,
 )
 from ltx_core.quantization import QuantizationPolicy
+from ltx_core.tools import AudioLatentTools, LatentTools, VideoLatentTools
+from ltx_core.types import (
+    AudioLatentShape,
+    LatentState,
+    VideoLatentShape,
+    VideoPixelShape,
+)
 
 # ---------------------------------------------------------------------------
 # ltx_core -- text encoders (Phase 2c consumes these; imported here so the ONE
@@ -138,13 +173,38 @@ from ltx_core.text_encoders.gemma.encoders.encoder_configurator import (
 # ---------------------------------------------------------------------------
 from ltx_pipelines.distilled import DistilledPipeline, should_use_ancestral_sampler
 from ltx_pipelines.utils.args import ImageConditioningInput
-from ltx_pipelines.utils.blocks import DiffusionStage, PromptEncoder
+from ltx_pipelines.utils.blocks import (
+    DiffusionStage,
+    ImageConditioner,
+    PromptEncoder,
+    VideoUpsampler,
+)
 from ltx_pipelines.utils.constants import DISTILLED_SIGMAS, STAGE_2_DISTILLED_SIGMAS
+from ltx_pipelines.utils.denoisers import SimpleDenoiser
 from ltx_pipelines.utils.gpu_model import gpu_model
-from ltx_pipelines.utils.helpers import cleanup_memory
+from ltx_pipelines.utils.helpers import (
+    cleanup_memory,
+    create_noised_state,
+    ensure_tiling_config,
+    image_conditionings_by_adding_guiding_latent,
+    image_conditionings_by_replacing_latent,
+    post_process_latent,
+    state_with_conditionings,
+    tiling_scale_factors_for_vae,
+)
 from ltx_pipelines.utils.media_io import encode_video
 from ltx_pipelines.utils.model_paths import ModelPaths
-from ltx_pipelines.utils.types import OffloadMode
+# `_ancestral_euler_denoising_loop` is module-private upstream and is NOT
+# re-exported: nothing outside this file calls it. It is imported only so
+# `verify` can read the body that decides whether the conditioned tokens are
+# re-pinned after each ancestral step -- the single fact the chain's frozen
+# carry band depends on, and one that lives in an `if`, not in a signature.
+from ltx_pipelines.utils.samplers import (
+    _ancestral_euler_denoising_loop,
+    euler_ancestral_denoising_loop,
+    euler_denoising_loop,
+)
+from ltx_pipelines.utils.types import ModalitySpec, OffloadMode
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +215,11 @@ __all__ = [
     "LTXV_MODEL_COMFY_RENAMING_MAP",
     "STAGE_2_DISTILLED_SIGMAS",
     "AllocatorTrimStrategy",
+    "AudioLatentShape",
+    "AudioLatentTools",
+    "AudioPatchifier",
     "AutoTiling",
+    "ConditioningItem",
     "ContentMatching",
     "ContentReplacement",
     "DiffusionStage",
@@ -163,14 +227,22 @@ __all__ = [
     "DistilledPipeline",
     "DisposableProtocol",
     "EmbeddingsProcessorConfigurator",
+    "EulerAncestralDiffusionStep",
+    "EulerDiffusionStep",
     "FuseRule",
+    "GaussianNoiser",
     "GemmaAssets",
     "GemmaTextEncoderConfigurator",
+    "ImageConditioner",
     "ImageConditioningInput",
     "LTXModel",
     "LTXModelConfigurator",
     "LTXModelProtocol",
+    "LatentState",
+    "LatentTools",
+    "LatentUpsampler",
     "LoraPathStrengthAndSDOps",
+    "ModalitySpec",
     "ModelBuilderProtocol",
     "ModelConfigurator",
     "ModelPaths",
@@ -182,10 +254,17 @@ __all__ = [
     "QuantizationPolicy",
     "Registry",
     "SDOps",
+    "SimpleDenoiser",
     "SingleGPUModelBuilder",
     "StateDict",
     "StateDictLoader",
     "TilingConfig",
+    "VideoConditionByMask",
+    "VideoLatentPatchifier",
+    "VideoLatentShape",
+    "VideoLatentTools",
+    "VideoPixelShape",
+    "VideoUpsampler",
     "X0Model",
     "_build_gemma4_unified_llm_key_ops",
     "_check_uninitialized",
@@ -194,18 +273,47 @@ __all__ = [
     "bf16_fuse_rule",
     "cleanup_memory",
     "create_meta_model",
+    "create_noised_state",
     "encode_video",
+    "ensure_tiling_config",
+    "euler_ancestral_denoising_loop",
+    "euler_denoising_loop",
     "gemma_model_type",
     "get_gemma_ops",
     "get_video_chunks_number",
     "gpu_model",
+    "image_conditionings_by_adding_guiding_latent",
+    "image_conditionings_by_replacing_latent",
     "load_state_dict",
     "module_registry_key",
+    "post_process_latent",
     "read_model_metadata",
     "resolve_gemma_weight_paths",
     "should_use_ancestral_sampler",
+    "state_with_conditionings",
+    "tiling_scale_factors_for_vae",
+    "upsample_video",
+    "upsampler_builders",
     "verify",
 ]
+
+
+def upsampler_builders(upsampler: VideoUpsampler) -> tuple[Any, Any]:
+    """The ``(encoder_builder, upsampler_builder)`` behind a :class:`VideoUpsampler`.
+
+    The ONE reach into ``VideoUpsampler``'s privates, kept here for the same
+    reason ``_load_model_weights`` is: the chunked upsample (§3-102) must build
+    the video encoder and the latent upsampler **once** and drive them over ~N
+    temporal chunks, while the public ``VideoUpsampler.__call__`` builds both,
+    upsamples one tensor, and frees them again. Its ``registry`` is constructed
+    with ``cache_weights=False``, so calling it per chunk would re-read the
+    checkpoints from disk every time.
+
+    Named as a function rather than re-exported as two attribute strings so the
+    reach is one grep and :func:`verify` can assert the attribute names exist
+    before any weights are touched.
+    """
+    return upsampler._encoder_builder, upsampler._upsampler_builder
 
 
 class CompatError(RuntimeError):
@@ -244,6 +352,39 @@ def _require_keyword_only(func: Any, label: str, *names: str) -> None:
 def _require_var_keyword(func: Any, label: str) -> None:
     if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in _params(func).values()):
         _fail(label, "no **kwargs sink; engine25 forwards extra build kwargs through it")
+
+
+def _source_of(obj: Any, label: str) -> str:
+    """``inspect.getsource`` with a CompatError instead of an OSError.
+
+    Source checks are for the handful of places where the thing engine25 depends
+    on is an EXPRESSION rather than a name -- the ancestral loop's re-pin
+    condition, the order of the three statements in ``create_noised_state``, the
+    two lines of arithmetic in ``VideoConditionByMask``. Each of those is a
+    silent-wrong-output hazard if it drifts (see the callers), and none of them
+    is reachable by ``inspect.signature``.
+    """
+    try:
+        return inspect.getsource(obj)
+    except OSError:  # pragma: no cover -- source unavailable (zipped install)
+        _fail(label, "source is unavailable, so its body cannot be verified")
+        return ""  # unreachable; _fail raises
+
+
+def _require_in_source(source: str, label: str, *needles: str) -> None:
+    missing = [n for n in needles if n not in source]
+    if missing:
+        _fail(label, f"body no longer contains {missing!r}")
+
+
+def _require_source_order(source: str, label: str, *needles: str) -> None:
+    """Assert *needles* appear in the given order, each exactly once-or-more."""
+    position = -1
+    for needle in needles:
+        found = source.find(needle, position + 1)
+        if found < 0:
+            _fail(label, f"body no longer contains {needle!r} after the preceding step")
+        position = found
 
 
 def _require_dataclass_fields(cls: type, label: str, expected: tuple[str, ...]) -> None:
@@ -468,7 +609,203 @@ def verify() -> None:
     _require_params(get_video_chunks_number, "get_video_chunks_number", "num_frames", "tiling_config")
     _require_params(should_use_ancestral_sampler, "should_use_ancestral_sampler", "transformer_path")
 
-    # 3. F1 canary -- logged, never asserted (see module docstring).
+    # 3. §3-102 (Chained): the surface engine25/chain25.py drives directly.
+    #
+    # The chain does not go through ``DistilledPipeline.__call__``. It calls the
+    # same blocks the pipeline calls, in its own order, with a frozen carry band
+    # in front of every segment and tile -- so the pieces that pipeline's own
+    # code would have guaranteed have to be asserted here instead.
+
+    # (1) The two denoising loops, called by KEYWORD from ``DiffusionStage`` and
+    #     re-bound by chain25 (ancestral needs ``noise_seed``). A renamed
+    #     parameter would be a TypeError at the first denoise; naming it here
+    #     makes it a named symbol at process start.
+    for loop, label in (
+        (euler_denoising_loop, "samplers.euler_denoising_loop"),
+        (euler_ancestral_denoising_loop, "samplers.euler_ancestral_denoising_loop"),
+    ):
+        _require_params(loop, label, "sigmas", "video_state", "audio_state", "stepper", "transformer", "denoiser")
+    _require_params(
+        euler_ancestral_denoising_loop,
+        "samplers.euler_ancestral_denoising_loop",
+        "noise_seed",
+        "new_noise_fn",
+        "model_dtype",
+    )
+
+    # (2) THE ancestral fact the frozen carry band rests on: the loop re-pins
+    #     the conditioned tokens (``post_process_latent``) only on the branch it
+    #     takes when it draws noise, and it draws noise iff ``stepper.eta > 0``.
+    #     At eta == 0 an ancestral run would leave the band drifting, silently --
+    #     which is why chain25 asserts ``stepper.eta > 0`` at every ancestral
+    #     call site and why the CONDITION ITSELF is pinned here.
+    _require_in_source(
+        _source_of(euler_ancestral_denoising_loop, "samplers.euler_ancestral_denoising_loop"),
+        "samplers.euler_ancestral_denoising_loop",
+        "draw_noise=stepper.eta > 0",
+    )
+    _require_source_order(
+        _source_of(_ancestral_euler_denoising_loop, "samplers._ancestral_euler_denoising_loop"),
+        "samplers._ancestral_euler_denoising_loop",
+        "if draw_noise:",
+        "post_process_latent(x_next, step.state.denoise_mask, step.state.clean_latent)",
+    )
+    _require_params(
+        post_process_latent, "helpers.post_process_latent", "denoised", "denoise_mask", "clean"
+    )
+
+    # (3) THE ORDER the band's bit-exactness rests on. 2.3 froze its carry by
+    #     editing ``denoise_mask`` between ``create_initial_state`` and the
+    #     noiser; 2.5's ``VideoConditionByMask`` reaches the same numbers only
+    #     because ``create_noised_state`` runs initial -> conditionings ->
+    #     noiser in exactly that order. If a release ever noised first, the band
+    #     would be noise instead of carry-over and nothing would raise.
+    _require_source_order(
+        _source_of(create_noised_state, "helpers.create_noised_state"),
+        "helpers.create_noised_state",
+        "tools.create_initial_state(",
+        "state_with_conditionings(",
+        "noiser(state, noise_scale)",
+    )
+    _require_params(
+        create_noised_state,
+        "helpers.create_noised_state",
+        "tools",
+        "conditionings",
+        "noiser",
+        "noise_scale",
+        "initial_latent",
+    )
+    _require_params(
+        state_with_conditionings, "helpers.state_with_conditionings", "latent_state", "conditioning_items"
+    )
+    # ``clean_latent`` is the carry-over itself: chain25 hands the previous
+    # segment's tail in as ``initial_latent`` and relies on the clone landing in
+    # ``clean_latent``, because that is what the mask pins back every step.
+    _require_in_source(
+        _source_of(VideoLatentTools.create_initial_state, "VideoLatentTools.create_initial_state"),
+        "VideoLatentTools.create_initial_state",
+        "clean_latent = initial_latent.clone()",
+    )
+    _require_in_source(
+        _source_of(AudioLatentTools.create_initial_state, "AudioLatentTools.create_initial_state"),
+        "AudioLatentTools.create_initial_state",
+        "clean_latent = initial_latent.clone()",
+    )
+
+    # (4) The band item's own arithmetic. ``AudioHeadBandMask`` in chain25 is a
+    #     line-for-line audio twin of these two expressions; pinning them is what
+    #     lets that twin be called "the same freeze" rather than "a similar one".
+    _require_in_source(
+        _source_of(VideoConditionByMask.apply_to, "VideoConditionByMask.apply_to"),
+        "VideoConditionByMask.apply_to",
+        "clean_latent=latent_state.clean_latent * inv + tokens * m",
+        "denoise_mask=latent_state.denoise_mask * inv + (1.0 - self.strength) * m",
+        "inv = 1 - m",
+    )
+    _require_params(VideoConditionByMask.__init__, "VideoConditionByMask.__init__", "latent", "mask", "strength")
+    if not callable(getattr(ConditioningItem, "apply_to", None)):
+        _fail("ConditioningItem", "the `apply_to` protocol method is gone")
+
+    # (5) ``keyframes_mask`` (new in 1.2.0). ``create_initial_state`` marks the
+    #     first latent frame UNCONDITIONALLY; for a chain segment/tile i >= 1
+    #     that frame is carried-over content, not a keyframe, so chain25 clears
+    #     the marker. Both the field and the marking helper are pinned: were the
+    #     marking to disappear, the clear would become a silent no-op rather
+    #     than an error.
+    if "keyframes_mask" not in {f.name for f in dataclasses.fields(LatentState)}:
+        _fail("LatentState", "no longer has a `keyframes_mask` field")
+    if not callable(getattr(VideoLatentTools, "_first_frame_keyframes_mask", None)):
+        _fail("VideoLatentTools._first_frame_keyframes_mask", "is gone")
+    if not isinstance(getattr(DiffusionStage, "supports_generated_keyframes", None), property):
+        _fail("DiffusionStage.supports_generated_keyframes", "is no longer a property")
+
+    # (6) Stage plumbing chain25 drives by hand.
+    _require_dataclass_fields(
+        ModalitySpec, "ModalitySpec", ("context", "conditionings", "noise_scale", "frozen", "initial_latent")
+    )
+    _require_params(SimpleDenoiser.__init__, "SimpleDenoiser.__init__", "v_context", "a_context")
+    _require_params(GaussianNoiser.__init__, "GaussianNoiser.__init__", "generator")
+    for name in ("eta", "s_noise"):
+        if name not in _params(EulerAncestralDiffusionStep.__init__):
+            _fail("EulerAncestralDiffusionStep.__init__", f"parameter {name!r} is gone")
+    _require_params(EulerDiffusionStep.step, "EulerDiffusionStep.step", "sample", "denoised_sample", "sigmas")
+    if not hasattr(DiffusionStage, "video_scale_factors") and "self.video_scale_factors" not in _source_of(
+        DiffusionStage.__init__, "DiffusionStage.__init__"
+    ):
+        _fail("DiffusionStage", "no longer publishes `video_scale_factors`")
+
+    # (7) Geometry. chain25 rebuilds the stage's own latent shapes to size the
+    #     carry tensors, so its arithmetic must be the stage's arithmetic.
+    _require_params(
+        VideoLatentShape.from_pixel_shape, "VideoLatentShape.from_pixel_shape", "shape", "scale_factors"
+    )
+    _require_params(
+        AudioLatentShape.from_video_pixel_shape, "AudioLatentShape.from_video_pixel_shape", "shape"
+    )
+    if tuple(VideoPixelShape._fields) != ("batch", "frames", "height", "width", "fps"):
+        _fail("VideoPixelShape", f"fields are {VideoPixelShape._fields}, expected (batch, frames, height, width, fps)")
+    # 25 audio latents per second -- the constant ``chain_math``'s whole audio
+    # side (ka_list, a_tiles, a_total) is computed from. A different rate would
+    # misalign every audio carry band without changing a single shape.
+    one_second = AudioLatentShape.from_video_pixel_shape(VideoPixelShape(1, 24, 64, 64, 24.0))
+    if one_second.frames != 25:
+        _fail(
+            "AudioLatentShape.from_video_pixel_shape",
+            f"resolves 1 second to {one_second.frames} latent frames, expected 25 "
+            f"(chain_math.AUDIO_LATENTS_PER_SEC)",
+        )
+    if AudioPatchifier(patch_size=1).get_token_count(one_second) != one_second.frames:
+        _fail("AudioPatchifier", "one token per audio latent frame no longer holds at patch_size=1")
+
+    # (8) Image conditioning -- the REPLACING / GUIDING pair 2.3 routes by
+    #     frame_idx, plus the CRF fill-in that must run before either.
+    for fn, label in (
+        (image_conditionings_by_replacing_latent, "helpers.image_conditionings_by_replacing_latent"),
+        (image_conditionings_by_adding_guiding_latent, "helpers.image_conditionings_by_adding_guiding_latent"),
+    ):
+        _require_params(fn, label, "images", "height", "width", "video_encoder", "dtype", "device")
+    _require_params(ImageConditioner.resolve_crf, "ImageConditioner.resolve_crf", "images")
+    _require_params(ImageConditioner.__call__, "ImageConditioner.__call__", "fn")
+
+    # (9) The chunked upsample. ``upsampler_builders`` is engine25's one reach
+    #     into VideoUpsampler's privates (see that function); the layer count
+    #     below is what makes ``chain_math.UPSAMPLE_HALO_FRAMES == 18`` a
+    #     derived number rather than a remembered one -- LatentUpsampler's
+    #     temporal receptive field is one Conv3d(k=3) radius per Conv3d layer,
+    #     and at ``num_blocks_per_stage=4`` there are 1 + 2*4 + 2*4 + 1 = 18 of
+    #     them (the spatial upsampler itself is Conv2d, so it adds none).
+    upsampler_source = _source_of(VideoUpsampler.__init__, "VideoUpsampler.__init__")
+    _require_in_source(
+        upsampler_source, "VideoUpsampler.__init__", "self._encoder_builder", "self._upsampler_builder"
+    )
+    _require_params(upsample_video, "upsampler.upsample_video", "latent", "video_encoder", "upsampler")
+    _require_params(
+        LatentUpsampler.__init__,
+        "LatentUpsampler.__init__",
+        "num_blocks_per_stage",
+        "dims",
+        "spatial_upsample",
+        "temporal_upsample",
+    )
+    _require_in_source(
+        _source_of(upsample_video, "upsampler.upsample_video"),
+        "upsampler.upsample_video",
+        "video_encoder.per_channel_statistics",
+    )
+
+    # (10) Decode side. The three keyword-only arguments are the ones a
+    #      positional call would silently mis-bind.
+    _require_keyword_only(
+        ensure_tiling_config,
+        "helpers.ensure_tiling_config",
+        "scale_factors",
+        "video_shape",
+        "vae_checkpoint_path",
+    )
+    _require_params(tiling_scale_factors_for_vae, "helpers.tiling_scale_factors_for_vae", "vae_checkpoint_path")
+
+    # 4. F1 canary -- logged, never asserted (see module docstring).
     try:
         source = inspect.getsource(Disposable.dispose)
         metas_storage = 'device="meta"' in source or "device='meta'" in source

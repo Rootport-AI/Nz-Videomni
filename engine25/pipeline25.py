@@ -156,10 +156,20 @@ STAGE_DECODE = "decode"
 #: per job) is what names them -- the same inference the 2.3 worker's shim makes.
 _DENOISE_STAGE_NAMES = {1: STAGE_1_DENOISE, 2: STAGE_2_DENOISE}
 
-#: ``progress(stage, index, total)``. ``index`` is the number of COMPLETED units
-#: for coarse stages and completed steps for the denoise stages, matching what
-#: the 2.3 adapter already assumes for each name.
-ProgressCallback = Callable[[str, int, int], None]
+#: ``progress(stage, index, total, *, outer_index=None, outer_total=None)``.
+#: ``index`` is the number of COMPLETED units for coarse stages and completed
+#: steps for the denoise stages, matching what the 2.3 adapter already assumes
+#: for each name.
+#:
+#: The two keyword-only arguments are the chain's position (which clip, which
+#: tile) and are the SAME pair the 2.3 worker emits from
+#: ``engine/worker.py``'s progress shim. They are optional, and every caller
+#: that does not need them is called with THREE POSITIONAL ARGUMENTS exactly as
+#: before -- a single-generation job never passes them, so its receipts and any
+#: three-argument receiver (``engine25/worker.py:_emit_progress``) are unchanged.
+#: Without them the app's chain receipt loop cannot tell step 3-of-8 of clip 1
+#: from step 3-of-8 of clip 2, and the job fraction rewinds at every clip.
+ProgressCallback = Callable[..., None]
 
 
 class Ltx25PipelineError(RuntimeError):
@@ -348,6 +358,14 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
     identical calls into ``stage1_denoise`` and ``stage2_denoise``: the stage is
     not told which one it is on, and inferring it from the sigma count would
     couple the naming to a schedule length that is a property of the checkpoint.
+
+    A CHAIN calls this stage many more than twice -- once per stage-1 clip and
+    once per stage-2 tile -- so the invocation counter cannot name those calls.
+    :meth:`announce` is the seam: the caller says what the next call is, and the
+    counter is used only when it has not. Everything about the single-generation
+    path is therefore unchanged, down to the phase strings: ``begin_job()``
+    clears any announcement, so a job that never announces gets exactly the
+    ``stage1_denoise`` / ``stage2_denoise`` + ``21_`` / ``22_`` naming it had.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -355,13 +373,39 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
         self.progress: ProgressCallback | None = None
         self.vram: _Vram | None = None
         self._invocation = 0
+        self._announced: tuple[str | None, str | None, int | None, int | None] = (None, None, None, None)
 
     def begin_job(self) -> None:
+        """Reset the invocation counter AND any announcement. Call once per job."""
         self._invocation = 0
+        self._announced = (None, None, None, None)
+
+    def announce(
+        self,
+        stage_name: str | None = None,
+        *,
+        vram_phase: str | None = None,
+        outer_index: int | None = None,
+        outer_total: int | None = None,
+    ) -> None:
+        """Name the NEXT ``__call__`` explicitly (chain only; consumed once).
+
+        ``stage_name`` is the progress stage the per-step events carry,
+        ``vram_phase`` the key the per-phase peak is recorded under, and
+        ``outer_index`` / ``outer_total`` the chain position forwarded to the
+        progress callback as keyword arguments. Consumed by the next call and
+        reset afterwards, so a stray announcement cannot leak into a later job's
+        naming -- the failure mode would be silent, and a mislabelled phase in
+        ``done`` is exactly the sort of number a gate would then read wrong.
+        """
+        self._announced = (stage_name, vram_phase, outer_index, outer_total)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         self._invocation += 1
-        name = _DENOISE_STAGE_NAMES.get(self._invocation, "denoise")
+        stage_name, vram_phase, outer_index, outer_total = self._announced
+        self._announced = (None, None, None, None)
+        name = stage_name or _DENOISE_STAGE_NAMES.get(self._invocation, "denoise")
+        phase = vram_phase or f"2{self._invocation}_{name}"
 
         # ``denoiser`` and ``sigmas`` are the first two parameters, so a caller
         # may pass either by position or by keyword; both are handled rather
@@ -372,8 +416,21 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
         if self.progress is not None and denoiser is not None and sigmas is not None:
             progress = self.progress
 
-            def report(done: int, total: int, _name: str = name) -> None:
-                progress(_name, done, total)
+            def report(
+                done: int,
+                total: int,
+                _name: str = name,
+                _outer_index: int | None = outer_index,
+                _outer_total: int | None = outer_total,
+            ) -> None:
+                # THREE POSITIONAL ARGUMENTS when there is no chain position:
+                # the single-generation receipt path (and any three-argument
+                # receiver such as engine25/worker.py's ``_emit_progress``) must
+                # keep seeing the call it has always seen.
+                if _outer_index is None and _outer_total is None:
+                    progress(_name, done, total)
+                else:
+                    progress(_name, done, total, outer_index=_outer_index, outer_total=_outer_total)
 
             counting = _CountingDenoiser(denoiser, len(sigmas) - 1, report)
             if "denoiser" in kwargs:
@@ -388,7 +445,7 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
             return super().__call__(*args, **kwargs)
         finally:
             if self.vram is not None:
-                self.vram.record(f"2{self._invocation}_{name}", time.perf_counter() - started)
+                self.vram.record(phase, time.perf_counter() - started)
 
 
 class Ltx25PromptEncoder(PromptEncoder):

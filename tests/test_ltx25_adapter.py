@@ -322,12 +322,15 @@ def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     features = set(ltx25.UNSUPPORTED_FEATURES)
     assert {feat for _f, feat, _p in ltx25.REJECT_TABLE} <= features
     assert {feat for _f, feat, _p in ltx25.CHAIN_REJECT_TABLE} <= features
-    # The four chain MODES this engine still cannot run stay published...
-    assert {"retake", "end_source", "v2v", "a2v"} <= features
-    # ...but "chain" itself LEFT with §3-102's first increment: a plain Chained
+    # The two chain MODES this engine still cannot run stay published...
+    assert {"retake", "end_source"} <= features
+    # ...but "chain" itself LEFT with §3-102's first increment (a plain Chained
     # job runs on this engine now, so publishing "no chain" would grey out a tab
-    # that works.
+    # that works), and "v2v"/"a2v" left with the second — publishing either
+    # would grey out the Chained tab's source panels, the Single tab's A2V
+    # accordion and the Batch tab's A2V rows, all of which now work.
     assert "chain" not in features
+    assert "v2v" not in features and "a2v" not in features
     assert len(ltx25.UNSUPPORTED_FEATURES) == len(features), "no duplicates"
 
 
@@ -379,12 +382,11 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 #: companions the SCHEMA couples them to (retake and end_source own the whole
 #: timeline, so they need a single clip; NAG needs a negative prompt). Imported
 #: by tests/test_ltx25_api_guard.py, which drives the same table through HTTP.
+#:
+#: ``source_video`` / ``source_audio`` LEFT this table with §3-102's second
+#: increment — they are honoured now, and the requests that carry them live in
+#: :data:`CHAIN_ACCEPTED_SOURCES` below instead.
 CHAIN_OVERRIDES: dict[str, dict] = {
-    "source_video": {
-        "clips": [{"num_frames": 49}, {"num_frames": 25}],
-        "source_video": {"video_id": "vid-1", "context_frames": 25},
-    },
-    "source_audio": {"source_audio": {"audio_id": "aud-1"}},
     "retake": {
         "clips": [{"num_frames": 73}],
         "retake": {"video_id": "vid-1", "window_start_sec": 0.0},
@@ -403,6 +405,50 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     "attention_backend": {"attention_backend": "sage"},
     "keep_resident": {"keep_resident": True},
 }
+
+
+#: The two chain source modes that §3-102's second increment TURNED ON, as
+#: valid request bodies. The mirror image of :data:`CHAIN_OVERRIDES`: same
+#: shape, opposite verdict, so the acceptance test below is driven by a table
+#: rather than by a hand-written pair — and tests/test_ltx25_api_guard.py can
+#: import it and drive the same two bodies through HTTP.
+CHAIN_ACCEPTED_SOURCES: dict[str, dict] = {
+    "source_video": {
+        "clips": [{"num_frames": 49}, {"num_frames": 25}],
+        "source_video": {"video_id": "vid-1", "context_frames": 25},
+    },
+    "source_audio": {"source_audio": {"audio_id": "aud-1"}},
+    # Single-tab A2V: the frontend sends a ONE-clip chain with the full-length
+    # stage-2 window, which the schema only allows together with source_audio.
+    "source_audio_full_length": {
+        "clips": [{"num_frames": 121}],
+        "source_audio": {"audio_id": "aud-1"},
+        "stage2_window": "full_length",
+    },
+    # Long A2V: one uploaded audio across three clips.
+    "source_audio_long": {
+        "clips": [{"num_frames": 121}, {"num_frames": 121}, {"num_frames": 121}],
+        "source_audio": {"audio_id": "aud-1"},
+    },
+}
+
+
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
+def test_v2v_and_a2v_are_no_longer_refused(case):
+    """The headline of §3-102's second increment: the two source modes pass the
+    ruling instead of raising. Field-by-field, so a table that lost only ONE of
+    the two rows fails here."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_SOURCES[case]))  # no raise
+
+
+def test_the_two_source_modes_are_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises. A field dropped from every
+    table would also stop raising — and would then be silently ignored."""
+    assert {"source_video", "source_audio"} <= ltx25.CHAIN_HONOURED_FIELDS
+    assert not {"source_video", "source_audio"} & {
+        f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
+    }
+    assert not {"source_video", "source_audio"} & set(ltx25.CHAIN_IGNORED_FIELDS)
 
 
 def test_a_plain_chain_is_accepted():
@@ -469,7 +515,7 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
     """The endpoint (P5) and the backend method must not be able to disagree:
     both go through ``reject_chain``, so there is one message and one code."""
     cfg, _paths, descriptor = ltx25_paths
-    request = _chain_request(**CHAIN_OVERRIDES["source_audio"])
+    request = _chain_request(**CHAIN_OVERRIDES["end_source"])
     with pytest.raises(APIError) as endpoint_side:
         ltx25.reject_chain(request)
     with pytest.raises(APIError) as backend_side:
@@ -479,15 +525,15 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
 
 
 def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_path):
-    """The orchestrator hands every runner the same thirteen keywords. Nine of
+    """The orchestrator hands every runner the same thirteen keywords. SIX of
     them name material this engine cannot use, and every one is refused by the
     table above — so a value arriving here means the table and this signature
     have drifted apart. That is a bug, and it must not look like a job."""
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
-    with pytest.raises(RuntimeError, match="source_audio_path"):
+    with pytest.raises(RuntimeError, match="retake_window_path"):
         backend.generate_chain(
-            _chain_request(), output_dir=tmp_path, source_audio_path=tmp_path / "a.wav"
+            _chain_request(), output_dir=tmp_path, retake_window_path=tmp_path / "w.mp4"
         )
     with pytest.raises(RuntimeError, match="lora_paths"):
         backend.generate_chain(
@@ -631,6 +677,108 @@ def test_chain_payload_carries_chunked_upsample(tmp_path):
     be = _capturing_chain_backend(captured)
     be.generate_chain(_chain_request(chunked_upsample=True), output_dir=tmp_path / "out")
     assert captured[0]["chunked_upsample"] is True
+
+
+#: The V2V / A2V payload blocks are ADDITIVE and their key order is part of the
+#: contract, exactly as the top-level key order is — and it is 2.3's key order
+#: on purpose (services/engines/ltx/adapter.py), because the two workers are
+#: unrelated code but the body of a chain job is the same geometry in both.
+GOLDEN_SOURCE_KEYS_25 = ["path", "context_frames"]
+GOLDEN_AUDIO_SOURCE_KEYS_25 = ["path"]
+
+
+def test_chain_payload_carries_the_v2v_source_block(tmp_path):
+    """V2V: the app-cut fps-correct tail plus the context length, appended AFTER
+    the golden keys so a plain chain's payload is untouched."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    tail = tmp_path / "src" / "_source_tail.mp4"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_SOURCES["source_video"]),
+        output_dir=tmp_path / "out",
+        source_tail_path=tail,
+        source_context_frames=25,
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["source"]
+    assert list(payload["source"]) == GOLDEN_SOURCE_KEYS_25
+    assert payload["source"] == {"path": str(tail), "context_frames": 25}
+    # The two source modes are mutually exclusive in the schema; the payload
+    # shows it rather than merely relying on it.
+    assert "audio_source" not in payload
+
+
+def test_the_v2v_source_block_needs_both_halves(tmp_path):
+    """The guard is on BOTH values, like 2.3's: a tail with no context length is
+    not a V2V job, and half a block reaching the worker would be worse than
+    none — it would be a payload no golden pins."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(), output_dir=tmp_path / "a", source_tail_path=tmp_path / "t.mp4"
+    )
+    assert "source" not in captured[0]
+
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "b", source_context_frames=25)
+    assert "source" not in captured[1]
+    # ...and a plain chain is byte-identical to the golden either way.
+    assert list(captured[0]) == list(captured[1]) == GOLDEN_CHAIN_KEYS_25
+
+
+def test_chain_payload_carries_the_a2v_audio_source_block(tmp_path):
+    """A2V: the uploaded wav, passed as-is — the engine truncates the encoded
+    latent to the timeline, so the app sends no geometry with it."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    wav = tmp_path / "up" / "input.wav"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_SOURCES["source_audio"]),
+        output_dir=tmp_path / "out",
+        source_audio_path=wav,
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source"]
+    assert list(payload["audio_source"]) == GOLDEN_AUDIO_SOURCE_KEYS_25
+    assert payload["audio_source"] == {"path": str(wav)}
+    assert "source" not in payload
+
+
+def test_chain_payload_carries_a2v_with_the_full_length_window(tmp_path):
+    """Single-tab A2V on the wire: ONE clip plus the full-length stage-2 window.
+    Both additive keys ride, and in the order the builder appends them — the
+    source blocks first, ``stage2_window`` last, as 2.3 does."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_SOURCES["source_audio_full_length"]),
+        output_dir=tmp_path / "out",
+        source_audio_path=tmp_path / "input.wav",
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source", "stage2_window"]
+    assert payload["stage2_window"] == "full_length"
+    assert len(payload["clips"]) == 1
+
+
+def test_chain_payload_carries_a2v_across_a_long_chain(tmp_path):
+    """Long A2V: ONE uploaded audio drives three clips. There is no per-clip
+    audio — the engine tiles the single latent across the stage-1 segments — so
+    the payload must not grow a per-clip audio key."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_SOURCES["source_audio_long"]),
+        output_dir=tmp_path / "out",
+        source_audio_path=tmp_path / "input.wav",
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source"]
+    assert len(payload["clips"]) == 3
+    assert all(set(clip) == {"prompt", "num_frames", "images"} for clip in payload["clips"])
 
 
 def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path):
@@ -790,10 +938,17 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for():
     assert "conditioning_images" in source
 
 
-#: ``field -> the text that proves it is read``. Only one field needs an entry:
-#: the global ``prompt`` is reached THROUGH the schema's own helper (a clip's
-#: override else the global one), so it never appears under its own name.
-_CHAIN_HONOURED_READS = {"prompt": "chain.clip_prompt("}
+#: ``field -> the text that proves it is read``. Three fields need an entry,
+#: and each for the same reason: the request field is not what ``generate_chain``
+#: touches. The global ``prompt`` is reached THROUGH the schema's own helper (a
+#: clip's override else the global one), and the two SOURCE fields are upload
+#: IDS the orchestrator has already resolved into material — so what the method
+#: reads is the keyword argument carrying that material, not ``chain.source_*``.
+_CHAIN_HONOURED_READS = {
+    "prompt": "chain.clip_prompt(",
+    "source_video": "source_tail_path",
+    "source_audio": "source_audio_path",
+}
 
 
 def test_chain_honoured_fields_are_exactly_what_generate_chain_acts_on():

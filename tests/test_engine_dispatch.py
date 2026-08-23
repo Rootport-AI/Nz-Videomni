@@ -199,10 +199,12 @@ def test_runner_class_for_returns_each_familys_facade():
 def test_unsupported_features_per_family():
     assert engines.unsupported_features("ltx") == ()
     features = engines.unsupported_features("ltx25")
-    assert "a2v" in features and "outpaint" in features
-    # "chain" は§3-102で外れた(素のChainedが2.5でも走る)。系統ごとの一覧が
-    # 「宣言したものだけ」であることは、外れた名前でも同じように確かめられる。
+    assert "retake" in features and "outpaint" in features
+    # "chain" は§3-102の第1段で、"v2v"/"a2v" は第2段で外れた(素のChained・
+    # V2V・A2Vが2.5でも走る)。系統ごとの一覧が「宣言したものだけ」である
+    # ことは、外れた名前でも同じように確かめられる。
     assert "chain" not in features
+    assert "v2v" not in features and "a2v" not in features
 
 
 def test_shipped_descriptors_match_their_familys_selection_fields():

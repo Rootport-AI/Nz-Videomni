@@ -207,15 +207,18 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: one tests "DIFFERS FROM THE DEFAULT", never "is present", because the
 #: frontend sends the whole schema on every request.
 #:
-#: The first four are whole MODES layered on top of a chain (V2V continuation,
-#: A2V, Retake, End source); the rest are the same engine-level features the
-#: single path refuses. ``outpaint`` has no counterpart here — the chain schema
-#: has no such field at all.
+#: The first two are whole MODES layered on top of a chain (Retake, End
+#: source); the rest are the same engine-level features the single path
+#: refuses. ``outpaint`` has no counterpart here — the chain schema has no such
+#: field at all.
+#:
+#: ``source_video`` AND ``source_audio`` LEFT THIS TABLE with §3-102's second
+#: increment: V2V continuation and A2V (Single, long and Batch alike) run on
+#: this engine now, so both moved to :data:`CHAIN_HONOURED_FIELDS`. Retake and
+#: End source stay — they are the modes engine25 still has no code path for.
 CHAIN_REJECT_TABLE: tuple[
     tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
 ] = (
-    ("source_video", "v2v", lambda r: r.source_video is not None),
-    ("source_audio", "a2v", lambda r: r.source_audio is not None),
     ("retake", "retake", lambda r: r.retake is not None),
     ("end_source", "end_source", lambda r: r.end_source is not None),
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
@@ -248,6 +251,13 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: ``crop_output`` is the app-side ffmpeg centre-crop applied to the finished
 #: mp4 — the same engine-independent ruling the single path makes.
 #:
+#: ``source_video`` and ``source_audio`` are honoured INDIRECTLY, exactly as on
+#: 2.3: the orchestrator resolves each upload id into material (the fps-correct
+#: ``_source_tail.mp4`` cut for V2V, the uploaded wav for A2V) and hands it to
+#: :meth:`_RealBackend25.generate_chain` as keyword arguments, which become the
+#: additive ``source`` / ``audio_source`` payload blocks. Naming the REQUEST
+#: fields here is what the audit needs — they are the fields the schema has.
+#:
 #: ``num_inference_steps`` is deliberately NOT here even though the payload
 #: carries a ``num_steps`` key built from it: the distilled schedule is fixed,
 #: so the engine records the number in metadata and denoises 8 + 3 steps
@@ -265,6 +275,8 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "overlap_strength",
         "chunked_upsample",
         "stage2_window",
+        "source_video",
+        "source_audio",
     }
 )
 
@@ -291,16 +303,17 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: because they are not single-request FIELDS at all, and the frontend needs
 #: their names to grey out the Edit tab and the Chained tab's mode panels.
 #:
-#: ``"chain"`` LEFT THIS TUPLE with §3-102's first increment: a plain Chained
-#: job now runs on this engine, so publishing "no chain" would grey out a tab
-#: that works. The four modes that still cannot run — retake / end_source /
-#: v2v / a2v — stay, and they are enforced field-by-field by
-#: :data:`CHAIN_REJECT_TABLE` rather than by one blanket refusal.
+#: ``"chain"`` LEFT THIS TUPLE with §3-102's first increment (a plain Chained
+#: job runs on this engine, so publishing "no chain" would grey out a tab that
+#: works), and ``"v2v"`` / ``"a2v"`` left with the second: V2V continuation and
+#: A2V run here too, which also lights the Single tab's A2V accordion and the
+#: Batch tab's A2V rows, because the frontend greys all three by these names.
+#: The two modes that still cannot run — retake / end_source — stay, and they
+#: are enforced field-by-field by :data:`CHAIN_REJECT_TABLE` rather than by one
+#: blanket refusal.
 UNSUPPORTED_FEATURES: tuple[str, ...] = (
     "retake",
     "end_source",
-    "v2v",
-    "a2v",
 ) + tuple(feature for _field, feature, _pred in REJECT_TABLE)
 
 
@@ -690,19 +703,26 @@ class _RealBackend25(_RealBackend):
         and must not: the ORCHESTRATOR's job is to prepare material, the
         ADAPTER's job is to rule on it.
 
-        Nine of those keywords name a mode outside this engine's scope
-        (V2V continuation, A2V, Retake, End source, LoRA, reference video).
-        Reaching this method with any of them set is already impossible —
-        :func:`reject_chain` refuses the request fields behind them at the
-        endpoint, and again on the line below — so a non-``None`` arrival means
-        the two tables have drifted apart, which is a bug worth a loud
-        ``RuntimeError`` rather than a silently ignored argument.
+        Six of those keywords name a mode outside this engine's scope (Retake,
+        End source, LoRA, reference video). Reaching this method with any of
+        them set is already impossible — :func:`reject_chain` refuses the
+        request fields behind them at the endpoint, and again on the line
+        below — so a non-``None`` arrival means the two tables have drifted
+        apart, which is a bug worth a loud ``RuntimeError`` rather than a
+        silently ignored argument.
 
         HONOURED, and worth naming: ``clip0_conditioning_paths`` (clip 0's I2V
         keyframes — the only clip the schema lets carry them) and
         ``crop_output``, the app-side ffmpeg centre-crop of the finished mp4,
         which is engine-independent for a chain exactly as it is for a single
         job.
+
+        ALSO HONOURED SINCE §3-102's SECOND INCREMENT: ``source_tail_path`` +
+        ``source_context_frames`` (V2V continuation) and ``source_audio_path``
+        (A2V). All three are material the ORCHESTRATOR prepared — the tail cut
+        to the requested fps, the uploaded wav — and they ride the payload as
+        the additive ``source`` / ``audio_source`` blocks below, in 2.3's shape
+        so the two engines' chain payloads stay comparable.
         """
         chain = chain_request
         # BEFORE the load, unlike :meth:`generate`. The ruling is a pure read of
@@ -717,9 +737,6 @@ class _RealBackend25(_RealBackend):
         # engine can do. ``lora_paths`` is tested for emptiness rather than for
         # None because run_chain_job always builds a list (empty = no loras).
         out_of_scope = {
-            "source_tail_path": source_tail_path,
-            "source_context_frames": source_context_frames,
-            "source_audio_path": source_audio_path,
             "retake_window_path": retake_window_path,
             "end_source_path": end_source_path,
             "end_source_context_frames": end_source_context_frames,
@@ -792,6 +809,20 @@ class _RealBackend25(_RealBackend):
             "output_path": str(target),
             "clips": clips_payload,
         }
+        # V2V continuation (additive): the app-cut fps-correct source tail. The
+        # ``is not None`` guard on BOTH values is what keeps a plain chain's
+        # payload key set byte-identical to the golden above — the same
+        # discipline, and the same key names and key ORDER, as 2.3's.
+        if source_tail_path is not None and source_context_frames is not None:
+            payload["source"] = {
+                "path": str(source_tail_path),
+                "context_frames": int(source_context_frames),
+            }
+        # A2V (additive): the uploaded audio path, passed as-is — the engine
+        # truncates the encoded latent to the timeline. Absent for a plain or a
+        # V2V chain (the schema makes the two source modes mutually exclusive).
+        if source_audio_path is not None:
+            payload["audio_source"] = {"path": str(source_audio_path)}
         # stage2_window: additive, sent ONLY when the request opted off
         # "standard", so a default chain's payload stays byte-identical to the
         # golden key set above (same contract as 2.3's).

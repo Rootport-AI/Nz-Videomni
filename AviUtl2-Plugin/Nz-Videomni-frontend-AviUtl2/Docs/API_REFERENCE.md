@@ -172,6 +172,7 @@ workerを停止しVRAM解放。ジョブ実行中は `409`。応答 `{"pipeline_
   "base_models": [
     { "id": "LTX23", "display_name": "LTX 2.3", "engine_family": "ltx",
       "active": true, "installed": true, "present": true, "missing_categories": [],
+      "unsupported_features": [],
       "category_order": ["transformer", "text_encoder", "video_vae", "audio"],
       "categories": { ... } }
   ]
@@ -181,6 +182,7 @@ workerを停止しVRAM解放。ジョブ実行中は `409`。応答 `{"pipeline_
 - **`category_order`(2026-08-20追加)**: そのベースモデルのカテゴリを**画面に並べる順**。正本は記述子`scripts/manifests/<base>.json`の`categories`のキー順で、既定は交換頻度順(動画モデル→テキストエンコーダ→動画VAE→音声モデル)である。
   - **配列で渡しているのは意図的である。** `categories`オブジェクトのキー順も同じ並びで送っているが、**JSONオブジェクトのキー順は転送を越えて保たれるとは限らない**——AviUtl2プラグイン経由のWebUIでは、サーバーが記述子順で送った応答が受け側でアルファベット順(`audio`/`text_encoder`/`transformer`/`video_vae`)になっていた実例がある(2026-08-20)。配列の要素順にはその曖昧さが無いので、**表示順はこの配列を読むこと**。キー順に依存してはならない。
 - `installed`(全カテゴリの既定ファイルが実在) / `present`(1つ以上実在＝一部導入) / `missing_categories`(不足カテゴリ名)。「未導入」と「一部導入」を利用者に区別して見せるための2フィールドである。
+- **`unsupported_features`(string[]、§3-98 P5で追加)**: そのベースモデルのエンジンが**扱えない機能の名前**。押しても必ず断られる操作を先回りで灰色にするために読む(強制するのは常にサーバー側の422 `FEATURE_UNSUPPORTED`)。**LTX 2.3 は空配列**、**LTX 2.5 は現在10件**(`retake` / `end_source` / `two_stage_hq` / `outpaint` / `loras` / `reference_video` / `nag` / `prune_vaed` / `sage_attention` / `keep_resident`)である。**`chain` / `v2v` / `a2v` は 2026-08-23 にこの配列から外れた**——LTX 2.5 でもクリップ連結・V2V継続・A2V(SingleタブのA2V・長尺A2V・バッチA2Vを含む)が動くようになったためで、宣言を残すと**動くタブやパネルを灰色にしてしまう**。**フィールドそのものを返さないバックエンドは「制限なし」として扱うこと**(省略＝全部だめ、ではない)。正本はバックエンド[`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.10(b)。
 
 ### 3.6 `GET /loras`(`api/loras.py::list_loras`)— 認証不要
 

@@ -31,9 +31,12 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   status.state が ready になったことを確認してから生成を投げてください。
   切り替え直後の1本目の生成はキャッシュが冷えていて通常の約2倍かかります
   （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
-  LTX 2.5 では submit_chain が丸ごと使えず、submit_generate でも
-  loras / reference_video_id / nag_enabled / vae_mode / attention_backend /
-  keep_resident（既定値以外）が使えません（422 FEATURE_UNSUPPORTED）。
+  LTX 2.5 では submit_generate の loras / reference_video_id / nag_enabled /
+  vae_mode / attention_backend / keep_resident（既定値以外）が使えません
+  （422 FEATURE_UNSUPPORTED）。submit_chain は連結生成そのものは使えますが、
+  source_video_id / source_audio_id / end_source_video_id /
+  end_source_image_id / reference_video_id / loras / nag_enabled / vae_mode /
+  attention_backend / keep_resident が同じく使えません。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。

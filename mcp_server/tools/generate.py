@@ -79,10 +79,11 @@ async def submit_generate(
     現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
-    LTX 2.5 では ``submit_chain`` が丸ごと使えないほか、このツールでは
-    ``loras`` / ``reference_video_id`` / ``nag_enabled`` / ``vae_mode`` /
-    ``attention_backend`` / ``keep_resident``（いずれも既定値以外にした場合）
-    が使えません。
+    LTX 2.5 では、このツールでは ``loras`` / ``reference_video_id`` /
+    ``nag_enabled`` / ``vae_mode`` / ``attention_backend`` /
+    ``keep_resident``（いずれも既定値以外にした場合）が使えません。
+    ``submit_chain``（連結生成）は本体そのものは使えますが、素材の指定など
+    一部の引数が使えません（``submit_chain`` の説明を見てください）。
 
     同時に実行できるジョブは1本だけです（Phase 1の制約）。既にジョブが
     進行中の場合は 409 JOB_BUSY のエラーになります -- 先に ``job_status`` /
@@ -327,9 +328,14 @@ async def submit_chain(
     現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
-    **LTX 2.5 ではこのツールは丸ごと使えません**（チェーン生成そのものが
-    未対応。単発の ``submit_generate`` を使うか、``load_pipeline`` で
-    LTX 2.3 に切り替えてください）。
+    **LTX 2.5 では、連結生成そのもの（複数クリップを1本に繋ぐ本体の動作）は
+    使えます**。ただし次の引数は使えず、既定値以外にすると 422
+    FEATURE_UNSUPPORTED になります: ``source_video_id``（V2V継続）/
+    ``source_audio_id``（A2V）/ ``end_source_video_id`` ・
+    ``end_source_image_id``（素材（末尾））/ ``reference_video_id``（参照動画）
+    / ``loras`` / ``nag_enabled`` / ``vae_mode`` / ``attention_backend`` /
+    ``keep_resident``。これらを使いたい場合は ``load_pipeline`` で LTX 2.3 に
+    切り替えてください。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行

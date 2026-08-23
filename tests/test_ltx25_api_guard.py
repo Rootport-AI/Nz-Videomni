@@ -26,14 +26,18 @@ GPUも重みも要らない(両系統ともmockバックエンド)。
 
 from __future__ import annotations
 
+import argparse
 import json
 import struct
 import wave
 
 import pytest
+import yaml
+from fastapi.testclient import TestClient
 from PIL import Image
 
 import chain_math
+import main
 from api.models import GenerateChainRequest, GenerateRequest
 from services import video_io
 from services.engines.ltx25 import adapter as ltx25
@@ -43,8 +47,10 @@ from services.engines.ltx25 import adapter as ltx25
 #: と、対応表が育ったときにどちらか片方だけが更新される。単発の
 #: ``GenerateRequest`` 用とchain用の2枚あり、扱う機能が違う。
 from test_ltx25_adapter import (  # noqa: E402
+    CHAIN_ACCEPTED_LORAS,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
+    REQUEST_ACCEPTED_LORAS,
     REQUEST_OVERRIDES,
 )
 
@@ -58,6 +64,14 @@ BASE_REQUEST: dict = {
     "height": 320,
     "num_frames": 9,
 }
+
+
+def _make_args(config_path: str) -> argparse.Namespace:
+    """conftestの同名ヘルパと同じ引数束(そちらは非公開名なので写した)。"""
+    return argparse.Namespace(
+        listen=False, port=None, api_key=None, allow_all_cors=False,
+        config=config_path, te_offload=None, dit_cpu_load=None,
+    )
 
 
 def _activate(client, base_model: str) -> None:
@@ -173,19 +187,51 @@ def test_ignored_fields_do_not_fail_a_job_on_ltx25(two_family_client):
 
 def test_the_guard_runs_before_the_upload_and_lora_lookups(two_family_client):
     """機能の可否はサーバの性質で、リクエストの中身の話ではない。存在しない
-    参照動画を指した2.5のリクエストに「その動画は無い」と答えたら、利用者は
-    直せないものを直しに行く。"""
+    素材を指した2.5のリクエストに「その画像は無い」と答えたら、利用者は
+    直せないものを直しに行く。
+
+    題材のフィールドは**NAG**である——第3段でLoRAと参照動画が通るように
+    なったので、それらで見たらガードではなく404側が正しい答えになってしまう。
+    2.5に残る拒否フィールドでなければ、この順序は確かめられない。"""
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate",
         json={
             **BASE_REQUEST,
-            "reference_video_id": "does-not-exist",
-            "loras": [{"name": "no-such-lora", "strength": 1.0}],
+            "nag_enabled": True,
+            "negative_prompt": "blurry, low quality",
+            "conditioning_images": [{"image_id": "does-not-exist"}],
         },
     )
     assert r.status_code == 422, r.text
     assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_LORAS))
+def test_ltx25_no_longer_refuses_style_and_reference(two_family_client, case):
+    """第3段の逆転(表駆動)。素材のidとアダプタ名は実在しないので404で構わない
+    ——見るのは「機能が無いから拒否された」で落ちていないことだけである。
+    第2段まではこの2件がまさにFEATURE_UNSUPPORTEDだった。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_LORAS[case]}
+    )
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+
+
+def test_outpaint_is_still_refused_by_name_on_ltx25(two_family_client):
+    """Outpaintは第3段でも対象外のままである。表の中で``outpaint``の行は外れた
+    2行より**前**に居るので、スキーマが要求する道連れ(参照動画+IC-LoRA)に
+    メッセージを奪われることもない——利用者は本当にできないものを知らされる。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_OVERRIDES["outpaint"]}
+    )
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "FEATURE_UNSUPPORTED"
+    assert "outpaint" in error["detail"]
 
 
 def test_the_reject_table_and_this_suite_cover_the_same_fields():
@@ -305,8 +351,9 @@ def test_the_chain_guard_runs_before_the_upload_lookups(two_family_client):
     ものを直しに行く。ガードは ``upload_store.path_for`` や LoRA の解決に伴う
     404より**先**に居る。
 
-    題材のフィールドは**LoRA**である——第2段でV2V・A2Vが通るようになったので、
-    2.5に残る拒否フィールドで見なければ、この順序は確かめられない。"""
+    題材のフィールドは**NAG**である——第2段でV2V・A2Vが、第3段でLoRAと参照動画が
+    通るようになったので、2.5に残る拒否フィールドで見なければ、この順序は
+    確かめられない。"""
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate/chain",
@@ -315,11 +362,24 @@ def test_the_chain_guard_runs_before_the_upload_lookups(two_family_client):
                 {"num_frames": 25, "conditioning_images": [{"image_id": "does-not-exist"}]},
                 {"num_frames": 25},
             ],
-            loras=[{"name": "no-such-lora", "strength": 1.0}],
+            nag_enabled=True,
+            negative_prompt="blurry, low quality",
         ),
     )
     assert r.status_code == 422, r.text
     assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_LORAS))
+def test_ltx25_no_longer_refuses_chain_style_and_reference(two_family_client, case):
+    """chain側の逆転(表駆動)。素材のidは実在しないので404で構わない——見るのは
+    「機能が無いから拒否された」で落ちていないことだけである。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_LORAS[case])
+    )
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
 
 
 # --------------------------------------------------------------------------- #
@@ -494,6 +554,10 @@ def test_the_still_refused_chain_modes_are_exactly_retake_and_end_source():
     assert not {"source_video", "source_audio"} & {
         f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
     }
+    # 第3段で外れたのも2件だけである。
+    assert not {"loras", "reference_video_id"} & {
+        f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
+    }
 
 
 def test_ltx23_still_chains(two_family_client):
@@ -526,6 +590,302 @@ def test_the_active_family_follows_the_runner(two_family_client):
 
 
 # --------------------------------------------------------------------------- #
+# 2c) Style LoRA・IC-LoRA・長尺IC-LoRAがmockで往復すること(§3-102 第3段)
+#
+# 422が外れただけでは「使える」とは言えない。アダプタの登録から
+# metadata.json まで、2.3と同じ道を最後まで通ることを見る。mockのバックエンド
+# クラスは2系統で共有なので(設計裁定)、通れば2.5でも同じ形の出力とメタデータが
+# 出る——実際に絵柄が変わることや制御に追従することは実機ゲート(G5)の担当で、
+# GPUの無い環境で確かめられるのはここまでである。
+#
+# **参照付きは全て%128の解像度**(512×384)。参照は出力の半分の解像度で64格子に
+# 乗るので、api層が width/height % 128 != 0 を先に422にする(2.3と同じ規則)。
+# --------------------------------------------------------------------------- #
+
+#: 登録するアダプタ。名前は実機ゲートB9の題材(Pixar_Toon)と、2.3側のテストが
+#: 使うcanny/depth/deblurの論理名に揃える。
+STYLE_LORA = "Pixar_Toon"
+CANNY_LORA = "canny-control"
+DEPTH_LORA = "depth-control"
+DEBLUR_LORA = "deblur"
+
+#: 参照付きリクエストの基寸。512も384も128の倍数である。
+REF_SIZE = {"width": 512, "height": 384}
+
+
+def _write_safetensors(path, metadata=None):
+    """ヘッダだけが意味を持つ最小のsafetensors(tests/test_lora_registry.py と同形)。
+
+    ``reference_downscale_factor`` を持つヘッダは、preprocessが``none``でも
+    **control**アダプタとして解決される——deblur(前処理不要の制御アダプタ)を
+    再現するにはこれが要る。
+    """
+    header: dict = {}
+    if metadata is not None:
+        header["__metadata__"] = {k: str(v) for k, v in metadata.items()}
+    blob = json.dumps(header).encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as fh:
+        fh.write(struct.pack("<Q", len(blob)))
+        fh.write(blob)
+        fh.write(bytes(16))
+    return path
+
+
+@pytest.fixture()
+def lora_two_family_client(tmp_path):
+    """``two_family_client`` と同じ2系統の世界に、IC-LoRAの登録を足したもの。
+
+    共有フィクスチャを書き換えず別に建てるのは、``ic_loras`` を足すと
+    ``GET /loras`` の応答が変わり、登録を前提にしていない既存テストの前提まで
+    動いてしまうからである。組み立ての部品(記述子・重み・GGUFヘッダ)は
+    conftestのものをそのまま使うので、二つの世界が食い違うことはない。
+    """
+    from conftest import (
+        base_model_descriptor,
+        build_model_layout,
+        write_gguf_with_kv,
+        write_model_file,
+    )
+
+    ltx23 = base_model_descriptor()
+    ltx25_descriptor = base_model_descriptor("LTX25")
+    ltx25_descriptor["display_name"] = "LTX 2.5"
+    ltx25_descriptor["engine_family"] = "ltx25"
+
+    fragment = build_model_layout(tmp_path, [ltx23, ltx25_descriptor])
+    models_dir = tmp_path / "models"
+    for category, spec in ltx25_descriptor["categories"].items():
+        target = models_dir / spec["default_file"]
+        if category == "transformer":
+            write_gguf_with_kv(
+                target, **{"general.architecture": "ltxv", "model_version": "2.5.0"}
+            )
+        else:
+            write_model_file(target)
+    write_gguf_with_kv(
+        models_dir / ltx23["categories"]["transformer"]["default_file"],
+        **{"general.architecture": "ltxv", "model_version": "2.3.0"},
+    )
+
+    adapters = tmp_path / "adapters"
+    style = _write_safetensors(adapters / "Pixar_Toon.safetensors")
+    union = _write_safetensors(
+        adapters / "union-control.safetensors", {"reference_downscale_factor": "2"}
+    )
+    deblur = _write_safetensors(
+        adapters / "deblur.safetensors", {"reference_downscale_factor": "1"}
+    )
+
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {
+            "backend": "mock",
+            **fragment,
+            # スタイルLoRAの走査先も必ずtmpへ。既定のままだと開発機の実物の
+            # StyleLoRAフォルダを読み、結果がその機械の持ち物に依存する。
+            "lora_dir": (tmp_path / "style_scan").as_posix(),
+            "ic_loras": {
+                STYLE_LORA: style.as_posix(),
+                CANNY_LORA: {"path": union.as_posix(), "preprocess": "canny"},
+                DEPTH_LORA: {"path": union.as_posix(), "preprocess": "depth"},
+                # 前処理不要の制御アダプタ(文字列形式)。controlになるのは
+                # ヘッダの reference_downscale_factor による。
+                DEBLUR_LORA: deblur.as_posix(),
+            },
+        },
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    app = main.build_app(_make_args(cfg_path.as_posix()))
+    with TestClient(app) as client:
+        client.app_context = app.state.context  # type: ignore[attr-defined]
+        yield client
+
+
+#: 参照動画として上げるバイト列。ストアは拡張子と大きさしか見ず、mockの
+#: バックエンドはこれを開かない(実尺の計測はアプリ側でbest-effort)。
+FAKE_MP4 = b"\x00\x00\x00\x18ftypmp42" + bytes(64)
+
+
+def _upload_reference(client) -> str:
+    r = client.post(
+        "/api/v1/upload/video", files={"file": ("ref.mp4", FAKE_MP4, "video/mp4")}
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["video_id"]
+
+
+def test_ltx25_runs_a_style_lora_single_job(lora_two_family_client):
+    """①Style LoRA単発。フロントエンドはプロンプトのタグ
+    ``<lora:Pixar_Toon:1.0>`` で選ばせるが、HTTPの契約は ``loras`` フィールド
+    そのものなので、ここではフィールドで直接指定する(タグの解釈はフロント側の
+    話である)。202→completed→metadataの ``ic_lora`` ブロックまで見る。
+    第2段まではこれがFEATURE_UNSUPPORTEDだった。"""
+    _activate(lora_two_family_client, "LTX25")
+    r = lora_two_family_client.post(
+        "/api/v1/generate",
+        json={**BASE_REQUEST, "loras": [{"name": STYLE_LORA, "strength": 1.0}]},
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = lora_two_family_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    meta = _metadata(lora_two_family_client, job_id)
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    assert meta["ic_lora"]["loras"] == [
+        {"name": STYLE_LORA, "strength": 1.0, "preprocess": "none"}
+    ]
+    # スタイル単体は参照動画を要らない(kind-awareな裁定。2.3と同じ)。
+    assert meta["ic_lora"]["reference_video_id"] is None
+
+
+def test_ltx25_runs_a_style_lora_chain(lora_two_family_client):
+    """②Style LoRA×Chained。連結の全クリップに同じアダプタが一様に効く形で、
+    参照動画は無い——なので ``ic_lora`` ブロックは**出ない**のが正しい(2.3の
+    裁定そのまま)。要求そのものは ``request`` ダンプに残る。"""
+    _activate(lora_two_family_client, "LTX25")
+    job_id = _run_to_completion(
+        lora_two_family_client,
+        _chain_body(loras=[{"name": STYLE_LORA, "strength": 0.8}]),
+    )
+    meta = _metadata(lora_two_family_client, job_id)
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    assert meta["request"]["loras"] == [
+        {"name": STYLE_LORA, "strength": 0.8, "audio_strength": None}
+    ]
+    assert "ic_lora" not in meta
+
+
+def test_ltx25_runs_a_control_lora_with_a_reference_video(lora_two_family_client):
+    """③制御IC-LoRA+参照動画の単発。解像度は**512×384**——参照は出力の半分の
+    解像度で64格子に乗るので、%128でなければアプリが先に422にする。"""
+    _activate(lora_two_family_client, "LTX25")
+    vid = _upload_reference(lora_two_family_client)
+
+    r = lora_two_family_client.post(
+        "/api/v1/generate",
+        json={
+            **BASE_REQUEST,
+            **REF_SIZE,
+            "loras": [{"name": CANNY_LORA, "strength": 1.0}],
+            "reference_video_id": vid,
+            "conditioning_attention_strength": 0.7,
+        },
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = lora_two_family_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    meta = _metadata(lora_two_family_client, job_id)
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    ic_lora = meta["ic_lora"]
+    assert ic_lora["reference_video_id"] == vid
+    assert ic_lora["loras"][0]["name"] == CANNY_LORA
+    assert ic_lora["loras"][0]["preprocess"] == "canny"
+    assert ic_lora["conditioning_attention_strength"] == 0.7
+
+
+def test_ltx25_refuses_a_non_128_resolution_for_a_reference_job(lora_two_family_client):
+    """③の対。参照付きで%128でない解像度は、機能の可否ではなく**寸法**の理由で
+    422になる——2.3と同じ符号でなければ、利用者は直せないものを直しに行く。"""
+    _activate(lora_two_family_client, "LTX25")
+    vid = _upload_reference(lora_two_family_client)
+    r = lora_two_family_client.post(
+        "/api/v1/generate",
+        json={
+            **BASE_REQUEST,  # 320x320: 128で割り切れない
+            "loras": [{"name": CANNY_LORA, "strength": 1.0}],
+            "reference_video_id": vid,
+        },
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "REFERENCE_RESOLUTION_INVALID"
+
+
+def test_ltx25_still_refuses_a_depth_adapter_on_a_multi_clip_chain(lora_two_family_client):
+    """④depth前処理×多クリップは、**エンジン非依存**の制限として残る
+    (LORA_DEPTH_CHAIN_UNSUPPORTED)。Video-Depth-Anythingがクリップ全体を
+    一括で見る設計だからで、2.5だから駄目なのではない——だから
+    FEATURE_UNSUPPORTEDではなく、こちらの符号で落ちなければならない。"""
+    _activate(lora_two_family_client, "LTX25")
+    vid = _upload_reference(lora_two_family_client)
+
+    r = lora_two_family_client.post(
+        "/api/v1/generate/chain",
+        json=_chain_body(
+            **REF_SIZE,
+            loras=[{"name": DEPTH_LORA, "strength": 1.0}],
+            reference_video_id=vid,
+        ),
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "LORA_DEPTH_CHAIN_UNSUPPORTED"
+    # 1クリップなら通る(制限はクリップ数の側にある)。
+    r1 = lora_two_family_client.post(
+        "/api/v1/generate/chain",
+        json=_chain_body(
+            **REF_SIZE,
+            clips=[{"num_frames": 25}],
+            loras=[{"name": DEPTH_LORA, "strength": 1.0}],
+            reference_video_id=vid,
+        ),
+    )
+    assert r1.status_code == 202, r1.text
+
+
+def test_ltx25_runs_a_long_ic_lora_chain(lora_two_family_client):
+    """⑤長尺IC-LoRA(§3-78の幾何)。1本の参照動画が2クリップを駆動し、
+    metadataの ``reference_segment_windows`` が ``chain_math`` の直接呼び出しと
+    一致する。窓はアプリ側が再計算して書くので、mockでもここまで確かめられる
+    ——実機ゲートB12はこの一致を実物の映像で見る側の担当である。
+
+    題材はdeblur(前処理不要の制御アダプタ)。depthと違い多クリップに乗る。"""
+    _activate(lora_two_family_client, "LTX25")
+    vid = _upload_reference(lora_two_family_client)
+    clip_frames = [25, 25]
+
+    job_id = _run_to_completion(
+        lora_two_family_client,
+        _chain_body(
+            **REF_SIZE,
+            clips=[{"num_frames": f} for f in clip_frames],
+            loras=[{"name": DEBLUR_LORA, "strength": 1.0}],
+            reference_video_id=vid,
+        ),
+    )
+
+    meta = _metadata(lora_two_family_client, job_id)
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    ic_lora = meta["ic_lora"]
+    assert ic_lora["reference_video_id"] == vid
+    assert ic_lora["loras"][0]["name"] == DEBLUR_LORA
+
+    layout = chain_math.compute_chain_layout(clip_frames, 24.0, kv=2)
+    expected = [list(w) for w in chain_math.video_segment_windows(layout)]
+    assert ic_lora["reference_segment_windows"] == expected
+    assert len(expected) == len(clip_frames)
+    assert ic_lora["reference_frames_needed"] == layout.total_px
+
+
+def test_the_2_3_engine_runs_the_same_lora_jobs(lora_two_family_client):
+    """対の検証。2.5で通るようになったからといって2.3が壊れていない——同じ
+    リクエストが同じ登録の上で両系統とも202になる。"""
+    for base_model in ("LTX23", "LTX25"):
+        _activate(lora_two_family_client, base_model)
+        r = lora_two_family_client.post(
+            "/api/v1/generate",
+            json={**BASE_REQUEST, "loras": [{"name": STYLE_LORA, "strength": 1.0}]},
+        )
+        assert r.status_code == 202, f"{base_model}: {r.text}"
+
+
+# --------------------------------------------------------------------------- #
 # 3) GET /models — unsupported_features は加算のみ
 # --------------------------------------------------------------------------- #
 
@@ -543,6 +903,10 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # Singleタブのa2vアコーディオンも、BatchタブのA2V行も灰色のままになる。
     assert "chain" not in features
     assert "v2v" not in features and "a2v" not in features
+    # 第3段で ``loras`` / ``reference_video`` も外れた——残っていればLoRAチップも
+    # 参照動画のパネルも灰色のままになる。``outpaint`` は残る。
+    assert "loras" not in features and "reference_video" not in features
+    assert "outpaint" in features
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

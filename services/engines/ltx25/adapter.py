@@ -51,7 +51,9 @@ from services.engines.ltx.adapter import (
     LTXRunner,
     LTX_ARCHITECTURE,
     ProgressCallback,
+    _lora_payload_entry,
     _minor_version,
+    _resolve_reference_preprocess,
     resolve_seed,
 )
 from services.lora_registry import ResolvedLora
@@ -129,8 +131,6 @@ DEFAULT_BLOCKS_ON_GPU = 8
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("outpaint", "outpaint", lambda r: r.outpaint is not None),
-    ("loras", "loras", lambda r: bool(r.loras)),
-    ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
     ("attention_backend", "sage_attention", lambda r: r.attention_backend != "sdpa"),
@@ -158,6 +158,15 @@ IGNORED_FIELDS: dict[str, str] = {
 #: ``images`` list, and ``crop_output`` is the app-side ffmpeg centre-crop that
 #: happens after the worker is done. Declared rather than merely implied so the
 #: model_fields audit below can name a home for every field.
+#:
+#: ``loras`` / ``reference_video_id`` AND THEIR TWO STRENGTHS JOINED THIS SET
+#: with §3-102's third increment (Style LoRA + IC-LoRA). None of the four is
+#: read off the request the way the six above are: the orchestrator has already
+#: resolved the adapter NAMES into files and the upload ID into a path, so what
+#: :meth:`_RealBackend25.generate` acts on is the ``lora_paths`` /
+#: ``reference_video_path`` keyword arguments carrying that material. The two
+#: strengths ARE read from the request, and only shape the ``reference_video``
+#: block. See the needle table in tests/test_ltx25_adapter.py.
 HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -168,6 +177,10 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "seed",
         "conditioning_images",
         "crop_output",
+        "loras",
+        "reference_video_id",
+        "conditioning_attention_strength",
+        "reference_video_strength",
     }
 )
 
@@ -175,9 +188,13 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 #: inert unless its governor is non-default, and every governor here is in
 #: :data:`REJECT_TABLE`. So they need no ruling of their own — a request that
 #: makes one of them meaningful is already refused, by the governor, before this
-#: field could have mattered. (``conditioning_attention_strength`` and
-#: ``reference_video_strength`` are not merely inert without ``loras``: the
-#: schema itself rejects them, api/models.py ``validate_ltx_constraints``.)
+#: field could have mattered.
+#:
+#: THE TWO REFERENCE STRENGTHS LEFT THIS TABLE with §3-102's third increment.
+#: They were only ever here because their governor (``loras``) was a 422; now
+#: that LoRA and the reference video run on this engine, a strength really does
+#: change the job, so it is HONOURED — and leaving it classified "governed"
+#: would have been the silent-drop the audit exists to catch.
 #:
 #: The distinction is worth keeping rather than folding into
 #: :data:`IGNORED_FIELDS`: "ignored" promises a job runs anyway, which is false
@@ -186,8 +203,6 @@ GOVERNED_FIELDS: dict[str, str] = {
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
-    "conditioning_attention_strength": "loras",
-    "reference_video_strength": "loras",
 }
 
 # --------------------------------------------------------------------------- #
@@ -214,15 +229,16 @@ GOVERNED_FIELDS: dict[str, str] = {
 #:
 #: ``source_video`` AND ``source_audio`` LEFT THIS TABLE with §3-102's second
 #: increment: V2V continuation and A2V (Single, long and Batch alike) run on
-#: this engine now, so both moved to :data:`CHAIN_HONOURED_FIELDS`. Retake and
-#: End source stay — they are the modes engine25 still has no code path for.
+#: this engine now, so both moved to :data:`CHAIN_HONOURED_FIELDS`. ``loras``
+#: and ``reference_video_id`` LEFT WITH THE THIRD: Style/character LoRA and the
+#: reference-video control IC-LoRA (long chains included) run here too. Retake
+#: and End source stay — they are the modes engine25 still has no code path
+#: for.
 CHAIN_REJECT_TABLE: tuple[
     tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
 ] = (
     ("retake", "retake", lambda r: r.retake is not None),
     ("end_source", "end_source", lambda r: r.end_source is not None),
-    ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
-    ("loras", "loras", lambda r: bool(r.loras)),
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
@@ -262,6 +278,15 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: carries a ``num_steps`` key built from it: the distilled schedule is fixed,
 #: so the engine records the number in metadata and denoises 8 + 3 steps
 #: regardless. "Honoured" would claim it changes the output; it does not.
+#:
+#: ``loras`` / ``reference_video_id`` AND THEIR TWO STRENGTHS JOINED THIS SET
+#: with §3-102's third increment, for the same reason and in the same shape as
+#: the single path's :data:`HONOURED_FIELDS`: the orchestrator resolves the
+#: adapter names and the upload id into material, and the payload carries the
+#: additive ``loras`` / ``reference_video`` blocks below. A long reference is
+#: sliced per stage-1 segment by the ENGINE; the app recomputes the same windows
+#: from ``chain_math`` for metadata, so nothing about that geometry is decided
+#: here.
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -277,23 +302,26 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "stage2_window",
         "source_video",
         "source_audio",
+        "loras",
+        "reference_video_id",
+        "conditioning_attention_strength",
+        "reference_video_strength",
     }
 )
 
 #: ``field -> the field that governs it``, exactly as :data:`GOVERNED_FIELDS`:
 #: each is inert unless its governor is non-default, and every governor here is
 #: in :data:`CHAIN_REJECT_TABLE`, so a request that could make one of them
-#: matter is already refused before this field is read. As in the single table,
-#: the two reference strengths name ``loras`` rather than ``reference_video_id``
-#: as their governor: the chain SCHEMA rejects them outright without a LoRA
-#: (api/models.py ``validate_chain_constraints``), so that is the field they
-#: actually depend on.
+#: matter is already refused before this field is read.
+#:
+#: THE TWO REFERENCE STRENGTHS LEFT THIS TABLE with §3-102's third increment,
+#: the chain twin of the single-path move: their governor is no longer a 422, so
+#: "governed" would now be a promise that they cannot reach a running job — and
+#: they can.
 CHAIN_GOVERNED_FIELDS: dict[str, str] = {
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
-    "conditioning_attention_strength": "loras",
-    "reference_video_strength": "loras",
 }
 
 
@@ -308,6 +336,8 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: works), and ``"v2v"`` / ``"a2v"`` left with the second: V2V continuation and
 #: A2V run here too, which also lights the Single tab's A2V accordion and the
 #: Batch tab's A2V rows, because the frontend greys all three by these names.
+#: ``"loras"`` and ``"reference_video"`` left with the THIRD increment, which
+#: re-opens the LoRA chips and the reference-video panel on both tabs.
 #: The two modes that still cannot run — retake / end_source — stay, and they
 #: are enforced field-by-field by :data:`CHAIN_REJECT_TABLE` rather than by one
 #: blanket refusal.
@@ -326,7 +356,7 @@ def reject_unsupported(request: GenerateRequest) -> None:
     so a rejection costs no worker round-trip and no job record; wiring it there
     changes nothing about the answer, only how early it arrives.
 
-    First offender wins. Listing all of them would read as "fix these eight
+    First offender wins. Listing all of them would read as "fix these six
     things" when in practice one control was left on.
     """
     for field, feature, is_non_default in REJECT_TABLE:
@@ -347,9 +377,9 @@ def reject_chain(request: GenerateChainRequest) -> None:
     UNTIL §3-102 THIS TOOK NO ARGUMENT and refused every chain outright, on the
     grounds that nothing in the body could make this engine able to chain. That
     is no longer true: a plain Chained job runs here now, and what is left out
-    of scope — V2V continuation, A2V, Retake, End source, LoRA, a reference
-    video, NAG and the acceleration knobs — is decided FIELD BY FIELD, exactly
-    like the single path. So the request has to be read.
+    of scope — Retake, End source, NAG and the acceleration knobs — is decided
+    FIELD BY FIELD, exactly like the single path. So the request has to be
+    read.
 
     Same first-offender-wins rule and same table discipline as
     :func:`reject_unsupported`; see :data:`CHAIN_REJECT_TABLE`.
@@ -575,13 +605,16 @@ class _RealBackend25(_RealBackend):
         seed: int | None = None,
         outpaint_source_path: Path | None = None,
     ) -> GenerationOutcome:
-        """One two-stage T2V/I2V generation (the whole v1 scope).
+        """One two-stage T2V/I2V generation, with Style / IC-LoRA (§3-102).
 
-        ``lora_paths`` / ``reference_video_path`` / ``outpaint_source_path`` are
-        accepted so the call shape stays identical to 2.3's — the orchestrator
-        passes them positionally — but reaching this method with any of them set
-        is already impossible: the request fields behind them are refused by
-        :func:`reject_unsupported` on the line above.
+        ``lora_paths`` and ``reference_video_path`` ARE ACTED ON since §3-102's
+        third increment: the orchestrator resolved the adapter names into
+        safetensors files and the upload id into a path, and both ride the
+        payload in 2.3's shape (see the ``loras`` / ``reference_video`` keys
+        below). ``outpaint_source_path`` is still accepted-and-unused so the
+        call shape stays identical to 2.3's — the orchestrator passes all of
+        them positionally — but reaching this method with it set is impossible:
+        ``outpaint`` is refused by :func:`reject_unsupported` on the line above.
 
         ``crop_output`` IS honoured, and is the one v1-scope decision worth
         naming: it is an ffmpeg centre-crop the app performs on the finished
@@ -596,6 +629,7 @@ class _RealBackend25(_RealBackend):
         _log_ignored(request)
 
         conditioning_image_paths = conditioning_image_paths or []
+        lora_paths = lora_paths or []
         mode = request.generation_mode
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -619,6 +653,38 @@ class _RealBackend25(_RealBackend):
         if progress_callback:
             progress_callback(None, None, 0.05)
 
+        # Style/character AND control IC-LoRA (§3-102 third increment), in 2.3's
+        # shape verbatim — ``_lora_payload_entry`` is IMPORTED from the 2.3
+        # adapter rather than restated, because the (path, strength[,
+        # audio_strength]) triple is the app's contract with a resolved adapter,
+        # not a fact about either engine. ``loras`` is ALWAYS a key (an empty
+        # list means "detach whatever was attached", which the worker must be
+        # told explicitly), and so is ``reference_video`` (None = no reference).
+        #
+        # ``preprocess`` is derived from the job's adapters; a conflict (>1
+        # distinct kind) is already refused by api/generate.py, and this is the
+        # defensive re-check at the runner hop, exactly as on 2.3. The reference
+        # ``strength`` defaults to 1.0 (official guidance) and
+        # ``attention_strength`` is spliced in ONLY when the request set it, so
+        # an omitted-field job's block stays byte-identical.
+        loras_payload = [_lora_payload_entry(lp) for lp in lora_paths]
+        if reference_video_path is not None:
+            reference_payload: dict | None = {
+                "path": str(reference_video_path),
+                "strength": (
+                    1.0
+                    if request.reference_video_strength is None
+                    else float(request.reference_video_strength)
+                ),
+                "preprocess": _resolve_reference_preprocess(lora_paths),
+            }
+            if request.conditioning_attention_strength is not None:
+                reference_payload["attention_strength"] = float(
+                    request.conditioning_attention_strength
+                )
+        else:
+            reference_payload = None
+
         # The v1 contract, whole. Fields this engine ignores are NOT forwarded:
         # they were already logged above, and a payload that carries only what
         # is acted upon is a payload a golden snapshot can pin.
@@ -631,6 +697,8 @@ class _RealBackend25(_RealBackend):
             "num_frames": request.num_frames,
             "frame_rate": request.frame_rate,
             "images": images,
+            "loras": loras_payload,
+            "reference_video": reference_payload,
             "output_path": str(target),
         }
 
@@ -703,13 +771,12 @@ class _RealBackend25(_RealBackend):
         and must not: the ORCHESTRATOR's job is to prepare material, the
         ADAPTER's job is to rule on it.
 
-        Six of those keywords name a mode outside this engine's scope (Retake,
-        End source, LoRA, reference video). Reaching this method with any of
-        them set is already impossible — :func:`reject_chain` refuses the
-        request fields behind them at the endpoint, and again on the line
-        below — so a non-``None`` arrival means the two tables have drifted
-        apart, which is a bug worth a loud ``RuntimeError`` rather than a
-        silently ignored argument.
+        FOUR of those keywords name a mode outside this engine's scope (Retake
+        and End source). Reaching this method with any of them set is already
+        impossible — :func:`reject_chain` refuses the request fields behind them
+        at the endpoint, and again on the line below — so a non-``None`` arrival
+        means the two tables have drifted apart, which is a bug worth a loud
+        ``RuntimeError`` rather than a silently ignored argument.
 
         HONOURED, and worth naming: ``clip0_conditioning_paths`` (clip 0's I2V
         keyframes — the only clip the schema lets carry them) and
@@ -723,6 +790,13 @@ class _RealBackend25(_RealBackend):
         to the requested fps, the uploaded wav — and they ride the payload as
         the additive ``source`` / ``audio_source`` blocks below, in 2.3's shape
         so the two engines' chain payloads stay comparable.
+
+        ALSO HONOURED SINCE THE THIRD: ``lora_paths`` (Style/character and
+        control adapters, applied uniformly across the chain) and
+        ``reference_video_path`` (the ONE reference video, sliced per stage-1
+        segment by the engine). Both ride as ADDITIVE blocks — non-empty /
+        non-``None`` only — so a plain chain's payload stays byte-identical to
+        the golden, which is 2.3's discipline for the same two keys.
         """
         chain = chain_request
         # BEFORE the load, unlike :meth:`generate`. The ruling is a pure read of
@@ -734,18 +808,17 @@ class _RealBackend25(_RealBackend):
 
         # Fail loud, not silent: every one of these is refused above, so a value
         # here means the reject table and this signature disagree about what the
-        # engine can do. ``lora_paths`` is tested for emptiness rather than for
-        # None because run_chain_job always builds a list (empty = no loras).
+        # engine can do. Four entries, not six: ``lora_paths`` and
+        # ``reference_video_path`` LEFT this guard with §3-102's third increment
+        # — they are material this engine now consumes, so their arrival is a
+        # job, not a drift.
         out_of_scope = {
             "retake_window_path": retake_window_path,
             "end_source_path": end_source_path,
             "end_source_context_frames": end_source_context_frames,
             "end_source_strength": end_source_strength,
-            "reference_video_path": reference_video_path,
         }
         supplied = [name for name, value in out_of_scope.items() if value is not None]
-        if lora_paths:
-            supplied.append("lora_paths")
         if supplied:
             raise RuntimeError(
                 "LTX 2.5 chain received out-of-scope material the feature table "
@@ -756,6 +829,7 @@ class _RealBackend25(_RealBackend):
             self.load()
 
         clip0_conditioning_paths = clip0_conditioning_paths or []
+        lora_paths = lora_paths or []
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "output.mp4"
 
@@ -823,6 +897,32 @@ class _RealBackend25(_RealBackend):
         # V2V chain (the schema makes the two source modes mutually exclusive).
         if source_audio_path is not None:
             payload["audio_source"] = {"path": str(source_audio_path)}
+        # Style/character AND control IC-LoRA (additive): (path, strength[,
+        # audio_strength]) per adapter, applied uniformly across the chain, and
+        # sent ONLY when non-empty so a no-lora chain's payload is byte-identical
+        # to the golden above. ``preprocess`` is deliberately NOT part of an
+        # entry — it is derived once for the reference block below, and a control
+        # adapter without a reference is already refused at the API layer.
+        if lora_paths:
+            payload["loras"] = [_lora_payload_entry(lp) for lp in lora_paths]
+        # Reference-video CONTROL IC-LoRA (additive): the ONE reference video,
+        # which the engine slices per stage-1 segment. Same block shape as the
+        # single path's, and present only when a reference was requested.
+        if reference_video_path is not None:
+            reference_payload: dict = {
+                "path": str(reference_video_path),
+                "strength": (
+                    1.0
+                    if chain.reference_video_strength is None
+                    else float(chain.reference_video_strength)
+                ),
+                "preprocess": _resolve_reference_preprocess(lora_paths),
+            }
+            if chain.conditioning_attention_strength is not None:
+                reference_payload["attention_strength"] = float(
+                    chain.conditioning_attention_strength
+                )
+            payload["reference_video"] = reference_payload
         # stage2_window: additive, sent ONLY when the request opted off
         # "standard", so a default chain's payload stays byte-identical to the
         # golden key set above (same contract as 2.3's).

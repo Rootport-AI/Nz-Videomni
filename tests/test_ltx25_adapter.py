@@ -35,6 +35,7 @@ from config import AppConfig
 from services.base_models import BaseModelDescriptor, CategoryDescriptor
 from services.engines.ltx import adapter as ltx23
 from services.engines.ltx25 import adapter as ltx25
+from services.lora_registry import ResolvedLora
 from services.low_vram import build_low_vram_settings
 
 LTX23_KV = {"general.architecture": "ltxv", "model_version": "2.3.0"}
@@ -261,12 +262,33 @@ REQUEST_OVERRIDES: dict[str, dict] = {
         "reference_video_id": "vid-123",
         "loras": _LORAS,
     },
-    "loras": {"loras": _LORAS},
-    "reference_video_id": {"reference_video_id": "vid-123", "loras": _LORAS},
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "vae_mode": {"vae_mode": "prune_vaed"},
     "attention_backend": {"attention_backend": "sage"},
     "keep_resident": {"keep_resident": True},
+}
+
+#: What §3-102's THIRD increment turned on, as valid request bodies: the two
+#: fields that left :data:`REJECT_TABLE` plus the two strength overrides that
+#: left :data:`GOVERNED_FIELDS`. The mirror image of :data:`REQUEST_OVERRIDES`
+#: — same shape, opposite verdict — so the acceptance test is table-driven
+#: like the refusal one, and
+#: tests/test_ltx25_api_guard.py can import it and drive the same bodies through
+#: HTTP. A reference video is SCHEMA-coupled to an IC-LoRA, so the pair travels
+#: together; the strength overrides are coupled the same way.
+REQUEST_ACCEPTED_LORAS: dict[str, dict] = {
+    "loras": {"loras": _LORAS},
+    "reference_video_id": {"reference_video_id": "vid-123", "loras": _LORAS},
+    "reference_video_strength": {
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "reference_video_strength": 0.8,
+    },
+    "conditioning_attention_strength": {
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "conditioning_attention_strength": 0.7,
+    },
 }
 
 
@@ -314,6 +336,39 @@ def test_every_rejected_field_raises_feature_unsupported(field):
 def test_reject_table_covers_every_field_the_fixture_names():
     """The parametrized test above is only as good as its request table."""
     assert set(REQUEST_OVERRIDES) == {f for f, _feat, _p in ltx25.REJECT_TABLE}
+
+
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_LORAS))
+def test_style_and_reference_are_no_longer_refused(case):
+    """The headline of §3-102's third increment: Style/character LoRA and the
+    reference-video control IC-LoRA pass the ruling instead of raising.
+    Field-by-field, so a table that lost only ONE of the two rows fails here."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_LORAS[case]))  # no raise
+
+
+def test_the_lora_fields_are_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises. A field dropped from every
+    table would also stop raising — and would then be silently ignored."""
+    lora_fields = {
+        "loras",
+        "reference_video_id",
+        "conditioning_attention_strength",
+        "reference_video_strength",
+    }
+    assert lora_fields <= ltx25.HONOURED_FIELDS
+    assert not lora_fields & {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert not lora_fields & set(ltx25.IGNORED_FIELDS)
+    assert not lora_fields & set(ltx25.GOVERNED_FIELDS)
+
+
+def test_outpaint_is_still_named_by_name_despite_its_lora_companions():
+    """``outpaint`` sits ABOVE the two rows that left the table, so the schema
+    companions it needs (a reference video + an IC-LoRA) no longer steal the
+    message. The user is told the thing they actually cannot do."""
+    with pytest.raises(APIError) as ei:
+        ltx25.reject_unsupported(_request(**REQUEST_OVERRIDES["outpaint"]))
+    assert "outpaint" in ei.value.detail
+    assert "loras" not in ei.value.detail and "reference_video" not in ei.value.detail
 
 
 def test_unsupported_features_is_both_reject_tables_without_chain_itself():
@@ -385,7 +440,9 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 #:
 #: ``source_video`` / ``source_audio`` LEFT this table with §3-102's second
 #: increment — they are honoured now, and the requests that carry them live in
-#: :data:`CHAIN_ACCEPTED_SOURCES` below instead.
+#: :data:`CHAIN_ACCEPTED_SOURCES` below instead. ``loras`` /
+#: ``reference_video_id`` LEFT WITH THE THIRD, and live in
+#: :data:`CHAIN_ACCEPTED_LORAS`.
 CHAIN_OVERRIDES: dict[str, dict] = {
     "retake": {
         "clips": [{"num_frames": 73}],
@@ -395,10 +452,6 @@ CHAIN_OVERRIDES: dict[str, dict] = {
         "clips": [{"num_frames": 73}],
         "end_source": {"image_id": "img-1", "context_frames": 24},
     },
-    # The schema couples a reference video to an IC-LoRA, so the pair travels
-    # together; the table's ORDER is what decides which of the two is named.
-    "reference_video_id": {"reference_video_id": "vid-123", "loras": _LORAS},
-    "loras": {"loras": _LORAS},
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
@@ -431,6 +484,49 @@ CHAIN_ACCEPTED_SOURCES: dict[str, dict] = {
         "source_audio": {"audio_id": "aud-1"},
     },
 }
+
+
+#: What §3-102's THIRD increment turned on for a chain, same discipline again:
+#: Style/character LoRA applied uniformly across the clips, and the ONE
+#: reference video the engine slices per stage-1 segment. The reference entries
+#: carry the IC-LoRA the schema couples them to, and the multi-clip one is the
+#: long IC-LoRA case (§3-78's geometry, now on this engine too).
+CHAIN_ACCEPTED_LORAS: dict[str, dict] = {
+    "loras": {"loras": _LORAS},
+    "reference_video_id": {
+        "clips": [{"num_frames": 25}],
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+    },
+    "reference_video_long": {"reference_video_id": "vid-123", "loras": _LORAS},
+    "reference_video_strength": {
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "reference_video_strength": 0.8,
+        "conditioning_attention_strength": 0.7,
+    },
+}
+
+
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_LORAS))
+def test_chain_style_and_reference_are_no_longer_refused(case):
+    """The chain twin of the single-path acceptance test (§3-102 third
+    increment). ``reference_video_long`` is the long IC-LoRA case: TWO clips
+    driven by one reference video, which §3-78 established on 2.3."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_LORAS[case]))  # no raise
+
+
+def test_the_chain_lora_fields_are_honoured_not_merely_unlisted():
+    lora_fields = {
+        "loras",
+        "reference_video_id",
+        "conditioning_attention_strength",
+        "reference_video_strength",
+    }
+    assert lora_fields <= ltx25.CHAIN_HONOURED_FIELDS
+    assert not lora_fields & {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert not lora_fields & set(ltx25.CHAIN_IGNORED_FIELDS)
+    assert not lora_fields & set(ltx25.CHAIN_GOVERNED_FIELDS)
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
@@ -525,7 +621,7 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
 
 
 def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_path):
-    """The orchestrator hands every runner the same thirteen keywords. SIX of
+    """The orchestrator hands every runner the same thirteen keywords. FOUR of
     them name material this engine cannot use, and every one is refused by the
     table above — so a value arriving here means the table and this signature
     have drifted apart. That is a bug, and it must not look like a job."""
@@ -535,9 +631,9 @@ def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_pat
         backend.generate_chain(
             _chain_request(), output_dir=tmp_path, retake_window_path=tmp_path / "w.mp4"
         )
-    with pytest.raises(RuntimeError, match="lora_paths"):
+    with pytest.raises(RuntimeError, match="end_source_path"):
         backend.generate_chain(
-            _chain_request(), output_dir=tmp_path, lora_paths=[object()]
+            _chain_request(), output_dir=tmp_path, end_source_path=tmp_path / "e.mp4"
         )
     # ...while the EMPTY list run_chain_job always builds for a no-lora chain is
     # not "material" and must sail through. Checked on the no-subprocess harness
@@ -547,6 +643,22 @@ def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_pat
         _chain_request(), output_dir=tmp_path / "ok", lora_paths=[]
     )
     assert captured[0]["op"] == "generate_chain"
+    assert "loras" not in captured[0]
+
+
+def test_the_lora_keywords_are_no_longer_out_of_scope_material(ltx25_paths, tmp_path):
+    """The other half of the guard's §3-102-third change: adapters and a
+    reference video ARRIVING here is a JOB now, not a drift between the table
+    and the signature — so they must reach the payload rather than raise."""
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_LORAS["reference_video_long"]),
+        output_dir=tmp_path / "ok",
+        lora_paths=[(tmp_path / "union.safetensors", 1.0, "canny", None)],
+        reference_video_path=tmp_path / "ref.mp4",
+    )
+    assert captured[0]["loras"][0]["strength"] == 1.0
+    assert captured[0]["reference_video"]["preprocess"] == "canny"
 
 
 # --------------------------------------------------------------------------- #
@@ -781,6 +893,111 @@ def test_chain_payload_carries_a2v_across_a_long_chain(tmp_path):
     assert all(set(clip) == {"prompt", "num_frames", "images"} for clip in payload["clips"])
 
 
+#: The IC-LoRA payload blocks' key order, also 2.3's verbatim (see
+#: services/engines/ltx/adapter.py ``generate_chain``). ``attention_strength``
+#: is spliced onto the end of the reference block only when the request set it.
+GOLDEN_LORA_ENTRY_KEYS_25 = ["path", "strength"]
+GOLDEN_REFERENCE_KEYS_25 = ["path", "strength", "preprocess"]
+
+
+def _resolved(path, strength=1.0, preprocess="none", audio_strength=None):
+    """A ``ResolvedLora`` the way services/lora_registry.py builds one."""
+    return ResolvedLora(
+        path=path, strength=strength, preprocess=preprocess, audio_strength=audio_strength
+    )
+
+
+def test_chain_payload_carries_the_style_lora_block(tmp_path):
+    """Style/character LoRA on a chain (§3-102 third increment): additive,
+    applied uniformly across the clips, and appended AFTER the golden keys so a
+    no-lora chain's payload is untouched."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    adapter = tmp_path / "Pixar_Toon.safetensors"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_LORAS["loras"]),
+        output_dir=tmp_path / "out",
+        lora_paths=[_resolved(adapter, 1.0)],
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["loras"]
+    assert list(payload["loras"][0]) == GOLDEN_LORA_ENTRY_KEYS_25
+    assert payload["loras"] == [{"path": str(adapter), "strength": 1.0}]
+    # A style-only chain asks for no reference video, so the key is absent —
+    # additive on the chain path, unlike the single path where it is always there.
+    assert "reference_video" not in payload
+
+
+def test_chain_payload_carries_audio_strength_only_when_the_adapter_has_one(tmp_path):
+    """§45's app-side half: ``audio_strength`` is spliced into an entry only when
+    the resolved adapter carries one, so a no-audio job's payload is unchanged."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    a = tmp_path / "a.safetensors"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_LORAS["loras"]),
+        output_dir=tmp_path / "out",
+        lora_paths=[_resolved(a, 1.0, audio_strength=0.4)],
+    )
+    assert captured[0]["loras"] == [
+        {"path": str(a), "strength": 1.0, "audio_strength": 0.4}
+    ]
+
+
+def test_chain_payload_carries_the_reference_block_for_a_long_chain(tmp_path):
+    """Long IC-LoRA (§3-78 geometry, now on 2.5): ONE reference video drives
+    TWO clips. There is no per-clip reference — the engine slices the single
+    stream per stage-1 segment — so the payload must not grow a per-clip key."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    adapter = tmp_path / "union-control.safetensors"
+    ref = tmp_path / "ref.mp4"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_LORAS["reference_video_long"]),
+        output_dir=tmp_path / "out",
+        lora_paths=[_resolved(adapter, 1.0, preprocess="canny")],
+        reference_video_path=ref,
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["loras", "reference_video"]
+    assert list(payload["reference_video"]) == GOLDEN_REFERENCE_KEYS_25
+    assert payload["reference_video"] == {
+        "path": str(ref),
+        "strength": 1.0,  # official guidance default when the request omits it
+        "preprocess": "canny",
+    }
+    assert len(payload["clips"]) == 2
+    assert all(set(clip) == {"prompt", "num_frames", "images"} for clip in payload["clips"])
+
+
+def test_chain_reference_block_carries_the_two_strength_overrides(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_LORAS["reference_video_strength"]),
+        output_dir=tmp_path / "out",
+        lora_paths=[_resolved(tmp_path / "u.safetensors", 1.0, preprocess="depth")],
+        reference_video_path=tmp_path / "ref.mp4",
+    )
+    reference = captured[0]["reference_video"]
+    assert reference["strength"] == 0.8
+    assert reference["attention_strength"] == 0.7
+    # ...appended AFTER the golden keys, so an omitted-field job's block order
+    # is untouched.
+    assert list(reference) == GOLDEN_REFERENCE_KEYS_25 + ["attention_strength"]
+
+
+def test_chain_payload_omits_both_lora_blocks_by_default(tmp_path):
+    """The additive contract, stated from the other side: a plain chain is
+    byte-identical to the golden even though the two keywords were passed."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "out", lora_paths=[])
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_25
+
+
 def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path):
     captured: list[dict] = []
     be = _capturing_chain_backend(captured)
@@ -819,6 +1036,172 @@ def test_chain_crop_output_is_an_app_side_post_process(tmp_path, monkeypatch):
     )
     assert Path(captured[0]["output_path"]).name == "_full.mp4"
     assert cropped == [("_full.mp4", 384, 256)]
+
+
+# --------------------------------------------------------------------------- #
+# 3f) golden SINGLE-generate payload — the worker contract, byte for byte
+# --------------------------------------------------------------------------- #
+#
+# Same discipline as the load and chain goldens: the key SET and the key ORDER
+# are the contract, and the payload is BUILT here rather than transcribed.
+# ``loras`` and ``reference_video`` are ALWAYS keys on this path — an empty list
+# means "detach whatever was attached" and None means "no reference", and a
+# worker that has to distinguish "absent" from "empty" is a worker with two
+# meanings for one silence. (The CHAIN path is additive instead; both choices
+# are 2.3's, restated per path.)
+
+#: The single-generate payload's key order.
+GOLDEN_GENERATE_KEYS_25 = [
+    "op",
+    "prompt",
+    "seed",
+    "width",
+    "height",
+    "num_frames",
+    "frame_rate",
+    "images",
+    "loras",
+    "reference_video",
+    "output_path",
+]
+
+
+def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
+    """A ``_RealBackend25`` with no subprocess behind it (single-generate twin
+    of :func:`_capturing_chain_backend`)."""
+    be = ltx25._RealBackend25.__new__(ltx25._RealBackend25)
+    be._proc = types.SimpleNamespace(poll=lambda: None)  # type: ignore[attr-defined]
+    be._lock = threading.Lock()
+
+    def _send(msg: dict) -> None:
+        captured.append(msg)
+        out = Path(msg["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"\x00" * 16)
+
+    be._send = _send  # type: ignore[attr-defined]
+    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+        "event": "done",
+        "seed_used": 4242,
+        "peak_vram_mb": 7000,
+    }
+    return be
+
+
+def test_generate_payload_golden_for_a_plain_t2v(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_request(width=512, height=320, num_frames=25, seed=123), tmp_path / "out")
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_GENERATE_KEYS_25
+    assert payload == {
+        "op": "generate",
+        "prompt": "a quiet harbour at first light",
+        "seed": 123,
+        "width": 512,
+        "height": 320,
+        "num_frames": 25,
+        "frame_rate": 24.0,
+        "images": [],
+        # ALWAYS present, even with nothing to say: an empty list is the
+        # explicit "detach whatever is attached" the worker acts on.
+        "loras": [],
+        "reference_video": None,
+        "output_path": str(tmp_path / "out" / "output.mp4"),
+    }
+
+
+def test_generate_payload_carries_the_style_lora_entries(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    a = tmp_path / "Pixar_Toon.safetensors"
+    b = tmp_path / "second.safetensors"
+    be.generate(
+        _request(**REQUEST_ACCEPTED_LORAS["loras"]),
+        tmp_path / "out",
+        lora_paths=[_resolved(a, 1.0), _resolved(b, 0.6, audio_strength=0.4)],
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_GENERATE_KEYS_25
+    assert payload["loras"] == [
+        {"path": str(a), "strength": 1.0},
+        # ``audio_strength`` spliced in only for the adapter that carries one.
+        {"path": str(b), "strength": 0.6, "audio_strength": 0.4},
+    ]
+    # A style-only job still has no reference video to send.
+    assert payload["reference_video"] is None
+
+
+def test_generate_payload_carries_the_reference_block(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    ref = tmp_path / "ref.mp4"
+    be.generate(
+        _request(**REQUEST_ACCEPTED_LORAS["reference_video_id"], width=512, height=384),
+        tmp_path / "out",
+        lora_paths=[_resolved(tmp_path / "u.safetensors", 1.0, preprocess="canny")],
+        reference_video_path=ref,
+    )
+
+    reference = captured[0]["reference_video"]
+    assert list(reference) == GOLDEN_REFERENCE_KEYS_25
+    assert reference == {
+        "path": str(ref),
+        "strength": 1.0,  # official guidance default when the request omits it
+        "preprocess": "canny",
+    }
+
+
+def test_generate_reference_block_carries_the_two_strength_overrides(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(
+        _request(
+            reference_video_id="vid-123",
+            loras=_LORAS,
+            reference_video_strength=0.8,
+            conditioning_attention_strength=0.7,
+            width=512,
+            height=384,
+        ),
+        tmp_path / "out",
+        lora_paths=[_resolved(tmp_path / "u.safetensors", 1.0, preprocess="depth")],
+        reference_video_path=tmp_path / "ref.mp4",
+    )
+    reference = captured[0]["reference_video"]
+    assert reference["strength"] == 0.8
+    assert reference["attention_strength"] == 0.7
+    assert list(reference) == GOLDEN_REFERENCE_KEYS_25 + ["attention_strength"]
+
+
+def test_generate_refuses_two_conflicting_preprocess_kinds(tmp_path):
+    """One uploaded reference can become ONE control signal. The API layer
+    already refuses this; the runner hop re-checks, exactly as 2.3 does — the
+    defensive half of a rule whose failure mode is a silently wrong control."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    with pytest.raises(APIError) as ei:
+        be.generate(
+            _request(**REQUEST_ACCEPTED_LORAS["reference_video_id"], width=512, height=384),
+            tmp_path / "out",
+            lora_paths=[
+                _resolved(tmp_path / "a.safetensors", 1.0, preprocess="canny"),
+                _resolved(tmp_path / "b.safetensors", 1.0, preprocess="depth"),
+            ],
+            reference_video_path=tmp_path / "ref.mp4",
+        )
+    assert ei.value.code == "LORA_PREPROCESS_CONFLICT"
+    assert not captured, "no payload may be sent for a conflicting job"
+
+
+def test_generate_outcome_names_this_engine(tmp_path):
+    captured: list[dict] = []
+    outcome = _capturing_backend(captured).generate(_request(), tmp_path / "out")
+    assert outcome.backend == ltx25.REAL_BACKEND_25
+    assert outcome.seed_used == 4242
+    assert outcome.attention_used == "sdpa"
 
 
 # --------------------------------------------------------------------------- #
@@ -948,6 +1331,11 @@ _CHAIN_HONOURED_READS = {
     "prompt": "chain.clip_prompt(",
     "source_video": "source_tail_path",
     "source_audio": "source_audio_path",
+    # §3-102 third increment, same reason as the source fields: the adapter
+    # NAMES and the reference upload id are resolved into material by the
+    # orchestrator, so what generate_chain reads is the keyword argument.
+    "loras": "lora_paths",
+    "reference_video_id": "reference_video_path",
 }
 
 
@@ -969,16 +1357,33 @@ def test_every_governor_is_itself_refused():
         assert governor in refused, f"{field} is governed by {governor}, which is not refused"
 
 
+#: ``field -> the text that proves it is read``, the single-path twin of
+#: :data:`_CHAIN_HONOURED_READS`. It did not exist until §3-102's third
+#: increment, because until then every honoured field WAS a ``request.<name>``
+#: read. The two entries below are the exception the LoRA work introduced: the
+#: adapter NAMES and the reference upload id are resolved into material by the
+#: orchestrator, so what ``generate`` touches is the keyword argument carrying
+#: that material, not the request field.
+#:
+#: The two strength overrides need NO entry: they really are read off the
+#: request (``request.reference_video_strength`` /
+#: ``request.conditioning_attention_strength``), which is exactly what the
+#: default needle asserts.
+_HONOURED_READS = {
+    "loras": "lora_paths",
+    "reference_video_id": "reference_video_path",
+}
+
+
 def test_honoured_fields_are_exactly_what_generate_acts_on(ltx25_paths):
     """Not a transcription of the payload builder: the payload is BUILT here and
     compared, so a field quietly dropped from ``generate`` fails this test."""
     import inspect
 
     source = inspect.getsource(ltx25._RealBackend25.generate)
-    # Six fields ride the payload verbatim; the other two are transformed
-    # (conditioning_images -> "images", crop_output -> ffmpeg post-process).
     for field in ltx25.HONOURED_FIELDS:
-        assert f"request.{field}" in source, f"{field} is declared honoured but never read"
+        needle = _HONOURED_READS.get(field, f"request.{field}")
+        assert needle in source, f"{field} is declared honoured but never read"
 
 
 # --------------------------------------------------------------------------- #

@@ -614,7 +614,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     expect(features).toEqual(
       expect.arrayContaining([
         "retake", "end_source",
-        "two_stage_hq", "outpaint", "loras", "reference_video",
+        "two_stage_hq", "outpaint",
         "nag", "prune_vaed", "sage_attention", "keep_resident",
       ]),
     );
@@ -622,11 +622,16 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // chains now, and its absence is what un-greys the Chained tab. §3-102
     // second stage: `v2v` and `a2v` left with it — the engine takes a source
     // video and a source audio track now, which is what un-greys the two Chain
-    // material panels and the Batch A2V section. All three asserted negatively,
-    // because `arrayContaining` above would not notice them coming back.
+    // material panels and the Batch A2V section. §3-102 third stage: `loras`
+    // and `reference_video` left too — Style LoRA and IC-LoRA (long IC-LoRA
+    // included) run on this engine now, which is what un-greys the reference
+    // panels on Single and Chained. All five asserted negatively, because
+    // `arrayContaining` above would not notice them coming back.
     expect(features).not.toContain("chain");
     expect(features).not.toContain("v2v");
     expect(features).not.toContain("a2v");
+    expect(features).not.toContain("loras");
+    expect(features).not.toContain("reference_video");
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {
@@ -665,8 +670,6 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
    * asked for this" — one case per row of `MOCK_CHAIN_FEATURE_FIELDS`. */
   const CASES: ReadonlyArray<{ feature: string; body: object }> = [
     { feature: "end_source", body: { end_source: { video_id: "vid-2", context_frames: 72 } } },
-    { feature: "reference_video", body: { reference_video_id: "vid-3" } },
-    { feature: "loras", body: { loras: [{ name: "style-a", strength: 0.8 }] } },
     { feature: "nag", body: { nag_enabled: true, negative_prompt: "blurry" } },
   ];
 
@@ -718,6 +721,32 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     expect(result.status).toBe(202);
   });
 
+  // §3-102 THIRD stage: the two that just left the declared list this time.
+  // Same reasoning as the two acceptances above — a row quietly dropped from
+  // `CASES` proves nothing, only a 202 on a request that carries the field does.
+  it("accepts a Style LoRA chain on LTX 2.5 — `loras` is in scope now", async () => {
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      loras: [{ name: "style-a", strength: 0.8 }],
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("accepts an IC-LoRA chain on LTX 2.5 — `reference_video_id` is in scope now", async () => {
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      // 384 rather than the shared body's 320: the real server requires a
+      // 128-multiple resolution of every request that carries a reference
+      // (`api/generate_chain.py`). The fixture does not check it, so spelling
+      // it out here keeps the case from being one no real server would take.
+      height: 384,
+      reference_video_id: "vid-3",
+    });
+    expect(result.status).toBe(202);
+  });
+
   it("accepts the Single-tab A2V shape on LTX 2.5 — one clip, full_length", async () => {
     // The shape the Single tab and Batch A2V both submit: a ONE-clip chain
     // carrying an audio track. It is only legal because a source is attached
@@ -733,9 +762,11 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     expect(result.status).toBe(202);
   });
 
-  it("still refuses end_source / reference_video on an LTX 2.5 V2V chain", async () => {
+  it("still refuses end_source on an LTX 2.5 V2V chain", async () => {
     // The other half of the same switch: opening V2V and A2V must not have
-    // opened the materials that are still out of scope.
+    // opened the material that is still out of scope. Named for what the
+    // request below actually carries — `end_source` alone; the reference video
+    // used to ride along here, and left the list in the third stage.
     const bridge = await ltx25Bridge();
     const result = await postChain(bridge, {
       ...CHAIN_BODY,

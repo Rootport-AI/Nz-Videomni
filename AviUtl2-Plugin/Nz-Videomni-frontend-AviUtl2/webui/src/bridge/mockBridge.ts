@@ -264,9 +264,13 @@ const MOCK_BASE_MODELS = [
  *
  * §3-102 second stage (V2V + A2V, incl. long A2V): `"v2v"` and `"a2v"` are gone
  * too — the engine takes a source video and a source audio track now, so both
- * Chain material panels and the Batch A2V section come back. What remains are
- * the materials it still cannot carry (`end_source`/`reference_video`) plus
- * Retake, and `handleGenerateChain` refuses exactly those. */
+ * Chain material panels and the Batch A2V section come back.
+ *
+ * §3-102 third stage (Style LoRA + IC-LoRA, long IC-LoRA included): `"loras"`
+ * and `"reference_video"` leave as well — the engine attaches LoRAs and takes a
+ * reference video now, on Single and on Chained alike. What remains is the
+ * material it still cannot carry (`end_source`) plus Retake and the rest below,
+ * and `handleGenerateChain` refuses exactly those. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   LTX23: [],
   LTX25: [
@@ -274,8 +278,6 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "end_source",
     "two_stage_hq",
     "outpaint",
-    "loras",
-    "reference_video",
     "nag",
     "prune_vaed",
     "sage_attention",
@@ -294,7 +296,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
  * ACTIVE base model. That is why LTX 2.3, whose array is empty, keeps sailing
  * through every one of these fields exactly as it always did — and why the
  * `source_video` / `source_audio` rows stay put now that LTX 2.5 no longer
- * declares `v2v` / `a2v`: the row only says which feature name a field belongs
+ * declares `v2v` / `a2v` — and, third stage, why the `loras` /
+ * `reference_video_id` rows stay put too: the row only says which feature name a field belongs
  * to, and membership in the declared list is what decides the 422. */
 const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{ field: string; feature: string }> = [
   { field: "source_video", feature: "v2v" },

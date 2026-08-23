@@ -132,10 +132,13 @@ describe("AppShell — base-model feature scope", () => {
   //
   // §3-102 SECOND stage (V2V + A2V, incl. long A2V): the split moved again.
   // `v2v` and `a2v` left the declared list, so the A2V track panel and the V2V
-  // half of the source card come BACK, and only 素材（末尾） and the reference
-  // video are still greyed. Both halves are asserted below, because a test that
-  // only checked the greyed two would pass just as happily on a build that greys
-  // everything.
+  // half of the source card come BACK.
+  //
+  // §3-102 THIRD stage (Style LoRA + IC-LoRA, long IC-LoRA included):
+  // `reference_video` left too, so the reference panel comes back as well and
+  // 素材（末尾） is the ONLY Chain material still greyed. Both halves are
+  // asserted below, because a test that only checked the greyed one would pass
+  // just as happily on a build that greys everything.
 
   /** The 📁 choose buttons of the panels LTX 2.5 still cannot use — the honest
    * probe, the way the folder inputs are for Batch A2V: each is live until
@@ -146,11 +149,12 @@ describe("AppShell — base-model feature scope", () => {
    * `.source-input-pick` and `.chain-audio-pick` are deliberately absent: V2V
    * and A2V are in scope now, so both must stay live. They are asserted
    * separately below (and in depth in `SourceInputPanel.test.tsx` /
-   * `ChainAudioPanel.test.tsx`). */
-  const CHAIN_PANEL_PICKS = [".chain-end-source-pick", ".chain-reference-pick"];
+   * `ChainAudioPanel.test.tsx`). §3-102 third stage: `.chain-reference-pick`
+   * joined them — IC-LoRA runs on this engine now. */
+  const CHAIN_PANEL_PICKS = [".chain-end-source-pick"];
 
   /** The panels LTX 2.5 CAN use — greyed by nothing, on either base model. */
-  const CHAIN_OPEN_PICKS = [".chain-audio-pick"];
+  const CHAIN_OPEN_PICKS = [".chain-audio-pick", ".chain-reference-pick"];
 
   function chainForm(container: HTMLElement): HTMLElement {
     return container.querySelector(".chained-form") as HTMLElement;
@@ -172,7 +176,7 @@ describe("AppShell — base-model feature scope", () => {
     return chainForm(container).querySelector(".source-input-pick") as HTMLButtonElement;
   }
 
-  it("greys the Chain material panels LTX 2.5 cannot use, each with its reason", async () => {
+  it("greys the one Chain material panel LTX 2.5 cannot use, with its reason", async () => {
     const { select, container } = await renderApp(AS_LTX25);
 
     expect(chainPicks(container).every((b) => b != null)).toBe(true);
@@ -187,12 +191,13 @@ describe("AppShell — base-model feature scope", () => {
     // generic "unsupported".
     const form = within(chainForm(container));
     expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
-    expect(form.getByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeInTheDocument();
-    // …and NOT the other two. A reason line left standing for a material the
+    // …and NOT the other three. A reason line left standing for a material the
     // engine can now take would tell the user to switch base models for
-    // something that already works here.
+    // something that already works here — §3-102 third stage moved the
+    // reference video into that group.
     expect(form.queryByText(/source VIDEO cannot be used on the selected base model/i)).toBeNull();
     expect(form.queryByText(/Generating from an audio track \(A2V\) is not available/i)).toBeNull();
+    expect(form.queryByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeNull();
 
     // …and the rest of the Chain form is untouched: the tab is live because the
     // engine CAN chain, so the clip list must stay usable.
@@ -202,12 +207,13 @@ describe("AppShell — base-model feature scope", () => {
     expect(addClip.disabled).toBe(false);
   });
 
-  it("keeps the V2V source and the A2V track attachable on LTX 2.5", async () => {
+  it("keeps the V2V source, the A2V track and the reference video attachable on LTX 2.5", async () => {
     // The second stage's headline: continuing an existing video (V2V) and
     // generating from an audio track (A2V) both run on this engine now, so the
     // source card keeps BOTH halves and the audio panel stays live. Greying
     // either would make a supported path unreachable — the same mistake the
-    // first stage had to correct for clip 1's opening image.
+    // first stage had to correct for clip 1's opening image. §3-102 third
+    // stage adds the reference video to `CHAIN_OPEN_PICKS` for the same reason.
     const { select, container } = await renderApp(AS_LTX25);
 
     await switchToLtx25(select);
@@ -220,6 +226,44 @@ describe("AppShell — base-model feature scope", () => {
     // The source card offers images AND video again — the wording is what tells
     // the user the video half is open, so it is asserted rather than assumed.
     expect(sourcePick(container).getAttribute("title")).toMatch(/choose image or video/i);
+  });
+
+  it("keeps the reference-video panels attachable on LTX 2.5 — Create AND Chained", async () => {
+    // §3-102 third stage's headline, asserted on BOTH screens: `loras` and
+    // `reference_video` left LTX 2.5's declared list, so Style LoRA and IC-LoRA
+    // (long IC-LoRA included) run here now. Chained's reference panel is the one
+    // the scope actually greyed (`referenceUnavailable`); Create's never was,
+    // and is asserted anyway so a prop later wired to the same feature name
+    // could not close it unnoticed.
+    //
+    // End source is checked in the same test as the contrast: this is the
+    // switch OPENING one material, not the greying going away wholesale.
+    const { select, container } = await renderApp(AS_LTX25);
+
+    // The Create-tab reference block has no class of its own — its 📁 button
+    // is named by `strings.single.referenceVideo.chooseButton`, and scoping to
+    // the Create form is what keeps the identically-worded Chained one out.
+    const singleForm = container.querySelector(".generation-form:not(.chained-form)") as HTMLElement;
+    const singleRefPick = () =>
+      within(singleForm).getByRole("button", { name: /choose reference video/i }) as HTMLButtonElement;
+    expect(singleRefPick().disabled).toBe(false);
+
+    await switchToLtx25(select);
+
+    // The end-source panel settling into its greyed state is what proves the
+    // switch took effect before the assertions below run.
+    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+
+    const chainRefPick = chainForm(container).querySelector(".chain-reference-pick") as HTMLButtonElement;
+    expect(chainRefPick).not.toBeNull();
+    expect(chainRefPick.disabled).toBe(false);
+    expect(singleRefPick().disabled).toBe(false);
+
+    // No reason line for a material the engine can take — and the one it still
+    // cannot keeps its own.
+    const form = within(chainForm(container));
+    expect(form.queryByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeNull();
+    expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
   });
 
   it("leaves every Chain material panel usable on LTX 2.3", async () => {

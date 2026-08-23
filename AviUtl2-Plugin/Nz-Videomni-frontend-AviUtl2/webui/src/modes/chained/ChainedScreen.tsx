@@ -98,6 +98,26 @@ export interface ChainedScreenProps {
    * `nag` above — `useChainForm` defaults it to the frozen
    * `ACCELERATION_DEFAULTS` sentinel, which sends nothing. */
   acceleration?: AccelerationSettings | undefined;
+  /** §3-102 (LTX 2.5 Chained, first stage): the four material panels the
+   * LOADED base model's engine cannot use, computed by `AppShell` from
+   * `useBaseModels`' `unsupportedFeatures` (`chainPanelsDisabledFor`) — this
+   * screen receives finished booleans and never reasons about engines itself.
+   * Each greys ONE panel and shows the matching line from
+   * `strings.chained.unavailableOnBaseModel`; the Chained tab itself stays
+   * live, because an engine that cannot chain at all loses the whole tab one
+   * level up (`disabledModesFor`). Optional so the many direct-render tests
+   * that predate them keep compiling — omitted means "no restriction", which
+   * is also what an older server (no `unsupported_features`) produces.
+   *
+   * Material attached BEFORE a switch to a restricted base model is
+   * deliberately not cleared or client-side blocked: the panel greys, and the
+   * submission itself fails loud with the server's own 422
+   * `FEATURE_UNSUPPORTED` (the same fail-loud treatment LoRA tags and NAG get
+   * — see the plan's 単純化原則). */
+  v2vUnavailable?: boolean | undefined;
+  a2vUnavailable?: boolean | undefined;
+  endSourceUnavailable?: boolean | undefined;
+  referenceUnavailable?: boolean | undefined;
 }
 
 /** The Chain screen: `POST /generate/chain` with a single, auto-detected mode
@@ -119,6 +139,10 @@ export function ChainedScreen({
   referenceDownscaleFactors,
   nag,
   acceleration,
+  v2vUnavailable,
+  a2vUnavailable,
+  endSourceUnavailable,
+  referenceUnavailable,
 }: ChainedScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -142,6 +166,10 @@ export function ChainedScreen({
       referenceDownscaleFactors={referenceDownscaleFactors}
       nag={nag}
       acceleration={acceleration}
+      v2vUnavailable={v2vUnavailable}
+      a2vUnavailable={a2vUnavailable}
+      endSourceUnavailable={endSourceUnavailable}
+      referenceUnavailable={referenceUnavailable}
     />
   );
 }
@@ -160,6 +188,10 @@ interface ChainedScreenBodyProps {
   referenceDownscaleFactors?: ReadonlyMap<string, number> | undefined;
   nag?: NagSettings | undefined;
   acceleration?: AccelerationSettings | undefined;
+  v2vUnavailable?: boolean | undefined;
+  a2vUnavailable?: boolean | undefined;
+  endSourceUnavailable?: boolean | undefined;
+  referenceUnavailable?: boolean | undefined;
 }
 
 function ChainedScreenBody({
@@ -176,6 +208,10 @@ function ChainedScreenBody({
   referenceDownscaleFactors,
   nag,
   acceleration,
+  v2vUnavailable = false,
+  a2vUnavailable = false,
+  endSourceUnavailable = false,
+  referenceUnavailable = false,
 }: ChainedScreenBodyProps) {
   const strings = useStrings();
   const jobsCtx = useJobsContext();
@@ -873,9 +909,16 @@ function ChainedScreenBody({
 
         <ReservedFields />
 
+        {/* §3-102: one greyed panel + one line saying why, the same shape
+            `BatchSection` already uses for its own whole-panel refusal. The
+            line goes ABOVE the panel it explains so a greyed card is never
+            read before its reason. */}
+        {v2vUnavailable && (
+          <p className="warning-banner">{strings.chained.unavailableOnBaseModel.sourceVideo}</p>
+        )}
         <SourceInputPanel
           form={form}
-          disabled={disabled}
+          disabled={disabled || v2vUnavailable}
           nativeBridge={nativeBridge}
           mediaSize={form.sourceMediaSize}
         />
@@ -891,7 +934,15 @@ function ChainedScreenBody({
         <details className="form-accordion" ref={endSourceAccordionRef}>
           <summary className="form-accordion-summary">{strings.chained.endSource.heading}</summary>
           <div className="form-accordion-body">
-            <ChainEndSourcePanel form={form} disabled={disabled} nativeBridge={nativeBridge} showHeading={false} />
+            {endSourceUnavailable && (
+              <p className="warning-banner">{strings.chained.unavailableOnBaseModel.endSource}</p>
+            )}
+            <ChainEndSourcePanel
+              form={form}
+              disabled={disabled || endSourceUnavailable}
+              nativeBridge={nativeBridge}
+              showHeading={false}
+            />
           </div>
         </details>
 
@@ -905,14 +956,30 @@ function ChainedScreenBody({
         <details className="form-accordion" ref={referenceAccordionRef}>
           <summary className="form-accordion-summary">{strings.chained.referenceVideo.heading}</summary>
           <div className="form-accordion-body">
-            <ChainReferencePanel form={form} disabled={disabled} nativeBridge={nativeBridge} showHeading={false} />
+            {referenceUnavailable && (
+              <p className="warning-banner">{strings.chained.unavailableOnBaseModel.referenceVideo}</p>
+            )}
+            <ChainReferencePanel
+              form={form}
+              disabled={disabled || referenceUnavailable}
+              nativeBridge={nativeBridge}
+              showHeading={false}
+            />
           </div>
         </details>
 
         <details className="form-accordion" ref={audioAccordionRef}>
           <summary className="form-accordion-summary">{strings.chained.sourceAudio.heading}</summary>
           <div className="form-accordion-body">
-            <ChainAudioPanel form={form} disabled={disabled} nativeBridge={nativeBridge} showHeading={false} />
+            {a2vUnavailable && (
+              <p className="warning-banner">{strings.chained.unavailableOnBaseModel.sourceAudio}</p>
+            )}
+            <ChainAudioPanel
+              form={form}
+              disabled={disabled || a2vUnavailable}
+              nativeBridge={nativeBridge}
+              showHeading={false}
+            />
           </div>
         </details>
 

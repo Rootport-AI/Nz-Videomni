@@ -100,6 +100,48 @@ export function batchA2vDisabledFor(unsupportedFeatures: readonly string[]): boo
   return unsupportedFeatures.includes("chain") || unsupportedFeatures.includes("a2v");
 }
 
+/** The four Chain-screen material panels an engine's feature scope can take
+ * down individually, keyed the way `ChainedScreen`'s props are.
+ *
+ * §3-102 (LTX 2.5 Chained, first stage): once an engine can chain, `chain`
+ * alone no longer settles the Chained tab — the tab is live, but the panels
+ * that attach material the engine still cannot use have to grey on their own.
+ * Each is exactly one feature name, because each panel IS one request field:
+ * `source_video`, `source_audio`, `end_source`, `reference_video_id`.
+ */
+export interface ChainPanelsDisabled {
+  /** `SourceInputPanel` — the V2V source video (`source_video`). */
+  v2v: boolean;
+  /** `ChainAudioPanel` — the A2V track (`source_audio`). */
+  a2v: boolean;
+  /** `ChainEndSourcePanel` — 素材（末尾） (`end_source`). */
+  endSource: boolean;
+  /** `ChainReferencePanel` — the IC-LoRA reference (`reference_video_id`). */
+  reference: boolean;
+}
+
+/**
+ * Which of {@link ChainPanelsDisabled}'s panels `unsupportedFeatures` makes
+ * unusable. Pure, exported and tested directly for the same reason
+ * {@link disabledModesFor} and {@link batchA2vDisabledFor} are: this is the one
+ * place a server-side feature name turns into a greyed Chain panel, and it must
+ * answer four `false`s for the ordinary case (LTX 2.3 / an older backend)
+ * without any special-casing.
+ *
+ * Deliberately does NOT consult `chain`: a base model that cannot chain at all
+ * loses the whole tab through {@link disabledModesFor}, so folding that in here
+ * would only duplicate a decision already made one level up.
+ */
+export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): ChainPanelsDisabled {
+  const unsupported = new Set(unsupportedFeatures);
+  return {
+    v2v: unsupported.has("v2v"),
+    a2v: unsupported.has("a2v"),
+    endSource: unsupported.has("end_source"),
+    reference: unsupported.has("reference_video"),
+  };
+}
+
 /** What a switch attempt settled on. Returned by
  * {@link UseBaseModelsResult.switchBaseModel} rather than pushed into hook
  * state on purpose: the caller (`AppShell`) raises exactly one toast per

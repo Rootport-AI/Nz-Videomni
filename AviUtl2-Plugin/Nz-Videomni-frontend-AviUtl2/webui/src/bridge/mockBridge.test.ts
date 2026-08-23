@@ -613,11 +613,16 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     expect(features).toEqual(
       expect.arrayContaining([
-        "chain", "retake", "end_source", "v2v", "a2v",
+        "retake", "end_source", "v2v", "a2v",
         "two_stage_hq", "outpaint", "loras", "reference_video",
         "nag", "prune_vaed", "sage_attention", "keep_resident",
       ]),
     );
+    // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
+    // chains now, and its absence is what un-greys the Chained tab. Asserted
+    // negatively, because `arrayContaining` above would not notice it coming
+    // back.
+    expect(features).not.toContain("chain");
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {
@@ -626,5 +631,122 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     const body = await getModels();
     const base = body.base_models.find((b) => b.id === "LTX25") as { engine_family?: string } | undefined;
     expect(base?.engine_family).toBe("ltx25");
+  });
+});
+
+// §3-102 (LTX 2.5 Chained, first stage): the fixture's chain endpoint now
+// refuses the individual MATERIALS the active base model declares it cannot
+// use, instead of refusing the whole endpoint. The two properties that matter
+// are opposite ones, so both are pinned here:
+//
+//   * LTX 2.5 — a declared feature arriving non-empty is 422 FEATURE_UNSUPPORTED
+//     (the fail-loud backstop for material attached before the switch, which
+//     the greyed panels cannot retroactively remove);
+//   * LTX 2.3 — declares NOTHING, so every one of those same fields sails
+//     through exactly as it always did. That half is load-bearing: the WebUI's
+//     whole V2V / A2V / End source / reference Chain suite runs on this
+//     fixture, and a refusal keyed on anything but the declared list would take
+//     all of it down.
+describe("POST /generate/chain — engine feature scope (§3-102)", () => {
+  const CHAIN_BODY = {
+    prompt: "a cat riding a skateboard, then a dog joins in",
+    width: 512,
+    height: 320,
+    frame_rate: 24,
+    seed: -1,
+    clips: [{ num_frames: 49 }, { num_frames: 33 }],
+  };
+
+  /** Every field the fixture can refuse, with a value that counts as "the user
+   * asked for this" — one case per row of `MOCK_CHAIN_FEATURE_FIELDS`. */
+  const CASES: ReadonlyArray<{ feature: string; body: object }> = [
+    { feature: "v2v", body: { source_video: { video_id: "vid-1", context_frames: 73 } } },
+    { feature: "a2v", body: { source_audio: { audio_id: "aud-1" } } },
+    { feature: "end_source", body: { end_source: { video_id: "vid-2", context_frames: 72 } } },
+    { feature: "reference_video", body: { reference_video_id: "vid-3" } },
+    { feature: "loras", body: { loras: [{ name: "style-a", strength: 0.8 }] } },
+    { feature: "nag", body: { nag_enabled: true, negative_prompt: "blurry" } },
+  ];
+
+  async function postChain(bridge: ReturnType<typeof createMockBridge>, body: object) {
+    return bridge.request("backend.request", { method: "POST", path: "/api/v1/generate/chain", body });
+  }
+
+  /** A fixture with LTX 2.5 both installed and loadable, switched to it. */
+  async function ltx25Bridge() {
+    const bridge = createMockBridge({
+      delayMs: 0,
+      ltx25Install: "full",
+      supportedBaseModels: ["LTX23", "LTX25"],
+    });
+    const loaded = await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "LTX25" },
+    });
+    expect(loaded.status).toBe(200);
+    return bridge;
+  }
+
+  it("accepts a plain multi-clip chain on LTX 2.5 — the endpoint itself is open now", async () => {
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, CHAIN_BODY);
+    expect(result.status).toBe(202);
+  });
+
+  for (const { feature, body } of CASES) {
+    it(`refuses '${feature}' on LTX 2.5 with 422 FEATURE_UNSUPPORTED`, async () => {
+      const bridge = await ltx25Bridge();
+      const result = await postChain(bridge, { ...CHAIN_BODY, ...body });
+      expect(result.status).toBe(422);
+      const error = (result.body as { error: { code: string; message: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message).toContain(feature);
+    });
+
+    it(`lets '${feature}' through on LTX 2.3, which declares no restrictions`, async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      const result = await postChain(bridge, { ...CHAIN_BODY, ...body });
+      expect(result.status).toBe(202);
+    });
+  }
+
+  it("ignores a field that is present but empty/default", async () => {
+    // The WebUI sends the whole schema every time, so `null`, `[]` and
+    // `nag_enabled: false` are NOT requests for those features — refusing them
+    // would 422 an ordinary chain.
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      source_video: null,
+      source_audio: null,
+      end_source: null,
+      reference_video_id: null,
+      loras: [],
+      nag_enabled: false,
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("refuses BEFORE request validation — an unrunnable request is not a fixable one", async () => {
+    // A 1-clip chain is also invalid, but telling the user to add a clip to a
+    // request that could never have run sends them to fix the wrong thing.
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      clips: [{ num_frames: 49 }],
+      source_audio: { audio_id: "aud-1" },
+    });
+    expect(result.status).toBe(422);
+    expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+  });
+
+  it("creates no job when it refuses", async () => {
+    const bridge = await ltx25Bridge();
+    await postChain(bridge, { ...CHAIN_BODY, source_audio: { audio_id: "aud-1" } });
+    // The refusal must not take the single-job slot with it: a following, valid
+    // chain has to be accepted rather than earning a 409 JOB_BUSY.
+    const next = await postChain(bridge, CHAIN_BODY);
+    expect(next.status).toBe(202);
   });
 });

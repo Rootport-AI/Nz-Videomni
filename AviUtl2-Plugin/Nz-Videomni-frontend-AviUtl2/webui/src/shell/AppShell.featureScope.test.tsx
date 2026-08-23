@@ -55,15 +55,19 @@ describe("AppShell — base-model feature scope", () => {
     }
   });
 
-  it("greys Chained and Edit once LTX 2.5 is the loaded base model", async () => {
+  it("greys Edit — but NOT Chained — once LTX 2.5 is the loaded base model", async () => {
+    // §3-102 (LTX 2.5 Chained, first stage): the engine chains now, so `chain`
+    // is gone from its `unsupported_features` and the tab comes back. Edit
+    // stays greyed — it hosts Retake and Outpainting, and this engine can run
+    // neither.
     const { select } = await renderApp(AS_LTX25);
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(tab("Chained")).toBeDisabled());
-    expect(tab("Edit")).toBeDisabled();
-    // Single is the one thing this engine's v1 CAN do, and Inventory only
-    // browses finished files.
+    await waitFor(() => expect(tab("Edit")).toBeDisabled());
+    expect(tab("Chained")).not.toBeDisabled();
+    // Single is the baseline every engine serves, and Inventory only browses
+    // finished files.
     expect(tab("Single")).not.toBeDisabled();
     expect(tab("Inventory")).not.toBeDisabled();
   });
@@ -73,29 +77,32 @@ describe("AppShell — base-model feature scope", () => {
     const user = userEvent.setup();
 
     await switchToLtx25(select);
-    await waitFor(() => expect(tab("Chained")).toBeDisabled());
+    await waitFor(() => expect(tab("Edit")).toBeDisabled());
 
     await user.selectOptions(select, "LTX23");
     await waitFor(() => expect(select.value).toBe("LTX23"));
 
-    await waitFor(() => expect(tab("Chained")).not.toBeDisabled());
-    expect(tab("Edit")).not.toBeDisabled();
+    await waitFor(() => expect(tab("Edit")).not.toBeDisabled());
+    expect(tab("Chained")).not.toBeDisabled();
   });
 
   it("bounces out of a mode the new base model cannot run", async () => {
-    // The case greying alone cannot cover: the user is ALREADY on Chained when
+    // The case greying alone cannot cover: the user is ALREADY on Edit when
     // they switch. Leaving that panel open behind a disabled tab would let them
     // fill in a form whose every submission comes back 422.
+    //
+    // §3-102: Edit is the subject now that Chained survives the switch — the
+    // bounce needs a mode LTX 2.5 genuinely cannot run.
     const { select } = await renderApp(AS_LTX25);
     const user = userEvent.setup();
 
-    await user.click(tab("Chained"));
-    await waitFor(() => expect(tab("Chained")).toHaveAttribute("aria-selected", "true"));
+    await user.click(tab("Edit"));
+    await waitFor(() => expect(tab("Edit")).toHaveAttribute("aria-selected", "true"));
 
     await switchToLtx25(select);
 
     await waitFor(() => expect(tab("Single")).toHaveAttribute("aria-selected", "true"));
-    expect(tab("Chained")).toBeDisabled();
+    expect(tab("Edit")).toBeDisabled();
   });
 
   it("leaves the current mode alone when the new base model can run it", async () => {
@@ -109,8 +116,72 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(tab("Chained")).toBeDisabled());
+    await waitFor(() => expect(tab("Edit")).toBeDisabled());
     expect(tab("Inventory")).toHaveAttribute("aria-selected", "true");
+  });
+
+
+  // -- §3-102: the four Chain material panels --------------------------------
+  //
+  // With `chain` gone from LTX 2.5's scope the Chained TAB is live, so the
+  // greying moves one level down: the panels that attach material the engine
+  // still cannot use (V2V source video / A2V track / 素材（末尾）/ reference
+  // video) grey individually, each with its own stated reason. The Chained
+  // tabpanel is `hidden` while another mode is selected, but jsdom keeps its
+  // children in the DOM either way — `container.querySelector` reaches them with
+  // no tab switch, exactly as the Batch A2V tests below do.
+
+  /** The four panels' 📁 choose buttons — the honest probe, the way the folder
+   * inputs are for Batch A2V: each is live until something disables it. (The
+   * 🔁 clear buttons are not: they start disabled with nothing attached, which
+   * would make the assertion pass for the wrong reason.) */
+  const CHAIN_PANEL_PICKS = [
+    ".source-input-pick",
+    ".chain-audio-pick",
+    ".chain-end-source-pick",
+    ".chain-reference-pick",
+  ];
+
+  function chainForm(container: HTMLElement): HTMLElement {
+    return container.querySelector(".chained-form") as HTMLElement;
+  }
+
+  function chainPicks(container: HTMLElement): HTMLButtonElement[] {
+    return CHAIN_PANEL_PICKS.map((sel) => chainForm(container).querySelector(sel) as HTMLButtonElement);
+  }
+
+  it("greys the four Chain material panels LTX 2.5 cannot use, each with its reason", async () => {
+    const { select, container } = await renderApp(AS_LTX25);
+
+    expect(chainPicks(container).every((b) => b != null)).toBe(true);
+    expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
+
+    await switchToLtx25(select);
+
+    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+
+    // A greyed control with no stated reason is what these lines exist to
+    // prevent — one per panel, each naming ITS OWN material rather than a
+    // generic "unsupported".
+    const form = within(chainForm(container));
+    expect(form.getByText(/Continuing from a source video \(V2V\) is not available/i)).toBeInTheDocument();
+    expect(form.getByText(/Generating from an audio track \(A2V\) is not available/i)).toBeInTheDocument();
+    expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
+    expect(form.getByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeInTheDocument();
+
+    // …and the rest of the Chain form is untouched: the tab is live because the
+    // engine CAN chain, so the clip list must stay usable.
+    // `getByRole` is off the table here: the Chained tabpanel is `hidden`, and
+    // role queries skip hidden subtrees. The text is the way in.
+    const addClip = form.getByText(/add clip/i).closest("button") as HTMLButtonElement;
+    expect(addClip.disabled).toBe(false);
+  });
+
+  it("leaves every Chain material panel usable on LTX 2.3", async () => {
+    const { container } = await renderApp();
+
+    expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
+    expect(within(chainForm(container)).queryByText(/is not available on the selected base model/i)).toBeNull();
   });
 
   it("disables the Batch A2V panel and says why (M4)", async () => {

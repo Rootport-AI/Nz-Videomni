@@ -54,7 +54,7 @@ import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
-import { batchA2vDisabledFor, useBaseModels } from "./useBaseModels";
+import { batchA2vDisabledFor, chainPanelsDisabledFor, useBaseModels } from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
 import "./AppShell.css";
@@ -1045,6 +1045,13 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     setMode("single");
   }, [disabledModes, mode]);
 
+  // §3-102 (LTX 2.5 Chained, first stage): once an engine CAN chain, the
+  // Chained tab stays live but the material panels its engine still cannot use
+  // have to grey individually. Computed here, next to `batchUnavailable`, so
+  // `ChainedScreen` receives finished booleans and never reasons about engines
+  // itself (the shell's standing rule for feature scope).
+  const chainPanels = chainPanelsDisabledFor(baseModels.unsupportedFeatures);
+
   const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
   // W0 (2026-08-09): same one-shot hand-off as the two above — Edit is now a
@@ -1163,6 +1170,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               referenceDownscaleFactors={referenceDownscaleFactors}
               nag={nagControls.nag}
               acceleration={accelerationControls.acceleration}
+              /* §3-102: the four material panels the loaded engine's feature
+                 scope can take down one by one — see `chainPanels` above. */
+              v2vUnavailable={chainPanels.v2v}
+              a2vUnavailable={chainPanels.a2v}
+              endSourceUnavailable={chainPanels.endSource}
+              referenceUnavailable={chainPanels.reference}
             />
           </div>
           {/* Edit (2026-08-09): promoted from a disabled mock tab to a real

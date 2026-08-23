@@ -360,6 +360,22 @@ export const en = {
     },
     configFallbackWarning:
       "Could not reach the server to load presets/limits — using built-in defaults. Values may not match the running server.",
+    /** §3-102 (LTX 2.5 Chained, first stage): one line per material panel the
+     * LOADED base model's engine cannot use, shown next to the greyed panel.
+     * The Chained tab itself is live here — only these attachments are out of
+     * scope — so every line names the ONE thing that is unavailable and the one
+     * way out (switch the base model in the header), in the same shape
+     * `batch.unavailableOnBaseModel` already uses for its whole panel. */
+    unavailableOnBaseModel: {
+      sourceVideo:
+        "Continuing from a source video (V2V) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach a source video.",
+      sourceAudio:
+        "Generating from an audio track (A2V) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach audio.",
+      endSource:
+        "End source is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach an end material.",
+      referenceVideo:
+        "Reference video (control IC-LoRA) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach a reference.",
+    },
     /** Sprint 2 item 9: chain preset dropdown (`config.generation_presets`),
      * mirroring Create's `strings.single.presets` naming. */
     presets: {
@@ -2065,6 +2081,16 @@ export const ja: Strings = {
     },
     configFallbackWarning:
       "サーバーからプリセット・上限値を取得できませんでした — 内蔵の既定値を使用しています。実際のサーバーと値が異なる場合があります。",
+    unavailableOnBaseModel: {
+      sourceVideo:
+        "動画の続きを生成（V2V）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。動画を読み込むには、上のベースモデルを切り替えてください。",
+      sourceAudio:
+        "音声から生成（A2V）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。音声を読み込むには、上のベースモデルを切り替えてください。",
+      endSource:
+        "素材（末尾）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。末尾の素材を読み込むには、上のベースモデルを切り替えてください。",
+      referenceVideo:
+        "参照動画（制御系IC-LoRA）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。参照動画を読み込むには、上のベースモデルを切り替えてください。",
+    },
     presets: {
       label: "プリセット",
       placeholder: "プリセットを選択…",

@@ -257,11 +257,15 @@ const MOCK_BASE_MODELS = [
  * would let a typo in the real mapping pass every test.
  *
  * LTX 2.3's empty array is the load-bearing half — it is what proves the
- * ordinary case stays untouched. */
+ * ordinary case stays untouched.
+ *
+ * §3-102 (LTX 2.5 Chained, first stage): `"chain"` is GONE from LTX25 — the
+ * engine chains now. What it still cannot do are the individual materials a
+ * chain can carry (`v2v`/`a2v`/`end_source`/`reference_video`) plus Retake, so
+ * those names stay and `handleGenerateChain` refuses exactly them. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   LTX23: [],
   LTX25: [
-    "chain",
     "retake",
     "end_source",
     "v2v",
@@ -276,6 +280,25 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "keep_resident",
   ],
 };
+
+/** §3-102: which `POST /generate/chain` field carries which FEATURE name, for
+ * the fixture's own `FEATURE_UNSUPPORTED` refusal below. Mirrors
+ * `services/engines/ltx25/adapter.py`'s chain reject table: the field is what a
+ * request actually contains, the feature is what `GET /models` publishes and
+ * the WebUI greys on.
+ *
+ * The pair is what makes the refusal HONEST — the fixture never invents a
+ * limitation, it only enforces what the same fixture already declared for the
+ * ACTIVE base model. That is why LTX 2.3, whose array is empty, keeps sailing
+ * through every one of these fields exactly as it always did. */
+const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{ field: string; feature: string }> = [
+  { field: "source_video", feature: "v2v" },
+  { field: "source_audio", feature: "a2v" },
+  { field: "end_source", feature: "end_source" },
+  { field: "reference_video_id", feature: "reference_video" },
+  { field: "loras", feature: "loras" },
+  { field: "nag_enabled", feature: "nag" },
+];
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";
 
@@ -1162,6 +1185,38 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     return { status: 200, body: { pipeline_loaded: false, state: "unloaded" } };
   }
 
+  /** §3-102: "the user actually asked for this" — the same NON-DEFAULT test the
+   * real adapter's reject table applies. `null`/`undefined` never counts (the
+   * WebUI sends the whole schema every time), an empty `loras` array does not
+   * either, and `nag_enabled: false` is the NAG default rather than a request
+   * for NAG. Everything else that is present IS a request. */
+  function isChainFieldSet(value: unknown): boolean {
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") return value.length > 0;
+    return true;
+  }
+
+  /** §3-102: `api/errors.py`'s `feature_unsupported` envelope, reproduced
+   * verbatim (bilingual message included) for the same reason
+   * {@link MOCK_LTX25_INCOMPATIBLE_DETAIL} is — the WebUI shows the server's own
+   * wording, so a fixture that paraphrased it would prove nothing. */
+  function featureUnsupported(feature: string, field: string): ResultOf<"backend.request"> {
+    return {
+      status: 422,
+      body: {
+        error: {
+          code: "FEATURE_UNSUPPORTED",
+          message: `'${feature}' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)`,
+          detail:
+            `LTX 2.5(v1)は${feature}に対応していません(リクエストの${field}が既定値ではありません)。` +
+            "この機能を使うにはベースモデルに「LTX 2.3」を選んでください。",
+        },
+      },
+    };
+  }
+
   function validationError(loc: string, msg: string): ResultOf<"backend.request"> {
     return {
       status: 422,
@@ -1250,6 +1305,20 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     }
 
     const req = (body ?? {}) as Record<string, unknown>;
+
+    // §3-102: the engine-scope refusal, BEFORE any request validation — the
+    // real server rejects an unsupported feature ahead of everything else, so
+    // the user is never sent to fix a clip count on a request that could not
+    // have run anyway. Driven by the ACTIVE base model's own declared list
+    // (`MOCK_UNSUPPORTED_FEATURES`), never by a hard-coded base-model id:
+    // LTX 2.3 declares none, so this loop cannot fire for it at all.
+    const activeUnsupported = new Set(MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []);
+    for (const { field, feature } of MOCK_CHAIN_FEATURE_FIELDS) {
+      if (!activeUnsupported.has(feature)) continue;
+      if (!isChainFieldSet(req[field])) continue;
+      return featureUnsupported(feature, field);
+    }
+
     const prompt = typeof req.prompt === "string" ? req.prompt : "";
     if (prompt.length < 1 || prompt.length > 2000) {
       return validationError("prompt", "String should have at least 1 character");

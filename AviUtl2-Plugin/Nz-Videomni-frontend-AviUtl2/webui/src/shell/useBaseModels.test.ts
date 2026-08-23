@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, createApiClient } from "../api/client";
 import type { ApiClient } from "../api/client";
 import { createMockBridge } from "../bridge/mockBridge";
-import { batchA2vDisabledFor, disabledModesFor, useBaseModels } from "./useBaseModels";
+import {
+  batchA2vDisabledFor,
+  chainPanelsDisabledFor,
+  disabledModesFor,
+  useBaseModels,
+} from "./useBaseModels";
 import type { BaseModelSwitchOutcome } from "./useBaseModels";
 
 /** A client that answers `GET /models` from the mock bridge (so the option
@@ -189,7 +194,11 @@ describe("useBaseModels", () => {
     // LTX 2.3 declares none — that empty array is the load-bearing half of
     // this feature, because it is what leaves the ordinary case untouched.
     expect(result.current.options[0]?.unsupportedFeatures).toEqual([]);
-    expect(result.current.options[1]?.unsupportedFeatures).toContain("chain");
+    // §3-102: `chain` is no longer among them — LTX 2.5 chains now. `v2v` is
+    // the name that stands in its place: still declared, still greying
+    // something (the Chain screen's source-video panel).
+    expect(result.current.options[1]?.unsupportedFeatures).not.toContain("chain");
+    expect(result.current.options[1]?.unsupportedFeatures).toContain("v2v");
     // LTX 2.3 is what is loaded, so nothing is disabled.
     expect(result.current.unsupportedFeatures).toEqual([]);
     expect(result.current.disabledModes).toEqual([]);
@@ -206,8 +215,9 @@ describe("useBaseModels", () => {
       await result.current.switchBaseModel("LTX25");
     });
 
-    expect(result.current.unsupportedFeatures).toContain("chain");
-    expect(result.current.disabledModes).toEqual(["chained", "edit"]);
+    expect(result.current.unsupportedFeatures).toContain("v2v");
+    // §3-102: only Edit now — Chained is back, because `chain` left the list.
+    expect(result.current.disabledModes).toEqual(["edit"]);
 
     // …and back. A restriction that never lifts is not a restriction, it is a
     // broken build.
@@ -295,5 +305,57 @@ describe("batchA2vDisabledFor", () => {
   it("is true when either half of what it needs is gone", () => {
     expect(batchA2vDisabledFor(["chain"])).toBe(true);
     expect(batchA2vDisabledFor(["a2v"])).toBe(true);
+  });
+});
+
+describe("chainPanelsDisabledFor", () => {
+  it("answers four falses for the ordinary case", () => {
+    expect(chainPanelsDisabledFor([])).toEqual({
+      v2v: false,
+      a2v: false,
+      endSource: false,
+      reference: false,
+    });
+  });
+
+  it("maps each feature name onto exactly its own panel", () => {
+    expect(chainPanelsDisabledFor(["v2v"])).toMatchObject({ v2v: true, a2v: false, endSource: false, reference: false });
+    expect(chainPanelsDisabledFor(["a2v"])).toMatchObject({ v2v: false, a2v: true, endSource: false, reference: false });
+    expect(chainPanelsDisabledFor(["end_source"])).toMatchObject({
+      v2v: false,
+      a2v: false,
+      endSource: true,
+      reference: false,
+    });
+    expect(chainPanelsDisabledFor(["reference_video"])).toMatchObject({
+      v2v: false,
+      a2v: false,
+      endSource: false,
+      reference: true,
+    });
+  });
+
+  it("greys all four for LTX 2.5's v1 chain scope", () => {
+    expect(chainPanelsDisabledFor(["retake", "end_source", "v2v", "a2v", "reference_video", "outpaint"])).toEqual({
+      v2v: true,
+      a2v: true,
+      endSource: true,
+      reference: true,
+    });
+  });
+
+  it("does NOT consult `chain` — that decision is made one level up", () => {
+    // A base model that cannot chain at all loses the whole tab through
+    // `disabledModesFor`, so folding it in here would duplicate the ruling.
+    expect(chainPanelsDisabledFor(["chain"])).toEqual({
+      v2v: false,
+      a2v: false,
+      endSource: false,
+      reference: false,
+    });
+  });
+
+  it("ignores names it has never heard of", () => {
+    expect(chainPanelsDisabledFor(["quantum_upscale", "a2v"])).toMatchObject({ a2v: true, v2v: false });
   });
 });

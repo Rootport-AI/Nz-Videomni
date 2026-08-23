@@ -76,6 +76,14 @@ async def submit_generate(
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
+    現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
+    使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
+    ``list_models`` の ``base_models[].unsupported_features`` を見てください。
+    LTX 2.5 では ``submit_chain`` が丸ごと使えないほか、このツールでは
+    ``loras`` / ``reference_video_id`` / ``nag_enabled`` / ``vae_mode`` /
+    ``attention_backend`` / ``keep_resident``（いずれも既定値以外にした場合）
+    が使えません。
+
     同時に実行できるジョブは1本だけです（Phase 1の制約）。既にジョブが
     進行中の場合は 409 JOB_BUSY のエラーになります -- 先に ``job_status`` /
     ``wait_for_job`` で完了を確認してください。このツール自体はジョブを
@@ -315,6 +323,13 @@ async def submit_chain(
     end_source_strength: float = 1.0,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
+
+    現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
+    使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
+    ``list_models`` の ``base_models[].unsupported_features`` を見てください。
+    **LTX 2.5 ではこのツールは丸ごと使えません**（チェーン生成そのものが
+    未対応。単発の ``submit_generate`` を使うか、``load_pipeline`` で
+    LTX 2.3 に切り替えてください）。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行

@@ -17,6 +17,7 @@ All tool functions are plain ``async def``, so they're driven with
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import anyio
@@ -194,3 +195,113 @@ def test_unload_pipeline_job_busy_raises_tool_error_with_code():
         anyio.run(system.unload_pipeline)
 
     assert "JOB_BUSY" in str(exc_info.value)
+
+
+# ----- base-model axis (§3-98 / D15): load_pipeline's base_model argument ---
+#
+# The MCP-specific contract is thin by design: the argument reaches the body,
+# the no-op shortcut steps aside when it is given, and the base-model layer of
+# GET /models comes back untouched. Everything else about a switch (which
+# 409/422 a bad switch earns, what LTX 2.5 refuses) is the SERVER's contract
+# and is already fixed by the API suites -- it is deliberately not restated
+# here.
+
+
+def test_load_pipeline_base_model_posts_without_the_status_precheck():
+    """``base_model`` given -> the no-op shortcut is skipped entirely (there is
+    no such thing as "already on it, do nothing" for a switch: only the server
+    knows whether the requested base model is the live one), so no GET goes
+    out and the body carries the id."""
+    calls: list[tuple[str, str]] = []
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        assert request.method == "POST", "base_model must not take the no-op branch"
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "pipeline_loaded": True,
+                "pipeline_type": "distilled",
+                "state": "ready",
+                "base_model": "LTX25",
+                "models": {"transformer": "default"},
+            },
+        )
+
+    set_client(_client_for_handler(handler))
+    result = anyio.run(system.load_pipeline, None, 45, "LTX25")
+
+    assert calls == [("POST", "/api/v1/pipeline/load")]
+    assert bodies == [{"base_model": "LTX25"}]
+    assert result["base_model"] == "LTX25"
+    assert result["finished"] is True
+
+
+def test_load_pipeline_models_and_base_model_travel_together():
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "pipeline_loaded": True,
+                "pipeline_type": "distilled",
+                "state": "ready",
+                "base_model": "LTX25",
+                "models": {"transformer": "alt"},
+            },
+        )
+
+    set_client(_client_for_handler(handler))
+    anyio.run(system.load_pipeline, {"transformer": "alt"}, 45, "LTX25")
+
+    assert bodies == [{"models": {"transformer": "alt"}, "base_model": "LTX25"}]
+
+
+def test_load_pipeline_base_model_job_busy_raises_tool_error_with_code():
+    """A switch attempted mid-job is refused by the SERVER; the MCP side only
+    has to let the envelope through as a ToolError naming the code."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "error": {
+                    "code": "JOB_BUSY",
+                    "message": "A job is already running (Phase 1 allows one concurrent job)",
+                    "detail": "cannot swap models while a job is running",
+                }
+            },
+        )
+
+    set_client(_client_for_handler(handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(system.load_pipeline, None, 45, "LTX25")
+
+    assert "JOB_BUSY" in str(exc_info.value)
+
+
+def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client, tmp_path):
+    """Against a REAL (mock-backend) app with two base models: the switch is
+    reflected in the response, and ``list_models`` hands back the base-model
+    layer verbatim -- no projection, no reshaping, on the MCP side."""
+    set_client(_client_for_app(two_family_client.app, tmp_path / "outputs"))
+
+    loaded = anyio.run(system.load_pipeline, None, 45, "LTX25")
+    assert loaded["base_model"] == "LTX25"
+    assert loaded["finished"] is True
+
+    models = anyio.run(system.list_models)
+    assert models["active_base_model"] == "LTX25"
+    by_id = {entry["id"]: entry for entry in models["base_models"]}
+    assert set(by_id) == {"LTX23", "LTX25"}
+    assert by_id["LTX25"]["active"] is True
+    assert by_id["LTX23"]["active"] is False
+    # The engine-capability layer is what makes the axis worth exposing.
+    assert by_id["LTX25"]["unsupported_features"], "LTX 2.5 declares refusals"
+    assert by_id["LTX23"]["unsupported_features"] == []

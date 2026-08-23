@@ -19,7 +19,21 @@ from mcp_server.tools import register_all
 SERVER_NAME = "nz-videomni"
 
 INSTRUCTIONS = """\
-Nz-Videomni バックエンド（LTX 2.3 動画生成）を操作するためのツール群です。
+Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作するためのツール群です。
+
+■ ベースモデル（LTX 2.3 / LTX 2.5）の切り替え
+  バックエンドは複数のベースモデル（推論エンジンごと入れ替わる大枠）を持ち、
+  一度に1つだけが選択されています。list_models の base_models[] で、導入済みか
+  （installed）・現在選択中か（active）・そのベースモデルで使えない機能
+  （unsupported_features）を確認してください。切り替えは
+  load_pipeline(base_model="LTX25") のように id を渡します。切り替えは
+  ワーカーの載せ替えを伴い数秒〜十数秒かかるので、backend_status の
+  status.state が ready になったことを確認してから生成を投げてください。
+  切り替え直後の1本目の生成はキャッシュが冷えていて通常の約2倍かかります
+  （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
+  LTX 2.5 では submit_chain が丸ごと使えず、submit_generate でも
+  loras / reference_video_id / nag_enabled / vae_mode / attention_backend /
+  keep_resident（既定値以外）が使えません（422 FEATURE_UNSUPPORTED）。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。

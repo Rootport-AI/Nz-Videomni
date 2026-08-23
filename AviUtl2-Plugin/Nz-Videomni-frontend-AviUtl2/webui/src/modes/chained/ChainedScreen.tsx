@@ -909,18 +909,24 @@ function ChainedScreenBody({
 
         <ReservedFields />
 
-        {/* §3-102: one greyed panel + one line saying why, the same shape
-            `BatchSection` already uses for its own whole-panel refusal. The
-            line goes ABOVE the panel it explains so a greyed card is never
-            read before its reason. */}
+        {/* §3-102: one line saying why, the same shape `BatchSection` already
+            uses for its own refusal, placed ABOVE the card it explains so a
+            greyed control is never read before its reason.
+
+            This card is the ONE exception to "grey the whole panel": it is a
+            single slot for two different materials, and only the V2V source
+            VIDEO is out of scope — clip 0's opening IMAGE is part of chained
+            generation proper and must stay attachable. So `disabled` is left
+            alone and `videoUnavailable` closes just that half. */}
         {v2vUnavailable && (
           <p className="warning-banner">{strings.chained.unavailableOnBaseModel.sourceVideo}</p>
         )}
         <SourceInputPanel
           form={form}
-          disabled={disabled || v2vUnavailable}
+          disabled={disabled}
           nativeBridge={nativeBridge}
           mediaSize={form.sourceMediaSize}
+          videoUnavailable={v2vUnavailable}
         />
 
         <ClipsSection form={form} disabled={disabled} />

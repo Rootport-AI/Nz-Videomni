@@ -12,7 +12,13 @@ import { useChainForm } from "./useChainForm";
 // (rather than inside `Harness`) so its identity — and the mock's internal
 // state (upload gate, fs, etc.) — survives every re-render `useChainForm`
 // triggers, instead of being rebuilt from scratch each time.
-function Harness({ nativeBridge }: { nativeBridge: NativeBridge }) {
+function Harness({
+  nativeBridge,
+  videoUnavailable = false,
+}: {
+  nativeBridge: NativeBridge;
+  videoUnavailable?: boolean;
+}) {
   const form = useChainForm(FALLBACK_APP_CONFIG, "a cat riding a skateboard", { nativeBridge });
   return (
     <LanguageProvider>
@@ -26,6 +32,7 @@ function Harness({ nativeBridge }: { nativeBridge: NativeBridge }) {
         disabled={false}
         nativeBridge={nativeBridge}
         mediaSize={form.sourceMediaSize}
+        videoUnavailable={videoUnavailable}
       />
     </LanguageProvider>
   );
@@ -322,5 +329,105 @@ describe("SourceInputPanel", () => {
       expect(screen.getByText(/no source selected/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^clear$/i })).toBeDisabled();
     });
+  });
+});
+
+// §3-102 (LTX 2.5 Chained, first stage): this card is ONE slot for two
+// different materials — clip 1's opening IMAGE (from-scratch / I2V) and the
+// V2V source VIDEO. An engine that chains but cannot continue from a video
+// needs exactly half of it closed, so `videoUnavailable` must leave the image
+// half working in every respect. Both directions are pinned: what still works,
+// and what no longer can.
+describe("SourceInputPanel — videoUnavailable (§3-102)", () => {
+  /** Records every bridge call so the picker's `kind` can be asserted — the
+   * narrowed native filter IS the mechanism, not a side effect of it. */
+  function recordingBridge(inner: NativeBridge) {
+    const calls: { method: string; params: unknown }[] = [];
+    const bridge = {
+      request: (method: string, params: unknown) => {
+        calls.push({ method, params });
+        return (inner as unknown as { request: (m: string, p: unknown) => Promise<unknown> }).request(method, params);
+      },
+    } as unknown as NativeBridge;
+    return { bridge, calls };
+  }
+
+  it("still attaches clip 1's opening image — the half that IS in scope", async () => {
+    const user = userEvent.setup();
+    const mockBridge = createMockBridge({ delayMs: 0, pickFileName: "photo.png" });
+    render(<Harness nativeBridge={mockBridge} videoUnavailable />);
+
+    const choose = screen.getByRole("button", { name: /choose image/i });
+    expect(choose).toBeEnabled();
+    await user.click(choose);
+
+    await waitFor(() => expect(screen.getByText(/^strength$/i)).toBeInTheDocument());
+    // The STRENGTH slider is the image half's own control, and it must be live
+    // rather than merely present.
+    expect(screen.getByRole("slider")).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^clear$/i })).toBeEnabled();
+    expect(screen.getByText(/photo\.png/)).toBeInTheDocument();
+  });
+
+  it("asks the native dialog for images only, and relabels the button to match", async () => {
+    const user = userEvent.setup();
+    const { bridge, calls } = recordingBridge(createMockBridge({ delayMs: 0, pickFileName: "photo.png" }));
+    render(<Harness nativeBridge={bridge} videoUnavailable />);
+
+    // A button that still said "image or video" would be promising something
+    // the dialog behind it no longer offers.
+    expect(screen.queryByRole("button", { name: /choose image or video/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /choose image/i }));
+
+    const pick = calls.find((c) => c.method === "ui.pickFile");
+    expect(pick?.params).toMatchObject({ kind: "image" });
+  });
+
+  it("refuses a video that reaches the form anyway, and says why", async () => {
+    // The belt-and-braces half: the narrowed dialog and the shortened drop
+    // `accept` normally keep videos out, but a typed path (or a future caller)
+    // must not be able to slip one in silently.
+    const user = userEvent.setup();
+    const mockBridge = createMockBridge({ delayMs: 0, pickFileName: "clip.mp4" });
+    render(<Harness nativeBridge={mockBridge} videoUnavailable />);
+
+    await user.click(screen.getByRole("button", { name: /choose image/i }));
+
+    await waitFor(() => expect(screen.getByText(/source VIDEO cannot be used/i)).toBeInTheDocument());
+    // Nothing was attached: still the unselected state, still the STRENGTH
+    // slider, Clear still dead.
+    expect(screen.getByText(/no source selected/i)).toBeInTheDocument();
+    expect(screen.queryByText(/context frames/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^clear$/i })).toBeDisabled();
+  });
+
+  it("leaves an already-attached image alone when a video is refused", async () => {
+    // The refusal happens BEFORE either slot is touched, so a user who has
+    // already set clip 1's opening frame does not lose it to a mis-drop.
+    const user = userEvent.setup();
+    const mockBridge = createMockBridge({ delayMs: 0, pickFileName: "photo.png" });
+    const { rerender } = render(<Harness nativeBridge={mockBridge} videoUnavailable />);
+    await user.click(screen.getByRole("button", { name: /choose image/i }));
+    await waitFor(() => expect(screen.getByText(/photo\.png/)).toBeInTheDocument());
+
+    const videoBridge = createMockBridge({ delayMs: 0, pickFileName: "clip.mp4" });
+    rerender(<Harness nativeBridge={videoBridge} videoUnavailable />);
+    await user.click(screen.getByRole("button", { name: /^change/i }));
+
+    await waitFor(() => expect(screen.getByText(/source VIDEO cannot be used/i)).toBeInTheDocument());
+    expect(screen.getByText(/photo\.png/)).toBeInTheDocument();
+  });
+
+  it("without the prop, picking a video still works exactly as before", async () => {
+    // The regression guard: LTX 2.3 renders this panel with no restriction,
+    // and its whole V2V suite runs through this same path.
+    const user = userEvent.setup();
+    const { bridge, calls } = recordingBridge(createMockBridge({ delayMs: 0, pickFileName: "clip.mp4" }));
+    render(<Harness nativeBridge={bridge} />);
+
+    await user.click(screen.getByRole("button", { name: /choose image or video/i }));
+
+    await waitFor(() => expect(screen.getByText(/context frames/i)).toBeInTheDocument());
+    expect(calls.find((c) => c.method === "ui.pickFile")?.params).toMatchObject({ kind: "imageOrVideo" });
   });
 });

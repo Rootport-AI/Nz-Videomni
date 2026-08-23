@@ -11,6 +11,12 @@ import type { UseChainFormResult } from "./useChainForm";
  * `ui.pickFile` filter (see that file's own header comment). */
 const SOURCE_INPUT_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "mp4", "mov", "webm", "mkv"];
 
+/** §3-102: the same list with the VIDEO half removed, used while
+ * {@link SourceInputPanelProps.videoUnavailable} is set. Dropping a video then
+ * lands on `useFileDrop`'s existing "unsupported" error line instead of
+ * attaching — no new refusal path, just a shorter `accept`. */
+const IMAGE_ONLY_SOURCE_EXTENSIONS = SOURCE_INPUT_EXTENSIONS.slice(0, 4);
+
 export interface SourceInputPanelProps {
   form: UseChainFormResult;
   /** Disabled while a generation is in flight/reserved, mirroring the rest of
@@ -31,6 +37,19 @@ export interface SourceInputPanelProps {
    * rather than read off `form` so the readout can be driven directly in
    * tests. */
   mediaSize: { width: number; height: number } | null;
+  /** §3-102 (LTX 2.5 Chained, first stage): the loaded base model's engine
+   * cannot continue from a SOURCE VIDEO (feature `v2v`), but chains perfectly
+   * well from clip 0's opening IMAGE.
+   *
+   * This card is one control for both, so it is greyed by half rather than
+   * whole: the picker opens as `kind:"image"`, the drop target stops accepting
+   * video extensions, and the CONTEXT FRAMES slider (reachable only with a
+   * video already attached — i.e. one attached before the base model was
+   * switched) goes dead. Everything the image half needs — choose, clear,
+   * strength, the thumbnail — stays live, because that half IS in scope.
+   * `ChainedScreen` renders the sentence explaining it directly above the
+   * card. Omitted -> no restriction. */
+  videoUnavailable?: boolean | undefined;
 }
 
 /** Chain's unified source-input slot (task brief "Chainのソース入力欄一本
@@ -53,7 +72,13 @@ export interface SourceInputPanelProps {
  * present — see `noteText` below, which also absorbs the "no source
  * selected" hint so that line doesn't disappear (and shrink the panel) the
  * moment something IS selected. */
-export function SourceInputPanel({ form, disabled, nativeBridge, mediaSize }: SourceInputPanelProps) {
+export function SourceInputPanel({
+  form,
+  disabled,
+  nativeBridge,
+  mediaSize,
+  videoUnavailable = false,
+}: SourceInputPanelProps) {
   const strings = useStrings();
   const t = strings.chained.sourceInput;
   const svt = strings.chained.sourceVideo;
@@ -65,7 +90,10 @@ export function SourceInputPanel({ form, disabled, nativeBridge, mediaSize }: So
 
   const busy = form.isPickingSource || imageItem?.status === "uploading" || videoState.status === "uploading";
   const hasSelection = kind !== null;
-  const chooseLabel = busy ? t.uploadingButton : hasSelection ? t.changeButton : t.chooseButton;
+  // §3-102: with the video half closed the button must not keep promising
+  // "image or video" — the dialog it opens offers images only.
+  const emptyLabel = videoUnavailable ? t.chooseImageOnlyButton : t.chooseButton;
+  const chooseLabel = busy ? t.uploadingButton : hasSelection ? t.changeButton : emptyLabel;
 
   // The one always-rendered prose line under the slider (see the class doc
   // comment above): video's descriptive `contextFramesHint` sentence, the
@@ -85,8 +113,9 @@ export function SourceInputPanel({ form, disabled, nativeBridge, mediaSize }: So
     error: dropError,
     handlers: dropHandlers,
   } = useFileDrop({
-    accept: SOURCE_INPUT_EXTENSIONS,
-    onFile: (filePath, fileName) => void form.attachSourceByPath(filePath, fileName),
+    accept: videoUnavailable ? IMAGE_ONLY_SOURCE_EXTENSIONS : SOURCE_INPUT_EXTENSIONS,
+    onFile: (filePath, fileName) =>
+      void form.attachSourceByPath(filePath, fileName, undefined, { imagesOnly: videoUnavailable }),
     disabled: disabled || busy,
     nativeBridge,
   });
@@ -124,7 +153,7 @@ export function SourceInputPanel({ form, disabled, nativeBridge, mediaSize }: So
           title={chooseLabel}
           aria-label={chooseLabel}
           disabled={disabled || busy}
-          onClick={() => void form.pickSource()}
+          onClick={() => void form.pickSource({ imagesOnly: videoUnavailable })}
         >
           <span aria-hidden="true">📁</span>
         </button>
@@ -173,7 +202,7 @@ export function SourceInputPanel({ form, disabled, nativeBridge, mediaSize }: So
                 max={form.contextFramesLimits.max}
                 step={8}
                 value={form.contextFrames}
-                disabled={disabled || videoState.status !== "ready"}
+                disabled={disabled || videoUnavailable || videoState.status !== "ready"}
                 onChange={(e) => form.setContextFrames(Number(e.target.value))}
               />
               <span className="field-hint">{form.contextFrames}</span>
@@ -232,7 +261,14 @@ export function SourceInputPanel({ form, disabled, nativeBridge, mediaSize }: So
       )}
       {form.sourceError && (
         <p className="field-hint field-hint-error">
-          {form.sourceError === "UNSUPPORTED_FILE_TYPE" ? t.unsupportedType : form.sourceError}
+          {form.sourceError === "UNSUPPORTED_FILE_TYPE"
+            ? t.unsupportedType
+            : // §3-102: a video that reached the form anyway (a typed path, a
+              // drop that slipped past `accept`) — say the same thing the line
+              // above the card says, rather than showing a bare error code.
+              form.sourceError === "VIDEO_SOURCE_UNSUPPORTED"
+              ? strings.chained.unavailableOnBaseModel.sourceVideo
+              : form.sourceError}
         </p>
       )}
     </div>

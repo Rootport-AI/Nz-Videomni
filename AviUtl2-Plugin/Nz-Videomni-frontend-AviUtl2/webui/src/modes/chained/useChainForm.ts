@@ -479,6 +479,29 @@ export interface AttachedSourceInfo {
   knownDurationSec: number | null;
 }
 
+/**
+ * §3-102 (LTX 2.5 Chained, first stage): how much of the unified SOURCE slot a
+ * caller is allowed to fill.
+ *
+ * The slot is deliberately ONE control for two different things — clip 0's
+ * opening image (from-scratch / I2V) and the V2V source video — so an engine
+ * that can chain but cannot continue from a video needs half of it, not none
+ * of it. `imagesOnly` closes exactly that half: the native dialog is opened as
+ * `kind:"image"` so a video cannot be chosen in the first place, and a video
+ * that arrives another way (a typed path, a drop that slipped past the panel's
+ * `accept` list) is refused with `sourceError = "VIDEO_SOURCE_UNSUPPORTED"`
+ * rather than silently attached.
+ *
+ * Lives on the FORM rather than in the panel because both attach routes
+ * (`pickSource` and `attachSourceByPath`) end in the same private
+ * `attachRoutedSource`, which is where the routing decision is actually made —
+ * a panel-side check would be a second, hand-maintained copy of it.
+ */
+export interface SourceAttachOptions {
+  /** Refuse videos, accept images. Default `false` (both halves open). */
+  imagesOnly?: boolean;
+}
+
 export interface UseChainFormResult {
   /** `true` once the user has *attached* a source video — attach intent, not
    * upload completion: `status ∈ {uploading, ready, error}`. Deliberately
@@ -637,8 +660,9 @@ export interface UseChainFormResult {
   /** Non-null after `pickSource` either fails to open the dialog for a reason
    * other than `CANCELLED`, or resolves to a file whose extension
    * `sourceRouting.routeSourceByExtension` doesn't recognise — surfaced by
-   * `SourceInputPanel` as a warning. Reset to `null` on the next successful
-   * `pickSource` and by `clearSource`. */
+   * `SourceInputPanel` as a warning. §3-102 adds one more value,
+   * `VIDEO_SOURCE_UNSUPPORTED` (see {@link SourceAttachOptions}). Reset to
+   * `null` on the next successful `pickSource` and by `clearSource`. */
   sourceError: string | null;
   /** Opens the unified "choose image or video" dialog
    * (`ui.pickFile({kind:"imageOrVideo"})`) once, then routes the result by
@@ -648,15 +672,25 @@ export interface UseChainFormResult {
    * existing source video) and drops any start frame (entering V2V mode). A
    * `CANCELLED` dialog is silently ignored, mirroring every other picker in
    * this codebase; any other dialog failure, or an unrecognised extension,
-   * sets `sourceError` instead of touching either slot. */
-  pickSource: () => Promise<void>;
+   * sets `sourceError` instead of touching either slot.
+   *
+   * §3-102: with `{ imagesOnly: true }` the dialog is opened as
+   * `kind:"image"` instead, so the VIDEO half of this one slot closes while
+   * clip 0's opening image keeps working. */
+  pickSource: (options?: SourceAttachOptions) => Promise<void>;
   /** Contract v7 (drag-and-drop): attaches an already-resolved local file
    * (image or video), sharing `pickSource`'s exact routing-by-extension,
    * single-slot exclusivity and `sourceError` behavior — the only difference
    * is skipping `ui.pickFile`'s native Open dialog, since the file is already
    * known. An unrecognised extension sets `sourceError` exactly like
-   * `pickSource` does. */
-  attachSourceByPath: (filePath: string, fileName: string, info?: AttachedSourceInfo) => Promise<void>;
+   * `pickSource` does. `options` behaves exactly as it does on
+   * {@link pickSource}. */
+  attachSourceByPath: (
+    filePath: string,
+    fileName: string,
+    info?: AttachedSourceInfo,
+    options?: SourceAttachOptions,
+  ) => Promise<void>;
   /** Detaches whichever of `startFrame`/`sourceVideo` is currently active (the
    * common "Clear" button for the unified source-input slot) and clears
    * `sourceError`. A no-op on either slot that's already empty. */
@@ -1398,8 +1432,16 @@ export function useChainForm(
   // the EXACT same routing/exclusivity/sourceError behavior as the native
   // dialog picker, rather than a second hand-maintained copy of it.
   const attachRoutedSource = useCallback(
-    async (filePath: string, fileName: string, info?: AttachedSourceInfo) => {
+    async (filePath: string, fileName: string, info?: AttachedSourceInfo, options?: SourceAttachOptions) => {
       const routed = routeSourceByExtension(fileName);
+      // §3-102: the video half of this slot is closed on the loaded engine.
+      // Checked BEFORE either branch runs, so neither slot is touched — the
+      // start frame the user may already have attached must survive a refused
+      // video, exactly as an unrecognised extension leaves it alone.
+      if (options?.imagesOnly && routed === "video") {
+        setSourceError("VIDEO_SOURCE_UNSUPPORTED");
+        return;
+      }
       if (routed === "image") {
         // Single-slot replace: drop any existing start frame before adding
         // the new one (mirrors `sourceVideo.uploadPath`'s own in-place
@@ -1438,31 +1480,39 @@ export function useChainForm(
     [startFrame, sourceVideo],
   );
 
-  const pickSource = useCallback(async () => {
-    setIsPickingSource(true);
-    try {
-      let picked: { filePath: string; fileName: string };
+  const pickSource = useCallback(
+    async (options?: SourceAttachOptions) => {
+      setIsPickingSource(true);
       try {
-        picked = await nativeBridge.request("ui.pickFile", { kind: "imageOrVideo" });
-      } catch (err) {
-        const code = errorCodeOf(err);
-        // CANCELLED (user dismissed the dialog) leaves both slots untouched,
-        // mirroring every other picker in this codebase.
-        if (code !== "CANCELLED") setSourceError(code);
-        return;
+        let picked: { filePath: string; fileName: string };
+        try {
+          // §3-102: narrowing the KIND is what actually keeps a video out —
+          // the native dialog then offers image extensions only, so the user
+          // never gets as far as a file the form would have to refuse.
+          picked = await nativeBridge.request("ui.pickFile", {
+            kind: options?.imagesOnly ? "image" : "imageOrVideo",
+          });
+        } catch (err) {
+          const code = errorCodeOf(err);
+          // CANCELLED (user dismissed the dialog) leaves both slots untouched,
+          // mirroring every other picker in this codebase.
+          if (code !== "CANCELLED") setSourceError(code);
+          return;
+        }
+        await attachRoutedSource(picked.filePath, picked.fileName, undefined, options);
+      } finally {
+        setIsPickingSource(false);
       }
-      await attachRoutedSource(picked.filePath, picked.fileName);
-    } finally {
-      setIsPickingSource(false);
-    }
-  }, [nativeBridge, attachRoutedSource]);
+    },
+    [nativeBridge, attachRoutedSource],
+  );
 
   // Contract v7 (drag-and-drop): attaches an already-resolved file (no native
   // Open dialog involved), sharing `pickSource`'s exact routing/exclusivity/
   // sourceError behavior via `attachRoutedSource`.
   const attachSourceByPath = useCallback(
-    (filePath: string, fileName: string, info?: AttachedSourceInfo) =>
-      attachRoutedSource(filePath, fileName, info),
+    (filePath: string, fileName: string, info?: AttachedSourceInfo, options?: SourceAttachOptions) =>
+      attachRoutedSource(filePath, fileName, info, options),
     [attachRoutedSource],
   );
 

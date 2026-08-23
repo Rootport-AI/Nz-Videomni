@@ -131,16 +131,16 @@ describe("AppShell — base-model feature scope", () => {
   // children in the DOM either way — `container.querySelector` reaches them with
   // no tab switch, exactly as the Batch A2V tests below do.
 
-  /** The four panels' 📁 choose buttons — the honest probe, the way the folder
+  /** The panels' 📁 choose buttons — the honest probe, the way the folder
    * inputs are for Batch A2V: each is live until something disables it. (The
    * 🔁 clear buttons are not: they start disabled with nothing attached, which
-   * would make the assertion pass for the wrong reason.) */
-  const CHAIN_PANEL_PICKS = [
-    ".source-input-pick",
-    ".chain-audio-pick",
-    ".chain-end-source-pick",
-    ".chain-reference-pick",
-  ];
+   * would make the assertion pass for the wrong reason.)
+   *
+   * `.source-input-pick` is deliberately absent: the SOURCE card is one slot
+   * for BOTH clip 1's opening image and the V2V video, and only the video half
+   * is out of scope, so that button must stay live. Its own greying is
+   * asserted separately below (and in depth in `SourceInputPanel.test.tsx`). */
+  const CHAIN_PANEL_PICKS = [".chain-audio-pick", ".chain-end-source-pick", ".chain-reference-pick"];
 
   function chainForm(container: HTMLElement): HTMLElement {
     return container.querySelector(".chained-form") as HTMLElement;
@@ -150,7 +150,11 @@ describe("AppShell — base-model feature scope", () => {
     return CHAIN_PANEL_PICKS.map((sel) => chainForm(container).querySelector(sel) as HTMLButtonElement);
   }
 
-  it("greys the four Chain material panels LTX 2.5 cannot use, each with its reason", async () => {
+  function sourcePick(container: HTMLElement): HTMLButtonElement {
+    return chainForm(container).querySelector(".source-input-pick") as HTMLButtonElement;
+  }
+
+  it("greys the Chain material panels LTX 2.5 cannot use, each with its reason", async () => {
     const { select, container } = await renderApp(AS_LTX25);
 
     expect(chainPicks(container).every((b) => b != null)).toBe(true);
@@ -164,7 +168,7 @@ describe("AppShell — base-model feature scope", () => {
     // prevent — one per panel, each naming ITS OWN material rather than a
     // generic "unsupported".
     const form = within(chainForm(container));
-    expect(form.getByText(/Continuing from a source video \(V2V\) is not available/i)).toBeInTheDocument();
+    expect(form.getByText(/source VIDEO cannot be used on the selected base model/i)).toBeInTheDocument();
     expect(form.getByText(/Generating from an audio track \(A2V\) is not available/i)).toBeInTheDocument();
     expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
     expect(form.getByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeInTheDocument();
@@ -177,11 +181,31 @@ describe("AppShell — base-model feature scope", () => {
     expect(addClip.disabled).toBe(false);
   });
 
+  it("keeps clip 1's opening image attachable on LTX 2.5 — only the VIDEO half closes", async () => {
+    // The correction that matters most: chained generation from a clip-0 image
+    // (I2V) is squarely in scope for this engine, and the source card is the
+    // only place that image can be attached. Greying the whole card would have
+    // made the supported path unreachable.
+    const { select, container } = await renderApp(AS_LTX25);
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+
+    expect(sourcePick(container).disabled).toBe(false);
+    // …and it now offers images only, which is what makes the video half shut
+    // rather than merely discouraged.
+    expect(sourcePick(container).getAttribute("title")).toMatch(/choose image/i);
+    expect(sourcePick(container).getAttribute("title")).not.toMatch(/or video/i);
+  });
+
   it("leaves every Chain material panel usable on LTX 2.3", async () => {
     const { container } = await renderApp();
 
     expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
+    expect(sourcePick(container).disabled).toBe(false);
+    expect(sourcePick(container).getAttribute("title")).toMatch(/choose image or video/i);
     expect(within(chainForm(container)).queryByText(/is not available on the selected base model/i)).toBeNull();
+    expect(within(chainForm(container)).queryByText(/cannot be used on the selected base model/i)).toBeNull();
   });
 
   it("disables the Batch A2V panel and says why (M4)", async () => {

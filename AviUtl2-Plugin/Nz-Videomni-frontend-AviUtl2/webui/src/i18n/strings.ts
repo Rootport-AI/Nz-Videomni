@@ -368,7 +368,7 @@ export const en = {
      * `batch.unavailableOnBaseModel` already uses for its whole panel. */
     unavailableOnBaseModel: {
       sourceVideo:
-        "Continuing from a source video (V2V) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach a source video.",
+        "A source VIDEO cannot be used on the selected base model (continuing an existing video, V2V). Everything else about this card still works — clip 1's opening IMAGE is unaffected. To attach a video, switch the base model in the header.",
       sourceAudio:
         "Generating from an audio track (A2V) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach audio.",
       endSource:
@@ -472,6 +472,10 @@ export const en = {
       heading: "Start source",
       note: "Generates a video that continues from the attached material (video or image).",
       chooseButton: "Choose image or video…",
+      /** §3-102: the same button while the loaded base model cannot take a
+       * source video — the dialog it opens is filtered to images, so the label
+       * must not keep offering both. */
+      chooseImageOnlyButton: "Choose image…",
       changeButton: "Change…",
       uploadingButton: "Uploading…",
       /** Detaches whichever is currently attached, returning the screen to
@@ -2083,7 +2087,7 @@ export const ja: Strings = {
       "サーバーからプリセット・上限値を取得できませんでした — 内蔵の既定値を使用しています。実際のサーバーと値が異なる場合があります。",
     unavailableOnBaseModel: {
       sourceVideo:
-        "動画の続きを生成（V2V）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。動画を読み込むには、上のベースモデルを切り替えてください。",
+        "素材に動画を使うこと（動画の続きを生成する＝V2V）は、選択中のベースモデルでは使えません。この欄のほかの機能はそのまま使えます——クリップ1の開始画像は影響を受けません。動画を読み込むには、上のベースモデルを切り替えてください。",
       sourceAudio:
         "音声から生成（A2V）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。音声を読み込むには、上のベースモデルを切り替えてください。",
       endSource:
@@ -2133,6 +2137,7 @@ export const ja: Strings = {
       heading: "素材（冒頭）",
       note: "入力された素材（動画 or 画像）に続く動画を生成します。",
       chooseButton: "画像または動画を選択…",
+      chooseImageOnlyButton: "画像を選択…",
       changeButton: "変更…",
       uploadingButton: "アップロード中…",
       clearButton: "クリア",

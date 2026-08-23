@@ -328,14 +328,14 @@ async def submit_chain(
     現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
-    **LTX 2.5 では、連結生成そのもの（複数クリップを1本に繋ぐ本体の動作）は
-    使えます**。ただし次の引数は使えず、既定値以外にすると 422
-    FEATURE_UNSUPPORTED になります: ``source_video_id``（V2V継続）/
-    ``source_audio_id``（A2V）/ ``end_source_video_id`` ・
-    ``end_source_image_id``（素材（末尾））/ ``reference_video_id``（参照動画）
-    / ``loras`` / ``nag_enabled`` / ``vae_mode`` / ``attention_backend`` /
-    ``keep_resident``。これらを使いたい場合は ``load_pipeline`` で LTX 2.3 に
-    切り替えてください。
+    **LTX 2.5 では、連結生成そのもの（複数クリップを1本に繋ぐ本体の動作）に
+    加えて、``source_video_id``（V2V継続）と ``source_audio_id``（A2V。長尺
+    A2V＝複数クリップにまたがる音声も含みます）も使えます**。ただし次の引数は
+    使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED になります:
+    ``end_source_video_id`` ・ ``end_source_image_id``（素材（末尾））/
+    ``reference_video_id``（参照動画）/ ``loras`` / ``nag_enabled`` /
+    ``vae_mode`` / ``attention_backend`` / ``keep_resident``。これらを使いたい
+    場合は ``load_pipeline`` で LTX 2.3 に切り替えてください。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行
@@ -347,8 +347,10 @@ async def submit_chain(
       * ``source_video_id`` も ``source_audio_id`` も ``reference_video_id``
         も指定しない通常のチェーンは、``clips`` が2件以上必要です（1クリップ
         なら submit_generate と同じなので）。
-      * A2V（``source_audio_id`` 指定）は ``clips`` が **ちょうど1件** である
-        必要があります（v1では音声を複数クリップに分割できません）。
+      * A2V（``source_audio_id`` 指定）は ``clips`` が **1〜24件** に対応
+        します（長尺A2V）。アップロードした音声1本がチェーン全体の時間軸を
+        受け持ち、サーバー側が各クリップのstage-1区間へ自分の窓を割り当てます
+        （クリップごとに音声を分けてアップロードする方式ではありません）。
       * V2V継続（``source_video_id`` 指定）は1クリップ以上（アップロード動画
         の末尾がクリップ0の先頭として凍結されるため、1クリップでも成立します）。
       * ``reference_video_id``（制御系IC-LoRA）を使うチェーンは、**1〜24

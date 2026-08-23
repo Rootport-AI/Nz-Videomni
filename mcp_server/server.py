@@ -33,10 +33,11 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
   LTX 2.5 では submit_generate の loras / reference_video_id / nag_enabled /
   vae_mode / attention_backend / keep_resident（既定値以外）が使えません
-  （422 FEATURE_UNSUPPORTED）。submit_chain は連結生成そのものは使えますが、
-  source_video_id / source_audio_id / end_source_video_id /
-  end_source_image_id / reference_video_id / loras / nag_enabled / vae_mode /
-  attention_backend / keep_resident が同じく使えません。
+  （422 FEATURE_UNSUPPORTED）。submit_chain は連結生成そのものに加えて
+  source_video_id（V2V継続）と source_audio_id（A2V。複数クリップにまたがる
+  長尺A2Vも含みます）が使えますが、end_source_video_id / end_source_image_id /
+  reference_video_id / loras / nag_enabled / vae_mode / attention_backend /
+  keep_resident は同じく使えません。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。

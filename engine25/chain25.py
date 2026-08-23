@@ -122,6 +122,7 @@ from chain_math import (
     compute_chain_layout,
     plan_upsample_chunks,
     resolve_stage2_window,
+    video_segment_windows,
 )
 from engine25.ltxcore_compat import (
     AUTO_TILING,
@@ -158,6 +159,13 @@ from engine25.ltxcore_compat import (
     upsample_video,
     upsampler_builders,
     vae_encode_audio,
+)
+from engine25.reference25 import (
+    iter_reference_frames_cpu,
+    iter_reference_windows,
+    reference_conditioning_from_pixels,
+    reference_pixel_dims,
+    resolve_reference_downscale_factor,
 )
 
 logger = logging.getLogger(__name__)
@@ -746,6 +754,78 @@ def _encode_source_heads(
     return src_half, src_full
 
 
+def _build_reference_conditionings(
+    video_encoder: Any,
+    *,
+    ic_reference: tuple[str, float],
+    factor: int | None,
+    attention_strength: float,
+    windows: list[tuple[int, int]],
+    height: int,
+    width: int,
+    tiling_config: Any,
+    device: torch.device,
+) -> list[list[ConditioningItem]]:
+    """ONE long IC-LoRA reference -> one conditioning list per stage-1 segment.
+
+    The long-IC-LoRA half of §3-102's third stage, and 2.3's §3-78 re-expressed
+    on the 2.5 encoder lifecycle. One decode of the reference file is cut into
+    the ``windows`` ``chain_math.video_segment_windows`` computed -- the SAME
+    windows the app republishes as ``reference_segment_windows`` in the job
+    metadata -- and each window is VAE-encoded into its segment's conditioning.
+
+    Returns EXACTLY ``len(windows)`` lists. An empty one means that segment gets
+    no reference, which happens when the file ran out before the window began:
+    the owner's rule is "a missing reference means generate without one", never
+    an error, and the alternative (refusing a reference shorter than the
+    timeline) would make a 24-clip chain need a 24-clip control video.
+
+    Called from inside ``ImageConditioner.__call__``'s closure because that is
+    the only place the video encoder exists. Everything it returns is a latent,
+    which is why holding all of them is affordable while holding all the PIXELS
+    would not be.
+
+    The half-resolution pair is what the reference is sized against
+    (``reference_pixel_dims(factor, height // 2, width // 2)``), because stage 1
+    is the only stage a reference is added to.
+    """
+    ref_path, ref_strength = ic_reference
+    scale, ref_h, ref_w = reference_pixel_dims(factor, height // 2, width // 2)
+    # Everything past the last window's end is waste: the chain cannot consume it.
+    frame_cap = windows[-1][0] + windows[-1][1]
+    logger.info(
+        "chain reference: %s -> %dx%d, factor=%d, %d window(s), frame_cap=%d",
+        ref_path, ref_w, ref_h, scale, len(windows), frame_cap,
+    )
+
+    out: list[list[ConditioningItem]] = []
+    frames = iter_reference_frames_cpu(
+        str(ref_path), height=ref_h, width=ref_w, frame_cap=frame_cap, device=device,
+    )
+    for index, pixels in enumerate(iter_reference_windows(frames, windows)):
+        if pixels is None:
+            logger.warning(
+                "chain reference: exhausted before segment %d; that clip generates "
+                "without a reference", index,
+            )
+            out.append([])
+            continue
+        out.append(
+            reference_conditioning_from_pixels(
+                pixels,
+                video_encoder=video_encoder,
+                device=device,
+                tiling_config=tiling_config,
+                scale=scale,
+                strength=float(ref_strength),
+                attention_strength=attention_strength,
+            )
+        )
+        del pixels
+    assert len(out) == len(windows), (len(out), len(windows))
+    return out
+
+
 def _load_audio_stereo(path: str, device: torch.device) -> tuple[torch.Tensor, int] | None:
     """``(waveform (1,2,N), sampling_rate)`` from any media file, or ``None``.
 
@@ -1016,6 +1096,9 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     stage1_sampler: str | None = None,
     stage1_eta: float | None = None,
     clear_keyframes: bool | None = None,
+    ic_loras: list[tuple] | None = None,
+    ic_reference: tuple[str, float] | None = None,
+    ic_attention_strength: float = 1.0,
 ) -> ChainResult:
     """Run one masked AV-latent chain to ONE mp4.
 
@@ -1023,11 +1106,18 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     model, whose official blocks this function drives directly instead of going
     through ``DistilledPipeline.__call__``.
 
-    The three keyword-only arguments are ENGINE-INTERNAL experiment knobs, not
-    request fields: they exist so gate G1's A/B arms can be run against the
-    shipped code path rather than a copy of it, and they default to the module
-    constants above, which are what every real job uses. Nothing in the
-    ``generate_chain`` payload maps to them.
+    ``stage1_sampler`` / ``stage1_eta`` / ``clear_keyframes`` are ENGINE-INTERNAL
+    experiment knobs, not request fields: they exist so gate G1's A/B arms can be
+    run against the shipped code path rather than a copy of it, and they default
+    to the module constants above, which are what every real job uses. Nothing in
+    the ``generate_chain`` payload maps to them.
+
+    ``ic_loras`` / ``ic_reference`` / ``ic_attention_strength`` ARE request
+    fields (§3-102 third stage). ``ic_loras`` is the job's adapters as
+    ``(path, strength[, audio_strength])``; ``ic_reference`` is ONE long control
+    video ``(path, strength)`` laid over the whole assembled timeline and cut
+    into per-clip windows -- long IC-LoRA, 2.3's §3-78. Defaults of ``None``
+    leave the chain byte-identical to a chain without them.
     """
     sampler = STAGE1_SAMPLER if stage1_sampler is None else stage1_sampler
     eta = STAGE1_ANCESTRAL_ETA if stage1_eta is None else float(stage1_eta)
@@ -1057,6 +1147,17 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     assert not (source is not None and audio_source is not None), (
         "V2V (source) and A2V (audio_source) are mutually exclusive; one chain is a "
         "video continuation or an audio-driven generation, never both."
+    )
+    # An IC-LoRA reference is API-exclusive with V2V (and, in 2.3, with retake and
+    # end source -- neither of which exists on this engine, so the assertion is
+    # 2.3's list minus the two modes that cannot reach it). The injection below
+    # LEANS on that: it sits after the head branch, so a reference reaching a V2V
+    # chain would append conditioning to a segment whose head is a frozen carry
+    # from a file. A2V is deliberately NOT in the list -- 2.3 allows the pair, and
+    # adding a constraint the older engine does not have would be a new
+    # restriction dressed up as parity.
+    assert ic_reference is None or source is None, (
+        "run_chain: ic_reference is mutually exclusive with source (V2V)"
     )
 
     # ── Geometry: the SHARED pure module, called the way the app calls it ─────
@@ -1111,17 +1212,36 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         device=device,
     )
 
+    # The IC-LoRA reference's downscale factor, resolved from the LoRA headers
+    # BEFORE any model is built (it is a header read; discovering "this LoRA
+    # declares no reference factor" mid-job would be a poor trade). The
+    # per-segment pixel windows come from the SAME shared arithmetic the app uses
+    # to publish ``reference_segment_windows`` in the job metadata.
+    reference_factor = resolve_reference_downscale_factor(list(ic_loras or []), ic_reference)
+    ref_px_windows: list[tuple[int, int]] = (
+        [] if ic_reference is None else video_segment_windows(layout)
+    )
+
     logger.info(
         "chain: %d clips %s -> %d px frames, %dx%d @ %.3f fps, kv=%d strength=%.3f, "
         "%d stage-2 tiles (window %s = %d/%d), sampler=%s eta=%s clear_keyframes=%s, "
-        "chunked_upsample=%s, source=%s, audio_source=%s",
+        "chunked_upsample=%s, source=%s, audio_source=%s, loras=%d, reference=%s",
         n, [c.num_frames for c in clips], total_px, width, height, frame_rate, kv,
         spec.overlap_strength, n_tiles, spec.stage2_window or "standard", v_tile, v_adv,
         sampler, eta if sampler == "ancestral" else "-", clear_kf, spec.chunked_upsample,
         "-" if source is None else f"{source.path} ctx={source.context_frames}",
         "-" if audio_source is None else audio_source.path,
+        len(list(ic_loras or [])),
+        "-" if ic_reference is None
+        else f"{ic_reference[0]} strength={ic_reference[1]:.3f} factor={reference_factor} "
+             f"attn={float(ic_attention_strength):.3f} windows={ref_px_windows}",
     )
 
+    # set_loras BEFORE begin_job, and unconditionally: begin_job releases the
+    # PREVIOUS job's attachment, and a chain that asks for no adapter must clear
+    # rather than inherit one. The stage owns the state; run_chain does not keep
+    # a second copy of it.
+    stage.set_loras(list(ic_loras or []))
     stage.begin_job()
     stage.progress = progress
     pipeline.prompt_encoder.progress = progress
@@ -1249,11 +1369,15 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         tile_conds: list[list[ConditioningItem]] = [[] for _ in range(n_tiles)]
         src_half: torch.Tensor | None = None
         src_full: torch.Tensor | None = None
-        if clip0_images or source is not None:
+        # ONE list per stage-1 segment, empty when no reference was asked for --
+        # which is what keeps the segment loop's ``conds_v`` byte-identical on a
+        # chain without one.
+        ref_conds: list[list[ConditioningItem]] = [[] for _ in range(n_seg)]
+        if clip0_images or source is not None or ic_reference is not None:
             if clip0_images:
                 clip0_images = dp.image_conditioner.resolve_crf(clip0_images)
 
-            def _build_all(encoder: Any) -> tuple[list, list[list], Any, Any]:
+            def _build_all(encoder: Any) -> tuple[list, list[list], Any, Any, list[list]]:
                 half: list[ConditioningItem] = []
                 full: list[list[ConditioningItem]] = [[] for _ in v_tiles]
                 if clip0_images:
@@ -1276,11 +1400,31 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                         frame_rate=frame_rate, tiling_config=tiling_config,
                         scale_factors=stage.video_scale_factors, device=device,
                     )
-                return half, full, head_half, head_full
+                # LAST, and all n_seg of them in one pass. 2.3 could encode each
+                # window lazily just before its segment because its video encoder
+                # was a long-lived object it could carry into the loop; 2.5's
+                # ``ImageConditioner`` builds the encoder, calls this closure and
+                # frees it again, so the encoder only exists HERE. The stream is
+                # still walked once and lazily (``iter_reference_windows`` buffers
+                # at most one window), and what is retained is the LATENTS, which
+                # are small: 512x320/49f at factor 1 is ~70KB per segment.
+                refs: list[list[ConditioningItem]] = [[] for _ in range(n_seg)]
+                if ic_reference is not None:
+                    refs = _build_reference_conditionings(
+                        encoder,
+                        ic_reference=ic_reference,
+                        factor=reference_factor,
+                        attention_strength=float(ic_attention_strength),
+                        windows=ref_px_windows,
+                        height=height, width=width,
+                        tiling_config=tiling_config,
+                        device=device,
+                    )
+                return half, full, head_half, head_full, refs
 
             vram.reset()
             conditioning_started = time.perf_counter()
-            stage1_conds, tile_conds, src_half, src_full = dp.image_conditioner(_build_all)
+            stage1_conds, tile_conds, src_half, src_full, ref_conds = dp.image_conditioner(_build_all)
             vram.record("11_image_conditioning", time.perf_counter() - conditioning_started)
 
         # ── STAGE 1: per-clip at half resolution, with the carry band ─────────
@@ -1333,7 +1477,12 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             # Clip 0's images are the TIMELINE's opening keyframes, so they go on
             # clip 0 only -- and AFTER the band items, which must see an
             # un-extended token axis (see AudioHeadBandMask).
-            conds_v = band_v + (stage1_conds if i == 0 else [])
+            # THIS segment's window of the long reference (§3-78's long IC-LoRA),
+            # appended last. An empty list is both "no reference asked for" and
+            # "the reference ran out before this segment" -- the owner's rule is
+            # that a missing reference means generate without one, never an error.
+            # STAGE 1 ONLY; the stage-2 tiles below never get one.
+            conds_v = band_v + (stage1_conds if i == 0 else []) + ref_conds[i]
 
             noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
             video_context, audio_context = seg_ctx[i]

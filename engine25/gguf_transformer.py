@@ -84,6 +84,7 @@ import argparse
 import gc
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -92,6 +93,12 @@ from typing import Any
 import torch
 
 # --- 2.3 engine reuse (import only; those modules are never edited) ----------
+from engine.gguf import ic_lora_common
+from engine.gguf.ic_lora_common import (
+    attach_ic_loras,
+    detach_ic_loras,
+    normalize_ic_loras,
+)
 from engine.gguf.quant_service import (
     GGMLQuantizedTensor,
     _patch_model_for_ggml_dequant,
@@ -583,6 +590,107 @@ class Ltx25DiffusionStage(DiffusionStage):
             if self.blocks_on_gpu > 0
             else None
         )
+        # -- IC-LoRA / Style LoRA state (§3-102 third stage) -----------------
+        #: The CURRENT job's adapters as ``(path, strength, audio_strength)``.
+        #: Empty is the ordinary case and costs one no-op detach per build.
+        self._ic_loras: list[tuple[str, float, float | None]] = []
+        #: ``(path, mtime_ns, size) -> pairs`` for the job. A chain builds the
+        #: transformer once per stage-1 clip AND once per stage-2 tile, and each
+        #: build would otherwise re-read the LoRA safetensors from disk (the
+        #: Deblur adapter is 906MB).
+        self._lora_pairs_cache: dict[tuple[str, int, int], list] = {}
+        #: The last model LoRAs were attached to, for the job-end detach. ``None``
+        #: whenever nothing is attached, so the stage never pins a model shell it
+        #: has no work to do on.
+        self._attached_model: torch.nn.Module | None = None
+
+    # -- LoRA state ----------------------------------------------------------
+
+    def set_loras(self, ic_loras: list[tuple] | None) -> None:
+        """Declare the adapters the NEXT builds attach. ``None``/``[]`` means none.
+
+        Entry points call this UNCONDITIONALLY, before :meth:`begin_job`, so a
+        job that asks for no LoRA clears whatever the previous one asked for
+        rather than inheriting it. Accepts 2- or 3-tuples and stores 3-tuples
+        (``normalize_ic_loras`` is the 2.3 normaliser, shared so the two engines
+        cannot disagree about what an entry means).
+        """
+        self._ic_loras = list(normalize_ic_loras(list(ic_loras or [])))
+
+    def begin_job(self) -> None:
+        """Release the previous job's LoRA state. Call once per job.
+
+        Best effort, and deliberately so: it detaches the buffers from the model
+        the last job attached them to (VRAM/RAM the next job would otherwise pay
+        for) and drops the pairs cache. Correctness does not rest on it -- every
+        build ends in ``attach`` or ``detach``, so a model always carries exactly
+        the current job's adapters whether or not this ran.
+        """
+        model, self._attached_model = self._attached_model, None
+        if model is not None:
+            try:
+                cleared = detach_ic_loras(model)
+                logger.info("IC-LoRA job teardown: detached from %d Linear(s)", cleared)
+            except Exception:  # noqa: BLE001 -- teardown must never fail a job
+                logger.exception("IC-LoRA job teardown: detach failed (ignored)")
+        self._lora_pairs_cache.clear()
+
+    def _apply_loras(self, model: X0Model) -> None:
+        """Attach the job's adapters to a freshly built transformer, or detach.
+
+        2.3's product form (``engine/gguf/quant_service.py:798-805``), verbatim
+        in shape: ``if ic_loras: attach else: detach``. The ELSE half is what
+        makes it safe on this engine -- the shell registry hands back the SAME
+        ``LTXModel`` instance on every build, so a job that stopped asking for a
+        LoRA would otherwise inherit the previous job's buffers.
+
+        Called between the ``X0Model`` wrap and ``_place_transformer`` on purpose:
+        ``attach_ic_loras`` registers A/B as NON-PERSISTENT buffers on each target
+        ``Linear``, so they ride ``block.to(device)`` during block swap and the
+        per-layer dequant forward adds their delta onto the dequantised tensor.
+        Attaching after placement would leave every swapped block's buffers on
+        the wrong device.
+
+        The safetensors read is memoised for the job. ``attach_ic_loras`` reads
+        the file through ``ic_lora_common.load_ic_lora_pairs``, a module global,
+        so the memo is installed in front of that name for the duration of the
+        call and restored in ``finally``. Rebinding rather than reimplementing
+        keeps the fail-loud contract (shape mismatch raises, 0 resolved prefixes
+        WARN, per-axis muting) exactly 2.3's, which is the whole point of reusing
+        the function.
+        """
+        if not self._ic_loras:
+            detach_ic_loras(model)
+            self._attached_model = None
+            return
+
+        cache = self._lora_pairs_cache
+        original_loader = ic_lora_common.load_ic_lora_pairs
+
+        def _cached_load(entries: list[tuple]) -> list[tuple]:
+            out: list[tuple] = []
+            for path, strength, audio_strength in normalize_ic_loras(list(entries)):
+                try:
+                    stat = os.stat(path)
+                    key: tuple[str, int, int] | None = (path, stat.st_mtime_ns, stat.st_size)
+                except OSError:
+                    # Missing/unreadable: fall through so the official loader
+                    # raises its own FileNotFoundError with its own message.
+                    key = None
+                pairs = None if key is None else cache.get(key)
+                if pairs is None:
+                    ((_p, _s, _a, pairs),) = original_loader([(path, strength, audio_strength)])
+                    if key is not None:
+                        cache[key] = pairs
+                out.append((path, strength, audio_strength, pairs))
+            return out
+
+        ic_lora_common.load_ic_lora_pairs = _cached_load
+        try:
+            attach_ic_loras(model, self._ic_loras)
+        finally:
+            ic_lora_common.load_ic_lora_pairs = original_loader
+        self._attached_model = model
 
     # -- construction --------------------------------------------------------
 
@@ -646,6 +754,9 @@ class Ltx25DiffusionStage(DiffusionStage):
         started = time.perf_counter()
         velocity_model = self._prepared_builder().build(device=target, **kwargs)
         model = X0Model(velocity_model).eval()
+        # BEFORE placement: the LoRA buffers have to be on the blocks when the
+        # blocks are moved, not after. See :meth:`_apply_loras`.
+        self._apply_loras(model)
         self._place_transformer(model, target)
         logger.info("Transformer ready on %s in %.1fs", target, time.perf_counter() - started)
         return model

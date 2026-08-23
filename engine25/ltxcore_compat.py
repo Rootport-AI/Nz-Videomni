@@ -114,7 +114,11 @@ from ltx_core.components.diffusion_steps import EulerAncestralDiffusionStep, Eul
 from ltx_core.components.noisers import GaussianNoiser
 from ltx_core.components.patchifiers import AudioPatchifier, VideoLatentPatchifier
 from ltx_core.conditioning.item import ConditioningItem
+from ltx_core.conditioning.types.attention_strength_wrapper import (
+    ConditioningItemAttentionStrengthWrapper,
+)
 from ltx_core.conditioning.types.mask_cond import VideoConditionByMask
+from ltx_core.conditioning.types.reference_video_cond import VideoConditionByReferenceLatent
 from ltx_core.loader.fuse_loras import FuseRule, bf16_fuse_rule
 from ltx_core.loader.helpers import (
     as_path_list,
@@ -201,7 +205,23 @@ from ltx_core.text_encoders.gemma.encoders.encoder_configurator import (
 # ---------------------------------------------------------------------------
 # ltx_pipelines
 # ---------------------------------------------------------------------------
-from ltx_pipelines.distilled import DistilledPipeline, should_use_ancestral_sampler
+import ltx_pipelines.distilled as ltx_distilled
+from ltx_pipelines.distilled import (
+    DistilledPipeline,
+    # THE SAME function object `DistilledPipeline.__call__` looks up by module
+    # global on each stage. It is re-exported so the reference-conditioning
+    # monkeypatch (engine25/reference25.py) has ONE name to save and restore,
+    # and so `verify` can pin that the distilled namespace still owns it -- an
+    # upstream that stopped name-importing it would make the patch a silent
+    # no-op rather than an error.
+    combined_image_conditionings,
+    should_use_ancestral_sampler,
+)
+# The IC-LoRA metadata reader. Public in 1.2.0 (2.3 had to reach for
+# `ic_lora._read_lora_reference_downscale_factor`); it returns 1 BOTH for a
+# declared 1 and for an absent key, which is why the factor VOTE in
+# reference25.py tests key presence with `safe_open` before letting a LoRA vote.
+from ltx_pipelines.iclora_utils import read_lora_reference_downscale_factor
 from ltx_pipelines.utils.args import ImageConditioningInput
 # `_build_state` is module-private upstream and is NOT re-exported: chain25 never
 # calls it. It is imported only so `verify` can read the branch that turns
@@ -215,6 +235,14 @@ from ltx_pipelines.utils.blocks import (
     PromptEncoder,
     VideoUpsampler,
     _build_state,
+    # Verify-only, and NOT re-exported: engine25 never calls either. They are
+    # imported so `verify` can pin the fact the Single reference conditioning
+    # rests on -- the `num_frames` its monkeypatch closes over is the value the
+    # caller asked for, because a concrete int short-circuits `resolve_num_frames`
+    # and `require_num_frames_source` is the guard that makes an AutoDuration
+    # request (which engine25 never sends) fail before any work.
+    require_num_frames_source,
+    resolve_num_frames,
 )
 from ltx_pipelines.utils.constants import DISTILLED_SIGMAS, STAGE_2_DISTILLED_SIGMAS
 from ltx_pipelines.utils.denoisers import SimpleDenoiser
@@ -267,6 +295,7 @@ __all__ = [
     "AudioPatchifier",
     "AutoTiling",
     "ConditioningItem",
+    "ConditioningItemAttentionStrengthWrapper",
     "ContentMatching",
     "ContentReplacement",
     "DiffusionStage",
@@ -308,6 +337,7 @@ __all__ = [
     "TileSizeConfig",
     "TilingConfig",
     "VideoConditionByMask",
+    "VideoConditionByReferenceLatent",
     "VideoEncoder",
     "VideoLatentPatchifier",
     "VideoLatentShape",
@@ -321,6 +351,7 @@ __all__ = [
     "as_path_list",
     "bf16_fuse_rule",
     "cleanup_memory",
+    "combined_image_conditionings",
     "create_meta_model",
     "decode_audio_from_file",
     "decode_video_by_frame",
@@ -337,9 +368,11 @@ __all__ = [
     "image_conditionings_by_adding_guiding_latent",
     "image_conditionings_by_replacing_latent",
     "load_state_dict",
+    "ltx_distilled",
     "module_registry_key",
     "normalize_images",
     "post_process_latent",
+    "read_lora_reference_downscale_factor",
     "read_model_metadata",
     "resize_and_center_crop",
     "resolve_gemma_weight_paths",
@@ -987,6 +1020,120 @@ def verify() -> None:
         _source_of(validate_audio_waveform, "audio_mux.validate_audio_waveform"),
         "audio_mux.validate_audio_waveform",
         "if samples.ndim != 2 or 2 not in samples.shape:",
+    )
+
+    # (12) §3-102 third stage (Style LoRA + IC-LoRA): the reference-conditioning
+    #      surface. Everything below is what engine25/reference25.py either
+    #      MONKEYPATCHES or constructs by hand, so a drift here would show up as
+    #      "the reference had no effect" -- a silent wrong picture, not a crash.
+
+    # (12a) The patch seam. `DistilledPipeline.__call__` looks `combined_image_conditionings`
+    #       up as a MODULE GLOBAL of `ltx_pipelines.distilled` once per stage, which
+    #       is the only reason a rebinding on that module intercepts both calls. An
+    #       upstream that imported it as `helpers.combined_image_conditionings` at
+    #       the call site, or inlined it, would leave the patch installed and inert.
+    if getattr(ltx_distilled, "combined_image_conditionings", None) is not combined_image_conditionings:
+        _fail(
+            "ltx_pipelines.distilled.combined_image_conditionings",
+            "is no longer the name-imported function object engine25 patches; the "
+            "reference conditioning would be silently dropped",
+        )
+    _require_params(
+        combined_image_conditionings,
+        "helpers.combined_image_conditionings",
+        "images", "height", "width", "video_encoder", "dtype", "device", "color_space",
+    )
+
+    # (12b) The STAGE DISCRIMINATOR. `height` is the only per-stage-differing
+    #       argument the conditioning function receives (no stage index, no
+    #       `num_frames`, no `tiling_config`), so `height == full_height // 2`
+    #       IS the stage-1 test -- and it is only valid while stage 1 is built at
+    #       half height. 2.3 leans on the same signal for the same reason.
+    distilled_call_source = _source_of(DistilledPipeline.__call__, "DistilledPipeline.__call__")
+    _require_in_source(
+        distilled_call_source,
+        "DistilledPipeline.__call__",
+        "stage_1_w, stage_1_h = width // 2, height // 2",
+    )
+    # ...and that BOTH stages go through the patched name, stage 1 first. If a
+    # release reordered them the patch would attach the reference to stage 2.
+    _require_source_order(
+        distilled_call_source,
+        "DistilledPipeline.__call__",
+        "stage_1_conditionings = self.image_conditioner(",
+        "combined_image_conditionings(",
+        "stage_2_conditionings = self.image_conditioner(",
+        "combined_image_conditionings(",
+    )
+
+    # (12c) `num_frames` in the closure. The patch closes over the frame count the
+    #       CALLER asked for, while the conditioning function is called with the
+    #       count the pipeline RESOLVED -- the two are the same number only because
+    #       a concrete int short-circuits `resolve_num_frames`, and an AutoDuration
+    #       request (which engine25 never sends, and this checkpoint's absent
+    #       DurationHead could not serve anyway) is refused up front.
+    _require_in_source(
+        distilled_call_source,
+        "DistilledPipeline.__call__",
+        "require_num_frames_source(num_frames, self.duration_predictor)",
+    )
+    _require_in_source(
+        _source_of(resolve_num_frames, "blocks.resolve_num_frames"),
+        "blocks.resolve_num_frames",
+        "if not isinstance(num_frames, AutoDuration):",
+        "return num_frames",
+    )
+    _require_params(
+        require_num_frames_source,
+        "blocks.require_num_frames_source",
+        "num_frames", "duration_predictor",
+    )
+
+    # (12d) The reference conditioning item engine25 constructs by hand rather
+    #       than through `append_ic_lora_reference_video_conditionings` (which
+    #       decodes with a GPU-side cat, O(F^2) in allocated volume, and cannot be
+    #       fed the per-segment pixel windows a long chain needs).
+    _require_params(
+        VideoConditionByReferenceLatent.__init__,
+        "VideoConditionByReferenceLatent.__init__",
+        "latent", "downscale_factor", "temporal_scale_factor", "strength",
+    )
+    #       The three body facts that make "strength=1.0 keeps the reference
+    #       clean" true, and that separate 2.5's item from 2.3's:
+    #         * the appended denoise mask is `1 - strength` (so 1.0 == clean);
+    #         * the NOISY side gets `zeros_like`, i.e. placeholder zeros rather
+    #           than the reference tokens themselves;
+    #         * the appended tokens are explicitly NOT keyframes -- a
+    #           position-derived marker would otherwise claim the reference's own
+    #           first latent frame and change what the model attends to.
+    _require_in_source(
+        _source_of(VideoConditionByReferenceLatent.apply_to, "VideoConditionByReferenceLatent.apply_to"),
+        "VideoConditionByReferenceLatent.apply_to",
+        "fill_value=1.0 - self.strength",
+        "torch.zeros_like(tokens)",
+        "marked=False",
+    )
+    # (12e) The attention-strength wrapper, applied ONLY below 1.0 (at 1.0 the
+    #       bare item is passed through, which is what keeps an ordinary
+    #       reference job structurally identical to the upstream one).
+    _require_params(
+        ConditioningItemAttentionStrengthWrapper.__init__,
+        "ConditioningItemAttentionStrengthWrapper.__init__",
+        "conditioning", "attention_mask",
+    )
+    # (12f) The metadata reader behind the downscale-factor VOTE. It DEFAULTS to
+    #       1 on an absent key, which is indistinguishable from a declared 1 --
+    #       hence reference25's separate `safe_open` presence test. Pinned so the
+    #       day upstream starts raising instead, the vote is revisited.
+    _require_params(
+        read_lora_reference_downscale_factor,
+        "iclora_utils.read_lora_reference_downscale_factor",
+        "lora_path",
+    )
+    _require_in_source(
+        _source_of(read_lora_reference_downscale_factor, "iclora_utils.read_lora_reference_downscale_factor"),
+        "iclora_utils.read_lora_reference_downscale_factor",
+        'metadata.get("reference_downscale_factor", 1)',
     )
 
     # 4. F1 canary -- logged, never asserted (see module docstring).

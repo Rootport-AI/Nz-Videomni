@@ -113,10 +113,17 @@ from engine25.ltxcore_compat import (
     OffloadMode,
     PromptEncoder,
     TilingConfig,
+    VideoPixelShape,
     cleanup_memory,
     encode_video,
+    ensure_tiling_config,
     get_video_chunks_number,
+    tiling_scale_factors_for_vae,
     verify,
+)
+from engine25.reference25 import (
+    reference_patch,
+    resolve_reference_downscale_factor,
 )
 
 logger = logging.getLogger(__name__)
@@ -377,7 +384,13 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
         self._announced: tuple[str | None, str | None, int | None, int | None] = (None, None, None, None)
 
     def begin_job(self) -> None:
-        """Reset the invocation counter AND any announcement. Call once per job."""
+        """Reset the invocation counter AND any announcement. Call once per job.
+
+        ``super()`` first, always: the base stage's ``begin_job`` releases the
+        previous job's IC-LoRA attachment, and a path that reset only the
+        progress counters would leave that teardown to chance.
+        """
+        super().begin_job()
         self._invocation = 0
         self._announced = (None, None, None, None)
 
@@ -756,6 +769,9 @@ class Ltx25Pipeline:
         output_path: str,
         images: Sequence[ImageConditioningInput] = (),
         tiling_config: TilingConfig | AutoTiling | None = AUTO_TILING,
+        ic_loras: Sequence[tuple] | None = None,
+        ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float = 1.0,
         ignored: dict[str, Any] | None = None,
     ) -> GenerationResult:
         """Run one two-stage generation and write ``output_path`` as an mp4.
@@ -763,6 +779,19 @@ class Ltx25Pipeline:
         ``images`` empty -> T2V; one or more entries -> I2V (the official image
         conditioner re-compresses each at the CRF the checkpoint declares and
         encodes it into the stage-1 and stage-2 latents).
+
+        ``ic_loras`` is the job's adapters as ``(path, strength[, audio_strength])``
+        -- Style LoRAs and IC-LoRAs alike, since nothing about the attach
+        distinguishes them. It is passed on EVERY call, including as ``None``,
+        because that is what clears the previous job's adapters (see
+        ``Ltx25DiffusionStage.set_loras``).
+
+        ``ic_reference`` is the IC-LoRA's reference video as ``(path, strength)``.
+        It requires ``ic_loras``: the reference's spatial downscale factor lives
+        in the LoRA's own metadata and nowhere else. The reference is appended to
+        STAGE 1 only. ``ic_attention_strength`` (0..1, default 1.0) relaxes how
+        strongly the reference tokens drive self-attention; at 1.0 no wrapper is
+        applied at all.
 
         ``ignored`` is the subset of the request this engine drops; it is logged
         here so a job's log names every knob that had no effect, rather than
@@ -779,11 +808,27 @@ class Ltx25Pipeline:
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
 
+        lora_entries = list(ic_loras or [])
+        # The downscale factor is resolved BEFORE any model is built: it is a
+        # header read, and getting "this LoRA declares no reference factor" as a
+        # failure two minutes into a job would be a poor trade.
+        reference_factor = resolve_reference_downscale_factor(lora_entries, ic_reference)
+
         logger.info(
-            "generate %dx%d / %d frames @ %.3f fps (encode %d fps) seed=%d images=%d -> %s",
-            width, height, num_frames, frame_rate, encode_fps, seed, len(images), out,
+            "generate %dx%d / %d frames @ %.3f fps (encode %d fps) seed=%d images=%d "
+            "loras=%d reference=%s -> %s",
+            width, height, num_frames, frame_rate, encode_fps, seed, len(images),
+            len(lora_entries),
+            "no" if ic_reference is None
+            else f"{Path(ic_reference[0]).name} strength={ic_reference[1]:.3f} "
+                 f"factor={reference_factor} attn={float(ic_attention_strength):.3f}",
+            out,
         )
 
+        # set_loras BEFORE begin_job, and unconditionally: begin_job releases the
+        # PREVIOUS job's attachment, and a job that asks for no adapter must clear
+        # rather than inherit one.
+        self.stage.set_loras(lora_entries)
         self.stage.begin_job()
         self.stage.progress = self.progress
         self.prompt_encoder.progress = self.progress
@@ -791,8 +836,32 @@ class Ltx25Pipeline:
         if self.device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(self.device)
 
+        # The reference patch receives only images/height/width/video_encoder/
+        # dtype/device/color_space, so the tiling config the factor-1 encode needs
+        # has to be resolved here and closed over. Same call the pipeline makes
+        # internally (distilled.py) -- FULL resolution and the whole frame count,
+        # because it is the DECODE's chunking, reused.
+        resolved_reference_tiling = None
+        if ic_reference is not None:
+            resolved_reference_tiling = ensure_tiling_config(
+                tiling_config,
+                scale_factors=tiling_scale_factors_for_vae(self.pipeline.video_decoder.checkpoint_path),
+                video_shape=VideoPixelShape(1, num_frames, height, width, frame_rate),
+                vae_checkpoint_path=self.pipeline.video_decoder.checkpoint_path,
+                diffvae_optimization=self.pipeline.video_decoder.diffvae_optimization,
+                device=self.device,
+            )
+
         started = time.perf_counter()
-        with torch.no_grad():
+        with torch.no_grad(), reference_patch(
+            ic_reference=ic_reference,
+            factor=reference_factor,
+            attention_strength=float(ic_attention_strength),
+            full_height=height,
+            num_frames=num_frames,
+            tiling_config=resolved_reference_tiling,
+            vram=self.vram,
+        ) as reference_receipts:
             video, audio, resolved_frames, resolved_tiling = self.pipeline(
                 prompt=prompt,
                 seed=seed,
@@ -819,6 +888,8 @@ class Ltx25Pipeline:
                 video_chunks_number=chunks,
             )
             self.vram.record("30_decode_encode", time.perf_counter() - encode_started)
+        if reference_receipts:
+            logger.info("IC-LoRA reference receipts: %s", reference_receipts)
 
         seconds = time.perf_counter() - started
 

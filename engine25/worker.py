@@ -51,6 +51,20 @@ Protocol (one JSON object per line; parent -> worker):
       ride along; each is logged as ignored and dropped. ``crop_output`` is NOT
       one of them -- it never reaches the worker in either engine, because it is
       an ffmpeg post-process the app applies to the finished mp4.
+  {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
+   num_steps, overlap_frames, overlap_strength, [chunked_upsample],
+   [stage2_window]}
+      One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
+      body keys are the 2.3 chain op's, verbatim, because the app builds one
+      payload shape for whichever engine is loaded. ``clips`` entries are
+      {prompt, num_frames, images}; only clip 0 may carry images.
+      Unlike ``generate``, a field naming a feature this chain does not have
+      (``source``, ``audio_source``, ``retake``, ``end_source``, ``loras``,
+      ``reference_video``, ``nag``, ``attention_backend``, ``keep_resident``,
+      ``vae_mode``, ``block_swap_prefetch``, ``fused_gguf_dequant_kernel``) is
+      REFUSED BY NAME rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
+      The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
+      2.3's shape.
   {"op": "shutdown"}
 
 Replies are framed with the SAME unique prefix as the 2.3 worker so the shared
@@ -59,6 +73,8 @@ ignorable. Every protocol line: @@LTX@@<compact-json>, flushed. All other
 logging goes to STDERR.
   @@LTX@@{"event":"ready","sampler":"euler_ancestral","sage_available":false}
   @@LTX@@{"event":"progress","stage":"stage1_denoise","index":3,"total":8}
+  @@LTX@@{"event":"progress","stage":"stage1_denoise","index":3,"total":8,
+          "outer_index":1,"outer_total":2}   <- chain only: which clip/tile
   @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,...}
   @@LTX@@{"event":"error","detail":...}
 
@@ -89,6 +105,18 @@ Selftest (gate G4), run inside the venv without the app::
 It drives the SAME ``_do_load`` / ``_do_generate`` handlers the protocol uses --
 it builds the JSON messages and feeds them in -- so a green selftest is evidence
 about the shipped path, not about a parallel one.
+
+The chain has its own (gate G2), same discipline, plus captured receipts::
+
+    python -m engine25.worker --selftest-chain \\
+        <the same five model paths> \\
+        --output chain.mp4 --clips 2 --num-frames 25 \\
+        --width 320 --height 192 [--chunked-upsample] [--rounds 2]
+
+Its JSON report carries the mp4 digests, the ``done`` event verbatim (with its
+``chain`` metadata) and the full ``progress`` series, so the event CONTRACT --
+which stages fire, and which of them name an ``outer_index``/``outer_total`` --
+is checked from the run instead of from the source.
 """
 
 import os
@@ -179,10 +207,39 @@ _LOAD_PATH_FIELDS = (
 _PIPE = None
 
 
-def _emit_progress(stage: str, index: int, total: int) -> None:
-    """One framed ``progress`` line. Never allowed to fail a job."""
+def _emit_progress(
+    stage: str,
+    index: int,
+    total: int,
+    *,
+    outer_index: int | None = None,
+    outer_total: int | None = None,
+) -> None:
+    """One framed ``progress`` line. Never allowed to fail a job.
+
+    The two keyword-only arguments are a CHAIN's position -- which clip is being
+    denoised, which stage-2 tile -- and are emitted under the SAME field names
+    the 2.3 worker uses (``engine/worker.py``'s ``_emit_step_progress``), because
+    the app-side receipt loop that reads them is shared: without them a chain's
+    job fraction rewinds to the start of stage 1 at every clip, and the "clip
+    n/N" line the GUI shows has nothing to read.
+
+    They are OMITTED from the line when absent, so a single generation's
+    ``progress`` events stay byte-identical to what they were before the chain
+    existed -- the single path calls this with three positional arguments and
+    nothing else.
+    """
     try:
-        _emit("progress", stage=stage, index=int(index), total=int(total))
+        fields: dict[str, object] = {
+            "stage": str(stage),
+            "index": int(index),
+            "total": int(total),
+        }
+        if outer_index is not None:
+            fields["outer_index"] = int(outer_index)
+        if outer_total is not None:
+            fields["outer_total"] = int(outer_total)
+        _emit("progress", **fields)
     except Exception as exc:  # noqa: BLE001
         _log(f"progress emit failed (ignored): {exc!r}")
 
@@ -292,6 +349,169 @@ def _do_generate(msg: dict) -> None:
     )
 
 
+#: Chain payload keys that name a feature this engine's chain does not have.
+#:
+#: REFUSED BY NAME, not ignored. Every one of them is already refused at the
+#: endpoint (``services/engines/ltx25/adapter.py``'s ``CHAIN_REJECT_TABLE``), and
+#: ``_RealBackend25.generate_chain`` builds its payload from a fixed literal that
+#: contains none of them -- so an arrival here is not a stray field, it is the
+#: reject table and the payload builder having drifted apart. Dropping it
+#: silently would hand the user a video that quietly ignored the LoRA / the
+#: source clip / the retake window they asked for, which is the one failure this
+#: engine must never produce.
+#:
+#: The test is MEMBERSHIP, not truthiness: ``{"loras": []}`` is as much a sign of
+#: drift as a populated list, and "the key was there but empty so we allowed it"
+#: is exactly the kind of exception the single-rule principle exists to avoid.
+#: The single-generate op differs deliberately -- there the acceleration knobs
+#: ARE part of the contract and are ignored-and-logged (``IGNORED_FIELDS``),
+#: because the app sends them on every single job.
+CHAIN_UNSUPPORTED_KEYS = (
+    "source",
+    "audio_source",
+    "retake",
+    "end_source",
+    "loras",
+    "reference_video",
+    "nag",
+    "attention_backend",
+    "keep_resident",
+    "vae_mode",
+    "block_swap_prefetch",
+    "fused_gguf_dequant_kernel",
+)
+
+
+def _do_generate_chain(msg: dict) -> None:
+    """Run one masked AV-latent clip chain; ONE mp4 written to ``msg['output_path']``.
+
+    Payload -> :class:`engine25.chain25.ChainSpec` -> ``run_chain``. The body
+    keys are 2.3's chain op verbatim (``engine/worker.py``'s
+    ``_do_generate_chain``): the two workers are unrelated code, but the body of
+    a chain job is the same geometry in both, and the app's chain adapter builds
+    one payload shape for whichever engine is loaded.
+
+    The ``done`` event carries ``chain`` -- the full layout + metadata dict, in
+    2.3's shape, so a client that already reads ``chain.total_px`` /
+    ``chain.all_junctions`` needs no branch -- ALONGSIDE the same job-level keys
+    the single path's ``done`` carries (``peak_vram_mb`` and friends), because
+    the app stores those from one code path regardless of the job kind.
+    """
+    # BEFORE the load check: this is a ruling on the request, and a payload that
+    # names a feature the engine does not have should say so whether or not a
+    # model happens to be resident.
+    refused = [key for key in CHAIN_UNSUPPORTED_KEYS if key in msg]
+    if refused:
+        raise RuntimeError(
+            "engine25 worker: generate_chain received field(s) the LTX 2.5 chain does not "
+            f"implement: {', '.join(refused)}. These are refused at the API "
+            "(services/engines/ltx25/adapter.py CHAIN_REJECT_TABLE), so their arrival here "
+            "means the reject table and the payload builder have drifted apart."
+        )
+
+    if _PIPE is None:
+        raise RuntimeError("generate_chain before load")
+
+    from engine25.chain25 import (  # noqa: PLC0415 -- deliberately lazy (see module docstring)
+        ChainClipSpec,
+        ChainSpec,
+        run_chain,
+    )
+    from engine25.pipeline25 import image_conditionings  # noqa: PLC0415
+
+    raw_clips = msg.get("clips") or []
+    if not raw_clips:
+        raise RuntimeError("engine25 worker: generate_chain needs a non-empty 'clips' list")
+
+    seed = int(msg["seed"])
+    clips = [
+        ChainClipSpec(
+            prompt=str(clip["prompt"]),
+            num_frames=int(clip["num_frames"]),
+            # Only clip 0 may carry them (the API schema enforces that); parsing
+            # every clip's list anyway keeps this a payload reader rather than a
+            # second place that knows the rule.
+            images=image_conditionings(clip.get("images") or []),
+        )
+        for clip in raw_clips
+    ]
+
+    spec = ChainSpec(
+        clips=clips,
+        width=int(msg["width"]),
+        height=int(msg["height"]),
+        frame_rate=float(msg["frame_rate"]),
+        seed=seed,
+        overlap_frames=int(msg["overlap_frames"]),
+        overlap_strength=float(msg["overlap_strength"]),
+        output_path=str(msg["output_path"]),
+        num_steps=int(msg.get("num_steps", 0)),
+        chunked_upsample=bool(msg.get("chunked_upsample", False)),
+        # Absent -> None -> chain_math's "standard" preset. The app sends the key
+        # only when the request opted off standard, so the default payload and
+        # the default geometry stay one thing.
+        stage2_window=msg.get("stage2_window") or None,
+    )
+
+    _log(
+        f"generate_chain {spec.width}x{spec.height} clips={len(clips)} "
+        f"frames={[c.num_frames for c in clips]} seed={seed} "
+        f"overlap={spec.overlap_frames}/{spec.overlap_strength} "
+        f"chunked_upsample={spec.chunked_upsample} "
+        f"stage2win={spec.stage2_window or 'standard'}"
+    )
+
+    result = run_chain(_PIPE, spec, _emit_progress)
+    meta = result.metadata
+    ltx25 = meta.get("ltx25") or {}
+    vram = ltx25.get("vram") or {}
+
+    # The chain's GENERATE_REPORT: one line, the phase ledger included, so a run
+    # that was only ever watched through the worker log still says where its wall
+    # clock and its VRAM peak went. The full metadata rides in the ``done`` event
+    # rather than here -- this line is the human-readable summary.
+    _log(
+        "CHAIN_REPORT "
+        + json.dumps(
+            {
+                "output": result.output_path,
+                "n_clips": meta.get("n_clips"),
+                "n_tiles": meta.get("n_tiles"),
+                "total_px": meta.get("total_px"),
+                "seeds": meta.get("seeds"),
+                "wall_s": meta.get("wall_s"),
+                "vram_peak_mb": meta.get("vram_peak_mb"),
+                "stage1_sampler": ltx25.get("stage1_sampler"),
+                "chunked_upsample": ltx25.get("chunked_upsample"),
+                "stage2_window": ltx25.get("stage2_window"),
+                "vram": vram,
+                "phases": ltx25.get("phases"),
+            },
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+
+    _emit(
+        "done",
+        seed_used=seed,
+        sampler=_PIPE.sampler,
+        # Same key names and units (MiB) as the single path's done, from the
+        # same per-phase peaks: the app reads these off one code path.
+        peak_vram_mb=_gib_to_mb(vram.get("peak_allocated_gib")),
+        peak_vram_reserved_mb=_gib_to_mb(vram.get("peak_reserved_gib")),
+        rss_peak_gib=vram.get("rss_peak_gib"),
+        seconds=meta.get("wall_s"),
+        # The chain's frame count is the ASSEMBLED timeline, not any one clip's.
+        num_frames=meta.get("total_px"),
+        encode_fps=ltx25.get("encode_fps"),
+        size_bytes=ltx25.get("size_bytes"),
+        phases=ltx25.get("phases"),
+        # 2.3's chain contract: the whole layout + metadata under one key.
+        chain=meta,
+    )
+
+
 def _gib_to_mb(value: float | None) -> int | None:
     return None if value is None else int(round(value * 1024))
 
@@ -373,17 +593,13 @@ def main() -> None:
                 _emit("error", detail=_detail(exc))
             continue
         if op == "generate_chain":
-            # Chain / retake / end-source are out of scope for LTX 2.5 v1 and
-            # are rejected with a 422 at the API long before here; this is the
-            # backstop for a payload that arrived another way.
-            _log("op='generate_chain' is not supported by the LTX 2.5 engine (v1)")
-            _emit(
-                "error",
-                detail=(
-                    "engine25 worker: generate_chain is not supported by the LTX 2.5 engine "
-                    "(v1 scope: single two-stage T2V/I2V generation)"
-                ),
-            )
+            try:
+                _do_generate_chain(msg)
+            except BaseException as exc:  # noqa: BLE001
+                # Same regime as ``generate``: a failed job is reported and the
+                # process stays alive. Only a failed LOAD is fatal.
+                _log("CHAIN_FAILED")
+                _emit("error", detail=_detail(exc))
             continue
         _log(f"ignoring unknown op={op!r}")
 
@@ -396,37 +612,20 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _selftest_generate(argv: list[str]) -> int:
-    """Load + generate once (or twice) from the command line, then report JSON.
+def _add_load_arguments(parser) -> None:
+    """The model-path + load-knob arguments both selftests share.
 
-    Drives ``_do_load`` / ``_do_generate`` with synthesised protocol messages so
-    the measured path is the shipped one. ``--rounds 2`` with an unchanged seed
-    is the determinism probe: the two mp4 digests are compared and reported.
+    One definition, because a chain selftest that spelled ``--video-vae``
+    differently from the single one would be a second contract to remember for
+    no reason -- and because the two must build the SAME ``load`` message: that
+    message is the thing under test in both.
     """
-    import argparse
-    import hashlib
-    import time
-
-    parser = argparse.ArgumentParser(prog="engine25.worker --selftest-generate")
     parser.add_argument("--transformer", required=True)
     parser.add_argument("--text-encoder", required=True)
     parser.add_argument("--text-encoder-assets", default=None)
     parser.add_argument("--video-vae", required=True)
     parser.add_argument("--audio-vae", required=True)
     parser.add_argument("--spatial-upsampler", required=True)
-    parser.add_argument(
-        "--output",
-        required=True,
-        help="mp4 path; with --rounds >1 the round number goes BEFORE the suffix (out.r1.mp4), "
-        "because PyAV picks the container from the extension and would refuse 'out.mp4.1'",
-    )
-    parser.add_argument("--prompt", default="A calm sunlit kitchen, steam rising from a cup of tea.")
-    parser.add_argument("--width", type=int, default=320)
-    parser.add_argument("--height", type=int, default=192)
-    parser.add_argument("--num-frames", type=int, default=25)
-    parser.add_argument("--frame-rate", type=float, default=24.0)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--blocks-on-gpu", type=int, default=None)
     parser.add_argument("--te-layers-on-gpu", type=int, default=None)
     parser.add_argument("--no-cache-weights", action="store_true")
@@ -435,10 +634,10 @@ def _selftest_generate(argv: list[str]) -> int:
         action="store_true",
         help="leave cuDNN algorithm selection free (the audio vocoder then varies run to run)",
     )
-    parser.add_argument("--image", action="append", default=[], help="conditioning image (repeatable): PATH[,FRAME_IDX[,STRENGTH]]")
-    parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
-    args = parser.parse_args(argv)
 
+
+def _load_message(args) -> dict:
+    """Build the ``{"op":"load"}`` payload from the shared arguments."""
     load_msg = {
         "op": "load",
         "transformer_path": args.transformer,
@@ -457,17 +656,51 @@ def _selftest_generate(argv: list[str]) -> int:
         load_msg["cache_weights"] = False
     if args.non_deterministic:
         load_msg["deterministic"] = False
+    return load_msg
 
-    images = []
-    for spec in args.image:
-        parts = spec.split(",")
-        images.append(
-            {
-                "path": parts[0],
-                "frame_idx": int(parts[1]) if len(parts) > 1 else 0,
-                "strength": float(parts[2]) if len(parts) > 2 else 1.0,
-            }
-        )
+
+def _parse_image_arg(spec: str) -> dict:
+    """``PATH[,FRAME_IDX[,STRENGTH]]`` -> one ``images`` entry."""
+    parts = spec.split(",")
+    return {
+        "path": parts[0],
+        "frame_idx": int(parts[1]) if len(parts) > 1 else 0,
+        "strength": float(parts[2]) if len(parts) > 2 else 1.0,
+    }
+
+
+def _selftest_generate(argv: list[str]) -> int:
+    """Load + generate once (or twice) from the command line, then report JSON.
+
+    Drives ``_do_load`` / ``_do_generate`` with synthesised protocol messages so
+    the measured path is the shipped one. ``--rounds 2`` with an unchanged seed
+    is the determinism probe: the two mp4 digests are compared and reported.
+    """
+    import argparse
+    import hashlib
+    import time
+
+    parser = argparse.ArgumentParser(prog="engine25.worker --selftest-generate")
+    _add_load_arguments(parser)
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="mp4 path; with --rounds >1 the round number goes BEFORE the suffix (out.r1.mp4), "
+        "because PyAV picks the container from the extension and would refuse 'out.mp4.1'",
+    )
+    parser.add_argument("--prompt", default="A calm sunlit kitchen, steam rising from a cup of tea.")
+    parser.add_argument("--width", type=int, default=320)
+    parser.add_argument("--height", type=int, default=192)
+    parser.add_argument("--num-frames", type=int, default=25)
+    parser.add_argument("--frame-rate", type=float, default=24.0)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument("--image", action="append", default=[], help="conditioning image (repeatable): PATH[,FRAME_IDX[,STRENGTH]]")
+    parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
+    args = parser.parse_args(argv)
+
+    load_msg = _load_message(args)
+    images = [_parse_image_arg(spec) for spec in args.image]
 
     report: dict = {"load": load_msg, "images": images, "rounds": []}
     started = time.perf_counter()
@@ -513,8 +746,221 @@ def _selftest_generate(argv: list[str]) -> int:
     return 0
 
 
+#: The chain selftest's default per-clip prompts. Two DISTINCT prompts, because
+#: "one text encode per distinct prompt" is part of what the chain path does and
+#: two identical ones would exercise only the dedup branch.
+_SELFTEST_CHAIN_PROMPTS = (
+    "A calm sunlit kitchen, steam rising from a cup of tea on a wooden table.",
+    "The same kitchen as the afternoon light fades, the steam thinning to nothing.",
+)
+
+
+def _selftest_chain(argv: list[str]) -> int:
+    """Load + run one clip chain from the command line, then report JSON (gate G2).
+
+    Drives ``_do_load`` / :func:`_do_generate_chain` with synthesised protocol
+    messages -- the SAME handlers the ``@@LTX@@`` protocol dispatches to -- so a
+    green run is evidence about the shipped path. The framed events are captured
+    on their way out, which is what makes the RECEIPTS checkable too: the report
+    carries the ``done`` event verbatim (its ``chain`` block is the layout +
+    metadata a client reads) and the whole ``progress`` series with its
+    ``outer_index`` / ``outer_total`` positions, so "does a chain say which clip
+    it is on" is answered by the run rather than by reading the code.
+
+    ``stage2_window`` is deliberately not an argument: the default chain is what
+    is under test, and the app sends that key only when a request opted off
+    "standard". ``--rounds 2`` at an unchanged seed is the determinism probe.
+    """
+    import argparse
+    import hashlib
+    import time
+
+    parser = argparse.ArgumentParser(prog="engine25.worker --selftest-chain")
+    _add_load_arguments(parser)
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="mp4 path; with --rounds >1 the round number goes BEFORE the suffix (out.r1.mp4), "
+        "because PyAV picks the container from the extension and would refuse 'out.mp4.1'",
+    )
+    parser.add_argument(
+        "--prompt",
+        action="append",
+        default=[],
+        help="per-clip prompt (repeatable); the default is two distinct prompts",
+    )
+    parser.add_argument("--clips", type=int, default=2, help="number of clips (default 2)")
+    parser.add_argument("--num-frames", type=int, default=25, help="pixel frames PER CLIP")
+    parser.add_argument("--width", type=int, default=320)
+    parser.add_argument("--height", type=int, default=192)
+    parser.add_argument("--frame-rate", type=float, default=24.0)
+    parser.add_argument("--seed", type=int, default=12345)
+    parser.add_argument("--overlap-frames", type=int, default=2, help="K_v, video latent frames")
+    parser.add_argument("--overlap-strength", type=float, default=0.5)
+    chunked = parser.add_mutually_exclusive_group()
+    chunked.add_argument("--chunked-upsample", dest="chunked_upsample", action="store_true")
+    chunked.add_argument("--no-chunked-upsample", dest="chunked_upsample", action="store_false")
+    parser.set_defaults(chunked_upsample=False)
+    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument(
+        "--image",
+        action="append",
+        default=[],
+        help="clip-0 conditioning image (repeatable): PATH[,FRAME_IDX[,STRENGTH]]",
+    )
+    parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
+    args = parser.parse_args(argv)
+
+    from chain_math import px_from_v_latent, v_latent_frames  # noqa: PLC0415
+
+    load_msg = _load_message(args)
+    images = [_parse_image_arg(spec) for spec in args.image]
+
+    prompts = list(args.prompt) or list(_SELFTEST_CHAIN_PROMPTS)
+    if len(prompts) < args.clips:
+        # Cycle rather than repeat the last one: a chain whose clips all share a
+        # prompt is a different (easier) job than one whose clips differ.
+        prompts = [prompts[i % len(prompts)] for i in range(args.clips)]
+    prompts = prompts[: args.clips]
+
+    clip_frames = [args.num_frames] * args.clips
+    expected_f_total = sum(v_latent_frames(f) for f in clip_frames) - args.overlap_frames * (
+        args.clips - 1
+    )
+
+    # Every framed event, captured on its way to stdout. Patching the module
+    # global is what leaves the handlers themselves untouched -- the run under
+    # observation is the shipped one, and the lines still reach stdout.
+    events: list[dict] = []
+    real_emit = _emit
+
+    def _capturing_emit(event: str, **fields: object) -> None:
+        events.append({"event": event, **fields})
+        real_emit(event, **fields)
+
+    globals()["_emit"] = _capturing_emit
+    try:
+        report: dict = {
+            "gate": "G2",
+            "load": load_msg,
+            "geometry": {
+                "clips": clip_frames,
+                "prompts": prompts,
+                "width": args.width,
+                "height": args.height,
+                "frame_rate": args.frame_rate,
+                "seed": args.seed,
+                "overlap_frames": args.overlap_frames,
+                "overlap_strength": args.overlap_strength,
+                "chunked_upsample": args.chunked_upsample,
+                "stage2_window": "standard (the key is omitted from the payload)",
+                "images": images,
+            },
+            "rounds": [],
+        }
+
+        started = time.perf_counter()
+        _do_load(load_msg)
+        report["load_seconds"] = round(time.perf_counter() - started, 2)
+        assert _PIPE is not None
+        report["build"] = _PIPE.build_report
+        report["sampler"] = _PIPE.sampler
+
+        digests = []
+        for index in range(1, max(1, args.rounds) + 1):
+            base = Path(args.output)
+            out = str(base if args.rounds <= 1 else base.with_name(f"{base.stem}.r{index}{base.suffix}"))
+            events.clear()
+            round_started = time.perf_counter()
+            _do_generate_chain(
+                {
+                    "op": "generate_chain",
+                    "width": args.width,
+                    "height": args.height,
+                    "frame_rate": args.frame_rate,
+                    "num_steps": 8,
+                    "seed": args.seed,
+                    "overlap_frames": args.overlap_frames,
+                    "overlap_strength": args.overlap_strength,
+                    "chunked_upsample": args.chunked_upsample,
+                    "output_path": out,
+                    "clips": [
+                        {
+                            "prompt": prompts[i],
+                            "num_frames": args.num_frames,
+                            "images": images if i == 0 else [],
+                        }
+                        for i in range(args.clips)
+                    ],
+                }
+            )
+            seconds = time.perf_counter() - round_started
+
+            done = next((e for e in events if e["event"] == "done"), None)
+            if done is None:
+                raise RuntimeError("the chain produced no terminal done event")
+            chain_meta = done.get("chain") or {}
+            progress = [e for e in events if e["event"] == "progress"]
+
+            # Per-stage receipts: how many, and which outer positions were named.
+            by_stage: dict[str, dict] = {}
+            for event in progress:
+                entry = by_stage.setdefault(str(event.get("stage")), {"count": 0, "outer": []})
+                entry["count"] += 1
+                pair = [event.get("outer_index"), event.get("outer_total")]
+                if pair[1] is not None and pair not in entry["outer"]:
+                    entry["outer"].append(pair)
+
+            digest = hashlib.sha256(Path(out).read_bytes()).hexdigest()
+            digests.append(digest)
+            report["rounds"].append(
+                {
+                    "round": index,
+                    "output": out,
+                    "sha256": digest,
+                    "size_bytes": Path(out).stat().st_size,
+                    "seconds": round(seconds, 2),
+                    # The done event VERBATIM: its chain block, its VRAM peaks
+                    # and the job-level keys the app reads, exactly as framed.
+                    "done": done,
+                    # Independent arithmetic through the SAME shared pure module
+                    # the engine used, so "total_px agrees with the layout" is a
+                    # cross-check rather than a restatement of one number.
+                    "layout_check": {
+                        "total_px": chain_meta.get("total_px"),
+                        "f_total_latent": chain_meta.get("f_total_latent"),
+                        "seg_latent": chain_meta.get("seg_latent"),
+                        "n_tiles": chain_meta.get("n_tiles"),
+                        "all_junctions": chain_meta.get("all_junctions"),
+                        "expected_f_total": expected_f_total,
+                        "expected_total_px": px_from_v_latent(expected_f_total),
+                    },
+                    "progress": {
+                        "count": len(progress),
+                        "with_outer": sum(1 for e in progress if e.get("outer_total") is not None),
+                        "by_stage": by_stage,
+                        "events": progress,
+                    },
+                }
+            )
+
+        if len(digests) > 1:
+            report["same_seed_sha_identical"] = len(set(digests)) == 1
+    finally:
+        globals()["_emit"] = real_emit
+
+    text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    if args.report:
+        Path(args.report).write_text(text, encoding="utf-8")
+    print(text)
+    return 0
+
+
 if __name__ == "__main__":
     if "--selftest-generate" in sys.argv:
         rest = [a for a in sys.argv[1:] if a != "--selftest-generate"]
         raise SystemExit(_selftest_generate(rest))
+    if "--selftest-chain" in sys.argv:
+        rest = [a for a in sys.argv[1:] if a != "--selftest-chain"]
+        raise SystemExit(_selftest_chain(rest))
     main()

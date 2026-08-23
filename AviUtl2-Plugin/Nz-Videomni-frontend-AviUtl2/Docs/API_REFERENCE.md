@@ -380,7 +380,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 
 ### 5.2 GenerateChainRequest(`api/models.py::GenerateChainRequest`)
 
-> **ベースモデルにLTX 2.5を選ぶと、本節のフィールドのうち11個が422になる**(2026-08-23。連結生成そのものは動く)。断られるのは`source_video`／`source_audio`／`retake`／`end_source`／`reference_video_id`／`loras`／`nag_enabled`／`pipeline`(`"distilled"`以外)／`vae_mode`(`"default"`以外)／`attention_backend`(`"sdpa"`以外)／`keep_resident`で、いずれも**既定値と違うときだけ**エラーコード`FEATURE_UNSUPPORTED`(422)になり、**最初の1件だけ**が名指しされる。判定はジョブ作成前・素材の404より先。**全34フィールドの4分類表(422系11／無視7／動作11／従属5)の正本はバックエンド[`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.10(f)** で、先回りのグレーアウトに使う機能名は`GET /models`の`unsupported_features`(§3.5)から取る。
+> **ベースモデルにLTX 2.5を選ぶと、本節のフィールドのうち9個が422になる**(2026-08-23。連結生成そのもの・V2V継続・A2Vは動く)。断られるのは`retake`／`end_source`／`reference_video_id`／`loras`／`nag_enabled`／`pipeline`(`"distilled"`以外)／`vae_mode`(`"default"`以外)／`attention_backend`(`"sdpa"`以外)／`keep_resident`で、いずれも**既定値と違うときだけ**エラーコード`FEATURE_UNSUPPORTED`(422)になり、**最初の1件だけ**が名指しされる。判定はジョブ作成前・素材の404より先。**`source_video`と`source_audio`は同日に422を抜けて動作側へ移った**ので、V2V継続・A2V・長尺A2V(複数クリップ)・Singleタブの`stage2_window="full_length"`はいずれもLTX 2.5で通る。**全34フィールドの4分類表(422系9／無視7／動作13／従属5)の正本はバックエンド[`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.10(f)** で、先回りのグレーアウトに使う機能名は`GET /models`の`unsupported_features`(§3.5。現在10件)から取る。
 
 共通: width/height/crop_output/frame_rate/num_inference_steps/guidance_scale/seed/pipeline は上と同じ制約。加えて:
 

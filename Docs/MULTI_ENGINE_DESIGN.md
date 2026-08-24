@@ -4,7 +4,7 @@
 
 **生きた文書（マルチエンジン化の設計正本）。** ヘッダーのドロップダウンで「LTX 2.3」「LTX 2.5」といった**ベースモデル**（動画生成AIの土台となるモデル一式）を切り替え、それぞれに適した**推論エンジン**（実際に計算を回す実装）でサーバーが動く仕組みを記述する。**本書には現在の姿だけを現在形で書く。** どういう順序でここへ辿り着いたか（設計当時の見立て・実装での訂正・敵対的レビューの指摘）は記録簿側が保持しているので、本書は繰り返さない——起票とクローズの記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-97（土台）・§3-98（LTX 2.5）、検証と実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §68（土台）・§69（LTX 2.5）にある。
 
-**現在の実装範囲**: 土台と、その上に載る2系統（LTX 2.3 と LTX 2.5）が動いている。**LTX 2.5 で使えるのは、基本生成（テキストから動画・画像から動画）と、2026-08-23 に加わったクリップ連結（Chained）・V2V 継続・A2V〔Single・長尺・バッチ〕と、2026-08-24 に加わったスタイル LoRA・IC-LoRA〔参照動画による制御。1 本の参照動画をクリップごとに配る長尺 IC-LoRA を含む〕である**（§5.6）。**まだ使えないのは Retake・素材（末尾）・Outpainting・NAG／VSF・PrunaVAED・SageAttention・`keep_resident`・非蒸留パイプラインの8件である。** クリップ連結・V2V 継続・A2V は**オーナーの実機確認に合格済み**（クリップ連結は 2026-08-23、V2V 継続と A2V は 2026-08-24。長尺 A2V はオーナー裁定により合格扱い）、**スタイル LoRA と IC-LoRA は機械ゲート・実機ゲートとも全項目合格していて、残るのはオーナーの目視だけである**。その後続作業は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102 で管理する（**次に着手するのは高速化技術の前倒しである**）。
+**現在の実装範囲**: 土台と、その上に載る2系統（LTX 2.3 と LTX 2.5）が動いている。**LTX 2.5 で使えるのは、基本生成（テキストから動画・画像から動画）と、2026-08-23 に加わったクリップ連結（Chained）・V2V 継続・A2V〔Single・長尺・バッチ〕と、2026-08-24 に加わったスタイル LoRA・IC-LoRA〔参照動画による制御。1 本の参照動画をクリップごとに配る長尺 IC-LoRA を含む〕である**（§5.6）。**まだ使えないのは Retake・素材（末尾）・Outpainting・NAG／VSF・PrunaVAED・SageAttention・`keep_resident`・非蒸留パイプラインの8件である。** **これらはすべてオーナーの実機確認に合格済みである**（クリップ連結は 2026-08-23、V2V 継続と A2V は 2026-08-24、スタイル LoRA と IC-LoRA は 2026-08-25。長尺 A2V はオーナー裁定により合格扱い）。その後続作業は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-102 で管理する（**次に着手するのは高速化技術の前倒しである**）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -616,7 +616,7 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 
 **既定の強度は動かしていない。** 前提実験では LTX 2.5 でLoRAがやや弱く効くことが分かっている（ぼけ取りの復元率が強度1.0で46%・1.3で136%）が、同等化のスコープでは既定を変えない。強めに効かせたい利用者は画面から強度を指定できる（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §74.9(1)）。
 
-**この段で `unsupported_features` は8件になった**（`retake` / `end_source` / `two_stage_hq` / `outpaint` / `nag` / `prune_vaed` / `sage_attention` / `keep_resident`）。API 契約への反映は [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(d)・(f)。**オーナーの目視は未了**である。
+**この段で `unsupported_features` は8件になった**（`retake` / `end_source` / `two_stage_hq` / `outpaint` / `nag` / `prune_vaed` / `sage_attention` / `keep_resident`）。API 契約への反映は [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(d)・(f)。**オーナーの目視は 2026-08-25 に合格した**——AviUtl2 の操作パネルからスタイルLoRAと IC-LoRA の両方を試し、いずれも効果があることを確認しての判定である（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §74.12）。
 
 #### 続き: 高速化第1弾＝fusedカーネルと先読み block swap（2026-08-24）
 

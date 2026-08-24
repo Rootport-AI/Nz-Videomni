@@ -228,10 +228,13 @@ class _BlockState:
 class PinnedStagingPool:
     """Grow-only pinned staging buffers, owned by the resident BlockSwapService.
 
-    Deliberately NOT per-job: cudaHostAlloc of ~370MB takes ~100ms and gets less
-    reliable as the process fragments host memory, so re-allocating every job is
-    how "prefetch mysteriously stopped working at job 7" happens. The cost is
-    ~740MB of RAM held for the process lifetime (documented in the README).
+    Deliberately NOT per-job: a cudaHostAlloc this size takes ~100ms and gets
+    less reliable as the process fragments host memory, so re-allocating every
+    job is how "prefetch mysteriously stopped working at job 7" happens. The
+    cost is two slots sized to the model's LARGEST block, held for the process
+    lifetime: ~416MB on LTX 2.5 (2 x 207.9MB) and ~508MB on LTX 2.3
+    (2 x 253.8MB, growing with LoRA -- 260.8 / 266.8 / 277.9MB measured).
+    Documented in the README.
     """
 
     def __init__(self, num_slots: int = _NUM_STAGING_SLOTS) -> None:

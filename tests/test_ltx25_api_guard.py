@@ -170,8 +170,14 @@ def test_crop_output_is_not_refused_on_ltx25(two_family_client):
 
 
 def test_ignored_fields_do_not_fail_a_job_on_ltx25(two_family_client):
-    """無視+ログ側は**通す**。block_swap_prefetch等は既定でONなので、ここで
-    拒否したら素のT2Vが通らなくなる。"""
+    """無視+ログ側は**通す**。素のT2Vでも負のプロンプト系の項目は一式送られて
+    くるので、ここで拒否したら通常の生成が一度も通らない。
+
+    block_swap_prefetch と fused_gguf_dequant_kernel は高速化第1弾で
+    「無視+ログ」から**honoured（実際に効く）**へ移った。ただし本文で明示的に
+    False を送る形は変えていない。どちらの分類でも202で受理されること自体は
+    変わらず、この一本は「受理される」という利用者から見た約束を守る番人で
+    あって、内部の分類を写した鏡ではないからである。"""
     _activate(two_family_client, "LTX25")
     body = {
         **BASE_REQUEST,
@@ -183,6 +189,35 @@ def test_ignored_fields_do_not_fail_a_job_on_ltx25(two_family_client):
     }
     r = two_family_client.post("/api/v1/generate", json=body)
     assert r.status_code == 202, r.text
+
+
+def test_the_acceleration_echoes_reach_metadata_json_on_ltx25(two_family_client):
+    """高速化第1弾の配線を、mockで端から端まで1本通す。
+
+    2.5のアダプタは done イベントの
+    ``block_swap_prefetch_used`` / ``fused_gguf_dequant_kernel_used`` を
+    そのまま中継し、pipeline_manager が metadata.json へ書く。mockバックエンド
+    はGPUを持たず何もエコーしないので、正しい答えは**null**である——「実際に
+    何が起きたか」を報告する欄に、誰も報告していないのに "off" と書いたら、
+    それはmockが実機のふりをしたことになる。実機での "on"/"on->off" は
+    ゲートG5で確かめる。
+
+    欄そのものが metadata.json に存在することを見るのがこの一本の値打ちで、
+    キーごと消えていれば実機で開通しても利用者には何も見えない。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post("/api/v1/generate", json=BASE_REQUEST)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert two_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = two_family_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    assert "block_swap_prefetch_used" in meta and "fused_gguf_dequant_kernel_used" in meta
+    assert meta["block_swap_prefetch_used"] is None
+    assert meta["fused_gguf_dequant_kernel_used"] is None
 
 
 def test_the_guard_runs_before_the_upload_and_lora_lookups(two_family_client):
@@ -329,8 +364,12 @@ def test_a_plain_chain_survives_the_optional_knobs_on_ltx25(two_family_client):
 
 
 def test_the_ignored_chain_fields_do_not_fail_a_job_on_ltx25(two_family_client):
-    """無視+ログ側は**通す**。block_swap_prefetch等は既定でONなので、ここで
-    拒否したら素のChainedが一度も通らない。"""
+    """無視+ログ側は**通す**。素のChainedでも負のプロンプト系の項目は一式
+    送られてくるので、ここで拒否したら連結生成が一度も通らない。
+
+    単発側の双子と同じく、block_swap_prefetch と fused_gguf_dequant_kernel は
+    高速化第1弾でhonouredへ移った。202で受理されるという約束は分類が変わっても
+    同じで、それを見張るのがこの一本である。"""
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate/chain",

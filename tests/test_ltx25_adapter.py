@@ -396,10 +396,13 @@ def test_ignored_fields_are_logged_only_when_set(caplog):
 
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="ltx25.runner"):
-        ltx25._log_ignored(_request(negative_prompt="blurry", block_swap_prefetch=False))
+        # ``vsf_scale`` rather than the acceleration knobs that used to stand
+        # here: 高速化第1弾 moved those two into HONOURED_FIELDS, so a needle
+        # naming them would now be testing a field this table no longer has.
+        ltx25._log_ignored(_request(negative_prompt="blurry", vsf_scale=2.0))
     messages = [r.getMessage() for r in caplog.records if "ignores" in r.getMessage()]
     assert len(messages) == 1
-    assert "negative_prompt" in messages[0] and "block_swap_prefetch" in messages[0]
+    assert "negative_prompt" in messages[0] and "vsf_scale" in messages[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -586,13 +589,14 @@ def test_the_chain_ignore_table_is_logged_only_when_set(caplog):
 
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="ltx25.runner"):
+        # ``vsf_scale`` for the same reason as the single-path twin above.
         ltx25._log_ignored(
-            _chain_request(negative_prompt="blurry", block_swap_prefetch=False),
+            _chain_request(negative_prompt="blurry", vsf_scale=2.0),
             ltx25.CHAIN_IGNORED_FIELDS,
         )
     messages = [r.getMessage() for r in caplog.records if "ignores" in r.getMessage()]
     assert len(messages) == 1
-    assert "negative_prompt" in messages[0] and "block_swap_prefetch" in messages[0]
+    assert "negative_prompt" in messages[0] and "vsf_scale" in messages[0]
 
 
 def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
@@ -669,6 +673,13 @@ def test_the_lora_keywords_are_no_longer_out_of_scope_material(ltx25_paths, tmp_
 # are the contract (JSON preserves insertion order, so a reorder IS a byte
 # change), and the payload is BUILT here rather than transcribed.
 
+#: The two acceleration keys 高速化第1弾 added, in adapter order. They are the
+#: TAIL of every payload rather than part of the golden lists below, because the
+#: adapter appends them LAST — after every other additive block — so the older
+#: blocks' positions are provably untouched. Both pydantic defaults are True, so
+#: a plain request carries both and every key-order assertion below ends here.
+GOLDEN_ACCEL_KEYS_25 = ["block_swap_prefetch", "fused_gguf_dequant_kernel"]
+
 #: The default chain payload's key order. ``stage2_window`` is deliberately
 #: absent: it is additive and rides only when the request opted off "standard".
 GOLDEN_CHAIN_KEYS_25 = [
@@ -710,6 +721,10 @@ def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
         "seed_used": 123,
         "peak_vram_mb": 7000,
         "chain": {"total_px": 41, "num_clips": 2},
+        # 高速化第1弾: the worker echoes what ACTUALLY happened for both knobs,
+        # and the adapter relays it verbatim (see the outcome test below).
+        "block_swap_prefetch_used": "on",
+        "fused_gguf_dequant_kernel_used": "on",
     }
     return be
 
@@ -721,7 +736,7 @@ def test_chain_payload_golden_for_a_plain_two_clip_chain(tmp_path):
 
     assert len(captured) == 1
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
     assert payload == {
         "op": "generate_chain",
         "width": 512,
@@ -737,7 +752,36 @@ def test_chain_payload_golden_for_a_plain_two_clip_chain(tmp_path):
             {"prompt": "a quiet harbour at first light", "num_frames": 25, "images": []},
             {"prompt": "a quiet harbour at first light", "num_frames": 25, "images": []},
         ],
+        # Both pydantic defaults are True, so a PLAIN chain asks for both — the
+        # additive contract is proved from the other side by
+        # ``test_chain_payload_omits_the_acceleration_keys_when_explicitly_off``.
+        "block_swap_prefetch": True,
+        "fused_gguf_dequant_kernel": True,
     }
+
+
+def test_chain_payload_omits_the_acceleration_keys_when_explicitly_off(tmp_path):
+    """The ADDITIVE half of 高速化第1弾's contract, and the reason the adapter
+    writes ``if chain.<field>:`` rather than sending the boolean.
+
+    Turning a knob off must leave the payload byte-identical to the
+    pre-acceleration golden, not send ``False``: an absent key already means off
+    on the worker side, so a sent ``False`` would be a second spelling of the
+    same silence — and the two spellings would drift."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(block_swap_prefetch=False, fused_gguf_dequant_kernel=False),
+        output_dir=tmp_path / "off",
+    )
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_25
+
+    # ...and one knob off leaves exactly the OTHER key, in adapter order.
+    be.generate_chain(
+        _chain_request(block_swap_prefetch=False),
+        output_dir=tmp_path / "half",
+    )
+    assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + ["fused_gguf_dequant_kernel"]
 
 
 def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
@@ -781,7 +825,7 @@ def test_chain_payload_carries_stage2_window_only_when_non_default(tmp_path):
     )
     assert captured[1]["stage2_window"] == "high_resolution"
     # ...appended AFTER the golden keys, so the default key order is untouched.
-    assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + ["stage2_window"]
+    assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + ["stage2_window"] + GOLDEN_ACCEL_KEYS_25
 
 
 def test_chain_payload_carries_chunked_upsample(tmp_path):
@@ -813,7 +857,7 @@ def test_chain_payload_carries_the_v2v_source_block(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["source"]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["source"] + GOLDEN_ACCEL_KEYS_25
     assert list(payload["source"]) == GOLDEN_SOURCE_KEYS_25
     assert payload["source"] == {"path": str(tail), "context_frames": 25}
     # The two source modes are mutually exclusive in the schema; the payload
@@ -835,7 +879,11 @@ def test_the_v2v_source_block_needs_both_halves(tmp_path):
     be.generate_chain(_chain_request(), output_dir=tmp_path / "b", source_context_frames=25)
     assert "source" not in captured[1]
     # ...and a plain chain is byte-identical to the golden either way.
-    assert list(captured[0]) == list(captured[1]) == GOLDEN_CHAIN_KEYS_25
+    assert (
+        list(captured[0])
+        == list(captured[1])
+        == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    )
 
 
 def test_chain_payload_carries_the_a2v_audio_source_block(tmp_path):
@@ -851,7 +899,7 @@ def test_chain_payload_carries_the_a2v_audio_source_block(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source"]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source"] + GOLDEN_ACCEL_KEYS_25
     assert list(payload["audio_source"]) == GOLDEN_AUDIO_SOURCE_KEYS_25
     assert payload["audio_source"] == {"path": str(wav)}
     assert "source" not in payload
@@ -870,7 +918,10 @@ def test_chain_payload_carries_a2v_with_the_full_length_window(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source", "stage2_window"]
+    assert (
+        list(payload)
+        == GOLDEN_CHAIN_KEYS_25 + ["audio_source", "stage2_window"] + GOLDEN_ACCEL_KEYS_25
+    )
     assert payload["stage2_window"] == "full_length"
     assert len(payload["clips"]) == 1
 
@@ -888,7 +939,7 @@ def test_chain_payload_carries_a2v_across_a_long_chain(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source"]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["audio_source"] + GOLDEN_ACCEL_KEYS_25
     assert len(payload["clips"]) == 3
     assert all(set(clip) == {"prompt", "num_frames", "images"} for clip in payload["clips"])
 
@@ -921,7 +972,7 @@ def test_chain_payload_carries_the_style_lora_block(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["loras"]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["loras"] + GOLDEN_ACCEL_KEYS_25
     assert list(payload["loras"][0]) == GOLDEN_LORA_ENTRY_KEYS_25
     assert payload["loras"] == [{"path": str(adapter), "strength": 1.0}]
     # A style-only chain asks for no reference video, so the key is absent —
@@ -961,7 +1012,10 @@ def test_chain_payload_carries_the_reference_block_for_a_long_chain(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["loras", "reference_video"]
+    assert (
+        list(payload)
+        == GOLDEN_CHAIN_KEYS_25 + ["loras", "reference_video"] + GOLDEN_ACCEL_KEYS_25
+    )
     assert list(payload["reference_video"]) == GOLDEN_REFERENCE_KEYS_25
     assert payload["reference_video"] == {
         "path": str(ref),
@@ -995,7 +1049,7 @@ def test_chain_payload_omits_both_lora_blocks_by_default(tmp_path):
     captured: list[dict] = []
     be = _capturing_chain_backend(captured)
     be.generate_chain(_chain_request(), output_dir=tmp_path / "out", lora_paths=[])
-    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_25
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
 
 
 def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path):
@@ -1008,14 +1062,16 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
     assert outcome.chain_metadata == {"total_px": 41, "num_clips": 2}
     assert outcome.seed_used == 123
     assert outcome.peak_vram_mb == 7000
-    # The chain scope is SDPA-only, and every OTHER acceleration relay names a
-    # 2.3 code path this engine does not have — reporting "off" would claim the
+    # The chain scope is SDPA-only, and the two relays that are STILL None name
+    # 2.3 code paths this engine does not have — reporting "off" would claim the
     # knob exists here and was left alone.
     assert outcome.attention_used == "sdpa"
-    assert outcome.block_swap_prefetch_used is None
     assert outcome.keep_resident_used is None
-    assert outcome.fused_gguf_dequant_kernel_used is None
     assert outcome.vae_mode_used is None
+    # 高速化第1弾: these two DO name engine25 code paths now, so the worker's
+    # echo rides through to metadata.json instead of being dropped.
+    assert outcome.block_swap_prefetch_used == "on"
+    assert outcome.fused_gguf_dequant_kernel_used == "on"
 
 
 def test_chain_crop_output_is_an_app_side_post_process(tmp_path, monkeypatch):
@@ -1084,6 +1140,9 @@ def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
         "event": "done",
         "seed_used": 4242,
         "peak_vram_mb": 7000,
+        # 高速化第1弾: the single-path twin of the chain fake's echo.
+        "block_swap_prefetch_used": "on",
+        "fused_gguf_dequant_kernel_used": "on",
     }
     return be
 
@@ -1094,7 +1153,7 @@ def test_generate_payload_golden_for_a_plain_t2v(tmp_path):
     be.generate(_request(width=512, height=320, num_frames=25, seed=123), tmp_path / "out")
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_GENERATE_KEYS_25
+    assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
     assert payload == {
         "op": "generate",
         "prompt": "a quiet harbour at first light",
@@ -1109,7 +1168,26 @@ def test_generate_payload_golden_for_a_plain_t2v(tmp_path):
         "loras": [],
         "reference_video": None,
         "output_path": str(tmp_path / "out" / "output.mp4"),
+        # Both pydantic defaults are True, so a plain T2V asks for both.
+        "block_swap_prefetch": True,
+        "fused_gguf_dequant_kernel": True,
     }
+
+
+def test_generate_payload_omits_the_acceleration_keys_when_explicitly_off(tmp_path):
+    """The single-path twin of the chain test above: both knobs off restores the
+    pre-acceleration golden exactly, and one knob off leaves exactly one key."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(
+        _request(block_swap_prefetch=False, fused_gguf_dequant_kernel=False),
+        tmp_path / "off",
+    )
+    assert list(captured[0]) == GOLDEN_GENERATE_KEYS_25
+
+    be.generate(_request(fused_gguf_dequant_kernel=False), tmp_path / "half")
+    assert list(captured[1]) == GOLDEN_GENERATE_KEYS_25 + ["block_swap_prefetch"]
+    assert captured[1]["block_swap_prefetch"] is True
 
 
 def test_generate_payload_carries_the_style_lora_entries(tmp_path):
@@ -1124,7 +1202,7 @@ def test_generate_payload_carries_the_style_lora_entries(tmp_path):
     )
 
     payload = captured[0]
-    assert list(payload) == GOLDEN_GENERATE_KEYS_25
+    assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
     assert payload["loras"] == [
         {"path": str(a), "strength": 1.0},
         # ``audio_strength`` spliced in only for the adapter that carries one.
@@ -1202,6 +1280,44 @@ def test_generate_outcome_names_this_engine(tmp_path):
     assert outcome.backend == ltx25.REAL_BACKEND_25
     assert outcome.seed_used == 4242
     assert outcome.attention_used == "sdpa"
+    # 高速化第1弾: the two acceleration echoes engine25 has are relayed; the two
+    # it does not have stay None rather than claiming an untouched "off".
+    assert outcome.block_swap_prefetch_used == "on"
+    assert outcome.fused_gguf_dequant_kernel_used == "on"
+    assert outcome.keep_resident_used is None
+    assert outcome.vae_mode_used is None
+
+
+def test_generate_outcome_relays_a_degrade_verbatim(tmp_path):
+    """The echo is what HAPPENED, not what was asked for: a worker that fell
+    back mid-job says so, and the adapter must not tidy that into "on"."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+        "event": "done",
+        "seed_used": 4242,
+        "peak_vram_mb": 7000,
+        "block_swap_prefetch_used": "on->off",
+        "fused_gguf_dequant_kernel_used": "off",
+    }
+    outcome = be.generate(_request(), tmp_path / "out")
+    assert outcome.block_swap_prefetch_used == "on->off"
+    assert outcome.fused_gguf_dequant_kernel_used == "off"
+
+
+def test_generate_outcome_leaves_the_echoes_none_when_the_worker_is_silent(tmp_path):
+    """A worker too old to echo leaves None — the honest "not reported", which
+    metadata.json shows as null rather than inventing an "off"."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+        "event": "done",
+        "seed_used": 4242,
+        "peak_vram_mb": 7000,
+    }
+    outcome = be.generate(_request(), tmp_path / "out")
+    assert outcome.block_swap_prefetch_used is None
+    assert outcome.fused_gguf_dequant_kernel_used is None
 
 
 # --------------------------------------------------------------------------- #

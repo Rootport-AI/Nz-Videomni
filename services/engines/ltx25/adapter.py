@@ -138,26 +138,33 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
-#: fail a job, with the reason an operator sees in the log. Two kinds live here:
-#: the distilled 2.5 schedule has no CFG and no step count to honour, and the
-#: 2.3 acceleration knobs describe code paths engine25 simply does not have.
-#: Refusing these would be hostile — they are ON by default (block_swap_prefetch,
-#: fused_gguf_dequant_kernel), so a plain T2V request carries them.
+#: fail a job, with the reason an operator sees in the log. What is left here is
+#: ONE kind: the distilled 2.5 schedule has no CFG and no step count to honour,
+#: so the five negative-prompt / step-count knobs describe a mechanism this
+#: engine does not run. Refusing them would be hostile — the frontend sends the
+#: whole schema on every request, so a plain T2V request carries them all.
+#:
+#: ``fused_gguf_dequant_kernel`` AND ``block_swap_prefetch`` LEFT THIS TABLE
+#: with 高速化第1弾 (§3-102): both are real engine25 code paths now — the Triton
+#: dequant kernel patches the 2.5 GGUF transformer AND its Gemma text encoder,
+#: and the prefetch engine rides engine25's own block-swap window. They are ON
+#: by default, so a plain T2V request now genuinely turns both on, and leaving
+#: them classified "ignored" would have been exactly the silent lie the audit
+#: below exists to catch. See :data:`HONOURED_FIELDS`.
 IGNORED_FIELDS: dict[str, str] = {
     "negative_prompt": "LTX 2.5 distilled runs without classifier-free guidance",
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
     "neg_method": "no negative-prompt mechanism in the LTX 2.5 v1 scope",
     "vsf_scale": "no negative-prompt mechanism in the LTX 2.5 v1 scope",
-    "fused_gguf_dequant_kernel": "2.3's Triton dequant kernel is not on this code path",
-    "block_swap_prefetch": "engine25 uses its own block-swap window",
 }
 
 #: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
-#: (see :meth:`_RealBackend25.generate`), ``conditioning_images`` becomes the
-#: ``images`` list, and ``crop_output`` is the app-side ffmpeg centre-crop that
-#: happens after the worker is done. Declared rather than merely implied so the
-#: model_fields audit below can name a home for every field.
+#: (see :meth:`_RealBackend25.generate`), two more ride it as additive
+#: acceleration flags, ``conditioning_images`` becomes the ``images`` list, and
+#: ``crop_output`` is the app-side ffmpeg centre-crop that happens after the
+#: worker is done. Declared rather than merely implied so the model_fields audit
+#: below can name a home for every field.
 #:
 #: ``loras`` / ``reference_video_id`` AND THEIR TWO STRENGTHS JOINED THIS SET
 #: with §3-102's third increment (Style LoRA + IC-LoRA). None of the four is
@@ -167,6 +174,13 @@ IGNORED_FIELDS: dict[str, str] = {
 #: ``reference_video_path`` keyword arguments carrying that material. The two
 #: strengths ARE read from the request, and only shape the ``reference_video``
 #: block. See the needle table in tests/test_ltx25_adapter.py.
+#:
+#: ``block_swap_prefetch`` / ``fused_gguf_dequant_kernel`` JOINED THIS SET with
+#: 高速化第1弾 (§3-102). Unlike the four above they ARE plain request reads: each
+#: rides the payload as a bare ``True`` under the same additive contract 2.3
+#: uses, and the worker echoes back what actually happened
+#: (``block_swap_prefetch_used`` / ``fused_gguf_dequant_kernel_used``) so a
+#: degrade is visible in metadata.json rather than assumed.
 HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -181,6 +195,8 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "reference_video_id",
         "conditioning_attention_strength",
         "reference_video_strength",
+        "block_swap_prefetch",
+        "fused_gguf_dequant_kernel",
     }
 )
 
@@ -246,22 +262,24 @@ CHAIN_REJECT_TABLE: tuple[
     ("keep_resident", "keep_resident", lambda r: bool(r.keep_resident)),
 )
 
-#: The ignore-and-log half. Field-for-field the same seven as
-#: :data:`IGNORED_FIELDS` and for the same two reasons (the distilled schedule
-#: has no CFG and no step count to honour; the 2.3 acceleration knobs name code
-#: paths engine25 does not have) — spelled out rather than aliased so the audit
-#: test reads one schema against one table.
+#: The ignore-and-log half. Field-for-field the same five as
+#: :data:`IGNORED_FIELDS` and for the same one reason (the distilled schedule
+#: has no CFG and no step count to honour) — spelled out rather than aliased so
+#: the audit test reads one schema against one table.
+#:
+#: The two acceleration knobs LEFT THIS TABLE with 高速化第1弾 (§3-102), the
+#: chain twin of the single-path move: engine25 really runs both code paths now,
+#: on every build a chain makes, so both are in :data:`CHAIN_HONOURED_FIELDS`.
 CHAIN_IGNORED_FIELDS: dict[str, str] = {
     "negative_prompt": "LTX 2.5 distilled runs without classifier-free guidance",
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
     "neg_method": "no negative-prompt mechanism in the LTX 2.5 chain scope",
     "vsf_scale": "no negative-prompt mechanism in the LTX 2.5 chain scope",
-    "fused_gguf_dequant_kernel": "2.3's Triton dequant kernel is not on this code path",
-    "block_swap_prefetch": "engine25 uses its own block-swap window",
 }
 
-#: Fields the chain path ACTS ON. Eight ride the worker payload verbatim (see
+#: Fields the chain path ACTS ON. Eight ride the worker payload verbatim and two
+#: more ride it as additive acceleration flags (see
 #: :meth:`_RealBackend25.generate_chain`), ``prompt`` and ``clips`` together
 #: become the per-clip list (effective prompt / num_frames / clip-0 images), and
 #: ``crop_output`` is the app-side ffmpeg centre-crop applied to the finished
@@ -287,6 +305,12 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: sliced per stage-1 segment by the ENGINE; the app recomputes the same windows
 #: from ``chain_math`` for metadata, so nothing about that geometry is decided
 #: here.
+#:
+#: ``block_swap_prefetch`` / ``fused_gguf_dequant_kernel`` JOINED WITH 高速化
+#: 第1弾 (§3-102), for the same reason as on the single path — and the chain is
+#: where the prefetch work is actually visible, because a chain rebuilds the
+#: transformer once per stage and the engine now re-arms the prefetch engine on
+#: every one of those builds.
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -306,6 +330,8 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "reference_video_id",
         "conditioning_attention_strength",
         "reference_video_strength",
+        "block_swap_prefetch",
+        "fused_gguf_dequant_kernel",
     }
 )
 
@@ -404,7 +430,7 @@ def _log_ignored(request, table: dict[str, str] | None = None) -> None:
     """ONE log line naming every ignored field this request actually SET.
 
     Only non-default values are named: a default-valued field was not a choice
-    the user made, and reporting all seven on every job would train the reader
+    the user made, and reporting all five on every job would train the reader
     to skip the line. The default comes from the schema itself
     (``model_fields[...].default``) rather than a transcribed copy, so a
     changed default cannot make this lie.
@@ -701,6 +727,19 @@ class _RealBackend25(_RealBackend):
             "reference_video": reference_payload,
             "output_path": str(target),
         }
+        # Acceleration (additive, 高速化第1弾): each key rides ONLY when the
+        # request asked for it, so a payload with either knob turned off stays
+        # byte-identical to the pre-acceleration golden. Both pydantic defaults
+        # are True, so a plain job carries both — an omitted key means off on
+        # the worker side, which is 2.3's contract restated verbatim
+        # (services/engines/ltx/adapter.py). Written as a literal
+        # ``request.<field>`` read on purpose: the needle table in
+        # tests/test_ltx25_adapter.py proves an honoured field is really read by
+        # searching this function's source for exactly that text.
+        if request.block_swap_prefetch:
+            payload["block_swap_prefetch"] = True
+        if request.fused_gguf_dequant_kernel:
+            payload["fused_gguf_dequant_kernel"] = True
 
         with self._lock:
             try:
@@ -737,10 +776,19 @@ class _RealBackend25(_RealBackend):
             peak_vram_mb=event.get("peak_vram_mb"),
             generation_mode=mode,
             backend=REAL_BACKEND_25,
-            # The acceleration relay fields stay None: every one of them names a
-            # 2.3 code path this engine does not have, and reporting "off" would
-            # claim the knob exists here and was left alone. attention_used is
-            # the exception worth stating positively — v1 is SDPA-only by scope.
+            # The two acceleration relays engine25 HAS (高速化第1弾): the worker
+            # reports what actually happened, not what was asked for — "off" /
+            # "on" / "on->off", the last being a degrade (no Triton, or a build
+            # the prefetch engine could not be installed on). pipeline_manager
+            # writes both into metadata.json unchanged. ``.get`` rather than a
+            # default because a worker that never spoke leaves None, and None is
+            # the honest answer.
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            fused_gguf_dequant_kernel_used=event.get("fused_gguf_dequant_kernel_used"),
+            # The REMAINING acceleration relays stay None: each names a 2.3 code
+            # path this engine does not have, and reporting "off" would claim the
+            # knob exists here and was left alone. attention_used is the
+            # exception worth stating positively — v1 is SDPA-only by scope.
             attention_used="sdpa",
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
@@ -928,6 +976,14 @@ class _RealBackend25(_RealBackend):
         # golden key set above (same contract as 2.3's).
         if chain.stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
             payload["stage2_window"] = chain.stage2_window
+        # Acceleration (additive, 高速化第1弾): the same contract and the same
+        # literal-read discipline as the single path above, and LAST in the key
+        # order for the same reason 2.3 puts them last — every other additive
+        # block predates them, so appending keeps those blocks' orders untouched.
+        if chain.block_swap_prefetch:
+            payload["block_swap_prefetch"] = True
+        if chain.fused_gguf_dequant_kernel:
+            payload["fused_gguf_dequant_kernel"] = True
 
         with self._lock:
             try:
@@ -961,10 +1017,16 @@ class _RealBackend25(_RealBackend):
             generation_mode="chain",
             backend=REAL_BACKEND_25,
             chain_metadata=event.get("chain"),
-            # Same relay discipline as the single path: every acceleration field
-            # names a 2.3 code path this engine does not have, so reporting "off"
-            # would claim the knob exists here and was left alone. attention_used
-            # is the one worth stating positively — the chain scope is SDPA-only.
+            # Same relay discipline as the single path: the two knobs engine25
+            # really has are echoed back from the worker's done event, and a
+            # chain's echo is a fold over every build it made ("on->off" when one
+            # of them fell back).
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            fused_gguf_dequant_kernel_used=event.get("fused_gguf_dequant_kernel_used"),
+            # Every REMAINING acceleration field names a 2.3 code path this
+            # engine does not have, so reporting "off" would claim the knob
+            # exists here and was left alone. attention_used is the one worth
+            # stating positively — the chain scope is SDPA-only.
             attention_used="sdpa",
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )

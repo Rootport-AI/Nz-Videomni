@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.31** |
+| 版 | **v0.5.32** |
 | 日付 | **2026-08-24**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -80,6 +80,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.29 | 2026-08-24 | **LTX 2.5 の V2V 継続・A2V・長尺 A2V がオーナーの実機確認に合格したことを反映（文書のみ。API・実装への変更は無い）**。オーナーが AviUtl2 の操作パネルから V2V と A2V を実際に生成して機能を確認し、合格と判定した。**長尺 A2V はオーナー裁定で合格扱い**（裁定の全文は `Docs/VERIFICATION_LOG.md` §73.10(2)）。これに伴い **§6.10(a)** と **§6.10(f) 末尾**・**§0.3 の SSOT 地図**の §3-102 の記述を「オーナー目視待ち」から「オーナー合格」へ改めた。結果の記録は `Docs/VERIFICATION_LOG.md` §73.10（§73.9 の目視欄は追記専用のため「未記入」のまま残り、§73.10 が上書きする）。**あわせて、前版 v0.5.28 の追加時に更新し忘れていた §0.1 の版メタ（v0.5.27 のまま残っていた）を実数へ訂正した。**<br>**【同日・敵対的レビューの確定指摘による訂正】** ①**版メタを1箇所へ一本化した**——冒頭にあった版メタの表を廃止し、§0.1 の表だけを正本とした（2 箇所に置いていたため更新のたびに片方が取り残され、実際に食い違っていた）。②**「生きている後続課題」の件数と列挙を本書から外した**（**§0.3 の SSOT 地図**・**§6.10 末尾**）——同じ件数が文書ごとに違う状態が繰り返し起きたため、列挙は台帳 `Docs/PENDING_TASKS.md` §3 の1箇所に集約し、本書はそこを参照するだけにした。③**§12b.2** の設計判断の参照範囲を D1〜D15 → **D1〜D16** へ（`Docs/MCP_SERVER_DESIGN.md` に D16 が追加されていた）。④上記のとおり長尺 A2V のオーナー裁定の全文を `Docs/VERIFICATION_LOG.md` §73.10(2) の1箇所に置き、本書は参照だけにした。 |
 | v0.5.30 | 2026-08-24 | **LTX 2.5 のスタイル LoRA・IC-LoRA（参照動画による制御。長尺＝クリップ別の参照窓を含む）対応を反映（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定の応答形への変更は無い）**。`loras` / `reference_video_id` と 2 つの強度（`conditioning_attention_strength` / `reference_video_strength`）が 422 の側から動作の側へ移ったため、**§6.10(a)**（対応範囲へスタイル LoRA と IC-LoRA を追加し、「まだ無い」の列挙から LoRA 各種を削除。前処理が LTX 2.3 と同じコードであること・既定強度を 1.0 に据え置いたことを明記）／**§6.10(b)**（`unsupported_features` の例から `"loras"` / `"reference_video"` を削除して**現在値 8 件**へ）／**§6.10(d)**（`GenerateRequest` 全 28 フィールドの 4 分類を **422 系 6・無視 7・動作 12・従属 3** へ改訂。2 つの強度が「従属」から「動作」へ移った理由と、参照動画を伴うリクエストの 128 の倍数制約〔422 `REFERENCE_RESOLUTION_INVALID`〕の注記を追加）／**§6.10(f)**（`GenerateChainRequest` 全 34 フィールドの 4 分類を **422 系 7・無視 7・動作 17・従属 3** へ改訂。長尺 IC-LoRA の窓の幾何が系統に依存しないこと、`depth-control` × 多クリップの 422 が LTX 2.5 でも効くことを明記）／**§6.10 末尾**（実測記録へ §74 と固定ベンチマーク B9〜B13 を追加し、**オーナー目視が未了**であることを明記）を更新した。実測記録は `Docs/VERIFICATION_LOG.md` §74、設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6・§8.5、方式の差分は `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` 12節。 |
 | v0.5.31 | 2026-08-24 | **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` が Windows では効いていなかったという実測を反映し、あわせて先読み block swap のアリーナリング化を記録した（凍結 API 契約〔§6〕への変更は無い）**。**§2.4 の環境変数の表**——この変数の行を「CUDA メモリ断片化による OOM 低減（未設定時は起動ログに警告）」から実態へ全面的に書き直した。PyTorch は Windows でこの指定を拒否し（`expandable_segments not supported on this platform`）、従来型のキャッシュアロケータのまま動く。torch 2.9 では変数名自体が `PYTORCH_ALLOC_CONF` へ非推奨化されている。未設定時の起動ログも警告から情報行へ改めた（`main.py`）。**§9.2**——2.3 側は行を残したまま「Windows では無効」の注記を追加し、2.5 側の注記は「プロセス衛生の 4 つ」から**3 つ**へ改めた（`services/engines/ltx25/adapter.py` から当該行を削除。もともと効いていないので削除しても挙動は不変）。断片化そのものへの対策は、実際に断片化が起きる場所である先読み block swap の**アリーナリング**（`engine/transformer/block_swap_prefetch.py`。ブロックごとの確保／返却をやめ、固定本数のアリーナを使い回す）で行うようにした。実測は `outputs/b4-vram-diag/`（アロケータの診断とアリーナリングの試作）と `outputs/ltx25-accel-gate/c2b_summary.json`（B系17本の再走）を参照。 |
+| v0.5.32 | 2026-08-24 | **LTX 2.5 の高速化第1弾（fused GGUF逆量子化カーネルと先読み block swap）を反映（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定の応答形への変更は無い）**。`fused_gguf_dequant_kernel` と `block_swap_prefetch` が「無視＋ログ」の側から動作の側へ移り、**LTX 2.5 でも既定 on で実際に効くようになった**（実測で 2 つを併用したときの生成時間は 102.86 秒 → 39.28 秒＝**61.8% 短縮**。固定ベンチマーク 17 本すべて mp4 の SHA-256 が従来と一致＝出力は 1 バイトも変わっていない）。**§6.10(a)**（対応範囲へ高速化 2 つを追加）／**§6.10(d)**（`GenerateRequest` 全 28 フィールドの 4 分類を **422 系 6・無視 5・動作 14・従属 3** へ改訂。2 つの加速つまみが「無視」から「動作」へ移った理由と、`metadata.json` へ届くエコー 2 欄〔`fused_gguf_dequant_kernel_used` / `block_swap_prefetch_used`〕を明記）／**§6.10(f)**（`GenerateChainRequest` 全 34 フィールドの 4 分類を **422 系 7・無視 5・動作 19・従属 3** へ改訂）／**§6.10(b)**（**`unsupported_features` は 8 件のまま無変更**である旨の注記を追加——この 2 つは 422 で断っていた機能ではなく「無視」の側にあった項目なので、画面のグレーアウトは 1 つも変わらず、フロントエンドのコードも無改修である）／**§6.10 末尾**（実測記録へ §75 を追加）を更新した。実測記録は `Docs/VERIFICATION_LOG.md` §75、設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6・§8.5。**前版 v0.5.31 で反映済みの `expandable_segments` の件（§2.4・§9.2）は本版では触っていない。** |
 
 ### 0.2 スコープ
 
@@ -1141,13 +1142,13 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 
 最後に使ったベースモデルと、ベースモデル別の最後の選択の組み合わせは、リポジトリ直下の `state.json`（git 追跡外・§11.9）に保存され、サーバーを再起動しても復元される。**API 契約の一部ではない**（どのエンドポイントにも現れない）が、`GET /status` の `base_model` と `GET /models` の `active_base_model` が再起動後に既定へ戻らない理由がこれである。
 
-### 6.10 LTX 2.5（エンジン系統 `ltx25`）の対応範囲（2026-08-22。連結生成の対応範囲＝下記 (f) を 2026-08-23 に加筆、LoRA と参照動画を 2026-08-24 に加筆）
+### 6.10 LTX 2.5（エンジン系統 `ltx25`）の対応範囲（2026-08-22。連結生成の対応範囲＝下記 (f) を 2026-08-23 に加筆、LoRA と参照動画・高速化 2 つを 2026-08-24 に加筆）
 
 **結論から言うと、ここでも凍結 API 契約は壊れていない。** 加算されたのは `GET /models` の 1 フィールドと、エラーコード 1 つだけである。**LTX 2.3 だけを使うクライアントから見た応答は 1 バイトも変わらない**——LTX 2.3 は「使えない機能」を 1 つも宣言していないため、加算されたフィールドは空配列になり、新しいエラーコードも出ない。
 
 #### (a) v1 の対応範囲
 
-LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連結（Chained）＋V2V 継続（素材（冒頭）に動画を使って続きを作る）＋A2V（音声から動画。Single・長尺・バッチのいずれも）＋スタイル LoRA と IC-LoRA（参照動画による制御。クリップ別の参照窓＝長尺 IC-LoRA を含む）＋畳み込みデコーダ版の映像 VAE ＋ VRAM 16GB 運用** である。Retake・End source・Outpainting・NAG／VSF・PrunaVAED・SageAttention といった機能は**まだ無い**。無いものを黙って無視するのではなく、**ジョブを作る前に 422 で断る**。
+LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連結（Chained）＋V2V 継続（素材（冒頭）に動画を使って続きを作る）＋A2V（音声から動画。Single・長尺・バッチのいずれも）＋スタイル LoRA と IC-LoRA（参照動画による制御。クリップ別の参照窓＝長尺 IC-LoRA を含む）＋高速化 2 つ（fused GGUF 逆量子化カーネルと先読み block swap。いずれも既定 on）＋畳み込みデコーダ版の映像 VAE ＋ VRAM 16GB 運用** である。Retake・End source・Outpainting・NAG／VSF・PrunaVAED・SageAttention といった機能は**まだ無い**。無いものを黙って無視するのではなく、**ジョブを作る前に 422 で断る**。
 
 **2026-08-23、クリップ連結（Chained）が加わった。** 第 1 版（v1・2026-08-22）では `POST /generate/chain` をエンドポイントごと一括で 422 にしていたが、いまは**素の連結生成は動き、その上に重ねるモードと、エンジンが持たない機能を名指しするフィールドだけがフィールド単位で 422 になる**。
 
@@ -1156,6 +1157,8 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 **この範囲は 2026-08-24 にオーナーの実機確認へ合格している**——AviUtl2 の操作パネルから V2V と A2V を実際に生成し、機能していることを確認したという報告である（長尺 A2V は実機検証を経ていないが、オーナー裁定により合格扱い）。記録は `Docs/VERIFICATION_LOG.md` §73.10。
 
 **2026-08-24、スタイル LoRA と IC-LoRA（参照動画による制御）が加わった。** `loras` と `reference_video_id`、およびその2つの強度（`conditioning_attention_strength` / `reference_video_strength`）が 422 の側から動作の側へ移り、**単発生成でも連結生成でも使えるようになった**——連結生成では、1本の参照動画を各クリップの担当区間へ自動で切り出す長尺 IC-LoRA も含む。制御信号の下ごしらえ（canny＝輪郭線抽出／dwpose＝骨格推定／depth＝深度推定）は **LTX 2.3 と同じコードが走る**（同じ素材から両エンジンが書いた制御動画は SHA-256 まで一致する。`Docs/VERIFICATION_LOG.md` §74.7(f)）。**強度の既定値は LTX 2.3 と同じ 1.0 のままである**（LTX 2.5 では LoRA がやや弱く効く傾向が実測されているが、既定は動かさず、強めたい利用者が明示的に指定する。同 §74.9(1)）。**この範囲についてはオーナーの実機目視がまだ済んでいない**（機械ゲート G0〜G4 と実機ゲート G5 は全項目合格。同 §74）。
+
+**同じ 2026-08-24、高速化 2 つ（`fused_gguf_dequant_kernel` と `block_swap_prefetch`）も加わった。** どちらも**「無視＋ログ」の側から動作の側へ移った**もので、**LTX 2.5 でも既定 on で実際に効く**。実測では 2 つを併用したときの生成時間が **102.86 秒 → 39.28 秒＝61.8% 短縮**、固定ベンチマーク 17 本はすべて mp4 の SHA-256 が従来と一致した（**速くなったが出力は 1 バイトも変わっていない**。`Docs/VERIFICATION_LOG.md` §75）。**これは 422 で断っていた機能ではないので、`unsupported_features` は 8 件のまま動いていない**——動いたのは下記 (d)・(f) の 4 分類の対応表だけである。実際に効いたかどうかは `outputs/{ジョブID}/metadata.json` の `fused_gguf_dequant_kernel_used` / `block_swap_prefetch_used`（`"off"` / `"on"` / `"on->off"`）で確認できる。**残る 3 つの高速化（SageAttention・`keep_resident`・PrunaVAED）は引き続き 422 である。**
 
 #### (b) `GET /models` — `base_models[]` へ `unsupported_features` を加算
 
@@ -1178,6 +1181,7 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 - **省略は「制限なし」であって「全部だめ」ではない。** このフィールドを持たない古いバックエンドに対しても、クライアントは「制限なし」として扱うこと。
 - **LTX 2.3 は空配列**である（`"unsupported_features": []`）。
 - **`"chain"` / `"v2v"` / `"a2v"` は 2026-08-23 に、`"loras"` / `"reference_video"` は 2026-08-24 にこの配列から消えた。** いずれも LTX 2.5 で走るようになったためで、宣言を残すと**動くタブやパネルを灰色にしてしまう**（`"a2v"` は Chained タブの音声カードだけでなく、Single タブの A2V とバッチ A2V の灰色化にも使われている。`"reference_video"` は Single・Chained 両方の参照動画パネルを灰色にしていた）。**現在値は 8 件**で、先頭 2 つ（`retake` / `end_source`）は**リクエストのフィールドではなく、連結生成の上に重ねるモードの名前**である。どちらも `POST /generate/chain` から来るが、拒否は 1 箇所の丸ごと判定ではなく**フィールド単位**で行う（下記 (f)）。残る 6 つは (d) の 422 系と同じ機能名である。
+- **2026-08-24 の高速化第 1 弾では、この配列は動いていない。** `fused_gguf_dequant_kernel` と `block_swap_prefetch` は**「無視＋ログ」の側にあった項目**であって、`unsupported_features` で断っていた機能ではないためである。動いたのは (d)・(f) の 4 分類の対応表だけで、**画面のグレーアウトは 1 つも変わらず、フロントエンドのコードも無改修**である。
 - **これは先回りであって強制ではない。** クライアントがこのフィールドを無視して要求を出しても、下記 (c) のとおりサーバー側が断る。
 
 #### (c) `FEATURE_UNSUPPORTED`（422）
@@ -1194,9 +1198,9 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 
 | 分類 | 件数 | フィールド | 扱い |
 |---|---:|---|---|
-| **422 系** | 6 | `pipeline`（`"distilled"` 以外）／`outpaint`／`nag_enabled`／`vae_mode`（`"default"` 以外）／`attention_backend`（`"sdpa"` 以外）／`keep_resident` | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**——クライアントは毎回スキーマ全体を送るため、既定値のまま届いたフィールドは利用者が求めたものではない。**`loras` / `reference_video_id` は 2026-08-24 にこの分類を抜けて「動作」へ移った** |
-| **無視＋ログ** | 7 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`／`fused_gguf_dequant_kernel`／`block_swap_prefetch` | ジョブは通常どおり走る。値は効かず、**アプリ側のロガー**（`ltx25.runner`＝`logs/server.log`）に理由が 1 行残る（ワーカーのログ `logs/ltx25_worker.log` ではない——判定も記録もアプリ側で完結し、無視するフィールドはワーカーへ送られないため）。**既定値のまま届いたフィールドは名指ししない**（利用者が選んでいないものを毎回並べると、その行自体が読み飛ばされるようになるため）。前 3 つは蒸留版 2.5 に CFG（プロンプトへの従い具合の制御）もステップ数の概念も無いため、後 2 つは LTX 2.3 側のコードパスの名前でエンジン系統 `ltx25` がそれを持たないため |
-| **動作** | 12 | `prompt`／`width`／`height`／`num_frames`／`frame_rate`／`seed`／`conditioning_images`／`crop_output`／**`loras`**／**`reference_video_id`**／**`conditioning_attention_strength`**／**`reference_video_strength`** | そのまま効く。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）で、エンジンに依存しないため**動作させる**（黙って消さない）。末尾 4 つ（2026-08-24 追加）のうち `loras` と `reference_video_id` の効き方は**間接的**である——リクエストが運ぶのは登録名とアップロード id で、アプリ側がそれをファイルのパスへ解決してからワーカーへ渡す。2 つの強度はリクエストから直接読まれ、参照条件の作り方を変える |
+| **422 系** | 6 | `pipeline`（`"distilled"` 以外）／`outpaint`／`nag_enabled`／`vae_mode`（`"default"` 以外）／`attention_backend`（`"sdpa"` 以外）／`keep_resident` | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**——クライアントは毎回スキーマ全体を送るため、既定値のまま届いたフィールドは利用者が求めたものではない。**`loras` / `reference_video_id` は 2026-08-24 にこの分類を抜けて「動作」へ移った。この 6 件は同日の高速化第 1 弾でも動いていない** |
+| **無視＋ログ** | 5 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale` | ジョブは通常どおり走る。値は効かず、**アプリ側のロガー**（`ltx25.runner`＝`logs/server.log`）に理由が 1 行残る（ワーカーのログ `logs/ltx25_worker.log` ではない——判定も記録もアプリ側で完結し、無視するフィールドはワーカーへ送られないため）。**既定値のまま届いたフィールドは名指ししない**（利用者が選んでいないものを毎回並べると、その行自体が読み飛ばされるようになるため）。残っているのは 1 種類だけ——蒸留版 2.5 に CFG（プロンプトへの従い具合の制御）もステップ数の概念も無い、という理由の 5 件である。**`fused_gguf_dequant_kernel` / `block_swap_prefetch` は 2026-08-24 にこの分類を抜けて「動作」へ移った** |
+| **動作** | 14 | `prompt`／`width`／`height`／`num_frames`／`frame_rate`／`seed`／`conditioning_images`／`crop_output`／**`loras`**／**`reference_video_id`**／**`conditioning_attention_strength`**／**`reference_video_strength`**／**`fused_gguf_dequant_kernel`**／**`block_swap_prefetch`** | そのまま効く。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）で、エンジンに依存しないため**動作させる**（黙って消さない）。`loras` と `reference_video_id`（2026-08-24 追加）の効き方は**間接的**である——リクエストが運ぶのは登録名とアップロード id で、アプリ側がそれをファイルのパスへ解決してからワーカーへ渡す。2 つの強度はリクエストから直接読まれ、参照条件の作り方を変える。**末尾 2 つの高速化つまみ（同じく 2026-08-24 追加）はリクエストから直接読まれ、LTX 2.3 と同じ加算方式でペイロードへ載る**（要求されたときだけ鍵が載るので、明示的に off にしたジョブのペイロードは以前とバイト単位で同じである）。実際に効いたかどうかは `metadata.json` の `fused_gguf_dequant_kernel_used` / `block_swap_prefetch_used`（`"off"` / `"on"` / `"on->off"`）に出る——**「動作」と宣言した以上、降格したかどうかが見えることまでが約束である** |
 | **従属** | 3 | `nag_scale`／`nag_tau`／`nag_alpha`（`nag_enabled` に従属） | 上位のフィールドが既定のままなら意味を持たない。**上位が 422 系にあるため、これらが意味を持つリクエストは上位の時点で既に断られている**（＝走るジョブに到達できない。だから「無視」とは別扱いにしてある）。**2 つの参照強度は 2026-08-24 にこの分類を抜けた**——上位（`loras`）が動くようになった以上、強度は本当にジョブを変えるので「動作」が正しい。従属のまま置くと「指定しても黙って消える」と宣言することになる |
 
 `GET /loras` は変更していない。**連結生成（`POST /generate/chain`）には別のスキーマ（`GenerateChainRequest`）用に、同じ 4 分類の対応表がもう 1 つある**——下記 (f)。
@@ -1226,8 +1230,8 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 | 分類 | 件数 | フィールド（→ 返す機能名） | 扱い |
 |---|---:|---|---|
 | **422 系** | 7 | `retake`→`retake`／`end_source`→`end_source`／`nag_enabled`→`nag`／`pipeline`（`"distilled"` 以外）→`two_stage_hq`／`vae_mode`（`"default"` 以外）→`prune_vaed`／`attention_backend`（`"sdpa"` 以外）→`sage_attention`／`keep_resident`→`keep_resident` | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**（クライアントは毎回スキーマ全体を送るため）。**最初に見つかった 1 件だけを名指しする**——全部並べると「この 7 つを直せ」と読めてしまうが、実際にはつまみが 1 つ入ったままなだけのことが多い。**`source_video` / `source_audio` は 2026-08-23 に、`loras` / `reference_video_id` は 2026-08-24 にこの分類を抜けて「動作」へ移った** |
-| **無視＋ログ** | 7 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale`／`fused_gguf_dequant_kernel`／`block_swap_prefetch` | ジョブは通常どおり走る。値は効かず、アプリ側のロガー（`logs/server.log`）に理由が 1 行残る。**既定値のまま届いたフィールドは名指ししない** |
-| **動作** | 17 | `prompt`／`clips`／`width`／`height`／`crop_output`／`frame_rate`／`seed`／`overlap_frames`／`overlap_strength`／`chunked_upsample`／`stage2_window`／**`source_video`**／**`source_audio`**／**`loras`**／**`reference_video_id`**／**`conditioning_attention_strength`**／**`reference_video_strength`** | そのまま効く。`prompt` と `clips` は合わせてクリップごとの指定（実効プロンプト・フレーム数・クリップ 1 の画像）になる。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）でエンジンに依存しないため**動作させる**（黙って消さない）。`source_video` / `source_audio`（V2V 継続・A2V）と `loras` / `reference_video_id`（LoRA・参照動画）の効き方は下記のとおり**間接的**である |
+| **無視＋ログ** | 5 | `negative_prompt`／`guidance_scale`／`num_inference_steps`／`neg_method`／`vsf_scale` | ジョブは通常どおり走る。値は効かず、アプリ側のロガー（`logs/server.log`）に理由が 1 行残る。**既定値のまま届いたフィールドは名指ししない**。**`fused_gguf_dequant_kernel` / `block_swap_prefetch` は 2026-08-24 にこの分類を抜けて「動作」へ移った**（単発側と同じ移動） |
+| **動作** | 19 | `prompt`／`clips`／`width`／`height`／`crop_output`／`frame_rate`／`seed`／`overlap_frames`／`overlap_strength`／`chunked_upsample`／`stage2_window`／**`source_video`**／**`source_audio`**／**`loras`**／**`reference_video_id`**／**`conditioning_attention_strength`**／**`reference_video_strength`**／**`fused_gguf_dequant_kernel`**／**`block_swap_prefetch`** | そのまま効く。`prompt` と `clips` は合わせてクリップごとの指定（実効プロンプト・フレーム数・クリップ 1 の画像）になる。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）でエンジンに依存しないため**動作させる**（黙って消さない）。`source_video` / `source_audio`（V2V 継続・A2V）と `loras` / `reference_video_id`（LoRA・参照動画）の効き方は下記のとおり**間接的**である。**末尾 2 つの高速化つまみは、連結生成でこそ効き目が見える**——連結生成はクリップごと・タイルごとに transformer を組み直すため、その組み直しのたびに先読みを張り直している |
 | **従属** | 3 | `nag_scale`／`nag_tau`／`nag_alpha`（`nag_enabled` に従属） | 上位が既定のままなら意味を持たない。**上位が 422 系にあるため、これらが意味を持つリクエストは上位の時点で既に断られている**。**2 つの参照強度は 2026-08-24 にこの分類を抜けて「動作」へ移った**（上位の `loras` が動くようになったため） |
 
 入れ子の `ChainClip`（`prompt` / `num_frames` / `conditioning_images` の 3 件）も別のテストで監査しており、いずれも**動作**する。
@@ -1238,9 +1242,9 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 - **`stage2_window` の `"full_length"` は、素の連結生成の本体には到達しない。** API 層が「クリップちょうど 1 本」かつ「`source_audio` 必須」の 2 条件を 422 で強制するためで、**これは LTX 2.3 でも同じ制約**であり LTX 2.5 固有の制限ではない。**`source_audio` が使えるようになった 2026-08-23 以降、LTX 2.5 でもこの経路は実際に通る**——Single タブの A2V がこれで、フロントエンドは 1 クリップの連結生成に `full_length` を添えて投げている。`source_audio` を伴わない素の連結生成で使えるのは、従来どおり `"standard"`（潜在 22 フレーム）と `"high_resolution"`（潜在 19 フレーム）の 2 つである。
 - **総尺上限・`8n+1` のフレーム規約・クリップ本数（1〜24）は系統に依存しない**（`chain_math.py` の共有計算がアプリとエンジンの両方から呼ばれる）。LTX 2.5 でも同じ値が効く。
 
-実測記録（機械ゲート G1〜G4・実機ゲート G5・固定ベンチマーク B1〜B4）は `Docs/VERIFICATION_LOG.md` §72。**V2V 継続・A2V のぶんの実機ゲートは同 §73**、**オーナーの実機確認の結果は同 §73.10**、**スタイル LoRA と IC-LoRA（長尺を含む）のぶんは同 §74**（固定ベンチマーク B9〜B13 は同 §74.8）である。
+実測記録（機械ゲート G1〜G4・実機ゲート G5・固定ベンチマーク B1〜B4）は `Docs/VERIFICATION_LOG.md` §72。**V2V 継続・A2V のぶんの実機ゲートは同 §73**、**オーナーの実機確認の結果は同 §73.10**、**スタイル LoRA と IC-LoRA（長尺を含む）のぶんは同 §74**（固定ベンチマーク B9〜B13 は同 §74.8）、**高速化 2 つのぶんは同 §75**である。**高速化第 1 弾では固定ベンチマークの基準 SHA-256 が 1 つも動いていない**（B1〜B12 は従来の値のまま有効。同 §75.9）。
 
-設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69（v1）・§72（連結生成）・§73（V2V・A2V）・§74（LoRA・参照動画）、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98。**連結生成・V2V 継続・A2V〔Single・長尺・バッチ〕は 2026-08-23 に対応済みで、オーナーの実機確認にも合格している**（連結生成は 2026-08-23、V2V 継続と A2V は 2026-08-24。**長尺 A2V はオーナー裁定で合格扱い**——裁定の全文は `Docs/VERIFICATION_LOG.md` §73.10(2)）。**スタイル LoRA と IC-LoRA は 2026-08-24 に対応し、機械ゲート・実機ゲートは全項目合格しているが、オーナーの目視はまだ済んでいない。** **生きている後続課題の一覧は台帳 `Docs/PENDING_TASKS.md` §3 を見ること**（件数と項目番号は本書に書かない。同じ件数が文書ごとに食い違う事故を繰り返したため、列挙は台帳の1箇所に集約してある）。
+設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6、実測記録は `Docs/VERIFICATION_LOG.md` §69（v1）・§72（連結生成）・§73（V2V・A2V）・§74（LoRA・参照動画）・**§75（高速化第 1 弾＝fused カーネルと先読み block swap）**、起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-98。**連結生成・V2V 継続・A2V〔Single・長尺・バッチ〕は 2026-08-23 に対応済みで、オーナーの実機確認にも合格している**（連結生成は 2026-08-23、V2V 継続と A2V は 2026-08-24。**長尺 A2V はオーナー裁定で合格扱い**——裁定の全文は `Docs/VERIFICATION_LOG.md` §73.10(2)）。**スタイル LoRA と IC-LoRA は 2026-08-24 に対応し、機械ゲート・実機ゲートは全項目合格しているが、オーナーの目視はまだ済んでいない。** **生きている後続課題の一覧は台帳 `Docs/PENDING_TASKS.md` §3 を見ること**（件数と項目番号は本書に書かない。同じ件数が文書ごとに食い違う事故を繰り返したため、列挙は台帳の1箇所に集約してある）。
 
 ---
 

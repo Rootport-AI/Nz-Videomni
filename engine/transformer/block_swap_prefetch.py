@@ -126,7 +126,16 @@ class _BlockLayout:
         total_bytes: int,
     ) -> None:
         self.slots = slots          # (owning module, attribute name, is_parameter)
-        self.kinds = kinds          # ("ggml", ggml_type, float_shape) | ("plain", dtype, shape)
+        # ("ggml", ggml_type, float_shape, tensor_class) | ("plain", dtype, shape)
+        # The ggml entry carries the CONCRETE class of the CPU master as a 4th
+        # element so `_build_views` can rebuild the GPU view as that same class
+        # rather than as the base `GGMLQuantizedTensor`. engine25 subclasses it
+        # (`Ltx25GGMLTensor`) purely to keep the quant metadata alive across
+        # `dispose()`'s `empty_like`; a base-class view left resident at the end
+        # of a pass would bring that bug straight back. The asymmetry (ggml 4
+        # elements, plain 3) is safe: all three consumers of `kinds` branch on
+        # `kind[0]` before reading anything past index 2.
+        self.kinds = kinds
         self.offsets = offsets      # byte offset into the arena (512B aligned)
         self.sizes = sizes          # exact byte count of each tensor
         self.total_bytes = total_bytes
@@ -337,7 +346,8 @@ class PrefetchEngine:
                 # 0-dim tensor cannot hit view(dtype)'s hard error.
                 raw = src.as_subclass(torch.Tensor).reshape(-1).view(torch.uint8)
                 nbytes = raw.numel()
-                kind: tuple = ("ggml", src._ggml_type, tuple(src._float_shape))
+                # `type(src)`, not the base class: see `_BlockLayout.kinds`.
+                kind: tuple = ("ggml", src._ggml_type, tuple(src._float_shape), type(src))
                 src_u8 = raw
             else:
                 if not src.is_contiguous():
@@ -383,6 +393,11 @@ class PrefetchEngine:
                 if kind[0] == "ggml":
                     if not isinstance(dev_t, GGMLQuantizedTensor):
                         raise RuntimeError("rebuilt tensor lost the GGMLQuantizedTensor identity")
+                    if type(dev_t) is not kind[3]:
+                        raise RuntimeError(
+                            f"rebuilt tensor is {type(dev_t).__name__}, expected "
+                            f"{kind[3].__name__} — the subclass did not survive the round trip"
+                        )
                     if dev_t._ggml_type != kind[1] or tuple(dev_t._float_shape) != kind[2]:
                         raise RuntimeError("rebuilt tensor lost its quant metadata")
                 else:
@@ -498,7 +513,9 @@ class PrefetchEngine:
             if kind[0] == "ggml":
                 # Same construction as the GGUF loader (quant_service.py:586) —
                 # verified to work under inference_mode (WORKORDER S0 spike).
-                dev_t: torch.Tensor = GGMLQuantizedTensor(raw, kind[1], kind[2])
+                # `kind[3]` is the CPU master's own class, so a subclass round
+                # trips as itself (three-argument __new__ is the shared shape).
+                dev_t: torch.Tensor = kind[3](raw, kind[1], kind[2])
             else:
                 dev_t = raw.view(kind[1]).view(kind[2])
             out.append((mod, name, is_param, dev_t))

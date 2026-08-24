@@ -53,10 +53,9 @@ The v1 generation contract
 else: prompt, width/height (multiples of 64), ``num_frames`` (8n+1), frame
 rate, seed, and zero or more conditioning images (T2V / I2V). Everything the
 app may still send -- ``negative_prompt``, ``guidance_scale``,
-``num_inference_steps``, the acceleration knobs this engine has no path for --
-is IGNORED WITH A LOG LINE, never silently: the distilled 2.5 model runs a fixed
-8 + 3 sigma schedule with no classifier-free guidance, so a step count or a CFG
-scale has nothing to attach to. ``crop_output`` does not appear here at all, by
+``num_inference_steps`` -- is IGNORED WITH A LOG LINE, never silently: the
+distilled 2.5 model runs a fixed 8 + 3 sigma schedule with no classifier-free
+guidance, so a step count or a CFG scale has nothing to attach to. ``crop_output`` does not appear here at all, by
 design: it is an ffmpeg post-process the app already performs on the finished
 mp4 (see ``services/engines/ltx/adapter.py``), engine-independent in both
 engines.
@@ -64,10 +63,11 @@ engines.
 The acceleration knobs that DO apply are not generation parameters and are not
 on ``generate``'s signature: they are per-job state on a resident worker
 process, armed by :meth:`Ltx25Pipeline.set_acceleration_job` before the job and
-disarmed in its ``finally``. So far that is the fused Triton GGUF
-dequantization kernels, which work here because this engine's transformer and
-text encoder both dequantize through 2.3's ``engine.gguf.quant_service``; block
-swap prefetch is accepted by the same call and does nothing yet.
+disarmed in its ``finally``. Both are live: the fused Triton GGUF dequantization
+kernels (which work here because this engine's transformer and text encoder both
+dequantize through 2.3's ``engine.gguf.quant_service``) and asynchronous
+block-swap prefetching (which the diffusion stage re-arms on every transformer
+build -- see ``Ltx25DiffusionStage.set_block_swap_prefetch``).
 
 Determinism
 -----------
@@ -468,6 +468,31 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
         try:
             return super().__call__(*args, **kwargs)
         finally:
+            # Denoise is over and the official ``gpu_model`` contract has already
+            # disposed the transformer, so give the prefetch arena back NOW rather
+            # than at the end of the job. The window is not cyclic: it drains to a
+            # single block, and that last block's arena -- 207.9 MB on this
+            # checkpoint -- is otherwise held by the engine's own ``_state`` while
+            # the spatial upsampler and the VAE decode run. ``dispose()`` cannot
+            # reach it; only this call can. MEASURED at 320x192x25: 229.1 MB still
+            # allocated at the end of denoise without this line, 21.2 MB with it.
+            #
+            # Safe against the disposed model, but not silently so, and the
+            # difference is worth knowing: ``PrefetchEngine._release`` re-points
+            # module slots at the CPU masters, and its first parameter slot raises
+            # ``set_data ... incompatible tensor type`` because ``dispose()`` left
+            # that parameter on ``device="meta"``. ``teardown()`` catches it, logs
+            # "release of block N failed", and clears ``_state`` anyway -- which is
+            # what actually frees the arena, so the common case is fully covered.
+            # The ONE case it does not cover: IC-LoRA / Style-LoRA A/B buffers are
+            # ``persistent=False``, so ``dispose()`` does not meta them either, and
+            # with the restore loop aborted they keep viewing the arena until the
+            # next build's ``detach_ic_loras``. A LoRA job therefore still carries
+            # ~208 MB into the upsampler (measured: 236.1 MB with and without this
+            # line). Fixing that means making ``_release`` restore slot by slot,
+            # which is a change to the shared 2.3 module and is deliberately not
+            # made here.
+            self.teardown_block_swap_prefetch()
             if self.vram is not None:
                 self.vram.record(phase, time.perf_counter() - started)
 
@@ -565,7 +590,6 @@ IGNORED_FIELDS: dict[str, str] = {
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
     "neg_method": "no negative-prompt mechanism in v1",
     "vsf_scale": "no negative-prompt mechanism in v1",
-    "block_swap_prefetch": "2.5 uses engine25's own block-swap window",
     "attention_backend": "v1 is SDPA-only",
     "keep_resident": "2.5 keeps its weights in the registry instead",
     "vae_mode": "v1 uses the Conv VAE only",
@@ -636,10 +660,11 @@ class Ltx25Pipeline:
         #   loaders with no pipeline handle to reach. This class only forwards
         #   arm/reset and reads the finished job's verdict back out.
         # * block-swap prefetch keeps the request here because the flag has to
-        #   be re-applied to the block-swap service on every transformer build.
-        #   In C1 it is REQUEST-ONLY: nothing reads it yet (see
-        #   :meth:`block_swap_prefetch_used`).
+        #   be re-applied to the block-swap service on every transformer build,
+        #   which is the diffusion stage's job -- so this class holds the request
+        #   and the finished job's verdict, and the stage holds the tally.
         self._block_swap_prefetch_requested = False
+        self._block_swap_prefetch_used = "off"
 
         started = time.perf_counter()
         self.vram.reset()
@@ -811,10 +836,16 @@ class Ltx25Pipeline:
         CUDA -- so there is nothing here that can fail, and the call ORDER is
         what makes the arrangement safe rather than any exception handling.
 
-        The prefetch half is request-only in C1: the flag is stored, and nothing
-        reads it. C2 wires it to engine25's block-swap window.
+        The prefetch half has the SAME ordering constraint, for the same reason:
+        the block-swap service reads its flag inside ``install()``, and install
+        happens during the build. Handing it to the stage is likewise nothing but
+        assignments -- the resources are created later, by the build -- so this
+        method still cannot fail.
         """
         self._block_swap_prefetch_requested = bool(block_swap_prefetch)
+        stage = getattr(self, "stage", None)
+        if stage is not None:
+            stage.set_block_swap_prefetch(self._block_swap_prefetch_requested)
         dequant_triton.set_job(bool(fused_gguf_dequant_kernel))
 
     def reset_acceleration_job(self) -> None:
@@ -832,12 +863,28 @@ class Ltx25Pipeline:
         pipeline was closed is a shutdown race, not a bug worth failing on.
         """
         try:
-            # C1: request-only, so "tear down" is just forgetting the request.
-            # C2 replaces this with the block-swap service teardown, which is
-            # also where ``self.stage is None`` becomes reachable.
-            self._block_swap_prefetch_requested = False
+            # Verdict FIRST, teardown second: the tally the verdict reads is
+            # per-job state on the stage, and disarming clears it.
+            stage = getattr(self, "stage", None)
+            if stage is None:
+                # After :meth:`close`, or before the pipeline finished building.
+                # A job that asked for prefetching and never reached a build got
+                # a degradation, not a clean "off" -- 2.3's rule verbatim
+                # (``engine/pipeline/fast_video_pipeline.py``).
+                self._block_swap_prefetch_used = (
+                    "on->off" if self._block_swap_prefetch_requested else "off"
+                )
+            else:
+                self._block_swap_prefetch_used = stage.block_swap_prefetch_verdict()
+                # The job owns the arenas, the CPU masters and the events;
+                # releasing them here rather than at the next build is what keeps
+                # the finished transformer from being pinned alive between jobs.
+                stage.teardown_block_swap_prefetch()
+                stage.set_block_swap_prefetch(False)
         except Exception:  # pragma: no cover -- never-raise discipline
             logger.exception("block-swap prefetch reset failed; continuing")
+        finally:
+            self._block_swap_prefetch_requested = False
         try:
             # The verdict ("off" / "on" / "on->off") is computed INSIDE
             # ``reset_job`` from the request, the exception latch and the number
@@ -852,14 +899,12 @@ class Ltx25Pipeline:
         """What the last finished job's block swap actually did: "off", "on", or
         "on->off" (asked for, but degraded to the synchronous path).
 
-        C1 ALWAYS RETURNS "off": engine25's block-swap window does not implement
-        prefetching yet, so no job can have used it, and reporting anything else
-        would be a claim the engine cannot back. C2 replaces the body with the
-        real per-build tally; the method exists now so the worker's ``done``
-        event carries both echo keys from the same commit and the app-side
-        contract does not change shape twice.
+        Like :meth:`fused_gguf_dequant_kernel_used`, this is the snapshot taken
+        by :meth:`reset_acceleration_job` -- folded there from the diffusion
+        stage's per-build tally, because a job builds the transformer many times
+        and "on" has to mean every one of those builds ran accelerated.
         """
-        return "off"
+        return self._block_swap_prefetch_used
 
     def fused_gguf_dequant_kernel_used(self) -> str:
         """What the last finished job's GGUF dequantization actually did: "off",

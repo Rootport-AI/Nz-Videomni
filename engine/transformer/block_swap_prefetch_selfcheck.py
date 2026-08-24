@@ -19,7 +19,7 @@ odd-sized buffer and a 0-dim buffer that exercise the arena's alignment padding
 and the ``reshape(-1)`` guard. Everything runs inside ``torch.inference_mode()``
 because that is where the production install() runs.
 
-What the 14 checks prove, in one line each:
+What the 15 checks prove, in one line each:
 
   C1  ON and OFF produce BIT-identical output (the only thing that changed is
       how the bytes travel, so anything less is a bug).
@@ -41,6 +41,8 @@ What the 14 checks prove, in one line each:
   C12 Slot enumeration finds nested, non-persistent and module-level tensors.
   C13 The window function's boundaries.
   C14 Weight tying is detected and warned about.
+  C15 A SUBCLASS of GGMLQuantizedTensor is rebuilt as that same subclass, with
+      its quant metadata intact (engine25's Ltx25GGMLTensor depends on it).
 """
 
 from __future__ import annotations
@@ -829,6 +831,78 @@ def check_c14_weight_tying_warning() -> None:
     print("       tying detected once, and not reported for an untied model")
 
 
+# --------------------------------------------------------------------------- #
+# C15: the quantised subclass survives the arena round trip                    #
+# --------------------------------------------------------------------------- #
+
+
+def check_c15_ggml_subclass_preserved() -> None:
+    """A GGMLQuantizedTensor SUBCLASS must come back out of the arena as itself.
+
+    engine25 does not use the base class: `Ltx25GGMLTensor` overrides
+    `__torch_function__` so the quant metadata survives `Disposable.dispose()`'s
+    `torch.empty_like(..., device="meta")`. The non-cyclic window leaves the last
+    block of every pass resident, so a GPU view rebuilt as the BASE class would
+    still be attached to the model when `dispose()` runs and would resurrect
+    exactly the F1 AttributeError the subclass exists to prevent. The subclass is
+    declared here rather than imported so this check stays a property of the
+    shared module and does not drag engine25 into the 2.3 venv.
+    """
+
+    class _SubGGML(GGMLQuantizedTensor):
+        """Stand-in for engine25's Ltx25GGMLTensor: same three-argument __new__."""
+
+        marker = "c15"
+
+    torch.manual_seed(5)
+    block = _DummyBlock(256)
+    base_weight = block.lin._buffers["weight"]
+    block.lin._buffers["weight"] = _SubGGML(
+        base_weight.as_subclass(torch.Tensor).reshape(-1).clone(),
+        base_weight._ggml_type,
+        tuple(base_weight._float_shape),
+    )
+    model = _DummyTransformer([block, _DummyBlock(256)])
+
+    engine = _prepared_engine(model, bs=1)
+    try:
+        kinds = engine._layout[0].kinds
+        slots = engine._layout[0].slots
+        # BY SLOT INDEX, not by name: ``norm`` has a ``weight`` too, and looking
+        # the quantised one up by name would silently grade the LayerNorm.
+        idx = next(
+            i for i, (mod, name, _p) in enumerate(slots)
+            if name == "weight" and mod is block.lin
+        )
+        if kinds[idx][0] != "ggml":
+            raise AssertionError(f"the weight slot was planned as {kinds[idx][0]!r}, not 'ggml'")
+        if len(kinds[idx]) != 4 or kinds[idx][3] is not _SubGGML:
+            raise AssertionError(f"the plan did not record the concrete class: {kinds[idx]!r}")
+
+        with torch.inference_mode():
+            arena = torch.empty(
+                engine._layout[0].total_bytes, dtype=torch.uint8, device=_DEVICE
+            )
+            views = engine._build_views(0, arena)
+        rebuilt = views[idx][3]
+        if type(rebuilt) is not _SubGGML:
+            raise AssertionError(
+                f"rebuilt weight is {type(rebuilt).__name__}, expected _SubGGML"
+            )
+        if rebuilt._ggml_type != base_weight._ggml_type:
+            raise AssertionError(f"_ggml_type={rebuilt._ggml_type} after the round trip")
+        if tuple(rebuilt.shape) != (256, 256):
+            raise AssertionError(f".shape={tuple(rebuilt.shape)} — the float-shape masquerade is gone")
+        # And the plain slots of the same block are untouched by the asymmetry.
+        for (_m, name, _p, t), kind in zip(views, kinds):
+            if kind[0] == "plain" and (t.dtype != kind[1] or tuple(t.shape) != kind[2]):
+                raise AssertionError(f"plain slot {name} came back as {t.dtype}{tuple(t.shape)}")
+        del views, rebuilt, arena
+        print("       subclass identity, _ggml_type and the float-shape masquerade all survive")
+    finally:
+        engine.teardown()
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -857,6 +931,8 @@ def main() -> int:
         ("C12  slot enumeration covers nested / non-persistent / module-level", check_c12_slot_enumeration),
         ("C13  window boundaries match the synchronous path", check_c13_window),
         ("C14  weight tying is detected and warned about once", check_c14_weight_tying_warning),
+        ("C15  a GGMLQuantizedTensor subclass is rebuilt as that subclass",
+         check_c15_ggml_subclass_preserved),
     ]
 
     for name, fn in checks:

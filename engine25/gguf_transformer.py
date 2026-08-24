@@ -75,7 +75,9 @@ Selftest (gate G2)::
 
 builds the transformer, runs a one-step forward on dummy input, disposes, and
 repeats -- proving the dispose -> rebuild cycle and reporting per-phase VRAM
-peaks and timings as JSON.
+peaks and timings as JSON. ``--block-swap-prefetch on`` adds the asynchronous
+swap path and reports what EACH round actually got, which is what makes the
+per-build re-install visible rather than merely intended.
 """
 
 from __future__ import annotations
@@ -603,6 +605,17 @@ class Ltx25DiffusionStage(DiffusionStage):
         #: whenever nothing is attached, so the stage never pins a model shell it
         #: has no work to do on.
         self._attached_model: torch.nn.Module | None = None
+        # -- block-swap prefetch (per job) -----------------------------------
+        #: What the CURRENT job asked for. Re-applied to the swap service on
+        #: EVERY build, because a build is what creates the prefetch engine and
+        #: this stage builds many times per job (stage 1, stage 2, and once per
+        #: clip/tile in a chain).
+        self._prefetch_requested = False
+        #: How many of this job's builds reached ``install()`` on the swap path,
+        #: and how many of those actually got a prefetch engine. The pair is the
+        #: whole echo: equal and non-zero means every build ran accelerated.
+        self._prefetch_builds = 0
+        self._prefetch_engaged = 0
 
     # -- LoRA state ----------------------------------------------------------
 
@@ -692,6 +705,63 @@ class Ltx25DiffusionStage(DiffusionStage):
             ic_lora_common.load_ic_lora_pairs = original_loader
         self._attached_model = model
 
+    # -- block-swap prefetch state (per job) ---------------------------------
+
+    def set_block_swap_prefetch(self, enabled: bool) -> None:
+        """Declare what the NEXT builds' block swap should do. Call once per job.
+
+        Resets the tally as well as the flag: the verdict is "did EVERY build of
+        THIS job get a prefetch engine", so a counter carried over from the
+        previous job would make the answer meaningless.
+        """
+        self._prefetch_requested = bool(enabled)
+        self._prefetch_builds = 0
+        self._prefetch_engaged = 0
+
+    def block_swap_prefetch_verdict(self) -> str:
+        """Fold this job's builds into one echo: "off", "on" or "on->off".
+
+        A job builds the transformer many times (two stages, plus one per clip
+        and per tile in a chain) and each build installs its own engine, so the
+        honest answer is a tally rather than a single flag:
+
+        * nothing was asked for -> "off";
+        * at least one build went down the swap path -> "on" only when EVERY one
+          of them got an engine, otherwise "on->off" (a partial degradation is
+          still a degradation, and averaging it away would hide it);
+        * no build went down the swap path at all -> the feature had nothing to
+          apply to. Full residency (``blocks_on_gpu >= total``) is the ordinary
+          way to get here: ``install()`` returns before it would build an engine
+          and leaves ``last_prefetch_used == "off"``, which is 2.3's answer for
+          the same configuration. Anything else there is unexplained, so it is
+          reported as a degradation rather than as a clean "off".
+        """
+        if not self._prefetch_requested:
+            return "off"
+        if self._prefetch_builds > 0:
+            return "on" if self._prefetch_engaged == self._prefetch_builds else "on->off"
+        svc = self._swap_service
+        if svc is None or getattr(svc, "last_prefetch_used", None) == "off":
+            return "off"
+        return "on->off"
+
+    def teardown_block_swap_prefetch(self) -> None:
+        """Release the prefetch engine's arenas, CPU masters and events. Never raises.
+
+        Idempotent by way of ``BlockSwapService.teardown_prefetch``, and called
+        from three places on purpose: the top of every build (so the previous
+        build's masters cannot be written back over the new state dict), the end
+        of every denoise (so the pass's last resident arena is returned before
+        the upsampler's peak), and the job's ``finally``.
+        """
+        svc = self._swap_service
+        if svc is None:
+            return
+        try:
+            svc.teardown_prefetch()
+        except Exception:  # noqa: BLE001 -- teardown must never fail a job
+            logger.exception("BlockSwap prefetch teardown failed (ignored)")
+
     # -- construction --------------------------------------------------------
 
     @classmethod
@@ -750,12 +820,36 @@ class Ltx25DiffusionStage(DiffusionStage):
         it there again. Both are fatal at 14.7GB on 16GB, so this builds on CPU
         and places selectively.
         """
+        # FIRST, before anything else touches the model shell. The previous
+        # build's prefetch engine still holds that shell's CPU masters, and
+        # ``PrefetchEngine.teardown()`` ends by writing every still-resident
+        # block's master back into the module slots. ``build()`` below reaches
+        # ``load_state_dict(assign=True)``, which REPLACES those slots with the
+        # new build's tensors -- so leaving the teardown to ``install()``'s own
+        # defensive call (which runs after the load) would overwrite this build's
+        # weights with the previous build's, silently. The registry hands back
+        # the SAME ``LTXModel`` instance every time, so those really are the same
+        # slots.
+        self.teardown_block_swap_prefetch()
+
         target = device or self._device
         started = time.perf_counter()
         velocity_model = self._prepared_builder().build(device=target, **kwargs)
         model = X0Model(velocity_model).eval()
         # BEFORE placement: the LoRA buffers have to be on the blocks when the
         # blocks are moved, not after. See :meth:`_apply_loras`.
+        #
+        # ORDERING INVARIANT with the prefetch teardown above: the teardown ends
+        # by writing the previous build's CPU masters back into the module slots,
+        # and among those slots are the IC-LoRA A/B buffers, which are
+        # ``persistent=False`` and therefore invisible to ``load_state_dict``.
+        # A teardown after this line would resurrect the PREVIOUS job's LoRA
+        # buffers on top of this job's. It cannot: ``_apply_loras`` always runs
+        # after it and always ends in either an attach -- whose first act is
+        # ``detach_ic_loras`` (``engine/gguf/ic_lora_common.py:247``, the
+        # defensive "never stack onto stale specs" call) -- or, when the job asks
+        # for no adapter, the ``else`` branch's bare ``detach_ic_loras``. Either
+        # way every resurrected buffer is removed before the forward sees it.
         self._apply_loras(model)
         self._place_transformer(model, target)
         logger.info("Transformer ready on %s in %.1fs", target, time.perf_counter() - started)
@@ -772,6 +866,15 @@ class Ltx25DiffusionStage(DiffusionStage):
                     "BlockSwap not needed (blocks_on_gpu=%d >= %d blocks) -- full residency",
                     self.blocks_on_gpu, total,
                 )
+                # Still called, and deliberately: ``install()`` returns at its
+                # ``blocks_on_gpu >= total`` guard BEFORE it moves a single block
+                # or builds an engine, so the only thing that happens here is
+                # that ``last_prefetch_used`` is set to "off". That is what lets
+                # the echo say "off" rather than "on->off" for a full-residency
+                # job -- the same answer 2.3 gives for the same configuration --
+                # without the verdict having to know the geometry.
+                self._swap_service.prefetch_requested = self._prefetch_requested
+                self._swap_service.install(model)
             _move_module_tree(model, device, skip=set())
             return
 
@@ -781,6 +884,16 @@ class Ltx25DiffusionStage(DiffusionStage):
             "Moved %d non-block tensors to %s; %d blocks stay on CPU for the swap window",
             moved, device, total,
         )
+        # The shell registry hands the SAME ``LTXModel`` back on every build, so
+        # the blocks arrive still wearing the PREVIOUS build's swap wrappers and
+        # the idempotency marker below would skip this build's install entirely
+        # -- which is how prefetch would end up installed once per PROCESS
+        # instead of once per build. Stripping them here, on the live model,
+        # rather than at the top of the build is deliberate: nothing between the
+        # two (``load_state_dict``, ``_apply_loras``, ``_move_module_tree``)
+        # touches a ``forward`` attribute, and here the model is guaranteed to be
+        # the one about to run.
+        self._unpatch_block_swap(model)
         self.ensure_block_swap_installed(model)
 
     # -- block swap ----------------------------------------------------------
@@ -806,11 +919,60 @@ class Ltx25DiffusionStage(DiffusionStage):
                 )
             logger.info("BlockSwap already installed on %d blocks -- skipped (idempotent)", len(blocks))
             return False
+        # IMMEDIATELY before install(), never at the top of this method: the
+        # selftest calls this a second time on an already-installed model to
+        # prove the idempotency, and a write up there would clear the flag the
+        # real install is still going to be judged on.
+        self._swap_service.prefetch_requested = self._prefetch_requested
         self._swap_service.install(model)
+        # ``last_prefetch_used`` is install()'s own verdict for THIS build:
+        # "on" when it got an engine, "on->off" when the setup failed and the
+        # job fell back to the synchronous swap, "off" when nothing was asked
+        # for. Tallied per build because a job has many builds and the echo has
+        # to be true of all of them -- see :meth:`block_swap_prefetch_verdict`.
+        self._prefetch_builds += 1
+        if self._swap_service.last_prefetch_used == "on":
+            self._prefetch_engaged += 1
         return True
+
+    def _unpatch_block_swap(self, model: torch.nn.Module) -> int:
+        """Put every block's original ``forward`` back and drop the marker.
+
+        **TOUCHES NO TENSOR, AND MUST NOT START TO.** Add no ``block.to(...)``,
+        no ``.cpu()``, no ``.data`` assignment, nothing that dispatches an
+        operator -- not even "just to be tidy". This runs on the model shell the
+        registry reuses, which by then has been through ``Disposable.dispose()``:
+        every parameter and persistent buffer is a ``device="meta"`` tensor, and
+        a ``.to()`` on one of those raises NotImplementedError. Restoring a
+        Python attribute is the only thing that is safe here, and it is also the
+        only thing that is needed.
+
+        The whole body is wrapped, ``transformer_blocks_of`` included: this is on
+        the build path now, and a model whose block list cannot be walked must
+        leave the build to fail on its own terms rather than be killed by the
+        cleanup that was meant to help it.
+        """
+        cleaned = 0
+        try:
+            for block in transformer_blocks_of(model):
+                original = getattr(block, _BLOCK_SWAP_ATTR, None)
+                if original is None:
+                    continue
+                block.forward = original  # type: ignore[method-assign]
+                delattr(block, _BLOCK_SWAP_ATTR)
+                cleaned += 1
+        except Exception:  # noqa: BLE001 -- never take the build down
+            logger.exception("BlockSwap: could not strip the previous forwards (ignored)")
+        return cleaned
 
     def uninstall_block_swap(self, model: torch.nn.Module) -> int:
         """Restore the original forwards and leave the blocks on CPU. Returns blocks cleaned.
+
+        **SELFTEST ONLY, AND ONLY BEFORE ``dispose()``.** It moves blocks with
+        ``block.to(_CPU)``, so on a disposed model shell -- whose tensors are all
+        on ``device="meta"`` -- it raises NotImplementedError. The production
+        build path wants :meth:`_unpatch_block_swap` instead, which is this
+        method's forward-restoring half with every tensor operation removed.
 
         Deliberately NOT ``BlockSwapService.uninstall``: that one ends with
         ``block.to(self.device)`` for all 48 blocks, i.e. exactly the 14.7GB
@@ -818,17 +980,16 @@ class Ltx25DiffusionStage(DiffusionStage):
         restore ``forward``, drop the marker, release the prefetch pool -- is
         reproduced here.
         """
-        cleaned = 0
-        for block in transformer_blocks_of(model):
-            original = getattr(block, _BLOCK_SWAP_ATTR, None)
-            if original is None:
-                continue
-            block.forward = original  # type: ignore[method-assign]
-            delattr(block, _BLOCK_SWAP_ATTR)
+        # Read the markers BEFORE stripping them: which blocks were patched is
+        # what decides which ones get moved back to CPU.
+        marked = [
+            block for block in transformer_blocks_of(model)
+            if hasattr(block, _BLOCK_SWAP_ATTR)
+        ]
+        cleaned = self._unpatch_block_swap(model)
+        for block in marked:
             block.to(_CPU)
-            cleaned += 1
-        if self._swap_service is not None:
-            self._swap_service.teardown_prefetch()
+        self.teardown_block_swap_prefetch()
         logger.info("BlockSwap uninstalled from %d blocks (left on CPU)", cleaned)
         return cleaned
 
@@ -968,6 +1129,7 @@ def _selftest(  # noqa: PLR0913, PLR0915
     frames: int,
     rounds: int,
     cache_weights: bool,
+    block_swap_prefetch: bool = False,
 ) -> dict:
     from engine25 import ltxcore_compat
 
@@ -987,6 +1149,7 @@ def _selftest(  # noqa: PLR0913, PLR0915
         "device": str(device),
         "blocks_on_gpu": blocks_on_gpu,
         "cache_weights": cache_weights,
+        "block_swap_prefetch": "on" if block_swap_prefetch else "off",
         "shape": {"width": width, "height": height, "frames": frames},
         "rounds": [],
         "phases": vram.phases,
@@ -1008,6 +1171,11 @@ def _selftest(  # noqa: PLR0913, PLR0915
     config = read_gguf_metadata(gguf_path)["config"]
     vram.record("00_stage_constructed", time.perf_counter() - started)
 
+    # Once, like a job entry point does -- and then NEVER again, which is the
+    # point: every round below has to re-arm the service on its own, through the
+    # build, or the per-round verdicts will not all read "on".
+    stage.set_block_swap_prefetch(block_swap_prefetch)
+
     modality = _dummy_video_modality(
         config, device=device, dtype=dtype, width=width, height=height, frames=frames
     )
@@ -1023,6 +1191,12 @@ def _selftest(  # noqa: PLR0913, PLR0915
         vram.record(f"{index:02d}a_build", build_seconds)
         round_report["build_seconds"] = round(build_seconds, 2)
         round_report["num_blocks"] = int(transformer.num_blocks)
+        # THE point of this selftest for the prefetch gate: install() runs once
+        # per BUILD, so this is "off" only on a round whose install was skipped
+        # -- which is exactly the failure the marker-stripping fixes.
+        round_report["prefetch_used"] = (
+            stage._swap_service.last_prefetch_used if stage._swap_service is not None else "off"
+        )
 
         # Idempotency + uninstall are checked on the LAST round only: they need a
         # live model, and the uninstall leaves the blocks unusable for a forward.
@@ -1081,9 +1255,19 @@ def _selftest(  # noqa: PLR0913, PLR0915
 
     builds = [entry["build_seconds"] for entry in report["rounds"]]
     report["checks"]["all_rounds_finite"] = all(entry["finite"] for entry in report["rounds"])
+    report["prefetch_verdict"] = stage.block_swap_prefetch_verdict()
+    report["checks"]["prefetch_every_round_engaged"] = (
+        all(entry.get("prefetch_used") == "on" for entry in report["rounds"])
+        if block_swap_prefetch
+        else all(entry.get("prefetch_used") == "off" for entry in report["rounds"])
+    )
+    report["checks"]["prefetch_verdict_matches_request"] = report["prefetch_verdict"] == (
+        "on" if block_swap_prefetch else "off"
+    )
     report["checks"]["rebuild_faster_than_first_build"] = (
         len(builds) < 2 or max(builds[1:]) < builds[0]
     )
+    stage.teardown_block_swap_prefetch()
     if device.type == "cuda":
         peaks = [
             entry.get("peak_allocated_gib", 0.0)
@@ -1103,6 +1287,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--frames", type=int, default=25)
     parser.add_argument("--rounds", type=int, default=3, help="build/forward/dispose cycles")
     parser.add_argument("--no-cache-weights", action="store_true")
+    parser.add_argument(
+        "--block-swap-prefetch",
+        choices=("on", "off"),
+        default="off",
+        help="asynchronous block-swap prefetching (default: off, the A/B baseline)",
+    )
     parser.add_argument("--json-out", default=None, help="also write the report to this path")
     args = parser.parse_args(argv)
 
@@ -1120,6 +1310,7 @@ def main(argv: list[str] | None = None) -> int:
         frames=args.frames,
         rounds=args.rounds,
         cache_weights=not args.no_cache_weights,
+        block_swap_prefetch=args.block_swap_prefetch == "on",
     )
     text = json.dumps(report, indent=2, ensure_ascii=False)
     print(text)

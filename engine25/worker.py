@@ -79,9 +79,9 @@ Protocol (one JSON object per line; parent -> worker):
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
       (``retake``, ``end_source``, ``nag``, ``attention_backend``,
-      ``keep_resident``, ``vae_mode``, ``block_swap_prefetch``,
-      ``fused_gguf_dequant_kernel``) is REFUSED BY NAME rather than ignored --
-      see ``CHAIN_UNSUPPORTED_KEYS``.
+      ``keep_resident``, ``vae_mode``) is REFUSED BY NAME rather than ignored --
+      see ``CHAIN_UNSUPPORTED_KEYS``. The two acceleration knobs are NOT on that
+      list: both apply to the chain unchanged.
       The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
       2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes ran.
   {"op": "shutdown"}
@@ -617,8 +617,10 @@ def _do_generate(msg: dict) -> None:
 #: ``fused_gguf_dequant_kernel`` LEFT WITH THE FUSED-KERNEL COMMIT: the chain
 #: builds its transformer through the same GGUF loaders the single generate does,
 #: so the Triton dequantization kernels apply to it unchanged and there is
-#: nothing left to refuse. ``block_swap_prefetch`` stays: engine25's block-swap
-#: window has no prefetching yet, on either op.
+#: nothing left to refuse. ``block_swap_prefetch`` LEFT WITH THE PREFETCH COMMIT
+#: for the same reason, and the chain is where it matters most: it re-arms per
+#: BUILD, and a chain builds the transformer once per stage-1 clip and once per
+#: stage-2 tile.
 #:
 #: The single-generate op differs deliberately for the knobs that remain here --
 #: there they are ignored-and-logged (``IGNORED_FIELDS``) rather than refused,
@@ -630,7 +632,6 @@ CHAIN_UNSUPPORTED_KEYS = (
     "attention_backend",
     "keep_resident",
     "vae_mode",
-    "block_swap_prefetch",
 )
 
 
@@ -778,11 +779,9 @@ def _do_generate_chain(msg: dict) -> None:
 
     # The acceleration knobs, read with the SAME two helpers the single op uses:
     # one pair of readers for the two entry points is what stops a knob from
-    # being wired to one op and forgotten on the other. ``prefetch`` is still
-    # pinned to False here -- ``block_swap_prefetch`` is on
-    # :data:`CHAIN_UNSUPPORTED_KEYS` and was refused above -- but it is read
-    # rather than hard-coded so that removing it from that list is the only edit
-    # C2 needs on this side.
+    # being wired to one op and forgotten on the other. Both are live on the
+    # chain: it builds the transformer once per stage-1 clip and once per
+    # stage-2 tile, and the stage re-arms the prefetch on every one of them.
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
 
@@ -1176,6 +1175,12 @@ def _add_acceleration_arguments(parser) -> None:
         default="on",
         help="fused Triton GGUF dequantization kernels (default: on)",
     )
+    parser.add_argument(
+        "--block-swap-prefetch",
+        choices=("on", "off"),
+        default="on",
+        help="asynchronous block-swap prefetching (default: on)",
+    )
 
 
 def _acceleration_payload(args) -> dict:
@@ -1189,6 +1194,8 @@ def _acceleration_payload(args) -> dict:
     payload: dict = {}
     if args.fused_dequant == "on":
         payload["fused_gguf_dequant_kernel"] = True
+    if args.block_swap_prefetch == "on":
+        payload["block_swap_prefetch"] = True
     return payload
 
 

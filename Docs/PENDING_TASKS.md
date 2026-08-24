@@ -489,7 +489,7 @@
 
 | 段階 | 残項目 | 断っているフィールド |
 |---|---|---|
-| **高速化技術の前倒し** | SageAttention／`keep_resident`／PrunaVAED／fusedカーネル／block swap prefetch | `attention_backend`／`keep_resident`／`vae_mode`（後2つは無視＋ログ扱い） |
+| **高速化技術の前倒し** | SageAttention／`keep_resident`／PrunaVAED／fusedカーネル（`fused_gguf_dequant_kernel`）／block swap prefetch（`block_swap_prefetch`） | **422系が3つ**＝`attention_backend`／`keep_resident`／`vae_mode`。**無視＋ログ扱いが2つ**＝`fused_gguf_dequant_kernel`／`block_swap_prefetch`（既定がonなので断るとふつうのT2Vが通らなくなるため、断らずに黙って効かせない） |
 | **準必須級** | Retake（選択範囲の撮り直し） | `retake` |
 | **準必須級** | End source（素材（末尾）） | `end_source` |
 | **準必須級** | Outpainting（キャンバス拡張） | `outpaint`（単発生成側のみ。連結スキーマには無い） |
@@ -502,7 +502,7 @@
 - **判断材料（3）stage-2の窓の作り直しは、本項とは別の判断として残っている**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71が出した「窓は解像度別ではなく単一のトークン予算で決めればよい」という結論は、**LTX 2.5の実装では採っていない**——同等化を優先してLTX 2.3の窓の値をそのまま持ち込んだためである（[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節）。着手するなら本項の外で判断すること。
 - **判断材料（4）連結生成の移植で分かった、後続に効く事実（2026-08-23）**: ①**帯の凍結はLTX 2.3とビット単位で同一**になったので、2.3で積み上げた凍結まわりの知見（Retake・End sourceの設計を含む）はそのまま使える。②**engine25固有の情報が`metadata.json`に載らない**——サンプラーや窓の選択肢が増えると「出来上がった動画がどう作られたか」を辿れなくなるので、後続で選択肢を増やすときに合わせて検討すること（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.8(3)）。③**ワーカーは範囲外の鍵を「存在するだけで」エラーにする**設計なので、機能を1つ開けるときはアプリ側の拒否表とワーカー側の鍵一覧の両方を同時に更新する必要がある。
 - **判断材料（5）MCPサーバーは`stage2_window`を送らない（2026-08-23確認・据え置き）**: `submit_chain`にはstage-2の窓を選ぶ引数が無く、サーバー側の既定（`standard`）で走る。**これはLTX 2.3のときからそうであり、2.5対応で失われた機能ではない。** AIエージェントから高解像度窓や`full_length`を選びたくなったら引数を足すことになるが、本項の同等化のスコープには含めていない（Singleタブの`full_length`はフロントエンドが送っているので、MCPを経由しない限り従来どおり使える）。
-- **判断材料（6）第3段（LoRA・IC-LoRA）の移植で分かった、後続に効く事実（2026-08-24）**: ①**前処理（canny／dwpose／depth）はLTX 2.3と同じコードが両系統から呼ばれている**（同じ素材から書いた制御動画のSHA-256が完全一致。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §74.7(f)）ので、前処理に手を入れるときは**両系統への影響を同時に考えること**。②**LTX 2.5用の仮想環境にはcv2とtorchvisionが入った**（`.venv-engine-ltx25`）ので、これらを要する後続機能は依存追加なしで着手できる。③**音声軸の重みを持つLoRAが1本も無い**ため、`audio_strength`の実効は2.5でも確認できていない（同 §74.3(c)。§45と同じ制約）——該当するLoRAが手に入ったら、固定ベンチマークB13（欠番）を埋めること。
+- **判断材料（6）第3段（LoRA・IC-LoRA）の移植で分かった、後続に効く事実（2026-08-24）**: ①**前処理（canny／dwpose／depth）はLTX 2.3と同じコードが両系統から呼ばれている**（同じ素材から書いた制御動画のSHA-256が完全一致。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §74.7(f)）ので、前処理に手を入れるときは**両系統への影響を同時に考えること**。②**LTX 2.5用の仮想環境に`opencv-python-headless`（画像処理ライブラリ。Pythonからimportするときの名前は`cv2`）と`torchvision`（PyTorch用の画像・動画ユーティリティ）が入った**（`.venv-engine-ltx25`。実際に入った版はそれぞれ4.13.0.92と0.24.1+cu128）ので、これらを要する後続機能は依存追加なしで着手できる。③**音声軸の重みを持つLoRAが1本も無い**ため、`audio_strength`の実効は2.5でも確認できていない（同 §74.3(c)。§45と同じ制約）——該当するLoRAが手に入ったら、固定ベンチマークB13（欠番）を埋めること。
 - **完了判定**: 機能が1つ実装できるたびにアダプタの対応表（`services/engines/ltx25/adapter.py`の`REJECT_TABLE`＝単発生成用と`CHAIN_REJECT_TABLE`＝連結生成用の**2つある**）から1行外すと、`GET /models`の`unsupported_features`から自動的に消える。**「対応表から1行消えて、テストが対応表と実装のずれを検出しなくなること」が完了の合図である。** 現在値は下表のとおり。
 
 | 見るところ | 現在値 | 完了時にどうなるか |
@@ -513,7 +513,7 @@
 | LTX 2.5が断る連結生成のモード | **Retake と End source の2つだけ** | 素の連結生成・V2V継続・A2V・LoRA・参照動画はすでに動く |
 
 - **状態**: 部分完了。連結生成の本体・V2V継続・A2V〔長尺A2Vを含む〕は2026-08-23に実装し**オーナー合格済み**（連結生成は2026-08-23の目視〔[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §72.10〕、V2V継続とA2Vは2026-08-24にAviUtl2の操作パネルからの実機検証で合格し、長尺A2Vはオーナー裁定により合格扱い〔同 §73.10〕）。**スタイルLoRAとIC-LoRA〔長尺を含む〕は2026-08-24に実装し、全ゲート合格・オーナー目視待ち**（同 §74.10 の5項目）。**残り6件は未着手で、次に着手するのは表の先頭＝高速化技術の前倒しである。**
-- **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6・**§8.5（連結生成の実績表）**、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.9・**§71（窓サイズのスイープとIC-LoRA互換検証の実測）**・**§72（連結生成の全ゲートと固定ベンチマークB1〜B4）**、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) **12節（LTX 2.5での実装と2.3との差分5点＋末尾のV2V・A2Vの差分）**、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) **11節（設計への持ち帰り）**、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）・**§3-110（連結音声の音量。2026-08-23のオーナー試聴で「実用上の問題なし」と決着しクローズ）**、**[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §73（V2V・A2Vの実機ゲート）**・**同§74（スタイルLoRAとIC-LoRAの全ゲートと固定ベンチマークB9〜B13）**、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（(d)＝単発生成の全28件・**(f)＝連結生成の全34件**）、本書§3-108（kohya形式LoRAのローダー非対応）。
+- **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6・**§8.5（第2段階と、その続きの第1〜3段＝連結生成・V2V／A2V・スタイルLoRA／IC-LoRAの実績表）**、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.9・**§71（窓サイズのスイープとIC-LoRA互換検証の実測）**・**§72（連結生成の全ゲートと固定ベンチマークB1〜B4）**、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) **12節（LTX 2.5での実装と2.3との差分5点＋末尾に追記したV2V・A2Vの差分と、長尺IC-LoRAで参照条件を先に「作り切る」方式）**、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) **11節（設計への持ち帰り）**、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）・**§3-110（連結音声の音量。2026-08-23のオーナー試聴で「実用上の問題なし」と決着しクローズ）**、**[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §73（V2V・A2Vの実機ゲート）**・**同§74（スタイルLoRAとIC-LoRAの全ゲートと固定ベンチマークB9〜B13）**、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10（(d)＝単発生成の全28件・**(f)＝連結生成の全34件**）、本書§3-108（kohya形式LoRAのローダー非対応）。
 
 #### 3-103. 拡散デコーダ版の映像VAE（DiffVAE）を採用するかどうか（起票：2026-08-22）
 

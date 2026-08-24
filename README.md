@@ -12,7 +12,7 @@ AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）も同じ�
 > | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` | そのプラグインのソース（C++ の `native/` ＋ React/TypeScript の `webui/`） |
 > | `Docs/` | プロジェクト全体の文書と課題台帳 |
 >
-> **Nz-Videomni は製品の名前、LTX 2.3 はモデルの名前**です。**LTX 2.5 には 2026-08-22 に対応しました**（画面上部のドロップダウンで切り替えます。対応範囲は基本生成〔テキストから動画・画像から動画〕と、2026-08-23 に加わったクリップ連結〔Chained〕・V2V〔動画の続きを作る〕・A2V〔音声から動画〕まで）。さらに Wan 2.x など別のモデルも載せられる基盤を目指しているため、製品名にモデル名を含めていません。
+> **Nz-Videomni は製品の名前、LTX 2.3 はモデルの名前**です。**LTX 2.5 には 2026-08-22 に対応しました**（画面上部のドロップダウンで切り替えます。対応範囲は基本生成〔テキストから動画・画像から動画〕と、2026-08-23 に加わったクリップ連結〔Chained〕・V2V〔動画の続きを作る〕・A2V〔音声から動画〕、および 2026-08-24 に加わったスタイル LoRA・IC-LoRA〔参照動画による制御。長尺 IC-LoRA を含む〕です。**まだ使えない機能の一覧は §7.1 にあります**）。さらに Wan 2.x など別のモデルも載せられる基盤を目指しているため、製品名にモデル名を含めていません。
 
 **Phase 1**（T2V + 最小I2V を同一MVP）の凍結 API を土台に、その後キーフレーム誘導・クリップ連結（`POST /generate/chain`）・
 V2V（元動画からの継続生成）・end source（素材（末尾）＝添付した画像・動画へ**繋がる**動画の生成——§7参照）・A2V（音声から動画生成）・IC-LoRA／スタイルLoRA
@@ -1098,8 +1098,12 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 4. 以降は T2V と同じ（`submit_generate` → `wait_for_job` → `get_job_video_path`）。**切り替え直後の1本目だけは通常の約2倍**かかるので、`wait_for_job` を多めに呼び直してください。
 5. LTX 2.3 へ戻すときは `load_pipeline(base_model="LTX23")`。
 6. **クリップ連結（`submit_chain`）も LTX 2.5 で使えます**（2026-08-23 から）。**`source_video_id`（V2V）と
-   `source_audio_id`（A2V。長尺 A2V を含む）も同日から使えます。** ただし撮り直し・素材（末尾）・参照動画・
-   LoRA などの引数を添えると 422 になります（§7.1）。
+   `source_audio_id`（A2V。長尺 A2V を含む）も同日から使えます。** さらに **`loras`（スタイル LoRA）と
+   `reference_video_id`（IC-LoRA。長尺 IC-LoRA を含む）、およびそれに従う 2 つの強度
+   （`conditioning_attention_strength`・`reference_video_strength`）は 2026-08-24 から動作します。**
+   いま 422 になるのは、撮り直し（`retake`）・素材（末尾）（`end_source`）・キャンバス拡張（`outpaint`。
+   単発生成のみ）と、NAG／VSF（`nag_enabled`）・PrunaVAED（`vae_mode`）・SageAttention（`attention_backend`）・
+   モデル骨格の常駐（`keep_resident`）・非蒸留パイプライン（`pipeline`）です（§7.1）。
 
 **A2Vバッチ（音声フォルダの一括生成）**:
 1. `plan_a2v_batch` で音声フォルダを走査し、行ごとの計画（音声パス・提案フレーム数・同stem画像等）を得る。

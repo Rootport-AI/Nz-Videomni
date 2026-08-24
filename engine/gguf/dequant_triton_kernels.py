@@ -50,6 +50,18 @@ divisibility hint buys nothing here because ``n_blocks`` only ever appears in a
 bounds comparison. ``triton.autotune`` is deliberately not used: it would
 re-benchmark per shape and reintroduce exactly the cost this design removes.
 
+"Once per process" is about SHAPES, and there is one axis it does not cover:
+Triton also specialises on each TENSOR argument's ``data_ptr() % 16 == 0``, and
+that is out of this module's hands. A caller that slices ``raw`` at an offset
+which is not a multiple of 16 gets a second compiled variant of the same kernel
+- the LTX 2.5 text encoder's chunked linear does exactly that, because Q6_K's
+row stride of 154350 bytes is not a multiple of 16. So a real job may end with
+more than three entries in ``jit_cache_size()``, up to six, and that is expected
+rather than a shape leak. Every variant is bit-verified before it is trusted:
+``dequant_triton._VERIFIED`` keys on the alignment class for this reason. The
+selfcheck only ever feeds aligned payloads (its arena case uses a 512B offset),
+which is why C8 still sees exactly three.
+
 Index algebra
 -------------
 Every kernel walks the same coordinates: ``j`` = 0..255 is the weight index

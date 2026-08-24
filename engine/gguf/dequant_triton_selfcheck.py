@@ -1,10 +1,22 @@
 """Standalone self-check for the fused GGUF dequantisation kernels.
 
-Run with the ENGINE venv (needs torch, triton and a CUDA GPU; the app venv has
-none of them, and .venv-engine has no pytest, which is why this is a script and
-not a test module):
+Run with an ENGINE venv (needs torch, triton and a CUDA GPU; the app venv has
+none of them, and neither engine venv has pytest, which is why this is a script
+and not a test module). With no arguments it checks the 2.3 engine's two GGUFs,
+which is what it has always done:
 
     .venv-engine\\Scripts\\python.exe -m engine.gguf.dequant_triton_selfcheck
+
+``--gguf PATH`` (repeatable) replaces that default set, which is how the same
+checks are run against the 2.5 engine's GGUFs from ITS venv. Relative paths are
+taken from the project root, so a command reads the same as the config does:
+
+    .venv-engine-ltx25\\Scripts\\python.exe -m engine.gguf.dequant_triton_selfcheck
+        --gguf models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf
+        --gguf models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf
+
+Only C1 and C9 read those files at all; every other check builds its payloads by
+hand and is model-independent.
 
 Same conventions as sage_selfcheck / block_swap_prefetch_selfcheck: NOT a pytest
 module, every check either PASSes or FAILs loudly, nothing is ever skipped, and
@@ -12,8 +24,8 @@ the exit code is 0 only when all of them pass.
 
 What the ten checks prove, in one line each:
 
-  C1  Every (quant type, shape) combination that actually occurs in the two
-      shipped GGUFs - enumerated from the files, not from a hand-written list -
+  C1  Every (quant type, shape) combination that actually occurs in the GGUFs
+      under test - enumerated from the files, not from a hand-written list -
       is bit-identical between Triton and eager.
   C2  Hand-built boundary blocks are bit-identical: the 6-bit scale/min packing
       at 0x00/0x0F/0x3F/0x80/0xFF, every qh bit position, Q6_K's signed scale
@@ -40,6 +52,7 @@ every comparison vacuous.
 
 from __future__ import annotations
 
+import argparse
 import gc
 import logging
 import sys
@@ -75,10 +88,38 @@ _EAGER = {_GGML_Q4_K: _dequant_q4_k, _GGML_Q5_K: _dequant_q5_k, _GGML_Q6_K: _deq
 _SCALE_FIELDS = {_GGML_Q4_K: [(0, 2), (2, 4)], _GGML_Q5_K: [(0, 2), (2, 4)],
                  _GGML_Q6_K: [(208, 210)]}
 
+#: Default file set: the 2.3 engine's two GGUFs. Kept as the DEFAULT rather than
+#: turned into a required argument, so the 2.3 engine's invocation stays exactly
+#: the string it has always been - a verification run that has to be re-spelled
+#: for another engine's sake is a regression risk for no gain.
 _MODELS = [
     Path("models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"),
     Path("models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf"),
 ]
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_models(specs: list[str] | None) -> list[Path]:
+    """``--gguf`` values (or the default set) as absolute paths.
+
+    Relative paths resolve against the PROJECT ROOT, not the cwd: every model
+    path in this repository is written that way (the config, the workers'
+    selftest arguments, ``_MODELS`` above), and a cwd-relative rule would make
+    one command mean different things from different directories.
+
+    Existence is deliberately NOT checked here. A missing file has to surface as
+    a C1 FAILURE, which is what it did before this argument existed; a startup
+    error instead would make "the checks never ran" and "the checks passed"
+    harder to tell apart than they need to be.
+    """
+    raw = [Path(s) for s in specs] if specs else list(_MODELS)
+    return [q if q.is_absolute() else _PROJECT_ROOT / q for q in raw]
+
+
+#: The GGUFs C1/C9 enumerate. Module-level because the checks are driven through
+#: a no-argument callable table; ``main()`` rebinds it from ``--gguf``.
+_MODEL_PATHS: list[Path] = _resolve_models(None)
 
 # The eager reference is computed in slices of at most this many elements. It
 # materialises ~25x its input as int32/fp32 intermediates, so running it in one
@@ -215,17 +256,19 @@ def _eager_matches(raw: torch.Tensor, ggml_type: int, got: torch.Tensor) -> tupl
     return n_diff, max_abs, n_nan_got, n_nan_ref
 
 
-def _enumerate_real_combos() -> list[tuple[int, tuple[int, ...]]]:
-    """Every distinct (quant type, shape) in the two shipped GGUFs.
+def _enumerate_real_combos(paths: list[Path]) -> list[tuple[int, tuple[int, ...]]]:
+    """Every distinct (quant type, shape) in the given GGUFs.
 
     Read out of the files rather than transcribed, so a model swap cannot leave
-    the check testing shapes that no longer exist.
+    the check testing shapes that no longer exist. ``paths`` arrives already
+    resolved to absolute (``_resolve_models``) and this function does no path
+    arithmetic of its own, so the default and the ``--gguf`` route cannot
+    diverge in how they interpret a relative path.
     """
     from gguf import GGUFReader
 
     combos: set[tuple[int, tuple[int, ...]]] = set()
-    for rel in _MODELS:
-        path = Path(__file__).resolve().parents[2] / rel
+    for path in paths:
         if not path.exists():
             raise FileNotFoundError(f"GGUF required by C1 is missing: {path}")
         reader = GGUFReader(str(path), mode="r")
@@ -283,11 +326,13 @@ _COMBOS: list[tuple[int, tuple[int, ...]]] = []
 
 def check_c1_real_shapes() -> None:
     global _COMBOS
-    _COMBOS = _enumerate_real_combos()
+    for path in _MODEL_PATHS:
+        print(f"       reading {path}")
+    _COMBOS = _enumerate_real_combos(_MODEL_PATHS)
     by_type: dict[int, int] = {}
     for ggml_type, _ in _COMBOS:
         by_type[ggml_type] = by_type.get(ggml_type, 0) + 1
-    print("       enumerated from the shipped GGUFs: "
+    print("       enumerated from the GGUFs above: "
           + ", ".join(f"{_TYPE_NAME[t]} x{n}" for t, n in sorted(by_type.items())))
     biggest = max(_COMBOS, key=lambda c: _n_elems(c[1]))
     print(f"       largest combo: {_TYPE_NAME[biggest[0]]}{biggest[1]} "
@@ -653,11 +698,28 @@ def check_c10_fp_fusion_control() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    global _MODEL_PATHS
+
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+
+    parser = argparse.ArgumentParser(
+        prog="python -m engine.gguf.dequant_triton_selfcheck",
+        description="Fused GGUF dequant self-check: 10 checks, exit 0 only if all pass.",
+    )
+    parser.add_argument(
+        "--gguf",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help="a GGUF whose (quant type, shape) set C1/C9 sweep; repeatable, "
+        "relative to the project root. Default: the 2.3 engine's two GGUFs.",
+    )
+    args = parser.parse_args(argv)
+    _MODEL_PATHS = _resolve_models(args.gguf)
 
     if not torch.cuda.is_available():
         print("[FAIL] no CUDA device: the fused dequant kernels cannot be exercised")
@@ -673,7 +735,7 @@ def main() -> int:
         return 1
 
     checks: list[tuple[str, Callable[[], None]]] = [
-        ("C1  every (type, shape) in the shipped GGUFs is bit-identical", check_c1_real_shapes),
+        ("C1  every (type, shape) in the GGUFs under test is bit-identical", check_c1_real_shapes),
         ("C2  hand-built boundary blocks are bit-identical", check_c2_boundary_blocks),
         ("C3  a CPU tensor never reaches Triton", check_c3_cpu_guard),
         ("C4  the IC-LoRA in-place add is identical ON and OFF", check_c4_ic_lora_inplace),

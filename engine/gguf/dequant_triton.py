@@ -26,7 +26,9 @@ The four ways this degrades, all of which end in "eager runs instead"
      nothing at all - it just quietly poisons the weights. So the first call of
      each quant type in the process is recomputed with the eager kernel and
      compared bit for bit; a mismatch latches the feature off exactly like an
-     exception would. Cost: three extra eager calls per process, once.
+     exception would. "Each quant type" is really each (quant type, pointer
+     alignment class) - see ``_VERIFIED`` for why the second half is load-
+     bearing. Cost: at most six extra eager calls per process, once.
 
 Any of 2-4 latches for the rest of the job, so the remaining ~1600 tensors of
 that forward pass go straight to eager without paying a try/except each. The
@@ -75,12 +77,24 @@ _CALLS = 0              # tensors this job actually dequantised on Triton
 _WARNED = False         # one warning per job, not per tensor
 _LAST_USED = "off"      # echo value for the job that just finished
 
-# Quant types whose first-call bit-exactness check has already passed. Process
-# lifetime, not job lifetime: the kernels are static code, so re-verifying them
-# on every job would be pure cost. Nothing is ever removed - a type that failed
-# verification latched the job, and the next job re-runs the check from scratch
-# because the type never got in here.
-_VERIFIED: set[int] = set()
+# ``(ggml type, is the payload pointer 16-byte aligned?)`` pairs whose
+# first-call bit-exactness check has already passed. Process lifetime, not job
+# lifetime: the kernels are static code, so re-verifying them on every job would
+# be pure cost. Nothing is ever removed - a combination that failed verification
+# latched the job, and the next job re-runs the check from scratch because it
+# never got in here.
+#
+# WHY THE ALIGNMENT BIT IS PART OF THE KEY: Triton specialises a kernel on
+# ``data_ptr() % 16 == 0``, so an aligned and a misaligned ``raw`` compile to two
+# DIFFERENT variants of the same source - and a misaligned one really does occur
+# in production. The 2.5 text encoder's chunked linear hands over row slices of
+# the packed payload, and Q6_K's row stride of 154350 bytes is not a multiple of
+# 16, so every chunk after the first starts misaligned. Keyed on the type alone,
+# that second variant would go straight into the weights having never been
+# compared against eager once. The whole point of check 4 above is that a wrong
+# index formula raises nothing, so "a variant nobody verified" is exactly the
+# hole this closes. Price: at most three more eager recomputations per process.
+_VERIFIED: set[tuple[int, bool]] = set()
 
 # Lazily imported kernel module, and a sticky record of a failed import (Python
 # does not cache import failures, so without this a missing Triton would re-run
@@ -221,11 +235,17 @@ def dequant(
             _latch("Triton kernels could not be imported")
             return None
         out = getattr(mod, _DISPATCH[ggml_type][0])(raw, original_shape)
-        if ggml_type not in _VERIFIED:
+        # One verification per COMPILED VARIANT, not per quant type: Triton
+        # specialises on the payload pointer's 16-byte alignment (see _VERIFIED).
+        aligned = raw.data_ptr() % 16 == 0
+        if (ggml_type, aligned) not in _VERIFIED:
             if not _verify(raw, ggml_type, original_shape, out):
-                _latch(f"first-call bit-exactness check failed for ggml type {ggml_type}")
+                _latch(
+                    f"first-call bit-exactness check failed for ggml type {ggml_type} "
+                    f"({'aligned' if aligned else 'misaligned'} payload)"
+                )
                 return None
-            _VERIFIED.add(ggml_type)
+            _VERIFIED.add((ggml_type, aligned))
     except BaseException as exc:  # noqa: BLE001 - a speed feature never kills a job
         _latch(f"{type(exc).__name__}: {exc}")
         return None

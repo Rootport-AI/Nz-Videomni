@@ -1410,6 +1410,15 @@ $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
 # the 2026-07-28 cleanup (PENDING_TASKS.md 3-25) and came back once the
 # Acceleration feature's SageAttentionService gave it a real consumer. SDPA
 # remains the default at generation time; sage is opt-in per job.
+#
+# triton-windows is NOT a 2.3-only package any more: as of 2026-08-24 it is
+# pinned in BOTH engine freezes (engine/venv-engine.freeze.txt and
+# engine25/venv-engine-ltx25.freeze.txt, same 3.5.1.post24). In the 2.5 venv it
+# has nothing to do with sage -- it is the runtime JIT for the fused GGUF
+# K-quant dequantisation kernels (engine/gguf/dequant_triton_kernels.py), which
+# the 2.5 transformer and text-encoder paths share with the 2.3 engine. No
+# installer CODE change was needed for that: the freeze is applied verbatim and
+# the state-hash marker re-applies it on the next run.
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------

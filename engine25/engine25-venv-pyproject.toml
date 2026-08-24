@@ -41,10 +41,13 @@ requires-python = ">=3.12"
 #
 # DELIBERATELY ABSENT (do not add without a plan change):
 #   sageattention  -- LTX 2.5 v1 runs on SDPA only.
-#   triton-windows -- nothing imports it here; the wheel's triton use is a lazy
-#                     fallback, confirmed to degrade cleanly when absent.
 #   diffusers      -- 2.3-only dependency; the 2.5 pipeline does not use it.
 #   natten         -- only the diffusion-decoder VAE wants it; v1 uses Conv VAE.
+# triton-windows was on that list until 2026-08-24 ("nothing imports it here").
+# It is a real dependency now: the 2.5 engine fuses its GGUF K-quant
+# dequantisation on Triton too (engine/gguf/dequant_triton.py is shared with the
+# 2.3 engine and sits on the 2.5 transformer AND text-encoder paths), so the
+# wheel has an importer here exactly as it does in .venv-engine.
 # openimageio is NOT listed either, but for the opposite reason: it is a hard
 # transitive requirement of `ltx_pipelines.distilled` and a real Windows wheel
 # exists (3.1.16.0, cp312, win_amd64), so it arrives on its own.
@@ -72,4 +75,11 @@ dependencies = [
     # an unpinned torchvision drags a matching newer torch in behind it.
     "opencv-python-headless>=4.8.0",
     "torchvision==0.24.1+cu128",
+    # Runtime JIT for the fused GGUF dequantisation kernels
+    # (engine/gguf/dequant_triton_kernels.py). Version left unbound here, the
+    # same convention this file uses for every non-torch dependency: the exact
+    # pin (triton-windows==3.5.1.post24, identical to the 2.3 venv's) lives in
+    # engine25/venv-engine-ltx25.freeze.txt, which is the DEFAULT install path.
+    # The wheel bundles its own TinyCC/ptxas, so no Visual Studio is needed.
+    "triton-windows",
 ]

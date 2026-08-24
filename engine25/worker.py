@@ -44,13 +44,20 @@ Protocol (one JSON object per line; parent -> worker):
       change. A failure here is fatal: ``error`` + exit 1, which is what the
       app's load-failure path expects.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   output_path, [images]}
+   output_path, [images], loras, reference_video}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
       ignores (negative_prompt, num_steps, the 2.3 acceleration knobs, ...) may
       ride along; each is logged as ignored and dropped. ``crop_output`` is NOT
       one of them -- it never reaches the worker in either engine, because it is
       an ffmpeg post-process the app applies to the finished mp4.
+      ``loras`` = [{path, strength, [audio_strength]}...] is the job's Style /
+      IC adapters and is ALWAYS a key, even as ``[]``: an explicit empty list is
+      the authoritative "no adapter this job" that makes the previous job's
+      attachment be cleared rather than inherited. ``reference_video`` =
+      {path, strength, preprocess, [attention_strength]} | null is the IC-LoRA's
+      reference video; ``preprocess`` != "none" turns it into a control signal
+      (``control_<kind>.mp4`` next to the output) via engine/preprocess/ first.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
    [stage2_window], [source], [audio_source]}
@@ -66,11 +73,15 @@ Protocol (one JSON object per line; parent -> worker):
       waveform verbatim. The two are mutually exclusive. Both are optional and
       ABSENT on a plain T2V/I2V chain, whose output is byte-identical to the
       chain that shipped before they existed.
+      ``loras`` / ``reference_video`` are the single op's blocks, applied
+      uniformly across the chain -- the ONE reference is sliced per stage-1
+      segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
+      for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``retake``, ``end_source``, ``loras``, ``reference_video``, ``nag``,
-      ``attention_backend``, ``keep_resident``, ``vae_mode``,
-      ``block_swap_prefetch``, ``fused_gguf_dequant_kernel``) is REFUSED BY NAME
-      rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
+      (``retake``, ``end_source``, ``nag``, ``attention_backend``,
+      ``keep_resident``, ``vae_mode``, ``block_swap_prefetch``,
+      ``fused_gguf_dequant_kernel``) is REFUSED BY NAME rather than ignored --
+      see ``CHAIN_UNSUPPORTED_KEYS``.
       The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
       2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes ran.
   {"op": "shutdown"}
@@ -310,6 +321,141 @@ def _do_load(msg: dict) -> None:
     _emit("ready", sampler=pipeline.sampler, sage_available=False)
 
 
+def _ic_loras(msg: dict) -> list[tuple[str, float, float | None]]:
+    """``msg['loras']`` -> the ``(path, strength, audio_strength)`` triples.
+
+    ALWAYS a list, and a missing key gives ``[]`` rather than ``None``: an empty
+    list is not "no opinion", it is the authoritative "no adapter this job",
+    which is what makes ``Ltx25DiffusionStage.set_loras([])`` detach the previous
+    job's attachment instead of letting it ride. The app's payload builder sends
+    the key on every single generate for exactly that reason.
+
+    The triple is built HERE, unconditionally, even though the normaliser
+    downstream accepts 2-tuples -- the same shape 2.3's worker builds
+    (``engine/worker.py``), so the two engines hand their (shared) normaliser the
+    same thing and a missing ``audio_strength`` means one thing in both.
+    """
+    return [
+        (
+            str(lo["path"]),
+            float(lo["strength"]),
+            None if lo.get("audio_strength") is None else float(lo["audio_strength"]),
+        )
+        for lo in msg.get("loras") or []
+    ]
+
+
+def _preprocess_frame_cap(msg: dict) -> int | None:
+    """Frames the reference preprocessor should decode: the generation length.
+
+    Ported from 2.3's worker unchanged, because it is a statement about the
+    GEOMETRY of a job and not about either engine's internals. Depth normalises
+    over the whole clip it is given (and canny/dwpose simply waste decode time on
+    footage the generation will never use), so this caps the preprocessor's input
+    to exactly what stage 1 can consume.
+
+    Single generate -> ``num_frames``. A chain -> the PIXEL TOTAL the stage-1
+    ledger spans across every clip (a reference is attached to EVERY clip's
+    stage-1 conditioning, sliced per segment by ``video_segment_windows``, so
+    clip 0's length is not the cap). Neither key present -> ``None`` = decode
+    everything, which is what a caller that supplies no length context gets.
+
+    The arithmetic goes through ``chain_math`` -- the torch-free module BOTH
+    engines share -- rather than being restated here, so the cap and the window
+    ledger cannot drift apart.
+    """
+    if "num_frames" in msg:
+        return int(msg["num_frames"])
+    raw_clips = msg.get("clips") or []
+    clip_frames = [int(c["num_frames"]) for c in raw_clips if "num_frames" in c]
+    if not clip_frames or len(clip_frames) != len(raw_clips):
+        return None
+
+    from chain_math import (  # noqa: PLC0415 -- lazy like every other import here
+        DEFAULT_OVERLAP_FRAMES,
+        px_from_v_latent,
+        v_latent_frames,
+    )
+
+    kv = int(msg.get("overlap_frames", DEFAULT_OVERLAP_FRAMES))
+    seg_latent = [v_latent_frames(f) for f in clip_frames]
+    f_total = sum(seg_latent) - (len(seg_latent) - 1) * kv
+    return px_from_v_latent(f_total)
+
+
+def _resolve_ic_reference(
+    ref: dict | None,
+    output_path: str,
+    frame_cap: int | None = None,
+    *,
+    op: str = "generate",
+) -> tuple[tuple[str, float] | None, float]:
+    """A ``reference_video`` block -> ``((path, strength), attention_strength)``.
+
+    ``None``/absent -> ``(None, 1.0)``, which is inert: no reference tokens are
+    built and the job is byte-identical to one from before the feature existed.
+
+    ``attention_strength`` (0..1, default 1.0) is the control-adherence knob; at
+    1.0 the engine applies no wrapper at all, so the default stays structurally
+    identical rather than merely numerically equal.
+
+    When ``preprocess`` is anything but ``"none"`` the raw reference is first
+    converted to a CONTROL SIGNAL (edge map / skeleton / depth map) by
+    ``engine.preprocess`` -- the 2.3 package, imported here across the engine
+    boundary on purpose: it is plain OpenCV/torch code with no ltx wheel in it,
+    and a second copy of the same edge detector would be a second thing to keep
+    honest. The result is written as ``control_<kind>.mp4`` NEXT TO THE OUTPUT
+    (so a job's control signal is inspectable alongside what it produced) and the
+    returned path is that file. An unknown kind fails the job loud
+    (``get_processor`` raises); ``"none"`` never imports cv2 at all.
+
+    Both entry points call this, so a reference resolves identically whether it
+    arrived on a single generate or on a chain. The existence check is this
+    engine's regime rather than 2.3's silence (see :func:`_existing_media_path`):
+    without it a typo'd path surfaces as whatever the demuxer says two minutes
+    into the job, or -- with a preprocess kind -- as an empty control mp4.
+    """
+    ic_reference = None
+    attn_strength = 1.0
+    if ref:
+        ref_path = _existing_media_path(ref["path"], "reference_video", op=op)
+        ref_strength = float(ref.get("strength", 1.0))
+        attn_strength = float(ref.get("attention_strength", 1.0))
+        preprocess = ref.get("preprocess", "none")
+        if preprocess and preprocess != "none":
+            import time  # noqa: PLC0415
+
+            from engine.preprocess import (  # noqa: PLC0415
+                get_processor,
+                preprocess_video,
+            )
+
+            processor = get_processor(preprocess)
+            control_path = os.path.join(
+                os.path.dirname(output_path), f"control_{preprocess}.mp4"
+            )
+            t0 = time.perf_counter()
+            n_frames = preprocess_video(
+                Path(ref_path), Path(control_path), processor, frame_cap=frame_cap
+            )
+            elapsed = time.perf_counter() - t0
+            _log(
+                f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
+                f"frames={n_frames}"
+                + ("" if frame_cap is None else f" cap={frame_cap}")
+                + f" elapsed={elapsed:.2f}"
+            )
+            ref_path = control_path
+        ic_reference = (ref_path, ref_strength)
+    return ic_reference, attn_strength
+
+
+def _preprocess_kind(msg: dict) -> str:
+    """The reference's preprocess kind for the one parse log line ("-" = no reference)."""
+    ref = msg.get("reference_video")
+    return "-" if not ref else str(ref.get("preprocess", "none"))
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -327,6 +473,27 @@ def _do_generate(msg: dict) -> None:
     # test: a caller that sends ``num_steps=8`` still gets told it had no effect.
     ignored = {name: msg[name] for name in IGNORED_FIELDS if name in msg}
 
+    # Style/character LoRA and the IC-LoRA reference video (§3-102 third
+    # increment). Both are resolved BEFORE the log line below, because a
+    # preprocess kind can take a minute of its own and the line is what says the
+    # job understood what it was asked for.
+    ic_loras = _ic_loras(msg)
+    ic_reference, attn_strength = _resolve_ic_reference(
+        msg.get("reference_video"), str(msg["output_path"]), _preprocess_frame_cap(msg)
+    )
+
+    # ONE line per job, after the parse: what the request ASKED for, in the
+    # worker's own log, so "I attached a LoRA and nothing happened" can be told
+    # apart from "the LoRA never reached the engine" without a rerun. The engine
+    # logs what it DID (pipeline25's own line names the resolved downscale
+    # factor); this names what arrived.
+    _log(
+        f"generate {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
+        f"seed={seed} images={len(images)} "
+        f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
+        f"preprocess={_preprocess_kind(msg)} attn={attn_strength:.3f}"
+    )
+
     result = _PIPE.generate(
         prompt=str(msg["prompt"]),
         seed=seed,
@@ -336,6 +503,10 @@ def _do_generate(msg: dict) -> None:
         frame_rate=float(msg["frame_rate"]),
         output_path=str(msg["output_path"]),
         images=images,
+        # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
+        ic_loras=ic_loras,
+        ic_reference=ic_reference,
+        ic_attention_strength=attn_strength,
         ignored=ignored,
     )
 
@@ -373,20 +544,20 @@ def _do_generate(msg: dict) -> None:
 #: ``source`` (V2V) and ``audio_source`` (A2V) USED to be on this list and are
 #: not any more: §3-102's second increment implemented both, so they are now
 #: read below into :class:`~engine25.chain25.SourceSpec` /
-#: :class:`~engine25.chain25.AudioSourceSpec`. What is left is what the engine
-#: still genuinely does not have.
+#: :class:`~engine25.chain25.AudioSourceSpec`. ``loras`` and ``reference_video``
+#: LEFT WITH THE THIRD, which implemented Style LoRA and the IC-LoRA reference
+#: (the long-form one included: ONE reference video, sliced per stage-1 segment).
+#: What is left is what the engine still genuinely does not have.
 #:
-#: The test is MEMBERSHIP, not truthiness: ``{"loras": []}`` is as much a sign of
-#: drift as a populated list, and "the key was there but empty so we allowed it"
-#: is exactly the kind of exception the single-rule principle exists to avoid.
+#: The test is MEMBERSHIP, not truthiness: ``{"retake": {}}`` is as much a sign
+#: of drift as a populated block, and "the key was there but empty so we allowed
+#: it" is exactly the kind of exception the single-rule principle exists to avoid.
 #: The single-generate op differs deliberately -- there the acceleration knobs
 #: ARE part of the contract and are ignored-and-logged (``IGNORED_FIELDS``),
 #: because the app sends them on every single job.
 CHAIN_UNSUPPORTED_KEYS = (
     "retake",
     "end_source",
-    "loras",
-    "reference_video",
     "nag",
     "attention_backend",
     "keep_resident",
@@ -396,7 +567,7 @@ CHAIN_UNSUPPORTED_KEYS = (
 )
 
 
-def _existing_media_path(raw: object, field: str) -> str:
+def _existing_media_path(raw: object, field: str, *, op: str = "generate_chain") -> str:
     """``str(raw)`` after checking it names a file that exists.
 
     2.3's worker does not check (:mod:`engine.worker`'s chain op reads the two
@@ -411,12 +582,15 @@ def _existing_media_path(raw: object, field: str) -> str:
 
     A directory is rejected too (``is_file``, not ``exists``): a path that names
     a folder is the same mistake and would fail just as obscurely.
+
+    ``op`` only names the op in the message. It exists because the reference
+    video reaches this check from BOTH ops (see :func:`_resolve_ic_reference`),
+    and a single generate whose reference path was mistyped should not be
+    reported as a chain failure.
     """
     path = str(raw)
     if not Path(path).is_file():
-        raise ValueError(
-            f"generate_chain: {field} path is not an existing file: {path!r}"
-        )
+        raise ValueError(f"{op}: {field} path is not an existing file: {path!r}")
     return path
 
 
@@ -517,6 +691,24 @@ def _do_generate_chain(msg: dict) -> None:
                 f"generate_chain: audio_source requires path (missing key {exc})"
             ) from exc
 
+    # Style/character LoRA + the ONE reference video, applied across the whole
+    # chain and read with the SAME two helpers the single generate uses -- which
+    # is the point: a reference must resolve (and preprocess) identically
+    # whichever op it arrived on. The frame cap here is the chain's stage-1 pixel
+    # TOTAL, not clip 0's length (see :func:`_preprocess_frame_cap`), because
+    # every clip's stage-1 conditioning gets a slice of this reference.
+    #
+    # Unlike the single op these two are ADDITIVE in the payload (absent on a
+    # chain that asked for neither), which is 2.3's chain shape verbatim: an
+    # absent ``loras`` key gives ``[]``, and ``[]`` is still the explicit detach.
+    ic_loras = _ic_loras(msg)
+    ic_reference, ic_attn = _resolve_ic_reference(
+        msg.get("reference_video"),
+        str(msg["output_path"]),
+        _preprocess_frame_cap(msg),
+        op="generate_chain",
+    )
+
     spec = ChainSpec(
         clips=clips,
         width=int(msg["width"]),
@@ -545,10 +737,21 @@ def _do_generate_chain(msg: dict) -> None:
         # engines' worker logs are read side by side when a chain is compared.
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
+        # The parse receipt for the two §3-102 blocks, in the same line rather
+        # than a second one: what the chain was ASKED for, before any of it runs.
+        f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
+        f"preprocess={_preprocess_kind(msg)} attn={ic_attn:.3f} "
         f"stage2win={spec.stage2_window or 'standard'}"
     )
 
-    result = run_chain(_PIPE, spec, _emit_progress)
+    result = run_chain(
+        _PIPE,
+        spec,
+        _emit_progress,
+        ic_loras=ic_loras,
+        ic_reference=ic_reference,
+        ic_attention_strength=ic_attn,
+    )
     meta = result.metadata
     ltx25 = meta.get("ltx25") or {}
     vram = ltx25.get("vram") or {}
@@ -756,12 +959,138 @@ def _parse_image_arg(spec: str) -> dict:
     }
 
 
+#: Where ``--lora NAME`` looks. Both engines share ONE adapter library (a LoRA
+#: file has no base-model axis -- the 2.3 adapters are what 2.5 runs, which is
+#: the whole finding §71 rests on), so this is the app's ``lora_dir`` and its
+#: ``ic_loras`` config entries alike, resolved by filename rather than restated.
+_LORA_SEARCH_ROOT = ROOT / "models" / "LTX23"
+
+
+def _resolve_lora_path(name: str) -> str:
+    """``NAME`` -> an existing adapter file, or fail loud.
+
+    A path that already names a file wins outright; otherwise the name (with or
+    without ``.safetensors``) is looked up under ``models/LTX23``. Searching by
+    filename rather than taking a directory argument is what lets the selftest
+    say ``--lora Pixar_Toon`` for a Style adapter and
+    ``--lora ltx-2.3-22b-ic-lora-union-control-ref0.5`` for a control one without
+    knowing which subdirectory each lives in -- the config's three logical
+    control names all point at that ONE file, so the lookup stays unambiguous.
+
+    Not-found and ambiguous both raise: a selftest that silently generated
+    without the adapter it was told to use would be a green run that proves the
+    opposite of what it claims.
+    """
+    direct = Path(name)
+    if direct.is_file():
+        return str(direct)
+    stem = direct.name
+    patterns = (stem, f"{stem}.safetensors")
+    found = sorted(
+        {p for pattern in patterns for p in _LORA_SEARCH_ROOT.rglob(pattern) if p.is_file()}
+    )
+    if not found:
+        raise SystemExit(f"--lora {name!r}: no such adapter file under {_LORA_SEARCH_ROOT}")
+    if len(found) > 1:
+        raise SystemExit(
+            f"--lora {name!r} matches {len(found)} files: {[str(p) for p in found]}"
+        )
+    return str(found[0])
+
+
+def _parse_lora_arg(spec: str) -> dict:
+    """``NAME[:STRENGTH[:AUDIO_STRENGTH]]`` -> one ``loras`` entry.
+
+    The numeric suffixes are peeled off the RIGHT, and only while they parse as
+    floats, so a Windows path (``S:\\models\\x.safetensors``) survives the split
+    that its drive-letter colon would otherwise break.
+
+    ``audio_strength`` is included ONLY when given, which is the app's payload
+    shape (``_lora_payload_entry``): an absent key means the audio-side Linears
+    follow the video strength, and sending ``null`` instead would be a different
+    statement.
+    """
+    parts = spec.split(":")
+    numbers: list[float] = []
+    while len(parts) > 1 and len(numbers) < 2:
+        try:
+            value = float(parts[-1])
+        except ValueError:
+            break
+        numbers.insert(0, value)
+        parts.pop()
+    entry = {
+        "path": _resolve_lora_path(":".join(parts)),
+        "strength": numbers[0] if numbers else 1.0,
+    }
+    if len(numbers) > 1:
+        entry["audio_strength"] = numbers[1]
+    return entry
+
+
+def _add_ic_lora_arguments(parser) -> None:
+    """The Style-LoRA / reference-video arguments BOTH selftests share.
+
+    One definition for the same reason the load arguments have one: the two
+    selftests must build the same blocks, because those blocks are the thing
+    under test. The reference's two strengths are here (rather than left at their
+    defaults) so the ``attention_strength`` branch -- the wrapper the engine
+    applies only below 1.0 -- is reachable from the command line at all.
+    """
+    parser.add_argument(
+        "--lora",
+        action="append",
+        default=[],
+        help="Style/IC adapter (repeatable): NAME[:STRENGTH[:AUDIO_STRENGTH]]. NAME is a "
+        "file under models/LTX23 (with or without .safetensors) or a path",
+    )
+    parser.add_argument(
+        "--reference",
+        default=None,
+        help="IC-LoRA reference video. Needs a --lora that declares a reference downscale "
+        "factor; %%128 width/height, as the API enforces for every reference job",
+    )
+    parser.add_argument("--reference-strength", type=float, default=1.0)
+    parser.add_argument(
+        "--preprocess",
+        default="none",
+        help="control-signal conversion for --reference: none (default) | canny | dwpose | "
+        "depth. Anything but none writes control_<kind>.mp4 next to the output",
+    )
+    parser.add_argument(
+        "--attention-strength",
+        type=float,
+        default=None,
+        help="conditioning_attention_strength (0..1). Omitted -> the key is absent from the "
+        "payload and the engine applies no wrapper at all",
+    )
+
+
+def _reference_payload(args) -> dict | None:
+    """The ``reference_video`` block from the shared arguments (None = no reference)."""
+    if args.reference is None:
+        return None
+    block: dict = {
+        "path": args.reference,
+        "strength": float(args.reference_strength),
+        "preprocess": args.preprocess,
+    }
+    if args.attention_strength is not None:
+        block["attention_strength"] = float(args.attention_strength)
+    return block
+
+
 def _selftest_generate(argv: list[str]) -> int:
     """Load + generate once (or twice) from the command line, then report JSON.
 
     Drives ``_do_load`` / ``_do_generate`` with synthesised protocol messages so
     the measured path is the shipped one. ``--rounds 2`` with an unchanged seed
     is the determinism probe: the two mp4 digests are compared and reported.
+
+    ``--lora`` / ``--reference`` / ``--preprocess`` build the two §3-102 blocks
+    the app sends. Both keys ride on EVERY message, ``[]``/``None`` included,
+    which is what makes an unchanged digest on a no-LoRA run evidence that the
+    explicit-detach path costs nothing rather than evidence that it never ran.
     """
     import argparse
     import hashlib
@@ -783,13 +1112,25 @@ def _selftest_generate(argv: list[str]) -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--image", action="append", default=[], help="conditioning image (repeatable): PATH[,FRAME_IDX[,STRENGTH]]")
+    _add_ic_lora_arguments(parser)
     parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
     args = parser.parse_args(argv)
 
     load_msg = _load_message(args)
     images = [_parse_image_arg(spec) for spec in args.image]
+    loras = [_parse_lora_arg(spec) for spec in args.lora]
+    reference = _reference_payload(args)
 
-    report: dict = {"load": load_msg, "images": images, "rounds": []}
+    report: dict = {
+        "load": load_msg,
+        "images": images,
+        # The RESOLVED blocks, not the raw arguments: which file a bare
+        # ``--lora Pixar_Toon`` turned into is exactly what a report of a
+        # LoRA run has to state.
+        "loras": loras,
+        "reference_video": reference,
+        "rounds": [],
+    }
     started = time.perf_counter()
     _do_load(load_msg)
     report["load_seconds"] = round(time.perf_counter() - started, 2)
@@ -812,6 +1153,11 @@ def _selftest_generate(argv: list[str]) -> int:
                 "frame_rate": args.frame_rate,
                 "output_path": out,
                 "images": images,
+                # ALWAYS present, ``[]``/``None`` included -- the app's single
+                # generate sends both keys on every job, and an empty list is
+                # the explicit detach the worker must be told about.
+                "loras": loras,
+                "reference_video": reference,
                 # Deliberately present: proves the ignore-and-log path runs on
                 # the same messages the app will send.
                 "num_steps": 8,
@@ -820,8 +1166,18 @@ def _selftest_generate(argv: list[str]) -> int:
         )
         digest = hashlib.sha256(Path(out).read_bytes()).hexdigest()
         digests.append(digest)
-        report["rounds"].append({"round": index, "output": out, "sha256": digest,
-                                 "size_bytes": Path(out).stat().st_size})
+        round_report = {"round": index, "output": out, "sha256": digest,
+                        "size_bytes": Path(out).stat().st_size}
+        # The control mp4 by MEASUREMENT: a preprocess kind that silently wrote
+        # nothing would otherwise look like a clean run.
+        if reference is not None and reference["preprocess"] != "none":
+            control = Path(out).with_name(f"control_{reference['preprocess']}.mp4")
+            round_report["control_video"] = {
+                "path": str(control),
+                "exists": control.is_file(),
+                "size_bytes": control.stat().st_size if control.is_file() else None,
+            }
+        report["rounds"].append(round_report)
 
     if len(digests) > 1:
         report["same_seed_sha_identical"] = len(set(digests)) == 1
@@ -860,6 +1216,10 @@ def _selftest_chain(argv: list[str]) -> int:
     rendering of an audio track. Neither given, the payload's key set is
     byte-identical to the one that shipped before the two modes existed, which
     is what makes an unchanged digest evidence rather than a coincidence.
+
+    ``--lora`` / ``--reference`` / ``--preprocess`` are the single selftest's,
+    with the chain's ADDITIVE payload discipline: neither key is written unless
+    asked for, so a plain chain's message is the dict it always was.
 
     ``stage2_window`` is deliberately not an argument: the default chain is what
     is under test, and the app sends that key only when a request opted off
@@ -927,6 +1287,7 @@ def _selftest_chain(argv: list[str]) -> int:
         help="V2V context span in PIXEL frames (8n+1); read only with --source. "
         "The app's default is 73",
     )
+    _add_ic_lora_arguments(parser)
     parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
     args = parser.parse_args(argv)
 
@@ -934,6 +1295,8 @@ def _selftest_chain(argv: list[str]) -> int:
 
     load_msg = _load_message(args)
     images = [_parse_image_arg(spec) for spec in args.image]
+    loras = [_parse_lora_arg(spec) for spec in args.lora]
+    reference = _reference_payload(args)
 
     prompts = list(args.prompt) or list(_SELFTEST_CHAIN_PROMPTS)
     if len(prompts) < args.clips:
@@ -984,6 +1347,11 @@ def _selftest_chain(argv: list[str]) -> int:
                 "audio_source": (
                     None if args.audio_source is None else {"path": args.audio_source}
                 ),
+                # The RESOLVED blocks (which file a bare --lora NAME became),
+                # both None/[] on the plain chain whose digest gate G2(a)
+                # compares against the pre-LoRA baseline.
+                "loras": loras,
+                "reference_video": reference,
             },
             "rounds": [],
         }
@@ -1027,6 +1395,12 @@ def _selftest_chain(argv: list[str]) -> int:
                 payload["source"] = {"path": args.source, "context_frames": args.context}
             if args.audio_source is not None:
                 payload["audio_source"] = {"path": args.audio_source}
+            # Additive here too, exactly as the chain adapter builds them: a
+            # chain that asked for neither carries neither key.
+            if loras:
+                payload["loras"] = loras
+            if reference is not None:
+                payload["reference_video"] = reference
             _do_generate_chain(payload)
             seconds = time.perf_counter() - round_started
 
@@ -1063,6 +1437,12 @@ def _selftest_chain(argv: list[str]) -> int:
                     "exists": exists,
                     "size_bytes": handle_path.stat().st_size if exists else None,
                 }
+
+            # Where a control-signal reference would have written its mp4 (next
+            # to the output, as _resolve_ic_reference puts it).
+            control_path = Path(out).with_name(
+                f"control_{'none' if reference is None else reference['preprocess']}.mp4"
+            )
             report["rounds"].append(
                 {
                     "round": index,
@@ -1093,6 +1473,21 @@ def _selftest_chain(argv: list[str]) -> int:
                     "v2v_key_count": len(v2v_meta) or None,
                     "a2v_key_count": len(chain_meta.get("a2v") or {}) or None,
                     "audio_handle": handle,
+                    # Same measurement as the single selftest's: a preprocess
+                    # kind that wrote nothing must not read as a clean run.
+                    "control_video": (
+                        None
+                        if reference is None or reference["preprocess"] == "none"
+                        else {
+                            "path": str(control_path),
+                            "exists": control_path.is_file(),
+                            "size_bytes": (
+                                control_path.stat().st_size
+                                if control_path.is_file()
+                                else None
+                            ),
+                        }
+                    ),
                     "progress": {
                         "count": len(progress),
                         "with_outer": sum(1 for e in progress if e.get("outer_total") is not None),

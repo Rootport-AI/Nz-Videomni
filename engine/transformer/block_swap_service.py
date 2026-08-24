@@ -53,11 +53,25 @@ class BlockSwapService:
         blocks_on_gpu: How many blocks to keep on GPU simultaneously.
                        0 disables block swapping entirely.
         device:        The GPU device blocks run on during their forward pass.
+        hold_arenas:   Give the prefetch engine a fixed ring of device arenas to
+                       recycle instead of allocating and freeing one per block.
+                       OFF by default, because the ring stays allocated from the
+                       last denoise pass until the job ends: that is free for an
+                       engine whose VRAM peak is INSIDE denoise (LTX 2.5) and
+                       costs blocks_on_gpu+1 extra arenas for one whose peak is
+                       outside it (LTX 2.3, measured +2,286MB on Chain A). The
+                       measurement is in ``block_swap_prefetch``'s docstring.
     """
 
-    def __init__(self, blocks_on_gpu: int, device: torch.device) -> None:
+    def __init__(
+        self,
+        blocks_on_gpu: int,
+        device: torch.device,
+        hold_arenas: bool = False,
+    ) -> None:
         self.blocks_on_gpu = blocks_on_gpu
         self.device = device
+        self.hold_arenas = hold_arenas
         self._installed_transformers: list[nn.Module] = []
 
         # ── Per-job prefetch (opt-in) ─────────────────────────────────────
@@ -302,6 +316,7 @@ class BlockSwapService:
             engine = PrefetchEngine(
                 blocks, self.device, self.blocks_on_gpu,
                 self._pinned_pool, self._xfer_stream,
+                hold_arenas=self.hold_arenas,
             )
             engine.prepare()
             return engine

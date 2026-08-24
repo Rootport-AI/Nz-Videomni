@@ -19,12 +19,12 @@ odd-sized buffer and a 0-dim buffer that exercise the arena's alignment padding
 and the ``reshape(-1)`` guard. Everything runs inside ``torch.inference_mode()``
 because that is where the production install() runs.
 
-What the 15 checks prove, in one line each:
+What the 16 checks prove, in one line each:
 
   C1  ON and OFF produce BIT-identical output (the only thing that changed is
       how the bytes travel, so anything less is a bug).
   C2  The CPU masters are never written to.
-  C3  Residency never exceeds blocks_on_gpu + 2, and a pass ends with exactly 1.
+  C3  Residency never exceeds blocks_on_gpu + 1, and a pass ends with exactly 1.
   C4  After the structural cold-start miss at the head of a pass, no block is
       ever waited for un-issued.
   C5  The GPU-side GGMLQuantizedTensor keeps its subclass, quant metadata and
@@ -43,6 +43,10 @@ What the 15 checks prove, in one line each:
   C14 Weight tying is detected and warned about.
   C15 A SUBCLASS of GGMLQuantizedTensor is rebuilt as that same subclass, with
       its quant metadata intact (engine25's Ltx25GGMLTensor depends on it).
+  C16 The arena ring is fixed and recycled, the head of a pass releases the
+      previous pass's leftover tail block before its slot is reused, teardown()
+      gives the ring back, and hold_arenas=False holds nothing while producing
+      the same bits.
 """
 
 from __future__ import annotations
@@ -263,8 +267,16 @@ def _cpu_snapshot(model: nn.Module) -> list[torch.Tensor]:
     return out
 
 
-def _service(blocks_on_gpu: int) -> BlockSwapService:
-    return BlockSwapService(blocks_on_gpu=blocks_on_gpu, device=_DEVICE)
+def _service(blocks_on_gpu: int, hold_arenas: bool = True) -> BlockSwapService:
+    """The service under test.
+
+    ``hold_arenas`` defaults to TRUE here even though the class default is False:
+    the arena ring is what LTX 2.5 runs in production, so it is what the checks
+    should exercise by default. C16 covers the other setting (LTX 2.3's) head on,
+    including the bit-identity between the two.
+    """
+    return BlockSwapService(blocks_on_gpu=blocks_on_gpu, device=_DEVICE,
+                            hold_arenas=hold_arenas)
 
 
 # --------------------------------------------------------------------------- #
@@ -332,6 +344,21 @@ def check_c2_master_invariance() -> None:
 
 
 def check_c3_c4_residency_and_schedule() -> None:
+    """Residency bound and issue schedule.
+
+    CONTRACT CHANGED WITH THE ARENA RING (see C16 and the module docstring).
+    The bound used to be ``blocks_on_gpu + 2``: the window, plus the block being
+    released, plus the tail block of the PREVIOUS pass, which nothing ever
+    released and which therefore sat resident through the whole next pass. The
+    ring made that leftover unsafe (its arena slot gets recycled), so
+    ``on_block_forward`` now releases it at ``idx == 0``, and the steady-state
+    residency is one lower: ``blocks_on_gpu + 1``. Both the ceiling and the
+    "peak is reached exactly" assertion below moved with it.
+
+    Unchanged: a pass still ENDS with exactly one resident block, because the
+    window still drains rather than wrapping. That leftover is now released at
+    the head of the next pass instead of lingering through it.
+    """
     # Two shapes: a small one, and the production one (48 blocks, 8 resident).
     for n_blocks, bs, passes in ((12, 3, 4), (48, 8, 3)):
         model = _build_model(n_blocks=n_blocks)
@@ -344,9 +371,9 @@ def check_c3_c4_residency_and_schedule() -> None:
         def sample(where: str, engine) -> None:
             n = len(engine._state)
             peak["n"] = max(peak["n"], n)
-            if n > bs + 2:
+            if n > bs + 1:
                 raise AssertionError(
-                    f"residency {n} exceeds blocks_on_gpu+2={bs + 2} ({where})"
+                    f"residency {n} exceeds blocks_on_gpu+1={bs + 1} ({where})"
                 )
 
         def after_pass(_p: int) -> None:
@@ -377,10 +404,11 @@ def check_c3_c4_residency_and_schedule() -> None:
              on_entry=on_entry, after_pass=after_pass)
         service.teardown_prefetch()
 
-        if peak["n"] != bs + 2:
+        if peak["n"] != bs + 1:
             raise AssertionError(
-                f"peak residency {peak['n']}, expected exactly blocks_on_gpu+2="
-                f"{bs + 2} (window + the block being released + last pass's tail)"
+                f"peak residency {peak['n']}, expected exactly blocks_on_gpu+1="
+                f"{bs + 1} (the window + the block being released; the previous "
+                f"pass's tail is released at the head of this one)"
             )
         for p, misses in enumerate(misses_by_pass):
             late = [m for m in misses if m != 0]
@@ -392,7 +420,7 @@ def check_c3_c4_residency_and_schedule() -> None:
                 )
         print(
             f"       {n_blocks} blocks / window {bs}: peak residency {peak['n']} "
-            f"(limit {bs + 2}), misses per pass {misses_by_pass}"
+            f"(limit {bs + 1}), misses per pass {misses_by_pass}"
         )
 
 
@@ -903,6 +931,142 @@ def check_c15_ggml_subclass_preserved() -> None:
         engine.teardown()
 
 
+# --------------------------------------------------------------------------- #
+# C16: the arena ring                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def check_c16_arena_ring() -> None:
+    """The ring is allocated once, recycled, and drained at teardown.
+
+    Four claims, all of them things the per-block ``torch.empty``/free version
+    did NOT have to satisfy:
+
+      1. ``prepare()`` allocates exactly ``min(total, blocks_on_gpu + 2)``
+         distinct arenas, each sized for the LARGEST block (so any block fits
+         any slot).
+      2. Those arenas do not move for the life of the job — the addresses seen
+         at the first block of pass 0 are the addresses seen at every later
+         block — and one pass of 12 issues uses no more than the 5 of them, i.e.
+         slots really are recycled rather than re-allocated.
+      3. The leftover tail block of the previous pass is released at the head of
+         the next one, BEFORE its slot comes round again. This is the assertion
+         that a silently wrong output would trip: a block still pointing at a
+         recycled slot reads another block's weights, which changes the digest
+         without raising. Checked from the run, at every block whose window does
+         not legitimately contain the tail.
+      4. ``teardown()`` drops the ring, so its VRAM is not held across jobs
+         (C8 covers the drift measurement; this covers the reference).
+      5. ``hold_arenas=False`` (LTX 2.3's setting) holds NO arenas at all and
+         produces the same bits. This is the half that keeps the flag honest:
+         the ring is a VRAM-placement choice, never an output one.
+    """
+    n_blocks, bs = 12, 3
+    tail = n_blocks - 1
+    model = _build_model(n_blocks=n_blocks)
+    x = _make_input()
+    service = _service(bs)
+
+    expected_ring = min(n_blocks, bs + 2)
+    ring_ptrs: list[int] = []
+    issued_ptrs: set[int] = set()
+    pass_no = {"p": 0}
+
+    def on_entry(idx: int) -> None:
+        engine = service._prefetch_engine
+        ptrs = [a.data_ptr() for a in engine._arenas]
+        if not ring_ptrs:
+            ring_ptrs.extend(ptrs)
+            if len(ring_ptrs) != expected_ring:
+                raise AssertionError(
+                    f"ring holds {len(ring_ptrs)} arenas, expected "
+                    f"min(total, blocks_on_gpu+2)={expected_ring}"
+                )
+            if len(set(ring_ptrs)) != expected_ring:
+                raise AssertionError("two ring slots share an address")
+            biggest = max(lay.total_bytes for lay in engine._layout)
+            sizes = {a.numel() for a in engine._arenas}
+            if sizes != {biggest}:
+                raise AssertionError(
+                    f"ring slot sizes {sorted(sizes)}, expected every slot to be "
+                    f"the largest block's {biggest} B"
+                )
+        elif ptrs != ring_ptrs:
+            raise AssertionError(f"the ring was re-allocated before block {idx}")
+
+        for st in engine._state.values():
+            issued_ptrs.add(st.arena.data_ptr())
+
+        # (3) The previous pass's tail must be gone by the time we are past the
+        #     head, except once the window legitimately reaches it again.
+        if pass_no["p"] >= 1 and 1 <= idx <= tail - bs:
+            if tail in engine._state:
+                raise AssertionError(
+                    f"pass {pass_no['p']}, block {idx}: block {tail} is still "
+                    f"resident from the previous pass — its ring slot will be "
+                    f"recycled underneath it"
+                )
+            master = model.transformer_blocks[tail].lin._buffers["weight"]
+            if master.device.type != "cpu":
+                raise AssertionError(
+                    f"pass {pass_no['p']}, block {idx}: block {tail} still points "
+                    f"at GPU memory ({master.device})"
+                )
+
+    def after_pass(p: int) -> None:
+        pass_no["p"] = p + 1
+
+    _run(service, model, x, passes=3, prefetch=True,
+         on_entry=on_entry, after_pass=after_pass)
+
+    engine = service._prefetch_engine
+    if issued_ptrs - set(ring_ptrs):
+        raise AssertionError("a block was issued into an arena outside the ring")
+    if len(issued_ptrs) < 2:
+        raise AssertionError(
+            f"only {len(issued_ptrs)} ring slot(s) were ever used — the run is "
+            f"too short to show recycling"
+        )
+    service.teardown_prefetch()
+    if engine._arenas:
+        raise AssertionError(f"teardown left {len(engine._arenas)} arenas allocated")
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+    # (5) The other setting: no ring at all, same bits.
+    model_off = _build_model(n_blocks=n_blocks)
+    service_off = _service(bs, hold_arenas=False)
+    held: list[int] = []
+
+    def watch(idx: int) -> None:
+        engine_off = service_off._prefetch_engine
+        held.append(len(engine_off._arenas))
+
+    outs_off = _run(service_off, model_off, x, passes=3, prefetch=True, on_entry=watch)
+    engine_off = service_off._prefetch_engine
+    service_off.teardown_prefetch()
+    if set(held) != {0}:
+        raise AssertionError(f"hold_arenas=False still held arenas: {sorted(set(held))}")
+
+    model_on = _build_model(n_blocks=n_blocks)
+    service_on = _service(bs, hold_arenas=True)
+    outs_on = _run(service_on, model_on, x, passes=3, prefetch=True)
+    service_on.teardown_prefetch()
+    for p, (a, b) in enumerate(zip(outs_off, outs_on)):
+        if not torch.equal(a, b):
+            raise AssertionError(f"pass {p}: ring on and ring off disagree bit for bit")
+    del model_off, model_on, outs_off, outs_on, engine_off
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    print(
+        f"       {expected_ring} arenas held and reused ({len(issued_ptrs)} slots "
+        f"seen over {n_blocks} blocks x 3 passes), block {tail} released at each "
+        f"pass head, ring dropped at teardown; hold_arenas=False holds 0 and is "
+        f"bit-identical"
+    )
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -917,7 +1081,7 @@ def main() -> int:
     checks: list[tuple[str, Callable[[], None]]] = [
         ("C1  ON output is bit-identical to OFF (3 passes, 12 blocks)", check_c1_output_parity),
         ("C2  the CPU masters are never mutated", check_c2_master_invariance),
-        ("C3/C4  residency <= blocks_on_gpu+2, 1 at pass end, no late issues",
+        ("C3/C4  residency <= blocks_on_gpu+1, 1 at pass end, no late issues",
          check_c3_c4_residency_and_schedule),
         ("C5  GGMLQuantizedTensor metadata and bytes survive the transfer", check_c5_ggml_metadata),
         ("C6  pinned-allocation failure degrades to the synchronous path", check_c6_pinned_failure_fallback),
@@ -933,6 +1097,8 @@ def main() -> int:
         ("C14  weight tying is detected and warned about once", check_c14_weight_tying_warning),
         ("C15  a GGMLQuantizedTensor subclass is rebuilt as that subclass",
          check_c15_ggml_subclass_preserved),
+        ("C16  the arena ring is fixed, recycled, released at teardown, and "
+         "optional", check_c16_arena_ring),
     ]
 
     for name, fn in checks:

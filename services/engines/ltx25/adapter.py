@@ -543,13 +543,27 @@ class _RealBackend25(_RealBackend):
         (``blocks_on_gpu`` / ``te_layers_on_gpu`` / ``cache_weights``) ride the
         LOAD PAYLOAD instead, where they are visible in the protocol.
 
-        What IS kept is the process hygiene the two share: the expandable-
-        segments allocator (16GB is the whole point), torch.compile off,
+        What IS kept is the process hygiene the two share: torch.compile off,
         unbuffered IO, and PYTHONPATH pinned to the project root so
         ``python -m engine25.worker`` resolves the first-party package.
+
+        ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`` used to be set here
+        as a fourth item, described as "the expandable-segments allocator (16GB
+        is the whole point)". That description was wrong and the line is now
+        GONE. Its removal cannot change behaviour, because the option never took
+        effect on this platform: torch refuses it on Windows ("expandable_segments
+        not supported on this platform") and keeps the segmented caching
+        allocator, measured on torch 2.9.1 — see
+        ``outputs/b4-vram-diag/probe_expandable.py``. torch 2.9 additionally
+        deprecates the variable's NAME in favour of ``PYTORCH_ALLOC_CONF``. The
+        fragmentation it was supposed to prevent is dealt with where it actually
+        happens instead: the arena ring in
+        ``engine/transformer/block_swap_prefetch.py``. Note also that the parent's
+        own environment still passes through (``dict(os.environ)`` below), so an
+        operator who exports the variable by hand is not overridden — what stops
+        is this adapter asserting a setting that does nothing.
         """
         env = dict(os.environ)
-        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         env["TORCH_COMPILE_DISABLE"] = "1"
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)

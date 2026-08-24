@@ -1576,7 +1576,14 @@ def test_child_env_carries_no_2_3_engine_knobs(ltx25_paths, tmp_path):
     env = _backend(cfg, descriptor)._build_child_env(tmp_path)
     assert {k for k in env if k.startswith("LTX_")} == inherited
     assert env["PYTHONPATH"] == str(tmp_path)
-    assert env["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
+    # The adapter deliberately sets NO allocator config: expandable_segments is
+    # refused on Windows and torch 2.9 deprecates the variable's name, so the
+    # line that used to set it was removed as a measured no-op (2026-08-24,
+    # outputs/b4-vram-diag/). Asserted as "does not ADD it", for the same reason
+    # the LTX_* assertion above is: the parent's environment passes through by
+    # design, and run.ps1 exports this variable.
+    added = {k: v for k, v in env.items() if os.environ.get(k) != v}
+    assert "PYTORCH_CUDA_ALLOC_CONF" not in added
 
     ltx23_env = ltx23._RealBackend(cfg, build_low_vram_settings(cfg), descriptor)._build_child_env(
         tmp_path

@@ -1645,10 +1645,10 @@ class _RealBackend:
     def _build_child_env(self, project_root: Path) -> dict[str, str]:
         """The worker subprocess's environment (§3-98 P3a seam).
 
-        Inherit, force the 16GB-load-bearing CUDA + compile knobs, unbuffered
-        IO, and set PYTHONPATH to the project root so the worker's ``engine.*``
-        package (and the venv-installed ltx_core/ltx_pipelines) resolve when
-        launched as ``python -m engine.worker``.
+        Inherit, force the compile knob, unbuffered IO, and set PYTHONPATH to
+        the project root so the worker's ``engine.*`` package (and the
+        venv-installed ltx_core/ltx_pipelines) resolve when launched as
+        ``python -m engine.worker``.
 
         A sibling engine family overrides this WHOLE method rather than editing
         the dict afterwards: every ``LTX_*`` variable below is a 2.3 knob read
@@ -1657,6 +1657,16 @@ class _RealBackend:
         to avoid.
         """
         env = dict(os.environ)
+        # INERT on this platform, kept only because LTX 2.3 is frozen. torch
+        # refuses expandable_segments on Windows ("expandable_segments not
+        # supported on this platform") and keeps the segmented caching allocator,
+        # so this line has never changed anything here; torch 2.9 also deprecates
+        # the variable's name in favour of PYTORCH_ALLOC_CONF. Measured
+        # 2026-08-24, outputs/b4-vram-diag/probe_expandable.py. The comment above
+        # used to call this a "16GB-load-bearing CUDA knob" — it is not, and the
+        # 2.5 adapter has dropped its copy of the line. Removing it here too would
+        # be equally behaviour-neutral; it stays because touching a frozen engine
+        # for a no-op is not worth the regression surface.
         env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         env["TORCH_COMPILE_DISABLE"] = "1"
         env["PYTHONUNBUFFERED"] = "1"

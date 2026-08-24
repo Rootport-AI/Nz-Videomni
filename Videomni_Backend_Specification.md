@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.30** |
+| 版 | **v0.5.31** |
 | 日付 | **2026-08-24**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -79,6 +79,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.28 | 2026-08-23 | **LTX 2.5 の V2V 継続・A2V（Single／長尺／バッチ）対応を反映（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定の応答形への変更は無い）**。`source_video` と `source_audio` が 422 の側から動作の側へ移ったため、**§6.1 の `POST /generate/chain` 補足**（断る系統を「4系統」から **Retake・End source の2系統**へ）／**§6.10(a)**（v1 の対応範囲へ V2V 継続と A2V を追加し、「まだ無い」の列挙から両者を削除）／**§6.10(b)**（`unsupported_features` の例から `"v2v"` / `"a2v"` を削除して**現在値 10 件**へ。残るモード名は `retake` / `end_source` の2つ）／**§6.10(f)**（`GenerateChainRequest` 全 34 フィールドの4分類を **422 系 9・無視 7・動作 13・従属 5** へ改訂。`stage2_window` の `"full_length"` が LTX 2.5 でも使えるようになった〔制約は LTX 2.3 と同じく「クリップちょうど1本かつ `source_audio` 必須」〕ことを明記）／**§6.10 末尾・§0.3 の SSOT 地図**（§3-102 の残りから V2V・A2V・長尺 A2V を外し、次に着手するものを Style LoRA へ）を更新した。実機ゲートの記録は `Docs/VERIFICATION_LOG.md` §73、設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6・§8.5、方式の差分は `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` 12節。 |
 | v0.5.29 | 2026-08-24 | **LTX 2.5 の V2V 継続・A2V・長尺 A2V がオーナーの実機確認に合格したことを反映（文書のみ。API・実装への変更は無い）**。オーナーが AviUtl2 の操作パネルから V2V と A2V を実際に生成して機能を確認し、合格と判定した。**長尺 A2V はオーナー裁定で合格扱い**（裁定の全文は `Docs/VERIFICATION_LOG.md` §73.10(2)）。これに伴い **§6.10(a)** と **§6.10(f) 末尾**・**§0.3 の SSOT 地図**の §3-102 の記述を「オーナー目視待ち」から「オーナー合格」へ改めた。結果の記録は `Docs/VERIFICATION_LOG.md` §73.10（§73.9 の目視欄は追記専用のため「未記入」のまま残り、§73.10 が上書きする）。**あわせて、前版 v0.5.28 の追加時に更新し忘れていた §0.1 の版メタ（v0.5.27 のまま残っていた）を実数へ訂正した。**<br>**【同日・敵対的レビューの確定指摘による訂正】** ①**版メタを1箇所へ一本化した**——冒頭にあった版メタの表を廃止し、§0.1 の表だけを正本とした（2 箇所に置いていたため更新のたびに片方が取り残され、実際に食い違っていた）。②**「生きている後続課題」の件数と列挙を本書から外した**（**§0.3 の SSOT 地図**・**§6.10 末尾**）——同じ件数が文書ごとに違う状態が繰り返し起きたため、列挙は台帳 `Docs/PENDING_TASKS.md` §3 の1箇所に集約し、本書はそこを参照するだけにした。③**§12b.2** の設計判断の参照範囲を D1〜D15 → **D1〜D16** へ（`Docs/MCP_SERVER_DESIGN.md` に D16 が追加されていた）。④上記のとおり長尺 A2V のオーナー裁定の全文を `Docs/VERIFICATION_LOG.md` §73.10(2) の1箇所に置き、本書は参照だけにした。 |
 | v0.5.30 | 2026-08-24 | **LTX 2.5 のスタイル LoRA・IC-LoRA（参照動画による制御。長尺＝クリップ別の参照窓を含む）対応を反映（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定の応答形への変更は無い）**。`loras` / `reference_video_id` と 2 つの強度（`conditioning_attention_strength` / `reference_video_strength`）が 422 の側から動作の側へ移ったため、**§6.10(a)**（対応範囲へスタイル LoRA と IC-LoRA を追加し、「まだ無い」の列挙から LoRA 各種を削除。前処理が LTX 2.3 と同じコードであること・既定強度を 1.0 に据え置いたことを明記）／**§6.10(b)**（`unsupported_features` の例から `"loras"` / `"reference_video"` を削除して**現在値 8 件**へ）／**§6.10(d)**（`GenerateRequest` 全 28 フィールドの 4 分類を **422 系 6・無視 7・動作 12・従属 3** へ改訂。2 つの強度が「従属」から「動作」へ移った理由と、参照動画を伴うリクエストの 128 の倍数制約〔422 `REFERENCE_RESOLUTION_INVALID`〕の注記を追加）／**§6.10(f)**（`GenerateChainRequest` 全 34 フィールドの 4 分類を **422 系 7・無視 7・動作 17・従属 3** へ改訂。長尺 IC-LoRA の窓の幾何が系統に依存しないこと、`depth-control` × 多クリップの 422 が LTX 2.5 でも効くことを明記）／**§6.10 末尾**（実測記録へ §74 と固定ベンチマーク B9〜B13 を追加し、**オーナー目視が未了**であることを明記）を更新した。実測記録は `Docs/VERIFICATION_LOG.md` §74、設計正本は `Docs/MULTI_ENGINE_DESIGN.md` §5.6・§8.5、方式の差分は `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` 12節。 |
+| v0.5.31 | 2026-08-24 | **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` が Windows では効いていなかったという実測を反映し、あわせて先読み block swap のアリーナリング化を記録した（凍結 API 契約〔§6〕への変更は無い）**。**§2.4 の環境変数の表**——この変数の行を「CUDA メモリ断片化による OOM 低減（未設定時は起動ログに警告）」から実態へ全面的に書き直した。PyTorch は Windows でこの指定を拒否し（`expandable_segments not supported on this platform`）、従来型のキャッシュアロケータのまま動く。torch 2.9 では変数名自体が `PYTORCH_ALLOC_CONF` へ非推奨化されている。未設定時の起動ログも警告から情報行へ改めた（`main.py`）。**§9.2**——2.3 側は行を残したまま「Windows では無効」の注記を追加し、2.5 側の注記は「プロセス衛生の 4 つ」から**3 つ**へ改めた（`services/engines/ltx25/adapter.py` から当該行を削除。もともと効いていないので削除しても挙動は不変）。断片化そのものへの対策は、実際に断片化が起きる場所である先読み block swap の**アリーナリング**（`engine/transformer/block_swap_prefetch.py`。ブロックごとの確保／返却をやめ、固定本数のアリーナを使い回す）で行うようにした。実測は `outputs/b4-vram-diag/`（アロケータの診断とアリーナリングの試作）と `outputs/ltx25-accel-gate/c2b_summary.json`（B系17本の再走）を参照。 |
 
 ### 0.2 スコープ
 
@@ -195,7 +196,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | 変数 | 用途 |
 |------|------|
 | `UV_PYTHON_INSTALL_DIR = <root>\.python` | uv 管理の Python 本体をプロジェクト内に固定 |
-| `PYTORCH_CUDA_ALLOC_CONF = expandable_segments:True` | CUDA メモリ断片化による OOM 低減（未設定時は起動ログに警告） |
+| `PYTORCH_CUDA_ALLOC_CONF = expandable_segments:True` | **Windows では効果が無い（設定しても無視される）**。`run.ps1` / `scripts/install_ltx.ps1` は歴史的経緯で今も設定するが、PyTorch は Windows でこの指定を拒否し（`expandable_segments not supported on this platform` と警告して従来型のキャッシュアロケータのまま動く）、torch 2.9 では変数名そのものが `PYTORCH_ALLOC_CONF` へ非推奨化されている（実測 2026-08-24・torch 2.9.1、記録は `outputs/b4-vram-diag/`）。未設定でも起動には何の支障も無い（起動ログには情報行が1行出るだけで、警告ではない）。断片化そのものへの対策は、実際に断片化が起きる場所＝先読み block swap のアリーナリング（`engine/transformer/block_swap_prefetch.py`）で行っている |
 | `UV_CACHE_DIR = <root>\.uv_cache`（install 時） | uv ダウンロードキャッシュをプロジェクト内へ |
 | `HF_HOME = <root>\hf_home`（install 時） | HuggingFace キャッシュをプロジェクト内へ |
 
@@ -1394,13 +1395,13 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 - `LTX_KEEP_RESIDENT` は **2026-08-02 に撤去済み**（この env はもう設定されないし、設定しても読まれない）。モデル骨格のジョブ間常駐は、環境変数ではなく `POST /generate`・`POST /generate/chain` の per-job フィールド（ジョブごとのリクエスト項目）`keep_resident`（既定 `false`）で指定する。§6.2 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照。
 - `LTX_COMPONENT_FILES=1`（`config.vram.use_component_files=true` に連動 / comp=1）。
 - `LTX_TE_OFFLOAD=1` / `LTX_DIT_CPU_LOAD=1`（既定 ON、`--no-te-offload` / `--no-dit-cpu-load` で無効化）。
-- `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`。
+- `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`。**ただし1つ目は Windows では無効である**（§2.4 の表を参照。設定しても PyTorch に拒否され、従来型のキャッシュアロケータのまま動く）。LTX 2.3 は凍結中のため行そのものは残してあるが、「16GB を成立させている設定」ではない。LTX 2.5 側（`ltx25`）は同じ理由でこの行を削除済みである（下の注記を参照）。
 
 `keep=0`（ジョブ毎再 materialize）と `comp=1`（Path B）の組合せが本番既定である理由は、**マルチジョブ連続生成での commit（仮想メモリ）枯渇回避**にある。`keep=1` は 720p の Gemma text-encode 中に out-of-place な `.to(cuda)` で瞬間二重在が発生し native crash する（VERIFICATION_LOG §10.2）。`comp=0` は毎ジョブ 46GB モノリスを再 materialize して job3 で commit 枯渇 crash（同 §10.3）。`comp=1/keep=0` は 46GB モノリスを使わず commit を束縛し、T2V・I2V ともマルチジョブ連続 + 音声で PASS 済（同 §10.3 / §10.7）。
 
 > **上段の keep=1 に関する記述は 2026-06-30 時点の判断である（2026-08-02 追記）。** その後 Gemma レイヤーオフロード導入後の構成で再検証し、native crash の原因だったデバイス移動の不具合を修正したうえで、`keep_resident` を per-job フィールドとして製品化した（既定は引き続き off）。現在の正しい理解は「本番既定は off のまま・利用者がジョブ単位で on にできる・on 時はメモリ 64GB 以上を推奨」であり、詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §47・§48 を正本とする。
 
-> **エンジン系統 `ltx25`（LTX 2.5）の worker には `LTX_*` を1つも渡さない【2026-08-22】**: `services/engines/ltx25/adapter.py` の `_build_child_env` が設定するのは、両系統で共通するプロセス衛生の 4 つ——`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1` / `PYTHONPATH=<project_root>`——**だけ**である。上段の `LTX_COMPONENT_FILES` / `LTX_TE_OFFLOAD` / `LTX_DIT_CPU_LOAD` はいずれも `engine/` の中のコードパスの名前で、`engine25/` はそれらを1つも読まない（独自のオフロードと block-swap 機構を持つ）。渡しても効かないうえ、ログ上は「設定されている」ように見えて誤解を招くため、意図的に渡していない。2.5 側の相当物（`blocks_on_gpu` / `te_layers_on_gpu` / `cache_weights`）は環境変数ではなく**ロードペイロード**に載る（プロトコル上で見えるほうがよいため。§6.10(e)）。
+> **エンジン系統 `ltx25`（LTX 2.5）の worker には `LTX_*` を1つも渡さない【2026-08-22】**: `services/engines/ltx25/adapter.py` の `_build_child_env` が設定するのは、プロセス衛生の 3 つ——`TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1` / `PYTHONPATH=<project_root>`——**だけ**である（**2026-08-24 に 4 つから 3 つへ減った**。`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` を設定していた行を削除した。Windows ではこの指定が PyTorch に拒否されるため、削除しても挙動は1ビットも変わらない＝もともと効いていなかった。§2.4 の表を参照）。上段の `LTX_COMPONENT_FILES` / `LTX_TE_OFFLOAD` / `LTX_DIT_CPU_LOAD` はいずれも `engine/` の中のコードパスの名前で、`engine25/` はそれらを1つも読まない（独自のオフロードと block-swap 機構を持つ）。渡しても効かないうえ、ログ上は「設定されている」ように見えて誤解を招くため、意図的に渡していない。2.5 側の相当物（`blocks_on_gpu` / `te_layers_on_gpu` / `cache_weights`）は環境変数ではなく**ロードペイロード**に載る（プロトコル上で見えるほうがよいため。§6.10(e)）。
 
 ### 9.3 表示専用フィールド（worker へ非伝播）
 

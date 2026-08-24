@@ -323,9 +323,19 @@ def build_app(args: argparse.Namespace) -> FastAPI:
         )
 
     if not os.environ.get("PYTORCH_CUDA_ALLOC_CONF"):
-        logger.warning(
-            "PYTORCH_CUDA_ALLOC_CONF is not set. "
-            'Consider $env:PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" to reduce OOM.'
+        # Informational, not a warning, and it no longer recommends
+        # expandable_segments:True. That option is REFUSED on Windows (torch
+        # answers "expandable_segments not supported on this platform" and keeps
+        # the segmented caching allocator), so recommending it was advice that
+        # did nothing; torch 2.9 also deprecates this variable's name in favour
+        # of PYTORCH_ALLOC_CONF. Measured 2026-08-24 on torch 2.9.1 —
+        # outputs/b4-vram-diag/probe_expandable.py. run.ps1 still exports the
+        # variable, so on the supported launch path this line does not fire at
+        # all; when it does, an unset allocator config is not a problem here.
+        logger.info(
+            "PYTORCH_CUDA_ALLOC_CONF is not set: the default caching allocator "
+            "is in use. On Windows this is expected: expandable_segments:True "
+            "is not supported on this platform and has no effect."
         )
 
     app = FastAPI(title="LTX-AviUtl2-Bridge", version="0.4.0", lifespan=_lifespan)

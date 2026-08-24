@@ -38,14 +38,79 @@ rejected alternative — allocating on the transfer stream and calling
 transfer stream's allocator pool (``BlockComparator`` keys on stream), which
 would be reserved-but-unusable right when the spatial upsampler needs it.
 
+**Arena ring** (opt-in, ``hold_arenas``) — the arenas are allocated ONCE and
+recycled; none is handed back to the allocator between blocks. ``prepare()``
+takes ``min(total, blocks_on_gpu + 2)`` arenas of the largest block's size and
+holds them for the whole job, and ``_issue`` takes the next slot round-robin,
+sliced down to that block's own ``total_bytes``. With ``hold_arenas=False``
+``_issue`` allocates and frees per block exactly as it always did.
+
+The reason is the Windows allocator. ``PYTORCH_CUDA_ALLOC_CONF=
+expandable_segments:True`` is a documented no-op here ("WARN: expandable_segments
+not supported on this platform"; torch 2.9 also renames the variable to
+``PYTORCH_ALLOC_CONF``), so every run on this platform uses the SEGMENTED caching
+allocator. Under it, allocating and freeing a ~208MB arena per block, interleaved
+with the denoise's own live allocations, walks the reserved pool one way: the
+freed arena leaves a hole inside a segment that the next, differently sized live
+tensor cannot use, and the pool grows to cover both. Diagnosed on B4
+(1920x1088, 2x169f, standard window): idle-inside-segment bytes 2.6x higher with
+the per-block allocate/free, peak reserved 15,292MB. The ring prototype answered
+14,824MB and 412.6s (from 438.5s on the same box, same session), output
+bit-identical. Evidence: ``outputs/b4-vram-diag/``; the shipped numbers are in
+``outputs/ltx25-accel-gate/c2b_summary.json``.
+
+The ring costs nothing in ceiling terms WHILE A PASS IS RUNNING — the same
+``blocks_on_gpu + 2`` arenas were live simultaneously at the old steady state —
+and it moves the failure mode earlier and softer: a machine that cannot fit the
+ring now fails inside ``prepare()``, which ``install()`` answers by falling back
+to the synchronous path for the whole job, instead of OOMing mid-pass.
+
+It is NOT free BETWEEN passes, and that is why it is opt-in rather than the
+unconditional behaviour. There is no end-of-denoise hook (see ``_CYCLIC`` below):
+teardown happens once, at the end of the job. So from the last block of the last
+pass until the job ends, the ring keeps ``blocks_on_gpu + 2`` arenas allocated
+where the per-block version kept exactly one. Whether that costs anything depends
+on WHERE the job's VRAM peak sits:
+
+  * LTX 2.5 (``engine25``) peaks INSIDE denoise — the stage-2 tiles are the
+    high-water mark — so the held arenas are bytes the job needed anyway, and the
+    fragmentation the ring removes is pure profit. Measured on B4:
+    15,292 -> 14,840MB peak reserved (421.7 -> 420.3s), and every one of the 17
+    fixed benchmarks bit-identical and inside the +400MB budget.
+  * LTX 2.3 (``engine/``) peaks OUTSIDE denoise. Its worker deliberately runs
+    ``gc.collect() + empty_cache()`` immediately before each denoise (the Phase
+    5(B) fix, ``engine/worker.py``), and its high-water mark then lands in the
+    decode/VAE phase where nothing is resident. Held arenas survive
+    ``empty_cache()``, so the whole ring stacks under that peak: Chain A measured
+    13,264 -> 15,550MB reserved, i.e. exactly nine extra 253.8MB arenas, for no
+    benefit at all (2.3 shows no fragmentation growth to begin with).
+
+Hence ``hold_arenas`` defaults to False and ``engine25`` is the only caller that
+turns it on. This is a deliberate exception to "one behaviour for both engines":
+the two engines genuinely differ in where their peak is, and the flag names that
+difference instead of hiding it.
+
+Recycling a slot is safe by the SAME edge that already made a fresh arena safe.
+S1b records ``alloc_evt`` on the COMPUTE stream at issue time, so the transfer
+stream's write into the slot is ordered behind every forward already enqueued
+there — including the forward of the block that last used this slot. No new
+synchronisation point is needed. What IS needed is that no module still POINTS at
+a slot about to be overwritten, which is what the pass-head release below is for.
+
 The resident window is NOT cyclic: it mirrors the synchronous path's
 ``W(idx) = {j | idx <= j < min(idx + blocks_on_gpu, total)}`` exactly, so it
 drains to a single block at the end of every pass and the VRAM profile at the
-stage1->stage2 boundary is unchanged. Steady-state residency is at most
-``blocks_on_gpu + 2`` (the window, plus the block being released, plus the last
-block of the previous pass which nothing ever releases). If cyclic prefetch is
-ever tried (``_CYCLIC``), a ``release_all()`` hook at the end of denoise becomes
-mandatory — no such hook exists today.
+stage1->stage2 boundary is unchanged. The head of the next pass then releases
+that leftover before anything else (``on_block_forward``, ``idx == 0``): with the
+ring its slot is about to be recycled, and a block left pointing at a recycled
+slot reads another block's weights — which is a CHANGED output digest, not a
+crash, and was measured as exactly that while the ring was prototyped without
+this release. Steady-state residency is therefore ``blocks_on_gpu + 1`` (the
+window plus the block being released); it was ``blocks_on_gpu + 2`` before the
+pass-head release existed, and the ring is deliberately still sized for that
+older bound, as one slot of headroom. If cyclic prefetch is ever tried
+(``_CYCLIC``), the pass-head release stops being reachable and an explicit
+``release_all()`` at the end of denoise becomes mandatory.
 
 This module is only ever reached when a job explicitly asks for prefetching;
 with the feature off, ``block_swap_service`` does not even import it.
@@ -247,10 +312,12 @@ class PrefetchEngine:
         blocks_on_gpu: int,
         pinned_pool: PinnedStagingPool,
         xfer_stream: "torch.cuda.Stream",
+        hold_arenas: bool = False,
     ) -> None:
         self._blocks = blocks
         self.device = device
         self.blocks_on_gpu = blocks_on_gpu
+        self.hold_arenas = hold_arenas
         self._pool = pinned_pool
         self._xfer = xfer_stream
 
@@ -263,6 +330,12 @@ class PrefetchEngine:
         self._master_u8: list[list[torch.Tensor]] = []
 
         self._state: dict[int, _BlockState] = {}
+        # The arena ring: a fixed set of device buffers, allocated in prepare()
+        # and recycled for the whole job. Empty unless `hold_arenas` is set, and
+        # empty is what makes `_issue` take the per-block allocate/free path.
+        # See the module docstring for which engine wants which and why.
+        self._arenas: list[torch.Tensor] = []
+        self._next_arena = 0
         self._pinned: list[torch.Tensor] = []
         self._slot_event: list[Any] = [None] * _NUM_STAGING_SLOTS
         self._next_slot = 0
@@ -312,11 +385,29 @@ class PrefetchEngine:
         self._pinned = self._pool.ensure(max_bytes)
         self._validate()
 
+        # The arena ring. One arena per concurrently-live block, every one sized
+        # for the LARGEST block so any block fits any slot, allocated here on the
+        # COMPUTE stream (prepare() runs on it) and held until teardown().
+        # min(): a model with fewer blocks than the ring would size can never
+        # have more than `total` live at once. If this OOMs, prepare() raises and
+        # install() falls back to the synchronous path for the whole job — the
+        # same VRAM would have been demanded a few blocks into the first pass.
+        ring = 0
+        if self.hold_arenas:
+            ring = min(len(self._blocks), self.blocks_on_gpu + 2)
+            self._arenas = [
+                torch.empty(max_bytes, dtype=torch.uint8, device=self.device)
+                for _ in range(ring)
+            ]
+        self._next_arena = 0
+
         total_mb = sum(lay.total_bytes for lay in self._layout) / (1024 * 1024)
         logger.info(
             "BlockSwap prefetch ready: %d blocks, %.0f MB of CPU masters, "
-            "largest block %.1f MB, window %d",
+            "largest block %.1f MB, window %d, arenas %s",
             len(self._blocks), total_mb, max_bytes / (1024 * 1024), self.blocks_on_gpu,
+            f"ring of {ring} x {max_bytes / (1024 * 1024):.1f} MB (held)"
+            if ring else "allocated per block (ring off)",
         )
 
     def _plan(
@@ -426,6 +517,16 @@ class PrefetchEngine:
         #     miss is attributed to this pass instead of being reset away.
         if idx == 0:
             self._log_and_reset_stats()
+            # The previous pass ended with its tail block still resident (the
+            # window drains to one, and nothing releases that last one). Its ring
+            # slot is about to be recycled, so hand every leftover block back to
+            # its CPU master FIRST — a block left pointing at a recycled slot
+            # silently reads another block's weights. Measured while prototyping:
+            # without this the output digest changes. Cheap and unconditional
+            # (`_release` is pointer re-assignment only, and in steady state this
+            # loop has exactly one entry).
+            for stale in list(self._state.keys()):
+                self._release(stale)
 
         # (1) Not issued yet (cold start, or a window too small to look ahead):
         #     issue it now and eat the transfer synchronously.
@@ -470,7 +571,17 @@ class PrefetchEngine:
             pinned[off:off + nbytes].copy_(src_u8)
 
         compute = torch.cuda.current_stream(self.device)
-        arena = torch.empty(lay.total_bytes, dtype=torch.uint8, device=self.device)
+        if self._arenas:
+            # Next ring slot, narrowed to this block's own size. No allocation and
+            # no free — that per-block churn is what walked the reserved pool
+            # under the Windows segmented allocator (module docstring). The slice
+            # is a view, so the arena stays alive through `_BlockState` exactly as
+            # a fresh allocation would.
+            slot_arena = self._arenas[self._next_arena]
+            self._next_arena = (self._next_arena + 1) % len(self._arenas)
+            arena = slot_arena[:lay.total_bytes]
+        else:
+            arena = torch.empty(lay.total_bytes, dtype=torch.uint8, device=self.device)
         alloc_evt = torch.cuda.Event()
         alloc_evt.record(compute)
 
@@ -538,9 +649,12 @@ class PrefetchEngine:
                 mod._parameters[name].data = cpu_t
             else:
                 mod._buffers[name] = cpu_t
-        # Dropping the last reference returns the arena to the allocator. It is
-        # owned by the compute stream, so any kernel still reading it is ordered
-        # ahead of whatever allocation reuses the block.
+        # With the ring on, dropping the last reference drops only the VIEW: the
+        # arena is a ring slot and stays allocated for the whole job. With it off,
+        # this returns the arena to the allocator. Either way the next use of
+        # those bytes is ordered behind this block's forward — by S1b for a
+        # recycled slot (module docstring, "Arena ring"), and by the compute
+        # stream owning the freed block for the allocator.
         del st
 
     # ------------------------------------------------------------------ #
@@ -566,6 +680,8 @@ class PrefetchEngine:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("BlockSwap prefetch: release of block %d failed (%s)", idx, exc)
         self._state.clear()
+        self._arenas = []                                 # the ring's VRAM goes back here
+        self._next_arena = 0
         self._slot_event = [None] * _NUM_STAGING_SLOTS
         self._layout = []
         self._master = []

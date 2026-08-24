@@ -588,7 +588,17 @@ class Ltx25DiffusionStage(DiffusionStage):
         super().__init__(transformer_builder, dtype, device, **kwargs)
         self.blocks_on_gpu = int(blocks_on_gpu)
         self._swap_service: BlockSwapService | None = (
-            BlockSwapService(blocks_on_gpu=self.blocks_on_gpu, device=device)
+            # hold_arenas=True: THIS engine's VRAM peak is inside denoise (the
+            # stage-2 tiles), so a held ring of recycled block arenas costs
+            # nothing between passes and removes the reserved-pool growth that
+            # per-block allocate/free caused under the Windows segmented
+            # allocator (measured on B4: 15,292 -> 14,840MB peak reserved).
+            # LTX 2.3 deliberately leaves it off - its peak is in decode, where
+            # a held ring would just stack under it. The full measurement and
+            # the reason the two engines differ are in the module docstring of
+            # engine/transformer/block_swap_prefetch.py.
+            BlockSwapService(blocks_on_gpu=self.blocks_on_gpu, device=device,
+                             hold_arenas=True)
             if self.blocks_on_gpu > 0
             else None
         )

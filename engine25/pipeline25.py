@@ -53,12 +53,21 @@ The v1 generation contract
 else: prompt, width/height (multiples of 64), ``num_frames`` (8n+1), frame
 rate, seed, and zero or more conditioning images (T2V / I2V). Everything the
 app may still send -- ``negative_prompt``, ``guidance_scale``,
-``num_inference_steps``, the 2.3 acceleration knobs -- is IGNORED WITH A LOG
-LINE, never silently: the distilled 2.5 model runs a fixed 8 + 3 sigma schedule
-with no classifier-free guidance, so a step count or a CFG scale has nothing to
-attach to. ``crop_output`` does not appear here at all, by design: it is an
-ffmpeg post-process the app already performs on the finished mp4 (see
-``services/engines/ltx/adapter.py``), engine-independent in both engines.
+``num_inference_steps``, the acceleration knobs this engine has no path for --
+is IGNORED WITH A LOG LINE, never silently: the distilled 2.5 model runs a fixed
+8 + 3 sigma schedule with no classifier-free guidance, so a step count or a CFG
+scale has nothing to attach to. ``crop_output`` does not appear here at all, by
+design: it is an ffmpeg post-process the app already performs on the finished
+mp4 (see ``services/engines/ltx/adapter.py``), engine-independent in both
+engines.
+
+The acceleration knobs that DO apply are not generation parameters and are not
+on ``generate``'s signature: they are per-job state on a resident worker
+process, armed by :meth:`Ltx25Pipeline.set_acceleration_job` before the job and
+disarmed in its ``finally``. So far that is the fused Triton GGUF
+dequantization kernels, which work here because this engine's transformer and
+text encoder both dequantize through 2.3's ``engine.gguf.quant_service``; block
+swap prefetch is accepted by the same call and does nothing yet.
 
 Determinism
 -----------
@@ -89,6 +98,7 @@ from typing import Any, Callable, Sequence
 
 import torch
 
+from engine.gguf import dequant_triton
 from engine25 import assets_export
 from engine25.gguf_gemma4 import (
     build_embeddings_processor_builder,
@@ -555,7 +565,6 @@ IGNORED_FIELDS: dict[str, str] = {
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
     "neg_method": "no negative-prompt mechanism in v1",
     "vsf_scale": "no negative-prompt mechanism in v1",
-    "fused_gguf_dequant_kernel": "2.3's Triton dequant kernel is not on this code path",
     "block_swap_prefetch": "2.5 uses engine25's own block-swap window",
     "attention_backend": "v1 is SDPA-only",
     "keep_resident": "2.5 keeps its weights in the registry instead",
@@ -611,6 +620,26 @@ class Ltx25Pipeline:
         self.progress = progress
         self.vram = _Vram(self.device)
         self.build_report: dict[str, Any] = {}
+
+        # -- per-job acceleration state ---------------------------------------
+        # Armed by :meth:`set_acceleration_job` at the worker's entry point and
+        # cleared by :meth:`reset_acceleration_job` in its ``finally``; the
+        # ``generate`` / ``run_chain`` signatures carry neither knob, so a caller
+        # that never arms anything (the spike scripts under ``outputs/``, a
+        # direct library user) gets both features OFF, which is the safe default.
+        #
+        # The two halves live in different places, exactly as they do in 2.3:
+        #
+        # * the fused GGUF dequantization kernels have NO state here at all --
+        #   it is MODULE globals in ``engine/gguf/dequant_triton``, because the
+        #   dequantization call sites are plain functions deep inside the GGUF
+        #   loaders with no pipeline handle to reach. This class only forwards
+        #   arm/reset and reads the finished job's verdict back out.
+        # * block-swap prefetch keeps the request here because the flag has to
+        #   be re-applied to the block-swap service on every transformer build.
+        #   In C1 it is REQUEST-ONLY: nothing reads it yet (see
+        #   :meth:`block_swap_prefetch_used`).
+        self._block_swap_prefetch_requested = False
 
         started = time.perf_counter()
         self.vram.reset()
@@ -756,6 +785,90 @@ class Ltx25Pipeline:
     @property
     def sampler(self) -> str:
         return SAMPLER_NAME
+
+    # -- acceleration knobs (per job) ----------------------------------------
+
+    def set_acceleration_job(
+        self,
+        *,
+        block_swap_prefetch: bool,
+        fused_gguf_dequant_kernel: bool,
+    ) -> None:
+        """Arm this job's two acceleration knobs.
+
+        Called by the worker BEFORE the try block that runs the job, and paired
+        with :meth:`reset_acceleration_job` in that block's ``finally``. Both
+        halves are per-JOB state on a resident worker process, so an arm without
+        a matching reset would leak one job's request into the next one.
+
+        The ordering constraint is on the fused half and it is not negotiable:
+        the flag has to be armed **before the transformer is built**, because the
+        build is where the GGUF weights are dequantized. Arming it after
+        ``generate`` had started would leave the whole first build on the eager
+        path and only catch a later rebuild. Same argument in 2.3
+        (``engine/pipeline/fast_video_pipeline.py``'s entry points), for the same
+        reason; ``set_job`` itself only assigns module globals -- no import, no
+        CUDA -- so there is nothing here that can fail, and the call ORDER is
+        what makes the arrangement safe rather than any exception handling.
+
+        The prefetch half is request-only in C1: the flag is stored, and nothing
+        reads it. C2 wires it to engine25's block-swap window.
+        """
+        self._block_swap_prefetch_requested = bool(block_swap_prefetch)
+        dequant_triton.set_job(bool(fused_gguf_dequant_kernel))
+
+    def reset_acceleration_job(self) -> None:
+        """End-of-job counterpart: freeze both verdicts and disarm.
+
+        **This method never raises.** It runs in the worker's ``finally``, so an
+        exception here would replace the job's real error with this one -- and on
+        a failed job it is precisely the paths that already went wrong that this
+        has to clean up. The two halves therefore get their own try/except: a
+        failure to tear down prefetch must not leave the fused kernels armed for
+        the next job, and vice versa.
+
+        ``self.stage is None`` (i.e. after :meth:`close`) is absorbed by the same
+        handlers rather than by a guard of its own: a reset arriving after the
+        pipeline was closed is a shutdown race, not a bug worth failing on.
+        """
+        try:
+            # C1: request-only, so "tear down" is just forgetting the request.
+            # C2 replaces this with the block-swap service teardown, which is
+            # also where ``self.stage is None`` becomes reachable.
+            self._block_swap_prefetch_requested = False
+        except Exception:  # pragma: no cover -- never-raise discipline
+            logger.exception("block-swap prefetch reset failed; continuing")
+        try:
+            # The verdict ("off" / "on" / "on->off") is computed INSIDE
+            # ``reset_job`` from the request, the exception latch and the number
+            # of tensors actually dequantized on Triton -- a job that asked for
+            # the kernels but dequantized nothing eligible is a degradation, same
+            # as a latch. Which is why the verdict has to be read AFTER this.
+            dequant_triton.reset_job()
+        except Exception:  # pragma: no cover -- never-raise discipline
+            logger.exception("fused GGUF dequant reset failed; continuing")
+
+    def block_swap_prefetch_used(self) -> str:
+        """What the last finished job's block swap actually did: "off", "on", or
+        "on->off" (asked for, but degraded to the synchronous path).
+
+        C1 ALWAYS RETURNS "off": engine25's block-swap window does not implement
+        prefetching yet, so no job can have used it, and reporting anything else
+        would be a claim the engine cannot back. C2 replaces the body with the
+        real per-build tally; the method exists now so the worker's ``done``
+        event carries both echo keys from the same commit and the app-side
+        contract does not change shape twice.
+        """
+        return "off"
+
+    def fused_gguf_dequant_kernel_used(self) -> str:
+        """What the last finished job's GGUF dequantization actually did: "off",
+        "on", or "on->off" (asked for, but fell back to the eager PyTorch path).
+
+        This is the snapshot taken by :meth:`reset_acceleration_job`, not live
+        state, so it is only meaningful after a job has finished.
+        """
+        return dequant_triton.last_used()
 
     def generate(  # noqa: PLR0913
         self,

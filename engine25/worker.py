@@ -119,11 +119,15 @@ Selftest (gate G4), run inside the venv without the app::
         --transformer <t.gguf> --text-encoder <te.gguf> \\
         --video-vae <conv.safetensors> --audio-vae <audio.safetensors> \\
         --spatial-upsampler <x2.safetensors> \\
-        --output out.mp4 --width 320 --height 192 --num-frames 25 [--rounds 2]
+        --output out.mp4 --width 320 --height 192 --num-frames 25 [--rounds 2] \\
+        [--fused-dequant on|off]
 
 It drives the SAME ``_do_load`` / ``_do_generate`` handlers the protocol uses --
 it builds the JSON messages and feeds them in -- so a green selftest is evidence
-about the shipped path, not about a parallel one.
+about the shipped path, not about a parallel one. Its JSON report carries the
+``done`` event verbatim, which is where the acceleration echoes live: run the
+same command twice with ``--fused-dequant off`` and ``on`` and the two digests
+must be IDENTICAL, because the fused kernels are a bit-exact substitution.
 
 The chain has its own (gate G2), same discipline, plus captured receipts::
 
@@ -131,7 +135,8 @@ The chain has its own (gate G2), same discipline, plus captured receipts::
         <the same five model paths> \\
         --output chain.mp4 --clips 2 --num-frames 25 \\
         --width 320 --height 192 [--chunked-upsample] [--rounds 2] \\
-        [--source tail.mp4 --context 25 | --audio-source track.wav]
+        [--source tail.mp4 --context 25 | --audio-source track.wav] \\
+        [--fused-dequant on|off]
 
 Its JSON report carries the mp4 digests, the ``done`` event verbatim (with its
 ``chain`` metadata) and the full ``progress`` series, so the event CONTRACT --
@@ -456,6 +461,29 @@ def _preprocess_kind(msg: dict) -> str:
     return "-" if not ref else str(ref.get("preprocess", "none"))
 
 
+def _resolve_block_swap_prefetch(msg: dict) -> bool:
+    """Resolve a job's ``block_swap_prefetch``. Missing key -> False.
+
+    2.3's reader verbatim (``engine/worker.py``): an invalid type is not
+    fail-loud -- this is a speed knob, not a correctness precondition. There is
+    also no "unknown value" concept here since it is not an enum; ``bool()``
+    simply coerces whatever was sent. Written the same way in both workers on
+    purpose: the app sends ONE payload shape for whichever engine is loaded, and
+    two readers disagreeing about what ``"0"`` means would be a real bug that no
+    test would catch.
+    """
+    return bool(msg.get("block_swap_prefetch", False))
+
+
+def _resolve_fused_dequant(msg: dict) -> bool:
+    """Resolve a job's ``fused_gguf_dequant_kernel``. Missing key -> False.
+
+    Same relaxed regime as :func:`_resolve_block_swap_prefetch`, and 2.3's
+    reader verbatim for the same reason.
+    """
+    return bool(msg.get("fused_gguf_dequant_kernel", False))
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -482,6 +510,13 @@ def _do_generate(msg: dict) -> None:
         msg.get("reference_video"), str(msg["output_path"]), _preprocess_frame_cap(msg)
     )
 
+    # The two acceleration knobs. Both are ABSENT-MEANS-OFF, so every payload
+    # written before they existed resolves to today's behaviour, and both are
+    # armed below rather than passed to ``generate``: they are per-job state on a
+    # resident process, not generation parameters.
+    prefetch = _resolve_block_swap_prefetch(msg)
+    fused = _resolve_fused_dequant(msg)
+
     # ONE line per job, after the parse: what the request ASKED for, in the
     # worker's own log, so "I attached a LoRA and nothing happened" can be told
     # apart from "the LoRA never reached the engine" without a rerun. The engine
@@ -491,27 +526,50 @@ def _do_generate(msg: dict) -> None:
         f"generate {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
-        f"preprocess={_preprocess_kind(msg)} attn={attn_strength:.3f}"
+        f"preprocess={_preprocess_kind(msg)} attn={attn_strength:.3f} "
+        # What was ASKED for. What was GOT is the pair of echo keys on the done
+        # event below, which can differ ("on->off").
+        f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'}"
     )
 
-    result = _PIPE.generate(
-        prompt=str(msg["prompt"]),
-        seed=seed,
-        width=int(msg["width"]),
-        height=int(msg["height"]),
-        num_frames=int(msg["num_frames"]),
-        frame_rate=float(msg["frame_rate"]),
-        output_path=str(msg["output_path"]),
-        images=images,
-        # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
-        ic_loras=ic_loras,
-        ic_reference=ic_reference,
-        ic_attention_strength=attn_strength,
-        ignored=ignored,
+    # OUTSIDE the try, and before the build: the fused kernels have to be armed
+    # before the transformer is built, because the build is where the GGUF
+    # weights are dequantized (see ``Ltx25Pipeline.set_acceleration_job``). Being
+    # outside the try is the other half of the discipline -- an arm that threw
+    # would skip the matching reset and leak this job's request into the next one
+    # on a resident worker, so nothing that can throw may sit between the two.
+    _PIPE.set_acceleration_job(
+        block_swap_prefetch=prefetch,
+        fused_gguf_dequant_kernel=fused,
     )
+    try:
+        result = _PIPE.generate(
+            prompt=str(msg["prompt"]),
+            seed=seed,
+            width=int(msg["width"]),
+            height=int(msg["height"]),
+            num_frames=int(msg["num_frames"]),
+            frame_rate=float(msg["frame_rate"]),
+            output_path=str(msg["output_path"]),
+            images=images,
+            # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
+            ic_loras=ic_loras,
+            ic_reference=ic_reference,
+            ic_attention_strength=attn_strength,
+            ignored=ignored,
+        )
 
-    report = result.as_dict()
-    _log(f"GENERATE_REPORT {json.dumps(report, ensure_ascii=False, default=str)}")
+        report = result.as_dict()
+        _log(f"GENERATE_REPORT {json.dumps(report, ensure_ascii=False, default=str)}")
+    finally:
+        # Runs on the failure path too: this is what stops a crashed job from
+        # leaving the kernels armed for the next one. It never raises.
+        _PIPE.reset_acceleration_job()
+
+    # Read the verdicts AFTER the reset -- that is where they are computed
+    # ("asked for it and dequantized nothing eligible" is a degradation, and the
+    # tally only closes at reset). Outside the try for the same reason the arm
+    # is: a failed job has already raised and emits no ``done`` at all.
     _emit(
         "done",
         seed_used=seed,
@@ -526,6 +584,10 @@ def _do_generate(msg: dict) -> None:
         encode_fps=result.encode_fps,
         size_bytes=result.size_bytes,
         phases=result.phases,
+        # 2.3's two echo keys, same names and same three values ("off" / "on" /
+        # "on->off"), so the app relays them from one code path per engine.
+        block_swap_prefetch_used=_PIPE.block_swap_prefetch_used(),
+        fused_gguf_dequant_kernel_used=_PIPE.fused_gguf_dequant_kernel_used(),
     )
 
 
@@ -552,8 +614,14 @@ def _do_generate(msg: dict) -> None:
 #: The test is MEMBERSHIP, not truthiness: ``{"retake": {}}`` is as much a sign
 #: of drift as a populated block, and "the key was there but empty so we allowed
 #: it" is exactly the kind of exception the single-rule principle exists to avoid.
-#: The single-generate op differs deliberately -- there the acceleration knobs
-#: ARE part of the contract and are ignored-and-logged (``IGNORED_FIELDS``),
+#: ``fused_gguf_dequant_kernel`` LEFT WITH THE FUSED-KERNEL COMMIT: the chain
+#: builds its transformer through the same GGUF loaders the single generate does,
+#: so the Triton dequantization kernels apply to it unchanged and there is
+#: nothing left to refuse. ``block_swap_prefetch`` stays: engine25's block-swap
+#: window has no prefetching yet, on either op.
+#:
+#: The single-generate op differs deliberately for the knobs that remain here --
+#: there they are ignored-and-logged (``IGNORED_FIELDS``) rather than refused,
 #: because the app sends them on every single job.
 CHAIN_UNSUPPORTED_KEYS = (
     "retake",
@@ -563,7 +631,6 @@ CHAIN_UNSUPPORTED_KEYS = (
     "keep_resident",
     "vae_mode",
     "block_swap_prefetch",
-    "fused_gguf_dequant_kernel",
 )
 
 
@@ -709,6 +776,16 @@ def _do_generate_chain(msg: dict) -> None:
         op="generate_chain",
     )
 
+    # The acceleration knobs, read with the SAME two helpers the single op uses:
+    # one pair of readers for the two entry points is what stops a knob from
+    # being wired to one op and forgotten on the other. ``prefetch`` is still
+    # pinned to False here -- ``block_swap_prefetch`` is on
+    # :data:`CHAIN_UNSUPPORTED_KEYS` and was refused above -- but it is read
+    # rather than hard-coded so that removing it from that list is the only edit
+    # C2 needs on this side.
+    prefetch = _resolve_block_swap_prefetch(msg)
+    fused = _resolve_fused_dequant(msg)
+
     spec = ChainSpec(
         clips=clips,
         width=int(msg["width"]),
@@ -741,46 +818,59 @@ def _do_generate_chain(msg: dict) -> None:
         # than a second one: what the chain was ASKED for, before any of it runs.
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
         f"preprocess={_preprocess_kind(msg)} attn={ic_attn:.3f} "
-        f"stage2win={spec.stage2_window or 'standard'}"
+        f"stage2win={spec.stage2_window or 'standard'} "
+        # What was ASKED for; the done event's echo keys say what was GOT.
+        f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'}"
     )
 
-    result = run_chain(
-        _PIPE,
-        spec,
-        _emit_progress,
-        ic_loras=ic_loras,
-        ic_reference=ic_reference,
-        ic_attention_strength=ic_attn,
+    # Armed OUTSIDE the try and before the first transformer build, disarmed in
+    # the finally: the single op's discipline verbatim, and the reason it is
+    # spelled out twice rather than factored into a helper is that the two ops'
+    # bodies are what sits between the two calls. See ``_do_generate``.
+    _PIPE.set_acceleration_job(
+        block_swap_prefetch=prefetch,
+        fused_gguf_dequant_kernel=fused,
     )
-    meta = result.metadata
-    ltx25 = meta.get("ltx25") or {}
-    vram = ltx25.get("vram") or {}
-
-    # The chain's GENERATE_REPORT: one line, the phase ledger included, so a run
-    # that was only ever watched through the worker log still says where its wall
-    # clock and its VRAM peak went. The full metadata rides in the ``done`` event
-    # rather than here -- this line is the human-readable summary.
-    _log(
-        "CHAIN_REPORT "
-        + json.dumps(
-            {
-                "output": result.output_path,
-                "n_clips": meta.get("n_clips"),
-                "n_tiles": meta.get("n_tiles"),
-                "total_px": meta.get("total_px"),
-                "seeds": meta.get("seeds"),
-                "wall_s": meta.get("wall_s"),
-                "vram_peak_mb": meta.get("vram_peak_mb"),
-                "stage1_sampler": ltx25.get("stage1_sampler"),
-                "chunked_upsample": ltx25.get("chunked_upsample"),
-                "stage2_window": ltx25.get("stage2_window"),
-                "vram": vram,
-                "phases": ltx25.get("phases"),
-            },
-            ensure_ascii=False,
-            default=str,
+    try:
+        result = run_chain(
+            _PIPE,
+            spec,
+            _emit_progress,
+            ic_loras=ic_loras,
+            ic_reference=ic_reference,
+            ic_attention_strength=ic_attn,
         )
-    )
+        meta = result.metadata
+        ltx25 = meta.get("ltx25") or {}
+        vram = ltx25.get("vram") or {}
+
+        # The chain's GENERATE_REPORT: one line, the phase ledger included, so a run
+        # that was only ever watched through the worker log still says where its wall
+        # clock and its VRAM peak went. The full metadata rides in the ``done`` event
+        # rather than here -- this line is the human-readable summary.
+        _log(
+            "CHAIN_REPORT "
+            + json.dumps(
+                {
+                    "output": result.output_path,
+                    "n_clips": meta.get("n_clips"),
+                    "n_tiles": meta.get("n_tiles"),
+                    "total_px": meta.get("total_px"),
+                    "seeds": meta.get("seeds"),
+                    "wall_s": meta.get("wall_s"),
+                    "vram_peak_mb": meta.get("vram_peak_mb"),
+                    "stage1_sampler": ltx25.get("stage1_sampler"),
+                    "chunked_upsample": ltx25.get("chunked_upsample"),
+                    "stage2_window": ltx25.get("stage2_window"),
+                    "vram": vram,
+                    "phases": ltx25.get("phases"),
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+    finally:
+        _PIPE.reset_acceleration_job()
 
     _emit(
         "done",
@@ -799,6 +889,11 @@ def _do_generate_chain(msg: dict) -> None:
         phases=ltx25.get("phases"),
         # 2.3's chain contract: the whole layout + metadata under one key.
         chain=meta,
+        # Same two echo keys, same values, as the single op's done: a chain runs
+        # many builds, and the fused verdict is the whole JOB's ("on" only if
+        # Triton really ran; "on->off" if any of them fell back).
+        block_swap_prefetch_used=_PIPE.block_swap_prefetch_used(),
+        fused_gguf_dequant_kernel_used=_PIPE.fused_gguf_dequant_kernel_used(),
     )
 
 
@@ -1066,6 +1161,37 @@ def _add_ic_lora_arguments(parser) -> None:
     )
 
 
+def _add_acceleration_arguments(parser) -> None:
+    """The acceleration-knob arguments both selftests share.
+
+    ``--fused-dequant on`` (the default) is what makes the selftest the thing
+    that MEASURES the feature: the default has to be the accelerated path,
+    because a knob whose selftest never turns it on is a knob nobody runs. The
+    ``off`` side exists for the pair comparison the gate asks for -- same seed,
+    same geometry, one bit different, digests compared.
+    """
+    parser.add_argument(
+        "--fused-dequant",
+        choices=("on", "off"),
+        default="on",
+        help="fused Triton GGUF dequantization kernels (default: on)",
+    )
+
+
+def _acceleration_payload(args) -> dict:
+    """The acceleration keys for a synthesised job message.
+
+    ADDITIVE, exactly as the app's payload builder is: ``off`` omits the key
+    entirely rather than sending ``False``, because absent-means-off is the
+    contract the workers' readers implement and an ``off`` run has to exercise
+    the same absent-key path a pre-acceleration payload would take.
+    """
+    payload: dict = {}
+    if args.fused_dequant == "on":
+        payload["fused_gguf_dequant_kernel"] = True
+    return payload
+
+
 def _reference_payload(args) -> dict | None:
     """The ``reference_video`` block from the shared arguments (None = no reference)."""
     if args.reference is None:
@@ -1113,6 +1239,7 @@ def _selftest_generate(argv: list[str]) -> int:
     parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--image", action="append", default=[], help="conditioning image (repeatable): PATH[,FRAME_IDX[,STRENGTH]]")
     _add_ic_lora_arguments(parser)
+    _add_acceleration_arguments(parser)
     parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
     args = parser.parse_args(argv)
 
@@ -1120,67 +1247,99 @@ def _selftest_generate(argv: list[str]) -> int:
     images = [_parse_image_arg(spec) for spec in args.image]
     loras = [_parse_lora_arg(spec) for spec in args.lora]
     reference = _reference_payload(args)
+    acceleration = _acceleration_payload(args)
 
-    report: dict = {
-        "load": load_msg,
-        "images": images,
-        # The RESOLVED blocks, not the raw arguments: which file a bare
-        # ``--lora Pixar_Toon`` turned into is exactly what a report of a
-        # LoRA run has to state.
-        "loras": loras,
-        "reference_video": reference,
-        "rounds": [],
-    }
-    started = time.perf_counter()
-    _do_load(load_msg)
-    report["load_seconds"] = round(time.perf_counter() - started, 2)
-    assert _PIPE is not None
-    report["build"] = _PIPE.build_report
-    report["sampler"] = _PIPE.sampler
+    # Every framed event, captured on its way to stdout, exactly as the chain
+    # selftest does it. Added with the acceleration knobs: this selftest used to
+    # print its ``done`` event and keep nothing, so the two echo keys -- the ONLY
+    # statement of what the job actually got, as opposed to what it asked for --
+    # were unavailable to anything reading the report. Patching the module global
+    # is what leaves the handler itself untouched: the run under observation is
+    # the shipped one, and the lines still reach stdout.
+    events: list[dict] = []
+    real_emit = _emit
 
-    digests = []
-    for index in range(1, max(1, args.rounds) + 1):
-        base = Path(args.output)
-        out = str(base if args.rounds <= 1 else base.with_name(f"{base.stem}.r{index}{base.suffix}"))
-        _do_generate(
-            {
-                "op": "generate",
-                "prompt": args.prompt,
-                "seed": args.seed,
-                "width": args.width,
-                "height": args.height,
-                "num_frames": args.num_frames,
-                "frame_rate": args.frame_rate,
-                "output_path": out,
-                "images": images,
-                # ALWAYS present, ``[]``/``None`` included -- the app's single
-                # generate sends both keys on every job, and an empty list is
-                # the explicit detach the worker must be told about.
-                "loras": loras,
-                "reference_video": reference,
-                # Deliberately present: proves the ignore-and-log path runs on
-                # the same messages the app will send.
-                "num_steps": 8,
-                "negative_prompt": "",
-            }
-        )
-        digest = hashlib.sha256(Path(out).read_bytes()).hexdigest()
-        digests.append(digest)
-        round_report = {"round": index, "output": out, "sha256": digest,
-                        "size_bytes": Path(out).stat().st_size}
-        # The control mp4 by MEASUREMENT: a preprocess kind that silently wrote
-        # nothing would otherwise look like a clean run.
-        if reference is not None and reference["preprocess"] != "none":
-            control = Path(out).with_name(f"control_{reference['preprocess']}.mp4")
-            round_report["control_video"] = {
-                "path": str(control),
-                "exists": control.is_file(),
-                "size_bytes": control.stat().st_size if control.is_file() else None,
-            }
-        report["rounds"].append(round_report)
+    def _capturing_emit(event: str, **fields: object) -> None:
+        events.append({"event": event, **fields})
+        real_emit(event, **fields)
 
-    if len(digests) > 1:
-        report["same_seed_sha_identical"] = len(set(digests)) == 1
+    globals()["_emit"] = _capturing_emit
+    try:
+        report: dict = {
+            "load": load_msg,
+            "images": images,
+            # The RESOLVED blocks, not the raw arguments: which file a bare
+            # ``--lora Pixar_Toon`` turned into is exactly what a report of a
+            # LoRA run has to state.
+            "loras": loras,
+            "reference_video": reference,
+            # What was ASKED for. Every round's ``done`` below says what was got.
+            "acceleration": acceleration,
+            "rounds": [],
+        }
+        started = time.perf_counter()
+        _do_load(load_msg)
+        report["load_seconds"] = round(time.perf_counter() - started, 2)
+        assert _PIPE is not None
+        report["build"] = _PIPE.build_report
+        report["sampler"] = _PIPE.sampler
+
+        digests = []
+        for index in range(1, max(1, args.rounds) + 1):
+            base = Path(args.output)
+            out = str(base if args.rounds <= 1 else base.with_name(f"{base.stem}.r{index}{base.suffix}"))
+            events.clear()
+            _do_generate(
+                {
+                    "op": "generate",
+                    "prompt": args.prompt,
+                    "seed": args.seed,
+                    "width": args.width,
+                    "height": args.height,
+                    "num_frames": args.num_frames,
+                    "frame_rate": args.frame_rate,
+                    "output_path": out,
+                    "images": images,
+                    # ALWAYS present, ``[]``/``None`` included -- the app's single
+                    # generate sends both keys on every job, and an empty list is
+                    # the explicit detach the worker must be told about.
+                    "loras": loras,
+                    "reference_video": reference,
+                    # Deliberately present: proves the ignore-and-log path runs on
+                    # the same messages the app will send.
+                    "num_steps": 8,
+                    "negative_prompt": "",
+                    # Additive, exactly as the app builds it: absent entirely when
+                    # --fused-dequant off.
+                    **acceleration,
+                }
+            )
+            digest = hashlib.sha256(Path(out).read_bytes()).hexdigest()
+            digests.append(digest)
+            done = next((e for e in events if e["event"] == "done"), None)
+            if done is None:
+                raise RuntimeError("the generation produced no terminal done event")
+            round_report = {"round": index, "output": out, "sha256": digest,
+                            "size_bytes": Path(out).stat().st_size,
+                            # The done event VERBATIM, which is where the two
+                            # acceleration echoes live. The chain selftest has
+                            # always reported this; the single one now does too.
+                            "done": done}
+            # The control mp4 by MEASUREMENT: a preprocess kind that silently wrote
+            # nothing would otherwise look like a clean run.
+            if reference is not None and reference["preprocess"] != "none":
+                control = Path(out).with_name(f"control_{reference['preprocess']}.mp4")
+                round_report["control_video"] = {
+                    "path": str(control),
+                    "exists": control.is_file(),
+                    "size_bytes": control.stat().st_size if control.is_file() else None,
+                }
+            report["rounds"].append(round_report)
+
+        if len(digests) > 1:
+            report["same_seed_sha_identical"] = len(set(digests)) == 1
+    finally:
+        globals()["_emit"] = real_emit
 
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     if args.report:
@@ -1288,6 +1447,7 @@ def _selftest_chain(argv: list[str]) -> int:
         "The app's default is 73",
     )
     _add_ic_lora_arguments(parser)
+    _add_acceleration_arguments(parser)
     parser.add_argument("--report", default=None, help="write the JSON report here as well as to stdout")
     args = parser.parse_args(argv)
 
@@ -1297,6 +1457,7 @@ def _selftest_chain(argv: list[str]) -> int:
     images = [_parse_image_arg(spec) for spec in args.image]
     loras = [_parse_lora_arg(spec) for spec in args.lora]
     reference = _reference_payload(args)
+    acceleration = _acceleration_payload(args)
 
     prompts = list(args.prompt) or list(_SELFTEST_CHAIN_PROMPTS)
     if len(prompts) < args.clips:
@@ -1352,6 +1513,10 @@ def _selftest_chain(argv: list[str]) -> int:
                 # compares against the pre-LoRA baseline.
                 "loras": loras,
                 "reference_video": reference,
+                # What was ASKED for. Every round's ``done`` says what was got --
+                # and a chain gets it across MANY transformer builds, which is
+                # the thing this pair of numbers is here to show.
+                "acceleration": acceleration,
             },
             "rounds": [],
         }
@@ -1401,6 +1566,9 @@ def _selftest_chain(argv: list[str]) -> int:
                 payload["loras"] = loras
             if reference is not None:
                 payload["reference_video"] = reference
+            # Additive here too: absent entirely when --fused-dequant off, which
+            # is the same absent-key path a pre-acceleration payload took.
+            payload.update(acceleration)
             _do_generate_chain(payload)
             seconds = time.perf_counter() - round_started
 

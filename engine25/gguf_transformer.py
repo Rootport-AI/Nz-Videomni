@@ -626,6 +626,18 @@ class Ltx25DiffusionStage(DiffusionStage):
         #: whole echo: equal and non-zero means every build ran accelerated.
         self._prefetch_builds = 0
         self._prefetch_engaged = 0
+        # -- SageAttention (per build) ---------------------------------------
+        #: The shared ``SageAttentionService``, attached AFTER construction by
+        #: :class:`~engine25.pipeline25.Ltx25Pipeline` (which owns the per-job
+        #: ``SageState`` the service reads).
+        #:
+        #: ``None`` is a REAL and supported state, not an oversight: the
+        #: selftest at the bottom of this module, and any direct library user,
+        #: construct the stage themselves and never attach one.
+        #: :meth:`_ensure_sage_installed` returns immediately for them, which is
+        #: what keeps sage entirely absent from a build nobody armed -- the same
+        #: zero-overhead-when-off property the service's own ``install()`` has.
+        self._sage_service: Any = None
 
     # -- LoRA state ----------------------------------------------------------
 
@@ -862,8 +874,46 @@ class Ltx25DiffusionStage(DiffusionStage):
         # way every resurrected buffer is removed before the forward sees it.
         self._apply_loras(model)
         self._place_transformer(model, target)
+        # AFTER placement, and last: swapping ``attention_function`` is a plain
+        # Python attribute write that no device move reads, so the order against
+        # placement is free -- and putting it at the end keeps it out of the way
+        # of the two things above that DO have ordering constraints.
+        self._ensure_sage_installed(model)
         logger.info("Transformer ready on %s in %.1fs", target, time.perf_counter() - started)
         return model
+
+    def _ensure_sage_installed(self, model: torch.nn.Module) -> None:
+        """Strip the previous build's sage wrappers, then install this job's.
+
+        STRIP AND RE-WRAP ON EVERY BUILD, never "install once". The registry
+        hands back the SAME ``LTXModel`` on every build and ``dispose()`` does
+        not touch plain Python attributes, so job N's wrappers are still on the
+        modules when job N+1 builds -- the same shell-reuse hazard
+        ``_place_transformer`` handles for block swap two methods up, with the
+        same answer. Left alone they would nest one level deeper per build,
+        silently: a nested wrapper still returns the right numbers.
+
+        The OFF case costs exactly one traversal that finds nothing (``install``
+        returns 0 at its ``state.requested`` gate having touched nothing at all),
+        which is what keeps an sdpa job bit-identical to the one that ran before
+        this feature existed.
+        """
+        service = self._sage_service
+        if service is None:
+            # Never attached: the selftest / a direct library user. See the
+            # attribute's own note in ``__init__``.
+            return
+        removed = service.uninstall(model)
+        if removed:
+            # INFO, not ERROR: on this engine a surviving wrapper is the NORMAL
+            # state of a reused shell, not a defect. (The service's own ERROR
+            # line fires only when a wrapper survives past THIS call, i.e. when
+            # the strip below did not happen at all.)
+            logger.info(
+                "SageAttention: stripped %d wrapper(s) from the reused shell before rebuilding",
+                removed,
+            )
+        service.install(model)
 
     def _place_transformer(self, model: X0Model, device: torch.device) -> None:
         """Put the model where it has to be: blocks streamed, everything else resident."""

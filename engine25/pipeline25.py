@@ -63,16 +63,23 @@ engines.
 The acceleration knobs that DO apply are not generation parameters and are not
 on ``generate``'s signature: they are per-job state on a resident worker
 process, armed by :meth:`Ltx25Pipeline.set_acceleration_job` before the job and
-disarmed in its ``finally``. All THREE are live: the fused Triton GGUF
+disarmed in its ``finally``. All FOUR are live: the fused Triton GGUF
 dequantization kernels (which work here because this engine's transformer and
 text encoder both dequantize through 2.3's ``engine.gguf.quant_service``),
 asynchronous block-swap prefetching (which the diffusion stage re-arms on every
-transformer build -- see ``Ltx25DiffusionStage.set_block_swap_prefetch``), and
+transformer build -- see ``Ltx25DiffusionStage.set_block_swap_prefetch``),
 ``keep_resident``, which retains the Gemma 4 text encoder's 7.7 GiB state dict
-between jobs instead of re-reading it from the GGUF every time. The third is the
-odd one out twice over: it is opt-in rather than on by default (it costs
-resident RAM), and its state deliberately OUTLIVES the job that armed it -- see
-:func:`_swap_keep_resident`.
+between jobs instead of re-reading it from the GGUF every time, and
+``attention_backend``, which swaps every transformer block's attention kernel
+for SageAttention (2.3's ``engine.transformer.sage_attention_service``,
+imported unchanged -- the two engines' attention contracts are identical).
+``keep_resident`` is the odd one out twice over: it is opt-in rather than on by
+default (it costs resident RAM), and its state deliberately OUTLIVES the job
+that armed it -- see :func:`_swap_keep_resident`. ``attention_backend`` is the
+only one of the four that changes the OUTPUT: sage is a quantized kernel, so a
+sage job and an sdpa job at one seed differ in fine detail, which is why it too
+defaults to off and why the job echoes back what it really ran on
+(:meth:`Ltx25Pipeline.attention_used`).
 
 Determinism
 -----------
@@ -104,6 +111,13 @@ from typing import Any, Callable, Sequence
 import torch
 
 from engine.gguf import dequant_triton
+# SHARED WITH LTX 2.3, imported rather than reimplemented: 2.5's attention
+# contract is 2.3's to the letter (flat (B, S, H*D) q/k/v, head dims 128/64, six
+# attention modules per block), so a second copy could only drift. The module's
+# own imports are stdlib + torch, so this costs nothing at import time and works
+# in a venv with no sageattention wheel -- the wheel is imported lazily, on the
+# first job that actually asks for sage.
+from engine.transformer.sage_attention_service import SageAttentionService, SageState
 from engine25 import assets_export
 from engine25.gguf_gemma4 import (
     build_embeddings_processor_builder,
@@ -631,7 +645,12 @@ IGNORED_FIELDS: dict[str, str] = {
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
     "neg_method": "no negative-prompt mechanism in v1",
     "vsf_scale": "no negative-prompt mechanism in v1",
-    "attention_backend": "v1 is SDPA-only",
+    # ``attention_backend`` LEFT WITH THE SAGE COMMIT. It used to sit here as
+    # "v1 is SDPA-only", which was true until this engine got a
+    # ``SageAttentionService``; it is now ACTED ON (see
+    # :meth:`Ltx25Pipeline.set_acceleration_job`) and echoed back on ``done`` as
+    # ``attention_used``, so leaving it on this list would make the worker log
+    # "ignored" for the one field whose whole point is that it is obeyed.
     "vae_mode": "v1 uses the Conv VAE only",
 }
 
@@ -792,6 +811,16 @@ class Ltx25Pipeline:
         self._keep_resident_enabled = False
         self._keep_resident_requested = False
         self._keep_resident_used = "off"
+        # * SageAttention is a FOURTH shape: the request, the per-call kernel
+        #   latch and the finished job's echo all live in ONE object shared with
+        #   2.3 (``SageState``), which the diffusion stage's service reads
+        #   through a closure on every transformer build. This class owns the
+        #   object and its arm/reset; the stage owns the wrapping. Held here
+        #   rather than on the stage because the stage is rebuilt-into many
+        #   times per job and the kernel latch has to outlive every one of those
+        #   builds -- a chain that lost its latch between segments would retry a
+        #   kernel already known to be broken, once per segment.
+        self._sage = SageState()
 
         started = time.perf_counter()
         self.vram.reset()
@@ -864,6 +893,15 @@ class Ltx25Pipeline:
         stage.vram = self.vram
         pipeline.stage = stage
         self.stage = stage
+        # Attached AFTER construction rather than passed to ``from_gguf``: the
+        # service needs a handle on the per-job ``SageState`` this class owns,
+        # and the state has to be reachable through a CLOSURE (not captured by
+        # value) so one long-lived service always sees the CURRENT job -- the
+        # same ``lambda: self._sage`` the 2.3 pipeline uses. Post-construction
+        # assignment is safe on this stage: ``with_*`` clones it with
+        # ``copy.copy`` (the attribute rides along), chain25 drives this very
+        # instance, and a stage built any other way simply has ``None`` there.
+        stage._sage_service = SageAttentionService(lambda: self._sage)
 
         # -- substitution 2: the prompt encoder --------------------------------
         # The transformer GGUF leads the EmbeddingsProcessor's path list: the
@@ -954,8 +992,9 @@ class Ltx25Pipeline:
         block_swap_prefetch: bool,
         fused_gguf_dequant_kernel: bool,
         keep_resident: bool,
+        attention_backend: str,
     ) -> None:
-        """Arm this job's three acceleration knobs.
+        """Arm this job's four acceleration knobs.
 
         Called by the worker BEFORE the try block that runs the job, and paired
         with :meth:`reset_acceleration_job` in that block's ``finally``. The
@@ -998,7 +1037,24 @@ class Ltx25Pipeline:
         reason: the swap happens before the text encoder is built, so a job
         that asked for the release runs on the freed footprint instead of
         paying for it only at the end.
+
+        ``attention_backend`` ("sdpa" / "sage") has NO DEFAULT on purpose: every
+        caller states its choice, so a new entry point cannot silently inherit
+        one. Its ordering constraint is the strictest of the four -- the wrappers
+        are installed during the transformer build, and ``install()`` reads
+        ``state.requested`` at that moment, so an arm after the build would
+        produce a job that asked for sage and ran entirely on SDPA while
+        reporting "sage". Like the two flag knobs it cannot fail:
+        ``SageState.set_backend`` degrades an unrecognised value to "sdpa"
+        rather than raising, because the fail-loud gate for unknown values
+        belongs at the protocol edge (``engine25.worker._resolve_attention``),
+        where refusing the job is still possible; raising HERE would skip the
+        matching reset and leak the request into the next job.
         """
+        # FIRST, and before anything that could conceivably fail: everything
+        # below this line is an assignment or a never-raise call, and the sage
+        # request is the one whose arm/reset pairing spans the whole job.
+        self._sage.set_backend(attention_backend)
         self._block_swap_prefetch_requested = bool(block_swap_prefetch)
         stage = getattr(self, "stage", None)
         if stage is not None:
@@ -1042,7 +1098,15 @@ class Ltx25Pipeline:
         "on" if it asked for it (the request is what the echo reports, exactly
         as in 2.3) -- but a failed job emits no ``done`` at all, so that echo
         never leaves the process.
+
+        The sage third is the one that has to run FIRST, before anything that
+        could raise or return early: ``SageState.reset`` snapshots
+        ``attention_used`` and only then clears the request, so it is both the
+        leak guard for the next job and the ONLY record of what the finished job
+        ran on. It cannot raise (four attribute writes), which is why it needs
+        no handler of its own.
         """
+        self._sage.reset()
         self._keep_resident_used = "on" if self._keep_resident_requested else "off"
         self._keep_resident_requested = False
         try:
@@ -1113,6 +1177,25 @@ class Ltx25Pipeline:
         path the request is also the outcome.
         """
         return self._keep_resident_used
+
+    def attention_used(self) -> str:
+        """What the last finished job's attention actually ran on: "sdpa",
+        "sage", or "sage->sdpa" (sage was requested, but a kernel call raised
+        and latched the rest of the job onto SDPA).
+
+        Read by the worker AFTER the job returns, which is why it reports the
+        snapshot ``SageState.reset()`` took rather than the live state --
+        :meth:`reset_acceleration_job` has already cleared that. Same name, same
+        three values and the same read-after-reset discipline as 2.3's
+        ``LTXFastVideoPipeline.attention_used``, so the app relays one field from
+        one code path per engine.
+
+        Unlike :meth:`keep_resident_used` above, this engine really can emit all
+        three values: the degradation here is the sage kernel raising mid-job,
+        which is a property of the kernel and the tensors rather than of either
+        engine's plumbing.
+        """
+        return self._sage.last_attention_used
 
     def generate(  # noqa: PLR0913
         self,

@@ -166,6 +166,13 @@ from ltx_core.model.transformer import (
     X0Model,
 )
 from ltx_core.model.transformer.modality import Modality
+
+# VERIFY-ONLY, like `validate_audio_waveform` and `AudioProcessor` above: nothing
+# outside this file names either symbol. They are imported so `verify` can pin
+# the two facts SageAttention rests on -- that a masked call goes somewhere else
+# entirely (`masked_attention_function`), and that `attention_function` is still
+# the slot the wrapper is allowed to overwrite. See section 13.
+from ltx_core.model.transformer.attention import Attention, AttentionOps
 from ltx_core.model.upsampler import LatentUpsampler, upsample_video
 from ltx_core.model.video_vae import (
     AUTO_TILING,
@@ -1161,6 +1168,48 @@ def verify() -> None:
         _source_of(read_lora_reference_downscale_factor, "iclora_utils.read_lora_reference_downscale_factor"),
         "iclora_utils.read_lora_reference_downscale_factor",
         'metadata.get("reference_downscale_factor", 1)',
+    )
+
+    # (13) THE TWO ATTENTION FACTS SageAttention RESTS ON. The service in
+    #      ``engine.transformer.sage_attention_service`` overwrites
+    #      ``Attention.attention_function`` on all 288 modules and hands its
+    #      fallback five positional arguments (q, k, v, heads, mask). Both pins
+    #      guard silent-wrong-behaviour, not a crash:
+    #
+    #      (a) The ROUTING. 2.5 splits the masked and unmasked paths across two
+    #          attributes, and sage only ever owns the unmasked one -- which is
+    #          why an IC-LoRA attention-strength job on this engine reaches SDPA
+    #          structurally rather than through the wrapper's own mask check. A
+    #          release that started routing masked calls back through
+    #          ``attention_function`` would silently push masks into a kernel
+    #          that cannot express one; the wrapper WOULD still catch them (its
+    #          mask branch is kept for exactly this reason, and for 2.3, where
+    #          NAG/VSF call it with a mask directly), but the "IC-LoRA on 2.5
+    #          never logs a masked fallback" fact written into §77 and asserted
+    #          by the real-device gate would quietly stop being true.
+    #          The ORDER is what is pinned, not just the presence of the two
+    #          names: `if mask is None` must come FIRST, because it is the
+    #          branch that sends the unmasked call to the slot sage owns.
+    #      (b) The four SLOTS. ``AttentionOps`` is the frozen dataclass every
+    #          block's Attention modules share one instance of, so ``uninstall``
+    #          restoring ``_fallback`` restores THAT shared callable. A renamed
+    #          or reordered field would make the wrapper install onto a slot the
+    #          forward no longer reads -- a run that reports "sage" and is not.
+    _require_source_order(
+        _source_of(Attention.forward, "Attention.forward"),
+        "Attention.forward",
+        "if mask is None:",
+        "masked_attention_function",
+    )
+    _require_dataclass_fields(
+        AttentionOps,
+        "AttentionOps",
+        (
+            "attention_function",
+            "masked_attention_function",
+            "preattention_function",
+            "gated_attention_function",
+        ),
     )
 
     # 4. F1 canary -- logged, never asserted (see module docstring).

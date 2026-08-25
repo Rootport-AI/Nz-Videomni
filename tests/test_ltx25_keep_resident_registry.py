@@ -38,6 +38,7 @@ pytest.importorskip("ltx_core")
 import torch  # noqa: E402
 from torch import nn  # noqa: E402
 
+from engine.transformer.sage_attention_service import SageState  # noqa: E402
 from engine25.ltxcore_compat import ModelRegistry, StateDict  # noqa: E402
 from engine25.pipeline25 import Ltx25Pipeline, _swap_keep_resident  # noqa: E402
 
@@ -113,12 +114,23 @@ def test_rearming_the_same_setting_leaves_the_cache_intact() -> None:
     pipeline._keep_resident_requested = False
     pipeline._keep_resident_used = "off"
     pipeline._block_swap_prefetch_requested = False
+    # The bare instance carries only what the two methods under test touch, and
+    # the sage arm/reset is now among them: ``set_acceleration_job`` starts by
+    # setting the backend on this object and ``reset_acceleration_job`` ends the
+    # job by snapshotting it. A real ``SageState`` rather than a stub -- it is
+    # four attribute writes with no dependencies, so a stub could only be a
+    # place for the two to disagree.
+    pipeline._sage = SageState()
 
     def arm(keep_resident: bool) -> None:
         pipeline.set_acceleration_job(
             block_swap_prefetch=False,
             fused_gguf_dequant_kernel=False,
             keep_resident=keep_resident,
+            # Stated explicitly because the parameter has no default: every
+            # caller of this method declares its attention backend, so a new
+            # entry point cannot inherit one by accident.
+            attention_backend="sdpa",
         )
 
     arm(True)  # job 1 turns it on

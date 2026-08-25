@@ -14,12 +14,16 @@ path.
 
 WHAT THIS FILE DELIBERATELY DOES NOT DO
     The pieces the 2.3 worker installs at import time -- the pre-denoise
-    ``empty_cache`` monkeypatch, the ``progress_shim`` tqdm swap, the
-    SageAttention probe, the CUDA pre-warm -- are absent, and stay absent. Each
-    is tuned to the 2.3 wheel's internals; re-applying them blind to a different
-    pipeline is exactly the kind of borrowed-assumption bug this separate engine
-    exists to avoid. Per-step progress in particular needs no shim here: the
-    official denoising loops call their ``denoiser`` once per step, so
+    ``empty_cache`` monkeypatch, the ``progress_shim`` tqdm swap, the CUDA
+    pre-warm -- are absent, and stay absent. Each is tuned to the 2.3 wheel's
+    internals; re-applying them blind to a different pipeline is exactly the
+    kind of borrowed-assumption bug this separate engine exists to avoid. The
+    SageAttention PROBE is the one that came back, and it came back on this
+    engine's own terms: 2.3 runs it at import time, here it is a lazy import
+    inside ``load``, after the cheap path checks, so a typo'd model path is
+    still reported in under a second and the module scope stays import-free.
+    Per-step progress in particular needs no shim here: the official denoising
+    loops call their ``denoiser`` once per step, so
     :mod:`engine25.pipeline25` counts steps at that seam instead of swapping
     tqdm out from under the library.
 
@@ -47,8 +51,8 @@ Protocol (one JSON object per line; parent -> worker):
    output_path, [images], loras, reference_video}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
-      ignores (negative_prompt, num_steps, attention_backend, vae_mode, ...) may
-      ride along; each is logged as ignored and dropped. ``crop_output`` is NOT
+      ignores (negative_prompt, num_steps, vae_mode, ...) may ride along; each
+      is logged as ignored and dropped. ``crop_output`` is NOT
       one of them -- it never reaches the worker in either engine, because it is
       an ffmpeg post-process the app applies to the finished mp4.
       ``loras`` = [{path, strength, [audio_strength]}...] is the job's Style /
@@ -78,9 +82,9 @@ Protocol (one JSON object per line; parent -> worker):
       segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``retake``, ``end_source``, ``nag``, ``attention_backend``, ``vae_mode``)
-      is REFUSED BY NAME rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
-      The three acceleration knobs are NOT on that list: all of them apply to
+      (``retake``, ``end_source``, ``nag``, ``vae_mode``) is REFUSED BY NAME
+      rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
+      The four acceleration knobs are NOT on that list: all of them apply to
       the chain unchanged.
       The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
       2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes ran.
@@ -107,11 +111,12 @@ resolved name, which is how the ``use_ancestral_sampler`` assertion becomes
 observable to the app instead of living only in a log line -- the official code
 silently downgrades that flag to False on GGUF paths and only WARNs.
 
-``ready.sage_available`` is always false for this engine and is expected to stay
-false: LTX 2.5 v1 is SDPA-only by scope decision, and sageattention is not even
-installed in .venv-engine-ltx25. The field is present anyway because the app
-publishes it as ``acceleration.sage_available`` on GET /status for whichever
-engine is loaded -- an absent key would read as "unknown", which is wrong.
+``ready.sage_available`` is the MEASURED answer for this process, from
+``engine.transformer.sage_attention_service.probe_sage`` (it used to be a
+hard-coded false, from the days when this engine was SDPA-only and the wheel was
+not installed in .venv-engine-ltx25). The app publishes it as
+``acceleration.sage_available`` on GET /status for whichever engine is loaded,
+which is what greys the option out when the wheel is missing or unusable.
 
 Selftest (gate G4), run inside the venv without the app::
 
@@ -128,6 +133,9 @@ about the shipped path, not about a parallel one. Its JSON report carries the
 ``done`` event verbatim, which is where the acceleration echoes live: run the
 same command twice with ``--fused-dequant off`` and ``on`` and the two digests
 must be IDENTICAL, because the fused kernels are a bit-exact substitution.
+``--attention`` is the opposite kind of knob and its pair reads the opposite
+way: sage is a QUANTIZED kernel, so ``sage`` and ``sdpa`` at one seed must
+DIFFER, and two ``sage`` rounds at one seed must agree with each other.
 
 The chain has its own (gate G2), same discipline, plus captured receipts::
 
@@ -281,8 +289,13 @@ def _do_load(msg: dict) -> None:
     """
     global _PIPE
     if _PIPE is not None:
+        # The probe is cached per process, so the re-answer cannot disagree with
+        # the first ``ready``; importing it here rather than at module scope is
+        # free on this branch, where the whole stack is already resident.
+        from engine.transformer.sage_attention_service import probe_sage  # noqa: PLC0415
+
         _log("load: already loaded -- re-answering ready")
-        _emit("ready", sampler=_PIPE.sampler, sage_available=False)
+        _emit("ready", sampler=_PIPE.sampler, sage_available=probe_sage())
         return
 
     for field in _LOAD_PATH_FIELDS:
@@ -294,6 +307,17 @@ def _do_load(msg: dict) -> None:
         if not path.exists():
             raise FileNotFoundError(f"{field} does not exist: {path}")
         _log(f"load: {field} OK ({path.stat().st_size} bytes) {path}")
+
+    # AFTER the path checks and BEFORE the pipeline: the checks above exist so a
+    # typo'd manifest entry is reported in under a second, and this import pulls
+    # in sageattention + triton (seconds, and a DLL load that can fail on a
+    # broken wheel). ``probe_sage`` swallows every failure and returns False, so
+    # an unusable wheel greys the option out in the UI instead of failing the
+    # load -- but it must not get the chance to do either before a missing model
+    # file has been named.
+    from engine.transformer.sage_attention_service import probe_sage  # noqa: PLC0415
+
+    sage_available = probe_sage()
 
     from engine25.pipeline25 import (  # noqa: PLC0415 -- deliberately lazy (see module docstring)
         DEFAULT_BLOCKS_ON_GPU,
@@ -322,8 +346,9 @@ def _do_load(msg: dict) -> None:
     )
     _PIPE = pipeline
     _log(f"LOAD_OK {json.dumps(pipeline.build_report, ensure_ascii=False, default=str)}")
-    # sage_available=False is permanent for this engine (see the module docstring).
-    _emit("ready", sampler=pipeline.sampler, sage_available=False)
+    # The MEASURED answer, from the probe above -- not a constant. See the
+    # ``ready.sage_available`` paragraph in the module docstring.
+    _emit("ready", sampler=pipeline.sampler, sage_available=sage_available)
 
 
 def _ic_loras(msg: dict) -> list[tuple[str, float, float | None]]:
@@ -507,6 +532,83 @@ def _resolve_keep_resident(msg: dict) -> bool:
     return bool(msg.get("keep_resident", False))
 
 
+def _resolve_attention(msg: dict) -> tuple[str, bool]:
+    """Resolve a job's ``attention_backend`` -> ``(effective_backend, degraded)``.
+
+    2.3's reader (``engine/worker.py``) word for word, and deliberately so: the
+    app sends ONE payload shape for whichever engine is loaded, so two readers
+    that disagreed about what an unknown value means would be a real bug no test
+    would catch.
+
+    ``degraded`` means "sage was asked for but this process cannot deliver it",
+    which is what turns into ``attention_used="sage->sdpa"`` below.
+
+    Missing key -> "sdpa": the payload is additive, so every caller written
+    before this existed (and every default request, which does not send the key
+    at all) resolves to exactly the behaviour it always had -- which is what
+    keeps the frozen default-job digests valid.
+
+    An UNKNOWN value fails the job loudly. It can only mean the app and the
+    engine disagree about the protocol, and quietly running the wrong backend
+    would be recorded as a truthful-looking ``attention_used`` for a job that
+    ignored the request.
+
+    ``sage`` when SageAttention is unavailable is a DIFFERENT case and is
+    deliberately not fatal: this is a speed knob, so "ran, just not faster"
+    beats "failed". Warn, degrade, and make the degradation visible in the job's
+    metadata rather than only in this log.
+
+    The ``probe_sage`` import is function-local, unlike 2.3's module-level one:
+    this worker's module scope is deliberately import-free (see the module
+    docstring), and this function only ever runs after ``load`` has already
+    pulled the whole stack in, so the lookup is a ``sys.modules`` hit.
+    """
+    from engine.transformer.sage_attention_service import probe_sage  # noqa: PLC0415
+
+    backend = str(msg.get("attention_backend", "sdpa"))
+    if backend not in ("sdpa", "sage"):
+        raise RuntimeError(
+            f"engine25 worker: unknown attention_backend {backend!r} — expected "
+            "'sdpa' or 'sage'."
+        )
+    if backend == "sage" and not probe_sage():
+        # ASCII only, deliberately. This goes straight to STDERR, which on a
+        # Japanese Windows is cp932 with errors="backslashreplace" - an em dash
+        # here would land in logs/ltx_worker.log as a backslash-u2014 escape,
+        # right in the middle of the one sentence an operator reads when asking
+        # "why did my sage job run slow?". (Nothing crashes either way;
+        # backslashreplace is exactly why it does not - this is only legibility,
+        # which is why the RuntimeError above can keep its dash: that one is
+        # JSON-escaped onto the protocol channel, never printed raw.)
+        _log(
+            "WARNING attention_backend='sage' requested but SageAttention is not "
+            "available in this engine venv - falling back to sdpa for this job "
+            "(reported as attention_used='sage->sdpa')."
+        )
+        return "sdpa", True
+    return backend, False
+
+
+def _attention_used(effective: str, degraded: bool) -> str:
+    """The ``done`` event's ``attention_used``: what the job ACTUALLY ran on.
+
+    2.3's function verbatim (``engine/worker.py``). Three sources, in order: the
+    pre-job availability degrade (``degraded``), the backend that was handed to
+    the pipeline, and -- only when sage really did start -- the pipeline's own
+    record, which reports "sage->sdpa" if a kernel call raised mid-job and
+    latched the rest of the job onto SDPA.
+
+    Must be called AFTER ``reset_acceleration_job``: the pipeline's reset is
+    what snapshots the live state into the value read here.
+    """
+    if degraded:
+        return "sage->sdpa"
+    if effective != "sage":
+        return "sdpa"
+    assert _PIPE is not None  # only reachable from a post-load generate op
+    return _PIPE.attention_used()
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -533,14 +635,18 @@ def _do_generate(msg: dict) -> None:
         msg.get("reference_video"), str(msg["output_path"]), _preprocess_frame_cap(msg)
     )
 
-    # The three acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
+    # The four acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
     # written before they existed resolves to today's behaviour, and all are
     # armed below rather than passed to ``generate``: they are per-job state on a
     # resident process, not generation parameters. For ``keep_resident`` the
     # absent case is an instruction rather than a default -- see its reader.
+    # ``attention_backend`` is the only one that can REFUSE the job (an unknown
+    # value is a protocol disagreement), and the only one that returns a pair:
+    # the second half is "sage was asked for and this process cannot serve it".
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
     keep_resident = _resolve_keep_resident(msg)
+    attention, attention_degraded = _resolve_attention(msg)
 
     # ONE line per job, after the parse: what the request ASKED for, in the
     # worker's own log, so "I attached a LoRA and nothing happened" can be told
@@ -555,7 +661,11 @@ def _do_generate(msg: dict) -> None:
         # What was ASKED for. What was GOT is the pair of echo keys on the done
         # event below, which can differ ("on->off").
         f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
-        f"keep_resident={'on' if keep_resident else 'off'}"
+        f"keep_resident={'on' if keep_resident else 'off'} "
+        # The RESOLVED backend, not the raw field: an unavailable wheel has
+        # already turned a 'sage' request into 'sdpa' by this line, and the
+        # WARNING that says so is immediately above it in the same log.
+        f"attention={attention}"
     )
 
     # OUTSIDE the try, and before the build: the fused kernels have to be armed
@@ -568,6 +678,7 @@ def _do_generate(msg: dict) -> None:
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
         keep_resident=keep_resident,
+        attention_backend=attention,
     )
     try:
         result = _PIPE.generate(
@@ -619,6 +730,12 @@ def _do_generate(msg: dict) -> None:
         # values; this engine only ever emits two (see
         # ``Ltx25Pipeline.keep_resident_used``).
         keep_resident_used=_PIPE.keep_resident_used(),
+        # 2.3's fourth echo key, same name and same three values. Read AFTER the
+        # reset like the others, because the reset is what snapshots it -- and
+        # computed from the pre-job degrade as well as the pipeline's record, so
+        # a request that never reached the pipeline (no wheel) is still reported
+        # as "sage->sdpa" rather than as a clean "sdpa".
+        attention_used=_attention_used(attention, attention_degraded),
     )
 
 
@@ -654,7 +771,10 @@ def _do_generate(msg: dict) -> None:
 #: stage-2 tile. ``keep_resident`` LEFT WITH THE KEEP-RESIDENT COMMIT: it now
 #: retains the text encoder's state dict between jobs, and a chain builds that
 #: encoder exactly once per job like everything else does, so there is nothing
-#: chain-shaped left to refuse.
+#: chain-shaped left to refuse. ``attention_backend`` LEFT WITH THE SAGE COMMIT,
+#: and for the strongest version of that reason: the sage wrappers are installed
+#: per transformer BUILD, and a chain is the path with the most builds (one per
+#: stage-1 clip, one per stage-2 tile). Nothing about it is chain-shaped.
 #:
 #: The single-generate op differs deliberately for the knobs that remain here --
 #: there they are ignored-and-logged (``IGNORED_FIELDS``) rather than refused,
@@ -663,7 +783,6 @@ CHAIN_UNSUPPORTED_KEYS = (
     "retake",
     "end_source",
     "nag",
-    "attention_backend",
     "vae_mode",
 )
 
@@ -810,17 +929,21 @@ def _do_generate_chain(msg: dict) -> None:
         op="generate_chain",
     )
 
-    # The acceleration knobs, read with the SAME three helpers the single op
+    # The acceleration knobs, read with the SAME four helpers the single op
     # uses: one set of readers for the two entry points is what stops a knob from
     # being wired to one op and forgotten on the other. All are live on the
     # chain: it builds the transformer once per stage-1 clip and once per
     # stage-2 tile, and the stage re-arms the prefetch on every one of them.
     # ``keep_resident`` works differently but is just as live -- a chain builds
     # the TEXT encoder once per job, same as a single generate, so what it saves
-    # is the same 7.7 GiB rebuild on the job after this one.
+    # is the same 7.7 GiB rebuild on the job after this one. ``attention_backend``
+    # is live for the transformer reason: the stage strips and re-installs the
+    # sage wrappers on EVERY one of those builds, so a chain's echo is true of
+    # all of them or of none.
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
     keep_resident = _resolve_keep_resident(msg)
+    attention, attention_degraded = _resolve_attention(msg)
 
     spec = ChainSpec(
         clips=clips,
@@ -857,7 +980,10 @@ def _do_generate_chain(msg: dict) -> None:
         f"stage2win={spec.stage2_window or 'standard'} "
         # What was ASKED for; the done event's echo keys say what was GOT.
         f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
-        f"keep_resident={'on' if keep_resident else 'off'}"
+        f"keep_resident={'on' if keep_resident else 'off'} "
+        # RESOLVED, exactly as in the single op: an unavailable wheel has already
+        # turned a 'sage' request into 'sdpa' by the time this line is written.
+        f"attention={attention}"
     )
 
     # Armed OUTSIDE the try and before the first transformer build, disarmed in
@@ -868,6 +994,7 @@ def _do_generate_chain(msg: dict) -> None:
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
         keep_resident=keep_resident,
+        attention_backend=attention,
     )
     try:
         result = run_chain(
@@ -936,6 +1063,12 @@ def _do_generate_chain(msg: dict) -> None:
         # values; this engine only ever emits two (see
         # ``Ltx25Pipeline.keep_resident_used``).
         keep_resident_used=_PIPE.keep_resident_used(),
+        # 2.3's fourth echo key. A chain's value covers the WHOLE job: the
+        # kernel-failure latch lives on the pipeline's ``SageState``, which
+        # outlives every one of the chain's transformer builds, so one failed
+        # kernel call in the last stage-2 tile makes the whole chain
+        # "sage->sdpa".
+        attention_used=_attention_used(attention, attention_degraded),
     )
 
 
@@ -1211,6 +1344,9 @@ def _add_acceleration_arguments(parser) -> None:
     because a knob whose selftest never turns it on is a knob nobody runs. The
     ``off`` side exists for the pair comparison the gate asks for -- same seed,
     same geometry, one bit different, digests compared.
+
+    The four knobs have THREE different defaults between them, and each one is
+    an argument rather than a convention -- see the comment above each.
     """
     parser.add_argument(
         "--fused-dequant",
@@ -1237,6 +1373,21 @@ def _add_acceleration_arguments(parser) -> None:
         help="retain the text encoder's state dict between jobs, ~7.7 GiB of resident RAM "
         "(default: off -- unlike the two knobs above, which default to on)",
     )
+    # DEFAULT SDPA, and for a THIRD reason again. The first two knobs default to
+    # on because they are free; keep-resident defaults to off because it buys
+    # time with RAM. This one defaults to sdpa because it is the only knob that
+    # CHANGES THE OUTPUT: sage is a quantized kernel, so a sage round's digest
+    # cannot be compared against the frozen baseline the other gates use. The
+    # app ships it off for the same reason (the default is a scope decision, not
+    # a performance one), and a selftest whose default did not match would make
+    # every digest comparison in this file a different measurement.
+    parser.add_argument(
+        "--attention",
+        choices=("sdpa", "sage"),
+        default="sdpa",
+        help="attention kernel: sdpa (default) or sage (SageAttention -- faster, and "
+        "quantized, so the mp4 differs from the sdpa one at the same seed)",
+    )
 
 
 def _acceleration_payload(args) -> dict:
@@ -1257,6 +1408,12 @@ def _acceleration_payload(args) -> dict:
         payload["block_swap_prefetch"] = True
     if args.keep_resident == "on":
         payload["keep_resident"] = True
+    if args.attention != "sdpa":
+        # Additive like the three above: ``sdpa`` omits the key rather than
+        # sending it, so an sdpa round exercises the same absent-key path a
+        # pre-sage payload takes -- which is what makes its digest comparable to
+        # the frozen baseline at all.
+        payload["attention_backend"] = args.attention
     return payload
 
 

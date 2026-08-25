@@ -103,7 +103,9 @@ LABELS: dict[str, dict[str, str]] = {
         # メモリ常駐量を推奨要件のすぐ横に置いた。WebUI 側の
         # `accelKeepResidentNote` と同内容に揃えてある。
         "accel_info_keep_resident": ("64GB or more of memory recommended (it uses about "
-                                     "20GB of main memory while resident). Keeps the "
+                                     "20GB of main memory while resident; about 8GB on "
+                                     "LTX 2.5, where only the text encoder is kept). "
+                                     "Keeps the "
                                      "model's CPU-side skeleton between jobs, greatly "
                                      "shortening the preprocessing of the second and "
                                      "later generations. The output does not change."),
@@ -636,7 +638,9 @@ LABELS: dict[str, dict[str, str]] = {
                                 "約10〜13%短縮。ブロック入れ替えが無効な設定では何も起きません。"),
         "accel_lbl_keep_resident": "モデル骨格の常駐（ジョブ間キャッシュ）",
         "accel_info_keep_resident": ("メモリ64GB以上を推奨（メインメモリを約20GB常駐で"
-                                     "使用します）。モデルのCPU側骨格をジョブ間で保持し、"
+                                     "使用します。LTX 2.5では常駐するのが文章を読み取る"
+                                     "部分だけなので約8GBです）。"
+                                     "モデルのCPU側骨格をジョブ間で保持し、"
                                      "2回目以降の生成の前処理を大幅に短縮します。"
                                      "生成結果は変わりません。"),
         "lbl_qmode": "品質モード",

@@ -10,7 +10,8 @@ distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える
 ``block_swap_prefetch``（既定on。backend §44、実装は先読み block swap。
 offにすると従来の同期スワップになる。S4, 2026-08-01: 実機ゲートG1〜G7全PASS
 を条件にオーナーが確定した既定反転）、``keep_resident``（既定off。ジョブ間の
-CPU骨格キャッシュ）、``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
+CPU骨格キャッシュ。LTX 2.5 では常駐するのがテキストエンコーダだけで、
+同じ名前でも中身が違う。§76）、``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
 Triton 1カーネル化。出力はビット単位で不変。§51, 2026-08-04: 実機ゲート
 G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mode``（既定
 ``"default"``、``"prune_vaed"`` で枝刈り版デコーダ。§3-50, 2026-08-05 に
@@ -80,10 +81,12 @@ async def submit_generate(
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
     LTX 2.5 では、このツールでは ``nag_enabled`` / ``vae_mode`` /
-    ``attention_backend`` / ``keep_resident``（いずれも既定値以外にした場合）
-    が使えません。``loras``（スタイルLoRA・制御系IC-LoRA）と
+    ``attention_backend``（いずれも既定値以外にした場合）が使えません。
+    ``loras``（スタイルLoRA・制御系IC-LoRA）と
     ``reference_video_id``、``conditioning_attention_strength`` /
     ``reference_video_strength`` は LTX 2.5 でも使えます。
+    ``keep_resident`` も 2026-08-25 から LTX 2.5 で使えます（既定off のまま。
+    2.5 が常駐させるのはテキストエンコーダの重み1つだけで約7.7GiBです）。
     ``submit_chain``（連結生成）は本体そのものは使えますが、素材の指定など
     一部の引数が使えません（``submit_chain`` の説明を見てください）。
 
@@ -173,6 +176,12 @@ async def submit_generate(
             との併用では自動的にoffへ降格します（メインメモリ二重化の回避）。
             実際に効いたかはジョブ完了後のメタデータの ``keep_resident_used``
             （``"off"`` / ``"on"`` / ``"on->off"``）に記録されます。
+            **上の数値と併用制限はすべて LTX 2.3 のものです。** LTX 2.5 でも
+            2026-08-25 から使えますが、**契約が同じだけで中身は別物**で、
+            常駐するのは Gemma 4 テキストエンコーダの重み1つだけ（実測
+            7.68GiB）です。2本目以降の生成が 27.6秒→20.5秒（約25%短縮）に
+            なり、LTX 2.5 側には併用の制限も自動降格も無いため、エコーは
+            ``"on"`` / ``"off"`` の2値しか出ません。
         fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
             Tritonの1カーネルにまとめて高速化します（**既定on**。実機で
             約17.5%短縮）。
@@ -337,9 +346,11 @@ async def submit_chain(
     クリップにまたがる参照動画も含みます）も使えます**。ただし次の引数は
     使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED になります:
     ``end_source_video_id`` ・ ``end_source_image_id``（素材（末尾））/
-    ``nag_enabled`` / ``vae_mode`` / ``attention_backend`` /
-    ``keep_resident``。これらを使いたい場合は ``load_pipeline`` で
-    LTX 2.3 に切り替えてください。
+    ``nag_enabled`` / ``vae_mode`` / ``attention_backend``。これらを使いたい
+    場合は ``load_pipeline`` で LTX 2.3 に切り替えてください。
+    **``keep_resident`` は 2026-08-25 から LTX 2.5 の連結生成でも使えます**
+    （既定off のまま。2.5 が常駐させるのはテキストエンコーダの重み1つだけ
+    です）。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行
@@ -458,7 +469,9 @@ async def submit_chain(
         keep_resident: submit_generate と同じ意味（**既定off・メモリ64GB以上
             推奨**。生成結果は変わりません。チェーンでも1つの設定がチェーン
             全体に効きます——骨格キャッシュはジョブ単位ではなくワーカー単位で
-            持つためです）。
+            持つためです）。LTX 2.5 では常駐するのがテキストエンコーダの重み
+            1つだけ（約7.7GiB）で、その構築はジョブあたり1回です（実測で
+            2本目の連結生成が 35.17秒→30.13秒）。
         fused_gguf_dequant_kernel: submit_generate と同じ意味（**既定on**。
             生成結果は変わりません＝現行実装とビット一致。実行できない環境では
             黙って従来実装へ降格します。チェーン全体・全ステージ共通で効きます）。

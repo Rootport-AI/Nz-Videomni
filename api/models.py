@@ -252,6 +252,13 @@ class GenerateRequest(BaseModel):
     # 組み合わせによっては自動的に off へ降格する（engine/worker.py の
     # _resolve_keep_resident を参照）。GET /status には載せない（利用可否は
     # 環境依存ではなくメモリ量の問題で、サーバーからは判定できないため）。
+    # 【エンジン差】上の数値・併用制限・自動降格はすべて LTX 2.3 のものである。
+    # LTX 2.5（engine_family="ltx25"）でも 2026-08-25 から効くが、**契約が同じ
+    # だけで実装は別物**——2.3 が全サブモデルの骨格を抱えるのに対し、2.5 が
+    # 常駐させるのは Gemma 4 テキストエンコーダの state dict ただ1つ（実測
+    # 7.68GiB）で、2本目以降のジョブが 27.6秒 → 20.5秒（約25%短縮）になる。
+    # 2.5 側には併用の制限も自動降格も存在しないため、keep_resident_used は
+    # "on" / "off" の2値しか出ない（契約は3値のまま）。§76 を参照。
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
 
     # fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
@@ -824,8 +831,10 @@ class GenerateChainRequest(BaseModel):
     # 既定on（S4, 2026-08-01）。offにすると従来の同期スワップになる。
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
     # keep_resident: 詳細は GenerateRequest の同名フィールドを参照。既定off
-    # （メインメモリ約20GB常駐・64GB以上推奨）。チェーンでも1つの設定が
+    # （メインメモリ約20GB常駐・64GB以上推奨。LTX 2.5 では常駐するのが
+    # テキストエンコーダだけなので約7.68GiB）。チェーンでも1つの設定が
     # チェーン全体に効く（骨格キャッシュはジョブ単位ではなくワーカー単位）。
+    # LTX 2.5 でも同じで、構築はジョブあたり1回だけである（§76）。
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
     # fused_gguf_dequant_kernel: 詳細は GenerateRequest の同名フィールドを参照。
     # 既定on（GenerateRequest と同じ）。チェーンでも1つの設定がチェーン全体に効く。

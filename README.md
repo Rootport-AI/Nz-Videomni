@@ -154,7 +154,7 @@ AviUtl2 のプラグインは、バックエンドのサーバーを自分で起
 |------|------|
 | GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
 | GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
-| メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（約 20GB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」）。**LTX 2.5 を使う場合も 64GB 以上を推奨**します——2.5 のワーカーは仕上げ工程のために重みをメインメモリへ持ち続ける設計（`cache_weights`、既定 on）で、**常駐が実測で約 25GiB** あるためです（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.19）。この既定を off にすれば常駐は減りますが、そのぶん仕上げ工程の作り直しに時間がかかります |
+| メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（LTX 2.3 では約 20GB、LTX 2.5 では約 7.7GiB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」）。**LTX 2.5 を使う場合も 64GB 以上を推奨**します——2.5 のワーカーは仕上げ工程のために重みをメインメモリへ持ち続ける設計（`cache_weights`、既定 on）で、**生成中のメインメモリの山が実測で約 26GiB** あるためです。この既定を off にすれば常駐は減りますが、そのぶん仕上げ工程の作り直しに時間がかかります。**LTX 2.5 でモデル骨格の常駐も同時に on にする場合は、安全側の見積りとして合計 約 34GiB を見ておいてください**（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.19・§76.2） |
 | ストレージ | **このフォルダを置くドライブに約 40〜41GB**（モデル 約 32.51GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
 | attention（注意機構の計算方法） | 既定は全世代で **SDPA**（PyTorch 標準の実装）。**2026-07-31 から、生成のたびに SageAttention へ切り替えられます**（§5「生成の高速化（Acceleration）」）。xformers・flash-attn は引き続き導入も使用もしません |
 
@@ -624,14 +624,15 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 ## 5. 16GB 向け生成テスト
 
 > **本節は LTX 2.3 を選んでいるときの説明です。LTX 2.5 を選んでいるときは一部が使えません。**
-> 生成の高速化（Acceleration）の5項目のうち、`sage attention`・モデル骨格の常駐（`keep_resident`）・PrunaVAED（`vae_mode`）は
-> **LTX 2.5 では既定値（`sdpa` / off / Default）しか受け付けず**、それ以外を指定すると 422 で断られます（降格はしません）。
-> 残る2項目（先読み block swap・GGUF逆量子化の1カーネル化）は **2026-08-24 から LTX 2.5 でも実際に効きます**（既定は on。
-> 2つ併用で生成時間が 61.8%短縮され、出来上がる動画は変わりません）。NAG・撮り直し（Retake）・
+> 生成の高速化（Acceleration）の5項目のうち、LTX 2.5 でまだ使えないのは `sage attention` と PrunaVAED（`vae_mode`）の**2つだけ**です。
+> この2つは **LTX 2.5 では既定値（`sdpa` / Default）しか受け付けず**、それ以外を指定すると 422 で断られます（降格はしません）。
+> 残る3項目は LTX 2.5 でも実際に効きます——先読み block swap と GGUF逆量子化の1カーネル化は **2026-08-24 から**（既定は on。
+> 2つ併用で生成時間が 61.8%短縮され、出来上がる動画は変わりません）、モデル骨格の常駐（`keep_resident`）は **2026-08-25 から**
+> です（既定は off のまま。2本目以降の生成が約25%短縮されます）。NAG・撮り直し（Retake）・
 > 素材（末尾）・キャンバス拡張（Outpainting）なども同様に LTX 2.5 では使えません（§7「制限事項」の LTX 2.5 の項）。
 > **クリップ連結（Chained）・V2V・A2V（長尺 A2V・バッチ A2V を含む）は 2026-08-23 に対応済み**で、LTX 2.5 でも
 > そのまま使えます（操作パネルからの実機確認済み）。**スタイル LoRA と IC-LoRA（参照動画による制御。長尺を含む）も
-> 2026-08-24 に対応済み**です（こちらは操作パネルからの目視確認がこれからです）。
+> 2026-08-24 に対応済み**です（操作パネルからの目視確認も 2026-08-25 に合格しています）。
 
 出力は `outputs/{job_id}/output.mp4` と `outputs/{job_id}/metadata.json` に保存されます。
 `peak_vram_mb` は `metadata.json` またはワーカーログの `GENERATED_OK peak_vram_mb=` から取得できます
@@ -731,22 +732,25 @@ $env:PYTHONPATH = (Get-Location).Path
 生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめました
 （AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。項目は5つあり、**LTX 2.3 では5つとも実際に効きます**
 （2026-08-05 に最後の1つ「VAE」が実装され、将来の実装枠として場所だけ確保してあったグレーアウトの項目は
-なくなりました）。**LTX 2.5 では、このうち2つ（GGUF逆量子化の1カーネル化・先読み block swap）が 2026-08-24 から効きます。**
+なくなりました）。**LTX 2.5 では、このうち3つが効きます**——GGUF逆量子化の1カーネル化と先読み block swap が 2026-08-24 から、
+モデル骨格の常駐（`keep_resident`）が 2026-08-25 からです。
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い |
 |------|--------|------------------|------------------|
 | Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on（2026-08-04） | **実装済み**。既定は on（2026-08-24） |
 | Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` | `sdpa` のみ。`sage` は **422** |
 | Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on（2026-08-24） |
-| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | off のみ。on は **422** |
+| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | **実装済み**。既定は off（2026-08-25） |
 | VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off。恒久的に off のままです）（2026-08-05） | Default のみ。PrunaVAED は **422** |
 
 **上の2つは 2026-08-24 に LTX 2.5 でも使えるようになりました**（それまでは「指定しても無視して生成を続ける」扱いでした）。
 **2つを併用したときの生成時間は、実測で 102.86 秒 → 39.28 秒＝61.8%短縮です。**
 出力そのものは変わらず、**固定の検証用ジョブ17本すべてで動画のファイルが1バイトも変わっていない**ことを確認しています。
-残る3つ（`sage` / モデル骨格の常駐 / PrunaVAED）は LTX 2.5 では **422** で断られます——利用者が意図して on にしたときだけ
+**モデル骨格の常駐（`keep_resident`）も 2026-08-25 に LTX 2.5 で使えるようになりました**（既定は off のままです。
+2本目以降の生成が実測で 27.6秒 → 20.5秒＝約25%短縮になります。下の「モデル骨格の常駐」の節を参照してください）。
+残る2つ（`sage` / PrunaVAED）は LTX 2.5 では **422** で断られます——利用者が意図して on にしたときだけ
 付くものなので、効かないまま黙って通すより断ったほうが親切だという判断です。詳しくは §7.1 と
-[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75 を参照してください。
+[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75・§76 を参照してください。
 
 **選び方**: `sdpa` は PyTorch 標準の実装で、これまでどおりの結果が出ます。`sage` は
 [SageAttention 2.2.0](https://github.com/thu-ml/SageAttention)（量子化を使って注意機構の計算そのものを速くする外部
@@ -856,6 +860,30 @@ off にしている場合だけは、生成結果が壊れる（LoRA を融合�
 `false`）を指定できます。以前あった環境変数 `LTX_KEEP_RESIDENT` は**撤去済み**で、設定しても効きません。詳しい
 設計判断・検証結果は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照してください。
 
+#### LTX 2.5 での常駐（2026-08-25 から）
+
+**LTX 2.5 でもこのトグルが効くようになりました。既定は off のままです。** ただし**同じ名前でも中身は別物**です——
+LTX 2.3 が抱え込むのは全部品の骨格（約 20GB）ですが、**LTX 2.5 が抱えるのは文章を読み取る部分（Gemma 4 テキスト
+エンコーダ）の重み1つだけ**で、**常駐に使うメインメモリは実測 7.7GiB** です。
+
+- **効くのは2本目以降です。** 1本目は重みを組み立てるので、これまでどおりの時間がかかります。2本目からは
+  その組み立て（6〜8秒）が **0.4秒**になり、**生成そのものが実測で 27.6秒 → 20.5秒＝約25%短縮**されます
+  （連結生成では約5秒の短縮です）。**出来上がる動画は1バイトも変わりません。**
+- **VRAM は増えません。** メインメモリと引き換えの機能なので、GPU 側には何も置きません（実測でも VRAM の
+  ピークは on/off で完全に同じ値でした）。
+- **off に戻すと、そのジョブの先頭で解放されます**（ログに「released 7.68 GiB」と出ます）。もう一度 on にすると
+  組み立てを1回だけ払い直します（実測 4.4秒）。
+- **LTX 2.5 には併用の制限も自動 off もありません。** `metadata.json` の `keep_resident_used` に出る値は
+  **`"on"` か `"off"` の2つだけ**で、LTX 2.3 で出ることのある `"on->off"`（自動的に off へ落ちた）は
+  **LTX 2.5 では出ません**。
+- **メインメモリの目安**: LTX 2.5 は常駐 off のときでも生成中に約 26GiB まで使います。常駐を on にする場合は、
+  安全側に見積もって **合計 約 34GiB** を見ておいてください（§1「ハードウェア要件」）。
+- **これまであった落とし穴が1つ消えました。** 以前は、ベースモデルに LTX 2.5 を選んだまま Settings でこの常駐を
+  on にすると、**以後のすべての生成が 422 で断られました**。画面上は「LTX 2.5 が壊れた」ようにしか見えず、しかも
+  原因は別のタブの設定にありました。2026-08-25 からはそのまま生成できます。
+
+詳しい実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §76 を参照してください。
+
 ### 枝刈り版の映像VAEデコーダ（PrunaVAED・`vae_mode`）
 
 映像の復元処理（生成の最後に、内部表現から実際の映像フレームを作る処理）を、**枝刈り**（pruning＝寄与の小さい部分を
@@ -942,8 +970,8 @@ V2V（素材（冒頭）に動画を使って続きを作る）と、A2V（音�
 **IC-LoRA は 1 本の参照動画をクリップごとに配る長尺 IC-LoRA も使えます。**
 **さらに 2026-08-24、高速化2つ（GGUF逆量子化の1カーネル化・先読み block swap）が使えるようになりました**（いずれも既定 on）。
 **クリップ連結・V2V・A2V は AviUtl2 の操作パネルからの実機確認で動作を確認済みです**（クリップ連結は 2026-08-23、
-V2V と A2V は 2026-08-24）。**スタイル LoRA と IC-LoRA は、機械での検証と実 GPU での検証は全項目合格していますが、
-操作パネルからの目視確認はこれからです。**
+V2V と A2V は 2026-08-24）。**スタイル LoRA と IC-LoRA は、機械での検証・実 GPU での検証に加えて、
+2026-08-25 に操作パネルからの目視確認にも合格しました。**
 **高速化2つには目視確認がありません**——出力が1バイトも変わらないことを機械で証明できているためです
 （固定の検証用ジョブ17本すべてで動画のファイルの SHA-256 が従来と一致。
 [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75.12）。
@@ -958,7 +986,6 @@ V2V と A2V は 2026-08-24）。**スタイル LoRA と IC-LoRA は、機械で�
 | 非CFGネガティブプロンプト（NAG・VSF） | `nag_enabled` |
 | 枝刈り版の映像VAEデコーダ（PrunaVAED） | `vae_mode` |
 | SageAttention | `attention_backend` |
-| モデル骨格の常駐 | `keep_resident` |
 | 高品質パイプライン（`two_stage_hq`） | `pipeline` |
 
 **上の2つ（撮り直し・素材（末尾））は連結生成と同じ入口（`POST /generate/chain`）を通りますが、
@@ -980,13 +1007,19 @@ GGUF逆量子化の1カーネル化（`fused_gguf_dequant_kernel`）です。そ
 **出来上がる動画は1バイトも変わりません**（§5「生成の高速化」と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75）。
 **画面の見た目は何も変わりません**——もともと灰色になっていた項目ではないためです。
 
+**さらに 2026-08-25、モデル骨格の常駐（`keep_resident`）も LTX 2.5 で使えるようになりました。** こちらは上の2つと違って
+**もともと 422 で断っていた機能**なので、**上の表から1行消えて、画面の灰色が1つ解けます**（この表が短くなったのは、
+これが初めてです）。**既定は off のまま**で、on にすると2本目以降の生成が **約25%短縮**されます（実測 27.6秒 → 20.5秒）。
+こちらも**出来上がる動画は変わりません**。詳しくは §5「モデル骨格の常駐」と
+[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §76 を参照してください。
+
 **指定しても断らず、黙って無視して生成を続ける項目もあります**——ネガティブプロンプト系
 （`negative_prompt` / `guidance_scale` / `num_inference_steps` / `neg_method` / `vsf_scale`）の5つです。
 蒸留版の LTX 2.5 に CFG（プロンプトへの従い具合の制御）そのものが無いためです。
 **無視したことは `logs/server.log` に1行残ります。**
 
 **LTX 2.3 を選んでいるあいだは、これらはすべて従来どおり使えます。** LTX 2.5 での対応は今後の課題です
-（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102。**クリップ連結・V2V・A2V は 2026-08-23 に、スタイル LoRA と IC-LoRA と高速化2つは 2026-08-24 に対応済みで、次に着手するのは残る高速化3つ（モデル骨格の常駐 → SageAttention）です**）。**なお LTX 2.5 の重みは HuggingFace で公開済みですが、`setup.bat` の取得対象ではありません**——
+（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102。**クリップ連結・V2V・A2V は 2026-08-23 に、スタイル LoRA と IC-LoRA と高速化2つは 2026-08-24 に、モデル骨格の常駐は 2026-08-25 に対応済みで、次に着手するのは SageAttention です**）。**なお LTX 2.5 の重みは HuggingFace で公開済みですが、`setup.bat` の取得対象ではありません**——
 [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) と
 [`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25) からダウンロードし、
 `models/LTX25/<カテゴリ>/` へ置くと認識されます（§1「models フォルダの構成」の LTX 2.5 の項）。
@@ -1135,9 +1168,10 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
    `source_audio_id`（A2V。長尺 A2V を含む）も同日から使えます。** さらに **`loras`（スタイル LoRA）と
    `reference_video_id`（IC-LoRA。長尺 IC-LoRA を含む）、およびそれに従う 2 つの強度
    （`conditioning_attention_strength`・`reference_video_strength`）は 2026-08-24 から動作します。**
+   **`keep_resident`（モデル骨格の常駐）も 2026-08-25 から動作します**（既定は off のままです）。
    いま 422 になるのは、撮り直し（`retake`）・素材（末尾）（`end_source`）・キャンバス拡張（`outpaint`。
    単発生成のみ）と、NAG／VSF（`nag_enabled`）・PrunaVAED（`vae_mode`）・SageAttention（`attention_backend`）・
-   モデル骨格の常駐（`keep_resident`）・非蒸留パイプライン（`pipeline`）です（§7.1）。
+   非蒸留パイプライン（`pipeline`）です（§7.1）。
 
 **A2Vバッチ（音声フォルダの一括生成）**:
 1. `plan_a2v_batch` で音声フォルダを走査し、行ごとの計画（音声パス・提案フレーム数・同stem画像等）を得る。
@@ -1151,7 +1185,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
 - **`attention_backend="sage"` の注意**: 生成結果が同じシードでも変わります。詳しくは §5「生成の高速化（Acceleration）」の[注意書き](#sage-seed-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、LTX 2.3 で `sageattention` が入っていない環境ならエラーにならず `"sdpa"` へ降格して完走します。実際に使われた方式はメタデータの `attention_used` に記録されます。
-- **「生成の高速化（Acceleration）」の5項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode`。最後に残っていた `vae_mode` は 2026-08-05 に公開しました。ツールの本数は22個のまま変わっていません）。
+- **「生成の高速化（Acceleration）」の5項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode`。最後に残っていた `vae_mode` は 2026-08-05 に公開しました。ツールの本数は22個のまま変わっていません）。**LTX 2.5 を選んでいるときにこの5項目のうち 422 になるのは、`attention_backend`（`sage`）と `vae_mode`（PrunaVAED）の2つだけです**——`keep_resident` は 2026-08-25 から、残る2つは 2026-08-24 から LTX 2.5 でも動作します。
 - **`vae_mode="prune_vaed"`（PrunaVAED）の注意**: こちらも生成結果が変わります。詳しくは §5「枝刈り版の映像VAEデコーダ」の[注意書き](#prunavaed-quality-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。`sage` と違って LTX 2.3 での降格の可否は環境ではなく**枝刈りデコーダのファイルの有無**で決まり、無ければエラーにならず通常のデコーダで完走します。実際にどちらで生成されたかはメタデータの `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）に記録されます。**指定しなければ従来とまったく同じ**です（既定は `"default"` で、省略したときはこの項目自体がバックエンドへ送られません）。
 
 ---

@@ -1,6 +1,8 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "./bridge/mockBridge";
+import type { MockBridgeOptions } from "./bridge/mockBridge";
 import { TIMELINE_MENU_INVOKED_EVENT } from "./bridge";
 import type { ResultOf } from "./bridge";
 import { apiClient as defaultApiClient } from "./api/client";
@@ -79,8 +81,8 @@ function runningJobClient(): ApiClient {
   return { ...defaultApiClient, listJobs: vi.fn(async () => [job]) } as unknown as ApiClient;
 }
 
-async function renderShell(apiClient?: ApiClient) {
-  const bridge = createMockBridge({ delayMs: 0 });
+async function renderShell(apiClient?: ApiClient, bridgeOptions: MockBridgeOptions = {}) {
+  const bridge = createMockBridge({ delayMs: 0, ...bridgeOptions });
   render(<AppShell nativeBridge={bridge} {...(apiClient ? { apiClient } : {})} />);
   // Create finished seeding from GET /config => the shell is mounted and the
   // menu router is subscribed. The label is "Busy…" instead of "Generate" when
@@ -279,6 +281,141 @@ describe("App / W0 Edit-系 right-click routing", () => {
 
       await screen.findByText(/requires a video/i, undefined, { timeout: 5_000 });
       expect(screen.getByRole("button", { name: /^generate$/i })).toBeInTheDocument();
+    },
+    20_000,
+  );
+});
+
+// §3-98 P5 — the OTHER way into a mode whose tab is greyed.
+//
+// `ModeTabs` greys a mode the loaded base model's engine cannot run, and the
+// bounce effect gets the user out of one they were already on. Neither reaches
+// the timeline's own context menu: AviUtl2 draws that, and every Edit-系 item is
+// still on it whatever this app has greyed. Before the Step 0 gate, such a route
+// ran the whole of `handleRoute` — `reservePlacement` wrote a ⏳ provisional onto
+// the timeline and `setMode("edit")` opened the tab, and only THEN did the
+// bounce effect fire and put the user back on Single. The tab switch was undone;
+// the object on the timeline was not. It stayed there, bound to nothing, with
+// nothing to ever clean it up.
+//
+// The fixture reaches this state honestly: LTX 2.5 declares both `retake` and
+// `outpaint`, so `disabledModesFor`'s `needsAnyOf` takes the whole Edit tab.
+const AS_LTX25: MockBridgeOptions = {
+  ltx25Install: "full",
+  supportedBaseModels: ["LTX23", "LTX25"],
+};
+
+describe("App / Edit-系 right-click on a base model that cannot run Edit", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetProvisionalReservation();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  /** Render, switch the header dropdown to LTX 2.5, and wait for the Edit tab to
+   * actually go grey — that greying is the positive signal the new
+   * `unsupported_features` list has landed, so nothing below can pass merely by
+   * out-running the switch. */
+  async function renderOnLtx25() {
+    const bridge = await renderShell(undefined, AS_LTX25);
+    const select = (await screen.findByRole("combobox", { name: /base model/i })) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("LTX23"));
+    await userEvent.setup().selectOptions(select, "LTX25");
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled());
+    return bridge;
+  }
+
+  it(
+    "refuses retakeRange BEFORE any provisional is written",
+    async () => {
+      const bridge = await renderOnLtx25();
+      const spy = vi.spyOn(bridge, "request");
+      emit(bridge, "retakeRange", videoSelection());
+
+      // The note is the positive signal the refusal actually ran (the §4 guard
+      // contract's shape: guidance only, nothing destructive).
+      await screen.findByText(/This command cannot be run on the selected base model/i, undefined, {
+        timeout: 5_000,
+      });
+
+      // The heart of it: NO provisional on the timeline. `insertProvisional` is
+      // the RPC `reservePlacement` issues, and the seat is still idle.
+      expect(spy.mock.calls.find(([m]) => m === "timeline.insertProvisional")).toBeUndefined();
+      expect(getReservationState().phase).toBe("idle");
+
+      // …and no tab switch: still on Single, and Edit never opened (its sub-tabs
+      // only exist inside its own screen, so their absence IS that assertion).
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.queryByRole("tab", { name: "Outpainting" })).not.toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "refuses outpaintVideo too — the gate is the MODE, not the one route that reserves",
+    async () => {
+      // `outpaintVideo` has `placement: null`, so it never had a provisional to
+      // leave behind; what it did have was the tab switch and the remount. Both
+      // must be gone as well, or the user lands on a form whose every submission
+      // comes back 422.
+      const bridge = await renderOnLtx25();
+      emit(bridge, "outpaintVideo", videoSelection());
+
+      await screen.findByText(/This command cannot be run on the selected base model/i, undefined, {
+        timeout: 5_000,
+      });
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.queryByRole("tab", { name: "Outpainting" })).not.toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "leaves a route to a mode the SAME base model CAN run completely alone",
+    async () => {
+      // The corollary, and the reason the gate keys on `disabledModes` rather
+      // than on the action name: LTX 2.5 runs Single and Chained perfectly well.
+      // A gate that refused every right-click on a restricted base model would
+      // pass all three assertions above and still be wrong.
+      //
+      // ✨ `textToVideoHere` is the probe: `targetMode: "single"`, placement C at
+      // the cursor — so it both switches nothing (already on Single) and DOES
+      // reserve, which is precisely the write the two tests above assert is
+      // absent.
+      const bridge = await renderOnLtx25();
+      const spy = vi.spyOn(bridge, "request");
+      emit(bridge, "textToVideoHere", videoSelection({ cursorLayer: 2, cursorFrame: 60 }));
+
+      await waitFor(
+        () => {
+          expect(spy.mock.calls.some(([m]) => m === "timeline.insertProvisional")).toBe(true);
+        },
+        { timeout: 5_000 },
+      );
+      await waitFor(() => expect(getReservationState().phase).toBe("reserved"));
+      expect(
+        screen.queryByText(/This command cannot be run on the selected base model/i),
+      ).not.toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "still routes Edit-系 normally on LTX 2.3 (the ordinary case is untouched)",
+    async () => {
+      // The regression guard for the gate itself: an unrestricted base model
+      // must behave exactly as it did before Step 0 existed.
+      const bridge = await renderShell();
+      const spy = vi.spyOn(bridge, "request");
+      emit(bridge, "retakeRange", videoSelection());
+
+      await screen.findByRole("tab", { name: "Outpainting" }, { timeout: 5_000 });
+      await waitFor(() => {
+        expect(spy.mock.calls.some(([m]) => m === "timeline.insertProvisional")).toBe(true);
+      });
     },
     20_000,
   );

@@ -54,7 +54,12 @@ import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
-import { batchA2vDisabledFor, chainPanelsDisabledFor, useBaseModels } from "./useBaseModels";
+import {
+  batchA2vDisabledFor,
+  chainPanelsDisabledFor,
+  editSubTabsDisabledFor,
+  useBaseModels,
+} from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
 import "./AppShell.css";
@@ -178,6 +183,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     [nativeBridge],
   );
   const baseModels = useBaseModels(baseModelDeps);
+  // §3-98 P5: the mode tabs the LOADED base model's engine cannot run.
+  // Read here rather than beside the bounce effect further down because there
+  // are TWO readers: that effect (a mode whose tab just went grey must not stay
+  // open) and `handleRoute` (a right-click routed AT such a mode must be refused
+  // before it writes anything). One value, so the two can never disagree.
+  const disabledModes = baseModels.disabledModes;
 
   // Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): a single persistent slot
   // above the operation panel. One note at a time — `showNote` REPLACES whatever
@@ -429,6 +440,39 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     const action = route.action;
     const target = route.targetMode;
     const intent = route.intent;
+
+    // ── Step 0: the routed mode must actually be runnable on the LOADED base
+    // model (§3-98 P5). Greying the tab covers the tab bar; it does NOT cover
+    // the timeline's own context menu, which reaches the very same modes from
+    // outside this app's UI entirely.
+    //
+    // This has to run FIRST — ahead of the selection guard, and far ahead of
+    // Step 8 — because everything below is destructive in the §4 sense: the
+    // route reserves a seat and writes a ⏳ provisional onto the user's
+    // timeline. The bounce effect further down cannot undo that: it fires
+    // AFTER `setMode`, by which time `placeProvisional` has already put an
+    // object on the timeline that nothing will ever bind to or clean up. That
+    // is a real, reproducible bug (right-click 撮り直し on a base model whose
+    // engine has no Retake → a stray 仮オブジェクト left behind), not a
+    // hypothetical — the fix is to refuse before the write, not to tidy after.
+    //
+    // Refusal shape is the §4 guard contract verbatim: a guidance note and
+    // NOTHING else — no tab switch, no remount, no reservation, no prefill.
+    // Deliberately NOT a bounce to Single: the user right-clicked an object,
+    // not a tab, so silently relocating them would be a second surprise on top
+    // of the refusal. The bounce effect keeps its own job (you are already ON
+    // the mode when it goes grey); this keeps you from ever arriving.
+    //
+    // The three early-return channels below (`appendText`,
+    // `insertProvisionalResult`, `insertLatestResultHere`) declare
+    // `targetMode: "single"` as a formal default they never act on, and Single
+    // is never in `disabledModes` — `MODE_REQUIREMENTS` does not list it, since
+    // Single IS the baseline every engine serves. So they pass through here
+    // unchanged, exactly as they must.
+    if (disabledModes.includes(target)) {
+      showNote("warning", strings.notes.modeUnsupportedByBaseModel);
+      return;
+    }
 
     // ── Step 1: selection guard (§4). Runs FIRST for every command: multiple-
     // selection -> undeterminable kind -> required-kind mismatch (+ #7 near-
@@ -985,7 +1029,24 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         });
       }
     }
-  }, [nativeBridge, prompt, config, sizePolicy, fpsPolicy, showNote, strings, confirmChainDiscard, toasts]);
+  }, [
+    nativeBridge,
+    prompt,
+    config,
+    sizePolicy,
+    fpsPolicy,
+    showNote,
+    strings,
+    confirmChainDiscard,
+    toasts,
+    // Step 0. A memo in `useBaseModels` keyed on the ACTIVE base model's
+    // feature list, so its identity changes only on mount and on a successful
+    // base-model switch — not on the 2-second job poll. Cheap enough to take as
+    // a real dependency (unlike `jobs`, which Step 4c reads through `jobsRef`
+    // for exactly that reason), and taking it as one is what keeps a refused
+    // route from being decided by a stale list.
+    disabledModes,
+  ]);
 
   // Reload/startup re-sync (§2): rebuild the single reservation seat from any
   // NzVideomni#… placeholders that survived a project reload, so the busy-guard and
@@ -1038,7 +1099,6 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // `disabledModes` is a memo in the hook, so this effect runs when the SET
   // changes, not on every poll. `setMode` with the value it already has is a
   // no-op in React, so the ordinary case (nothing disabled) costs nothing.
-  const disabledModes = baseModels.disabledModes;
   useEffect(() => {
     if (!disabledModes.includes(mode)) return;
     setPendingIntent(null);
@@ -1051,6 +1111,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // `ChainedScreen` receives finished booleans and never reasons about engines
   // itself (the shell's standing rule for feature scope).
   const chainPanels = chainPanelsDisabledFor(baseModels.unsupportedFeatures);
+
+  // Same arrangement one level down inside Edit: the tab survives as long as
+  // ONE of Retake/Outpainting runs here (`MODE_REQUIREMENTS`'s `needsAnyOf`),
+  // so the sub-tab that does NOT has to grey on its own. `EditScreen` receives
+  // finished booleans and never reasons about engines itself.
+  const editSubTabs = editSubTabsDisabledFor(baseModels.unsupportedFeatures);
 
   const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
@@ -1196,6 +1262,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               nativeBridge={nativeBridge}
               highlightedJobId={highlightedJobId}
               onJobSubmitted={setHighlightedJobId}
+              subTabsDisabled={editSubTabs}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "inventory"}>

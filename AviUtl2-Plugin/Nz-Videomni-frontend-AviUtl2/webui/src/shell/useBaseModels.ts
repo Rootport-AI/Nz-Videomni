@@ -142,6 +142,53 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
   };
 }
 
+/** The two Edit-screen sub-tabs an engine's feature scope can take down
+ * individually, keyed the way `EditScreen`'s `subTabsDisabled` prop is.
+ * (Inpainting is not here: it is a mock sub-tab with no panel behind it, so it
+ * is disabled on EVERY base model and needs no feature name.)
+ *
+ * The Retake+End source 開通 makes this necessary. Until then LTX 2.5 declared
+ * BOTH `retake` and `outpaint`, so `disabledModesFor` greyed the whole Edit tab
+ * and no sub-tab was ever reachable to grey — the tab-level rule made this one
+ * redundant by accident, not by design. The moment ONE of the two opens, the
+ * Edit tab goes live and the sub-tab that is still out of scope has to grey on
+ * its own, exactly as {@link chainPanelsDisabledFor}'s panels do.
+ */
+export interface EditSubTabsDisabled {
+  /** `RetakePanel` — 撮り直し (`retake`). */
+  retake: boolean;
+  /** `OutpaintingPanel` — 画角拡張 (`outpaint`). */
+  outpainting: boolean;
+}
+
+/**
+ * Which of {@link EditSubTabsDisabled}'s sub-tabs `unsupportedFeatures` makes
+ * unusable. Pure, exported and tested directly for the same reason
+ * {@link disabledModesFor}, {@link batchA2vDisabledFor} and
+ * {@link chainPanelsDisabledFor} are: this is the one place a server-side
+ * feature name turns into a greyed Edit sub-tab, and it must answer two
+ * `false`s for the ordinary case (LTX 2.3 / an older backend) without any
+ * special-casing.
+ *
+ * Note the names differ on purpose: the SERVER's feature is `outpaint` (that is
+ * what a request field and a 422 say), while the sub-tab is `outpainting`. The
+ * translation is exactly what this function is for — nothing downstream should
+ * have to know either name.
+ *
+ * Both `true` at once is possible here, but the caller never sees it: a base
+ * model that can run NEITHER loses the whole Edit tab through
+ * {@link disabledModesFor} (`needsAnyOf: ["retake", "outpaint"]`), so the screen
+ * this feeds is not mounted at all. Answering honestly anyway keeps the
+ * function a plain table rather than a special case.
+ */
+export function editSubTabsDisabledFor(unsupportedFeatures: readonly string[]): EditSubTabsDisabled {
+  const unsupported = new Set(unsupportedFeatures);
+  return {
+    retake: unsupported.has("retake"),
+    outpainting: unsupported.has("outpaint"),
+  };
+}
+
 /** What a switch attempt settled on. Returned by
  * {@link UseBaseModelsResult.switchBaseModel} rather than pushed into hook
  * state on purpose: the caller (`AppShell`) raises exactly one toast per

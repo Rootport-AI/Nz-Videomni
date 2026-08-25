@@ -37,10 +37,14 @@ vi.mock("../../jobs/JobsContext", () => ({
   }),
 }));
 
-function renderEdit(initialIntent?: GenerationPrefill, prompt?: string) {
+function renderEdit(
+  initialIntent?: GenerationPrefill,
+  prompt?: string,
+  subTabsDisabled?: { retake: boolean; outpainting: boolean },
+) {
   return render(
     <LanguageProvider>
-      <EditScreen initialIntent={initialIntent} prompt={prompt} />
+      <EditScreen initialIntent={initialIntent} prompt={prompt} subTabsDisabled={subTabsDisabled} />
     </LanguageProvider>,
   );
 }
@@ -243,5 +247,156 @@ describe("EditScreen sub-tabs", () => {
     renderEdit();
     await user.click(screen.getByRole("tab", { name: "Outpainting" }));
     expect(screen.getByRole("heading", { name: /^retake/i, hidden: true })).toBeInTheDocument();
+  });
+});
+
+// §3-98 P5 / §3-102 — the sub-tab half of the base-model feature scope.
+//
+// Until the Retake/End source 開通, LTX 2.5 declared BOTH `retake` and
+// `outpaint`, so `disabledModesFor`'s `needsAnyOf` greyed the whole Edit TAB and
+// no sub-tab was ever reachable to grey. That made the tab-level rule look as
+// though it covered this case; it did so by accident. The moment ONE of the two
+// opens, the tab goes live and the other sub-tab has to grey on its own.
+//
+// These tests therefore drive the prop directly rather than through a base
+// model: the state they describe is not reachable from any fixture yet, and the
+// translation from a server feature name to these booleans is tested where it
+// lives (`shell/useBaseModels.test.ts`'s `editSubTabsDisabledFor`).
+describe("EditScreen sub-tabs — base-model feature scope", () => {
+  const subTab = (name: string) => screen.getByRole("tab", { name });
+  const heading = (name: RegExp) => screen.getByRole("heading", { name, hidden: true });
+
+  it("leaves both real sub-tabs live when the prop is omitted", () => {
+    // The regression that matters most: a build with this feature must look
+    // exactly like the build before it on a base model with no restrictions.
+    renderEdit();
+    expect(subTab("Retake")).not.toBeDisabled();
+    expect(subTab("Outpainting")).not.toBeDisabled();
+    expect(subTab("Inpainting")).toBeDisabled();
+  });
+
+  it("greys the Outpainting sub-tab — and only it — when the engine cannot outpaint", () => {
+    renderEdit(undefined, undefined, { retake: false, outpainting: true });
+    expect(subTab("Outpainting")).toBeDisabled();
+    expect(subTab("Retake")).not.toBeDisabled();
+  });
+
+  it("greys the Retake sub-tab — and only it — when the engine cannot retake", () => {
+    renderEdit(undefined, undefined, { retake: true, outpainting: false });
+    expect(subTab("Retake")).toBeDisabled();
+    expect(subTab("Outpainting")).not.toBeDisabled();
+  });
+
+  it("gives a greyed sub-tab its OWN reason, and the Inpainting mock none", () => {
+    // One greyed treatment, two reasons — the tooltip is what tells them apart
+    // (`shell/ModeTabs.tsx` makes the same call for its Toolbox mock). A greyed
+    // control with no stated reason is what this line exists to prevent; a mock
+    // that grew one would be telling the user to switch base models for
+    // something no base model has.
+    renderEdit(undefined, undefined, { retake: false, outpainting: true });
+    expect(subTab("Outpainting")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Outpainting is not available/i),
+    );
+    expect(subTab("Retake")).not.toHaveAttribute("title");
+    expect(subTab("Inpainting")).not.toHaveAttribute("title");
+  });
+
+  it("does nothing when a greyed real sub-tab is clicked", async () => {
+    // The same treatment the Inpainting mock already gets: `<button disabled>`
+    // with no `onClick` attached at all, so there is no handler to reach even if
+    // the disabled attribute were somehow bypassed.
+    const user = userEvent.setup();
+    renderEdit(undefined, undefined, { retake: false, outpainting: true });
+    await user.click(subTab("Outpainting"));
+    expect(subTab("Retake")).toHaveAttribute("aria-selected", "true");
+    expect(heading(/^retake/i)).toBeVisible();
+    expect(heading(/^outpainting/i)).not.toBeVisible();
+  });
+
+  it("falls back to Retake for an 'outpaint' route when Outpainting is greyed", () => {
+    // The case C2 creates: the engine gains Retake but still has no Outpainting,
+    // and a right-click 画角拡張 lands here anyway (the timeline's context menu is
+    // outside this app's greying entirely). Landing ON the greyed sub-tab would
+    // show a panel behind a tab the user cannot click back to.
+    renderEdit(prefill("outpaint"), undefined, { retake: false, outpainting: true });
+    expect(subTab("Retake")).toHaveAttribute("aria-selected", "true");
+    expect(heading(/^retake/i)).toBeVisible();
+    expect(heading(/^outpainting/i)).not.toBeVisible();
+  });
+
+  it("falls back to Outpainting for the default/'retake' route when Retake is greyed", () => {
+    // The mirror. Both greyed at once cannot reach this screen: `disabledModesFor`
+    // takes the whole Edit tab in that case, so it is never mounted.
+    renderEdit(prefill("retake"), undefined, { retake: true, outpainting: false });
+    expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");
+    expect(heading(/^outpainting/i)).toBeVisible();
+    expect(heading(/^retake/i)).not.toBeVisible();
+  });
+
+  it("still lets a routed intent pick a sub-tab that IS available", () => {
+    // The corollary: the fallback must be caused by the RESTRICTION, not by the
+    // prop merely being present. An 'outpaint' route on an engine that CAN
+    // outpaint lands on Outpainting exactly as it always did.
+    renderEdit(prefill("outpaint"), undefined, { retake: true, outpainting: false });
+    expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");
+  });
+
+  // R7 (実装計画 §リスク): Edit 配下のミューテーションを**全部数える**。7 本あり、
+  // それ以外は無い:
+  //   送信 2 本      — Outpainting の `submit` (POST /generate) と
+  //                    Retake の `submitChain` (POST /generate/chain)
+  //   アップロード 2 本 — 両パネルの 📁（`useOutpaintForm` / `useRetakeForm` の
+  //                    `uploadPath` = POST /upload）
+  //   予約系 3 本    — `reservePlacement` / `bindToJob` /
+  //                    `rollbackReservedPlacement`。**Retake 側にしか無い**:
+  //                    Outpainting のルートは席を取らない（placement null）ので、
+  //                    専用の `useGenerationSubmit` インスタンスを分けて
+  //                    bind/rollback を共有させていない（EditScreen の doc 参照）。
+  //
+  // 灰色化が入口をちゃんと塞ぐのは、この 7 本が例外なく
+  //  (a) `subMode === <その側>` のときだけ描かれる生成群の中か、
+  //  (b) `hidden` になるサブパネルの中か、
+  // のどちらかにしか無いからで、サブタブを押せなければ `subMode` はそこへ行かない。
+  // 下の 2 本はその事実を両向きで押さえる。
+  it("leaves no Outpainting-side mutation reachable while it is greyed (R7)", async () => {
+    const user = userEvent.setup();
+    const { container } = renderEdit(undefined, "a wide city street", {
+      retake: false,
+      outpainting: true,
+    });
+
+    // 入口の入口: 灰色のサブタブは選べない。
+    await user.click(subTab("Outpainting"));
+    expect(subTab("Retake")).toHaveAttribute("aria-selected", "true");
+
+    // (a) 送信: Outpainting の Generate は `subMode === "outpainting"` のときだけ
+    //     描かれる。Retake 側も右クリック由来のスナップショットが無いので生成群を
+    //     出さない — つまり Generate ボタンは画面に 1 つも無い。
+    expect(screen.queryByRole("button", { name: /^generate$/i })).not.toBeInTheDocument();
+
+    // (b) アップロード: Outpainting パネルごと `hidden`。
+    expect(heading(/^outpainting/i)).not.toBeVisible();
+
+    // …そして残った側は普通に使える（灰色化が巻き添えにしていない）。
+    expect(heading(/^retake/i)).toBeVisible();
+    expect(container.querySelector(".edit-subpanel")).not.toBeNull();
+  });
+
+  it("leaves no Retake-side mutation — the 予約系 3 included — reachable while it is greyed (R7)", async () => {
+    const user = userEvent.setup();
+    renderEdit(prefill("retake"), "a wide city street", { retake: true, outpainting: false });
+
+    // ルートは Retake 行きだったが、灰色なので Outpainting へ逃げている。
+    expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");
+    await user.click(subTab("Retake"));
+    expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");
+
+    // 予約系 3 本はすべて Retake の Generate 押下か、Retake パネル内の ❌ からしか
+    // 始まらない。前者は生成群ごと出ていない（見えている Generate は Outpainting の
+    // 1 本だけ）、後者はパネルごと `hidden`。
+    expect(screen.getAllByRole("button", { name: /^generate$/i })).toHaveLength(1);
+    expect(heading(/^outpainting/i)).toBeVisible();
+    expect(heading(/^retake/i)).not.toBeVisible();
   });
 });

@@ -3,6 +3,7 @@ import { apiClient as defaultApiClient, createApiClient } from "../../api/client
 import type { ApiClient } from "../../api/client";
 import { EditSubTabs } from "./EditSubTabs";
 import type { EditSubMode } from "./EditSubTabs";
+import type { EditSubTabsDisabled } from "../../shell/useBaseModels";
 import { OutpaintingPanel } from "./OutpaintingPanel";
 import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
@@ -41,6 +42,12 @@ export interface EditScreenProps {
    * the highlighted job — so the card appears outlined in the ledger beside the
    * form. */
   onJobSubmitted?: ((jobId: string) => void) | undefined;
+  /** §3-98 P5 / §3-102: サブタブのうち、**読み込み中のベースモデルの
+   * エンジンが実行できない**もの（`shell/useBaseModels.ts` の
+   * `editSubTabsDisabledFor`）。`AppShell` が確定済みの真偽値として渡すので、
+   * この画面もパネルもフィーチャ名を一切知らない（`ChainedScreen` が
+   * `chainPanels` を受け取るのと同じ作法）。省略時はどちらも有効。 */
+  subTabsDisabled?: EditSubTabsDisabled | undefined;
 }
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
@@ -98,6 +105,7 @@ export function EditScreen({
   highlightedJobId = null,
   nativeBridge,
   onJobSubmitted,
+  subTabsDisabled = { retake: false, outpainting: false },
 }: EditScreenProps = {}) {
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
@@ -105,9 +113,21 @@ export function EditScreen({
   // as a fresh mount and re-runs this. Only `"outpaint"` steers away from the
   // default; `"retake"` and every other/absent intent land on Retake, which is
   // also the screen's plain default.
-  const [subMode, setSubMode] = useState<EditSubMode>(() =>
-    initialIntent?.intent === "outpaint" ? "outpainting" : "retake",
-  );
+  //
+  // §3-98 P5 / §3-102 のフォールバック: 行き先のサブタブが**そのベースモデルで
+  // 灰色**なら、もう片方へ回す —— 灰色のタブを選択状態にすると、押せないタブの
+  // 下に生成群が出てしまう（`subMode` が生成群の出し分けそのものだから）。
+  //
+  // 両方が無効な場合はここへ到達しない: `disabledModesFor` の
+  // `needsAnyOf: ["retake", "outpaint"]` が Edit タブごと落とすので、この画面は
+  // そもそもマウントされていない（`useBaseModels.ts` の `MODE_REQUIREMENTS`）。
+  // なので下の2本の三項は「片方は必ず有効」を前提にしてよい。
+  const [subMode, setSubMode] = useState<EditSubMode>(() => {
+    if (initialIntent?.intent === "outpaint") {
+      return subTabsDisabled.outpainting ? "retake" : "outpainting";
+    }
+    return subTabsDisabled.retake ? "outpainting" : "retake";
+  });
 
   // One client for everything the Outpainting flow does (`GET /loras` inside
   // the form hook, `POST /generate` here), so a single injected bridge drives
@@ -234,7 +254,7 @@ export function EditScreen({
 
   return (
     <div className="edit-screen">
-      <EditSubTabs mode={subMode} onChange={setSubMode} />
+      <EditSubTabs mode={subMode} onChange={setSubMode} disabled={subTabsDisabled} />
       <div className="single-layout">
         <div className="edit-form-column">
           <div className="edit-subpanel" hidden={subMode !== "retake"}>

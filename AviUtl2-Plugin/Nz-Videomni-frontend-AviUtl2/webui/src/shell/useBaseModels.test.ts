@@ -7,6 +7,7 @@ import {
   batchA2vDisabledFor,
   chainPanelsDisabledFor,
   disabledModesFor,
+  editSubTabsDisabledFor,
   useBaseModels,
 } from "./useBaseModels";
 import type { BaseModelSwitchOutcome } from "./useBaseModels";
@@ -360,5 +361,67 @@ describe("chainPanelsDisabledFor", () => {
 
   it("ignores names it has never heard of", () => {
     expect(chainPanelsDisabledFor(["quantum_upscale", "a2v"])).toMatchObject({ a2v: true, v2v: false });
+  });
+});
+
+describe("editSubTabsDisabledFor", () => {
+  // The whole table, one row per input, so the mapping can be read off the test
+  // the way `chainPanelsDisabledFor`'s can. `outpaint` -> `outpainting` is the
+  // one place the server's feature name and the sub-tab's name differ, and it
+  // is the single most likely thing to get wrong here.
+  const TABLE: ReadonlyArray<{
+    unsupported: readonly string[];
+    expected: { retake: boolean; outpainting: boolean };
+    why: string;
+  }> = [
+    { unsupported: [], expected: { retake: false, outpainting: false }, why: "LTX 2.3 / an older backend" },
+    { unsupported: ["retake"], expected: { retake: true, outpainting: false }, why: "Retake only" },
+    { unsupported: ["outpaint"], expected: { retake: false, outpainting: true }, why: "Outpainting only" },
+    {
+      unsupported: ["retake", "outpaint"],
+      expected: { retake: true, outpainting: true },
+      why: "both — the Edit tab itself is gone at this point",
+    },
+    {
+      unsupported: ["retake", "end_source", "two_stage_hq", "outpaint", "nag", "prune_vaed"],
+      expected: { retake: true, outpainting: true },
+      why: "LTX 2.5's list as it stands before the Retake/End source 開通",
+    },
+    {
+      unsupported: ["end_source", "two_stage_hq", "outpaint", "nag", "prune_vaed"],
+      expected: { retake: false, outpainting: true },
+      why: "…and after it: `retake` leaves the list, `outpaint` stays",
+    },
+  ];
+
+  for (const { unsupported, expected, why } of TABLE) {
+    it(`[${unsupported.join(", ")}] -> retake:${expected.retake} outpainting:${expected.outpainting} (${why})`, () => {
+      expect(editSubTabsDisabledFor(unsupported)).toEqual(expected);
+    });
+  }
+
+  it("keys the OUTPAINTING sub-tab on the server's `outpaint`, never on `outpainting`", () => {
+    // The negative half of the row above: a build that matched the sub-tab's own
+    // name would pass every positive assertion in a fixture that happened to
+    // publish both spellings. The server publishes `outpaint`.
+    expect(editSubTabsDisabledFor(["outpainting"])).toEqual({ retake: false, outpainting: false });
+  });
+
+  it("ignores names it has never heard of", () => {
+    expect(editSubTabsDisabledFor(["quantum_upscale", "retake"])).toEqual({
+      retake: true,
+      outpainting: false,
+    });
+  });
+
+  it("does NOT consult anything the Edit TAB is decided by", () => {
+    // The mirror of `chainPanelsDisabledFor`'s "does NOT consult `chain`":
+    // whether the Edit tab exists at all is `disabledModesFor`'s ruling, made
+    // from these same two names one level up. Nothing else may reach in here —
+    // `chain` in particular takes the Chained tab, not an Edit sub-tab.
+    expect(editSubTabsDisabledFor(["chain", "v2v", "a2v", "reference_video"])).toEqual({
+      retake: false,
+      outpainting: false,
+    });
   });
 });

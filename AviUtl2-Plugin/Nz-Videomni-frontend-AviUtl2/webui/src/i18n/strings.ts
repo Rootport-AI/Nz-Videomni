@@ -111,6 +111,21 @@ export const en = {
       outpainting: "Outpainting",
       inpainting: "Inpainting",
     },
+    /** The tooltip on a sub-tab the LOADED base model's engine cannot run, one
+     * line per sub-tab — the same shape `chained.unavailableOnBaseModel` uses
+     * for its material panels, and for the same reason: the Edit TAB is live
+     * here (the engine can run the OTHER sub-tab), so a generic "unsupported"
+     * would leave the user guessing which half is out of scope.
+     *
+     * The Inpainting mock deliberately gets NO tooltip — it is "not built yet"
+     * on every base model, which its own absence of a panel already says
+     * (`shell/ModeTabs.tsx` treats the Toolbox mock exactly this way). */
+    unavailableOnBaseModel: {
+      retake:
+        "Retake is not available on the selected base model. Switch the base model in the header to use it.",
+      outpainting:
+        "Outpainting is not available on the selected base model. Switch the base model in the header to use it.",
+    },
     retake: {
       heading: "Retake",
       /** Rewritten 2026-08-10 (owner feedback ⑥): now names the 73-frame floor,
@@ -1530,6 +1545,19 @@ export const en = {
      * so a new generation reservation is refused (busy-guard). */
     reservationBusy:
       "A new reservation cannot be made until the current generation finishes. Please try again after it completes.",
+    /** §3-98 P5 / §3-102: the right-click command routes to a mode the LOADED
+     * base model's engine cannot run (`shell/useBaseModels.ts`'s
+     * `disabledModes`). Its tab is already greyed, so this note is what covers
+     * the OTHER way into that mode — the timeline's context menu, which the
+     * greying cannot reach.
+     *
+     * Worded as "this command", not "this tab": the user right-clicked an
+     * object on the timeline and never saw a tab. Deliberately distinct from
+     * `modes.unsupportedByBaseModel` (the tab tooltip) and from
+     * `chained.unavailableOnBaseModel.*` (the material-panel lines) for the
+     * same reason. */
+    modeUnsupportedByBaseModel:
+      "This command cannot be run on the selected base model. Switch the base model in the header and try again.",
     /** I8 §6: receipt note shown at the START of a #1/#6 auto-load — the
      * routed material's file name is now being loaded into the source slot. */
     loadedFromRightClick: (fileName: string): string => `Loaded from a right-click: ${fileName}`,
@@ -1928,6 +1956,12 @@ export const ja: Strings = {
       retake: "Retake",
       outpainting: "Outpainting",
       inpainting: "Inpainting",
+    },
+    unavailableOnBaseModel: {
+      retake:
+        "Retake（撮り直し）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
+      outpainting:
+        "Outpainting（画角拡張）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
     },
     retake: {
       heading: "Retake（リテイク：撮り直し）",
@@ -2694,6 +2728,8 @@ export const ja: Strings = {
       `選択された範囲が短すぎます。${requiredFrames}フレーム以上を選択してください。`,
     reservationBusy:
       "前の生成が完了するまで、新しい生成予約はできません。完了後にもう一度お試しください。",
+    modeUnsupportedByBaseModel:
+      "この操作は選択中のベースモデルでは実行できません。上のベースモデルを切り替えてから、もう一度お試しください。",
     loadedFromRightClick: (fileName: string): string => `右クリックから読み込みました: ${fileName}`,
     sourceFileMissing: "素材ファイルが見つかりません（移動または削除された可能性があります）。",
     capturedFrameToKeyframe: "現在フレームをキーフレームに取り込みました。",

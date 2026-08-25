@@ -63,11 +63,16 @@ engines.
 The acceleration knobs that DO apply are not generation parameters and are not
 on ``generate``'s signature: they are per-job state on a resident worker
 process, armed by :meth:`Ltx25Pipeline.set_acceleration_job` before the job and
-disarmed in its ``finally``. Both are live: the fused Triton GGUF dequantization
-kernels (which work here because this engine's transformer and text encoder both
-dequantize through 2.3's ``engine.gguf.quant_service``) and asynchronous
-block-swap prefetching (which the diffusion stage re-arms on every transformer
-build -- see ``Ltx25DiffusionStage.set_block_swap_prefetch``).
+disarmed in its ``finally``. All THREE are live: the fused Triton GGUF
+dequantization kernels (which work here because this engine's transformer and
+text encoder both dequantize through 2.3's ``engine.gguf.quant_service``),
+asynchronous block-swap prefetching (which the diffusion stage re-arms on every
+transformer build -- see ``Ltx25DiffusionStage.set_block_swap_prefetch``), and
+``keep_resident``, which retains the Gemma 4 text encoder's 7.7 GiB state dict
+between jobs instead of re-reading it from the GGUF every time. The third is the
+odd one out twice over: it is opt-in rather than on by default (it costs
+resident RAM), and its state deliberately OUTLIVES the job that armed it -- see
+:func:`_swap_keep_resident`.
 
 Determinism
 -----------
@@ -124,6 +129,7 @@ from engine25.ltxcore_compat import (
     PromptEncoder,
     TilingConfig,
     VideoPixelShape,
+    as_path_list,
     cleanup_memory,
     encode_video,
     ensure_tiling_config,
@@ -626,9 +632,83 @@ IGNORED_FIELDS: dict[str, str] = {
     "neg_method": "no negative-prompt mechanism in v1",
     "vsf_scale": "no negative-prompt mechanism in v1",
     "attention_backend": "v1 is SDPA-only",
-    "keep_resident": "2.5 keeps its weights in the registry instead",
     "vae_mode": "v1 uses the Conv VAE only",
 }
+
+
+# ---------------------------------------------------------------------------
+# keep_resident: the text encoder's state dict between jobs
+# ---------------------------------------------------------------------------
+#
+# ``keep_resident`` used to sit in IGNORED_FIELDS above ("2.5 keeps its weights
+# in the registry instead"), which was true of the TRANSFORMER and only of the
+# transformer. The Gemma 4 text encoder's own registry is built with
+# ``cache_weights=False`` (``gguf_gemma4.build_text_encoder_builder``), so its
+# 7.7 GiB state dict is re-read from the GGUF on every single job. This function
+# is the switch for that, and the reason the field is now acted on.
+#
+# NAME SHARED WITH 2.3, IMPLEMENTATION NOT. 2.3's ``keep_resident`` retains the
+# skeletons of every sub-model behind a two-argument call that returns a tuple
+# and carries three internal degradation guards (LoRA in-place mutation, and two
+# more). This is one registry holding one state dict, with no degradation path
+# at all -- 2.5's text encoder takes no LoRA and is loaded with ``assign=True``,
+# so nothing ever mutates the retained tensors in place. The CONTRACT is 2.3's
+# verbatim (absent key means off, no end-of-job reset, an echo on ``done``); the
+# code behind it is unrelated.
+
+
+def _swap_keep_resident(registry: Any, builder: Any, enabled: bool) -> int | None:
+    """Turn the text encoder's weight cache on or off. Returns bytes released.
+
+    **Never raises.** It is called from :meth:`Ltx25Pipeline.set_acceleration_job`,
+    which sits OUTSIDE the worker's try/finally so that nothing between the arm
+    and the reset can throw -- and unlike the other two knobs this one is not a
+    pure assignment: the OFF path drops a 7.7 GiB state dict, which is I/O-shaped
+    work (frees, and a collector pass). An exception here would skip the reset
+    and leak the job's request into the next one on a resident worker, so it is
+    logged and swallowed instead. A failed swap costs speed or RAM, never
+    correctness: both settings produce the same weights and the same video.
+
+    ``registry.add`` is the ONLY method that reads ``_cache_weights``, so turning
+    the flag ON takes effect at the next build with nothing else to do. Turning
+    it OFF does NOT: ``get`` never looks at the flag, so an already-cached state
+    dict would keep being served (and keep being held) forever. The OFF path
+    therefore has to ``pop`` the entry out by hand, with the same key ``add``
+    used -- which is why the builder is needed here and not just the registry.
+
+    Returns the number of bytes released (0 when nothing was cached), or None if
+    the swap did not run.
+    """
+    if registry is None or builder is None:
+        # Before the pipeline finished building, or after :meth:`close`.
+        return None
+    try:
+        registry._cache_weights = enabled
+        if enabled:
+            logger.info(
+                "keep-resident ON: the text encoder's state dict will be retained between jobs "
+                "(~7.7 GiB of resident RAM; the next job skips its rebuild)"
+            )
+            return 0
+        state_dict = registry.pop(as_path_list(builder.model_path), builder.model_sd_ops)
+        # ``del`` is what frees it: this is the last reference to the state dict
+        # once the registry has let go, so the tensors are gone at this line.
+        # ``gc.collect()`` is insurance for reference CYCLES only (a released
+        # StateDict participates in none today) -- it is not the mechanism.
+        # Both run BEFORE the log line so that the line is a statement about
+        # memory already given back, not about memory that is about to be.
+        size = state_dict.size if state_dict is not None else 0
+        del state_dict
+        gc.collect()
+        logger.info(
+            "keep-resident OFF: released %.2f GiB of retained text-encoder weights "
+            "(the next job rebuilds them from the GGUF)",
+            size / 2**30,
+        )
+        return size
+    except Exception:  # pragma: no cover -- never-raise discipline
+        logger.exception("keep-resident swap to %s failed; continuing", "on" if enabled else "off")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -698,8 +778,20 @@ class Ltx25Pipeline:
         #   be re-applied to the block-swap service on every transformer build,
         #   which is the diffusion stage's job -- so this class holds the request
         #   and the finished job's verdict, and the stage holds the tally.
+        # * keep_resident is a THIRD shape again: its state is a flag on a
+        #   registry object that lives inside the text-encoder builder, so this
+        #   class holds the two handles it needs to reach it (set just after the
+        #   builder is constructed, below), the CURRENT setting -- which, alone
+        #   among the three knobs, SURVIVES the end of the job because the
+        #   retained weights are the feature -- and the requested/used pair the
+        #   echo is folded from.
         self._block_swap_prefetch_requested = False
         self._block_swap_prefetch_used = "off"
+        self._te_builder: Any = None
+        self._te_registry: Any = None
+        self._keep_resident_enabled = False
+        self._keep_resident_requested = False
+        self._keep_resident_used = "off"
 
         started = time.perf_counter()
         self.vram.reset()
@@ -784,6 +876,14 @@ class Ltx25Pipeline:
             assets_path=self.assets_path,
             layers_on_gpu=self.te_layers_on_gpu,
         )
+        # The two handles ``keep_resident`` needs, taken HERE rather than fished
+        # out of ``self.prompt_encoder`` later: the builder's private registry is
+        # created inside the factory above (``cache_weights=False``, which is the
+        # OFF this class starts in), the builder is its only user, and the pair
+        # is what ``_swap_keep_resident`` keys the state dict with. Both are
+        # dropped in :meth:`close` -- see the note there.
+        self._te_builder = text_encoder_builder
+        self._te_registry = text_encoder_builder.registry
         embeddings_builder = _GpuPlacedBuilder(
             build_embeddings_processor_builder(
                 files.text_encoder,
@@ -853,13 +953,23 @@ class Ltx25Pipeline:
         *,
         block_swap_prefetch: bool,
         fused_gguf_dequant_kernel: bool,
+        keep_resident: bool,
     ) -> None:
-        """Arm this job's two acceleration knobs.
+        """Arm this job's three acceleration knobs.
 
         Called by the worker BEFORE the try block that runs the job, and paired
-        with :meth:`reset_acceleration_job` in that block's ``finally``. Both
-        halves are per-JOB state on a resident worker process, so an arm without
-        a matching reset would leak one job's request into the next one.
+        with :meth:`reset_acceleration_job` in that block's ``finally``. The
+        first two are per-JOB state on a resident worker process, so an arm
+        without a matching reset would leak one job's request into the next one.
+
+        ``keep_resident`` is the ASYMMETRIC one and deliberately so: the reset
+        does not turn it off, because the retained 7.7 GiB of text-encoder weights
+        ARE the feature -- they have to outlive the job that asked for them or
+        there is nothing for the next job to hit. What the reset does is freeze
+        the echo. The setting therefore changes only here, and only when the new
+        request differs from what is already in force (2.3's rule verbatim: a
+        job that does not send the key is asking for the weights to be RELEASED,
+        which is why a missing key is a real instruction and not a no-op).
 
         The ordering constraint is on the fused half and it is not negotiable:
         the flag has to be armed **before the transformer is built**, because the
@@ -868,14 +978,26 @@ class Ltx25Pipeline:
         path and only catch a later rebuild. Same argument in 2.3
         (``engine/pipeline/fast_video_pipeline.py``'s entry points), for the same
         reason; ``set_job`` itself only assigns module globals -- no import, no
-        CUDA -- so there is nothing here that can fail, and the call ORDER is
-        what makes the arrangement safe rather than any exception handling.
+        CUDA -- so THAT half cannot fail, and the call ORDER is what makes the
+        arrangement safe rather than any exception handling.
 
         The prefetch half has the SAME ordering constraint, for the same reason:
         the block-swap service reads its flag inside ``install()``, and install
         happens during the build. Handing it to the stage is likewise nothing but
-        assignments -- the resources are created later, by the build -- so this
-        method still cannot fail.
+        assignments -- the resources are created later, by the build -- so it
+        cannot fail either.
+
+        **The keep-resident half CAN**, which is the one place this method
+        departs from "it is all assignments". Switching it off pops a 7.7 GiB
+        state dict out of the registry and drops it: real work, not an
+        assignment. :func:`_swap_keep_resident` is therefore never-raise (it
+        logs and swallows), which restores the property the arm/reset pairing
+        outside this class depends on -- **this method still cannot fail** --
+        without pretending that what it does is trivial. Its ordering
+        constraint runs the same direction as the other two, for a smaller
+        reason: the swap happens before the text encoder is built, so a job
+        that asked for the release runs on the freed footprint instead of
+        paying for it only at the end.
         """
         self._block_swap_prefetch_requested = bool(block_swap_prefetch)
         stage = getattr(self, "stage", None)
@@ -883,8 +1005,18 @@ class Ltx25Pipeline:
             stage.set_block_swap_prefetch(self._block_swap_prefetch_requested)
         dequant_triton.set_job(bool(fused_gguf_dequant_kernel))
 
+        keep_resident = bool(keep_resident)
+        self._keep_resident_requested = keep_resident
+        # The no-op guard is what makes this cheap to call on every job: the
+        # common case is a run of identical requests, and re-arming the setting
+        # that is already in force must NOT pop (and so destroy) the cache the
+        # last job just filled. Only a CHANGE touches the registry.
+        if keep_resident != self._keep_resident_enabled:
+            _swap_keep_resident(self._te_registry, self._te_builder, keep_resident)
+            self._keep_resident_enabled = keep_resident
+
     def reset_acceleration_job(self) -> None:
-        """End-of-job counterpart: freeze both verdicts and disarm.
+        """End-of-job counterpart: freeze the verdicts and disarm.
 
         **This method never raises.** It runs in the worker's ``finally``, so an
         exception here would replace the job's real error with this one -- and on
@@ -896,7 +1028,23 @@ class Ltx25Pipeline:
         ``self.stage is None`` (i.e. after :meth:`close`) is absorbed by the same
         handlers rather than by a guard of its own: a reset arriving after the
         pipeline was closed is a shutdown race, not a bug worth failing on.
+
+        The keep-resident third is DELIBERATELY ASYMMETRIC and needs no handler
+        of its own, because it undoes nothing: the two plain lines below freeze
+        the echo and clear the request, and the retained weights stay exactly
+        where they are. Releasing them here would destroy the feature -- the
+        point of keep-resident is that the NEXT job finds them still there --
+        and the release instead happens at the next :meth:`set_acceleration_job`
+        that asks for it. Nothing here can raise, so the never-raise contract
+        above is untouched.
+
+        A job that failed BEFORE the text encoder was ever built still echoes
+        "on" if it asked for it (the request is what the echo reports, exactly
+        as in 2.3) -- but a failed job emits no ``done`` at all, so that echo
+        never leaves the process.
         """
+        self._keep_resident_used = "on" if self._keep_resident_requested else "off"
+        self._keep_resident_requested = False
         try:
             # Verdict FIRST, teardown second: the tally the verdict reads is
             # per-job state on the stage, and disarming clears it.
@@ -949,6 +1097,22 @@ class Ltx25Pipeline:
         state, so it is only meaningful after a job has finished.
         """
         return dequant_triton.last_used()
+
+    def keep_resident_used(self) -> str:
+        """What the last finished job's text-encoder residency actually did:
+        "off" or "on".
+
+        The echo CONTRACT is 2.3's three-valued one ("off" / "on" / "on->off"),
+        and the app relays whatever arrives; this engine simply has no third
+        value to emit. 2.3's "on->off" is its automatic degradation -- a LoRA
+        that would mutate retained weights in place, and two more guards -- and
+        none of those mechanisms exist here: 2.5's text encoder takes no LoRA
+        and is loaded with ``assign=True``, so there is nothing that could force
+        a retained state dict to be dropped mid-job. The value is the REQUEST,
+        frozen at :meth:`reset_acceleration_job`, because with no degradation
+        path the request is also the outcome.
+        """
+        return self._keep_resident_used
 
     def generate(  # noqa: PLR0913
         self,
@@ -1155,6 +1319,16 @@ class Ltx25Pipeline:
         self.pipeline = None  # type: ignore[assignment]
         self.stage = None  # type: ignore[assignment]
         self.prompt_encoder = None  # type: ignore[assignment]
+        # The keep-resident handles have to go too, or a close() taken while the
+        # feature was ON would leave 7.7 GiB of text-encoder weights alive for as
+        # long as this object is: the three lines above drop every path to the
+        # builder EXCEPT these, and the registry holds the state dict directly.
+        # Dropping the handles is enough -- no pop is needed and none is wanted,
+        # because the collector below frees the registry itself. Setting the flag
+        # back to False keeps the state honest if the object is somehow reused.
+        self._te_builder = None
+        self._te_registry = None
+        self._keep_resident_enabled = False
         gc.collect()
         try:
             cleanup_memory()

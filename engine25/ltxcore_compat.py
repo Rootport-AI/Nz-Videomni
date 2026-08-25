@@ -557,6 +557,24 @@ def verify() -> None:
     for method in ("add", "get", "pop", "clear", "get_model", "add_model", "pop_model"):
         if not callable(getattr(ModelRegistry, method, None)):
             _fail("ModelRegistry", f"method {method!r} is gone")
+    # BEHAVIOURAL pin, not a name pin: ``keep_resident`` works by writing
+    # ``_cache_weights`` on a live registry and popping the entry back out by
+    # key (``pipeline25._swap_keep_resident``). A signature check cannot see any
+    # of that -- a wheel that renamed the private attribute, or started reading
+    # the flag in ``get`` as well, would leave every signature intact and turn
+    # the feature into a silent 7.7 GiB leak. So the round trip is driven here,
+    # on a THROWAWAY registry with a fake path list: no I/O, no GPU, no tensors.
+    probe = ModelRegistry(cache_weights=False, cache_models=True)
+    if not isinstance(getattr(probe, "_cache_weights", None), bool):
+        _fail("ModelRegistry._cache_weights", "is no longer a bool attribute keep_resident can flip")
+    probe._cache_weights = True
+    probe.add(["<compat-probe>"], None, "sentinel")  # type: ignore[arg-type]
+    if probe.get(["<compat-probe>"], None) is None:
+        _fail("ModelRegistry.add", "no longer honours _cache_weights=True written after construction")
+    if probe.pop(["<compat-probe>"], None) is None:
+        _fail("ModelRegistry.pop", "did not return the entry keep_resident releases by key")
+    if probe.get(["<compat-probe>"], None) is not None:
+        _fail("ModelRegistry.pop", "left the entry in place; keep_resident's OFF path would leak it")
 
     # Quantization policy + state-dict ops.
     _require_dataclass_fields(

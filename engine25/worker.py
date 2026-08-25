@@ -47,7 +47,7 @@ Protocol (one JSON object per line; parent -> worker):
    output_path, [images], loras, reference_video}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
-      ignores (negative_prompt, num_steps, the 2.3 acceleration knobs, ...) may
+      ignores (negative_prompt, num_steps, attention_backend, vae_mode, ...) may
       ride along; each is logged as ignored and dropped. ``crop_output`` is NOT
       one of them -- it never reaches the worker in either engine, because it is
       an ffmpeg post-process the app applies to the finished mp4.
@@ -78,10 +78,10 @@ Protocol (one JSON object per line; parent -> worker):
       segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``retake``, ``end_source``, ``nag``, ``attention_backend``,
-      ``keep_resident``, ``vae_mode``) is REFUSED BY NAME rather than ignored --
-      see ``CHAIN_UNSUPPORTED_KEYS``. The two acceleration knobs are NOT on that
-      list: both apply to the chain unchanged.
+      (``retake``, ``end_source``, ``nag``, ``attention_backend``, ``vae_mode``)
+      is REFUSED BY NAME rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
+      The three acceleration knobs are NOT on that list: all of them apply to
+      the chain unchanged.
       The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
       2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes ran.
   {"op": "shutdown"}
@@ -484,6 +484,29 @@ def _resolve_fused_dequant(msg: dict) -> bool:
     return bool(msg.get("fused_gguf_dequant_kernel", False))
 
 
+def _resolve_keep_resident(msg: dict) -> bool:
+    """Resolve a job's ``keep_resident``. Missing key -> False.
+
+    Absent-means-off carries MORE weight here than for the other two knobs, and
+    it is 2.3's contract verbatim: because the retained weights survive the end
+    of the job, a payload without the key is not merely "do not enable it", it is
+    **an explicit instruction to release** whatever a previous job left resident.
+    The app's payload builders are additive (they send the key only when the
+    setting is on), so that release semantics is what an unchecked box produces,
+    with no extra field and no extra code path.
+
+    The CONTRACT is 2.3's word for word; the IMPLEMENTATION behind it is not.
+    2.3 arms this through a two-argument call that returns a tuple and carries
+    three internal degradation guards; here it is one flag on one registry with
+    no degradation path at all (see
+    :func:`engine25.pipeline25._swap_keep_resident`). Same regime as the other
+    two readers otherwise: ``bool()`` coerces whatever arrived rather than
+    failing loud, because this is a speed/RAM knob and not a correctness
+    precondition.
+    """
+    return bool(msg.get("keep_resident", False))
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -510,12 +533,14 @@ def _do_generate(msg: dict) -> None:
         msg.get("reference_video"), str(msg["output_path"]), _preprocess_frame_cap(msg)
     )
 
-    # The two acceleration knobs. Both are ABSENT-MEANS-OFF, so every payload
-    # written before they existed resolves to today's behaviour, and both are
+    # The three acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
+    # written before they existed resolves to today's behaviour, and all are
     # armed below rather than passed to ``generate``: they are per-job state on a
-    # resident process, not generation parameters.
+    # resident process, not generation parameters. For ``keep_resident`` the
+    # absent case is an instruction rather than a default -- see its reader.
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
+    keep_resident = _resolve_keep_resident(msg)
 
     # ONE line per job, after the parse: what the request ASKED for, in the
     # worker's own log, so "I attached a LoRA and nothing happened" can be told
@@ -529,7 +554,8 @@ def _do_generate(msg: dict) -> None:
         f"preprocess={_preprocess_kind(msg)} attn={attn_strength:.3f} "
         # What was ASKED for. What was GOT is the pair of echo keys on the done
         # event below, which can differ ("on->off").
-        f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'}"
+        f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
+        f"keep_resident={'on' if keep_resident else 'off'}"
     )
 
     # OUTSIDE the try, and before the build: the fused kernels have to be armed
@@ -541,6 +567,7 @@ def _do_generate(msg: dict) -> None:
     _PIPE.set_acceleration_job(
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
+        keep_resident=keep_resident,
     )
     try:
         result = _PIPE.generate(
@@ -584,10 +611,14 @@ def _do_generate(msg: dict) -> None:
         encode_fps=result.encode_fps,
         size_bytes=result.size_bytes,
         phases=result.phases,
-        # 2.3's two echo keys, same names and same three values ("off" / "on" /
+        # 2.3's echo keys, same names and same three values ("off" / "on" /
         # "on->off"), so the app relays them from one code path per engine.
         block_swap_prefetch_used=_PIPE.block_swap_prefetch_used(),
         fused_gguf_dequant_kernel_used=_PIPE.fused_gguf_dequant_kernel_used(),
+        # 2.3's third echo key, same name. The contract is the same three
+        # values; this engine only ever emits two (see
+        # ``Ltx25Pipeline.keep_resident_used``).
+        keep_resident_used=_PIPE.keep_resident_used(),
     )
 
 
@@ -620,7 +651,10 @@ def _do_generate(msg: dict) -> None:
 #: nothing left to refuse. ``block_swap_prefetch`` LEFT WITH THE PREFETCH COMMIT
 #: for the same reason, and the chain is where it matters most: it re-arms per
 #: BUILD, and a chain builds the transformer once per stage-1 clip and once per
-#: stage-2 tile.
+#: stage-2 tile. ``keep_resident`` LEFT WITH THE KEEP-RESIDENT COMMIT: it now
+#: retains the text encoder's state dict between jobs, and a chain builds that
+#: encoder exactly once per job like everything else does, so there is nothing
+#: chain-shaped left to refuse.
 #:
 #: The single-generate op differs deliberately for the knobs that remain here --
 #: there they are ignored-and-logged (``IGNORED_FIELDS``) rather than refused,
@@ -630,7 +664,6 @@ CHAIN_UNSUPPORTED_KEYS = (
     "end_source",
     "nag",
     "attention_backend",
-    "keep_resident",
     "vae_mode",
 )
 
@@ -777,13 +810,17 @@ def _do_generate_chain(msg: dict) -> None:
         op="generate_chain",
     )
 
-    # The acceleration knobs, read with the SAME two helpers the single op uses:
-    # one pair of readers for the two entry points is what stops a knob from
-    # being wired to one op and forgotten on the other. Both are live on the
+    # The acceleration knobs, read with the SAME three helpers the single op
+    # uses: one set of readers for the two entry points is what stops a knob from
+    # being wired to one op and forgotten on the other. All are live on the
     # chain: it builds the transformer once per stage-1 clip and once per
     # stage-2 tile, and the stage re-arms the prefetch on every one of them.
+    # ``keep_resident`` works differently but is just as live -- a chain builds
+    # the TEXT encoder once per job, same as a single generate, so what it saves
+    # is the same 7.7 GiB rebuild on the job after this one.
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
+    keep_resident = _resolve_keep_resident(msg)
 
     spec = ChainSpec(
         clips=clips,
@@ -819,7 +856,8 @@ def _do_generate_chain(msg: dict) -> None:
         f"preprocess={_preprocess_kind(msg)} attn={ic_attn:.3f} "
         f"stage2win={spec.stage2_window or 'standard'} "
         # What was ASKED for; the done event's echo keys say what was GOT.
-        f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'}"
+        f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
+        f"keep_resident={'on' if keep_resident else 'off'}"
     )
 
     # Armed OUTSIDE the try and before the first transformer build, disarmed in
@@ -829,6 +867,7 @@ def _do_generate_chain(msg: dict) -> None:
     _PIPE.set_acceleration_job(
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
+        keep_resident=keep_resident,
     )
     try:
         result = run_chain(
@@ -888,11 +927,15 @@ def _do_generate_chain(msg: dict) -> None:
         phases=ltx25.get("phases"),
         # 2.3's chain contract: the whole layout + metadata under one key.
         chain=meta,
-        # Same two echo keys, same values, as the single op's done: a chain runs
+        # The same echo keys, same values, as the single op's done: a chain runs
         # many builds, and the fused verdict is the whole JOB's ("on" only if
         # Triton really ran; "on->off" if any of them fell back).
         block_swap_prefetch_used=_PIPE.block_swap_prefetch_used(),
         fused_gguf_dequant_kernel_used=_PIPE.fused_gguf_dequant_kernel_used(),
+        # 2.3's third echo key, same name. The contract is the same three
+        # values; this engine only ever emits two (see
+        # ``Ltx25Pipeline.keep_resident_used``).
+        keep_resident_used=_PIPE.keep_resident_used(),
     )
 
 
@@ -1181,6 +1224,19 @@ def _add_acceleration_arguments(parser) -> None:
         default="on",
         help="asynchronous block-swap prefetching (default: on)",
     )
+    # DEFAULT OFF -- the opposite direction from the two above, and not an
+    # oversight. The other two are free (same output, less time), so their
+    # selftest default is the accelerated path. This one BUYS TIME WITH RAM:
+    # ~7.7 GiB stays resident between jobs. The app ships it off by default for
+    # that reason, and a selftest whose default did not match would measure a
+    # configuration nobody runs.
+    parser.add_argument(
+        "--keep-resident",
+        choices=("on", "off"),
+        default="off",
+        help="retain the text encoder's state dict between jobs, ~7.7 GiB of resident RAM "
+        "(default: off -- unlike the two knobs above, which default to on)",
+    )
 
 
 def _acceleration_payload(args) -> dict:
@@ -1189,13 +1245,18 @@ def _acceleration_payload(args) -> dict:
     ADDITIVE, exactly as the app's payload builder is: ``off`` omits the key
     entirely rather than sending ``False``, because absent-means-off is the
     contract the workers' readers implement and an ``off`` run has to exercise
-    the same absent-key path a pre-acceleration payload would take.
+    the same absent-key path a pre-acceleration payload would take. For
+    ``keep_resident`` the omission is doubly the point: an absent key is the
+    RELEASE instruction, so an ``off`` round on a warm worker is what proves the
+    release path runs (see :func:`_resolve_keep_resident`).
     """
     payload: dict = {}
     if args.fused_dequant == "on":
         payload["fused_gguf_dequant_kernel"] = True
     if args.block_swap_prefetch == "on":
         payload["block_swap_prefetch"] = True
+    if args.keep_resident == "on":
+        payload["keep_resident"] = True
     return payload
 
 
@@ -1258,7 +1319,7 @@ def _selftest_generate(argv: list[str]) -> int:
 
     # Every framed event, captured on its way to stdout, exactly as the chain
     # selftest does it. Added with the acceleration knobs: this selftest used to
-    # print its ``done`` event and keep nothing, so the two echo keys -- the ONLY
+    # print its ``done`` event and keep nothing, so the echo keys -- the ONLY
     # statement of what the job actually got, as opposed to what it asked for --
     # were unavailable to anything reading the report. Patching the module global
     # is what leaves the handler itself untouched: the run under observation is

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { MockBridgeOptions } from "../bridge/mockBridge";
+import { withExtraUnsupportedFeatures } from "../test/unsupportedFeatures";
 import { AppShell } from "./AppShell";
 
 // §3-98 Phase 5 — the WebUI half of the LTX 2.5 v1 feature scope.
@@ -24,8 +25,11 @@ const AS_LTX25: MockBridgeOptions = {
   supportedBaseModels: ["LTX23", "LTX25"],
 };
 
-async function renderApp(options: MockBridgeOptions = {}) {
-  const bridge = createMockBridge({ delayMs: 0, ...options });
+async function renderApp(options: MockBridgeOptions = {}, extraUnsupported: readonly string[] = []) {
+  const base = createMockBridge({ delayMs: 0, ...options });
+  const bridge = extraUnsupported.length
+    ? withExtraUnsupportedFeatures(base, "LTX25", extraUnsupported)
+    : base;
   const utils = render(<AppShell nativeBridge={bridge} />);
   await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
   const select = (await screen.findByRole("combobox", { name: /base model/i })) as HTMLSelectElement;
@@ -44,6 +48,19 @@ function tab(name: string) {
   return screen.getByRole("tab", { name });
 }
 
+/** One of the Edit tab's SUB-tabs.
+ *
+ * Reached through the sub-tab strip rather than by role name alone, because the
+ * main mode tabs and these are both `role="tab"` and every mode panel stays
+ * mounted (hidden) — so a bare `getByRole` would be ambiguous. `container` is
+ * used for the same reason the Chain-panel tests below use it: a hidden panel
+ * is out of the accessibility tree but still in the DOM. */
+function editSubTab(container: HTMLElement, name: string) {
+  const strip = container.querySelector(".edit-subtabs");
+  if (!strip) throw new Error("the Edit sub-tab strip is not mounted");
+  return within(strip as HTMLElement).getByRole("tab", { name, hidden: true });
+}
+
 describe("AppShell — base-model feature scope", () => {
   it("leaves every tab enabled on a base model that declares no restrictions", async () => {
     await renderApp();
@@ -55,35 +72,41 @@ describe("AppShell — base-model feature scope", () => {
     }
   });
 
-  it("greys Edit — but NOT Chained — once LTX 2.5 is the loaded base model", async () => {
-    // §3-102 (LTX 2.5 Chained, first stage): the engine chains now, so `chain`
-    // is gone from its `unsupported_features` and the tab comes back. Edit
-    // stays greyed — it hosts Retake and Outpainting, and this engine can run
-    // neither.
-    const { select } = await renderApp(AS_LTX25);
+  it("leaves every TAB enabled on LTX 2.5 — the greying moved into Edit", async () => {
+    // The Retake increment is what moved it. §3-102 gave the engine `chain`, so
+    // the Chained tab came back; Retake gives it 撮り直し, and the Edit tab
+    // hosts Retake AND Outpainting, so ONE of the two being runnable is enough
+    // to keep the tab. What is still out of scope (画角拡張) therefore has to
+    // grey ONE LEVEL DOWN, on its own sub-tab — which is exactly the machinery
+    // C0 put in place for this moment.
+    const { select, container } = await renderApp(AS_LTX25);
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(tab("Edit")).toBeDisabled());
-    expect(tab("Chained")).not.toBeDisabled();
-    // Single is the baseline every engine serves, and Inventory only browses
-    // finished files.
-    expect(tab("Single")).not.toBeDisabled();
-    expect(tab("Inventory")).not.toBeDisabled();
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    expect(editSubTab(container, "Retake")).not.toBeDisabled();
+    for (const name of ["Single", "Chained", "Edit", "Inventory"]) {
+      expect(tab(name)).not.toBeDisabled();
+    }
   });
 
-  it("switching back to LTX 2.3 restores the tabs", async () => {
-    const { select } = await renderApp(AS_LTX25);
+  it("switching back to LTX 2.3 restores the Edit sub-tab", async () => {
+    // The same round trip the tab-level test used to make, one level down:
+    // a restriction that never lifts is not a restriction, it is a broken build.
+    const { select, container } = await renderApp(AS_LTX25);
     const user = userEvent.setup();
 
     await switchToLtx25(select);
-    await waitFor(() => expect(tab("Edit")).toBeDisabled());
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
 
     await user.selectOptions(select, "LTX23");
     await waitFor(() => expect(select.value).toBe("LTX23"));
 
-    await waitFor(() => expect(tab("Edit")).not.toBeDisabled());
-    expect(tab("Chained")).not.toBeDisabled();
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).not.toBeDisabled());
+    expect(editSubTab(container, "Retake")).not.toBeDisabled();
+    for (const name of ["Single", "Chained", "Edit", "Inventory"]) {
+      expect(tab(name)).not.toBeDisabled();
+    }
   });
 
   it("bounces out of a mode the new base model cannot run", async () => {
@@ -91,9 +114,13 @@ describe("AppShell — base-model feature scope", () => {
     // they switch. Leaving that panel open behind a disabled tab would let them
     // fill in a form whose every submission comes back 422.
     //
-    // §3-102: Edit is the subject now that Chained survives the switch — the
-    // bounce needs a mode LTX 2.5 genuinely cannot run.
-    const { select } = await renderApp(AS_LTX25);
+    // THE BASE MODEL HERE IS SYNTHETIC. Edit greys only when BOTH of its
+    // sub-modes are refused, and the fixture's LTX 2.5 refuses only 画角拡張
+    // since the Retake increment — so the extra name is added to the published
+    // list rather than the test being re-pointed at a different tab every time
+    // the engine grows. What is under test is the BOUNCE, not today's feature
+    // list (that is `bridge/mockBridge.test.ts`'s job).
+    const { select } = await renderApp(AS_LTX25, ["retake"]);
     const user = userEvent.setup();
 
     await user.click(tab("Edit"));
@@ -107,8 +134,9 @@ describe("AppShell — base-model feature scope", () => {
 
   it("leaves the current mode alone when the new base model can run it", async () => {
     // The corollary: the bounce must be caused by the RESTRICTION, not by the
-    // switch. A user on Inventory stays on Inventory.
-    const { select } = await renderApp(AS_LTX25);
+    // switch. A user on Inventory stays on Inventory — and the switch really
+    // did land, which the greyed Outpainting sub-tab is the positive signal for.
+    const { select, container } = await renderApp(AS_LTX25);
     const user = userEvent.setup();
 
     await user.click(tab("Inventory"));
@@ -116,7 +144,7 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(tab("Edit")).toBeDisabled());
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
     expect(tab("Inventory")).toHaveAttribute("aria-selected", "true");
   });
 

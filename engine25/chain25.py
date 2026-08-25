@@ -68,17 +68,18 @@ Two 2.5-only facts the band has to answer for:
 
 Scope
 -----
-Multi-clip T2V/I2V, plus V2V and A2V (§3-102 second stage): per-clip prompts,
-clip 0's conditioning images, the overlap knobs, ``chunked_upsample``,
-``stage2_window``, ``source`` and ``audio_source``. Retake, end source,
-reference video, LoRA, NAG/VSF and the acceleration knobs are NOT here and are
+Multi-clip T2V/I2V, plus V2V and A2V (§3-102 second stage) and RETAKE:
+per-clip prompts, clip 0's conditioning images, the overlap knobs,
+``chunked_upsample``, ``stage2_window``, ``source``, ``audio_source`` and
+``retake``. The end source, NAG/VSF and ``vae_mode`` are NOT here and are
 refused at the API. ``chain_math`` still computes their geometry; this file
 simply never passes those arguments.
 
-The two ways material gets frozen
----------------------------------
-V2V and A2V both start from an uploaded file and both end up freezing latents,
-but they use DIFFERENT mechanisms, and the difference is not stylistic:
+The three ways material gets frozen
+-----------------------------------
+V2V, A2V and a retake all start from an uploaded file and all end up freezing
+latents, but they use DIFFERENT mechanisms, and the differences are not
+stylistic:
 
 * **V2V** freezes a HEAD BAND -- the same one an inter-clip carry uses, via
   ``VideoConditionByMask`` / :class:`AudioBandMask`. Stage 1 holds it at
@@ -95,10 +96,20 @@ but they use DIFFERENT mechanisms, and the difference is not stylistic:
   keeps its ordinary ``overlap_strength`` seams -- welding those shut is exactly
   the long-A2V failure 2.3 recorded. The vocoder never runs: the ORIGINAL
   waveform is muxed, so the delivered audio track is the upload by construction.
+* **Retake** freezes TWO BANDS -- one at each end of a single window -- using
+  the same items a carry does, and HARD (mask 0.0, so the bands are bit-exact
+  and the freeze is machine-provable rather than merely intended). What it
+  regenerates is the free middle between them. Both bands are re-written and
+  re-frozen at stage 2 from a fresh FULL-resolution encode of the window, which
+  is mandatory rather than careful: stage 2 re-noises at sigma[0] ~= 0.909 and
+  would destroy a stage-1-only freeze outright. Nothing is trimmed off the
+  decode -- the whole window is the deliverable, glue bands included -- because
+  the app lays the result back over the original and wants the seam at the
+  window's OUTER edge, not at the regenerated region's boundary.
 
-With ``source`` and ``audio_source`` both ``None`` -- every plain T2V/I2V chain
--- none of the branches either feature opens is taken, and the output is
-byte-identical to the chain that shipped before them (gate G1(a)).
+With ``source``, ``audio_source`` and ``retake`` all ``None`` -- every plain
+T2V/I2V chain -- none of the branches these features open is taken, and the
+output is byte-identical to the chain that shipped before them (gate G1(a)).
 """
 
 from __future__ import annotations
@@ -111,7 +122,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import torch
 
@@ -140,6 +151,7 @@ from engine25.ltxcore_compat import (
     LatentTools,
     ModalitySpec,
     SimpleDenoiser,
+    TileSizeConfig,
     VideoConditionByMask,
     VideoLatentShape,
     VideoPixelShape,
@@ -207,6 +219,42 @@ CLEAR_KEYFRAMES_ON_CARRY = True
 #:
 #: ``False`` is the reasoned default and gate G1(e) is the measurement behind it.
 CLEAR_KEYFRAMES_ON_V2V_HEAD = False
+
+#: Stage-1 denoise-mask value for a retake's two glue bands. 0.0 == HARD freeze.
+#:
+#: DELIBERATELY THE SAME NAME 2.3's chain uses
+#: (``engine/pipeline/chain_pipeline.RETAKE_STAGE1_MASK_VALUE``): VERIFICATION_LOG
+#: §55.3 is written against that name, so a reader who follows the reference
+#: finds the same constant in both engines rather than two spellings of one
+#: decision. Both 0.0 and 0.5 passed 2.3's spike -- at 0.5 the band drifts at
+#: stage 1 and reconverges at stage 2 -- and 0.0 is the owner-chosen default
+#: because it is the value that makes the stage-1 bands bit-exact and therefore
+#: MACHINE-PROVABLE. The freeze proof below reads its "which of the eight must
+#: be zero" rule off this constant rather than restating the judgement.
+#:
+#: Note the direction: this is a MASK value, and the band items below take its
+#: COMPLEMENT (a strength). :func:`_freeze_strengths` is the one place that
+#: subtraction happens.
+RETAKE_STAGE1_MASK_VALUE = 0.0
+
+#: Whether a retake's single segment clears its first-frame keyframe marker.
+#:
+#: ``False``, and for BOTH halves of the reason the marker exists. The marker
+#: claims two things about latent 0, and a retake satisfies them both:
+#:
+#: * CONTENT -- latent 0 comes from a FRESH causal encode of the window file, so
+#:   it really does cover exactly one pixel frame. (This is what makes a V2V head
+#:   keep its marker too; see :data:`CLEAR_KEYFRAMES_ON_V2V_HEAD`.) An inter-clip
+#:   carry, by contrast, starts on latent 0 of the PREVIOUS clip's tail, which is
+#:   ordinary content covering eight pixel frames.
+#: * POSITION -- a retake is exactly one clip (``chain_math`` refuses any other
+#:   count), so its segment IS timeline position 0, where the first frame of the
+#:   video is what latent 0 depicts.
+#:
+#: Clearing it would therefore throw away a true fact about the tensor. The same
+#: constant governs the stage-2 branch, because tile 0 of a one-tile timeline is
+#: the same position and the same fresh encode.
+CLEAR_KEYFRAMES_ON_RETAKE_HEAD = False
 
 #: Tolerance on the source video's frame rate, in fps. The app re-encodes the
 #: tail to the requested rate before the engine ever sees it
@@ -306,13 +354,57 @@ class AudioSourceSpec:
 
 
 @dataclass
+class RetakeSpec:
+    """Retake (temporal inpainting) -- regenerate the MIDDLE of an existing clip.
+
+    Same four fields, same meanings, as 2.3's ``RetakeSpec``: the app layer that
+    fills them in is engine-independent and already shipped, and the geometry
+    behind them comes from the SHARED :mod:`chain_math`, so the app validator,
+    the mock and both engines cannot disagree about which latents are frozen.
+
+    * ``path``: an mp4 that is ALREADY the exact window the app cut out of the
+      user's material -- ``8n + 1`` frames, CFR, at the request fps. THE ENGINE
+      NEVER CUTS OR RESAMPLES; it checks the rate rather than trusting it
+      (:func:`_load_video_frames_cpu`). Same division of labour as
+      :class:`SourceSpec`: the app owns "which pixels", the engine owns "what
+      happens to them". ``services/video_io.cut_window_mp4`` is the cutter.
+    * ``head_px`` / ``tail_px``: the GLUE bands kept frozen at the two ends of
+      the window. Their defaults (25 / 24) are 2.3's calibrated recommendation
+      (VERIFICATION_LOG §55.5) -- 9/8 leaves too little material to hold the
+      ends and 49/48 weakens the audio seam, so wider is NOT monotonically
+      better. The two are ASYMMETRIC because the video VAE is causal: a head
+      band must be ``8n + 1`` pixels and a tail band a multiple of 8.
+    * ``regenerate_audio``: True regenerates the audio inside the free middle
+      along with the video. False keeps the ORIGINAL window waveform and muxes
+      it back verbatim -- and in that mode the vocoder is skipped entirely,
+      because there is no point rendering audio that is about to be discarded.
+
+    Mutually exclusive with :class:`SourceSpec` (V2V) AND
+    :class:`AudioSourceSpec` (A2V): all three want to own the same latent ends.
+    Asserted in :func:`run_chain`, and 422 at the API layer together with the
+    reference-video and clip-0 conditioning-image exclusions.
+
+    WHY THE WHOLE WINDOW IS DELIVERED, glue bands included, is a decode-time
+    question and is answered there.
+    """
+
+    path: str
+    head_px: int = 25
+    tail_px: int = 24
+    regenerate_audio: bool = True
+
+
+@dataclass
 class ChainSpec:
     """One chain job: exactly the body keys of the ``generate_chain`` payload.
 
-    Deliberately nothing else. The features this engine still refuses (retake,
-    end source, reference video, LoRA, NAG/VSF, the acceleration knobs) have no
-    field here at all, so "this engine does not do that" is visible in the type
-    rather than in a runtime branch -- and adding one later is a deliberate act.
+    Deliberately nothing else. The features this engine still refuses (end
+    source, NAG/VSF, ``vae_mode``) have no field here at all, so "this engine
+    does not do that" is visible in the type rather than in a runtime branch --
+    and adding one later is a deliberate act. The features it DOES run but that
+    arrive as prepared MATERIAL rather than as body keys -- ``retake``,
+    ``ic_loras``, ``ic_reference`` -- are keyword arguments of
+    :func:`run_chain` instead, which is also where 2.3 takes them.
 
     ``source`` and ``audio_source`` are BOTH ``None`` on a plain multi-clip
     T2V/I2V chain, and that case is byte-identical to the chain that shipped
@@ -756,6 +848,252 @@ def _encode_source_heads(
 
     src_half, src_full = heads
     return src_half, src_full
+
+
+#: The largest ONE-TILE spatial working set the retake window encode is allowed,
+#: in pixels, plus the grid a narrowed tile is snapped to and the floor it stops
+#: at. ``448 x 384`` is a MEASUREMENT, not a round number: it is the largest of
+#: the configurations tried that both stays inside a 16 GiB card and keeps the
+#: VAE round-trip ceiling within half a decibel of ``AUTO_TILING``'s.
+#:
+#: WHY THE WINDOW ENCODE NEEDS ITS OWN TILING AT ALL. Every other encode in this
+#: engine reads a HEAD -- 25..145 pixel frames of a source tail. A retake reads
+#: the WHOLE window, TWICE (half resolution for stage 1, full resolution for
+#: stage 2's variant-B freeze), and AUTO's tiles are not sized for that: LTX 2.5
+#: ships a CONV video VAE, so ``tiling_config_for_vae`` resolves through the
+#: ASPECT-ONLY branch and never reads a free-VRAM figure (the memory-aware branch
+#: is diffusion-VAE only). At the worst point the app allows -- 1280x768 x 169
+#: frames -- AUTO makes a single 8.66 GiB allocation, and what happens on a
+#: 16 GiB card is not a failure but a SPILL: Windows backs the reserved pool with
+#: shared system memory and the job crawls. That is the trap this closes.
+#:
+#: WHAT THE CEILING HAS TO DO WITH IT. A narrower tile means more seams, and the
+#: trapezoidal blend over them is not free -- so the thing to protect is not
+#: merely "it fits" but the R-1 ceiling itself, i.e. how close a VAE round-trip
+#: of the window can possibly come to the original. Measured on the gate's own
+#: material at 1280x768, ONE PROCESS PER ROW, with the round trip taken through
+#: the gate's own analyzer so the numbers subtract from C0-prep's published
+#: ceilings (42.81 / 42.17 / 42.40 dB at 73 / 121 / 169 frames):
+#:
+#: =================  =============  ==============  ==========  =============
+#: encode tiling      reserved 169f  encode 169f     ceiling Δ    band Δ worst
+#: =================  =============  ==============  ==========  =============
+#: 80/24 448x768       27190 MB          30.2 s       (baseline)  (baseline)
+#: 80/24 **448x384**   13926 MB          17.2 s      -0.51..-0.63  -0.48
+#: 80/24 448x256       15826 MB          20.0 s      -0.48..-0.60  -0.61
+#: 80/24 256x384        8244 MB          21.2 s      -1.03..-1.18  -1.09
+#: 56/24 448x768       18846 MB          27.8 s      -0.07..+0.16  (spills)
+#: 40/24 448x768       13280 MB          27.8 s      -0.86..-3.89  -3.89
+#: =================  =============  ==============  ==========  =============
+#:
+#: THREE THINGS THE TABLE DECIDES.
+#:
+#: * The reduction is SPATIAL, not temporal. Narrowing the FRAMES tile is the
+#:   cheapest way to save memory and the most expensive way to spend quality --
+#:   40/24 costs nearly FOUR decibels at the short window -- because that axis
+#:   carries the video VAE's causal receptive field. 56/24 keeps the ceiling but
+#:   does not fit.
+#: * ONE spatial axis, not both. Halving both (256x384) buys memory nobody needs
+#:   and costs 1.1 dB in the glue bands, which is the whole of R-1's tolerance.
+#:   Halving the LARGER tile alone costs half a decibel and leaves ~2.4 GiB of
+#:   headroom on the card.
+#: * The budget is expressed as an AREA rather than as "halve the width",
+#:   because which axis is the larger one depends on the job's aspect ratio
+#:   (``TileSizeConfig.from_long_side`` caps the long side at 768 and scales the
+#:   short one), and a square request would otherwise be left with AUTO's
+#:   768x768 tile -- bigger than the one this exists to shrink.
+#:
+#: WHAT THE RULE ITSELF THEN MEASURES, at 1280x768 and its half, over the three
+#: window lengths the gate uses (the two encodes a retake makes are sequential,
+#: so the job's own peak is the larger of each pair):
+#:
+#: ========  =================  ==========  =============  ========
+#: window    resolved tiling    peak alloc  peak reserved  encode
+#: ========  =================  ==========  =============  ========
+#: 73 full   80/24 448x384       6839 MB        8162 MB     6.2 s
+#: 73 half   80/24 448x320       5061 MB        6036 MB     1.9 s
+#: 121 full  80/24 448x384       6839 MB        8182 MB    11.5 s
+#: 121 half  80/24 448x320       5061 MB        6036 MB     3.3 s
+#: 169 full  80/24 448x384       7520 MB       13926 MB    17.0 s
+#: 169 half  80/24 448x320       5547 MB       10138 MB     4.8 s
+#: ========  =================  ==========  =============  ========
+#:
+#: Both resolutions come inside the card at every window, which matters: the
+#: HALF-resolution encode spills under AUTO too (19.6 GiB reserved at 169
+#: frames), a fact C0-prep's ceiling run could not separate out because it
+#: measured an encode and a decode together.
+#:
+#: NOT a knob: it is a property of this engine's VAE and of how large a window
+#: the app lets a user retake. No request field reaches it.
+RETAKE_ENCODE_TILE_AREA_BUDGET = 448 * 384
+RETAKE_ENCODE_SPATIAL_GRID = 64
+RETAKE_ENCODE_MIN_SPATIAL_TILE = 128
+
+
+class _Ingest(NamedTuple):
+    """Everything ONE ``ImageConditioner`` build produced.
+
+    A named tuple rather than a bare tuple because the closure now returns
+    SEVEN things and a positional unpack of seven is a bug waiting for its
+    seventh element. The ORDER is the order the closure computes them in, which
+    is deliberately the order it always had with the retake pair appended --
+    changing the order would change which encode runs while which model is
+    resident, and that is a VRAM fact, not a formatting one.
+    """
+
+    stage1_conds: list[ConditioningItem]
+    tile_conds: list[list[ConditioningItem]]
+    src_half: torch.Tensor | None
+    src_full: torch.Tensor | None
+    ref_conds: list[list[ConditioningItem]]
+    retake_half: torch.Tensor | None
+    retake_full: torch.Tensor | None
+
+
+def _retake_encode_tiling(tiling_config: Any, *, scale_factors: Any, video_shape: VideoPixelShape) -> Any:
+    """AUTO's tiling with its SPATIAL tiles brought inside the area budget above.
+
+    The TEMPORAL half is AUTO's own answer, taken unchanged: that axis carries
+    the video VAE's causal receptive field, and the measurements say it is by
+    far the expensive one to narrow. The OVERLAPS are not touched on any axis --
+    64 pixels is the conv encode's own floor, and a narrower tile needs its
+    seams blended no less.
+
+    THE BUDGET IS TESTED AGAINST THE *EFFECTIVE* TILE, i.e. the tile clipped to
+    the frame: a 768-pixel tile on a 640-pixel-wide frame is a 640-pixel tile,
+    and narrowing it because of the number it declares rather than the work it
+    does would cost quality for nothing. That is also why the halving is of the
+    effective size: on such an axis, halving the declared 768 would leave 384,
+    which is a real change; halving the effective 640 leaves 320, which is the
+    change actually intended.
+
+    Each pass narrows whichever axis is currently the LARGER of the two, so a
+    landscape job loses width, a portrait job loses height, and a square job
+    loses each in turn -- and the loop ends either inside the budget or when
+    neither axis can shrink further, never by iterating forever.
+
+    The result is validated against the WINDOW's pixel shape -- which for a
+    retake is also the timeline's, but it is the shape the encode is actually
+    handed -- so an illegal pair fails here, in a sentence, rather than deep
+    inside ``prepare_tiles_for_encoding``.
+
+    The isinstance check is a live guard, not a formality: a future DIFFUSION
+    video VAE would make ``tiling_config_for_vae`` take its memory-aware branch
+    and return a different config type, and silently encoding a whole window
+    with AUTO's tiles is exactly the spill this function exists to avoid. Loud
+    is the only safe setting.
+    """
+    if not isinstance(tiling_config, TileSizeConfig):
+        raise ChainError(
+            "retake: the resolved decode tiling is "
+            f"{type(tiling_config).__name__}, not a TileSizeConfig, so the whole-window "
+            "encode cannot be brought inside the tile budget (see "
+            "RETAKE_ENCODE_TILE_AREA_BUDGET)."
+        )
+
+    grid = RETAKE_ENCODE_SPATIAL_GRID
+    height, width = tiling_config.height, tiling_config.width
+    extents = {"height": int(video_shape.height), "width": int(video_shape.width)}
+
+    def effective(dim: Any, extent: int) -> int:
+        # An untiled axis (``tile_size == 0``) covers the whole extent.
+        return min(dim.tile_size, extent) if dim.is_tiled() else extent
+
+    while True:
+        eff_h = effective(height, extents["height"])
+        eff_w = effective(width, extents["width"])
+        if eff_h * eff_w <= RETAKE_ENCODE_TILE_AREA_BUDGET:
+            break
+        axis, dim, eff = (
+            ("height", height, eff_h) if eff_h >= eff_w else ("width", width, eff_w)
+        )
+        target = max(RETAKE_ENCODE_MIN_SPATIAL_TILE, -(-(eff // 2) // grid) * grid)
+        if dim.is_tiled() and target >= dim.tile_size:
+            break                     # this axis is already at or below target
+        if target >= eff:
+            break                     # nothing left to give on either axis
+        narrowed = replace(dim, tile_size=target)
+        if axis == "height":
+            height = narrowed
+        else:
+            width = narrowed
+
+    cfg = replace(tiling_config, height=height, width=width)
+    cfg.validate(scale_factors, video_shape)
+    return cfg
+
+
+def _encode_retake_window(
+    video_encoder: Any,
+    *,
+    retake: RetakeSpec,
+    layout: ChainLayout,
+    width: int,
+    height: int,
+    frame_rate: float,
+    tiling_config: Any,
+    scale_factors: Any,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """VAE-encode the WHOLE retake window twice: ``(half_res, full_res)``.
+
+    WHY THE WHOLE WINDOW AND NOT JUST THE TWO GLUE BANDS -- 2.3's argument, and
+    it is about the VAE, not about convenience: the video VAE is causal and
+    temporally strided, so a standalone encode of the last 25 pixel frames would
+    make ITS latent 0 a fresh keyframe -- both the wrong index mapping and the
+    wrong content. One full-window encode yields correctly-aligned latents for
+    both ends at once.
+
+    WHY TWICE, at two resolutions, is :func:`_encode_source_heads`' reason
+    verbatim: the half-res latent is stage 1's frozen carry and has to match the
+    resolution stage 1 works in; the full-res one is stage 2's hard freeze and
+    must come from a fresh encode of the original rather than from the upsampled
+    stage-1 approximation ("variant B"). C0-prep measured the gap that makes
+    that mandatory rather than tidy: at 169 frames the half-resolution VAE
+    ceiling is 38.3 dB against the full-resolution 42.4 dB.
+
+    Both encodes are TILED, and with the NARROWED spatial tiles
+    :func:`_retake_encode_tiling` builds -- see :data:`RETAKE_ENCODE_TILE_AREA_BUDGET`
+    for the measurement behind it. The AUDIO half of the window is not here: it
+    needs the audio encoder, which lives in a different block's lifetime, so it
+    is read in :func:`run_chain`'s audio-ingest branch instead.
+    """
+    window_px = int(layout.retake_window_px or 0)
+    f_total = int(layout.f_total)
+    encode_tiling = _retake_encode_tiling(
+        tiling_config,
+        scale_factors=scale_factors,
+        video_shape=VideoPixelShape(1, window_px, height, width, frame_rate),
+    )
+    logger.info(
+        "chain retake: encoding the %d-frame window at both resolutions, tiling=%r",
+        window_px, encode_tiling,
+    )
+
+    out: list[torch.Tensor] = []
+    for label, h, w in (("half", height // 2, width // 2), ("full", height, width)):
+        pixels = _load_video_frames_cpu(
+            retake.path, frame_cap=window_px, height=h, width=w,
+            device=device, expected_fps=frame_rate,
+        )
+        encoded = video_encoder.tiled_encode(pixels, encode_tiling)
+        del pixels
+        latent = encoded.detach().clone()
+        del encoded
+        cleanup_memory()
+        if latent.shape[2] != f_total:
+            raise ChainError(
+                f"the {label}-res retake encode produced {latent.shape[2]} latent frames but the "
+                f"layout's timeline is f_total={f_total} -- the glue bands would land on the "
+                f"wrong latent index"
+            )
+        expected = VideoLatentShape.from_pixel_shape(
+            VideoPixelShape(1, window_px, h, w, frame_rate), scale_factors=scale_factors
+        ).to_torch_shape()
+        assert tuple(latent.shape) == tuple(expected), (label, tuple(latent.shape), tuple(expected))
+        out.append(latent)
+
+    return out[0], out[1]
 
 
 def _build_reference_conditionings(
@@ -1240,6 +1578,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     stage1_sampler: str | None = None,
     stage1_eta: float | None = None,
     clear_keyframes: bool | None = None,
+    retake: RetakeSpec | None = None,
     ic_loras: list[tuple] | None = None,
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
@@ -1255,6 +1594,14 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     run against the shipped code path rather than a copy of it, and they default
     to the module constants above, which are what every real job uses. Nothing in
     the ``generate_chain`` payload maps to them.
+
+    ``retake`` IS a request field (the Retake increment), and rides as a keyword
+    rather than as a :class:`ChainSpec` field for the same reason ``ic_loras``
+    does: it is MATERIAL the app prepared plus the geometry that goes with it,
+    not a body key of the ``generate_chain`` payload's own shape -- and 2.3's
+    ``run_chain`` takes it in exactly this position, so the two engines' chain
+    entry points stay readable side by side. ``None`` -- every chain but a
+    retake -- leaves every branch it opens untaken.
 
     ``ic_loras`` / ``ic_reference`` / ``ic_attention_strength`` ARE request
     fields (§3-102 third stage). ``ic_loras`` is the job's adapters as
@@ -1292,26 +1639,45 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         "V2V (source) and A2V (audio_source) are mutually exclusive; one chain is a "
         "video continuation or an audio-driven generation, never both."
     )
-    # An IC-LoRA reference is API-exclusive with V2V (and, in 2.3, with retake and
-    # end source -- neither of which exists on this engine, so the assertion is
-    # 2.3's list minus the two modes that cannot reach it). The injection below
-    # LEANS on that: it sits after the head branch, so a reference reaching a V2V
-    # chain would append conditioning to a segment whose head is a frozen carry
-    # from a file. A2V is deliberately NOT in the list -- 2.3 allows the pair, and
-    # adding a constraint the older engine does not have would be a new
-    # restriction dressed up as parity.
-    assert ic_reference is None or source is None, (
-        "run_chain: ic_reference is mutually exclusive with source (V2V)"
+    # A retake owns BOTH ends of the one and only clip, so it can share the
+    # timeline with neither of the other two -- 2.3's assertion, verbatim, and
+    # the API layer 422s the pairing first.
+    assert sum(x is not None for x in (source, audio_source, retake)) <= 1, (
+        "run_chain: source (V2V), audio_source (A2V) and retake are mutually exclusive"
+    )
+    # An IC-LoRA reference is API-exclusive with V2V and with retake (and, in
+    # 2.3, with the end source, which does not exist on this engine, so the
+    # assertion is 2.3's list minus the one mode that cannot reach it). The
+    # injection below LEANS on that: it sits after the head branch, so a
+    # reference reaching a V2V or retake chain would append conditioning to a
+    # segment whose head is a frozen carry from a file. A2V is deliberately NOT
+    # in the list -- 2.3 allows the pair, and adding a constraint the older
+    # engine does not have would be a new restriction dressed up as parity.
+    assert ic_reference is None or (source is None and retake is None), (
+        "run_chain: ic_reference is mutually exclusive with source (V2V) and retake"
+    )
+    # Clip-0 keyframes and a retake are API-exclusive too, and this assertion is
+    # SPENT below rather than merely stated: the stage-1 conditioning list is
+    # built as ``band_v + (stage1_conds if i == 0 else []) + ref_conds[i]``, and
+    # what makes that expression "the band items alone" on a retake -- which is
+    # what 2.3 writes as a literal empty list -- is precisely this exclusion
+    # together with the reference one above.
+    assert not (retake is not None and clips[0].images), (
+        "run_chain: retake and clip-0 conditioning images are mutually exclusive"
     )
 
     # ── Geometry: the SHARED pure module, called the way the app calls it ─────
     # Same positional pair, same ``kv``, same resolved (v_tile, v_adv), and now
     # the same ``source_context_px`` -- which is None on every request without a
     # source video, i.e. the same call the plain chain always made. The two
-    # remaining feature keywords (retake_glue_px / end_context_px) are still
-    # refused at the API, so omitting them is still the same call; gate G1(e)
-    # pins that against the app's own call sites rather than leaving it as a
-    # comment.
+    # remaining feature keyword (end_context_px) is still refused at the API, so
+    # omitting it is still the same call; gate G1(e) pins that against the app's
+    # own call sites rather than leaving it as a comment.
+    #
+    # ``retake_glue_px`` is now passed, and it is the SINGLE SOURCE OF TRUTH for
+    # the whole retake geometry: the app validator, the mock and both engines
+    # call this one function with these two numbers, so they cannot disagree
+    # about which latents are frozen. Nothing below re-derives any of it.
     v_tile, v_adv = resolve_stage2_window(spec.stage2_window)
     source_context_px = None if source is None else int(source.context_frames)
     layout: ChainLayout = compute_chain_layout(
@@ -1319,10 +1685,22 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         kv=kv,
         v_tile=v_tile, v_adv=v_adv,
         source_context_px=source_context_px,
+        retake_glue_px=(
+            None if retake is None else (int(retake.head_px), int(retake.tail_px))
+        ),
     )
     seg_frames = layout.seg_frames
     n_seg = len(seg_frames)
     assert n_seg == n, (n_seg, n)   # no feature here appends a segment
+    # Retake glue sizes, READ OFF THE LAYOUT (never recomputed): the four counts
+    # the two write sites and the freeze proof all index with. All zero on every
+    # chain without a retake, which is what keeps every one of those slices inert
+    # there.
+    rt_geo = layout.to_dict().get("retake") or {}
+    n_head_v = int(rt_geo.get("n_head_v", 0))
+    n_tail_v = int(rt_geo.get("n_tail_v", 0))
+    n_head_a = int(rt_geo.get("n_head_a", 0))
+    n_tail_a = int(rt_geo.get("n_tail_a", 0))
     ka_list = layout.ka_list
     v_tiles, a_tiles = layout.v_tiles, layout.a_tiles
     kt_v, kt_a = layout.kt_v, layout.kt_a
@@ -1417,10 +1795,12 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         # ``ImageConditioner`` and the same lifecycle the official A2V pipeline
         # uses.
         #
-        # V2V and A2V both land here, and take DIFFERENT amounts of the result:
-        # V2V keeps a head band (``n_ctx_a`` frames, short) and A2V keeps the
-        # whole timeline. They also differ on what a shortfall means, which is
-        # the interesting part -- see each branch.
+        # V2V, A2V and a RETAKE all land here, and take DIFFERENT amounts of the
+        # result: V2V keeps a head band (``n_ctx_a`` frames, short), A2V keeps the
+        # whole timeline, and a retake keeps a band at EACH end. They also differ
+        # on what a shortfall means, which is the interesting part -- see each
+        # branch. ``elif`` rather than three independent ``if``s because the three
+        # are TRULY exclusive (asserted above), not merely usually apart.
         a2v_a: torch.Tensor | None = None          # (1,8,a_total,16) frozen audio
         a2v_orig_wf: torch.Tensor | None = None    # (2,N) CPU float32 -- the mux
         a2v_sr = 0
@@ -1429,6 +1809,10 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         src_a: torch.Tensor | None = None          # (1,8,freeze_ka,16) V2V head
         freeze_ka = 0
         source_had_audio = False
+        rt_a: torch.Tensor | None = None           # (1,8,a_total,16) window audio
+        rt_orig_wf: torch.Tensor | None = None     # (2,N) CPU float32 -- the re-mux
+        rt_sr = 0
+        retake_had_audio = False
 
         if audio_source is not None:
             loaded = _load_audio_stereo(audio_source.path, device)
@@ -1495,6 +1879,81 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 del encoded_a, wf
                 cleanup_memory()
 
+        elif retake is not None:
+            # ── the retake WINDOW's own audio ─────────────────────────────────
+            # Kept whole (``a_total`` latent frames == the window's own timeline)
+            # because BOTH ends of it are frozen; the two write sites take the
+            # leading ``n_head_a`` and the trailing ``n_tail_a`` out of it.
+            #
+            # THE ADJUDICATION IS 2.3's, decided by the owner in VERIFICATION_LOG
+            # §55.6, and the three arms are genuinely different rulings:
+            #
+            #   * the window HAS audio but encodes to fewer than ``a_total``
+            #     latent frames -> HARD FAIL. A short encode puts the TAIL glue
+            #     at the wrong latent index and would silently invalidate the
+            #     freeze, which is worse than a failed job. (This is why the
+            #     slice below is anchored at ``a_total`` and not at ``avail``:
+            #     there is no correct narrower band, only a misplaced one.)
+            #   * the same shortfall with ``regenerate_audio=False`` -> a WARNING
+            #     and no audio freeze at all. The delivered audio is the original
+            #     waveform, so a short encode can only under-freeze latents that
+            #     are about to be discarded.
+            #   * the window has NO audio track -> continue with no audio freeze,
+            #     recorded in the metadata rather than raised. A silent clip is a
+            #     legitimate thing to retake.
+            loaded = _load_audio_stereo(retake.path, device)
+            retake_had_audio = loaded is not None
+            if loaded is not None:
+                wf, rt_sr = loaded
+                # Kept on CPU for a possible verbatim re-mux
+                # (``regenerate_audio=False``), which is the one path that never
+                # runs the vocoder.
+                rt_orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+                vram.reset()
+                audio_started = time.perf_counter()
+                encoded_a = pipeline.audio_conditioner(
+                    lambda encoder: _encode_audio_latent(encoder, wf, rt_sr)
+                )
+                vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
+
+                a_win = int(layout.a_total)
+                avail = int(encoded_a.shape[2])
+                if avail < a_win:
+                    if retake.regenerate_audio:
+                        raise ValueError(
+                            f"retake window audio encoded to {avail} audio-latent frames "
+                            f"< a_total={a_win} required by the "
+                            f"{int(layout.retake_window_px or 0)}-frame window; "
+                            "the tail glue would land on the wrong latent index"
+                        )
+                    logger.warning(
+                        "chain retake: window audio encoded to %d < a_total=%d, but "
+                        "regenerate_audio=False -- continuing with NO audio freeze "
+                        "(the delivered audio is the original waveform).",
+                        avail, a_win,
+                    )
+                    retake_had_audio = False
+                else:
+                    rt_a = encoded_a[:, :, :a_win].detach().clone()
+                del encoded_a, wf
+                cleanup_memory()
+            if not retake_had_audio:
+                # Nothing to freeze -> the glue bands are video-only. NOT an
+                # error (owner adjudication §55.6); the metadata says so, and
+                # zeroing the two counts here is what makes every audio slice
+                # below inert rather than each of them re-testing the condition.
+                n_head_a = n_tail_a = 0
+
+        # Whether a retake has an AUDIO band to prove anything about. Computed
+        # once, here, because the freeze proof far below has to distinguish
+        # "frozen and unchanged" (0.0) from "nothing was frozen" (None), and an
+        # invented 0.0 would fake a passing proof of the one thing this feature
+        # exists to prove.
+        rt_audio_band = bool(
+            retake is not None and retake_had_audio and rt_a is not None
+            and (n_head_a > 0 or n_tail_a > 0)
+        )
+
         # ── Image conditioning: ONE encoder build for every resolution ────────
         # ``ImageConditioner.__call__(fn)`` builds the video encoder, calls
         # ``fn(encoder)`` once and frees it, so the half-resolution stage-1 items,
@@ -1504,24 +1963,27 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         # the images must be re-compressed at, and ``crf=None`` reaches
         # ``load_image_and_preprocess`` as a hard failure.
         #
-        # A V2V request never carries clip-0 images (the API refuses the pair) and
-        # an image request never carries a source, so in practice each call does
-        # one of the two jobs; the closure handles both because the block that
-        # OWNS the encoder should not have to know which.
+        # A V2V request never carries clip-0 images (the API refuses the pair), an
+        # image request never carries a source, and a RETAKE carries neither
+        # (refused with both), so in practice each call does one of the jobs; the
+        # closure handles them all because the block that OWNS the encoder should
+        # not have to know which.
         clip0_images: list[ImageConditioningInput] = list(clips[0].images)
         stage1_conds: list[ConditioningItem] = []
         tile_conds: list[list[ConditioningItem]] = [[] for _ in range(n_tiles)]
         src_half: torch.Tensor | None = None
         src_full: torch.Tensor | None = None
+        rt_v_half: torch.Tensor | None = None
+        rt_v_full: torch.Tensor | None = None
         # ONE list per stage-1 segment, empty when no reference was asked for --
         # which is what keeps the segment loop's ``conds_v`` byte-identical on a
         # chain without one.
         ref_conds: list[list[ConditioningItem]] = [[] for _ in range(n_seg)]
-        if clip0_images or source is not None or ic_reference is not None:
+        if clip0_images or source is not None or ic_reference is not None or retake is not None:
             if clip0_images:
                 clip0_images = dp.image_conditioner.resolve_crf(clip0_images)
 
-            def _build_all(encoder: Any) -> tuple[list, list[list], Any, Any, list[list]]:
+            def _build_all(encoder: Any) -> _Ingest:
                 half: list[ConditioningItem] = []
                 full: list[list[ConditioningItem]] = [[] for _ in v_tiles]
                 if clip0_images:
@@ -1564,11 +2026,37 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                         tiling_config=tiling_config,
                         device=device,
                     )
-                return half, full, head_half, head_full, refs
+                # LAST of all, and appended to the closure's result rather than
+                # woven into it, so every block above computes in exactly the
+                # order it did before this one existed. Position is not free
+                # here -- it decides which tensors are resident while the
+                # heaviest encode in the job runs -- and last is where the
+                # fewest are: what the three blocks above retain is LATENTS
+                # (kilobytes), and the window encode is the only thing that
+                # allocates gigabytes.
+                #
+                # A retake is exclusive with all three of them (asserted at the
+                # top of this function), so in a real job it is the only block
+                # that runs at all.
+                rt_half = rt_full = None
+                if retake is not None:
+                    rt_half, rt_full = _encode_retake_window(
+                        encoder,
+                        retake=retake, layout=layout, width=width, height=height,
+                        frame_rate=frame_rate, tiling_config=tiling_config,
+                        scale_factors=stage.video_scale_factors, device=device,
+                    )
+                return _Ingest(half, full, head_half, head_full, refs, rt_half, rt_full)
 
             vram.reset()
             conditioning_started = time.perf_counter()
-            stage1_conds, tile_conds, src_half, src_full, ref_conds = dp.image_conditioner(_build_all)
+            ingest = dp.image_conditioner(_build_all)
+            stage1_conds = ingest.stage1_conds
+            tile_conds = ingest.tile_conds
+            src_half, src_full = ingest.src_half, ingest.src_full
+            ref_conds = ingest.ref_conds
+            rt_v_half, rt_v_full = ingest.retake_half, ingest.retake_full
+            del ingest
             vram.record("11_image_conditioning", time.perf_counter() - conditioning_started)
 
         # ── STAGE 1: per-clip at half resolution, with the carry band ─────────
@@ -1584,8 +2072,44 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
             init_v = init_a = None
             fkv = fka = 0
+            # Tail freeze widths. Zero on every path but a retake, which is what
+            # keeps the band call below building exactly the items it built
+            # before a tail was possible at all.
+            ftv = fta = 0
             seg_clear_kf = clear_kf
-            if i == 0 and source is not None:
+            if i == 0 and retake is not None:
+                # ── retake: freeze BOTH ends of the single window segment ────
+                # The init tensor carries the ORIGINAL window's half-resolution
+                # latents at the two glue bands and ZEROS in the middle; the two
+                # band items built below are what actually hold them. The middle
+                # is what gets regenerated, and it is the only part that does.
+                #
+                # THE INDEX IS ``layout.f_total`` and that is safe HERE and
+                # nowhere else in this file: a retake is exactly one clip
+                # (chain_math refuses any other count), so this segment's own
+                # length IS the whole timeline's. Every other freeze in this
+                # function indexes off the tensor it is writing into.
+                init_v = torch.zeros(tuple(v_shape.to_torch_shape()), dtype=DTYPE, device=device)
+                init_v[:, :, :n_head_v] = rt_v_half[:, :, :n_head_v].to(DTYPE)
+                init_v[:, :, layout.f_total - n_tail_v:] = (
+                    rt_v_half[:, :, layout.f_total - n_tail_v:].to(DTYPE)
+                )
+                fkv = n_head_v
+                ftv = n_tail_v
+                # ``n_head_a``/``n_tail_a`` were zeroed by the audio ingest above
+                # when the window had none to freeze, so this one test covers
+                # "no audio track", "an undecodable one" and "a short encode we
+                # ruled survivable" alike.
+                if n_head_a > 0 or n_tail_a > 0:
+                    init_a = torch.zeros(tuple(a_shape.to_torch_shape()), dtype=DTYPE, device=device)
+                    init_a[:, :, :n_head_a] = rt_a[:, :, :n_head_a].to(DTYPE)
+                    init_a[:, :, layout.a_total - n_tail_a:] = (
+                        rt_a[:, :, layout.a_total - n_tail_a:].to(DTYPE)
+                    )
+                    fka = n_head_a
+                    fta = n_tail_a
+                seg_clear_kf = CLEAR_KEYFRAMES_ON_RETAKE_HEAD
+            elif i == 0 and source is not None:
                 # ── video-to-video: the source tail IS clip 0's head ──────────
                 # Exactly the inter-clip carry mechanism below, fed from a file
                 # instead of from a previous segment: same partial freeze
@@ -1612,12 +2136,33 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
                 fkv, fka = kv, ka_i
 
+            # The four band strengths. An ordinary carry seam (and a V2V head)
+            # passes ``overlap_strength`` VERBATIM and asks for no tail -- see
+            # ``_freeze_strengths``' docstring for the 1-ULP reason that must
+            # stay true. A RETAKE is the case that function exists for: its two
+            # bands are held at the complement of ``RETAKE_STAGE1_MASK_VALUE``,
+            # resolved through the SAME ``chain_math.freeze_mask_values`` the app
+            # validated, so head and tail, video and audio, cannot drift apart
+            # from what 2.3 measured. At the module default (0.0) all four come
+            # back 1.0 -- a hard freeze, and the value that makes the stage-1
+            # bands bit-exact and therefore provable.
+            seg_strength = float(spec.overlap_strength)
+            seg_tail_strength: float | None = None
+            seg_audio_strength: float | None = None
+            seg_audio_tail_strength: float | None = None
+            if retake is not None:
+                (seg_strength, seg_tail_strength,
+                 seg_audio_strength, seg_audio_tail_strength) = _freeze_strengths(
+                    RETAKE_STAGE1_MASK_VALUE
+                )
             band_v, band_a = _band_conditionings(
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
-                # VERBATIM, never through ``_freeze_strengths``: see that
-                # function's docstring for the 1-ULP reason.
-                strength=float(spec.overlap_strength),
+                video_tail_frozen=ftv, audio_tail_frozen=fta,
+                strength=seg_strength,
+                tail_strength=seg_tail_strength,
+                audio_strength=seg_audio_strength,
+                audio_tail_strength=seg_audio_tail_strength,
                 # The head-freeze test is spelled out HERE because that is where
                 # it used to live implicitly -- ``_band_conditionings`` appended
                 # the marker clear only from inside its "a video head is frozen"
@@ -1635,6 +2180,11 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             # "the reference ran out before this segment" -- the owner's rule is
             # that a missing reference means generate without one, never an error.
             # STAGE 1 ONLY; the stage-2 tiles below never get one.
+            # ON A RETAKE this is ``band_v`` and nothing else -- which is what
+            # 2.3 writes as a literal empty conditioning list. It is not a
+            # coincidence to be re-checked here: both of the other two terms are
+            # empty by the two exclusions asserted at the top of this function
+            # (no clip-0 keyframes, no IC-LoRA reference).
             conds_v = band_v + (stage1_conds if i == 0 else []) + ref_conds[i]
 
             noiser = GaussianNoiser(generator=torch.Generator(device=device).manual_seed(seeds[i]))
@@ -1713,6 +2263,31 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         assert tuple(assembled_v.shape) == tuple(exp_v), (tuple(assembled_v.shape), tuple(exp_v))
         assert tuple(assembled_a.shape) == tuple(exp_a), (tuple(assembled_a.shape), tuple(exp_a))
 
+        # ── retake: the STAGE-1 half of the freeze proof ──────────────────────
+        # Taken off the ASSEMBLED timeline rather than off the segment, so what
+        # is measured is the band as it actually enters the upsample. (For a
+        # retake the two are the same tensor -- one segment -- but reading the
+        # assembled one is what makes this the same statement the stage-2 half
+        # makes, and what would catch an assembly that ever stopped being a
+        # pass-through.)
+        #
+        # HERE, AND CLONED, FOR TWO REASONS. ``assembled_v`` is deleted right
+        # after the upsample below, so a measurement taken later would have
+        # nothing to read; and a plain slice is a VIEW, which would keep the
+        # WHOLE half-resolution timeline's storage alive until the proof runs
+        # after stage 2. The clones are a handful of latent frames -- kilobytes
+        # against gigabytes.
+        rt_s1_head = rt_s1_tail = None
+        rt_s1_head_a = rt_s1_tail_a = None
+        if retake is not None:
+            rt_s1_head = assembled_v[:, :, :n_head_v].detach().clone()
+            rt_s1_tail = assembled_v[:, :, layout.f_total - n_tail_v:].detach().clone()
+            if rt_audio_band:
+                rt_s1_head_a = assembled_a[:, :, :n_head_a].detach().clone()
+                rt_s1_tail_a = (
+                    assembled_a[:, :, layout.a_total - n_tail_a:].detach().clone()
+                )
+
         # ── ONE upsample over the whole timeline ──────────────────────────────
         vram.reset()
         upsample_started = time.perf_counter()
@@ -1753,8 +2328,45 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             init_a = assembled_a[:, :, as_:as_ + alen].contiguous().clone()
 
             fkv = fka = 0
+            ftv = fta = 0
             tile_clear_kf = clear_kf
-            if i == 0 and source is not None:
+            if i == 0 and retake is not None:
+                # ── retake stage 2: re-write AND re-freeze both ends ─────────
+                # RE-FREEZING IS MANDATORY, not belt-and-braces: stage 2 re-noises
+                # at sigma[0] ~= 0.909, which would destroy a stage-1-only freeze
+                # outright. And the bands come from the FULL-RESOLUTION re-encode
+                # of the original window, never from the upsampled stage-1
+                # approximation -- 2.3's "variant B", the same choice the V2V
+                # head below makes, and the reason ``_encode_retake_window``
+                # encodes twice. C0-prep measured what variant A would cost here:
+                # at 169 frames the half-resolution VAE ceiling is 38.3 dB
+                # against the full-resolution 42.4 dB, so freezing the upsampled
+                # approximation would pin the delivered ends to a visibly worse
+                # picture than the material they are supposed to match.
+                #
+                # ``layout.f_total`` / ``layout.a_total`` as the index is safe
+                # for the SAME reason as at stage 1 and for one more: a retake
+                # window is one stage-2 tile by construction
+                # (``chain_math.retake_max_window_px`` is what bounds the window
+                # length), so this tile IS the whole timeline. Asserted rather
+                # than assumed, because the failure would be a silently
+                # misplaced freeze.
+                assert n_tiles == 1, (n_tiles, layout.retake_window_px)
+                init_v[:, :, :n_head_v] = rt_v_full[:, :, :n_head_v].to(DTYPE)
+                init_v[:, :, layout.f_total - n_tail_v:] = (
+                    rt_v_full[:, :, layout.f_total - n_tail_v:].to(DTYPE)
+                )
+                fkv = n_head_v
+                ftv = n_tail_v
+                if n_head_a > 0 or n_tail_a > 0:
+                    init_a[:, :, :n_head_a] = rt_a[:, :, :n_head_a].to(DTYPE)
+                    init_a[:, :, layout.a_total - n_tail_a:] = (
+                        rt_a[:, :, layout.a_total - n_tail_a:].to(DTYPE)
+                    )
+                    fka = n_head_a
+                    fta = n_tail_a
+                tile_clear_kf = CLEAR_KEYFRAMES_ON_RETAKE_HEAD
+            elif i == 0 and source is not None:
                 # ── video-to-video, "variant B": HARD-freeze the source head ──
                 # Same hard freeze the i>=1 tile joins below use, but fed from a
                 # FULL-RESOLUTION re-encode of the original file rather than from
@@ -1786,6 +2398,13 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             band_v, band_a = _band_conditionings(
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
+                # A retake's tail, and zero everywhere else. NO tail STRENGTH is
+                # passed with it: stage 2 hard-freezes every band it has, so the
+                # tail wants the same 1.0 the head is already given, and
+                # ``_band_conditionings`` resolves an omitted tail strength to
+                # exactly that. The stage-1 call is where the two halves really
+                # can differ.
+                video_tail_frozen=ftv, audio_tail_frozen=fta,
                 strength=1.0,
                 # Today's effective value, written down -- see the stage-1 call.
                 clear_keyframes=tile_clear_kf and fkv > 0,
@@ -1855,6 +2474,74 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         del refined_v, refined_a
         assert final_v.shape[2] == layout.f_total, (final_v.shape[2], layout.f_total)
         assert final_a.shape[2] == layout.a_total, (final_a.shape[2], layout.a_total)
+
+        # ── retake FREEZE PROOF (latent domain, while the sources still live) ─
+        # EIGHT numbers = {stage 1, stage 2} x {video, audio} x {head, tail},
+        # each the max-abs difference between what came OUT of the denoise and
+        # what was frozen IN. This is the ONE check in the whole feature that
+        # looks at the latents themselves rather than at pixels, and it is the
+        # same eight 2.3's spike passed on all counts (VERIFICATION_LOG §55.3).
+        #
+        # WHICH OF THEM MUST BE ZERO IS READ OFF THE CONSTANTS, not restated:
+        # stage 2 always hard-freezes (strength 1.0 -> denoise mask 0.0), so its
+        # four MUST be exactly 0.0; the stage-1 four are required to be 0.0 only
+        # while ``RETAKE_STAGE1_MASK_VALUE`` is 0.0, because at 0.5 the band is a
+        # deliberate blend and a non-zero difference would be CORRECT.
+        #
+        # WHY EXACTLY 0.0 IS ATTAINABLE, rather than "small": every write is a
+        # bf16 copy of the encoder's own output, a denoise mask of 0.0 returns
+        # those tokens untouched, and the stage-2 reassembly's crossfade is over
+        # a single tile (there is nothing to fade). The proof rests on that, not
+        # on a tolerance -- if the pipeline ever moved to a dtype where the
+        # copies stopped being exact, the thing to relax would be ``== 0.0``.
+        #
+        # OBSERVATION ONLY -- deliberately never raises. A wrong number here
+        # means degraded output, not a corrupt job, and turning a metadata probe
+        # into a new crash path would be the worse trade. ``pass`` carries the
+        # verdict. The audio four are None (NOT 0.0) when nothing was frozen:
+        # there is nothing to compare, and an invented 0.0 would fake a passing
+        # proof of exactly the thing being proven.
+        retake_meta: dict[str, Any] | None = None
+        if retake is not None:
+            def _mad(a: torch.Tensor, b: torch.Tensor) -> float:
+                return float((a.float() - b.float()).abs().max().item())
+
+            f_tot, a_tot = layout.f_total, layout.a_total
+            checks: dict[str, float | bool | None] = {
+                "s1_video_head": _mad(rt_s1_head, rt_v_half[:, :, :n_head_v]),
+                "s1_video_tail": _mad(rt_s1_tail, rt_v_half[:, :, f_tot - n_tail_v:]),
+                "s2_video_head": _mad(final_v[:, :, :n_head_v], rt_v_full[:, :, :n_head_v]),
+                "s2_video_tail": _mad(
+                    final_v[:, :, f_tot - n_tail_v:], rt_v_full[:, :, f_tot - n_tail_v:]
+                ),
+                "s1_audio_head": (
+                    _mad(rt_s1_head_a, rt_a[:, :, :n_head_a]) if rt_audio_band else None
+                ),
+                "s1_audio_tail": (
+                    _mad(rt_s1_tail_a, rt_a[:, :, a_tot - n_tail_a:]) if rt_audio_band else None
+                ),
+                "s2_audio_head": (
+                    _mad(final_a[:, :, :n_head_a], rt_a[:, :, :n_head_a])
+                    if rt_audio_band else None
+                ),
+                "s2_audio_tail": (
+                    _mad(final_a[:, :, a_tot - n_tail_a:], rt_a[:, :, a_tot - n_tail_a:])
+                    if rt_audio_band else None
+                ),
+            }
+            expected_zero = [k for k in checks if k.startswith("s2_")]
+            if RETAKE_STAGE1_MASK_VALUE == 0.0:
+                expected_zero += [k for k in checks if k.startswith("s1_")]
+            checks["pass"] = all(
+                checks[k] == 0.0 for k in expected_zero if checks[k] is not None
+            )
+            retake_meta = {"freeze_proof": checks}
+            logger.info(
+                "chain retake: freeze proof %s %s",
+                "PASS" if checks["pass"] else "FAIL",
+                {k: v for k, v in checks.items() if k != "pass"},
+            )
+            del rt_s1_head, rt_s1_tail, rt_s1_head_a, rt_s1_tail_a
 
         # ── ONE VAE decode -> ONE mp4 ─────────────────────────────────────────
         # ``tiling_config`` was resolved for the WHOLE timeline (``total_px``) at
@@ -1966,8 +2653,65 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             }
             del decoded_video, decoded_audio, waveform, new_wf
 
+        elif retake is not None and not retake.regenerate_audio:
+            # ── retake, ORIGINAL WAVEFORM: re-mux it verbatim; no vocoder ─────
+            # The condition is ``regenerate_audio=False`` ALONE, and that is the
+            # whole reason this branch exists as a third one. A retake that DOES
+            # regenerate its audio wants precisely what the plain chain below
+            # does -- decode the audio latent, mux it, deliver the whole timeline
+            # -- so giving it a branch of its own would be a second copy of that
+            # code with nothing different in it.
+            #
+            # WHAT IS DIFFERENT HERE is that the delivered audio is the window's
+            # OWN recording, so rendering the audio latent would spend a vocoder
+            # pass on a waveform that is then thrown away AND would leave the
+            # output one vocoder round-trip away from the user's own sound. The
+            # video side still streams chunk by chunk, exactly as everywhere
+            # else.
+            #
+            # ``rt_orig_wf is None`` is reachable: a window with no audio track
+            # at all, retaken with ``regenerate_audio=False``. The honest answer
+            # there is a silent mp4 -- the user asked for the original sound and
+            # the original sound is silence -- not a vocoder render nobody asked
+            # for. 2.3 delivers the same thing by the same reasoning.
+            out_audio = None
+            if rt_orig_wf is not None:
+                n_mux = int(round(total_px / frame_rate * rt_sr))
+                mux_wf = rt_orig_wf[:, :n_mux].contiguous()
+                out_audio = Audio(waveform=mux_wf.to(torch.float32), sampling_rate=rt_sr)
+                logger.info(
+                    "chain retake: muxing the window's ORIGINAL waveform "
+                    "(%d samples, %d channels @ %d Hz); the vocoder is NOT run",
+                    int(mux_wf.shape[-1]), int(mux_wf.shape[0]), rt_sr,
+                )
+            else:
+                logger.info(
+                    "chain retake: regenerate_audio=False and the window has no audio "
+                    "track; delivering a silent mp4 (the vocoder is NOT run)"
+                )
+            encode_video(
+                video=_decode_progress(decoded_video, chunks, progress),
+                fps=encode_fps,
+                audio=out_audio,
+                output_path=str(out_path),
+                video_chunks_number=chunks,
+            )
+            del decoded_video, out_audio
+
         else:
             # ── the plain chain: unchanged, and byte-identical (gate G1(a)) ───
+            # A RETAKE WITH ``regenerate_audio=True`` LANDS HERE, and that is
+            # correct rather than an oversight: its deliverable is the WHOLE
+            # WINDOW, glue bands included and nothing trimmed, with the audio
+            # this job just generated -- which is exactly what these five lines
+            # do. (The glue bands are NOT cut off: they are the overlap material
+            # the app lays this clip back over the original with, so the seam
+            # sits at the window's outer edge rather than at the regenerated
+            # region's boundary and the VAE round-trip's quality step never
+            # lands on the edit point. That is also why a retake emits no audio
+            # HANDLE sidecar the way V2V does -- the duplicate material a client
+            # would need is already inside this mp4 -- and no head fade, since
+            # there is no butt-join to guard a click at.)
             decoded_audio = dp.audio_decoder(final_a)
             encode_video(
                 video=_decode_progress(decoded_video, chunks, progress),
@@ -2045,6 +2789,26 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         metadata.setdefault("v2v", {}).update(v2v_meta)
     if a2v_meta is not None:
         metadata["a2v"] = a2v_meta
+    # The runtime RETAKE facts merge into the geometry sub-dict ``ChainLayout``
+    # already put there, the same way V2V's do: the app reads ONE
+    # ``chain.retake`` block and both halves belong in it. The key set is 2.3's,
+    # name for name, because the app that reads them is engine-independent --
+    # and the mock's is the same set MINUS ``freeze_proof``, which is the one
+    # number that cannot be produced without real latents.
+    if retake_meta is not None:
+        retake_meta.update({
+            "regenerate_audio": bool(retake.regenerate_audio),
+            "source_had_audio": bool(retake_had_audio),
+            # DISTINCT from source_had_audio: a window can carry an audio stream
+            # and still end up with no frozen band (``regenerate_audio=False``
+            # plus a short encode -- see the audio ingest branch).
+            "audio_frozen": bool(n_head_a > 0 or n_tail_a > 0),
+            "muxed_original_waveform": bool(
+                not retake.regenerate_audio and rt_orig_wf is not None
+            ),
+            "decoded_frames_px": int(total_px),
+        })
+        metadata.setdefault("retake", {}).update(retake_meta)
     logger.info(
         "CHAIN_OK %.1fs peak=%sMB %d clips / %d tiles -> %s",
         wall, peak_mb, n, n_tiles, out_path,

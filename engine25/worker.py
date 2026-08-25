@@ -64,7 +64,7 @@ Protocol (one JSON object per line; parent -> worker):
       (``control_<kind>.mp4`` next to the output) via engine/preprocess/ first.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
-   [stage2_window], [source], [audio_source]}
+   [stage2_window], [source], [audio_source], [retake]}
       One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
       body keys are the 2.3 chain op's, verbatim, because the app builds one
       payload shape for whichever engine is loaded. ``clips`` entries are
@@ -77,12 +77,17 @@ Protocol (one JSON object per line; parent -> worker):
       waveform verbatim. The two are mutually exclusive. Both are optional and
       ABSENT on a plain T2V/I2V chain, whose output is byte-identical to the
       chain that shipped before they existed.
+      ``retake`` = {path, head_px, tail_px, regenerate_audio} regenerates the
+      MIDDLE of an existing clip: ``path`` is the frame-exact CFR window the app
+      already cut, and the two glue widths are the pixel bands kept frozen at
+      its two ends. Mutually exclusive with both source modes. Optional and
+      ABSENT on every other chain.
       ``loras`` / ``reference_video`` are the single op's blocks, applied
       uniformly across the chain -- the ONE reference is sliced per stage-1
       segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``retake``, ``end_source``, ``nag``, ``vae_mode``) is REFUSED BY NAME
+      (``end_source``, ``nag``, ``vae_mode``) is REFUSED BY NAME
       rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
       The four acceleration knobs are NOT on that list: all of them apply to
       the chain unchanged.
@@ -748,7 +753,7 @@ def _do_generate(msg: dict) -> None:
 #: none of them, so an arrival here is not a stray field, it is the reject table
 #: and the payload builder having drifted apart. Dropping it silently would hand
 #: the user a video that quietly ignored the LoRA / the reference video / the
-#: retake window they asked for, which is the one failure this engine must never
+#: end source they asked for, which is the one failure this engine must never
 #: produce.
 #:
 #: ``source`` (V2V) and ``audio_source`` (A2V) USED to be on this list and are
@@ -757,9 +762,11 @@ def _do_generate(msg: dict) -> None:
 #: :class:`~engine25.chain25.AudioSourceSpec`. ``loras`` and ``reference_video``
 #: LEFT WITH THE THIRD, which implemented Style LoRA and the IC-LoRA reference
 #: (the long-form one included: ONE reference video, sliced per stage-1 segment).
-#: What is left is what the engine still genuinely does not have.
+#: ``retake`` LEFT WITH THE RETAKE INCREMENT, which taught the chain to freeze
+#: BOTH ends of a single window. What is left is what the engine still genuinely
+#: does not have.
 #:
-#: The test is MEMBERSHIP, not truthiness: ``{"retake": {}}`` is as much a sign
+#: The test is MEMBERSHIP, not truthiness: ``{"end_source": {}}`` is as much a sign
 #: of drift as a populated block, and "the key was there but empty so we allowed
 #: it" is exactly the kind of exception the single-rule principle exists to avoid.
 #: ``fused_gguf_dequant_kernel`` LEFT WITH THE FUSED-KERNEL COMMIT: the chain
@@ -779,8 +786,11 @@ def _do_generate(msg: dict) -> None:
 #: The single-generate op differs deliberately for the knobs that remain here --
 #: there they are ignored-and-logged (``IGNORED_FIELDS``) rather than refused,
 #: because the app sends them on every single job.
+#:
+#: ``retake`` LEFT WITH THE RETAKE INCREMENT: the 2.5 chain freezes BOTH ends of
+#: a single window now, so the block is READ below into
+#: :class:`~engine25.chain25.RetakeSpec` rather than refused by name.
 CHAIN_UNSUPPORTED_KEYS = (
-    "retake",
     "end_source",
     "nag",
     "vae_mode",
@@ -848,6 +858,7 @@ def _do_generate_chain(msg: dict) -> None:
         AudioSourceSpec,
         ChainClipSpec,
         ChainSpec,
+        RetakeSpec,
         SourceSpec,
         run_chain,
     )
@@ -909,6 +920,32 @@ def _do_generate_chain(msg: dict) -> None:
         except KeyError as exc:
             raise ValueError(
                 f"generate_chain: audio_source requires path (missing key {exc})"
+            ) from exc
+
+    # Retake (temporal inpainting): optional ``retake``, an mp4 that is ALREADY
+    # the frame-exact, CFR window the app cut (``video_io.cut_window_mp4``), plus
+    # the two glue widths in PIXEL frames. Mutually exclusive with ``source`` and
+    # ``audio_source`` -- asserted in ``run_chain`` and refused at the endpoint,
+    # so it is not re-stated here; this stays a payload reader.
+    #
+    # Read exactly as 2.3's chain op reads it (``engine/worker.py``): same four
+    # keys, same truthiness test, same ``KeyError`` -> ``ValueError`` translation,
+    # because the app builds ONE chain payload shape for whichever engine is
+    # loaded. Absent -> byte-identical to before.
+    retake = None
+    rt = msg.get("retake")
+    if rt:
+        try:
+            retake = RetakeSpec(
+                path=_existing_media_path(rt["path"], "retake"),
+                head_px=int(rt["head_px"]),
+                tail_px=int(rt["tail_px"]),
+                regenerate_audio=bool(rt["regenerate_audio"]),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: retake requires path, head_px, tail_px and "
+                f"regenerate_audio (missing key {exc})"
             ) from exc
 
     # Style/character LoRA + the ONE reference video, applied across the whole
@@ -973,6 +1010,14 @@ def _do_generate_chain(msg: dict) -> None:
         # engines' worker logs are read side by side when a chain is compared.
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
+        # The retake receipt, in the same line and the same spelling 2.3 uses:
+        # the two glue widths and the audio ruling, as PARSED, before any of it
+        # runs. ``regen`` is the one field that changes what is delivered (a
+        # False re-muxes the window's own waveform and skips the vocoder), so it
+        # is spelled out rather than folded into "yes".
+        f"retake={'yes(head=' + str(retake.head_px) + ' tail=' + str(retake.tail_px)
+                 + ' regen=' + ('on' if retake.regenerate_audio else 'off') + ')'
+                 if retake else 'no'} "
         # The parse receipt for the two §3-102 blocks, in the same line rather
         # than a second one: what the chain was ASKED for, before any of it runs.
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
@@ -1001,6 +1046,7 @@ def _do_generate_chain(msg: dict) -> None:
             _PIPE,
             spec,
             _emit_progress,
+            retake=retake,
             ic_loras=ic_loras,
             ic_reference=ic_reference,
             ic_attention_strength=ic_attn,

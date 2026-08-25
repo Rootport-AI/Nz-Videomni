@@ -49,6 +49,7 @@ from services.engines.ltx25 import adapter as ltx25
 from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_KEEP_RESIDENT,
     CHAIN_ACCEPTED_LORAS,
+    CHAIN_ACCEPTED_RETAKE,
     CHAIN_ACCEPTED_SAGE,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
@@ -596,6 +597,61 @@ def test_ltx25_runs_a_v2v_chain_and_joins_it(two_family_client, tmp_path):
     assert (job_dir / "joined.mp4").exists()
 
 
+def test_ltx25_runs_a_retake_chain(two_family_client, tmp_path):
+    """Retake往復の全長。アップロード→202→completed→アプリが切り出した窓→
+    メタの ``retake`` ブロックまで。422が外れただけでは「使える」とは言えない
+    ので、素材の切り出しから metadata.json まで、2.3と同じ道を最後まで通る
+    ことを見る。
+
+    見どころは**納品が窓まるごと**であること。V2Vが文脈分を切り落とすのと
+    逆で、撮り直しは糊代(前後の凍結帯)を付けたまま返す——タイムラインは
+    それを元の映像に重ねて置くので、繋ぎ目が窓の外縁に来る。だから
+    ``frame_count == 73`` であり、V2Vのような音声サイドカーも出ない。"""
+    _activate(two_family_client, "LTX25")
+    src = _make_source_mp4(tmp_path / "retake_src.mp4", n_frames=90, fps=24.0)
+    vid = _upload_video(two_family_client, src)
+
+    job_id = _run_to_completion(
+        two_family_client,
+        _chain_body(
+            clips=[{"num_frames": 73}],
+            retake={"video_id": vid, "window_start_sec": 0.0},
+        ),
+    )
+
+    job_dir = two_family_client.app_context.config.output_dir / job_id
+    # アプリが切り出した窓。エンジンは切りも再サンプルもしない約束なので、
+    # これが無いままworkerが呼ばれていたら撮り直しは成立していない。
+    assert (job_dir / "_retake_window.mp4").exists()
+    assert video_io.frame_count(job_dir / "_retake_window.mp4") == 73
+
+    out = job_dir / "output.mp4"
+    assert out.exists() and out.stat().st_size > 0
+    assert video_io.frame_count(out) == 73          # 窓まるごと・無トリム
+    assert not list(job_dir.glob("*_audio_handle.wav"))   # V2Vと違い出さない
+
+    meta = _metadata(two_family_client, job_id)
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    rt = meta["retake"]
+    # 幾何は chain_math が唯一の出所——アプリの検証もエンジンもここを読む。
+    layout = chain_math.compute_chain_layout(
+        [73], 24.0, kv=2, retake_glue_px=(25, 24)
+    )
+    assert rt["window_px"] == layout.to_dict()["retake"]["window_px"] == 73
+    assert (rt["head_px"], rt["tail_px"]) == (25, 24)
+    assert (rt["n_head_v"], rt["n_tail_v"]) == (
+        layout.to_dict()["retake"]["n_head_v"],
+        layout.to_dict()["retake"]["n_tail_v"],
+    )
+    assert rt["free_middle_px"] == [25, 49]
+    # 実行時の側。
+    assert rt["regenerate_audio"] is True
+    assert rt["decoded_frames_px"] == 73
+    assert rt["retake_video_id"] == vid
+    # mockは凍結の証明を捏造しない(潜在を持たないので出しようがない)。
+    assert "freeze_proof" not in rt
+
+
 def test_ltx25_runs_a_single_tab_a2v_chain(two_family_client, tmp_path):
     """SingleタブのA2V=フロントエンドが ``stage2_window="full_length"`` 固定の
     1クリップChainedを投げる形。A2Vが開通すればSingle A2Vも同時に開通する、
@@ -662,10 +718,11 @@ def test_ltx25_no_longer_refuses_the_two_source_modes(two_family_client, case):
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
 
 
-def test_the_still_refused_chain_modes_are_exactly_retake_and_end_source():
-    """第2段で外れたのは2件だけである。V2V/A2Vと一緒にRetakeやEnd sourceの
-    行まで落ちていたら、走らないモードが422にならず、mockでは通ってしまう。"""
-    assert {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE} >= {"retake", "end_source"}
+def test_the_still_refused_chain_mode_is_exactly_end_source():
+    """各段で外れたのは、その段が実装した分だけである。走らないモードまで
+    一緒に落ちていたら、それが422にならず、mockでは通ってしまう——実機で
+    初めて「エンジンにその道が無い」と判ることになる。"""
+    assert {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE} >= {"end_source"}
     assert not {"source_video", "source_audio"} & {
         f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
     }
@@ -673,6 +730,21 @@ def test_the_still_refused_chain_modes_are_exactly_retake_and_end_source():
     assert not {"loras", "reference_video_id"} & {
         f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
     }
+    # Retake段で外れたのは1件だけである。
+    assert "retake" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+
+
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_RETAKE))
+def test_ltx25_no_longer_refuses_retake(two_family_client, case):
+    """Retake段の対の検証(表駆動)。素材のidは実在しないので404で構わない——
+    見るのは「機能が無いから拒否された」で落ちていないことだけである。前段まで
+    この3件はまさにFEATURE_UNSUPPORTEDだったので、ここが逆転の証拠になる。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_RETAKE[case])
+    )
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
 
 
 def test_ltx23_still_chains(two_family_client):
@@ -683,9 +755,11 @@ def test_ltx23_still_chains(two_family_client):
 
 def test_switching_back_to_2_3_lifts_the_chain_mode_refusals(two_family_client):
     """ガードは系統に追随する。往復して初めて「系統を見ている」と言える。
-    題材は**Retake**である——素のChainedもV2V・A2Vもいまや両系統で通るので、
-    それらで往復させても何も動かない。2.5に残る拒否モードで見る必要がある。"""
-    body = _chain_body(**CHAIN_OVERRIDES["retake"])
+    題材は**End source**である——素のChainedもV2V・A2Vも、Retake段を経たいまは
+    撮り直しも、両系統で通るようになった。2.5に残る拒否モードで見る必要が
+    あり、残っているのはこれ1件である(この行の題材が枯れたら、それは2.5が
+    chain系の全モードを持ったということなので、このテスト自体を畳んでよい)。"""
+    body = _chain_body(**CHAIN_OVERRIDES["end_source"])
     _activate(two_family_client, "LTX25")
     assert two_family_client.post("/api/v1/generate/chain", json=body).status_code == 422
     _activate(two_family_client, "LTX23")
@@ -1011,7 +1085,11 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
 
     assert by_id["LTX23"]["unsupported_features"] == []
     features = by_id["LTX25"]["unsupported_features"]
-    assert {"retake", "end_source"} <= set(features)
+    assert {"end_source"} <= set(features)
+    # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
+    # サブタブも、タイムラインの右クリックからそこへ入る導線も灰色のままに
+    # なる(どちらも動くようになった)。
+    assert "retake" not in features
     # "chain" は§3-102で一覧から外れた。素のChainedが走るようになった以上、
     # ここに残っていればフロントエンドが動くタブを灰色にしてしまう。同じ理屈で
     # "v2v"/"a2v" も第2段で外れた——残っていればChainedタブのソース欄も、

@@ -613,7 +613,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     expect(features).toEqual(
       expect.arrayContaining([
-        "retake", "end_source",
+        "end_source",
         "two_stage_hq", "outpaint",
         "nag", "prune_vaed",
       ]),
@@ -627,6 +627,12 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // included) run on this engine now, which is what un-greys the reference
     // panels on Single and Chained. All five asserted negatively, because
     // `arrayContaining` above would not notice them coming back.
+    // Retake increment: `retake` left too, and it is asserted NEGATIVELY for
+    // the reason the five below are -- dropping it from the `arrayContaining`
+    // list alone would keep this test green whether the fixture was updated or
+    // not, and a stale fixture would go on greying out the Edit tab's 撮り直し
+    // sub-tab (and the timeline right-click route into it) for a mode that runs.
+    expect(features).not.toContain("retake");
     expect(features).not.toContain("chain");
     expect(features).not.toContain("v2v");
     expect(features).not.toContain("a2v");

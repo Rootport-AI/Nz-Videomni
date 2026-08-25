@@ -10,6 +10,7 @@ import type { ApiClient } from "./api/client";
 import type { JobResponse } from "./api/types";
 import { AppShell } from "./shell/AppShell";
 import { getReservationState, resetProvisionalReservation } from "./timeline/provisionalReservation";
+import { withExtraUnsupportedFeatures } from "./test/unsupportedFeatures";
 
 // W0 (共通スパイン, 2026-08-09): the two Edit-系 right-click commands
 // (`outpaintVideo` / `retakeRange`) are the first ones to route to the Edit
@@ -300,6 +301,8 @@ describe("App / W0 Edit-系 right-click routing", () => {
 //
 // The fixture reaches this state honestly: LTX 2.5 declares both `retake` and
 // `outpaint`, so `disabledModesFor`'s `needsAnyOf` takes the whole Edit tab.
+/** Wraps a fixture bridge so a base model declares extra `unsupported_features`
+ * — see the helper's own note for why these tests need it. */
 const AS_LTX25: MockBridgeOptions = {
   ltx25Install: "full",
   supportedBaseModels: ["LTX23", "LTX25"],
@@ -317,9 +320,24 @@ describe("App / Edit-系 right-click on a base model that cannot run Edit", () =
   /** Render, switch the header dropdown to LTX 2.5, and wait for the Edit tab to
    * actually go grey — that greying is the positive signal the new
    * `unsupported_features` list has landed, so nothing below can pass merely by
-   * out-running the switch. */
+   * out-running the switch.
+   *
+   * THE FIXTURE'S OWN LTX 2.5 NO LONGER QUALIFIES. Edit greys only when BOTH of
+   * its sub-modes are refused, and since the Retake increment the engine runs
+   * 撮り直し — so the tab is live and only the Outpainting SUB-tab greys. What
+   * these tests are about is the ROUTE GATE, which keys on `disabledModes`, so
+   * the base model is given the one extra name that takes the whole tab down
+   * (`withExtraUnsupportedFeatures`) rather than the tests being re-pointed at
+   * whatever LTX 2.5 happens to refuse this month. The real list is asserted in
+   * `bridge/mockBridge.test.ts`, against the server's own. */
   async function renderOnLtx25() {
-    const bridge = await renderShell(undefined, AS_LTX25);
+    const bridge = withExtraUnsupportedFeatures(
+      createMockBridge({ delayMs: 0, ...AS_LTX25 }),
+      "LTX25",
+      ["retake"],
+    );
+    render(<AppShell nativeBridge={bridge} />);
+    await screen.findByRole("button", { name: /^(generate|busy…)$/i }, { timeout: 5_000 });
     const select = (await screen.findByRole("combobox", { name: /base model/i })) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("LTX23"));
     await userEvent.setup().selectOptions(select, "LTX25");

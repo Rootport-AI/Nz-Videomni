@@ -268,13 +268,25 @@ const MOCK_BASE_MODELS = [
  *
  * §3-102 third stage (Style LoRA + IC-LoRA, long IC-LoRA included): `"loras"`
  * and `"reference_video"` leave as well — the engine attaches LoRAs and takes a
- * reference video now, on Single and on Chained alike. What remains is the
- * material it still cannot carry (`end_source`) plus Retake and the rest below,
- * and `handleGenerateChain` refuses exactly those. */
+ * reference video now, on Single and on Chained alike.
+ *
+ * Retake increment: `"retake"` leaves too — the engine regenerates the middle
+ * of a clip now. What remains is the ONE mode it still cannot run
+ * (`end_source`) plus the rest below, and `handleGenerateChain` refuses exactly
+ * those. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   LTX23: [],
   LTX25: [
-    "retake",
+    // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
+    // BOTH ends of a single window now (`engine25/chain25.py`), so the server
+    // no longer 422s a `retake` chain -- and publishing the name here would go
+    // on greying out the Edit tab's 撮り直し sub-tab, and with it the timeline's
+    // right-click route into a mode that works. Mirrors
+    // `services/engines/ltx25/adapter.py`'s UNSUPPORTED_FEATURES.
+    //
+    // NOTE the asymmetry with `MOCK_CHAIN_FEATURE_FIELDS` below: `retake` never
+    // had a row there, so this one line is the whole change. `end_source` has
+    // one, and turning that mode on will mean editing both places.
     "end_source",
     "two_stage_hq",
     "outpaint",

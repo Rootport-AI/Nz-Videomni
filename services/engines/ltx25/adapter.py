@@ -272,13 +272,14 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: increment: V2V continuation and A2V (Single, long and Batch alike) run on
 #: this engine now, so both moved to :data:`CHAIN_HONOURED_FIELDS`. ``loras``
 #: and ``reference_video_id`` LEFT WITH THE THIRD: Style/character LoRA and the
-#: reference-video control IC-LoRA (long chains included) run here too. Retake
-#: and End source stay — they are the modes engine25 still has no code path
-#: for.
+#: reference-video control IC-LoRA (long chains included) run here too.
+#: ``retake`` LEFT WITH §3-102's Retake increment — engine25's chain now
+#: freezes BOTH ends of a single window (``chain25.run_chain(retake=...)``), so
+#: the mode has a code path and moved to :data:`CHAIN_HONOURED_FIELDS`. End
+#: source stays — it is the one chain MODE engine25 still cannot run.
 CHAIN_REJECT_TABLE: tuple[
     tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
 ] = (
-    ("retake", "retake", lambda r: r.retake is not None),
     ("end_source", "end_source", lambda r: r.end_source is not None),
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
@@ -366,6 +367,14 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "stage2_window",
         "source_video",
         "source_audio",
+        # Retake, honoured INDIRECTLY exactly as the two source modes are: the
+        # request field carries an upload id plus a window START TIME, and the
+        # orchestrator has already turned that into material — the frame-exact,
+        # CFR window mp4 it cut with ``video_io.cut_window_mp4``. What
+        # :meth:`_RealBackend25.generate_chain` reads is therefore
+        # ``retake_window_path`` (plus the glue widths off ``chain.retake``),
+        # not the id. Naming the REQUEST field here is what the audit needs.
+        "retake",
         "loras",
         "reference_video_id",
         "conditioning_attention_strength",
@@ -408,11 +417,12 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: re-opens the LoRA chips and the reference-video panel on both tabs.
 #: ``"sage_attention"`` left with 高速化第3弾, which un-greys the Settings
 #: panel's attention control — the last acceleration name this engine published.
-#: The two modes that still cannot run — retake / end_source — stay, and they
-#: are enforced field-by-field by :data:`CHAIN_REJECT_TABLE` rather than by one
-#: blanket refusal.
+#: ``"retake"`` LEFT WITH THE RETAKE INCREMENT, which un-greys the Edit tab's
+#: 撮り直し sub-tab (and with it the timeline's right-click route into it).
+#: The ONE mode that still cannot run — end_source — stays, and it is enforced
+#: field-by-field by :data:`CHAIN_REJECT_TABLE` rather than by one blanket
+#: refusal.
 UNSUPPORTED_FEATURES: tuple[str, ...] = (
-    "retake",
     "end_source",
 ) + tuple(feature for _field, feature, _pred in REJECT_TABLE)
 
@@ -909,8 +919,8 @@ class _RealBackend25(_RealBackend):
         and must not: the ORCHESTRATOR's job is to prepare material, the
         ADAPTER's job is to rule on it.
 
-        FOUR of those keywords name a mode outside this engine's scope (Retake
-        and End source). Reaching this method with any of them set is already
+        THREE of those keywords name a mode outside this engine's scope (End
+        source). Reaching this method with any of them set is already
         impossible — :func:`reject_chain` refuses the request fields behind them
         at the endpoint, and again on the line below — so a non-``None`` arrival
         means the two tables have drifted apart, which is a bug worth a loud
@@ -935,6 +945,13 @@ class _RealBackend25(_RealBackend):
         segment by the engine). Both ride as ADDITIVE blocks — non-empty /
         non-``None`` only — so a plain chain's payload stays byte-identical to
         the golden, which is 2.3's discipline for the same two keys.
+
+        ALSO HONOURED SINCE THE RETAKE INCREMENT: ``retake_window_path``, the
+        frame-exact CFR window the orchestrator cut out of the user's material
+        (``video_io.cut_window_mp4``). The glue widths ride with it off
+        ``chain.retake``, in 2.3's block shape — the engine owns "what happens
+        to those pixels", the app owns "which pixels", and neither engine cuts
+        or resamples.
         """
         chain = chain_request
         # BEFORE the load, unlike :meth:`generate`. The ruling is a pure read of
@@ -946,12 +963,13 @@ class _RealBackend25(_RealBackend):
 
         # Fail loud, not silent: every one of these is refused above, so a value
         # here means the reject table and this signature disagree about what the
-        # engine can do. Four entries, not six: ``lora_paths`` and
+        # engine can do. Three entries, not six: ``lora_paths`` and
         # ``reference_video_path`` LEFT this guard with §3-102's third increment
         # — they are material this engine now consumes, so their arrival is a
-        # job, not a drift.
+        # job, not a drift — and ``retake_window_path`` LEFT with the Retake
+        # increment for exactly the same reason. What is left is End source's
+        # three keywords, the one mode with no code path here.
         out_of_scope = {
-            "retake_window_path": retake_window_path,
             "end_source_path": end_source_path,
             "end_source_context_frames": end_source_context_frames,
             "end_source_strength": end_source_strength,
@@ -1035,6 +1053,20 @@ class _RealBackend25(_RealBackend):
         # V2V chain (the schema makes the two source modes mutually exclusive).
         if source_audio_path is not None:
             payload["audio_source"] = {"path": str(source_audio_path)}
+        # Retake (additive): the app-cut window plus the glue geometry, in 2.3's
+        # block shape (services/engines/ltx/adapter.py) key for key and in the
+        # same key ORDER, because the two workers are unrelated code but a
+        # retake's geometry is the same in both. The ``is not None`` guard on
+        # BOTH the path and the request block is what keeps a non-retake chain's
+        # payload key set byte-identical to the golden above — the same
+        # discipline as the two source blocks, and the same one 2.3 keeps.
+        if retake_window_path is not None and getattr(chain, "retake", None) is not None:
+            payload["retake"] = {
+                "path": str(retake_window_path),
+                "head_px": int(chain.retake.head_px),
+                "tail_px": int(chain.retake.tail_px),
+                "regenerate_audio": bool(chain.retake.regenerate_audio),
+            }
         # Style/character AND control IC-LoRA (additive): (path, strength[,
         # audio_strength]) per adapter, applied uniformly across the chain, and
         # sent ONLY when non-empty so a no-lora chain's payload is byte-identical

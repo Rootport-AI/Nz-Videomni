@@ -208,20 +208,30 @@ describe("useBaseModels", () => {
     expect(result.current.disabledModes).toEqual([]);
   });
 
-  it("switching to a restricted base model moves the disabled modes with it", async () => {
+  it("switching to a restricted base model moves the restrictions with it", async () => {
     const apiClient = createApiClient(
       createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
     );
     const { result } = await renderReady(apiClient);
     expect(result.current.disabledModes).toEqual([]);
+    expect(result.current.unsupportedFeatures).toEqual([]);
 
     await act(async () => {
       await result.current.switchBaseModel("LTX25");
     });
 
     expect(result.current.unsupportedFeatures).toContain("end_source");
-    // §3-102: only Edit now — Chained is back, because `chain` left the list.
-    expect(result.current.disabledModes).toEqual(["edit"]);
+    expect(result.current.unsupportedFeatures).toContain("outpaint");
+    // §3-102 took `chain` off the list and the Chained tab came back; the
+    // Retake increment took `retake` off it and the Edit tab came back too —
+    // Edit hosts Retake AND Outpainting, so one of the two running is enough
+    // to keep the tab. NO WHOLE TAB is greyed for this engine any more, which
+    // is why the restriction has to be read one level down.
+    expect(result.current.disabledModes).toEqual([]);
+    expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
+      retake: false,
+      outpainting: true,
+    });
 
     // …and back. A restriction that never lifts is not a restriction, it is a
     // broken build.
@@ -229,6 +239,10 @@ describe("useBaseModels", () => {
       await result.current.switchBaseModel("LTX23");
     });
     expect(result.current.disabledModes).toEqual([]);
+    expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
+      retake: false,
+      outpainting: false,
+    });
   });
 
   it("a REFUSED switch leaves the disabled modes where they were", async () => {

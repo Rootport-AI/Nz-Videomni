@@ -436,7 +436,10 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     attention control the server now accepts. This was the last acceleration
     name on the list, so the published set drops from seven names to six."""
     assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 6
+    # Six when this increment shipped; FIVE since Retake, which took the next
+    # name off the list. The count is asserted rather than only the absence
+    # because it is what catches a name being ADDED back by accident.
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 5
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -461,8 +464,12 @@ def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     features = set(ltx25.UNSUPPORTED_FEATURES)
     assert {feat for _f, feat, _p in ltx25.REJECT_TABLE} <= features
     assert {feat for _f, feat, _p in ltx25.CHAIN_REJECT_TABLE} <= features
-    # The two chain MODES this engine still cannot run stay published...
-    assert {"retake", "end_source"} <= features
+    # The ONE chain MODE this engine still cannot run stays published...
+    assert {"end_source"} <= features
+    # ...while ``retake`` LEFT with the Retake increment: the engine regenerates
+    # the middle of a clip now, and publishing the name would go on greying out
+    # the Edit tab's 撮り直し sub-tab and the timeline right-click route into it.
+    assert "retake" not in features
     # ...but "chain" itself LEFT with §3-102's first increment (a plain Chained
     # job runs on this engine now, so publishing "no chain" would grey out a tab
     # that works), and "v2v"/"a2v" left with the second — publishing either
@@ -529,12 +536,10 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 #: increment — they are honoured now, and the requests that carry them live in
 #: :data:`CHAIN_ACCEPTED_SOURCES` below instead. ``loras`` /
 #: ``reference_video_id`` LEFT WITH THE THIRD, and live in
-#: :data:`CHAIN_ACCEPTED_LORAS`.
+#: :data:`CHAIN_ACCEPTED_LORAS`. ``retake`` LEFT WITH THE RETAKE INCREMENT and
+#: lives in :data:`CHAIN_ACCEPTED_RETAKE`, which leaves ONE row here that is a
+#: whole MODE rather than an engine-level field.
 CHAIN_OVERRIDES: dict[str, dict] = {
-    "retake": {
-        "clips": [{"num_frames": 73}],
-        "retake": {"video_id": "vid-1", "window_start_sec": 0.0},
-    },
     "end_source": {
         "clips": [{"num_frames": 73}],
         "end_source": {"image_id": "img-1", "context_frames": 24},
@@ -567,6 +572,42 @@ CHAIN_ACCEPTED_SOURCES: dict[str, dict] = {
     "source_audio_long": {
         "clips": [{"num_frames": 121}, {"num_frames": 121}, {"num_frames": 121}],
         "source_audio": {"audio_id": "aud-1"},
+    },
+}
+
+
+#: The chain MODE the Retake increment turned on, as valid request bodies —
+#: the mirror image of :data:`CHAIN_OVERRIDES`, same shape and opposite verdict,
+#: so the acceptance test below is table-driven and tests/test_ltx25_api_guard.py
+#: can drive the same bodies through HTTP.
+#:
+#: Retake owns the whole timeline, so every entry is ONE clip (the schema
+#: enforces that). The three rows are the three geometries the app can ask for:
+#: the default glue widths, an explicit non-default pair, and the "keep the
+#: original sound" flag — which is the field that changes what is DELIVERED
+#: rather than what is frozen, and therefore the one worth having in the table
+#: of its own accord.
+CHAIN_ACCEPTED_RETAKE: dict[str, dict] = {
+    "retake": {
+        "clips": [{"num_frames": 73}],
+        "retake": {"video_id": "vid-1", "window_start_sec": 0.0},
+    },
+    "retake_explicit_glue": {
+        "clips": [{"num_frames": 121}],
+        "retake": {
+            "video_id": "vid-1",
+            "window_start_sec": 1.5,
+            "head_px": 33,
+            "tail_px": 32,
+        },
+    },
+    "retake_keep_original_audio": {
+        "clips": [{"num_frames": 73}],
+        "retake": {
+            "video_id": "vid-1",
+            "window_start_sec": 0.0,
+            "regenerate_audio": False,
+        },
     },
 }
 
@@ -659,6 +700,34 @@ def test_the_chain_lora_fields_are_honoured_not_merely_unlisted():
     assert not lora_fields & set(ltx25.CHAIN_GOVERNED_FIELDS)
 
 
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_RETAKE))
+def test_chain_retake_is_no_longer_refused(case):
+    """The headline of the Retake increment: a chain that regenerates the middle
+    of an existing clip passes the ruling instead of raising. Until now this was
+    the FIRST row of the chain reject table, and the one a user reached from the
+    timeline's own right-click menu."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_RETAKE[case]))  # no raise
+
+
+def test_the_retake_field_is_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises. A field dropped from every
+    table would also stop raising — and would then be silently ignored, i.e. the
+    user would get their window back untouched in the middle and be told
+    nothing."""
+    assert "retake" in ltx25.CHAIN_HONOURED_FIELDS
+    assert "retake" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert "retake" not in ltx25.CHAIN_IGNORED_FIELDS
+    assert "retake" not in ltx25.CHAIN_GOVERNED_FIELDS
+
+
+def test_end_source_is_the_only_chain_mode_still_refused():
+    """The Retake increment moved ONE row. If ``end_source`` had come with it,
+    a mode with no code path at all would reach the worker — where it is refused
+    by name, which is a 500 dressed up as a feature."""
+    assert {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE} >= {"end_source"}
+    assert "retake" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+
+
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
 def test_v2v_and_a2v_are_no_longer_refused(case):
     """The headline of §3-102's second increment: the two source modes pass the
@@ -733,7 +802,7 @@ def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
     with pytest.raises(APIError) as ei:
-        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["retake"]), output_dir=None)
+        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["end_source"]), output_dir=None)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
     assert "LTX 2.3" in ei.value.detail
 
@@ -752,16 +821,16 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
 
 
 def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_path):
-    """The orchestrator hands every runner the same thirteen keywords. FOUR of
+    """The orchestrator hands every runner the same thirteen keywords. THREE of
     them name material this engine cannot use, and every one is refused by the
     table above — so a value arriving here means the table and this signature
-    have drifted apart. That is a bug, and it must not look like a job."""
+    have drifted apart. That is a bug, and it must not look like a job.
+
+    ``retake_window_path`` LEFT this guard with the Retake increment; the test
+    below asserts the OPPOSITE for it, which is the pair that makes "it moved"
+    checkable rather than "it disappeared"."""
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
-    with pytest.raises(RuntimeError, match="retake_window_path"):
-        backend.generate_chain(
-            _chain_request(), output_dir=tmp_path, retake_window_path=tmp_path / "w.mp4"
-        )
     with pytest.raises(RuntimeError, match="end_source_path"):
         backend.generate_chain(
             _chain_request(), output_dir=tmp_path, end_source_path=tmp_path / "e.mp4"
@@ -1006,6 +1075,11 @@ def test_chain_payload_carries_chunked_upsample(tmp_path):
 GOLDEN_SOURCE_KEYS_25 = ["path", "context_frames"]
 GOLDEN_AUDIO_SOURCE_KEYS_25 = ["path"]
 
+#: The retake block's key order, and 2.3's for the same reason as the two above
+#: (services/engines/ltx/adapter.py): a retake's geometry is the same in both
+#: engines, so its payload block is too.
+GOLDEN_RETAKE_KEYS_25 = ["path", "head_px", "tail_px", "regenerate_audio"]
+
 
 def test_chain_payload_carries_the_v2v_source_block(tmp_path):
     """V2V: the app-cut fps-correct tail plus the context length, appended AFTER
@@ -1067,6 +1141,98 @@ def test_chain_payload_carries_the_a2v_audio_source_block(tmp_path):
     assert list(payload["audio_source"]) == GOLDEN_AUDIO_SOURCE_KEYS_25
     assert payload["audio_source"] == {"path": str(wav)}
     assert "source" not in payload
+
+
+def test_chain_payload_carries_the_retake_block(tmp_path):
+    """Retake: the app-cut window plus the glue geometry, appended AFTER the
+    golden keys and AFTER the two source blocks, so a plain chain's payload is
+    untouched and the older additive blocks keep their positions."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    window = tmp_path / "job" / "_retake_window.mp4"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_RETAKE["retake"]),
+        output_dir=tmp_path / "out",
+        retake_window_path=window,
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["retake"] + GOLDEN_ACCEL_KEYS_25
+    assert list(payload["retake"]) == GOLDEN_RETAKE_KEYS_25
+    assert payload["retake"] == {
+        "path": str(window),
+        # The schema's calibrated defaults (VERIFICATION_LOG §55.5), passed
+        # through as INTEGERS — the engine indexes latents with them.
+        "head_px": 25,
+        "tail_px": 24,
+        "regenerate_audio": True,
+    }
+    # A retake owns the whole timeline; the schema makes it exclusive with both
+    # source modes, and the payload shows it rather than merely relying on it.
+    assert "source" not in payload and "audio_source" not in payload
+
+
+def test_the_retake_block_carries_non_default_geometry_and_the_audio_flag(tmp_path):
+    """The three fields that are not the path really are read off the request,
+    not defaulted a second time here. ``regenerate_audio=False`` is the one that
+    changes what is DELIVERED (the window's own waveform, re-muxed, with the
+    vocoder skipped), so a payload that dropped it would silently hand the user
+    a re-synthesised soundtrack."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_RETAKE["retake_explicit_glue"]),
+        output_dir=tmp_path / "a",
+        retake_window_path=tmp_path / "w.mp4",
+    )
+    assert captured[0]["retake"]["head_px"] == 33
+    assert captured[0]["retake"]["tail_px"] == 32
+
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_RETAKE["retake_keep_original_audio"]),
+        output_dir=tmp_path / "b",
+        retake_window_path=tmp_path / "w.mp4",
+    )
+    assert captured[1]["retake"]["regenerate_audio"] is False
+
+
+def test_the_retake_block_needs_both_the_window_and_the_request_field(tmp_path):
+    """The guard is on BOTH, like 2.3's: a window path with no ``retake`` in the
+    request is not a retake job, and half a block reaching the worker would be a
+    payload no golden pins. Either half alone leaves the plain golden."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+
+    # material without the request field...
+    be.generate_chain(
+        _chain_request(), output_dir=tmp_path / "a", retake_window_path=tmp_path / "w.mp4"
+    )
+    assert "retake" not in captured[0]
+
+    # ...and the request field without material (the orchestrator failed to cut).
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_RETAKE["retake"]), output_dir=tmp_path / "b"
+    )
+    assert "retake" not in captured[1]
+    assert (
+        list(captured[0])
+        == list(captured[1])
+        == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    )
+
+
+def test_the_retake_window_is_no_longer_out_of_scope_material(tmp_path):
+    """The other half of the fail-loud guard's Retake change: a window ARRIVING
+    here is a JOB now, not a drift between the table and the signature — so it
+    must reach the payload rather than raise. The negative twin of
+    ``test_generate_chain_fails_loud_on_out_of_scope_material``."""
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_RETAKE["retake"]),
+        output_dir=tmp_path / "ok",
+        retake_window_path=tmp_path / "w.mp4",
+    )
+    assert captured[0]["retake"]["path"] == str(tmp_path / "w.mp4")
 
 
 def test_chain_payload_carries_a2v_with_the_full_length_window(tmp_path):
@@ -1753,6 +1919,14 @@ _CHAIN_HONOURED_READS = {
     "prompt": "chain.clip_prompt(",
     "source_video": "source_tail_path",
     "source_audio": "source_audio_path",
+    # Retake, for the SAME reason as the two source fields: the request field
+    # carries an upload id and a window start time, and the orchestrator has
+    # already cut those into the frame-exact window mp4 — so what
+    # ``generate_chain`` reads is the keyword argument carrying it. (The glue
+    # widths ARE read off ``chain.retake``, but the default needle would look
+    # for ``chain.retake`` as a whole, and the material is the load-bearing
+    # half.)
+    "retake": "retake_window_path",
     # §3-102 third increment, same reason as the source fields: the adapter
     # NAMES and the reference upload id are resolved into material by the
     # orchestrator, so what generate_chain reads is the keyword argument.

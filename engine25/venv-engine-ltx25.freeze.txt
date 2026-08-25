@@ -40,14 +40,26 @@
 # can build IC-LoRA control videos with the same code the 2.3 engine runs.
 # cv2 4.13.0.92 was verified ABI-compatible with this venv's numpy 2.5.2.
 #
-# NOTE: no sageattention, no diffusers, no natten here, and that is deliberate
-# -- see the header of engine25/engine25-venv-pyproject.toml for the reason each
-# one is out. triton-windows USED to be on that list and no longer is: it was
-# added 2026-08-24 because the 2.5 engine runs the same fused GGUF K-quant
-# dequantisation kernels the 2.3 engine does (engine/gguf/dequant_triton.py),
-# and those need Triton. OpenImageIO, by contrast, is present and
-# unavoidable: `ltx_pipelines.distilled` imports it transitively, and a real
-# Windows wheel exists (3.1.16.0 / cp312 / win_amd64), so no stub is needed.
+# NOTE: no diffusers and no natten here, and that is deliberate -- see the
+# header of engine25/engine25-venv-pyproject.toml for the reason each one is
+# out. TWO packages used to be on that list and no longer are:
+#   triton-windows  added 2026-08-24, because the 2.5 engine runs the same fused
+#                   GGUF K-quant dequantisation kernels the 2.3 engine does
+#                   (engine/gguf/dequant_triton.py), and those need Triton.
+#   sageattention   added 2026-08-25 (Acceleration third wave), because
+#                   `attention_backend: "sage"` is now a per-job option on the
+#                   2.5 engine too -- engine/transformer/sage_attention_service.py
+#                   is shared by both engines, so this venv needs the wheel it
+#                   imports. Its line below is BARE (name==version), like the
+#                   ltx-core / ltx-pipelines / torch / torchaudio lines, because
+#                   there is no PyPI build of it at all: it comes from the direct
+#                   wheel URL in scripts/install_ltx.ps1's $ltx25DirectPins,
+#                   which is the identical URL the 2.3 stack pins (one cp310-abi3
+#                   wheel, both venvs). triton-windows is its runtime JIT here as
+#                   well as the dequantisation kernels'.
+# OpenImageIO, by contrast, is present and unavoidable: `ltx_pipelines.distilled`
+# imports it transitively, and a real Windows wheel exists (3.1.16.0 / cp312 /
+# win_amd64), so no stub is needed.
 #
 accelerate==1.14.0
 annotated-doc==0.0.5
@@ -88,6 +100,7 @@ regex==2026.7.19
 requests==2.34.2
 rich==15.0.0
 safetensors==0.8.0
+sageattention==2.2.0+cu128torch2.9.1.post6
 scipy==1.18.0
 setuptools==84.0.0
 shellingham==1.5.4

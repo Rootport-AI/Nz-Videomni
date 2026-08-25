@@ -39,8 +39,20 @@ requires-python = ">=3.12"
 # which is the DEFAULT deterministic install path. This file is only consulted
 # by the opt-in -ResolveLatest route.
 #
+# sageattention IS installed in this venv (2026-08-25, Acceleration third wave:
+# `attention_backend: "sage"` is a per-job option on the 2.5 engine now) but is
+# DELIBERATELY NOT LISTED in `dependencies` below -- exactly the same discipline
+# engine/engine-venv-pyproject.toml keeps for the 2.3 stack. The only supported
+# source is the direct wheel URL pinned in scripts/install_ltx.ps1's
+# $ltx25DirectPins (recorded as a bare line in
+# engine25/venv-engine-ltx25.freeze.txt), because that wheel is ABI-pinned to
+# this project's exact validated stack (cp310-abi3 / cu128 / torch 2.9.1) and
+# ships no PyPI build uv could resolve here anyway. Listing it here would put it
+# in the path of -ResolveLatest, which resolves an UNVALIDATED newer torch the
+# pinned wheel is not built against -- so a -ResolveLatest venv is
+# sage-unavailable BY DESIGN and falls back to sdpa, on both engines alike.
+#
 # DELIBERATELY ABSENT (do not add without a plan change):
-#   sageattention  -- LTX 2.5 v1 runs on SDPA only.
 #   diffusers      -- 2.3-only dependency; the 2.5 pipeline does not use it.
 #   natten         -- only the diffusion-decoder VAE wants it; v1 uses Conv VAE.
 # triton-windows was on that list until 2026-08-24 ("nothing imports it here").

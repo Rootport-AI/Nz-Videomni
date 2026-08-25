@@ -93,7 +93,10 @@
     sage_attention_service.py) is now a real consumer, so sageattention 2.2.0
     (prebuilt wheel, cu128/torch2.9.1) and triton-windows (its runtime JIT
     dependency) are installed by default -- see $engineDirectPins below and
-    engine/venv-engine.freeze.txt. SDPA stays the default at generation time;
+    engine/venv-engine.freeze.txt. As of 2026-08-25 the SAME wheel is installed
+    into the LTX 2.5 venv as well ($ltx25DirectPins +
+    engine25/venv-engine-ltx25.freeze.txt): sage is a per-job backend on BOTH
+    engines now, not a 2.3-only one. SDPA stays the default at generation time;
     sage is opt-in per job via `attention_backend`. Blackwell needs an R570+
     driver. Because nothing here is arch-dependent, this installer does not
     detect or take a GPU architecture at all.
@@ -1089,7 +1092,7 @@ if ($SkipVenv) {
 #    TWO of them, built by ONE shared Ensure-EngineVenv:
 #      .venv-engine        LTX 2.3 -- transformers 4.57.6, sageattention, diffusers
 #      .venv-engine-ltx25  LTX 2.5 -- transformers 5.x (Gemma 4), official LTX-2
-#                                     v1.2.0, no sage / no diffusers
+#                                     v1.2.0, sageattention, no diffusers
 #    They are siblings, not versions of each other: transformers 4.57 and 5.x
 #    cannot coexist in one interpreter, so each engine gets its own. Neither
 #    worker can import the other's stack, which is exactly the isolation the
@@ -1173,11 +1176,23 @@ $ltx25StateFile = "$ProjectRoot\.venv-engine-ltx25\.nz-engine-state"
 # The official LTX-2 packages are pinned by FULL SHA (v1.2.0 =
 # d151147788a9284cca791edc6ce898007e727fe6) rather than by tag, so a moved tag
 # cannot change what gets installed.
+#
+# sageattention is the SAME wheel URL as the 2.3 array above -- byte for byte
+# the same string, deliberately, because it is the same wheel: cp310-abi3
+# (one build serves every CPython >= 3.10, so the 2.5 venv's 3.12 is covered)
+# against the same torch 2.9.1+cu128 both stacks pin. Added 2026-08-25 for the
+# Acceleration third wave, which opens `attention_backend: "sage"` on the 2.5
+# engine; before that the 2.5 venv had no sageattention at all. Its runtime JIT
+# dependency, triton-windows, was already here (it arrived 2026-08-24 for the
+# fused GGUF dequantisation kernels), so nothing else had to change.
+# `%2B` is the URL-encoded `+` of the wheel's local version segment -- keep the
+# line SINGLE-quoted here too, or PowerShell will try to interpolate it.
 $ltx25DirectPins = @(
     "torch==2.9.1+cu128"
     "torchaudio==2.9.1+cu128"
     "ltx-core @ git+https://github.com/Lightricks/LTX-2.git@d151147788a9284cca791edc6ce898007e727fe6#subdirectory=packages/ltx-core"
     "ltx-pipelines @ git+https://github.com/Lightricks/LTX-2.git@d151147788a9284cca791edc6ce898007e727fe6#subdirectory=packages/ltx-pipelines"
+    'sageattention @ https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu128torch2.9.1.post6-cp310-abi3-win_amd64.whl'
 )
 
 # Extra uv arguments the 2.5 stack needs and the 2.3 stack does not.
@@ -1385,7 +1400,7 @@ Ensure-EngineVenv -VenvPath $ltx25Venv -PythonPath $ltx25Py `
     -StateFile $ltx25StateFile -FreezeFile $ltx25FreezeSrc -PyprojectDir $ltx25PyprojectDir `
     -DirectPins $ltx25DirectPins -Label ".venv-engine-ltx25" `
     -DirectPinArgs $ltx25UvArgs `
-    -DirectPinsLabel "2 torch pins + 2 git pins: torch / torchaudio / ltx-core / ltx-pipelines" `
+    -DirectPinsLabel "2 torch pins + 2 git pins + 1 wheel pin: torch / torchaudio / ltx-core / ltx-pipelines / sageattention" `
     -ResolveArgs $ltx25UvArgs
 
 # hf.exe (used by the model downloads below) must exist in the engine venv.
@@ -1403,22 +1418,32 @@ $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
 # scripts/build_xformers.ps1 -- and note the engine code does not import it.)
 #
 # sageattention, the optional second backend, is NOT installed here either --
-# it was re-added 2026-07-31 as one of the $engineDirectPins pinned wheels
-# above (step 5), alongside triton-windows (its runtime JIT dependency, in
-# engine/venv-engine.freeze.txt) which bundles its own TinyCC/ptxas and needs
-# no Visual Studio on the end-user machine. It was removed as dead weight in
-# the 2026-07-28 cleanup (PENDING_TASKS.md 3-25) and came back once the
-# Acceleration feature's SageAttentionService gave it a real consumer. SDPA
-# remains the default at generation time; sage is opt-in per job.
+# it is a pinned wheel in the $engineDirectPins / $ltx25DirectPins arrays above
+# (step 5), alongside triton-windows (its runtime JIT dependency, in both engine
+# freezes) which bundles its own TinyCC/ptxas and needs no Visual Studio on the
+# end-user machine. It was removed as dead weight in the 2026-07-28 cleanup
+# (PENDING_TASKS.md 3-25) and came back 2026-07-31 once the Acceleration
+# feature's SageAttentionService gave it a real consumer. SDPA remains the
+# default at generation time; sage is opt-in per job.
+#
+# sageattention is NOT a 2.3-only package any more either: as of 2026-08-25 the
+# SAME wheel URL is pinned for BOTH venvs (Acceleration third wave, which opens
+# `attention_backend: "sage"` on the 2.5 engine). One wheel serves both because
+# it is cp310-abi3 -- a single build for every CPython >= 3.10, so .venv-engine's
+# 3.12 and .venv-engine-ltx25's 3.12 take the identical file -- and because both
+# stacks pin the identical torch 2.9.1+cu128 the wheel's ABI tag names. The two
+# venvs still never import each other's packages; they simply install the same
+# artefact from the same URL.
 #
 # triton-windows is NOT a 2.3-only package any more: as of 2026-08-24 it is
 # pinned in BOTH engine freezes (engine/venv-engine.freeze.txt and
 # engine25/venv-engine-ltx25.freeze.txt, same 3.5.1.post24). In the 2.5 venv it
-# has nothing to do with sage -- it is the runtime JIT for the fused GGUF
-# K-quant dequantisation kernels (engine/gguf/dequant_triton_kernels.py), which
-# the 2.5 transformer and text-encoder paths share with the 2.3 engine. No
-# installer CODE change was needed for that: the freeze is applied verbatim and
-# the state-hash marker re-applies it on the next run.
+# arrived for a reason unrelated to sage -- it is the runtime JIT for the fused
+# GGUF K-quant dequantisation kernels (engine/gguf/dequant_triton_kernels.py),
+# which the 2.5 transformer and text-encoder paths share with the 2.3 engine --
+# and it now serves sage's JIT there as well, exactly as it does in .venv-engine.
+# No installer CODE change was needed for that: the freeze is applied verbatim
+# and the state-hash marker re-applies it on the next run.
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------

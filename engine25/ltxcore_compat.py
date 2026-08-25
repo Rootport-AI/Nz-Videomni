@@ -66,7 +66,7 @@ What :func:`verify` checks
        2.5's ``VideoConditionByMask`` reproduces 2.3's hand-edited mask.
      * ``VideoConditionByMask.apply_to`` still computes
        ``clean*inv + tokens*m`` / ``denoise_mask*inv + (1-strength)*m`` --
-       chain25's ``AudioHeadBandMask`` is a line-for-line audio twin of it.
+       chain25's ``AudioBandMask`` is a line-for-line audio twin of it.
    Plus the surface chain25 drives directly: both denoising loops' keyword
    names, ``ModalitySpec``'s fields, the ``replacing``/``guiding`` image pair
    with ``resolve_crf``, ``ensure_tiling_config``'s three keyword-only
@@ -815,7 +815,7 @@ def verify() -> None:
         "clean_latent = initial_latent.clone()",
     )
 
-    # (4) The band item's own arithmetic. ``AudioHeadBandMask`` in chain25 is a
+    # (4) The band item's own arithmetic. ``AudioBandMask`` in chain25 is a
     #     line-for-line audio twin of these two expressions; pinning them is what
     #     lets that twin be called "the same freeze" rather than "a similar one".
     _require_in_source(
@@ -1018,7 +1018,7 @@ def verify() -> None:
         )
 
     # (11e) The FROZEN modality -- A2V's whole-timeline audio freeze. This is a
-    #       different mechanism from the band (`AudioHeadBandMask`), and
+    #       different mechanism from the band (`AudioBandMask`), and
     #       deliberately so: the band leaves `sigma` alone, while `frozen` zeroes
     #       the scalar too. Both halves are pinned because A2V's correctness is
     #       "the audio the model attends to is EXACTLY the upload", and a lost

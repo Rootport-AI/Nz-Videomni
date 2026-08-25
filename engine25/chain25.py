@@ -47,7 +47,7 @@ conditionings -> noiser in exactly 2.3's order. Handed the same tensor as
 band, the two routes agree bit for bit (gate G1(a)), so the band is the OFFICIAL
 mechanism rather than a re-implementation of the wheel's internals.
 
-There is no audio equivalent upstream, so :class:`AudioHeadBandMask` below is a
+There is no audio equivalent upstream, so :class:`AudioBandMask` below is a
 line-for-line audio twin of those two expressions. It is the only conditioning
 maths this file owns, and ``ltxcore_compat.verify()`` pins the video original it
 mirrors so a divergence upstream is reported by name.
@@ -81,7 +81,7 @@ V2V and A2V both start from an uploaded file and both end up freezing latents,
 but they use DIFFERENT mechanisms, and the difference is not stylistic:
 
 * **V2V** freezes a HEAD BAND -- the same one an inter-clip carry uses, via
-  ``VideoConditionByMask`` / :class:`AudioHeadBandMask`. Stage 1 holds it at
+  ``VideoConditionByMask`` / :class:`AudioBandMask`. Stage 1 holds it at
   ``1 - overlap_strength`` so the continuation can still bend toward it; stage 2
   pins it outright, from a fresh FULL-resolution encode rather than from the
   upsampled stage-1 latent. Only the head is affected; the rest of the timeline
@@ -120,6 +120,7 @@ from chain_math import (
     ChainLayout,
     audio_segment_windows,
     compute_chain_layout,
+    freeze_mask_values,
     plan_upsample_chunks,
     resolve_stage2_window,
     video_segment_windows,
@@ -350,8 +351,8 @@ class ChainResult:
 # ---------------------------------------------------------------------------
 
 
-class AudioHeadBandMask(ConditioningItem):
-    """Freeze the leading ``K`` audio latent frames -- the audio twin of
+class AudioBandMask(ConditioningItem):
+    """Freeze a masked band of audio latent frames -- the audio twin of
     :class:`VideoConditionByMask`.
 
     Upstream has a masked conditioning item for video and none for audio, so
@@ -368,9 +369,12 @@ class AudioHeadBandMask(ConditioningItem):
 
     The audio token domain is one token per latent frame (``AudioPatchifier`` at
     ``patch_size=1``), so ``mask`` is ``(B, T)``: entry ``t`` is 1 where latent
-    frame ``t`` is carried over. It is patchified through the SAME call the
-    video item uses -- ``patchify(mask[:, None, :, None])`` -- rather than being
-    reshaped by hand, so the token order is the patchifier's, whatever that is.
+    frame ``t`` is frozen -- the LEADING frames for a carry, the trailing ones
+    for a tail band, and this class has no opinion about which (hence the name:
+    it was ``AudioHeadBandMask`` while the head was the only band there was).
+    It is patchified through the SAME call the video item uses --
+    ``patchify(mask[:, None, :, None])`` -- rather than being reshaped by hand,
+    so the token order is the patchifier's, whatever that is.
 
     MUST be applied BEFORE any conditioning item that APPENDS tokens (a
     ``frame_idx > 0`` keyframe image): the arithmetic is elementwise over the
@@ -390,7 +394,7 @@ class AudioHeadBandMask(ConditioningItem):
         mask = latent_tools.patchifier.patchify(self.mask[:, None, :, None])
 
         assert tokens.shape[1] == latent_state.denoise_mask.shape[1], (
-            f"AudioHeadBandMask covers {tokens.shape[1]} tokens but the state has "
+            f"AudioBandMask covers {tokens.shape[1]} tokens but the state has "
             f"{latent_state.denoise_mask.shape[1]}; the band must be applied before any "
             f"conditioning item that appends tokens."
         )
@@ -981,6 +985,43 @@ def _stage1_sampler_kwargs(sampler: str, eta: float, seed: int, dtype: torch.dty
     return {"stepper": stepper, "loop": loop}
 
 
+def _freeze_strengths(
+    mask_value: float,
+    tail_mask_value: float | None = None,
+    audio_mask_value: float | None = None,
+    audio_tail_mask_value: float | None = None,
+) -> tuple[float, float, float, float]:
+    """``chain_math.freeze_mask_values`` read from the other end.
+
+    2.3 writes DENOISE-MASK VALUES by hand; 2.5's band items take the
+    COMPLEMENT (``denoise_mask = denoise_mask * inv + (1 - strength) * m``), so
+    the four numbers a two-sided freeze needs are the same four the app already
+    validated, subtracted from one. Calling the shared resolver rather than
+    restating its three-override precedence (tail splits head from tail, audio
+    splits the modalities, audio-tail splits the tail BY modality) is what keeps
+    a retake or an end-source freeze in this engine the one 2.3 measured.
+
+    Returns ``(video_head, video_tail, audio_head, audio_tail)`` as STRENGTHS,
+    ready to hand straight to :func:`_band_conditionings`' four strength
+    arguments in that order.
+
+    FOR THE RETAKE / END SOURCE BANDS ONLY -- never for the ordinary carry seam.
+    The seam's strength is ``float(spec.overlap_strength)`` and it is passed
+    through verbatim, because a round trip through this function is a DOUBLE
+    COMPLEMENT and floating point does not survive one: ``1.0 - (1.0 - 0.3)`` is
+    ``0.30000000000000004``, not ``0.3``. Every existing chain would keep its
+    digest at the default ``overlap_strength`` of 0.5 (which round-trips
+    exactly) and quietly change at every other value -- the class of regression
+    no gate that runs only the defaults can see. ``tests/test_ltx25_band.py``
+    pins both halves: the resolver's table, and the fact that a head band's
+    strength arrives as the float it was given.
+    """
+    v_head, v_tail, a_head, a_tail = freeze_mask_values(
+        mask_value, tail_mask_value, audio_mask_value, audio_tail_mask_value
+    )
+    return 1.0 - v_head, 1.0 - v_tail, 1.0 - a_head, 1.0 - a_tail
+
+
 def _band_conditionings(
     *,
     video_latent: torch.Tensor | None,
@@ -989,23 +1030,79 @@ def _band_conditionings(
     audio_frames_frozen: int,
     strength: float,
     clear_keyframes: bool,
+    video_tail_frozen: int = 0,
+    audio_tail_frozen: int = 0,
+    tail_strength: float | None = None,
+    audio_strength: float | None = None,
+    audio_tail_strength: float | None = None,
 ) -> tuple[list[ConditioningItem], list[ConditioningItem]]:
     """The ``(video, audio)`` conditioning prefixes for one segment or tile.
 
-    Both lists are EMPTY when nothing is frozen, which is what makes a free head
-    (clip 0 at stage 1, tile 0 at stage 2) literally the official code path with
-    no band item in it at all.
+    Both lists are EMPTY when nothing is frozen and no marker has to be cleared,
+    which is what makes a free head (clip 0 at stage 1, tile 0 at stage 2)
+    literally the official code path with no band item in it at all.
+
+    A HEAD band and a TAIL band are separate items over the SAME latent tensor,
+    with masks that are disjoint by construction: the head covers
+    ``[0, video_frames_frozen)``, the tail covers the last
+    ``video_tail_frozen`` frames, and the assertion below refuses the pairing
+    that would make them meet. Two items rather than one two-lobed mask because
+    the two halves carry DIFFERENT strengths (a retake pins both hard; an end
+    source holds its tail at the user's strength while a carried-in head stays
+    at ``overlap_strength``), and a single item has one.
+
+    The tail arguments default to zero width, so every call that does not ask
+    for one builds exactly the items it built before they existed -- gate G1(a).
+
+    ORDER. Every item here is elementwise over the whole token axis, so all of
+    them must be applied BEFORE any conditioning item that APPENDS tokens (a
+    ``frame_idx > 0`` keyframe image). That is carried by CONSTRUCTION ORDER at
+    the call sites (``conds_v = band_v + ...``), not by a type: there is
+    deliberately no ``VideoBandMask`` subclass to sort on, because the sort
+    would be a second mechanism to keep true and the one that already exists is
+    one line long. ``tests/test_ltx25_band.py`` pins the construction order
+    instead, which is the same bargain the unused ``TemporalRegionMask`` got.
+
+    ``clear_keyframes`` is INDEPENDENT of everything else here. It used to be
+    reachable only from inside the "a video head is frozen" branch, which tied
+    the marker's correctness -- a question about POSITION on the timeline -- to
+    a question about freezing; the two come apart the moment a segment can be
+    generated in reverse order (§3-102 C3).
     """
     video: list[ConditioningItem] = []
     audio: list[ConditioningItem] = []
 
+    # The same resolution order ``chain_math.freeze_mask_values`` uses, in
+    # strength space: an omitted override means "same as the one above it", so a
+    # caller that passes only ``strength`` gets the single-value behaviour the
+    # ordinary carry seam has always had.
+    v_head_strength = float(strength)
+    a_head_strength = v_head_strength if audio_strength is None else float(audio_strength)
+    if tail_strength is None:
+        v_tail_strength, a_tail_strength = v_head_strength, a_head_strength
+    else:
+        v_tail_strength = a_tail_strength = float(tail_strength)
+    if audio_tail_strength is not None:
+        a_tail_strength = float(audio_tail_strength)
+
+    if clear_keyframes:
+        video.append(ClearKeyframesMask())
+
     if video_latent is not None and video_frames_frozen > 0:
-        if clear_keyframes:
-            video.append(ClearKeyframesMask())
         b, _, _, h, w = video_latent.shape
         mask = torch.zeros((b, video_latent.shape[2], h, w), dtype=torch.float32, device=video_latent.device)
         mask[:, :video_frames_frozen] = 1.0
-        video.append(VideoConditionByMask(latent=video_latent, mask=mask, strength=strength))
+        video.append(VideoConditionByMask(latent=video_latent, mask=mask, strength=v_head_strength))
+
+    if video_latent is not None and video_tail_frozen > 0:
+        b, _, f, h, w = video_latent.shape
+        assert video_frames_frozen + video_tail_frozen <= f, (
+            f"a {video_frames_frozen}-frame head and a {video_tail_frozen}-frame tail do not "
+            f"fit in {f} video latent frames without overlapping"
+        )
+        mask_t = torch.zeros((b, f, h, w), dtype=torch.float32, device=video_latent.device)
+        mask_t[:, f - video_tail_frozen:] = 1.0
+        video.append(VideoConditionByMask(latent=video_latent, mask=mask_t, strength=v_tail_strength))
 
     if audio_latent is not None and audio_frames_frozen > 0:
         mask_a = torch.zeros(
@@ -1014,7 +1111,21 @@ def _band_conditionings(
             device=audio_latent.device,
         )
         mask_a[:, :audio_frames_frozen] = 1.0
-        audio.append(AudioHeadBandMask(latent=audio_latent, mask=mask_a, strength=strength))
+        audio.append(AudioBandMask(latent=audio_latent, mask=mask_a, strength=a_head_strength))
+
+    if audio_latent is not None and audio_tail_frozen > 0:
+        t = audio_latent.shape[2]
+        assert audio_frames_frozen + audio_tail_frozen <= t, (
+            f"a {audio_frames_frozen}-frame head and a {audio_tail_frozen}-frame tail do not "
+            f"fit in {t} audio latent frames without overlapping"
+        )
+        mask_at = torch.zeros(
+            (audio_latent.shape[0], t),
+            dtype=torch.float32,
+            device=audio_latent.device,
+        )
+        mask_at[:, t - audio_tail_frozen:] = 1.0
+        audio.append(AudioBandMask(latent=audio_latent, mask=mask_at, strength=a_tail_strength))
 
     return video, audio
 
@@ -1504,12 +1615,21 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             band_v, band_a = _band_conditionings(
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
+                # VERBATIM, never through ``_freeze_strengths``: see that
+                # function's docstring for the 1-ULP reason.
                 strength=float(spec.overlap_strength),
-                clear_keyframes=seg_clear_kf,
+                # The head-freeze test is spelled out HERE because that is where
+                # it used to live implicitly -- ``_band_conditionings`` appended
+                # the marker clear only from inside its "a video head is frozen"
+                # branch, so this expression is today's effective value written
+                # down, to the letter (``fkv > 0`` never holds without
+                # ``init_v``). §3-102 C3 replaces it with the TIMELINE INDEX,
+                # which is what the marker's correctness actually depends on.
+                clear_keyframes=seg_clear_kf and fkv > 0,
             )
             # Clip 0's images are the TIMELINE's opening keyframes, so they go on
             # clip 0 only -- and AFTER the band items, which must see an
-            # un-extended token axis (see AudioHeadBandMask).
+            # un-extended token axis (see AudioBandMask).
             # THIS segment's window of the long reference (§3-78's long IC-LoRA),
             # appended last. An empty list is both "no reference asked for" and
             # "the reference ran out before this segment" -- the owner's rule is
@@ -1667,7 +1787,8 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
                 strength=1.0,
-                clear_keyframes=tile_clear_kf,
+                # Today's effective value, written down -- see the stage-1 call.
+                clear_keyframes=tile_clear_kf and fkv > 0,
             )
             conds_v = band_v + tile_conds[i]
 

@@ -133,7 +133,6 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("outpaint", "outpaint", lambda r: r.outpaint is not None),
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
-    ("attention_backend", "sage_attention", lambda r: r.attention_backend != "sdpa"),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -191,6 +190,20 @@ IGNORED_FIELDS: dict[str, str] = {
 #: SECOND job in the same process, and the RAM it costs is real. So the two
 #: engines answering to the same field name do not do the same amount of work,
 #: and a reader comparing them should expect different numbers.
+#:
+#: ``attention_backend`` JOINED THIS SET with 高速化第3弾 (§3-102), leaving
+#: :data:`REJECT_TABLE` — the last acceleration knob that still 422'd on this
+#: engine. THE CONTRACT IS 2.3's WORD FOR WORD once more: the key rides ONLY
+#: when the request asked for something other than the default ``"sdpa"``, so a
+#: plain job's payload is byte-identical to what it was before this field was
+#: honoured, and the worker echoes back what ACTUALLY ran
+#: (``attention_used``: "sdpa" / "sage" / "sage->sdpa"). And here the
+#: implementation really IS the same thing: engine25 shares 2.3's
+#: ``services/sage_attention_service.py`` verbatim, because the two engines'
+#: attention contract (flat ``(B, S, H*D)`` q/k/v, head_dim 128/64) is
+#: identical. The ONE difference is the lifetime of the wrapper it installs —
+#: 2.5 reuses one model shell across jobs, so every build strips and re-installs
+#: rather than patching a fresh transformer.
 HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -208,6 +221,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
         "keep_resident",
+        "attention_backend",
     }
 )
 
@@ -269,7 +283,6 @@ CHAIN_REJECT_TABLE: tuple[
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
-    ("attention_backend", "sage_attention", lambda r: r.attention_backend != "sdpa"),
 )
 
 #: The ignore-and-log half. Field-for-field the same five as
@@ -330,6 +343,14 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: A chain builds the text encoder once per JOB just as a single job does, so
 #: what is saved here is likewise the SECOND job's rebuild, not anything inside
 #: the chain itself.
+#:
+#: ``attention_backend`` JOINED WITH 高速化第3弾, the chain twin of the
+#: single-path move and with the same contract: the key rides only when the
+#: request asked for something other than ``"sdpa"``, and the worker echoes what
+#: ran. A chain is where the wrapper's lifetime matters most — it rebuilds the
+#: transformer once per stage, and every one of those builds strips the previous
+#: job's wrapper before installing a fresh one, so the echo a chain returns is a
+#: fold over every build it made ("sage->sdpa" when one of them fell back).
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -352,6 +373,7 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
         "keep_resident",
+        "attention_backend",
     }
 )
 
@@ -384,6 +406,8 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: Batch tab's A2V rows, because the frontend greys all three by these names.
 #: ``"loras"`` and ``"reference_video"`` left with the THIRD increment, which
 #: re-opens the LoRA chips and the reference-video panel on both tabs.
+#: ``"sage_attention"`` left with 高速化第3弾, which un-greys the Settings
+#: panel's attention control — the last acceleration name this engine published.
 #: The two modes that still cannot run — retake / end_source — stay, and they
 #: are enforced field-by-field by :data:`CHAIN_REJECT_TABLE` rather than by one
 #: blanket refusal.
@@ -784,6 +808,16 @@ class _RealBackend25(_RealBackend):
         # of sub-model skeletons.
         if request.keep_resident:
             payload["keep_resident"] = True
+        # 高速化第3弾, appended LAST for the same reason each block before it
+        # was: the newest key goes at the end, so no existing key order moves.
+        # The pydantic default is "sdpa", so a plain job carries NO key and the
+        # golden payload is byte-identical to what it was before this line
+        # existed — which is what keeps the frozen-SHA evidence of every earlier
+        # increment valid. An absent key means "sdpa" on the worker side (2.3's
+        # contract restated verbatim), and the worker echoes back what actually
+        # ran rather than what was asked for.
+        if request.attention_backend != "sdpa":
+            payload["attention_backend"] = request.attention_backend
 
         with self._lock:
             try:
@@ -838,9 +872,14 @@ class _RealBackend25(_RealBackend):
             # The ONE REMAINING acceleration relay (``vae_mode_used``) stays
             # None: it names a 2.3 code path this engine does not have, and
             # reporting "off" would claim the knob exists here and was left
-            # alone. attention_used is the exception worth stating positively —
-            # v1 is SDPA-only by scope.
-            attention_used="sdpa",
+            # alone.
+            # 高速化第3弾: attention_used is no longer the hard-coded "sdpa" it
+            # was while this engine's scope excluded sage. It is the worker's
+            # own echo now — "sdpa", "sage", or "sage->sdpa" for a build that
+            # asked for sage and could not have it — so a degrade is visible in
+            # metadata.json rather than assumed. ``.get`` for the same reason as
+            # the three above: a worker that never spoke leaves None.
+            attention_used=event.get("attention_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
@@ -1041,6 +1080,12 @@ class _RealBackend25(_RealBackend):
         # unchanged; an absent key is the release request, not silence.
         if chain.keep_resident:
             payload["keep_resident"] = True
+        # 高速化第3弾, appended last for the same reason as everything above it.
+        # Default "sdpa", so a plain chain's payload is unchanged; the key rides
+        # only when the user asked for something else, and an absent key is
+        # "sdpa" on the worker side rather than silence.
+        if chain.attention_backend != "sdpa":
+            payload["attention_backend"] = chain.attention_backend
 
         with self._lock:
             try:
@@ -1086,9 +1131,12 @@ class _RealBackend25(_RealBackend):
             keep_resident_used=event.get("keep_resident_used"),
             # The ONE REMAINING acceleration field (``vae_mode_used``) names a
             # 2.3 code path this engine does not have, so reporting "off" would
-            # claim the knob exists here and was left alone. attention_used is
-            # the one worth stating positively — the chain scope is SDPA-only.
-            attention_used="sdpa",
+            # claim the knob exists here and was left alone.
+            # 高速化第3弾: attention_used is the worker's echo now, and on a
+            # chain it is a FOLD over every build the chain made — "sage->sdpa"
+            # when one of them fell back, the same shape the two 第1弾 echoes
+            # take here.
+            attention_used=event.get("attention_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
@@ -1100,20 +1148,16 @@ class LTX25Runner(LTXRunner):
     selection, ``set_descriptor`` teardown, the availability probe and its
     missing-file report — applies unchanged; the class attributes below are the
     only per-family facts, and they are exactly the seams P3a introduced.
+
+    ``sage_available`` USED TO BE OVERRIDDEN HERE, hard-coded to False because
+    SageAttention was not installed in ``.venv-engine-ltx25`` and this engine's
+    v1 scope was SDPA-only. 高速化第3弾 removed the override rather than
+    changing its answer: the base class's file-existence probe reads
+    ``_REAL_BACKEND_CLS._engine_python_value(config)``, which on this class is
+    ``model.engine_python_ltx25`` — so it already looks in the 2.5 venv's own
+    site-packages, and the honest answer is whatever it finds there.
     """
 
     _REAL_BACKEND_CLS = _RealBackend25
     _MOCK_BACKEND_CLS = _MockBackend
     _MOCK_BACKEND_LABEL = MOCK_BACKEND_25
-
-    @property
-    def sage_available(self) -> bool:
-        """Always False, and expected to stay False.
-
-        Not a probe result: SageAttention is not installed in
-        ``.venv-engine-ltx25`` and v1 is SDPA-only by scope decision, so running
-        the base class's file-existence probe would be asking a question whose
-        answer is already fixed — and, worse, it would answer it by looking in
-        the wrong venv's site-packages if the two ever diverged.
-        """
-        return False

@@ -280,12 +280,19 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "outpaint",
     "nag",
     "prune_vaed",
-    "sage_attention",
     // 高速化第2弾: `keep_resident` LEFT THIS LIST. The 2.5 engine keeps its
     // Gemma 4 text encoder resident between jobs now (opt-in, default off), so
     // the server no longer 422s the field — and publishing it here would grey
     // out a Settings control that works. Mirrors
     // `services/engines/ltx25/adapter.py`'s HONOURED_FIELDS.
+    //
+    // 高速化第3弾: `sage_attention` LEFT TOO, for the same reason and from the
+    // same Settings panel. The 2.5 engine shares 2.3's sage service verbatim
+    // now (`services/sage_attention_service.py` — the two engines' attention
+    // contract is identical), so `attention_backend: "sage"` is honoured
+    // rather than 422'd, and the worker echoes back what actually ran. That
+    // leaves `prune_vaed` as the ONE acceleration name this fixture still
+    // publishes for LTX 2.5.
   ],
 };
 

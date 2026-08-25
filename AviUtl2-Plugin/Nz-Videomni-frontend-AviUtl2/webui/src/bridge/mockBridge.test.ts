@@ -615,7 +615,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       expect.arrayContaining([
         "retake", "end_source",
         "two_stage_hq", "outpaint",
-        "nag", "prune_vaed", "sage_attention",
+        "nag", "prune_vaed",
       ]),
     );
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
@@ -638,6 +638,9 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // have kept this test green whether the fixture was updated or not, and a
     // stale fixture would go on greying out a Settings control that works.
     expect(features).not.toContain("keep_resident");
+    // 高速化第3弾: and `sage_attention` left, from the same Settings panel and
+    // pinned the same way. The engine runs 2.3's sage kernels now.
+    expect(features).not.toContain("sage_attention");
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {

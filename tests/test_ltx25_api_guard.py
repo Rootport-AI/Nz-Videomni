@@ -49,10 +49,12 @@ from services.engines.ltx25 import adapter as ltx25
 from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_KEEP_RESIDENT,
     CHAIN_ACCEPTED_LORAS,
+    CHAIN_ACCEPTED_SAGE,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
     REQUEST_ACCEPTED_KEEP_RESIDENT,
     REQUEST_ACCEPTED_LORAS,
+    REQUEST_ACCEPTED_SAGE,
     REQUEST_OVERRIDES,
 )
 
@@ -142,15 +144,17 @@ def test_ltx23_accepts_every_field_the_2_5_engine_refuses(two_family_client, fie
 
 @pytest.mark.parametrize(
     "field,value",
-    [("attention_backend", "sage"), ("vae_mode", "prune_vaed")],
+    [("vae_mode", "prune_vaed")],
 )
 def test_ltx23_really_runs_the_jobs_2_5_refuses(two_family_client, field, value):
     """前のテストは「FEATURE_UNSUPPORTEDでない」しか言っていない。素材を必要と
-    しない2件については、2.3で本当に202まで通ることを見ておく。
+    しない件については、2.3で本当に202まで通ることを見ておく。
 
     ``keep_resident`` は高速化第2弾でこの一覧を**外れた**。2.5でも受理される
     ようになったので、「2.5が拒否する仕事」という前提そのものが成り立たない
-    ——2.3側の受理は下の肯定テストが2系統まとめて見る。"""
+    ——2.3側の受理は下の肯定テストが2系統まとめて見る。``attention_backend``
+    は高速化第3弾で同じ理由で外れ、残るのは ``vae_mode`` 1件だけになった
+    (PrunaVAEDは2.5に該当する経路が無く、据え置きである)。"""
     _activate(two_family_client, "LTX23")
     r = two_family_client.post("/api/v1/generate", json={**BASE_REQUEST, field: value})
     assert r.status_code == 202, r.text
@@ -278,6 +282,27 @@ def test_ltx25_no_longer_refuses_keep_resident(two_family_client, case):
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_KEEP_RESIDENT[case]}
+    )
+    assert r.status_code == 202, r.text
+
+
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_SAGE))
+def test_ltx25_no_longer_refuses_sage_attention(two_family_client, case):
+    """高速化第3弾の逆転。``keep_resident`` と同じくここも404で妥協せず
+    **202まで**見る——sageは素材を一つも要らないので、途中で止まる理由がある
+    としたらそれはガードだけである。
+
+    そして罠も同じ形だった:2.5を選んだまま設定パネルで注意機構をsageにすると、
+    以後の**すべての**ジョブが422になる。設定は残るので、利用者が設定パネルを
+    開き直すまで直らない——「LTX 2.5が壊れた」としか見えない。これが消えたこと
+    をこの一本が見張る。
+
+    mockバックエンドなのでsageのカーネルそのものは走らない(GPUも重みも無い)。
+    ここで見るのは**入口の裁定**だけで、本当にカーネルが効くことは実機ゲート
+    (G5)の担当である。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_SAGE[case]}
     )
     assert r.status_code == 202, r.text
 
@@ -456,6 +481,18 @@ def test_ltx25_no_longer_refuses_chain_keep_resident(two_family_client, case):
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_KEEP_RESIDENT[case])
+    )
+    assert r.status_code == 202, r.text
+
+
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_SAGE))
+def test_ltx25_no_longer_refuses_chain_sage_attention(two_family_client, case):
+    """単発側の双子(高速化第3弾)。設定パネルの注意機構がsageのままだと連結生成
+    も一つ残らず422になっていた——タブが違うだけで罠は同じものだった。ここも
+    **202まで**見る。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_SAGE[case])
     )
     assert r.status_code == 202, r.text
 

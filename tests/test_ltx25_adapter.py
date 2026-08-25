@@ -264,7 +264,6 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     },
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "vae_mode": {"vae_mode": "prune_vaed"},
-    "attention_backend": {"attention_backend": "sage"},
 }
 
 #: What §3-102's THIRD increment turned on, as valid request bodies: the two
@@ -304,6 +303,22 @@ REQUEST_ACCEPTED_LORAS: dict[str, dict] = {
 #: state dict alone (~7.7 GiB), not 2.3's whole set of sub-model skeletons.
 REQUEST_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
     "keep_resident": {"keep_resident": True},
+}
+
+#: What 高速化第3弾 turned on: ``attention_backend``, the LAST acceleration knob
+#: left in :data:`REQUEST_OVERRIDES`. A table of its own for the same reason
+#: :data:`REQUEST_ACCEPTED_KEEP_RESIDENT` is one — it is THIS increment's
+#: evidence, and folding it into an earlier increment's table would make both
+#: lie about what they cover.
+#:
+#: One row, and one row it stays: nothing is coupled to it (no upload, no
+#: adapter), so the request that asks for sage is the plain request plus a
+#: string. And unlike ``keep_resident``, what the field buys on 2.5 IS what it
+#: buys on 2.3 — the two engines share
+#: ``services/sage_attention_service.py`` verbatim, because their attention
+#: contract is identical.
+REQUEST_ACCEPTED_SAGE: dict[str, dict] = {
+    "attention_backend": {"attention_backend": "sage"},
 }
 
 
@@ -394,6 +409,34 @@ def test_keep_resident_is_honoured_not_merely_unlisted():
     assert "keep_resident" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert "keep_resident" not in ltx25.IGNORED_FIELDS
     assert "keep_resident" not in ltx25.GOVERNED_FIELDS
+
+
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_SAGE))
+def test_sage_attention_is_no_longer_refused(case):
+    """The headline of 高速化第3弾: asking the 2.5 engine for the sage attention
+    kernel passes the ruling instead of raising 422. Until this increment it was
+    the LAST acceleration knob that still refused a job — and, like
+    ``keep_resident`` before it, it refused from the SETTINGS panel, i.e. for
+    every job until the user found the setting again."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_SAGE[case]))  # no raise
+
+
+def test_sage_attention_is_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises. Dropping the field from
+    every table would also stop the 422 — and would then run every job on SDPA
+    while the Settings panel said sage."""
+    assert "attention_backend" in ltx25.HONOURED_FIELDS
+    assert "attention_backend" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert "attention_backend" not in ltx25.IGNORED_FIELDS
+    assert "attention_backend" not in ltx25.GOVERNED_FIELDS
+
+
+def test_sage_attention_no_longer_names_a_published_limitation():
+    """GET /models must stop publishing it, or the frontend greys out the
+    attention control the server now accepts. This was the last acceleration
+    name on the list, so the published set drops from seven names to six."""
+    assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 6
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -499,7 +542,6 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
-    "attention_backend": {"attention_backend": "sage"},
 }
 
 
@@ -561,10 +603,32 @@ CHAIN_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
 }
 
 
+#: The chain twin of :data:`REQUEST_ACCEPTED_SAGE` (高速化第3弾), a separate
+#: table for the same reason. A chain rebuilds the transformer once per STAGE,
+#: so the wrapper is stripped and re-installed on every one of those builds —
+#: which is why the echo a chain returns is a fold, not a single build's answer.
+CHAIN_ACCEPTED_SAGE: dict[str, dict] = {
+    "attention_backend": {"attention_backend": "sage"},
+}
+
+
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_KEEP_RESIDENT))
 def test_chain_keep_resident_is_no_longer_refused(case):
     """The chain twin of the single-path acceptance test (高速化第2弾)."""
     ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_KEEP_RESIDENT[case]))  # no raise
+
+
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SAGE))
+def test_chain_sage_attention_is_no_longer_refused(case):
+    """The chain twin of the single-path acceptance test (高速化第3弾)."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_SAGE[case]))  # no raise
+
+
+def test_the_chain_sage_field_is_honoured_not_merely_unlisted():
+    assert "attention_backend" in ltx25.CHAIN_HONOURED_FIELDS
+    assert "attention_backend" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert "attention_backend" not in ltx25.CHAIN_IGNORED_FIELDS
+    assert "attention_backend" not in ltx25.CHAIN_GOVERNED_FIELDS
 
 
 def test_the_chain_keep_resident_field_is_honoured_not_merely_unlisted():
@@ -791,6 +855,12 @@ def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
         # 高速化第2弾: a third echo, and one that only ever says "on" or "off" —
         # engine25 has no degrade path for the resident text encoder.
         "keep_resident_used": "on",
+        # 高速化第3弾: a FOURTH echo. It used to be hard-coded in the adapter
+        # ("sdpa", because the field was a 422 on this engine); now it comes
+        # from the worker like the three above, so the fake has to speak it or
+        # the relay would answer None. "sdpa" here — a plain chain asks for
+        # nothing else — and the positive "sage" case gets its own test below.
+        "attention_used": "sdpa",
     }
     return be
 
@@ -1156,9 +1226,11 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
     assert outcome.chain_metadata == {"total_px": 41, "num_clips": 2}
     assert outcome.seed_used == 123
     assert outcome.peak_vram_mb == 7000
-    # The chain scope is SDPA-only, and the ONE relay that is still None names a
-    # 2.3 code path this engine does not have — reporting "off" would claim the
-    # knob exists here and was left alone.
+    # 高速化第3弾: "sdpa" is what the WORKER said (the fake echoes it), not a
+    # constant the adapter writes — the positive "sage" case is the test below.
+    # The ONE relay that is still None names a 2.3 code path this engine does
+    # not have; reporting "off" would claim the knob exists here and was left
+    # alone.
     assert outcome.attention_used == "sdpa"
     assert outcome.vae_mode_used is None
     # 高速化第1弾: these two DO name engine25 code paths now, so the worker's
@@ -1168,6 +1240,55 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
     # 高速化第2弾: and so does the third. It used to be None here, because the
     # field was a 422 on this engine.
     assert outcome.keep_resident_used == "on"
+
+
+def test_chain_payload_carries_the_attention_backend_only_when_asked(tmp_path):
+    """高速化第3弾, the additive contract from both sides at once: a plain chain
+    carries NO ``attention_backend`` key (so the golden above stays byte-exact),
+    and a chain that asked for sage carries it — appended LAST, after the three
+    acceleration keys that predate it."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "plain")
+    assert "attention_backend" not in captured[0]
+
+    # ...nor does an EXPLICIT "sdpa", the shape the frontend actually sends.
+    captured.clear()
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(attention_backend="sdpa"), output_dir=tmp_path / "explicit"
+    )
+    assert "attention_backend" not in captured[0]
+
+    captured.clear()
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_SAGE["attention_backend"]),
+        output_dir=tmp_path / "sage",
+    )
+    assert captured[0]["attention_backend"] == "sage"
+    assert list(captured[0])[-1] == "attention_backend"
+
+
+def test_chain_outcome_relays_a_sage_echo_verbatim(tmp_path):
+    """THE POSITIVE DIRECTION, which the "sdpa" assertions above cannot reach:
+    a hard-coded ``attention_used="sdpa"`` would have passed every one of them.
+    Only a worker that says "sage" tells the two apart — and the fold a chain
+    returns ("sage->sdpa", one build fell back) must ride through untidied, or
+    metadata.json would claim a kernel the job did not run."""
+    for echoed in ("sage", "sage->sdpa"):
+        captured: list[dict] = []
+        be = _capturing_chain_backend(captured)
+        base = be._read_chain_events(None)  # type: ignore[attr-defined]
+        be._read_chain_events = lambda cb, e=echoed: {  # type: ignore[attr-defined]
+            **base,
+            "attention_used": e,
+        }
+        outcome = be.generate_chain(
+            _chain_request(**CHAIN_ACCEPTED_SAGE["attention_backend"]),
+            output_dir=tmp_path / echoed.replace(">", "_"),
+        )
+        assert outcome.attention_used == echoed
 
 
 def test_chain_crop_output_is_an_app_side_post_process(tmp_path, monkeypatch):
@@ -1241,6 +1362,8 @@ def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
         "fused_gguf_dequant_kernel_used": "on",
         # 高速化第2弾: the third echo, "on"/"off" only.
         "keep_resident_used": "on",
+        # 高速化第3弾: the fourth, the single-path twin of the chain fake's.
+        "attention_used": "sdpa",
     }
     return be
 
@@ -1406,6 +1529,8 @@ def test_generate_outcome_names_this_engine(tmp_path):
     outcome = _capturing_backend(captured).generate(_request(), tmp_path / "out")
     assert outcome.backend == ltx25.REAL_BACKEND_25
     assert outcome.seed_used == 4242
+    # 高速化第3弾: the worker's own echo, not a constant — see the positive
+    # "sage" test below, which is the only one that can tell the two apart.
     assert outcome.attention_used == "sdpa"
     # 高速化第1弾+第2弾: the three acceleration echoes engine25 has are relayed;
     # the ONE it does not have stays None rather than claiming an untouched
@@ -1414,6 +1539,53 @@ def test_generate_outcome_names_this_engine(tmp_path):
     assert outcome.fused_gguf_dequant_kernel_used == "on"
     assert outcome.keep_resident_used == "on"
     assert outcome.vae_mode_used is None
+
+
+def test_generate_payload_carries_the_attention_backend_only_when_asked(tmp_path):
+    """高速化第3弾, the single-path twin of the chain test: a plain T2V carries
+    NO ``attention_backend`` key — which is what keeps the golden payload above
+    byte-identical to the pre-sage one, and with it every frozen-SHA piece of
+    evidence the earlier increments left behind."""
+    captured: list[dict] = []
+    _capturing_backend(captured).generate(_request(), tmp_path / "plain")
+    assert "attention_backend" not in captured[0]
+
+    # ...and neither does one that names "sdpa" EXPLICITLY, which is what the
+    # frontend sends on every request: the predicate is "differs from the
+    # default", never "is present", so the golden survives a full schema.
+    captured.clear()
+    _capturing_backend(captured).generate(
+        _request(attention_backend="sdpa"), tmp_path / "explicit"
+    )
+    assert "attention_backend" not in captured[0]
+
+    captured.clear()
+    _capturing_backend(captured).generate(
+        _request(**REQUEST_ACCEPTED_SAGE["attention_backend"]), tmp_path / "sage"
+    )
+    assert captured[0]["attention_backend"] == "sage"
+    assert list(captured[0])[-1] == "attention_backend"
+
+
+def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):
+    """THE POSITIVE DIRECTION (高速化第3弾). Every "sdpa" assertion in this file
+    would also pass against the hard-coded ``attention_used="sdpa"`` the adapter
+    used to write, so none of them proves the relay exists. This one does: only
+    a worker saying "sage" — or "sage->sdpa", the degrade a build that could not
+    load the kernel reports — can be distinguished from a constant."""
+    for echoed in ("sage", "sage->sdpa"):
+        captured: list[dict] = []
+        be = _capturing_backend(captured)
+        base = be._read_worker_events(None, False, "generate")  # type: ignore[attr-defined]
+        be._read_worker_events = lambda cb, chain, prefix, e=echoed: {  # type: ignore[attr-defined]
+            **base,
+            "attention_used": e,
+        }
+        outcome = be.generate(
+            _request(**REQUEST_ACCEPTED_SAGE["attention_backend"]),
+            tmp_path / echoed.replace(">", "_"),
+        )
+        assert outcome.attention_used == echoed
 
 
 def test_generate_outcome_relays_a_degrade_verbatim(tmp_path):
@@ -1448,6 +1620,10 @@ def test_generate_outcome_leaves_the_echoes_none_when_the_worker_is_silent(tmp_p
     assert outcome.fused_gguf_dequant_kernel_used is None
     # 高速化第2弾's echo obeys the same rule: nobody reported, so nobody answers.
     assert outcome.keep_resident_used is None
+    # 高速化第3弾: and so does the fourth, now that it is a relay. Before this
+    # increment it was hard-coded, so a silent worker still produced "sdpa" —
+    # an answer nobody had given.
+    assert outcome.attention_used is None
 
 
 # --------------------------------------------------------------------------- #
@@ -1721,7 +1897,66 @@ def test_child_env_carries_no_2_3_engine_knobs(ltx25_paths, tmp_path):
     assert {"LTX_COMPONENT_FILES", "LTX_TE_OFFLOAD", "LTX_DIT_CPU_LOAD"} <= set(ltx23_env)
 
 
-def test_sage_is_permanently_off_for_this_engine():
-    cfg = AppConfig.model_validate({})
-    runner = ltx25.LTX25Runner(cfg, build_low_vram_settings(cfg), _descriptor_stub())
-    assert runner.sage_available is False
+def test_sage_availability_delegates_to_the_base_probe_on_the_2_5_venv(tmp_path):
+    """高速化第3弾 REMOVED this class's ``sage_available`` override; what stands
+    here now is the property it inherits.
+
+    The old test asserted ``is False`` unconditionally, which was right while
+    the answer was hard-coded and would be WRONG now — the base property is a
+    file-existence probe, so on the owner's machine (where 高速化第3弾 installed
+    the wheel into ``.venv-engine-ltx25``) the honest answer is True. Asserting
+    a constant would therefore fail on exactly the machine the feature works on.
+
+    So this pins the SHAPE instead, and the shape is the thing that could
+    silently regress: the probe must read the LTX 2.5 venv's site-packages —
+    ``_REAL_BACKEND_CLS._engine_python_value`` resolves to
+    ``model.engine_python_ltx25`` on this class — and it must require BOTH
+    packages, because the sage kernels are Triton-backed. A probe still pointed
+    at ``.venv-engine`` would answer for the 2.3 engine's install, which is the
+    wrong venv's answer given confidently. This is also what GET /status reports
+    BEFORE any worker exists (see PipelineManager.acceleration_status_block);
+    once a worker is up, its own import probe wins."""
+    venv25 = tmp_path / ".venv-engine-ltx25"
+    site = venv25 / "Lib" / "site-packages"
+    site.mkdir(parents=True)
+    (venv25 / "Scripts").mkdir()
+    # A DIFFERENT venv for 2.3, fully stocked: if the probe read this one the
+    # assertions below would come out backwards, which is the point of setting
+    # it up rather than leaving the 2.3 key at its default.
+    venv23 = tmp_path / ".venv-engine"
+    site23 = venv23 / "Lib" / "site-packages"
+    site23.mkdir(parents=True)
+    (venv23 / "Scripts").mkdir()
+    (site23 / "sageattention").mkdir()
+    (site23 / "triton").mkdir()
+
+    def _runner() -> ltx25.LTX25Runner:
+        cfg = AppConfig.model_validate({})
+        cfg.model.engine_python = (venv23 / "Scripts" / "python.exe").as_posix()
+        cfg.model.engine_python_ltx25 = (venv25 / "Scripts" / "python.exe").as_posix()
+        return ltx25.LTX25Runner(cfg, build_low_vram_settings(cfg), _descriptor_stub())
+
+    # The property really is inherited now — no per-class override to go stale.
+    assert "sage_available" not in vars(ltx25.LTX25Runner)
+    assert ltx25.LTX25Runner.sage_available is ltx23.LTXRunner.sage_available
+
+    assert _runner().sage_available is False  # the 2.5 venv is empty...
+    (site / "sageattention").mkdir()
+    assert _runner().sage_available is False  # ...triton missing -> still False
+    (site / "triton").mkdir()
+    assert _runner().sage_available is True  # ...and now the wheel is there
+
+    # ...and THAT is the value GET /status publishes before any worker exists.
+    # PipelineManager._sage_available is the truth table's single home
+    # (tests/test_smoke.py walks all four of its rows on the 2.3 runner); what
+    # is asserted here is only that the LTX 2.5 runner plugs into the pre-load
+    # row of it, because that row is the one the removed override used to
+    # answer with a constant. The 2.5 runner is REAL here (not the mock, whose
+    # row returns False whatever the venv holds) and has no live worker, so the
+    # file probe is what answers.
+    from services.pipeline_manager import PipelineManager
+
+    runner = _runner()
+    runner.config.model.backend = "real"
+    assert runner.is_mock is False and runner.worker_sage_available is None
+    assert PipelineManager._sage_available(types.SimpleNamespace(runner=runner)) is True

@@ -1773,7 +1773,7 @@ export const en = {
      * 2026-08-06 after the real-device gate: the measured "70s -> 10s" pair
      * and the bit-identical aside were dropped as noise for the reader. */
     accelKeepResidentNote:
-      "64GB or more of memory recommended (it uses about 20GB of main memory while resident). Keeps the model's CPU-side skeleton between jobs, greatly shortening the preprocessing of the second and later generations. The output does not change.",
+      "64GB or more of memory recommended: LTX 2.3 keeps about 20GB of main memory resident, LTX 2.5 about 8GB (2.5 only keeps the part that reads the prompt). Keeps the model's CPU-side skeleton between jobs, greatly shortening the preprocessing of the second and later generations. The output does not change.",
     backendUrlLabel: "Backend URL",
     backendUrlPlaceholder: "http://127.0.0.1:18620",
     loadingCurrent: "Loading current settings…",
@@ -2796,7 +2796,7 @@ export const ja: Strings = {
     accelKeepResidentOff: "OFF",
     accelKeepResidentPrefetchOffTooltip: "先読みblock swapが有効なときだけ使えます",
     accelKeepResidentNote:
-      "メモリ64GB以上を推奨（メインメモリを約20GB常駐で使用します）。モデルのCPU側骨格をジョブ間で保持し、2回目以降の生成の前処理を大幅に短縮します。生成結果は変わりません。",
+      "メモリ64GB以上を推奨（LTX 2.3では約20GB、LTX 2.5では約8GBをメインメモリに常駐で使用します。2.5で常駐するのは文章を読み取る部分だけです）。モデルのCPU側骨格をジョブ間で保持し、2回目以降の生成の前処理を大幅に短縮します。生成結果は変わりません。",
     backendUrlLabel: "接続先URL",
     backendUrlPlaceholder: "http://127.0.0.1:18620",
     loadingCurrent: "現在の設定を読み込み中…",

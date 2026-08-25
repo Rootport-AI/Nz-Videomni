@@ -862,7 +862,12 @@ export interface BaseModelBlock {
    *
    * Known names at the time of writing: `chain`, `retake`, `end_source`,
    * `v2v`, `a2v`, `two_stage_hq`, `outpaint`, `loras`, `reference_video`,
-   * `nag`, `prune_vaed`, `sage_attention`, `keep_resident`. */
+   * `nag`, `prune_vaed`, `sage_attention`. That list is a history, not a
+   * contract: a name leaves it as soon as an engine gains the feature
+   * (`chain`/`v2v`/`a2v` on 2026-08-23, `loras`/`reference_video` on
+   * 2026-08-24, `keep_resident` on 2026-08-25 -- LTX 2.5 opened the
+   * text-encoder form of it). Read the live array, never this comment; the
+   * canonical list is the backend spec's 6.10(b), 7 names for LTX 2.5. */
   unsupported_features?: string[];
   categories: Record<string, ModelCategoryBlock>;
 }

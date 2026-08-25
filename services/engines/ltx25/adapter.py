@@ -134,7 +134,6 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
     ("attention_backend", "sage_attention", lambda r: r.attention_backend != "sdpa"),
-    ("keep_resident", "keep_resident", lambda r: bool(r.keep_resident)),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -160,7 +159,7 @@ IGNORED_FIELDS: dict[str, str] = {
 }
 
 #: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
-#: (see :meth:`_RealBackend25.generate`), two more ride it as additive
+#: (see :meth:`_RealBackend25.generate`), three more ride it as additive
 #: acceleration flags, ``conditioning_images`` becomes the ``images`` list, and
 #: ``crop_output`` is the app-side ffmpeg centre-crop that happens after the
 #: worker is done. Declared rather than merely implied so the model_fields audit
@@ -181,6 +180,17 @@ IGNORED_FIELDS: dict[str, str] = {
 #: uses, and the worker echoes back what actually happened
 #: (``block_swap_prefetch_used`` / ``fused_gguf_dequant_kernel_used``) so a
 #: degrade is visible in metadata.json rather than assumed.
+#:
+#: ``keep_resident`` JOINED THIS SET with 高速化第2弾 (§3-102), leaving
+#: :data:`REJECT_TABLE`. THE CONTRACT IS 2.3's WORD FOR WORD — the key rides
+#: only when asked for, an absent key IS the release request, and the worker
+#: echoes "on"/"off" back — but THE IMPLEMENTATION IS A DIFFERENT THING: 2.3
+#: keeps the skeletons of every sub-model resident, while 2.5 keeps ONE thing,
+#: the Gemma 4 text encoder's state dict (about 7.7 GiB in RAM), and nothing
+#: else. Default OFF on this engine, deliberately: the win is only ever on a
+#: SECOND job in the same process, and the RAM it costs is real. So the two
+#: engines answering to the same field name do not do the same amount of work,
+#: and a reader comparing them should expect different numbers.
 HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -197,6 +207,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "reference_video_strength",
         "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
+        "keep_resident",
     }
 )
 
@@ -259,7 +270,6 @@ CHAIN_REJECT_TABLE: tuple[
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
     ("attention_backend", "sage_attention", lambda r: r.attention_backend != "sdpa"),
-    ("keep_resident", "keep_resident", lambda r: bool(r.keep_resident)),
 )
 
 #: The ignore-and-log half. Field-for-field the same five as
@@ -278,8 +288,8 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
     "vsf_scale": "no negative-prompt mechanism in the LTX 2.5 chain scope",
 }
 
-#: Fields the chain path ACTS ON. Eight ride the worker payload verbatim and two
-#: more ride it as additive acceleration flags (see
+#: Fields the chain path ACTS ON. Eight ride the worker payload verbatim and
+#: three more ride it as additive acceleration flags (see
 #: :meth:`_RealBackend25.generate_chain`), ``prompt`` and ``clips`` together
 #: become the per-clip list (effective prompt / num_frames / clip-0 images), and
 #: ``crop_output`` is the app-side ffmpeg centre-crop applied to the finished
@@ -311,6 +321,15 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: where the prefetch work is actually visible, because a chain rebuilds the
 #: transformer once per stage and the engine now re-arms the prefetch engine on
 #: every one of those builds.
+#:
+#: ``keep_resident`` JOINED WITH 高速化第2弾, the chain twin of the single-path
+#: move, and with the same warning attached: THE CONTRACT is 2.3's verbatim (key
+#: only when asked for, absent key = release, echo back what happened) but THE
+#: IMPLEMENTATION IS A DIFFERENT THING — 2.3 holds every sub-model's skeleton,
+#: 2.5 holds ONE state dict, the Gemma 4 text encoder's ~7.7 GiB. Default OFF.
+#: A chain builds the text encoder once per JOB just as a single job does, so
+#: what is saved here is likewise the SECOND job's rebuild, not anything inside
+#: the chain itself.
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -332,6 +351,7 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "reference_video_strength",
         "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
+        "keep_resident",
     }
 )
 
@@ -382,7 +402,7 @@ def reject_unsupported(request: GenerateRequest) -> None:
     so a rejection costs no worker round-trip and no job record; wiring it there
     changes nothing about the answer, only how early it arrives.
 
-    First offender wins. Listing all of them would read as "fix these six
+    First offender wins. Listing all of them would read as "fix these five
     things" when in practice one control was left on.
     """
     for field, feature, is_non_default in REJECT_TABLE:
@@ -754,6 +774,16 @@ class _RealBackend25(_RealBackend):
             payload["block_swap_prefetch"] = True
         if request.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # 高速化第2弾: the same additive contract once more, appended LAST so the
+        # 第1弾 key order above is untouched. This one's pydantic default is
+        # FALSE, so a plain job carries no key at all and the golden payload is
+        # byte-identical to what it was before this line existed — and an absent
+        # key is not merely "not asked for", it is the RELEASE request the
+        # worker acts on (2.3's contract, restated verbatim). What the engine
+        # then holds is only the text encoder's state dict, not 2.3's whole set
+        # of sub-model skeletons.
+        if request.keep_resident:
+            payload["keep_resident"] = True
 
         with self._lock:
             try:
@@ -790,19 +820,26 @@ class _RealBackend25(_RealBackend):
             peak_vram_mb=event.get("peak_vram_mb"),
             generation_mode=mode,
             backend=REAL_BACKEND_25,
-            # The two acceleration relays engine25 HAS (高速化第1弾): the worker
-            # reports what actually happened, not what was asked for — "off" /
-            # "on" / "on->off", the last being a degrade (no Triton, or a build
-            # the prefetch engine could not be installed on). pipeline_manager
-            # writes both into metadata.json unchanged. ``.get`` rather than a
-            # default because a worker that never spoke leaves None, and None is
-            # the honest answer.
+            # The acceleration relays engine25 HAS (高速化第1弾 and 第2弾): the
+            # worker reports what actually happened, not what was asked for —
+            # "off" / "on" / "on->off", the last being a degrade (no Triton, or a
+            # build the prefetch engine could not be installed on).
+            # pipeline_manager writes them into metadata.json unchanged. ``.get``
+            # rather than a default because a worker that never spoke leaves
+            # None, and None is the honest answer.
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             fused_gguf_dequant_kernel_used=event.get("fused_gguf_dequant_kernel_used"),
-            # The REMAINING acceleration relays stay None: each names a 2.3 code
-            # path this engine does not have, and reporting "off" would claim the
-            # knob exists here and was left alone. attention_used is the
-            # exception worth stating positively — v1 is SDPA-only by scope.
+            # keep_resident echoes only "on"/"off" here — engine25 has no degrade
+            # path for it, so "on->off" never appears even though the field's
+            # contract allows it. A job that died before the text encoder was
+            # built would have echoed "on" too, but then no done event arrives,
+            # so nothing is relayed at all (2.3 behaves identically).
+            keep_resident_used=event.get("keep_resident_used"),
+            # The ONE REMAINING acceleration relay (``vae_mode_used``) stays
+            # None: it names a 2.3 code path this engine does not have, and
+            # reporting "off" would claim the knob exists here and was left
+            # alone. attention_used is the exception worth stating positively —
+            # v1 is SDPA-only by scope.
             attention_used="sdpa",
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
@@ -998,6 +1035,12 @@ class _RealBackend25(_RealBackend):
             payload["block_swap_prefetch"] = True
         if chain.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # 高速化第2弾, appended after the 第1弾 pair for the same reason they were
+        # appended after everything else: the newest block goes last, so no
+        # existing key order moves. Default FALSE, so a plain chain's payload is
+        # unchanged; an absent key is the release request, not silence.
+        if chain.keep_resident:
+            payload["keep_resident"] = True
 
         with self._lock:
             try:
@@ -1031,16 +1074,20 @@ class _RealBackend25(_RealBackend):
             generation_mode="chain",
             backend=REAL_BACKEND_25,
             chain_metadata=event.get("chain"),
-            # Same relay discipline as the single path: the two knobs engine25
+            # Same relay discipline as the single path: the knobs engine25
             # really has are echoed back from the worker's done event, and a
             # chain's echo is a fold over every build it made ("on->off" when one
             # of them fell back).
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             fused_gguf_dequant_kernel_used=event.get("fused_gguf_dequant_kernel_used"),
-            # Every REMAINING acceleration field names a 2.3 code path this
-            # engine does not have, so reporting "off" would claim the knob
-            # exists here and was left alone. attention_used is the one worth
-            # stating positively — the chain scope is SDPA-only.
+            # keep_resident is per-JOB, not per-build: the text encoder is built
+            # once for the whole chain, so this echo is "on"/"off" and never the
+            # folded "on->off" the two above can produce.
+            keep_resident_used=event.get("keep_resident_used"),
+            # The ONE REMAINING acceleration field (``vae_mode_used``) names a
+            # 2.3 code path this engine does not have, so reporting "off" would
+            # claim the knob exists here and was left alone. attention_used is
+            # the one worth stating positively — the chain scope is SDPA-only.
             attention_used="sdpa",
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )

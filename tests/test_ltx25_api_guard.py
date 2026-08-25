@@ -47,9 +47,11 @@ from services.engines.ltx25 import adapter as ltx25
 #: と、対応表が育ったときにどちらか片方だけが更新される。単発の
 #: ``GenerateRequest`` 用とchain用の2枚あり、扱う機能が違う。
 from test_ltx25_adapter import (  # noqa: E402
+    CHAIN_ACCEPTED_KEEP_RESIDENT,
     CHAIN_ACCEPTED_LORAS,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
+    REQUEST_ACCEPTED_KEEP_RESIDENT,
     REQUEST_ACCEPTED_LORAS,
     REQUEST_OVERRIDES,
 )
@@ -140,11 +142,15 @@ def test_ltx23_accepts_every_field_the_2_5_engine_refuses(two_family_client, fie
 
 @pytest.mark.parametrize(
     "field,value",
-    [("keep_resident", True), ("attention_backend", "sage"), ("vae_mode", "prune_vaed")],
+    [("attention_backend", "sage"), ("vae_mode", "prune_vaed")],
 )
 def test_ltx23_really_runs_the_jobs_2_5_refuses(two_family_client, field, value):
     """前のテストは「FEATURE_UNSUPPORTEDでない」しか言っていない。素材を必要と
-    しない3件については、2.3で本当に202まで通ることを見ておく。"""
+    しない2件については、2.3で本当に202まで通ることを見ておく。
+
+    ``keep_resident`` は高速化第2弾でこの一覧を**外れた**。2.5でも受理される
+    ようになったので、「2.5が拒否する仕事」という前提そのものが成り立たない
+    ——2.3側の受理は下の肯定テストが2系統まとめて見る。"""
     _activate(two_family_client, "LTX23")
     r = two_family_client.post("/api/v1/generate", json={**BASE_REQUEST, field: value})
     assert r.status_code == 202, r.text
@@ -218,6 +224,10 @@ def test_the_acceleration_echoes_reach_metadata_json_on_ltx25(two_family_client)
     assert "block_swap_prefetch_used" in meta and "fused_gguf_dequant_kernel_used" in meta
     assert meta["block_swap_prefetch_used"] is None
     assert meta["fused_gguf_dequant_kernel_used"] is None
+    # 高速化第2弾の3本目。理由も答えも第1弾の2本と同じで、mockは何も報告しない
+    # のだから null が正しい。実機での "on"/"off" はゲートG5で確かめる。
+    assert "keep_resident_used" in meta
+    assert meta["keep_resident_used"] is None
 
 
 def test_the_guard_runs_before_the_upload_and_lora_lookups(two_family_client):
@@ -253,6 +263,23 @@ def test_ltx25_no_longer_refuses_style_and_reference(two_family_client, case):
     )
     if r.status_code >= 400:
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+
+
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_KEEP_RESIDENT))
+def test_ltx25_no_longer_refuses_keep_resident(two_family_client, case):
+    """高速化第2弾の逆転。ここは404で妥協しない——**202まで**を見る。
+
+    このフィールドは素材を一つも要らないので、通るなら最後まで通るはずで
+    あり、途中で止まる理由があるとしたらそれはガードだけである。そして
+    直前まで、まさにここが422だった:2.5を選んだまま設定パネルで常駐を
+    ONにすると、以後の**すべての**ジョブが422になる——利用者から見れば
+    「LTX 2.5が壊れた」としか見えない罠で、それが消えたことをこの一本が
+    見張る。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_KEEP_RESIDENT[case]}
+    )
+    assert r.status_code == 202, r.text
 
 
 def test_outpaint_is_still_refused_by_name_on_ltx25(two_family_client):
@@ -419,6 +446,18 @@ def test_ltx25_no_longer_refuses_chain_style_and_reference(two_family_client, ca
     )
     if r.status_code >= 400:
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+
+
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_KEEP_RESIDENT))
+def test_ltx25_no_longer_refuses_chain_keep_resident(two_family_client, case):
+    """単発側の双子(高速化第2弾)。連結生成にも素材は要らないので、ここも
+    **202まで**見る。設定パネルの常駐がONのままだと連結生成も一つ残らず422に
+    なっていた——タブが違うだけで罠は同じものだった。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_KEEP_RESIDENT[case])
+    )
+    assert r.status_code == 202, r.text
 
 
 # --------------------------------------------------------------------------- #

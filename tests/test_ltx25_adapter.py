@@ -265,7 +265,6 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "vae_mode": {"vae_mode": "prune_vaed"},
     "attention_backend": {"attention_backend": "sage"},
-    "keep_resident": {"keep_resident": True},
 }
 
 #: What §3-102's THIRD increment turned on, as valid request bodies: the two
@@ -289,6 +288,22 @@ REQUEST_ACCEPTED_LORAS: dict[str, dict] = {
         "loras": _LORAS,
         "conditioning_attention_strength": 0.7,
     },
+}
+
+#: What 高速化第2弾 turned on: ``keep_resident``, which until this increment was
+#: the last acceleration knob left in :data:`REJECT_TABLE`. A table of its OWN
+#: rather than a row added to :data:`REQUEST_ACCEPTED_LORAS`, because that one
+#: is the LoRA increment's evidence and says so in its name — mixing an
+#: unrelated field into it would make both tables lie about what they cover.
+#: One row, and a row it will stay: nothing else is coupled to it (no upload,
+#: no adapter), so the request that turns it on is the plain request plus a
+#: boolean.
+#:
+#: WHAT THIS BUYS on 2.5 is not what it buys on 2.3. The contract is 2.3's
+#: verbatim — but the thing kept resident here is the Gemma 4 text encoder's
+#: state dict alone (~7.7 GiB), not 2.3's whole set of sub-model skeletons.
+REQUEST_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
+    "keep_resident": {"keep_resident": True},
 }
 
 
@@ -359,6 +374,32 @@ def test_the_lora_fields_are_honoured_not_merely_unlisted():
     assert not lora_fields & {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert not lora_fields & set(ltx25.IGNORED_FIELDS)
     assert not lora_fields & set(ltx25.GOVERNED_FIELDS)
+
+
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_KEEP_RESIDENT))
+def test_keep_resident_is_no_longer_refused(case):
+    """The headline of 高速化第2弾: asking the 2.5 engine to keep the text
+    encoder resident passes the ruling instead of raising 422. Until this
+    increment it was the one acceleration knob that still refused a job — and
+    refused it from the SETTINGS panel, i.e. for every job until the user found
+    the setting again."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_KEEP_RESIDENT[case]))  # no raise
+
+
+def test_keep_resident_is_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises. Dropping the field from
+    every table would also stop the 422 — and would then keep the user's RAM
+    setting a secret from the engine."""
+    assert "keep_resident" in ltx25.HONOURED_FIELDS
+    assert "keep_resident" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert "keep_resident" not in ltx25.IGNORED_FIELDS
+    assert "keep_resident" not in ltx25.GOVERNED_FIELDS
+
+
+def test_keep_resident_no_longer_names_a_published_limitation():
+    """GET /models must stop publishing it, or the frontend greys out a setting
+    the server now accepts — the exact trap this increment removes."""
+    assert "keep_resident" not in ltx25.UNSUPPORTED_FEATURES
 
 
 def test_outpaint_is_still_named_by_name_despite_its_lora_companions():
@@ -459,7 +500,6 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
     "attention_backend": {"attention_backend": "sage"},
-    "keep_resident": {"keep_resident": True},
 }
 
 
@@ -509,6 +549,29 @@ CHAIN_ACCEPTED_LORAS: dict[str, dict] = {
         "conditioning_attention_strength": 0.7,
     },
 }
+
+
+#: The chain twin of :data:`REQUEST_ACCEPTED_KEEP_RESIDENT` (高速化第2弾), and
+#: a separate table for the same reason: it is this increment's evidence, not
+#: the LoRA increment's. A chain builds the text encoder once per JOB exactly
+#: as a single job does, so the field means the same thing on both endpoints —
+#: what the SECOND job no longer has to rebuild.
+CHAIN_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
+    "keep_resident": {"keep_resident": True},
+}
+
+
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_KEEP_RESIDENT))
+def test_chain_keep_resident_is_no_longer_refused(case):
+    """The chain twin of the single-path acceptance test (高速化第2弾)."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_KEEP_RESIDENT[case]))  # no raise
+
+
+def test_the_chain_keep_resident_field_is_honoured_not_merely_unlisted():
+    assert "keep_resident" in ltx25.CHAIN_HONOURED_FIELDS
+    assert "keep_resident" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert "keep_resident" not in ltx25.CHAIN_IGNORED_FIELDS
+    assert "keep_resident" not in ltx25.CHAIN_GOVERNED_FIELDS
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_LORAS))
@@ -725,6 +788,9 @@ def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
         # and the adapter relays it verbatim (see the outcome test below).
         "block_swap_prefetch_used": "on",
         "fused_gguf_dequant_kernel_used": "on",
+        # 高速化第2弾: a third echo, and one that only ever says "on" or "off" —
+        # engine25 has no degrade path for the resident text encoder.
+        "keep_resident_used": "on",
     }
     return be
 
@@ -782,6 +848,34 @@ def test_chain_payload_omits_the_acceleration_keys_when_explicitly_off(tmp_path)
         output_dir=tmp_path / "half",
     )
     assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + ["fused_gguf_dequant_kernel"]
+
+
+def test_chain_payload_carries_keep_resident_only_when_asked(tmp_path):
+    """高速化第2弾's half of the additive contract, and the direction that
+    matters most here: this knob's pydantic default is FALSE, so the DEFAULT
+    chain must look exactly as it did before the field was wired — the golden
+    plus 第1弾's pair, and nothing else. Turning it on appends ONE key, and it
+    lands at the very END, after the two 第1弾 keys, because the adapter appends
+    the newest block last and every earlier block's position is the contract.
+
+    Explicit ``False`` is tested beside the default on purpose: the frontend
+    sends the whole schema on every request, so "the user left it off" arrives
+    as a literal ``false`` far more often than as an omission, and the two must
+    produce the same payload — an absent key IS the release request the worker
+    acts on."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "default")
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+
+    be.generate_chain(_chain_request(keep_resident=False), output_dir=tmp_path / "explicit")
+    assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+    be.generate_chain(_chain_request(keep_resident=True), output_dir=tmp_path / "on")
+    assert list(captured[2]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident"]
+    assert captured[2]["keep_resident"] is True
 
 
 def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
@@ -1062,16 +1156,18 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
     assert outcome.chain_metadata == {"total_px": 41, "num_clips": 2}
     assert outcome.seed_used == 123
     assert outcome.peak_vram_mb == 7000
-    # The chain scope is SDPA-only, and the two relays that are STILL None name
-    # 2.3 code paths this engine does not have — reporting "off" would claim the
+    # The chain scope is SDPA-only, and the ONE relay that is still None names a
+    # 2.3 code path this engine does not have — reporting "off" would claim the
     # knob exists here and was left alone.
     assert outcome.attention_used == "sdpa"
-    assert outcome.keep_resident_used is None
     assert outcome.vae_mode_used is None
     # 高速化第1弾: these two DO name engine25 code paths now, so the worker's
     # echo rides through to metadata.json instead of being dropped.
     assert outcome.block_swap_prefetch_used == "on"
     assert outcome.fused_gguf_dequant_kernel_used == "on"
+    # 高速化第2弾: and so does the third. It used to be None here, because the
+    # field was a 422 on this engine.
+    assert outcome.keep_resident_used == "on"
 
 
 def test_chain_crop_output_is_an_app_side_post_process(tmp_path, monkeypatch):
@@ -1143,6 +1239,8 @@ def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
         # 高速化第1弾: the single-path twin of the chain fake's echo.
         "block_swap_prefetch_used": "on",
         "fused_gguf_dequant_kernel_used": "on",
+        # 高速化第2弾: the third echo, "on"/"off" only.
+        "keep_resident_used": "on",
     }
     return be
 
@@ -1188,6 +1286,35 @@ def test_generate_payload_omits_the_acceleration_keys_when_explicitly_off(tmp_pa
     be.generate(_request(fused_gguf_dequant_kernel=False), tmp_path / "half")
     assert list(captured[1]) == GOLDEN_GENERATE_KEYS_25 + ["block_swap_prefetch"]
     assert captured[1]["block_swap_prefetch"] is True
+
+
+def test_generate_payload_carries_keep_resident_only_when_asked(tmp_path):
+    """The single-path twin of the chain test in section 3d (高速化第2弾).
+
+    The default direction is the load-bearing one: this knob's pydantic default
+    is FALSE, so a plain T2V's payload is byte-identical to what it was before
+    the field was wired — which is why the golden above needed no edit. Explicit
+    ``False`` must produce that same payload, because the frontend sends the
+    whole schema every time and an absent key is not silence: it is the release
+    request the worker acts on."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    # A pinned seed, because the two payloads below are compared to EACH OTHER:
+    # an omitted seed is drawn per job, which would differ for a reason that has
+    # nothing to do with this field.
+    fixed = {"seed": 123}
+
+    be.generate(_request(**fixed), tmp_path / "default")
+    assert list(captured[0]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+
+    be.generate(_request(keep_resident=False, **fixed), tmp_path / "explicit")
+    assert list(captured[1]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+    be.generate(_request(keep_resident=True, **fixed), tmp_path / "on")
+    # Appended LAST — after 第1弾's pair — so no earlier key moved.
+    assert list(captured[2]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident"]
+    assert captured[2]["keep_resident"] is True
 
 
 def test_generate_payload_carries_the_style_lora_entries(tmp_path):
@@ -1280,11 +1407,12 @@ def test_generate_outcome_names_this_engine(tmp_path):
     assert outcome.backend == ltx25.REAL_BACKEND_25
     assert outcome.seed_used == 4242
     assert outcome.attention_used == "sdpa"
-    # 高速化第1弾: the two acceleration echoes engine25 has are relayed; the two
-    # it does not have stay None rather than claiming an untouched "off".
+    # 高速化第1弾+第2弾: the three acceleration echoes engine25 has are relayed;
+    # the ONE it does not have stays None rather than claiming an untouched
+    # "off".
     assert outcome.block_swap_prefetch_used == "on"
     assert outcome.fused_gguf_dequant_kernel_used == "on"
-    assert outcome.keep_resident_used is None
+    assert outcome.keep_resident_used == "on"
     assert outcome.vae_mode_used is None
 
 
@@ -1318,6 +1446,8 @@ def test_generate_outcome_leaves_the_echoes_none_when_the_worker_is_silent(tmp_p
     outcome = be.generate(_request(), tmp_path / "out")
     assert outcome.block_swap_prefetch_used is None
     assert outcome.fused_gguf_dequant_kernel_used is None
+    # 高速化第2弾's echo obeys the same rule: nobody reported, so nobody answers.
+    assert outcome.keep_resident_used is None
 
 
 # --------------------------------------------------------------------------- #

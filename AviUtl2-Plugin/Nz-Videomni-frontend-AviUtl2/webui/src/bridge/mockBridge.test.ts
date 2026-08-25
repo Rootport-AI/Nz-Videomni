@@ -615,7 +615,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       expect.arrayContaining([
         "retake", "end_source",
         "two_stage_hq", "outpaint",
-        "nag", "prune_vaed", "sage_attention", "keep_resident",
+        "nag", "prune_vaed", "sage_attention",
       ]),
     );
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
@@ -632,6 +632,12 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     expect(features).not.toContain("a2v");
     expect(features).not.toContain("loras");
     expect(features).not.toContain("reference_video");
+    // 高速化第2弾: `keep_resident` left too — the engine keeps its text encoder
+    // resident between jobs now. Asserted NEGATIVELY for the reason above and
+    // for one more: dropping it from the `arrayContaining` list alone would
+    // have kept this test green whether the fixture was updated or not, and a
+    // stale fixture would go on greying out a Settings control that works.
+    expect(features).not.toContain("keep_resident");
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {

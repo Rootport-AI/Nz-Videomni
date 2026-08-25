@@ -281,7 +281,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "nag",
     "prune_vaed",
     "sage_attention",
-    "keep_resident",
+    // 高速化第2弾: `keep_resident` LEFT THIS LIST. The 2.5 engine keeps its
+    // Gemma 4 text encoder resident between jobs now (opt-in, default off), so
+    // the server no longer 422s the field — and publishing it here would grey
+    // out a Settings control that works. Mirrors
+    // `services/engines/ltx25/adapter.py`'s HONOURED_FIELDS.
   ],
 };
 

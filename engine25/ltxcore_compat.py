@@ -615,6 +615,15 @@ def verify() -> None:
         "text_encoder_builder",
         "alloc_trim_strategy",
     )
+    # The two no-argument build methods ``Ltx25PromptEncoder`` overrides to time
+    # them (``10a_te_build`` / ``10b_ep_build``). If either is renamed upstream
+    # the override stops intercepting anything: the official build still runs,
+    # so nothing fails -- the phase simply vanishes from the report, which is a
+    # silent loss of measurement rather than an error. Pinned here so the rename
+    # is reported at worker start instead.
+    for method in ("_build_text_encoder", "_build_embeddings_processor"):
+        if not callable(getattr(PromptEncoder, method, None)):
+            _fail("PromptEncoder", f"method {method!r} is gone; engine25's phase timers no longer intercept it")
     _require_params(gpu_model, "gpu_model", "model", "alloc_trim_strategy")
 
     # --- Phase 2d: assembly surface -----------------------------------------

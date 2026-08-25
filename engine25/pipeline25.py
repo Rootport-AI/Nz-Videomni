@@ -534,6 +534,41 @@ class Ltx25PromptEncoder(PromptEncoder):
         self.progress: ProgressCallback | None = None
         self.vram: _Vram | None = None
 
+    # -- sub-phase timers ----------------------------------------------------
+    #
+    # ``10_prompt_encode`` is one number for three very different pieces of
+    # work: building the 9.2 GB Gemma 4 text encoder, running the encode, and
+    # building the embeddings processor. These two overrides split the two
+    # BUILDS out of it so the split is measured instead of assumed -- the
+    # encode's own cost is then the parent minus these two.
+    #
+    # Both official methods take no arguments (asserted by
+    # ``ltxcore_compat.verify``), so wrapping them is a plain ``super()`` call
+    # with a clock around it and changes nothing about what gets built. They
+    # deliberately do NOT call ``self.vram.reset()``: a reset here would zero
+    # CUDA's peak counters inside the parent's window and make
+    # ``10_prompt_encode`` understate the peak it exists to report. The
+    # sub-phases therefore read the same running peak the parent will, which is
+    # what "the peak so far, at this point in the window" means.
+
+    def _build_text_encoder(self) -> Any:
+        """Official build, timed as ``10a_te_build`` (inside ``10_prompt_encode``)."""
+        started = time.perf_counter()
+        try:
+            return super()._build_text_encoder()
+        finally:
+            if self.vram is not None:
+                self.vram.record("10a_te_build", time.perf_counter() - started)
+
+    def _build_embeddings_processor(self) -> Any:
+        """Official build, timed as ``10b_ep_build`` (inside ``10_prompt_encode``)."""
+        started = time.perf_counter()
+        try:
+            return super()._build_embeddings_processor()
+        finally:
+            if self.vram is not None:
+                self.vram.record("10b_ep_build", time.perf_counter() - started)
+
     def __call__(self, prompts: list[str], **kwargs: Any) -> Any:
         if self.progress is not None:
             self.progress(STAGE_ENCODE, 0, 1)
@@ -1061,6 +1096,14 @@ class Ltx25Pipeline:
         del video, audio
         gc.collect()
         cleanup_memory()
+
+        # The job's RESTING footprint: host RSS after the collector has run and
+        # before anything of the next job is built. It is a marker, not an
+        # interval -- nothing is being timed, so the seconds are 0.0 and the
+        # entry exists purely for its ``rss_gib``. Recorded here rather than
+        # after ``GenerationResult`` so it lands in ``phases`` and travels on
+        # the ``done`` event with the rest.
+        self.vram.record("40_job_end", 0.0)
 
         result = GenerationResult(
             output_path=str(out),

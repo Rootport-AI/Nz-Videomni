@@ -1019,6 +1019,28 @@ def _band_conditionings(
     return video, audio
 
 
+#: Phases whose ``seconds`` must NOT be added into ``seconds_total``.
+#:
+#: Two shapes, one expression:
+#:
+#: * ``<digits><lowercase letters>_`` -- a SUB-phase (``10a_te_build``,
+#:   ``10b_ep_build``). Its time is already inside its parent (``10_``), so
+#:   adding it would double-count. The letter suffix on the ordering prefix IS
+#:   the convention: a bare ``NN_`` prefix is a phase in its own right, an
+#:   ``NNx_`` prefix is a slice of the ``NN_`` above it.
+#: * ``40_job_end`` -- a marker, not an interval. Its seconds are 0.0 by
+#:   construction, so excluding it changes no arithmetic; it is listed here so
+#:   the rule reads as "everything summed is an elapsed interval" rather than
+#:   "everything summed is an interval, except one entry that happens to be
+#:   zero".
+#:
+#: ``by_kind`` is deliberately NOT filtered: it is a per-kind table, and a
+#: reader looking up "how long did the text encoder build take" wants to find
+#: it there. The extra buckets (``te_build`` / ``ep_build`` / ``job_end``) are
+#: additions to that table, and ``count`` still counts every phase recorded.
+_NOT_IN_SECONDS_TOTAL = re.compile(r"^\d+[a-z]+_|^40_job_end$")
+
+
 def _vram_summary(phases: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """Reduce a chain's per-phase peaks to what belongs on ``done``.
 
@@ -1028,6 +1050,9 @@ def _vram_summary(phases: dict[str, dict[str, Any]]) -> dict[str, Any]:
     how many phases they were taken over, so a truncated run is visible. The
     full table is kept alongside it under ``metadata["ltx25"]["phases"]``, which
     is where a post-mortem looks and where the app does not.
+
+    ``seconds_total`` sums the phases that ARE elapsed intervals; sub-phases and
+    markers are left out of it (see ``_NOT_IN_SECONDS_TOTAL``).
     """
     if not phases:
         return {"count": 0}
@@ -1059,7 +1084,15 @@ def _vram_summary(phases: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "peak_allocated_gib": _peak("peak_allocated_gib"),
         "peak_reserved_gib": _peak("peak_reserved_gib"),
         "rss_peak_gib": _peak("rss_gib"),
-        "seconds_total": round(sum(float(e.get("seconds") or 0.0) for e in phases.values()), 2),
+        # Elapsed intervals only -- see ``_NOT_IN_SECONDS_TOTAL``.
+        "seconds_total": round(
+            sum(
+                float(entry.get("seconds") or 0.0)
+                for name, entry in phases.items()
+                if not _NOT_IN_SECONDS_TOTAL.match(name)
+            ),
+            2,
+        ),
         "by_kind": by_kind,
     }
 
@@ -1834,6 +1867,12 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
     gc.collect()
     cleanup_memory()
+
+    # The chain's resting footprint after the collector has run -- the same
+    # marker the single-generation path records, so the two are read the same
+    # way. Seconds are 0.0: nothing is being timed, the entry exists for its
+    # ``rss_gib``.
+    vram.record("40_job_end", 0.0)
 
     # ``vram_peak_mb`` is the highest PER-PHASE peak, not ``max_memory_allocated``
     # read at the end. The per-phase recorder resets CUDA's peak counters around

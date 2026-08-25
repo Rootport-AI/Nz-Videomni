@@ -31,19 +31,25 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   status.state が ready になったことを確認してから生成を投げてください。
   切り替え直後の1本目の生成はキャッシュが冷えていて通常の約2倍かかります
   （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
-  LTX 2.5 では submit_generate の nag_enabled / vae_mode / attention_backend
-  （いずれも既定値以外）が使えません（422 FEATURE_UNSUPPORTED）。
+  LTX 2.5 では submit_generate の nag_enabled / vae_mode（いずれも既定値以外）
+  が使えません（422 FEATURE_UNSUPPORTED）。
   keep_resident（モデル骨格の常駐）は 2026-08-25 から LTX 2.5 でも使えます
   （既定 off のまま。ただし LTX 2.3 とは常駐する中身が違い、2.5 が抱えるのは
   テキストエンコーダの重みだけで約7.7GiBです）。
+  attention_backend（SageAttention）も 2026-08-25 から LTX 2.5 で使えます
+  （既定 "sdpa" のまま）。ただしこれは他の高速化と違い、"sage" にすると
+  同じシードでも生成結果の細部が変わります。速さは動画の大きさに強く依存し、
+  1280x768 の連結生成で約1.10倍、512x320 級では効かないか、かえって遅く
+  なることがあります。sageattention が入っていない環境では 422 にはならず
+  自動的に "sdpa" へ降格して完走します（この降格の規律は 2.3 と同じです）。
   loras（スタイルLoRA・制御系IC-LoRA）と reference_video_id、および
   conditioning_attention_strength / reference_video_strength は LTX 2.5 でも
   使えます。submit_chain は連結生成そのものに加えて
   source_video_id（V2V継続）と source_audio_id（A2V。複数クリップにまたがる
   長尺A2Vも含みます）、loras と reference_video_id（複数クリップにまたがる
   長尺IC-LoRAも含みます）が使えますが、end_source_video_id /
-  end_source_image_id / nag_enabled / vae_mode / attention_backend は
-  同じく使えません（keep_resident は submit_chain でも使えます）。
+  end_source_image_id / nag_enabled / vae_mode は同じく使えません
+  （keep_resident と attention_backend は submit_chain でも使えます）。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。

@@ -80,13 +80,21 @@ async def submit_generate(
     現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
-    LTX 2.5 では、このツールでは ``nag_enabled`` / ``vae_mode`` /
-    ``attention_backend``（いずれも既定値以外にした場合）が使えません。
+    LTX 2.5 では、このツールでは ``nag_enabled`` / ``vae_mode``
+    （いずれも既定値以外にした場合）が使えません。
     ``loras``（スタイルLoRA・制御系IC-LoRA）と
     ``reference_video_id``、``conditioning_attention_strength`` /
     ``reference_video_strength`` は LTX 2.5 でも使えます。
     ``keep_resident`` も 2026-08-25 から LTX 2.5 で使えます（既定off のまま。
     2.5 が常駐させるのはテキストエンコーダの重み1つだけで約7.7GiBです）。
+    ``attention_backend``（SageAttention）も 2026-08-25 から LTX 2.5 で
+    使えます（既定 ``"sdpa"`` のまま）。**これだけは他の高速化と違い、
+    ``"sage"`` にすると同じシードでも生成結果の細部が変わります**。
+    速さは動画の大きさに強く依存し、1280x768 の連結生成で約1.10倍、
+    512x320 級では効かないか、かえって遅くなることがあります。
+    sageattention が入っていない環境では 422 にはならず自動的に ``"sdpa"``
+    へ降格して完走し、``metadata.json`` の ``attention_used`` が
+    ``"sage->sdpa"`` になります（降格の規律は LTX 2.3 と同じです）。
     ``submit_chain``（連結生成）は本体そのものは使えますが、素材の指定など
     一部の引数が使えません（``submit_chain`` の説明を見てください）。
 
@@ -346,11 +354,16 @@ async def submit_chain(
     クリップにまたがる参照動画も含みます）も使えます**。ただし次の引数は
     使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED になります:
     ``end_source_video_id`` ・ ``end_source_image_id``（素材（末尾））/
-    ``nag_enabled`` / ``vae_mode`` / ``attention_backend``。これらを使いたい
-    場合は ``load_pipeline`` で LTX 2.3 に切り替えてください。
+    ``nag_enabled`` / ``vae_mode``。これらを使いたい場合は ``load_pipeline``
+    で LTX 2.3 に切り替えてください。
     **``keep_resident`` は 2026-08-25 から LTX 2.5 の連結生成でも使えます**
     （既定off のまま。2.5 が常駐させるのはテキストエンコーダの重み1つだけ
-    です）。
+    です）。**``attention_backend``（SageAttention）も 2026-08-25 から
+    LTX 2.5 の連結生成で使えます**（既定 ``"sdpa"`` のまま。チェーンの全
+    クリップ・全ステージへ一律に効き、実測は 1280x768・2クリップ×121
+    フレームで約1.10倍）。**ただし ``"sage"`` にすると同じシードでも生成
+    結果の細部が変わります。** エコーはチェーン全体の畳み込みで、どこか
+    1回でも降格すれば ``"sage->sdpa"`` になります。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行

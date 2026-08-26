@@ -1927,6 +1927,43 @@ def test_generate_payload_carries_the_attention_backend_only_when_asked(tmp_path
     assert list(captured[0])[-1] == "attention_backend"
 
 
+def test_generate_payload_is_untouched_when_outpaint_is_absent_or_None(tmp_path):
+    """THE BEFORE PICTURE for the Outpainting increment (M-6), landed in commit
+    C1 while the engine driver is still INACTIVE.
+
+    C2 will add an ``outpaint`` block to this payload, guarded on
+    ``request.outpaint is not None``. The risk that guard carries is not that it
+    fails to fire — a gate that generated nothing would be obvious — but that it
+    fires when it should not, or that adding it disturbs the key ORDER of the
+    payload every other job sends. Either would change the bytes of a plain
+    T2V's worker message, and with them every frozen-SHA piece of evidence the
+    earlier increments left behind.
+
+    So this pins the plain payload's key SET and key ORDER *now*, with
+    ``outpaint`` named explicitly rather than merely omitted: the frontend sends
+    the whole schema on every request, so ``outpaint=None`` is the shape that
+    actually arrives, and "absent" and "explicitly None" must produce the same
+    bytes. Written against the adapter AS IT IS — no adapter line changes in
+    C1 — so a re-run after C2 is a real before/after comparison rather than a
+    test written to fit the new code.
+    """
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    # A pinned seed, because the two payloads are compared to EACH OTHER: an
+    # omitted seed is drawn per job and would differ for a reason that has
+    # nothing to do with this field.
+    fixed = {"width": 512, "height": 320, "num_frames": 25, "seed": 123}
+
+    be.generate(_request(**fixed), tmp_path / "absent")
+    be.generate(_request(outpaint=None, **fixed), tmp_path / "explicit_none")
+
+    for payload in captured:
+        assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+        assert "outpaint" not in payload
+    # Byte-identical but for the destination the two runs were given.
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+
 def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):
     """THE POSITIVE DIRECTION (高速化第3弾). Every "sdpa" assertion in this file
     would also pass against the hard-coded ``attention_used="sdpa"`` the adapter

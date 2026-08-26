@@ -3284,3 +3284,47 @@ LTX 2.3でStyle LoRA（画風・キャラクターLoRA）適用時に音声出�
 - **画面に出る文言は1文字も変えていない**ので、**`.aux2`の作り直しは本弾では行っていない**（直近の再配布は§90の`d515ffa`）。
 
 - **状態**: 実装・機械検証まで完了（2026-08-25）。**この弾だけは「絵が変わる」種類の高速化なので、オーナーの目視ゲート（G8）が残っている＝目視待ち**である（見るものと聴くものはバックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1、依頼の全文は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §77.6）。
+
+---
+
+## 92. LTX 2.5で撮り直し（Retake）と素材（末尾）（End source）が開通した — Editサブタブ単位のグレーアウト新設と、無効モード行き右クリックの遮断（バックエンド§3-102の準必須級2件）（2026-08-26）
+
+**やったこと**: LTX 2.5エンジンが撮り直し（Retake）と素材（末尾）（End source）を受理するようになったのに合わせ、**Editタブを「サブタブ単位」で灰色にできる仕組みを新設し、あわせて今日でも再現する既存バグを1件直した**。フロントエンドのファイルはバックエンドのコミット`dc480f4`（C0＝土台とバグ修正）と`18a501e`（C2＝撮り直し開通に伴うモックの1語）・`a53d086`（C3＝素材（末尾）開通に伴うモックの1語と`.aux2`の再配布）の3本に分かれて入っている。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §78（**訂正と補足は同 §78.13**）、設計正本は同[`MULTI_ENGINE_DESIGN.md`](../../../Docs/MULTI_ENGINE_DESIGN.md) §5.6・§8.5。
+
+**この段は§90・§91と種類が違う。** `keep_resident`（§90）と`sage_attention`（§91）のときに触ったのはモックだけで**製品コードは0行**だったが、**本段は製品コード4ファイルとi18nに手が入っている**。理由は開通の形にある——開通後のEditタブは「撮り直しとOutpaintingの**どちらか一方でも動けば生きたまま**」になるので、**タブ単位のグレーアウトではOutpaintingだけを閉じられない**。
+
+### (1) 製品コードの変更（C0・4ファイル＋i18n）
+
+| ファイル | 変更点 |
+|---|---|
+| `shell/useBaseModels.ts` | **`editSubTabsDisabledFor`を新設**（`chainPanelsDisabledFor`と同型の純関数）。**サーバーの機能名`outpaint`とサブタブ名`outpainting`の読み替えは、この関数の中だけで行う**——下流のどこもどちらの名前も知らなくてよい形にした。両方`true`になりうるが呼び出し側は見ない（両方だめなベースモデルは`disabledModesFor`の`needsAnyOf: ["retake", "outpaint"]`でEditタブごと落ちるため、この画面がマウントされない）。**それでも正直に答えさせている**のは、関数を特別扱いのない素の表のままに保つためである |
+| `modes/edit/EditSubTabs.tsx` | 有効なidにも`disabled`を許すよう**判別可能ユニオンを拡張**した。`disabled: true`はリテラルのままなので、`onChange(tab.id)`側の型の絞り込みは従来どおり効く。**無効タブにはonClickを付けない**作法（`shell/ModeTabs.tsx`準拠）と、**灰色の見た目は1種類に留めて理由はツールチップで伝える**判断も踏襲した |
+| `modes/edit/EditScreen.tsx` | `subTabsDisabled`を受け取ってサブタブへ配る |
+| `shell/AppShell.tsx` | **`handleRoute`の冒頭で、無効モード行きのルートを弾く**（下記(2)） |
+| `i18n/strings.ts` | **36行の追加**。`edit.unavailableOnBaseModel.retake` / `.outpainting`（サブタブ1つにつき1行のツールチップ。`chained.unavailableOnBaseModel`と同じ形——Editタブ自体は生きているので、汎用の「非対応」ではどちらの半分が範囲外なのか分からなくなる）と、`modeUnsupportedByBaseModel`（右クリックを弾いたときの案内ノート）の日英。**Inpaintingのモックには意図的にツールチップを付けていない**——どのベースモデルでも「まだ作っていない」ものなので、パネルが無いこと自体が既に説明になっている |
+
+### (2) 挙動が実際に変わるのは、既存バグの修正1点だけである
+
+- **タイムラインの右クリックメニューはAviUtl2が描いている。** このアプリがタブを灰色にしても、Edit系の項目はメニューに出たままになる。
+- これまで`handleRoute`は`disabledModes`を見ずに走り切っていたため、**`reservePlacement`が⏳仮オブジェクトをタイムラインへ書き**、`setMode("edit")`でタブを開き、**そのあとでバウンス用の`useEffect`がSingleへ戻していた**。タブ切替は取り消せても、**書き込まれた仮オブジェクトは残る**——どのジョブにも紐づかず、片付ける主体もいない。**「LTX 2.5で右クリック撮り直し→ゴミ仮オブジェクト残留」は今日でも再現する実バグだった。**
+- **C0は`handleRoute`の冒頭（選択ガードよりさらに前、当然あらゆる書き込みより前）で弾く。** 弾き方は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §4の選択ガードと同じ契約——**案内ノートを出して、それ以外は何もしない**（タブ切替なし・リマウントなし・予約なし・プリフィルなし）。**Singleへ誘導はしない**: ユーザーが押したのはタブではなくタイムライン上のオブジェクトなので、拒否のうえに勝手な画面移動を重ねると驚きが2つになる。既存のバウンス`useEffect`は「すでにそのモードに居るとき」を引き続き担当し、こちらは「そもそも到着させない」を担当する、という住み分けである。
+- **土台のグレーアウトそのものは、C0の時点では観測できない。** 当時のLTX 2.5は`retake`と`outpaint`の両方を非対応と申告していたので、`disabledModesFor`がEditタブごと灰色にしてしまい、サブタブに到達できなかった。**C2で`retake`が抜けた瞬間からEditタブが生き、Outpaintingのサブタブだけが灰色になる**——ここで初めて仕組みが表に出る。
+
+### (3) モックの追随（C2・C3）とテスト
+
+- **`bridge/mockBridge.ts`**: 宣言するLTX 2.5の使えない機能一覧から、**C2で`"retake"`・C3で`"end_source"`の1語ずつ**を削除した（§90・§91とまったく同じ作法）。**これで宣言に残るのは`two_stage_hq`／`outpaint`／`nag`／`prune_vaed`の4件**になり、**連結生成のモード名は1つも残っていない**。
+- **`test/unsupportedFeatures.ts`を新設した**（C2）。期待値をテストごとに手で並べるのをやめ、**1箇所の表から引くようにした**——**期待値から消すだけでは、古いモックのままでもテストが緑で通ってしまう**（§89以来の止め方）ので、`not.toContain`の側も同じ表から作れる形にしてある。
+- **件数**: vitest **2,576件（2,566 passed ＋ 10 skipped・134ファイル）で0失敗**。**基準は§90・§91の 2,553件（2,543 passed ＋ 10 skipped）**なので、**passedで+23件・skipは増減なし**である。**件数を引用するときは「passedだけか、skipped込みか」を必ず添えること**（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §76.8(6)）。型検査 **0エラー**。
+
+### (4) `.aux2`は再ビルドして2箇所へ配った（C3）
+
+- **画面に出る文言が増えている**ので（上記(1)の`strings.ts` 36行）、**`.aux2`の作り直しが要る段である**。`build.ps1 -Config Release` → `deploy.ps1`を通し、**実機のAviUtl2インストール先（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2`）と、リポジトリの配布用コピー（`AviUtl2-Plugin\NzVideomni.aux2`）の2箇所**へ配置した。
+- **SHA-256は3値一致**（ビルド成果物`build/ninja-release/NzVideomni.aux2`・実機・配布用コピー）: **`cbbf71d284ba910768b4fd839d9ac54d0a793ce31fd57f9172afe245cf587254`**（**1,246,720バイト**）。
+- **ビルドは必ず`build.ps1` → `deploy.ps1`を通すこと**（ninjaを直接叩くとWeb UIの埋め込みが更新されず、**画面の文言だけが古いまま配られる**）。
+
+### (5) この段だけの注意
+
+- **`unsupported_features`が4件に減っても、画面が灰色になるのはOutpaintingだけである。** 残る4件のうち**このWebUIが読んでいるのは`outpaint`だけ**——機能名を灰色へ翻訳しているのは`shell/useBaseModels.ts`の3つの表（`MODE_REQUIREMENTS`・`chainPanelsDisabledFor`・`editSubTabsDisabledFor`）と`batchA2vDisabledFor`だけで、そこに現れる語は`chain`／`retake`／`outpaint`／`v2v`／`a2v`／`end_source`／`reference_video`の**7語しかない**。**`two_stage_hq`・`nag`・`prune_vaed`はどの表にも無く、画面のどの部品とも結びついていない**（NAGのトグルや非蒸留の選択は`unsupported_features`を見ずに描かれ、押せば422が返る）。**§90・§91と同じ注意である**——「この一覧が減った」と「画面の何かが変わった」を、**混ぜて覚えないこと**。
+- **モックのクリップ数の下限が、実APIとずれている**（本段で見つかった範囲外の不具合）。`mockBridge.ts`はクリップ1本の連結生成を許す例外として`source_video`と`source_audio`しか持っていないが、実APIの`api/models.py`は`retake`・`reference_video_id`・`end_source`も例外にしている。**したがってクリップ1本の素材（末尾）チェーンが、モックでだけ422になる。C3以前からのずれ**で、本段では直していない（テスト側は2クリップへ寄せ、理由をテストに書いた）。起票はバックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-116。
+
+- **状態**: 実装・機械検証・デプロイまで完了（2026-08-26）。**オーナーの目視ゲート（G8）が残っている＝目視・試聴待ち**である（見るものと聴くものはバックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1、素材は`outputs/ltx25-rtes-gate/g8_material/`）。**M8（キーフレーム印の述語）の裁定は監督裁定であって、オーナー追認待ちである**——理論から導いた述語が2シードの実測で否定され、暫定でキャリー基準を出荷構成に入れてある（バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §78.7・§78.13(1)）。**押し込み（`git push`）はオーナー承認のうえで行う運用なので、エージェントはコミットまでで止める。**

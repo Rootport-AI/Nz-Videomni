@@ -2481,8 +2481,12 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             # at seed 12345 and 31.143 vs 32.631 dB at seed 999 -- the
             # position rule losing by 1.5-2.2 dB, where the gate's line was
             # "no worse than 0.5 dB"). LTX 2.3 on the identical request sits
-            # at 31.333 dB, nearer the content rule. Owner ruling, on those
-            # numbers: the CONTENT half is what governs.
+            # at 31.333 dB, nearer the content rule. SUPERVISOR RULING (OWNER
+            # RATIFICATION PENDING), on those numbers: the CONTENT half is
+            # what governs. Re-adjudicated on the shipped arrangement, A =
+            # carry / B = position: 32.912 vs 30.236 dB, delta +2.676 dB, so
+            # the gate passes. Keep these numbers and VERIFICATION_LOG 78.7
+            # (as corrected by 78.13) saying the same thing.
             #
             # WHY THAT IS THE COHERENT READING rather than merely the measured
             # one: a reverse segment's latent 0 is not carried from anywhere,

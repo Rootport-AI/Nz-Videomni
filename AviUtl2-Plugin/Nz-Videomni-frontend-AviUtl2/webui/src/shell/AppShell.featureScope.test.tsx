@@ -135,8 +135,13 @@ describe("AppShell — base-model feature scope", () => {
   it("leaves the current mode alone when the new base model can run it", async () => {
     // The corollary: the bounce must be caused by the RESTRICTION, not by the
     // switch. A user on Inventory stays on Inventory — and the switch really
-    // did land, which the greyed Outpainting sub-tab is the positive signal for.
-    const { select, container } = await renderApp(AS_LTX25);
+    // did land, which is proven with a SYNTHETIC `retake` addition
+    // (`withExtraUnsupportedFeatures`) rather than the real `outpaint`
+    // refusal: once Outpainting opens up there is nothing left in the real
+    // fixture to grey, and this waitFor would hang forever. The synthetic name
+    // settles on the same `active`-derived recompute (`editSubTabsDisabledFor`)
+    // regardless of what the real feature list says.
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
     const user = userEvent.setup();
 
     await user.click(tab("Inventory"));
@@ -144,7 +149,7 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
     expect(tab("Inventory")).toHaveAttribute("aria-selected", "true");
   });
 
@@ -258,13 +263,15 @@ describe("AppShell — base-model feature scope", () => {
     // this engine, so the Chained form looks the same on both base models. A
     // stale fixture would go on greying 素材（末尾） for a mode that runs, which
     // is the one failure this pair exists to catch.
-    const { select, container } = await renderApp(AS_LTX25);
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
 
     await switchToLtx25(select);
-    // The greyed Outpainting sub-tab is the positive signal that the switch
-    // landed — `outpaint` is what LTX 2.5 still refuses, and settling on an
-    // assertion about the thing under test would be no signal at all.
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    // The settle signal is a SYNTHETIC `retake` addition
+    // (`withExtraUnsupportedFeatures`), not the real `outpaint` refusal:
+    // settling on an assertion about the very thing under test below would be
+    // no signal at all, and the real refusal stops existing the moment
+    // Outpainting opens up.
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
 
     expect(chainPicks(container).every((b) => b != null)).toBe(true);
     expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
@@ -283,12 +290,14 @@ describe("AppShell — base-model feature scope", () => {
     // either would make a supported path unreachable — the same mistake the
     // first stage had to correct for clip 1's opening image. §3-102 third
     // stage adds the reference video to `CHAIN_OPEN_PICKS` for the same reason.
-    const { select, container } = await renderApp(AS_LTX25);
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
 
     await switchToLtx25(select);
-    // The settle signal is the greyed Outpainting sub-tab, not a greyed Chain
-    // panel: since the End-source increment there is no longer such a panel.
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    // The settle signal is a SYNTHETIC `retake` addition
+    // (`withExtraUnsupportedFeatures`), not a greyed Chain panel (none exists
+    // to grey since the End-source increment) and not the real `outpaint`
+    // refusal, which stops existing the moment Outpainting opens up.
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
 
     expect(openPicks(container).every((b) => b != null)).toBe(true);
     expect(openPicks(container).every((b) => b.disabled)).toBe(false);
@@ -310,7 +319,7 @@ describe("AppShell — base-model feature scope", () => {
     // Since the End-source increment there is no CONTRAST material left to
     // check against on this engine, so the settle signal moved to the Edit
     // sub-tab and the end-source panel is asserted OPEN below with the rest.
-    const { select, container } = await renderApp(AS_LTX25);
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
 
     // The Create-tab reference block has no class of its own — its 📁 button
     // is named by `strings.single.referenceVideo.chooseButton`, and scoping to
@@ -322,9 +331,11 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    // The Outpainting sub-tab settling into its greyed state is what proves the
-    // switch took effect before the assertions below run.
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    // A SYNTHETIC `retake` addition (`withExtraUnsupportedFeatures`) settling
+    // into its greyed state is what proves the switch took effect before the
+    // assertions below run — not the real `outpaint` refusal, which stops
+    // existing the moment Outpainting opens up.
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
 
     const chainRefPick = chainForm(container).querySelector(".chain-reference-pick") as HTMLButtonElement;
     expect(chainRefPick).not.toBeNull();
@@ -354,7 +365,7 @@ describe("AppShell — base-model feature scope", () => {
     // tab greying above cannot reach it, yet every row it queues is a
     // `POST /generate/chain` carrying an audio track. §3-102 second stage: that
     // is exactly what LTX 2.5 can run now, so the panel must survive the switch.
-    const { select, container } = await renderApp(AS_LTX25);
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
 
     // The panel is a collapsed `<details>`, but jsdom keeps its children in
     // the DOM either way — no click needed to reach them.
@@ -370,9 +381,12 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    // The switch settles on the greyed Outpainting sub-tab; once it has, the
-    // Batch inputs must still be live and no block reason may have appeared.
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    // The switch settles on a SYNTHETIC `retake` addition
+    // (`withExtraUnsupportedFeatures`) rather than the real `outpaint`
+    // refusal, which stops existing the moment Outpainting opens up; once it
+    // has, the Batch inputs must still be live and no block reason may have
+    // appeared.
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
     expect(inputs().every((i) => i.disabled)).toBe(false);
     expect(within(section).queryByText(/not available on the selected base model/i)).not.toBeInTheDocument();
   });

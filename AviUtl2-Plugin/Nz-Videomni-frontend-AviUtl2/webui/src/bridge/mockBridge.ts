@@ -271,9 +271,13 @@ const MOCK_BASE_MODELS = [
  * reference video now, on Single and on Chained alike.
  *
  * Retake increment: `"retake"` leaves too — the engine regenerates the middle
- * of a clip now. What remains is the ONE mode it still cannot run
- * (`end_source`) plus the rest below, and `handleGenerateChain` refuses exactly
- * those. */
+ * of a clip now.
+ *
+ * End source increment: `"end_source"` leaves as well, and it was the LAST
+ * chain-family MODE name here — the engine runs the layout's own stage-1
+ * schedule (reverse order on 2+ clips) and freezes the material's band at the
+ * timeline's tail. What remains for LTX 2.5 is engine-level features only, and
+ * `handleGenerateChain` refuses exactly those. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   LTX23: [],
   LTX25: [
@@ -284,10 +288,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // right-click route into a mode that works. Mirrors
     // `services/engines/ltx25/adapter.py`'s UNSUPPORTED_FEATURES.
     //
-    // NOTE the asymmetry with `MOCK_CHAIN_FEATURE_FIELDS` below: `retake` never
-    // had a row there, so this one line is the whole change. `end_source` has
-    // one, and turning that mode on will mean editing both places.
-    "end_source",
+    // `end_source` LEFT THIS LIST with the End-source increment. Note the
+    // asymmetry the retake increment flagged: `retake` never had a row in
+    // `MOCK_CHAIN_FEATURE_FIELDS` below, so removing it was a one-line change;
+    // `end_source` DID have one, so this increment edited both places, which is
+    // what keeps the fixture's 422 and its published list saying one thing.
     "two_stage_hq",
     "outpaint",
     "nag",
@@ -325,7 +330,6 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
 const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{ field: string; feature: string }> = [
   { field: "source_video", feature: "v2v" },
   { field: "source_audio", feature: "a2v" },
-  { field: "end_source", feature: "end_source" },
   { field: "reference_video_id", feature: "reference_video" },
   { field: "loras", feature: "loras" },
   { field: "nag_enabled", feature: "nag" },

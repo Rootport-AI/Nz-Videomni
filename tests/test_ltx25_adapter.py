@@ -436,10 +436,12 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     attention control the server now accepts. This was the last acceleration
     name on the list, so the published set drops from seven names to six."""
     assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
-    # Six when this increment shipped; FIVE since Retake, which took the next
-    # name off the list. The count is asserted rather than only the absence
-    # because it is what catches a name being ADDED back by accident.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 5
+    # Six when this increment shipped; FIVE since Retake and FOUR since the
+    # End source, each of which took the next name off the list. The count is
+    # asserted rather than only the absence because it is what catches a name
+    # being ADDED back by accident. At four, every name left is an
+    # ENGINE-LEVEL feature -- no chain MODE is published any more.
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 4
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -464,12 +466,16 @@ def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     features = set(ltx25.UNSUPPORTED_FEATURES)
     assert {feat for _f, feat, _p in ltx25.REJECT_TABLE} <= features
     assert {feat for _f, feat, _p in ltx25.CHAIN_REJECT_TABLE} <= features
-    # The ONE chain MODE this engine still cannot run stays published...
-    assert {"end_source"} <= features
-    # ...while ``retake`` LEFT with the Retake increment: the engine regenerates
-    # the middle of a clip now, and publishing the name would go on greying out
-    # the Edit tab's 撮り直し sub-tab and the timeline right-click route into it.
+    # NO chain MODE is published any more. ``retake`` LEFT with the Retake
+    # increment -- the engine regenerates the middle of a clip now, and the name
+    # would go on greying out the Edit tab's 撮り直し sub-tab and the timeline
+    # right-click route into it -- and ``end_source`` left with the End-source
+    # increment, which was the LAST of them: the engine runs the layout's own
+    # stage-1 schedule and freezes the material's band at the timeline's tail,
+    # so publishing the name would grey the Chained tab's 素材（末尾） panel for a
+    # mode that works.
     assert "retake" not in features
+    assert "end_source" not in features
     # ...but "chain" itself LEFT with §3-102's first increment (a plain Chained
     # job runs on this engine now, so publishing "no chain" would grey out a tab
     # that works), and "v2v"/"a2v" left with the second — publishing either
@@ -537,13 +543,11 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 #: :data:`CHAIN_ACCEPTED_SOURCES` below instead. ``loras`` /
 #: ``reference_video_id`` LEFT WITH THE THIRD, and live in
 #: :data:`CHAIN_ACCEPTED_LORAS`. ``retake`` LEFT WITH THE RETAKE INCREMENT and
-#: lives in :data:`CHAIN_ACCEPTED_RETAKE`, which leaves ONE row here that is a
-#: whole MODE rather than an engine-level field.
+#: lives in :data:`CHAIN_ACCEPTED_RETAKE`. ``end_source`` LEFT WITH THE
+#: END-SOURCE INCREMENT and lives in :data:`CHAIN_ACCEPTED_END_SOURCE` — it was
+#: the last whole MODE here, so every row that remains is an engine-level
+#: field the single path refuses for the same reason.
 CHAIN_OVERRIDES: dict[str, dict] = {
-    "end_source": {
-        "clips": [{"num_frames": 73}],
-        "end_source": {"image_id": "img-1", "context_frames": 24},
-    },
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
@@ -608,6 +612,59 @@ CHAIN_ACCEPTED_RETAKE: dict[str, dict] = {
             "window_start_sec": 0.0,
             "regenerate_audio": False,
         },
+    },
+}
+
+
+#: The chain MODE the End-source increment turned on — the LAST row to leave
+#: :data:`CHAIN_OVERRIDES`. Same discipline as the tables above: valid request
+#: bodies, opposite verdict, imported by tests/test_ltx25_api_guard.py so the
+#: same bodies go through HTTP.
+#:
+#: THE FIVE ROWS ARE THE FIVE THINGS THAT CAN VARY, and each is here because it
+#: reaches a DIFFERENT part of the engine:
+#:
+#: * ``end_source`` — ONE clip, i.e. ``chain_math``'s ``in_window`` geometry
+#:   (the band is that clip's own tail, and the owner's recommended usage).
+#: * ``end_source_reverse`` — two clips, i.e. the ``reverse`` geometry, where
+#:   stage 1 generates the clips LAST TO FIRST. It is the one row that changes
+#:   the SHAPE of stage 1 rather than only what is frozen.
+#: * ``end_source_strength`` — the knob, at a NON-DEFAULT value. A default-only
+#:   table cannot see a strength that is dropped on the way to the payload,
+#:   which is the class of regression the 1-ULP note in ``_freeze_strengths``
+#:   is about.
+#: * ``end_source_still`` — a still image rather than a video. The app loops it
+#:   into a silent mp4, so the ENGINE sees one code path; what differs is which
+#:   upload store the id comes from, which is a schema fact worth pinning.
+#: * ``end_source_with_source_video`` — the INTERPOLATION the API explicitly
+#:   allows: start material AND end material on one clip. It is the only
+#:   combination the mode has, and the one a refusal keyed on the wrong field
+#:   would break.
+CHAIN_ACCEPTED_END_SOURCE: dict[str, dict] = {
+    "end_source": {
+        "clips": [{"num_frames": 121}],
+        "end_source": {"video_id": "vid-2", "context_frames": 24},
+    },
+    "end_source_reverse": {
+        "clips": [{"num_frames": 121}, {"num_frames": 121}],
+        "end_source": {"video_id": "vid-2", "context_frames": 24},
+    },
+    "end_source_strength": {
+        "clips": [{"num_frames": 121}],
+        "end_source": {
+            "video_id": "vid-2",
+            "context_frames": 24,
+            "strength": 0.7,
+        },
+    },
+    "end_source_still": {
+        "clips": [{"num_frames": 121}],
+        "end_source": {"image_id": "img-1", "context_frames": 8},
+    },
+    "end_source_with_source_video": {
+        "clips": [{"num_frames": 121}],
+        "source_video": {"video_id": "vid-1", "context_frames": 25},
+        "end_source": {"video_id": "vid-2", "context_frames": 24},
     },
 }
 
@@ -720,12 +777,42 @@ def test_the_retake_field_is_honoured_not_merely_unlisted():
     assert "retake" not in ltx25.CHAIN_GOVERNED_FIELDS
 
 
-def test_end_source_is_the_only_chain_mode_still_refused():
-    """The Retake increment moved ONE row. If ``end_source`` had come with it,
-    a mode with no code path at all would reach the worker — where it is refused
-    by name, which is a 500 dressed up as a feature."""
-    assert {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE} >= {"end_source"}
-    assert "retake" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_END_SOURCE))
+def test_chain_end_source_is_no_longer_refused(case):
+    """The headline of the End-source increment: a chain that must END on the
+    user's material passes the ruling instead of raising. It was the LAST row of
+    the chain reject table, and the one the Chained tab's 素材（末尾） panel is
+    greyed by."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_END_SOURCE[case]))  # no raise
+
+
+def test_the_end_source_field_is_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises. A field dropped from every
+    table would also stop raising — and would then be silently ignored, i.e. the
+    user would get a video that does NOT end on the material they handed in and
+    be told nothing."""
+    assert "end_source" in ltx25.CHAIN_HONOURED_FIELDS
+    assert "end_source" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert "end_source" not in ltx25.CHAIN_IGNORED_FIELDS
+    assert "end_source" not in ltx25.CHAIN_GOVERNED_FIELDS
+
+
+def test_no_chain_mode_is_refused_any_more():
+    """Each increment moved the rows it implemented and no others. With the End
+    source's row gone, EVERY chain MODE the schema can express has a code path on
+    this engine, and what is left in the table is engine-level fields only — so
+    a MODE reappearing here would be a regression, not a scope decision.
+
+    Spelled out as "none of these four" rather than as a count, because the
+    failure this guards against is a specific name coming back, and a count
+    would also fire for an unrelated engine-level field being added."""
+    refused = {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert not refused & {
+        "end_source", "retake", "source_video", "source_audio",
+        "loras", "reference_video_id",
+    }
+    # ...and what remains really is only the engine-level half.
+    assert refused == {"nag_enabled", "pipeline", "vae_mode"}
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
@@ -798,11 +885,14 @@ def test_the_chain_ignore_table_is_logged_only_when_set(caplog):
 def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
     """UNTIL §3-102 this refused EVERY chain. Now the refusal is field-by-field,
     and it still happens without loading a worker — the ruling is a pure read of
-    the request, so a doomed chain must not pay for a model load."""
+    the request, so a doomed chain must not pay for a model load.
+
+    The subject was ``end_source`` until that mode was implemented; NAG is the
+    field the engine still refuses on a chain."""
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
     with pytest.raises(APIError) as ei:
-        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["end_source"]), output_dir=None)
+        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["nag_enabled"]), output_dir=None)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
     assert "LTX 2.3" in ei.value.detail
 
@@ -811,7 +901,7 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
     """The endpoint (P5) and the backend method must not be able to disagree:
     both go through ``reject_chain``, so there is one message and one code."""
     cfg, _paths, descriptor = ltx25_paths
-    request = _chain_request(**CHAIN_OVERRIDES["end_source"])
+    request = _chain_request(**CHAIN_OVERRIDES["nag_enabled"])
     with pytest.raises(APIError) as endpoint_side:
         ltx25.reject_chain(request)
     with pytest.raises(APIError) as backend_side:
@@ -820,21 +910,28 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
     assert endpoint_side.value.detail == backend_side.value.detail
 
 
-def test_generate_chain_fails_loud_on_out_of_scope_material(ltx25_paths, tmp_path):
+def test_generate_chain_has_no_out_of_scope_material_left_to_refuse(ltx25_paths, tmp_path):
     """The orchestrator hands every runner the same thirteen keywords. THREE of
-    them name material this engine cannot use, and every one is refused by the
-    table above — so a value arriving here means the table and this signature
-    have drifted apart. That is a bug, and it must not look like a job.
+    them used to name material this engine could not use, and a value arriving
+    here raised a loud ``RuntimeError`` because it could only mean the reject
+    table and the signature had drifted apart.
 
-    ``retake_window_path`` LEFT this guard with the Retake increment; the test
-    below asserts the OPPOSITE for it, which is the pair that makes "it moved"
-    checkable rather than "it disappeared"."""
+    THE END-SOURCE INCREMENT EMPTIED THAT GUARD, so the assertion inverts: the
+    LAST three keywords must now reach the payload rather than raise. Keeping
+    the test rather than deleting it is what makes "the guard was removed
+    because nothing was left" checkable against "the guard was removed and
+    something is now silently ignored"."""
     cfg, _paths, descriptor = ltx25_paths
-    backend = _backend(cfg, descriptor)
-    with pytest.raises(RuntimeError, match="end_source_path"):
-        backend.generate_chain(
-            _chain_request(), output_dir=tmp_path, end_source_path=tmp_path / "e.mp4"
-        )
+    _backend(cfg, descriptor)  # the fixture is what proves this path is loadable
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_END_SOURCE["end_source"]),
+        output_dir=tmp_path / "es",
+        end_source_path=tmp_path / "e.mp4",
+        end_source_context_frames=24,
+        end_source_strength=0.7,
+    )
+    assert captured[0]["end_source"]["path"] == str(tmp_path / "e.mp4")
     # ...while the EMPTY list run_chain_job always builds for a no-lora chain is
     # not "material" and must sail through. Checked on the no-subprocess harness
     # so the assertion is about the guard, not about a worker spawn.
@@ -1080,6 +1177,12 @@ GOLDEN_AUDIO_SOURCE_KEYS_25 = ["path"]
 #: engines, so its payload block is too.
 GOLDEN_RETAKE_KEYS_25 = ["path", "head_px", "tail_px", "regenerate_audio"]
 
+#: The end-source block's key order, 2.3's again and for the same reason.
+#: ``strength`` is part of the BLOCK rather than resolved in the engine because
+#: a ``None`` there means "the request left it at its default", which is a
+#: statement about the schema and belongs on the app side of the wire.
+GOLDEN_END_SOURCE_KEYS_25 = ["path", "context_frames", "strength"]
+
 
 def test_chain_payload_carries_the_v2v_source_block(tmp_path):
     """V2V: the app-cut fps-correct tail plus the context length, appended AFTER
@@ -1233,6 +1336,97 @@ def test_the_retake_window_is_no_longer_out_of_scope_material(tmp_path):
         retake_window_path=tmp_path / "w.mp4",
     )
     assert captured[0]["retake"]["path"] == str(tmp_path / "w.mp4")
+
+
+def test_chain_payload_carries_the_end_source_block(tmp_path):
+    """End source: the app-prepared tail material plus the band length and the
+    strength, appended AFTER the golden keys and AFTER the retake block, so a
+    plain chain's payload is untouched and every older additive block keeps its
+    position."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    material = tmp_path / "job" / "_end_source.mp4"
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_END_SOURCE["end_source"]),
+        output_dir=tmp_path / "out",
+        end_source_path=material,
+        end_source_context_frames=24,
+    )
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_25 + ["end_source"] + GOLDEN_ACCEL_KEYS_25
+    assert list(payload["end_source"]) == GOLDEN_END_SOURCE_KEYS_25
+    assert payload["end_source"] == {
+        "path": str(material),
+        "context_frames": 24,
+        # NOT passed by the caller above: an absent strength is the schema's
+        # default, resolved here so the engine never has to know what None means.
+        "strength": 1.0,
+    }
+    assert "retake" not in payload
+
+
+def test_the_end_source_block_carries_a_non_default_strength(tmp_path):
+    """The knob really is read off the argument rather than defaulted a second
+    time here. A payload that dropped it would silently HARD-freeze a band the
+    user asked to hold softly — and at the default 1.0 no test could see it,
+    which is why the arm is non-default."""
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_END_SOURCE["end_source_strength"]),
+        output_dir=tmp_path / "a",
+        end_source_path=tmp_path / "e.mp4",
+        end_source_context_frames=24,
+        end_source_strength=0.7,
+    )
+    assert captured[0]["end_source"]["strength"] == 0.7
+
+
+def test_the_end_source_block_needs_both_the_material_and_the_band_length(tmp_path):
+    """The guard is on BOTH values, like 2.3's and like the retake block's:
+    half a block reaching the worker would be a payload no golden pins. Either
+    half alone leaves the plain golden."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+
+    # material without the band length...
+    be.generate_chain(
+        _chain_request(), output_dir=tmp_path / "a", end_source_path=tmp_path / "e.mp4"
+    )
+    assert "end_source" not in captured[0]
+
+    # ...and the band length without material (the orchestrator failed to cut).
+    be.generate_chain(
+        _chain_request(), output_dir=tmp_path / "b", end_source_context_frames=24
+    )
+    assert "end_source" not in captured[1]
+    assert (
+        list(captured[0])
+        == list(captured[1])
+        == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    )
+
+
+def test_the_end_source_block_rides_beside_a_v2v_source(tmp_path):
+    """The one combination the mode has: start material AND end material on a
+    single clip — the interpolation the API explicitly allows. BOTH additive
+    blocks must ride, in the order the builder appends them (``source`` first,
+    ``end_source`` after the retake slot), or one of the two is silently lost."""
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_END_SOURCE["end_source_with_source_video"]),
+        output_dir=tmp_path / "out",
+        source_tail_path=tmp_path / "_source_tail.mp4",
+        source_context_frames=25,
+        end_source_path=tmp_path / "_end_source.mp4",
+        end_source_context_frames=24,
+    )
+    payload = captured[0]
+    assert list(payload) == (
+        GOLDEN_CHAIN_KEYS_25 + ["source", "end_source"] + GOLDEN_ACCEL_KEYS_25
+    )
+    assert payload["source"]["context_frames"] == 25
+    assert payload["end_source"]["context_frames"] == 24
 
 
 def test_chain_payload_carries_a2v_with_the_full_length_window(tmp_path):
@@ -1927,6 +2121,12 @@ _CHAIN_HONOURED_READS = {
     # for ``chain.retake`` as a whole, and the material is the load-bearing
     # half.)
     "retake": "retake_window_path",
+    # End source, for the SAME reason: the request field carries an upload id
+    # (a video OR a still) and the band length, and the orchestrator has already
+    # turned that into the cut mp4 — so what ``generate_chain`` reads is the
+    # keyword argument carrying it. (``context_frames`` and ``strength`` are
+    # read off their own keywords too, for the same reason.)
+    "end_source": "end_source_path",
     # §3-102 third increment, same reason as the source fields: the adapter
     # NAMES and the reference upload id are resolved into material by the
     # orchestrator, so what generate_chain reads is the keyword argument.

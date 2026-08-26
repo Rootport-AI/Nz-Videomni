@@ -199,14 +199,15 @@ def test_runner_class_for_returns_each_familys_facade():
 def test_unsupported_features_per_family():
     assert engines.unsupported_features("ltx") == ()
     features = engines.unsupported_features("ltx25")
-    assert "end_source" in features and "outpaint" in features
+    assert "outpaint" in features
     # "chain" は§3-102の第1段で、"v2v"/"a2v" は第2段で、"retake" は
-    # Retake段で外れた(素のChained・V2V・A2V・撮り直しが2.5でも走る)。
-    # 系統ごとの一覧が「宣言したものだけ」であることは、外れた名前でも
-    # 同じように確かめられる。
+    # Retake段で、"end_source" は End source段で外れた(素のChained・V2V・A2V・
+    # 撮り直し・素材(末尾)が2.5でも走る)。系統ごとの一覧が「宣言したものだけ」
+    # であることは、外れた名前でも同じように確かめられる。
     assert "chain" not in features
     assert "v2v" not in features and "a2v" not in features
     assert "retake" not in features
+    assert "end_source" not in features
 
 
 def test_shipped_descriptors_match_their_familys_selection_fields():

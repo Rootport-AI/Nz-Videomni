@@ -163,25 +163,35 @@ describe("AppShell — base-model feature scope", () => {
   // half of the source card come BACK.
   //
   // §3-102 THIRD stage (Style LoRA + IC-LoRA, long IC-LoRA included):
-  // `reference_video` left too, so the reference panel comes back as well and
-  // 素材（末尾） is the ONLY Chain material still greyed. Both halves are
-  // asserted below, because a test that only checked the greyed one would pass
-  // just as happily on a build that greys everything.
+  // `reference_video` left too, so the reference panel came back as well and
+  // 素材（末尾） was the ONLY Chain material still greyed.
+  //
+  // END-SOURCE increment: `end_source` left as well, and with it the LAST name
+  // that greyed ANY Chain material panel on this engine. The suite below is
+  // therefore split in two, which is the same bargain the Edit sub-tab tests
+  // struck one increment earlier:
+  //
+  //   * the MECHANISM — a published feature name greys ITS panel and states
+  //     ITS reason — is driven with a SYNTHETIC name added to the response
+  //     (`withExtraUnsupportedFeatures`), so it keeps testing the wiring
+  //     whatever the engine grows next;
+  //   * TODAY'S ANSWER — LTX 2.5 greys none of the four — is asserted against
+  //     the real fixture. Both halves are needed: the first alone would pass on
+  //     a build that greys everything, the second alone on a build that greys
+  //     nothing ever.
 
-  /** The 📁 choose buttons of the panels LTX 2.5 still cannot use — the honest
+  /** The 📁 choose buttons of the four Chain material panels — the honest
    * probe, the way the folder inputs are for Batch A2V: each is live until
    * something disables it. (The 🔁 clear buttons are not: they start disabled
    * with nothing attached, which would make the assertion pass for the wrong
-   * reason.)
-   *
-   * `.source-input-pick` and `.chain-audio-pick` are deliberately absent: V2V
-   * and A2V are in scope now, so both must stay live. They are asserted
-   * separately below (and in depth in `SourceInputPanel.test.tsx` /
-   * `ChainAudioPanel.test.tsx`). §3-102 third stage: `.chain-reference-pick`
-   * joined them — IC-LoRA runs on this engine now. */
+   * reason.) `.source-input-pick` has its own helper below because what it
+   * says in its title is part of what V2V being open means. */
   const CHAIN_PANEL_PICKS = [".chain-end-source-pick"];
 
-  /** The panels LTX 2.5 CAN use — greyed by nothing, on either base model. */
+  /** The panels greyed by nothing on either base model. Since the End-source
+   * increment `CHAIN_PANEL_PICKS` is in the same position — it is kept as a
+   * list of its own only because the synthetic-name test still needs to name
+   * that ONE panel and read its reason line. */
   const CHAIN_OPEN_PICKS = [".chain-audio-pick", ".chain-reference-pick"];
 
   function chainForm(container: HTMLElement): HTMLElement {
@@ -204,8 +214,15 @@ describe("AppShell — base-model feature scope", () => {
     return chainForm(container).querySelector(".source-input-pick") as HTMLButtonElement;
   }
 
-  it("greys the one Chain material panel LTX 2.5 cannot use, with its reason", async () => {
-    const { select, container } = await renderApp(AS_LTX25);
+  it("greys a Chain material panel the base model declares, with its own reason", async () => {
+    // THE FEATURE NAME HERE IS SYNTHETIC. The fixture's LTX 2.5 declares none
+    // of the four Chain materials since the End-source increment, so pinning
+    // this test to whatever it happens to refuse this month is exactly what
+    // made it need rewriting at every increment. What is under test is the
+    // WIRING — a published name reaches `chainPanelsDisabledFor`, greys ITS
+    // panel and prints ITS reason — not today's list (`bridge/mockBridge.test.ts`
+    // owns that, against the server's own `UNSUPPORTED_FEATURES`).
+    const { select, container } = await renderApp(AS_LTX25, ["end_source"]);
 
     expect(chainPicks(container).every((b) => b != null)).toBe(true);
     expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
@@ -219,10 +236,10 @@ describe("AppShell — base-model feature scope", () => {
     // generic "unsupported".
     const form = within(chainForm(container));
     expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
-    // …and NOT the other three. A reason line left standing for a material the
-    // engine can now take would tell the user to switch base models for
-    // something that already works here — §3-102 third stage moved the
-    // reference video into that group.
+    // …and NOT the other three. A reason line that appeared for a material
+    // nobody refused would tell the user to switch base models for something
+    // that works — the greying must be keyed on the NAME, not on "some
+    // restriction exists".
     expect(form.queryByText(/source VIDEO cannot be used on the selected base model/i)).toBeNull();
     expect(form.queryByText(/Generating from an audio track \(A2V\) is not available/i)).toBeNull();
     expect(form.queryByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeNull();
@@ -235,6 +252,30 @@ describe("AppShell — base-model feature scope", () => {
     expect(addClip.disabled).toBe(false);
   });
 
+  it("greys NO Chain material panel on LTX 2.5 — the End-source increment took the last", async () => {
+    // The other half, and the increment's actual headline: with `end_source`
+    // off the published list every one of the four materials is attachable on
+    // this engine, so the Chained form looks the same on both base models. A
+    // stale fixture would go on greying 素材（末尾） for a mode that runs, which
+    // is the one failure this pair exists to catch.
+    const { select, container } = await renderApp(AS_LTX25);
+
+    await switchToLtx25(select);
+    // The greyed Outpainting sub-tab is the positive signal that the switch
+    // landed — `outpaint` is what LTX 2.5 still refuses, and settling on an
+    // assertion about the thing under test would be no signal at all.
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+
+    expect(chainPicks(container).every((b) => b != null)).toBe(true);
+    expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
+    expect(openPicks(container).every((b) => b.disabled)).toBe(false);
+    expect(sourcePick(container).disabled).toBe(false);
+
+    const form = within(chainForm(container));
+    expect(form.queryByText(/is not available on the selected base model/i)).toBeNull();
+    expect(form.queryByText(/cannot be used on the selected base model/i)).toBeNull();
+  });
+
   it("keeps the V2V source, the A2V track and the reference video attachable on LTX 2.5", async () => {
     // The second stage's headline: continuing an existing video (V2V) and
     // generating from an audio track (A2V) both run on this engine now, so the
@@ -245,7 +286,9 @@ describe("AppShell — base-model feature scope", () => {
     const { select, container } = await renderApp(AS_LTX25);
 
     await switchToLtx25(select);
-    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+    // The settle signal is the greyed Outpainting sub-tab, not a greyed Chain
+    // panel: since the End-source increment there is no longer such a panel.
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
 
     expect(openPicks(container).every((b) => b != null)).toBe(true);
     expect(openPicks(container).every((b) => b.disabled)).toBe(false);
@@ -264,8 +307,9 @@ describe("AppShell — base-model feature scope", () => {
     // and is asserted anyway so a prop later wired to the same feature name
     // could not close it unnoticed.
     //
-    // End source is checked in the same test as the contrast: this is the
-    // switch OPENING one material, not the greying going away wholesale.
+    // Since the End-source increment there is no CONTRAST material left to
+    // check against on this engine, so the settle signal moved to the Edit
+    // sub-tab and the end-source panel is asserted OPEN below with the rest.
     const { select, container } = await renderApp(AS_LTX25);
 
     // The Create-tab reference block has no class of its own — its 📁 button
@@ -278,20 +322,20 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    // The end-source panel settling into its greyed state is what proves the
+    // The Outpainting sub-tab settling into its greyed state is what proves the
     // switch took effect before the assertions below run.
-    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
 
     const chainRefPick = chainForm(container).querySelector(".chain-reference-pick") as HTMLButtonElement;
     expect(chainRefPick).not.toBeNull();
     expect(chainRefPick.disabled).toBe(false);
     expect(singleRefPick().disabled).toBe(false);
 
-    // No reason line for a material the engine can take — and the one it still
-    // cannot keeps its own.
+    // No reason line for a material the engine can take — which since the
+    // End-source increment is all four of them.
     const form = within(chainForm(container));
     expect(form.queryByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeNull();
-    expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
+    expect(form.queryByText(/End source is not available/i)).toBeNull();
   });
 
   it("leaves every Chain material panel usable on LTX 2.3", async () => {
@@ -326,9 +370,9 @@ describe("AppShell — base-model feature scope", () => {
 
     await switchToLtx25(select);
 
-    // The switch settles on the Chained-panel greying above; once it has, the
+    // The switch settles on the greyed Outpainting sub-tab; once it has, the
     // Batch inputs must still be live and no block reason may have appeared.
-    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
     expect(inputs().every((i) => i.disabled)).toBe(false);
     expect(within(section).queryByText(/not available on the selected base model/i)).not.toBeInTheDocument();
   });

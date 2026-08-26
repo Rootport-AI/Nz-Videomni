@@ -196,13 +196,14 @@ describe("useBaseModels", () => {
     // this feature, because it is what leaves the ordinary case untouched.
     expect(result.current.options[0]?.unsupportedFeatures).toEqual([]);
     // §3-102: `chain` is no longer among them — LTX 2.5 chains now — and its
-    // second stage took `v2v` and `a2v` with it. `end_source` is the name that
-    // stands in their place: still declared, still greying something (the Chain
-    // screen's 素材（末尾） panel).
+    // second stage took `v2v` and `a2v` with it. The End-source increment took
+    // the LAST chain-family name, `end_source`, so what is left for this engine
+    // is engine-level features; `outpaint` is the one that still greys a panel.
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("chain");
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("v2v");
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("a2v");
-    expect(result.current.options[1]?.unsupportedFeatures).toContain("end_source");
+    expect(result.current.options[1]?.unsupportedFeatures).not.toContain("end_source");
+    expect(result.current.options[1]?.unsupportedFeatures).toContain("outpaint");
     // LTX 2.3 is what is loaded, so nothing is disabled.
     expect(result.current.unsupportedFeatures).toEqual([]);
     expect(result.current.disabledModes).toEqual([]);
@@ -220,7 +221,7 @@ describe("useBaseModels", () => {
       await result.current.switchBaseModel("LTX25");
     });
 
-    expect(result.current.unsupportedFeatures).toContain("end_source");
+    expect(result.current.unsupportedFeatures).not.toContain("end_source");
     expect(result.current.unsupportedFeatures).toContain("outpaint");
     // §3-102 took `chain` off the list and the Chained tab came back; the
     // Retake increment took `retake` off it and the Edit tab came back too —
@@ -399,12 +400,12 @@ describe("editSubTabsDisabledFor", () => {
     {
       unsupported: ["retake", "end_source", "two_stage_hq", "outpaint", "nag", "prune_vaed"],
       expected: { retake: true, outpainting: true },
-      why: "LTX 2.5's list as it stands before the Retake/End source 開通",
+      why: "LTX 2.5's list as it stood before the Retake/End source 開通",
     },
     {
-      unsupported: ["end_source", "two_stage_hq", "outpaint", "nag", "prune_vaed"],
+      unsupported: ["two_stage_hq", "outpaint", "nag", "prune_vaed"],
       expected: { retake: false, outpainting: true },
-      why: "…and after it: `retake` leaves the list, `outpaint` stays",
+      why: "…and after it: `retake` and `end_source` leave, `outpaint` stays",
     },
   ];
 

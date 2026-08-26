@@ -613,7 +613,6 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     expect(features).toEqual(
       expect.arrayContaining([
-        "end_source",
         "two_stage_hq", "outpaint",
         "nag", "prune_vaed",
       ]),
@@ -633,6 +632,14 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // not, and a stale fixture would go on greying out the Edit tab's 撮り直し
     // sub-tab (and the timeline right-click route into it) for a mode that runs.
     expect(features).not.toContain("retake");
+    // End source increment: `end_source` left too, and it was the LAST
+    // chain-family MODE name on this list — so what LTX 2.5 publishes now is
+    // engine-level features only. Asserted NEGATIVELY for the reason the
+    // others are: dropping it from the `arrayContaining` list alone would keep
+    // this test green whether the fixture was updated or not, and a stale
+    // fixture would go on greying out the Chained tab's 素材（末尾） panel for a
+    // mode that runs.
+    expect(features).not.toContain("end_source");
     expect(features).not.toContain("chain");
     expect(features).not.toContain("v2v");
     expect(features).not.toContain("a2v");
@@ -684,7 +691,10 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
   /** Every field the fixture can refuse, with a value that counts as "the user
    * asked for this" — one case per row of `MOCK_CHAIN_FEATURE_FIELDS`. */
   const CASES: ReadonlyArray<{ feature: string; body: object }> = [
-    { feature: "end_source", body: { end_source: { video_id: "vid-2", context_frames: 72 } } },
+    // `end_source` LEFT this table with the End-source increment, together
+    // with its row in `MOCK_CHAIN_FEATURE_FIELDS` — the acceptance twin is
+    // below (`accepts end_source ...`), which is what makes the move checkable
+    // rather than merely an absence.
     { feature: "nag", body: { nag_enabled: true, negative_prompt: "blurry" } },
   ];
 
@@ -777,19 +787,39 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     expect(result.status).toBe(202);
   });
 
-  it("still refuses end_source on an LTX 2.5 V2V chain", async () => {
-    // The other half of the same switch: opening V2V and A2V must not have
-    // opened the material that is still out of scope. Named for what the
-    // request below actually carries — `end_source` alone; the reference video
-    // used to ride along here, and left the list in the third stage.
+  it("accepts end_source alongside a V2V source on LTX 2.5", async () => {
+    // This case used to be the 422 that proved opening V2V had not opened the
+    // material still out of scope. The End-source increment INVERTS it, and
+    // this particular pairing is the one worth keeping: start material plus end
+    // material on one chain is the interpolation the API explicitly allows, and
+    // it is exactly what a refusal keyed on the wrong field would break.
     const bridge = await ltx25Bridge();
     const result = await postChain(bridge, {
       ...CHAIN_BODY,
-      source_video: { video_id: "vid-1", context_frames: 73 },
-      end_source: { video_id: "vid-2", context_frames: 72 },
+      clips: [{ num_frames: 121 }],
+      source_video: { video_id: "vid-1", context_frames: 25 },
+      end_source: { video_id: "vid-2", context_frames: 24 },
     });
-    expect(result.status).toBe(422);
-    expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+    expect(result.status).toBe(202);
+  });
+
+  it("accepts end_source on a multi-clip chain (the `reverse` geometry)", async () => {
+    // The headline of the End-source increment on the fixture: what used to be
+    // this suite's example of a refusal now passes the ruling.
+    //
+    // TWO CLIPS, not one, and the reason is a fixture LIMIT rather than a rule:
+    // this mock's clip-count floor exempts only `source_video` / `source_audio`,
+    // while the real schema (`api/models.py`) also exempts `retake`,
+    // `reference_video_id` and `end_source`. A bare one-clip end-source chain
+    // therefore earns a VALIDATION_ERROR here that the server would accept. The
+    // `in_window` geometry is covered against the real API in
+    // `tests/test_ltx25_api_guard.py`; the pairing below covers it here.
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      end_source: { video_id: "vid-2", context_frames: 24 },
+    });
+    expect(result.status).toBe(202);
   });
 
   for (const { feature, body } of CASES) {
@@ -829,11 +859,14 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
   it("refuses BEFORE request validation — an unrunnable request is not a fixable one", async () => {
     // A 1-clip chain is also invalid, but telling the user to add a clip to a
     // request that could never have run sends them to fix the wrong thing.
+    // The subject was `end_source` until that mode was implemented; `nag` is
+    // now the field the fixture still refuses on this base model.
     const bridge = await ltx25Bridge();
     const result = await postChain(bridge, {
       ...CHAIN_BODY,
       clips: [{ num_frames: 49 }],
-      end_source: { video_id: "vid-2", context_frames: 72 },
+      nag_enabled: true,
+      negative_prompt: "blurry",
     });
     expect(result.status).toBe(422);
     expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
@@ -841,7 +874,11 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
 
   it("creates no job when it refuses", async () => {
     const bridge = await ltx25Bridge();
-    await postChain(bridge, { ...CHAIN_BODY, end_source: { video_id: "vid-2", context_frames: 72 } });
+    await postChain(bridge, {
+      ...CHAIN_BODY,
+      nag_enabled: true,
+      negative_prompt: "blurry",
+    });
     // The refusal must not take the single-job slot with it: a following, valid
     // chain has to be accepted rather than earning a 409 JOB_BUSY.
     const next = await postChain(bridge, CHAIN_BODY);

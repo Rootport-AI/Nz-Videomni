@@ -47,6 +47,7 @@ from services.engines.ltx25 import adapter as ltx25
 #: と、対応表が育ったときにどちらか片方だけが更新される。単発の
 #: ``GenerateRequest`` 用とchain用の2枚あり、扱う機能が違う。
 from test_ltx25_adapter import (  # noqa: E402
+    CHAIN_ACCEPTED_END_SOURCE,
     CHAIN_ACCEPTED_KEEP_RESIDENT,
     CHAIN_ACCEPTED_LORAS,
     CHAIN_ACCEPTED_RETAKE,
@@ -533,6 +534,12 @@ def _upload_video(client, path) -> str:
     return r.json()["video_id"]
 
 
+def _upload_image(client, png: bytes) -> str:
+    r = client.post("/api/v1/upload/image", files={"file": ("end.png", png, "image/png")})
+    assert r.status_code == 200, r.text
+    return r.json()["image_id"]
+
+
 def _upload_audio(client, path) -> str:
     r = client.post(
         "/api/v1/upload/audio", files={"file": ("voice.wav", path.read_bytes(), "audio/wav")}
@@ -652,6 +659,119 @@ def test_ltx25_runs_a_retake_chain(two_family_client, tmp_path):
     assert "freeze_proof" not in rt
 
 
+def test_ltx25_runs_an_end_source_chain(two_family_client, tmp_path):
+    """End source往復の全長。アップロード→202→completed→アプリが切り出した
+    素材→メタの ``end_source`` ブロックまで。422が外れただけでは「使える」とは
+    言えないので、素材の切り出しから metadata.json まで、2.3と同じ道を最後まで
+    通ることを見る。
+
+    見どころは**切り出しが context_frames + 1 フレーム**であることと、
+    **納品の長さがクリップの長さのまま**であることの2点である。前者は因果VAEの
+    プライマ1枚ぶん(エンコード後に捨てられ、残りがタイムラインの格子へ乗る)、
+    後者はこのモードの約束——帯は最後のクリップ自身の末尾であって、
+    タイムラインへの追加ではない。"""
+    _activate(two_family_client, "LTX25")
+    src = _make_source_mp4(tmp_path / "es_src.mp4", n_frames=60, fps=24.0)
+    vid = _upload_video(two_family_client, src)
+
+    job_id = _run_to_completion(
+        two_family_client,
+        _chain_body(
+            clips=[{"num_frames": 121}],
+            end_source={"video_id": vid, "context_frames": 24},
+        ),
+    )
+
+    job_dir = two_family_client.app_context.config.output_dir / job_id
+    # アプリが要求fpsへ切り出した素材。エンジンは切りも再サンプルもしない
+    # 約束なので、これが無いままworkerが呼ばれていたらEnd sourceは成立しない。
+    cut = job_dir / "_end_source.mp4"
+    assert cut.exists()
+    assert video_io.frame_count(cut) == 25          # context_frames + 1 プライマ
+
+    out = job_dir / "output.mp4"
+    assert out.exists() and out.stat().st_size > 0
+    assert video_io.frame_count(out) == 121         # クリップの長さのまま
+
+    meta = _metadata(two_family_client, job_id)
+    assert meta["backend"] == ltx25.MOCK_BACKEND_25
+    es = meta["end_source"]
+    # 幾何は chain_math が唯一の出所——アプリの検証もエンジンもここを読む。
+    layout = chain_math.compute_chain_layout(
+        [121], 24.0, kv=2, end_context_px=24
+    )
+    geo = layout.to_dict()["end_source"]
+    assert es["mode"] == geo["mode"] == "in_window"      # 1クリップ
+    assert es["n_end_v"] == geo["n_end_v"]
+    assert es["n_end_a"] == geo["n_end_a"]
+    assert es["generation_order"] == geo["generation_order"] == [0]
+    # 実行時の側。
+    assert es["kind"] == "video"
+    assert es["cut_path"] == str(cut)
+    assert es["strength"] == 1.0
+    assert es["decoded_frames_px"] == 121
+    # mockは凍結の証明を捏造しない(潜在を持たないので出しようがない)。
+    assert "freeze_proof" not in es
+
+
+def test_ltx25_runs_a_reverse_end_source_chain(two_family_client, tmp_path):
+    """クリップが2本以上のときの幾何(``reverse``)。1クリップとの違いは
+    **stage-1の生成順**そのもの——最後のクリップから先に作り、各クリップは
+    次のクリップの先頭を自分の末尾として凍結する——なので、`generation_order`
+    が降順であることと、納品の長さが「素のchainと同じ」ことの2点を見る。
+
+    納品長は重要である: このモードは帯のためにセグメントを足さないので、
+    2クリップ×121フレームの出力長は素の2クリップchainと1フレームも違わない。"""
+    _activate(two_family_client, "LTX25")
+    src = _make_source_mp4(tmp_path / "es_rev_src.mp4", n_frames=60, fps=24.0)
+    vid = _upload_video(two_family_client, src)
+
+    job_id = _run_to_completion(
+        two_family_client,
+        _chain_body(
+            clips=[{"num_frames": 121}, {"num_frames": 121}],
+            end_source={"video_id": vid, "context_frames": 24},
+        ),
+    )
+
+    job_dir = two_family_client.app_context.config.output_dir / job_id
+    layout = chain_math.compute_chain_layout(
+        [121, 121], 24.0, kv=2, end_context_px=24
+    )
+    plain = chain_math.compute_chain_layout([121, 121], 24.0, kv=2)
+    assert layout.total_px == plain.total_px          # 帯のぶんは足されない
+    assert video_io.frame_count(job_dir / "output.mp4") == layout.total_px
+
+    meta = _metadata(two_family_client, job_id)
+    es = meta["end_source"]
+    assert es["mode"] == "reverse"
+    assert es["generation_order"] == [1, 0]           # 後ろから作る
+    assert es["kind"] == "video"
+
+
+def test_ltx25_runs_an_end_source_chain_from_a_still_image(two_family_client, png_bytes):
+    """静止画を終点にする形。アプリが無音の動画へループしてから渡すので、
+    エンジンから見た道は動画のときと1本である——``kind`` だけが違う。
+    その1本化がアプリ側で本当に起きていることを、切り出しのフレーム数と
+    メタの ``kind`` の両方で見る。"""
+    _activate(two_family_client, "LTX25")
+    iid = _upload_image(two_family_client, png_bytes)
+
+    job_id = _run_to_completion(
+        two_family_client,
+        _chain_body(
+            clips=[{"num_frames": 121}],
+            end_source={"image_id": iid, "context_frames": 8},
+        ),
+    )
+
+    job_dir = two_family_client.app_context.config.output_dir / job_id
+    assert video_io.frame_count(job_dir / "_end_source.mp4") == 9   # 8 + プライマ
+    es = _metadata(two_family_client, job_id)["end_source"]
+    assert es["kind"] == "image"
+    assert es["mode"] == "in_window"
+
+
 def test_ltx25_runs_a_single_tab_a2v_chain(two_family_client, tmp_path):
     """SingleタブのA2V=フロントエンドが ``stage2_window="full_length"`` 固定の
     1クリップChainedを投げる形。A2Vが開通すればSingle A2Vも同時に開通する、
@@ -718,20 +838,21 @@ def test_ltx25_no_longer_refuses_the_two_source_modes(two_family_client, case):
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
 
 
-def test_the_still_refused_chain_mode_is_exactly_end_source():
+def test_no_chain_mode_is_refused_any_more():
     """各段で外れたのは、その段が実装した分だけである。走らないモードまで
     一緒に落ちていたら、それが422にならず、mockでは通ってしまう——実機で
-    初めて「エンジンにその道が無い」と判ることになる。"""
-    assert {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE} >= {"end_source"}
-    assert not {"source_video", "source_audio"} & {
-        f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
+    初めて「エンジンにその道が無い」と判ることになる。
+
+    End source段でその最後の1件も外れた。以後この表に残るのはエンジン側の
+    機能(NAG／two_stage_hq／prune_vaed)だけで、chain系のモード名がここへ
+    戻ってきたらそれは方針の変更ではなく退行である。"""
+    refused = {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert not refused & {
+        "source_video", "source_audio",
+        "loras", "reference_video_id",
+        "retake", "end_source",
     }
-    # 第3段で外れたのも2件だけである。
-    assert not {"loras", "reference_video_id"} & {
-        f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
-    }
-    # Retake段で外れたのは1件だけである。
-    assert "retake" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert refused == {"nag_enabled", "pipeline", "vae_mode"}
 
 
 @pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_RETAKE))
@@ -747,25 +868,45 @@ def test_ltx25_no_longer_refuses_retake(two_family_client, case):
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
 
 
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_END_SOURCE))
+def test_ltx25_no_longer_refuses_end_source(two_family_client, case):
+    """End source段の対の検証(表駆動)。素材のidは実在しないので404で構わない
+    ——見るのは「機能が無いから拒否された」で落ちていないことだけである。
+    前段までこの5件はまさにFEATURE_UNSUPPORTEDだったので、ここが逆転の証拠になる。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_END_SOURCE[case])
+    )
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+
+
 def test_ltx23_still_chains(two_family_client):
     _activate(two_family_client, "LTX23")
     r = two_family_client.post("/api/v1/generate/chain", json=_chain_body())
     assert r.status_code == 202, r.text
 
 
-def test_switching_back_to_2_3_lifts_the_chain_mode_refusals(two_family_client):
+def test_switching_back_to_2_3_lifts_the_chain_refusals(two_family_client):
     """ガードは系統に追随する。往復して初めて「系統を見ている」と言える。
-    題材は**End source**である——素のChainedもV2V・A2Vも、Retake段を経たいまは
-    撮り直しも、両系統で通るようになった。2.5に残る拒否モードで見る必要が
-    あり、残っているのはこれ1件である(この行の題材が枯れたら、それは2.5が
-    chain系の全モードを持ったということなので、このテスト自体を畳んでよい)。"""
-    body = _chain_body(**CHAIN_OVERRIDES["end_source"])
+
+    **題材が変わった**。前段まではEnd sourceで見ていた——2.5に残る最後の
+    拒否モードだったからである。End source段でそれが通るようになり、
+    「この行の題材が枯れたらテストごと畳んでよい」と書いてあったが、畳まずに
+    題材だけ差し替えた。畳むと**系統に追随するという性質そのもの**を見る
+    テストが1つも残らないためである(chain系のモードは全部通るようになったが、
+    エンジン側の機能=NAGはいまも2.5だけが拒否する)。
+
+    したがって題材は **NAG** である。モードではないので「素材の切り出し」の
+    ような往復は無いが、見たいのは系統の切り替えに追随することだけである。"""
+    body = _chain_body(**CHAIN_OVERRIDES["nag_enabled"])
     _activate(two_family_client, "LTX25")
     assert two_family_client.post("/api/v1/generate/chain", json=body).status_code == 422
     _activate(two_family_client, "LTX23")
-    # 2.3では機能の可否では落ちない(素材が無いので404)。
+    # 2.3では機能の可否では落ちない。
     r = two_family_client.post("/api/v1/generate/chain", json=body)
-    assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
     _activate(two_family_client, "LTX25")
     assert two_family_client.post("/api/v1/generate/chain", json=body).status_code == 422
 
@@ -1085,11 +1226,13 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
 
     assert by_id["LTX23"]["unsupported_features"] == []
     features = by_id["LTX25"]["unsupported_features"]
-    assert {"end_source"} <= set(features)
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
     # サブタブも、タイムラインの右クリックからそこへ入る導線も灰色のままに
-    # なる(どちらも動くようになった)。
+    # なる(どちらも動くようになった)。End source段で ``end_source`` も外れた。
+    # これがchain系で最後のモード名だったので、いま2.5が公開するのは
+    # エンジン側の機能名だけである。
     assert "retake" not in features
+    assert "end_source" not in features
     # "chain" は§3-102で一覧から外れた。素のChainedが走るようになった以上、
     # ここに残っていればフロントエンドが動くタブを灰色にしてしまう。同じ理屈で
     # "v2v"/"a2v" も第2段で外れた——残っていればChainedタブのソース欄も、

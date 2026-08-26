@@ -263,10 +263,9 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: one tests "DIFFERS FROM THE DEFAULT", never "is present", because the
 #: frontend sends the whole schema on every request.
 #:
-#: The first two are whole MODES layered on top of a chain (Retake, End
-#: source); the rest are the same engine-level features the single path
-#: refuses. ``outpaint`` has no counterpart here — the chain schema has no such
-#: field at all.
+#: NO WHOLE MODE IS LEFT HERE. Every row is an engine-level feature the single
+#: path refuses for the same reason it refuses it there; ``outpaint`` has no
+#: counterpart at all, because the chain schema has no such field.
 #:
 #: ``source_video`` AND ``source_audio`` LEFT THIS TABLE with §3-102's second
 #: increment: V2V continuation and A2V (Single, long and Batch alike) run on
@@ -275,12 +274,15 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: reference-video control IC-LoRA (long chains included) run here too.
 #: ``retake`` LEFT WITH §3-102's Retake increment — engine25's chain now
 #: freezes BOTH ends of a single window (``chain25.run_chain(retake=...)``), so
-#: the mode has a code path and moved to :data:`CHAIN_HONOURED_FIELDS`. End
-#: source stays — it is the one chain MODE engine25 still cannot run.
+#: the mode has a code path and moved to :data:`CHAIN_HONOURED_FIELDS`.
+#: ``end_source`` LEFT WITH THE END-SOURCE INCREMENT, the LAST chain MODE to do
+#: so: engine25 runs the layout's own stage-1 SCHEDULE now
+#: (``chain25.run_chain(end_source=...)`` — reverse order on 2+ clips) and
+#: freezes the material's band at the timeline's tail in both stages. With it
+#: gone, every chain mode the schema can express has a code path here.
 CHAIN_REJECT_TABLE: tuple[
     tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
 ] = (
-    ("end_source", "end_source", lambda r: r.end_source is not None),
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
@@ -375,6 +377,15 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         # ``retake_window_path`` (plus the glue widths off ``chain.retake``),
         # not the id. Naming the REQUEST field here is what the audit needs.
         "retake",
+        # End source, honoured INDIRECTLY for the same reason retake and the
+        # two source modes are: the request field carries an upload id (a
+        # video OR a still image) plus the band length, and the ORCHESTRATOR
+        # has already turned that into material — the mp4 it cut, or the
+        # still it looped, to exactly ``context_frames + 1`` frames at the
+        # request fps. What :meth:`_RealBackend25.generate_chain` reads is
+        # therefore ``end_source_path`` and the two numbers beside it, not
+        # the id. Naming the REQUEST field here is what the audit needs.
+        "end_source",
         "loras",
         "reference_video_id",
         "conditioning_attention_strength",
@@ -419,12 +430,14 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: panel's attention control — the last acceleration name this engine published.
 #: ``"retake"`` LEFT WITH THE RETAKE INCREMENT, which un-greys the Edit tab's
 #: 撮り直し sub-tab (and with it the timeline's right-click route into it).
-#: The ONE mode that still cannot run — end_source — stays, and it is enforced
-#: field-by-field by :data:`CHAIN_REJECT_TABLE` rather than by one blanket
-#: refusal.
-UNSUPPORTED_FEATURES: tuple[str, ...] = (
-    "end_source",
-) + tuple(feature for _field, feature, _pred in REJECT_TABLE)
+#: ``"end_source"`` LEFT WITH THE END-SOURCE INCREMENT, which un-greys the
+#: Chained tab's 素材（末尾） panel — and it was the LAST chain-family MODE name
+#: here, which is why nothing is prepended any more: what this tuple publishes
+#: is now exactly :data:`REJECT_TABLE`'s features, because the chain half of
+#: the ruling has no mode of its own left to add.
+UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
+    feature for _field, feature, _pred in REJECT_TABLE
+)
 
 
 def reject_unsupported(request: GenerateRequest) -> None:
@@ -919,12 +932,12 @@ class _RealBackend25(_RealBackend):
         and must not: the ORCHESTRATOR's job is to prepare material, the
         ADAPTER's job is to rule on it.
 
-        THREE of those keywords name a mode outside this engine's scope (End
-        source). Reaching this method with any of them set is already
-        impossible — :func:`reject_chain` refuses the request fields behind them
-        at the endpoint, and again on the line below — so a non-``None`` arrival
-        means the two tables have drifted apart, which is a bug worth a loud
-        ``RuntimeError`` rather than a silently ignored argument.
+        NONE of those keywords names a mode outside this engine's scope any
+        more. Until the End-source increment three of them did, and a
+        non-``None`` arrival raised a loud ``RuntimeError`` because it could
+        only mean the reject table and this signature had drifted apart. With
+        that mode implemented the guard had nothing left to guard, so it was
+        REMOVED rather than left standing as a branch no request can reach.
 
         HONOURED, and worth naming: ``clip0_conditioning_paths`` (clip 0's I2V
         keyframes — the only clip the schema lets carry them) and
@@ -952,6 +965,17 @@ class _RealBackend25(_RealBackend):
         ``chain.retake``, in 2.3's block shape — the engine owns "what happens
         to those pixels", the app owns "which pixels", and neither engine cuts
         or resamples.
+
+        ALSO HONOURED SINCE THE END-SOURCE INCREMENT, and with it the LAST of
+        the thirteen: ``end_source_path`` / ``end_source_context_frames`` /
+        ``end_source_strength``. The same division of labour once more — the
+        orchestrator prepared the material (a cut video, or a still image it
+        looped into one; always ``context_frames + 1`` frames at the request
+        fps, which is the primer the causal VAE needs) and the engine decides
+        what happens to those latents. ``end_source_strength`` is the one of
+        the three that is a KNOB rather than material, and ``None`` there
+        means the request left it at its default — a statement about the
+        schema, which is why it is resolved to 1.0 here and not in the engine.
         """
         chain = chain_request
         # BEFORE the load, unlike :meth:`generate`. The ruling is a pure read of
@@ -960,26 +984,6 @@ class _RealBackend25(_RealBackend):
         # without a subprocess, which is what lets a pytest hold it.
         reject_chain(chain)
         _log_ignored(chain, CHAIN_IGNORED_FIELDS)
-
-        # Fail loud, not silent: every one of these is refused above, so a value
-        # here means the reject table and this signature disagree about what the
-        # engine can do. Three entries, not six: ``lora_paths`` and
-        # ``reference_video_path`` LEFT this guard with §3-102's third increment
-        # — they are material this engine now consumes, so their arrival is a
-        # job, not a drift — and ``retake_window_path`` LEFT with the Retake
-        # increment for exactly the same reason. What is left is End source's
-        # three keywords, the one mode with no code path here.
-        out_of_scope = {
-            "end_source_path": end_source_path,
-            "end_source_context_frames": end_source_context_frames,
-            "end_source_strength": end_source_strength,
-        }
-        supplied = [name for name, value in out_of_scope.items() if value is not None]
-        if supplied:
-            raise RuntimeError(
-                "LTX 2.5 chain received out-of-scope material the feature table "
-                f"should have refused: {', '.join(sorted(supplied))}"
-            )
 
         if not self.loaded:
             self.load()
@@ -1066,6 +1070,21 @@ class _RealBackend25(_RealBackend):
                 "head_px": int(chain.retake.head_px),
                 "tail_px": int(chain.retake.tail_px),
                 "regenerate_audio": bool(chain.retake.regenerate_audio),
+            }
+        # End source (additive): the app-prepared tail material — a cut video
+        # or a looped still, so the engine only ever sees a video — plus the
+        # band length and the user's strength. 2.3's block shape
+        # (services/engines/ltx/adapter.py) key for key and in the same key
+        # ORDER, for the reason the retake block above gives. The ``is not
+        # None`` guard on BOTH values is what keeps a chain without an end
+        # source byte-identical to the golden, payload key set included.
+        if end_source_path is not None and end_source_context_frames is not None:
+            payload["end_source"] = {
+                "path": str(end_source_path),
+                "context_frames": int(end_source_context_frames),
+                "strength": (
+                    1.0 if end_source_strength is None else float(end_source_strength)
+                ),
             }
         # Style/character AND control IC-LoRA (additive): (path, strength[,
         # audio_strength]) per adapter, applied uniformly across the chain, and

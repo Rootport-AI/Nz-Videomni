@@ -134,6 +134,7 @@ from chain_math import (
     freeze_mask_values,
     plan_upsample_chunks,
     resolve_stage2_window,
+    tail_tile_bands,
     video_segment_windows,
 )
 from engine25.ltxcore_compat import (
@@ -395,14 +396,67 @@ class RetakeSpec:
 
 
 @dataclass
+class EndSourceSpec:
+    """End source -- the chain must END on this material (V2V's mirror).
+
+    Same three fields, same meanings, as 2.3's ``EndSourceSpec``: the app
+    layer that fills them in is engine-independent and already shipped, and
+    the geometry behind them is the SHARED :mod:`chain_math`, so the app
+    validator, the mock and both engines cannot disagree about which latents
+    are frozen.
+
+    * ``path``: an mp4 the app has ALREADY cut to ``context_frames + 1``
+      frames at the request fps. A STILL IMAGE was looped into a video app
+      side, so the engine only ever sees a video -- ONE code path. THE ENGINE
+      NEVER CUTS OR RESAMPLES; it checks the rate rather than trusting it
+      (:func:`_load_video_frames_cpu`), the same division of labour
+      :class:`SourceSpec` and :class:`RetakeSpec` keep.
+    * ``context_frames``: the frozen TAIL band in pixel frames, a MULTIPLE
+      OF 8 (``chain_math.v_tail_latents``). A tail is counted back from the
+      end in whole groups of eight and never reaches the lone keyframe
+      latent, so the head grid's ``8n + 1`` does not apply here.
+    * ``strength``: how hard STAGE 1 holds the VIDEO tail (1.0 == a hard
+      freeze). Stage 2 pins the band outright whatever this says, because it
+      re-noises at sigma[0], and the AUDIO band is a hard freeze in both
+      stages -- this knob is video-only, exactly as in 2.3.
+
+    WHY THE FILE CARRIES ONE FRAME MORE THAN THE BAND. The video VAE is
+    causal: its latent 0 covers a single pixel frame and every later latent
+    covers eight. Encoding ``context_frames`` alone would put the band on a
+    grid one frame out of phase with the timeline's. The extra leading frame
+    is a PRIMER: it is encoded and then dropped, and what remains lands on
+    the timeline's own grid. The ``+ 1`` assertion in
+    :func:`_encode_end_source_video` is the contract check between the app's
+    cutter and this encode.
+
+    WHERE THE BAND LIVES depends on the clip count, and ``chain_math``
+    decides it once as ``layout.end_source_mode``: ``"in_window"`` on ONE
+    clip (the band is that clip's own tail) and ``"reverse"`` on two or more
+    (stage 1 generates the clips LAST TO FIRST, each freezing the next one's
+    opening as its own ending). Nothing in this module re-derives either --
+    :func:`run_chain` reads the schedule off the layout's three tables.
+
+    Mutually exclusive with :class:`RetakeSpec` and :class:`AudioSourceSpec`,
+    and COMBINABLE with :class:`SourceSpec` -- the one-clip interpolation the
+    API explicitly allows (start material, end material, generated middle).
+    That last one is not a detail: it is why the audio anchor below is an
+    independent branch rather than another ``elif``.
+    """
+
+    path: str
+    context_frames: int
+    strength: float = 1.0
+
+
+@dataclass
 class ChainSpec:
     """One chain job: exactly the body keys of the ``generate_chain`` payload.
 
-    Deliberately nothing else. The features this engine still refuses (end
-    source, NAG/VSF, ``vae_mode``) have no field here at all, so "this engine
-    does not do that" is visible in the type rather than in a runtime branch --
-    and adding one later is a deliberate act. The features it DOES run but that
-    arrive as prepared MATERIAL rather than as body keys -- ``retake``,
+    Deliberately nothing else. The features this engine still refuses (NAG/VSF,
+    ``vae_mode``) have no field here at all, so "this engine does not do that"
+    is visible in the type rather than in a runtime branch -- and adding one
+    later is a deliberate act. The features it DOES run but that arrive as
+    prepared MATERIAL rather than as body keys -- ``retake``, ``end_source``,
     ``ic_loras``, ``ic_reference`` -- are keyword arguments of
     :func:`run_chain` instead, which is also where 2.3 takes them.
 
@@ -934,11 +988,12 @@ class _Ingest(NamedTuple):
     """Everything ONE ``ImageConditioner`` build produced.
 
     A named tuple rather than a bare tuple because the closure now returns
-    SEVEN things and a positional unpack of seven is a bug waiting for its
-    seventh element. The ORDER is the order the closure computes them in, which
-    is deliberately the order it always had with the retake pair appended --
-    changing the order would change which encode runs while which model is
-    resident, and that is a VRAM fact, not a formatting one.
+    NINE things and a positional unpack of nine is a bug waiting for its
+    ninth element. The ORDER is the order the closure computes them in, which
+    is deliberately the order it always had with the retake pair and then the
+    end-source pair appended -- changing the order would change which encode
+    runs while which model is resident, and that is a VRAM fact, not a
+    formatting one.
     """
 
     stage1_conds: list[ConditioningItem]
@@ -948,6 +1003,8 @@ class _Ingest(NamedTuple):
     ref_conds: list[list[ConditioningItem]]
     retake_half: torch.Tensor | None
     retake_full: torch.Tensor | None
+    end_half: torch.Tensor | None
+    end_full: torch.Tensor | None
 
 
 def _retake_encode_tiling(tiling_config: Any, *, scale_factors: Any, video_shape: VideoPixelShape) -> Any:
@@ -982,6 +1039,15 @@ def _retake_encode_tiling(tiling_config: Any, *, scale_factors: Any, video_shape
     and return a different config type, and silently encoding a whole window
     with AUTO's tiles is exactly the spill this function exists to avoid. Loud
     is the only safe setting.
+
+    THE END SOURCE SHARES THIS, and the name is the only thing about it that
+    still says "retake". The budget is a property of THIS VAE and of how much
+    material the app lets a user hand in, not of either mode: an end source is
+    read at up to ``context_frames + 1 == 137`` pixel frames, at BOTH
+    resolutions, which is the same class of allocation a 169-frame window is
+    and lands in the same spill. The alternative -- letting the end source
+    keep AUTO's tiles because its read is a little shorter -- would mean two
+    encode paths in one engine differing by a number nobody could defend.
     """
     if not isinstance(tiling_config, TileSizeConfig):
         raise ChainError(
@@ -1092,6 +1158,95 @@ def _encode_retake_window(
         ).to_torch_shape()
         assert tuple(latent.shape) == tuple(expected), (label, tuple(latent.shape), tuple(expected))
         out.append(latent)
+
+    return out[0], out[1]
+
+
+def _encode_end_source_video(
+    video_encoder: Any,
+    *,
+    end_source: EndSourceSpec,
+    layout: ChainLayout,
+    width: int,
+    height: int,
+    frame_rate: float,
+    tiling_config: Any,
+    scale_factors: Any,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """VAE-encode the end material twice: ``(half_res_band, full_res_band)``.
+
+    THE VIDEO HALF ONLY. 2.3 does this in ONE function that returns five
+    things -- both video bands, the audio band, its effective width and an
+    audio status -- because its video encoder is a long-lived object it can
+    reach for anywhere. In 2.5 the two encoders have DIFFERENT LIFETIMES:
+    ``ImageConditioner`` owns the video one for the length of one closure and
+    ``AudioConditioner`` owns the audio one for the length of another, so a
+    single function would have to hold both models resident at once. The
+    split is that constraint, not a preference; the audio anchor is read in
+    :func:`run_chain`'s audio-ingest block instead, and what it computes
+    (``n_end_a_eff``) is wired from there to the stage-2 band plan.
+
+    WHY TWICE, at two resolutions, is :func:`_encode_source_heads`' reason and
+    :func:`_encode_retake_window`'s verbatim: the half-res band is what stage 1
+    freezes at the end of its LAST segment and must match the resolution stage
+    1 works in; the full-res one is stage 2's hard freeze in every tile the
+    band reaches, and comes from a fresh full-resolution encode of the original
+    file rather than from the upsampled stage-1 approximation ('variant B').
+    C0-prep measured the gap that makes that mandatory rather than tidy: the
+    half-resolution VAE ceiling runs 3-4 dB below the full-resolution one.
+
+    BOTH ENCODES CONSUME THE WHOLE FILE -- ``context_frames + 1`` pixel frames
+    -- AND THEN DROP LATENT 0. That primer frame is what makes the remaining
+    ``n_end_v`` latents land on the timeline's own grid; see
+    :class:`EndSourceSpec` for the causal-VAE argument. The ``+ 1`` assertion
+    is therefore the REAL CONTRACT CHECK between the app's cutter and this
+    encode: a file of the wrong length would silently freeze the wrong
+    latents, which is a failure no later check would catch.
+
+    Both go through ``tiled_encode`` with the NARROWED spatial tiles
+    :func:`_retake_encode_tiling` builds -- see that function's note on why
+    the end source shares the retake window's budget, and
+    :data:`RETAKE_ENCODE_TILE_AREA_BUDGET` for the measurement behind it.
+    """
+    cut_px = int(end_source.context_frames) + 1
+    n_end_v = int(layout.n_end_v)
+    encode_tiling = _retake_encode_tiling(
+        tiling_config,
+        scale_factors=scale_factors,
+        video_shape=VideoPixelShape(1, cut_px, height, width, frame_rate),
+    )
+    logger.info(
+        "chain end source: encoding %d pixel frames (%d band latents + 1 primer) "
+        "at both resolutions, tiling=%r",
+        cut_px, n_end_v, encode_tiling,
+    )
+
+    out: list[torch.Tensor] = []
+    for label, h, w in (("half", height // 2, width // 2), ("full", height, width)):
+        pixels = _load_video_frames_cpu(
+            end_source.path, frame_cap=cut_px, height=h, width=w,
+            device=device, expected_fps=frame_rate,
+        )
+        encoded = video_encoder.tiled_encode(pixels, encode_tiling)
+        del pixels
+        if encoded.shape[2] != n_end_v + 1:
+            raise ChainError(
+                f"the {label}-res end-source encode produced {encoded.shape[2]} latent "
+                f"frames but the band needs n_end_v={n_end_v} plus the causal primer "
+                f"({n_end_v + 1}); the app must cut the material to "
+                f"context_frames + 1 = {cut_px} frames."
+            )
+        band = encoded[:, :, 1:].detach().clone()
+        del encoded
+        cleanup_memory()
+
+        expected = VideoLatentShape.from_pixel_shape(
+            VideoPixelShape(1, cut_px, h, w, frame_rate), scale_factors=scale_factors
+        ).to_torch_shape()
+        want = (expected[0], expected[1], n_end_v, expected[3], expected[4])
+        assert tuple(band.shape) == want, (label, tuple(band.shape), want)
+        out.append(band)
 
     return out[0], out[1]
 
@@ -1403,9 +1558,16 @@ def _band_conditionings(
 
     ``clear_keyframes`` is INDEPENDENT of everything else here. It used to be
     reachable only from inside the "a video head is frozen" branch, which tied
-    the marker's correctness -- a question about POSITION on the timeline -- to
-    a question about freezing; the two come apart the moment a segment can be
-    generated in reverse order (§3-102 C3).
+    a question about the CONTENT of latent 0 to a question about freezing.
+
+    NO SHIPPED PATH CURRENTLY ASKS FOR A MARKER CLEAR WITH NOTHING FROZEN, and
+    that is worth saying plainly rather than leaving the parameter looking
+    busier than it is: C1 separated the two for §3-102 C3's reverse schedule,
+    and gate M8 then MEASURED that a free-headed segment should keep its
+    marker, so the caller's predicate went back to a carry test. The
+    separation stays because the two questions really are independent and the
+    coupling was an accident of where the code grew -- not because anything
+    exercises the standalone case today.
     """
     video: list[ConditioningItem] = []
     audio: list[ConditioningItem] = []
@@ -1579,6 +1741,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     stage1_eta: float | None = None,
     clear_keyframes: bool | None = None,
     retake: RetakeSpec | None = None,
+    end_source: EndSourceSpec | None = None,
     ic_loras: list[tuple] | None = None,
     ic_reference: tuple[str, float] | None = None,
     ic_attention_strength: float = 1.0,
@@ -1602,6 +1765,14 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     ``run_chain`` takes it in exactly this position, so the two engines' chain
     entry points stay readable side by side. ``None`` -- every chain but a
     retake -- leaves every branch it opens untaken.
+
+    ``end_source`` is the same kind of argument and arrived with the End-source
+    increment: the app-cut tail material plus the band length and the user's
+    strength. It is the ONE of these that changes the SHAPE OF STAGE 1 rather
+    than only what is frozen -- on two or more clips the layout schedules the
+    segments in reverse and this function follows that schedule, so ``i`` below
+    is a TIMELINE index and ``order_idx`` is how far through the queue we are.
+    ``None`` leaves the loop running ``[0..n_seg)``, which is what it always did.
 
     ``ic_loras`` / ``ic_reference`` / ``ic_attention_strength`` ARE request
     fields (§3-102 third stage). ``ic_loras`` is the job's adapters as
@@ -1645,16 +1816,33 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     assert sum(x is not None for x in (source, audio_source, retake)) <= 1, (
         "run_chain: source (V2V), audio_source (A2V) and retake are mutually exclusive"
     )
-    # An IC-LoRA reference is API-exclusive with V2V and with retake (and, in
-    # 2.3, with the end source, which does not exist on this engine, so the
-    # assertion is 2.3's list minus the one mode that cannot reach it). The
+    # An end source is 2.3's SAME two exclusions -- and deliberately NOT a third
+    # entry in the sum above, because it is NOT exclusive with ``source``: one
+    # clip with a start material AND an end material is the interpolation the
+    # API explicitly allows, and folding it into that sum would refuse the very
+    # combination this feature is most often used for.
+    assert not (end_source is not None and retake is not None), (
+        "run_chain: end_source and retake are mutually exclusive"
+    )
+    assert not (end_source is not None and audio_source is not None), (
+        "run_chain: end_source and audio_source (A2V) are mutually exclusive"
+    )
+    # An IC-LoRA reference is API-exclusive with V2V, with retake AND with the
+    # end source -- 2.3's list in full now that the third mode exists here. The
     # injection below LEANS on that: it sits after the head branch, so a
     # reference reaching a V2V or retake chain would append conditioning to a
-    # segment whose head is a frozen carry from a file. A2V is deliberately NOT
-    # in the list -- 2.3 allows the pair, and adding a constraint the older
-    # engine does not have would be a new restriction dressed up as parity.
-    assert ic_reference is None or (source is None and retake is None), (
-        "run_chain: ic_reference is mutually exclusive with source (V2V) and retake"
+    # segment whose head is a frozen carry from a file. THE END SOURCE'S REASON
+    # IS A DIFFERENT ONE and it is about the SCHEDULE: the reference windows are
+    # walked once, forwards, out of a lazy decode stream that cannot go back, so
+    # a reverse stage-1 order would hand every segment the wrong window. A2V is
+    # deliberately NOT in the list -- 2.3 allows the pair, and adding a
+    # constraint the older engine does not have would be a new restriction
+    # dressed up as parity.
+    assert ic_reference is None or (
+        source is None and retake is None and end_source is None
+    ), (
+        "run_chain: ic_reference is mutually exclusive with source (V2V), retake "
+        "and end_source"
     )
     # Clip-0 keyframes and a retake are API-exclusive too, and this assertion is
     # SPENT below rather than merely stated: the stage-1 conditioning list is
@@ -1668,11 +1856,11 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
     # ── Geometry: the SHARED pure module, called the way the app calls it ─────
     # Same positional pair, same ``kv``, same resolved (v_tile, v_adv), and now
-    # the same ``source_context_px`` -- which is None on every request without a
-    # source video, i.e. the same call the plain chain always made. The two
-    # remaining feature keyword (end_context_px) is still refused at the API, so
-    # omitting it is still the same call; gate G1(e) pins that against the app's
-    # own call sites rather than leaving it as a comment.
+    # the same ``source_context_px`` AND ``end_context_px`` -- both None on a
+    # request without that material, i.e. the same call the plain chain always
+    # made. With ``end_context_px`` wired, EVERY keyword this shared function
+    # takes is now reachable from this engine, so there is no longer any part
+    # of the layout the two engines compute differently.
     #
     # ``retake_glue_px`` is now passed, and it is the SINGLE SOURCE OF TRUTH for
     # the whole retake geometry: the app validator, the mock and both engines
@@ -1688,7 +1876,25 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         retake_glue_px=(
             None if retake is None else (int(retake.head_px), int(retake.tail_px))
         ),
+        end_context_px=(
+            None if end_source is None else int(end_source.context_frames)
+        ),
     )
+    # ``internal_segment`` is the end source's LEGACY geometry -- an extra band
+    # segment appended after the user's clips. It is unreachable from the API
+    # (``compute_chain_layout`` derives the mode from the clip count and only an
+    # explicit ``end_source_mode_override`` can force this one), and this engine
+    # deliberately does not implement it: the appended segment would make
+    # ``n_seg == n + 1``, which every shape assertion below is written against.
+    # NAMED rather than left to fail somewhere downstream, because a silent
+    # mis-sized timeline is the worst failure this feature can have.
+    if layout.end_source_mode == "internal_segment":
+        raise ChainError(
+            "end_source_mode='internal_segment' is not implemented on this engine "
+            "(engine25 runs the in_window and reverse geometries only); it is "
+            "unreachable from the API and reaching it here means a caller passed "
+            "chain_math's end_source_mode_override."
+        )
     seg_frames = layout.seg_frames
     n_seg = len(seg_frames)
     assert n_seg == n, (n_seg, n)   # no feature here appends a segment
@@ -1701,6 +1907,11 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     n_tail_v = int(rt_geo.get("n_tail_v", 0))
     n_head_a = int(rt_geo.get("n_head_a", 0))
     n_tail_a = int(rt_geo.get("n_tail_a", 0))
+    # End-source band sizes, READ OFF THE LAYOUT (never recomputed), exactly as
+    # the retake glue above is. Both zero on every chain without an end source,
+    # which is what keeps every slice they index inert there.
+    n_end_v = int(layout.n_end_v)
+    n_end_a = int(layout.n_end_a)
     ka_list = layout.ka_list
     v_tiles, a_tiles = layout.v_tiles, layout.a_tiles
     kt_v, kt_a = layout.kt_v, layout.kt_a
@@ -1747,12 +1958,17 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     logger.info(
         "chain: %d clips %s -> %d px frames, %dx%d @ %.3f fps, kv=%d strength=%.3f, "
         "%d stage-2 tiles (window %s = %d/%d), sampler=%s eta=%s clear_keyframes=%s, "
-        "chunked_upsample=%s, source=%s, audio_source=%s, loras=%d, reference=%s",
+        "chunked_upsample=%s, source=%s, audio_source=%s, end_source=%s, loras=%d, "
+        "reference=%s",
         n, [c.num_frames for c in clips], total_px, width, height, frame_rate, kv,
         spec.overlap_strength, n_tiles, spec.stage2_window or "standard", v_tile, v_adv,
         sampler, eta if sampler == "ancestral" else "-", clear_kf, spec.chunked_upsample,
         "-" if source is None else f"{source.path} ctx={source.context_frames}",
         "-" if audio_source is None else audio_source.path,
+        "-" if end_source is None
+        else f"{end_source.path} ctx={end_source.context_frames} "
+             f"strength={float(end_source.strength):.3f} mode={layout.end_source_mode} "
+             f"order={layout.seg_generation_order}",
         len(list(ic_loras or [])),
         "-" if ic_reference is None
         else f"{ic_reference[0]} strength={ic_reference[1]:.3f} factor={reference_factor} "
@@ -1795,12 +2011,29 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         # ``ImageConditioner`` and the same lifecycle the official A2V pipeline
         # uses.
         #
-        # V2V, A2V and a RETAKE all land here, and take DIFFERENT amounts of the
-        # result: V2V keeps a head band (``n_ctx_a`` frames, short), A2V keeps the
-        # whole timeline, and a retake keeps a band at EACH end. They also differ
-        # on what a shortfall means, which is the interesting part -- see each
-        # branch. ``elif`` rather than three independent ``if``s because the three
-        # are TRULY exclusive (asserted above), not merely usually apart.
+        # V2V, A2V, a RETAKE and an END SOURCE all land here, and take DIFFERENT
+        # amounts of the result: V2V keeps a head band (``n_ctx_a`` frames,
+        # short), A2V keeps the whole timeline, a retake keeps a band at EACH end
+        # and an end source keeps one at the TAIL. They also differ on what a
+        # shortfall means, which is the interesting part -- see each adjudication.
+        #
+        # THE FIRST THREE ARE AN ``elif`` CHAIN because they are TRULY exclusive
+        # (asserted above). THE END SOURCE IS AN INDEPENDENT ``if``, and that is
+        # not a stylistic choice: it rides WITH a V2V source on the one-clip
+        # interpolation the API explicitly allows, so a fourth ``elif`` would drop
+        # its anchor on exactly that combination -- and drop it INVISIBLY, since
+        # ``end_a`` would be None, the metadata's ``audio_frozen`` would read
+        # false, and the freeze proof skips its None entries and would still say
+        # ``pass``. A silent loss that reports success is the one failure this
+        # block must not have.
+        #
+        # WHAT THE INDEPENDENT BRANCH COSTS, AND HOW IT IS PAID. The standing rule
+        # here is ONE ``AudioConditioner`` build for the whole job; two branches
+        # that can both fire would have meant two. So LOADING is separated from
+        # ENCODING: each branch decodes its waveform into ``wf_jobs``, ONE closure
+        # encodes every entry, and the adjudications -- which differ per mode and
+        # are the whole point -- read the results back out below, in the order
+        # they always ran in.
         a2v_a: torch.Tensor | None = None          # (1,8,a_total,16) frozen audio
         a2v_orig_wf: torch.Tensor | None = None    # (2,N) CPU float32 -- the mux
         a2v_sr = 0
@@ -1813,6 +2046,16 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         rt_orig_wf: torch.Tensor | None = None     # (2,N) CPU float32 -- the re-mux
         rt_sr = 0
         retake_had_audio = False
+        end_a: torch.Tensor | None = None          # (1,8,n_end_a_eff,16) tail band
+        n_end_a_eff = 0
+        # ``"disabled"`` is NOT in this value's domain on 2.5. In 2.3 it means the
+        # ``END_SOURCE_FREEZE_AUDIO`` rollback constant was off; this engine has no
+        # such constant, so the honest set is ``{None, "no_audio"}`` -- and a SHORT
+        # encode is not a fallback at all, it reads as frozen with a narrower
+        # ``n_end_a_frozen`` (see the adjudication below).
+        end_audio_status: str | None = "no_audio" if end_source is not None else None
+        # What each branch decoded, keyed by mode. ONE closure encodes the lot.
+        wf_jobs: dict[str, tuple[torch.Tensor, int]] = {}
 
         if audio_source is not None:
             loaded = _load_audio_stereo(audio_source.path, device)
@@ -1822,14 +2065,70 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 )
             wf, a2v_sr = loaded
             a2v_orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+            wf_jobs["a2v"] = (wf, a2v_sr)
 
+        elif source is not None:
+            loaded = _load_audio_stereo(source.path, device)
+            source_had_audio = loaded is not None
+            if loaded is not None:
+                wf, src_sr = loaded
+                wf_jobs["v2v"] = (wf, src_sr)
+
+        elif retake is not None:
+            loaded = _load_audio_stereo(retake.path, device)
+            retake_had_audio = loaded is not None
+            if loaded is not None:
+                wf, rt_sr = loaded
+                # Kept on CPU for a possible verbatim re-mux
+                # (``regenerate_audio=False``), which is the one path that never
+                # runs the vocoder.
+                rt_orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+                wf_jobs["retake"] = (wf, rt_sr)
+
+        # ── the END SOURCE's own audio anchor (INDEPENDENT; see the note above) ─
+        # THE WAVEFORM IS TRIMMED TO THE VIDEO'S OWN LENGTH BEFORE THE ENCODE, and
+        # the trim is HEAD-BASED at ``cut_px`` -- ``context_frames + 1``, the
+        # FILE's frame count, never ``context_frames``. The band is sliced off the
+        # TAIL below, which assumes the last audio sample is the last video frame;
+        # the app's cutter writes PCM where it can and falls back to AAC, and AAC
+        # pads its final frame (up to ~21 ms) at exactly the end that slice reads
+        # from. Cutting to ``cut_px / fps`` seconds first is what restores the
+        # assumption -- the same ``round(px / fps * sr)`` the A2V and retake mux
+        # paths use, for the same reason. A still image has no audio track at all
+        # and simply does not enter here.
+        if end_source is not None:
+            loaded = _load_audio_stereo(end_source.path, device)
+            if loaded is not None:
+                wf, es_sr = loaded
+                es_cut_px = int(end_source.context_frames) + 1
+                wf = wf[..., : int(round(es_cut_px / frame_rate * es_sr))].contiguous()
+                if int(wf.shape[-1]) > 0:
+                    wf_jobs["end_source"] = (wf, es_sr)
+
+        # ── ONE build, every waveform ─────────────────────────────────────────
+        # ``__call__(fn)`` builds the encoder, calls ``fn`` once and frees it, so a
+        # dict comprehension inside the closure is how two modes come to share a
+        # single build. In practice the dict holds ONE entry, or two on the
+        # one-clip V2V + end-source interpolation -- the only pairing the
+        # exclusions leave open.
+        encoded_by_mode: dict[str, torch.Tensor] = {}
+        if wf_jobs:
             vram.reset()
             audio_started = time.perf_counter()
-            encoded_a = pipeline.audio_conditioner(
-                lambda encoder: _encode_audio_latent(encoder, wf, a2v_sr)
+            encoded_by_mode = pipeline.audio_conditioner(
+                lambda encoder: {
+                    mode: _encode_audio_latent(encoder, waveform, rate)
+                    for mode, (waveform, rate) in wf_jobs.items()
+                }
             )
             vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
+            wf_jobs.clear()
+            del wf, loaded
+            cleanup_memory()
 
+        # ── A2V's adjudication: the timeline is authoritative, audio is truncated ─
+        if "a2v" in encoded_by_mode:
+            encoded_a = encoded_by_mode.pop("a2v")
             a_total = int(layout.a_total)
             a2v_avail = int(encoded_a.shape[2])
             # A HARD failure, unlike the V2V underrun below, and the asymmetry is
@@ -1845,77 +2144,55 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                     f"length is authoritative; audio is truncated, never padded."
                 )
             a2v_a = encoded_a[:, :, :a_total].detach().clone()
-            del encoded_a, wf
+            del encoded_a
             cleanup_memory()
             a_seg_windows = audio_segment_windows(layout)
 
-        elif source is not None:
-            loaded = _load_audio_stereo(source.path, device)
-            source_had_audio = loaded is not None
-            if loaded is not None:
-                wf, src_sr = loaded
-                vram.reset()
-                audio_started = time.perf_counter()
-                encoded_a = pipeline.audio_conditioner(
-                    lambda encoder: _encode_audio_latent(encoder, wf, src_sr)
+        # ── V2V's adjudication: an underrun is a WARNING, not an error ─────────
+        if "v2v" in encoded_by_mode:
+            encoded_a = encoded_by_mode.pop("v2v")
+            n_ctx_a = int(layout.n_ctx_a)
+            avail = int(encoded_a.shape[2])
+            freeze_ka = min(n_ctx_a, avail)
+            # A WARNING, not an error -- the opposite of A2V above. Here the
+            # audio is only continuity material for the junction: freezing
+            # fewer frames than asked for makes the join less smooth, it does
+            # not make the job meaningless. 2.3 chose the same, and
+            # ``audio_head_frozen`` in the metadata reports what happened.
+            if avail < n_ctx_a:
+                logger.warning(
+                    "chain: source audio underrun -- only %d encoded audio-latent frames "
+                    "available but the context needs n_ctx_a=%d; freezing %d.",
+                    avail, n_ctx_a, freeze_ka,
                 )
-                vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
+            src_a = encoded_a[:, :, :freeze_ka].detach().clone() if freeze_ka > 0 else None
+            del encoded_a
+            cleanup_memory()
 
-                n_ctx_a = int(layout.n_ctx_a)
-                avail = int(encoded_a.shape[2])
-                freeze_ka = min(n_ctx_a, avail)
-                # A WARNING, not an error -- the opposite of A2V above. Here the
-                # audio is only continuity material for the junction: freezing
-                # fewer frames than asked for makes the join less smooth, it does
-                # not make the job meaningless. 2.3 chose the same, and
-                # ``audio_head_frozen`` in the metadata reports what happened.
-                if avail < n_ctx_a:
-                    logger.warning(
-                        "chain: source audio underrun -- only %d encoded audio-latent frames "
-                        "available but the context needs n_ctx_a=%d; freezing %d.",
-                        avail, n_ctx_a, freeze_ka,
-                    )
-                src_a = encoded_a[:, :, :freeze_ka].detach().clone() if freeze_ka > 0 else None
-                del encoded_a, wf
-                cleanup_memory()
-
-        elif retake is not None:
-            # ── the retake WINDOW's own audio ─────────────────────────────────
-            # Kept whole (``a_total`` latent frames == the window's own timeline)
-            # because BOTH ends of it are frozen; the two write sites take the
-            # leading ``n_head_a`` and the trailing ``n_tail_a`` out of it.
-            #
-            # THE ADJUDICATION IS 2.3's, decided by the owner in VERIFICATION_LOG
-            # §55.6, and the three arms are genuinely different rulings:
-            #
-            #   * the window HAS audio but encodes to fewer than ``a_total``
-            #     latent frames -> HARD FAIL. A short encode puts the TAIL glue
-            #     at the wrong latent index and would silently invalidate the
-            #     freeze, which is worse than a failed job. (This is why the
-            #     slice below is anchored at ``a_total`` and not at ``avail``:
-            #     there is no correct narrower band, only a misplaced one.)
-            #   * the same shortfall with ``regenerate_audio=False`` -> a WARNING
-            #     and no audio freeze at all. The delivered audio is the original
-            #     waveform, so a short encode can only under-freeze latents that
-            #     are about to be discarded.
-            #   * the window has NO audio track -> continue with no audio freeze,
-            #     recorded in the metadata rather than raised. A silent clip is a
-            #     legitimate thing to retake.
-            loaded = _load_audio_stereo(retake.path, device)
-            retake_had_audio = loaded is not None
-            if loaded is not None:
-                wf, rt_sr = loaded
-                # Kept on CPU for a possible verbatim re-mux
-                # (``regenerate_audio=False``), which is the one path that never
-                # runs the vocoder.
-                rt_orig_wf = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
-                vram.reset()
-                audio_started = time.perf_counter()
-                encoded_a = pipeline.audio_conditioner(
-                    lambda encoder: _encode_audio_latent(encoder, wf, rt_sr)
-                )
-                vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
-
+        # ── the RETAKE window's own audio ─────────────────────────────────────
+        # Kept whole (``a_total`` latent frames == the window's own timeline)
+        # because BOTH ends of it are frozen; the two write sites take the
+        # leading ``n_head_a`` and the trailing ``n_tail_a`` out of it.
+        #
+        # THE ADJUDICATION IS 2.3's, decided by the owner in VERIFICATION_LOG
+        # §55.6, and the three arms are genuinely different rulings:
+        #
+        #   * the window HAS audio but encodes to fewer than ``a_total``
+        #     latent frames -> HARD FAIL. A short encode puts the TAIL glue
+        #     at the wrong latent index and would silently invalidate the
+        #     freeze, which is worse than a failed job. (This is why the
+        #     slice below is anchored at ``a_total`` and not at ``avail``:
+        #     there is no correct narrower band, only a misplaced one.)
+        #   * the same shortfall with ``regenerate_audio=False`` -> a WARNING
+        #     and no audio freeze at all. The delivered audio is the original
+        #     waveform, so a short encode can only under-freeze latents that
+        #     are about to be discarded.
+        #   * the window has NO audio track -> continue with no audio freeze,
+        #     recorded in the metadata rather than raised. A silent clip is a
+        #     legitimate thing to retake.
+        if retake is not None:
+            if "retake" in encoded_by_mode:
+                encoded_a = encoded_by_mode.pop("retake")
                 a_win = int(layout.a_total)
                 avail = int(encoded_a.shape[2])
                 if avail < a_win:
@@ -1935,7 +2212,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                     retake_had_audio = False
                 else:
                     rt_a = encoded_a[:, :, :a_win].detach().clone()
-                del encoded_a, wf
+                del encoded_a
                 cleanup_memory()
             if not retake_had_audio:
                 # Nothing to freeze -> the glue bands are video-only. NOT an
@@ -1943,6 +2220,60 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 # zeroing the two counts here is what makes every audio slice
                 # below inert rather than each of them re-testing the condition.
                 n_head_a = n_tail_a = 0
+
+        # ── the END SOURCE's adjudication: SILENT fallbacks, never errors ──────
+        # SLICED FROM THE TAIL, ``enc[:, :, avail - n_end_a_eff : avail]``, because
+        # the file's LAST audio sample is what lines up with the timeline's last
+        # frame. The material's own latent grid and the timeline's are not in phase
+        # in general, so up to ONE audio latent (40 ms) of offset remains --
+        # accepted, and finer than the 1-3 frame uncertainty the retake work
+        # already records for the encoder's time support.
+        #
+        # FALLBACKS ARE SILENT, NEVER ERRORS (owner adjudication, 2.3's): no audio
+        # track or an undecodable one -> ``"no_audio"`` and the tail's audio is
+        # generated freely, exactly as before this existed. A SHORT encode freezes
+        # what there is (``n_end_a_eff = min(n_end_a, avail)``, ``"partial"``)
+        # rather than failing the job -- the same quiet under-freeze the V2V head
+        # settled on. Digital silence is NOT detected: silence is frozen as silence.
+        #
+        # KEPT IN ``DTYPE``, not fp32: the freeze proof asks for an EXACT 0.0 and
+        # gets it only because every write is a bf16 copy of the encoder's own
+        # output. Holding fp32 here and rounding at the write site would leave the
+        # proof comparing two different roundings of the same number.
+        if "end_source" in encoded_by_mode:
+            encoded_a = encoded_by_mode.pop("end_source")
+            avail = int(encoded_a.shape[2])
+            n_end_a_eff = min(n_end_a, avail)
+            if n_end_a_eff > 0:
+                end_a = (
+                    encoded_a[:, :, avail - n_end_a_eff:avail].detach().clone().to(DTYPE)
+                )
+                end_audio_status = "frozen" if n_end_a_eff == n_end_a else "partial"
+            if n_end_a_eff < n_end_a:
+                logger.warning(
+                    "chain: end source audio underrun -- only %d encoded audio-latent "
+                    "frames available but the band needs n_end_a=%d; freezing %d frames "
+                    "only (silent under-freeze, no error).",
+                    avail, n_end_a, n_end_a_eff,
+                )
+            del encoded_a
+            cleanup_memory()
+        assert not encoded_by_mode, sorted(encoded_by_mode)
+
+        # THE AUDIO BAND'S PER-TILE STAGE-2 PLAN. Normally the layout's own -- but
+        # a short encode (``"partial"``) froze FEWER latents than the geometry says,
+        # and the tiles must be re-cut to THAT width by the same pure function
+        # ``chain_math`` used. Reusing the stored table there would freeze latents
+        # the engine never wrote, i.e. it would pin freshly GENERATED audio to
+        # whatever the tile happened to hold. Left empty when nothing is frozen,
+        # which is exactly when the stage-2 write below is skipped.
+        end_bands_a: list[tuple[int, int]] = []
+        if end_a is not None:
+            end_bands_a = (
+                [tuple(b) for b in layout.end_tile_bands_a]
+                if n_end_a_eff == n_end_a
+                else tail_tile_bands(layout.a_tiles, layout.a_total, n_end_a_eff)
+            )
 
         # Whether a retake has an AUDIO band to prove anything about. Computed
         # once, here, because the freeze proof far below has to distinguish
@@ -1975,11 +2306,19 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         src_full: torch.Tensor | None = None
         rt_v_half: torch.Tensor | None = None
         rt_v_full: torch.Tensor | None = None
+        end_v_half: torch.Tensor | None = None
+        end_v_full: torch.Tensor | None = None
         # ONE list per stage-1 segment, empty when no reference was asked for --
         # which is what keeps the segment loop's ``conds_v`` byte-identical on a
         # chain without one.
         ref_conds: list[list[ConditioningItem]] = [[] for _ in range(n_seg)]
-        if clip0_images or source is not None or ic_reference is not None or retake is not None:
+        if (
+            clip0_images
+            or source is not None
+            or ic_reference is not None
+            or retake is not None
+            or end_source is not None
+        ):
             if clip0_images:
                 clip0_images = dp.image_conditioner.resolve_crf(clip0_images)
 
@@ -2046,7 +2385,27 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                         frame_rate=frame_rate, tiling_config=tiling_config,
                         scale_factors=stage.video_scale_factors, device=device,
                     )
-                return _Ingest(half, full, head_half, head_full, refs, rt_half, rt_full)
+                # AFTER the retake pair, and last of everything, for the same
+                # VRAM reason that put the retake block there -- with one
+                # difference that matters: an end source is NOT exclusive with
+                # the source heads above (the one-clip interpolation), so on
+                # that job this really is the second gigabyte-scale encode in
+                # the closure, and last is where the fewest other tensors are
+                # resident. A retake is exclusive with all four blocks above,
+                # so a retake job still runs exactly one of them.
+                es_half = es_full = None
+                if end_source is not None:
+                    es_half, es_full = _encode_end_source_video(
+                        encoder,
+                        end_source=end_source, layout=layout, width=width,
+                        height=height, frame_rate=frame_rate,
+                        tiling_config=tiling_config,
+                        scale_factors=stage.video_scale_factors, device=device,
+                    )
+                return _Ingest(
+                    half, full, head_half, head_full, refs,
+                    rt_half, rt_full, es_half, es_full,
+                )
 
             vram.reset()
             conditioning_started = time.perf_counter()
@@ -2056,14 +2415,32 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             src_half, src_full = ingest.src_half, ingest.src_full
             ref_conds = ingest.ref_conds
             rt_v_half, rt_v_full = ingest.retake_half, ingest.retake_full
+            end_v_half, end_v_full = ingest.end_half, ingest.end_full
             del ingest
             vram.record("11_image_conditioning", time.perf_counter() - conditioning_started)
 
         # ── STAGE 1: per-clip at half resolution, with the carry band ─────────
         stage_1_sigmas = DISTILLED_SIGMAS.to(dtype=torch.float32, device=device)
-        seg_v: list[torch.Tensor] = []
-        seg_a: list[torch.Tensor] = []
-        for i in range(n_seg):
+        # THE LOOP RUNS IN GENERATION ORDER, NOT TIMELINE ORDER. ``i`` is always
+        # the TIMELINE index -- it picks the seed, the prompt, the clip and the
+        # SLOT the result is stored in; ``order_idx`` is only how far through the
+        # schedule we are. On every mode but the end source's ``reverse`` the two
+        # coincide and ``seg_generation_order`` is ``[0..n_seg)``, so this is the
+        # same loop it has always been -- gate G1(a)'s byte-identical digest is
+        # what pins that. The slots are PRE-ALLOCATED because a reverse schedule
+        # fills them out of order; the assembly below asserts none stayed empty.
+        seg_v: list[torch.Tensor | None] = [None] * n_seg
+        seg_a: list[torch.Tensor | None] = [None] * n_seg
+        # WHAT STAGE 1 ACTUALLY DID, recorded as it goes: the order it visited
+        # the segments in and the four freeze widths each one ran with. Every
+        # other end-source number in the metadata is a copy of a ``chain_math``
+        # value, so those agreeing proves only that the layout is
+        # self-consistent. These two come from the LOOP, which is why the
+        # reverse schedule's machine gate reads them and not the layout's own
+        # ``generation_order``.
+        stage1_order: list[int] = []
+        stage1_freezes: list[dict] = []
+        for order_idx, i in enumerate(layout.seg_generation_order):
             seg_shape = VideoPixelShape(1, seg_frames[i], height // 2, width // 2, frame_rate)
             v_shape = VideoLatentShape.from_pixel_shape(
                 seg_shape, scale_factors=stage.video_scale_factors
@@ -2072,11 +2449,57 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
             init_v = init_a = None
             fkv = fka = 0
-            # Tail freeze widths. Zero on every path but a retake, which is what
-            # keeps the band call below building exactly the items it built
-            # before a tail was possible at all.
+            # Tail freeze widths. Zero on every path but a retake, the end
+            # source and the reverse schedule's のり代, which is what keeps the
+            # band call below building exactly the items it built before a tail
+            # was possible at all.
             ftv = fta = 0
-            seg_clear_kf = clear_kf
+            # Initialised HERE rather than beside ``seg_strength`` further down,
+            # because the two blocks that set them (the reverse のり代 and the
+            # end-source band) sit earlier. ``None`` means "hold the tail at
+            # whatever the head resolves to", which is what every caller before
+            # the end source wanted AND what the reverse のり代 wants: the user's
+            # one seam-blend knob should govern both directions.
+            seg_tail_strength: float | None = None
+            seg_audio_tail_strength: float | None = None
+            # THE MARKER'S CORRECTNESS IS A QUESTION ABOUT THE CONTENT OF
+            # LATENT 0, and the predicate says so: clear the marker exactly
+            # when this segment's opening latent is CARRIED-OVER content --
+            # the previous segment's tail, which covers eight pixel frames and
+            # so makes the "this is a single pixel frame" marker a lie.
+            #
+            # THIS IS A MEASUREMENT, NOT A DERIVATION, and it overturned the
+            # design C3 was planned around. That design (adversarial review
+            # C-3) argued the marker needs BOTH a fresh causal encode AND
+            # timeline position 0, and made POSITION decisive: ``clear_kf and
+            # i > 0``. On a forward schedule the two predicates are the same
+            # set, so only the end source's ``reverse`` mode could tell them
+            # apart -- and gate M8 was built to make it. It did, against the
+            # design: on the two-clip reverse chain, at BOTH seeds tried,
+            # clearing the marker on a FREE-headed segment made the junctions
+            # MORE visible, not less (junction PSNR median 30.236 vs 32.465 dB
+            # at seed 12345 and 31.143 vs 32.631 dB at seed 999 -- the
+            # position rule losing by 1.5-2.2 dB, where the gate's line was
+            # "no worse than 0.5 dB"). LTX 2.3 on the identical request sits
+            # at 31.333 dB, nearer the content rule. Owner ruling, on those
+            # numbers: the CONTENT half is what governs.
+            #
+            # WHY THAT IS THE COHERENT READING rather than merely the measured
+            # one: a reverse segment's latent 0 is not carried from anywhere,
+            # it is GENERATED, so it really does cover a single pixel frame
+            # and the marker really is true of it. Clearing it threw away a
+            # true fact about the tensor -- which is word for word the reason
+            # :data:`CLEAR_KEYFRAMES_ON_V2V_HEAD` and
+            # :data:`CLEAR_KEYFRAMES_ON_RETAKE_HEAD` are ``False``. The two
+            # i == 0 branches below still override with those constants; this
+            # expression is now the same judgement generalised.
+            #
+            # THE TABLE IS THE SOURCE, never ``i - 1``: on every forward
+            # schedule ``seg_head_source[i]`` IS ``i - 1`` and this is the
+            # value the pre-C3 code computed as ``fkv > 0``, so every existing
+            # chain is byte-identical (gate G3(g)); in ``reverse`` the table is
+            # all-None and no segment clears.
+            seg_clear_kf = clear_kf and layout.seg_head_source[i] is not None
             if i == 0 and retake is not None:
                 # ── retake: freeze BOTH ends of the single window segment ────
                 # The init tensor carries the ORIGINAL window's half-resolution
@@ -2124,17 +2547,156 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                     init_a[:, :, :freeze_ka] = src_a.to(DTYPE)
                     fka = freeze_ka
                 seg_clear_kf = CLEAR_KEYFRAMES_ON_V2V_HEAD
-            elif i > 0:
-                # The carry: the previous clip's tail, in tensors sized from THIS
-                # clip's shapes (clip lengths may differ, so ``zeros_like(prev)``
-                # would be the wrong shape).
-                prev_v, prev_a = seg_v[i - 1], seg_a[i - 1]
-                ka_i = ka_list[i - 1]
+            elif layout.seg_head_source[i] is not None:
+                # The carry: the PREVIOUS segment's tail, in tensors sized from
+                # THIS clip's shapes (clip lengths may differ, so
+                # ``zeros_like(prev)`` would be the wrong shape).
+                #
+                # ``h`` IS READ FROM THE LAYOUT'S TABLE, not assumed to be
+                # ``i - 1``. On every schedule that existed before the table it
+                # IS ``i - 1`` -- the three tables' forward values were checked
+                # element for element against the old expressions -- so this
+                # branch is unchanged there. In the end source's ``reverse``
+                # mode the table is all-None and this branch never fires at all:
+                # every head is free, which is the mode's premise.
+                h = layout.seg_head_source[i]
+                prev_v, prev_a = seg_v[h], seg_a[h]
+                assert prev_v is not None and prev_a is not None, (i, h)
+                ka_i = ka_list[h]
                 init_v = torch.zeros(tuple(v_shape.to_torch_shape()), dtype=DTYPE, device=device)
                 init_v[:, :, :kv] = prev_v[:, :, prev_v.shape[2] - kv:]
                 init_a = torch.zeros(tuple(a_shape.to_torch_shape()), dtype=DTYPE, device=device)
                 init_a[:, :, :ka_i] = prev_a[:, :, prev_a.shape[2] - ka_i:]
                 fkv, fka = kv, ka_i
+
+            # ── reverse のり代 (additive): freeze the NEXT segment's HEAD as ──
+            #    this segment's TAIL -- the mirror image of the forward carry.
+            # An INDEPENDENT ``if`` for the same reason the end-source block
+            # below is one: it does not REPLACE a branch, it adds a frozen band
+            # at the far end of whatever that branch built.
+            # ``seg_tail_source`` is all-None on every mode but ``reverse``, so
+            # this is inert everywhere else.
+            #
+            # THE STRENGTH IS DELIBERATELY NOT SET HERE. Leaving
+            # ``seg_tail_strength`` at None makes ``_band_conditionings`` hold
+            # the tail at the same ``overlap_strength`` a forward seam gets, for
+            # video AND audio alike. That is the mirror: the user's one
+            # seam-blend knob governs both directions. It holds only while the
+            # audio overrides are also None -- the first is A2V's, which is
+            # API-exclusive with an end source, and the second is the end
+            # source's own band, set ONLY on the LAST segment, whose tail
+            # carries the band instead of a のり代 (asserted below).
+            t_src = layout.seg_tail_source[i]
+            if t_src is not None:
+                next_v, next_a = seg_v[t_src], seg_a[t_src]
+                # The schedule's whole promise, checked rather than trusted: the
+                # segment being borrowed from has already been generated.
+                assert next_v is not None and next_a is not None, (i, t_src)
+                # The join on THIS segment's TAIL side is ``ka_list[i]``; the
+                # forward carry's ``ka_list[h]`` is the one on its head side.
+                # Getting the two the wrong way round would misalign the audio
+                # crossfade.
+                ka_i = ka_list[i]
+                # init_v and init_a are allocated under SEPARATE ``if``s: a
+                # segment can arrive with one and not the other (see the
+                # end-source audio block below for the case that really
+                # happens), and one allocation guarded by the other's test
+                # would be an indexed write into None.
+                if init_v is None:
+                    init_v = torch.zeros(
+                        tuple(v_shape.to_torch_shape()), dtype=DTYPE, device=device
+                    )
+                if init_a is None:
+                    init_a = torch.zeros(
+                        tuple(a_shape.to_torch_shape()), dtype=DTYPE, device=device
+                    )
+                init_v[:, :, init_v.shape[2] - kv:] = next_v[:, :, :kv].to(DTYPE)
+                init_a[:, :, init_a.shape[2] - ka_i:] = next_a[:, :, :ka_i].to(DTYPE)
+                ftv, fta = kv, ka_i
+
+            # ── end source (additive): freeze the LAST SEGMENT's TAIL ─────────
+            # Deliberately an INDEPENDENT ``if``, not another ``elif``: an end
+            # source does not replace any branch above, it ADDS a frozen band at
+            # the far end of the last segment on top of whatever that branch
+            # built.
+            #
+            # THE CONDITION IS THE TIMELINE INDEX, NOT THE GENERATION ORDER: the
+            # band belongs at the end of the VIDEO. In ``reverse`` mode that
+            # segment is the one generated FIRST, which is the whole point of
+            # the schedule.
+            #
+            # WHAT "THE LAST SEGMENT" IS depends on the mode. Under
+            # ``in_window`` (1 clip) it is the user's ONLY clip, i == 0, so any
+            # of the i == 0 branches above may have run: the V2V one leaves a
+            # real ``init_v``, the plain t2v one leaves it None and the band
+            # still has to be written somewhere -- hence the zeros arm. Under
+            # ``reverse`` it is the user's LAST clip, whose head is free and
+            # whose tail is this band, so it too arrives with ``init_v`` None.
+            # (``internal_segment`` is refused at the top of this function.)
+            if end_source is not None and i == n_seg - 1:
+                # The band and a reverse のり代 would write the SAME latents; the
+                # layout guarantees they never both apply, and this is where
+                # that guarantee is spent.
+                assert layout.seg_tail_source[i] is None, (i, layout.seg_tail_source)
+                if init_v is None:
+                    assert layout.end_source_mode in ("in_window", "reverse"), (
+                        layout.end_source_mode
+                    )
+                    init_v = torch.zeros(
+                        tuple(v_shape.to_torch_shape()), dtype=DTYPE, device=device
+                    )
+                    # ``init_a`` is NOT allocated here -- see the audio block
+                    # below, which allocates it under its own condition.
+                # THE INDEX IS THIS SEGMENT'S OWN LATENT LENGTH -- never blindly
+                # ``layout.f_total``. f_total is the length of the WHOLE
+                # assembled timeline; it coincides with a segment's length only
+                # when there is exactly one segment (retake's degenerate shape,
+                # and ``in_window``). Copying that idiom into a multi-segment
+                # mode would freeze the band at the wrong position.
+                seg_L = init_v.shape[2]
+                if layout.end_source_mode == "in_window":
+                    assert seg_L == layout.f_total, (seg_L, layout.f_total)
+                else:
+                    assert seg_L == layout.seg_latent[-1], (seg_L, layout.seg_latent)
+                init_v[:, :, seg_L - n_end_v:] = end_v_half.to(DTYPE)
+                ftv = n_end_v
+                # The two ends want DIFFERENT strengths whenever this segment
+                # has a head at all (a V2V context head at ``overlap_strength``),
+                # while the tail defaults to a HARD freeze so the chain really
+                # lands on the given material. That split is exactly what
+                # ``tail_strength`` is for. CLAMPED, because ``strength`` is a
+                # per-request float and this engine's band items take it as a
+                # multiplier: a value outside [0, 1] would not be a softer or
+                # harder freeze, it would be an amplification of the material's
+                # latents. The AUDIO tail below is unaffected by it.
+                seg_tail_strength = max(0.0, min(1.0, float(end_source.strength)))
+                # ── the material's own AUDIO band, on the same segment's tail ──
+                # THE CONDITION IS ``end_a``, NEVER ``end_source``: a still
+                # image, or a video with no audio track, leaves it None and this
+                # block does not exist -- which is what makes the fallback exact
+                # rather than approximate.
+                if end_a is not None:
+                    # ALLOCATED UNDER ITS OWN ``if``, not inside the ``init_v is
+                    # None`` arm above: "``init_v`` real, ``init_a`` None" is a
+                    # REAL combination -- V2V + end source on ONE clip (the
+                    # interpolation the API explicitly allows) with a source
+                    # video that has no audio track leaves exactly that, and an
+                    # indexed write into None would crash the job.
+                    if init_a is None:
+                        init_a = torch.zeros(
+                            tuple(a_shape.to_torch_shape()), dtype=DTYPE, device=device
+                        )
+                    # This segment's OWN audio length, for the same reason
+                    # ``seg_L`` is its own video length.
+                    seg_aL = init_a.shape[2]
+                    assert seg_aL == layout.seg_audio[i], (seg_aL, layout.seg_audio)
+                    init_a[:, :, seg_aL - n_end_a_eff:] = end_a.to(DTYPE)
+                    fta = n_end_a_eff
+                    # ALWAYS 1.0 -- a HARD freeze, whatever ``strength`` says.
+                    # The split between this and the video tail's clamped
+                    # strength is the whole reason the band builder grew a
+                    # fourth strength argument (C1).
+                    seg_audio_tail_strength = 1.0
 
             # The four band strengths. An ordinary carry seam (and a V2V head)
             # passes ``overlap_strength`` VERBATIM and asks for no tail -- see
@@ -2147,9 +2709,7 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             # back 1.0 -- a hard freeze, and the value that makes the stage-1
             # bands bit-exact and therefore provable.
             seg_strength = float(spec.overlap_strength)
-            seg_tail_strength: float | None = None
             seg_audio_strength: float | None = None
-            seg_audio_tail_strength: float | None = None
             if retake is not None:
                 (seg_strength, seg_tail_strength,
                  seg_audio_strength, seg_audio_tail_strength) = _freeze_strengths(
@@ -2163,14 +2723,15 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 tail_strength=seg_tail_strength,
                 audio_strength=seg_audio_strength,
                 audio_tail_strength=seg_audio_tail_strength,
-                # The head-freeze test is spelled out HERE because that is where
-                # it used to live implicitly -- ``_band_conditionings`` appended
-                # the marker clear only from inside its "a video head is frozen"
-                # branch, so this expression is today's effective value written
-                # down, to the letter (``fkv > 0`` never holds without
-                # ``init_v``). §3-102 C3 replaces it with the TIMELINE INDEX,
-                # which is what the marker's correctness actually depends on.
-                clear_keyframes=seg_clear_kf and fkv > 0,
+                # NO ``and fkv > 0`` here any more, and the reason is that the
+                # test moved UP rather than away: ``seg_clear_kf`` above now
+                # asks the question directly (is this segment's latent 0
+                # carried-over content?) instead of inferring it from a freeze
+                # width. The two are the same set on every schedule this engine
+                # runs -- a carried head is exactly a frozen head -- so this is
+                # the same value the pre-C3 expression produced, said once and
+                # in the vocabulary of the thing it is actually about.
+                clear_keyframes=seg_clear_kf,
             )
             # Clip 0's images are the TIMELINE's opening keyframes, so they go on
             # clip 0 only -- and AFTER the band items, which must see an
@@ -2220,8 +2781,17 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
             stage.announce(
                 STAGE_1_DENOISE,
+                # The VRAM PHASE NAME keeps the TIMELINE index: it is a
+                # dictionary key a reader looks up to ask "what did clip 2
+                # cost", and renumbering it by queue position would make the
+                # ledger unreadable against the request.
                 vram_phase=f"21_stage1_denoise_c{i}",
-                outer_index=i,
+                # THE PROGRESS INDEX IS THE SCHEDULE POSITION. The receiver
+                # turns it into the fraction ``(outer_index + step) /
+                # outer_total``, so a reverse schedule reporting the timeline
+                # index would run the bar BACKWARDS -- and a bar that goes
+                # backwards is read as a hang.
+                outer_index=order_idx,
                 outer_total=n_seg,
             )
             vstate, astate = stage(
@@ -2238,13 +2808,29 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 audio=audio_spec,
                 **_stage1_sampler_kwargs(sampler, eta, seeds[i], pipeline.dtype),
             )
-            seg_v.append(vstate.latent.detach().clone())
-            seg_a.append(astate.latent.detach().clone())
+            # ASSIGNED INTO THE SLOT, not appended: a reverse schedule visits the
+            # segments out of order and the timeline position is ``i``.
+            seg_v[i] = vstate.latent.detach().clone()
+            seg_a[i] = astate.latent.detach().clone()
+            stage1_order.append(i)
+            stage1_freezes.append(
+                {"seg": i, "fkv": int(fkv), "ftv": int(ftv),
+                 "fka": int(fka), "fta": int(fta)}
+            )
             del vstate, astate, init_v, init_a
             if progress is not None:
-                progress(STAGE_1, i, n_seg)
+                # THE NUMERATOR IS THE SCHEDULE POSITION, not the timeline
+                # index: a progress bar must go forwards, and under ``reverse``
+                # the timeline index counts down.
+                progress(STAGE_1, order_idx, n_seg)
 
         # ── Assemble ONE continuous stage-1 timeline ──────────────────────────
+        # Assembly is TIMELINE order, ALWAYS -- it knows nothing about the
+        # schedule. The slots were pre-allocated, so this is where a schedule
+        # that skipped one shows up as a sentence rather than as a shape error
+        # several hundred lines later.
+        assert all(x is not None for x in seg_v), layout.seg_generation_order
+        assert all(x is not None for x in seg_a), layout.seg_generation_order
         assembled_v = seg_v[0]
         for i in range(1, n_seg):
             assembled_v = _crossfade_concat(assembled_v, seg_v[i], kv)
@@ -2288,6 +2874,28 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                     assembled_a[:, :, layout.a_total - n_tail_a:].detach().clone()
                 )
 
+        # ── end source: the STAGE-1 half of the END-TO-END freeze proof ───────
+        # Taken off the ASSEMBLED timeline, not off ``seg_v[-1]``, so what is
+        # proven is the band as it actually enters the upsample -- the crossfade
+        # at the last segment's own seam is upstream of this slice, so a mistake
+        # there would show.
+        #
+        # CLONE IS MANDATORY, for the two reasons the retake pair above gives:
+        # ``assembled_v`` is deleted right after the upsample, and a plain slice
+        # is a VIEW that would keep the WHOLE half-resolution timeline's storage
+        # alive until the proof runs after stage 2. The clone is ``n_end_v``
+        # latent frames -- kilobytes against gigabytes.
+        es_s1_tail = None
+        es_s1_tail_a = None
+        if end_source is not None:
+            es_s1_tail = (
+                assembled_v[:, :, assembled_v.shape[2] - n_end_v:].detach().clone()
+            )
+        if end_a is not None:
+            es_s1_tail_a = (
+                assembled_a[:, :, assembled_a.shape[2] - n_end_a_eff:].detach().clone()
+            )
+
         # ── ONE upsample over the whole timeline ──────────────────────────────
         vram.reset()
         upsample_started = time.perf_counter()
@@ -2317,6 +2925,14 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         noise_scale2 = float(stage_2_sigmas[0].item())
         refined_v: list[torch.Tensor] = []
         refined_a: list[torch.Tensor] = []
+        # Tiles the end-source band covers ENTIRELY (video fully frozen, audio
+        # still refined). Observation only -- reported in the metadata so a long
+        # band's cost is visible; empty on every path without an end source. The
+        # AUDIO twin is recorded SEPARATELY rather than inferred: the two grids
+        # advance differently, so a fully-frozen video tile does not imply a
+        # fully-frozen audio one.
+        end_fully_frozen_tiles: list[int] = []
+        end_fully_frozen_tiles_a: list[int] = []
         for i in range(n_tiles):
             vs, vlen = v_tiles[i]
             as_, alen = a_tiles[i]
@@ -2395,15 +3011,95 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 init_a[:, :, :kt_a] = refined_a[i - 1][:, :, refined_a[i - 1].shape[2] - kt_a:]
                 fkv, fka = kt_v, kt_a
 
+            # ── end source (additive): re-write AND re-freeze the band in ─────
+            #    EVERY tile it reaches.
+            # An INDEPENDENT ``if`` for the same reason as its stage-1 twin: the
+            # band is added on top of whichever head this tile already has (tile
+            # 0's V2V context, tile i >= 1's carry, or nothing at all).
+            # Re-freezing here is MANDATORY, not belt-and-braces: stage 2
+            # re-noises at sigma[0] ~= 0.909, which would destroy a stage-1-only
+            # freeze outright -- the retake branch above makes the same argument.
+            # Variant B: the band comes from the FULL-res re-encode of the
+            # material, never from the upsampled stage-1 approximation.
+            #
+            # THE BAND MAY SPAN SEVERAL TILES, and the plan for that is
+            # ``layout.end_tile_bands`` -- computed ONCE in chain_math and NEVER
+            # re-derived here, so the geometry the app validated and the geometry
+            # the engine writes cannot drift. ``t`` is how many band latents THIS
+            # tile ends on and ``off`` the offset one past the last band latent it
+            # holds (meaningless, and possibly negative, when ``t == 0`` -- hence
+            # the guard). Because the band sits at the very END of the timeline,
+            # every tile that reaches it reaches it on that TILE'S OWN TAIL.
+            #
+            # WHY A SEAM *INSIDE* THE BAND IS SAFE. Tile i >= 1 hard-freezes its
+            # leading ``kt_v`` from tile i-1's output and the reassembly below
+            # crossfades exactly that region. When the seam falls inside the band,
+            # BOTH sides of the fade hold the same source latents: tile i-1's tail
+            # IS ``end_v_full`` (it was frozen to it, and a denoise mask of 0.0
+            # returns it bit-exact) and tile i's lead is a copy of that tail.
+            # ``_crossfade_concat`` computes ``a*(1-x) + b*x`` in fp32 and rounds
+            # back to bf16; with ``a == b`` that is ``a`` exactly, so a fade over
+            # identical values is the identity, bit for bit.
+            if end_source is not None:
+                t, off = layout.end_tile_bands[i]
+                if t > 0:
+                    # THE INDEX IS THIS TILE'S OWN LENGTH (``vlen``) -- never
+                    # ``layout.f_total``; see the stage-1 note for why that idiom
+                    # is safe only in retake's degenerate single-tile shape.
+                    init_v[:, :, vlen - t:] = end_v_full[:, :, off - t: off].to(DTYPE)
+                    ftv = t
+                    if t == vlen:
+                        end_fully_frozen_tiles.append(i)
+            # ── the end source's AUDIO band: a SEPARATE ``if``, deliberately ──
+            # NOT nested inside the video block's ``t > 0``: the two grids advance
+            # at different rates, so a tile can hold no video band latents and
+            # some audio ones. ``end_bands_a`` is the plan the engine actually
+            # wrote -- the layout's own, or the narrower one a short encode forced
+            # -- and it is read here exactly as its video twin is read above.
+            if end_a is not None:
+                ta, off_a = end_bands_a[i]
+                if ta > 0:
+                    init_a[:, :, alen - ta:] = end_a[:, :, off_a - ta: off_a].to(DTYPE)
+                    fta = ta
+                    if ta == alen:
+                        end_fully_frozen_tiles_a.append(i)
+            # WHEN THE CARRY HEAD AND THE BAND MEET, THEY BECOME ONE BAND. This is
+            # not a rare corner: over the app's whole legal parameter space a
+            # third of end-source layouts put a band of ``t`` latents on a tile
+            # that also carries ``kt_v`` frozen leading ones, and ``t + kt_v``
+            # then exceeds the tile. ``_band_conditionings`` refuses that pairing
+            # (C1's disjointness assertion), and rightly: two items whose masks
+            # overlap are ambiguous IN GENERAL.
+            #
+            # HERE THEY ARE NOT AMBIGUOUS, and the collapse is exact rather than
+            # a tolerance. Stage 2 gives BOTH bands strength 1.0 over the SAME
+            # ``init_v``, so the pair means "hold [0, fkv) and [vlen-ftv, vlen)
+            # hard" -- and when those two reach each other their union is the
+            # WHOLE tile. One band of ``vlen`` says the identical thing with one
+            # item. The values agree where the regions overlap for the reason the
+            # seam note above gives: the carry was copied from a tail that was
+            # itself frozen to this same band.
+            if fkv + ftv > vlen:
+                fkv, ftv = 0, vlen
+                if i not in end_fully_frozen_tiles:
+                    end_fully_frozen_tiles.append(i)
+            if fka + fta > alen:
+                fka, fta = 0, alen
+                if i not in end_fully_frozen_tiles_a:
+                    end_fully_frozen_tiles_a.append(i)
+
             band_v, band_a = _band_conditionings(
                 video_latent=init_v, video_frames_frozen=fkv,
                 audio_latent=init_a, audio_frames_frozen=fka,
-                # A retake's tail, and zero everywhere else. NO tail STRENGTH is
-                # passed with it: stage 2 hard-freezes every band it has, so the
-                # tail wants the same 1.0 the head is already given, and
-                # ``_band_conditionings`` resolves an omitted tail strength to
-                # exactly that. The stage-1 call is where the two halves really
-                # can differ.
+                # A retake's two glue bands, an end source's tail band, and zero
+                # everywhere else. NO tail STRENGTH is passed with either: stage
+                # 2 hard-freezes every band it has, so the tail wants the same
+                # 1.0 the head is already given, and ``_band_conditionings``
+                # resolves an omitted tail strength to exactly that. THE END
+                # SOURCE'S ``strength`` DOES NOT REACH HERE AT ALL, and that is
+                # the design: stage 2 re-noises at sigma[0], so a soft band would
+                # simply be erased. The stage-1 call is where the two halves
+                # really can differ.
                 video_tail_frozen=ftv, audio_tail_frozen=fta,
                 strength=1.0,
                 # Today's effective value, written down -- see the stage-1 call.
@@ -2542,6 +3238,113 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                 {k: v for k, v in checks.items() if k != "pass"},
             )
             del rt_s1_head, rt_s1_tail, rt_s1_head_a, rt_s1_tail_a
+
+        # ── end source FREEZE PROOF (the retake block's mirror) ───────────────
+        # FOUR numbers = {stage 1, stage 2} x {video tail, audio tail}, each the
+        # max-abs difference between what came OUT of the denoise and what was
+        # frozen IN. Stage 2 is ALWAYS a hard freeze, so its two MUST be exactly
+        # 0.0. The VIDEO stage-1 number is a hard freeze only when
+        # ``end_source.strength >= 1.0``; below that the band is a deliberate
+        # soft blend and a non-zero difference is CORRECT.
+        #
+        # THE AUDIO PAIR IS UNCONDITIONALLY EXPECTED TO BE 0.0, in stage 1 as
+        # well as stage 2, because ``strength`` never reaches the audio tail
+        # (1.0 in both stages -- see ``seg_audio_tail_strength``).
+        # ``s1_expected_zero`` below is therefore a VIDEO-ONLY statement and
+        # must not be read as covering the audio. Both audio numbers are None
+        # (not 0.0) when nothing was frozen, for the reason the retake proof
+        # gives: an invented 0.0 would fake a passing proof. When a short encode
+        # made the band narrower they are measured over the ``n_end_a_frozen``
+        # latents that were actually written, which is where 0.0 is the correct
+        # expectation.
+        #
+        # THE MEASUREMENT IS END-TO-END, and that is the whole point of its
+        # POSITION here -- after the tiles are reassembled, before the decode.
+        # The band can span an arbitrary number of stage-2 tiles, so a per-tile
+        # check would prove each tile in isolation and prove nothing about the
+        # seams BETWEEN them. These numbers instead compare the material against
+        # the ONE assembled stage-1 timeline that entered the upsample and the
+        # ONE assembled stage-2 timeline about to be decoded, every crossfade
+        # included.
+        #
+        # ``s1_expected_zero`` is recorded in the metadata rather than only
+        # folded into ``pass`` because -- unlike the retake verdict, which turns
+        # on a module constant -- this one turns on a PER-REQUEST value: reading
+        # ``pass`` alone from a log would risk hearing "the freeze was proven"
+        # where the correct reading is "a soft blend behaved as configured".
+        #
+        # OBSERVATION ONLY -- never raises, for the reason the retake proof does
+        # not: a wrong number means degraded output, not a corrupt job.
+        end_source_meta: dict[str, Any] | None = None
+        if end_source is not None:
+            def _mad_end(a: torch.Tensor, b: torch.Tensor) -> float:
+                return float((a.float() - b.float()).abs().max().item())
+
+            s1_expected_zero = float(end_source.strength) >= 1.0
+            end_checks: dict[str, float | bool | None] = {
+                # Always computed, even when a soft blend makes it non-zero by
+                # design -- it is the OBSERVED DRIFT, not merely a pass/fail bit.
+                "s1_video_tail": _mad_end(es_s1_tail, end_v_half),
+                "s2_video_tail": _mad_end(
+                    final_v[:, :, final_v.shape[2] - n_end_v:], end_v_full
+                ),
+                "s1_audio_tail": (
+                    None if es_s1_tail_a is None else _mad_end(es_s1_tail_a, end_a)
+                ),
+                "s2_audio_tail": (
+                    None if end_a is None
+                    else _mad_end(final_a[:, :, final_a.shape[2] - n_end_a_eff:], end_a)
+                ),
+            }
+            end_checks["pass"] = (
+                end_checks["s2_video_tail"] == 0.0
+                and (not s1_expected_zero or end_checks["s1_video_tail"] == 0.0)
+                and all(
+                    end_checks[k] == 0.0
+                    for k in ("s1_audio_tail", "s2_audio_tail")
+                    if end_checks[k] is not None
+                )
+            )
+            end_source_meta = {
+                "freeze_proof": end_checks,
+                "context_frames": int(end_source.context_frames),
+                "source_path": str(end_source.path),
+                "strength": float(end_source.strength),
+                "s1_expected_zero": s1_expected_zero,
+                # WHAT STAGE 1 ACTUALLY DID, as opposed to what the geometry
+                # said it should. Every other end-source number here is a copy
+                # of a ``chain_math`` value, so those agreeing proves only that
+                # the layout is self-consistent; these two come from the loop.
+                "stage1_order": list(stage1_order),
+                "stage1_freezes": list(stage1_freezes),
+                "end_fully_frozen_tiles": list(end_fully_frozen_tiles),
+                # ── what the AUDIO side actually did ─────────────────────────
+                # RUNTIME observations, which is why they live here and not in
+                # the layout's ``to_dict`` (that one publishes the GEOMETRY --
+                # how wide the band is -- and cannot know what the material
+                # turned out to hold). The reading order for "did the audio
+                # freeze happen" is this block, never the app's provenance.
+                "audio_frozen": end_a is not None,
+                # None when it did freeze; otherwise "no_audio" (no track, an
+                # undecodable one, or an encode that yielded nothing). A SHORT
+                # encode is NOT a fallback: it reads as ``audio_frozen: true``
+                # with ``n_end_a_frozen`` below the layout's ``n_end_a``.
+                "audio_fallback_reason": None if end_a is not None else end_audio_status,
+                "n_end_a_frozen": int(n_end_a_eff),
+                # THE BAND THE ENGINE ACTUALLY WROTE, per tile. Equal to the
+                # layout's ``end_tile_bands_a`` on a full freeze and narrower on
+                # a short one, so a machine gate can check the freeze proof
+                # against the plan that produced it rather than against a
+                # geometry that was not used.
+                "end_tile_bands_a_frozen": [list(b) for b in end_bands_a],
+                "end_fully_frozen_tiles_a": list(end_fully_frozen_tiles_a),
+            }
+            logger.info(
+                "chain end source: freeze proof %s %s",
+                "PASS" if end_checks["pass"] else "FAIL",
+                {k: v for k, v in end_checks.items() if k != "pass"},
+            )
+            del es_s1_tail, es_s1_tail_a
 
         # ── ONE VAE decode -> ONE mp4 ─────────────────────────────────────────
         # ``tiling_config`` was resolved for the WHOLE timeline (``total_px``) at
@@ -2809,6 +3612,16 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             "decoded_frames_px": int(total_px),
         })
         metadata.setdefault("retake", {}).update(retake_meta)
+    # The runtime END SOURCE facts merge into the geometry sub-dict
+    # ``ChainLayout`` already put there, the same way V2V's and the retake's do:
+    # the app reads ONE ``chain.end_source`` block and both halves belong in it.
+    # The key set is 2.3's, name for name, because the app that reads them is
+    # engine-independent -- with ONE value removed from a domain rather than a
+    # key removed from the set: ``audio_fallback_reason`` can never be
+    # "disabled" here, because this engine has no ``END_SOURCE_FREEZE_AUDIO``
+    # rollback constant to be off.
+    if end_source_meta is not None:
+        metadata.setdefault("end_source", {}).update(end_source_meta)
     logger.info(
         "CHAIN_OK %.1fs peak=%sMB %d clips / %d tiles -> %s",
         wall, peak_mb, n, n_tiles, out_path,

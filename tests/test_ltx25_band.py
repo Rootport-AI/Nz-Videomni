@@ -412,13 +412,117 @@ def test_existing_call_sites_keep_todays_effective_value(
     assert any(isinstance(it, ClearKeyframesMask) for it in band_v) is expected, label
 
 
-def test_both_call_sites_still_spell_the_head_freeze_test() -> None:
-    """The caller-side expression is pinned, so the table above cannot go stale.
+def test_the_two_call_sites_are_the_expressions_c3_left_behind() -> None:
+    """The caller-side expressions are pinned, so the table above cannot go stale.
 
-    C1's contract is "the effective value does not move". C3 changes it on
-    purpose -- to the timeline index -- and this assertion is what makes that a
-    deliberate edit of a test rather than an unnoticed drift.
+    C1's contract was "the effective value does not move", and both call sites
+    spelled out ``<flag> and fkv > 0``. C3 CHANGED THE STAGE-1 ONE ON PURPOSE --
+    the marker's correctness is a question about POSITION on the timeline, and a
+    reverse schedule is where position and "is a head frozen" come apart -- so
+    the head-freeze conjunct is gone from stage 1 and ``seg_clear_kf`` carries
+    the whole predicate. This assertion is what made that a deliberate edit of a
+    test rather than an unnoticed drift, and it goes on being that for the next
+    change.
+
+    STAGE 2 IS DELIBERATELY UNCHANGED, and the two halves are asserted together
+    so that stays visible: tile 0 IS timeline position 0 (no schedule reorders
+    tiles), and every tile with ``i > 0`` freezes ``kt_v > 0`` leading latents,
+    so there the conjunct is not a coincidence -- it is the same fact said twice.
     """
     found = re.findall(r"^\s*clear_keyframes=(.+),$", _chain25_source(), re.M)
-    call_sites = [rhs for rhs in found if "fkv" in rhs]
-    assert call_sites == ["seg_clear_kf and fkv > 0", "tile_clear_kf and fkv > 0"], found
+    assert found == ["seg_clear_kf", "tile_clear_kf and fkv > 0"], found
+
+
+def test_the_stage1_predicate_is_the_carry_test_gate_m8_chose() -> None:
+    """The predicate is pinned as a SOURCE EXPRESSION, because the thing it
+    decides is invisible in any output a unit test can build and because it has
+    now changed twice.
+
+    C3 was planned around the TIMELINE INDEX (``clear_kf and i > 0``): the
+    adversarial review argued the first-frame marker needs a fresh causal
+    encode AND position 0, and made position decisive. Gate M8 was built to
+    test exactly that, because only the end source's ``reverse`` mode can tell
+    the two predicates apart -- and it came back AGAINST the design at both
+    seeds (junction PSNR 30.236 vs 32.465 dB, 31.143 vs 32.631 dB; the line was
+    'no worse than 0.5 dB'). The owner ruled on those numbers, so the shipped
+    predicate is the CARRY test: clear the marker exactly when latent 0 is the
+    previous segment's tail.
+
+    A build that went back to ``i > 0`` would clear the marker on a reverse
+    schedule's free-headed segments, which is the measured-worse arm; one that
+    used ``clear_kf`` alone would clear it on the segment that opens the video.
+    Both are silent picture faults, so the expression itself is pinned."""
+    found = re.findall(r"^\s*seg_clear_kf = (.+)$", _chain25_source(), re.M)
+    # One initialisation, plus the two i == 0 branches' constant overrides.
+    assert found == [
+        "clear_kf and layout.seg_head_source[i] is not None",
+        "CLEAR_KEYFRAMES_ON_RETAKE_HEAD",
+        "CLEAR_KEYFRAMES_ON_V2V_HEAD",
+    ], found
+
+
+def test_the_carry_predicate_is_the_pre_c3_value_on_every_forward_schedule() -> None:
+    """The other half of the ruling, and the reason G3(g)'s digests held: on a
+    FORWARD schedule ``seg_head_source[i] is not None`` and the pre-C3
+    ``fkv > 0`` are the same set, element for element -- a carried head is
+    exactly a frozen head. So the predicate change is a change of VOCABULARY
+    there and of BEHAVIOUR only in ``reverse``, where every head is free and
+    the table is all-None.
+
+    Driven through the shared ``chain_math``, not restated: this is a claim
+    about the layout the app and both engines share."""
+    from chain_math import compute_chain_layout, resolve_stage2_window
+
+    v_tile, v_adv = resolve_stage2_window(None)
+    checked = 0
+    for n_clips in (1, 2, 3, 5):
+        for frames in (25, 49, 121):
+            for kv in (1, 2, 3):
+                layout = compute_chain_layout(
+                    [frames] * n_clips, 24.0, kv=kv, v_tile=v_tile, v_adv=v_adv
+                )
+                n_seg = len(layout.seg_frames)
+                # ``fkv`` on a plain forward chain is 0 at i == 0 and kv after.
+                pre_c3 = [(kv if i > 0 else 0) > 0 for i in range(n_seg)]
+                shipped = [layout.seg_head_source[i] is not None for i in range(n_seg)]
+                assert shipped == pre_c3, (n_clips, frames, kv, shipped, pre_c3)
+                checked += 1
+    assert checked >= 30
+
+    # ...and in ``reverse`` the table is all-None, i.e. NO segment clears --
+    # which is the arm M8 measured as the better one.
+    rev = compute_chain_layout(
+        [169, 169], 24.0, kv=1, v_tile=v_tile, v_adv=v_adv, end_context_px=8
+    )
+    assert rev.end_source_mode == "reverse"
+    assert all(h is None for h in rev.seg_head_source), rev.seg_head_source
+
+
+def test_a_marker_clear_beside_a_tail_band_builds_both_in_order() -> None:
+    """The builder's capability, NOT a shipped path -- and the difference is
+    stated because it changed under this theme.
+
+    C1 separated the marker clear from the head-freeze branch so §3-102 C3's
+    reverse schedule could clear the marker on a free-headed segment. Gate M8
+    then measured that such a segment should KEEP its marker, and the owner
+    ruled accordingly, so no caller asks for this combination today: the
+    shipped predicate clears only on a carried head, which always brings a head
+    band with it.
+
+    The test stays because the SEPARATION stays -- the two questions are
+    independent whatever the predicate is -- and because a builder that quietly
+    re-coupled them would be found here rather than by the next feature that
+    needs them apart. ``clear_keyframes=True`` is passed directly for that."""
+    video, audio = _latents()
+    band_v, _ = _band_conditionings(
+        video_latent=video, video_frames_frozen=0,
+        audio_latent=audio, audio_frames_frozen=0,
+        video_tail_frozen=2, audio_tail_frozen=2,
+        strength=0.5,
+        clear_keyframes=True,
+    )
+    # The marker clear AND the tail band, and the marker FIRST: every item here
+    # is elementwise over the whole token axis, so order is carried by
+    # construction and this is where that is checked.
+    assert isinstance(band_v[0], ClearKeyframesMask)
+    assert len(band_v) == 2

@@ -64,7 +64,7 @@ Protocol (one JSON object per line; parent -> worker):
       (``control_<kind>.mp4`` next to the output) via engine/preprocess/ first.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
-   [stage2_window], [source], [audio_source], [retake]}
+   [stage2_window], [source], [audio_source], [retake], [end_source]}
       One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
       body keys are the 2.3 chain op's, verbatim, because the app builds one
       payload shape for whichever engine is loaded. ``clips`` entries are
@@ -82,13 +82,20 @@ Protocol (one JSON object per line; parent -> worker):
       already cut, and the two glue widths are the pixel bands kept frozen at
       its two ends. Mutually exclusive with both source modes. Optional and
       ABSENT on every other chain.
+      ``end_source`` = {path, context_frames, strength} makes the chain END on
+      the user's material: ``path`` is the app-cut video (a still image was
+      looped into one app-side) of ``context_frames + 1`` frames -- the extra
+      one is the causal VAE's primer, dropped after the encode. Mutually
+      exclusive with ``retake`` and ``audio_source``, COMBINABLE with
+      ``source``. Optional and ABSENT on every other chain.
       ``loras`` / ``reference_video`` are the single op's blocks, applied
       uniformly across the chain -- the ONE reference is sliced per stage-1
       segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``end_source``, ``nag``, ``vae_mode``) is REFUSED BY NAME
-      rather than ignored -- see ``CHAIN_UNSUPPORTED_KEYS``.
+      (``nag``, ``vae_mode``) is REFUSED BY NAME rather than
+      ignored -- see ``CHAIN_UNSUPPORTED_KEYS``. Both are engine-level knobs;
+      no chain MODE is on that list any more.
       The four acceleration knobs are NOT on that list: all of them apply to
       the chain unchanged.
       The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
@@ -790,8 +797,12 @@ def _do_generate(msg: dict) -> None:
 #: ``retake`` LEFT WITH THE RETAKE INCREMENT: the 2.5 chain freezes BOTH ends of
 #: a single window now, so the block is READ below into
 #: :class:`~engine25.chain25.RetakeSpec` rather than refused by name.
+#: ``end_source`` LEFT WITH THE END-SOURCE INCREMENT for the same reason and it
+#: was the last chain MODE on this list: the 2.5 chain runs the layout's own
+#: stage-1 schedule and freezes the material's band at the timeline's tail, so
+#: the block is READ below into :class:`~engine25.chain25.EndSourceSpec`. What
+#: remains are two ENGINE-LEVEL features, not modes.
 CHAIN_UNSUPPORTED_KEYS = (
-    "end_source",
     "nag",
     "vae_mode",
 )
@@ -858,6 +869,7 @@ def _do_generate_chain(msg: dict) -> None:
         AudioSourceSpec,
         ChainClipSpec,
         ChainSpec,
+        EndSourceSpec,
         RetakeSpec,
         SourceSpec,
         run_chain,
@@ -948,6 +960,35 @@ def _do_generate_chain(msg: dict) -> None:
                 f"regenerate_audio (missing key {exc})"
             ) from exc
 
+    # End source: optional ``end_source``, an mp4 the app has ALREADY cut to
+    # ``context_frames + 1`` frames at the request fps (a still image was
+    # looped into a video app-side, so the engine only ever sees a video —
+    # ONE code path). The extra frame is the causal VAE's PRIMER: the encode
+    # drops latent 0 so the remaining ones land on the timeline's own grid.
+    # Mutually exclusive with ``retake`` and ``audio_source`` and COMBINABLE
+    # with ``source`` (the one-clip interpolation the API allows) — asserted
+    # in ``run_chain`` and refused at the endpoint, so it is not re-stated
+    # here; this stays a payload reader.
+    #
+    # Read exactly as 2.3's chain op reads it (``engine/worker.py``): same
+    # three keys, same truthiness test, same ``KeyError`` -> ``ValueError``
+    # translation, and the same ``strength`` default of 1.0 for a payload
+    # whose builder left it out. Absent -> byte-identical to before.
+    end_source = None
+    es = msg.get("end_source")
+    if es:
+        try:
+            end_source = EndSourceSpec(
+                path=_existing_media_path(es["path"], "end_source"),
+                context_frames=int(es["context_frames"]),
+                strength=float(es.get("strength", 1.0)),
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "generate_chain: end_source requires path and context_frames "
+                f"(missing key {exc})"
+            ) from exc
+
     # Style/character LoRA + the ONE reference video, applied across the whole
     # chain and read with the SAME two helpers the single generate uses -- which
     # is the point: a reference must resolve (and preprocess) identically
@@ -1018,6 +1059,13 @@ def _do_generate_chain(msg: dict) -> None:
         f"retake={'yes(head=' + str(retake.head_px) + ' tail=' + str(retake.tail_px)
                  + ' regen=' + ('on' if retake.regenerate_audio else 'off') + ')'
                  if retake else 'no'} "
+        # The end source's parse receipt, in 2.3's spelling for the same
+        # side-by-side reason: the band length as ASKED FOR (the file itself
+        # carries one frame more) and the strength, which is the one field
+        # that changes how hard stage 1 holds the video tail.
+        f"end_source={'yes(ctx=' + str(end_source.context_frames)
+                     + ' strength=' + format(end_source.strength, '.3f') + ')'
+                     if end_source else 'no'} "
         # The parse receipt for the two §3-102 blocks, in the same line rather
         # than a second one: what the chain was ASKED for, before any of it runs.
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
@@ -1047,6 +1095,7 @@ def _do_generate_chain(msg: dict) -> None:
             spec,
             _emit_progress,
             retake=retake,
+            end_source=end_source,
             ic_loras=ic_loras,
             ic_reference=ic_reference,
             ic_attention_strength=ic_attn,

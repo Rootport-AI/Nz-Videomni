@@ -47,9 +47,14 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   使えます。submit_chain は連結生成そのものに加えて
   source_video_id（V2V継続）と source_audio_id（A2V。複数クリップにまたがる
   長尺A2Vも含みます）、loras と reference_video_id（複数クリップにまたがる
-  長尺IC-LoRAも含みます）が使えますが、end_source_video_id /
-  end_source_image_id / nag_enabled / vae_mode は同じく使えません
+  長尺IC-LoRAも含みます）が使えます。end_source_video_id /
+  end_source_image_id（素材（末尾））も 2026-08-26 から LTX 2.5 で使えます
+  ——この日に撮り直し（Retake）と素材（末尾）が開通し、submit_chain が
+  投げられるモードは LTX 2.5 でも全部通るようになりました。submit_chain で
+  まだ使えないのは nag_enabled / vae_mode の2つだけです
   （keep_resident と attention_backend は submit_chain でも使えます）。
+  なお撮り直しは、そもそも submit_chain に引数がありません（LTX 2.3 でも
+  同じで、2.5 で失われた機能ではありません）。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。

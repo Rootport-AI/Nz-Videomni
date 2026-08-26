@@ -351,9 +351,13 @@ async def submit_chain(
     加えて、``source_video_id``（V2V継続）と ``source_audio_id``（A2V。長尺
     A2V＝複数クリップにまたがる音声も含みます）、``loras``（スタイルLoRA・
     制御系IC-LoRA）と ``reference_video_id``（参照動画。長尺IC-LoRA＝複数
-    クリップにまたがる参照動画も含みます）も使えます**。ただし次の引数は
+    クリップにまたがる参照動画も含みます）も使えます**。
+    **``end_source_video_id`` / ``end_source_image_id``（素材（末尾））も
+    2026-08-26 から LTX 2.5 で使えます**——この日に撮り直し（Retake）と
+    素材（末尾）が開通し、``submit_chain`` が投げられるモードは LTX 2.5 でも
+    全部通るようになりました（幾何・受理範囲・``metadata.json`` の
+    ``end_source`` ブロックはいずれも LTX 2.3 と同一です）。ただし次の引数は
     使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED になります:
-    ``end_source_video_id`` ・ ``end_source_image_id``（素材（末尾））/
     ``nag_enabled`` / ``vae_mode``。これらを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。
     **``keep_resident`` は 2026-08-25 から LTX 2.5 の連結生成でも使えます**
@@ -420,7 +424,10 @@ async def submit_chain(
         ことを確認しており、これは仕様として許容しています。品質を重視して
         複数クリップを終端付きで繋ぎたい場合は、end_source をクリップ1件
         ずつ使い、生成物を次の素材にして過去へ遡って生成する手動リレーが
-        実用的な回避策です。
+        実用的な回避策です。**この推奨外の逆順Chainedは、LTX 2.5 では音声の
+        継ぎ目がさらに悪くなります**（同一の依頼・素材・解析器で、LTX 2.3 は
+        6箇所とも連続、LTX 2.5 は 4/6 が不連続。映像側は 2.5 でも 6/6 連続
+        です）。**推奨のクリップ1件（窓内モード）には影響しません。**
         **出力の長さはどちらの場合もクリップの合計**であって、素材の分だけ
         伸びることはありません。
         ``retake`` / ``source_audio_id`` / ``reference_video_id`` とは排他

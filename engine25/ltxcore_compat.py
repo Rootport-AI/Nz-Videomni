@@ -173,6 +173,14 @@ from ltx_core.model.transformer.modality import Modality
 # entirely (`masked_attention_function`), and that `attention_function` is still
 # the slot the wrapper is allowed to overwrite. See section 13.
 from ltx_core.model.transformer.attention import Attention, AttentionOps
+
+# VERIFY-ONLY as well, and for section 14: the two call sites of the TEXT
+# cross-attention `attn2` / `audio_attn2` that `engine25.neg_prompt25` replaces
+# the `forward` of. Nothing outside `verify` names either.
+from ltx_core.model.transformer.transformer import (
+    BasicAVTransformerBlock,
+    apply_cross_attention_adaln,
+)
 from ltx_core.model.upsampler import LatentUpsampler, upsample_video
 from ltx_core.model.video_vae import (
     AUTO_TILING,
@@ -1210,6 +1218,78 @@ def verify() -> None:
             "preattention_function",
             "gated_attention_function",
         ),
+    )
+
+    # (14) THE FOUR ATTENTION FACTS THE NEGATIVE-PROMPT PATCH RESTS ON.
+    #      ``engine25.neg_prompt25`` REPLACES ``Attention.forward`` on the 96
+    #      text cross-attention modules (attn2 / audio_attn2) with a hand-written
+    #      equivalent, so unlike sage -- which swaps ONE callable the official
+    #      forward still calls -- it has to reproduce the official forward's
+    #      arithmetic itself. Every pin below guards a SILENTLY WRONG VIDEO, not
+    #      a crash: a patched forward that computes the wrong thing still returns
+    #      a tensor of the right shape and the job finishes.
+    #
+    #      (14a) ``context_mask`` IS HARDCODED None. The replacement forward
+    #            refuses a non-None ``mask`` outright (there is no fallback to
+    #            take -- the original bound method is deliberately not kept), so
+    #            a release that started routing a real mask into text
+    #            cross-attention would turn every negative-prompt job into a hard
+    #            failure. Pinned at the ONE place the value is decided.
+    _require_in_source(
+        _source_of(modality_from_latent_state, "helpers.modality_from_latent_state"),
+        "helpers.modality_from_latent_state",
+        "context_mask=None,",
+    )
+    #      (14b) THE NON-MASKED CALL TAKES FOUR ARGUMENTS. 2.3's patch calls
+    #            ``attention_function(q, k, v, heads, mask)``; on 2.5 that fifth
+    #            argument is a ``TypeError`` against the FA3/FA4 callables, and
+    #            the mask belongs to a different slot anyway. The replacement
+    #            forward therefore calls the four-argument shape, and this is
+    #            where that shape is read from.
+    _require_in_source(
+        _source_of(Attention.forward, "Attention.forward"),
+        "Attention.forward",
+        "self.attention_function(q, k, v, self.heads)",
+    )
+    #      (14c) GATE THEN ``to_out``, IN THAT ORDER, THROUGH THE OFFICIAL SLOT.
+    #            2.5 hoisted the per-head gate arithmetic out of the forward into
+    #            ``gated_attention_function``, so the patch calls that rather
+    #            than re-implementing it -- and the NAG combine (or VSF's single
+    #            softmax) happens BEFORE it, which is only meaningful while the
+    #            gate is still the last step before the output projection.
+    _require_source_order(
+        _source_of(Attention.forward, "Attention.forward"),
+        "Attention.forward",
+        "self.gated_attention_function(x, out, self)",
+        "return self.to_out(out)",
+    )
+    #      (14d) ``pe`` NEVER REACHES TEXT CROSS-ATTENTION -- the SOURCE leg of
+    #            the two-legged equivalence behind the patch's single
+    #            ``preattention_function`` call over CONCATENATED keys. That
+    #            shortcut (which exists to avoid materialising ``q``'s
+    #            normalisation twice, ~+230 MB) is exact only while preattention
+    #            is position-independent, i.e. while its ``apply_rotary_emb``
+    #            branch is dead. Both call sites of attn2/audio_attn2 are pinned,
+    #            because either one gaining a ``pe=`` would revive it.
+    #
+    #            THE SECOND LEG IS A RUNTIME CHECK, not a pin: that ``q_norm`` /
+    #            ``k_norm`` really are ``torch.nn.RMSNorm`` (last-dimension
+    #            independent) is asserted per module by
+    #            ``NegPromptService._check_module_shape``, in the same style as
+    #            its ``caption_projection`` check -- an isinstance test needs a
+    #            built model, which ``verify`` does not have.
+    _require_in_source(
+        _source_of(
+            BasicAVTransformerBlock._apply_text_cross_attention,
+            "BasicAVTransformerBlock._apply_text_cross_attention",
+        ),
+        "BasicAVTransformerBlock._apply_text_cross_attention",
+        "return attn(x_normed, context=context, mask=context_mask)",
+    )
+    _require_in_source(
+        _source_of(apply_cross_attention_adaln, "transformer.apply_cross_attention_adaln"),
+        "transformer.apply_cross_attention_adaln",
+        "return attn(attn_input, context=encoder_hidden_states, mask=context_mask) * q_gate",
     )
 
     # 4. F1 canary -- logged, never asserted (see module docstring).

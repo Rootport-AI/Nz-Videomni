@@ -556,6 +556,72 @@ def _resolve_keep_resident(msg: dict) -> bool:
     return bool(msg.get("keep_resident", False))
 
 
+def _resolve_nag(msg: dict):
+    """Resolve a worker ``nag`` block -> NagParams / VsfParams, or None when
+    absent/falsy.
+
+    2.3's reader (``engine/worker.py``) WORD FOR WORD, and for the same reason
+    :func:`_resolve_attention` is: the app builds ONE payload shape for whichever
+    engine is loaded, so two readers that disagreed about what a block means
+    would be a real bug no test would catch. The ONE difference is that the two
+    params classes are imported inside the function -- this worker's module
+    scope is deliberately import-free, and this only ever runs after ``load``
+    pulled the stack in, so it is a ``sys.modules`` hit.
+
+    ``nag`` is present only when the app/API layer had a non-CFG negative prompt
+    enabled for this job (the payload is additive -- absent for every request
+    that did not ask, so this returns None and the job is byte-identical to
+    before the feature existed).
+
+    ``method`` selects between the two methods and defaults to ``"nag"`` when
+    the key is missing: the app layer gained that key with VSF, so an older
+    client (or a replayed pre-VSF payload) must keep resolving to exactly the
+    NAG params it always did. An UNKNOWN method is a different situation
+    entirely -- it means the two layers disagree -- and fails loudly rather than
+    quietly falling back to the wrong algorithm. VSF's own knob defaults to the
+    API's default (scale 1.5) for the same forward-compatibility reason.
+    """
+    from engine25.neg_prompt25 import NagParams, VsfParams  # noqa: PLC0415
+
+    blk = msg.get("nag")
+    if not blk:
+        return None
+    method = str(blk.get("method", "nag"))
+    if method == "nag":
+        return NagParams(
+            negative_prompt=str(blk["negative_prompt"]),
+            scale=float(blk["scale"]),
+            tau=float(blk["tau"]),
+            alpha=float(blk["alpha"]),
+        )
+    if method == "vsf":
+        return VsfParams(
+            negative_prompt=str(blk["negative_prompt"]),
+            scale=float(blk.get("vsf_scale", 1.5)),
+        )
+    raise RuntimeError(
+        f"engine25 worker: unknown negative-prompt method {method!r} in the "
+        "job's 'nag' block — expected 'nag' or 'vsf'."
+    )
+
+
+def _neg_label(nag) -> str:
+    """Job-log tag for the non-CFG negative-prompt method: off / nag / vsf.
+
+    2.3's function verbatim. Not ``on|off``: with two methods, "on" no longer
+    says which algorithm actually ran, and that is the first thing anyone
+    reading a log for a suspicious result needs to know.
+
+    The type import is function-local for the reason :func:`_resolve_nag`'s is,
+    and it is a TYPE import only -- this function never constructs anything.
+    """
+    from engine25.neg_prompt25 import VsfParams  # noqa: PLC0415
+
+    if nag is None:
+        return "off"
+    return "vsf" if isinstance(nag, VsfParams) else "nag"
+
+
 def _resolve_attention(msg: dict) -> tuple[str, bool]:
     """Resolve a job's ``attention_backend`` -> ``(effective_backend, degraded)``.
 
@@ -680,6 +746,13 @@ def _do_generate(msg: dict) -> None:
     keep_resident = _resolve_keep_resident(msg)
     attention, attention_degraded = _resolve_attention(msg)
 
+    # The non-CFG negative prompt. ABSENT-MEANS-OFF like the four above, and
+    # additive for the same reason: a payload written before this existed
+    # resolves to None and the job runs exactly as it did. Unlike those four it
+    # is not an acceleration knob -- it changes what the model computes -- which
+    # is why it is armed through its own method below.
+    nag = _resolve_nag(msg)
+
     # ONE line per job, after the parse: what the request ASKED for, in the
     # worker's own log, so "I attached a LoRA and nothing happened" can be told
     # apart from "the LoRA never reached the engine" without a rerun. The engine
@@ -697,7 +770,10 @@ def _do_generate(msg: dict) -> None:
         # The RESOLVED backend, not the raw field: an unavailable wheel has
         # already turned a 'sage' request into 'sdpa' by this line, and the
         # WARNING that says so is immediately above it in the same log.
-        f"attention={attention}"
+        f"attention={attention} "
+        # off / nag / vsf, in 2.3's spelling: the two engines' worker logs are
+        # read side by side when a result is compared.
+        f"neg={_neg_label(nag)}"
     )
 
     # OUTSIDE the try, and before the build: the fused kernels have to be armed
@@ -712,6 +788,13 @@ def _do_generate(msg: dict) -> None:
         keep_resident=keep_resident,
         attention_backend=attention,
     )
+    # OUTSIDE the try for the same reason, and with an ordering constraint of
+    # its own that is stricter than any of the four above: the negative prompt
+    # is encoded during the PROMPT ENCODE, which is the first thing the job
+    # does, and the patch reads ``state.requested`` at transformer-build time.
+    # Armed on EVERY job, ``None`` included -- that is what clears a previous
+    # job's negative prompt on a resident worker rather than inheriting it.
+    _PIPE.set_nag_job(nag)
     try:
         if outpaint is not None:
             # Outpainting (§3-102). ``reference_video.path`` is ALREADY the
@@ -799,7 +882,10 @@ def _do_generate(msg: dict) -> None:
         _log(f"GENERATE_REPORT {json.dumps(report, ensure_ascii=False, default=str)}")
     finally:
         # Runs on the failure path too: this is what stops a crashed job from
-        # leaving the kernels armed for the next one. It never raises.
+        # leaving the kernels armed -- or a negative prompt encoded -- for the
+        # next one. Neither call raises. The negative prompt goes FIRST because
+        # it is the one holding tensors.
+        _PIPE.reset_nag_job()
         _PIPE.reset_acceleration_job()
 
     # The ONE additive ``done`` key, and only on an outpaint job: the app reads
@@ -898,12 +984,16 @@ def _do_generate(msg: dict) -> None:
 #: ``end_source`` LEFT WITH THE END-SOURCE INCREMENT for the same reason and it
 #: was the last chain MODE on this list: the 2.5 chain runs the layout's own
 #: stage-1 schedule and freezes the material's band at the timeline's tail, so
-#: the block is READ below into :class:`~engine25.chain25.EndSourceSpec`. What
-#: remains are two ENGINE-LEVEL features, not modes.
-CHAIN_UNSUPPORTED_KEYS = (
-    "nag",
-    "vae_mode",
-)
+#: the block is READ below into :class:`~engine25.chain25.EndSourceSpec`.
+#:
+#: ``nag`` LEFT THIS TUPLE WITH THE NAG/VSF COMMIT, on exactly the argument
+#: ``attention_backend`` left on: the patch is installed per transformer BUILD,
+#: and a chain is the path with the MOST builds (one per stage-1 clip, one per
+#: stage-2 tile). The negative prompt itself is encoded once per job by the
+#: prompt encoder, which a chain calls once like everything else does. Nothing
+#: about it is chain-shaped, so there was nothing chain-shaped left to refuse.
+#: What remains is ONE engine-level field, and no mode of any kind.
+CHAIN_UNSUPPORTED_KEYS = ("vae_mode",)
 
 
 def _existing_media_path(raw: object, field: str, *, op: str = "generate_chain") -> str:
@@ -1120,6 +1210,9 @@ def _do_generate_chain(msg: dict) -> None:
     fused = _resolve_fused_dequant(msg)
     keep_resident = _resolve_keep_resident(msg)
     attention, attention_degraded = _resolve_attention(msg)
+    # Same reader, same absent-means-off contract, as the single op's -- see
+    # there. The chain is where the patch's per-build lifetime matters most.
+    nag = _resolve_nag(msg)
 
     spec = ChainSpec(
         clips=clips,
@@ -1174,7 +1267,9 @@ def _do_generate_chain(msg: dict) -> None:
         f"keep_resident={'on' if keep_resident else 'off'} "
         # RESOLVED, exactly as in the single op: an unavailable wheel has already
         # turned a 'sage' request into 'sdpa' by the time this line is written.
-        f"attention={attention}"
+        f"attention={attention} "
+        # off / nag / vsf, the single op's spelling and 2.3's.
+        f"neg={_neg_label(nag)}"
     )
 
     # Armed OUTSIDE the try and before the first transformer build, disarmed in
@@ -1187,6 +1282,9 @@ def _do_generate_chain(msg: dict) -> None:
         keep_resident=keep_resident,
         attention_backend=attention,
     )
+    # The single op's discipline verbatim, for the same ordering reason: armed
+    # outside the try, before the prompt encode, disarmed in the finally.
+    _PIPE.set_nag_job(nag)
     try:
         result = run_chain(
             _PIPE,
@@ -1228,6 +1326,9 @@ def _do_generate_chain(msg: dict) -> None:
             )
         )
     finally:
+        # Two lines here, as in the single op, and in the same order: the
+        # negative prompt goes first because it is the one holding tensors.
+        _PIPE.reset_nag_job()
         _PIPE.reset_acceleration_job()
 
     _emit(

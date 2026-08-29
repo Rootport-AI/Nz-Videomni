@@ -614,7 +614,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     expect(features).toEqual(
       expect.arrayContaining([
         "two_stage_hq",
-        "nag", "prune_vaed",
+        "prune_vaed",
       ]),
     );
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
@@ -659,6 +659,13 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // 高速化第3弾: and `sage_attention` left, from the same Settings panel and
     // pinned the same way. The engine runs 2.3's sage kernels now.
     expect(features).not.toContain("sage_attention");
+    // NAG/VSF increment: `nag` left, and it is asserted NEGATIVELY for the
+    // reason every name above it is -- removing it from the `arrayContaining`
+    // list alone would keep this test green whether the fixture was updated or
+    // not, and a stale fixture would go on greying out the negative-prompt
+    // panel (and the method switch and three knobs behind it) on both the
+    // Single and the Chained tab, for a feature the server runs.
+    expect(features).not.toContain("nag");
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {
@@ -700,7 +707,18 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     // with its row in `MOCK_CHAIN_FEATURE_FIELDS` — the acceptance twin is
     // below (`accepts end_source ...`), which is what makes the move checkable
     // rather than merely an absence.
-    { feature: "nag", body: { nag_enabled: true, negative_prompt: "blurry" } },
+    //
+    // `nag` LEFT WITH THE NAG/VSF INCREMENT, and it was the last row here. The
+    // table is NOT left empty: `prune_vaed` takes its place, which is the same
+    // move the backend's own test tables made (`vae_mode` is the subject the
+    // 2.5 suite switched every refusal test onto). An empty CASES would have
+    // silently retired both loops below — the 422 on 2.5 AND the pass-through
+    // on 2.3 — leaving the fixture's whole refusal mechanism untested.
+    //
+    // It is also the first row whose FIELD only became refusable in that same
+    // commit: `vae_mode` was declared unsupported all along but had no row in
+    // `MOCK_CHAIN_FEATURE_FIELDS` to enforce it with.
+    { feature: "prune_vaed", body: { vae_mode: "prune_vaed" } },
   ];
 
   async function postChain(bridge: ReturnType<typeof createMockBridge>, body: object) {
@@ -808,6 +826,34 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     expect(result.status).toBe(202);
   });
 
+  it("accepts a NAG chain on LTX 2.5 — the negative prompt is in scope now", async () => {
+    // The NAG/VSF increment's acceptance twin, and the reason the removal from
+    // `CASES` above proves anything: a row quietly dropped from a table is not
+    // evidence, a 202 on a request that actually carries the field is.
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      nag_enabled: true,
+      negative_prompt: "blurry, low quality",
+      nag_scale: 7.5,
+      nag_tau: 3.5,
+      nag_alpha: 0.5,
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("accepts a VSF chain on LTX 2.5 — the method switch is in scope too", async () => {
+    const bridge = await ltx25Bridge();
+    const result = await postChain(bridge, {
+      ...CHAIN_BODY,
+      nag_enabled: true,
+      negative_prompt: "blurry, low quality",
+      neg_method: "vsf",
+      vsf_scale: 3.0,
+    });
+    expect(result.status).toBe(202);
+  });
+
   it("accepts end_source on a multi-clip chain (the `reverse` geometry)", async () => {
     // The headline of the End-source increment on the fixture: what used to be
     // this suite's example of a refusal now passes the ruling.
@@ -857,6 +903,13 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
       reference_video_id: null,
       loras: [],
       nag_enabled: false,
+      // THE TWO ROWS THE NAG/VSF INCREMENT ADDED, at their schema defaults.
+      // These are the first refusable fields whose default is a NON-EMPTY
+      // STRING, so they are the ones that would 422 an ordinary chain if the
+      // rows had been added without predicates of their own — which is exactly
+      // what this assertion is here to catch.
+      pipeline: "distilled",
+      vae_mode: "default",
     });
     expect(result.status).toBe(202);
   });
@@ -864,14 +917,15 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
   it("refuses BEFORE request validation — an unrunnable request is not a fixable one", async () => {
     // A 1-clip chain is also invalid, but telling the user to add a clip to a
     // request that could never have run sends them to fix the wrong thing.
-    // The subject was `end_source` until that mode was implemented; `nag` is
-    // now the field the fixture still refuses on this base model.
+    // The subject was `end_source` until that mode was implemented, then `nag`
+    // until the NAG/VSF increment; `vae_mode` is now the field the fixture
+    // still refuses on this base model — and it needs no companion, so the body
+    // under test is the plain chain plus one value.
     const bridge = await ltx25Bridge();
     const result = await postChain(bridge, {
       ...CHAIN_BODY,
       clips: [{ num_frames: 49 }],
-      nag_enabled: true,
-      negative_prompt: "blurry",
+      vae_mode: "prune_vaed",
     });
     expect(result.status).toBe(422);
     expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
@@ -881,8 +935,8 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     const bridge = await ltx25Bridge();
     await postChain(bridge, {
       ...CHAIN_BODY,
-      nag_enabled: true,
-      negative_prompt: "blurry",
+      // Followed the test above onto `vae_mode` for the same reason.
+      vae_mode: "prune_vaed",
     });
     // The refusal must not take the single-job slot with it: a following, valid
     // chain has to be accepted rather than earning a 409 JOB_BUSY.

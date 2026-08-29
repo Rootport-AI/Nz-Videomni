@@ -302,8 +302,20 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // the same reason `retake` was: the single `/generate` path has no
     // per-field refusal loop in this fixture, so there was nothing else to
     // edit. What LTX 2.5 publishes now is three ENGINE-LEVEL feature names.
+    //
+    // `nag` LEFT THIS LIST with the NAG/VSF increment. A CFG-free model cannot
+    // be pushed away from an unconditional prediction, but it can be argued
+    // with inside the one pass it does run -- which is what NAG and VSF do on
+    // this engine now (`engine25/neg_prompt25.py`), so the server no longer
+    // 422s the field and publishing the name here would go on greying out the
+    // negative-prompt panel on the Single and Chained tabs, the method switch
+    // and the three knobs behind it. It DID have a row in
+    // `MOCK_CHAIN_FEATURE_FIELDS` below -- like `end_source` and unlike
+    // `retake` -- but the row stays: what a row says is which feature name a
+    // field belongs to, and membership in THIS list is what decides the 422.
+    // What that leaves is a fixture with nothing reachable left to refuse,
+    // which is why the two rows below it were added in the same commit.
     "two_stage_hq",
-    "nag",
     "prune_vaed",
     // 高速化第2弾: `keep_resident` LEFT THIS LIST. The 2.5 engine keeps its
     // Gemma 4 text encoder resident between jobs now (opt-in, default off), so
@@ -335,12 +347,36 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
  * declares `v2v` / `a2v` — and, third stage, why the `loras` /
  * `reference_video_id` rows stay put too: the row only says which feature name a field belongs
  * to, and membership in the declared list is what decides the 422. */
-const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{ field: string; feature: string }> = [
+const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
+  field: string;
+  feature: string;
+  /** How to read "the user asked for this" for THIS field, when the shared
+   * {@link isChainFieldSet} predicate would get it wrong. Every row above the
+   * two added by the NAG/VSF increment is a null/empty/false test, which is
+   * what the shared predicate does; `pipeline` and `vae_mode` are the first
+   * rows whose DEFAULT is a non-empty string, so without a predicate of their
+   * own the shared one would read `"distilled"` / `"default"` as a request and
+   * 422 every single chain. */
+  isSet?: (value: unknown) => boolean;
+}> = [
   { field: "source_video", feature: "v2v" },
   { field: "source_audio", feature: "a2v" },
   { field: "reference_video_id", feature: "reference_video" },
   { field: "loras", feature: "loras" },
   { field: "nag_enabled", feature: "nag" },
+  // ADDED BY THE NAG/VSF INCREMENT, and the first rows this table has ever
+  // gained rather than kept. Until then `nag_enabled` was the one declared
+  // feature the chain fixture could actually refuse; with `nag` off the
+  // published list, the refusal loop below had nothing left to fire on and the
+  // fixture would have quietly stopped exercising the whole mechanism.
+  //
+  // THIS ALSO FIXES A LATENT FIXTURE BUG, and it is worth being precise about
+  // where: the CHAIN path has this per-field refusal loop, so `two_stage_hq`
+  // and `prune_vaed` were declared unsupported and then never enforced on it.
+  // The single `/generate` path has no such loop at all -- it never refused any
+  // field -- so nothing there was ever wrong, and nothing there is being fixed.
+  { field: "pipeline", feature: "two_stage_hq", isSet: (v) => v != null && v !== "distilled" },
+  { field: "vae_mode", feature: "prune_vaed", isSet: (v) => v != null && v !== "default" },
 ];
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";
@@ -1356,9 +1392,13 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     // (`MOCK_UNSUPPORTED_FEATURES`), never by a hard-coded base-model id:
     // LTX 2.3 declares none, so this loop cannot fire for it at all.
     const activeUnsupported = new Set(MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []);
-    for (const { field, feature } of MOCK_CHAIN_FEATURE_FIELDS) {
+    for (const { field, feature, isSet } of MOCK_CHAIN_FEATURE_FIELDS) {
       if (!activeUnsupported.has(feature)) continue;
-      if (!isChainFieldSet(req[field])) continue;
+      // A row's own predicate when it has one, the shared "non-empty" test
+      // otherwise. See the `isSet` field's own note: the shared predicate reads
+      // any non-empty string as a request, which is right for an upload id and
+      // wrong for an enum whose default is a word.
+      if (!(isSet ?? isChainFieldSet)(req[field])) continue;
       return featureUnsupported(feature, field);
     }
 

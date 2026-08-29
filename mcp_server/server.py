@@ -31,8 +31,12 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   status.state が ready になったことを確認してから生成を投げてください。
   切り替え直後の1本目の生成はキャッシュが冷えていて通常の約2倍かかります
   （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
-  LTX 2.5 では submit_generate の nag_enabled / vae_mode（いずれも既定値以外）
-  が使えません（422 FEATURE_UNSUPPORTED）。
+  LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）だけです
+  （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
+  は 2026-08-30 から LTX 2.5 でも使えます——negative_prompt / nag_scale /
+  nag_tau / nag_alpha / neg_method / vsf_scale も同時に効くようになりました。
+  ただし nag_alpha=0 にしても「NAG なし」とビット単位で同じ絵にはならないので、
+  無効化したいときは nag_enabled を false にしてください。
   keep_resident（モデル骨格の常駐）は 2026-08-25 から LTX 2.5 でも使えます
   （既定 off のまま。ただし LTX 2.3 とは常駐する中身が違い、2.5 が抱えるのは
   テキストエンコーダの重みだけで約7.7GiBです）。
@@ -51,8 +55,9 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   end_source_image_id（素材（末尾））も 2026-08-26 から LTX 2.5 で使えます
   ——この日に撮り直し（Retake）と素材（末尾）が開通し、submit_chain が
   投げられるモードは LTX 2.5 でも全部通るようになりました。submit_chain で
-  まだ使えないのは nag_enabled / vae_mode の2つだけです
-  （keep_resident と attention_backend は submit_chain でも使えます）。
+  まだ使えないのは vae_mode の1つだけです（keep_resident・attention_backend・
+  nag_enabled は submit_chain でも使えます。nag_enabled は 2026-08-30 から
+  LTX 2.5 でも使えるようになりました）。
   なお撮り直しは、そもそも submit_chain に引数がありません（LTX 2.3 でも
   同じで、2.5 で失われた機能ではありません）。
 

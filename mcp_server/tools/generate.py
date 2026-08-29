@@ -80,8 +80,14 @@ async def submit_generate(
     現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
-    LTX 2.5 では、このツールでは ``nag_enabled`` / ``vae_mode``
-    （いずれも既定値以外にした場合）が使えません。
+    LTX 2.5 では、このツールで使えないのは ``vae_mode``
+    （既定値以外にした場合）だけです。**``nag_enabled``（ネガティブプロンプト。
+    NAG と VSF）は 2026-08-30 から LTX 2.5 でも使えます**——``negative_prompt``
+    / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
+    ``vsf_scale`` も同時に効くようになりました。**ただし ``nag_alpha=0`` に
+    しても「NAG なし」とビット単位で同じ絵にはなりません**（負のプロンプトを
+    1件足すぶん内部のバッチが増え、行列積のカーネル選択が変わりうるため）。
+    **無効化したいときは ``nag_enabled`` を ``False`` にしてください。**
     ``loras``（スタイルLoRA・制御系IC-LoRA）と
     ``reference_video_id``、``conditioning_attention_strength`` /
     ``reference_video_strength`` は LTX 2.5 でも使えます。
@@ -356,9 +362,13 @@ async def submit_chain(
     2026-08-26 から LTX 2.5 で使えます**——この日に撮り直し（Retake）と
     素材（末尾）が開通し、``submit_chain`` が投げられるモードは LTX 2.5 でも
     全部通るようになりました（幾何・受理範囲・``metadata.json`` の
-    ``end_source`` ブロックはいずれも LTX 2.3 と同一です）。ただし次の引数は
-    使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED になります:
-    ``nag_enabled`` / ``vae_mode``。これらを使いたい場合は ``load_pipeline``
+    ``end_source`` ブロックはいずれも LTX 2.3 と同一です）。
+    **``nag_enabled``（ネガティブプロンプト。NAG と VSF）も 2026-08-30 から
+    LTX 2.5 の連結生成で使えます**（``negative_prompt`` / ``nag_scale`` /
+    ``nag_tau`` / ``nag_alpha`` / ``neg_method`` / ``vsf_scale`` も同時に。
+    連結生成では1本の ``negative_prompt`` が全クリップ・全ステージに効きます）。
+    ただし次の引数は使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED に
+    なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。
     **``keep_resident`` は 2026-08-25 から LTX 2.5 の連結生成でも使えます**
     （既定off のまま。2.5 が常駐させるのはテキストエンコーダの重み1つだけ

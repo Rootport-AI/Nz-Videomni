@@ -251,17 +251,16 @@ _LORAS = [{"name": "style-a", "strength": 1.0}]
 
 #: One VALID request per rejected field that sets that field non-default, so
 #: the table below drives real ``GenerateRequest`` objects rather than
-#: asserting against itself. Several entries carry companions because the
-#: SCHEMA already couples them (outpaint needs the video it extends; a
-#: reference video needs an IC-LoRA to condition; NAG needs a negative prompt)
-#: — this engine's ruling has to survive those couplings, not dodge them.
+#: asserting against itself. One entry still carries a companion because the
+#: SCHEMA couples them (NAG needs a negative prompt) — this engine's ruling has
+#: to survive that coupling, not dodge it.
+#:
+#: ``outpaint`` LEFT THIS TABLE with the Outpainting increment, and it was the
+#: last entry that needed TWO companions (the video it extends and the IC-LoRA
+#: that conditions on it). Its mirror image is
+#: :data:`REQUEST_ACCEPTED_OUTPAINT` below.
 REQUEST_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
-    "outpaint": {
-        "outpaint": {"pad_left": 64, "pad_right": 0, "pad_top": 0, "pad_bottom": 0},
-        "reference_video_id": "vid-123",
-        "loras": _LORAS,
-    },
     "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "vae_mode": {"vae_mode": "prune_vaed"},
 }
@@ -319,6 +318,32 @@ REQUEST_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
 #: contract is identical.
 REQUEST_ACCEPTED_SAGE: dict[str, dict] = {
     "attention_backend": {"attention_backend": "sage"},
+}
+
+#: What the Outpainting increment turned on: ``outpaint``, the LAST whole MODE
+#: :data:`REQUEST_OVERRIDES` refused. A table of its own for the reason the two
+#: above are — it is THIS increment's evidence — and the ONLY one of the four
+#: accepted tables whose row is not a knob but a job kind.
+#:
+#: THE COMPANIONS TRAVEL WITH IT, unchanged from when this row lived in
+#: :data:`REQUEST_OVERRIDES`: the schema requires a reference video (the clip
+#: whose canvas is extended) and the endpoint requires a CONTROL adapter to
+#: consume it, so a bare ``outpaint`` block is not a valid request at all. Both
+#: are honoured on this engine now, which is what makes the coupling harmless —
+#: the point of the row is that the ruling lets the WHOLE combination through,
+#: not that the block is reachable in isolation.
+#:
+#: The pads are one-sided and small on purpose: ``_request``'s canvas is the
+#: schema default 512x320, so a 64px left pad leaves a 448x320 keep rectangle,
+#: which clears the 256px floor the blend's mask dilation imposes. A test body
+#: that tripped THAT rule would raise ValidationError before this engine's
+#: ruling was ever consulted, and would prove nothing.
+REQUEST_ACCEPTED_OUTPAINT: dict[str, dict] = {
+    "outpaint": {
+        "outpaint": {"pad_left": 64, "pad_right": 0, "pad_top": 0, "pad_bottom": 0},
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+    },
 }
 
 
@@ -436,12 +461,13 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     attention control the server now accepts. This was the last acceleration
     name on the list, so the published set drops from seven names to six."""
     assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
-    # Six when this increment shipped; FIVE since Retake and FOUR since the
-    # End source, each of which took the next name off the list. The count is
-    # asserted rather than only the absence because it is what catches a name
-    # being ADDED back by accident. At four, every name left is an
-    # ENGINE-LEVEL feature -- no chain MODE is published any more.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 4
+    # Six when this increment shipped; FIVE since Retake, FOUR since the End
+    # source and THREE since Outpainting, each of which took the next name off
+    # the list. The count is asserted rather than only the absence because it is
+    # what catches a name being ADDED back by accident. At three, every name
+    # left is an ENGINE-LEVEL feature -- no MODE of any kind is published any
+    # more, chain or single.
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -450,14 +476,36 @@ def test_keep_resident_no_longer_names_a_published_limitation():
     assert "keep_resident" not in ltx25.UNSUPPORTED_FEATURES
 
 
-def test_outpaint_is_still_named_by_name_despite_its_lora_companions():
-    """``outpaint`` sits ABOVE the two rows that left the table, so the schema
-    companions it needs (a reference video + an IC-LoRA) no longer steal the
-    message. The user is told the thing they actually cannot do."""
-    with pytest.raises(APIError) as ei:
-        ltx25.reject_unsupported(_request(**REQUEST_OVERRIDES["outpaint"]))
-    assert "outpaint" in ei.value.detail
-    assert "loras" not in ei.value.detail and "reference_video" not in ei.value.detail
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_OUTPAINT))
+def test_outpaint_is_no_longer_refused(case):
+    """The headline of the Outpainting increment: a canvas-extension request —
+    the whole coupled combination, reference video and IC-LoRA included —
+    passes the ruling instead of raising 422.
+
+    THE COMBINATION IS THE TEST. Until this increment ``outpaint`` sat ABOVE the
+    LoRA rows in the table precisely so that its companions could not steal the
+    message; now that the row is gone, the same body has to survive the two
+    rules that used to be underneath it as well. A table that dropped the
+    ``outpaint`` row but re-refused it through ``loras`` would fail here."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_OUTPAINT[case]))  # no raise
+
+
+def test_outpaint_is_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises, and nowhere more so than
+    here: ``outpaint`` is not a knob whose loss degrades a picture, it is the
+    SWITCH that routes the worker to the two-stage driver. A field dropped from
+    every table would stop the 422 and then hand the user a plain generation at
+    canvas size — a green border where their video should have been extended."""
+    assert "outpaint" in ltx25.HONOURED_FIELDS
+    assert "outpaint" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert "outpaint" not in ltx25.IGNORED_FIELDS
+    assert "outpaint" not in ltx25.GOVERNED_FIELDS
+
+
+def test_outpaint_no_longer_names_a_published_limitation():
+    """GET /models must stop publishing it, or the frontend greys out the Edit
+    tab's 画角拡張 sub-tab for a mode the server now accepts."""
+    assert "outpaint" not in ltx25.UNSUPPORTED_FEATURES
 
 
 def test_unsupported_features_is_both_reject_tables_without_chain_itself():
@@ -1962,6 +2010,64 @@ def test_generate_payload_is_untouched_when_outpaint_is_absent_or_None(tmp_path)
         assert "outpaint" not in payload
     # Byte-identical but for the destination the two runs were given.
     assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+
+def test_generate_payload_carries_the_outpaint_block_when_asked(tmp_path):
+    """THE AFTER PICTURE (the Outpainting increment). The test above pins that a
+    plain job is untouched; this one pins that the block really rides, in 2.3's
+    key order, appended LAST.
+
+    The ORDER is the load-bearing half. ``outpaint`` is the newest key on this
+    payload, so it goes at the end — every earlier increment's frozen-SHA
+    evidence rests on no existing key moving. And the block's key order is 2.3's
+    verbatim (services/engines/ltx/adapter.py), because the two engines answer
+    to ONE app-side contract per feature: an operator comparing two worker logs
+    is then comparing the same eleven names in the same places.
+
+    ``outpaint_source_path`` is the ORIGINAL upload, not the canvas — by this
+    point the orchestrator has already substituted the green canvas for
+    ``reference_video_path`` — so the two paths in the payload are deliberately
+    different files."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    source = tmp_path / "material.mp4"
+    canvas = tmp_path / "outpaint_canvas.mp4"
+
+    be.generate(
+        _request(**REQUEST_ACCEPTED_OUTPAINT["outpaint"], seed=123),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=canvas,
+        outpaint_source_path=source,
+    )
+
+    payload = captured[0]
+    # Appended LAST: after the golden keys AND after the acceleration keys.
+    assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["outpaint"]
+    assert payload["outpaint"] == {
+        "source_path": str(source),
+        "canvas_width": 512,
+        "canvas_height": 320,
+        "pad_left": 64,
+        "pad_right": 0,
+        "pad_top": 0,
+        "pad_bottom": 0,
+        # The workflow's own defaults, sent verbatim rather than defaulted
+        # worker-side: the engine must not have a second opinion about the
+        # parameter the official note calls "the most important" one.
+        "blend_dilation_stage1": 5,
+        "blend_dilation_stage2": 2,
+        "freeze_source_audio": True,
+    }
+    # 2.3's key ORDER, not just its key set.
+    assert list(payload["outpaint"]) == [
+        "source_path", "canvas_width", "canvas_height",
+        "pad_left", "pad_right", "pad_top", "pad_bottom",
+        "blend_dilation_stage1", "blend_dilation_stage2", "freeze_source_audio",
+    ]
+    # The canvas rides where it always did — the reference block — so the
+    # engine's IC-LoRA plumbing needs no notion of outpainting at all.
+    assert payload["reference_video"]["path"] == str(canvas)
 
 
 def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):

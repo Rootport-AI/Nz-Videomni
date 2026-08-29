@@ -48,7 +48,7 @@ Protocol (one JSON object per line; parent -> worker):
       change. A failure here is fatal: ``error`` + exit 1, which is what the
       app's load-failure path expects.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   output_path, [images], loras, reference_video}
+   output_path, [images], loras, reference_video, [outpaint]}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
       ignores (negative_prompt, num_steps, vae_mode, ...) may ride along; each
@@ -62,6 +62,18 @@ Protocol (one JSON object per line; parent -> worker):
       {path, strength, preprocess, [attention_strength]} | null is the IC-LoRA's
       reference video; ``preprocess`` != "none" turns it into a control signal
       (``control_<kind>.mp4`` next to the output) via engine/preprocess/ first.
+      ``outpaint`` = {source_path, canvas_width, canvas_height, pad_*,
+      blend_dilation_stage1, blend_dilation_stage2, freeze_source_audio} is
+      ADDITIVE and ABSENT on every other job, so their payloads are unchanged.
+      Its PRESENCE routes the op to :mod:`engine25.outpaint25` instead of the
+      plain generation, which is why it carries the whole canvas geometry (the
+      engine rebuilds the blend mask from it) rather than a flag.
+      ``reference_video.path`` is then ALREADY the app-built green canvas, and
+      ``source_path`` is the ORIGINAL upload, read only for its audio -- the
+      canvas is written without an audio stream on purpose.
+      The ``done`` reply adds ``outpaint``: the job's metadata dict (geometry,
+      blend, sigmas, the audio freeze proof). It rides the event and the
+      ``GENERATE_REPORT`` line only; metadata.json does NOT carry it.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
    [stage2_window], [source], [audio_source], [retake], [end_source]}
@@ -647,6 +659,14 @@ def _do_generate(msg: dict) -> None:
         msg.get("reference_video"), str(msg["output_path"]), _preprocess_frame_cap(msg)
     )
 
+    # Outpainting (§3-102). MEMBERSHIP is the switch, exactly as on 2.3: the
+    # adapter puts this key on the payload only for an outpaint job, so its
+    # presence routes the whole op to the two-stage driver below. It carries the
+    # canvas GEOMETRY rather than a flag because the engine rebuilds the blend
+    # mask from it, and a mask built from anything but the geometry the app
+    # validated is the one thing this feature must never do.
+    outpaint = msg.get("outpaint")
+
     # The four acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
     # written before they existed resolves to today's behaviour, and all are
     # armed below rather than passed to ``generate``: they are per-job state on a
@@ -693,28 +713,104 @@ def _do_generate(msg: dict) -> None:
         attention_backend=attention,
     )
     try:
-        result = _PIPE.generate(
-            prompt=str(msg["prompt"]),
-            seed=seed,
-            width=int(msg["width"]),
-            height=int(msg["height"]),
-            num_frames=int(msg["num_frames"]),
-            frame_rate=float(msg["frame_rate"]),
-            output_path=str(msg["output_path"]),
-            images=images,
-            # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
-            ic_loras=ic_loras,
-            ic_reference=ic_reference,
-            ic_attention_strength=attn_strength,
-            ignored=ignored,
-        )
+        if outpaint is not None:
+            # Outpainting (§3-102). ``reference_video.path`` is ALREADY the
+            # green canvas the app built, so ``ic_reference`` above points at
+            # it and this branch only has to hand ``run_outpaint`` the geometry
+            # it needs to rebuild the blend mask. Imported HERE rather than at
+            # module scope for the same reason every other engine import in
+            # this file is: a worker that only ever loads a model must not pay
+            # for torch-heavy modules a job kind it is not running would need.
+            from engine.outpaint.canvas import OutpaintGeometry  # noqa: PLC0415
+            from engine25.outpaint25 import run_outpaint  # noqa: PLC0415
 
+            # THE GEOMETRY IS THE ONLY SOURCE OF THE OUTPUT SIZE. ``msg`` also
+            # carries ``width``/``height``, and they agree -- the adapter fills
+            # ``canvas_width``/``canvas_height`` from exactly those two fields
+            # -- but ``run_outpaint`` takes no width/height argument at all, so
+            # there is no second place for them to be read from and disagree.
+            geometry = OutpaintGeometry(
+                canvas_width=int(outpaint["canvas_width"]),
+                canvas_height=int(outpaint["canvas_height"]),
+                pad_left=int(outpaint["pad_left"]),
+                pad_right=int(outpaint["pad_right"]),
+                pad_top=int(outpaint["pad_top"]),
+                pad_bottom=int(outpaint["pad_bottom"]),
+            )
+            assert ic_reference is not None, (
+                "outpaint requires a reference video (the green canvas); the API "
+                "layer enforces this before the job is created"
+            )
+            result = run_outpaint(
+                _PIPE,
+                prompt=str(msg["prompt"]),
+                canvas_path=ic_reference[0],
+                source_path=outpaint.get("source_path"),
+                geometry=geometry,
+                num_frames=int(msg["num_frames"]),
+                frame_rate=float(msg["frame_rate"]),
+                # Carried and reported, never acted on: the distilled schedule
+                # is fixed at 8 + 3 sigmas. The single-generate payload does not
+                # carry the key at all (the adapter forwards only what is acted
+                # upon), so 0 is the honest "not stated" -- the chain op reads
+                # it exactly this way.
+                num_steps=int(msg.get("num_steps", 0)),
+                seed=seed,
+                output_path=str(msg["output_path"]),
+                # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
+                # An outpaint job can never actually have none -- the official
+                # workflow has no LoRA-free path and ``run_outpaint`` raises --
+                # but the call shape is the plain generate's either way.
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=attn_strength,
+                blend_dilation_stage1=int(outpaint.get("blend_dilation_stage1", 5)),
+                blend_dilation_stage2=int(outpaint.get("blend_dilation_stage2", 2)),
+                freeze_source_audio=bool(outpaint.get("freeze_source_audio", True)),
+                # Reported through pipeline25's own ``_log_ignored``, so an
+                # outpaint job's log names the dropped knobs in the same words a
+                # plain one's does.
+                ignored=ignored,
+                progress=_emit_progress,
+            )
+        else:
+            result = _PIPE.generate(
+                prompt=str(msg["prompt"]),
+                seed=seed,
+                width=int(msg["width"]),
+                height=int(msg["height"]),
+                num_frames=int(msg["num_frames"]),
+                frame_rate=float(msg["frame_rate"]),
+                output_path=str(msg["output_path"]),
+                images=images,
+                # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=attn_strength,
+                ignored=ignored,
+            )
+
+        # ONE report line for BOTH job kinds, and deliberately still the
+        # ``GENERATE_REPORT`` marker: ``OutpaintResult`` is a strict superset of
+        # ``GenerationResult`` (same field names, same ``as_dict`` order plus one
+        # additive ``outpaint`` key), so every existing evidence collector that
+        # greps for this marker keeps working on an outpaint job.
         report = result.as_dict()
         _log(f"GENERATE_REPORT {json.dumps(report, ensure_ascii=False, default=str)}")
     finally:
         # Runs on the failure path too: this is what stops a crashed job from
         # leaving the kernels armed for the next one. It never raises.
         _PIPE.reset_acceleration_job()
+
+    # The ONE additive ``done`` key, and only on an outpaint job: the app reads
+    # this event by NAME (``event.get(...)`` per field), so an unknown key adds
+    # a fact without disturbing one, and a plain generation's event is
+    # byte-identical to what it has always been. WHAT IS IN IT does not reach
+    # metadata.json -- that would need an app-layer change, which this theme
+    # does not make -- so the freeze proof, the audio branch and the sampler's
+    # intentional differences live here and in the GENERATE_REPORT line above.
+    # That is where the gates collect them from.
+    extra: dict = {} if outpaint is None else {"outpaint": result.metadata}
 
     # Read the verdicts AFTER the reset -- that is where they are computed
     # ("asked for it and dequantized nothing eligible" is a degradation, and the
@@ -748,6 +844,8 @@ def _do_generate(msg: dict) -> None:
         # a request that never reached the pipeline (no wheel) is still reported
         # as "sage->sdpa" rather than as a clean "sdpa".
         attention_used=_attention_used(attention, attention_degraded),
+        # Appended LAST, and empty for every job but an outpaint one.
+        **extra,
     )
 
 

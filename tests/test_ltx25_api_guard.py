@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import struct
 import wave
 
@@ -56,6 +57,7 @@ from test_ltx25_adapter import (  # noqa: E402
     CHAIN_OVERRIDES,
     REQUEST_ACCEPTED_KEEP_RESIDENT,
     REQUEST_ACCEPTED_LORAS,
+    REQUEST_ACCEPTED_OUTPAINT,
     REQUEST_ACCEPTED_SAGE,
     REQUEST_OVERRIDES,
 )
@@ -309,18 +311,24 @@ def test_ltx25_no_longer_refuses_sage_attention(two_family_client, case):
     assert r.status_code == 202, r.text
 
 
-def test_outpaint_is_still_refused_by_name_on_ltx25(two_family_client):
-    """Outpaintは第3段でも対象外のままである。表の中で``outpaint``の行は外れた
-    2行より**前**に居るので、スキーマが要求する道連れ(参照動画+IC-LoRA)に
-    メッセージを奪われることもない——利用者は本当にできないものを知らされる。"""
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_OUTPAINT))
+def test_ltx25_no_longer_refuses_outpaint(two_family_client, case):
+    """画角拡張(Outpainting)の逆転。**最後まで残っていたモード**がここで外れる。
+
+    このフィクスチャには素材もアダプタも登録が無いので404で構わない——ここで
+    見るのは「機能が無いから拒否された」で落ちていないことだけである。素材を
+    揃えた202→completedは、下の専用フィクスチャの担当である。
+
+    直前まで、この本文はFEATURE_UNSUPPORTEDだった。しかも``outpaint``の行は
+    表の中でLoRAの2行より**前**に居たので、道連れ(参照動画+IC-LoRA)に
+    メッセージを奪われないよう順序まで面倒を見ていた。行ごと外れたいま、同じ
+    本文はその2つの規則の下も通り抜けなければならない。"""
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
-        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_OVERRIDES["outpaint"]}
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_OUTPAINT[case]}
     )
-    assert r.status_code == 422, r.text
-    error = r.json()["error"]
-    assert error["code"] == "FEATURE_UNSUPPORTED"
-    assert "outpaint" in error["detail"]
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
 
 
 def test_the_reject_table_and_this_suite_cover_the_same_fields():
@@ -962,14 +970,18 @@ def _write_safetensors(path, metadata=None):
     return path
 
 
-@pytest.fixture()
-def lora_two_family_client(tmp_path):
-    """``two_family_client`` と同じ2系統の世界に、IC-LoRAの登録を足したもの。
+def _two_family_app_with_ic_loras(tmp_path, ic_loras: dict):
+    """``two_family_client`` と同じ2系統の世界を、``ic_loras`` の登録だけ
+    差し替えて建てる。
 
-    共有フィクスチャを書き換えず別に建てるのは、``ic_loras`` を足すと
+    共有フィクスチャ(conftest)を書き換えず別に建てるのは、``ic_loras`` を足すと
     ``GET /loras`` の応答が変わり、登録を前提にしていない既存テストの前提まで
     動いてしまうからである。組み立ての部品(記述子・重み・GGUFヘッダ)は
     conftestのものをそのまま使うので、二つの世界が食い違うことはない。
+
+    **登録内容だけを引数にした共通部**である。この世界を要るテストは2種類あり
+    (IC-LoRA一般と、画角拡張)、必要なアダプタが違うだけで**世界の組み立ては
+    1文字も違わない**。写して2枚にすると、2系統の世界の定義が2つになる。
     """
     from conftest import (
         base_model_descriptor,
@@ -998,6 +1010,28 @@ def lora_two_family_client(tmp_path):
         **{"general.architecture": "ltxv", "model_version": "2.3.0"},
     )
 
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {
+            "backend": "mock",
+            **fragment,
+            # スタイルLoRAの走査先も必ずtmpへ。既定のままだと開発機の実物の
+            # StyleLoRAフォルダを読み、結果がその機械の持ち物に依存する。
+            "lora_dir": (tmp_path / "style_scan").as_posix(),
+            "ic_loras": ic_loras,
+        },
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return main.build_app(_make_args(cfg_path.as_posix()))
+
+
+@pytest.fixture()
+def lora_two_family_client(tmp_path):
+    """2系統の世界 + IC-LoRAの登録(style / canny / depth / deblur)。"""
     adapters = tmp_path / "adapters"
     style = _write_safetensors(adapters / "Pixar_Toon.safetensors")
     union = _write_safetensors(
@@ -1007,30 +1041,17 @@ def lora_two_family_client(tmp_path):
         adapters / "deblur.safetensors", {"reference_downscale_factor": "1"}
     )
 
-    cfg = {
-        "server": {"log_dir": (tmp_path / "logs").as_posix()},
-        "model": {
-            "backend": "mock",
-            **fragment,
-            # スタイルLoRAの走査先も必ずtmpへ。既定のままだと開発機の実物の
-            # StyleLoRAフォルダを読み、結果がその機械の持ち物に依存する。
-            "lora_dir": (tmp_path / "style_scan").as_posix(),
-            "ic_loras": {
-                STYLE_LORA: style.as_posix(),
-                CANNY_LORA: {"path": union.as_posix(), "preprocess": "canny"},
-                DEPTH_LORA: {"path": union.as_posix(), "preprocess": "depth"},
-                # 前処理不要の制御アダプタ(文字列形式)。controlになるのは
-                # ヘッダの reference_downscale_factor による。
-                DEBLUR_LORA: deblur.as_posix(),
-            },
+    app = _two_family_app_with_ic_loras(
+        tmp_path,
+        {
+            STYLE_LORA: style.as_posix(),
+            CANNY_LORA: {"path": union.as_posix(), "preprocess": "canny"},
+            DEPTH_LORA: {"path": union.as_posix(), "preprocess": "depth"},
+            # 前処理不要の制御アダプタ(文字列形式)。controlになるのは
+            # ヘッダの reference_downscale_factor による。
+            DEBLUR_LORA: deblur.as_posix(),
         },
-        "output": {"dir": (tmp_path / "outputs").as_posix()},
-        "upload": {"dir": (tmp_path / "uploads").as_posix()},
-        "state_file": (tmp_path / "state.json").as_posix(),
-    }
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    app = main.build_app(_make_args(cfg_path.as_posix()))
+    )
     with TestClient(app) as client:
         client.app_context = app.state.context  # type: ignore[attr-defined]
         yield client
@@ -1216,6 +1237,174 @@ def test_the_2_3_engine_runs_the_same_lora_jobs(lora_two_family_client):
 
 
 # --------------------------------------------------------------------------- #
+# 2c) POST /generate — 画角拡張(Outpainting)が202から completed まで通る
+# --------------------------------------------------------------------------- #
+#
+# 上の逆転テストは「FEATURE_UNSUPPORTEDでない」しか言っていない。画角拡張は
+# **素材を要求する唯一のモード**で、入口のガードが4つ重なっている:
+#
+#   1. 参照動画が実在すること(404 VIDEO_NOT_FOUND);
+#   2. キャンバスが128の倍数であること(422 REFERENCE_RESOLUTION_INVALID);
+#   3. 参照動画の解像度が**残し領域と一致**すること(422 OUTPAINT_SOURCE_MISMATCH。
+#      ffprobeで実測する);
+#   4. 参照動画のフレーム数が num_frames を満たすこと(422 OUTPAINT_SOURCE_TOO_SHORT);
+#
+# さらにIC-LoRAの規則として、参照動画は**control種のアダプタ**を通してしか
+# 消費できず、そのアダプタは前処理なし(緑のセンチネルにcannyを掛けても意味が
+# 無い)でなければならない。この4+2を全部満たす本文でなければ、202は
+# 「ガードが外れた」証拠にならない——別の理由で落ちているだけである。
+#
+# だから**このファイル側に**素材を作るフィクスチャを新設する。2.3側の
+# tests/test_outpaint_api.py は同じ形のものを持っているが、あちらは2.3の証跡
+# であって、こちらの都合で1行も動かさない(作法だけを写した)。
+#
+# ffmpeg/ffprobe が要る:ガード3と4が実測で、緑キャンバスの生成
+# (services.video_io.pad_green_mp4)もffmpegを呼ぶ。
+
+#: 前処理なしの制御アダプタ。論理名は製品と同じ(フロントエンドの
+#: useOutpaintForm.ts がこの名前を固定送信する)。
+OUTPAINT_LORA = "in-outpainting"
+
+#: 残し領域 512x256、キャンバス 768x384 -> 左右128/上下64。512も256も
+#: OUTPAINT_MIN_KEEP_SIDE(256)以上で、768も384も128の倍数である。
+OUTPAINT_SRC_W, OUTPAINT_SRC_H = 512, 256
+OUTPAINT_CANVAS_W, OUTPAINT_CANVAS_H = 768, 384
+OUTPAINT_PADS = {"pad_left": 128, "pad_right": 128, "pad_top": 64, "pad_bottom": 64}
+#: 要求フレーム数より素材を長くしておく。ガード4は「足りていること」を見る
+#: 規則なので、ちょうど同数にすると符号化の端数で落ちうる。
+OUTPAINT_NUM_FRAMES = 25
+OUTPAINT_SRC_FRAMES = 33
+
+has_ffmpeg = pytest.mark.skipif(
+    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
+    reason="画角拡張の入口ガードと緑キャンバスの生成はどちらもffmpegを呼ぶ",
+)
+
+
+@pytest.fixture()
+def outpaint_two_family_client(tmp_path):
+    """2系統の世界 + 前処理なしの制御アダプタ1本(``in-outpainting``)。
+
+    ``lora_two_family_client`` を使い回さないのは、あちらの登録には前処理つきの
+    canny/depth が居て、``GET /loras`` の応答が画角拡張の話と関係のない名前で
+    埋まるからである。世界の組み立て自体は共通部
+    (:func:`_two_family_app_with_ic_loras`)が1つ持っている。
+    """
+    adapters = tmp_path / "adapters"
+    # ヘッダの reference_downscale_factor が control 種に分類させる。1(=等倍)は
+    # 配布の In/Outpainting IC-LoRA が実際に宣言している値である。
+    control = _write_safetensors(
+        adapters / "in-outpainting.safetensors", {"reference_downscale_factor": "1"}
+    )
+    app = _two_family_app_with_ic_loras(tmp_path, {OUTPAINT_LORA: control.as_posix()})
+    with TestClient(app) as client:
+        client.app_context = app.state.context  # type: ignore[attr-defined]
+        client.tmp_path = tmp_path  # type: ignore[attr-defined]
+        yield client
+
+
+def _upload_outpaint_source(client) -> str:
+    """残し領域とぴったり同じ大きさの、本物のmp4を上げる。
+
+    ``FAKE_MP4`` の断片ではだめである——入口ガードが ffprobe で解像度と
+    フレーム数を**実測**するので、開けない動画はガードに届く前に落ちる。
+    """
+    src = client.tmp_path / f"outpaint_src_{OUTPAINT_SRC_W}x{OUTPAINT_SRC_H}.mp4"
+    if not src.exists():
+        _make_source_mp4(
+            src, OUTPAINT_SRC_FRAMES, 24, size=(OUTPAINT_SRC_W, OUTPAINT_SRC_H)
+        )
+    return _upload_video(client, src)
+
+
+def _outpaint_body(video_id: str, **overrides) -> dict:
+    body = {
+        "prompt": "a wide suburban kitchen",
+        "width": OUTPAINT_CANVAS_W,
+        "height": OUTPAINT_CANVAS_H,
+        "num_frames": OUTPAINT_NUM_FRAMES,
+        "frame_rate": 24,
+        "seed": 7,
+        "loras": [{"name": OUTPAINT_LORA, "strength": 1.0}],
+        "reference_video_id": video_id,
+        "outpaint": dict(OUTPAINT_PADS),
+    }
+    body.update(overrides)
+    return body
+
+
+@has_ffmpeg
+def test_ltx25_runs_an_outpaint_job_end_to_end(outpaint_two_family_client):
+    """画角拡張が2.5で**202→completed**まで通る。ここは404で妥協しない。
+
+    見どころは3つある。緑キャンバスが出力の隣に実際に書かれていること
+    (アプリ層が作り、エンジンには参照動画として渡る)、その大きさが
+    **キャンバス寸法**であること(素材の寸法ではない)、そして仕上がりの
+    mp4もキャンバス寸法で出ていること——つまり「拡張された画角」が本当に
+    最後まで運ばれている。
+
+    mockバックエンドなので絵は合成の傾斜であり、実際に緑が塗り潰されること
+    (LoRAの効き)は実機ゲートの担当である。ここで見るのは配管だけである。
+    """
+    client = outpaint_two_family_client
+    _activate(client, "LTX25")
+    vid = _upload_outpaint_source(client)
+
+    r = client.post("/api/v1/generate", json=_outpaint_body(vid))
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    out_dir = client.app_context.config.output_dir / job_id
+    canvas = out_dir / "outpaint_canvas.mp4"
+    assert canvas.exists(), "緑キャンバスは出力の隣に書かれる"
+    assert video_io.probe_resolution(canvas) == (OUTPAINT_CANVAS_W, OUTPAINT_CANVAS_H)
+    assert video_io.frame_count(canvas) == OUTPAINT_NUM_FRAMES
+    assert video_io.probe_resolution(out_dir / "output.mp4") == (
+        OUTPAINT_CANVAS_W,
+        OUTPAINT_CANVAS_H,
+    )
+    # どちらのエンジンが走ったかは metadata.json が名乗る。GPUの無い環境でも
+    # 「2.5の側で通った」ことはこれで確かめられる。
+    assert _metadata(client, job_id)["backend"] == ltx25.MOCK_BACKEND_25
+
+
+@has_ffmpeg
+def test_the_2_3_engine_runs_the_same_outpaint_job(outpaint_two_family_client):
+    """対の検証。2.5で通るようになったからといって2.3が壊れていない——同じ
+    本文が同じ登録の上で両系統とも202になる。"""
+    client = outpaint_two_family_client
+    for base_model in ("LTX23", "LTX25"):
+        _activate(client, base_model)
+        vid = _upload_outpaint_source(client)
+        r = client.post("/api/v1/generate", json=_outpaint_body(vid))
+        assert r.status_code == 202, f"{base_model}: {r.text}"
+
+
+@has_ffmpeg
+def test_the_outpaint_guards_still_bite_on_ltx25(outpaint_two_family_client):
+    """開通は**ガードを外すこと**ではない。素材側の規則は2.5でも生きている。
+
+    ここを見ておかないと、上の202が「全部素通しになった」ことの証拠にも
+    なってしまう。解像度違いとフレーム不足の2つを、2.5がアクティブな状態で
+    確かめる(どちらも ffprobe の実測に基づく422である)。"""
+    client = outpaint_two_family_client
+    _activate(client, "LTX25")
+
+    wrong = client.tmp_path / "outpaint_src_wrong.mp4"
+    _make_source_mp4(wrong, OUTPAINT_SRC_FRAMES, 24, size=(640, 256))
+    r = client.post("/api/v1/generate", json=_outpaint_body(_upload_video(client, wrong)))
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "OUTPAINT_SOURCE_MISMATCH"
+
+    short = client.tmp_path / "outpaint_src_short.mp4"
+    _make_source_mp4(short, 17, 24, size=(OUTPAINT_SRC_W, OUTPAINT_SRC_H))
+    r = client.post("/api/v1/generate", json=_outpaint_body(_upload_video(client, short)))
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "OUTPAINT_SOURCE_TOO_SHORT"
+
+
+# --------------------------------------------------------------------------- #
 # 3) GET /models — unsupported_features は加算のみ
 # --------------------------------------------------------------------------- #
 
@@ -1240,9 +1429,14 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     assert "chain" not in features
     assert "v2v" not in features and "a2v" not in features
     # 第3段で ``loras`` / ``reference_video`` も外れた——残っていればLoRAチップも
-    # 参照動画のパネルも灰色のままになる。``outpaint`` は残る。
+    # 参照動画のパネルも灰色のままになる。
     assert "loras" not in features and "reference_video" not in features
-    assert "outpaint" in features
+    # そしてOutpainting段で ``outpaint`` も外れた。これが**種類を問わず最後の
+    # モード名**で、残っていればEditタブの「画角拡張」サブタブが、動くモードの
+    # ために灰色のままになる。いま2.5が公開するのはエンジン側の機能名3つだけ
+    # である。
+    assert "outpaint" not in features
+    assert len(features) == 3
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

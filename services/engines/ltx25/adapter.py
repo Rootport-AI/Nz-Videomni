@@ -128,9 +128,16 @@ DEFAULT_BLOCKS_ON_GPU = 8
 #: default-valued field was not asked for by the user (the frontend sends the
 #: whole schema on every request), so rejecting it would make plain T2V
 #: impossible.
+#:
+#: ``outpaint`` LEFT THIS TABLE with the Outpainting increment (§3-102), and it
+#: was the LAST whole MODE the single path refused. ``engine25/outpaint25.py``
+#: drives the official 2.5 outpainting workflow now — the 2.3-shipped
+#: In/Outpainting IC-LoRA over the app's green canvas, two stages with a
+#: Laplacian pyramid blend between them — so the field is HONOURED (see
+#: :data:`HONOURED_FIELDS`) rather than refused. What is left here are three
+#: ENGINE-LEVEL features, none of them a mode.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
-    ("outpaint", "outpaint", lambda r: r.outpaint is not None),
     ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
 )
@@ -191,6 +198,19 @@ IGNORED_FIELDS: dict[str, str] = {
 #: engines answering to the same field name do not do the same amount of work,
 #: and a reader comparing them should expect different numbers.
 #:
+#: ``outpaint`` JOINED THIS SET with the Outpainting increment (§3-102),
+#: leaving :data:`REJECT_TABLE` as the last MODE on it. Unlike every other
+#: member it is not a knob but a whole job kind: its PRESENCE is what routes the
+#: worker to ``engine25.outpaint25.run_outpaint`` instead of the plain
+#: generation, so the payload block below carries the full canvas geometry
+#: rather than a flag (the engine has to rebuild the blend mask from it). The
+#: app has already substituted the green canvas for ``reference_video.path``,
+#: which is why nothing else in this method changes — and the ORIGINAL upload
+#: arrives separately as ``outpaint_source_path``, read only for its audio.
+#: THE PAYLOAD SHAPE IS 2.3's, key for key (services/engines/ltx/adapter.py):
+#: one app-side contract for one feature, so an operator comparing two engines'
+#: worker logs is comparing the same eleven names.
+#:
 #: ``attention_backend`` JOINED THIS SET with 高速化第3弾 (§3-102), leaving
 #: :data:`REJECT_TABLE` — the last acceleration knob that still 422'd on this
 #: engine. THE CONTRACT IS 2.3's WORD FOR WORD once more: the key rides ONLY
@@ -222,6 +242,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "fused_gguf_dequant_kernel",
         "keep_resident",
         "attention_backend",
+        "outpaint",
     }
 )
 
@@ -435,6 +456,9 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: here, which is why nothing is prepended any more: what this tuple publishes
 #: is now exactly :data:`REJECT_TABLE`'s features, because the chain half of
 #: the ruling has no mode of its own left to add.
+#: ``"outpaint"`` LEFT WITH THE OUTPAINTING INCREMENT, which un-greys the Edit
+#: tab's 画角拡張 sub-tab — the LAST MODE of any kind this engine published, so
+#: what is left is three engine-level feature names and nothing else.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
@@ -718,10 +742,18 @@ class _RealBackend25(_RealBackend):
         third increment: the orchestrator resolved the adapter names into
         safetensors files and the upload id into a path, and both ride the
         payload in 2.3's shape (see the ``loras`` / ``reference_video`` keys
-        below). ``outpaint_source_path`` is still accepted-and-unused so the
-        call shape stays identical to 2.3's — the orchestrator passes all of
-        them positionally — but reaching this method with it set is impossible:
-        ``outpaint`` is refused by :func:`reject_unsupported` on the line above.
+        below).
+
+        ``outpaint_source_path`` IS ACTED ON since the Outpainting increment
+        (§3-102), and it is the one argument whose meaning is not obvious from
+        its name: it is the ORIGINAL upload, not the material the engine
+        extends. By the time the orchestrator calls this it has already built
+        the green canvas and substituted it for ``reference_video_path``, so
+        the canvas is what the IC-LoRA conditions on; the source travels
+        separately because the canvas is written WITHOUT an audio stream on
+        purpose, and the clip's own waveform is what the finished mp4 carries.
+        It rides the ``outpaint`` block below, whose mere PRESENCE is what
+        routes the worker to the two-stage outpaint driver.
 
         ``crop_output`` IS honoured, and is the one v1-scope decision worth
         naming: it is an ffmpeg centre-crop the app performs on the finished
@@ -841,6 +873,38 @@ class _RealBackend25(_RealBackend):
         # ran rather than what was asked for.
         if request.attention_backend != "sdpa":
             payload["attention_backend"] = request.attention_backend
+        # Outpainting (§3-102), appended LAST for the same reason each block
+        # before it was: the newest key goes at the end, so no existing key
+        # order moves and every earlier increment's frozen-SHA evidence stays
+        # valid. The key is ABSENT from every non-outpaint job — the pydantic
+        # default is None and the frontend sends ``outpaint: null`` on a plain
+        # request — so those payloads stay byte-identical.
+        #
+        # ITS PRESENCE IS ALSO THE SWITCH that routes the worker to
+        # ``engine25.outpaint25.run_outpaint`` instead of the plain generate,
+        # which is why it carries the full canvas geometry rather than a flag:
+        # the engine rebuilds the blend mask from it, and a mask built from a
+        # geometry the app did not validate is the one thing this feature must
+        # never do. ``reference_video.path`` above is ALREADY the green canvas
+        # (the orchestrator substituted it); the ``source_path`` here is the
+        # original upload, read only for its audio.
+        #
+        # KEY FOR KEY 2.3's block (services/engines/ltx/adapter.py), same
+        # order: one app-side contract per feature, not one per engine.
+        if request.outpaint is not None:
+            op = request.outpaint
+            payload["outpaint"] = {
+                "source_path": str(outpaint_source_path) if outpaint_source_path else None,
+                "canvas_width": request.width,
+                "canvas_height": request.height,
+                "pad_left": op.pad_left,
+                "pad_right": op.pad_right,
+                "pad_top": op.pad_top,
+                "pad_bottom": op.pad_bottom,
+                "blend_dilation_stage1": op.blend_dilation_stage1,
+                "blend_dilation_stage2": op.blend_dilation_stage2,
+                "freeze_source_audio": op.freeze_source_audio,
+            }
 
         with self._lock:
             try:

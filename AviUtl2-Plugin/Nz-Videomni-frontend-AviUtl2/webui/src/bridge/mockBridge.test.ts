@@ -613,7 +613,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     expect(features).toEqual(
       expect.arrayContaining([
-        "two_stage_hq", "outpaint",
+        "two_stage_hq",
         "nag", "prune_vaed",
       ]),
     );
@@ -640,6 +640,11 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // fixture would go on greying out the Chained tab's 素材（末尾） panel for a
     // mode that runs.
     expect(features).not.toContain("end_source");
+    // Outpainting increment: `outpaint` left too, and it was the LAST MODE name
+    // of ANY family on this list — chain or single. Asserted NEGATIVELY for the
+    // reason all the others are, and a stale fixture would go on greying out
+    // the Edit tab's 画角拡張 sub-tab for a mode that runs.
+    expect(features).not.toContain("outpaint");
     expect(features).not.toContain("chain");
     expect(features).not.toContain("v2v");
     expect(features).not.toContain("a2v");

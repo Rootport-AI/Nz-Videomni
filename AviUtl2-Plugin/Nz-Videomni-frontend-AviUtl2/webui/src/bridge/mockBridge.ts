@@ -293,8 +293,16 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // `MOCK_CHAIN_FEATURE_FIELDS` below, so removing it was a one-line change;
     // `end_source` DID have one, so this increment edited both places, which is
     // what keeps the fixture's 422 and its published list saying one thing.
+    //
+    // `outpaint` LEFT THIS LIST with the Outpainting increment, and it was the
+    // LAST MODE of any kind on it: `engine25/outpaint25.py` drives the official
+    // two-stage outpainting workflow now, so the server no longer 422s the
+    // field — and publishing the name here would go on greying out the Edit
+    // tab's 画角拡張 sub-tab for a mode that runs. It is a one-line removal for
+    // the same reason `retake` was: the single `/generate` path has no
+    // per-field refusal loop in this fixture, so there was nothing else to
+    // edit. What LTX 2.5 publishes now is three ENGINE-LEVEL feature names.
     "two_stage_hq",
-    "outpaint",
     "nag",
     "prune_vaed",
     // 高速化第2弾: `keep_resident` LEFT THIS LIST. The 2.5 engine keeps its

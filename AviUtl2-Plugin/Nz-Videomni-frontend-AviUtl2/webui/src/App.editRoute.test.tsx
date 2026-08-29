@@ -299,8 +299,10 @@ describe("App / W0 Edit-系 right-click routing", () => {
 // the object on the timeline was not. It stayed there, bound to nothing, with
 // nothing to ever clean it up.
 //
-// The fixture reaches this state honestly: LTX 2.5 declares both `retake` and
-// `outpaint`, so `disabledModesFor`'s `needsAnyOf` takes the whole Edit tab.
+// The fixture reaches this state through `withExtraUnsupportedFeatures`, which
+// declares BOTH `retake` and `outpaint` for LTX 2.5 so `disabledModesFor`'s
+// `needsAnyOf` takes the whole Edit tab. Both names are synthetic now — the
+// engine runs both modes.
 /** Wraps a fixture bridge so a base model declares extra `unsupported_features`
  * — see the helper's own note for why these tests need it. */
 const AS_LTX25: MockBridgeOptions = {
@@ -322,19 +324,21 @@ describe("App / Edit-系 right-click on a base model that cannot run Edit", () =
    * `unsupported_features` list has landed, so nothing below can pass merely by
    * out-running the switch.
    *
-   * THE FIXTURE'S OWN LTX 2.5 NO LONGER QUALIFIES. Edit greys only when BOTH of
-   * its sub-modes are refused, and since the Retake increment the engine runs
-   * 撮り直し — so the tab is live and only the Outpainting SUB-tab greys. What
-   * these tests are about is the ROUTE GATE, which keys on `disabledModes`, so
-   * the base model is given the one extra name that takes the whole tab down
+   * THE FIXTURE'S OWN LTX 2.5 NO LONGER QUALIFIES — and since the Outpainting
+   * increment it does not supply EITHER half. Edit greys only when BOTH of its
+   * sub-modes are refused; the Retake increment gave the engine 撮り直し and the
+   * Outpainting increment gave it 画角拡張, so LTX 2.5 now greys neither the tab
+   * nor a sub-tab. What these tests are about is the ROUTE GATE, which keys on
+   * `disabledModes`, so the base model is given BOTH names
    * (`withExtraUnsupportedFeatures`) rather than the tests being re-pointed at
-   * whatever LTX 2.5 happens to refuse this month. The real list is asserted in
-   * `bridge/mockBridge.test.ts`, against the server's own. */
+   * whatever LTX 2.5 happens to refuse this month. That is the whole bargain of
+   * the helper: the MECHANISM is under test here, and the real list is asserted
+   * where it belongs — `bridge/mockBridge.test.ts`, against the server's own. */
   async function renderOnLtx25() {
     const bridge = withExtraUnsupportedFeatures(
       createMockBridge({ delayMs: 0, ...AS_LTX25 }),
       "LTX25",
-      ["retake"],
+      ["retake", "outpaint"],
     );
     render(<AppShell nativeBridge={bridge} />);
     await screen.findByRole("button", { name: /^(generate|busy…)$/i }, { timeout: 5_000 });

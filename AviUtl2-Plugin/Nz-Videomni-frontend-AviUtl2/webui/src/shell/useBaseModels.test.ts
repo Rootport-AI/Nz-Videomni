@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, createApiClient } from "../api/client";
 import type { ApiClient } from "../api/client";
 import { createMockBridge } from "../bridge/mockBridge";
+import { withExtraUnsupportedFeatures } from "../test/unsupportedFeatures";
 import {
   batchA2vDisabledFor,
   chainPanelsDisabledFor,
@@ -197,21 +198,45 @@ describe("useBaseModels", () => {
     expect(result.current.options[0]?.unsupportedFeatures).toEqual([]);
     // §3-102: `chain` is no longer among them — LTX 2.5 chains now — and its
     // second stage took `v2v` and `a2v` with it. The End-source increment took
-    // the LAST chain-family name, `end_source`, so what is left for this engine
-    // is engine-level features; `outpaint` is the one that still greys a panel.
+    // the LAST chain-family name, `end_source`, and the Outpainting increment
+    // took `outpaint` — the last MODE name of any kind. What LTX 2.5 declares
+    // now is engine-level features only, and NONE of them greys a tab or a
+    // sub-tab, which is why the next test drives a synthetic name instead.
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("chain");
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("v2v");
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("a2v");
     expect(result.current.options[1]?.unsupportedFeatures).not.toContain("end_source");
-    expect(result.current.options[1]?.unsupportedFeatures).toContain("outpaint");
+    expect(result.current.options[1]?.unsupportedFeatures).not.toContain("outpaint");
+    // …and one POSITIVE assertion, so this stays a test that the list travels
+    // at all rather than a list of things that are absent from an empty array.
+    expect(result.current.options[1]?.unsupportedFeatures).toContain("two_stage_hq");
     // LTX 2.3 is what is loaded, so nothing is disabled.
     expect(result.current.unsupportedFeatures).toEqual([]);
     expect(result.current.disabledModes).toEqual([]);
   });
 
   it("switching to a restricted base model moves the restrictions with it", async () => {
+    // THE RESTRICTION IS SYNTHETIC (`withExtraUnsupportedFeatures`), and since
+    // the Outpainting increment it has to be: LTX 2.5's real list no longer
+    // greys anything at all — no tab, and no Edit sub-tab — so a round trip
+    // driven by it would compare "nothing disabled" with "nothing disabled"
+    // and pass however broken this hook was. What is under test here is the
+    // MOVEMENT of a restriction across a switch, not today's feature list;
+    // that list is the test above's job, and `bridge/mockBridge.test.ts`'s.
+    //
+    // `retake` is the name added for the same reason `AppShell.featureScope`
+    // adds it: it greys exactly ONE Edit sub-tab, so the assertions below can
+    // tell "moved" from "greyed everything".
     const apiClient = createApiClient(
-      createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
+      withExtraUnsupportedFeatures(
+        createMockBridge({
+          delayMs: 0,
+          ltx25Install: "full",
+          supportedBaseModels: ["LTX23", "LTX25"],
+        }),
+        "LTX25",
+        ["retake"],
+      ),
     );
     const { result } = await renderReady(apiClient);
     expect(result.current.disabledModes).toEqual([]);
@@ -221,8 +246,12 @@ describe("useBaseModels", () => {
       await result.current.switchBaseModel("LTX25");
     });
 
+    expect(result.current.unsupportedFeatures).toContain("retake");
+    // The engine's OWN list travelled too, and what it no longer contains is
+    // the point of this increment: `outpaint` left it, so the 画角拡張 sub-tab
+    // below is expected FALSE where it used to be true.
     expect(result.current.unsupportedFeatures).not.toContain("end_source");
-    expect(result.current.unsupportedFeatures).toContain("outpaint");
+    expect(result.current.unsupportedFeatures).not.toContain("outpaint");
     // §3-102 took `chain` off the list and the Chained tab came back; the
     // Retake increment took `retake` off it and the Edit tab came back too —
     // Edit hosts Retake AND Outpainting, so one of the two running is enough
@@ -230,8 +259,8 @@ describe("useBaseModels", () => {
     // is why the restriction has to be read one level down.
     expect(result.current.disabledModes).toEqual([]);
     expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
-      retake: false,
-      outpainting: true,
+      retake: true,
+      outpainting: false,
     });
 
     // …and back. A restriction that never lifts is not a restriction, it is a
@@ -405,7 +434,12 @@ describe("editSubTabsDisabledFor", () => {
     {
       unsupported: ["two_stage_hq", "outpaint", "nag", "prune_vaed"],
       expected: { retake: false, outpainting: true },
-      why: "…and after it: `retake` and `end_source` leave, `outpaint` stays",
+      why: "…and after it: `retake` and `end_source` had left, `outpaint` had not",
+    },
+    {
+      unsupported: ["two_stage_hq", "nag", "prune_vaed"],
+      expected: { retake: false, outpainting: false },
+      why: "LTX 2.5's list TODAY — Outpainting 開通 took the last MODE name off it, so this engine greys neither sub-tab",
     },
   ];
 

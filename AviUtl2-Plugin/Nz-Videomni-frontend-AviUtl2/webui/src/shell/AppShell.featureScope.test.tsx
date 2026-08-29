@@ -72,19 +72,28 @@ describe("AppShell — base-model feature scope", () => {
     }
   });
 
-  it("leaves every TAB enabled on LTX 2.5 — the greying moved into Edit", async () => {
-    // The Retake increment is what moved it. §3-102 gave the engine `chain`, so
-    // the Chained tab came back; Retake gives it 撮り直し, and the Edit tab
-    // hosts Retake AND Outpainting, so ONE of the two being runnable is enough
-    // to keep the tab. What is still out of scope (画角拡張) therefore has to
-    // grey ONE LEVEL DOWN, on its own sub-tab — which is exactly the machinery
-    // C0 put in place for this moment.
-    const { select, container } = await renderApp(AS_LTX25);
+  it("leaves every TAB enabled on LTX 2.5 — a restriction greys one level down", async () => {
+    // §3-102 gave the engine `chain`, so the Chained tab came back; the Retake
+    // increment gave it 撮り直し, and the Edit tab hosts Retake AND Outpainting,
+    // so ONE of the two being runnable is enough to keep the tab. A restriction
+    // that remains therefore has to grey ONE LEVEL DOWN, on its own sub-tab.
+    //
+    // THE RESTRICTION HERE IS SYNTHETIC (`withExtraUnsupportedFeatures`), and
+    // since the Outpainting increment it has to be: LTX 2.5's real list greys
+    // NOTHING any more — 画角拡張 was the last mode it refused — so there would
+    // be no way to tell "the response was read and nothing greys" from "the
+    // response was never read". The synthetic `retake` is this test's settle
+    // signal, which is what makes the `outpaint` assertion after it meaningful:
+    // by then the new feature list has demonstrably been applied.
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
-    expect(editSubTab(container, "Retake")).not.toBeDisabled();
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
+    // THE INCREMENT'S OWN EVIDENCE. Until Outpainting opened, this sub-tab was
+    // the one that greyed on LTX 2.5 and 撮り直し was the one that did not —
+    // the two have swapped, and only the synthetic name greys now.
+    expect(editSubTab(container, "Outpainting")).not.toBeDisabled();
     for (const name of ["Single", "Chained", "Edit", "Inventory"]) {
       expect(tab(name)).not.toBeDisabled();
     }
@@ -93,17 +102,21 @@ describe("AppShell — base-model feature scope", () => {
   it("switching back to LTX 2.3 restores the Edit sub-tab", async () => {
     // The same round trip the tab-level test used to make, one level down:
     // a restriction that never lifts is not a restriction, it is a broken build.
-    const { select, container } = await renderApp(AS_LTX25);
+    // Synthetic for the same reason the test above is — and here the need is
+    // sharper still, because a round trip driven by a list that greys nothing
+    // would compare "not disabled" with "not disabled" at both ends.
+    const { select, container } = await renderApp(AS_LTX25, ["retake"]);
     const user = userEvent.setup();
 
     await switchToLtx25(select);
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).toBeDisabled());
+    await waitFor(() => expect(editSubTab(container, "Retake")).toBeDisabled());
+    expect(editSubTab(container, "Outpainting")).not.toBeDisabled();
 
     await user.selectOptions(select, "LTX23");
     await waitFor(() => expect(select.value).toBe("LTX23"));
 
-    await waitFor(() => expect(editSubTab(container, "Outpainting")).not.toBeDisabled());
-    expect(editSubTab(container, "Retake")).not.toBeDisabled();
+    await waitFor(() => expect(editSubTab(container, "Retake")).not.toBeDisabled());
+    expect(editSubTab(container, "Outpainting")).not.toBeDisabled();
     for (const name of ["Single", "Chained", "Edit", "Inventory"]) {
       expect(tab(name)).not.toBeDisabled();
     }
@@ -114,13 +127,15 @@ describe("AppShell — base-model feature scope", () => {
     // they switch. Leaving that panel open behind a disabled tab would let them
     // fill in a form whose every submission comes back 422.
     //
-    // THE BASE MODEL HERE IS SYNTHETIC. Edit greys only when BOTH of its
-    // sub-modes are refused, and the fixture's LTX 2.5 refuses only 画角拡張
-    // since the Retake increment — so the extra name is added to the published
-    // list rather than the test being re-pointed at a different tab every time
-    // the engine grows. What is under test is the BOUNCE, not today's feature
-    // list (that is `bridge/mockBridge.test.ts`'s job).
-    const { select } = await renderApp(AS_LTX25, ["retake"]);
+    // THE BASE MODEL HERE IS SYNTHETIC, and since the Outpainting increment
+    // BOTH halves of it are. Edit greys only when BOTH of its sub-modes are
+    // refused; the Retake increment gave the engine 撮り直し and the Outpainting
+    // increment gave it 画角拡張, so the fixture's LTX 2.5 refuses neither now.
+    // The two names are added to the published list rather than the test being
+    // re-pointed at a different tab every time the engine grows. What is under
+    // test is the BOUNCE, not today's feature list (that is
+    // `bridge/mockBridge.test.ts`'s job).
+    const { select } = await renderApp(AS_LTX25, ["retake", "outpaint"]);
     const user = userEvent.setup();
 
     await user.click(tab("Edit"));

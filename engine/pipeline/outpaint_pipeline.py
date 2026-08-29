@@ -24,13 +24,15 @@ Flow (one worker invocation):
       -> STAGE 1 at half resolution, with the green canvas attached as the
          IC-LoRA reference conditioning
       -> decode stage 1 to pixels (half res)
-      -> BLEND 1: Laplacian pyramid, dilation 5, against the green canvas
+      -> DE-GREEN: the canvas' pad bands are replaced by these same pixels
+      -> BLEND 1: Laplacian pyramid, dilation 5, against that canvas
       -> 2x pixel upscale
       -> tiled VAE re-encode
       -> STAGE 2 at full resolution (no reference conditioning: the official
          graph strips the guide latents with ``LTXVCropGuides`` before stage 2)
       -> decode stage 2 to pixels (full res)
-      -> BLEND 2: Laplacian pyramid, dilation 2, against the green canvas
+      -> DE-GREEN again, at full resolution
+      -> BLEND 2: Laplacian pyramid, dilation 2, against that canvas
       -> mux with the source's original waveform -> one mp4
 
 Deliberate differences from the official workflow, all recorded rather than
@@ -48,6 +50,12 @@ hidden (see the module-level constants and the inline notes):
 * the blend mask is generated analytically per resolution instead of being
   area-downscaled from the full-res one, and is carried as ONE frame instead of
   one per frame (see ``engine.outpaint``);
+* the canvas handed to each blend has its pad bands overwritten with that
+  stage's own generated pixels first (``engine.outpaint.canvas`` ->
+  ``fill_pad_with_generated_``), which the official graph does not do. The coarse
+  pyramid levels bleed the canvas' DC component into the generated area whatever
+  the mask says; this decides that what bleeds in is the picture rather than the
+  #66FF00 sentinel. The kept rectangle, and therefore the seam, is untouched;
 * stage-2 audio is re-frozen from the SOURCE audio, where the official graph
   freezes stage 1's own audio output. Stage 1 froze that audio hard
   (``mask_value=0.0``), so its output is the source audio — and this matches how
@@ -64,7 +72,11 @@ import time
 import torch
 
 from engine import progress_shim
-from engine.outpaint.canvas import OutpaintGeometry, build_blend_mask
+from engine.outpaint.canvas import (
+    OutpaintGeometry,
+    build_blend_mask,
+    fill_pad_with_generated_,
+)
 from engine.outpaint.pyramid_blend import blend_video_u8
 from engine.pipeline.chain_pipeline import DTYPE, _denoise_av_with_carry
 from engine.pipeline.common import (
@@ -400,6 +412,9 @@ def run_outpaint(
     stage1_pixels = stage1_pixels[:num_frames]
 
     mask_half = build_blend_mask(geometry, height=height // 2, width=width // 2)
+    # De-green: the canvas' pad bands become this stage's own pixels, so what the
+    # coarse pyramid levels bleed inwards is the picture, not #66FF00.
+    fill_pad_with_generated_(canvas_half, generated=stage1_pixels, mask=mask_half)
     blended_half = blend_video_u8(
         stage1_pixels,
         canvas_half,
@@ -520,6 +535,8 @@ def run_outpaint(
         device=device,
     )[:num_frames]
     mask_full = build_blend_mask(geometry, height=height, width=width)
+    # De-green, full resolution this time (same reason as BLEND 1 above).
+    fill_pad_with_generated_(canvas_full, generated=stage2_pixels, mask=mask_full)
     final_pixels = blend_video_u8(
         stage2_pixels,
         canvas_full,

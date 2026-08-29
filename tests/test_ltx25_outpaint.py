@@ -182,6 +182,9 @@ def test_the_geometry_and_the_blend_are_the_SAME_objects_the_2_3_engine_uses() -
     assert outpaint25.OutpaintGeometry is canvas_2_3.OutpaintGeometry
     assert outpaint25.build_blend_mask is canvas_2_3.build_blend_mask
     assert outpaint25.blend_video_u8 is blend_2_3.blend_video_u8
+    # The de-green step likewise: two copies would let the pad band this engine
+    # replaces and the pad band the mask defines drift apart.
+    assert outpaint25.fill_pad_with_generated_ is canvas_2_3.fill_pad_with_generated_
 
 
 def test_the_chain_borrowings_are_the_same_objects_the_chain_uses() -> None:

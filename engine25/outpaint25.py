@@ -13,12 +13,14 @@ rectangle blended back in pixel space between the two stages.
       -> encode the GREEN CANVAS as the IC-LoRA reference conditioning
       -> STAGE 1 at half resolution, with that reference attached
       -> decode stage 1 to pixels (half res)
-      -> BLEND 1: Laplacian pyramid, dilation 5, against the green canvas
+      -> DE-GREEN: the canvas' pad bands are replaced by these same pixels
+      -> BLEND 1: Laplacian pyramid, dilation 5, against that canvas
       -> 2x PIXEL upscale
       -> tiled VAE re-encode at full resolution
       -> STAGE 2 at full resolution, no reference conditioning
       -> decode stage 2 to pixels (full res)
-      -> BLEND 2: Laplacian pyramid, dilation 2, against the green canvas
+      -> DE-GREEN again, at full resolution
+      -> BLEND 2: Laplacian pyramid, dilation 2, against that canvas
       -> mux the source's ORIGINAL waveform -> one mp4.
 
 NOTHING CALLS THIS YET. Commit C1 lands the driver with zero call sites: the
@@ -161,7 +163,11 @@ from typing import Any, Callable
 
 import torch
 
-from engine.outpaint.canvas import OutpaintGeometry, build_blend_mask
+from engine.outpaint.canvas import (
+    OutpaintGeometry,
+    build_blend_mask,
+    fill_pad_with_generated_,
+)
 from engine.outpaint.pyramid_blend import blend_video_u8
 from engine25.chain25 import (
     DTYPE,
@@ -1079,6 +1085,9 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         vram.reset()
         blend1_started = time.perf_counter()
         mask_half = build_blend_mask(geometry, height=height // 2, width=width // 2)
+        # De-green: the canvas' pad bands become this stage's own pixels, so what
+        # the coarse pyramid levels bleed inwards is the picture, not #66FF00.
+        fill_pad_with_generated_(canvas_half, generated=stage1_pixels, mask=mask_half)
         blended_half = blend_video_u8(
             stage1_pixels,
             canvas_half,
@@ -1240,6 +1249,8 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
             source="the full-resolution VAE decode",
         )
         mask_full = build_blend_mask(geometry, height=height, width=width)
+        # De-green, full resolution this time (same reason as BLEND 1 above).
+        fill_pad_with_generated_(canvas_full, generated=stage2_pixels, mask=mask_full)
         final_pixels = blend_video_u8(
             stage2_pixels,
             canvas_full,

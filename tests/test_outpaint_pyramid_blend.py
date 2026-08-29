@@ -43,6 +43,13 @@ from engine.outpaint.pyramid_blend import (  # noqa: E402
     pyrup,
 )
 
+from engine.outpaint.canvas import (  # noqa: E402
+    GREEN_RGB,
+    OutpaintGeometry,
+    build_blend_mask,
+    fill_pad_with_generated_,
+)
+
 _GOLDEN = pathlib.Path(__file__).with_name("fixtures") / "outpaint_pyramid_golden.npz"
 
 
@@ -277,9 +284,15 @@ def test_blend_video_u8_does_not_mutate_its_inputs():
     mask = _rect_mask(32, 32, 8, 24, 8, 24)
     before_a = generated.clone()
     before_b = original.clone()
+    before_m = mask.clone()
     blend_video_u8(generated, original, mask)
     assert torch.equal(generated, before_a)
     assert torch.equal(original, before_b)
+    # The mask too. Both engines now hand the SAME mask object to
+    # ``fill_pad_with_generated_`` and then to this function, and the helper
+    # derives the pad rectangle from it -- so the two calls must not be
+    # order-dependent. (It holds today: the blend dilates its own copy.)
+    assert torch.equal(mask, before_m)
 
 
 def test_blend_video_u8_rejects_mismatched_shapes():
@@ -400,3 +413,183 @@ def test_build_blend_mask_full_and_half_resolution():
     assert half[0, 0, 32:288, 64:512].max().item() == 0.0
     assert half[0, 0, :32, :].min().item() == 1.0
     assert half[0, 0, :, 512:].min().item() == 1.0
+
+
+# ── canvas.fill_pad_with_generated_ (the de-greened blend operand) ──────────
+#
+# The smallest canvas the geometry allows: both sides a multiple of 128 and a
+# kept rectangle of at least 256px. All four pads are ODD and no two are equal,
+# so an off-by-one in the rectangle derivation shows up as a wrong band rather
+# than cancelling out.
+_DEGREEN_GEOM = OutpaintGeometry(
+    canvas_width=384,
+    canvas_height=384,
+    pad_left=63,
+    pad_right=65,
+    pad_top=61,
+    pad_bottom=67,
+)
+
+
+def _green_canvas(frames: int, h: int, w: int):
+    """A canvas painted the #66FF00 sentinel edge to edge, as ``pad_green_mp4``
+    paints the pad bands before the source rectangle is composited over it."""
+    canvas = torch.empty((frames, h, w, 3), dtype=torch.uint8)
+    for channel, value in enumerate(GREEN_RGB):
+        canvas[..., channel] = value
+    return canvas
+
+
+def _picture(frames: int, h: int, w: int, seed: int):
+    torch.manual_seed(seed)
+    return (torch.rand(frames, h, w, 3) * 255).to(torch.uint8)
+
+
+def _pad_green_excess(video, mask) -> float:
+    """``G - (R + B) / 2`` over the pad band -- the headline number of the spike
+    report. Positive means the region leans green."""
+    pad = mask[0, 0] > 0.5
+    mean = video[:, pad, :].to(torch.float64).mean(dim=(0, 1))
+    return float(mean[1] - (mean[0] + mean[2]) / 2.0)
+
+
+def test_fill_pad_replaces_every_pad_pixel_and_leaves_the_kept_rect_alone():
+    """T1. Odd pads on every side; the pad band must end up bit-identical to the
+    generated video and the kept rectangle bit-identical to what it was."""
+    _DEGREEN_GEOM.validate()
+    mask = build_blend_mask(_DEGREEN_GEOM, height=384, width=384)
+    canvas = _green_canvas(3, 384, 384)
+    generated = _picture(3, 384, 384, seed=101)
+    before = canvas.clone()
+
+    fill_pad_with_generated_(canvas, generated=generated, mask=mask)
+
+    pad = mask[0, 0] > 0.5
+    keep = ~pad
+    assert torch.equal(canvas[:, pad, :], generated[:, pad, :])
+    assert torch.equal(canvas[:, keep, :], before[:, keep, :])
+    # and the kept rectangle really is the geometry's, not a shrunken one
+    assert int(keep.sum()) == _DEGREEN_GEOM.inner_width * _DEGREEN_GEOM.inner_height
+
+
+def test_fill_pad_is_in_place_and_allocates_no_second_canvas():
+    """T2. The engines pass a local that is blended and then ``del``'d, so the
+    write must land in the caller's own storage: same object, same data_ptr."""
+    mask = build_blend_mask(_DEGREEN_GEOM, height=384, width=384)
+    canvas = _green_canvas(2, 384, 384)
+    generated = _picture(2, 384, 384, seed=102)
+    pointer = canvas.data_ptr()
+
+    returned = fill_pad_with_generated_(canvas, generated=generated, mask=mask)
+
+    assert returned is canvas
+    assert returned.data_ptr() == pointer
+
+
+def test_fill_pad_follows_the_half_resolution_mask():
+    """T3. Stage 1 blends at half resolution against a mask whose rectangle is
+    PROPORTIONALLY PROJECTED, not resampled. The bands the helper writes must be
+    that projection's, to the pixel."""
+    mask_half = build_blend_mask(_DEGREEN_GEOM, height=192, width=192)
+    canvas = _green_canvas(2, 192, 192)
+    generated = _picture(2, 192, 192, seed=103)
+    before = canvas.clone()
+
+    fill_pad_with_generated_(canvas, generated=generated, mask=mask_half)
+
+    # round(63 * 192/384) = 32, round((63+256) * 192/384) = 160, and the same
+    # pair vertically: round(61/2) = 30, round((61+256)/2) = 158.
+    y0, y1, x0, x1 = 30, 158, 32, 160
+    assert mask_half[0, 0, y0:y1, x0:x1].max().item() == 0.0
+    assert int((mask_half[0, 0] == 0.0).sum()) == (y1 - y0) * (x1 - x0)
+    assert torch.equal(canvas[:, y0:y1, x0:x1, :], before[:, y0:y1, x0:x1, :])
+    pad = mask_half[0, 0] > 0.5
+    assert torch.equal(canvas[:, pad, :], generated[:, pad, :])
+
+
+def test_fill_pad_does_not_touch_the_generated_video():
+    """T4. The generated tensor is the blend's other operand and is read again
+    immediately afterwards; writing into it would corrupt the blend itself."""
+    mask = build_blend_mask(_DEGREEN_GEOM, height=384, width=384)
+    canvas = _green_canvas(2, 384, 384)
+    generated = _picture(2, 384, 384, seed=104)
+    before = generated.clone()
+
+    fill_pad_with_generated_(canvas, generated=generated, mask=mask)
+
+    assert torch.equal(generated, before)
+
+
+def test_fill_pad_rejects_a_mask_of_the_wrong_resolution():
+    """T5. A half-resolution mask against a full-resolution canvas is the exact
+    mistake the two call sites per engine invite, and it must be named."""
+    canvas = _green_canvas(1, 384, 384)
+    generated = _picture(1, 384, 384, seed=105)
+    wrong = build_blend_mask(_DEGREEN_GEOM, height=192, width=192)
+    with pytest.raises(ValueError, match="same spatial resolution"):
+        fill_pad_with_generated_(canvas, generated=generated, mask=wrong)
+
+
+def test_the_blend_of_a_de_greened_canvas_returns_the_generated_video_exactly():
+    """T6a -- the permanent green regression gate.
+
+    This fixture is ARTIFICIAL on purpose: the canvas is the generated video
+    everywhere except the pad, so once the helper has run the two blend operands
+    are bit-identical over the whole frame and the blend has nothing left to do.
+    That makes the expected output exact rather than approximate -- and it is the
+    strongest possible statement of the property under test, because the moment
+    the helper stops replacing the pad the equality breaks by a wide margin (the
+    control arm below). A production-shaped version of the same claim, where the
+    two operands still differ inside the kept rectangle, is the next test.
+    """
+    mask = build_blend_mask(_DEGREEN_GEOM, height=384, width=384)
+    generated = _picture(2, 384, 384, seed=106)
+
+    canvas = generated.clone()
+    pad = mask[0, 0] > 0.5
+    for channel, value in enumerate(GREEN_RGB):
+        canvas[:, pad, channel] = value
+
+    de_greened = canvas.clone()
+    fill_pad_with_generated_(de_greened, generated=generated, mask=mask)
+    blended = blend_video_u8(generated, de_greened, mask, mask_low_res_dilation=5)
+    assert torch.equal(blended, generated)
+
+    # Control arm: the same fixture WITHOUT the helper. If this ever passes too,
+    # the test above has stopped proving anything.
+    plain = blend_video_u8(generated, canvas, mask, mask_low_res_dilation=5)
+    assert not torch.equal(plain, generated)
+
+
+def test_the_de_greened_blend_drops_the_pad_bands_green_by_an_order_of_magnitude():
+    """T6b -- the production-shaped version of T6a.
+
+    Green canvas, and a kept rectangle holding a DIFFERENT picture from the
+    generated one, which is the real situation: source footage on one side of the
+    seam, the model's frame on the other. The blend still mixes the canvas in --
+    the coarse pyramid levels guarantee it -- so the claim is not "zero" but "the
+    sentinel is no longer what mixes in". Measured as green excess over the pad
+    band, which is the spike report's headline number; a per-pixel bound is not
+    used, because individual pixels move by up to 132 codes for reasons that have
+    nothing to do with green.
+    """
+    mask = build_blend_mask(_DEGREEN_GEOM, height=384, width=384)
+    generated = _picture(2, 384, 384, seed=107)
+    keep = ~(mask[0, 0] > 0.5)
+
+    canvas = _green_canvas(2, 384, 384)
+    footage = _picture(2, 384, 384, seed=207)
+    canvas[:, keep, :] = footage[:, keep, :]
+
+    de_greened = canvas.clone()
+    fill_pad_with_generated_(de_greened, generated=generated, mask=mask)
+
+    before = _pad_green_excess(
+        blend_video_u8(generated, canvas, mask, mask_low_res_dilation=5), mask
+    )
+    after = _pad_green_excess(
+        blend_video_u8(generated, de_greened, mask, mask_low_res_dilation=5), mask
+    )
+
+    assert before > 1.0, "the control arm must actually be green, or nothing is proven"
+    assert abs(after) < abs(before) / 10.0

@@ -20,6 +20,7 @@ from .canvas import (
     MIN_INNER_SIDE,
     OutpaintGeometry,
     build_blend_mask,
+    fill_pad_with_generated_,
 )
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "OutpaintGeometry",
     "blend_video_u8",
     "build_blend_mask",
+    "fill_pad_with_generated_",
     "laplacian_pyramid_blend",
 ]
 

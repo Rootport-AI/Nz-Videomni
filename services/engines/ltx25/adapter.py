@@ -134,20 +134,31 @@ DEFAULT_BLOCKS_ON_GPU = 8
 #: drives the official 2.5 outpainting workflow now — the 2.3-shipped
 #: In/Outpainting IC-LoRA over the app's green canvas, two stages with a
 #: Laplacian pyramid blend between them — so the field is HONOURED (see
-#: :data:`HONOURED_FIELDS`) rather than refused. What is left here are three
-#: ENGINE-LEVEL features, none of them a mode.
+#: :data:`HONOURED_FIELDS`) rather than refused.
+#:
+#: ``nag_enabled`` LEFT THIS TABLE with the NAG/VSF increment. A CFG-free model
+#: cannot be pushed away from an unconditional prediction, which is why this row
+#: stood here — but it can be argued with INSIDE the single pass it does run,
+#: and that is what NAG and VSF do (``engine25/neg_prompt25.py`` replaces the
+#: 96 text cross-attention forwards). So the field is honoured now, and with it
+#: the six knobs that were only ever inert because this row refused them.
+#: What is left is TWO engine-level features, neither of them a mode.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
-    ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
-#: fail a job, with the reason an operator sees in the log. What is left here is
-#: ONE kind: the distilled 2.5 schedule has no CFG and no step count to honour,
-#: so the five negative-prompt / step-count knobs describe a mechanism this
-#: engine does not run. Refusing them would be hostile — the frontend sends the
-#: whole schema on every request, so a plain T2V request carries them all.
+#: fail a job, with the reason an operator sees in the log. Refusing them would
+#: be hostile — the frontend sends the whole schema on every request, so a plain
+#: T2V request carries them all.
+#:
+#: THE THREE NEGATIVE-PROMPT FIELDS LEFT THIS TABLE with the NAG/VSF increment
+#: (``negative_prompt``, ``neg_method``, ``vsf_scale``): they are the feature
+#: now, so calling them ignored would be exactly the silent lie the audit below
+#: exists to catch. What remains is ONE kind, and now the reason really is one
+#: reason: the distilled 2.5 schedule is fixed and has no classifier-free
+#: guidance, so a CFG SCALE and a STEP COUNT have nothing to attach to.
 #:
 #: ``fused_gguf_dequant_kernel`` AND ``block_swap_prefetch`` LEFT THIS TABLE
 #: with 高速化第1弾 (§3-102): both are real engine25 code paths now — the Triton
@@ -157,11 +168,8 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 #: them classified "ignored" would have been exactly the silent lie the audit
 #: below exists to catch. See :data:`HONOURED_FIELDS`.
 IGNORED_FIELDS: dict[str, str] = {
-    "negative_prompt": "LTX 2.5 distilled runs without classifier-free guidance",
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
-    "neg_method": "no negative-prompt mechanism in the LTX 2.5 v1 scope",
-    "vsf_scale": "no negative-prompt mechanism in the LTX 2.5 v1 scope",
 }
 
 #: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
@@ -224,6 +232,20 @@ IGNORED_FIELDS: dict[str, str] = {
 #: identical. The ONE difference is the lifetime of the wrapper it installs —
 #: 2.5 reuses one model shell across jobs, so every build strips and re-installs
 #: rather than patching a fresh transformer.
+#:
+#: THE SEVEN NEGATIVE-PROMPT FIELDS JOINED THIS SET with the NAG/VSF increment,
+#: from THREE different tables at once: ``nag_enabled`` left
+#: :data:`REJECT_TABLE`, ``negative_prompt`` / ``neg_method`` / ``vsf_scale``
+#: left :data:`IGNORED_FIELDS`, and ``nag_scale`` / ``nag_tau`` / ``nag_alpha``
+#: left :data:`GOVERNED_FIELDS` — which emptied it. All seven are plain
+#: ``request.<field>`` reads that ride the additive ``nag`` payload block below,
+#: key for key in 2.3's order, so one app-side contract serves both engines.
+#:
+#: "Honoured" and not "governed" for the three NAG knobs specifically: governed
+#: promises that a field cannot reach a running job, which was true only while
+#: its governor was a 422. It no longer is, so a scale really does change the
+#: video. And not "ignored" either, for the obvious reason — this engine acts on
+#: them. HONOURED is the only classification that is true.
 HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -243,6 +265,17 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "keep_resident",
         "attention_backend",
         "outpaint",
+        # The non-CFG negative prompt (NAG / VSF), seven fields that travel as
+        # one feature: the switch, the prompt, the method, and the two methods'
+        # knobs. They are listed together rather than sorted in because that is
+        # what they are — a request either carries the whole block or none of it.
+        "nag_enabled",
+        "negative_prompt",
+        "nag_scale",
+        "nag_tau",
+        "nag_alpha",
+        "neg_method",
+        "vsf_scale",
     }
 )
 
@@ -260,12 +293,19 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 #:
 #: The distinction is worth keeping rather than folding into
 #: :data:`IGNORED_FIELDS`: "ignored" promises a job runs anyway, which is false
-#: here — these cannot reach a running job at all.
-GOVERNED_FIELDS: dict[str, str] = {
-    "nag_scale": "nag_enabled",
-    "nag_tau": "nag_enabled",
-    "nag_alpha": "nag_enabled",
-}
+#: for a governed field — it cannot reach a running job at all.
+#:
+#: THE TABLE IS NOW EMPTY, and is KEPT rather than deleted. The three NAG knobs
+#: were its last rows and they left with the NAG/VSF increment: their governor
+#: ``nag_enabled`` is no longer a 422, so a scale really does change the video
+#: and "governed" would have become the silent-drop the audit exists to catch.
+#:
+#: Empty is a real state and a checkable one: the classification audit reads
+#: this table by name, ``test_every_governor_is_itself_refused`` iterates it (an
+#: empty loop passes, which is the honest answer when nothing is governed), and
+#: keeping the name means the day a NEW sub-parameter appears behind a NEW 422
+#: there is somewhere obvious to put it.
+GOVERNED_FIELDS: dict[str, str] = {}
 
 # --------------------------------------------------------------------------- #
 # chain feature scope (§3-102 第1段: Chained本体)
@@ -301,28 +341,32 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: (``chain25.run_chain(end_source=...)`` — reverse order on 2+ clips) and
 #: freezes the material's band at the timeline's tail in both stages. With it
 #: gone, every chain mode the schema can express has a code path here.
+#: ``nag_enabled`` LEFT WITH THE NAG/VSF INCREMENT, the chain twin of the
+#: single-path move and on the strongest form of its argument: the patch is
+#: installed per transformer BUILD and a chain is the path with the most builds,
+#: while the negative prompt is encoded once per job by a prompt encoder a chain
+#: calls once. Nothing about it was ever chain-shaped.
 CHAIN_REJECT_TABLE: tuple[
     tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
 ] = (
-    ("nag_enabled", "nag", lambda r: bool(r.nag_enabled)),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
 )
 
-#: The ignore-and-log half. Field-for-field the same five as
+#: The ignore-and-log half. Field-for-field the same two as
 #: :data:`IGNORED_FIELDS` and for the same one reason (the distilled schedule
 #: has no CFG and no step count to honour) — spelled out rather than aliased so
 #: the audit test reads one schema against one table.
+#:
+#: The three negative-prompt fields LEFT THIS TABLE with the NAG/VSF increment,
+#: the chain twin of the single-path move: they are the feature now.
 #:
 #: The two acceleration knobs LEFT THIS TABLE with 高速化第1弾 (§3-102), the
 #: chain twin of the single-path move: engine25 really runs both code paths now,
 #: on every build a chain makes, so both are in :data:`CHAIN_HONOURED_FIELDS`.
 CHAIN_IGNORED_FIELDS: dict[str, str] = {
-    "negative_prompt": "LTX 2.5 distilled runs without classifier-free guidance",
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
-    "neg_method": "no negative-prompt mechanism in the LTX 2.5 chain scope",
-    "vsf_scale": "no negative-prompt mechanism in the LTX 2.5 chain scope",
 }
 
 #: Fields the chain path ACTS ON. Eight ride the worker payload verbatim and
@@ -375,6 +419,13 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: transformer once per stage, and every one of those builds strips the previous
 #: job's wrapper before installing a fresh one, so the echo a chain returns is a
 #: fold over every build it made ("sage->sdpa" when one of them fell back).
+#:
+#: THE SEVEN NEGATIVE-PROMPT FIELDS JOINED WITH THE NAG/VSF INCREMENT, the chain
+#: twin of the single-path move and from the same three tables at once
+#: (``nag_enabled`` from the reject table, the prompt/method/vsf_scale trio from
+#: the ignore table, the three NAG knobs from :data:`CHAIN_GOVERNED_FIELDS`,
+#: which that emptied). All seven are plain ``chain.<field>`` reads riding the
+#: additive ``nag`` block, key for key as on the single path and as on 2.3.
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -415,6 +466,15 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "fused_gguf_dequant_kernel",
         "keep_resident",
         "attention_backend",
+        # The non-CFG negative prompt (NAG / VSF): the single path's seven, on
+        # the chain schema, carrying the identical payload block.
+        "nag_enabled",
+        "negative_prompt",
+        "nag_scale",
+        "nag_tau",
+        "nag_alpha",
+        "neg_method",
+        "vsf_scale",
     }
 )
 
@@ -427,11 +487,13 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
 #: the chain twin of the single-path move: their governor is no longer a 422, so
 #: "governed" would now be a promise that they cannot reach a running job — and
 #: they can.
-CHAIN_GOVERNED_FIELDS: dict[str, str] = {
-    "nag_scale": "nag_enabled",
-    "nag_tau": "nag_enabled",
-    "nag_alpha": "nag_enabled",
-}
+#:
+#: THE TABLE IS NOW EMPTY, for the reason :data:`GOVERNED_FIELDS` is: the three
+#: NAG knobs were its last rows and their governor stopped being a 422 with the
+#: NAG/VSF increment. Kept rather than deleted for the same reasons — the audit
+#: reads it by name, the governor test's loop is honestly empty, and a future
+#: sub-parameter behind a future 422 has an obvious home.
+CHAIN_GOVERNED_FIELDS: dict[str, str] = {}
 
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``
@@ -457,8 +519,10 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: is now exactly :data:`REJECT_TABLE`'s features, because the chain half of
 #: the ruling has no mode of its own left to add.
 #: ``"outpaint"`` LEFT WITH THE OUTPAINTING INCREMENT, which un-greys the Edit
-#: tab's 画角拡張 sub-tab — the LAST MODE of any kind this engine published, so
-#: what is left is three engine-level feature names and nothing else.
+#: tab's 画角拡張 sub-tab — the LAST MODE of any kind this engine published.
+#: ``"nag"`` LEFT WITH THE NAG/VSF INCREMENT, which un-greys the negative-prompt
+#: panel on the Single and Chained tabs (and with it the method switch and the
+#: three NAG knobs behind it). What is left is TWO engine-level feature names.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
@@ -494,9 +558,10 @@ def reject_chain(request: GenerateChainRequest) -> None:
     UNTIL §3-102 THIS TOOK NO ARGUMENT and refused every chain outright, on the
     grounds that nothing in the body could make this engine able to chain. That
     is no longer true: a plain Chained job runs here now, and what is left out
-    of scope — Retake, End source, NAG and the acceleration knobs — is decided
-    FIELD BY FIELD, exactly like the single path. So the request has to be
-    read.
+    of scope is decided FIELD BY FIELD, exactly like the single path. So the
+    request has to be read. (Retake, End source, the acceleration knobs and —
+    since the NAG/VSF increment — the negative prompt have all since left the
+    table; what it still refuses is the two engine-level fields below.)
 
     Same first-offender-wins rule and same table discipline as
     :func:`reject_unsupported`; see :data:`CHAIN_REJECT_TABLE`.
@@ -905,6 +970,28 @@ class _RealBackend25(_RealBackend):
                 "blend_dilation_stage2": op.blend_dilation_stage2,
                 "freeze_source_audio": op.freeze_source_audio,
             }
+        # The non-CFG negative prompt (NAG / VSF), appended LAST for the reason
+        # every block before it was: the newest key goes at the end, so no
+        # existing key order moves and every earlier increment's frozen-SHA
+        # evidence stays valid. ADDITIVE — the block rides only when the request
+        # actually enabled it, so a plain job's payload is byte-identical to what
+        # it was before this line existed.
+        #
+        # KEY FOR KEY 2.3's BLOCK, in 2.3's order (services/engines/ltx/adapter.py):
+        # one app-side contract per feature, not one per engine, so an operator
+        # comparing two engines' worker logs is comparing the same names. The
+        # worker key is ``method`` rather than ``neg_method``, and scale/tau/alpha
+        # ride unconditionally because the engine only reads them when
+        # ``method == "nag"``.
+        if request.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": request.negative_prompt,
+                "scale": float(request.nag_scale),
+                "tau": float(request.nag_tau),
+                "alpha": float(request.nag_alpha),
+            }
+            payload["nag"]["method"] = request.neg_method
+            payload["nag"]["vsf_scale"] = request.vsf_scale
 
         with self._lock:
             try:
@@ -1201,6 +1288,18 @@ class _RealBackend25(_RealBackend):
         # "sdpa" on the worker side rather than silence.
         if chain.attention_backend != "sdpa":
             payload["attention_backend"] = chain.attention_backend
+        # The non-CFG negative prompt (NAG / VSF), appended last for the reason
+        # everything above it was, and byte-for-byte the single path's block on
+        # the chain schema — which is also 2.3's chain block, key for key.
+        if chain.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": chain.negative_prompt,
+                "scale": float(chain.nag_scale),
+                "tau": float(chain.nag_tau),
+                "alpha": float(chain.nag_alpha),
+            }
+            payload["nag"]["method"] = chain.neg_method
+            payload["nag"]["vsf_scale"] = chain.vsf_scale
 
         with self._lock:
             try:

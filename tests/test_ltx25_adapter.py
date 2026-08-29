@@ -251,18 +251,51 @@ _LORAS = [{"name": "style-a", "strength": 1.0}]
 
 #: One VALID request per rejected field that sets that field non-default, so
 #: the table below drives real ``GenerateRequest`` objects rather than
-#: asserting against itself. One entry still carries a companion because the
-#: SCHEMA couples them (NAG needs a negative prompt) — this engine's ruling has
-#: to survive that coupling, not dodge it.
+#: asserting against itself.
 #:
 #: ``outpaint`` LEFT THIS TABLE with the Outpainting increment, and it was the
 #: last entry that needed TWO companions (the video it extends and the IC-LoRA
 #: that conditions on it). Its mirror image is
 #: :data:`REQUEST_ACCEPTED_OUTPAINT` below.
+#:
+#: ``nag_enabled`` LEFT WITH THE NAG/VSF INCREMENT, and it was the last entry
+#: that needed a companion at all (the schema couples it to a non-empty
+#: negative prompt). Its mirror image is :data:`REQUEST_ACCEPTED_NAG`, which
+#: inherits the coupling — this engine's ruling has to survive it, not dodge it.
+#: Every row that remains is a bare one-field override.
 REQUEST_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
-    "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "vae_mode": {"vae_mode": "prune_vaed"},
+}
+
+#: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
+#: master switch and the schema refuses it without a non-empty negative prompt
+#: (``api/models.py``). Spelt once and spread into each row, so a row says only
+#: what it is actually testing.
+_NAG_COMPANION = {"nag_enabled": True, "negative_prompt": "blurry, low quality"}
+
+#: What the NAG/VSF increment turned on: the SEVEN negative-prompt fields, which
+#: left THREE different tables at once — ``nag_enabled`` from
+#: :data:`REQUEST_OVERRIDES`, the prompt/method/vsf_scale trio from
+#: ``IGNORED_FIELDS``, and the three NAG knobs from ``GOVERNED_FIELDS`` (which
+#: it emptied). A table of its own for the reason every accepted table before it
+#: has one: it is THIS increment's evidence, and folding it into an earlier
+#: increment's table would make both lie about what they cover.
+#:
+#: SEVEN ROWS FOR SEVEN FIELDS, each at a NON-DEFAULT value, because the class of
+#: regression that matters here is a single knob being dropped on the way to the
+#: payload while the switch still rides. The last two rows carry
+#: ``neg_method="vsf"`` because ``vsf_scale`` is only meaningful under it — and
+#: because VSF is the method whose payload key is spelt differently on the wire
+#: (``method``, not ``neg_method``).
+REQUEST_ACCEPTED_NAG: dict[str, dict] = {
+    "nag_enabled": {**_NAG_COMPANION},
+    "negative_prompt": {**_NAG_COMPANION},
+    "nag_scale": {**_NAG_COMPANION, "nag_scale": 7.5},
+    "nag_tau": {**_NAG_COMPANION, "nag_tau": 3.5},
+    "nag_alpha": {**_NAG_COMPANION, "nag_alpha": 0.5},
+    "neg_method": {**_NAG_COMPANION, "neg_method": "vsf"},
+    "vsf_scale": {**_NAG_COMPANION, "neg_method": "vsf", "vsf_scale": 3.0},
 }
 
 #: What §3-102's THIRD increment turned on, as valid request bodies: the two
@@ -462,12 +495,12 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     name on the list, so the published set drops from seven names to six."""
     assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
     # Six when this increment shipped; FIVE since Retake, FOUR since the End
-    # source and THREE since Outpainting, each of which took the next name off
-    # the list. The count is asserted rather than only the absence because it is
-    # what catches a name being ADDED back by accident. At three, every name
-    # left is an ENGINE-LEVEL feature -- no MODE of any kind is published any
-    # more, chain or single.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
+    # source, THREE since Outpainting and TWO since NAG/VSF, each of which took
+    # the next name off the list. The count is asserted rather than only the
+    # absence because it is what catches a name being ADDED back by accident. At
+    # two, every name left is an ENGINE-LEVEL feature -- no MODE of any kind is
+    # published any more, chain or single.
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 2
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -508,6 +541,55 @@ def test_outpaint_no_longer_names_a_published_limitation():
     assert "outpaint" not in ltx25.UNSUPPORTED_FEATURES
 
 
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_NAG))
+def test_the_negative_prompt_fields_are_no_longer_refused(case):
+    """The headline of the NAG/VSF increment: a request that asks for a negative
+    prompt passes the ruling instead of raising 422. Field by field, because the
+    seven arrived from three different tables and a move that took only some of
+    them would leave the rest silently dropped rather than loudly refused."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_NAG[case]))  # no raise
+
+
+def test_the_negative_prompt_fields_are_honoured_not_merely_unlisted():
+    """Unlisted, ignored and honoured are three different promises, and this is
+    the increment where all three were in play at once: one field was a 422,
+    three were "ignored", three were "governed". Dropping any of them from every
+    table would stop the 422 and then hand the user a video generated without
+    the negative prompt they typed — with nothing in the log to say so."""
+    neg_fields = {
+        "nag_enabled",
+        "negative_prompt",
+        "nag_scale",
+        "nag_tau",
+        "nag_alpha",
+        "neg_method",
+        "vsf_scale",
+    }
+    assert neg_fields <= ltx25.HONOURED_FIELDS
+    assert not neg_fields & {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert not neg_fields & set(ltx25.IGNORED_FIELDS)
+    assert not neg_fields & set(ltx25.GOVERNED_FIELDS)
+
+
+def test_the_governed_table_is_empty_and_still_exists():
+    """``GOVERNED_FIELDS`` lost its last three rows to the NAG/VSF increment.
+
+    EMPTY IS A STATE, NOT AN ABSENCE. The name is still read by the
+    classification audit and by ``test_every_governor_is_itself_refused``, whose
+    loop is now honestly empty; deleting the table would make the audit
+    incomplete rather than smaller, and would leave the next sub-parameter
+    behind the next 422 with nowhere obvious to go."""
+    assert ltx25.GOVERNED_FIELDS == {}
+    assert ltx25.CHAIN_GOVERNED_FIELDS == {}
+
+
+def test_nag_no_longer_names_a_published_limitation():
+    """GET /models must stop publishing it, or the frontend greys out the
+    negative-prompt panel — and the method switch and three knobs behind it —
+    on both the Single and the Chained tab, for a feature the server runs."""
+    assert "nag" not in ltx25.UNSUPPORTED_FEATURES
+
+
 def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     """Every feature name either table refuses must be published, or a control
     the server 422s stays lit in the frontend."""
@@ -541,13 +623,28 @@ def test_ignored_fields_are_logged_only_when_set(caplog):
 
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="ltx25.runner"):
-        # ``vsf_scale`` rather than the acceleration knobs that used to stand
-        # here: 高速化第1弾 moved those two into HONOURED_FIELDS, so a needle
-        # naming them would now be testing a field this table no longer has.
-        ltx25._log_ignored(_request(negative_prompt="blurry", vsf_scale=2.0))
+        # ``guidance_scale`` / ``num_inference_steps`` rather than the negative
+        # prompt that used to stand here: the NAG/VSF increment moved those
+        # three into HONOURED_FIELDS, so a needle naming them would now be
+        # testing fields this table no longer has -- and would pass while
+        # naming nothing, because ``_log_ignored`` skips what it cannot find.
+        # These two are what the table is DOWN TO, so the needles cannot rot
+        # again without the table itself becoming empty.
+        #
+        # ``pipeline="two_stage_hq"`` IS THE ONLY WAY TO BUILD SUCH A BODY, and
+        # that is a fact about the schema rather than a trick: ``api/models.py``
+        # pins both fields to their defaults whenever the pipeline is
+        # ``distilled``. So on a 2.5 request that this engine would actually
+        # ACCEPT, these two can only ever hold their defaults and this log line
+        # cannot fire -- the table is a classification that stays honest, not a
+        # message anyone will read. ``_log_ignored`` is a pure read of the
+        # request, so calling it directly is what lets the rule be tested at all.
+        ltx25._log_ignored(
+            _request(pipeline="two_stage_hq", guidance_scale=7.5, num_inference_steps=30)
+        )
     messages = [r.getMessage() for r in caplog.records if "ignores" in r.getMessage()]
     assert len(messages) == 1
-    assert "negative_prompt" in messages[0] and "vsf_scale" in messages[0]
+    assert "guidance_scale" in messages[0] and "num_inference_steps" in messages[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -581,10 +678,8 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 
 #: One VALID chain request body per refused field, same discipline as
 #: :data:`REQUEST_OVERRIDES`: the table drives real ``GenerateChainRequest``
-#: objects rather than asserting against itself, and several entries carry the
-#: companions the SCHEMA couples them to (retake and end_source own the whole
-#: timeline, so they need a single clip; NAG needs a negative prompt). Imported
-#: by tests/test_ltx25_api_guard.py, which drives the same table through HTTP.
+#: objects rather than asserting against itself. Imported by
+#: tests/test_ltx25_api_guard.py, which drives the same table through HTTP.
 #:
 #: ``source_video`` / ``source_audio`` LEFT this table with §3-102's second
 #: increment — they are honoured now, and the requests that carry them live in
@@ -593,12 +688,28 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 #: :data:`CHAIN_ACCEPTED_LORAS`. ``retake`` LEFT WITH THE RETAKE INCREMENT and
 #: lives in :data:`CHAIN_ACCEPTED_RETAKE`. ``end_source`` LEFT WITH THE
 #: END-SOURCE INCREMENT and lives in :data:`CHAIN_ACCEPTED_END_SOURCE` — it was
-#: the last whole MODE here, so every row that remains is an engine-level
-#: field the single path refuses for the same reason.
+#: the last whole MODE here. ``nag_enabled`` LEFT WITH THE NAG/VSF INCREMENT
+#: and lives in :data:`CHAIN_ACCEPTED_NAG`; it was the last row that carried a
+#: schema companion, so every row that remains is a bare one-field override of
+#: an engine-level field the single path refuses for the same reason.
 CHAIN_OVERRIDES: dict[str, dict] = {
-    "nag_enabled": {"nag_enabled": True, "negative_prompt": "blurry, low quality"},
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
+}
+
+
+#: The chain twin of :data:`REQUEST_ACCEPTED_NAG`, same seven fields and same
+#: schema companion — a chain carries ONE negative prompt for every clip and
+#: every stage, so the body shape is the single path's exactly. Imported by
+#: tests/test_ltx25_api_guard.py, which drives the same bodies through HTTP.
+CHAIN_ACCEPTED_NAG: dict[str, dict] = {
+    "nag_enabled": {**_NAG_COMPANION},
+    "negative_prompt": {**_NAG_COMPANION},
+    "nag_scale": {**_NAG_COMPANION, "nag_scale": 7.5},
+    "nag_tau": {**_NAG_COMPANION, "nag_tau": 3.5},
+    "nag_alpha": {**_NAG_COMPANION, "nag_alpha": 0.5},
+    "neg_method": {**_NAG_COMPANION, "neg_method": "vsf"},
+    "vsf_scale": {**_NAG_COMPANION, "neg_method": "vsf", "vsf_scale": 3.0},
 }
 
 
@@ -859,8 +970,10 @@ def test_no_chain_mode_is_refused_any_more():
         "end_source", "retake", "source_video", "source_audio",
         "loras", "reference_video_id",
     }
-    # ...and what remains really is only the engine-level half.
-    assert refused == {"nag_enabled", "pipeline", "vae_mode"}
+    # ...and what remains really is only the engine-level half. ``nag_enabled``
+    # left it with the NAG/VSF increment, which is asserted by its own
+    # acceptance test below rather than only by this set shrinking.
+    assert refused == {"pipeline", "vae_mode"}
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
@@ -879,6 +992,32 @@ def test_the_two_source_modes_are_honoured_not_merely_unlisted():
         f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
     }
     assert not {"source_video", "source_audio"} & set(ltx25.CHAIN_IGNORED_FIELDS)
+
+
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_NAG))
+def test_the_chain_negative_prompt_fields_are_no_longer_refused(case):
+    """The chain twin of the single path's NAG acceptance, field by field."""
+    ltx25.reject_chain(_chain_request(**CHAIN_ACCEPTED_NAG[case]))  # no raise
+
+
+def test_the_chain_negative_prompt_fields_are_honoured_not_merely_unlisted():
+    """Unlisted, ignored and honoured are three different promises — the chain
+    twin of the single-path assertion, and the failure it guards is worse here:
+    a chain is many clips, so a dropped negative prompt is many seconds of video
+    generated without the thing the user asked to avoid."""
+    neg_fields = {
+        "nag_enabled",
+        "negative_prompt",
+        "nag_scale",
+        "nag_tau",
+        "nag_alpha",
+        "neg_method",
+        "vsf_scale",
+    }
+    assert neg_fields <= ltx25.CHAIN_HONOURED_FIELDS
+    assert not neg_fields & {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert not neg_fields & set(ltx25.CHAIN_IGNORED_FIELDS)
+    assert not neg_fields & set(ltx25.CHAIN_GOVERNED_FIELDS)
 
 
 def test_a_plain_chain_is_accepted():
@@ -920,14 +1059,19 @@ def test_the_chain_ignore_table_is_logged_only_when_set(caplog):
 
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="ltx25.runner"):
-        # ``vsf_scale`` for the same reason as the single-path twin above.
+        # ``guidance_scale`` / ``num_inference_steps`` for the same reason as
+        # the single-path twin above, and with the same schema caveat: only a
+        # ``two_stage_hq`` body can carry either at a non-default value, so on
+        # an acceptable 2.5 chain this line cannot fire either.
         ltx25._log_ignored(
-            _chain_request(negative_prompt="blurry", vsf_scale=2.0),
+            _chain_request(
+                pipeline="two_stage_hq", guidance_scale=7.5, num_inference_steps=30
+            ),
             ltx25.CHAIN_IGNORED_FIELDS,
         )
     messages = [r.getMessage() for r in caplog.records if "ignores" in r.getMessage()]
     assert len(messages) == 1
-    assert "negative_prompt" in messages[0] and "vsf_scale" in messages[0]
+    assert "guidance_scale" in messages[0] and "num_inference_steps" in messages[0]
 
 
 def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
@@ -935,21 +1079,26 @@ def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
     and it still happens without loading a worker — the ruling is a pure read of
     the request, so a doomed chain must not pay for a model load.
 
-    The subject was ``end_source`` until that mode was implemented; NAG is the
-    field the engine still refuses on a chain."""
+    The subject was ``end_source`` until that mode was implemented and NAG until
+    the NAG/VSF increment; ``vae_mode`` is a field the engine still refuses on a
+    chain, and it needs no schema companion, so the body under test is the plain
+    chain plus one value."""
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
     with pytest.raises(APIError) as ei:
-        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["nag_enabled"]), output_dir=None)
+        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["vae_mode"]), output_dir=None)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
     assert "LTX 2.3" in ei.value.detail
 
 
 def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
     """The endpoint (P5) and the backend method must not be able to disagree:
-    both go through ``reject_chain``, so there is one message and one code."""
+    both go through ``reject_chain``, so there is one message and one code.
+
+    The subject followed the test above off NAG and onto ``vae_mode`` when the
+    NAG/VSF increment made a negative prompt a thing this engine runs."""
     cfg, _paths, descriptor = ltx25_paths
-    request = _chain_request(**CHAIN_OVERRIDES["nag_enabled"])
+    request = _chain_request(**CHAIN_OVERRIDES["vae_mode"])
     with pytest.raises(APIError) as endpoint_side:
         ltx25.reject_chain(request)
     with pytest.raises(APIError) as backend_side:
@@ -1678,6 +1827,81 @@ def test_chain_payload_carries_the_attention_backend_only_when_asked(tmp_path):
     assert list(captured[0])[-1] == "attention_backend"
 
 
+def test_chain_payload_carries_the_nag_block_only_when_enabled(tmp_path):
+    """The NAG/VSF increment's additive contract, from both sides at once.
+
+    THE DEFAULT DIRECTION IS THE LOAD-BEARING ONE: ``nag_enabled``'s pydantic
+    default is False and the frontend sends the whole schema every time, so a
+    chain that merely CARRIES the seven fields at their defaults must produce a
+    payload byte-identical to the golden -- which is why no golden needed an
+    edit for this increment.
+
+    And when it IS enabled, the block rides LAST, after every acceleration key,
+    so no earlier key order moved."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "plain")
+    assert "nag" not in captured[0]
+
+    # ...nor does a body that spells every negative-prompt field out at its
+    # default, which is what the WebUI actually posts.
+    captured.clear()
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(
+            nag_enabled=False,
+            negative_prompt="",
+            nag_scale=11.0,
+            nag_tau=2.5,
+            nag_alpha=0.25,
+            neg_method="nag",
+            vsf_scale=1.5,
+        ),
+        output_dir=tmp_path / "explicit",
+    )
+    assert "nag" not in captured[0]
+
+    captured.clear()
+    be = _capturing_chain_backend(captured)
+    be.generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_NAG["nag_scale"]), output_dir=tmp_path / "nag"
+    )
+    assert list(captured[0])[-1] == "nag"
+    # KEY FOR KEY 2.3's block, in 2.3's order, and the wire name for the method
+    # is ``method`` rather than the request's ``neg_method``.
+    assert list(captured[0]["nag"]) == [
+        "negative_prompt",
+        "scale",
+        "tau",
+        "alpha",
+        "method",
+        "vsf_scale",
+    ]
+    assert captured[0]["nag"] == {
+        "negative_prompt": "blurry, low quality",
+        "scale": 7.5,
+        "tau": 2.5,
+        "alpha": 0.25,
+        "method": "nag",
+        "vsf_scale": 1.5,
+    }
+
+
+def test_chain_payload_carries_the_vsf_method_and_scale(tmp_path):
+    """VSF is a METHOD SWITCH inside the same block, not a second block: the
+    NAG knobs keep riding unconditionally (the engine reads them only when
+    ``method == "nag"``), and what changes is two values. A payload that dropped
+    ``vsf_scale`` would run VSF at the reference default and no log would say
+    the user's number had been lost."""
+    captured: list[dict] = []
+    _capturing_chain_backend(captured).generate_chain(
+        _chain_request(**CHAIN_ACCEPTED_NAG["vsf_scale"]), output_dir=tmp_path / "vsf"
+    )
+    assert captured[0]["nag"]["method"] == "vsf"
+    assert captured[0]["nag"]["vsf_scale"] == 3.0
+    assert captured[0]["nag"]["scale"] == 11.0  # the NAG knob, still carried
+
+
 def test_chain_outcome_relays_a_sage_echo_verbatim(tmp_path):
     """THE POSITIVE DIRECTION, which the "sdpa" assertions above cannot reach:
     a hard-coded ``attention_used="sdpa"`` would have passed every one of them.
@@ -1846,6 +2070,70 @@ def test_generate_payload_carries_keep_resident_only_when_asked(tmp_path):
     # Appended LAST — after 第1弾's pair — so no earlier key moved.
     assert list(captured[2]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident"]
     assert captured[2]["keep_resident"] is True
+
+
+def test_generate_payload_carries_the_nag_block_only_when_enabled(tmp_path):
+    """The single-path twin of the chain test in section 3d.
+
+    Same two directions, same reason the default one is what matters: the seven
+    fields ride the schema on every request, so a payload that gained a ``nag``
+    key from a DEFAULT body would have broken the golden -- and would have armed
+    a negative prompt on a job that never asked for one."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    fixed = {"seed": 123}
+
+    be.generate(_request(**fixed), tmp_path / "plain")
+    assert "nag" not in captured[0]
+
+    be.generate(
+        _request(
+            nag_enabled=False,
+            negative_prompt="",
+            nag_scale=11.0,
+            nag_tau=2.5,
+            nag_alpha=0.25,
+            neg_method="nag",
+            vsf_scale=1.5,
+            **fixed,
+        ),
+        tmp_path / "explicit",
+    )
+    assert "nag" not in captured[1]
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+    be.generate(_request(**REQUEST_ACCEPTED_NAG["nag_alpha"], **fixed), tmp_path / "nag")
+    # Appended LAST -- after the acceleration keys and after outpaint -- so no
+    # earlier key moved.
+    assert list(captured[2])[-1] == "nag"
+    assert list(captured[2]["nag"]) == [
+        "negative_prompt",
+        "scale",
+        "tau",
+        "alpha",
+        "method",
+        "vsf_scale",
+    ]
+    assert captured[2]["nag"] == {
+        "negative_prompt": "blurry, low quality",
+        "scale": 11.0,
+        "tau": 2.5,
+        "alpha": 0.5,
+        "method": "nag",
+        "vsf_scale": 1.5,
+    }
+
+
+def test_generate_payload_carries_the_vsf_method_and_scale(tmp_path):
+    """The single-path twin: the method switch and its own scale, in the one
+    block. See the chain test for why both are asserted."""
+    captured: list[dict] = []
+    _capturing_backend(captured).generate(
+        _request(**REQUEST_ACCEPTED_NAG["vsf_scale"], seed=123), tmp_path / "vsf"
+    )
+    assert captured[0]["nag"]["method"] == "vsf"
+    assert captured[0]["nag"]["vsf_scale"] == 3.0
+    assert captured[0]["nag"]["scale"] == 11.0
 
 
 def test_generate_payload_carries_the_style_lora_entries(tmp_path):
@@ -2220,6 +2508,10 @@ def test_no_chain_classification_names_a_field_the_schema_does_not_have():
 
 
 def test_every_chain_governor_is_itself_refused():
+    """THE LOOP IS EMPTY SINCE THE NAG/VSF INCREMENT, and that is the correct
+    result rather than a hole: ``CHAIN_GOVERNED_FIELDS`` has no rows left, so
+    there is no governor to check. The test is kept because what it asserts is
+    a RULE about any future row, not a fact about today's three."""
     refused = {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
     for field, governor in ltx25.CHAIN_GOVERNED_FIELDS.items():
         assert governor in refused, f"{field} is governed by {governor}, which is not refused"
@@ -2290,7 +2582,16 @@ def test_chain_honoured_fields_are_exactly_what_generate_chain_acts_on():
 def test_every_governor_is_itself_refused():
     """A sub-parameter is only safe to leave unruled because its GOVERNOR is a
     422 — otherwise a request could make it meaningful and this engine would act
-    on a value it never reads."""
+    on a value it never reads.
+
+    THE LOOP IS EMPTY SINCE THE NAG/VSF INCREMENT: ``GOVERNED_FIELDS`` lost its
+    last three rows (the NAG knobs) when their governor stopped being a 422, so
+    there is nothing to iterate. An empty loop passing is the honest answer to
+    "is every governor refused?" when nothing is governed — and the test stays
+    because it states a rule about the NEXT row, not a fact about the last
+    three. ``test_the_governed_table_is_empty_and_still_exists`` above is what
+    pins the emptiness itself, so this passing vacuously cannot hide a table
+    that was deleted rather than emptied."""
     refused = {f for f, _feat, _p in ltx25.REJECT_TABLE}
     for field, governor in ltx25.GOVERNED_FIELDS.items():
         assert governor in refused, f"{field} is governed by {governor}, which is not refused"

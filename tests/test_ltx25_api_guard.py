@@ -51,12 +51,14 @@ from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_END_SOURCE,
     CHAIN_ACCEPTED_KEEP_RESIDENT,
     CHAIN_ACCEPTED_LORAS,
+    CHAIN_ACCEPTED_NAG,
     CHAIN_ACCEPTED_RETAKE,
     CHAIN_ACCEPTED_SAGE,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
     REQUEST_ACCEPTED_KEEP_RESIDENT,
     REQUEST_ACCEPTED_LORAS,
+    REQUEST_ACCEPTED_NAG,
     REQUEST_ACCEPTED_OUTPAINT,
     REQUEST_ACCEPTED_SAGE,
     REQUEST_OVERRIDES,
@@ -243,21 +245,47 @@ def test_the_guard_runs_before_the_upload_and_lora_lookups(two_family_client):
     素材を指した2.5のリクエストに「その画像は無い」と答えたら、利用者は
     直せないものを直しに行く。
 
-    題材のフィールドは**NAG**である——第3段でLoRAと参照動画が通るように
+    題材のフィールドは**vae_mode**である。第3段でLoRAと参照動画が通るように
     なったので、それらで見たらガードではなく404側が正しい答えになってしまう。
-    2.5に残る拒否フィールドでなければ、この順序は確かめられない。"""
+    NAG/VSF段まではここがNAGだったが、負プロンプトも通るようになったので、
+    2.5にいま残る拒否フィールドへ題材を移した——スキーマの相方も要らない
+    ので、本体は素のリクエストに1値を足しただけになる。"""
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate",
         json={
             **BASE_REQUEST,
-            "nag_enabled": True,
-            "negative_prompt": "blurry, low quality",
+            "vae_mode": "prune_vaed",
             "conditioning_images": [{"image_id": "does-not-exist"}],
         },
     )
     assert r.status_code == 422, r.text
     assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_NAG))
+def test_ltx25_no_longer_refuses_the_negative_prompt(two_family_client, case):
+    """NAG/VSF段の逆転を、HTTPの入口で7フィールド一件ずつ見る。
+
+    ここまでの逆転(LoRA・参照動画など)と違い、素材のidが絡まないので202が
+    そのまま期待値になる——負プロンプトはアップロードでもアダプタでもなく、
+    リクエスト本体の値だけで完結している。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_NAG[case]}
+    )
+    assert r.status_code == 202, f"{case}: {r.text}"
+
+
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_NAG))
+def test_ltx25_no_longer_refuses_the_chain_negative_prompt(two_family_client, case):
+    """chain側の対。1本のnegative_promptが全クリップ・全ステージに効くという
+    スキーマなので、本体の形はSingleと同じである。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_NAG[case])
+    )
+    assert r.status_code == 202, f"{case}: {r.text}"
 
 
 @pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_LORAS))
@@ -452,9 +480,9 @@ def test_the_chain_guard_runs_before_the_upload_lookups(two_family_client):
     ものを直しに行く。ガードは ``upload_store.path_for`` や LoRA の解決に伴う
     404より**先**に居る。
 
-    題材のフィールドは**NAG**である——第2段でV2V・A2Vが、第3段でLoRAと参照動画が
-    通るようになったので、2.5に残る拒否フィールドで見なければ、この順序は
-    確かめられない。"""
+    題材のフィールドは**vae_mode**である——第2段でV2V・A2Vが、第3段でLoRAと
+    参照動画が、NAG/VSF段で負プロンプトが通るようになったので、2.5にいま残る
+    拒否フィールドで見なければ、この順序は確かめられない。"""
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate/chain",
@@ -463,8 +491,7 @@ def test_the_chain_guard_runs_before_the_upload_lookups(two_family_client):
                 {"num_frames": 25, "conditioning_images": [{"image_id": "does-not-exist"}]},
                 {"num_frames": 25},
             ],
-            nag_enabled=True,
-            negative_prompt="blurry, low quality",
+            vae_mode="prune_vaed",
         ),
     )
     assert r.status_code == 422, r.text
@@ -852,15 +879,17 @@ def test_no_chain_mode_is_refused_any_more():
     初めて「エンジンにその道が無い」と判ることになる。
 
     End source段でその最後の1件も外れた。以後この表に残るのはエンジン側の
-    機能(NAG／two_stage_hq／prune_vaed)だけで、chain系のモード名がここへ
-    戻ってきたらそれは方針の変更ではなく退行である。"""
+    機能だけで、chain系のモード名がここへ戻ってきたらそれは方針の変更ではなく
+    退行である。NAG/VSF段でその「エンジン側の機能」も1件減り、残るのは
+    two_stage_hq と prune_vaed の2件になった。"""
     refused = {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
     assert not refused & {
         "source_video", "source_audio",
         "loras", "reference_video_id",
         "retake", "end_source",
+        "nag_enabled",
     }
-    assert refused == {"nag_enabled", "pipeline", "vae_mode"}
+    assert refused == {"pipeline", "vae_mode"}
 
 
 @pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_RETAKE))
@@ -898,16 +927,16 @@ def test_ltx23_still_chains(two_family_client):
 def test_switching_back_to_2_3_lifts_the_chain_refusals(two_family_client):
     """ガードは系統に追随する。往復して初めて「系統を見ている」と言える。
 
-    **題材が変わった**。前段まではEnd sourceで見ていた——2.5に残る最後の
-    拒否モードだったからである。End source段でそれが通るようになり、
-    「この行の題材が枯れたらテストごと畳んでよい」と書いてあったが、畳まずに
-    題材だけ差し替えた。畳むと**系統に追随するという性質そのもの**を見る
-    テストが1つも残らないためである(chain系のモードは全部通るようになったが、
-    エンジン側の機能=NAGはいまも2.5だけが拒否する)。
+    **題材が二度変わった**。もとはEnd sourceで見ていた——2.5に残る最後の
+    拒否モードだったからである。End source段でそれが通るようになったので
+    NAGへ移し、NAG/VSF段でそれも通るようになったので、いまは **vae_mode**
+    で見ている。畳まずに題材を差し替え続けているのは、畳むと**系統に追随する
+    という性質そのもの**を見るテストが1つも残らないためである。
 
-    したがって題材は **NAG** である。モードではないので「素材の切り出し」の
-    ような往復は無いが、見たいのは系統の切り替えに追随することだけである。"""
-    body = _chain_body(**CHAIN_OVERRIDES["nag_enabled"])
+    題材はモードではないので「素材の切り出し」のような往復は無いが、見たいのは
+    系統の切り替えに追随することだけである。相方の要らないフィールドなので、
+    本体は素のchainに1値を足しただけになる。"""
+    body = _chain_body(**CHAIN_OVERRIDES["vae_mode"])
     _activate(two_family_client, "LTX25")
     assert two_family_client.post("/api/v1/generate/chain", json=body).status_code == 422
     _activate(two_family_client, "LTX23")
@@ -1433,10 +1462,14 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     assert "loras" not in features and "reference_video" not in features
     # そしてOutpainting段で ``outpaint`` も外れた。これが**種類を問わず最後の
     # モード名**で、残っていればEditタブの「画角拡張」サブタブが、動くモードの
-    # ために灰色のままになる。いま2.5が公開するのはエンジン側の機能名3つだけ
-    # である。
+    # ために灰色のままになる。
     assert "outpaint" not in features
-    assert len(features) == 3
+    # NAG/VSF段で ``nag`` も外れた。残っていればSingle・Chained両タブの
+    # ネガティブプロンプト欄が——手法の切り替えも3つのつまみも含めて——動く
+    # 機能のために灰色のままになる。いま2.5が公開するのはエンジン側の機能名
+    # 2つだけである。
+    assert "nag" not in features
+    assert len(features) == 2
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

@@ -638,6 +638,18 @@ class Ltx25DiffusionStage(DiffusionStage):
         #: what keeps sage entirely absent from a build nobody armed -- the same
         #: zero-overhead-when-off property the service's own ``install()`` has.
         self._sage_service: Any = None
+        # -- non-CFG negative prompt, NAG / VSF (per build) -------------------
+        #: The shared ``NegPromptService``, attached AFTER construction by
+        #: :class:`~engine25.pipeline25.Ltx25Pipeline` exactly as the sage
+        #: service above is, and ``None`` for the same real and supported
+        #: callers (the selftest, a direct library user).
+        #:
+        #: A SECOND service on the same modules, and the two do not collide:
+        #: sage swaps ``attention_function`` (which this one's replacement
+        #: ``forward`` then calls, so a NAG+sage job really does run both of its
+        #: attention calls on the sage kernel), while this one swaps ``forward``
+        #: itself.
+        self._neg_service: Any = None
 
     # -- LoRA state ----------------------------------------------------------
 
@@ -879,6 +891,13 @@ class Ltx25DiffusionStage(DiffusionStage):
         # placement is free -- and putting it at the end keeps it out of the way
         # of the two things above that DO have ordering constraints.
         self._ensure_sage_installed(model)
+        # LAST, and after sage for one reason that is not arbitrary: the
+        # replacement forward CALLS ``attention_function``, so installing it
+        # after the sage swap means a NAG+sage job's positive and negative
+        # attention both go through the sage kernel. (Nothing would break in the
+        # other order -- both are plain attribute writes read at call time --
+        # but this order is the one the reader would assume.)
+        self._ensure_neg_installed(model)
         logger.info("Transformer ready on %s in %.1fs", target, time.perf_counter() - started)
         return model
 
@@ -911,6 +930,40 @@ class Ltx25DiffusionStage(DiffusionStage):
             # the strip below did not happen at all.)
             logger.info(
                 "SageAttention: stripped %d wrapper(s) from the reused shell before rebuilding",
+                removed,
+            )
+        service.install(model)
+
+    def _ensure_neg_installed(self, model: torch.nn.Module) -> None:
+        """Strip the previous build's NAG/VSF forwards, then install this job's.
+
+        THE SAME SHAPE AS :meth:`_ensure_sage_installed`, IN THE SAME ORDER, FOR
+        THE SAME REASON, and the resemblance is deliberate rather than
+        incidental. The registry hands back the SAME ``LTXModel`` on every build
+        and ``dispose()`` does not touch plain Python attributes, so job N's
+        patched ``forward``s are still on the modules when job N+1 builds. Left
+        alone they would nest one level deeper per build, silently -- a nested
+        patch still returns numbers of the right shape.
+
+        Strip-and-re-install rather than "install once" is also what makes the
+        strip count uninteresting: a resident worker running two negative-prompt
+        jobs in a row finds 96 wrappers here and that is NORMAL. Hence INFO.
+
+        The OFF case costs one traversal that finds nothing (``uninstall``
+        returns 0) plus an ``install`` that returns at its ``state.requested``
+        gate having touched nothing at all -- which is what keeps a plain job
+        identical to the one that ran before this feature existed.
+        """
+        service = self._neg_service
+        if service is None:
+            # Never attached: the selftest / a direct library user. See the
+            # attribute's own note in ``__init__``.
+            return
+        removed = service.uninstall(model)
+        if removed:
+            logger.info(
+                "negative prompt: stripped %d patched forward(s) from the reused "
+                "shell before rebuilding",
                 removed,
             )
         service.install(model)

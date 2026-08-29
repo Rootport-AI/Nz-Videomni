@@ -51,11 +51,16 @@ The v1 generation contract
 --------------------------
 :meth:`Ltx25Pipeline.generate` accepts what LTX 2.5 v1 supports and nothing
 else: prompt, width/height (multiples of 64), ``num_frames`` (8n+1), frame
-rate, seed, and zero or more conditioning images (T2V / I2V). Everything the
-app may still send -- ``negative_prompt``, ``guidance_scale``,
+rate, seed, and zero or more conditioning images (T2V / I2V). What the app may
+still send and this engine does not act on -- ``guidance_scale``,
 ``num_inference_steps`` -- is IGNORED WITH A LOG LINE, never silently: the
 distilled 2.5 model runs a fixed 8 + 3 sigma schedule with no classifier-free
-guidance, so a step count or a CFG scale has nothing to attach to. ``crop_output`` does not appear here at all, by
+guidance, so a step count or a CFG scale has nothing to attach to.
+``negative_prompt`` USED TO BE ON THAT LIST AND NO LONGER IS: a CFG-free model
+cannot be pushed away from an unconditional prediction, but it can be argued
+with inside the single pass it does run, which is what NAG and VSF do (see
+:meth:`Ltx25Pipeline.set_nag_job` and ``engine25/neg_prompt25.py``).
+``crop_output`` does not appear here at all, by
 design: it is an ffmpeg post-process the app already performs on the finished
 mp4 (see ``services/engines/ltx/adapter.py``), engine-independent in both
 engines.
@@ -80,6 +85,13 @@ only one of the four that changes the OUTPUT: sage is a quantized kernel, so a
 sage job and an sdpa job at one seed differ in fine detail, which is why it too
 defaults to off and why the job echoes back what it really ran on
 (:meth:`Ltx25Pipeline.attention_used`).
+
+A FIFTH per-job knob sits beside those four and is a different kind of thing:
+:meth:`Ltx25Pipeline.set_nag_job` arms the job's non-CFG negative prompt (NAG or
+VSF). It is armed and reset in the same place and by the same discipline, but it
+is not an acceleration knob -- it changes what the model computes, on purpose,
+which is why it has its own method rather than a fifth argument to
+``set_acceleration_job``.
 
 Determinism
 -----------
@@ -119,6 +131,11 @@ from engine.gguf import dequant_triton
 # first job that actually asks for sage.
 from engine.transformer.sage_attention_service import SageAttentionService, SageState
 from engine25 import assets_export
+# The non-CFG negative-prompt patch (NAG / VSF). ``NagState``/``NagParams``/
+# ``VsfParams`` are 2.3's own classes, re-exported by engine25's module -- see
+# its docstring on why the algebra is shared and only the replacement
+# ``Attention.forward`` is 2.5's own.
+from engine25.neg_prompt25 import NagParams, NagState, NegPromptService, VsfParams
 from engine25.gguf_gemma4 import (
     build_embeddings_processor_builder,
     build_text_encoder_builder,
@@ -536,6 +553,7 @@ class Ltx25PromptEncoder(PromptEncoder):
         *,
         text_encoder_builder: Any,
         embeddings_processor_builder: Any,
+        neg_state_provider: Callable[[], NagState] | None = None,
         alloc_trim_strategy: AllocatorTrimStrategy = AllocatorTrimStrategy.TRIM,
     ) -> None:
         super().__init__(
@@ -553,6 +571,17 @@ class Ltx25PromptEncoder(PromptEncoder):
         self._embeddings_processor_builder = embeddings_processor_builder
         self.progress: ProgressCallback | None = None
         self.vram: _Vram | None = None
+        #: The job's NAG/VSF state, read through a CLOSURE on every call rather
+        #: than captured by value -- one long-lived encoder, many jobs, and the
+        #: same pattern the sage service uses on this engine. ``None`` is a real
+        #: and supported state (a direct library user, the selftest): it means
+        #: "never encode a negative prompt", which is what :meth:`__call__`
+        #: falls back to.
+        self._neg_state_provider = neg_state_provider
+        #: The tokenizer the last :meth:`_build_text_encoder` produced, kept
+        #: because the VSF slice needs it AFTER the encoder itself has been
+        #: freed -- see :meth:`_build_text_encoder`.
+        self._tokenizer: Any = None
 
     # -- sub-phase timers ----------------------------------------------------
     #
@@ -572,10 +601,22 @@ class Ltx25PromptEncoder(PromptEncoder):
     # what "the peak so far, at this point in the window" means.
 
     def _build_text_encoder(self) -> Any:
-        """Official build, timed as ``10a_te_build`` (inside ``10_prompt_encode``)."""
+        """Official build, timed as ``10a_te_build`` (inside ``10_prompt_encode``).
+
+        ALSO WHERE THE TOKENIZER IS STASHED, and this is the only place it can
+        be: the official ``__call__`` builds the encoder inside a ``with`` block
+        and frees it before returning, so by the time the VSF slice needs the
+        prompt's real token count the encoder object is gone. What is kept is
+        the tokenizer alone -- vocabulary, no weights -- and it is REPLACED on
+        every build, so it can never go stale: the encoder is rebuilt once per
+        job, and the tokenizer that comes with it is the one that produced this
+        job's embeddings.
+        """
         started = time.perf_counter()
         try:
-            return super()._build_text_encoder()
+            encoder = super()._build_text_encoder()
+            self._tokenizer = getattr(encoder, "tokenizer", None)
+            return encoder
         finally:
             if self.vram is not None:
                 self.vram.record("10a_te_build", time.perf_counter() - started)
@@ -590,18 +631,139 @@ class Ltx25PromptEncoder(PromptEncoder):
                 self.vram.record("10b_ep_build", time.perf_counter() - started)
 
     def __call__(self, prompts: list[str], **kwargs: Any) -> Any:
+        """The official encode, plus this job's negative prompt when it has one.
+
+        THE BRANCH IS THE POINT. A job that did not ask for a negative prompt
+        takes the ``super().__call__(prompts, **kwargs)`` line below -- the same
+        call, with the same arguments, that stood here before this feature
+        existed -- so its encode is not merely equivalent to what it was, it is
+        the same code path. That is the structural half of "a non-NAG job is
+        unchanged"; routing every job through the negative-prompt helper and
+        having it no-op would not have been.
+        """
         if self.progress is not None:
             self.progress(STAGE_ENCODE, 0, 1)
         if self.vram is not None:
             self.vram.reset()
         started = time.perf_counter()
         try:
-            return super().__call__(prompts, **kwargs)
+            state = None if self._neg_state_provider is None else self._neg_state_provider()
+            if state is None or not state.requested:
+                return super().__call__(prompts, **kwargs)
+            return self._call_with_negative(state, prompts, **kwargs)
         finally:
             if self.vram is not None:
                 self.vram.record("10_prompt_encode", time.perf_counter() - started)
             if self.progress is not None:
                 self.progress(STAGE_ENCODE, 1, 1)
+
+    def _call_with_negative(self, state: NagState, prompts: list[str], **kwargs: Any) -> Any:
+        """Encode the negative prompt in the SAME Gemma pass, then slice it off.
+
+        ONE EXTRA LIST ENTRY, AT THE END. The official encoder tokenizes every
+        prompt to the same fixed 1024 length and stacks them into a single ``[N,
+        1024]`` batch, so appending costs one more row through Gemma and one
+        more row through the connectors -- not a second model load, which is the
+        expensive part. Appending at the END rather than the front matters for
+        one reason: ``enhance_first_prompt`` rewrites ``prompts[0]``, and the
+        negative prompt must never be the one that gets enhanced. (2.5 never
+        enables it, but the ordering costs nothing to get right.)
+
+        THE TAIL IS SLICED OFF BEFORE RETURNING, and a caller that somehow got
+        the unsliced list would not limp along: ``DistilledPipeline.__call__``
+        unpacks the result as ``(ctx_p,) = ...`` and ``chain25`` zips it against
+        its prompt list with ``strict=True``. Both fail immediately and loudly.
+
+        The reshape below is ``TransformerArgsPreprocessor._prepare_context``'s,
+        and deliberately only its tail: that method is ``caption_projection``
+        (None on this engine's 22B checkpoints -- the projection lives in the
+        text encoder) followed by ``context.view(batch, -1, x.shape[-1])``. So
+        the negative context reaches attn2 at exactly the representation stage
+        the positive one does, and ``NegPromptService.install`` refuses the job
+        outright if a future checkpoint ever brings the projection back.
+        """
+        params = state.params
+        assert params is not None  # implied by state.requested at the call site
+        outputs = list(super().__call__([*prompts, params.negative_prompt], **kwargs))
+        if len(outputs) != len(prompts) + 1:
+            raise Ltx25PipelineError(
+                f"the prompt encoder returned {len(outputs)} outputs for "
+                f"{len(prompts) + 1} prompts, so the negative prompt cannot be "
+                "separated from the positive ones."
+            )
+        negative = outputs.pop()
+
+        video_ctx = negative.video_encoding
+        audio_ctx = negative.audio_encoding
+        if video_ctx is None or audio_ctx is None:
+            raise Ltx25PipelineError(
+                "the negative prompt encoded to a missing video or audio "
+                "context; this engine's AV transformer needs both."
+            )
+        video_ctx = video_ctx.view(video_ctx.shape[0], -1, video_ctx.shape[-1])
+        audio_ctx = audio_ctx.view(audio_ctx.shape[0], -1, audio_ctx.shape[-1])
+
+        if isinstance(params, VsfParams):
+            n_real = self._real_token_count(params.negative_prompt, video_ctx, audio_ctx)
+            video_ctx = video_ctx[:, :n_real, :]
+            audio_ctx = audio_ctx[:, :n_real, :]
+
+        state.set_contexts(video_ctx, audio_ctx)
+        logger.info(
+            "negative prompt encoded alongside %d positive prompt(s): "
+            "video=%s audio=%s (method=%s)",
+            len(prompts),
+            tuple(int(d) for d in video_ctx.shape),
+            tuple(int(d) for d in audio_ctx.shape),
+            "vsf" if isinstance(params, VsfParams) else "nag",
+        )
+        return outputs
+
+    def _real_token_count(
+        self, prompt: str, video_ctx: torch.Tensor, audio_ctx: torch.Tensor
+    ) -> int:
+        """How many of the encoded tokens are the prompt's OWN. VSF only.
+
+        WHY THE FRONT OF THE SEQUENCE IS THE RIGHT SLICE ON THIS ENGINE:
+        ``EmbeddingsProcessor.create_embeddings`` runs every feature tensor
+        through ``_compute_right_pad_order`` before the connectors see it -- a
+        STABLE descending sort of the binary mask, i.e. "valid tokens first,
+        pads after, relative order preserved". The real tokens are therefore at
+        the FRONT by construction. 2.3 gets the same guarantee from a re-pack
+        INSIDE the connector; on 2.5 it happens one layer up, which is why this
+        docstring cites the 2.5 source rather than restating 2.3's.
+
+        WHY VSF NEEDS IT AND NAG DOES NOT: VSF concatenates the negative
+        keys/values into ONE shared softmax and NEGATES the negative values. The
+        tail of the encoded sequence is not padding -- it is the connector's
+        learned register embeddings, real trained data -- so sign-flipping it
+        would inject a large, prompt-independent repulsion. NAG combines two
+        SEPARATE attention outputs and is unharmed, which is why it keeps the
+        full context.
+
+        Fail-loud rather than guess: an absent tokenizer, or a count that does
+        not fit the encoded length, means the encode and the count came from
+        different places.
+        """
+        tokenizer = self._tokenizer
+        if tokenizer is None:
+            raise Ltx25PipelineError(
+                "VSF needs the negative prompt's real token count, but no "
+                "tokenizer was captured from the text-encoder build. Slicing is "
+                "a correctness requirement for VSF (see this method's "
+                "docstring), so this fails rather than silently sign-flipping "
+                "learned register embeddings."
+            )
+        pairs = tokenizer.tokenize_with_weights(prompt)["gemma"]
+        n_real = int(sum(int(weight) for _token, weight in pairs))
+        seq_len = int(min(video_ctx.shape[1], audio_ctx.shape[1]))
+        if n_real <= 0 or n_real > seq_len:
+            raise Ltx25PipelineError(
+                f"the tokenizer reports {n_real} real tokens for a negative "
+                f"context of length {seq_len} -- expected 0 < N <= seq_len. "
+                "Refusing to guess."
+            )
+        return n_real
 
 
 # ---------------------------------------------------------------------------
@@ -639,12 +801,16 @@ def validate_geometry(width: int, height: int, num_frames: int) -> None:
 #: of the *unsupported* fields become a 422 (Phase 5); this list is the set that
 #: is safe to drop on the floor whatever the value.
 IGNORED_FIELDS: dict[str, str] = {
-    "negative_prompt": "2.5 distilled runs without classifier-free guidance",
+    # ``negative_prompt`` / ``neg_method`` / ``vsf_scale`` LEFT THIS LIST with
+    # the NAG/VSF commit. They used to sit here as "no negative-prompt
+    # mechanism in v1", which was true until this engine got one: the request's
+    # negative prompt is now encoded alongside the positive one and its
+    # cross-attention contribution is real (see :meth:`Ltx25Pipeline.set_nag_job`
+    # and ``engine25/neg_prompt25.py``). Leaving them here would make the worker
+    # log "ignored" for the three fields the feature is made of.
     "guidance_scale": "2.5 distilled runs without classifier-free guidance",
     "num_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
     "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
-    "neg_method": "no negative-prompt mechanism in v1",
-    "vsf_scale": "no negative-prompt mechanism in v1",
     # ``attention_backend`` LEFT WITH THE SAGE COMMIT. It used to sit here as
     # "v1 is SDPA-only", which was true until this engine got a
     # ``SageAttentionService``; it is now ACTED ON (see
@@ -821,6 +987,16 @@ class Ltx25Pipeline:
         #   builds -- a chain that lost its latch between segments would retry a
         #   kernel already known to be broken, once per segment.
         self._sage = SageState()
+        # * the non-CFG negative prompt (NAG / VSF) is a FIFTH shape, and the
+        #   only per-job knob that changes what the model COMPUTES rather than
+        #   how fast it computes it. Its state is one ``NagState`` -- 2.3's own
+        #   class -- read by TWO closures: the prompt encoder's, which fills in
+        #   the encoded negative contexts, and the diffusion stage's service,
+        #   which patches the 96 text cross-attention forwards on every build.
+        #   Held here, like the sage state, because the stage is rebuilt-into
+        #   many times per job and the encoded contexts have to outlive every
+        #   one of those builds.
+        self._nag = NagState()
 
         started = time.perf_counter()
         self.vram.reset()
@@ -902,6 +1078,12 @@ class Ltx25Pipeline:
         # ``copy.copy`` (the attribute rides along), chain25 drives this very
         # instance, and a stage built any other way simply has ``None`` there.
         stage._sage_service = SageAttentionService(lambda: self._sage)
+        # Same post-construction attachment, same closure, same reason: one
+        # long-lived service that always sees the CURRENT job's request. The
+        # stage strips and re-installs on every transformer build (see
+        # ``Ltx25DiffusionStage._ensure_neg_installed``), which is what a reused
+        # model shell requires.
+        stage._neg_service = NegPromptService(lambda: self._nag)
 
         # -- substitution 2: the prompt encoder --------------------------------
         # The transformer GGUF leads the EmbeddingsProcessor's path list: the
@@ -935,6 +1117,10 @@ class Ltx25Pipeline:
             self.device,
             text_encoder_builder=text_encoder_builder,
             embeddings_processor_builder=embeddings_builder,
+            # The other half of the negative-prompt wiring: the encoder fills the
+            # state the stage's service reads. Passed as a closure for the same
+            # reason the service gets one -- this object outlives every job.
+            neg_state_provider=lambda: self._nag,
         )
         prompt_encoder.vram = self.vram
         pipeline.prompt_encoder = prompt_encoder
@@ -1070,6 +1256,55 @@ class Ltx25Pipeline:
         if keep_resident != self._keep_resident_enabled:
             _swap_keep_resident(self._te_registry, self._te_builder, keep_resident)
             self._keep_resident_enabled = keep_resident
+
+    def set_nag_job(self, nag: "NagParams | VsfParams | None") -> None:
+        """Arm (or clear, with ``None``) this job's non-CFG negative prompt.
+
+        ONE ASSIGNMENT, and deliberately a SEPARATE method from
+        :meth:`set_acceleration_job` rather than a sixth argument to it. That
+        method's whole contract is "these knobs do not change the output"
+        (``attention_backend`` is the acknowledged exception and says so); a
+        negative prompt changes it on purpose, and folding the two together
+        would make one docstring have to say both things.
+
+        CALLED ON EVERY JOB, ``None`` INCLUDED. That is what gives stale-clear
+        semantics on a resident worker: ``NagState.set_params`` drops any
+        previously encoded contexts along with the params, so a NAG job followed
+        by a plain one cannot leak the prior negative prompt -- and a caller
+        that armed params but never encoded them hits ``install``'s
+        "requested but not ready" ``RuntimeError`` instead of silently reusing a
+        stale encoding.
+
+        THE ORDERING CONSTRAINT is the strictest in this class, and it is the
+        reason this sits OUTSIDE the worker's try block like the acceleration
+        arm does: the negative prompt has to be encoded during the prompt
+        encode, which happens before the first transformer build, and the
+        service reads ``state.requested`` at build time. Arming after
+        ``generate`` had started would produce a job that asked for a negative
+        prompt, ran without one, and said nothing.
+
+        **This method cannot fail** -- it is a single attribute write through
+        ``NagState.set_params`` -- which is what keeps the arm/reset pairing
+        outside this class safe. The fail-loud gate for an unknown METHOD name
+        lives at the protocol edge (``engine25.worker._resolve_nag``), where
+        refusing the job is still possible.
+        """
+        self._nag.set_params(nag)
+
+    def reset_nag_job(self) -> None:
+        """End-of-job counterpart: drop the request and the encoded contexts.
+
+        **Never raises** (three attribute writes inside ``NagState.reset``), for
+        the same reason :meth:`reset_acceleration_job` must not: it runs in the
+        worker's ``finally``, where an exception would replace the job's real
+        error with this one.
+
+        SYMMETRIC, unlike ``keep_resident``: nothing here is worth keeping. The
+        encoded contexts are two tensors sized to ONE job's negative prompt, and
+        holding them past the job would both leak VRAM on a resident worker and
+        risk the next job's build finding a populated state it never asked for.
+        """
+        self._nag.reset()
 
     def reset_acceleration_job(self) -> None:
         """End-of-job counterpart: freeze the verdicts and disarm.
@@ -1412,6 +1647,12 @@ class Ltx25Pipeline:
         self._te_builder = None
         self._te_registry = None
         self._keep_resident_enabled = False
+        # The negative prompt's encoded contexts are two live tensors on the
+        # GPU. Nothing above reaches them -- the state is owned by this object,
+        # not by the stage or the encoder -- so the collector below would keep
+        # them alive for as long as this object is. Never raises, so it is safe
+        # in a teardown that is otherwise best-effort.
+        self.reset_nag_job()
         gc.collect()
         try:
             cleanup_memory()

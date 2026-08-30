@@ -480,7 +480,7 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
 
 **導入口は「本体＋ベースモデル別」の2階建てである 【オーナー裁定】。** `setup.bat` は **Nz-Videomni 本体のインストーラ**であり、最初に試していただくAIとして **LTX 2.3 だけを一緒に導入する**（お試し用の1本という位置づけである）。**別のベースモデルは、そのモデル専用の導入バッチで足す**——ダブルクリックすると、ダウンロード → 配置 → ドロップダウンで選べる状態、までが一続きで走るものを想定している。
 
-**最初の1本が `install-LTX25.bat` である（2026-08-30 実装）。** ダブルクリックすると `scripts/install_model.ps1 -BaseModel LTX25`（日本語の入口）を経て、既存のインストーラ本体 `scripts/install_ltx.ps1` を `-BaseModel LTX25 -SkipVenv -SkipMigrate` で呼ぶ。実装の記録と実測は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111 と[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82。
+**最初の1本が `install-LTX25.bat` である（2026-08-30 実装）。** ダブルクリックすると `scripts/install_model.ps1 -BaseModel LTX25`（日本語の入口）を経て、既存のインストーラ本体 `scripts/install_ltx.ps1` を `-BaseModel LTX25 -SkipVenv -SkipMigrate` で呼ぶ。実装の記録と実測は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82（**2026-08-30 に開発機ゲートA0〜A8・サブマシンゲートG0〜G7とも全合格で完結**）と[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-111。
 
 > **「どの記述子をどのバッチが担当するか」のスイッチは、`install_ltx.ps1` の `-BaseModel` である。** 起票時の懸案は、`install_ltx.ps1` が `scripts/manifests/*.json` を一括で読むため、`20-ltx25.json` の `downloads[]` を埋めた瞬間に `setup.bat` が LTX 2.5 まで取りにいってしまう（本体を入れるだけで 60GB 超のダウンロードになる）ことだった。**解いた形は「既定値を、`setup.bat` が同梱する集合そのものにする」である**——`-BaseModel` は記述子の `id` を並べる配列で、既定値は LTX 2.3 と共用前処理器。引数なしで呼ばれる `setup.bat` の経路は既定値の担当分しか見ないので、**`setup.ps1` を1行も触らずに「本体インストーラの取得対象は変わらない」が構造的に保証される。**
 >

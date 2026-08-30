@@ -438,7 +438,7 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 
 > **2026-08-30追記（上の本文は当時のまま）**: **上の2エントリは`scripts/manifests/20-ltx25.json`へ投入した。正本はその現物であり、上の案文はもう最新ではない。**
 >
-> 投入できるようになったのは、`scripts/install_ltx.ps1`に**「どの記述子をこのRUNが担当するか」を決める`-BaseModel`**が入ったからである。その既定値は「`setup.bat`が同梱する集合」＝LTX 2.3と共用前処理器なので、`downloads[]`を埋めても`setup.bat`はLTX 2.5を取りにいかない。導線は`install-LTX25.bat` → `scripts/install_model.ps1` → `install_ltx.ps1`。設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2、実装と実測の記録は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111 と[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82。
+> 投入できるようになったのは、`scripts/install_ltx.ps1`に**「どの記述子をこのRUNが担当するか」を決める`-BaseModel`**が入ったからである。その既定値は「`setup.bat`が同梱する集合」＝LTX 2.3と共用前処理器なので、`downloads[]`を埋めても`setup.bat`はLTX 2.5を取りにいかない。導線は`install-LTX25.bat` → `scripts/install_model.ps1` → `install_ltx.ps1`。設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2、実装と実測の記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-111 と[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82。
 >
 > **案と現物の差は2点である。**
 >

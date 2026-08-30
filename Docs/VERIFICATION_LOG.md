@@ -8862,7 +8862,7 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 
 **「監督裁定・オーナー追認待ち」と書いてある下流の文書は、本節をもって格上げする。** 対象は生きた文書4つ（[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)・[`PENDING_TASKS.md`](PENDING_TASKS.md)・[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)）と、追記専用のフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §92 である。**生きた文書は直接書き換え、`DEVLOG.md` は追記で格上げする**（同書は追記専用のため）。**これは §79.12(3) が C1・C2 について取ったのと同じ手順である。**
 
-**コード内のコメントが1箇所だけ残っている。** `engine25/chain25.py` の `seg_clear_kf` の代入行の直前にある `SUPERVISOR RULING (OWNER RATIFICATION PENDING)` は、本節の時点でまだそのままである——**本節を書いた作業が文書のみの範囲（コードは0行）だったため、あえて触っていない。** **次にこのファイルへ触る作業のとき、`(OWNER RATIFICATION PENDING)` を外して本節を指すこと。** **なおこれは表記の格上げであって、述語そのものは1文字も変わらない。**
+**コード内のコメントも格上げ済みである。** `engine25/chain25.py` の `seg_clear_kf` の代入行の直前にあった `SUPERVISOR RULING (OWNER RATIFICATION PENDING)` は、**`SUPERVISOR RULING, OWNER RATIFIED 2026-08-30 (VERIFICATION_LOG 78.15)` へ書き換えた**（本節の直後の別コミット）。**コメント行の折り返しが変わっただけで、述語も実測値も1文字も変わっていない**——`seg_clear_kf` の式そのものには触れていない。
 
 #### (4) 状態
 

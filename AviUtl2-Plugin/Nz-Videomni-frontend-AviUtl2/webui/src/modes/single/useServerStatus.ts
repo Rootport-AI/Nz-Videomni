@@ -25,32 +25,43 @@ export type ServerStatusState =
    * reads as "ready, go ahead and generate" and earns the user a failure.
    * Loading is also the stronger claim of the two when both could apply:
    * a queue count is stale bookkeeping next to a worker that is being torn
-   * down and rebuilt. */
-  | { kind: "loading-models"; status: StatusResponse }
+   * down and rebuilt.
+   *
+   * `status` is `null` when this WebUI's OWN `POST /pipeline/load` raised the
+   * flag (`UseServerStatusDeps.localLoading`): there is no `/status` body
+   * behind that claim, only the request in flight. Nothing reads `.status` on
+   * this variant — the two readers (`AppShell`, `SettingsPanel`) narrow to
+   * `online`/`busy` first. */
+  | { kind: "loading-models"; status: StatusResponse | null }
   /** Reachable, but a job is currently occupying the single-job queue. */
   | { kind: "busy"; status: StatusResponse }
   /** Reachable bridge and backend, but an unexpected error code came back. */
   | { kind: "error"; message: string };
 
-/** Poll period. 2.5s, NOT the 10s this used to be (2026-08-20).
+/** Poll period.
  *
- * The badge is the only thing that tells the user the engine is being rebuilt,
- * and a rebuild is not always long: swapping one GGUF checkpoint on a warm
- * machine takes about 8 seconds (`Docs/VERIFICATION_LOG.md` §68.5 measured
- * exactly that for default -> Sulphur). At 10s a whole rebuild could start and
- * finish between two polls, so `loading-models` was never rendered — which is
- * what the owner saw. 2.5s puts at least three polls inside an 8s load.
+ * A load this WebUI starts itself no longer needs to be caught by the poll at
+ * all: the issuer hands its `POST /pipeline/load` to `JobsContext`'s
+ * `trackPipelineLoad`, and `localLoading` reports both edges at 0ms. Chasing
+ * short loads with a short period — the reason this was once 2.5s — solved a
+ * problem that no longer exists.
  *
- * A single-step interval rather than a fast/slow state machine, deliberately:
- * a two-speed poller can only speed up AFTER it has seen `state === "loading"`
- * once, which is precisely the observation the short load denies it. `GET
- * /status` is a cheap read (`api/status.py`: in-memory fields plus one
- * `torch.cuda.mem_get_info`; ~2ms round trip on the real machine, per the
- * plugin log) against localhost, and the job ledger already polls every 2s
- * next to it, so this changes no order of magnitude. */
-const DEFAULT_INTERVAL_MS = 2_500;
+ * What is left for the poll is a safety net for the things this WebUI cannot
+ * see for itself: (1) a load started from another entry point (the Gradio UI,
+ * the MCP server), and (2) the backend process appearing or disappearing.
+ * Neither is urgent to the millisecond, so 10s.
+ *
+ * Accepted by design: an EXTERNAL load shorter than one period can begin and
+ * end between two polls and never show a badge. That window belongs to a
+ * client that is not this one, which is showing its own progress. */
+const DEFAULT_INTERVAL_MS = 10_000;
 
-/** Polls server connectivity on mount and every `intervalMs` (default 2.5s),
+/** The `loading-models` state raised by our own in-flight `POST
+ * /pipeline/load` rather than by a `GET /status` body. Module-level so the
+ * returned object is referentially stable across renders. */
+const LOCAL_LOADING: ServerStatusState = { kind: "loading-models", status: null };
+
+/** Polls server connectivity on mount and every `intervalMs` (default 10s),
  * per Docs/API_REFERENCE.md §11 step 1. Two independent failure axes are
  * distinguished: the native bridge being unreachable (checked via `ping`)
  * vs. the backend HTTP server being unreachable (checked via `GET /status`,
@@ -58,6 +69,15 @@ const DEFAULT_INTERVAL_MS = 2_500;
 export interface UseServerStatusDeps {
   nativeBridge?: NativeBridge;
   apiClient?: ApiClient;
+  /** This WebUI's own `POST /pipeline/load` is in flight
+   * (`JobsContext.pipelineLoading`). While true the hook reports
+   * `loading-models` outright, without waiting for a poll to confirm it.
+   *
+   * Accepted degradation: `offline`/`error` are hidden for that window too. A
+   * dead backend rejects the POST, which lowers the flag and lets the next
+   * fetch surface `offline`; a hung one is bounded by `loadPipeline`'s own
+   * 600s timeout — the same window the dropdown was already disabled for. */
+  localLoading?: boolean;
 }
 
 /** `deps` lets tests bind a purpose-configured mock bridge instead of the
@@ -66,6 +86,7 @@ export function useServerStatus(intervalMs = DEFAULT_INTERVAL_MS, deps: UseServe
   state: ServerStatusState;
   retry: () => void;
 } {
+  const localLoading = deps.localLoading ?? false;
   const nativeBridge = deps.nativeBridge ?? defaultBridge;
   const client = deps.apiClient ?? defaultApiClient;
   const [state, setState] = useState<ServerStatusState>({ kind: "checking" });
@@ -115,5 +136,17 @@ export function useServerStatus(intervalMs = DEFAULT_INTERVAL_MS, deps: UseServe
     return () => clearInterval(timer);
   }, [check, intervalMs]);
 
-  return { state, retry: () => void check() };
+  // Falling edge (true -> false): our load just finished, so fetch once
+  // immediately instead of leaving a stale body on screen for up to a full
+  // period. The ref seeds from the current value, so neither the first mount
+  // nor StrictMode's double-invoke fires it.
+  const prevLocalLoadingRef = useRef(localLoading);
+  useEffect(() => {
+    if (prevLocalLoadingRef.current && !localLoading) void check();
+    prevLocalLoadingRef.current = localLoading;
+  }, [localLoading, check]);
+
+  const retry = useCallback(() => void check(), [check]);
+
+  return { state: localLoading ? LOCAL_LOADING : state, retry };
 }

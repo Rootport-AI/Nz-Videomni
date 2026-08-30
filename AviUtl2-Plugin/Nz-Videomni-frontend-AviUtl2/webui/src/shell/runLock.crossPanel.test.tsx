@@ -107,11 +107,11 @@ interface PanelsProps {
    * routes an intent at it. */
   a2vKey?: number;
   i2vKey?: number;
-  /** `JobsContext.hasActiveJob`, as both screens pass it down. */
-  hasActiveJob?: boolean;
+  /** `JobsContext.serverBusy`, as both screens pass it down. */
+  serverBusy?: boolean;
 }
 
-function Panels({ bridge, a2vKey = 0, i2vKey = 0, hasActiveJob = false }: PanelsProps) {
+function Panels({ bridge, a2vKey = 0, i2vKey = 0, serverBusy = false }: PanelsProps) {
   // The Create screen owns the KEYFRAMES panel Batch A2V borrows its `Shared`
   // image from — mirrored here so the A2V panel can actually reach `canStart`.
   const keyframes = useKeyframes(FALLBACK_APP_CONFIG, { nativeBridge: bridge });
@@ -129,7 +129,7 @@ function Panels({ bridge, a2vKey = 0, i2vKey = 0, hasActiveJob = false }: Panels
           icLoraActive={false}
           keyframes={keyframes}
           nativeBridge={bridge}
-          hasActiveJob={hasActiveJob}
+          serverBusy={serverBusy}
         />
       </div>
       <div data-testid="i2v-panel">
@@ -137,7 +137,7 @@ function Panels({ bridge, a2vKey = 0, i2vKey = 0, hasActiveJob = false }: Panels
           key={`i2v-${i2vKey}`}
           config={FALLBACK_APP_CONFIG}
           chain={makeChain()}
-          hasActiveJob={hasActiveJob}
+          serverBusy={serverBusy}
           nativeBridge={bridge}
         />
       </div>
@@ -195,11 +195,11 @@ describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両�
   /** Renders both panels and brings each to the point where its own Start
    * button is enabled (folder committed, folder scanned, shared keyframe
    * ready). Returns the render handle and the gated-submit release. */
-  async function readyBothPanels(opts: { hasActiveJob?: boolean } = {}) {
+  async function readyBothPanels(opts: { serverBusy?: boolean } = {}) {
     const user = userEvent.setup();
     const base = createMockBridge({ delayMs: 0, fs: foldersFs() });
     const { wrapped, release } = gateChainSubmit(base);
-    let props: PanelsProps = { bridge: wrapped, ...(opts.hasActiveJob ? { hasActiveJob: true } : {}) };
+    let props: PanelsProps = { bridge: wrapped, ...(opts.serverBusy ? { serverBusy: true } : {}) };
     const view = render(
       <LanguageProvider>
         <Panels {...props} />
@@ -334,7 +334,7 @@ describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両�
   // リマウントされると走行そのものは孤児化する（既知の限界）。修正前はそれに
   // 加えて**共有ロックが永久に取り残され**、i2v-longが二度と開始できなくなって
   // いた。いまはロックの返却が実行Promise側にぶら下がっているので、孤児化した
-  // 走行が終わればロックは必ず戻る。その間はStartが`hasActiveJob`で無効化され、
+  // 走行が終わればロックは必ず戻る。その間はStartが`serverBusy`で無効化され、
   // 案内文も出る（黙って何も起きないボタンにしない）。
   it("A2V走行中にCreate側パネルがリマウントされても、ロックは取り残されず、その間のStartは無効＋案内", async () => {
     const { user, view, release, remount } = await readyBothPanels();
@@ -344,7 +344,7 @@ describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両�
 
     // 走行中にCreate画面がリマウントされる（右クリック経由のintentルーティング）。
     // ジョブ台帳から見れば、孤児化した走行のジョブはまだ動いている。
-    remount({ a2vKey: 1, hasActiveJob: true });
+    remount({ a2vKey: 1, serverBusy: true });
     openBoth(view.container);
 
     const start = within(a2vPanel()).getByRole("button", { name: en.batch.startButton });
@@ -363,7 +363,7 @@ describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両�
   // ジョブは動き続ける。ロックだけに頼っていたバッチA2Vは、この状態でStartが
   // 押せてしまい、押しても何も起きない（あるいは409を撃つ）ままだった。
   it("再読み込み後のようにロックが無くてもジョブが動いていれば、バッチA2VのStartは無効＋案内", async () => {
-    const { user } = await readyBothPanels({ hasActiveJob: true });
+    const { user } = await readyBothPanels({ serverBusy: true });
 
     expect(getRunLockOwner()).toBeNull();
     const start = within(a2vPanel()).getByRole("button", { name: en.batch.startButton });

@@ -28,15 +28,15 @@ import { clearRetakeCarryOver } from "./useRetakeForm";
  * 「席が空いていない」で無言の no-op になり、緑のまま何も検証しなくなる。
  */
 
-/** ジョブ台帳のスタブ。`hasActiveJob` だけはテストごとに切り替えたい（busy
+/** ジョブ台帳のスタブ。`serverBusy` だけはテストごとに切り替えたい（busy
  * ガード）ので、可変の 1 箱越しに読ませる。`vi.hoisted` なのは `vi.mock` の
  * ファクトリが巻き上げられて先に走るため。 */
-const jobsStub = vi.hoisted(() => ({ hasActiveJob: false }));
+const jobsStub = vi.hoisted(() => ({ serverBusy: false }));
 
 vi.mock("../../jobs/JobsContext", () => ({
   useJobsContext: () => ({
     jobs: [],
-    hasActiveJob: jobsStub.hasActiveJob,
+    serverBusy: jobsStub.serverBusy,
     cancellingIds: new Set<string>(),
     deletingIds: new Set<string>(),
     cancelJob: () => Promise.resolve(),
@@ -187,7 +187,7 @@ afterEach(async () => {
   await rollbackReservedPlacement(createBridge());
   // 🔁 の持ち越しもモジュール状態なので、残すと次のテストへ漏れる。
   clearRetakeCarryOver();
-  jobsStub.hasActiveJob = false;
+  jobsStub.serverBusy = false;
 });
 
 describe("EditScreen — Retake の通し", () => {
@@ -352,7 +352,7 @@ describe("EditScreen — Retake の通し", () => {
 
   // ── ① busy ガード（オーナー目視 2026-08-10） ─────────────────────────────
   it("サーバが busy の間は Generate が押せず、ラベルが busy 表記になる", async () => {
-    jobsStub.hasActiveJob = true;
+    jobsStub.serverBusy = true;
     renderRetake();
     const button = await screen.findByRole("button", { name: "Busy…" });
     expect(button).toBeDisabled();

@@ -282,6 +282,45 @@ def _pin_loading(client) -> None:
     pm.state = pm.STATE_LOADING
 
 
+def test_generate_while_loading_is_409_before_a_job_is_ever_created(client23):
+    """The synchronous guard in api/generate.py: a load in flight must refuse
+    BEFORE a job record exists, not 202 the request and fail it later inside
+    the job thread."""
+    _pin_loading(client23)
+    payload = {
+        "prompt": "A red ball rolling on a white floor",
+        "width": 384, "height": 256, "num_frames": 17,
+        "num_inference_steps": 8, "guidance_scale": 1.0, "seed": 42,
+        "pipeline": "distilled",
+    }
+    r = client23.post("/api/v1/generate", json=payload)
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "PIPELINE_LOADING"
+    assert client23.get("/api/v1/jobs").json() == []
+
+
+def test_generate_chain_while_loading_is_409_before_a_job_is_ever_created(client23):
+    """Same synchronous guard in api/generate_chain.py."""
+    _pin_loading(client23)
+    payload = {
+        "prompt": "a serene mountain lake at dawn",
+        "width": 384,
+        "height": 256,
+        "frame_rate": 24.0,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "seed": 123,
+        "pipeline": "distilled",
+        "overlap_frames": 2,
+        "overlap_strength": 0.5,
+        "clips": [{"num_frames": 25}, {"num_frames": 25}],
+    }
+    r = client23.post("/api/v1/generate/chain", json=payload)
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "PIPELINE_LOADING"
+    assert client23.get("/api/v1/jobs").json() == []
+
+
 def test_a_second_load_while_loading_is_409(client23):
     _pin_loading(client23)
     r = client23.post("/api/v1/pipeline/load")
@@ -311,20 +350,34 @@ def test_unload_is_the_way_out_of_a_stuck_loading_state(client23):
 def test_auto_load_during_a_load_fails_the_job_readably(client23):
     """Auto-load-on-generate goes through the same guard, where the 409 is
     re-wrapped as GENERATION_FAILED — the operator must still be able to read
-    WHY out of the job record."""
+    WHY out of the job record.
+
+    This is the LAST LINE OF DEFENSE behind the synchronous 409 in
+    api/generate.py (see test_generate_while_loading_is_409_before_a_job_is_ever_created
+    above): it must keep working even though the API layer now refuses the
+    request before a job ever exists. Reached directly through
+    ``job_store.create`` + ``pipeline_manager.run_job`` (bypassing HTTP, and
+    therefore the new synchronous guard) rather than through
+    ``POST /generate``, which now returns 409 before creating a job — the same
+    pattern as tests/test_smoke.py's ``test_run_job_honours_cancel_before_dispatch``.
+    """
+    from api.models import GenerateRequest, JobStatus
+
     _pin_loading(client23)
-    payload = {
-        "prompt": "A red ball rolling on a white floor",
-        "width": 384, "height": 256, "num_frames": 17,
-        "num_inference_steps": 8, "guidance_scale": 1.0, "seed": 42,
-        "pipeline": "distilled",
-    }
-    r = client23.post("/api/v1/generate", json=payload)
-    assert r.status_code == 202, r.text
-    job = client23.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
-    assert job["status"] == "failed"
-    assert "GENERATION_FAILED" in job["error"]
-    assert "読み込み中" in job["error"]
+    ctx = client23.app_context
+    request = GenerateRequest(
+        prompt="A red ball rolling on a white floor",
+        width=384, height=256, num_frames=17,
+        num_inference_steps=8, guidance_scale=1.0, seed=42,
+        pipeline="distilled",
+    )
+    job = ctx.job_store.create(request)
+
+    ctx.pipeline_manager.run_job(job)
+
+    assert job.status == JobStatus.failed
+    assert "GENERATION_FAILED" in job.error
+    assert "読み込み中" in job.error
 
 
 # --------------------------------------------------------------------------- #

@@ -54,7 +54,7 @@ function renderBatchForm(
     gen?: BatchGenerationValues;
     nag?: NagSettings;
     acceleration?: AccelerationSettings;
-    hasActiveJob?: boolean;
+    serverBusy?: boolean;
   } = {},
 ) {
   const prompt = opts.prompt ?? "a prompt";
@@ -65,7 +65,7 @@ function renderBatchForm(
       nativeBridge: bridge,
       nag: opts.nag,
       acceleration: opts.acceleration,
-      ...(opts.hasActiveJob !== undefined ? { hasActiveJob: opts.hasActiveJob } : {}),
+      ...(opts.serverBusy !== undefined ? { serverBusy: opts.serverBusy } : {}),
     });
   });
 }
@@ -1381,12 +1381,12 @@ describe("useBatchForm", () => {
 
     // §1-7 相互ロック 第2段: the run lock is browser-volatile, so it cannot
     // protect the job slot across a reload — nor against a job no batch panel
-    // started. `hasActiveJob` is the server-derived gate that does.
+    // started. `serverBusy` is the server-derived gate that does.
     it("blocks Start while a job is active, even with the run lock free, and submits nothing if called anyway", async () => {
       const fs = wavFolder([{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }]);
       const base = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
       const { wrapped, chainBodies } = captureChainBridge(base);
-      const rendered = renderBatchForm(wrapped, { hasActiveJob: true });
+      const rendered = renderBatchForm(wrapped, { serverBusy: true });
       const { result } = rendered;
       await act(async () => {
         await result.current.pickWavDir();

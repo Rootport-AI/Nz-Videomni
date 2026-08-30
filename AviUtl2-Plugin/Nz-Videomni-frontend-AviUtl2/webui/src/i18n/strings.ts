@@ -946,9 +946,11 @@ export const en = {
     /** §1-7 相互ロック: the shared run lock (`shell/runLock.ts`) is held by
      * Batch i2v-long on the Clip Chain screen. Blocks Start. */
     lockedByOther: "Batch i2v-long is running on the Clip Chain screen. Only one batch runs at a time — wait for it to finish, or stop it there.",
-    /** §1-7 相互ロック 第2段: the backend's single job slot is busy — the same
-     * gate Batch i2v-long's `blockReasons.jobActive` states. Blocks Start. */
-    jobActive: "Another job is still running. Only one generation runs at a time — wait for it to finish before starting the batch.",
+    /** §1-7 相互ロック 第2段: the backend is occupied — its single job slot is
+     * taken, or a model load is in flight — the same gate Batch i2v-long's
+     * `blockReasons.jobActive` states. The KEY keeps its original name (it is
+     * the block-reason code the form pushes); only the copy covers both. */
+    jobActive: "The server is busy: another job is running, or a model is being loaded. Only one runs at a time — wait for it to finish before starting the batch.",
     /** §3-98 P5: the loaded base model's engine cannot run chained generation,
      * which is what every batch row is. Disables the whole panel. */
     unavailableOnBaseModel: "Batch A2V is not available on the selected base model (it uses chained generation). Switch the base model in the header to use it.",
@@ -1062,7 +1064,7 @@ export const en = {
       promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's own Prompt column.",
       promptTooLong: "The combined prompt is too long. Shorten it to 2000 characters or less.",
       unknownLoraTag: "The prompt has a LoRA name that does not exist. Fix or remove the tag.",
-      jobActive: "Another job is still running. Wait for it to finish.",
+      jobActive: "The server is busy: another job is running, or a model is being loaded. Wait for it to finish.",
       /** The shared run lock (`shell/runLock.ts`) is held by the OTHER batch
        * panel (Batch A2V, on the Create screen) — only one batch runs at a
        * time. */
@@ -1476,9 +1478,9 @@ export const en = {
     },
     generateButton: "Generate",
     generatingButton: "Generating…",
-    /** U-R1: Generate button label while another job is already running
-     * (`hasActiveJob`) — the button is disabled, not queued (reservation
-     * removed 2026-07-17). */
+    /** U-R1: Generate button label while the server is occupied — another job
+     * is running, or a model is being loaded (`JobsContext.serverBusy`). The
+     * button is disabled, not queued (reservation removed 2026-07-17). */
     busyButton: "Busy…",
   },
   /** Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): persistent, single-seat
@@ -2375,7 +2377,7 @@ export const ja: Strings = {
     fpsMismatch: "FPSまたはDURATIONがスキャン時と異なります。フレーム数はバッチ開始時に現在の値で自動的に再計算されます。",
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",
-    jobActive: "ほかの生成が実行中です。生成は同時に1つしか動かせません。終わるまで待ってから開始してください。",
+    jobActive: "サーバーが処理中です（ほかの生成が実行中か、モデルを読み込み中です）。同時に1つしか動かせないため、終わるまで待ってから開始してください。",
     unavailableOnBaseModel: "バッチA2Vは選択中のベースモデルでは使えません（連結生成を使うため）。使うには、上のベースモデルを切り替えてください。",
     skipReasons: {
       "wav-only-alpha": "wav形式でないか、長さを読み取れませんでした",
@@ -2446,7 +2448,7 @@ export const ja: Strings = {
       promptEmpty: "プロンプトを入力してください（クリップチェーンの共通プロンプトか、行ごとのプロンプト欄のどちらかで）。",
       promptTooLong: "合成後のプロンプトが長すぎます。2000文字以内にしてください。",
       unknownLoraTag: "プロンプトに存在しないLoRA名が含まれています。タグを修正するか削除してください。",
-      jobActive: "他のジョブが実行中です。終わるまで待ってください。",
+      jobActive: "サーバーが処理中です（他のジョブが実行中か、モデルを読み込み中です）。終わるまで待ってください。",
       lockedByOther: "作成画面のバッチA2Vが実行中です。バッチは同時に1つしか実行できません。停止するか、終わるまで待ってください。",
     },
     promptRowIssues: {

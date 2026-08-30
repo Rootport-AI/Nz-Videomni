@@ -109,27 +109,41 @@ describe("AppShell — header base-model dropdown", () => {
     expect(loadCalls(requests)).toHaveLength(0);
   });
 
-  it("is disabled while the switch it started is still in flight", async () => {
+  it("is disabled — and the badge says 'loading models' — while its own switch is in flight", async () => {
     // A real load takes minutes; a second pick during it would only earn a 409
-    // PIPELINE_LOADING, so the control locks itself for the duration. (The
-    // sibling guard — disabled while a generation job holds the queue — is
-    // driven by the `/status` poll, which in this harness runs against the
-    // app-wide singleton bridge rather than the injected one, so it is not
-    // reachable from here.)
+    // PIPELINE_LOADING, so the control locks itself for the duration.
+    //
+    // Both halves are now the SAME fact: `JobsContext.serverBusy`. The
+    // dropdown's sibling guard (a generation job holding the queue) comes from
+    // the job-ledger poll, which in this harness runs against the app-wide
+    // singleton bridge rather than the injected one, so it is still not
+    // reachable from here — but the load half is, because the WebUI issued the
+    // `POST` itself and `trackPipelineLoad` reports it at 0ms with no `/status`
+    // poll involved. That is the whole point of the change, so the badge is
+    // asserted right here alongside the disabled control.
+    //
     // The in-flight window IS the fixture's `delayMs`, and the assertion below
     // runs after it. 40ms was enough when this file ran alone and lost the race
     // under the full suite (2026-08-22, flaky in CI-shaped runs, unrelated to
     // what was being changed); 400ms buys an order of magnitude of headroom
     // without making the test wait for it — the `waitFor` at the end settles as
-    // soon as the load resolves.
-    const { select, container } = await renderApp({ delayMs: 400 });
+    // soon as the load resolves. A FULL LTX 2.5 install is opted into because
+    // the default fixture answers 422 for it, which would end the flight before
+    // there is anything to observe.
+    const { select, container } = await renderApp({
+      delayMs: 400,
+      ltx25Install: "full",
+      supportedBaseModels: ["LTX23", "LTX25"],
+    });
     const user = userEvent.setup();
 
     await user.selectOptions(select, "LTX25");
 
     expect(select).toBeDisabled();
+    expect(screen.getByText("Loading models…")).toBeInTheDocument();
     // …and released once the attempt settles, whichever way it went.
     await toastText(container);
     await waitFor(() => expect(select).toBeEnabled());
+    await waitFor(() => expect(screen.queryByText("Loading models…")).not.toBeInTheDocument());
   });
 });

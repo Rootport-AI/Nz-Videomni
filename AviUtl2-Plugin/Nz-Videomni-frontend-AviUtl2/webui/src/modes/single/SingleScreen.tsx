@@ -841,11 +841,11 @@ function SingleScreenBody({
   const overflowKeyframes = findOverflowFrameIdxs(keyframes.items, form.values.numFrames, frameIdxMultiple, gridOffset);
   const hasOverflowKeyframes = overflowKeyframes.length > 0;
 
-  // MJ-1: the form is only frozen while a submit is in flight; a running job
-  // (`hasActiveJob`) leaves the form editable and blocks the Generate button
-  // alone.
+  // MJ-1: the form is only frozen while a submit is in flight; an occupied
+  // server (`serverBusy` — a running job, or a model load) leaves the form
+  // editable and blocks the Generate button alone.
   const submitting = submitState.phase === "submitting";
-  const hasActiveJob = jobsCtx.hasActiveJob;
+  const serverBusy = jobsCtx.serverBusy;
 
   const handleGenerate = () => {
     // Group3 item11: an attached source audio switches submission to
@@ -878,11 +878,11 @@ function SingleScreenBody({
   }, [form.audioFramesAdjustedEvent, strings, toasts]);
 
   // The Generate button's own disabled/label logic (`.generation-column`,
-  // above the ledger). `hasActiveJob` blocks only this button (label
+  // above the ledger). `serverBusy` blocks only this button (label
   // `busyButton`); everything else is a genuine "can't submit yet" guard.
   const generateDisabled =
     submitting ||
-    hasActiveJob ||
+    serverBusy ||
     !form.isValid ||
     keyframes.isUploading ||
     // A source-audio upload still in flight must block submit — until it
@@ -904,7 +904,7 @@ function SingleScreenBody({
     hasOverflowKeyframes;
   const generateLabel = submitting
     ? strings.single.generatingButton
-    : hasActiveJob
+    : serverBusy
       ? strings.single.busyButton
       : strings.single.generateButton;
 
@@ -913,7 +913,7 @@ function SingleScreenBody({
   // gates that also feed `generateDisabled` above (each condition here is the
   // SAME one used there): keyframe/audio uploads in flight, an IC-LoRA route
   // whose reference video isn't ready yet, and an out-of-range keyframe.
-  // `submitting`/`hasActiveJob` are deliberately NOT reasons — the button's own
+  // `submitting`/`serverBusy` are deliberately NOT reasons — the button's own
   // label already changes for those. `overflowKeyframes` reuses the keyframe
   // out-of-range copy (its old standalone banner below is removed, folded here).
   const generateReasonCodes: string[] = [
@@ -1028,7 +1028,7 @@ function SingleScreenBody({
         acceleration={acceleration}
         /* §1-7 相互ロック 第2段 (2026-07-31): the same job-slot gate the Chain
            screen already hands to Batch i2v-long. */
-        hasActiveJob={hasActiveJob}
+        serverBusy={serverBusy}
         /* §3-98 P5: the loaded base model's engine cannot chain, so this
            panel's every job would come back 422. */
         unavailable={batchUnavailable}

@@ -21,7 +21,6 @@ import { dispatchCreateCommand } from "../timeline/createLiveCommands";
 import { fileNameFromPath } from "../modes/single/keyframeUtils";
 import { LanguageProvider, useStrings } from "../i18n/LanguageContext";
 import { JobsProvider, useJobsContext } from "../jobs/JobsContext";
-import { hasActiveJob } from "../jobs/useJobsPoll";
 import { downloadAndInsertVideo } from "../jobs/downloadAndInsert";
 import { createApiClient } from "../api/client";
 import type { ApiClient } from "../api/client";
@@ -156,10 +155,14 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // dependency (which would re-create the callback on every 2s poll). Updated
   // every render. `AppShellBody` renders inside `JobsProvider` (see `AppShell`),
   // so `useJobsContext` is in scope here.
-  const { jobs } = useJobsContext();
+  const { jobs, pipelineLoading, serverBusy, trackPipelineLoad } = useJobsContext();
   const jobsRef = useRef<JobResponse[]>(jobs);
   jobsRef.current = jobs;
-  const { state: serverStatus, retry } = useServerStatus();
+  // Same mirroring, same reason, for the app-wide "the server is occupied"
+  // fact (a job in flight OR a model load we started).
+  const serverBusyRef = useRef<boolean>(serverBusy);
+  serverBusyRef.current = serverBusy;
+  const { state: serverStatus, retry } = useServerStatus(undefined, { localLoading: pipelineLoading });
   const baseUrl = useBaseUrl();
   const [mode, setMode] = useState<AppMode>("single");
   // W8 (owner requirement 2026-07-21 #1): the right-click prefill resolution/fps
@@ -180,8 +183,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // it a fixture server with a specific install state; production passes no
   // bridge and the hook falls back to the app-wide singleton.
   const baseModelDeps = useMemo(
-    () => (nativeBridge ? { apiClient: createApiClient(nativeBridge) } : {}),
-    [nativeBridge],
+    () => ({
+      ...(nativeBridge ? { apiClient: createApiClient(nativeBridge) } : {}),
+      trackLoad: trackPipelineLoad,
+    }),
+    [nativeBridge, trackPipelineLoad],
   );
   const baseModels = useBaseModels(baseModelDeps);
   // §3-98 P5: the mode tabs the LOADED base model's engine cannot run.
@@ -766,12 +772,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // 素材系/カーソル系の 9 起点まで一緒に塞がってしまう —— あちらが見ているのは
     // 「席が ⏳生成中 で埋まっているか」であって、「サーバが忙しいか」ではない。
     //
-    // 判定は `jobsRef`（毎描画更新）越し。`handleRoute` は `useCallback` で
-    // `jobs` を依存に取っていない（2 秒ポーリングのたびに作り直さないため）ので、
-    // context を直読みすると初回の `false` に凍りつく。述語 `hasActiveJob` は
-    // `jobs/useJobsPoll.ts` から借りたもので、Retake パネルの Generate ボタンが
-    // 使っているのと同じ 1 本。
-    if (action === "retakeRange" && hasActiveJob(jobsRef.current)) {
+    // 判定は `serverBusyRef`（毎描画更新）越し。`handleRoute` は `useCallback`
+    // でポーリング由来の値を依存に取っていない（ポーリングのたびに作り直さない
+    // ため）ので、context を直読みすると初回の `false` に凍りつく。読むのは述語
+    // ではなく `JobsContext` が組み立て済みの真偽値 `serverBusy` そのもので、
+    // Retake パネルの Generate ボタンが使っているのと同じ 1 本。
+    if (action === "retakeRange" && serverBusyRef.current) {
       showNote("warning", strings.notes.reservationBusy);
       return;
     }
@@ -1130,17 +1136,15 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       <header className="app-header">
         {/* Base-model dropdown (§3-97 P7), in the old static "Nz-Videomni"
             title's spot. Options and labels come from the server's
-            `base_models[]`; picking one loads it immediately. Disabled while a
-            switch is in flight (a second pick would only earn a 409
-            PIPELINE_LOADING) and while a generation job holds the queue (the
-            server would answer 409 JOB_BUSY) — pre-empting both guards here
-            keeps the user out of an error they cannot act on, while the server
-            still enforces them for anyone else. */}
+            `base_models[]`; picking one loads it immediately. Disabled
+            whenever the server is occupied (`serverBusy`) — a second pick
+            would only earn a 409, and pre-empting that here keeps the user out
+            of an error they cannot act on. */}
         <select
           className="app-title-select"
           aria-label={strings.toolVersion.ariaLabel}
           value={baseModels.current}
-          disabled={baseModels.switching || serverStatus.kind === "busy"}
+          disabled={serverBusy}
           onChange={(e) => handleBaseModelChange(e.target.value)}
         >
           {baseModels.options.length === 0 ? (

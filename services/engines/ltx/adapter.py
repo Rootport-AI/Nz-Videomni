@@ -767,9 +767,9 @@ class LTXRunner:
         authoritative — see ``_RealBackend.sage_available`` and
         ``PipelineManager.acceleration_status_block``.
 
-        Evaluated ONCE and cached for the process lifetime: GET /status polls
-        every 10s, and installing sageattention into the engine venv requires a
-        server restart to take effect anyway.
+        Evaluated ONCE and cached for the process lifetime: installing
+        sageattention into the engine venv requires a server restart to take
+        effect anyway, so the availability cannot change mid-process.
         """
         if self._sage_probe_cache is None:
             self._sage_probe_cache = self._probe_sage_files()

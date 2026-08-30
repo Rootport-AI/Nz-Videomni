@@ -3,6 +3,7 @@ import { apiClient as defaultApiClient, BackendApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
 import type { BaseModelBlock } from "../api/types";
 import type { AppMode } from "./AppShell";
+import type { TrackPipelineLoad } from "../jobs/JobsContext";
 
 /**
  * Backs the header's BASE MODEL dropdown (multi-engine groundwork §3-97 P7;
@@ -227,6 +228,11 @@ export function baseModelInstaller(id: string): string {
 
 export interface UseBaseModelsDeps {
   apiClient?: ApiClient;
+  /** `JobsContext.trackPipelineLoad`. Wrapping the switch in it is what makes
+   * the header badge light up the instant the user picks an entry, instead of
+   * on whichever `GET /status` poll happens to land next. Optional so tests
+   * (and any caller with no provider above it) can omit it. */
+  trackLoad?: TrackPipelineLoad;
 }
 
 export interface UseBaseModelsResult {
@@ -237,9 +243,6 @@ export interface UseBaseModelsResult {
    * `GET /models` lands (or on an older backend that declares none), which is
    * the caller's cue to show its placeholder. */
   current: string;
-  /** A switch is in flight — disable the dropdown (a second pick would only
-   * earn a 409 `PIPELINE_LOADING` from the server). */
-  switching: boolean;
   /** Feature names the LOADED base model's engine cannot run (§3-98 P5).
    *
    * Read off `active`, never off `current`: while a switch is in flight the
@@ -285,6 +288,7 @@ function classifySwitchFailure(err: unknown): BaseModelSwitchOutcome {
 
 export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult {
   const client = deps.apiClient ?? defaultApiClient;
+  const track = deps.trackLoad;
   const [options, setOptions] = useState<BaseModelOption[]>([]);
   const [active, setActive] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -330,24 +334,31 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
       }
 
       setPending(id);
-      try {
-        // Empty selection + a base model: the server resolves that base's own
-        // categories from its descriptor defaults / remembered selection
-        // (§6.3). The WebUI has no business naming files for a base model it
-        // has not listed yet.
-        await client.loadPipeline({}, id);
-        if (mountedRef.current) setActive(id);
-        await refresh();
-        return { kind: "switched", id };
-      } catch (err) {
-        return classifySwitchFailure(err);
-      } finally {
-        // Guard 4: unconditional, so every failure path above reverts the
-        // display to `active` — the base model still actually loaded.
-        if (mountedRef.current) setPending(null);
-      }
+      // Tracked from here, so the flag's window is exactly `pending`'s window.
+      // The wrapped body is total — every path returns a
+      // `BaseModelSwitchOutcome` — so `trackPipelineLoad` never sees a
+      // rejection to re-raise.
+      const attempt = (async (): Promise<BaseModelSwitchOutcome> => {
+        try {
+          // Empty selection + a base model: the server resolves that base's own
+          // categories from its descriptor defaults / remembered selection
+          // (§6.3). The WebUI has no business naming files for a base model it
+          // has not listed yet.
+          await client.loadPipeline({}, id);
+          if (mountedRef.current) setActive(id);
+          await refresh();
+          return { kind: "switched", id };
+        } catch (err) {
+          return classifySwitchFailure(err);
+        } finally {
+          // Guard 4: unconditional, so every failure path above reverts the
+          // display to `active` — the base model still actually loaded.
+          if (mountedRef.current) setPending(null);
+        }
+      })();
+      return track ? track(attempt) : attempt;
     },
-    [client, options, refresh],
+    [client, options, refresh, track],
   );
 
   const unsupportedFeatures = useMemo(
@@ -362,7 +373,6 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
   return {
     options,
     current: pending ?? active,
-    switching: pending !== null,
     unsupportedFeatures,
     disabledModes,
     switchBaseModel,

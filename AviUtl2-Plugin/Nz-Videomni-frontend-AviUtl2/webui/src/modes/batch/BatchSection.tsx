@@ -43,12 +43,13 @@ export interface BatchSectionProps {
    * value to the frozen `ACCELERATION_DEFAULTS` sentinel) — Batch has no
    * acceleration UI of its own, same as `nag` above. */
   acceleration?: AccelerationSettings | undefined;
-  /** §1-7 相互ロック 第2段 (2026-07-31): `JobsContext.hasActiveJob` — a
-   * generation (single or from the other batch) is in flight, so this batch may
-   * not start. The exact counterpart of `BatchI2vLongSection`'s prop of the
-   * same name; see `UseBatchFormDeps.hasActiveJob` for why the shared run lock
-   * alone was not enough. */
-  hasActiveJob?: boolean;
+  /** §1-7 相互ロック 第2段 (2026-07-31): `JobsContext.serverBusy` — the backend
+   * is occupied by a generation (single or from the other batch) or by a model
+   * load, so this batch may not start. The exact counterpart of
+   * `BatchI2vLongSection`'s prop of the same name; see
+   * `UseBatchFormDeps.serverBusy` for why the shared run lock alone was not
+   * enough. */
+  serverBusy?: boolean;
   /** §3-98 P5: the loaded base model's engine cannot run this panel at all.
    *
    * Batch A2V is a `POST /generate/chain` driver, and LTX 2.5 (v1) refuses the
@@ -86,7 +87,7 @@ export function BatchSection({
   nativeBridge,
   nag,
   acceleration,
-  hasActiveJob = false,
+  serverBusy = false,
   unavailable = false,
 }: BatchSectionProps) {
   const strings = useStrings();
@@ -95,7 +96,7 @@ export function BatchSection({
     ...(nativeBridge !== undefined ? { nativeBridge } : {}),
     ...(nag !== undefined ? { nag } : {}),
     ...(acceleration !== undefined ? { acceleration } : {}),
-    hasActiveJob,
+    serverBusy,
   });
 
   // The manifest's `stat` column is only safe to hand-edit (folder pickers,

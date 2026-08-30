@@ -122,7 +122,7 @@ function failingLorasClient(): ApiClient {
 
 interface RenderOpts {
   chain?: ChainSnapshotSource;
-  hasActiveJob?: boolean;
+  serverBusy?: boolean;
   config?: AppConfig;
   apiClient?: ApiClient;
 }
@@ -130,13 +130,13 @@ interface RenderOpts {
 function renderForm(bridge: NativeBridge, opts: RenderOpts = {}) {
   const initialProps = {
     chain: opts.chain ?? makeChain(),
-    hasActiveJob: opts.hasActiveJob ?? false,
+    serverBusy: opts.serverBusy ?? false,
   };
   const config = opts.config ?? FALLBACK_APP_CONFIG;
   const apiClient = opts.apiClient ?? lorasClient([]);
   return renderHook(
-    (props: { chain: ChainSnapshotSource; hasActiveJob: boolean }) =>
-      useBatchI2vLongForm(config, props.chain, props.hasActiveJob, {
+    (props: { chain: ChainSnapshotSource; serverBusy: boolean }) =>
+      useBatchI2vLongForm(config, props.chain, props.serverBusy, {
         nativeBridge: bridge,
         apiClient,
         // Test-only: the production 1s job poll would make every
@@ -571,9 +571,9 @@ describe("useBatchI2vLongForm", () => {
     expect(result.current.blockReasons).not.toContain("unknownLoraTag");
   });
 
-  it("hasActiveJobでjobActive", () => {
+  it("serverBusyでjobActive", () => {
     const bridge = createMockBridge({ delayMs: 0, fs: imgFolder([]) });
-    const { result } = renderForm(bridge, { hasActiveJob: true });
+    const { result } = renderForm(bridge, { serverBusy: true });
 
     expect(result.current.blockReasons).toContain("jobActive");
   });
@@ -726,7 +726,7 @@ describe("useBatchI2vLongForm", () => {
     act(() => result.current.start());
 
     // 走行中にChain画面が編集された、を模す。
-    rerender({ chain: makeChain({ prompt: "AFTER EDIT" }), hasActiveJob: false });
+    rerender({ chain: makeChain({ prompt: "AFTER EDIT" }), serverBusy: false });
     expect(result.current.templatePreview.prompt).toBe("AFTER EDIT");
     expect(result.current.templatePreview).not.toBe(startedTemplate);
 

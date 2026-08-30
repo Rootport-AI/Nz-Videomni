@@ -49,7 +49,7 @@ export interface GenerationFormProps {
   /** U-R1 MJ-1: the whole form is only disabled while a submit is in flight
    * (`submitState.phase === "submitting"`) — a running job no longer freezes
    * the form, only the Generate button (which `SingleScreen` disables
-   * separately via `hasActiveJob`). */
+   * separately via `serverBusy`). */
   disabled: boolean;
   configFallbackWarning: boolean;
   /** `deriveGenerationParams`'s human-readable reasons for the auto-chosen

@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.43**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-08-30**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.45**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-08-31**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -93,6 +93,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.42 | 2026-08-30 | **LTX 2.5 の撮り直し（Retake）と素材（末尾）（End source）がオーナーの目視ゲート（G8）に合格したことを反映（文書のみ。凍結 API 契約〔§6〕・実装・既定値のいずれにも変更は無い）**。判定は **AviUtl2 の操作パネルからの実機生成**で行われ、撮り直しは4観点（プロンプトどおりに再生成される／継ぎ目が分からない／「Picture and sound」で音声も生成される／「Picture only (keep the original sound)」で音声はそのまま）、逆順 Chained は3観点（プロンプトどおり／継ぎ目で数フレームの早期収束／音声の継ぎ目がはっきり分かる）で確認された。**後の2つはオーナー裁定で「想定の範囲内なので合格」**であり、2026-08-18 の「素材（末尾）の複数クリップは推奨外・劣化は仕様として許容する」という裁定がそのまま維持されている。**§6.10 の該当段落から「目視ゲートは未了」の断りを外した。** **ただし監督裁定2件（R-1 の天井の読み・M8 のキャリー基準）はオーナー追認待ちのままである。** 結果の正本は `Docs/VERIFICATION_LOG.md` §78.14。**あわせて §0.1 版メタが v0.5.40 のまま止まっていた（改訂履歴は v0.5.41 まで進んでいた）のを、本版で揃えた。** |
 | v0.5.43 | 2026-08-30 | **撮り直し（Retake）と素材（末尾）（End source）の監督裁定2件について、オーナーの追認が出たことを反映（文書のみ。凍結 API 契約〔§6〕・実装・既定値のいずれにも変更は無い）**。**R-1**＝のりしろの一致度を判定する天井は**同一の処理鎖を通った天井（読みB）**を正とする、**M8**＝先頭フレームのキーフレーム印の述語は**キャリー基準**を採る、というどちらの監督裁定も、**オーナー本人が「監督裁定を追認するよ」と明示して確定した。** **これで §78 系に未決の項目は1つも残っていない。** 出荷構成は動いていない——変わったのは判断の根拠で、**いまは「オーナーが読みBとキャリー基準を選んだ」と読んでよい**（以前は読んではならなかった）。結果の正本は `Docs/VERIFICATION_LOG.md` **§78.15**。 |
 | v0.5.44 | 2026-08-30 | **ベースモデル別の導入バッチ（`install-LTX25.bat`）の実装を反映（文書のみ。API・実装への変更は無い）**。**§2.5**（入口が「本体＝`setup.bat`＋ベースモデル別＝`install-<記述子の id>.bat`」の2階建てになったこと、`install_ltx.ps1` の `-BaseModel` が絞るのはダウンロード段と検証表だけで読み込み・検証・移行と `INSTALLED_PATHS.txt` は絞らないこと、`hf download` の固定回数リトライ）／**§4.4**（`install-LTX25.bat` と `scripts/install_model.ps1` をディレクトリ構成へ追加）／**§5.1b**（検証表の行数の書き写しをやめ、行の作られ方＝担当記述子の期待ファイル＋固定3行の記述に置換）。設計判断の正本は `Docs/MULTI_ENGINE_DESIGN.md` §6.2、実装と実測は `Docs/VERIFICATION_LOG.md` §82 と `Docs/PENDING_TASKS_CLOSED.md` §3-111・§3-126。 |
+| v0.5.45 | 2026-08-31 | **モデル読み込み中の `POST /generate` / `POST /generate/chain` を、ジョブを作る前に同期で 409 `PIPELINE_LOADING` で断るようにした（凍結 API 契約〔§6〕への加算）**。**加算であって縮小ではない**——従来この状況は `202` でジョブを受理したあと、ジョブスレッド内で `load()` が同じ 409 に当たって `GENERATION_FAILED` として失敗する、という成功しない経路だった。そこへ至る前に断るコードが増えただけで、以前は成功していたが今は失敗する、という状況は存在しない。**§6.1**（`POST /generate` の主なステータス欄へ `PIPELINE_LOADING` を追加）／**§6.1 の `POST /generate/chain` 補足**（同旨を1文追加）／**§6.8**（エラー表の `PIPELINE_LOADING` 行に本挙動を追記）／**§6.9(f)**（同）を更新した。実装は `services/pipeline_manager.py` の公開メソッド `reject_if_loading()`（判定と断り文自体は既存の `_reject_while_loading()` のまま）を `api/generate.py` と `api/generate_chain.py` の単一ジョブガード直前で呼ぶだけであり、`api/models.py` と `engine/` は無変更。**あわせてフロントエンドのヘッダーバッジ「モデル読み込み中…」を`POST /pipeline/load`往復に同期させ、全タブの生成ボタンを「ジョブ実行中またはモデル読み込み中」の1本のルールへ統一した**（設計は `Docs/MULTI_ENGINE_DESIGN.md` §6.5・§5.5(b)、フロントエンド実装ログは同 `Docs/DEVLOG.md` §98）。**オーナーの実機ゲートは本版の時点で未了である**（`Docs/PENDING_TASKS.md` §1-24 が完了条件の正本）。 |
 
 ### 0.2 スコープ
 
@@ -569,7 +570,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | POST | `/api/v1/pipeline/load` | パイプラインを明示ロード（任意ボディで**ベースモデル**とカテゴリ別モデルを選択可＝§6.9） | 要 | 200 / 404(MODEL_NOT_FOUND) / 409(JOB_BUSY, **PIPELINE_LOADING**) / 422(MODEL_FILE_MISSING, MODEL_INCOMPATIBLE) / 503(PIPELINE_LOAD_FAILED) |
 | POST | `/api/v1/pipeline/unload` | パイプラインをアンロード | 要 | 200 / 409(JOB_BUSY) |
 | POST | `/api/v1/upload/image` | 最小 I2V 用画像をアップロードし `image_id` を返す | 要 | 200 / 400(UPLOAD_INVALID_TYPE, UPLOAD_TOO_LARGE) |
-| POST | `/api/v1/generate` | 生成ジョブを開始し job_id を返す | 要 | **202** / 404(IMAGE_NOT_FOUND) / 409(JOB_BUSY) / 422(VALIDATION_ERROR, **FEATURE_UNSUPPORTED**) |
+| POST | `/api/v1/generate` | 生成ジョブを開始し job_id を返す | 要 | **202** / 404(IMAGE_NOT_FOUND) / 409(JOB_BUSY, **PIPELINE_LOADING**) / 422(VALIDATION_ERROR, **FEATURE_UNSUPPORTED**) |
 | GET | `/api/v1/jobs` | メモリ上のジョブ一覧を返す | 不要 | 200 |
 | GET | `/api/v1/jobs/{job_id}` | ジョブ状態を返す | 不要 | 200 / 404(JOB_NOT_FOUND) |
 | GET | `/api/v1/jobs/{job_id}/video` | 完了済み動画（`video/mp4`）を返す | 不要 | 200 / 404(JOB_NOT_FOUND) / 409(VIDEO_NOT_READY) |
@@ -586,7 +587,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 - `GET /models`（`api/models_registry.py::list_models`）も本表に未掲載の ADDITIVE エンドポイントで、認証不要。カテゴリ別（transformer / text_encoder / video_vae / audio）に選択可能なモデル名を返す。**2026-08-20 に `active_base_model` と `base_models[]` を加算して 3 層構造になった**（従来の `categories` ブロックはキー・順序・値とも温存）。詳細は §6.9(c)。
 - `POST /upload/video`（`api/uploads.py::upload_video`）も本表に未掲載の ADDITIVE エンドポイント（Phase B の IC-LoRA 参照動画／V2V 継続元アップロード）で、**2026-07-30 に任意のクエリ引数 `trim_start_sec` / `trim_duration_sec`（いずれも `float | None`、既定 `None`）を加算した**——アップロードした動画のうち `[trim_start_sec, trim_start_sec + trim_duration_sec)` の区間だけを残してサーバー側で切り出す（フロントエンドのタイムライン上でリボンが元動画の一部しか占めていないときに、その範囲だけを冒頭クリップにするための機能）。作法は `source_tail_seconds` と同じ「凍結表外エンドポイントへの追加専用拡張」で、**2引数とも未指定なら旧リクエストとバイト単位で同一**（`services/video_upload_store.py` の切り出し経路そのものが走らず、受信バイト列がそのまま保存される）。`Query()` に `ge=`／`le=` を意図的に付けておらず、**片方だけ指定・NaN／inf・負の開始・0以下の尺・ffmpeg 失敗はすべて 422 や 500 にせず「トリムせずそのまま保存」へ穏当に劣化する**（本引数の加算で新しいエラー応答が生まれないことを保証する設計）。レスポンス `UploadVideoResponse` には `trimmed`（bool, 既定 `False`, `2026-07-30追加`——2引数が指定され、かつ切り出しが実際に成功したときだけ `True`）を加算した。**この2引数は V2V 継続元だけでなく IC-LoRA 参照動画（`reference_video_id`）のアップロードにも同じクエリのまま使われる**（`2026-08-01`——フロントエンドが同じ判定関数で両方の経路にトリムを適用するようになったため。バックエンドは両者を区別せず、`POST /upload/video` は1本のままである）。実装・機械検証・実機ゲートの記録は `Docs/VERIFICATION_LOG.md` §42。**2026-08-11 に任意のクエリ引数 `max_frames`（int \| None、既定 `None`）を追加**——`MAX_CHAIN_TOTAL_PIXEL_FRAMES` を超える参照動画の先頭を切り詰める引数（長尺IC-LoRA用）。**2026-08-16 にレスポンス `UploadVideoResponse` へ `frame_count`／`fps`（いずれも int/float \| None）を追加**——素材（末尾）の帯長をクライアント側で自動決定するための実測値。
 - `POST /jobs/{job_id}/join`・`GET /jobs/{job_id}/joined` は V2V（video-to-video 継続）専用の ADDITIVE エンドポイントで、V2V 継続機能そのものの実装時（§24）に新設され、**2026-07-21 に凍結の限定解除（オーナー承認・コミット `d22706e`）でリクエスト/レスポンスが拡張された**。リクエスト `JoinRequest` は `audio_smoothing`（bool, 既定 `true`＝クロスフェード）・`handle_crossfade_ms`（int, 既定 `300`, `0`〜`2000`）・`source_tail_seconds`（float, 既定 `5.0`, `2026-07-21追加`——結合前にソース動画の末尾 `N` 秒だけを残す tail-keep トリム。`0` はソースを全長のまま結合）。レスポンス `JoinResponse` は `job_id`・`joined_path`（結合後 mp4 のパス）・`join_mode`・`source_normalized`・`source_lufs`・`continuation_lufs_before`・`fade_ms_applied`・`handle_crossfade_ms_applied`・`handle_context_seconds`・`loudness_matched`・`trimmed_source_seconds`（float, `2026-07-21追加`——tail-keep で削られた秒数。挿入位置計算に使う）・`source_fps`（float \| null, `2026-07-21追加`——ソースの実測fps）を返す。ボディ省略（またはPOST時ボディ無し）は既定値でのスムーズ結合になる。
-- `POST /generate/chain`（`api/generate_chain.py::generate_chain`）も本表に未掲載の ADDITIVE エンドポイントで、クリップ連結・Retake・End source・V2V・A2V の**5系統すべてがこの1本を通る**。**2026-08-22 追加／2026-08-23 更新**: 選択中のベースモデルのエンジンが扱えない要求は、ジョブを作る前に `engines.reject_chain(family, request)` が **422 `FEATURE_UNSUPPORTED`** で断る（エンジン系統 `ltx25` が該当）。**2026-08-23 から、拒否は「5系統をまとめて」ではなく「リクエストのフィールド単位」になった。** **さらに 2026-08-26、Retake と End source も LTX 2.5 で走るようになったので、いま断るのは扱えない機能のフィールドだけである**——**この 5 系統はどれも、エンジン系統によらず通る**（残る 422 は `nag_enabled` / `pipeline` / `vae_mode` の 3 つで、いずれも系統の機能ではなくフィールドの話である）。§6.10(c)・§6.10(f)。
+- `POST /generate/chain`（`api/generate_chain.py::generate_chain`）も本表に未掲載の ADDITIVE エンドポイントで、クリップ連結・Retake・End source・V2V・A2V の**5系統すべてがこの1本を通る**。**2026-08-22 追加／2026-08-23 更新**: 選択中のベースモデルのエンジンが扱えない要求は、ジョブを作る前に `engines.reject_chain(family, request)` が **422 `FEATURE_UNSUPPORTED`** で断る（エンジン系統 `ltx25` が該当）。**2026-08-23 から、拒否は「5系統をまとめて」ではなく「リクエストのフィールド単位」になった。** **さらに 2026-08-26、Retake と End source も LTX 2.5 で走るようになったので、いま断るのは扱えない機能のフィールドだけである**——**この 5 系統はどれも、エンジン系統によらず通る**（残る 422 は `nag_enabled` / `pipeline` / `vae_mode` の 3 つで、いずれも系統の機能ではなくフィールドの話である）。§6.10(c)・§6.10(f)。**2026-08-31 追加**: モデル読み込み中の要求はジョブを作る前に 409 `PIPELINE_LOADING` で断る（`/generate` と同じ。§6.9(f)）。
 
 ### 6.2 GenerateRequest 全文
 
@@ -1054,7 +1055,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 | `JOB_NOT_FOUND` | 404 | ジョブ未存在 / video 実体なし |
 | `VIDEO_NOT_READY` | 409 | ジョブが completed 前に video 要求 |
 | `PIPELINE_LOAD_FAILED` | 503 | パイプラインロード失敗 |
-| `PIPELINE_LOADING` | 409 | すでにロード中のパイプラインに対して重ねてロードを要求した（**2026-08-20 新設**。`POST /pipeline/load` と内部の reload のみ。`POST /pipeline/unload` にはあえて置いていない＝`loading` に張り付いたときの唯一の復帰路として温存。§6.9(f)） |
+| `PIPELINE_LOADING` | 409 | すでにロード中のパイプラインに対して重ねてロードを要求した（**2026-08-20 新設**。`POST /pipeline/load` と内部の reload のほか、**2026-08-31 から `POST /generate` と `POST /generate/chain` もジョブを作る前に同じコードで断る**〔`PipelineManager.reject_if_loading()`〕。`POST /pipeline/unload` にはあえて置いていない＝`loading` に張り付いたときの唯一の復帰路として温存。§6.9(f)） |
 | `FEATURE_UNSUPPORTED` | 422 | 選択中のベースモデルのエンジンが持っていない機能を要求した（**2026-08-22 新設**。現在これを出すのは LTX 2.5＝エンジン系統 `ltx25` だけで、LTX 2.3 は 1 つも宣言していないため素通りする。ジョブを作る前に、他のどの検証よりも先に判定する。`detail` に該当フィールド名または機能名が入る。§6.10） |
 | `GPU_OOM` | 503 | 生成中の CUDA OOM |
 | `GENERATION_FAILED` | 503 | 生成中の非 OOM 例外 |
@@ -1160,7 +1161,7 @@ API は 481f まで受理するが、この値を超えると shared メモリ�
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
-| `PIPELINE_LOADING` | 409 | `state == "loading"` のときに重ねてロード（または内部の reload）を要求した |
+| `PIPELINE_LOADING` | 409 | `state == "loading"` のときに重ねてロード（または内部の reload）を要求した。**2026-08-31 から `POST /generate` / `POST /generate/chain` も、ジョブを作る前に同じコードで断る**（`PipelineManager.reject_if_loading()` を単一ジョブガードの直前で呼ぶ。従来はジョブが `202` で作られたあと `run_job` 内で `GENERATION_FAILED` として失敗していた） |
 
 メッセージは `"The pipeline is already loading (モデルの読み込み中です)"`。**`POST /pipeline/unload` にはこのガードを置いていない**——`loading` に張り付いた状態から抜ける唯一の手段として unload を温存するためで、これは意図した非対称である。
 

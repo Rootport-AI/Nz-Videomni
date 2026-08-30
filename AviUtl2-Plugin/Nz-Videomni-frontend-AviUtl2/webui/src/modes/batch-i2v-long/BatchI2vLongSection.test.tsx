@@ -63,14 +63,14 @@ function makeChain(state: ChainFakeState = {}): ChainSnapshotSource {
 
 function renderSection(
   bridge: NativeBridge,
-  opts: { chain?: ChainSnapshotSource; hasActiveJob?: boolean } = {},
+  opts: { chain?: ChainSnapshotSource; serverBusy?: boolean } = {},
 ) {
   return render(
     <LanguageProvider>
       <BatchI2vLongSection
         config={FALLBACK_APP_CONFIG}
         chain={opts.chain ?? makeChain()}
-        hasActiveJob={opts.hasActiveJob ?? false}
+        serverBusy={opts.serverBusy ?? false}
         nativeBridge={bridge}
       />
     </LanguageProvider>,
@@ -138,7 +138,7 @@ describe("BatchI2vLongSection", () => {
 
   it("ブロック理由をバッチ側・Chain側とも1行ずつ個別に展開する", () => {
     const chain = makeChain({ isValid: false, validityReasons: ["dimensionsOffGrid", "clipFramesOffGrid"] });
-    const { container } = renderSection(createMockBridge({ delayMs: 0 }), { chain, hasActiveJob: true });
+    const { container } = renderSection(createMockBridge({ delayMs: 0 }), { chain, serverBusy: true });
     open(container);
 
     const note = screen.getByRole("note");

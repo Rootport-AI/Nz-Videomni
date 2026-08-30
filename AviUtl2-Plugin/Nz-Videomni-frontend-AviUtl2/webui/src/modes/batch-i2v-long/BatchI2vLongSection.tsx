@@ -21,9 +21,10 @@ export interface BatchI2vLongSectionProps {
    * structural {@link ChainSnapshotSource}. Every generation parameter comes
    * from here; this panel owns no size/length/seed field of its own. */
   chain: ChainSnapshotSource;
-  /** `JobsContext.hasActiveJob` — a single generation (or another batch's row)
-   * is in flight, so this batch may not start. */
-  hasActiveJob: boolean;
+  /** `JobsContext.serverBusy` — the backend is occupied by a single
+   * generation (or another batch's row), or by a model load, so this batch may
+   * not start. */
+  serverBusy: boolean;
   nativeBridge?: NativeBridge | undefined;
 }
 
@@ -41,10 +42,10 @@ export interface BatchI2vLongSectionProps {
  * Must be rendered OUTSIDE `.single-layout` (the Chain screen's 2-column grid),
  * as a full-width sibling below it — see `ChainedScreen.tsx`'s fragment.
  */
-export function BatchI2vLongSection({ config, chain, hasActiveJob, nativeBridge }: BatchI2vLongSectionProps) {
+export function BatchI2vLongSection({ config, chain, serverBusy, nativeBridge }: BatchI2vLongSectionProps) {
   const strings = useStrings();
   const t = strings.batchI2vLong;
-  const form = useBatchI2vLongForm(config, chain, hasActiveJob, {
+  const form = useBatchI2vLongForm(config, chain, serverBusy, {
     ...(nativeBridge !== undefined ? { nativeBridge } : {}),
   });
 

@@ -494,6 +494,16 @@ class PipelineManager:
             self.runner.unload()
             self.state = self.STATE_UNLOADED
 
+    def reject_if_loading(self) -> None:
+        """409 if a load is already in flight (API-layer entry point).
+
+        The judgment and the message stay owned by ``_reject_while_loading``;
+        this method only does the locking. The load itself runs OUTSIDE the
+        lock (see ``_reject_while_loading``), so this wait is trivial.
+        """
+        with self._lock:
+            self._reject_while_loading()
+
     def _reject_while_loading(self) -> None:
         """409 if a load is already in flight. CALLED ONLY UNDER ``_lock``.
 

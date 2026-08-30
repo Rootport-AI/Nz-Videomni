@@ -10,9 +10,21 @@ import { useToasts } from "../shell/ToastContext";
 import { settleProvisionalText } from "../timeline/provisionalReservation";
 import { useJobsPoll } from "./useJobsPoll";
 
+/** Wraps one in-flight `POST /pipeline/load` so the provider can raise its
+ * flag for exactly as long as that request is in the air. Pass-through: the
+ * promise's own value and rejection are handed straight back, so the caller
+ * keeps its existing success/failure handling. */
+export type TrackPipelineLoad = <T>(promise: Promise<T>) => Promise<T>;
+
 export interface JobsContextValue {
   jobs: JobResponse[];
-  hasActiveJob: boolean;
+  /** A `POST /pipeline/load` THIS WebUI issued is in flight — known at 0ms,
+   * without waiting for a `GET /status` poll to observe it. Drives the
+   * header's "loading models" badge. */
+  pipelineLoading: boolean;
+  /** `hasActiveJob || pipelineLoading` — the one "the server is occupied"
+   * fact. Every tab's Generate button reads this and nothing else. */
+  serverBusy: boolean;
   /** job_ids for which `DELETE /jobs/{id}` has been requested but the job
    * hasn't settled into a terminal state yet — cancel is best-effort/non-
    * immediate (Docs/API_REFERENCE.md §3.19), so the UI must keep showing
@@ -22,6 +34,11 @@ export interface JobsContextValue {
   refresh: () => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
   deleteJob: (jobId: string) => Promise<void>;
+  /** The two issuers of `POST /pipeline/load` (the header's base-model
+   * dropdown and Settings' "Load selected models") wrap their own request in
+   * this. It only raises and lowers the flag — it never swallows a rejection,
+   * so each issuer keeps classifying its own failure. */
+  trackPipelineLoad: TrackPipelineLoad;
 }
 
 const JobsContext = createContext<JobsContextValue | null>(null);
@@ -38,10 +55,17 @@ export interface JobsProviderProps {
   intervalMs?: number;
 }
 
-/** Owns the M3 job rail's data: the `GET /jobs` poll (`useJobsPoll`), the
- * per-job "cancelling"/"deleting" in-flight flags for `DELETE /jobs/{id}`,
- * and pushing a toast (via `ToastContext`) whenever *any* job — not just
- * one the current session submitted — settles into a terminal state. */
+/** Owns one question — "is the server occupied right now?" — from both of the
+ * places it can be answered: the job ledger's `GET /jobs` poll (`useJobsPoll`)
+ * and the in-flight flag for a `POST /pipeline/load` this WebUI issued itself.
+ * The two are joined into {@link JobsContextValue.serverBusy}, so a Generate
+ * button never has to `||` them together for itself and the three screens can
+ * never disagree about what "busy" means.
+ *
+ * Also owns the M3 job rail's data around that: the per-job
+ * "cancelling"/"deleting" in-flight flags for `DELETE /jobs/{id}`, and pushing
+ * a toast (via `ToastContext`) whenever *any* job — not just one the current
+ * session submitted — settles into a terminal state. */
 export function JobsProvider({ children, apiClient, nativeBridge, intervalMs }: JobsProviderProps) {
   const strings = useStrings();
   const client = apiClient ?? defaultApiClient;
@@ -49,6 +73,11 @@ export function JobsProvider({ children, apiClient, nativeBridge, intervalMs }: 
   const { push } = useToasts();
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  // A boolean, not a counter: both issuers are themselves disabled by
+  // `serverBusy`, so two concurrent loads cannot occur. `promise.finally` runs
+  // independently of any component's lifetime, so closing the Settings panel
+  // mid-load still lowers the flag when the request lands.
+  const [pipelineLoading, setPipelineLoading] = useState(false);
 
   const clearCancelling = useCallback((jobId: string) => {
     setCancellingIds((prev) => {
@@ -123,9 +152,34 @@ export function JobsProvider({ children, apiClient, nativeBridge, intervalMs }: 
     [client, refresh],
   );
 
+  const trackPipelineLoad = useCallback<TrackPipelineLoad>((promise) => {
+    setPipelineLoading(true);
+    return promise.finally(() => setPipelineLoading(false));
+  }, []);
+
   const value = useMemo<JobsContextValue>(
-    () => ({ jobs, hasActiveJob, cancellingIds, deletingIds, refresh, cancelJob, deleteJob }),
-    [jobs, hasActiveJob, cancellingIds, deletingIds, refresh, cancelJob, deleteJob],
+    () => ({
+      jobs,
+      pipelineLoading,
+      serverBusy: hasActiveJob || pipelineLoading,
+      cancellingIds,
+      deletingIds,
+      refresh,
+      cancelJob,
+      deleteJob,
+      trackPipelineLoad,
+    }),
+    [
+      jobs,
+      pipelineLoading,
+      hasActiveJob,
+      cancellingIds,
+      deletingIds,
+      refresh,
+      cancelJob,
+      deleteJob,
+      trackPipelineLoad,
+    ],
   );
 
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;

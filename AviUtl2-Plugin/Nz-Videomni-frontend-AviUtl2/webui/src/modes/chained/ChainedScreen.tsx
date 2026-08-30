@@ -698,10 +698,11 @@ function ChainedScreenBody({
     }
   }, [autoLoadStatus, showNote, strings]);
 
-  // MJ-1: the form is only frozen mid-submit; a running job blocks the
-  // Generate button alone (`hasActiveJob`), leaving fields editable.
+  // MJ-1: the form is only frozen mid-submit; an occupied server (a running
+  // job, or a model load) blocks the Generate button alone (`serverBusy`),
+  // leaving fields editable.
   const submitting = submitState.phase === "submitting";
-  const hasActiveJob = jobsCtx.hasActiveJob;
+  const serverBusy = jobsCtx.serverBusy;
   const disabled = submitting;
 
   /**
@@ -771,7 +772,7 @@ function ChainedScreenBody({
 
   const generateLabel = submitting
     ? strings.chained.generatingButton
-    : hasActiveJob
+    : serverBusy
       ? strings.chained.busyButton
       : strings.chained.generateButton;
 
@@ -780,7 +781,7 @@ function ChainedScreenBody({
   // `validityReasons` mapped to copy. The map itself now lives in
   // `generateReasonMessages.ts` (§1-7) so Batch i2v-long can expand the very
   // same `validityReasons` with the very same wording; the content is
-  // unchanged. `submitting`/`hasActiveJob` are not reasons (the label already
+  // unchanged. `submitting`/`serverBusy` are not reasons (the label already
   // changes).
   const generateReasonMessages = buildChainReasonMessages(strings, {
     minFramesForOverlap: form.minFramesForOverlap,
@@ -1080,7 +1081,7 @@ function ChainedScreenBody({
       <div className="generation-column">
         <GenerateButtonBar
           label={generateLabel}
-          disabled={submitting || hasActiveJob || !form.isValid}
+          disabled={submitting || serverBusy || !form.isValid}
           onGenerate={() => void handleGenerate()}
           hint={`${strings.chained.totalFramesLabel(form.totalFrames, MAX_CHAIN_TOTAL_FRAMES)} — ${form.estimateLabel}`}
         />
@@ -1098,7 +1099,7 @@ function ChainedScreenBody({
     <BatchI2vLongSection
       config={config}
       chain={form}
-      hasActiveJob={hasActiveJob}
+      serverBusy={serverBusy}
       nativeBridge={nativeBridge}
     />
     </>

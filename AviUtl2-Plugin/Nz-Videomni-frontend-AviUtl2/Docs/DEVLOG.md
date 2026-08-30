@@ -1,6 +1,6 @@
 # Nz-Videomni 開発ログ
 
-最終更新: 2026-08-30（§97 未導入ベースモデルの案内を導入バッチの名指しへ戻した＝`baseModelInstaller()`の復活〔バックエンドで`install-LTX25.bat`が実在するようになったため〕を追加。§91・§92・§93へ、それぞれの目視ゲートの結果を追記した——§91はSageAttentionのG8が2026-08-25に合格〔正本はバックエンドVERIFICATION_LOG §77.10〕、§92は撮り直し・素材（末尾）のG8が2026-08-30に合格〔同§78.14。M8とR-1の監督裁定も同日にオーナーが追認して決着した——同§78.15。§92には追記2として格上げを1つ足してある〕、§93は画角拡張のG8′が2026-08-29に合格〔同§79.11、既定値2点の裁定は同§79.12〕。**いずれも追記専用の規律どおり本文は不変**である。§96 LTX 2.5での非CFGネガティブプロンプト〔NAG／VSF〕の開通＝モックの宣言1語の削除と、そこで見つかったchain側の潜在バグの修正を追加。§93 LTX 2.5での画角拡張〔Outpainting〕の開通、§94 「脱緑ブレンド」と§66「採らなかった指摘(1)」との和解、§95 画角拡張の目視ゲートG8′合格を追加。§74 Single a2vの全長stage-2化、§75 バッチa2vスキップ上限の調査結果〔改修不要でクローズ〕とOutpaintingのセンタリングを追加。以下は2026-08-10時点までの記録——§55 Acceleration〔生成の高速化〕フロントエンド追随、§56 V2Vリボン範囲トリムの実機調査確定・仕上げ実装・IC-LoRA参照動画への拡張・実機ゲート全項目合格とテーマクローズ〔§56.6〕・保存領域の方針確定〔§56.7〕を追加。あわせて§49へ「配布方法は2026-07-31に`.aux2`単体同梱へ置き換え済み」の注記を付した。§68・§69（Retake本体実装と目視フィードバック改修バッチ）を追加。§70（長尺A2V＝クリップ連結の全体へ音声1本を添付する機能の実装）を追加。§71（Retake改修第2弾＝❌／🔁ボタン・表示順・文言）を追加。**§68・§69・§71は同日中にオーナー目視が全項目合格し、状態行を「2026-08-10 オーナー目視合格」へ更新した**（開閉区間は閉区間で確定。§70＝長尺A2Vのみ目視待ち）。**さらに同日、最後に残っていた最小窓73フレームの仕様判断が「73フレーム維持（注意文で伝える方式）」で確定し、Retakeのテーマは完結した**（台帳の記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73）。§57以降には未コミットの節がある——コミット状況は各節末尾の『状態』行を正とする） / 出典: `git log`(コミット本文)・各マイルストーンの実装ソース・実機/自動テスト結果(§13の大規模UIリデザインは`80e99bd`/`9bd5172`、§14の実機フィードバック起点のデバッグ＋UI改修は`86e8689`/`c1a5a17`、§15のIC-LoRA UI再設計〔第5波〕は`0dacdf4`/`60b9108`、§16の埋め込み専用運用への一本化〔第6波〕は`a884677`/`198db67`、§18のキーフレームタイムラインUI本実装は`3ab643c`(feat)/本コミット(docs)として、いずれもコミット・`origin/main`へのpushまで完了済み。本節冒頭より後の各節に残る「未コミット」等の記述は、その節を記録した時点のスナップショットであり、その後のセッションでコミット・pushされている(§27・§28は`6ff17c0`／`9324f05`、§52(NAG追随)は`260e73a`としていずれも`origin/main`へpush済みで確認済み。§57以降には未コミットの節がある——コミット状況は各節末尾の『状態』行を正とする)
+最終更新: 2026-08-31（§98 モデル読み込み中の即時バッジとGenerate凍結の一本化——`POST /pipeline/load`の往復自体をバッジの材料にし〔§87(2)で却下した(c)案をJobsContext一本化により覆した〕、全タブの生成ボタンを`serverBusy`1本のルールへ統一。台帳は`PENDING_TASKS.md` §1-24、オーナーの実機ゲート待ち）を追加。§97 未導入ベースモデルの案内を導入バッチの名指しへ戻した＝`baseModelInstaller()`の復活〔バックエンドで`install-LTX25.bat`が実在するようになったため〕を追加。§91・§92・§93へ、それぞれの目視ゲートの結果を追記した——§91はSageAttentionのG8が2026-08-25に合格〔正本はバックエンドVERIFICATION_LOG §77.10〕、§92は撮り直し・素材（末尾）のG8が2026-08-30に合格〔同§78.14。M8とR-1の監督裁定も同日にオーナーが追認して決着した——同§78.15。§92には追記2として格上げを1つ足してある〕、§93は画角拡張のG8′が2026-08-29に合格〔同§79.11、既定値2点の裁定は同§79.12〕。**いずれも追記専用の規律どおり本文は不変**である。§96 LTX 2.5での非CFGネガティブプロンプト〔NAG／VSF〕の開通＝モックの宣言1語の削除と、そこで見つかったchain側の潜在バグの修正を追加。§93 LTX 2.5での画角拡張〔Outpainting〕の開通、§94 「脱緑ブレンド」と§66「採らなかった指摘(1)」との和解、§95 画角拡張の目視ゲートG8′合格を追加。§74 Single a2vの全長stage-2化、§75 バッチa2vスキップ上限の調査結果〔改修不要でクローズ〕とOutpaintingのセンタリングを追加。以下は2026-08-10時点までの記録——§55 Acceleration〔生成の高速化〕フロントエンド追随、§56 V2Vリボン範囲トリムの実機調査確定・仕上げ実装・IC-LoRA参照動画への拡張・実機ゲート全項目合格とテーマクローズ〔§56.6〕・保存領域の方針確定〔§56.7〕を追加。あわせて§49へ「配布方法は2026-07-31に`.aux2`単体同梱へ置き換え済み」の注記を付した。§68・§69（Retake本体実装と目視フィードバック改修バッチ）を追加。§70（長尺A2V＝クリップ連結の全体へ音声1本を添付する機能の実装）を追加。§71（Retake改修第2弾＝❌／🔁ボタン・表示順・文言）を追加。**§68・§69・§71は同日中にオーナー目視が全項目合格し、状態行を「2026-08-10 オーナー目視合格」へ更新した**（開閉区間は閉区間で確定。§70＝長尺A2Vのみ目視待ち）。**さらに同日、最後に残っていた最小窓73フレームの仕様判断が「73フレーム維持（注意文で伝える方式）」で確定し、Retakeのテーマは完結した**（台帳の記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73）。§57以降には未コミットの節がある——コミット状況は各節末尾の『状態』行を正とする） / 出典: `git log`(コミット本文)・各マイルストーンの実装ソース・実機/自動テスト結果(§13の大規模UIリデザインは`80e99bd`/`9bd5172`、§14の実機フィードバック起点のデバッグ＋UI改修は`86e8689`/`c1a5a17`、§15のIC-LoRA UI再設計〔第5波〕は`0dacdf4`/`60b9108`、§16の埋め込み専用運用への一本化〔第6波〕は`a884677`/`198db67`、§18のキーフレームタイムラインUI本実装は`3ab643c`(feat)/本コミット(docs)として、いずれもコミット・`origin/main`へのpushまで完了済み。本節冒頭より後の各節に残る「未コミット」等の記述は、その節を記録した時点のスナップショットであり、その後のセッションでコミット・pushされている(§27・§28は`6ff17c0`／`9324f05`、§52(NAG追随)は`260e73a`としていずれも`origin/main`へpush済みで確認済み。§57以降には未コミットの節がある——コミット状況は各節末尾の『状態』行を正とする)
 
 関連ドキュメント: [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) ／ [API_REFERENCE.md](API_REFERENCE.md) ／ [SDK_REFERENCE.md](SDK_REFERENCE.md) ／ [BRIDGE_CONTRACT.md](BRIDGE_CONTRACT.md)
 
@@ -3548,5 +3548,39 @@ export function baseModelInstaller(id: string): string {
 ### 97.5 状態
 
 **vitestは134ファイル・2,570件が0失敗**（10 skip）、**`npm run typecheck`はエラー0**、**`npm run lint`もエラー0**（既存の警告のみ・新規の警告は無い）。**`npx tsc --noEmit`は偽合格になるので使っていない。****webuiはaux2に埋め込まれるので`scripts/build.ps1 -Config Release`から作り直し、`scripts/deploy.ps1`で実機とリポジトリ配布コピーの2か所へ配布済みである。**
+
+## 98. モデル読み込み中の即時バッジとGenerate凍結の一本化（バックエンド§1-24）（2026-08-31）
+
+### 98.1 結論
+
+**ヘッダーの「モデル読み込み中…」バッジを`GET /status`のポーリング頼みから、自分が出した`POST /pipeline/load`の往復そのものへ差し替えた。** これに伴い、全タブのGenerateボタン・ヘッダーのベースモデル選択・Settingsの「読み込み」ボタンとカテゴリ選択を「サーバーが仕事中（ジョブ実行中 or モデル読み込み中）なら不可」という1本のルールへ統一した。ポーリング周期は10秒（2.5秒だった旧値から復帰）。バックエンドの`/generate`・`/generate/chain`はジョブ作成前に同期で409 `PIPELINE_LOADING`を返すようになった（バックエンド`Videomni_Backend_Specification.md` §6.9(f)）。台帳は`PENDING_TASKS.md` §1-24。
+
+### 98.2 背景
+
+**バッジは最大2.5秒遅れて点き、Generateボタンはそもそもモデル読み込み中を見ていなかった。** バッジは`GET /status`のポーリング（2.5秒周期）でしか点かないため、切り替え開始から最大2.5秒バッジが出ない窓があった。しかもSingle／Chained／Edit・バッチA2V／i2v-longのGenerateボタンはどれも`serverStatus`を読んでおらず、`GET /jobs`由来の`hasActiveJob`だけで凍結していたので、バッジが出ていてもGenerateを押せてしまい、押すとバックエンドはジョブを202で受理したあとジョブスレッド内で`PIPELINE_LOADING`により失敗させ、台帳に失敗ジョブが残っていた。
+
+**2026-08-20当時（§87(2)）は、いま採った方式を却下していた。** モデル切り替えは常にフロントエンド自身が出す同期の`POST /pipeline/load`（発行元はヘッダーの`shell/useBaseModels.ts`とSettingsの`shell/useModels.ts`）なので、フロントエンドは開始と終了を0ミリ秒で知っている。当時もこの事実は分かっていたが、§87(2)は3つの選択肢のうち(c)「`POST /pipeline/load`を出した側が即時refresh＋高頻度化する」案を「Settingsのパネルとヘッダーのバッジという別々の持ち主の間に新しい配線を1本増やすことになり、例外を増やさないという方針に反する」として却下し、代わりにポーリング周期を2.5秒へ縮める(a)案を採っていた。
+
+**今回それを覆せたのは、配線先が変わったからである。** 生成ゲートの読み手（Single／Chained／Edit）はすでに`useJobsContext()`を直読みしていたので、旗の置き場を「パネルとヘッダーという別々の持ち主の間」ではなく、両方の発行元がもとから読み書きしている**単一の持ち主`JobsContext`**にした。発行元は自分の`POST /pipeline/load`を`trackPipelineLoad`に渡すだけで、読み手（ヘッダー・Settings・全タブの生成ボタン）は同じ場所の`pipelineLoading`／`serverBusy`を読むだけになる。**§87(2)が懸念していた「新しい配線」自体が要らなくなった**ので、例外は増えていない——却下の理由がそのまま消えた、という関係である。
+
+### 98.3 実装差分
+
+- **`jobs/JobsContext.tsx`**: `pipelineLoading`（自分が出した`POST /pipeline/load`が飛行中かどうかの真偽値）と`serverBusy`（`hasActiveJob || pipelineLoading`）を追加し、`trackPipelineLoad`（`<T>(promise: Promise<T>) => Promise<T>`。旗を立てて`promise.finally`で下ろすだけの素通し）を公開した。`hasActiveJob`はコンテキストの公開値から外した（`jobs/useJobsPoll.ts`側は内部関数へ降格）。
+- **`shell/useBaseModels.ts`**: `trackLoad?: TrackPipelineLoad`を追加し、`switchBaseModel`の本体を包む。**`switching`を削除**——読み手は`serverBusy`に一本化された。
+- **`shell/useModels.ts` / `shell/ModelsPanel.tsx`**: 同じ`trackLoad?`を`useModels`に追加。`ModelsPanel`は`useJobsContext()`を直読みし、`busy`を`serverBusy`にした。
+- **`modes/single/useServerStatus.ts`**: `UseServerStatusDeps.localLoading?: boolean`を追加。真なら`GET /status`の応答を待たずに`{ kind: "loading-models", status: null }`を返す。`DEFAULT_INTERVAL_MS`を10秒へ戻した。立ち下がり（true→false）で`check()`を1回叩く。
+- **ゲートの読み替え**: `shell/AppShell.tsx`のドロップダウン無効化・右クリック→撮り直しの遮断、`modes/single/SingleScreen.tsx`・`modes/chained/ChainedScreen.tsx`・`modes/edit/EditScreen.tsx`の各Generateボタンを、すべて`serverBusy`（または`hasActiveJob`からの改名）へ揃えた。**`modes/edit/EditScreen.tsx`の画角拡張（Outpainting）のGenerateには、従来凍結が無かったので新規に追加した**（撮り直しと同じ作法）。
+- **バッチ**: `modes/batch/BatchSection.tsx`・`useBatchForm.ts`、`modes/batch-i2v-long/BatchI2vLongSection.tsx`・`useBatchI2vLongForm.ts`のプロップ名を`hasActiveJob`→`serverBusy`へ改名。**理由コード`jobActive`とi18nキー名`batch.jobActive`／`batchI2vLong.blockReasons.jobActive`は据え置き**——文言だけを「ジョブ実行中かモデル読み込み中」の両方を覆う1本に変えた。
+- **バックエンド**: `services/pipeline_manager.py`に`reject_if_loading()`を新設（判定と断り文自体は既存の`_reject_while_loading()`のまま、施錠だけを担う）。`api/generate.py`・`api/generate_chain.py`の単一ジョブガード直前でこれを呼ぶ。テストは`tests/test_base_model_axis.py`に新規2本を追加し、最終防衛線のテスト`test_auto_load_during_a_load_fails_the_job_readably`はHTTPを経由せず`job_store.create`+`pipeline_manager.run_job`を直接呼ぶ形へ書き換えた（`POST /generate`が新しい同期409で先に断るようになったため）。
+- **実装済み・意図した1点の乖離**: `shell/ModelsPanel.tsx`の「読み込みには数分かかることがあります」通知（`models.loadingNotice`）は`serverBusy`ではなく`pipelineLoading`のときにだけ出す。通常の生成ジョブ中にこの通知を出すと「モデルを読み込んでいる」という偽の説明になるためである。**副作用として、サーバーが仕事中（ジョブ実行中またはモデル読み込み中）の間はSettingsのモデルパネル（読み込みボタン・更新ボタン・カテゴリ選択）が1本のルールで凍結されるようになった**（従来はローカルな読み込み中だけが対象だった）。詳細は`PENDING_TASKS.md` §1-24。
+
+### 98.4 テスト
+
+- **フロントエンド**: `npm run typecheck`0エラー、`npm run lint`0エラー（既存警告29件は不変）、`npm run test` → **Test Files 134 passed (134)** ／ **Tests 2578 passed | 10 skipped (2588)**（8本追加・1本置き換え）。
+- **バックエンド**: `.venv\Scripts\python.exe -m pytest -q tests`全緑（`tests/test_base_model_axis.py`に2本追加、1本書き換え）。
+
+### 98.5 状態
+
+**実装・機械検証まで完了。** `scripts/build.ps1 -Config Release` → `scripts/deploy.ps1`（実機と配布コピーの2箇所）を実施。**オーナーの実機ゲート（`PENDING_TASKS.md` §1-24のG1〜G10）は本節の時点では未了である。**
 
 **バックエンド側には実ダウンロードを伴うサブマシンゲートが残っている**（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §82.4）。**そのうちG7aがこの文面を実機で見る項目**で、「トーストに`install-LTX25.bat`が出る／選択が2.3へ戻る／`POST /pipeline/load`が送られない」の3点を確認する。**フロントエンドの作業は本段で完了している。**

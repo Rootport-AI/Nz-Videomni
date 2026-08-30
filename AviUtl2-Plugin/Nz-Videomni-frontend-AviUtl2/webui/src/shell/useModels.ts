@@ -3,6 +3,7 @@ import { apiClient as defaultApiClient, BackendApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
 import type { ModelCategory, ModelsResponse } from "../api/types";
 import { MODEL_DEFAULT_NAME } from "../api/types";
+import type { TrackPipelineLoad } from "../jobs/JobsContext";
 
 /** The categories this WebUI knows how to render, and the FALLBACK order
  * (Docs/API_REFERENCE.md §3.5, `services/model_registry.py`'s `CATEGORIES`).
@@ -76,6 +77,11 @@ export type ModelsLoadState =
 
 export interface UseModelsDeps {
   apiClient?: ApiClient;
+  /** `JobsContext.trackPipelineLoad`. The panel's "Load" button issues the
+   * very same `POST /pipeline/load` the header's dropdown does, so it raises
+   * the very same flag — and the badge then survives the panel being closed
+   * mid-load. Optional so tests can omit it. */
+  trackLoad?: TrackPipelineLoad;
 }
 
 export interface UseModelsResult {
@@ -109,6 +115,7 @@ export interface UseModelsResult {
  * bind a purpose-configured mock bridge instead. */
 export function useModels(deps: UseModelsDeps = {}): UseModelsResult {
   const client = deps.apiClient ?? defaultApiClient;
+  const track = deps.trackLoad;
   const [list, setList] = useState<ModelsListState>({ status: "loading" });
   const [selection, setSelectionState] = useState<ModelSelection>(allDefaultSelection);
   const [load, setLoad] = useState<ModelsLoadState>({ status: "idle" });
@@ -148,7 +155,10 @@ export function useModels(deps: UseModelsDeps = {}): UseModelsResult {
 
   const loadPipeline = useCallback(() => {
     setLoad({ status: "loading" });
-    void (async () => {
+    // Tracked so the header badge lights up at 0ms and stays lit even if the
+    // Settings panel (and this hook with it) unmounts mid-load — `finally`
+    // runs on the promise, not on the component.
+    const attempt = (async () => {
       try {
         const resp = await client.loadPipeline(selection);
         if (!mountedRef.current) return;
@@ -167,7 +177,8 @@ export function useModels(deps: UseModelsDeps = {}): UseModelsResult {
         setLoad({ status: "error", code, message });
       }
     })();
-  }, [client, selection, refresh]);
+    void (track ? track(attempt) : attempt);
+  }, [client, selection, refresh, track]);
 
   return {
     list,

@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { EditScreen } from "./EditScreen";
@@ -26,16 +26,26 @@ import { EditScreen } from "./EditScreen";
 // members off the same context — hence the fuller stub. An empty `jobs` array
 // makes the ledger render its "no jobs yet" line, so the cancel/delete halves
 // are never actually invoked; they exist so the destructuring finds them.
+//
+// `serverBusy` is the one member a test needs to move (the Generate gate), so
+// it is read through a mutable box; `vi.hoisted` because the `vi.mock` factory
+// is hoisted above this file's own statements.
+const jobsStub = vi.hoisted(() => ({ serverBusy: false }));
+
 vi.mock("../../jobs/JobsContext", () => ({
   useJobsContext: () => ({
     jobs: [],
-    hasActiveJob: false,
+    serverBusy: jobsStub.serverBusy,
     cancellingIds: new Set<string>(),
     deletingIds: new Set<string>(),
     cancelJob: () => Promise.resolve(),
     deleteJob: () => Promise.resolve(),
   }),
 }));
+
+afterEach(() => {
+  jobsStub.serverBusy = false;
+});
 
 function renderEdit(
   initialIntent?: GenerationPrefill,
@@ -398,5 +408,26 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
     expect(screen.getAllByRole("button", { name: /^generate$/i })).toHaveLength(1);
     expect(heading(/^outpainting/i)).toBeVisible();
     expect(heading(/^retake/i)).not.toBeVisible();
+  });
+
+  // 2026-08-31: Outpainting was the one Generate button in the app with no
+  // server-busy gate — it stayed pressable while a job ran or a model loaded,
+  // and the press came back as a failed job in the ledger. It now follows the
+  // same convention as Retake/Create/Chain: the button alone is frozen, the
+  // form stays editable, and the label says why.
+  it("freezes the Outpainting Generate while the server is busy, with the busy label", () => {
+    jobsStub.serverBusy = true;
+    renderEdit(prefill("outpaint"), "a wide city street");
+
+    expect(screen.queryByRole("button", { name: /^generate$/i })).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: /^busy…$/i });
+    expect(button).toBeDisabled();
+  });
+
+  it("labels the Outpainting Generate normally when the server is idle", () => {
+    renderEdit(prefill("outpaint"), "a wide city street");
+
+    expect(screen.getByRole("button", { name: /^generate$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^busy…$/i })).not.toBeInTheDocument();
   });
 });

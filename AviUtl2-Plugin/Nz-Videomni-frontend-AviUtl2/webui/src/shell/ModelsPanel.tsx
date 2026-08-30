@@ -2,6 +2,7 @@ import { useStrings } from "../i18n/LanguageContext";
 import type { ApiClient } from "../api/client";
 import type { ModelCategory, ModelEntry } from "../api/types";
 import { MODEL_DEFAULT_NAME } from "../api/types";
+import { useJobsContext } from "../jobs/JobsContext";
 import { useModels } from "./useModels";
 import "./SettingsPanel.css";
 
@@ -82,11 +83,24 @@ function ModelCategoryField({
  * shows an explicit "this can take a while" notice instead of a spinner. */
 export function ModelsPanel({ apiClient }: ModelsPanelProps) {
   const strings = useStrings();
-  const models = useModels({ ...(apiClient !== undefined ? { apiClient } : {}) });
+  // Read from the context directly rather than taking two more props through
+  // `AppShell -> SettingsPanel -> ModelsPanel`: this panel is one of the two
+  // issuers of `POST /pipeline/load`, so it belongs to the same owner as the
+  // flag it raises.
+  const { serverBusy, pipelineLoading, trackPipelineLoad } = useJobsContext();
+  const models = useModels({
+    ...(apiClient !== undefined ? { apiClient } : {}),
+    trackLoad: trackPipelineLoad,
+  });
 
   const listLoading = models.list.status === "loading";
   const load = models.load;
-  const busy = load.status === "loading";
+  // The app-wide fact, not this hook's local `load.status`: a job or the
+  // header dropdown's own switch must disable these controls too, and
+  // `serverBusy` is already true before `load.status` becomes "loading" for a
+  // press of the button below. `load.status === "busy"` (the JOB_BUSY notice)
+  // stays as the last line of defence for a race we lost.
+  const busy = serverBusy;
 
   let loadSummary: string | null = null;
   if (load.status === "done") {
@@ -140,7 +154,10 @@ export function ModelsPanel({ apiClient }: ModelsPanelProps) {
         </button>
       </div>
 
-      {busy && <p className="hint">{strings.models.loadingNotice}</p>}
+      {/* The notice names a model load specifically ("rebuilds the engine…"),
+          so it follows the load flag, not the wider `busy` above — a running
+          generation greys the controls without claiming a load is happening. */}
+      {pipelineLoading && <p className="hint">{strings.models.loadingNotice}</p>}
       {loadSummary && <p className="field-hint">{loadSummary}</p>}
       {load.status === "busy" && <p className="field-hint field-hint-error">{strings.models.jobBusy}</p>}
       {errorMessage && <p className="field-hint field-hint-error">{errorMessage}</p>}

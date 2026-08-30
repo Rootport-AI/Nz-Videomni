@@ -4,6 +4,7 @@ import type { ApiClient } from "../api/client";
 import { createApiClient } from "../api/client";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { ModelsResponse } from "../api/types";
+import type { TrackPipelineLoad } from "../jobs/JobsContext";
 import { useModels } from "./useModels";
 
 const DESCRIPTOR_ORDER = ["transformer", "text_encoder", "video_vae", "audio"];
@@ -160,6 +161,50 @@ describe("useModels", () => {
     await waitFor(() => expect(result.current.load.status).toBe("error"));
     if (result.current.load.status !== "error") throw new Error("unreachable");
     expect(result.current.load.code).toBe("MODEL_FILE_MISSING");
+  });
+
+  it("loadPipeline() hands its request to trackLoad exactly once", async () => {
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0 }));
+    const tracked = vi.fn();
+    const trackLoad: TrackPipelineLoad = (promise) => {
+      tracked();
+      return promise;
+    };
+    const { result } = renderHook(() => useModels({ apiClient, trackLoad }));
+    await waitFor(() => expect(result.current.list.status).toBe("ready"));
+
+    // The `GET /models` on mount is NOT a pipeline load.
+    expect(tracked).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.loadPipeline();
+    });
+    expect(tracked).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.load.status).toBe("done"));
+  });
+
+  it("a failed POST still settles the tracked promise, so the flag comes back down", async () => {
+    const real = createApiClient(createMockBridge({ delayMs: 0 }));
+    const apiClient: ApiClient = { ...real, loadPipeline: () => Promise.reject(new Error("boom")) };
+    // Stands in for `JobsContext`'s flag: raised on entry, lowered in `finally`.
+    let flag = false;
+    const trackLoad: TrackPipelineLoad = (promise) => {
+      flag = true;
+      return promise.finally(() => {
+        flag = false;
+      });
+    };
+
+    const { result } = renderHook(() => useModels({ apiClient, trackLoad }));
+    await waitFor(() => expect(result.current.list.status).toBe("ready"));
+
+    act(() => {
+      result.current.loadPipeline();
+    });
+    expect(flag).toBe(true);
+
+    await waitFor(() => expect(result.current.load.status).toBe("error"));
+    await waitFor(() => expect(flag).toBe(false));
   });
 
   it("loadPipeline() sends timeoutMs=600000 to the bridge (model swap can take minutes)", async () => {

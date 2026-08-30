@@ -16,7 +16,7 @@ import { EditScreen } from "./EditScreen";
 vi.mock("../../jobs/JobsContext", () => ({
   useJobsContext: () => ({
     jobs: [],
-    hasActiveJob: false,
+    serverBusy: false,
     cancellingIds: new Set<string>(),
     deletingIds: new Set<string>(),
     cancelJob: () => Promise.resolve(),

@@ -13,6 +13,7 @@ import {
   useBaseModels,
 } from "./useBaseModels";
 import type { BaseModelSwitchOutcome } from "./useBaseModels";
+import type { TrackPipelineLoad } from "../jobs/JobsContext";
 
 /** A client that answers `GET /models` from the mock bridge (so the option
  * list is realistic) but fails `POST /pipeline/load` with a specific backend
@@ -25,6 +26,20 @@ function clientRejectingLoadWith(err: unknown): ApiClient {
   return {
     ...real,
     loadPipeline: () => Promise.reject(err),
+  };
+}
+
+/** A pass-through `TrackPipelineLoad` with a plain counter beside it —
+ * `vi.fn` cannot carry the generic signature, and the tests only ever ask how
+ * many times it ran. */
+function countingTrackLoad(): { spy: ReturnType<typeof vi.fn>; trackLoad: TrackPipelineLoad } {
+  const spy = vi.fn();
+  return {
+    spy,
+    trackLoad: (promise) => {
+      spy();
+      return promise;
+    },
   };
 }
 
@@ -50,7 +65,6 @@ describe("useBaseModels", () => {
     expect(result.current.options[1]).toMatchObject({ installed: false, present: true });
     expect(result.current.options[1]?.missingCategories).toContain("audio");
     expect(result.current.current).toBe("LTX23");
-    expect(result.current.switching).toBe(false);
   });
 
   it("a successful switch moves `current` and re-reads GET /models", async () => {
@@ -65,7 +79,6 @@ describe("useBaseModels", () => {
     });
 
     expect(result.current.current).toBe("LTX25");
-    expect(result.current.switching).toBe(false);
     // Switching IS loading (§6.1), with no per-category selection of its own.
     expect(loadPipeline).toHaveBeenCalledWith({}, "LTX25");
     // The refetch is what makes the `active` flag follow the swap.
@@ -87,6 +100,35 @@ describe("useBaseModels", () => {
 
     expect(loadPipeline).not.toHaveBeenCalled();
     expect(result.current.current).toBe("LTX23");
+  });
+
+  it("trackLoad wraps exactly one request per switch, and none for a local refusal", async () => {
+    const apiClient = createApiClient(
+      createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
+    );
+    const { spy: tracked, trackLoad } = countingTrackLoad();
+    const view = renderHook(() => useBaseModels({ apiClient, trackLoad }));
+    await waitFor(() => expect(view.result.current.options.length).toBeGreaterThan(0));
+
+    // The `GET /models` on mount is NOT a pipeline load.
+    expect(tracked).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await view.result.current.switchBaseModel("LTX25");
+    });
+    expect(tracked).toHaveBeenCalledTimes(1);
+  });
+
+  it("trackLoad is not called for a base model with nothing on disk (no request is made)", async () => {
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "none" }));
+    const { spy: tracked, trackLoad } = countingTrackLoad();
+    const view = renderHook(() => useBaseModels({ apiClient, trackLoad }));
+    await waitFor(() => expect(view.result.current.options.length).toBeGreaterThan(0));
+
+    await act(async () => {
+      await view.result.current.switchBaseModel("LTX25");
+    });
+    expect(tracked).not.toHaveBeenCalled();
   });
 
   it("names the installer batch file after the descriptor id", () => {
@@ -121,7 +163,6 @@ describe("useBaseModels", () => {
     });
 
     expect(result.current.current).toBe("LTX23");
-    expect(result.current.switching).toBe(false);
   });
 
   it("409 PIPELINE_LOADING is distinguished from JOB_BUSY", async () => {

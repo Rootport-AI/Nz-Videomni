@@ -183,6 +183,12 @@ def generate_chain(
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
 
+    # Loading guard: without this, a load in flight would still return 202 and
+    # the job would only die later, inside the job thread, as GENERATION_FAILED.
+    # Checked BEFORE the job-busy guard because loading is the stronger claim
+    # (same order the frontend's status badge uses).
+    context.pipeline_manager.reject_if_loading()
+
     # Single-job guard: atomically reserve, else 409 JOB_BUSY.
     job = context.job_store.create_chain_if_idle(request)
     if job is None:

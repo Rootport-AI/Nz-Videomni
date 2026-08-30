@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../bridge/mockBridge";
 import { LanguageProvider } from "../i18n/LanguageContext";
 import { LANG_STORAGE_KEY } from "../i18n/strings";
+import { JobsProvider } from "../jobs/JobsContext";
 import { SettingsPanel } from "./SettingsPanel";
+import { ToastProvider } from "./ToastContext";
 import { ThemeProvider } from "./ThemeContext";
 import {
   PrefillPolicyProvider,
@@ -105,7 +107,16 @@ function renderPanel(
     <ThemeProvider>
       <LanguageProvider>
         <PrefillPolicyProvider>
-          <Harness bridge={bridge} onSaved={onSaved} onClose={onClose} serverStatus={serverStatus} />
+          {/* `ModelsPanel` (rendered inside `SettingsPanel`) reads
+              `useJobsContext()` directly — it is one of the two issuers of
+              `POST /pipeline/load`, so it takes the flag from its owner rather
+              than through two layers of props. `JobsProvider` needs a
+              `ToastProvider` above it for the job-settled toasts. */}
+          <ToastProvider>
+            <JobsProvider nativeBridge={bridge}>
+              <Harness bridge={bridge} onSaved={onSaved} onClose={onClose} serverStatus={serverStatus} />
+            </JobsProvider>
+          </ToastProvider>
         </PrefillPolicyProvider>
       </LanguageProvider>
     </ThemeProvider>,

@@ -45,17 +45,69 @@ beforeEach(() => {
 });
 
 describe("JobsContext", () => {
-  it("polls GET /jobs and reflects hasActiveJob while a job is queued/running, then completes", async () => {
+  it("polls GET /jobs and reflects serverBusy while a job is queued/running, then completes", async () => {
     const { apiClient, wrapper } = setup(2);
     await apiClient.generate(REQUEST);
 
     const { result } = renderHook(() => useJobsContext(), { wrapper });
 
     await waitFor(() => expect(result.current.jobs.length).toBe(1));
-    expect(result.current.hasActiveJob).toBe(true);
+    expect(result.current.serverBusy).toBe(true);
+    // The job half only — no `POST /pipeline/load` was tracked.
+    expect(result.current.pipelineLoading).toBe(false);
 
-    await waitFor(() => expect(result.current.hasActiveJob).toBe(false), { timeout: 8_000 });
+    await waitFor(() => expect(result.current.serverBusy).toBe(false), { timeout: 8_000 });
     expect(result.current.jobs[0]?.status).toBe("completed");
+  }, 10_000);
+
+  it("trackPipelineLoad raises serverBusy/pipelineLoading for exactly the promise's flight", async () => {
+    const { wrapper } = setup(1);
+    const { result } = renderHook(() => useJobsContext(), { wrapper });
+
+    await waitFor(() => expect(result.current.serverBusy).toBe(false));
+
+    let resolveLoad!: (value: string) => void;
+    const load = new Promise<string>((resolve) => {
+      resolveLoad = resolve;
+    });
+
+    let tracked!: Promise<string>;
+    act(() => {
+      tracked = result.current.trackPipelineLoad(load);
+    });
+    expect(result.current.pipelineLoading).toBe(true);
+    expect(result.current.serverBusy).toBe(true);
+
+    await act(async () => {
+      resolveLoad("loaded");
+      // The value is handed straight back to the caller.
+      expect(await tracked).toBe("loaded");
+    });
+    expect(result.current.pipelineLoading).toBe(false);
+    expect(result.current.serverBusy).toBe(false);
+  }, 10_000);
+
+  it("trackPipelineLoad lowers the flag on rejection and re-raises the error to the caller", async () => {
+    const { wrapper } = setup(1);
+    const { result } = renderHook(() => useJobsContext(), { wrapper });
+
+    let rejectLoad!: (reason: Error) => void;
+    const load = new Promise<never>((_resolve, reject) => {
+      rejectLoad = reject;
+    });
+
+    let tracked!: Promise<never>;
+    act(() => {
+      tracked = result.current.trackPipelineLoad(load);
+    });
+    expect(result.current.pipelineLoading).toBe(true);
+
+    await act(async () => {
+      rejectLoad(new Error("boom"));
+      await expect(tracked).rejects.toThrow("boom");
+    });
+    expect(result.current.pipelineLoading).toBe(false);
+    expect(result.current.serverBusy).toBe(false);
   }, 10_000);
 
   it("pushes a success toast when a job it observes transitions to completed", async () => {
@@ -64,7 +116,7 @@ describe("JobsContext", () => {
 
     const { result } = renderHook(() => ({ jobs: useJobsContext(), toasts: useToasts() }), { wrapper });
 
-    await waitFor(() => expect(result.current.jobs.hasActiveJob).toBe(false), { timeout: 8_000 });
+    await waitFor(() => expect(result.current.jobs.serverBusy).toBe(false), { timeout: 8_000 });
     await waitFor(() => expect(result.current.toasts.toasts.length).toBe(1));
     expect(result.current.toasts.toasts[0]?.kind).toBe("success");
     expect(result.current.toasts.toasts[0]?.jobId).toBe(result.current.jobs.jobs[0]?.job_id);

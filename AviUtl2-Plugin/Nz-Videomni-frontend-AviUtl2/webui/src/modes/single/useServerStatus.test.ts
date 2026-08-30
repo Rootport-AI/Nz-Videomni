@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { createApiClient } from "../../api/client";
@@ -77,42 +77,38 @@ describe("useServerStatus", () => {
     });
   });
 
-  it("the DEFAULT poll period catches an 8-second model load", async () => {
-    // The real regression (2026-08-20): a checkpoint swap on a warm machine
-    // takes ~8s (Docs/VERIFICATION_LOG.md §68.5), and the old 10s period could
-    // put the whole rebuild between two polls — the badge never appeared. The
-    // load window below (1s..9s after mount) is placed to be missed by a 10s
-    // poll on purpose, so this test fails if the default goes back up.
+  it("localLoading reports 'loading-models' immediately, with no poll involved", async () => {
+    // Replaces the old "the default period catches an 8-second load" test: the
+    // WebUI's own load is no longer something the poll has to catch. The issuer
+    // hands its `POST /pipeline/load` to `JobsContext.trackPipelineLoad`, and
+    // this flag reports both edges at 0ms — which is why the default period
+    // went back up to 10s.
     const bridge = createMockBridge({ delayMs: 0 });
-    const base = await createApiClient(bridge).getStatus();
-    const LOAD_START_MS = 1_000;
-    const LOAD_END_MS = 9_000;
+    const real = createApiClient(bridge);
+    const getStatus = vi.fn(() => real.getStatus());
+    const apiClient: ApiClient = { ...real, getStatus };
 
-    vi.useFakeTimers();
-    const mountedAt = Date.now();
-    const apiClient: ApiClient = {
-      ...createApiClient(bridge),
-      getStatus: async () => {
-        const elapsed = Date.now() - mountedAt;
-        const loading = elapsed >= LOAD_START_MS && elapsed < LOAD_END_MS;
-        return { ...base, state: loading ? "loading" : "ready" } as StatusResponse;
-      },
-    };
-
-    // No `intervalMs` argument: this exercises the SHIPPED default.
-    const { result } = renderHook(() =>
-      useServerStatus(undefined, { nativeBridge: bridge as NativeBridge, apiClient }),
+    // 60s period: every `getStatus` call counted below is the mount check or
+    // the falling edge, never the interval.
+    const { result, rerender } = renderHook(
+      ({ localLoading }: { localLoading: boolean }) =>
+        useServerStatus(60_000, { nativeBridge: bridge as NativeBridge, apiClient, localLoading }),
+      { initialProps: { localLoading: false } },
     );
 
-    let sawLoadingBadge = false;
-    for (let elapsed = 0; elapsed < LOAD_END_MS; elapsed += 250) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-      if (result.current.state.kind === "loading-models") sawLoadingBadge = true;
-    }
+    await waitFor(() => expect(result.current.state.kind).toBe("online"));
+    const callsBefore = getStatus.mock.calls.length;
 
-    expect(sawLoadingBadge).toBe(true);
+    rerender({ localLoading: true });
+    // Synchronously, on the very render that raised the flag — no await.
+    expect(result.current.state.kind).toBe("loading-models");
+    expect(getStatus).toHaveBeenCalledTimes(callsBefore);
+
+    rerender({ localLoading: false });
+    // The falling edge fetches exactly once, so the badge clears against a
+    // fresh body instead of waiting out the rest of the period.
+    await waitFor(() => expect(result.current.state.kind).toBe("online"));
+    expect(getStatus).toHaveBeenCalledTimes(callsBefore + 1);
   });
 
   it("retry() re-runs the check on demand", async () => {

@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-08-30
+- 作成: 2026-07-15／最終更新: 2026-08-31
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳**。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。**現在は該当が無いので節ごと削除してある。** 復活させるときは**チェックリスト形式**で書く——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は§2-3（オーナー判断待ち）へ分ける。
@@ -14,7 +14,7 @@
 ## 1. 近日中の改修項目
 
 実装・修正の内容が具体的で、近く着手すべきもの。**新しい機能を設計するときは保存領域の原則（貴重な生成物は`outputs/`へ、雑に消せるものは`uploads/`へ）に従うこと**——正本は[`STORAGE_POLICY.md`](STORAGE_POLICY.md)。
-**本節に現存するのは§1-4の1件のみ**で、これはオーナー自身がREADMEを書く作業である（AIエージェントが実装するタスクではない）。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
+**本節に現存するのは§1-4と§1-24の2件**で、§1-4はオーナー自身がREADMEを書く作業（AIエージェントが実装するタスクではない）、§1-24は実装済みでオーナーの実機ゲート待ちの案件である。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
 
 ### 1-4. READMEのスピードガイド執筆（起票：2026-07-26）
 
@@ -27,6 +27,27 @@
   - **参照切れ3ターゲットを同時に解消する**——`requirements.txt`のREADME参照コメント（`# See README "7. LTX 2.3 のインストール".`）と、`scripts/build_xformers.ps1`のREADME 7.2参照3箇所・7.3参照1箇所。いずれも参照先の見出しが現存せず、しかも現行の「7.」は**制限事項**の節なので、番号をたどった読者はまったく別の場所へ着地する。
 - **状態**: 未着手（オーナーが手書きするための備忘録。書き終えた時点でクローズする）。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（導線の前提と`run.ps1`の設計）、[`README.md`](../README.md) §1（要求スペック）。
+
+### 1-24. モデル読み込み中の即時バッジとGenerate凍結の一本化（起票：2026-08-31）
+
+- **背景**: ヘッダーの「モデル読み込み中…」バッジは`GET /status`のポーリング（従来2.5秒周期）でしか点かず、切り替え開始から最大2.5秒遅れていた。しかもどのタブのGenerateボタンも`serverStatus`を見ておらず、バッジが出ていても押せてしまい、押すとバックエンドはジョブを202で作ってからジョブスレッド内で失敗させ、台帳に失敗ジョブが残っていた。
+- **決定事項**（再協議しない）: ①ポーリング周期は10秒へ戻す（外部クライアント経由のロードはポーリングで拾えれば十分）。②Settingsの「読み込み」ボタンもヘッダーのドロップダウンと同じ扱い。③「サーバーが仕事中（ジョブ実行中 or モデル読み込み中）なら生成不可」の1本のルールに統一し、各タブはそれを読むだけ。④バックエンドの`/generate`と`/generate/chain`はジョブ作成前に同期で409 `PIPELINE_LOADING`を返す。⑤Edit/Outpaintingの凍結抜けも同じバッチで直す。
+- **実装したこと**: フロントエンドは`jobs/JobsContext.tsx`に`pipelineLoading`（自分が出した`POST /pipeline/load`が飛行中）と`serverBusy`（`hasActiveJob || pipelineLoading`）を追加し、全タブの生成ボタン・ヘッダーのベースモデル選択・Settingsの「読み込み」ボタン/カテゴリ選択が`serverBusy`だけを読むよう統一した（発行元は`shell/useBaseModels.ts`と`shell/useModels.ts`、包む口が`trackPipelineLoad`）。`modes/single/useServerStatus.ts`は`localLoading`（＝`pipelineLoading`）を受け取り、応答を待たずに`loading-models`を返す。バックエンドは`services/pipeline_manager.py`に`reject_if_loading()`を新設し、`api/generate.py`・`api/generate_chain.py`の単一ジョブガード直前で呼ぶ。設計の全体像は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.5・§5.5(b)、API契約への反映は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.9(f)・v0.5.45、フロントエンド実装ログは`DEVLOG.md` §98。
+- **実装との1点の乖離**: `shell/ModelsPanel.tsx`の「読み込みには数分かかることがあります」通知（`models.loadingNotice`）は、`serverBusy`ではなく`pipelineLoading`のときにだけ出す——通常の生成ジョブ中に出すと「モデルを読み込んでいる」という嘘になるため。副作用として、サーバーが仕事中（ジョブ実行中またはモデル読み込み中）の間はSettingsのモデルパネル（読み込みボタン・更新ボタン・カテゴリ選択）が1本のルールで凍結されるようになった（従来はローカルな読み込み中だけだった）。
+- **完了条件（オーナーの実機ゲート。本項が単一正本）**:
+  - G1: ベースモデル選択でLTX 2.3 → 2.5。選んだその場でバッジ「モデル読み込み中…」が点く。
+  - G2: その間、Single／Chained／Edit（撮り直し・画角拡張）のGenerateが全て無効、ラベルが「処理中…」になる。
+  - G3: その間、バッチA2V／i2v-longのStartが無効になり、新しい文言（ジョブ実行中かモデル読み込み中）が出る。
+  - G4: その間、ベースモデル選択が無効。Settingsを開くと「読み込み」ボタンとカテゴリ選択も無効。
+  - G5: 応答の瞬間にバッジが消え、選択欄・全Generateが戻る（10秒待たされない）。
+  - G6: Settingsの「読み込み」ボタンで同じことが起きる。読み込み中にSettingsを閉じてもバッジは維持され、終了時に消える。
+  - G7: 読み込み中の右クリック→撮り直しが遮断される。
+  - G8: Gradioの Models からロードを始めWebUIは触らない。周期（10秒）より長いロード（LTX 2.5系統切替・約15秒）ではバッジが出て終了後に戻る。周期より短い外部ロードは拾えないのが許容仕様。
+  - G9: 読み込み中に`curl`で`POST /api/v1/generate` → 409 `PIPELINE_LOADING`、`GET /api/v1/jobs`にジョブが増えない。`/generate/chain`も同じ。
+  - G10: 通常生成1本で、その間の全Generate無効化（非回帰）。
+- **状態**: 実装・機械検証（フロントエンド`npm run typecheck`／`npm run lint`／`npm run test`、バックエンド`pytest`とも全緑）・ビルド/配布まで完了。**オーナーの実機ゲート（G1〜G10）待ち**。合格後は本項を[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移設しクローズする。
+- **残作業（範囲外）**: MCPサーバーのツール説明文（`mcp_server/tools/generate.py`・`mcp_server/server.py`・`mcp_server/tools/batch.py`）が`JOB_BUSY`のみ言及しており、`PIPELINE_LOADING`にも触れていない。今回は`mcp_server/`を対象外としたため未対応。
+- **出典**: フロントエンド`DEVLOG.md` §98、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.5・§5.5(b)、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.9(f)・v0.5.45改訂履歴。
 
 ---
 

@@ -11,8 +11,9 @@ import type { GenerateChainRequest, GenerateRequest } from "../../api/types";
  * `POST /generate` (or `/generate/chain`), and on a `202` hands the new
  * `job_id` back to the caller (which refreshes the ledger + highlights it).
  *
- * `error` covers both transport failures and the `409 JOB_BUSY` a stale
- * `hasActiveJob` can still let through (Docs/API_REFERENCE.md §7 "同時1ジョブ",
+ * `error` covers both transport failures and the `409 JOB_BUSY`/`409
+ * PIPELINE_LOADING` a stale
+ * `serverBusy` can still let through (Docs/API_REFERENCE.md §7 "同時1ジョブ",
  * reservation/auto-retry removed 2026-07-17): `describeError` surfaces the
  * backend code/message just below the Generate button, and re-clicking retries. */
 export type SubmitState =

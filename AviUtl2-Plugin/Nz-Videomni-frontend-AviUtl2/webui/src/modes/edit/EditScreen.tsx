@@ -210,12 +210,13 @@ export function EditScreen({
     onFailed: onRetakeFailed,
   });
   const retakeSubmitting = retakeSubmitState.phase === "submitting";
-  // サーバが忙しい（queued/running のジョブがある）間は Retake の Generate を
-  // 押させない（オーナー目視 2026-08-10 ①）。Create/Chain と同じ作法で、
-  // **ボタンだけ**を止め（フォームは触れるまま）、ラベルは既存の
-  // `single.busyButton` を流用する（同じ状態に 2 つ目の文言を作らない）。
-  // 409 はサーバ側の最終防衛として従来どおり残る。
-  const { hasActiveJob } = useJobsContext();
+  // サーバが塞がっている（queued/running のジョブがある、または自分が出した
+  // モデル読み込みが飛行中）間は Retake と Outpainting の Generate を押させない
+  // （オーナー目視 2026-08-10 ①）。Create/Chain と同じ作法で、**ボタンだけ**を
+  // 止め（フォームは触れるまま）、ラベルは既存の `single.busyButton` を流用する
+  // （同じ状態に 2 つ目の文言を作らない）。409 はサーバ側の最終防衛として従来
+  // どおり残る。
+  const { serverBusy } = useJobsContext();
 
   /**
    * Generate 押下時の順序（実装計画 §1 の「可動窓と配置の整合」）:
@@ -273,11 +274,11 @@ export function EditScreen({
                 label={
                   retakeSubmitting
                     ? tr.generatingButton
-                    : hasActiveJob
+                    : serverBusy
                       ? strings.single.busyButton
                       : tr.generateButton
                 }
-                disabled={retakeSubmitting || hasActiveJob || !retakeForm.isValid}
+                disabled={retakeSubmitting || serverBusy || !retakeForm.isValid}
                 onGenerate={() => void handleRetakeGenerate()}
               />
               {retakeSubmitState.phase === "error" && (
@@ -292,8 +293,10 @@ export function EditScreen({
           {subMode === "outpainting" && (
             <>
               <GenerateButtonBar
-                label={submitting ? t.generatingButton : t.generateButton}
-                disabled={submitting || !outpaintForm.isValid}
+                label={
+                  submitting ? t.generatingButton : serverBusy ? strings.single.busyButton : t.generateButton
+                }
+                disabled={submitting || serverBusy || !outpaintForm.isValid}
                 onGenerate={() => submit(outpaintForm.buildRequest())}
               />
               {submitState.phase === "error" && (

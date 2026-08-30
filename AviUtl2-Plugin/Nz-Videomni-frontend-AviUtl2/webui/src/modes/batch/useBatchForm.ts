@@ -85,9 +85,10 @@ export interface UseBatchFormDeps {
    * inherits it silently, exactly like `nag` above. Defaults to the frozen
    * `ACCELERATION_DEFAULTS` sentinel when omitted. */
   acceleration?: AccelerationSettings | undefined;
-  /** §1-7 相互ロック 第2段（2026-07-31 オーナー実機報告）: `JobsContext.hasActiveJob`
-   * — a generation (a single Generate, or ANOTHER batch's row) is in flight on
-   * the backend's single job slot, so this batch may not start.
+  /** §1-7 相互ロック 第2段（2026-07-31 オーナー実機報告）: `JobsContext.serverBusy`
+   * — the backend is occupied, either by a generation (a single Generate, or
+   * ANOTHER batch's row) holding its single job slot or by a model load this
+   * WebUI started, so this batch may not start.
    *
    * Batch i2v-long has had this gate since day one (`jobActive`); Batch A2V
    * relied on the shared run lock alone, which is not enough: the lock is
@@ -97,7 +98,7 @@ export interface UseBatchFormDeps {
    * In every one of those cases Start stayed enabled and pressing it either
    * did nothing at all (the lock refused it silently) or 409-spammed the
    * backend. Defaults to false so every pre-existing unit test is unaffected. */
-  hasActiveJob?: boolean;
+  serverBusy?: boolean;
 }
 
 export interface UseBatchFormResult {
@@ -218,9 +219,11 @@ export interface UseBatchFormResult {
    * Start is disabled rather than just greying it out. False while this panel
    * holds the lock itself (that case is already covered by `runnerState`). */
   lockedByOther: boolean;
-  /** §1-7 相互ロック 第2段: true while the backend's single job slot is busy
-   * (`UseBatchFormDeps.hasActiveJob`) — the same gate Batch i2v-long's
-   * `jobActive` block reason applies. Blocks `canStart` and is surfaced
+  /** §1-7 相互ロック 第2段: true while the backend is occupied — a job in its
+   * single slot, or a model load (`UseBatchFormDeps.serverBusy`) — the same
+   * gate Batch i2v-long's `jobActive` block reason applies. The name is the
+   * block-reason code, which is shared with the i18n key and left alone.
+   * Blocks `canStart` and is surfaced
    * standalone so `BatchSection` can explain the disabled button. Unlike
    * `lockedByOther` this survives a page reload, because it is derived from
    * the SERVER's job list rather than from browser-local lock state. */
@@ -315,9 +318,9 @@ export function useBatchForm(
   const nag = deps.nag ?? NAG_OFF;
   // Acceleration (2026-07-31): same optional-dep shape as `nag`.
   const acceleration = deps.acceleration ?? ACCELERATION_DEFAULTS;
-  // §1-7 相互ロック 第2段: the server-side "is anything generating right now?"
-  // gate (see `UseBatchFormDeps.hasActiveJob`). Same default-off shape as `nag`.
-  const hasActiveJob = deps.hasActiveJob ?? false;
+  // §1-7 相互ロック 第2段: the server-side "is the backend occupied right now?"
+  // gate (see `UseBatchFormDeps.serverBusy`). Same default-off shape as `nag`.
+  const serverBusy = deps.serverBusy ?? false;
 
   const [wavDir, setWavDirState] = useState<string | null>(null);
   const [imgDir, setImgDirState] = useState<string | null>(null);
@@ -630,7 +633,7 @@ export function useBatchForm(
   //
   // 残る既知の限界: the runner instance is still `useRef`-owned, so a mid-run
   // remount does orphan the RUN itself (the old runner keeps submitting rows
-  // with no UI behind it). The `hasActiveJob` gate below is what keeps that
+  // with no UI behind it). The `serverBusy` gate below is what keeps that
   // window safe now — the remounted panel's Start stays disabled, with a
   // reason, for as long as the orphaned run occupies the backend.
   const lockTokenRef = useRef<RunLockToken | null>(null);
@@ -660,7 +663,7 @@ export function useBatchForm(
     // §1-7 相互ロック 第2段: never submit into a busy job slot, even if this is
     // reached with a stale closure or by a direct call — the run lock cannot
     // catch a job that no batch panel started (or one that outlived a reload).
-    if (hasActiveJob) return;
+    if (serverBusy) return;
     // §1-7 相互ロック: take the shared run lock before anything is submitted.
     // `null` means the other batch (i2v-long) is running — or this one already
     // is — so nothing is started. The re-judgment above is still committed,
@@ -746,7 +749,7 @@ export function useBatchForm(
     // intermittent-bug source flagged in the plan's own adversarial review,
     // same class of bug as the pre-existing `generationValues.numFrames` note
     // above `scan`).
-    // `hasActiveJob` is in the list for the same reason `nag` is: without it
+    // `serverBusy` is in the list for the same reason `nag` is: without it
     // this callback would close over a STALE job-slot state and could start a
     // whole batch into a slot that became busy since the last render.
   // `acceleration` is in this dependency list for the same reason `nag` is:
@@ -763,7 +766,7 @@ export function useBatchForm(
     batchRunner,
     nag,
     acceleration,
-    hasActiveJob,
+    serverBusy,
   ]);
 
   const summary: BatchSummary = useMemo(() => {
@@ -830,10 +833,11 @@ export function useBatchForm(
     wavDir !== null &&
     outDir !== null &&
     !lockedByOther &&
-    // §1-7 相互ロック 第2段: the backend's single job slot is busy. Kept
-    // separate from `lockedByOther` on purpose — this one is server-derived, so
-    // it still holds after a reload (or for a job no batch panel started).
-    !hasActiveJob &&
+    // §1-7 相互ロック 第2段: the backend is occupied (a job, or a model load).
+    // Kept separate from `lockedByOther` on purpose — this one is
+    // server-derived, so it still holds after a reload (or for a job no batch
+    // panel started).
+    !serverBusy &&
     batchRunner.state === "idle" &&
     !keyframes.isUploading &&
     !sharedKeyframeMissing &&
@@ -876,7 +880,7 @@ export function useBatchForm(
     currentRow,
     canStart,
     lockedByOther,
-    jobActive: hasActiveJob,
+    jobActive: serverBusy,
     start,
     stop: batchRunner.stop,
   };

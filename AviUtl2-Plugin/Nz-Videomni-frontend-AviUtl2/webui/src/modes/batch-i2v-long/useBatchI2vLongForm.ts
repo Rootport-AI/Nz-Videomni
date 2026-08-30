@@ -239,7 +239,7 @@ export interface UseBatchI2vLongFormResult {
 export function useBatchI2vLongForm(
   config: AppConfig,
   chain: ChainSnapshotSource,
-  hasActiveJob: boolean,
+  serverBusy: boolean,
   deps: UseBatchI2vLongFormDeps = {},
 ): UseBatchI2vLongFormResult {
   const nativeBridge = deps.nativeBridge ?? defaultBridge;
@@ -502,10 +502,10 @@ export function useBatchI2vLongForm(
       reasons.push("promptTooLong");
     }
     if (unknownLoraNames.length > 0) reasons.push("unknownLoraTag");
-    if (hasActiveJob) reasons.push("jobActive");
+    if (serverBusy) reasons.push("jobActive");
     if (lockedByOther) reasons.push("lockedByOther");
     return reasons;
-  }, [imgDir, outDir, rows.length, runnableRows.length, sourceVideoAttached, sourceAudioAttached, referenceVideoAttached, endSourceAttached, templatePreview, promptIssues, unknownLoraNames, hasActiveJob, lockedByOther]);
+  }, [imgDir, outDir, rows.length, runnableRows.length, sourceVideoAttached, sourceAudioAttached, referenceVideoAttached, endSourceAttached, templatePreview, promptIssues, unknownLoraNames, serverBusy, lockedByOther]);
 
   // The Chain form's own gates, expanded verbatim rather than collapsed into a
   // single "chain settings are invalid" line. The source-video codes are

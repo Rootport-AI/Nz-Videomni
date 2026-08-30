@@ -13,16 +13,9 @@ function isTerminal(status: JobStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
-/** True iff any job in `jobs` is `queued` or `running` — the app-wide "the
- * server is busy" predicate behind every Generate button's busy state.
- *
- * A plain exported function (not just the hook's `hasActiveJob` field) because
- * `shell/AppShell.tsx`'s right-click router cannot read the context: its
- * `handleRoute` is a `useCallback` that deliberately does NOT depend on `jobs`
- * (a 2s poll would re-create it constantly), so it reads the ledger through a
- * ref and needs the very same predicate applied by hand. One definition means
- * the button and the right-click can never disagree about what "busy" is. */
-export function hasActiveJob(jobs: readonly JobResponse[]): boolean {
+/** True iff any job in `jobs` is `queued` or `running` — the job-ledger half
+ * of `JobsContext`'s `serverBusy`, which is what the UI actually reads. */
+function hasActiveJob(jobs: readonly JobResponse[]): boolean {
   return jobs.some((job) => job.status === "queued" || job.status === "running");
 }
 

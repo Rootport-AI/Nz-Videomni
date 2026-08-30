@@ -107,6 +107,7 @@
     ./scripts/install_ltx.ps1 -ResolveLatest        # fresh (unvalidated) engine resolve
     ./scripts/install_ltx.ps1 -SkipModels           # venvs only, no downloads
     ./scripts/install_ltx.ps1 -RunSmoke             # + mock GPU-free smoke test
+    ./scripts/install_ltx.ps1 -BaseModel LTX25 -SkipVenv -SkipMigrate   # add ONE more base model (install-LTX25.bat)
 #>
 
 [CmdletBinding()]
@@ -127,7 +128,15 @@ param(
     [switch] $DryRun,
     # Leave an existing models/ tree exactly as it is (no migration, no
     # config.yaml rewrite).
-    [switch] $SkipMigrate
+    [switch] $SkipMigrate,
+    # Which manifests this RUN actually downloads and lists in the verification
+    # table, selected by the 'id' field of scripts/manifests/*.json. The default
+    # is exactly the set setup.bat ships -- the app plus the try-it-out LTX 2.3
+    # plus the shared preprocessors (owner's ruling 2026-08-23,
+    # Docs/MULTI_ENGINE_DESIGN.md §6.2). Any further base model is added by its
+    # own install-<ID>.bat, which passes its id here. Loading, validation and the
+    # migrate merge always cover EVERY manifest regardless of this switch.
+    [string[]] $BaseModel = @('LTX23', 'Preprocessors')
 )
 
 $ErrorActionPreference = "Stop"
@@ -301,10 +310,10 @@ function Test-ManifestShape {
     }
     # schema 1 keeps the original strict rule (a schema-1 manifest with no
     # downloads is almost certainly a mistake). schema 2 base-model descriptors
-    # are allowed an empty (or absent) 'downloads' -- a base model whose weights
-    # are not yet distributed (e.g. LTX 2.5, see scripts/manifests/20-ltx25.json)
-    # still needs to validate and load so its 'categories'/'default_selection'
-    # are visible to the registry, even though there is nothing to download yet
+    # are allowed an empty (or absent) 'downloads' -- a descriptor whose weights
+    # are not distributed through this installer yet still needs to validate and
+    # load so its 'categories'/'default_selection' are visible to the registry,
+    # even though this run has nothing to fetch for it
     # (S-2 / F2, MULTI_ENGINE_DESIGN.md §4.3).
     if ($Manifest.schema -eq 1 -and -not $Manifest.downloads) {
         throw "Manifest ${Name}: missing 'downloads'."
@@ -376,8 +385,8 @@ function Test-BaseModelShape {
     # Every downloads[].files[].path in this SAME manifest, for the drift check
     # below (default_file / assets must name a file the downloads table actually
     # produces -- otherwise the descriptor and the download table have silently
-    # diverged). Skipped entirely when downloads is empty (a not-yet-distributed
-    # base model like LTX 2.5 has nothing to drift against yet).
+    # diverged). Skipped entirely when downloads is empty: a descriptor with an
+    # empty downloads[] has nothing to drift against.
     $hasDownloads = (@($Manifest.downloads)).Count -gt 0
     $filePaths = @{}
     foreach ($dl in @($Manifest.downloads)) {
@@ -462,6 +471,37 @@ foreach ($mf in $Manifests) {
 }
 $manifestNames = ($Manifests | ForEach-Object { $_.Name }) -join ', '
 Write-Ok "$($Manifests.Count) manifest(s) validated: $manifestNames  ($($MigrateAll.Count) migrate entries)"
+
+# ----------------------------------------------------------------------------
+# Which manifests THIS run downloads and verifies (-BaseModel, see param()).
+# Everything above stays whole-set: loading, validation and the migrate merge
+# always see every descriptor, because a partial view of those would let two
+# manifests disagree without anyone noticing.
+#
+# The filter iterates $Manifests, NOT $BaseModel: the file-name order
+# (00- -> 10- -> 20-) is what fixes the row order of the verification table, and
+# setup.bat's table must not change shape just because the default value happens
+# to list LTX23 before Preprocessors.
+#
+# -contains is case-insensitive by default, so `-BaseModel ltx25` works too.
+# ----------------------------------------------------------------------------
+$wanted = @($BaseModel | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+$knownIds = @($Manifests | ForEach-Object { [string] $_.Data.id })
+# An empty selection must NOT be read as "nothing to check": with no manifests
+# left, the table would shrink to its three fixed rows, every one of them would
+# PASS, and the run would exit 0 having downloaded and verified no model at all.
+# -BaseModel '' / @() / '  ' all land here.
+if ($wanted.Count -eq 0) {
+    throw "-BaseModel resolved to no ids. Known ids: $($knownIds -join ', ')"
+}
+$TargetManifests = @($Manifests | Where-Object { $wanted -contains [string] $_.Data.id })
+$foundIds = @($TargetManifests | ForEach-Object { [string] $_.Data.id })
+foreach ($w in $wanted) {
+    if ($foundIds -notcontains $w) {
+        throw "-BaseModel '$w' matches no manifest id in $ManifestDir. Known ids: $($knownIds -join ', ')"
+    }
+}
+Write-Ok "-BaseModel: downloads + verification limited to $($foundIds -join ', ')"
 
 # ----------------------------------------------------------------------------
 # 1) Prerequisites
@@ -1545,9 +1585,13 @@ if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
 } else {
-    Write-Step "Model downloads (~31GB total, public repos, no token needed)"
+    # No total size in this heading: what a run fetches now depends on
+    # -BaseModel, and the manifests' `min` values are deliberately 4-10% under
+    # the official sizes, so any number computed here would be wrong. The
+    # per-batch estimate is printed by scripts/setup.ps1 / scripts/install_model.ps1.
+    Write-Step "Model downloads (public repos, no token needed)"
 
-    foreach ($mf in $Manifests) {
+    foreach ($mf in $TargetManifests) {
         $idx = 0
         foreach ($dl in @($mf.Data.downloads)) {
             $idx++
@@ -1656,7 +1700,11 @@ $required = @(
     @{ Label = "app_python";       Rel = ".venv/Scripts/python.exe";        IsDir = $false; Min = [long]0 }
     @{ Label = "engine worker.py"; Rel = "engine/worker.py";                IsDir = $false; Min = [long]0 }
 )
-foreach ($mf in $Manifests) {
+# Model rows come from the manifests THIS run is responsible for (-BaseModel):
+# install-LTX25.bat must not report LTX 2.3 as MISSING, and setup.bat must not
+# report LTX 2.5 as MISSING. The three fixed rows above stay unconditional --
+# they are this script's own prerequisites, not model files.
+foreach ($mf in $TargetManifests) {
     foreach ($dl in @($mf.Data.downloads)) {
         foreach ($fl in @($dl.files)) {
             $required += @{
@@ -1702,17 +1750,34 @@ foreach ($row in $rows) {
 # `files[]` entry that carries a `key` is a path the SERVER resolves by name --
 # a base-model descriptor `categories[].default_file` or `assets` entry (the
 # `key` is that asset key / category, not a config.yaml key any more: the fixed
-# default paths left config.yaml in §3-97 P3b). The list below is therefore
-# guaranteed to agree with the table above.
+# default paths left config.yaml in §3-97 P3b).
 # ----------------------------------------------------------------------------
+#
+# This list and the table above no longer answer the same question, so do not
+# expect them to match row for row: the table is narrowed by -BaseModel and
+# judges each file against its `min`, while this list covers every manifest and
+# only asks whether the file exists.
+#
+# This one list is NOT narrowed by -BaseModel (owner's ruling, 2026-08-30): the
+# file describes what is on this disk, so it must not shrink just because the
+# batch that happened to run last was only responsible for one base model.
+# Instead each row is kept only when the file is really there, using the same
+# existence test as the table above -- so after install-LTX25.bat the LTX 2.3
+# rows survive, and a base model nobody has downloaded yet contributes nothing.
 $pathRows = @()
 foreach ($mf in $Manifests) {
     foreach ($dl in @($mf.Data.downloads)) {
         foreach ($fl in @($dl.files)) {
-            if ($fl.key) { $pathRows += [pscustomobject]@{ Key = [string] $fl.key; Value = "./models/" + $fl.path } }
+            if (-not $fl.key) { continue }
+            $absPath = Join-Path $ModelsDir ($fl.path -replace '/', '\')
+            if (-not (Test-Path -LiteralPath $absPath)) { continue }
+            $pathRows += [pscustomobject]@{ Key = [string] $fl.key; Value = "./models/" + $fl.path }
         }
     }
 }
+# Unconditional: it is the interpreter, not a model file, and it is the row a
+# reader looks for when nothing else is installed yet (also keeps $keyWidth,
+# computed below over the filtered list, from seeing an empty collection).
 $pathRows += [pscustomobject]@{ Key = "engine_python"; Value = "./.venv-engine/Scripts/python.exe" }
 
 $keyWidth = ($pathRows | ForEach-Object { $_.Key.Length } | Measure-Object -Maximum).Maximum
@@ -1738,7 +1803,10 @@ if ($anyMissing) {
     Write-Warning "always enough -- never delete a whole models/ folder, it holds your own LoRAs"
     Write-Warning "and self-converted GGUFs, which no repo can give back."
     if ($SkipModels) { Write-Warning "You passed -SkipModels; re-run without it to fetch models." }
-    if ($SkipVenv) { Write-Warning "You passed -SkipVenv; re-run without it to build the venvs." }
+    # Only worth saying when the venv is actually missing: install-<ID>.bat
+    # passes -SkipVenv on purpose (it must not re-sync the working engine venv),
+    # so an unconditional "re-run without it" would send that user the wrong way.
+    if ($SkipVenv -and -not (Test-Path $hfExe)) { Write-Warning "You passed -SkipVenv; re-run without it to build the venvs." }
     exit 1
 }
 Write-Ok "All required artifacts present."

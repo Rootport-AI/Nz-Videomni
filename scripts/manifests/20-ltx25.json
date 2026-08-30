@@ -3,7 +3,7 @@
   "id": "LTX25",
   "display_name": "LTX 2.5",
   "engine_family": "ltx25",
-  "_note": "重みは未配布のため downloads は空のまま(scripts/install_ltx.ps1はSkipするだけで済む)。§3-98 Phase 4で四カテゴリとアップスケーラの実ファイル名を確定させた。video_vaeの既定は畳み込みデコーダ版(conv)で、拡散デコーダ版は LTX25/VAE/diffvae/ へ退避してある(VAEのscanは非再帰なので自動認識されない)。テキストエンコーダのtokenizer/processorメタデータはGGUFの中に入っており(engine25/assets_export.pyがGGUFの隣に書き出す)、LTX 2.3の gemma_root / text_projection にあたる資産は2.5には存在しない。",
+  "_note": "downloads は install-LTX25.bat 専用。scripts/install_ltx.ps1 の -BaseModel の既定値は LTX23,Preprocessors なので、setup.bat からの実行はここに到達しない(取得も検証もしない。Docs/MULTI_ENGINE_DESIGN.md §6.2)。§3-98 Phase 4で四カテゴリとアップスケーラの実ファイル名を確定させた。video_vaeの既定は畳み込みデコーダ版(conv)で、拡散デコーダ版は LTX25/VAE/diffvae/ へ退避してあり配布対象外(VAEのscanは非再帰なので自動認識されない)。テキストエンコーダのtokenizer/processorメタデータはGGUFの中に入っており、engine25/assets_export.py が初回ロード時にGGUFの隣へ *.assets.safetensors を書き出す(自動生成物なので配布対象外)。LTX 2.3の gemma_root / text_projection にあたる資産は2.5には存在しない。",
 
   "categories": {
     "transformer": {
@@ -42,6 +42,64 @@
     "audio": "default"
   },
 
-  "downloads": [],
+  "downloads": [
+    {
+      "name": "LTX 2.5 weights + VAE + upscaler (4 files)",
+      "repo": "Rootport/Nz-LTX25-weights",
+      "include": ["Weights/*", "VAE/*", "Upscaler/*"],
+      "map": [
+        { "from": "Weights", "to": "LTX25/Weights" },
+        { "from": "VAE", "to": "LTX25/VAE" },
+        { "from": "Upscaler", "to": "LTX25/Upscaler" }
+      ],
+      "files": [
+        {
+          "path": "LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+          "min": 14100000000,
+          "label": "gguf_transformer",
+          "key": "transformer",
+          "_min": "公式14,738,670,464Bの1ファイル(約4%下)"
+        },
+        {
+          "path": "LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+          "min": 1400000000,
+          "label": "component_video_vae",
+          "key": "video_vae",
+          "_min": "公式1,452,269,922Bの1ファイル(約4%下)。拡散デコーダ版はdiffvae/へ退避済みで配布対象外"
+        },
+        {
+          "path": "LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+          "min": 350000000,
+          "label": "component_audio_vae",
+          "key": "audio",
+          "_min": "公式364,866,540Bの1ファイル(約4%下)"
+        },
+        {
+          "path": "LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+          "min": 900000000,
+          "label": "spatial_upsampler",
+          "key": "spatial_upsampler",
+          "_min": "公式995,778,752Bの1ファイル(約10%下)"
+        }
+      ]
+    },
+    {
+      "name": "Gemma 4-12B text encoder for LTX 2.5 (1 file)",
+      "repo": "Rootport/Nz-Gemma4-12B-LTX25",
+      "include": ["TextEncoder/*"],
+      "map": [
+        { "from": "TextEncoder", "to": "LTX25/TextEncoder" }
+      ],
+      "files": [
+        {
+          "path": "LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+          "min": 8850000000,
+          "label": "gguf_gemma4",
+          "key": "text_encoder",
+          "_min": "公式9,231,374,624Bの1ファイル(約4%下)。隣の*.assets.safetensorsは自動生成物で配布対象外"
+        }
+      ]
+    }
+  ],
   "migrate": []
 }

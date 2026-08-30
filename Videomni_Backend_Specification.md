@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.42** |
+| 版 | **v0.5.42**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-08-30**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -117,6 +117,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/MCP_SERVER_DESIGN.md` | MCPサーバー（`mcp_server/`）の設計判断（ツール分割・非同期化・エラー翻訳・`.mcp.json` 生成方式 等） |
 | `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`（アーカイブ形式だが仕様の正本として現役） | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の仕様・設計判断 |
 | `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
+| `Docs/VSF_README_NOTES.md` | 非CFGネガティブプロンプト（NAG／VSF）の**使い分けの正本**（どちらを選ぶか・つまみの目安・LTX 2.5 での実測）。README §5 と §7.1 はここを指している |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値と逆算式の正本 |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |

@@ -1169,3 +1169,11 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **申し送り（台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3にも記載）**: **画角拡張に触る改修では連続ジョブの腕を回すこと。** 常設の道具は `outputs/ltx25-opmode-gate/scripts/`（`op_gate.py` ほか）。**腕が「有効」かどうかを合否とは別に検査する**のがこのゲートの要点である。
 - **状態**: **クローズ（2026-08-30、修正＋全ゲート合格）。**
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§81**（機構・ゲート結果の正本）・**§80.7**（発見時の記録。**呼称と引用ログ行は§81が訂正している**）、`outputs/ltx25-opmode-gate/summary.json`（数値の正本）と同 `RESULTS.md`、**`outputs/ltx25-nagvsf-gate/manifest.jsonl` の15〜16行目（失敗の唯一の一次記録**——起票時に挙げた `runs/g8_off/run.json` と同 `worker_tail.csv` は、どちらも成功した再走で上書き済みである。トレースバックの末尾3行は §81.3 に転記保存してある）。
+
+### 4-12. 部分的な作り直し（Retake）と領域の塗り替え（Inpaint）（統合によりクローズ：2026-08-30）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-12からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §4「スコープ外（さらに先の将来）」の§4-12（同書§4-12は欠番）。生成済み動画の一部の時間区間だけを作り直すRetakeと、映像の一部の領域を塗り替えるInpaintを、ひとまとめの「さらに先の将来」として置いていた項目である。
+- **クローズ理由（統合・2026-08-30）**: **本項が抱えていた2つの主題は、どちらも既に別の場所で管理されている。** 時間軸側のRetakeは**実装済み・クローズ済み**（本書§3-73。窓の長尺化も本書§3-93で起票取り下げ済み）で、領域側のInpaintは[`PENDING_TASKS.md`](PENDING_TASKS.md) **§3-55**（前提は同§3-54の軽量ユーティリティAIモジュール）が扱っている。**したがって本項は「同じ話が3か所にある」状態を作るだけであり、独立して残す意味が無い。**
+- **移した内容**: 本項が唯一持っていた記述——**「タイムライン設計の当初から『さらに先の将来』として位置づけられている」という位置づけと、土台として`ltx_pipelines`に`RetakePipeline`が実在すること**——を[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55へ1行として吸収し、出典（`TIMELINE_ALPHA_REQUIREMENTS.md`・`TIMELINE_FEATURE_CANDIDATES.md`・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.6）も同項へ引き継いだ。**失われた判断材料は無い。**
+- **状態**: **未着手のまま統合によりクローズ（2026-08-30）**。実装・機械検証は本項を目的としては一度も発生していない。**着手の判断は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55（および前提の§3-54）を見ること。**
+- **正本・出典**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55・§3-54、本書§3-73（Retakeの実装記録）・§3-93（窓の長尺化の取り下げ）、[`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)「優先順位の階層」、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.6。

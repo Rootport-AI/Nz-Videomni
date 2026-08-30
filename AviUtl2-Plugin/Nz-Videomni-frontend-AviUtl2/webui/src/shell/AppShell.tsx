@@ -56,6 +56,7 @@ import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationS
 import { useAccelerationSettings } from "./useAccelerationSettings";
 import {
   batchA2vDisabledFor,
+  baseModelInstaller,
   chainPanelsDisabledFor,
   editSubTabsDisabledFor,
   useBaseModels,
@@ -314,7 +315,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           case "not-installed":
             toasts.push({
               kind: "warning",
-              message: strings.toolVersion.notInstalled(outcome.displayName),
+              message: strings.toolVersion.notInstalled(outcome.displayName, baseModelInstaller(outcome.id)),
             });
             return;
           case "busy":

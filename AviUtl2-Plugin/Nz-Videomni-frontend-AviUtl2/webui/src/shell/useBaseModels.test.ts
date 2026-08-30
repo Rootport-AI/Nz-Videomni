@@ -6,6 +6,7 @@ import { createMockBridge } from "../bridge/mockBridge";
 import { withExtraUnsupportedFeatures } from "../test/unsupportedFeatures";
 import {
   batchA2vDisabledFor,
+  baseModelInstaller,
   chainPanelsDisabledFor,
   disabledModesFor,
   editSubTabsDisabledFor,
@@ -86,6 +87,10 @@ describe("useBaseModels", () => {
 
     expect(loadPipeline).not.toHaveBeenCalled();
     expect(result.current.current).toBe("LTX23");
+  });
+
+  it("names the installer batch file after the descriptor id", () => {
+    expect(baseModelInstaller("LTX25")).toBe("install-LTX25.bat");
   });
 
   it("a partial install is NOT short-circuited — the server gets to say why", async () => {

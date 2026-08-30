@@ -213,6 +213,18 @@ export type BaseModelSwitchOutcome =
    * failure, an unexpected status. */
   | { kind: "failed"; message: string };
 
+/** The batch file that installs a base model's weights. The server never
+ * downloads anything itself (`Docs/MULTI_ENGINE_DESIGN.md` §6.2) — putting
+ * files on disk is `install-<id>.bat`'s job, one bat per descriptor id
+ * (台帳 §3-111). Derived from the id alone, so a base model added
+ * server-side needs no change here. LTX 2.3 has no bat of its own — it ships
+ * inside `setup.bat` — so this name is reachable for it only if someone
+ * deletes the weights `setup.bat` already placed; that residual mismatch is
+ * an accepted corner (オーナー裁定), not a bug to design around. */
+export function baseModelInstaller(id: string): string {
+  return `install-${id}.bat`;
+}
+
 export interface UseBaseModelsDeps {
   apiClient?: ApiClient;
 }

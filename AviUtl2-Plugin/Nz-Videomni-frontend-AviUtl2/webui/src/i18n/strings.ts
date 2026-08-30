@@ -33,13 +33,13 @@ export const en = {
      * so it is selectable but the server will refuse it with the specifics. */
     optionPartial: (displayName: string): string => `${displayName} (partly installed)`,
     switched: (displayName: string): string => `Switched to ${displayName}.`,
-    /** Guard 2: no request was made — putting weights on disk is the setup
-     * procedure's job, never the server's (§6.2). Deliberately does NOT name a
-     * per-base-model batch file: which weights a base model needs and how they
-     * are obtained differs per model, and the setup documentation is the one
-     * place that stays correct. */
-    notInstalled: (displayName: string): string =>
-      `${displayName} is not installed. Follow the setup guide to put its weight files in place, then pick it again.`,
+    /** Guard 2: no request was made — putting weights on disk is a batch
+     * file's job, never the server's (§6.2). Names the batch file: it really
+     * exists now (`install-<id>.bat`, 台帳 §3-111), so the vaguer
+     * "follow the setup guide" wording would only make the user hunt for a
+     * name this screen already knows. */
+    notInstalled: (displayName: string, installer: string): string =>
+      `${displayName} is not installed. Double-click ${installer} in the backend folder to download its weight files, then reopen this screen and pick it again.`,
     /** Guard 1: 409 JOB_BUSY. */
     switchFailedBusy: "Cannot switch the base model while a job is running.",
     /** Guard 3: 409 PIPELINE_LOADING. */
@@ -1903,8 +1903,8 @@ export const ja: Strings = {
     optionNotInstalled: (displayName: string): string => `${displayName}（未導入）`,
     optionPartial: (displayName: string): string => `${displayName}（一部未導入）`,
     switched: (displayName: string): string => `${displayName}へ切り替えました。`,
-    notInstalled: (displayName: string): string =>
-      `${displayName}はまだ導入されていません。導入手順に従って重みファイルを配置してから、もう一度選び直してください。`,
+    notInstalled: (displayName: string, installer: string): string =>
+      `${displayName}はまだ導入されていません。バックエンドのフォルダにある${installer}をダブルクリックして重みファイルを取得したあと、この画面を開き直してから選び直してください。`,
     switchFailedBusy: "生成中はベースモデルを切り替えられません。",
     switchFailedLoading: "モデルの読み込み中です。完了してから切り替えてください。",
     switchFailedRejected: (reason: string): string => `ベースモデルを切り替えられませんでした: ${reason}`,

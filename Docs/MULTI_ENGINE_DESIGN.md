@@ -112,7 +112,7 @@
 
 「置き場所がそのまま所属の宣言になる」という現行の `models/` レイアウト（[`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) §4）は、この軸にそのまま合致する。**現行レイアウトは変更しない。**
 
-導入口はベースモデル別ではなく `setup.bat` の1本である（§6.2）。
+導入口は「本体＋ベースモデル別」の2階建てである——`setup.bat` が本体と LTX 2.3 を、`install-<ID>.bat`（`ID` は記述子の `id`）がそれ以外のベースモデルを導入する（§6.2）。
 
 ### 3.2 EngineFamily（エンジン系統）— 推論実装の単位
 
@@ -171,7 +171,7 @@ Wan 2.2  ──────→ wan        （将来）
 置き場所は `scripts/manifests/` で、インストーラ `scripts/install_ltx.ps1` と同じものをサーバーも読む。インストーラはこの記述ファイルに完全に駆動されており（`Import-ModelManifests` が `scripts/manifests/*.json` を読み、スクリプト自体はモデル名を一切持たない）、スキーマ番号による版管理も形式検証（`Test-ManifestShape`。schema 1 と 2 の両方を受理する）も備わっている。
 
 - **ベースモデル記述子**（`10-ltx23.json`・`20-ltx25.json`）— `engine_family` を持つ。**これだけがヘッダーのドロップダウン・ベースモデル一覧に出る。**
-- **共有資産記述子**（`00-preprocessors.json` など）— `engine_family` を持たない。どのベースモデルからも参照される共有素材を記述する。`setup.bat` の「全部読んで全部入れる」経路には含まれるが、ベースモデル切替のUIには現れない。
+- **共有資産記述子**（`00-preprocessors.json` など）— `engine_family` を持たない。どのベースモデルからも参照される共有素材を記述する。`setup.bat` が取得する集合（`install_ltx.ps1` の `-BaseModel` 既定値・§6.2）には含まれるが、ベースモデル切替のUIには現れない。
 
 ### 4.3 記述子の形
 

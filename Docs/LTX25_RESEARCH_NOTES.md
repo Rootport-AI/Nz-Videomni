@@ -292,9 +292,9 @@ Gemma 4 text encoderの量子化設計についても、未決の論点が2つ�
 
 量子化ポリシーはオーナー裁定を経て次のとおり確定した。40層のsliding-attention層と8層のfull-attention層が持つ`nn.Linear`の重み328本（1層あたり7種、full層は`v_proj`を共有するため実質40×7＋8×6ではなく、7名の対象名を持つ層すべてから拾える328本）をQ4_Kにする。`aggregate_embed`（video用[4096, 188160]・audio用[2048, 188160]の2本）はQ6_Kにする——実測rel-RMSEがQ4_Kで0.0656、Q6_Kで0.0173となり、Q6_Kを採用した。`embed_tokens`（[262144, 3840]の埋め込みテーブル）はK量子化の条件を満たすがBF16のまま温存する——バックエンド側が埋め込みを読み込み時に必ずBF16へ全展開する実装のため、量子化してもVRAM削減効果がゼロで、リスクだけが残るという判断による。残りのnorm系・`layer_scalar`・biases・projector・vision towerはBF16のまま。
 
-transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distilled-transformer.gguf`（14,738,670,368バイト、1節参照）。
+transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distilled-transformer.gguf`（14,738,670,368バイト、1節参照）。**このサイズとSHA-256はKVメタデータを足す前の出力のものである**——実際に配布・配置されている現物の値は10節の表が正本。
 
-**両GGUFとも`models\LTX25\`へは未配置である。** `models\LTX25\Weights\`フォルダは実在するが中身は空で、`TextEncoder\`・`VAE\`フォルダはまだ作成されていない。配置作業はオーナーが行う。
+**両GGUFとも`models\LTX25\`へは未配置である。** `models\LTX25\Weights\`フォルダは実在するが中身は空で、`TextEncoder\`・`VAE\`フォルダはまだ作成されていない。配置作業はオーナーが行う。**（この段落は2026-08-21時点の記述で、いまは失効している——重みは10節のとおり再ホスト済みで、配置は`install-LTX25.bat`が行う。）**
 
 残る4本の重み（safetensors形式）はGGUF化せず、そのまま使う方針である。`Nz-GGUF-Converter-LTX23\.artifacts\official-ltx25\`配下に検証済みでダウンロード済みになっている。
 
@@ -416,7 +416,7 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 }
 ```
 
-`categories.*.default_file`4件（`LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf`・`LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf`・`LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors`・`LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors`）と`assets.spatial_upsampler_path`（`LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors`）は、いずれも上のどちらかの`files[].path`と文字列一致している。`min`は`10-ltx23.json`の慣例（公式サイズの約4〜10%下）に倣った概算であり、実配置後の実測に合わせて微調整してよい。`key`は`install_ltx.ps1`側コメント（1670行目、後述）が「`categories`／`assets`の呼称そのもの」と説明している値に倣ったが、必須項目ではない（spatial_upsamplerの`files[]`行に`key`を付けていないのは、`10-ltx23.json`の同種エントリ（Upscaler）も`key`を持たない先例に倣ったもの）。
+`categories.*.default_file`4件（`LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf`・`LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf`・`LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors`・`LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors`）と`assets.spatial_upsampler_path`（`LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors`）は、いずれも上のどちらかの`files[].path`と文字列一致している。`min`は`10-ltx23.json`の慣例（公式サイズの約4〜10%下）に倣った概算であり、実配置後の実測に合わせて微調整してよい。`key`は`install_ltx.ps1`の`models/INSTALLED_PATHS.txt`再生成部のコメントが「`categories`／`assets`の呼称そのもの」と説明している値に倣ったが、必須項目ではない（spatial_upsamplerの`files[]`行に`key`を付けていないのは、`10-ltx23.json`の同種エントリ（Upscaler）も`key`を持たない先例に倣ったもの）。
 
 #### `install_ltx.ps1`の制約（配線前に必ず踏まえること）
 
@@ -444,6 +444,8 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 >
 > 1. **空間アップスケーラの行に`key`を付けた**（`"key": "spatial_upsampler"`）。`key`を持つ行だけが`models/INSTALLED_PATHS.txt`に載るので、付けないとこの1本だけが一覧から落ちる。
 > 2. **上の案文が「`10-ltx23.json`のUpscaler行も`key`を持たない」と書いているのは事実誤認である。** 現物の`10-ltx23.json`は該当行に`key`を持っている（裏取り済み）。したがって「先例に倣って付けない」という理由は成り立たない。
+>
+> **⑤（`--include`の記法）の申し送りも決着した。** ダウンロードは`.venv-engine`側の`hf.exe`（huggingface_hub 0.36.2）で走らせる設計のままとし、記法は変更していない——実ダウンロードを伴う検証はサブマシンで行い、5ファイルとも取得できている（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82）。**開発機の`hf.exe`が改名で壊れている事実はいまも有効**で、開発機ではこれを「ダウンロードを必ず失敗させる故障注入器」として使い、失敗案内とステージング残存の確認に充てている（同 §82.7）。**なお`hf download`は固定回数まで再試行する**（回数と待ち時間の正本は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §2.5。リマップは`.cache`を消さないので再開情報が残り、取得済みのファイルは取り直さない）。**ただし固定されているのは`huggingface_hub`だけで、転送の実体を担う`hf-xet`は`engine/venv-engine.freeze.txt`に載っていない**（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-128）ので、「ダウンロード側は完全に固定されている」と読んではならない。
 >
 > なお`_note`も書き換えてあり、**`downloads`は`install-LTX25.bat`専用であること**・`install_ltx.ps1`の`-BaseModel`既定値のおかげで`setup.bat`はここに到達しないこと・拡散デコーダ版VAEと`*.assets.safetensors`は配布対象外であることを、現物のコメントとして残してある。**この節に書いた5ファイルのサイズとSHA-256の表は、いまも正本のままである。**
 

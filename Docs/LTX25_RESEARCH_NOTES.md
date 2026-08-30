@@ -355,7 +355,7 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 
 #### `scripts\manifests\20-ltx25.json`の`downloads[]`へ追加すべきエントリ案
 
-現状の`20-ltx25.json`は`downloads: []`のまま（`categories`・`assets`・`default_selection`は§3-98 Phase 4で確定済み）。`10-ltx23.json`の実書式に倣うと、次の2エントリを追加すればよい。
+**この項の内容は2026-08-23時点の案である**（この2エントリは2026-08-30に投入済みで、いまの正本は`20-ltx25.json`の現物である。節末の追記を参照）。当時の`20-ltx25.json`は`downloads: []`のままだった（`categories`・`assets`・`default_selection`は§3-98 Phase 4で確定済み）。`10-ltx23.json`の実書式に倣うと、次の2エントリを追加すればよい。
 
 ```json
 {
@@ -420,23 +420,32 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 
 #### `install_ltx.ps1`の制約（配線前に必ず踏まえること）
 
-実物の該当行を読んで確認した事実のみを記す。
+実物を読んで確認した事実のみを記す。**引く場所は関数名で書く**——初出時は行番号で書いていたが、その後の改修（`-BaseModel`の新設など）で全て失効したためである。
 
-① **`downloads[]`の各エントリは`name`／`repo`／`include`／`map`／`files`が全て必須**で、欠けると`Test-ManifestShape`が`throw`する（314〜318行目）。加えて、`files[]`の各行の`path`は同じエントリの`map[].to`のいずれかの配下でなければならず、外れていると「remapが絶対にそこへ置けないのでguardが満たされ得ない」という文言で`throw`する（329〜335行目）。
+① **`downloads[]`の各エントリは`name`／`repo`／`include`／`map`／`files`が全て必須**で、欠けると`Test-ManifestShape`が`throw`する。加えて、`files[]`の各行の`path`は同じエントリの`map[].to`のいずれかの配下でなければならず、外れていると「remapが絶対にそこへ置けないのでguardが満たされ得ない」という文言で`throw`する（どちらも同じ`Test-ManifestShape`の中）。
 
-② **`downloads`が非空になった瞬間から、descriptor drift検査が有効化される。** `categories.*.default_file`4件と`assets.spatial_upsampler_path`のすべてが、同じmanifestファイル内の`downloads[].files[].path`のどれかと文字列一致していないと`throw`する（`categories`側は403〜409行目、`assets`側は413〜423行目。有効化条件`$hasDownloads`は378行目）。上記のJSON案では2つの`downloads`エントリを**同一の`20-ltx25.json`内**に追加するため、`$filePaths`の集計はその2エントリ分を合算した上で行われ、5件の一致要求はまとめて成立する（378〜381行目）。
+② **`downloads`が非空になった瞬間から、descriptor drift検査が有効化される。** `categories.*.default_file`4件と`assets.spatial_upsampler_path`のすべてが、同じmanifestファイル内の`downloads[].files[].path`のどれかと文字列一致していないと`throw`する（`Test-BaseModelShape`の中。有効化条件はその関数が冒頭で作る`$hasDownloads`）。上記のJSON案では2つの`downloads`エントリを**同一の`20-ltx25.json`内**に追加するため、`$filePaths`の集計はその2エントリ分を合算した上で行われ、5件の一致要求はまとめて成立する。
 
-③ **ステージング領域（`models\.dl\...`）に落ちた全ファイルが`map`に回収されなければならない。** ダウンロード後、`map`のどのエントリにも属さないファイルが1つでも残っていると、「`map`を広げるか`include`を絞れ」という文言で`throw`する（1555〜1558行目）。
+③ **ステージング領域（`models\.dl\...`）に落ちた全ファイルが`map`に回収されなければならない。** ダウンロード後、`map`のどのエントリにも属さないファイルが1つでも残っていると、「`map`を広げるか`include`を絞れ」という文言で`throw`する（ダウンロード段のremapループ。`Resolve-MapTarget`が`$null`を返した場合）。
 
-④ **`include`は`<dir>/*`形式で、リポジトリ直下のLICENSE・NOTICE.md・README.md等はどの`<dir>/*`にもマッチしない。** これはコメントで明示的に説明されている仕様であり（1479〜1485行目）、上記のJSON案の`include`（`"Weights/*"`等）はこの仕様に沿って書いてある——カード類がステージングへ紛れ込んでremapで`throw`されるのを、この境界がそもそも防いでいる。
+④ **`include`は`<dir>/*`形式で、リポジトリ直下のLICENSE・NOTICE.md・README.md等はどの`<dir>/*`にもマッチしない。** これはダウンロード段の見出しコメント（glob semanticsの注記）で明示的に説明されている仕様であり、上記のJSON案の`include`（`"Weights/*"`等）はこの仕様に沿って書いてある——カード類がステージングへ紛れ込んでremapで`throw`されるのを、この境界がそもそも防いでいる。
 
-⑤ **単一`--include`に複数パターンを並べる現行記法（1534〜1536行目）はhuggingface_hub 0.36系専用である。** スクリプト自身の警告コメント（1469〜1477行目）によれば、1.20.1系では「`--include`は無視する」という警告とともに黙ってファイルを取りこぼす（実際に空間アップスケーラが消える形で再現済みとコメントにある）。`$hfExe`は1392行目で`"$ProjectRoot\.venv-engine\Scripts\hf.exe"`に固定されており、これはLTX 2.3側の仮想環境である。`.venv-engine`のhuggingface_hubは0.36.2固定（`engine\venv-engine.freeze.txt`60行目実測）なので、現行記法のままで問題は起きない設計になっている。
+⑤ **単一`--include`に複数パターンを並べる現行記法はhuggingface_hub 0.36系専用である。** スクリプト自身の警告コメント（同じくダウンロード段の見出し。`nargs="*"`の注記）によれば、1.20.1系では「`--include`は無視する」という警告とともに黙ってファイルを取りこぼす（実際に空間アップスケーラが消える形で再現済みとコメントにある）。`$hfExe`は`"$ProjectRoot\.venv-engine\Scripts\hf.exe"`に固定されており、これはLTX 2.3側の仮想環境である。`.venv-engine`のhuggingface_hubは0.36.2固定（`engine\venv-engine.freeze.txt`実測）なので、現行記法のままで問題は起きない設計になっている。
 
 　ただし**開発機ではこの`.venv-engine\Scripts\hf.exe`自体が壊れている**——2026-08-19のモノレポ改名（`Nz-LTX23-backend`→`Nz-Videomni`）より前（実測タイムスタンプ2026-07-08）に作られたuvシムで、埋め込みパスが旧ディレクトリ名を指している。これは`Nz-HF-Rehost\README.md`冒頭の2026-08-23追記ブロックで報告されている「旧`Nz-LTX23-backend\.venv\Scripts\hf.exe`が改名で壊れたシムのため使えない」現象と同型の問題である。開発機で`setup.bat`／`install_ltx.ps1`のダウンロード検証を行う際、もし`.venv-engine`側を作り直さずLTX 2.5用の`.venv-engine-ltx25`（huggingface_hub **1.28.0**固定、`engine25\venv-engine-ltx25.freeze.txt`60行目実測）のhf.exeへ差し替えて検証するなら、1.20系以降の挙動（②の警告どおり複数パターンが無視される）に当たるため、単一`--include`複数パターンの記法から`--include`を繰り返す記法へ変更する必要がある——コード修正はDocs担当の本エージェントの権限外であり、次セッションでの判断事項として残す。
 
 **この`20-ltx25.json`の編集と`install_ltx.ps1`（`setup.bat`経由）の動作検証は、次セッション（LTX 2.5推論エンジン担当）の作業とする。** 本節はJSONエントリ案と踏まえるべき制約を申し送るのみで、コード変更は一切行っていない。
 
-> **2026-08-23追記（上の本文は当時のまま）**: 上の「`downloads[]`へ追加すべきエントリ案」は**いま入れるものではない**。`setup.bat`は本体＋LTX 2.3だけを導入し、別のベースモデルは専用バッチ（`install-LTX25.bat`等）で足す、という2階建ての導線だからである。したがって`downloads[]`は当面**空のまま**にしておく（埋めると`setup.bat`がLTX 2.5まで取りにいく）。このエントリ案を実際に投入するのは[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111（ベースモデル別インストールバッチの整備）のスコープである。設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2。
+> **2026-08-30追記（上の本文は当時のまま）**: **上の2エントリは`scripts/manifests/20-ltx25.json`へ投入した。正本はその現物であり、上の案文はもう最新ではない。**
+>
+> 投入できるようになったのは、`scripts/install_ltx.ps1`に**「どの記述子をこのRUNが担当するか」を決める`-BaseModel`**が入ったからである。その既定値は「`setup.bat`が同梱する集合」＝LTX 2.3と共用前処理器なので、`downloads[]`を埋めても`setup.bat`はLTX 2.5を取りにいかない。導線は`install-LTX25.bat` → `scripts/install_model.ps1` → `install_ltx.ps1`。設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2、実装と実測の記録は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111 と[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82。
+>
+> **案と現物の差は2点である。**
+>
+> 1. **空間アップスケーラの行に`key`を付けた**（`"key": "spatial_upsampler"`）。`key`を持つ行だけが`models/INSTALLED_PATHS.txt`に載るので、付けないとこの1本だけが一覧から落ちる。
+> 2. **上の案文が「`10-ltx23.json`のUpscaler行も`key`を持たない」と書いているのは事実誤認である。** 現物の`10-ltx23.json`は該当行に`key`を持っている（裏取り済み）。したがって「先例に倣って付けない」という理由は成り立たない。
+>
+> なお`_note`も書き換えてあり、**`downloads`は`install-LTX25.bat`専用であること**・`install_ltx.ps1`の`-BaseModel`既定値のおかげで`setup.bat`はここに到達しないこと・拡散デコーダ版VAEと`*.assets.safetensors`は配布対象外であることを、現物のコメントとして残してある。**この節に書いた5ファイルのサイズとSHA-256の表は、いまも正本のままである。**
 
 ### 11. Stage-2の窓サイズの実測と2.5向け窓プリセット案／LTX 2.3のLoRA・IC-LoRAを2.5へ流用できるか（2026-08-23）
 

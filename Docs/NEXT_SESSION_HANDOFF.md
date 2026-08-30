@@ -117,12 +117,13 @@ models/
 ```
 
 - 各フォルダの `put_*_here.txt`（**全18本**。`git ls-files` 実測）は git 追跡。空フォルダのプレースホルダと「そこへ置ける形式」の掲示を兼ねる。
-- **LTX 2.5 の記述子（`scripts/manifests/20-ltx25.json`）は `downloads` が空**で、インストーラは LTX 2.5 のぶんを単に飛ばす（最後の検証テーブル 15 行にも LTX 2.5 は出ない）。**これは意図した状態である**——`setup.bat` は本体のインストーラで、最初に試すAIとして LTX 2.3 だけを導入し、**別のベースモデルは専用のバッチ（`install-LTX25.bat` 等）で導入する**という設計である（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2）。バッチ群の整備までは `downloads` を空のまま置くこと（埋めると `setup.bat` が LTX 2.5 まで取りにいく）。整備は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111。
-- **LTX 2.5 の重みは HuggingFace で公開済みである**（Public・非 Gated）。[`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights)（transformer GGUF・映像/音声 VAE・空間アップスケーラ）と[`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25)（Gemma 4 テキストエンコーダ GGUF）の2本立てで、**ライセンス確認も完了している**。ダウンロードして `models/LTX25/<カテゴリ>/` へ記述子の期待名のまま置けば、そのまま認識される。ファイル一覧と SHA-256 の正本は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節。期待するファイル名 5 本は記述子と[`../README.md`](../README.md) §1「models フォルダの構成」にも書いてある。
+- **導入口は「本体＋ベースモデル別」の2階建てである。** `setup.bat` は本体のインストーラで、最初に試すAIとして **LTX 2.3 と共用前処理器だけ**を導入する。**別のベースモデルは専用のバッチで足す**——LTX 2.5 は `install-LTX25.bat`（リポジトリ直下）をダブルクリックすると、`scripts/install_model.ps1` を経て `scripts/install_ltx.ps1 -BaseModel LTX25 -SkipVenv -SkipMigrate` が走り、5ファイルが `models/LTX25/<カテゴリ>/` へ置かれる。設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.2、実装と実測は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-111・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82。
+- **`setup.bat` の取得対象を分けているのは `install_ltx.ps1` の `-BaseModel` である**（記述子の `id` を並べる配列。既定値が「`setup.bat` が同梱する集合」そのもの）。**引数なしで呼ばれた `setup.bat` の検証テーブルに LTX 2.5 の行は出ない**——テーブルの中身を知りたいときは、数を書き写した文書ではなく `setup.bat` の出力そのものを見ること。**新しいベースモデルを足すときに `-BaseModel` の既定値へ手を入れる必要はない**（バッチ1本と記述子1本で足りる。既定値が伸びるのは、本体インストーラの同梱物そのものが増えるときだけである）。
+- **LTX 2.5 の重みは HuggingFace で公開済みである**（Public・非 Gated）。[`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights)（transformer GGUF・映像/音声 VAE・空間アップスケーラ）と[`Rootport/Nz-Gemma4-12B-LTX25`](https://huggingface.co/Rootport/Nz-Gemma4-12B-LTX25)（Gemma 4 テキストエンコーダ GGUF）の2本立てで、**ライセンス確認も完了している**。`install-LTX25.bat` が取りにいくのはこの2本である（手で置く場合も、記述子の期待名のまま `models/LTX25/<カテゴリ>/` へ置けばそのまま認識される）。ファイル一覧と SHA-256 の正本は[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10節。期待するファイル名 5 本は記述子と[`../README.md`](../README.md) §1「LTX 2.5 を追加する」の表にも書いてある。
 - インストーラ（`scripts/install_ltx.ps1`）は **`scripts/manifests/*.json` に駆動される**。manifest が取得元リポジトリ・展開先・期待ファイルを宣言し、スクリプト自体はモデル名を持たない。新しいモデルを足すときは manifest を足す。
 - **ガードは期待ファイル単位**である（ディレクトリ合計サイズではない）。`TextEncoder` が2つのリポジトリから供給されること、`Weights` に利用者の自家変換 GGUF が同居することの2点で、合計方式は破綻するため。
 - **旧レイアウトからの自動移行を持つ。** 旧配置のファイルを新配置へ移動し、`config.yaml` 内のモデルパスも自動で書き換える（書き換え前に `config.yaml.bak` を作る）。移動は上書きしない方式で、実行前に安全性チェック（シンボリックリンク・衝突）を通る。
-- 検証に失敗した場合は、**足りない1ファイルだけを消して再実行する**。`models\LTX23` ごと消してはいけない（`StyleLoRA` や自家変換 GGUF は再取得できない利用者資産のため）。
+- 検証に失敗した場合は、**足りない1ファイルだけを消して再実行する**。`models\LTX23`・`models\LTX25` をフォルダごと消してはいけない（`StyleLoRA` や自家変換 GGUF は再取得できない利用者資産のため）。`install-LTX25.bat` の失敗案内も同じことを言う。
 
 ---
 

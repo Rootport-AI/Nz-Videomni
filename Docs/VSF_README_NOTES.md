@@ -76,7 +76,7 @@ LTX 2.3では、正のプロンプト情報は注意計算に渡る直前に**Ad
 - NAG論文: arXiv:2505.21179
 - 検証の正本: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §41（設計根拠41.1〜、実機ゲート41.5、目視評価41.9、縮退41.10）
 - 目視評価に使った動画セット: Hugging Face `Rootport/Nz-Videomni-vsf-eval-20260729`（非公開データセット・比較表つき）
-- **LTX 2.5 での開通と実測（2026-08-30）**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§80**（設計要点 §80.2、実GPUゲート11腕 §80.4、既知の制限 §80.6、**オーナーの目視ゲートG8の結果 §80.10**）、生の数値は `outputs/ltx25-nagvsf-gate/summary.json`、目視素材は `outputs/ltx25-nagvsf-gate/g8_material/`（チェックリストは[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2）
+- **LTX 2.5 での開通と実測（2026-08-30）**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§80**（設計要点 §80.2、実GPUゲート11腕 §80.4、既知の制限 §80.6、**オーナーの目視ゲートG8の結果 §80.10**）、生の数値は `outputs/ltx25-nagvsf-gate/summary.json`、目視素材は `outputs/ltx25-nagvsf-gate/g8_material/`
 
 ## 8. LTX 2.5 での実測（2026-08-30 追記）
 

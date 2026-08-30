@@ -55,10 +55,6 @@ LTX-2/
 *.npz
 *.tar
 *.zip
-# Exception: the AviUtl2 plugin package (~378 KB) ships inside this repo so the
-# installer flow is self-contained. Plain git object, NOT Git LFS on purpose --
-# LFS would force every user to install git-lfs before cloning.
-!*.au2pkg.zip
 
 # HuggingFace / uv / torch caches redirected into the project (install_ltx.ps1)
 .hf_cache/

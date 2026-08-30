@@ -48,6 +48,13 @@
 # from the plain `-r freeze` install. triton-windows is a NORMAL line (real
 # PyPI package) and installs straight from this freeze like everything else.
 #
+# 2026-08-30 (PENDING_TASKS_CLOSED.md §3-128): hf-xet==1.6.0 is ADDED. It does
+# NOT arrive on its own: huggingface_hub 0.36.2 guards its hf-xet requirement
+# with `platform_machine == "x86_64" or "amd64" or "arm64" or "aarch64"`,
+# environment markers compare case-SENSITIVELY, and Windows reports "AMD64" --
+# so that guard is False here and this freeze is the ONLY install path for the
+# Xet transfer backend. Pinning it keeps every machine on the same version.
+#
 accelerate==1.12.0
 annotated-types==0.7.0
 anyio==4.12.1
@@ -61,6 +68,7 @@ filelock==3.24.2
 fsspec==2026.2.0
 gguf==0.18.0
 h11==0.16.0
+hf-xet==1.6.0
 httpcore==1.0.9
 httpx==0.28.1
 huggingface_hub==0.36.2

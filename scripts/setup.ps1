@@ -435,13 +435,8 @@ try {
         New-McpJson
         Write-Host ''
         Write-Info ('次: ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリック。')
-        $pkg = Get-ChildItem -LiteralPath $ProjectRoot -Filter '*.au2pkg.zip' -File -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($pkg) {
-            Write-Info ('AviUtl2 で使うには ' + $pkg.Name + ' を AviUtl2 のプレビュー画面へドラッグ。')
-        } else {
-            Write-Info 'AviUtl2 で使うには .au2pkg.zip を AviUtl2 のプレビュー画面へドラッグ。'
-        }
+        Write-Info ('AviUtl2 で使うには ' + (Join-Path $ProjectRoot 'AviUtl2-Plugin\NzVideomni.aux2') + ' を')
+        Write-Info '    AviUtl2 のプレビュー画面へドラッグ＆ドロップし、そのあと AviUtl2 を再起動してください。'
         Write-Info 'AviUtl2 から使うときも run.bat の画面は開いたままにしてください。'
     }
 } catch {

@@ -10035,3 +10035,28 @@ RuntimeError: Inplace update to inference tensor outside InferenceMode is not al
 1. **`.venv-engine` に `hf-xet` 1.6.0 が残る**——これが**上の申し送りが言っていた「freeze と実環境の食い違い」の正体である。** 依存を直接指定する段で `huggingface-hub` 1.29.0 と一緒に入り、そのあと freeze を当てて hub は 0.36.2 へ戻るのだが、**`hf-xet` は freeze に書かれていないので取り残される。** これが利用者の環境で Xet 経路が有効になる理由であり、開発機の古い `.venv-engine` にそれが無いのは、その環境が直接指定の段より前に作られたからである。**固定するのか、意図的に外すのかの裁定は、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-128 で扱う**（本テーマでは触っていない）。
 2. `uv python install` が出す「`C:\Users\<利用者>\.local\bin\python3.12.exe` は uv の管理外」という警告は、**前回の導入で置かれたランチャーの残骸**を指しているだけで無害である。
 3. `hf` が出す `Still waiting to acquire lock …gitignore.lock` は、**並列取得のときに普通に出るメッセージ**である。
+
+### 82.8 §3-127（`.au2pkg.zip`案内の失効）と§3-128（`hf-xet`のfreeze固定）の実装・開発機確認の記録（2026-08-30・台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-127・§3-128）
+
+**§82.4 と §82.7 で見つかった2件の失効は、いずれも同日に実装してクローズした。** 本節はその実装内容と、開発機で確かめられる範囲の確認結果を記録する。サブマシンでの確認はまだ実施していない——実施後にこの節へ追記する。
+
+**§3-127（`.au2pkg.zip`案内の失効）**: `scripts/setup.ps1` の完了案内から `.au2pkg.zip` の探索と文面を削除し、`AviUtl2-Plugin\NzVideomni.aux2` を AviUtl2 のプレビュー画面へドラッグ＆ドロップする案内に一本化した。**案内文の差し替えのみ**で、ダウンロード段・検証テーブルなど他の挙動は変えていない。開発機確認として PowerShell の `[System.Management.Automation.Language.Parser]::ParseFile('scripts\setup.ps1', ...)` を実行し、**構文エラー0件**を確認した。文面が実際にその通り表示されることの実機確認は、次の `setup.bat` 実行時にオーナーが目視できる。
+
+**§3-128（`hf-xet`のfreeze固定）**: `engine/venv-engine.freeze.txt` へ `hf-xet==1.6.0` を1行追加した（`engine25/venv-engine-ltx25.freeze.txt` 側のfreezeと同版）。**オーナー裁定＝Xet経路に固定する**（サブマシンで全ゲート合格した環境と全利用者の環境を一致させるため）。開発機確認として `tools\uv\uv.exe pip install -r engine/venv-engine.freeze.txt --python .venv-engine\Scripts\python.exe --dry-run` を実行し、次の出力を得た。
+
+```
+Resolved 53 packages in 250ms
+Would download 1 package
+Would install 1 package
+ + hf-xet==1.6.0
+```
+
+**この`--dry-run`は生のfreezeへindex引数を付けずに実行した代理確認であり、本番の段(b)（`scripts/install_ltx.ps1`の`Invoke-EngineFreezeApply`が、直接指定4行〔diffusers・ltx-core・ltx-pipelines・sageattention〕を除いた一時コピーへcu128 indexを付けて実行するもの）とは厳密には異なる。段(a)（直接指定4本の`uv pip install`）は`direct_url.json`がピンと一致するため再導入されない**——したがって実際のインストーラ経路でも、この`--dry-run`が示した「追加されるのは`hf-xet==1.6.0`の1件だけ」という結論は変わらない。
+
+**追加されるのは `hf-xet==1.6.0` の1件だけ**で、他のパッケージへの影響は無い（`--exact` を付けていないので既存パッケージの削除もかからない）。**版1.6.0が範囲内にあることの根拠は`huggingface_hub 0.36.2`側の依存宣言そのものである**——`hf-xet<2.0.0,>=1.1.3; platform_machine == "x86_64" or "amd64" or "arm64" or "aarch64"`（`.venv-engine`の`huggingface_hub-0.36.2.dist-info/METADATA`で実測）。**このマーカーはWindowsが返す`AMD64`（大文字）を含まないため、Windows環境ではhf-xetはこの依存だけでは自動導入されない**（`platform.machine()`の実測値は`AMD64`。1.28.0以降はマーカーに`AMD64`が追加されている——`.venv-engine-ltx25`の`huggingface_hub-1.28.0.dist-info/METADATA`で確認済み。サブマシンに入っていたのは、前段で一時的に入ったhub 1.29.0が連れてきたためである）。**したがってこのfreezeの1行が、Windows環境でhf-xetが入る唯一の経路である。** hub 0.36.2が`import`する名前（`upload_bytes`・`upload_files`・`PyXetDownloadInfo`・`download_files`・`PyItemProgressUpdate`・`PyTotalProgressUpdate`）はhf_xet 1.6.0に全て存在し、この組み合わせはサブマシンG0〜G7の実ダウンロードを通っている。
+
+**サブマシンでの確認（未実施・実施後に追記）**: `setup.bat` を1回再実行し、①検証テーブルが18行のまま行順を含めて不変であること、②`.venv-engine` の再同期が軽く終わること（サブマシンは既に `hf-xet` 1.6.0 が入っているため、実質的には freeze のハッシュ変化に伴う再確認で終わるはずである）の2点を見る。
+
+**開発機の壊れた `hf.exe` シムは、この再同期だけでは直らない。** `hf`（Windowsでは `hf.exe`）は `huggingface_hub` のコンソールスクリプト（`entry_points.txt` の `console_scripts`）であり、uv が `Scripts\*.exe` を再生成するのはそのパッケージ自体を再導入したときだけである。`hf_xet` はコンソールスクリプトを持たないため、**`hf-xet` が新規追加されるだけでは `hf.exe` は作り直されない。** 直すには `uv pip install --python .venv-engine\Scripts\python.exe --reinstall-package huggingface_hub -r engine\venv-engine.freeze.txt` 相当の、`huggingface_hub` 自体を対象にした再導入が要る（開発機の既知事項として記録するのみで、本項の対応範囲ではない）。**実害は「重みが欠けたブロックが出た場合に5試行分を消費して失敗する」ことだけ**である（§3-126 の固定5試行の枠内で収まり、無限に待ち続けることはない）。
+
+**あわせてコード側で3点が追加反映されている**: ①`scripts/setup.ps1` の完了案内へ「そのあと AviUtl2 を再起動してください」を追記、②`engine/venv-engine.freeze.txt` の冒頭コメントへ、本節と同じ根拠（`platform_machine` マーカーの大小文字の食い違い）を記した2026-08-30付の注記を追加、③`.gitignore` から `.au2pkg.zip` 配布方式時代の `!*.au2pkg.zip` 例外（説明コメント3行＋例外1行）を削除——配布方式は2026-07-31付で `NzVideomni.aux2` 単体同梱へ切り替わっており、この例外はもう対象を持たないためである。

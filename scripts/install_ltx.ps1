@@ -1615,9 +1615,31 @@ if ($SkipModels) {
             $argv += @("--local-dir", $stage)
 
             Write-Do "$($dl.name)  download $($dl.repo)  (missing: $($short -join '; '))"
-            & $hfExe @argv
-            if ($LASTEXITCODE -ne 0) {
-                throw "Download of '$($dl.name)' failed. The repo is public and needs no token, so check your network first, then the include globs against https://huggingface.co/$($dl.repo)/tree/main  (staging kept at $stage so the next run resumes)"
+            # Retry the whole `hf download` a fixed number of times. huggingface_hub
+            # retries HEAD/transfer internally (http_backoff) but NOT the repo_info
+            # call at the start of snapshot_download nor the Xet connection-info
+            # fetch, so one reset TLS handshake kills the process. Resumable
+            # .incomplete files under $stage\.cache mean a retry never re-downloads
+            # finished bytes. The count is fixed on purpose: an installer that never
+            # gives up is worse than one that stops with a message (owner decision,
+            # 2026-08-30). Exit codes carry no information (the CLI maps every
+            # uncaught exception to 1), so every non-zero exit is retried alike.
+            $retryWaits  = @(5, 10, 20, 40)          # seconds before attempt 2..5
+            $maxAttempts = $retryWaits.Count + 1
+            $code = 0
+            for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+                $global:LASTEXITCODE = 0
+                & $hfExe @argv
+                $code = $LASTEXITCODE
+                if ($code -eq 0) { break }
+                if ($attempt -lt $maxAttempts) {
+                    $wait = $retryWaits[$attempt - 1]
+                    Write-Do "hf download exited $code; retrying in ${wait}s (attempt $($attempt + 1)/$maxAttempts)"
+                    Start-Sleep -Seconds $wait
+                }
+            }
+            if ($code -ne 0) {
+                throw "Download of '$($dl.name)' failed $maxAttempts times (last exit code $code). The repo is public and needs no token, so check your network first, then the include globs against https://huggingface.co/$($dl.repo)/tree/main  (staging kept at $stage so the next run resumes)"
             }
 
             # Remap staging -> final layout.
@@ -1625,9 +1647,10 @@ if ($SkipModels) {
             foreach ($sf in $staged) {
                 $rel = ConvertTo-SlashPath $sf.FullName.Substring($stage.Length + 1)
                 if (($rel -split '/') -contains '.cache') {
-                    # HuggingFace bookkeeping for a cache root that dies with the
-                    # staging directory. Dropped silently, on purpose.
-                    Remove-Item -LiteralPath $sf.FullName -Force
+                    # HuggingFace bookkeeping (.incomplete resume state lives here).
+                    # Not a file to place, so skip it -- but do NOT delete it: on
+                    # success the whole $stage is removed below, and on failure
+                    # these files are exactly what "the next run resumes" from.
                     continue
                 }
                 $target = Resolve-MapTarget -Rel $rel -Pairs @($dl.map)
@@ -1643,7 +1666,7 @@ if ($SkipModels) {
 
             $short = Get-ShortEntries -Files @($dl.files)
             if ($short.Count -gt 0) {
-                throw "'$($dl.name)' downloaded but these expected files are missing or short: $($short -join '; '). Check the include globs and the map in $($mf.Name). Staging kept at $stage."
+                throw "'$($dl.name)' downloaded but these expected files are missing or short: $($short -join '; '). Check your network first (a download that was cut off can end here), then check the include globs and the map in $($mf.Name). Staging kept at $stage."
             }
 
             Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue

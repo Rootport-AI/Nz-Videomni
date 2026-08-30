@@ -426,6 +426,31 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
 
 ---
 
+### 5.8 推論モードの規約 — **`engine25` は全経路 `no_grad`。2.3 は全経路 `inference_mode`**（2026-08-30・§3-124より）
+
+**エンジン系統ごとに、推論の囲み（PyTorch の推論モード）が違う。** これは好みの問題ではなく、**混ぜると実行時エラーになる**ので規約として書いておく。
+
+| エンジン系統 | 本番の囲み | 該当箇所 |
+|---|---|---|
+| `ltx`（LTX 2.3） | **全経路 `torch.inference_mode()`** | 単発・連結・画角拡張のすべて |
+| `ltx25`（LTX 2.5） | **全経路 `torch.no_grad()`** | `pipeline25.generate` / `chain25.run_chain` / `outpaint25.run_outpaint` |
+
+**なぜ揃っている必要があるのか。** `inference_mode` の中で**新しく確保された**テンソルは「推論テンソル」の印を帯び、**`no_grad` からその中身を書き換えようとすると `RuntimeError` になる**（逆向きは合法という非対称な規則である）。**先読み block swap のページ固定バッファのように、ジョブをまたいで生き残る受け皿を共有していると、囲みが1経路だけ違うだけで「あるジョブの直後に別のジョブが落ちる」という形の不具合になる。** 実例が §3-124 で、**画角拡張だけが `inference_mode` だったために、その直後の普通の生成が落ちていた**（機構の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§81**）。
+
+**機械で守ってある**: `tests/test_ltx25_outpaint.py` の `test_no_engine25_module_asks_for_torchs_inference_mode` が、**`engine25` 配下に `inference_mode` が1つも現れないこと**をCPUだけで主張する。
+
+**上流（`ltx_core` / `ltx_pipelines`）には `inference_mode` の面が残っている。** **これらを新しく配線するときは、同じ食い違いが再発しうる**ので、囲みを必ず確認すること。
+
+| 上流の場所 | 内容 |
+|---|---|
+| `ltx_core/block_streaming/block_fetcher.py:70-72` | **上流自身が同じ罠を明文化している**——「ページ固定バッファは呼び出し側の inference_mode の下で確保されるので、このスレッドからの in-place `copy_` にも inference_mode が要る」と書いて `with torch.inference_mode():` で囲っている |
+| `ltx_pipelines/distilled.py:320`（ほか `a2vid_two_stage.py:308` / `dfr_pipeline.py:564` / `ic_lora.py:410` / `retake.py:332` など） | 公式 **CLI の `main`** に `@torch.inference_mode()` が付いている。**当エンジンは `main` を呼ばず、下のブロックを直接駆動しているので今は無関係**だが、CLI 経路を使う配線を足すと入ってくる |
+| `ltx_core/text_encoders/gemma/encoders/base_encoder.py:118` | テキスト符号化（プロンプト側）が `with torch.inference_mode()` で囲まれている。**上流の内部で完結しているうちは無害**である |
+
+**規約**: **`engine25` に新しい経路を足すときは `torch.no_grad()` で書く。** **LTX 2.3 の経路を移植するときは、デコレータを一緒に持ってこないこと**——これが再発の最も安い経路である。
+
+---
+
 ## 6. 利用者から見た振る舞い（UX仕様）【オーナー裁定】
 
 ### 6.1 切り替え＝即ロード

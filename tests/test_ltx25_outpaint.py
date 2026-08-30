@@ -36,6 +36,12 @@ building a single model, is everything else that could go wrong later:
 8. **``OutpaintResult`` is a superset of ``GenerationResult``** -- derived from
    the dataclass rather than restated -- because the worker's ``done`` builder
    reads it by name and the app stores ``peak_vram_mb`` out of it.
+9. **The engine runs in ONE inference mode (§3-124).**
+   ``torch.inference_mode`` appears nowhere under ``engine25/``. This driver
+   was decorated with it once, borrowed from 2.3 where every path is, and the
+   buffers a job allocated under it could no longer be written by the NEXT
+   ordinary generation on the same resident worker. The scan keeps the next
+   borrowing from bringing that back.
 
 CPU-only and model-free. Every function under test is arithmetic over tensors,
 floats and dicts; the one that touches a decoder takes it through the module
@@ -50,8 +56,10 @@ FastAPI app that venv does not have)::
 
 from __future__ import annotations
 
+import inspect
 import math
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
@@ -550,3 +558,48 @@ def test_as_dict_is_generation_results_dict_in_its_order_plus_outpaint() -> None
     # because 81.345 is not representable and rounds DOWN here (81.34); a
     # literal would be pinning the float repr rather than the rounding.
     assert got["seconds"] == round(81.345, 2) == plain["seconds"]
+
+
+# ---------------------------------------------------------------------------
+# 9. One inference mode across engine25 (§3-124)
+# ---------------------------------------------------------------------------
+
+
+def test_no_engine25_module_asks_for_torchs_inference_mode() -> None:
+    """§3-124: ``run_outpaint`` carried an ``@torch.inference_mode()``
+    decorator (copied from 2.3's outpaint pipeline, where EVERY path is that
+    mode), and the pinned staging buffers a picture-widening job allocated under
+    it were stamped "inference tensors" for good -- so the next ordinary
+    generation on the same resident worker died writing into them
+    (``RuntimeError: Inplace update to inference tensor outside InferenceMode``).
+    The fix was subtraction: engine25 runs under ``torch.no_grad()`` everywhere
+    now, as ``generate`` and ``run_chain`` always had. VERIFICATION_LOG §81
+    carries the mechanism.
+
+    WHY A MACHINE KEEPS THIS RULE. The bug was one line, it was correct-looking,
+    and it was CHEAP TO REPEAT: the next person porting a 2.3 path will find
+    that decorator on it. Nothing else here would notice -- the mismatch needs a
+    GPU, a resident worker and two jobs in the right order to show itself, which
+    is a gate an hour long rather than a test. Text is what the ban is on, since
+    a decorator, a ``with`` block and a bare call all spell the same name; that
+    is also why the comment left at the old site says "inference-mode" in words
+    rather than in code.
+    """
+    package_dir = Path(inspect.getsourcefile(outpaint25)).parent
+    modules = sorted(package_dir.rglob("*.py"))
+
+    # The GLOB is the weak link, not the scan: a renamed or moved package would
+    # hand this test an empty list and pass. The package's own contents are the
+    # tripwire for that.
+    names = {path.name for path in modules}
+    assert {"outpaint25.py", "chain25.py", "pipeline25.py", "worker.py"} <= names, sorted(names)
+    assert len(modules) >= 10, sorted(names)
+
+    offenders = sorted(
+        path.name for path in modules
+        if "inference_mode" in path.read_text(encoding="utf-8")
+    )
+    assert offenders == [], (
+        "engine25 is no_grad from end to end; these ask for the other mode: "
+        f"{offenders}"
+    )

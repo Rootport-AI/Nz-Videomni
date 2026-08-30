@@ -748,7 +748,7 @@ def _phase_peak_mb(phases: dict[str, dict[str, Any]], name: str) -> float | None
 # ---------------------------------------------------------------------------
 
 
-@torch.inference_mode()
+# No decorator: the mode is :877's ``with torch.no_grad():``, as on every engine25 path -- the inference-mode one that stood here is VERIFICATION_LOG §81.
 def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it would hide the order
     pipeline: Any,
     *,

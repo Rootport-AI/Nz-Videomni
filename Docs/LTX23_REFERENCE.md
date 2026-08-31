@@ -1,6 +1,6 @@
 # LTX 2.3 リファレンス知識（基礎・参照URL付き）
 
-作成: 2026-06-28 / 性格: **特定タスクに紐づかない LTX-2/LTX-2.3 の一般知識**。解像度契約・2段パイプライン・VRAM スケーリング・16GB レシピを、出典とともに記録する。実機検証の経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)、現状の方針は [NEXT_SESSION_HANDOFF.md](NEXT_SESSION_HANDOFF.md)。
+作成: 2026-06-28 / 性格: **特定タスクに紐づかない LTX-2/LTX-2.3 の一般知識**。解像度契約・2段パイプライン・VRAM スケーリング・16GB レシピを、出典とともに記録する。実機検証の経緯は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)、現状の方針と残課題は [PENDING_TASKS.md](PENDING_TASKS.md)。
 
 > 表記: **[公式]**=Lightricks 公式ドキュメント/コード/論文で確認 / **[実測]**=コミュニティ実測値 / **[推定]**=論理的帰結・フェルミ推定（明記）。
 

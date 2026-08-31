@@ -475,5 +475,7 @@ Elsewhere in the monorepo:
 - `..\..\Videomni_Backend_Specification.md` — the frozen API contract (§6) and
   the backend's own specification.
 - `..\..\Docs\PENDING_TASKS.md` — the project-wide task ledger (backend and
-  frontend alike); start a session by reading it.
-- `..\..\Docs\NEXT_SESSION_HANDOFF.md` — the current handoff note.
+  frontend alike); it is the single entry point for a session.
+- `..\..\Docs\HANDOFF_ARCHIVE.md` — append-only archive of past handoff
+  entries (the `NEXT_SESSION_HANDOFF.md` note it archived was retired on
+  2026-09-01).

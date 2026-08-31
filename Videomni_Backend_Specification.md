@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.45**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-08-31**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.47**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-09-01**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -94,6 +94,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.43 | 2026-08-30 | **撮り直し（Retake）と素材（末尾）（End source）の監督裁定2件について、オーナーの追認が出たことを反映（文書のみ。凍結 API 契約〔§6〕・実装・既定値のいずれにも変更は無い）**。**R-1**＝のりしろの一致度を判定する天井は**同一の処理鎖を通った天井（読みB）**を正とする、**M8**＝先頭フレームのキーフレーム印の述語は**キャリー基準**を採る、というどちらの監督裁定も、**オーナー本人が「監督裁定を追認するよ」と明示して確定した。** **これで §78 系に未決の項目は1つも残っていない。** 出荷構成は動いていない——変わったのは判断の根拠で、**いまは「オーナーが読みBとキャリー基準を選んだ」と読んでよい**（以前は読んではならなかった）。結果の正本は `Docs/VERIFICATION_LOG.md` **§78.15**。 |
 | v0.5.44 | 2026-08-30 | **ベースモデル別の導入バッチ（`install-LTX25.bat`）の実装を反映（文書のみ。API・実装への変更は無い）**。**§2.5**（入口が「本体＝`setup.bat`＋ベースモデル別＝`install-<記述子の id>.bat`」の2階建てになったこと、`install_ltx.ps1` の `-BaseModel` が絞るのはダウンロード段と検証表だけで読み込み・検証・移行と `INSTALLED_PATHS.txt` は絞らないこと、`hf download` の固定回数リトライ）／**§4.4**（`install-LTX25.bat` と `scripts/install_model.ps1` をディレクトリ構成へ追加）／**§5.1b**（検証表の行数の書き写しをやめ、行の作られ方＝担当記述子の期待ファイル＋固定3行の記述に置換）。設計判断の正本は `Docs/MULTI_ENGINE_DESIGN.md` §6.2、実装と実測は `Docs/VERIFICATION_LOG.md` §82 と `Docs/PENDING_TASKS_CLOSED.md` §3-111・§3-126。 |
 | v0.5.45 | 2026-08-31 | **モデル読み込み中の `POST /generate` / `POST /generate/chain` を、ジョブを作る前に同期で 409 `PIPELINE_LOADING` で断るようにした（凍結 API 契約〔§6〕への加算）**。**加算であって縮小ではない**——従来この状況は `202` でジョブを受理したあと、ジョブスレッド内で `load()` が同じ 409 に当たって `GENERATION_FAILED` として失敗する、という成功しない経路だった。そこへ至る前に断るコードが増えただけで、以前は成功していたが今は失敗する、という状況は存在しない。**§6.1**（`POST /generate` の主なステータス欄へ `PIPELINE_LOADING` を追加）／**§6.1 の `POST /generate/chain` 補足**（同旨を1文追加）／**§6.8**（エラー表の `PIPELINE_LOADING` 行に本挙動を追記）／**§6.9(f)**（同）を更新した。実装は `services/pipeline_manager.py` の公開メソッド `reject_if_loading()`（判定と断り文自体は既存の `_reject_while_loading()` のまま）を `api/generate.py` と `api/generate_chain.py` の単一ジョブガード直前で呼ぶだけであり、`api/models.py` と `engine/` は無変更。**あわせてフロントエンドのヘッダーバッジ「モデル読み込み中…」を`POST /pipeline/load`往復に同期させ、全タブの生成ボタンを「ジョブ実行中またはモデル読み込み中」の1本のルールへ統一した**（設計は `Docs/MULTI_ENGINE_DESIGN.md` §6.5・§5.5(b)、フロントエンド実装ログは同 `Docs/DEVLOG.md` §98）。**オーナーの実機ゲートは本版の時点で未了である**（`Docs/PENDING_TASKS.md` §1-24 が完了条件の正本）。 |
+| v0.5.46 | 2026-08-31 | **快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとの配信テーブル `limits.comfort_budgets` として配る形へ改めたことを反映（文書のみ。凍結 API 契約〔§6〕への変更は加算で、既存の鍵は1つも消していない）**。**§6.7**（`limits` の表へ `comfort_budgets` の行を追加し、表の読み方＝「上から照合して全鍵一致した最初の行を採る／一致行が無ければ `spill_free_frames` へ落ちる（正常系）／`ltx` は既定構成の行を意図的に持たないので `requires` が空の行を足してはならない」を明記。旧来の `single_comfort_token_budget` / `chain_comfort_token_budget` は**表を持たない古いサーバー向けの互換値**である旨へ位置づけを改めた。あわせて `spill_free_frames` の値の書き写し〔257/153/81〕をやめ、実体＝`config.yaml`・説明の正本＝`Docs/COMFORT_LIMIT_TABLE.md` §付記への参照に置換）／**§10.2**（表が 2026-07-01 時点の値であることの日付つき注記を追加し、「全on構成のときだけ別鍵で配信する」という旧来の仕組みの説明を配信テーブルの説明へ差し替え）／**§11.7**（同じ書き写しをやめ、参照へ置換）。**同日の §5.1b の更新も本行に含める**——必要空き容量の記述を、2仮想環境時代の値（約 40〜41GB・しきい値 45GB）と `.venv-engine-ltx25` 追加後の再実測待ちの注記から、**`README.md` のハードウェア要件表を正本として参照する形**へ差し替え、`scripts/setup.ps1` の空き容量しきい値 `$needGB` を 45 → **50** へ揃えた（クリーン環境の実測は `Docs/PENDING_TASKS_CLOSED.md` §3-107。LTX 2.3 のみ約50GB・LTX 2.5 追加で約30GB）。**線と表の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7、レガシー表の値は同 §付記、較正の記録は `Docs/VERIFICATION_LOG.md` §84**、台帳の完了記録は `Docs/PENDING_TASKS_CLOSED.md` §3-95・同 §3-125 である。なお v0.5.45 の行が完了条件の正本として指している `Docs/PENDING_TASKS.md` §1-24 は、同日の実機ゲート合格により `Docs/PENDING_TASKS_CLOSED.md` §3-129 へ移った。 |
+| v0.5.47 | 2026-09-01 | **役割が重複する引き継ぎ文書 2 本の廃止を反映（文書のみ。API・実装への変更は無い）**。オーナーの決定により `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/NEXT_SESSION_WORKORDER.md` を削除し、**セッションの入口を `Docs/PENDING_TASKS.md` ただ 1 つへ一本化した**（前者の内容は他の正本の要約で、後者は 2026-07-02 時点の計画であり、いずれも役割が重複していた）。**§0.3**（SSOT 地図から `Docs/NEXT_SESSION_HANDOFF.md` の行を削除し、同書 §2 にしか無かった**文書の3分類（①生きた文書／②追記専用の記録簿／③凍結文書）と入口の規則**を表の直後へ移設）／**§1.3・§5・§13・付録B**（廃止した 2 文書への参照を、`Docs/HANDOFF_ARCHIVE.md`・`Docs/VERIFICATION_LOG.md` などの現行の正本へ向け直した）。**§0.1 の版メタの写しも本行に合わせて更新済みである。** なお上の改訂履歴 v0.5.2・v0.5.20 の行に残る両文書への言及は、**当時の作業の記録なのでそのまま残してある**。 |
 
 ### 0.2 スコープ
 
@@ -122,9 +124,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
 | `Docs/VSF_README_NOTES.md` | 非CFGネガティブプロンプト（NAG／VSF）の**使い分けの正本**（どちらを選ぶか・つまみの目安・LTX 2.5 での実測）。README §5 と §7.1 はここを指している |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
-| `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値と逆算式の正本 |
+| `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`）は §1.1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
-| `Docs/NEXT_SESSION_HANDOFF.md` | セッション間の引き継ぎ（リポジトリの形・文書の地図・開発の基本操作・直近の状況）。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
 | `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` | クリップ連結（Clip Chain）の内部構造と Stage-2 固定窓アーキテクチャの設計正本 |
 | `Docs/MULTI_ENGINE_DESIGN.md` | **マルチエンジン化の設計正本**（複数の動画生成AIをドロップダウンで切り替える機能。ベースモデル／エンジン系統の2軸分離・記述子拡張・`EngineRunner` 分離・状態の3層憲章・API の加算方針）。**第1段階（土台）は 2026-08-20 に実装済み**で、その API 面は本書 §6.9 が正本（加算のみ・凍結契約は不変）。起票とクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-97・§3-98（2026-08-22 にクローズ移設）。**生きている後続課題の一覧は台帳 `Docs/PENDING_TASKS.md` §3 が唯一の正本である**（件数と項目番号を本書には書かない。文書ごとに数が食い違う事故を繰り返したため）。参考資料（設計の正本ではない）として `Docs/LTX25_RESEARCH_NOTES.md` |
@@ -133,6 +134,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` | API 利用者（フロントエンド実装者）向けの解説と全ルート一覧。**契約そのものの正本は本書 §6** |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md` | AviUtl2 プラグインの native ↔ Web UI 間 JSON-RPC 契約 |
 | `engine/VENDOR_NOTICE.md` | `engine/` の由来・provenance・依存再現手順・ライセンス帰属 |
+
+> **文書の3分類とセッションの入口（2026-09-01 追加。`Docs/NEXT_SESSION_HANDOFF.md` の廃止にともない、同書§2から移設）**: 文書は3つに分ける。**①生きた文書**（現状を現在形で書き、随時更新する。上表に並ぶ正本はすべてこれ）／**②追記専用の記録簿**（過去の記述は書き換えず、新しい記録を追記する。`Docs/VERIFICATION_LOG.md`・`Docs/PENDING_TASKS_CLOSED.md`・`Docs/HANDOFF_ARCHIVE.md`・フロントエンド `Docs/DEVLOG.md`）／**③凍結文書**（一切触らない。各 `*_WORKORDER.md` / `*_STATUS.md`、完了済みの設計書、当時のまま収蔵する下調べ（`Docs/LTX25_RESEARCH_NOTES.md` など））。**歴史は②・③側へ書き、①には現在の姿だけを現在形で書く。** 上表にも本注記にも挙がっていない `Docs/` の文書は原則②または③である（例外は上表に載るアーカイブ形式の正本＝`Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。**セッションの入口は `Docs/PENDING_TASKS.md` ただ 1 つである**（役割が重複する文書を置かないため、2026-09-01 に `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/NEXT_SESSION_WORKORDER.md` を廃止した。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` に残る）。
 
 > **乖離時の原則**: 本文の数値（秒数・GB・上限フレーム等）は**代表値**であり、正確な網羅・最新実測は上表の該当 Docs が正。乖離を見つけたら Docs を正とし、Docs 側を更新すること。
 
@@ -159,7 +162,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 ### 1.3 early-integration（早く統合して育てる）
 
-本プロジェクトの開発方針は「機能を全部固めてから統合する」ではなく、**「早く統合して、使いながら育てる」**である（`Docs/NEXT_SESSION_HANDOFF.md`「設計対話の決定」）。
+本プロジェクトの開発方針は「機能を全部固めてから統合する」ではなく、**「早く統合して、使いながら育てる」**である（当時の設計対話の記録は `Docs/HANDOFF_ARCHIVE.md`）。
 
 具体的には、Phase 1 の最小バックエンドが 16GB で T2V/最小I2V/720p/マルチジョブまで通った時点で、次は機能拡張ではなく **AviUtl2 統合（Phase 2＝ゴール）へ進む**。長尺化・高度な条件付け（クリップ連結・IC-LoRA・V2V 等）は、統合して実運用しながら Phase 3 以降で育てる。ロードマップの詳細は §13、統合の役割分担は §14。
 
@@ -474,7 +477,7 @@ Nz-Videomni/
 - Gemma text encoder も GGUF Q4_K_M（逐次層オフロード）。
 - VAE/audio/text-projection は 46GB モノリスでなく小単体 component ファイルから読む。
 
-判断根拠は「16GB / Windows で公式ローダが落ちる」という実機事実に尽きる。詳細な経緯・A/B 実測・SHA256 バイト一致検証は `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/VERIFICATION_LOG.md`、engine の由来は `engine/VENDOR_NOTICE.md` を一次情報とする。なお `Docs/note.md` は旧・公式ローダ前提のノートだが、「torch 2.9.1+cu128 / attention は SDPA（Ada では FlashAttention-2）で十分 / xformers は任意 / 16GB の律速は重み転送(PCIe)」という結論部分は現行でも有効である（**2026-07-31 補足**: この「SDPA で十分」は既定の話として引き続き正しいが、2026-07-31 に SageAttention をジョブ単位で選べるようにした結果、attention 側にも 720p で 1.17 倍・二段目単体で 1.56 倍という実測の伸びしろがあることが判明した。詳細は §5.4）。
+判断根拠は「16GB / Windows で公式ローダが落ちる」という実機事実に尽きる。詳細な経緯・A/B 実測・SHA256 バイト一致検証は `Docs/VERIFICATION_LOG.md` と `Docs/HANDOFF_ARCHIVE.md`、engine の由来は `engine/VENDOR_NOTICE.md` を一次情報とする。なお `Docs/note.md` は旧・公式ローダ前提のノートだが、「torch 2.9.1+cu128 / attention は SDPA（Ada では FlashAttention-2）で十分 / xformers は任意 / 16GB の律速は重み転送(PCIe)」という結論部分は現行でも有効である（**2026-07-31 補足**: この「SDPA で十分」は既定の話として引き続き正しいが、2026-07-31 に SageAttention をジョブ単位で選べるようにした結果、attention 側にも 720p で 1.17 倍・二段目単体で 1.56 倍という実測の伸びしろがあることが判明した。詳細は §5.4）。
 
 ---
 
@@ -1003,18 +1006,15 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `max_conditioning_images` | `5` | I2V キーフレーム画像は最大5枚（Phase 3 で 1→5 に拡張） |
 | `phase1_max_concurrent_jobs` | `1` | 単一ジョブ |
 | `low_vram_disabled_required` | `false` | status に反映 |
-| `spill_free_frames` | 下記マップ | 解像度別「溢れない」フレーム数（クライアント UI 警告用） |
-| `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。下記参照 |
+| `spill_free_frames` | 生成サイズ文字列 → フレーム数のマップ | 解像度別「溢れない」フレーム数（クライアント UI 警告用）。**値は書き写さない**——実体は `config.yaml`、説明の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記 |
+| `comfort_budgets` | エンジン系統ごとの表 | **快適上限マーカーの線の配信テーブル（2026-08-31追加）。下記参照** |
+| `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。**表を持たない古いサーバー向けの互換値**。下記参照 |
 
-`spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）:
-```yaml
-"1280x768": 257    # 720p（実用快適上限）
-"1920x1088": 153   # 1080p
-"2560x1472": 81    # 1440p
-```
-API は 481f まで受理するが、この値を超えると shared メモリへ溢れて低速化（OOM はしない）。クライアント UI が警告する用途。実測根拠は `Docs/RESOLUTION_DURATION_CAPABILITY.md §8.4/§8.6` を参照（数値網羅表は複製しない）。
+`spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）は、API が 481f まで受理する一方でこの値を超えると shared メモリへ溢れて低速化する（OOM はしない）という境界を、クライアント UI の警告用に配る。**マップの中身は 2026-08-31 に判定規則 v3 で再測定してあり、数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記（実体は `config.yaml` の `limits.spill_free_frames`）である**——本書へは写さない。当初の実測経緯は `Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6（同 §8.4 末尾に再測定の追記あり）。
 
-**`single_comfort_token_budget`**（既定 `44880`、2026-08-18追加）は「単発 `/generate` 1発が快適に収まる注意トークン数の上限」。トークン数＝`(幅÷32) × (高さ÷32) × 潜在フレーム数`で、Chained 用の `chain_comfort_token_budget`（既定 `40000`）とは**別の物理条件から出た別の鍵**（単発は stage-2 タイル分割なしで全体を1パスで精製するため、1回の仕上げ工程分の予算であるチェーン側とはワークロードが異なる）。**サーバーはこの値で一切の判定をしない**（拒否も丸めもしない）——WebUI の Create 画面が、5つの高速化トグル（sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が全て on のときだけこの値から解像度ぴったりのフレーム数上限を逆算してスライダーに表示し、1つでも off なら従来の `spill_free_frames` へフォールバックする、という用途に限定した助言専用の公開値である。44,880 は 2026-08-18 の4段階・21ジョブ実機検証（3解像度×縦横両向き）で較正された値で、正本は `Docs/COMFORT_LIMIT_TABLE.md`。
+**`comfort_budgets`**（2026-08-31追加）は「快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとに配信する表」である。系統ごとに行の並びを持ち、各行は `requires`（リクエストのフィールド名と同じ語彙で書いた条件）と単発生成・連結生成それぞれの予算を持つ。**クライアントは上から順に照合し、全鍵が一致した最初の行を採る。一致する行が無いときは `spill_free_frames` へ落ちる——これは異常ではなく設計どおりの正常系である。** **`ltx`（LTX 2.3）は既定構成に当たる行を意図的に持っていない**ので、`requires` が空の行を足してはならない（足すと退避が起きる領域まで快適と表示する）。**行の並びと予算、および行を置かない理由の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7**、較正の記録は `Docs/VERIFICATION_LOG.md` §84 である。サーバーはこの表で一切の判定をしない（拒否も丸めもしない）——助言専用の公開値である。
+
+**`single_comfort_token_budget`**（既定 `44880`、2026-08-18追加）と **`chain_comfort_token_budget`**（既定 `40000`）は、**`comfort_budgets` を持たない古いサーバー向けの互換値として残置している2鍵**である。トークン数＝`(幅÷32) × (高さ÷32) × 潜在フレーム数`という式は表と共通だが、単発は stage-2 タイル分割なしで全体を1パスで精製するため、1回の仕上げ工程分の予算であるチェーン側とはワークロードが異なる（**別の物理条件から出た別の鍵**である）。**表が配信されている場合、クライアントはこの2鍵を使わない。** サーバーはどちらの値でも一切の判定をしない。較正の正本は `Docs/COMFORT_LIMIT_TABLE.md`。
 
 ### 6.8 エラーコード
 
@@ -1478,15 +1478,17 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 VRAM が溢れ始めない最長尺は解像度別に異なり、`GET /api/v1/config` の `limits.spill_free_frames` に露出する（RES-DUR §8.4 / §8.6 が正本）:
 
-| 表示解像度 | 生成サイズ | 溢れない最長（実測） |
+| 表示解像度 | 生成サイズ | 溢れない最長（2026-07-01 実測・**現行値ではない**） |
 |------------|-----------|----------------------|
 | **720p** | 1280×768 | **257f（API 上限 10.67s・clean）**。物理溢れ境界は 257<x<321f |
 | **1080p** | 1920×1088 | **~153f（~6.3s）** |
 | **1440p** | 2560×1472 | **~81f（~3.3s）** |
 
-これを超えると WDDM shared へ溢れて **~2–4x 低速化**（OOM せず完走）。天井付近の生成時間は解像度に依らず ~334–344秒（~5.7分）に収束する（RES-DUR §8.6）。720p は API `num_frames≤257` が物理溢れ境界より手前で効くため、実運用では 257f が溢れない最長となる。
+これを超えると WDDM shared へ溢れて **~2–4x 低速化**（OOM せず完走）。天井付近の生成時間は解像度に依らず ~334–344秒（~5.7分）に収束する（RES-DUR §8.6）。
 
-上表は**既定構成（高速化トグルのいずれか1つ以上が off）のときの快適上限**である。5つの高速化トグル（sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が**全て on**の全on構成では、より高い線（44,880トークン）まで快適であることが2026-08-18の実機検証で確認されており、`GET /api/v1/config` の `limits.single_comfort_token_budget`（§6.7・§11.7）として別鍵で配信している。WebUI の Create 画面はこの2本の値を条件で出し分けており、正本は `Docs/COMFORT_LIMIT_TABLE.md`。
+> **【2026-08-31 追記】上表の値は当時の実測であり、現行値ではない。** レガシー表 `spill_free_frames` は 2026-08-31 に判定規則 v3（同じ解像度の基準点と比べた共有GPUメモリの持続的な上昇だけで線を引く方式）で測り直しており、**現行値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記**（実体は `config.yaml`）、境界の根拠は同 §4.8、較正の記録は `Docs/VERIFICATION_LOG.md` §84 である。上表は当時の記録として残す。
+
+**線をどこに引くかは、いまはエンジン系統〔ベースモデルの世代〕ごとの配信テーブル `limits.comfort_budgets`（§6.7・§11.7）で決まる。** 上表が代表するレガシー表 `spill_free_frames` は、**そのテーブルに一致する行が無いときのフォールバック**という位置づけである。**LTX 2.3 の既定構成は意図的にテーブルへ行を持たないので、この経路を通るのが正しい。** 旧来の2鍵（`single_comfort_token_budget` / `chain_comfort_token_budget`）は表を持たない古いサーバー向けの互換値として残置してある。線と表の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7。
 
 ### 10.3 1080p 長尺は非実用 → 720p 生成 + 外部アップスケール推奨
 
@@ -1580,7 +1582,7 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `FHD_1080p` | 1920 | 1088 | `{1920, 1080}` | 169 |
 | `WQHD_1440p` | 2560 | 1472 | `{2560, 1440}` | 89 |
 
-> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は、2026-08-19に`single_comfort_token_budget`（44,880・全高速化on時の快適上限線）の逆算式で引き上げた値である（旧値257/153/81は`limits.spill_free_frames`（§11.7、全高速化on以外向けのフォールバック用・据え置き）の解像度別快適上限と一致していたが、現在はプリセットとspill_free_framesは別々の数値になっている）。詳細はバックエンド`Docs/COMFORT_LIMIT_TABLE.md`。
+> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は、2026-08-19に`single_comfort_token_budget`（44,880・全高速化on時の快適上限線）の逆算式で引き上げた値である（当時の旧値は`limits.spill_free_frames`〔§11.7〕の解像度別快適上限と一致していたが、**現在はプリセットと`spill_free_frames`は別々の数値である**——後者は 2026-08-31 に判定規則 v3 で再測定されており、値の正本はバックエンド`Docs/COMFORT_LIMIT_TABLE.md` §付記である。線そのものの配信形も同日にエンジン系統ごとの表`limits.comfort_budgets`へ移った〔同 §1.1〕）。
 
 ### 11.5 generation_defaults
 Gradio / API の初期値。
@@ -1608,7 +1610,7 @@ Gradio / API の初期値。
 | `normalize_to_png` | `true` | PNG 正規化（EXIF orientation 反映・RGB 変換） |
 
 ### 11.7 limits
-§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=5`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`={"1280x768":257,"1920x1088":153,"2560x1472":81}, `single_comfort_token_budget=44880`）。
+§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=5`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
 
 ### 11.8 output
 | キー | 実値 | 説明 |
@@ -1707,7 +1709,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 
 ## §13 開発フェーズとロードマップ
 
-> 本章は `Docs/NEXT_SESSION_HANDOFF.md`「設計対話の決定」「フェーズ別ロードマップ」の **early-integration 是正**を反映する。旧 v04 §16 の Phase 2〜5 枠は、以下の削除・再分類・格上げで置き換わる。
+> 本章は当時の引き継ぎ書（現在は `Docs/HANDOFF_ARCHIVE.md`）の「設計対話の決定」「フェーズ別ロードマップ」の **early-integration 是正**を反映する。旧 v04 §16 の Phase 2〜5 枠は、以下の削除・再分類・格上げで置き換わる。
 
 ### 13.1 方針: early-integration
 
@@ -1738,7 +1740,7 @@ Phase 1 ＝ 凍結 REST API を持つ最小バックエンド。以下は **done
 
 **Phase 3 の北極星＝公式 [LTX-Desktop](https://github.com/Lightricks/LTX-Desktop)（Lightricks・Apache-2.0・LTX-2.3 と同時リリース）の「AI 生成機能」パリティ。** 動画編集・エンコード・タイムライン配置は AviUtl2 が担うので、拡張機能側は **LTX-Desktop が持つ生成系機能をすべて出せる**ことを目標にする（編集系は対象外）。我々のバックエンドは元々 LTX-Desktop の低VRAM フォーク（*Kandyman-iac* fork）由来で、アーキも同型（FastAPI backend ＋ 別フロント）＝**フロントを AviUtl2 拡張に差し替え、バックエンドの露出を LTX-Desktop に揃える**構図。
 
-> **重要な調査結論（2026-07-02・`Docs/NEXT_SESSION_WORKORDER.md` に詳細）**: LTX-Desktop の生成機能の**大半は下層（我々の `engine`／凍結 wheel `ltx_core`/`ltx_pipelines`）が既に対応済み**で、露出を塞いでいるのは**我々の Phase 1 凍結 API だけ**。キーフレーム／first+last／任意 frame_idx／複数条件／strength は wheel の `VideoConditionByKeyframeIndex`/`VideoConditionByLatentIndex`/`VideoConditionByReferenceLatent` が既にサポートし、`combined_image_conditionings` が frame_idx で自動振り分けする。
+> **重要な調査結論（2026-07-02 の調査。当時の詳細を書いた `Docs/NEXT_SESSION_WORKORDER.md` は 2026-09-01 に廃止した）**: LTX-Desktop の生成機能の**大半は下層（我々の `engine`／凍結 wheel `ltx_core`/`ltx_pipelines`）が既に対応済み**で、露出を塞いでいるのは**我々の Phase 1 凍結 API だけ**。キーフレーム／first+last／任意 frame_idx／複数条件／strength は wheel の `VideoConditionByKeyframeIndex`/`VideoConditionByLatentIndex`/`VideoConditionByReferenceLatent` が既にサポートし、`combined_image_conditionings` が frame_idx で自動振り分けする。
 
 **Phase 3 の作業（優先順）:**
 
@@ -1920,7 +1922,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | distilled ステップ / CFG | **8 steps / CFG=1.0** 固定 | §6.7 |
 | I2V のキーフレーム画像 | **最大5枚**・`frame_idx` は 0 または 8n+1（画像なし=T2V）。`0` は開始フレーム、`> 0` は 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプ（**422 にはせず丸める**）。Phase 3 で「1枚・`frame_idx=0` 固定」から拡張 | §6.2 の凍結制約 6・7、§6.7 の `max_conditioning_images` |
 | 非64 表示サイズ | **`crop_output` で中央クロップ**（例 1280×768→720, 960×576→540） | §8.2 |
-| 解像度別 spill-free フレーム（16GB 実測・代表値） | 720p(1280×768):**257** / 1080p(1920×1088):**153** / 1440p(2560×1472):**81** | 超えると shared へ溢れ ~2-4x 低速（OOM せず）。`GET /api/v1/config` の `limits.spill_free_frames`。正本＝`Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6 |
+| 解像度別 spill-free フレーム（16GB 実測） | **数値はここへ書き写さない**——実体は `config.yaml` の `limits.spill_free_frames`（`GET /api/v1/config` で配信） | 超えると shared へ溢れ ~2-4x 低速（OOM せず）。**説明と現行値の正本＝`Docs/COMFORT_LIMIT_TABLE.md` §付記**（2026-08-31 に判定規則 v3 で再測定）。当初の実測経緯＝`Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6 |
 | 解像度×尺の実用上限 | 解像度別に §10 / §6.7 を参照 | 1080p 長尺は非実用（~40分・commit リスク）→ **720p 生成 + 外部 upscale 推奨** |
 
 ---
@@ -1952,4 +1954,4 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 ### B.2 SSOT ドキュメント地図
 
-§0.3 の SSOT 地図と整合。どの Docs が何の正本かは §0.3 の表を参照（本書 §6＝凍結 API 契約 / `config.yaml`＝設定実値 / `VERIFICATION_LOG`＝実測・検証 / `RESOLUTION_DURATION_CAPABILITY`＝解像度×尺の能力 / `NEXT_SESSION_HANDOFF`＝ゴール・ロードマップ / `LTX23_REFERENCE`＝LTX 一般知識 / `engine/VENDOR_NOTICE`＝provenance / `MCP_SERVER_DESIGN`＝MCPサーバーの設計判断（§12b）/ `ICLORA_DEPTH_DEBLUR_WORKORDER`＝IC-LoRA Depth・Deblur の仕様・設計判断 / `ACCELERATION_RESEARCH_NOTES`＝生成高速化の候補整理と採否判断 / `README`＝起動・導線）。
+§0.3 の SSOT 地図と整合。どの Docs が何の正本かは §0.3 の表を参照（本書 §6＝凍結 API 契約 / `config.yaml`＝設定実値 / `VERIFICATION_LOG`＝実測・検証 / `RESOLUTION_DURATION_CAPABILITY`＝解像度×尺の能力 / `LTX23_REFERENCE`＝LTX 一般知識 / `engine/VENDOR_NOTICE`＝provenance / `MCP_SERVER_DESIGN`＝MCPサーバーの設計判断（§12b）/ `ICLORA_DEPTH_DEBLUR_WORKORDER`＝IC-LoRA Depth・Deblur の仕様・設計判断 / `ACCELERATION_RESEARCH_NOTES`＝生成高速化の候補整理と採否判断 / `README`＝起動・導線）。

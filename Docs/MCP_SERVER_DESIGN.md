@@ -111,4 +111,4 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 - 利用者向けの使い方: [`README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節
 - 機械検証の実行記録: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)（本パッケージの節）
-- 次セッション引き継ぎ: [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md)
+- セッションの入口（課題台帳）: [`PENDING_TASKS.md`](PENDING_TASKS.md)

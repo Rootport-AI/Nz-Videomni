@@ -189,7 +189,7 @@ limits:
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
   # 2026-08-31 再測定（判定規則v3・LTX 2.3 既定構成）。正本は Docs/COMFORT_LIMIT_TABLE.md
-  spill_free_frames:         # 16GB 実測(§8.4)。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告
+  spill_free_frames:         # 当初の実測は RESOLUTION_DURATION_CAPABILITY §8.4。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告
     "512x320": 481           # minimal（20s@24fps 上限）
     "960x576": 481           # small（G4でわずかな共有メモリ使用を観測したが、ログ確認により速度低下しない無害なベースライン（§8.2）と確定し481へ復帰、2026-07-20）
     "1280x768": 273          # 720p（実用快適上限）

@@ -2,6 +2,8 @@
 
 > **本書はアーカイブ文書です。** [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) が代々の引き継ぎで積み上げてきた「最新ステータス」ブロックを、日付の新しい順にそのまま保管している。**現在有効な引き継ぎは [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) を参照すること。**
 >
+> **【2026-09-01 追記】本書がアーカイブしていた [`NEXT_SESSION_HANDOFF.md`](NEXT_SESSION_HANDOFF.md) は、オーナーの決定により同日廃止した（`NEXT_SESSION_WORKORDER.md` も同時に廃止）。**以後、セッションの入口は [`PENDING_TASKS.md`](PENDING_TASKS.md) ただ 1 つである。** 本書は追記専用の記録簿なので、上の行と以下の各ブロックが持つ `NEXT_SESSION_HANDOFF.md` への参照は当時のまま残してある（いずれも現存しない文書を指す）。
+>
 > 本書の内容は移設時のまま無改変で、**各ブロックが書かれた当時の記述**である。したがって、その後の改修で失効した記述（旧ディレクトリ構成・2リポジトリ時代の構成・旧モデル配置など）が含まれる。各テーマの最新状態は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の該当節、課題の現況は[`PENDING_TASKS.md`](PENDING_TASKS.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)が正本。
 
 ---

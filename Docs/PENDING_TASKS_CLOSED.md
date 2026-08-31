@@ -1045,7 +1045,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **解決した範囲（マーカーのみ）**: バックエンド`config.py`の`LimitsConfig`へ`single_comfort_token_budget: int = 44880`を独立フィールドとして新設し（`chain_comfort_token_budget`とは別鍵・別値）、`GET /config`の`limits`ブロックへ配線不要で自動露出させた。フロントエンドは`webui/src/modes/single/spillUtils.ts`に逆算式`singleComfortFrames`（`cells = floor(w/32)*floor(h/32)` → `N_latent_max = floor(budget/cells)` → `frames = 8*(N_latent_max-1)+1` → clamp）を新設し、`webui/src/shell/accelerationSettings.ts`の`isFullAcceleration`（5つの高速化トグル全on判定。sageは`sageAvailable`の3値扱い）が真のときだけこの式でマーカーを引く。1つでもoffなら従来どおり`resolveSpillFreeFrames`（`spill_free_frames`テーブルの面積最近傍丸め）へフォールバックする——**起票時に指摘された「テーブルの粗さ」そのものは、全on構成以外では今回も解消していない**。44,880は2026-08-18の4段階・21ジョブ実機検証（3解像度×縦横両向き）で較正した値で、正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md)。実装・機械検証の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §66、フロントエンド実装記録は[`DEVLOG.md`](DEVLOG.md) §84、契約は[`API_REFERENCE.md`](API_REFERENCE.md) §3.2。
 - **据え置き（本項の対象外のまま残るもの）**: `webui/src/timeline/deriveDuration.ts`の右クリック尺の自動決定（複数経路共有のため据え置き）と`webui/src/modes/edit/OutpaintingPanel.tsx`のOutpainting側（Edit系は別設計が要る）は、**今回のマーカー改修の対象外**——両方とも起票時と同じ`resolveSpillFreeFrames`の粗い丸めのまま。全on構成では、右クリック直後の自動尺（例257）と本項のマーカー（例361）が食い違って見える新しい見た目上の課題も生じており、これはA2V wav自動調整の天井の据え置きとあわせて後続タスクへ引き継ぐ（下記§3-95）。
 - **状態**: **Singleのマーカーのみ実装完了・機械検証全PASS・クローズ（2026-08-18）**。オーナー目視ゲートは[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4に別途起票。
-- **その後（2026-08-31）**: 本項が入れた「5つの高速化トグルが全onのときだけ賢い線を引く」という判定は、エンジン系統〔ベースモデルの世代〕ごとの配信テーブルへ置き換わり、据え置きだったSingle系の右クリック尺とa2vの自動尺調整もマーカーと同じ値に揃った（レガシー表`spill_free_frames`自体も再測定された）。**線の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、較正と判定規則v3の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84**である。
+- **その後（2026-08-31）**: 本項が入れた「5つの高速化トグルが全onのときだけ賢い線を引く」という判定は、エンジン系統〔ベースモデルの世代〕ごとの配信テーブルへ置き換わり、据え置きだったSingle系の右クリック尺とa2vの自動尺調整もマーカーと同じ値に揃った（レガシー表`spill_free_frames`自体も再測定された）。**線の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、較正と判定規則v3の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84**である。**あわせて、下の「正本・出典」が挙げる後続課題§3-95も同日に本書§3-95としてクローズした**（残件は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-132・§3-133・§3-134）。
 - **正本・出典**: バックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md)（実測較正の正本）・[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §66、フロントエンド[`DEVLOG.md`](DEVLOG.md) §84、[`API_REFERENCE.md`](API_REFERENCE.md) §3.2、[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4（目視ゲート）・§3-95（適用拡大の後続課題）。
 
 ### 3-99. ヘッダーのモデル名ドロップダウンのモック目視条件の破棄（仕様がモック→実配線へ逆転したため。起票：2026-08-19、破棄：2026-08-20）（旧§2-1からクローズ）
@@ -1242,5 +1242,26 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **オーナーの実測（authoritative・2026-08-30、サブマシン・クリーン環境で`setup.bat`→`install-LTX25.bat`を実行、`outputs`は空）**: 合計 **74.4 GB（ディスク上74.6 GB）**。上の事実より`install-LTX25.bat`が追加するのは重みのみ（≒26.82 GB）なので、**LTX 2.3のみの必要容量 ≒ 74.4 − 26.82 ≒ 47.6 GB、LTX 2.5追加分 ≒ 26.82 GB**と導出できる。ハードウェア要件表に載せる値は安全側に次の5GB単位へ切り上げ、**LTX 2.3のみ＝約50GB、LTX 2.5追加＝約30GB**とした。
 - **README改訂**: ハードウェア要件表の「ストレージ」行をこの新しい値（約50GB）に更新し、「ストレージ（ベースモデルを追加する場合）」行（LTX 2.5：追加で約30GB）を新設した。「必要な空き容量の内訳」節は、2仮想環境時代の内訳表と本項への言及（測り直し待ちの注記）を整理し、上表を正本として参照する形にした。ページファイルの節など旧「40〜41GB」を繰り返していた箇所も同じ数値を参照する書き方へそろえた。
 - **残作業（範囲外のまま）**: [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §5.1bと`scripts/setup.ps1`の空き容量しきい値`$needGB`（現行45GB）は、本セッションの担当範囲（README.md等の文書4点）に含まれないため未更新のまま残っている。新しい必要容量（LTX 2.3のみ約50GB）に対して`$needGB`が実質的に余裕を欠く可能性があるため、コードに触れるセッションで見直すこと。同じ理由で`MULTI_ENGINE_DESIGN.md`（313行目付近）と`HANDOFF_ARCHIVE.md`（追記専用記録簿につき編集対象外）に残る「本項は未着手」前提の言及も、本項のクローズにあわせて古い記述のまま残っている。
+- **【2026-08-31 追記】**: この残作業のうち `Videomni_Backend_Specification.md` §5.1b・`scripts/setup.ps1` の `$needGB`（→50）・`Docs/MULTI_ENGINE_DESIGN.md` の3点は同日中に解消した。`HANDOFF_ARCHIVE.md` は追記専用記録簿につき据え置き。
 - **状態**: **クローズ（2026-08-31、クリーン環境の実測にもとづきREADME改訂）。**
 - **正本・出典**: 本項の実測（`models/LTX23`・`models/LTX25`・`.venv`・`.venv-engine`・`.venv-engine-ltx25`・`.python`・`hf_home`・`tools`・`vendor`・`.uv_cache`）、`scripts/setup.ps1`・`scripts/install_ltx.ps1`・`scripts/install_model.ps1`・`scripts/manifests/*.json`（現物）、オーナー実測（サブマシン、2026-08-30）、[`README.md`](../README.md) §1（改訂後の正本）。
+
+### 3-95. 快適上限の適用拡大（Singleの賢いマーカー以外への波及）（起票：2026-08-18、クローズ：2026-08-31）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-95からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-95（同書§3-95は欠番）。起票理由は「賢い快適上限マーカーが全on構成のときだけ働き、周辺の経路は解像度別の粗いレガシー表`spill_free_frames`を読んだままだった」こと。
+- **決着**: 起票時に挙げた6つの波及先のうち**3つは2026-08-31の改修で解決し、残る3つは単独の項目として切り出したので、本項そのものは役目を終えた。**
+  - **解決した3つ**: ①**Single系の右クリック直後の自動尺**——賢い快適上限マーカーと同じリゾルバを通すようにした。②**a2v（音声から動画を生成する機能）のwav自動調整**——同上。③**Single a2vの快適上限に実測が無い**——a2vとt2vは同一の幾何でVRAMに効く指標が一致することを実測で確かめ、**単発生成の線をそのまま適用してよい**と結論した。
+  - **切り出した3つ**: ①Chain系の右クリック尺を賢い線にするかどうか＝[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-132。②参照動画つき単発生成の快適上限に実測が無い＝同§3-133。③画角拡張（Outpainting）専用のトークン予算の実測較正＝同§3-134。
+- **あわせて起きた設計上の変化**: 線の知識がフロントエンドの条件式（5つの高速化トグルの数え上げ）から、**サーバーが配信するエンジン系統〔ベースモデルの世代〕ごとの表**へ移った。**この変化そのものは本項の起票範囲を超えており、記録は下の正本側にある。**
+- **状態**: **クローズ（2026-08-31。残件は§3-132・§3-133・§3-134として単独に生きている）。**
+- **正本・出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1（線の表）・§6（実装への引き渡し）・§7（LTX 2.5）・§付記（レガシー表）＝**設計と数値の正本**、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84＝**較正の記録の正本**（一次記録は `outputs/comfort-calib-2026-08-31/RESULTS.md`。オーナーの実機目視ゲートは同 §84.8）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §99（実装記録）、同[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §3.2（契約）、本書§3-12（マーカー本体の実装記録）。
+
+### 3-125. ブラウザ保存の高速化設定にエンジン軸が無い（LTX 2.3で選んだ`vae_mode`のままLTX 2.5へ切り替えると全ジョブが422）（起票：2026-08-30、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-26へ統合してクローズ：2026-08-31）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-125からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-125（同書§3-125は欠番）。
+- **決着**: 本項が指していた2つの症状のうち、**片方は解消し、もう片方は同じ原因を扱う[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-26へ一本化した。** 項目を2つに分けたままにすると、同じ1回の修正で閉じるものを二重に管理することになるためである。
+  - **解消した症状（快適上限マーカーとの噛み合わせ）**: 以前は`prune_vaed`がブラウザに残っていると「高速化が全部on」と判定され、**マーカーだけ賢い表示のままジョブは422**、という食い違いが起こりえた。2026-08-31 に線がエンジン系統ごとの配信テーブルへ移り、**LTX 2.5 の行は無条件（どの高速化設定でも同じ1本）**になったため、マーカーの表示は`vae_mode`が何であっても正しい。
+  - **§1-26へ移した症状（422そのもの）**: 送信判定（`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields()`）にベースモデルの軸が無いため、LTX 2.3 で PrunaVAED を選んだまま LTX 2.5 へ切り替えると以後のすべての生成が422になる。**同書§1-26の完了条件は「設定パネルで操作できないこと」と「保存済み設定が残っていても422にならないこと」の両方**であり、本項が求めていたものはその後半にそのまま含まれる。
+- **後続への影響**: 本項を前提としていた[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-22（SageAttentionを既定にするかどうか）の前提は、**同書§1-26へ読み替えること。**
+- **状態**: **クローズ（2026-08-31、§1-26への統合）。**
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)（罠の発見時の記録）・§84（マーカー側が解消した較正の記録）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §7（LTX 2.5 の行が無条件であることの正本）、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-26（残った作業の現行の正本）。

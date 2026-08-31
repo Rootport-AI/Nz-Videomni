@@ -157,7 +157,11 @@ export interface PublishedFormValues {
   numFrames: number;
   frameRate: number;
   /** W8: the live form's current generation width/height — the resolution the
-   * #9/#10 comfort-ceiling DURATION is resolved for (`resolveSpillFreeFrames`). */
+   * #9/#10 comfort-ceiling DURATION is resolved for. Since 2026-08-31 that
+   * resolution feeds `shell/comfortTable.ts`'s smart, token-derived ceiling
+   * when the loaded engine + acceleration configuration has a served row, and
+   * `spillUtils.resolveSpillFreeFrames` otherwise — either way it is the same
+   * value Create's own comfort marker is showing for this geometry. */
   width: number;
   height: number;
 }

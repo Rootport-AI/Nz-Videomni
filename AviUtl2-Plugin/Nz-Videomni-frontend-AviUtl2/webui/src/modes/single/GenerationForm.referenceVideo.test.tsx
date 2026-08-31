@@ -182,7 +182,7 @@ describe("GenerationForm — ReferenceVideoSection (IC-LoRA card redesign)", () 
   it("shows the soft IC-LoRA spill warning when the generated duration exceeds the reference (15.0s > 2.0s)", async () => {
     const user = userEvent.setup();
     // Default duration is 361 frames @ 24fps = 15.0s (raised 2026-08-19 to the
-    // SMART comfort ceiling — see `spillUtils.singleComfortFrames`); a 2.0s
+    // SMART comfort ceiling — see `comfortTable.comfortFramesForBudget`); a 2.0s
     // reference is shorter, so the spill warning must show. The dropped
     // (unseeded) wav sets A2V without a measured duration, so numFrames stays
     // at its default.

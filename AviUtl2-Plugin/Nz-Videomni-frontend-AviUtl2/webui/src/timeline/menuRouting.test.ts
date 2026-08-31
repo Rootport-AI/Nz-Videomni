@@ -3,6 +3,7 @@ import {
   MENU_ROUTING_TABLE,
   knownMenuActions,
   routeMenuAction,
+  targetModeForIntent,
 } from "./menuRouting";
 import type { MenuPlacement, MenuRequiredKind, MenuTargetMode } from "./menuRouting";
 
@@ -222,5 +223,40 @@ describe("MENU_ROUTING_TABLE invariants", () => {
     for (const info of Object.values(MENU_ROUTING_TABLE)) {
       expect(allowed).toContain(info.placement);
     }
+  });
+});
+
+// 2026-08-31: the reverse direction, for the code downstream of routing that
+// only ever sees the `intent` string (`timeline/prefillSeed.ts` decides from it
+// whether the SINGLE screen's comfort ceiling applies to a DURATION seed).
+describe("targetModeForIntent", () => {
+  it("is the exact inverse of the table for every row", () => {
+    for (const info of Object.values(MENU_ROUTING_TABLE)) {
+      expect(targetModeForIntent(info.intent)).toBe(info.targetMode);
+    }
+  });
+
+  it("is well-defined: no intent string appears on two rows", () => {
+    const intents = Object.values(MENU_ROUTING_TABLE).map((info) => info.intent);
+    expect(new Set(intents).size).toBe(intents.length);
+  });
+
+  it("returns null for an intent the table has no row for", () => {
+    expect(targetModeForIntent("not-a-real-intent")).toBeNull();
+    expect(targetModeForIntent("")).toBeNull();
+    // An ACTION name is not an intent — passing one in must not accidentally
+    // resolve (the two vocabularies are deliberately separate).
+    expect(targetModeForIntent("referenceVideo")).toBeNull();
+  });
+
+  it("keeps the Single-系 DURATION flows on single, and retake/end-with-this off it", () => {
+    // The four intents that actually carry a DURATION policy...
+    expect(targetModeForIntent("reference-video")).toBe("single"); // #2
+    expect(targetModeForIntent("video-audio-to-video")).toBe("single"); // #3
+    expect(targetModeForIntent("image-to-video")).toBe("single"); // #4
+    expect(targetModeForIntent("audio-to-video")).toBe("single"); // #7
+    // ...and the two that must NOT pick up Create's per-clip comfort ceiling.
+    expect(targetModeForIntent("retake")).toBe("edit");
+    expect(targetModeForIntent("end-with-this")).toBe("chained");
   });
 });

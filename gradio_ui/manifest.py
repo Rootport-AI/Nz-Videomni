@@ -357,7 +357,7 @@ def compute_spill_warnings(
     """Return one warning string per non-Skip row whose ``frames`` exceeds the
     comfortable (spill-free) threshold for ``{width}x{height}`` in
     ``spill_free_frames`` (config.yaml's ``limits.spill_free_frames`` shape,
-    e.g. ``{"1280x768": 257}``). Unknown resolution -> no warnings. This never
+    e.g. ``{"1280x768": 273}``). Unknown resolution -> no warnings. This never
     changes ``stat`` — spill is a slowdown, not an exclusion (WORKORDER §2.6 /
     §4.3: only the 481-frame cap Skips)."""
     key = f"{int(width)}x{int(height)}"

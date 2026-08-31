@@ -157,7 +157,8 @@ AviUtl2 のプラグインは、バックエンドのサーバーを自分で起
 | GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
 | GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
 | メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（LTX 2.3 では約 20GB、LTX 2.5 では約 7.7GiB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」）。**LTX 2.5 を使う場合も 64GB 以上を推奨**します——2.5 のワーカーは仕上げ工程のために重みをメインメモリへ持ち続ける設計（`cache_weights`、既定 on）で、**生成中のメインメモリの山が実測で約 26GiB** あるためです。この既定を off にすれば常駐は減りますが、そのぶん仕上げ工程の作り直しに時間がかかります。**LTX 2.5 でモデル骨格の常駐も同時に on にする場合は、安全側の見積りとして合計 約 34GiB を見ておいてください**（内訳は連結生成の OFF ピーク 26.33GiB ＋ 常駐増分 7.68GiB ≒ 34.0GiB。[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.19・§76.2(3)・**§76.8(3)**〔§76.2(3) の「約 33.6GiB」はこの節で 約 34.0GiB へ訂正した〕） |
-| ストレージ | **このフォルダを置くドライブに約 40〜41GB**（モデル 約 32.51GiB ＋ Python 環境 7〜8GiB ＋ `tools/` 約 0.4GiB）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き（下の「必要な空き容量の内訳」参照） |
+| ストレージ | **このフォルダを置くドライブに約 50GB**（`setup.bat`のみ＝LTX 2.3を導入した場合の必要空き容量。内訳は下の「必要な空き容量の内訳」参照）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き |
+| ストレージ（ベースモデルを追加する場合） | **LTX 2.5：追加で約 30GB**（`install-LTX25.bat`。下の「LTX 2.5 を追加する」参照） |
 | attention（注意機構の計算方法） | 既定は全世代で **SDPA**（PyTorch 標準の実装）。**2026-07-31 から、生成のたびに SageAttention へ切り替えられます**（§5「生成の高速化（Acceleration）」）。xformers・flash-attn は引き続き導入も使用もしません |
 
 #### 対応する GPU 世代
@@ -194,28 +195,18 @@ attention は全世代で PyTorch の SDPA を既定にしており、xformers �
 
 #### 必要な空き容量の内訳
 
-このフォルダの中に入るものは、実測で次のとおりです。合計 **約 40〜41GB** を見てください。
-この「約 40〜41GB」が本プロジェクトで統一している必要容量の数字で、`setup.bat`（`scripts/setup.ps1`）が
-起動時に出す空き容量の案内・失敗時の案内も同じ数字を使います（判定のしきい値はここに余裕を足した 45GB）。
+上の「ストレージ」欄の **約 50GB**（LTX 2.3 のみ）が、本プロジェクトで統一している必要容量の数字です。合計の正本はこの欄だけで、他の場所には数値を書き写しません。`setup.bat`（`scripts/setup.ps1`）が起動時に出す空き容量の案内・失敗時の案内は、この数字に余裕を足ししきい値として使っています。
 
-| 中身 | 実測サイズ | 備考 |
-|------|-----------|------|
-| `models/`（モデル一式） | 約 32.51 GiB | `models/LTX23/` に GGUF transformer（`Weights/`）＋ GGUF Gemma と tokenizer（`TextEncoder/`）＋ VAE 一式（`VAE/`、枝刈りデコーダ PrunaVAED を含め計 2.34 GiB）＋ アップサンプラ（`Upscaler/`）＋ IC-LoRA 2点（1.22 GiB）と Deblur 1点（0.91 GiB）と In-Outpainting 1点（1.22 GiB）（`IC-LoRA/`）、`models/Preprocessors/` に DWPose 前処理器 2点（0.33 GiB）と Video-Depth-Anything 2点（0.12 GiB）。フォルダの意味は下の「models フォルダの構成」を参照 |
-| Python 環境（`.uv_cache/` ＋ `.venv/` ＋ `.venv-engine/` ＋ `.venv-engine-ltx25/` ＋ `.python/`） | 約 7〜8 GiB | 実体はほぼ `.uv_cache/` にあり、3つの venv はそこへのハードリンク（同じ実体を指す別名）で共有するため、単純な足し算にはなりません |
-| `tools/`（`uv` ＋ `ffmpeg`） | 約 0.4 GiB（実測 378 MB） | `setup.bat` が取り込む前提ツール。ffmpeg のダウンロードは約 104 MB だが、展開後はこの大きさになる |
+中身は `models/`（モデル一式。`models/LTX23/` の GGUF transformer・GGUF Gemma・VAE・アップスケーラ・IC-LoRA、`models/Preprocessors/` の DWPose・Video-Depth-Anything。フォルダの意味は下の「models フォルダの構成」を参照）＋ Python 環境（`.venv/` ＋ `.venv-engine/` ＋ `.venv-engine-ltx25/` ＋ 共有キャッシュ `.uv_cache/` ＋ `.python/`。3つの venv は `.uv_cache/` へのハードリンクで実体を共有するため、単純な足し算にはならず、キャッシュの再構築回数によっても変わります）＋ `tools/`（`uv` ＋ `ffmpeg`、約 0.4 GiB）です。**3つ目の仮想環境（`.venv-engine-ltx25`、LTX 2.5 用）は `install-LTX25.bat` ではなく `setup.bat` の時点で、選んだベースモデルに関わらず作られます**——この約 50GB にすでに含まれています。
 
-> **この 40〜41GB に LTX 2.5 の重みは含まれていません。** LTX 2.5 は `setup.bat` ではなく `install-LTX25.bat` で別に導入するもので、
-> そのぶんの空き容量は下の「LTX 2.5 を追加する」を参照してください（必要量はバッチ自身が実行前に表示します）。
+> **この約 50GB に LTX 2.5 の重みは含まれていません。** LTX 2.5 は `setup.bat` ではなく `install-LTX25.bat` で別に導入するもので、上表の「ストレージ（ベースモデルを追加する場合）」＝追加で約 30GB を見てください（詳しくは下の「LTX 2.5 を追加する」）。
 
-> **この表の数値は、LTX 2.5 用の3つ目の仮想環境（`.venv-engine-ltx25`）が加わったあとの再実測がまだ済んでいません。**
-> 上の「約 7〜8 GiB」「合計 約 40〜41GB」は 2 つの仮想環境だった時期の実測値です。3 つ目のぶんは共有キャッシュ
-> （`.uv_cache/`）にも積み上がるため、実際にはこれより大きくなる可能性があります。**クリーンな環境で測り直すまで
-> 数値は動かさない**方針で、測り直しは課題として起票済みです（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-107）。
+> **数値は 2026-08-31 に、クリーンなサブマシン環境で `setup.bat` → `install-LTX25.bat` を実行して測定しました**（測定の経緯・生の実測値は[`Docs/PENDING_TASKS_CLOSED.md`](Docs/PENDING_TASKS_CLOSED.md) §3-107）。
 
-> **ページファイル用の 60GB は、この 40〜41GB の代わりにはなりません。** ページファイルは
+> **ページファイル用の 60GB は、上の「ストレージ」欄の空きの代わりにはなりません。** ページファイルは
 > 別のドライブに置いていても構わない性質のもので（Windows の既定では C ドライブ）、
 > 用途もまったく別です。**両方**必要だと考えてください。たとえばこのフォルダを D ドライブへ
-> 置き、ページファイルが C ドライブにあるなら、D に 40〜41GB・C に 60GB の空きが要ります。
+> 置き、ページファイルが C ドライブにあるなら、D に約 50GB・C に 60GB の空きが要ります。
 
 #### メインメモリとページファイル（最重要）
 
@@ -426,7 +417,7 @@ models/
 そのあと `run.bat` で画面を開き直せば、ヘッダーのベースモデル一覧から「LTX 2.5」を選べるようになります（**画面を開いたままだと未導入のままに見えます**——
 一覧は画面を開いたときにしか読み直さないためです）。
 
-- **ダウンロードの量はおよそ 25 GB** で、回線によっては1〜2時間かかります。途中でスリープしない設定にしておくと確実です（**必要な空き容量は、余裕を見た値をバッチ自身が実行前に表示します**）。
+- **ダウンロードの量はおよそ 25 GB**（必要な空き容量として上の「ストレージ（ベースモデルを追加する場合）」に載せている約 30GB は、これに安全側の余裕を足した値）で、回線によっては1〜2時間かかります。途中でスリープしない設定にしておくと確実です（**バッチ自身も実行前に必要な空き容量を表示します**）。
 - **揃っているファイルは取り直しません。** 途中で失敗しても、もう一度ダブルクリックすれば続きから再開します。`setup.bat` と続けて実行しても二重取得は起きません。
 - 実行の記録は `logs\install_LTX25_<日時>.log` に残ります。うまくいかないときは、この記録を見てください。
 - 検証に失敗したときは、**足りない 1 ファイルだけを消して**もう一度実行してください。`models\LTX25` をフォルダごと消さないでください（ご自身で置いた LoRA などが同居している場合、再取得できません）。
@@ -625,10 +616,12 @@ $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
   検証は [`api/models.py`](api/models.py) の `GenerateRequest` validator）。
 - フレーム数は **8n+1**（9, 17, 25, … 121）。尺 cap は **20s（481f=8×60+1）@24fps** まで許容
   （旧 257f/10.67s から緩和）。溢れ/低速/非実用は**クライアント UI 警告に委ねる**方針で、
-  解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames`
-  （720p:257 / 1080p:153 / 1440p:81）に露出する。これを超えると shared へ溢れ ~2-4x 低速化
+  解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames` に露出する
+  （**値は `config.yaml` の `limits.spill_free_frames` と [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) を参照**。
+  2026-08-31 に再測定済み）。これを超えると shared へ溢れ ~2-4x 低速化
   （OOM せず）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨。
-  閾値の正本は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6。
+  閾値の説明の正本は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) §付記（2026-07-01 時点の実測の経緯は
+  [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6）。
 - Distilled は **8 steps / CFG=1.0** 固定。
 - I2V のキーフレーム画像は **最大5枚**（画像なし=T2V、1枚以上=I2V）。`frame_idx` は `0`（開始フレーム）か 8n+1 で、
   それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。

@@ -11,6 +11,7 @@ import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { useToasts } from "../../shell/ToastContext";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { BatchSection } from "../batch/BatchSection";
+import { comfortFramesForBudget, resolveComfortRow } from "../../shell/comfortTable";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
 import { DURATION_POLICY_BY_INTENT, materialDurationForIntent, resolvePrefillSeed } from "../../timeline/prefillSeed";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
@@ -78,6 +79,14 @@ export interface SingleScreenProps {
    * `nag`/`acceleration` above — every pre-existing direct-render test that
    * doesn't pass it keeps compiling. */
   sageAvailable?: boolean | null | undefined;
+  /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
+   * (`useBaseModels().activeEngineFamily`), the key into the served
+   * `config.limits.comfort_budgets` table. Passed straight through to
+   * `useGenerationForm` (and to `resolvePrefillSeed`/`computeTargetNumFrames`
+   * for the right-click DURATION seed, so the seeded length matches the marker
+   * the user then sees). Omitted/`""` ⇒ "engine unknown" ⇒ the compatibility
+   * shim, so every direct-render test that predates it keeps compiling. */
+  engineFamily?: string | undefined;
   /** §3-98 P5: Batch A2V submits `POST /generate/chain`, which the loaded base
    * model's engine may not support (LTX 2.5 v1 refuses the whole chain family
    * with 422 `FEATURE_UNSUPPORTED`). `true` greys the panel's controls the same
@@ -105,6 +114,7 @@ export function SingleScreen({
   nag,
   acceleration,
   sageAvailable,
+  engineFamily,
   batchUnavailable,
 }: SingleScreenProps) {
   const strings = useStrings();
@@ -130,6 +140,7 @@ export function SingleScreen({
       nag={nag}
       acceleration={acceleration}
       sageAvailable={sageAvailable}
+      engineFamily={engineFamily}
       batchUnavailable={batchUnavailable}
     />
   );
@@ -150,6 +161,7 @@ interface SingleScreenBodyProps {
   nag?: NagSettings | undefined;
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
+  engineFamily?: string | undefined;
   batchUnavailable?: boolean | undefined;
 }
 
@@ -168,6 +180,7 @@ function SingleScreenBody({
   nag,
   acceleration,
   sageAvailable,
+  engineFamily,
   batchUnavailable = false,
 }: SingleScreenBodyProps) {
   const strings = useStrings();
@@ -263,9 +276,16 @@ function SingleScreenBody({
             config,
             sizePolicy,
             fpsPolicy,
+            // 2026-08-31: the same trio `AppShell` hands its OWN
+            // `resolvePrefillSeed` call for the reservation length — the two
+            // must be given identical inputs or the placed ribbon and the
+            // seeded form disagree (R-4).
+            engineFamily,
+            acceleration,
+            sageAvailable,
           })
         : null,
-    [initialIntent, config, sizePolicy, fpsPolicy],
+    [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable],
   );
   const derived = seed?.derived ?? null;
   const prefillFrameRate = seed?.frameRate;
@@ -279,7 +299,7 @@ function SingleScreenBody({
   const form = useGenerationForm(
     config,
     prompt,
-    { nativeBridge, controlLora, setControlLora, controlLoraNames, nag, acceleration, sageAvailable },
+    { nativeBridge, controlLora, setControlLora, controlLoraNames, nag, acceleration, sageAvailable, engineFamily },
     {
       ...(derived
         ? {
@@ -364,6 +384,31 @@ function SingleScreenBody({
         const policy = DURATION_POLICY_BY_INTENT[initialIntent.intent];
         if (policy) {
           const materialDurationSec = materialDurationForIntent(initialIntent.intent, initialIntent.selection);
+          // 2026-08-31: the smart ceiling has to be RE-derived here, not reused
+          // from `seed`, because `size=project` has just replaced the seed's
+          // width/height with the project's — a token-derived ceiling computed
+          // at the old geometry would be the wrong number. Dropping this
+          // recomputation would silently send the `project` policy's DURATION
+          // back to the legacy table (this is a one-shot mount effect, so
+          // nothing later would correct it).
+          // Gated on `acceleration` for the same reason `resolvePrefillSeed` is:
+          // a caller that does not thread the Settings state cannot say what
+          // would effectively run, so it keeps the legacy ceiling.
+          const comfortRow = acceleration
+            ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null)
+            : null;
+          const smartCeiling =
+            comfortRow
+              ? comfortFramesForBudget(
+                  effectiveWidth,
+                  effectiveHeight,
+                  comfortRow.singleBudget,
+                  MIN_NUM_FRAMES,
+                  config.limits.max_num_frames,
+                  comfortRow.spatialFactor,
+                  comfortRow.temporalFactor,
+                )
+              : null;
           const target = computeTargetNumFrames({
             policy,
             width: effectiveWidth,
@@ -371,6 +416,7 @@ function SingleScreenBody({
             spillFreeFrames: config.limits.spill_free_frames,
             minNumFrames: MIN_NUM_FRAMES,
             maxNumFrames: config.limits.max_num_frames,
+            ...(smartCeiling !== null ? { comfortCeilingFrames: smartCeiling } : {}),
             ...(materialDurationSec !== undefined ? { materialDurationSec } : {}),
             genFps: effectiveGenFps,
           });

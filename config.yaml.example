@@ -134,7 +134,7 @@ generation_presets:
     crop_output:
       width: 1280
       height: 720
-    num_frames: 361 # 賢い快適上限マーカー（single_comfort_token_budget=44880）の算出値に引き上げ（2026-08-19）。旧値257はlimits.spill_free_frames["1280x768"]の実測快適上限（コースな5点表・全加速オン以外向けフォールバック）と一致していたが、式ベースの正確な値に更新
+    num_frames: 361 # 賢い快適上限マーカー（single_comfort_token_budget=44880）の算出値に引き上げ（2026-08-19）。旧値は当時のlimits.spill_free_frames["1280x768"]と一致していたが、式ベースの正確な値に更新（同表は2026-08-31に再測定され値が変わった・下記参照）
   FHD_1080p:
     width: 1920
     height: 1088
@@ -188,11 +188,12 @@ limits:
   conditioning_keyframe_grid_offset: 1
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
+  # 2026-08-31 再測定（判定規則v3・LTX 2.3 既定構成）。正本は Docs/COMFORT_LIMIT_TABLE.md
   spill_free_frames:         # 16GB 実測(§8.4)。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告
     "512x320": 481           # minimal（20s@24fps 上限）
     "960x576": 481           # small（G4でわずかな共有メモリ使用を観測したが、ログ確認により速度低下しない無害なベースライン（§8.2）と確定し481へ復帰、2026-07-20）
-    "1280x768": 257          # 720p（実用快適上限）
-    "1920x1088": 153         # 1080p（20s は非実用~40分→720p生成+外部upscale 推奨）
+    "1280x768": 273          # 720p（実用快適上限）
+    "1920x1088": 161         # 1080p（20s は非実用~40分→720p生成+外部upscale 推奨）
     "2560x1472": 81          # 1440p
   # V2V 継続（POST /generate/chain の source_video.context_frames）。/config で公開。
   # context_frames は 8n+1。max=145 は保守的な v1 上限（凍結ヘッドを stage-2 の

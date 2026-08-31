@@ -18,6 +18,7 @@ import {
   stage2MaxContextFrames,
 } from "../../shell/tokenBudget";
 import type { ChainWindowBudgetMarkers, Stage2Window } from "../../shell/tokenBudget";
+import { resolveComfortRow } from "../../shell/comfortTable";
 import { MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
 import { estimateGenerationSeconds, formatEstimate } from "../single/estimateUtils";
 import {
@@ -137,6 +138,22 @@ export interface UseChainFormDeps {
    * omitted, which keeps `buildRequest`'s `accelerationRequestFields` call
    * at `{}`. */
   acceleration?: AccelerationSettings | undefined;
+  /** Smart comfort marker (2026-08-31): whether the server reports
+   * SageAttention as installed (`shell/accelerationSettings.sageAvailability`),
+   * owned by `shell/AppShell.tsx` — same optional-dep shape as `acceleration`
+   * above. `null` ("unknown", the default when omitted) never demotes sage. */
+  sageAvailable?: boolean | null | undefined;
+  /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
+   * (`useBaseModels().activeEngineFamily`), the key into the served
+   * `config.limits.comfort_budgets` table. This hook takes the matched row's
+   * CHAIN budget for the stage-2 window guide line and its warning; with no
+   * matching row it keeps using `config.limits.chain_comfort_token_budget`,
+   * i.e. today's value.
+   *
+   * Omitted, `undefined` or `""` all mean "engine unknown" →
+   * `shell/comfortTable.ts`'s compatibility shim, so every pre-existing unit
+   * test keeps its current budget. */
+  engineFamily?: string | undefined;
 }
 
 const EMPTY_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set();
@@ -1099,6 +1116,12 @@ export function useChainForm(
   const nag = deps.nag ?? NAG_OFF;
   // Acceleration (2026-07-31): same optional-dep shape as `nag` above.
   const acceleration = deps.acceleration ?? ACCELERATION_DEFAULTS;
+  // Smart comfort marker (2026-08-31): the two inputs that, with `acceleration`
+  // above, pick the served comfort row whose CHAIN budget draws the stage-2
+  // window guide. Both default to "unknown", which yields the compatibility
+  // shim — i.e. the pre-table budget.
+  const sageAvailable = deps.sageAvailable ?? null;
+  const engineFamily = deps.engineFamily;
 
   // ── §1-15 参照動画: declared FIRST because the width/height grid depends on
   // it. A reference video (or a control LoRA, which mandates one) puts the
@@ -2372,7 +2395,20 @@ export function useChainForm(
   // The budget itself is SERVED (2026-08-12) so it can be tuned per machine
   // without a rebuild; `resolveChainComfortBudget` covers an older backend that
   // does not send it at all, and the offline fallback config.
-  const comfortBudget = resolveChainComfortBudget(config.limits.chain_comfort_token_budget);
+  //
+  // 2026-08-31: the served TABLE takes precedence when it has a row for this
+  // engine + acceleration configuration — that is what widens LTX 2.5's guide
+  // line (40,000 -> 44,880). With no matching row (LTX 2.3's default
+  // configuration, an older backend, or before `GET /models` lands) this falls
+  // back to the scalar key exactly as before.
+  // D tidy (2026-08-31): memoized with the SAME deps style
+  // `useGenerationForm.ts`'s own `comfortRow` uses, for consistency across the
+  // two hooks that call `resolveComfortRow`.
+  const comfortRow = useMemo(
+    () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable),
+    [config.limits, engineFamily, acceleration, sageAvailable],
+  );
+  const comfortBudget = comfortRow?.chainBudget ?? resolveChainComfortBudget(config.limits.chain_comfort_token_budget);
   const chainWindowOverBudget = isChainWindowOverBudget(common.width, common.height, stage2Window, comfortBudget);
   // The same budget, expressed as positions on the two sliders. `active.multiple`
   // is the grid the sliders can actually land on (64, or 128 with a reference

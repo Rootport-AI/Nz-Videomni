@@ -19,6 +19,7 @@ import {
 import { resetCreateLiveCommands } from "./timeline/createLiveCommands";
 import { END_SOURCE_SEED_MAX_FRAMES } from "./timeline/prefillSeed";
 import { END_SOURCE_CONTEXT_FRAMES } from "./timeline/tailAlign";
+import { ACCELERATION_STORAGE_KEY } from "./shell/accelerationSettings";
 
 // Integration coverage for the right-click "routing -> prefill" host wiring
 // (task: ルーティング→プリフィル). A mock bridge is injected into `AppShell`
@@ -209,6 +210,27 @@ const panel = () => screen.getByRole("tabpanel");
 function pinMaterialPolicies(): void {
   window.localStorage.setItem(PREFILL_SIZE_POLICY_STORAGE_KEY, "material");
   window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, "defaults");
+}
+
+// Post-review fix (2026-08-31, A-1): pins all FIVE Acceleration toggles on
+// BEFORE render, via the same `localStorage` key `useAccelerationSettings`'s
+// lazy initializer reads — mirroring `SettingsPanel.test.tsx`'s own
+// round-trip assertions of that shape. With this pinned, `resolveComfortRow`
+// matches the `ltx` row (or, before `GET /models` lands, the identical
+// compatibility shim — see `shell/comfortTable.ts`), so the SMART
+// per-resolution ceiling applies instead of the legacy `spill_free_frames`
+// table.
+function pinAllOnAcceleration(): void {
+  window.localStorage.setItem(
+    ACCELERATION_STORAGE_KEY,
+    JSON.stringify({
+      attentionBackend: "sage",
+      blockSwapPrefetch: true,
+      keepResident: true,
+      fusedGgufDequantKernel: true,
+      vaeMode: "prune_vaed",
+    }),
+  );
 }
 
 describe("App / right-click routing -> prefill", () => {
@@ -2195,7 +2217,7 @@ describe("App / right-click routing -> prefill", () => {
   // --- W8: right-click DURATION decision engine ------------------------------
 
   it(
-    "#4 imageToVideo seeds DURATION to the resolution's comfort ceiling (512x320 -> 481, a raise from the 257 default)",
+    "#4 imageToVideo seeds DURATION to the resolution's comfort ceiling (512x320 -> 481, a raise from the 273 ceiling)",
     async () => {
       resetProvisionalReservation();
       const bridge = createMockBridge({ delayMs: 0 });
@@ -2207,7 +2229,7 @@ describe("App / right-click routing -> prefill", () => {
       });
 
       // Width/height applied (512x320) AND DURATION raised to the 512x320 ceiling
-      // (481) — not the config default 257.
+      // (481) — not the 1280x768 ceiling 273.
       await waitFor(
         () => {
           expect(within(panel()).getAllByDisplayValue("512").length).toBeGreaterThan(0);
@@ -2222,7 +2244,7 @@ describe("App / right-click routing -> prefill", () => {
   );
 
   it(
-    "#4 imageToVideo lowers DURATION to the ceiling for a large resolution (1920x1088 -> 153)",
+    "#4 imageToVideo lowers DURATION to the ceiling for a large resolution (1920x1088 -> 161)",
     async () => {
       resetProvisionalReservation();
       const bridge = createMockBridge({ delayMs: 0 });
@@ -2237,7 +2259,41 @@ describe("App / right-click routing -> prefill", () => {
         () => {
           expect(
             (within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value,
-          ).toBe("153");
+          ).toBe("161");
+        },
+        { timeout: 5_000 },
+      );
+    },
+    15_000,
+  );
+
+  it(
+    "#4 imageToVideo seeds DURATION to the SMART per-resolution ceiling when acceleration is all-on (1280x768 -> 361, not the legacy 273)",
+    async () => {
+      // Post-review fix A-1 (2026-08-31): end-to-end wiring check for
+      // `shell/comfortTable.ts`'s `resolveComfortRow`/`comfortFramesForBudget`
+      // reaching the right-click DURATION seed through
+      // `AppShell`/`resolvePrefillSeed`. All five Acceleration toggles on ->
+      // the served `ltx` row matches -> the comfort budget widens from the
+      // legacy table's 273 (nearest-area lookup at 1280x768) to the smart
+      // per-resolution ceiling's 361 (comfortFramesForBudget(1280, 768, 44880,
+      // ...) — same anchor `shell/comfortTable.test.ts` pins).
+      resetProvisionalReservation();
+      pinAllOnAcceleration();
+      const bridge = createMockBridge({ delayMs: 0 });
+      render(<AppShell nativeBridge={bridge} />);
+      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSelectionSized(1280, 768) });
+      });
+
+      await waitFor(
+        () => {
+          expect(within(panel()).getAllByDisplayValue("1280").length).toBeGreaterThan(0);
+          expect(
+            (within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value,
+          ).toBe("361");
         },
         { timeout: 5_000 },
       );
@@ -2258,9 +2314,9 @@ describe("App / right-click routing -> prefill", () => {
       render(<AppShell nativeBridge={bridge} />);
       await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
 
-      // 1280x768 (already on the IC-LoRA 128 grid) -> comfort ceiling 257. W4: the
+      // 1280x768 (already on the IC-LoRA 128 grid) -> comfort ceiling 273. W4: the
       // reference now follows the object's TRIMMED span, not the full file: frames
-      // 0..120 (inclusive span 121) @ selection fps 24 -> 121 frames (< 257), so
+      // 0..120 (inclusive span 121) @ selection fps 24 -> 121 frames (< 273), so
       // the span wins over the ceiling. mediaDurationSec (5) is deliberately ignored.
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
@@ -2282,7 +2338,7 @@ describe("App / right-click routing -> prefill", () => {
   );
 
   it(
-    "#2 referenceVideo clamps DURATION to the ceiling when the trimmed SPAN is longer (721-frame span, 1920x1152 -> 153)",
+    "#2 referenceVideo clamps DURATION to the ceiling when the trimmed SPAN is longer (721-frame span, 1920x1152 -> 161)",
     async () => {
       resetProvisionalReservation();
       pinMaterialPolicies();
@@ -2290,9 +2346,9 @@ describe("App / right-click routing -> prefill", () => {
       render(<AppShell nativeBridge={bridge} />);
       await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
 
-      // 1920x1152 (128-aligned) -> comfort ceiling 153. W4: a long TRIMMED span
-      // (frames 0..720, inclusive span 721) @24fps floors well past 153, so it
-      // clamps DOWN to the 153 ceiling — a value distinct from the 257 default.
+      // 1920x1152 (128-aligned) -> comfort ceiling 161. W4: a long TRIMMED span
+      // (frames 0..720, inclusive span 721) @24fps floors well past 161, so it
+      // clamps DOWN to the 161 ceiling — a value distinct from the 273 one at the default resolution.
       const sel = videoSelectionSized(1920, 1152, 30, 24, 1);
       sel.selected[0]!.frameEnd = 720;
       act(() => {
@@ -2303,7 +2359,7 @@ describe("App / right-click routing -> prefill", () => {
         () => {
           expect(
             (within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value,
-          ).toBe("153");
+          ).toBe("161");
         },
         { timeout: 5_000 },
       );
@@ -2398,7 +2454,7 @@ describe("App / right-click routing -> prefill", () => {
   // matches the remounted form the instant it appears. -----------------------
 
   it(
-    "#4 imageToVideo reserves the provisional at the comfort-ceiling DURATION (512x320 -> numFrames 481, not the 257 default)",
+    "#4 imageToVideo reserves the provisional at the comfort-ceiling DURATION (512x320 -> numFrames 481, not the 273 ceiling at the default resolution)",
     async () => {
       resetProvisionalReservation();
       const bridge = createMockBridge({ delayMs: 0 });
@@ -2441,7 +2497,7 @@ describe("App / right-click routing -> prefill", () => {
 
       // #2 is placement B (head-aligned). W4: the reservation seed follows the
       // TRIMMED span (frames 0..120, inclusive span 121) @ the selection's fps 24
-      // -> 121 frames (< the 1280x768 ceiling 257). The reservation always uses
+      // -> 121 frames (< the 1280x768 ceiling 273). The reservation always uses
       // the selection fps (the seed), independent of the fps policy.
       await waitFor(
         () => {
@@ -2501,7 +2557,7 @@ describe("App / right-click routing -> prefill", () => {
       // W4: #7 now follows the audio object's TRIMMED timeline span, not the full
       // file. audioSelection() frames 10..130 (inclusive span 121) @ rate 30 ->
       // 121/30 s * 30fps = 121 frames; the audio has no media resolution, so
-      // DURATION resolves off the project-default 1280x768 (ceiling 257), leaving
+      // DURATION resolves off the project-default 1280x768 (ceiling 273), leaving
       // 121 unclamped. mediaDurationSec (3, full file) is deliberately ignored.
       // Placement B.
       const sized = (() => {

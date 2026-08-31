@@ -10,6 +10,7 @@ import {
 } from "./shell/PrefillPolicyContext";
 import { resetProvisionalReservation } from "./timeline/provisionalReservation";
 import { resetCreateLiveCommands } from "./timeline/createLiveCommands";
+import { ACCELERATION_STORAGE_KEY } from "./shell/accelerationSettings";
 
 // W1 integration coverage: the right-click prefill SIZE and FPS policies are now
 // two independent axes (Settings → PrefillPolicyContext), each persisted under
@@ -185,6 +186,51 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
           expect(within(panel()).getAllByDisplayValue("1024").length).toBeGreaterThan(0);
           expect(within(panel()).getAllByDisplayValue("512").length).toBeGreaterThan(0);
           expect(fpsInput().value).toBe("60");
+        },
+        { timeout: 5_000 },
+      );
+    },
+    15_000,
+  );
+
+  it(
+    "② size=project with acceleration all-on: DURATION is RE-derived at the project's own resolution using the SMART ceiling (1280x768 -> 361, not the legacy 273)",
+    async () => {
+      // Post-review fix A-1 (2026-08-31): `SingleScreen.tsx`'s size=project
+      // mount effect must recompute the smart ceiling at the OVERWRITTEN
+      // (project) width/height, not reuse whatever `resolvePrefillSeed`
+      // resolved at the material's geometry — see the comment above
+      // `smartCeiling` in that file. All five Acceleration toggles on selects
+      // the served `ltx` row.
+      setSizePolicy("project");
+      setFpsPolicy("project");
+      window.localStorage.setItem(
+        ACCELERATION_STORAGE_KEY,
+        JSON.stringify({
+          attentionBackend: "sage",
+          blockSwapPrefetch: true,
+          keepResident: true,
+          fusedGgufDequantKernel: true,
+          vaeMode: "prune_vaed",
+        }),
+      );
+      // The project's resolution (1280x768) differs from the material
+      // (832x640) so the overwrite is observable, and is itself the
+      // `spill_free_frames` legacy table's key with the widest gap to the
+      // smart value (273 vs. 361).
+      const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1280, height: 768, rate: 24, scale: 1 } });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 30, 1) });
+      });
+
+      await waitFor(
+        () => {
+          expect(within(panel()).getAllByDisplayValue("1280").length).toBeGreaterThan(0);
+          expect(within(panel()).getAllByDisplayValue("768").length).toBeGreaterThan(0);
+          expect(
+            (within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value,
+          ).toBe("361");
         },
         { timeout: 5_000 },
       );

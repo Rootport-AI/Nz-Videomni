@@ -15,7 +15,10 @@
  * derivation. Do not import this module from Create/single-generate code, and do
  * not generalise `CHAIN_COMFORT_TOKEN_BUDGET` / `CHAIN_STAGE1_COMFORT_TOKEN_BUDGET`
  * into app-wide constants — every function below is named `chain*`/`stage2*` for
- * exactly that reason.
+ * exactly that reason. The ONE sanctioned exception is `shell/comfortTable.ts`,
+ * which imports `CHAIN_COMFORT_TOKEN_BUDGET`/`resolveChainComfortBudget` solely
+ * to hand the CHAIN half of a served comfort row back to Chained code — it
+ * never mixes the two budgets, and nothing in Create reads them through it.
  *
  * This is also a SEPARATE axis from `config.limits.spill_free_frames`
  * (`modes/single/spillUtils.ts`): that one is the server-published comfortable

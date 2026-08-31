@@ -107,7 +107,9 @@ export const MOCK_CONFIG_BODY = {
     conditioning_keyframe_grid_offset: 1,
     phase1_max_concurrent_jobs: 1,
     low_vram_disabled_required: false,
-    spill_free_frames: { "512x320": 481, "960x576": 481, "1280x768": 257, "1920x1088": 153, "2560x1472": 81 },
+    // 2026-08-31 再測定・判定規則v3・LTX 2.3 既定構成（正本は
+    // `Nz-Videomni/config.yaml` の `limits.spill_free_frames`）。
+    spill_free_frames: { "512x320": 481, "960x576": 481, "1280x768": 273, "1920x1088": 161, "2560x1472": 81 },
     v2v_context_frames_default: 73,
     v2v_context_frames_min: 25,
     v2v_context_frames_max: 145,
@@ -118,6 +120,35 @@ export const MOCK_CONFIG_BODY = {
     end_context_frames_max: 136,
     chain_comfort_token_budget: 40000,
     single_comfort_token_budget: 44880,
+    // 快適上限マーカーの配信テーブル（2026-08-31）。`FALLBACK_APP_CONFIG.limits`
+    // (`modes/single/defaultConfig.ts`) と**同内容**であること —— 下のパリティ
+    // テストは片方向包含（fallback の全鍵がここにある）しか見ないので、中身の
+    // ズレはテストでは捕まらない。`ltx` に requires 空の行が無いのは意図
+    // （理由は defaultConfig.ts 側のコメント）。
+    comfort_budgets: {
+      ltx: {
+        spatial_factor: 32,
+        temporal_factor: 8,
+        rows: [
+          {
+            requires: {
+              attention_backend: "sage",
+              block_swap_prefetch: true,
+              keep_resident: true,
+              fused_gguf_dequant_kernel: true,
+              vae_mode: "prune_vaed",
+            },
+            single_budget: 44880,
+            chain_budget: 40000,
+          },
+        ],
+      },
+      ltx25: {
+        spatial_factor: 32,
+        temporal_factor: 8,
+        rows: [{ requires: {}, single_budget: 44880, chain_budget: 44880 }],
+      },
+    },
   },
   output: { dir: "./outputs", format: "mp4", save_metadata_json: true, keep_raw_frames: false },
 };

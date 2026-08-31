@@ -52,6 +52,7 @@ import { ThemeProvider } from "./ThemeContext";
 import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
+import { comfortFramesForBudget, resolveComfortRow } from "./comfortTable";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 import {
   batchA2vDisabledFor,
@@ -296,6 +297,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // marker needs sage's own availability, not just prefetch's.
   const statusBody = serverStatus.kind === "online" || serverStatus.kind === "busy" ? serverStatus.status : null;
   const accelerationControls = useAccelerationSettings(blockSwapPrefetchAvailability(statusBody));
+  // Resolved ONCE (2026-08-31): three consumers now read sage's availability —
+  // Create's and Chained's comfort marker, and `handleRoute`'s right-click
+  // DURATION ceiling. A plain `boolean | null`, never the `/status` body
+  // itself, so the route callback's dependency list stays keyed on the flag
+  // that actually matters rather than on every poll's fresh object.
+  const sageAvail = sageAvailability(statusBody);
 
   const toasts = useToasts();
   // Header base-model switch (§3-97 P7). One toast per user action, raised from
@@ -653,6 +660,34 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // placeholder and the form can never diverge. `null` — nothing published yet,
     // or an unresolvable ceiling — means neither the form nor the reservation is
     // rewritten: both stay at the current published DURATION.
+    //
+    // 2026-08-31: #9/#10 do NOT go through `resolvePrefillSeed` (they never
+    // remount Create), so the SMART ceiling is resolved here the same way that
+    // function does it — off the LIVE published width/height, which is exactly
+    // the geometry Create's own marker is reading at that moment. No matching
+    // row (LTX 2.3's default configuration, an older backend) leaves the field
+    // off entirely and `computeTargetNumFrames` does its legacy lookup.
+    //
+    // Gated on the SAME intent check `cursorItemCeilingNumFrames` below uses
+    // (single ternary, D tidy) — every other action reaching this shared
+    // function has no use for either value, so there is no reason to spend a
+    // `resolveComfortRow` lookup on it.
+    const cursorItemComfortRow =
+      (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState
+        ? resolveComfortRow(config.limits, baseModels.activeEngineFamily, accelerationControls.acceleration, sageAvail)
+        : null;
+    const cursorItemSmartCeiling =
+      cursorItemComfortRow && publishedForKeepState
+        ? comfortFramesForBudget(
+            publishedForKeepState.width,
+            publishedForKeepState.height,
+            cursorItemComfortRow.singleBudget,
+            MIN_NUM_FRAMES,
+            config.limits.max_num_frames,
+            cursorItemComfortRow.spatialFactor,
+            cursorItemComfortRow.temporalFactor,
+          )
+        : null;
     const cursorItemCeilingNumFrames =
       (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState
         ? computeTargetNumFrames({
@@ -662,6 +697,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
             spillFreeFrames: config.limits.spill_free_frames,
             minNumFrames: MIN_NUM_FRAMES,
             maxNumFrames: config.limits.max_num_frames,
+            ...(cursorItemSmartCeiling !== null ? { comfortCeilingFrames: cursorItemSmartCeiling } : {}),
           })
         : null;
 
@@ -903,7 +939,20 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       numFrames = cursorItemCeilingNumFrames ?? keepStateNumFrames;
       genFps = keepStateGenFps;
     } else {
-      const seed = resolvePrefillSeed({ intent, selection: command.selection, config, sizePolicy, fpsPolicy });
+      const seed = resolvePrefillSeed({
+        intent,
+        selection: command.selection,
+        config,
+        sizePolicy,
+        fpsPolicy,
+        // 2026-08-31: the same three inputs Create's own comfort marker reads,
+        // so a reserved provisional's ribbon is the length the remounted form
+        // will show. `SingleScreen`'s own `resolvePrefillSeed` call is handed
+        // the identical trio — the two must never disagree (R-4).
+        engineFamily: baseModels.activeEngineFamily,
+        acceleration: accelerationControls.acceleration,
+        sageAvailable: sageAvail,
+      });
       numFrames = seed.numFrames ?? config.generation_defaults.num_frames;
       genFps = seed.frameRate ?? config.generation_defaults.frame_rate;
     }
@@ -1046,6 +1095,14 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     strings,
     confirmChainDiscard,
     toasts,
+    // 2026-08-31 (Step 7 / #9/#10 live-set): the comfort ceiling a routed
+    // DURATION seeds to now follows the loaded engine + acceleration settings,
+    // so a route decided from a stale trio would seed the wrong length. A plain
+    // `boolean | null` for sage rather than the `/status` body itself, so the
+    // 2-second poll's fresh object never re-creates this callback.
+    baseModels.activeEngineFamily,
+    accelerationControls.acceleration,
+    sageAvail,
     // Step 0. A memo in `useBaseModels` keyed on the ACTIVE base model's
     // feature list, so its identity changes only on mount and on a successful
     // base-model switch — not on the 2-second job poll. Cheap enough to take as
@@ -1220,7 +1277,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               controlLoraNames={controlLoraNames}
               nag={nagControls.nag}
               acceleration={accelerationControls.acceleration}
-              sageAvailable={sageAvailability(statusBody)}
+              sageAvailable={sageAvail}
+              /* 2026-08-31: the loaded engine keys the served comfort-budget
+                 table, so Create's comfort marker follows the base model. */
+              engineFamily={baseModels.activeEngineFamily}
               /* §3-98 P5 (M4): the Batch A2V section lives on this screen but
                  submits chain jobs, so it follows the engine's feature scope
                  rather than Create's own. */
@@ -1241,6 +1301,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               referenceDownscaleFactors={referenceDownscaleFactors}
               nag={nagControls.nag}
               acceleration={accelerationControls.acceleration}
+              /* 2026-08-31: same served comfort-budget table Create reads —
+                 Chained takes the row's CHAIN budget (the stage-2 window
+                 guide line), which currently differs from Create's only on
+                 LTX 2.5. */
+              sageAvailable={sageAvail}
+              engineFamily={baseModels.activeEngineFamily}
               /* §3-102: the four material panels the loaded engine's feature
                  scope can take down one by one — see `chainPanels` above. */
               v2vUnavailable={chainPanels.v2v}

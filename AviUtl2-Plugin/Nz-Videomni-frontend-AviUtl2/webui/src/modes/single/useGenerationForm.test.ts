@@ -69,7 +69,7 @@ describe("useGenerationForm", () => {
   // the DURATION policy engine — the fourth `initial` arg's `numFrames`.
   describe("initial.numFrames (W8 right-click DURATION seed)", () => {
     it("seeds the initial DURATION from initial.numFrames instead of the config default (raise)", () => {
-      // 512x320's comfort ceiling (481) is ABOVE the config default (257) — the
+      // 512x320's comfort ceiling (481) is ABOVE the config default (361) — the
       // seed raises DURATION, not just lowers it.
       const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, { numFrames: 481 }));
       expect(result.current.values.numFrames).toBe(481);
@@ -542,24 +542,25 @@ describe("useGenerationForm", () => {
     expect(result.current.spillThresholdFrames).toBe(
       resolveSpillFreeFrames(FALLBACK_APP_CONFIG.limits.spill_free_frames, 1280, 768),
     );
-    expect(result.current.spillThresholdFrames).toBe(257);
+    expect(result.current.spillThresholdFrames).toBe(273);
     // Preset num_frames (361, raised 2026-08-19 to the SMART comfort ceiling —
-    // see `spillUtils.singleComfortFrames`) now itself sits ABOVE the coarse
-    // spill_free_frames threshold (257); the two are no longer expected to
-    // coincide the way they did before the raise.
+    // see `comfortTable.comfortFramesForBudget`) now itself sits ABOVE the
+    // coarse spill_free_frames threshold (273, re-measured 2026-08-31); the two
+    // are no longer expected to coincide the way they did before the raise.
     expect(result.current.isOverSpillThreshold).toBe(true);
 
-    act(() => result.current.setNumFrames(257)); // exactly at threshold: not over
+    act(() => result.current.setNumFrames(273)); // exactly at threshold: not over
     expect(result.current.isOverSpillThreshold).toBe(false);
 
     act(() => result.current.setNumFrames(300));
     expect(result.current.isOverSpillThreshold).toBe(true);
   });
 
-  describe("smart comfort marker (2026-08-18)", () => {
+  describe("smart comfort marker (2026-08-18, served as a table since 2026-08-31)", () => {
     // All five Acceleration toggles at the calibrated all-on configuration —
-    // see `accelerationSettings.isFullAcceleration`'s own doc comment for why
-    // every one of these must hold.
+    // exactly what the served `comfort_budgets.ltx` row's `requires` demands;
+    // see `accelerationSettings.effectiveAccelerationFields` for why every one
+    // of these must hold and how sage's 3-valued availability plays in.
     const FULL_ACCELERATION: AccelerationSettings = {
       attentionBackend: "sage",
       blockSwapPrefetch: true,
@@ -568,9 +569,17 @@ describe("useGenerationForm", () => {
       vaeMode: "prune_vaed",
     };
 
+    /** LTX 2.3's engine family — the id whose only served row is the all-on
+     * one above (its DEFAULT configuration deliberately has no row). */
+    const LTX = "ltx";
+
     it("switches to the smart per-resolution ceiling when all five toggles are on, and follows resolution changes", () => {
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", { acceleration: FULL_ACCELERATION, sageAvailable: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
       );
 
       // Default 1280x768.
@@ -593,40 +602,110 @@ describe("useGenerationForm", () => {
     it("falls back to the coarse spill_free_frames marker the instant even one toggle is off", () => {
       const oneOff: AccelerationSettings = { ...FULL_ACCELERATION, vaeMode: "default" };
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", { acceleration: oneOff, sageAvailable: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: oneOff,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
       );
       expect(result.current.isComfortMarkerSmart).toBe(false);
       // Default 1280x768 resolves the fallback map's exact entry.
-      expect(result.current.spillThresholdFrames).toBe(257);
+      expect(result.current.spillThresholdFrames).toBe(273);
     });
 
-    it("treats an explicit sageAvailable=false as sage not really running (falls back), and null as unknown (stays smart)", () => {
-      const { result: withFalse } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", { acceleration: FULL_ACCELERATION, sageAvailable: false }),
-      );
-      expect(withFalse.current.isComfortMarkerSmart).toBe(false);
-      expect(withFalse.current.spillThresholdFrames).toBe(257);
-
-      const { result: withNull } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", { acceleration: FULL_ACCELERATION, sageAvailable: null }),
-      );
-      expect(withNull.current.isComfortMarkerSmart).toBe(true);
-      expect(withNull.current.spillThresholdFrames).toBe(361);
-    });
-
-    it("mirrors the built-in 44,880 budget when the served config carries no single_comfort_token_budget key", () => {
-      const { single_comfort_token_budget: _drop, ...limitsWithoutKey } = FALLBACK_APP_CONFIG.limits;
-      const config: AppConfig = { ...FALLBACK_APP_CONFIG, limits: limitsWithoutKey };
+    it("uses the legacy table for LTX 2.3's DEFAULT (all-off) configuration — intentionally no smart row", () => {
+      // 2026-08-31: LTX 2.3's plain VAE decoder makes the comfort boundary
+      // non-monotone in token count (the boundaries line up with the decoder's
+      // chunk-count steps), so no token line describes it and the re-measured
+      // `spill_free_frames` points are the truth. A `requires: {}` row for
+      // `ltx` would be a regression, not an improvement.
       const { result } = renderHook(() =>
-        useGenerationForm(config, "x", { acceleration: FULL_ACCELERATION, sageAvailable: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: ACCELERATION_DEFAULTS,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
+      );
+      expect(result.current.isComfortMarkerSmart).toBe(false);
+      expect(result.current.spillThresholdFrames).toBe(273);
+    });
+
+    it("is smart on LTX 2.5 even with every toggle off — its served row is unconditional", () => {
+      const { result } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: ACCELERATION_DEFAULTS,
+          sageAvailable: false,
+          engineFamily: "ltx25",
+        }),
       );
       expect(result.current.isComfortMarkerSmart).toBe(true);
       expect(result.current.spillThresholdFrames).toBe(361);
     });
 
+    it("treats an explicit sageAvailable=false as sage not really running (falls back), and null as unknown (stays smart)", () => {
+      const { result: withFalse } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: false,
+          engineFamily: LTX,
+        }),
+      );
+      expect(withFalse.current.isComfortMarkerSmart).toBe(false);
+      expect(withFalse.current.spillThresholdFrames).toBe(273);
+
+      const { result: withNull } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: null,
+          engineFamily: LTX,
+        }),
+      );
+      expect(withNull.current.isComfortMarkerSmart).toBe(true);
+      expect(withNull.current.spillThresholdFrames).toBe(361);
+    });
+
+    it("falls to the compatibility shim on a backend that publishes no comfort_budgets table at all", () => {
+      // Old backend, new WebUI: no table, so `resolveComfortRow` applies its
+      // shim — the pre-2026-08-31 rule verbatim (smart ONLY while all five
+      // toggles are on, budget from the legacy scalar key), and the engine
+      // family is not consulted at all.
+      const { comfort_budgets: _dropTable, ...limitsWithoutTable } = FALLBACK_APP_CONFIG.limits;
+      const config: AppConfig = { ...FALLBACK_APP_CONFIG, limits: limitsWithoutTable };
+
+      const { result: allOn } = renderHook(() =>
+        useGenerationForm(config, "x", { acceleration: FULL_ACCELERATION, sageAvailable: true, engineFamily: LTX }),
+      );
+      expect(allOn.current.isComfortMarkerSmart).toBe(true);
+      expect(allOn.current.spillThresholdFrames).toBe(361);
+
+      const oneOff: AccelerationSettings = { ...FULL_ACCELERATION, vaeMode: "default" };
+      const { result: notAllOn } = renderHook(() =>
+        useGenerationForm(config, "x", { acceleration: oneOff, sageAvailable: true, engineFamily: LTX }),
+      );
+      expect(notAllOn.current.isComfortMarkerSmart).toBe(false);
+      expect(notAllOn.current.spillThresholdFrames).toBe(273);
+
+      // ...and with the legacy scalar key gone too, the shim mirrors 44,880.
+      const { single_comfort_token_budget: _dropKey, ...bareLimits } = limitsWithoutTable;
+      const bareConfig: AppConfig = { ...FALLBACK_APP_CONFIG, limits: bareLimits };
+      const { result: bare } = renderHook(() =>
+        useGenerationForm(bareConfig, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
+      );
+      expect(bare.current.isComfortMarkerSmart).toBe(true);
+      expect(bare.current.spillThresholdFrames).toBe(361);
+    });
+
     it("clamps the smart marker to maxNumFrames at a low resolution (matches the fallback value at that point)", () => {
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", { acceleration: FULL_ACCELERATION, sageAvailable: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
       );
       act(() => {
         result.current.setWidth(512);
@@ -639,9 +718,13 @@ describe("useGenerationForm", () => {
       expect(result.current.spillThresholdFrames).toBe(481);
     });
 
-    it("moves isOverSpillThreshold's boundary to the smart 361/369 line instead of the fallback 257", () => {
+    it("moves isOverSpillThreshold's boundary to the smart 361/369 line instead of the fallback 273", () => {
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", { acceleration: FULL_ACCELERATION, sageAvailable: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
       );
       act(() => result.current.setNumFrames(361));
       expect(result.current.isOverSpillThreshold).toBe(false);
@@ -649,11 +732,11 @@ describe("useGenerationForm", () => {
       expect(result.current.isOverSpillThreshold).toBe(true);
     });
 
-    it("regression: reads single_comfort_token_budget, not chain_comfort_token_budget, when both keys are present", () => {
-      // Misreading the CHAIN key (40,000) here would compute 321 at 1280x768
-      // instead of 361 — a mistake TypeScript's structural typing cannot catch
-      // (both are plain optional `number` fields on the same `AppLimits`
-      // interface), so this has to be an explicit runtime assertion.
+    it("regression: reads the matched row's SINGLE budget, not its chain budget", () => {
+      // Misreading the CHAIN budget (40,000) here would compute 321 at
+      // 1280x768 instead of 361 — a mistake TypeScript's structural typing
+      // cannot catch (both are plain `number` fields on the same row), so this
+      // has to be an explicit runtime assertion.
       const config: AppConfig = {
         ...FALLBACK_APP_CONFIG,
         limits: {
@@ -663,7 +746,11 @@ describe("useGenerationForm", () => {
         },
       };
       const { result } = renderHook(() =>
-        useGenerationForm(config, "x", { acceleration: FULL_ACCELERATION, sageAvailable: true }),
+        useGenerationForm(config, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: true,
+          engineFamily: LTX,
+        }),
       );
       expect(result.current.spillThresholdFrames).toBe(361);
       expect(result.current.spillThresholdFrames).not.toBe(321);
@@ -963,22 +1050,49 @@ describe("useGenerationForm", () => {
     });
 
     // W8: a long wav's auto-adjust suggestion is capped at the current
-    // resolution's comfort ceiling (spill_free_frames), not just the config max.
+    // resolution's comfort ceiling — the SAME `spillThresholdFrames` the
+    // comfort marker draws (2026-08-31), not just the config max.
     it("caps the wav auto-adjust at the resolution's comfort ceiling (W8)", async () => {
       // 30s @ 24fps -> suggestFramesForAudio floors to 713, which even after the
-      // max clamp (481) is well ABOVE 1280x768's comfort ceiling (257). W8 clamps
+      // max clamp (481) is well ABOVE 1280x768's comfort ceiling (273). W8 clamps
       // the suggestion down to that ceiling.
       const raw = suggestFramesForAudio(30, 24);
-      expect(raw).toBeGreaterThan(257);
+      expect(raw).toBeGreaterThan(273);
       const { result } = setupA2V(30);
       act(() => {
         void result.current.sourceAudio.pick();
       });
       await waitFor(() => expect(result.current.sourceAudio.state.status).toBe("ready"));
 
-      // Default resolution 1280x768 -> spill_free_frames ceiling 257.
-      await waitFor(() => expect(result.current.values.numFrames).toBe(257));
-      expect(result.current.audioFramesAdjustedEvent?.frames).toBe(257);
+      // Default resolution 1280x768 -> spill_free_frames ceiling 273.
+      await waitFor(() => expect(result.current.values.numFrames).toBe(273));
+      expect(result.current.audioFramesAdjustedEvent?.frames).toBe(273);
+    });
+
+    // 2026-08-31: the clamp reads the marker's own value, so the two can never
+    // disagree. These pin BOTH branches of the marker against the SAME hook
+    // result rather than against a hard-coded number.
+    it("clamps the wav auto-adjust to exactly spillThresholdFrames, on the legacy branch and the smart one", async () => {
+      // Legacy branch: LTX 2.3's default configuration has no served row.
+      const { result: legacy } = setupA2V(30, "a music video", { engineFamily: "ltx" });
+      act(() => {
+        void legacy.current.sourceAudio.pick();
+      });
+      await waitFor(() => expect(legacy.current.sourceAudio.state.status).toBe("ready"));
+      await waitFor(() => expect(legacy.current.values.numFrames).toBe(legacy.current.spillThresholdFrames));
+      expect(legacy.current.isComfortMarkerSmart).toBe(false);
+      expect(legacy.current.values.numFrames).toBe(273);
+
+      // Smart branch: LTX 2.5's served row is unconditional, so the same wav
+      // auto-adjusts to the smart 361 instead — matching what the marker shows.
+      const { result: smart } = setupA2V(30, "a music video", { engineFamily: "ltx25" });
+      act(() => {
+        void smart.current.sourceAudio.pick();
+      });
+      await waitFor(() => expect(smart.current.sourceAudio.state.status).toBe("ready"));
+      await waitFor(() => expect(smart.current.values.numFrames).toBe(smart.current.spillThresholdFrames));
+      expect(smart.current.isComfortMarkerSmart).toBe(true);
+      expect(smart.current.values.numFrames).toBe(361);
     });
 
     // W4 (#7 trim追従): an audio-to-video right-click prefill uploads the WHOLE
@@ -991,7 +1105,7 @@ describe("useGenerationForm", () => {
       const mockFs = createMockFs({
         folders: {
           // The prefill-attached audio: a long (30s) file whose raw suggestion is
-          // far above the span cap (and even above the 257 spill ceiling).
+          // far above the span cap (and even above the 273 spill ceiling).
           "C:\\a": [{ name: "voice.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 30 }],
           // The user's replacement pick (8s), well under the spill ceiling.
           "C:\\Users\\mock\\Pictures": [{ name: "picked-audio-1.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 8 }],

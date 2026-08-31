@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { computeTargetNumFrames, floorToFrameGrid } from "./deriveDuration";
 
-// Local fixture only — defaultConfig.ts is off-limits (parallel edit in
-// flight), so this mirrors its shape (Docs/API_REFERENCE.md §3.2's
-// `limits.spill_free_frames`) without importing it. 481/257/153 are all
-// already valid 8n+1 values, as the real backend map's entries are.
+// A module-local fixture shaped like `limits.spill_free_frames`, intentionally
+// independent of `defaultConfig.ts`'s actual delivered values (it is not meant
+// to track them — only to exercise this module's own logic). 481/257/153 are
+// all already valid 8n+1 values, as the real backend map's entries are.
 const SPILL_MAP = { "512x320": 481, "1280x768": 257, "1920x1088": 153 };
 
 const MIN = 9;
@@ -336,5 +336,71 @@ describe("computeTargetNumFrames — selectedRangeLength (§1-17 Retake)", () =>
     expect(
       computeTargetNumFrames({ ...BASE, selectedRangeFrames: 150, projectFps: 30, genFps: 0 }),
     ).toBeNull();
+  });
+});
+
+// 2026-08-31: a caller that already knows the SMART (token-derived) comfort
+// ceiling for the loaded engine hands it over directly, and this module uses it
+// in place of the `spillFreeFrames` lookup. The module itself stays ignorant of
+// engines and acceleration settings — it only decides how a ceiling becomes a
+// frame count.
+describe("comfortCeilingFrames (smart ceiling override)", () => {
+  it("wins over the spill_free_frames lookup for the comfortCeiling policy", () => {
+    expect(
+      computeTargetNumFrames({
+        policy: "comfortCeiling",
+        width: 1280,
+        height: 768,
+        spillFreeFrames: SPILL_MAP, // would resolve 257
+        minNumFrames: MIN,
+        maxNumFrames: MAX,
+        comfortCeilingFrames: 361,
+      }),
+    ).toBe(361);
+  });
+
+  it("keeps the legacy lookup when omitted (every pre-existing caller)", () => {
+    expect(
+      computeTargetNumFrames({
+        policy: "comfortCeiling",
+        width: 1280,
+        height: 768,
+        spillFreeFrames: SPILL_MAP,
+        minNumFrames: MIN,
+        maxNumFrames: MAX,
+      }),
+    ).toBe(257);
+  });
+
+  it("also caps the materialClampedToCeiling policy's material-derived length", () => {
+    // 30s @ 24fps floors to 713 raw frames — far above either ceiling, so the
+    // clamp is what decides the answer, and it must be the smart one.
+    expect(
+      computeTargetNumFrames({
+        policy: "materialClampedToCeiling",
+        width: 1280,
+        height: 768,
+        spillFreeFrames: SPILL_MAP, // would clamp to 257
+        minNumFrames: MIN,
+        maxNumFrames: MAX,
+        materialDurationSec: 30,
+        genFps: 24,
+        comfortCeilingFrames: 361,
+      }),
+    ).toBe(361);
+    // A SHORT material is still respected — the ceiling only ever clamps down.
+    expect(
+      computeTargetNumFrames({
+        policy: "materialClampedToCeiling",
+        width: 1280,
+        height: 768,
+        spillFreeFrames: SPILL_MAP,
+        minNumFrames: MIN,
+        maxNumFrames: MAX,
+        materialDurationSec: 2,
+        genFps: 24,
+        comfortCeilingFrames: 361,
+      }),
+    ).toBe(41);
   });
 });

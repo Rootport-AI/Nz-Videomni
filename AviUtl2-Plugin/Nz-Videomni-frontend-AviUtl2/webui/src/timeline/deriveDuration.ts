@@ -14,6 +14,10 @@
  *    (`AppConfig.limits.spill_free_frames`, see `spillUtils.ts`'s
  *    `resolveSpillFreeFrames`) — always, regardless of whatever DURATION
  *    already held, since there is no source material to respect instead.
+ *    Since 2026-08-31 a caller that KNOWS the smart (token-derived) ceiling
+ *    for the target engine can hand it over as `comfortCeilingFrames` and this
+ *    module uses that instead — see that field. Deliberately no knowledge of
+ *    engines or acceleration settings lives here.
  *  - `"materialClampedToCeiling"`: flows with a source clip (V2V continuation,
  *    IC-LoRA reference) must never suggest a DURATION longer than the source
  *    itself, so the comfort ceiling only ever clamps it shorter.
@@ -55,8 +59,27 @@ export interface ComputeTargetNumFramesArgs {
   width: number;
   height: number;
   /** `AppConfig.limits.spill_free_frames`, or `null` when unavailable (e.g. a
-   * config that hasn't loaded yet) — treated the same as an empty map. */
+   * config that hasn't loaded yet) — treated the same as an empty map.
+   * Ignored entirely when {@link ComputeTargetNumFramesArgs.comfortCeilingFrames}
+   * is supplied. */
   spillFreeFrames: Record<string, number> | null;
+  /** The comfort ceiling to use INSTEAD of looking one up in
+   * `spillFreeFrames` (2026-08-31). Supplied by a caller that has already
+   * resolved the SMART, token-derived ceiling for the loaded engine +
+   * acceleration configuration (`shell/comfortTable.ts`), so a right-click's
+   * seeded DURATION lands on exactly the value the Create screen's comfort
+   * marker will then show.
+   *
+   * Omitted (the default) reproduces the pre-2026-08-31 behaviour exactly: the
+   * `spillFreeFrames` nearest-area lookup. This module deliberately learns
+   * nothing about engines or acceleration — the caller decides, this decides
+   * only how a ceiling turns into a frame count.
+   *
+   * ⚠ It is ONE ceiling for both policies that have one: as well as capping
+   * `"comfortCeiling"`, it caps `"materialClampedToCeiling"`'s material-derived
+   * length (see the `materialClampedToCeiling` branch below). That is
+   * intentional — #2/#3/#7's material clamp moves onto the smart line too. */
+  comfortCeilingFrames?: number | undefined;
   /** `limits.minNumFrames`/`limits.maxNumFrames` (already valid 8n+1 values —
    * see `paramUtils.snapNumFrames`'s own assumption). Both policies that can
    * return non-null clamp into this range. */
@@ -148,7 +171,12 @@ export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number
     return Math.min(Math.max(frames, minNumFrames), maxNumFrames);
   }
 
-  const ceiling = spillFreeFrames ? resolveSpillFreeFrames(spillFreeFrames, width, height) : null;
+  // A caller-supplied smart ceiling wins outright; otherwise the legacy
+  // nearest-area lookup. `??` (not `||`) so a caller could in principle pass a
+  // legitimate 0 — and so that "not supplied" is the ONLY thing that reaches
+  // the lookup.
+  const ceiling =
+    args.comfortCeilingFrames ?? (spillFreeFrames ? resolveSpillFreeFrames(spillFreeFrames, width, height) : null);
 
   if (policy === "comfortCeiling") {
     if (ceiling === null) return null;

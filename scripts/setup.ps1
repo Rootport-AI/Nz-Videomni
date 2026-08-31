@@ -99,17 +99,21 @@ function New-StagingDir {
 # 事前チェック（すべて警告のみ。ここで処理を止めない）
 # ---------------------------------------------------------------------------
 function Test-FreeSpace {
-    # 必要容量の表記は README §1「必要な空き容量の内訳」と揃えること（約 40〜41 GB）。
-    # $needGB はそこへ安全側の余裕を足したしきい値。
-    $needGB = 45
+    # 必要容量の表記は README のハードウェア要件表（正本）と揃えること。
+    # 2026-08-31 実測に基づく。正本は README ハードウェア要件表。
+    # setup.bat（このスクリプト）は install_ltx.ps1 を -BaseModel 指定なしで呼ぶため、
+    # 常に既定の LTX23,Preprocessors のみを導入する（LTX25 はここでは選べない）。
+    # LTX 2.5 の追加分（約 30GB）は install-LTX25.bat（scripts/install_model.ps1）の
+    # 側で別途しきい値を持つため、ここでは base 分の 50GB のみを見る。
+    $needGB = 50
     try {
         $qualifier = Split-Path -Qualifier $ProjectRoot          # 例: "S:"
         $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='" + $qualifier + "'")
         if (-not $disk) { Write-Warn '空き容量を確認できませんでした。'; return }
         $freeGB = [Math]::Round($disk.FreeSpace / 1GB, 1)
-        Write-Info ($qualifier + ' ドライブの空き容量: ' + $freeGB + ' GB（必要: 約 40〜41 GB）')
+        Write-Info ($qualifier + ' ドライブの空き容量: ' + $freeGB + ' GB（必要: 約 50GB。内訳は README の「必要な空き容量の内訳」参照）')
         if ($freeGB -lt $needGB) {
-            Write-Warn '空き容量が不足気味です（モデル 約 33 GB＋Python 環境 7〜8 GB＋道具類 約 0.4 GB）。'
+            Write-Warn '空き容量が不足気味です（内訳は README の「必要な空き容量の内訳」参照）。'
             Write-Info '足りないと途中で失敗します。不要なファイルを整理してから実行してください。'
         } else {
             Write-Good '空き容量は足りています。'

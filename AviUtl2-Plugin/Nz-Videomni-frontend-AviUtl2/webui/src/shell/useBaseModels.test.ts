@@ -261,6 +261,55 @@ describe("useBaseModels", () => {
     expect(result.current.disabledModes).toEqual([]);
   });
 
+  // ── 2026-08-31: activeEngineFamily (comfort-budget table key) ──────────────
+
+  it("activeEngineFamily reflects the ACTIVE base model, and stays on the OLD family while a switch is in flight", async () => {
+    // Mirrors "carries each base model's unsupported_features and reports the
+    // ACTIVE one's" above, for the sibling field threaded to
+    // `shell/comfortTable.ts`'s `resolveComfortRow`.
+    const real = createApiClient(
+      createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
+    );
+    let releaseLoad: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    const apiClient: ApiClient = {
+      ...real,
+      loadPipeline: async (models, baseModel) => {
+        await gate;
+        return real.loadPipeline(models, baseModel);
+      },
+    };
+    const { result } = await renderReady(apiClient);
+
+    expect(result.current.options[0]?.engineFamily).toBe("ltx");
+    expect(result.current.options[1]?.engineFamily).toBe("ltx25");
+    // LTX 2.3 (the loaded/default model) is what is ACTIVE.
+    expect(result.current.activeEngineFamily).toBe("ltx");
+
+    let outcome: Promise<BaseModelSwitchOutcome>;
+    act(() => {
+      outcome = result.current.switchBaseModel("LTX25");
+    });
+
+    // `current` (the DISPLAYED selection) moves optimistically to `pending`...
+    await waitFor(() => expect(result.current.current).toBe("LTX25"));
+    // ...but `activeEngineFamily` (read off `active`, not `current` — see its
+    // own doc comment) must NOT: the pipeline has not actually loaded yet, so
+    // moving the comfort marker's line early would advertise a ceiling that
+    // does not apply.
+    expect(result.current.activeEngineFamily).toBe("ltx");
+
+    releaseLoad();
+    await act(async () => {
+      await outcome;
+    });
+
+    // The switch completed — `active` (and therefore the family) followed.
+    expect(result.current.activeEngineFamily).toBe("ltx25");
+  });
+
   it("switching to a restricted base model moves the restrictions with it", async () => {
     // THE RESTRICTION IS SYNTHETIC (`withExtraUnsupportedFeatures`), and since
     // the Outpainting increment it has to be: LTX 2.5's real list no longer

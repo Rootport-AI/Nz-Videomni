@@ -668,15 +668,18 @@ describe("chainUtils", () => {
   });
 
   describe("recommendedClipFrames", () => {
-    // Fixture values mirror `webui/src/bridge/mockBridge.ts`'s
-    // `MOCK_CONFIG_BODY.limits.spill_free_frames` / `generation_presets`
-    // (same as `defaultConfig.ts`'s `FALLBACK_APP_CONFIG`), so these double as
-    // a sanity check that the fixture and the recommendation logic agree.
-    const spillFreeFrames = { "1280x768": 257, "1920x1088": 153, "2560x1472": 81 };
+    // `spillFreeFrames` mirrors `webui/src/bridge/mockBridge.ts`'s
+    // `MOCK_CONFIG_BODY.limits.spill_free_frames` (same as `defaultConfig.ts`'s
+    // `FALLBACK_APP_CONFIG`). The `presetNumFrames` arguments below (257/153)
+    // are arbitrary placeholders distinct from today's real `generation_presets`
+    // values — they exist only to prove the function prefers the
+    // `spill_free_frames` threshold over whatever preset value it is handed,
+    // not to mirror any current default.
+    const spillFreeFrames = { "1280x768": 273, "1920x1088": 161, "2560x1472": 81 };
 
     it("prefers the spill_free_frames threshold when the resolution has one", () => {
-      expect(recommendedClipFrames(1280, 768, 257, spillFreeFrames)).toBe(257);
-      expect(recommendedClipFrames(1920, 1088, 153, spillFreeFrames)).toBe(153);
+      expect(recommendedClipFrames(1280, 768, 257, spillFreeFrames)).toBe(273);
+      expect(recommendedClipFrames(1920, 1088, 153, spillFreeFrames)).toBe(161);
     });
 
     it("falls back to the preset's own num_frames when the resolution has no entry", () => {

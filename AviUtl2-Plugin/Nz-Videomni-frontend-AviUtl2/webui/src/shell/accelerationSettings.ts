@@ -345,51 +345,6 @@ export function effectiveAcceleration(
   return { ...acceleration, keepResident };
 }
 
-/**
- * Whether ALL FIVE Acceleration toggles are effectively on — the gate behind
- * Create's smart comfort marker (2026-08-18,
- * `modes/single/spillUtils.singleComfortFrames`): the 44,880-token budget was
- * calibrated exclusively against this all-on configuration, so the marker
- * only switches to the smart derivation while every one of these holds; a
- * caller with even one toggle off must fall back to the coarse
- * `spill_free_frames` lookup instead.
- *
- * `acceleration` MUST be the EFFECTIVE settings object — the one
- * {@link effectiveAcceleration} already ran (what `useAccelerationSettings`
- * hands to every reader) — not the raw stored choice. Reading the raw object
- * here would misjudge `keepResident` while block-swap prefetch is
- * unavailable/off (the pair the backend itself folds back to off — see
- * {@link keepResidentEffective}).
- *
- * `sageAvailable` gets the SAME three-valued treatment {@link sageAvailability}
- * documents: `null` ("unknown" — no `/status` yet, or a pre-§43 backend) counts
- * as effectively on, matching the sage button's own "disable on an explicit
- * `false` only" rule and avoiding a startup flicker where the marker would
- * otherwise show smart, then jump back to the fallback the instant `/status`
- * lands. Only an explicit `false` counts against this gate.
- *
- * `blockSwapPrefetch`'s own SERVER availability is deliberately NOT checked a
- * second time here: it is already folded into `acceleration.keepResident` by
- * `effectiveAcceleration` before this function ever sees the object (see the
- * MUST-be-effective note above). A future edit that drops `keepResident` from
- * this five-condition list must add an explicit
- * {@link blockSwapPrefetchEffective} check in its place, or that indirect
- * coverage silently disappears.
- */
-export function isFullAcceleration(
-  acceleration: AccelerationSettings,
-  sageAvailable: boolean | null,
-): boolean {
-  return (
-    acceleration.attentionBackend === "sage" &&
-    sageAvailable !== false &&
-    acceleration.blockSwapPrefetch === true &&
-    acceleration.keepResident === true &&
-    acceleration.fusedGgufDequantKernel === true &&
-    acceleration.vaeMode === "prune_vaed"
-  );
-}
-
 /** The additive acceleration fields as sent on a `/generate` or
  * `/generate/chain` request — see {@link accelerationRequestFields}. */
 export interface AccelerationRequestFields {
@@ -398,6 +353,52 @@ export interface AccelerationRequestFields {
   keep_resident?: boolean;
   fused_gguf_dequant_kernel?: boolean;
   vae_mode?: VaeMode;
+}
+
+/**
+ * The five acceleration settings as they would EFFECTIVELY run, expressed in
+ * the SERVER's own vocabulary (the request field names) — every key always
+ * present, so it can be matched key-by-key against a served
+ * `AppLimits.comfort_budgets` row's `requires` map (2026-08-31,
+ * `shell/comfortTable.ts`'s `resolveComfortRow`). This is deliberately NOT
+ * {@link accelerationRequestFields}: that one omits every field still sitting
+ * on the server default (so a request stays byte-identical to before the
+ * feature existed), which is the opposite of what a matcher needs.
+ *
+ * `acceleration` MUST be the EFFECTIVE settings object — the one
+ * {@link effectiveAcceleration} already ran (what `useAccelerationSettings`
+ * hands to every reader) — not the raw stored choice. Reading the raw object
+ * here would misjudge `keep_resident` while block-swap prefetch is
+ * unavailable/off (the pair the backend itself folds back to off — see
+ * {@link keepResidentEffective}).
+ *
+ * `blockSwapPrefetch`'s own SERVER availability is deliberately NOT checked a
+ * second time here for exactly that reason: it is already folded into
+ * `acceleration.keepResident` before this function ever sees the object.
+ *
+ * `sageAvailable` gets the SAME three-valued treatment {@link sageAvailability}
+ * documents: `null` ("unknown" — no `/status` yet, or a pre-§43 backend) counts
+ * as effectively on, matching the sage button's own "disable on an explicit
+ * `false` only" rule and avoiding a startup flicker where the comfort marker
+ * would otherwise show smart, then jump back to the fallback the instant
+ * `/status` lands. Only an explicit `false` demotes `attention_backend` to
+ * `"sdpa"` here.
+ *
+ * ⚠ Returns a FRESH object every call, so never place it in a React
+ * dependency array — callers build it once inside the function that consumes
+ * it (R-9).
+ */
+export function effectiveAccelerationFields(
+  acceleration: AccelerationSettings,
+  sageAvailable: boolean | null,
+): Required<AccelerationRequestFields> {
+  return {
+    attention_backend: acceleration.attentionBackend === "sage" && sageAvailable !== false ? "sage" : "sdpa",
+    block_swap_prefetch: acceleration.blockSwapPrefetch,
+    keep_resident: acceleration.keepResident,
+    fused_gguf_dequant_kernel: acceleration.fusedGgufDequantKernel,
+    vae_mode: acceleration.vaeMode,
+  };
 }
 
 /**

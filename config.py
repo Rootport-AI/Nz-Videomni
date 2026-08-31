@@ -256,6 +256,90 @@ class UploadConfig(BaseModel):
     )
 
 
+class ComfortRow(BaseModel):
+    """One comfort-budget row for a single engine family (comfort table,
+    2026-08-31 recalibration).
+
+    ``requires`` is written in SERVER vocabulary — the same request field
+    names a ``/generate`` acceleration toggle uses (``attention_backend``,
+    ``block_swap_prefetch``, ``keep_resident``, ``fused_gguf_dequant_kernel``,
+    ``vae_mode``, ...) — so a client builds its own "effective acceleration"
+    dict in the same vocabulary and compares it key-for-key. A profile's
+    ``rows`` are tried top-down; the FIRST row whose ``requires`` fully
+    matches wins. No row matches -> the client falls back to the legacy
+    ``spill_free_frames`` table (today's behavior for everyone), so a family
+    with no rows at all, or none that match, is never left without a number.
+    """
+
+    requires: dict[str, str | bool] = Field(default_factory=dict)
+    single_budget: int
+    chain_budget: int
+
+
+class EngineComfortProfile(BaseModel):
+    """The comfort-budget rows for one engine family
+    (``services.engines.FAMILY_BY_ID`` — "ltx"/"ltx25" — is the id source of
+    truth).
+
+    ``spatial_factor``/``temporal_factor`` are the token formula's divisors,
+    same formula as ``chain_comfort_token_budget``/``single_comfort_token_budget``
+    below: a token is (width // spatial_factor) * (height // spatial_factor)
+    per temporal_factor latent frames. Carried per-profile (not a global
+    constant) so a future model with a different latent compression ratio can
+    override them without touching the client's formula.
+    """
+
+    spatial_factor: int = 32
+    temporal_factor: int = 8
+    rows: list[ComfortRow] = Field(default_factory=list)
+
+
+def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
+    """Comfort-budget table calibrated 2026-08-31 (real-device run, 37 jobs +
+    1 submission failure; primary record
+    ``outputs/comfort-calib-2026-08-31/RESULTS.md``; single source of truth
+    for every number here: Docs/COMFORT_LIMIT_TABLE.md).
+
+    "ltx" (LTX 2.3) INTENTIONALLY HAS NO EMPTY-``requires`` ROW. With the
+    default (non-pruned) VAE decoder, LTX 2.3's comfort boundary is NOT
+    monotone in tokens — it coincides with the decode chunk-count increments
+    (7->8 / 4->5 / 2->3 at 720p/1080p/1440p) rather than a clean token
+    ceiling, so there is no single number that is safe below it and unsafe
+    above it except under the one fully-accelerated row below (pruned VAE
+    decoder included, where the boundary IS monotone). DO NOT "fix" this by
+    adding a default row for LTX 2.3 — a client with no matching row is
+    expected to fall back to the legacy ``spill_free_frames`` table, which
+    stays calibrated for the default configuration precisely because this
+    row does not cover it.
+
+    "ltx25" (LTX 2.5) has no such boundary — VRAM is identical across every
+    acceleration combination measured — so its one row has empty
+    ``requires`` (always matches) and reuses the same 44,880 ceiling for
+    both Single and Chained (Chained's legacy 40,000 was a 2.3 measurement
+    carried over; 2.5 gets its own number here).
+    """
+    return {
+        "ltx": EngineComfortProfile(
+            rows=[
+                ComfortRow(
+                    requires={
+                        "attention_backend": "sage",
+                        "block_swap_prefetch": True,
+                        "keep_resident": True,
+                        "fused_gguf_dequant_kernel": True,
+                        "vae_mode": "prune_vaed",
+                    },
+                    single_budget=44880,
+                    chain_budget=CHAIN_COMFORT_TOKEN_BUDGET,
+                )
+            ]
+        ),
+        "ltx25": EngineComfortProfile(
+            rows=[ComfortRow(requires={}, single_budget=44880, chain_budget=44880)]
+        ),
+    }
+
+
 class LimitsConfig(BaseModel):
     max_width: int = 1920
     max_height: int = 1088
@@ -364,6 +448,24 @@ class LimitsConfig(BaseModel):
     # (exactly 44,880 tokens). Source of truth and the full derivation table:
     # Docs/COMFORT_LIMIT_TABLE.md.
     single_comfort_token_budget: int = 44880
+    # Server-side comfort-budget TABLE, keyed by engine family id
+    # (services.engines.FAMILY_BY_ID: "ltx"/"ltx25"), superseding the single
+    # fixed value above for clients that understand it. Same advisory
+    # discipline as chain_comfort_token_budget/single_comfort_token_budget:
+    # the server never consults this — no request is rejected, clamped or
+    # altered by it. It exists so a client looks up {requires, single_budget,
+    # chain_budget} rows per engine family instead of hard-coding "all five
+    # acceleration toggles on" the way it does today, and so a future engine
+    # or toggle needs only a new row/family here, not a client code change.
+    # NOT written to config.yaml (code default only — an operator CAN still
+    # override it there like any other field) and carries no validator; a
+    # client with no matching row is responsible for falling back to
+    # spill_free_frames, exactly as it does today. See
+    # _default_comfort_budgets for the default table and its rationale, and
+    # Docs/COMFORT_LIMIT_TABLE.md for the calibration.
+    comfort_budgets: dict[str, EngineComfortProfile] = Field(
+        default_factory=_default_comfort_budgets
+    )
 
 
 class OutputConfig(BaseModel):

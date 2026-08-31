@@ -20,8 +20,9 @@ import { useSourceUpload } from "../chained/useSourceUpload";
 import type { UseSourceUploadResult } from "../chained/useSourceUpload";
 import { isNagNegativeEmpty, NAG_OFF, nagRequestFields } from "../../shell/nagSettings";
 import type { NagSettings } from "../../shell/nagSettings";
-import { accelerationRequestFields, ACCELERATION_DEFAULTS, isFullAcceleration } from "../../shell/accelerationSettings";
+import { accelerationRequestFields, ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { comfortFramesForBudget, resolveComfortRow } from "../../shell/comfortTable";
 import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "./defaultConfig";
 import { estimateGenerationSeconds, formatEstimate } from "./estimateUtils";
 import {
@@ -35,7 +36,7 @@ import {
   roundToMultiple,
   snapNumFrames,
 } from "./paramUtils";
-import { resolveSingleComfortBudget, resolveSpillFreeFrames, singleComfortFrames } from "./spillUtils";
+import { resolveSpillFreeFrames } from "./spillUtils";
 
 /** The width/height rounding multiple for the IC-LoRA (`referenceVideo`) flow:
  * `/generate`'s reference-video conditioning requires both dimensions to be
@@ -124,10 +125,24 @@ export interface UseGenerationFormDeps {
    * owned by `shell/AppShell.tsx` off the same `/status` poll it already reads
    * `blockSwapPrefetchAvailability` from — same "caller owns the state" shape
    * as `acceleration` above. Defaults to `null` ("unknown") when omitted
-   * (every pre-existing unit test), which `isFullAcceleration` treats as
-   * effectively on (see that function's own doc comment) — so an omitted dep
-   * never itself blocks the smart marker; only an explicit `false` does. */
+   * (every pre-existing unit test), which
+   * `accelerationSettings.effectiveAccelerationFields` treats as effectively on
+   * (see that function's own doc comment) — so an omitted dep never itself
+   * blocks the smart marker; only an explicit `false` does. */
   sageAvailable?: boolean | null | undefined;
+  /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
+   * (`BaseModelBlock.engine_family` — `"ltx"`, `"ltx25"`, …), owned by
+   * `shell/AppShell.tsx` via `useBaseModels().activeEngineFamily` — same
+   * "caller owns the state" shape as `sageAvailable` above. It is the key into
+   * the served `config.limits.comfort_budgets` table, so the comfort marker
+   * follows the engine instead of a hard-coded rule.
+   *
+   * Omitted (every pre-existing unit test), `undefined` or `""` (before `GET
+   * /models` lands, or offline) all mean "engine unknown", which
+   * `shell/comfortTable.ts`'s `resolveComfortRow` answers with its
+   * compatibility shim — i.e. exactly the pre-2026-08-31 behaviour, with no
+   * startup flicker. */
+  engineFamily?: string | undefined;
 }
 
 function noopSetControlLora(): void {
@@ -213,18 +228,24 @@ export interface UseGenerationFormResult {
   getSizeError: string | null;
   /** The comfortable `num_frames` ceiling for the current width/height.
    *
-   * Smart comfort marker (2026-08-18): while ALL FIVE Acceleration toggles
-   * are effectively on (`shell/accelerationSettings.isFullAcceleration`),
-   * this is the resolution-exact ceiling `spillUtils.singleComfortFrames`
-   * derives from `config.limits.single_comfort_token_budget` — it moves
+   * Smart comfort marker (2026-08-31, was 2026-08-18): when the SERVED table
+   * `config.limits.comfort_budgets` has a row for the loaded engine family +
+   * the current acceleration configuration (`shell/comfortTable.ts`'s
+   * `resolveComfortRow`), this is the resolution-exact ceiling
+   * `comfortFramesForBudget` derives from that row's token budget — it moves
    * smoothly with every 64px step instead of jumping between five measured
-   * points. The instant even one toggle is off (or the smart derivation
-   * itself returns `null`), this falls back to the original coarse 5-key
+   * points. When no row applies (LTX 2.3's DEFAULT configuration
+   * deliberately has none), or the smart derivation itself returns `null` (a
+   * hand-typed 0/blank width), this falls back to the coarse 5-key
    * nearest-area lookup (Docs/API_REFERENCE.md §3.2 `spill_free_frames`, see
    * `spillUtils.resolveSpillFreeFrames`). `null` only when even THAT lookup
    * can't resolve (empty/malformed config map). See {@link isComfortMarkerSmart}
    * for which branch produced the current value — it drives which warning
-   * copy is shown past the threshold. */
+   * copy is shown past the threshold.
+   *
+   * This same value is the ceiling the A2V wav auto-adjust clamps its
+   * suggestion at, so the marker and the auto-adjusted DURATION can never
+   * disagree. */
   spillThresholdFrames: number | null;
   /** True once `values.numFrames` exceeds `spillThresholdFrames`. Formula is
    * unchanged by the smart marker (2026-08-18) — only where
@@ -421,9 +442,14 @@ export function useGenerationForm(
   const acceleration = deps.acceleration ?? ACCELERATION_DEFAULTS;
   // Smart comfort marker (2026-08-18): same optional-dep shape again —
   // `null` ("unknown") is the correct default, not just a filler value, since
-  // `isFullAcceleration` treats `null` as effectively on (see its own doc
-  // comment).
+  // `effectiveAccelerationFields` treats `null` as effectively on (see its own
+  // doc comment).
   const sageAvailable = deps.sageAvailable ?? null;
+  // Smart comfort marker (2026-08-31): the engine family keying the served
+  // comfort table. `undefined` (omitted, or `GET /models` not in yet) is the
+  // "engine unknown" case `resolveComfortRow` answers with its compatibility
+  // shim, so an omitted dep reproduces the pre-table behaviour exactly.
+  const engineFamily = deps.engineFamily;
 
   const setControlLoraStrength = useCallback(
     (raw: number) => {
@@ -652,6 +678,44 @@ export function useGenerationForm(
     };
   });
 
+  // Smart comfort marker (2026-08-31, was 2026-08-18): which comfort row the
+  // SERVED table (`config.limits.comfort_budgets`) gives this engine family +
+  // acceleration configuration, or `null` when none applies — see
+  // `shell/comfortTable.ts`'s `resolveComfortRow` for the compatibility shim,
+  // the sage 3-value handling, and why `null` is a normal outcome (LTX 2.3's
+  // default configuration deliberately has no row).
+  //
+  // `acceleration` must already be the EFFECTIVE object, and it is: this
+  // hook's `acceleration` local is `deps.acceleration`, which `AppShell`
+  // already ran through `effectiveAcceleration` before handing it down.
+  //
+  // ⚠ Computed HERE — above `gettingSize`, below `values` — rather than beside
+  // the rest of the derived values further down, because the A2V wav
+  // auto-adjust effect reads `spillThresholdFrames` and would otherwise see it
+  // in its temporal dead zone.
+  const comfortRow = useMemo(
+    () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable),
+    [config.limits, engineFamily, acceleration, sageAvailable],
+  );
+  const smartComfortFrames = comfortRow
+    ? comfortFramesForBudget(
+        values.width,
+        values.height,
+        comfortRow.singleBudget,
+        limits.minNumFrames,
+        limits.maxNumFrames,
+        comfortRow.spatialFactor,
+        comfortRow.temporalFactor,
+      )
+    : null;
+  // `??`, not a ternary on `comfortRow`: a matched row whose smart derivation
+  // still yields `null` (a hand-typed 0/blank width) falls back to the legacy
+  // lookup exactly as it did before, rather than blanking the marker.
+  const spillThresholdFrames =
+    smartComfortFrames ?? resolveSpillFreeFrames(config.limits.spill_free_frames, values.width, values.height);
+  const isComfortMarkerSmart = smartComfortFrames !== null;
+  const isOverSpillThreshold = spillThresholdFrames !== null && values.numFrames > spillThresholdFrames;
+
   const [gettingSize, setGettingSize] = useState(false);
   const [getSizeError, setGetSizeError] = useState<string | null>(null);
 
@@ -872,14 +936,21 @@ export function useGenerationForm(
         limits.maxNumFrames,
       );
       // W8: cap the wav-derived suggestion at the current resolution's comfort
-      // ceiling (`spill_free_frames`) so a long wav never auto-adjusts DURATION
-      // past the point generation starts spilling. Applies to EVERY A2V attach
-      // path (pick / drag-and-drop / right-click #3/#7), an owner-approved
-      // intentional behavior change. A null ceiling (unresolvable map) leaves
-      // the suggestion untouched. `spill_free_frames` entries are themselves
-      // valid 8n+1 values, so clamping down to one keeps `suggested` on-grid.
-      const spillCeiling = resolveSpillFreeFrames(config.limits.spill_free_frames, values.width, values.height);
-      if (spillCeiling !== null && suggested > spillCeiling) suggested = spillCeiling;
+      // ceiling so a long wav never auto-adjusts DURATION past the point
+      // generation starts spilling. Applies to EVERY A2V attach path (pick /
+      // drag-and-drop / right-click #3/#7), an owner-approved intentional
+      // behavior change. A null ceiling (unresolvable map) leaves the
+      // suggestion untouched.
+      //
+      // 2026-08-31: this is the SAME `spillThresholdFrames` the comfort marker
+      // draws, not an independent `spill_free_frames` lookup — so on a smart
+      // engine the auto-adjusted DURATION lands exactly on the marker instead
+      // of at the coarser legacy value. (E4 of the 2026-08-31 calibration
+      // measured A2V against T2V at identical geometry and found every metric
+      // within ±0.3%, so Create's single-shot line applies to A2V unchanged.)
+      // Both the smart ceiling and the `spill_free_frames` entries are valid
+      // 8n+1 values, so clamping down to one keeps `suggested` on-grid.
+      if (spillThresholdFrames !== null && suggested > spillThresholdFrames) suggested = spillThresholdFrames;
       // W4 (#7 trim追従): while the attached audio is STILL the prefill-attached
       // one (path matches the captured cap path), additionally cap the wav
       // suggestion at the span-derived DURATION so #7 follows the trimmed ribbon
@@ -910,7 +981,7 @@ export function useGenerationForm(
       // never see a duration for this upload.
       if (!settled) probedAudioIdRef.current = null;
     };
-  }, [sourceAudio.state.status, sourceAudio.state.id, nativeBridge, values.frameRate, values.width, values.height, config.limits.spill_free_frames, limits.minNumFrames, limits.maxNumFrames, a2vSeedMaxFrames]);
+  }, [sourceAudio.state.status, sourceAudio.state.id, nativeBridge, values.frameRate, values.width, values.height, spillThresholdFrames, limits.minNumFrames, limits.maxNumFrames, a2vSeedMaxFrames]);
 
   // A2V-only: gates on whether the attached wav's MEASURED duration is long
   // enough for `values.numFrames` (`chainUtils.audioLengthPrecheck`). `null`
@@ -998,28 +1069,6 @@ export function useGenerationForm(
   const isValid = validityReasons.length === 0;
 
   const durationHint = formatDurationHint(values.numFrames, values.frameRate);
-
-  // Smart comfort marker (2026-08-18): the all-on gate — see
-  // `isFullAcceleration`'s own doc comment for the sage 3-value handling and
-  // why `acceleration` must already be the EFFECTIVE object (it is: this
-  // hook's `acceleration` local is `deps.acceleration`, which `AppShell`
-  // already ran through `effectiveAcceleration` before handing it down).
-  const isFullAccelerationOn = useMemo(
-    () => isFullAcceleration(acceleration, sageAvailable),
-    [acceleration, sageAvailable],
-  );
-  const singleComfortBudget = resolveSingleComfortBudget(config.limits.single_comfort_token_budget);
-  const smartComfortFrames = useMemo(
-    () => singleComfortFrames(values.width, values.height, singleComfortBudget, limits.minNumFrames, limits.maxNumFrames),
-    [values.width, values.height, singleComfortBudget, limits.minNumFrames, limits.maxNumFrames],
-  );
-  const fallbackSpillThresholdFrames = useMemo(
-    () => resolveSpillFreeFrames(config.limits.spill_free_frames, values.width, values.height),
-    [config.limits.spill_free_frames, values.width, values.height],
-  );
-  const isComfortMarkerSmart = isFullAccelerationOn && smartComfortFrames !== null;
-  const spillThresholdFrames = isComfortMarkerSmart ? smartComfortFrames : fallbackSpillThresholdFrames;
-  const isOverSpillThreshold = spillThresholdFrames !== null && values.numFrames > spillThresholdFrames;
 
   const estimateSeconds = useMemo(
     () => estimateGenerationSeconds(values.width, values.height, values.numFrames),

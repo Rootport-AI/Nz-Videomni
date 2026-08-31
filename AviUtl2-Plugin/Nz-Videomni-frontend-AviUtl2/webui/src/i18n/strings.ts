@@ -1204,8 +1204,10 @@ export const en = {
      * above whenever the marker itself is the smart per-resolution ceiling
      * (`useGenerationForm`'s `isComfortMarkerSmart`) rather than the coarse
      * `spill_free_frames` fallback — the "2-4x" figure above was measured
-     * against the DEFAULT (not all-accelerations-on) configuration, so it no
-     * longer holds once the smart marker is active. Named with a `Smart`
+     * against LTX 2.3's DEFAULT configuration, and does not hold in the
+     * configurations where a smart line can be drawn at all (LTX 2.5
+     * unconditionally, LTX 2.3 only with every acceleration toggle on — see
+     * `shell/comfortTable.ts`'s `resolveComfortRow`). Named with a `Smart`
      * suffix specifically to avoid two unrelated existing keys: `single.size.
      * comfortMarkerTitle` (the Chained screen's resolution-slider guide
      * tooltip — a different feature entirely) and `edit.comfortWarning`
@@ -2542,8 +2544,9 @@ export const ja: Strings = {
     spillWarning: "これを超えると生成速度が2〜4倍遅くなります。",
     // 賢い快適上限マーカー（2026-08-18）: マーカー自体が賢い解像度別上限
     // （`useGenerationForm` の `isComfortMarkerSmart`）のときは上の
-    // `spillWarning` の代わりにこちらを出す——「2〜4倍」は既定構成（全加速オンでは
-    // ない状態）の実測であり、賢いマーカーが有効な条件下では成り立たないため。
+    // `spillWarning` の代わりにこちらを出す——「2〜4倍」はLTX 2.3の既定構成の
+    // 実測であり、賢い線を引ける構成（LTX 2.5は無条件・LTX 2.3は加速全オンのみ
+    // ——`shell/comfortTable.ts` の `resolveComfortRow` 参照）では成り立たないため。
     // キー名に `Smart` を付けたのは、別機能の既存キー2つと混同しないため:
     // `single.size.comfortMarkerTitle`（Chained画面の解像度スライダー用ガイドの
     // ツールチップ、全く別機能）と `edit.comfortWarning`（Outpaintingの別軸トークン

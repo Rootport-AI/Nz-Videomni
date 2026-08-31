@@ -166,7 +166,7 @@ describe("resolvePrefillSeed — width/height/fps", () => {
     expect(s.derived.height).toBe(cfg.generation_defaults.height); // 768
     expect(s.frameRate).toBeUndefined();
     // Comfort ceiling still resolves off the config-default resolution.
-    expect(s.numFrames).toBe(257);
+    expect(s.numFrames).toBe(273);
   });
 
   it("leaves fps unseeded when rate/scale are not resolvable", () => {
@@ -231,21 +231,21 @@ describe("resolvePrefillSeed — DURATION (comfortCeiling intents)", () => {
     });
   }
 
-  it("comfortCeiling lowers DURATION for a large resolution (1920x1088 -> 153)", () => {
-    expect(seed("image-to-video", makeSelection({ mediaWidth: 1920, mediaHeight: 1088 })).numFrames).toBe(153);
+  it("comfortCeiling lowers DURATION for a large resolution (1920x1088 -> 161)", () => {
+    expect(seed("image-to-video", makeSelection({ mediaWidth: 1920, mediaHeight: 1088 })).numFrames).toBe(161);
   });
 
   it("current-frame-to-clip-chain has no material, so it uses the project-default resolution's ceiling", () => {
     // Empty selection -> deriveGenerationParams falls back to config defaults
-    // (1280x768), whose comfort ceiling is 257.
-    expect(seed("current-frame-to-clip-chain", emptySelection()).numFrames).toBe(257);
+    // (1280x768), whose comfort ceiling is 273.
+    expect(seed("current-frame-to-clip-chain", emptySelection()).numFrames).toBe(273);
   });
 });
 
 describe("resolvePrefillSeed — DURATION (materialClampedToCeiling intents, W4 span-based)", () => {
   it("#2 reference-video: clamps to the SPAN length when under the ceiling (121-frame span -> 121)", () => {
-    // 1280x768 (128-aligned) -> ceiling 257. Span (120-0+1)=121 frames @24fps
-    // maps to 121 frames (on the 8n+1 grid), which is < 257 so the span wins.
+    // 1280x768 (128-aligned) -> ceiling 273. Span (120-0+1)=121 frames @24fps
+    // maps to 121 frames (on the 8n+1 grid), which is < 273 so the span wins.
     const s = seed(
       "reference-video",
       makeSelection({ mediaWidth: 1280, mediaHeight: 768, frameStart: 0, frameEnd: 120, mediaDurationSec: 999 }, { rate: 24, scale: 1 }),
@@ -253,19 +253,19 @@ describe("resolvePrefillSeed — DURATION (materialClampedToCeiling intents, W4 
     expect(s.numFrames).toBe(121);
   });
 
-  it("#2 reference-video: clamps to the comfort ceiling when the SPAN is longer (721-frame span -> 153)", () => {
-    // 1920x1152 (128 grid) -> nearest-area ceiling 153; a 721-frame span floors
-    // well past 153, so it clamps DOWN to 153.
+  it("#2 reference-video: clamps to the comfort ceiling when the SPAN is longer (721-frame span -> 161)", () => {
+    // 1920x1152 (128 grid) -> nearest-area ceiling 161; a 721-frame span floors
+    // well past 161, so it clamps DOWN to 161.
     const s = seed(
       "reference-video",
       makeSelection({ mediaWidth: 1920, mediaHeight: 1152, frameStart: 0, frameEnd: 720, mediaDurationSec: 2 }, { rate: 24, scale: 1 }),
     );
-    expect(s.numFrames).toBe(153);
+    expect(s.numFrames).toBe(161);
   });
 
   it("#7 audio-to-video: seeds from the object's timeline SPAN, not the full-file duration", () => {
     // Audio has no media resolution (0) -> derived falls back to the project
-    // default 1280x768 (ceiling 257). Span 121 frames @24fps -> 121 (< 257). The
+    // default 1280x768 (ceiling 273). Span 121 frames @24fps -> 121 (< 273). The
     // full-file mediaDurationSec (999) is deliberately ignored.
     const s = seed(
       "audio-to-video",
@@ -365,5 +365,85 @@ describe("selectedRangeFramesForIntent / retake の尺シード（§1-17）", ()
   it("範囲が無い retake は尺を決めない（設定の既定へ落ちる）", () => {
     const sel = makeSelection({}, { rate: 30, scale: 1 });
     expect(seed("retake", { ...sel, hasRange: false }).numFrames).toBeUndefined();
+  });
+});
+
+// 2026-08-31: when the caller threads the engine family + acceleration settings
+// (AppShell and SingleScreen both do), a Single-系 prefill's DURATION seeds to
+// the SAME smart ceiling Create's comfort marker will then display. Chain-系
+// intents are a different quantity (a per-clip length inside a chain) and stay
+// on the legacy table.
+describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
+  /** All five toggles on: exactly what the served `ltx` row requires. */
+  const FULL_ACCELERATION = {
+    attentionBackend: "sage",
+    blockSwapPrefetch: true,
+    keepResident: true,
+    fusedGgufDequantKernel: true,
+    vaeMode: "prune_vaed",
+  } as const;
+
+  function smartSeed(intent: string, selection: Selection, engineFamily = "ltx") {
+    return resolvePrefillSeed({
+      intent,
+      selection,
+      config: cfg,
+      sizePolicy: "material",
+      fpsPolicy: "material",
+      engineFamily,
+      acceleration: FULL_ACCELERATION,
+      sageAvailable: true,
+    });
+  }
+
+  it("#4 image-to-video seeds the SMART 361 at 1280x768 with all five toggles on (ltx)", () => {
+    // Same input as the legacy case above, which seeds 273 — the acceleration
+    // trio is the only difference.
+    const selection = makeSelection({ mediaWidth: 1280, mediaHeight: 768 });
+    expect(seed("image-to-video", selection).numFrames).toBe(273);
+    expect(smartSeed("image-to-video", selection).numFrames).toBe(361);
+  });
+
+  it("#4 stays on the legacy table for LTX 2.3's default configuration, and goes smart on LTX 2.5", () => {
+    const selection = makeSelection({ mediaWidth: 1280, mediaHeight: 768 });
+    const defaults = {
+      attentionBackend: "sdpa",
+      blockSwapPrefetch: true,
+      keepResident: false,
+      fusedGgufDequantKernel: true,
+      vaeMode: "default",
+    } as const;
+    const withDefaults = (engineFamily: string) =>
+      resolvePrefillSeed({
+        intent: "image-to-video",
+        selection,
+        config: cfg,
+        sizePolicy: "material",
+        fpsPolicy: "material",
+        engineFamily,
+        acceleration: defaults,
+        sageAvailable: true,
+      }).numFrames;
+    expect(withDefaults("ltx")).toBe(273);
+    expect(withDefaults("ltx25")).toBe(361);
+  });
+
+  it("Chain-系 intents keep the legacy ceiling even with the trio threaded", () => {
+    // `image-to-clip-chain` (#6) targets the Chained screen, so Create's
+    // single-shot line must not follow it there.
+    const selection = makeSelection({ mediaWidth: 1280, mediaHeight: 768 });
+    expect(smartSeed("image-to-clip-chain", selection).numFrames).toBe(273);
+    expect(smartSeed("extend-video", selection).numFrames).toBe(273);
+  });
+
+  it("#2 reference-video's material clamp moves onto the smart line too", () => {
+    // A 721-frame span at 1280x768 is far past either ceiling, so the clamp
+    // decides — and it is the smart one.
+    const selection = makeSelection(
+      { mediaWidth: 1280, mediaHeight: 768, frameStart: 0, frameEnd: 720, mediaDurationSec: 2 },
+      { rate: 24, scale: 1 },
+    );
+    expect(seed("reference-video", selection).numFrames).toBe(273);
+    expect(smartSeed("reference-video", selection).numFrames).toBe(361);
   });
 });

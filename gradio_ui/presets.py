@@ -108,8 +108,8 @@ def format_duration_label(num_frames, fps) -> str:
     """Format a pixel-frame count + frame rate as a rounded seconds label.
 
     Pure formatter: ``duration = num_frames / fps``, rendered with 2 decimal
-    places and an ``s`` suffix (e.g. ``format_duration_label(257, 24)`` ->
-    ``"10.71s"``, ``format_duration_label(121, 24)`` -> ``"5.04s"``).
+    places and an ``s`` suffix (e.g. ``format_duration_label(273, 24)`` ->
+    ``"11.38s"``, ``format_duration_label(121, 24)`` -> ``"5.04s"``).
 
     Defensive: returns ``""`` (empty string, so a caller can drop it straight
     into a ``gr.update(value=...)``/label with no visible garbage) when either
@@ -386,7 +386,7 @@ def apply_chain_preset(name: str, config: dict | None,
         comfortable cap when the server publishes one for this exact
         resolution, else the preset's own ``num_frames`` (e.g. ``minimal``'s
         512x320 has no ``spill_free_frames`` entry -> falls back to its
-        ``num_frames`` 49; ``FHD_1080p``'s 1920x1088 -> 153 from
+        ``num_frames`` 49; ``FHD_1080p``'s 1920x1088 -> 161 from
         ``spill_free_frames``). Callers may still hand-edit individual slots
         afterwards; this only sets the initial suggestion.
       * ``chain_total_warning_update`` -- ``gr.update`` for a Markdown

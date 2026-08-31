@@ -680,17 +680,72 @@ export interface AppLimits {
   /** Create（単発 `/generate`）1 発が快適に収まる注意トークン数の上限（トークン
    * = （幅//32）×（高さ//32）× 潜在フレーム数）。`chain_comfort_token_budget`
    * とは別軸——あちらは Chained のstage-2 1 窓、こちらは単発 1 パス全体。混同
-   * しないこと。サーバはこの値で何も判定しない純粋な助言値で、Create 画面の
-   * 賢い快適上限マーカーは**5つの高速化トグル
-   * （sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・
-   * vae_mode=prune_vaed）が全て on のときだけ**この値から算出する——1 つでも
-   * off なら既存の `spill_free_frames` が正。
+   * しないこと。サーバはこの値で何も判定しない純粋な助言値。
+   *
+   * **表を持たない古いサーバ向けの互換値**（2026-08-31）。今のサーバは
+   * {@link AppLimits.comfort_budgets} でエンジン系統×条件ごとの予算を配信し、
+   * こちらのスカラ鍵は互換のために残っているだけ——`comfort_budgets` が無い
+   * サーバに当たったとき、`shell/comfortTable.ts` の互換シムが
+   * 「5つの高速化トグル（sage・block_swap_prefetch・keep_resident・
+   * fused_gguf_dequant_kernel・vae_mode=prune_vaed）が全て on」のときだけ
+   * この値を単発予算として採用する（＝2026-08-31 以前と完全に同じ挙動）。
    *
    * **オプショナル**（この鍵を持たない古いサーバ対応）。読む側は必ず
-   * `modes/single/spillUtils.ts` の `resolveSingleComfortBudget` を通すこと
+   * `shell/comfortTable.ts` の `resolveSingleComfortBudget` を通すこと
    * ——欠落・0・負・NaN のときは同ファイルのミラー定数 44,880 へ落ちる。生の
    * 値を直接参照してはならない。 */
   single_comfort_token_budget?: number;
+  /** 快適上限マーカーの配信テーブル（2026-08-31）。エンジン系統 id
+   * （`BaseModelBlock.engine_family`。`"ltx"`／`"ltx25"`）→ そのエンジンの
+   * プロファイル。将来のモデル追加・高速化トグル追加に**行の追加だけ**で
+   * 対応するための骨格で、フロントは条件をハードコードしない。
+   *
+   * **読む側は必ず `shell/comfortTable.ts` の `resolveComfortRow` を通すこと。**
+   * 生の `rows` を自前で走査してはならない——実効の高速化設定への写像
+   * （sage の3値・keepResident の畳み込み）と、不正値の正規化（予算が正の
+   * 有限数でなければミラー定数／`spatial_factor` < 1 → 32／
+   * `temporal_factor` < 1 → 8）は全てそこに1箇所だけある。
+   *
+   * **一致する行が無い（＝`resolveComfortRow` が `null`）のは異常ではなく
+   * 正常な状態**で、呼び手はレガシーの {@link AppLimits.spill_free_frames}
+   * へ落ちる。とくに LTX 2.3 の既定構成は**意図的に**行を持たない：素の VAE
+   * デコーダのせいで快適境界がトークン数に対して単調でなく（境界がデコードの
+   * チャンク数増分 7→8／4→5／2→3 と一致する）、1本のトークン線では表せない
+   * ため、`spill_free_frames` の実測5点が正である。「`ltx` に requires 空の
+   * 行を足せば全構成で賢くなる」というのは誤り。
+   *
+   * **オプショナル**（この鍵を持たない古いサーバ対応）。欠落時は
+   * `resolveComfortRow` の互換シムが働く——
+   * {@link AppLimits.single_comfort_token_budget} の doc を参照。 */
+  comfort_budgets?: Record<string, EngineComfortProfile>;
+}
+
+/** {@link EngineComfortProfile} の1行。上から順に、`requires` の**全鍵**が
+ * 実効の高速化設定に一致した**最初の行**が採用される（`shell/comfortTable.ts`
+ * の `resolveComfortRow`）。 */
+export interface ComfortRow {
+  /** サーバ語彙（リクエストのフィールド名）で書かれた適用条件。空 `{}` は
+   * 「無条件」＝どの高速化設定でもこの行が当たる。フロントが知らない鍵を
+   * 要求する行は**不一致**として扱われる（安全側）。 */
+  requires: Record<string, string | boolean>;
+  /** Create（単発 `/generate`）1 発分の快適トークン予算。 */
+  single_budget: number;
+  /** Chained の stage-2 1 窓分の快適トークン予算。 */
+  chain_budget: number;
+}
+
+/** 1つのエンジン系統ぶんの快適予算プロファイル（{@link AppLimits.comfort_budgets}
+ * の値）。係数は将来モデル用にサーバが持つ——現行の LTX 系はいずれも 32/8。 */
+export interface EngineComfortProfile {
+  /** 動画 VAE の空間圧縮率：`spatial_factor` × `spatial_factor` ピクセルが
+   * 潜在1マス。現行は 32。 */
+  spatial_factor: number;
+  /** 潜在フレーム1つあたりの画素フレーム数（`8n+1` グリッドの `n` 係数）。
+   * 現行は 8。 */
+  temporal_factor: number;
+  /** 上から順に評価される条件行。空配列は「このエンジンに賢い線は無い」＝
+   * 常にレガシー表へ落ちる、という正当な状態。 */
+  rows: ComfortRow[];
 }
 
 /** One entry of `AppConfig.model.ic_loras` (Docs/API_REFERENCE.md §3.2) — a
@@ -822,9 +877,16 @@ export interface BaseModelBlock {
    * a hard-coded literal — adding a base model is a server-side descriptor
    * change only. */
   display_name: string;
-  /** Inference-engine lineage (`"ltx"`, …). Diagnostic here: the server picks
-   * the engine from the weight file's own GGUF metadata, never from anything
-   * the WebUI sends (`Docs/MULTI_ENGINE_DESIGN.md` §2.1). */
+  /** Inference-engine lineage (`"ltx"`, …). The server picks the engine from
+   * the weight file's own GGUF metadata, never from anything the WebUI sends
+   * (`Docs/MULTI_ENGINE_DESIGN.md` §2.1).
+   *
+   * Since 2026-08-31 this is no longer purely diagnostic: it is the key into
+   * {@link AppLimits.comfort_budgets}. NON-optional on the wire — a reader
+   * that still writes `?? ""` is defending against a backend older than
+   * §3-97, not against a normal response, and `""` is exactly what
+   * `shell/comfortTable.ts`'s `resolveComfortRow` treats as "engine unknown"
+   * (→ the compatibility shim, i.e. today's behaviour). */
   engine_family: string;
   active: boolean;
   installed: boolean;

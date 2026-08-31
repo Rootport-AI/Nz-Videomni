@@ -576,6 +576,33 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
     const missing = Object.keys(FALLBACK_APP_CONFIG.limits).filter((key) => !mockKeys.has(key));
     expect(missing).toEqual([]);
   });
+
+  // 2026-08-31: the one-directional key check above cannot see a CONTENT drift
+  // inside `comfort_budgets`, and that block is a nested structure both
+  // fixtures now carry. This pins the two FRONTEND mirrors against each other
+  // (both engine families, both budget values, both `requires` shapes) — it
+  // does NOT pin against the backend's own `_default_comfort_budgets()`; that
+  // parity is checked manually, or by the backend's own tests, not from here.
+  it("both fixtures publish an identical comfort_budgets block", () => {
+    expect(FALLBACK_APP_CONFIG.limits.comfort_budgets).toEqual(MOCK_CONFIG_BODY.limits.comfort_budgets);
+  });
+
+  it("the ltx row requires exactly the five all-on acceleration fields, and ltx25 requires nothing", () => {
+    // ⚠ `ltx`'s single row is CONDITIONAL on purpose: LTX 2.3's default
+    // configuration has no smart line at all (its comfort boundary tracks the
+    // VAE decoder's chunk-count steps, not the token count), so it falls to
+    // `spill_free_frames`. A `requires: {}` row here would be a regression,
+    // not an improvement — hence the exact key-set assertion.
+    const ltxRow = MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.rows[0];
+    expect(Object.keys(ltxRow?.requires ?? {}).sort()).toEqual([
+      "attention_backend",
+      "block_swap_prefetch",
+      "fused_gguf_dequant_kernel",
+      "keep_resident",
+      "vae_mode",
+    ]);
+    expect(MOCK_CONFIG_BODY.limits.comfort_budgets.ltx25.rows[0]?.requires).toEqual({});
+  });
 });
 
 // §3-98 P5: `GET /models` publishes, per base model, the feature names that

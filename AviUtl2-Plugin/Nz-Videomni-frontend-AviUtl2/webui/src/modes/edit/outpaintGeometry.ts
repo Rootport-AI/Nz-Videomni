@@ -87,7 +87,7 @@ export const MAX_PAD = 4096;
  * (the block-reason list deliberately has no token-budget code; see
  * `editReasonMessages.ts`).
  *
- * ⚠ NOT the same axis as `modes/single/spillUtils.ts`'s
+ * ⚠ NOT the same axis as `shell/comfortTable.ts`'s
  * `SINGLE_COMFORT_TOKEN_BUDGET` (44,880, Create's single-shot budget) even
  * though both are "one pass, no stage-2 tiling" numbers with the same token
  * formula — Outpainting is a DIFFERENT workload (the source video's own VAE

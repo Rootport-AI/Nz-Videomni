@@ -14,7 +14,7 @@
 ## 1. 近日中の改修項目
 
 実装・修正の内容が具体的で、近く着手すべきもの。**新しい機能を設計するときは保存領域の原則（貴重な生成物は`outputs/`へ、雑に消せるものは`uploads/`へ）に従うこと**——正本は[`STORAGE_POLICY.md`](STORAGE_POLICY.md)。
-**本節に現存するのは§1-4と§1-24の2件**で、§1-4はオーナー自身がREADMEを書く作業（AIエージェントが実装するタスクではない）、§1-24は実装済みでオーナーの実機ゲート待ちの案件である。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
+**本節に現存するのは§1-4・§1-25・§1-26の3件**で、§1-4はオーナー自身がREADMEを書く作業（AIエージェントが実装するタスクではない）、§1-25はGradio同梱WebUI側の露出不足を埋める未着手案件、§1-26はLTX 2.5選択時にPrunaVAEDのトグルが誤って操作できてしまう表示上のギャップである。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
 
 ### 1-4. READMEのスピードガイド執筆（起票：2026-07-26）
 
@@ -28,26 +28,20 @@
 - **状態**: 未着手（オーナーが手書きするための備忘録。書き終えた時点でクローズする）。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（導線の前提と`run.ps1`の設計）、[`README.md`](../README.md) §1（要求スペック）。
 
-### 1-24. モデル読み込み中の即時バッジとGenerate凍結の一本化（起票：2026-08-31）
+### 1-25. ベースモデル切り替えのGradio UI露出（起票：2026-08-31）
 
-- **背景**: ヘッダーの「モデル読み込み中…」バッジは`GET /status`のポーリング（従来2.5秒周期）でしか点かず、切り替え開始から最大2.5秒遅れていた。しかもどのタブのGenerateボタンも`serverStatus`を見ておらず、バッジが出ていても押せてしまい、押すとバックエンドはジョブを202で作ってからジョブスレッド内で失敗させ、台帳に失敗ジョブが残っていた。
-- **決定事項**（再協議しない）: ①ポーリング周期は10秒へ戻す（外部クライアント経由のロードはポーリングで拾えれば十分）。②Settingsの「読み込み」ボタンもヘッダーのドロップダウンと同じ扱い。③「サーバーが仕事中（ジョブ実行中 or モデル読み込み中）なら生成不可」の1本のルールに統一し、各タブはそれを読むだけ。④バックエンドの`/generate`と`/generate/chain`はジョブ作成前に同期で409 `PIPELINE_LOADING`を返す。⑤Edit/Outpaintingの凍結抜けも同じバッチで直す。
-- **実装したこと**: フロントエンドは`jobs/JobsContext.tsx`に`pipelineLoading`（自分が出した`POST /pipeline/load`が飛行中）と`serverBusy`（`hasActiveJob || pipelineLoading`）を追加し、全タブの生成ボタン・ヘッダーのベースモデル選択・Settingsの「読み込み」ボタン/カテゴリ選択が`serverBusy`だけを読むよう統一した（発行元は`shell/useBaseModels.ts`と`shell/useModels.ts`、包む口が`trackPipelineLoad`）。`modes/single/useServerStatus.ts`は`localLoading`（＝`pipelineLoading`）を受け取り、応答を待たずに`loading-models`を返す。バックエンドは`services/pipeline_manager.py`に`reject_if_loading()`を新設し、`api/generate.py`・`api/generate_chain.py`の単一ジョブガード直前で呼ぶ。設計の全体像は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.5・§5.5(b)、API契約への反映は[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.9(f)・v0.5.45、フロントエンド実装ログは`DEVLOG.md` §98。
-- **実装との1点の乖離**: `shell/ModelsPanel.tsx`の「読み込みには数分かかることがあります」通知（`models.loadingNotice`）は、`serverBusy`ではなく`pipelineLoading`のときにだけ出す——通常の生成ジョブ中に出すと「モデルを読み込んでいる」という嘘になるため。副作用として、サーバーが仕事中（ジョブ実行中またはモデル読み込み中）の間はSettingsのモデルパネル（読み込みボタン・更新ボタン・カテゴリ選択）が1本のルールで凍結されるようになった（従来はローカルな読み込み中だけだった）。
-- **完了条件（オーナーの実機ゲート。本項が単一正本）**:
-  - G1: ベースモデル選択でLTX 2.3 → 2.5。選んだその場でバッジ「モデル読み込み中…」が点く。
-  - G2: その間、Single／Chained／Edit（撮り直し・画角拡張）のGenerateが全て無効、ラベルが「処理中…」になる。
-  - G3: その間、バッチA2V／i2v-longのStartが無効になり、新しい文言（ジョブ実行中かモデル読み込み中）が出る。
-  - G4: その間、ベースモデル選択が無効。Settingsを開くと「読み込み」ボタンとカテゴリ選択も無効。
-  - G5: 応答の瞬間にバッジが消え、選択欄・全Generateが戻る（10秒待たされない）。
-  - G6: Settingsの「読み込み」ボタンで同じことが起きる。読み込み中にSettingsを閉じてもバッジは維持され、終了時に消える。
-  - G7: 読み込み中の右クリック→撮り直しが遮断される。
-  - G8: Gradioの Models からロードを始めWebUIは触らない。周期（10秒）より長いロード（LTX 2.5系統切替・約15秒）ではバッジが出て終了後に戻る。周期より短い外部ロードは拾えないのが許容仕様。
-  - G9: 読み込み中に`curl`で`POST /api/v1/generate` → 409 `PIPELINE_LOADING`、`GET /api/v1/jobs`にジョブが増えない。`/generate/chain`も同じ。
-  - G10: 通常生成1本で、その間の全Generate無効化（非回帰）。
-- **状態**: 実装・機械検証（フロントエンド`npm run typecheck`／`npm run lint`／`npm run test`、バックエンド`pytest`とも全緑）・ビルド/配布まで完了。**オーナーの実機ゲート（G1〜G10）待ち**。合格後は本項を[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移設しクローズする。
-- **残作業（範囲外）**: MCPサーバーのツール説明文（`mcp_server/tools/generate.py`・`mcp_server/server.py`・`mcp_server/tools/batch.py`）が`JOB_BUSY`のみ言及しており、`PIPELINE_LOADING`にも触れていない。今回は`mcp_server/`を対象外としたため未対応。
-- **出典**: フロントエンド`DEVLOG.md` §98、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.5・§5.5(b)、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.9(f)・v0.5.45改訂履歴。
+- **背景**: Gradio同梱WebUIのModelsセクションはカテゴリ別（transformer／text_encoder／video_vae／audio）の差し替えしか送れず、`base_model`（LTX 2.3↔2.5の系統切替）が露出していない（`gradio_ui/handlers.py:1608`の`load_pipeline_models`は`models`のみ送信）。AviUtl2側フロントエンドはヘッダーのドロップダウンで切替できるのに対し、Gradio側だけ後れている。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-129の実機ゲートG8で前提不成立として発覚し、オーナー指示で起票した。
+- **やること**: Modelsセクション（または適切な場所）にベースモデル選択を追加し、`POST /api/v1/pipeline/load`の`base_model`を送れるようにする。
+- **状態**: 未着手。完了条件はオーナーと相談のうえ着手時に定める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §83、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-129。
+
+### 1-26. LTX 2.5 選択時に PrunaVAED のトグルが操作できてしまう（起票：2026-08-31）
+
+- **背景**: 設定パネル（`webui/src/shell/SettingsPanel.tsx`のPrunaVAED行）は、選んでいるベースモデル（エンジン）によってこの項目を無効化する仕組みを持っていない。サーバーの`/models`応答はLTX 2.5の`unsupported_features`に`prune_vaed`を含めて返しているが、webui側でこの一覧を読んで設定パネルの表示を変える消費者は無い（`unsupportedFeatures`を読んでいるのは`disabledModesFor`・`chainPanelsDisabledFor`・`editSubTabsDisabledFor`・`batchA2vDisabledFor`の4か所のみで、いずれも設定パネルのvae_mode選択とは無関係）。そのためLTX 2.5を選んだままPrunaVAEDのトグルを押すこと自体はできてしまい、実際にジョブを投げた時点で422になる（フォームの時点では警告が出ない）。
+- **関連する既知の課題**: 本書§3-125（ブラウザ保存の高速化設定にエンジン軸が無い）に、同種の罠として「LTX 2.3で選んだ`vae_mode`のままLTX 2.5へ切り替えると全ジョブが422になる」現象が記録されている。そのうち**快適上限マーカーとの噛み合わせ（マーカー側の表示が賢いままジョブだけ422になる不整合）は、本日新設した`comfort_budgets`のエンジン軸配信テーブルにより解消済みである**（LTX 2.5の線はどの高速化設定でも同じ1本になったため）。**422そのもの、および本項が指す「トグルを触れてしまうこと自体」は未解決のまま残っている。**
+- **オーナーの記憶**: 「以前はグレーアウトされていた記憶がある」とのことだが、その仕組みが実装されたうえで退行したのか、そもそも実装されたことが無いのかは今回のコード読みでは特定できていない。次回、別セッションで調査・修正する。
+- **状態**: 未着手。
+- **出典**: `webui/src/shell/SettingsPanel.tsx`（PrunaVAED行）、`webui/src/shell/useBaseModels.ts`（`unsupportedFeatures`の消費箇所）、本書§3-102・§3-125、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)。
 
 ---
 
@@ -67,7 +61,6 @@
 | §3-103 | 拡散デコーダ版の映像VAE（DiffVAE）を採用するかどうか | 未着手 |
 | §3-104 | インストーラの`-ResolveLatest`が機能しない | 未着手 |
 | §3-105 | LTX 2.3ワーカーの2ジョブ目以降の時間・VRAMのせり上がり | 未着手 |
-| §3-107 | ストレージ必要容量の再実測（`.venv-engine-ltx25`追加後） | 未着手（クリーン環境での実測が前提） |
 | §3-108 | kohya形式のLoRAをエンジンのローダーが読めない（2.3／2.5共通） | 未着手 |
 | §3-109 | チャンク化upsampleの廃止（再訪条件つき・LTX 2.5） | 未着手 |
 | §3-112 | CUDAアロケータ設定の見直し（`PYTORCH_ALLOC_CONF`への移行と`max_split_size_mb`の評価） | 未着手 |
@@ -149,14 +142,6 @@
 - **直し方の見込み**: 渡すパスをディレクトリではなく実ファイル（`--project` か、`pyproject.toml` として読める形）にすればよい。ただし**`-ResolveLatest` で得られる環境はそもそも未検証の新しいtorch（~2.11）である**ため、直したうえで実際に使うかどうかは別の判断になる。
 - **状態**: 未着手（将来の改修項目）。
 - **出典**: `scripts/install_ltx.ps1` の `Ensure-EngineVenv`、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（温存したまま持ち越した理由）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.3。
-
-#### 3-107. ストレージ必要容量の再実測（`.venv-engine-ltx25`追加後）（起票：2026-08-22）
-
-- **概要**: 文書が掲げている必要容量は、仮想環境が2つだった時期の実測値である（現行の数値の正本は[`README.md`](../README.md) §1）。LTX 2.5用の3つ目（`.venv-engine-ltx25`）が加わったあと測り直していない。**開発機では`.uv_cache/`だけが旧記載のPython環境全体より大きく育っており**、合計は現行表記より増えている可能性が高い。
-- **測り直しの前提**: 開発機のキャッシュは何度も再構築を繰り返した結果なので、そのままユーザー環境の必要量とは言えない。**クリーンな環境（新規cloneから`setup.bat`を1回だけ）での実測が前提**であり、それまで数値は動かさない。
-- **直す先は3箇所**: [`README.md`](../README.md) §1（要求スペックの表と「必要な空き容量の内訳」）・[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §5.1b（取得総量と必要容量の注記）・`scripts/setup.ps1`の空き容量しきい値`$needGB`（現行表記に余裕を足した値なので、合計が増えるなら連動して見直す）。
-- **状態**: 未着手（将来の改修項目・クリーン環境での実測が要る）。
-- **出典**: [`README.md`](../README.md) §1（現行の数値と、再実測が未了である旨の注記）、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §5.1b、`scripts/setup.ps1`。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -312,8 +297,8 @@
 
 #### 3-42. 長尺の快適上限の引き上げ（単発生成へのチャンク化＋タイル化の移植）
 
-- **概要**: 単発生成（t2v／i2v／a2v／v2v共通の`/generate`）には解像度ごとに「VRAMが溢れない快適上限」があり（1280×768→257フレーム、1920×1088→153フレーム、2560×1472→81フレーム）、超えると共有メモリへ溢れて大幅に遅くなる。原因は「一括アップサンプル」と「フル解像度の一括仕上げデノイズ」の2工程と実測で特定済みで、どちらもClip Chain側には対策（チャンク化アップサンプル／stage-2の22latent固定窓によるタイル化）が実装・実機検証済みで存在する。研究課題は、この**2つをセットで**単発生成のパイプラインへ移植できるかの検証である（片方だけでは上限は伸びない）。
-- **移植後の推定（フェルミ推定・実測前の目安）**: small（960×576）121→約481／standard_720p（1280×768）257→481（いずれもAPI上限に到達）／FHD_1080p（1920×1088）153→約300（最も実測が必要）／WQHD_1440p（2560×1472）81→約100〜150（下振れリスク大）。実験は1080pを153→241→361→481と昇順に振るところから始めるのが最小確認パス。
+- **概要**: 単発生成（t2v／i2v／a2v／v2v共通の`/generate`）には解像度ごとに「VRAMが溢れない快適上限」があり（値の正本は`config.yaml`の`limits.spill_free_frames`と[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §付記）、超えると共有メモリへ溢れて大幅に遅くなる。原因は「一括アップサンプル」と「フル解像度の一括仕上げデノイズ」の2工程と実測で特定済みで、どちらもClip Chain側には対策（チャンク化アップサンプル／stage-2の22latent固定窓によるタイル化）が実装・実機検証済みで存在する。研究課題は、この**2つをセットで**単発生成のパイプラインへ移植できるかの検証である（片方だけでは上限は伸びない）。
+- **移植後の推定（フェルミ推定・実測前の目安）**: small（960×576）は約481／standard_720p（1280×768）は481（いずれもAPI上限に到達）／FHD_1080p（1920×1088）は約300（最も実測が必要）／WQHD_1440p（2560×1472）は約100〜150（下振れリスク大）。**起点となる現行の快適上限は`limits.spill_free_frames`が正本**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §付記。2026-08-31に再測定済み）。実験は1080pを現行値から241→361→481と昇順に振るところから始めるのが最小確認パス。
 - **出典**: [`Nz-Videomni/Docs/PHASE3_CLIP_CONCAT_STATUS.md`](PHASE3_CLIP_CONCAT_STATUS.md)「実運用で得た経験則」節（本テーマの正本は本項）。
 - **タイル化の先行実施**: IC-LoRA参照動画のVAEエンコードについては、本テーマの最小スライスとしてタイル化済みである（正本はバックエンド[`ICLORA_DEPTH_DEBLUR_WORKORDER.md`](ICLORA_DEPTH_DEBLUR_WORKORDER.md)）。
 - **状態**: 将来の研究課題（着手時期未定）。**以上はLTX 2.3での推定である。LTX 2.5にも援用するかどうかは、本件着手時に別途検討する。**
@@ -500,12 +485,12 @@
 - **状態**: 将来の研究課題（着手時期未定・規模が大きいため設計調査を先に行う）。
 - **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §65.8（試聴結果と考察の正本）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（考察の正本）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（End source実用化テーマの完結記録）。
 
-#### 3-95. 快適上限の適用拡大（Singleの賢いマーカー以外への波及、起票：2026-08-18）
+#### 3-95. 快適上限の適用拡大（Singleの賢いマーカー以外への波及、起票：2026-08-18／2026-08-31に一部解決）
 
-- **概要**: Singleタブの賢い快適上限マーカー（全on構成限定・44,880トークン線）が直したのはフレーム数スライダーの表示1点だけで、同じ`resolveSpillFreeFrames`の粗い丸めに依存する他の3経路は手つかずである。その据え置いた経路をまとめて扱う。
-- **対象3件**: ①③右クリック直後の自動尺（`deriveDuration.ts`）とA2V wav自動調整（`useGenerationForm.ts`）——全on構成でマーカー（例361）と食い違う（例257）。前者は複数経路が共有する関数、後者は「Single a2vは実際にはチェーンを投げる」という事情があり、**どちらも単純な差し替えが正しいとは限らないのでセットで検討する**。④Single a2v・参照動画つき生成の快適上限は実測が無い。⑤Outpainting専用の単発トークン予算40,000（`outpaintGeometry.ts`）は別ワークロードの別軸で、実測較正が未了。
+- **概要**: 賢い快適上限マーカーと同じ`resolveSpillFreeFrames`の粗い丸めに依存していた周辺経路をまとめて扱う項目。**Single系の右クリック直後の自動尺とa2v（音声から動画を生成する機能）のwav自動調整、および「Single a2vの快適上限に実測が無い」の3点は2026-08-31に解決したので、本項に残っているのは下の3点だけである**（解決分の記録はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84とフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §99）。
+- **残っている3点**: ①**Chain系の右クリック尺**はレガシー表の値のままで、賢い線には追随していない（本書§3-132で単独に扱う）。②**参照動画つき生成**の快適上限は実測が無い。③**Outpainting専用の単発トークン予算40,000**（`webui/src/modes/edit/outpaintGeometry.ts`）は別ワークロードの別軸で、実測較正が未了である。
 - **状態**: 将来の研究課題（着手時期未定）。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12（Singleマーカー本体の実装記録）、バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §6④（Outpainting予算の根拠）、`webui/src/timeline/deriveDuration.ts`・`webui/src/modes/single/useGenerationForm.ts`・`webui/src/modes/edit/outpaintGeometry.ts`。
+- **出典**: バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1（線の表）・§6④（Outpainting予算の根拠）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-12（マーカー本体の実装記録）、`webui/src/timeline/deriveDuration.ts`・`webui/src/modes/edit/outpaintGeometry.ts`。
 
 #### 3-96. End source付き連結クリップの改善研究（起票：2026-08-19）
 
@@ -703,11 +688,34 @@
 #### 3-125. ブラウザ保存の高速化設定にエンジン軸が無い（LTX 2.3で選んだ`vae_mode`のままLTX 2.5へ切り替えると全ジョブが422）（起票：2026-08-30）
 
 - **何が起きるか**: フロントエンドは高速化の設定をブラウザへ保存し、**「サーバー既定と違う値のときだけ鍵を送る」**という規律で組み立てる。**その判定にベースモデル（エンジン）の種類が入っていない**（`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields()`）。したがって**LTX 2.3で「PrunaVAED」を選んだままLTX 2.5へ切り替えると、以後のすべての生成が422で断られる。**
-- **副作用がもう1つある**: `prune_vaed`がブラウザに残っていると「高速化が全部on」と判定されるため、**快適上限のマーカーは賢い表示のままなのにジョブは422**という噛み合わない状態が起こりうる。
+- **快適上限のマーカーとの噛み合わせは解消済みである**: 以前は`prune_vaed`がブラウザに残っていると「高速化が全部on」と判定され、マーカーだけ賢い表示のままジョブは422、という噛み合わない状態が起こりえた。**LTX 2.5 の線はどの高速化設定でも同じ1本になったので、マーカーの表示は常に正しい**（バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §7）。**残っているのは422そのものだけである。**
 - **残っているのは`vae_mode`の1件だけである**: 同型の罠のうち`attention_backend`は`GET /status`の`sage_available`を画面が見るので同じ形にならない。**PrunaVAEDをLTX 2.5で開通させるか（本書§3-102）、送信判定にエンジンの種類を入れるかのどちらかで消える。**
 - **なぜ独立の項目にしたか**: **§4-22（SageAttentionを既定にするかどうか）の前提だからである。** 既定を反転するなら、保存済み設定がエンジンを跨いだときの振る舞いが先に決まっていなければならない。
 - **状態**: 未着手（将来の改修項目）。通常の操作ではLTX 2.5でPrunaVAEDを選べないので、**実害が出るのは「2.3で選んでから切り替えた」場合に限られる。**
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)、本書§3-102・§3-118、`webui/src/shell/accelerationSettings.ts`。
+
+#### 3-130. LTX 2.3 既定構成にも賢い快適上限線を引けるようにする（境界のモデル化）（起票：2026-08-31）
+
+- **概要**: 賢い快適上限マーカーの配信テーブルは、**LTX 2.3 の既定構成にだけ意図的に行を持っていない**（この構成ではレガシー表`spill_free_frames`へ落ちる）。素のVAEデコーダを使うため復元（デコード）の段で共有GPUメモリへの退避が起き、快適と非快適の境界がトークン数に対して単調にならないからである。**その非単調性を説明できる式が見つかれば、この構成にも1行足せる。**
+- **判断材料（モデル化の候補3つ・いずれも未検証）**: ①**復元のかたまり（チャンク）の数を式に入れる**——実測では境界がかたまりの数がちょうど1段増える点と一致している（7→8・4→5・2→3）。②**復元済みフレームの保持量を数える**——かたまりを書き出すまでに何フレーム分をメモリ上に抱えるか。③**メモリ確保器（アロケータ）の環境変数を変える**——境界付近が非決定的なのは断片化の状態が実行ごとに変わるためなので、確保器の設定で境界が動きうる（本書§3-112と同じ軸）。
+- **着手の前提**: 境界のすぐ内側は同一条件でも判定が割れるため、**1点あたり最低2回は走らせる較正の作法**が要る（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84.7）。**LTX 2.3 は半年ほどで既定のベースモデルから外れる見込みなので、優先度は低い。**
+- **状態**: 将来の研究課題（着手時期未定）。
+- **出典**: バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1（行を置かない理由）・§4.8（実測の境界）・§8（研究メモ）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84。
+
+#### 3-131. LTX 2.5 の`metadata.json`に`vae_mode_used`が書かれない（起票：2026-08-31）
+
+- **概要**: 生成物の`metadata.json`には「要求した高速化設定が実際に効いたか」を後から確かめるための項目が並ぶが、**LTX 2.5 では`vae_mode_used`だけが`null`のまま**で、LTX 2.3 と違って確認の対象から外れている。**残る4項目（`attention_backend`・`block_swap_prefetch`・`keep_resident`・`fused_gguf_dequant_kernel`）は両系統とも書かれる。**
+- **いま実害が小さい理由**: LTX 2.5 では PrunaVAED（`vae_mode`）がそもそも422で断られる（本書§3-102）ため、選べる値が実質1つしかない。**PrunaVAEDのLTX 2.5版が上流に出て開通したときには、確認の穴になる。**
+- **同種の課題**: engine25固有の情報が`metadata.json`に載らないという、より広い論点が本書§3-102の判断材料(4)にある。**そちらとまとめて直すのが自然である。**
+- **状態**: 未着手（将来の改修項目）。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84.6（較正で見つけた5事実の4番目）、本書§3-102。
+
+#### 3-132. Chain系の右クリック尺を賢い線にするかどうか（起票：2026-08-31）
+
+- **概要**: 右クリックから始まる生成の初期の尺（フレーム数）は、Single系（単発生成へ向かうもの）は賢い快適上限マーカーと同じ値になったが、**Chain系（連結生成へ向かうもの）はレガシー表`spill_free_frames`の値のままである**。揃えるべきかどうかを判断する項目。
+- **判断材料**: ①連結生成の快適予算は**単発生成とは別の物理条件から出た別の値**であり（仕上げ工程の窓1枚分に対する予算）、単発の線をそのまま当てるのは誤りになる。②連結生成側の線に合わせるなら、クリップ1本あたりの尺と窓の関係（`chainUtils.ts`の推奨クリップ長）と二重に効かないかを先に確かめる必要がある。③**揃えない場合でも、レガシー表の再測定によってChain系の尺は2026-08-31に変わっている**ので、食い違いの幅そのものは以前より小さい。
+- **状態**: 将来の研究課題（着手時期未定）。本書§3-95から切り出した1件。
+- **出典**: バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1（系統ごとの予算）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §99、`webui/src/timeline/deriveDuration.ts`・`webui/src/timeline/menuRouting.ts`。
 
 ---
 
@@ -913,6 +921,7 @@
 
 - **概要**: `CHAIN_COMFORT_TOKEN_BUDGET`（stage-2の快適予算40,000トークン）は`GET /config`の`limits.chain_comfort_token_budget`として配信済みだが、**その兄弟である`CHAIN_STAGE1_COMFORT_TOKEN_BUDGET`（参照動画つきstage-1の快適予算25,000トークン）はフロントエンドのミラー定数のまま**である（配信化の実装記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-85）。同じパターンで配信化できる（`config.py`の`LimitsConfig`へ1鍵足し、フロントは`resolveChainComfortBudget`と同型のリゾルバを通して読む）。
 - **何が塞いでいるか**: 何も塞いでいない。必要が生じた時点（VRAM容量の異なる機体で25,000線を調整したくなった時点）で着手すればよい。25,000は実機ゲートで実測の急変点と一致することが確認済みの暫定値である（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57のG4）。
+- **配信形が変わったことの補足**: 快適予算の配信は2026-08-31にエンジン系統〔ベースモデルの世代〕ごとのテーブル`limits.comfort_budgets`（バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §6④）へ移ったが、参照動画つきstage-1の25,000はそのテーブルの対象外で据え置きのため、着手時は「従来どおり鍵を1つ足す」か「同テーブルへ行として持たせる」かの選択から入ることになる。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-85（快適上限マーカーの実装記録）、`Nz-Videomni/chain_math.py`、`webui/src/shell/tokenBudget.ts`。
 
 ---

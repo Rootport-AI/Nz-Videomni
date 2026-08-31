@@ -320,3 +320,18 @@ def test_config_publishes_the_single_comfort_token_budget(client):
     server judges nothing by it. See Docs/COMFORT_LIMIT_TABLE.md."""
     limits = client.get("/api/v1/config").json()["limits"]
     assert limits["single_comfort_token_budget"] == 44880
+
+
+def test_config_publishes_the_comfort_budgets_table(client):
+    """2026-08-31: the per-engine-family comfort-budget table supersedes the
+    two fixed values above for a client that understands it, but the legacy
+    keys must keep flowing byte-identical for old frontends/gradio/MCP
+    (backward-compat discipline — see config.py's ``comfort_budgets`` doc).
+    The ``client`` fixture builds its config from a minimal dict (no
+    ``limits:`` section — see conftest._build_app); the legacy-key assertions
+    for that fixture already live in the two tests above
+    (test_config_publishes_the_chain_comfort_token_budget and
+    test_config_publishes_the_single_comfort_token_budget), so this test
+    only pins the new table."""
+    limits = client.get("/api/v1/config").json()["limits"]
+    assert limits["comfort_budgets"]["ltx25"]["rows"][0]["single_budget"] == 44880

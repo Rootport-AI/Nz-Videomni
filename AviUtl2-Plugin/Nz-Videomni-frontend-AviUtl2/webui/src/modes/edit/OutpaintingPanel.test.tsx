@@ -402,7 +402,7 @@ describe("OutpaintingPanel", () => {
   it("ticks the comfortable ceiling on the duration slider, resolved from the EXTENDED canvas", async () => {
     const user = userEvent.setup();
     // 30 秒あるので尺の上限は元動画長ではなく設定側の 481 になり、快適上限
-    // (257) を跨いだ状態を作れる。
+    // (273) を跨いだ状態を作れる。
     const { bridge } = createPanelBridge({ media: { durationSec: 30, width: 1265, height: 720 } });
     const panel = renderPanel(bridge);
 
@@ -416,19 +416,19 @@ describe("OutpaintingPanel", () => {
 
     const duration = panel.getByRole("slider", { name: /duration/i });
     expect(duration).toHaveAttribute("list", "outpaint-spill-tick");
-    // 1265x720 -> キャンバス 1280x768。その行の値は 257 で、元動画寸法
+    // 1265x720 -> キャンバス 1280x768。その行の値は 273 で、元動画寸法
     // (1265x720、面積的には 960x576 より 1280x768 に近い) ではなくキャンバスの
     // 行が引かれていることを、値そのものが示す。
     const tick = document.getElementById("outpaint-spill-tick");
-    expect(tick?.querySelector("option")?.getAttribute("value")).toBe("257");
+    expect(tick?.querySelector("option")?.getAttribute("value")).toBe("273");
 
     // 既定値は 361（2026-08-19、賢い快適上限マーカーの算出値に引き上げ）で、
-    // この行の快適上限 257 を既に超えているため、警告は最初から出る。
+    // この行の快適上限 273 を既に超えているため、警告は最初から出る。
     expect(panel.getByText(/may slow down/i)).toBeInTheDocument();
-    // ちょうど上限 (257) に下げれば超えていない扱いになり、警告は消える。
-    fireEvent.change(duration, { target: { value: "257" } });
+    // ちょうど上限 (273) に下げれば超えていない扱いになり、警告は消える。
+    fireEvent.change(duration, { target: { value: "273" } });
     expect(panel.queryByText(/may slow down/i)).not.toBeInTheDocument();
-    fireEvent.change(duration, { target: { value: "265" } });
+    fireEvent.change(duration, { target: { value: "281" } });
     expect(panel.getByText(/may slow down/i)).toBeInTheDocument();
     // 警告であってブロックではない。
     expect(panel.getByRole("button", { name: /^generate$/i })).toBeInTheDocument();

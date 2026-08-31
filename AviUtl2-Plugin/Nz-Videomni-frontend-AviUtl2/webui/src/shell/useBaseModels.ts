@@ -45,6 +45,12 @@ export interface BaseModelOption {
    * {@link BaseModelBlock.unsupported_features}. `[]` on a backend that does
    * not publish the key, which is the same thing as "no restrictions". */
   unsupportedFeatures: string[];
+  /** Inference-engine lineage (`BaseModelBlock.engine_family` — `"ltx"`,
+   * `"ltx25"`, …), the key into the served `AppLimits.comfort_budgets` table
+   * (2026-08-31). `""` on a backend older than §3-97 that does not publish the
+   * key, which `shell/comfortTable.ts` reads as "engine unknown" and answers
+   * with its compatibility shim. */
+  engineFamily: string;
 }
 
 /** Which mode tab each unsupported FEATURE takes down with it.
@@ -250,6 +256,21 @@ export interface UseBaseModelsResult {
    * early would disable controls that still work — and, if the switch then
    * fails, leave them disabled for a base model that never loaded. */
   unsupportedFeatures: string[];
+  /** The LOADED base model's engine family (2026-08-31) — the key into the
+   * served `AppLimits.comfort_budgets` table, threaded down to Create/Chained
+   * so the comfort marker follows the engine.
+   *
+   * Read off `active`, never off `current`, for the SAME reason
+   * {@link unsupportedFeatures} is: while a switch is in flight the pipeline is
+   * still running the OLD base model, so moving the marker to the new engine's
+   * line early would advertise a ceiling that does not apply yet — and, if the
+   * switch then fails, leave it advertising one for a base model that never
+   * loaded.
+   *
+   * `""` until the first `GET /models` lands (and on a pre-§3-97 backend),
+   * which `shell/comfortTable.ts` reads as "engine unknown" → the
+   * compatibility shim, i.e. no startup flicker. */
+  activeEngineFamily: string;
   /** The mode tabs {@link unsupportedFeatures} makes unreachable — the shell
    * greys these and bounces out of one if it is the current mode. */
   disabledModes: AppMode[];
@@ -269,6 +290,11 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     // `?? []` is the whole backward-compatibility story: a backend older than
     // §3-98 P5 omits the key, and "omitted" means "no restrictions".
     unsupportedFeatures: block.unsupported_features ?? [],
+    // `engine_family` is NON-optional on the wire (`api/types.ts`); the `?? ""`
+    // is defence against a backend older than §3-97 that predates the field
+    // entirely, and `""` is exactly the "engine unknown" value
+    // `shell/comfortTable.ts` handles with its compatibility shim.
+    engineFamily: block.engine_family ?? "",
   };
 }
 
@@ -365,6 +391,10 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     () => options.find((o) => o.id === active)?.unsupportedFeatures ?? [],
     [options, active],
   );
+  const activeEngineFamily = useMemo(
+    () => options.find((o) => o.id === active)?.engineFamily ?? "",
+    [options, active],
+  );
   const disabledModes = useMemo(
     () => disabledModesFor(unsupportedFeatures),
     [unsupportedFeatures],
@@ -374,6 +404,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     options,
     current: pending ?? active,
     unsupportedFeatures,
+    activeEngineFamily,
     disabledModes,
     switchBaseModel,
     refresh,

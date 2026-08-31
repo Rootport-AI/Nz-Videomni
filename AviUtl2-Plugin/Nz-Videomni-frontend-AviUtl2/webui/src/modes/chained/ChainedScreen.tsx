@@ -98,6 +98,20 @@ export interface ChainedScreenProps {
    * `nag` above — `useChainForm` defaults it to the frozen
    * `ACCELERATION_DEFAULTS` sentinel, which sends nothing. */
   acceleration?: AccelerationSettings | undefined;
+  /** Smart comfort marker (2026-08-31): whether the server reports
+   * SageAttention as installed (`shell/accelerationSettings.sageAvailability`,
+   * resolved once by `AppShell` off the `/status` poll). Together with
+   * {@link ChainedScreenProps.engineFamily} it selects the served
+   * `config.limits.comfort_budgets` row whose CHAIN budget draws the stage-2
+   * window guide line. Optional for the same reason as `nag`/`acceleration`
+   * above — omitted means `null` ("unknown"), which never demotes sage. */
+  sageAvailable?: boolean | null | undefined;
+  /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
+   * (`useBaseModels().activeEngineFamily`) — the key into the served
+   * comfort-budget table. Omitted/`""` ⇒ "engine unknown" ⇒ the compatibility
+   * shim in `shell/comfortTable.ts`, i.e. the pre-table behaviour, so every
+   * direct-render test that predates it keeps compiling. */
+  engineFamily?: string | undefined;
   /** §3-102 (LTX 2.5 Chained, first stage): the four material panels the
    * LOADED base model's engine cannot use, computed by `AppShell` from
    * `useBaseModels`' `unsupportedFeatures` (`chainPanelsDisabledFor`) — this
@@ -139,6 +153,8 @@ export function ChainedScreen({
   referenceDownscaleFactors,
   nag,
   acceleration,
+  sageAvailable,
+  engineFamily,
   v2vUnavailable,
   a2vUnavailable,
   endSourceUnavailable,
@@ -166,6 +182,8 @@ export function ChainedScreen({
       referenceDownscaleFactors={referenceDownscaleFactors}
       nag={nag}
       acceleration={acceleration}
+      sageAvailable={sageAvailable}
+      engineFamily={engineFamily}
       v2vUnavailable={v2vUnavailable}
       a2vUnavailable={a2vUnavailable}
       endSourceUnavailable={endSourceUnavailable}
@@ -188,6 +206,8 @@ interface ChainedScreenBodyProps {
   referenceDownscaleFactors?: ReadonlyMap<string, number> | undefined;
   nag?: NagSettings | undefined;
   acceleration?: AccelerationSettings | undefined;
+  sageAvailable?: boolean | null | undefined;
+  engineFamily?: string | undefined;
   v2vUnavailable?: boolean | undefined;
   a2vUnavailable?: boolean | undefined;
   endSourceUnavailable?: boolean | undefined;
@@ -208,6 +228,8 @@ function ChainedScreenBody({
   referenceDownscaleFactors,
   nag,
   acceleration,
+  sageAvailable,
+  engineFamily,
   v2vUnavailable = false,
   a2vUnavailable = false,
   endSourceUnavailable = false,
@@ -319,7 +341,7 @@ function ChainedScreenBody({
   const form = useChainForm(
     config,
     prompt,
-    { nativeBridge, controlLoraNames, depthLoraNames, nag, acceleration },
+    { nativeBridge, controlLoraNames, depthLoraNames, nag, acceleration, sageAvailable, engineFamily },
     initialCommon,
   );
 

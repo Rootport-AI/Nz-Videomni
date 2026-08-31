@@ -383,3 +383,27 @@ export function routeMenuAction(action: string): MenuRoute | null {
 export function knownMenuActions(): string[] {
   return Object.keys(MENU_ROUTING_TABLE);
 }
+
+/** Reverse index of {@link MENU_ROUTING_TABLE}, keyed on `intent`. Every intent
+ * string appears on exactly ONE row, so the reverse direction is a function —
+ * built once at module load rather than re-scanned per lookup. */
+const TARGET_MODE_BY_INTENT: ReadonlyMap<string, MenuTargetMode> = new Map(
+  Object.values(MENU_ROUTING_TABLE).map((info) => [info.intent, info.targetMode]),
+);
+
+/**
+ * Which screen a routed `intent` belongs to, or `null` for an intent the table
+ * has no row for. The inverse of {@link routeMenuAction}'s `intent` output, for
+ * the code paths downstream of routing that only ever see the intent string
+ * (`timeline/prefillSeed.ts`).
+ *
+ * Its one caller uses this to decide whether the SINGLE screen's comfort
+ * ceiling applies to a prefill's DURATION seed, so note the shape of the
+ * answer: `"single"` comes back for 11 rows, but only #2/#3/#4/#7 carry a
+ * DURATION policy at all (`prefillSeed.DURATION_POLICY_BY_INTENT` — the rest
+ * are `untouched` and never reach a ceiling). Retake routes to `"edit"` and
+ * `end-with-this` to `"chained"`, so neither can collide with
+ * `END_SOURCE_SEED_MAX_FRAMES` or the Retake window rules. Pure. */
+export function targetModeForIntent(intent: string): MenuTargetMode | null {
+  return TARGET_MODE_BY_INTENT.get(intent) ?? null;
+}

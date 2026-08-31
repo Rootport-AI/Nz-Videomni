@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACCELERATION_DEFAULTS,
   effectiveAcceleration,
-  isFullAcceleration,
+  effectiveAccelerationFields,
   type AccelerationSettings,
 } from "./accelerationSettings";
 
@@ -21,50 +21,73 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
   };
 }
 
-describe("isFullAcceleration", () => {
-  it("is true when all five toggles are on and sage is known available", () => {
-    expect(isFullAcceleration(makeAllOn(), true)).toBe(true);
+describe("effectiveAccelerationFields", () => {
+  it("maps all five toggles onto the server's own request-field vocabulary", () => {
+    expect(effectiveAccelerationFields(makeAllOn(), true)).toEqual({
+      attention_backend: "sage",
+      block_swap_prefetch: true,
+      keep_resident: true,
+      fused_gguf_dequant_kernel: true,
+      vae_mode: "prune_vaed",
+    });
   });
 
-  it("is true when sage availability is unknown (null) — never disables on unknown", () => {
-    expect(isFullAcceleration(makeAllOn(), null)).toBe(true);
+  it("always carries every key, unlike accelerationRequestFields' omit-the-default shape", () => {
+    // The matcher in `shell/comfortTable.ts` compares key by key, so a field
+    // sitting on the server default must still be PRESENT here (it is exactly
+    // the field `accelerationRequestFields` would drop).
+    const fields = effectiveAccelerationFields(ACCELERATION_DEFAULTS, null);
+    expect(Object.keys(fields).sort()).toEqual([
+      "attention_backend",
+      "block_swap_prefetch",
+      "fused_gguf_dequant_kernel",
+      "keep_resident",
+      "vae_mode",
+    ]);
+    expect(fields).toEqual({
+      attention_backend: "sdpa",
+      block_swap_prefetch: true,
+      keep_resident: false,
+      fused_gguf_dequant_kernel: true,
+      vae_mode: "default",
+    });
   });
 
-  it("is false when sage is explicitly reported unavailable, even with sage selected", () => {
-    // The server would silently fall back to sdpa for this job, so the
-    // all-on gate must not claim sage is really running.
-    expect(isFullAcceleration(makeAllOn(), false)).toBe(false);
+  it("keeps sage when availability is unknown (null) — never demotes on unknown", () => {
+    expect(effectiveAccelerationFields(makeAllOn(), null).attention_backend).toBe("sage");
   });
 
-  it("is false for each toggle individually left off, all others on", () => {
-    expect(isFullAcceleration(makeAllOn({ attentionBackend: "sdpa" }), true)).toBe(false);
-    expect(isFullAcceleration(makeAllOn({ blockSwapPrefetch: false }), true)).toBe(false);
-    expect(isFullAcceleration(makeAllOn({ keepResident: false }), true)).toBe(false);
-    expect(isFullAcceleration(makeAllOn({ fusedGgufDequantKernel: false }), true)).toBe(false);
-    expect(isFullAcceleration(makeAllOn({ vaeMode: "default" }), true)).toBe(false);
+  it("demotes sage to sdpa only when the server explicitly reports it unavailable", () => {
+    // The server would silently fall back to sdpa for this job, so a row that
+    // requires `attention_backend: "sage"` must not match.
+    expect(effectiveAccelerationFields(makeAllOn(), false).attention_backend).toBe("sdpa");
   });
 
-  it("is false for the frozen ACCELERATION_DEFAULTS sentinel (sage/keepResident/vaeMode are not all-on there)", () => {
-    expect(isFullAcceleration(ACCELERATION_DEFAULTS, true)).toBe(false);
-    expect(isFullAcceleration(ACCELERATION_DEFAULTS, null)).toBe(false);
+  it("reflects each toggle individually left off", () => {
+    expect(effectiveAccelerationFields(makeAllOn({ blockSwapPrefetch: false }), true).block_swap_prefetch).toBe(false);
+    expect(effectiveAccelerationFields(makeAllOn({ keepResident: false }), true).keep_resident).toBe(false);
+    expect(
+      effectiveAccelerationFields(makeAllOn({ fusedGgufDequantKernel: false }), true).fused_gguf_dequant_kernel,
+    ).toBe(false);
+    expect(effectiveAccelerationFields(makeAllOn({ vaeMode: "default" }), true).vae_mode).toBe("default");
   });
 
   it("must be called with the EFFECTIVE settings object, not the raw stored choice", () => {
     // Raw: block-swap prefetch and keep-resident both stored ON, but the
     // server reports the prefetch CAPABILITY itself unavailable
-    // (prefetchAvailable=false). `isFullAcceleration` only reads
-    // `blockSwapPrefetch`/`keepResident` off the object it's handed — it has
+    // (prefetchAvailable=false). This function only reads
+    // `blockSwapPrefetch`/`keepResident` off the object it is handed — it has
     // no capability flag of its own — so the RAW object (still `keepResident:
-    // true`) over-reports "full acceleration".
+    // true`) over-reports what would actually run.
     const raw = makeAllOn(); // blockSwapPrefetch: true, keepResident: true
-    expect(isFullAcceleration(raw, true)).toBe(true); // misjudged: doesn't see the capability gap
+    expect(effectiveAccelerationFields(raw, true).keep_resident).toBe(true); // misjudged
 
     // The effective object (what useAccelerationSettings actually hands to
     // every reader) folds keepResident down to false in this combination
-    // (the backend's own engine/worker.py guard does the same), and the gate
-    // correctly reports false.
+    // (the backend's own engine/worker.py guard does the same), so a row
+    // requiring `keep_resident: true` correctly stops matching.
     const effective = effectiveAcceleration(raw, false);
     expect(effective.keepResident).toBe(false);
-    expect(isFullAcceleration(effective, true)).toBe(false);
+    expect(effectiveAccelerationFields(effective, true).keep_resident).toBe(false);
   });
 });

@@ -52,11 +52,13 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     conditioning_frame_idx_multiple: 8,
     conditioning_keyframe_grid_offset: 1,
     phase1_max_concurrent_jobs: 1,
+    // 2026-08-31 再測定・判定規則v3・LTX 2.3 既定構成（正本は
+    // `Nz-Videomni/config.yaml` の `limits.spill_free_frames`）。
     spill_free_frames: {
       "512x320": 481,
       "960x576": 481,
-      "1280x768": 257,
-      "1920x1088": 153,
+      "1280x768": 273,
+      "1920x1088": 161,
       "2560x1472": 81,
     },
     v2v_context_frames_default: 73,
@@ -72,6 +74,39 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     end_context_frames_max: 136,
     chain_comfort_token_budget: 40000,
     single_comfort_token_budget: 44880,
+    // 快適上限マーカーの配信テーブル（2026-08-31）。正本は
+    // `Nz-Videomni/config.py` の `_default_comfort_budgets()`；ここはオフライン
+    // フォールバック用のミラーで、`bridge/mockBridge.ts` の
+    // `MOCK_CONFIG_BODY.limits.comfort_budgets` と同内容でなければならない。
+    //
+    // ⚠ `ltx` に `requires: {}` の行が無いのは意図。LTX 2.3 の既定構成は
+    // 快適境界がトークン数に対して単調でなく（境界がデコードのチャンク数増分
+    // 7→8／4→5／2→3 と一致）、1本のトークン線で表せないので、そこは上の
+    // `spill_free_frames` が正である。「既定行を足せば全構成で賢くなる」は誤り。
+    comfort_budgets: {
+      ltx: {
+        spatial_factor: 32,
+        temporal_factor: 8,
+        rows: [
+          {
+            requires: {
+              attention_backend: "sage",
+              block_swap_prefetch: true,
+              keep_resident: true,
+              fused_gguf_dequant_kernel: true,
+              vae_mode: "prune_vaed",
+            },
+            single_budget: 44880,
+            chain_budget: 40000,
+          },
+        ],
+      },
+      ltx25: {
+        spatial_factor: 32,
+        temporal_factor: 8,
+        rows: [{ requires: {}, single_budget: 44880, chain_budget: 44880 }],
+      },
+    },
   },
   upload: {
     max_image_size_mb: 20,

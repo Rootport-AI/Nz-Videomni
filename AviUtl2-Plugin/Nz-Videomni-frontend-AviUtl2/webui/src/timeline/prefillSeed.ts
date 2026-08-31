@@ -25,10 +25,13 @@ import { pxFromVLatent } from "../modes/chained/chainUtils";
 import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../modes/single/defaultConfig";
 import { STAGE2_WINDOW_DEFAULT, STAGE2_WINDOW_PRESETS } from "../shell/tokenBudget";
 import type { PrefillResolutionPolicy } from "../shell/PrefillPolicyContext";
+import type { AccelerationSettings } from "../shell/accelerationSettings";
+import { comfortFramesForBudget, resolveComfortRow } from "../shell/comfortTable";
 import { computeTargetNumFrames } from "./deriveDuration";
 import type { DurationPolicy } from "./deriveDuration";
 import { deriveGenerationParams } from "./deriveGenerationParams";
 import type { DerivedGenerationParams } from "./deriveGenerationParams";
+import { targetModeForIntent } from "./menuRouting";
 import type { SelectionItem, TimelineSelection } from "./menuSelection";
 import { selectionRangeFrames } from "./selectionRange";
 
@@ -213,6 +216,22 @@ export interface ResolvePrefillSeedArgs {
    * `project` seed the fps from the selection's project rate/scale (`project`
    * is later overwritten off `getEditInfo` by the caller). */
   fpsPolicy: PrefillResolutionPolicy;
+  /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
+   * (`useBaseModels().activeEngineFamily`), the acceleration settings
+   * (EFFECTIVE ones — `AppShell`'s `accelerationControls.acceleration`) and
+   * sage's availability. Together they pick the served comfort row whose
+   * budget gives the SMART DURATION ceiling for a Single-screen prefill, so a
+   * right-click's seeded length equals the marker the user then sees on the
+   * form.
+   *
+   * All three are optional and all three must effectively be present for the
+   * smart path to run (the gate is on `acceleration`, which is the only one
+   * with no meaningful default). Omit them — as every pre-existing caller and
+   * test does — and the seed is derived exactly as before, off
+   * `config.limits.spill_free_frames`. */
+  engineFamily?: string | undefined;
+  acceleration?: AccelerationSettings | undefined;
+  sageAvailable?: boolean | null | undefined;
 }
 
 export interface PrefillSeed {
@@ -248,7 +267,7 @@ export interface PrefillSeed {
  * config default.
  */
 export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
-  const { intent, selection, config, sizePolicy, fpsPolicy } = args;
+  const { intent, selection, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable } = args;
   // Both IC-LoRA intents seed on the 128 grid. 台帳§1-15 W4 (2026-08-11): the
   // Chain-targeted one MUST be here — its material lands in Chain's reference
   // slot, which flips `useChainForm`'s size grid from 64 to 128 the moment the
@@ -295,6 +314,34 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const selectedRangeFrames = selectedRangeFramesForIntent(intent, selection);
   const projectFps = selection.rate > 0 && selection.scale > 0 ? selection.rate / selection.scale : undefined;
 
+  // Smart comfort marker (2026-08-31): only the SINGLE screen's flows share
+  // Create's per-clip comfort line — a Chain-targeted intent's DURATION is a
+  // per-CLIP length inside a chain, a different quantity, so it keeps the
+  // legacy table. `acceleration` gates the whole thing because a caller that
+  // does not thread the Settings state cannot say what would effectively run,
+  // and guessing would move seeds for callers that never opted in.
+  //
+  // Computed against `derived.width/height` — the size this very seed is about
+  // to apply — not the form's current size, which is what makes the seeded
+  // DURATION and the marker that appears next to it agree.
+  const smartCeiling =
+    targetModeForIntent(intent) === "single" && acceleration
+      ? (() => {
+          const row = resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null);
+          return row
+            ? comfortFramesForBudget(
+                derived.width,
+                derived.height,
+                row.singleBudget,
+                MIN_NUM_FRAMES,
+                config.limits.max_num_frames,
+                row.spatialFactor,
+                row.temporalFactor,
+              )
+            : null;
+        })()
+      : null;
+
   const targetNumFrames =
     computeTargetNumFrames({
       policy,
@@ -303,6 +350,7 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
       spillFreeFrames: config.limits.spill_free_frames,
       minNumFrames: MIN_NUM_FRAMES,
       maxNumFrames: config.limits.max_num_frames,
+      ...(smartCeiling !== null ? { comfortCeilingFrames: smartCeiling } : {}),
       ...(materialDurationSec !== undefined ? { materialDurationSec } : {}),
       ...(selectedRangeFrames !== undefined ? { selectedRangeFrames } : {}),
       ...(projectFps !== undefined ? { projectFps } : {}),

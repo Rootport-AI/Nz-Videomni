@@ -528,9 +528,11 @@ describe("useChainForm", () => {
 
       expect(result.current.common.width).toBe(1280);
       expect(result.current.common.height).toBe(768);
-      // standard_720p (1280x768, 257f) has a spill_free_frames["1280x768"]=257
-      // entry in FALLBACK_APP_CONFIG, so the recommendation equals it exactly.
-      expect(result.current.clips.every((clip) => clip.numFrames === 257)).toBe(true);
+      // standard_720p (1280x768) has a spill_free_frames["1280x768"]=273 entry
+      // in FALLBACK_APP_CONFIG (re-measured 2026-08-31), and
+      // `recommendedClipFrames` prefers that over the preset's own num_frames,
+      // so the recommendation equals it exactly.
+      expect(result.current.clips.every((clip) => clip.numFrames === 273)).toBe(true);
     });
 
     it("reflects the preset's own crop_output (N1, Gradio-faithful)", () => {
@@ -2490,7 +2492,7 @@ describe("useChainForm", () => {
     /** A config whose default clip length is pinned at 257 — the value
      * `FALLBACK_APP_CONFIG.generation_defaults.num_frames` held before the
      * 2026-08-19 preset raise (to 361, the SMART comfort ceiling — see
-     * `spillUtils.singleComfortFrames`). Several worked examples below (497,
+     * `comfortTable.comfortFramesForBudget`). Several worked examples below (497,
      * 514, 424, 705 output/total frames; the 30fps/kv=1 overlap-budget
      * geometry) are calibrated specifically against 257f clips and are
      * otherwise unrelated to the live preset value, so they pin it here
@@ -3463,6 +3465,45 @@ describe("useChainForm", () => {
       expect(result.current.hasEndSource).toBe(false);
       await attachEndVideo(result);
       expect(result.current.hasEndSource).toBe(true);
+    });
+  });
+
+  // ── 2026-08-31: engineFamily -> resolveComfortRow -> chainBudget ──────────
+
+  describe("engineFamily widens the chain comfort budget (shell/comfortTable.ts)", () => {
+    // 1920x1088 on the default "standard" stage-2 window (vTile 22) is
+    // EXACTLY 44,880 tokens (floor(1920/32)*floor(1088/32)*22 = 60*34*22):
+    // over the `ltx` engine's 40,000 budget (no served row for LTX 2.3's
+    // default acceleration, so it falls to `chain_comfort_token_budget`) but
+    // not over `ltx25`'s unconditional 44,880 row — see
+    // `shell/comfortTable.test.ts`'s own `resolveComfortRow` coverage for the
+    // same two numbers.
+    it("stays at the 40,000 budget for engine family 'ltx'", () => {
+      const mockBridge = createMockBridge({ delayMs: 0 });
+      const { result } = renderHook(() =>
+        useChainForm(FALLBACK_APP_CONFIG, "x", { nativeBridge: mockBridge, engineFamily: "ltx" }),
+      );
+      act(() => {
+        result.current.setWidth(1920, false);
+        result.current.setHeight(1088, false);
+      });
+      expect(result.current.chainWindowOverBudget).toBe(true);
+    });
+
+    it("resolves the budget to 44,880 for engine family 'ltx25', clearing the same over-budget flag", () => {
+      const mockBridge = createMockBridge({ delayMs: 0 });
+      const { result } = renderHook(() =>
+        useChainForm(FALLBACK_APP_CONFIG, "x", { nativeBridge: mockBridge, engineFamily: "ltx25" }),
+      );
+      act(() => {
+        result.current.setWidth(1920, false);
+        result.current.setHeight(1088, false);
+      });
+      expect(result.current.chainWindowOverBudget).toBe(false);
+      // The markers move with the same budget (comfortWidth/comfortHeight are
+      // the largest roughly-16:9 pair that fits it — a wider budget means a
+      // larger recommended point than the 40,000-budget default).
+      expect(result.current.chainWindowMarkers.comfortWidth).toBeGreaterThan(0);
     });
   });
 });

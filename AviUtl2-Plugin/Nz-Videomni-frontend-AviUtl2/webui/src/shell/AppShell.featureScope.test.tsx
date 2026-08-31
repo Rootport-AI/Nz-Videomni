@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { MockBridgeOptions } from "../bridge/mockBridge";
 import { withExtraUnsupportedFeatures } from "../test/unsupportedFeatures";
+import { ACCELERATION_STORAGE_KEY, readStoredAcceleration } from "./accelerationSettings";
 import { AppShell } from "./AppShell";
 
 // §3-98 Phase 5 — the WebUI half of the LTX 2.5 v1 feature scope.
@@ -62,6 +63,18 @@ function editSubTab(container: HTMLElement, name: string) {
 }
 
 describe("AppShell — base-model feature scope", () => {
+  // §1-26: the two PrunaVAED tests below SEED this key, and every `AppShell`
+  // mount writes it back through `useAccelerationSettings` — so a leftover
+  // would decide the next test's starting choice. Same precaution
+  // `SettingsPanel.test.tsx` takes for the same key.
+  beforeEach(() => {
+    window.localStorage.removeItem(ACCELERATION_STORAGE_KEY);
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem(ACCELERATION_STORAGE_KEY);
+  });
+
   it("leaves every tab enabled on a base model that declares no restrictions", async () => {
     await renderApp();
 
@@ -414,5 +427,79 @@ describe("AppShell — base-model feature scope", () => {
     const inputs = within(section).getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.length).toBeGreaterThan(0);
     expect(inputs.every((i) => i.disabled)).toBe(false);
+  });
+
+  // -- §1-26: PrunaVAED, a Settings row rather than a mode ---------------------
+  //
+  // The name `prune_vaed` is a REAL entry on LTX 2.5's published list (unlike
+  // the synthetic ones above), and unlike every other feature in this file it
+  // greys nothing: an engine that publishes it answers `vae_mode` with a 422
+  // instead of degrading, so the row is HIDDEN and the stored choice is written
+  // back to the server default.
+
+  /** Seeds the persisted Acceleration choices with PrunaVAED selected — the
+   * leftover a user leaves behind by picking it on LTX 2.3. Written as the
+   * whole JSON object `readStoredAcceleration` reads, so the other four fields
+   * land on their own defaults rather than on `undefined`. */
+  function storePruneVaed() {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: true,
+        keepResident: false,
+        fusedGgufDequantKernel: true,
+        vaeMode: "prune_vaed",
+      }),
+    );
+  }
+
+  /** The PrunaVAED row itself — its `role="group"` button pair, named by
+   * `strings.settings.accelVaeLabel`. */
+  function vaeRow() {
+    return screen.queryByRole("group", { name: /^VAE \(video decode\)$/ });
+  }
+
+  /** The row's warning note (`strings.settings.accelVaeNote`), a SIBLING of the
+   * row rather than a child — which is the whole reason the two are wrapped by
+   * one condition, and why both are asserted here. */
+  function vaeNote() {
+    return screen.queryByText(/a pruned decoder speeds up video reconstruction/i);
+  }
+
+  it("hides the PrunaVAED row AND its note on LTX 2.5", async () => {
+    // PrunaVAED is stored as the choice, so BOTH halves are on screen to begin
+    // with — without that the note would be absent either way and the
+    // disappearance of the row alone would prove nothing about it.
+    storePruneVaed();
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(vaeRow()).toBeInTheDocument();
+    expect(vaeNote()).toBeInTheDocument();
+
+    // The panel stays open across the switch: the header dropdown is outside
+    // the modal, and watching the row vanish in place is exactly the moment
+    // this hiding exists for.
+    await switchToLtx25(select);
+
+    await waitFor(() => expect(vaeRow()).toBeNull());
+    expect(vaeNote()).toBeNull();
+  });
+
+  it("writes a leftover PrunaVAED choice back to the server default on LTX 2.5", async () => {
+    // Hiding the row is not enough on its own: the choice PERSISTS, so a
+    // `vae_mode: "prune_vaed"` picked on LTX 2.3 would keep riding along on
+    // every request to an engine that 422s it. The normalization effect is what
+    // this asserts, through `localStorage` rather than through the UI — the row
+    // it would have shown up in is gone by then.
+    storePruneVaed();
+    const { select } = await renderApp(AS_LTX25);
+    expect(readStoredAcceleration().vaeMode).toBe("prune_vaed");
+
+    await switchToLtx25(select);
+
+    await waitFor(() => expect(readStoredAcceleration().vaeMode).toBe("default"));
   });
 });

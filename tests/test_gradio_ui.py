@@ -507,6 +507,9 @@ def test_batch_regen_refuses_skip_row(tmp_path):
     fn = demo.on_batch_regen
 
     # A Skip row is refused: stat stays Skip and the table update is a no-op.
+    # The reason code here is deliberately the LEGACY "over-481f" (the current
+    # writer emits "over-cap"): this keeps an execution path over a manifest
+    # written before §4-29, which the refusal message must still localize.
     skip_rows = [BatchRow(queue=1, wav="a.wav", stat=STAT_SKIP,
                           skip_reason="over-481f")]
     upd, out_rows = fn(0, skip_rows, str(tmp_path), "en")
@@ -518,6 +521,21 @@ def test_batch_regen_refuses_skip_row(tmp_path):
     upd2, out2 = fn(0, done_rows, str(tmp_path), "en")
     assert out2[0].stat == STAT_WAITING
     assert "value" in upd2                        # table re-rendered
+
+
+def test_batch_skip_key_maps_current_and_legacy_reason_codes():
+    """§4-29: the writer emits "over-cap", but manifests written before the
+    change carry "over-481f". Both must render as the SAME localized label, so
+    a legacy CSV never shows a raw reason code."""
+    from gradio_ui.ui import _BATCH_SKIP_KEY, batch_row_info_text
+    from gradio_ui.manifest import BatchRow, STAT_SKIP
+
+    assert _BATCH_SKIP_KEY["over-cap"] == _BATCH_SKIP_KEY["over-481f"]
+    for lang in ("en", "ja"):
+        label = LABELS[lang][_BATCH_SKIP_KEY["over-cap"]]
+        for code in ("over-cap", "over-481f"):
+            row = BatchRow(queue=1, wav="a.wav", stat=STAT_SKIP, skip_reason=code)
+            assert batch_row_info_text(row, lang) == label
 
 
 def test_batch_regen_skip_i18n_key_present_both_languages():

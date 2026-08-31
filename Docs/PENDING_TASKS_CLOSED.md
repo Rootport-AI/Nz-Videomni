@@ -1256,12 +1256,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: **クローズ（2026-08-31。残件は§3-132・§3-133・§3-134として単独に生きている）。**
 - **正本・出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1（線の表）・§6（実装への引き渡し）・§7（LTX 2.5）・§付記（レガシー表）＝**設計と数値の正本**、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §84＝**較正の記録の正本**（一次記録は `outputs/comfort-calib-2026-08-31/RESULTS.md`。オーナーの実機目視ゲートは同 §84.8）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §99（実装記録）、同[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §3.2（契約）、本書§3-12（マーカー本体の実装記録）。
 
-### 3-125. ブラウザ保存の高速化設定にエンジン軸が無い（LTX 2.3で選んだ`vae_mode`のままLTX 2.5へ切り替えると全ジョブが422）（起票：2026-08-30、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-26へ統合してクローズ：2026-08-31）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-125からクローズ）
+### 3-125. ブラウザ保存の高速化設定にエンジン軸が無い（LTX 2.3で選んだ`vae_mode`のままLTX 2.5へ切り替えると全ジョブが422）（起票：2026-08-30、[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4へ統合してクローズ：2026-08-31）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-125からクローズ）
 
 - **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-125（同書§3-125は欠番）。
 - **決着**: 本項が指していた2つの症状のうち、**片方は解消し、もう片方は同じ原因を扱う[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-26へ一本化した。** 項目を2つに分けたままにすると、同じ1回の修正で閉じるものを二重に管理することになるためである。
   - **解消した症状（快適上限マーカーとの噛み合わせ）**: 以前は`prune_vaed`がブラウザに残っていると「高速化が全部on」と判定され、**マーカーだけ賢い表示のままジョブは422**、という食い違いが起こりえた。2026-08-31 に線がエンジン系統ごとの配信テーブルへ移り、**LTX 2.5 の行は無条件（どの高速化設定でも同じ1本）**になったため、マーカーの表示は`vae_mode`が何であっても正しい。
-  - **§1-26へ移した症状（422そのもの）**: 送信判定（`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields()`）にベースモデルの軸が無いため、LTX 2.3 で PrunaVAED を選んだまま LTX 2.5 へ切り替えると以後のすべての生成が422になる。**同書§1-26の完了条件は「設定パネルで操作できないこと」と「保存済み設定が残っていても422にならないこと」の両方**であり、本項が求めていたものはその後半にそのまま含まれる。
-- **後続への影響**: 本項を前提としていた[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-22（SageAttentionを既定にするかどうか）の前提は、**同書§1-26へ読み替えること。**
-- **状態**: **クローズ（2026-08-31、§1-26への統合）。**
-- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)（罠の発見時の記録）・§84（マーカー側が解消した較正の記録）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §7（LTX 2.5 の行が無条件であることの正本）、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-26（残った作業の現行の正本）。
+  - **統合先へ移した症状（422そのもの）**: 送信判定（`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields()`）にベースモデルの軸が無いため、LTX 2.3 で PrunaVAED を選んだまま LTX 2.5 へ切り替えると以後のすべての生成が422になる。**統合先の完了条件は「設定パネルにPrunaVAEDの行が出ないこと」と「保存済み設定が残っていても422にならないこと」の両方**であり、本項が求めていたものはその後半にそのまま含まれる。
+- **後続への影響**: 本項を前提としていた[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-22（SageAttentionを既定にするかどうか）の前提は、**統合先へ読み替えること。**
+- **状態**: **クローズ（2026-08-31、統合先への一本化）。**
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)（罠の発見時の記録）・§84（マーカー側が解消した較正の記録）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §7（LTX 2.5 の行が無条件であることの正本）、[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4（統合先。残った作業の現行の正本。統合した2026-08-31時点では同書§1-26だった）。

@@ -245,7 +245,7 @@ def write_manifest_atomic(wav_dir, rows: list[BatchRow]) -> WriteResult:
 
 # --------------------------------------------------------------------------- #
 # Frame-count arithmetic (pure) — the ONE place the raw 8n+1 frame-count formula
-# and the 481-frame Skip test live, so scan_wav_folder (initial scan) and the
+# and the frame-cap Skip test live, so scan_wav_folder (initial scan) and the
 # batch runner's start-time re-judgment (gradio_ui.batch) share exactly the same
 # math instead of re-deriving it. Deliberately policy-free (no clamp/shrink):
 # that "which frame count does the app actually pick" policy stays in
@@ -253,15 +253,22 @@ def write_manifest_atomic(wav_dir, rows: list[BatchRow]) -> WriteResult:
 # --------------------------------------------------------------------------- #
 def raw_frame_count(dur: float, fps) -> int:
     """The raw (unclamped) 8n+1 frame count ``dur`` seconds covers at ``fps`` —
-    the exact expression the 481-frame Skip test keys off
+    the exact expression the frame-cap Skip test keys off
     (``((floor(dur*fps) - 1) // 8) * 8 + 1``)."""
     return ((floor(dur * float(fps)) - 1) // 8) * 8 + 1
 
 
-def over_frame_limit(dur: float, fps) -> bool:
-    """True when ``dur`` at ``fps`` needs more than :data:`MAX_FRAMES` raw
-    frames (i.e. the row must be Skipped with ``skip_reason="over-481f"``)."""
-    return raw_frame_count(dur, fps) > MAX_FRAMES
+def over_frame_limit(dur: float, fps, max_frames=MAX_FRAMES) -> bool:
+    """True when ``dur`` at ``fps`` needs more raw frames than the effective
+    cap (i.e. the row must be Skipped with ``skip_reason="over-cap"``).
+
+    The effective cap is ``min(max_frames, MAX_FRAMES)`` — the same
+    ``Math.min(cap, 481)`` the WebView2 frontend applies, so both GUIs skip
+    exactly the same rows: the Generate tab's own frame count is the ceiling a
+    batch row may reach, and the server's hard 481 caps that in turn. A missing
+    / zero ``max_frames`` (empty input box) falls back to the hard cap."""
+    cap = min(int(max_frames or MAX_FRAMES), MAX_FRAMES)
+    return raw_frame_count(dur, fps) > cap
 
 
 # --------------------------------------------------------------------------- #
@@ -290,7 +297,8 @@ def _wav_duration_seconds(path) -> float | None:
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり（scan_wav_folder の走査
 # 規約 / raw_frame_count / over_frame_limit）。変更時は両方＋パリティテストを更新
 def scan_wav_folder(
-    wav_dir, fps, frames_for: Callable[[float, float], int]
+    wav_dir, fps, frames_for: Callable[[float, float], int],
+    max_frames=MAX_FRAMES,
 ) -> list[BatchRow]:
     """Scan ``wav_dir`` for audio files and build fresh :class:`BatchRow`\\ s.
 
@@ -302,7 +310,11 @@ def scan_wav_folder(
       ``stat=Skip, skip_reason="wav-only-alpha"`` (kept in the list — visible
       but excluded — rather than dropped silently).
     * ``.wav`` files whose raw frame count (``((floor(dur*fps)-1)//8)*8+1``)
-      exceeds 481 get ``stat=Skip, skip_reason="over-481f"``.
+      exceeds the effective cap ``min(max_frames, 481)`` get
+      ``stat=Skip, skip_reason="over-cap"``. ``max_frames`` is the Generate
+      tab's own frame count (the caller passes it in), so raising DURATION and
+      re-running "Set audios" brings a skipped row back — see
+      :func:`merge_rows`' Rule 1.
     * Everything else gets its ``frames`` from the injected ``frames_for(dur,
       fps)`` callable (the caller wires in
       ``gradio_ui.handlers.suggest_frames_for_audio``, which additionally
@@ -338,10 +350,10 @@ def scan_wav_folder(
             ))
             continue
 
-        if over_frame_limit(dur, fps):
+        if over_frame_limit(dur, fps, max_frames):
             rows.append(BatchRow(
                 queue=i, wav=p.name, duration_s=dur,
-                stat=STAT_SKIP, skip_reason="over-481f",
+                stat=STAT_SKIP, skip_reason="over-cap",
             ))
             continue
 
@@ -388,6 +400,11 @@ def merge_rows(
        the rescan. If the rescan newly flags the row Skip, ``stat`` is
        overwritten to Skip UNLESS the existing row was already ``Done`` — a
        completed row is never demoted, it just earns a warning instead.
+       Conversely, a row that WAS Skip and comes back clean from the rescan
+       returns to the rescan's stat (Waiting): the frame cap is the Generate
+       tab's own frame count now, so raising it and pressing "Set audios"
+       again is how a user un-skips a row (without this the row would stay
+       Skip forever while its reason silently blanked out).
     2. A wav present only in the rescan is a brand-new row, inserted as-is
        (its own ``scan_wav_folder`` stat — normally Waiting, or Skip when the
        scan itself flagged it).
@@ -430,6 +447,10 @@ def merge_rows(
                 stat = STAT_DONE
             else:
                 stat = STAT_SKIP
+        elif erow.stat == STAT_SKIP:
+            # The rescan cleared the Skip -> take its stat (Waiting) so the row
+            # actually comes back. Done/Failed/Waiting rows are untouched here.
+            stat = srow.stat
         merged.append(BatchRow(
             queue=0, wav=srow.wav, duration_s=srow.duration_s,
             image=erow.image, prompt=erow.prompt, stat=stat,

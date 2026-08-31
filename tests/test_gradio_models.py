@@ -19,6 +19,8 @@ import httpx
 from gradio_ui.adapters import (
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
+    active_base_model,
+    build_base_model_choices,
     build_model_choices,
     model_active_value,
 )
@@ -152,6 +154,63 @@ def test_model_active_value():
 
 
 # --------------------------------------------------------------------------- #
+# adapters: base-model layer (§1-25). GET /models keeps its legacy top-level
+# ``categories`` block (the ACTIVE base model) and adds ``base_models[]`` with a
+# per-base listing; the Settings tab's base dropdown reads the latter.
+# --------------------------------------------------------------------------- #
+
+#: SAMPLE_MODELS plus the multi-engine layer: LTX23 active, LTX25 listed at its
+#: own defaults (the server sends an empty ``active`` for a non-loaded base).
+SAMPLE_MODELS_MULTI = dict(SAMPLE_MODELS, **{
+    "active_base_model": "LTX23",
+    "base_models": [
+        {"id": "LTX23", "display_name": "LTX 2.3", "active": True,
+         "categories": SAMPLE_MODELS["categories"]},
+        {"id": "LTX25", "display_name": "LTX 2.5", "active": False,
+         "categories": {
+             "transformer": {"default": "default", "active": "",
+                             "entries": [_entry("default", is_default=True,
+                                                path="models/LTX25/ltx25.gguf"),
+                                         _entry("ltx25-alt", source="scan")]},
+             "text_encoder": {"default": "default", "active": "",
+                              "entries": [_entry("default", is_default=True)]},
+             "video_vae": {"default": "default", "active": "",
+                           "entries": [_entry("default", is_default=True)]},
+             "audio": {"default": "default", "active": "",
+                       "entries": [_entry("default", is_default=True)]},
+         }},
+    ],
+})
+
+
+def test_build_base_model_choices_labels_are_display_names():
+    choices = build_base_model_choices(SAMPLE_MODELS_MULTI)
+    assert choices == [("LTX 2.3", "LTX23"), ("LTX 2.5", "LTX25")]
+    assert active_base_model(SAMPLE_MODELS_MULTI) == "LTX23"
+    # A response without the multi-engine layer (or none at all) -> no choices,
+    # so the caller leaves its dropdown untouched instead of blanking it.
+    assert build_base_model_choices(SAMPLE_MODELS) == []
+    assert build_base_model_choices(None) == []
+    assert active_base_model(SAMPLE_MODELS) == ""
+
+
+def test_build_model_choices_reads_the_requested_base_model():
+    """Selecting a base model that is not loaded lists ITS entries, and (since
+    the server sends no live selection for it) pre-selects "default"."""
+    choices = build_model_choices(SAMPLE_MODELS_MULTI, "transformer",
+                                  base_model="LTX25")
+    assert [value for _label, value in choices] == ["default", "ltx25-alt"]
+    assert model_active_value(SAMPLE_MODELS_MULTI, "transformer",
+                              base_model="LTX25") == MODEL_DEFAULT
+    # Without base_model the legacy (active-base) block is read, unchanged.
+    assert [v for _l, v in build_model_choices(SAMPLE_MODELS_MULTI, "transformer")] \
+        == ["default", "alt", "ghost"]
+    # An unknown base id degrades to the lone "default" choice.
+    assert build_model_choices(SAMPLE_MODELS_MULTI, "transformer",
+                               base_model="nope") == [(MODEL_DEFAULT, MODEL_DEFAULT)]
+
+
+# --------------------------------------------------------------------------- #
 # ApiClient: paths, method, auth, body
 # --------------------------------------------------------------------------- #
 
@@ -218,6 +277,25 @@ def test_load_selected_models_success_message_and_body():
                                        "video_vae": "default", "audio": "default"}}
     assert "transformer=alt" in msg
     assert "text_encoder=default" in msg
+
+
+def test_load_selected_models_sends_the_base_model():
+    """§1-25: the base dropdown's id rides along on POST /pipeline/load. An
+    empty/absent selection omits the key entirely (byte-identical to the
+    pre-multi-engine request)."""
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"pipeline_loaded": True, "state": "ready"})
+
+    load_selected_models(_make_client(handler), "alt", None, None, None,
+                         base_model="LTX25")
+    assert seen["json"]["base_model"] == "LTX25"
+    assert seen["json"]["models"]["transformer"] == "alt"
+
+    load_selected_models(_make_client(handler), "alt", None, None, None)
+    assert "base_model" not in seen["json"]
 
 
 def test_load_selected_models_empty_values_default():

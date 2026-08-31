@@ -1589,7 +1589,8 @@ def fetch_models_safe(api: ApiClient, lang: str = _DEFAULT_LANG) -> tuple[dict |
 
 def load_selected_models(api: ApiClient, transformer: str | None, text_encoder: str | None,
                          video_vae: str | None, audio: str | None,
-                         lang: str = _DEFAULT_LANG) -> str:
+                         lang: str = _DEFAULT_LANG,
+                         base_model: str | None = None) -> str:
     """POST /pipeline/load with the four dropdown selections.
 
     Returns a localized status line for the Models-section status box. An
@@ -1597,7 +1598,11 @@ def load_selected_models(api: ApiClient, transformer: str | None, text_encoder: 
     always-safe entry). REST errors are rendered through
     :func:`gradio_ui.formatting.format_api_error` so the model-management
     codes (MODEL_NOT_FOUND / MODEL_FILE_MISSING / MODEL_INCOMPATIBLE /
-    JOB_BUSY / PIPELINE_LOAD_FAILED) each get their actionable hint."""
+    JOB_BUSY / PIPELINE_LOAD_FAILED) each get their actionable hint.
+
+    ``base_model`` is the base-model dropdown's current id (multi-engine axis).
+    It is passed straight through — an empty/None value simply omits the key,
+    and re-sending the base model the server is already on is a no-op there."""
     models = {
         "transformer": transformer or MODEL_DEFAULT,
         "text_encoder": text_encoder or MODEL_DEFAULT,
@@ -1605,7 +1610,7 @@ def load_selected_models(api: ApiClient, transformer: str | None, text_encoder: 
         "audio": audio or MODEL_DEFAULT,
     }
     try:
-        resp = api.load_pipeline_models(models)
+        resp = api.load_pipeline_models(models, base_model or None)
     except httpx.HTTPStatusError as exc:
         try:
             body: object = exc.response.json()

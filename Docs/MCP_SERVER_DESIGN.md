@@ -87,7 +87,7 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 写経元は2箇所:
 - `gradio_ui/handlers.py::suggest_frames_for_audio`（フレーム数提案。stdlib `wave` で長さを取得し、`chain_math.audio_latents_required` と突き合わせて8刻みで縮める）。
-- `gradio_ui/manifest.py::scan_wav_folder` の走査規約（全音声拡張子を候補にし、`manifest`/`autosave`/`*.tmp` を除外、mtime昇順、非wav・読めないwavは可視Skip行 `skip_reason="wav-only-alpha"`、481フレーム超は `"over-481f"`）。
+- `gradio_ui/manifest.py::scan_wav_folder` の走査規約（全音声拡張子を候補にし、`manifest`/`autosave`/`*.tmp` を除外、mtime昇順、非wav・読めないwavは可視Skip行 `skip_reason="wav-only-alpha"`、実効上限 `min(max_frames, 481)` 超は `"over-cap"`）。理由コードと上限の規約の正本は [`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)。
 
 写経の乖離を防ぐため、`tests/test_mcp_batch_planning.py` が本家 `gradio_ui.handlers.suggest_frames_for_audio` との**総当たりパリティテスト**（多数の秒数・fps値の組み合わせで両実装の出力を突き合わせる）で固定している。さらに写経元の2ファイル（`gradio_ui/handlers.py` / `gradio_ui/manifest.py`）側にも「MCPサーバー側に写経あり・変更時は両方＋パリティテストを更新」というコメントを追加してあり、将来どちらかを変更する開発者が反対側の存在に気づける設計にした。
 
@@ -105,7 +105,7 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 | `test_mcp_tools_generate.py` | アップロード3本＋`submit_generate`/`submit_chain` のペイロード契約（隠しフィールド不在・None/空を送らない・XOR事前弾き等） |
 | `test_mcp_tools_jobs.py` | jobs系7ツール（`wait_for_job` のクランプとtimed_out契約・`cancel_job`/`delete_job` の状態ガード・`purge_terminal_jobs` のdry_run） |
 | `test_mcp_outputs.py` | outputs系3ツール（パス導出の回帰・`no_clobber` 連番・`to_thread` 化） |
-| `test_mcp_batch_planning.py` | `plan_a2v_batch` の走査規約（mtime昇順・Skip行可視・481f超判定）と、本家 `suggest_frames_for_audio` との総当たりパリティ |
+| `test_mcp_batch_planning.py` | `plan_a2v_batch` の走査規約（mtime昇順・Skip行可視・上限超過判定〔`min(max_frames, 481)`〕）と、本家 `suggest_frames_for_audio` との総当たりパリティ |
 
 ## 11. 参照
 

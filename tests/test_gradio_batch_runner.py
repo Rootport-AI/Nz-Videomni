@@ -688,7 +688,7 @@ def test_start_remarks_over481_row_to_skip_and_excludes_it(tmp_path):
     runner = BatchRunner()
     started, _ = runner.start(snap, rows, api, sync=True)
     assert started is True
-    assert rows[1].stat == STAT_SKIP and rows[1].skip_reason == "over-481f"
+    assert rows[1].stat == STAT_SKIP and rows[1].skip_reason == "over-cap"
     assert rows[0].stat == STAT_DONE
     assert server.chain_calls == 1                     # only ok.wav submitted
     assert server.audio_uploads == 1
@@ -696,7 +696,36 @@ def test_start_remarks_over481_row_to_skip_and_excludes_it(tmp_path):
     # the Skip re-mark is flushed to the CSV.
     disk = {r.wav: r for r in read_manifest(wav_dir)}
     assert disk["big.wav"].stat == STAT_SKIP
-    assert disk["big.wav"].skip_reason == "over-481f"
+    assert disk["big.wav"].skip_reason == "over-cap"
+
+
+def test_start_rejudges_against_the_snapshot_frame_cap(tmp_path):
+    """§4-29: the snapshot carries the Generate tab's frame count, so a row
+    well under 481 frames is re-marked Skip at start-time when it exceeds
+    that cap — the same judgment "Set audios" made."""
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "ok.wav")
+    _write_wav(wav_dir / "medium.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, num_frames=257)
+    # medium.wav: 15s @ 24fps -> ~353 raw frames: under 481, over the 257 cap.
+    rows = [
+        BatchRow(queue=1, wav="ok.wav", duration_s=1.0, stat=STAT_WAITING,
+                 image="", frames=25),
+        BatchRow(queue=2, wav="medium.wav", duration_s=15.0, stat=STAT_WAITING,
+                 image="", frames=353),
+    ]
+
+    runner = BatchRunner()
+    started, _ = runner.start(snap, rows, api, sync=True)
+    assert started is True
+    assert rows[1].stat == STAT_SKIP and rows[1].skip_reason == "over-cap"
+    assert rows[0].stat == STAT_DONE
+    assert server.chain_calls == 1                     # only ok.wav submitted
 
 
 def test_start_recomputes_frames_at_snapshot_fps(tmp_path):

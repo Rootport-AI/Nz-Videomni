@@ -96,12 +96,19 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
-    def load_pipeline_models(self, models: dict) -> dict:
+    def load_pipeline_models(self, models: dict, base_model: str | None = None) -> dict:
         """POST /pipeline/load with a ``models`` selection block (additive S2
         extension: category -> registered NAME). A swap restarts the engine
-        worker and can take minutes, so reuse the generous load timeout."""
+        worker and can take minutes, so reuse the generous load timeout.
+
+        ``base_model`` (multi-engine axis) is added to the body ONLY when the
+        caller passes one, so the pre-multi-engine request stays byte-identical
+        for every caller that does not know about base models."""
+        body: dict = {"models": models}
+        if base_model is not None:
+            body["base_model"] = base_model
         r = self.client.post(self._url("/api/v1/pipeline/load"),
-                             json={"models": models},
+                             json=body,
                              headers=self.headers, timeout=600)
         r.raise_for_status()
         return r.json()

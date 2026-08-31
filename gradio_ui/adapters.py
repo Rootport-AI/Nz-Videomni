@@ -64,8 +64,57 @@ def _path_basename(path: str) -> str:
     return path.replace("\\", "/").rsplit("/", 1)[-1]
 
 
+def _category_block(
+    models_json: dict | None, category: str, base_model: str | None = None
+) -> dict:
+    """The ``{default, active, entries}`` block for one category.
+
+    ``base_model=None`` reads the legacy top-level ``categories`` block, which
+    always describes the ACTIVE base model (unchanged behaviour for every
+    pre-multi-engine caller). A non-empty ``base_model`` instead reads that
+    base model's own listing out of ``base_models[]`` — the shape the Settings
+    tab needs while the user is browsing a base model that is not loaded yet.
+    An unknown id (or a server too old to send ``base_models``) yields ``{}``,
+    which the callers below degrade to the "default" fallback.
+    """
+    root = models_json or {}
+    if base_model:
+        for entry in root.get("base_models") or []:
+            if isinstance(entry, dict) and entry.get("id") == base_model:
+                return ((entry.get("categories") or {}).get(category)) or {}
+        return {}
+    return ((root.get("categories") or {}).get(category)) or {}
+
+
+def build_base_model_choices(models_json: dict | None) -> list[tuple[str, str]]:
+    """Dropdown ``choices`` for the base-model selector: ``(display_name, id)``
+    over ``base_models[]``, in server order. The VALUE is the base-model id (the
+    string ``POST /pipeline/load`` takes as ``base_model``); the label is the
+    descriptor's human display name, which is language-independent — so a
+    language switch never has to rebuild these choices.
+
+    A response without ``base_models`` (a server predating the multi-engine
+    layer) yields an empty list; the caller leaves its dropdown untouched."""
+    choices: list[tuple[str, str]] = []
+    for entry in (models_json or {}).get("base_models") or []:
+        if not isinstance(entry, dict):
+            continue
+        base_id = entry.get("id")
+        if not base_id:
+            continue
+        choices.append((entry.get("display_name") or base_id, base_id))
+    return choices
+
+
+def active_base_model(models_json: dict | None) -> str:
+    """The id of the base model the pipeline is on (``""`` when the response
+    does not carry one)."""
+    return (models_json or {}).get("active_base_model") or ""
+
+
 def build_model_choices(
-    models_json: dict | None, category: str, lang: str = _DEFAULT_LANG
+    models_json: dict | None, category: str, lang: str = _DEFAULT_LANG,
+    base_model: str | None = None,
 ) -> list[tuple[str, str]]:
     """Dropdown ``choices`` for one category from a GET /models response.
 
@@ -82,8 +131,11 @@ def build_model_choices(
     change: the choice's VALUE stays ``"default"`` (the server-side resolution
     logic and callers key off that name, never the label). When ``path`` is
     empty or missing the label falls back to plain "default", same as before.
+
+    ``base_model`` (optional) reads the listing of THAT base model instead of
+    the active one's legacy block — see :func:`_category_block`.
     """
-    block = ((models_json or {}).get("categories") or {}).get(category) or {}
+    block = _category_block(models_json, category, base_model)
     choices: list[tuple[str, str]] = []
     for entry in block.get("entries") or []:
         name = entry.get("name")
@@ -101,9 +153,15 @@ def build_model_choices(
     return choices or [(MODEL_DEFAULT, MODEL_DEFAULT)]
 
 
-def model_active_value(models_json: dict | None, category: str) -> str:
-    """The currently active NAME for a category (``"default"`` fallback)."""
-    block = ((models_json or {}).get("categories") or {}).get(category) or {}
+def model_active_value(models_json: dict | None, category: str,
+                       base_model: str | None = None) -> str:
+    """The currently active NAME for a category (``"default"`` fallback).
+
+    With ``base_model`` set to a base model that is NOT the active one the
+    server sends an empty ``active`` (no live selection exists for it), so this
+    naturally falls back to ``"default"`` — the right pre-selection for a base
+    model the user is only browsing."""
+    block = _category_block(models_json, category, base_model)
     return block.get("active") or MODEL_DEFAULT
 
 

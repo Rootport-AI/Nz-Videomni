@@ -442,6 +442,9 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_purge_failed": "Failed to delete jobs: {err}",
         # --- settings tab: model management (model_ prefix) ---
         "model_section_title": "Models",
+        # The base-model (engine family) selector that sits above the four
+        # category dropdowns — LTX 2.3 / LTX 2.5 etc.
+        "model_base_label": "Base model",
         # "checkpoint", not the internal component name, and no engine name on
         # the text encoder (owner ruling 2026-08-20 — same wording as the
         # AviUtl2 WebUI's `webui/src/i18n/strings.ts`).
@@ -461,7 +464,6 @@ LABELS: dict[str, dict[str, str]] = {
                        "combination. Switching restarts the engine worker (a few "
                        "minutes). If a load fails, select 'default' everywhere and "
                        "Load again."),
-        "model_folder_hint": "Drop GGUF files into this folder and they will be auto-detected.",
         "apierr_MODEL_NOT_FOUND": ("Unknown model name. Refresh the model list and pick "
                                    "again."),
         "apierr_MODEL_FILE_MISSING": ("The model file is missing on disk. Re-download it "
@@ -510,7 +512,9 @@ LABELS: dict[str, dict[str, str]] = {
         "batch_set_audios": "Set audios",
         "batch_stop": "Stop batch",
         "batch_maxdur": "max duration: {frames}f ({secs:.1f}s)",
-        "batch_frames_auto": "Auto-computed per wav (batch enabled)",
+        "batch_frames_auto": ("Auto-computed per wav (batch enabled). This value is "
+                              "also the batch's skip limit: a wav needing more "
+                              "frames than this is skipped."),
         "batch_row_image": "Image for this row",
         "batch_image_shared": "Shared",
         "batch_copy_common": "Copy common prompt to this row",
@@ -538,15 +542,17 @@ LABELS: dict[str, dict[str, str]] = {
                                  "autosave copy instead."),
         "batch_msg_no_wav": "No audio files found in the folder.",
         "batch_msg_wav_dir_invalid": "Audio folder path is invalid.",
-        "batch_skip_over481": "Over 481-frame hard limit",
+        "batch_skip_overcap": "Over the frame limit",
         "batch_skip_wavonly": "Alpha supports .wav only",
         "batch_warn_spill": ("{n} row(s) exceed the comfortable limit for {res} ({frames}f); "
                              "generation may be slow."),
         "batch_msg_running_locked": "Table editing is locked while the batch is running.",
         "batch_msg_no_rows": "No rows to process (all done or skipped).",
         "batch_msg_wav_dir_missing": "Audio folder not found.",
-        "batch_msg_regen_skip": ("This row is skipped ({reason}) and cannot be "
-                                 "regenerated."),
+        "batch_msg_regen_skip": ("This row is skipped ({reason}), so it cannot be "
+                                 "regenerated from here. Raise Frames (or replace "
+                                 "the file) and press \"Set audios\" again to bring "
+                                 "it back."),
         "batch_msg_prompt_empty_add": ("Common prompt is empty. Enter it, or switch "
                                        "Prompt mode to Replace."),
         "batch_msg_prompt_rows_empty": ("Common prompt is empty and {n} row(s) have "
@@ -942,6 +948,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_purge_failed": "ジョブの削除に失敗しました: {err}",
         # --- settings tab: model management (model_ prefix) ---
         "model_section_title": "モデル",
+        "model_base_label": "ベースモデル",
         "model_cat_transformer": "動画モデル (checkpoint)",
         "model_cat_text_encoder": "テキストエンコーダ",
         "model_cat_video_vae": "動画VAE",
@@ -956,7 +963,6 @@ LABELS: dict[str, dict[str, str]] = {
         "model_hint": ("選択は「読込」ボタンで反映されます。default は標準構成です。"
                        "切替はエンジンの再起動を伴い数分かかります。読込に失敗した場合は、"
                        "すべて default を選び直して再度読込してください。"),
-        "model_folder_hint": "このフォルダにGGUFファイルを置くと自動認識されます。",
         "apierr_MODEL_NOT_FOUND": "不明なモデル名です。モデル一覧を更新して選び直してください。",
         "apierr_MODEL_FILE_MISSING": "モデルファイルがディスク上に見つかりません。再ダウンロードするか別のモデルを選んでください。",
         "apierr_MODEL_INCOMPATIBLE": "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",
@@ -999,7 +1005,9 @@ LABELS: dict[str, dict[str, str]] = {
         "batch_set_audios": "音声を読み込む",
         "batch_stop": "バッチを停止",
         "batch_maxdur": "上限尺: {frames}f（{secs:.1f}秒）",
-        "batch_frames_auto": "wavごとに自動算出されます（バッチ有効中）",
+        "batch_frames_auto": ("wavごとに自動算出されます（バッチ有効中）。"
+                              "この値はバッチの除外上限も兼ねており、"
+                              "これを超えるフレーム数が必要なwavは除外されます。"),
         "batch_row_image": "この行の画像",
         "batch_image_shared": "Shared",
         "batch_copy_common": "共通プロンプトをこの行へコピー",
@@ -1027,14 +1035,16 @@ LABELS: dict[str, dict[str, str]] = {
                                  "退避コピーに保存しました。"),
         "batch_msg_no_wav": "フォルダに音声ファイルが見つかりません。",
         "batch_msg_wav_dir_invalid": "音声フォルダのパスが正しくありません。",
-        "batch_skip_over481": "481フレーム上限超過",
+        "batch_skip_overcap": "フレーム上限超過",
         "batch_skip_wavonly": "α版は.wavのみ対応",
         "batch_warn_spill": ("{res}の快適上限（{frames}f）を超える行が{n}件あります。"
                              "生成が低速になる可能性があります。"),
         "batch_msg_running_locked": "バッチ実行中は表の編集はできません。",
         "batch_msg_no_rows": "実行対象の行がありません（全て完了済みまたは除外です）。",
         "batch_msg_wav_dir_missing": "音声フォルダが見つかりません。",
-        "batch_msg_regen_skip": "この行は除外されています（{reason}）。再生成できません。",
+        "batch_msg_regen_skip": ("この行は除外されています（{reason}）。ここからは再生成できません。"
+                                 "フレーム数を増やす（またはファイルを差し替える）うえで"
+                                 "「音声を読み込む」をやり直すと復帰します。"),
         "batch_msg_prompt_empty_add": ("共通プロンプトが空です。入力するか、プロンプト合成モードを"
                                        "Replaceに切り替えてください。"),
         "batch_msg_prompt_rows_empty": ("共通プロンプトが空のまま、プロンプト未入力の行が{n}件あります"

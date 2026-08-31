@@ -1169,6 +1169,25 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     setMode("single");
   }, [disabledModes, mode]);
 
+  // §1-26 (2026-09-01): PrunaVAED is an ENGINE-level feature — an engine that
+  // publishes `prune_vaed` answers the field with a 422 rather than degrading
+  // to the ordinary decoder, so the Settings row is hidden outright (below,
+  // via `vaeUnsupported`) instead of greyed. Read off the published
+  // `unsupported_features`, never a base-model id.
+  const vaeUnsupported = baseModels.unsupportedFeatures.includes("prune_vaed");
+
+  // The stored choice PERSISTS, so hiding the row is not enough on its own: a
+  // `prune_vaed` picked on a base model that supports it would otherwise keep
+  // riding along on every request here and 422 every job. Same shape as the
+  // mode bounce above — observing the refusal is what writes the setting back —
+  // which covers a leftover from a previous session and a switch made just now
+  // with the one effect and no request of its own.
+  useEffect(() => {
+    if (!vaeUnsupported) return;
+    if (accelerationControls.acceleration.vaeMode === "default") return;
+    accelerationControls.setVaeMode("default");
+  }, [vaeUnsupported, accelerationControls.acceleration.vaeMode, accelerationControls.setVaeMode]);
+
   // §3-102 (LTX 2.5 Chained, first stage): once an engine CAN chain, the
   // Chained tab stays live but the material panels its engine still cannot use
   // have to grey individually. Computed here, next to `batchUnavailable`, so
@@ -1361,6 +1380,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           onKeepResidentChange={accelerationControls.setKeepResident}
           onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
           onVaeModeChange={accelerationControls.setVaeMode}
+          vaeUnsupported={vaeUnsupported}
           // The panel reads sage availability straight off this existing
           // shared /status poll — no capability fetch of its own.
           serverStatus={serverStatus}

@@ -14,6 +14,8 @@ from .adapters import ADAPTER_NONE, build_adapter_choices
 from .adapters import (
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
+    active_base_model,
+    build_base_model_choices,
     build_model_choices,
     build_style_gallery,
     model_active_value,
@@ -118,9 +120,13 @@ _BATCH_STAT_DISPLAY = {
     STAT_SKIP: ("⛔", "batch_stat_skip"),            # no-entry
 }
 
-# scan_wav_folder's skip_reason strings -> localized i18n key.
+# scan_wav_folder's skip_reason strings -> localized i18n key. "over-481f" is
+# the LEGACY code this GUI wrote before the cap became DURATION-linked (§4-29);
+# manifests written back then still carry it, so it maps to the same label as
+# the current "over-cap" instead of falling through as a raw string.
 _BATCH_SKIP_KEY = {
-    "over-481f": "batch_skip_over481",
+    "over-cap": "batch_skip_overcap",
+    "over-481f": "batch_skip_overcap",
     "wav-only-alpha": "batch_skip_wavonly",
 }
 
@@ -1108,17 +1114,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # load buttons — only additive event listeners below.
                 reg(gr.Markdown(f"### {L('model_section_title')}"),
                     "model_section_title", "value")
-                # Where to drop GGUF files so the server auto-detects them.
-                reg(gr.Markdown(L("model_folder_hint"), elem_classes=["note"]),
-                    "model_folder_hint", "value")
-                # Copy-able folder path. buttons=["copy"] (Gradio 6's replacement
-                # for show_copy_button) only renders when show_label is True, so
-                # the box carries the section title as its label (existing key --
-                # i18n.py stays untouched).
-                reg(gr.Textbox(value="models\\LTX23\\Weights",
-                               label=L("model_section_title"), interactive=False,
-                               buttons=["copy"], elem_classes=["base-url-box"]),
-                    "model_section_title")
+                # Base model (multi-engine axis, §1-25). Choices come from GET
+                # /models' base_models[] — label = display_name, value = id —
+                # and the value doubles as the "which base model is active"
+                # readout (refresh_model_dropdowns re-selects active_base_model).
+                # The labels are language-independent, so switch_language only
+                # has to re-stamp this component's own label.
+                model_base_dd = reg(gr.Dropdown(
+                    choices=[], value=None, label=L("model_base_label")),
+                    "model_base_label")
                 with gr.Row():
                     model_dd_transformer = reg(gr.Dropdown(
                         choices=[(MODEL_DEFAULT, MODEL_DEFAULT)], value=MODEL_DEFAULT,
@@ -1407,6 +1411,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 keep_resident=bool(accel_keep_resident_v),
                 fused_gguf_dequant_kernel=bool(accel_fused_dequant_v),
                 vae_mode=accel_vae_v or "default",
+                # Skip ceiling for the start-time re-judgment — the SAME value
+                # the Set audios scan used, so a Start never re-judges against
+                # a different cap than the table the user is looking at.
+                num_frames=int(num_frames_v or MAX_FRAMES),
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1528,8 +1536,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # "Set audios": scan the wav folder, merge over any existing manifest,
         # persist the CSV, and (re)build the table + image dropdown + summary.
+        # ``num_frames_v`` is the Generate tab's frame count: it doubles as the
+        # batch's Skip ceiling (effective cap = min(num_frames, 481), the same
+        # rule the WebView2 frontend uses), so a row over it is excluded here
+        # and comes back on the next Set audios once the value is raised.
         def on_batch_set_audios(wav_dir, img_dir, width_v, height_v, fps_v,
-                                config_v, lang):
+                                num_frames_v, config_v, lang):
             # Locked while a run is in flight: re-scanning would rewrite the CSV
             # the runner owns and desync the displayed rows from its state. Leave
             # the table, rows-state, dropdown, maxdur and summary all untouched
@@ -1546,7 +1558,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         gr.update(), gr.update(value=""))
             fps = _resolve_fps(fps_v)
             scanned = batch_manifest.scan_wav_folder(
-                wav_dir, fps, frames_for=suggest_frames_for_audio)
+                wav_dir, fps, frames_for=suggest_frames_for_audio,
+                max_frames=num_frames_v)
             if not scanned:
                 gr.Warning(L("batch_msg_no_wav", lang))
             existing = batch_manifest.read_manifest(wav_dir)
@@ -1575,7 +1588,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         batch_set_btn.click(
             on_batch_set_audios,
             inputs=[batch_wav_dir, batch_img_dir, width, height, frame_rate,
-                    config_state, lang_state],
+                    num_frames, config_state, lang_state],
             outputs=[batch_table, batch_rows_state, batch_img_dd,
                      batch_maxdur_md, batch_summary_md],
         )
@@ -1669,9 +1682,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         )
 
         # Re-queue the selected row (stat -> Waiting; output/error untouched).
-        # A Skip row is refused: it was excluded for a structural reason
-        # (over-481f / non-wav) that re-queueing cannot fix, so warn and leave
-        # the table + state untouched rather than silently promoting it.
+        # A Skip row is still refused here: this button only flips a stat, and
+        # a Skip is a judgment about the row's LENGTH ("over-cap" against the
+        # Generate tab's frame count, or a non-wav file), which re-queueing
+        # alone cannot change. The way back is to raise DURATION (or replace
+        # the file) and press "Set audios" again — the rescan clears the Skip
+        # (manifest.merge_rows Rule 1) — so the warning says exactly that.
         def on_batch_regen(sel_idx, rows, wav_dir, lang):
             rows = rows or []
             if get_runner().state != STATE_IDLE:
@@ -2143,6 +2159,21 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # hook (gr.Blocks allows several) and its own Refresh button.
         model_dds = [model_dd_transformer, model_dd_text_encoder,
                      model_dd_video_vae, model_dd_audio]
+        # The base dropdown is the FIRST output of refresh_model_dropdowns; the
+        # four category dropdowns follow in MODEL_CATEGORIES order.
+        model_all_dds = [model_base_dd, *model_dds]
+
+        def _base_model_update(models_json):
+            """gr.update for the base-model dropdown: its choices plus the
+            active base pre-selected. A server that sends no ``base_models``
+            leaves the dropdown exactly as it is (bare update)."""
+            choices = build_base_model_choices(models_json)
+            if not choices:
+                return gr.update()
+            ids = [value for _label, value in choices]
+            active = active_base_model(models_json)
+            return gr.update(choices=choices,
+                             value=active if active in ids else ids[0])
 
         def refresh_model_dropdowns(lang, warn: bool = True):
             models_json, err = fetch_models_safe(api, lang)
@@ -2151,39 +2182,74 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # /config path); the explicit Refresh button does warn.
                 if warn:
                     gr.Warning(err)
-                return tuple(gr.update() for _ in MODEL_CATEGORIES)
-            return tuple(
+                return tuple(gr.update() for _ in model_all_dds)
+            # The legacy top-level ``categories`` block always describes the
+            # ACTIVE base model, so the four category dropdowns keep reading it
+            # verbatim (no base_model argument) — a refresh always shows what
+            # the pipeline is actually on.
+            return (_base_model_update(models_json),) + tuple(
                 gr.update(choices=build_model_choices(models_json, cat, lang),
                           value=model_active_value(models_json, cat))
                 for cat in MODEL_CATEGORIES
             )
 
         model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
-                                outputs=model_dds)
+                                outputs=model_all_dds)
         # show_progress="hidden": same rationale as on_page_load's show_progress.
         demo.load(lambda lang: refresh_model_dropdowns(lang, warn=False),
-                  inputs=lang_state, outputs=model_dds, show_progress="hidden")
+                  inputs=lang_state, outputs=model_all_dds, show_progress="hidden")
+
+        def on_base_model_change(base_id, lang):
+            """Re-fill the four category dropdowns from the SELECTED base
+            model's own listing (``base_models[].categories``), so the user
+            picks parts of the base model they are about to load rather than
+            of the one still loaded. Nothing is loaded here — the Load button
+            sends the selection.
+
+            Wired to ``.input`` (user edits only), never ``.change``: a
+            programmatic ``gr.update(value=...)`` from refresh / page load /
+            the post-Load re-pull also fires ``.change``, which would mean a
+            second /models fetch on every page load and a warning toast while
+            the server is down."""
+            models_json, err = fetch_models_safe(api, lang)
+            if err is not None:
+                # User-initiated (like Refresh), so a failure is worth a toast.
+                gr.Warning(err)
+                return tuple(gr.update() for _ in MODEL_CATEGORIES)
+            return tuple(
+                gr.update(
+                    choices=build_model_choices(models_json, cat, lang,
+                                                base_model=base_id),
+                    value=model_active_value(models_json, cat,
+                                             base_model=base_id))
+                for cat in MODEL_CATEGORIES
+            )
+
+        model_base_dd.input(on_base_model_change,
+                            inputs=[model_base_dd, lang_state],
+                            outputs=model_dds)
 
         def on_model_load_start(lang):
             # Disable the button + show the "takes minutes" notice while the
             # blocking POST runs (model load is synchronous, not a polled job).
             return gr.update(interactive=False), L("model_loading", lang)
 
-        def on_model_load(tr, te, vv, au, lang):
-            return load_selected_models(api, tr, te, vv, au, lang)
+        def on_model_load(tr, te, vv, au, base_id, lang):
+            return load_selected_models(api, tr, te, vv, au, lang,
+                                        base_model=base_id)
 
         model_load_btn.click(
             on_model_load_start, inputs=lang_state,
             outputs=[model_load_btn, model_status_box],
         ).then(
-            on_model_load, inputs=[*model_dds, lang_state],
+            on_model_load, inputs=[*model_dds, model_base_dd, lang_state],
             outputs=model_status_box,
         ).then(
             lambda: gr.update(interactive=True), outputs=model_load_btn,
         ).then(
             # Re-pull /models so the dropdowns reflect the new active marks.
             lambda lang: refresh_model_dropdowns(lang, warn=False),
-            inputs=lang_state, outputs=model_dds,
+            inputs=lang_state, outputs=model_all_dds,
         )
 
         # ---- Style LoRA tab events (INDEPENDENT listeners) ----
@@ -2274,4 +2340,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     # drive them directly (mirrors the on_adapter_change exposure above).
     demo.on_nag_enable_toggle = on_nag_enable_toggle  # type: ignore[attr-defined]
     demo.on_nag_method_change = on_nag_method_change  # type: ignore[attr-defined]
+    # Models-section closures (§1-25 base-model dropdown): the refresh that
+    # fills base + 4 category dropdowns, and the base-model .input handler.
+    demo.refresh_model_dropdowns = refresh_model_dropdowns  # type: ignore[attr-defined]
+    demo.on_base_model_change = on_base_model_change  # type: ignore[attr-defined]
+    # "Set audios" closure (§4-29): lets a test drive the scan/merge/write path
+    # with an explicit frame cap without a live event round-trip.
+    demo.on_batch_set_audios = on_batch_set_audios  # type: ignore[attr-defined]
     return demo

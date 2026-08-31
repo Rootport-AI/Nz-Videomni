@@ -87,6 +87,12 @@ function Harness({
       onKeepResidentChange={accelerationControls.setKeepResident}
       onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
       onVaeModeChange={accelerationControls.setVaeMode}
+      // §1-26: the PrunaVAED row is hidden only on an engine that publishes
+      // `prune_vaed`; these tests render the panel directly, with no base model
+      // in play, so they take the ordinary "supported" case. The hiding itself
+      // is covered end-to-end through the fixture server in
+      // `AppShell.featureScope.test.tsx`.
+      vaeUnsupported={false}
       serverStatus={serverStatus}
     />
   );

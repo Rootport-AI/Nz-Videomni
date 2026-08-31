@@ -1,9 +1,9 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-08-31（快適上限マーカーのテーブル化にともなう全項目の見直し）
+- 作成: 2026-07-15／最終更新: 2026-09-01（軽微修正4件の実装にともなう§2の復活）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（2026-09-01、役割が重複する `NEXT_SESSION_HANDOFF.md` と `NEXT_SESSION_WORKORDER.md` を廃止した。過去の引き継ぎは[`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md)に残る）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
-  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。**現在は該当が無いので節ごと削除してある。** 復活させるときは**チェックリスト形式**で書く——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は§2-3（オーナー判断待ち）へ分ける。
+  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
 - **完了してクローズした項目は本書に残さず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。** 本書の「3.」と同書の「3.」は別物なので、**参照するときは番号だけで書かず、必ずファイル名を添えること**。
@@ -27,27 +27,58 @@
 - **状態**: 未着手（オーナーが手書きするための備忘録。書き終えた時点でクローズする）。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（導線の前提と`run.ps1`の設計）、[`README.md`](../README.md) §1（要求スペック）。
 
-### 1-25. ベースモデル切り替えのGradio UI露出（起票：2026-08-31）
+---
 
-- **何が開いているか**: Gradio同梱WebUIのModelsセクションはカテゴリ別（transformer／text_encoder／video_vae／audio）の差し替えしか送れず、`base_model`（LTX 2.3↔2.5の系統切替）を露出していない（`gradio_ui/handlers.py`の`load_pipeline_models`は`models`のみ送信）。AviUtl2側フロントエンドはヘッダーのドロップダウンで切り替えられる。
-- **なぜ効くか**: Gradio側だけでベースモデルを選べず、切り替えにはAviUtl2の操作パネル・MCP・API直叩きのいずれかが要る。
-- **やること**: Modelsセクション（または適切な場所）にベースモデル選択を追加し、`POST /api/v1/pipeline/load`の`base_model`を送れるようにする。
-- **完了条件**: Gradio同梱WebUIだけでベースモデルを切り替えられること。具体的な受入条件はオーナーと相談のうえ着手時に定める。
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装と機械検証（型検査・自動テスト）まで終わっていて、オーナー本人の実機・目視の確認だけが残っているもの。**各項目のチェックが全部埋まったら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。**
+
+### 2-1. AviUtl2側Settingsの並び順（Modelsセクションを上へ）
+
+- **何を変えたか**: 操作パネルのSettingsで、Models（ベースモデルとカテゴリの選択・更新・読み込み）のブロックを、Right-click menu（Fps policy）の直後・Accelerationの見出しの前へ移した。従来はSave/Closeの下に置いていた。
+- **オーナー実機目視ゲート（G-O1）**:
+  - [ ] SettingsでModelsがRight-click menuの直後・Accelerationの見出しの前にある。
+  - [ ] 移した先の余白と罫線の見え方が不自然でない。
+  - [ ] Save/Closeボタンの位置は従来どおりで変わっていない。
+- **出典**: オーナー指示（2026-09-01。本書に起票しないまま実施した件）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §100。
+
+### 2-2. ベースモデル切り替えのGradio UI露出
+
+- **何を変えたか**: Gradio同梱WebUIのSettings＞Modelsの見出し直下に、ベースモデル（LTX 2.3↔2.5の系統）を選ぶドロップダウンを新設した。選択肢と初期値は`GET /models`の`base_models[]`・`active_base_model`から作り、選択を変えると4カテゴリ（transformer／text_encoder／video_vae／audio）をその系統の一覧で埋め直す。読み込みボタンは`base_model`を常に送る。あわせて「Drop GGUF files…」の説明文と、ハードコードのパス表示カードを削除した。
+- **既知の制約（対策は作らないというオーナー判断・2026-09-01）**: Gradio側でベースモデルを切り替えても、AviUtl2側フロントエンドは次に起動するまでその変化に追随しない。両方のUIを同時に開いて使ったときだけ現れる理論上の穴で、フロントエンドは次回起動時の正規化で回復する。
+- **オーナー実機目視ゲート（G-O2）**:
+  - [ ] `/ui`のSettingsタブで、ベースモデルのドロップダウンがModelsの見出し直下にあり、初期値がいまアクティブな系統になっている。
+  - [ ] 選択を変えると、4カテゴリの選択肢がその系統のものへ入れ替わる。
+  - [ ] 読み込みボタン（Load）でベースモデルの切り替えが成功する。
+  - [ ] 説明文とパス表示カードが消えている。
+  - [ ] 言語を切り替えても、ドロップダウンの選択肢が消えない。
 - **関連**: 本書§4-6（Gradio同梱UIの他の残件。本項と重複させない）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §83、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-129。
 
-### 1-26. LTX 2.5 選択時に PrunaVAED（`vae_mode`）を選べてしまい、ジョブが422になる（起票：2026-08-31）
+### 2-3. Gradio側バッチのスキップ判定をフロントエンドへ揃えた
 
-- **何が開いているか**: 高速化設定の`vae_mode`に**ベースモデル（エンジン）の軸が無い**。塞がっていない口は2つで、どちらも同じ1つの症状（LTX 2.5で全ジョブが422）に行き着く。
-  1. **設定パネルが無効化しない**——`webui/src/shell/SettingsPanel.tsx`のPrunaVAED行は、選んでいるベースモデルでこの項目を落とす仕組みを持たない。サーバーの`GET /models`はLTX 2.5の`unsupported_features`に`prune_vaed`を返しているが、webui側でこの一覧を読むのは`disabledModesFor`・`chainPanelsDisabledFor`・`editSubTabsDisabledFor`・`batchA2vDisabledFor`の4か所だけで、いずれも設定パネルの`vae_mode`とは無関係である。
-  2. **送信判定にエンジンが入っていない**——`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields()`は「サーバー既定と違う値のときだけ鍵を送る」判定にベースモデルを含めない。したがって**LTX 2.3でPrunaVAEDを選んだままLTX 2.5へ切り替えると、以後のすべての生成が422で断られる**。
-- **なぜ効くか**: フォームの時点では警告が出ず、押した先で初めて422になる。実害が出るのは「2.3で選んでから切り替えた」場合に限られるが、原因が画面から読み取れない種類の壊れ方である。
-- **完了条件**: LTX 2.5を選んでいる間はPrunaVAEDを操作できず、かつブラウザに`prune_vaed`が残っていてもLTX 2.5のジョブが422にならないこと。**どちらか一方だけでは閉じない。**
-- **判断材料**: (a) 同型の罠のうち`attention_backend`は`GET /status`の`sage_available`を画面が見るので同じ形にならない。**残っているのは`vae_mode`の1件だけである。** (b) PrunaVAEDをLTX 2.5で開通させる（本書§3-102）ほうの経路でも症状は消えるが、そちらは上流の重み待ちで着手できない。(c) オーナーは「以前はグレーアウトされていた記憶がある」と述べているが、退行なのか未実装なのかはコード読みでは特定できていない。
-- **快適上限マーカーとの噛み合わせは本項の範囲外である**（解消済み。LTX 2.5の線はどの高速化設定でも同じ1本になった。正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §7）。
+- **何を変えたか**: バッチa2v（音声から動画を生成する機能をまとめて流す機能）のスキップ判定の実効上限を、Gradio側も「GenerateタブのDURATION（生成するフレーム数）の値と481の小さいほう」にした（スキャン時と開始時の再判定の両方）。表（CSV）へ書く理由コードは`over-cap`へ統一し、読み取り側は過去のGradioが書いた旧コードも同じラベルで受ける。あわせて、上限を上げて音声フォルダを読み込み直せば（Set audios）Skipの行がWaitingへ戻るようにし、MCPサーバー側の写経も追随させた。**契約の正本は[`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)。**
+- **既定の挙動が変わる（オーナー受諾済み）**: ページを開いた時点でプリセットがDURATIONへ361を書くため、Gradioバッチの実効既定上限も361になる（フロントエンドと同じ値）。
+- **オーナー実機目視ゲート（G-O3）**:
+  - [ ] DURATIONを257等にしてバッチをONにし、音声フォルダを読み込み直す（Set audios）と、481フレーム未満でも上限を超える行がSkipになり新しいラベルが出る。
+  - [ ] 既存CSVに残る旧理由コードの行も、同じラベルで表示される。
+  - [ ] 既定のまま（DURATION=361）だと、24フレーム毎秒でおよそ15秒を超えるwavがSkipになる。
+  - [ ] Skipになった行が、DURATIONを上げてSet audiosをやり直すとWaitingへ戻る。
+- **相互参照**: 本書§4-6（Gradio同梱UIの他の残件）・§4-15（`chunked_upsample`の逆方向の差分。こちらは未解消のまま残っている）。
+- **出典**: フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §75.1、[`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9。
+
+### 2-4. LTX 2.5 選択時に PrunaVAED（`vae_mode`）を選べてしまい、ジョブが422になる件
+
+- **何を変えたか**: サーバーが配信する`unsupported_features`に`prune_vaed`が入っている間は、操作パネルのSettingsからPrunaVAEDの行と注意文をまるごと消す（グレーアウトではなく非表示）。あわせて「非対応のベースモデルがアクティブだ」と観測した時点でブラウザの保存値を`default`へ書き戻す正規化を1本入れ、起動時に残っていた場合と切り替え操作の場合の両方を同じ経路で塞いだ。送信側の判定（`accelerationRequestFields()`）は変えていない。
+- **完了条件（確定仕様）**: LTX 2.5がアクティブな間はPrunaVAEDの行が画面に出ず、ブラウザに`prune_vaed`が残っていてもLTX 2.5のジョブが422にならないこと。**送信ロジックの改修は完了条件に含めない**——表示を消して保存値を正規化すれば同じ結果になるためである。
+- **仕様として受け入れる帰結**: LTX 2.3→2.5→2.3と往復するとPrunaVAEDの選択は消えている（手で入れ直す）。入れ直すまでは快適上限マーカーがレガシー表の低い線になるが、これは実際の設定を正しく映した結果である。
+- **オーナー実機目視ゲート（G-O4）**:
+  - [ ] LTX 2.5を選んでいる間、PrunaVAEDの行と注意文がどちらも見えない。
+  - [ ] LTX 2.3でPrunaVAEDを選んでから2.5へ切り替えても、ジョブが422にならない。
+  - [ ] 2.5から2.3へ戻すとPrunaVAEDは`default`になっている（上記の仕様どおり）。
+  - [ ] 戻した直後は、PrunaVAEDを再設定するまで快適上限マーカーがレガシー表の線になる。
 - **本項は§4-22（SageAttentionを既定にするか）の前提である**——保存済み設定がエンジンを跨いだときの振る舞いが決まらないうちに既定を反転すると、切り替えのたびに説明のつかない422を踏ませる。
-- **状態**: 未着手。
-- **出典**: `webui/src/shell/SettingsPanel.tsx`（PrunaVAED行）・`webui/src/shell/accelerationSettings.ts`（`accelerationRequestFields()`）・`webui/src/shell/useBaseModels.ts`（`unsupportedFeatures`の消費箇所）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-125（本項へ統合した旧項目の記録）、本書§3-102・§3-118。
+- **出典**: `webui/src/shell/SettingsPanel.tsx`・`webui/src/shell/AppShell.tsx`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-125（本項へ統合した旧項目の記録）、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §100、本書§3-102・§3-118。
 
 ---
 
@@ -79,10 +110,11 @@
 | §3-121 | LTX 2.5の復号が、FHD級×241フレームでこぼれる | 未着手 |
 | §3-123 | G8の街路の単体動画の境界勾配比が上限2.0を超えている | 未着手（観察項目） |
 | §3-131 | LTX 2.5の`metadata.json`に`vae_mode_used`が書かれない | 未着手 |
+| §3-135 | モデル別のUI表示テーブル（Settings等のUI構成のテーブル駆動化） | 未着手 |
 
 > **着手時の必須手順: 画角拡張（Outpainting）に触る改修では、連続ジョブの腕を必ず回すこと。** 「1腕1プロセス」の直接ドライバだけでは、**同じ常駐ワーカーで後続のジョブを流したときに出る不具合**（画角拡張の直後の普通の生成が落ちる類）を捕まえられない。**常設の道具が `outputs/ltx25-opmode-gate/scripts/` にある**（`op_gate.py`＝3腕〔通常→画角拡張→通常／→連結／→画角拡張→通常〕の連続投入ドライバ、`README.md`＝依存チェーンと合格条件、`SHA_ARMS.md`＝バイト同一性の手順書）。**腕が「有効」かどうか〔ページ固定プールが実際に成長したか〕を合否とは別に検査する**のがこのゲートの要点である（正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §81.6・§81.9）。
 
-**§1（近日中の改修項目）にも本テーマ由来の1件がある**——§1-26（LTX 2.5選択時に`vae_mode`を選べてしまい422になる）。本表は§3の項目だけを並べる表なので、そちらは§1で管理する。
+**§2（実装済み・ユーザーのテスト待ち）にも本テーマ由来の1件がある**——§2-4（LTX 2.5選択時に`vae_mode`を選べてしまい422になる）。本表は§3の項目だけを並べる表なので、そちらは§2で管理する。
 
 **この表の対象外**: 次の2群は本表に並べていない（**どちらも下の§3の本文には生きている**）。
 
@@ -526,9 +558,9 @@
   - **(6) 前処理（canny／dwpose／depth）は両系統が同じコードを呼ぶ**（同じ素材から書いた制御動画のSHA-256が一致。同 §74.7(f)）。前処理に手を入れるときは**LTX 2.3への影響も同時に考えること**。なお`.venv-engine-ltx25`には`opencv-python-headless`（`cv2`）と`torchvision`が入っているので、これらを要する後続機能は依存追加なしで着手できる。**音声軸の重みを持つLoRAが1本も無い**ため、`audio_strength`の実効は2.5でも確認できていない（同 §74.3(c)）。
   - **(7) 共有コードに触る改修では、LTX 2.3の回帰ゲートを必ず通すこと。** 高速化第1弾では、共有コードへの無条件の変更がLTX 2.3側のVRAM回帰を生んでいる（同 §75.7(5)）。物差しは本書§3-113の「着手時の必須条件」と同じである。**VRAMの天井がある場所はエンジンごとに違う**（2.5はdenoiseの中、2.3はdenoiseの外）ので、「両エンジンに同じ挙動を」が成り立たない場面ではフラグの名前で違いを表に出すこと。
   - **(8) 測るときの作法**: 固定ベンチマークB1〜B13（同 §72.7・§73.7・§74.8。**B13は音声軸の重みを持つLoRAが手に入るまで欠番**）を走らせ直し、mp4のSHA-256一致で「絵が変わっていないか」を判定する。**再ゲートは必ずサーバー再起動から行う**（`POST /pipeline/load`はPythonのモジュールを読み込み直さない。同 §75.11）。**フェーズごとの秒数とRSSは`metadata.json`ではなくワーカーのログ（`logs/ltx25_worker.log`）にしか出ない。** 小さいジョブの予約VRAMは履歴依存でMB単位の再現性が無いので、合否は「基準比+400MB以内」という予算で判定する。
-  - **(9) ブラウザ保存の設定がエンジンを跨ぐ罠は`vae_mode`側に残っている**（同 §77.7(f)）。**本書§1-26として独立に起票してある。**
+  - **(9) ブラウザ保存の設定がエンジンを跨ぐ罠は`vae_mode`側に残っている**（同 §77.7(f)）。**本書§2-4として独立に起票してあり、実装は済んで実機テスト待ちである。**
   - **(10)（画角拡張の旧方針）は棄却済みである。** 経緯は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.1。
-- **本項から派生して独立に起票してある課題**: 本書§3-112（CUDAアロケータ設定）・§3-113（受け皿の返却）・§3-114（埋め込み処理器の常駐）・§3-118（`vae_mode`の失効記述）・§3-131（`vae_mode_used`が書かれない）・§3-108（kohya形式LoRA）・§1-26（`vae_mode`のエンジン軸）。
+- **本項から派生して独立に起票してある課題**: 本書§3-112（CUDAアロケータ設定）・§3-113（受け皿の返却）・§3-114（埋め込み処理器の常駐）・§3-118（`vae_mode`の失効記述）・§3-131（`vae_mode_used`が書かれない）・§3-108（kohya形式LoRA）・§2-4（`vae_mode`のエンジン軸。実装済み・実機テスト待ち）。
 - **状態**: 部分完了・外部要因待ち（残り2件）。
 - **出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6・**§8.5**、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69〜§80、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 11節、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-98（クローズ済みの親テーマ）、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10。
 
@@ -635,7 +667,7 @@
 
 - **概要**: フロントエンドの[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md)は、`vae_mode`（PrunaVAED＝枝刈り版VAEデコーダの選択）を**3箇所で「モック（受理のみ・生成に一切影響しない）」と書いている**——§5.1の一覧の`vae_mode`行・§5.2の一覧の同行・**§7.1「モックのみ＝『出すが無効化する』機能」の節まるごと**。**この記述はすべて失効している。**
 - **やることは文書の修正だけである（実地で確認済み）**: バックエンドはPrunaVAEDを実機能として実装済みで（設計正本は[`PRUNAVAED_WORKORDER.md`](PRUNAVAED_WORKORDER.md) §6.3、MCPへの公開は[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D12）、**フロントエンドも既に`vae_mode`を送り・永続化し・操作UIを持っている**（送信と永続化は`webui/src/shell/accelerationSettings.ts`、操作UIは`webui/src/shell/SettingsPanel.tsx`）。**したがって§7.1の「常時disabled」「未実装」「workerへは渡さない」「このWebUIから一切送らない」はいずれも実態と違う。**
-- **LTX 2.5では別の論点が絡む**: `prune_vaed`はLTX 2.5では`unsupported_features`に残る2件の1つであり（本書§3-102）、加えて**LTX 2.3で選んだ設定のまま2.5へ切り替えると全ジョブが422になる**という罠がある（本書§1-26）。**文面を直すときは、この罠の始末とセットで考えること。**
+- **LTX 2.5では別の論点が絡む**: `prune_vaed`はLTX 2.5では`unsupported_features`に残る2件の1つであり（本書§3-102）、加えて**LTX 2.3で選んだ設定のまま2.5へ切り替えると全ジョブが422になる**という罠があった（本書§2-4。実装済み・実機テスト待ち）。**文面を直すときは、この罠の始末とセットで考えること。**
 - **状態**: 未着手（文書のみの修正。**フロントエンドの製品コードは変えない**）。
 - **出典**: フロントエンド[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.1・§5.2・§7.1、`webui/src/shell/accelerationSettings.ts`・`webui/src/shell/SettingsPanel.tsx`、[`PRUNAVAED_WORKORDER.md`](PRUNAVAED_WORKORDER.md) §6.3、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.10-b・§77.7(f)。
 
@@ -735,6 +767,13 @@
 - **状態**: 将来の研究課題（着手時期未定）。
 - **出典**: `webui/src/modes/edit/outpaintGeometry.ts`（`COMFORT_TOKEN_BUDGET`とその注記）、バックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1・§6、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-95（本項の出自）、本書§3-121。
 
+#### 3-135. モデル別のUI表示テーブル（Settings等のUI構成のテーブル駆動化）（起票：2026-09-01）
+
+- **何が開いているか**: 「どのベースモデルでどのUIを見せるか」の知識が、画面ごとの個別判定として散らばっている。快適上限マーカーで表駆動化した`comfort_budgets`と同じ発想で、**モデルごとの表示可否を1枚の表にして機械的に決められないか**、という構想である。
+- **いまは要らない**: `unsupported_features`を要素ごとに読む軽い方式で足りている（本書§2-4がその最初の実例）。**着手の目安は、この個別判定が5〜10個に増えて見通しが悪くなったとき**——そのときに消費側を束ね直す。
+- **状態**: 将来の研究課題（着手時期未定）。
+- **出典**: 本書§2-4のディスカッション（2026-09-01）、`webui/src/shell/useBaseModels.ts`（`unsupportedFeatures`の消費箇所）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1（表駆動化の先例）。
+
 ---
 
 ## 4. スコープ外（さらに先の将来）
@@ -779,7 +818,7 @@
 
 ### 4-6. バックエンド同梱Gradio UIの残5件
 
-- **ベースモデル軸に未対応**: **本書§1-25で扱う**（本項には重ねて書かない）。Gradio UIは`GET /models`の旧来の2層ブロックだけを読む実装のままなので壊れはせず、アクティブなベースモデルのカテゴリ一覧が出る。
+- **ベースモデル軸**: **本書§2-2で扱う**（実装済み・実機テスト待ち。本項には重ねて書かない）。
 - **概要（従来からの4件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）。
 - **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。
 - **既知の差分**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する挙動（フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針である。
@@ -888,7 +927,7 @@
   1. **アップデートで生成結果を黙って変えない**。`sage`は数値精度が異なるため、同じシードを指定しても生成結果の細部が変わる（構図は同じで、質感やノイズの出方が変わる。実測でPSNR 27〜28dB程度の差）。既定を差し替えると、利用者が「昨日と同じ設定なのに絵が違う」という説明のつかない体験をすることになる。
   2. **`sdpa`は常に正しい参照実装**であり、比較の基準として動かさない価値がある。
   3. **切替のコストが小さい**。UIの1クリックで済み、選択は保存される。
-- **着手の前提**: **本書§1-26（`vae_mode`にエンジン軸が無い）が先である。** 保存済み設定がエンジンを跨いだときの振る舞いが決まっていないまま既定を反転すると、切り替えのたびに説明のつかない422を踏ませることになる。
+- **着手の前提**: **本書§2-4（`vae_mode`にエンジン軸が無い）が先であり、いまは§2で実機テスト待ちである。** 保存済み設定がエンジンを跨いだときの振る舞いが決まっていないまま既定を反転すると、切り替えのたびに説明のつかない422を踏ませることになる。
 - **切り替えるとしたら何を決めるか**: 既存プロジェクトの再現性をどう扱うか（既定変更の告知方法、あるいは「以前と同じ結果が欲しいなら`sdpa`」の案内の出し方）。`sageattention`未導入環境での降格挙動はすでに実装済みなので、そちらは追加作業にならない。
 - **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.1・§43.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §55。
 
@@ -927,13 +966,6 @@
 - **何が塞いでいるか**: **非量子化モデルを動かせるハイスペックマシンをオーナーが所有していないこと**（**§4-1**と同根）。計算コストはステップ増（8→30〜50）とCFGの2回forwardで**約7〜12倍**になり、活性値も増えるためVRAM 16GBでの実測が必須。
 - **着手するときの入口**: ①未配線箇所は`services/engines/ltx/adapter.py`（旧パス`services/ltx_runner.py`は再エクスポートのshim）が組み立てるworkerペイロード——`op: "generate"`の辞書に`pipeline`と`guidance_scale`が無く、常にdistilled経路になる（ステップ数の扱いは§4-1）。②入口となる重みは非蒸留×量子化のGGUFが実在する（`unsloth/LTX-2.3-GGUF`の`ltx-2.3-22b-dev-Q4_K_M.gguf`、約14.3GB）。
 - **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N12、`Nz-Videomni`の`api/models.py`（pipeline列挙型）・`gradio_ui/i18n.py`（「バックエンド未対応」ラベル）・`services/engines/ltx/adapter.py`（generateペイロード）、[`Nz-Videomni/Docs/FEATURE_RESEARCH_2026-07-04.md`](FEATURE_RESEARCH_2026-07-04.md) D節。
-
-### 4-29. Gradio側バッチのスキップ判定が481フレーム固定のまま（逆方向の差分）（起票：2026-08-12）
-
-- **概要**: バッチa2v（audio to video、音声から動画を生成する機能）のスキップ判定の上限が、**フロントエンドは「SingleタブのDURATION（生成するフレーム数）の値と481フレームの小さいほう」**（`webui/src/modes/batch/manifestMerge.ts`の`scanToRows`／`rejudgeRows`。481はサーバー絶対上限へのクランプとしてのみ効く）なのに対し、**バックエンド同梱のGradio GUIは`MAX_FRAMES = 481`固定**（`gradio_ui/manifest.py`の`over_frame_limit()`）で、この連動に追随していない。**フロントエンドのほうが進んでいる逆方向の差分**であり、§4-15と同型である。表（CSV）へ書かれるスキップ理由コードも異なる（フロントエンド`over-cap`／Gradio`over-481f`。同じ音声フォルダを両方のGUIで扱うと相手側のコードには説明文が出ないが、フロントエンドはStart時に全行を再判定して自前のコードへ書き直すため実害は表示だけにとどまる。理由コードの一覧は[`Nz-Videomni/Docs/BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)が正本）。
-- **何が塞いでいるか**: バックエンドの凍結方針と、「製品の入口はフロントエンド」という位置づけ。オーナー判断で優先度は低い。
-- **相互参照**: §4-6（Gradio GUIの残件。in-outpaintingをアダプタのドロップダウンから除外した改修も同じくWebUIのみに効く）、§4-15（`chunked_upsample`の逆方向差分）。
-- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §75.1、`webui/src/modes/batch/manifestMerge.ts`・`webui/src/modes/batch/useBatchForm.ts`、`Nz-Videomni`の`gradio_ui/manifest.py`。
 
 ### 4-30. stage-1の快適予算（参照動画つき）の配信化（起票：2026-08-12）
 

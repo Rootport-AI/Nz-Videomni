@@ -67,6 +67,13 @@ export interface SettingsPanelProps {
    * no relationship to any other row (a server without the pruned weights
    * degrades per job on its own). */
   onVaeModeChange: (value: VaeMode) => void;
+  /** §1-26 (2026-09-01): whether the LOADED base model's engine refuses
+   * `prune_vaed` — `AppShell` derives it from the `unsupported_features` list
+   * `GET /models` publishes, never from a base-model id. Unlike sage and
+   * block-swap prefetch (greyed out, since the server downgrades on its own),
+   * this one HIDES the row outright: an engine that publishes the name 422s
+   * the field, so there is no degraded-but-working choice left to offer. */
+  vaeUnsupported: boolean;
   /** `AppShell`'s existing `useServerStatus` state (the same `/status` poll the
    * header badge reads) — the ONLY source of sage availability. No separate
    * capability hook/fetch exists on purpose; see
@@ -90,6 +97,7 @@ export function SettingsPanel({
   onKeepResidentChange,
   onFusedGgufDequantKernelChange,
   onVaeModeChange,
+  vaeUnsupported,
   serverStatus,
   nativeBridge,
 }: SettingsPanelProps) {
@@ -275,6 +283,13 @@ export function SettingsPanel({
           </div>
         </div>
 
+        {/* Directly after the right-click menu group and BEFORE Acceleration
+         * (owner instruction 2026-09-01: move Models up here). It used to sit
+         * below the Save/Close actions, away from the connection settings'
+         * primary button; the owner asked for the base-model controls to be
+         * reachable without scrolling past every acceleration row instead. */}
+        <ModelsPanel {...(modelsApiClient !== undefined ? { apiClient: modelsApiClient } : {})} />
+
         {/* Acceleration (2026-07-31, backend §43; block-swap prefetch added
             2026-08-01, backend §44; keep-resident added 2026-08-02, backend
             §48; fused GGUF dequant kernel added 2026-08-04, backend §51;
@@ -403,33 +418,44 @@ export function SettingsPanel({
         {keepResidentShown && <p className="field-hint">{strings.settings.accelKeepResidentNote}</p>}
 
         {/* PrunaVAED (2026-08-05, backend §52). Same two-button shape as the
-            fused-kernel row above and, like it, gated on NOTHING: the backend
-            publishes no availability flag and instead degrades per job
-            (`vae_mode_used: "on->off"`) when the pruned weights are absent. */}
-        <div className="field">
-          <span className="field-label">{strings.settings.accelVaeLabel}</span>
-          <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelVaeLabel}>
-            {[
-              { mode: "default" as const, label: strings.settings.accelVaeDefault },
-              { mode: "prune_vaed" as const, label: strings.settings.accelVaePruneVaed },
-            ].map(({ mode, label }) => (
-              <button
-                key={mode}
-                type="button"
-                className={`mode-tab${acceleration.vaeMode === mode ? " mode-tab--active" : ""}`}
-                aria-pressed={acceleration.vaeMode === mode}
-                onClick={() => onVaeModeChange(mode)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* Shown only while PrunaVAED is selected. Unlike the three
-            bit-identical rows above, this note is a WARNING in the same spirit
-            as sage's: a pruned decoder is a different decoder, so the output
-            can differ slightly. */}
-        {acceleration.vaeMode === "prune_vaed" && <p className="field-hint">{strings.settings.accelVaeNote}</p>}
+            fused-kernel row above and, like it, gated on no `/status`
+            capability flag: the backend publishes none and instead degrades per
+            job (`vae_mode_used: "on->off"`) when the pruned weights are absent.
+
+            §1-26 (2026-09-01): the row and its note are HIDDEN OUTRIGHT — not
+            greyed — on an engine whose published `unsupported_features` name
+            `prune_vaed`, because there the field is a hard 422 rather than a
+            silent downgrade. Both are wrapped by the ONE condition on purpose:
+            they are siblings, and condition-ing only the row would leave the
+            note stranded. */}
+        {!vaeUnsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelVaeLabel}</span>
+              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelVaeLabel}>
+                {[
+                  { mode: "default" as const, label: strings.settings.accelVaeDefault },
+                  { mode: "prune_vaed" as const, label: strings.settings.accelVaePruneVaed },
+                ].map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`mode-tab${acceleration.vaeMode === mode ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.vaeMode === mode}
+                    onClick={() => onVaeModeChange(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Shown only while PrunaVAED is selected. Unlike the three
+                bit-identical rows above, this note is a WARNING in the same
+                spirit as sage's: a pruned decoder is a different decoder, so
+                the output can differ slightly. */}
+            {acceleration.vaeMode === "prune_vaed" && <p className="field-hint">{strings.settings.accelVaeNote}</p>}
+          </>
+        )}
 
         <label className="field">
           <span className="field-label">{strings.settings.backendUrlLabel}</span>
@@ -458,13 +484,6 @@ export function SettingsPanel({
             {settings.save.status === "saving" ? strings.settings.saving : strings.settings.save}
           </button>
         </div>
-
-        {/* Below the main Save/Close actions on purpose (task brief: "誤操作
-         * しにくい配置") — a model swap is a separate, slower, more
-         * consequential action (rebuilds the engine) and must not be
-         * reachable by whatever muscle-memory click lands on the connection
-         * settings' primary button. */}
-        <ModelsPanel {...(modelsApiClient !== undefined ? { apiClient: modelsApiClient } : {})} />
 
         {/* N11: spill-free frame-count table, and N10: raw /config JSON
          * viewer. Both new sections share the single `configState` fetched
@@ -526,10 +545,11 @@ export function SettingsPanel({
         )}
 
         {/* N4: "danger zone" — pipeline unload + bulk purge of terminal jobs.
-         * Placed last on purpose, same reasoning as `ModelsPanel`'s own
-         * below-the-fold placement above: these are slow-to-notice,
-         * consequential actions that must never be reachable by muscle
-         * memory. Reuses the same apiClient instance as `ModelsPanel` (test
+         * Placed last on purpose: these are slow-to-notice, consequential
+         * actions that must never be reachable by whatever muscle-memory click
+         * lands on the connection settings' primary button. (`ModelsPanel`
+         * shared that reasoning until 2026-09-01, when the owner moved it up
+         * above Acceleration.) Reuses the same apiClient instance (test
          * override only; production omits it and both fall back to the
          * app-wide singleton). */}
         <DangerZonePanel {...(modelsApiClient !== undefined ? { apiClient: modelsApiClient } : {})} />

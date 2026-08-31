@@ -164,9 +164,38 @@ def test_scan_skips_over_481_frames(tmp_path):
     rows = scan_wav_folder(tmp_path, fps=24, frames_for=lambda dur, fps: 999)
     assert len(rows) == 1
     assert rows[0].stat == STAT_SKIP
-    assert rows[0].skip_reason == "over-481f"
+    assert rows[0].skip_reason == "over-cap"
     # frames_for must NOT have been consulted for a Skip row
     assert rows[0].frames == 0
+
+
+def test_scan_skips_over_caller_supplied_cap(tmp_path):
+    """§4-29: the cap is the Generate tab's own frame count, so a wav well
+    under 481 frames is skipped once max_frames is lower than it needs."""
+    wav = tmp_path / "medium.wav"
+    _write_wav(wav, seconds=15.0, rate=100)  # ~353 raw frames @24fps
+
+    rows = scan_wav_folder(tmp_path, fps=24, frames_for=lambda dur, fps: 353,
+                           max_frames=257)
+    assert rows[0].stat == STAT_SKIP
+    assert rows[0].skip_reason == "over-cap"
+
+    # The same wav with the default (481) cap is NOT skipped.
+    rows = scan_wav_folder(tmp_path, fps=24, frames_for=lambda dur, fps: 353)
+    assert rows[0].stat == STAT_WAITING
+
+
+def test_scan_cap_is_clamped_to_the_server_hard_limit(tmp_path):
+    """A max_frames above the server's 481 hard cap is clamped down to it
+    (mirrors the frontend's Math.min(cap, 481)) — an absurd Frames value can
+    never let an over-481 wav through."""
+    long_wav = tmp_path / "too_long.wav"
+    _write_wav(long_wav, seconds=25.0, rate=100)  # ~593 raw frames @24fps
+
+    rows = scan_wav_folder(tmp_path, fps=24, frames_for=lambda dur, fps: 999,
+                           max_frames=9999)
+    assert rows[0].stat == STAT_SKIP
+    assert rows[0].skip_reason == "over-cap"
 
 
 def test_scan_uses_injected_frames_for(tmp_path):
@@ -199,7 +228,7 @@ def test_compute_spill_warnings_flags_rows_over_threshold():
     rows = [
         BatchRow(queue=1, wav="a.wav", frames=300, stat=STAT_WAITING),
         BatchRow(queue=2, wav="b.wav", frames=100, stat=STAT_WAITING),
-        BatchRow(queue=3, wav="c.wav", frames=999, stat=STAT_SKIP, skip_reason="over-481f"),
+        BatchRow(queue=3, wav="c.wav", frames=999, stat=STAT_SKIP, skip_reason="over-cap"),
     ]
     warnings = compute_spill_warnings(rows, 1280, 768, {"1280x768": 257})
     assert len(warnings) == 1
@@ -229,7 +258,7 @@ def test_merge_rows_all_four_rules():
         # rescan order = mtime order: b, a, c
         BatchRow(queue=1, wav="b.wav", duration_s=5.0, frames=50, stat=STAT_WAITING),
         BatchRow(queue=2, wav="a.wav", duration_s=99.0, frames=0,
-                  stat=STAT_SKIP, skip_reason="over-481f"),
+                  stat=STAT_SKIP, skip_reason="over-cap"),
         BatchRow(queue=3, wav="c.wav", duration_s=3.0, frames=30, stat=STAT_WAITING),
     ]
 
@@ -249,7 +278,7 @@ def test_merge_rows_all_four_rules():
     assert a_row.image == "img1.png"
     assert a_row.prompt == "edited a"
     assert a_row.output == "a.mp4"
-    assert a_row.skip_reason == "over-481f"  # recomputed value still recorded
+    assert a_row.skip_reason == "over-cap"  # recomputed value still recorded
 
     # rule 2: brand new row, added as Waiting
     c_row = by_wav["c.wav"]
@@ -270,6 +299,40 @@ def test_merge_rows_all_four_rules():
     assert len(warnings) == 2
     assert any("a.wav" in w for w in warnings)
     assert any("gone_done.wav" in w for w in warnings)
+
+
+def test_merge_rows_rescan_clears_a_stale_skip():
+    """§4-29 Skip recovery: the cap is DURATION-linked now, so a row skipped
+    under a low Frames value must come back once the rescan says it fits
+    (raise Frames -> Set audios). A Done row still wins over the rescan."""
+    existing = [
+        BatchRow(queue=1, wav="a.wav", prompt="kept", stat=STAT_SKIP,
+                 skip_reason="over-cap", frames=0),
+        BatchRow(queue=2, wav="legacy.wav", stat=STAT_SKIP,
+                 skip_reason="over-481f", frames=0),
+        BatchRow(queue=3, wav="done.wav", stat=STAT_DONE, output="done.mp4"),
+    ]
+    scanned = [
+        BatchRow(queue=1, wav="a.wav", duration_s=10.0, frames=241, stat=STAT_WAITING),
+        BatchRow(queue=2, wav="legacy.wav", duration_s=8.0, frames=193, stat=STAT_WAITING),
+        BatchRow(queue=3, wav="done.wav", duration_s=4.0, frames=97, stat=STAT_WAITING),
+    ]
+
+    merged, warnings = merge_rows(existing, scanned)
+    by_wav = {r.wav: r for r in merged}
+
+    # Both stale Skips (current + legacy reason code) return to Waiting, with
+    # the refreshed frames and a cleared reason — and user edits survive.
+    assert by_wav["a.wav"].stat == STAT_WAITING
+    assert by_wav["a.wav"].frames == 241
+    assert by_wav["a.wav"].skip_reason == ""
+    assert by_wav["a.wav"].prompt == "kept"
+    assert by_wav["legacy.wav"].stat == STAT_WAITING
+
+    # Done protection unchanged: a completed row is not re-queued by a rescan.
+    assert by_wav["done.wav"].stat == STAT_DONE
+    assert by_wav["done.wav"].output == "done.mp4"
+    assert warnings == []
 
 
 def test_merge_rows_first_scan_no_existing_manifest():

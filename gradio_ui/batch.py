@@ -60,6 +60,7 @@ from .handlers import (
 )
 from .manifest import (
     IMAGE_SHARED,
+    MAX_FRAMES,
     STAT_DONE,
     STAT_FAILED,
     STAT_GENERATING,
@@ -185,6 +186,13 @@ class BatchSnapshot:
                      §3-50), same reasoning again. The default is "default"
                      and never flips (owner ruling 0-11), so this one reaches
                      the payload only when "prune_vaed" is selected.
+
+    Skip cap
+        num_frames  The Generate tab's own frame count, snapshotted so the
+                     start-time re-judgment uses the SAME effective cap
+                     (``min(num_frames, 481)``) the "Set audios" scan did —
+                     without it a Start would re-judge every row against a bare
+                     481 and silently un-skip rows the scan excluded (§4-29).
     """
 
     wav_dir: str
@@ -217,6 +225,7 @@ class BatchSnapshot:
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
     vae_mode: str = "default"
+    num_frames: int = MAX_FRAMES
 
 
 # --------------------------------------------------------------------------- #
@@ -653,7 +662,7 @@ class BatchRunner:
 
 
 # --------------------------------------------------------------------------- #
-# Start-time re-judgment (frames / 481-frame Skip), recomputed at the snapshot's
+# Start-time re-judgment (frames / frame-cap Skip), recomputed at the snapshot's
 # frame rate. Pure + non-mutating: it returns a PLAN keyed by ``id(row)`` that
 # the caller applies only after every validation check has passed, so a rejected
 # start never half-mutates the rows / CSV. The raw-frame math itself lives in
@@ -664,18 +673,19 @@ class BatchRunner:
 def _plan_rejudgement(snapshot: BatchSnapshot, rows: List[BatchRow]) -> dict:
     """Project each unfinished row's re-judgment WITHOUT mutating anything.
 
-    Returns ``{id(row): ("skip", "over-481f")}`` for a row whose duration now
-    overruns the 481-frame cap at ``snapshot.frame_rate``, or
-    ``{id(row): ("frames", n)}`` with its refreshed ``suggest_frames_for_audio``
-    count otherwise. Rows with a non-positive ``duration_s`` (non-wav / already
-    Skip remnants) are left out entirely — never touched."""
+    Returns ``{id(row): ("skip", "over-cap")}`` for a row whose duration now
+    overruns the effective cap (``min(snapshot.num_frames, 481)``) at
+    ``snapshot.frame_rate``, or ``{id(row): ("frames", n)}`` with its refreshed
+    ``suggest_frames_for_audio`` count otherwise. Rows with a non-positive
+    ``duration_s`` (non-wav / already Skip remnants) are left out entirely —
+    never touched."""
     fps = snapshot.frame_rate
     plan: dict = {}
     for r in rows:
         if r.stat not in _UNFINISHED or r.duration_s <= 0:
             continue
-        if over_frame_limit(r.duration_s, fps):
-            plan[id(r)] = ("skip", "over-481f")
+        if over_frame_limit(r.duration_s, fps, snapshot.num_frames):
+            plan[id(r)] = ("skip", "over-cap")
         else:
             plan[id(r)] = ("frames", int(suggest_frames_for_audio(r.duration_s, fps)))
     return plan

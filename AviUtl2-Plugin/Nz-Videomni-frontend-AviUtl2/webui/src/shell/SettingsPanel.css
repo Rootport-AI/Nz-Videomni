@@ -90,10 +90,13 @@
   }
 }
 
-/* Model management (S1): the Settings panel's "Models" section. A top
- * divider sets it visually apart from the connection-settings fields above —
- * a model swap is a slower, more consequential action (rebuilds the engine),
- * so it deliberately doesn't look like just another form field. */
+/* Model management (S1): the Settings panel's "Models" section — and the
+ * shared layout of every `<h3>` section below it (spill-free table, API key,
+ * raw config, danger zone). A top divider sets it visually apart from the
+ * plain toggle fields it now follows (2026-09-01 the owner moved Models up
+ * between the right-click menu group and Acceleration) — a model swap is a
+ * slower, more consequential action (rebuilds the engine), so it deliberately
+ * doesn't look like just another form field. */
 .models-section {
   display: flex;
   flex-direction: column;

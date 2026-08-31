@@ -10,7 +10,8 @@
   ``chain_math.audio_latents_required`` と突き合わせて8刻みで縮める）。
 * ``gradio_ui/manifest.py`` の ``scan_wav_folder`` 走査規約（全音声拡張子を
   候補にし、manifest/autosave/*.tmp を除外、mtime昇順、非wav・読めないwavは
-  可視Skip行 ``skip_reason="wav-only-alpha"``、481f超は ``"over-481f"``）。
+  可視Skip行 ``skip_reason="wav-only-alpha"``、実効上限（``min(max_frames,
+  481)``）超は ``"over-cap"``）。
 
 写経ロジックの乖離を防ぐため、``tests/test_mcp_batch_planning.py`` が本家
 （``gradio_ui.handlers.suggest_frames_for_audio``）との総当たりパリティで
@@ -82,8 +83,12 @@ def raw_frame_count(dur: float, fps: Any) -> int:
 
 
 def over_frame_limit(dur: float, fps: Any, max_frames: int = _DEFAULT_MAX_FRAMES) -> bool:
-    """``gradio_ui/manifest.py::over_frame_limit`` の写経。"""
-    return raw_frame_count(dur, fps) > max_frames
+    """``gradio_ui/manifest.py::over_frame_limit`` の写経。実効上限は
+    ``min(max_frames, 481)``（WebView2フロントエンドの ``Math.min(cap, 481)``
+    と同型）。未指定/0の ``max_frames``（空欄相当）はハード上限へフォールバック
+    する。"""
+    cap = min(int(max_frames or _DEFAULT_MAX_FRAMES), _DEFAULT_MAX_FRAMES)
+    return raw_frame_count(dur, fps) > cap
 
 
 def suggest_frames_for_audio(dur: float, fps: Any) -> int:
@@ -154,9 +159,9 @@ def plan_rows(
     ``gradio_ui/manifest.py::scan_wav_folder`` と同じ規約:
     全音声拡張子（``_ALLOWED_AUDIO_EXTENSIONS``）を候補にし、manifestファイル
     自身とautosave・``*.tmp`` は除外、mtime昇順。非wav・読めないwavは
-    ``skip_reason="wav-only-alpha"`` の可視Skip行（除外はしない）。481f超は
-    ``skip_reason="over-481f"``。それ以外は ``suggest_frames_for_audio`` で
-    フレーム数を提案する。
+    ``skip_reason="wav-only-alpha"`` の可視Skip行（除外はしない）。実効上限
+    （``min(max_frames, 481)``）超は ``skip_reason="over-cap"``。それ以外は
+    ``suggest_frames_for_audio`` でフレーム数を提案する。
     """
     wav_dir = Path(wav_dir)
     reserved = {_MANIFEST_NAME, _AUTOSAVE_NAME}
@@ -204,7 +209,7 @@ def plan_rows(
                 "duration_seconds": dur,
                 "suggested_num_frames": None,
                 "image_path": image_path,
-                "skip_reason": "over-481f",
+                "skip_reason": "over-cap",
             })
             continue
 

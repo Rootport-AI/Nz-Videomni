@@ -45,8 +45,9 @@ async def plan_a2v_batch(
     （stdlib の ``wave`` モジュールしか使わないため、mp3/m4a等は長さを読めず、
     ``skip_reason="wav-only-alpha"`` の可視Skip行になります――生成できない
     という意味ではなく、このツールが事前に長さを提案できないだけです。それ
-    でも行として一覧には残ります）。1クリップの尺が481フレームを超える長さの
-    wavは ``skip_reason="over-481f"`` になります。
+    でも行として一覧には残ります）。1クリップの尺が実効上限（``min(max_frames,
+    481)``、サーバーのハード上限481を超えては指定できません）を超える長さの
+    wavは ``skip_reason="over-cap"`` になります。
 
     ``image_dir`` を指定すると、各wavと同じstem（拡張子を除くファイル名、
     大小無視）の画像ファイルを1件だけ自動で紐付けます（同stemが複数拡張子で
@@ -57,7 +58,9 @@ async def plan_a2v_batch(
         wav_dir: 音声ファイルが入ったローカルフォルダの絶対パス。
         fps: フレームレート（フレーム数提案の計算に使う）。
         image_dir: 同stem画像を探すローカルフォルダの絶対パス（省略可）。
-        max_frames: 1クリップの最大フレーム数（既定481、サーバーの上限と同じ）。
+        max_frames: 1クリップの最大フレーム数（既定481）。実効上限は
+            ``min(max_frames, 481)`` ―― サーバーのハード上限481より大きい値を
+            渡しても481へ内部クランプされます。
 
     Returns:
         fps, wav_dir, rows（index/wav_path/filename/duration_seconds/

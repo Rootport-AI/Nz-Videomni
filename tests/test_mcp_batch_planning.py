@@ -98,14 +98,28 @@ def test_plan_rows_reserved_filenames_and_tmp_excluded(tmp_path):
     assert [r["filename"] for r in rows] == ["voice.wav"]
 
 
-def test_plan_rows_long_wav_over_481f_skip(tmp_path):
+def test_plan_rows_long_wav_over_cap_skip(tmp_path):
     _make_wav(tmp_path / "long.wav", seconds=30.0)
 
     rows = batch_planning.plan_rows(tmp_path, 24.0)
 
-    assert rows[0]["skip_reason"] == "over-481f"
+    assert rows[0]["skip_reason"] == "over-cap"
     assert rows[0]["suggested_num_frames"] is None
     assert rows[0]["duration_seconds"] > 0
+
+
+def test_plan_rows_max_frames_over_hard_cap_clamped_to_481(tmp_path):
+    # A raw frame count just over the hard cap (481) must still be Skipped
+    # even when the caller passes max_frames=9999 -- over_frame_limit() must
+    # clamp to min(max_frames, 481) internally (mirrors
+    # gradio_ui/manifest.py::over_frame_limit; DURATION values above the
+    # server's hard cap are not a valid escape hatch).
+    _make_wav(tmp_path / "long.wav", seconds=30.0)
+
+    rows = batch_planning.plan_rows(tmp_path, 24.0, max_frames=9999)
+
+    assert rows[0]["skip_reason"] == "over-cap"
+    assert rows[0]["suggested_num_frames"] is None
 
 
 def test_plan_rows_plannable_row_has_suggested_frames(tmp_path):

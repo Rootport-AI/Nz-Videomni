@@ -146,7 +146,8 @@ describe("App / W0 Edit-系 right-click routing", () => {
       );
       // Create is hidden along with its panel. Probed through Create's OWN
       // "Get size from AviUtl2" button rather than a generic Generate button:
-      // the Outpainting panel grew a Generate button of its own (§1-13,
+      // the Outpainting panel grew a Generate button of its own
+      // (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the time,
       // 2026-08-09), so "no Generate anywhere" stopped being a Create-specific
       // signal. A `hidden` panel is out of the accessibility tree, so a plain
       // `queryByRole` reaching nothing is exactly the assertion wanted.

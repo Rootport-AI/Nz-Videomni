@@ -913,7 +913,8 @@ def _do_generate(msg: dict) -> None:
 
     meta = None
     if outpaint is not None:
-        # Outpainting (§1-13). ``reference_video.path`` is already the green
+        # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the
+        # time). ``reference_video.path`` is already the green
         # canvas the app built, so ic_reference above points at it and this
         # branch only has to hand run_outpaint the geometry it needs to rebuild
         # the blend mask. Unlike the wheel's single generate, run_outpaint drives

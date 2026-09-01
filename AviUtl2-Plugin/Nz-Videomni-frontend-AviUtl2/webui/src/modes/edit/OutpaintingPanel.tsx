@@ -41,7 +41,8 @@ export interface OutpaintingPanelProps {
 
 /**
  * Outpainting（アウトペインティング：画面の描き足し）のパネル。正本は
- * `Docs/OUTPAINTING_DESIGN_NOTES.md`、台帳は `Docs/PENDING_TASKS.md` §1-13。
+ * `Docs/OUTPAINTING_DESIGN_NOTES.md`、台帳は `Docs/PENDING_TASKS_CLOSED.md`
+ * §3-70（起票当時は§1-13）。
  *
  * The user's path through it, top to bottom: attach the video → look at the
  * picture → dial in how much to add on each side (0 起点・1px 刻み、スライダー

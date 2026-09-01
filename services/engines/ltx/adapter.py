@@ -532,7 +532,8 @@ class LTXRunner:
         seed: int | None = None,
         outpaint_source_path: Path | None = None,
     ) -> GenerationOutcome:
-        """``outpaint_source_path`` (§1-13, additive): the ORIGINAL uploaded video
+        """``outpaint_source_path`` (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as
+        §1-13 at the time; additive): the ORIGINAL uploaded video
         for an outpainting job. ``reference_video_path`` already points at the
         green-padded canvas pipeline_manager built from it; this second path is
         what the engine reads the frozen-guidance AUDIO from, because the canvas
@@ -910,7 +911,8 @@ class _MockBackend:
         the real weight patch (and the preprocess -> control-signal conversion)
         lives in the engine worker.
 
-        ``outpaint_source_path`` (§1-13) is accepted and ignored for the same
+        ``outpaint_source_path`` (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as
+        §1-13 at the time) is accepted and ignored for the same
         reason: the mock never opens a video. It does honour the outpaint
         GEOMETRY though — ``request.width``/``height`` are already the canvas, so
         the placeholder comes out at the extended size and ``_render_frames``
@@ -1324,7 +1326,8 @@ class _MockBackend:
             cy = int(h * (0.5 + 0.3 * math.sin(t * 2 * math.pi)))
             r = max(6, min(w, h) // 12)
             draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ball_color)
-            # Outpainting (§1-13): the clip is already the CANVAS size (width /
+            # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at
+            # the time): the clip is already the CANVAS size (width /
             # height ARE the canvas), so the only thing the placeholder has to
             # add is where the original footage would have sat — otherwise a
             # mock outpaint run is indistinguishable from a plain one and the
@@ -1973,7 +1976,8 @@ class _RealBackend:
         # vae_mode_used="on->off".
         if request.vae_mode != "default":
             payload["vae_mode"] = request.vae_mode
-        # Outpainting (§1-13): same additive contract — the key is absent from
+        # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the
+        # time): same additive contract — the key is absent from
         # every non-outpaint job, so their payloads stay byte-identical. Its
         # presence is ALSO the switch that routes the worker to
         # ``generate_outpaint`` instead of ``generate``, so it carries the full

@@ -686,7 +686,8 @@ class PipelineManager:
                 else None
             )
 
-            # Outpainting (§1-13): build the green-padded canvas and hand THAT to
+            # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at
+            # the time): build the green-padded canvas and hand THAT to
             # the runner as the reference video. Substituting the path here is
             # what keeps the whole IC-LoRA chain below untouched — the engine's
             # ``_resolve_ic_reference`` and ``_reference_conditioning_for_stage``

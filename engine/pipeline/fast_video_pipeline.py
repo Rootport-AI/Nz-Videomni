@@ -1988,7 +1988,8 @@ class LTXFastVideoPipeline:
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
     ) -> dict:
-        """Canvas extension (outpainting, §1-13) -> ONE mp4.
+        """Canvas extension (outpainting, Docs/PENDING_TASKS_CLOSED.md §3-70,
+        filed as §1-13 at the time) -> ONE mp4.
 
         Delegates to :func:`engine.pipeline.outpaint_pipeline.run_outpaint`,
         which reuses THIS pipeline's ledger/components/low-VRAM machinery the

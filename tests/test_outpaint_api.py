@@ -1,4 +1,5 @@
-"""Outpainting (§1-13) — app-layer tests: schema, endpoint guards, runner payload.
+"""Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the time)
+— app-layer tests: schema, endpoint guards, runner payload.
 
 Mock backend, no GPU. The engine's two-stage driver
 (``engine/pipeline/outpaint_pipeline.py``) and the pure blend parts are tested

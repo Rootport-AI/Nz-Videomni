@@ -301,7 +301,8 @@ def lora_preprocess_conflict(kinds: list[str]) -> APIError:
 
 
 def outpaint_preprocess_conflict(kinds: list[str]) -> APIError:
-    """§1-13: outpainting hands the engine a green-padded CANVAS as the reference
+    """Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time): outpainting
+    hands the engine a green-padded CANVAS as the reference
     video, so a control adapter that would first run it through a preprocessor
     (canny / dwpose / depth) is incoherent — the edge map or depth map of a
     sentinel-green border is meaningless, and the In-Outpainting IC-LoRA expects
@@ -318,7 +319,8 @@ def outpaint_preprocess_conflict(kinds: list[str]) -> APIError:
 def outpaint_source_mismatch(
     expected: tuple[int, int], actual: tuple[int, int] | None
 ) -> APIError:
-    """§1-13: ``width``/``height`` are the final canvas and the four pads are cut
+    """Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time):
+    ``width``/``height`` are the final canvas and the four pads are cut
     out of it, so the keep rectangle is fully determined by the request. If the
     reference video's own resolution differs, the source would be silently
     rescaled and centre-cropped into the canvas (``resize_and_center_crop``),
@@ -335,7 +337,8 @@ def outpaint_source_mismatch(
 
 
 def outpaint_source_too_short(available: int, required: int) -> APIError:
-    """§1-13: the two blends pair frame *i* of the generation with frame *i* of
+    """Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time): the two
+    blends pair frame *i* of the generation with frame *i* of
     the green canvas, and stage 2 asserts its initial latent matches the target
     shape, so a source shorter than ``num_frames`` cannot be honoured — the tail
     would be a frozen clone of the last frame while the request claims real

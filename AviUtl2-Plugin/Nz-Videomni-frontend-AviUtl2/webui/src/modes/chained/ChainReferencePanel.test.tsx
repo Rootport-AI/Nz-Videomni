@@ -165,7 +165,8 @@ describe("ChainReferencePanel (§1-15 参照動画)", () => {
     });
 
     it("excludes in-outpainting from the dropdown even when the form reports it as a control LoRA", () => {
-      // §1-13/T2 (2026-08-11): `in-outpainting` has its own dedicated place —
+      // Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time), T2
+      // (2026-08-11): `in-outpainting` has its own dedicated place —
       // the Edit tab's Outpainting panel — so Chain's own dropdown must never
       // offer it, even though `form.controlLoraNames` (unfiltered, per
       // `lora/controlLoras.ts`'s doc comment) legitimately contains it.

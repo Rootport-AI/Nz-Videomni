@@ -52,8 +52,9 @@ export interface EditScreenProps {
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
  * disabled mock in `shell/ModeTabs.tsx`; it is now a real `AppMode` with panels
- * of its own, so the Outpainting work (`Docs/PENDING_TASKS.md` §1-13, design
- * notes `Docs/OUTPAINTING_DESIGN_NOTES.md` §5-8) has somewhere to land.
+ * of its own, so the Outpainting work (`Docs/PENDING_TASKS_CLOSED.md` §3-70,
+ * filed as §1-13 at the time; design notes `Docs/OUTPAINTING_DESIGN_NOTES.md`
+ * §5-8) has somewhere to land.
  *
  * ## Layout (owner feedback batch 2, 2026-08-09)
  *

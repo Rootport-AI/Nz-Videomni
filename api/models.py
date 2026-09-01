@@ -31,7 +31,8 @@ from config import LimitsConfig
 # SourceVideoSpec.validate_context_frames.
 _LIMITS_DEFAULTS = LimitsConfig()
 
-# Outpainting (§1-13): the smallest keep-rectangle side we accept.
+# Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the time):
+# the smallest keep-rectangle side we accept.
 #
 # The Laplacian-pyramid blend dilates its mask AFTER shrinking it to a 64px long
 # side, so a radius of r pixels there costs ``r * canvas_long_side / 64`` real
@@ -126,7 +127,8 @@ class LoraSpec(BaseModel):
 
 
 class OutpaintSpec(BaseModel):
-    """Canvas extension (outpainting), §1-13. Reproduces the official Lightricks
+    """Canvas extension (outpainting), Docs/PENDING_TASKS_CLOSED.md §3-70 (filed
+    as §1-13 at the time). Reproduces the official Lightricks
     ``LTX-2.3_ICLoRA_Outpaint_Two_Stage_Distilled`` ComfyUI workflow.
 
     Geometry contract: ``GenerateRequest.width`` / ``height`` are the FINAL
@@ -336,7 +338,8 @@ class GenerateRequest(BaseModel):
     # unchanged (the runner still emits strength=1.0 when this is None).
     reference_video_strength: float | None = Field(None, ge=0.0, le=1.0)
 
-    # Outpainting (§1-13, ADDITIVE/optional). ``None`` ⇒ the request is
+    # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the
+    # time; ADDITIVE/optional). ``None`` ⇒ the request is
     # byte-identical to before. See OutpaintSpec for the geometry contract.
     outpaint: OutpaintSpec | None = None
 
@@ -410,7 +413,7 @@ class GenerateRequest(BaseModel):
         if self.nag_enabled and not self.negative_prompt.strip():
             raise ValueError("nag_enabled requires a non-empty negative_prompt")
 
-        # ── Outpainting (§1-13) ───────────────────────────────────────────────
+        # ── Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the time) ──
         # One flat check per rule (no nesting): every failure names exactly what
         # the caller got wrong.
         if self.outpaint is not None:

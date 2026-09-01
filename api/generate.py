@@ -105,7 +105,7 @@ def generate(
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
 
-    # ── Outpainting (§1-13) ──────────────────────────────────────────────────
+    # ── Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the time) ──
     # The shape-only rules (pads, exclusivity, keep-region floor) live in the
     # pydantic validator; the three below need the registry or the file on disk,
     # so they belong here — the same split the control-adapter checks above use.

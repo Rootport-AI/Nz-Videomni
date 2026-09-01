@@ -68,7 +68,8 @@ export interface LoraSpec {
 
 /**
  * Outpainting（動画キャンバス拡張）の指定 —— 元動画の上下左右に何ピクセル
- * 描き足すか（設計方針書 `Docs/OUTPAINTING_DESIGN_NOTES.md` §1-13）。
+ * 描き足すか（設計方針書 `Docs/OUTPAINTING_DESIGN_NOTES.md`、台帳は
+ * `Docs/PENDING_TASKS_CLOSED.md` §3-70（起票当時は§1-13））。
  *
  * The canvas-extension spec for `POST /generate` (Edit タブ / Outpainting).
  * All four pads are pixel counts >= 0, and at least one of them must be
@@ -185,7 +186,8 @@ export interface GenerateRequest {
    * the usual decoder and records `vae_mode_used` when the pruned weights are
    * missing. Unrelated to the server's existing `vae_tiling` VRAM option. */
   vae_mode?: "default" | "prune_vaed";
-  /** Outpainting (2026-08-09, 台帳 §1-13): the canvas-extension spec. Built
+  /** Outpainting (2026-08-09, 台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-70, filed
+   * as §1-13 at the time): the canvas-extension spec. Built
    * exclusively by `modes/edit/useOutpaintForm.ts` and omitted entirely by
    * every other caller, so an ordinary Create/Chain request stays byte-identical
    * to before. See {@link OutpaintSpec} for the constraints the WebUI must

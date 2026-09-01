@@ -66,7 +66,8 @@ model:
       preprocess: depth
     # 前処理不要の制御アダプタ（ぼけた参照動画をそのまま渡す）＝文字列形式
     deblur: "./models/LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors"
-    # Outpainting（画面の描き足し, §1-13）。公式 In-Outpainting IC-LoRA。
+    # Outpainting（画面の描き足し, ``Docs/PENDING_TASKS_CLOSED.md`` §3-70（起票
+    # 当時は§1-13））。公式 In-Outpainting IC-LoRA。
     # 参照として渡すのは「緑で外周を塗ったキャンバス動画」で、これを canny や
     # depth に変換してはいけない（緑は前処理の対象ではなくセンチネル）ため、
     # preprocess を持たない文字列形式で登録する。ヘッダに

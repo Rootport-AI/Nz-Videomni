@@ -59,6 +59,10 @@ powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -Config Release
 
 ### 3.1 エフェクト名の一覧（起動後、最初の右クリックで1回だけ）
 
+> **注記（2026-09-01追記）**：**本節と §3.2 に載せてあるログのブロックは、採取をお願いするときに「こういう行が出ます」と説明するために書き手が組み立てた想定の出力例であり、実機で採取された値ではありません。** とくに `effect name="動画ファイル" type=2 flag=3` のような `type=` / `flag=` の数値、`videoFile item name=` の3行、`obj#0 item[再生位置] value="60"` のような値は、**いずれも書式を説明するための仮の値**です（`value="60"` は、直後の読み分けの説明で「フレームだった場合」の例として置いたものです）。
+>
+> **実際に採取して確定した事実の正本は [`V2V_RIBBON_TRIM_WORKORDER.md`](V2V_RIBBON_TRIM_WORKORDER.md) §4 です**（`再生位置` の生値は4フィールドのCSV `開始,終了,再生範囲,0` で、先頭2値の単位は素材時間軸の秒。ほかに `ループ再生` 項目の実在なども同節にあります）。本書の例示の値は、当時の依頼書の原文として手を加えずに残してあります。
+
 ```
 [PROBE] ==== probe A begin (TEMPORARY, NZVIDEOMNI_PROBE_VIDEO_ITEMS) ====
 [PROBE] effect name="動画ファイル" type=2 flag=3

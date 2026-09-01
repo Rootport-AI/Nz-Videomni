@@ -1043,10 +1043,19 @@ class _RealBackend25(_RealBackend):
             # built would have echoed "on" too, but then no done event arrives,
             # so nothing is relayed at all (2.3 behaves identically).
             keep_resident_used=event.get("keep_resident_used"),
-            # The ONE REMAINING acceleration relay (``vae_mode_used``) stays
-            # None: it names a 2.3 code path this engine does not have, and
-            # reporting "off" would claim the knob exists here and was left
-            # alone.
+            # 台帳 §3-131: ``vae_mode_used`` used to stay None here -- it named
+            # 2.3's PrunaVAED knob, which this engine does not have. It is
+            # REPURPOSED now as this engine's OWN decoder-name echo ("diff" /
+            # "conv"), a different question with a different vocabulary from
+            # 2.3's "off"/"on"/"on->off". ``ltx25`` is this engine's own
+            # additive facts (encode_fps/video_chunks/tiling/size_bytes/phases,
+            # or the outpaint superset) -- absent on 2.3 and on the mock, so
+            # it stays ``None`` there. ``vae_mode_used`` is ``None`` only on
+            # the mock, though: on 2.3 it is the PrunaVAED echo, not absent.
+            # Same ``.get`` discipline as the relays above: a worker that
+            # never spoke leaves None.
+            vae_mode_used=event.get("vae_mode_used"),
+            ltx25=event.get("ltx25"),
             # 高速化第3弾: attention_used is no longer the hard-coded "sdpa" it
             # was while this engine's scope excluded sage. It is the worker's
             # own echo now — "sdpa", "sage", or "sage->sdpa" for a build that
@@ -1343,9 +1352,12 @@ class _RealBackend25(_RealBackend):
             # once for the whole chain, so this echo is "on"/"off" and never the
             # folded "on->off" the two above can produce.
             keep_resident_used=event.get("keep_resident_used"),
-            # The ONE REMAINING acceleration field (``vae_mode_used``) names a
-            # 2.3 code path this engine does not have, so reporting "off" would
-            # claim the knob exists here and was left alone.
+            # 台帳 §3-131: same repurposing as the single path -- see the
+            # comment there. No ``ltx25=`` here: ``chain_metadata`` (built
+            # above from ``event.get("chain")``) already carries
+            # ``chain_metadata["ltx25"]``, so ``GenerationOutcome.ltx25`` stays
+            # None on a chain outcome, single-job only by contract.
+            vae_mode_used=event.get("vae_mode_used"),
             # 高速化第3弾: attention_used is the worker's echo now, and on a
             # chain it is a FOLD over every build the chain made — "sage->sdpa"
             # when one of them fell back, the same shape the two 第1弾 echoes

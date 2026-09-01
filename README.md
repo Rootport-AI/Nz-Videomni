@@ -949,7 +949,7 @@ LTX 2.5 へ切り替えると、**以後のすべての生成が 422 で断ら�
 **ファイルが無いときはどうなるか**: 枝刈りデコーダのファイルが見つからない場合（古い手順で作った環境や、利用者が
 削除した場合）は、**エラーにはならず、通常のデコーダで最後まで生成されます**。ファイルを戻せば次のジョブから
 また使われます（サーバーの再起動は要りません）。実際にどちらで生成されたかは、生成後に
-`outputs/{ジョブID}/metadata.json` の `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）で確認できます。
+`outputs/{ジョブID}/metadata.json` の `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）で確認できます。**LTX 2.5では`vae_mode_used`の意味が変わり、載っているデコーダの実名（現行の構成では`"conv"`）がそのまま入ります**——詳細は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.6を参照してください。
 
 **API から使う場合**: `POST /generate` と `POST /generate/chain` のどちらにも `vae_mode`（`"default"` または
 `"prune_vaed"`、既定 `"default"`）を指定できます。**フィールドの値が `"prune_vaed"` と綴られているのは、この機能を
@@ -1232,7 +1232,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
 - **`attention_backend="sage"` の注意**: 生成結果が同じシードでも変わります。詳しくは §5「生成の高速化（Acceleration）」の[注意書き](#sage-seed-note)を参照してください（**LTX 2.5 でも 2026-08-25 から選べるようになった**点もそこに書いてあります）。利用可否は `backend_status` の `acceleration.sage_available` で確認でき、`sageattention` が入っていない環境ならエラーにならず `"sdpa"` へ降格して完走します（**この降格の規律は LTX 2.3・LTX 2.5 のどちらでも逐語で同じ**です）。実際に使われた方式はメタデータの `attention_used` に記録されます。
 - **「生成の高速化（Acceleration）」の5項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode`。最後に残っていた `vae_mode` は 2026-08-05 に公開しました。ツールの本数は22個のまま変わっていません）。**LTX 2.5 を選んでいるときにこの5項目のうち 422 になるのは、`vae_mode`（PrunaVAED）の1つだけです**——`keep_resident` と `attention_backend` は 2026-08-25 から、残る2つは 2026-08-24 から LTX 2.5 でも動作します。
-- **`vae_mode="prune_vaed"`（PrunaVAED）の注意**: こちらも生成結果が変わります。詳しくは §5「枝刈り版の映像VAEデコーダ」の[注意書き](#prunavaed-quality-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。`sage` と違って LTX 2.3 での降格の可否は環境ではなく**枝刈りデコーダのファイルの有無**で決まり、無ければエラーにならず通常のデコーダで完走します。実際にどちらで生成されたかはメタデータの `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）に記録されます。**指定しなければ従来とまったく同じ**です（既定は `"default"` で、省略したときはこの項目自体がバックエンドへ送られません）。
+- **`vae_mode="prune_vaed"`（PrunaVAED）の注意**: こちらも生成結果が変わります。詳しくは §5「枝刈り版の映像VAEデコーダ」の[注意書き](#prunavaed-quality-note)を参照してください（**LTX 2.5 では 422 になる**点もそこに書いてあります）。`sage` と違って LTX 2.3 での降格の可否は環境ではなく**枝刈りデコーダのファイルの有無**で決まり、無ければエラーにならず通常のデコーダで完走します。実際にどちらで生成されたかはメタデータの `vae_mode_used`（`"off"` / `"on"` / `"on->off"`）に記録されます。**指定しなければ従来とまったく同じ**です（既定は `"default"` で、省略したときはこの項目自体がバックエンドへ送られません）。**LTX 2.5では本フィールドそのものは422になりますが、`vae_mode_used`は載っているデコーダの実名として引き続き記録されます**——値の意味は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.6を参照してください。
 
 ---
 

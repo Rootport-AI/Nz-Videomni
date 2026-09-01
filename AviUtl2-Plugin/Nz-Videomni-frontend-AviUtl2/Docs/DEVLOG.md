@@ -3702,3 +3702,40 @@ export function baseModelInstaller(id: string): string {
 ゲート結果（2026-09-01）: `npm run typecheck` エラー0／`npm test` **2,637 passed・10 skipped・0 failed**。AviUtl2プラグイン（C++）側は**doctest 282ケース・アサーション1452件**で0失敗（改修前は278ケース・1416アサーション）。バックエンドの全体スイートは**junit集計で2,146件・failures 0・errors 0・skipped 23**である。**数値の物差しと一次記録の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §86**で、ここには要点だけを引く。
 
 **自動ゲートは全部緑だが、§3-13のオーナー実機ゲートG1〜G8は未了である**（項目はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md)「2. 実装済み・ユーザーのテスト待ち」のチェックリスト）。実機で見るには`build.ps1`→`deploy.ps1`での配置が要る。**MCPとモックに閉じた3件（§3-115・§3-116・§3-122）は実機で確認できる要素が原理的に無いため、オーナー裁定により§2を経ずに直接クローズした**（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-115・§3-116・§3-122）。
+
+## 102. Editタブの右クリック自動読み込みが二重にアップロードしていた不具合を修正した（バックエンド台帳§3-63）（2026-09-02）
+
+### 102.1 結論
+
+**Editタブで「選択範囲を撮り直す」（Retake）へ右クリックで入ると、見えていないOutpaintingパネルの自動読み込みも一緒に走り、同じ素材ファイルが`uploads/`へもう一度アップロードされていた。** `EditScreen`はOutpaintingとRetakeの両フォームを常時マウントする設計（サブタブの切り替えは表示だけで、状態は両方生きている）だが、素材を読み込む一発処理のうちOutpainting側だけが、自分宛ての右クリックかどうかを見ずに`initialIntent`を素通しにしていた。**台帳の起票時の記述「逆向きも同様」は事実誤りだった**——調査の結果、Retake側（`useRetakeForm.ts`の`snapshotSelection`）は当時から`intent === "retake"`を見る自衛が既にあり、不具合は**片方向（Outpainting側）のみ**だった。
+
+### 102.2 直したこと
+
+`webui/src/modes/edit/useOutpaintForm.ts:213`の一発右クリック自動読み込みを、次の1行へ変更した。
+
+```ts
+const selection = initialIntent?.intent === "outpaint" ? initialIntent.selection : undefined;
+```
+
+判定基準をサブタブ選択（`EditScreen.tsx`の`initialIntent?.intent === "outpaint"`）に揃え、Retake側`useRetakeForm.ts`の`snapshotSelection`と双子の形にした。**`initialIntent`の同ファイル内の読み出しはこの1箇所のみ**なのでヘルパー関数化はしていない。
+
+### 102.3 テスト
+
+`EditScreen.retake.test.tsx`の既存の通しテストを強化した（新規フィクスチャは起こしていない）。
+
+- 「件数は1と決め打たない」というNOTEを削除し、`backend.uploadFile`が**ちょうど1回**であることを固定するアサートへ置き換えた。
+- 同じテストに、Outpaintingパネルの中に素材名`take1.mp4`が**無い**ことのアサートを1行追加した——`document.querySelector(".outpaint-panel")`をDOMから直接取って`within`で絞る形にしている。**両パネルとも`hidden`属性つきで常時レンダリングされる**ため、`getByRole`系のクエリでは`hidden`配下が見えず偽合格する点に注意。
+- 「Outpaintingパネルにも同名が出る」という、事実でなくなった旧NOTEの記述は書き換えた。
+- 敵対的レビューの採用: 当初案にあった`OutpaintingPanel.test.tsx`への新規否定テストは、上記1行の追加で同じ主張が満たせるため見送った。
+
+### 102.4 受容した挙動変化と休眠経路
+
+**オーナー決定**: 修正後は、撮り直し（Retake）の右クリックで入ってからOutpaintingサブタブへ切り替えると、Outpainting側の素材欄は空になる。これは**正しい挙動として受容済み**である（そもそも入ってきた素材はRetake用で、Outpaintingが無条件で拾うことのほうが誤りだった）。
+
+**休眠経路（敵対的レビューで指摘・記録）**: Retakeサブタブがベースモデルによって灰色化されている構成では、`intent: "retake"`が表示中のOutpaintingパネルへフォールバックする（`EditScreen.tsx:130`）。本修正後はそこにも素材が入らなくなる。**現行はLTX 2.3・LTX 2.5どちらの系統でもRetakeが有効なので、この経路は休眠状態である。**
+
+### 102.5 テストと状態
+
+`npm run typecheck` エラー0。`EditScreen.retake.test.tsx` **17/17 合格**。`build.ps1` → `deploy.ps1`で、実機のPluginフォルダとバックエンドリポジトリの配布コピー`AviUtl2-Plugin/NzVideomni.aux2`の2箇所へ配置済み（2026-09-02 00:00）。**台帳はクローズした**（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-63-02。本書には旧§3-63〔IC-LoRA Depth/Deblur〕が既にあるため`-02`）。
+
+**教訓（`npm test`のスイート全体実行が抱える罠）**: 本テーマの並行作業で、バックエンド側を担当したエージェントが稼働中の実バックエンド（オーナーがMCP確認のために起動していたもの）へ気づかず、`src/api/backend.integration.test.ts`が18620番ポートの実バックエンドを検出して実際の生成ジョブを送信してしまう事故があった（LTX 2.3がGPUへロードされ、ジョブが1本`outputs/`に残っている）。**今後の規律**: `GET /status`が到達不能であると確認できた場合を除き、エージェントが`webui`のテストを回すときは`backend.integration.test.ts`を除外すること。本節のテスト（`EditScreen.retake.test.tsx`単体実行）はこの罠を踏まない。詳細はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §87.4。

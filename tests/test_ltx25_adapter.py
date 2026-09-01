@@ -1210,7 +1210,20 @@ def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
         "event": "done",
         "seed_used": 123,
         "peak_vram_mb": 7000,
-        "chain": {"total_px": 41, "num_clips": 2},
+        # 台帳 §3-131: the chain's own ``ltx25`` sub-dict lives INSIDE "chain",
+        # not as a sibling key — the worker never emits a top-level ``ltx25``
+        # on a chain job (see the outcome test below).
+        "chain": {
+            "total_px": 41,
+            "num_clips": 2,
+            "ltx25": {
+                "stage1_sampler": "ancestral",
+                "stage1_eta": 1.0,
+                "chunked_upsample": False,
+                "tiling": None,
+                "phases": {},
+            },
+        },
         # 高速化第1弾: the worker echoes what ACTUALLY happened for both knobs,
         # and the adapter relays it verbatim (see the outcome test below).
         "block_swap_prefetch_used": "on",
@@ -1224,6 +1237,9 @@ def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
         # the relay would answer None. "sdpa" here — a plain chain asks for
         # nothing else — and the positive "sage" case gets its own test below.
         "attention_used": "sdpa",
+        # 台帳 §3-131: the decoder-name echo, same vocabulary as the single
+        # path's fake above.
+        "vae_mode_used": "conv",
     }
     return be
 
@@ -1780,16 +1796,25 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
 
     assert outcome.generation_mode == "chain"
     assert outcome.backend == ltx25.REAL_BACKEND_25
-    assert outcome.chain_metadata == {"total_px": 41, "num_clips": 2}
+    assert outcome.chain_metadata == {
+        "total_px": 41,
+        "num_clips": 2,
+        "ltx25": {
+            "stage1_sampler": "ancestral",
+            "stage1_eta": 1.0,
+            "chunked_upsample": False,
+            "tiling": None,
+            "phases": {},
+        },
+    }
     assert outcome.seed_used == 123
     assert outcome.peak_vram_mb == 7000
     # 高速化第3弾: "sdpa" is what the WORKER said (the fake echoes it), not a
     # constant the adapter writes — the positive "sage" case is the test below.
-    # The ONE relay that is still None names a 2.3 code path this engine does
-    # not have; reporting "off" would claim the knob exists here and was left
-    # alone.
+    # 台帳 §3-131: ``vae_mode_used`` is REPURPOSED as engine25's own
+    # decoder-name echo ("diff" / "conv") — no longer a permanent None here.
     assert outcome.attention_used == "sdpa"
-    assert outcome.vae_mode_used is None
+    assert outcome.vae_mode_used == "conv"
     # 高速化第1弾: these two DO name engine25 code paths now, so the worker's
     # echo rides through to metadata.json instead of being dropped.
     assert outcome.block_swap_prefetch_used == "on"
@@ -1797,6 +1822,25 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
     # 高速化第2弾: and so does the third. It used to be None here, because the
     # field was a 422 on this engine.
     assert outcome.keep_resident_used == "on"
+
+
+def test_chain_outcome_ltx25_field_stays_none_the_dict_lives_in_chain_metadata(tmp_path):
+    """台帳 §3-131: ``GenerationOutcome.ltx25`` is single-job only by contract —
+    a chain's engine25 facts live inside ``chain_metadata["ltx25"]`` instead
+    (``chain=meta`` already carries them; the worker never emits a top-level
+    ``ltx25`` on a chain ``done`` event, see ``_capturing_chain_backend``)."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    outcome = be.generate_chain(_chain_request(), output_dir=tmp_path / "out")
+
+    assert outcome.ltx25 is None
+    assert outcome.chain_metadata["ltx25"] == {
+        "stage1_sampler": "ancestral",
+        "stage1_eta": 1.0,
+        "chunked_upsample": False,
+        "tiling": None,
+        "phases": {},
+    }
 
 
 def test_chain_payload_carries_the_attention_backend_only_when_asked(tmp_path):
@@ -1996,6 +2040,16 @@ def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
         "keep_resident_used": "on",
         # 高速化第3弾: the fourth, the single-path twin of the chain fake's.
         "attention_used": "sdpa",
+        # 台帳 §3-131: the decoder-name echo and this engine's own additive
+        # facts, single-generation shape (five keys, no sampler/vram).
+        "vae_mode_used": "conv",
+        "ltx25": {
+            "encode_fps": 24,
+            "video_chunks": 1,
+            "tiling": None,
+            "size_bytes": 16,
+            "phases": {},
+        },
     }
     return be
 
@@ -2234,7 +2288,18 @@ def test_generate_outcome_names_this_engine(tmp_path):
     assert outcome.block_swap_prefetch_used == "on"
     assert outcome.fused_gguf_dequant_kernel_used == "on"
     assert outcome.keep_resident_used == "on"
-    assert outcome.vae_mode_used is None
+    # 台帳 §3-131: ``vae_mode_used`` is REPURPOSED as engine25's own
+    # decoder-name echo ("diff" / "conv") — no longer a permanent None here.
+    # ``ltx25`` is single-job-only additive: the worker's five engine25 facts,
+    # relayed verbatim (see ``_capturing_backend``'s fake ``done`` event).
+    assert outcome.vae_mode_used == "conv"
+    assert outcome.ltx25 == {
+        "encode_fps": 24,
+        "video_chunks": 1,
+        "tiling": None,
+        "size_bytes": 16,
+        "phases": {},
+    }
 
 
 def test_generate_payload_carries_the_attention_backend_only_when_asked(tmp_path):

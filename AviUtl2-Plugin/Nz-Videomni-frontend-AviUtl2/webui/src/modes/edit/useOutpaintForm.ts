@@ -210,7 +210,12 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   useEffect(() => {
     if (autoLoadRef.current) return;
     autoLoadRef.current = true;
-    const selection = initialIntent?.selection;
+    // `intent` を見るのが load-bearing: `EditScreen` は両サブパネルを常時マウントするので、
+    // Retake の右クリック（同じ `initialIntent` が届く）でここが素通しだと、見てもいない
+    // パネルが同じファイルをもう一度アップロードしてしまう。判定基準はサブタブ選択
+    // （`EditScreen.tsx` の `initialIntent?.intent === "outpaint"`）と揃え、双子は
+    // `useRetakeForm.ts` の `snapshotSelection`。（台帳 §3-63）
+    const selection = initialIntent?.intent === "outpaint" ? initialIntent.selection : undefined;
     const item = selection?.selected[0];
     const filePath = item?.filePath;
     if (!selection || !filePath) return;

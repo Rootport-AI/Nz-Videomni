@@ -302,6 +302,10 @@ async def submit_generate(
             実際に何で復元したかはジョブ完了後のメタデータの ``vae_mode_used``
             （``"off"`` / ``"on"`` / ``"on->off"``。``"on->off"`` は「頼んだが
             重みが無かったので既定で完走した」）に記録されます。
+            **LTX 2.5では本引数の指定自体が422になりますが、``vae_mode_used``
+            は引き続き記録され、値は載っているデコーダの実名（現行の構成では
+            ``"conv"``）に変わります**（台帳 §3-131。語彙の正本はバックエンド
+            ``Videomni_Backend_Specification.md`` §6.6）。
         outpaint_pad_left, outpaint_pad_right, outpaint_pad_top,
         outpaint_pad_bottom: 画角拡張で描き足す幅（px、0〜4096、既定0）。
             **4辺すべて0なら画角拡張は行いません**（``outpaint`` はサーバーへ
@@ -708,6 +712,10 @@ async def submit_chain(
             がわずかに低下する可能性があります**。**既定は ``"default"`` で、
             既定のままなら従来と完全に同じです**。チェーン全体・全クリップ・
             全ステージ共通で効きます。結果は ``vae_mode_used`` に記録されます）。
+            **LTX 2.5では本引数の指定自体が422になりますが、``vae_mode_used``
+            は引き続き記録され、値は載っているデコーダの実名（現行の構成では
+            ``"conv"``）に変わります**（台帳 §3-131。語彙の正本はバックエンド
+            ``Videomni_Backend_Specification.md`` §6.6）。
         end_source_video_id: 末尾を凍結する素材の動画ID（``upload_video`` で
             取得）。``end_source_image_id`` とは同時に指定できません。
         end_source_image_id: 末尾を凍結する素材の画像ID（``upload_image`` で

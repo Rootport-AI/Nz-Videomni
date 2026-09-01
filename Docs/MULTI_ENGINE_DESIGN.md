@@ -848,7 +848,7 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 
 **本書に残っている未決事項は無い。** 今後の課題は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3 側で管理する（**どの項目がいくつ生きているかは台帳 §3 を見ること**。件数と項目番号を本書に書かないのは、同じ数が文書ごとに食い違う事故を繰り返したためである）。
 
-判断が必要になったとき参照する現状を1つだけ挙げておく。**LTX 2.5 の映像デコーダは畳み込み版（conv）を既定としている**（`is_diffusion_video_vae` が偽であることは実測で確認済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §73.1）。拡散デコーダ版（DiffVAE）のファイル自体は捨てずに `models/LTX25/VAE/diffvae/` へ退避してあり、カテゴリの走査は非再帰なので**自動認識の対象にならない**（置いてあるが選べない、という状態）。
+判断が必要になったとき参照する現状を1つだけ挙げておく。**LTX 2.5 の映像デコーダは畳み込み版（conv）を既定としている**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §73.1で実測済み）。**現在は engine25 がロード時に `is_diffusion_video_vae` でこれを判定し（`Ltx25Pipeline.video_vae_kind`）、`build_report`／`LOAD_OK` に加え `metadata.json` の `vae_mode_used` としても報告する**（台帳 §3-131。詳細はバックエンド`Videomni_Backend_Specification.md` §6.6）。拡散デコーダ版（DiffVAE）のファイル自体は捨てずに `models/LTX25/VAE/diffvae/` へ退避してあり、カテゴリの走査は非再帰なので**自動認識の対象にならない**（置いてあるが選べない、という状態）。
 
 **拡散デコーダ版の決定性について、本節の旧記述（「反復的なノイズ除去を伴うため決定性が壊れる」）は事実として誤りだったので訂正する。**
 

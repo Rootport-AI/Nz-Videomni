@@ -6806,6 +6806,8 @@ VRAM確保ピークは LTX 2.5 ではエンジンのフェーズ別ピークの�
 
 **現時点では実害はない**（`unsupported_features` と拒否表があるので、どの設定で走ったかは request 側から復元できる）。ただし今後 §3-102 の残項目を入れてサンプラーや窓の選択肢が増えると、**出来上がった動画から「どう作られたか」を辿れなくなる**。engine25 固有ブロックを `metadata.json` へ通すかどうかは、次にこの周辺を触るときの検討事項として残しておく。
 
+> **【2026-09-02 追記】** engine25 固有ブロックは §87 で `metadata.json` へ通した（`vae_mode_used` の LTX 2.5 語彙化＋`ltx25` ブロックの加算。台帳 §3-131）。ここに書いた「ジョブ全体7,282 MB vs フェーズ別ピーク7,635.4 MB は別物」という単位差は、§87 の単位注記（MiB／GiB／十進MBの3体系）と同じ話である。
+
 #### (4) `chain.video_tiles` は（開始, 長さ）であって（開始, 終了）ではない
 
 `chain_math.py` の定義どおりだが、G5の駆動スクリプトの初版はここを読み違え、末尾の詰められたタイル（例: B4 の `[36, 5]`）で合計が負になり秒/トークンが負値になった。**G5の表の値は全ラン、`phases` と `chain` から計算し直したものである**。同じハーネスを再利用する人への申し送りとして記録しておく。
@@ -10284,3 +10286,41 @@ G1〜G6・G10は合格した（完了条件の正本は台帳[`PENDING_TASKS_CLO
 > - **G8も未検証のまま合格扱いである。** 理由は、**🎞ボタンによるタイムラインへの挿入が速すぎて、挿入中に別のオブジェクトを右クリックする余地が無く、検証そのものが成立しなかった**ためである。
 > - **したがって、§86.5が「特に見てほしい」と書いたG3・G5・G8の3本のうち、実際に確認できたのはG5だけである。** STAスレッド上でMedia Foundationを同期に読む経路について、実機で確かめられた範囲は「通常の素材で体感速度に変化が無い」ところまでだと理解すること。
 > - **§3-13はこれでクローズした。** 記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-13-02**（本書には旧§3-13が既にあるため、同書冒頭の採番規定に従って`-02`を付けた）。[`PENDING_TASKS.md`](PENDING_TASKS.md)側は§3-13・§2-5ともに欠番で、**「2. 実装済み・ユーザーのテスト待ち」は空になったので節ごと削除した。**
+
+## 87. ★Editタブの二重アップロード修正＋LTX 2.5の`vae_mode_used`とengine25固有ブロックのmetadata.json化＝機械ゲート・実機ゲート（オーナー了承のもとエージェントが実行）G-R0〜G-R5 全合格（2026-09-02）
+
+### 87.1 テーマの概要
+
+**独立した2件を1セッションで実装した。** 台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-63**（Editタブの右クリック自動読み込みが、撮り直し（Retake）で入ったときにも隠れているOutpaintingパネルを走らせ、同じ素材ファイルを二重に`uploads/`へ上げていた片方向のバグ）と、同**§3-131**（LTX 2.5の`metadata.json`で`vae_mode_used`が常に`null`で、engine25固有の情報＝Stage-1サンプラー・タイル化・フェーズ別所要などが一切載らなかった件）である。**実装内容の記録は各文書が正本で、本節はゲート結果のみを記録する**——§3-63はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §102、§3-131は`Videomni_Backend_Specification.md` §6.6と台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-131が正本である。
+
+### 87.2 機械ゲート（2026-09-02）
+
+**バックエンド全体スイート**（app venv `pytest -q`、`--junitxml`集計）: **着手前実測1 failed／2,122 passed／23 skipped → 実装後1 failed／2,125 passed／23 skipped（+3件、いずれも§3-131の新規テスト）。** 唯一の失敗`tests/test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false`は**18620番ポートにバックエンドが立っていないことを前提にしたテストで、本テーマの前後で同一に失敗する環境依存の既知失敗**である（本テーマの変更とは無関係）。
+
+**engine venvのCPU確認**（GPU不要）: `.venv-engine-ltx25\Scripts\python.exe -c "from engine25.ltxcore_compat import is_diffusion_video_vae, verify; verify(); print(is_diffusion_video_vae(r'models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors'))"` → `verify()`は例外なし・`is_diffusion_video_vae(...)`は`False`（畳み込み版）。実機の期待値どおり。
+
+**フロントエンド**: `npm run typecheck` エラー0。`EditScreen.retake.test.tsx` **17/17 合格**。**`npm test`をスイート全体では回していない**——`src/api/backend.integration.test.ts`が、到達可能な実バックエンドを見つけると実際のジョブを投げてしまう仕様であるため（詳細は下記87.5の教訓1）。単体ファイル実行はこの罠を踏まない。
+
+### 87.3 実機ゲート（オーナー了承のもとエージェントが実行。2026-09-02、RTX 4070 Ti SUPER 16GB、HTTP API直叩き）
+
+**§3-131のみが実機の対象**（§3-63の実機相当の確認はvitestで担保済み——上記`EditScreen.retake.test.tsx`）。**実行はHTTP APIを直接叩く方式**（MCPサーバーは使っていない。理由は下記87.5の教訓2）。app venvのPython＋`httpx`、ベースURL`http://127.0.0.1:18620/api/v1`、認証ヘッダ不要（`config.yaml`の`api_key: null`）。**バックエンドは着手前にオーナーが再起動済み。** 駆動スクリプトはリポジトリを汚さないようscratchpad（`gate_3131.py`）に置き、ゲート後は残していない——**手順そのものは以下に書き残す。**
+
+| # | 手順・リクエスト本体 | 結果 |
+|---|---|---|
+| G-R0 | `GET /status` | 開始前状態＝未ロード（`base_model`はLTX23のまま） |
+| G-R1 | `POST /pipeline/load {"base_model":"LTX25"}`（`timeout=None`で送信——本エンドポイントは同期で、既定タイムアウトで送ると再送が409 `PIPELINE_LOADING`になる罠がある） | 応答本体`state=="ready"`・`base_model=="LTX25"`。`logs/ltx25_worker.log`のLOAD_OK行に`"video_vae_kind": "conv"` |
+| G-R2 | `POST /generate` 本体`{"prompt":"a red ball rolling on a white floor","width":384,"height":256,"num_frames":17,"frame_rate":24.0,"num_inference_steps":8,"guidance_scale":1.0,"seed":42,"pipeline":"distilled"}` → `GET /jobs/{id}`をcompletedまでポーリング → `outputs/{id}/metadata.json`を読む | ジョブ`e771feef-e57e-4c67-9e35-d33a386af8c3`、55秒で完了。`vae_mode_used=="conv"`。`ltx25`は共通コア5キー＝`encode_fps=24`／`video_chunks=1`／`tiling=TileSizeConfig(frames=(80,24), height=(512,64), width=(768,64))`／`size_bytes=31009`／`phases`（7エントリ: `10a_te_build` 9.09秒・`10b_ep_build` 5.38秒・`10_prompt_encode` 19.11秒・`21_stage1_denoise` 22.53秒・`22_stage2_denoise` 4.77秒・`30_decode_encode` 0.41秒・`40_job_end` 0.0秒）。他の4実効値欄は`attention_used="sdpa"`／`block_swap_prefetch_used="on"`／`fused_gguf_dequant_kernel_used="on"`／`keep_resident_used="off"`で従来どおり。`peak_vram_mb=6952`・`peak_vram_reserved_mb=7180`・`generation_time_seconds=51.84`。トップレベルのキー集合＝§6.6の標準20キー＋`ltx25`の21キー |
+| G-R3 | **`POST /generate/chain`**（`/generate_chain`ではない）本体`{"prompt":"a serene mountain lake at dawn","width":384,"height":256,"frame_rate":24.0,"num_inference_steps":8,"guidance_scale":1.0,"pipeline":"distilled","overlap_frames":3,"overlap_strength":0.5,"clips":[{"num_frames":25},{"num_frames":25}]}` → 同上 | ジョブ`912767ad-11d7-48f6-a26b-7be22bd875ed`、45秒で完了。`vae_mode_used=="conv"`。`ltx25`（`chain`ブロックの内側）は`stage1_sampler="ancestral"`／`stage1_eta=1.0`／`stage2_sampler="euler"`／`clear_keyframes_on_carry=true`／`chunked_upsample=false`／`stage2_window="standard"`／`video_chunks=1`／`vram`（`count=9`・`peak_allocated_gib=6.451`・`peak_reserved_gib=6.637`・`rss_peak_gib=25.86`・`seconds_total=41.21`）／`phases`（9エントリ）。**`chain`ブロック自体は従来どおり14キーのまま**（`ltx25`は最上位へは追加されない）。`peak_vram_mb=6606`・`peak_vram_reserved_mb=6796`・`generation_time_seconds=41.64`。`metadata.json`実サイズ117,012バイト |
+| G-R4 | `POST /pipeline/load {"base_model":"LTX23"}` → `POST /generate`（G-R2と同じ本体） → `metadata.json` | ジョブ`3d266c5a-7cff-4701-9e12-23d545098a0a`、70秒で完了。`vae_mode_used=="off"`（従来値）。`"ltx25"`キーは**無い**。トップレベルのキー集合（20キー）は、**mtime最新のLTX23単発ジョブ**（`outputs/*-gate*/evidence/`配下の`run_outpaint`生辞書ダンプは対象外）と完全一致——本テーマ前後でLTX 2.3側のキー集合はバイト不変であることの確認。`peak_vram_mb=8442`・`peak_vram_reserved_mb=8972`・`generation_time_seconds=69.36` |
+| G-R5 | 後片付け | ベースモデルをG-R0の開始前状態（未ロード）へ復帰。生成物は3本とも`outputs/`に残置（削除しない） |
+
+**全行程を通じて409・タイムアウト・再送は0件だった。**
+
+### 87.4 記録に値する教訓2件
+
+1. **`npm test`をスイート全体で回すと、稼働中の実バックエンドへ実ジョブを投げてしまうことがある。** 本テーマ中、フロントエンド作業を担当したエージェントが`npm test`をスイート全体で実行したところ、`src/api/backend.integration.test.ts`が18620番ポートで稼働していたオーナーの実バックエンド（MCP確認のために起動されていたもの）を検出し、実際の生成ジョブを送信した（LTX 2.3がGPUへロードされ、ジョブ`6cb2ef5e-38c0-4e04-b33f-3201673ff0ae`が`outputs/`に残っている）。**今後の規律**: `GET /status`が到達不能であると確認できた場合を除き、エージェントがwebuiのテストを回すときは`backend.integration.test.ts`を除外すること。
+2. **`nz-videomni` MCPサーバーは、Claude Codeの作業ディレクトリが親フォルダのままだと検出されない。** `.mcp.json`は`Nz-Videomni/`直下にあるため、リポジトリのさらに親フォルダを開いたセッションからは見えない。過去の成功例（§39.6）は別マシンでリポジトリフォルダを直接開いていたケースであり、本テーマのセッション構成では再現しなかった。**このため本ゲートはMCP経由ではなくHTTP APIを直接叩く方式で実施した**（プラン段階から想定済みの代替経路）。
+
+### 87.5 状態
+
+**§3-63・§3-131とも実装・全ゲート合格でクローズした（2026-09-02）。** 記録は台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-63-02**（本書には旧§3-63〔IC-LoRA Depth/Deblur〕が既にあるため`-02`）・**§3-131**（無印）。**§3-131のクローズにより、台帳§3-102の判断材料(4)「engine25固有の情報が`metadata.json`に載らない」も同時に解消した**（同書§3-102本文にもその旨を記載済み）。G-R2〜G-R4の3ジョブと、上記教訓1の事故ジョブ（`6cb2ef5e-38c0-4e04-b33f-3201673ff0ae`）は、いずれも`outputs/`に残置してある（削除していない）。

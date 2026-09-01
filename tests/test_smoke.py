@@ -188,6 +188,10 @@ def test_metadata_records_attention_used(client):
     # of them actually took effect.
     assert meta["request"]["attention_backend"] == "sage"
     assert meta["request"]["vae_mode"] == "prune_vaed"
+    # 台帳 §3-131: ``ltx25`` is LTX 2.5-only additive (GenerationOutcome.ltx25 is
+    # None on 2.3 and on the mock), so a 2.3 job's metadata key set is
+    # byte-unchanged -- the key must not even appear.
+    assert "ltx25" not in meta
 
 
 def test_metadata_records_block_swap_prefetch_used(client):
@@ -252,6 +256,9 @@ def test_chain_metadata_records_attention_used(client):
     assert "attention_used" in meta
     assert meta["attention_used"] is None
     assert meta["request"]["attention_backend"] == "sage"
+    # 台帳 §3-131: same fact as the single-generate test above, on the chain
+    # metadata writer (chain_metadata["ltx25"] is None on 2.3 and on the mock).
+    assert "ltx25" not in meta
 
 
 def test_chain_metadata_records_block_swap_prefetch_used(client):

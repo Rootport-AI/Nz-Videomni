@@ -1382,6 +1382,14 @@ class PipelineManager:
         end_source = cm.get("end_source")
         if end_source is not None:
             metadata["end_source"] = {**end_source, **(end_source_provenance or {})}
+        # LTX 2.5 engine facts (additive, 台帳 §3-131): only present on an LTX
+        # 2.5 chain, so a 2.3 (or mock) chain's metadata key set is
+        # byte-unchanged. The engine's own ``chain["ltx25"]`` sub-dict, relayed
+        # verbatim — no app-side provenance to merge in, unlike the blocks
+        # above.
+        ltx25 = cm.get("ltx25")
+        if ltx25 is not None:
+            metadata["ltx25"] = ltx25
         # §1-15 (clip-wise IC-LoRA reference, additive): only present when a
         # reference video was actually used, so a normal (or style-loras-only)
         # chain's metadata key set is byte-unchanged. Mirrors _write_metadata's
@@ -1556,6 +1564,11 @@ class PipelineManager:
                 metadata["ic_lora"]["reference_video_strength"] = (
                     req.reference_video_strength
                 )
+        # LTX 2.5 engine facts (additive, 台帳 §3-131): only present on an LTX
+        # 2.5 single generation, so a 2.3 (or mock) job's metadata key set stays
+        # byte-unchanged.
+        if outcome.ltx25 is not None:
+            metadata["ltx25"] = outcome.ltx25
         video_io.save_metadata(metadata_path, metadata)
 
     def _environment_block(self) -> dict:

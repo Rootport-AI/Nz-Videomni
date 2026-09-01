@@ -134,9 +134,14 @@ What this module deliberately does NOT do
   decode 1 + blend 1 + upscale + re-encode. That is a long, silent stretch at
   production resolution. It is documented rather than fixed: a new phase name
   would need an app-side branch, which this theme does not touch.
-* **It does not carry its own metadata into ``metadata.json``.** ``done``'s
-  additive keys and the worker log are where the outpaint facts land; putting
-  them in ``metadata.json`` needs an app-layer change and is out of scope.
+* **Its ``ltx25`` sub-dict reaches ``metadata.json`` now; the rest of it still
+  does not (台帳 §3-131).** ``done``'s additive keys and the worker log are
+  where the REST of the outpaint facts (geometry, blend, sigmas, the audio
+  freeze proof) land -- putting THOSE in ``metadata.json`` would still need a
+  further app-layer change and is out of scope. The one exception is the
+  nested ``ltx25`` sub-dict: the worker re-sends that SAME dict object as a
+  top-level ``ltx25`` key on ``done`` (see ``engine25/worker.py``), and the app
+  writes it into ``metadata.json`` verbatim.
   :class:`OutpaintResult` is a superset of
   :class:`~engine25.pipeline25.GenerationResult` precisely so the numbers the
   app DOES store (``vram_optimization.peak_vram_mb``) still get filled in.
@@ -319,9 +324,13 @@ class OutpaintResult:
     :attr:`metadata` is the 2.3-shaped job metadata dict (the ``outpaint``
     sub-dict, the flat geometry/timing keys, and the ``ltx25`` sub-dict), the
     same shape :class:`engine25.chain25.ChainResult` carries. It rides on
-    ``done`` as an additive key and in the worker log; it does NOT reach
-    ``metadata.json``, which would need an app-layer change (out of scope --
-    see the module docstring).
+    ``done`` as an additive key and in the worker log. Of the two halves, only
+    the nested ``ltx25`` sub-dict reaches ``metadata.json`` (台帳 §3-131) -- the
+    worker re-sends that SAME dict object as a top-level ``ltx25`` key on
+    ``done``, and the app writes it in verbatim. The rest of ``metadata``
+    (geometry, blend, sigmas, the audio freeze proof) does NOT reach
+    ``metadata.json``, which would still need a further app-layer change (out
+    of scope -- see the module docstring).
     """
 
     output_path: str

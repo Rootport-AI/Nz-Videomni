@@ -71,9 +71,18 @@ Protocol (one JSON object per line; parent -> worker):
       ``reference_video.path`` is then ALREADY the app-built green canvas, and
       ``source_path`` is the ORIGINAL upload, read only for its audio -- the
       canvas is written without an audio stream on purpose.
-      The ``done`` reply adds ``outpaint``: the job's metadata dict (geometry,
-      blend, sigmas, the audio freeze proof). It rides the event and the
-      ``GENERATE_REPORT`` line only; metadata.json does NOT carry it.
+      The ``done`` reply adds ``vae_mode_used`` (which VAE decoder this
+      checkpoint built -- "diff" or "conv"; a load-time fact, 台帳 §3-131) and
+      ``ltx25`` (encode_fps/video_chunks/tiling/size_bytes/phases -- deliberately
+      no ``sampler``, that is already ``ready.sampler``) to EVERY generate job,
+      plain or outpaint. On an outpaint job it ALSO adds ``outpaint``: the job's
+      metadata dict (geometry, blend, sigmas, the audio freeze proof, and its
+      own nested ``ltx25`` sub-dict, a superset of the plain one -- the SAME
+      dict object as the top-level ``ltx25`` key, not a second copy).
+      ``outpaint`` itself rides the event and the ``GENERATE_REPORT`` line
+      only; metadata.json does NOT carry it. ``vae_mode_used`` and ``ltx25``
+      are different: metadata.json DOES carry both -- the app reads only the
+      top-level ``ltx25``, never ``outpaint.ltx25``.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
    [stage2_window], [source], [audio_source], [retake], [end_source]}
@@ -110,8 +119,12 @@ Protocol (one JSON object per line; parent -> worker):
       no chain MODE is on that list any more.
       The four acceleration knobs are NOT on that list: all of them apply to
       the chain unchanged.
-      The ``done`` reply adds ``chain``: the whole layout + metadata dict, in
-      2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes ran.
+      The ``done`` reply adds ``vae_mode_used`` (same fact and vocabulary as the
+      single op's, 台帳 §3-131) and ``chain``: the whole layout + metadata dict,
+      in 2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes
+      ran, and its own ``ltx25`` sub-dict (``chain["ltx25"]``). Unlike the
+      single op, no additive top-level ``ltx25`` key: ``chain`` already carries
+      it, one level down.
   {"op": "shutdown"}
 
 Replies are framed with the SAME unique prefix as the 2.3 worker so the shared
@@ -122,7 +135,8 @@ logging goes to STDERR.
   @@LTX@@{"event":"progress","stage":"stage1_denoise","index":3,"total":8}
   @@LTX@@{"event":"progress","stage":"stage1_denoise","index":3,"total":8,
           "outer_index":1,"outer_total":2}   <- chain only: which clip/tile
-  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,...}
+  @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,
+          "vae_mode_used":"conv","ltx25":{...},...}
   @@LTX@@{"event":"error","detail":...}
 
 ``progress`` stage names are the 2.3 worker's names on purpose (``encode`` /
@@ -888,15 +902,39 @@ def _do_generate(msg: dict) -> None:
         _PIPE.reset_nag_job()
         _PIPE.reset_acceleration_job()
 
-    # The ONE additive ``done`` key, and only on an outpaint job: the app reads
-    # this event by NAME (``event.get(...)`` per field), so an unknown key adds
-    # a fact without disturbing one, and a plain generation's event is
-    # byte-identical to what it has always been. WHAT IS IN IT does not reach
-    # metadata.json -- that would need an app-layer change, which this theme
-    # does not make -- so the freeze proof, the audio branch and the sampler's
-    # intentional differences live here and in the GENERATE_REPORT line above.
-    # That is where the gates collect them from.
+    # ``outpaint`` is the additive ``done`` key, and it appears only on an
+    # outpaint job -- unlike ``vae_mode_used`` and ``ltx25`` (below), which
+    # ride EVERY job. The app reads this event by NAME (``event.get(...)``
+    # per field), so an unknown key adds a fact without disturbing one. WHAT
+    # IS IN IT (aside from its own ``ltx25`` sub-dict, see below) does not
+    # reach metadata.json -- that would need an app-layer change, which this
+    # theme does not make -- so the freeze proof, the audio branch and the
+    # sampler's intentional differences live here and in the GENERATE_REPORT
+    # line above. That is where the gates collect them from.
     extra: dict = {} if outpaint is None else {"outpaint": result.metadata}
+
+    # 台帳 §3-131: ``ltx25``, a SECOND and SEPARATE ``done`` key, present on
+    # EVERY generate job (plain or outpaint), unlike ``extra`` above. Its
+    # content DOES reach metadata.json -- ``services/engines/ltx25/adapter.py``
+    # lifts it onto ``GenerationOutcome.ltx25`` and
+    # ``services/pipeline_manager.py`` writes it in verbatim when present.
+    # ``outpaint25.py`` already builds its own ``ltx25`` sub-dict inside
+    # ``result.metadata`` (the same dict that just went into ``extra``), so an
+    # outpaint job reuses it rather than building a second, possibly-drifting
+    # copy -- the app reads the TOP-LEVEL key only, never ``outpaint.ltx25``,
+    # but the two are one and the same object here. A plain generation has no
+    # such dict to reuse, so it is built fresh from the same fields the
+    # ``done`` event below already reports (deliberately NO ``sampler`` -- a
+    # constant already on ``ready.sampler``/LOAD_OK -- and no
+    # ``stage1_eta``/``stage2_sampler``/``vram``, which only a two-stage
+    # outpaint/chain build has).
+    ltx25: dict = result.metadata["ltx25"] if outpaint is not None else {
+        "encode_fps": result.encode_fps,
+        "video_chunks": result.video_chunks,
+        "tiling": result.tiling,
+        "size_bytes": result.size_bytes,
+        "phases": result.phases,
+    }
 
     # Read the verdicts AFTER the reset -- that is where they are computed
     # ("asked for it and dequantized nothing eligible" is a degradation, and the
@@ -930,6 +968,16 @@ def _do_generate(msg: dict) -> None:
         # a request that never reached the pipeline (no wheel) is still reported
         # as "sage->sdpa" rather than as a clean "sdpa".
         attention_used=_attention_used(attention, attention_degraded),
+        # 台帳 §3-131: which VAE decoder this checkpoint built ("diff" / "conv").
+        # A DIFFERENT vocabulary from 2.3's PrunaVAED echo above (that "off" /
+        # "on" / "on->off" triad is whether the PRUNED decoder ran instead of
+        # the stock one; this is the real decoder's own name) on purpose -- the
+        # two answer different questions. Load-time, not per-job: it never
+        # moves between jobs on one worker.
+        vae_mode_used=_PIPE.video_vae_kind,
+        # 台帳 §3-131: see the ``ltx25`` build above -- present on every job,
+        # unlike ``extra``.
+        ltx25=ltx25,
         # Appended LAST, and empty for every job but an outpaint one.
         **extra,
     )
@@ -1363,6 +1411,12 @@ def _do_generate_chain(msg: dict) -> None:
         # kernel call in the last stage-2 tile makes the whole chain
         # "sage->sdpa".
         attention_used=_attention_used(attention, attention_degraded),
+        # 台帳 §3-131: same vocabulary and same load-time fact as the single
+        # op's done -- see the comment there. No additive ``ltx25=`` key here:
+        # ``chain=meta`` already carries ``meta["ltx25"]`` (built by
+        # ``chain25.py``), and duplicating it at the top level would be two
+        # copies of one dict to keep in sync instead of one.
+        vae_mode_used=_PIPE.video_vae_kind,
     )
 
 

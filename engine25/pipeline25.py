@@ -165,6 +165,7 @@ from engine25.ltxcore_compat import (
     encode_video,
     ensure_tiling_config,
     get_video_chunks_number,
+    is_diffusion_video_vae,
     tiling_scale_factors_for_vae,
     verify,
 )
@@ -1153,6 +1154,15 @@ class Ltx25Pipeline:
         self.build_report["te_layers_on_gpu"] = self.te_layers_on_gpu
         self.build_report["cache_weights"] = self.cache_weights
         self.build_report["sampler"] = SAMPLER_NAME
+        # 台帳 §3-131: which VAE decoder this checkpoint builds -- "diff" (the
+        # DiT-based diffusion decoder) or "conv" (the plain convolutional one).
+        # ``VideoDecoder.__init__`` calls the same function on the same path to
+        # pick its own internals, but does not keep the answer anywhere reachable
+        # afterwards. It is a load-time fact of the checkpoint, not a per-job
+        # decision, so it is read once here and stored as an attribute -- not
+        # recomputed as a method on every job.
+        self.video_vae_kind = "diff" if is_diffusion_video_vae(self.files.video_vae) else "conv"
+        self.build_report["video_vae_kind"] = self.video_vae_kind
         self.build_report["stage_1_steps"] = int(DISTILLED_SIGMAS.numel()) - 1
         self.build_report["stage_2_steps"] = int(STAGE_2_DISTILLED_SIGMAS.numel()) - 1
         if self.device.type == "cuda":

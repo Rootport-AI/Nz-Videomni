@@ -189,6 +189,7 @@ from ltx_core.model.video_vae import (
     TilingConfig,
     VideoEncoder,
     get_video_chunks_number,
+    is_diffusion_video_vae,
 )
 from ltx_core.quantization import QuantizationPolicy
 from ltx_core.tools import AudioLatentTools, LatentTools, VideoLatentTools
@@ -382,6 +383,7 @@ __all__ = [
     "gpu_model",
     "image_conditionings_by_adding_guiding_latent",
     "image_conditionings_by_replacing_latent",
+    "is_diffusion_video_vae",
     "load_state_dict",
     "ltx_distilled",
     "module_registry_key",
@@ -738,6 +740,7 @@ def verify() -> None:
     )
     _require_params(get_video_chunks_number, "get_video_chunks_number", "num_frames", "tiling_config")
     _require_params(should_use_ancestral_sampler, "should_use_ancestral_sampler", "transformer_path")
+    _require_params(is_diffusion_video_vae, "is_diffusion_video_vae", "checkpoint_path")
 
     # 3. §3-102 (Chained): the surface engine25/chain25.py drives directly.
     #

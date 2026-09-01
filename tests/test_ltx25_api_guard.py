@@ -238,6 +238,79 @@ def test_the_acceleration_echoes_reach_metadata_json_on_ltx25(two_family_client)
     # のだから null が正しい。実機での "on"/"off" はゲートG5で確かめる。
     assert "keep_resident_used" in meta
     assert meta["keep_resident_used"] is None
+    # 台帳 §3-131。``vae_mode_used`` は欄そのものは常に存在する（2.3の
+    # PrunaVAED欄と共有）が、mockは何も報告しないのでnull。``ltx25`` は
+    # 加算専用キーで、mockはoutcome.ltx25を作らない（実機のみ）ので、
+    # metadata.jsonにキーごと現れない——「mockは実機のふりをしない」の
+    # もう一つの現れ。
+    assert "vae_mode_used" in meta and meta["vae_mode_used"] is None
+    assert "ltx25" not in meta
+
+
+def test_ltx25_single_generate_ltx25_dict_reaches_metadata_json(two_family_client):
+    """台帳 §3-131。前のテストが確かめたのは「mockは ``ltx25`` を報告しない」
+    という**mock固有**の事実で、それ自体は実配線の証拠にならない。この一本は
+    ``pm.runner.generate`` の返り値へ ``outcome.ltx25`` を後乗せして、実機の
+    ``services/engines/ltx25/adapter.py``(``ltx25=event.get("ltx25")``)と
+    ``services/pipeline_manager.py``(``if outcome.ltx25 is not None:
+    metadata["ltx25"] = outcome.ltx25``)の配線だけを、mockのままGPUなしで
+    端から端まで1本通す。
+
+    ラップは**_activate の後**でなければならない: ``base_model`` の切り替えは
+    ``pm.runner`` を新しいランナー**インスタンス**へ差し替えるので(§3-97
+    P3b)、先にラップすると _activate がそれごと握り潰す。同じ流儀が
+    tests/test_runtime_state.py:340 の ``pm.runner.load = _raise`` シャドウに
+    ある。"""
+    _activate(two_family_client, "LTX25")
+    pm = two_family_client.app_context.pipeline_manager
+    orig = pm.runner.generate
+
+    def wrapped(*a, **k):
+        outcome = orig(*a, **k)
+        outcome.ltx25 = {"tiling": None, "phases": {"decode": {"seconds": 1.0}}}
+        return outcome
+
+    pm.runner.generate = wrapped  # type: ignore[method-assign]
+
+    r = two_family_client.post("/api/v1/generate", json=BASE_REQUEST)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert two_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = two_family_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["ltx25"] == {"tiling": None, "phases": {"decode": {"seconds": 1.0}}}
+
+
+def test_ltx25_chain_ltx25_dict_reaches_metadata_json(two_family_client):
+    """chain版の対。正本経路は ``GenerationOutcome.ltx25`` ではなく
+    ``chain_metadata["ltx25"]``(``chain_metadata`` はmock上ただのdict)なので、
+    そちらへ後乗せする——実機の中継(``chain=meta`` -> worker done event ->
+    ``chain_metadata=event.get("chain")``)と同じ形。ラップが _activate の後で
+    なければならない理由は単発の一本と同じ。"""
+    _activate(two_family_client, "LTX25")
+    pm = two_family_client.app_context.pipeline_manager
+    orig = pm.runner.generate_chain
+
+    def wrapped(*a, **k):
+        outcome = orig(*a, **k)
+        outcome.chain_metadata["ltx25"] = {"tiling": None, "phases": {"decode": {"seconds": 1.0}}}
+        return outcome
+
+    pm.runner.generate_chain = wrapped  # type: ignore[method-assign]
+
+    r = two_family_client.post("/api/v1/generate/chain", json=_chain_body())
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert two_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+    ctx = two_family_client.app_context
+    meta = json.loads(
+        (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["ltx25"] == {"tiling": None, "phases": {"decode": {"seconds": 1.0}}}
 
 
 def test_the_guard_runs_before_the_upload_and_lora_lookups(two_family_client):

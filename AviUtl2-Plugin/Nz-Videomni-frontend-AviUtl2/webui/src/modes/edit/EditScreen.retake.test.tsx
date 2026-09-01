@@ -196,19 +196,28 @@ describe("EditScreen — Retake の通し", () => {
     const tabs = screen.getAllByRole("tab");
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
 
+    // §3-63 修正前はここが 2 件だった —— `useOutpaintForm` が同じ `initialIntent`
+    // を intent を見ずに読んでいたため、見えていない Outpainting パネルの
+    // 自動読み込みも走り、同じファイルがもう一度上がっていた。今は Outpainting
+    // 側が `intent === "outpaint"` を見るので、ちょうど 1 件のみ。ただしここでは
+    // 「少なくとも 1 件」だけを待つ —— 件数の断定はパネルが落ち着いた後（下）で
+    // 行う。そうしないと、まだ 2 件目が届く前の一瞬を「1 件」と誤判定しうる。
     await waitFor(() => expect(bridgeCalls(request, "backend.uploadFile").length).toBeGreaterThan(0));
-    // タイムライン上で一部だけを使っているので、その範囲だけを切り出して上げる。
-    // NOTE: 件数は 1 と決め打たない —— `EditScreen` は両サブパネルを常時マウント
-    // するので、同じ `initialIntent` を見る `useOutpaintForm` の自動読み込みも
-    // 同時に走り、同じファイルがもう一度上がる（`useOutpaintForm.ts` は本作業の
-    // 立入禁止領域なので、ここでは事実として受け入れて記録するに留める）。
-    for (const call of bridgeCalls(request, "backend.uploadFile")) {
-      expect(call[1]).toMatchObject({ query: { trim_start_sec: "2.000", trim_duration_sec: "10.000" } });
-    }
-    // 素材名が Retake パネル**の中**に出ている（同じ右クリックを見ている
-    // Outpainting パネルにも同名が出るので、必ずパネル内へ絞る）。
+    // 素材名が Retake パネル**の中**に出ている。
     const panel = document.querySelector<HTMLElement>(".retake-panel")!;
     expect(await within(panel).findByText(/take1\.mp4/)).toBeTruthy();
+    // パネルが落ち着いた後で件数を断定する。
+    expect(bridgeCalls(request, "backend.uploadFile")).toHaveLength(1);
+    // タイムライン上で一部だけを使っているので、その範囲だけを切り出して上げる。
+    expect(bridgeCalls(request, "backend.uploadFile")[0]![1]).toMatchObject({
+      query: { trim_start_sec: "2.000", trim_duration_sec: "10.000" },
+    });
+    // 同じ右クリックを見ている Outpainting パネルは、intent が一致しないので
+    // 素材を読み込まない（同名は出ない）。両パネルとも `hidden` 属性つきで常時
+    // レンダリングされるので、`getByRole` 系ではなく DOM から直接取って
+    // `within` で絞る（`hidden` 配下は role クエリでは見えず偽合格するため）。
+    const outpaint = document.querySelector<HTMLElement>(".outpaint-panel")!;
+    expect(within(outpaint).queryByText(/take1\.mp4/)).toBeNull();
     // 素材を**差し替える**導線はこのパネルには無い。あるのは片付けの 2 つ
     // （❌＝この撮り直しごと捨てる／🔁＝素材と区間だけ捨てて設定は残す）と、
     // シードの 2 つだけ。全数一致で見るので、増えたら必ずここが落ちる。

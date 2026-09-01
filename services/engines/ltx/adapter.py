@@ -392,6 +392,9 @@ class GenerationOutcome:
     # acceleration field whose "on" CHANGES THE PIXELS — which is exactly why
     # recording what actually ran matters here more than anywhere else. None on
     # the mock backend and on any worker that predates the field.
+    # LTX 2.5 only (台帳 §3-131): the vocabulary differs there — the value is
+    # the REAL NAME of the video VAE decoder that was loaded ("conv" / "diff"),
+    # not a PrunaVAED on/off echo like the 2.3 description above.
     vae_mode_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
@@ -399,6 +402,12 @@ class GenerationOutcome:
     # Additive — does not replace peak_vram_mb. None on the mock backend and on
     # any worker that predates the field.
     peak_vram_reserved_mb: int | None = None
+    # LTX 2.5 only, single-job generation (台帳 §3-131): the worker's own
+    # engine25-specific facts (encode_fps/video_chunks/tiling/size_bytes/phases,
+    # or an outpaint job's larger dict) — relayed verbatim into metadata.json.
+    # A chain rides the same facts inside chain_metadata["ltx25"] instead, so
+    # this field stays None there too. None on the mock backend and on LTX 2.3.
+    ltx25: dict | None = None
 
 
 class LTXRunner:

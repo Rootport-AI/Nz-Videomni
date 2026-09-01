@@ -85,6 +85,7 @@ set(NZVIDEOMNI_COMMON_SOURCES
     "${NATIVE_DIR}/src/alias_util.cpp"
     "${NATIVE_DIR}/src/provisional.cpp"
     "${NATIVE_DIR}/src/mf_mp4_writer.cpp"
+    "${NATIVE_DIR}/src/media_fps_probe.cpp"
     "${NATIVE_DIR}/src/wav_probe.cpp"
     "${NATIVE_DIR}/src/fs_util.cpp")
 
@@ -121,7 +122,8 @@ target_link_libraries(NzVideomni PRIVATE
     winhttp
     windowscodecs
     user32
-    # Media Foundation: IMFSinkWriter mp4 (H.264 + AAC) encoder (mf_mp4_writer).
+    # Media Foundation: IMFSinkWriter mp4 (H.264 + AAC) encoder (mf_mp4_writer)
+    # and the IMFSourceReader frame-rate probe (media_fps_probe).
     mfplat
     mfreadwrite
     mfuuid)
@@ -186,6 +188,7 @@ add_executable(NzVideomni_tests
     "${NATIVE_DIR}/tests/test_alias_util.cpp"
     "${NATIVE_DIR}/tests/test_provisional.cpp"
     "${NATIVE_DIR}/tests/test_mf_mp4_writer.cpp"
+    "${NATIVE_DIR}/tests/test_media_fps_probe.cpp"
     "${NATIVE_DIR}/tests/test_wav_probe.cpp"
     "${NATIVE_DIR}/tests/test_fs_util.cpp"
     ${NZVIDEOMNI_COMMON_SOURCES})

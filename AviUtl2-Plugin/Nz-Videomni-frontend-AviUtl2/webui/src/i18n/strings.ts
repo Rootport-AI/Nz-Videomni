@@ -97,13 +97,15 @@ export const en = {
   },
   /** Edit mode (2026-08-09): the tab was promoted from a disabled mock to a
    * real one, and now hosts its own sub-tab row (Retake / Outpainting /
-   * Inpainting). Outpainting is a real panel (`Docs/PENDING_TASKS.md` §1-13);
+   * Inpainting). Outpainting is a real panel (`Docs/PENDING_TASKS_CLOSED.md`
+   * §3-70, filed as §1-13 at the time);
    * Retake is still a placeholder and Inpainting is a disabled mock sub-tab.
    * The Outpainting panel has NO prompt field of its own — it reads the shared
    * `promptBar` above the tabs, exactly as Create/Chain do. The sub-tab LABELS are
    * deliberately identical in en/ja, matching the `modes.*` main-tab labels
    * (owner decision, 2026-08 tab rename); only the prose below is translated.
-   * Groundwork for `Docs/PENDING_TASKS.md` §1-13 (Outpainting). */
+   * Groundwork for `Docs/PENDING_TASKS_CLOSED.md` §3-70 (Outpainting, filed as
+   * §1-13 at the time). */
   edit: {
     subTabsAriaLabel: "Edit tool",
     subTabs: {
@@ -1723,22 +1725,20 @@ export const en = {
     themeLabel: "Theme",
     themeDark: "Dark",
     themeLight: "Light",
-    /** W1/X1/X6: how a right-click prefill decides the generation size
+    /** W1/X6/§3-13: how a right-click prefill decides the generation size
      * (width/height) and, independently, the fps (`shell/PrefillPolicyContext.tsx`).
      * Persisted client-side only (`localStorage`), like the theme toggle above.
      * Affects only the right-click prefill's initial values — ordinary panel
      * edits, presets and "Get size from AviUtl2" are unchanged. X6: a shared
-     * heading sits above both axes; the fps axis's "materials" button is disabled
-     * (X1: material fps detection is deferred). */
+     * heading sits above both axes. §3-13: all three choices are live on BOTH
+     * axes — the fps axis's "materials" snaps the material's own framerate to an
+     * integer and falls back to the project's fps when it can't be read. */
     rightClickMenuHeading: "Right-click menu:",
     prefillSizePolicyLabel: "Match Gen video size to the...",
     prefillFpsPolicyLabel: "Match Gen video FPS to the...",
     prefillPolicyDefaults: "Dev",
     prefillPolicyProject: "project",
     prefillPolicyMaterial: "materials",
-    /** X1/X6: tooltip on the fps axis's disabled "materials" button — the SDK
-     * cannot read a material's real fps yet (deferred to a future update). */
-    prefillFpsMaterialDisabledTooltip: "Material FPS detection is planned for a future update.",
     /** X6: tooltip on both axes' "Dev" button (its label is intentionally terse). */
     prefillPolicyDevTooltip: "Developmental defaults",
     /** Acceleration (2026-07-31, backend §43): five rows, all of them REAL as
@@ -2810,7 +2810,6 @@ export const ja: Strings = {
     prefillPolicyDefaults: "開発用",
     prefillPolicyProject: "プロジェクト",
     prefillPolicyMaterial: "素材",
-    prefillFpsMaterialDisabledTooltip: "素材fpsの取得は将来対応予定です",
     prefillPolicyDevTooltip: "開発用の既定値",
     accelerationHeading: "生成の高速化:",
     accelFusedGgufKernelLabel: "GGUF脱量子化カーネルの1本化",

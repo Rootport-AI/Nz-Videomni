@@ -21,6 +21,14 @@ G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mod
 （実装と実機ゲートG1〜G7の合格を待ってからの最終ステップ。
 ``PRUNAVAED_WORKORDER.md`` §0-8・§6.3）。
 
+ネストオブジェクトを取る2機能は 2026-09-01 に公開した（``Docs/PENDING_TASKS_CLOSED.md``
+§3-115 / §3-122、2026-09-01にクローズ済み。
+**ツール本数は22本のまま不変**で、引数が増えただけ）: ``submit_chain`` の
+撮り直し（``retake_*`` 5引数 → ``retake`` ネスト）と、``submit_generate`` の
+画角拡張（``outpaint_*`` 6引数 → ``outpaint`` ネスト）。どちらもAPI側
+（``RetakeSpec`` / ``OutpaintSpec``）は前から実装済みで、MCPは引数を素通し
+するだけである。
+
 送信ボディは「Noneまたは空は送らない」を徹底する（計画のペイロード契約）。
 ``crop_width`` / ``crop_height`` は両方指定 or 両方省略のみを許す（片側だけの
 指定はサーバーへ投げる前にここで弾く）。NAG系フィールドは ``nag_enabled=False``
@@ -46,6 +54,41 @@ from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 
 _SUBMIT_TIMEOUT = 30.0
 _CHAIN_SUBMIT_TIMEOUT = 30.0
+
+# 画角拡張（outpainting, ``Docs/PENDING_TASKS_CLOSED.md`` §3-70（起票当時は
+# §1-13）/ ``Docs/PENDING_TASKS_CLOSED.md`` §3-122、
+# 2026-09-01にクローズ済み）の既定値。正本は
+# ``api/models.py`` の ``OutpaintSpec``（stage1=5 / stage2=2）と、操作パネル側の
+# ``webui/src/modes/edit/outpaintGeometry.ts``（``DEFAULT_BLEND_DILATION_STAGE1``）。
+_OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT = 5
+# 画角拡張が必ず1本だけ要求する control 系アダプタ名。操作パネルの
+# ``controlLoras.ts`` の ``OUTPAINT_LORA_NAME`` と同一。
+_OUTPAINT_LORA_NAME = "in-outpainting"
+_OUTPAINT_LORA_STRENGTH = 1.0
+
+# 撮り直し（Retake, ``Docs/PENDING_TASKS_CLOSED.md`` §3-115、2026-09-01に
+# クローズ済み）の補助引数の既定値。正本は ``api/models.py`` の
+# ``RetakeSpec``（head_px=25 / tail_px=24 / regenerate_audio=True）。
+_RETAKE_HEAD_PX_DEFAULT = 25
+_RETAKE_TAIL_PX_DEFAULT = 24
+_RETAKE_REGENERATE_AUDIO_DEFAULT = True
+
+
+def _outpaint_stage2_from_stage1(r: int) -> int:
+    """stage 1 の膨張段数から stage 2 の段数を導く（公式ワークフローの 5:2）。
+
+    操作パネル側の正本 ``webui/src/modes/edit/outpaintGeometry.ts`` の
+    ``stage2FromStage1`` の移植: ``r <= 0`` だけ特例で 0（「膨張なし」を選んだ
+    のに stage 2 だけ膨らむのを防ぐ）、それ以外は ``max(1, round(r * 2 / 5))``。
+
+    Pythonの ``round`` は偶数丸め（banker's rounding）だがJavaScriptの
+    ``Math.round`` は 0.5 切り上げ -- ここでは差が出ない。``r`` は整数なので
+    ``r * 2 / 5`` の小数部は 0 / 0.2 / 0.4 / 0.6 / 0.8 のいずれかにしかならず、
+    ちょうど .5 になる ``r`` が存在しないためである。
+    """
+    if r <= 0:
+        return 0
+    return max(1, round(r * 2 / 5))
 
 
 async def submit_generate(
@@ -74,6 +117,12 @@ async def submit_generate(
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     vae_mode: Literal["default", "prune_vaed"] = "default",
+    outpaint_pad_left: int = 0,
+    outpaint_pad_right: int = 0,
+    outpaint_pad_top: int = 0,
+    outpaint_pad_bottom: int = 0,
+    outpaint_blend_dilation_stage1: int = _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT,
+    outpaint_freeze_source_audio: bool = True,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -126,6 +175,41 @@ async def submit_generate(
         参照動画が必須な制御系（control）アダプタを使う場合は、必ず
         ``loras`` の先頭（``loras[0]``）に置き、``reference_video_id`` も
         指定してください（スタイル系/character系アダプタは参照動画不要）。
+
+    画角拡張（outpainting、元動画の外側を描き足して画角を広げる）:
+      * ``outpaint_pad_*``（左右上下のパディング、単位px）を1つ以上0より大きく
+        すると画角拡張になります。4辺すべて0なら通常の生成です。
+      * **``width`` / ``height`` は「拡張後の最終キャンバス」であり、パディング
+        はその内側から切り出されます。** 元動画の解像度と一致しなければならない
+        のは「残す領域」＝ ``width - outpaint_pad_left - outpaint_pad_right``
+        × ``height - outpaint_pad_top - outpaint_pad_bottom`` のほうです
+        （サーバーがffprobeで実測して照合し、食い違えば422で拒否します）。
+        元動画がリサイズされることはありません。
+      * 満たすべき幾何条件は4つです。(1) ``width`` / ``height`` は**128の倍数**
+        （参照動画を使うため64ではなく128）。(2) 残す領域が元動画の解像度と
+        完全一致。(3) 残す領域は**縦横とも256px以上**（なじみ処理がキャンバス
+        長辺の約1/10まで内側に及ぶため）。(4) 元動画のフレーム数が
+        ``num_frames`` 以上。
+      * ``reference_video_id`` が**必須**です（画角を広げる対象の元動画。
+        ``upload_video`` で取得）。``conditioning_images`` と
+        ``crop_width`` / ``crop_height`` とは排他です。
+      * **``in-outpainting`` という制御系LoRAが1本だけ必要で、このツールが
+        自動で ``loras`` へ追加します**（``{"name": "in-outpainting",
+        "strength": 1.0}``。あなたが ``loras`` に同名のものを既に入れていれば
+        何もしません）。**``in-outpainting`` が導入されていない環境ではLoRAの
+        解決に失敗して404になります**——事前に ``list_loras`` で存在を確認して
+        ください。
+      * **アップロード前に、ローカルで ffprobe 等により元動画の解像度と
+        フレーム数を確認し、キャンバス（128の倍数）を逆算してください。
+        ``upload_video`` の応答は解像度を返しません**（``max_frames`` を渡せば
+        フレーム数と ``fps`` だけは返ります）。
+      * ``outpaint_blend_dilation_stage1`` は継ぎ目のなじみ幅（マスクぼかし）の
+        段数です。実寸のピクセル幅は ``段数 × キャンバス長辺 ÷ 64`` で、
+        1920px幅・既定5段なら約150pxになります。stage 2 の段数は公式ワーク
+        フローと同じ5:2の比で**自動追従**するので、指定するのはstage 1だけです。
+        既定（5）のままなら ``blend_dilation_stage1`` / ``_stage2`` の
+        両キーとも送りません（このフィールドを知らない古いサーバーでも通る
+        ようにするため）。
 
     Args:
         prompt: 生成プロンプト（必須）。
@@ -218,10 +302,41 @@ async def submit_generate(
             実際に何で復元したかはジョブ完了後のメタデータの ``vae_mode_used``
             （``"off"`` / ``"on"`` / ``"on->off"``。``"on->off"`` は「頼んだが
             重みが無かったので既定で完走した」）に記録されます。
+        outpaint_pad_left, outpaint_pad_right, outpaint_pad_top,
+        outpaint_pad_bottom: 画角拡張で描き足す幅（px、0〜4096、既定0）。
+            **4辺すべて0なら画角拡張は行いません**（``outpaint`` はサーバーへ
+            送られません）。1つでも0より大きければ画角拡張になり、
+            ``reference_video_id`` が必須になります。上の「画角拡張」の節に
+            ある幾何条件4つを必ず満たしてください。
+        outpaint_blend_dilation_stage1: 継ぎ目のなじみ幅の段数（0〜15、既定5＝
+            公式ワークフローの値）。stage 2 の段数は5:2の比で自動追従します。
+            **既定のままなら送信しません。** 画角拡張をしない（4辺すべて0）のに
+            既定以外にすると、黙って無視される代わりにエラーになります。
+        outpaint_freeze_source_audio: 元動画の音声を両ステージで凍結するか
+            （既定True＝公式ワークフローと同じ。広がった画角に合わせて音声を
+            作り直させたい場合だけFalseにします）。**既定のままなら送信
+            しません。** 画角拡張をしない（4辺すべて0）のにFalseにすると、
+            黙って無視される代わりにエラーになります。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
     """
+    total_outpaint_pad = (
+        outpaint_pad_left + outpaint_pad_right + outpaint_pad_top + outpaint_pad_bottom
+    )
+    # 「指定が黙って消える」型のPOST前チェック（既存のCROP_SIZE_INCOMPLETEと
+    # 同じカテゴリ）。幾何条件・排他はサーバーの422に任せ、ここでは二重に
+    # 持たない。
+    if total_outpaint_pad == 0 and (
+        outpaint_blend_dilation_stage1 != _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT
+        or not outpaint_freeze_source_audio
+    ):
+        raise ToolError(
+            "OUTPAINT_PADS_ALL_ZERO: outpaint_blend_dilation_stage1 / "
+            "outpaint_freeze_source_audio を指定するには、outpaint_pad_left / "
+            "_right / _top / _bottom のいずれかを0より大きくしてください"
+            "（4辺すべて0だと画角拡張そのものが行われず、指定が無視されます）"
+        )
     if (crop_width is None) != (crop_height is None):
         raise ToolError(
             "CROP_SIZE_INCOMPLETE: crop_width と crop_height は両方指定するか、"
@@ -291,6 +406,44 @@ async def submit_generate(
     if reference_video_strength is not None:
         payload["reference_video_strength"] = reference_video_strength
 
+    # 画角拡張（outpainting, ``Docs/PENDING_TASKS_CLOSED.md`` §3-70（起票当時は
+    # §1-13）/ ``Docs/PENDING_TASKS_CLOSED.md`` §3-122、
+    # 2026-09-01にクローズ済み）。ネストオブジェクトは
+    # end_source と同じく「使うときだけ丸ごと足す」（4辺すべて0＝使わない）。
+    # 最後に追加しているので、既定値だけの呼び出しのボディのキー集合と順序は
+    # これまでと1バイトも変わらない。
+    if total_outpaint_pad > 0:
+        outpaint: dict[str, Any] = {
+            "pad_left": outpaint_pad_left,
+            "pad_right": outpaint_pad_right,
+            "pad_top": outpaint_pad_top,
+            "pad_bottom": outpaint_pad_bottom,
+        }
+        # 既定（5）のときは両キーごと省略する -- 操作パネル
+        # （webui/src/modes/edit/useOutpaintForm.ts）と同じ後方互換の規律。
+        # 非既定のときだけ、stage 2 を5:2で追従させて2キーとも送る。
+        if outpaint_blend_dilation_stage1 != _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT:
+            outpaint["blend_dilation_stage1"] = outpaint_blend_dilation_stage1
+            outpaint["blend_dilation_stage2"] = _outpaint_stage2_from_stage1(
+                outpaint_blend_dilation_stage1
+            )
+        if not outpaint_freeze_source_audio:
+            outpaint["freeze_source_audio"] = False
+        payload["outpaint"] = outpaint
+
+        # `in-outpainting` の自動注入（2026-09-01 オーナー裁定）。操作パネルは
+        # このLoRAを固定でピン留めしており、サーバーも outpaint には
+        # preprocess の無い control 系アダプタをちょうど1本要求する。
+        # エージェントに毎回書かせると忘れて422になるだけなので、パネルと
+        # 同じ振る舞いをここで再現する。重複判定は **name の一致だけ** で行う
+        # -- 呼び出し側が strength 0.7 で明示していたらその指定を尊重する。
+        existing_loras: list[dict[str, Any]] = payload.get("loras", [])
+        if not any(lora.get("name") == _OUTPAINT_LORA_NAME for lora in existing_loras):
+            payload["loras"] = [
+                *existing_loras,
+                {"name": _OUTPAINT_LORA_NAME, "strength": _OUTPAINT_LORA_STRENGTH},
+            ]
+
     client = get_client()
     result = await client.post_json("/generate", json=payload, timeout=_SUBMIT_TIMEOUT)
     return {
@@ -348,6 +501,11 @@ async def submit_chain(
     end_source_image_id: str | None = None,
     end_source_context_frames: int = 72,
     end_source_strength: float = 1.0,
+    retake_video_id: str | None = None,
+    retake_window_start_sec: float | None = None,
+    retake_head_px: int = _RETAKE_HEAD_PX_DEFAULT,
+    retake_tail_px: int = _RETAKE_TAIL_PX_DEFAULT,
+    retake_regenerate_audio: bool = _RETAKE_REGENERATE_AUDIO_DEFAULT,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -404,6 +562,8 @@ async def submit_chain(
         例外として、深度（depth）系の制御アダプタは2クリップ以上の
         チェーンでは非対応（422 ``LORA_DEPTH_CHAIN_UNSUPPORTED``。depthの
         前処理はチェーン全体分の参照を一括処理する設計のため）。
+      * 撮り直し（``retake_video_id`` 指定）は **``clips`` がちょうど1件**
+        です（そのクリップ自身が作り直す窓だからです）。
 
     V2V / A2V:
       * ``source_video_id`` と ``source_audio_id`` は同時に指定できません
@@ -441,14 +601,51 @@ async def submit_chain(
         です）。**推奨のクリップ1件（窓内モード）には影響しません。**
         **出力の長さはどちらの場合もクリップの合計**であって、素材の分だけ
         伸びることはありません。
-        ``retake`` / ``source_audio_id`` / ``reference_video_id`` とは排他
-        です。``source_video_id`` との併用は**クリップ1件のときだけ**受理
+        ``retake_video_id`` / ``source_audio_id`` / ``reference_video_id``
+        とは排他です。``source_video_id`` との併用は**クリップ1件のときだけ**受理
         されます（頭と尾の両方を固定して補間する構図）。2件以上との併用は
         422で拒否されます。
       * ``end_source_strength``（既定1.0）は1.0で素材どおりに終わります
         （既定）。下げるとStage-1での素材へのなじみ方が緩くなりますが、
         Stage-2で改めて固定されるため最終フレームは常に素材どおりになり
         ます。
+
+    撮り直し（Retake、既存クリップの「まん中」だけ作り直す時間方向の
+    inpainting）:
+      * ``retake_video_id``（``upload_video`` で取得したID）を指定すると
+        撮り直しになります。サーバーは元動画から窓
+        ``[retake_window_start_sec, retake_window_start_sec + 窓長)`` を
+        フレーム単位で切り出し、その窓**だけ**をエンジンへ渡します。
+      * **窓長を決めるのは ``clips[0].num_frames`` ただ1つです**——長さを表す
+        第2の引数は意図的に存在しません（食い違いを作らないため）。
+        受理される範囲は既定のstage-2窓で **[73, 169] フレーム**であり、
+        ``get_config`` の ``limits.retake_window_min_frames`` /
+        ``retake_window_max_frames`` で確認できます。``clips`` はちょうど1件
+        にしてください。
+      * ``retake_window_start_sec`` は**必須**です（0以上の秒数）。
+        ``retake_video_id`` を指定して ``retake_window_start_sec`` を省略すると、
+        このツールがPOST前にエラーにします。
+      * **窓の開始秒を決める下調べには ``upload_video(file_path, max_frames=...)``
+        を使ってください**——``max_frames`` を渡したときだけ、保存された動画の
+        ``frame_count`` と ``fps`` が実測されて返ります（``max_frames`` は
+        「先頭Nフレームだけ残す」引数でもあるので、測るだけのときは元の尺より
+        確実に大きい値を渡してください）。
+      * ``retake_head_px``（既定25）と ``retake_tail_px``（既定24）は、窓の
+        前後で凍結したまま残す「糊しろ」のフレーム数です。**``retake_head_px``
+        は 8n+1、``retake_tail_px`` は 8の倍数でなければなりません**——映像VAEが
+        因果的で、窓の両端が別の潜在グリッドに乗るためです。
+        **既定の25/24は較正済みの推奨値であり、広くすれば良いというものでは
+        ありません**（49/48は音声の継ぎ目をむしろ弱めることが実測されています）。
+      * 納品されるmp4は**窓まるごと**で、糊しろはトリムされていません。この
+        糊しろが、タイムライン上で元動画へ重ね直すための「のりしろ」であり、
+        品質の継ぎ目を編集点ではなく窓の外側の縁へ追い出す仕組みです。
+      * ``retake_regenerate_audio`` を False にすると、窓の**元の波形**を
+        そのまま使い戻します（ボコーダをスキップします）。この場合、元動画に
+        音声トラックが実際に無いと422で拒否されます。
+      * ``source_video_id`` / ``source_audio_id`` / ``reference_video_id`` /
+        ``end_source_video_id`` / ``end_source_image_id`` /
+        ``clips[0].conditioning_images`` とは**すべて排他**です（いずれも1本の
+        クリップの端を取り合うため）。
 
     その他:
       * ``loras`` はチェーン全体・全ステージに一律で効きます（クリップごとの
@@ -523,10 +720,46 @@ async def submit_chain(
             1.0＝素材どおりに終わる（既定）。下げるとStage-1での素材への
             なじみ方が緩くなりますが、Stage-2で改めて固定されるため最終
             フレームは常に素材どおりになります。
+        retake_video_id: 撮り直す元動画のID（``upload_video`` で取得）。これを
+            指定すると撮り直しになり、``clips`` はちょうど1件・窓長は
+            ``clips[0].num_frames`` になります。
+        retake_window_start_sec: 作り直す窓の開始秒（0以上）。**``retake_video_id``
+            を指定するなら必須**です（省略するとPOST前にエラーになります）。
+            ``upload_video(max_frames=...)`` が返す ``frame_count`` / ``fps``
+            から算出してください。
+        retake_head_px: 窓の先頭で凍結したまま残す糊しろのフレーム数
+            （**8n+1**、既定25）。
+        retake_tail_px: 窓の末尾で凍結したまま残す糊しろのフレーム数
+            （**8の倍数**、既定24）。**既定の25/24は較正済みの推奨値で、
+            広げれば良いというものではありません。**
+        retake_regenerate_audio: 窓の音声を作り直すか（既定True）。Falseにすると
+            元の波形をそのまま使い戻します（元動画に音声トラックが無いと422）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
     """
+    # 撮り直しのPOST前チェック2本。どちらも「指定が黙って消える / 意図しない値に
+    # 化ける」型（既存の CROP_SIZE_INCOMPLETE と同じカテゴリ）に限っている。
+    # 幾何条件（8n+1・8の倍数・窓長の範囲）と排他はサーバーの422が正本で、
+    # ここに二重の判断を置かない。
+    if retake_video_id and retake_window_start_sec is None:
+        raise ToolError(
+            "RETAKE_WINDOW_START_REQUIRED: retake_video_id を指定する場合は "
+            "retake_window_start_sec（作り直す窓の開始秒、0以上）も指定して"
+            "ください（既定値はありません）"
+        )
+    if not retake_video_id and (
+        retake_window_start_sec is not None
+        or retake_head_px != _RETAKE_HEAD_PX_DEFAULT
+        or retake_tail_px != _RETAKE_TAIL_PX_DEFAULT
+        or retake_regenerate_audio != _RETAKE_REGENERATE_AUDIO_DEFAULT
+    ):
+        raise ToolError(
+            "RETAKE_ARGS_WITHOUT_VIDEO_ID: retake_window_start_sec / "
+            "retake_head_px / retake_tail_px / retake_regenerate_audio を指定する"
+            "には retake_video_id も指定してください（撮り直しでなければ"
+            "これらの指定は無視されます）"
+        )
     if source_video_id is not None and source_audio_id is not None:
         raise ToolError(
             "SOURCE_XOR_VIOLATION: source_video_id と source_audio_id は同時に"
@@ -602,6 +835,21 @@ async def submit_chain(
             "image_id": end_source_image_id,
             "context_frames": end_source_context_frames,
             "strength": end_source_strength,
+        }
+    # 撮り直し（``Docs/PENDING_TASKS_CLOSED.md`` §3-115、2026-09-01にクローズ済み）。
+    # end_source と同型に「使うときだけネストを丸ごと足す」。
+    # 5キーは既定値のままでも全部入れる -- RetakeSpec 側の既定と同じ値なので
+    # 送信しても意味は変わらず、ネストの形が呼び出しごとに揺れないほうが
+    # metadata の突き合わせが読みやすいため（end_source と同じ作法）。
+    # ``window_start_sec`` が None のまま来ることは無い（上のPOST前チェックで
+    # 弾いている）。
+    if retake_video_id:
+        payload["retake"] = {
+            "video_id": retake_video_id,
+            "window_start_sec": retake_window_start_sec,
+            "head_px": retake_head_px,
+            "tail_px": retake_tail_px,
+            "regenerate_audio": retake_regenerate_audio,
         }
 
     if loras:

@@ -1151,6 +1151,11 @@ json MakeSelectionResult(const SelectionSnapshot& snap) {
         // Not nullable either: 0 means "unknown duration" (still image / no
         // audio / lookup failure); the webui treats 0 as unknown.
         e["mediaDurationSec"] = it.media_duration_sec;
+        // Contract v11 (material fps, section 3-13): the material's own frame
+        // rate, RAW (29.97 stays 29.97 - the webui does the integer snap). Not
+        // nullable either; 0 means "unknown", which 0 can safely mean because
+        // it is never a real frame rate.
+        e["mediaFps"] = it.media_fps;
         // Contract v10 (source trim, section 1-6). None of these are nullable:
         // hasPlaybackRange is the explicit "was it really read" flag, and the
         // other three carry conservative defaults (neutral speed, no loop, one

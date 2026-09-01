@@ -7,19 +7,21 @@ import type { ReactNode } from "react";
  * independently now — a `sizePolicy` for width/height and an `fpsPolicy` for the
  * frame rate — each taking one of the same three values:
  *  - `"material"`: the selected material's real resolution (falling back to the
- *    project defaults) / the selection's project rate/scale (falling back to the
- *    backend default).
+ *    project defaults) / the selected object's own probed framerate (falling back
+ *    to the project's rate/scale).
  *  - `"project"`: the AviUtl2 project's own resolution/fps, read via
  *    `timeline.getEditInfo` once on the prefilling remount.
  *  - `"defaults"` (label "Dev"): always the backend
  *    `config.generation_defaults` (width/height / frame_rate), ignoring the
  *    material's real size/rate.
  *
- * X1: the FPS axis no longer offers `"material"` — the SDK cannot read a
- * material's real fps (deferred to a future update), so on the fps axis only
- * `"defaults"`/`"project"` are selectable and a persisted/incoming `"material"`
- * is coerced to the default `"project"` (see `readStoredFpsPolicy`/`setFpsPolicy`
- * below). The SIZE axis keeps all three choices.
+ * §3-13 (2026-09-01): BOTH axes offer all three choices. The fps axis's
+ * `"material"` was retired by X1 while native had no way to read a material's
+ * real fps; contract v11 gives it one (`mediaFps`, probed via Media Foundation)
+ * and `timeline/prefillSeed.ts` snaps that raw rate to an integer, so the choice
+ * is live again and the X1 coercions that forced a stored/incoming `"material"`
+ * back to `"project"` are gone — this context now stores and restores all three
+ * values on either axis.
  *
  * This choice affects ONLY the right-click prefill's initial value decision —
  * ordinary panel edits, presets and the "Get size from AviUtl2" button are
@@ -62,11 +64,7 @@ export function readStoredSizePolicy(): PrefillResolutionPolicy {
 }
 
 export function readStoredFpsPolicy(): PrefillResolutionPolicy {
-  const stored = readStoredPolicy(PREFILL_FPS_POLICY_STORAGE_KEY, DEFAULT_PREFILL_FPS_POLICY);
-  // X1: the fps axis no longer offers "material" (SDK can't read a material's
-  // real fps — deferred to a future update), so a persisted "material" (e.g. a
-  // value stored before X1) is treated as invalid and falls back to the default.
-  return stored === "material" ? DEFAULT_PREFILL_FPS_POLICY : stored;
+  return readStoredPolicy(PREFILL_FPS_POLICY_STORAGE_KEY, DEFAULT_PREFILL_FPS_POLICY);
 }
 
 function writeStoredPolicy(key: string, policy: PrefillResolutionPolicy): void {
@@ -101,11 +99,8 @@ export function PrefillPolicyProvider({ children }: { children: ReactNode }) {
     writeStoredPolicy(PREFILL_SIZE_POLICY_STORAGE_KEY, next);
   }, []);
   const setFpsPolicy = useCallback((next: PrefillResolutionPolicy) => {
-    // X1 (二重防御): "material" is not a valid fps choice — the Settings UI
-    // disables that button, but coerce here too so no stray call can persist it.
-    const coerced = next === "material" ? DEFAULT_PREFILL_FPS_POLICY : next;
-    setFpsPolicyState(coerced);
-    writeStoredPolicy(PREFILL_FPS_POLICY_STORAGE_KEY, coerced);
+    setFpsPolicyState(next);
+    writeStoredPolicy(PREFILL_FPS_POLICY_STORAGE_KEY, next);
   }, []);
 
   const value = useMemo<PrefillPolicyContextValue>(

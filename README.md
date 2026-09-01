@@ -1162,10 +1162,10 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `unload_pipeline` | パイプラインをメモリから解放する |
 | `list_loras` | 選択可能な IC-LoRA アダプタを一覧する（`GET /loras`） |
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
-| `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用） |
+| `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化4項目を指定できる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく `attention_backend` ほか生成の高速化4項目を指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化4項目に加え、**画角拡張（Outpainting）の6引数**も指定できる（2026-09-01 公開。[`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) D20） |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく `attention_backend` ほか生成の高速化4項目に加え、**撮り直し（Retake）の5引数**も指定できる（2026-09-01 公開。[`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) D19） |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
 | `wait_for_job` | ジョブが終端状態になるまで待つ（最大45秒でタイムアウト） |
@@ -1207,16 +1207,17 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
    **`end_source_video_id` / `end_source_image_id`（素材（末尾））は 2026-08-26 から LTX 2.5 で使えます**
    ——この日に撮り直し（Retake）と素材（末尾）が開通し、**`submit_chain` が投げられるモードは LTX 2.5 でも
    全部通るようになりました**（**オーナーの目視確認にも 2026-08-30 に合格しています**。§7.1）。
-   **なお撮り直しは、そもそも `submit_chain` に引数がありません**——**LTX 2.3 でも同じ**で、LTX 2.5 で
-   失われた機能ではありません（引数を足すかどうかは
-   [`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-115 で検討中です）。
+   **撮り直し（Retake）は 2026-09-01 に `submit_chain` へ公開しました**（`retake_video_id` ほか5引数。
+   窓の長さは `clips` を1本にしたときのその `num_frames` が決めます）。使い方はツールの説明文
+   （docstring）が正本で、設計の理由は [`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) D19 にあります。
    いま 422 になるのは、PrunaVAED（`vae_mode`）と非蒸留パイプライン（`pipeline`）の
    2つだけです（§7.1）。**ネガティブプロンプト（`nag_enabled`）は 2026-08-30 から
    LTX 2.5 でも通ります。**
-   **キャンバス拡張（`outpaint`）は 2026-08-29 に LTX 2.5 でも通るようになりました**が、
-   **撮り直しと同じく `submit_generate` にそもそも引数がありません**——**LTX 2.3 でも同じ**で、
-   LTX 2.5 で失われた機能ではありません（引数を足すかどうかは
-   [`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-122 で検討中です）。
+   **キャンバス拡張（`outpaint`）は 2026-08-29 に LTX 2.5 でも通るようになり、
+   2026-09-01 に `submit_generate` へも公開しました**（4辺のパディングほか6引数。
+   `in-outpainting` の LoRA は指定しなくても自動で足されます）。こちらも詳しくは
+   ツールの説明文と [`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) D20 を参照してください。
+   **どちらもツールは増えていません（22個のままです）。**
 
 **A2Vバッチ（音声フォルダの一括生成）**:
 1. `plan_a2v_batch` で音声フォルダを走査し、行ごとの計画（音声パス・提案フレーム数・同stem画像等）を得る。

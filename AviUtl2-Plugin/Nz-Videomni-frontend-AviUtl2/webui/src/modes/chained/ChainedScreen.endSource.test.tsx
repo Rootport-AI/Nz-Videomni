@@ -79,6 +79,37 @@ const DEFAULT_BRIDGE_REQUEST = defaultBridge.request.bind(defaultBridge);
 /** The bridge's own `request` signature, before any spy wraps it. */
 type RawRequest = ReturnType<typeof createMockBridge>["request"];
 
+/**
+ * Empties the app-wide mock's job fixture.
+ *
+ * That bridge is a MODULE SINGLETON, so a job one test submits is still "on
+ * the server" while the next test renders — and `JobsContext.serverBusy`
+ * renames every Generate button to 「Busy…」, which makes the very next
+ * `getByRole("button", { name: "Generate" })` fail. This file used to get away
+ * without a cleanup only by accident: the mock 422'd a 1-clip `end_source`
+ * chain, so no job was ever created. §3-116 fixed that — `api/models.py`'s
+ * clip-count floor exempts `end_source` (a single clip is "a video that ends
+ * with this"), so the real server answers 202 here and the mock now does too.
+ * The submits in this describe therefore really do leave a job behind, and it
+ * has to be cleaned up explicitly.
+ *
+ * The fixture's queued->running->completed clock is driven by poll count, so
+ * the drain alternates `GET /jobs` (advances every job) with `DELETE
+ * /jobs/{id}` (flags a still-running job cancelled; removes an already
+ * terminal one) until the list comes back empty.
+ */
+async function drainDefaultBridgeJobs(): Promise<void> {
+  for (let guard = 0; guard < 10; guard += 1) {
+    const listed = await DEFAULT_BRIDGE_REQUEST("backend.request", { method: "GET", path: "/api/v1/jobs" });
+    const jobs = (listed.body ?? []) as { job_id: string }[];
+    if (jobs.length === 0) return;
+    for (const job of jobs) {
+      await DEFAULT_BRIDGE_REQUEST("backend.request", { method: "DELETE", path: `/api/v1/jobs/${job.job_id}` });
+    }
+  }
+  throw new Error("the app-wide mock bridge's job fixture never drained");
+}
+
 function renderChain(initialIntent?: GenerationPrefill) {
   const nativeBridge = createMockBridge({ delayMs: 0 });
   /** Same capture, for the per-test bridge. */
@@ -132,8 +163,16 @@ function addClipButton(): HTMLButtonElement {
 }
 
 describe("ChainedScreen — 素材（末尾）", () => {
-  beforeEach(() => {
+  // Both halves of the shared state this file leaves behind, cleaned up BEFORE
+  // the next render rather than after the previous test: Testing Library's own
+  // auto-cleanup (an `afterEach`) has unmounted the previous screen by now, so
+  // nothing is still polling while the fixture is drained. The spies on the
+  // singleton bridge are dropped first, so the drain talks to the untouched
+  // fixture and no stale `order` array is still being written to.
+  beforeEach(async () => {
+    vi.restoreAllMocks();
     resetProvisionalReservation();
+    await drainDefaultBridgeJobs();
   });
 
   it("places the end-source accordion after the clip list and before the reference/audio pair", async () => {

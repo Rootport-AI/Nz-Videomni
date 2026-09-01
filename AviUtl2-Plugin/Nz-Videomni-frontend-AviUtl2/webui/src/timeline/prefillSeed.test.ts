@@ -7,6 +7,7 @@ import {
   materialDurationForIntent,
   selectedRangeFramesForIntent,
   resolvePrefillSeed,
+  snapMaterialFps,
   spanDurationSec,
 } from "./prefillSeed";
 
@@ -14,6 +15,9 @@ type Selection = ResultOf<"timeline.getSelection">;
 
 // A single-object selection with the fields resolvePrefillSeed reads
 // (media resolution/duration + frame span on the item; rate/scale at the top).
+// §3-13: `item` is a Partial of the contract-v11 item, so a case that needs the
+// material's own framerate passes `{ mediaFps: 29.97 }` here; leaving it out is
+// the "native reported nothing" shape every pre-existing case relies on.
 function makeSelection(
   item: Partial<Selection["selected"][number]> = {},
   top: Partial<Pick<Selection, "rate" | "scale">> = {},
@@ -128,8 +132,44 @@ describe("spanDurationSec", () => {
   });
 });
 
+// §3-13 (contract v11): native reports the material's RAW framerate and this
+// layer decides the integer the generation actually runs at.
+describe("snapMaterialFps", () => {
+  it("rounds the real-world non-integer rates to their intended integer", () => {
+    expect(snapMaterialFps(29.97)).toBe(30);
+    expect(snapMaterialFps(23.976)).toBe(24);
+    expect(snapMaterialFps(59.94)).toBe(60);
+    // An already-integer rate passes through untouched.
+    expect(snapMaterialFps(30)).toBe(30);
+  });
+
+  it("clamps to [1, 60] — the same range the FPS field's own setter enforces", () => {
+    // A 120/240 fps material would otherwise seed a value the backend rejects
+    // with a 422 before the user has even seen the form.
+    expect(snapMaterialFps(120)).toBe(60);
+    expect(snapMaterialFps(240)).toBe(60);
+    // Below the floor: 0.4 rounds to 0, which the clamp lifts to 1.
+    expect(snapMaterialFps(0.4)).toBe(1);
+  });
+
+  it("returns undefined for every 'unknown' shape (absent / 0 / negative / non-finite)", () => {
+    // `undefined` = an older native build that doesn't emit the field; `0` = the
+    // mediaWidth/mediaHeight "0 means unknown" convention, which is where a
+    // non-video object and an unsupported container (mkv/webm) both land — a
+    // NORMAL outcome that simply falls through to the project's fps.
+    expect(snapMaterialFps(undefined)).toBeUndefined();
+    expect(snapMaterialFps(0)).toBeUndefined();
+    expect(snapMaterialFps(-30)).toBeUndefined();
+    expect(snapMaterialFps(Number.NaN)).toBeUndefined();
+    expect(snapMaterialFps(Number.POSITIVE_INFINITY)).toBeUndefined();
+  });
+});
+
 describe("resolvePrefillSeed — width/height/fps", () => {
   it("seeds width/height from the material and fps from the selection rate/scale (material/material)", () => {
+    // §3-13: this fixture carries no `mediaFps`, so the fps axis's `material`
+    // lands on its tier-2 fallback — the selection's own rate/scale. The tier-1
+    // (material fps) cases live in their own describe below.
     const s = seed("image-to-video", makeSelection({ mediaWidth: 800, mediaHeight: 600 }, { rate: 30, scale: 1 }));
     // 800x600 on the general 64 grid -> 832x640; fps = 30/1.
     expect(s.derived.width).toBe(832);
@@ -219,6 +259,83 @@ describe("resolvePrefillSeed — width/height/fps", () => {
     );
     expect(s.derived.width).toBe(512);
     expect(s.frameRate).toBe(30);
+  });
+});
+
+// §3-13 (contract v11): the fps axis's three tiers, each isolated by a fixture
+// where the three candidate values are all different — the material's own fps
+// (29.97 -> 30), the selection's project rate (25) and the config default (24).
+describe("resolvePrefillSeed — fps の3段フォールバック（§3-13）", () => {
+  it("1段目: fps=material は素材自身の fps を整数へスナップして採用する", () => {
+    const s = seed(
+      "image-to-video",
+      makeSelection({ mediaWidth: 512, mediaHeight: 320, mediaFps: 29.97 }, { rate: 25, scale: 1 }),
+      "material",
+      "material",
+    );
+    // 25 (プロジェクト) でも 24 (設定既定) でもなく、素材の 29.97 -> 30。
+    expect(s.frameRate).toBe(30);
+  });
+
+  it("2段目: 素材 fps が読めなければプロジェクトの rate/scale へ落ちる（mkv/webm・旧nativeビルド）", () => {
+    // 0 は「不明」規約（media_width/height と同じ）。未指定も同じ扱い。
+    expect(
+      seed(
+        "image-to-video",
+        makeSelection({ mediaWidth: 512, mediaHeight: 320, mediaFps: 0 }, { rate: 25, scale: 1 }),
+        "material",
+        "material",
+      ).frameRate,
+    ).toBe(25);
+    expect(
+      seed(
+        "image-to-video",
+        makeSelection({ mediaWidth: 512, mediaHeight: 320 }, { rate: 25, scale: 1 }),
+        "material",
+        "material",
+      ).frameRate,
+    ).toBe(25);
+  });
+
+  it("3段目: 素材 fps も rate/scale も無ければ undefined（設定の既定 fps を使う）", () => {
+    const s = seed(
+      "image-to-video",
+      makeSelection({ mediaWidth: 512, mediaHeight: 320, mediaFps: 0 }, { rate: 0, scale: 1 }),
+      "material",
+      "material",
+    );
+    expect(s.frameRate).toBeUndefined();
+  });
+
+  it("fps=project は素材 fps を見ない（軸ごとにポリシーが効く）", () => {
+    // 同じ 29.97 の素材でも、project ならプロジェクトの 25 のまま。
+    const s = seed(
+      "image-to-video",
+      makeSelection({ mediaWidth: 512, mediaHeight: 320, mediaFps: 29.97 }, { rate: 25, scale: 1 }),
+      "material",
+      "project",
+    );
+    expect(s.frameRate).toBe(25);
+  });
+
+  it("fps=defaults は素材 fps があっても undefined のまま", () => {
+    const s = seed(
+      "image-to-video",
+      makeSelection({ mediaWidth: 512, mediaHeight: 320, mediaFps: 29.97 }, { rate: 25, scale: 1 }),
+      "material",
+      "defaults",
+    );
+    expect(s.frameRate).toBeUndefined();
+  });
+
+  it("素材 fps は尺→フレーム数の換算（genFps）にも波及する（意図どおり）", () => {
+    // #2 reference-video: 素材尺は 121 プロジェクトフレーム / 24fps = 121/24 秒。
+    // genFps 24 なら 121 フレーム、genFps 30 なら floor(151.25)=151 -> 8n+1 で 145。
+    const item = { mediaWidth: 1280, mediaHeight: 768, frameStart: 0, frameEnd: 120 };
+    expect(seed("reference-video", makeSelection(item, { rate: 24, scale: 1 })).numFrames).toBe(121);
+    expect(
+      seed("reference-video", makeSelection({ ...item, mediaFps: 29.97 }, { rate: 24, scale: 1 })).numFrames,
+    ).toBe(145);
   });
 });
 

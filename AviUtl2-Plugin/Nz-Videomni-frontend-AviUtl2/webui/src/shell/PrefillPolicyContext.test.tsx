@@ -45,15 +45,16 @@ describe("PrefillPolicyContext", () => {
     expect(result.current.fpsPolicy).toBe("defaults");
   });
 
-  it("X1: coerces a persisted fps=material to the default project on mount (fps material is retired)", () => {
-    // The SIZE axis still honours "material"; the FPS axis no longer does (SDK
-    // can't read a material's real fps), so a stale stored "material" falls back.
+  it("§3-13: restores a persisted fps=material unchanged (the X1 coercion is gone)", () => {
+    // Both axes honour "material" now: contract v11 gives the fps axis a real
+    // material framerate to read (`mediaFps`, snapped in `prefillSeed.ts`), so a
+    // stored "material" is a valid choice rather than a stale value to correct.
     window.localStorage.setItem(PREFILL_SIZE_POLICY_STORAGE_KEY, "material");
     window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, "material");
     const { result } = renderHook(() => usePrefillPolicy(), { wrapper });
     expect(result.current.sizePolicy).toBe("material");
-    expect(result.current.fpsPolicy).toBe("project");
-    expect(readStoredFpsPolicy()).toBe("project");
+    expect(result.current.fpsPolicy).toBe("material");
+    expect(readStoredFpsPolicy()).toBe("material");
   });
 
   it("ignores the legacy single key entirely (no migration)", () => {
@@ -95,18 +96,19 @@ describe("PrefillPolicyContext", () => {
     expect(readStoredFpsPolicy()).toBe("project");
   });
 
-  it("X1: setFpsPolicy('material') is coerced to project (二重防御) and persists project", () => {
+  it("§3-13: setFpsPolicy('material') is kept and persisted as material (no coercion)", () => {
     const { result } = renderHook(() => usePrefillPolicy(), { wrapper });
 
     act(() => {
       result.current.setFpsPolicy("material");
     });
-    // The retired "material" fps choice is corrected to the default "project".
-    expect(result.current.fpsPolicy).toBe("project");
-    expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("project");
-    expect(readStoredFpsPolicy()).toBe("project");
+    // The fps axis stores "material" verbatim — the X1 二重防御 that rewrote it
+    // to "project" is gone now that the choice does something.
+    expect(result.current.fpsPolicy).toBe("material");
+    expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("material");
+    expect(readStoredFpsPolicy()).toBe("material");
 
-    // The SIZE axis still accepts "material" — the coercion is fps-only.
+    // The SIZE axis accepts "material" too, and the two stay independent.
     act(() => {
       result.current.setSizePolicy("material");
     });

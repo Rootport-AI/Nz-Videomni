@@ -236,8 +236,8 @@ export function SettingsPanel({
         <div className="field">
           <span className="field-label">{strings.settings.prefillSizePolicyLabel}</span>
           <div className="settings-lang-toggle" role="group" aria-label={strings.settings.prefillSizePolicyLabel}>
-            {/* Size axis: all three choices stay active (X1 only retired the fps
-             * axis's material option). */}
+            {/* Size axis: all three choices are active — as are the fps axis's
+             * below, since §3-13 made "materials" real there too. */}
             {prefillPolicyOptions.map(({ policy: option, label }) => (
               <button
                 key={option}
@@ -256,30 +256,22 @@ export function SettingsPanel({
         <div className="field">
           <span className="field-label">{strings.settings.prefillFpsPolicyLabel}</span>
           <div className="settings-lang-toggle" role="group" aria-label={strings.settings.prefillFpsPolicyLabel}>
-            {/* Fps axis: X1 disables the "materials" button (the SDK can't read a
-             * material's real fps yet), leaving Dev/project selectable. */}
-            {prefillPolicyOptions.map(({ policy: option, label }) => {
-              const isMaterial = option === "material";
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  className={`mode-tab${fpsPolicy === option ? " mode-tab--active" : ""}`}
-                  aria-pressed={fpsPolicy === option}
-                  disabled={isMaterial}
-                  title={
-                    isMaterial
-                      ? strings.settings.prefillFpsMaterialDisabledTooltip
-                      : option === "defaults"
-                        ? strings.settings.prefillPolicyDevTooltip
-                        : undefined
-                  }
-                  onClick={() => setFpsPolicy(option)}
-                >
-                  {label}
-                </button>
-              );
-            })}
+            {/* Fps axis: the same shape as the size axis above. §3-13 restored
+             * the "materials" button — native probes the material's own fps
+             * (contract v11 `mediaFps`) and the prefill layer snaps it to an
+             * integer, falling back to the project's fps when it can't be read. */}
+            {prefillPolicyOptions.map(({ policy: option, label }) => (
+              <button
+                key={option}
+                type="button"
+                className={`mode-tab${fpsPolicy === option ? " mode-tab--active" : ""}`}
+                aria-pressed={fpsPolicy === option}
+                title={option === "defaults" ? strings.settings.prefillPolicyDevTooltip : undefined}
+                onClick={() => setFpsPolicy(option)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 

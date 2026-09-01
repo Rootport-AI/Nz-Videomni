@@ -58,8 +58,11 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   まだ使えないのは vae_mode の1つだけです（keep_resident・attention_backend・
   nag_enabled は submit_chain でも使えます。nag_enabled は 2026-08-30 から
   LTX 2.5 でも使えるようになりました）。
-  なお撮り直しは、そもそも submit_chain に引数がありません（LTX 2.3 でも
-  同じで、2.5 で失われた機能ではありません）。
+  撮り直し（Retake）も 2026-09-01 から submit_chain の引数として使えます
+  （retake_video_id ほか5引数。LTX 2.3 / LTX 2.5 のどちらでも使えます）。
+  同じ日に、画角拡張（Outpainting）も submit_generate の引数として使える
+  ようになりました（outpaint_pad_* ほか6引数）。どちらも下の専用の節を
+  読んでください。
 
 ■ 同時実行は1ジョブまで
   バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。
@@ -97,6 +100,49 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   既定値であって推奨値ではありません。
   2件以上のときは source_video（素材（冒頭））との併用が拒否されます（422）。
   併用したい場合はクリップを1件にしてください。
+
+■ 撮り直し（Retake）— submit_chain の retake_video_id ほか5引数
+  既に手元にある動画の「まん中」だけを作り直す機能です（時間方向の
+  inpainting）。retake_video_id（upload_video で取得）と
+  retake_window_start_sec（作り直す窓の開始秒）を指定すると、サーバーが
+  その窓だけを切り出して作り直し、窓まるごとを返します。
+  **窓の長さを決めるのは clips[0].num_frames ただ1つで、長さを表す第2の
+  引数は存在しません。** clips はちょうど1件・窓長は既定のstage-2窓で
+  [73, 169] フレーム（get_config の limits.retake_window_min_frames /
+  retake_window_max_frames）です。
+  **retake_window_start_sec には既定値がありません**——retake_video_id を
+  指定して省略すると、submit_chain がPOST前にエラーにします。
+  **窓の開始秒を決める下調べには upload_video(file_path, max_frames=...)
+  を使ってください**——max_frames を渡したときだけ、保存された動画の
+  frame_count と fps が実測されて返ります（max_frames は「先頭Nフレームだけ
+  残す」引数でもあるので、測るだけのときは元の尺より確実に大きい値を
+  渡してください）。
+  糊しろの retake_head_px（8n+1・既定25）と retake_tail_px（8の倍数・
+  既定24）は較正済みの推奨値で、**広げれば良いというものではありません**。
+  source_video_id / source_audio_id / reference_video_id / end_source_* /
+  clips[0].conditioning_images とはすべて排他です。
+
+■ 画角拡張（Outpainting）— submit_generate の outpaint_pad_* ほか6引数
+  手元の動画の外側を描き足して画角を広げる機能です。
+  outpaint_pad_left / _right / _top / _bottom（px）のいずれかを0より大きく
+  すると有効になり、4辺すべて0なら通常の生成のままです。
+  **width / height は「拡張後の最終キャンバス」であり、パディングはその
+  内側から切り出されます。** 元動画の解像度と一致しなければならないのは
+  「残す領域」（width - pad_left - pad_right × height - pad_top -
+  pad_bottom）のほうで、サーバーが実測して照合します。
+  幾何条件は4つです: width/height は128の倍数・残す領域が元動画の解像度と
+  一致・残す領域は縦横とも256px以上・元動画のフレーム数が num_frames 以上。
+  reference_video_id（広げる対象の元動画）が必須で、conditioning_images と
+  crop_width/crop_height とは排他です。
+  **in-outpainting という制御系LoRAが1本だけ必要で、submit_generate が自動で
+  loras へ追加します**（既に同名を入れていれば何もしません）。
+  **in-outpainting が導入されていない環境では404になる**ので、事前に
+  list_loras で存在を確認してください。
+  **upload_video の応答は解像度を返しません。** キャンバス（128の倍数）を
+  逆算するには、アップロード前にローカルで ffprobe 等により元動画の解像度を
+  確認してください。
+  outpaint_blend_dilation_stage1（なじみ幅の段数、既定5）は stage 2 が5:2の
+  比で自動追従するので、指定するのは stage 1 だけです。
 
 ■ AviUtl2 のタイムライン連携は対象外
   このツール群はバックエンドの生成・ジョブ管理・バッチ計画のみを扱います。

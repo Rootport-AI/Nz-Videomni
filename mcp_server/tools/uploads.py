@@ -57,6 +57,7 @@ async def _upload(
     kind: str,
     endpoint: str,
     timeout: float,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     path = Path(file_path)
     await anyio.to_thread.run_sync(
@@ -69,6 +70,7 @@ async def _upload(
     return await client.post_file(
         endpoint,
         files={"file": (path.name, data, content_type)},
+        params=params,
         timeout=timeout,
     )
 
@@ -99,20 +101,42 @@ async def upload_image(file_path: str) -> dict[str, Any]:
     )
 
 
-async def upload_video(file_path: str) -> dict[str, Any]:
+async def upload_video(file_path: str, max_frames: int | None = None) -> dict[str, Any]:
     """ローカルの動画ファイルをアップロードします（POST /upload/video）。
 
-    2通りの用途で使う参照/継続動画のアップロードです:
+    4通りの用途で使う参照/継続動画のアップロードです:
     (1) ``submit_generate`` / ``submit_chain`` の ``reference_video_id``
-        （IC-LoRA制御アダプタの参照動画）、
-    (2) ``submit_chain`` の ``source_video``（V2V継続の元動画、W4で公開）。
+        （IC-LoRA制御アダプタの参照動画。画角拡張〔outpaint〕の元動画も
+        この口です）、
+    (2) ``submit_chain`` の ``source_video``（V2V継続の元動画）、
+    (3) ``submit_chain`` の ``end_source_video_id``（素材（末尾））、
+    (4) ``submit_chain`` の ``retake_video_id``（撮り直しの元動画）。
     許可される拡張子・最大サイズはバックエンドの設定に従います。
+
+    **``max_frames`` を渡すと、尺（``frame_count``）と ``fps`` が実測されて
+    返ります。撮り直し（``submit_chain`` の ``retake_video_id``）の
+    ``retake_window_start_sec`` を決めるための下調べにはこれを使ってください。**
+    渡さない場合、``frame_count`` と ``fps`` は両方 ``null`` で返ります
+    （通常のアップロードに余計な ffprobe を払わせないための仕様であり、
+    エラーではありません）。実測に失敗した場合も ``null`` になります。
+    **``max_frames`` は「先頭 N フレームだけ残して切り詰める」引数でもあります**
+    ——尺を測るためだけに渡すときは、元の尺より確実に大きい値
+    （例: 100000）を渡してください。小さい値を渡すと**動画そのものが切り
+    詰められて保存されます**。
+    なお解像度（width / height）はこの応答からは分かりません。画角拡張の
+    キャンバス（128の倍数）を逆算するには、アップロード前にローカルで
+    ffprobe 等により解像度を確認してください。
 
     Args:
         file_path: MCPサーバーを動かしているマシン上のローカルファイルパス。
+        max_frames: 先頭から残すフレーム数の上限（省略時は切り詰めなし）。
+            指定すると保存後のファイルの ``frame_count`` / ``fps`` が実測され
+            て返ります。
 
     Returns:
-        video_id / original_filename / stored_path / content_type / size_bytes。
+        video_id / original_filename / stored_path / content_type / size_bytes /
+        trimmed / frame_count / fps（``frame_count`` と ``fps`` は
+        ``max_frames`` を渡したときだけ実測値、それ以外は ``null``）。
     """
     client = get_client()
     upload_cfg = client.upload
@@ -123,6 +147,10 @@ async def upload_video(file_path: str) -> dict[str, Any]:
         kind="動画",
         endpoint="/upload/video",
         timeout=_VIDEO_TIMEOUT,
+        # クエリ引数（api/uploads.py:57 の ``max_frames: int | None = Query(None)``）。
+        # 未指定のときはキーごと送らない -- 従来のアップロードのリクエストを
+        # 1バイトも変えないため（「Noneまたは空は送らない」のペイロード契約）。
+        params=None if max_frames is None else {"max_frames": max_frames},
     )
 
 

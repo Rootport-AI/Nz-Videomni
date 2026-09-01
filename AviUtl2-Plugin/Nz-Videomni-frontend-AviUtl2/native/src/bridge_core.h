@@ -186,6 +186,16 @@ struct SelectionItem {
     // "unknown". Consumed by the length guard for #1/#2 (see the redesign spec
     // section 4-5).
     double media_duration_sec = 0.0;
+    // --- contract v11 (material fps, section 3-13) --------------------------
+    // Native frame rate of the underlying media file, probed with Media
+    // Foundation (see native/src/media_fps_probe.h). RAW, never rounded: an
+    // NTSC clip reports 29.97..., and the snap-to-integer policy lives in the
+    // webui's prefill layer. Like media_width/media_height this is NOT nullable
+    // in the JSON - 0 means "unknown" (no file path, a non-video object, a
+    // container Media Foundation cannot open such as .mkv/.webm, or a media
+    // type with no declared frame rate). 0 can never be a legitimate frame
+    // rate, so no separate "was it really read" flag is needed.
+    double media_fps = 0.0;
     // --- contract v10 (source trim, section 1-6) ---------------------------
     // The window of the BACKING FILE this object plays, from AviUtl2's
     // "playback position" item. Both are SECONDS on the SOURCE time axis; the

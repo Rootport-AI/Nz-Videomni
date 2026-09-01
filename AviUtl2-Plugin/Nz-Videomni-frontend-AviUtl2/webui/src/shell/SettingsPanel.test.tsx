@@ -222,9 +222,10 @@ describe("SettingsPanel", () => {
     expect(fpsGroup.getByRole("button", { name: "project" })).toHaveAttribute("aria-pressed", "true");
     expect(fpsGroup.getByRole("button", { name: "materials" })).toHaveAttribute("aria-pressed", "false");
 
-    // X1/X6: the fps axis's "materials" button is DISABLED (material fps
-    // detection is deferred); the size axis's "materials" stays active.
-    expect(fpsGroup.getByRole("button", { name: "materials" })).toBeDisabled();
+    // §3-13: BOTH axes' "materials" buttons are active. The fps one was disabled
+    // under X1 while native could not read a material's fps; contract v11's
+    // `mediaFps` gives it a real value, so the two axes are the same shape now.
+    expect(fpsGroup.getByRole("button", { name: "materials" })).toBeEnabled();
     expect(sizeGroup.getByRole("button", { name: "materials" })).toBeEnabled();
   });
 
@@ -242,7 +243,7 @@ describe("SettingsPanel", () => {
     await waitFor(() => {
       expect(sizeGroup.getByRole("button", { name: "project" })).toHaveAttribute("aria-pressed", "true");
     });
-    // ...and the fps axis to "Dev" (defaults) — its "materials" button is disabled.
+    // ...and the fps axis to "Dev" (defaults).
     await user.click(fpsGroup.getByRole("button", { name: "Dev" }));
     await waitFor(() => {
       expect(fpsGroup.getByRole("button", { name: "Dev" })).toHaveAttribute("aria-pressed", "true");
@@ -252,6 +253,15 @@ describe("SettingsPanel", () => {
     expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("defaults");
     expect(readStoredSizePolicy()).toBe("project");
     expect(readStoredFpsPolicy()).toBe("defaults");
+
+    // §3-13: the fps axis's "materials" is a real, clickable choice now — it
+    // presses and persists like any other, where X1 left it inert.
+    await user.click(fpsGroup.getByRole("button", { name: "materials" }));
+    await waitFor(() => {
+      expect(fpsGroup.getByRole("button", { name: "materials" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("material");
+    expect(readStoredFpsPolicy()).toBe("material");
   });
 
   it("renders the Acceleration section: sdpa selected, the one remaining mock row disabled", async () => {

@@ -42,7 +42,8 @@ export const MOCK_CONFIG_BODY = {
       "pose-control": { path: "mock/pose.safetensors", preprocess: "dwpose" },
       "depth-control": { path: "mock/depth.safetensors", preprocess: "depth" },
       "deblur": "mock/deblur.safetensors",
-      // §1-13 Outpainting: the Edit tab's pinned adapter (`lora/controlLoras.ts`'s
+      // Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time)
+      // Outpainting: the Edit tab's pinned adapter (`lora/controlLoras.ts`'s
       // `OUTPAINT_LORA_NAME`). Must be present for `useOutpaintForm`'s
       // `hasOutpaintLora` gate to clear in dev/mock/tests.
       "in-outpainting": "mock/in-outpainting.safetensors",
@@ -175,7 +176,8 @@ const MOCK_LORAS: Array<{ name: string; kind: "style" | "control"; has_thumbnail
   { name: "pose-control", kind: "control", has_thumbnail: false, exists: true, source: "config" },
   { name: "depth-control", kind: "control", has_thumbnail: false, exists: true, source: "config" },
   { name: "deblur", kind: "control", has_thumbnail: false, exists: true, source: "config" },
-  // §1-13 Outpainting: see the matching `ic_loras` entry above for why this
+  // Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time) Outpainting:
+  // see the matching `ic_loras` entry above for why this
   // one must stay in step too. Deliberately EXCLUDED from Create/Chain's own
   // dropdown by `lora/controlLoras.ts`'s `UI_HIDDEN_CONTROL_LORA_NAMES` — see
   // `AppShell.controlLora.test.tsx`'s "lists every control adapter" test,
@@ -896,6 +898,10 @@ const DEFAULT_SELECTION: ResultOf<"timeline.getSelection"> = {
       playbackSpeed: 1,
       loopPlay: false,
       sectionCount: 1,
+      // Contract v11 (§3-13). 60 is deliberately neither the project fps (30,
+      // `DEFAULT_EDIT_INFO.rate`) nor the config default (24) — a consumer
+      // that reads the wrong one back cannot pass a test that checks for 60.
+      mediaFps: 60,
     },
   ],
   cursorFrame: DEFAULT_EDIT_INFO.frame,
@@ -1440,9 +1446,29 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (clips.length < 1 || clips.length > 24) {
       return validationError("clips", "clips must have between 1 and 24 items");
     }
-    const hasSource = req.source_video != null || req.source_audio != null;
+    // §3-116: mirrors the real schema's clip-count exception list verbatim.
+    // The source of truth is `api/models.py`'s `GenerateChainRequest` —
+    // its clip-count-floor `model_validator` is a five-way `is None`
+    // conjunction (all five `is None` AND `len(clips) < 2` -> reject), so any
+    // ONE of these five being set makes a 1-clip chain legal: `source_video`
+    // (the frozen source head IS the prior segment), `source_audio` (a single
+    // clip is the whole timeline), `reference_video_id` (a 1-clip
+    // reference-conditioned chain), `retake` (the single clip IS the window
+    // being repaired), and `end_source` (a single clip is "a video that ends
+    // with this", owner decision). This was previously out of sync here (only
+    // source_video/source_audio were exempted) — see the 5-exception
+    // table-driven test in mockBridge.test.ts.
+    const hasSource =
+      req.source_video != null ||
+      req.source_audio != null ||
+      req.retake != null ||
+      req.reference_video_id != null ||
+      req.end_source != null;
     if (!hasSource && clips.length < 2) {
-      return validationError("clips", "at least 2 clips are required when no source_video/source_audio is set");
+      return validationError(
+        "clips",
+        "at least 2 clips are required when none of source_video/source_audio/retake/reference_video_id/end_source is set",
+      );
     }
     // NAG (2026-07-28): mirrors the real backend's 422 for "enabled but no
     // negative prompt" (`shell/nagSettings.ts`'s `isNagNegativeEmpty` is the

@@ -28,6 +28,7 @@
 #include "fs_util.h"    // MatchesAnyExtension, MakeNumberedName, ExtensionLower, JoinPath (v6)
 #include "http_client.h"
 #include "log.h"
+#include "media_fps_probe.h"  // ProbeMediaFps (contract v11: getSelection mediaFps)
 #include "mf_mp4_writer.h"  // Mp4Writer for timeline.cutoutRange (I7/I9)
 #include "settings.h"
 #include "strconv.h"
@@ -782,6 +783,23 @@ void GetSelectionEditProc(void* param, EDIT_SECTION* edit) {
                     // A host that cannot answer reports <= 0; keep the
                     // single-section default rather than reading that as "many".
                     if (sections > 0) item.section_count = sections;
+                }
+                // Contract v11 (material fps, section 3-13): the material's own
+                // frame rate, for the prefill "match the material" fps axis.
+                // It rides inside the video branch so Media Foundation is never
+                // opened for an image / audio object. `path` is converted again
+                // here because get_media_info's wide_path is local to the
+                // sibling branch above. No cache: one right-click resolves one
+                // file, so there is nothing for a cache to hit.
+                if (!path.empty()) {
+                    double fps = 0.0;
+                    // The error string is discarded on purpose: a failed probe
+                    // is a normal outcome (a .mkv / .webm has no Media
+                    // Foundation source), and media_fps then stays 0 so the
+                    // webui falls back to the project fps.
+                    if (ProbeMediaFps(Utf8ToWide(path), &fps, nullptr)) {
+                        item.media_fps = fps;
+                    }
                 }
             }
         } else if (!alias.empty()) {

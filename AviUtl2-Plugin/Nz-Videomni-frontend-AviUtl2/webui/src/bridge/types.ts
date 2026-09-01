@@ -126,6 +126,20 @@
  * reason only: an older plugin build simply does not emit them, and the WebUI
  * must then fall back to the pre-v10 whole-file upload instead of trimming from
  * a position it never learned.
+ *
+ * v11 (§3-13) adds `mediaFps` to `timeline.getSelection`'s `selected[]` entries:
+ * the selected object's material framerate, probed from the backing file via
+ * Media Foundation (`MFCreateSourceReaderFromURL` + `GetNativeMediaType` +
+ * `MF_MT_FRAME_RATE`). It is the RAW rate the container reports (`29.97`, not
+ * pre-snapped to `30`) — the same non-nullable, `0` = "unknown" contract as
+ * `mediaWidth`/`mediaHeight` above, so `mediaFps` is never `null`, only absent
+ * (older build) or `0` (probe failed, or an unsupported container — mkv/webm
+ * commonly land here, and that is a NORMAL outcome, not an error). Integer
+ * snapping (`29.97` -> `30`, `23.976` -> `24`) is deliberately NOT native's
+ * job: it happens on the WebUI side, in the prefill layer
+ * (`timeline/prefillSeed.ts`), so the raw value stays available unrounded.
+ * `mediaFps` is declared OPTIONAL for the same single reason the six v10
+ * fields are: an older native build simply does not emit it yet.
  */
 
 /** All RPC methods defined as of contract v6. */
@@ -580,6 +594,14 @@ export interface BridgeResultMap {
        * means the time mapping is piecewise; native reports `1` when it cannot
        * ask. */
       sectionCount?: number;
+      /** Contract v11 (§3-13): the object's material framerate, probed via
+       * Media Foundation. RAW (unsnapped) — `29.97` stays `29.97`, never
+       * pre-rounded to `30`. Non-nullable, `0` = "unknown" (the same contract
+       * as `mediaWidth`/`mediaHeight`); a failed probe (mkv/webm are the
+       * common case) is a normal `0`, not an error. Optional only because an
+       * older native build does not emit it. Integer snapping happens in
+       * `timeline/prefillSeed.ts`, not here. */
+      mediaFps?: number;
     }>;
     cursorFrame: number;
     cursorLayer: number;

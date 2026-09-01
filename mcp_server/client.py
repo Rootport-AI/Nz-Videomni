@@ -115,9 +115,18 @@ class BackendClient:
         *,
         files: dict[str, Any],
         data: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
+        # ``params`` is the QUERY string, not the multipart body: POST
+        # /upload/video declares trim_start_sec / trim_duration_sec / max_frames
+        # as ``Query(...)`` (api/uploads.py), so they must ride on the URL. Sent
+        # only when a caller actually passes one, so an ordinary upload's
+        # request line is byte-identical to what it was before this parameter
+        # existed.
         kwargs: dict[str, Any] = {"files": files, "data": data}
+        if params is not None:
+            kwargs["params"] = params
         if timeout is not None:
             kwargs["timeout"] = timeout
         return await self._request("POST", path, **kwargs)

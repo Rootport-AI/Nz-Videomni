@@ -266,11 +266,49 @@ describe("createMockBridge", () => {
       expect((result.body as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
     });
 
-    it("rejects fewer than 2 clips when there's no source_video/source_audio", async () => {
+    it("rejects fewer than 2 clips when none of source_video/source_audio/retake/reference_video_id/end_source is set", async () => {
       const bridge = createMockBridge({ delayMs: 0 });
       const result = await postChain(bridge, { ...CHAIN_BODY, clips: [{ num_frames: 49 }] });
       expect(result.status).toBe(422);
     });
+
+    // §3-116: the real schema's clip-count floor exempts FIVE fields, not just
+    // source_video/source_audio (see the `hasSource` comment in mockBridge.ts
+    // for the exact citation of `api/models.py`'s `GenerateChainRequest`).
+    // Table-driven: one 1-clip case per exception (202), plus the "none of
+    // them" case that must still 422. Backend-side pytest counterparts:
+    // `tests/test_chain.py::test_chain_rejects_single_clip` (plain 1-clip
+    // chain, 422), `tests/test_chain_reference.py::
+    // test_depth_reference_with_one_clip_accepted` (reference_video_id + a
+    // 1-clip chain, 202), and `tests/test_end_source_chain.py::
+    // test_end_source_allows_a_single_clip` (end_source + a 1-clip chain,
+    // 202) — retake and source_video/source_audio have no dedicated
+    // cross-reference here, but are covered by the same `model_validator`.
+    const CLIP_COUNT_EXCEPTION_CASES: ReadonlyArray<{ name: string; body: object; status: 202 | 422 }> = [
+      { name: "source_video", body: { source_video: { video_id: "vid-1", context_frames: 25 } }, status: 202 },
+      { name: "source_audio", body: { source_audio: { audio_id: "aud-1" } }, status: 202 },
+      { name: "retake", body: { retake: { video_id: "vid-1", window_start_sec: 2 } }, status: 202 },
+      {
+        name: "reference_video_id",
+        // The real schema also requires `reference_video_id` to carry at
+        // least one lora ("reference_video_id requires at least one lora",
+        // `api/models.py`) — `loras` is added so this case matches what the
+        // real API actually accepts, not just this fixture's own (looser)
+        // `hasSource` check.
+        body: { reference_video_id: "vid-3", loras: [{ name: "style-a", strength: 0.8 }] },
+        status: 202,
+      },
+      { name: "end_source", body: { end_source: { video_id: "vid-2", context_frames: 24 } }, status: 202 },
+      { name: "none of the five", body: {}, status: 422 },
+    ];
+
+    for (const { name, body, status } of CLIP_COUNT_EXCEPTION_CASES) {
+      it(`1-clip chain with '${name}' set -> ${status}`, async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const result = await postChain(bridge, { ...CHAIN_BODY, clips: [{ num_frames: 49 }], ...body });
+        expect(result.status).toBe(status);
+      });
+    }
 
     // NAG (2026-07-28): the mock's 422 mirror of the backend's "enabled but
     // empty negative prompt" rule, on the chain endpoint too.
@@ -881,20 +919,17 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     expect(result.status).toBe(202);
   });
 
-  it("accepts end_source on a multi-clip chain (the `reverse` geometry)", async () => {
+  it("accepts end_source on a single-clip chain (the `in_window` geometry)", async () => {
     // The headline of the End-source increment on the fixture: what used to be
-    // this suite's example of a refusal now passes the ruling.
-    //
-    // TWO CLIPS, not one, and the reason is a fixture LIMIT rather than a rule:
-    // this mock's clip-count floor exempts only `source_video` / `source_audio`,
-    // while the real schema (`api/models.py`) also exempts `retake`,
-    // `reference_video_id` and `end_source`. A bare one-clip end-source chain
-    // therefore earns a VALIDATION_ERROR here that the server would accept. The
-    // `in_window` geometry is covered against the real API in
-    // `tests/test_ltx25_api_guard.py`; the pairing below covers it here.
+    // this suite's example of a refusal now passes the ruling. §3-116 aligned
+    // this fixture's clip-count floor with the real schema (`api/models.py`),
+    // so a bare one-clip end-source chain earns 202 here too — see the
+    // 5-exception table-driven test above (`CLIP_COUNT_EXCEPTION_CASES`) for
+    // the full parity check across all five fields.
     const bridge = await ltx25Bridge();
     const result = await postChain(bridge, {
       ...CHAIN_BODY,
+      clips: [{ num_frames: 121 }],
       end_source: { video_id: "vid-2", context_frames: 24 },
     });
     expect(result.status).toBe(202);

@@ -1159,7 +1159,7 @@ TEST_CASE("getSelection defaults mediaWidth/mediaHeight to 0 when unset") {
     CHECK(r["selected"][0]["mediaHeight"] == 0);
 }
 
-TEST_CASE("getSelection serializes textContent (nullable) and mediaDurationSec") {
+TEST_CASE("getSelection serializes textContent (nullable), mediaDurationSec and mediaFps") {
     RequestContext ctx = AvailableCtx();
     ctx.get_selection = []() {
         SelectionSnapshot s;
@@ -1171,7 +1171,8 @@ TEST_CASE("getSelection serializes textContent (nullable) and mediaDurationSec")
         media.media_width = 1920;
         media.media_height = 1080;
         media.media_duration_sec = 4.5;
-        SelectionItem text;  // a text object: body present, no duration
+        media.media_fps = 29.97;  // contract v11: RAW, the webui snaps it to 30
+        SelectionItem text;  // a text object: body present, no duration/fps
         text.effect_name = "text";
         text.has_text_content = true;
         text.text_content = "hello world";
@@ -1187,6 +1188,8 @@ TEST_CASE("getSelection serializes textContent (nullable) and mediaDurationSec")
     // Media object: textContent null (has_text_content false), duration present.
     CHECK(r["selected"][0]["textContent"].is_null());
     CHECK(r["selected"][0]["mediaDurationSec"] == 4.5);
+    // mediaFps survives the round trip unrounded (contract v11, section 3-13).
+    CHECK(r["selected"][0]["mediaFps"].get<double>() == doctest::Approx(29.97));
     // Text object: textContent carries the body, mediaDurationSec is a plain 0
     // (never null) since there is no media file to probe.
     CHECK(r["selected"][1]["textContent"] == "hello world");
@@ -1194,7 +1197,7 @@ TEST_CASE("getSelection serializes textContent (nullable) and mediaDurationSec")
     CHECK_FALSE(r["selected"][1]["mediaDurationSec"].is_null());
 }
 
-TEST_CASE("getSelection defaults textContent to null and mediaDurationSec to 0") {
+TEST_CASE("getSelection defaults textContent to null and mediaDurationSec / mediaFps to 0") {
     RequestContext ctx = AvailableCtx();
     ctx.get_selection = []() {
         SelectionSnapshot s;
@@ -1212,6 +1215,9 @@ TEST_CASE("getSelection defaults textContent to null and mediaDurationSec to 0")
     CHECK(r["selected"][0]["textContent"].is_null());
     CHECK(r["selected"][0]["mediaDurationSec"] == 0);
     CHECK_FALSE(r["selected"][0]["mediaDurationSec"].is_null());
+    // mediaFps is not nullable either: an unprobed object serializes a plain 0.
+    CHECK(r["selected"][0]["mediaFps"] == 0);
+    CHECK_FALSE(r["selected"][0]["mediaFps"].is_null());
 }
 
 // --- contract v10: the playback range / speed / loop / section fields --------

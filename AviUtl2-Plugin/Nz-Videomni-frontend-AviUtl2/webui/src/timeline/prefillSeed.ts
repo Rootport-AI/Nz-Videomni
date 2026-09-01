@@ -119,6 +119,31 @@ export const DURATION_POLICY_BY_INTENT: Readonly<Record<string, DurationPolicy>>
 export const END_SOURCE_SEED_MAX_FRAMES = pxFromVLatent(STAGE2_WINDOW_PRESETS[STAGE2_WINDOW_DEFAULT].vTile);
 
 /**
+ * §3-13 (contract v11): the generation fps to take from a selected object's OWN
+ * material framerate — native's raw probed `mediaFps` snapped to an integer — or
+ * `undefined` when the selection carries no usable rate, which is the signal the
+ * fps seed falls back to the project's rate/scale.
+ *
+ * `undefined` covers every "not known" shape at once: an older native build that
+ * does not emit the field at all, a non-video object (audio/shape → `0`, the
+ * `mediaWidth`/`mediaHeight` "0 = unknown" convention), and a probe that failed —
+ * an unsupported container such as mkv/webm lands here and that is a NORMAL
+ * outcome, not an error.
+ *
+ * The rounding is `Math.round` alone, deliberately: every framerate that exists
+ * in practice (29.97 → 30, 23.976 → 24, 59.94 → 60) lands on its intended integer
+ * in one step, so a tolerance band would only add a second branch for the values
+ * that miss. The result is then clamped to `[1, 60]` — the SAME range the FPS
+ * field's own setter enforces (`Math.min(60, Math.max(1, raw))`) — so a 120/240
+ * fps material seeds the highest fps the form accepts instead of a value the
+ * backend rejects with a 422 before the user has seen the form. Pure.
+ */
+export function snapMaterialFps(fps: number | undefined): number | undefined {
+  if (fps === undefined || !Number.isFinite(fps) || fps <= 0) return undefined;
+  return Math.min(60, Math.max(1, Math.round(fps)));
+}
+
+/**
  * The inclusive timeline SPAN of a selected object, in seconds — the trimmed
  * (ribbon) length the object actually occupies on the timeline, NOT the whole
  * backing file's duration. `(frameEnd - frameStart + 1)` frames (frameEnd
@@ -212,9 +237,11 @@ export interface ResolvePrefillSeedArgs {
    * overwritten off `getEditInfo` by the caller). */
   sizePolicy: PrefillResolutionPolicy;
   /** W1: the Settings FPS policy (`usePrefillPolicy().fpsPolicy`), driving the
-   * frame rate only. `defaults` keeps the config default fps; `material`/
-   * `project` seed the fps from the selection's project rate/scale (`project`
-   * is later overwritten off `getEditInfo` by the caller). */
+   * frame rate only. `defaults` keeps the config default fps; `project` seeds it
+   * from the selection's project rate/scale (and is later overwritten off
+   * `getEditInfo` by the caller); §3-13: `material` seeds it from the selected
+   * object's OWN probed framerate ({@link snapMaterialFps}), falling back to that
+   * same project rate/scale when the material's fps can't be read. */
   fpsPolicy: PrefillResolutionPolicy;
   /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
    * (`useBaseModels().activeEngineFamily`), the acceleration settings
@@ -257,9 +284,9 @@ export interface PrefillSeed {
  * matches the remounted form.
  *
  * Composition: `deriveGenerationParams` (isICLora = either IC-LoRA intent,
- * useMaterialSize = `sizePolicy` ≠ `defaults`) for width/height → the fps seed
- * off the selection's project rate/scale (only when `fpsPolicy` ≠ `defaults`) →
- * the intent's {@link DurationPolicy} + {@link materialDurationForIntent} fed
+ * useMaterialSize = `sizePolicy` ≠ `defaults`) for width/height → the three-tier
+ * fps seed (material → project → config default, see below) → the intent's
+ * {@link DurationPolicy} + {@link materialDurationForIntent} fed
  * into `computeTargetNumFrames` (which owns the 8n+1 snap and the comfort-
  * ceiling clamp) → the one intent-specific DURATION cap
  * ({@link END_SOURCE_SEED_MAX_FRAMES}). `computeTargetNumFrames`'s `null` (policy
@@ -278,8 +305,12 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // fps follows `fpsPolicy`. `defaults` on an axis ignores the material for that
   // axis; `material`/`project` seed it from the selection (`project` is later
   // overwritten off `getEditInfo` by the caller).
+  //
+  // §3-13: the fps axis needs all THREE policies told apart, so it has no
+  // `useMaterialFps` twin of the flag below — that boolean was true for both
+  // `material` and `project` and so could never distinguish them. See the fps
+  // seed further down.
   const useMaterialSize = sizePolicy !== "defaults";
-  const useMaterialFps = fpsPolicy !== "defaults";
   const primarySel = selection.selected[0];
 
   const derived = deriveGenerationParams({
@@ -296,11 +327,19 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
     },
   });
 
-  // fps seed: material/project use the selection's project rate/scale (the best
-  // available "match material" fps — per-object fps isn't in getSelection),
-  // falling back to the config default; defaults keeps the config default.
-  const frameRate =
-    useMaterialFps && selection.rate > 0 && selection.scale > 0 ? selection.rate / selection.scale : undefined;
+  // fps seed (§3-13, contract v11) — three tiers, tried in order:
+  //  1. `material`: the selected object's OWN framerate. Native probes it off the
+  //     backing file and reports it RAW (`29.97`); the snap to an integer is this
+  //     layer's job ({@link snapMaterialFps}).
+  //  2. the selection's project rate/scale — where `project` always lands, and
+  //     where `material` falls back when the object has no readable fps (an older
+  //     native build, a non-video object, or an unsupported container such as
+  //     mkv/webm — all normal outcomes, not errors).
+  //  3. `undefined`: keep the config default — the `defaults` policy, or a
+  //     rate/scale that isn't resolvable either.
+  const projectSeedFps = selection.rate > 0 && selection.scale > 0 ? selection.rate / selection.scale : undefined;
+  const materialSeedFps = fpsPolicy === "material" ? snapMaterialFps(primarySel?.mediaFps) : undefined;
+  const frameRate = fpsPolicy === "defaults" ? undefined : (materialSeedFps ?? projectSeedFps);
 
   const policy: DurationPolicy = DURATION_POLICY_BY_INTENT[intent] ?? "untouched";
   // The fps used to convert a material duration to frames — the same fps that

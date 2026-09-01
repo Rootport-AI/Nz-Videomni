@@ -18,6 +18,11 @@ import { ACCELERATION_STORAGE_KEY } from "./shell/accelerationSettings";
 // test writes the key(s) it needs BEFORE rendering `AppShell`. Only the
 // right-click prefill's initial values change; the routing/reservation machinery
 // is unchanged (covered by App.prefill.test.tsx).
+//
+// §3-13 (2026-09-01): the fps axis's `material` is live again and now reads the
+// selected object's OWN framerate (contract v11 `mediaFps`), so the cases that
+// used to assert X1's coercion to `project` assert the material's snapped fps
+// instead — the mock-side verification of the whole native→bridge→prefill path.
 
 function selectionWith(
   mediaWidth: number,
@@ -26,6 +31,10 @@ function selectionWith(
   scale = 1,
   effectName = "動画ファイル",
   filePath = "C:\\v\\a.mp4",
+  // §3-13 (contract v11): the object's OWN probed framerate, RAW as native
+  // reports it. Omitted by default so every pre-existing case keeps the
+  // "native told us nothing" shape it was written against.
+  mediaFps?: number,
 ): ResultOf<"timeline.getSelection"> {
   return {
     hasRange: true,
@@ -43,6 +52,7 @@ function selectionWith(
         mediaWidth,
         mediaHeight,
         mediaDurationSec: 0,
+        ...(mediaFps !== undefined ? { mediaFps } : {}),
       },
     ],
     cursorFrame: 0,
@@ -53,8 +63,14 @@ function selectionWith(
   };
 }
 
-function imageSel(mediaWidth: number, mediaHeight: number, rate = 30, scale = 1): ResultOf<"timeline.getSelection"> {
-  return selectionWith(mediaWidth, mediaHeight, rate, scale, "画像ファイル", "C:\\i\\a.png");
+function imageSel(
+  mediaWidth: number,
+  mediaHeight: number,
+  rate = 30,
+  scale = 1,
+  mediaFps?: number,
+): ResultOf<"timeline.getSelection"> {
+  return selectionWith(mediaWidth, mediaHeight, rate, scale, "画像ファイル", "C:\\i\\a.png", mediaFps);
 }
 
 const panel = () => screen.getByRole("tabpanel");
@@ -113,32 +129,61 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
   );
 
   it(
-    "X1: size=material × stored fps=material — size stays material, fps coerced to the PROJECT (getEditInfo)",
+    "§3-13: size=material × fps=material — both axes come from the MATERIAL, the fps snapped from 29.97 to 30",
     async () => {
-      // X1: the fps axis no longer offers "material" — a stored "material" is
-      // coerced to the default "project" on mount, so the fps now follows
-      // getEditInfo (60), NOT the selection rate (30) it once did. The SIZE axis
-      // still honours material, so size=material coverage is preserved here.
+      // §3-13's mock-side main verification: the fps axis's "material" reads the
+      // object's OWN probed framerate (contract v11 `mediaFps`) and snaps it to
+      // an integer. 30 is distinguishable from every other candidate in play —
+      // the selection's project rate (25), getEditInfo's project fps (60) and the
+      // config default (24) — so only the material path can produce it.
       setSizePolicy("material");
       setFpsPolicy("material");
       const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 60, scale: 1 } });
 
-      // media 800x600 (64 grid -> 832x640) from the material.
+      // media 800x600 (64 grid -> 832x640) and 29.97 fps, from the material.
       act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 30, 1) });
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+          action: "imageToVideo",
+          selection: imageSel(800, 600, 25, 1, 29.97),
+        });
       });
 
       await waitFor(
         () => {
           expect(within(panel()).getAllByDisplayValue("832").length).toBeGreaterThan(0);
           expect(within(panel()).getAllByDisplayValue("640").length).toBeGreaterThan(0);
-          // fps coerced to the project path -> getEditInfo's 60 (not the selection's 30).
-          expect(fpsInput().value).toBe("60");
+          // 29.97 -> 30: neither the selection's 25, nor getEditInfo's 60, nor 24.
+          expect(fpsInput().value).toBe("30");
         },
         { timeout: 5_000 },
       );
       // size stays the material's 832x640, never the project's 1024x512.
       expect(within(panel()).queryByDisplayValue("1024")).not.toBeInTheDocument();
+    },
+    15_000,
+  );
+
+  it(
+    "§3-13: fps=material falls back to the selection's project rate when the material has no readable fps",
+    async () => {
+      // The mkv/webm (and old-native-build) case: no `mediaFps` on the selection
+      // at all -> tier 2, the selection's own rate/scale (25). getEditInfo is NOT
+      // consulted, since neither axis is `project`.
+      setSizePolicy("material");
+      setFpsPolicy("material");
+      const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 60, scale: 1 } });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 25, 1) });
+      });
+
+      await waitFor(
+        () => {
+          expect(within(panel()).getAllByDisplayValue("832").length).toBeGreaterThan(0);
+          expect(fpsInput().value).toBe("25");
+        },
+        { timeout: 5_000 },
+      );
     },
     15_000,
   );
@@ -289,23 +334,27 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
   );
 
   it(
-    "X1: size=project × stored fps=material — fps no longer stays the selection; it coerces to the PROJECT (60)",
+    "crossing size=project × fps=material: size overwritten from getEditInfo, fps left at the material's own",
     async () => {
       setSizePolicy("project");
-      setFpsPolicy("material"); // retired -> coerced to "project" on mount
+      setFpsPolicy("material");
       const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 60, scale: 1 } });
 
       act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 30, 1) });
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+          action: "imageToVideo",
+          selection: imageSel(800, 600, 25, 1, 29.97),
+        });
       });
 
-      // Both axes now resolve off the project: size 1024x512 AND fps 60 from
-      // getEditInfo — the fps is no longer held at the selection's 30.
+      // The axes split cleanly: size 1024x512 from getEditInfo, while the fps
+      // stays the material's own 29.97 -> 30 — the `project` mount effect must
+      // apply only ITS axis and leave the fps alone (not the project's 60).
       await waitFor(
         () => {
           expect(within(panel()).getAllByDisplayValue("1024").length).toBeGreaterThan(0);
           expect(within(panel()).getAllByDisplayValue("512").length).toBeGreaterThan(0);
-          expect(fpsInput().value).toBe("60");
+          expect(fpsInput().value).toBe("30");
         },
         { timeout: 5_000 },
       );
@@ -316,14 +365,17 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
   // --- Chain ----------------------------------------------------------------
 
   it(
-    "X1 (Chain): size=material × stored fps=material — common size from material, fps coerced to the PROJECT",
+    "§3-13 (Chain): size=material × fps=material — common size AND fps both from the material",
     async () => {
       setSizePolicy("material");
-      setFpsPolicy("material"); // retired -> coerced to "project" on mount
+      setFpsPolicy("material");
       const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 60, scale: 1 } });
 
       act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "extendVideo", selection: selectionWith(800, 600, 30, 1) });
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+          action: "extendVideo",
+          selection: selectionWith(800, 600, 25, 1, "動画ファイル", "C:\\v\\a.mp4", 29.97),
+        });
       });
 
       await waitFor(
@@ -334,10 +386,11 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
       );
       await waitFor(
         () => {
-          // common size stays the material's 832x640; fps coerced to project -> 60.
+          // common size stays the material's 832x640; the common fps is the
+          // material's 29.97 -> 30 (not the selection's 25, nor getEditInfo's 60).
           expect(within(panel()).getAllByDisplayValue("832").length).toBeGreaterThan(0);
           expect(within(panel()).getAllByDisplayValue("640").length).toBeGreaterThan(0);
-          expect(fpsInput().value).toBe("60");
+          expect(fpsInput().value).toBe("30");
         },
         { timeout: 5_000 },
       );

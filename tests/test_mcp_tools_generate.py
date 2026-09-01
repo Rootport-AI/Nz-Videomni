@@ -169,6 +169,10 @@ def test_submit_generate_payload_contract_defaults_only():
     assert "conditioning_images" not in body
     assert "loras" not in body
     assert "reference_video_id" not in body
+    # Docs/PENDING_TASKS_CLOSED.md §3-122 (closed 2026-09-01): the outpaint nest
+    # rides only on a non-zero pad, so a defaults-only call's body is
+    # byte-identical to what it was before the six outpaint_* arguments existed.
+    assert "outpaint" not in body
 
 
 def test_submit_generate_with_nag_and_conditioning_images_includes_them():
@@ -696,6 +700,10 @@ def test_submit_chain_payload_contract_defaults_only_and_chunked_upsample_always
     assert "loras" not in body
     assert "reference_video_id" not in body
     assert "end_source" not in body
+    # Docs/PENDING_TASKS_CLOSED.md §3-115 (closed 2026-09-01): the retake nest
+    # rides only on retake_video_id, so a defaults-only call's body is
+    # byte-identical to what it was before the five retake_* arguments existed.
+    assert "retake" not in body
 
 
 def test_submit_chain_end_source_video_id_included_in_body():
@@ -1262,3 +1270,473 @@ def test_submit_chain_a2v_single_clip_happy_path_via_mcp_app(mcp_app, tmp_path):
 
     status = anyio.run(jobs.job_status, job_id)
     assert status["status"] == "completed", status
+
+
+# ---------------- retake (Docs/PENDING_TASKS_CLOSED.md §3-115, closed 2026-09-01)
+#
+# The five retake_* arguments were appended to submit_chain's signature (the
+# same "append at the tail" discipline D13-D16 used for end source), so every
+# existing positional-argument call above keeps working untouched. The nest they
+# build carries ALL FIVE keys even at their defaults, matching RetakeSpec's own
+# defaults (api/models.py:547-599) -- the same shape end_source sends.
+
+
+def test_submit_chain_retake_body_exact():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 1},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=121)],
+            retake_video_id="v-1",
+            retake_window_start_sec=2.5,
+        )
+    )
+
+    body = captured["body"]
+    # Defaults for head/tail/regenerate_audio are still spelled out on the wire.
+    assert body["retake"] == {
+        "video_id": "v-1",
+        "window_start_sec": 2.5,
+        "head_px": 25,
+        "tail_px": 24,
+        "regenerate_audio": True,
+    }
+    # The window length has exactly one source: clips[0].num_frames.
+    assert body["clips"] == [{"num_frames": 121}]
+
+
+def test_submit_chain_retake_non_default_glue_and_audio_in_body():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 1},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=73)],
+            retake_video_id="v-2",
+            retake_window_start_sec=0.0,
+            retake_head_px=33,  # 8n+1
+            retake_tail_px=32,  # multiple of 8
+            retake_regenerate_audio=False,
+        )
+    )
+
+    assert captured["body"]["retake"] == {
+        "video_id": "v-2",
+        "window_start_sec": 0.0,
+        "head_px": 33,
+        "tail_px": 32,
+        "regenerate_audio": False,
+    }
+
+
+def test_submit_chain_retake_without_window_start_raises_before_any_http_call():
+    # Owner ruling (2026-09-01): window_start_sec has NO default, so a forgotten
+    # one must not silently become 0.0 and retake the wrong part of the footage.
+    # Same "a specification silently turns into something else" category as
+    # CROP_SIZE_INCOMPLETE.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
+
+    set_client(_client_for_handler(handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_chain,
+                "a prompt",
+                [ChainClipArg(num_frames=121)],
+                retake_video_id="v-1",
+            )
+        )
+
+    assert "RETAKE_WINDOW_START_REQUIRED" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"retake_window_start_sec": 1.0},
+        {"retake_head_px": 33},
+        {"retake_tail_px": 32},
+        {"retake_regenerate_audio": False},
+    ],
+)
+def test_submit_chain_retake_helper_args_without_video_id_raise_before_any_http_call(kwargs):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
+
+    set_client(_client_for_handler(handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_chain,
+                "a prompt",
+                [ChainClipArg(num_frames=49), ChainClipArg(num_frames=49)],
+                **kwargs,
+            )
+        )
+
+    assert "RETAKE_ARGS_WITHOUT_VIDEO_ID" in str(exc_info.value)
+
+
+def test_submit_chain_input_schema_exposes_retake_arguments():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_chain")
+    props = tool.inputSchema["properties"]
+    for name in (
+        "retake_video_id",
+        "retake_window_start_sec",
+        "retake_head_px",
+        "retake_tail_px",
+        "retake_regenerate_audio",
+    ):
+        assert name in props, f"{name} missing from submit_chain schema"
+    assert props["retake_head_px"]["default"] == 25
+    assert props["retake_tail_px"]["default"] == 24
+    assert props["retake_regenerate_audio"]["default"] is True
+    # No usable default for the window start (owner ruling): the schema must not
+    # advertise a 0.0 an agent would read as "fine to omit".
+    assert props["retake_window_start_sec"].get("default") is None
+
+
+# -------------- outpaint (Docs/PENDING_TASKS_CLOSED.md §3-122, closed 2026-09-01)
+
+
+def test_submit_generate_outpaint_body_default_blend_omits_both_keys():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            num_frames=49,
+            reference_video_id="v-1",
+            outpaint_pad_left=128,
+            outpaint_pad_right=128,
+        )
+    )
+
+    body = captured["body"]
+    # blend_dilation_* omitted at the default (5) -- the same backward-compat
+    # discipline the panel's useOutpaintForm.ts follows; freeze_source_audio
+    # omitted at its own default (True).
+    assert body["outpaint"] == {
+        "pad_left": 128,
+        "pad_right": 128,
+        "pad_top": 0,
+        "pad_bottom": 0,
+    }
+
+
+def test_submit_generate_outpaint_non_default_blend_follows_5_to_2():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            reference_video_id="v-1",
+            outpaint_pad_top=64,
+            outpaint_blend_dilation_stage1=8,
+            outpaint_freeze_source_audio=False,
+        )
+    )
+
+    body = captured["body"]
+    # round(8 * 2 / 5) == round(3.2) == 3 -- the port of outpaintGeometry.ts's
+    # stage2FromStage1, which the panel is the source of truth for.
+    assert body["outpaint"] == {
+        "pad_left": 0,
+        "pad_right": 0,
+        "pad_top": 64,
+        "pad_bottom": 0,
+        "blend_dilation_stage1": 8,
+        "blend_dilation_stage2": 3,
+        "freeze_source_audio": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "stage1,expected_stage2",
+    [(0, 0), (1, 1), (2, 1), (3, 1), (4, 2), (6, 2), (7, 3), (8, 3), (10, 4), (15, 6)],
+)
+def test_outpaint_stage2_from_stage1_matches_the_panel_formula(stage1, expected_stage2):
+    # Python's round() is banker's rounding and JavaScript's Math.round() is
+    # half-up, but r*2/5 never lands on a .5 for an integer r, so the port is
+    # exact over the whole 0-15 range the API accepts.
+    assert generate._outpaint_stage2_from_stage1(stage1) == expected_stage2
+
+
+def test_submit_generate_all_pads_zero_sends_no_outpaint_key():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            outpaint_pad_left=0,
+            outpaint_pad_right=0,
+            outpaint_pad_top=0,
+            outpaint_pad_bottom=0,
+        )
+    )
+
+    body = captured["body"]
+    assert "outpaint" not in body
+    assert "loras" not in body  # ...and no LoRA is injected either
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+
+
+def test_submit_generate_outpaint_auto_injects_the_in_outpainting_lora():
+    # Owner ruling (2026-09-01): the panel pins this LoRA, the server requires
+    # exactly one preprocess-free control adapter alongside `outpaint`, and an
+    # agent that forgets it only ever sees a 422. So the tool adds it.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            reference_video_id="v-1",
+            outpaint_pad_bottom=128,
+        )
+    )
+
+    assert captured["body"]["loras"] == [{"name": "in-outpainting", "strength": 1.0}]
+
+    # An unrelated style LoRA is kept, with the control adapter appended.
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            loras=[LoraArg(name="Pixar_Toon", strength=0.6)],
+            reference_video_id="v-1",
+            outpaint_pad_bottom=128,
+        )
+    )
+
+    assert captured["body"]["loras"] == [
+        {"name": "Pixar_Toon", "strength": 0.6},
+        {"name": "in-outpainting", "strength": 1.0},
+    ]
+
+
+def test_submit_generate_outpaint_does_not_duplicate_an_existing_in_outpainting_lora():
+    # Match on NAME ONLY: a caller who deliberately dialled the strength down to
+    # 0.7 keeps that value rather than getting a second 1.0 entry beside it.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            loras=[LoraArg(name="in-outpainting", strength=0.7)],
+            reference_video_id="v-1",
+            outpaint_pad_bottom=128,
+        )
+    )
+
+    assert captured["body"]["loras"] == [{"name": "in-outpainting", "strength": 0.7}]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"outpaint_blend_dilation_stage1": 8},
+        {"outpaint_freeze_source_audio": False},
+    ],
+)
+def test_submit_generate_outpaint_helper_args_with_zero_pads_raise_before_any_http_call(kwargs):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
+
+    set_client(_client_for_handler(handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(functools.partial(generate.submit_generate, "a prompt", **kwargs))
+
+    assert "OUTPAINT_PADS_ALL_ZERO" in str(exc_info.value)
+
+
+def test_submit_generate_input_schema_exposes_outpaint_arguments():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_generate")
+    props = tool.inputSchema["properties"]
+    for name in (
+        "outpaint_pad_left",
+        "outpaint_pad_right",
+        "outpaint_pad_top",
+        "outpaint_pad_bottom",
+        "outpaint_blend_dilation_stage1",
+        "outpaint_freeze_source_audio",
+    ):
+        assert name in props, f"{name} missing from submit_generate schema"
+    assert props["outpaint_pad_left"]["default"] == 0
+    assert props["outpaint_blend_dilation_stage1"]["default"] == 5
+    assert props["outpaint_freeze_source_audio"]["default"] is True
+    # blend_dilation_stage2 is DERIVED (5:2), never an argument -- exposing it
+    # would give the ratio a second source of truth.
+    assert "outpaint_blend_dilation_stage2" not in props
+
+
+# ---- upload_video max_frames (Docs/PENDING_TASKS_CLOSED.md §3-122 companion)
+
+
+def test_upload_video_max_frames_rides_on_the_query_and_returns_measurements(tmp_path):
+    # api/uploads.py:57 declares max_frames as a Query parameter, and it doubles
+    # as the "please measure this" opt-in (frame_count / fps come back only when
+    # it is sent) -- which is how an agent works out a retake window's start
+    # second without leaving MCP.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={
+                "video_id": "v-1",
+                "original_filename": "clip.mp4",
+                "stored_path": "videos/v-1/input.mp4",
+                "content_type": "video/mp4",
+                "size_bytes": 5,
+                "trimmed": False,
+                "frame_count": 480,
+                "fps": 24.0,
+            },
+        )
+
+    set_client(_client_for_handler(handler))
+
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"fake\x00")
+
+    result = anyio.run(functools.partial(uploads.upload_video, str(clip), max_frames=100000))
+
+    assert captured["path"].endswith("/upload/video")
+    assert captured["params"] == {"max_frames": "100000"}
+    assert result["frame_count"] == 480
+    assert result["fps"] == 24.0
+
+
+def test_upload_video_without_max_frames_sends_no_query_at_all(tmp_path):
+    # Tripwire: an ordinary upload's request line must stay byte-identical to
+    # what it was before max_frames existed.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={
+                "video_id": "v-1",
+                "original_filename": "clip.mp4",
+                "stored_path": "videos/v-1/input.mp4",
+                "content_type": "video/mp4",
+                "size_bytes": 5,
+                "trimmed": False,
+                "frame_count": None,
+                "fps": None,
+            },
+        )
+
+    set_client(_client_for_handler(handler))
+
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"fake\x00")
+
+    result = anyio.run(uploads.upload_video, str(clip))
+
+    assert captured["params"] == {}
+    assert result["frame_count"] is None
+    assert result["fps"] is None
+
+
+def test_upload_video_input_schema_exposes_max_frames():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "upload_video")
+    assert "max_frames" in tool.inputSchema["properties"]

@@ -286,7 +286,8 @@ def test_generate_payload_omits_attention_backend_by_default(tmp_path):
 
 
 def test_generate_payload_carries_vae_mode_when_pruned(tmp_path):
-    # PrunaVAED (§3-50) turned vae_mode from a mock into a real engine field on
+    # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time) turned vae_mode from a mock into a real engine field on
     # 2026-08-05: a non-default value now DOES ride the wire (this assert was
     # the exact inverse until then). Sent alongside sage so the acceleration
     # branch as a whole is exercised.
@@ -356,7 +357,8 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     # therefore carries both (value True). attention_backend and vae_mode are
     # real engine fields too, but their defaults were never flipped ("sdpa" /
     # "default"), so they stay absent — vae_mode's default is permanently off
-    # because the pruned decoder changes the picture (§3-50).
+    # because the pruned decoder changes the picture (PrunaVAED,
+    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time).
     captured: list[dict] = []
     be = _capturing_backend(captured)
     be.generate(_nag_request(), tmp_path / "single")

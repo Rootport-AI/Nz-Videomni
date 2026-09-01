@@ -426,7 +426,8 @@ def test_vsf_fields_accepted_generate():
 # ─────────────────────────────────────────────────────────────────────────────
 # Acceleration — attention_backend / block_swap_prefetch /
 # fused_gguf_dequant_kernel / vae_mode. All four are implemented; vae_mode was
-# the last mock and became real on 2026-08-05 (PrunaVAED, §3-50). Only its
+# the last mock and became real on 2026-08-05 (PrunaVAED,
+# Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time). Only its
 # DEFAULT is special: permanently "default", because the pruned decoder changes
 # the picture.
 # ─────────────────────────────────────────────────────────────────────────────

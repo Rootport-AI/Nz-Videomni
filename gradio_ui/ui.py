@@ -121,9 +121,10 @@ _BATCH_STAT_DISPLAY = {
 }
 
 # scan_wav_folder's skip_reason strings -> localized i18n key. "over-481f" is
-# the LEGACY code this GUI wrote before the cap became DURATION-linked (§4-29);
-# manifests written back then still carry it, so it maps to the same label as
-# the current "over-cap" instead of falling through as a raw string.
+# the LEGACY code this GUI wrote before the cap became DURATION-linked
+# (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed 2026-09-01); manifests
+# written back then still carry it, so it maps to the same label as the
+# current "over-cap" instead of falling through as a raw string.
 _BATCH_SKIP_KEY = {
     "over-cap": "batch_skip_overcap",
     "over-481f": "batch_skip_overcap",
@@ -1081,7 +1082,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # Display name: "PruneVAED" -> "PrunaVAED" (correct product name
                 # per PRUNAVAED_WORKORDER.md §6.1). The API literal value
                 # "prune_vaed" is an external contract and is unchanged.
-                # PrunaVAED (§3-50): pruned video-VAE decoder, real as of
+                # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
+                # §3-50 at the time): pruned video-VAE decoder, real as of
                 # 2026-08-05. Wired the same way as attention_backend/
                 # accel_prefetch/accel_keep_resident/accel_fused_dequant above
                 # -- see dispatch()/chain_dispatch() below for how the selected
@@ -1114,7 +1116,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # load buttons — only additive event listeners below.
                 reg(gr.Markdown(f"### {L('model_section_title')}"),
                     "model_section_title", "value")
-                # Base model (multi-engine axis, §1-25). Choices come from GET
+                # Base model (multi-engine axis; Docs/PENDING_TASKS_CLOSED.md's
+                # old §1-25, closed 2026-09-01). Choices come from GET
                 # /models' base_models[] — label = display_name, value = id —
                 # and the value doubles as the "which base model is active"
                 # readout (refresh_model_dropdowns re-selects active_base_model).
@@ -1448,8 +1451,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
             # vsf_scale, then the Acceleration attention selector, the
             # block-swap prefetch checkbox, the keep-resident checkbox, the
-            # fused-dequant checkbox AND the VAE radio (PrunaVAED, §3-50), are
-            # APPENDED at the very end, after every pre-existing positional
+            # fused-dequant checkbox AND the VAE radio (PrunaVAED,
+            # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time),
+            # are APPENDED at the very end, after every pre-existing positional
             # (matching dispatch()'s signature order, which appends them after
             # batch_img_dir_v).
             inputs=[prompt, negative, *kf_inputs, width, height,
@@ -1903,8 +1907,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # Acceleration: the attention selector, the block-swap prefetch
         # checkbox, the keep-resident checkbox, the fused-dequant checkbox AND
-        # the VAE radio (PrunaVAED, §3-50) are APPENDED at the very end of the
-        # chain inputs list below, in that order (attention_backend,
+        # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
+        # as §3-50 at the time) are APPENDED at the very end of the chain
+        # inputs list below, in that order (attention_backend,
         # accel_prefetch, accel_keep_resident, accel_fused_dequant,
         # accel_vae). generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
@@ -1939,7 +1944,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # it is intentionally left off the end and keeps its None default.
             # The Acceleration attention selector, the block-swap prefetch
             # checkbox, the keep-resident checkbox, the fused-dequant checkbox
-            # AND the VAE radio (PrunaVAED, §3-50) are APPENDED last (in that
+            # AND the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
+            # §3-66, filed as §3-50 at the time) are APPENDED last (in that
             # order) and reach the handler as keywords via chain_dispatch
             # above.
             inputs=[prompt, negative, chain_width, chain_height,
@@ -2340,11 +2346,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     # drive them directly (mirrors the on_adapter_change exposure above).
     demo.on_nag_enable_toggle = on_nag_enable_toggle  # type: ignore[attr-defined]
     demo.on_nag_method_change = on_nag_method_change  # type: ignore[attr-defined]
-    # Models-section closures (§1-25 base-model dropdown): the refresh that
-    # fills base + 4 category dropdowns, and the base-model .input handler.
+    # Models-section closures (base-model dropdown; Docs/PENDING_TASKS_CLOSED.md's
+    # old §1-25, closed 2026-09-01): the refresh that fills base + 4 category
+    # dropdowns, and the base-model .input handler.
     demo.refresh_model_dropdowns = refresh_model_dropdowns  # type: ignore[attr-defined]
     demo.on_base_model_change = on_base_model_change  # type: ignore[attr-defined]
-    # "Set audios" closure (§4-29): lets a test drive the scan/merge/write path
-    # with an explicit frame cap without a live event round-trip.
+    # "Set audios" closure (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed
+    # 2026-09-01): lets a test drive the scan/merge/write path with an
+    # explicit frame cap without a live event round-trip.
     demo.on_batch_set_audios = on_batch_set_audios  # type: ignore[attr-defined]
     return demo

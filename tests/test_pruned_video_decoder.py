@@ -1,4 +1,5 @@
-"""Structure of the pruned video VAE decoder (PrunaVAED, §3-50).
+"""Structure of the pruned video VAE decoder (PrunaVAED,
+Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time).
 
 This is the machine half of gate G2: the module is built on the META device (no
 weights, no GPU, no allocation) and every structural claim the design rests on

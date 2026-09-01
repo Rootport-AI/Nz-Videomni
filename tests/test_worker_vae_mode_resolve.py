@@ -1,4 +1,5 @@
-"""Worker-side resolution of the per-job ``vae_mode`` field (PrunaVAED, §3-50).
+"""Worker-side resolution of the per-job ``vae_mode`` field (PrunaVAED,
+Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time).
 
 Covers ``engine.worker._resolve_vae_mode`` (the missing-key default, the two
 legal values, and the fail-loud on anything else) and ``_vae_mode_used`` (the

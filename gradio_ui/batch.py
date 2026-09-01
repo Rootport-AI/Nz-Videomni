@@ -183,7 +183,8 @@ class BatchSnapshot:
                      when False. The output is bit-identical either way — only
                      the speed changes.
         vae_mode  Snapshotted from the Settings-tab VAE radio (PrunaVAED,
-                     §3-50), same reasoning again. The default is "default"
+                     Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+                     time), same reasoning again. The default is "default"
                      and never flips (owner ruling 0-11), so this one reaches
                      the payload only when "prune_vaed" is selected.
 
@@ -192,7 +193,9 @@ class BatchSnapshot:
                      start-time re-judgment uses the SAME effective cap
                      (``min(num_frames, 481)``) the "Set audios" scan did —
                      without it a Start would re-judge every row against a bare
-                     481 and silently un-skip rows the scan excluded (§4-29).
+                     481 and silently un-skip rows the scan excluded
+                     (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed
+                     2026-09-01).
     """
 
     wav_dir: str

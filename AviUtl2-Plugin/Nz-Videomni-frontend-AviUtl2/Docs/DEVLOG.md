@@ -3657,3 +3657,5 @@ export function baseModelInstaller(id: string): string {
 ゲート結果（2026-09-01）: `npm run typecheck` エラー0／`npm test` 135ファイル **2621 passed・10 skipped・0 failed**（`AppShell.featureScope.test.tsx`へ2本追加——LTX 2.5へ切り替えるとPrunaVAEDの行と注意文が両方消えること、ブラウザに`prune_vaed`が残っていてもLTX 2.5がアクティブになれば保存値が`default`へ戻ること）。
 
 **オーナーの実機目視ゲートは未了である**（項目はバックエンド台帳§2-1・§2-4のチェックリスト）。実機で見るには`build.ps1`→`deploy.ps1`での配置が要る。
+
+> **【2026-09-01 追記】実機目視ゲート合格・配置済み。** オーナーの実機目視ゲートG-O1〜G-O4（本節の2件に加え、バックエンド側で同時に入った§100.4の1件とGradioのベースモデル露出）は**4本とも全項目合格**し、`build.ps1`→`deploy.ps1`での配置（実機＋リポジトリ内の配布コピーの2箇所）も同日に完了した。ゲート結果の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) **§85**で、台帳の項目は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) **§3-136〜§3-139**へ移した（§100.1が挙げる§1-25・§1-26・§4-29と、その後の§2-1〜§2-4はいずれも欠番である）。

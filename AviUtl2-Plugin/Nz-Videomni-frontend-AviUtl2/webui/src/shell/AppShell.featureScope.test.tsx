@@ -63,9 +63,10 @@ function editSubTab(container: HTMLElement, name: string) {
 }
 
 describe("AppShell — base-model feature scope", () => {
-  // §1-26: the two PrunaVAED tests below SEED this key, and every `AppShell`
-  // mount writes it back through `useAccelerationSettings` — so a leftover
-  // would decide the next test's starting choice. Same precaution
+  // backend Docs/PENDING_TASKS_CLOSED.md's old §1-26 (hiding PrunaVAED on LTX 2.5,
+  // closed 2026-09-01): the two PrunaVAED tests below SEED this key, and every
+  // `AppShell` mount writes it back through `useAccelerationSettings` — so a
+  // leftover would decide the next test's starting choice. Same precaution
   // `SettingsPanel.test.tsx` takes for the same key.
   beforeEach(() => {
     window.localStorage.removeItem(ACCELERATION_STORAGE_KEY);
@@ -429,7 +430,8 @@ describe("AppShell — base-model feature scope", () => {
     expect(inputs.every((i) => i.disabled)).toBe(false);
   });
 
-  // -- §1-26: PrunaVAED, a Settings row rather than a mode ---------------------
+  // -- backend Docs/PENDING_TASKS_CLOSED.md's old §1-26 (closed 2026-09-01): PrunaVAED,
+  // -- a Settings row rather than a mode ---------------------------------------
   //
   // The name `prune_vaed` is a REAL entry on LTX 2.5's published list (unlike
   // the synthetic ones above), and unlike every other feature in this file it

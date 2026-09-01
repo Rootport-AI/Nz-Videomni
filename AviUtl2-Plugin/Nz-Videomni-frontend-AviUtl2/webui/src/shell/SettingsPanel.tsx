@@ -67,12 +67,12 @@ export interface SettingsPanelProps {
    * no relationship to any other row (a server without the pruned weights
    * degrades per job on its own). */
   onVaeModeChange: (value: VaeMode) => void;
-  /** §1-26 (2026-09-01): whether the LOADED base model's engine refuses
-   * `prune_vaed` — `AppShell` derives it from the `unsupported_features` list
-   * `GET /models` publishes, never from a base-model id. Unlike sage and
-   * block-swap prefetch (greyed out, since the server downgrades on its own),
-   * this one HIDES the row outright: an engine that publishes the name 422s
-   * the field, so there is no degraded-but-working choice left to offer. */
+  /** backend Docs/PENDING_TASKS_CLOSED.md's old §1-26 (2026-09-01, closed): whether the
+   * LOADED base model's engine refuses `prune_vaed` — `AppShell` derives it from the
+   * `unsupported_features` list `GET /models` publishes, never from a base-model id.
+   * Unlike sage and block-swap prefetch (greyed out, since the server downgrades on
+   * its own), this one HIDES the row outright: an engine that publishes the name
+   * 422s the field, so there is no degraded-but-working choice left to offer. */
   vaeUnsupported: boolean;
   /** `AppShell`'s existing `useServerStatus` state (the same `/status` poll the
    * header badge reads) — the ONLY source of sage availability. No separate
@@ -422,7 +422,8 @@ export function SettingsPanel({
             capability flag: the backend publishes none and instead degrades per
             job (`vae_mode_used: "on->off"`) when the pruned weights are absent.
 
-            §1-26 (2026-09-01): the row and its note are HIDDEN OUTRIGHT — not
+            backend Docs/PENDING_TASKS_CLOSED.md's old §1-26 (2026-09-01, closed): the
+            row and its note are HIDDEN OUTRIGHT — not
             greyed — on an engine whose published `unsupported_features` name
             `prune_vaed`, because there the field is a hard 422 rather than a
             silent downgrade. Both are wrapped by the ONE condition on purpose:

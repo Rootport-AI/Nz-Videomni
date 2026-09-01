@@ -154,9 +154,10 @@ def test_model_active_value():
 
 
 # --------------------------------------------------------------------------- #
-# adapters: base-model layer (§1-25). GET /models keeps its legacy top-level
-# ``categories`` block (the ACTIVE base model) and adds ``base_models[]`` with a
-# per-base listing; the Settings tab's base dropdown reads the latter.
+# adapters: base-model layer (Docs/PENDING_TASKS_CLOSED.md's old §1-25,
+# closed 2026-09-01). GET /models keeps its legacy top-level ``categories``
+# block (the ACTIVE base model) and adds ``base_models[]`` with a per-base
+# listing; the Settings tab's base dropdown reads the latter.
 # --------------------------------------------------------------------------- #
 
 #: SAMPLE_MODELS plus the multi-engine layer: LTX23 active, LTX25 listed at its
@@ -280,9 +281,10 @@ def test_load_selected_models_success_message_and_body():
 
 
 def test_load_selected_models_sends_the_base_model():
-    """§1-25: the base dropdown's id rides along on POST /pipeline/load. An
-    empty/absent selection omits the key entirely (byte-identical to the
-    pre-multi-engine request)."""
+    """Docs/PENDING_TASKS_CLOSED.md's old §1-25 (closed 2026-09-01): the base
+    dropdown's id rides along on POST /pipeline/load. An empty/absent
+    selection omits the key entirely (byte-identical to the pre-multi-engine
+    request)."""
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

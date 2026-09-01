@@ -74,7 +74,8 @@ GOLDEN_PAYLOAD_KEYS = [
     "component_video_vae_path",
     "component_audio_vae_path",
     "component_text_projection_path",
-    # PrunaVAED (§3-50, 2026-08-05): the pruned video VAE decoder's path. Rides
+    # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time; 2026-08-05): the pruned video VAE decoder's path. Rides
     # the load payload like the other component paths, but is NOT required to
     # exist (a job asking for it downgrades instead) and is NOT swappable
     # through the model registry.

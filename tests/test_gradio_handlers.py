@@ -3625,9 +3625,11 @@ def test_fused_dequant_i18n_keys_present_in_both_languages():
     # 2026-08-04: complete removal, not a rename-in-place).
     for lang in ("en", "ja"):
         assert "accel_lbl_fused_gguf" not in LABELS[lang]
-    # The shared "not implemented" info line is gone too (§3-50, 2026-08-05):
-    # the VAE radio was its last user and it now carries accel_info_vae, so
-    # Acceleration has no mock controls -- and no orphan strings -- left.
+    # The shared "not implemented" info line is gone too (PrunaVAED,
+    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time;
+    # 2026-08-05): the VAE radio was its last user and it now carries
+    # accel_info_vae, so Acceleration has no mock controls -- and no orphan
+    # strings -- left.
     for lang in ("en", "ja"):
         assert "accel_info_unimplemented" not in LABELS[lang]
         assert LABELS[lang]["accel_info_vae"].strip()

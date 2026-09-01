@@ -700,9 +700,10 @@ def test_start_remarks_over481_row_to_skip_and_excludes_it(tmp_path):
 
 
 def test_start_rejudges_against_the_snapshot_frame_cap(tmp_path):
-    """§4-29: the snapshot carries the Generate tab's frame count, so a row
-    well under 481 frames is re-marked Skip at start-time when it exceeds
-    that cap — the same judgment "Set audios" made."""
+    """Docs/PENDING_TASKS_CLOSED.md's old §4-29 (closed 2026-09-01): the
+    snapshot carries the Generate tab's frame count, so a row well under 481
+    frames is re-marked Skip at start-time when it exceeds that cap — the
+    same judgment "Set audios" made."""
     wav_dir = tmp_path / "wavs"
     wav_dir.mkdir()
     _write_wav(wav_dir / "ok.wav")

@@ -509,7 +509,8 @@ def test_batch_regen_refuses_skip_row(tmp_path):
     # A Skip row is refused: stat stays Skip and the table update is a no-op.
     # The reason code here is deliberately the LEGACY "over-481f" (the current
     # writer emits "over-cap"): this keeps an execution path over a manifest
-    # written before §4-29, which the refusal message must still localize.
+    # written before Docs/PENDING_TASKS_CLOSED.md's old §4-29 (closed
+    # 2026-09-01), which the refusal message must still localize.
     skip_rows = [BatchRow(queue=1, wav="a.wav", stat=STAT_SKIP,
                           skip_reason="over-481f")]
     upd, out_rows = fn(0, skip_rows, str(tmp_path), "en")
@@ -524,9 +525,10 @@ def test_batch_regen_refuses_skip_row(tmp_path):
 
 
 def test_batch_skip_key_maps_current_and_legacy_reason_codes():
-    """§4-29: the writer emits "over-cap", but manifests written before the
-    change carry "over-481f". Both must render as the SAME localized label, so
-    a legacy CSV never shows a raw reason code."""
+    """Docs/PENDING_TASKS_CLOSED.md's old §4-29 (closed 2026-09-01): the
+    writer emits "over-cap", but manifests written before the change carry
+    "over-481f". Both must render as the SAME localized label, so a legacy
+    CSV never shows a raw reason code."""
     from gradio_ui.ui import _BATCH_SKIP_KEY, batch_row_info_text
     from gradio_ui.manifest import BatchRow, STAT_SKIP
 
@@ -703,7 +705,8 @@ def test_acceleration_attention_radio_values_and_default():
 
 
 def test_acceleration_no_mock_controls_remain():
-    # PrunaVAED (§3-50, 2026-08-05): the VAE radio was the last remaining mock
+    # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time; real as of 2026-08-05): the VAE radio was the last remaining mock
     # in this section (the old fused_gguf_dequant_gemm checkbox was removed
     # outright on 2026-08-04). It is now a real, wired control -- Acceleration
     # has zero mocks left. The display label was also corrected from
@@ -750,8 +753,9 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     # put it last when it was the only Acceleration control, then the
     # block-swap prefetch checkbox went after it, the keep-resident checkbox
     # after that, the fused-dequant checkbox after that, and the VAE radio
-    # (PrunaVAED, §3-50) after that. This index is the canary for a wiring
-    # list and a handler signature drifting apart.
+    # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time) after that. This index is the canary for a wiring list and a
+    # handler signature drifting apart.
     for dep in deps_with_radio:
         assert dep.inputs[-5] is radio
 
@@ -820,7 +824,8 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
     # THIRD-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
-    # and §3-50 (PrunaVAED) appended the VAE radio after that.
+    # and PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time) appended the VAE radio after that.
     for dep in deps:
         assert dep.inputs[-3] is box
 
@@ -848,7 +853,8 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
     # And it is the FOURTH-TO-LAST input of each: APPENDED after
     # attention_backend, then the keep-resident checkbox (§48), the
-    # fused-dequant checkbox (§1-11) and the VAE radio (PrunaVAED, §3-50) were
+    # fused-dequant checkbox (§1-11) and the VAE radio (PrunaVAED,
+    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time) were
     # appended after IT.
     for dep in deps_with_box:
         assert dep.inputs[-4] is box
@@ -899,7 +905,8 @@ def test_fused_dequant_checkbox_is_wired_into_generate_and_chain():
                and c.label == en["accel_lbl_fused_dequant"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
-    # SECOND-TO-LAST since §3-50 (PrunaVAED) appended the VAE radio after it.
+    # SECOND-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
+    # filed as §3-50 at the time) appended the VAE radio after it.
     for dep in deps:
         assert dep.inputs[-2] is box
 
@@ -954,8 +961,9 @@ def test_generate_and_chain_trailing_inputs_order_is_locked():
 
 
 # --------------------------------------------------------------------------- #
-# vae_mode (PrunaVAED, §3-50) reaching the request payload: single-generate
-# (T2V and A2V branches), chain, and batch (which shares the A2V branch's
+# vae_mode (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at
+# the time) reaching the request payload: single-generate (T2V and A2V
+# branches), chain, and batch (which shares the A2V branch's
 # build_a2v_chain_payload builder). Same offline ``httpx.MockTransport``
 # pattern tests/test_gradio_handlers.py and tests/test_gradio_batch_runner.py
 # use to assert on the exact JSON body without a live server.

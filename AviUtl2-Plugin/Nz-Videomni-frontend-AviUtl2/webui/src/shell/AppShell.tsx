@@ -1169,11 +1169,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     setMode("single");
   }, [disabledModes, mode]);
 
-  // §1-26 (2026-09-01): PrunaVAED is an ENGINE-level feature — an engine that
-  // publishes `prune_vaed` answers the field with a 422 rather than degrading
-  // to the ordinary decoder, so the Settings row is hidden outright (below,
-  // via `vaeUnsupported`) instead of greyed. Read off the published
-  // `unsupported_features`, never a base-model id.
+  // PrunaVAED is an ENGINE-level feature (backend Docs/PENDING_TASKS_CLOSED.md's old
+  // §1-26, closed 2026-09-01, hiding PrunaVAED on LTX 2.5) — an engine that publishes
+  // `prune_vaed` answers the field with a 422 rather than degrading to the ordinary
+  // decoder, so the Settings row is hidden outright (below, via `vaeUnsupported`)
+  // instead of greyed. Read off the published `unsupported_features`, never a
+  // base-model id.
   const vaeUnsupported = baseModels.unsupportedFeatures.includes("prune_vaed");
 
   // The stored choice PERSISTS, so hiding the row is not enough on its own: a

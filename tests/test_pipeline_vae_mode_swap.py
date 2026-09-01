@@ -1,4 +1,6 @@
-"""Per-job video VAE decoder switching (PrunaVAED, §3-50) — gate G4's main half.
+"""Per-job video VAE decoder switching (PrunaVAED,
+Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time) — gate G4's
+main half.
 
 ``LTXFastVideoPipeline._set_vae_mode_job`` re-points ONE ledger builder per job.
 Three properties have to hold, and all three are provable in process — which is

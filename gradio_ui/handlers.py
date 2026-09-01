@@ -481,7 +481,8 @@ def build_a2v_chain_payload(
     ``fused_gguf_dequant_kernel`` is appended LAST under the same rule, with
     the same direction as block_swap_prefetch since 2026-08-04 (§51 flipped the
     server default to on -> the key rides only on an UNCHECKED box).
-    ``vae_mode`` (PrunaVAED, §3-50) is appended after it, same "differs from
+    ``vae_mode`` (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
+    §3-50 at the time) is appended after it, same "differs from
     the default" rule. Its default ("default") never changes (owner ruling
     0-11: no later default-flip step for this one, unlike the toggles above),
     so the key rides only when the pruned decoder ("prune_vaed") is chosen."""
@@ -591,7 +592,8 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # keep_resident.
                  fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
                  # Acceleration (ADDITIVE, last): the Settings-tab VAE radio
-                 # (PrunaVAED, §3-50). Same discipline again -- keyword-only
+                 # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
+                 # §3-50 at the time). Same discipline again -- keyword-only
                  # from ui.py's dispatch(), appended after
                  # fused_gguf_dequant_kernel.
                  vae_mode="default"):
@@ -1037,7 +1039,8 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # chain_dispatch.
                        fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
                        # Acceleration (ADDITIVE, last): the VAE radio
-                       # (PrunaVAED, §3-50), appended after
+                       # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
+                       # as §3-50 at the time), appended after
                        # fused_gguf_dequant_kernel and forwarded as a KEYWORD
                        # by ui.py's chain_dispatch.
                        vae_mode="default"):

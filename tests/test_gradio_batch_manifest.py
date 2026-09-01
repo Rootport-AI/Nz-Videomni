@@ -170,8 +170,9 @@ def test_scan_skips_over_481_frames(tmp_path):
 
 
 def test_scan_skips_over_caller_supplied_cap(tmp_path):
-    """§4-29: the cap is the Generate tab's own frame count, so a wav well
-    under 481 frames is skipped once max_frames is lower than it needs."""
+    """Docs/PENDING_TASKS_CLOSED.md's old §4-29 (closed 2026-09-01): the cap
+    is the Generate tab's own frame count, so a wav well under 481 frames is
+    skipped once max_frames is lower than it needs."""
     wav = tmp_path / "medium.wav"
     _write_wav(wav, seconds=15.0, rate=100)  # ~353 raw frames @24fps
 
@@ -302,9 +303,10 @@ def test_merge_rows_all_four_rules():
 
 
 def test_merge_rows_rescan_clears_a_stale_skip():
-    """§4-29 Skip recovery: the cap is DURATION-linked now, so a row skipped
-    under a low Frames value must come back once the rescan says it fits
-    (raise Frames -> Set audios). A Done row still wins over the rescan."""
+    """Docs/PENDING_TASKS_CLOSED.md's old §4-29 (closed 2026-09-01) Skip
+    recovery: the cap is DURATION-linked now, so a row skipped under a low
+    Frames value must come back once the rescan says it fits (raise Frames ->
+    Set audios). A Done row still wins over the rescan."""
     existing = [
         BatchRow(queue=1, wav="a.wav", prompt="kept", stat=STAT_SKIP,
                  skip_reason="over-cap", frames=0),

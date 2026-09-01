@@ -14,8 +14,8 @@ CPU骨格キャッシュ。LTX 2.5 では常駐するのがテキストエンコ
 同じ名前でも中身が違う。§76）、``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
 Triton 1カーネル化。出力はビット単位で不変。§51, 2026-08-04: 実機ゲート
 G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mode``（既定
-``"default"``、``"prune_vaed"`` で枝刈り版デコーダ。§3-50, 2026-08-05 に
-モックから実機能へ転換）を公開する。
+``"default"``、``"prune_vaed"`` で枝刈り版デコーダ。Docs/PENDING_TASKS_CLOSED.md
+§3-66（起票当時は§3-50）、2026-08-05 にモックから実機能へ転換）を公開する。
 ``vae_mode`` はかつて「現状モック（受理のみで効果が無い）なので出さない」
 （計画D1）として除外していたが、2026-08-05 のオーナー裁定で公開へ転じた
 （実装と実機ゲートG1〜G7の合格を待ってからの最終ステップ。
@@ -271,7 +271,8 @@ async def submit_generate(
     # appended last so the default payload's key order is untouched.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel
-    # vae_mode (§3-50, 2026-08-05): same "differs from the server's own
+    # vae_mode (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50
+    # at the time; 2026-08-05): same "differs from the server's own
     # default" rule, expressed against the "default" literal because the
     # server declares it inline (api/models.py:213) rather than through a
     # shared constant. Appended after fused_gguf_dequant_kernel so the default

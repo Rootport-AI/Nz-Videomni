@@ -486,7 +486,8 @@ def test_submit_generate_fused_dequant_off_included_in_body():
 
 
 def test_submit_generate_vae_mode_prune_vaed_included_in_body():
-    # vae_mode (§3-50, PrunaVAED): exposed to MCP on 2026-08-05 once the
+    # vae_mode (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50
+    # at the time): exposed to MCP on 2026-08-05 once the
     # real-device gates G1-G7 passed (owner ruling 0-8; before that the tool
     # deliberately hid it because the field was a mock). Default is "default"
     # and it is PERMANENT (0-11) -- so the "prune_vaed" call is the one that
@@ -1003,8 +1004,10 @@ def test_submit_chain_fused_dequant_off_included_in_body():
 
 
 def test_submit_chain_vae_mode_prune_vaed_included_in_body():
-    # §3-50: same rule and same direction as submit_generate above. In a chain
-    # one vae_mode applies to every clip and every stage (api/models.py:456-460).
+    # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time): same rule and same direction as submit_generate above. In a
+    # chain one vae_mode applies to every clip and every stage
+    # (api/models.py:456-460).
     captured: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

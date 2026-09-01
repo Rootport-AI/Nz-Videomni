@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.47**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.48**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-09-01**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -96,6 +96,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.45 | 2026-08-31 | **モデル読み込み中の `POST /generate` / `POST /generate/chain` を、ジョブを作る前に同期で 409 `PIPELINE_LOADING` で断るようにした（凍結 API 契約〔§6〕への加算）**。**加算であって縮小ではない**——従来この状況は `202` でジョブを受理したあと、ジョブスレッド内で `load()` が同じ 409 に当たって `GENERATION_FAILED` として失敗する、という成功しない経路だった。そこへ至る前に断るコードが増えただけで、以前は成功していたが今は失敗する、という状況は存在しない。**§6.1**（`POST /generate` の主なステータス欄へ `PIPELINE_LOADING` を追加）／**§6.1 の `POST /generate/chain` 補足**（同旨を1文追加）／**§6.8**（エラー表の `PIPELINE_LOADING` 行に本挙動を追記）／**§6.9(f)**（同）を更新した。実装は `services/pipeline_manager.py` の公開メソッド `reject_if_loading()`（判定と断り文自体は既存の `_reject_while_loading()` のまま）を `api/generate.py` と `api/generate_chain.py` の単一ジョブガード直前で呼ぶだけであり、`api/models.py` と `engine/` は無変更。**あわせてフロントエンドのヘッダーバッジ「モデル読み込み中…」を`POST /pipeline/load`往復に同期させ、全タブの生成ボタンを「ジョブ実行中またはモデル読み込み中」の1本のルールへ統一した**（設計は `Docs/MULTI_ENGINE_DESIGN.md` §6.5・§5.5(b)、フロントエンド実装ログは同 `Docs/DEVLOG.md` §98）。**オーナーの実機ゲートは本版の時点で未了である**（`Docs/PENDING_TASKS.md` §1-24 が完了条件の正本）。 |
 | v0.5.46 | 2026-08-31 | **快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとの配信テーブル `limits.comfort_budgets` として配る形へ改めたことを反映（文書のみ。凍結 API 契約〔§6〕への変更は加算で、既存の鍵は1つも消していない）**。**§6.7**（`limits` の表へ `comfort_budgets` の行を追加し、表の読み方＝「上から照合して全鍵一致した最初の行を採る／一致行が無ければ `spill_free_frames` へ落ちる（正常系）／`ltx` は既定構成の行を意図的に持たないので `requires` が空の行を足してはならない」を明記。旧来の `single_comfort_token_budget` / `chain_comfort_token_budget` は**表を持たない古いサーバー向けの互換値**である旨へ位置づけを改めた。あわせて `spill_free_frames` の値の書き写し〔257/153/81〕をやめ、実体＝`config.yaml`・説明の正本＝`Docs/COMFORT_LIMIT_TABLE.md` §付記への参照に置換）／**§10.2**（表が 2026-07-01 時点の値であることの日付つき注記を追加し、「全on構成のときだけ別鍵で配信する」という旧来の仕組みの説明を配信テーブルの説明へ差し替え）／**§11.7**（同じ書き写しをやめ、参照へ置換）。**同日の §5.1b の更新も本行に含める**——必要空き容量の記述を、2仮想環境時代の値（約 40〜41GB・しきい値 45GB）と `.venv-engine-ltx25` 追加後の再実測待ちの注記から、**`README.md` のハードウェア要件表を正本として参照する形**へ差し替え、`scripts/setup.ps1` の空き容量しきい値 `$needGB` を 45 → **50** へ揃えた（クリーン環境の実測は `Docs/PENDING_TASKS_CLOSED.md` §3-107。LTX 2.3 のみ約50GB・LTX 2.5 追加で約30GB）。**線と表の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7、レガシー表の値は同 §付記、較正の記録は `Docs/VERIFICATION_LOG.md` §84**、台帳の完了記録は `Docs/PENDING_TASKS_CLOSED.md` §3-95・同 §3-125 である。なお v0.5.45 の行が完了条件の正本として指している `Docs/PENDING_TASKS.md` §1-24 は、同日の実機ゲート合格により `Docs/PENDING_TASKS_CLOSED.md` §3-129 へ移った。 |
 | v0.5.47 | 2026-09-01 | **役割が重複する引き継ぎ文書 2 本の廃止を反映（文書のみ。API・実装への変更は無い）**。オーナーの決定により `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/NEXT_SESSION_WORKORDER.md` を削除し、**セッションの入口を `Docs/PENDING_TASKS.md` ただ 1 つへ一本化した**（前者の内容は他の正本の要約で、後者は 2026-07-02 時点の計画であり、いずれも役割が重複していた）。**§0.3**（SSOT 地図から `Docs/NEXT_SESSION_HANDOFF.md` の行を削除し、同書 §2 にしか無かった**文書の3分類（①生きた文書／②追記専用の記録簿／③凍結文書）と入口の規則**を表の直後へ移設）／**§1.3・§5・§13・付録B**（廃止した 2 文書への参照を、`Docs/HANDOFF_ARCHIVE.md`・`Docs/VERIFICATION_LOG.md` などの現行の正本へ向け直した）。**§0.1 の版メタの写しも本行に合わせて更新済みである。** なお上の改訂履歴 v0.5.2・v0.5.20 の行に残る両文書への言及は、**当時の作業の記録なのでそのまま残してある**。 |
+| v0.5.48 | 2026-09-01 | **Gradio 同梱 UI の Settings ＞ Models に、ベースモデル（LTX 2.3 ／ LTX 2.5 の系統）を選ぶドロップダウンを新設したことを反映（文書のみ。凍結 API 契約〔§6〕・実装への変更は無い——使うのは既存の `GET /models` と `POST /pipeline/load` だけである）**。**§12**（Settings タブの Models セクションの記述を「ベースモデルのドロップダウン＋カテゴリ別ドロップダウン」の2段構成へ改め、実装から削除したハードコードのフォルダ案内の記述を落とした）を更新した。**同じ日に Gradio 側バッチのスキップ判定もフロントエンドの規約へ追随したが、契約の正本は `Docs/BATCH_A2V_CSV_SPEC.md` なので本書には書かない。** オーナー実機目視ゲートの記録は `Docs/VERIFICATION_LOG.md` §85、台帳のクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-136〜§3-139。<br>**【同日・敵対的レビューの確定指摘による追記】** **§0.3 の SSOT 地図へ `Docs/BATCH_A2V_CSV_SPEC.md` の行を追加した**——本書が同文書を「契約の正本」として参照しているのに、地図側に載っていなかったためである（版は上げない。地図への1行追加であり、本文の記述は変わっていない）。 |
 
 ### 0.2 スコープ
 
@@ -121,6 +122,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/VERIFICATION_LOG.md` | 実機検証の全経緯・実測 peak_vram/秒数・SHA256 バイト一致・設計判断の根拠 |
 | `Docs/MCP_SERVER_DESIGN.md` | MCPサーバー（`mcp_server/`）の設計判断（ツール分割・非同期化・エラー翻訳・`.mcp.json` 生成方式 等） |
 | `Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`（アーカイブ形式だが仕様の正本として現役） | IC-LoRA Depth（深度制御）・Deblur（ぼけ除去）の仕様・設計判断 |
+| `Docs/BATCH_A2V_CSV_SPEC.md` | バッチA2V の CSV マニフェスト（`batch_a2v_manifest.csv`）の正本。列定義・文字コード・`stat` と `skip_reason` の値・実効上限の規約・マージ規則。**参照実装は `gradio_ui/manifest.py` だが、契約は文書側が正本**である（実装との差分はバグとして扱う） |
 | `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
 | `Docs/VSF_README_NOTES.md` | 非CFGネガティブプロンプト（NAG／VSF）の**使い分けの正本**（どちらを選ぶか・つまみの目安・LTX 2.5 での実測）。README §5 と §7.1 はここを指している |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
@@ -1679,7 +1681,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - Quality mode 直下に **Preset** ドロップダウン。選択すると解像度・crop と各クリップの推奨フレーム数（解像度別の快適上限）を全スロットへ一括自動入力する。
 - width / height の `minimum` 撤去・JS での `min` 属性付与、および「生成中はボタンをグレーアウト」は Generate タブと同じ仕組みを共有する。
 
-**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（カテゴリ別ドロップダウン＋Load。`models\LTX23\Weights` 直下に GGUF を置くと自動認識される旨のフォルダ案内つき。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。あわせて **Acceleration（生成の高速化）** 区画があり、**5項目すべて実装済み**の切替——Fused GGUF Dequantization Kernel（GGUF 逆量子化の1カーネル化）／attention（`sdpa`・`sage`）／Block-swap prefetch（先読み block swap）／モデル骨格の常駐（`keep_resident`）／VAE（Default・PrunaVAED。**2026-08-05 に実装**。既定は Default で恒久的に反転しない）——を並べる。**常時グレーアウトのプレースホルダは 2026-08-05 をもって1件も無くなった**。**値はジョブ単位でリクエストに載る**（サーバーの再起動もパイプラインの再読み込みも要らない。フィールドは §6.2 を参照）。
+**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（見出し直下に**ベースモデル（LTX 2.3 ／ LTX 2.5 の系統）を選ぶドロップダウン**、その下にカテゴリ別ドロップダウン＋Load。選択肢と初期値は `GET /models` の `base_models[]` ・ `active_base_model` から作り、系統を変えると4カテゴリの選択肢がその系統のものへ入れ替わる。Load は `base_model` を常に送る。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。あわせて **Acceleration（生成の高速化）** 区画があり、**5項目すべて実装済み**の切替——Fused GGUF Dequantization Kernel（GGUF 逆量子化の1カーネル化）／attention（`sdpa`・`sage`）／Block-swap prefetch（先読み block swap）／モデル骨格の常駐（`keep_resident`）／VAE（Default・PrunaVAED。**2026-08-05 に実装**。既定は Default で恒久的に反転しない）——を並べる。**常時グレーアウトのプレースホルダは 2026-08-05 をもって1件も無くなった**。**値はジョブ単位でリクエストに載る**（サーバーの再起動もパイプラインの再読み込みも要らない。フィールドは §6.2 を参照）。
 
 **共通**: 上段バーの server status は `GET /api/v1/status` を叩き、GPU 名・空き VRAM・**low_vram_mode / profile** を表示。ジョブ進捗を 1 秒間隔でポーリングし、完了後に mp4 を取得してプレビュー表示。distilled は **8 steps / CFG=1.0** 固定で送る。
 

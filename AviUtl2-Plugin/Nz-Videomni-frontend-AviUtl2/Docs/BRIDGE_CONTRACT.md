@@ -263,7 +263,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
   - **`types.ts`側では6つとも任意フィールド(`?`)として宣言している**。これは**古いプラグインが返さない場合にWebUIが安全側(＝トリムせず全体をアップロード)へ倒れる**ためだけの措置で、現行のnativeは常に6つとも返す。
   - 消費側は`webui/src/timeline/sourceTrim.ts`の`decideSourceTrim`のみ。切り出し尺は**`min(リボンの秒数, playbackEndSec − playbackStartSec)`**で決める(両方向のはみ出しを潰すため。理由は[`V2V_RIBBON_TRIM_WORKORDER.md`](V2V_RIBBON_TRIM_WORKORDER.md) §4を参照)。
 
-- **拡張(2026-09-01、contract v11＝素材fps)**: `selected[]`の各要素に、右クリックプリフィルのfps軸「素材に合わせる」を成立させるためのフィールドが1つ加わった。台帳は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md)の該当項目(起票時は同書§3-13。実装済み・オーナーの実機ゲート待ちとして同書「2. 実装済み・ユーザーのテスト待ち」へ移してある)。`動画ファイル`エフェクトのオブジェクトについてのみ意味を持ち、それ以外は既定値のまま返る。
+- **拡張(2026-09-01、contract v11＝素材fps)**: `selected[]`の各要素に、右クリックプリフィルのfps軸「素材に合わせる」を成立させるためのフィールドが1つ加わった。台帳の記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-13-02(2026-09-01にオーナーの実機ゲート合格でクローズ。起票時は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md)§3-13で、実機ゲート待ちの間は同書§2-5。どちらも同書では欠番)。`動画ファイル`エフェクトのオブジェクトについてのみ意味を持ち、それ以外は既定値のまま返る。
 
   | フィールド | 型 | 意味 |
   | --- | --- | --- |

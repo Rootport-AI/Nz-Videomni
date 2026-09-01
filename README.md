@@ -106,7 +106,7 @@ worker を **subprocess** として起動し、JSON-lines プロトコルで駆�
 > **この案内に `Ctrl+C` を書き足さないでください（意図的な省略です）。** `Ctrl+C` で止めると、`cmd` が
 > `Terminate batch job (Y/N)?` という英語のプロンプトを返すことがあり、本プロジェクトの想定利用者
 > （PowerShell を自分で開けないリテラシー）はここで手が止まります。× で閉じる 1 通りだけを案内する、
-> というのが決定事項です（`Docs/PENDING_TASKS_CLOSED.md` §3-37）。
+> というのが決定事項です（`Docs/PENDING_TASKS_CLOSED.md` 旧§3-37「`setup.bat`／`run.bat`の新設」。同書の §3-37-02 は別内容です）。
 
 #### AviUtl2 から使うときの注意（重要）
 
@@ -1017,7 +1017,7 @@ GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・キ�
 **この2つは、画面のタブやパネルとして出ている「機能」ではありません。** PrunaVAED は
 **LTX 2.5 版の枝刈り済み重みが世の中に無い**ため、非蒸留モデルは
 **それを動かせる計算機が手元に無い**ため、どちらも先送りです
-（[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-102）。
+（[`Docs/PENDING_TASKS_CLOSED.md`](Docs/PENDING_TASKS_CLOSED.md) §3-102）。
 **断り方は「入口ごとまとめて」ではなく項目ごとです**——連結生成（`POST /generate/chain`）そのものは通り、
 上の2項目を指定したときだけ 422 になります。
 

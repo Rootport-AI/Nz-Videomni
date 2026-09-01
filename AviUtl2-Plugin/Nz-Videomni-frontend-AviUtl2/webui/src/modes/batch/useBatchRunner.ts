@@ -38,9 +38,11 @@ export interface UseBatchRunnerResult {
    * running"`, which never produce a single row update and would otherwise
    * be invisible to the caller. `null` before the first attempt. */
   lastStartResult: BatchRunnerStartResult | null;
-  /** Fires the run. `onRowsChanged` is called on every CSV flush with a
-   * fresh row array — the caller (`useBatchForm`) is expected to feed it
-   * straight into its own row state. Fire-and-forget: this never throws and
+  /** Fires the run. `onRowsChanged` is called after every `stat` transition
+   * with a fresh row array — the caller (`useBatchForm`) is expected to feed
+   * it straight into its own row state. That React state IS the persistence:
+   * nothing is flushed to disk (owner decision, 2026-07-18: stateless batch).
+   * Fire-and-forget: this never throws and
    * the caller should read `state`/`lastStartResult` for the outcome.
    *
    * `onSettled` is called once, when `BatchRunner.start()`'s promise resolves

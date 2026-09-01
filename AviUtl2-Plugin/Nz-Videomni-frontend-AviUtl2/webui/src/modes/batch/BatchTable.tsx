@@ -18,8 +18,9 @@ export interface BatchTableProps {
   rows: BatchRow[];
   /** True while a run is in flight — disables every row's reset button, the
    * prompt/image editors, and the "copy common prompt" button alike (the
-   * canonical CSV is only safe to hand-edit while idle; N5 deliberately
-   * gates this globally rather than per-row). */
+   * in-memory row list is the only copy there is, so it is only safe to
+   * hand-edit while the runner isn't updating it; N5 deliberately gates this
+   * globally rather than per-row). */
   disabled: boolean;
   /** N5 "A3: 行別画像割当" — the shared `<select>` option list (always leads
    * with the `Shared` sentinel), from `useBatchForm`'s `imageOptions`. */
@@ -35,8 +36,8 @@ export interface BatchTableProps {
 }
 
 /** The `<select>` options to render for one row: `imageOptions` as-is, unless
- * the row's current `image` isn't among them (e.g. a manifest referencing a
- * file the image folder no longer has, or no image folder scanned yet) — in
+ * the row's current `image` isn't among them (e.g. a row still naming a file
+ * the image folder no longer has, or no image folder scanned yet) — in
  * which case it's appended so the `<select>` always has a matching, visible
  * option instead of silently rendering blank. */
 function optionsForRow(imageOptions: string[], current: string): string[] {
@@ -44,8 +45,9 @@ function optionsForRow(imageOptions: string[], current: string): string[] {
 }
 
 /**
- * Renders the batch manifest's first 7 columns (spec §3: "先頭7列のみ表示" —
- * `frames`/`skip_reason`/`error` are CSV-only management columns), plus a
+ * Renders the first 7 of the spec's columns (spec §3: "先頭7列のみ表示" —
+ * `frames`/`skip_reason`/`error` are management-only fields, never a table
+ * column of their own), plus a
  * per-row "Reset to Waiting" action for `Done`/`Failed`/`Skip` rows (spec
  * §4's manual regenerate rule). A plain `<table>` rather than a virtualized
  * grid — the spec's own working scale is "100〜200個" rows, comfortably
@@ -152,8 +154,8 @@ export function BatchTable({
 /** Title for a `Skip` row's stat badge (spec: "❌ Skipバッジのツールチップ") —
  * only when `row.stat === "Skip"` AND `skipReason` is one of today's known
  * keys (`strings.batch.skipReasons`, keyed by `manifestMerge.ts`'s
- * `BatchRow.skipReason`). A future/unknown skipReason (e.g. a value added by
- * a newer manifest scan than this build knows about) falls through to
+ * `BatchRow.skipReason`). A future/unknown skipReason (e.g. a code the spec
+ * gains after this build shipped) falls through to
  * `undefined` rather than indexing the map with an unchecked string (TS7053)
  * or showing a blank/garbled tooltip. */
 function skipReasonTitle(stat: BatchStat, skipReason: string, skipReasons: Record<string, string>): string | undefined {

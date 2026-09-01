@@ -112,7 +112,7 @@ describe("BatchRunner", () => {
     expect(byWav.get("a.wav")?.stat).toBe("Done");
     expect(byWav.get("b.wav")?.stat).toBe("Done");
     expect(byWav.get("c.wav")?.stat).toBe("Done");
-    // Untouched: no processing, no CSV field changes.
+    // Untouched: no processing, no row field changes.
     expect(byWav.get("d.wav")).toMatchObject({ stat: "Done", output: "d.mp4" });
     expect(byWav.get("e.wav")).toMatchObject({ stat: "Skip", skipReason: "over-cap" });
 

@@ -67,7 +67,8 @@ export interface BatchSectionProps {
 /**
  * The "Batch A2V" panel (webui-B): a collapsed-by-default `<details>` section
  * on the Create screen (task brief: "既定閉") that scans a folder of audio
- * files into a CSV-manifest-backed queue and drives them through
+ * files into an in-memory queue (no CSV — owner decision, 2026-07-18: the
+ * frontend's batch is stateless; see `manifestMerge.ts`) and drives them through
  * `POST /generate/chain` one at a time via {@link useBatchForm}. All state
  * ownership lives in `useBatchForm`/`useBatchRunner`; this component is pure
  * rendering + event wiring, matching the `*Screen.tsx` convention elsewhere in
@@ -99,8 +100,8 @@ export function BatchSection({
     serverBusy,
   });
 
-  // The manifest's `stat` column is only safe to hand-edit (folder pickers,
-  // scan, row resets, settings) while the runner isn't actively writing it —
+  // A row's `stat` is only safe to hand-edit (folder pickers, scan, row
+  // resets, settings) while the runner isn't actively updating the rows —
   // mirrors every other mode's `disabled` gate on "isGenerating". Also gated
   // on `isScanning` (L1 remediation): `scan()`'s async merge (`setRows`) can
   // land mid-edit and clobber it otherwise.

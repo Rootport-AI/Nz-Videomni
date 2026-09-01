@@ -105,7 +105,9 @@ export interface BatchRunnerSettings {
 
 export interface BatchRunnerStartParams {
   /** Absolute path to the audio folder. Each row's `wav` is resolved against
-   * this; the manifest CSV also lives directly under this folder (spec §1). */
+   * this. (Gradio's own manifest CSV lives directly under this folder too —
+   * spec §1 — but this frontend never reads or writes it; see
+   * `manifestMerge.ts`.) */
   wavDir: string;
   /** Absolute path to the image folder a row's own (non-`Shared`) `image`
    * column is resolved against. Empty/omitted falls back to `wavDir`
@@ -168,8 +170,9 @@ function stemOf(name: string): string {
   return idx > 0 ? name.slice(0, idx) : name;
 }
 
-/** Mirrors `batch.py`'s `_summarize_exc`: a short, readable string for the
- * CSV `error` column, truncated to 500 characters. */
+/** Mirrors `batch.py`'s `_summarize_exc`: a short, readable string for a
+ * row's `error` field (the spec's `error` column), truncated to 500
+ * characters. */
 function summarizeError(err: unknown): string {
   if (err instanceof BridgeError) return `${err.code}: ${err.message}`.slice(0, 500);
   if (err instanceof Error) return `${err.name}: ${err.message}`.slice(0, 500);

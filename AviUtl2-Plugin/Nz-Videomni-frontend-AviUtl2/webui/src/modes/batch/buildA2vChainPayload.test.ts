@@ -42,7 +42,7 @@ describe("resolveConditioningImages", () => {
     expect(result).toEqual([]);
   });
 
-  it("image=空文字は空配列（Shared正規化はparseManifest側の責務でここでは行わない）", () => {
+  it("image=空文字は空配列（Shared既定はscanToRows側の責務でここでは行わない）", () => {
     const result = resolveConditioningImages({ image: "", sharedImages: shared, rowImageId: "img-row-1" });
     expect(result).toEqual([]);
   });

@@ -80,8 +80,8 @@ export interface ConditioningResolutionInput {
  *   that id isn't available yet;
  * - an empty `image` -> `[]` (matches the Python function's own literal
  *   `elif row.image:` guard; in practice `image` is never empty by the time
- *   it reaches this function, since `parseManifest` already normalizes an
- *   empty CSV cell to `IMAGE_SHARED` — this branch exists purely so the
+ *   it reaches this function, since `manifestMerge.ts`'s `scanToRows` always
+ *   fills a fresh row's `image` with `IMAGE_SHARED` — this branch exists purely so the
  *   mirror is faithful to the reference implementation's behavior at this
  *   exact layer).
  */

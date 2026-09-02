@@ -649,6 +649,20 @@ class PrefetchEngine:
             return
         for (mod, name, is_param), cpu_t in zip(self._layout[idx].slots, self._master[idx]):
             if is_param:
+                if mod._parameters[name].is_meta:
+                    # engine25's ``gpu_model`` contract calls ``dispose()``, which leaves
+                    # this block's parameters on ``device="meta"``; ``.data =`` then raises
+                    # "set_data ... incompatible tensor type" and used to abort the whole
+                    # loop, stranding every slot behind it — the IC-/Style-LoRA A/B buffers
+                    # among them, which are ``persistent=False`` and so never metaed — on
+                    # the arena. Skipping costs nothing: the next build's
+                    # ``load_state_dict(assign=True)`` replaces these slots wholesale
+                    # (``engine25/gguf_transformer.py:857-867``). Parameters only, because
+                    # ``_plan`` refuses any slot that is not on CPU — nothing here is meta
+                    # before ``dispose()`` — and 2.3's quantised weights are metaed on the
+                    # BUFFER branch (``engine/gguf/quant_service.py:641-650``), where a
+                    # plain dict assignment cannot fail.
+                    continue
                 mod._parameters[name].data = cpu_t
             else:
                 mod._buffers[name] = cpu_t

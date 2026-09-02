@@ -515,21 +515,20 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
             # reach it; only this call can. MEASURED at 320x192x25: 229.1 MB still
             # allocated at the end of denoise without this line, 21.2 MB with it.
             #
-            # Safe against the disposed model, but not silently so, and the
-            # difference is worth knowing: ``PrefetchEngine._release`` re-points
-            # module slots at the CPU masters, and its first parameter slot raises
-            # ``set_data ... incompatible tensor type`` because ``dispose()`` left
-            # that parameter on ``device="meta"``. ``teardown()`` catches it, logs
-            # "release of block N failed", and clears ``_state`` anyway -- which is
-            # what actually frees the arena, so the common case is fully covered.
-            # The ONE case it does not cover: IC-LoRA / Style-LoRA A/B buffers are
-            # ``persistent=False``, so ``dispose()`` does not meta them either, and
-            # with the restore loop aborted they keep viewing the arena until the
-            # next build's ``detach_ic_loras``. A LoRA job therefore still carries
-            # ~208 MB into the upsampler (measured: 236.1 MB with and without this
-            # line). Fixing that means making ``_release`` restore slot by slot,
-            # which is a change to the shared 2.3 module and is deliberately not
-            # made here.
+            # Safe against the disposed model, and silently so since 2026-09-02:
+            # ``PrefetchEngine._release`` re-points module slots at the CPU masters
+            # and now SKIPS the parameter slots ``dispose()`` left on
+            # ``device="meta"`` instead of raising on the first one, so the loop
+            # runs to completion and no "release of block N failed" warning is
+            # logged. Completing it matters beyond the log line: the IC-LoRA /
+            # Style-LoRA A/B buffers are ``persistent=False``, so ``dispose()``
+            # never metas them and they sit BEHIND those parameter slots -- with
+            # the loop aborting they kept viewing the arena (~208 MB carried into
+            # the upsampler on a LoRA job) until the next build's
+            # ``detach_ic_loras``. They are restored here now, and the arena comes
+            # back immediately when ``teardown()`` clears ``_state``. The same
+            # holds on the exception path, where ``_state`` can still hold several
+            # blocks: every one of them is restored, not just the first.
             self.teardown_block_swap_prefetch()
             if self.vram is not None:
                 self.vram.record(phase, time.perf_counter() - started)

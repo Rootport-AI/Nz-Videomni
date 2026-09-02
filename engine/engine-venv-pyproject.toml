@@ -27,11 +27,24 @@ requires-python = ">=3.12"
 # scripts/install_ltx.ps1's $engineDirectPins (see also
 # engine/venv-engine.freeze.txt), because that wheel is ABI-pinned to this
 # project's exact validated stack (cu128 / torch 2.9.1) and ships no PyPI
-# build uv could resolve here anyway. -ResolveLatest (this file's fresh-resolve
-# path) deliberately does NOT get sage: it resolves an UNVALIDATED newer torch
-# (~2.11), which the pinned wheel is not built against and would silently fail
-# to import (or, worse, import against a mismatched ABI) -- so a -ResolveLatest
-# venv is sage-unavailable by design, not by oversight, and falls back to sdpa.
+# build uv could resolve here anyway. A venv resolved from THIS file deliberately
+# does NOT get sage: such a resolve yields an UNVALIDATED newer torch (~2.11),
+# which the pinned wheel is not built against and would silently fail to import
+# (or, worse, import against a mismatched ABI) -- so a hand-resolved venv is
+# sage-unavailable by design, not by oversight, and falls back to sdpa.
+#
+# NOTHING READS THIS FILE AUTOMATICALLY. scripts/install_ltx.ps1 applies the
+# freeze (engine/venv-engine.freeze.txt) and only the freeze; the -ResolveLatest
+# flag that used to consume this file was deleted on 2026-09-02 because it had
+# never worked (Docs/PENDING_TASKS_CLOSED.md 3-104). The file is kept as the
+# dependency SPEC for the next torch update, to be applied BY HAND:
+#   1. copy this file into an empty scratch directory, renamed `pyproject.toml`
+#      (uv reads only that exact name -- which is why the old flag always failed,
+#      it pointed uv at engine/ where no such name exists),
+#   2. uv pip install --python <repo>\.venv-engine\Scripts\python.exe
+#          --index-strategy unsafe-best-match <that scratch directory>
+#   3. validate the resulting stack, then regenerate
+#      engine/venv-engine.freeze.txt (its own header documents the method).
 dependencies = [
     "pillow>=10.3.0",
     "torch>=2.3.0",

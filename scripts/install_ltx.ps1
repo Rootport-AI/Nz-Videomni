@@ -30,7 +30,6 @@
          verification ran on). Re-applied automatically whenever a pinned
          dependency set changes, so "git pull, then re-run this" actually
          updates the venvs.
-         -ResolveLatest opts into a fresh resolve (UNVALIDATED newer torch).
       6. Model downloads (~31GB) via .venv-engine's hf.exe, driven entirely by
          the manifests: staged into models\.dl\ and then remapped into place.
       7. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt,
@@ -104,7 +103,6 @@
 .EXAMPLE
     ./scripts/install_ltx.ps1                       # full install
     ./scripts/install_ltx.ps1 -DryRun               # print the migration plan only
-    ./scripts/install_ltx.ps1 -ResolveLatest        # fresh (unvalidated) engine resolve
     ./scripts/install_ltx.ps1 -SkipModels           # venvs only, no downloads
     ./scripts/install_ltx.ps1 -RunSmoke             # + mock GPU-free smoke test
     ./scripts/install_ltx.ps1 -BaseModel LTX25 -SkipVenv -SkipMigrate   # add ONE more base model (install-LTX25.bat)
@@ -112,9 +110,6 @@
 
 [CmdletBinding()]
 param(
-    # Opt into a fresh resolve of the engine venv (UNVALIDATED newer torch ~2.11).
-    # Default (unset) uses the deterministic freeze path.
-    [switch] $ResolveLatest,
     # After install, run the mock, GPU-free smoke test.
     [switch] $RunSmoke,
     # Clone upstream Lightricks/LTX-2 into vendor/LTX-2 as REFERENCE ONLY (no venv
@@ -1142,8 +1137,10 @@ if ($SkipVenv) {
 #    DEFAULT = deterministic FREEZE path: reproduces the VALIDATED torch
 #    2.9.1+cu128 stacks (engine/venv-engine.freeze.txt and
 #    engine25/venv-engine-ltx25.freeze.txt) that every verification run in this
-#    project used. -ResolveLatest opts into a fresh resolve from the matching
-#    *-venv-pyproject.toml (yields an UNVALIDATED newer torch).
+#    project used. The installer has no fresh-resolve mode: the matching
+#    *-venv-pyproject.toml is the hand-run recipe for building a NEW stack when
+#    torch is updated (see that file's header comment), not something this
+#    script ever applies.
 #
 #    hf.exe lives in the 2.3 venv, so that one must be created BEFORE the model
 #    downloads. The 2.5 venv has no such ordering constraint -- it is built right
@@ -1161,7 +1158,6 @@ if ($SkipVenv) {
 # ----------------------------------------------------------------------------
 $enginePy = "$ProjectRoot\.venv-engine\Scripts\python.exe"
 $freezeSrc = "$ProjectRoot\engine\venv-engine.freeze.txt"
-$enginePyprojectDir = "$ProjectRoot\engine"
 # Applied-state hash + completion marker. It lives INSIDE .venv-engine, which
 # .gitignore already excludes, so it is never tracked and dies with the venv.
 $engineStateFile = "$ProjectRoot\.venv-engine\.nz-engine-state"
@@ -1183,9 +1179,9 @@ $engineStateFile = "$ProjectRoot\.venv-engine\.nz-engine-state"
 # keep this string SINGLE-quoted so PowerShell does not try to interpolate it.
 # Re-added 2026-07-31 (see .NOTES above and D4 in the Acceleration plan): this
 # is the only supported source for sageattention -- engine-venv-pyproject.toml
-# deliberately does NOT list it (see that file's header comment), because
-# -ResolveLatest resolves an unvalidated newer torch this ABI-pinned wheel is
-# not built against.
+# deliberately does NOT list it (see that file's header comment), because that
+# file resolves an unvalidated newer torch this ABI-pinned wheel is not built
+# against -- the installer applies the freeze, and only the freeze.
 $engineDirectPins = @(
     "diffusers @ git+https://github.com/huggingface/diffusers.git@01de02e8b4f2cc91df4f3e91cb6535ebcbeb490c"
     "ltx-core @ git+https://github.com/Lightricks/LTX-2.git@00dc53d3f81c405932f9f16d9c57557de411e702#subdirectory=packages/ltx-core"
@@ -1199,7 +1195,6 @@ $engineDirectPins = @(
 $ltx25Venv = "$ProjectRoot\.venv-engine-ltx25"
 $ltx25Py = "$ProjectRoot\.venv-engine-ltx25\Scripts\python.exe"
 $ltx25FreezeSrc = "$ProjectRoot\engine25\venv-engine-ltx25.freeze.txt"
-$ltx25PyprojectDir = "$ProjectRoot\engine25"
 $ltx25StateFile = "$ProjectRoot\.venv-engine-ltx25\.nz-engine-state"
 
 # The 2.5 direct-reference set. Unlike the 2.3 array above this one ALSO carries
@@ -1329,8 +1324,8 @@ function Invoke-EngineFreezeApply {
     }
 }
 
-# One engine venv, start to finish: the -SkipVenv / -ResolveLatest / freeze
-# three-way, the create-vs-re-sync decision, and the state marker. Called once
+# One engine venv, start to finish: the -SkipVenv / freeze two-way, the
+# create-vs-re-sync decision, and the state marker. Called once
 # per engine (2.3, then 2.5) -- this used to be inline, and inlining it a second
 # time for the 2.5 stack would have meant two copies of the marker logic that
 # drift apart on the first fix.
@@ -1340,56 +1335,22 @@ function Invoke-EngineFreezeApply {
 # the same directory absolute, and is what actually gets passed to `uv venv` so
 # the call cannot be hurt by a future cwd change.
 #
-# $DirectPinArgs / $ResolveArgs carry the per-engine uv flag differences (see
-# $ltx25UvArgs); their defaults reproduce the 2.3 behaviour exactly.
+# $DirectPinArgs carries the per-engine uv flag differences (see $ltx25UvArgs);
+# its default reproduces the 2.3 behaviour exactly.
 function Ensure-EngineVenv {
     param(
         [Parameter(Mandatory)] [string]   $VenvPath,
         [Parameter(Mandatory)] [string]   $PythonPath,
         [Parameter(Mandatory)] [string]   $StateFile,
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string]   $PyprojectDir,
         [Parameter(Mandatory)] [string[]] $DirectPins,
         [Parameter(Mandatory)] [string]   $Label,
         [string[]] $DirectPinArgs = @(),
-        [string]   $DirectPinsLabel = "3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention",
-        [string[]] $ResolveArgs = @("--index-strategy", "unsafe-best-match")
+        [string]   $DirectPinsLabel = "3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention"
     )
     if ($SkipVenv) {
         Write-Step "Engine venv $Label"
         Write-Skip "-SkipVenv given"
-        return
-    }
-
-    if ($ResolveLatest) {
-        # --------------------------------------------------------------------
-        # Opt-in fresh resolve. --index-strategy unsafe-best-match is REQUIRED:
-        # the pyproject's torchaudio source lacks a platform marker, and without
-        # unsafe-best-match uv pulls a CPU-only torchaudio (known bug). This path
-        # is UNVALIDATED (newer torch ~2.11 vs the verified 2.9.1). Unlike
-        # before, an existing venv no longer makes the flag a no-op -- asking for
-        # a fresh resolve now always performs one.
-        # --------------------------------------------------------------------
-        Write-Step "Engine venv $Label  (-ResolveLatest: fresh resolve)"
-        if (-not (Test-Path $PythonPath)) {
-            Write-Do "uv venv --python 3.12 $Label"
-            uv venv --python 3.12 $VenvPath
-            if ($LASTEXITCODE -ne 0) { throw "uv venv $Label failed." }
-        }
-        Write-Warning "-ResolveLatest: resolving the engine venv fresh from engine-venv-pyproject.toml."
-        Write-Warning "This yields an UNVALIDATED newer torch (~2.11). All project verification ran on"
-        Write-Warning "the frozen 2.9.1+cu128 stack (the default). Use only if you accept re-validating."
-        Write-Do "uv pip install $($ResolveArgs -join ' ') <engine pyproject dir>"
-        $resolveArgv = @("pip", "install", "--python", $PythonPath) + $ResolveArgs + @($PyprojectDir)
-        uv @resolveArgv
-        if ($LASTEXITCODE -ne 0) { throw "engine venv resolve (-ResolveLatest) failed." }
-        # No state marker is written here, and a stale one is dropped: the
-        # resulting venv is NOT the frozen stack, so claiming it matches would be
-        # a lie. The absence is meaningful in both directions -- it records "this
-        # venv came in by the other route", and it makes the next default run
-        # re-pin it to the freeze.
-        if (Test-Path $StateFile) { Remove-Item $StateFile -Force }
-        Write-Ok "$Label ready (unvalidated resolve)"
         return
     }
 
@@ -1431,17 +1392,16 @@ function Ensure-EngineVenv {
 
 # LTX 2.3 -- FIRST, because hf.exe (used by the model downloads below) lives here.
 Ensure-EngineVenv -VenvPath "$ProjectRoot\.venv-engine" -PythonPath $enginePy `
-    -StateFile $engineStateFile -FreezeFile $freezeSrc -PyprojectDir $enginePyprojectDir `
+    -StateFile $engineStateFile -FreezeFile $freezeSrc `
     -DirectPins $engineDirectPins -Label ".venv-engine"
 
 # LTX 2.5 -- the sibling stack. Same machinery, different pins and (per the
 # M2 correction) the extra --no-sources / cu128-index flags on BOTH uv stages.
 Ensure-EngineVenv -VenvPath $ltx25Venv -PythonPath $ltx25Py `
-    -StateFile $ltx25StateFile -FreezeFile $ltx25FreezeSrc -PyprojectDir $ltx25PyprojectDir `
+    -StateFile $ltx25StateFile -FreezeFile $ltx25FreezeSrc `
     -DirectPins $ltx25DirectPins -Label ".venv-engine-ltx25" `
     -DirectPinArgs $ltx25UvArgs `
-    -DirectPinsLabel "2 torch pins + 2 git pins + 1 wheel pin: torch / torchaudio / ltx-core / ltx-pipelines / sageattention" `
-    -ResolveArgs $ltx25UvArgs
+    -DirectPinsLabel "2 torch pins + 2 git pins + 1 wheel pin: torch / torchaudio / ltx-core / ltx-pipelines / sageattention"
 
 # hf.exe (used by the model downloads below) must exist in the engine venv.
 $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"

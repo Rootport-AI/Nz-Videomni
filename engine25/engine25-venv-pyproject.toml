@@ -34,10 +34,21 @@ requires-python = ">=3.12"
 # Leaving torchaudio unpinned was measured to drag in torchaudio 2.11, which
 # then pulls a matching torch and silently defeats the 2.9.1 pin.
 #
-# scripts/install_ltx.ps1 (Ensure-EngineVenv) applies all of this for real
-# users; the resolved result is frozen in engine25/venv-engine-ltx25.freeze.txt,
-# which is the DEFAULT deterministic install path. This file is only consulted
-# by the opt-in -ResolveLatest route.
+# The result of resolving this file is frozen in
+# engine25/venv-engine-ltx25.freeze.txt, and THAT freeze is what
+# scripts/install_ltx.ps1 (Ensure-EngineVenv) applies for real users -- the
+# freeze and nothing else.
+#
+# NOTHING READS THIS FILE AUTOMATICALLY: the -ResolveLatest flag that used to
+# consume it was deleted on 2026-09-02 because it had never worked
+# (Docs/PENDING_TASKS_CLOSED.md 3-104). The file is kept as the dependency SPEC
+# for the next torch update, to be applied BY HAND: copy it into an empty
+# scratch directory, renamed `pyproject.toml` (uv reads only that exact name --
+# which is why the old flag always failed), then
+#   uv pip install --python <repo>\.venv-engine-ltx25\Scripts\python.exe
+#       --no-sources --index https://download.pytorch.org/whl/cu128
+#       --index-strategy unsafe-best-match <that scratch directory>
+# validate the result, and regenerate the freeze (its header documents how).
 #
 # sageattention IS installed in this venv (2026-08-25, Acceleration third wave:
 # `attention_backend: "sage"` is a per-job option on the 2.5 engine now) but is
@@ -48,9 +59,10 @@ requires-python = ">=3.12"
 # engine25/venv-engine-ltx25.freeze.txt), because that wheel is ABI-pinned to
 # this project's exact validated stack (cp310-abi3 / cu128 / torch 2.9.1) and
 # ships no PyPI build uv could resolve here anyway. Listing it here would put it
-# in the path of -ResolveLatest, which resolves an UNVALIDATED newer torch the
-# pinned wheel is not built against -- so a -ResolveLatest venv is
-# sage-unavailable BY DESIGN and falls back to sdpa, on both engines alike.
+# in the path of the hand-run resolve described above, which yields an
+# UNVALIDATED newer torch the pinned wheel is not built against -- so a
+# hand-resolved venv is sage-unavailable BY DESIGN and falls back to sdpa, on
+# both engines alike.
 #
 # DELIBERATELY ABSENT (do not add without a plan change):
 #   diffusers      -- 2.3-only dependency; the 2.5 pipeline does not use it.

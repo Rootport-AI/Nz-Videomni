@@ -31,6 +31,7 @@ import type { BridgeMethod, NativeBridge, ParamsOf, ResultOf } from "../bridge";
 import { LanguageProvider } from "../i18n/LanguageContext";
 import { en } from "../i18n/strings";
 import { BatchSection } from "../modes/batch/BatchSection";
+import { __resetBatchRuntimeForTests } from "../modes/batch/runtime";
 import type { BatchGenerationValues } from "../modes/batch/useBatchForm";
 import { BatchI2vLongSection } from "../modes/batch-i2v-long/BatchI2vLongSection";
 import type { ChainSnapshotSource } from "../modes/batch-i2v-long/chainSnapshot";
@@ -188,6 +189,10 @@ function foldersFs() {
 
 describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両方向）", () => {
   beforeEach(() => {
+    // 両バッチともランナー実体はモジュールレベルのシングルトン（§3-47以降は
+    // A2V側も）。前のテストの走行状態が残っていると、次のテストのパネルが
+    // マウント直後に「走行中」として復元されてしまう。
+    __resetBatchRuntimeForTests();
     __resetI2vLongRuntimeForTests();
     __resetRunLockForTests();
   });
@@ -330,32 +335,57 @@ describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両�
     await waitFor(() => expect(getRunLockOwner()).toBeNull());
   }, 20_000);
 
-  // バッチA2Vのランナーは`useRef`所有のままなので、Create画面が走行中に
-  // リマウントされると走行そのものは孤児化する（既知の限界）。修正前はそれに
-  // 加えて**共有ロックが永久に取り残され**、i2v-longが二度と開始できなくなって
-  // いた。いまはロックの返却が実行Promise側にぶら下がっているので、孤児化した
-  // 走行が終わればロックは必ず戻る。その間はStartが`serverBusy`で無効化され、
-  // 案内文も出る（黙って何も起きないボタンにしない）。
-  it("A2V走行中にCreate側パネルがリマウントされても、ロックは取り残されず、その間のStartは無効＋案内", async () => {
+  // Create画面も右クリックのintentルーティングで`key`リマウントされる
+  // （`AppShell`の`remountTokens`）。§3-47（2026-09-02）でバッチA2Vのランナーも
+  // モジュールレベルのシングルトン（`modes/batch/runtime.ts`）へ移したので、
+  // リマウント後も走行中のバッチに再接続でき、Stopも行の進捗もロックも保たれる。
+  //
+  // 2026-09-02以前はここが逆だった: ランナーが`useRef`所有だったため、
+  // リマウントで走行そのものが孤児化し（走行は裏で続くのにUIからは消える）、
+  // Stopも進捗も失われていた。本テストの反転が、この改修の直接の機械的証明。
+  it("A2V走行中にCreate側パネルがリマウントされても、走行へ再接続してStopが効き、ロックも保たれる", async () => {
     const { user, view, release, remount } = await readyBothPanels();
 
     await user.click(within(a2vPanel()).getByRole("button", { name: en.batch.startButton }));
     expect(getRunLockOwner()).toBe("batch-a2v");
 
     // 走行中にCreate画面がリマウントされる（右クリック経由のintentルーティング）。
-    // ジョブ台帳から見れば、孤児化した走行のジョブはまだ動いている。
-    remount({ a2vKey: 1, serverBusy: true });
+    remount({ a2vKey: 1 });
     openBoth(view.container);
 
-    const start = within(a2vPanel()).getByRole("button", { name: en.batch.startButton });
-    expect(start).toBeDisabled();
-    expect(within(a2vPanel()).getByText(en.batch.jobActive)).toBeInTheDocument();
+    // リマウント後も走行中として復帰する（`runtime.ts`のシングルトンに再接続）。
+    // Stopは押せる状態で出ており、Startは「実行中…」で無効。
+    expect(within(a2vPanel()).getByRole("button", { name: en.batch.stopButton })).toBeEnabled();
+    expect(within(a2vPanel()).getByRole("button", { name: en.batch.runningButton })).toBeDisabled();
+    // 行の進捗も白紙に戻らない（走行中の行スナップショットから復元される）。
+    expect(within(a2vPanel()).getByText("a.wav")).toBeInTheDocument();
+    // 走行に使っている入力そのものも復元される。これが無いと、走行中なのに
+    // フォルダ欄だけ空という半端な状態になる（走行中は行編集がUI無効なので、
+    // ここは表示の一貫性そのもの）。
+    await waitFor(() => {
+      expect(within(a2vPanel()).getByLabelText(en.batch.wavDir.label)).toHaveValue(WAV_DIR);
+    });
+    expect(within(a2vPanel()).getByLabelText(en.batch.outDir.label)).toHaveValue(`${WAV_DIR}_a2v_out`);
+    // ロックは保たれたまま、相手（i2v-long）のStartも無効のまま。
+    expect(getRunLockOwner()).toBe("batch-a2v");
+    expect(within(i2vPanel()).getByRole("button", { name: en.batchI2vLong.startButton })).toBeDisabled();
 
-    // 孤児化した走行が終われば、ロックは戻る（修正前はここが`batch-a2v`のまま）。
+    // リマウント後のStopは飾りではなく、走行中のそのバッチに効く（＝同じランナー
+    // に繋がっている証拠）。ロックは中止要求だけでは返さない——いま生成中の1本が
+    // バックエンドの唯一のジョブ枠を占め続けているため。
+    await user.click(within(a2vPanel()).getByRole("button", { name: en.batch.stopButton }));
+    expect(within(a2vPanel()).getByRole("button", { name: en.batch.stoppingButton })).toBeDisabled();
+    expect(within(a2vPanel()).getByRole("button", { name: en.batch.stopButton })).toBeDisabled();
+    expect(getRunLockOwner()).toBe("batch-a2v");
+
+    // 走行が終われば、ロックは戻る。
     await act(async () => {
       release();
     });
     await waitFor(() => expect(getRunLockOwner()).toBeNull());
+    await waitFor(() => {
+      expect(within(i2vPanel()).getByRole("button", { name: en.batchI2vLong.startButton })).toBeEnabled();
+    });
   }, 20_000);
 
   // ページ再読み込み（プラグインのパネルを閉じて開き直す等）を跨ぐと、共有

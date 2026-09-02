@@ -1,10 +1,27 @@
-import { useCallback, useRef, useState } from "react";
+/**
+ * バッチA2VのReactラッパー。§3-47（2026-09-02）以降、**ランナーを`useRef`で
+ * 持たない**——実体は`runtime.ts`のモジュールレベル・シングルトンで、このフックは
+ * 購読するだけ。そのためCreate画面が`key`リマウントされても、マウント時に現在の
+ * 状態と行へ自動的に再接続する（新しいランナーは作られない）。
+ *
+ * The React face of Batch A2V. The runner is NOT owned by a `useRef` here: it
+ * lives in `runtime.ts`'s module-level singleton and this hook merely
+ * subscribes, so a `key`-remounted Create screen re-attaches to a batch that is
+ * already running (state, rows and the folders it runs against included)
+ * instead of silently orphaning it.
+ *
+ * `useSyncExternalStore` is the right primitive for exactly that: the store is
+ * outside React, the snapshot object is referentially stable between changes
+ * (`runtime.ts` replaces it wholesale on every update), and a fresh mount reads
+ * the current value on its very first render — no effect, no flash of "idle".
+ */
+import { useCallback, useSyncExternalStore } from "react";
 import type { ConditioningImage } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
-import { BatchRunner } from "./batchRunner";
 import type { BatchRunnerSettings, BatchRunnerState, BatchRunnerStartResult } from "./batchRunner";
 import type { BatchRow } from "./manifestMerge";
+import { getBatchA2vRuntime } from "./runtime";
 
 export interface RunBatchParams {
   wavDir: string;
@@ -20,6 +37,12 @@ export interface RunBatchParams {
    * resolving to no keyframe (the pre-N7 behavior) when the caller doesn't
    * pass this. */
   sharedConditioningImages?: ConditioningImage[];
+  /** Scan-derived state frozen with the rows so a mid-run remount can restore
+   * the panel exactly as it stood at `start()` — the per-row image `<select>`
+   * options and the fps/DURATION drift hint. */
+  imageFileNames: string[];
+  scannedFps: number | null;
+  scannedMaxFrames: number | null;
   /** Test-only pass-through to `BatchRunner.start()` — see
    * `batchRunner.ts`'s `BatchRunnerStartParams` doc comments. Production
    * call sites should omit both. */
@@ -33,88 +56,81 @@ export interface UseBatchRunnerDeps {
 
 export interface UseBatchRunnerResult {
   state: BatchRunnerState;
-  /** The outcome of the most recently *attempted* `start()` — in particular
+  /** The running (or most recent) batch's live rows — served from the runtime
+   * singleton, so this is already correct on a remount's first render. */
+  rows: BatchRow[];
+  /** The folders the running (or most recent) batch was started against. */
+  wavDir: string | null;
+  imgDir: string | null;
+  outDir: string | null;
+  /** The scan-derived state frozen at that run's `start()`. */
+  imageFileNames: string[];
+  scannedFps: number | null;
+  scannedMaxFrames: number | null;
+  /** The outcome of the most recently *attempted* `run()` — in particular
    * `{started:false, reason:"no rows to process"}` / `"batch already
-   * running"`, which never produce a single row update and would otherwise
-   * be invisible to the caller. `null` before the first attempt. */
+   * running"` / `"run lock held by …"`, which never produce a single row
+   * update and would otherwise be invisible to the caller. `null` before the
+   * first attempt. */
   lastStartResult: BatchRunnerStartResult | null;
-  /** Fires the run. `onRowsChanged` is called after every `stat` transition
-   * with a fresh row array — the caller (`useBatchForm`) is expected to feed
-   * it straight into its own row state. That React state IS the persistence:
-   * nothing is flushed to disk (owner decision, 2026-07-18: stateless batch).
-   * Fire-and-forget: this never throws and
-   * the caller should read `state`/`lastStartResult` for the outcome.
+  /** Fires the run. `onRowsChanged` is an OPTIONAL extra sink — the primary
+   * channel is `rows` above, which is what survives a remount. Fire-and-forget:
+   * this never throws; read `state`/`lastStartResult` for the outcome.
    *
-   * `onSettled` is called once, when `BatchRunner.start()`'s promise resolves
-   * — i.e. when the run has finished (or was refused outright with
-   * `{started:false}`). It fires from the promise itself, NOT from a React
-   * effect, so it still runs when this hook has already been unmounted (a
-   * `remountTokens` remount of the Create screen mid-run): that is what makes
-   * it safe to release the shared run lock from there
-   * (`useBatchForm`), instead of stranding it until the app is reloaded. */
-  run: (
-    params: RunBatchParams,
-    onRowsChanged: (rows: BatchRow[]) => void,
-    onSettled?: (result: BatchRunnerStartResult) => void,
-  ) => void;
+   * The shared run lock is taken inside `runtime.run()` (before the runner's
+   * `start()`) and handed back from the run promise itself, NOT from a React
+   * effect — so it still comes back when this hook has already been unmounted
+   * (a `remountTokens` remount of the Create screen mid-run). */
+  run: (params: RunBatchParams, onRowsChanged?: (rows: BatchRow[]) => void) => void;
+  /** Graceful stop: no further rows are submitted, but the clip generating
+   * right now runs to completion and is still saved. */
   stop: () => void;
 }
 
-/**
- * Thin React wrapper around the framework-agnostic {@link BatchRunner} class
- * — owns exactly one `BatchRunner` instance per hook mount (via `useRef`, so
- * it survives re-renders) and mirrors its 3-state lifecycle
- * (`idle`/`running`/`stopping`) into React state at the two points it can
- * actually change: right after `start()`/`stop()` return (both flip
- * `BatchRunner`'s internal state synchronously, before/without awaiting
- * anything — see `batchRunner.ts`) and once the run's promise settles.
- */
 export function useBatchRunner(deps: UseBatchRunnerDeps = {}): UseBatchRunnerResult {
   const nativeBridge = deps.nativeBridge ?? defaultBridge;
-  const runnerRef = useRef<BatchRunner | null>(null);
-  if (runnerRef.current === null) runnerRef.current = new BatchRunner(nativeBridge);
+  const runtime = getBatchA2vRuntime();
 
-  const [state, setState] = useState<BatchRunnerState>("idle");
-  const [lastStartResult, setLastStartResult] = useState<BatchRunnerStartResult | null>(null);
+  const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getSnapshot, runtime.getSnapshot);
 
   const run = useCallback(
-    (
-      params: RunBatchParams,
-      onRowsChanged: (rows: BatchRow[]) => void,
-      onSettled?: (result: BatchRunnerStartResult) => void,
-    ) => {
-      const runner = runnerRef.current;
-      if (!runner) return;
-
-      void runner
-        .start({
-          ...params,
-          onRowsChanged,
-        })
-        .then((result) => {
-          setLastStartResult(result);
-          setState(runner.state);
-          // Last, and outside React's state bookkeeping: this is the run-lock
-          // handback, and it must happen even if the two setState calls above
-          // land on an unmounted hook (both are no-ops in that case).
-          onSettled?.(result);
-        });
-
-      // `BatchRunner.start()` flips its internal state synchronously before
-      // its first `await` — reading it right back here keeps `state` truthful
-      // even before the returned promise settles (matters for `idle` ->
-      // `running` showing up on the very same tick as the click).
-      setState(runner.state);
+    (params: RunBatchParams, onRowsChanged?: (rows: BatchRow[]) => void) => {
+      runtime.run({
+        bridge: nativeBridge,
+        wavDir: params.wavDir,
+        outDir: params.outDir,
+        settings: params.settings,
+        rows: params.rows,
+        imageFileNames: params.imageFileNames,
+        scannedFps: params.scannedFps,
+        scannedMaxFrames: params.scannedMaxFrames,
+        ...(params.imgDir !== undefined ? { imgDir: params.imgDir } : {}),
+        ...(params.sharedConditioningImages !== undefined
+          ? { sharedConditioningImages: params.sharedConditioningImages }
+          : {}),
+        ...(onRowsChanged ? { onRowsChanged } : {}),
+        ...(params.pollIntervalMs !== undefined ? { pollIntervalMs: params.pollIntervalMs } : {}),
+        ...(params.jobBusyBackoffMs !== undefined ? { jobBusyBackoffMs: params.jobBusyBackoffMs } : {}),
+      });
     },
-    [],
+    [runtime, nativeBridge],
   );
 
   const stop = useCallback(() => {
-    const runner = runnerRef.current;
-    if (!runner) return;
-    runner.stop();
-    setState(runner.state);
-  }, []);
+    runtime.stop();
+  }, [runtime]);
 
-  return { state, lastStartResult, run, stop };
+  return {
+    state: snapshot.state,
+    rows: snapshot.rows,
+    wavDir: snapshot.wavDir,
+    imgDir: snapshot.imgDir,
+    outDir: snapshot.outDir,
+    imageFileNames: snapshot.imageFileNames,
+    scannedFps: snapshot.scannedFps,
+    scannedMaxFrames: snapshot.scannedMaxFrames,
+    lastStartResult: snapshot.lastStartResult,
+    run,
+    stop,
+  };
 }

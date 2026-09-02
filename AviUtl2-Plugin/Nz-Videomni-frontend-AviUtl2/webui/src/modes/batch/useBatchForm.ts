@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AppConfig } from "../../api/types";
 import { bridge as defaultBridge, BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
@@ -12,8 +12,7 @@ import {
   KEEP_RESIDENT_SERVER_DEFAULT,
   VAE_MODE_DEFAULT,
 } from "../../shell/accelerationSettings";
-import { RUN_LOCK_OWNER_BATCH_A2V, acquireRunLock, getRunLockOwner, releaseRunLock, subscribeRunLock } from "../../shell/runLock";
-import type { RunLockToken } from "../../shell/runLock";
+import { RUN_LOCK_OWNER_BATCH_A2V, getRunLockOwner, subscribeRunLock } from "../../shell/runLock";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { rawFramesForAudio, suggestFramesForAudio } from "../chained/chainUtils";
@@ -322,9 +321,33 @@ export function useBatchForm(
   // gate (see `UseBatchFormDeps.serverBusy`). Same default-off shape as `nag`.
   const serverBusy = deps.serverBusy ?? false;
 
-  const [wavDir, setWavDirState] = useState<string | null>(null);
-  const [imgDir, setImgDirState] = useState<string | null>(null);
-  const [outDir, setOutDirState] = useState<string | null>(null);
+  // §3-47（2026-09-02）: ランナーはモジュールレベルのシングルトン
+  // (`runtime.ts`) なので、走行中にCreate画面が`key`リマウントされても走行は
+  // 生き続ける。このフックは購読するだけ——だから`useBatchRunner`は他の
+  // `useState`より前で呼び、下の遅延初期化子がその場でスナップショットを
+  // 読めるようにしている。
+  const batchRunner = useBatchRunner({ nativeBridge });
+
+  // 復元するのは「走行中のときだけ」（設計判断1）。非走行時のリマウントは従来
+  // どおり白紙から始める——A2Vはステートレスバッチ（行はメモリのみ・CSVなし、
+  // オーナー裁定2026-07-18）で、走り終わった後の入力を勝手に復活させるのは
+  // その設計に反する。走行中は行編集がUI無効（`BatchSection`の`disabled`）
+  // なので、凍結した選択肢やfps表示と実際の走行が食い違うこともない。
+  //
+  // Restore ONLY while a run is in flight: a remount during a run must
+  // re-attach to it (folders, rows, and the scan-derived state the table
+  // renders from), while a remount with nothing running keeps the pre-existing
+  // blank-slate behavior. Lazy initializers, so this happens on the remount's
+  // very first render — no effect, no flash of an empty panel.
+  const restoring = batchRunner.state !== "idle";
+  const [wavDir, setWavDirState] = useState<string | null>(() => (restoring ? batchRunner.wavDir : null));
+  const [imgDir, setImgDirState] = useState<string | null>(() => (restoring ? batchRunner.imgDir : null));
+  const [outDir, setOutDirState] = useState<string | null>(() => (restoring ? batchRunner.outDir : null));
+  // 復元しない（設計判断3）: `outDirIsAuto`は「利用者が出力先を自分で選んだか」
+  // という意思であって、走行入力から導出できるものではない。i2v-long側の
+  // `runner.outDir === null`という初期化子をそのまま写すと、一度走行した後は
+  // 自動導出が恒久的に死に、音声フォルダを変えても出力先が前回のままになる
+  // （＝別バッチの成果物が混ざる）。
   const [outDirIsAuto, setOutDirIsAuto] = useState(true);
 
   const limits: BatchFormLimits = useMemo(
@@ -373,7 +396,7 @@ export function useBatchForm(
     [nativeBridge],
   );
 
-  const [rows, setRows] = useState<BatchRow[]>([]);
+  const [rows, setRows] = useState<BatchRow[]>(() => (restoring ? batchRunner.rows : []));
   const [scanError, setScanError] = useState<string | null>(null);
   // N5 A3: the image folder's file names, fetched once per `scan()` call and
   // sorted here (contract: "native's result order is unspecified — callers
@@ -381,17 +404,38 @@ export function useBatchForm(
   // per-row `<select>` option list, always leading with `IMAGE_SHARED` and
   // collapsing to just that sentinel whenever `imgDir` is unset — so clearing
   // the image folder narrows the choices immediately even before the next scan.
-  const [imageFileNames, setImageFileNames] = useState<string[]>([]);
+  const [imageFileNames, setImageFileNames] = useState<string[]>(() => (restoring ? batchRunner.imageFileNames : []));
   // U4 guard 2: the FPS in effect at the last successful `scan()` — baked into
   // each row's frame count. Compared against the live Create-form FPS below;
   // reset to null whenever the row set is invalidated (folder change).
-  const [scannedFps, setScannedFps] = useState<number | null>(null);
+  const [scannedFps, setScannedFps] = useState<number | null>(() => (restoring ? batchRunner.scannedFps : null));
   // Paired with `scannedFps` (same lifecycle): the DURATION (`numFrames`) Skip
   // cap in effect at the last successful `scan()` — baked into each row's
   // over-cap Skip judgment. Compared against the live Create-form DURATION
   // below to widen `fpsMismatch` to also cover a DURATION change; reset to
   // null on the same folder-change invalidations as `scannedFps`.
-  const [scannedMaxFrames, setScannedMaxFrames] = useState<number | null>(null);
+  const [scannedMaxFrames, setScannedMaxFrames] = useState<number | null>(() =>
+    restoring ? batchRunner.scannedMaxFrames : null,
+  );
+
+  // §3-47: 走行中に「再接続した」マウントへ行の更新を流し続けるための経路。
+  // `runtime.ts`は変化のたびにスナップショットを丸ごと差し替えるので、この効果は
+  // 行の遷移1回につきちょうど1回発火する。
+  //
+  // 走行へ再接続したマウント（＝`restoring`だったマウント）だけが対象なのが要点。
+  // 自分で`start()`したマウントは`setRows`を直接シンクとして渡しているのでこの
+  // 効果を必要とせず、逆にここを無条件にすると「走り終わった後に白紙で始まった
+  // マウント」が前回の走行の行だけを拾ってしまう——フォルダ欄は空なのに前回の
+  // 行だけ表に残る、という設計判断1に反する半端な状態になる。
+  // 判定はマウント時に凍結する（走行が終わって`state`がidleへ落ちた瞬間に効果を
+  // 切ると、最後の行更新を取りこぼしうるため）。
+  const [attachedToRun] = useState(restoring);
+  const runnerRows = batchRunner.rows;
+  useEffect(() => {
+    if (!attachedToRun) return;
+    if (runnerRows.length === 0) return;
+    setRows(runnerRows);
+  }, [attachedToRun, runnerRows]);
 
   const pickWavDir = useCallback(
     async (title?: string) => {
@@ -612,31 +656,22 @@ export function useBatchForm(
     [imgDir, imageFileNames],
   );
 
-  const batchRunner = useBatchRunner({ nativeBridge });
-
   // --- §1-7 相互ロック（shell/runLock.ts） ---------------------------------
   //
   // Batch A2V and Batch i2v-long may never run at the same time (both drive the
   // backend's single job slot). The lock is owner-token based BECAUSE both
   // panels are permanently mounted: a plain "release when my runner is idle"
   // effect would fire on this panel's very first mount and free a lock the
-  // OTHER panel is holding. Everything below is therefore token-scoped.
+  // OTHER panel is holding.
   //
-  // 2026-07-31 修正: the handback used to live in a `useEffect` watching this
-  // hook's own `runnerState` for a running -> idle transition. That effect can
-  // only fire while the hook is MOUNTED, so a `remountTokens`-driven remount of
-  // the Create screen mid-run stranded the lock until the app was reloaded (and
-  // Batch i2v-long could then never start again: "Batch A2V is running" for
-  // ever). The release now hangs off the run promise itself
-  // (`useBatchRunner`'s `onSettled`), which fires whether or not this hook is
-  // still mounted — the same shape as Batch i2v-long's `runtime.ts`.
+  // 取得も返却もこのフックではなく`runtime.ts`（モジュールレベル・シングルトン）
+  // の責務: 取得は`start()`の前、返却は実行Promiseの`.then`。Reactのeffectでは
+  // ないので、走行中にこのフックがアンマウントされてもロックは必ず戻る。ここに
+  // 残っているのは「相手が握っているか」を読むための購読だけ。
   //
-  // 残る既知の限界: the runner instance is still `useRef`-owned, so a mid-run
-  // remount does orphan the RUN itself (the old runner keeps submitting rows
-  // with no UI behind it). The `serverBusy` gate below is what keeps that
-  // window safe now — the remounted panel's Start stays disabled, with a
-  // reason, for as long as the orphaned run occupies the backend.
-  const lockTokenRef = useRef<RunLockToken | null>(null);
+  // 2026-09-02（§3-47）: ランナー実体も`runtime.ts`へ移したので、走行中の
+  // リマウントで走行が孤児化することもなくなった（リマウント後のパネルはその
+  // まま走行へ再接続し、Stopも行の進捗も生きている）。
   const lockOwner = useSyncExternalStore(subscribeRunLock, getRunLockOwner, getRunLockOwner);
   const lockedByOther = lockOwner !== null && lockOwner !== RUN_LOCK_OWNER_BATCH_A2V;
 
@@ -664,13 +699,6 @@ export function useBatchForm(
     // reached with a stale closure or by a direct call — the run lock cannot
     // catch a job that no batch panel started (or one that outlived a reload).
     if (serverBusy) return;
-    // §1-7 相互ロック: take the shared run lock before anything is submitted.
-    // `null` means the other batch (i2v-long) is running — or this one already
-    // is — so nothing is started. The re-judgment above is still committed,
-    // keeping the "setRows runs unconditionally" contract intact.
-    const token = acquireRunLock(RUN_LOCK_OWNER_BATCH_A2V);
-    if (token === null) return;
-    lockTokenRef.current = token;
     const { strippedPrompt, loras } = parseLoraPrompt(prompt);
     const settings: BatchRunnerSettings = {
       promptCommon: strippedPrompt,
@@ -721,27 +749,25 @@ export function useBatchForm(
       settings,
       rows: rejudged,
       sharedConditioningImages,
+      // §3-47: frozen alongside the rows so a mid-run remount restores the
+      // table's own derived state (image `<select>` options, fps/DURATION
+      // drift hint) instead of showing a half-blank panel over a live run.
+      imageFileNames,
+      scannedFps,
+      scannedMaxFrames,
       ...(imgDir ? { imgDir } : {}),
     };
-    // §1-7 相互ロック: the token goes back when the run promise settles — which
-    // covers BOTH endings `BatchRunner.start()` has (a finished run, and a
-    // `{started:false}` refusal that never left `idle`). `onSettled` fires from
-    // the promise, so an unmount (remount) in between cannot strand the lock.
-    // The token is captured by this closure, so it needs no ref to survive.
-    batchRunner.run(params, setRows, () => {
-      if (lockTokenRef.current === token) lockTokenRef.current = null;
-      releaseRunLock(token);
-    });
-    // ...and, for the "nothing to run" case, synchronously as well: that
-    // refusal is decided before `start()`'s first await, so the panel must not
-    // look locked for even the one microtask it takes the promise to settle
-    // (`releaseRunLock` is token-identity checked, so the `onSettled` release
-    // that follows is an inert no-op). Same "unfinished" stat set the runner
-    // itself uses.
-    if (!rejudged.some((r) => r.stat === "Waiting" || r.stat === "Failed" || r.stat === "Generating")) {
-      lockTokenRef.current = null;
-      releaseRunLock(token);
-    }
+    // §1-7 相互ロック: the shared lock is taken inside `runtime.run()` (before
+    // the runner's `start()`) and handed back from the run promise, so a
+    // remount in between cannot strand it. A refusal (`{started:false}`,
+    // including "the other batch holds the lock") is visible through the
+    // runtime's `lastStartResult`; nothing is submitted in that case.
+    //
+    // `setRows` is passed as an EXTRA sink on top of the runtime snapshot: the
+    // runner flushes row 1's `Waiting -> Generating` synchronously inside
+    // `start()`, and this keeps that visible on the same tick as the click
+    // (the snapshot-driven effect above is what survives a remount).
+    batchRunner.run(params, setRows);
     // NAG (2026-07-28) adversarial-review note: `nag` MUST be in this
     // dependency list — omitting it would let `start()` close over a STALE
     // NAG state and silently run a whole overnight batch against an old
@@ -767,6 +793,11 @@ export function useBatchForm(
     nag,
     acceleration,
     serverBusy,
+    // §3-47: the scan-derived state frozen into the run's snapshot — same
+    // stale-closure reasoning as `nag`/`serverBusy` above.
+    imageFileNames,
+    scannedFps,
+    scannedMaxFrames,
   ]);
 
   const summary: BatchSummary = useMemo(() => {

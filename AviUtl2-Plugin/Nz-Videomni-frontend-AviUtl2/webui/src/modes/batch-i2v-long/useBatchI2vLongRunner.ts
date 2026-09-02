@@ -1,16 +1,24 @@
 /**
- * バッチi2v-longのReactラッパー。出典は`modes/batch/useBatchRunner.ts`だが、
- * 最大の違いは**ランナーを`useRef`で持たないこと**——実体は`runtime.ts`の
- * モジュールレベル・シングルトンで、このフックは購読するだけ。そのため
- * ChainedScreenが`key`リマウントされても、マウント時に現在の状態と行へ自動的に
- * 再接続する（新しいランナーは作られない）。
+ * バッチi2v-longのReactラッパー。ランナーを`useRef`で持たないのが要点——実体は
+ * `runtime.ts`のモジュールレベル・シングルトンで、このフックは購読するだけ。
+ * そのためChainedScreenが`key`リマウントされても、マウント時に現在の状態と行へ
+ * 自動的に再接続する（新しいランナーは作られない）。
  *
- * The React face of Batch i2v-long. Ported from `modes/batch/useBatchRunner.ts`
- * with one structural change: the runner is NOT owned by a `useRef` here. It
- * lives in `runtime.ts`'s module-level singleton and this hook merely
+ * この形は当初`modes/batch/useBatchRunner.ts`（バッチA2V）から移植したうえで、
+ * 「ランナーをフックの寿命に縛らない」という一点だけを変えたものだった。
+ * **2026-09-02（§3-47）にA2V側も同じシングルトン方式へ移した**ので、いまは
+ * 双子の構造になっている（A2V側の`modes/batch/runtime.ts`を参照）。
+ *
+ * The React face of Batch i2v-long. The runner is NOT owned by a `useRef` here:
+ * it lives in `runtime.ts`'s module-level singleton and this hook merely
  * subscribes, so a `key`-remounted Chain screen re-attaches to a batch that is
  * already running (state, rows and folders included) instead of silently
  * orphaning it.
+ *
+ * This shape was originally ported from `modes/batch/useBatchRunner.ts` (Batch
+ * A2V) with exactly that one structural change. Batch A2V moved to the same
+ * singleton shape on 2026-09-02, so the two are now twins — see
+ * `modes/batch/runtime.ts`.
  *
  * `useSyncExternalStore` is the right primitive for exactly that: the store is
  * outside React, the snapshot object is referentially stable between changes

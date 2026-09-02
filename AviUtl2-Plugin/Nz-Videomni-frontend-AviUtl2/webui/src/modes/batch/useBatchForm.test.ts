@@ -19,6 +19,7 @@ import {
   isRunLockHeld,
   releaseRunLock,
 } from "../../shell/runLock";
+import { __resetBatchRuntimeForTests } from "./runtime";
 import { useBatchForm } from "./useBatchForm";
 import type { BatchGenerationValues } from "./useBatchForm";
 
@@ -125,7 +126,15 @@ describe("useBatchForm", () => {
   // §1-7 相互ロック: `shell/runLock.ts` is module-level state, so a test whose
   // run is still in flight when it ends would leak a held lock into the next
   // test (`canStart` would be false for no visible reason). Clear it up front.
+  //
+  // §3-47（2026-09-02）: ランナー実体と走行中の行も`runtime.ts`のモジュール
+  // レベル・シングルトンになったので、同じ理由でこちらもリセットする。これが
+  // 無いと、前のテストの走行状態が残ったまま次のテストがマウントされ、
+  // 「走行中なら復元する」初期化子が前のテストのフォルダと行を復元してしまう。
+  // ※これはテスト間の後始末であって、走り残ったランナー自体は止まらない
+  //   （止められない）——実際に走らせるテストは末尾でidleまで待ち切ること。
   beforeEach(() => {
+    __resetBatchRuntimeForTests();
     __resetRunLockForTests();
   });
 
@@ -353,6 +362,9 @@ describe("useBatchForm", () => {
     await waitFor(() => expect(chainBodies).toHaveLength(2));
     const expectedFrames = suggestFramesForAudio(OVER_CAP_DURATION_SEC, 12);
     expect(chainBodies.map(framesOf)).toContain(expectedFrames);
+    // §3-47: ランナーは`runtime.ts`のシングルトンなので、走らせたら走り切るまで
+    // 待つ（走り残しが次のテストのスナップショットへ書き込むのを防ぐ）。
+    await waitFor(() => expect(result.current.runnerState).toBe("idle"));
   });
 
   it("all runnable rows fall to Skip on re-judge: rows reflect the re-judged state, runner stays idle (0 targets)", async () => {
@@ -531,6 +543,8 @@ describe("useBatchForm", () => {
     // frame_idx 0, strength preserved (0.35). mock-image-1 (frame_idx 40) is
     // dropped entirely — no error, no warning.
     expect(conditioning).toEqual([{ image_id: "mock-image-2", frame_idx: 0, strength: 0.35 }]);
+    // §3-47: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
+    await waitFor(() => expect(result.current.runnerState).toBe("idle"));
   });
 
   it("Shared spec (2026-07-18): with no ready image the run is blocked (canStart false); a Shared run therefore never sends a headless job", async () => {
@@ -552,11 +566,16 @@ describe("useBatchForm", () => {
     expect(result.current.canStart).toBe(false);
 
     // Even if `start()` is invoked, `BatchSection` gates it on `canStart`; here
-    // we assert the underlying invariant that no /generate/chain is emitted.
+    // we assert the underlying invariant that no /generate/chain is emitted
+    // synchronously — the submit is several awaits away, and the UI gate is
+    // what actually keeps a headless job from ever being queued.
     act(() => {
       result.current.start();
     });
     expect(chainBodies).toHaveLength(0);
+    // §3-47: この呼び出しは（`canStart`を迂回しているので）実際に走り出す。
+    // シングルトンへの走り残りを残さないよう、ここで走り切らせる。
+    await waitFor(() => expect(result.current.runnerState).toBe("idle"));
   });
 
   it("sharedKeyframeMissing only inspects runnable rows: a non-runnable (Skip) Shared row doesn't block when every still-to-run row has its own image", async () => {
@@ -1127,6 +1146,8 @@ describe("useBatchForm", () => {
       expect(body.nag_scale).toBe(11.0);
       expect(body.nag_tau).toBe(2.5);
       expect(body.nag_alpha).toBe(0.25);
+      // §3-47: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
     });
 
     // Dependency-array regression guard (adversarial review, 2026-07-28): the
@@ -1167,6 +1188,8 @@ describe("useBatchForm", () => {
 
       await waitFor(() => expect(chainBodies).toHaveLength(1));
       expect(chainBodies[0]?.negative_prompt).toBe("fresh negative prompt");
+      // §3-47: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
     });
   });
 
@@ -1196,6 +1219,10 @@ describe("useBatchForm", () => {
         result.current.start();
       });
       await waitFor(() => expect(chainBodies).toHaveLength(1));
+      // §3-47: ランナーは`runtime.ts`のシングルトン。このヘルパは1つのテスト内で
+      // 2回呼ばれることもある（all-defaults）ので、走り切らせてから返さないと
+      // 次のマウントが走行中の状態を復元し、2回目のstart()はロックを取れない。
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
       return chainBodies[0]!;
     }
 
@@ -1333,10 +1360,17 @@ describe("useBatchForm", () => {
       expect(isRunLockHeld()).toBe(false);
     });
 
-    it("releases the lock immediately when there was nothing to run (start() never goes running)", async () => {
+    it("releases the lock when there was nothing to run (start() never goes running)", async () => {
       // An empty audio folder scans to zero rows, so `BatchRunner.start()`
-      // returns {started:false} without ever leaving `idle` — the running->idle
-      // effect would never fire, so `start()` has to hand the token back itself.
+      // returns {started:false} without ever leaving `idle`. The handback still
+      // happens, on the run promise's `.then` — the ONE code path that covers
+      // both endings `start()` has.
+      //
+      // §3-47（2026-09-02）: 以前はこの「対象ゼロ」だけ同期で即時解放する分岐を
+      // 持っていた（1マイクロタスクぶんのロック点滅を避けるため）。その作り込みは
+      // 引き算した——離散イベントのReact同期フラッシュ内で解放マイクロタスクが
+      // 完了するため描画上は見えず、A2V固有の分岐を1つ増やすだけだったため。
+      // よってここは`waitFor`で待つ。
       const fs = wavFolder([]);
       const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
       const { result } = renderBatchForm(bridge);
@@ -1353,14 +1387,20 @@ describe("useBatchForm", () => {
         result.current.start();
       });
 
-      expect(isRunLockHeld()).toBe(false);
+      // 走行状態には一度もならない（対象行ゼロは`start()`の最初のawaitより前に
+      // 判定される）。ロックだけが1マイクロタスク遅れて返る。
+      expect(result.current.runnerState).toBe("idle");
+      await waitFor(() => expect(isRunLockHeld()).toBe(false));
       expect(result.current.runnerState).toBe("idle");
     });
 
     // 2026-07-31 オーナー実機報告の修正: ロックの返却は実行Promise側
-    // (`useBatchRunner`の`onSettled`) にぶら下がっている。Reactのeffectでは
+    // （§3-47以降は`runtime.ts`の`.then`）にぶら下がっている。Reactのeffectでは
     // ないので、走行中にこのフックがアンマウントされても（Create画面の
     // `remountTokens`リマウント）ロックが取り残されない。
+    // ※アンマウント後も走行そのものは`runtime.ts`のシングルトンが持ち続ける。
+    //   リマウント後のパネルがその走行へ再接続できることは
+    //   `shell/runLock.crossPanel.test.tsx`と`runtime.test.ts`がピンしている。
     it("releases the lock even when the panel is unmounted mid-run (remount no longer strands it)", async () => {
       const fs = wavFolder([{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }]);
       const base = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
@@ -1375,7 +1415,8 @@ describe("useBatchForm", () => {
       // The panel goes away while the run is still in flight.
       unmount();
       await waitFor(() => expect(chainBodies).toHaveLength(1));
-      // ...and the lock still comes back when that (now orphaned) run ends.
+      // ...and the lock still comes back when that run ends, with no panel
+      // mounted behind it to notice.
       await waitFor(() => expect(isRunLockHeld()).toBe(false));
     });
 
@@ -1431,5 +1472,115 @@ describe("useBatchForm", () => {
       expect(getRunLockOwner()).toBe(RUN_LOCK_OWNER_BATCH_I2V_LONG);
       expect(releaseRunLock(otherToken)).toBe(true);
     });
+  });
+
+  // §3-47（2026-09-02）: ランナー実体は`runtime.ts`のモジュールレベル・
+  // シングルトン。設計判断1の両側——「復元するのは走行中のときだけ」——を、
+  // アンマウント→再マウント（Create画面の`remountTokens`リマウント相当）で
+  // 両方向ともピン留めする。
+  describe("リマウント時の復元（§3-47）", () => {
+    const IMG_DIR = "C:\\voice\\ep01-images";
+
+    /** 音声フォルダと画像フォルダの両方を持つmock fs。行に自前の画像を割り当てて
+     * 走らせるので、Shared用のキーフレーム（＝画像アップロード）が要らない。 */
+    function bothFolders() {
+      return createMockFs({
+        folders: {
+          [WAV_DIR]: [{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }],
+          [IMG_DIR]: [{ name: "cover.png", sizeBytes: 10, mtimeMs: 1 }],
+        },
+      });
+    }
+
+    /** 両フォルダを手入力で確定し、スキャンして、行に自前の画像を割り当てる
+     * ——`canStart`が立つ最小状態まで持っていく。 */
+    async function readyWithOwnImage(bridge: NativeBridge) {
+      const rendered = renderBatchForm(bridge);
+      const { result } = rendered;
+      await act(async () => {
+        await result.current.setWavDir(WAV_DIR);
+      });
+      await act(async () => {
+        await result.current.setImgDir(IMG_DIR);
+      });
+      await act(async () => {
+        await result.current.scan();
+      });
+      act(() => {
+        result.current.updateRowImage(0, "cover.png");
+      });
+      expect(result.current.sharedKeyframeMissing).toBe(false);
+      expect(result.current.canStart).toBe(true);
+      return rendered;
+    }
+
+    it("走行中のリマウントは、フォルダ・行・画像選択肢を復元して走行へ再接続する", async () => {
+      // `holdUploads`で音声アップロード（`processRow`の最初のawait）に走行を
+      // 停め、その間にリマウントする。解放後は`captureChainBridge`が投入を
+      // 500で弾くので、ジョブのポーリング待ちなしで走り切る。
+      const base = createMockBridge({ delayMs: 0, fs: bothFolders(), holdUploads: true });
+      const { wrapped } = captureChainBridge(base);
+      const { result, unmount } = await readyWithOwnImage(wrapped);
+
+      act(() => {
+        result.current.start();
+      });
+      expect(result.current.runnerState).toBe("running");
+
+      unmount();
+      const { result: remounted } = renderBatchForm(wrapped);
+
+      // 再マウント直後の初回レンダーで、走行中であることも入力も見えている。
+      expect(remounted.current.runnerState).toBe("running");
+      expect(remounted.current.wavDir).toBe(WAV_DIR);
+      expect(remounted.current.imgDir).toBe(IMG_DIR);
+      expect(remounted.current.outDir).toBe(AUTO_OUT_DIR);
+      // 行と、行の画像`<select>`の選択肢（スキャン由来の派生状態）も戻る。
+      expect(remounted.current.rows[0]).toMatchObject({ wav: "a.wav", image: "cover.png", stat: "Generating" });
+      expect(remounted.current.imageOptions).toEqual(["Shared", "cover.png"]);
+      // 走行中はStopが出せる状態（行編集はUI側で無効化される）。
+      expect(remounted.current.canStart).toBe(false);
+
+      // 復元は初回レンダーだけの話ではない: 以降の行の進捗も、リマウント後の
+      // パネルへ届き続ける（＝走行中のランナーに実際に繋がっている）。
+      base.releaseUploads();
+      await waitFor(() => expect(remounted.current.runnerState).toBe("idle"));
+      // `captureChainBridge`が投入を500で弾くので、行はFailedで終わる。その
+      // 遷移はリマウント後に起きているので、届いていれば復元が生きている証拠。
+      expect(remounted.current.rows[0]).toMatchObject({ wav: "a.wav", stat: "Failed" });
+    }, 15_000);
+
+    it("走行が終わった後のリマウントは、従来どおり白紙から始まる（走行中だけ復元する）", async () => {
+      // A2Vはステートレスバッチ（行はメモリのみ・CSVなし、オーナー裁定
+      // 2026-07-18）。走り終わった後まで前回の入力や行を復活させると、その設計に
+      // 反するうえ「フォルダ欄は空なのに前回の行だけ残っている」という半端な
+      // 状態になる。
+      const base = createMockBridge({ delayMs: 0, fs: bothFolders() });
+      const { wrapped, chainBodies } = captureChainBridge(base);
+      const { result, unmount } = await readyWithOwnImage(wrapped);
+
+      act(() => {
+        result.current.start();
+      });
+      await waitFor(() => expect(chainBodies).toHaveLength(1));
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
+
+      unmount();
+      const { result: remounted } = renderBatchForm(wrapped);
+
+      expect(remounted.current.runnerState).toBe("idle");
+      expect(remounted.current.wavDir).toBeNull();
+      expect(remounted.current.imgDir).toBeNull();
+      expect(remounted.current.outDir).toBeNull();
+      expect(remounted.current.rows).toEqual([]);
+      expect(remounted.current.imageOptions).toEqual(["Shared"]);
+      // 出力フォルダの自動導出も生きたまま（設計判断3: `outDirIsAuto`は
+      // 走行入力から導出しない）——音声フォルダを選べばちゃんと再導出される。
+      expect(remounted.current.outDirIsAuto).toBe(true);
+      await act(async () => {
+        await remounted.current.setWavDir(WAV_DIR);
+      });
+      expect(remounted.current.outDir).toBe(AUTO_OUT_DIR);
+    }, 15_000);
   });
 });

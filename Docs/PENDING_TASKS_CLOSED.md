@@ -1561,3 +1561,31 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **機械検証（実機ゲートは別立て）**: ①`run.ps1`・`scripts/install_ltx.ps1`のPowerShell構文解析（`[System.Management.Automation.Language.Parser]::ParseFile`）がエラー0件。②`main.py`・`services/engines/ltx/adapter.py`・`tests/test_ltx25_adapter.py`の構文解析が通る。③リポジトリ内にこの変数を**設定する**行が0件（残るのは上記の説明コメントと記録文書のみ）。④アプリ仮想環境の全体テストが**2,136 passed／23 skipped**（直近基準と同数）。
 - **状態**: **削除でクローズ（2026-09-02）。実機ゲートN1〜N6も全合格した。** 挙動不変は実機で証明済みである——LTX 2.3（N1）・LTX 2.5（N2）のスモーク生成のmp4のSHA-256が、変更前のベースラインと**完全一致**した（`c273b9fd…c100f`／`62216a9c…65b7`）。警告2種は**変更前の計5件から3ログとも0件**になり（N3）、`main.py`の情報行も出ない＋ブロックが残っていないことを動的・静的の両建てで確認した（N4）。設定行が1つも残っていないことの静的確認（N6）も0件である。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§89**、一次記録は`outputs/subtraction-gate-2026-09-02/RESULTS.md`。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §7.2（最初の実測。no-opの一次記録）・§7.3（対策スイープの値）・§7.4（採用した対策＝`empty_cache`）・§75.7（アリーナリングと2026-08-24の再実測）・**§89**（本件の検証記録。実機ゲートN1〜N6の実測値と、一次記録`outputs/subtraction-gate-2026-09-02/RESULTS.md`への案内）、`outputs/b4-vram-diag/`（`probe_expandable.py`＝この指定が効くかの判定、`diag.py`＝セグメントの内訳）、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §2.4（環境変数の表と撤去の注記）・§9.2（LTX 2.3のワーカーに渡すenv。版はv0.5.51）、`engine/worker.py`・`engine/transformer/block_swap_prefetch.py`（no-opであることを説明する残置コメント）、本書§3-102（本項の出自＝派生課題の一覧）。
+
+### 3-21. 操作パネルの自動表示（起票：2026-07-22、クローズ：2026-09-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-21からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-21（同書側は欠番）。概要: 生成起点の右クリック後に操作パネル（Create画面のプロンプト欄等）を自動で前面へ表示・アクティブ化する構想。AviUtl2 SDKの`plugin2.h`にプラグインウィンドウの表示/アクティブ化APIが存在せず、Win32の`ShowWindow`直叩きは本体のドッキング/タブ管理と衝突するリスクがあり実機検証なしに安全性を保証できないまま塞がっていた。
+- **クローズ理由（オーナー裁定・2026-09-02）**: 実用上不要と判断してクローズ（実装なし）。前提が変われば再訪しうるが、現時点で再訪条件は設けない。
+- **状態**: 未着手のままクローズ（2026-09-02、オーナー裁定）。
+- **正本・出典**: フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §46.8、`AviUtl_ExEdit2 SDK`の`plugin2.h`。
+
+### 3-27. 仮オブジェクトを右クリックして進行中の生成をキャンセルする（クローズ：2026-09-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-27からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-27（同書側は欠番）。概要: 仮オブジェクトを右クリックし、紐づく進行中の生成ジョブを中止できるようにする構想。α版は土台（jobIDと仮オブジェクトの対応づけ）だけを用意し、機能自体は入れていなかった（サーバー側の改修が必要でフロントエンドだけでは完結しないため）。
+- **クローズ理由（オーナー裁定・2026-09-02）**: 実用上不要と判断してクローズ（実装なし）。前提が変われば再訪しうるが、現時点で再訪条件は設けない。
+- **状態**: 未着手のままクローズ（2026-09-02、オーナー裁定）。
+- **正本・出典**: フロントエンド[`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
+
+### 3-28. 失敗した仮オブジェクトの自動片付け（クローズ：2026-09-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-28からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-28（同書側は欠番）。概要: 生成が失敗した仮オブジェクトを自動で削除するモード。α版は「残す」方針で、テキストを`❌失敗：理由`へ書き換えるところまでで止めていた（自動削除は「気づかないうちに消える」副作用を伴うため）。
+- **クローズ理由（オーナー裁定・2026-09-02）**: 実用上不要と判断してクローズ（実装なし）。前提が変われば再訪しうるが、現時点で再訪条件は設けない。
+- **状態**: 未着手のままクローズ（2026-09-02、オーナー裁定）。
+- **正本・出典**: フロントエンド[`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)（失敗時の扱い・優先順位の階層）、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。
+
+### 3-29. 孤児（セッションまたぎ）仮オブジェクトの自動掃除（クローズ：2026-09-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-29からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-29（同書側は欠番）。概要: プロジェクトを閉じて開き直したあとに宙に浮いて残った仮オブジェクトを自動で掃除するモード。α版はプロジェクト読み込み時に検出して「再生成しますか？」と提案するところまでで、削除はユーザー操作に委ねていた（検出は実装済み、自動削除だけがスコープ外）。
+- **クローズ理由（オーナー裁定・2026-09-02）**: 実用上不要と判断してクローズ（実装なし）。前提が変われば再訪しうるが、現時点で再訪条件は設けない。
+- **状態**: 未着手のままクローズ（2026-09-02、オーナー裁定）。
+- **正本・出典**: フロントエンド[`TIMELINE_ALPHA_REQUIREMENTS.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_ALPHA_REQUIREMENTS.md)「孤児（セッションまたぎ）」「優先順位の階層」、[`TIMELINE_FEATURE_CANDIDATES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/TIMELINE_FEATURE_CANDIDATES.md)「将来の入り口」。

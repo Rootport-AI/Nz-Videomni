@@ -181,7 +181,7 @@ VRAM（グラフィックスメモリ）から溢れて共有メモリへ退避�
 ## 1-A. 【2026-08-09】スイープ・追試の結論と、実際に採った実装
 
 上の §1 は**スイープを実施する前の予測**である。実際に9本＋追試4本を回した結果、予測とは異なる結論になった。
-測定値の正本は [`outputs/stage2_window_sweep/SWEEP_RESULTS.md`](../outputs/stage2_window_sweep/SWEEP_RESULTS.md)、
+測定値の正本は [`outputs/stage2_window_sweep/SWEEP_RESULTS.md`](../outputs/stage2_window_sweep/SWEEP_RESULTS.md)（複写: [`Outputs-archive/stage2_window_sweep/SWEEP_RESULTS.md`](Outputs-archive/stage2_window_sweep/SWEEP_RESULTS.md)）、
 経緯と教訓の正本は `Docs/VERIFICATION_LOG.md` §53 である。ここでは差分だけを記す。
 
 ### 予測と違ったこと

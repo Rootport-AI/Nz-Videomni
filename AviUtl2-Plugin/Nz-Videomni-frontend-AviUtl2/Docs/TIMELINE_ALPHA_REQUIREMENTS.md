@@ -119,7 +119,7 @@
 - 将来の改修項目（優先度：高）：仮オブジェクトのキャンセル、失敗仮オブジェクトの自動片付け、孤児仮オブジェクトの自動掃除。
 - 将来の研究課題（優先度：低）：部分再生成（Retake）、領域塗り替え（Inpaint）。
 
-**追記（2026-07-27）**: この5項目の追跡は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ一本化しました。**以後の管理は同書で行います**（改修項目の3件＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-27・§3-28・§3-29〔2026-09-02にオーナー裁定「実用上不要」でクローズ済み〕、Retake・Inpaint＝[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-12）。本書は設計記録として残します。
+**追記（2026-07-27）**: この5項目の追跡は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ一本化しました。**以後の管理は同書で行います**（改修項目の3件＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-27-02・§3-28-02・§3-29-02〔2026-09-02にオーナー裁定「実用上不要」でクローズ済み〕、Retake・Inpaint＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §4-12〔2026-08-30に統合クローズ済み〕）。本書は設計記録として残します。
 
 ---
 

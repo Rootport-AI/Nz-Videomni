@@ -820,7 +820,7 @@ G3が不合格の場合は、§5-10のロールバックフラグ`REPLACE_INSERT
 | 外した項目 | 現在の管理先（[`PENDING_TASKS.md`](PENDING_TASKS.md)） |
 |---|---|
 | Fill the gap（すき間を埋める） | §3-10（先行調査は[`GAP_FILL_RESEARCH.md`](GAP_FILL_RESEARCH.md)） |
-| Regenerate / Replace（作り直す・差し替える） | [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-39-02（2026-09-02、オーナー裁定・実用上不要でクローズ済み） |
+| Regenerate / Replace（作り直す・差し替える） | [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-39-02（2026-09-02、オーナー裁定・実用上不要でクローズ済み） |
 | チェーン投入系（テキスト・画像を構築中のチェーンへ送る） | §3-40 |
 | 範囲切り出し→素材化 | §3-34（2026-07-27決定＝α版では配線しない。判断材料は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48）。**2026-08-01追記**: 判断材料③「リボンの範囲選択が無言で無視される」という体験上の不満は、`cutoutRange`（シーン合成をフレーム毎にレンダリングする方式）とは**別方式**で解消済みである——右クリック#1 V2Vと#2 IC-LoRA参照動画は、素材ファイルをリボンの範囲で切り出してアップロードするようになった（[`V2V_RIBBON_TRIM_WORKORDER.md`](V2V_RIBBON_TRIM_WORKORDER.md)、クローズ記録[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-59）。§3-34の残置判断自体は変わらない（機構が違うため） |
 | 完了時の自動置換 | §3-8 |

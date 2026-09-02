@@ -321,7 +321,7 @@ export function useBatchForm(
   // gate (see `UseBatchFormDeps.serverBusy`). Same default-off shape as `nag`.
   const serverBusy = deps.serverBusy ?? false;
 
-  // §3-47（2026-09-02）: ランナーはモジュールレベルのシングルトン
+  // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）: ランナーはモジュールレベルのシングルトン
   // (`runtime.ts`) なので、走行中にCreate画面が`key`リマウントされても走行は
   // 生き続ける。このフックは購読するだけ——だから`useBatchRunner`は他の
   // `useState`より前で呼び、下の遅延初期化子がその場でスナップショットを
@@ -418,7 +418,7 @@ export function useBatchForm(
     restoring ? batchRunner.scannedMaxFrames : null,
   );
 
-  // §3-47: 走行中に「再接続した」マウントへ行の更新を流し続けるための経路。
+  // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: 走行中に「再接続した」マウントへ行の更新を流し続けるための経路。
   // `runtime.ts`は変化のたびにスナップショットを丸ごと差し替えるので、この効果は
   // 行の遷移1回につきちょうど1回発火する。
   //
@@ -669,7 +669,7 @@ export function useBatchForm(
   // ないので、走行中にこのフックがアンマウントされてもロックは必ず戻る。ここに
   // 残っているのは「相手が握っているか」を読むための購読だけ。
   //
-  // 2026-09-02（§3-47）: ランナー実体も`runtime.ts`へ移したので、走行中の
+  // 2026-09-02（バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02）: ランナー実体も`runtime.ts`へ移したので、走行中の
   // リマウントで走行が孤児化することもなくなった（リマウント後のパネルはその
   // まま走行へ再接続し、Stopも行の進捗も生きている）。
   const lockOwner = useSyncExternalStore(subscribeRunLock, getRunLockOwner, getRunLockOwner);
@@ -749,7 +749,7 @@ export function useBatchForm(
       settings,
       rows: rejudged,
       sharedConditioningImages,
-      // §3-47: frozen alongside the rows so a mid-run remount restores the
+      // backend `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: frozen alongside the rows so a mid-run remount restores the
       // table's own derived state (image `<select>` options, fps/DURATION
       // drift hint) instead of showing a half-blank panel over a live run.
       imageFileNames,
@@ -793,7 +793,7 @@ export function useBatchForm(
     nag,
     acceleration,
     serverBusy,
-    // §3-47: the scan-derived state frozen into the run's snapshot — same
+    // backend `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: the scan-derived state frozen into the run's snapshot — same
     // stale-closure reasoning as `nag`/`serverBusy` above.
     imageFileNames,
     scannedFps,

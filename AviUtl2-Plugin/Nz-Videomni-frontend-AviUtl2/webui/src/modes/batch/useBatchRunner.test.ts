@@ -141,7 +141,7 @@ describe("useBatchRunner", () => {
   });
 
   // 本フックが`useRef`でランナーを持たない最大の理由（Create画面の`key`
-  // リマウント耐性・§3-47）を、アンマウント→再マウントで直接ピン留めする。
+  // リマウント耐性・バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02）を、アンマウント→再マウントで直接ピン留めする。
   it("アンマウント→再マウントしても走行中バッチへ再接続し、初回レンダーから状態が正しい", async () => {
     const fs = createMockFs();
     const bridge = createMockBridge({ delayMs: 0, runningPollCount: 3, fs });

@@ -28,6 +28,7 @@
 - `outputs/{job_id}/` に `output.mp4`・`metadata.json`（設定で有効時）・V2V結合後は`joined.mp4`。job_idはジョブ作成時に発行されるUUID。
 - `DELETE /jobs/{job_id}`（終了済みジョブのみ）が`outputs/{job_id}`を削除する。これが唯一のディスク削除API。
 - 実測（2026-08-01）: 433件・約1.5GB。
+- `outputs/`内のMarkdownのうち、生きている文書が正本として参照するものは`Docs/Outputs-archive/`へスナップショット複写する。運用規則は同フォルダの[`README.md`](Outputs-archive/README.md)。
 
 ## 2. UploadsとOutputsの紐づけ
 

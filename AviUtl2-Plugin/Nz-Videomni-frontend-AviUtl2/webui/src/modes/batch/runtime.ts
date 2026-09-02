@@ -8,7 +8,7 @@
  * ランナーを持たせると、そのリマウントで走行中バッチが孤児化し、走行は裏で続く
  * のにUIからは「実行していない」ように見え、Stopも行の進捗も消える。
  * モジュールレベルに置けば、リマウント後のセクションは購読し直すだけで走行中
- * バッチへ再接続できる（§3-47・2026-09-02）。出典は
+ * バッチへ再接続できる（バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02・2026-09-02）。出典は
  * `modes/batch-i2v-long/runtime.ts`——同じ形をA2Vへ移植したもの。
  *
  * The single live home of a running Batch A2V: the runner instance, the latest

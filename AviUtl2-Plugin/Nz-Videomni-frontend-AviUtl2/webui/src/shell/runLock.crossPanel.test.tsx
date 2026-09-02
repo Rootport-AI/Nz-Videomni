@@ -189,7 +189,7 @@ function foldersFs() {
 
 describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両方向）", () => {
   beforeEach(() => {
-    // 両バッチともランナー実体はモジュールレベルのシングルトン（§3-47以降は
+    // 両バッチともランナー実体はモジュールレベルのシングルトン（バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02以降は
     // A2V側も）。前のテストの走行状態が残っていると、次のテストのパネルが
     // マウント直後に「走行中」として復元されてしまう。
     __resetBatchRuntimeForTests();
@@ -336,7 +336,7 @@ describe("バッチA2V ↔ バッチi2v-long の相互排他（実走行・両�
   }, 20_000);
 
   // Create画面も右クリックのintentルーティングで`key`リマウントされる
-  // （`AppShell`の`remountTokens`）。§3-47（2026-09-02）でバッチA2Vのランナーも
+  // （`AppShell`の`remountTokens`）。バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）でバッチA2Vのランナーも
   // モジュールレベルのシングルトン（`modes/batch/runtime.ts`）へ移したので、
   // リマウント後も走行中のバッチに再接続でき、Stopも行の進捗もロックも保たれる。
   //

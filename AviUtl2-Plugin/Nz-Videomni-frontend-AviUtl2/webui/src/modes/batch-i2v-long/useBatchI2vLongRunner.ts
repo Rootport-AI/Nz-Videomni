@@ -6,7 +6,7 @@
  *
  * この形は当初`modes/batch/useBatchRunner.ts`（バッチA2V）から移植したうえで、
  * 「ランナーをフックの寿命に縛らない」という一点だけを変えたものだった。
- * **2026-09-02（§3-47）にA2V側も同じシングルトン方式へ移した**ので、いまは
+ * **2026-09-02（バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02）にA2V側も同じシングルトン方式へ移した**ので、いまは
  * 双子の構造になっている（A2V側の`modes/batch/runtime.ts`を参照）。
  *
  * The React face of Batch i2v-long. The runner is NOT owned by a `useRef` here:

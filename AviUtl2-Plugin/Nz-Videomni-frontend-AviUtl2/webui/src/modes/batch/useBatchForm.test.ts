@@ -127,7 +127,7 @@ describe("useBatchForm", () => {
   // run is still in flight when it ends would leak a held lock into the next
   // test (`canStart` would be false for no visible reason). Clear it up front.
   //
-  // §3-47（2026-09-02）: ランナー実体と走行中の行も`runtime.ts`のモジュール
+  // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）: ランナー実体と走行中の行も`runtime.ts`のモジュール
   // レベル・シングルトンになったので、同じ理由でこちらもリセットする。これが
   // 無いと、前のテストの走行状態が残ったまま次のテストがマウントされ、
   // 「走行中なら復元する」初期化子が前のテストのフォルダと行を復元してしまう。
@@ -362,7 +362,7 @@ describe("useBatchForm", () => {
     await waitFor(() => expect(chainBodies).toHaveLength(2));
     const expectedFrames = suggestFramesForAudio(OVER_CAP_DURATION_SEC, 12);
     expect(chainBodies.map(framesOf)).toContain(expectedFrames);
-    // §3-47: ランナーは`runtime.ts`のシングルトンなので、走らせたら走り切るまで
+    // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: ランナーは`runtime.ts`のシングルトンなので、走らせたら走り切るまで
     // 待つ（走り残しが次のテストのスナップショットへ書き込むのを防ぐ）。
     await waitFor(() => expect(result.current.runnerState).toBe("idle"));
   });
@@ -543,7 +543,7 @@ describe("useBatchForm", () => {
     // frame_idx 0, strength preserved (0.35). mock-image-1 (frame_idx 40) is
     // dropped entirely — no error, no warning.
     expect(conditioning).toEqual([{ image_id: "mock-image-2", frame_idx: 0, strength: 0.35 }]);
-    // §3-47: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
+    // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
     await waitFor(() => expect(result.current.runnerState).toBe("idle"));
   });
 
@@ -573,7 +573,7 @@ describe("useBatchForm", () => {
       result.current.start();
     });
     expect(chainBodies).toHaveLength(0);
-    // §3-47: この呼び出しは（`canStart`を迂回しているので）実際に走り出す。
+    // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: この呼び出しは（`canStart`を迂回しているので）実際に走り出す。
     // シングルトンへの走り残りを残さないよう、ここで走り切らせる。
     await waitFor(() => expect(result.current.runnerState).toBe("idle"));
   });
@@ -1146,7 +1146,7 @@ describe("useBatchForm", () => {
       expect(body.nag_scale).toBe(11.0);
       expect(body.nag_tau).toBe(2.5);
       expect(body.nag_alpha).toBe(0.25);
-      // §3-47: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
+      // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
       await waitFor(() => expect(result.current.runnerState).toBe("idle"));
     });
 
@@ -1188,7 +1188,7 @@ describe("useBatchForm", () => {
 
       await waitFor(() => expect(chainBodies).toHaveLength(1));
       expect(chainBodies[0]?.negative_prompt).toBe("fresh negative prompt");
-      // §3-47: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
+      // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: 走らせたテストは走り切るまで待つ（シングルトンへの走り残り防止）。
       await waitFor(() => expect(result.current.runnerState).toBe("idle"));
     });
   });
@@ -1219,7 +1219,7 @@ describe("useBatchForm", () => {
         result.current.start();
       });
       await waitFor(() => expect(chainBodies).toHaveLength(1));
-      // §3-47: ランナーは`runtime.ts`のシングルトン。このヘルパは1つのテスト内で
+      // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: ランナーは`runtime.ts`のシングルトン。このヘルパは1つのテスト内で
       // 2回呼ばれることもある（all-defaults）ので、走り切らせてから返さないと
       // 次のマウントが走行中の状態を復元し、2回目のstart()はロックを取れない。
       await waitFor(() => expect(result.current.runnerState).toBe("idle"));
@@ -1366,7 +1366,7 @@ describe("useBatchForm", () => {
       // happens, on the run promise's `.then` — the ONE code path that covers
       // both endings `start()` has.
       //
-      // §3-47（2026-09-02）: 以前はこの「対象ゼロ」だけ同期で即時解放する分岐を
+      // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）: 以前はこの「対象ゼロ」だけ同期で即時解放する分岐を
       // 持っていた（1マイクロタスクぶんのロック点滅を避けるため）。その作り込みは
       // 引き算した——離散イベントのReact同期フラッシュ内で解放マイクロタスクが
       // 完了するため描画上は見えず、A2V固有の分岐を1つ増やすだけだったため。
@@ -1395,7 +1395,7 @@ describe("useBatchForm", () => {
     });
 
     // 2026-07-31 オーナー実機報告の修正: ロックの返却は実行Promise側
-    // （§3-47以降は`runtime.ts`の`.then`）にぶら下がっている。Reactのeffectでは
+    // （バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02以降は`runtime.ts`の`.then`）にぶら下がっている。Reactのeffectでは
     // ないので、走行中にこのフックがアンマウントされても（Create画面の
     // `remountTokens`リマウント）ロックが取り残されない。
     // ※アンマウント後も走行そのものは`runtime.ts`のシングルトンが持ち続ける。
@@ -1474,11 +1474,11 @@ describe("useBatchForm", () => {
     });
   });
 
-  // §3-47（2026-09-02）: ランナー実体は`runtime.ts`のモジュールレベル・
+  // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）: ランナー実体は`runtime.ts`のモジュールレベル・
   // シングルトン。設計判断1の両側——「復元するのは走行中のときだけ」——を、
   // アンマウント→再マウント（Create画面の`remountTokens`リマウント相当）で
   // 両方向ともピン留めする。
-  describe("リマウント時の復元（§3-47）", () => {
+  describe("リマウント時の復元（バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02）", () => {
     const IMG_DIR = "C:\\voice\\ep01-images";
 
     /** 音声フォルダと画像フォルダの両方を持つmock fs。行に自前の画像を割り当てて

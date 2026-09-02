@@ -187,4 +187,4 @@ Chain画面は右クリックのintentルーティングで`remountTokens`によ
 
 ## 9. 関連台帳
 
-`PENDING_TASKS_CLOSED.md` §3-57（本件のクローズ記録。起票時は`PENDING_TASKS.md` §1-7）・`PENDING_TASKS.md` §3-1（バッチA2Vのα版省略機能）・同§3-47（バッチA2Vランナーの孤児化とrunLock滞留。本書§6.5で起票）・同§3-48（JobLedgerの多数件描画）・`PENDING_TASKS_CLOSED.md`のバッチA2V設計経緯。
+`PENDING_TASKS_CLOSED.md` §3-57（本件のクローズ記録。起票時は`PENDING_TASKS.md` §1-7）・`PENDING_TASKS.md` §3-1（バッチA2Vのα版省略機能）・同§3-48（JobLedgerの多数件描画）・`PENDING_TASKS_CLOSED.md` §3-47-02（バッチA2Vランナーの孤児化とrunLock滞留。本書§6.5で起票し、2026-09-02にクローズ）・`PENDING_TASKS_CLOSED.md`のバッチA2V設計経緯。

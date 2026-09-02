@@ -349,15 +349,19 @@ class _GpuPlacedBuilder:
     :class:`~engine25.gguf_transformer.Ltx25CpuModelBuilder` deliberately ignores
     the requested device: for the 14.7 GB transformer, placement is a selective
     operation the stage performs. The EmbeddingsProcessor is the opposite case --
-    a ~1.5 GB model that has to sit wholly on the GPU because the hidden states
-    it consumes are already there -- so this puts the move back.
+    a ~4.6 GiB model (the raw size of the state dict it loads, measured) that has
+    to sit wholly on the GPU because the hidden states it consumes are already
+    there -- so this puts the move back.
 
     A wrapper rather than a subclass because the builder is produced by
     :func:`engine25.gguf_gemma4.build_embeddings_processor_builder`, which owns
     the (four-way) configuration of that builder; re-deriving it here to change
     one line would duplicate the part most likely to drift. Only ``build`` is
     intercepted; everything else is delegated, so ``with_*``/``model_config``
-    still work if a later phase needs them.
+    still work if a later phase needs them -- and so, through ``__getattr__``, do
+    ``registry`` / ``model_path`` / ``model_sd_ops``, which is the whole reason
+    keep_resident (embeddings) can key its release off this wrapper instead of
+    having to reach past it for the builder inside.
     """
 
     def __init__(self, inner: Any) -> None:
@@ -822,7 +826,7 @@ IGNORED_FIELDS: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
-# keep_resident: the text encoder's state dict between jobs
+# keep_resident: a builder's state dict between jobs
 # ---------------------------------------------------------------------------
 #
 # ``keep_resident`` used to sit in IGNORED_FIELDS above ("2.5 keeps its weights
@@ -832,26 +836,38 @@ IGNORED_FIELDS: dict[str, str] = {
 # 7.7 GiB state dict is re-read from the GGUF on every single job. This function
 # is the switch for that, and the reason the field is now acted on.
 #
+# TWO REGISTRIES, ONE FUNCTION. The EmbeddingsProcessor sits behind the very same
+# arrangement -- ``gguf_gemma4.build_embeddings_processor_builder`` also defaults
+# to ``cache_weights=False``, so its ~4.6 GiB state dict is re-read job after job
+# too -- and gets its own switch (``keep_resident_embeddings``) rather than
+# riding on the first one, because the two cost different amounts of RAM and the
+# machine that can afford one may not be able to afford both. The only thing that
+# differs between them is the KEY: the text encoder's builder has a single path,
+# while the EmbeddingsProcessor's spans TWO files (the transformer GGUF leads;
+# the text-encoder GGUF supplies the four projection tensors), so its
+# ``model_path`` is a tuple. ``as_path_list`` -- the same normalisation
+# ``load_state_dict`` runs on the way IN -- is what makes one ``pop`` fit both.
+#
 # NAME SHARED WITH 2.3, IMPLEMENTATION NOT. 2.3's ``keep_resident`` retains the
 # skeletons of every sub-model behind a two-argument call that returns a tuple
 # and carries three internal degradation guards (LoRA in-place mutation, and two
-# more). This is one registry holding one state dict, with no degradation path
-# at all -- 2.5's text encoder takes no LoRA and is loaded with ``assign=True``,
-# so nothing ever mutates the retained tensors in place. The CONTRACT is 2.3's
-# verbatim (absent key means off, no end-of-job reset, an echo on ``done``); the
-# code behind it is unrelated.
+# more). Each of these is one registry holding one state dict, with no
+# degradation path at all -- neither 2.5 component takes a LoRA and both are
+# loaded with ``assign=True``, so nothing mutates the retained tensors in place.
+# The CONTRACT is 2.3's verbatim (absent key means off, no end-of-job reset, an
+# echo on ``done``); the code behind it is unrelated.
 
 
-def _swap_keep_resident(registry: Any, builder: Any, enabled: bool) -> int | None:
-    """Turn the text encoder's weight cache on or off. Returns bytes released.
+def _swap_keep_resident(registry: Any, builder: Any, enabled: bool, *, label: str) -> int | None:
+    """Turn one builder's weight cache on or off. Returns bytes released.
 
     **Never raises.** It is called from :meth:`Ltx25Pipeline.set_acceleration_job`,
     which sits OUTSIDE the worker's try/finally so that nothing between the arm
-    and the reset can throw -- and unlike the other two knobs this one is not a
-    pure assignment: the OFF path drops a 7.7 GiB state dict, which is I/O-shaped
-    work (frees, and a collector pass). An exception here would skip the reset
-    and leak the job's request into the next one on a resident worker, so it is
-    logged and swallowed instead. A failed swap costs speed or RAM, never
+    and the reset can throw -- and unlike the knobs that are pure assignments,
+    this one is not: the OFF path drops a multi-gigabyte state dict, which is
+    I/O-shaped work (frees, and a collector pass). An exception here would skip
+    the reset and leak the job's request into the next one on a resident worker,
+    so it is logged and swallowed instead. A failed swap costs speed or RAM, never
     correctness: both settings produce the same weights and the same video.
 
     ``registry.add`` is the ONLY method that reads ``_cache_weights``, so turning
@@ -860,6 +876,17 @@ def _swap_keep_resident(registry: Any, builder: Any, enabled: bool) -> int | Non
     dict would keep being served (and keep being held) forever. The OFF path
     therefore has to ``pop`` the entry out by hand, with the same key ``add``
     used -- which is why the builder is needed here and not just the registry.
+    ``as_path_list`` is what makes that key right for BOTH callers: the text
+    encoder's ``model_path`` is one path, the EmbeddingsProcessor's is a tuple of
+    two, and the normalisation is exactly what ``load_state_dict`` applies on the
+    way in.
+
+    ``label`` names the component in the two log lines and carries its RAM
+    estimate with it (``"text encoder (~7.7 GiB)"``), so the OFF line reads as the
+    estimate next to the bytes actually given back -- a released 0.00 GiB under a
+    label promising 7.7 is a visible symptom rather than a silent one. Keyword-
+    only and without a default: two components share this function, and a caller
+    that forgot to say which one would write the other one's name into the log.
 
     Returns the number of bytes released (0 when nothing was cached), or None if
     the swap did not run.
@@ -871,8 +898,9 @@ def _swap_keep_resident(registry: Any, builder: Any, enabled: bool) -> int | Non
         registry._cache_weights = enabled
         if enabled:
             logger.info(
-                "keep-resident ON: the text encoder's state dict will be retained between jobs "
-                "(~7.7 GiB of resident RAM; the next job skips its rebuild)"
+                "keep-resident ON: the %s state dict will be retained between jobs "
+                "(that much resident RAM; the next job skips its rebuild)",
+                label,
             )
             return 0
         state_dict = registry.pop(as_path_list(builder.model_path), builder.model_sd_ops)
@@ -886,13 +914,16 @@ def _swap_keep_resident(registry: Any, builder: Any, enabled: bool) -> int | Non
         del state_dict
         gc.collect()
         logger.info(
-            "keep-resident OFF: released %.2f GiB of retained text-encoder weights "
+            "keep-resident OFF: released %.2f GiB of retained %s weights "
             "(the next job rebuilds them from the GGUF)",
-            size / 2**30,
+            size / 2**30, label,
         )
         return size
     except Exception:  # pragma: no cover -- never-raise discipline
-        logger.exception("keep-resident swap to %s failed; continuing", "on" if enabled else "off")
+        logger.exception(
+            "keep-resident swap of the %s to %s failed; continuing",
+            label, "on" if enabled else "off",
+        )
         return None
 
 
@@ -966,10 +997,16 @@ class Ltx25Pipeline:
         # * keep_resident is a THIRD shape again: its state is a flag on a
         #   registry object that lives inside the text-encoder builder, so this
         #   class holds the two handles it needs to reach it (set just after the
-        #   builder is constructed, below), the CURRENT setting -- which, alone
-        #   among the three knobs, SURVIVES the end of the job because the
-        #   retained weights are the feature -- and the requested/used pair the
-        #   echo is folded from.
+        #   builder is constructed, below), the CURRENT setting -- which, unlike
+        #   the prefetch and fused requests, SURVIVES the end of the job because
+        #   the retained weights are the feature -- and the requested/used pair
+        #   the echo is folded from.
+        # * keep_resident_embeddings is that THIRD shape a second time, on the
+        #   EmbeddingsProcessor's builder (whose registry is likewise built with
+        #   ``cache_weights=False``). Five attributes of its own rather than a
+        #   branch inside the text encoder's, because the two components are
+        #   retained independently: two handles, two settings, two echoes -- and
+        #   one mechanism, :func:`_swap_keep_resident`, told apart by a label.
         self._block_swap_prefetch_requested = False
         self._block_swap_prefetch_used = "off"
         self._te_builder: Any = None
@@ -977,6 +1014,11 @@ class Ltx25Pipeline:
         self._keep_resident_enabled = False
         self._keep_resident_requested = False
         self._keep_resident_used = "off"
+        self._ep_builder: Any = None
+        self._ep_registry: Any = None
+        self._keep_resident_embeddings_enabled = False
+        self._keep_resident_embeddings_requested = False
+        self._keep_resident_embeddings_used = "off"
         # * SageAttention is a FOURTH shape: the request, the per-call kernel
         #   latch and the finished job's echo all live in ONE object shared with
         #   2.3 (``SageState``), which the diffusion stage's service reads
@@ -1111,6 +1153,15 @@ class Ltx25Pipeline:
                 assets_path=self.assets_path,
             )
         )
+        # The same two handles for the second registry, and kept as the WRAPPER
+        # rather than the builder inside it: ``_GpuPlacedBuilder.__getattr__``
+        # forwards ``registry`` / ``model_path`` / ``model_sd_ops``, so unwrapping
+        # would buy nothing and would hide the fact that the placement wrapper is
+        # on the keep-resident path too. ``model_path`` here is the TWO-file tuple
+        # this builder spans, which is what ``_swap_keep_resident`` normalises
+        # through ``as_path_list``. Both are dropped in :meth:`close`.
+        self._ep_builder = embeddings_builder
+        self._ep_registry = embeddings_builder.registry
         prompt_encoder = Ltx25PromptEncoder(
             model_paths,
             self.dtype,
@@ -1187,16 +1238,17 @@ class Ltx25Pipeline:
         block_swap_prefetch: bool,
         fused_gguf_dequant_kernel: bool,
         keep_resident: bool,
+        keep_resident_embeddings: bool,
         attention_backend: str,
     ) -> None:
-        """Arm this job's four acceleration knobs.
+        """Arm this job's five acceleration knobs.
 
         Called by the worker BEFORE the try block that runs the job, and paired
         with :meth:`reset_acceleration_job` in that block's ``finally``. The
         first two are per-JOB state on a resident worker process, so an arm
         without a matching reset would leak one job's request into the next one.
 
-        ``keep_resident`` is the ASYMMETRIC one and deliberately so: the reset
+        ``keep_resident`` is an ASYMMETRIC one and deliberately so: the reset
         does not turn it off, because the retained 7.7 GiB of text-encoder weights
         ARE the feature -- they have to outlive the job that asked for them or
         there is nothing for the next job to hit. What the reset does is freeze
@@ -1204,6 +1256,15 @@ class Ltx25Pipeline:
         request differs from what is already in force (2.3's rule verbatim: a
         job that does not send the key is asking for the weights to be RELEASED,
         which is why a missing key is a real instruction and not a no-op).
+
+        ``keep_resident_embeddings`` IS THE SECOND ASYMMETRIC KNOB, and the same
+        one: same never-raise swap, same no-op guard, same "a missing key means
+        release", pointed at the EmbeddingsProcessor's registry (~4.6 GiB) rather
+        than the text encoder's. Two switches rather than one because the two
+        retentions cost different amounts of RAM and are worth buying separately
+        -- a machine that can hold one may not be able to hold both. They are
+        independent in every direction: either order, either combination, and
+        neither one's swap can disturb the other's registry.
 
         The ordering constraint is on the fused half and it is not negotiable:
         the flag has to be armed **before the transformer is built**, because the
@@ -1221,21 +1282,21 @@ class Ltx25Pipeline:
         assignments -- the resources are created later, by the build -- so it
         cannot fail either.
 
-        **The keep-resident half CAN**, which is the one place this method
-        departs from "it is all assignments". Switching it off pops a 7.7 GiB
-        state dict out of the registry and drops it: real work, not an
-        assignment. :func:`_swap_keep_resident` is therefore never-raise (it
+        **The two keep-resident halves CAN**, which is the one place this method
+        departs from "it is all assignments". Switching either off pops a
+        multi-gigabyte state dict out of a registry and drops it: real work, not
+        an assignment. :func:`_swap_keep_resident` is therefore never-raise (it
         logs and swallows), which restores the property the arm/reset pairing
         outside this class depends on -- **this method still cannot fail** --
-        without pretending that what it does is trivial. Its ordering
+        without pretending that what it does is trivial. Their ordering
         constraint runs the same direction as the other two, for a smaller
-        reason: the swap happens before the text encoder is built, so a job
-        that asked for the release runs on the freed footprint instead of
-        paying for it only at the end.
+        reason: the swaps happen before the prompt encode builds either
+        component, so a job that asked for a release runs on the freed footprint
+        instead of paying for it only at the end.
 
         ``attention_backend`` ("sdpa" / "sage") has NO DEFAULT on purpose: every
         caller states its choice, so a new entry point cannot silently inherit
-        one. Its ordering constraint is the strictest of the four -- the wrappers
+        one. Its ordering constraint is the strictest of the five -- the wrappers
         are installed during the transformer build, and ``install()`` reads
         ``state.requested`` at that moment, so an arm after the build would
         produce a job that asked for sage and ran entirely on SDPA while
@@ -1263,14 +1324,30 @@ class Ltx25Pipeline:
         # that is already in force must NOT pop (and so destroy) the cache the
         # last job just filled. Only a CHANGE touches the registry.
         if keep_resident != self._keep_resident_enabled:
-            _swap_keep_resident(self._te_registry, self._te_builder, keep_resident)
+            _swap_keep_resident(
+                self._te_registry, self._te_builder, keep_resident,
+                label="text encoder (~7.7 GiB)",
+            )
             self._keep_resident_enabled = keep_resident
+
+        keep_resident_embeddings = bool(keep_resident_embeddings)
+        self._keep_resident_embeddings_requested = keep_resident_embeddings
+        # The second registry, guarded the same way and for the same reason. The
+        # two guards are separate because the two settings are: a job that turns
+        # one on and leaves the other alone must not pop the cache the other one
+        # is holding.
+        if keep_resident_embeddings != self._keep_resident_embeddings_enabled:
+            _swap_keep_resident(
+                self._ep_registry, self._ep_builder, keep_resident_embeddings,
+                label="embeddings processor (~4.6 GiB)",
+            )
+            self._keep_resident_embeddings_enabled = keep_resident_embeddings
 
     def set_nag_job(self, nag: "NagParams | VsfParams | None") -> None:
         """Arm (or clear, with ``None``) this job's non-CFG negative prompt.
 
         ONE ASSIGNMENT, and deliberately a SEPARATE method from
-        :meth:`set_acceleration_job` rather than a sixth argument to it. That
+        :meth:`set_acceleration_job` rather than one more argument to it. That
         method's whole contract is "these knobs do not change the output"
         (``attention_backend`` is the acknowledged exception and says so); a
         negative prompt changes it on purpose, and folding the two together
@@ -1330,18 +1407,20 @@ class Ltx25Pipeline:
         pipeline was closed is a shutdown race, not a bug worth failing on.
 
         The keep-resident third is DELIBERATELY ASYMMETRIC and needs no handler
-        of its own, because it undoes nothing: the two plain lines below freeze
-        the echo and clear the request, and the retained weights stay exactly
-        where they are. Releasing them here would destroy the feature -- the
-        point of keep-resident is that the NEXT job finds them still there --
+        of its own, because it undoes nothing: the four plain lines below freeze
+        the two echoes and clear the two requests, and the retained weights stay
+        exactly where they are. Releasing them here would destroy the feature --
+        the point of keep-resident is that the NEXT job finds them still there --
         and the release instead happens at the next :meth:`set_acceleration_job`
         that asks for it. Nothing here can raise, so the never-raise contract
-        above is untouched.
+        above is untouched. The embeddings pair is written out beside the text
+        encoder's rather than folded into a loop: two lines each, and a loop over
+        two attribute names would be harder to read than the thing it replaced.
 
-        A job that failed BEFORE the text encoder was ever built still echoes
-        "on" if it asked for it (the request is what the echo reports, exactly
-        as in 2.3) -- but a failed job emits no ``done`` at all, so that echo
-        never leaves the process.
+        A job that failed BEFORE the text encoder (or the EmbeddingsProcessor)
+        was ever built still echoes "on" if it asked for it (the request is what
+        the echo reports, exactly as in 2.3) -- but a failed job emits no ``done``
+        at all, so that echo never leaves the process.
 
         The sage third is the one that has to run FIRST, before anything that
         could raise or return early: ``SageState.reset`` snapshots
@@ -1353,6 +1432,10 @@ class Ltx25Pipeline:
         self._sage.reset()
         self._keep_resident_used = "on" if self._keep_resident_requested else "off"
         self._keep_resident_requested = False
+        self._keep_resident_embeddings_used = (
+            "on" if self._keep_resident_embeddings_requested else "off"
+        )
+        self._keep_resident_embeddings_requested = False
         try:
             # Verdict FIRST, teardown second: the tally the verdict reads is
             # per-job state on the stage, and disarming clears it.
@@ -1421,6 +1504,19 @@ class Ltx25Pipeline:
         path the request is also the outcome.
         """
         return self._keep_resident_used
+
+    def keep_resident_embeddings_used(self) -> str:
+        """What the last finished job's EmbeddingsProcessor residency actually
+        did: "off" or "on".
+
+        The same two-of-three story as :meth:`keep_resident_used` above, for the
+        same reason: the echo CONTRACT is 2.3's three-valued one ("off" / "on" /
+        "on->off"), and this engine has no third value to emit because it has no
+        degradation path -- the EmbeddingsProcessor takes no LoRA either, and is
+        loaded onto a shell the same way. The value is the REQUEST, frozen at
+        :meth:`reset_acceleration_job`.
+        """
+        return self._keep_resident_embeddings_used
 
     def attention_used(self) -> str:
         """What the last finished job's attention actually ran on: "sdpa",
@@ -1656,6 +1752,14 @@ class Ltx25Pipeline:
         self._te_builder = None
         self._te_registry = None
         self._keep_resident_enabled = False
+        # The EmbeddingsProcessor's pair goes with them, for symmetry rather than
+        # for leak prevention: this worker calls ``sys.exit(0)`` right after
+        # ``close()``, so the process takes the retained weights with it either
+        # way. Leaving one component's handles behind while dropping the other's
+        # would be the kind of asymmetry a later reader has to stop and explain.
+        self._ep_builder = None
+        self._ep_registry = None
+        self._keep_resident_embeddings_enabled = False
         # The negative prompt's encoded contexts are two live tensors on the
         # GPU. Nothing above reaches them -- the state is owned by this object,
         # not by the stage or the encoder -- so the collector below would keep

@@ -1,8 +1,16 @@
-"""The LTX 2.5 ``keep_resident`` switch, against the REAL official registry.
+"""The LTX 2.5 ``keep_resident`` switches, against the REAL official registry.
 
 Covers ``engine25.pipeline25._swap_keep_resident`` -- the whole of the feature's
 mechanism -- and the no-op guard in ``Ltx25Pipeline.set_acceleration_job`` that
 decides when it is allowed to run.
+
+TWO REGISTRIES, ONE MECHANISM, so every case below is run twice: once for the
+text encoder, whose builder has ONE ``model_path``, and once for the
+EmbeddingsProcessor, whose builder spans TWO files and therefore carries a
+TUPLE. The tuple half is not ceremony -- it is the only thing that can catch a
+key built the wrong way round, and a swap that keyed ``[model_path]`` instead of
+``as_path_list(model_path)`` would pass every single-path test here and strand
+4.6 GiB in production.
 
 Everything here is device-free and I/O-free. The registry is the official
 ``ModelRegistry`` (the point: a wheel that changed how ``_cache_weights`` is
@@ -39,27 +47,43 @@ import torch  # noqa: E402
 from torch import nn  # noqa: E402
 
 from engine.transformer.sage_attention_service import SageState  # noqa: E402
-from engine25.ltxcore_compat import ModelRegistry, StateDict  # noqa: E402
+from engine25.ltxcore_compat import ModelRegistry, StateDict, as_path_list  # noqa: E402
 from engine25.pipeline25 import Ltx25Pipeline, _swap_keep_resident  # noqa: E402
 
 #: A path that need not exist: the registry only hashes it (``Path.resolve`` on
 #: a missing name is not an error), and nothing here opens a file.
 FAKE_TE_GGUF = "S:/nonexistent/LTX-2.5-gemma4-text-encoder.gguf"
 
+#: The EmbeddingsProcessor's builder spans two files, transformer FIRST, exactly
+#: as ``gguf_gemma4.build_embeddings_processor_builder`` orders them.
+FAKE_EP_GGUFS = ("S:/nonexistent/LTX-2.5-transformer.gguf", FAKE_TE_GGUF)
+
 #: Stands in for the 7.7 GiB the real text encoder retains.
 FAKE_SIZE = 9_876_543_210
 
+#: The label is only log text, but the parameter is keyword-only and has no
+#: default, so every call has to say something.
+LABEL = "text encoder (~7.7 GiB)"
+
 
 class _DummyBuilder:
-    """The two attributes ``_swap_keep_resident`` reads off the TE builder.
+    """The two attributes ``_swap_keep_resident`` reads off a builder.
 
     Deliberately NOT a ``SingleGPUModelBuilder``: the swap must key the pop the
     same way ``load_state_dict`` keys the add, and the only thing that makes
     that true is these two values. Anything else on a real builder is noise for
     this question.
+
+    ``model_path`` is a plain string for the text encoder and a two-element
+    tuple for the EmbeddingsProcessor -- the one difference between the two
+    registries, and the reason ``as_path_list`` is on both sides below.
     """
 
-    def __init__(self, model_path: str = FAKE_TE_GGUF, model_sd_ops: object = None) -> None:
+    def __init__(
+        self,
+        model_path: str | tuple[str, ...] = FAKE_TE_GGUF,
+        model_sd_ops: object = None,
+    ) -> None:
         self.model_path = model_path
         self.model_sd_ops = model_sd_ops
 
@@ -69,12 +93,17 @@ def _state_dict() -> StateDict:
 
 
 def _cache(registry: ModelRegistry, builder: _DummyBuilder) -> StateDict:
-    """Fill the cache the way ``ltx_core.loader.helpers.load_state_dict`` does."""
-    return registry.add([builder.model_path], builder.model_sd_ops, _state_dict())
+    """Fill the cache the way ``ltx_core.loader.helpers.load_state_dict`` does.
+
+    Through ``as_path_list``, which is what ``load_state_dict`` itself calls: a
+    single path becomes a one-element list and a tuple becomes one entry per
+    file. Keying the fill any other way would test the test rather than the swap.
+    """
+    return registry.add(as_path_list(builder.model_path), builder.model_sd_ops, _state_dict())
 
 
 def _cached(registry: ModelRegistry, builder: _DummyBuilder) -> StateDict | None:
-    return registry.get([builder.model_path], builder.model_sd_ops)
+    return registry.get(as_path_list(builder.model_path), builder.model_sd_ops)
 
 
 def test_arming_on_makes_the_registry_start_caching_weights() -> None:
@@ -87,7 +116,7 @@ def test_arming_on_makes_the_registry_start_caching_weights() -> None:
     _cache(registry, builder)
     assert _cached(registry, builder) is None
 
-    released = _swap_keep_resident(registry, builder, True)
+    released = _swap_keep_resident(registry, builder, True, label=LABEL)
     assert released == 0  # nothing to release when turning it ON
 
     _cache(registry, builder)
@@ -113,6 +142,14 @@ def test_rearming_the_same_setting_leaves_the_cache_intact() -> None:
     pipeline._keep_resident_enabled = False
     pipeline._keep_resident_requested = False
     pipeline._keep_resident_used = "off"
+    # The embeddings half of the same knob: the method now reads and writes these
+    # five too, and this test leaves them OFF throughout -- an untouched second
+    # registry is also the proof that the two guards are independent.
+    pipeline._ep_registry = None
+    pipeline._ep_builder = None
+    pipeline._keep_resident_embeddings_enabled = False
+    pipeline._keep_resident_embeddings_requested = False
+    pipeline._keep_resident_embeddings_used = "off"
     pipeline._block_swap_prefetch_requested = False
     # The bare instance carries only what the two methods under test touch, and
     # the sage arm/reset is now among them: ``set_acceleration_job`` starts by
@@ -127,6 +164,10 @@ def test_rearming_the_same_setting_leaves_the_cache_intact() -> None:
             block_swap_prefetch=False,
             fused_gguf_dequant_kernel=False,
             keep_resident=keep_resident,
+            # Stated explicitly because the parameter has no default, exactly
+            # like the backend below: this test is about the TEXT ENCODER's
+            # guard, so the embeddings knob stays off for every job in it.
+            keep_resident_embeddings=False,
             # Stated explicitly because the parameter has no default: every
             # caller of this method declares its attention backend, so a new
             # entry point cannot inherit one by accident.
@@ -155,11 +196,11 @@ def test_arming_off_pops_the_retained_state_dict() -> None:
     registry = ModelRegistry(cache_weights=False, cache_models=True)
     builder = _DummyBuilder()
 
-    _swap_keep_resident(registry, builder, True)
+    _swap_keep_resident(registry, builder, True, label=LABEL)
     _cache(registry, builder)
     assert _cached(registry, builder) is not None
 
-    released = _swap_keep_resident(registry, builder, False)
+    released = _swap_keep_resident(registry, builder, False, label=LABEL)
 
     assert released == FAKE_SIZE, "the release has to report the bytes it actually gave back"
     assert _cached(registry, builder) is None, (
@@ -167,7 +208,7 @@ def test_arming_off_pops_the_retained_state_dict() -> None:
         "would keep serving -- and holding -- the retained weights forever"
     )
     # Turning it off twice is harmless and reports an honest zero.
-    assert _swap_keep_resident(registry, builder, False) == 0
+    assert _swap_keep_resident(registry, builder, False, label=LABEL) == 0
 
 
 def test_the_release_keeps_the_cached_model_shells() -> None:
@@ -177,9 +218,128 @@ def test_the_release_keeps_the_cached_model_shells() -> None:
     shell = nn.Linear(2, 2)
     registry.add_model("te-shell", shell)
 
-    _swap_keep_resident(registry, builder, True)
+    _swap_keep_resident(registry, builder, True, label=LABEL)
     _cache(registry, builder)
-    _swap_keep_resident(registry, builder, False)
+    _swap_keep_resident(registry, builder, False, label=LABEL)
 
     assert registry.get_model("te-shell") is shell
+    assert registry._models, "clear() would have taken the shells with the weights"
+
+
+# ---------------------------------------------------------------------------
+# The same four questions for the EmbeddingsProcessor's registry
+# ---------------------------------------------------------------------------
+#
+# One builder attribute differs -- ``model_path`` is a two-file tuple -- and that
+# is the whole reason these exist. ``as_path_list`` turns the tuple into the
+# two-element list the registry hashes; a swap that wrapped the tuple in a list
+# instead (``[model_path]``) would key a DIFFERENT entry, pop nothing, and leave
+# the retained weights being served forever. Nothing above can tell the two apart,
+# because for a single string they produce the same key.
+
+#: The label the pipeline passes for the second registry; only log text, but
+#: stated for the same reason ``LABEL`` is.
+EP_LABEL = "embeddings processor (~4.6 GiB)"
+
+
+def test_arming_on_makes_the_registry_start_caching_multi_file_weights() -> None:
+    """OFF -> ON on the two-file key: ``add`` retains from the next build on."""
+    registry = ModelRegistry(cache_weights=False, cache_models=True)
+    builder = _DummyBuilder(FAKE_EP_GGUFS)
+
+    _cache(registry, builder)
+    assert _cached(registry, builder) is None
+
+    released = _swap_keep_resident(registry, builder, True, label=EP_LABEL)
+    assert released == 0
+
+    _cache(registry, builder)
+    retained = _cached(registry, builder)
+    assert retained is not None
+    assert retained.size == FAKE_SIZE
+
+
+def test_rearming_the_same_embeddings_setting_leaves_the_cache_intact() -> None:
+    """ON -> ON on the second registry must not pop, and must not touch the first.
+
+    Driven through the real method for the same reason the text encoder's version
+    is: the guard, not the swap, is what makes a run of identical jobs hit the
+    cache. The text encoder's handles are left as ``None`` here, which is also
+    the assertion that arming one knob cannot reach the other's registry.
+    """
+    registry = ModelRegistry(cache_weights=False, cache_models=True)
+    builder = _DummyBuilder(FAKE_EP_GGUFS)
+
+    pipeline = Ltx25Pipeline.__new__(Ltx25Pipeline)
+    pipeline._te_registry = None
+    pipeline._te_builder = None
+    pipeline._keep_resident_enabled = False
+    pipeline._keep_resident_requested = False
+    pipeline._keep_resident_used = "off"
+    pipeline._ep_registry = registry
+    pipeline._ep_builder = builder
+    pipeline._keep_resident_embeddings_enabled = False
+    pipeline._keep_resident_embeddings_requested = False
+    pipeline._keep_resident_embeddings_used = "off"
+    pipeline._block_swap_prefetch_requested = False
+    pipeline._sage = SageState()
+
+    def arm(keep_resident_embeddings: bool) -> None:
+        pipeline.set_acceleration_job(
+            block_swap_prefetch=False,
+            fused_gguf_dequant_kernel=False,
+            keep_resident=False,
+            keep_resident_embeddings=keep_resident_embeddings,
+            attention_backend="sdpa",
+        )
+
+    arm(True)  # job 1 turns it on
+    _cache(registry, builder)  # job 1 builds the embeddings processor
+    assert _cached(registry, builder) is not None
+
+    arm(True)  # job 2 asks for the same thing
+    assert _cached(registry, builder) is not None, "the re-arm destroyed the cache it should hit"
+    assert pipeline._keep_resident_embeddings_enabled is True
+
+    # ...and the echo is frozen at reset, beside -- not instead of -- the text
+    # encoder's, which stayed off the whole time.
+    pipeline.reset_acceleration_job()
+    assert pipeline.keep_resident_embeddings_used() == "on"
+    assert pipeline.keep_resident_used() == "off"
+    assert pipeline._keep_resident_embeddings_requested is False
+    assert _cached(registry, builder) is not None
+    assert pipeline._keep_resident_embeddings_enabled is True
+
+
+def test_arming_off_pops_the_retained_multi_file_state_dict() -> None:
+    """ON -> OFF on the two-file key: the pop has to hit the entry ``add`` made."""
+    registry = ModelRegistry(cache_weights=False, cache_models=True)
+    builder = _DummyBuilder(FAKE_EP_GGUFS)
+
+    _swap_keep_resident(registry, builder, True, label=EP_LABEL)
+    _cache(registry, builder)
+    assert _cached(registry, builder) is not None
+
+    released = _swap_keep_resident(registry, builder, False, label=EP_LABEL)
+
+    assert released == FAKE_SIZE, (
+        "a key built from the tuple any way other than as_path_list would pop nothing "
+        "and report an honest-looking zero"
+    )
+    assert _cached(registry, builder) is None
+    assert _swap_keep_resident(registry, builder, False, label=EP_LABEL) == 0
+
+
+def test_the_embeddings_release_keeps_the_cached_model_shells() -> None:
+    """``pop``, never ``clear``, on the second registry as well."""
+    registry = ModelRegistry(cache_weights=False, cache_models=True)
+    builder = _DummyBuilder(FAKE_EP_GGUFS)
+    shell = nn.Linear(2, 2)
+    registry.add_model("ep-shell", shell)
+
+    _swap_keep_resident(registry, builder, True, label=EP_LABEL)
+    _cache(registry, builder)
+    _swap_keep_resident(registry, builder, False, label=EP_LABEL)
+
+    assert registry.get_model("ep-shell") is shell
     assert registry._models, "clear() would have taken the shells with the weights"

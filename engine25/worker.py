@@ -800,6 +800,9 @@ def _do_generate(msg: dict) -> None:
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
         keep_resident=keep_resident,
+        # Stated, not defaulted: the parameter has none. False until the request
+        # key is wired up, which is the next step of §3-114.
+        keep_resident_embeddings=False,
         attention_backend=attention,
     )
     # OUTSIDE the try for the same reason, and with an ordering constraint of
@@ -1328,6 +1331,9 @@ def _do_generate_chain(msg: dict) -> None:
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
         keep_resident=keep_resident,
+        # The single op's line verbatim: stated because the parameter has no
+        # default, and False until the request key is wired up (§3-114).
+        keep_resident_embeddings=False,
         attention_backend=attention,
     )
     # The single op's discipline verbatim, for the same ordering reason: armed

@@ -592,6 +592,26 @@ def verify() -> None:
         _fail("ModelRegistry.pop", "did not return the entry keep_resident releases by key")
     if probe.get(["<compat-probe>"], None) is not None:
         _fail("ModelRegistry.pop", "left the entry in place; keep_resident's OFF path would leak it")
+    # The SAME round trip on a TUPLE of paths, because the second registry
+    # keep_resident reaches is keyed on two files: the EmbeddingsProcessor's
+    # builder spans the transformer GGUF and the text-encoder GGUF, so its
+    # ``model_path`` is a 2-tuple and ``pipeline25._swap_keep_resident`` pops
+    # through ``as_path_list``. A wheel that stopped caching multi-file keys --
+    # or expanded them differently on the way in than on the way out -- would
+    # leave every signature intact and quietly strand 4.6 GiB, which the
+    # single-path probe above cannot see. MULTI_ENGINE_DESIGN.md's rule for
+    # private-attribute dependencies: the same shape of dependency gets the same
+    # handling.
+    probe = ModelRegistry(cache_weights=False, cache_models=True)
+    key = as_path_list(("<compat-probe-a>", "<compat-probe-b>"))
+    probe._cache_weights = True
+    probe.add(key, None, "sentinel")  # type: ignore[arg-type]
+    if probe.get(key, None) is None:
+        _fail("ModelRegistry.add", "no longer caches the multi-file key the embeddings processor uses")
+    if probe.pop(key, None) is None:
+        _fail("ModelRegistry.pop", "did not return the multi-file entry keep_resident releases by key")
+    if probe.get(key, None) is not None:
+        _fail("ModelRegistry.pop", "left the multi-file entry in place; the embeddings OFF path would leak it")
 
     # Quantization policy + state-dict ops.
     _require_dataclass_fields(

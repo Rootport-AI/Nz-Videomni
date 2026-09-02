@@ -48,8 +48,7 @@ Protocol (one JSON object per line; parent -> worker):
       change. A failure here is fatal: ``error`` + exit 1, which is what the
       app's load-failure path expects.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   output_path, [images], loras, reference_video, [outpaint],
-   [keep_resident_embeddings]}
+   output_path, [images], loras, reference_video, [outpaint]}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
       ignores (negative_prompt, num_steps, vae_mode, ...) may ride along; each
@@ -86,8 +85,7 @@ Protocol (one JSON object per line; parent -> worker):
       top-level ``ltx25``, never ``outpaint.ltx25``.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
-   [stage2_window], [source], [audio_source], [retake], [end_source],
-   [keep_resident_embeddings]}
+   [stage2_window], [source], [audio_source], [retake], [end_source]}
       One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
       body keys are the 2.3 chain op's, verbatim, because the app builds one
       payload shape for whichever engine is loaded. ``clips`` entries are

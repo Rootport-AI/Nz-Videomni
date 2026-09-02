@@ -1232,6 +1232,10 @@ describe("useBatchForm", () => {
       expect(withDefaults).not.toHaveProperty("attention_backend");
       expect(withDefaults).not.toHaveProperty("fused_gguf_dequant_kernel");
       expect(withDefaults).not.toHaveProperty("vae_mode");
+      // §3-114: this absence is load-bearing rather than tidy — LTX 2.3 refuses
+      // a `keep_resident_embeddings: true`, so a defaults row must not mention
+      // the key at all.
+      expect(withDefaults).not.toHaveProperty("keep_resident_embeddings");
     });
 
     it("sage: every row body carries attention_backend", async () => {
@@ -1269,6 +1273,18 @@ describe("useBatchForm", () => {
       // otherwise make the toggle work everywhere except Batch A2V.
       const body = await startAndCapture({ ...ACCELERATION_DEFAULTS, vaeMode: "prune_vaed" });
       expect(body.vae_mode).toBe("prune_vaed");
+    });
+
+    it("keep-embeddings-resident on: every row body carries keep_resident_embeddings (§3-114)", async () => {
+      // 台帳 §3-114 (2026-09-03): server default is false, so ON is what
+      // diverges. Same role as the three tests above — THE test that catches a
+      // missed entry in `useBatchForm`'s hand-written OR-list, which would
+      // otherwise make the toggle work everywhere except Batch A2V. This one is
+      // the only field in the list that ALSO needs a line in
+      // `buildA2vChainPayload`'s local payload interface, and a body captured
+      // here is what proves both landed.
+      const body = await startAndCapture({ ...ACCELERATION_DEFAULTS, keepResidentEmbeddings: true });
+      expect(body.keep_resident_embeddings).toBe(true);
     });
   });
 

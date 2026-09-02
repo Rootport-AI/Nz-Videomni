@@ -239,9 +239,12 @@ describe("useBaseModels", () => {
   it("carries each base model's unsupported_features and reports the ACTIVE one's", async () => {
     const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0 })));
 
-    // LTX 2.3 declares none — that empty array is the load-bearing half of
-    // this feature, because it is what leaves the ordinary case untouched.
-    expect(result.current.options[0]?.unsupportedFeatures).toEqual([]);
+    // 台帳 §3-114 (2026-09-03): LTX 2.3 declares exactly ONE name now, where it
+    // declared none for this feature's whole life. `keep_resident_embeddings`
+    // belongs to a component only LTX 2.5 has, so for the first time it is the
+    // OLDER engine that publishes a refusal — and it greys/hides nothing but a
+    // Settings row, which is why the ordinary case is still untouched here.
+    expect(result.current.options[0]?.unsupportedFeatures).toEqual(["keep_resident_embeddings"]);
     // §3-102: `chain` is no longer among them — LTX 2.5 chains now — and its
     // second stage took `v2v` and `a2v` with it. The End-source increment took
     // the LAST chain-family name, `end_source`, and the Outpainting increment
@@ -256,8 +259,9 @@ describe("useBaseModels", () => {
     // …and one POSITIVE assertion, so this stays a test that the list travels
     // at all rather than a list of things that are absent from an empty array.
     expect(result.current.options[1]?.unsupportedFeatures).toContain("two_stage_hq");
-    // LTX 2.3 is what is loaded, so nothing is disabled.
-    expect(result.current.unsupportedFeatures).toEqual([]);
+    // LTX 2.3 is what is loaded, so nothing is disabled — its one declared name
+    // (§3-114) hides a Settings row, not a mode.
+    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings"]);
     expect(result.current.disabledModes).toEqual([]);
   });
 
@@ -335,13 +339,17 @@ describe("useBaseModels", () => {
     );
     const { result } = await renderReady(apiClient);
     expect(result.current.disabledModes).toEqual([]);
-    expect(result.current.unsupportedFeatures).toEqual([]);
+    // §3-114: LTX 2.3's own one name is the starting list here. What matters
+    // for this test is that it is not `retake` — the switch below is what has
+    // to move `retake` in, and 2.3's `keep_resident_embeddings` out.
+    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings"]);
 
     await act(async () => {
       await result.current.switchBaseModel("LTX25");
     });
 
     expect(result.current.unsupportedFeatures).toContain("retake");
+    expect(result.current.unsupportedFeatures).not.toContain("keep_resident_embeddings");
     // The engine's OWN list travelled too, and what it no longer contains is
     // the point of this increment: `outpaint` left it, so the 画角拡張 sub-tab
     // below is expected FALSE where it used to be true.

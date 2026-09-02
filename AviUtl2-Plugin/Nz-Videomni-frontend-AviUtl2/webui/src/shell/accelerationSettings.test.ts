@@ -6,10 +6,16 @@ import {
   type AccelerationSettings,
 } from "./accelerationSettings";
 
-/** All five toggles at the "smart comfort marker" all-on configuration —
- * `attentionBackend: "sage"` and `vaeMode: "prune_vaed"` are the two that
- * DIFFER from `ACCELERATION_DEFAULTS` (the rest are already server-default
- * `true`/`false` as appropriate — see that constant's own doc comment). */
+/** Every toggle on — `attentionBackend: "sage"`, `vaeMode: "prune_vaed"` and,
+ * since 台帳 §3-114, `keepResidentEmbeddings: true` are the three that DIFFER
+ * from `ACCELERATION_DEFAULTS` (the rest are already server-default
+ * `true`/`false` as appropriate — see that constant's own doc comment).
+ *
+ * Note that this is NO LONGER identical to the "smart comfort marker" all-on
+ * configuration: the served `comfort_budgets` rows' `requires` maps name the
+ * original FIVE keys and say nothing about `keep_resident_embeddings`, so a row
+ * matches whatever this sixth field holds (`shell/comfortTable.ts`'s
+ * `matchesRequires` iterates the row's keys, not the field bag's). */
 function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSettings {
   return {
     attentionBackend: "sage",
@@ -17,18 +23,20 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     keepResident: true,
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
+    keepResidentEmbeddings: true,
     ...overrides,
   };
 }
 
 describe("effectiveAccelerationFields", () => {
-  it("maps all five toggles onto the server's own request-field vocabulary", () => {
+  it("maps all six toggles onto the server's own request-field vocabulary", () => {
     expect(effectiveAccelerationFields(makeAllOn(), true)).toEqual({
       attention_backend: "sage",
       block_swap_prefetch: true,
       keep_resident: true,
       fused_gguf_dequant_kernel: true,
       vae_mode: "prune_vaed",
+      keep_resident_embeddings: true,
     });
   });
 
@@ -42,6 +50,7 @@ describe("effectiveAccelerationFields", () => {
       "block_swap_prefetch",
       "fused_gguf_dequant_kernel",
       "keep_resident",
+      "keep_resident_embeddings",
       "vae_mode",
     ]);
     expect(fields).toEqual({
@@ -50,6 +59,7 @@ describe("effectiveAccelerationFields", () => {
       keep_resident: false,
       fused_gguf_dequant_kernel: true,
       vae_mode: "default",
+      keep_resident_embeddings: false,
     });
   });
 
@@ -70,6 +80,9 @@ describe("effectiveAccelerationFields", () => {
       effectiveAccelerationFields(makeAllOn({ fusedGgufDequantKernel: false }), true).fused_gguf_dequant_kernel,
     ).toBe(false);
     expect(effectiveAccelerationFields(makeAllOn({ vaeMode: "default" }), true).vae_mode).toBe("default");
+    expect(
+      effectiveAccelerationFields(makeAllOn({ keepResidentEmbeddings: false }), true).keep_resident_embeddings,
+    ).toBe(false);
   });
 
   it("must be called with the EFFECTIVE settings object, not the raw stored choice", () => {

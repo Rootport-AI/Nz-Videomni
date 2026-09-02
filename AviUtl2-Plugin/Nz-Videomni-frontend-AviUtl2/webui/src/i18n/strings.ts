@@ -1826,6 +1826,19 @@ export const en = {
      * and the bit-identical aside were dropped as noise for the reader. */
     accelKeepResidentNote:
       "64GB or more of memory recommended: LTX 2.3 keeps about 20GB of main memory resident, LTX 2.5 about 8GB (2.5 only keeps the part that reads the prompt). Keeps the model's CPU-side skeleton between jobs, greatly shortening the preprocessing of the second and later generations. The output does not change.",
+    /** Acceleration (2026-09-03, 台帳 §3-114): keep LTX 2.5's embeddings
+     * processor resident between jobs. The row is HIDDEN on LTX 2.3 (which has
+     * no such component and refuses the field), so the label names the engine
+     * it belongs to — a reader who sees the row is on 2.5, and a reader who has
+     * heard of it and cannot find it learns why from the label alone. */
+    accelKeepResidentEmbeddingsLabel: "Keep embeddings processor resident (LTX 2.5)",
+    accelKeepResidentEmbeddingsOn: "ON",
+    accelKeepResidentEmbeddingsOff: "OFF",
+    /** Shown under the row while it is on, same role as
+     * `accelKeepResidentNote`: the memory cost is what the reader needs at that
+     * moment, and it is not an output warning. */
+    accelKeepResidentEmbeddingsNote:
+      "For LTX 2.5 only. Keeps the part that arranges the prompt's reading between jobs, shortening the preprocessing of the second and later generations. It holds about 5GB of main memory, on top of the model skeleton above. The output does not change. Off by default.",
     backendUrlLabel: "Backend URL",
     backendUrlPlaceholder: "http://127.0.0.1:18620",
     loadingCurrent: "Loading current settings…",
@@ -2861,6 +2874,11 @@ export const ja: Strings = {
     accelKeepResidentPrefetchOffTooltip: "先読みblock swapが有効なときだけ使えます",
     accelKeepResidentNote:
       "メモリ64GB以上を推奨（LTX 2.3では約20GB、LTX 2.5では約8GBをメインメモリに常駐で使用します。2.5で常駐するのは文章を読み取る部分だけです）。モデルのCPU側骨格をジョブ間で保持し、2回目以降の生成の前処理を大幅に短縮します。生成結果は変わりません。",
+    accelKeepResidentEmbeddingsLabel: "埋め込み処理器の常駐（LTX 2.5）",
+    accelKeepResidentEmbeddingsOn: "ON",
+    accelKeepResidentEmbeddingsOff: "OFF",
+    accelKeepResidentEmbeddingsNote:
+      "LTX 2.5専用の項目です。文章の読み取り結果を整える部品をジョブ間で保持し、2回目以降の生成の前処理を短縮します。メインメモリを約5GB常駐で使用します（上のモデル骨格の常駐とは別枠で、両方onにすると合算されます）。生成結果は変わりません。既定はoffです。",
     backendUrlLabel: "接続先URL",
     backendUrlPlaceholder: "http://127.0.0.1:18620",
     loadingCurrent: "現在の設定を読み込み中…",

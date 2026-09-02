@@ -621,6 +621,10 @@ describe("useGenerationForm", () => {
       keepResident: true,
       fusedGgufDequantKernel: true,
       vaeMode: "prune_vaed",
+      // 台帳 §3-114: at its server default on purpose — no served row's
+      // `requires` map names `keep_resident_embeddings`, so it takes no part in
+      // the match, and the calibration behind these rows is the five above.
+      keepResidentEmbeddings: false,
     };
 
     /** LTX 2.3's engine family — the id whose only served row is the all-on

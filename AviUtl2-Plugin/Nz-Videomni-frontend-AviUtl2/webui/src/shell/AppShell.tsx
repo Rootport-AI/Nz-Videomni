@@ -1189,6 +1189,32 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     accelerationControls.setVaeMode("default");
   }, [vaeUnsupported, accelerationControls.acceleration.vaeMode, accelerationControls.setVaeMode]);
 
+  // 台帳 §3-114 (2026-09-03): the same arrangement one row further down the
+  // Settings panel, POINTING THE OTHER WAY. `keep_resident_embeddings` names a
+  // component only LTX 2.5 has, so it is LTX 2.3 that publishes the name and
+  // 422s a `true` — the first field 2.3 has ever refused. Read off the
+  // published `unsupported_features` exactly like the row above, never a
+  // base-model id: which engine lacks the part is the server's fact to state.
+  const keepResidentEmbeddingsUnsupported = baseModels.unsupportedFeatures.includes("keep_resident_embeddings");
+
+  // And the same write-back, for the same reason: the stored choice PERSISTS,
+  // so a `true` picked on LTX 2.5 would otherwise ride along on every request
+  // after a switch back to LTX 2.3 and 422 every job there.
+  //
+  // The two inputs are pulled out into locals FIRST, unlike the PrunaVAED
+  // effect above: `exhaustive-deps` cannot see through an
+  // `accelerationControls.acceleration.x` chain and asks for the whole object
+  // instead, which is what leaves that effect with a standing warning. These
+  // locals say the same thing in a form the rule can check, so this addition
+  // costs the lint baseline nothing.
+  const { setKeepResidentEmbeddings } = accelerationControls;
+  const keepResidentEmbeddingsChosen = accelerationControls.acceleration.keepResidentEmbeddings;
+  useEffect(() => {
+    if (!keepResidentEmbeddingsUnsupported) return;
+    if (!keepResidentEmbeddingsChosen) return;
+    setKeepResidentEmbeddings(false);
+  }, [keepResidentEmbeddingsUnsupported, keepResidentEmbeddingsChosen, setKeepResidentEmbeddings]);
+
   // §3-102 (LTX 2.5 Chained, first stage): once an engine CAN chain, the
   // Chained tab stays live but the material panels its engine still cannot use
   // have to grey individually. Computed here, next to `batchUnavailable`, so
@@ -1382,6 +1408,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
           onVaeModeChange={accelerationControls.setVaeMode}
           vaeUnsupported={vaeUnsupported}
+          onKeepResidentEmbeddingsChange={accelerationControls.setKeepResidentEmbeddings}
+          keepResidentEmbeddingsUnsupported={keepResidentEmbeddingsUnsupported}
           // The panel reads sage availability straight off this existing
           // shared /status poll — no capability fetch of its own.
           serverStatus={serverStatus}

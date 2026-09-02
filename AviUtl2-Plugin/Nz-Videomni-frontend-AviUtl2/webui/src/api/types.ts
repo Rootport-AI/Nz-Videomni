@@ -186,6 +186,21 @@ export interface GenerateRequest {
    * the usual decoder and records `vae_mode_used` when the pruned weights are
    * missing. Unrelated to the server's existing `vae_tiling` VRAM option. */
   vae_mode?: "default" | "prune_vaed";
+  /** Acceleration (2026-09-03, 台帳 §3-114): keep LTX 2.5's embeddings
+   * processor (the part that shapes the text encoder's output before the
+   * transformer sees it) resident between jobs. Built exclusively by
+   * `shell/accelerationSettings.ts`'s `accelerationRequestFields` and spread
+   * in — omitted entirely while the server default (`false`) is selected, so
+   * like `keep_resident` this key only ever appears as `true`. The output is
+   * bit-identical on/off; the cost is roughly 5GB of resident RAM, ON TOP OF
+   * `keep_resident`'s (they are separate switches over separate objects). The
+   * SCOPE runs the opposite way to every field above: the embeddings processor
+   * is LTX 2.5's own component, so an `engine_family: "ltx"` (LTX 2.3) base
+   * model publishes `keep_resident_embeddings` in its `unsupported_features`
+   * and answers a `true` with a 422 — the first field LTX 2.3 has ever refused.
+   * The backend records `keep_resident_embeddings_used` ("on"/"off" only —
+   * there is no degrade path, so no `"on->off"`) in the job metadata. */
+  keep_resident_embeddings?: boolean;
   /** Outpainting (2026-08-09, 台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-70, filed
    * as §1-13 at the time): the canvas-extension spec. Built
    * exclusively by `modes/edit/useOutpaintForm.ts` and omitted entirely by
@@ -427,6 +442,12 @@ export interface GenerateChainRequest {
    * (`shell/accelerationSettings.ts`'s `accelerationRequestFields`), same
    * "omitted while server default (`"default"`)" rule. */
   vae_mode?: "default" | "prune_vaed";
+  /** Acceleration (2026-09-03, 台帳 §3-114): mirrors
+   * `GenerateRequest.keep_resident_embeddings` — same single builder
+   * (`shell/accelerationSettings.ts`'s `accelerationRequestFields`), same
+   * "omitted while server default (`false`)" rule, and the same LTX 2.3-side
+   * 422 on a `true`. */
+  keep_resident_embeddings?: boolean;
   /** §1-17 Retake（選択範囲の撮り直し）。指定すると `clips` はちょうど 1 本
    * （その `num_frames` が窓の長さ＝窓長の単一ソース）でなければならず、
    * `source_video`/`source_audio`/`reference_video_id` とは排他。

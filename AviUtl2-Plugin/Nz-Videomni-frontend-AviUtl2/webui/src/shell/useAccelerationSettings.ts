@@ -37,6 +37,12 @@ export interface UseAccelerationSettingsResult {
    * it should survive a reload like the other four (backend §52,
    * 2026-08-05). */
   setVaeMode: (value: VaeMode) => void;
+  /** Write-through to `localStorage`, same persistence rationale as
+   * {@link setAttentionBackend} — whether this PC has the ~5GB of spare main
+   * memory to hold LTX 2.5's embeddings processor is a machine-level fact, so
+   * it should survive a reload like the other five (台帳 §3-114,
+   * 2026-09-03). */
+  setKeepResidentEmbeddings: (value: boolean) => void;
 }
 
 /**
@@ -49,12 +55,15 @@ export interface UseAccelerationSettingsResult {
  *
  * One `useState<AccelerationSettings>` with a lazy initializer, plus
  * functional updates in every setter (so none ever captures a stale value).
- * All FIVE fields — `attentionBackend` / `blockSwapPrefetch` / `keepResident` /
- * `fusedGgufDequantKernel` / `vaeMode` — restore from `localStorage` via
+ * All SIX fields — `attentionBackend` / `blockSwapPrefetch` / `keepResident` /
+ * `fusedGgufDequantKernel` / `vaeMode` / `keepResidentEmbeddings` — restore
+ * from `localStorage` via
  * {@link readStoredAcceleration}. `vaeMode` joined them on 2026-08-05 (backend
  * §52) when it stopped being a mock; before that it seeded at its default
  * every mount and had no setter, exactly the state `fusedGgufDequantKernel`
- * left on 2026-08-04.
+ * left on 2026-08-04. `keepResidentEmbeddings` joined on 2026-09-03 (台帳
+ * §3-114) with its setter and its Settings row in the same change, so it never
+ * spent a day in that state.
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -87,6 +96,7 @@ export function useAccelerationSettings(
       keepResident: stored.keepResident,
       fusedGgufDequantKernel: stored.fusedGgufDequantKernel,
       vaeMode: stored.vaeMode,
+      keepResidentEmbeddings: stored.keepResidentEmbeddings,
     };
   });
 
@@ -100,6 +110,7 @@ export function useAccelerationSettings(
       keepResident: acceleration.keepResident,
       fusedGgufDequantKernel: acceleration.fusedGgufDequantKernel,
       vaeMode: acceleration.vaeMode,
+      keepResidentEmbeddings: acceleration.keepResidentEmbeddings,
     });
   }, [
     acceleration.attentionBackend,
@@ -107,6 +118,7 @@ export function useAccelerationSettings(
     acceleration.keepResident,
     acceleration.fusedGgufDequantKernel,
     acceleration.vaeMode,
+    acceleration.keepResidentEmbeddings,
   ]);
 
   const setAttentionBackend = useCallback((value: AttentionBackend) => {
@@ -129,6 +141,10 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, vaeMode: value }));
   }, []);
 
+  const setKeepResidentEmbeddings = useCallback((value: boolean) => {
+    setAcceleration((prev) => ({ ...prev, keepResidentEmbeddings: value }));
+  }, []);
+
   // §1-10: readers get the EFFECTIVE object, the state above stays the stored
   // one (so `localStorage` and the panel's own restore-on-return both keep
   // working). Memoized on the two inputs, and `effectiveAcceleration` returns
@@ -146,5 +162,6 @@ export function useAccelerationSettings(
     setKeepResident,
     setFusedGgufDequantKernel,
     setVaeMode,
+    setKeepResidentEmbeddings,
   };
 }

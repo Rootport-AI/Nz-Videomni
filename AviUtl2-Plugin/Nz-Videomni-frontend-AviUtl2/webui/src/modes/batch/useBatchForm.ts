@@ -9,6 +9,7 @@ import {
   ATTENTION_BACKEND_DEFAULT,
   BLOCK_SWAP_PREFETCH_SERVER_DEFAULT,
   FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
+  KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   KEEP_RESIDENT_SERVER_DEFAULT,
   VAE_MODE_DEFAULT,
 } from "../../shell/accelerationSettings";
@@ -715,7 +716,7 @@ export function useBatchForm(
       ...(nag.enabled ? { nag } : {}),
       // Acceleration (2026-07-31; block-swap prefetch added 2026-08-01,
       // keep-resident 2026-08-02, fused GGUF dequant kernel 2026-08-04,
-      // PrunaVAED 2026-08-05): only
+      // PrunaVAED 2026-08-05, keep-resident-embeddings 2026-09-03): only
       // threaded through when it would
       // actually change the payload, so an all-defaults choice stays a no-op
       // for every row (`accelerationRequestFields` would return `{}` anyway —
@@ -728,7 +729,8 @@ export function useBatchForm(
       acceleration.blockSwapPrefetch !== BLOCK_SWAP_PREFETCH_SERVER_DEFAULT ||
       acceleration.keepResident !== KEEP_RESIDENT_SERVER_DEFAULT ||
       acceleration.fusedGgufDequantKernel !== FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT ||
-      acceleration.vaeMode !== VAE_MODE_DEFAULT
+      acceleration.vaeMode !== VAE_MODE_DEFAULT ||
+      acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT
         ? { acceleration }
         : {}),
     };

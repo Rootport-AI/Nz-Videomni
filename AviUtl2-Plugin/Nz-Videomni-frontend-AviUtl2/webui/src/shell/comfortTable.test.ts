@@ -13,7 +13,13 @@ import {
 
 /** All five toggles at the all-on configuration the `ltx` row requires —
  * `attentionBackend: "sage"` and `vaeMode: "prune_vaed"` are the two that
- * DIFFER from `ACCELERATION_DEFAULTS`. */
+ * DIFFER from `ACCELERATION_DEFAULTS`.
+ *
+ * `keepResidentEmbeddings` (台帳 §3-114) stays at its SERVER DEFAULT here, and
+ * deliberately: no served row's `requires` map mentions the key, so matching
+ * cannot depend on it either way (`matchesRequires` iterates the row's keys).
+ * The calibration those rows were measured at is the five above — writing the
+ * sixth as `true` would suggest it took part. */
 function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSettings {
   return {
     attentionBackend: "sage",
@@ -21,6 +27,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     keepResident: true,
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
+    keepResidentEmbeddings: false,
     ...overrides,
   };
 }

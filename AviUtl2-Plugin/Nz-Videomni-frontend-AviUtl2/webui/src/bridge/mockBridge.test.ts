@@ -667,7 +667,14 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     for (const base of body.base_models) {
       expect(Array.isArray(base.unsupported_features), base.id).toBe(true);
     }
-    expect(body.base_models.find((b) => b.id === "LTX23")?.unsupported_features).toEqual([]);
+    // 台帳 §3-114 (2026-09-03): LTX 2.3's list is no longer the empty one it was
+    // for this fixture's whole life. `keep_resident_embeddings` names LTX 2.5's
+    // embeddings processor, a component 2.3's pipeline does not have, so 2.3 is
+    // the engine that refuses it — the first field it has ever refused, and the
+    // first time this mechanism has pointed at the OLDER engine.
+    expect(body.base_models.find((b) => b.id === "LTX23")?.unsupported_features).toEqual([
+      "keep_resident_embeddings",
+    ]);
   });
 
   it("names LTX 2.5's v1 scope with the server's own feature names", async () => {

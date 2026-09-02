@@ -194,7 +194,7 @@ export interface A2vChainPayload {
   neg_method?: "nag" | "vsf";
   vsf_scale?: number;
   // Acceleration (2026-07-31 / 2026-08-01 / 2026-08-02 / 2026-08-04 /
-  // 2026-08-05): the five real fields — see
+  // 2026-08-05 / 2026-09-03): the six real fields — see
   // `BuildA2vChainPayloadParams.acceleration`. Every field
   // `accelerationRequestFields` can emit must appear here, or the spread below
   // would not type-check.
@@ -203,6 +203,7 @@ export interface A2vChainPayload {
   keep_resident?: boolean;
   fused_gguf_dequant_kernel?: boolean;
   vae_mode?: "default" | "prune_vaed";
+  keep_resident_embeddings?: boolean;
 }
 
 /**

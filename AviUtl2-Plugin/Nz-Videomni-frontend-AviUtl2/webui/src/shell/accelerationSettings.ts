@@ -4,8 +4,10 @@
  * backend §43), whether it prefetches block-swap transfers (2026-08-01,
  * backend §44), whether it keeps the models' CPU-side skeleton resident
  * between jobs (2026-08-02, backend §48), and whether GGUF dequantization runs
- * as one fused Triton kernel (2026-08-04, backend §51), and which VAE decoder
- * reconstructs the video (2026-08-05, backend §52 — PrunaVAED). Shared by
+ * as one fused Triton kernel (2026-08-04, backend §51), which VAE decoder
+ * reconstructs the video (2026-08-05, backend §52 — PrunaVAED), and whether
+ * LTX 2.5's embeddings processor stays resident between jobs (2026-09-03,
+ * 台帳 §3-114). Shared by
  * Create/Chain/Batch via a
  * single `AccelerationSettings` object (D1: `AppShell` useState + props, no
  * Context — exactly the arrangement `shell/nagSettings.ts` documents and every
@@ -14,8 +16,9 @@
  * the types, the constants, the `localStorage` read/write for the chosen
  * backend, and the additive request-field contract.
  *
- * Five items exist in the UI, and as of 2026-08-05 ALL FIVE are implemented
- * (`vaeMode` was the last mock; backend §52 turned it real):
+ * Six items exist in the UI, and ALL SIX are implemented — the fifth
+ * (`vaeMode`) was the last mock, which backend §52 turned real on 2026-08-05,
+ * and the sixth (`keepResidentEmbeddings`) was born real on 2026-09-03:
  *  - `attentionBackend` — REAL. `sdpa` (PyTorch's own scaled-dot-product
  *    attention, the server default) vs. `sage` (SageAttention 2.2.0, ~1.2-1.6x
  *    faster with no extra VRAM). Sent as `attention_backend`.
@@ -60,6 +63,25 @@
  *    capability flag — the backend degrades per job to `vae_mode_used:
  *    "on->off"` if the pruned weights are missing). `vaeMode` is unrelated to
  *    the server's existing `vae_tiling` VRAM option.
+ *  - `keepResidentEmbeddings` — REAL (2026-09-03, 台帳 §3-114). Keeps LTX 2.5's
+ *    EMBEDDINGS PROCESSOR (the component that shapes the text encoder's output
+ *    before it reaches the transformer) resident between jobs, so its GGUF is
+ *    not re-read every single time. Bit-identical output — the same part is
+ *    reused rather than rebuilt — at a cost of roughly 5GB of resident main
+ *    memory. Sent as `keep_resident_embeddings`; the SERVER default is `false`,
+ *    so the key rides along only while it is ON, exactly like `keep_resident`.
+ *    It is NOT gated on prefetch the way `keep_resident` is (a different engine
+ *    and a different mechanism — there is no pairing to honour), and it has no
+ *    `/status` capability flag for the same reason `keep_resident` has none:
+ *    whether it is worth turning on is a question about this machine's RAM,
+ *    which the server cannot answer.
+ *
+ *    THE DIRECTION OF ITS SCOPE IS THE OPPOSITE OF EVERY ROW ABOVE, and that is
+ *    the one thing worth remembering about it: the embeddings processor exists
+ *    only on LTX 2.5, so it is LTX 2.3 that publishes `keep_resident_embeddings`
+ *    in `unsupported_features` and 422s a `true`. `AppShell` hides the row (and
+ *    writes a leftover `true` back to `false`) on any engine that publishes the
+ *    name — the same treatment `prune_vaed` gets, just pointing the other way.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -106,6 +128,14 @@ export interface AccelerationSettings {
    * selected. Sent as `vae_mode`, and only while it is off the server default
    * (`"default"`). */
   vaeMode: VaeMode;
+  /** REAL (2026-09-03, 台帳 §3-114): keeps LTX 2.5's embeddings processor
+   * resident between jobs. Bit-identical output, same as {@link keepResident},
+   * and INDEPENDENT of it — the two are separate switches over two different
+   * objects, so their RAM costs add rather than overlap. Sent as
+   * `keep_resident_embeddings` — but only while ON, since the server defaults
+   * to `false`. The one row here whose SUPPORT points the other way: LTX 2.3
+   * has no embeddings processor, so 2.3 is the engine that refuses it. */
+  keepResidentEmbeddings: boolean;
 }
 
 /** Mirrors the backend's `api/models.py` `Field(...)` defaults as of
@@ -153,6 +183,16 @@ export const FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT = true;
  * therefore the same as `KEEP_RESIDENT_SERVER_DEFAULT`: the key rides along
  * only when the user turns it ON. */
 export const VAE_MODE_DEFAULT: VaeMode = "default";
+/** Server default for `keep_resident_embeddings` as of 台帳 §3-114
+ * (2026-09-03): `false`. Not flipped, and for `KEEP_RESIDENT_SERVER_DEFAULT`'s
+ * exact reason — keeping the embeddings processor resident costs roughly 5GB of
+ * main memory, so it is opt-in on a machine the owner judges to have the RAM
+ * for it. Direction therefore matches `keep_resident`: the key rides along only
+ * when the user turns it ON — which is also what keeps an LTX 2.3 request out
+ * of the 422, since the engine that refuses this field refuses a `true` and
+ * ignores an absent key (see
+ * {@link AccelerationSettings.keepResidentEmbeddings}). */
+export const KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT = false;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -176,17 +216,21 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
   fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   vaeMode: VAE_MODE_DEFAULT,
+  keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
 });
 
 /** The persisted subset of {@link AccelerationSettings} — as of 2026-08-05
  * (backend §52) that is the WHOLE of it: `vaeMode` was the last unpersisted
- * field, and it only was because it had no UI to change it. */
+ * field, and it only was because it had no UI to change it. §3-114's
+ * `keepResidentEmbeddings` (2026-09-03) arrived with its UI already attached,
+ * so it has been persisted from its first day. */
 export interface StoredAcceleration {
   attentionBackend: AttentionBackend;
   blockSwapPrefetch: boolean;
   keepResident: boolean;
   fusedGgufDequantKernel: boolean;
   vaeMode: VaeMode;
+  keepResidentEmbeddings: boolean;
 }
 
 const STORED_DEFAULTS: StoredAcceleration = {
@@ -195,6 +239,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
   fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   vaeMode: VAE_MODE_DEFAULT,
+  keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
 };
 
 /** Reads the persisted acceleration choices. Wrapped in a `try` since
@@ -208,12 +253,14 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *     backward-compat path `ACCELERATION_STORAGE_KEY`'s doc comment promises)
  *  3. the current JSON object `{"attentionBackend":...,
  *     "blockSwapPrefetch":...,"keepResident":...,
- *     "fusedGgufDequantKernel":...,"vaeMode":...}`
+ *     "fusedGgufDequantKernel":...,"vaeMode":...,
+ *     "keepResidentEmbeddings":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
  * (which has no `keepResident` key at all) — or a pre-§51 one (no
- * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`) — read back
+ * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`), or a pre-§3-114
+ * one (no `keepResidentEmbeddings`) — read back
  * cleanly. EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
  * whole-object write below would persist an `undefined` that reads back as
@@ -233,6 +280,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
       fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
       vaeMode: VAE_MODE_DEFAULT,
+      keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
     };
   }
   try {
@@ -251,6 +299,10 @@ export function readStoredAcceleration(): StoredAcceleration {
           ? rec.fusedGgufDequantKernel
           : FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
       vaeMode: vaeMode === "default" || vaeMode === "prune_vaed" ? vaeMode : VAE_MODE_DEFAULT,
+      keepResidentEmbeddings:
+        typeof rec.keepResidentEmbeddings === "boolean"
+          ? rec.keepResidentEmbeddings
+          : KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
     };
   } catch {
     return { ...STORED_DEFAULTS };
@@ -353,10 +405,11 @@ export interface AccelerationRequestFields {
   keep_resident?: boolean;
   fused_gguf_dequant_kernel?: boolean;
   vae_mode?: VaeMode;
+  keep_resident_embeddings?: boolean;
 }
 
 /**
- * The five acceleration settings as they would EFFECTIVELY run, expressed in
+ * The six acceleration settings as they would EFFECTIVELY run, expressed in
  * the SERVER's own vocabulary (the request field names) — every key always
  * present, so it can be matched key-by-key against a served
  * `AppLimits.comfort_budgets` row's `requires` map (2026-08-31,
@@ -398,6 +451,7 @@ export function effectiveAccelerationFields(
     keep_resident: acceleration.keepResident,
     fused_gguf_dequant_kernel: acceleration.fusedGgufDequantKernel,
     vae_mode: acceleration.vaeMode,
+    keep_resident_embeddings: acceleration.keepResidentEmbeddings,
   };
 }
 
@@ -458,6 +512,22 @@ export function accelerationRequestFields(
   // declaration order stable for the backend's frozen key-set tests.
   if (acceleration.vaeMode !== VAE_MODE_DEFAULT) {
     out.vae_mode = acceleration.vaeMode;
+  }
+  // §3-114 (2026-09-03): same "only when moved off the server default" rule
+  // again. Direction matches `keep_resident` (the server default is `false`, so
+  // the key only ever appears as `true`) and, like the fused kernel and the VAE
+  // row, it is INDEPENDENT — no capability flag and, unlike `keep_resident`, no
+  // dependency on prefetch either, so the raw setting is read straight off the
+  // object. Emitted LAST, keeping declaration order stable for the backend's
+  // frozen key-set tests, exactly as `vae_mode` was before it.
+  //
+  // The SCOPE half of this field's rule is not enforced here and must not be:
+  // an engine without an embeddings processor 422s a `true`, and it is
+  // `AppShell` that hides the row and writes the stored choice back to `false`
+  // when `GET /models` publishes the name. By the time a settings object
+  // reaches this function the answer is already in it.
+  if (acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT) {
+    out.keep_resident_embeddings = acceleration.keepResidentEmbeddings;
   }
   return out;
 }

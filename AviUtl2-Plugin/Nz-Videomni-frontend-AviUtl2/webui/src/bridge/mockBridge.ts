@@ -289,8 +289,13 @@ const MOCK_BASE_MODELS = [
  * driven by these exact strings, so a fixture that invented its own names
  * would let a typo in the real mapping pass every test.
  *
- * LTX 2.3's empty array is the load-bearing half — it is what proves the
- * ordinary case stays untouched.
+ * LTX 2.3's array was EMPTY until 台帳 §3-114 (2026-09-03), and that emptiness
+ * was the load-bearing half — it was what proved the ordinary case stays
+ * untouched. It holds ONE name now, and the direction of the whole mechanism
+ * is what changed with it: `keep_resident_embeddings` names a component only
+ * LTX 2.5 has (its embeddings processor), so for the first time it is the OLDER
+ * engine that has to say no. Mirrors `services/engines/ltx/adapter.py`'s
+ * `REJECT_TABLE`, which the real `UNSUPPORTED_FEATURES` is derived from.
  *
  * §3-102 (LTX 2.5 Chained, first stage): `"chain"` is GONE from LTX25 — the
  * engine chains now.
@@ -312,7 +317,17 @@ const MOCK_BASE_MODELS = [
  * timeline's tail. What remains for LTX 2.5 is engine-level features only, and
  * `handleGenerateChain` refuses exactly those. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
-  LTX23: [],
+  LTX23: [
+    // 台帳 §3-114 (2026-09-03): THE FIRST NAME THIS ARRAY HAS EVER HELD, and
+    // the first field LTX 2.3 has ever refused. `keep_resident_embeddings`
+    // keeps LTX 2.5's EmbeddingsProcessor resident between jobs — 2.3's
+    // pipeline has no such component, so a `true` earns a 422 here rather than
+    // being ignored. Nothing else about this fixture's LTX 2.3 changes: the
+    // per-field chain refusal loop below only fires on a field the ACTIVE base
+    // model declares, so every other request 2.3 has ever served still sails
+    // through untouched.
+    "keep_resident_embeddings",
+  ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
     // BOTH ends of a single window now (`engine25/chain25.py`), so the server
@@ -374,8 +389,9 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
  *
  * The pair is what makes the refusal HONEST — the fixture never invents a
  * limitation, it only enforces what the same fixture already declared for the
- * ACTIVE base model. That is why LTX 2.3, whose array is empty, keeps sailing
- * through every one of these fields exactly as it always did — and why the
+ * ACTIVE base model. That is why LTX 2.3 keeps sailing through every one of
+ * these fields exactly as it always did EXCEPT the one it declares itself since
+ * §3-114 (`keep_resident_embeddings`) — and why the
  * `source_video` / `source_audio` rows stay put now that LTX 2.5 no longer
  * declares `v2v` / `a2v` — and, third stage, why the `loras` /
  * `reference_video_id` rows stay put too: the row only says which feature name a field belongs
@@ -410,6 +426,13 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // field -- so nothing there was ever wrong, and nothing there is being fixed.
   { field: "pipeline", feature: "two_stage_hq", isSet: (v) => v != null && v !== "distilled" },
   { field: "vae_mode", feature: "prune_vaed", isSet: (v) => v != null && v !== "default" },
+  // 台帳 §3-114 (2026-09-03): the first row here whose feature belongs to LTX
+  // 2.3's list rather than LTX 2.5's — see {@link MOCK_UNSUPPORTED_FEATURES}.
+  // NO `isSet` of its own: the field is a boolean defaulting to `false`, which
+  // is exactly the case the shared {@link isChainFieldSet} predicate reads
+  // correctly (`false` is not a request, `true` is), unlike the two
+  // string-valued rows above it.
+  { field: "keep_resident_embeddings", feature: "keep_resident_embeddings" },
 ];
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";
@@ -1425,8 +1448,11 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     // real server rejects an unsupported feature ahead of everything else, so
     // the user is never sent to fix a clip count on a request that could not
     // have run anyway. Driven by the ACTIVE base model's own declared list
-    // (`MOCK_UNSUPPORTED_FEATURES`), never by a hard-coded base-model id:
-    // LTX 2.3 declares none, so this loop cannot fire for it at all.
+    // (`MOCK_UNSUPPORTED_FEATURES`), never by a hard-coded base-model id —
+    // which is what let LTX 2.3 join the mechanism with 台帳 §3-114
+    // (2026-09-03) without a line changing here: until then 2.3 declared
+    // nothing and this loop could not fire for it at all; now it declares
+    // `keep_resident_embeddings` and the loop fires on that one field.
     const activeUnsupported = new Set(MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []);
     for (const { field, feature, isSet } of MOCK_CHAIN_FEATURE_FIELDS) {
       if (!activeUnsupported.has(feature)) continue;

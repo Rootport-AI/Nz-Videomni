@@ -5,6 +5,7 @@ import {
   ATTENTION_BACKEND_DEFAULT,
   BLOCK_SWAP_PREFETCH_SERVER_DEFAULT,
   KEEP_RESIDENT_SERVER_DEFAULT,
+  KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   VAE_MODE_DEFAULT,
 } from "./accelerationSettings";
@@ -27,6 +28,7 @@ describe("useAccelerationSettings", () => {
       keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
       fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
       vaeMode: VAE_MODE_DEFAULT,
+      keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
     });
   });
 
@@ -59,6 +61,7 @@ describe("useAccelerationSettings", () => {
         keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
 
@@ -71,6 +74,7 @@ describe("useAccelerationSettings", () => {
         keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
   });
@@ -90,6 +94,7 @@ describe("useAccelerationSettings", () => {
         keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
 
@@ -102,6 +107,7 @@ describe("useAccelerationSettings", () => {
         keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
   });
@@ -143,6 +149,7 @@ describe("useAccelerationSettings", () => {
         keepResident: true,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
 
@@ -155,6 +162,7 @@ describe("useAccelerationSettings", () => {
         keepResident: false,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
   });
@@ -243,6 +251,7 @@ describe("useAccelerationSettings", () => {
         keepResident: true,
         fusedGgufDequantKernel: true,
         vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
 
@@ -294,7 +303,7 @@ describe("useAccelerationSettings", () => {
     expect(result.current.acceleration.attentionBackend).toBe("sdpa");
   });
 
-  it("setVaeMode updates state, writes through, and does not disturb the other four", async () => {
+  it("setVaeMode updates state, writes through, and does not disturb the other five", async () => {
     const { result } = renderHook(() => useAccelerationSettings());
 
     act(() => result.current.setAttentionBackend("sage"));
@@ -312,6 +321,7 @@ describe("useAccelerationSettings", () => {
         keepResident: true,
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: "prune_vaed",
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       });
     });
 
@@ -320,6 +330,67 @@ describe("useAccelerationSettings", () => {
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).vaeMode).toBe("default");
     });
+  });
+
+  // 台帳 §3-114 (2026-09-03): the sixth persisted field. Like the fused kernel
+  // and the VAE row, and UNLIKE the keep-resident field it is named after, it is
+  // folded by nothing — what is stored is what every reader sees.
+  it("restores a persisted keepResidentEmbeddings=true from the JSON form", () => {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({ attentionBackend: "sdpa", blockSwapPrefetch: true, keepResidentEmbeddings: true }),
+    );
+    const { result } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.keepResidentEmbeddings).toBe(true);
+    expect(result.current.acceleration.attentionBackend).toBe("sdpa");
+  });
+
+  it("setKeepResidentEmbeddings updates state, writes through, and does not disturb the other five", async () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+
+    act(() => result.current.setAttentionBackend("sage"));
+    act(() => result.current.setKeepResident(true));
+    act(() => result.current.setKeepResidentEmbeddings(true));
+
+    expect(result.current.acceleration.keepResidentEmbeddings).toBe(true);
+    expect(result.current.acceleration.attentionBackend).toBe("sage");
+    expect(result.current.acceleration.keepResident).toBe(true);
+    expect(result.current.acceleration.vaeMode).toBe(VAE_MODE_DEFAULT);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!)).toEqual({
+        attentionBackend: "sage",
+        blockSwapPrefetch: true,
+        keepResident: true,
+        fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
+        vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: true,
+      });
+    });
+
+    act(() => result.current.setKeepResidentEmbeddings(false));
+    expect(result.current.acceleration.keepResidentEmbeddings).toBe(false);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).keepResidentEmbeddings).toBe(false);
+    });
+  });
+
+  it("keepResidentEmbeddings is NOT folded by prefetch being off — an independent toggle", () => {
+    // The distinction that matters, since the two rows share a name:
+    // `keepResident` is folded down while prefetch is off (§1-10), and this one
+    // is a switch over a different object on a different engine, with no such
+    // pairing to honour.
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: false,
+        keepResident: true,
+        keepResidentEmbeddings: true,
+      }),
+    );
+    const { result } = renderHook(() => useAccelerationSettings(false));
+    expect(result.current.acceleration.keepResident).toBe(false);
+    expect(result.current.acceleration.keepResidentEmbeddings).toBe(true);
   });
 
   it("vaeMode is NOT folded by prefetch being off — an independent toggle", () => {

@@ -93,6 +93,14 @@ function Harness({
       // they take the ordinary "supported" case. The hiding itself is covered
       // end-to-end through the fixture server in `AppShell.featureScope.test.tsx`.
       vaeUnsupported={false}
+      onKeepResidentEmbeddingsChange={accelerationControls.setKeepResidentEmbeddings}
+      // 台帳 §3-114: the mirror image of `vaeUnsupported` above — this row is
+      // hidden on an engine that publishes `keep_resident_embeddings`, which is
+      // LTX 2.3 rather than LTX 2.5. Same reasoning applies here: these tests
+      // render the panel directly with no base model in play, so they take the
+      // ordinary "supported" case, and the hiding itself is covered end-to-end
+      // through the fixture server in `AppShell.featureScope.test.tsx`.
+      keepResidentEmbeddingsUnsupported={false}
       serverStatus={serverStatus}
     />
   );
@@ -330,6 +338,7 @@ describe("SettingsPanel", () => {
         keepResident: false,
         fusedGgufDequantKernel: true,
         vaeMode: "prune_vaed",
+        keepResidentEmbeddings: false,
       });
     });
     expect(readStoredAcceleration().vaeMode).toBe("prune_vaed");
@@ -438,6 +447,7 @@ describe("SettingsPanel", () => {
         keepResident: false,
         fusedGgufDequantKernel: true,
         vaeMode: "default",
+        keepResidentEmbeddings: false,
       });
     });
     expect(readStoredAcceleration().blockSwapPrefetch).toBe(false);
@@ -523,6 +533,7 @@ describe("SettingsPanel", () => {
         keepResident: true,
         fusedGgufDequantKernel: true,
         vaeMode: "default",
+        keepResidentEmbeddings: false,
       });
     });
     expect(readStoredAcceleration().keepResident).toBe(true);
@@ -640,6 +651,7 @@ describe("SettingsPanel", () => {
         keepResident: false,
         fusedGgufDequantKernel: false,
         vaeMode: "default",
+        keepResidentEmbeddings: false,
       });
     });
     expect(readStoredAcceleration().fusedGgufDequantKernel).toBe(false);

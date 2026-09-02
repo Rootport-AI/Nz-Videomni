@@ -504,4 +504,86 @@ describe("AppShell — base-model feature scope", () => {
 
     await waitFor(() => expect(readStoredAcceleration().vaeMode).toBe("default"));
   });
+
+  // -- 台帳 §3-114 (2026-09-03): keep the embeddings processor resident, the
+  // -- same mechanism RUNNING BACKWARDS ------------------------------------
+  //
+  // `keep_resident_embeddings` is a REAL entry too, but on LTX 2.3's published
+  // list rather than LTX 2.5's — it names LTX 2.5's embeddings processor, a
+  // component 2.3's pipeline does not have. So this is the first feature in
+  // this file whose row is hidden BEFORE the base-model switch and appears
+  // AFTER it, and the first one LTX 2.3 has ever refused. Everything else about
+  // it matches PrunaVAED above: a hard 422 rather than a downgrade, so the row
+  // is hidden outright and a leftover choice is written back.
+
+  /** Seeds the persisted Acceleration choices with the embeddings processor
+   * kept resident — the leftover a user leaves behind by turning it on while
+   * LTX 2.5 is loaded. Whole JSON object, same as {@link storePruneVaed}. */
+  function storeKeepResidentEmbeddings() {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: true,
+        keepResident: false,
+        fusedGgufDequantKernel: true,
+        vaeMode: "default",
+        keepResidentEmbeddings: true,
+      }),
+    );
+  }
+
+  /** The row itself — its `role="group"` button pair, named by
+   * `strings.settings.accelKeepResidentEmbeddingsLabel`. The `^…$` anchors keep
+   * it from also matching the plain keep-resident row above it. */
+  function embeddingsRow() {
+    return screen.queryByRole("group", { name: /^Keep embeddings processor resident \(LTX 2\.5\)$/ });
+  }
+
+  /** The row's note (`strings.settings.accelKeepResidentEmbeddingsNote`), a
+   * SIBLING of the row — asserted alongside it for the same reason the
+   * PrunaVAED note is: the two are wrapped by one condition. */
+  function embeddingsNote() {
+    return screen.queryByText(/keeps the part that arranges the prompt's reading between jobs/i);
+  }
+
+  it("hides the keep-embeddings-resident row AND its note on LTX 2.3, and shows both on LTX 2.5", async () => {
+    // The REVERSE of the PrunaVAED case: absent at startup (LTX 2.3 is what
+    // loads first) and present after the switch. Seeded ON so the note is on
+    // screen the moment the row is — without that, the note would be absent
+    // either way and the row's appearance would prove nothing about it.
+    storeKeepResidentEmbeddings();
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    // LTX 2.3 publishes the name, so the row is not there at all — and the
+    // normalization effect below has already turned the stored choice off.
+    expect(embeddingsRow()).toBeNull();
+    expect(embeddingsNote()).toBeNull();
+
+    // The panel stays open across the switch, exactly as in the PrunaVAED test.
+    await switchToLtx25(select);
+
+    await waitFor(() => expect(embeddingsRow()).toBeInTheDocument());
+    // The note follows the row's OWN state, and the normalization above turned
+    // the choice off, so it is the row that has to be turned on for the note to
+    // return. That is the sibling relationship this assertion is really about.
+    expect(embeddingsNote()).toBeNull();
+    await user.click(within(embeddingsRow()!).getByRole("button", { name: "ON" }));
+    await waitFor(() => expect(embeddingsNote()).toBeInTheDocument());
+  });
+
+  it("writes a leftover keep-embeddings-resident choice back to the server default on LTX 2.3", async () => {
+    // Hiding the row is not enough on its own, same as PrunaVAED: the choice
+    // PERSISTS, so a `true` picked on LTX 2.5 would keep riding along on every
+    // request to LTX 2.3, which 422s it. Here the write-back fires at STARTUP
+    // rather than after a switch — LTX 2.3 is the model that loads first — so
+    // this is the "leftover from a previous session" half of the effect, which
+    // the PrunaVAED pair covers only through a switch.
+    storeKeepResidentEmbeddings();
+    await renderApp(AS_LTX25);
+
+    await waitFor(() => expect(readStoredAcceleration().keepResidentEmbeddings).toBe(false));
+  });
 });

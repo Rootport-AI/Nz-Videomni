@@ -572,13 +572,16 @@ describe("selectedRangeFramesForIntent / retake の尺シード（§1-17）", ()
 // intents are a different quantity (a per-clip length inside a chain) and stay
 // on the legacy table.
 describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
-  /** All five toggles on: exactly what the served `ltx` row requires. */
+  /** All five toggles on: exactly what the served `ltx` row requires. The sixth
+   * (`keepResidentEmbeddings`, 台帳 §3-114) sits at its server default because
+   * no served row's `requires` map names it — it takes no part in the match. */
   const FULL_ACCELERATION = {
     attentionBackend: "sage",
     blockSwapPrefetch: true,
     keepResident: true,
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
+    keepResidentEmbeddings: false,
   } as const;
 
   function smartSeed(intent: string, selection: Selection, engineFamily = "ltx") {
@@ -610,6 +613,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       keepResident: false,
       fusedGgufDequantKernel: true,
       vaeMode: "default",
+      keepResidentEmbeddings: false,
     } as const;
     const withDefaults = (engineFamily: string) =>
       resolvePrefillSeed({

@@ -74,6 +74,19 @@ export interface SettingsPanelProps {
    * its own), this one HIDES the row outright: an engine that publishes the name
    * 422s the field, so there is no degraded-but-working choice left to offer. */
   vaeUnsupported: boolean;
+  /** Acceleration (2026-09-03, 台帳 §3-114): keep LTX 2.5's embeddings
+   * processor resident between jobs. INDEPENDENT like the fused-kernel and VAE
+   * rows — no `/status` capability flag, and, unlike the keep-resident row it
+   * sits under, no dependency on block-swap prefetch either. */
+  onKeepResidentEmbeddingsChange: (value: boolean) => void;
+  /** 台帳 §3-114: whether the LOADED base model's engine refuses
+   * `keep_resident_embeddings` — derived by `AppShell` from the
+   * `unsupported_features` list `GET /models` publishes, never from a
+   * base-model id. Same HIDE-don't-grey treatment as {@link vaeUnsupported},
+   * and for the same reason (a hard 422, not a silent downgrade) — but the
+   * OTHER WAY ROUND: the embeddings processor is LTX 2.5's own component, so it
+   * is LTX 2.3 that publishes the name and hides this row. */
+  keepResidentEmbeddingsUnsupported: boolean;
   /** `AppShell`'s existing `useServerStatus` state (the same `/status` poll the
    * header badge reads) — the ONLY source of sage availability. No separate
    * capability hook/fetch exists on purpose; see
@@ -98,6 +111,8 @@ export function SettingsPanel({
   onFusedGgufDequantKernelChange,
   onVaeModeChange,
   vaeUnsupported,
+  onKeepResidentEmbeddingsChange,
+  keepResidentEmbeddingsUnsupported,
   serverStatus,
   nativeBridge,
 }: SettingsPanelProps) {
@@ -408,6 +423,56 @@ export function SettingsPanel({
             needs in front of them at that moment. Not a warning about output
             quality: like prefetch, the frames are bit-identical either way. */}
         {keepResidentShown && <p className="field-hint">{strings.settings.accelKeepResidentNote}</p>}
+
+        {/* Keep the embeddings processor resident (2026-09-03, 台帳 §3-114) —
+            the sibling of the row above, over a different object. Same
+            two-button shape, but NO prefetch gate: this one is a switch of its
+            own on a different engine, so both buttons stay live whatever
+            block-swap prefetch is doing, and the row renders the raw stored
+            choice rather than a folded one.
+
+            HIDDEN OUTRIGHT — not greyed — on an engine whose published
+            `unsupported_features` name `keep_resident_embeddings`, exactly like
+            the PrunaVAED row below and for the same reason (a hard 422, not a
+            silent downgrade). What differs is WHICH engine that is: the
+            embeddings processor exists only on LTX 2.5, so it is LTX 2.3 that
+            hides this row. Row and note are wrapped by the ONE condition on
+            purpose — they are siblings, and condition-ing only the row would
+            leave the note stranded. */}
+        {!keepResidentEmbeddingsUnsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelKeepResidentEmbeddingsLabel}</span>
+              <div
+                className="settings-lang-toggle"
+                role="group"
+                aria-label={strings.settings.accelKeepResidentEmbeddingsLabel}
+              >
+                {[
+                  { on: true, label: strings.settings.accelKeepResidentEmbeddingsOn },
+                  { on: false, label: strings.settings.accelKeepResidentEmbeddingsOff },
+                ].map(({ on, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`mode-tab${acceleration.keepResidentEmbeddings === on ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.keepResidentEmbeddings === on}
+                    onClick={() => onKeepResidentEmbeddingsChange(on)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Shown only while it is ON, like the keep-resident note above:
+                the RAM cost is what the reader needs in front of them at that
+                moment. Not an output warning — the frames are bit-identical
+                either way. */}
+            {acceleration.keepResidentEmbeddings && (
+              <p className="field-hint">{strings.settings.accelKeepResidentEmbeddingsNote}</p>
+            )}
+          </>
+        )}
 
         {/* PrunaVAED (2026-08-05, backend §52). Same two-button shape as the
             fused-kernel row above and, like it, gated on no `/status`

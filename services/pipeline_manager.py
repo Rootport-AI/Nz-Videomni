@@ -93,35 +93,24 @@ def _prompt_for_log(prompt: str, limit: int = _PROMPT_LOG_MAX) -> str:
 
 
 def _loras_for_log(specs, resolved) -> str:
-    """``name(strength=R[, effective=E][, audio=A[, effective=E]])`` per adapter,
-    or ``none``.
+    """``name(strength=R)[, audio=A]`` per adapter, or ``none``.
 
-    ``specs`` are the request ``LoraSpec``s (friendly NAME + the REQUESTED
-    strength); ``resolved`` are the registry ``ResolvedLora``s in the SAME order
-    (see ``LoraRegistry.resolve`` — ``effective`` folds in the alpha/rank
-    convolution). ``effective`` is only shown when it actually differs from the
-    requested strength, so the common scale==1.0 case stays terse. The
-    ``audio=`` segment is appended only when the resolved audio_strength is not
-    None (video-axis-only jobs keep the exact prior rendering).
+    ``specs`` are the request ``LoraSpec``s (friendly NAME + strength);
+    ``resolved`` are the registry ``ResolvedLora``s in the SAME order. Since
+    §3-108, ``LoraRegistry.resolve`` returns the requested strength untouched
+    (the alpha/rank metadata multiplier is gone), so requested and effective can
+    no longer differ and only one number is ever worth printing. The ``audio=``
+    segment is appended only when the resolved audio_strength is not None
+    (video-axis-only jobs keep the exact prior rendering).
     """
     if not specs:
         return "none"
     parts: list[str] = []
     for i, spec in enumerate(specs):
-        eff = resolved[i][1] if i < len(resolved) else None
-        if eff is not None and abs(float(eff) - float(spec.strength)) > 1e-6:
-            part = f"{spec.name}(strength={spec.strength:g}, effective={float(eff):g})"
-        else:
-            part = f"{spec.name}(strength={spec.strength:g})"
+        part = f"{spec.name}(strength={spec.strength:g})"
         audio_eff = resolved[i][3] if i < len(resolved) and len(resolved[i]) > 3 else None
         if audio_eff is not None:
-            requested_audio = getattr(spec, "audio_strength", None)
-            if requested_audio is not None and abs(
-                float(audio_eff) - float(requested_audio)
-            ) > 1e-6:
-                part += f", audio={requested_audio:g}, effective={float(audio_eff):g}"
-            else:
-                part += f", audio={float(audio_eff):g}"
+            part += f", audio={float(audio_eff):g}"
         parts.append(part)
     return ", ".join(parts)
 

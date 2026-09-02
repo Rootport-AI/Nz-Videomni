@@ -48,10 +48,17 @@ def _control_safetensors(path, factor: str = "1") -> None:
     """Write a minimal safetensors file whose header declares
     ``reference_downscale_factor`` — which is exactly what makes
     ``services.lora_registry`` classify the adapter as CONTROL kind with
-    ``preprocess: none``, the combination outpainting requires."""
+    ``preprocess: none``, the combination outpainting requires.
+
+    The ``lora_A`` key is there for §3-108: a header with no recognisable LoRA
+    weight keys is now an UNSUPPORTED layout that ``resolve()`` 422s on. It does
+    not disturb the CONTROL classification, which comes purely from the
+    ``reference_downscale_factor`` metadata above."""
     header = {
         "__metadata__": {"reference_downscale_factor": factor},
-        "dummy": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]},
+        "diffusion_model.transformer_blocks.0.attn1.to_q.lora_A.weight": {
+            "dtype": "F32", "shape": [1], "data_offsets": [0, 4],
+        },
     }
     blob = json.dumps(header).encode("utf-8")
     path.write_bytes(struct.pack("<Q", len(blob)) + blob + b"\x00" * 4)

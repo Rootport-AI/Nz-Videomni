@@ -420,3 +420,64 @@ def test_run_chain_clears_stale_ic_loras_when_none(monkeypatch):
     set_calls = [c for c in calls if isinstance(c, tuple) and c[0] == "set_ic_job"]
     assert set_calls == [("set_ic_job", [], None, 1.0)]
     assert calls.index(set_calls[0]) < calls.index("video_encoder")
+
+
+# --------------------------------------------- §3-108: unsupported LoRA layout
+
+
+UNSUPPORTED_LORA = "loha-style"
+
+
+@pytest.fixture()
+def chain_unsupported_lora_client(tmp_path):
+    """Chain-side twin of ``test_ic_lora_api``'s fixture: one registered adapter
+    whose file is a valid safetensors carrying a LoHa factorisation, a layout the
+    engine loader cannot pair into (A, B). ``lora_dir`` is pinned to a tmp dir so
+    the real ./models/LTX23/StyleLoRA folder cannot leak in."""
+    import struct
+
+    lora_file = tmp_path / "loha-style.safetensors"
+    header = {
+        "lora_unet_transformer_blocks_0_attn1_to_q.hada_w1_a": {
+            "dtype": "F16", "shape": [16, 4096], "data_offsets": [0, 0],
+        },
+        "lora_unet_transformer_blocks_0_attn1_to_q.hada_w1_b": {
+            "dtype": "F16", "shape": [4096, 16], "data_offsets": [0, 0],
+        },
+    }
+    blob = json.dumps(header).encode("utf-8")
+    lora_file.write_bytes(struct.pack("<Q", len(blob)) + blob + b"\x00" * 16)
+
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {
+            "backend": "mock",
+            "ic_loras": {UNSUPPORTED_LORA: lora_file.as_posix()},
+            "lora_dir": (tmp_path / "empty-lora-dir").as_posix(),
+        },
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    app = main.build_app(_make_args(cfg_path.as_posix()))
+    with TestClient(app) as c:
+        c.app_context = app.state.context  # type: ignore[attr-defined]
+        yield c
+
+
+def test_chain_with_unsupported_lora_format_422(chain_unsupported_lora_client):
+    """The chain endpoint's own per-adapter ``resolve()`` call catches it too —
+    one registry change covers both entry points, no new check in
+    api/generate_chain.py."""
+    r = _run_chain(
+        chain_unsupported_lora_client,
+        [{"num_frames": 25}, {"num_frames": 25}],
+        loras=[{"name": UNSUPPORTED_LORA, "strength": 1.0}],
+    )
+    assert r.status_code == 422, r.text
+    body = r.json()["error"]
+    assert body["code"] == "LORA_FORMAT_UNSUPPORTED"
+    assert "LoHa" in body["detail"]

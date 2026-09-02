@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.48**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-09-01**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.49**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-09-02**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -97,6 +97,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.46 | 2026-08-31 | **快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとの配信テーブル `limits.comfort_budgets` として配る形へ改めたことを反映（文書のみ。凍結 API 契約〔§6〕への変更は加算で、既存の鍵は1つも消していない）**。**§6.7**（`limits` の表へ `comfort_budgets` の行を追加し、表の読み方＝「上から照合して全鍵一致した最初の行を採る／一致行が無ければ `spill_free_frames` へ落ちる（正常系）／`ltx` は既定構成の行を意図的に持たないので `requires` が空の行を足してはならない」を明記。旧来の `single_comfort_token_budget` / `chain_comfort_token_budget` は**表を持たない古いサーバー向けの互換値**である旨へ位置づけを改めた。あわせて `spill_free_frames` の値の書き写し〔257/153/81〕をやめ、実体＝`config.yaml`・説明の正本＝`Docs/COMFORT_LIMIT_TABLE.md` §付記への参照に置換）／**§10.2**（表が 2026-07-01 時点の値であることの日付つき注記を追加し、「全on構成のときだけ別鍵で配信する」という旧来の仕組みの説明を配信テーブルの説明へ差し替え）／**§11.7**（同じ書き写しをやめ、参照へ置換）。**同日の §5.1b の更新も本行に含める**——必要空き容量の記述を、2仮想環境時代の値（約 40〜41GB・しきい値 45GB）と `.venv-engine-ltx25` 追加後の再実測待ちの注記から、**`README.md` のハードウェア要件表を正本として参照する形**へ差し替え、`scripts/setup.ps1` の空き容量しきい値 `$needGB` を 45 → **50** へ揃えた（クリーン環境の実測は `Docs/PENDING_TASKS_CLOSED.md` §3-107。LTX 2.3 のみ約50GB・LTX 2.5 追加で約30GB）。**線と表の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7、レガシー表の値は同 §付記、較正の記録は `Docs/VERIFICATION_LOG.md` §84**、台帳の完了記録は `Docs/PENDING_TASKS_CLOSED.md` §3-95・同 §3-125 である。なお v0.5.45 の行が完了条件の正本として指している `Docs/PENDING_TASKS.md` §1-24 は、同日の実機ゲート合格により `Docs/PENDING_TASKS_CLOSED.md` §3-129 へ移った。 |
 | v0.5.47 | 2026-09-01 | **役割が重複する引き継ぎ文書 2 本の廃止を反映（文書のみ。API・実装への変更は無い）**。オーナーの決定により `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/NEXT_SESSION_WORKORDER.md` を削除し、**セッションの入口を `Docs/PENDING_TASKS.md` ただ 1 つへ一本化した**（前者の内容は他の正本の要約で、後者は 2026-07-02 時点の計画であり、いずれも役割が重複していた）。**§0.3**（SSOT 地図から `Docs/NEXT_SESSION_HANDOFF.md` の行を削除し、同書 §2 にしか無かった**文書の3分類（①生きた文書／②追記専用の記録簿／③凍結文書）と入口の規則**を表の直後へ移設）／**§1.3・§5・§13・付録B**（廃止した 2 文書への参照を、`Docs/HANDOFF_ARCHIVE.md`・`Docs/VERIFICATION_LOG.md` などの現行の正本へ向け直した）。**§0.1 の版メタの写しも本行に合わせて更新済みである。** なお上の改訂履歴 v0.5.2・v0.5.20 の行に残る両文書への言及は、**当時の作業の記録なのでそのまま残してある**。 |
 | v0.5.48 | 2026-09-01 | **Gradio 同梱 UI の Settings ＞ Models に、ベースモデル（LTX 2.3 ／ LTX 2.5 の系統）を選ぶドロップダウンを新設したことを反映（文書のみ。凍結 API 契約〔§6〕・実装への変更は無い——使うのは既存の `GET /models` と `POST /pipeline/load` だけである）**。**§12**（Settings タブの Models セクションの記述を「ベースモデルのドロップダウン＋カテゴリ別ドロップダウン」の2段構成へ改め、実装から削除したハードコードのフォルダ案内の記述を落とした）を更新した。**同じ日に Gradio 側バッチのスキップ判定もフロントエンドの規約へ追随したが、契約の正本は `Docs/BATCH_A2V_CSV_SPEC.md` なので本書には書かない。** オーナー実機目視ゲートの記録は `Docs/VERIFICATION_LOG.md` §85、台帳のクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-136〜§3-139。<br>**【同日・敵対的レビューの確定指摘による追記】** **§0.3 の SSOT 地図へ `Docs/BATCH_A2V_CSV_SPEC.md` の行を追加した**——本書が同文書を「契約の正本」として参照しているのに、地図側に載っていなかったためである（版は上げない。地図への1行追加であり、本文の記述は変わっていない）。 |
+| v0.5.49 | 2026-09-02 | **kohya 形式（LoRA 学習ツール kohya-ss 系が出力する書式）の LoRA を読み込めるようにし、あわせて `loras[].strength` の意味論を ComfyUI と同じに戻したことを反映（台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-108）**。**加算だけの版ではない——凍結 API 契約（§6）の既存フィールド `loras[].strength` の意味が変わっており、後方互換ではない。** 従来はアダプタのヘッダに残っていたメタデータ `ss_network_alpha ÷ ss_network_dim` を要求強度へ自動で掛けていたが（2026-07-06 の §29.4 決定）、**A/B 形式への変換器はその倍率を重みへ畳み込んだうえでメタデータを無変更のまま複製するため、これは化石のメタデータの二重適用だった**。**この撤去により `Pixar_Toon` と `LTX-2.3-Henshin` の実効強度は従来の 2 倍（＝学習した側が意図したとおりの強さ）になる**——以前と同じ絵が欲しいときは `strength` に 0.5 を指定する（変更後の 0.5 が変更前の 1.0 とバイト単位で一致することを実機で確認済み）。alpha は本来それが在る場所＝kohya 形式のファイルが持つ `.alpha` テンソルでのみ扱い、`alpha ÷ rank` を読み込み時に B（up）側へ畳み込む。**§6.3 の LoraSpec**（`strength` の行へ意味論と変更日を明記）／**§6.8**（新設エラーコード `LORA_FORMAT_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 36→37 件・本表掲載分を 31→32 件へ訂正）を更新した。**A/B 形式のアダプタの出力は 1 バイトも変わっていない**（LTX 2.3・LTX 2.5 の両系統で mp4 の SHA-256 一致を確認済み）。利用者向けの説明は `README.md`「LoRA」の項と §7.1、撤回の根拠・機械ゲート・実機ゲート G1〜G9 の正本は `Docs/VERIFICATION_LOG.md` **§88**、実装とクローズの記録は `Docs/PENDING_TASKS_CLOSED.md` §3-108 である。 |
 
 ### 0.2 スコープ
 
@@ -705,7 +706,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | フィールド | 型 | デフォルト | 制約 |
 |-----------|----|-----------|------|
 | `name` | str | （必須） | `min_length=1, max_length=200`。**サーバー側の登録名のみ**——`/`・`\`・`..` を含むパス風の名前はバリデータが拒否する（クライアントが任意のファイルを指させないため） |
-| `strength` | float | `1.0` | `gt=0.0, le=2.0`（映像軸の適用強度。0 は不可） |
+| `strength` | float | `1.0` | `gt=0.0, le=2.0`（映像軸の適用強度。0 は不可）。**要求した値がそのまま適用される（ComfyUI と同じ意味論）。2026-09-02 に意味論が変わった**——それ以前はヘッダのメタデータ `ss_network_alpha ÷ ss_network_dim` を掛けた値が実効強度になっていた。撤回の根拠と実測は `Docs/VERIFICATION_LOG.md` §88 |
 | `audio_strength` | float \| null | `null` | `ge=0.0, le=2.0`（音声軸の適用強度。`null` なら `strength` に追従＝従来と同一挙動。**こちらは 0 を許容する**——映像目的のスタイル LoRA の音声側差分が音を壊す事例への対処。正本は `Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`） |
 
 **OutpaintSpec**（`GenerateRequest.outpaint`。2026-08-08追加・§1-13）
@@ -1028,7 +1029,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 ```
 （`job_id`・`detail` は非 None のときだけ含まれる。）
 
-実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 36 件**あり、本表はそのうち 31 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 5 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE` と Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT` は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正した）:
+実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 37 件**あり、本表はそのうち 32 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 5 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE` と Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT` は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正した）:
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
@@ -1053,6 +1054,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `LORA_REQUIRES_REFERENCE` | 422 | 制御系 IC-LoRA を `reference_video_id` 無しで要求した |
 | `REFERENCE_REQUIRES_CONTROL_LORA` | 422 | `reference_video_id` を渡したが、要求アダプタに制御系が1つも無い（逆方向チェック） |
 | `LORA_DEPTH_CHAIN_UNSUPPORTED` | 422 | 2クリップ以上のチェーンで `depth-control`（深度制御）アダプタを要求した。深度マップを作る前処理が全編一括設計でメモリに載らないため、depth系のみ多クリップ非対応（**2026-08-11・長尺IC-LoRA実装で `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` を置換**。他の制御系〔canny/pose〕・参照系〔upscaler/deblur〕アダプタは多クリップで受理される。クリップ1本のチェーンと単発生成は depth 込みで従来どおり使える） |
+| `LORA_FORMAT_UNSUPPORTED` | 422 | 指定した LoRA の重み鍵の書式を、エンジンのローダーが読めない（**2026-09-02 新設**）。**読める書式は 2 つだけ**である——A/B 形式（`.lora_A.weight`／`.lora_B.weight`）と kohya 形式（LoRA 学習ツール kohya-ss 系が出力する書式。`.lora_down.weight`／`.lora_up.weight`＋`.alpha`。**鍵がドット区切りのものに限る**）。DoRA（`.dora_scale`）・LoHa（`hada_`）・LoKr（`lokr_`）・鍵がアンダースコアで連結された kohya（`lora_unet_…`。モジュール名に解決できない）・LoRA の重み鍵を1つも持たないファイルは、ジョブを作る前にここで断る。`detail` に判定した書式名と鍵の実例が入る。**この判定を入れる前は、ペアが1組も作られないまま生成が完走し、LoRA を指定していないのと同じ動画が出ていた**（無音の空振り。§6.3 の LoraSpec も参照） |
 | `LORA_THUMBNAIL_NOT_FOUND` | 404 | サムネイル（`<stem>.png`）を持たないアダプタ、または未知のアダプタ名 |
 | `LORA_PREPROCESS_CONFLICT` | 400 | 1本の参照動画に対して2種類以上の制御前処理を要求した（canny と pose の同時指定など） |
 | `REFERENCE_RESOLUTION_INVALID` | 422 | 参照動画を使うジョブで `width`/`height` が 128 の倍数でない |

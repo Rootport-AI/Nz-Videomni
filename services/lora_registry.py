@@ -1,8 +1,9 @@
 """IC-LoRA / style-LoRA adapter-name registry (Phase B, extended Phase C, S1).
 
 Resolves a server-side adapter NAME (accepted in ``GenerateRequest.loras[].name``)
-to the safetensors file on disk plus its ``preprocess`` kind and an alpha-scaled
-strength. Names come from two sources, config authoritative over the scan:
+to the safetensors file on disk plus its ``preprocess`` kind, passing the
+requested strength through untouched. Names come from two sources, config
+authoritative over the scan:
 
 1. ``config.yaml`` ``model.ic_loras`` (name -> project-relative path, or name ->
    ``IcLoraEntry`` for Phase C control adapters) — the authoritative registration;
@@ -20,11 +21,18 @@ has no torch):
     ``preprocess`` (union-control / pixel-spatial-upscaler: they derive their
     conditioning from a REFERENCE video); ``"style"`` otherwise (画風/character
     LoRAs that need no reference). Drives the endpoint's reference-required check.
-  * ``scale`` — the LoRA alpha/rank convolution factor from ``ss_network_alpha``
-    / ``ss_network_dim`` (kohya metadata); folded into the strength returned by
-    ``resolve()`` per the user decision (auto-convolution, outside the frozen
-    weight-patch mechanism). No metadata -> ``scale=1.0`` (behaviour unchanged;
-    the existing IC-LoRA files carry no ``ss_network_alpha``).
+  * ``layout`` — which weight-key layout the file uses, so an adapter the engine
+    loader cannot read is refused up front (``LORA_FORMAT_UNSUPPORTED``, 422)
+    instead of silently producing a LoRA-free video. See :func:`_detect_layout`.
+
+§3-108 (2026-09-02) removed the former ``scale`` field: it multiplied the
+requested strength by ``ss_network_alpha / ss_network_dim`` read from the
+header metadata, but musubi-tuner's A/B conversion already bakes alpha into the
+weights and copies that metadata over verbatim — so the multiplier was a second,
+fossil application (``Pixar_Toon`` and ``LTX-2.3-Henshin`` ran at half the
+requested strength). Alpha is now handled where it is real: the engine loader
+folds a kohya file's ``.alpha`` tensor into B at load time, and this layer
+passes ``strength`` through exactly as requested (ComfyUI semantics).
 
 Fail loud, no silent skip — but only for CONFIG registrations:
   * config name whose file is missing on disk -> ``LORA_NOT_FOUND`` at resolve;
@@ -43,7 +51,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
-from api.errors import lora_not_found
+from api.errors import lora_format_unsupported, lora_not_found
 from config import AppConfig, IcLoraEntry
 
 logger = logging.getLogger("ltx.loras")
@@ -64,6 +72,19 @@ class ResolvedLora(NamedTuple):
 # a corrupt/foreign file than a real header (services.model_registry precedent).
 _MAX_SAFETENSORS_HEADER = 100 * 1024 * 1024
 
+# Weight-key suffixes, kept in sync with ``engine.gguf.ic_lora_common`` (which
+# cannot be imported here — this layer runs in the torch-free app venv).
+_SUFFIX_A = ".lora_A.weight"
+_SUFFIX_DOWN = ".lora_down.weight"
+_SUFFIX_DORA = ".dora_scale"
+
+#: ``LoraEntryInfo.layout`` values. Anything starting with ``_LAYOUT_UNSUPPORTED``
+#: is refused by ``resolve()``; the reason follows a ``:`` so the entry needs no
+#: second field to carry it.
+_LAYOUT_AB = "ab"
+_LAYOUT_KOHYA = "kohya"
+_LAYOUT_UNSUPPORTED = "unsupported"
+
 
 @dataclass
 class LoraEntryInfo:
@@ -73,7 +94,7 @@ class LoraEntryInfo:
     path: Path  # absolute (config._abs of the registered/scanned path)
     preprocess: str  # "none" | "canny" | "dwpose" | "depth"
     kind: str  # "style" | "control"
-    scale: float  # alpha/rank convolution factor (1.0 when unknown)
+    layout: str  # "ab" | "kohya" | "unsupported:<reason>" (see _detect_layout)
     has_thumbnail: bool  # a sibling <stem>.png exists
     source: str  # "config" | "scan"
     exists: bool
@@ -131,44 +152,52 @@ def _metadata(header: dict) -> dict:
     return md if isinstance(md, dict) else {}
 
 
-def _rank_from_tensors(header: dict) -> float | None:
-    """Fallback rank = shape[0] of any ``lora_A`` tensor (kohya down-projection
-    ``[rank, in_features]``). Used only when ``ss_network_dim`` is absent."""
-    for tensor_name, info in header.items():
-        if tensor_name == "__metadata__":
-            continue
-        if "lora_a" in tensor_name.lower() and isinstance(info, dict):
-            shape = info.get("shape")
-            if isinstance(shape, list) and shape:
-                try:
-                    return float(shape[0])
-                except (TypeError, ValueError):
-                    return None
-    return None
+def _detect_layout(header: dict) -> str:
+    """Classify the file's weight-key layout from its tensor NAMES alone.
 
+    Returns ``"ab"``, ``"kohya"``, or ``"unsupported:<reason>"`` — the reason
+    travels inside the string so an entry needs no second field for it, and
+    ``resolve()`` hands it to the client as the 422's ``detail``.
 
-def _alpha_scale(header: dict) -> float:
-    """LoRA alpha/rank convolution factor from kohya metadata; 1.0 if unknown."""
-    md = _metadata(header)
-    alpha_raw = md.get("ss_network_alpha")
-    if alpha_raw is None:
-        return 1.0
-    try:
-        alpha = float(alpha_raw)
-    except (TypeError, ValueError):
-        return 1.0
-    rank: float | None = None
-    dim_raw = md.get("ss_network_dim")
-    if dim_raw is not None:
-        try:
-            rank = float(dim_raw)
-        except (TypeError, ValueError):
-            rank = None
-    if rank is None:
-        rank = _rank_from_tensors(header)
-    if not rank or rank <= 0:
-        return 1.0
-    return alpha / rank
+    Evaluation order is part of the contract:
+
+    1. ``.dora_scale`` -> DoRA. Checked FIRST because a DoRA file also carries
+       ordinary A/B or down/up keys; reading it as a plain LoRA would silently
+       drop the magnitude vector and change the result.
+    2. ``.lora_A.weight`` -> A/B, matching ``load_ic_lora_pairs``' own
+       A/B-first file-unit guard (one A key makes the whole file an A/B file).
+    3. ``.lora_down.weight`` -> kohya, but ONLY when at least one such key has a
+       DOTTED module path once the suffix is stripped. LyCORIS/sd-scripts also
+       emit underscore-joined names (``lora_unet_transformer_blocks_0_...``)
+       that no ``named_modules()`` lookup can resolve — those would attach to
+       0 Linears, i.e. exactly the silent no-op §3-108 exists to end.
+    4. ``hada_`` / ``lokr_`` -> LoHa / LoKr: different factorisations
+       altogether (Hadamard product / Kronecker product), not a B@A delta.
+    5. Nothing recognisable -> unknown.
+    """
+    names = [name for name in header if name != "__metadata__"]
+    if any(name.endswith(_SUFFIX_DORA) for name in names):
+        return f"{_LAYOUT_UNSUPPORTED}:DoRA (weight-decomposed, '{_SUFFIX_DORA}' keys)"
+    if any(name.endswith(_SUFFIX_A) for name in names):
+        return _LAYOUT_AB
+    down = [name for name in names if name.endswith(_SUFFIX_DOWN)]
+    if down:
+        if any("." in name[: -len(_SUFFIX_DOWN)] for name in down):
+            return _LAYOUT_KOHYA
+        return (
+            f"{_LAYOUT_UNSUPPORTED}:kohya keys joined by underscores instead of "
+            f"dots (e.g. '{down[0]}'), which match no module path"
+        )
+    if any("hada_" in name for name in names):
+        return f"{_LAYOUT_UNSUPPORTED}:LoHa (Hadamard-product 'hada_' keys)"
+    if any("lokr_" in name for name in names):
+        return f"{_LAYOUT_UNSUPPORTED}:LoKr (Kronecker-product 'lokr_' keys)"
+    sample = ", ".join(f"'{name}'" for name in names[:3]) or "(no tensors)"
+    return (
+        f"{_LAYOUT_UNSUPPORTED}:no LoRA weight keys found; supported layouts are "
+        f"'{_SUFFIX_A}'/'.lora_B.weight' and '{_SUFFIX_DOWN}'/'.lora_up.weight'. "
+        f"Sample keys: {sample}"
+    )
 
 
 class LoraRegistry:
@@ -243,19 +272,22 @@ class LoraRegistry:
     def _build_entry(
         self, name: str, abs_path: Path, preprocess: str, source: str
     ) -> LoraEntryInfo | None:
-        """Build a LoraEntryInfo, reading kind/scale from the header when possible.
+        """Build a LoraEntryInfo, reading kind/layout from the header when possible.
 
         Returns ``None`` (drop it) ONLY for a scan entry whose header is
         unreadable. A config entry is always kept — a missing/broken file falls
-        back to preprocess-derived kind + scale 1.0, and resolve() fails loud
-        later if the file is absent when a job actually needs it.
+        back to preprocess-derived kind + layout ``"ab"``, and resolve() fails
+        loud later if the file is absent when a job actually needs it. That
+        ``"ab"`` default is deliberate: with no header there is nothing to judge
+        a layout on, so the pre-§3-108 behaviour (accept, let the engine speak)
+        is kept rather than inventing a rejection out of missing evidence.
         """
         exists = abs_path.exists()
         has_thumbnail = abs_path.with_suffix(".png").exists()
         # preprocess is authoritative for control (a canny/pose registration is a
         # control adapter regardless of what the header says).
         kind = "control" if preprocess != "none" else "style"
-        scale = 1.0
+        layout = _LAYOUT_AB
         ref_downscale: float | None = None
         if exists:
             try:
@@ -267,7 +299,7 @@ class LoraRegistry:
                     )
                     return None
                 logger.warning(
-                    "lora '%s': unreadable header for %s (%s); kind/scale from "
+                    "lora '%s': unreadable header for %s (%s); kind/layout from "
                     "registration only",
                     name,
                     abs_path,
@@ -281,13 +313,13 @@ class LoraRegistry:
                         ref_downscale = float(md["reference_downscale_factor"])
                     except (TypeError, ValueError):
                         ref_downscale = None
-                scale = _alpha_scale(header)
+                layout = _detect_layout(header)
         return LoraEntryInfo(
             name=name,
             path=abs_path,
             preprocess=preprocess,
             kind=kind,
-            scale=scale,
+            layout=layout,
             has_thumbnail=has_thumbnail,
             source=source,
             exists=exists,
@@ -330,20 +362,22 @@ class LoraRegistry:
     def resolve(
         self, name: str, strength: float, audio_strength: float | None = None
     ) -> ResolvedLora:
-        """Resolve ``name`` -> ``ResolvedLora(path, scaled_strength, preprocess,
-        scaled_audio_strength)``.
+        """Resolve ``name`` -> ``ResolvedLora(path, strength, preprocess,
+        audio_strength)``.
 
-        ``scaled_strength`` is ``strength * scale`` where ``scale`` is the LoRA
-        alpha/rank convolution factor read from the header (1.0 when absent, i.e.
-        byte-identical to the pre-S1 behaviour for the existing IC-LoRA files).
-        ``preprocess`` is ``"none"`` for legacy string entries / scanned files or
-        the ``IcLoraEntry.preprocess`` value for config dict entries.
-        ``scaled_audio_strength`` mirrors ``scaled_strength`` (same ``scale``
-        factor) but stays ``None`` when ``audio_strength`` is ``None`` (video-axis
-        follow — the caller didn't ask for an independent audio strength).
+        ``strength`` and ``audio_strength`` are returned EXACTLY as requested
+        (§3-108: the alpha/rank metadata multiplier is gone — see the module
+        docstring); ``audio_strength`` stays ``None`` when the caller passed
+        ``None`` (video-axis follow — no independent audio strength was asked
+        for). ``preprocess`` is ``"none"`` for legacy string entries / scanned
+        files or the ``IcLoraEntry.preprocess`` value for config dict entries.
 
         Raises ``lora_not_found`` (404) for a path-like name, an empty registry,
-        an unknown name, or a registered-but-missing file.
+        an unknown name, or a registered-but-missing file; and
+        ``lora_format_unsupported`` (422) for a file whose weight-key layout the
+        engine loader cannot read. Both endpoint validation loops (single and
+        chain) already call this per requested adapter, so neither needed a new
+        check of its own.
         """
         if "/" in name or "\\" in name or ".." in name:
             raise lora_not_found(name, detail="adapter name must not be a path")
@@ -360,9 +394,12 @@ class LoraRegistry:
             raise lora_not_found(
                 name, detail=f"registered adapter file missing: {entry.path}"
             )
-        scaled_audio = (
-            None if audio_strength is None else float(audio_strength) * entry.scale
-        )
+        if entry.layout.startswith(_LAYOUT_UNSUPPORTED):
+            _, _, reason = entry.layout.partition(":")
+            raise lora_format_unsupported(name, reason or entry.layout)
         return ResolvedLora(
-            entry.path, float(strength) * entry.scale, entry.preprocess, scaled_audio
+            entry.path,
+            float(strength),
+            entry.preprocess,
+            None if audio_strength is None else float(audio_strength),
         )

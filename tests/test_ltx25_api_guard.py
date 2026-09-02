@@ -1059,8 +1059,16 @@ def _write_safetensors(path, metadata=None):
     ``reference_downscale_factor`` を持つヘッダは、preprocessが``none``でも
     **control**アダプタとして解決される——deblur(前処理不要の制御アダプタ)を
     再現するにはこれが要る。
+
+    ``lora_A``テンソルを1本必ず入れるのは§3-108のため。重み鍵が1本も無い
+    ヘッダは「読めない書式」と判定され``resolve()``が422で断るので、書式とは
+    無関係なここのテストが巻き添えで落ちてしまう。
     """
-    header: dict = {}
+    header: dict = {
+        "diffusion_model.transformer_blocks.0.attn1.to_q.lora_A.weight": {
+            "dtype": "F16", "shape": [4, 8], "data_offsets": [0, 0],
+        },
+    }
     if metadata is not None:
         header["__metadata__"] = {k: str(v) for k, v in metadata.items()}
     blob = json.dumps(header).encode("utf-8")

@@ -256,6 +256,23 @@ def reference_requires_control_lora(names: list[str]) -> APIError:
     )
 
 
+def lora_format_unsupported(name: str, detail: str) -> APIError:
+    """§3-108: the adapter file is a real safetensors, but its weight layout is
+    one the engine loader cannot read — DoRA, LoHa, LoKr, kohya keys joined by
+    underscores instead of dots (they resolve to no ``named_modules()`` name),
+    or no LoRA weight keys at all. Only ``.lora_A``/``.lora_B`` (A/B) and
+    ``.lora_down``/``.lora_up`` (+ ``.alpha``, kohya) are supported. Refusing
+    here is what turns the old SILENT no-op (0 pairs -> a video identical to the
+    LoRA-free one) into a loud rejection. 422 — the request is well-formed; the
+    server-side artifact is what is unusable."""
+    return APIError(
+        "LORA_FORMAT_UNSUPPORTED",
+        f"LoRA '{name}' uses an unsupported weight layout",
+        422,
+        detail=detail,
+    )
+
+
 def lora_depth_chain_unsupported(names: list[str]) -> APIError:
     """Chain LoRA (owner decision 2026-08-11): a depth-preprocess CONTROL IC-LoRA
     (Video-Depth-Anything) was requested on a chain with clips > 1. Multi-clip

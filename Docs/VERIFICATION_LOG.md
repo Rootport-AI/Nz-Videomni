@@ -1884,6 +1884,8 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 
 ### 29.4 alpha スケールの裏付けと設計決定（ユーザー承認済み）
 
+> **【2026-09-02 追記】本項の設計決定（alpha/rank を `resolve()` で strength へ自動乗算する）は撤回した。→ §88.2。** 以下は当時の記録としてそのまま残す。
+
 - 両 LoRA は `.alpha` テンソルを持たず、メタデータ `ss_network_alpha` のみ（両方 alpha/rank＝0.5）。既存の delta 式（`strength × B@A`）は alpha を読まない。
 - **ユーザー決定**: alpha/rank を LoRA 名前解決層（`services/lora_registry.py` の `resolve()`）で strength に自動乗算する（Forge 系互換・weight 1.0＝学習が想定したとおりの効き）。不可触の重みパッチ機構は無改造。既存 IC-LoRA は alpha メタなし→係数 1.0→既存挙動は不変。
 - **併せて確定した設計判断**: GUI は分離する（制御 LoRA＝従来のアダプタドロップダウン ／ 画風 LoRA＝プロンプト内 `<lora:名前:weight>` コマンド ＋ 新「Style LoRA」タブ）。
@@ -1905,7 +1907,7 @@ LoRA の各テンソルが本番モデルのどのモジュールに対応付く
 
 - **ディレクトリスキャン＋登録制のマージ（`services/lora_registry.py` 拡張）**: `rescan()` を新設。`config.yaml` の登録（authoritative）と `config.model.lora_dir="./models/loras"` のスキャン結果をマージする。名前が衝突したら config 側を勝たせ、スキャン側は親ディレクトリ名を付けて退避する。
 - **kind 判定**: safetensors メタに `reference_downscale_factor` があるか、または preprocess が `none` 以外なら **control**（制御 LoRA＝参照動画が要る）、それ以外を **style**（画風／キャラ）と判定する。
-- **alpha 自動畳み込み**: scale＝alpha/rank（メタ `ss_network_alpha`／`ss_network_dim` から算出・メタ無しは 1.0）を `resolve()` が返す strength に自動乗算する（§29.4 のユーザー承認済み設計・不可触機構の外側で完結）。
+- **alpha 自動畳み込み**: scale＝alpha/rank（メタ `ss_network_alpha`／`ss_network_dim` から算出・メタ無しは 1.0）を `resolve()` が返す strength に自動乗算する（§29.4 のユーザー承認済み設計・不可触機構の外側で完結）。 **【2026-09-02 追記】この自動乗算は §88.2 で撤回した（化石メタデータの二重適用だったため）。**
 - **all-or-nothing 緩和（`api/models.py`）**: 「loras を指定したら `reference_video_id` 必須」という all-or-nothing 検証を撤廃（逆向き＝`reference_video_id`／strength 系を指定したら loras 必須、は維持）。かわりに `api/generate.py` の endpoint 層で kind を判定し、**kind＝control かつ参照動画なし** のときに **422 `LORA_REQUIRES_REFERENCE`** を返す。
 - **新設 API（`api/loras.py`）**: `GET /loras`（毎回 rescan して一覧）／`POST /loras/reload`／`GET /loras/{name}/thumbnail`（`<stem>.png` を併置・無ければ 404）。
 - **既存 IC-LoRA への無影響を事前確認**: 既存の IC-LoRA 実ファイル（upscaler x2／x4・union-control）は `ss_network_alpha` を持たないため scale＝1.0＝挙動不変。alpha 畳み込みが既存経路に影響しないことを事前に確認済み。
@@ -6438,7 +6440,7 @@ WDDMは確保が物理容量を超えた分をシステムメモリで裏打ち�
 
 ① **2.3の蒸留LoRAが2.5の全Linearを過不足なく覆った。** #7（`ltx-2.3-22b-distilled-lora-1.1_fro90_ceil72_condsafe`）のペア数1,660は、2.5側の`nn.Linear`の総数1,660と**完全に一致**し、そのすべてが1対1で解決した。**LTX 2.3とLTX 2.5のLinearの顔ぶれは名前・形状ともに完全に同一**であり、これが「ほとんどの2.3 LoRAは2.5で無変換で動く」という公式説明の最も強い機械的裏付けになる。
 
-② **kohya形式の2本は、2.5以前に2.3エンジンのローダーが読めていない。** `engine/gguf/ic_lora_common.py:44`の`_SUFFIX_A = ".lora_A.weight"`が固定なので、`.lora_down.weight`／`.lora_up.weight`／`.alpha`という方言はペアが1組も作られない。**警告こそ出るが実質的に何も起こらない（無音の空振り）** 状態で、これは**LTX 2.3でも同じ**である。詳細と対処は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108へ起票した。
+② **kohya形式の2本は、2.5以前に2.3エンジンのローダーが読めていない。** `engine/gguf/ic_lora_common.py:44`の`_SUFFIX_A = ".lora_A.weight"`が固定なので、`.lora_down.weight`／`.lora_up.weight`／`.alpha`という方言はペアが1組も作られない。**警告こそ出るが実質的に何も起こらない（無音の空振り）** 状態で、これは**LTX 2.3でも同じ**である。詳細と対処は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108へ起票した。 **【2026-09-02 追記】kohya形式は §88 で読み込み対応した（`alpha ÷ rank` を読み込み時にB側へ畳み込む）。本表の #13・#14 は現在の実装では「判定対象外」ではない——実測のペア数は MysticXXX が 1,228・SynthPussy_01_rank32 が 576 である。**
 
 ③ **`av_ca_*`の軸判定は2.5でもそのまま効く。** #7の非block命中28件はすべてLTXModel直下に実在する`nn.Linear`で、形状も一致した（`adaln_single`系4種×3・`av_ca_*`系4種×3・`patchify_proj`／`proj_out`／`audio_patchify_proj`／`audio_proj_out`各1）。うち`av_ca_*`の4つは`ic_lora_common.py`の音声軸・映像軸の例外表（`_AUDIO_AXIS_EXACT`／`_VIDEO_AXIS_EXACT`）に載っている名前であり、**`audio_strength`の軸判定が2.5でも成立する**ことが裏付けられた。
 
@@ -10323,3 +10325,77 @@ G1〜G6・G10は合格した（完了条件の正本は台帳[`PENDING_TASKS_CLO
 ### 87.5 状態
 
 **§3-63・§3-131とも実装・全ゲート合格でクローズした（2026-09-02）。** 記録は台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-63-02**（本書には旧§3-63〔IC-LoRA Depth/Deblur〕が既にあるため`-02`）・**§3-131**（無印）。**§3-131のクローズにより、台帳§3-102の判断材料(4)「engine25固有の情報が`metadata.json`に載らない」も同時に解消した**（同書§3-102本文にもその旨を記載済み）。G-R2〜G-R4の3ジョブと、上記87.4の事故ジョブ（`6cb2ef5e-38c0-4e04-b33f-3201673ff0ae`）は、いずれも`outputs/`に残置してある（削除していない）。
+
+## 88. ★kohya形式LoRAの受け入れと、alpha自動畳み込みの撤回（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-108）＝CPUゲート・実機ゲートG1〜G6 全合格（2026-09-02）
+
+### 88.1 テーマの概要
+
+**kohya形式**（LoRA学習ツールkohya-ss系が出力する書式。`.lora_down.weight`／`.lora_up.weight`＋`.alpha`）のLoRAを指定すると、ペアが1組も作られないまま生成が完走し、**LoRAを指定していないのと同じ動画が出てくる**（無音の空振り）という不具合を直した回である。**実装内容とクローズの記録は台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-108が正本**、契約の正本は`Videomni_Backend_Specification.md` §6.3（LoraSpec）・§6.8（`LORA_FORMAT_UNSUPPORTED`）で、**本節は「過去の設計決定の撤回」と「ゲートの実測値」だけを記録する。**
+
+**実機ゲートの一次記録は`outputs/lora-gate-2026-09-02/RESULTS.md`である**（同ディレクトリにリクエスト本文`req_*.json`・出力mp4・`metadata.json`・機械可読な`results.json`・`ffprobe`出力が揃っている。`outputs/`配下なのでgit管理外という扱いは`outputs/comfort-calib-2026-08-31/RESULTS.md`と同じである）。**本節はそこから要点だけを引き取っており、全数の値は重ねて書かない。**
+
+### 88.2 §29.4・§30.1 の「alpha/rank の自動乗算」決定の撤回
+
+**撤回する。** §29.4（2026-07-06のユーザー承認済み設計）と§30.1（その実装記録）が定めた「safetensorsヘッダのメタデータ `ss_network_alpha ÷ ss_network_dim` を、LoRA名前解決層 `services/lora_registry.py` の `resolve()` が返す strength へ自動乗算する（Forge系互換）」という決定を取り下げ、**要求された強度をそのまま適用するComfyUI準拠の意味論へ改めた。** alphaは本来それが在る場所——kohya形式のファイルが持つ`.alpha`テンソル——でのみ扱い、`alpha ÷ rank`をエンジンのローダーが読み込み時にB（up）側へ畳み込む。
+
+**撤回の根拠は3つある。**
+
+1. **一次コードの確認**: A/B形式への変換を担うmusubi-tunerの変換器は、**alphaを重みへ畳み込んだうえで、safetensorsヘッダのメタデータを無変更のまま複製する。** したがって変換後のA/B形式ファイルに残る`ss_network_alpha`／`ss_network_dim`は**変換前の学習設定の化石**であり、その内容は既に重みへ反映済みである。ここへさらに倍率を掛けるのは**二重適用**にほかならない。
+2. **実害が実機に現れていた**: 手持ちのA/B形式LoRAのうち`Pixar_Toon`と`LTX-2.3-Henshin`はメタデータのalpha/rankが0.5で、変更前は`logs/server.log`のジョブ開始行に`strength=1, effective=0.5`、エンジンのattachログに`strength=0.500`と出ていた（Phase 1で確認。88.5の表）。**利用者が1.0を指定しても、実際には学習した側が意図した強さの半分でしか効いていなかった。** オーナーの「効きが弱い」という体感とも一致する。
+3. **他実装との乖離**: ComfyUIもdiffusersもこのメタデータを読まない。**メタデータ由来の倍率を温存すると、同じ内容のLoRAでも書式（A/B形式かkohya形式か）によって効きが変わってしまう**——kohya形式側は`.alpha`テンソルという別の経路でalphaを持つためである。
+
+**撤去がちょうど0.5倍ぶんだけであることは、実機でバイト単位で証明した**（88.5のG2）。§29.4・§30.1の該当箇所には、本節を指す打ち消しの1行注記を添えてある。
+
+### 88.3 §71.6 の「kohya形式2本は判定対象外」の更新
+
+§71.6（LTX 2.5の器へLoRA 14本の鍵と形状を突き合わせた実験2A）は、`LTX2.3-MysticXXX`と`SynthPussy_01_rank32`の2本を**ペア数0・判定対象外**として表に載せ、所見②で「2.3のローダーが読めていない」と記録していた。**本テーマでこの2本は読み込み対応した。** 現在の実装でのペア数は MysticXXX が **1,228**（実機のattachログで確認。88.5のG5）・`SynthPussy_01_rank32` が **576** である。§71.6の所見②には本節を指す1行注記を添えてある。
+
+**なお`outputs/ltx25-iclora-compat/a_key_shape_check.py`（git管理外の研究スクリプト）は、この2本について0だった値が上記へ変わる。** 製品コードではないので影響は無い。
+
+### 88.4 機械ゲート（CPUテスト・2026-09-02）
+
+**物差しは「全体スイート」である**（特定ファイルだけを回した件数ではない）。
+
+| 環境 | コマンド | 結果 |
+|---|---|---|
+| アプリvenv | `.venv\Scripts\python.exe -m pytest -q`（**バックエンドを停止した状態で実行**） | **2,136 passed／23 skipped／0 failed** |
+| エンジンvenv | `.venv-engine\Scripts\python.exe -m pytest tests	est_ic_lora_forward.py --noconftest -q`（GPU不要） | **21 passed**（着手前は13 passed。kohya合成ファイルによる検証8件を追加） |
+
+- **アプリvenvの0 failedには理由がある。** 直近の基準（§87.2）は「1 failed／2,125 passed／23 skipped」で、その唯一の失敗`tests/test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false`は**18620番ポートにバックエンドが立っていないことを前提にしたテスト**である。今回はバックエンドを停止した状態で回したので、この環境依存の失敗が出ていない（**バックエンドを起動したまま回すと、本テーマとは無関係にこの1件だけが失敗する**）。**したがって前回との差し引きは、本テーマの新規テストとこの1件の反転が混ざった値であり、そのまま新規テスト件数として読んではならない。**
+- エンジンvenvの8件は、`_save_kohya_lora`ヘルパー（`_save_av_lora`を模したもの）で合成したファイルを使い、(i)alpha＝rankならA/B形式の双子とビット一致 (ii)alpha＝2×rankならA不変・Bだけが参照式`(b.float()*s).to(b.dtype)`とビット一致 (iii)`.alpha`鍵が無ければ倍率1.0 (iv)(v)attach後のforwardがA/B形式の双子と一致 (vi)alphaがBF16でもF32版と同値 (vii)downだけでupが無ければ`RuntimeError` (viii)A/Bとdown/upが混在するファイルは**A/B枝のみを採る**（ファイル単位ガードの固定）、を確かめている。
+
+### 88.5 実機ゲート（MCP経由・オーナー了承のもとエージェントが実行）
+
+**RTX 4070 Ti SUPER 16GB。バックエンドはエージェントが`run.ps1`でreal起動し（`config.yaml`は未編集・`model.backend`は既定の`auto`でREALが自動選択された）、終了後に停止した。** 経路は自前のstdioクライアントで`python -m mcp_server`を子プロセス起動する確立済みの手段である。**全ジョブでプロンプト・解像度384×256・24fps・シード4242を固定し、Phase 2ではPhase 1で保存した`req_*.json`をそのまま再送している**（G2の0.5指定版だけが`strength`の値1つ違う）。ジョブは常に同時1本のみ。
+
+#### (1) Phase 1（変更前ベースライン。2026-09-02 07:39〜07:54）
+
+| ID | 内容 | mp4のSHA-256（先頭8桁） | 所見 |
+|---|---|---|---|
+| B0a／B0b | LoRA無し（2.3）を続けて2回 | `c273b9fd…` ／ `c273b9fd…` | **完全一致＝再現性の錨。** この環境では「同じ入力なら mp4 はバイト単位で同じ」が成り立ち、SHA比較を判定手段に使える |
+| B1 | LoRA無しの基準（B0aと同一ジョブ） | `c273b9fd…` | — |
+| B2／B3 | `DR34ML4Y_LT3X_V3` 強度1.0（2.3／2.5） | `9d816615…` ／ `cc396f3f…` | A/B形式。G1の比較対象 |
+| B4／B5 | `Pixar_Toon`／`LTX-2.3-Henshin` 強度1.0（2.3） | `4e307478…` ／ `bce15b2b…` | **どちらも`server.log`に`strength=1, effective=0.5`・attachログに`strength=0.500`**＝88.2の実害の実機確認 |
+| B6 | `LTX2.3-MysticXXX` 強度1.0（2.3・kohya形式） | `c273b9fd…` | **B1と完全一致＝無音の空振りの証拠。** ログには`matched 0 Linear modules — LoRA/model KEY-FORMAT MISMATCH`が出ているが、APIは成功として完走していた |
+| S1 | 撮り直し用の素材・121フレーム・音声つき（2.3） | `709e628b…` | `ffprobe`で音声ストリーム（aac 48kHz 2ch）を確認済み |
+
+**Phase 1で採ったattach件数**（`logs/ltx_worker.log`）: `DR34ML4Y_LT3X_V3` 1,440 Linear／`Pixar_Toon` 576／`LTX-2.3-Henshin` 1,152／`LTX2.3-MysticXXX` **0**。
+
+#### (2) Phase 2（変更後。2026-09-02 08:37〜08:57）
+
+| ゲート | 判定基準 | 結果 | 実測の要点 |
+|---|---|---|---|
+| G1 | B2／B3とmp4のSHA-256が完全一致 | **合格** | 2.3（`9d816615…`）・2.5（`cc396f3f…`）とも一致＝**A/B形式の既存の挙動は1バイトも変わっていない** |
+| G2 | B4／B5と不一致、かつ強度0.5でB4／B5と一致 | **合格** | 強度1.0は両方とも不一致（`70694b98…`／`7a2262cd…`）、**強度0.5は両方ともB4／B5とバイト単位で一致**。撤去されたのはちょうど0.5倍だけで副作用が無いことの証明。`server.log`から`effective=`の表示も消えた |
+| G3 | MysticXXXがB1・B6と不一致、フレーム平均絶対差>1.0/255 | **合格** | SHA `8d74744b…`。**平均絶対差 71.087/255（正規化0.2788）＝判定基準の約71倍**・差のある画素99.50%。尺度の妥当性は「G4対B1＝0.000000」「B2対B1＝64.639/255」との対比で確認した（効いているA/B形式のLoRAと同程度の変化量） |
+| G4 | G3の直後のLoRA無し再生成がB1とSHA一致 | **合格** | `c273b9fd…`で完全一致・最大画素差0＝**detach残留ゼロ** |
+| G5 | attach件数が0より大きく、0件マッチの警告が出ない | **合格** | MysticXXXが**1,228 Linear**（変更前は0）。今回のセッションで`KEY-FORMAT MISMATCH`の新規出力は無し。2.5側も`DR34ML4Y_LT3X_V3`が1,440で従来どおり |
+| G6 | 非対応書式が422 `LORA_FORMAT_UNSUPPORTED`で断られ、撤去後は一覧から消える | **合格** | 合成したLoHa風ファイル（`hada_w1_a`系4鍵だけを持つ736バイトの有効なsafetensors）を`models/LTX23/StyleLoRA/`へ一時配置→**HTTP 422**・`detail`に`LoHa (Hadamard-product 'hada_' keys)`。撤去後は`GET /loras`から消失を確認 |
+| G7／G8／G9 | 撮り直し（Retake）＋スタイルLoRAで`metadata.json`の`freeze_proof`が`pass:true`かつ映像4本・音声4本とも0.0 | **合格** | 2.3・2.5・「音声再生成なし×`audio_strength=0.0`」の3本とも8項目すべて0.0。**素材S1が音声つきなので音声側が`None`にならないことも確認した。** 本3本は撮り直し側の確認であり、**台帳の記録は§3-108とは別項である** |
+
+**9ゲートすべて合格。不合格・想定外はなし。** 後始末として、合成LoHa風ファイルは撤去（`GET /loras`からの消失を確認）・ベースモデルは`LTX23`／`state=ready`へ復帰・エージェントが起動したバックエンドは停止済みである。**リポジトリ内への書き込みは`outputs/lora-gate-2026-09-02/`と、G6のために一時作成して撤去した合成LoRA 1本だけである。**
+
+### 88.6 未検証として残る事項
+
+- **alpha ≠ rank のkohya実ファイルは手元に無い。** 手持ちのkohya形式2本（`LTX2.3-MysticXXX`・`SynthPussy_01_rank32`）はいずれもalpha＝rank＝倍率1.0であり、**`alpha ÷ rank`が1.0でない場合の倍率経路の正しさは、88.4のエンジンvenvの合成テストだけが根拠である。** alphaの異なる実ファイルが手に入った時点で、実機で1本確かめておくとよい。
+- **許容した軽微事項**: `_fuse_ic_loras`のログが出す鍵数`n_keys = 2×ペア数`は、鍵が3種あるkohya形式のファイルでは過少表示になる。表示だけの問題なので触っていない。

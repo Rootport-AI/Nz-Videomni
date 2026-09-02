@@ -1,10 +1,17 @@
-"""S1: LoraRegistry — config + lora_dir scan, kind/scale/thumbnail, resolve.
+"""S1: LoraRegistry — config + lora_dir scan, kind/layout/thumbnail, resolve.
 
 Torch-free. Synthetic safetensors headers are written in pure Python (8-byte LE
 length + JSON header + a few data bytes) so kind detection (``__metadata__``
-``reference_downscale_factor``) and the alpha/rank convolution scale
-(``ss_network_alpha`` / ``ss_network_dim``, kohya metadata) are exercised without
-any real weights. Mirrors the model_registry scan/collision precedent.
+``reference_downscale_factor``) and weight-layout detection (the tensor KEY
+NAMES) are exercised without any real weights. Mirrors the model_registry
+scan/collision precedent.
+
+§3-108 (2026-09-02) replaced the ``scale`` field with ``layout``: the alpha/rank
+metadata multiplier is gone (musubi-tuner already bakes alpha into the converted
+weights and copies ``ss_network_alpha`` over verbatim, so multiplying again was
+a double application), and an adapter whose key layout the engine loader cannot
+read is now refused at ``resolve()`` with 422 ``LORA_FORMAT_UNSUPPORTED`` rather
+than silently producing a LoRA-free video.
 """
 
 from __future__ import annotations
@@ -23,8 +30,24 @@ from services.lora_registry import LoraRegistry
 # helpers
 # --------------------------------------------------------------------------- #
 
+#: One A/B key, enough to make a fixture look like a readable LoRA. Since
+#: §3-108 a header with no recognisable weight keys is an UNSUPPORTED layout, so
+#: every fixture that is not itself about layout detection needs one of these —
+#: otherwise resolve() would 422 in tests about kind/thumbnail/collisions.
+_DEFAULT_TENSORS = {
+    "diffusion_model.transformer_blocks.0.attn1.to_q.lora_A.weight": [4, 8],
+    "diffusion_model.transformer_blocks.0.attn1.to_q.lora_B.weight": [8, 4],
+}
+
+
 def _write_safetensors(path, metadata=None, tensors=None, data_bytes=16):
-    """Write a minimal valid-header safetensors file (header only matters)."""
+    """Write a minimal valid-header safetensors file (header only matters).
+
+    ``tensors`` defaults to :data:`_DEFAULT_TENSORS` (an A/B pair); pass an
+    explicit dict — ``{}`` included — to control the layout under test.
+    """
+    if tensors is None:
+        tensors = _DEFAULT_TENSORS
     header: dict = {}
     if metadata is not None:
         header["__metadata__"] = {k: str(v) for k, v in metadata.items()}
@@ -54,7 +77,7 @@ def _config(tmp_path, ic_loras=None, lora_dir=None):
 
 
 # --------------------------------------------------------------------------- #
-# directory scan + kind + scale
+# directory scan + kind + layout
 # --------------------------------------------------------------------------- #
 
 def test_scan_discovers_style_lora(tmp_path):
@@ -69,7 +92,9 @@ def test_scan_discovers_style_lora(tmp_path):
     assert info.kind == "style"
     assert info.source == "scan"
     assert info.exists
-    assert info.scale == pytest.approx(0.5)  # 16 / 32
+    # The kohya alpha/dim metadata is a fossil of the pre-conversion training
+    # run and no longer influences anything — only the KEY NAMES are read.
+    assert info.layout == "ab"
 
 
 def test_scan_control_lora_detected_by_metadata(tmp_path):
@@ -80,25 +105,6 @@ def test_scan_control_lora_detected_by_metadata(tmp_path):
     )
     reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
     assert reg.info("some-control").kind == "control"
-
-
-def test_scale_defaults_to_one_without_alpha(tmp_path):
-    lora_dir = tmp_path / "loras"
-    _write_safetensors(lora_dir / "plain.safetensors", metadata={"foo": "bar"})
-    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    assert reg.info("plain").scale == 1.0
-
-
-def test_scale_rank_falls_back_to_lora_a_tensor_shape(tmp_path):
-    """No ss_network_dim -> rank read from a lora_A tensor's shape[0]."""
-    lora_dir = tmp_path / "loras"
-    _write_safetensors(
-        lora_dir / "ranked.safetensors",
-        metadata={"ss_network_alpha": "8"},  # dim absent
-        tensors={"diffusion_model.blocks.0.attn.to_q.lora_A.weight": [16, 4096]},
-    )
-    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    assert reg.info("ranked").scale == pytest.approx(0.5)  # 8 / 16
 
 
 def test_scan_skips_broken_safetensors(tmp_path):
@@ -247,35 +253,36 @@ def test_config_preprocess_is_control_even_without_metadata(tmp_path):
     )
     info = reg.info("canny-control")
     assert info.kind == "control"  # from preprocess, header unreadable
-    assert info.scale == 1.0
+    # No header -> nothing to judge a layout on -> the pre-§3-108 "accept it,
+    # let the engine speak" behaviour is kept. Every zero-byte dummy adapter in
+    # the API test suites depends on this default.
+    assert info.layout == "ab"
     assert info.source == "config"
     assert info.preprocess == "canny"
 
 
 # --------------------------------------------------------------------------- #
-# resolve (scale folding + failure modes)
+# resolve (strength pass-through + failure modes)
 # --------------------------------------------------------------------------- #
 
-def test_resolve_folds_alpha_scale_into_strength(tmp_path):
+def test_resolve_passes_strength_through_despite_alpha_metadata(tmp_path):
+    """§3-108 B案 (ComfyUI semantics): ``ss_network_alpha``/``ss_network_dim``
+    in the header are NOT folded into the strength any more. musubi-tuner's A/B
+    conversion already baked alpha into the weights and then copied the training
+    metadata across verbatim, so the old ``* (alpha/dim)`` was a second, fossil
+    application — ``Pixar_Toon`` (16/32) ran at half the requested strength.
+    What the caller asks for is what the engine gets."""
     lora_dir = tmp_path / "loras"
     _write_safetensors(
-        lora_dir / "scaled.safetensors",
+        lora_dir / "with-alpha-meta.safetensors",
         metadata={"ss_network_alpha": "16", "ss_network_dim": "32"},
     )
     reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    path, strength, preprocess, audio_strength = reg.resolve("scaled", 1.0)
-    assert strength == pytest.approx(0.5)  # 1.0 * (16/32)
+    path, strength, preprocess, audio_strength = reg.resolve("with-alpha-meta", 0.8)
+    assert strength == pytest.approx(0.8)  # NOT 0.4
     assert preprocess == "none"
-    assert path.name == "scaled.safetensors"
+    assert path.name == "with-alpha-meta.safetensors"
     assert audio_strength is None  # not requested -> follows the video axis
-
-
-def test_resolve_scan_entry_default_scale_unchanged(tmp_path):
-    lora_dir = tmp_path / "loras"
-    _write_safetensors(lora_dir / "plain.safetensors", metadata={"x": "1"})
-    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    _, strength, _, _ = reg.resolve("plain", 0.8)
-    assert strength == pytest.approx(0.8)  # scale 1.0
 
 
 def test_resolve_audio_strength_none_by_default(tmp_path):
@@ -286,28 +293,29 @@ def test_resolve_audio_strength_none_by_default(tmp_path):
     assert resolved.audio_strength is None
 
 
-def test_resolve_audio_strength_zero_with_scaled_entry_stays_zero(tmp_path):
-    # audio_strength=0.0 means "skip the audio-side patch entirely" — 0 * scale
-    # must stay exactly 0.0, never folded away to None.
+def test_resolve_audio_strength_zero_stays_zero(tmp_path):
+    # audio_strength=0.0 means "skip the audio-side patch entirely" — it must
+    # stay exactly 0.0, never folded away to None (which would mean "follow the
+    # video axis", the opposite instruction).
     lora_dir = tmp_path / "loras"
     _write_safetensors(
-        lora_dir / "scaled.safetensors",
+        lora_dir / "with-alpha-meta.safetensors",
         metadata={"ss_network_alpha": "16", "ss_network_dim": "32"},
     )
     reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    resolved = reg.resolve("scaled", 1.0, audio_strength=0.0)
+    resolved = reg.resolve("with-alpha-meta", 1.0, audio_strength=0.0)
     assert resolved.audio_strength == 0.0
 
 
-def test_resolve_audio_strength_scaled_by_entry_scale(tmp_path):
+def test_resolve_audio_strength_passed_through(tmp_path):
     lora_dir = tmp_path / "loras"
     _write_safetensors(
-        lora_dir / "scaled.safetensors",
-        metadata={"ss_network_alpha": "32", "ss_network_dim": "16"},  # scale=2.0
+        lora_dir / "with-alpha-meta.safetensors",
+        metadata={"ss_network_alpha": "32", "ss_network_dim": "16"},  # old scale=2.0
     )
     reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
-    resolved = reg.resolve("scaled", 1.0, audio_strength=0.5)
-    assert resolved.audio_strength == pytest.approx(1.0)  # 0.5 * 2.0
+    resolved = reg.resolve("with-alpha-meta", 1.0, audio_strength=0.5)
+    assert resolved.audio_strength == pytest.approx(0.5)  # NOT 1.0
 
 
 def test_resolve_pathlike_name_rejected(tmp_path):
@@ -373,3 +381,170 @@ def test_rescan_picks_up_new_file(tmp_path):
     _write_safetensors(lora_dir / "late.safetensors", metadata={"x": "1"})
     reg.rescan()
     assert "late" in reg.names()
+
+
+# --------------------------------------------------------------------------- #
+# §3-108: weight-layout detection + the 422 it feeds
+#
+# Only the tensor KEY NAMES are read (shapes and metadata are irrelevant here),
+# because that is all a torch-free header parse can see — and all the engine
+# loader itself keys off.
+# --------------------------------------------------------------------------- #
+
+_PREFIX = "diffusion_model.transformer_blocks.0.attn1.to_q"
+
+
+def _layout_of(tmp_path, tensors, name="probe"):
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(lora_dir / f"{name}.safetensors", tensors=tensors)
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    return reg.info(name).layout
+
+
+def test_layout_ab(tmp_path):
+    assert _layout_of(
+        tmp_path,
+        {
+            f"{_PREFIX}.lora_A.weight": [16, 4096],
+            f"{_PREFIX}.lora_B.weight": [4096, 16],
+        },
+    ) == "ab"
+
+
+def test_layout_kohya(tmp_path):
+    """The shape §3-108 unblocks: sd-scripts down/up/alpha with DOTTED paths
+    (LTX2.3-MysticXXX, SynthPussy_01_rank32)."""
+    assert _layout_of(
+        tmp_path,
+        {
+            f"{_PREFIX}.lora_down.weight": [16, 4096],
+            f"{_PREFIX}.lora_up.weight": [4096, 16],
+            f"{_PREFIX}.alpha": [],
+        },
+    ) == "kohya"
+
+
+def test_layout_unsupported_dora(tmp_path):
+    layout = _layout_of(tmp_path, {f"{_PREFIX}.dora_scale": [4096]})
+    assert layout.startswith("unsupported:")
+    assert "DoRA" in layout
+
+
+def test_layout_unsupported_loha(tmp_path):
+    layout = _layout_of(
+        tmp_path,
+        {
+            "lora_unet_transformer_blocks_0_attn1_to_q.hada_w1_a": [16, 4096],
+            "lora_unet_transformer_blocks_0_attn1_to_q.hada_w1_b": [4096, 16],
+        },
+    )
+    assert layout.startswith("unsupported:")
+    assert "LoHa" in layout
+
+
+def test_layout_unsupported_lokr(tmp_path):
+    layout = _layout_of(
+        tmp_path,
+        {
+            "lora_unet_transformer_blocks_0_attn1_to_q.lokr_w1": [16, 16],
+            "lora_unet_transformer_blocks_0_attn1_to_q.lokr_w2": [256, 256],
+        },
+    )
+    assert layout.startswith("unsupported:")
+    assert "LoKr" in layout
+
+
+def test_layout_unsupported_unknown_keys(tmp_path):
+    """Neither A/B nor down/up nor a recognised exotic factorisation — including
+    the degenerate 'valid header, no tensors at all' file."""
+    layout = _layout_of(tmp_path, {"some.random.tensor": [1]})
+    assert layout.startswith("unsupported:")
+    assert "some.random.tensor" in layout  # the detail names what it did see
+    assert _layout_of(tmp_path, {}, name="empty").startswith("unsupported:")
+
+
+def test_layout_unsupported_kohya_underscore_keys(tmp_path):
+    """Underscore-joined kohya names resolve to no ``named_modules()`` path, so
+    they would attach to 0 Linears — exactly the silent no-op §3-108 ends. They
+    are refused rather than accepted as "kohya"."""
+    layout = _layout_of(
+        tmp_path,
+        {
+            "lora_unet_transformer_blocks_0_attn1_to_q.lora_down.weight": [16, 4096],
+            "lora_unet_transformer_blocks_0_attn1_to_q.lora_up.weight": [4096, 16],
+        },
+    )
+    assert layout.startswith("unsupported:")
+    assert "underscores" in layout
+
+
+def test_layout_order_dora_beats_ab(tmp_path):
+    """A DoRA file also carries ordinary A/B keys; reading it as plain A/B would
+    silently drop the magnitude vector, so ``.dora_scale`` is checked first."""
+    assert _layout_of(
+        tmp_path,
+        {
+            f"{_PREFIX}.lora_A.weight": [16, 4096],
+            f"{_PREFIX}.lora_B.weight": [4096, 16],
+            f"{_PREFIX}.dora_scale": [4096],
+        },
+    ).startswith("unsupported:")
+
+
+def test_layout_order_ab_beats_kohya(tmp_path):
+    """One A/B key makes the whole file an A/B file — the same file-unit guard
+    ``load_ic_lora_pairs`` applies, so a mixed file's delta is never doubled."""
+    assert _layout_of(
+        tmp_path,
+        {
+            f"{_PREFIX}.lora_A.weight": [16, 4096],
+            f"{_PREFIX}.lora_B.weight": [4096, 16],
+            "diffusion_model.transformer_blocks.1.attn1.to_q.lora_down.weight": [16, 4096],
+            "diffusion_model.transformer_blocks.1.attn1.to_q.lora_up.weight": [4096, 16],
+        },
+    ) == "ab"
+
+
+def test_resolve_unsupported_layout_is_422(tmp_path):
+    """The whole point of the layout field: a file the engine loader cannot read
+    is refused at resolve() — which BOTH endpoint validation loops (single and
+    chain) already call per requested adapter — instead of running the job and
+    returning a video indistinguishable from the LoRA-free one."""
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(
+        lora_dir / "loha-style.safetensors",
+        tensors={"lora_unet_blocks_0_attn.hada_w1_a": [16, 4096]},
+    )
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    assert "loha-style" in reg.names()  # still LISTED — only using it is refused
+    with pytest.raises(APIError) as ei:
+        reg.resolve("loha-style", 1.0)
+    assert ei.value.code == "LORA_FORMAT_UNSUPPORTED"
+    assert ei.value.status_code == 422
+    assert "LoHa" in ei.value.detail
+
+
+def test_as_dict_key_set_unchanged_by_layout(tmp_path):
+    """``layout`` is server-internal: GET /loras keeps exactly its prior keys, so
+    no frontend build has to learn anything new (the former ``scale`` was never
+    exposed either)."""
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(
+        lora_dir / "kohya-style.safetensors",
+        tensors={
+            f"{_PREFIX}.lora_down.weight": [16, 4096],
+            f"{_PREFIX}.lora_up.weight": [4096, 16],
+            f"{_PREFIX}.alpha": [],
+        },
+    )
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    assert reg.info("kohya-style").layout == "kohya"
+    assert set(reg.info("kohya-style").as_dict()) == {
+        "name",
+        "kind",
+        "has_thumbnail",
+        "exists",
+        "source",
+        "preprocess",
+        "reference_downscale_factor",
+    }

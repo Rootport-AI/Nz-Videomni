@@ -334,3 +334,246 @@ def test_full_mute_does_not_warn_key_format_mismatch(caplog):
             assert attach_ic_loras(root, [(str(path), 1.0, 0.0)]) == 0
         assert "KEY-FORMAT" not in caplog.text
         assert getattr(aud, IC_LORA_SPECS_ATTR, None) is None
+
+
+# --------------------------------------------------------------------- #
+# §3-108: kohya key layout (.lora_down/.lora_up/.alpha)                  #
+# --------------------------------------------------------------------- #
+#
+# The two kohya files actually on this machine (LTX2.3-MysticXXX,
+# SynthPussy_01_rank32) both carry alpha == rank, i.e. scale 1.0 — so the
+# SCALED path has no real-file witness at all and these synthetic cases are its
+# only evidence. Scale factors and strengths below are powers of two on purpose,
+# so "fold into B, then multiply by strength" and "multiply by the combined
+# strength" come out bit-identical rather than merely close.
+
+_VIDEO_BASE = "diffusion_model.transformer_blocks.0.attn1.to_q"
+_AUDIO_BASE = "diffusion_model.transformer_blocks.0.audio_attn1.to_q"
+
+
+def _save_kohya_lora(
+    path,
+    A: torch.Tensor,
+    B: torch.Tensor,
+    *,
+    alpha: float | None = None,
+    alpha_dtype: torch.dtype = torch.float32,
+    bases: tuple[str, ...] = (_VIDEO_BASE, _AUDIO_BASE),
+    include_up: bool = True,
+) -> None:
+    """kohya/sd-scripts twin of :func:`_save_av_lora`: the SAME factors in the
+    SAME orientation (down == A, up == B — no transpose), but with the alpha
+    carried as a separate 0-dim tensor instead of baked into the weights."""
+    from safetensors.torch import save_file
+
+    sd = {}
+    for base in bases:
+        sd[base + ".lora_down.weight"] = A.to(torch.bfloat16)
+        if include_up:
+            sd[base + ".lora_up.weight"] = B.to(torch.bfloat16)
+        if alpha is not None:
+            sd[base + ".alpha"] = torch.tensor(alpha, dtype=alpha_dtype)
+    save_file(sd, str(path))
+
+
+def _pairs_by_prefix(path) -> dict:
+    from engine.gguf.ic_lora_common import load_ic_lora_pairs
+
+    (_path, _s, _a, pairs), = load_ic_lora_pairs([(str(path), 1.0)])
+    return {prefix: (lora_a, lora_b) for prefix, lora_a, lora_b in pairs}
+
+
+def test_kohya_alpha_equal_rank_is_bitwise_the_ab_twin():
+    """(i) alpha == rank -> scale 1.0 -> the factors must come back untouched,
+    bit for bit identical to the same LoRA saved in A/B form."""
+    pytest.importorskip("ltx_core")
+    import tempfile
+    from pathlib import Path
+
+    torch.manual_seed(20)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+
+    with tempfile.TemporaryDirectory() as td:
+        ab_path, kohya_path = Path(td) / "ab.safetensors", Path(td) / "kohya.safetensors"
+        _save_av_lora(ab_path, A, B)
+        _save_kohya_lora(kohya_path, A, B, alpha=float(RANK))
+        ab, kohya = _pairs_by_prefix(ab_path), _pairs_by_prefix(kohya_path)
+
+    assert set(kohya) == set(ab)  # same module prefixes; .alpha never leaks in
+    for prefix, (a_ab, b_ab) in ab.items():
+        a_k, b_k = kohya[prefix]
+        assert torch.equal(a_k, a_ab), prefix
+        assert torch.equal(b_k, b_ab), prefix
+
+
+def test_kohya_alpha_twice_rank_folds_into_b_only():
+    """(ii) alpha == 2*rank -> scale 2.0 folded into B ALONE, matching the
+    reference expression ``(b.float() * s).to(b.dtype)`` bit for bit."""
+    pytest.importorskip("ltx_core")
+    import tempfile
+    from pathlib import Path
+
+    torch.manual_seed(21)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+    want_b = (B.to(torch.bfloat16).float() * 2.0).to(torch.bfloat16)
+
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "kohya.safetensors"
+        _save_kohya_lora(path, A, B, alpha=float(2 * RANK))
+        kohya = _pairs_by_prefix(path)
+
+    for prefix, (a_k, b_k) in kohya.items():
+        assert torch.equal(a_k, A.to(torch.bfloat16)), prefix  # A untouched
+        assert torch.equal(b_k, want_b), prefix
+
+
+def test_kohya_without_alpha_key_is_scale_one():
+    """(iii) no ``.alpha`` tensor -> nothing to divide by rank -> scale 1.0 (the
+    factors are already final), NOT a skipped pair."""
+    pytest.importorskip("ltx_core")
+    import tempfile
+    from pathlib import Path
+
+    torch.manual_seed(22)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "kohya.safetensors"
+        _save_kohya_lora(path, A, B, alpha=None)
+        kohya = _pairs_by_prefix(path)
+
+    assert len(kohya) == 2
+    for prefix, (a_k, b_k) in kohya.items():
+        assert torch.equal(a_k, A.to(torch.bfloat16)), prefix
+        assert torch.equal(b_k, B.to(torch.bfloat16)), prefix
+
+
+def _attach_and_forward(save_lora, strength, x):
+    """Attach one saved LoRA onto a FRESH AV tree (identical weights every call)
+    and return both Linears' outputs, so two layouts can be compared directly."""
+    import tempfile
+    from pathlib import Path
+
+    from engine.gguf.ic_lora_common import attach_ic_loras
+
+    torch.manual_seed(23)
+    Wv, Wa = torch.randn(OUT_F, IN_F), torch.randn(OUT_F, IN_F)
+    root, vid, aud = _av_tree(Wv, Wa)
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lora.safetensors"
+        save_lora(path)
+        assert attach_ic_loras(root, [(str(path), strength)]) == 2
+        return vid(x), aud(x)
+
+
+def test_kohya_attach_forward_matches_ab_twin_alpha_equal_rank():
+    """(iv) end to end at scale 1.0: attaching the kohya file and the A/B file at
+    the same strength gives the same forward output."""
+    pytest.importorskip("ltx_core")
+
+    torch.manual_seed(24)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+    x = torch.randn(5, IN_F)
+
+    ab = _attach_and_forward(lambda p: _save_av_lora(p, A, B), 0.75, x)
+    kohya = _attach_and_forward(
+        lambda p: _save_kohya_lora(p, A, B, alpha=float(RANK)), 0.75, x
+    )
+    assert torch.equal(kohya[0], ab[0])
+    assert torch.equal(kohya[1], ab[1])
+
+
+def test_kohya_attach_forward_matches_ab_twin_at_scaled_strength():
+    """(v) end to end at scale 2.0: kohya @ strength 0.5 == the A/B twin @ 1.0.
+    That equivalence is the whole user-visible meaning of folding alpha/rank
+    into B at load time."""
+    pytest.importorskip("ltx_core")
+
+    torch.manual_seed(25)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+    x = torch.randn(5, IN_F)
+
+    ab = _attach_and_forward(lambda p: _save_av_lora(p, A, B), 1.0, x)
+    kohya = _attach_and_forward(
+        lambda p: _save_kohya_lora(p, A, B, alpha=float(2 * RANK)), 0.5, x
+    )
+    assert torch.equal(kohya[0], ab[0])
+    assert torch.equal(kohya[1], ab[1])
+
+
+def test_kohya_bf16_alpha_matches_f32_alpha():
+    """(vi) the alpha tensor's dtype varies per trainer (MysticXXX ships F32,
+    SynthPussy_01_rank32 BF16) — reading it through ``.float().item()`` makes
+    the two indistinguishable."""
+    pytest.importorskip("ltx_core")
+    import tempfile
+    from pathlib import Path
+
+    torch.manual_seed(26)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+
+    with tempfile.TemporaryDirectory() as td:
+        f32_path = Path(td) / "f32.safetensors"
+        bf16_path = Path(td) / "bf16.safetensors"
+        _save_kohya_lora(f32_path, A, B, alpha=float(2 * RANK))
+        _save_kohya_lora(
+            bf16_path, A, B, alpha=float(2 * RANK), alpha_dtype=torch.bfloat16
+        )
+        f32, bf16 = _pairs_by_prefix(f32_path), _pairs_by_prefix(bf16_path)
+
+    assert set(f32) == set(bf16)
+    for prefix, (a_f32, b_f32) in f32.items():
+        a_bf16, b_bf16 = bf16[prefix]
+        assert torch.equal(a_bf16, a_f32), prefix
+        assert torch.equal(b_bf16, b_f32), prefix
+
+
+def test_kohya_missing_up_raises():
+    """(vii) a down without its up is a corrupt file, and fails as loudly as the
+    A/B branch's missing lora_B — never a quietly dropped pair."""
+    pytest.importorskip("ltx_core")
+    import tempfile
+    from pathlib import Path
+
+    from engine.gguf.ic_lora_common import load_ic_lora_pairs
+
+    torch.manual_seed(27)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "half.safetensors"
+        _save_kohya_lora(path, A, B, alpha=float(RANK), include_up=False)
+        with pytest.raises(RuntimeError, match="lora_up.weight missing"):
+            load_ic_lora_pairs([(str(path), 1.0)])
+
+
+def test_mixed_ab_and_kohya_reads_only_the_ab_keys():
+    """(viii) file-unit guard: ONE ``.lora_A.weight`` makes the WHOLE file an A/B
+    file and its kohya-named keys are ignored. Reading both would apply two
+    deltas where the file means one — and "ab" is also what
+    ``services.lora_registry._detect_layout`` calls a mixed file, so the two
+    layers cannot disagree about what they are looking at."""
+    pytest.importorskip("ltx_core")
+    import tempfile
+    from pathlib import Path
+
+    from safetensors.torch import save_file
+
+    torch.manual_seed(28)
+    A, B = torch.randn(RANK, IN_F), torch.randn(OUT_F, RANK)
+
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "mixed.safetensors"
+        save_file(
+            {
+                _VIDEO_BASE + ".lora_A.weight": A.to(torch.bfloat16),
+                _VIDEO_BASE + ".lora_B.weight": B.to(torch.bfloat16),
+                _AUDIO_BASE + ".lora_down.weight": A.to(torch.bfloat16),
+                _AUDIO_BASE + ".lora_up.weight": B.to(torch.bfloat16),
+                _AUDIO_BASE + ".alpha": torch.tensor(float(2 * RANK)),
+            },
+            str(path),
+        )
+        pairs = _pairs_by_prefix(path)
+
+    assert set(pairs) == {"transformer_blocks.0.attn1.to_q"}

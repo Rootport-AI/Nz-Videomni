@@ -623,3 +623,65 @@ def test_resolve_reference_preprocess_conflict_raises_400():
         _resolve_reference_preprocess(lora_paths)
     assert exc_info.value.status_code == 400
     assert exc_info.value.code == "LORA_PREPROCESS_CONFLICT"
+
+
+# --------------------------------------------- §3-108: unsupported LoRA layout
+
+
+UNSUPPORTED_LORA = "loha-style"
+
+
+@pytest.fixture()
+def unsupported_lora_client(tmp_path):
+    """A client registering ONE adapter whose file is a perfectly valid
+    safetensors carrying a LoHa (Hadamard-product) factorisation — a layout
+    ``engine.gguf.ic_lora_common`` cannot pair into (A, B). Before §3-108 such a
+    file loaded as 0 pairs and the job produced a video byte-identical to the
+    LoRA-free one; now the endpoint refuses it.
+
+    ``lora_dir`` is pinned to a tmp dir so the real ./models/LTX23/StyleLoRA
+    folder never leaks into this assertion.
+    """
+    import struct
+
+    lora_file = tmp_path / "loha-style.safetensors"
+    header = {
+        "lora_unet_transformer_blocks_0_attn1_to_q.hada_w1_a": {
+            "dtype": "F16", "shape": [16, 4096], "data_offsets": [0, 0],
+        },
+        "lora_unet_transformer_blocks_0_attn1_to_q.hada_w1_b": {
+            "dtype": "F16", "shape": [4096, 16], "data_offsets": [0, 0],
+        },
+    }
+    blob = json.dumps(header).encode("utf-8")
+    lora_file.write_bytes(struct.pack("<Q", len(blob)) + blob + b"\x00" * 16)
+
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {
+            "backend": "mock",
+            "ic_loras": {UNSUPPORTED_LORA: lora_file.as_posix()},
+            "lora_dir": (tmp_path / "empty-lora-dir").as_posix(),
+        },
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    app = main.build_app(_make_args(cfg_path.as_posix()))
+    with TestClient(app) as c:
+        c.app_context = app.state.context  # type: ignore[attr-defined]
+        yield c
+
+
+def test_generate_with_unsupported_lora_format_422(unsupported_lora_client):
+    """The endpoint's existing per-adapter ``resolve()`` call is what catches it,
+    so no new validation step was needed in api/generate.py."""
+    payload = _base_payload(loras=[{"name": UNSUPPORTED_LORA, "strength": 1.0}])
+    r = unsupported_lora_client.post("/api/v1/generate", json=payload)
+    assert r.status_code == 422, r.text
+    body = r.json()["error"]
+    assert body["code"] == "LORA_FORMAT_UNSUPPORTED"
+    assert "LoHa" in body["detail"]  # the detail names the format it recognised

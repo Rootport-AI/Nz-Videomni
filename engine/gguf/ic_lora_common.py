@@ -11,8 +11,10 @@ Two engine paths consume IC-LoRA adapters:
 Both need the SAME front half: load the LoRA safetensors through the wheel's
 ``SafetensorsStateDictLoader`` with ``LTXV_LORA_COMFY_RENAMING_MAP`` (which strips
 the ``diffusion_model.`` prefix so LoRA keys align with the raw GGUF/model keys),
-then pair ``<prefix>.lora_A.weight`` / ``<prefix>.lora_B.weight`` and shape-check.
-That reusable front half lives here in :func:`load_ic_lora_pairs`.
+then pair ``<prefix>.lora_A.weight`` / ``<prefix>.lora_B.weight`` — or, for a
+kohya-named file, ``<prefix>.lora_down.weight`` / ``<prefix>.lora_up.weight``
+with its ``<prefix>.alpha`` folded into B — and shape-check. That reusable front
+half lives here in :func:`load_ic_lora_pairs`.
 
 The forward-time path additionally needs to attach the A/B factors to the target
 ``nn.Linear`` instances so they ride ``block.to(device)`` during block-swap — see
@@ -43,6 +45,15 @@ IC_LORA_SPECS_ATTR = "_ic_lora_specs"
 
 _SUFFIX_A = ".lora_A.weight"
 _SUFFIX_B = ".lora_B.weight"
+
+# kohya/sd-scripts naming (§3-108). Same factor shapes as A/B — down is the
+# (rank, in) projection, up the (out, rank) one, so NO transpose is needed —
+# but the alpha/rank scale is carried as a separate 0-dim tensor instead of
+# being baked into the weights. Kept in sync with
+# ``services.lora_registry._detect_layout`` (app venv, no torch there).
+_SUFFIX_DOWN = ".lora_down.weight"
+_SUFFIX_UP = ".lora_up.weight"
+_SUFFIX_ALPHA = ".alpha"
 
 # One configured LoRA: ``audio_strength`` None → the audio side follows
 # ``strength`` (historical behaviour, byte-identical delta path).
@@ -156,8 +167,22 @@ def load_ic_lora_pairs(
     LoRA keys agree exactly). ``lora_A``/``lora_B`` are returned in their native
     dtype (bf16) on CPU; callers cast to fp32 at delta time.
 
-    Raises on a missing file or a lora_A present with no matching lora_B
-    (corrupt/unsupported layout). Empty ``ic_loras`` → empty list.
+    TWO KEY LAYOUTS are read (§3-108), chosen PER FILE, never mixed:
+
+      * A/B (``.lora_A.weight`` / ``.lora_B.weight``) — the diffusers/musubi
+        converted form, whose alpha is already folded into the weights;
+      * kohya (``.lora_down.weight`` / ``.lora_up.weight`` / ``.alpha``) — the
+        sd-scripts training form, whose ``scale = alpha / rank`` is folded into
+        B here, at load time, exactly as musubi-tuner's own converter does.
+
+    A file carrying even ONE ``.lora_A.weight`` key is read as A/B and its
+    kohya-named keys are ignored — the same A/B-first order
+    ``services.lora_registry._detect_layout`` uses, so a mixed file can never
+    have the same delta applied twice.
+
+    Raises on a missing file, a lora_A present with no matching lora_B, or a
+    lora_down present with no matching lora_up (corrupt/unsupported layout).
+    Empty ``ic_loras`` → empty list.
     """
     from ltx_core.loader import (
         LTXV_LORA_COMFY_RENAMING_MAP,
@@ -175,19 +200,50 @@ def load_ic_lora_pairs(
             raise FileNotFoundError(f"IC-LoRA safetensors not found: {path}")
         lora_sd = loader.load(path, sd_ops=LTXV_LORA_COMFY_RENAMING_MAP, device=cpu)
         pairs: list[tuple[str, torch.Tensor, torch.Tensor]] = []
-        for key_a in lora_sd.sd:
-            if not key_a.endswith(_SUFFIX_A):
-                continue
-            prefix = key_a[: -len(_SUFFIX_A)]
-            key_b = prefix + _SUFFIX_B
-            lora_a = lora_sd.sd.get(key_a)
-            lora_b = lora_sd.sd.get(key_b)
-            if lora_b is None:
-                raise RuntimeError(
-                    f"IC-LoRA {Path(path).name}: {key_a} present but {key_b} "
-                    "missing — corrupt/unsupported LoRA layout"
-                )
-            pairs.append((prefix, lora_a, lora_b))
+        # File-unit layout choice (see the docstring): A/B wins outright.
+        has_ab = any(key.endswith(_SUFFIX_A) for key in lora_sd.sd)
+        if has_ab:
+            for key_a in lora_sd.sd:
+                if not key_a.endswith(_SUFFIX_A):
+                    continue
+                prefix = key_a[: -len(_SUFFIX_A)]
+                key_b = prefix + _SUFFIX_B
+                lora_a = lora_sd.sd.get(key_a)
+                lora_b = lora_sd.sd.get(key_b)
+                if lora_b is None:
+                    raise RuntimeError(
+                        f"IC-LoRA {Path(path).name}: {key_a} present but {key_b} "
+                        "missing — corrupt/unsupported LoRA layout"
+                    )
+                pairs.append((prefix, lora_a, lora_b))
+        else:
+            for key_down in lora_sd.sd:
+                if not key_down.endswith(_SUFFIX_DOWN):
+                    continue
+                prefix = key_down[: -len(_SUFFIX_DOWN)]
+                key_up = prefix + _SUFFIX_UP
+                lora_a = lora_sd.sd.get(key_down)
+                lora_b = lora_sd.sd.get(key_up)
+                if lora_b is None:
+                    raise RuntimeError(
+                        f"IC-LoRA {Path(path).name}: {key_down} present but {key_up} "
+                        "missing — corrupt/unsupported LoRA layout"
+                    )
+                # scale = alpha / rank, alpha being a 0-dim tensor whose dtype
+                # varies per trainer (F32 / BF16) -> .float().item() first.
+                # No .alpha key -> scale 1.0 (the factors are already final).
+                alpha = lora_sd.sd.get(prefix + _SUFFIX_ALPHA)
+                rank = int(lora_a.shape[0]) if lora_a.dim() else 0
+                scale = 1.0
+                if alpha is not None and rank:
+                    scale = float(alpha.float().item()) / rank
+                if scale != 1.0:
+                    # OUT-OF-PLACE ON PURPOSE — never ``lora_b.mul_(...)``.
+                    # engine25/gguf_transformer.py memoises load_ic_lora_pairs'
+                    # result and hands the SAME tensor objects to every later
+                    # build, so an in-place fold would compound once per reuse.
+                    lora_b = (lora_b.float() * scale).to(lora_b.dtype)
+                pairs.append((prefix, lora_a, lora_b))
         out.append((path, strength, audio_strength, pairs))
     return out
 

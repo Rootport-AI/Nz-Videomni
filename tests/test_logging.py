@@ -108,9 +108,11 @@ def test_prompt_for_log_escapes_newlines_and_truncates():
     assert len(long) == 203 and long.endswith("...")  # 200 chars + ellipsis
 
 
-def test_loras_for_log_names_and_effective_strength():
-    """The info line lists adapter NAMES with requested strength, adding the
-    effective (alpha-scaled) strength only when it differs; empty -> ``none``."""
+def test_loras_for_log_names_and_requested_strength():
+    """The info line lists adapter NAMES with the requested strength; empty ->
+    ``none``. §3-108 retired the alpha/rank multiplier, so the resolved strength
+    can no longer diverge from the requested one and there is no second number
+    left to print."""
     import types
 
     from services.pipeline_manager import _loras_for_log
@@ -118,12 +120,8 @@ def test_loras_for_log_names_and_effective_strength():
     assert _loras_for_log([], []) == "none"
 
     spec = types.SimpleNamespace(name="Pixar_Toon", strength=0.45)
-    # scale 1.0 (effective == requested) -> terse, no "effective="
     terse = _loras_for_log([spec], [("/p/a.safetensors", 0.45, "none")])
     assert terse == "Pixar_Toon(strength=0.45)"
-    # alpha/rank convolution changed the strength -> both are shown
-    scaled = _loras_for_log([spec], [("/p/a.safetensors", 0.30, "none")])
-    assert "Pixar_Toon(strength=0.45, effective=0.3)" == scaled
 
 
 # --------------------------------- S2: chain stage-progress (real-backend unit)

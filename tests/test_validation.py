@@ -619,6 +619,23 @@ def test_chain_to_clip_request_transcribes_keep_resident():
     assert GenerateChainRequest(**CHAIN_BASE).to_clip_request(0).keep_resident is False
 
 
+def test_chain_to_clip_request_transcribes_keep_resident_embeddings():
+    # §3-114. The same trap as every acceleration field above -- an omission
+    # here does not fail validation, it just makes a chain job's stored request
+    # (GET /jobs, metadata.json) claim False for a run that asked for True.
+    #
+    # AND ONE EXTRA REASON HERE: this field is the one a 422 can hang on. The
+    # stored per-clip request is what a reader consults to explain why a chain
+    # was refused on LTX 2.3, so a dropped transcription would leave the record
+    # contradicting the rejection.
+    from api.models import GenerateChainRequest
+
+    model = GenerateChainRequest(**{**CHAIN_BASE, "keep_resident_embeddings": True})
+    assert model.to_clip_request(0).keep_resident_embeddings is True
+    plain = GenerateChainRequest(**CHAIN_BASE).to_clip_request(0)
+    assert plain.keep_resident_embeddings is False
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # EndSourceSpec (end source — the chain's LAST frames come from an upload).
 # Schema-level only; the geometry cross-checks (does the band fit the final clip

@@ -304,4 +304,8 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
     assert by_id["LTX23"]["active"] is False
     # The engine-capability layer is what makes the axis worth exposing.
     assert by_id["LTX25"]["unsupported_features"], "LTX 2.5 declares refusals"
-    assert by_id["LTX23"]["unsupported_features"] == []
+    # §3-114: LTX 2.3 declares one of its own now, and it points the other way —
+    # ``keep_resident_embeddings`` names a component only 2.5's pipeline has, so
+    # 2.3 is the engine that has to refuse it. An empty list here again would
+    # mean an MCP client could turn the knob on while 2.3 is active.
+    assert by_id["LTX23"]["unsupported_features"] == ["keep_resident_embeddings"]

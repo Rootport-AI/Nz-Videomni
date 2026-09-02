@@ -1226,6 +1226,9 @@ class PipelineManager:
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
                     keep_resident_used=outcome.keep_resident_used,
+                    keep_resident_embeddings_used=(
+                        outcome.keep_resident_embeddings_used
+                    ),
                     fused_gguf_dequant_kernel_used=(
                         outcome.fused_gguf_dequant_kernel_used
                     ),
@@ -1281,6 +1284,7 @@ class PipelineManager:
         reference_provenance=None,
         attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
+        keep_resident_embeddings_used=None,
         fused_gguf_dequant_kernel_used=None, vae_mode_used=None,
         peak_vram_reserved_mb=None,
     ) -> None:
@@ -1299,6 +1303,7 @@ class PipelineManager:
             "attention_used": attention_used,
             "block_swap_prefetch_used": block_swap_prefetch_used,
             "keep_resident_used": keep_resident_used,
+            "keep_resident_embeddings_used": keep_resident_embeddings_used,
             "fused_gguf_dequant_kernel_used": fused_gguf_dequant_kernel_used,
             "vae_mode_used": vae_mode_used,
             "peak_vram_reserved_mb": peak_vram_reserved_mb,
@@ -1498,6 +1503,13 @@ class PipelineManager:
             # auto-downgrade (see engine/worker._resolve_keep_resident) becomes
             # visible — the real-device gate judges on this field, not on logs.
             "keep_resident_used": outcome.keep_resident_used,
+            # Acceleration, LTX 2.5 only (§3-114): whether the
+            # EmbeddingsProcessor's CPU state dict actually stayed resident
+            # ("off" | "on" — no degrade path, so never "on->off"). Same relay
+            # discipline again, and the same reason it is a field rather than an
+            # inference: the real-device gate judges on this, not on logs. Always
+            # null on LTX 2.3, whose worker has no such component to report on.
+            "keep_resident_embeddings_used": outcome.keep_resident_embeddings_used,
             # Acceleration: whether the fused Triton GGUF dequantization kernel
             # actually ran ("off" | "on" | "on->off"), same relay discipline
             # again. "on->off" means the job asked for it but it never applied

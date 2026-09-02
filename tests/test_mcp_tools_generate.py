@@ -452,6 +452,55 @@ def test_submit_generate_keep_resident_on_included_in_body():
     assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
 
 
+def test_submit_generate_keep_resident_embeddings_on_included_in_body():
+    # §3-114. Same "differs from the server's own default" rule and the same
+    # direction as keep_resident above (default OFF -> the ON call is the one
+    # that reaches the wire), over a DIFFERENT object -- so both keys can ride
+    # at once and neither replaces the other.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            keep_resident_embeddings=True,
+        )
+    )
+    assert captured["body"]["keep_resident_embeddings"] is True
+    assert "keep_resident" not in captured["body"], "the two switches are independent"
+
+    # Both on: two keys, not one.
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            keep_resident=True,
+            keep_resident_embeddings=True,
+        )
+    )
+    assert captured["body"]["keep_resident"] is True
+    assert captured["body"]["keep_resident_embeddings"] is True
+
+    # ...and the default (False) is indistinguishable from omitting it.
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            keep_resident_embeddings=False,
+        )
+    )
+    body = captured["body"]
+    assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
+
+
 def test_submit_generate_fused_dequant_off_included_in_body():
     # fused_gguf_dequant_kernel (§1-11): default ON since 2026-08-04 (§51), so
     # the OFF call is the one that reaches the wire. Sent LAST of the
@@ -965,6 +1014,45 @@ def test_submit_chain_keep_resident_on_included_in_body():
             "a prompt",
             [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
             keep_resident=False,
+        )
+    )
+    assert set(captured["body"].keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
+
+
+def test_submit_chain_keep_resident_embeddings_on_included_in_body():
+    # §3-114, the chain twin: default OFF -> only the ON call reaches the wire,
+    # and the default call must leave the frozen chain key set untouched.
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 2},
+        )
+
+    set_client(_client_for_handler(handler))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            keep_resident_embeddings=True,
+        )
+    )
+    assert captured["body"]["keep_resident_embeddings"] is True
+    assert "keep_resident" not in captured["body"], "the two switches are independent"
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            keep_resident_embeddings=False,
         )
     )
     assert set(captured["body"].keys()) == {

@@ -337,6 +337,19 @@ REQUEST_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
     "keep_resident": {"keep_resident": True},
 }
 
+#: What §3-114 turned on: ``keep_resident_embeddings``, the loose end 高速化第2弾
+#: left behind — the EmbeddingsProcessor beside the text encoder went on being
+#: rebuilt from its GGUF on every job. A table of its own for the reason every
+#: accepted table before it has one: it is THIS increment's evidence.
+#:
+#: AND THE ONLY ONE OF THEM THAT NEVER SAT IN :data:`REQUEST_OVERRIDES`. Every
+#: other accepted table records a field this engine used to REFUSE; this field
+#: was born honoured here, because it names a component only LTX 2.5 has. The
+#: refusal it creates is LTX 2.3's, and lives in that engine's own tests.
+REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS: dict[str, dict] = {
+    "keep_resident_embeddings": {"keep_resident_embeddings": True},
+}
+
 #: What 高速化第3弾 turned on: ``attention_backend``, the LAST acceleration knob
 #: left in :data:`REQUEST_OVERRIDES`. A table of its own for the same reason
 #: :data:`REQUEST_ACCEPTED_KEEP_RESIDENT` is one — it is THIS increment's
@@ -467,6 +480,37 @@ def test_keep_resident_is_honoured_not_merely_unlisted():
     assert "keep_resident" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert "keep_resident" not in ltx25.IGNORED_FIELDS
     assert "keep_resident" not in ltx25.GOVERNED_FIELDS
+
+
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS))
+def test_keep_resident_embeddings_is_accepted(case):
+    """§3-114. Unlike every acceptance test above it, this one records no
+    REVERSAL: the field was never refused here. What it pins is that the ruling
+    lets it through — a row added to :data:`REQUEST_OVERRIDES` by mistake would
+    422 a knob that names this engine's own component."""
+    ltx25.reject_unsupported(
+        _request(**REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS[case])
+    )  # no raise
+
+
+def test_keep_resident_embeddings_is_honoured_not_merely_unlisted():
+    """Unlisted and honoured are different promises, and here the difference is
+    the whole feature: a field dropped from every table would still not 422, and
+    the engine would go on rebuilding the EmbeddingsProcessor on every job while
+    the user's setting said otherwise — a silence with no symptom but the clock."""
+    assert "keep_resident_embeddings" in ltx25.HONOURED_FIELDS
+    assert "keep_resident_embeddings" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert "keep_resident_embeddings" not in ltx25.IGNORED_FIELDS
+    assert "keep_resident_embeddings" not in ltx25.GOVERNED_FIELDS
+
+
+def test_keep_resident_embeddings_is_not_a_published_limitation_of_this_engine():
+    """The MIRROR of every ``..._no_longer_names_a_published_limitation`` test
+    above: this name must never appear in 2.5's published list, because it is
+    LTX 2.3 that cannot serve it. Publishing it here would grey out the control
+    on the only engine that can run it."""
+    assert "keep_resident_embeddings" not in ltx25.UNSUPPORTED_FEATURES
+    assert "keep_resident_embeddings" in ltx23.UNSUPPORTED_FEATURES
 
 
 @pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_SAGE))
@@ -860,6 +904,15 @@ CHAIN_ACCEPTED_KEEP_RESIDENT: dict[str, dict] = {
 }
 
 
+#: The chain twin of :data:`REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS` (§3-114),
+#: a separate table for the same reason. A chain builds the EmbeddingsProcessor
+#: once per JOB just as a single generate does, so what the switch saves is the
+#: NEXT job's rebuild — nothing inside the chain itself.
+CHAIN_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS: dict[str, dict] = {
+    "keep_resident_embeddings": {"keep_resident_embeddings": True},
+}
+
+
 #: The chain twin of :data:`REQUEST_ACCEPTED_SAGE` (高速化第3弾), a separate
 #: table for the same reason. A chain rebuilds the transformer once per STAGE,
 #: so the wrapper is stripped and re-installed on every one of those builds —
@@ -893,6 +946,24 @@ def test_the_chain_keep_resident_field_is_honoured_not_merely_unlisted():
     assert "keep_resident" not in {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
     assert "keep_resident" not in ltx25.CHAIN_IGNORED_FIELDS
     assert "keep_resident" not in ltx25.CHAIN_GOVERNED_FIELDS
+
+
+@pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS))
+def test_chain_keep_resident_embeddings_is_accepted(case):
+    """The chain twin of the single-path acceptance test (§3-114). No reversal
+    here either: the field was born honoured on this engine."""
+    ltx25.reject_chain(
+        _chain_request(**CHAIN_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS[case])
+    )  # no raise
+
+
+def test_the_chain_keep_resident_embeddings_field_is_honoured_not_merely_unlisted():
+    assert "keep_resident_embeddings" in ltx25.CHAIN_HONOURED_FIELDS
+    assert "keep_resident_embeddings" not in {
+        f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE
+    }
+    assert "keep_resident_embeddings" not in ltx25.CHAIN_IGNORED_FIELDS
+    assert "keep_resident_embeddings" not in ltx25.CHAIN_GOVERNED_FIELDS
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_LORAS))
@@ -1231,6 +1302,10 @@ def _capturing_chain_backend(captured: list[dict]) -> ltx25._RealBackend25:
         # 高速化第2弾: a third echo, and one that only ever says "on" or "off" —
         # engine25 has no degrade path for the resident text encoder.
         "keep_resident_used": "on",
+        # §3-114: a FIFTH echo on the same two-value contract, for the other
+        # resident object (the EmbeddingsProcessor). Spelt separately because the
+        # two switches are separate — a job can hold one and release the other.
+        "keep_resident_embeddings_used": "on",
         # 高速化第3弾: a FOURTH echo. It used to be hard-coded in the adapter
         # ("sdpa", because the field was a 422 on this engine); now it comes
         # from the worker like the three above, so the fake has to speak it or
@@ -1325,6 +1400,49 @@ def test_chain_payload_carries_keep_resident_only_when_asked(tmp_path):
     be.generate_chain(_chain_request(keep_resident=True), output_dir=tmp_path / "on")
     assert list(captured[2]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident"]
     assert captured[2]["keep_resident"] is True
+
+
+def test_chain_payload_carries_keep_resident_embeddings_only_when_asked(tmp_path):
+    """§3-114's half of the additive contract, chain side. Same two directions
+    as the test above and the same load-bearing one: the pydantic default is
+    FALSE, so the DEFAULT chain must be byte-identical to the golden plus 第1弾's
+    pair — which is why ``test_chain_payload_golden_for_a_plain_two_clip_chain``
+    needed no edit for this increment.
+
+    The key lands at the very END, after ``keep_resident`` when both are on: the
+    adapter appends the newest block last, and the two are INDEPENDENT switches
+    — a chain can hold the text encoder resident and release the embeddings
+    processor, or the other way round, which is what the third case pins."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+
+    be.generate_chain(_chain_request(), output_dir=tmp_path / "default")
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+
+    be.generate_chain(
+        _chain_request(keep_resident_embeddings=False), output_dir=tmp_path / "explicit"
+    )
+    assert list(captured[1]) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+    be.generate_chain(
+        _chain_request(keep_resident_embeddings=True), output_dir=tmp_path / "on"
+    )
+    assert list(captured[2]) == (
+        GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident_embeddings"]
+    )
+    assert captured[2]["keep_resident_embeddings"] is True
+
+    # Both on: two independent keys, in adapter order, and nothing else moved.
+    be.generate_chain(
+        _chain_request(keep_resident=True, keep_resident_embeddings=True),
+        output_dir=tmp_path / "both",
+    )
+    assert list(captured[3]) == (
+        GOLDEN_CHAIN_KEYS_25
+        + GOLDEN_ACCEL_KEYS_25
+        + ["keep_resident", "keep_resident_embeddings"]
+    )
 
 
 def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
@@ -1822,6 +1940,10 @@ def test_chain_outcome_names_this_engine_and_relays_the_chain_metadata(tmp_path)
     # 高速化第2弾: and so does the third. It used to be None here, because the
     # field was a 422 on this engine.
     assert outcome.keep_resident_used == "on"
+    # §3-114: the fifth, relayed by its own name. Reading it off
+    # ``keep_resident_used`` would make a chain that held one object and released
+    # the other report the same value for both.
+    assert outcome.keep_resident_embeddings_used == "on"
 
 
 def test_chain_outcome_ltx25_field_stays_none_the_dict_lives_in_chain_metadata(tmp_path):
@@ -2038,6 +2160,9 @@ def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
         "fused_gguf_dequant_kernel_used": "on",
         # 高速化第2弾: the third echo, "on"/"off" only.
         "keep_resident_used": "on",
+        # §3-114: the EmbeddingsProcessor's own echo, same two values, separate
+        # key — the two resident objects are switched independently.
+        "keep_resident_embeddings_used": "on",
         # 高速化第3弾: the fourth, the single-path twin of the chain fake's.
         "attention_used": "sdpa",
         # 台帳 §3-131: the decoder-name echo and this engine's own additive
@@ -2124,6 +2249,48 @@ def test_generate_payload_carries_keep_resident_only_when_asked(tmp_path):
     # Appended LAST — after 第1弾's pair — so no earlier key moved.
     assert list(captured[2]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident"]
     assert captured[2]["keep_resident"] is True
+
+
+def test_generate_payload_carries_keep_resident_embeddings_only_when_asked(tmp_path):
+    """The single-path twin of the chain test in section 3d (§3-114).
+
+    The default direction is the load-bearing one again: this knob's pydantic
+    default is FALSE, so a plain T2V's payload is byte-identical to what it was
+    before the field was wired — which is why the golden above needed no edit for
+    this increment either. Explicit ``False`` must produce that same payload,
+    because an absent key is not silence: it is the release request the worker
+    acts on.
+
+    The last case pins that the two resident switches are INDEPENDENT: both keys
+    ride, in adapter order, and neither replaces the other."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    fixed = {"seed": 123}
+
+    be.generate(_request(**fixed), tmp_path / "default")
+    assert list(captured[0]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+
+    be.generate(
+        _request(keep_resident_embeddings=False, **fixed), tmp_path / "explicit"
+    )
+    assert list(captured[1]) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+    be.generate(_request(keep_resident_embeddings=True, **fixed), tmp_path / "on")
+    assert list(captured[2]) == (
+        GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["keep_resident_embeddings"]
+    )
+    assert captured[2]["keep_resident_embeddings"] is True
+
+    be.generate(
+        _request(keep_resident=True, keep_resident_embeddings=True, **fixed),
+        tmp_path / "both",
+    )
+    assert list(captured[3]) == (
+        GOLDEN_GENERATE_KEYS_25
+        + GOLDEN_ACCEL_KEYS_25
+        + ["keep_resident", "keep_resident_embeddings"]
+    )
 
 
 def test_generate_payload_carries_the_nag_block_only_when_enabled(tmp_path):
@@ -2288,6 +2455,8 @@ def test_generate_outcome_names_this_engine(tmp_path):
     assert outcome.block_swap_prefetch_used == "on"
     assert outcome.fused_gguf_dequant_kernel_used == "on"
     assert outcome.keep_resident_used == "on"
+    # §3-114: the EmbeddingsProcessor's echo, relayed under its own name.
+    assert outcome.keep_resident_embeddings_used == "on"
     # 台帳 §3-131: ``vae_mode_used`` is REPURPOSED as engine25's own
     # decoder-name echo ("diff" / "conv") — no longer a permanent None here.
     # ``ltx25`` is single-job-only additive: the worker's five engine25 facts,
@@ -2476,6 +2645,9 @@ def test_generate_outcome_leaves_the_echoes_none_when_the_worker_is_silent(tmp_p
     assert outcome.fused_gguf_dequant_kernel_used is None
     # 高速化第2弾's echo obeys the same rule: nobody reported, so nobody answers.
     assert outcome.keep_resident_used is None
+    # §3-114's echo likewise — and this is also the shape a job on LTX 2.3 has
+    # permanently, since that worker has no such component to report on.
+    assert outcome.keep_resident_embeddings_used is None
     # 高速化第3弾: and so does the fourth, now that it is a relay. Before this
     # increment it was hard-coded, so a silent worker still produced "sdpa" —
     # an answer nobody had given.

@@ -40,6 +40,11 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   keep_resident（モデル骨格の常駐）は 2026-08-25 から LTX 2.5 でも使えます
   （既定 off のまま。ただし LTX 2.3 とは常駐する中身が違い、2.5 が抱えるのは
   テキストエンコーダの重みだけで約7.7GiBです）。
+  keep_resident_embeddings（埋め込み処理器の常駐）は LTX 2.5 専用です
+  （既定 off。約4.6GiB。keep_resident とは別のスイッチで、両方 on にすると
+  メモリ増分は加算されます）。これだけは向きが逆で、LTX 2.3 を選んでいるとき
+  に true を送ると 422 FEATURE_UNSUPPORTED になります——「LTX 2.5 で使えない
+  機能」ではなく「LTX 2.3 で使えない機能」の1つ目です。
   attention_backend（SageAttention）も 2026-08-25 から LTX 2.5 で使えます
   （既定 "sdpa" のまま）。ただしこれは他の高速化と違い、"sage" にすると
   同じシードでも生成結果の細部が変わります。速さは動画の大きさに強く依存し、
@@ -57,7 +62,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   投げられるモードは LTX 2.5 でも全部通るようになりました。submit_chain で
   まだ使えないのは vae_mode の1つだけです（keep_resident・attention_backend・
   nag_enabled は submit_chain でも使えます。nag_enabled は 2026-08-30 から
-  LTX 2.5 でも使えるようになりました）。
+  LTX 2.5 でも使えるようになりました）。keep_resident_embeddings は
+  submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
   撮り直し（Retake）も 2026-09-01 から submit_chain の引数として使えます
   （retake_video_id ほか5引数。LTX 2.3 / LTX 2.5 のどちらでも使えます）。
   同じ日に、画角拡張（Outpainting）も submit_generate の引数として使える

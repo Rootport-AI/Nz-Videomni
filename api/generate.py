@@ -58,7 +58,11 @@ def generate(
     # without touching the upload stores or the lora registry: telling a user
     # "that reference video does not exist" for a request whose engine cannot
     # consume reference videos at all would send them to fix the wrong thing.
-    # A no-op for LTX 2.3 (it declares no unsupported features), which is why
+    # NOT a no-op for either engine any more. LTX 2.3 declared nothing until
+    # §3-114 gave it one refusal of its own (``keep_resident_embeddings``, which
+    # names a component only 2.5 has), so the guard now answers on both sides.
+    # What is still true is that a DEFAULT request passes on both: every
+    # predicate in both tables tests "differs from the default", which is why
     # every pre-existing test is unaffected — deliberately, not by luck.
     engines.reject_unsupported(context.pipeline_manager.active_engine_family, request)
 

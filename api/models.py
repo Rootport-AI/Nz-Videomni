@@ -72,6 +72,15 @@ BLOCK_SWAP_PREFETCH_DEFAULT = True
 # 自前のミラー定数を持つ——変えるときは両方＋MCPを同じ変更で動かすこと。
 KEEP_RESIDENT_DEFAULT = False
 
+# keep_resident_embeddings（LTX 2.5 の埋め込み処理器のジョブ間常駐）の既定値。
+# **off** — keep_resident と同じ向き（既定 False なので「ON のときだけ送る」）。
+# 名前付き定数にしている理由は上の2つと同じだが、集約先は**2点だけ**である：
+# このファイルの2つの Field 既定と、mcp_server/tools/generate.py の import 元。
+# gradio_ui/handlers.py のミラーは**持たない**——Gradio 側にこのトグルを追加
+# しないため、ミラーすべき相手がそもそも存在しないからである（将来 Gradio に
+# 出すなら、そのときにミラーを1つ増やすこと）。
+KEEP_RESIDENT_EMBEDDINGS_DEFAULT = False
+
 # fused_gguf_dequant_kernel（GGUF 逆量子化の Triton 1カーネル化）の既定値。
 # **on**（2026-08-04: 実機ゲート G1〜G8 全PASS、オーナー承認「ゲート緑なら
 # 既定ON」。block_swap_prefetch の S4 と同じ前例。実測は backend
@@ -262,6 +271,27 @@ class GenerateRequest(BaseModel):
     # 2.5 側には併用の制限も自動降格も存在しないため、keep_resident_used は
     # "on" / "off" の2値しか出ない（契約は3値のまま）。§76 を参照。
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
+
+    # keep_resident_embeddings: LTX 2.5 の**埋め込み処理器**（プロンプトを読み
+    # 取ったあとの内部表現を整える部品）の、CPU側 state dict ただ1本をジョブ間
+    # で常駐させ、毎ジョブの GGUF 読み直しを省く。
+    # 【重要】keep_resident と同じく、**生成結果は1バイトも変わらない**——
+    # 同じ部品を作り直さずに使い回すだけなので、構築が速くなるだけである。
+    # 代償はメインメモリ：約4.6GiB が常駐する（ワーカーログの実測。実機ゲートの
+    # 実測値の正本は backend Docs/VERIFICATION_LOG.md §92）。LTX 2.5 の
+    # keep_resident（テキストエンコーダの state dict、約7.68GiB）とは別々の
+    # スイッチで、併用したときのメインメモリ増分は**加算的**になる。
+    # 実際に効いたかどうかは metadata.json の keep_resident_embeddings_used で
+    # 確認できる（"on" / "off" の2値。2.5 側に自動降格の経路が無いため、
+    # keep_resident と違って "on->off" は出ない）。GET /status には載せない
+    # （keep_resident と同じ理由——利用可否は環境の能力ではなくメモリ量の
+    # 問題で、サーバーからは判定できない）。
+    # 【エンジン差】**向きがここまでのフィールドと逆である**。このフィールドが
+    # 指す埋め込み処理器は LTX 2.5 にしか無い部品なので、非対応を宣言するのは
+    # LTX 2.3 の側になる：engine_family="ltx" では unsupported_features に
+    # keep_resident_embeddings が載り、true を送ると 422 FEATURE_UNSUPPORTED に
+    # なる（**LTX 2.3 が初めて「非対応」を宣言するフィールド**である）。
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
 
     # fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
     # Triton の1カーネルに融合し、純 PyTorch 実装の多段テンソル演算を置き換える。
@@ -839,6 +869,12 @@ class GenerateChainRequest(BaseModel):
     # チェーン全体に効く（骨格キャッシュはジョブ単位ではなくワーカー単位）。
     # LTX 2.5 でも同じで、構築はジョブあたり1回だけである（§76）。
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
+    # keep_resident_embeddings: 詳細は GenerateRequest の同名フィールドを参照。
+    # 既定off。チェーンでも1つの設定がチェーン全体に効き、埋め込み処理器の構築は
+    # ジョブあたり1回である（したがって節約されるのは「次のジョブの構築」で
+    # あって、チェーンの内側ではない）。LTX 2.3 では true を送ると 422 になる
+    # 点も単発と同じ。
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
     # fused_gguf_dequant_kernel: 詳細は GenerateRequest の同名フィールドを参照。
     # 既定on（GenerateRequest と同じ）。チェーンでも1つの設定がチェーン全体に効く。
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
@@ -1326,7 +1362,8 @@ class GenerateChainRequest(BaseModel):
         negative_prompt would fail GenerateRequest's own validator).
 
         The acceleration fields (``attention_backend``, ``block_swap_prefetch``,
-        ``keep_resident``, ``fused_gguf_dequant_kernel`` and ``vae_mode``) are
+        ``keep_resident``, ``keep_resident_embeddings``,
+        ``fused_gguf_dequant_kernel`` and ``vae_mode``) are
         transcribed for the same reason: they do not fail validation when
         dropped, so an omission would silently mis-report a chain job's
         reproducibility metadata (GET /jobs' ``request`` and metadata.json would
@@ -1355,6 +1392,7 @@ class GenerateChainRequest(BaseModel):
             attention_backend=self.attention_backend,
             block_swap_prefetch=self.block_swap_prefetch,
             keep_resident=self.keep_resident,
+            keep_resident_embeddings=self.keep_resident_embeddings,
             fused_gguf_dequant_kernel=self.fused_gguf_dequant_kernel,
             vae_mode=self.vae_mode,
             width=self.width,

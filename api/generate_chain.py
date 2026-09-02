@@ -47,8 +47,11 @@ def generate_chain(
     # Chained, Retake, End source, V2V continuation and A2V are all shapes of
     # THIS request, and which of them an engine can serve is a FIELD-BY-FIELD
     # answer, not one blanket yes/no — LTX 2.5 runs a plain Chained job but none
-    # of the four modes layered on it. Hence the body is passed. A no-op for
-    # LTX 2.3, which serves all of them.
+    # of the four modes layered on it. Hence the body is passed. LTX 2.3 serves
+    # all of them — but it is no longer a no-op there either: §3-114 gave 2.3
+    # one refusal of its own (``keep_resident_embeddings``, which names a
+    # component only 2.5 has). A DEFAULT chain still passes on both engines,
+    # because every predicate in both tables tests "differs from the default".
     #
     # STAYS AHEAD OF THE UPLOAD LOOKUPS BELOW. "This engine cannot do that" is a
     # fact about the server; "that video does not exist" is a fact about the

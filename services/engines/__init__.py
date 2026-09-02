@@ -156,7 +156,9 @@ def unsupported_features(family: str) -> tuple[str, ...]:
     """この系統が扱えない機能名(GET /modelsが公開する。§3-98 Phase 5)。
 
     宣言していない系統は空タプル——「制限なし」が既定であって、機能表を
-    持たないことが「全部だめ」を意味してはならない。
+    持たないことが「全部だめ」を意味してはならない。**いまはどちらの系統も
+    宣言を持つ**(§3-114で ``ltx`` 側にも1件できた)が、既定の向きはそのまま
+    である:新しい系統を足した人がこの関数を知らなくても、正しく動く側に倒れる。
     """
     return tuple(getattr(_adapter(family), "UNSUPPORTED_FEATURES", ()))
 
@@ -169,10 +171,12 @@ def reject_unsupported(family: str, request: GenerateRequest) -> None:
     あって、エンドポイントの事情ではない。api/generate.py が系統名で分岐して
     機能表を持ち始めた瞬間に、同じ表が2箇所に生まれて必ずずれる。
 
-    宣言していない系統(``ltx``)は素通り。``getattr`` で見に行くのは、
-    「制限を宣言しない」が既定であるという :func:`unsupported_features` と
-    同じ規約による——新しい系統を足した人が、この関数の存在を知らなくても
-    正しく動く側に倒れる。
+    宣言していない系統は素通り。``getattr`` で見に行くのは、「制限を宣言
+    しない」が既定であるという :func:`unsupported_features` と同じ規約に
+    よる——新しい系統を足した人が、この関数の存在を知らなくても正しく動く側に
+    倒れる。**いまは ``ltx`` / ``ltx25`` の両方が判断を持つ**(§3-114で
+    ``ltx`` 側にも ``reject_unsupported`` ができた)ので、素通りするのは
+    「まだ何も宣言していない将来の系統」だけである。
 
     エンドポイントから**関数として**呼ぶ(FastAPIの ``Depends`` にはしない)。
     Dependsは引数の解決順に依存するため、リクエスト本文の検証と機能の可否の
@@ -196,11 +200,11 @@ def reject_chain(family: str, request: GenerateChainRequest) -> None:
     LTX 2.5の連結生成で断られるのは ``pipeline``(非蒸留)と ``vae_mode``
     (PrunaVAED)の2フィールドが既定と違うときだけで、それ以外のモード
     (V2V・A2V・Retake・End source・LoRA・参照動画など)は走る。だから
-    リクエストを渡す。**どのフィールドを断るかの正本は
-    ``services/engines/ltx25/adapter.py`` の ``CHAIN_REJECT_TABLE`` であり、
-    ここには書き写さない。**
+    リクエストを渡す。**どのフィールドを断るかの正本は各アダプタの
+    ``CHAIN_REJECT_TABLE`` であり、ここには書き写さない**——§3-114で
+    ``ltx`` 側にも同名の表ができたので、正本は1枚ではなく系統ごとに1枚である。
 
-    宣言していない系統(``ltx``)は素通り、という :func:`reject_unsupported` と
+    まだ何も宣言していない系統は素通り、という :func:`reject_unsupported` と
     同じ規約。
     """
     guard = getattr(_adapter(family), "reject_chain", None)

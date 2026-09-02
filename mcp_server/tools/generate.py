@@ -5,13 +5,16 @@
 ``crf``）は計画D8により出さない -- ``two_stage_hq`` は現状モックのみで、
 distilledパイプラインの固定値（8ステップ・CFG=1.0）を変える意味がないため
 （``two_stage_hq`` 系の非公開理由はそのまま存置する）。一方でAcceleration機能は
-**5項目すべて**を公開する --
+**6項目すべて**を公開する --
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
 ``block_swap_prefetch``（既定on。backend §44、実装は先読み block swap。
 offにすると従来の同期スワップになる。S4, 2026-08-01: 実機ゲートG1〜G7全PASS
 を条件にオーナーが確定した既定反転）、``keep_resident``（既定off。ジョブ間の
 CPU骨格キャッシュ。LTX 2.5 では常駐するのがテキストエンコーダだけで、
-同じ名前でも中身が違う。§76）、``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
+同じ名前でも中身が違う。§76）、``keep_resident_embeddings``（既定off。**LTX 2.5
+専用**で、埋め込み処理器のジョブ間常駐。台帳 §3-114。ここまでの5項目と違い、
+LTX 2.3 を選んでいるときに既定以外にすると422になる向きである）、
+``fused_gguf_dequant_kernel``（既定on。GGUF逆量子化の
 Triton 1カーネル化。出力はビット単位で不変。§51, 2026-08-04: 実機ゲート
 G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mode``（既定
 ``"default"``、``"prune_vaed"`` で枝刈り版デコーダ。Docs/PENDING_TASKS_CLOSED.md
@@ -49,6 +52,7 @@ from api.models import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
+    KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
 )
 from mcp_server.client import get_client
 from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
@@ -154,6 +158,7 @@ async def submit_generate(
     attention_backend: str = "sdpa",
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     vae_mode: Literal["default", "prune_vaed"] = "default",
     outpaint_pad_left: int = 0,
@@ -181,6 +186,10 @@ async def submit_generate(
     ``reference_video_strength`` は LTX 2.5 でも使えます。
     ``keep_resident`` も 2026-08-25 から LTX 2.5 で使えます（既定off のまま。
     2.5 が常駐させるのはテキストエンコーダの重み1つだけで約7.7GiBです）。
+    ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
+    **LTX 2.5 専用**です（既定off）。**これは向きが逆で、LTX 2.3 を選んで
+    いるときに true を送ると 422 FEATURE_UNSUPPORTED になる初めての引数です**
+    ——「LTX 2.5 で使えない機能」ではなく「LTX 2.3 で使えない機能」です。
     ``attention_backend``（SageAttention）も 2026-08-25 から LTX 2.5 で
     使えます（既定 ``"sdpa"`` のまま）。**これだけは他の高速化と違い、
     ``"sage"`` にすると同じシードでも生成結果の細部が変わります**。
@@ -322,6 +331,17 @@ async def submit_generate(
             7.68GiB）です。2本目以降の生成が 27.6秒→20.5秒（約25%短縮）に
             なり、LTX 2.5 側には併用の制限も自動降格も無いため、エコーは
             ``"on"`` / ``"off"`` の2値しか出ません。
+        keep_resident_embeddings: **LTX 2.5 専用**。2.5 の埋め込み処理器
+            （プロンプトを読み取ったあとの内部表現を整える部品）のCPU側の
+            重み1本をジョブ間で常駐させ、毎ジョブのGGUF読み直しを省きます
+            （**既定off**）。``keep_resident`` と同じく**生成結果は1バイトも
+            変わりません**（構築が速くなるだけです）。代償はメインメモリで、
+            約4.6GiB が常駐します。``keep_resident`` とは別のスイッチなので、
+            両方onにするとメモリ増分は加算になります。実際に効いたかはジョブ
+            完了後のメタデータの ``keep_resident_embeddings_used``（``"on"`` /
+            ``"off"`` の2値。降格経路が無いので ``"on->off"`` は出ません）に
+            記録されます。**LTX 2.3 を選んでいるときに true を送ると 422
+            FEATURE_UNSUPPORTED になります**（2.3 にはこの部品がありません）。
         fused_gguf_dequant_kernel: GGUF（K量子化 Q4_K/Q5_K/Q6_K）の逆量子化を
             Tritonの1カーネルにまとめて高速化します（**既定on**。実機で
             約17.5%短縮）。
@@ -425,6 +445,14 @@ async def submit_generate(
     # future default flip.
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         payload["keep_resident"] = keep_resident
+    # keep_resident_embeddings: the same rule once more, against its own
+    # constant. Its default is False today, so in practice the key rides only on
+    # an explicit True — but the comparison, not a "send when True" branch, is
+    # what would survive a future default flip, exactly as for keep_resident
+    # above. Placed beside it because they are the same KIND of switch (two
+    # objects kept resident across jobs), not because they travel together.
+    if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
+        payload["keep_resident_embeddings"] = keep_resident_embeddings
     # fused_gguf_dequant_kernel: same rule again (FUSED_GGUF_DEQUANT_KERNEL_
     # DEFAULT flipped to True on 2026-08-04, so the key now rides only on an
     # explicit False -- the rule is unchanged, which is exactly why it was
@@ -541,6 +569,7 @@ async def submit_chain(
     attention_backend: str = "sdpa",
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
     keep_resident: bool = KEEP_RESIDENT_DEFAULT,
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     vae_mode: Literal["default", "prune_vaed"] = "default",
     end_source_video_id: str | None = None,
@@ -577,7 +606,10 @@ async def submit_chain(
     で LTX 2.3 に切り替えてください。
     **``keep_resident`` は 2026-08-25 から LTX 2.5 の連結生成でも使えます**
     （既定off のまま。2.5 が常駐させるのはテキストエンコーダの重み1つだけ
-    です）。**``attention_backend``（SageAttention）も 2026-08-25 から
+    です）。``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
+    **LTX 2.5 専用**で、連結生成でも使えます（既定off）。**これは向きが逆で、
+    LTX 2.3 を選んでいるときに true を送ると 422 FEATURE_UNSUPPORTED になる
+    初めての引数です。****``attention_backend``（SageAttention）も 2026-08-25 から
     LTX 2.5 の連結生成で使えます**（既定 ``"sdpa"`` のまま。チェーンの全
     クリップ・全ステージへ一律に効き、実測は 1280x768・2クリップ×121
     フレームで約1.10倍）。**ただし ``"sage"`` にすると同じシードでも生成
@@ -749,6 +781,10 @@ async def submit_chain(
             持つためです）。LTX 2.5 では常駐するのがテキストエンコーダの重み
             1つだけ（約7.7GiB）で、その構築はジョブあたり1回です（実測で
             2本目の連結生成が 35.17秒→30.13秒）。
+        keep_resident_embeddings: submit_generate と同じ意味（**LTX 2.5 専用・
+            既定off**。生成結果は変わりません。チェーンでも1つの設定がチェーン
+            全体に効き、埋め込み処理器の構築はジョブあたり1回です。**LTX 2.3 で
+            true にすると 422 になります**）。
         fused_gguf_dequant_kernel: submit_generate と同じ意味（**既定on**。
             生成結果は変わりません＝現行実装とビット一致。実行できない環境では
             黙って従来実装へ降格します。チェーン全体・全ステージ共通で効きます）。
@@ -858,6 +894,10 @@ async def submit_chain(
     # an explicit True).
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         payload["keep_resident"] = keep_resident
+    # keep_resident_embeddings: same rule as submit_generate, beside it for the
+    # same reason (default off -> sent only on an explicit True).
+    if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
+        payload["keep_resident_embeddings"] = keep_resident_embeddings
     # fused_gguf_dequant_kernel: same rule as submit_generate, appended last.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel

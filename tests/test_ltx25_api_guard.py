@@ -2,7 +2,7 @@
 
 アダプタ側の判断そのものは tests/test_ltx25_adapter.py が固定している。
 ここで確かめるのは**その判断がHTTPの入口に本当に挿さっているか**であり、
-見るべきことは3つに絞れる:
+見るべきことは4つに絞れる:
 
 1. **挿入点の全網羅**。対応表の422系フィールド一つひとつについて、LTX 2.5が
    アクティブなら422/FEATURE_UNSUPPORTED、既定値なら通り、LTX 2.3がアクティブ
@@ -15,7 +15,11 @@
 3. **GET /modelsの互換性**。応答の形として増えたのは ``unsupported_features``
    というキー1つだけで、2.3運用の既存クライアントから見た応答は1バイトも
    変わっていない(中身の機能名は、エンジンができることが増えれば減る——
-   §3-102で ``chain`` が外れた)。
+   §3-102で ``chain`` が外れた);
+4. **逆向きの拒否**(§3-114で新設)。ここまでの3点はすべて「2.5が断り、2.3が
+   通す」形だったが、``keep_resident_embeddings`` は LTX 2.5 にしか無い部品の
+   つまみなので、断るのは**2.3の側**である。1と同じ3点(422・ジョブ非生成・
+   404より先)を、系統を入れ替えて見る。
 
 ガードは**ジョブを作る前**に効く。効いていなければ、拒否したはずのリクエスト
 がジョブ台帳に残り、同時1ジョブの枠を食い、次の正当なリクエストが409になる——
@@ -50,6 +54,7 @@ from services.engines.ltx25 import adapter as ltx25
 from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_END_SOURCE,
     CHAIN_ACCEPTED_KEEP_RESIDENT,
+    CHAIN_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS,
     CHAIN_ACCEPTED_LORAS,
     CHAIN_ACCEPTED_NAG,
     CHAIN_ACCEPTED_RETAKE,
@@ -57,6 +62,7 @@ from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
     REQUEST_ACCEPTED_KEEP_RESIDENT,
+    REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS,
     REQUEST_ACCEPTED_LORAS,
     REQUEST_ACCEPTED_NAG,
     REQUEST_ACCEPTED_OUTPAINT,
@@ -391,6 +397,22 @@ def test_ltx25_no_longer_refuses_keep_resident(two_family_client, case):
     assert r.status_code == 202, r.text
 
 
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS))
+def test_ltx25_accepts_keep_resident_embeddings(two_family_client, case):
+    """§3-114。**逆向きのフィールドの、受理される側**である。素材を一つも
+    要らないので、ここも404で妥協せず**202まで**見る——2.5で途中で止まる理由が
+    あるとしたら、それはガードだけである。
+
+    対になる「2.3では422」は下の§4節が見る。両方あって初めて「向きが逆」を
+    確かめたことになる。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate",
+        json={**BASE_REQUEST, **REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS[case]},
+    )
+    assert r.status_code == 202, r.text
+
+
 @pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_SAGE))
 def test_ltx25_no_longer_refuses_sage_attention(two_family_client, case):
     """高速化第3弾の逆転。``keep_resident`` と同じくここも404で妥協せず
@@ -591,6 +613,18 @@ def test_ltx25_no_longer_refuses_chain_keep_resident(two_family_client, case):
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate/chain", json=_chain_body(**CHAIN_ACCEPTED_KEEP_RESIDENT[case])
+    )
+    assert r.status_code == 202, r.text
+
+
+@pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS))
+def test_ltx25_accepts_chain_keep_resident_embeddings(two_family_client, case):
+    """単発側の双子(§3-114)。連結生成にも素材は要らないので、ここも**202まで**
+    見る。対になる「2.3の連結生成では422」は下の§4節が見る。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate/chain",
+        json=_chain_body(**CHAIN_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS[case]),
     )
     assert r.status_code == 202, r.text
 
@@ -1523,7 +1557,10 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     body = two_family_client.get("/api/v1/models").json()
     by_id = {b["id"]: b for b in body["base_models"]}
 
-    assert by_id["LTX23"]["unsupported_features"] == []
+    # 2.3側は§3-114まで空だった。いまは**1件**だけ載る——
+    # keep_resident_embeddings は LTX 2.5 にしか無い部品のつまみなので、
+    # 非対応を宣言するのは2.3の側になる（この一覧の向きが初めて逆になった件）。
+    assert by_id["LTX23"]["unsupported_features"] == ["keep_resident_embeddings"]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
     # サブタブも、タイムラインの右クリックからそこへ入る導線も灰色のままに
@@ -1585,3 +1622,99 @@ def test_every_base_model_entry_carries_the_key(two_family_client):
     body = two_family_client.get("/api/v1/models").json()
     for entry in body["base_models"]:
         assert "unsupported_features" in entry, entry["id"]
+
+
+# --------------------------------------------------------------------------- #
+# 4) 逆向きの拒否 — LTX 2.3 が断る唯一のフィールド(§3-114)
+# --------------------------------------------------------------------------- #
+#
+# ここまでの3節は「2.5が断り、2.3が通す」形しか扱っていない。§3-114で初めて
+# **向きが逆のフィールド**ができた: ``keep_resident_embeddings`` が指す埋め込み
+# 処理器は LTX 2.5 にしか無い部品なので、断るのは2.3の側である。
+#
+# 見ることは1節と同じ3点だが、系統を入れ替えて見る: 422/FEATURE_UNSUPPORTED で
+# あること、**ジョブが作られていない**こと、そしてガードが素材の404より**先**に
+# 居ること。2.5側で202まで通ることは上の2節が既に見ているので、対になる。
+
+
+def test_ltx23_refuses_keep_resident_embeddings(two_family_client):
+    """2.3がこのフィールドを422にする。ジョブは作られない。
+
+    メッセージは次の一手を言う——ここだけは「LTX 2.5を選んでください」であり、
+    ほかの全ての拒否メッセージ(「LTX 2.3を選んでください」)と逆を向く。"""
+    _activate(two_family_client, "LTX23")
+    before = _job_count(two_family_client)
+
+    r = two_family_client.post(
+        "/api/v1/generate",
+        json={**BASE_REQUEST, "keep_resident_embeddings": True},
+    )
+
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "FEATURE_UNSUPPORTED"
+    assert "LTX 2.5" in error["detail"]
+    assert _job_count(two_family_client) == before
+
+
+def test_ltx23_refuses_keep_resident_embeddings_on_a_chain(two_family_client):
+    """連結生成の入口にも同じガードが挿さっている。単発だけ塞いでも、同じ設定
+    がChainedタブから素通りしては意味がない。"""
+    _activate(two_family_client, "LTX23")
+    before = _job_count(two_family_client)
+
+    r = two_family_client.post(
+        "/api/v1/generate/chain", json=_chain_body(keep_resident_embeddings=True)
+    )
+
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "FEATURE_UNSUPPORTED"
+    assert "LTX 2.5" in error["detail"]
+    assert _job_count(two_family_client) == before
+
+
+def test_the_2_3_guard_runs_before_the_upload_lookups(two_family_client):
+    """順序も逆向きで確かめる。1節の
+    ``test_the_guard_runs_before_the_upload_and_lora_lookups`` の鏡像で、
+    理由も同じ: 機能の可否はサーバの性質で、リクエストの中身の話ではない。
+    存在しない画像を指した2.3のリクエストに「その画像は無い」と答えたら、
+    利用者は直せないものを直しに行く。"""
+    _activate(two_family_client, "LTX23")
+    r = two_family_client.post(
+        "/api/v1/generate",
+        json={
+            **BASE_REQUEST,
+            "keep_resident_embeddings": True,
+            "conditioning_images": [{"image_id": "does-not-exist"}],
+        },
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+
+
+def test_a_default_request_still_passes_on_ltx23(two_family_client):
+    """述語は「既定値と違うか」であって「フィールドが在るか」ではない。
+    フロントエンドは毎回スキーマ全体を送るので、ここが落ちたら2.3で素のT2Vが
+    一度も通らなくなる——1件しかない表でも、この一本が要る理由である。"""
+    _activate(two_family_client, "LTX23")
+    assert two_family_client.post("/api/v1/generate", json=BASE_REQUEST).status_code == 202
+    assert (
+        two_family_client.post(
+            "/api/v1/generate",
+            json={**BASE_REQUEST, "keep_resident_embeddings": False},
+        ).status_code
+        == 202
+    )
+
+
+def test_switching_to_2_5_lifts_the_2_3_refusal(two_family_client):
+    """ガードは系統に追随する——**こちら向きでも**。
+    ``test_switching_back_to_2_3_lifts_the_chain_refusals`` の鏡像である。"""
+    body = {**BASE_REQUEST, "keep_resident_embeddings": True}
+    _activate(two_family_client, "LTX23")
+    assert two_family_client.post("/api/v1/generate", json=body).status_code == 422
+    _activate(two_family_client, "LTX25")
+    assert two_family_client.post("/api/v1/generate", json=body).status_code == 202
+    _activate(two_family_client, "LTX23")
+    assert two_family_client.post("/api/v1/generate", json=body).status_code == 422

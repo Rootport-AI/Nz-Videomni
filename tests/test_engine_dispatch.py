@@ -197,7 +197,11 @@ def test_runner_class_for_returns_each_familys_facade():
 
 
 def test_unsupported_features_per_family():
-    assert engines.unsupported_features("ltx") == ()
+    # §3-114で ``ltx`` 側にも宣言ができた。**向きが逆の1件**である——
+    # keep_resident_embeddings が指す埋め込み処理器は LTX 2.5 にしか無い部品
+    # なので、断るのは 2.3 の側になる。ここが空タプルへ戻ったら、2.3を選んだ
+    # ままこのつまみをONにできてしまい、フロントエンドは灰色にしない。
+    assert engines.unsupported_features("ltx") == ("keep_resident_embeddings",)
     features = engines.unsupported_features("ltx25")
     # 系統ごとの一覧は「その系統のアダプタが宣言したものだけ」である。それは
     # **残っている名前**でも**外れた名前**でも同じように確かめられ、いま2.5に

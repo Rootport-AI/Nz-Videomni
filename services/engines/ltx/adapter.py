@@ -47,8 +47,8 @@ from typing import Callable
 from PIL import Image, ImageDraw
 
 import chain_math
-from api.errors import lora_preprocess_conflict, model_incompatible
-from api.models import GenerateRequest
+from api.errors import feature_unsupported, lora_preprocess_conflict, model_incompatible
+from api.models import GenerateChainRequest, GenerateRequest
 from config import AppConfig
 from services import gpu_info, video_io
 from services.base_models import BaseModelDescriptor, load_base_models
@@ -89,6 +89,100 @@ SUPPORTED_MODEL_VERSIONS: frozenset[str] = frozenset({"2.3"})
 
 #: ``general.architecture`` value of every LTX weight file (2.3 and 2.5 alike).
 LTX_ARCHITECTURE = "ltxv"
+
+
+# --------------------------------------------------------------------------- #
+# feature scope (§3-114)
+# --------------------------------------------------------------------------- #
+
+#: The 422 half of this engine's ``GenerateRequest`` field table: ``(field,
+#: feature, is_non_default)`` — the SAME three-element shape the 2.5 adapter's
+#: table has, so a reader comparing the two engines is comparing one form.
+#:
+#: THE DIRECTION IS THE OPPOSITE ONE, AND THAT IS WHY THIS TABLE EXISTS AT ALL.
+#: Until §3-114 this engine declared nothing: every field the schema had, it
+#: could run, and all the refusals lived on the NEWER engine. That is no longer
+#: true. ``keep_resident_embeddings`` names LTX 2.5's EmbeddingsProcessor — a
+#: component 2.3's pipeline simply does not have — so here it is 2.3 that has to
+#: say no, and it is the first field it has ever had to say no to.
+#:
+#: THE PREDICATE TESTS "DIFFERS FROM THE DEFAULT", exactly like every row of the
+#: 2.5 table: the frontend sends the whole schema on every request, so refusing
+#: a PRESENT field would make plain T2V impossible. The bare attribute read IS
+#: that test here, because the field's default is ``False``
+#: (``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` in api/models.py).
+#:
+#: ONE ROW, AND THE TABLE IS DELIBERATELY THIN BECAUSE OF IT: adding a second
+#: row means bringing the 2.5 adapter's exhaustive classification audit over
+#: with it in the SAME change (tests/test_ltx25_adapter.py §3b — every schema
+#: field in exactly one of four tables), because from two rows on, "what does
+#: this engine do with field X" stops being answerable by reading one tuple.
+REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
+    ("keep_resident_embeddings", "keep_resident_embeddings",
+     lambda r: r.keep_resident_embeddings),
+)
+
+#: The chain schema's own table, same shape and same discipline as
+#: :data:`REJECT_TABLE`. A SECOND table rather than a reuse of the first, for
+#: the reason the 2.5 adapter keeps two: the two schemas are different objects,
+#: and one table forced to serve both would need a per-schema exception list.
+CHAIN_REJECT_TABLE: tuple[
+    tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
+] = (
+    ("keep_resident_embeddings", "keep_resident_embeddings",
+     lambda r: r.keep_resident_embeddings),
+)
+
+#: Everything GET /models publishes as this engine's ``unsupported_features``.
+#: DERIVED from :data:`REJECT_TABLE` rather than transcribed — the same
+#: machinery the 2.5 adapter uses — so the published list and the 422 can never
+#: disagree. It used to be absent entirely, which ``services/engines/__init__``
+#: read as the empty tuple; now it is a real (one-name) list.
+UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
+    feature for _field, feature, _pred in REJECT_TABLE
+)
+
+
+def reject_unsupported(request: GenerateRequest) -> None:
+    """422 the first out-of-scope field of ``request`` (§3-114).
+
+    The MIRROR IMAGE of :func:`services.engines.ltx25.adapter.reject_unsupported`,
+    including the first-offender-wins rule: listing every offender would read as
+    a to-do list when in practice one control was left on. Called from the API
+    layer through :func:`services.engines.reject_unsupported`, so a refusal
+    costs no worker round-trip and no job record.
+
+    The message points the other way, and that is the whole novelty: it names
+    LTX 2.5 as the base model to switch TO.
+    """
+    for field, feature, is_non_default in REJECT_TABLE:
+        if is_non_default(request):
+            raise feature_unsupported(
+                feature,
+                detail=(
+                    f"LTX 2.3は{feature}に対応していません"
+                    f"(リクエストの{field}が既定値ではありません)。"
+                    "この機能を使うにはベースモデルに「LTX 2.5」を選んでください。"
+                ),
+            )
+
+
+def reject_chain(request: GenerateChainRequest) -> None:
+    """422 the first out-of-scope field of a chain ``request`` (§3-114).
+
+    The chain twin of :func:`reject_unsupported`, with the same table discipline
+    and the same first-offender rule; see :data:`CHAIN_REJECT_TABLE`.
+    """
+    for field, feature, is_non_default in CHAIN_REJECT_TABLE:
+        if is_non_default(request):
+            raise feature_unsupported(
+                feature,
+                detail=(
+                    f"LTX 2.3の連結生成(Chained)は{feature}に対応していません"
+                    f"(リクエストの{field}が既定値ではありません)。"
+                    "この機能を使うにはベースモデルに「LTX 2.5」を選んでください。"
+                ),
+            )
 
 
 def _minor_version(version: str) -> str:
@@ -378,6 +472,13 @@ class GenerationOutcome:
     # reading worker logs. None on the mock backend and on any worker that
     # predates the field.
     keep_resident_used: str | None = None
+    # Acceleration, LTX 2.5 ONLY (§3-114): whether the EmbeddingsProcessor's CPU
+    # state dict actually stayed resident for this job ("off" | "on"; there is
+    # no degrade path, so the third value ``keep_resident_used`` can take never
+    # appears). Always None on THIS engine — 2.3's worker has no such key
+    # because it has no such component, and None is the honest answer to a
+    # question the engine was never asked. Same relay discipline otherwise.
+    keep_resident_embeddings_used: str | None = None
     # Acceleration: whether the fused Triton GGUF dequantization kernel ACTUALLY
     # ran for this job ("off" | "on" | "on->off" when it was requested but never
     # applied — Triton unavailable, a kernel exception latched the fallback, the

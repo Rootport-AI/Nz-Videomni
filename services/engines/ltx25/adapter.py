@@ -206,6 +206,22 @@ IGNORED_FIELDS: dict[str, str] = {
 #: engines answering to the same field name do not do the same amount of work,
 #: and a reader comparing them should expect different numbers.
 #:
+#: ``keep_resident_embeddings`` JOINED THIS SET with §3-114, the loose end
+#: 高速化第2弾 left behind: that increment made the Gemma 4 text encoder's state
+#: dict survive a job, while the EmbeddingsProcessor standing next to it went on
+#: being rebuilt from its own GGUF on every single job. THE CONTRACT IS
+#: ``keep_resident``'s, restated: the key rides only when asked for, an absent
+#: key IS the release request, and the worker echoes "on"/"off" back. The two
+#: are INDEPENDENT switches over two different objects, so their RAM costs add
+#: rather than overlap.
+#:
+#: AND IT IS THE FIRST MEMBER THAT WAS BORN HERE. Every other field in this set
+#: ARRIVED from :data:`REJECT_TABLE`, :data:`IGNORED_FIELDS` or
+#: :data:`GOVERNED_FIELDS` — something this engine used to refuse and now runs.
+#: This one names a component only LTX 2.5 has, so it was honoured on the day it
+#: existed, and the 422 it produces belongs to the OTHER engine: it is the field
+#: that created ``services/engines/ltx/adapter.py``'s own ``REJECT_TABLE``.
+#:
 #: ``outpaint`` JOINED THIS SET with the Outpainting increment (§3-102),
 #: leaving :data:`REJECT_TABLE` as the last MODE on it. Unlike every other
 #: member it is not a knob but a whole job kind: its PRESENCE is what routes the
@@ -263,6 +279,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
         "keep_resident",
+        "keep_resident_embeddings",
         "attention_backend",
         "outpaint",
         # The non-CFG negative prompt (NAG / VSF), seven fields that travel as
@@ -412,6 +429,17 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: what is saved here is likewise the SECOND job's rebuild, not anything inside
 #: the chain itself.
 #:
+#: ``keep_resident_embeddings`` JOINED WITH §3-114, the chain twin of the
+#: single-path move and with the same reading: what it saves is the NEXT job's
+#: rebuild of the EmbeddingsProcessor, because a chain builds that component
+#: once per JOB exactly as a single generate does. Same additive contract as
+#: ``keep_resident`` beside it, and the same independence — two switches, two
+#: objects, two RAM costs that add.
+#:
+#: IT IS ALSO THE FIRST FIELD IN THIS SET THAT NEVER SAT IN
+#: :data:`CHAIN_REJECT_TABLE`: the component it names exists only on this
+#: engine, so the refusal it produces is LTX 2.3's, not this engine's.
+#:
 #: ``attention_backend`` JOINED WITH 高速化第3弾, the chain twin of the
 #: single-path move and with the same contract: the key rides only when the
 #: request asked for something other than ``"sdpa"``, and the worker echoes what
@@ -465,6 +493,7 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
         "keep_resident",
+        "keep_resident_embeddings",
         "attention_backend",
         # The non-CFG negative prompt (NAG / VSF): the single path's seven, on
         # the chain schema, carrying the identical payload block.
@@ -992,6 +1021,18 @@ class _RealBackend25(_RealBackend):
             }
             payload["nag"]["method"] = request.neg_method
             payload["nag"]["vsf_scale"] = request.vsf_scale
+        # §3-114, appended LAST for the reason every block above it was: the
+        # newest key goes at the end, so no existing key order moves and every
+        # earlier increment's frozen-SHA evidence stays valid. Contract-for-
+        # contract ``keep_resident``'s (pydantic default FALSE, so a plain job
+        # carries no key at all and the golden payload is byte-identical; an
+        # absent key is not silence but the RELEASE request the worker acts on),
+        # over a different object: the EmbeddingsProcessor's CPU state dict
+        # rather than the text encoder's. Written as a literal
+        # ``request.keep_resident_embeddings`` read for the needle table's sake,
+        # same as the blocks above.
+        if request.keep_resident_embeddings:
+            payload["keep_resident_embeddings"] = True
 
         with self._lock:
             try:
@@ -1043,6 +1084,12 @@ class _RealBackend25(_RealBackend):
             # built would have echoed "on" too, but then no done event arrives,
             # so nothing is relayed at all (2.3 behaves identically).
             keep_resident_used=event.get("keep_resident_used"),
+            # §3-114: the EmbeddingsProcessor's own echo, on exactly the
+            # two-value contract of the line above ("on"/"off", never
+            # "on->off" -- there is no degrade path here either). Separate from
+            # ``keep_resident_used`` because the two switches are separate: a
+            # job can hold one object resident and release the other.
+            keep_resident_embeddings_used=event.get("keep_resident_embeddings_used"),
             # 台帳 §3-131: ``vae_mode_used`` used to stay None here -- it named
             # 2.3's PrunaVAED knob, which this engine does not have. It is
             # REPURPOSED now as this engine's OWN decoder-name echo ("diff" /
@@ -1309,6 +1356,12 @@ class _RealBackend25(_RealBackend):
             }
             payload["nag"]["method"] = chain.neg_method
             payload["nag"]["vsf_scale"] = chain.vsf_scale
+        # §3-114, appended last for the reason everything above it was, and the
+        # chain twin of the single path's block key for key. Default FALSE, so a
+        # plain chain's payload is unchanged; an absent key is the release
+        # request, not silence.
+        if chain.keep_resident_embeddings:
+            payload["keep_resident_embeddings"] = True
 
         with self._lock:
             try:
@@ -1352,6 +1405,10 @@ class _RealBackend25(_RealBackend):
             # once for the whole chain, so this echo is "on"/"off" and never the
             # folded "on->off" the two above can produce.
             keep_resident_used=event.get("keep_resident_used"),
+            # §3-114: the chain twin, and per-JOB for the same reason the line
+            # above is -- the EmbeddingsProcessor is built once for the whole
+            # chain, so this echo is "on"/"off" and never a folded "on->off".
+            keep_resident_embeddings_used=event.get("keep_resident_embeddings_used"),
             # 台帳 §3-131: same repurposing as the single path -- see the
             # comment there. No ``ltx25=`` here: ``chain_metadata`` (built
             # above from ``event.get("chain")``) already carries

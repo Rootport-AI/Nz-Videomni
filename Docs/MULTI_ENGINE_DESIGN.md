@@ -855,6 +855,6 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 - **実機重みは1ステップである。** config が `default_num_inference_steps=1`・`model_output_type="x0"` で、σ=1 の純雑音から x0 を1発予測する（ステップのループは0回転で、Euler 更新も通らない）。拡散ブロックはデコーダ重み795.6MiBのうち17.1MiB＝約2%で、残りは決定的な近傍注意アップサンプラである。
 - **雑音そのものは固定できる。** デコード呼び出しは第3引数に `torch.Generator` を取り、雑音はこれを渡した `torch.randn(generator=...)` を通る。
 - **環境によって出力が変わる要因は`AUTO_TILING`である。** 1ステップ時の雑音はタイルごとに独立に引かれるため、**タイル表（タイル数・順序・各タイルの形状）が乱数の消費順序を決める**。そして DiffVAE のときだけ、そのタイル表は実行時の空きVRAM（`cuda_activation_budget_bytes()`）から決まる。畳み込み版の自動タイル化は縦横比だけで決まり空きVRAM量を読まない。**明示 `TileSizeConfig` と固定 `generator` を組み合わせれば、タイル表も乱数の消費順序も実行時の空きVRAMに依存しなくなり、環境非依存になる。**
-- 上記の実測値・コード読解の正本は `outputs/diffvae-research-2026-09-01/RESULTS.md`（§5・§6。**このディレクトリは git 管理外である**）。
+- 上記の実測値・コード読解の正本は `outputs/diffvae-research-2026-09-01/RESULTS.md`（§5・§6。**このディレクトリは git 管理外である**。複写: [`Docs/Outputs-archive/diffvae-research-2026-09-01/RESULTS.md`](Outputs-archive/diffvae-research-2026-09-01/RESULTS.md)）。
 
 採否の判断は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-33（再訪条件つきのスコープ外）で扱う。

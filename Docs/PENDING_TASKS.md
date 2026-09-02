@@ -62,7 +62,7 @@
 | §3-135 | モデル別のUI表示テーブル（Settings等のUI構成のテーブル駆動化） | 未着手 |
 | §3-141 | RetakeのIC-LoRA（参照動画つき制御）対応 | 未着手 |
 
-> **着手時の必須手順: 画角拡張（Outpainting）に触る改修では、連続ジョブの腕を必ず回すこと。** 「1腕1プロセス」の直接ドライバだけでは、**同じ常駐ワーカーで後続のジョブを流したときに出る不具合**（画角拡張の直後の普通の生成が落ちる類）を捕まえられない。**常設の道具が `outputs/ltx25-opmode-gate/scripts/` にある**（`op_gate.py`＝3腕〔通常→画角拡張→通常／→連結／→画角拡張→通常〕の連続投入ドライバ、`README.md`＝依存チェーンと合格条件、`SHA_ARMS.md`＝バイト同一性の手順書）。**腕が「有効」かどうか〔ページ固定プールが実際に成長したか〕を合否とは別に検査する**のがこのゲートの要点である（正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §81.6・§81.9）。
+> **着手時の必須手順: 画角拡張（Outpainting）に触る改修では、連続ジョブの腕を必ず回すこと。** 「1腕1プロセス」の直接ドライバだけでは、**同じ常駐ワーカーで後続のジョブを流したときに出る不具合**（画角拡張の直後の普通の生成が落ちる類）を捕まえられない。**常設の道具が `outputs/ltx25-opmode-gate/scripts/` にある**（`op_gate.py`＝3腕〔通常→画角拡張→通常／→連結／→画角拡張→通常〕の連続投入ドライバ、`README.md`＝依存チェーンと合格条件、`SHA_ARMS.md`＝バイト同一性の手順書。`README.md`・`SHA_ARMS.md`の複写は[`Docs/Outputs-archive/ltx25-opmode-gate-scripts/`](Outputs-archive/ltx25-opmode-gate-scripts/)）。**腕が「有効」かどうか〔ページ固定プールが実際に成長したか〕を合否とは別に検査する**のがこのゲートの要点である（正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §81.6・§81.9）。
 
 **この表の対象外**: 次の各群は本表に並べていない（**いずれも下の§3の本文には生きている**）。
 
@@ -678,7 +678,7 @@
 - **決定性は「壊れる」のではなく、条件つきで保てる**: 実機重みは `default_num_inference_steps=1`・`model_output_type="x0"` で反復せず、拡散ブロックはデコーダ重みの約2%である。雑音は `torch.Generator` で固定できる。環境によって出力が変わる原因は、**`AUTO_TILING` のタイル表が実行時の空きVRAMから決まること**——1ステップ時の雑音はタイルごとに独立に引かれるため、タイル表が乱数の消費順序を決める。**明示 `TileSizeConfig` と固定 `generator` を組み合わせれば環境非依存になる。** 正本は同 RESULTS.md §5・§6。
 - **natten の現状**: `ltx_core` 1.2.0 の `natten` extra は environment marker が Linux（x86_64／aarch64）限定で、Windows では依存そのものが要求されない。NATTEN 公式も Windows ビルドを experimental と明記し、公式 wheel は Linux 向けのみである。不在時は Triton の `na3d` 経路へフォールバックして動作するが、**公式のメモリ見積り係数は natten 経路を前提にしている**ため、Triton 経路では実測が見積りを大きく上回る（同 RESULTS.md §4・§6.3）。
 - **連結生成の実装が作った前提**: `engine25/chain25.py`は、素材の潜在化と復号で**同じタイル設定を使い回す**ために、その解決を**まだモデルを1つも載せていない時点**へ前倒ししてある。畳み込みデコーダ版では自動タイル化が縦横比だけを見る分岐を通り空きVRAM量を読まないので結果は決定的だが、**DiffVAEは空きVRAMを見る分岐へ入る**ため、採用するならこの前倒しの位置を見直す必要がある（空きが最も楽観的に見える位置で読むことになるため）。詳細は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 12節末尾。
-- **出典**: 一次記録 `outputs/diffvae-research-2026-09-01/RESULTS.md`（実測8条件・実装コード読解・公式／コミュニティ情報の正本。git 管理外）、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §10、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.8・§69.14、オーナー裁定（2026-09-01）。
+- **出典**: 一次記録 `outputs/diffvae-research-2026-09-01/RESULTS.md`（実測8条件・実装コード読解・公式／コミュニティ情報の正本。git 管理外。複写: [`Docs/Outputs-archive/diffvae-research-2026-09-01/RESULTS.md`](Outputs-archive/diffvae-research-2026-09-01/RESULTS.md)）、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §10、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §69.8・§69.14、オーナー裁定（2026-09-01）。
 
 ---
 

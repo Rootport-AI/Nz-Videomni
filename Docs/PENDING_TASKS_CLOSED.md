@@ -1646,3 +1646,22 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **④再訪条件**: **「Prefer No Sysmem Fallback」設定の環境で実際にOOMの報告が来たとき、そのとき新規に起票する。** 本項は本エントリをもって閉じ、再訪の予約は残さない。
 - **状態**: READMEへの注記の実施をもってクローズ（2026-09-02、オーナー裁定）。アプリ本体のコードは一切変更していない。
 - **正本・出典**: [`README.md`](../README.md)「NVIDIA の「システム メモリ フォールバック」設定」節（案内の正本）、バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57.6のG4段落（実GPU計測と外挿式の正本）、本書§3-78（長尺IC-LoRA本体の完了記録。本項の親テーマ）、[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-76（同じG4から派生した、いま生きているもう1件＝参照動画VAEエンコードのタイル化）。
+
+### 3-142. 逆順ChainedでIC-LoRA参照動画の窓が生成順に配られる（LTX 2.3のみ）（起票：2026-09-02、誤起票の訂正でクローズ：2026-09-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-142からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-142（同書側は欠番）。起票理由は「`chain_pipeline.py:1701-1702`が参照動画の窓を`next(ref_windows, None)`で生成順に消費しており、逆順Chained（素材（末尾）×クリップ2本以上）でIC-LoRA参照動画を併用すると、最後に生成されるクリップへ窓0（参照動画の先頭区間）が渡ってしまう」というもので、§3-117（逆順Chainedの音声の継ぎ目調査）の副産物として2026-09-02のコード読解で起票された。
+- **①クローズの理由——直すべきバグが存在しない**: 起票が描いた状況（逆順×参照）は、次の**3重封印で絶対に到達しない**。
+  1. **アプリ層の422バリデータ**: `api/models.py:1046-1051`が`reference_video_id`と`end_source`を排他として弾く。現物の422テストが`tests/test_end_source_chain.py:416-424`（`test_end_source_conflicts_with_reference_video_422`）に存在する。
+  2. **エンジンassert**: `chain_pipeline.py:1076-1081`の`assert ic_reference is None or (source is None and retake is None and end_source is None)`。
+  3. **窓ジェネレータ構築直前の再assert**: `chain_pipeline.py:1361-1363`の`assert layout.seg_generation_order == list(range(n_seg))`。
+- **②封印は偶然ではなく設計**: 消費箇所（`chain_pipeline.py:1701-1702`）の直前、`:1355-1360`のコメントが一次資料である。趣旨は「参照窓のジェネレータは前方向にしか進めないので、セグメントを生成順どおりに辿らないスケジュール（＝逆順のend source）だと各セグメントへ間違った窓が渡る。参照はend sourceとAPI排他なのでこれは起こり得ない——起票が描いた症状そのものを設計者が認識したうえで、黙った取り違えにしないためassertで止めてある」というもの。**§3-142の症状は、実装ミスの発見ではなく、実装済みの安全柵の再発見だった。**
+- **③誤起票の訂正**: 上記のとおり、§3-142（2026-09-02・ぼく自身の§3-117調査の副産物として起票）は「実装済みの安全柵を、柵の存在に気づかずバグとして再発見した」ものであり、**バグの起票として誤りだった**。オーナー裁定（2026-09-02）は**クローズ**——「封印のまま中身を直す」「解禁まで踏み込む」はいずれも不採用（到達不能なコードの改修・新機能開発であり、バグ修正ではないため）。
+- **④付録（クローズの理由ではない。将来「逆順×参照」を機能として解禁するときの参考資料）**: 解禁に必要な作業一式。
+  - **(a) 2.5型のmaterialize設計への転換**: 逆順では生成順の最初のセグメントが参照動画の**末尾**窓を要求するため、現行の前方向のみの遅延デコード（`chain_pipeline.py:1345-1350`の設計＝先頭から順に1窓ずつ遅延デコードするジェネレータ）と正面衝突する。全窓を事前にVAEエンコードしてlatentとして保持する方式（`engine25/chain25.py`の`_build_reference_conditionings`と同型）へ転換する必要がある。**2.3の`video_encoder`はループ全体で生存しているため、転換そのものへの技術的障壁は無い。**
+  - **(b) ガード3箇所の同時解除**: 上記①の1〜3（`api/models.py:1046-1051`・`chain_pipeline.py:1076-1081`・`chain_pipeline.py:1361-1363`）。
+  - **(c) テストの拡張**: `tests/test_chain_reference_engine.py`の`_drive_stage1`（:263）を窓対応pin付きに拡張し、逆順スケジュールでの窓割当てを検証するテストを新設する。**現状はガード③のassertに阻まれてこの種のテストを書けない。**
+  - **(d) ログの追加**: 現行の2.3側（`chain_pipeline.py`の参照窓消費箇所）はセグメント番号・窓範囲のログが**ゼロ件**。2.5側`_build_reference_conditionings`（`engine25/chain25.py:1254`）は`logger.info`でセグメント数・窓数・frame_capを出しており（:1293）、同水準へ揃える。
+  - **(e) `chain_math.py`契約docstringの更新**: `video_segment_windows`（:1522）のdocstring:1540-1544（本書のとおり本項と同時に`end_source`の記載漏れを訂正済み）を、解禁後の排他関係に合わせて書き直す。
+  - **(f) オーナー裁定との整合確認**: 逆順Chained自体が「推奨外」というオーナー裁定（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.14の見出し「逆順Chained（素材（末尾）をクリップ2本以上で使う推奨外モード）」・同§78.14(3)）と、解禁の要否が整合するかを解禁着手時に必ず確認する。
+- **状態**: 誤起票の訂正でクローズ（2026-09-02、オーナー裁定）。実行コードの変更はゼロ。あわせて`chain_math.py:1540-1544`のdocstring（`video_segment_windows`の排他列挙に`end_source`が抜けていた記載漏れ）を1行訂正した——これは本項の調査で見つかった別件の軽微な文書訂正で、クローズの理由そのものではない。
+- **正本・出典**: `api/models.py:1046-1051`、`tests/test_end_source_chain.py:416-424`、`engine/pipeline/chain_pipeline.py:1076-1081`・`:1355-1363`・`:1701-1702`、`engine25/chain25.py:1254`・`:1293`・`:1841-1846`・`:2745`・`:2749-2754`、`chain_math.py:1522`・`:1540-1544`、`tests/test_chain_reference_engine.py:263`、本書§3-117、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.14。

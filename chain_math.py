@@ -1538,10 +1538,10 @@ def video_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     the already-assembled timeline with no reference conditioning at all.
 
     No V2V / retake terms appear here on purpose. A reference is mutually
-    exclusive with ``source_video`` and with retake at the API level
-    (``api/models.py``), so a layout that carries ``source_context_px`` /
-    ``retake_glue_px`` can never reach this function with a reference attached —
-    there is no trimmed head to compensate for.
+    exclusive with ``source_video``, with retake, and with the end source at
+    the API level (``api/models.py``), so a layout that carries
+    ``source_context_px`` / ``retake_glue_px`` can never reach this function
+    with a reference attached — there is no trimmed head to compensate for.
 
     Adjacent windows overlap by exactly ``8 * kv - 7`` pixel frames (17 at the
     default K_v=3), which is precisely the pixel span the K_v latent carry-over

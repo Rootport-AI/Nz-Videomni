@@ -236,6 +236,14 @@ the Chain screen no longer carries its own copy of either.)
   single-file-embedded `NzVideomni.aux2` plus `Language/*.aul2` (and
   `package.ini` / `package.txt`) into `dist/NzVideomni-<version>.au2pkg.zip` in
   the layout AviUtl2 expects (`Plugin/NzVideomni/`, `Language/`).
+- **Generation fps is always a whole number**: whichever of the three fps
+  sources feeds a form (material, project, or the backend defaults) and
+  however it gets there (right-click prefill, manual edit, or lazy init),
+  the value sent to the backend is an integer in `[1, 60]` — every entry
+  point rounds through `snapFrameRate` (`webui/src/modes/single/paramUtils.ts`,
+  §3-71/§3-72 in `Docs/PENDING_TASKS.md`). Only a right-click prefill that
+  actually changed the value surfaces a one-shot toast; manual edits and
+  mount overwrites round silently.
 
 ## Directory layout
 

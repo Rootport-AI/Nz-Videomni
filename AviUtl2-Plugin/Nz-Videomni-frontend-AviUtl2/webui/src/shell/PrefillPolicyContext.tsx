@@ -17,11 +17,17 @@ import type { ReactNode } from "react";
  *
  * §3-13 (2026-09-01): BOTH axes offer all three choices. The fps axis's
  * `"material"` was retired by X1 while native had no way to read a material's
- * real fps; contract v11 gives it one (`mediaFps`, probed via Media Foundation)
- * and `timeline/prefillSeed.ts` snaps that raw rate to an integer, so the choice
- * is live again and the X1 coercions that forced a stored/incoming `"material"`
- * back to `"project"` are gone — this context now stores and restores all three
- * values on either axis.
+ * real fps; contract v11 gives it one (`mediaFps`, probed via Media Foundation),
+ * so the choice is live again and the X1 coercions that forced a stored/incoming
+ * `"material"` back to `"project"` are gone — this context now stores and
+ * restores all three values on either axis.
+ *
+ * §3-71/§3-72 (2026-09-02): it is not only the material tier that gets
+ * rounded — EVERY fps stage this prefill can select (material, project, and
+ * the generation defaults fallback) is snapped to a whole number by
+ * `modes/single/paramUtils.ts`'s `snapFrameRate`, the one source of truth for
+ * the rounding rule (see that file's header for why this is a UI policy, not
+ * a §5.1 API-frozen constraint).
  *
  * This choice affects ONLY the right-click prefill's initial value decision —
  * ordinary panel edits, presets and the "Get size from AviUtl2" button are

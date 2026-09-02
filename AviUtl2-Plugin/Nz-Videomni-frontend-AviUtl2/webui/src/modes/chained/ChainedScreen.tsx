@@ -5,6 +5,7 @@ import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
 import { useJobsContext } from "../../jobs/JobsContext";
 import { JobLedger } from "../../jobs/JobLedger";
+import { formatFps } from "../../jobs/fpsConvert";
 import { useShowNote } from "../../shell/NoteArea";
 import { useToasts } from "../../shell/ToastContext";
 import type { NagSettings } from "../../shell/nagSettings";
@@ -292,8 +293,12 @@ function ChainedScreenBody({
   // W7: the right-click prefill resolution/fps policy (Settings). Only affects
   // the initial-value decision below — ordinary edits/presets are unchanged.
   const { sizePolicy, fpsPolicy } = usePrefillPolicy();
-  const initialCommon = useMemo(() => {
-    if (!initialIntent) return {};
+  // 台帳§3-71/§3-72: the seed is derived OUTSIDE `initialCommon` now (it used to
+  // be a local inside that useMemo) so the fps-snap toast effect below can read
+  // `frameRateSnappedFrom` off it. `initialCommon` still consumes exactly the
+  // same object, so the form's lazy init is unchanged.
+  const seed = useMemo(() => {
+    if (!initialIntent) return null;
     // W8: the shared純関数 `resolvePrefillSeed` decides the common width/height +
     // fps + clip-0 DURATION from the SAME right-click inputs `AppShell`'s
     // reservation length uses, so a placed provisional's ribbon matches the
@@ -307,13 +312,17 @@ function ChainedScreenBody({
     // size/rate; `material`/`project` seed from it (`project` is overwritten
     // below off getEditInfo). A `null`/undefined seed value leaves the common
     // field at the config default.
-    const seed = resolvePrefillSeed({
+    return resolvePrefillSeed({
       intent: initialIntent.intent,
       selection: initialIntent.selection,
       config,
       sizePolicy,
       fpsPolicy,
     });
+  }, [initialIntent, config, sizePolicy, fpsPolicy]);
+
+  const initialCommon = useMemo(() => {
+    if (!initialIntent || !seed) return {};
     return {
       width: seed.derived.width,
       height: seed.derived.height,
@@ -336,7 +345,7 @@ function ChainedScreenBody({
         ? { forceSingleClip: true }
         : {}),
     };
-  }, [initialIntent, config, sizePolicy, fpsPolicy]);
+  }, [initialIntent, seed]);
 
   const form = useChainForm(
     config,
@@ -361,6 +370,23 @@ function ChainedScreenBody({
 
   const showNote = useShowNote();
   const toasts = useToasts();
+
+  // 台帳§3-71/§3-72: the Chain twin of `SingleScreen`'s fps-snap toast — tell the
+  // user ONCE when a right-click prefill had to round the project's (or the
+  // material's) frame rate to a whole number. Same rules as Create's: the
+  // `project` mount overwrite below and manual typing stay silent (the field
+  // shows the rounded value the same instant), and the one-shot ref + empty deps
+  // pair with `AppShell`'s `remountTokens` key so every right-click gets exactly
+  // one toast even under StrictMode's double-invoked mount effect.
+  const fpsSnapToastedRef = useRef(false);
+  useEffect(() => {
+    if (fpsSnapToastedRef.current) return;
+    const from = seed?.frameRateSnappedFrom;
+    if (from === undefined || seed?.frameRate === undefined) return;
+    fpsSnapToastedRef.current = true;
+    toasts.push({ kind: "warning", message: strings.prefill.fpsSnappedToast(formatFps(from), seed.frameRate) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
+  }, []);
 
   // §1-16 長尺A2V: turn `adjustClipsForAudio`'s published outcome into a toast.
   // `useChainForm` never touches the toast system itself (it stays usable from a

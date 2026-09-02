@@ -10,7 +10,7 @@ import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
 import { useLoras } from "../inventory/useLoras";
 import { FALLBACK_APP_CONFIG, MIN_NUM_FRAMES } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
-import { snapNumFrames } from "../single/paramUtils";
+import { FRAME_RATE_FALLBACK, FRAME_RATE_MIN, snapFrameRate, snapNumFrames } from "../single/paramUtils";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが、ファイル
 // 移動はしない —— 他ワークストリームが chained/ を占有しているため、ここで動かす
 // と衝突する。Create（`modes/single/useGenerationForm.ts`）も同じ理由でこのフック
@@ -188,7 +188,17 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   const [centering, setCenteringState] = useState(false);
   const [blendDilation, setBlendDilationState] = useState(DEFAULT_BLEND_DILATION_STAGE1);
   const [numFramesInput, setNumFramesInput] = useState(FALLBACK_APP_CONFIG.generation_defaults.num_frames);
-  const [frameRate, setFrameRate] = useState(FALLBACK_APP_CONFIG.generation_defaults.frame_rate);
+  // 台帳§3-71/§3-72: 生成 fps は必ず整数（`paramUtils.snapFrameRate` が正本）。
+  // 初期値も通す —— 既定を非整数へ変えたときに、このパネルだけ素通しになるのを
+  // 防ぐため。フォールバックは定数（`?? FALLBACK_APP_CONFIG…` と繋ぐと、スナップ
+  // が弾いたその値がそのまま漏れる）。なお、このパネルが実 config ではなく
+  // `FALLBACK_APP_CONFIG` を見ている件は本改修のスコープ外（別件）。
+  const [frameRate, setFrameRateState] = useState(
+    () => snapFrameRate(FALLBACK_APP_CONFIG.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
+  );
+  /** fps 欄の setter。空欄（`Number("")` = 0）・非有限・範囲外は他パネルと同じ
+   * 意味論（0 以下 → 1、60 超 → 60、小数 → 四捨五入）。 */
+  const setFrameRate = useCallback((raw: number) => setFrameRateState(snapFrameRate(raw) ?? FRAME_RATE_MIN), []);
   const [seed, setSeed] = useState(FALLBACK_APP_CONFIG.generation_defaults.seed);
 
   const source = useSourceUpload("video", nativeBridge ? { nativeBridge } : {});

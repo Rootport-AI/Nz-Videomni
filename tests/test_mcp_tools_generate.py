@@ -1740,3 +1740,85 @@ def test_upload_video_input_schema_exposes_max_frames():
     tools = anyio.run(_run)
     tool = next(t for t in tools if t.name == "upload_video")
     assert "max_frames" in tool.inputSchema["properties"]
+
+
+# ---- frame-rate snapping (台帳 §3-71 / §3-72) --------------------------------
+# The rounding rule floor(x + 0.5) is shared with webui's
+# modes/single/paramUtils.ts::snapFrameRate and gradio_ui/handlers.py's
+# _snap_frame_rate, but the OUT-OF-RANGE behaviour is deliberately NOT shared:
+# webui clamps into [1, 60], while MCP passes the value through untouched so the
+# server's own Field(ge=1.0, le=60.0) answers 422 instead of a GPU job running on
+# an argument the caller never meant. Don't "fix" these tests into a parity suite.
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        (29.97, 30.0),   # NTSC
+        (23.976, 24.0),  # film-over-NTSC
+        (59.94, 60.0),   # NTSC 60 -- still inside the range, so still rounded
+        # An exact .5 rounds UP, matching JavaScript's Math.round. Python's own
+        # round() would give 24.0 and 26.0 here (banker's rounding), which is
+        # precisely why the implementation uses math.floor(x + 0.5).
+        (24.5, 25.0),
+        (25.5, 26.0),
+        (24.0, 24.0),    # already integral -- identity
+        (1.0, 1.0),      # inclusive lower bound
+        (60.0, 60.0),    # inclusive upper bound
+    ],
+)
+def test_snap_frame_rate_rounds_inside_the_server_range(given, expected):
+    assert generate._snap_frame_rate(given) == expected
+
+
+@pytest.mark.parametrize("given", [120.0, 0.0, -5.0, 60.4, 0.9, float("nan"), float("inf")])
+def test_snap_frame_rate_passes_out_of_range_and_non_finite_through(given):
+    got = generate._snap_frame_rate(given)
+    if got != got:  # NaN
+        assert given != given
+    else:
+        assert got == given
+
+
+def _fps_capture_handler(captured: dict, *, chain: bool = False):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        payload = {"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        if chain:
+            payload["num_clips"] = 2
+        return httpx.Response(202, json=payload)
+
+    return handler
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [(29.97, 30.0), (23.976, 24.0), (120.0, 120.0), (0.0, 0.0)],
+)
+def test_submit_generate_snaps_frame_rate_in_payload(given, expected):
+    captured: dict = {}
+    set_client(_client_for_handler(_fps_capture_handler(captured)))
+
+    anyio.run(functools.partial(generate.submit_generate, "a prompt", frame_rate=given))
+
+    assert captured["body"]["frame_rate"] == expected
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [(29.97, 30.0), (23.976, 24.0), (120.0, 120.0), (0.0, 0.0)],
+)
+def test_submit_chain_snaps_frame_rate_in_payload(given, expected):
+    captured: dict = {}
+    set_client(_client_for_handler(_fps_capture_handler(captured, chain=True)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_chain,
+            "a prompt",
+            [ChainClipArg(num_frames=25), ChainClipArg(num_frames=25)],
+            frame_rate=given,
+        )
+    )
+
+    assert captured["body"]["frame_rate"] == expected

@@ -4,6 +4,7 @@ import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { SizeFields } from "../single/CommonGenerationFields";
+import { FRAME_RATE_MAX, FRAME_RATE_MIN } from "../single/paramUtils";
 import { RangeBand } from "./RangeBand";
 import type { UseRetakeFormResult } from "./useRetakeForm";
 
@@ -271,8 +272,8 @@ function RetakeSettings({ form, disabled }: RetakePanelProps) {
           <span className="field-label">{strings.single.duration.fps}</span>
           <input
             type="number"
-            min={1}
-            max={60}
+            min={FRAME_RATE_MIN}
+            max={FRAME_RATE_MAX}
             value={form.frameRate}
             disabled={disabled}
             onChange={(e) => form.setFrameRate(Number(e.target.value))}

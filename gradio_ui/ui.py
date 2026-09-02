@@ -506,8 +506,16 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                         format_duration_label(49, 24.0),
                                         elem_classes=["duration-line"])
                                 with gr.Column(scale=3, min_width=0):
+                                    # precision=0 is a real defence, not cosmetics
+                                    # (§3-71 / §3-72 — see handlers._snap_frame_rate):
+                                    # it makes Gradio hand every downstream consumer a
+                                    # whole number, including the live duration/spill
+                                    # readouts and the A2V length precheck, which read
+                                    # the raw field rather than the snapped payload.
+                                    # minimum/maximum stay omitted server-side for the
+                                    # same reason as the width field above.
                                     frame_rate = reg(gr.Number(
-                                        value=24.0, label=L("lbl_fps")), "lbl_fps")
+                                        value=24, label=L("lbl_fps"), precision=0), "lbl_fps")
 
                         spill_warning = gr.Markdown("", visible=False,
                                                     elem_classes=["spill-warning"])
@@ -819,7 +827,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             chain_crop_h = reg(gr.Number(value=0, label=L("lbl_crop_h"),
                                                          precision=0), "lbl_crop_h")
                         with gr.Row():
-                            chain_fps = reg(gr.Number(value=24.0, label=L("lbl_fps")), "lbl_fps")
+                            # precision=0: same real defence as the Generate tab's
+                            # fps field (§3-71 / §3-72 — see the note there and
+                            # handlers._snap_frame_rate). Here it also guards the
+                            # live chain estimate (presets.compute_chain_layout),
+                            # which reads this field raw. minimum/maximum stay
+                            # omitted server-side (see the Generate width note).
+                            chain_fps = reg(gr.Number(value=24, label=L("lbl_fps"),
+                                                      precision=0), "lbl_fps")
                             chain_steps = reg(gr.Slider(1, 50, value=8, step=1, label=L("lbl_steps"),
                                                         interactive=False), "lbl_steps")
                             chain_cfg = reg(gr.Slider(1.0, 12.0, value=1.0, step=0.1,

@@ -269,6 +269,42 @@ describe("useRetakeForm — ゲート", () => {
   });
 });
 
+// 台帳§3-71/§3-72 (2026-09-02): fps 欄は整数だけを持つ。丸めの規則そのものは
+// `paramUtils.test.ts` の `snapFrameRate`。ここで押さえるのは「Retake の setter
+// がそこへ繋がっている」ことと、以前は素の setState だったせいで 0 や負値が
+// 入り込めた穴が塞がっていること。
+describe("useRetakeForm — フレームレート（整数のみ）", () => {
+  it("小数は四捨五入され、上下限でクランプされる", () => {
+    const { result } = renderForm(makeIntent());
+    act(() => result.current.setFrameRate(29.97));
+    expect(result.current.frameRate).toBe(30);
+    act(() => result.current.setFrameRate(23.976));
+    expect(result.current.frameRate).toBe(24);
+    act(() => result.current.setFrameRate(120));
+    expect(result.current.frameRate).toBe(60);
+  });
+
+  it("0・負値・NaN は 1fps へ（窓計算は frameRate > 0 を前提にしている）", () => {
+    const { result } = renderForm(makeIntent());
+    act(() => result.current.setFrameRate(0));
+    expect(result.current.frameRate).toBe(1);
+    act(() => result.current.setFrameRate(-30));
+    expect(result.current.frameRate).toBe(1);
+    act(() => result.current.setFrameRate(Number.NaN));
+    expect(result.current.frameRate).toBe(1);
+  });
+
+  it("❌（clearAll）で既定へ戻すときも setter を通る（素通しの別名を作らないこと）", () => {
+    const { result } = renderForm(makeIntent());
+    act(() => result.current.setFrameRate(50));
+    expect(result.current.frameRate).toBe(50);
+    act(() => result.current.clearAll());
+    // 既定は 24（整数）なので値そのものは変わらないが、ここが素の setState に
+    // 戻ると非整数 config で丸めが効かなくなる。
+    expect(result.current.frameRate).toBe(24);
+  });
+});
+
 describe("useRetakeForm — 解像度（④ 幅・高さの編集）", () => {
   it("初期値は素材の実寸ベースで、ユーザーが触るまで導出値に追随する", () => {
     const { result } = renderForm(makeIntent());

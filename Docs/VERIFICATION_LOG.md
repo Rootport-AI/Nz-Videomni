@@ -10703,3 +10703,35 @@ G1〜G6・G10は合格した（完了条件の正本は台帳[`PENDING_TASKS_CLO
 ### 90.10 状態
 
 **自己診断16/16×2・G-A／G-B／G-C／G-E 全合格・G-Dは前段合格＋後段は代替証拠3点で充足（裁定）。** 台帳の§3-113・§3-119はいずれも[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移してクローズ済みである。**コードの変更は1行のガードとコメントの現行化だけなので、コミットは1件にまとめる**（1行の共通修正で2項目を閉じるため分割しない）。**残件は無い。**
+
+## 91. ★非整数fps（29.97/23.976）対策 — webui・MCP・Gradioの全入口を整数へスナップ（台帳§3-71・§3-72）＝自動ゲート全緑・**実機ゲートG1〜G11は未実施でオーナー実施待ち**（2026-09-02）
+
+### 91.1 目的
+
+台帳§3-71（チェーン生成の非標準フレームレート422問題）と§3-72（非整数フレームレートの音ズレ）は、いずれも**非整数fps（29.97・23.976のようなNTSC系の値）が生成リクエストに乗ることが引き金**である。バックエンド側の恒久修正（`chain_math.py`の丸め誤差対策・`media_io`のfps切り捨て対策）は凍結領域（`api/`スキーマ・`engine/`・`engine25/`・`chain_math.py`・vendor）を広く触ることになるため見送り、**クライアント側（webui・MCP・Gradio）でfpsが決まりうる全ての入口を整数へ丸め、両バグの再現経路そのものを塞ぐ**方針を採った（オーナー裁定・案A採用）。バックエンドの`api/`・`engine/`・`engine25/`・`chain_math.py`・vendor・ネイティブC++はコード変更なし。完成時に台帳§3-71・§3-72をクローズする（実機ゲート合格後）。
+
+### 91.2 設計要点
+
+- **正本は1箇所**: webui側の丸め規則はフロントエンド`webui/src/modes/single/paramUtils.ts`の`snapFrameRate`一箇所に統合した（旧`timeline/prefillSeed.ts`の`snapMaterialFps`は削除・統合）。`Math.round`のあと`[1, 60]`へクランプする。**整数fpsはAPIの凍結制約ではなくUI方針である**——サーバー側のバリデーション`Field(ge=1.0, le=60.0)`とは独立した、クライアント側だけの追加規律。
+- **丸め規則は3実装（webui／MCP／Gradio）で共通、範囲外の扱いは意図的に異なる**: webuiはクランプ（`[1,60]`へ強制、フォーム入力なので値を必ず確定させる必要がある）。MCP・Gradioは**範囲外・非有限を素通し**させ、サーバーの422バリデーションへ判断を委ねる（「黙って24へ差し替える」形は取らない——誤発火したGPUジョブを隠蔽してしまうため）。MCP側の丸めは`math.floor(value + 0.5)`であって`round()`ではない（Pythonの`round()`は偶数丸めで、webuiの`Math.round`と食い違うため）。この非対称は「3面ミラー」と呼ばない設計にしてある——書き切らずに写経すると、後任が誤ったパリティテストを書く恐れがあるため。
+- **Gradioは解析点でスナップする（＝幾何プリチェックより前）**: Chainのfps解析点（`handlers.py`の`fps = float(frame_rate)`の直後）で丸めており、payload直前ではない。理由は、その手前でローカルの幾何プリチェック（`validation.py`の`check_chain_total`→`compute_chain_layout`。§3-71の422と同じ数式のローカル版）が生fpsのまま走ってしまうため——解析点に置くことで「[1,60]事前チェック・幾何プリチェック・payload」の3箇所が同じ丸め済みの値を見るようになる。`ui.py`の`gr.Number`へ付けた`precision=0`＋`value=24`は表示整形ではなく、ライブ推定経路（Chainのプリセット推定・A2Vプリチェック）が生fpsのまま残ることへの実防御である。
+- **webui側は6入口**（プロジェクトのrate/scale・素材のmediaFps・4フォームのsetter・4フォームのlazy init）に加え、プリフィルで値が実際に変わったときだけ発火する1回限りのトースト（Create/Chainedの2画面）を実装した。Retakeの選択範囲実時間換算が使う`projectFps`は意図的にスナップ対象から外してある（`deriveDuration.ts`の実時間換算が壊れるため）。
+
+### 91.3 自動検証の結果
+
+| 対象 | 基準 | 結果 |
+|---|---|---|
+| webui `npm run typecheck` | — | **エラー0** |
+| webui `npm test` | 2,653 passed / 10 skipped | **2,688 passed / 10 skipped**（+35件は新規テスト） |
+| MCP `tests/test_mcp_*.py` | 141 passed | **164 passed** |
+| Gradio `tests/test_gradio_handlers.py`・`tests/test_gradio_ui.py` | 261 passed | **281 passed** |
+
+**いずれも失敗ゼロ。** フロントエンド側の実装記録・変更ファイル一覧はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §105が正本。
+
+### 91.4 実機ゲート
+
+**未実施——オーナー実施待ち。** ゲート表（G1〜G11）の正本は台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2であり、二重に書き写さない（実機での`build.ps1`→`deploy.ps1`配置が前提）。合格後、台帳§3-71・§3-72を[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移送する。
+
+### 91.5 状態
+
+**自動ゲート全緑・実機ゲートは未実施。** コード変更はバックエンドの`mcp_server/tools/generate.py`・`gradio_ui/handlers.py`・`gradio_ui/ui.py`とフロントエンド側6入口（91.2参照）で、いずれも§3-71/§3-72の症状に対するクライアント側の緩和であり、バックエンドの恒久修正そのものではない（残余は台帳§3-71・§3-72のクローズ文に明記する）。

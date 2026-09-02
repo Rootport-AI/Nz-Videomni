@@ -380,6 +380,32 @@ describe("OutpaintingPanel", () => {
     expect(panel.queryByText("The height can be at most 4096 pixels.")).not.toBeInTheDocument();
   });
 
+  // 台帳§3-71/§3-72 (2026-09-02): the fps box only ever holds a whole frame rate
+  // in [1, 60]. Driven through the real input (this panel has no hook-level test
+  // file of its own), one `fireEvent.change` per case — the paste-equivalent
+  // route, not a keystroke-by-keystroke `user.type`.
+  it("rounds and clamps the frame-rate box to a whole [1, 60] value", async () => {
+    const user = userEvent.setup();
+    const { bridge } = createPanelBridge();
+    const panel = renderPanel(bridge);
+    await attachSource(panel, user, null);
+
+    const fps = panel.getByRole("spinbutton", { name: /fps/i }) as HTMLInputElement;
+    expect(fps).toHaveAttribute("min", "1");
+    expect(fps).toHaveAttribute("max", "60");
+    expect(fps.value).toBe("24");
+
+    fireEvent.change(fps, { target: { value: "29.97" } });
+    expect(fps.value).toBe("30");
+
+    fireEvent.change(fps, { target: { value: "200" } });
+    expect(fps.value).toBe("60");
+
+    // An emptied box reads as `Number("") === 0`, which lands on the floor.
+    fireEvent.change(fps, { target: { value: "" } });
+    expect(fps.value).toBe("1");
+  });
+
   it("caps the duration slider at the source video's own length", async () => {
     const user = userEvent.setup();
     const { bridge } = createPanelBridge();

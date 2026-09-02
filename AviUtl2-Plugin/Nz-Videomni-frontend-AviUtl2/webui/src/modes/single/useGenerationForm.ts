@@ -30,10 +30,13 @@ import {
   clamp,
   floorToMultiple,
   formatDurationHint,
+  FRAME_RATE_FALLBACK,
+  FRAME_RATE_MIN,
   isDimensionOnGrid,
   isNumFramesOnGrid,
   isValidPrompt,
   roundToMultiple,
+  snapFrameRate,
   snapNumFrames,
 } from "./paramUtils";
 import { resolveSpillFreeFrames } from "./spillUtils";
@@ -672,8 +675,12 @@ export function useGenerationForm(
       // initial state is always a valid 8n+1 value in range.
       numFrames: snapNumFrames(initial.numFrames ?? config.generation_defaults.num_frames, MIN_NUM_FRAMES, config.limits.max_num_frames),
       // W7: a right-click prefill can seed fps (material policy: selection
-      // rate/scale); otherwise the config default, unchanged.
-      frameRate: initial.frameRate ?? config.generation_defaults.frame_rate,
+      // rate/scale); otherwise the config default.
+      // 台帳§3-71/§3-72: snapped to a whole frame rate here too, so a non-integer
+      // CONFIG default can't slip past every entry point. The fallback is the
+      // constant, NOT `?? config…` — chaining back to the config would let the
+      // raw value through exactly when the snap rejected it.
+      frameRate: snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
       seed: config.generation_defaults.seed,
     };
   });
@@ -766,8 +773,15 @@ export function useGenerationForm(
     [limits.minNumFrames, limits.maxNumFrames],
   );
 
+  // 台帳§3-71/§3-72: rounds as well as clamping now — the generation only ever
+  // runs at whole frame rates (see `paramUtils.snapFrameRate`; the range is the
+  // server's, the integer is our UI policy). `?? FRAME_RATE_MIN` keeps the
+  // pre-existing "an emptied field becomes 1fps" behaviour: an
+  // `<input type="number">` reports a cleared (or half-typed, e.g. `"29."`)
+  // box as `""`, which the change handler passes on as `Number("") === 0`,
+  // and 0 landed on 1 under the old `Math.min(60, Math.max(1, raw))` too.
   const setFrameRate = useCallback(
-    (raw: number) => setValues((prev) => ({ ...prev, frameRate: Math.min(60, Math.max(1, raw)) })),
+    (raw: number) => setValues((prev) => ({ ...prev, frameRate: snapFrameRate(raw) ?? FRAME_RATE_MIN })),
     [],
   );
 

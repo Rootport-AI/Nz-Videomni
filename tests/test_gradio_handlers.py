@@ -3814,3 +3814,137 @@ def test_chain_handler_default_omits_fused_dequant():
     ]))
     _run_chain_until_started(gen)
     assert "fused_gguf_dequant_kernel" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Frame-rate snapping (台帳 §3-71 / §3-72). The rounding rule floor(x + 0.5) is
+# shared with webui's modes/single/paramUtils.ts::snapFrameRate and
+# mcp_server/tools/generate.py::_snap_frame_rate, but the OUT-OF-RANGE behaviour
+# is NOT: webui clamps into [1, 60] while Gradio (like MCP) passes the value
+# through so the server's Field(ge=1.0, le=60.0) answers 422. Do not turn these
+# into a three-way parity suite.
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        (29.97, 30.0),   # NTSC
+        (23.976, 24.0),  # film-over-NTSC
+        (59.94, 60.0),
+        # Exact .5 rounds UP like JavaScript's Math.round; Python's own round()
+        # would answer 24.0 / 26.0 here (banker's rounding), which is why the
+        # implementation uses math.floor(x + 0.5).
+        (24.5, 25.0),
+        (25.5, 26.0),
+        (24.0, 24.0),    # already integral -- identity
+        (1.0, 1.0),      # inclusive lower bound
+        (60.0, 60.0),    # inclusive upper bound
+    ],
+)
+def test_snap_frame_rate_rounds_inside_the_server_range(given, expected):
+    from gradio_ui.handlers import _snap_frame_rate
+
+    assert _snap_frame_rate(given) == expected
+
+
+@pytest.mark.parametrize("given", [120.0, 0.0, -5.0, 60.4, 0.9, float("inf")])
+def test_snap_frame_rate_passes_out_of_range_through(given):
+    from gradio_ui.handlers import _snap_frame_rate
+
+    assert _snap_frame_rate(given) == given
+
+
+def test_snap_frame_rate_passes_nan_through():
+    import math
+
+    from gradio_ui.handlers import _snap_frame_rate
+
+    assert math.isnan(_snap_frame_rate(float("nan")))
+
+
+def test_generate_payload_snaps_non_integer_frame_rate():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-fps"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 29.97, -1,
+    )
+    _run_until_job_started(gen)
+
+    assert captured["frame_rate"] == 30.0
+    assert isinstance(captured["frame_rate"], float)
+
+
+def test_generate_payload_passes_out_of_range_frame_rate_through_to_the_server():
+    # 120 is a 422 on the server (Field(le=60.0)); swapping in a default here
+    # would swallow that and start a GPU job on an fps the caller never asked
+    # for, so the handler sends it unchanged.
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-fps-hi"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", *_kf_args(),
+        512, 320, False, 0, 0, 49, 120.0, -1,
+    )
+    _run_until_job_started(gen)
+
+    assert captured["frame_rate"] == 120.0
+
+
+def test_build_a2v_chain_payload_snaps_non_integer_frame_rate():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-fps",
+        num_frames=113,
+        prompt="p",
+        negative_prompt=None,
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate="23.976",  # string, exactly as a Gradio field delivers it
+        seed=0,
+    )
+    assert payload["frame_rate"] == 24.0
+    assert isinstance(payload["frame_rate"], float)
+
+
+def test_chain_29_97_clears_the_geometry_precheck_and_sends_30():
+    # THE §3-71 headline case: [257, 257] at 29.97 fails chain_math's stage-2
+    # audio re-assembly check ("audio reassembly 414 != a_total 415"), so the
+    # LOCAL precheck (check_chain_total, the same arithmetic as the server's
+    # 422) rejects it before any HTTP call. Snapping at the parse point rather
+    # than just before the payload is what lets this ordinary clip list through
+    # — the precheck, the [1, 60] range check and the payload all see 30.0.
+    assert check_chain_total([257, 257], 29.97, 3) is not None  # ground truth
+    assert check_chain_total([257, 257], 30.0, 3) is None
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-fps"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(fps=29.97, clips=[
+        {"enabled": True, "frames": 257},
+        {"enabled": True, "frames": 257},
+    ]))
+    outs = _run_chain_until_started(gen)
+
+    assert outs[-1][1] == "chain-fps"  # a job really started (no local reject)
+    assert captured["frame_rate"] == 30.0

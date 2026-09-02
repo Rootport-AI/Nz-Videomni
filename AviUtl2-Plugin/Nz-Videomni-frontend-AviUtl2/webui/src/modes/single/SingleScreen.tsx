@@ -5,6 +5,7 @@ import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
 import { useJobsContext } from "../../jobs/JobsContext";
 import { JobLedger } from "../../jobs/JobLedger";
+import { formatFps } from "../../jobs/fpsConvert";
 import type { ControlLoraSelection } from "../../lora/controlLoras";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
@@ -27,7 +28,7 @@ import { KeyframeShrinkModal } from "./KeyframeShrinkModal";
 import { GenerateButtonBar } from "./GenerateButtonBar";
 import { GenerateReasonsNote } from "./GenerateReasonsNote";
 import { GenerationForm } from "./GenerationForm";
-import { snapNumFrames } from "./paramUtils";
+import { snapFrameRate, snapNumFrames } from "./paramUtils";
 import { useConfig } from "./useConfig";
 import { useDurationShrinkGuard } from "./useDurationShrinkGuard";
 import { useGenerationSubmit } from "./useGeneration";
@@ -291,6 +292,29 @@ function SingleScreenBody({
   const prefillFrameRate = seed?.frameRate;
   const prefillNumFrames = seed?.numFrames;
 
+  // 台帳§3-71/§3-72: tell the user, ONCE, when a right-click prefill had to
+  // round the project's (or the material's) frame rate to a whole number —
+  // the one place the snap is worth reporting, because the value the user
+  // gets is not the value their project has (owner ruling 2026-09-02 ②).
+  // Manual typing and the `project` mount overwrite below stay silent: the
+  // field re-renders rounded the same instant, so a toast would only repeat
+  // what the user can already see (and the overwrite would double-report this
+  // very seed).
+  //
+  // One-shot ref + empty deps, exactly like the `project` overwrite effect
+  // below: this whole body remounts under a fresh `key` on every right-click
+  // (`AppShell`'s `remountTokens`), so "once per mount" IS "once per prefill",
+  // and StrictMode's double-invoked mount effect still shows one toast.
+  const fpsSnapToastedRef = useRef(false);
+  useEffect(() => {
+    if (fpsSnapToastedRef.current) return;
+    const from = seed?.frameRateSnappedFrom;
+    if (from === undefined || seed?.frameRate === undefined) return;
+    fpsSnapToastedRef.current = true;
+    toasts.push({ kind: "warning", message: strings.prefill.fpsSnappedToast(formatFps(from), seed.frameRate) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
+  }, []);
+
   // W5 (反対スロット保持): the opposite source slot carried across this remount —
   // #2 carries the existing audio, #3/#7 carry the existing reference video +
   // strengths (AppShell filled the relevant side). Threaded into the form's
@@ -358,8 +382,15 @@ function SingleScreenBody({
       const bridge = nativeBridge ?? defaultBridge;
       try {
         const editInfo = await bridge.request("getEditInfo", {});
-        const projectGenFps =
-          editInfo.scale > 0 && editInfo.rate > 0 ? editInfo.rate / editInfo.scale : config.generation_defaults.frame_rate;
+        // 台帳§3-71/§3-72: snapped HERE, at the definition — not around the
+        // `form.setFrameRate` call below — because `effectiveGenFps` further
+        // down reads this value directly (it never goes through the form), so a
+        // snap applied only at the setter would leave the DURATION recomputation
+        // converting against a raw 29.97.
+        // The `?? config…` fallback can only ever reach `effectiveGenFps`: the
+        // `setFrameRate` call is itself guarded on a resolvable rate/scale, i.e.
+        // exactly the case where `snapFrameRate` returns a number.
+        const projectGenFps = snapFrameRate(editInfo.rate / editInfo.scale) ?? config.generation_defaults.frame_rate;
         // Apply only the axis (or axes) whose policy is `project`.
         if (sizePolicy === "project") {
           form.setWidth(editInfo.width);

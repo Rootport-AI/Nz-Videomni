@@ -39,6 +39,7 @@ G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mod
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -89,6 +90,44 @@ def _outpaint_stage2_from_stage1(r: int) -> int:
     if r <= 0:
         return 0
     return max(1, round(r * 2 / 5))
+
+
+def _snap_frame_rate(value: float) -> float:
+    """フレームレートを整数へ丸める（サーバーが受理する範囲内のときだけ）。
+
+    ``1.0 <= value <= 60.0`` かつ有限のときだけ ``floor(value + 0.5)`` で丸めて
+    ``float`` で返し、それ以外（範囲外・NaN・±inf）は**素通し**する。
+
+    **なぜ整数か（台帳 §3-71 / §3-72）.** 非整数fpsが生成リクエストに乗ると、
+    ①チェーン生成のstage-2音声タイル再組立検算が丸め誤差で落ち、ごく普通の
+    クリップ構成が422になる（§3-71。29.97 の ``[257, 257]`` が代表例。24や30
+    なら通る）、②mp4書き出しでfpsが整数へ切り捨てられ、長尺ほど音声が
+    ずれていく（§3-72）。サーバー側の恒久修正は凍結領域に広く及ぶため、
+    **クライアントの全入口で整数へスナップして**両方の再現経路を塞ぐ。
+
+    **なぜ範囲外を素通しするか.** 範囲の正本はサーバーの
+    ``Field(ge=1.0, le=60.0)``（``api/models.py``）であり、範囲外は422で
+    弾かれるべき入力である。ここで黙って既定値（24）などに差し替えると、
+    利用者が誤った引数を渡したことに気づけないままGPUジョブが走ってしまう。
+    整数化はUI方針だが、範囲はAPIの制約——という役割の違いをそのまま
+    実装に写している。
+
+    **なぜ ``round()`` を使わないか.** Pythonの ``round()`` は偶数丸め
+    （banker's rounding）なので ``round(0.5) == 0`` / ``round(2.5) == 2`` と
+    なり、JavaScriptの ``Math.round``（常に0.5切り上げ）と食い違う。
+    ``math.floor(value + 0.5)`` なら ``Math.round`` と同じ結果になる。
+
+    **3実装の関係（写経パリティテストを書く前に読むこと）.** 丸め規則
+    ``floor(x + 0.5)`` 相当は3つの実装で共通である:
+    ``webui/src/modes/single/paramUtils.ts`` の ``snapFrameRate``（操作パネル）、
+    本関数（MCP）、``gradio_ui/handlers.py`` の ``_snap_frame_rate``（Gradio）。
+    ただし**範囲外の扱いは正反対**で、webuiは[1, 60]へクランプするのに対し、
+    MCPとGradioは素通ししてサーバーの422へ委譲する。「3つとも同じ関数」と
+    思い込んだパリティテストを書くと必ず落ちるので注意。
+    """
+    if not math.isfinite(value) or value < 1.0 or value > 60.0:
+        return value
+    return float(math.floor(value + 0.5))
 
 
 async def submit_generate(
@@ -231,7 +270,10 @@ async def submit_generate(
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
         num_frames: フレーム数（8n+1、9〜481）。
-        frame_rate: フレームレート。
+        frame_rate: フレームレート。1〜60の範囲内なら**整数へ四捨五入して**
+            送る（29.97→30、23.976→24。台帳 §3-71 / §3-72、
+            ``_snap_frame_rate`` 参照）。範囲外の値は丸めずそのまま送るので
+            サーバーが422で弾く。
         seed: 乱数シード（-1でランダム）。
         conditioning_images: I2V用のキーフレーム画像（最大5件、``upload_image``
             で得た ``image_id`` を使う）。
@@ -355,7 +397,7 @@ async def submit_generate(
     if crop_width is not None and crop_height is not None:
         payload["crop_output"] = {"width": crop_width, "height": crop_height}
     payload["num_frames"] = num_frames
-    payload["frame_rate"] = frame_rate
+    payload["frame_rate"] = _snap_frame_rate(frame_rate)
     payload["seed"] = seed
 
     if nag_enabled:
@@ -671,7 +713,10 @@ async def submit_chain(
         width, height: 生成解像度（64の倍数、参照動画使用時は128の倍数）。
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
-        frame_rate: フレームレート。
+        frame_rate: フレームレート。1〜60の範囲内なら**整数へ四捨五入して**
+            送る（29.97→30、23.976→24。台帳 §3-71 / §3-72、
+            ``_snap_frame_rate`` 参照）。範囲外の値は丸めずそのまま送るので
+            サーバーが422で弾く。
         seed: 乱数シード（-1でランダム）。
         overlap_frames: クリップ間の重なり潜在フレーム数（1〜8）。
         overlap_strength: 重なり部分の強度（0〜1）。
@@ -791,7 +836,7 @@ async def submit_chain(
     payload["height"] = height
     if crop_width is not None and crop_height is not None:
         payload["crop_output"] = {"width": crop_width, "height": crop_height}
-    payload["frame_rate"] = frame_rate
+    payload["frame_rate"] = _snap_frame_rate(frame_rate)
     payload["seed"] = seed
 
     if nag_enabled:

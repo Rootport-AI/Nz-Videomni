@@ -1662,6 +1662,22 @@ export const en = {
     /** Stage 3 reason for a cancelled job — reads "Failed: canceled". */
     cancelled: "canceled",
   },
+  /** 台帳§3-71/§3-72 (2026-09-02): copy for the right-click PREFILL itself —
+   * messages about how a seeded value was adjusted on the way into the form,
+   * as opposed to `settings`' copy about which policy decides the seed. */
+  prefill: {
+    /** Shown once, as a warning toast, when a right-click prefill had to round
+     * a non-integer frame rate (an NTSC project's 29.97, or a 23.976 material)
+     * to the whole frame rate the generation actually runs at. `from` arrives
+     * pre-formatted by `jobs/fpsConvert.ts`'s `formatFps` (29.97 -> "29.97",
+     * 23.976 -> "23.98"); `to` is the integer now in the field.
+     *
+     * Only the PREFILL route says anything — typing a rate by hand rounds
+     * silently, because the field visibly shows the rounded value the same
+     * instant (owner ruling 2026-09-02 ②). */
+    fpsSnappedToast: (from: string, to: number): string =>
+      `Frame rate ${from} was rounded to ${to} fps. Generation only runs at whole frame rates.`,
+  },
   /** I8 §3-4 (※): confirmation dialogs. `chainDiscard` guards a #1/#6 Chain
    * remount that would throw away in-progress chain editing (only shown when
    * the Chain form is actually dirty). */
@@ -1731,8 +1747,12 @@ export const en = {
      * Affects only the right-click prefill's initial values — ordinary panel
      * edits, presets and "Get size from AviUtl2" are unchanged. X6: a shared
      * heading sits above both axes. §3-13: all three choices are live on BOTH
-     * axes — the fps axis's "materials" snaps the material's own framerate to an
-     * integer and falls back to the project's fps when it can't be read. */
+     * axes — the fps axis's "materials" reads the material's own framerate and
+     * falls back to the project's fps when it can't be read. §3-71/§3-72
+     * (2026-09-02): every fps stage this prefill can land on — material,
+     * project, and the generation defaults fallback — is rounded to a whole
+     * number by `modes/single/paramUtils.ts`'s `snapFrameRate` (the one source
+     * of truth), not just the material tier. */
     rightClickMenuHeading: "Right-click menu:",
     prefillSizePolicyLabel: "Match Gen video size to the...",
     prefillFpsPolicyLabel: "Match Gen video FPS to the...",
@@ -2768,6 +2788,10 @@ export const ja: Strings = {
     failed: (reason: string): string => `Failed: ${reason}`,
     failedGeneric: "unknown error",
     cancelled: "canceled",
+  },
+  prefill: {
+    fpsSnappedToast: (from: string, to: number): string =>
+      `フレームレート ${from} を ${to} fps に丸めました。生成は整数のフレームレートでのみ動きます。`,
   },
   dialogs: {
     chainDiscard: {

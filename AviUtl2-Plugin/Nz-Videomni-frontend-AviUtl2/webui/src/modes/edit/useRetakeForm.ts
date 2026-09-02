@@ -26,7 +26,13 @@ import { STAGE2_WINDOW_DEFAULT, STAGE2_WINDOW_PRESETS } from "../../shell/tokenB
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { FALLBACK_APP_CONFIG, MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
-import { isDimensionOnGrid, roundToMultiple } from "../single/paramUtils";
+import {
+  FRAME_RATE_FALLBACK,
+  FRAME_RATE_MIN,
+  isDimensionOnGrid,
+  roundToMultiple,
+  snapFrameRate,
+} from "../single/paramUtils";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが動かさない
 // —— `useOutpaintForm` がすでに同じ理由（chained/ は別ワークストリームの占有領域）で
 // ここから直接 import しており、本ファイルはその先例に倣っているだけ。
@@ -263,7 +269,23 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   const carried = (): RetakeCarryOver | null =>
     snapshotSelection(initialIntent) ? peekRetakeCarryOver() : null;
 
-  const [frameRate, setFrameRate] = useState(() => carried()?.frameRate ?? config.generation_defaults.frame_rate);
+  // 台帳§3-71/§3-72: 生成 fps は必ず整数（`paramUtils.snapFrameRate` が正本）。
+  // lazy initializer も 🔁 の持ち越し値・config 既定の両方を通す —— 非整数の
+  // config 既定が来ても、この欄からは整数しか出ていかない。フォールバックは
+  // 定数（`?? config…` と繋ぐと、スナップが弾いたその値がそのまま漏れる）。
+  const [frameRate, setFrameRateState] = useState(
+    () => snapFrameRate(carried()?.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
+  );
+  /**
+   * fps 欄の setter。**名前は `setFrameRate` のまま**にしてある —— 呼び出しは
+   * 初期化・`clearAll`・公開値の 3 箇所あり、別名にするとどれかが素の
+   * `setFrameRateState` を呼び続けて丸めを素通りする。
+   *
+   * 空欄（`Number("")` = 0）は `FRAME_RATE_MIN` = 1 へ。以前はここが素の
+   * setState で、0 や負値がそのまま入って窓計算（`frameRate > 0` を前提に
+   * している）を壊せた —— その穴も同時に塞がる。
+   */
+  const setFrameRate = useCallback((raw: number) => setFrameRateState(snapFrameRate(raw) ?? FRAME_RATE_MIN), []);
   const [seed, setSeed] = useState(() => carried()?.seed ?? config.generation_defaults.seed);
   // 既定は「映像と音声」（実装計画 §1 の確定仕様）。
   const [regenerateAudio, setRegenerateAudio] = useState(() => carried()?.regenerateAudio ?? true);
@@ -452,7 +474,7 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     setWidthOverride(null);
     setHeightOverride(null);
     clearRetakeCarryOver();
-  }, [dropSource, config.generation_defaults.frame_rate, config.generation_defaults.seed]);
+  }, [dropSource, setFrameRate, config.generation_defaults.frame_rate, config.generation_defaults.seed]);
 
   /**
    * 🔁: 動画と区間だけを捨てて「素材待ち」へ。

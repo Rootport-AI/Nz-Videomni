@@ -3677,6 +3677,8 @@ export function baseModelInstaller(id: string): string {
 - **読み方**: 新規モジュール`native/src/media_fps_probe.{h,cpp}`が、素材ファイルに`IMFSourceReader`を開き、**最初の映像ストリームの「ネイティブ型」**（コンテナ自身の宣言）から`MF_MT_FRAME_RATE`（分子と分母の対）を読む。**デコーダを作らず1フレームも復号しない**ので、コストは動画の長さに比例しない。
 - **契約は`mediaFps`の1フィールドだけ**（`timeline.getSelection`の`selected[]`へ追加、contract v11）。**「不明」は`0`**で、`mediaWidth`／`mediaHeight`とまったく同じ非nullableの規約に揃えた。契約の正本は[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13・§8である。
 - **nativeは生値を返し、整数へのスナップはwebui側で行う。** 29.97は`29.97…`のまま渡り、`29.97→30`・`23.976→24`という丸めは`timeline/prefillSeed.ts`の`snapMaterialFps`が担う。**`media*`は「素材由来の事実」を運ぶ枠で、方針を混ぜないという既存の規約に従った**——この分担のおかげで、丸め方を変えたくなってもネイティブを触らずに済む。スナップは`Math.round`一本のあと`[1, 60]`へクランプする（120fpsや240fpsの素材が、そのまま送られてサーバーに422で断られる穴を塞ぐため。クランプの形は既存のfps入力欄のsetterと同じである）。
+
+  > **追記（2026-09-02）**: この`snapMaterialFps`は、素材段だけでなくfpsが決まりうる全入口を丸める`modes/single/paramUtils.ts`の`snapFrameRate`へ統合された（台帳§3-71/§3-72対策）。後日談は§105参照。
 - **プリフィルのfpsは3段**になった——①fps軸が「素材に合わせる」なら素材のfps、②読めなければプロジェクトのfps、③それも無ければバックエンドの既定値。**「読めない」は異常ではない**（古いプラグイン・動画以外のオブジェクト・Media Foundationが対応しないコンテナ）。
 - **mkv／webmで読めないのは正常系である。** AviUtl2はbeta10でMedia Foundationのファイルリーダーを外してL-SMASH Worksが標準構成になったので、**「AviUtl2が読めるファイル」と「Media Foundationがfpsを答えられるファイル」は同じ集合ではない。** 読めなければプロジェクトのfpsへ落ちるだけなので、ログにも出さない。
 - **X1の巻き戻し**: fps軸「素材に合わせる」を強制的に「プロジェクトに合わせる」へ倒していた二重の防御（保存値の読み込み時と、設定を変えるときのsetter）と、ボタンのグレーアウト・「将来対応予定」のツールチップ（と、その文言の英日2キー）をすべて撤去した。**X1の挙動を固定していたテストは削除ではなく反転させてある**——同じ場所で反対の期待値を見張るほうが、次に誰かが同じ防御を足したときに気づける。
@@ -3836,3 +3838,58 @@ return {
 - **状態**: 実装・自動ゲートとも完了。**オーナー実機目視待ち**——確認項目はバックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1、実装の記録は同[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-47-02。
 
 > **追記（2026-09-02）**: 上記のオーナー実機目視ゲートG-P1（走行中リマウントでのStop・進捗生存／Stopでの停止とロック解放）に同日中に合格し、完結した。バックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1は節ごと削除済み、合格記録は同[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-47-02。**本文は追記専用の規律どおり不変**である（当時の記録として読むこと）。
+
+## 105. 非整数fps（29.97/23.976）対策 — webui・MCP・Gradioの全入口を整数へスナップした（バックエンド台帳§3-71・§3-72）（2026-09-02）
+
+### 105.1 結論
+
+**Chainedの音声タイル再組立検算が丸め誤差で落ちる422（台帳§3-71）と、mp4書き出し時のfps切り捨てによる長尺音ズレ（§3-72）は、いずれも非整数fps（29.97・23.976のようなNTSC系の値）が生成リクエストに乗ることが引き金だった。** バックエンド側の恒久修正（`chain_math.py`の丸め誤差対策・`media_io`のfps切り捨て対策）は凍結領域を広く触ることになり見送り、**代わりにクライアント側でfpsが決まりうる全ての入口を整数へ丸め、両バグの再現経路そのものを塞いだ**（オーナー裁定・案A採用）。
+
+**正本は`webui/src/modes/single/paramUtils.ts`の`snapFrameRate`一箇所である。** 素材のfpsだけを丸めていた旧`timeline/prefillSeed.ts`の`snapMaterialFps`（§3-13・契約v11）はここへ統合して削除した——素材段はこの丸め方針が最初に生まれた場所だったが、429・音ズレの引き金は素材段に限らないため、対象をプロジェクトのrate/scale・4フォームの手入力・lazy initまで広げる必要があった。
+
+### 105.2 webui: 全入口の丸め
+
+**丸め規則は`Math.round`のあと`[1, 60]`へクランプ**（`FRAME_RATE_MIN`=1・`FRAME_RATE_MAX`=60。フォームのmin/maxとも共通の正本）。非有限・0以下・`null`・`undefined`は`undefined`を返し、呼び出し側がフォールバック値を選ぶ。**整数fpsはAPIの§5.1凍結制約ではなくUI方針である**旨を、既存の凍結制約と混同されないようdocに明記した。
+
+対象にした入口は次の6つである。
+
+1. **`timeline/prefillSeed.ts`のfps3段決定**（素材→プロジェクト→config既定）——プロジェクト層の`rate`/`scale`もこの改修で新たに丸め対象へ加わった。`PrefillSeed`に`frameRateSnappedFrom: number | undefined`（スナップで値が実際に変わったときだけ生値。トースト専用）を追加した。**`projectFps`（Retakeの選択範囲実時間換算が使う生の値）はこれとは別に温存し、スナップしない**——ここへスナップを通すと`deriveDuration.ts`の実時間換算が壊れるため、禁止の1文コメントと回帰テストで固定してある。
+2. **`SingleScreen.tsx`の`projectGenFps`定義**（`snapFrameRate(editInfo.rate/editInfo.scale) ?? config.generation_defaults.frame_rate`）。
+3. **4フォームのsetter**（`useGenerationForm.ts`・`useChainForm.ts`・`useRetakeForm.ts`・`useOutpaintForm.ts`）——`snapFrameRate(raw) ?? FRAME_RATE_MIN`に統一。Retake/Outpaintは従来生の`setState`で0が入ると窓計算が壊れる穴も同時に塞いだ。setterの名前（`setFrameRate`）はRetakeの3箇所の呼び出し（init/clearAll/公開）を壊さないようそのまま維持した。
+4. **4フォームのlazy init**（`snapFrameRate(seeded) ?? FRAME_RATE_FALLBACK`。`FRAME_RATE_FALLBACK = 24`は`defaultConfig.ts`の既定値と同値である旨を相互参照コメントで固定）。
+5. **`useChainForm.ts`の`baselineCommon.frameRate`**（config既定が非整数だった場合にマウント直後からisDirtyになる保険。現行config=24.0では発火しない）。
+
+### 105.3 webui: トースト（プリフィル時のみ・1枚）
+
+**発火点はSingleScreenとChainedScreenの2箇所だけ**——`seed.frameRateSnappedFrom`が存在するとき、one-shot ref＋空depsの`useEffect`で警告トーストを1枚出す。**手入力とマウント上書きは無音**（前者は欄の表示がその場で丸まるため、後者はプリフィルのシードトーストと二重報告になるため）。文言は`i18n/strings.ts`の新名前空間`prefill.fpsSnappedToast`（en/ja両辞書）で、元値の整形は既存の`formatFps`を流用する。
+
+**§3-13-02実機ゲートG2で合格済みの「素材fpsの無音スナップ」は、本改修でトースト付きに変わった**（オーナー裁定②による意図的な変更であり、退行ではない）。
+
+### 105.4 MCP・Gradio: サーバー層のミラー実装
+
+**MCP**（`mcp_server/tools/generate.py`）に純関数`_snap_frame_rate`を追加し、`submit_generate`・`submit_chain`のpayloadへ適用した。**丸めは`math.floor(value + 0.5)`であって`round()`ではない**（Pythonの`round()`は偶数丸めで、webuiの`Math.round`と食い違うため）。**[1, 60]内の値だけ丸め、範囲外・非有限は素通しする**——サーバー側の`Field(ge=1.0, le=60.0)`の422に判断を委ねる設計で、「黙って24に差し替える」形は取っていない（誤発火したGPUジョブを隠蔽してしまうため）。
+
+**Gradio**（`gradio_ui/handlers.py`）にも同じ規則の`_snap_frame_rate`を追加した。**適用位置はChainだけ特別**——`handlers.py`のfps解析点（`fps = float(frame_rate)`の直後）に置いた。payload直前ではなく解析点に置いたのは、その手前で幾何プリチェック（`validation.py`の`check_chain_total`→`compute_chain_layout`。§3-71の422と同じ数式のローカル版）が生fpsのまま走ってしまうためで、解析点に置けば「[1,60]事前チェック・幾何プリチェック・payload」の3箇所が同じ丸め済みの値を見る。単発・A2Vチェーンはそれぞれの解析点1箇所ずつ。`ui.py`の`gr.Number`には`precision=0`と`value=24`も付与した——これは見た目の整形ではなく、ライブ推定経路（Chainのプリセット推定・A2Vプリチェック）が生fpsのまま残ることに対する実防御である。
+
+**3実装の丸め規則自体は共通だが、範囲外の扱いは意図的に異なる**——webuiはクランプ（`[1,60]`へ強制）、MCP・Gradioは素通し（サーバー422へ委譲）。この非対称は「3面ミラー」と呼ばない設計にしてある——書き切らずに写経すると、後任が誤ったパリティテストを書く恐れがあるため。
+
+### 105.5 テスト・検証結果
+
+**webui**: `npm run typecheck`エラー0。`npm test`は**2,688 passed・10 skipped**（基準2,653件から+35件、内訳は`paramUtils.test.ts`の新規スナップ単体・`prefillSeed.test.ts`の移設・4フォームのsetter/lazy initケース・トースト統合テスト2本・Create/ChainのUI経由テストなど）。失敗ゼロ。
+
+**MCP**: `tests/test_mcp_*.py`が**141 passed → 164 passed**（新規は29.97/23.976/120/0の各ケース×2ツール）。
+
+**Gradio**: `tests/test_gradio_handlers.py`・`tests/test_gradio_ui.py`が**261 passed → 281 passed**（単発・A2V・Chainのpayload丸めケースと、`gr.Number`の`precision == 0`アサート追加）。
+
+**いずれも失敗ゼロ。** 詳しい検証記録・設計要点はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §91が正本。
+
+### 105.6 既知の副作用（29.97プロジェクトに限る・許容済み）
+
+1. **バックエンドのリサンプル経路が常時発動する**——29.97プロジェクトでは素材が29.97のままリクエストは30になるため、`pipeline_manager`のフレームレート変換が毎回走る。素材fpsスナップ（§3-13-02）で既に許容されていたのと同じ性質の副作用であり、新しく生まれたものではない。
+2. **Joinの「プロジェクトfpsと動画fpsの不一致」非ブロッキング案内が常時表示される**——29.97プロジェクトでは事実として値が食い違っているので、この表示自体は正しい。
+
+### 105.7 状態
+
+- **変更ファイル（webui）**: `modes/single/paramUtils.ts`（正本追加）・`timeline/prefillSeed.ts`・`modes/single/SingleScreen.tsx`・`modes/single/useGenerationForm.ts`・`modes/chained/useChainForm.ts`・`modes/chained/ChainedScreen.tsx`・`modes/edit/useRetakeForm.ts`・`modes/edit/useOutpaintForm.ts`・`i18n/strings.ts`、および対応する`*.test.ts`/`*.test.tsx`群。
+- **変更ファイル（バックエンド）**: `mcp_server/tools/generate.py`・`gradio_ui/handlers.py`・`gradio_ui/ui.py`、および対応するテスト。
+- **状態**: 実装・自動ゲートとも完了。**オーナー実機目視待ち**——確認項目はバックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-2（G1〜G11）、台帳本文は同書§3-71・§3-72（実機ゲート合格後に[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)へ移送）。

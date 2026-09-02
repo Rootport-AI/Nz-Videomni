@@ -398,6 +398,82 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
     15_000,
   );
 
+  // --- 台帳§3-71/§3-72: the fps-snap toast -----------------------------------
+  //
+  // Whole frame rates only, at every entry point. The PREFILL route is the one
+  // that says so out loud (owner ruling 2026-09-02 ②): the value the user gets
+  // is not the value their project or their material has. Manual typing and the
+  // `project` mount overwrite stay silent — the field shows the rounded number
+  // the same instant, so a toast would only repeat it.
+
+  it(
+    "project 29.97: the field lands on 30 AND one toast names the original rate",
+    async () => {
+      setSizePolicy("material");
+      setFpsPolicy("project");
+      // Both the selection's rate/scale (the seed's tier 2) and getEditInfo (the
+      // mount overwrite) are the NTSC 30000/1001, so the two agree on 30 and the
+      // only thing under test is the toast.
+      const bridge = await renderReady({
+        delayMs: 0,
+        editInfo: { width: 1024, height: 512, rate: 30000, scale: 1001 },
+      });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+          action: "imageToVideo",
+          selection: imageSel(800, 600, 30000, 1001),
+        });
+      });
+
+      await waitFor(() => expect(fpsInput().value).toBe("30"), { timeout: 5_000 });
+      const toasts = await screen.findAllByText(/rounded to 30 fps/i, {}, { timeout: 5_000 });
+      // Exactly one — the seed reports it, the `project` overwrite does not.
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0]).toHaveTextContent("29.97");
+    },
+    15_000,
+  );
+
+  it(
+    "a project already on a whole frame rate produces NO toast (no false positives)",
+    async () => {
+      setSizePolicy("material");
+      setFpsPolicy("project");
+      const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 30, scale: 1 } });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 30, 1) });
+      });
+
+      await waitFor(() => expect(fpsInput().value).toBe("30"), { timeout: 5_000 });
+      expect(screen.queryByText(/rounded to/i)).not.toBeInTheDocument();
+    },
+    15_000,
+  );
+
+  it(
+    "material 23.976: the toast names the material's own rate, formatted to 23.98",
+    async () => {
+      setSizePolicy("material");
+      setFpsPolicy("material");
+      const bridge = await renderReady({ delayMs: 0 });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+          action: "imageToVideo",
+          selection: imageSel(800, 600, 30, 1, 23.976),
+        });
+      });
+
+      await waitFor(() => expect(fpsInput().value).toBe("24"), { timeout: 5_000 });
+      // `jobs/fpsConvert.ts`'s `formatFps` caps the display at two decimals.
+      const toast = await screen.findByText(/rounded to 24 fps/i, {}, { timeout: 5_000 });
+      expect(toast).toHaveTextContent("23.98");
+    },
+    15_000,
+  );
+
   it(
     "② project (Chain): overwrites the common width/height/fps from getEditInfo",
     async () => {

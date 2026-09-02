@@ -4,7 +4,7 @@ import { useStrings } from "../../i18n/LanguageContext";
 import { useJobsContext } from "../../jobs/JobsContext";
 import { latestJobSeed } from "../../jobs/seedUtils";
 import { clampCropOutput, CROP_OUTPUT_MIN } from "../chained/chainUtils";
-import { isStepEvent } from "./paramUtils";
+import { FRAME_RATE_MAX, FRAME_RATE_MIN, isStepEvent } from "./paramUtils";
 
 /** Guide positions drawn on the width/height sliders, in pixels of the very
  * same axis the slider controls.
@@ -457,8 +457,8 @@ export function FrameRateSeedFields({
         <span className="field-label">{strings.single.duration.fps}</span>
         <input
           type="number"
-          min={1}
-          max={60}
+          min={FRAME_RATE_MIN}
+          max={FRAME_RATE_MAX}
           value={frameRate}
           disabled={disabled}
           onChange={(e) => onFrameRateChange(Number(e.target.value))}

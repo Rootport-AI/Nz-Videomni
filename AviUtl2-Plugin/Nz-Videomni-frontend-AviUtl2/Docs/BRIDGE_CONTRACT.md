@@ -270,10 +270,10 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
   | `mediaFps` | `number` | 素材そのもののフレームレート。Media Foundationが返す`MF_MT_FRAME_RATE`(分子/分母の`UINT32`対)をdoubleへ直した値で、**取得できないときは`0`**。 |
 
   - **nullableにしない**: `mediaWidth`/`mediaHeight`とまったく同じ規約で、「不明」は常に`0`として表現する(`null`は返さない)。fpsに`0`という正当な値は存在しないため、値そのもので「読めなかった」を表現できる。
-  - **nativeが返すのは生値で、整数へのスナップはwebui側で行う**。29.97(30000/1001)は`29.97…`のまま返り、`29.97→30`・`23.976→24`という丸めは`webui/src/timeline/prefillSeed.ts`の`snapMaterialFps`(`Math.round`のあと`[1, 60]`へクランプ)が担当する。`media*`は「素材由来の事実」を運ぶ枠であって方針を混ぜないため、という規約上の理由による分担である。
+  - **nativeが返すのは生値で、整数へのスナップはwebui側で行う**。29.97(30000/1001)は`29.97…`のまま返り、`29.97→30`・`23.976→24`という丸めは`webui/src/modes/single/paramUtils.ts`の`snapFrameRate`(`Math.round`のあと`[1, 60]`へクランプ。台帳§3-71/§3-72対策で、素材段だけでなくfpsが決まりうる全入口の丸めを担う正本へ統合された)が担当する。`media*`は「素材由来の事実」を運ぶ枠であって方針を混ぜないため、という規約上の理由による分担である。
   - **mkv/webmでの取得失敗は正常系である**。AviUtl2はbeta10でMedia Foundationのファイルリーダーを外しL-SMASH Worksが標準構成になったので、**「AviUtl2が読めるファイル」と「Media Foundationがfpsを答えられるファイル」は同じ集合ではない**(mp4/movは確実、mkv/webmは不確実)。読めなければ`0`が返り、webuiはプロジェクトfpsへ落ちる——これは異常ではないのでnative側はログにも出さない。
   - **`types.ts`側で任意フィールド(`?`)にしているのは、旧nativeビルドとの互換のためだけ**である(v10の再生位置系6フィールドとまったく同じ理由)。現行のnativeは常に返す。
-  - 消費側は`prefillSeed.ts`のfps3段決定だけである——①fps軸が`material`なら`snapMaterialFps(mediaFps)`、②読めなければ選択のプロジェクトfps(`rate`/`scale`)、③それも無ければconfig既定、の順に落ちる。
+  - 消費側は`prefillSeed.ts`のfps3段決定だけである——①fps軸が`material`なら`snapFrameRate(mediaFps)`(`paramUtils.ts`が正本)、②読めなければ選択のプロジェクトfps(`rate`/`scale`、これも同じ`snapFrameRate`で丸める)、③それも無ければconfig既定、の順に落ちる。
   - native実装は新規モジュール`native/src/media_fps_probe.{h,cpp}`(`MFCreateSourceReaderFromURL`→`GetNativeMediaType`→`MFGetAttributeRatio`。**最初の映像ストリームのネイティブ型を読むだけでデコーダを作らず1フレームも復号しない**ので、コストはファイル尺に比例しない)と、`bridge.cpp`の`GetSelectionEditProc`が動画エフェクト限定ブロック内から呼ぶ配線からなる。`MFStartup`は`std::call_once`でプロセス1回・対応する`MFShutdown`は意図的に呼ばない(プラグインの寿命＝プロセスの寿命であり、毎クリックのStartup/Shutdown往復と`Mp4Writer`稼働中の参照カウント落ちを同時に避けるため。理由はヘッダのコメントが正本)。COM初期化はUIスレッドがSTAなので`COINIT_APARTMENTTHREADED`を要求し、`S_FALSE`と`RPC_E_CHANGED_MODE`のどちらも失敗として扱わない。
 
 ### 4.14 `timeline.menuInvoked`(イベント、ネイティブ→WebUI、contract v5)
@@ -488,4 +488,4 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\bridge\mockBridge.v10.test.ts`(contract v10、mockブリッジ側の`query`／`trimmed`の疎通テスト)
 - `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\media_fps_probe.h` / `media_fps_probe.cpp`(contract v11、Media Foundationによる素材fpsの読み取り。2026-09-01新規。**MFの寿命・COMアパートメント・取得失敗が正常系である理由の正本はこのヘッダのコメント**)
 - `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\tests\test_media_fps_probe.cpp`(contract v11のnative実装doctest。純関数`FpsFromRatio`とMF往復)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\timeline\prefillSeed.ts`(contract v11、`mediaFps`の唯一の消費者。`snapMaterialFps`＝整数スナップと`[1, 60]`クランプ、およびfpsの3段フォールバック)
+- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\timeline\prefillSeed.ts`(contract v11、`mediaFps`の唯一の消費者。fpsの3段フォールバックを実装。整数スナップと`[1, 60]`クランプ自体の正本は`modes/single/paramUtils.ts`の`snapFrameRate`——台帳§3-71/§3-72対策で全入口共通化)

@@ -111,3 +111,51 @@ describe("App / Create screen", () => {
     20_000,
   );
 });
+
+// 台帳§3-71/§3-72 (2026-09-02): the fps box only ever holds a whole frame rate.
+// Driven through the REAL input with a single `fireEvent.change` — the
+// paste-equivalent route, which is how 29.97 actually reaches the field (typing
+// it keystroke by keystroke passes through "29." first, which an
+// `<input type="number">` reports as "" and the setter lands on 1fps, exactly as
+// it did before this change).
+describe("App / frame rate is whole numbers only (台帳§3-71/§3-72)", () => {
+  const fpsInput = () => within(panel()).getByRole("spinbutton", { name: /fps/i }) as HTMLInputElement;
+
+  it(
+    "Create: pasting 29.97 leaves the field on 30",
+    async () => {
+      render(<App />);
+      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
+
+      const fps = fpsInput();
+      // The bounds come from `paramUtils`' FRAME_RATE_MIN/MAX, the same pair the
+      // snap clamps to.
+      expect(fps).toHaveAttribute("min", "1");
+      expect(fps).toHaveAttribute("max", "60");
+
+      fireEvent.change(fps, { target: { value: "29.97" } });
+      expect(fpsInput().value).toBe("30");
+    },
+    20_000,
+  );
+
+  it(
+    "Chain: same, in the common parameters section",
+    async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
+
+      await user.click(screen.getByRole("tab", { name: /^chained$/i }));
+      await waitFor(() =>
+        expect(screen.getByRole("tab", { name: /^chained$/i })).toHaveAttribute("aria-selected", "true"),
+      );
+
+      const fps = fpsInput();
+      expect(fps.value).toBe("24");
+      fireEvent.change(fps, { target: { value: "29.97" } });
+      expect(fpsInput().value).toBe("30");
+    },
+    20_000,
+  );
+});

@@ -136,8 +136,9 @@
  * (older build) or `0` (probe failed, or an unsupported container — mkv/webm
  * commonly land here, and that is a NORMAL outcome, not an error). Integer
  * snapping (`29.97` -> `30`, `23.976` -> `24`) is deliberately NOT native's
- * job: it happens on the WebUI side, in the prefill layer
- * (`timeline/prefillSeed.ts`), so the raw value stays available unrounded.
+ * job: it happens on the WebUI side, via `modes/single/paramUtils.ts`'s
+ * `snapFrameRate` (§3-71/§3-72's one source of truth for the rounding rule),
+ * so the raw value stays available unrounded here.
  * `mediaFps` is declared OPTIONAL for the same single reason the six v10
  * fields are: an older native build simply does not emit it yet.
  */
@@ -599,8 +600,9 @@ export interface BridgeResultMap {
        * pre-rounded to `30`. Non-nullable, `0` = "unknown" (the same contract
        * as `mediaWidth`/`mediaHeight`); a failed probe (mkv/webm are the
        * common case) is a normal `0`, not an error. Optional only because an
-       * older native build does not emit it. Integer snapping happens in
-       * `timeline/prefillSeed.ts`, not here. */
+       * older native build does not emit it. Integer snapping happens on the
+       * WebUI side, in `modes/single/paramUtils.ts`'s `snapFrameRate`, not
+       * here. */
       mediaFps?: number;
     }>;
     cursorFrame: number;

@@ -23,6 +23,7 @@
 import type { AppConfig } from "../api/types";
 import { pxFromVLatent } from "../modes/chained/chainUtils";
 import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../modes/single/defaultConfig";
+import { snapFrameRate } from "../modes/single/paramUtils";
 import { STAGE2_WINDOW_DEFAULT, STAGE2_WINDOW_PRESETS } from "../shell/tokenBudget";
 import type { PrefillResolutionPolicy } from "../shell/PrefillPolicyContext";
 import type { AccelerationSettings } from "../shell/accelerationSettings";
@@ -117,31 +118,6 @@ export const DURATION_POLICY_BY_INTENT: Readonly<Record<string, DurationPolicy>>
  * 多クリップ逆順チェーンの品質については何も語らない。
  */
 export const END_SOURCE_SEED_MAX_FRAMES = pxFromVLatent(STAGE2_WINDOW_PRESETS[STAGE2_WINDOW_DEFAULT].vTile);
-
-/**
- * §3-13 (contract v11): the generation fps to take from a selected object's OWN
- * material framerate — native's raw probed `mediaFps` snapped to an integer — or
- * `undefined` when the selection carries no usable rate, which is the signal the
- * fps seed falls back to the project's rate/scale.
- *
- * `undefined` covers every "not known" shape at once: an older native build that
- * does not emit the field at all, a non-video object (audio/shape → `0`, the
- * `mediaWidth`/`mediaHeight` "0 = unknown" convention), and a probe that failed —
- * an unsupported container such as mkv/webm lands here and that is a NORMAL
- * outcome, not an error.
- *
- * The rounding is `Math.round` alone, deliberately: every framerate that exists
- * in practice (29.97 → 30, 23.976 → 24, 59.94 → 60) lands on its intended integer
- * in one step, so a tolerance band would only add a second branch for the values
- * that miss. The result is then clamped to `[1, 60]` — the SAME range the FPS
- * field's own setter enforces (`Math.min(60, Math.max(1, raw))`) — so a 120/240
- * fps material seeds the highest fps the form accepts instead of a value the
- * backend rejects with a 422 before the user has seen the form. Pure.
- */
-export function snapMaterialFps(fps: number | undefined): number | undefined {
-  if (fps === undefined || !Number.isFinite(fps) || fps <= 0) return undefined;
-  return Math.min(60, Math.max(1, Math.round(fps)));
-}
 
 /**
  * The inclusive timeline SPAN of a selected object, in seconds — the trimmed
@@ -240,8 +216,10 @@ export interface ResolvePrefillSeedArgs {
    * frame rate only. `defaults` keeps the config default fps; `project` seeds it
    * from the selection's project rate/scale (and is later overwritten off
    * `getEditInfo` by the caller); §3-13: `material` seeds it from the selected
-   * object's OWN probed framerate ({@link snapMaterialFps}), falling back to that
-   * same project rate/scale when the material's fps can't be read. */
+   * object's OWN probed framerate, falling back to that same project rate/scale
+   * when the material's fps can't be read. Every tier is snapped to a whole
+   * frame rate by `modes/single/paramUtils.ts`'s `snapFrameRate` (台帳
+   * §3-71/§3-72). */
   fpsPolicy: PrefillResolutionPolicy;
   /** Smart comfort marker (2026-08-31): the LOADED base model's engine family
    * (`useBaseModels().activeEngineFamily`), the acceleration settings
@@ -267,8 +245,17 @@ export interface PrefillSeed {
    * `derived.notes`/`derived.width`/… keep working unchanged. */
   derived: DerivedGenerationParams;
   /** The generation fps to seed the form with, or `undefined` to keep the
-   * config default (the `defaults` policy, or an unresolvable rate/scale). */
+   * config default (the `defaults` policy, or an unresolvable rate/scale).
+   * Always a whole frame rate in [1, 60] — see `frameRateSnappedFrom`. */
   frameRate: number | undefined;
+  /** 台帳§3-71/§3-72: the RAW rate `frameRate` was snapped FROM, but only when
+   * the snap actually changed the value (29.97 → 30 leaves `29.97…` here; a
+   * project already at 30 leaves `undefined`). **Display only** — nothing
+   * derives a number from it; `SingleScreen`/`ChainedScreen` turn it into the
+   * one-shot "rounded to N fps" toast and nothing else reads it. Deliberately
+   * the raw double, not a pre-formatted string, so the toast owns its own
+   * formatting (`jobs/fpsConvert.ts`'s `formatFps`). */
+  frameRateSnappedFrom: number | undefined;
   /** The DURATION (`num_frames`) to seed the form/reservation with, or
    * `undefined` to keep the config default (no DURATION policy for the intent,
    * or the policy couldn't resolve a value — e.g. an unknown material length or
@@ -329,17 +316,37 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
 
   // fps seed (§3-13, contract v11) — three tiers, tried in order:
   //  1. `material`: the selected object's OWN framerate. Native probes it off the
-  //     backing file and reports it RAW (`29.97`); the snap to an integer is this
-  //     layer's job ({@link snapMaterialFps}).
+  //     backing file and reports it RAW (`29.97`).
   //  2. the selection's project rate/scale — where `project` always lands, and
   //     where `material` falls back when the object has no readable fps (an older
   //     native build, a non-video object, or an unsupported container such as
-  //     mkv/webm — all normal outcomes, not errors).
+  //     mkv/webm — all normal outcomes, not errors). Also RAW: an NTSC project is
+  //     `30000/1001`, not 30.
   //  3. `undefined`: keep the config default — the `defaults` policy, or a
   //     rate/scale that isn't resolvable either.
-  const projectSeedFps = selection.rate > 0 && selection.scale > 0 ? selection.rate / selection.scale : undefined;
-  const materialSeedFps = fpsPolicy === "material" ? snapMaterialFps(primarySel?.mediaFps) : undefined;
-  const frameRate = fpsPolicy === "defaults" ? undefined : (materialSeedFps ?? projectSeedFps);
+  //
+  // 台帳§3-71/§3-72: BOTH value tiers are snapped to a whole frame rate by
+  // `snapFrameRate` (the one source of truth, in `modes/single/paramUtils.ts`).
+  // The material tier used to be the only snapped one — it isn't any more,
+  // because an NTSC PROJECT reaches the request through tier 2 just as easily.
+  // `snapFrameRate` also collapses every "no usable rate" shape to `undefined`,
+  // which is exactly the fall-through signal each tier needs, so the old
+  // `rate > 0 && scale > 0` guard is now inside it.
+  const rawProjectFps =
+    selection.rate > 0 && selection.scale > 0 ? selection.rate / selection.scale : undefined;
+  const rawMaterialFps = fpsPolicy === "material" ? primarySel?.mediaFps : undefined;
+  // Tier 1 only wins when it is USABLE, and `snapFrameRate` is exactly that test
+  // (`undefined` for absent / 0 / negative / non-finite — every shape that means
+  // "native told us nothing"), so it doubles as the guard here.
+  const usableMaterialFps = snapFrameRate(rawMaterialFps) !== undefined ? rawMaterialFps : undefined;
+  // The RAW rate the seed came from, kept beside the snapped one purely so the
+  // toast can name it (see `PrefillSeed.frameRateSnappedFrom`).
+  const rawSeedFps = fpsPolicy === "defaults" ? undefined : (usableMaterialFps ?? rawProjectFps);
+  const frameRate = snapFrameRate(rawSeedFps);
+  // Only a snap that actually MOVED the value is worth reporting; a project or
+  // material already on a whole frame rate must stay silent (no false positives).
+  const frameRateSnappedFrom =
+    frameRate !== undefined && rawSeedFps !== undefined && rawSeedFps !== frameRate ? rawSeedFps : undefined;
 
   const policy: DurationPolicy = DURATION_POLICY_BY_INTENT[intent] ?? "untouched";
   // The fps used to convert a material duration to frames — the same fps that
@@ -351,7 +358,16 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // Both are spread away for every other intent, so no other flow's request
   // changes by a single field.
   const selectedRangeFrames = selectedRangeFramesForIntent(intent, selection);
-  const projectFps = selection.rate > 0 && selection.scale > 0 ? selection.rate / selection.scale : undefined;
+  // ⚠ RAW, and it MUST stay raw — do NOT run this through `snapFrameRate`
+  // (台帳§3-71/§3-72). This is not a value anybody generates at: it is the
+  // PROJECT's own timebase, used by `deriveDuration.ts`'s `selectedRangeLength`
+  // policy to convert the selected frame RANGE into real seconds. Snapping it
+  // would mis-measure a 29.97fps project's selection by 0.1% — a Retake window
+  // that lands on the wrong frames. The generation fps (`frameRate` above) is
+  // the one that gets snapped; the two are deliberately different quantities
+  // even though both come out of `rate/scale`. Pinned by a regression test in
+  // `prefillSeed.test.ts`.
+  const projectFps = rawProjectFps;
 
   // Smart comfort marker (2026-08-31): only the SINGLE screen's flows share
   // Create's per-clip comfort line — a Chain-targeted intent's DURATION is a
@@ -405,5 +421,5 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
       ? Math.min(targetNumFrames, END_SOURCE_SEED_MAX_FRAMES)
       : targetNumFrames;
 
-  return { derived, frameRate, numFrames };
+  return { derived, frameRate, frameRateSnappedFrom, numFrames };
 }

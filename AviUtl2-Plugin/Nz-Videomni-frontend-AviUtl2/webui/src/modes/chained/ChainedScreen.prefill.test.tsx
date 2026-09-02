@@ -5,6 +5,7 @@ import { createMockBridge } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import { JobsProvider } from "../../jobs/JobsContext";
 import { ToastProvider } from "../../shell/ToastContext";
+import { Toasts } from "../../shell/Toasts";
 import { PrefillPolicyProvider } from "../../shell/PrefillPolicyContext";
 import { ShowNoteProvider } from "../../shell/NoteArea";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
@@ -181,5 +182,66 @@ describe("ChainedScreen — #1 extend-video source trim (§1-6)", () => {
       filePath: "C:\\v\\clip.mp4",
       query: { trim_start_sec: "12.500", trim_duration_sec: "5.000" },
     });
+  });
+});
+
+// 台帳§3-71/§3-72 (2026-09-02): the Chain twin of `App.prefillPolicy.test.tsx`'s
+// fps-snap toast cases. A right-click prefill that had to round a non-integer
+// frame rate says so, exactly once; one that changed nothing stays silent.
+//
+// This block needs its own render helper because the file's shared `Providers`
+// deliberately mounts no `<Toasts />` — the toast STACK is `AppShell`'s in
+// production, so the tests that don't care about it never paid for it.
+function renderChainWithToasts(initialIntent: GenerationPrefill) {
+  const nativeBridge = createMockBridge({ delayMs: 0, pickFileName: "clip.mp4" });
+  const rendered = render(
+    <Providers nativeBridge={nativeBridge}>
+      <ChainedScreen
+        prompt="a cat riding a skateboard"
+        baseUrl={null}
+        initialIntent={initialIntent}
+        nativeBridge={nativeBridge}
+        highlightedJobId={null}
+        onJobSubmitted={() => {}}
+        controlLoraNames={new Set()}
+      />
+      <Toasts />
+    </Providers>,
+  );
+  return { ...rendered, nativeBridge };
+}
+
+/** `selectionWithFile` at an arbitrary project rate/scale. */
+function selectionAtRate(rate: number, scale: number) {
+  return { ...selectionWithFile("C:\\v\\clip.mp4"), rate, scale };
+}
+
+const fpsBox = () => screen.getByRole("spinbutton", { name: /fps/i }) as HTMLInputElement;
+
+describe("ChainedScreen — fps snap toast (台帳§3-71/§3-72)", () => {
+  it("an NTSC project (30000/1001) seeds 30 and reports the rounding once", async () => {
+    renderChainWithToasts({
+      intent: "extend-video",
+      targetMode: "chained",
+      selection: selectionAtRate(30000, 1001),
+    });
+
+    await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
+    await waitFor(() => expect(fpsBox().value).toBe("30"), { timeout: 5_000 });
+    const toasts = await screen.findAllByText(/rounded to 30 fps/i, {}, { timeout: 5_000 });
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toHaveTextContent("29.97");
+  });
+
+  it("a project already on a whole frame rate says nothing", async () => {
+    renderChainWithToasts({
+      intent: "extend-video",
+      targetMode: "chained",
+      selection: selectionAtRate(30, 1),
+    });
+
+    await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
+    await waitFor(() => expect(fpsBox().value).toBe("30"), { timeout: 5_000 });
+    expect(screen.queryByText(/rounded to/i)).not.toBeInTheDocument();
   });
 });

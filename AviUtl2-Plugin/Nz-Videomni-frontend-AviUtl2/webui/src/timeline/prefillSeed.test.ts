@@ -7,7 +7,6 @@ import {
   materialDurationForIntent,
   selectedRangeFramesForIntent,
   resolvePrefillSeed,
-  snapMaterialFps,
   spanDurationSec,
 } from "./prefillSeed";
 
@@ -134,34 +133,116 @@ describe("spanDurationSec", () => {
 
 // §3-13 (contract v11): native reports the material's RAW framerate and this
 // layer decides the integer the generation actually runs at.
-describe("snapMaterialFps", () => {
-  it("rounds the real-world non-integer rates to their intended integer", () => {
-    expect(snapMaterialFps(29.97)).toBe(30);
-    expect(snapMaterialFps(23.976)).toBe(24);
-    expect(snapMaterialFps(59.94)).toBe(60);
-    // An already-integer rate passes through untouched.
-    expect(snapMaterialFps(30)).toBe(30);
+// 台帳§3-71/§3-72 (2026-09-02): the snap itself moved to
+// `modes/single/paramUtils.ts`'s `snapFrameRate` (one source of truth for every
+// fps entry point), so the unit cases that used to live here — the
+// `snapMaterialFps` describe — now live in `paramUtils.test.ts`. What stays here
+// is what only this module can answer: which TIER a value comes from, and which
+// of the two rates derived from `rate/scale` gets snapped.
+describe("resolvePrefillSeed — fps snapping (台帳§3-71/§3-72)", () => {
+  it("snaps the PROJECT tier too: an NTSC project (30000/1001) seeds 30 and reports the raw rate", () => {
+    // This is the case the §3-71/§3-72 fix is really about: before it, only the
+    // material tier was snapped, so an NTSC PROJECT's 29.97 went into the
+    // request untouched.
+    const s = seed("image-to-video", makeSelection({}, { rate: 30000, scale: 1001 }), "material", "project");
+    expect(s.frameRate).toBe(30);
+    expect(s.frameRateSnappedFrom).toBeCloseTo(29.97, 4);
   });
 
-  it("clamps to [1, 60] — the same range the FPS field's own setter enforces", () => {
-    // A 120/240 fps material would otherwise seed a value the backend rejects
-    // with a 422 before the user has even seen the form.
-    expect(snapMaterialFps(120)).toBe(60);
-    expect(snapMaterialFps(240)).toBe(60);
-    // Below the floor: 0.4 rounds to 0, which the clamp lifts to 1.
-    expect(snapMaterialFps(0.4)).toBe(1);
+  it("reports NOTHING when the project is already on a whole frame rate (no false positives)", () => {
+    const s = seed("image-to-video", makeSelection({}, { rate: 30, scale: 1 }), "material", "project");
+    expect(s.frameRate).toBe(30);
+    expect(s.frameRateSnappedFrom).toBeUndefined();
   });
 
-  it("returns undefined for every 'unknown' shape (absent / 0 / negative / non-finite)", () => {
-    // `undefined` = an older native build that doesn't emit the field; `0` = the
-    // mediaWidth/mediaHeight "0 means unknown" convention, which is where a
-    // non-video object and an unsupported container (mkv/webm) both land — a
-    // NORMAL outcome that simply falls through to the project's fps.
-    expect(snapMaterialFps(undefined)).toBeUndefined();
-    expect(snapMaterialFps(0)).toBeUndefined();
-    expect(snapMaterialFps(-30)).toBeUndefined();
-    expect(snapMaterialFps(Number.NaN)).toBeUndefined();
-    expect(snapMaterialFps(Number.POSITIVE_INFINITY)).toBeUndefined();
+  it("snaps the MATERIAL tier: a 23.976fps clip seeds 24 and reports 23.976", () => {
+    const s = seed(
+      "image-to-video",
+      makeSelection({ mediaFps: 23.976 }, { rate: 30, scale: 1 }),
+      "material",
+      "material",
+    );
+    expect(s.frameRate).toBe(24);
+    expect(s.frameRateSnappedFrom).toBe(23.976);
+  });
+
+  it("falls through to the project tier when the material's own fps is unusable, and snaps THAT", () => {
+    // `mediaFps: 0` is native's "unknown" (a non-video object, or an
+    // unsupported container) — tier 2 takes over, and it is snapped as well.
+    const s = seed(
+      "image-to-video",
+      makeSelection({ mediaFps: 0 }, { rate: 24000, scale: 1001 }),
+      "material",
+      "material",
+    );
+    expect(s.frameRate).toBe(24);
+    expect(s.frameRateSnappedFrom).toBeCloseTo(23.976, 4);
+  });
+
+  it("clamps a high-frame-rate material to 60 and reports the raw rate", () => {
+    const s = seed("image-to-video", makeSelection({ mediaFps: 120 }), "material", "material");
+    expect(s.frameRate).toBe(60);
+    expect(s.frameRateSnappedFrom).toBe(120);
+  });
+
+  it("the `defaults` policy seeds no fps at all, and so reports no snap", () => {
+    const s = seed("image-to-video", makeSelection({ mediaFps: 29.97 }, { rate: 30000, scale: 1001 }), "material", "defaults");
+    expect(s.frameRate).toBeUndefined();
+    expect(s.frameRateSnappedFrom).toBeUndefined();
+  });
+
+  it("an unresolvable rate/scale seeds no fps and reports no snap", () => {
+    const s = seed("image-to-video", makeSelection({}, { rate: 0, scale: 0 }), "material", "project");
+    expect(s.frameRate).toBeUndefined();
+    expect(s.frameRateSnappedFrom).toBeUndefined();
+  });
+
+  // ⚠ REGRESSION GUARD (台帳§3-71/§3-72, plan §2 item 1): the `selectedRangeLength`
+  // policy's `projectFps` must stay RAW. It is the PROJECT's timebase — the thing
+  // that turns a selected frame RANGE into real seconds — not a rate anything
+  // generates at, so snapping it would mis-measure the selection and Retake would
+  // open on the wrong frames. `computeTargetNumFrames` computes
+  // `round(selectedRangeFrames / projectFps * genFps)` (no 8n+1 snap on this
+  // policy — see `deriveDuration.ts`), so a snapped `projectFps` would make the
+  // whole expression collapse to `selectedRangeFrames` itself.
+  it("Retake: a 120fps project converts the range at the RAW 120 while generating at the clamped 60", () => {
+    // Chosen because the two answers differ by a FACTOR OF TWO rather than the
+    // 0.1% an NTSC pair gives: `snapFrameRate(120)` clamps to 60, so a snapped
+    // `projectFps` would read 300 project frames as 300 generation frames
+    // instead of the correct 150.
+    const selection = {
+      ...makeSelection({ frameStart: 0, frameEnd: 299 }, { rate: 120, scale: 1 }),
+      rangeStart: 0,
+      rangeEnd: 299,
+    };
+    const s = seed("retake", selection, "material", "project");
+    expect(s.frameRate).toBe(60);
+    // 300 project frames / 120 = 2.5s; x 60fps = 150. (A snapped projectFps
+    // would give 300 — twice the length the user selected.)
+    expect(s.numFrames).toBe(150);
+  });
+
+  it("Retake: an NTSC project keeps the 0.1% the snap would have thrown away", () => {
+    // The realistic shape of the same guard. 1000 project frames at 30000/1001
+    // is 33.3667s, which is 1001 frames at the seeded 30fps — exactly one frame
+    // more than the 1000 a snapped `projectFps` would produce. Needs a config
+    // whose `max_num_frames` doesn't clamp the answer away, so this case builds
+    // one instead of using `cfg`.
+    const longCfg = { ...cfg, limits: { ...cfg.limits, max_num_frames: 4801 } };
+    const selection = {
+      ...makeSelection({ frameStart: 0, frameEnd: 999 }, { rate: 30000, scale: 1001 }),
+      rangeStart: 0,
+      rangeEnd: 999,
+    };
+    const s = resolvePrefillSeed({
+      intent: "retake",
+      selection,
+      config: longCfg,
+      sizePolicy: "material",
+      fpsPolicy: "project",
+    });
+    expect(s.frameRate).toBe(30);
+    expect(s.numFrames).toBe(1001);
   });
 });
 

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { FALLBACK_APP_CONFIG } from "./defaultConfig";
 import {
   ceilToMultiple,
   clamp,
   floorToMultiple,
   formatDurationHint,
+  FRAME_RATE_FALLBACK,
+  FRAME_RATE_MAX,
+  FRAME_RATE_MIN,
   framesToSeconds,
   isDimensionOnGrid,
   isNumFramesOnGrid,
@@ -12,6 +16,7 @@ import {
   isValidNumFrames,
   isValidPrompt,
   roundToMultiple,
+  snapFrameRate,
   snapNumFrames,
 } from "./paramUtils";
 
@@ -227,5 +232,77 @@ describe("isDimensionOnGrid (send-time width/height validation)", () => {
   });
   it("rejects a non-integer value", () => {
     expect(isDimensionOnGrid(512.5, 64, 256, 1920)).toBe(false);
+  });
+});
+
+// 台帳§3-71/§3-72 (2026-09-02): whole frame rates only. This describe absorbed
+// `prefillSeed.test.ts`'s old `snapMaterialFps` block when the two snaps were
+// merged into one function — the material-fps cases below are that block,
+// verbatim in substance, plus the cases the wider contract added (`null`, and
+// the callers that lean on the [1,60] clamp).
+describe("snapFrameRate (台帳§3-71/§3-72: generation fps is always a whole number)", () => {
+  it("rounds the real-world non-integer rates to their intended integer", () => {
+    expect(snapFrameRate(29.97)).toBe(30);
+    expect(snapFrameRate(23.976)).toBe(24);
+    expect(snapFrameRate(59.94)).toBe(60);
+    // The exact rationals an NTSC project's rate/scale produces, not just the
+    // rounded decimals a fixture would type.
+    expect(snapFrameRate(30000 / 1001)).toBe(30);
+    expect(snapFrameRate(24000 / 1001)).toBe(24);
+    // An already-integer rate passes through untouched.
+    expect(snapFrameRate(30)).toBe(30);
+    expect(snapFrameRate(24)).toBe(24);
+  });
+
+  it("rounds half away from zero (Math.round), NOT to even", () => {
+    // Pinned because the sibling implementations in `mcp_server/`/`gradio_ui/`
+    // deliberately avoid Python's `round()` for this exact reason: 24.5 must be
+    // 25 on every one of the three, not 24.
+    expect(snapFrameRate(24.5)).toBe(25);
+    expect(snapFrameRate(25.5)).toBe(26);
+  });
+
+  it("clamps to [FRAME_RATE_MIN, FRAME_RATE_MAX] — the range the server enforces", () => {
+    // A 120/240 fps material would otherwise seed a value the backend rejects
+    // with a 422 before the user has even seen the form.
+    expect(snapFrameRate(120)).toBe(60);
+    expect(snapFrameRate(240)).toBe(60);
+    expect(snapFrameRate(61)).toBe(60);
+    // Below the floor: 0.4 rounds to 0, which the clamp lifts to 1.
+    expect(snapFrameRate(0.4)).toBe(1);
+    expect(snapFrameRate(0.5)).toBe(1);
+  });
+
+  it("returns undefined for every 'no usable rate' shape (null / absent / 0 / negative / non-finite)", () => {
+    // `undefined` = an older native build that doesn't emit `mediaFps`; `0` = the
+    // mediaWidth/mediaHeight "0 means unknown" convention, which is where a
+    // non-video object and an unsupported container (mkv/webm) both land — a
+    // NORMAL outcome that simply falls through to the next fps tier. `null` is
+    // the shape a bridge field takes when native reports "not applicable".
+    expect(snapFrameRate(undefined)).toBeUndefined();
+    expect(snapFrameRate(null)).toBeUndefined();
+    expect(snapFrameRate(0)).toBeUndefined();
+    expect(snapFrameRate(-30)).toBeUndefined();
+    expect(snapFrameRate(Number.NaN)).toBeUndefined();
+    expect(snapFrameRate(Number.POSITIVE_INFINITY)).toBeUndefined();
+    expect(snapFrameRate(Number.NEGATIVE_INFINITY)).toBeUndefined();
+  });
+});
+
+describe("frame-rate constants", () => {
+  it("are the [1, 60] range every fps field and every snap shares", () => {
+    expect(FRAME_RATE_MIN).toBe(1);
+    expect(FRAME_RATE_MAX).toBe(60);
+    // The clamp really is expressed in terms of them.
+    expect(snapFrameRate(1000)).toBe(FRAME_RATE_MAX);
+    expect(snapFrameRate(0.1)).toBe(FRAME_RATE_MIN);
+  });
+
+  it("FRAME_RATE_FALLBACK equals the config default fps (the cross-reference in its doc comment)", () => {
+    // The two are duplicated on purpose (paramUtils stays dependency-free), so
+    // this test is what stops them drifting apart: change `defaultConfig.ts`'s
+    // `generation_defaults.frame_rate` without changing the constant and a form
+    // whose seed failed would land on a different fps than one with no seed.
+    expect(FRAME_RATE_FALLBACK).toBe(FALLBACK_APP_CONFIG.generation_defaults.frame_rate);
   });
 });

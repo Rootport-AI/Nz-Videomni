@@ -25,10 +25,13 @@ import {
   ceilToMultiple,
   clamp,
   floorToMultiple,
+  FRAME_RATE_FALLBACK,
+  FRAME_RATE_MIN,
   isDimensionOnGrid,
   isNumFramesOnGrid,
   isValidPrompt,
   roundToMultiple,
+  snapFrameRate,
 } from "../single/paramUtils";
 import { useKeyframes } from "../single/useKeyframes";
 import type { UseKeyframesResult } from "../single/useKeyframes";
@@ -1201,8 +1204,10 @@ export function useChainForm(
     width: roundToMultiple(initial.width ?? config.generation_defaults.width, 64, MIN_WIDTH, config.limits.max_width),
     height: roundToMultiple(initial.height ?? config.generation_defaults.height, 64, MIN_HEIGHT, config.limits.max_height),
     // W7: a right-click prefill can seed fps (material policy: selection
-    // rate/scale); otherwise the config default, unchanged.
-    frameRate: initial.frameRate ?? config.generation_defaults.frame_rate,
+    // rate/scale); otherwise the config default.
+    // 台帳§3-71/§3-72: snapped here too — see the twin in `useGenerationForm`
+    // for why the fallback is the constant rather than `?? config…`.
+    frameRate: snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
     seed: config.generation_defaults.seed,
   }));
 
@@ -1232,8 +1237,12 @@ export function useChainForm(
       }),
     [active],
   );
+  // 台帳§3-71/§3-72: the Chain twin of Create's setter — rounds as well as
+  // clamping, and lands an emptied box on 1fps exactly as before. This is the
+  // form whose §3-71 symptom was worst: a non-integer fps made
+  // `chainLayoutError` reject ordinary clip lists with a 422.
   const setFrameRate = useCallback(
-    (raw: number) => setCommon((prev) => ({ ...prev, frameRate: Math.min(60, Math.max(1, raw)) })),
+    (raw: number) => setCommon((prev) => ({ ...prev, frameRate: snapFrameRate(raw) ?? FRAME_RATE_MIN })),
     [],
   );
   const setSeed = useCallback((raw: number) => setCommon((prev) => ({ ...prev, seed: Math.trunc(raw) })), []);
@@ -2662,7 +2671,14 @@ export function useChainForm(
     () => ({
       width: roundToMultiple(config.generation_defaults.width, 64, MIN_WIDTH, config.limits.max_width),
       height: roundToMultiple(config.generation_defaults.height, 64, MIN_HEIGHT, config.limits.max_height),
-      frameRate: config.generation_defaults.frame_rate,
+      // 台帳§3-71/§3-72: snapped the same way the `common` initializer above is.
+      // The baseline exists to answer "has the user edited anything?", so it has
+      // to be the value the form ACTUALLY mounts with — with a non-integer
+      // config default the two would differ from the first render and the form
+      // would report itself dirty before the user touched it. (Today's config
+      // default is 24.0, so this changes nothing in practice; it is the guard
+      // that keeps it that way.)
+      frameRate: snapFrameRate(config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
       seed: config.generation_defaults.seed,
     }),
     [config.generation_defaults.width, config.generation_defaults.height, config.generation_defaults.frame_rate, config.generation_defaults.seed, config.limits.max_width, config.limits.max_height],

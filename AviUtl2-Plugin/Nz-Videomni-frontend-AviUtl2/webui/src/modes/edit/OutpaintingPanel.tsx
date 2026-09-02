@@ -5,7 +5,7 @@ import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { useFileDrop } from "../../shell/useFileDrop";
 import { FALLBACK_APP_CONFIG, MIN_NUM_FRAMES } from "../single/defaultConfig";
-import { formatDurationHint, isStepEvent } from "../single/paramUtils";
+import { formatDurationHint, FRAME_RATE_MAX, FRAME_RATE_MIN, isStepEvent } from "../single/paramUtils";
 import { resolveSpillFreeFrames } from "../single/spillUtils";
 import {
   BLEND_DILATION_MAX,
@@ -223,8 +223,8 @@ export function OutpaintingPanel({ form, disabled, nativeBridge }: OutpaintingPa
           <span className="field-label">{strings.single.duration.fps}</span>
           <input
             type="number"
-            min={1}
-            max={60}
+            min={FRAME_RATE_MIN}
+            max={FRAME_RATE_MAX}
             value={form.frameRate}
             disabled={disabled}
             onChange={(e) => form.setFrameRate(Number(e.target.value))}

@@ -1116,6 +1116,53 @@ describe("useChainForm", () => {
       const second = setup();
       expect(second.result.current.isDirty).toBe(false);
     });
+
+    // 台帳§3-71/§3-72: the `common` initializer snaps the seeded fps, so the
+    // `isDirty` BASELINE has to snap it identically — otherwise a server whose
+    // `generation_defaults.frame_rate` is non-integer would make every freshly
+    // mounted Chain form report itself dirty and prompt the discard dialog on
+    // the user's very first right-click.
+    it("is false at mount even when the CONFIG default fps is non-integer", () => {
+      const ntscConfig: AppConfig = {
+        ...FALLBACK_APP_CONFIG,
+        generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, frame_rate: 29.97 },
+      };
+      const mockBridge = createMockBridge({ delayMs: 0 });
+      const { result } = renderHook(() =>
+        useChainForm(ntscConfig, "a cat riding a skateboard", { nativeBridge: mockBridge }),
+      );
+      expect(result.current.common.frameRate).toBe(30);
+      expect(result.current.isDirty).toBe(false);
+    });
+  });
+
+  // 台帳§3-71/§3-72: the common fps field only ever holds a whole frame rate in
+  // [1, 60]. The rounding rules themselves are `paramUtils.test.ts`'s; this pins
+  // that Chain's setter is wired to them.
+  describe("setFrameRate (whole frame rates only)", () => {
+    it("rounds a non-integer rate to the nearest integer", () => {
+      const { result } = setup();
+      act(() => result.current.setFrameRate(29.97));
+      expect(result.current.common.frameRate).toBe(30);
+      act(() => result.current.setFrameRate(23.976));
+      expect(result.current.common.frameRate).toBe(24);
+    });
+
+    it("still clamps to [1, 60]", () => {
+      const { result } = setup();
+      act(() => result.current.setFrameRate(120));
+      expect(result.current.common.frameRate).toBe(60);
+      act(() => result.current.setFrameRate(-5));
+      expect(result.current.common.frameRate).toBe(1);
+    });
+
+    it("lands an emptied box (Number(\"\") === 0) and NaN on 1fps, exactly as before", () => {
+      const { result } = setup();
+      act(() => result.current.setFrameRate(0));
+      expect(result.current.common.frameRate).toBe(1);
+      act(() => result.current.setFrameRate(Number.NaN));
+      expect(result.current.common.frameRate).toBe(1);
+    });
   });
 
   // W7: `validityReasons` is the structured breakdown behind `isValid`. Each
@@ -1975,12 +2022,14 @@ describe("useChainForm", () => {
       expect(result.current.audioAttachError).toBeNull();
     });
 
-    it("chainLayoutInvalid at 29.97fps — and never without audio attached", async () => {
-      // [257,257] @ 29.97 is `audioReassemblyMismatch` server-side; at 24 it is fine.
-      const bare = setup();
-      act(() => bare.result.current.setFrameRate(29.97));
-      expect(bare.result.current.validityReasons).not.toContain("chainLayoutInvalid");
-
+    // 台帳§3-71/§3-72 (2026-09-02): this test used to READ 29.97 straight into
+    // `common.frameRate` and assert the resulting `chainLayoutInvalid`. The fps
+    // setter now snaps, so 29.97 can no longer reach the layout check at all —
+    // which is the whole point of the fix (§3-71's 422 repro path is gone from
+    // the client). The first case pins the new behaviour; the second keeps the
+    // `chainLayoutError -> validityReasons` WIRING covered with a geometry that
+    // fails at a WHOLE frame rate, so the plumbing can still regress loudly.
+    it("29.97fps can no longer reach the layout check — the setter rounds it to 30 (§3-71)", async () => {
       const { result } = setupAudio();
       await attachAudio(result, { knownDurationSec: 21 });
       // The default clips (361,361, raised 2026-08-19) no longer already fit 21s
@@ -1990,9 +2039,40 @@ describe("useChainForm", () => {
       expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([257, 257]);
       expect(result.current.validityReasons).not.toContain("chainLayoutInvalid");
 
+      // [257,257] @ 29.97 WAS `audioReassemblyMismatch` server-side (see
+      // `chainUtils.test.ts`'s ground-truth table); at 30 it is fine.
       act(() => result.current.setFrameRate(29.97));
+      expect(result.current.common.frameRate).toBe(30);
+      expect(result.current.validityReasons).not.toContain("chainLayoutInvalid");
+    });
+
+    it("chainLayoutError still reaches validityReasons — pinned at a WHOLE fps ([257,257] @50, overlap 1)", async () => {
+      // `chainUtils.test.ts`'s ground truth row: `[257, 257] @ 50fps, kv=1` ->
+      // `degenerateAudioOverlap`. An integer-fps failure, so it survives the
+      // §3-71 snap and keeps this wiring covered.
+      const { result } = setupAudio();
+      await attachAudio(result, { knownDurationSec: 21 });
+      await waitFor(() => expect(result.current.audioFitEvent?.outcome).toBe("adjusted"));
+      expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([257, 257]);
+
+      act(() => result.current.setFrameRate(50));
+      act(() => result.current.setOverlapFrames(1));
+      // The auto-fit is one-shot per attached track, so neither edit re-lays the
+      // clip list — the geometry under test is still [257, 257].
+      expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([257, 257]);
+      expect(result.current.common.frameRate).toBe(50);
+      expect(result.current.overlapFrames).toBe(1);
       expect(result.current.validityReasons).toContain("chainLayoutInvalid");
       expect(result.current.isValid).toBe(false);
+    });
+
+    it("never fires without audio attached, whatever the fps", () => {
+      const bare = setup();
+      act(() => bare.result.current.setFrameRate(29.97));
+      expect(bare.result.current.validityReasons).not.toContain("chainLayoutInvalid");
+      act(() => bare.result.current.setOverlapFrames(1));
+      act(() => bare.result.current.setFrameRate(50));
+      expect(bare.result.current.validityReasons).not.toContain("chainLayoutInvalid");
     });
   });
 

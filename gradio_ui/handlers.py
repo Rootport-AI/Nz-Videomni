@@ -106,6 +106,58 @@ def _resolve_fps(fps) -> float:
     return fps_v or 24.0
 
 
+def _snap_frame_rate(value: float) -> float:
+    """Round a frame rate to a whole number — but only inside the range the
+    server accepts.
+
+    ``floor(value + 0.5)`` when ``value`` is finite and ``1.0 <= value <= 60.0``;
+    everything else (out of range, NaN, ±inf) is passed through UNCHANGED so the
+    server's own ``Field(ge=1.0, le=60.0)`` returns its 422. Silently
+    substituting a default here would swallow that 422 and fire a GPU job on an
+    argument the caller never meant.
+
+    **Why integers at all (台帳 §3-71 / §3-72).** A non-integer fps on a
+    generation request breaks two things downstream: the chain flow's stage-2
+    audio tile re-assembly check accumulates rounding error and rejects ordinary
+    clip lists with a 422 (§3-71 — ``[257, 257]`` at 29.97 is the headline case,
+    fine at 24 or 30), and the mp4 writer truncates fps to an integer so a 29.97
+    request drifts further out of audio sync the longer it runs (§3-72). The
+    server-side fix reaches deep into frozen code, so every CLIENT entry point
+    snaps instead.
+
+    **Why not** :func:`round`. Python's ``round`` is banker's rounding
+    (``round(0.5) == 0``, ``round(2.5) == 2``), which disagrees with
+    JavaScript's ``Math.round`` (always half-up). ``math.floor(x + 0.5)``
+    matches ``Math.round``.
+
+    **How the three implementations relate** (read this before writing a
+    parity test): the rounding rule ``floor(x + 0.5)`` is shared by
+    ``webui/src/modes/single/paramUtils.ts``'s ``snapFrameRate`` (the operator
+    panel), ``mcp_server/tools/generate.py``'s ``_snap_frame_rate`` (MCP — a
+    line-for-line sibling of this one, including the pass-through), and this
+    function. The OUT-OF-RANGE behaviour, however, is the opposite: webui clamps
+    into [1, 60], while MCP and Gradio pass the value through and let the server
+    answer 422. A test that assumes all three behave identically will fail.
+
+    Note the UI path never actually exercises the rounding: ``ui.py``'s fps
+    ``gr.Number`` fields carry ``precision=0``, so Gradio has already coerced the
+    value to a whole number (with Python's own banker's rounding) before a
+    handler sees it, making this call the identity there. The rounding matters
+    for direct (non-UI) handler calls — tests, and anything driving these
+    functions programmatically.
+
+    Known limitation on that direct path: the A2V length precheck
+    (:func:`make_generate_handler`) and the live chain estimate still read the
+    RAW fps, so a caller who passes 29.97 straight in can see a message computed
+    from 29.97 while the request carries 30. The divergence only ever leans safe
+    — the higher rate needs no more audio latents than the message quoted, so it
+    cannot turn a passing precheck into a 422.
+    """
+    if not math.isfinite(value) or value < 1.0 or value > 60.0:
+        return value
+    return float(math.floor(value + 0.5))
+
+
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def suggest_frames_for_audio(dur: float, fps) -> int:
     """Suggest a ``Frames`` value (8n+1) that fits ``dur`` seconds of audio at
@@ -497,7 +549,10 @@ def build_a2v_chain_payload(
         "width": int(width),
         "height": int(height),
         "crop_output": crop_output,
-        "frame_rate": float(frame_rate),
+        # fps is snapped to a whole number here (§3-71 / §3-72 — see
+        # _snap_frame_rate). float() stays on the INSIDE: callers may hand this
+        # helper a string straight off a Gradio field.
+        "frame_rate": _snap_frame_rate(float(frame_rate)),
         "num_inference_steps": 8,
         "guidance_scale": 1.0,
         "seed": int(seed),
@@ -857,7 +912,10 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "height": int(height),
             "crop_output": crop_output,
             "num_frames": int(num_frames),
-            "frame_rate": float(frame_rate),
+            # fps is snapped to a whole number here (§3-71 / §3-72 — see
+            # _snap_frame_rate). float() stays on the INSIDE: this handler is
+            # called with string fps in tests and from Gradio fields.
+            "frame_rate": _snap_frame_rate(float(frame_rate)),
             "num_inference_steps": 8,
             "guidance_scale": 1.0,
             "seed": int(seed),
@@ -1091,7 +1149,14 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 return
 
         try:
-            fps = float(frame_rate)
+            # Snap at the PARSE point, not just before the payload: every later
+            # check has to see the same number the request will carry. In
+            # particular the chain-total precheck below (check_chain_total ->
+            # compute_chain_layout, the very arithmetic behind §3-71's 422)
+            # would otherwise reject an ordinary 29.97 clip list locally, before
+            # the rounding at the payload could have saved it. float() stays on
+            # the INSIDE: fps arrives as a string from the Gradio field.
+            fps = _snap_frame_rate(float(frame_rate))
         except (TypeError, ValueError):
             yield _precheck_reject(L("msg_fps_range", lang)), "", None
             return

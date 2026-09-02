@@ -206,8 +206,14 @@ def test_duration_panel_fuses_frames_duration_fps_into_one_group():
     en = LABELS["en"]
     assert any(isinstance(c, gr.Number) and c.label == en["lbl_frames"]
                for c in left_leaves)
-    assert any(isinstance(c, gr.Number) and c.label == en["lbl_fps"]
-               for c in right_leaves)
+    # precision=0 on the fps Number is a real defence, not cosmetics (台帳
+    # §3-71 / §3-72): the live duration/spill readouts and the A2V length
+    # precheck read this field RAW, so integer-ising it here is what keeps a
+    # pasted 29.97 out of chain_math on the UI path. Pin the attribute.
+    fps_numbers = [c for c in right_leaves
+                   if isinstance(c, gr.Number) and c.label == en["lbl_fps"]]
+    assert fps_numbers
+    assert fps_numbers[0].precision == 0
 
     # Middle column: a bold "Duration" heading (i18n-frozen, English literal
     # by design) above the value-only Markdown readout -- no input widget.
@@ -242,6 +248,29 @@ def test_dimension_frame_numbers_have_no_server_minimum_but_carry_elem_id():
         c = by_id[elem_id]
         assert c.minimum is None, f"{elem_id} must not set a server-side minimum"
         assert c.step == step, f"{elem_id} step must stay {step}"
+
+
+def test_every_fps_number_is_integer_only_but_keeps_no_server_bounds():
+    # 台帳 §3-71 / §3-72: a non-integer fps breaks the chain's stage-2 audio
+    # re-assembly check (an ordinary clip list 422s) and makes the mp4 writer
+    # truncate the rate, so long clips drift out of audio sync. handlers.py
+    # snaps the value it PUTS IN THE PAYLOAD, but several consumers read the
+    # field raw — the live duration/spill readouts, the A2V length precheck and
+    # the Chain tab's live layout estimate — so precision=0 is what integer-ises
+    # the UI path, and the default value must be an int for the same reason.
+    #
+    # minimum/maximum deliberately stay unset here, exactly like the dimension
+    # fields above: a live .change listener would raise inside Number preprocess
+    # on an in-progress keystroke. The [1, 60] range is enforced by the handler
+    # precheck and, finally, by the server's own Field(ge=1.0, le=60.0).
+    demo = _demo()
+    fps_numbers = [c for c in demo.blocks.values()
+                   if isinstance(c, gr.Number) and c.label == LABELS["en"]["lbl_fps"]]
+    assert len(fps_numbers) == 2, "expected the Generate tab's and the Chain tab's fps fields"
+    for c in fps_numbers:
+        assert c.precision == 0
+        assert c.value == 24 and isinstance(c.value, int)
+        assert c.minimum is None and c.maximum is None
 
 
 def test_load_js_reapplies_min_attribute_client_side():

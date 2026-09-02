@@ -94,6 +94,60 @@ describe("useGenerationForm", () => {
     });
   });
 
+  // 台帳§3-71/§3-72: the fps field only ever holds a whole frame rate in [1, 60].
+  // The rounding rules themselves are `paramUtils.test.ts`'s; these pin that
+  // Create's setter and lazy init are wired to them.
+  describe("frame rate (whole frame rates only)", () => {
+    it("setFrameRate rounds a non-integer rate to the nearest integer", () => {
+      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "x"));
+      act(() => result.current.setFrameRate(29.97));
+      expect(result.current.values.frameRate).toBe(30);
+      act(() => result.current.setFrameRate(23.976));
+      expect(result.current.values.frameRate).toBe(24);
+    });
+
+    it("setFrameRate still clamps to [1, 60]", () => {
+      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "x"));
+      act(() => result.current.setFrameRate(120));
+      expect(result.current.values.frameRate).toBe(60);
+      act(() => result.current.setFrameRate(-5));
+      expect(result.current.values.frameRate).toBe(1);
+    });
+
+    it('setFrameRate lands an emptied box (Number("") === 0) and NaN on 1fps, exactly as before', () => {
+      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "x"));
+      act(() => result.current.setFrameRate(0));
+      expect(result.current.values.frameRate).toBe(1);
+      act(() => result.current.setFrameRate(Number.NaN));
+      expect(result.current.values.frameRate).toBe(1);
+    });
+
+    it("snaps a right-click fps seed as well as the config default", () => {
+      const { result: seeded } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {}, { frameRate: 29.97 }),
+      );
+      expect(seeded.current.values.frameRate).toBe(30);
+
+      const ntscConfig: AppConfig = {
+        ...FALLBACK_APP_CONFIG,
+        generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, frame_rate: 23.976 },
+      };
+      const { result: fromConfig } = renderHook(() => useGenerationForm(ntscConfig, "x"));
+      expect(fromConfig.current.values.frameRate).toBe(24);
+    });
+
+    it("falls back to FRAME_RATE_FALLBACK (24) rather than leaking an unusable config value", () => {
+      // `?? config…` would put the 0 straight back into the field — the whole
+      // reason the initializer chains to the constant instead.
+      const brokenConfig: AppConfig = {
+        ...FALLBACK_APP_CONFIG,
+        generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, frame_rate: 0 },
+      };
+      const { result } = renderHook(() => useGenerationForm(brokenConfig, "x"));
+      expect(result.current.values.frameRate).toBe(24);
+    });
+  });
+
   it("seeds cropOutput from config.generation_defaults.crop_output (real server standard_720p defaults)", () => {
     const config: AppConfig = {
       ...FALLBACK_APP_CONFIG,

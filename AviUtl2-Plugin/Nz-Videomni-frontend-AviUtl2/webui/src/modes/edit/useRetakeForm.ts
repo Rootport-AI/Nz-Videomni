@@ -538,7 +538,8 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
 
   const buildRequest = useCallback((): GenerateChainRequest => {
     const windowStartSec = window?.ok && mapping?.ok ? window.startSec - mapping.trimOffsetSec : 0;
-    // プロンプトの `<lora:…>` タグは Create/Chain とまったく同じ扱い（§3-62）:
+    // プロンプトの `<lora:…>` タグは Create/Chain とまったく同じ扱い
+    // （バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-62-02）:
     // 同じパーサで指示文（`strippedPrompt`）と `loras[]` に分け、両方を送る。
     // タグを外すだけで `loras` を捨てていた旧契約は、Retake も 1 クリップの
     // チェーンジョブでバックエンドが素通しで受けるため、意味を失った。

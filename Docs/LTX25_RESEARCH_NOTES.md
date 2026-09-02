@@ -506,6 +506,8 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 
 **kohya形式のLoRA 2本は、2.5以前にLTX 2.3のエンジンが読めていない。** `LTX2.3-MysticXXX`と`SynthPussy_01_rank32`は`lora_down`／`lora_up`／`alpha`という方言で書かれており、`engine/gguf/ic_lora_common.py`のローダーは`.lora_A.weight`を固定で探すためペアが1組も作られない。**これは2.5の互換性の問題ではなく、2.3でも同じ状態（警告は出るが実質何も起こらない＝無音の空振り）である。** 手当ては[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108として起票した。
 
+> **【2026-09-02 追記（上の本文は当時のまま）】kohya形式は読み込み対応した。** いまのローダーはA/B形式とkohya形式（鍵がドットで区切られているもの）の両方を読み、`alpha ÷ rank`を読み込み時にB側へ畳み込む。台帳の記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-108で、[`PENDING_TASKS.md`](PENDING_TASKS.md)側は欠番である。撤回した過去の設計と実測は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §88。
+
 **実装時の注意が3つある。** ①**ジョブ末尾の`detach`は必須**——LoRAのバッファは非永続バッファとしてLinearへ付き、公式の`dispose()`を生き延びることを実測で確認した（Stage-2の構築時点でStage-1のバッファが残っていた）。しかもモデルの器は使い回されるので、明示的な`detach_ic_loras`だけが「前のジョブのLoRAを引きずらないこと」を保証する。②**既定強度のベースモデル別分離を検討する**（上記）。③**`attach`はブロックの配置より前に置く**——LoRAバッファは`module.to(device)`に付いて動くので、ブロックスワップがブロックをCPUへ移したあとでは取り残される。LTX 2.3側の正本（`engine/gguf/quant_service.py:789-791`）と同じ規則で、`engine25`では`_build_transformer`の「構築→X0Model→配置」のうち**X0Modelの直後・配置の直前**が挿入位置になる。
 
 **この節の数値の詳細（全ラン表・当てはめ式・A表14本・B/Cの全指標・オーナー目視欄）は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71にある。**
@@ -558,3 +560,5 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 ```
 
 **なお 11節(b) が名指しした kohya 形式のLoRAが読めない件は、今回も直していない**（台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108として生きている）。**音声側の強度（`audio_strength`）も、音声軸の重みを持つLoRAが1本も無いため 2.5 でも実効を確認できていない**（§74.3(c)）。
+
+> **【2026-09-02 追記（上の本文は当時のまま）】kohya形式の件は片付いた。** 2026-09-02にローダーが読み込み対応し、§3-108は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-108としてクローズしている（[`PENDING_TASKS.md`](PENDING_TASKS.md)側は欠番。詳細は11節(b)末尾の追記と[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §88）。`audio_strength`の実効が未確認である点は、いまも変わっていない。

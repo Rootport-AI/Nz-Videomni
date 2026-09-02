@@ -164,10 +164,10 @@ def unsupported_features(family: str) -> tuple[str, ...]:
 def reject_unsupported(family: str, request: GenerateRequest) -> None:
     """この系統が走らせられないリクエストなら、その場で422にする(§3-98 P5)。
 
-    **判断はアダプタが持ち、ここは取り次ぐだけ**である。「LTX 2.5(v1)では
-    outpaintができない」というのはエンジンの事実であって、エンドポイントの
-    事情ではない。api/generate.py が系統名で分岐して機能表を持ち始めた瞬間に、
-    同じ表が2箇所に生まれて必ずずれる。
+    **判断はアダプタが持ち、ここは取り次ぐだけ**である。「LTX 2.5では非蒸留
+    パイプライン(``pipeline``)を走らせられない」というのはエンジンの事実で
+    あって、エンドポイントの事情ではない。api/generate.py が系統名で分岐して
+    機能表を持ち始めた瞬間に、同じ表が2箇所に生まれて必ずずれる。
 
     宣言していない系統(``ltx``)は素通り。``getattr`` で見に行くのは、
     「制限を宣言しない」が既定であるという :func:`unsupported_features` と
@@ -193,8 +193,12 @@ def reject_chain(family: str, request: GenerateChainRequest) -> None:
     かつては引数にリクエストを取らなかった。「chain系はまるごと扱えるか扱えない
     かのどちらかで、中身を見ても答えが変わらない」からだった——LTX 2.5が連結生成
     を一切できなかった頃の話である。いまは**系統によって中身で答えが変わる**:
-    素のChainedは2.5でも走り、V2V・A2V・Retake・End source・LoRA・参照動画は
-    走らない。だからリクエストを渡す。
+    LTX 2.5の連結生成で断られるのは ``pipeline``(非蒸留)と ``vae_mode``
+    (PrunaVAED)の2フィールドが既定と違うときだけで、それ以外のモード
+    (V2V・A2V・Retake・End source・LoRA・参照動画など)は走る。だから
+    リクエストを渡す。**どのフィールドを断るかの正本は
+    ``services/engines/ltx25/adapter.py`` の ``CHAIN_REJECT_TABLE`` であり、
+    ここには書き写さない。**
 
     宣言していない系統(``ltx``)は素通り、という :func:`reject_unsupported` と
     同じ規約。

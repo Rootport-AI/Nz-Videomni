@@ -377,7 +377,8 @@ describe("useRetakeForm — buildRequest", () => {
     expect(result.current.buildRequest().retake?.regenerate_audio).toBe(false);
   });
 
-  // §3-62: 以前は「タグを外して `loras` は送らない」契約だったが、バックエンドは
+  // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-62-02: 以前は「タグを外して
+  // `loras` は送らない」契約だったが、バックエンドは
   // Retake（1 クリップのチェーンジョブ）でも `loras` を素通しで受けるため、
   // Create/Chain と同じ扱いへ揃えた。
   it("プロンプトの LoRA タグは指示文から外し、loras[] として送る（Create/Chain と同じ扱い）", async () => {

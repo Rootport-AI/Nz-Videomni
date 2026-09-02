@@ -604,6 +604,8 @@ def verify() -> None:
     # handling.
     probe = ModelRegistry(cache_weights=False, cache_models=True)
     key = as_path_list(("<compat-probe-a>", "<compat-probe-b>"))
+    if key != ["<compat-probe-a>", "<compat-probe-b>"]:
+        _fail("as_path_list", "no longer expands a 2-file tuple into the flat key list the embeddings-processor release path pops")
     probe._cache_weights = True
     probe.add(key, None, "sentinel")  # type: ignore[arg-type]
     if probe.get(key, None) is None:

@@ -21,7 +21,7 @@
 
 ### 起動方法
 - **標準（エンドユーザー向け）**: リポジトリ直下の `setup.bat` で導入し、`run.bat` で起動する（バックエンド `README.md` §1「かんたんインストール」・§2「起動」）。`run.bat` は `run.ps1` を呼ぶだけの薄いラッパー。
-- **推奨（開発者向け）**: `run.ps1` を直接実行する。環境変数(`UV_PYTHON_INSTALL_DIR`, `PYTORCH_CUDA_ALLOC_CONF`)の設定と `tools/` の `PATH` 前置を済ませてから、末尾で `.venv\Scripts\python.exe main.py @Args` を実行する。
+- **推奨（開発者向け）**: `run.ps1` を直接実行する。環境変数(`UV_PYTHON_INSTALL_DIR`)の設定と `tools/` の `PATH` 前置を済ませてから、末尾で `.venv\Scripts\python.exe main.py @Args` を実行する。
 - 直接: `.\.venv\Scripts\python.exe main.py`。
 - real backend選択時、アプリが `.venv-engine\Scripts\python.exe -u -m engine.worker` を自動spawn（バックエンド `README.md` §3「アーキテクチャ」）。フロント側からの手動起動は不要。
 

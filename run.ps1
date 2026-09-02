@@ -31,11 +31,6 @@ try { $Host.UI.RawUI.WindowTitle = 'Nz-Videomni サーバー（この画面は�
 # Keep uv-managed Python inside the project (process-scoped).
 $env:UV_PYTHON_INSTALL_DIR = "$PSScriptRoot\.python"
 
-# Reduce CUDA fragmentation OOM (harmless when no GPU is present).
-if (-not $env:PYTORCH_CUDA_ALLOC_CONF) {
-    $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
-}
-
 # setup.bat が用意した tools\ をこのプロセスの PATH の先頭へ。
 # services/video_io.py は shutil.which で ffmpeg / ffprobe を探すので、
 # これだけで Python 側は何も変えずにプロジェクト内の ffmpeg を使う。

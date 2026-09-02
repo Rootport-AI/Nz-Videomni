@@ -2768,9 +2768,12 @@ def test_child_env_carries_no_2_3_engine_knobs(ltx25_paths, tmp_path):
     # The adapter deliberately sets NO allocator config: expandable_segments is
     # refused on Windows and torch 2.9 deprecates the variable's name, so the
     # line that used to set it was removed as a measured no-op (2026-08-24,
-    # outputs/b4-vram-diag/). Asserted as "does not ADD it", for the same reason
-    # the LTX_* assertion above is: the parent's environment passes through by
-    # design, and run.ps1 exports this variable.
+    # outputs/b4-vram-diag/). Nothing in the project sets the variable any more
+    # either — run.ps1, scripts/install_ltx.ps1 and the LTX 2.3 adapter all
+    # dropped their copies on 2026-09-02 (Docs/PENDING_TASKS_CLOSED.md §3-112).
+    # Still asserted as "does not ADD it", for the same reason the LTX_*
+    # assertion above is: the parent's environment passes through by design, so
+    # an operator who exports the variable by hand is not overridden.
     added = {k: v for k, v in env.items() if os.environ.get(k) != v}
     assert "PYTORCH_CUDA_ALLOC_CONF" not in added
 

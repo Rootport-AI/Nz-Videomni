@@ -2842,7 +2842,7 @@ HFの非公開dataset（41.6のリンク）をオーナーが実際に目視し�
 
 sage を使うには外部パッケージが要るため、**`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24 をエンジン用仮想環境の標準同梱に戻した**。
 
-- `sageattention` は [woct0rdho 版の Windows 用ビルド済み wheel](https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/) を**直リンクで固定**して導入する（`sageattention-2.2.0+cu128torch2.9.1.post6-cp310-abi3-win_amd64.whl`）。torch 2.9.1+cu128 に合わせてビルドされた ABI 固定の wheel であるため、`engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも**載せていない**——`-ResolveLatest`（依存を最新へ解決し直すオプション）は未検証の新しい torch を引く経路であり、この wheel とは互換にならないため。**`-ResolveLatest` を使った環境では sage の動作は保証外**である旨をコメントに明記した。`triton-windows` のみ `dependencies` に載せている（バージョンの固定は freeze 側が持つ）。
+- `sageattention` は [woct0rdho 版の Windows 用ビルド済み wheel](https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/) を**直リンクで固定**して導入する（`sageattention-2.2.0+cu128torch2.9.1.post6-cp310-abi3-win_amd64.whl`）。torch 2.9.1+cu128 に合わせてビルドされた ABI 固定の wheel であるため、`engine/engine-venv-pyproject.toml` の `dependencies` にも `[tool.uv.sources]` にも**載せていない**——`-ResolveLatest`（依存を最新へ解決し直すオプション）は未検証の新しい torch を引く経路であり、この wheel とは互換にならないため。**`-ResolveLatest` を使った環境では sage の動作は保証外**である旨をコメントに明記した。（**【2026-09-02 追記】`-ResolveLatest` は §89 でフラグごと削除した**——`sageattention` を pyproject に載せない判断そのものは変わらず、「手で解決し直した環境では保証外」という現行の言い方へ書き換えてある。）`triton-windows` のみ `dependencies` に載せている（バージョンの固定は freeze 側が持つ）。
 - `triton-windows` は TinyCC と ptxas を同梱しており、**エンドユーザーに Visual Studio の導入を要求しない**ことを確認済み。
 - **§40.1 で削除した19エントリのうち2つを戻したことになるが、当時の判断と矛盾しない。** §40.1 が削除したのは旧世代の `sageattention` **1.0.6**（フォーク由来で、コードから一度も import されていない死重依存）であり、今回入れるのは現行世代の 2.2.0 で、`engine/transformer/sage_attention_service.py` という**実際の消費者がある**。「実消費者のない依存は置かない」という当時の基準はそのまま守られている。同旨の追記を §40.1 にも入れた。
 - **ハッシュが変わるため、導入済みの環境では次回の `setup.bat` 実行時に freeze の再適用が1回走る**（`.venv-engine/.nz-engine-state` との突き合わせによる冪等ガード）。パッケージの差分自体はほぼ無いため、実測では監査（audit）で止まる短時間の処理になる。「即座に終了」ではない点に注意。
@@ -5942,6 +5942,7 @@ ltx.runner: Model-management overrides: {'transformer': '...\models\LTX23\Weight
 - PowerShellから標準入出力経由で `load` → `@@LTX@@...ready`、`shutdown` → 終了コード0、パス欠損の `load` → フレーム付きエラー＋終了コード1。
 - **`engine/` と `.venv-engine`（LTX 2.3側）の差分はゼロ。**
 - インストーラのエンジンvenv構築は `Ensure-EngineVenv`（必須引数7つ）へ抽出して2系統ぶん呼ぶ形にした。**2.3経路の出力文字列と `uv` の引数列は1文字も変わっていない**ことを、関数をASTで取り出し `uv` をスタブ化した全分岐実行で確認した。
+  - **【2026-09-02 追記】`-ResolveLatest` と `-PyprojectDir` を §89 で削除したため、現在の `Ensure-EngineVenv` は必須引数6つ＋既定つき2つである**（本文の「7つ」は当時の数）。
 
 ### 69.4 G2 — transformer GGUFのロード経路（Phase 2b）
 
@@ -7719,6 +7720,8 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 |---|---|---|
 | ① | **CUDA アロケータ設定の見直し**——`PYTORCH_CUDA_ALLOC_CONF` から `PYTORCH_ALLOC_CONF` への移行と、`max_split_size_mb` が Windows の従来型アロケータで効くかどうかの評価 | 中（本段の原因究明の直接の派生） |
 | ② | **解放処理をスロット単位で囲う**——LoRA 有りのジョブでも M1 が効くようになる（約208MB） | 低 |
+
+**【2026-09-02 追記】①は §89 でクローズした**——`PYTORCH_ALLOC_CONF` への改名も `max_split_size_mb` の追加も行わず、**効かない設定行を全部削除する**という決着である（`max_split_size_mb` は §7.3 で否定実測済み）。②は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-113 として生きている。
 
 **(5) 高速化技術の残り3つ（第2弾・第3弾）の見通し。** **第2弾は `keep_resident`（モデル骨格の常駐）のテキストエンコーダ側**で、**既定 off のオプトイン**として入れる想定である。**第3弾は SageAttention** で、こちらは出力の細部が変わるので **PSNR を基準にした判定**が要る。**PrunaVAED は LTX 2.5 版の重みが存在しないため先送り**である。
 
@@ -10399,3 +10402,146 @@ G1〜G6・G10は合格した（完了条件の正本は台帳[`PENDING_TASKS_CLO
 
 - **alpha ≠ rank のkohya実ファイルは手元に無い。** 手持ちのkohya形式2本（`LTX2.3-MysticXXX`・`SynthPussy_01_rank32`）はいずれもalpha＝rank＝倍率1.0であり、**`alpha ÷ rank`が1.0でない場合の倍率経路の正しさは、88.4のエンジンvenvの合成テストだけが根拠である。** alphaの異なる実ファイルが手に入った時点で、実機で1本確かめておくとよい。
 - **許容した軽微事項**: `_fuse_ic_loras`のログが出す鍵数`n_keys = 2×ペア数`は、鍵が3種あるkohya形式のファイルでは過少表示になる。表示だけの問題なので触っていない。
+
+---
+
+## 89. ★無害バグ2件の引き算（インストーラの`-ResolveLatest`削除＝台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-104／`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`の全撤去＝同 §3-112）＝実機ゲート**N1〜N6 全合格**（2026-09-02）
+
+### 89.1 テーマの概要
+
+**2件とも「直す」ではなく「消す」で決着した引き算である**（オーナー裁定 2026-09-02）。どちらも**利用者に見える不具合ではなく、動いていない・効いていないコードが残っていた**という型の負債で、削除しても挙動が変わらないことを実機で証明するのがゲートの主目的だった。
+
+- **§3-104**: `scripts/install_ltx.ps1 -ResolveLatest`（エンジン用の仮想環境を、固定版ではなく最新版で解決し直す任意フラグ）は**導入初日から一度も成功したことがない**。修理せずフラグごと削除した。
+- **§3-112**: `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` は**Windowsのtorchが一度も受け付けていない**。改名（`PYTORCH_ALLOC_CONF`）も新しいつまみの追加もせず、設定行を全部消した。
+
+**実機ゲートの一次記録は`outputs/subtraction-gate-2026-09-02/RESULTS.md`である**（同ディレクトリにリクエスト本文`req_*.json`・出力mp4（`B0a`／`B0b`／`B1`／`B2`／`N1`／`N2`）・`metadata.json`のコピー・機械可読な`results.json`・警告集計`warning_counts*.json`・新規ログ分の全文`logdump*/`・使用スクリプトが揃っている。`outputs/`はgit管理外）。
+
+**コミットの構成**: ①§3-104＝`ffe1d04`（`scripts/install_ltx.ps1`のみ）。②§3-112＝コード4ファイル（`run.ps1`／`scripts/install_ltx.ps1`／`services/engines/ltx/adapter.py`／`main.py`）＋テストのコメント1箇所。ゲートは①がコミット済み・②が作業ツリーの状態で通した。**同じ`install_ltx.ps1`を触る①と②は、1ファイル1所有者にするため順序を分けて実装した。**
+
+### 89.2 §3-104 — `-ResolveLatest`は導入初日から一度も動いていない
+
+**症状と原因**: このフラグを付けて実行すると必ず解決に失敗する。`uv pip install <ディレクトリ>`に`engine`／`engine25`を渡していたためで、`uv`は渡されたディレクトリに`pyproject.toml`という名前のファイルがあることを前提にするが、実際に置いてあるのは`engine-venv-pyproject.toml`／`engine25-venv-pyproject.toml`である。LTX 2.3・LTX 2.5の両系統で同じ症状だった。
+
+**経緯（着手前調査。git履歴とコード現物の突き合わせ）**: **ファイル名がこの形になったのはフラグ導入の前日で、翌日（2026-07-02）の全面書き換えで入ったフラグが、その改名に追随していなかった。** 以来、成功した実行の記録はどの文書にも残っていない。利用者導線にも一切乗っていない——`setup.bat`（`scripts/setup.ps1`）は引数なしで本体を呼び、`install-LTX25.bat`（`scripts/install_model.ps1`）は`-BaseModel`／`-SkipVenv`／`-SkipMigrate`だけを渡し、`README.md`にも登場しない。
+
+**裁定と削除の連鎖**: 直しても手に入るのは**未検証の新しいtorch（~2.11）で作った仮想環境**であり、看板だけを維持する価値がない。そこでフラグ宣言・`.DESCRIPTION`／`.EXAMPLE`の言及・`Ensure-EngineVenv`の`if ($ResolveLatest) {…}`分岐・**そこにしか届かない引数**（`$PyprojectDir`・`$ResolveArgs`）・呼び出し側の受け渡し・変数`$enginePyprojectDir`／`$ltx25PyprojectDir`まで連鎖でまとめて落とした。**固定版（freeze）を当てる経路には1文字も触れていない**ので、`setup.bat`と`install-LTX25.bat`が実際に行う処理は変わらない。
+
+**`*-venv-pyproject.toml`の2ファイルは温存した（コードからの参照はゼロになった）**: 次にtorchを上げるときの**依存仕様の正本がこの2ファイルしか無い**ためである（固定版ファイルは解決済みの結果であってレシピではない）。代わりに、手で解決し直す手順——空の作業用ディレクトリへ**`pyproject.toml`という名前で**コピーしてから`uv pip install --python <エンジン仮想環境のpython.exe> <その作業用ディレクトリ>`を実行する——を各ファイルの冒頭コメントに書いた。**ファイル名を`pyproject.toml`にすること自体が、この不具合の原因そのものだった**ので手順に明記してある。
+
+**N5の合格が意味すること**: 敵対的レビューのCritical 1件は「行継続のバッククォートを外し忘れたまま引数行を消すと、次の文が引数として無言で飲み込まれる。しかも構文解析はエラー0件のまま通る」というものだった（レビューアがパーサー実験で実証）。**N5の「余剰の位置引数0」は、この無言破壊が起きていないことの直接の証拠である**——各名前付き引数がちょうど1つの値を伴い、それ以外の要素が1つも無い。構文解析だけでは検出できない事故なので、**引数名の集合を`param()`と突き合わせる検算をゲートに入れたのが効いた。**
+
+### 89.3 §3-112 — `expandable_segments`が効いた実測記録は存在しない
+
+**「効かない」ことは最初の実測の時点で記録されている。** §7.2（2026-06-29）の診断表は、断片化の原因そのものを「`expandable_segments`が本機Windowsでno-op（`UserWarning: not supported on this platform`）のため、空いた~16GBのセグメントがキャッシュに居座る」と書いている。つまり**この行は「効くはず」という実測前の定石として先に入り、最初の測定で否定されたのに、行だけが生き残っていた**。2026-08-24の再実測（§75.7(2)。torch 2.9.1、`outputs/b4-vram-diag/probe_expandable.py`）も同じ結論で、torch 2.9は変数名そのものを`PYTORCH_ALLOC_CONF`へ非推奨化してもいる。**「効いた」と書いた実測はどの節にも無い。**
+
+**警告は撤去の直前まで出続けていた（本テーマの実測）**: Step 0の新規ログ分に**計5件**（`expandable_segments not supported on this platform`が3件・`PYTORCH_CUDA_ALLOC_CONF is deprecated`が2件）。撤去後のStep 3では**3ログとも0件**である（89.5(3)）。
+
+**判定上の知見——警告は`server.log`には出ない。** 変更前も変更後も`logs/server.log`の該当件数は0で、警告はすべて子プロセス側（`logs/ltx_worker.log`・`logs/ltx25_worker.log`）に出る。APIプロセス自身はCUDAを初期化しないためである。**アプリのログだけを見て「警告は無い」と判断すると誤判定になる**——実体は`run.ps1`のexportで、そこから全ワーカーが継承していた。
+
+**`max_split_size_mb`は入れない（根拠は§7.3の否定実測。値の水準で正確に引き取る）**: 対策スイープはdenoiseのWDDM shared溢れピークで評価しており、baselineは3,969MBである。
+
+| 構成 | denoise shared ピーク | 判定 |
+|---|---|---|
+| baseline | 3,969MB | — |
+| `max_split_size_mb:512` | 3,785MB | ✗（≈baseline） |
+| `max_split_size_mb:256` | 3,743MB | ✗（≈baseline） |
+| `gc_threshold:0.6,max_split:256` | 3,774MB | ✗（≈baseline） |
+| `backend:cudaMallocAsync` | 1,805MB | **△（大幅減。ただし溢れは残る）** |
+| denoise直前の`empty_cache()` | 742MB（ambient） | **✓ 完全消失** |
+
+**否定されたのは`expandable_segments`・`max_split_size_mb`・`gc_threshold`の3つであって、「アロケータのつまみは全部効かなかった」ではない**——`backend:cudaMallocAsync`は当時「任意の補助」として併用候補に挙げられ、採用されないまま今日に至っている（§7.4）。したがって起票時の論点②（`max_split_size_mb`が従来型アロケータで効くかの評価）は**実測済みで否定**であり、新しいつまみを足す理由が無い。将来もう一度アロケータへ手を出すなら、再訪の入口は`max_split_size_mb`ではなく`backend:cudaMallocAsync`である（ただし下記のとおり溢れは別の手当てで消えているので、動機は無い）。**なおこの対策スイープでは全構成の出力がバイト単位で同一だった**（メモリ挙動だけが変わり、画は変わらない）——今回のN1・N2のSHA一致と同じ性質の結果である。
+
+**断片化の実問題は、効かない環境変数とは無関係に、発生源で解決済みである**: LTX 2.3＝transformerロード後・最初のdenoise直前の`gc.collect(); torch.cuda.empty_cache()`（§7.4。予約17,452→1,508MB・shared 3,969→742MB・210.9→114.9秒）。先読みblock swap＝アリーナリング（§75.7。`engine/transformer/block_swap_prefetch.py`。両系統が共有する実行時コード）。**この2つを説明するコメントは`engine/worker.py`と同ファイルに残してある**——「この指定はno-opだから別の手当てが要る」という、行を消したあとも正しい説明だからである。
+
+### 89.4 Step 0 — 変更前ベースライン（2026-09-02 10:50〜10:53）
+
+**`run.ps1`経由でREAL起動した**（`powershell -NoProfile -ExecutionPolicy Bypass -File run.ps1`）。**`PYTORCH_CUDA_ALLOC_CONF`の手動exportはしていない**——値は削除前の`run.ps1`が設定したものだけであり、これがN3／N4の対照条件になる（直接`main.py`を起動すると削除対象の行が実行経路に乗らず、偽判定になる）。`config.yaml`は未編集・`model.backend`は既定の`auto`。
+
+生成条件（4本とも共通）: `a red sports car driving along a coastal road at sunset`／384×256／17フレーム／24fps／**シード4242**／LoRAなし／その他すべて既定。
+
+| ID | 内容 | mp4のSHA-256 | エンジン | 生成秒数 |
+|---|---|---|---|---|
+| B0a | LTX 2.3・1本目（＝B1と同一ジョブ） | `c273b9fd8dc35252648f0dd61fc4adf74972146cacb0928472fd2dac3b4c100f` | ltx-distilled | 67.36 |
+| B0b | LTX 2.3・2本目（再現性の錨） | `c273b9fd…c100f`（B0aと完全一致） | ltx-distilled | 68.52 |
+| B1 | 2.3の基準＝**N1の対照** | `c273b9fd…c100f` | ltx-distilled | 67.36 |
+| B2 | LTX 2.5＝**N2の対照** | `62216a9c644241ebdabc8894fc8e9fd42894bf0866ad281c5321f92f521065b7` | ltx25-distilled | 47.19 |
+
+- **B0の再現性は成立**（B0a＝B0b）。したがって変更後のSHA比較を判定手段に使える。
+- B1のSHAは、同じ条件で**別セッション**（同日07:40、前テーマの`outputs/lora-gate-2026-09-02/`のB1）に採った値とも一致している。**サーバー再起動・ベースモデル切替を挟んでもビット単位で同じ絵が出る。**
+
+**警告の対照記録**（ログは追記のみでローテーションが無いため、**起動直前に各ログのバイトサイズを記録し、それ以降に書かれた分だけ**を数えた）:
+
+| ログ | 開始→終了バイト | 新規行数 | `expandable_segments not supported` | `PYTORCH_CUDA_ALLOC_CONF is deprecated` | `main.py`のアロケータ情報行 |
+|---|---|---|---|---|---|
+| `logs/server.log` | 3,305,983 → 3,313,022 | 53 | 0 | 0 | 0 |
+| `logs/ltx_worker.log` | 6,065,389 → 6,082,963 | 113 | **2** | **1** | 0 |
+| `logs/ltx25_worker.log` | 676,294 → 693,114 | 94 | **1** | **1** | 0 |
+| 合計 | — | — | **3** | **2**（計5件） | **0** |
+
+出所は`engine/worker.py:246`と`engine25/gguf_transformer.py:551`のUserWarning、および`[W902 …] AllocatorConfig.cpp:28`の非推奨警告である。**`main.py`のアロケータ情報行は変更前も0件**だった（`run.ps1`が変数を設定していたので未設定分岐に入らない）——この事実がN4の判定方法を決めた（89.5(4)）。
+
+### 89.5 Step 3 — 変更後の実機ゲートN1〜N6（同日・MCP経由・オーナー了承のもとエージェントが実行）
+
+**RTX 4070 Ti SUPER 16GB。Step 0と同じく`run.ps1`経由でREAL起動し、手動exportはしていない。** §3-104（コミット済み`ffe1d04`）と§3-112（作業ツリー）の改修後のコードである。ベースモデルは`LTX23`開始→N2のときだけ`LTX25`→最後に`LTX23`へ戻した。
+
+**(1) 合否一覧**
+
+| ID | 判定基準 | 結果 | 実測 |
+|---|---|---|---|
+| N1 | 2.3スモークがベースラインとmp4 SHA-256完全一致 | **合格** | `c273b9fd…c100f`＝B1と完全一致 |
+| N2 | 2.5スモークが同じくSHA-256完全一致 | **合格** | `62216a9c…65b7`＝B2と完全一致 |
+| N3 | 新規ログ分に警告2種が1件も出ない | **合格** | 3ログとも0件（Step 0は計5件） |
+| N4 | `main.py`のアロケータ情報行が出ない＋ブロックが存在しない | **合格** | 動的0件、かつ`main.py`に該当変数の参照が1つも無い |
+| N5 | `install_ltx.ps1`のASTパース0エラー＋`Ensure-EngineVenv`の引数名整合＋`-BaseModel`のみの呼び出し形が不変 | **合格** | パース0エラー、未知の引数名0・**余剰の位置引数0**・必須引数の欠落0 |
+| N6 | `PYTORCH_CUDA_ALLOC_CONF`を**設定する**行が0件 | **合格** | 設定形の正規表現でリポジトリ全体を検索して0件 |
+
+**6ゲートすべて合格。不合格・想定外はなし。**
+
+**(2) N1・N2（挙動不変の証明）**: N1＝ジョブ`9fd22de0-…`・SHA `c273b9fd…c100f`・67.42秒（B1は67.36秒）。N2＝ジョブ`dc1a2670-…`・SHA `62216a9c…65b7`・48.67秒（B2は47.19秒）。リクエスト本文はStep 0のものをそのまま再送している。**`expandable_segments`がtorchに拒否されていた＝一度も効いていなかったという前提どおり、削除しても絵は1ビットも変わらない。** 速度も誤差の範囲である。
+
+**(3) N3（警告の消滅）と判定窓の裏取り**: 判定窓はStep 0と同じ方式で囲った——`logs/server.log` 3,313,022→3,318,995（+5,973B・44行）／`logs/ltx_worker.log` 6,082,963→6,094,152（+11,189B・71行）／`logs/ltx25_worker.log` 693,114→709,466（+16,352B・91行）。**この窓が今回の起動〜生成2本を確かに覆っていることは、新規分の`server.log`に両ジョブIDが計6回・`Backend auto-selected: REAL.`が2回現れ、両ワーカーログにも生成行が入っていることで確認した。** 該当行を抜き出した`logdump_step3/*.alloc_hits.txt`は**3本とも0バイト**である（Step 0の同ファイルには5行入っていた）。**「窓が空だから0件」ではないことを、窓の中身の存在で先に示すのがこの型のゲートの作法である。**
+
+**(4) N4は静的確認と両建てにしないと判定にならない**: このゲートは「`main.py`の情報ログが出ないこと」だが、**変更前も0件だった**（89.4の最終段）。動的観測だけでは改修の有無を区別できないので、`main.py`に`PYTORCH_CUDA_ALLOC_CONF`の参照が1つも残っていないという静的確認と併せて合格とした。あわせて`run.ps1`の該当ブロックと`services/engines/ltx/adapter.py`の設定行が無いことも確認している。
+
+**(5) N5の内訳**: `Ensure-EngineVenv`の`param()`は**8個（必須6＋既定つき2）**——`-VenvPath`／`-PythonPath`／`-StateFile`／`-FreezeFile`／`-DirectPins`／`-Label`（必須）＋`-DirectPinArgs`（既定`@()`）／`-DirectPinsLabel`（既定は文字列）。**`-ResolveLatest`と`-PyprojectDir`は宣言から消えている。** 呼び出し2件（`:1393`・`:1399`）はいずれも未知の引数名0・余剰の位置引数0・必須の欠落0。`-BaseModel`のみの呼び出し形も不変で、`scripts/setup.ps1:419`は`& $installScript`（引数なし）、`scripts/install_model.ps1:367`は`& $installScript -BaseModel $plan.Id -SkipVenv -SkipMigrate`である。`ResolveLatest`／`PyprojectDir`／`ResolveArgs`の文字列はスクリプトに1件も残らず、温存対象の`engine/engine-venv-pyproject.toml`・`engine25/engine25-venv-pyproject.toml`は2ファイルとも存在する。**実インストールは走らせていない。**
+
+**(6) N6の内訳**: `$env:…=`／`os.environ[…]=`／`env[…]=`／`setdefault(…)`／`set …=`／`export …`という**設定形**の正規表現でリポジトリ全体（`.venv*`・`outputs/`・`uploads/`・`logs/`・`.python`・`hf_home`を除く）を検索して0件。残る言及は`services/engines/ltx25/adapter.py:706`のdocstring（過去形）・`tests/test_ltx25_adapter.py:2778`の「設定されないこと」を固定するassert・`engine/transformer/block_swap_prefetch.py:48`と`engine/worker.py:262`のコメント（no-opである旨の正しい説明）・文書（履歴と撤去の記録）だけである。
+
+**後始末**: エージェントが起動したバックエンドは停止し、pythonプロセスの残留が無いことを確認した。ベースモデルは`LTX23`／`state=ready`で終了し、`state.json`も`active_base_model: "LTX23"`。前テーマの証跡`outputs/lora-gate-2026-09-02/`には一切書き込んでいない。
+
+### 89.6 機械ゲート（CPUテストと構文解析）
+
+**物差しは「全体スイート」である**（特定ファイルだけを回した件数ではない）。
+
+| 時点 | コマンド | 結果 |
+|---|---|---|
+| コミット①（§3-104）の直後 | `.venv\Scripts\python.exe -m pytest`（**バックエンドを停止した状態で実行**） | **2,136 passed／23 skipped／0 failed** |
+| コミット②（§3-112）の直後 | 同上 | **2,136 passed／23 skipped／0 failed**（236.29秒） |
+
+**直前の基準（§88.4）と同数である。** 2件とも「実行されないコードと、効かない設定行の削除」なので、件数が動かないことが正しい結果になる。
+
+- PowerShell構文解析（`[System.Management.Automation.Language.Parser]::ParseFile`）: `scripts/install_ltx.ps1`＝エラー0件（8,975トークン）／`run.ps1`＝エラー0件（517トークン）。
+- Python構文解析: `main.py`・`services/engines/ltx/adapter.py`・`tests/test_ltx25_adapter.py`とも`ast.parse`が通過。
+- 2.3アダプタの`_build_child_env`に`PYTORCH_CUDA_ALLOC_CONF`の設定を要求するテストは存在しない（2.5側に「設定しないこと」を固定するテストがあるだけで、削除後も真である）。
+
+### 89.7 旧節へ入れた注記（最小限）
+
+**過去の本文は書き換えず、失効した箇所へ1行の追記だけを添えた**（追記専用の作法）。
+
+- **§43.3**（`sageattention`をpyprojectに載せない理由の説明が`-ResolveLatest`を前提にしていた箇所）。
+- **§69.3**（`Ensure-EngineVenv`の「必須引数7つ」）——削除後は必須6＋既定つき2である。
+- **§75.10(4)**（台帳へ2件起票したという表の①＝CUDAアロケータ設定の見直し）——本節でクローズした。
+
+### 89.8 検証の教訓
+
+**(1) 「変更前も0・変更後も0」のゲートは、静的確認と両建てにしないと何も判定していない。** N4がそれで、Step 0の時点でこの性質に気づいたため判定方法を組み替えた。**ゲートを設計したら「変更しなかった場合にも同じ結果が出ないか」を必ず自問すること。**
+
+**(2) ログの窓は「中身があること」を先に示す。** バイトオフセットで囲った新規分が0件でも、窓が空なら何の証拠にもならない。今回はジョブIDと`Backend auto-selected: REAL.`の出現回数で窓の妥当性を先に固めた。
+
+**(3) 警告の出どころはアプリではなく子プロセスである。** `logs/server.log`だけを見ると、変更前から警告0件に見える。CUDA由来の警告を数えるときは必ずワーカーログを対象に含めること。
+
+**(4) `pytest`に`-q`を明示すると、この構成では件数のサマリ行が出ない。** `pyproject.toml`の`[tool.pytest.ini_options] addopts = "-q"`と重なって`-qq`相当になり、`2,136 passed／23 skipped`の1行が抑止される（終了コードは0のまま）。**件数を物差しとして記録する場面では`-q`を足さずに`python -m pytest`で回すこと。**
+
+### 89.9 状態
+
+**実機ゲートN1〜N6・機械ゲートとも全合格。** 台帳の§3-104・§3-112はいずれも[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移してクローズ済みである（仕様書は§3-104でv0.5.50、§3-112でv0.5.51。§2.4・§2.5・§5.4・§9.2を現行化した）。**残件は無い。**

@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.50**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.51**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-09-02**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -99,6 +99,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.48 | 2026-09-01 | **Gradio 同梱 UI の Settings ＞ Models に、ベースモデル（LTX 2.3 ／ LTX 2.5 の系統）を選ぶドロップダウンを新設したことを反映（文書のみ。凍結 API 契約〔§6〕・実装への変更は無い——使うのは既存の `GET /models` と `POST /pipeline/load` だけである）**。**§12**（Settings タブの Models セクションの記述を「ベースモデルのドロップダウン＋カテゴリ別ドロップダウン」の2段構成へ改め、実装から削除したハードコードのフォルダ案内の記述を落とした）を更新した。**同じ日に Gradio 側バッチのスキップ判定もフロントエンドの規約へ追随したが、契約の正本は `Docs/BATCH_A2V_CSV_SPEC.md` なので本書には書かない。** オーナー実機目視ゲートの記録は `Docs/VERIFICATION_LOG.md` §85、台帳のクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-136〜§3-139。<br>**【同日・敵対的レビューの確定指摘による追記】** **§0.3 の SSOT 地図へ `Docs/BATCH_A2V_CSV_SPEC.md` の行を追加した**——本書が同文書を「契約の正本」として参照しているのに、地図側に載っていなかったためである（版は上げない。地図への1行追加であり、本文の記述は変わっていない）。 |
 | v0.5.49 | 2026-09-02 | **kohya 形式（LoRA 学習ツール kohya-ss 系が出力する書式）の LoRA を読み込めるようにし、あわせて `loras[].strength` の意味論を ComfyUI と同じに戻したことを反映（台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-108）**。**加算だけの版ではない——凍結 API 契約（§6）の既存フィールド `loras[].strength` の意味が変わっており、後方互換ではない。** 従来はアダプタのヘッダに残っていたメタデータ `ss_network_alpha ÷ ss_network_dim` を要求強度へ自動で掛けていたが（2026-07-06 の §29.4 決定）、**A/B 形式への変換器はその倍率を重みへ畳み込んだうえでメタデータを無変更のまま複製するため、これは化石のメタデータの二重適用だった**。**この撤去により `Pixar_Toon` と `LTX-2.3-Henshin` の実効強度は従来の 2 倍（＝学習した側が意図したとおりの強さ）になる**——以前と同じ絵が欲しいときは `strength` に 0.5 を指定する（変更後の 0.5 が変更前の 1.0 とバイト単位で一致することを実機で確認済み）。alpha は本来それが在る場所＝kohya 形式のファイルが持つ `.alpha` テンソルでのみ扱い、`alpha ÷ rank` を読み込み時に B（up）側へ畳み込む。**§6.3 の LoraSpec**（`strength` の行へ意味論と変更日を明記）／**§6.8**（新設エラーコード `LORA_FORMAT_UNSUPPORTED`〔422〕の行を追加し、ファクトリ件数を 36→37 件・本表掲載分を 31→32 件へ訂正）を更新した。**A/B 形式のアダプタの出力は 1 バイトも変わっていない**（LTX 2.3・LTX 2.5 の両系統で mp4 の SHA-256 一致を確認済み）。利用者向けの説明は `README.md`「LoRA」の項と §7.1、撤回の根拠・機械ゲート・実機ゲート G1〜G9 の正本は `Docs/VERIFICATION_LOG.md` **§88**、実装とクローズの記録は `Docs/PENDING_TASKS_CLOSED.md` §3-108 である。 |
 | v0.5.50 | 2026-09-02 | **インストーラの任意フラグ `-ResolveLatest`（エンジン用の仮想環境を、固定版ではなく最新版で解決し直すためのもの）を、実装ごと削除したことを反映（挙動不変の引き算。API・生成結果への変更は無い）**。同フラグは導入初日（2026-07-02）から `uv` に渡すパスを取り違えており**一度も成功したことがなく**、利用者導線（`setup.bat` / `install-LTX25.bat` / `README.md`）にも一切載っていなかったため、**修理ではなく削除**というオーナー裁定（2026-09-02）に従って、フラグ宣言・分岐本体・そこにしか届かない受け渡し（`Ensure-EngineVenv` の `$PyprojectDir` / `$ResolveArgs` と呼び出し側の引数・変数 `$enginePyprojectDir` / `$ltx25PyprojectDir`）まで連鎖でまとめて落とした。**固定版（freeze）の適用経路には 1 文字も触れていない**ので、`setup.bat` と `install-LTX25.bat` の実行内容は変わらない。**§0.1 の版メタ**（本欄）／**§2.5**（`.nz-engine-state` の説明から「`-ResolveLatest` を通った場合はマーカーを書かない」の一文を削除——そういう経路が無くなったため）／**§5.4**（`sageattention` を pyproject に載せない理由を、フラグ前提の書き方から「同ファイルを手で解決し直した環境では保証外」という現行の書き方へ）を更新した。**`engine/engine-venv-pyproject.toml` と `engine25/engine25-venv-pyproject.toml` の 2 ファイルは残してある**——コードから参照されなくなったが、**次に torch を上げるときの依存仕様の正本はこの 2 ファイルだけ**だからで、手で解決し直す手順は各ファイルの冒頭コメントに書いた。クローズの記録は `Docs/PENDING_TASKS_CLOSED.md` §3-104。 |
+| v0.5.51 | 2026-09-02 | **GPU メモリの確保方針の環境変数 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` を、プロジェクトから全撤去したことを反映（挙動不変の引き算。API・生成結果・ログの生成内容への変更は無い）**。この指定は **Windows の PyTorch に一度も受け付けられておらず**（`expandable_segments not supported on this platform` と警告して従来型のキャッシュアロケータのまま動く）、導入は実測前の設計書の定石記述だった。設定していたのは `run.ps1`・`scripts/install_ltx.ps1`・`services/engines/ltx/adapter.py` の 3 箇所（LTX 2.5 側は 2026-08-24 に削除済み）で、**その 3 箇所と `main.py` の未設定時の情報ログを削除**した。断片化の実問題は発生源で解決済みである（LTX 2.3 = denoise 直前の `empty_cache()`、先読み block swap = アリーナリング）。台帳論点の `max_split_size_mb` は `Docs/VERIFICATION_LOG.md` §7.3 で否定実測済み（baseline と同値）のため**新しいつまみは足さない**。**§2.4**（環境変数の表から該当行を削除し、撤去の経緯と「利用者が設定する必要は無い」ことを注記）／**§9.2**（LTX 2.3 のワーカーに渡す env の一覧から削除し、「凍結中のため行そのものは残してある」という記述を撤去済みの現行へ）／**§0.1 版メタ**（本欄）を更新した。クローズの記録は `Docs/PENDING_TASKS_CLOSED.md` §3-112。 |
 
 ### 0.2 スコープ
 
@@ -218,9 +219,10 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | 変数 | 用途 |
 |------|------|
 | `UV_PYTHON_INSTALL_DIR = <root>\.python` | uv 管理の Python 本体をプロジェクト内に固定 |
-| `PYTORCH_CUDA_ALLOC_CONF = expandable_segments:True` | **Windows では効果が無い（設定しても無視される）**。`run.ps1` / `scripts/install_ltx.ps1` は歴史的経緯で今も設定するが、PyTorch は Windows でこの指定を拒否し（`expandable_segments not supported on this platform` と警告して従来型のキャッシュアロケータのまま動く）、torch 2.9 では変数名そのものが `PYTORCH_ALLOC_CONF` へ非推奨化されている（実測 2026-08-24・torch 2.9.1、記録は `outputs/b4-vram-diag/`）。未設定でも起動には何の支障も無い（起動ログには情報行が1行出るだけで、警告ではない）。断片化そのものへの対策は、実際に断片化が起きる場所＝先読み block swap のアリーナリング（`engine/transformer/block_swap_prefetch.py`）で行っている |
 | `UV_CACHE_DIR = <root>\.uv_cache`（install 時） | uv ダウンロードキャッシュをプロジェクト内へ |
 | `HF_HOME = <root>\hf_home`（install 時） | HuggingFace キャッシュをプロジェクト内へ |
+
+> **`PYTORCH_CUDA_ALLOC_CONF` は 2026-09-02 に全撤去した（挙動不変）。** かつては `run.ps1` / `scripts/install_ltx.ps1` / LTX 2.3 のワーカー起動が `expandable_segments:True` を設定しており、上の表にも行があった。しかし **Windows の PyTorch はこの指定を一度も受け付けていない**——`expandable_segments not supported on this platform` と警告して従来型（セグメント式）のキャッシュアロケータのまま動く。この事実は最初の実測（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §7.2・2026-06-29）の時点で警告として出ており、2026-08-24 の再実測（torch 2.9.1、記録は `outputs/b4-vram-diag/`）でも同じだった。torch 2.9 では変数名そのものが `PYTORCH_ALLOC_CONF` へ非推奨化されてもいる。**設定しても効かない行を残すと、起動のたびに警告が出るうえに「16GB を成立させている設定」だと誤解される**ため、改名ではなく削除を選んだ（オーナー裁定 2026-09-02）。**利用者が設定する必要は無い。** 断片化そのものへの対策は、実際に断片化が起きる場所で済ませてある——denoise 直前の `empty_cache()`（同 §7.4。LTX 2.3 のワーカー）と、先読み block swap のアリーナリング（`engine/transformer/block_swap_prefetch.py`。両系統が共有する実行時コード。同 §75.7）である。クローズの記録は [`Docs/PENDING_TASKS_CLOSED.md`](Docs/PENDING_TASKS_CLOSED.md) §3-112。
 
 ### 2.5 インストール導線
 
@@ -1444,7 +1446,7 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 - `LTX_KEEP_RESIDENT` は **2026-08-02 に撤去済み**（この env はもう設定されないし、設定しても読まれない）。モデル骨格のジョブ間常駐は、環境変数ではなく `POST /generate`・`POST /generate/chain` の per-job フィールド（ジョブごとのリクエスト項目）`keep_resident`（既定 `false`）で指定する。§6.2 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照。
 - `LTX_COMPONENT_FILES=1`（`config.vram.use_component_files=true` に連動 / comp=1）。
 - `LTX_TE_OFFLOAD=1` / `LTX_DIT_CPU_LOAD=1`（既定 ON、`--no-te-offload` / `--no-dit-cpu-load` で無効化）。
-- `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` / `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`。**ただし1つ目は Windows では無効である**（§2.4 の表を参照。設定しても PyTorch に拒否され、従来型のキャッシュアロケータのまま動く）。LTX 2.3 は凍結中のため行そのものは残してあるが、「16GB を成立させている設定」ではない。LTX 2.5 側（`ltx25`）は同じ理由でこの行を削除済みである（下の注記を参照）。
+- `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`（プロセス衛生。加えて `PYTHONPATH=<project_root>`）。**かつてここに `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` を設定する行があったが、2026-09-02 に削除した**（§2.4 の注記を参照）。Windows の PyTorch はこの指定を拒否して従来型のキャッシュアロケータのまま動くため、**削除しても挙動は1ビットも変わらない**——「16GB を成立させている設定」ではなかった。以前は「LTX 2.3 は凍結中なので行そのものは残す」としていたが、効かない設定を残す理由が無いという裁定で、LTX 2.5 側（2026-08-24 に削除済み）と揃えた。
 
 `keep=0`（ジョブ毎再 materialize）と `comp=1`（Path B）の組合せが本番既定である理由は、**マルチジョブ連続生成での commit（仮想メモリ）枯渇回避**にある。`keep=1` は 720p の Gemma text-encode 中に out-of-place な `.to(cuda)` で瞬間二重在が発生し native crash する（VERIFICATION_LOG §10.2）。`comp=0` は毎ジョブ 46GB モノリスを再 materialize して job3 で commit 枯渇 crash（同 §10.3）。`comp=1/keep=0` は 46GB モノリスを使わず commit を束縛し、T2V・I2V ともマルチジョブ連続 + 音声で PASS 済（同 §10.3 / §10.7）。
 

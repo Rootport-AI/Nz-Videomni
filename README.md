@@ -36,7 +36,7 @@ API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`
 閉じ込めます（仕様書 2.5）。
 
 - グローバル/システムの `pip install` は **禁止**。必ず `uv` + プロジェクトローカル venv。
-- 環境変数（`PYTORCH_CUDA_ALLOC_CONF`, `UV_PYTHON_INSTALL_DIR`）は **そのプロセス内のみ**。永続化しない。
+- 環境変数（`UV_PYTHON_INSTALL_DIR` など）は **そのプロセス内のみ**。永続化しない。
 - 前提ツール（`uv` / `ffmpeg` / `ffprobe`）も `tools/` に取り込み、`PATH` への追加は **そのプロセス内のみ**。
   Windows の環境変数設定は書き換えません。
 - パッケージのダウンロードキャッシュも `.uv_cache/` としてプロジェクト内に置きます（システムのユーザープロファイル配下は使いません）。
@@ -511,15 +511,17 @@ x4 アップスケーラーなども、対応表に無いものはそのまま�
 
 # もしくは直接（環境変数と PATH は自分で用意することになります）
 $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
-$env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
 .\.venv\Scripts\python.exe main.py
 ```
 
-> **`PYTORCH_CUDA_ALLOC_CONF` の行は、Windows では効果が無いことが確認済みです。** PyTorch は
-> 「`expandable_segments not supported on this platform`」という警告を出して従来型のメモリ管理のまま動きます
-> （実測。[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75.7(2)）。さらに torch 2.9 では変数名そのものが
-> `PYTORCH_ALLOC_CONF` へ移っています。**現状は害の無い置物**なので上の例からは消していませんが、
-> 扱いは台帳[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §3-112 で整理する予定です。
+> **GPU のメモリまわりの環境変数は、設定する必要はありません。** 以前はここで
+> `PYTORCH_CUDA_ALLOC_CONF` へ `expandable_segments:True` を設定する例を載せていましたが、**この指定は Windows では
+> そもそも効きません**——PyTorch が「`expandable_segments not supported on this platform`」という警告を出して、
+> 従来どおりのメモリ管理のまま動きます（実測。[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §7.2・§75.7(2)）。
+> 効かない設定を残すと起動のたびに警告が出るだけなので、**2026-09-02 にプロジェクトから全部取り除きました**
+> （起動スクリプトも、生成を行うワーカーも、もうこの変数を設定しません）。挙動は変わっていません。
+> メモリの断片化への対策は、実際に断片化が起きる場所（生成の直前と、モデルの部品を GPU へ出し入れする仕組み）で
+> 行っています。
 
 `run.ps1` は **アプリ**（`./.venv` の `main.py`）を起動します。real backend が選ばれると、アプリが
 `./.venv-engine\Scripts\python.exe -m engine.worker` を subprocess として自動 spawn します（手動起動は不要）。

@@ -146,7 +146,6 @@ Set-Location $ProjectRoot
 $env:UV_PYTHON_INSTALL_DIR = "$ProjectRoot\.python"
 if (-not $env:UV_CACHE_DIR) { $env:UV_CACHE_DIR = "$ProjectRoot\.uv_cache" }
 if (-not $env:HF_HOME) { $env:HF_HOME = "$ProjectRoot\hf_home" }
-if (-not $env:PYTORCH_CUDA_ALLOC_CONF) { $env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" }
 
 $ModelsDir = "$ProjectRoot\models"
 $ManifestDir = "$ProjectRoot\scripts\manifests"

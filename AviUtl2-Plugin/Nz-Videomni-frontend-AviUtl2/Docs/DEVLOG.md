@@ -2773,7 +2773,7 @@ LTX 2.3でStyle LoRA（画風・キャラクターLoRA）適用時に音声出�
 - **のりしろの値はサーバーへ送らない**。`head_px`/`tail_px`はAPIにはあるが、リクエストには載せていない。実測で較正された値（頭25／尾24。バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §55.5）をサーバー側の既定に自動追随させるためで、**画面から動かせないつまみを送ると、送った値が正であるかのように見えてしまう**。フロント側の25/24はバーの縞と説明文1行を描くためだけの写しである。窓長の正は`clips[0].num_frames`1本。
 - **パネルにわざと置かなかったもの**: DURATION（尺）欄——長さは区間バーが決めるので、数字を別に置くと正が2つになる。素材の差し替え——右クリックしたオブジェクトに対して測った区間なので、素材だけ入れ替えると意味が変わる。プロンプト欄——§67で全画面共通に一本化した`PromptBar`を読む。のりしろのつまみ——上記のとおり。
 - **生成時の再検証は注意文にとどめ、ブロックしない**（着手時のオーナー確定事項どおり）。パネルを開いたあとにタイムラインの選択が変わっていたら「撮り直されるのは、ここに表示されている範囲です」と出すだけで、生成ボタンは止めない。
-- **LoRAはv1では対応しない**。`loras`は送らないが、共有プロンプト欄には`<lora:名:強度>`が書かれうるので、**Create/Chainと同じパーサでタグを文字列としても取り除いてから**送る。素通しにするとタグの字面がそのまま指示文の一部として効いてしまう。解禁の検討は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-62へ起票した。
+- **LoRAはv1では対応しない**。`loras`は送らないが、共有プロンプト欄には`<lora:名:強度>`が書かれうるので、**Create/Chainと同じパーサでタグを文字列としても取り除いてから**送る。素通しにするとタグの字面がそのまま指示文の一部として効いてしまう。解禁の検討は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-62へ起票した。 **→ スタイルLoRAは2026-09-02に解禁した（§103）。台帳の記録はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-62-02**（この行の`PENDING_TASKS.md`リンクは当時から相対パスが実体を指していない。バックエンドの文書は`../../../Docs/`配下である）。
 - **プロンプト空欄を許している**のは意図である。同じ内容のまま「もう一度撮る」のは撮り直しとして正当な使い方だからである。
 - **音声ハンドルのサイドカーは探していない**。バックエンドが窓まるごとを返すので、重ね置きに必要な重複素材は出力mp4の中にある（2026-08-09の撤回。同§55.8）。
 - **変更ファイル（webui）**: 新規7点（`timeline/retakeWindow.ts`／`retakeWindow.test.ts`／`timeline/selectionRange.ts`、`modes/edit/RangeBand.tsx`／`RangeBand.css`／`RangeBand.test.tsx`、`modes/edit/RetakePanel.tsx`）＋`modes/edit/useRetakeForm.ts`／`useRetakeForm.test.tsx`／`EditScreen.retake.test.tsx`、改修は`modes/edit/EditScreen.tsx`／`EditScreen.css`／`editReasonMessages.ts`／`timeline/prefillSeed.ts`（＋テスト）／`timeline/menuSelection.ts`／`shell/AppShell.tsx`／`i18n/strings.ts`（`edit.retake.*`のみ）／`api/types.ts`。
@@ -3739,3 +3739,46 @@ const selection = initialIntent?.intent === "outpaint" ? initialIntent.selection
 `npm run typecheck` エラー0。`EditScreen.retake.test.tsx` **17/17 合格**。`build.ps1` → `deploy.ps1`で、実機のPluginフォルダとバックエンドリポジトリの配布コピー`AviUtl2-Plugin/NzVideomni.aux2`の2箇所へ配置済み（2026-09-02 00:00）。**台帳はクローズした**（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-63-02。本書には旧§3-63〔IC-LoRA Depth/Deblur〕が既にあるため`-02`）。
 
 **教訓（`npm test`のスイート全体実行が抱える罠）**: 本テーマの並行作業で、フロントエンド側を担当したエージェントが、稼働中の実バックエンドに気づかないまま`npm test`をスイート全体で実行し、`src/api/backend.integration.test.ts`が18620番ポートの実バックエンドを検出して実際の生成ジョブを送信してしまう事故があった（LTX 2.3がGPUへロードされ、ジョブが1本`outputs/`に残っている）。**今後の規律**: `GET /status`が到達不能であると確認できた場合を除き、エージェントが`webui`のテストを回すときは`backend.integration.test.ts`を除外すること。本節のテスト（`EditScreen.retake.test.tsx`単体実行）はこの罠を踏まない。詳細はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §87.4。
+
+## 103. 撮り直し（Retake）でスタイルLoRAを使えるようにした — 塞いでいたのは`buildRequest`の1関数だけだった（バックエンド台帳§3-62）（2026-09-02）
+
+### 103.1 結論
+
+**撮り直しのプロンプト欄に`<lora:名:強度>`と書くと、そのLoRAが効くようになった。** §68のv1で「LoRAは対応しない」と決めて以来、`useRetakeForm.ts`はタグを**文字列として剥がすだけ**で`loras`をリクエストへ載せていなかった。ところが**バックエンドは、LTX 2.3・LTX 2.5のどちらも、撮り直しのジョブで`loras`を素通しで受け付ける**——撮り直しは1クリップのチェーンジョブ（`POST /generate/chain`）であり、`loras`はそのスキーマに元から在って検証も通る。**塞いでいたのはフロントエンドの1関数だけで、バックエンドは1行も変えていない。**
+
+### 103.2 直したこと
+
+`webui/src/modes/edit/useRetakeForm.ts`の`buildRequest`で、`parseLoraPrompt`の戻り値を**両方**使うようにした（従来は`strippedPrompt`だけを取り出して`loras`を捨てていた）。
+
+```ts
+const { strippedPrompt, loras } = parseLoraPrompt(prompt);
+return {
+  prompt: strippedPrompt.trim(),
+  // タグが 1 つも無ければキーごと省く（Chain の `buildRequest` と同じ作法）。
+  ...(loras.length > 0 ? { loras } : {}),
+```
+
+**キーを省く作法は意味を持っている**——LoRAを使わない撮り直しのリクエストは、この改修の前後でバイト単位で同じである。
+
+**`combineLoras`は通していない。** あれはCreate／Chainedが持つ制御系（IC-LoRA）の選択パネルとプロンプト内のタグを混ぜるための関数で、**Editタブの撮り直しにそのパネルは無い**。無いものを混ぜる関数を通すと、読む人に「どこかに制御系の選択UIがあるはずだ」と思わせてしまう。
+
+**制御系LoRAの名前を手打ちされても、クライアント側では止めない。** 撮り直しは`reference_video_id`を送れない（両者はAPIで排他）ので、制御系を指定したリクエストはバックエンドの既存422 `LORA_REQUIRES_REFERENCE`がそのまま断る。**ここにだけ新しいゲートを足すと「どのタブで何が弾かれるか」の規則が1つ増える**ので、既存の422に委ねた（UIのルールは例外を増やさず単純に保つ）。
+
+### 103.3 テスト
+
+`useRetakeForm.test.tsx`の「`loras`を送らない」という固定（pin）を**反転**させ、あわせて2件を新しく固定した。
+
+- LoRAタグは指示文（`prompt`）から外し、`loras[]`として送る（Create／Chainedと同じ扱い）。
+- タグが1つも無ければ、`loras`キー自体を載せない。
+- 制御系LoRAの名前を手打ちしてもクライアント側では止めず、そのまま`loras[]`に載せる（バックエンドの422に委ねる、という上記の設計判断の固定）。
+
+**フロントエンドのテストは2,638件すべて緑**（`npm run typecheck`＝`tsc -b`は0エラー、`npm run lint`も通過）。**実バックエンドが稼働しているあいだにスイート全体を回すときは、`src/api/backend.integration.test.ts`を必ず`--exclude`すること**——実GPUへ本物のジョブを投げてしまう（§102の教訓）。
+
+### 103.4 ゲートと状態
+
+**実機ゲートはバックエンド側の記録が正本である**——[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) **§88.5**のG7〜G9で全合格した（MCP経由でバックエンドの受け口を直接踏む腕。フロントエンドの差分そのものは上記のvitestが担保する）。**撮り直し＋スタイルLoRAで、`metadata.json`の`retake.freeze_proof`の8項目（映像の頭・尾×2ステージ、音声の頭・尾×2ステージ）がすべて0.0・`pass:true`のまま維持された**ことを、LTX 2.3・LTX 2.5・「音声を作り直さない×`audio_strength=0.0`」の3構成で確認している。
+
+**制御系のIC-LoRA（参照動画つきの制御）は本テーマに含めていない。** アプリ層の422と2つのエンジンのassert、計3箇所で明示的に禁止されており、解禁は別テーマである（バックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) **§3-141**へ起票した）。
+
+- **変更ファイル（webui）**: `modes/edit/useRetakeForm.ts`／`modes/edit/useRetakeForm.test.tsx`の2点のみ。
+- **状態**: 実装・テスト・実機ゲートとも完了。台帳の記録はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-62-02。

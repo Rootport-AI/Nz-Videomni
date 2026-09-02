@@ -6440,7 +6440,7 @@ WDDMは確保が物理容量を超えた分をシステムメモリで裏打ち�
 
 ① **2.3の蒸留LoRAが2.5の全Linearを過不足なく覆った。** #7（`ltx-2.3-22b-distilled-lora-1.1_fro90_ceil72_condsafe`）のペア数1,660は、2.5側の`nn.Linear`の総数1,660と**完全に一致**し、そのすべてが1対1で解決した。**LTX 2.3とLTX 2.5のLinearの顔ぶれは名前・形状ともに完全に同一**であり、これが「ほとんどの2.3 LoRAは2.5で無変換で動く」という公式説明の最も強い機械的裏付けになる。
 
-② **kohya形式の2本は、2.5以前に2.3エンジンのローダーが読めていない。** `engine/gguf/ic_lora_common.py:44`の`_SUFFIX_A = ".lora_A.weight"`が固定なので、`.lora_down.weight`／`.lora_up.weight`／`.alpha`という方言はペアが1組も作られない。**警告こそ出るが実質的に何も起こらない（無音の空振り）** 状態で、これは**LTX 2.3でも同じ**である。詳細と対処は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108へ起票した。 **【2026-09-02 追記】kohya形式は §88 で読み込み対応した（`alpha ÷ rank` を読み込み時にB側へ畳み込む）。本表の #13・#14 は現在の実装では「判定対象外」ではない——実測のペア数は MysticXXX が 1,228・SynthPussy_01_rank32 が 576 である。**
+② **kohya形式の2本は、2.5以前に2.3エンジンのローダーが読めていない。** `engine/gguf/ic_lora_common.py:44`の`_SUFFIX_A = ".lora_A.weight"`が固定なので、`.lora_down.weight`／`.lora_up.weight`／`.alpha`という方言はペアが1組も作られない。**警告こそ出るが実質的に何も起こらない（無音の空振り）** 状態で、これは**LTX 2.3でも同じ**である。詳細と対処は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-108へ起票した。 **【2026-09-02 追記】kohya形式は §88 で読み込み対応した（`alpha ÷ rank` を読み込み時にB側へ畳み込む）。本表の #13・#14 は現在の実装では「判定対象外」ではない——ペア数は MysticXXX が **1,228**（実機のattachログで直接確認した値。§88.5のG5）、`SynthPussy_01_rank32` が **576**（本表が実測した鍵1,728本＝`lora_down`／`lora_up`／`alpha`各576からの導出であって、実機での確認はしていない）である。**
 
 ③ **`av_ca_*`の軸判定は2.5でもそのまま効く。** #7の非block命中28件はすべてLTXModel直下に実在する`nn.Linear`で、形状も一致した（`adaln_single`系4種×3・`av_ca_*`系4種×3・`patchify_proj`／`proj_out`／`audio_patchify_proj`／`audio_proj_out`各1）。うち`av_ca_*`の4つは`ic_lora_common.py`の音声軸・映像軸の例外表（`_AUDIO_AXIS_EXACT`／`_VIDEO_AXIS_EXACT`）に載っている名前であり、**`audio_strength`の軸判定が2.5でも成立する**ことが裏付けられた。
 
@@ -10348,7 +10348,7 @@ G1〜G6・G10は合格した（完了条件の正本は台帳[`PENDING_TASKS_CLO
 
 ### 88.3 §71.6 の「kohya形式2本は判定対象外」の更新
 
-§71.6（LTX 2.5の器へLoRA 14本の鍵と形状を突き合わせた実験2A）は、`LTX2.3-MysticXXX`と`SynthPussy_01_rank32`の2本を**ペア数0・判定対象外**として表に載せ、所見②で「2.3のローダーが読めていない」と記録していた。**本テーマでこの2本は読み込み対応した。** 現在の実装でのペア数は MysticXXX が **1,228**（実機のattachログで確認。88.5のG5）・`SynthPussy_01_rank32` が **576** である。§71.6の所見②には本節を指す1行注記を添えてある。
+§71.6（LTX 2.5の器へLoRA 14本の鍵と形状を突き合わせた実験2A）は、`LTX2.3-MysticXXX`と`SynthPussy_01_rank32`の2本を**ペア数0・判定対象外**として表に載せ、所見②で「2.3のローダーが読めていない」と記録していた。**本テーマでこの2本は読み込み対応した。** 現在の実装でのペア数は、MysticXXXが**1,228**——これは実機のattachログで直接確認した値である（88.5のG5）。`SynthPussy_01_rank32`は**576**で、こちらは§71.6が実測した鍵1,728本（`lora_down`／`lora_up`／`alpha`各576）からの導出であり、実機では確認していない。§71.6の所見②には本節を指す1行注記を添えてある。
 
 **なお`outputs/ltx25-iclora-compat/a_key_shape_check.py`（git管理外の研究スクリプト）は、この2本について0だった値が上記へ変わる。** 製品コードではないので影響は無い。
 

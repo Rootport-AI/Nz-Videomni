@@ -538,12 +538,21 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
 
   const buildRequest = useCallback((): GenerateChainRequest => {
     const windowStartSec = window?.ok && mapping?.ok ? window.startSec - mapping.trimOffsetSec : 0;
+    // プロンプトの `<lora:…>` タグは Create/Chain とまったく同じ扱い（§3-62）:
+    // 同じパーサで指示文（`strippedPrompt`）と `loras[]` に分け、両方を送る。
+    // タグを外すだけで `loras` を捨てていた旧契約は、Retake も 1 クリップの
+    // チェーンジョブでバックエンドが素通しで受けるため、意味を失った。
+    //
+    // `combineLoras` は**通さない**: それは Create/Chain が持つ制御系（IC-LoRA）
+    // 選択パネルと混ぜるための関数で、Retake にそのパネルは無い。制御系の名前を
+    // 手打ちされた場合もクライアントでは止めず、バックエンドの既存 422
+    // （`LORA_REQUIRES_REFERENCE`）に委ねる —— ここにだけ別のゲートを増やすと、
+    // 「どのタブで何が弾かれるか」の規則が増える。
+    const { strippedPrompt, loras } = parseLoraPrompt(prompt);
     return {
-      // プロンプトからは `<lora:…>` タグを外すが、`loras` は**送らない**。
-      // Retake の確定契約（バックエンド監督B）に LoRA は無い。かといって素通しに
-      // すると、タグの文字列がそのまま指示文の一部として効いてしまうので、
-      // Create/Chain と同じパーサで外すところまではやる。
-      prompt: parseLoraPrompt(prompt).strippedPrompt.trim(),
+      prompt: strippedPrompt.trim(),
+      // タグが 1 つも無ければキーごと省く（Chain の `buildRequest` と同じ作法）。
+      ...(loras.length > 0 ? { loras } : {}),
       width,
       height,
       frame_rate: frameRate,

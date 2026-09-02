@@ -377,12 +377,37 @@ describe("useRetakeForm — buildRequest", () => {
     expect(result.current.buildRequest().retake?.regenerate_audio).toBe(false);
   });
 
-  it("プロンプトの LoRA タグは外す（loras は送らない契約なので、素通しは指示文を汚す）", async () => {
+  // §3-62: 以前は「タグを外して `loras` は送らない」契約だったが、バックエンドは
+  // Retake（1 クリップのチェーンジョブ）でも `loras` を素通しで受けるため、
+  // Create/Chain と同じ扱いへ揃えた。
+  it("プロンプトの LoRA タグは指示文から外し、loras[] として送る（Create/Chain と同じ扱い）", async () => {
     const { result } = renderForm(makeIntent(), {}, "a cat <lora:Pixar_Toon:0.8>");
     await waitReady(result);
     const body = result.current.buildRequest();
     expect(body.prompt).toBe("a cat");
+    expect(body.loras).toEqual([{ name: "Pixar_Toon", strength: 0.8 }]);
+  });
+
+  it("タグが無ければ loras キー自体を載せない", async () => {
+    // `renderForm` の既定プロンプト "a cat" にはタグが無い。
+    const { result } = renderForm(makeIntent());
+    await waitReady(result);
+    const body = result.current.buildRequest();
+    expect(body.prompt).toBe("a cat");
     expect(body).not.toHaveProperty("loras");
+  });
+
+  // 制御系（IC-LoRA）を手打ちされてもクライアントは止めない。Retake には制御系の
+  // 選択パネルが無く、参照動画も付けられないので、この組み合わせはバックエンドの
+  // 既存 422（`LORA_REQUIRES_REFERENCE`）が断る。ここにだけ別のゲートを増やさない
+  // ことがこの pin の主旨。
+  it("制御系 LoRA の名前を手打ちしてもクライアント側では止めず、そのまま loras[] に載せる", async () => {
+    const { result } = renderForm(makeIntent(), {}, "a cat <lora:in-outpainting:1.0>");
+    await waitReady(result);
+    const body = result.current.buildRequest();
+    expect(body.prompt).toBe("a cat");
+    expect(body.loras).toEqual([{ name: "in-outpainting", strength: 1 }]);
+    expect(result.current.isValid).toBe(true);
   });
 });
 

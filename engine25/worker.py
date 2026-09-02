@@ -48,7 +48,8 @@ Protocol (one JSON object per line; parent -> worker):
       change. A failure here is fatal: ``error`` + exit 1, which is what the
       app's load-failure path expects.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   output_path, [images], loras, reference_video, [outpaint]}
+   output_path, [images], loras, reference_video, [outpaint],
+   [keep_resident_embeddings]}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
       ignores (negative_prompt, num_steps, vae_mode, ...) may ride along; each
@@ -85,7 +86,8 @@ Protocol (one JSON object per line; parent -> worker):
       top-level ``ltx25``, never ``outpaint.ltx25``.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
-   [stage2_window], [source], [audio_source], [retake], [end_source]}
+   [stage2_window], [source], [audio_source], [retake], [end_source],
+   [keep_resident_embeddings]}
       One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
       body keys are the 2.3 chain op's, verbatim, because the app builds one
       payload shape for whichever engine is loaded. ``clips`` entries are
@@ -117,7 +119,7 @@ Protocol (one JSON object per line; parent -> worker):
       (``nag``, ``vae_mode``) is REFUSED BY NAME rather than
       ignored -- see ``CHAIN_UNSUPPORTED_KEYS``. Both are engine-level knobs;
       no chain MODE is on that list any more.
-      The four acceleration knobs are NOT on that list: all of them apply to
+      The five acceleration knobs are NOT on that list: all of them apply to
       the chain unchanged.
       The ``done`` reply adds ``vae_mode_used`` (same fact and vocabulary as the
       single op's, 台帳 §3-131) and ``chain``: the whole layout + metadata dict,
@@ -570,6 +572,20 @@ def _resolve_keep_resident(msg: dict) -> bool:
     return bool(msg.get("keep_resident", False))
 
 
+def _resolve_keep_resident_embeddings(msg: dict) -> bool:
+    """Resolve a job's ``keep_resident_embeddings``. Missing key -> False.
+
+    The EmbeddingsProcessor's own switch, on the same absent-means-release
+    contract as :func:`_resolve_keep_resident` and for the same reason: a
+    payload without the key is not "leave it as it was", it is an explicit
+    instruction to release whatever a previous job left resident (see
+    :meth:`engine25.pipeline25.Ltx25Pipeline.set_acceleration_job`). LTX 2.3's
+    worker has no matching key at all -- the EmbeddingsProcessor is a 2.5-only
+    component, so this knob is 2.5-only too.
+    """
+    return bool(msg.get("keep_resident_embeddings", False))
+
+
 def _resolve_nag(msg: dict):
     """Resolve a worker ``nag`` block -> NagParams / VsfParams, or None when
     absent/falsy.
@@ -747,22 +763,24 @@ def _do_generate(msg: dict) -> None:
     # validated is the one thing this feature must never do.
     outpaint = msg.get("outpaint")
 
-    # The four acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
+    # The five acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
     # written before they existed resolves to today's behaviour, and all are
     # armed below rather than passed to ``generate``: they are per-job state on a
-    # resident process, not generation parameters. For ``keep_resident`` the
-    # absent case is an instruction rather than a default -- see its reader.
-    # ``attention_backend`` is the only one that can REFUSE the job (an unknown
-    # value is a protocol disagreement), and the only one that returns a pair:
-    # the second half is "sage was asked for and this process cannot serve it".
+    # resident process, not generation parameters. For ``keep_resident`` and
+    # ``keep_resident_embeddings`` the absent case is an instruction rather than
+    # a default -- see their readers. ``attention_backend`` is the only one that
+    # can REFUSE the job (an unknown value is a protocol disagreement), and the
+    # only one that returns a pair: the second half is "sage was asked for and
+    # this process cannot serve it".
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
     keep_resident = _resolve_keep_resident(msg)
+    keep_resident_embeddings = _resolve_keep_resident_embeddings(msg)
     attention, attention_degraded = _resolve_attention(msg)
 
-    # The non-CFG negative prompt. ABSENT-MEANS-OFF like the four above, and
+    # The non-CFG negative prompt. ABSENT-MEANS-OFF like the five above, and
     # additive for the same reason: a payload written before this existed
-    # resolves to None and the job runs exactly as it did. Unlike those four it
+    # resolves to None and the job runs exactly as it did. Unlike those five it
     # is not an acceleration knob -- it changes what the model computes -- which
     # is why it is armed through its own method below.
     nag = _resolve_nag(msg)
@@ -781,6 +799,7 @@ def _do_generate(msg: dict) -> None:
         # event below, which can differ ("on->off").
         f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
         f"keep_resident={'on' if keep_resident else 'off'} "
+        f"keep_resident_emb={'on' if keep_resident_embeddings else 'off'} "
         # The RESOLVED backend, not the raw field: an unavailable wheel has
         # already turned a 'sage' request into 'sdpa' by this line, and the
         # WARNING that says so is immediately above it in the same log.
@@ -800,13 +819,11 @@ def _do_generate(msg: dict) -> None:
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
         keep_resident=keep_resident,
-        # Stated, not defaulted: the parameter has none. False until the request
-        # key is wired up, which is the next step of §3-114.
-        keep_resident_embeddings=False,
+        keep_resident_embeddings=keep_resident_embeddings,
         attention_backend=attention,
     )
     # OUTSIDE the try for the same reason, and with an ordering constraint of
-    # its own that is stricter than any of the four above: the negative prompt
+    # its own that is stricter than any of the five above: the negative prompt
     # is encoded during the PROMPT ENCODE, which is the first thing the job
     # does, and the patch reads ``state.requested`` at transformer-build time.
     # Armed on EVERY job, ``None`` included -- that is what clears a previous
@@ -965,6 +982,11 @@ def _do_generate(msg: dict) -> None:
         # values; this engine only ever emits two (see
         # ``Ltx25Pipeline.keep_resident_used``).
         keep_resident_used=_PIPE.keep_resident_used(),
+        # The EmbeddingsProcessor's own echo, on the same two-value contract as
+        # ``keep_resident_used`` immediately above (see
+        # ``Ltx25Pipeline.keep_resident_embeddings_used``). 2.3 has no matching
+        # key: the EmbeddingsProcessor is a 2.5-only component.
+        keep_resident_embeddings_used=_PIPE.keep_resident_embeddings_used(),
         # 2.3's fourth echo key, same name and same three values. Read AFTER the
         # reset like the others, because the reset is what snapshots it -- and
         # computed from the pre-job degrade as well as the pipeline's record, so
@@ -1246,20 +1268,22 @@ def _do_generate_chain(msg: dict) -> None:
         op="generate_chain",
     )
 
-    # The acceleration knobs, read with the SAME four helpers the single op
+    # The acceleration knobs, read with the SAME five helpers the single op
     # uses: one set of readers for the two entry points is what stops a knob from
     # being wired to one op and forgotten on the other. All are live on the
     # chain: it builds the transformer once per stage-1 clip and once per
     # stage-2 tile, and the stage re-arms the prefetch on every one of them.
-    # ``keep_resident`` works differently but is just as live -- a chain builds
-    # the TEXT encoder once per job, same as a single generate, so what it saves
-    # is the same 7.7 GiB rebuild on the job after this one. ``attention_backend``
-    # is live for the transformer reason: the stage strips and re-installs the
-    # sage wrappers on EVERY one of those builds, so a chain's echo is true of
-    # all of them or of none.
+    # ``keep_resident`` and ``keep_resident_embeddings`` work differently but are
+    # just as live -- a chain builds the TEXT encoder and the EmbeddingsProcessor
+    # once per job, same as a single generate, so what each saves is the same
+    # rebuild on the job after this one. ``attention_backend`` is live for the
+    # transformer reason: the stage strips and re-installs the sage wrappers on
+    # EVERY one of those builds, so a chain's echo is true of all of them or of
+    # none.
     prefetch = _resolve_block_swap_prefetch(msg)
     fused = _resolve_fused_dequant(msg)
     keep_resident = _resolve_keep_resident(msg)
+    keep_resident_embeddings = _resolve_keep_resident_embeddings(msg)
     attention, attention_degraded = _resolve_attention(msg)
     # Same reader, same absent-means-off contract, as the single op's -- see
     # there. The chain is where the patch's per-build lifetime matters most.
@@ -1316,6 +1340,7 @@ def _do_generate_chain(msg: dict) -> None:
         # What was ASKED for; the done event's echo keys say what was GOT.
         f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
         f"keep_resident={'on' if keep_resident else 'off'} "
+        f"keep_resident_emb={'on' if keep_resident_embeddings else 'off'} "
         # RESOLVED, exactly as in the single op: an unavailable wheel has already
         # turned a 'sage' request into 'sdpa' by the time this line is written.
         f"attention={attention} "
@@ -1331,9 +1356,7 @@ def _do_generate_chain(msg: dict) -> None:
         block_swap_prefetch=prefetch,
         fused_gguf_dequant_kernel=fused,
         keep_resident=keep_resident,
-        # The single op's line verbatim: stated because the parameter has no
-        # default, and False until the request key is wired up (§3-114).
-        keep_resident_embeddings=False,
+        keep_resident_embeddings=keep_resident_embeddings,
         attention_backend=attention,
     )
     # The single op's discipline verbatim, for the same ordering reason: armed
@@ -1411,6 +1434,12 @@ def _do_generate_chain(msg: dict) -> None:
         # values; this engine only ever emits two (see
         # ``Ltx25Pipeline.keep_resident_used``).
         keep_resident_used=_PIPE.keep_resident_used(),
+        # The EmbeddingsProcessor's own echo, on the same two-value contract as
+        # ``keep_resident_used`` immediately above (see
+        # ``Ltx25Pipeline.keep_resident_embeddings_used``). 2.3 has no matching
+        # key: the EmbeddingsProcessor is a 2.5-only component. A chain builds
+        # it once per job like everything else does, same as the single op.
+        keep_resident_embeddings_used=_PIPE.keep_resident_embeddings_used(),
         # 2.3's fourth echo key. A chain's value covers the WHOLE job: the
         # kernel-failure latch lives on the pipeline's ``SageState``, which
         # outlives every one of the chain's transformer builds, so one failed
@@ -1699,7 +1728,7 @@ def _add_acceleration_arguments(parser) -> None:
     ``off`` side exists for the pair comparison the gate asks for -- same seed,
     same geometry, one bit different, digests compared.
 
-    The four knobs have THREE different defaults between them, and each one is
+    The five knobs have THREE different defaults between them, and each one is
     an argument rather than a convention -- see the comment above each.
     """
     parser.add_argument(
@@ -1726,6 +1755,18 @@ def _add_acceleration_arguments(parser) -> None:
         default="off",
         help="retain the text encoder's state dict between jobs, ~7.7 GiB of resident RAM "
         "(default: off -- unlike the two knobs above, which default to on)",
+    )
+    # DEFAULT OFF, same reasoning as ``--keep-resident`` immediately above: this
+    # BUYS TIME WITH RAM too, just for the EmbeddingsProcessor's state dict
+    # instead of the text encoder's -- ~4.6 GiB stays resident between jobs. The
+    # app ships it off by default for that reason, and a selftest whose default
+    # did not match would measure a configuration nobody runs.
+    parser.add_argument(
+        "--keep-resident-embeddings",
+        choices=("on", "off"),
+        default="off",
+        help="retain the EmbeddingsProcessor's state dict between jobs, ~4.6 GiB of resident "
+        "RAM (default: off, matching --keep-resident above)",
     )
     # DEFAULT SDPA, and for a THIRD reason again. The first two knobs default to
     # on because they are free; keep-resident defaults to off because it buys
@@ -1768,6 +1809,8 @@ def _acceleration_payload(args) -> dict:
         # pre-sage payload takes -- which is what makes its digest comparable to
         # the frozen baseline at all.
         payload["attention_backend"] = args.attention
+    if args.keep_resident_embeddings == "on":
+        payload["keep_resident_embeddings"] = True
     return payload
 
 

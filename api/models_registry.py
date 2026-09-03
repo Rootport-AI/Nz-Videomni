@@ -29,7 +29,8 @@ one. Added alongside it:
     ``missing_categories`` (which ones are not), ``category_order`` (the
     descriptor's declaration order as an ARRAY — see below) and
     ``unsupported_features`` (§3-98 P5: feature names that base model's engine
-    cannot run — ``[]`` for LTX 2.3, so nothing about the 2.3 response changed).
+    cannot run, straight from that engine's own adapter — LTX 2.3's entry was
+    ``[]`` until §3-114 (2026-09-03) gave it its first one).
 
 CATEGORY ORDER IS CARRIED BY AN ARRAY, NOT BY OBJECT KEY ORDER. Both
 ``categories`` blocks are emitted in declaration order and Python dicts keep
@@ -98,9 +99,12 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 "present": any(presence.values()),
                 "missing_categories": [c for c, ok in presence.items() if not ok],
                 # Feature names this base model's ENGINE cannot run (§3-98 P5).
-                # Purely ADDITIVE and per-base-model: LTX 2.3 declares none, so
-                # its entry is `[]` and a client that has never heard of this
-                # key is unaffected. The frontend greys out the controls it
+                # Purely ADDITIVE and per-base-model: LTX 2.3's entry used to
+                # be `[]` until §3-114 (2026-09-03) gave it a first one
+                # (keep_resident_embeddings) — the content is owned by each
+                # adapter's own UNSUPPORTED_FEATURES, not by this endpoint. A
+                # client that has never heard of this key is unaffected
+                # either way. The frontend greys out the controls it
                 # recognises; POST /generate refuses the rest with the matching
                 # FEATURE_UNSUPPORTED, so this list is a courtesy, never the
                 # enforcement (a page can be stale, a script never asked).

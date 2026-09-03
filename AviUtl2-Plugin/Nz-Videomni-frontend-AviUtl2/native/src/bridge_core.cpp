@@ -184,7 +184,7 @@ std::string HandleRequestJson(const std::string& request_json,
             case InsertMediaResult::Status::kInsertFailed:
             default:
                 return MakeErrorResponse(id, "INSERT_FAILED",
-                                         "create_object_from_media_file returned null "
+                                         "media object creation failed "
                                          "(unsupported format or overlapping object)");
         }
     }
@@ -221,8 +221,8 @@ std::string HandleRequestJson(const std::string& request_json,
             if (!outcome.ok) {
                 return MakeErrorResponse(
                     id, "INSERT_FAILED",
-                    "create_object_from_media_file returned null for the replace-"
-                    "insert (unsupported/broken media or a blocked slot)");
+                    "media object creation failed for the replace-insert "
+                    "(unsupported/broken media or a blocked slot)");
             }
             json result;
             result["ok"] = true;
@@ -261,7 +261,7 @@ std::string HandleRequestJson(const std::string& request_json,
             case InsertMediaResult::Status::kInsertFailed:
             default:
                 return MakeErrorResponse(id, "INSERT_FAILED",
-                                         "create_object_from_media_file returned null "
+                                         "media object creation failed "
                                          "(unsupported format or overlapping object)");
         }
     }

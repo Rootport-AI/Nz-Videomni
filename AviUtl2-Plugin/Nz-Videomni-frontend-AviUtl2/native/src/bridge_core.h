@@ -405,6 +405,14 @@ using DeleteProvisionalProvider = std::function<bool(const DeleteProvisionalRequ
 // ONCE at layer_max+1 / same frame / same explicit length (used_fallback), and
 // on a second null reports ok == false (a single undo then restores the just-
 // deleted marker as the user's retreat).
+//
+// Section 3-140 kept that asymmetry (still no room pre-check). The create now
+// goes through an alias, so the finished object carries the "audio present"
+// flag, and the length is verified AFTER the fact instead: an alias object that
+// lands shorter than requested is deleted and rebuilt with the legacy
+// media-file call. The contract this header describes is therefore unchanged -
+// whatever ultimately yields no object is still a null, retried once at
+// layer_max+1 and otherwise reported as ok == false.
 struct ReplaceMediaForJobRequest {
     std::string job_id;     // re-find key (exact alias match)
     int layer = 0;          // the found placeholder position (from the scan)

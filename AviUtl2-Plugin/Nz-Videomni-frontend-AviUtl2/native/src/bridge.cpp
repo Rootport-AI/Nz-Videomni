@@ -24,6 +24,7 @@
 #include "json.hpp"
 #include "plugin2.h"  // EDIT_HANDLE, EDIT_INFO, EDIT_SECTION, PIXEL_RGBA
 
+#include "alias_util.h"  // BuildMediaObjectAlias, NormalizeAliasObjectFrameHeader (3-140)
 #include "bridge_core.h"
 #include "fs_util.h"    // MatchesAnyExtension, MakeNumberedName, ExtensionLower, JoinPath (v6)
 #include "http_client.h"
@@ -52,6 +53,119 @@ struct InsertContext {
     bool ran = false;
 };
 
+// Create one media object at layer/frame - the single funnel every live media
+// insert in this file goes through (section 3-140).
+//
+// Why not just call create_object_from_media_file: that API never writes the
+// "audio present" item, so the object it makes renders as a ONE-tone ribbon and
+// its context menu offers no "separate audio" - the mp4 plays fine, but the
+// object is not what dropping the same file on the timeline produces. So the
+// drag-and-drop-equivalent alias is built here instead (BuildMediaObjectAlias,
+// fed by one get_media_info probe for the audio flag and the source duration)
+// and handed to create_object_from_alias.
+//
+// The length is resolved with the SAME formula as before 3-140: length =
+// round(total_time_seconds * project_fps), project_fps = rate/scale, and any
+// failure (no get_media_info, unsupported/still media with total_time <= 0,
+// degenerate rate/scale, or a sub-frame clip that rounds to 0) leaves length 0,
+// i.e. the host's automatic length adjustment.
+//
+// The legacy API remains the safety net, three times over:
+//   1. the alias is only used for a real video with a usable length - a still,
+//      an audio-only file, an unreadable one or a path with CR/LF takes the
+//      legacy call with exactly the arguments it received before 3-140;
+//   2. if create_object_from_alias returns null, the legacy call is tried once
+//      with the same layer/frame/length, so an alias-specific failure (an
+//      effect name that does not resolve, say) costs nothing;
+//   3. the created object's real span is measured afterwards, and one SHORTER
+//      than requested is deleted and rebuilt with the legacy call.
+// Requested vs actual is logged either way: alias + explicit-length collision
+// behaviour is not yet observed on the real device (gate R7).
+//
+// Returns the created object, or nullptr when every attempt failed (callers
+// treat that exactly as they treated a null create_object_from_media_file).
+OBJECT_HANDLE CreateMediaObject(EDIT_SECTION* edit, const std::string& path_utf8,
+                                int layer, int frame) {
+    if (edit == nullptr || edit->create_object_from_media_file == nullptr) {
+        return nullptr;
+    }
+    const std::wstring wide = Utf8ToWide(path_utf8);
+
+    // One probe feeds both the length and the alias (audio flag + source span).
+    MEDIA_INFO info{};
+    bool have_info = false;
+    if (edit->get_media_info != nullptr) {
+        have_info = edit->get_media_info(wide.c_str(), &info, sizeof(info));
+    }
+    int length = 0;
+    if (have_info && info.total_time > 0.0 && edit->info != nullptr &&
+        edit->info->scale != 0) {
+        const double project_fps = static_cast<double>(edit->info->rate) /
+                                   static_cast<double>(edit->info->scale);
+        const int frames = ProjectFramesForSeconds(info.total_time, project_fps);
+        if (frames >= 1) {
+            length = frames;
+        }
+    }
+
+    // Safety net 1. video_track_num == 0 rules out stills and audio-only files
+    // (whose ribbons are already right today); length >= 1 is required because
+    // an explicit length of 0 is exactly where the SDK silently shortens a
+    // colliding create instead of failing (D2 finding).
+    std::string alias;
+    if (have_info && info.video_track_num > 0 && length >= 1) {
+        alias = BuildMediaObjectAlias(path_utf8, info.total_time,
+                                      info.audio_track_num > 0);
+    }
+    if (alias.empty() || edit->create_object_from_alias == nullptr) {
+        return edit->create_object_from_media_file(wide.c_str(), layer, frame, length);
+    }
+
+    // An alias' own frame range OVERRIDES the length argument, so pin both to
+    // the same span - the double pin (frame=0,N inside the alias PLUS the
+    // explicit length argument) is the shape insertProvisional already proved on
+    // the real device.
+    const std::string pinned = NormalizeAliasObjectFrameHeader(alias, length);
+    OBJECT_HANDLE created =
+        edit->create_object_from_alias(pinned.c_str(), layer, frame, length);
+    if (created == nullptr) {
+        // Safety net 2: alias-specific failure only - this is byte-for-byte the
+        // pre-3-140 call, so the outcome here is exactly today's.
+        LogWarn(std::wstring(L"CreateMediaObject: create_object_from_alias returned null "
+                             L"(layer ") +
+                std::to_wstring(layer) + L", frame " + std::to_wstring(frame) +
+                L", length " + std::to_wstring(length) +
+                L") - retrying with create_object_from_media_file");
+        return edit->create_object_from_media_file(wide.c_str(), layer, frame, length);
+    }
+
+    // Safety net 3. Whether OBJECT_LAYER_FRAME.end is inclusive is not yet
+    // observed, so the check is deliberately one-sided: only a span SHORTER than
+    // requested is a failure. Reading end as inclusive when it is exclusive just
+    // overstates the actual length by one and passes, whereas an equality test
+    // would make the whole 3-140 fix fall back silently on every insert.
+    if (edit->get_object_layer_frame != nullptr) {
+        const OBJECT_LAYER_FRAME lf = edit->get_object_layer_frame(created);
+        const int actual = lf.end - lf.start + 1;
+        LogInfo(std::wstring(L"CreateMediaObject: alias create requested layer ") +
+                std::to_wstring(layer) + L", frame " + std::to_wstring(frame) +
+                L", length " + std::to_wstring(length) + L"; actual layer " +
+                std::to_wstring(lf.layer) + L", start " + std::to_wstring(lf.start) +
+                L", end " + std::to_wstring(lf.end));
+        if (actual < length) {
+            LogWarn(std::wstring(L"CreateMediaObject: alias object is shorter than "
+                                 L"requested (") +
+                    std::to_wstring(actual) + L" < " + std::to_wstring(length) + L")");
+            if (edit->delete_object != nullptr) {
+                edit->delete_object(created);
+                return edit->create_object_from_media_file(wide.c_str(), layer, frame,
+                                                           length);
+            }
+        }
+    }
+    return created;
+}
+
 // Non-capturing callback invoked by the host on the main thread under the edit
 // lock. Must be a plain function pointer, so it captures nothing.
 void InsertMediaEditProc(void* param, EDIT_SECTION* edit) {
@@ -63,31 +177,10 @@ void InsertMediaEditProc(void* param, EDIT_SECTION* edit) {
                                     : (edit->info != nullptr ? edit->info->frame : 0);
     ctx->layer = layer;
     ctx->frame = frame;
-    if (edit->create_object_from_media_file == nullptr) {
-        return;
-    }
-    const std::wstring wide = Utf8ToWide(ctx->in->file_path);
-    // Size the inserted object to the media's real length so it reflects the
-    // actual video duration instead of the host's default add-position guess.
-    // length = round(total_time_seconds * project_fps), project_fps = rate/scale.
-    // Any failure (no get_media_info, unsupported/still media with total_time
-    // <= 0, degenerate rate/scale, or a sub-frame clip that rounds to 0) falls
-    // back to length 0, i.e. the host's automatic length adjustment.
-    int length = 0;
-    if (edit->get_media_info != nullptr && edit->info != nullptr &&
-        edit->info->scale != 0) {
-        MEDIA_INFO info{};
-        if (edit->get_media_info(wide.c_str(), &info, sizeof(info)) &&
-            info.total_time > 0.0) {
-            const double project_fps = static_cast<double>(edit->info->rate) /
-                                       static_cast<double>(edit->info->scale);
-            const int frames = ProjectFramesForSeconds(info.total_time, project_fps);
-            if (frames >= 1) {
-                length = frames;
-            }
-        }
-    }
-    ctx->object = edit->create_object_from_media_file(wide.c_str(), layer, frame, length);
+    // Sizing to the media's real length (so the ribbon reflects the actual video
+    // duration instead of the host's default add-position guess) and the
+    // "audio present" flag both live in CreateMediaObject.
+    ctx->object = CreateMediaObject(edit, ctx->in->file_path, layer, frame);
 }
 
 // True if a file exists on disk (a plain file or directory; used to give the
@@ -516,14 +609,24 @@ void ProbeAudioDurationWorker(ProbeAudioDurationRequest req, json_t id,
 // Handles are never retained (they go stale across undo/reload): every re-find
 // happens inside the callback via find_object + provisional::AliasMatchesJob.
 //
+// Media object creation is funnelled through ONE helper, CreateMediaObject
+// (defined near the top of this file, next to InsertMediaEditProc). It goes via
+// create_object_from_alias rather than create_object_from_media_file because
+// only the alias can carry the "audio present" item - without it the ribbon is
+// one-tone and the object's context menu has no "separate audio" (section
+// 3-140). The legacy API stays as the fallback for every case the alias cannot
+// or must not cover, so a failure there is never worse than before.
+//
 // Character encoding: alias text is UTF-8 (get_object_alias / LPCSTR), effect &
 // item names are UTF-16 (built at runtime from the UTF-8 byte escapes below so
 // this stays an ASCII-only translation unit), and paths are wide. All string
 // conversions reuse strconv (Utf8ToWide / WideToUtf8).
 // ===========================================================================
 
-// UTF-8 byte escapes for the AviUtl2 Japanese effect / item names. Kept byte-for
-// -byte identical to alias_util.cpp so the two stay in sync.
+// UTF-8 byte escapes for the AviUtl2 Japanese effect / item names this file
+// needs. The ones it shares with alias_util.cpp are kept byte-for-byte
+// identical to that copy so the two stay in sync (alias_util.cpp also carries
+// names used only by its builders, which are deliberately not duplicated here).
 const char kEffectTextJp[] =
     "\xe3\x83\x86\xe3\x82\xad\xe3\x82\xb9\xe3\x83\x88";  // "text" effect + text item
 const char kEffectVideoFileJp[] =
@@ -1045,6 +1148,8 @@ void ReplaceObjectEditProc(void* param, EDIT_SECTION* edit) {
     // deleted). REALDEVICE-VERIFY: undo coalesces delete+create into one step;
     // in-place set_object_item_value on the file item is left as an optional
     // optimization, not the default.
+    // This path is NOT used by the webui, so the alias-based media create
+    // (CreateMediaObject, section 3-140) is deliberately not applied here.
     OBJECT_HANDLE placeholder = FindObjectByJob(edit, r.layer, r.job_id, c->frame_max);
     if (placeholder != nullptr && edit->delete_object != nullptr) {
         edit->delete_object(placeholder);
@@ -1063,8 +1168,8 @@ void ReplaceObjectEditProc(void* param, EDIT_SECTION* edit) {
 // our own placeholder text object and create the finished media in its place,
 // atomically (one edit section = one undo step). Unlike ReplaceObjectEditProc
 // (resolveProvisional), the length is the media's REAL length (get_media_info ->
-// ProjectFramesForSeconds, exactly like InsertMediaEditProc), not a caller-
-// supplied frame count.
+// ProjectFramesForSeconds, resolved inside CreateMediaObject exactly like the
+// plain insert path), not a caller-supplied frame count.
 //
 // Deliberately NO HasRoomForLength pre-check here (unlike InsertProvisional /
 // UpdateReservation): the placeholder we are about to delete occupies the exact
@@ -1098,35 +1203,18 @@ void ReplaceMediaForJobEditProc(void* param, EDIT_SECTION* edit) {
     if (edit->create_object_from_media_file == nullptr) {
         return;
     }
-    // 2. Resolve the media's REAL length (identical math to InsertMediaEditProc):
-    // length = round(total_time_seconds * project_fps), project_fps = rate/scale.
-    // Any failure falls back to length 0 (the host's automatic length adjust).
-    const std::wstring wpath = Utf8ToWide(r.file_path);
-    int length = 0;
-    if (edit->get_media_info != nullptr && edit->info != nullptr &&
-        edit->info->scale != 0) {
-        MEDIA_INFO info{};
-        if (edit->get_media_info(wpath.c_str(), &info, sizeof(info)) &&
-            info.total_time > 0.0) {
-            const double project_fps = static_cast<double>(edit->info->rate) /
-                                       static_cast<double>(edit->info->scale);
-            const int frames = ProjectFramesForSeconds(info.total_time, project_fps);
-            if (frames >= 1) {
-                length = frames;
-            }
-        }
-    }
-    // 3. Create the media in the marker's slot (no room pre-check - see above).
+    // 2. Create the media in the marker's slot (no room pre-check - see above).
+    // CreateMediaObject resolves the media's REAL length itself (the same math
+    // as before section 3-140) and prefers the alias path so the finished object
+    // carries the "audio present" flag.
     int placed_layer = r.layer;
-    OBJECT_HANDLE created =
-        edit->create_object_from_media_file(wpath.c_str(), r.layer, r.frame, length);
+    OBJECT_HANDLE created = CreateMediaObject(edit, r.file_path, r.layer, r.frame);
     if (created == nullptr) {
         // Genuine failure at the marker slot -> retry once on a guaranteed-empty
-        // layer_max+1 (same frame, same explicit length). One undo restores the
+        // layer_max+1 (same frame, same real length). One undo restores the
         // deleted marker if this also fails.
         placed_layer = c->layer_max + 1;
-        created =
-            edit->create_object_from_media_file(wpath.c_str(), placed_layer, r.frame, length);
+        created = CreateMediaObject(edit, r.file_path, placed_layer, r.frame);
         if (created != nullptr) {
             c->used_fallback = true;
         }
@@ -2211,8 +2299,10 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             return r;
         }
         if (ic.object == nullptr) {
-            LogWarn(std::wstring(L"timeline.insertMedia: create_object_from_media_file "
-                                 L"returned null (layer ") +
+            // Every create attempt failed - the alias path AND the legacy
+            // create_object_from_media_file fallback (see CreateMediaObject).
+            LogWarn(std::wstring(L"timeline.insertMedia: media object creation failed "
+                                 L"(layer ") +
                     std::to_wstring(ic.layer) + L", frame " + std::to_wstring(ic.frame) +
                     L")");
             r.status = InsertMediaResult::Status::kInsertFailed;

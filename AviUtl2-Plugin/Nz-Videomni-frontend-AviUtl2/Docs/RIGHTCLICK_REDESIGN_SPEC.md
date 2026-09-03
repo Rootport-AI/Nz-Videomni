@@ -557,7 +557,7 @@ Generateを押した後は、用途(a)により仮予約ID（`pending-…`）が
 
 出典: `webui/src/timeline/deriveDuration.ts`。第1段階は、右クリックプリフィルの幅・高さ（解像度）は`deriveGenerationParams.ts`が決定していましたが、DURATIONは「別途の未決定事項」として素通しにしていました（同ファイルの§7-3-Bに選択肢のみ記載）。第2段階でこの空白を埋め、DURATIONの決定を専用モジュール`deriveDuration.ts`へ切り出しました。
 
-> **【2026-08-31 追記】本節が「快適上限」と書いているものの出どころが変わりました。** **Single系（単発生成へ向かう項目）の快適上限は、いまは賢い快適上限マーカーと同じ値です**——`deriveDuration.ts`は自分で`spill_free_frames`を引かず、**呼び出し側が算出した天井を引数で受け取る**形になりました（どの項目が単発生成へ向かうかは`timeline/menuRouting.ts`の既存の経路表から逆引きします）。A2Vのwav自動調整の天井も同じ値へ揃いました。**Chain系（連結生成へ向かう項目）は本節のとおり`spill_free_frames`のままです**（揃えるかどうかの判断はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-132）。線そのものの正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §1.1、実装記録は[`DEVLOG.md`](DEVLOG.md) §99です。**以下の本文は第2段階当時の記録としてそのまま残します。**
+> **【2026-08-31 追記】本節が「快適上限」と書いているものの出どころが変わりました。** **Single系（単発生成へ向かう項目）の快適上限は、いまは賢い快適上限マーカーと同じ値です**——`deriveDuration.ts`は自分で`spill_free_frames`を引かず、**呼び出し側が算出した天井を引数で受け取る**形になりました（どの項目が単発生成へ向かうかは`timeline/menuRouting.ts`の既存の経路表から逆引きします）。A2Vのwav自動調整の天井も同じ値へ揃いました。**Chain系（連結生成へ向かう項目）は本節のとおり`spill_free_frames`のままです**（揃えるかどうかの判断はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-132）。**【2026-09-04 追記】その§3-132は2026-09-03のオーナー裁定「揃えない」で決着し、クローズ済みです**——現在の参照先はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-132で、Chain系が`spill_free_frames`のままであることが確定仕様になりました（生きた台帳§3を探しても見つかりません）。線そのものの正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §1.1、実装記録は[`DEVLOG.md`](DEVLOG.md) §99です。**以下の本文は第2段階当時の記録としてそのまま残します。**
 
 **3つの方式（`DurationPolicy`）**:
 
@@ -830,6 +830,6 @@ G3が不合格の場合は、§5-10のロールバックフラグ`REPLACE_INSERT
 | 完了時の自動置換 | §3-8 |
 | solo分離（音声抽出で対象レイヤー以外を自動無効化） | §3-9 |
 
-**V2V結合（Join）機能は本一覧から除去しました（2026-07-21に復活実装が完了し、実機ゲートにも合格しているため）。** 誤って将来項目として復活させないよう、ここに明記しておきます（経緯は[`JOIN_FEATURE_RESEARCH.md`](JOIN_FEATURE_RESEARCH.md)と[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-26。残っている既知の縮退3ケースは[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-16、Unjoin表示のリロード揮発は同書§3-16）。
+**V2V結合（Join）機能は本一覧から除去しました（2026-07-21に復活実装が完了し、実機ゲートにも合格しているため）。** 誤って将来項目として復活させないよう、ここに明記しておきます（経緯は[`JOIN_FEATURE_RESEARCH.md`](JOIN_FEATURE_RESEARCH.md)と[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-26。残っている既知の縮退3ケースは[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-16、Unjoin表示のリロード揮発は同書§3-16）。**【2026-09-04 追記】このうちUnjoin表示のリロード揮発（§3-16）は、2026-09-03のオーナー裁定「許容」でクローズ済みです**——現在の参照先はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-16-02です（生きた台帳§3を探しても見つかりません）。縮退3ケースの§4-16のほうは引き続き生きています。
 
 出典: [`DEVLOG.md`](DEVLOG.md) §33.3・§33.6・§33.11・§33.13、[`GAP_FILL_RESEARCH.md`](GAP_FILL_RESEARCH.md)。

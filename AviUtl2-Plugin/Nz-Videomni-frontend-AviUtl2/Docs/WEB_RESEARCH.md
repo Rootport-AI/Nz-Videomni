@@ -1,6 +1,6 @@
 # AviUtl2向けプラグイン開発 WEBリサーチまとめ
 
-最終更新: 2026-07-07 / 出典: 調査エージェント報告(2026-07-07)
+最終更新: 2026-09-04(§5のエイリアス書式を「XML形式」から「INI風」へ訂正した——訂正の根拠と経緯は[SDK_REFERENCE.md](SDK_REFERENCE.md) §5.1が正本) / 初版の出典: 調査エージェント報告(2026-07-07)
 
 関連ドキュメント: [API_REFERENCE.md](API_REFERENCE.md) ／ [SDK_REFERENCE.md](SDK_REFERENCE.md) ／ [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) ／ [BRIDGE_CONTRACT.md](BRIDGE_CONTRACT.md) ／ [DEVLOG.md](DEVLOG.md)
 

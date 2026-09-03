@@ -1,6 +1,6 @@
 # Nz-Videomni ブリッジ契約リファレンス(WebUI ⇔ ネイティブ JSON-RPC, v4.1 + v5抜粋 + v6 + v7 + v8 + v9 + v10 + v11)
 
-最終更新: 2026-09-01(contract v11＝素材fps——`timeline.getSelection`の`selected[]`へ`mediaFps`を追加した。素材そのもののフレームレートをMedia Foundationで読み、右クリックプリフィルのfps軸「素材に合わせる」へ流し込むためのもので、新規モジュール`native/src/media_fps_probe.{h,cpp}`が担う。§4.13・§8・§10を更新) / 出典: `webui/src/bridge/types.ts` と `native/src/bridge_core.h` / `bridge_core.cpp` / `bridge.h` / `bridge.cpp` / `native/src/webview_host.cpp` を突き合わせて作成(コード一次)。
+最終更新: 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§3-140〔🎞挿入をエイリアス方式へ差し替え〕に伴う注記を§4.5・§4.7・§4.14.1・§5へ足し、あわせて§4.13へ`frameStart`/`frameEnd`の端点解釈が未決である旨を1箇所だけ記した。ワイヤ形式・RPCの引数・応答はいずれも1文字も変わっていない) / その前は 2026-09-01(contract v11＝素材fps——`timeline.getSelection`の`selected[]`へ`mediaFps`を追加した。素材そのもののフレームレートをMedia Foundationで読み、右クリックプリフィルのfps軸「素材に合わせる」へ流し込むためのもので、新規モジュール`native/src/media_fps_probe.{h,cpp}`が担う。§4.13・§8・§10を更新) / 出典: `webui/src/bridge/types.ts` と `native/src/bridge_core.h` / `bridge_core.cpp` / `bridge.h` / `bridge.cpp` / `native/src/webview_host.cpp` を突き合わせて作成(コード一次)。
 
 > **注記(2026-07-17追記)**: ネイティブ側のJSON型を`nlohmann::json`から`nlohmann::ordered_json`(`bridge_core.h`)へ変更した。ワイヤ形式(送受信されるJSON文字列そのもの)には影響しない。変わったのはC++側でのオブジェクトのキー順が挿入順で保持されるようになった点のみ(従来はキーのアルファベット順)で、契約上の意味は無い。
 
@@ -240,6 +240,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - result:
   - `hasRange: boolean` / `rangeStart: number` / `rangeEnd: number` — フレーム範囲選択(`EDIT_INFO.select_range_start/end`起源。未選択なら`hasRange:false`)。
   - `selected: Array<{ layer, frameStart, frameEnd, effectName, filePath: string|null, objectName: string|null, mediaWidth: number, mediaHeight: number }>` — 選択中の各タイムラインオブジェクト。`filePath`/`objectName`は取得できない場合`null`。
+    - **`frameStart`/`frameEnd`の端点解釈は突き合わせ未了である(2026-09-04時点・未決)**: ネイティブは`OBJECT_LAYER_FRAME`の`start`/`end`を**素通しで**載せている(`bridge.cpp`の`GetSelectionEditProc`)。その`end`は2026-09-04の実機ログから**排他**(次フレームの先頭を指す)と確定した([SDK_REFERENCE.md](SDK_REFERENCE.md) §16 (h)が正本)。一方でwebui側は`frameEnd`を**包含**と読み、リボン長を`frameEnd - frameStart + 1`で算出している(`timeline/prefillSeed.ts`・`jobs/fpsConvert.ts`・`timeline/retakeWindow.ts`)。この「包含」はネイティブの`next = end + 1`という書き方からの推定であって実測ではない。**両者の突き合わせは未了で、コードは1行も変えていない**——読むときは2つの解釈が同居している前提で読むこと。
     - **`mediaWidth` / `mediaHeight`(2026-07-08追加)**: 選択オブジェクトが参照するメディアファイルの実解像度(整数)。ネイティブの`GetSelectionEditProc`(`bridge.cpp`)が、選択オブジェクトのファイルパスに対して`EDIT_SECTION::get_media_info`([SDK_REFERENCE.md](SDK_REFERENCE.md) §5.1)を呼び出して取得する。**解決できない場合(音声/図形オブジェクト、`get_media_info`未提供、失敗時)は`0`を返す(`null`にはしない)** — 「不明」は常に`0`として表現される。右クリック生成時の出力解像度を入力素材に合わせるためのseam(`webui/src/timeline/deriveGenerationParams.ts`)がこの値を最優先で参照する。
   - `cursorFrame` / `cursorLayer` — 編集カーソル位置。
   - `rate` / `scale` / `sampleRate` — `getEditInfo`と同じプロジェクトのフレームレート/サンプルレート(frame⇄time換算用)。

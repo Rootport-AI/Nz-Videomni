@@ -2874,7 +2874,7 @@ export const ja: Strings = {
     accelKeepResidentPrefetchOffTooltip: "先読みblock swapが有効なときだけ使えます",
     accelKeepResidentNote:
       "メモリ64GB以上を推奨（LTX 2.3では約20GB、LTX 2.5では約8GBをメインメモリに常駐で使用します。2.5で常駐するのは文章を読み取る部分だけです）。モデルのCPU側骨格をジョブ間で保持し、2回目以降の生成の前処理を大幅に短縮します。生成結果は変わりません。",
-    accelKeepResidentEmbeddingsLabel: "埋め込み処理器の常駐（LTX 2.5）",
+    accelKeepResidentEmbeddingsLabel: "Embeddings processorの常駐（LTX 2.5）",
     accelKeepResidentEmbeddingsOn: "ON",
     accelKeepResidentEmbeddingsOff: "OFF",
     accelKeepResidentEmbeddingsNote:

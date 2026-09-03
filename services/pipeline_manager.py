@@ -1202,7 +1202,21 @@ class PipelineManager:
             elapsed = time.time() - started
             meta = outcome.chain_metadata or {}
             total_frames = int(meta.get("total_px", 0))
-            duration = round(total_frames / chain.frame_rate, 3) if total_frames else 0.0
+            # DELIVERED frames, which is what ``output.duration_seconds``
+            # describes (§3-88). V2V hands back a shorter mp4 than the assembled
+            # timeline because the frozen head is trimmed off, so the delivered
+            # length is ``v2v.new_frames_px``. Every other chain (no V2V, retake,
+            # end source alone, A2V) carries no ``v2v`` block at all and falls
+            # back to ``total_px`` exactly as before. ``chain.total_frames`` in
+            # the metadata keeps meaning the assembled total and is untouched.
+            if "new_frames_px" in meta.get("v2v", {}):
+                delivered_frames = int(meta["v2v"]["new_frames_px"])
+            else:
+                delivered_frames = total_frames
+            duration = (
+                round(delivered_frames / chain.frame_rate, 3)
+                if delivered_frames else 0.0
+            )
             if chain.crop_output is not None:
                 resolution = f"{chain.crop_output.width}x{chain.crop_output.height}"
             else:

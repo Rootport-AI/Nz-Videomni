@@ -156,6 +156,14 @@ def test_v2v_mock_e2e_resample(client, tmp_path):
     assert video_io.frame_count(out) == layout.new_frames_px  # NEW part only (49-25=24)
 
     meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    # §3-88: the DELIVERED length must agree in all three places -- the real mp4
+    # (asserted above), metadata.json and the job status API. Missing this pair
+    # is what let the pre-trim duration survive: ``new_frames_px`` itself was
+    # checked, but ``output.duration_seconds`` never was.
+    delivered_seconds = round(layout.new_frames_px / 24.0, 3)
+    assert meta["output"]["duration_seconds"] == delivered_seconds
+    assert job["result"]["duration_seconds"] == delivered_seconds
+
     v2v = meta["v2v"]
     # geometry (from chain_math)
     assert v2v["context_frames"] == 25

@@ -21,6 +21,17 @@ const char* kVidFile =
     "\xe5\x8b\x95\xe7\x94\xbb\xe3\x83\x95\xe3\x82\xa1\xe3\x82\xa4\xe3\x83\xab";  // video file effect
 const char* kFileJp = "\xe3\x83\x95\xe3\x82\xa1\xe3\x82\xa4\xe3\x83\xab";      // file item
 const char* kPlayJp = "\xe5\x86\x8d\xe7\x94\x9f\xe4\xbd\x8d\xe7\xbd\xae";      // playback item
+// Section 3-140 (BuildMediaObjectAlias). A THIRD copy of these names on purpose:
+// the test must fail if alias_util.cpp's bytes ever drift, so it cannot share
+// them. The last four are the items the builder deliberately does NOT write.
+const char* kVidPlay = "\xe6\x98\xa0\xe5\x83\x8f\xe5\x86\x8d\xe7\x94\x9f";  // video playback
+const char* kHasAudio = "\xe9\x9f\xb3\xe5\xa3\xb0\xe4\xbb\x98\xe3\x81\x8d";  // audio present
+const char* kPlayRange = "\xe5\x86\x8d\xe7\x94\x9f\xe7\xaf\x84\xe5\x9b\xb2";  // playback range
+const char* kPlaySpeed =
+    "\xe5\x86\x8d\xe7\x94\x9f\xe9\x80\x9f\xe5\xba\xa6";  // playback speed (omitted)
+const char* kTrack = "\xe3\x83\x88\xe3\x83\xa9\xe3\x83\x83\xe3\x82\xaf";  // track (omitted)
+const char* kLoopPlay =
+    "\xe3\x83\xab\xe3\x83\xbc\xe3\x83\x97\xe5\x86\x8d\xe7\x94\x9f";  // loop playback (omitted)
 
 bool Contains(const std::string& hay, const std::string& needle) {
     return hay.find(needle) != std::string::npos;
@@ -171,6 +182,107 @@ TEST_CASE("provisional text alias honors an explicit textPrefix (spec 5-5)") {
     CHECK_FALSE(Contains(value, kGeneratingPrefix));
     CHECK(Contains(value, "[#jP]"));
     CHECK(pre.object_name == "NzVideomni#jP");
+}
+
+// ---------------------------------------------------------------------------
+// BuildMediaObjectAlias (section 3-140: the "audio present" flag)
+// ---------------------------------------------------------------------------
+
+// The exact "playback position" value the builder must emit for a given
+// 3-decimal duration string: start, source duration, range keyword, flag.
+static std::string ExpectedPlayback(const std::string& seconds_3dp) {
+    return std::string("0.000,") + seconds_3dp + "," + kPlayRange + ",0";
+}
+
+TEST_CASE("media object alias has the two-effect video structure and no frame line") {
+    const std::string a = BuildMediaObjectAlias("C:\\v\\clip.mp4", 10.0416666, true);
+    REQUIRE_FALSE(a.empty());
+    CHECK(Contains(a, "[Object]"));
+    CHECK(Contains(a, std::string("effect.name=") + kVidFile));
+    CHECK(Contains(a, "[Object.1]"));
+    CHECK(Contains(a, std::string("effect.name=") + kVidPlay));
+    // No frame= line: the length is pinned by NormalizeAliasObjectFrameHeader,
+    // because an alias-local frame range would OVERRIDE the requested length.
+    CHECK_FALSE(Contains(a, "frame="));
+    CHECK(Contains(a, "\r\n"));  // CRLF, like BuildProvisionalTextAlias
+}
+
+TEST_CASE("media object alias items belong to the video-file effect section") {
+    const std::string with_audio = BuildMediaObjectAlias("C:\\v\\a.mp4", 10.0416666, true);
+    const std::string no_audio = BuildMediaObjectAlias("C:\\v\\a.mp4", 10.0416666, false);
+    std::string value;
+
+    // The whole point of 3-140: "audio present" must be readable as an item of
+    // the [Object.0] video-file effect, and must follow has_audio.
+    REQUIRE(ParseAliasItemValue(with_audio, kVidFile, kHasAudio, &value));
+    CHECK(value == "1");
+    REQUIRE(ParseAliasItemValue(no_audio, kVidFile, kHasAudio, &value));
+    CHECK(value == "0");
+
+    // The other two per-material items round-trip out of the same section.
+    REQUIRE(ParseAliasItemValue(with_audio, kVidFile, kFileJp, &value));
+    CHECK(value == "C:\\v\\a.mp4");
+    REQUIRE(ParseAliasItemValue(with_audio, kVidFile, kPlayJp, &value));
+    CHECK(value == ExpectedPlayback("10.042"));
+
+    // They are NOT items of the [Object.1] video-playback effect.
+    CHECK_FALSE(ParseAliasItemValue(with_audio, kVidPlay, kHasAudio, &value));
+}
+
+TEST_CASE("playback position always carries exactly three decimals") {
+    struct Case { double seconds; const char* text; };
+    const Case cases[] = {
+        {10.0416666, "10.042"},  // rounds up
+        {10.0, "10.000"},        // integral seconds still get 3 decimals
+        {0.5, "0.500"},          // sub-second, trailing zeros kept
+        {1234.5678, "1234.568"}, // long clip, rounds up
+    };
+    for (const Case& c : cases) {
+        const std::string a = BuildMediaObjectAlias("C:\\v\\a.mp4", c.seconds, true);
+        REQUIRE_FALSE(a.empty());
+        std::string value;
+        REQUIRE(ParseAliasItemValue(a, kVidFile, kPlayJp, &value));
+        CHECK(value == ExpectedPlayback(c.text));
+    }
+}
+
+TEST_CASE("an '=' inside the path stays part of the value") {
+    const std::string a = BuildMediaObjectAlias("C:\\a=b\\v.mp4", 2.0, true);
+    REQUIRE_FALSE(a.empty());
+    std::string value;
+    REQUIRE(ParseAliasItemValue(a, kVidFile, kFileJp, &value));
+    CHECK(value == "C:\\a=b\\v.mp4");  // everything after the FIRST '=' is the value
+}
+
+TEST_CASE("unbuildable inputs return an empty alias (caller falls back)") {
+    CHECK(BuildMediaObjectAlias("", 10.0, true).empty());               // empty path
+    CHECK(BuildMediaObjectAlias("C:\\a\nb.mp4", 10.0, true).empty());   // LF in path
+    CHECK(BuildMediaObjectAlias("C:\\a\rb.mp4", 10.0, true).empty());   // CR in path
+    CHECK(BuildMediaObjectAlias("C:\\v\\a.mp4", 0.0, true).empty());    // still image
+    CHECK(BuildMediaObjectAlias("C:\\v\\a.mp4", -1.0, true).empty());   // nonsense duration
+}
+
+TEST_CASE("media object alias pins its length through the frame normalizer") {
+    // This is the production shape: build, then normalize with the resolved
+    // project-frame length before handing it to create_object_from_alias.
+    const std::string a = BuildMediaObjectAlias("C:\\v\\a.mp4", 10.0416666, true);
+    REQUIRE_FALSE(a.empty());
+    const std::string pinned = NormalizeAliasObjectFrameHeader(a, 240);
+    CHECK(Contains(pinned, "[Object]\r\nframe=0,240\r\n[Object.0]"));
+    std::string value;  // normalizing must not disturb the items
+    REQUIRE(ParseAliasItemValue(pinned, kVidFile, kHasAudio, &value));
+    CHECK(value == "1");
+}
+
+TEST_CASE("items left at their static defaults are not written") {
+    // Design pin: only per-material values are emitted; the host fills the rest
+    // in from its own defaults (the aviutl2_sdk sample omits them likewise).
+    const std::string a = BuildMediaObjectAlias("C:\\v\\a.mp4", 10.0416666, true);
+    REQUIRE_FALSE(a.empty());
+    CHECK_FALSE(Contains(a, kPlaySpeed));
+    CHECK_FALSE(Contains(a, kTrack));
+    CHECK_FALSE(Contains(a, kLoopPlay));
+    CHECK_FALSE(Contains(a, "YUV"));
 }
 
 // ---------------------------------------------------------------------------

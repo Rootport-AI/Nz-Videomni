@@ -11,8 +11,10 @@
 // These helpers ONLY build / rewrite that text - they never call the AviUtl2
 // SDK. They exist so the bridge can (a) pin a created object's length to exactly
 // the generated video (NormalizeAliasObjectFrameHeader), (b) repoint a video
-// object at the downloaded mp4 (PatchAliasReplaceVideoFilePath), and (c) drop a
-// provisional "generating..." text placeholder (BuildProvisionalTextAlias).
+// object at the downloaded mp4 (PatchAliasReplaceVideoFilePath), (c) drop a
+// provisional "generating..." text placeholder (BuildProvisionalTextAlias), and
+// (d) place a finished media file as a VIDEO OBJECT (BuildMediaObjectAlias) -
+// the drag-and-drop-equivalent alias that carries the "audio present" flag.
 //
 // The Japanese effect/item names AviUtl2 uses (from aviutl2_sdk WindowClient.cpp
 // and the object property sheet) are embedded below as UTF-8 byte escapes so
@@ -70,6 +72,29 @@ struct ProvisionalTextAlias {
 ProvisionalTextAlias BuildProvisionalTextAlias(const std::string& display_text,
                                                const std::string& job_id,
                                                const std::string& text_prefix = std::string());
+
+// Build the alias for a finished media file placed as a VIDEO OBJECT, i.e. the
+// text AviUtl2 itself serializes for a drag-and-dropped clip (section 3-140).
+// Two items make this different from create_object_from_media_file, which never
+// writes either of them:
+//   * "audio present" = has_audio ? 1 : 0 - the flag that decides the ribbon's
+//     two-tone (video+audio) look AND whether the object's context menu offers
+//     "separate audio". This is THE reason this builder exists.
+//   * "playback position" = 0.000,<total_time_sec>,<playback range>,0 - the
+//     source duration, so a trimmed ribbon reports a real source span.
+// Only the items that vary per material are written; "playback speed", "track",
+// "loop playback" and "YUV" are deliberately omitted and left to the host's
+// defaults (the aviutl2_sdk sample omits every default likewise). No "frame="
+// line is written - pass the result through NormalizeAliasObjectFrameHeader to
+// pin the length, exactly like BuildProvisionalPlaceholder does.
+//
+// Returns an EMPTY string when the alias cannot be built safely - an empty
+// path, a path containing CR or LF (it would break the line-based format; there
+// is no escape mechanism), or total_time_sec <= 0 (a still image or an
+// unreadable file). The caller treats an empty result as "fall back to the
+// legacy create_object_from_media_file path".
+std::string BuildMediaObjectAlias(const std::string& file_path_utf8,
+                                  double total_time_sec, bool has_audio);
 
 // Read the value of effect's item from an alias, e.g. the text-effect's text
 // line or a video effect's file line. Returns true and fills *out_value (raw,

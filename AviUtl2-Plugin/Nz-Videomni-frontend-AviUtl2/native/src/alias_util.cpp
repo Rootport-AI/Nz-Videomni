@@ -26,6 +26,15 @@ const char kItemFileJp[] =
     "\xe3\x83\x95\xe3\x82\xa1\xe3\x82\xa4\xe3\x83\xab";  // "file" item (path)
 const char kItemPlaybackJp[] =
     "\xe5\x86\x8d\xe7\x94\x9f\xe4\xbd\x8d\xe7\xbd\xae";  // "playback position" item
+// Section 3-140: the three names a drag-and-drop-equivalent video object needs.
+// No \xHH escape here is followed by a hex digit, so none of them can swallow a
+// neighbouring character; "<playback range>,0" is assembled by concatenation.
+const char kEffectVideoPlayJp[] =
+    "\xe6\x98\xa0\xe5\x83\x8f\xe5\x86\x8d\xe7\x94\x9f";  // "video playback" effect
+const char kItemHasAudioJp[] =
+    "\xe9\x9f\xb3\xe5\xa3\xb0\xe4\xbb\x98\xe3\x81\x8d";  // "audio present" item
+const char kPlaybackRangeJp[] =
+    "\xe5\x86\x8d\xe7\x94\x9f\xe7\xaf\x84\xe5\x9b\xb2";  // "playback range" (3rd value)
 // ASCII fallback prefix. The webui always passes an explicit, localized prefix
 // (spec 5-5's 4-stage labels), so this default is only reached on an off-nominal
 // path with no caller prefix; keep it ASCII so no tofu box can ever appear.
@@ -122,6 +131,41 @@ bool IsFileKey(const std::string& key) {
 
 bool IsPlaybackKey(const std::string& key) {
     return key == kItemPlaybackJp || key == "Playback";
+}
+
+// Format a double with EXACTLY three decimals, e.g. 10.0416666 -> "10.042",
+// 10.0 -> "10.000", 0.5 -> "0.500". Deliberately NOT snprintf("%.3f"): that
+// honours the C locale's decimal point, and the host process may have called
+// setlocale, which would emit "10,042" and corrupt the comma-separated
+// "playback position" value. Integer arithmetic has no such dependency.
+// Rounding is half-away-from-zero, matching AviUtl2's own 3-decimal output.
+std::string Fixed3(double value) {
+    const bool negative = value < 0.0;
+    double magnitude = negative ? -value : value;
+    // Keep the scaled value far inside the 64-bit range (an out-of-range
+    // double -> long long conversion is undefined). Also catches NaN, which
+    // fails every comparison and so lands on 0.
+    const double kMaxMagnitude = 1.0e12;
+    if (!(magnitude < kMaxMagnitude)) {
+        magnitude = magnitude > kMaxMagnitude ? kMaxMagnitude : 0.0;
+    }
+    const long long scaled = static_cast<long long>(magnitude * 1000.0 + 0.5);
+    const long long whole = scaled / 1000;
+    const long long frac = scaled % 1000;
+    std::string out;
+    if (negative) {
+        out += '-';
+    }
+    out += std::to_string(whole);
+    out += '.';
+    if (frac < 100) {
+        out += '0';
+    }
+    if (frac < 10) {
+        out += '0';
+    }
+    out += std::to_string(frac);
+    return out;
 }
 
 // First codepoints of a UTF-8 string (<= max_cp). *truncated is set when bytes
@@ -341,6 +385,60 @@ ProvisionalTextAlias BuildProvisionalTextAlias(const std::string& display_text,
     out.alias = alias;
     out.object_name = std::string(kProvisionalNamePrefix) + job_id;
     return out;
+}
+
+std::string BuildMediaObjectAlias(const std::string& file_path_utf8,
+                                  double total_time_sec, bool has_audio) {
+    // Guards (see the header): every one of these means "the caller must use the
+    // legacy create_object_from_media_file path instead".
+    if (file_path_utf8.empty()) {
+        return std::string();
+    }
+    // The format is line-based with no escape mechanism, so a CR or LF inside
+    // the path would silently split the alias into bogus lines. '=', '[' and ']'
+    // are harmless: everything after the first '=' is the value, verbatim.
+    if (file_path_utf8.find('\r') != std::string::npos ||
+        file_path_utf8.find('\n') != std::string::npos) {
+        return std::string();
+    }
+    // Written as !(x > 0) rather than (x <= 0) so a NaN duration is rejected too.
+    if (!(total_time_sec > 0.0)) {
+        return std::string();
+    }
+
+    const std::string eol = "\r\n";
+    std::string alias;
+    alias += "[Object]";  // no frame= line: NormalizeAliasObjectFrameHeader pins it
+    alias += eol;
+    alias += "[Object.0]";
+    alias += eol;
+    alias += "effect.name=";
+    alias += kEffectVideoFile;
+    alias += eol;
+    // "playback position" = start,source-duration,<playback range>,0. The comma
+    // separator is why Fixed3 (not the locale-aware snprintf) formats the value.
+    alias += kItemPlaybackJp;
+    alias += "=0.000,";
+    alias += Fixed3(total_time_sec);
+    alias += ",";
+    alias += kPlaybackRangeJp;
+    alias += ",";
+    alias += "0";
+    alias += eol;
+    alias += kItemFileJp;
+    alias += "=";
+    alias += file_path_utf8;
+    alias += eol;
+    alias += kItemHasAudioJp;  // the flag create_object_from_media_file never sets
+    alias += "=";
+    alias += has_audio ? "1" : "0";
+    alias += eol;
+    alias += "[Object.1]";
+    alias += eol;
+    alias += "effect.name=";
+    alias += kEffectVideoPlayJp;
+    alias += eol;
+    return alias;
 }
 
 bool ParseAliasItemValue(const std::string& alias, const std::string& effect,

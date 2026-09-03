@@ -277,8 +277,8 @@ class GenerateRequest(BaseModel):
     # で常駐させ、毎ジョブの GGUF 読み直しを省く。
     # 【重要】keep_resident と同じく、**生成結果は1バイトも変わらない**——
     # 同じ部品を作り直さずに使い回すだけなので、構築が速くなるだけである。
-    # 代償はメインメモリ：約4.6GiB が常駐する（ワーカーログの実測。実機ゲートの
-    # 実測値の正本は backend Docs/VERIFICATION_LOG.md §92）。LTX 2.5 の
+    # 代償はメインメモリ：実測 4.66GiB が常駐する（実機ゲートG-R2の実測。単発の
+    # 腕どうしの差で、正本は backend Docs/VERIFICATION_LOG.md §92）。LTX 2.5 の
     # keep_resident（テキストエンコーダの state dict、約7.68GiB）とは別々の
     # スイッチで、併用したときのメインメモリ増分は**加算的**になる。
     # 実際に効いたかどうかは metadata.json の keep_resident_embeddings_used で

@@ -41,7 +41,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   （既定 off のまま。ただし LTX 2.3 とは常駐する中身が違い、2.5 が抱えるのは
   テキストエンコーダの重みだけで約7.7GiBです）。
   keep_resident_embeddings（埋め込み処理器の常駐）は LTX 2.5 専用です
-  （既定 off。約4.6GiB。keep_resident とは別のスイッチで、両方 on にすると
+  （既定 off。実測4.66GiB。keep_resident とは別のスイッチで、両方 on にすると
   メモリ増分は加算されます）。これだけは向きが逆で、LTX 2.3 を選んでいるとき
   に true を送ると 422 FEATURE_UNSUPPORTED になります——「LTX 2.5 で使えない
   機能」ではなく「LTX 2.3 で使えない機能」の1つ目です。

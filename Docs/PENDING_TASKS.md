@@ -41,7 +41,7 @@ LTX 2.5の埋め込み処理器（embeddings processor＝プロンプトを読�
 - [ ] **U2**: そのままLTX 2.5へ切り替える → 同じ行が**現れる**（既定はoff）。
 - [ ] **U3**: LTX 2.5でこのトグルをonにしたうえで、LTX 2.3を選んだ状態で開き直す → 保存されていたonが**offへ書き戻されている**（LTX 2.5へ戻したときもoffのままであること＝正規化されていること）。
 
-**合格後**: ①文書3箇所の但し書き（[`../README.md`](../README.md) §5前文・同§7.1・[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(f)末尾の「まだオーナーの確認を経ていません」）を外す。②本項を`3-114`として[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移送しクローズする。③[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ結果の節を足す（同書は追記専用）。
+**合格後**: ①文書4箇所の但し書きを外す（**文言は箇所ごとに違うので、下の実文で検索すること**）——[`../README.md`](../README.md) §5前文と同§7.1は「まだオーナーの確認を経ていません」、[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.10(f)末尾は「2026-09-03 に加わった埋め込み処理器の常駐〔`keep_resident_embeddings`〕を除く」、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)冒頭「本書の位置づけ」の2026-09-03追記は「画面の見え方の目視3点がまだオーナー待ちである」である。②本項を`3-114`として[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移送しクローズする。③[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ結果の節を足す（同書は追記専用）。
 
 ### 2-4. V2V併用時の`duration_seconds`の実機確認 — 本書§3-88の実機ゲート（起票：2026-08-17／実装：2026-09-03）
 
@@ -50,7 +50,7 @@ LTX 2.5の埋め込み処理器（embeddings processor＝プロンプトを読�
 | # | 手順 | 期待 | 結果 |
 |---|---|---|---|
 | G1 | V2V（素材（冒頭））を使ったチェーン生成を1本実行し、出力フォルダのmetadata.jsonを開く | `output.duration_seconds`が実ファイルの尺と一致（§61.10の再現例なら7.042→4.0秒側になる） | **合格**（2026-09-03・オーナー了承の下MCP経由で実施。ジョブ`1e4a34ba`・三者とも1.0秒・詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §93.9） |
-| G2 | Inventoryの生成履歴グリッドで同ジョブのカードを見る（G1のジョブ`1e4a34ba`のカードが「512×320 · 1.0s」になっているかで確認できる） | 表示される尺が実ファイルと一致（webui無変更で値だけ直る） | 未実施（オーナー裁定で後回し） |
+| G2 | **新しくV2Vのチェーン生成を1本回し、その直後に**Inventoryの生成履歴グリッドで当該カードを見る（G1と同条件でよい。**G1のジョブ`1e4a34ba`のカードはもう見られない**——ジョブ履歴はメモリのみでサーバー再起動とともに消えるうえ〔[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.1〕、G1の検証後にバックエンドを停止しているため） | そのカードが「512×320 · 1.0s」表記になる＝表示される尺が実ファイルと一致（webui無変更で値だけ直る） | 未実施（オーナー裁定で後回し） |
 
 **合格後**: 本項を`3-88`として[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移送しクローズする（本書§3-88の本文もあわせて移す。クローズ文に含めるもの＝「実害なし」という影響評価の訂正／棄却した変種〔実ファイルをffprobe等で測り直してmetadataへ書き戻すこと〕とその理由／`output`区画の設計意図〔`resolution`の先例〕／素材（末尾）＝End source側は現行仕様〔末尾は切り落とさない〕により同種の食い違いが存在しないこと）。
 
@@ -296,9 +296,8 @@ LTX 2.5の埋め込み処理器（embeddings processor＝プロンプトを読�
 - **何が起きているか**: 素材（冒頭）＝V2V（動画から続きを生成する機能）を使うと、配信されるmp4は凍結した頭の分だけ短くなる（頭がトリムされる）のに、**`metadata.json`とジョブ状態（`job_status`）の`duration_seconds`はトリム前の値**（`num_frames ÷ fps`）を返す。実ファイルの尺と食い違う。
 - **影響**: 現在のフロントエンドはこの値を尺の表示に使っていないため実害は出ていないが、**将来ジョブ一覧などで尺を表示すると必ずズレる**。値を信じる側から見ると原因が分かりにくい種類の不一致なので、先に起票しておく。
 - **想定される直し方**: エンコード後の実フレーム数（もしくはトリム後のフレーム数）から計算し直す。トリム量はバックエンド側が持っているため、フロントエンドでの補正は避けたい（同じ計算の写しが増える）。
-- **状態**: 将来の改修項目（着手時期未定・尺の表示機能を作るときが自然な着手条件）。バックエンドの改修が必要。
-- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61.10（実機実験で再現確認済み）。
 - **状態（2026-09-03追記）**: **実装完了・実機ゲート待ち（本書§2-4参照）**。上の「影響」に書いた「フロントエンドはこの値を尺の表示に使っていないため実害は出ていない」は事実と違っていた——訂正はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §93.4にある。
+- **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §61.10（実機実験で再現確認済み）。
 
 #### 3-90. Start source＋End source併用（真ん中クリップの両側条件付け）（起票：2026-08-18）
 
@@ -455,12 +454,12 @@ LTX 2.5の埋め込み処理器（embeddings processor＝プロンプトを読�
 - **何が塞いでいるか**: テキストエンコーダのGemmaを**text-only化してVRAMを22.7GB回収した**現行構成と正面から衝突する。巻き戻す判断が必要なため計画外で、要件化されたときに別途判断する。
 - **出典**: [`Nz-Videomni/Docs/PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
 
-### 4-6. バックエンド同梱Gradio UIの残5件
+### 4-6. バックエンド同梱Gradio UIの残6件
 
-- **概要（残る5件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）⑤Gradio側が`unsupported_features`をまったく読んでいないこと（次項）。
+- **概要（残る6件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）⑤Gradio側が`unsupported_features`をまったく読んでいないこと（次項）⑥Settingsタブに埋め込み処理器の常駐（`keep_resident_embeddings`）のトグルが無いこと（2026-09-03の新設時に**意図的に見送った**もので、実装漏れではない。Gradio側のSettingsタブは高速化5項目のままで、6項目目はAviUtl2の操作パネルにだけある——[`README.md`](../README.md)「生成の高速化（Acceleration）」の項も同じことを書いている）。
 - **⑤の詳細**: **Gradio側のSettingsタブにあるVAEのラジオ（Default／PrunaVAED）は、アクティブなベースモデルが何であっても無条件に表示される。** LTX 2.5 を選んだ状態でPrunaVAEDを選んで生成すると、サーバーは`prune_vaed`を非対応として**422**で断る。AviUtl2側の操作パネルは同じ罠を[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-139で塞いだ（`unsupported_features`に`prune_vaed`がある間は行ごと非表示にする）が、**Gradio側は`unsupported_features`を1箇所も参照していない**（`gradio_ui/`全体でこのキーの出現は0件）。
 - **本項の扱い**: **実装するかどうかはオーナー判断であり、着手は決まっていない。** 直すなら`GET /models`の`unsupported_features`をGradio側でも読み、含まれる機能のコントロールを隠す（またはグレーアウトする）形になる。表駆動化そのものの研究課題は本書§3-135が受け皿である。
-- **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。⑤だけは利便性ではなく**到達可能な罠**である点が他の4件と異なる。
+- **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。⑤だけは利便性ではなく**到達可能な罠**である点が他の5件と異なる。
 - **既知の差分**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する挙動（フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針である。
 - **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73。**⑤の出典**は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-137（ベース切替の新設）・同§3-139（AviUtl2側の対処と`unsupported_features`の使い方）、[`README.md`](../README.md)「枝刈り版の映像VAEデコーダ」節（利用者向けの説明の正本）、および2026-09-01の敵対的レビュー。
 

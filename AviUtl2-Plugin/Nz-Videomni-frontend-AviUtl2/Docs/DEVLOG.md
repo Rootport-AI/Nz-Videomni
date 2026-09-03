@@ -3894,6 +3894,8 @@ return {
 - **変更ファイル（バックエンド）**: `mcp_server/tools/generate.py`・`gradio_ui/handlers.py`・`gradio_ui/ui.py`、および対応するテスト。
 - **状態**: 実装・自動ゲートとも完了。**オーナー実機目視待ち**——確認項目はバックエンド[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-2（G1〜G11）、台帳本文は同書§3-71・§3-72（実機ゲート合格後に[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)へ移送）。
 
+> **【2026-09-03 追記】G1〜G11は同日オーナーの実機ゲートで全項目合格し、§3-71・§3-72はバックエンドの[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)へ移送済みである。** **参照先として挙げているバックエンド台帳の§2-2は、全項目合格の運用規則どおり見出しごと削除されている**ので、**結果の正本はバックエンドの[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §91.6 である。**
+
 ## 106. 埋め込み処理器の常駐トグルを追加した — Settingsの高速化6行目・**LTX 2.5のときだけ見える**（バックエンド台帳§3-114）（2026-09-03）
 
 ### 106.1 結論

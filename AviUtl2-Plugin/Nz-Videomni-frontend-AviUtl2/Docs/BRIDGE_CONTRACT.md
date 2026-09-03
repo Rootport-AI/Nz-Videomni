@@ -173,6 +173,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - **逆順Chained（End source第2段階バッチ2、2026-08-18）はブリッジ契約に影響しない**: 複数クリップへの拡張はサーバー側の生成方式（`chain_math`のモード判定・Stage-1の生成順）が変わっただけで、アップロード応答の使い道（帯の長さ決定）も系統E（末尾合わせ）の純関数群（`AppShell.tsx`・`ChainedScreen.tsx`）も無改修のままである。nativeは1行も変わっていない。
 - doctest: `native/tests/test_bridge_core.cpp`に9ケース追加(258→**267 pass/6 skip**。実測は`build/ninja-release/NzVideomni_tests.exe --test-suite-exclude=integration`)。
 - **`timeline.getSelection`のv10追加フィールド(再生位置系)は2026-08-01に収録済み**: トリムの判定には、リボンが元動画のどこから再生を始めているか(AviUtl2の`動画ファイル`エフェクトの`再生位置`項目)が必要である。この項目の**単位**(秒／プロジェクトfpsのフレーム／ソースfpsのフレーム)はSDKのどこにも書かれておらず実機で1回採取する必要があったが、2026-08-01の採取・解析で**素材時間軸の秒**と確定した。これを受けて`playbackStartSec`／`playbackEndSec`／`hasPlaybackRange`／`playbackSpeed`／`loopPlay`／`sectionCount`の6フィールドを`bridge/types.ts`の`timeline.getSelection`結果へ載せ、本書§4.13へ追記した(`webui/src/timeline/sourceTrim.ts`のローカル型に暫定的に置いていた4フィールドはこれに伴い廃止し、同型は契約型の再エクスポートになった)。詳細な確定事実は[`V2V_RIBBON_TRIM_WORKORDER.md`](V2V_RIBBON_TRIM_WORKORDER.md) §4を参照。**実機ゲートは2026-08-01に全5項目合格し、テーマはクローズ済みである**([`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.12、[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-59)。同日、この6フィールドの**2つ目の消費者としてIC-LoRA参照動画のアップロード経路**が加わったが、契約側の変更は無い(`decideSourceTrim`／`trimQuery`という既存の純関数を`CreateScreen.tsx`から呼ぶだけで完結した)。
+- **注記(2026-09-04、§3-140の副作用。契約は不変)**: 🎞挿入がエイリアス方式になり`再生位置`を明示するようになったため(§4.7)、**🎞で置いたオブジェクトのリボンを手で詰めてからV2Vへ送ると、これまでの全尺送信ではなくトリム送信になる**。ドラッグ＆ドロップで置いたオブジェクトの挙動と一致させる方向の変化であり、`decideSourceTrim`のロジックも本書の契約も1文字も変えていない(トリムしていない場合は`spanCoversWholeMedia`のゲートで従来どおり全尺のまま)。経緯は[`DEVLOG.md`](DEVLOG.md) §107。
 
 ### 4.6 `backend.getBaseUrl`
 
@@ -184,8 +185,8 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 
 - params: `{ filePath: string, layer?: number, frame?: number }`(`layer`/`frame`省略時は現在の編集カーソル位置)
 - result: `{ inserted: true, layer: number, frame: number }`(実際に使われた解決後の値)
-- 実装: `call_edit_section_param`のコールバック内で`create_object_from_media_file(file, layer, frame, /*length=*/0)`を呼ぶ(メインスレッド・更新ロック下、**同期**)。
-- エラー: `BAD_REQUEST`(`filePath`欠落/空)、`FILE_NOT_FOUND`(送信前チェック)、`NO_EDIT_HANDLE`(編集ハンドル未取得、または`call_edit_section_param`が実行されなかった)、`INSERT_FAILED`(`create_object_from_media_file`が`nullptr`— 非対応形式や位置重複)。
+- 実装: `call_edit_section_param`のコールバック内で、メディア生成を一手に引き受けるnative側のヘルパ`CreateMediaObject`(`native/src/bridge.cpp`)を呼ぶ(メインスレッド・更新ロック下、**同期**)。同ヘルパは`get_media_info`1回で素材の実尺と音声トラックの有無を採り、尺は`round(総時間秒 × プロジェクトfps)`で決める(この式は§3-140の前後で変わっていない)。**動画かつ尺が1フレーム以上なら、ドラッグ＆ドロップ相当のエイリアス(`音声付き`キー込み)を組み立てて`create_object_from_alias`へ渡す**——`create_object_from_media_file`は`音声付き`を立てず、できたオブジェクトが青一色になり右クリックの「音声を分離」も出ないためである(§3-140)。静止画・音声のみ・素材情報が読めない・尺が0フレームへ丸まる・パスにCR/LFを含む、のいずれかなら**従来どおり`create_object_from_media_file(file, layer, frame, length)`**を呼ぶ。エイリアス経路が`nullptr`を返した場合と、できたオブジェクトが要求尺より短かった場合(deleteしてから)も同APIへ退避する(**三重の安全網**)。詳細は[`DEVLOG.md`](DEVLOG.md) §107、SDK側の確定知見は[`SDK_REFERENCE.md`](SDK_REFERENCE.md) §16(g)(h)。
+- エラー: `BAD_REQUEST`(`filePath`欠落/空)、`FILE_NOT_FOUND`(送信前チェック)、`NO_EDIT_HANDLE`(編集ハンドル未取得、または`call_edit_section_param`が実行されなかった)、`INSERT_FAILED`(**エイリアス経路と従来API経路の両方が失敗**して`nullptr`しか得られなかった — 非対応形式や位置重複。メッセージは§3-140で経路中立な`media object creation failed (unsupported format or overlapping object)`へ改めた)。
 
 ### 4.8 `timeline.captureFrame`
 
@@ -300,7 +301,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 タイムライン右クリック再設計の第1段階で、仮オブジェクトのライフサイクルを担う**新設ネイティブRPCと既存RPCの契約変更**が加わった。**いずれも`webui/src/bridge/types.ts`とnative(`bridge_core.*`／`bridge.cpp`)に実装済み**だが、本書は§0冒頭のv5ドキュメント債務の方針に倣い、詳細な引数・応答形式の収録は行わず、下記の要点と一次ソースへのポインタにとどめる（**現行の唯一の正は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5、契約型は`types.ts`**）。
 
 - **`timeline.updateProvisionalReservation`（新設・SPEC §5-3）**: 仮オブジェクトの「削除＋付け替え」を1編集セクション（アンドゥ1件）で原子的に行う。用途は(a)予約移動、(b)旧予約の削除、(c)自己修復（旧予約が見つからなければcreateのみ）。位置衝突時はnative側で`EDIT_INFO.layer_max`を参照し`layer_max+1`へフォールバックcreate。
-- **`timeline.insertMediaForJob`（新設・SPEC §5-10）**: 完成動画の🎞挿入を、仮オブジェクトのマーカー位置（レイヤー・フレーム）へ**位置連動で置換**する（現在選択レイヤー・カーソル位置は無視）。1編集セクションで delete＋create（明示尺）を行いアンドゥ1件にまとめる。ロールバック用の機能フラグ`REPLACE_INSERT_ENABLED`（webui側）で旧経路＝`timeline.insertMedia`＋`timeline.deleteProvisionalByJob`へ即時退避できる。
+- **`timeline.insertMediaForJob`（新設・SPEC §5-10）**: 完成動画の🎞挿入を、仮オブジェクトのマーカー位置（レイヤー・フレーム）へ**位置連動で置換**する（現在選択レイヤー・カーソル位置は無視）。1編集セクションで delete＋create（明示尺）を行いアンドゥ1件にまとめる。ロールバック用の機能フラグ`REPLACE_INSERT_ENABLED`（webui側）で旧経路＝`timeline.insertMedia`＋`timeline.deleteProvisionalByJob`へ即時退避できる。**注記（2026-09-04、§3-140）**: このRPCが使う生成プリミティブは`timeline.insertMedia`と共通の`CreateMediaObject`ヘルパへ集約され、動画は`create_object_from_alias`（`音声付き`込み）経由になった（§4.7の実装欄が正本。RPCの引数・応答は不変で、契約バージョンも据え置き）。
 - **`timeline.deleteProvisionalByJob`**: jobID指定で仮オブジェクトを逆引き削除する（旧✅マーカー自動削除経路。上記ロールバック経路で使用）。
 - **`timeline.insertProvisional`の契約変更**: 長さ指定が旧`lengthFrames`から**`numFrames`（生成フレーム数）＋`genFps`（生成フレームレート）**へ変更された。尺換算はwebuiでは行わず、native側が`ProjectFramesForPixels()`（`timeline_math.h`）でプロジェクトfps基準へ換算する。あわせて配置系統パラメータ（(A)素材直後／(B)素材と同開始で`layer_max+1`／(C)右クリック位置）と`textPrefix`（状況表示テキストの接頭辞）が加わった。`updateProvisionalReservation`も同じ`numFrames`／`genFps`／配置系統を受ける。
 - **`timeline.projectLoaded`（イベント）**: §0冒頭2026-07-08注記のとおり本書は未収録のまま（既知の債務）。孤児（セッションまたぎ）仮オブジェクトの予約検出に使う。検出はテキスト本文の`[#id]`マーカーを第一手段、`object_name`の`NzVideomni#<id>`を名前フォールバックとする二重化設計（SPEC §5-7）。
@@ -404,7 +405,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 | `BACKEND_TIMEOUT` | WinHTTPタイムアウト | 同上 |
 | `DOWNLOAD_FAILED` | ダウンロードHTTPステータスが200以外 | `backend.downloadVideo` |
 | `FILE_NOT_FOUND` | 送信前のローカルファイル存在チェック失敗 | `timeline.insertMedia`, `backend.uploadFile`, `ui.makeThumbnail` |
-| `INSERT_FAILED` | `create_object_from_media_file`が`nullptr` | `timeline.insertMedia` |
+| `INSERT_FAILED` | メディアオブジェクトの生成に失敗(§3-140以降は**エイリアス経路と`create_object_from_media_file`の両方が`nullptr`**を返したとき。メッセージは経路中立な`media object creation failed …`) | `timeline.insertMedia`, `timeline.insertMediaForJob` |
 | `CAPTURE_FAILED` | レンダリング/PNGエンコードの失敗(`NO_EDIT_HANDLE`除外後) | `timeline.captureFrame` |
 | `CANCELLED` | ユーザーがファイル選択/フォルダ選択をキャンセル(UIではエラー非表示) | `ui.pickFile`, `ui.pickFolder`(v6・§4.15) |
 | `DIALOG_FAILED` | ネイティブOpen/フォルダ選択ダイアログ自体の失敗・再入 | `ui.pickFile`, `ui.pickFolder`(v6・§4.15) |

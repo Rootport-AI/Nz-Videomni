@@ -142,7 +142,9 @@ void (*delete_object)(OBJECT_HANDLE);                                           
 
 `MEDIA_INFO`(67-72行): `{video_track_num, audio_track_num, total_time, width, height}`。動画/音声トラック数・総時間・解像度。
 
-`create_object_from_alias(alias, layer, frame, length)`(168行): UTF-8のXML形式エイリアス文字列(`.object`ファイルと同フォーマット)からオブジェクトを生成する。2025/12/6更新で複数オブジェクトのエイリアスデータにも対応。
+`create_object_from_alias(alias, layer, frame, length)`(168行): UTF-8の**INI風**エイリアス文字列(`.object`ファイルと同フォーマット。`[Object]`／`[Object.N]`のセクション見出しの下に`key=value`行が並ぶ形式で、各セクションの先頭が`effect.name=<エフェクト名>`)からオブジェクトを生成する。2025/12/6更新で複数オブジェクトのエイリアスデータにも対応。
+
+> **訂正注記（2026-09-04追記・§3-140）**：上記の書式は初版で「XML形式」と書いていたが**誤りである**。根拠はSDK同梱サンプル`aviutl2_sdk\WindowClient.cpp`:69-82のエイリアスリテラル（`[Object]`→`[Object.0]`→`effect.name=テキスト`→`サイズ=150.00`…と続き、XMLタグは1つも現れない）で、実機で採取した`.object`ファイルも同じ書式である。同じ誤記が [`WEB_RESEARCH.md`](WEB_RESEARCH.md) §5にもあり、あわせて訂正した（[`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md) 第0節Bは当初からINI風と正しく書いていた）。
 
 ### 5.2 プロジェクト・編集情報
 
@@ -356,6 +358,11 @@ struct LOG_HANDLE {
 - **(d) `layer_max+1` へのcreateはレイヤーが自動確保される。** オブジェクトが存在する最大レイヤー番号＋1（定義上、必ず空いている最前面レイヤー）を指定してcreateすると、そのレイヤーが自動的に確保されてオブジェクトが置ける（フォールバック挿入先として成立することをG2で確認）。
 - **(e) `call_edit_section` 1回内の delete＋create はアンドゥ1件にまとまる。** ヘッダ未記載で従来「未確認」だった `call_edit_section` の1トランザクション性を実機で確認した。**テキスト→テキスト**（✨挿入・予約付け替え。G1）と**テキスト→メディア**（🎞置換。G3）の両方で、一連の削除→createがCtrl+Z 1回でまとめて戻せることを確認済み。これにより `updateProvisionalReservation`／`insertMediaForJob`（1セクション内で delete＋create を原子的に行う新設RPC）のアンドゥ設計が成立する。
 - **(f) `register_event_listener` は本プラグイン未使用のまま。** §3・§10で「使用前に実機疎通確認」としていた2026/6/14追加のこのAPIは、本再設計でも採用せず未使用のままである。プロジェクトロード検出は `register_project_load_handler`（コールバック内でフラグ／予約検出）で足りており、イベント専用スレッド制約（コールバック内で `call_edit_section` 系が使えない）を負う `register_event_listener` を導入する必要がなかった。
+
+**追記（2026-09-03〜04、§3-140＝🎞挿入オブジェクトが青一色になる症状の調査と修正）**：以下の2点は右クリック再設計とは別の機会に得た知見である。一次記録は [`DEVLOG.md`](DEVLOG.md) §107、実機で採取したエイリアスの突き合わせ結果はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-140。
+
+- **(g) `動画ファイル`オブジェクトの表示種別は、エイリアス直列化キー`音声付き`（`0`／`1`）で決まる。** 二色リボン（上が映像・下が音声）で描かれるか、右クリックメニューに「音声を分離」が出るかは、この1キーの値で決まる。**`create_object_from_media_file`はこのキーを立てない**ため、同じ動画ファイルでも、このAPIで作ったオブジェクトは`音声付き=0`となり**青一色・「音声を分離」なし**になる（同じファイルをドラッグ＆ドロップで置くと`音声付き=1`）。SDKにはオブジェクトの表示種別を指定・取得するAPIが無いので、**二色リボンを得る唯一の経路は`create_object_from_alias`へこのキーを含むエイリアスを渡すこと**である。§3-140のE1実機採取（2026-09-03、ドロップ由来と🎞挿入由来の`.object`の突き合わせ）で確定した。なお`音声付き`は本体の**UI項目一覧には現れない**が、**エイリアス直列化のキーとしては現役**である（この両立の整理は [`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md) 第0節Bの訂正注記を参照）。
+- **(h) `create_object_from_alias`へ明示尺（`length>0`）を渡したときの衝突挙動は未実測のまま。** (c)で確定しているのは`length=0`の側（黙って短縮する）だけで、明示尺を渡した場合に`null`が返るのか黙って短縮されるのかは実機で観測していない。§3-140の実装はどちらかを前提にせず、**エイリアス内の`frame=0,N`ピンと`length`引数の二重ピン＋生成後の実尺検証**（要求より短ければdeleteして`create_object_from_media_file`へ退避）で埋めている。`OBJECT_LAYER_FRAME.end`が包含か排他かも未実測のため、実尺検証は「要求より短いときだけ失敗とみなす」片側判定にしてある。実機ゲートR7のログで確定させる予定。
 
 ## 参照ファイル(絶対パス)
 

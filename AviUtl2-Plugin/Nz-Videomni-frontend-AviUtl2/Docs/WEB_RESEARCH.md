@@ -76,7 +76,8 @@
 
 ## 5. タイムライン追加・プロジェクト連携の知見
 
-- キーAPI: `EDIT_SECTION::create_object_from_alias()`(XML形式エイリアスからオブジェクト生成)と`create_object_from_media_file()`。手元SDKヘッダ(`plugin2.h`)で行番号付きで裏取り済み([SDK_REFERENCE.md](SDK_REFERENCE.md) §5参照)。
+- キーAPI: `EDIT_SECTION::create_object_from_alias()`(**INI風**エイリアス〔`[Object]`／`[Object.N]`セクション＋`key=value`行〕からオブジェクト生成)と`create_object_from_media_file()`。手元SDKヘッダ(`plugin2.h`)で行番号付きで裏取り済み([SDK_REFERENCE.md](SDK_REFERENCE.md) §5参照)。
+  - **訂正注記(2026-09-04追記・§3-140)**: 本行は初版で「XML形式エイリアス」と書いていたが**誤りである**。書式はINI風で、根拠と経緯は [SDK_REFERENCE.md](SDK_REFERENCE.md) §5.1の訂正注記が正本。
 - 排他制御: `EDIT_HANDLE::call_edit_section()`で編集ロックを取得した状態でコールバックが実行される。マルチスレッドでHTTP結果を受け取り→UIスレッド(メインスレッド)で編集操作、というマーシャリングが必須である点は、GCMZDrops2等の既存IPC実装とも設計思想が共通する。
 - 2025年8月時点の「入力・出力プラグインのみ」という記事(guest04氏 https://guest04.hatenablog.com/entry/2025/08/08/221521 )は`.aux2`整備前の古い情報であり、現在は当てはまらない。
 

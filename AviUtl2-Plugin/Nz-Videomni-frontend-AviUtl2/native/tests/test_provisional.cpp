@@ -175,7 +175,7 @@ TEST_CASE("DetectOrphans returns provisional objects with no active job") {
     CHECK(orphans[0].object_name == "NzVideomni#stale");
     CHECK(orphans[0].layer == 2);
     CHECK(orphans[0].frame == 40);
-    CHECK(orphans[0].length_frames == 51);  // 90-40+1（包含）
+    CHECK(orphans[0].length_frames == 51);  // 90 - 40 + 1 (frame_end is inclusive)
 }
 
 TEST_CASE("DetectOrphans with no active jobs orphans every provisional object") {

@@ -823,7 +823,8 @@ bool ParseInsertProvisional(const json_t& params, InsertProvisionalParams* out,
                             std::string* err_message);
 
 // Build the provisional placeholder alias + object_name for a job, pinned to
-// length_frames project frames. Pure wrapper over BuildProvisionalTextAlias +
+// length_frames project frames - i.e. the alias carries the INCLUSIVE header
+// range "frame=0,<length_frames-1>". Pure wrapper over BuildProvisionalTextAlias +
 // NormalizeAliasObjectFrameHeader; the produced alias round-trips through
 // provisional::AliasMatchesJob(alias, job_id). text_prefix picks the 4-stage
 // label prefix (spec section 5-5): empty = the default "generating:" prefix

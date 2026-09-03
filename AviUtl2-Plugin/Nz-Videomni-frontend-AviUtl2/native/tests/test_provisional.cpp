@@ -34,6 +34,8 @@ std::string TextAlias(const std::string& text) {
     return a;
 }
 
+// fs/fe are the object's INCLUSIVE first/last frames (ScannedObject mirrors
+// OBJECT_LAYER_FRAME.start/end), so the span is fe - fs + 1 frames long.
 ScannedObject Obj(int layer, int fs, int fe, const std::string& alias) {
     ScannedObject o;
     o.layer = layer;
@@ -107,6 +109,19 @@ TEST_CASE("FindProvisionalIndex falls back to the reserved covering frame") {
     CHECK(FindProvisionalIndex(scan, "target", -1, 20) == -1);
 }
 
+TEST_CASE("FindProvisionalIndex covers the object's last frame (inclusive)") {
+    // The one visible effect of reading the scanned span as inclusive: a
+    // reservation sitting exactly ON frame_end now recovers the object instead of
+    // falling through. frame_end + 1 is still outside it.
+    std::vector<ScannedObject> scan = {
+        Obj(2, 10, 40, TextAlias("edited")),  // occupies frames 10..40
+    };
+    CHECK(FindProvisionalIndex(scan, "target", 2, 40) == 0);   // last frame: hit
+    CHECK(FindProvisionalIndex(scan, "target", 2, 10) == 0);   // first frame: hit
+    CHECK(FindProvisionalIndex(scan, "target", 2, 41) == -1);  // one past the end
+    CHECK(FindProvisionalIndex(scan, "target", 2, 9) == -1);   // one before it
+}
+
 TEST_CASE("FindProvisionalIndex prefers exact match over the fallback") {
     std::vector<ScannedObject> scan = {
         Obj(2, 10, 40, TextAlias("edited")),           // would satisfy fallback
@@ -160,7 +175,7 @@ TEST_CASE("DetectOrphans returns provisional objects with no active job") {
     CHECK(orphans[0].object_name == "NzVideomni#stale");
     CHECK(orphans[0].layer == 2);
     CHECK(orphans[0].frame == 40);
-    CHECK(orphans[0].length_frames == 50);  // 90 - 40
+    CHECK(orphans[0].length_frames == 51);  // 90-40+1（包含）
 }
 
 TEST_CASE("DetectOrphans with no active jobs orphans every provisional object") {

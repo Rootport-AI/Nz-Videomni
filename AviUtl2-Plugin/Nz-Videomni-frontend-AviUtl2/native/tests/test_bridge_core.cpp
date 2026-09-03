@@ -1484,8 +1484,9 @@ TEST_CASE("BuildProvisionalPlaceholder embeds the job id and pins the length") {
     // The alias round-trips through the provisional re-discovery predicate.
     CHECK(AliasMatchesJob(built.alias, "job-XYZ"));
     CHECK_FALSE(AliasMatchesJob(built.alias, "job-XY"));  // no prefix collision
-    // The top [Object] frame header is pinned to frame=0,<length>.
-    CHECK(built.alias.find("frame=0,37") != std::string::npos);
+    // The top [Object] frame header is pinned to frame=0,<length-1> (the header's
+    // end frame is inclusive, so 37 frames read as 0..36).
+    CHECK(built.alias.find("frame=0,36") != std::string::npos);
 
     // With an explicit stage-1 (ASCII) prefix, the label leads with it yet the
     // job id remains embedded/re-discoverable (double-tag preserved, spec 5-5).
@@ -1536,7 +1537,8 @@ TEST_CASE("insertProvisional builds the alias, calls the provider and echoes nam
     // D2: the resolved length is forwarded to the provider (explicit create len).
     CHECK(captured_length == 24);
     CHECK(AliasMatchesJob(captured_alias, "j9"));
-    CHECK(captured_alias.find("frame=0,24") != std::string::npos);
+    // 24 frames -> inclusive header range 0..23.
+    CHECK(captured_alias.find("frame=0,23") != std::string::npos);
 }
 
 TEST_CASE("insertProvisional maps a provider failure to PROVISIONAL_FAILED") {
@@ -2161,9 +2163,9 @@ TEST_CASE("insertProvisional resolves length from numFrames+genFps (project fps)
         ctx);
     const json j = json::parse(resp);
     REQUIRE(j["ok"] == true);
-    // The alias frame header is pinned to the resolved length (49); D2: the same
-    // resolved length is forwarded to create.
-    CHECK(captured_alias.find("frame=0,49") != std::string::npos);
+    // The alias frame header is pinned to the resolved length (49 frames -> the
+    // inclusive range 0..48); D2: the same resolved length is forwarded to create.
+    CHECK(captured_alias.find("frame=0,48") != std::string::npos);
     CHECK(captured_length == 49);
     CHECK(j["result"]["usedFallback"] == false);
     CHECK(j["result"]["placedLayer"] == 1);
@@ -2332,11 +2334,12 @@ TEST_CASE("updateProvisionalReservation resolves length/placement and reports de
     CHECK(j["result"]["placedLayer"] == 2);
     CHECK(j["result"]["placedFrame"] == 61);
     CHECK(j["result"]["usedFallback"] == false);
-    // The provider received the built alias pinned to the resolved length (49).
+    // The provider received the built alias pinned to the resolved length (49
+    // frames -> the inclusive header range 0..48).
     CHECK(captured.new_job_id == "job-9");
     CHECK(captured.old_job_id == "pending-1");
     CHECK(AliasMatchesJob(captured.alias, "job-9"));
-    CHECK(captured.alias.find("frame=0,49") != std::string::npos);
+    CHECK(captured.alias.find("frame=0,48") != std::string::npos);
     CHECK(captured.layer == 2);
     CHECK(captured.frame == 61);
     // D2: the resolved length rides on the request (explicit create len + pre-check).

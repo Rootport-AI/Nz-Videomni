@@ -101,11 +101,14 @@ int FindProvisionalIndex(const std::vector<ScannedObject>& scanned,
         }
     }
     // Fallback: recover by the reservation position (only if one was supplied).
+    // The scanned span is INCLUSIVE at both ends (see provisional.h), so the
+    // upper bound is <=, not <: a reservation landing exactly on the object's
+    // last frame still recovers it.
     if (reserved_layer >= 0) {
         for (size_t i = 0; i < scanned.size(); ++i) {
             const ScannedObject& o = scanned[i];
             if (o.layer == reserved_layer && o.frame_start <= reserved_frame &&
-                reserved_frame < o.frame_end) {
+                reserved_frame <= o.frame_end) {
                 return static_cast<int>(i);
             }
         }
@@ -147,7 +150,7 @@ std::vector<Reservation> DetectOrphans(
         r.object_name = std::string(kNamePrefix) + jid;
         r.layer = o.layer;
         r.frame = o.frame_start;
-        r.length_frames = o.frame_end - o.frame_start;
+        r.length_frames = o.frame_end - o.frame_start + 1;  // inclusive span
         orphans.push_back(r);
     }
     return orphans;

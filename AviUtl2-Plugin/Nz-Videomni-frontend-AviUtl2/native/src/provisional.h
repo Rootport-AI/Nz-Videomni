@@ -48,7 +48,10 @@ struct Reservation {
 };
 
 // One object returned by a timeline scan (SDK-side; this module only sees the
-// plain fields). frame span is half-open: [frame_start, frame_end).
+// plain fields). The frame span is INCLUSIVE at both ends: [frame_start,
+// frame_end], mirroring OBJECT_LAYER_FRAME.start/end, which these fields are a
+// pass-through of (measured 2026-09-04, Docs\SDK_REFERENCE.md section 16 (h)).
+// So the object occupies frame_end - frame_start + 1 frames.
 struct ScannedObject {
     int layer = 0;
     int frame_start = 0;
@@ -69,8 +72,9 @@ bool AliasMatchesJob(const std::string& alias, const std::string& job_id);
 // Fallback (mirrors the reference FindObjectCoveringFrameByExactAlias recovery
 // path): if no alias matches - e.g. the user edited the placeholder text and
 // destroyed the "[#...]" marker - recover the object the reservation still points
-// at: the first candidate on reserved_layer whose [frame_start, frame_end) covers
-// reserved_frame. The fallback is skipped when reserved_layer < 0 (no usable
+// at: the first candidate on reserved_layer whose INCLUSIVE span [frame_start,
+// frame_end] covers reserved_frame (a reservation sitting exactly on frame_end is
+// therefore a hit). The fallback is skipped when reserved_layer < 0 (no usable
 // reservation), so a purely negative-layer sentinel disables it.
 int FindProvisionalIndex(const std::vector<ScannedObject>& scanned,
                          const std::string& job_id, int reserved_layer,

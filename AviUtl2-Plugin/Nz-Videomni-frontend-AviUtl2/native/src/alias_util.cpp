@@ -205,6 +205,14 @@ std::string StripUtf8Bom(const std::string& s) {
 }
 
 std::string NormalizeAliasObjectFrameHeader(const std::string& alias, int length) {
+    // Guard, not a code path: both production callers (BuildProvisionalPlaceholder
+    // in bridge_core.cpp and CreateMediaObject in bridge.cpp) already require
+    // length >= 1. A length below 1 has no representable inclusive end frame, so
+    // the alias is returned untouched - and an alias with no "frame=" line is
+    // created at the HOST's automatic duration, not at the requested one.
+    if (length < 1) {
+        return alias;
+    }
     const std::string src = StripUtf8Bom(alias);
     const std::string eol = DetectEol(src);
     bool trailing = false;
@@ -230,7 +238,12 @@ std::string NormalizeAliasObjectFrameHeader(const std::string& alias, int length
         }
     }
 
-    const std::string frame_line = "frame=0," + std::to_string(length);
+    // "frame=a,b" is 0-based and INCLUSIVE at BOTH ends, whereas `length` counts
+    // frames, so N frames are pinned as "frame=0,N-1" - writing N would produce
+    // an object one frame too long. Measured on the real device 2026-09-04: a
+    // 121-frame clip dropped onto the timeline serializes as "frame=0,120"
+    // (data\Alias\R4_d_and_d.object); see Docs\SDK_REFERENCE.md section 16 (h).
+    const std::string frame_line = "frame=0," + std::to_string(length - 1);
     int frame_idx = -1;
     for (size_t j = static_cast<size_t>(obj_idx) + 1; j < sec_end; ++j) {
         if (KeyOf(lines[j]) == "frame") {
@@ -408,7 +421,9 @@ std::string BuildMediaObjectAlias(const std::string& file_path_utf8,
 
     const std::string eol = "\r\n";
     std::string alias;
-    alias += "[Object]";  // no frame= line: NormalizeAliasObjectFrameHeader pins it
+    // No frame= line here: NormalizeAliasObjectFrameHeader pins the length by
+    // writing "frame=0,<length-1>" (the header's end frame is inclusive).
+    alias += "[Object]";
     alias += eol;
     alias += "[Object.0]";
     alias += eol;

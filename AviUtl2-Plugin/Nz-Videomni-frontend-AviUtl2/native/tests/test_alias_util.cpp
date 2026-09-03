@@ -58,33 +58,53 @@ TEST_CASE("StripUtf8Bom removes a leading BOM only") {
 TEST_CASE("frame line is rewritten in place") {
     const std::string in = "[Object]\nframe=0,100\n[Object.0]\neffect.name=x\n";
     const std::string out = NormalizeAliasObjectFrameHeader(in, 200);
-    CHECK(Contains(out, "frame=0,200"));
-    CHECK_FALSE(Contains(out, "frame=0,100"));
+    CHECK(Contains(out, "frame=0,199"));  // 200 frames, inclusive end
+    CHECK_FALSE(Contains(out, "frame=0,100"));  // the input value is gone
 }
 
 TEST_CASE("frame line is inserted right after [Object] when missing") {
     const std::string in = "[Object]\n[Object.0]\neffect.name=x\n";
     const std::string out = NormalizeAliasObjectFrameHeader(in, 50);
-    CHECK(Contains(out, "[Object]\nframe=0,50\n[Object.0]"));
+    CHECK(Contains(out, "[Object]\nframe=0,49\n[Object.0]"));  // 50 frames
 }
 
 TEST_CASE("a frame line inside another section is not touched") {
     const std::string in = "[Object]\n[Object.0]\neffect.name=x\nframe=99,99\n";
     const std::string out = NormalizeAliasObjectFrameHeader(in, 10);
-    CHECK(Contains(out, "frame=0,10"));    // inserted into [Object]
+    CHECK(Contains(out, "frame=0,9"));     // inserted into [Object] (10 frames)
     CHECK(Contains(out, "frame=99,99"));   // [Object.0]'s own line survives
 }
 
 TEST_CASE("CRLF line endings are preserved and BOM stripped") {
     const std::string in = "\xEF\xBB\xBF[Object]\r\nframe=0,1\r\n[Object.0]\r\n";
     const std::string out = NormalizeAliasObjectFrameHeader(in, 7);
-    CHECK(Contains(out, "frame=0,7\r\n"));
+    CHECK(Contains(out, "frame=0,6\r\n"));  // 7 frames
     CHECK_FALSE(Contains(out, "\xEF\xBB\xBF"));
 }
 
 TEST_CASE("no [Object] section leaves the alias unchanged") {
     const std::string in = "[Object.0]\neffect.name=x\n";
     CHECK(NormalizeAliasObjectFrameHeader(in, 5) == in);
+}
+
+TEST_CASE("the pinned header matches what the host itself serializes") {
+    // Regression pin for the off-by-one fixed on 2026-09-04. The header's second
+    // value is an INCLUSIVE end frame, so a 121-frame clip must read
+    // "frame=0,120" - byte-identical to what AviUtl2 writes for the SAME 121-frame
+    // material dropped onto the timeline (real-device capture
+    // data\Alias\R4_d_and_d.object; Docs\SDK_REFERENCE.md section 16 (h)).
+    // Writing "frame=0,121" - the old behaviour, captured in R4_insert.object -
+    // produced a 122-frame object, one frame longer than the video.
+    const std::string in = "[Object]\n[Object.0]\neffect.name=x\n";
+    const std::string out = NormalizeAliasObjectFrameHeader(in, 121);
+    CHECK(Contains(out, "frame=0,120"));
+    CHECK_FALSE(Contains(out, "frame=0,121"));
+}
+
+TEST_CASE("a one-frame length pins the degenerate inclusive range") {
+    // Boundary: 1 frame occupies frame 0 only, so start == end.
+    const std::string in = "[Object]\n[Object.0]\neffect.name=x\n";
+    CHECK(Contains(NormalizeAliasObjectFrameHeader(in, 1), "frame=0,0"));
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +177,7 @@ TEST_CASE("provisional text alias centers the label with the alignment item") {
 TEST_CASE("provisional alias round-trips through the frame normalizer") {
     ProvisionalTextAlias p = BuildProvisionalTextAlias("x", "j1");
     const std::string pinned = NormalizeAliasObjectFrameHeader(p.alias, 42);
-    CHECK(Contains(pinned, "frame=0,42"));
+    CHECK(Contains(pinned, "frame=0,41"));  // 42 frames, inclusive end
 }
 
 TEST_CASE("provisional text alias honors an explicit textPrefix (spec 5-5)") {
@@ -201,8 +221,9 @@ TEST_CASE("media object alias has the two-effect video structure and no frame li
     CHECK(Contains(a, std::string("effect.name=") + kVidFile));
     CHECK(Contains(a, "[Object.1]"));
     CHECK(Contains(a, std::string("effect.name=") + kVidPlay));
-    // No frame= line: the length is pinned by NormalizeAliasObjectFrameHeader,
-    // because an alias-local frame range would OVERRIDE the requested length.
+    // No frame= line: the length is pinned by NormalizeAliasObjectFrameHeader
+    // (as the inclusive "frame=0,<length-1>"), because an alias-local frame range
+    // would OVERRIDE the requested length.
     CHECK_FALSE(Contains(a, "frame="));
     CHECK(Contains(a, "\r\n"));  // CRLF, like BuildProvisionalTextAlias
 }
@@ -268,7 +289,7 @@ TEST_CASE("media object alias pins its length through the frame normalizer") {
     const std::string a = BuildMediaObjectAlias("C:\\v\\a.mp4", 10.0416666, true);
     REQUIRE_FALSE(a.empty());
     const std::string pinned = NormalizeAliasObjectFrameHeader(a, 240);
-    CHECK(Contains(pinned, "[Object]\r\nframe=0,240\r\n[Object.0]"));
+    CHECK(Contains(pinned, "[Object]\r\nframe=0,239\r\n[Object.0]"));  // 240 frames
     std::string value;  // normalizing must not disturb the items
     REQUIRE(ParseAliasItemValue(pinned, kVidFile, kHasAudio, &value));
     CHECK(value == "1");

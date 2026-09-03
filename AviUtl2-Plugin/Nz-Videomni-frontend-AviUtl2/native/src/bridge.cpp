@@ -122,9 +122,12 @@ OBJECT_HANDLE CreateMediaObject(EDIT_SECTION* edit, const std::string& path_utf8
     }
 
     // An alias' own frame range OVERRIDES the length argument, so pin both to
-    // the same span - the double pin (frame=0,N inside the alias PLUS the
-    // explicit length argument) is the shape insertProvisional already proved on
-    // the real device.
+    // the same span - the double pin (the frame= header inside the alias PLUS
+    // the explicit length argument) is the shape insertProvisional already
+    // proved on the real device. The two are written in DIFFERENT units: the
+    // header's second value is an INCLUSIVE end frame (so the helper writes
+    // length-1), while the length argument is a frame COUNT. Conflating them is
+    // what made every inserted object one frame too long until 2026-09-04.
     const std::string pinned = NormalizeAliasObjectFrameHeader(alias, length);
     OBJECT_HANDLE created =
         edit->create_object_from_alias(pinned.c_str(), layer, frame, length);
@@ -139,11 +142,18 @@ OBJECT_HANDLE CreateMediaObject(EDIT_SECTION* edit, const std::string& path_utf8
         return edit->create_object_from_media_file(wide.c_str(), layer, frame, length);
     }
 
-    // Safety net 3. Whether OBJECT_LAYER_FRAME.end is inclusive is not yet
-    // observed, so the check is deliberately one-sided: only a span SHORTER than
-    // requested is a failure. Reading end as inclusive when it is exclusive just
-    // overstates the actual length by one and passes, whereas an equality test
-    // would make the whole 3-140 fix fall back silently on every insert.
+    // Safety net 3. OBJECT_LAYER_FRAME.end is INCLUSIVE - measured 2026-09-04,
+    // see Docs\SDK_REFERENCE.md section 16 (h) - so "end - start + 1" below is
+    // the real frame count and, with the header now pinned to length-1, the
+    // expected reading is actual == length.
+    //
+    // The check stays deliberately one-sided (only a span SHORTER than requested
+    // is a failure) rather than an equality test. The reason is a dependency, not
+    // a proof: actual == length holds only while the alias' frame header keeps
+    // overriding the length argument (itself an observed behaviour, same day).
+    // Should that ever stop holding, an equality test would make every insert
+    // fall back silently and undo the whole 3-140 fix, whereas a one-sided test
+    // simply passes.
     if (edit->get_object_layer_frame != nullptr) {
         const OBJECT_LAYER_FRAME lf = edit->get_object_layer_frame(created);
         const int actual = lf.end - lf.start + 1;

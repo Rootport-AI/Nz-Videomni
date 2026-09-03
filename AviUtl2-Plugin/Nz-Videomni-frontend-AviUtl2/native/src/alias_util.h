@@ -10,7 +10,8 @@
 //   ...
 // These helpers ONLY build / rewrite that text - they never call the AviUtl2
 // SDK. They exist so the bridge can (a) pin a created object's length to exactly
-// the generated video (NormalizeAliasObjectFrameHeader), (b) repoint a video
+// the generated video - by writing the INCLUSIVE frame range the header wants
+// (NormalizeAliasObjectFrameHeader), (b) repoint a video
 // object at the downloaded mp4 (PatchAliasReplaceVideoFilePath), (c) drop a
 // provisional "generating..." text placeholder (BuildProvisionalTextAlias), and
 // (d) place a finished media file as a VIDEO OBJECT (BuildMediaObjectAlias) -
@@ -32,13 +33,23 @@ namespace nzvideomni {
 // Call before parsing an alias whose origin might have added a BOM.
 std::string StripUtf8Bom(const std::string& s);
 
-// Rewrite the top "[Object]" section's "frame=" line to "frame=0,<length>",
+// Rewrite the top "[Object]" section's "frame=" line to "frame=0,<length-1>",
 // inserting it right after the "[Object]" header when absent. This is the MOST
 // IMPORTANT helper: create_object_from_alias lets the alias' own frame range
-// override the requested length, so pinning frame=0,<length> is what forces a
-// created object to the intended duration. A leading BOM is stripped first; the
-// input's line-ending style (CRLF vs LF) is preserved. If the alias has no
-// "[Object]" section the input is returned unchanged.
+// override the requested length, so pinning the frame range is what forces a
+// created object to the intended duration.
+//
+// The header's "frame=a,b" is 0-based and INCLUSIVE at both ends, while `length`
+// is a FRAME COUNT, hence the -1: N frames are written as "frame=0,N-1". (Real
+// device, 2026-09-04: a 121-frame clip dropped onto the timeline serializes as
+// "frame=0,120"; see Docs\SDK_REFERENCE.md section 16 (h). Writing "frame=0,N"
+// - what this helper did before that measurement - made every created object one
+// frame too long.) A length below 1 has no representable inclusive end, so the
+// alias is returned unchanged and the host picks the duration itself.
+//
+// A leading BOM is stripped first; the input's line-ending style (CRLF vs LF) is
+// preserved. If the alias has no "[Object]" section the input is returned
+// unchanged.
 std::string NormalizeAliasObjectFrameHeader(const std::string& alias, int length);
 
 // Inside the video-file effect block, replace the file-path line's value with
@@ -86,7 +97,8 @@ ProvisionalTextAlias BuildProvisionalTextAlias(const std::string& display_text,
 // "loop playback" and "YUV" are deliberately omitted and left to the host's
 // defaults (the aviutl2_sdk sample omits every default likewise). No "frame="
 // line is written - pass the result through NormalizeAliasObjectFrameHeader to
-// pin the length, exactly like BuildProvisionalPlaceholder does.
+// pin the length (it writes the inclusive "frame=0,<length-1>"), exactly like
+// BuildProvisionalPlaceholder does.
 //
 // Returns an EMPTY string when the alias cannot be built safely - an empty
 // path, a path containing CR or LF (it would break the line-based format; there

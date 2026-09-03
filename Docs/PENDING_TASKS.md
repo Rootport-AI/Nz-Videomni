@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-03（**埋め込み処理器の常駐〔`keep_resident_embeddings`〕の実装・機械ゲート・実機ゲート〔API側〕が全合格し、画面の目視待ちで§2節を立て直した〔§2-3〕**。§3-114は§2へ移送したので、§3の一覧表と本文からは削除してある。検証記録はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §92・フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §106）／**§3-88〔V2V併用時の`duration_seconds`〕の実装が完了し、実機ゲートを§2-4として起票した**（検証記録は同[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §93）／**§3-120をクローズし〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-120〕、§3-121を§4-34へ移した**（オーナー裁定2026-09-03。いずれも§3の一覧表と本文からは削除してある）
+- 作成: 2026-07-15／最終更新: 2026-09-03（**埋め込み処理器の常駐〔`keep_resident_embeddings`〕の実装・機械ゲート・実機ゲート〔API側〕が全合格し、画面の目視待ちで§2節を立て直した〔§2-3〕**。§3-114は§2へ移送したので、§3の一覧表と本文からは削除してある。検証記録はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §92・フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §106）／**§3-88〔V2V併用時の`duration_seconds`〕の実装が完了し、実機ゲートを§2-4として起票した**（検証記録は同[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §93）／**§3-120をクローズし〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-120〕、§3-121を§4-34へ移した**（オーナー裁定2026-09-03。いずれも§3の一覧表と本文からは削除してある）／**§3-54（軽量ユーティリティAIモジュール新設＋座標追尾→マスク作成）へ、候補調査（最有力候補UETrack）を追記した**（オーナー承認済み・2026-09-03）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（役割が重複する `NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md` は廃止済みで、新設もしない。過去の引き継ぎは[`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md)に残る）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -231,6 +231,17 @@ LTX 2.5の埋め込み処理器（embeddings processor＝プロンプトを読�
 - **なぜ第一弾として先行実装する価値があるか**: インペイントが未実装でも、モザイク追従等の用途で単体で有用なため。
 - **本項がマスク受け渡し契約の背骨である**: **上の(c)〜(e)（返す／返さないの線引き・ピクセル精度1本への統一・1chグレースケール動画＋uploadsレール＋受信側の二値化）が、マスクを扱う全機能の共通契約である。** マスクを使う課題（§3-55 Inpainting・§4-8(C) `conditioning_attention_mask`の露出・§4-25 AviUtl2側で作ったマスク動画の受け口）は、いずれも**この契約の応用先**であり、契約そのものを各項で作り直さないこと。
 - **関連**: §3-55（Inpainting）は本項の完成を前提にした後続項目。
+- **候補調査（2026-09-03・一次資料の読解ベース・コード未実行）**:
+  - **最有力候補: UETrack**（CVPR 2026採録・大連理工大学の物体追跡研究室）。単一物体追跡（SOT＝バウンディングボックス追跡）で、**効率系トラッカーの中でCPU速度・精度とも現行最良クラス**——CPU実測56〜83 FPS（Base/Small/Tinyの3バリアント。ただし測定機は最上位級のIntel i9-14900KFで、開発機ではこれより落ちる）・OSTrack-256と同等精度をCPU約5倍速・6〜13Mパラメータ・素のPyTorch演算のみ。**矩形出力のみでセグメンテーション非対応だが、本項のマスク契約は矩形で足りる設計（§3-55側で潜在解像度の32pxブロックへ丸まる）なので適合する**。
+  - **採否のゲート: コードにLICENSEファイルが無い**（形式上は全権利留保。**重みはApache-2.0**〔HuggingFace `kangben258/UETrack`〕とちぐはぐ）。組み込むなら著者への明示依頼（kangben@mail.dlut.edu.cn）が先決。
+  - 実装メモ: リポジトリは事実上凍結（コミット2件・以後停止・未返信Issueあり）／推論経路に`.cuda()`決め打ち14箇所（3ファイル。device化は機械的）／動画1本＋初期ボックスのデモ無し（`lib/test/evaluation/tracker.py`の`run_video`部品はあるので薄いラッパー自作で済む）／CLIPパッケージが無条件importされるが、設定`MULTI_MODAL_LANGUAGE: False`でCLIP構築自体は回避可能（重み1.27GBの大半は使わないCLIP同梱分で、実質の追跡モデルは13M）。
+  - 同居性: 公式環境はPython 3.10＋PyTorch 1.11.0＋torchvision 0.12.0（Windows用ホイールの実在をCPU版含め確認済み）。本項(a)の「別モジュール・別プロセス」要件どおり、**専用venvを1本足す**形で既存のマルチvenv運用に乗る。
+  - 着手順の目安: ①著者へライセンス確認 → ②開発機でのCPU実測スパイク（venv分離・device化・ラッパー） → ③本体設計。
+  - 参考URL（そのまま記載）:
+    - 公式GitHub: https://github.com/kangben258/UETrack
+    - CVPR 2026論文ページ: https://openaccess.thecvf.com/content/CVPR2026/html/Kang_UETrack_A_Unified_and_Efficient_Framework_for_Single_Object_Tracking_CVPR_2026_paper.html
+    - arXiv: https://arxiv.org/abs/2603.01412
+    - 重み: https://huggingface.co/kangben258/UETrack
 - **状態**: 将来の研究課題（着手時期未定・設計は確定済み）。
 - **出典**: オーナーの設計ディスカッション（確定事項は上記に転記済み）。
 

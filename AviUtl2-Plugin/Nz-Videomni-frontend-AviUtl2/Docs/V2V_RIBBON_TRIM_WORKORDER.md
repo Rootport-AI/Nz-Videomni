@@ -41,6 +41,7 @@
 
 - 元動画パスの取得点は `webui/src/modes/chain/ChainScreen.tsx:340-341` の1箇所（`selection.selected[0].filePath`）。**リボン範囲（`frameStart`/`frameEnd`）は同じ`item`に既に載っているが未使用**。
 - `frameEnd`は**INCLUSIVE**。リボン長＝`frameEnd - frameStart + 1`（根拠: `native/src/bridge.cpp:591`。WebUI側の前提明記: `prefillSeed.ts:66-75`）。秒換算は既存純関数 `spanDurationSec(item, selection)` がそのまま使える。
+  - **【2026-09-04追記】端点解釈に未決の突き合わせあり。正本はフロントエンド[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13。**（本ワークオーダーは凍結文書のため上の本文は当時のまま残してある）
 - アップロードは `useSourceUpload.ts:104-136` → `backend.uploadFile {kind:"video", filePath}` → `native/src/bridge.cpp:1667-1707`（**現状はURLクエリを付ける口が無い**・単一パートmultipart）。
 - 音声側の兄弟機能 `timeline.extractAudio`（#3 videoAudioToVideo）は**既にリボン実範囲を渡して出荷済み**（`CreateScreen.tsx:386-449`）。「リボン範囲を素材化に反映する」思想は音声側では前例があり、映像側だけ取り残されているのが現状。
 

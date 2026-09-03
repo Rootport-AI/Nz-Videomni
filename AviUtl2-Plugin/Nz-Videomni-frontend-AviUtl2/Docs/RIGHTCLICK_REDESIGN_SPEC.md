@@ -830,6 +830,6 @@ G3が不合格の場合は、§5-10のロールバックフラグ`REPLACE_INSERT
 | 完了時の自動置換 | §3-8 |
 | solo分離（音声抽出で対象レイヤー以外を自動無効化） | §3-9 |
 
-**V2V結合（Join）機能は本一覧から除去しました（2026-07-21に復活実装が完了し、実機ゲートにも合格しているため）。** 誤って将来項目として復活させないよう、ここに明記しておきます（経緯は[`JOIN_FEATURE_RESEARCH.md`](JOIN_FEATURE_RESEARCH.md)と[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-26。残っている既知の縮退3ケースは[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-16、Unjoin表示のリロード揮発は同書§3-16）。**【2026-09-04 追記】このうちUnjoin表示のリロード揮発（§3-16）は、2026-09-03のオーナー裁定「許容」でクローズ済みです**——現在の参照先はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-16-02です（生きた台帳§3を探しても見つかりません）。縮退3ケースの§4-16のほうは引き続き生きています。
+**V2V結合（Join）機能は本一覧から除去しました（2026-07-21に復活実装が完了し、実機ゲートにも合格しているため）。** 誤って将来項目として復活させないよう、ここに明記しておきます（経緯は[`JOIN_FEATURE_RESEARCH.md`](JOIN_FEATURE_RESEARCH.md)と[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-26。残っている既知の縮退3ケースは[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §4-16、Unjoin表示のリロード揮発は同書§3-16）。**【2026-09-04 追記】このうちUnjoin表示のリロード揮発（§3-16）は、2026-09-03のオーナー裁定「許容」でクローズ済みです**——現在の参照先はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-16-02です（生きた台帳§3を探しても見つかりません）。縮退3ケースの§4-16のほうは引き続き生きています。
 
 出典: [`DEVLOG.md`](DEVLOG.md) §33.3・§33.6・§33.11・§33.13、[`GAP_FILL_RESEARCH.md`](GAP_FILL_RESEARCH.md)。

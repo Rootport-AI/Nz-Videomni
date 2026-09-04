@@ -1373,11 +1373,11 @@ describe("useGenerationForm", () => {
 
     // Contract v7 (drag-and-drop): `GenerationForm`'s SourceAudioSection
     // DropZone calls `form.attachSourceAudioByPath` (never
-    // `sourceAudio.uploadPath` directly) specifically so the wav-duration
-    // auto-adjust probe below still fires — it reads
-    // `lastAudioFilePathRef.current`, which only `ui.pickFile` populates on
-    // its own. This guards the exact regression the task brief calls out:
-    // forgetting to prime that ref before uploading.
+    // `sourceAudio.uploadPath` directly). This asserts the wav-duration
+    // auto-adjust probe fires for a drop exactly as it does for a pick —
+    // since §3-36 both paths feed the probe the same
+    // `sourceAudio.state.filePath`, so this is the regression guard for that
+    // unification as much as for the drop path itself.
     it("attachSourceAudioByPath (drag-and-drop) auto-adjusts numFrames just like pick() does", async () => {
       const mockFs = createMockFs({
         folders: {

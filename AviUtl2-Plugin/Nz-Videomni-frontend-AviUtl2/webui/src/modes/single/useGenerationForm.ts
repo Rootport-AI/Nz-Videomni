@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge as defaultBridge } from "../../bridge";
-import type { BridgeMethod, NativeBridge, ParamsOf, ResultOf } from "../../bridge";
+import type { NativeBridge } from "../../bridge";
 import type { AppConfig, ConditioningImage, CropOutput, GenerateRequest } from "../../api/types";
 import { combineLoras } from "../../lora/controlLoras";
 import type { ControlLoraSelection } from "../../lora/controlLoras";
@@ -207,11 +207,12 @@ export interface GenerationFormInitial {
   carryReferenceVideoStrength?: number | null;
   /** W5 (反対スロット保持): a source audio carried across a #2 (IC-LoRA) remount —
    * the opposite slot the new reference material does not replace. Seeds the
-   * `sourceAudio` slot's ready state (no re-upload); `lastAudioFilePathRef` is
-   * primed from its `filePath` so the mount-time wav probe still fires and the
-   * DURATION auto-adjusts to the audio (回帰対策2 — keeps the A2V DURATION
-   * priority). NOT paired with `a2vSeedMaxFrames`: a #2-carried audio is not a
-   * prefill material, so it follows the full wav length (no span cap). */
+   * `sourceAudio` slot's ready state (no re-upload) INCLUDING its `filePath`,
+   * so the mount-time wav probe — which reads that same
+   * `sourceAudio.state.filePath` — still fires and the DURATION auto-adjusts to
+   * the audio (回帰対策2 — keeps the A2V DURATION priority). NOT paired with
+   * `a2vSeedMaxFrames`: a #2-carried audio is not a prefill material, so it
+   * follows the full wav length (no span cap). */
   carryAudio?: { id: string; fileName: string; filePath: string };
 }
 
@@ -344,12 +345,14 @@ export interface UseGenerationFormResult {
    * A2V payload also carries the reference-video fields (reference-controlled
    * A2V). */
   sourceAudio: UseSourceUploadResult;
-  /** Contract v7 (drag-and-drop): attaches a dropped audio file, mirroring
-   * `sourceAudio.uploadPath` but ALSO priming `lastAudioFilePathRef` first, so
-   * the wav-duration auto-adjust probe below (which reads that ref, not
-   * `sourceAudio.state`) still fires for a drop the same as it does for a
-   * `ui.pickFile`-driven pick. Use this instead of `sourceAudio.uploadPath`
-   * directly for any non-`ui.pickFile` attach path. */
+  /** Contract v7 (drag-and-drop): attaches a dropped audio file, wrapping
+   * `sourceAudio.uploadPath` with the W4 span-cap capture (`a2vSeedCapPathRef`)
+   * that lets a #7 prefill audio follow the trimmed ribbon. Use this instead of
+   * `sourceAudio.uploadPath` directly for any non-`ui.pickFile` attach path.
+   *
+   * §3-36 (2026-09-04): the wav-duration auto-adjust probe reads
+   * `sourceAudio.state.filePath` — which `uploadPath` itself sets — so this
+   * wrapper no longer has any path-priming duty; only the cap capture. */
   attachSourceAudioByPath: (filePath: string, fileName: string) => Promise<void>;
   /** True once a source audio is attached (`status === "ready"`) — i.e. audio
    * is the generation's driving source — the flag that routes submission
@@ -528,55 +531,36 @@ export function useGenerationForm(
     [],
   );
 
-  // Group3 item11 (A2V move to Create): a wav-picker snoop wrapper around
-  // `nativeBridge`, identical in intent to Chain's `audioProbingBridge`
-  // (`modes/chained/useChainForm.ts`): `useSourceUpload`'s `SourceUploadState`
-  // only ever exposes `fileName`, never the local `filePath` that
-  // `ui.pickFile` resolved with — and `useSourceUpload` is out of this file's
-  // scope. This thin pass-through forwards every call unchanged while
-  // capturing the audio pick's `filePath` into `lastAudioFilePathRef`, so the
-  // wav-duration probe below has a path to hand `fs.probeAudioDuration`.
-  // W5 回帰対策2: prime the ref with the carried audio's path (#2 remount) so the
-  // mount-time wav probe below — which reads THIS ref, not `sourceAudio.state` —
-  // still fires for a carried-over audio and re-derives the DURATION from it
-  // (keeps the A2V DURATION priority across the remount).
-  const lastAudioFilePathRef = useRef<string | null>(initial.carryAudio?.filePath ?? null);
-  const audioProbingBridge = useMemo<NativeBridge>(
-    () => ({
-      async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
-        const result = await nativeBridge.request(method, params);
-        if (method === "ui.pickFile" && (params as ParamsOf<"ui.pickFile">).kind === "audio") {
-          lastAudioFilePathRef.current = (result as ResultOf<"ui.pickFile">).filePath;
-        }
-        return result;
-      },
-      requestWithFiles(method, params, files) {
-        return nativeBridge.requestWithFiles(method, params, files);
-      },
-      on(event, handler) {
-        return nativeBridge.on(event, handler);
-      },
-    }),
-    [nativeBridge],
-  );
+  // Group3 item11 (A2V move to Create): the optional A2V source-audio slot.
+  //
+  // §3-36 (2026-09-04): the local `filePath` the wav-duration probe below needs
+  // now comes straight off `sourceAudio.state.filePath`. `useSourceUpload` sets
+  // that field on EVERY transition — a `ui.pickFile` pick, a direct
+  // `uploadPath` (drag-and-drop / #3 / #7), and the W5 `initial` seed alike —
+  // so the plain `nativeBridge` is passed through here as it is everywhere
+  // else. The old wav-picker snoop wrapper (`audioProbingBridge` capturing the
+  // pick's path into a `lastAudioFilePathRef`) dated from contract v9, before
+  // `SourceUploadState` carried `filePath` at all; it was the last consumer of
+  // that mechanism, so it is gone and this file has one source of truth for
+  // the audio path — matching the reference-video slot right below.
   const sourceAudio = useSourceUpload("audio", {
-    nativeBridge: audioProbingBridge,
-    // W5: seed the carried source audio's ready state (#2 remount).
+    nativeBridge,
+    // W5: seed the carried source audio's ready state (#2 remount) — its
+    // `filePath` comes along, which is what keeps the mount-time wav probe
+    // firing for a carried-over audio (回帰対策2).
     ...(initial.carryAudio ? { initial: initial.carryAudio } : {}),
   });
   const audioReady = sourceAudio.state.status === "ready";
 
-  // Contract v7 (drag-and-drop): D&D never goes through `ui.pickFile`, so
-  // `audioProbingBridge`'s own snoop (above) never fires for it -- priming
-  // `lastAudioFilePathRef` here directly is what keeps the wav-duration
-  // auto-adjust probe working for a dropped file too. Forgetting this call
-  // order (ref set BEFORE uploadPath, not after) is the most likely
-  // regression: the probe effect reads the ref synchronously off of
-  // `sourceAudio.state.id` turning non-null, so it must already be current by
-  // the time that happens.
+  // Contract v7 (drag-and-drop): the non-`ui.pickFile` attach path — D&D, and
+  // the #3/#7 right-click auto-loads. Since §3-36 its only extra duty over a
+  // bare `sourceAudio.uploadPath` is the W4 span-cap capture below (the
+  // wav-duration probe reads `sourceAudio.state.filePath`, which `uploadPath`
+  // sets for every caller), but callers must still route through here rather
+  // than `uploadPath` directly, or a #7 prefill audio stops following the
+  // trimmed ribbon.
   const attachSourceAudioByPath = useCallback(
     (filePath: string, fileName: string) => {
-      lastAudioFilePathRef.current = filePath;
       // W4 (#7 trim追従): remember the FIRST audio attached under an active
       // span cap as the prefill audio (the #7 auto-load attaches exactly once at
       // mount, before any user action). Later attaches — a drag-and-drop swap —
@@ -930,7 +914,10 @@ export function useGenerationForm(
     const id = sourceAudio.state.id;
     if (!id || probedAudioIdRef.current === id) return;
     probedAudioIdRef.current = id;
-    const filePath = lastAudioFilePathRef.current;
+    // §3-36: read the path straight off the upload slot (same as the
+    // reference-video probe above). `useSourceUpload` keeps `filePath` in step
+    // with `id` on every transition, so a `ready` id always has its path.
+    const filePath = sourceAudio.state.filePath;
     if (!filePath) return;
 
     let cancelled = false;
@@ -971,11 +958,13 @@ export function useGenerationForm(
       // rather than the full uploaded file. Both `a2vSeedMaxFrames` and the span
       // seed are valid 8n+1 values, so `min` keeps `suggested` on-grid. Swapping
       // the audio makes the paths differ, lifting the cap (ordinary full-wav
-      // follow resumes).
+      // follow resumes). `filePath` is this probe run's own path (captured
+      // above): a swap that lands mid-probe tears this run down and returns at
+      // the `cancelled` guard, so it never reaches this comparison.
       if (
         a2vSeedMaxFrames !== undefined &&
         a2vSeedCapPathRef.current !== null &&
-        lastAudioFilePathRef.current === a2vSeedCapPathRef.current &&
+        filePath === a2vSeedCapPathRef.current &&
         suggested > a2vSeedMaxFrames
       ) {
         suggested = a2vSeedMaxFrames;
@@ -995,7 +984,7 @@ export function useGenerationForm(
       // never see a duration for this upload.
       if (!settled) probedAudioIdRef.current = null;
     };
-  }, [sourceAudio.state.status, sourceAudio.state.id, nativeBridge, values.frameRate, values.width, values.height, spillThresholdFrames, limits.minNumFrames, limits.maxNumFrames, a2vSeedMaxFrames]);
+  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.frameRate, values.width, values.height, spillThresholdFrames, limits.minNumFrames, limits.maxNumFrames, a2vSeedMaxFrames]);
 
   // A2V-only: gates on whether the attached wav's MEASURED duration is long
   // enough for `values.numFrames` (`chainUtils.audioLengthPrecheck`). `null`

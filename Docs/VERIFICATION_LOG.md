@@ -11116,3 +11116,36 @@ G1〜G6・G10は合格した（完了条件の正本は台帳[`PENDING_TASKS_CLO
 4. **バイト検査**: 編集後も**BOM無しUTF-8**（先頭3バイトが`<`・`#`・CR）で、**CRLF 1,813行＝LF 1,813個**（混在なし）。ファイル長は99,274→99,571バイト。
 
 **実インストールを再走させない判断の前例は§82.8（§3-127＝`setup.ps1`の完了案内の差し替え）である**——利用者に見える文面だけを変えた改修は、構文解析の通過と文面の確認で足りる。**欠落シミュレーション（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 旧§3-36の12ケース）も実施していない**——判定ロジックを1行も変えていないためである。
+
+## 97. ★仮オブジェクトの`object_name`が`.aup2`の保存・再読込をまたいで残ることを、オーナーの実機検証で確定した（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-35-02）＝右クリック挿入の成功そのものが直接証明（2026-09-04）
+
+**製品のコードは1行も変えていない。** 2026-07-20の右クリック再設計で「将来検証」として残したまま持ち越していた実機チェックリストの2項目——フロントエンド[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節の**#10（`object_name`の`.aup2`永続化）**と**#9（`register_project_load_handler`の手動オープン発火）**——を、オーナーが実機で消化した。
+
+**オーナーの手順（5段階）**: ①タイムラインを右クリックして「ここにAI生成を挿入」を選び、仮オブジェクトを置く。②t2v（テキストから動画）で生成し、完了まで待つ。③**完成した動画を挿入しないまま**プロジェクトを保存し、AviUtl2を終了する。④AviUtl2を起動し直し、**手動でプロジェクトを開く**。残っている仮オブジェクトを右クリックし「⬇ この生成結果を今すぐ挿入」を選ぶ。⑤生成済みの動画が問題なく挿入された。
+
+**なぜ⑤の成功が`object_name`の永続化の直接証明になるのか**——この右クリック項目（`insertProvisionalResult`）は、**`object_name`だけでジョブを特定する経路**だからである。フロントエンドの`webui/src/shell/AppShell.tsx`が、右クリック時のスナップショットに載っている`objectName`へ`/^NzVideomni#(.+)$/`を当ててジョブIDを取り出し、そのIDでジョブ台帳を引く。名前が取れなければ「Nz-Videomniの予約オブジェクトではない」と警告して即座に戻る早期リターンで、**テキスト本文の`[#id]`マーカーはこの判定に一切使われない**。そして`objectName`の出所は、ネイティブが右クリックの瞬間にSDKの`get_object_name`から読む値である（`native/src/bridge.cpp`・`native/src/plugin.cpp`）。したがって、**プロジェクトを開き直したあとにこの経路が正常に走り切った時点で、`object_name`が`.aup2`をまたいで復元されたことが確定する。** 挿入が成功したかどうかを別の証拠で補強する必要はない。
+
+**プラグインのログに残った一次記録**（`%LOCALAPPDATA%\NzVideomni\logs\plugin.log`。手順が1本の時系列としてそのまま残っている）:
+
+| 時刻（2026-09-04） | ログ | 対応する手順 |
+| :--- | :--- | :--- |
+| 22:36:34.569 | `timeline.menuInvoked pushed: action=textToVideoHere` | ① 右クリックから生成起点へ |
+| 22:36:34.580 | `bridge request: timeline.insertProvisional` | ① 仮オブジェクトの設置 |
+| 22:36:53.521 | `bridge request: timeline.updateProvisionalReservation` | ② Generate押下（長さ確定・本jobIDへの貼り替え） |
+| 22:39:30.944 | `bridge request: timeline.updateProvisionalText` | ② 生成完了に伴う文言の書き換え |
+| 22:42:53.281 | `Nz-Videomni UninitializePlugin` | ③ 保存してAviUtl2を終了 |
+| 22:42:55.910 / .930 | `Nz-Videomni InitializePlugin` ／ `register_project_load_handler: registered` | ④ 起動し直し |
+| 22:42:56.040 | `timeline.projectLoaded pushed (project load handler)` | ④ 起動時の初期化による発火 |
+| **22:43:00.571 と 22:43:00.581** | `timeline.projectLoaded pushed (project load handler)`（**2回**） | ④ **手動でプロジェクトを開いた瞬間の発火** |
+| 22:43:00.591 / .612 | `bridge request: timeline.scanProvisionals`（2回） | ④ 発火ごとの予約再構築 |
+| 22:43:06.731 | `timeline.menuInvoked pushed: action=insertProvisionalResult` | ④ 「⬇ この生成結果を今すぐ挿入」 |
+| 22:43:06.733 → .834 | `bridge request: backend.downloadVideo` → `downloadVideo done: 38508860 bytes -> …\2048f34f-2351-4c96-85cb-69684b35ef1a.mp4` | ⑤ ジョブID`2048f34f-…`で完成動画を取得 |
+| 22:43:06.835 → 22:43:07.237 | `bridge request: timeline.insertMediaForJob` → `CreateMediaObject: alias create requested layer 0, frame 63, length 361; actual layer 0, start 63, end 423` | ⑤ マーカー位置（レイヤー0・フレーム63）へ361コマで挿入。短縮も`layer_max+1`退避も起きていない |
+
+**#9（手動オープンでの発火）は、これで完全確認である。** 従来の見込みはSDKの記述（「プロジェクトロード直後・初期化時にも呼ばれる」）と更新履歴の発火漏れ修正3件からの推論にとどまっており、**手動の「ファイル→開く」で発火するかどうかは実機未検証**のまま残っていた。上の表のとおり、起動時の初期化による発火（22:42:56.040）とは別に、手動で開いた瞬間の発火（22:43:00台）が独立して観測されている。なお同じ日には他にも 00:29:22.374・07:49:03.054・20:04:46.199・20:51:03.720・22:33:52.771、そして検証後の 22:54:43.845 に発火が記録されている。
+
+**10ミリ秒差の2連発火は、観測事実として記録しておく。** 手動オープンの発火は`22:43:00.571`と`22:43:00.581`の2回で、受け側の`scanProvisionals`もそれぞれに対して2回走っている。**実害の兆候は無い**——受け側がやるのは予約席の状態をタイムラインから復元し直す冪等な再構築（台帳認識reconcile）で、2回走っても結果は同じであり、この直後の⬇挿入も正常に完了している。原因（SDK側が読込完了とその直後の初期化とで二度呼ぶのか、別の経路が重なっているのか）は追っていない。**将来`projectLoaded`の購読側に冪等でない処理を足すときは、この2連発火を前提に設計すること。**
+
+**残る留保——今回証明したのは「`get_object_name`で読める値としての永続化」であって、「エイリアス文字列への直列化」ではない。** ネイティブ側の予約走査（`native/src/provisional.cpp`の`ExtractJobId`）は、①エイリアスのテキスト項目の末尾にある`[#<job_id>]`マーカー、②エイリアス文字列のどこかにある`NzVideomni#<job_id>`トークン、の順で試す二重化になっている。この②が前提としている「`get_object_alias`が返す文字列へ`object_name`が直列化されて載る」ことは**今回も未検証のまま**である（仮オブジェクトのテキストには常に`[#<job_id>]`マーカーが載るので①で成立し、②の経路は今回も踏まれていない——これはログに現れる事実ではなく、コードからの帰結である）。契約の正本は`native/src/provisional.h`冒頭のコメント（「a serialized object_name line」）で、対になる実装は上記`ExtractJobId`である。**`[#id]`マーカー方式をやめる・変えるときは、②の前提をそのとき先に確かめること。**
+
+**状態**: 台帳のスタブ（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-35）は削除し、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-35-02**としてクローズした。仕様書側の実機チェックリスト#9・#10も同日「確認済み」へ更新した（[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節）。**この検証で製品のコード・設定・フロントエンドは1行も変えていない。**

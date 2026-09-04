@@ -598,9 +598,10 @@ function SingleScreenBody({
       void form.referenceVideo.uploadPath(filePath, fileName, trimQuery(decision));
     } else if (intent === "audio-to-video") {
       // #7 (§3-4 #7): audio object → source-audio slot, enabling A2V once the
-      // upload is ready. `attachSourceAudioByPath` primes `lastAudioFilePathRef`
-      // so a wav triggers the form's Frames auto-adjust (fs.probeAudioDuration);
-      // a non-wav is accepted without adjustment (existing behavior).
+      // upload is ready. A wav triggers the form's Frames auto-adjust
+      // (fs.probeAudioDuration); a non-wav is accepted without adjustment
+      // (existing behavior). `attachSourceAudioByPath` rather than
+      // `sourceAudio.uploadPath` because it also captures the W4 span cap.
       void form.attachSourceAudioByPath(filePath, fileName);
     } else {
       // #4: image → KEYFRAMES 1st card (frame 0), flipping the mode badge to I2V.

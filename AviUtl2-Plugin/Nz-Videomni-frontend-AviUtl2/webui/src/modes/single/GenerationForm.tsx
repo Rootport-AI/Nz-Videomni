@@ -565,9 +565,8 @@ function SourceAudioSection({
   // IC-LoRA/A2V card redesign: whole-card drop target (mirrors Chain's
   // `SourceInputPanel`), replacing the old `DropZone` wrapper. Routed through
   // `form.attachSourceAudioByPath` (NOT `sourceAudio.uploadPath` directly) — it
-  // also primes `lastAudioFilePathRef` so the wav-duration auto-adjust probe
-  // still fires for a dropped file (see that function's doc comment in
-  // useGenerationForm.ts for why this is the easiest spot to regress).
+  // also captures the W4 span cap so a #7 prefill audio keeps following the
+  // trimmed ribbon (see that function's doc comment in useGenerationForm.ts).
   const {
     isDragOver,
     error: dropError,

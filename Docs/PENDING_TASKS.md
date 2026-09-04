@@ -1,9 +1,9 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-04（**§3-134〔画角拡張のトークン予算の実測較正〕の実装・ビルド・デプロイが済み、オーナーの画面目視待ちで§2節を立て直した〔§2-5〕**——予算の数値の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9、較正そのものの記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §95。§3-134は§2へ移送したので、§3の本文からも冒頭一覧の「この表の対象外」からも削除してある／**§3-140〔🎞ボタンで挿入したオブジェクトが青一色になる症状〕が、オーナーの実機ゲートR1〜R8に全合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-140、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §107、SDK確定知見（`OBJECT_LAYER_FRAME.end`の排他判定を含む）は同[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (g)(h)）／**§3-133〔参照動画つき単発生成の快適上限に実測が無い〕が、第2次較正キャンペーンの実測で決着してクローズした**——結論は「単発の線をそのまま当ててよい」で、線44,880は動いていない〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-133、線の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.9、較正の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §94〕／2026-09-03（**§3-114〔埋め込み処理器の常駐＝`keep_resident_embeddings`〕と§3-88〔V2V併用時の`duration_seconds`〕が、どちらもオーナーの実機ゲートに全合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-114・§3-88、検証記録はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §92〔画面目視の結果は§92.8〕・§93〔G2の結果は§93.10〕、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §106。**両項が抜けて空になった§2節は、運用規則どおり見出しごと削除した**。§3-114の目視U2ではオーナー裁定でUIラベルを「Embeddings processorの常駐（LTX 2.5）」へ改めている）／**§3-120をクローズし〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-120〕、§3-121を§4-34へ移した**（オーナー裁定2026-09-03。いずれも§3の一覧表と本文からは削除してある）／**§3-54（軽量ユーティリティAIモジュール新設＋座標追尾→マスク作成）へ、候補調査（最有力候補UETrack）を追記した**（オーナー承認済み・2026-09-03）／**台帳整理6件のオーナー裁定を反映した**（2026-09-03）——§3-5・§3-16・§3-61・§3-132はクローズ〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-5-02・§3-16-02・§3-61-02・§3-132〕、§3-11は再訪条件を追加、§3-53は着手の入口を追記した（この2件はクローズせず§3に残した）
+- 作成: 2026-07-15／最終更新: 2026-09-04（**§3-134〔画角拡張のトークン予算の実測較正〕が、オーナーの画面目視に合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134、予算の数値の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9、較正と目視結果の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §95〔目視結果は§95.9〕。**唯一の項目だった§2-5が抜けて空になった§2節は、運用規則どおり見出しごと削除した**／**§3-140〔🎞ボタンで挿入したオブジェクトが青一色になる症状〕が、オーナーの実機ゲートR1〜R8に全合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-140、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §107、SDK確定知見（`OBJECT_LAYER_FRAME.end`の排他判定を含む）は同[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (g)(h)）／**§3-133〔参照動画つき単発生成の快適上限に実測が無い〕が、第2次較正キャンペーンの実測で決着してクローズした**——結論は「単発の線をそのまま当ててよい」で、線44,880は動いていない〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-133、線の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.9、較正の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §94〕／2026-09-03（**§3-114〔埋め込み処理器の常駐＝`keep_resident_embeddings`〕と§3-88〔V2V併用時の`duration_seconds`〕が、どちらもオーナーの実機ゲートに全合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-114・§3-88、検証記録はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §92〔画面目視の結果は§92.8〕・§93〔G2の結果は§93.10〕、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §106。**両項が抜けて空になった§2節は、運用規則どおり見出しごと削除した**。§3-114の目視U2ではオーナー裁定でUIラベルを「Embeddings processorの常駐（LTX 2.5）」へ改めている）／**§3-120をクローズし〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-120〕、§3-121を§4-34へ移した**（オーナー裁定2026-09-03。いずれも§3の一覧表と本文からは削除してある）／**§3-54（軽量ユーティリティAIモジュール新設＋座標追尾→マスク作成）へ、候補調査（最有力候補UETrack）を追記した**（オーナー承認済み・2026-09-03）／**台帳整理6件のオーナー裁定を反映した**（2026-09-03）——§3-5・§3-16・§3-61・§3-132はクローズ〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-5-02・§3-16-02・§3-61-02・§3-132〕、§3-11は再訪条件を追加、§3-53は着手の入口を追記した（この2件はクローズせず§3に残した）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（役割が重複する `NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md` は廃止済みで、新設もしない。過去の引き継ぎは[`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md)に残る）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
-  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
+  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
 - **完了してクローズした項目は本書に残さず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。** 本書の「3.」と同書の「3.」は別物なので、**参照するときは番号だけで書かず、必ずファイル名を添えること**。
@@ -34,29 +34,9 @@
 - **何が開いているか**: Edit画面の画角拡張は、生成要求を組み立てる`webui/src/modes/edit/useOutpaintForm.ts`の`buildRequest`で、加速設定（Settingsの「生成高速化」）の要求フィールドを一切載せていない——`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields`（どの鍵をどんな条件で載せるかの契約の正本）を呼んでいない。Create（`webui/src/modes/single/useGenerationForm.ts`）・Chained（`webui/src/modes/chained/chainUtils.ts`）・バッチ（`webui/src/modes/batch/buildA2vChainPayload.ts`）はいずれも呼んでいる。**そもそも`webui/src/shell/AppShell.tsx`が`EditScreen`へ`acceleration`を渡していない**ため、同じ画面のもう一方のサブタブである撮り直し（Retake。`webui/src/modes/edit/useRetakeForm.ts`）も同じ状態である。
 - **なぜ効くか**: 利用者がSettingsで加速を切り替えても、Edit画面から出したジョブだけは常にサーバー既定の構成で走り、速度とVRAMの挙動が他タブと揃わない。実際にどの構成で走ったかは、そのジョブの`metadata.json`の`*_used`で読める。
 - **着手時の形**: `AppShell`から`EditScreen`へ`acceleration`を渡し、両サブタブの`buildRequest`で`accelerationRequestFields(...)`を展開する（Create／Chained／バッチと同じ作法）。**載せるかどうかはオーナー判断であり、本項は「いま載せていない」という事実と影響の起票にとどまる。**
-- **関連**: 本書§2-5（画角拡張のトークン予算）。**その較正はこの状態のまま——つまりサーバー既定の加速構成——で測ってある**ので、**この画面へ加速設定を載せる改修を入れたら、画角拡張の予算は要再較正である**（前提の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.2）。
+- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134（画角拡張のトークン予算をエンジン系統別の実測値へ置き換えた件。クローズ済み）。**その較正はこの状態のまま——つまりサーバー既定の加速構成——で測ってある**ので、**この画面へ加速設定を載せる改修を入れたら、画角拡張の予算は要再較正である**（前提の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.2）。
 - **状態**: 未着手（載せるかどうかのオーナー判断待ち）。
 - **出典**: `webui/src/modes/edit/useOutpaintForm.ts`・`webui/src/modes/edit/useRetakeForm.ts`・`webui/src/shell/AppShell.tsx`（載せていない・渡していないことの現物）、`webui/src/shell/accelerationSettings.ts`（`accelerationRequestFields`の契約の正本）、`webui/src/modes/single/useGenerationForm.ts`（載せている側との対比）。
-
----
-
-## 2. 実装済み・ユーザーのテスト待ち
-
-実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。全項目が合格して空になったら本節は見出しごと削除する（運用規則は末尾「本台帳の位置づけ」節）。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
-
-### 2-5. 画角拡張（Outpainting）のトークン予算をエンジン系統別の実測値にした件の画面目視 — 本書§3-134の移送先（起票：2026-08-31／実装：2026-09-04）
-
-画角拡張の快適上限の警告に使うトークン予算を、**エンジン系統（ベースモデルの世代）ごとの実測値**へ置き換えた。**数値の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9で、本書には書き写さない**（較正そのものの記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §95）。フロントエンドは**実際に読み込まれているベースモデルの系統**で予算を引き、系統が分からないとき（バックエンド未接続・`GET /models`未着）は従来の据え置き値へ落ちる。**トークン数の式は`shell/comfortTable.ts`と同じ切り捨て形へ揃えて決着させた**——128の倍数に載ったキャンバス（生成できる唯一の形）では数値が変わらないので、下の目視の判定には影響しない。**警告だけの線であり、超えても生成は止まらない**（この性格は変えていない）。
-
-**機械ゲート（型検査・vitest・lint）は全合格**で、ビルドと2箇所へのデプロイも済んでいる（ビルド成果物・実機・バックエンドリポジトリ配布コピーのSHA-256が3値一致）。**残るのは画面の見え方だけで、この表がその正本である。**
-
-**共通の手順**: Edit画面の画角拡張で、**1280×768の素材**（185コマまで伸ばせる長さのもの）を選び、余白を**左右320・上下128**にする（＝キャンバス1920×1024。較正で測ったのと同じ形）。あとは尺（コマ数）だけを動かし、警告文が出るかどうかを見る。
-
-- [ ] **V1（LTX 2.3）**: LTX 2.3を読み込んだ状態で、**177コマ → 警告が出る**／**169コマ → 出ない**。
-- [ ] **V2（LTX 2.5）**: LTX 2.5へ切り替え、読み込みが終わってから、**177コマ → 出ない**／**185コマ → 出る**（2.5のほうが線が高い）。
-- [ ] **V3（系統が分からないとき）**: バックエンドが未接続の状態（起動直後などモデル情報がまだ届いていない状態も同じ）で同じ画面を見ると、**169コマでも警告が出る**＝従来の据え置き値のまま振る舞う（実測値へは動かさない）。
-
-**合格後**: ①本項を`3-134`として[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移送しクローズする。②[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9の、フロントエンドの反映状況について書いてある一文（「残るのはオーナーの画面目視だけ」）を現状へ直す。③[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ目視結果の追記を足す（同書は追記専用。§95の末尾が台帳§3-134を「フロントエンドへの反映待ち」と書いたままなので、そこも追記で更新する）。④フロントエンド[`OUTPAINTING_DESIGN_NOTES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/OUTPAINTING_DESIGN_NOTES.md) §4-5の2026-08-31追記は「40,000をいまも使っている・較正の受け皿は台帳§3-134」という旧状態のままなので、現状へ直す（**これだけは合格を待たずに直してよい**）。
 
 ---
 
@@ -601,7 +581,7 @@
 - **概要**: LTX 2.5の復号は、**1920×1088×241フレームで予約VRAMがカードの総量を超え、WDDMの共有システムメモリへこぼれる**（実測値の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.2。**本書には写さない**）。**落ちはしないが、這うように遅くなる。**
 - **何が塞いでいるか**: 何も塞いでいない。**画角拡張が持ち込んだ問題ではなく、出荷済みの復号経路そのものの性質**であり、画角拡張を使わない普通の生成でも同じ形状なら同じことが起きる。**この形状に到達するのは高解像度×長尺を狙った利用者だけで、そのとき起きるのは失敗ではなく減速である**——直す対象は画角拡張ではなく復号側であり、いま急いで着手する理由が無い、というのが優先度を下げて本節へ置いた理由である。
 - **着手時の入口**: **符号化の側では、同じ形状の膨張が`set_conv3d_memory_format`（重みの並びを変えるだけの処置）で大きく落ちている**（往復の一致度はほぼ不変）。原因は bf16 の3次元畳み込みが im2col 経路へ落ちることなので、**復号側にも同種の余地があるかどうかをまず測ること。** 測る前に実装へ進まないこと——符号化で効いたから復号でも効く、とは限らない。
-- **関連**: 本書§2-5（画角拡張のトークン予算）——**その較正で退避へ反転した点は、拡張なしの対照が平坦だったことから画角拡張に固有と確定しており、本項には帰属しない**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.1）。ほかに§3-59（画角拡張のチェーン対応）。
+- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134（画角拡張のトークン予算。クローズ済み）——**その較正で退避へ反転した点は、拡張なしの対照が平坦だったことから画角拡張に固有と確定しており、本項には帰属しない**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.1）。ほかに§3-59（画角拡張のチェーン対応）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.2、`outputs/ltx25-outpaint-prep/RESULTS.md`（複写: [`Outputs-archive/ltx25-outpaint-prep/RESULTS.md`](Outputs-archive/ltx25-outpaint-prep/RESULTS.md)）の G0-d、オーナー裁定（2026-09-03）。
 
 ---

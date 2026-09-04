@@ -23,10 +23,12 @@ import {
   canvasSize,
   centerPads,
   clampPad,
+  comfortTokenEstimate,
   DEFAULT_BLEND_DILATION_STAGE1,
   isOverComfortBudget,
   maxNumFrames,
   outpaintReasons,
+  resolveOutpaintComfortBudget,
   stage2FromStage1,
   ZERO_PADS,
 } from "./outpaintGeometry";
@@ -79,6 +81,18 @@ export interface UseOutpaintFormDeps {
    * material; `AppShell` bumps `remountTokens.edit` per route, so a fresh
    * right-click always arrives as a fresh mount. */
   initialIntent?: GenerationPrefill | undefined;
+  /** §3-134 (2026-09-04): the LOADED base model's engine family
+   * (`BaseModelBlock.engine_family` — `"ltx"`, `"ltx25"`, …), owned by
+   * `shell/AppShell.tsx` via `useBaseModels().activeEngineFamily`. It picks the
+   * 快適上限 WARNING's token budget out of
+   * `outpaintGeometry.OUTPAINT_COMFORT_TOKEN_BUDGETS` — the same "caller owns
+   * the state" shape Create/Chain use for their own comfort markers.
+   *
+   * Omitted (every pre-existing unit test), `undefined` or `""` (before `GET
+   * /models` lands, or offline) all mean "engine unknown" and take the
+   * `COMFORT_TOKEN_BUDGET` fallback, i.e. exactly the pre-2026-09-04
+   * behaviour. */
+  engineFamily?: string | undefined;
 }
 
 export interface UseOutpaintFormResult {
@@ -138,9 +152,11 @@ export interface UseOutpaintFormResult {
   /** One code per failing gate; empty exactly when Generate is pressable. */
   validityReasons: string[];
   isValid: boolean;
-  /** 快適上限 (§4-5): a WARNING, never part of `isValid`. */
+  /** 快適上限: a WARNING, never part of `isValid`. The budget it is measured
+   * against comes from {@link UseOutpaintFormDeps.engineFamily}. */
   isOverComfortBudget: boolean;
-  /** The rough token count the warning quotes. */
+  /** The rough token count the warning quotes — `outpaintGeometry`'s
+   * `comfortTokenEstimate` of the EXTENDED canvas. */
   comfortTokens: number;
 
   /** The `POST /generate` body. Only meaningful while `isValid`. */
@@ -172,7 +188,7 @@ export interface UseOutpaintFormResult {
  *    source can't leave a stale clamp behind.
  */
 export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintFormResult {
-  const { nativeBridge, initialIntent } = deps;
+  const { nativeBridge, initialIntent, engineFamily } = deps;
   const apiClient = useMemo<ApiClient>(
     () => deps.apiClient ?? (nativeBridge ? createApiClient(nativeBridge) : defaultApiClient),
     [deps.apiClient, nativeBridge],
@@ -387,8 +403,13 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   });
   const isValid = validityReasons.length === 0;
 
-  const comfortTokens = Math.round((canvas.width / 32) * (canvas.height / 32) * (Math.floor((numFrames - 1) / 8) + 1));
-  const overComfort = known && isOverComfortBudget(canvas.width, canvas.height, numFrames);
+  // 警告の閾値と、警告文が引用する概算トークン数。式は `comfortTokenEstimate`
+  // ただ1つを通す —— ここで同じ式を書き直すと、切り捨ての有無のような細部が
+  // 表示と判定で食い違う。予算はエンジン系統から引き（系統不明なら従来の
+  // 40,000 へ）、超過は WARNING だけで `isValid` には一切関与しない。
+  const comfortBudget = resolveOutpaintComfortBudget(engineFamily);
+  const comfortTokens = comfortTokenEstimate(canvas.width, canvas.height, numFrames);
+  const overComfort = known && isOverComfortBudget(canvas.width, canvas.height, numFrames, comfortBudget);
 
   const buildRequest = useCallback((): GenerateRequest => {
     // 既定（5 / 2）のときは両キーごと省略する —— 送っても意味は同じだが、

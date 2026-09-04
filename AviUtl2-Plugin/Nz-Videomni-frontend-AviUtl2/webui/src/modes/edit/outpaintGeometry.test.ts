@@ -5,6 +5,7 @@ import {
   canvasSize,
   centerPads,
   clampPad,
+  COMFORT_TOKEN_BUDGET,
   comfortTokenEstimate,
   DEFAULT_BLEND_DILATION_STAGE1,
   DEFAULT_BLEND_DILATION_STAGE2,
@@ -15,7 +16,9 @@ import {
   MAX_PAD,
   maxNumFrames,
   MIN_INNER_SIDE,
+  OUTPAINT_COMFORT_TOKEN_BUDGETS,
   outpaintReasons,
+  resolveOutpaintComfortBudget,
   stage2FromStage1,
   totalPad,
 } from "./outpaintGeometry";
@@ -170,12 +173,59 @@ describe("快適上限（警告のみ・ブロックではない）", () => {
     expect(latentFrameCount(1)).toBe(1);
   });
 
-  it("(幅/32)*(高さ/32)*潜在フレーム数 が約 40000 を超えたら警告", () => {
-    // 1280x768 = 40*24 = 960 マス。潜在 13 コマで 12480 -> 収まる。
+  it("推定トークン数は ⌊幅/32⌋*⌊高さ/32⌋*潜在フレーム数", () => {
+    // 1280x768 = 40*24 = 960 マス。潜在 13 コマで 12480。
     expect(comfortTokenEstimate(1280, 768, 97)).toBe(12_480);
-    expect(isOverComfortBudget(1280, 768, 97)).toBe(false);
-    // 1920x1088 = 60*34 = 2040 マス。潜在 21 コマで 42840 -> 超える。
-    expect(isOverComfortBudget(1920, 1088, 161)).toBe(true);
+    // 1920x1088 = 60*34 = 2040 マス。潜在 21 コマで 42840。
+    expect(comfortTokenEstimate(1920, 1088, 161)).toBe(42_840);
+  });
+
+  it("128 の格子から外れた寸法では各軸を切り捨てる（マスを増やさない端数）", () => {
+    // 1265x720 -> ⌊1265/32⌋=39, ⌊720/32⌋=22 で 858 マス。切り捨てない旧式なら
+    // 39.53*22.5 = 889.45 マス相当になっていた。生成できるのは 128 の倍数の
+    // キャンバスだけなので、この差が出るのは編集途中の表示のみ。
+    expect(comfortTokenEstimate(1265, 720, 97)).toBe(858 * 13);
+  });
+
+  it("エンジン系統ごとに予算を引く。表に無い系統・未確定はフォールバックの 40000", () => {
+    expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx).toBe(42_240);
+    expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx25).toBe(44_880);
+    expect(COMFORT_TOKEN_BUDGET).toBe(40_000);
+
+    expect(resolveOutpaintComfortBudget("ltx")).toBe(42_240);
+    expect(resolveOutpaintComfortBudget("ltx25")).toBe(44_880);
+    // `GET /models` 未着・オフラインは "" で届く（`activeEngineFamily`）。
+    expect(resolveOutpaintComfortBudget(undefined)).toBe(COMFORT_TOKEN_BUDGET);
+    expect(resolveOutpaintComfortBudget("")).toBe(COMFORT_TOKEN_BUDGET);
+    // 将来のエンジンや綴り違いも黙って従来値へ。予算 0 は出さない。
+    expect(resolveOutpaintComfortBudget("ltx3")).toBe(COMFORT_TOKEN_BUDGET);
+    expect(resolveOutpaintComfortBudget("LTX25")).toBe(COMFORT_TOKEN_BUDGET);
+    // `Object.prototype` の名前を系統名として渡しても表の穴にはならない。
+    expect(resolveOutpaintComfortBudget("constructor")).toBe(COMFORT_TOKEN_BUDGET);
+  });
+
+  it("同じ幾何でも系統が違えば警告の出方が変わる（判定は予算引数だけを見る）", () => {
+    // 1920x1088 / 161 コマ = 42840 トークン。
+    expect(isOverComfortBudget(1920, 1088, 161, resolveOutpaintComfortBudget("ltx25"))).toBe(false);
+    expect(isOverComfortBudget(1920, 1088, 161, resolveOutpaintComfortBudget("ltx"))).toBe(true);
+    expect(isOverComfortBudget(1920, 1088, 161, resolveOutpaintComfortBudget(undefined))).toBe(true);
+
+    // 1920x1088 / 153 コマ = 40800 トークン —— ltx の予算には収まるが、系統が
+    // 分からないときの 40000 は超える。
+    expect(isOverComfortBudget(1920, 1088, 153, resolveOutpaintComfortBudget("ltx"))).toBe(false);
+    expect(isOverComfortBudget(1920, 1088, 153, resolveOutpaintComfortBudget(undefined))).toBe(true);
+
+    // どの系統でも余裕のある寸法。
+    expect(isOverComfortBudget(1280, 768, 97, resolveOutpaintComfortBudget("ltx"))).toBe(false);
+    expect(isOverComfortBudget(1280, 768, 97, resolveOutpaintComfortBudget("ltx25"))).toBe(false);
+    expect(isOverComfortBudget(1280, 768, 97, resolveOutpaintComfortBudget(undefined))).toBe(false);
+  });
+
+  it("ちょうど予算どおりは超過ではない（境界は `>`）", () => {
+    // 1920x1088 = 2040 マス、潜在 22 コマ（169 フレーム）でちょうど 44880。
+    expect(comfortTokenEstimate(1920, 1088, 169)).toBe(44_880);
+    expect(isOverComfortBudget(1920, 1088, 169, 44_880)).toBe(false);
+    expect(isOverComfortBudget(1920, 1088, 169, 44_879)).toBe(true);
   });
 });
 

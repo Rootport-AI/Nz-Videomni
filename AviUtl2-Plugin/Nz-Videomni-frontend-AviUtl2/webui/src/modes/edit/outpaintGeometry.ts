@@ -82,19 +82,50 @@ export const PAD_SLIDER_MAX = 220;
  * number box carries this as its `max`, and {@link clampPad} enforces it. */
 export const MAX_PAD = 4096;
 
-/** The comfortable token budget (設計書 §4-5): 約 40,000 を超えると VRAM への
- * こぼれ出しが始まる、という既存の経験則。Warning only — never a Generate block
- * (the block-reason list deliberately has no token-budget code; see
- * `editReasonMessages.ts`).
+/** 画角拡張（Outpainting）の快適トークン予算を**エンジン系統ごと**に引く表。
+ * 数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §9（2026-09-04 実測）で、ここは
+ * その写しである。キーは `GET /models` が返すエンジン系統
+ * （`shell/useBaseModels.ts` の `activeEngineFamily`）。
  *
- * ⚠ NOT the same axis as `shell/comfortTable.ts`'s
- * `SINGLE_COMFORT_TOKEN_BUDGET` (44,880, Create's single-shot budget) even
- * though both are "one pass, no stage-2 tiling" numbers with the same token
- * formula — Outpainting is a DIFFERENT workload (the source video's own VAE
- * encode plus the outpaint mask ride alongside the generated pixels), and
- * this constant has never been calibrated against the 2026-08-18 real-device
- * run that produced 44,880. Do not substitute one for the other. */
+ * 予算は WARNING の閾値でしかない —— これを超えても生成は止まらない
+ * （{@link outpaintReasons} にトークン予算の理由コードは無く、
+ * `editReasonMessages.ts` にも対応する文言は無い）。
+ *
+ * ⚠ `shell/comfortTable.ts` の `SINGLE_COMFORT_TOKEN_BUDGET` とは**別の軸**で
+ * ある。同じトークン式を使うが Create の単発生成とは負荷が違う（画角拡張は
+ * 生成画素に加えて元動画自身の VAE エンコードと拡張マスクを抱える）。`ltx25`
+ * の値がたまたま Create の 44,880 と同じ数でも、片方の変更がもう片方に及ぶ
+ * ことはない —— 一方を他方で置き換えないこと。
+ *
+ * このモジュールが import ゼロである以上、`shell/comfortTable.ts` からこの表を
+ * 引くことはしない（サーバー配信の `comfort_budgets` に画角拡張の列は無い）。 */
+export const OUTPAINT_COMFORT_TOKEN_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
+  ltx: 42_240,
+  ltx25: 44_880,
+});
+
+/** エンジン系統が分からないときの予算。`GET /models` 未着・オフライン・
+ * {@link OUTPAINT_COMFORT_TOKEN_BUDGETS} に無い系統がこれを使う。
+ *
+ * この 40,000 だけは実測値ではなく従来の経験則（設計書 §4-5）である —— 系統が
+ * 判明していないセッションの挙動を変えないための据え置きなので、上の表の実測値
+ * に合わせて動かさないこと。 */
 export const COMFORT_TOKEN_BUDGET = 40_000;
+
+/**
+ * 系統名から予算を1つ決める。表に載っていない系統・`undefined`・空文字はすべて
+ * {@link COMFORT_TOKEN_BUDGET} へ落ちる。
+ *
+ * 空文字を `undefined` と同じ扱いにするのは、`activeEngineFamily` が
+ * 「まだ分からない」を `""` で表すため（`shell/comfortTable.ts` の
+ * `resolveComfortRow` も同じ2値を同じ意味で見る）。
+ */
+export function resolveOutpaintComfortBudget(engineFamily: string | undefined): number {
+  if (engineFamily === undefined || engineFamily === "") return COMFORT_TOKEN_BUDGET;
+  const budget = OUTPAINT_COMFORT_TOKEN_BUDGETS[engineFamily];
+  if (typeof budget !== "number" || !Number.isFinite(budget) || budget <= 0) return COMFORT_TOKEN_BUDGET;
+  return budget;
+}
 
 /** 上下左右に足すピクセル数。すべて 0 以上。 */
 export interface Pads {
@@ -199,15 +230,24 @@ export function latentFrameCount(numFrames: number): number {
   return Math.floor((numFrames - 1) / 8) + 1;
 }
 
-/** 快適上限の推定トークン数: `(幅/32) × (高さ/32) × 潜在フレーム数`（設計書 §4-5）。 */
+/** 快適上限の推定トークン数: `⌊幅/32⌋ × ⌊高さ/32⌋ × 潜在フレーム数`。
+ *
+ * 各軸を先に切り捨てるのは `shell/comfortTable.ts` の `comfortFramesForBudget`
+ * と同じ形にするため —— 32×32 の画素ブロック1つが潜在1マスなので、端数の画素は
+ * マスを増やさない。128 の倍数に載ったキャンバス（生成できる唯一の形）では
+ * 切り捨てが効かないので数値は変わらず、値が動くのは 128 格子から外れた**編集
+ * 途中**の表示だけである。 */
 export function comfortTokenEstimate(width: number, height: number, numFrames: number): number {
-  return (width / 32) * (height / 32) * latentFrameCount(numFrames);
+  return Math.floor(width / 32) * Math.floor(height / 32) * latentFrameCount(numFrames);
 }
 
-/** True once {@link comfortTokenEstimate} passes {@link COMFORT_TOKEN_BUDGET}.
- * A WARNING only — generation is never blocked on it. */
-export function isOverComfortBudget(width: number, height: number, numFrames: number): boolean {
-  return comfortTokenEstimate(width, height, numFrames) > COMFORT_TOKEN_BUDGET;
+/** True once {@link comfortTokenEstimate} passes `budget`. A WARNING only —
+ * generation is never blocked on it.
+ *
+ * 予算は引数で受ける。エンジン系統ごとに違う値になったため
+ * （{@link resolveOutpaintComfortBudget} が呼び手の解決器）。 */
+export function isOverComfortBudget(width: number, height: number, numFrames: number, budget: number): boolean {
+  return comfortTokenEstimate(width, height, numFrames) > budget;
 }
 
 /* --- マスクブラー（なじみ幅） ---------------------------------------------

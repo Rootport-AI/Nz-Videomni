@@ -1380,6 +1380,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               highlightedJobId={highlightedJobId}
               onJobSubmitted={setHighlightedJobId}
               subTabsDisabled={editSubTabs}
+              /* §3-134 (2026-09-04): the loaded engine picks Outpainting's
+                 快適上限 warning threshold, the same way it keys Create's and
+                 Chained's comfort markers above. */
+              engineFamily={baseModels.activeEngineFamily}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "inventory"}>

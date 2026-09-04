@@ -48,6 +48,14 @@ export interface EditScreenProps {
    * この画面もパネルもフィーチャ名を一切知らない（`ChainedScreen` が
    * `chainPanels` を受け取るのと同じ作法）。省略時はどちらも有効。 */
   subTabsDisabled?: EditSubTabsDisabled | undefined;
+  /** §3-134 (2026-09-04): the LOADED base model's engine family
+   * (`useBaseModels().activeEngineFamily`), passed straight through to
+   * `useOutpaintForm`, where it picks the 快適上限 warning's token budget out of
+   * `outpaintGeometry.OUTPAINT_COMFORT_TOKEN_BUDGETS`. Create/Chain take the
+   * very same prop for their own comfort markers. Omitted/`""` ⇒ "engine
+   * unknown" ⇒ the 40,000 fallback, so every direct-render test that predates
+   * it keeps compiling. */
+  engineFamily?: string | undefined;
 }
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
@@ -107,6 +115,7 @@ export function EditScreen({
   nativeBridge,
   onJobSubmitted,
   subTabsDisabled = { retake: false, outpainting: false },
+  engineFamily,
 }: EditScreenProps = {}) {
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
@@ -143,6 +152,7 @@ export function EditScreen({
     apiClient: client,
     nativeBridge,
     initialIntent,
+    engineFamily,
   });
   // Wrapped rather than passed straight through: `onSubmitted` is an OPTIONAL
   // property and `exactOptionalPropertyTypes` forbids handing it an explicit

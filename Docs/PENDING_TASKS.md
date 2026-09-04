@@ -1,7 +1,7 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-04（**§3-134〔画角拡張のトークン予算の実測較正〕が、オーナーの画面目視に合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134、予算の数値の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9、較正と目視結果の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §95〔目視結果は§95.9〕。**唯一の項目だった§2-5が抜けて空になった§2節は、運用規則どおり見出しごと削除した**／**§3-140〔🎞ボタンで挿入したオブジェクトが青一色になる症状〕が、オーナーの実機ゲートR1〜R8に全合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-140、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §107、SDK確定知見（`OBJECT_LAYER_FRAME.end`の排他判定を含む）は同[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (g)(h)）／**§3-133〔参照動画つき単発生成の快適上限に実測が無い〕が、第2次較正キャンペーンの実測で決着してクローズした**——結論は「単発の線をそのまま当ててよい」で、線44,880は動いていない〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-133、線の正本は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.9、較正の記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §94〕／2026-09-03（**§3-114〔埋め込み処理器の常駐＝`keep_resident_embeddings`〕と§3-88〔V2V併用時の`duration_seconds`〕が、どちらもオーナーの実機ゲートに全合格してクローズした**——記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-114・§3-88、検証記録はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §92〔画面目視の結果は§92.8〕・§93〔G2の結果は§93.10〕、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §106。**両項が抜けて空になった§2節は、運用規則どおり見出しごと削除した**。§3-114の目視U2ではオーナー裁定でUIラベルを「Embeddings processorの常駐（LTX 2.5）」へ改めている）／**§3-120をクローズし〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-120〕、§3-121を§4-34へ移した**（オーナー裁定2026-09-03。いずれも§3の一覧表と本文からは削除してある）／**§3-54（軽量ユーティリティAIモジュール新設＋座標追尾→マスク作成）へ、候補調査（最有力候補UETrack）を追記した**（オーナー承認済み・2026-09-03）／**台帳整理6件のオーナー裁定を反映した**（2026-09-03）——§3-5・§3-16・§3-61・§3-132はクローズ〔記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-5-02・§3-16-02・§3-61-02・§3-132〕、§3-11は再訪条件を追加、§3-53は着手の入口を追記した（この2件はクローズせず§3に残した）
-- 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（役割が重複する `NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md` は廃止済みで、新設もしない。過去の引き継ぎは[`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md)に残る）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
+- 作成: 2026-07-15／最終更新: 2026-09-04（現在の構成は**§1 近日中の改修項目／§3 将来の研究課題／§4 スコープ外**の3節。§2〔実装済み・ユーザーのテスト待ち〕は該当項目が無いため、運用規則どおり見出しごと削除してある）
+- 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
@@ -19,13 +19,13 @@
 
 - **概要**: α版公開時に、オーナーがREADMEの冒頭へ手書きで「スピードガイド」（初めての人が最短でインストールから初回生成までたどり着くための案内）を書く。**AIエージェントが実装するタスクではない**。想定ユーザー像はオーナー確定で「PowerShellコマンドを打つことも難しいリテラシー」——ダブルクリックとドラッグ＆ドロップだけで完結することを目指す。**これがα版公開前に残っている唯一の作業である。**
 - **書く前に読み返すもの**: ①インストール導線を縛る前提8点（自動更新は作らない／前提ツールはgitだけ／更新の単位はコミット／`run.bat`に`uv sync`を入れない／`.bat`は純ASCII・CRLF・末尾`pause`／`config.yaml`はgit追跡外＋`.example`から複製／Git LFSは使わない／日本語・空白を含むパスでも壊れない）は、**READMEの文面だけでなく`setup.bat`／`run.bat`の作り方そのものを縛る**。②要求スペック・所要時間（モデルのダウンロード約50分）・更新手順・gitとffmpegの扱いは、すでに[`README.md`](../README.md) §1にある内容をやさしく言い直せばよい。
-- **挿し込む画像素材は用意済み**: リポジトリ直下の`images/`に、オーナーが2026-09-03に同梱した（ロゴ・導入手順のスクリーンショット等。中身はディレクトリを直接見ること——ここへ写すと増減のたびに食い違う）。READMEからは相対パスで参照する。※`github_zipDL.jpg`はZIP取得の導線図で、上記の前提8点（前提ツールはgitだけ・更新の単位はコミット）とは別方針である。ガイドでどちらを採るかは**オーナー判断で未決**。
+- **挿し込む画像素材は用意済み**: リポジトリ直下の`images/`にある（ロゴ・導入手順のスクリーンショット等。中身はディレクトリを直接見ること——ここへ写すと増減のたびに食い違う）。READMEからは相対パスで参照する。※`github_zipDL.jpg`はZIP取得の導線図で、上記の前提8点（前提ツールはgitだけ・更新の単位はコミット）とは別方針である。ガイドでどちらを採るかは**オーナー判断で未決**。
 - **他に記録の無い覚書（この5点だけは本書が唯一の置き場）**:
   - **クローン先は`C:\Nz-Videomni`のような浅いパス**を案内する。デスクトップやドキュメントはWindows 11の既定でOneDriveと同期されるため、`models/`の30GB超がOneDriveへアップロードされ始める（`.gitignore`は無関係。OneDriveはgitではなくファイルシステムを見ている）。260文字パス長制限を避けられる利点もある。※オーナー判断: 過剰なフールプルーフは不要で、空き容量の説明のついでに注意喚起する程度でよい。
   - **`install_ltx.ps1 -RunSmoke`はmockバックエンドで動きGPUに一切触れない**ため、**セットアップの成功は実生成の成功を意味しない**。初回の生成はWebGUIのプリセット`smoke_test`（384×256／17フレーム）を手で回して確かめるよう案内する。
   - **EditタブのRetake／Outpaintingの使い方**にも1節設ける（対象機能は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-73・同§3-70）。
   - **参照切れ3ターゲットを同時に解消する**——`requirements.txt`のREADME参照コメント（`# See README "7. LTX 2.3 のインストール".`）と、`scripts/build_xformers.ps1`のREADME 7.2参照3箇所・7.3参照1箇所。いずれも参照先の見出しが現存せず、しかも現行の「7.」は**制限事項**の節なので、番号をたどった読者はまったく別の場所へ着地する。
-  - **リリース準備の一環として`webui/package.json`のversionを実バージョンへ**（旧§3-5の併合・2026-09-03）。初期値`0.0.0`のまま放置されており、バージョン文字列の一次ソース（`native/src/bridge_core.h`の`kPluginVersion`と`scripts/package.ps1 -Version`）とは別管理になっている。README執筆と同じタイミングで直す。
+  - **リリース準備の一環として`webui/package.json`のversionを実バージョンへ**。初期値`0.0.0`のまま放置されており、バージョン文字列の一次ソース（`native/src/bridge_core.h`の`kPluginVersion`と`scripts/package.ps1 -Version`）とは別管理になっている。README執筆と同じタイミングで直す。
 - **状態**: 未着手（オーナーが手書きするための備忘録。書き終えた時点でクローズする）。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-36〜§3-38・§3-56（導線の前提と`run.ps1`の設計）、[`README.md`](../README.md) §1（要求スペック）。
 
@@ -34,7 +34,7 @@
 - **何が開いているか**: Edit画面の画角拡張は、生成要求を組み立てる`webui/src/modes/edit/useOutpaintForm.ts`の`buildRequest`で、加速設定（Settingsの「生成高速化」）の要求フィールドを一切載せていない——`webui/src/shell/accelerationSettings.ts`の`accelerationRequestFields`（どの鍵をどんな条件で載せるかの契約の正本）を呼んでいない。Create（`webui/src/modes/single/useGenerationForm.ts`）・Chained（`webui/src/modes/chained/chainUtils.ts`）・バッチ（`webui/src/modes/batch/buildA2vChainPayload.ts`）はいずれも呼んでいる。**そもそも`webui/src/shell/AppShell.tsx`が`EditScreen`へ`acceleration`を渡していない**ため、同じ画面のもう一方のサブタブである撮り直し（Retake。`webui/src/modes/edit/useRetakeForm.ts`）も同じ状態である。
 - **なぜ効くか**: 利用者がSettingsで加速を切り替えても、Edit画面から出したジョブだけは常にサーバー既定の構成で走り、速度とVRAMの挙動が他タブと揃わない。実際にどの構成で走ったかは、そのジョブの`metadata.json`の`*_used`で読める。
 - **着手時の形**: `AppShell`から`EditScreen`へ`acceleration`を渡し、両サブタブの`buildRequest`で`accelerationRequestFields(...)`を展開する（Create／Chained／バッチと同じ作法）。**載せるかどうかはオーナー判断であり、本項は「いま載せていない」という事実と影響の起票にとどまる。**
-- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134（画角拡張のトークン予算をエンジン系統別の実測値へ置き換えた件。クローズ済み）。**その較正はこの状態のまま——つまりサーバー既定の加速構成——で測ってある**ので、**この画面へ加速設定を載せる改修を入れたら、画角拡張の予算は要再較正である**（前提の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.2）。
+- **関連**: 画角拡張のトークン予算は**この状態のまま——つまりサーバー既定の加速構成——で測ってある**ので、**この画面へ加速設定を載せる改修を入れたら、画角拡張の予算は要再較正である**（前提の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.2、予算の由来は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134）。
 - **状態**: 未着手（載せるかどうかのオーナー判断待ち）。
 - **出典**: `webui/src/modes/edit/useOutpaintForm.ts`・`webui/src/modes/edit/useRetakeForm.ts`・`webui/src/shell/AppShell.tsx`（載せていない・渡していないことの現物）、`webui/src/shell/accelerationSettings.ts`（`accelerationRequestFields`の契約の正本）、`webui/src/modes/single/useGenerationForm.ts`（載せている側との対比）。
 
@@ -57,7 +57,7 @@
 
 > **着手時の必須手順: 画角拡張（Outpainting）に触る改修では、連続ジョブの腕を必ず回すこと。** 「1腕1プロセス」の直接ドライバだけでは、**同じ常駐ワーカーで後続のジョブを流したときに出る不具合**（画角拡張の直後の普通の生成が落ちる類）を捕まえられない。**常設の道具が `outputs/ltx25-opmode-gate/scripts/` にある**（`op_gate.py`＝3腕〔通常→画角拡張→通常／→連結／→画角拡張→通常〕の連続投入ドライバ、`README.md`＝依存チェーンと合格条件、`SHA_ARMS.md`＝バイト同一性の手順書。`README.md`・`SHA_ARMS.md`の複写は[`Docs/Outputs-archive/ltx25-opmode-gate-scripts/`](Outputs-archive/ltx25-opmode-gate-scripts/)）。**腕が「有効」かどうか〔ページ固定プールが実際に成長したか〕を合否とは別に検査する**のがこのゲートの要点である（正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §81.6・§81.9）。
 
-**この表の対象外**: 次に挙げる群は本表に並べていない（**下の§3の本文には生きている**）。
+**この表の対象外**: 次の項目は本表に並べていない（**下の§3の本文には生きている**）。
 
 - **快適上限の線そのものを扱う課題**——§3-130（LTX 2.3既定構成の境界のモデル化）。マルチエンジン化の後続ではなく、快適上限マーカーのテーマから出たものである。
 
@@ -386,7 +386,7 @@
 
 ### 4-6. バックエンド同梱Gradio UIの残6件
 
-- **概要（残る6件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）⑤Gradio側が`unsupported_features`をまったく読んでいないこと（次項）⑥Settingsタブに埋め込み処理器の常駐（`keep_resident_embeddings`）のトグルが無いこと（2026-09-03の新設時に**意図的に見送った**もので、実装漏れではない。Gradio側のSettingsタブは高速化5項目のままで、6項目目はAviUtl2の操作パネルにだけある——[`README.md`](../README.md)「生成の高速化（Acceleration）」の項も同じことを書いている）。
+- **概要（残る6件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）⑤Gradio側が`unsupported_features`をまったく読んでいないこと（次項）⑥Settingsタブに埋め込み処理器の常駐（`keep_resident_embeddings`）のトグルが無いこと（**意図的に見送っている**もので、実装漏れではない。Gradio側のSettingsタブは高速化5項目のままで、6項目目はAviUtl2の操作パネルにだけある——[`README.md`](../README.md)「生成の高速化（Acceleration）」の項も同じことを書いている）。
 - **⑤の詳細**: **Gradio側のSettingsタブにあるVAEのラジオ（Default／PrunaVAED）は、アクティブなベースモデルが何であっても無条件に表示される。** LTX 2.5 を選んだ状態でPrunaVAEDを選んで生成すると、サーバーは`prune_vaed`を非対応として**422**で断る。AviUtl2側の操作パネルは同じ罠を[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-139で塞いだ（`unsupported_features`に`prune_vaed`がある間は行ごと非表示にする）が、**Gradio側は`unsupported_features`を1箇所も参照していない**（`gradio_ui/`全体でこのキーの出現は0件）。
 - **本項の扱い**: **実装するかどうかはオーナー判断であり、着手は決まっていない。** 直すなら`GET /models`の`unsupported_features`をGradio側でも読み、含まれる機能のコントロールを隠す（またはグレーアウトする）形になる。表駆動化そのものの研究課題は本書§3-135が受け皿である。
 - **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。⑤だけは利便性ではなく**到達可能な罠**である点が他の5件と異なる。
@@ -397,7 +397,7 @@
 
 - **概要**: ①stage-2の音声タイル継ぎ目（チェーン由来のbacklogと同族でV2V固有ではない）②fpsリサンプルが**全体変換**になっている（末尾のcontext区間だけの部分変換に最適化できる。単一ユーザーでは実害小。可変フレームレート素材は未ストレステスト）③ハンドル方式のクロスフェード窓に残る**浅い一時的な凹み**（深さ0.42。源とハンドルが同一音楽の別レンダのため位相干渉が部分的に残る）。
 - **何が塞いでいるか**: ①②③とも、オーナーの試聴で実用上受容済み。③はノイズフロア整合などの追加手段が候補として挙がっている段階。
-- **①②③はLTX 2.3の試聴・実測だけである**: **LTX 2.5では同じ3点を計測していない。** 着手するときは2.5でも測り直すこと。**題材が同じ「連結の継ぎ目の音」なので、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-117（逆順Chainedの音声の継ぎ目。2026-09-02クローズ＝原因はモデル〔音声VAE・ボコーダ〕の性質と確認済み）の知見を踏まえ、1つの試聴セッションにまとめるのが合理的である。**
+- **①②③はLTX 2.3の試聴・実測だけである**: **LTX 2.5では同じ3点を計測していない。** 着手するときは2.5でも測り直すこと。**題材が同じ「連結の継ぎ目の音」なので、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-117（逆順Chainedの音声の継ぎ目。原因はモデル〔音声VAE・ボコーダ〕の性質と確認済み）の知見を踏まえ、1つの試聴セッションにまとめるのが合理的である。**
 - **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §24.5・§24.7、[`Nz-Videomni/Docs/V2V_AUDIO_JOIN_RESEARCH.md`](V2V_AUDIO_JOIN_RESEARCH.md) §4。
 
 ### 4-8. 未対応のIC-LoRAアダプタ（Motion-Track）＋`conditioning_attention_mask`の露出
@@ -421,7 +421,7 @@
 
 ### 4-10. 120クリップ級の長尺チェーン構想
 
-- **概要**: クリップ連結の上限をさらに大きく（120クリップ級＝理論上8時間）伸ばす構想。当初案として挙がったが、**チェーンが不可分の単一ジョブである**（途中で失敗すると全部やり直し）というリスクの指摘を受けて撤回し、上限は24に落ち着いた。
+- **概要**: クリップ連結の上限をさらに大きく（120クリップ級＝理論上8時間）伸ばす構想。**チェーンは不可分の単一ジョブである**（途中で失敗すると全部やり直し）というリスクがあるため、固定枠を伸ばす形は採らず、上限は24としている。
 - **何が塞いでいるか**: やるとしても「固定枠の拡張」という現行方式ではなく、バッチA2Vと同じ**表＋状態管理のUI＋区間分割生成して繋ぐ再開可能な仕組み**として、別の設計課題で扱うべきものと位置づけられている。
 - **出典**: [`Nz-Videomni/Docs/CHAIN_UI_EXPANSION_WORKORDER.md`](CHAIN_UI_EXPANSION_WORKORDER.md)。
 
@@ -441,7 +441,7 @@
 ### 4-14. バッチA2VパネルのCrop欄が未露出
 
 - **概要**: Crop出力（最終出力を指定サイズへ切り出す）の入力欄は、Create画面とChain画面には実装済みだが、**バッチA2Vのパネルには無い**。送信側は`buildA2vChainPayload`が常に`crop_output`を組み立てているため、バッチはCreate側の値をそのまま使う形になっている。
-- **何が塞いでいるか**: Crop欄の新設時に「本流2画面に限定する」とスコープを切った名残で、関連ギャップとして認識だけされていた。
+- **何が塞いでいるか**: Crop欄のスコープが「本流2画面（Create・Chain）に限定する」ままであること。関連ギャップとして認識されているにとどまる。
 - **出典**: [`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N1、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §12（パリティ実装 第1〜3陣のN1）。
 
 ### 4-15. Gradio側バッチが`chunked_upsample`を送っていない（逆方向の差分）
@@ -489,7 +489,7 @@
 
 ### 4-22. SageAttentionを既定にするかどうかの再検討（起票：2026-08-01）
 
-- **再訪条件**: SageAttention（生成の高速化。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58でクローズしたAcceleration機能）が、フィールド（オーナー以外の実際の利用環境）で十分な期間・十分な件数にわたって問題なく動いた実績が溜まったとき。あるいは、利用者から「毎回わざわざ切り替えるのが面倒」という声が出たとき。
+- **再訪条件**: SageAttention（生成の高速化＝Acceleration機能。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58）が、フィールド（オーナー以外の実際の利用環境）で十分な期間・十分な件数にわたって問題なく動いた実績が溜まったとき。あるいは、利用者から「毎回わざわざ切り替えるのが面倒」という声が出たとき。
 - **概要**: 現在、attention（注意機構）の実装の既定は`sdpa`（PyTorch標準）で、`sage`は利用者が設定画面で選んだときだけ有効になる。これを`sage`既定へ切り替えるかどうかを再検討する。
 - **本項の対象はLTX 2.3・LTX 2.5の両方である**: **LTX 2.5でもSageAttentionは開通しているが、既定は2.3とまったく同じ理由（アップデートで利用者の生成結果を黙って変えない）で`sdpa`のままである。したがって既定を反転するかどうかの議論は、2.3と2.5をまとめて本項で扱う**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77）。**判断材料が1つ増えた**——LTX 2.5では効き目が形状に強く依存し、512×320級では効かないかむしろ遅くなる実測があるので、「既定onにすれば誰でも速くなる」とは言えない。
 - **いま`sdpa`既定にしている理由（オーナー確定）**:
@@ -581,7 +581,7 @@
 - **概要**: LTX 2.5の復号は、**1920×1088×241フレームで予約VRAMがカードの総量を超え、WDDMの共有システムメモリへこぼれる**（実測値の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.2。**本書には写さない**）。**落ちはしないが、這うように遅くなる。**
 - **何が塞いでいるか**: 何も塞いでいない。**画角拡張が持ち込んだ問題ではなく、出荷済みの復号経路そのものの性質**であり、画角拡張を使わない普通の生成でも同じ形状なら同じことが起きる。**この形状に到達するのは高解像度×長尺を狙った利用者だけで、そのとき起きるのは失敗ではなく減速である**——直す対象は画角拡張ではなく復号側であり、いま急いで着手する理由が無い、というのが優先度を下げて本節へ置いた理由である。
 - **着手時の入口**: **符号化の側では、同じ形状の膨張が`set_conv3d_memory_format`（重みの並びを変えるだけの処置）で大きく落ちている**（往復の一致度はほぼ不変）。原因は bf16 の3次元畳み込みが im2col 経路へ落ちることなので、**復号側にも同種の余地があるかどうかをまず測ること。** 測る前に実装へ進まないこと——符号化で効いたから復号でも効く、とは限らない。
-- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134（画角拡張のトークン予算。クローズ済み）——**その較正で退避へ反転した点は、拡張なしの対照が平坦だったことから画角拡張に固有と確定しており、本項には帰属しない**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.1）。ほかに§3-59（画角拡張のチェーン対応）。
+- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134（画角拡張のトークン予算）——**その較正で退避へ反転した点は、拡張なしの対照が平坦だったことから画角拡張に固有と確定しており、本項には帰属しない**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.1）。ほかに§3-59（画角拡張のチェーン対応）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.2、`outputs/ltx25-outpaint-prep/RESULTS.md`（複写: [`Outputs-archive/ltx25-outpaint-prep/RESULTS.md`](Outputs-archive/ltx25-outpaint-prep/RESULTS.md)）の G0-d、オーナー裁定（2026-09-03）。
 
 ---

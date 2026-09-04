@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { EditScreen } from "./EditScreen";
 
@@ -89,6 +91,10 @@ interface RenderOptions {
    * of its own — production threads this in through `EditScreen`. */
   prompt?: string;
   onJobSubmitted?: (jobId: string) => void;
+  /** §1-27 (2026-09-05): Settings' shared acceleration choice, threaded
+   * straight through to `EditScreen` — production wiring for the ledger item
+   * this file's acceleration tests cover. */
+  acceleration?: AccelerationSettings;
 }
 
 /** A routed payload that carries NO material — just enough to put `EditScreen`
@@ -135,6 +141,7 @@ function renderPanel(bridge: NativeBridge, options: RenderOptions = {}) {
           initialIntent={options.initialIntent ?? OUTPAINT_TAB_INTENT}
           prompt={options.prompt}
           onJobSubmitted={options.onJobSubmitted}
+          {...(options.acceleration ? { acceleration: options.acceleration } : {})}
         />
       </div>
     </LanguageProvider>,
@@ -504,6 +511,70 @@ describe("OutpaintingPanel", () => {
     // Outpainting は conditioning_images / crop_output と排他 —— どちらも送らない。
     expect(body.conditioning_images).toBeUndefined();
     expect(body.crop_output).toBeUndefined();
+  });
+
+  // §1-27 (2026-09-05): Edit was missing Settings' acceleration wire —
+  // `RenderOptions.acceleration` threads straight through `EditScreen` into
+  // `useOutpaintForm`'s `buildRequest`, exercising the same
+  // `accelerationRequestFields` additive contract Create/Chain already send.
+  const ACCELERATION_KEYS = [
+    "attention_backend",
+    "block_swap_prefetch",
+    "keep_resident",
+    "fused_gguf_dequant_kernel",
+    "vae_mode",
+    "keep_resident_embeddings",
+  ] as const;
+
+  it("acceleration at all-defaults: none of the six keys ride along", async () => {
+    const user = userEvent.setup();
+    const { bridge, request } = createPanelBridge();
+    const panel = renderPanel(bridge, { prompt: PROMPT, acceleration: ACCELERATION_DEFAULTS });
+    await attachSource(panel, user);
+
+    const generate = panel.getByRole("button", { name: /^generate$/i });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    const isGenerate = ([method, params]: [string, unknown]) =>
+      method === "backend.request" && (params as { path: string }).path.endsWith("/generate");
+    await waitFor(() => expect(request.mock.calls.some((c) => isGenerate(c as [string, unknown]))).toBe(true));
+    const call = request.mock.calls.find((c) => isGenerate(c as [string, unknown])) as
+      | [string, { body: Record<string, unknown> }]
+      | undefined;
+    if (!call) throw new Error("no POST /generate call was made");
+    const body = call[1].body;
+
+    for (const key of ACCELERATION_KEYS) expect(body).not.toHaveProperty(key);
+  });
+
+  it("acceleration with sage: exactly attention_backend rides along", async () => {
+    const user = userEvent.setup();
+    const { bridge, request } = createPanelBridge();
+    const panel = renderPanel(bridge, {
+      prompt: PROMPT,
+      acceleration: { ...ACCELERATION_DEFAULTS, attentionBackend: "sage" },
+    });
+    await attachSource(panel, user);
+
+    const generate = panel.getByRole("button", { name: /^generate$/i });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    const isGenerate = ([method, params]: [string, unknown]) =>
+      method === "backend.request" && (params as { path: string }).path.endsWith("/generate");
+    await waitFor(() => expect(request.mock.calls.some((c) => isGenerate(c as [string, unknown]))).toBe(true));
+    const call = request.mock.calls.find((c) => isGenerate(c as [string, unknown])) as
+      | [string, { body: Record<string, unknown> }]
+      | undefined;
+    if (!call) throw new Error("no POST /generate call was made");
+    const body = call[1].body;
+
+    expect(body.attention_backend).toBe("sage");
+    for (const key of ACCELERATION_KEYS) {
+      if (key === "attention_backend") continue;
+      expect(body).not.toHaveProperty(key);
+    }
   });
 
   it("uploads the right-clicked material on mount, trimmed to the ribbon's range", async () => {

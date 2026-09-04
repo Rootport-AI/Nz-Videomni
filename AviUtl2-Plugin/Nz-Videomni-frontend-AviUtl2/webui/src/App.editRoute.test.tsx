@@ -9,6 +9,7 @@ import { apiClient as defaultApiClient } from "./api/client";
 import type { ApiClient } from "./api/client";
 import type { JobResponse } from "./api/types";
 import { AppShell } from "./shell/AppShell";
+import { ACCELERATION_STORAGE_KEY } from "./shell/accelerationSettings";
 import { getReservationState, resetProvisionalReservation } from "./timeline/provisionalReservation";
 import { withExtraUnsupportedFeatures } from "./test/unsupportedFeatures";
 
@@ -283,6 +284,108 @@ describe("App / W0 Edit-系 right-click routing", () => {
 
       await screen.findByText(/requires a video/i, undefined, { timeout: 5_000 });
       expect(screen.getByRole("button", { name: /^generate$/i })).toBeInTheDocument();
+    },
+    20_000,
+  );
+});
+
+// §1-27 (2026-09-05): the SPINE gap this ledger item exists to close —
+// `AppShell` never threaded its shared `acceleration` prop down into
+// `EditScreen`, so every job Edit submitted ran the server-default config no
+// matter what Settings held. Every other unit test in this file/`modes/edit/`
+// stubs its own bridge or renders `EditScreen` directly, so none of them can
+// see whether the SHELL actually wires the prop through — this is that one
+// test, rendering `AppShell` for real like the routing tests above and
+// checking the wire the way `App.prefill.test.tsx`'s `pinAllOnAcceleration`
+// and `EditScreen.retake.test.tsx`'s `chainBody` do for their own layers.
+describe("App / Edit screens receive Settings' acceleration (§1-27)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetProvisionalReservation();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  /** `videoSelection()` above (span 4.03s inside a 5s file, no playback range
+   * reported) is exactly what the OTHER tests in this file want — it never
+   * clears `decideSourceTrim`'s `unknownPlaybackPosition` gate, so
+   * `useRetakeForm`'s `mapping` never resolves and Generate stays disabled
+   * forever. Those tests only assert on the ROUTE (tab switch / reservation),
+   * so that never mattered before. This test clicks Generate, so it needs a
+   * selection the form can actually turn into a window — same numbers
+   * `useRetakeForm.test.tsx`'s own `makeSelection()` uses (a reported playback
+   * range 2.0-12.0s inside a 20s file), proven there to resolve to a valid
+   * 113-frame window. */
+  function retakeReadySelection(): ResultOf<"timeline.getSelection"> {
+    return {
+      hasRange: true,
+      rangeStart: 60,
+      rangeEnd: 209, // 150 frames = 5.0s @30fps
+      selected: [
+        {
+          layer: 3,
+          frameStart: 0,
+          frameEnd: 299,
+          effectName: "動画ファイル",
+          filePath: "C:\\v\\retake-take1.mp4",
+          objectName: "take1",
+          textContent: null,
+          mediaWidth: 1280,
+          mediaHeight: 768,
+          mediaDurationSec: 20,
+          hasPlaybackRange: true,
+          playbackStartSec: 2,
+          playbackEndSec: 12,
+        },
+      ],
+      cursorFrame: 60,
+      cursorLayer: 3,
+      rate: 30,
+      scale: 1,
+      sampleRate: 44100,
+    };
+  }
+
+  /** Pins ONLY `attentionBackend` off its server default. `readStoredAcceleration`
+   * falls back per-field to `STORED_DEFAULTS` for whatever is absent from the
+   * JSON blob (its own doc comment), so this is "sage, everything else
+   * untouched" — unlike `App.prefill.test.tsx`'s `pinAllOnAcceleration`, which
+   * pins all five for a different purpose (matching the comfort marker's
+   * `requires` row) this test has no need of. Written BEFORE render:
+   * `useAccelerationSettings`'s lazy initializer reads `localStorage` once, on
+   * mount. */
+  function pinSageAcceleration(): void {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ attentionBackend: "sage" }));
+  }
+
+  it(
+    "retakeRange's POST /generate/chain carries the pinned acceleration (attention_backend: sage)",
+    async () => {
+      pinSageAcceleration();
+      const bridge = await renderShell();
+      const spy = vi.spyOn(bridge, "request");
+      emit(bridge, "retakeRange", retakeReadySelection());
+      await waitForEditPanel();
+
+      const generate = await screen.findByRole(
+        "button",
+        { name: /redo the selected range/i },
+        { timeout: 5_000 },
+      );
+      await waitFor(() => expect(generate).toBeEnabled(), { timeout: 5_000 });
+      await userEvent.setup().click(generate);
+
+      const isChain = ([method, params]: [string, unknown]) =>
+        method === "backend.request" && (params as { path?: string }).path?.endsWith("/generate/chain") === true;
+      await waitFor(() => expect(spy.mock.calls.some((c) => isChain(c as [string, unknown]))).toBe(true), {
+        timeout: 5_000,
+      });
+      const call = spy.mock.calls.find((c) => isChain(c as [string, unknown])) as
+        | [string, { body: Record<string, unknown> }]
+        | undefined;
+      if (!call) throw new Error("no POST /generate/chain call was made");
+      expect(call[1].body.attention_backend).toBe("sage");
     },
     20_000,
   );

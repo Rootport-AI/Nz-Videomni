@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
 import { resetProvisionalReservation } from "../../timeline/provisionalReservation";
@@ -76,10 +78,20 @@ function createBridge(options: BridgeOptions = {}) {
   return { request, requestWithFiles: vi.fn(), on: vi.fn(() => () => {}) } as unknown as NativeBridge;
 }
 
-function renderForm(intent: GenerationPrefill | undefined, options: BridgeOptions = {}, prompt = "a cat") {
+function renderForm(
+  intent: GenerationPrefill | undefined,
+  options: BridgeOptions = {},
+  prompt = "a cat",
+  acceleration?: AccelerationSettings,
+) {
   const nativeBridge = createBridge(options);
   const view = renderHook(() =>
-    useRetakeForm({ prompt, nativeBridge, ...(intent ? { initialIntent: intent } : {}) }),
+    useRetakeForm({
+      prompt,
+      nativeBridge,
+      ...(intent ? { initialIntent: intent } : {}),
+      ...(acceleration ? { acceleration } : {}),
+    }),
   );
   return { ...view, nativeBridge };
 }
@@ -445,6 +457,56 @@ describe("useRetakeForm — buildRequest", () => {
     expect(body.prompt).toBe("a cat");
     expect(body.loras).toEqual([{ name: "in-outpainting", strength: 1 }]);
     expect(result.current.isValid).toBe(true);
+  });
+
+  // §1-27 (2026-09-05): Retake was missing Settings' acceleration wire —
+  // `deps.acceleration` now reaches `buildRequest` through the single
+  // `accelerationRequestFields` contract (mirrors `chainUtils.test.ts`'s own
+  // acceleration block).
+  describe("Acceleration (deps.acceleration)", () => {
+    it("omitted / all-defaults: buildRequest is byte-identical (key order included)", async () => {
+      const baseline = renderForm(makeIntent());
+      await waitReady(baseline.result);
+      const baselineBody = baseline.result.current.buildRequest();
+
+      const { result } = renderForm(makeIntent(), {}, "a cat", ACCELERATION_DEFAULTS);
+      await waitReady(result);
+      expect(JSON.stringify(result.current.buildRequest())).toBe(JSON.stringify(baselineBody));
+    });
+
+    it("attentionBackend: sage — exactly one key more (attention_backend)", async () => {
+      const baseline = renderForm(makeIntent());
+      await waitReady(baseline.result);
+      const baselineKeys = Object.keys(baseline.result.current.buildRequest());
+
+      const { result } = renderForm(makeIntent(), {}, "a cat", {
+        ...ACCELERATION_DEFAULTS,
+        attentionBackend: "sage",
+      });
+      await waitReady(result);
+      const body = result.current.buildRequest();
+      expect(body.attention_backend).toBe("sage");
+      expect(Object.keys(body).sort()).toEqual([...baselineKeys, "attention_backend"].sort());
+    });
+
+    // §1-27 レビュー: `keepResident:true` 単独例は入れない —— `keep_resident`
+    // が載るかは prefetch 実効 on が前提（`keepResidentEffective`）で、単独の
+    // トグルとして読むと誤解を招く。独立鍵の代表として fusedGgufDequantKernel
+    // を使う。
+    it("fusedGgufDequantKernel: false — exactly one key more (fused_gguf_dequant_kernel)", async () => {
+      const baseline = renderForm(makeIntent());
+      await waitReady(baseline.result);
+      const baselineKeys = Object.keys(baseline.result.current.buildRequest());
+
+      const { result } = renderForm(makeIntent(), {}, "a cat", {
+        ...ACCELERATION_DEFAULTS,
+        fusedGgufDequantKernel: false,
+      });
+      await waitReady(result);
+      const body = result.current.buildRequest();
+      expect(body.fused_gguf_dequant_kernel).toBe(false);
+      expect(Object.keys(body).sort()).toEqual([...baselineKeys, "fused_gguf_dequant_kernel"].sort());
+    });
   });
 });
 

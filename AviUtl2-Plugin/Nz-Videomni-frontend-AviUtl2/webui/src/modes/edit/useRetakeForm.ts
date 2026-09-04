@@ -4,6 +4,8 @@ import type { AppConfig } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { parseLoraPrompt } from "../../lora/loraTags";
+import { accelerationRequestFields } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { deriveGenerationParams } from "../../timeline/deriveGenerationParams";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
@@ -112,6 +114,10 @@ export interface UseRetakeFormDeps {
    * 消費する（`AppShell` が `remountTokens.edit` を進めるので、新しい右クリックは
    * 新しいマウントとして届く）。 */
   initialIntent?: GenerationPrefill | undefined;
+  /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
+   * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
+   * Omitted keeps `accelerationRequestFields` sending nothing at all. */
+  acceleration?: AccelerationSettings | undefined;
 }
 
 export interface UseRetakeFormResult {
@@ -241,7 +247,7 @@ export interface UseRetakeFormResult {
  *    そのまま持ち越される導線で、「素材の差し替え」ではない。
  */
 export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult {
-  const { nativeBridge, initialIntent } = deps;
+  const { nativeBridge, initialIntent, acceleration } = deps;
   const config = deps.config ?? FALLBACK_APP_CONFIG;
   const prompt = deps.prompt ?? "";
 
@@ -600,6 +606,9 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
         window_start_sec: Math.max(0, windowStartSec),
         regenerate_audio: regenerateAudio,
       },
+      // §1-27 (2026-09-05): `{}` (no keys) unless the user moved off the
+      // server default, keeping this request byte-identical to before.
+      ...accelerationRequestFields(acceleration),
     };
   }, [
     prompt,
@@ -613,6 +622,7 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     stage2Window,
     source.state.id,
     regenerateAudio,
+    acceleration,
   ]);
 
   return {

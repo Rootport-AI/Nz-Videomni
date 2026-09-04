@@ -1380,6 +1380,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               highlightedJobId={highlightedJobId}
               onJobSubmitted={setHighlightedJobId}
               subTabsDisabled={editSubTabs}
+              /* §1-27 (2026-09-05): Create/Chained already load Settings'
+                 acceleration onto their requests — Edit was missing this
+                 wire, so its jobs always ran the server default config. */
+              acceleration={accelerationControls.acceleration}
               /* §3-134 (2026-09-04): the loaded engine picks Outpainting's
                  快適上限 warning threshold, the same way it keys Create's and
                  Chained's comfort markers above. */

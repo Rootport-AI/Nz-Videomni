@@ -4,6 +4,8 @@ import type { ApiClient } from "../../api/client";
 import type { GenerateRequest } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
+import { accelerationRequestFields } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
@@ -93,6 +95,10 @@ export interface UseOutpaintFormDeps {
    * `COMFORT_TOKEN_BUDGET` fallback, i.e. exactly the pre-2026-09-04
    * behaviour. */
   engineFamily?: string | undefined;
+  /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
+   * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
+   * Omitted keeps `accelerationRequestFields` sending nothing at all. */
+  acceleration?: AccelerationSettings | undefined;
 }
 
 export interface UseOutpaintFormResult {
@@ -188,7 +194,7 @@ export interface UseOutpaintFormResult {
  *    source can't leave a stale clamp behind.
  */
 export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintFormResult {
-  const { nativeBridge, initialIntent, engineFamily } = deps;
+  const { nativeBridge, initialIntent, engineFamily, acceleration } = deps;
   const apiClient = useMemo<ApiClient>(
     () => deps.apiClient ?? (nativeBridge ? createApiClient(nativeBridge) : defaultApiClient),
     [deps.apiClient, nativeBridge],
@@ -439,8 +445,11 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
         ...blend,
         freeze_source_audio: true,
       },
+      // §1-27 (2026-09-05): `{}` (no keys) unless the user moved off the
+      // server default, keeping this request byte-identical to before.
+      ...accelerationRequestFields(acceleration),
     };
-  }, [prompt, canvas.width, canvas.height, numFrames, frameRate, seed, sourceId, pads, blendDilation]);
+  }, [prompt, canvas.width, canvas.height, numFrames, frameRate, seed, sourceId, pads, blendDilation, acceleration]);
 
   return {
     source,

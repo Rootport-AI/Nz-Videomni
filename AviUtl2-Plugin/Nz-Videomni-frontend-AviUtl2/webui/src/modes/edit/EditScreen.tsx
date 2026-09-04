@@ -8,6 +8,7 @@ import { OutpaintingPanel } from "./OutpaintingPanel";
 import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { useStrings } from "../../i18n/LanguageContext";
 import { JobLedger } from "../../jobs/JobLedger";
 import { useJobsContext } from "../../jobs/JobsContext";
@@ -56,6 +57,10 @@ export interface EditScreenProps {
    * unknown" ⇒ the 40,000 fallback, so every direct-render test that predates
    * it keeps compiling. */
   engineFamily?: string | undefined;
+  /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
+   * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
+   * Threaded to both `useOutpaintForm` and `useRetakeForm`. */
+  acceleration?: AccelerationSettings | undefined;
 }
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
@@ -116,6 +121,7 @@ export function EditScreen({
   onJobSubmitted,
   subTabsDisabled = { retake: false, outpainting: false },
   engineFamily,
+  acceleration,
 }: EditScreenProps = {}) {
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
@@ -153,6 +159,7 @@ export function EditScreen({
     nativeBridge,
     initialIntent,
     engineFamily,
+    acceleration,
   });
   // Wrapped rather than passed straight through: `onSubmitted` is an OPTIONAL
   // property and `exactOptionalPropertyTypes` forbids handing it an explicit
@@ -175,7 +182,7 @@ export function EditScreen({
   // 間・失敗時は組み込みの既定へ落ちるので、パネルは常に描ける。
   const configState = useConfig();
   const config = configState.status === "ready" ? configState.config : FALLBACK_APP_CONFIG;
-  const retakeForm = useRetakeForm({ prompt, config, nativeBridge, initialIntent });
+  const retakeForm = useRetakeForm({ prompt, config, nativeBridge, initialIntent, acceleration });
   const retakeReasonMessages = useMemo(() => buildRetakeReasonMessages(strings), [strings]);
   const tr = strings.edit.retake;
 

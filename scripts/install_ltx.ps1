@@ -1505,9 +1505,9 @@ if ($CloneUpstreamReference) {
 #   "Ignoring --include since filenames have been explicitly set." and silently
 #   drops files (spatial upscaler went missing in testing). If that venv's
 #   huggingface_hub is ever upgraded, switch this to repeated --include flags.
-#   The per-file guard below does catch the resulting short download, but the
-#   thrown error gives no hint that a version bump is the cause -- look here
-#   first.
+#   The per-file guard below does catch the resulting short download, and since
+#   2026-09-04 the error it throws carries a "Maintainer note" that points back
+#   at this comment -- the two are one hint in two halves.
 #
 #   NOTE (glob semantics, verified live against both repos): --include matches with
 #   Python fnmatch against the repo-relative path, and `*` DOES cross '/'. So
@@ -1625,7 +1625,7 @@ if ($SkipModels) {
 
             $short = Get-ShortEntries -Files @($dl.files)
             if ($short.Count -gt 0) {
-                throw "'$($dl.name)' downloaded but these expected files are missing or short: $($short -join '; '). Check your network first (a download that was cut off can end here), then check the include globs and the map in $($mf.Name). Staging kept at $stage."
+                throw "'$($dl.name)' downloaded but these expected files are missing or short: $($short -join '; '). Check your network first (a download that was cut off can end here), then check the include globs and the map in $($mf.Name). Staging kept at $stage. Maintainer note: if this repeats on a healthy network, check whether .venv-engine's huggingface_hub moved past 0.36.2 -- the single --include form this script builds is silently ignored on 1.x (see the version WARNING above the download loop)."
             }
 
             Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue

@@ -83,9 +83,11 @@ export const PAD_SLIDER_MAX = 220;
 export const MAX_PAD = 4096;
 
 /** 画角拡張（Outpainting）の快適トークン予算を**エンジン系統ごと**に引く表。
- * 数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §9（2026-09-04 実測）で、ここは
+ * 数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §9（2026-09-05 実測）で、ここは
  * その写しである。キーは `GET /models` が返すエンジン系統
- * （`shell/useBaseModels.ts` の `activeEngineFamily`）。
+ * （`shell/useBaseModels.ts` の `activeEngineFamily`）。この線は Settings の
+ * 加速設定を全て on にした構成で測った実測値である（Single/Chained の快適上限
+ * マーカーが前提とする「全on」の線と同じ意味論）。
  *
  * 予算は WARNING の閾値でしかない —— これを超えても生成は止まらない
  * （{@link outpaintReasons} にトークン予算の理由コードは無く、
@@ -94,14 +96,15 @@ export const MAX_PAD = 4096;
  * ⚠ `shell/comfortTable.ts` の `SINGLE_COMFORT_TOKEN_BUDGET` とは**別の軸**で
  * ある。同じトークン式を使うが Create の単発生成とは負荷が違う（画角拡張は
  * 生成画素に加えて元動画自身の VAE エンコードと拡張マスクを抱える）。`ltx25`
- * の値がたまたま Create の 44,880 と同じ数でも、片方の変更がもう片方に及ぶ
- * ことはない —— 一方を他方で置き換えないこと。
+ * の値は 44,880 だった頃は Create の線とたまたま同じ数だったが、今回の
+ * 全on再較正で 46,080 になり別の数になった —— 元々別軸なので、片方の変更が
+ * もう片方に及ぶことはない。一方を他方で置き換えないこと。
  *
  * このモジュールが import ゼロである以上、`shell/comfortTable.ts` からこの表を
  * 引くことはしない（サーバー配信の `comfort_budgets` に画角拡張の列は無い）。 */
 export const OUTPAINT_COMFORT_TOKEN_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   ltx: 42_240,
-  ltx25: 44_880,
+  ltx25: 46_080,
 });
 
 /** エンジン系統が分からないときの予算。`GET /models` 未着・オフライン・

@@ -189,11 +189,11 @@ describe("快適上限（警告のみ・ブロックではない）", () => {
 
   it("エンジン系統ごとに予算を引く。表に無い系統・未確定はフォールバックの 40000", () => {
     expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx).toBe(42_240);
-    expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx25).toBe(44_880);
+    expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx25).toBe(46_080);
     expect(COMFORT_TOKEN_BUDGET).toBe(40_000);
 
     expect(resolveOutpaintComfortBudget("ltx")).toBe(42_240);
-    expect(resolveOutpaintComfortBudget("ltx25")).toBe(44_880);
+    expect(resolveOutpaintComfortBudget("ltx25")).toBe(46_080);
     // `GET /models` 未着・オフラインは "" で届く（`activeEngineFamily`）。
     expect(resolveOutpaintComfortBudget(undefined)).toBe(COMFORT_TOKEN_BUDGET);
     expect(resolveOutpaintComfortBudget("")).toBe(COMFORT_TOKEN_BUDGET);

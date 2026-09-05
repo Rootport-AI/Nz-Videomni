@@ -771,6 +771,15 @@ export interface EngineComfortProfile {
   /** 上から順に評価される条件行。空配列は「このエンジンに賢い線は無い」＝
    * 常にレガシー表へ落ちる、という正当な状態。 */
   rows: ComfortRow[];
+  /** 画角拡張（Outpainting、Edit タブ）の快適トークン予算。**{@link rows} の外に
+   * ある固定線**で、加速構成には連動しない（オーナー裁定 J1・2026-09-05）。
+   *
+   * `null`／欠落 ＝ **線が無い** ＝ クライアントは画角拡張の快適超過警告を
+   * 一切出さない（未較正の系統に仮の数字を当てない）。読む側は必ず
+   * `shell/outpaintBudget.ts` の `resolveOutpaintComfortBudget` を通すこと。
+   *
+   * 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §9。 */
+  outpaint_budget?: number | null;
 }
 
 /** One entry of `AppConfig.model.ic_loras` (Docs/API_REFERENCE.md §3.2) — a

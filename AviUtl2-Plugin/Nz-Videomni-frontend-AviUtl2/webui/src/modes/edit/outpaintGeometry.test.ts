@@ -5,7 +5,6 @@ import {
   canvasSize,
   centerPads,
   clampPad,
-  COMFORT_TOKEN_BUDGET,
   comfortTokenEstimate,
   DEFAULT_BLEND_DILATION_STAGE1,
   DEFAULT_BLEND_DILATION_STAGE2,
@@ -16,9 +15,7 @@ import {
   MAX_PAD,
   maxNumFrames,
   MIN_INNER_SIDE,
-  OUTPAINT_COMFORT_TOKEN_BUDGETS,
   outpaintReasons,
-  resolveOutpaintComfortBudget,
   stage2FromStage1,
   totalPad,
 } from "./outpaintGeometry";
@@ -187,38 +184,23 @@ describe("快適上限（警告のみ・ブロックではない）", () => {
     expect(comfortTokenEstimate(1265, 720, 97)).toBe(858 * 13);
   });
 
-  it("エンジン系統ごとに予算を引く。表に無い系統・未確定はフォールバックの 40000", () => {
-    expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx).toBe(42_240);
-    expect(OUTPAINT_COMFORT_TOKEN_BUDGETS.ltx25).toBe(46_080);
-    expect(COMFORT_TOKEN_BUDGET).toBe(40_000);
+  // §3-135 (2026-09-05): 予算そのものの解決はこのモジュールを離れ、サーバー配信の
+  // 表を引く `shell/outpaintBudget.ts` へ移った（このモジュールは import ゼロを
+  // 保つ）。ここに残るのは「渡された予算で判定する」という判定側だけなので、
+  // 予算は数値リテラルで直接渡す。
+  it("同じ幾何でも予算が違えば警告の出方が変わる（判定は予算引数だけを見る）", () => {
+    // 1920x1088 / 161 コマ = 42840 トークン。ltx25 の 46,080 には収まり、
+    // ltx の 42,240 は超える。
+    expect(isOverComfortBudget(1920, 1088, 161, 46_080)).toBe(false);
+    expect(isOverComfortBudget(1920, 1088, 161, 42_240)).toBe(true);
 
-    expect(resolveOutpaintComfortBudget("ltx")).toBe(42_240);
-    expect(resolveOutpaintComfortBudget("ltx25")).toBe(46_080);
-    // `GET /models` 未着・オフラインは "" で届く（`activeEngineFamily`）。
-    expect(resolveOutpaintComfortBudget(undefined)).toBe(COMFORT_TOKEN_BUDGET);
-    expect(resolveOutpaintComfortBudget("")).toBe(COMFORT_TOKEN_BUDGET);
-    // 将来のエンジンや綴り違いも黙って従来値へ。予算 0 は出さない。
-    expect(resolveOutpaintComfortBudget("ltx3")).toBe(COMFORT_TOKEN_BUDGET);
-    expect(resolveOutpaintComfortBudget("LTX25")).toBe(COMFORT_TOKEN_BUDGET);
-    // `Object.prototype` の名前を系統名として渡しても表の穴にはならない。
-    expect(resolveOutpaintComfortBudget("constructor")).toBe(COMFORT_TOKEN_BUDGET);
-  });
-
-  it("同じ幾何でも系統が違えば警告の出方が変わる（判定は予算引数だけを見る）", () => {
-    // 1920x1088 / 161 コマ = 42840 トークン。
-    expect(isOverComfortBudget(1920, 1088, 161, resolveOutpaintComfortBudget("ltx25"))).toBe(false);
-    expect(isOverComfortBudget(1920, 1088, 161, resolveOutpaintComfortBudget("ltx"))).toBe(true);
-    expect(isOverComfortBudget(1920, 1088, 161, resolveOutpaintComfortBudget(undefined))).toBe(true);
-
-    // 1920x1088 / 153 コマ = 40800 トークン —— ltx の予算には収まるが、系統が
-    // 分からないときの 40000 は超える。
-    expect(isOverComfortBudget(1920, 1088, 153, resolveOutpaintComfortBudget("ltx"))).toBe(false);
-    expect(isOverComfortBudget(1920, 1088, 153, resolveOutpaintComfortBudget(undefined))).toBe(true);
+    // 1920x1088 / 153 コマ = 40800 トークン —— どちらの系統の線にも収まる。
+    expect(isOverComfortBudget(1920, 1088, 153, 42_240)).toBe(false);
+    expect(isOverComfortBudget(1920, 1088, 153, 46_080)).toBe(false);
 
     // どの系統でも余裕のある寸法。
-    expect(isOverComfortBudget(1280, 768, 97, resolveOutpaintComfortBudget("ltx"))).toBe(false);
-    expect(isOverComfortBudget(1280, 768, 97, resolveOutpaintComfortBudget("ltx25"))).toBe(false);
-    expect(isOverComfortBudget(1280, 768, 97, resolveOutpaintComfortBudget(undefined))).toBe(false);
+    expect(isOverComfortBudget(1280, 768, 97, 42_240)).toBe(false);
+    expect(isOverComfortBudget(1280, 768, 97, 46_080)).toBe(false);
   });
 
   it("ちょうど予算どおりは超過ではない（境界は `>`）", () => {

@@ -106,6 +106,41 @@ describe("resolveComfortRow", () => {
       });
       expect(resolveComfortRow(limits, "ltx", allOn(), true)).toBeNull();
     });
+
+    // §3-135 / 裁定 J1 (2026-09-05): 画角拡張の線 (`outpaint_budget`) は `rows`
+    // の外にある固定線であり、行の照合には一切関与しない。ここが緑であるかぎり
+    // 「画角拡張の線を足したら単発・連結のマーカーが動いた」は起こらない。
+    it("ignores outpaint_budget entirely — it takes no part in row matching (J1)", () => {
+      const rows = [{ requires: { vae_mode: "prune_vaed" }, single_budget: 30000, chain_budget: 31000 }];
+      const withoutLine = limitsWith({
+        comfort_budgets: { ltx: { spatial_factor: 32, temporal_factor: 8, rows } },
+      });
+      const withLine = limitsWith({
+        comfort_budgets: { ltx: { spatial_factor: 32, temporal_factor: 8, rows, outpaint_budget: 42240 } },
+      });
+
+      // 一致する構成: 線があってもなくても解決結果は同じ（余分な鍵も生えない）。
+      expect(resolveComfortRow(withLine, "ltx", allOn(), true)).toEqual(
+        resolveComfortRow(withoutLine, "ltx", allOn(), true),
+      );
+      expect(resolveComfortRow(withLine, "ltx", allOn(), true)).toEqual({
+        singleBudget: 30000,
+        chainBudget: 31000,
+        spatialFactor: 32,
+        temporalFactor: 8,
+        rowIndex: 0,
+      });
+
+      // `requires` が一致しない構成: 線があっても行は無いまま。線が行の代役を
+      // 務めることはない。
+      expect(resolveComfortRow(withLine, "ltx", allOn({ vaeMode: "default" }), true)).toBeNull();
+
+      // 行がまったく無いプロファイルに線だけあっても同じ。
+      const lineOnly = limitsWith({
+        comfort_budgets: { ltx: { spatial_factor: 32, temporal_factor: 8, rows: [], outpaint_budget: 42240 } },
+      });
+      expect(resolveComfortRow(lineOnly, "ltx", allOn(), true)).toBeNull();
+    });
   });
 
   describe("row matching order and vocabulary", () => {

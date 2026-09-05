@@ -125,7 +125,8 @@ export const MOCK_CONFIG_BODY = {
     // (`modes/single/defaultConfig.ts`) と**同内容**であること —— 下のパリティ
     // テストは片方向包含（fallback の全鍵がここにある）しか見ないので、中身の
     // ズレはテストでは捕まらない。`ltx` に requires 空の行が無いのは意図
-    // （理由は defaultConfig.ts 側のコメント）。
+    // （理由は defaultConfig.ts 側のコメント）。`outpaint_budget`（§3-135）の
+    // 位置づけと、BE↔FE の数値一致が自動突き合わせされない件も同じコメント。
     comfort_budgets: {
       ltx: {
         spatial_factor: 32,
@@ -143,11 +144,13 @@ export const MOCK_CONFIG_BODY = {
             chain_budget: 40000,
           },
         ],
+        outpaint_budget: 42240,
       },
       ltx25: {
         spatial_factor: 32,
         temporal_factor: 8,
         rows: [{ requires: {}, single_budget: 44880, chain_budget: 44880 }],
+        outpaint_budget: 46080,
       },
     },
   },

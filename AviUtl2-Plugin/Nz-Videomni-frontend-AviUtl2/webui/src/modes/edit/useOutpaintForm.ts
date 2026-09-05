@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, createApiClient } from "../../api/client";
 import type { ApiClient } from "../../api/client";
-import type { GenerateRequest } from "../../api/types";
+import type { AppConfig, GenerateRequest } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { resolveOutpaintComfortBudget } from "../../shell/outpaintBudget";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
@@ -30,7 +31,6 @@ import {
   isOverComfortBudget,
   maxNumFrames,
   outpaintReasons,
-  resolveOutpaintComfortBudget,
   stage2FromStage1,
   ZERO_PADS,
 } from "./outpaintGeometry";
@@ -83,17 +83,26 @@ export interface UseOutpaintFormDeps {
    * material; `AppShell` bumps `remountTokens.edit` per route, so a fresh
    * right-click always arrives as a fresh mount. */
   initialIntent?: GenerationPrefill | undefined;
+  /** `GET /config`。省略時は組み込みの既定（`FALLBACK_APP_CONFIG`）。
+   *
+   * §3-135 (2026-09-05): **当面は画角拡張の快適予算専用**である
+   * （`limits.comfort_budgets[系統].outpaint_budget`）。このフックが他に読む
+   * 設定値（既定の `num_frames`・`frame_rate`・`seed`、`limits.max_num_frames`）
+   * が `FALLBACK_APP_CONFIG` 直読みのままである件は、これまで通り**別件**。
+   * `OutpaintingPanel.tsx` の `spill_free_frames` 直読みも同じく別件。 */
+  config?: AppConfig | undefined;
   /** §3-134 (2026-09-04): the LOADED base model's engine family
    * (`BaseModelBlock.engine_family` — `"ltx"`, `"ltx25"`, …), owned by
    * `shell/AppShell.tsx` via `useBaseModels().activeEngineFamily`. It picks the
-   * 快適上限 WARNING's token budget out of
-   * `outpaintGeometry.OUTPAINT_COMFORT_TOKEN_BUDGETS` — the same "caller owns
-   * the state" shape Create/Chain use for their own comfort markers.
+   * 快適上限 WARNING's token budget out of the SERVED table
+   * (`shell/outpaintBudget.ts`'s `resolveOutpaintComfortBudget`, §3-135) — the
+   * same "caller owns the state" shape Create/Chain use for their own comfort
+   * markers.
    *
    * Omitted (every pre-existing unit test), `undefined` or `""` (before `GET
-   * /models` lands, or offline) all mean "engine unknown" and take the
-   * `COMFORT_TOKEN_BUDGET` fallback, i.e. exactly the pre-2026-09-04
-   * behaviour. */
+   * /models` lands, or offline) all mean "engine unknown", which resolves to
+   * **no line at all** — and with no line there is no warning (オーナー裁定
+   * 2026-09-05). */
   engineFamily?: string | undefined;
   /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
@@ -159,7 +168,9 @@ export interface UseOutpaintFormResult {
   validityReasons: string[];
   isValid: boolean;
   /** 快適上限: a WARNING, never part of `isValid`. The budget it is measured
-   * against comes from {@link UseOutpaintFormDeps.engineFamily}. */
+   * against is the SERVED line for {@link UseOutpaintFormDeps.engineFamily}
+   * (`shell/outpaintBudget.ts`). **線が無い系統では常に `false`** — 未較正の
+   * 系統に仮の閾値を当てないので、警告そのものが出ない（§3-135）。 */
   isOverComfortBudget: boolean;
   /** The rough token count the warning quotes — `outpaintGeometry`'s
    * `comfortTokenEstimate` of the EXTENDED canvas. */
@@ -194,7 +205,7 @@ export interface UseOutpaintFormResult {
  *    source can't leave a stale clamp behind.
  */
 export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintFormResult {
-  const { nativeBridge, initialIntent, engineFamily, acceleration } = deps;
+  const { nativeBridge, initialIntent, config, engineFamily, acceleration } = deps;
   const apiClient = useMemo<ApiClient>(
     () => deps.apiClient ?? (nativeBridge ? createApiClient(nativeBridge) : defaultApiClient),
     [deps.apiClient, nativeBridge],
@@ -213,8 +224,10 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   // 台帳§3-71/§3-72: 生成 fps は必ず整数（`paramUtils.snapFrameRate` が正本）。
   // 初期値も通す —— 既定を非整数へ変えたときに、このパネルだけ素通しになるのを
   // 防ぐため。フォールバックは定数（`?? FALLBACK_APP_CONFIG…` と繋ぐと、スナップ
-  // が弾いたその値がそのまま漏れる）。なお、このパネルが実 config ではなく
-  // `FALLBACK_APP_CONFIG` を見ている件は本改修のスコープ外（別件）。
+  // が弾いたその値がそのまま漏れる）。なお、これら既定値の類（このブロックと
+  // 前後の `num_frames`・`seed`）が実 config ではなく `FALLBACK_APP_CONFIG` を
+  // 直読みしている件は引き続き**別件**である —— §3-135 で `deps.config` を
+  // 受け取るようにしたが、それを見るのは画角拡張の快適予算だけ。
   const [frameRate, setFrameRateState] = useState(
     () => snapFrameRate(FALLBACK_APP_CONFIG.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
   );
@@ -411,11 +424,13 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
 
   // 警告の閾値と、警告文が引用する概算トークン数。式は `comfortTokenEstimate`
   // ただ1つを通す —— ここで同じ式を書き直すと、切り捨ての有無のような細部が
-  // 表示と判定で食い違う。予算はエンジン系統から引き（系統不明なら従来の
-  // 40,000 へ）、超過は WARNING だけで `isValid` には一切関与しない。
-  const comfortBudget = resolveOutpaintComfortBudget(engineFamily);
+  // 表示と判定で食い違う。予算はサーバー配信の表からエンジン系統で引き（§3-135）、
+  // **線が無ければ（`null`）警告を出さない**。超過は WARNING だけで `isValid`
+  // には一切関与しない。
+  const comfortBudget = resolveOutpaintComfortBudget((config ?? FALLBACK_APP_CONFIG).limits, engineFamily);
   const comfortTokens = comfortTokenEstimate(canvas.width, canvas.height, numFrames);
-  const overComfort = known && isOverComfortBudget(canvas.width, canvas.height, numFrames, comfortBudget);
+  const overComfort =
+    known && comfortBudget !== null && isOverComfortBudget(canvas.width, canvas.height, numFrames, comfortBudget);
 
   const buildRequest = useCallback((): GenerateRequest => {
     // 既定（5 / 2）のときは両キーごと省略する —— 送っても意味は同じだが、

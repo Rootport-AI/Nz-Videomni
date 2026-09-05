@@ -82,54 +82,6 @@ export const PAD_SLIDER_MAX = 220;
  * number box carries this as its `max`, and {@link clampPad} enforces it. */
 export const MAX_PAD = 4096;
 
-/** 画角拡張（Outpainting）の快適トークン予算を**エンジン系統ごと**に引く表。
- * 数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §9（2026-09-05 実測）で、ここは
- * その写しである。キーは `GET /models` が返すエンジン系統
- * （`shell/useBaseModels.ts` の `activeEngineFamily`）。この線は Settings の
- * 加速設定を全て on にした構成で測った実測値である（Single/Chained の快適上限
- * マーカーが前提とする「全on」の線と同じ意味論）。
- *
- * 予算は WARNING の閾値でしかない —— これを超えても生成は止まらない
- * （{@link outpaintReasons} にトークン予算の理由コードは無く、
- * `editReasonMessages.ts` にも対応する文言は無い）。
- *
- * ⚠ `shell/comfortTable.ts` の `SINGLE_COMFORT_TOKEN_BUDGET` とは**別の軸**で
- * ある。同じトークン式を使うが Create の単発生成とは負荷が違う（画角拡張は
- * 生成画素に加えて元動画自身の VAE エンコードと拡張マスクを抱える）。`ltx25`
- * の値は 44,880 だった頃は Create の線とたまたま同じ数だったが、今回の
- * 全on再較正で 46,080 になり別の数になった —— 元々別軸なので、片方の変更が
- * もう片方に及ぶことはない。一方を他方で置き換えないこと。
- *
- * このモジュールが import ゼロである以上、`shell/comfortTable.ts` からこの表を
- * 引くことはしない（サーバー配信の `comfort_budgets` に画角拡張の列は無い）。 */
-export const OUTPAINT_COMFORT_TOKEN_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
-  ltx: 42_240,
-  ltx25: 46_080,
-});
-
-/** エンジン系統が分からないときの予算。`GET /models` 未着・オフライン・
- * {@link OUTPAINT_COMFORT_TOKEN_BUDGETS} に無い系統がこれを使う。
- *
- * この 40,000 だけは実測値ではなく従来の経験則（設計書 §4-5）である —— 系統が
- * 判明していないセッションの挙動を変えないための据え置きなので、上の表の実測値
- * に合わせて動かさないこと。 */
-export const COMFORT_TOKEN_BUDGET = 40_000;
-
-/**
- * 系統名から予算を1つ決める。表に載っていない系統・`undefined`・空文字はすべて
- * {@link COMFORT_TOKEN_BUDGET} へ落ちる。
- *
- * 空文字を `undefined` と同じ扱いにするのは、`activeEngineFamily` が
- * 「まだ分からない」を `""` で表すため（`shell/comfortTable.ts` の
- * `resolveComfortRow` も同じ2値を同じ意味で見る）。
- */
-export function resolveOutpaintComfortBudget(engineFamily: string | undefined): number {
-  if (engineFamily === undefined || engineFamily === "") return COMFORT_TOKEN_BUDGET;
-  const budget = OUTPAINT_COMFORT_TOKEN_BUDGETS[engineFamily];
-  if (typeof budget !== "number" || !Number.isFinite(budget) || budget <= 0) return COMFORT_TOKEN_BUDGET;
-  return budget;
-}
-
 /** 上下左右に足すピクセル数。すべて 0 以上。 */
 export interface Pads {
   left: number;
@@ -247,8 +199,11 @@ export function comfortTokenEstimate(width: number, height: number, numFrames: n
 /** True once {@link comfortTokenEstimate} passes `budget`. A WARNING only —
  * generation is never blocked on it.
  *
- * 予算は引数で受ける。エンジン系統ごとに違う値になったため
- * （{@link resolveOutpaintComfortBudget} が呼び手の解決器）。 */
+ * 予算は引数で受ける。エンジン系統ごとに違う値であり、その解決は
+ * `shell/outpaintBudget.ts` の `resolveOutpaintComfortBudget`（サーバー配信の
+ * `limits.comfort_budgets` を引く）が担う —— このモジュールは import ゼロを
+ * 保つため、系統名を知らないままでいる。線が無い（同解決器が `null`）ときは
+ * 呼び手がこの関数を呼ばず、警告も出さない。 */
 export function isOverComfortBudget(width: number, height: number, numFrames: number, budget: number): boolean {
   return comfortTokenEstimate(width, height, numFrames) > budget;
 }

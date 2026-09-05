@@ -52,10 +52,10 @@ export interface EditScreenProps {
   /** §3-134 (2026-09-04): the LOADED base model's engine family
    * (`useBaseModels().activeEngineFamily`), passed straight through to
    * `useOutpaintForm`, where it picks the 快適上限 warning's token budget out of
-   * `outpaintGeometry.OUTPAINT_COMFORT_TOKEN_BUDGETS`. Create/Chain take the
+   * the SERVED table (`shell/outpaintBudget.ts`, §3-135). Create/Chain take the
    * very same prop for their own comfort markers. Omitted/`""` ⇒ "engine
-   * unknown" ⇒ the 40,000 fallback, so every direct-render test that predates
-   * it keeps compiling. */
+   * unknown" ⇒ **no line, hence no warning**, so every direct-render test that
+   * predates it keeps compiling. */
   engineFamily?: string | undefined;
   /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
@@ -153,11 +153,22 @@ export function EditScreen({
     [nativeBridge],
   );
 
+  // `GET /config`。Retake の窓長の上下限（`limits.retake_window_*`）と、
+  // Outpainting の快適予算（`limits.comfort_budgets[系統].outpaint_budget`、
+  // §3-135）をここから取る。読めない間・失敗時は組み込みの既定へ落ちるので、
+  // どちらのパネルも常に描ける。
+  //
+  // 両フックより前に呼ぶ（§3-135）: フックの呼び出し順はレンダ間で安定である
+  // 必要があり、ここから下の並びには条件分岐も早期 return も無い。
+  const configState = useConfig();
+  const config = configState.status === "ready" ? configState.config : FALLBACK_APP_CONFIG;
+
   const outpaintForm = useOutpaintForm({
     prompt,
     apiClient: client,
     nativeBridge,
     initialIntent,
+    config,
     engineFamily,
     acceleration,
   });
@@ -178,10 +189,7 @@ export function EditScreen({
   const t = strings.edit.outpainting;
 
   // ── §1-17 Retake ────────────────────────────────────────────────────────
-  // 窓長の上下限（`limits.retake_window_*`）は `GET /config` から取る。読めない
-  // 間・失敗時は組み込みの既定へ落ちるので、パネルは常に描ける。
-  const configState = useConfig();
-  const config = configState.status === "ready" ? configState.config : FALLBACK_APP_CONFIG;
+  // 窓長の上下限（`limits.retake_window_*`）は上で読んだ `config` から取る。
   const retakeForm = useRetakeForm({ prompt, config, nativeBridge, initialIntent, acceleration });
   const retakeReasonMessages = useMemo(() => buildRetakeReasonMessages(strings), [strings]);
   const tr = strings.edit.retake;

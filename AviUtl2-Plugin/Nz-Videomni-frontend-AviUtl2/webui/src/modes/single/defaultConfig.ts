@@ -83,6 +83,15 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     // 快適境界がトークン数に対して単調でなく（境界がデコードのチャンク数増分
     // 7→8／4→5／2→3 と一致）、1本のトークン線で表せないので、そこは上の
     // `spill_free_frames` が正である。「既定行を足せば全構成で賢くなる」は誤り。
+    //
+    // BE↔FE の数値一致は**自動では突き合わされない** —— バックエンドの
+    // `tests/test_comfort_budgets.py` と、フロントの
+    // `shell/outpaintBudget.test.ts` などが持つ**別々のリテラル**が守っている。
+    // 値を動かすときは両方を直すこと（片方だけ直しても両者とも緑のままになる）。
+    //
+    // `outpaint_budget`（§3-135, 2026-09-05）は画角拡張の快適予算で、`rows` の
+    // 外にある固定線（加速構成に連動しない・裁定J1）。未較正の系統では省略＝
+    // 線なし＝警告を出さない。
     comfort_budgets: {
       ltx: {
         spatial_factor: 32,
@@ -100,11 +109,13 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
             chain_budget: 40000,
           },
         ],
+        outpaint_budget: 42240,
       },
       ltx25: {
         spatial_factor: 32,
         temporal_factor: 8,
         rows: [{ requires: {}, single_budget: 44880, chain_budget: 44880 }],
+        outpaint_budget: 46080,
       },
     },
   },

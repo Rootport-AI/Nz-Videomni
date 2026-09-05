@@ -1214,7 +1214,7 @@ export const en = {
      * comfortMarkerTitle` (the Chained screen's resolution-slider guide
      * tooltip — a different feature entirely) and `edit.comfortWarning`
      * (Outpainting's own token-budget warning, a different workload/budget —
-     * see `modes/edit/outpaintGeometry.ts`'s `COMFORT_TOKEN_BUDGET`).
+     * see `shell/outpaintBudget.ts`'s `resolveOutpaintComfortBudget`).
      * The text is DELIBERATELY identical to Chained's `overBudgetWarning`
      * below (same wording for the same kind of warning) — a text-anchored
      * search for this string will hit both keys. */
@@ -2583,7 +2583,7 @@ export const ja: Strings = {
     // キー名に `Smart` を付けたのは、別機能の既存キー2つと混同しないため:
     // `single.size.comfortMarkerTitle`（Chained画面の解像度スライダー用ガイドの
     // ツールチップ、全く別機能）と `edit.comfortWarning`（Outpaintingの別軸トークン
-    // 予算の警告——`modes/edit/outpaintGeometry.ts` の `COMFORT_TOKEN_BUDGET`
+    // 予算の警告——`shell/outpaintBudget.ts` の `resolveOutpaintComfortBudget`
     // 参照）。
     comfortWarningSmart: "VRAM溢れにより生成が遅くなる可能性があります。",
     size: {

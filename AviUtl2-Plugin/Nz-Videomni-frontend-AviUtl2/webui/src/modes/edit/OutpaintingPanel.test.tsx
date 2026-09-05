@@ -467,6 +467,35 @@ describe("OutpaintingPanel", () => {
     expect(panel.getByRole("button", { name: /^generate$/i })).toBeInTheDocument();
   });
 
+  // §3-135 (2026-09-05): 画角拡張の快適予算はサーバー配信の
+  // `limits.comfort_budgets[系統].outpaint_budget` から引くようになった
+  // （`shell/outpaintBudget.ts`）。エンジン系統が分からないあいだ ——
+  // `engineFamily` を渡さないこのテスト群の状態で、本番では `GET /models` 未着や
+  // オフライン —— は**線が無い**ので、どれほど重い幾何でも快適超過の警告は
+  // 出さない。「分からないときに仮の数字を当てて分かったふりの表示をしない」と
+  // いうオーナー裁定で、以前の据え置き 40,000 は概念ごと廃止された。
+  it("draws no comfort warning while the engine family is unknown, however heavy the geometry", async () => {
+    const user = userEvent.setup();
+    // 1920x1088 のまま（パッド 0）・既定の 361 コマ = 2040 マス × 潜在 46 コマ =
+    // 93,840 トークン。かつての据え置き 40,000 も、ltx の 42,240 も、ltx25 の
+    // 46,080 も遥かに超える幾何である。
+    const { bridge } = createPanelBridge({ media: { durationSec: 30, width: 1920, height: 1088 } });
+    const panel = renderPanel(bridge);
+    await attachSource(panel, user, null);
+
+    // 前提の確認: キャンバスも尺も本当にその値になっている。
+    expect(panel.getByText(/generating at 1920 x 1088 px/i)).toBeInTheDocument();
+    expect(sliderValue(panel, /duration/i)).toBe("361");
+
+    // 快適超過の警告は出ない。文言は `edit.comfortWarning`（「units of work」を
+    // 含む唯一のバナー）で、上のテストが見ている `edit.spillWarning`
+    // （"Generation may slow down 2-4x."）とは別物。
+    expect(panel.queryByText(/units of work/i)).toBeNull();
+    // 対照: 別軸の spill 警告のほうは出ている —— つまりバナーが描かれない画面に
+    // なっているのではなく、快適超過の判定だけが「線なし」で沈黙している。
+    expect(panel.getByText(/may slow down/i)).toBeInTheDocument();
+  });
+
   it("sends the extended canvas, the four pads, the pinned LoRA and the reference video", async () => {
     const user = userEvent.setup();
     const { bridge, request } = createPanelBridge();

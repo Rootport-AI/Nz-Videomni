@@ -1,5 +1,7 @@
 # Nz-Videomni
 
+![Nz-Videomni-logo](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/Videomni_logo.jpg)
+
 LTX 2.3 / LTX 2.5 の動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用に Gradio UI(`/ui`) を同梱します。
 AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）も同じリポジトリに入っており、`AviUtl2-Plugin/` 以下がそれです。API は汎用設計なので、DaVinci Resolve など他のフロントエンドからも使えます。
 

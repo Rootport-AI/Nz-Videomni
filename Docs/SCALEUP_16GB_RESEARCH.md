@@ -6,6 +6,8 @@
 > 詳細・原因分析（keep_resident の Gemma out-of-place 移動 crash、comp=1 による commit 束縛、マシンスペック比較）は **VERIFICATION_LOG §10** と **NEXT_SESSION_HANDOFF.md 冒頭 ▶▶▶▶**。以下（本バナー以降）は着手前の調査記録（有効・参照用）。
 >
 > ※`LTX_KEEP_RESIDENT` は当時の手順。2026-08-02 に環境変数の経路は撤去され、現在は API の `keep_resident` フィールド（`POST /generate`・`POST /generate/chain`。既定 `false`＝上記レシピの keep=0 と同じ状態）で指定する（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48）。
+>
+> ※本文（§2 のレバー棚卸しの表と付録A）が「将来項目としての管理は `PENDING_TASKS.md` §3-44 へ移設」と書いている先は、**現在は [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-35（FFNチャンキング）である**——2026-09-05 に §4（スコープ外）へ移したため、同書 §3-44 は欠番になった。**[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の §3-44 はまったく別の項目**（IC-LoRA 128グリッドの粘着）なので、番号だけでたどらないこと。本文中の相対パス（`../../Nz-LTX23-frontend-AviUtl2/Docs/PENDING_TASKS.md`）も、台帳がバックエンドへ移る前の配置のままである。**本書は凍結文書のため、本文そのものは直していない。**
 
 作成日: 2026-06-30
 

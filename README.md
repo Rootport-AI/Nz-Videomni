@@ -13,8 +13,9 @@
 - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
 　※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
 
-- アップデートするとき：`git pull`を実行する（後述）  
+- アップデートするとき：`git pull`を実行する（後述）
 
+  
 ### 1)  gitをインストールする  
 [![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)  
 

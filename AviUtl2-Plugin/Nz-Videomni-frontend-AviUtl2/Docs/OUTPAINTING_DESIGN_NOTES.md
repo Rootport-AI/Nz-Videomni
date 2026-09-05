@@ -145,6 +145,12 @@ Chained タブの v2v（動画から動画を生成する機能）と同じ二�
 
 > **【2026-09-04 追記】この 40,000 はもう画角拡張の運用値ではない。** 画角拡張の予算は**画角拡張自身の実測で較正され、エンジン系統〔ベースモデルの世代〕ごとの値**になった（`webui/src/modes/edit/outpaintGeometry.ts` の `OUTPAINT_COMFORT_TOKEN_BUDGETS` が系統キーの表、`resolveOutpaintComfortBudget` が系統から予算を 1 つ決める入口）。**数値の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §9 であり、本書には書き写さない。** `COMFORT_TOKEN_BUDGET` は定数として残っているが役割が変わり、**エンジン系統が分からないときのフォールバック**である——系統不明のセッションの挙動を変えないための据え置きなので、実測値に合わせて動かさない（**どの条件がここへ落ちるかの一覧は `outpaintGeometry.ts` の doc コメントが正本**）。**単発生成側の線を画角拡張へ当ててはならない**という別軸の原則は、今回の較正でも変わっていない（**正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §9.4**。`outpaintGeometry.ts` の注記はその実装側のミラーである）。上のトークン数の式は `shell/comfortTable.ts` と同じ切り捨て形へ揃えたが、生成できる唯一の形である 128 の倍数のキャンバスでは数値は変わらない。**警告専用・非ブロッキングという性格も不変である。** **オーナーの画面目視は 2026-09-04 に合格し、本件は完結した**（台帳の記録はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-134、目視結果は同[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §95.9）。
 
+> **【2026-09-05 追記】上の追記が名指ししている `OUTPAINT_COMFORT_TOKEN_BUDGETS` と `COMFORT_TOKEN_BUDGET` は、どちらももう存在しない。** 予算は**サーバーが配信する値**になり（`GET /config` の `limits.comfort_budgets[系統].outpaint_budget`）、フロントエンドは表を持たない。**読み口は `webui/src/shell/outpaintBudget.ts` の `resolveOutpaintComfortBudget` の1つだけ**で、戻り値は `number | null` である。
+>
+> **「フォールバック」という概念そのものも廃止した。** 系統が分からないとき・配信が無いときに据え置きの 40,000 を当てる扱いをやめ、**線が無ければ警告を出さない**（`null`）を唯一の規則にした——**未較正の系統に仮の数字を当てて「分かったふり」の表示をしないため**というオーナー裁定である。したがって上の追記の「`COMFORT_TOKEN_BUDGET` は定数として残っているが役割が変わり、エンジン系統が分からないときのフォールバックである」という記述は、**現在は失効している**（当時の状態として残してある）。
+>
+> **変わっていないもの**: **数値の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §9 のままで、本書には書き写さない。** **単発生成側の線を画角拡張へ当ててはならない**という別軸の原則（同 §9.4）も、**警告専用・非ブロッキングという性格**も不変である。**実装と設計判断の記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §99**、フロントエンド側は[`DEVLOG.md`](DEVLOG.md) §111 である。
+
 ### 4-6. アスペクト比プリセット
 
 「16:9→9:16」等のプリセットボタンは要望があるが、**他の仕様が固まってから検討する**（オーナー判断。本書のスコープ外）。

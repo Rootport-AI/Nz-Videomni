@@ -161,6 +161,7 @@ import json
 import gc
 import logging
 import traceback
+from datetime import datetime
 from pathlib import Path
 
 os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
@@ -198,7 +199,9 @@ def _configure_worker_logging() -> None:
     root = logging.getLogger()
     if not any(getattr(h, "_ltx_worker_handler", False) for h in root.handlers):
         handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter("[ltx_worker] %(name)s: %(message)s"))
+        handler.setFormatter(
+            logging.Formatter("[ltx_worker] %(asctime)s %(name)s: %(message)s")
+        )
         handler._ltx_worker_handler = True  # type: ignore[attr-defined]
         root.addHandler(handler)
     root.setLevel(logging.INFO)
@@ -208,8 +211,13 @@ _configure_worker_logging()
 
 
 def _log(msg: str) -> None:
-    """Human/diagnostic logging -> STDERR only (never the protocol channel)."""
-    print(f"[ltx_worker] {msg}", file=sys.stderr, flush=True)
+    """Human/diagnostic logging -> STDERR only (never the protocol channel).
+
+    Timestamped with the same format as server.log's ``%(asctime)s`` default,
+    so the two logs can be cross-referenced by wall-clock time.
+    """
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    print(f"[ltx_worker] {ts} {msg}", file=sys.stderr, flush=True)
 
 
 def _emit(event: str, **fields: object) -> None:
@@ -818,6 +826,19 @@ def _peak_vram_reserved_mb() -> int:
     return int(torch.cuda.max_memory_reserved(DEV) // (1024 * 1024))
 
 
+def _log_job_start_vram() -> None:
+    """Log allocated/reserved VRAM right after ``reset_peak_memory_stats``.
+
+    This is the starting point of this job's peak measurement, so on a
+    successful job it equals whatever the previous job left resident. Not
+    called at job end: a failed job skips the trailing gc, so its value can
+    drift from what the next job's start actually sees.
+    """
+    allocated = torch.cuda.memory_allocated(DEV) // (1024 * 1024)
+    reserved = torch.cuda.memory_reserved(DEV) // (1024 * 1024)
+    _log(f"JOB_START_VRAM allocated_mb={allocated} reserved_mb={reserved}")
+
+
 def _do_generate(msg: dict) -> None:
     """Run one generation; mp4 is written by the engine to msg['output_path']."""
     assert _PIPE is not None, "generate before load"
@@ -825,6 +846,7 @@ def _do_generate(msg: dict) -> None:
     seed = int(msg["seed"])
 
     torch.cuda.reset_peak_memory_stats(DEV)
+    _log_job_start_vram()
 
     images = [
         ImageConditioningInput(
@@ -997,8 +1019,10 @@ def _do_generate(msg: dict) -> None:
     # the next job. The block-swap transformer carries reference cycles
     # (swapped_forward closures capturing block lists) that plain refcounting
     # can't reclaim, so an explicit gc.collect() is required; empty_cache() then
-    # returns the freed CUDA blocks to the driver. Pairs with the keep-latest
-    # fix in BlockSwapService.install().
+    # returns the freed CUDA blocks to the driver. Pairs with the end-of-job
+    # release in FastVideoPipeline's finally (BlockSwapService.release_installed()
+    # drops the keep-latest reference there; this gc.collect() is what actually
+    # reclaims it).
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -1022,6 +1046,7 @@ def _do_generate_chain(msg: dict) -> None:
     output_path = msg["output_path"]
     seed = int(msg["seed"])
     torch.cuda.reset_peak_memory_stats(DEV)
+    _log_job_start_vram()
 
     clips = [
         ChainClipSpec(

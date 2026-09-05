@@ -576,9 +576,12 @@ class LTXFastVideoPipeline:
             self._block_swap_prefetch_used = svc.last_prefetch_used or (
                 "on->off" if self._block_swap_prefetch_requested else "off"
             )
-            # The job owns the prefetch resources; releasing them here (rather
-            # than at the next install) is what keeps the finished transformer
-            # from being pinned alive between jobs.
+            # The job owns the prefetch resources (transfer stream, pinned
+            # masters, arenas); releasing them here — rather than deferring to
+            # the next install() — keeps them from surviving the gap between
+            # jobs. The transformer reference itself is a separate concern:
+            # _release_block_swap_transformer() (called right after this, from
+            # the same finally) is what lets THAT go.
             svc.teardown_prefetch()
             svc.prefetch_requested = False
         else:
@@ -586,6 +589,19 @@ class LTXFastVideoPipeline:
                 "on->off" if self._block_swap_prefetch_requested else "off"
             )
         self._block_swap_prefetch_requested = False
+
+    def _release_block_swap_transformer(self) -> None:
+        """End-of-job release of the keep-latest transformer reference.
+
+        All three entry points (single, chain, outpaint) already ``del`` the
+        transformer before decode on their success path — this drops the last
+        strong reference BlockSwapService still holds, so the worker's
+        trailing ``gc.collect()`` can reclaim it. Never raises, same as the
+        other per-job resets in this same ``finally``.
+        """
+        svc = getattr(self, "_block_swap_service", None)
+        if svc is not None:
+            svc.release_installed()
 
     def block_swap_prefetch_used(self) -> str:
         """What the last finished job's block swap actually did: "off", "on", or
@@ -1800,6 +1816,10 @@ class LTXFastVideoPipeline:
             # transfer state down (drains the stream, frees the arenas and the
             # CPU masters) so nothing survives into the next job.
             self._reset_block_swap_prefetch_job()
+            # And the job's transformer reference itself (§3-105 F2): the
+            # success path already del'd the transformer before decode, so
+            # this drops BlockSwapService's own keep-latest reference to it.
+            self._release_block_swap_transformer()
             # Same again for the fused GGUF dequantization kernels; reset also
             # snapshots this job's verdict for
             # fused_gguf_dequant_kernel_used() below.
@@ -1959,6 +1979,7 @@ class LTXFastVideoPipeline:
             self._nag.reset()
             self._sage.reset()
             self._reset_block_swap_prefetch_job()
+            self._release_block_swap_transformer()
             self._reset_fused_dequant_job()
 
     @torch.inference_mode()
@@ -2039,6 +2060,7 @@ class LTXFastVideoPipeline:
             self._nag.reset()
             self._sage.reset()
             self._reset_block_swap_prefetch_job()
+            self._release_block_swap_transformer()
             self._reset_fused_dequant_job()
 
     @torch.inference_mode()

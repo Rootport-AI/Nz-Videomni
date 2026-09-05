@@ -151,6 +151,12 @@ class BlockSwapService:
         # transformer so the prior one becomes collectable (gc.collect() breaks
         # its swapped_forward reference cycles; see the between-job cleanup in
         # engine.worker._do_generate).
+        #
+        # LTX 2.3 also lets go of this reference earlier, at end-of-job, via
+        # release_installed() (FastVideoPipeline's finally) — this clear() is
+        # then just its safety net for a job that never reached that finally.
+        # engine25 never calls release_installed(), so for it this clear()
+        # remains the ONLY mechanism.
         self._installed_transformers.clear()
         self._installed_transformers.append(transformer)
 
@@ -177,6 +183,17 @@ class BlockSwapService:
             self._pinned_pool.release()
 
         logger.info("BlockSwap: uninstalled, all blocks moved to %s", self.device)
+
+    def release_installed(self) -> None:
+        """Drop the keep-latest reference to the job's transformer. Idempotent.
+
+        NOT uninstall(): that one is unused in production and moves all blocks
+        back to GPU (the trap engine25 warns about at gguf_transformer.py:1090).
+        This touches no tensor and no device; it only lets go of the reference
+        so the job's trailing gc.collect() can reclaim the transformer (the
+        swapped_forward closures are reference cycles).
+        """
+        self._installed_transformers.clear()
 
     def teardown_prefetch(self) -> None:
         """Drop this job's prefetch state. Idempotent, and never raises.

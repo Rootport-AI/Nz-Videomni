@@ -11432,3 +11432,81 @@ LTX 2.3 が反転した177コマ・1920×1024と**まったく同じ幾何で、
 | 配布コピー | `AviUtl2-Plugin/NzVideomni.aux2`（C5のコミットに含む） |
 
 **この配置がC1とC2をセットで出荷したことの実体である**（§99.7(a)）。**目視の前にバックエンドをC1以降のツリーで起動し直すこと**——`.aux2`だけが新しく、サーバーが古いままだと、そのセットが崩れる。
+
+## 100. ★LTX 2.3ワーカーの2ジョブ目以降のVRAMせり上がりを、診断の常設（F1）と前ジョブtransformerの参照解放（F2）で決着させた（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-105）＝実機ゲート2段階とも全合格・出力ビット不変（2026-09-05）
+
+### 100.1 何をしたか、なぜ
+
+台帳§3-105（起票：2026-08-22）「LTX 2.3ワーカーの2ジョブ目以降の時間・VRAMのせり上がり」を、2つの手当てで決着させた。①**F1＝診断の常設**——`engine/worker.py`の`_log()`とロギングハンドラのFormatterへ時刻を足し（server.logの`%(asctime)s`既定書式と同一の書式にして突合できるようにした）、各ジョブの先頭（`torch.cuda.reset_peak_memory_stats`直後）へ`JOB_START_VRAM allocated_mb=.../reserved_mb=...`の診断行を新設した。②**F2＝前ジョブのDiT（動画生成の本体トランスフォーマー）への参照を、ジョブ末尾で手放す**——`BlockSwapService.release_installed()`を新設し（keep-latestリストの参照を手放すだけで、テンソルにもデバイスにも触れない）、`FastVideoPipeline._release_block_swap_transformer()`から呼び出して、単発生成・連結生成・画角拡張（Outpainting）の3つの生成経路すべてのfinallyへ配線した。新テスト`tests/test_block_swap_release.py`は、weakrefで「release後は`gc.collect()`で回収可能になる」ことを固定している。
+
+**順番に意味がある。** まずF1だけを実機に入れて段差の正体を直接証明し（§100.4）、その証明を踏まえてF2で居残りそのものを断った（§100.5）。**バックエンドのAPI・`config.yaml`は変えていない**——触ったのは`engine/worker.py`・`engine/transformer/block_swap_service.py`・`engine/pipeline/fast_video_pipeline.py`の3ファイルと新規テスト1本である。
+
+### 100.2 なぜこの置き場所か（設計判断）
+
+- **置き場所は候補A（worker.pyのジョブ末尾）でなく候補B（pipelineの既存finallyパターン）を採った。** 候補Aは例外発生時に走らない。候補Bは例外安全で、単発・連結・画角拡張の3つの入口すべてを一箇所の型でカバーでき、既存の`_reset_block_swap_prefetch_job()`など「ジョブ末尾の後始末」群と同型になる。
+- **`BlockSwapService.uninstall()`の流用は禁止と判断した。** 本番未使用のメソッドで、全ブロックをGPUへ戻す——VRAM回避という本来の設計とは正反対の効果を持つ。この罠は`engine25/gguf_transformer.py:1090`に既存の警告コメントがある。
+- **Gemma（テキストエンコーダ）側はスコープ外である。** `GemmaLayerOffloadService`のインスタンスは`patched_text_encoder()`のローカル変数で、テキストエンコード直後の`del`＋`cleanup_memory()`により既に毎ジョブ回収されている。手放すべき常駐参照がそもそも存在しない。
+- **engine25（LTX 2.5）は`BlockSwapService`クラスを共有するが、波及はない。** 追加したのは新規メソッド1本のみで既存メソッドは無改修、かつengine25は`release_installed()`を呼ばない。`install()`冒頭の既存`clear()`はそのまま温存してあり、engine25にとっては唯一の機構、LTX 2.3にとっては安全網として働く（`release_installed()`が届かなかったジョブの後始末）。
+- **却下した代替案2件。** ①`_installed_transformers`のweakref化——engine25と共有する`uninstall()`の書き換えが必要になり、2エンジン共有部分の境界を破る。②実機ゲートに参照動画つきジョブを混ぜる——ゲートが複雑化し、下記のSHA-256 6本一致という均質な比較を崩す。
+
+### 100.3 効果範囲の限定（重要）
+
+**ピーク段差+818MiBが出るのは、前処理がピークになる極小ジョブ（スモーク級）に限られる。** 実運用サイズのジョブはピークがdecode／VAE段にある（`engine/transformer/block_swap_prefetch.py:80-83`・`engine25/gguf_transformer.py:596-597`の既存コメント、実測は`logs/ltx_worker.log`——1280×768／385フレームでワーカー通算7本目のpeak=13,303MB〔:39427行〕に対し、再起動後1本目は13,302MB〔:39790行〕で差1MB）。**居残りは初回denoise前のgcで既に回収済みのため、この規模のジョブではピークへ届かない。** ただし、この大ジョブの対は`keep_resident=on`で採られたものであり、**厳密な統制（`keep_resident=off`・1本目vs2本目）の対はまだ取れていない**——ここは正直に未裏取りと書いておく。
+
+**F2の実利はむしろ、IC-LoRA参照符号化区間**（居残りの生存窓の内側で走る、最も逼迫する区間。§94.6が記録した反転点の予約ピーク15,734MB・残余約640MB）**の実ヘッドルームを最大818MiB広げることにある。** この余地は§3-134の較正値の材料になりうるが、**再較正はしない**——[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md)は無改修のままである。F2でずれる方向は保守側（実際にはもう少し余裕がある方向）だけなので、既存の線を危険側へ動かす心配はない。
+
+### 100.4 段階1実測（F1のみ・2026-09-05）
+
+条件: 384×256／17フレーム／seed=12345・既定構成（プリセット`smoke_test`と同規模）・同一ワーカーで3本連続。ジョブID`58c9d3c4`／`a415d062`／`832368d6`。
+
+| # | JOB_START_VRAM allocated_mb | peak_vram_mb | generation_time_seconds | 前処理正味（T0→T4） | T4→GENERATED_OK |
+|---|---:|---:|---:|---:|---:|
+| 1本目 | 0 | 8,442 | 63.83 | 51.4s | 12.39s |
+| 2本目 | 824 | 9,260 | 83.47 | 71.4s | 12.09s |
+| 3本目 | 824 | 9,262 | 73.70 | 61.4s | 12.26s |
+
+**peak差818MiBとallocated差824MiBが6MiB以内で一致——これが仮説H1（keep-latestの居残りがピーク計測に混入している）の直接証明である。** T4→GENERATED_OK（denoise＋VAEデコード）はほぼ不変（12.39/12.09/12.26秒）で、せり上がりは前処理側にしか出ていない。時刻突合はserver.logと0〜2ミリ秒差で一致。WARNINGはゼロ。3本のSHA-256は完全一致（`ce2cdabb6974ec5de378645ebb89a5669c7951d83ed1d4b2434a51ad686f039a`）。
+
+### 100.5 段階2実測（F2適用・サーバ再起動後・同一条件3本・2026-09-05）
+
+ジョブID`a4a065bd`／`f53f9063`／`18fa5bf4`。
+
+| # | JOB_START_VRAM allocated_mb | peak_vram_mb | generation_time_seconds | 前処理正味 |
+|---|---:|---:|---:|---:|
+| 1本目 | 0 | 8,442 | 55.19 | 43.6s |
+| 2本目 | 9 | 8,445 | 54.05 | 42.4s |
+| 3本目 | 9 | 8,445 | 61.47 | 49.7s |
+
+**居残りは消滅した**（allocated_mbが824→9で実質ゼロ）。**peak_vram_mbは3本ともほぼフラットで、段階1比で約818MiB低い水準に揃った。** 前処理正味でも、段階1で見えていたせり上がりは消えている。T4→GENERATED_OKは11.60/11.64/11.48秒。WARNINGはゼロ。**段階1・段階2をあわせた6本すべてが単一のSHA-256`ce2cdabb…039a`で一致——出力はバイト不変である。**
+
+### 100.6 時間側の解釈（正直に書く）
+
+段階2で時間のせり上がりは観測されなくなったが、**これを「F2が時間の段差そのものを直した」と断定はしない。** 理由は2つある。①F2は回収コストを計測窓の外へ移す——doneイベントの発行がジョブ末尾のgcより先に起きるため（pipeline_managerの`generation_time_seconds`はその時点で確定する）、比較には簿記上の移動が混ざりうる。②ページキャッシュの状態を段階間で統制していない。**したがって仮説H5（前ジョブの居残りがCPU側マスターのページキャッシュを追い出していた）は確定させない。** 前処理正味（T0→T4）でもせり上がり消失が観測されているので改善方向の傍証にはなるが、断定材料としては弱いままである。
+
+### 100.7 transformerを握りうる箇所の照合表（将来の退行時の突合資産）
+
+**release後〜次のinstall()完了までにtransformerを使う・握る経路がほかに無いこと**を、現物の実装を1つずつ確認して固定した。
+
+| 箇所 | 保持するもの |
+|---|---|
+| `NagService`／`VsfService` | `_state_provider`のみ |
+| `SageAttentionService` | 同様に`_state_provider`のみ |
+| `DitCpuLoadService` | deviceとserviceのみ |
+| `PrefetchEngine.teardown()` | `_blocks`を`[]`へ戻す |
+| `ModelLedger.transformer()` | 毎回新規構築（非キャッシュ） |
+| patched_transformerクロージャ群 | `original_transformer`とサービスのみで、構築済み個体は非保持 |
+
+### 100.8 機械検証
+
+アプリ側pytest **2,199 passed / 24 skipped**（着手前基準2,199 passed / 23 skippedに対し**skip+1のみ**——その1件は新テストのtorch不在時のskipであり、**退行はゼロ**）。エンジン側（`.venv-engine`・`--noconftest`）**32 passed**（新テスト`tests/test_block_swap_release.py`の1件＋worker系既存31件）。新テストはweakrefで「install後は外部の唯一の強参照であること」「release後は`gc.collect()`で回収可能になること」を固定しており、`install()`の早期return3系統（`blocks_on_gpu==0`・ブロック未検出・`blocks_on_gpu>=total`）を踏んでいないことも前提として検査している。`py_compile`は3ファイルとも exit 0。
+
+### 100.9 残る未確定・申し送り
+
+- **H5（前ジョブ居残りのCPU側マスターによるページキャッシュ追い出し）は未確定**（§100.6）。
+- **engine25側のワーカーログは時刻なしのまま**——今回はLTX 2.3側だけの改修であり、非対称は意図して受容した。2.5側が必要になったら、2.5の実機ゲートとセットで別件として扱う。
+- `outputs/comfort-calib-2026-09-05/calib.py:33`にある「ワーカーログにはタイムスタンプが無い」という前提文は、LTX 2.3については古くなった。
+- F1の副産物として、これまで§46.1が求めていた外部PowerShellでの打刻は今後不要になった——工程分解がワーカーログ単独でできるようになったためである。
+
+### 100.10 状態
+
+**クローズ（2026-09-05。段階1・段階2とも実機ゲート全合格、機械検証も全緑）。** 台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-105としてクローズし、生きている台帳[`PENDING_TASKS.md`](PENDING_TASKS.md)からは§3-105の節と一覧表の行を削除した。

@@ -16,10 +16,13 @@
 - アップデートするとき：`git pull`を実行する（後述）
 
   
-### 1)  gitをインストールする  
+### 1) gitをインストールする  
 [![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)  
 
-gitのインストールページ（ https://git-scm.com/install/windows ） からあなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。
+gitのインストールページ（ https://git-scm.com/install/windows ） から、あなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。
+
+### 2) このアプリのデータを`git clone`でダウンロードする  
+
 
 ---
 # Nz-Videomni

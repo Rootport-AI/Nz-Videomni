@@ -37,7 +37,7 @@ type ModeTabSpec =
  * §3-98 P5 added a SECOND reason a tab can be greyed: the loaded base model's
  * engine cannot run it (`disabledModes`). This component does not know what a
  * base model is — it is handed a list of mode ids and renders them disabled.
- * Deciding that list is `shell/useBaseModels.ts`'s `disabledModesFor`. */
+ * Deciding that list is `shell/featureScope.ts`'s `disabledModesFor`. */
 export function ModeTabs({ mode, onChange, disabledModes = [] }: ModeTabsProps) {
   const strings = useStrings();
   const tabs: ModeTabSpec[] = [

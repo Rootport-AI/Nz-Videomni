@@ -67,7 +67,7 @@ describe("ModeTabs", () => {
 
   // §3-98 P5: a second reason a tab can be greyed — the loaded base model's
   // engine cannot run it. `ModeTabs` knows nothing about engines; it is handed
-  // a list of mode ids (`shell/useBaseModels.ts`'s `disabledModesFor`).
+  // a list of mode ids (`shell/featureScope.ts`'s `disabledModesFor`).
 
   it("greys the modes it is told the base model cannot run", () => {
     renderTabs(vi.fn(), ["chained", "edit"]);

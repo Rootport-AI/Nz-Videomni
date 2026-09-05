@@ -53,14 +53,14 @@ import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
 import { comfortFramesForBudget, resolveComfortRow } from "./comfortTable";
-import { useAccelerationSettings } from "./useAccelerationSettings";
 import {
   batchA2vDisabledFor,
-  baseModelInstaller,
   chainPanelsDisabledFor,
   editSubTabsDisabledFor,
-  useBaseModels,
-} from "./useBaseModels";
+  settingsRowsHiddenFor,
+} from "./featureScope";
+import { useAccelerationSettings } from "./useAccelerationSettings";
+import { baseModelInstaller, useBaseModels } from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
 import "./AppShell.css";
@@ -480,9 +480,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // The three early-return channels below (`appendText`,
     // `insertProvisionalResult`, `insertLatestResultHere`) declare
     // `targetMode: "single"` as a formal default they never act on, and Single
-    // is never in `disabledModes` — `MODE_REQUIREMENTS` does not list it, since
-    // Single IS the baseline every engine serves. So they pass through here
-    // unchanged, exactly as they must.
+    // is never in `disabledModes` — `shell/featureScope.ts`'s table gives it no
+    // row, since Single IS the baseline every engine serves. So they pass
+    // through here unchanged, exactly as they must.
     if (disabledModes.includes(target)) {
       showNote("warning", strings.notes.modeUnsupportedByBaseModel);
       return;
@@ -1169,13 +1169,18 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     setMode("single");
   }, [disabledModes, mode]);
 
-  // PrunaVAED is an ENGINE-level feature (backend Docs/PENDING_TASKS_CLOSED.md's old
-  // §1-26, closed 2026-09-01, hiding PrunaVAED on LTX 2.5) — an engine that publishes
-  // `prune_vaed` answers the field with a 422 rather than degrading to the ordinary
-  // decoder, so the Settings row is hidden outright (below, via `vaeUnsupported`)
-  // instead of greyed. Read off the published `unsupported_features`, never a
-  // base-model id.
-  const vaeUnsupported = baseModels.unsupportedFeatures.includes("prune_vaed");
+  // The two Settings rows a base model's feature scope HIDES outright (not
+  // greys): an engine that publishes either name answers the field with a 422
+  // rather than degrading, so there is nothing left to offer. WHICH feature name
+  // closes which row is the declaration table's business (`shell/featureScope.ts`
+  // — §3-135); this file only receives finished booleans, exactly as
+  // `chainPanels`/`editSubTabs` below do.
+  //
+  // PrunaVAED is the first of the two (backend Docs/PENDING_TASKS_CLOSED.md's old
+  // §1-26, closed 2026-09-01, hiding PrunaVAED on LTX 2.5). Read off the published
+  // `unsupported_features`, never a base-model id.
+  const settingsRowsHidden = settingsRowsHiddenFor(baseModels.unsupportedFeatures);
+  const vaeUnsupported = settingsRowsHidden.vae;
 
   // The stored choice PERSISTS, so hiding the row is not enough on its own: a
   // `prune_vaed` picked on a base model that supports it would otherwise keep
@@ -1192,10 +1197,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // 台帳 §3-114 (2026-09-03): the same arrangement one row further down the
   // Settings panel, POINTING THE OTHER WAY. `keep_resident_embeddings` names a
   // component only LTX 2.5 has, so it is LTX 2.3 that publishes the name and
-  // 422s a `true` — the first field 2.3 has ever refused. Read off the
-  // published `unsupported_features` exactly like the row above, never a
-  // base-model id: which engine lacks the part is the server's fact to state.
-  const keepResidentEmbeddingsUnsupported = baseModels.unsupportedFeatures.includes("keep_resident_embeddings");
+  // 422s a `true` — the first field 2.3 has ever refused. Which name does that
+  // is again the table's fact, not this file's; the direction it points makes no
+  // difference here, because a hidden row is a hidden row.
+  const keepResidentEmbeddingsUnsupported = settingsRowsHidden.keepResidentEmbeddings;
 
   // And the same write-back, for the same reason: the stored choice PERSISTS,
   // so a `true` picked on LTX 2.5 would otherwise ride along on every request
@@ -1223,7 +1228,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const chainPanels = chainPanelsDisabledFor(baseModels.unsupportedFeatures);
 
   // Same arrangement one level down inside Edit: the tab survives as long as
-  // ONE of Retake/Outpainting runs here (`MODE_REQUIREMENTS`'s `needsAnyOf`),
+  // ONE of Retake/Outpainting runs here (`shell/featureScope.ts`'s
+  // `CONTAINER_TARGETS` — `mode.edit` closes only once BOTH sub-tabs have),
   // so the sub-tab that does NOT has to grey on its own. `EditScreen` receives
   // finished booleans and never reasons about engines itself.
   const editSubTabs = editSubTabsDisabledFor(baseModels.unsupportedFeatures);

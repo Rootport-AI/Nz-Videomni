@@ -115,8 +115,9 @@ export interface ChainedScreenProps {
   engineFamily?: string | undefined;
   /** §3-102 (LTX 2.5 Chained, first stage): the four material panels the
    * LOADED base model's engine cannot use, computed by `AppShell` from
-   * `useBaseModels`' `unsupportedFeatures` (`chainPanelsDisabledFor`) — this
-   * screen receives finished booleans and never reasons about engines itself.
+   * `useBaseModels`' `unsupportedFeatures` (`shell/featureScope.ts`'s
+   * `chainPanelsDisabledFor`) — this screen receives finished booleans and
+   * never reasons about engines itself.
    * Each greys ONE panel and shows the matching line from
    * `strings.chained.unavailableOnBaseModel`; the Chained tab itself stays
    * live, because an engine that cannot chain at all loses the whole tab one

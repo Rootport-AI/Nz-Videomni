@@ -5,8 +5,9 @@ import type { NativeBridge } from "../bridge/types";
  * A mock bridge whose `GET /api/v1/models` reports EXTRA `unsupported_features`
  * for one base model.
  *
- * Why this exists. The shell's tab-level greying (`disabledModesFor`) and the
- * right-click gate that rides on it (`AppShell.handleRoute`) can only be
+ * Why this exists. The shell's tab-level greying (`shell/featureScope.ts`'s
+ * `disabledModesFor`) and the right-click gate that rides on it
+ * (`AppShell.handleRoute`) can only be
  * exercised end to end while SOME base model in the fixture actually declares
  * enough limitations to take a whole tab down — and the fixture's LTX 2.5 keeps
  * declaring fewer of them, one increment at a time. Edit needs BOTH `retake`

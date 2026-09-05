@@ -1,5 +1,5 @@
 import { useStrings } from "../../i18n/LanguageContext";
-import type { EditSubTabsDisabled } from "../../shell/useBaseModels";
+import type { EditSubTabsDisabled } from "../../shell/featureScope";
 
 /** The Edit tab's own sub-modes — the ones that actually have a panel behind
  * them. Exported because `EditScreen` owns the selection state. */
@@ -29,7 +29,7 @@ export interface EditSubTabsProps {
   mode: EditSubMode;
   onChange: (mode: EditSubMode) => void;
   /** §3-98 P5 / §3-102: 実体のあるサブタブのうち、**読み込み中のベースモデルの
-   * エンジンが実行できない**もの（`shell/useBaseModels.ts` の
+   * エンジンが実行できない**もの（`shell/featureScope.ts` の
    * `editSubTabsDisabledFor`）。`ModeTabs` の `disabledModes` と同じ考え方で、
    * この部品はベースモデルを一切知らない —— 渡された真偽値を描くだけ。
    * 省略時はどちらも有効（＝この機能が存在しなかった頃と一字も変わらない）。 */

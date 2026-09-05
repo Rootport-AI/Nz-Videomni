@@ -3,7 +3,7 @@ import { apiClient as defaultApiClient, createApiClient } from "../../api/client
 import type { ApiClient } from "../../api/client";
 import { EditSubTabs } from "./EditSubTabs";
 import type { EditSubMode } from "./EditSubTabs";
-import type { EditSubTabsDisabled } from "../../shell/useBaseModels";
+import type { EditSubTabsDisabled } from "../../shell/featureScope";
 import { OutpaintingPanel } from "./OutpaintingPanel";
 import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
@@ -44,7 +44,7 @@ export interface EditScreenProps {
    * form. */
   onJobSubmitted?: ((jobId: string) => void) | undefined;
   /** §3-98 P5 / §3-102: サブタブのうち、**読み込み中のベースモデルの
-   * エンジンが実行できない**もの（`shell/useBaseModels.ts` の
+   * エンジンが実行できない**もの（`shell/featureScope.ts` の
    * `editSubTabsDisabledFor`）。`AppShell` が確定済みの真偽値として渡すので、
    * この画面もパネルもフィーチャ名を一切知らない（`ChainedScreen` が
    * `chainPanels` を受け取るのと同じ作法）。省略時はどちらも有効。 */
@@ -134,9 +134,9 @@ export function EditScreen({
   // 灰色**なら、もう片方へ回す —— 灰色のタブを選択状態にすると、押せないタブの
   // 下に生成群が出てしまう（`subMode` が生成群の出し分けそのものだから）。
   //
-  // 両方が無効な場合はここへ到達しない: `disabledModesFor` の
-  // `needsAnyOf: ["retake", "outpaint"]` が Edit タブごと落とすので、この画面は
-  // そもそもマウントされていない（`useBaseModels.ts` の `MODE_REQUIREMENTS`）。
+  // 両方が無効な場合はここへ到達しない: 2つのサブタブが**両方**閉じたときだけ
+  // `disabledModesFor` が Edit タブごと落とすので、この画面はそもそも
+  // マウントされていない（`shell/featureScope.ts` の `CONTAINER_TARGETS`）。
   // なので下の2本の三項は「片方は必ず有効」を前提にしてよい。
   const [subMode, setSubMode] = useState<EditSubMode>(() => {
     if (initialIntent?.intent === "outpaint") {

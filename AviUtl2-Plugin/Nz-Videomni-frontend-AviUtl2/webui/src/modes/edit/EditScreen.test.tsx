@@ -271,7 +271,7 @@ describe("EditScreen sub-tabs", () => {
 // These tests therefore drive the prop directly rather than through a base
 // model: the state they describe is not reachable from any fixture yet, and the
 // translation from a server feature name to these booleans is tested where it
-// lives (`shell/useBaseModels.test.ts`'s `editSubTabsDisabledFor`).
+// lives (`shell/featureScope.test.ts`'s `editSubTabsDisabledFor`).
 describe("EditScreen sub-tabs — base-model feature scope", () => {
   const subTab = (name: string) => screen.getByRole("tab", { name });
   const heading = (name: RegExp) => screen.getByRole("heading", { name, hidden: true });

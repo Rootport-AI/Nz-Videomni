@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 import torch
 
+from chain_math import REFERENCE_ENCODE_TILE_TOKEN_BUDGET, reference_encode_tokens
 from engine.api_types import ImageConditioningInput
 from engine.gguf import dequant_triton
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
@@ -1212,10 +1213,10 @@ class LTXFastVideoPipeline:
         """VAE-encode already-decoded reference PIXELS into ``[conditioning]``.
 
         The back half of ``_reference_conditioning_for_stage``, split out verbatim
-        (§1-15 B5): the channels_last_3d switch for factor-1 adapters, the
-        tiled/untiled encode branch, the restore in ``finally`` and the
-        attention-strength wrapper. ``video`` is a CPU (1,C,F,H,W) tensor at
-        ``_reference_pixel_dims`` resolution.
+        (§1-15 B5): the tiled/untiled encode branch, the channels_last_3d switch
+        that rides along with the tiled half of it, the restore in ``finally``
+        and the attention-strength wrapper. ``video`` is a CPU (1,C,F,H,W) tensor
+        at ``_reference_pixel_dims`` resolution.
 
         NO stage discriminator here on purpose — that check MUST stay in the
         ``_reference_conditioning_for_stage`` wrapper. Moving it inside would make
@@ -1238,6 +1239,15 @@ class LTXFastVideoPipeline:
         video_encoder = cond_kwargs["video_encoder"]
         device = cond_kwargs["device"]
 
+        # Tokens this encode spans, measured on the reference's OWN shape —
+        # ``video`` is (1, C, F, H, W). ONE number decides the encode shape for
+        # factor >= 2; ``tiled`` is then read by BOTH the layout switch and the
+        # branch, so the two can never disagree (see each for the reasoning).
+        ref_tokens = reference_encode_tokens(
+            int(video.shape[4]), int(video.shape[3]), int(video.shape[2])
+        )
+        tiled = scale == 1 or ref_tokens > REFERENCE_ENCODE_TILE_TOKEN_BUDGET
+
         # ONE predicate for both the measurement and the layout switch below:
         # ``device`` may arrive as a plain string (so compare
         # ``torch.device(device).type``, not the object), and the unit tests'
@@ -1245,7 +1255,15 @@ class LTXFastVideoPipeline:
         _accel = torch.device(device).type == "cuda" and callable(
             getattr(video_encoder, "modules", None)
         )
-        _relayout = _accel and scale == 1
+        # The layout switch rides on ``tiled``, NOT on ``scale``: "tiled +
+        # contiguous" has no successful precedent in this repo — it OOM'd for
+        # real at factor 1 (§49.9 first fix) and only passed once
+        # channels_last_3d was added (second fix). So the tiled path always
+        # carries channels_last_3d with it: the one combination proven both by
+        # the factor-1 production path and by §79.2(d). The untiled path is
+        # untouched (no relayout, as before), which is what keeps every shipped
+        # factor-2 output byte-identical.
+        _relayout = _accel and tiled
         _converted = 0
         if _relayout:
             # torch 2.9's bf16 Conv3d takes an im2col fallback for contiguous
@@ -1256,11 +1274,14 @@ class LTXFastVideoPipeline:
             # intermediate disappears (measured on the OOM case: peak 6265 ->
             # 1198 MiB, 6.8 -> 5.0 s).
             #
-            # This is NOT bit-identical, and this comment is the full extent of
-            # the change: only the factor-1 REFERENCE latent moves (rel_rms
-            # 1.2e-2 / cos 0.99993). Keyframes, factor-2 references, chain source
-            # heads and stage 2 all stay bit-identical (measured), and deblur has
-            # no shipped baseline output, so nothing published shifts.
+            # This is NOT bit-identical, and it reaches exactly the latents that
+            # take the tiled branch: the factor-1 REFERENCE latent (rel_rms
+            # 1.2e-2 / cos 0.99993 measured) and, since §3-76, an above-budget
+            # factor-2 reference — which is tiled and therefore already not
+            # byte-identical to its untiled self. Keyframes, factor-2 references
+            # BELOW the budget, chain source heads and stage 2 all stay
+            # bit-identical (measured), and deblur has no shipped baseline
+            # output, so nothing published shifts.
             #
             # The input video is deliberately NOT converted: CausalConv3d's
             # repeat+cat (convolution.py:304-313) re-normalises it to contiguous
@@ -1292,14 +1313,24 @@ class LTXFastVideoPipeline:
                 _alloc_before = torch.cuda.memory_allocated() // _mb
                 _reserved_before = torch.cuda.memory_reserved() // _mb
 
-            if scale == 1:
-                # Factor-1 adapters (deblur) feed the reference at 4x the pixel
-                # count of the factor-2 ones, and the untiled encode's
-                # intermediates OOM a 16GB card — the same reason
-                # chain_pipeline._encode_source_heads is tiled. The tiling config
-                # is the DECODE-side default reused here; there is no separate
-                # encode config. Factor >= 2 stays untiled (tiling would split it
-                # temporally and break byte-identity).
+            if tiled:
+                # Two disjoint reasons to tile, both folded into ``tiled``:
+                #
+                #   * factor-1 adapters (deblur) ALWAYS — they feed the reference
+                #     at 4x the pixel count of the factor-2 ones and the untiled
+                #     encode's intermediates OOM a 16GB card (§49.9), the same
+                #     reason chain_pipeline._encode_source_heads is tiled;
+                #   * factor >= 2 only ABOVE REFERENCE_ENCODE_TILE_TOKEN_BUDGET.
+                #     Below the line it stays untiled (the ``else`` below), and
+                #     that is what carries byte-identity with every factor-2
+                #     output shipped so far — tiling splits the encode
+                #     temporally, so it cannot be bit-equal to the one-shot. Above
+                #     the line it switches over on its own, on the SAME line the
+                #     UI's amber banner already draws (§57.6 G4's cost knee —
+                #     0.0205 -> 0.1263 s/frame; §3-76).
+                #
+                # The tiling config is the DECODE-side default reused here; there
+                # is no separate encode config.
                 encoded_video = video_encoder.tiled_encode(
                     video, cond_kwargs.get("tiling_config")
                 )
@@ -1314,14 +1345,20 @@ class LTXFastVideoPipeline:
                 # Logged here — after the encode, BEFORE the restore — so the
                 # interval peak is the encode's own and not polluted by the
                 # restore's transient (+54MiB, one weight's worth). ``convs`` is
-                # the converted Conv3d count (expect 42; a 0 means the layout
-                # switch did not run).
+                # the converted Conv3d count: 42 on the tiled path, 0 on the
+                # untiled one (where the layout switch is deliberately off), so
+                # read it together with ``tiled``. ``ref_tokens`` is the number
+                # ``tiled`` was decided on, and it stays INSIDE the parentheses —
+                # the calibration harness parses this line with a trailing
+                # ``(?P<extra>[^)]*)`` group, which anything appended outside
+                # them would fall out of.
                 logging.getLogger(__name__).info(
-                    "IC-LoRA reference encode (scale=%d tiled=%s channels_last_3d convs=%d): "
+                    "IC-LoRA reference encode (scale=%d tiled=%s channels_last_3d convs=%d "
+                    "ref_tokens=%d): "
                     "allocated %d -> %d MB, reserved %d -> %d MB, "
                     "interval peak allocated %d MB / reserved %d MB "
                     "(job peak before this interval: allocated %d MB, reserved %d MB)",
-                    scale, scale == 1, _converted,
+                    scale, tiled, _converted, ref_tokens,
                     _alloc_before, torch.cuda.memory_allocated() // _mb,
                     _reserved_before, torch.cuda.memory_reserved() // _mb,
                     torch.cuda.max_memory_allocated() // _mb,

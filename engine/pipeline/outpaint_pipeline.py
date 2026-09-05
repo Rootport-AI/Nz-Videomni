@@ -44,9 +44,11 @@ hidden (see the module-level constants and the inline notes):
   IS the distilled base;
 * the 2x pixel upscale is bicubic, not lanczos (torch has no lanczos kernel);
 * the IC-LoRA reference is TILE-encoded (``_reference_conditioning_for_stage``
-  does this for every downscale-factor-1 adapter to survive a 16GB card),
-  whereas the official ``LTXAddVideoICLoRAGuideAdvanced`` has
-  ``use_tiled_encode=False``;
+  does this for every downscale-factor-1 adapter to survive a 16GB card — and,
+  since §3-76, for any reference whose own encode crosses
+  ``chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET``, which in-outpainting's
+  factor-1 references reach first via the factor rule anyway), whereas the
+  official ``LTXAddVideoICLoRAGuideAdvanced`` has ``use_tiled_encode=False``;
 * the blend mask is generated analytically per resolution instead of being
   area-downscaled from the full-res one, and is carried as ONE frame instead of
   one per frame (see ``engine.outpaint``);

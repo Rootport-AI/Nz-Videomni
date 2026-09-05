@@ -202,6 +202,49 @@ def chain_stage1_tokens(
     return tokens
 
 
+# ── Reference-video VAE-encode tile threshold (§3-76) ────────────────────────
+# NOT A KNOB: there is no config key, no API field, and no UI control for this
+# threshold. The reference video's own length is the only switch — exactly the
+# same pattern as ``UPSAMPLE_CHUNK_FRAMES``/``UPSAMPLE_HALO_FRAMES`` above,
+# which pick chunked vs. one-shot upsampling purely from the assembled
+# timeline's length.
+#
+# The reference's own latent token count (the tokens its VAE encode would
+# attend over) is the yardstick:
+#   reference_encode_tokens(w, h, F) = (w // 32) * (h // 32) * v_latent_frames(F)
+# At %128 output resolutions (both the single-shot and chain reference APIs
+# force multiples of 128), this identity holds EXACTLY:
+#   chain_stage1_tokens(w, h, v, ref_scale=2) == 5 * reference_encode_tokens(w // 4, h // 4, F)
+# (with v == v_latent_frames(F)) — so ``25_000 // 5 == 5_000`` cuts the SAME
+# job set as the Chained screen's stage-1 comfort banner
+# (:data:`CHAIN_STAGE1_COMFORT_TOKEN_BUDGET` above). At 1152x1536: 361 pixel
+# frames -> 4,968 (below the line, one-shot — byte-identical to already
+# shipped output); 369 pixel frames -> 5,076 (above the line, tiled).
+#
+# This is a DIFFERENT knee from the spill-onset point (reference ~2,940
+# tokens, reserved-memory measured, ~217 frames at 1152x1536): the light
+# spill in the 217-361 frame band that the banner stays silent about is a
+# KNOWN, ACCEPTED gap — the owner's 2026-09-05 decision (§3-76) prioritises
+# byte-identical output over closing it, and leaves that band spilling on
+# purpose.
+#
+# This constant does NOT track CHAIN_STAGE1_COMFORT_TOKEN_BUDGET
+# automatically: if that comfort line is ever recalibrated, this one stays
+# 5_000 unless a separate owner decision moves it.
+REFERENCE_ENCODE_TILE_TOKEN_BUDGET = 5_000
+
+
+def reference_encode_tokens(ref_width: int, ref_height: int, pixel_frames: int) -> int:
+    """Attention tokens the reference video's OWN VAE encode spans.
+
+    ``(ref_width // 32) * (ref_height // 32) * v_latent_frames(pixel_frames)``.
+    Compare against :data:`REFERENCE_ENCODE_TILE_TOKEN_BUDGET` to decide
+    whether the reference is VAE-encoded in one shot or in temporal tiles
+    (§3-76).
+    """
+    return (ref_width // 32) * (ref_height // 32) * v_latent_frames(pixel_frames)
+
+
 def stage2_max_context_px(v_tile: int) -> int:
     """Largest 8n+1 V2V context span that leaves tile 0 something to generate.
 

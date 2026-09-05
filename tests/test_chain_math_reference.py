@@ -177,3 +177,61 @@ def test_chain_stage1_comfort_budget_sits_between_the_two_anchors():
     assert chain_math.chain_stage1_tokens(1152, 1536, 46, 2) < 25_000
     # 328 stage-1 spatial patches x 61 latent frames x 1.25 = 25,010.
     assert int(328 * 61 * 1.25) > chain_math.CHAIN_STAGE1_COMFORT_TOKEN_BUDGET
+
+
+# ── reference_encode_tokens / REFERENCE_ENCODE_TILE_TOKEN_BUDGET (§3-76) ─────
+def test_reference_encode_tokens_matches_stage1_scale2_identity_at_pct128():
+    """At %128 OUTPUT resolutions (both the single-shot and chain reference
+    APIs force multiples of 128), ``chain_stage1_tokens(w, h, v, ref_scale=2)``
+    is EXACTLY 5x the reference's own ``reference_encode_tokens(w//4, h//4, F)``
+    — the two integer-division chains (half, //32, //2, //32) collapse to the
+    same spatial patch count when w/h are multiples of 128. That is why
+    ``REFERENCE_ENCODE_TILE_TOKEN_BUDGET = 25_000 // 5 = 5_000`` cuts the SAME
+    job set as the Chained screen's stage-1 comfort banner: both budgets agree
+    on which side of the line each (w, h, pixel_frames) triple falls."""
+    for width, height, pixel_frames in [
+        (1152, 1536, 361),
+        (1152, 1536, 481),
+        (768, 512, 121),
+        (1024, 1024, 249),
+        (1920, 1152, 481),
+    ]:
+        v = chain_math.v_latent_frames(pixel_frames)
+        stage1 = chain_math.chain_stage1_tokens(width, height, v, 2)
+        ref = chain_math.reference_encode_tokens(width // 4, height // 4, pixel_frames)
+        assert stage1 == 5 * ref, (width, height, pixel_frames)
+        assert (
+            stage1 < chain_math.CHAIN_STAGE1_COMFORT_TOKEN_BUDGET
+        ) == (
+            ref < chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET
+        ), (width, height, pixel_frames)
+
+    # Non-%128 counter-example (1152x704 -- 704 is not a multiple of 128): the
+    # identity is NOT claimed off-grid and does in fact break, because the
+    # half/half-of-half division chains stop collapsing to the same patch
+    # count once a dimension falls off the 128 grid.
+    v = chain_math.v_latent_frames(361)
+    assert chain_math.chain_stage1_tokens(1152, 704, v, 2) != 5 * chain_math.reference_encode_tokens(
+        1152 // 4, 704 // 4, 361
+    )
+
+
+def test_reference_encode_tile_token_budget_knee_values():
+    """The knee itself: 361 pixel frames at 288x384 (the reference's own
+    resolution after ``resize_and_center_crop``) sits just under 5,000 -- one
+    shot, byte-identical to already-shipped output; 369 sits just over --
+    tiled. 241/481 are extra anchor points from the real-hardware gate."""
+    assert chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET == 5_000
+    assert chain_math.reference_encode_tokens(288, 384, 361) == 4_968
+    assert chain_math.reference_encode_tokens(288, 384, 369) == 5_076
+    assert chain_math.reference_encode_tokens(288, 384, 241) == 3_348
+    assert chain_math.reference_encode_tokens(288, 384, 481) == 6_588
+
+
+def test_reference_encode_tokens_short_window_floors_not_truncates_to_zero():
+    """A short reference window still contributes its full spatial patch
+    count -- ``v_latent_frames`` floors the LATENT count, never the spatial
+    one, so even a single pixel frame (v_latent == 1) yields 108 tokens, not
+    0."""
+    assert chain_math.reference_encode_tokens(288, 384, 360) == 108 * 45
+    assert chain_math.reference_encode_tokens(288, 384, 1) == 108

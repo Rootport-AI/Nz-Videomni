@@ -1372,7 +1372,8 @@ def run_chain(
             "video_encoder": video_encoder,
             "dtype": DTYPE,
             "device": device,
-            # factor-1 references (deblur) are tiled-encoded there.
+            # Tiled-encoded there: factor-1 references (deblur) always, plus any
+            # reference above REFERENCE_ENCODE_TILE_TOKEN_BUDGET tokens (§3-76).
             "tiling_config": tiling_cfg,
         }
         ref_windows = _iter_reference_windows(

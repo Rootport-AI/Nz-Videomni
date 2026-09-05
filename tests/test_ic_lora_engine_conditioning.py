@@ -150,6 +150,45 @@ def _call(attn_strength: float, scale: int = 2, encoder=None, device="cpu"):
     return method(fake, full_height=full_height, num_frames=9, cond_kwargs=cond_kwargs)
 
 
+def _call_pixels(
+    frames: int,
+    *,
+    scale: int = 2,
+    attn_strength: float = 1.0,
+    encoder=None,
+    strength: float = 1.0,
+):
+    """Invoke ``_reference_conditioning_from_pixels`` directly on a META video of
+    ``frames`` frames — the chain path's own call shape, and the only way to
+    exercise the token threshold at hundreds of frames without materialising them
+    (657 frames of 192x320 float32 would be ~484MB of zeros).
+
+    BOTH the tensor and ``cond_kwargs["device"]`` are meta, and that pairing is
+    load-bearing: the untiled branch does ``video.to(device)`` and a meta -> cpu
+    ``.to()`` raises. meta is also not cuda, so the channels_last_3d / VRAM
+    measurement branch stays off exactly as it does under "cpu".
+
+    ``scale`` sets the reference size the same way ``_reference_pixel_dims``
+    does — 384x640 stage-1 dims // scale — so the token arithmetic in the tests
+    below is the production arithmetic.
+    """
+    cond_height, cond_width = 384, 640
+    ref_h, ref_w = cond_height // scale, cond_width // scale
+    video = torch.zeros(1, 3, frames, ref_h, ref_w, device="meta")
+    cond_kwargs = {
+        "height": cond_height,
+        "width": cond_width,
+        "video_encoder": encoder if encoder is not None else _FakeVideoEncoder(),
+        "dtype": torch.float32,
+        "device": torch.device("meta"),
+        "tiling_config": _TILING_SENTINEL,
+    }
+    fake = _FakePipe(attn_strength, scale=scale)
+    return LTXFastVideoPipeline._reference_conditioning_from_pixels(
+        fake, video, cond_kwargs=cond_kwargs, scale=scale, strength=strength
+    )
+
+
 def test_reference_conditioning_no_wrap_at_one(stub_ltx):
     """strength 1.0 -> bare VideoConditionByReferenceLatent (no wrapper)."""
     conds = _call(1.0)
@@ -197,19 +236,64 @@ def test_scale_one_uses_tiled_encode(stub_ltx):
 
 
 def test_scale_two_stays_untiled(stub_ltx):
-    """Factor 2 is deliberately NOT tiled: tiling splits the reference across
-    temporal tiles and would break byte-identity with every existing output."""
+    """Factor 2 BELOW the token budget is deliberately NOT tiled: tiling splits
+    the reference across temporal tiles and would break byte-identity with every
+    existing output.
+
+    657 frames at 192x320 (= stage-1 384x640 // 2), i.e. the largest reference
+    that still fits: (320//32) * (192//32) = 60 spatial patches x
+    v_latent_frames(657) = 83  ->  4,980 tokens <= 5,000
+    (REFERENCE_ENCODE_TILE_TOKEN_BUDGET).
+    """
     enc = _FakeVideoEncoder()
-    conds = _call(1.0, scale=2, encoder=enc)
+    conds = _call_pixels(657, scale=2, encoder=enc)
     assert enc.calls == ["plain"]
     assert enc.tiling_configs == []
     assert conds[0].downscale_factor == 2
+
+
+def test_scale_two_above_budget_is_tiled(stub_ltx):
+    """Eight more frames cross the budget and the factor-2 encode switches to
+    tiles on its own — the same line the UI's amber banner draws (§3-76).
+
+    665 frames at 192x320: the same 60 spatial patches x v_latent_frames(665) =
+    84  ->  5,040 tokens > 5,000. Pinning BOTH sides of that 8-frame step (with
+    the test above) is what fixes the threshold in place.
+
+    The caller's tiling config must reach ``tiled_encode`` unchanged: a None
+    slipping through here would silently fall back to the encoder's own default
+    geometry instead of the decode-side config the callers thread in.
+    """
+    enc = _FakeVideoEncoder()
+    conds = _call_pixels(665, scale=2, encoder=enc)
+    assert enc.calls == ["tiled"]
+    assert enc.tiling_configs == [_TILING_SENTINEL]
+    assert conds[0].downscale_factor == 2
+
+
+def test_scale_one_is_tiled_regardless_of_budget(stub_ltx):
+    """Factor 1 is tiled unconditionally — the OOM it avoids (§49.9) is about the
+    4x pixel count, not about the token budget, so the budget must not be able to
+    un-tile it.
+
+    9 frames at 384x640 (factor 1 leaves the stage-1 dims alone):
+    (640//32) * (384//32) = 240 spatial patches x v_latent_frames(9) = 2  ->
+    480 tokens, an order of magnitude under 5,000, and still tiled.
+    """
+    enc = _FakeVideoEncoder()
+    conds = _call_pixels(9, scale=1, encoder=enc)
+    assert enc.calls == ["tiled"]
+    assert enc.tiling_configs == [_TILING_SENTINEL]
+    assert conds[0].downscale_factor == 1
 
 
 def test_scale_two_moves_video_to_device(stub_ltx):
     """The loader now assembles the reference on the CPU, so the UNTILED factor-2
     path must ``.to(device)`` it before calling the encoder (VideoEncoder.forward
     expects device-resident input; tiled_encode moves tiles itself).
+
+    This 9-frame reference is far below REFERENCE_ENCODE_TILE_TOKEN_BUDGET and
+    therefore takes the untiled branch — which is the premise of the probe.
 
     ``device="meta"`` is the probe: it is not cuda (so the channels_last_3d /
     measurement branch stays off) yet it is distinguishable from the loader's

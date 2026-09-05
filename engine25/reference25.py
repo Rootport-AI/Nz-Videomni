@@ -63,6 +63,7 @@ from typing import Any
 
 import torch
 
+from chain_math import REFERENCE_ENCODE_TILE_TOKEN_BUDGET, reference_encode_tokens
 from engine25.ltxcore_compat import (
     ConditioningItem,
     ConditioningItemAttentionStrengthWrapper,
@@ -345,8 +346,9 @@ def reference_conditioning_from_pixels(
     calls this from its stage-1 loop). Moving it inside would make the chain path
     either always empty or, worse, attach a reference to stage 2.
 
-    Two encode paths, split on the adapter's own declared factor -- 2.3's split,
-    kept because both halves of it were measured there:
+    Two encode paths -- 2.3's, kept in step with it because both halves of it
+    were measured there. The adapter's declared factor settles the first case
+    outright; in the second the reference's own LENGTH settles it:
 
     * **factor 1** (deblur) feeds the reference at 4x the pixel count of a
       factor-2 one, and the untiled encode's intermediates OOM a 16GB card, so it
@@ -360,17 +362,35 @@ def reference_conditioning_from_pixels(
       CORRECTNESS requirement, not hygiene: stage 2 of the same job re-encodes its
       images through this very encoder and those latents do change under
       ``channels_last``.
-    * **factor >= 2** stays untiled: tiling would split it temporally, and the
-      reference is small enough at half the linear size that it does not need to
-      be. ``VideoEncoder.forward`` expects its input already on the compute
-      device (``tiled_encode`` moves tiles itself; the plain call does not).
+    * **factor >= 2** is encoded in ONE SHOT up to
+      :data:`chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET` reference tokens,
+      and switches to the SAME tiled + ``channels_last_3d`` path above it
+      (§3-76). Below the line nothing moved: every reference short enough for
+      the Chained screen's stage-1 comfort banner to stay silent takes the
+      untiled branch it always took, so already-shipped outputs stay
+      byte-identical. Above it the two mechanisms hand over together --
+      tiling and the memory-layout switch are the one combination this
+      repository has measured as safe, and tiling with contiguous weights was
+      measured OOM. The reference's OWN LENGTH is the entire switch: there is
+      no config key, no API field and no UI control for it.
+      ``VideoEncoder.forward`` expects its input already on the compute device
+      (``tiled_encode`` moves tiles itself; the plain call does not), which is
+      why only the untiled branch does the ``.to(device)``.
 
     The attention-strength wrapper is applied ONLY below 1.0. At 1.0 the bare
     ``VideoConditionByReferenceLatent`` is returned, which is both what the
     official ``iclora_utils`` does and what keeps the ordinary case structurally
     identical to an unpatched run.
     """
-    relayout = torch.device(device).type == "cuda" and scale == 1
+    # (1,C,F,H,W) -> the reference's own latent token count, the only switch.
+    ref_tokens = reference_encode_tokens(
+        int(video.shape[4]), int(video.shape[3]), int(video.shape[2])
+    )
+    tiled = scale == 1 or ref_tokens > REFERENCE_ENCODE_TILE_TOKEN_BUDGET
+    # channels_last_3d rides WITH tiling, never without it: tiled + contiguous
+    # was measured OOM, tiled + channels_last_3d is the combination the
+    # factor-1 path has shipped on all along.
+    relayout = torch.device(device).type == "cuda" and tiled
     converted = 0
     started = time.perf_counter()
     if relayout:
@@ -381,7 +401,7 @@ def reference_conditioning_from_pixels(
         cleanup_memory()
         if vram is not None:
             vram.reset()
-        if scale == 1:
+        if tiled:
             encoded = video_encoder.tiled_encode(video, tiling_config)
         else:
             encoded = video_encoder(video.to(device))
@@ -404,9 +424,9 @@ def reference_conditioning_from_pixels(
     if vram is not None and phase:
         vram.record(phase, seconds)
     logger.info(
-        "IC-LoRA reference encode (scale=%d tiled=%s channels_last_3d convs=%d): "
-        "latent %s in %.2fs",
-        scale, scale == 1, converted, tuple(encoded.shape), seconds,
+        "IC-LoRA reference encode (scale=%d tiled=%s channels_last_3d convs=%d "
+        "ref_tokens=%d): latent %s in %.2fs",
+        scale, tiled, converted, ref_tokens, tuple(encoded.shape), seconds,
     )
 
     cond: ConditioningItem = VideoConditionByReferenceLatent(

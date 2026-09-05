@@ -287,11 +287,25 @@ class EngineComfortProfile(BaseModel):
     per temporal_factor latent frames. Carried per-profile (not a global
     constant) so a future model with a different latent compression ratio can
     override them without touching the client's formula.
+
+    ``outpaint_budget`` is the Outpainting (Edit tab) comfort-token budget
+    for this family — a fixed per-family line that deliberately does NOT
+    vary with the acceleration configuration, and NOT a general rule:
+    keeping the all-on-measured line for every configuration is a
+    per-family ruling for the two families below (J1, 2026-09-05 —
+    Docs/VERIFICATION_LOG.md §98.11 / Docs/COMFORT_LIMIT_TABLE.md §9.2),
+    so when a new family is added, LEAVE THIS ``None`` until that family
+    has been calibrated and has received its own ruling ("do not copy the
+    precedent" is part of J1). ``None`` means "no line": the client draws
+    no outpaint comfort warning at all. Advisory-only like ``rows`` — the
+    server never validates a request against it. Single source of truth
+    for the numbers: Docs/COMFORT_LIMIT_TABLE.md §9.
     """
 
     spatial_factor: int = 32
     temporal_factor: int = 8
     rows: list[ComfortRow] = Field(default_factory=list)
+    outpaint_budget: int | None = None
 
 
 def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
@@ -317,6 +331,12 @@ def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
     ``requires`` (always matches) and reuses the same 44,880 ceiling for
     both Single and Chained (Chained's legacy 40,000 was a 2.3 measurement
     carried over; 2.5 gets its own number here).
+
+    ``outpaint_budget`` (§3-135, 2026-09-05): the Outpainting lines from
+    the 2026-09-05 all-on recalibration (primary record
+    ``outputs/comfort-calib-2026-09-05/``). This field is only the
+    delivery path for the two families that already have a ruling; the
+    numbers' home is Docs/COMFORT_LIMIT_TABLE.md §9.
     """
     return {
         "ltx": EngineComfortProfile(
@@ -332,10 +352,12 @@ def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
                     single_budget=44880,
                     chain_budget=CHAIN_COMFORT_TOKEN_BUDGET,
                 )
-            ]
+            ],
+            outpaint_budget=42240,  # Docs/COMFORT_LIMIT_TABLE.md §9 (2026-09-05 all-on run)
         ),
         "ltx25": EngineComfortProfile(
-            rows=[ComfortRow(requires={}, single_budget=44880, chain_budget=44880)]
+            rows=[ComfortRow(requires={}, single_budget=44880, chain_budget=44880)],
+            outpaint_budget=46080,  # Docs/COMFORT_LIMIT_TABLE.md §9 (2026-09-05 all-on run)
         ),
     }
 
@@ -463,6 +485,10 @@ class LimitsConfig(BaseModel):
     # spill_free_frames, exactly as it does today. See
     # _default_comfort_budgets for the default table and its rationale, and
     # Docs/COMFORT_LIMIT_TABLE.md for the calibration.
+    # A yaml override REPLACES the whole table (no per-family/per-field
+    # merge — pinned by tests/test_comfort_budgets.py), so an override that
+    # omits ``outpaint_budget`` silently drops the outpaint line (``None`` =
+    # the client draws no outpaint comfort warning).
     comfort_budgets: dict[str, EngineComfortProfile] = Field(
         default_factory=_default_comfort_budgets
     )

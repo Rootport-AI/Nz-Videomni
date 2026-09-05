@@ -335,3 +335,4 @@ def test_config_publishes_the_comfort_budgets_table(client):
     only pins the new table."""
     limits = client.get("/api/v1/config").json()["limits"]
     assert limits["comfort_budgets"]["ltx25"]["rows"][0]["single_budget"] == 44880
+    assert limits["comfort_budgets"]["ltx"]["outpaint_budget"] == 42240

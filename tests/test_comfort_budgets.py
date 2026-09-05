@@ -80,6 +80,38 @@ def test_both_families_use_the_default_token_factors():
         assert profile.temporal_factor == 8
 
 
+def test_default_profiles_publish_the_2026_09_05_outpaint_budgets():
+    """§3-135: the Outpainting (Edit tab) comfort-token lines from the
+    2026-09-05 all-on recalibration (Docs/COMFORT_LIMIT_TABLE.md §9) --
+    ltx=42,240 (unchanged from the prior calibration), ltx25=46,080 (the one
+    line that moved)."""
+    budgets = _default_budgets()
+    assert budgets["ltx"].outpaint_budget == 42240
+    assert budgets["ltx25"].outpaint_budget == 46080
+
+
+def test_comfort_rows_do_not_carry_an_outpaint_budget_of_their_own():
+    """J1 (2026-09-05, Docs/VERIFICATION_LOG.md §98.11): the outpaint line is
+    a fixed per-family value, not a per-row one -- it must not ride along on
+    ``ComfortRow`` (which is keyed by acceleration ``requires``), only on the
+    profile itself."""
+    budgets = _default_budgets()
+    for family_id in ("ltx", "ltx25"):
+        for row in budgets[family_id].rows:
+            assert not hasattr(row, "outpaint_budget")
+
+
+def test_engine_comfort_profile_defaults_outpaint_budget_to_none():
+    """An uncalibrated family (no ruling yet) must default to ``None`` --
+    "no line": the client draws no outpaint comfort warning at all, and a
+    future family must NOT inherit the two calibrated families' numbers (see
+    ``EngineComfortProfile.outpaint_budget`` docstring, J1's "do not copy the
+    precedent")."""
+    from config import EngineComfortProfile
+
+    assert EngineComfortProfile().outpaint_budget is None
+
+
 def test_yaml_can_override_the_comfort_budgets_table(tmp_path: Path):
     """``config.yaml`` overriding ``limits.comfort_budgets`` replaces the
     whole table (no per-row merge) -- same overwrite discipline as every

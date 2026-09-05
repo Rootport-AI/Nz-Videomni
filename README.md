@@ -1,9 +1,30 @@
-# Nz-Videomni
-
 ![Nz-Videomni-logo](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/Videomni_logo.jpg)
 
-LTX 2.3 / LTX 2.5 の動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用に Gradio UI(`/ui`) を同梱します。
-AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）も同じリポジトリに入っており、`AviUtl2-Plugin/` 以下がそれです。API は汎用設計なので、DaVinci Resolve など他のフロントエンドからも使えます。
+---  
+# Nz-Videomni インストール方法（概要）
+
+1. gitをインストールする  
+2. このアプリのデータを`git clone`でダウンロードする（後述）  
+3. 同梱のsetup.batを実行してインストール  
+4. 同梱のrun.batを実行してアプリを起動  
+5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ  
+　※ 最初のAIとして`LTX 2.3`がインストールされます。  
+  
+- 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
+　※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
+
+- アップデートするとき：`git pull`を実行する（後述）  
+
+### 1)  gitをインストールする  
+[![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)  
+
+gitのインストールページ（ https://git-scm.com/install/windows ） からあなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。
+
+---
+# Nz-Videomni
+
+LTX 2.3 / LTX 2.5 の動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用の Gradio UI(`/ui`) を同梱。API は汎用設計なので、DaVinci Resolve など他のフロントエンドからも使える想定です。
+さらに`AviUtl2-Plugin/` 以下には、AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）が同梱されています。
 
 > **リポジトリの構成（モノレポ）**
 >

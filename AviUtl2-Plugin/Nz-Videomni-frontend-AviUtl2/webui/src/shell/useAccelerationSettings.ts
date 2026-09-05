@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { effectiveAcceleration, readStoredAcceleration, writeStoredAcceleration } from "./accelerationSettings";
+import {
+  effectiveAcceleration,
+  readStoredAcceleration,
+  withServerDefaults,
+  writeStoredAcceleration,
+} from "./accelerationSettings";
 import type { AccelerationSettings, AttentionBackend, VaeMode } from "./accelerationSettings";
 
 export interface UseAccelerationSettingsResult {
@@ -43,6 +48,14 @@ export interface UseAccelerationSettingsResult {
    * it should survive a reload like the other five (台帳 §3-114,
    * 2026-09-03). */
   setKeepResidentEmbeddings: (value: boolean) => void;
+  /** §3-135: forces the named fields back to their SERVER default and persists
+   * that, exactly like the six setters above (the write-through effect below
+   * does not care which setter moved the state). Not a user action — it is the
+   * "cleanup" half of `shell/featureScope.ts`'s table, which `AppShell` runs
+   * when the loaded base model HIDES the Settings row a persisted choice came
+   * from. Safe to call on every render: `withServerDefaults` returns the same
+   * object when there is nothing to move, so `setState` bails out. */
+  resetToServerDefaults: (fields: readonly (keyof AccelerationSettings)[]) => void;
 }
 
 /**
@@ -145,6 +158,15 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, keepResidentEmbeddings: value }));
   }, []);
 
+  // §3-135: the same functional-update shape as the six setters above, so it
+  // rides the same `localStorage` write-through effect — the cleanup is a
+  // persisted change like any other, not a per-render mask. `prev` is the STORED
+  // object (not the effective one), which is the basis `withServerDefaults`
+  // documents as the one that stays correct.
+  const resetToServerDefaults = useCallback((fields: readonly (keyof AccelerationSettings)[]) => {
+    setAcceleration((prev) => withServerDefaults(prev, fields));
+  }, []);
+
   // §1-10: readers get the EFFECTIVE object, the state above stays the stored
   // one (so `localStorage` and the panel's own restore-on-return both keep
   // working). Memoized on the two inputs, and `effectiveAcceleration` returns
@@ -163,5 +185,6 @@ export function useAccelerationSettings(
     setFusedGgufDequantKernel,
     setVaeMode,
     setKeepResidentEmbeddings,
+    resetToServerDefaults,
   };
 }

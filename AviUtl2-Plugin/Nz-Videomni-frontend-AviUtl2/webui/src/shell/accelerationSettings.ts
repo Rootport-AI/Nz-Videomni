@@ -219,6 +219,56 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
 });
 
+/**
+ * The settings object with the named fields forced back to their SERVER default
+ * (§3-135) — the "cleanup" half of `shell/featureScope.ts`'s table, which names
+ * the FIELDS while {@link ACCELERATION_DEFAULTS} holds the VALUES. `AppShell`
+ * calls it through `useAccelerationSettings`'s `resetToServerDefaults` whenever
+ * the loaded base model hides a Settings row: hiding is not enough on its own,
+ * because the choice is persisted and would keep riding along on every request
+ * to an engine that 422s it.
+ *
+ * Returns the SAME REFERENCE when there is nothing to move — React's `setState`
+ * bails out on an identical value, and the cleanup effect that calls this is
+ * allowed to run on any render (it re-fires whenever the memoized field list is
+ * rebuilt, which a `/models` refresh does). That bail-out is what keeps a
+ * no-op call from looping.
+ *
+ * The "nothing to move" test reads the STORED value, not the effective one
+ * ({@link effectiveAcceleration}). The two are equivalent today — the only field
+ * `effectiveAcceleration` rewrites is `keepResident`, and no table row resets
+ * that — but they would DIVERGE the moment a `resets: "keepResident"` row is
+ * added: the effective value can already read `false` (prefetch off) while the
+ * stored choice is still `true`, so an effective-basis test would skip a
+ * write-back that is still needed. Stored is the basis that stays correct.
+ *
+ * All six fields are enumerated explicitly rather than spread over a computed
+ * key, deliberately and for {@link effectiveAccelerationFields}'s reason: a
+ * seventh field added to {@link AccelerationSettings} must fail `typecheck` here
+ * instead of quietly slipping through a `{ ...acceleration, [f]: … }`.
+ */
+export function withServerDefaults(
+  acceleration: AccelerationSettings,
+  fields: readonly (keyof AccelerationSettings)[],
+): AccelerationSettings {
+  if (fields.every((f) => acceleration[f] === ACCELERATION_DEFAULTS[f])) return acceleration;
+  const at = (f: keyof AccelerationSettings) => fields.includes(f);
+  return {
+    attentionBackend: at("attentionBackend") ? ACCELERATION_DEFAULTS.attentionBackend : acceleration.attentionBackend,
+    blockSwapPrefetch: at("blockSwapPrefetch")
+      ? ACCELERATION_DEFAULTS.blockSwapPrefetch
+      : acceleration.blockSwapPrefetch,
+    keepResident: at("keepResident") ? ACCELERATION_DEFAULTS.keepResident : acceleration.keepResident,
+    fusedGgufDequantKernel: at("fusedGgufDequantKernel")
+      ? ACCELERATION_DEFAULTS.fusedGgufDequantKernel
+      : acceleration.fusedGgufDequantKernel,
+    vaeMode: at("vaeMode") ? ACCELERATION_DEFAULTS.vaeMode : acceleration.vaeMode,
+    keepResidentEmbeddings: at("keepResidentEmbeddings")
+      ? ACCELERATION_DEFAULTS.keepResidentEmbeddings
+      : acceleration.keepResidentEmbeddings,
+  };
+}
+
 /** The persisted subset of {@link AccelerationSettings} — as of 2026-08-05
  * (backend §52) that is the WHOLE of it: `vaeMode` was the last unpersisted
  * field, and it only was because it had no UI to change it. §3-114's

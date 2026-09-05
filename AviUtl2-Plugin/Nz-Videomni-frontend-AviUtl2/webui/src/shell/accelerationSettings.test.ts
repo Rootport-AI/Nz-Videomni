@@ -3,6 +3,7 @@ import {
   ACCELERATION_DEFAULTS,
   effectiveAcceleration,
   effectiveAccelerationFields,
+  withServerDefaults,
   type AccelerationSettings,
 } from "./accelerationSettings";
 
@@ -102,5 +103,66 @@ describe("effectiveAccelerationFields", () => {
     const effective = effectiveAcceleration(raw, false);
     expect(effective.keepResident).toBe(false);
     expect(effectiveAccelerationFields(effective, true).keep_resident).toBe(false);
+  });
+});
+
+// §3-135: the "cleanup" half of `shell/featureScope.ts`'s table — the field
+// NAMES come from the table, the VALUES from `ACCELERATION_DEFAULTS`.
+describe("withServerDefaults", () => {
+  it("returns the SAME reference for an empty field list", () => {
+    // The ordinary case by far: no loaded base model hides a Settings row, so
+    // `accelerationResetsFor` answers `[]` and this must cost nothing.
+    const before = makeAllOn();
+    expect(withServerDefaults(before, [])).toBe(before);
+  });
+
+  it("returns the SAME reference when every named field already sits on its server default", () => {
+    // This is the bail-out `AppShell`'s cleanup effect depends on: it re-fires
+    // whenever the memoized field list is rebuilt, so a fresh object here would
+    // re-render every consumer on each `/models` refresh.
+    const before = makeAllOn({ vaeMode: "default", keepResidentEmbeddings: false });
+    expect(withServerDefaults(before, ["vaeMode"])).toBe(before);
+    expect(withServerDefaults(before, ["vaeMode", "keepResidentEmbeddings"])).toBe(before);
+  });
+
+  it("writes the named field back to the server default and leaves the other five untouched", () => {
+    const before = makeAllOn(); // vaeMode: "prune_vaed"
+    const after = withServerDefaults(before, ["vaeMode"]);
+
+    expect(after).not.toBe(before);
+    expect(after.vaeMode).toBe(ACCELERATION_DEFAULTS.vaeMode);
+    expect(after).toEqual(makeAllOn({ vaeMode: ACCELERATION_DEFAULTS.vaeMode }));
+    // Named explicitly too, because "leaves the others alone" is the whole
+    // contract: hiding one row must not reset a choice another row still owns.
+    expect(after.attentionBackend).toBe("sage");
+    expect(after.blockSwapPrefetch).toBe(true);
+    expect(after.keepResident).toBe(true);
+    expect(after.fusedGgufDequantKernel).toBe(true);
+    expect(after.keepResidentEmbeddings).toBe(true);
+  });
+
+  it("writes several named fields back in one call", () => {
+    // Two features hiding two rows at once — the table's `resets` set is
+    // deduplicated and handed over whole, so this is one write, not two.
+    const after = withServerDefaults(makeAllOn(), ["vaeMode", "keepResidentEmbeddings"]);
+    expect(after.vaeMode).toBe(ACCELERATION_DEFAULTS.vaeMode);
+    expect(after.keepResidentEmbeddings).toBe(ACCELERATION_DEFAULTS.keepResidentEmbeddings);
+    expect(after).toEqual(
+      makeAllOn({
+        vaeMode: ACCELERATION_DEFAULTS.vaeMode,
+        keepResidentEmbeddings: ACCELERATION_DEFAULTS.keepResidentEmbeddings,
+      }),
+    );
+  });
+
+  it("moves only the fields that are off their default when a list mixes both", () => {
+    // `vaeMode` is already default here, `keepResidentEmbeddings` is not: the
+    // whole-list "nothing to move" test must not short-circuit on the first
+    // field it happens to look at.
+    const before = makeAllOn({ vaeMode: "default" });
+    const after = withServerDefaults(before, ["vaeMode", "keepResidentEmbeddings"]);
+    expect(after).not.toBe(before);
+    expect(after.vaeMode).toBe("default");
+    expect(after.keepResidentEmbeddings).toBe(ACCELERATION_DEFAULTS.keepResidentEmbeddings);
   });
 });

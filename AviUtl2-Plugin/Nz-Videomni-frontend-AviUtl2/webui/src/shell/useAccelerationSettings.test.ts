@@ -419,4 +419,49 @@ describe("useAccelerationSettings", () => {
     const { result: result2 } = renderHook(() => useAccelerationSettings());
     expect(result2.current.acceleration.vaeMode).toBe("prune_vaed");
   });
+
+  // §3-135: the seventh entry point into the same state — not a user action but
+  // the cleanup `AppShell` runs when the loaded base model HIDES a Settings row.
+  it("resetToServerDefaults moves the named field back AND writes that through to localStorage", async () => {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({ attentionBackend: "sage", blockSwapPrefetch: true, vaeMode: "prune_vaed" }),
+    );
+    const { result } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.vaeMode).toBe("prune_vaed");
+
+    act(() => result.current.resetToServerDefaults(["vaeMode"]));
+
+    expect(result.current.acceleration.vaeMode).toBe(VAE_MODE_DEFAULT);
+    // Persisting it is the point: leaving the reset in memory only would bring
+    // `prune_vaed` straight back on the next reload of a base model that 422s it.
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!)).toEqual({
+        attentionBackend: "sage",
+        blockSwapPrefetch: true,
+        keepResident: KEEP_RESIDENT_SERVER_DEFAULT,
+        fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
+        vaeMode: VAE_MODE_DEFAULT,
+        keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+      });
+    });
+  });
+
+  it("resetToServerDefaults on a field already at its default keeps the SAME object (no re-render)", () => {
+    // The effect that calls this is allowed to re-fire on any rebuilt field
+    // list, so the no-op path must not hand consumers a new object — every
+    // reader of `acceleration` takes it as a dependency.
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useAccelerationSettings();
+    });
+    const before = result.current.acceleration;
+    const rendersBefore = renders;
+
+    act(() => result.current.resetToServerDefaults(["vaeMode", "keepResidentEmbeddings"]));
+
+    expect(result.current.acceleration).toBe(before);
+    expect(renders).toBe(rendersBefore);
+  });
 });

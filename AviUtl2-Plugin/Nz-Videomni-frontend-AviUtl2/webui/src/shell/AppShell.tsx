@@ -54,6 +54,7 @@ import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
 import { comfortFramesForBudget, resolveComfortRow } from "./comfortTable";
 import {
+  accelerationResetsFor,
   batchA2vDisabledFor,
   chainPanelsDisabledFor,
   editSubTabsDisabledFor,
@@ -1180,45 +1181,32 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // §1-26, closed 2026-09-01, hiding PrunaVAED on LTX 2.5). Read off the published
   // `unsupported_features`, never a base-model id.
   const settingsRowsHidden = settingsRowsHiddenFor(baseModels.unsupportedFeatures);
-  const vaeUnsupported = settingsRowsHidden.vae;
 
-  // The stored choice PERSISTS, so hiding the row is not enough on its own: a
-  // `prune_vaed` picked on a base model that supports it would otherwise keep
-  // riding along on every request here and 422 every job. Same shape as the
-  // mode bounce above — observing the refusal is what writes the setting back —
-  // which covers a leftover from a previous session and a switch made just now
-  // with the one effect and no request of its own.
-  useEffect(() => {
-    if (!vaeUnsupported) return;
-    if (accelerationControls.acceleration.vaeMode === "default") return;
-    accelerationControls.setVaeMode("default");
-  }, [vaeUnsupported, accelerationControls.acceleration.vaeMode, accelerationControls.setVaeMode]);
-
-  // 台帳 §3-114 (2026-09-03): the same arrangement one row further down the
-  // Settings panel, POINTING THE OTHER WAY. `keep_resident_embeddings` names a
-  // component only LTX 2.5 has, so it is LTX 2.3 that publishes the name and
-  // 422s a `true` — the first field 2.3 has ever refused. Which name does that
-  // is again the table's fact, not this file's; the direction it points makes no
-  // difference here, because a hidden row is a hidden row.
-  const keepResidentEmbeddingsUnsupported = settingsRowsHidden.keepResidentEmbeddings;
-
-  // And the same write-back, for the same reason: the stored choice PERSISTS,
-  // so a `true` picked on LTX 2.5 would otherwise ride along on every request
-  // after a switch back to LTX 2.3 and 422 every job there.
+  // §3-135: which rows get hidden AND what gets written back when they are is
+  // the one table in `shell/featureScope.ts`, not two hand-written effects here.
+  // The write-back is not optional tidiness: the stored choice PERSISTS, so a
+  // value picked on a base model that supports it would otherwise keep riding
+  // along on every request to an engine that refuses it and 422 every job
+  // (the reason the old per-row comments gave, one row at a time). The two rows
+  // that carry a `resets` today point in OPPOSITE directions — LTX 2.5 refuses
+  // `prune_vaed`, LTX 2.3 refuses `keep_resident_embeddings` — and this code
+  // never has to know that; a hidden row is a hidden row.
   //
-  // The two inputs are pulled out into locals FIRST, unlike the PrunaVAED
-  // effect above: `exhaustive-deps` cannot see through an
-  // `accelerationControls.acceleration.x` chain and asks for the whole object
-  // instead, which is what leaves that effect with a standing warning. These
-  // locals say the same thing in a form the rule can check, so this addition
-  // costs the lint baseline nothing.
-  const { setKeepResidentEmbeddings } = accelerationControls;
-  const keepResidentEmbeddingsChosen = accelerationControls.acceleration.keepResidentEmbeddings;
+  // Runs on a leftover from a previous session and on a switch made just now
+  // with the one effect and no request of its own. `unsupportedFeatures` keeping
+  // a stable reference between switches is a property of `AppShell` not polling
+  // `refresh()`, not something this effect relies on: should that change, a
+  // rebuilt list just re-fires it and `withServerDefaults` returns the same
+  // settings object, which `setState` bails out on.
+  const accelerationResets = useMemo(
+    () => accelerationResetsFor(baseModels.unsupportedFeatures),
+    [baseModels.unsupportedFeatures],
+  );
+  const { resetToServerDefaults } = accelerationControls;
   useEffect(() => {
-    if (!keepResidentEmbeddingsUnsupported) return;
-    if (!keepResidentEmbeddingsChosen) return;
-    setKeepResidentEmbeddings(false);
-  }, [keepResidentEmbeddingsUnsupported, keepResidentEmbeddingsChosen, setKeepResidentEmbeddings]);
+    if (accelerationResets.length === 0) return;
+    resetToServerDefaults(accelerationResets);
+  }, [accelerationResets, resetToServerDefaults]);
 
   // §3-102 (LTX 2.5 Chained, first stage): once an engine CAN chain, the
   // Chained tab stays live but the material panels its engine still cannot use
@@ -1421,9 +1409,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           onKeepResidentChange={accelerationControls.setKeepResident}
           onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
           onVaeModeChange={accelerationControls.setVaeMode}
-          vaeUnsupported={vaeUnsupported}
+          vaeUnsupported={settingsRowsHidden.vae}
           onKeepResidentEmbeddingsChange={accelerationControls.setKeepResidentEmbeddings}
-          keepResidentEmbeddingsUnsupported={keepResidentEmbeddingsUnsupported}
+          keepResidentEmbeddingsUnsupported={settingsRowsHidden.keepResidentEmbeddings}
           // The panel reads sage availability straight off this existing
           // shared /status poll — no capability fetch of its own.
           serverStatus={serverStatus}

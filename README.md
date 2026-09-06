@@ -125,6 +125,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ※生成後に`🎞`ボタンを押すと、タイムライン上の仮オブジェクトがその動画ファイルに置き換わる。  
 
 ---
+# Nz-Videomniの詳細　　
 > **リポジトリの構成（モノレポ）**
 >
 > | 場所 | 中身 |

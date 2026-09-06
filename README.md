@@ -147,11 +147,10 @@ API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`
 
 ---
 
-## 0. 環境分離ポリシー（最重要・最初に読む）
+## 0. 環境分離ポリシー（最重要）
 
 **このプロジェクトは PC のシステム Python 環境を一切汚しません。** Python 本体を含め、必要なものはすべて
-プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.python/`, `.uv_cache/`, `tools/`）に
-閉じ込めます（仕様書 2.5）。
+プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.python/`, `.uv_cache/`, `tools/`）に閉じ込めます（仕様書 2.5）。
 
 - グローバル/システムの `pip install` は **禁止**。必ず `uv` + プロジェクトローカル venv。
 - 環境変数（`UV_PYTHON_INSTALL_DIR` など）は **そのプロセス内のみ**。永続化しない。

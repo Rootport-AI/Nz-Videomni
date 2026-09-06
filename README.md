@@ -4,14 +4,12 @@
 # Nz-Videomni   
 AviUtl2から動画生成AIを動かせるバックエンドPythonサーバーです。フロントエンドとしてAviUtl2 用`.aux2` プラグインを同梱。さらに、検証用の簡易なGradio UIを同梱しています。API は汎用設計なので、DaVinci Resolve など他の動画編集ソフトからも（フロントエンド用プラグインを開発すれば）使用できる見込みです。  
 
-### 必須スペック   
-
-| 項目 | 要件 |  
+| 必須スペック | 要件 |  
 |------|------|  
-| GPU | NVIDIA製 **VRAM 16GB 以上**。動作検証には RTX 4070 ti SUPER および RTX 3080 mobile を使用 |  
+| GPU | **VRAM 16GB 以上** NVIDIA製GPU。動作検証には RTX 4070 ti SUPER および RTX 3080 mobile を使用 |  
 | メインメモリ | 64GB または 32GB + ページファイル |  
 | ストレージ | 50GB （ページファイル利用の場合は＋60GB）|  
-| ストレージ（モデル追加時） | LTX 2.5：＋30GB |  
+| ストレージ（モデル追加時） | LTX 2.5の追加時：＋30GB |  
   
 ### インストール スピードガイド  
 1. [Git](https://git-scm.com/install/windows)をインストールする  

@@ -77,9 +77,19 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ![表示メニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_003.jpg)　　
 ![Videomniの操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_004.jpg) 
 ---  
-## 動作テスト  
+## 動作テストa：テキストを入力して動画を生成する（t2v / Text-to-Video）  
+###6. 操作パネルはウィンドウ分離すると使いやすい。  
+![ウィンドウ分離](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_005.jpg)  
 
-
+###7. 動画を生成する。  
+ベースモデルが「LTX 2.3」になっていることを確認する。プロンプト入力欄に適当な文章を入力し、「生成 / Generate」ボタンを押す。（※ここでは`a girl is walking in the forest`というプロンプトで動画生成した）  
+**7-1. 基本的な操作方法**
+![画面の基本的な説明](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_006.jpg)  
+**7-2. Generateボタンを押すと生成が始まる。**
+![生成中の画面](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_007.jpg)  
+**7-3. 生成完了後、「🎞」ボタンを押すと、AviUtl2のタイムラインに動画が挿入される。**  
+![挿入ボタン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_008.jpg)  
+![胴が挿入済みのタイムライン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_009.jpg)  
   
 
 ---

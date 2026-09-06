@@ -4,7 +4,7 @@
 # Nz-Videomni   
   
 ### インストール スピードガイド  
-1. gitをインストールする  
+1. [Git](https://git-scm.com/install/windows)をインストールする  
 2. このアプリのデータを`git clone`でダウンロードする（後述）  
 3. 同梱のsetup.batを実行してインストール  
 4. 同梱のrun.batを実行してアプリを起動  

@@ -108,7 +108,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
 ### 9. タイムラインに仮オブジェクトが挿入される。  
 ![仮オブジェクト](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-1.jpg)  
-※仮オブジェクト＝「生成中の動画がこの場所に挿入されること」を示すだけのテキストオブジェクト  
+※仮オブジェクト＝「生成中の動画が将来この場所に挿入されること」を示すだけのテキストオブジェクト  
     
 ### 10. 操作パネルに、動画ファイルが送られる。  
 ![動画ファイル入力後の操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-2.jpg)

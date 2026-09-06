@@ -604,7 +604,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 - `tests/test_validation.py` — GenerateRequestバリデーション。
 - `tests/test_gradio_*.py` — 既存UIハンドラ(呼び出しシーケンスの実例)。
 - `tests/conftest.py` が `model.backend="mock"` を強制。
-- curl 具体例はバックエンド `README.md` §5「16GB 向け生成テスト」。
+- curl 具体例はバックエンド `Videomni_Backend_Specification.md` §16.1「16GB 実機の生成順序」。
 
 ## 10. 参考実装
 

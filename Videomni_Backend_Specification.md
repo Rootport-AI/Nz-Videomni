@@ -1903,7 +1903,49 @@ AviUtl2 拡張機能との連携は**本プロジェクトの最終目的**で�
 | 3 | I2V（`minimal` + 画像1枚） | 512×320 | 49 | なし | 最小I2V（`frame_idx=0`） |
 | 4 | `small` | 960×576 | 121 | **960×540** | T2V（+ 任意で I2V） |
 
-期待される具体的な生成秒数・peak_vram は `Docs/RESOLUTION_DURATION_CAPABILITY.md` および `Docs/VERIFICATION_LOG.md` が正本（本書は代表値のみ）。手動 API 例は `README.md` §5 を参照。720p は 1280×768 生成 → `crop_output={1280×720}` で確認する。
+期待される具体的な生成秒数・peak_vram は `Docs/RESOLUTION_DURATION_CAPABILITY.md` および `Docs/VERIFICATION_LOG.md` が正本（本書は代表値のみ）。手動 API 例は本節に示す。720p は 1280×768 生成 → `crop_output={1280×720}` で確認する。
+
+#### smoke_test (T2V, 384x256 / 17 frames)
+
+```bash
+curl -X POST http://127.0.0.1:18620/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"A red ball rolling on a white floor","width":384,"height":256,"num_frames":17,"num_inference_steps":8,"guidance_scale":1.0,"pipeline":"distilled","seed":42,"conditioning_images":[]}'
+# -> {"job_id":"...","status":"queued",...}
+
+curl http://127.0.0.1:18620/api/v1/jobs/<job_id>
+curl http://127.0.0.1:18620/api/v1/jobs/<job_id>/video --output out.mp4
+```
+
+#### minimal (T2V, 512x320 / 49 frames)
+
+```powershell
+# seed 固定で決定的に検証（別プロセスでもバイト一致することを実測済み）
+$body = '{"prompt":"a calm ocean wave rolling onto a sandy beach at sunset, cinematic","width":512,"height":320,"num_frames":49,"num_inference_steps":8,"guidance_scale":1.0,"pipeline":"distilled","seed":12345,"conditioning_images":[]}'
+# POST /api/v1/generate に body を送り、GET /api/v1/jobs/{id} で完了確認
+# ログは LTX 2.3 なら ltx_worker.log、LTX 2.5 なら ltx25_worker.log
+Select-String -Path logs/ltx_worker.log -Pattern "GENERATED_OK|LOAD_FAILED|GENERATE_FAILED"
+```
+
+#### 720p (1280x768 生成 → 任意で 1280x720 にクロップ)
+
+```powershell
+# crop_output を付けると worker が full-size を書き、ffmpeg 中央クロップで 1280x720 配信
+$body = '{"prompt":"...","width":1280,"height":768,"num_frames":49,"num_inference_steps":8,"guidance_scale":1.0,"pipeline":"distilled","seed":12345,"crop_output":{"width":1280,"height":720},"conditioning_images":[]}'
+```
+
+#### 最小I2V (512x320 / 49 frames + 画像1枚)
+
+```bash
+# 1) 画像アップロード
+curl -X POST http://127.0.0.1:18620/api/v1/upload/image -F "file=@first_frame.png"
+# -> {"image_id":"...",...}
+
+# 2) 生成（conditioning_images に image_id を1件だけ・frame_idx=0）
+curl -X POST http://127.0.0.1:18620/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"The scene slowly comes alive","width":512,"height":320,"num_frames":49,"num_inference_steps":8,"guidance_scale":1.0,"pipeline":"distilled","seed":42,"conditioning_images":[{"image_id":"<id>","frame_idx":0,"strength":0.8}]}'
+```
 
 ### 16.2 mock pytest（GPU 無し）
 
@@ -1929,7 +1971,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 ## §17 ライセンスと provenance
 
-- **本プロジェクト**: **Apache-2.0 を推奨**（上流コード利用時の整合性を優先）。
+- **本プロジェクト**: **Apache-2.0**（リポジトリ直下の `LICENSE` が全文。上流コード利用時の整合性を優先して選定）。
 - **`engine/`**: LTX-2（`ltx_core` / `ltx_pipelines`）および LTX-Desktop 由来の派生コードを含む。由来・依存再現手順・帰属の一次情報は **`engine/VENDOR_NOTICE.md`**。再配布時は上流の帰属表示を保持すること。
 - **モデルウェイト**: **LTX-2 Community License** に従う。
 

@@ -370,10 +370,10 @@ struct LOG_HANDLE {
     - **`WARN`（`create_object_from_alias`のnull・実尺不足によるdelete＋作り直し）はこの区間に1件も出ていない。** ただしこれは安全網2・3が不要だったことの証明ではなく、**衝突シナリオ（R7）自体が成立しなかった**ためである（5件とも要求どおりの`layer`/`frame`へ一発で成功している）。**したがって本項冒頭のとおり、明示尺を渡したときの衝突時挙動は未実測のままである。**
     - **この包含確定により、ブリッジ契約の`frameEnd`を「包含」と読み、リボン長を`frameEnd − frameStart + 1`で算出してきた既存記述は正しかったことが確認された**（`frameEnd`は本構造体の`end`の素通しである）。[`DEVLOG.md`](DEVLOG.md) §44.4の「`frameEnd`はinclusive」という記録も復権する。決着の記述は [`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13（`timeline.getSelection`）の`selected[]`の項にある。台帳クローズはバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-140。
 
-## 参照ファイル(絶対パス)
+## 参照ファイル(モノレポルート基準の相対パス)
 
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\aviutl2_sdk\aviutl2_plugin_sdk.txt`(SDK総論・更新履歴全文)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\aviutl2_sdk\plugin2.h`(`COMMON_PLUGIN_TABLE:46` / `EDIT_INFO:131` / `EDIT_SECTION:154` / `create_object_from_media_file:289` / `EDIT_HANDLE:580` / `call_edit_section_param:592` / `get_edit_info:598` / `rendering_scene_video:680` / `wait_rendering_task:696` / `PROJECT_FILE:716` / `HOST_APP_TABLE:755` / `register_window_client:791` / `register_event_listener:914`)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\aviutl2_sdk\WindowClient.cpp` / `English.WindowClient.aul2`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\aviutl2_sdk\config2.h`(`app_data_path:24`) / `logger2.h` / `cache2.h`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/aviutl2_sdk/aviutl2_plugin_sdk.txt`(SDK総論・更新履歴全文)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/aviutl2_sdk/plugin2.h`(`COMMON_PLUGIN_TABLE:46` / `EDIT_INFO:131` / `EDIT_SECTION:154` / `create_object_from_media_file:289` / `EDIT_HANDLE:580` / `call_edit_section_param:592` / `get_edit_info:598` / `rendering_scene_video:680` / `wait_rendering_task:696` / `PROJECT_FILE:716` / `HOST_APP_TABLE:755` / `register_window_client:791` / `register_event_listener:914`)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/aviutl2_sdk/WindowClient.cpp` / `English.WindowClient.aul2`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/aviutl2_sdk/config2.h`(`app_data_path:24`) / `logger2.h` / `cache2.h`
 - `Mock\AVIUTL2_DESIGN_BRIEF.md`(§5制約・§7実装方針・§11確定デザイン)

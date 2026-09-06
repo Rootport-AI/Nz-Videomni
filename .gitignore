@@ -95,3 +95,6 @@ config.yaml.bak
 # MCP registration and leak local filesystem layout. See scripts/setup.ps1 /
 # README "AIエージェント連携（MCPサーバー）".
 .mcp.json
+
+# ローカルのエージェント設定・個人環境パスを含むため追跡除外
+.claude/

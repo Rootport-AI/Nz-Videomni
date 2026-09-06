@@ -469,26 +469,26 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 
 それ以外(エラーコード一覧、各メソッドのparams/result形状、`timeoutMs`のクランプ範囲、`settings.set`のno-op挙動等)はコード上完全に一致していた。
 
-## 10. 参照ファイル(絶対パス)
+## 10. 参照ファイル(モノレポルート基準の相対パス)
 
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\bridge\types.ts`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\bridge\requestDispatcher.ts`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\bridge\webviewBridge.ts`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\bridge_core.h` / `bridge_core.cpp`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\bridge.h` / `bridge.cpp`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\http_client.h`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\settings.h` / `settings.cpp`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\log.h` / `log.cpp`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\wic_png.cpp`
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\wav_probe.h` / `wav_probe.cpp`(contract v6、wavヘッダ計測。2026-07-15新規)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\fs_util.h` / `fs_util.cpp`(contract v6、フォルダ列挙・テキスト読み書き・原子的置換・noClobber付番。2026-07-15新規)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\tests\test_bridge_core.cpp`(該当ファイルは`native/tests/`配下)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\tests\test_wav_probe.cpp` / `test_fs_util.cpp`(contract v6のnative実装doctest)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\webview_host.cpp`(contract v7、WebView2ホスティング＋`WebMessageReceived`ハンドラでの`__droppedPaths`注入。2026-07-17新規追記)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\bridge\mockBridge.ts`(contract v7、`requestWithFiles`/`ui.resolveDroppedFiles`のdev/testフィクスチャ)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\shell\useFileDrop.ts` / `DropZone.tsx`(contract v7、3箇所のドロップゾーンが共有するD&D受付ロジック/UI)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\timeline\sourceTrim.ts`(contract v10、`query`の唯一の生成元`trimQuery()`と、再生位置系フィールドを消費する唯一の判定関数`decideSourceTrim`。2026-07-30新規／2026-08-01に実機確定値へ更新)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\bridge\mockBridge.v10.test.ts`(contract v10、mockブリッジ側の`query`／`trimmed`の疎通テスト)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\src\media_fps_probe.h` / `media_fps_probe.cpp`(contract v11、Media Foundationによる素材fpsの読み取り。2026-09-01新規。**MFの寿命・COMアパートメント・取得失敗が正常系である理由の正本はこのヘッダのコメント**)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\native\tests\test_media_fps_probe.cpp`(contract v11のnative実装doctest。純関数`FpsFromRatio`とMF往復)
-- `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin\Nz-Videomni-frontend-AviUtl2\webui\src\timeline\prefillSeed.ts`(contract v11、`mediaFps`の唯一の消費者。fpsの3段フォールバックを実装。整数スナップと`[1, 60]`クランプ自体の正本は`modes/single/paramUtils.ts`の`snapFrameRate`——台帳§3-71/§3-72対策で全入口共通化)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/bridge/types.ts`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/bridge/requestDispatcher.ts`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/bridge/webviewBridge.ts`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/bridge_core.h` / `bridge_core.cpp`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/bridge.h` / `bridge.cpp`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/http_client.h`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/settings.h` / `settings.cpp`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/log.h` / `log.cpp`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/wic_png.cpp`
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/wav_probe.h` / `wav_probe.cpp`(contract v6、wavヘッダ計測。2026-07-15新規)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/fs_util.h` / `fs_util.cpp`(contract v6、フォルダ列挙・テキスト読み書き・原子的置換・noClobber付番。2026-07-15新規)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/tests/test_bridge_core.cpp`(該当ファイルは`native/tests/`配下)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/tests/test_wav_probe.cpp` / `test_fs_util.cpp`(contract v6のnative実装doctest)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/webview_host.cpp`(contract v7、WebView2ホスティング＋`WebMessageReceived`ハンドラでの`__droppedPaths`注入。2026-07-17新規追記)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/bridge/mockBridge.ts`(contract v7、`requestWithFiles`/`ui.resolveDroppedFiles`のdev/testフィクスチャ)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/useFileDrop.ts` / `DropZone.tsx`(contract v7、3箇所のドロップゾーンが共有するD&D受付ロジック/UI)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/timeline/sourceTrim.ts`(contract v10、`query`の唯一の生成元`trimQuery()`と、再生位置系フィールドを消費する唯一の判定関数`decideSourceTrim`。2026-07-30新規／2026-08-01に実機確定値へ更新)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/bridge/mockBridge.v10.test.ts`(contract v10、mockブリッジ側の`query`／`trimmed`の疎通テスト)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/media_fps_probe.h` / `media_fps_probe.cpp`(contract v11、Media Foundationによる素材fpsの読み取り。2026-09-01新規。**MFの寿命・COMアパートメント・取得失敗が正常系である理由の正本はこのヘッダのコメント**)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/tests/test_media_fps_probe.cpp`(contract v11のnative実装doctest。純関数`FpsFromRatio`とMF往復)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/timeline/prefillSeed.ts`(contract v11、`mediaFps`の唯一の消費者。fpsの3段フォールバックを実装。整数スナップと`[1, 60]`クランプ自体の正本は`modes/single/paramUtils.ts`の`snapFrameRate`——台帳§3-71/§3-72対策で全入口共通化)

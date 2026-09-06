@@ -58,18 +58,29 @@
     the .aux2 is committed to the backend repo so end users get it via
     git clone and install it by drag-and-drop, replacing the old zip-based
     distribution. Every deploy also refreshes this copy so the repo never
-    ships a stale build. Pass an empty string to skip.
+    ships a stale build. Defaults to the monorepo's AviUtl2-Plugin\ folder,
+    derived from $RepoRoot below (repository-relative; not a machine-specific
+    absolute path). Pass an empty string explicitly to skip.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
     [string]$PluginDir = "D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin",
-    [string]$DistDir = "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin"
+    [string]$DistDir
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+
+# DistDir's real default (repository-relative: the monorepo's AviUtl2-Plugin\
+# folder, one level above this frontend repo). Not expressed as a param
+# default above because $RepoRoot isn't known until $PSScriptRoot resolves.
+# Only fill it in when the caller didn't pass -DistDir at all -- an explicit
+# -DistDir "" must still mean "skip the distribution copy" (see param doc).
+if (-not $PSBoundParameters.ContainsKey('DistDir')) {
+    $DistDir = Split-Path -Parent $RepoRoot
+}
 
 $preset = if ($Config -eq "Debug") { "ninja-debug" } else { "ninja-release" }
 $aux2 = Join-Path $RepoRoot "build\$preset\NzVideomni.aux2"

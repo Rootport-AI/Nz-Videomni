@@ -385,9 +385,10 @@ switch).
    `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin`.
 2. **The monorepo's distribution copy** (`-DistDir`), i.e.
    `AviUtl2-Plugin\NzVideomni.aux2` — the git-tracked file end users install.
-   The default is the absolute path
-   `S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\AviUtl2-Plugin`, so pass
-   `-DistDir` explicitly if your clone lives somewhere else.
+   The default is derived from the repo's own location at run time (the
+   monorepo's `AviUtl2-Plugin\` folder, one level above this frontend repo),
+   so it works on any clone path without an override; pass `-DistDir`
+   explicitly only to send the copy somewhere else.
    **Forgetting this copy means users keep getting the old plugin**, which is
    why deploy.ps1 does it automatically rather than leaving it to a later
    manual step. (Skipped automatically when the build carries a `[PROBE]`

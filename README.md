@@ -46,7 +46,7 @@ gitのインストールページ（ https://git-scm.com/install/windows ） か
 git clone https://github.com/Rootport-AI/Nz-Videomni.git  
 ```  
 ![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  
-　※この自様態でエンターキーを押す。  
+　※この状態でエンターキーを押す。  
   
 **2-4. インストールに必要なファイル群がダウンロードされる。**  
 ![コマンドプロンプトにダウンロード経過が表示された図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-006.jpg)  
@@ -57,8 +57,8 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ![Setup.batを探そうの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/setup.bat.jpg)  
 
 **3-2. 40～60分間ほど待つ。黒い画面は閉じない。**  
-
-``という文章が出たらインストール完了。黒い画面を閉じていい。      
+![インストール完了画面](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/setup.bat_002.jpg)
+`続行するには何かキーを押してください．．．`という文章が出たらインストール完了。黒い画面を閉じていい。      
 
 ### 4) 同梱のrun.batを実行してアプリを起動  
 アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  

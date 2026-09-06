@@ -112,6 +112,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
     
 ### 10. 操作パネルに、動画ファイルが送られる。  
 ![動画ファイル入力後の操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-2.jpg)
+※右クリック → プラグイン → `🎬Video: この動画の続きを生成(v2v)`を選択すると…  
 - 画面上部のタブが`Chained`に切り替わる。  
 - 動画ファイルが入力されたことを示すメッセージが出る。
 - `START SOURCE`のカードに、動画ファイルがセットされる。

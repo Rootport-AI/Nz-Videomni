@@ -46,6 +46,7 @@ gitのインストールページ（ https://git-scm.com/install/windows ） か
 git clone https://github.com/Rootport-AI/Nz-Videomni.git  
 ```  
 ![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  
+　※この自様態でエンターキーを押す。  
   
 **2-4. インストールに必要なファイル群がダウンロードされる。**  
 ![コマンドプロンプトにダウンロード経過が表示された図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-006.jpg)  
@@ -66,7 +67,14 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ### 5) `NzVideomni.aux2`をAviUtl2のプレビュー画面にドラッグ＆ドロップ  
 ファイルの場所："\任意のフォルダ\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
 ![aux2ファイルの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_001.jpg)  
+![aux2のドラッグ＆ドロップ時](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_002.jpg)
 ※`このプラグイン・スクリプトを信用して使用する`をクリックする。  
+
+**5-2. メニューの`表示` → `Nz-Videomni`で、Videomniの操作パネルが表示されたらインストール成功。**  
+![表示メニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_003.jpg)　　
+![Videomniの操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_004.jpg) 
+---
+## 動作テスト  
 
 
   

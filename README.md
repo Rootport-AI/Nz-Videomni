@@ -65,7 +65,11 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
   
 ### 5) `NzVideomni.aux2`をAviUtl2のプレビュー画面にドラッグ＆ドロップ  
 ファイルの場所："\任意のフォルダ\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
+![aux2ファイルの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_001.jpg)  
+※`このプラグイン・スクリプトを信用して使用する`をクリックする。  
 
+
+  
 
 ---
 > **リポジトリの構成（モノレポ）**

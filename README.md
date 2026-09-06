@@ -35,7 +35,7 @@ gitのインストールページ（ https://git-scm.com/install/windows ） か
 > プログラムの更新履歴を管理するアプリです。エンジニアの間では広く使われています。WEB上で公開されているアプリのダウンロードやアップデートにも利用できます。 
   
 ### 2) このアプリのデータを`git clone`でダウンロードする  
-2-1. Windowsで、このアプリをインストールしたいフォルダを開く。  
+**2-1. Windowsで、このアプリをインストールしたいフォルダを開く。**  
 ![任意のフォルダを開いた図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-001.jpg)  
   
 2-2. アドレスの入力欄をクリックし、`CMD`と打ちこみ、エンターキーを押す。  
@@ -43,21 +43,21 @@ gitのインストールページ（ https://git-scm.com/install/windows ） か
 ![アドレス入力欄に「CMD」と打ち込んだ図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-003.jpg)  
 ※この状態でエンターキーを押す。  
   
-2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。  
-![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  
+**2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。**  
 ```  
 git clone https://github.com/Rootport-AI/Nz-Videomni.git  
 ```  
+![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  
   
-2-4. インストールに必要なファイル群がダウンロードされる。  
+**2-4. インストールに必要なファイル群がダウンロードされる。**  
 ![コマンドプロンプトにダウンロード経過が表示された図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-006.jpg)  
 ※`Updating files: 100% (*** / ***), done.`と表示されたら、この黒い画面は閉じていい。  
   
 ### 3) 同梱のsetup.batを実行してインストール  
-3-1. ダウンロードされたファイル群の中から`setup.bat`を探し、ダブルクリックする。  
-  
+**3-1. ダウンロードされたファイル群の中から`setup.bat`を探し、ダブルクリックする。**  
+![Setup.batを探そうの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/setup.bat.jpg)  
 
-3-2. 40～60分間ほど待つ。黒い画面は閉じない。  
+**3-2. 40～60分間ほど待つ。黒い画面は閉じない。**  
 
 ``という文章が出たらインストール完了。黒い画面を閉じていい。      
 

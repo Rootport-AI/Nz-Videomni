@@ -63,20 +63,20 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ### 4) 同梱のrun.batを実行してアプリを起動  
 ![run.batの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/run.bat.jpg)
 ![run.batのコンソール](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/run.bat_002.jpg)
-　※アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  
-　※`INFO:     Uvicorn running on http://127.0.0.1:18620 (Press CTRL+C to quit)`と表示されたら起動完了。  
-
+  ※アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  
+  ※`INFO:     Uvicorn running on http://127.0.0.1:18620 (Press CTRL+C to quit)`と表示されたら起動完了。  
+  
   
 ### 5) `NzVideomni.aux2`をAviUtl2のプレビュー画面にドラッグ＆ドロップ  
-ファイルの場所："\任意のフォルダ\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
+ファイルの場所："\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
 ![aux2ファイルの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_001.jpg)  
 ![aux2のドラッグ＆ドロップ時](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_002.jpg)
 ※`このプラグイン・スクリプトを信用して使用する`をクリックする。  
-
+  
 **5-2. メニューの`表示` → `Nz-Videomni`で、Videomniの操作パネルが表示されたらインストール成功。**  
 ![表示メニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_003.jpg)　　
 ![Videomniの操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_004.jpg) 
----
+---  
 ## 動作テスト  
 
 

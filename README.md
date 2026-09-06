@@ -82,10 +82,11 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
   
 ---  
 ## 動作テストa： 簡単な動画を生成する。      
-###6. 操作パネルはウィンドウ分離すると使いやすい。  
-![ウィンドウ分離](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_005.jpg)  
+### 6. 操作パネルはウィンドウ分離すると使いやすい。  
+![ウィンドウ分離](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_005.jpg)   
+※操作パネルの`Nz-Videomni`という名前欄を右クリック → ウィンドウ配置 → ウィンドウ分離  
   
-###7. 動画を生成する。  
+### 7. 動画を生成する。  
 ベースモデルが「LTX 2.3」になっていることを確認する。プロンプト入力欄に適当な文章を入力し、「生成 / Generate」ボタンを押す。（※ここでは`a girl is walking in the forest`というプロンプトで動画生成した）  
   
 **7-1. 基本的な操作方法**  

@@ -17,7 +17,7 @@ AviUtl2から動画生成AIを動かせるバックエンドPythonサーバー�
 2. このアプリのデータを`git clone`でダウンロードする（後述）  
 3. 同梱のsetup.batを実行してインストール  
 4. 同梱のrun.batを実行してアプリを起動  
-5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ
+5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ   
 ※ 最初のAIとして`LTX 2.3`がインストールされます。  
   
 > - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  

@@ -22,7 +22,7 @@ AviUtl2から動画生成AIを動かせるバックエンドPythonサーバー�
 ※ 最初のAIとして`LTX 2.3`がインストールされます。  
   
 > - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
-> ※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
+> ※例）`install-LTX25.bat`を実行すると`LTX 2.5`がインストールされます。  
 > 
 > - アップデートするとき：`git pull`を実行する（後述）  
  
@@ -130,6 +130,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
 ---
 # Nz-Videomniの詳細　　
+
 > **リポジトリの構成（モノレポ）**
 >
 > | 場所 | 中身 |

@@ -10,13 +10,14 @@ AviUtl2から動画生成AIを動かせるバックエンドPythonサーバー�
 | メインメモリ | 64GB または 32GB + ページファイル |  
 | ストレージ | 50GB （ページファイル利用の場合は＋60GB）|  
 | ストレージ（モデル追加時） | LTX 2.5の追加時：＋30GB |  
-  
-### インストール方法  
+
+# インストール方法
+### 概要    
 1. [Git](https://git-scm.com/install/windows)をインストールする  
 2. このアプリのデータを`git clone`でダウンロードする（後述）  
 3. 同梱のsetup.batを実行してインストール  
 4. 同梱のrun.batを実行してアプリを起動  
-5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ
+5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ   
 ※ 最初のAIとして`LTX 2.3`がインストールされます。  
   
 > - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
@@ -61,23 +62,65 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 `続行するには何かキーを押してください．．．`という文章が出たらインストール完了。黒い画面を閉じていい。      
 
 ### 4) 同梱のrun.batを実行してアプリを起動  
-アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  
-
+![run.batの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/run.bat.jpg)
+![run.batのコンソール](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/run.bat_002.jpg)
+  ※アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  
+  ※`Uvicorn running on http://127.0.0.1:18620 (Press CTRL+C to quit)`と表示されたら起動完了。  
+  
   
 ### 5) `NzVideomni.aux2`をAviUtl2のプレビュー画面にドラッグ＆ドロップ  
-ファイルの場所："\任意のフォルダ\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
+ファイルの場所："\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
 ![aux2ファイルの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_001.jpg)  
 ![aux2のドラッグ＆ドロップ時](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_002.jpg)
 ※`このプラグイン・スクリプトを信用して使用する`をクリックする。  
-
+  
 **5-2. メニューの`表示` → `Nz-Videomni`で、Videomniの操作パネルが表示されたらインストール成功。**  
 ![表示メニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_003.jpg)　　
 ![Videomniの操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_004.jpg) 
----
-## 動作テスト  
-
+※操作パネルが表示されたらインストール成功です。  
 
   
+---  
+## 動作テストa： 簡単な動画を生成する。      
+###6. 操作パネルはウィンドウ分離すると使いやすい。  
+![ウィンドウ分離](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_005.jpg)  
+  
+###7. 動画を生成する。  
+ベースモデルが「LTX 2.3」になっていることを確認する。プロンプト入力欄に適当な文章を入力し、「生成 / Generate」ボタンを押す。（※ここでは`a girl is walking in the forest`というプロンプトで動画生成した）  
+  
+**7-1. 基本的な操作方法**  
+![画面の基本的な説明](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_006.jpg)  
+  
+**7-2. Generateボタンを押すと生成が始まる。**  
+![生成中の画面](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_007.jpg)  
+  
+**7-3. 生成完了後、「🎞」ボタンを押すと、AviUtl2のタイムラインに動画が挿入される。**  
+![挿入ボタン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_008.jpg)  
+![胴が挿入済みのタイムライン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_009.jpg)  
+
+
+---  
+# 動作テストb： 動画の続きを生成する  
+### 8. タイムライン上の動画オブジェクトを右クリック  
+![右クリックメニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_001.jpg)
+※右クリック → プラグイン → `🎬Video: この動画の続きを生成(v2v)`を選択する  
+
+### 9. タイムラインに仮オブジェクトが挿入される。  
+![仮オブジェクト](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-1.jpg)  
+※仮オブジェクト＝「生成中の動画がこの場所に挿入されること」を示すだけのテキストオブジェクト  
+    
+### 10. 操作パネルに、動画ファイルが送られる。  
+![動画ファイル入力後の操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-2.jpg)
+- 画面上部のタブが`Chained`に切り替わる。  
+- 動画ファイルが入力されたことを示すメッセージが出る。
+- `START SOURCE`のカードに、動画ファイルがセットされる。
+- `CLIP`カードのスライダーで、追加したい動画の長さ（フレーム数）を指定できる。
+- `Generate`ボタン（`生成`ボタン）を押すと、生成が始まる。  
+
+### 11. 生成された動画ファイルを、`🎞`ボタンでタイムラインに送る。  
+![挿入ボタンの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_003.jpg)  
+![挿入後のタイムライン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_004.jpg)  
+※生成後に`🎞`ボタンを押すと、タイムライン上の仮オブジェクトがその動画ファイルに置き換わる。  
 
 ---
 > **リポジトリの構成（モノレポ）**

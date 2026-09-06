@@ -18,8 +18,8 @@ AviUtl2から動画生成AIを動かせるバックエンドPythonサーバー�
 2. このアプリのデータを`git clone`でダウンロードする（後述）  
 3. 同梱のsetup.batを実行してインストール  
 4. 同梱のrun.batを実行してアプリを起動  
-5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ  
-　※ 最初のAIとして`LTX 2.3`がインストールされます。  
+5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ
+※ 最初のAIとして`LTX 2.3`がインストールされます。  
   
 > - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
 > ※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
@@ -38,9 +38,10 @@ gitのインストールページ（ https://git-scm.com/install/windows ） か
 2-1. Windowsで、このアプリをインストールしたいフォルダを開く。  
 ![任意のフォルダを開いた図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-001.jpg)  
   
-2-2. アドレスの入力欄をクリックし、`CMD`と打ちこむ。  
+2-2. アドレスの入力欄をクリックし、`CMD`と打ちこみ、エンターキーを押す。  
 ![アドレス入力欄の図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-002.jpg)  
 ![アドレス入力欄に「CMD」と打ち込んだ図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-003.jpg)  
+※この状態でエンターキーを押す。  
   
 2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。  
 ![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  

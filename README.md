@@ -76,6 +76,9 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 **5-2. メニューの`表示` → `Nz-Videomni`で、Videomniの操作パネルが表示されたらインストール成功。**  
 ![表示メニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_003.jpg)　　
 ![Videomniの操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_004.jpg) 
+※操作パネルが表示されたらインストール成功です。  
+
+  
 ---  
 ## 動作テストa：テキストを入力して動画を生成する（t2v / Text-to-Video）  
 ###6. 操作パネルはウィンドウ分離すると使いやすい。  

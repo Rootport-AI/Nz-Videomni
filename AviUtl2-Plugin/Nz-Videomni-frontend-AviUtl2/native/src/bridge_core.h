@@ -62,7 +62,7 @@ namespace nzvideomni {
 using json_t = nlohmann::ordered_json;
 
 // Plugin version string reported by the "ping" method.
-inline constexpr char kPluginVersion[] = "1.0.0-rc1";
+inline constexpr char kPluginVersion[] = "1.0.0";
 
 // Built-in default backend base URL (host + scheme, no trailing slash) and API
 // path prefix. The base URL is now a runtime setting (contract v4: see

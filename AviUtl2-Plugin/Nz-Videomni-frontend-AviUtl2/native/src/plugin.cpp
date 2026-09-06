@@ -92,7 +92,7 @@ std::wstring Translate(LPCWSTR text) {
 //---------------------------------------------------------------------
 COMMON_PLUGIN_TABLE g_common_plugin_table = {
     L"Nz-Videomni",                                                      // plugin name
-    L"LTX 2.3 video generation frontend (1.0.0-rc1)",                // plugin information
+    L"LTX 2.3 video generation frontend (1.0.0)",                // plugin information
 };
 
 // Apply the current client rect to the fallback label and the WebView2

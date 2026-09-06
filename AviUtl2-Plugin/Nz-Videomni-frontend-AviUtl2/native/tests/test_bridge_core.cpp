@@ -109,7 +109,7 @@ TEST_CASE("ping returns pong and plugin version") {
     CHECK(j["id"] == 1);
     CHECK(j["ok"] == true);
     CHECK(j["result"]["pong"] == true);
-    CHECK(j["result"]["pluginVersion"] == "1.0.0-rc1");
+    CHECK(j["result"]["pluginVersion"] == "1.0.0");
 }
 
 TEST_CASE("getEditInfo returns the six mandatory fields") {

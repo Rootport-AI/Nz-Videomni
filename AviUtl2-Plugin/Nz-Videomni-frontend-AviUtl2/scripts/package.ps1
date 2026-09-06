@@ -30,7 +30,7 @@
 
 .PARAMETER Version
     Version string used in the zip name and package.ini. Defaults to the current
-    plugin version (kPluginVersion), 1.0.0-rc1.
+    plugin version (kPluginVersion), 1.0.0.
 
 .PARAMETER OutDir
     Output directory for the .au2pkg.zip. Defaults to <repo>\dist.
@@ -39,7 +39,7 @@
 param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
-    [string]$Version = "1.0.0-rc1",
+    [string]$Version = "1.0.0",
     [string]$OutDir
 )
 

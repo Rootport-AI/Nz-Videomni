@@ -15,7 +15,7 @@ standalone frontend repository `Nz-LTX23-frontend-AviUtl2` is frozen.)
 **WebView2**-based React/TypeScript Web UI over a JSON-RPC bridge
 (`window.chrome.webview.postMessage` / `PostWebMessageAsJson`).
 
-Current release: **1.0.0-rc1**. The authoritative version string lives in two
+Current release: **1.0.0**. The authoritative version string lives in two
 places that must be kept in sync: `native/src/bridge_core.h`'s
 `kPluginVersion` constant (also what the `ping` RPC method returns) and the
 `-Version` default in `scripts/package.ps1` (used for the `.au2pkg.zip` file
@@ -428,7 +428,7 @@ The embedded build serves its UI from the DLL, so the `.au2pkg.zip` ships no
 `.aux2` was not built with the Web UI embedded, since packaging a
 non-embedded build would ship a release with no UI (same rationale and check
 as `scripts\deploy.ps1`; see its Deploy section above). `-Version` defaults to
-the current `kPluginVersion` (1.0.0-rc1); pass it explicitly if you have
+the current `kPluginVersion` (1.0.0); pass it explicitly if you have
 bumped one without the other.
 
 ## Run AviUtl2

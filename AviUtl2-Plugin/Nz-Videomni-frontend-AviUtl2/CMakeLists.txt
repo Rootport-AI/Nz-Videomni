@@ -1,12 +1,12 @@
 #----------------------------------------------------------------------------------
 #  Nz-Videomni - AviUtl2 general-purpose (.aux2) plugin
-#  Track A: native foundation (1.0.0-rc1 - WebView2 host + JSON-RPC bridge contract v6)
+#  Track A: native foundation (1.0.0 - WebView2 host + JSON-RPC bridge contract v6)
 #----------------------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.20)
 
 # NOTE: CMake's project(VERSION ...) only accepts numeric major.minor.patch
 # components and cannot express a pre-release suffix like "-rc1". The
-# human-facing, full version string (e.g. "1.0.0-rc1") is authored in exactly
+# human-facing, full version string (e.g. "1.0.0") is authored in exactly
 # two places: native/src/bridge_core.h's kPluginVersion (reported by the
 # "ping" method) and scripts/package.ps1's -Version default (used for the zip
 # name and package.ini). Keep VERSION below in sync with the numeric prefix of

@@ -2,68 +2,83 @@
 
 ---  
 # Nz-Videomni   
+AviUtl2から動画生成AIを動かせるバックエンドPythonサーバーです。フロントエンドとしてAviUtl2 用`.aux2` プラグインを同梱。さらに、検証用の簡易なGradio UIを同梱しています。API は汎用設計なので、DaVinci Resolve など他の動画編集ソフトからも（フロントエンド用プラグインを開発すれば）使用できる見込みです。  
+
+| 必須スペック | 要件 |  
+|------|------|  
+| GPU | **VRAM 16GB 以上** NVIDIA製GPU。動作検証には RTX 4070 ti SUPER および RTX 3080 mobile を使用 |  
+| メインメモリ | 64GB または 32GB + ページファイル |  
+| ストレージ | 50GB （ページファイル利用の場合は＋60GB）|  
+| ストレージ（モデル追加時） | LTX 2.5の追加時：＋30GB |  
   
-### インストール スピードガイド  
+### インストール方法  
 1. [Git](https://git-scm.com/install/windows)をインストールする  
 2. このアプリのデータを`git clone`でダウンロードする（後述）  
 3. 同梱のsetup.batを実行してインストール  
 4. 同梱のrun.batを実行してアプリを起動  
-5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ  
-　※ 最初のAIとして`LTX 2.3`がインストールされます。  
+5. AviUtl2を起動し、` \AviUtl2-Plugin\NzVideomni.aux2`をプレビュー画面にドラッグ＆ドロップ
+※ 最初のAIとして`LTX 2.3`がインストールされます。  
   
-- 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
-　※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
-
-- アップデートするとき：`git pull`を実行する（後述）  
+> - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
+> ※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
+> 
+> - アップデートするとき：`git pull`を実行する（後述）  
  
   
 ### 1) gitをインストールする  
-[![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)  
-
-gitのインストールページ（ https://git-scm.com/install/windows ） から、あなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。
-
+[![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)   
+  
+gitのインストールページ（ https://git-scm.com/install/windows ） から、あなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。  
+> **Gitとは？**  
+> プログラムの更新履歴を管理するアプリです。エンジニアの間では広く使われています。WEB上で公開されているアプリのダウンロードやアップデートにも利用できます。 
+  
 ### 2) このアプリのデータを`git clone`でダウンロードする  
-2-1. Windowsで、このアプリをインストールしたいフォルダを開く。  
+**2-1. Windowsで、このアプリをインストールしたいフォルダを開く。**  
+![任意のフォルダを開いた図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-001.jpg)  
   
-2-2. アドレスの入力欄をクリックし、`CMD`と打ちこむ。  
+**2-2. アドレスの入力欄をクリックし、`CMD`と打ちこみ、エンターキーを押す。**  
+![アドレス入力欄の図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-002.jpg)  
+![アドレス入力欄に「CMD」と打ち込んだ図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-003.jpg)  
+　※この状態でエンターキーを押す。  
   
-2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。  
-```
-git clone https://github.com/Rootport-AI/Nz-Videomni.git
-```
-
-2-4. インストールに必要なファイル群がダウンロードされる。  
-
-
+**2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。**  
+```  
+git clone https://github.com/Rootport-AI/Nz-Videomni.git  
+```  
+![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  
+  
+**2-4. インストールに必要なファイル群がダウンロードされる。**  
+![コマンドプロンプトにダウンロード経過が表示された図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-006.jpg)  
 ※`Updating files: 100% (*** / ***), done.`と表示されたら、この黒い画面は閉じていい。  
   
 ### 3) 同梱のsetup.batを実行してインストール  
-3-1. ダウンロードされたファイル群の中から`setup.bat`を探し、ダブルクリックする。  
-  
+**3-1. ダウンロードされたファイル群の中から`setup.bat`を探し、ダブルクリックする。**  
+![Setup.batを探そうの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/setup.bat.jpg)  
 
-3-2. 40～60分間ほど待つ。黒い画面は閉じない。  
+**3-2. 40～60分間ほど待つ。黒い画面は閉じない。**  
 
 ``という文章が出たらインストール完了。黒い画面を閉じていい。      
 
 ### 4) 同梱のrun.batを実行してアプリを起動  
+アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  
+
+  
+### 5) `NzVideomni.aux2`をAviUtl2のプレビュー画面にドラッグ＆ドロップ  
+ファイルの場所："\任意のフォルダ\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
+
 
 ---
-# Nz-Videomni
-
-LTX 2.3 / LTX 2.5 の動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用の Gradio UI(`/ui`) を同梱。API は汎用設計なので、DaVinci Resolve など他のフロントエンドからも使える想定です。
-さらに`AviUtl2-Plugin/` 以下には、AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）が同梱されています。
-
 > **リポジトリの構成（モノレポ）**
 >
 > | 場所 | 中身 |
 > |------|------|
 > | リポジトリ直下 | バックエンド（`main.py` / `api/` / `services/` / `engine/` / `engine25/` / `gradio_ui/` / `mcp_server/`） |
-> | `AviUtl2-Plugin/NzVideomni.aux2` | ビルド済みの AviUtl2 プラグイン（配布物。利用者はこれを AviUtl2 へドラッグ＆ドロップします） |
+> | `AviUtl2-Plugin/NzVideomni.aux2` | ビルド済みの AviUtl2 プラグイン（配布物。AviUtl2 へドラッグ＆ドロップしてインストールします） |
 > | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` | そのプラグインのソース（C++ の `native/` ＋ React/TypeScript の `webui/`） |
 > | `Docs/` | プロジェクト全体の文書と課題台帳 |
 > | `images/` | 本 README へ貼るための画像素材ほか（スピードガイド執筆用。用途は `Docs/PENDING_TASKS.md` §1-4） |
 >
-> **Nz-Videomni は製品の名前、LTX 2.3 はモデルの名前**です。**LTX 2.5 には 2026-08-22 に対応しました**（画面上部のドロップダウンで切り替えます。対応範囲は基本生成〔テキストから動画・画像から動画〕と、2026-08-23 に加わったクリップ連結〔Chained〕・V2V〔動画の続きを作る〕・A2V〔音声から動画〕、および 2026-08-24 に加わったスタイル LoRA・IC-LoRA〔参照動画による制御。長尺 IC-LoRA を含む〕、2026-08-26 に加わった撮り直し〔Retake〕と素材（末尾）〔End source〕、**2026-08-29 に加わったキャンバス拡張〔画角拡張・Outpainting＝動画の外側へ絵を描き足して、映っている範囲そのものを広げる機能〕**、**2026-08-30 に加わったネガティブプロンプト〔NAG／VSF＝「こういう絵にはしないでほしい」を言葉で指定する機能〕**です。**これで、画面にタブ・サブタブ・カードとして出るモードは、すべて LTX 2.5 で動きます。まだ使えない機能の一覧は §7.1 にあります**）。さらに Wan 2.x など別のモデルも載せられる基盤を目指しているため、製品名にモデル名を含めていません。
+> **Nz-Videomni は製品の名前、LTX 2.3 はベースモデルの名前**です。
 
 **Phase 1**（T2V + 最小I2V を同一MVP）の凍結 API を土台に、その後キーフレーム誘導・クリップ連結（`POST /generate/chain`）・
 V2V（元動画からの継続生成）・end source（素材（末尾）＝添付した画像・動画へ**繋がる**動画の生成——§7参照）・A2V（音声から動画生成）・IC-LoRA／スタイルLoRA

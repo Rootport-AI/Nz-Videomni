@@ -536,6 +536,15 @@
 - **着手時の注意**: 測定設計の落とし穴が3点（出力側の二値化・判定定数の置き方・生成物どうしを比べる指標）あり、いずれも出典に書いてある。**外から持ってきた判定定数をそのまま使わないこと。** また、**LTX 2.5側は計測の足場がLTX 2.3に劣る**——参照エンコード区間のピークがログに出ず（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §101.8）、ワーカーログには時刻も付いていない（同§100.9）。2.5を測るなら、**まずログの書式を2.3へ揃えるところから工数を見積もること。**
 - **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§101**（本テーマ全体の正本。残件と再訪材料・測定設計の落とし穴の一覧は§101.11）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-76（クローズ記録）。
 
+### 4-40. LTXシリーズでのキーフレーム上限の変更（起票：2026-09-07）
+
+**将来LTXシリーズでキーフレーム画像（conditioning_images）の上限枚数を変える必要が生じたとき** → 着手前に必ず本項を読むこと。
+
+- **概要**: キーフレーム上限「5枚」は、LTX-DesktopのUI構成（先頭1+末尾1+中間3）を倣った設計判断で、凍結API契約の一部である（出どころの正本は[`PHASE3_API_UNFREEZE_WORKORDER.md`](PHASE3_API_UNFREEZE_WORKORDER.md) §1・§2）。
+- **何が塞いでいるか**: 凍結API契約の値であり、変更の需要が無い。要件化されたときの入口として本項を残す。
+- **着手時の最重要注意（本項の核）**: `config.yaml`の`limits.max_conditioning_images`を書き換えるだけでは上限は変わらない。サーバーの実際の判定は`api/models.py`の2箇所——単発生成`/generate`のバリデータと連結生成`/generate/chain`のバリデータ——にリテラル直書きされた`5`であり、`config`側の値は`GET /config`でクライアントへ広告する専用で、バリデーションには使われていない。変更するなら、少なくとも①この2箇所、②config、③クライアント側の消費箇所、④テスト、の4つを揃える必要がある。この直書き構造の指摘の初出は[`CHAIN_UI_EXPANSION_WORKORDER.md`](CHAIN_UI_EXPANSION_WORKORDER.md)。
+- **出典**: [`PHASE3_API_UNFREEZE_WORKORDER.md`](PHASE3_API_UNFREEZE_WORKORDER.md) §1・§2（上限5の出どころ）、[`CHAIN_UI_EXPANSION_WORKORDER.md`](CHAIN_UI_EXPANSION_WORKORDER.md)（直書き構造の指摘の初出）、`api/models.py`・`config.py`（現物）、フロントエンド[`KEYFRAME_TIMELINE_DESIGN_NOTES.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/KEYFRAME_TIMELINE_DESIGN_NOTES.md) §4（本起票と同時に、上限は`config.limits.max_conditioning_images`由来という誤認を訂正済み）。
+
 ---
 
 ## 本台帳の位置づけ（運用規則）

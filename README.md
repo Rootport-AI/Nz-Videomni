@@ -36,10 +36,10 @@ gitのインストールページ（ https://git-scm.com/install/windows ） か
 **2-1. Windowsで、このアプリをインストールしたいフォルダを開く。**  
 ![任意のフォルダを開いた図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-001.jpg)  
   
-2-2. アドレスの入力欄をクリックし、`CMD`と打ちこみ、エンターキーを押す。  
+**2-2. アドレスの入力欄をクリックし、`CMD`と打ちこみ、エンターキーを押す。**  
 ![アドレス入力欄の図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-002.jpg)  
 ![アドレス入力欄に「CMD」と打ち込んだ図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-003.jpg)  
-※この状態でエンターキーを押す。  
+　※この状態でエンターキーを押す。  
   
 **2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。**  
 ```  

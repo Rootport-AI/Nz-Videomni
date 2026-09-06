@@ -80,7 +80,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
   
 ---  
-## 動作テストa：動画を生成する。      
+## 動作テストa： 簡単な動画を生成する。      
 ###6. 操作パネルはウィンドウ分離すると使いやすい。  
 ![ウィンドウ分離](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_005.jpg)  
   
@@ -97,8 +97,29 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ![挿入ボタン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_008.jpg)  
 ![胴が挿入済みのタイムライン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/aux2_009.jpg)  
 
-  
-# 動作テストb：動画の続きを生成する  
+
+---  
+# 動作テストb： 動画の続きを生成する  
+### 8. タイムライン上の動画オブジェクトを右クリック  
+![右クリックメニュー](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_001.jpg)
+※右クリック → プラグイン → `🎬Video: この動画の続きを生成(v2v)`を選択する  
+
+### 9. タイムラインに仮オブジェクトが挿入される。  
+![仮オブジェクト](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-1.jpg)  
+※仮オブジェクト＝「生成中の動画がこの場所に挿入されること」を示すだけのテキストオブジェクト  
+    
+### 10. 操作パネルに、動画ファイルが送られる。  
+![動画ファイル入力後の操作パネル](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_002-2.jpg)
+- 画面上部のタブが`Chained`に切り替わる。  
+- 動画ファイルが入力されたことを示すメッセージが出る。
+- `START SOURCE`のカードに、動画ファイルがセットされる。
+- `CLIP`カードのスライダーで、追加したい動画の長さ（フレーム数）を指定できる。
+- `Generate`ボタン（`生成`ボタン）を押すと、生成が始まる。  
+
+### 11. 生成された動画ファイルを、`🎞`ボタンでタイムラインに送る。  
+![挿入ボタンの位置](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_003.jpg)  
+![挿入後のタイムライン](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/v2v_004.jpg)  
+※生成後に`🎞`ボタンを押すと、タイムライン上の仮オブジェクトがその動画ファイルに置き換わる。  
 
 ---
 > **リポジトリの構成（モノレポ）**

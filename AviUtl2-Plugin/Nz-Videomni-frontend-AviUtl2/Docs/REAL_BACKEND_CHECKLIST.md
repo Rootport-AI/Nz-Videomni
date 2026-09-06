@@ -35,7 +35,7 @@
 
 ### 2.1 backendをrealへ切り替える
 
-`Nz-Videomni/config.yaml`の`model.backend`を確認する（README §1「必要なモデル」表の直後の説明）。
+`Nz-Videomni/config.yaml`の`model.backend`を確認する（README §1「エンジン venv（torch+cu128）と実モデル」——「必要なモデル」の表と、そのあとに続く backend 選択の説明）。
 
 - [ ] `model.backend: "auto"`（既定値）のままでよい場合: `./.venv-engine`のpythonと`engine/worker.py`、および下記モデル一式が揃っていれば自動的に`real`が選ばれる（揃っていなければ`mock`にフォールバックする）。
 - [ ] 明示的に`real`を強制したい場合: `config.yaml`の`model.backend`を`"real"`に書き換える（未整備なら起動時にロード失敗する点に注意）。

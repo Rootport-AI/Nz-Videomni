@@ -4242,3 +4242,37 @@ return {
 ### 111.5 追補（2026-09-05）— 画面目視G-V1〜G-V4が合格し、台帳§2-8はクローズした
 
 **§111.4が「未了」と書いたオーナーの画面目視ゲートは、同日のうちに全項目合格した**（§111.4の記述は当時のまま残し、本節が上書きする）。**目視結果の詳細と設計判断の記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §99.13、台帳の記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-135へ移送済み**である（予算の数値の正本が[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §9であることは変わらない）。合格に伴い**台帳`PENDING_TASKS.md`の§2-8は節ごと削除された**ので、**§111.4が指している同書§2-8は現在は欠番である**——参照するときは上記のクローズ側へたどること。
+
+## 112. バージョンを1.0.0へ統一した — rc卒業と`.aux2`の再ビルド配布（バックエンド台帳§1-4→CLOSED §3-145。§3-5-02の併合分）（2026-09-06）
+
+### 112.1 結論
+
+**Publicリリースへ切り替えるというオーナー裁定に伴い、`1.0.0-rc1`をやめて`1.0.0`へ揃えた回である。** 直したのはバージョン文字列だけで、**振る舞いは1行も変えていない。**
+
+**バージョンの一次ソースは3つあり、それぞれ別に管理されていた**——`native/src/bridge_core.h`の`kPluginVersion`（ブリッジがフロントエンドへ返す版）、`scripts/package.ps1`の既定`-Version`（配布パッケージの版）、`webui/package.json`の`version`（初期値`0.0.0`のまま放置されていた）。**この3つが同じ値になったことが、この回の本体である。** 3つ目は、バックエンド台帳が長らく別項目（同§3-5）として抱えていたもので、2026-09-03のオーナー裁定で§1-4へ併合され、ここで一緒に片づいた。
+
+### 112.2 触った10ファイル
+
+- **バージョンの一次ソース3件**: `native/src/bridge_core.h`（`kPluginVersion`）・`scripts/package.ps1`（既定`-Version`）・`webui/package.json`。
+- **それに追随させた4件**: `webui/package-lock.json`（`npm install --package-lock-only`で追随させた。差分は冒頭2箇所の`version`フィールドだけである）・`native/tests/test_bridge_core.cpp`（`pluginVersion`をassertするCHECK）・`native/src/plugin.cpp`（AviUtl2へ渡すプラグイン情報の文字列）・`CMakeLists.txt`（コメント中の版表記2箇所）。
+- **生きた文書2件**: [`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md)（`pluginVersion`の現状を述べている3箇所）・[`README.md`](../README.md)（Current releaseの表記と`-Version`の説明）。
+- **成果物1件**: `AviUtl2-Plugin/NzVideomni.aux2`（再ビルドしたバイナリ）。
+
+### 112.3 線引き — 「生きた記述」だけを直し、日付つきの歴史記述は据え置いた
+
+リポジトリ全体を`1.0.0-rc1`でgrepしたうえで、**「現在の値はこれである」と述べている記述だけを直した。** 直していないのは次の2種類である。
+
+- **追記専用の記録簿**（本書・バックエンドの[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md)・同[`HANDOFF_ARCHIVE.md`](../../../Docs/HANDOFF_ARCHIVE.md)）。
+- **日付つきの歴史記述**（[`API_REFERENCE.md`](API_REFERENCE.md)冒頭の変更履歴・[`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md)の「史料として原文のまま残す」節・[`WEBVIEW2_PARITY_BACKLOG.md`](WEBVIEW2_PARITY_BACKLOG.md)・バックエンド[`FRONTEND_CATCHUP_WORKORDER.md`](../../../Docs/FRONTEND_CATCHUP_WORKORDER.md)の各追記専用ログ）。
+
+**「1.0.0-rc1で実装を完了した」という当時の事実を1.0.0へ書き換えると、記録そのものが嘘になる。** 版数の一斉置換でいちばん壊しやすいのがここなので、**判断の軸は「その文が現在を述べているか、過去を述べているか」の1つだけに置いた。**
+
+### 112.4 ゲートと配置
+
+- `npm run typecheck` **エラー0**。
+- vitestは、実バックエンドを叩く`api/backend.integration.test.ts`を除外した基準の実行（§111.4）で**138ファイル・2,734件成功・0 skip**——基準どおりである。**1回目の実行で`App.nag.test.tsx`内の1件が落ちたが、単体でも全体でも再実行すると成功し、落ちる箇所も実行ごとに違ったため、既存のflakyと判断した**（版数の変更に由来するものではない）。
+- `npm run lint` **エラー0・警告31本**——これも基準どおりである。
+- ネイティブ側のdoctestは**292ケース・1,504アサーション全成功**（`pluginVersion`のアサーションの更新を含む）。
+- 配置は`build.ps1 -Config Release`→`deploy.ps1`で、**SHA-256 `EDD1411188F3C9A63232CC74CC28850E62408904BA26CB5B9387FE8677A89B73`**がビルド出力・実機・バックエンドリポジトリ配布コピーの3値で一致している。
+
+台帳の記録はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) **§3-145**（§1-4のクローズ記録であり、§3-5-02の併合分の完了記録でもある）。実装そのものの正本はコミット`20a7b00`である。

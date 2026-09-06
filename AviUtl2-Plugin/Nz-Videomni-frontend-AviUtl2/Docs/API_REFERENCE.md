@@ -11,9 +11,9 @@
 ## 0. 全体像
 
 - **プロトコル**: HTTP REST(JSON)のみ。**WebSocket / SSE は無し**。進捗取得は**1秒間隔のポーリング**。
-- **2プロセス・2venv構成**(バックエンド `README.md` §0「環境分離ポリシー」の「2つの venv」)。
+- **2プロセス・3venv構成**(バックエンド `README.md` §0「環境分離ポリシー」の「venv の構成」)。
   - `./.venv`(torch無し): FastAPIアプリ本体。API・ジョブ管理・Gradio検証UI・モックbackend。
-  - `./.venv-engine`(torch+cu128): 実推論worker。アプリが `subprocess` として自動spawnするため、**フロントエンドは engine を直接意識する必要はない**。
+  - `./.venv-engine`／`./.venv-engine-ltx25`(torch+cu128): 実推論worker。ベースモデルの系統ごとに分かれており、**同時に動くのは1つだけ**である。アプリが `subprocess` として自動spawnするため、**フロントエンドは engine を直接意識する必要はない**。
 - **backend選択**: `config.model.backend` = `auto` / `mock` / `real`(`config.yaml`の`model.backend`)。`auto`はGPU+モデルがあれば`real`、無ければ`mock`(合成クリップ)。**モックでもAPI・スキーマ・出力構造は実物と同一**なので、フロントはbackendの別を意識せず開発できる。開発中のE2E確認は原則mockバックエンドで行う。
 - 一次資料: `Videomni_Backend_Specification.md`(API契約詳細)、`Docs/RESOLUTION_DURATION_CAPABILITY.md`(解像度別性能実測)、[`../Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md)(本フロントエンド専用の設計ブリーフ。§5「変えてはいけない制約」、§4「性能の現実」が必読)。
 

@@ -60,24 +60,25 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ``という文章が出たらインストール完了。黒い画面を閉じていい。      
 
 ### 4) 同梱のrun.batを実行してアプリを起動  
+アプリの利用中はこの黒い画面を閉じてはならない。（※逆に、アプリ終了時にはこの画面を閉じるだけでいい。）  
+
+  
+### 5) `NzVideomni.aux2`をAviUtl2のプレビュー画面にドラッグ＆ドロップ  
+ファイルの場所："\任意のフォルダ\Nz-Videomni\AviUtl2-Plugin\NzVideomni.aux2"  
+
 
 ---
-# Nz-Videomni
-
-LTX 2.3 / LTX 2.5 の動画生成モデルを **VRAM 16GB** のコンシューマーGPUで動かし、REST API として公開するバックエンドサーバー。検証用の Gradio UI(`/ui`) を同梱。API は汎用設計なので、DaVinci Resolve など他のフロントエンドからも使える想定です。
-さらに`AviUtl2-Plugin/` 以下には、AviUtl2 用の拡張フロントエンド（`.aux2` プラグイン）が同梱されています。
-
 > **リポジトリの構成（モノレポ）**
 >
 > | 場所 | 中身 |
 > |------|------|
 > | リポジトリ直下 | バックエンド（`main.py` / `api/` / `services/` / `engine/` / `engine25/` / `gradio_ui/` / `mcp_server/`） |
-> | `AviUtl2-Plugin/NzVideomni.aux2` | ビルド済みの AviUtl2 プラグイン（配布物。利用者はこれを AviUtl2 へドラッグ＆ドロップします） |
+> | `AviUtl2-Plugin/NzVideomni.aux2` | ビルド済みの AviUtl2 プラグイン（配布物。AviUtl2 へドラッグ＆ドロップしてインストールします） |
 > | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` | そのプラグインのソース（C++ の `native/` ＋ React/TypeScript の `webui/`） |
 > | `Docs/` | プロジェクト全体の文書と課題台帳 |
 > | `images/` | 本 README へ貼るための画像素材ほか（スピードガイド執筆用。用途は `Docs/PENDING_TASKS.md` §1-4） |
 >
-> **Nz-Videomni は製品の名前、LTX 2.3 はモデルの名前**です。**LTX 2.5 には 2026-08-22 に対応しました**（画面上部のドロップダウンで切り替えます。対応範囲は基本生成〔テキストから動画・画像から動画〕と、2026-08-23 に加わったクリップ連結〔Chained〕・V2V〔動画の続きを作る〕・A2V〔音声から動画〕、および 2026-08-24 に加わったスタイル LoRA・IC-LoRA〔参照動画による制御。長尺 IC-LoRA を含む〕、2026-08-26 に加わった撮り直し〔Retake〕と素材（末尾）〔End source〕、**2026-08-29 に加わったキャンバス拡張〔画角拡張・Outpainting＝動画の外側へ絵を描き足して、映っている範囲そのものを広げる機能〕**、**2026-08-30 に加わったネガティブプロンプト〔NAG／VSF＝「こういう絵にはしないでほしい」を言葉で指定する機能〕**です。**これで、画面にタブ・サブタブ・カードとして出るモードは、すべて LTX 2.5 で動きます。まだ使えない機能の一覧は §7.1 にあります**）。さらに Wan 2.x など別のモデルも載せられる基盤を目指しているため、製品名にモデル名を含めていません。
+> **Nz-Videomni は製品の名前、LTX 2.3 はベースモデルの名前**です。
 
 **Phase 1**（T2V + 最小I2V を同一MVP）の凍結 API を土台に、その後キーフレーム誘導・クリップ連結（`POST /generate/chain`）・
 V2V（元動画からの継続生成）・end source（素材（末尾）＝添付した画像・動画へ**繋がる**動画の生成——§7参照）・A2V（音声から動画生成）・IC-LoRA／スタイルLoRA

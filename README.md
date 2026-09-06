@@ -136,20 +136,14 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 > | `Docs/` | プロジェクト全体の文書と課題台帳 |
 > | `images/` | 本 README へ貼るための画像素材ほか（スピードガイド執筆用。用途は `Docs/PENDING_TASKS.md` §1-4） |
 >
-> **Nz-Videomni は製品の名前、LTX 2.3 はベースモデルの名前**です。
-
-**Phase 1**（T2V + 最小I2V を同一MVP）の凍結 API を土台に、その後キーフレーム誘導・クリップ連結（`POST /generate/chain`）・
-V2V（元動画からの継続生成）・end source（素材（末尾）＝添付した画像・動画へ**繋がる**動画の生成——§7参照）・A2V（音声から動画生成）・IC-LoRA／スタイルLoRA
-などを加算的に拡張しています。
+> **Nz-Videomni は製品の名前、LTX 2.3 はベースモデルの名前**です。  
 API 契約・スキーマの詳細仕様は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) を参照してください。
 
 > 実エンジンは **first-party の `engine/` パッケージ**（GGUF 量子化トランスフォーマー + block-swap +
 > GGUF Gemma 逐次オフロード + DiT CPU 構築 + VAE タイリング）です。**VRAM 16GB の実機で 720p 級（1280×768）の生成に対応**します。
-> GPU / モデルウェイトが無い環境では自動的に **モック backend**（合成クリップ）へフォールバックし、
-> API・ジョブ管理・Gradio・テストまで完全に疎通します。
+> GPU / モデルウェイトが無い環境では自動的に **モック backend**（合成クリップ）へフォールバックし、API・ジョブ管理・Gradio・テストまで完全に疎通します。
 >
-> 公式 `ltx_pipelines` の safetensors ローダは本機(16GB/Windows)で native crash するため**不採用**で、GGUF + component-file
-> 経路にしています。詳しい設計判断・実測は `Docs/VERIFICATION_LOG.md` と `engine/VENDOR_NOTICE.md` が一次情報です。
+> 公式 `ltx_pipelines` の safetensors ローダは本機(16GB/Windows)で native crash するため**不採用**で、GGUF + component-file 経路にしています。詳しい設計判断・実測は `Docs/VERIFICATION_LOG.md` と `engine/VENDOR_NOTICE.md` が一次情報です。
 
 ---
 

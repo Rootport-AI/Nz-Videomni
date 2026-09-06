@@ -23,7 +23,8 @@
     Everything stays inside the project. MSVC and the CUDA Toolkit are system
     build tools (not Python) — they do not violate the Python-isolation rule.
 
-.PREREQUISITES (install manually first — see README 7.2 winget commands)
+.PREREQUISITES (install manually first: CUDA Toolkit 12.8 and VS 2022 Build
+    Tools with the C++ workload)
     - Visual Studio 2022 Build Tools with the C++ workload (MSVC v143 + Win SDK)
     - CUDA Toolkit 12.8  (nvcc; must match torch's cu128)
     - .venv-engine already created with torch 2.9.1+cu128
@@ -93,7 +94,7 @@ if ($env:CUDA_PATH_V12_8 -and (Test-Path "$env:CUDA_PATH_V12_8\bin\nvcc.exe")) {
     $cudaRoot = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v$CudaVersion"
 }
 if (-not (Test-Path "$cudaRoot\bin\nvcc.exe")) {
-    throw "CUDA Toolkit $CudaVersion not found (checked `$env:CUDA_PATH_V12_8, `$env:CUDA_PATH, and $cudaRoot). Install it (README 7.2) — must match torch's cu128."
+    throw "CUDA Toolkit $CudaVersion not found (checked `$env:CUDA_PATH_V12_8, `$env:CUDA_PATH, and $cudaRoot). Install CUDA Toolkit 12.8 — must match torch's cu128."
 }
 $env:CUDA_PATH = $cudaRoot
 $env:CUDA_HOME = $cudaRoot
@@ -103,7 +104,7 @@ Write-Host (& "$cudaRoot\bin\nvcc.exe" --version | Select-String "release")
 # --- 2b) MSVC build environment (vcvars64) -----------------------------------
 Write-Step "Setting up MSVC (Visual Studio 2022 C++)"
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-if (-not (Test-Path $vswhere)) { throw "vswhere not found — install VS 2022 Build Tools with the C++ workload (README 7.2)." }
+if (-not (Test-Path $vswhere)) { throw "vswhere not found — install VS 2022 Build Tools with the C++ workload." }
 $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $vsPath) { throw "MSVC C++ tools not found — install the 'Desktop development with C++' workload." }
 $vcvars = "$vsPath\VC\Auxiliary\Build\vcvars64.bat"
@@ -116,7 +117,7 @@ cmd /c "`"$vcvars`" $verArg >nul 2>&1 && set" | ForEach-Object {
 }
 $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
 if (-not $cl) {
-    throw "cl.exe not on PATH after vcvars. Is the C++ workload installed? If on VS 2026, add the 'MSVC v143 - VS 2022 C++ build tools (v14.44)' component (see README 7.3)."
+    throw "cl.exe not on PATH after vcvars. Is the C++ workload installed? If on VS 2026, add the 'MSVC v143 - VS 2022 C++ build tools (v14.44)' component."
 }
 $clVer = (& cl.exe 2>&1 | Select-Object -First 1)
 Write-Host "MSVC: $($cl.Source)"

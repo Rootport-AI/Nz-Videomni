@@ -18,7 +18,7 @@
 # Attention backend: PyTorch SDPA on EVERY GPU architecture. Neither xformers
 # nor flash-attn is installed or imported; there is no per-architecture branch
 # and no `xformers` extra (pyproject.toml declares only the `dev` extra).
-# See README "7. LTX 2.3 のインストール".
+# See README "1. セットアップの詳細".
 # =============================================================================
 
 fastapi>=0.110

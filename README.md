@@ -22,29 +22,34 @@ AviUtl2から様々な動画生成AIを動かせるバックエンドPythonサ�
 　※ 最初のAIとして`LTX 2.3`がインストールされます。  
   
 > - 動画生成AIを追加したいとき：`install-〇〇.bat`を実行してください。  
->　※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
+> ※例）`install-ltx25.bat`を実行すると`LTX 2.5`がインストールされます。  
 > 
 > - アップデートするとき：`git pull`を実行する（後述）  
  
   
 ### 1) gitをインストールする  
-[![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)  
-
-gitのインストールページ（ https://git-scm.com/install/windows ） から、あなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。
-
+[![git-installer](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git_installer.jpg)](https://git-scm.com/install/windows)   
+  
+gitのインストールページ（ https://git-scm.com/install/windows ） から、あなたのマシンに合わせたインストーラーをダウンロードして実行し、gitをインストールしてください。  
+> **Gitとは？**  
+> プログラムの更新履歴を管理するアプリです。エンジニアの間では広く使われています。WEB上で公開されているアプリのダウンロードやアップデートにも利用できます。 
+  
 ### 2) このアプリのデータを`git clone`でダウンロードする  
 2-1. Windowsで、このアプリをインストールしたいフォルダを開く。  
+![任意のフォルダを開いた図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-001.jpg)  
   
 2-2. アドレスの入力欄をクリックし、`CMD`と打ちこむ。  
+![アドレス入力欄の図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-002.jpg)  
+![アドレス入力欄に「CMD」と打ち込んだ図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-003.jpg)  
   
 2-3. 黒い画面（コマンドプロンプト）が開くので、以下のコマンドを打ちこむ。  
-```
-git clone https://github.com/Rootport-AI/Nz-Videomni.git
-```
-
+![コマンドプロンプトの図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-005.jpg)  
+```  
+git clone https://github.com/Rootport-AI/Nz-Videomni.git  
+```  
+  
 2-4. インストールに必要なファイル群がダウンロードされる。  
-
-
+![コマンドプロンプトにダウンロード経過が表示された図](https://github.com/Rootport-AI/Nz-Videomni/blob/main/images/git-clone-006.jpg)  
 ※`Updating files: 100% (*** / ***), done.`と表示されたら、この黒い画面は閉じていい。  
   
 ### 3) 同梱のsetup.batを実行してインストール  

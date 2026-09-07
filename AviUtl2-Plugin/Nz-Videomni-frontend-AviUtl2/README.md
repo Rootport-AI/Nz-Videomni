@@ -106,21 +106,30 @@ name and `package.ini`).
   own `num_frames`; nothing is added to the preview), the anchor is a fixed 8
   frames sent explicitly as `context_frames` (no slider, no derivation from
   the material), and the end-source video must be ≥9 frames (8 + the causal
-  VAE's primer; stills exempt). **Two or more clips now switch to `reverse`
-  mode (reverse-order Chained, added 2026-08-18)**: Stage-1 generates in
-  dependency order from the timeline's last clip back to the first, each
-  segment freezing the head of its future neighbour onto its own tail; output
-  length is still the clip total either way. `overlap_frames >= 2` remains
-  required only for window-internal mode (one clip) — reverse Chained's
-  default is 1 and the lower bound is waived. A mild warning appears when a
+  VAE's primer; stills exempt). **Two or more clips with no start source
+  attached switch to `reverse` mode (reverse-order Chained, added
+  2026-08-18)**: Stage-1 generates in dependency order from the timeline's
+  last clip back to the first, each segment freezing the head of its future
+  neighbour onto its own tail; output length is still the clip total either
+  way. `overlap_frames >= 2` remains required only for window-internal mode
+  (one clip); reverse Chained and bridge mode are both waived, and reverse
+  Chained additionally defaults to 1. A mild warning appears when a
   single clip (window-internal mode) outgrows one stage-2 tile (169 frames on
   `standard`, 145 on `high_resolution`), because the anchor and the frames
   blending into it then sit in different tiles and the join smears; it is
-  advice only, never blocks, and does not apply to multi-clip reverse Chained.
+  advice only, never blocks, and does not apply to any multi-clip mode.
   Mutually exclusive with a2v and the IC-LoRA reference video; combines freely
   with clip 0 keyframes. Combining with the start source (that pairing is an
-  interpolation) is **single clip only** — two or more clips with the start
-  source attached is rejected with 422. The right-click entry
+  interpolation) works at any clip count: one clip stays window-internal, and
+  **two or more clips became `bridge` mode on 2026-09-07**: every clip is
+  generated forward as in a plain chain and only the last one is conditioned
+  at both ends (head from the previous clip's overlap, tail from the end
+  source's frozen frames), so no seam is generated backwards. It is meant for
+  filling the missing span between two similar videos, it is flagged as an
+  experimental feature, and a crossfade or morph inside that last clip when
+  the two materials are far apart is accepted behaviour, not a defect. Before
+  2026-09-07 this combination was rejected with 422 at two or more clips. The
+  right-click entry
   「これで終わる動画を作る」 opens the screen with a single clip, seeds its
   length at `min(comfort ceiling, 169)` so the warning is never pre-tripped,
   and places the provisional object tail-aligned (`timeline/tailAlign.ts`,
@@ -128,8 +137,8 @@ name and `package.ini`).
   placement with a pre-shifted frame, so native gained no new placement kind).
   The backend's older band-appending path (`internal_segment`) is now
   unreachable from any request the UI can build. See `Docs/API_REFERENCE.md`
-  §5.2, `Docs/DEVLOG.md` §80 / §81, and `../../Docs/PENDING_TASKS_CLOSED.md` §3-82 /
-  §3-86 (the v2 history and the withdrawal).
+  §5.2, `Docs/DEVLOG.md` §80 / §81 / §113, and `../../Docs/PENDING_TASKS_CLOSED.md`
+  §3-82 / §3-86 (the v2 history and the withdrawal) / §3-90 (bridge mode).
 - Concatenate up to 24 clips into a single generation
   (`MAX_CHAIN_TOTAL_FRAMES` = 24 × 481 = 11544 frames), with an estimated
   output-length preview that accounts for overlap-fusion and context-splice

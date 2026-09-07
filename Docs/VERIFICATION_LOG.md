@@ -5416,6 +5416,8 @@ B-0の試聴は既に2026-08-18合格済み（§63.4参照）。以上でバッ�
 - Stage-1ループ自身に実行記録（`stage1_order`・`stage1_freezes`）を積み、幾何の計算値（`generation_order`）だけでなく**エンジンが実際に逆順で走ったこと**を`metadata.json`から確認できるようにした（機械ゲートM7の根拠。M2〜M6はすべて`chain_math`の計算値の写しであり、エンジンの実行そのものを証明できるのはM7だけである）。
 - Stage-2・組み立て（`_crossfade_concat`）・`audio_segment_windows`／`video_segment_windows`は**無改修**。フロントエンドの出力長計算（`computeOutputFrames`）も**無改修**——逆順モードの帯も最終クリップの内側にあり、旧方式のような加算ロジックは結局不要だった。
 
+> **【2026-09-07に変更】本節と§64.2の2点は、すでに現行ではない。** ①**モード判定はクリップ本数のみでは決まらない**（2本以上は素材（冒頭）の有無で`bridge`と`reverse`に分かれる）。②**受理検査②の「`source_video`×`end_source`×2クリップ以上を拒否」は、通常経路からは撤去された**（受理へ転じた。ただし`end_source_mode_override`で`reverse`を強制したときの assert としては残っている。§102.2）。現行の判定と契約の正本は§102である。
+
 ### 64.2 実装内容
 
 **バックエンド**:
@@ -11673,6 +11675,7 @@ chain_stage1_tokens(w, h, v, ref_scale=2) == 5 × reference_encode_tokens(w // 4
 
 - アプリ側pytest **2,202 passed / 25 skipped**（着手前基準2,199 passed / 24 skipped に対し**+3 passed／+1 skipped のみ＝退行ゼロ**。増分は新規テストそのもの）。
 - LTX 2.3エンジン側（`.venv-engine`・`--noconftest`）**69 passed**、LTX 2.5エンジン側（`.venv-engine-ltx25`・同）**235 passed**。
+  - **（2026-09-07追記）この2つの数字を現在の基準として使わないこと。** どのファイルを渡したのかを本節が書き残していないため再現できず、**§102.5で実行対象を定義し直してある**。以後のエンジン仮想環境の基準は同節が正本である。
 - `py_compile`は改修した全ファイルで exit 0。
 
 ### 101.11 残る未確定と、将来の再訪材料
@@ -11690,7 +11693,7 @@ chain_stage1_tokens(w, h, v, ref_scale=2) == 5 × reference_encode_tokens(w // 4
 
 **クローズ（2026-09-05。ゲートA全一致・最終実走で膝の消滅を実証・オーナー裁定による最小仕上げでの完結）。** 台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-76としてクローズし、生きている台帳[`PENDING_TASKS.md`](PENDING_TASKS.md)からは§3-76の節を削除して、**上の§101.11が挙げた再訪材料を後継の課題（同書§4-39〔旧§3-144〕）として起票した**。
 
-## 102. ★素材（冒頭）と素材（末尾）を同時に指定した2本以上の連結を開通させた。全クリップを正順に生成し、最終クリップだけを両側で条件付けする（台帳 §3-90 → [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-9）＝自動ゲート全緑・**オーナー目視は未実施＝同 §2-9待ち**（2026-09-07）
+## 102. ★素材（冒頭）と素材（末尾）を同時に指定した2本以上の連結を開通させた。全クリップを正順に生成し、最終クリップだけを両側で条件付けする（台帳 §3-90 → [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-9）＝自動ゲート全緑・**オーナー目視は未実施＝同 §2-9待ち**（2026-09-07。**→§102.13で決着**）
 
 ### 102.1 何をしたか、なぜ
 
@@ -11748,7 +11751,7 @@ chain_stage1_tokens(w, h, v, ref_scale=2) == 5 × reference_encode_tokens(w // 4
 - **LTX 2.3の14ファイル**: `test_block_swap_release` / `test_chain_reference_engine` / `test_gemma_keep_resident_move` / `test_ic_lora_engine_conditioning` / `test_ic_lora_forward` / `test_outpaint_canvas` / `test_outpaint_pyramid_blend` / `test_pipeline_vae_mode_swap` / `test_pruned_video_decoder` / `test_registry_swap` / `test_retake_math` / `test_worker_fused_dequant_resolve` / `test_worker_keep_resident_resolve` / `test_worker_vae_mode_resolve`。
 - **意図的に外した2ファイル**（いずれも本改修とは無関係の、環境に起因する除外）: `test_chain_lora.py` は収集時に `ModuleNotFoundError: No module named 'fastapi'` となり、この1ファイルだけで収集が中断する。`test_stage2_window.py` は Gradio 依存の失敗3件と FastAPI／モックバックエンド依存のエラー3件が出る（アプリ側の資産を併用するテストで、エンジン仮想環境では成立しない）。
 - **LTX 2.5の7ファイル**: `test_ltx25_band` / `test_ltx25_outpaint` / `test_ltx25_reference_encode` / `test_ltx25_keep_resident_registry` / `test_retake_math` / `test_outpaint_canvas` / `test_outpaint_pyramid_blend`。後半3ファイルが2.3側と重複するのは意図的で、幾何を両系統が同じ純Pythonモジュールで共有していることを両方の仮想環境で確かめる役割である。
-- **実行のしかた**: 2.3側は `.venv-engine\Scripts\python.exe -m pytest --noconftest -p no:cacheprovider <上の14ファイル>` である（この仮想環境には pytest が入っている。`--noconftest` は必須で、アプリ側の `tests/conftest.py` が FastAPI アプリを組み立てるため）。**2.5側の仮想環境には pytest が入っていない**ので、既存の作法どおり**アプリ側 `.venv` の `site-packages` を `sys.path` の末尾へ足すランナー**を経由する（**末尾**なのは `torch` と `ltx_core` の解決をエンジン側に勝たせるためである。§76.4末尾・§78と同一手順）。既存のランナー `outputs/ltx25-sage-gate/run_ltx25_pytest.py` は対象ファイルがハードコードされているため、**対象を `argv` から受け取るだけの同型のもの**を使った。**再走するときは、このランナーを恒久的な場所へ置くこと。**
+- **実行のしかた**: 2.3側は `.venv-engine\Scripts\python.exe -m pytest --noconftest -p no:cacheprovider <上の14ファイル>` である（この仮想環境には pytest が入っている。`--noconftest` は必須で、アプリ側の `tests/conftest.py` が FastAPI アプリを組み立てるため）。**2.5側の仮想環境には pytest が入っていない**ので、既存の作法どおり**アプリ側 `.venv` の `site-packages` を `sys.path` の末尾へ足すランナー**を経由する（**末尾**なのは `torch` と `ltx_core` の解決をエンジン側に勝たせるためである。§76.4末尾・§78と同一手順）。既存のランナー `outputs/ltx25-sage-gate/run_ltx25_pytest.py` は対象ファイルがハードコードされているため、**対象を `argv` から受け取るだけの同型のもの**を使った。**そのランナーは[`Outputs-archive/start-end-bridge-2026-09-07/implA_engine_runner/`](Outputs-archive/start-end-bridge-2026-09-07/implA_engine_runner/)へ複写して追跡対象にしてある**（あわせて `mcp_call.py`・`job_run.py`・`verify_g3.py` も同フォルダ直下にある）。**実行方法の正本は同フォルダの `engine_tests.md`** で、対象ファイルの一覧とコマンドはそちらに揃えてある。
 - **本改修で足したエンジン側テストは1件**である（`test_ltx25_band.py::test_a_marker_clear_with_both_a_head_and_a_tail_band_builds_all_three`。`bridge` の最終区画が「キーフレーム標識のクリア＋頭の凍結＋尾の凍結」を1回で組み立てる初の出荷経路であることを固定する）。**この1件はアプリ側の仮想環境では `importorskip("ltx_core")` によりモジュールごと skip されるため、§102.4の件数には現れない。**
 
 ### 102.6 G2（実装後の敵対的レビュー）
@@ -11795,10 +11798,12 @@ chain_stage1_tokens(w, h, v, ref_scale=2) == 5 × reference_encode_tokens(w // 4
 
 - **素材候補（round7）**: <https://huggingface.co/datasets/Rootport/Nz-LTX23-eval-clips/tree/main/round7-start-end-materials>（コミット `7070971`）。同一プロンプトでシードだけを変えた3本で、**オーナーが cand1 を素材（冒頭）・cand2 を素材（末尾）として選んだ。**
 - **出力（round8）**: <https://huggingface.co/datasets/Rootport/Nz-LTX23-eval-clips/tree/main/round8-start-end-bridge>（コミット `1c70978`）。§102.7の2本（LTX 2.3・LTX 2.5）である。
+- **一次記録の置き場（ローカル）**: `outputs/start-end-bridge-2026-09-07/`（**git 管理外**）。内訳は `g0_baseline/`＝非退行の基準 MD5 と `requests.json`、`g3/`＝両エンジンの `metadata.json`・md5・`verify.json`、`g3/g33/`＝非退行の比較、`engine_tests.md` である。**追跡対象の複写は[`Outputs-archive/start-end-bridge-2026-09-07/`](Outputs-archive/start-end-bridge-2026-09-07/)にある**（§102.5）。
+- **アップロードの実行方法**: アプリ側の仮想環境から `.venv\Scripts\python.exe -m huggingface_hub.cli.hf upload <dataset> <folder> <path_in_repo> --repo-type dataset` で行った。**`.venv\Scripts\hf.exe` は使えない。** 起動子がリポジトリ改名前のパスを持っており `Failed to canonicalize script path` で起動しない（**仮想環境は修理していない**ので、次回も同じ壁に当たる）。**`HF_HOME` を `hf_home/` へ向けないこと。** そちらでは読み取り専用トークンが使われて 403 になる。**既定の資格情報キャッシュのまま実行する**のが正しい。
 
 ### 102.12 状態
 
-**自動ゲートは全緑である。** 実装は作業ブランチ `feature/start-end-bridge` のコミット `dccff75`（バックエンド）と `640ce71`（フロントエンド＋再ビルドした `.aux2`。SHA-256 `BEDEEDD4C6DE4F9401991C635F9402DFFD51ABAC96B4BDF4AB7A8B54B5369E78`）で、いずれも push 済みである。計画は2026-09-07の敵対的レビュー（18件・過剰設計の指摘は無し・Major 2件は `useRef` の初期化子の見落としと、モック経由のテストが証明にならない件）を反映したうえでオーナーが承認した。
+**自動ゲートは全緑である。** 実装は作業ブランチ `feature/start-end-bridge` のコミット `dccff75`（バックエンド）と `640ce71`（フロントエンド＋再ビルドした `.aux2`。SHA-256 `BEDEEDD4C6DE4F9401991C635F9402DFFD51ABAC96B4BDF4AB7A8B54B5369E78`）で、いずれも push 済みである。計画は2026-09-07の敵対的レビュー（18件・過剰設計の指摘は無し・Major 2件は `useRef` の初期化子の見落としと、モック経由のテストが証明にならない件）を反映したうえでオーナーが承認した。**同日 main へ merge 済みである**（fast-forward で `7857ce9` が main の先頭。ローカルの作業ブランチは削除し、リモートの `origin/feature/start-end-bridge` は残置してある）。
 
 ### 102.13 オーナー裁定（2026-09-07）＝一括受容してクローズ
 

@@ -824,12 +824,6 @@ export const en = {
       endSourceTrimFailed: "Attach the end source again (its range could not be cut out).",
       endSourceConflictsWithAudio: "An end source and a2v can't be combined. Remove either one.",
       endSourceConflictsWithReference: "An end source and IC-LoRA can't be combined. Remove either one.",
-      /** 逆順Chained (2026-08-18, second stage): a V2V source video and an end
-       * source on 2+ clips — the interpolation case (start+end on ONE clip) is
-       * unaffected. Deliberately names the future so the user doesn't read it
-       * as a permanent limitation. */
-      endSourceWithSourceVideoMultiClip:
-        "A source video and an end source together need a single clip. Remove one, or drop to one clip (support for more is planned).",
       /** The v1 geometry lines (`endContextFramesInvalid` /
        * `…TooLongForWindow` / `…TooLongForClip`) are gone with the rules they
        * explained; these replace them. The first two say the same thing as the
@@ -2332,8 +2326,6 @@ export const ja: Strings = {
       endSourceTrimFailed: "素材（末尾）を添付し直してください（範囲の切り出しに失敗しました）。",
       endSourceConflictsWithAudio: "素材（末尾）とa2vは併用できません。どちらかを外してください。",
       endSourceConflictsWithReference: "素材（末尾）とIC-LoRAは併用できません。どちらかを外してください。",
-      endSourceWithSourceVideoMultiClip:
-        "素材（冒頭）と素材（末尾）を両方使うときは、クリップは1本だけです（複数クリップでの併用は今後対応予定です）。",
       endSourceTooShort: "素材（末尾）は9フレーム以上必要です。長い動画を使ってください。",
       endSourceLengthUnknown:
         "素材（末尾）の長さを取得できませんでした。添付し直すか、別のファイルを使ってください。",

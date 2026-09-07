@@ -2993,6 +2993,66 @@ describe("useChainForm", () => {
         await attachEndVideo(result);
         expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
       });
+
+      // §3-90: the 素材（冒頭）is the THIRD edge of the same one-shot rule.
+      // Attaching one turns the chain from `reverse` into the forward `bridge`
+      // chain, whose comfortable seam-blend width is the plain-chain default
+      // again — so the nudge undoes itself, and re-arms if the start material
+      // is taken away.
+      it("restores the default when a START source joins, and nudges back on its removal", async () => {
+        const { result } = setupEnd();
+        await attachEndVideo(result); // stays at the default 2 clips
+        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.isReverseEndSource).toBe(true);
+
+        act(() => {
+          void result.current.sourceVideo.pick();
+        });
+        await waitFor(() => expect(result.current.sourceVideo.state.status).toBe("ready"));
+        expect(result.current.isReverseEndSource).toBe(false);
+        expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
+
+        act(() => result.current.clearSource());
+        expect(result.current.isReverseEndSource).toBe(true);
+        expect(result.current.overlapFrames).toBe(1);
+      });
+
+      // §3-90, the ref initialiser: the effect's baseline (`useRef`) and the
+      // effect's own test now read the SAME `isReverseEndSource`, so a chain
+      // that is Start+End+2-clips before the rule can ever say "reverse" must
+      // never see a のりしろ of 1 — not even for one render, which is exactly
+      // what a baseline computed from the OLD expression would produce.
+      //
+      // A literal "mounted already in that state" form is unreachable: both
+      // upload slots are `idle` on the first render, so the state can only be
+      // built up afterwards. Attaching the START source FIRST is the earliest
+      // reachable point, and recording EVERY render's value (rather than only
+      // the last) is what turns "no nudge" into an assertion a one-render
+      // wrong nudge would fail.
+      it("never lets a のりしろ of 1 appear when the START source is attached first", async () => {
+        const mockBridge = createMockBridge({ delayMs: 0 });
+        const seen: number[] = [];
+        const { result } = renderHook(() => {
+          const form = useChainForm(FALLBACK_APP_CONFIG, "a cat riding a skateboard", { nativeBridge: mockBridge });
+          seen.push(form.overlapFrames);
+          return form;
+        });
+
+        act(() => {
+          void result.current.sourceVideo.pick();
+        });
+        await waitFor(() => expect(result.current.sourceVideo.state.status).toBe("ready"));
+        await act(async () => {
+          await result.current.attachEndSourceByPath("C:\\v\\tail.mp4", "tail.mp4");
+        });
+        await waitFor(() => expect(result.current.endSourceStatus).toBe("ready"));
+
+        expect(result.current.clips.length).toBeGreaterThan(1);
+        expect(result.current.isReverseEndSource).toBe(false);
+        expect(seen.length).toBeGreaterThan(1);
+        expect(seen).not.toContain(1);
+        expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
+      });
     });
 
     // 逆順Chained (2026-08-18, second stage), 2.6(f): the audio-overlap-budget
@@ -3366,18 +3426,21 @@ describe("useChainForm", () => {
 
         expect(result.current.validityReasons).not.toContain("endSourceConflictsWithAudio");
         expect(result.current.validityReasons).not.toContain("endSourceConflictsWithReference");
-        expect(result.current.validityReasons).not.toContain("endSourceWithSourceVideoMultiClip");
         expect(result.current.isValid).toBe(true);
         const request = result.current.buildRequest();
         expect(request.source_video).toBeTruthy();
         expect(request.end_source).toBeTruthy();
       });
 
-      // 逆順Chained (2026-08-18, second stage): mirrors `chain_math.py:1097-1105`
-      // — a V2V source video and an end source on 2+ clips is a combination
-      // nothing has ever run (clip 0 would be frozen at both ends), refused
-      // outright rather than accepted untested.
-      it("blocks (and drops) an end source attached alongside a V2V source video once the chain grows past ONE clip", async () => {
+      // §3-90 (2026-09-07): the INVERSE of the block this used to pin. The
+      // server now accepts a start source and an end source on 2+ clips as the
+      // forward `bridge` chain (every clip generated in order, only the LAST
+      // one conditioned on both sides), so the client sends both slots and
+      // nothing blocks Generate. `buildRequest` carrying BOTH `source_video`
+      // and `end_source` with an EMPTY `validityReasons` is the whole proof:
+      // it is exactly what the deleted `!(hasSourceVideo && clips.length >= 2)`
+      // drop condition and the deleted reason code used to prevent.
+      it("sends BOTH a V2V source video and an end source once the chain grows past ONE clip (bridge)", async () => {
         const { result } = setupEnd();
         act(() => {
           void result.current.sourceVideo.pick();
@@ -3387,21 +3450,41 @@ describe("useChainForm", () => {
         // The default chain is already 2 clips — nothing more to do.
         expect(result.current.clips).toHaveLength(2);
 
-        expect(result.current.validityReasons).toContain("endSourceWithSourceVideoMultiClip");
-        expect(result.current.isValid).toBe(false);
+        expect(result.current.validityReasons).toEqual([]);
+        expect(result.current.isValid).toBe(true);
         const request = result.current.buildRequest();
-        expect(request).not.toHaveProperty("end_source");
         expect(request.source_video).toBeTruthy();
+        expect(request.end_source).toBeTruthy();
 
-        // Dropping to 1 clip clears it — the same interpolation case as the
-        // test above.
-        makeSingleClip(result);
-        expect(result.current.validityReasons).not.toContain("endSourceWithSourceVideoMultiClip");
+        // …and a THIRD clip changes nothing (the rule is about the pair, not
+        // about a particular clip count).
+        act(() => result.current.addClip());
+        expect(result.current.clips).toHaveLength(3);
+        expect(result.current.validityReasons).toEqual([]);
+        const three = result.current.buildRequest();
+        expect(three.source_video).toBeTruthy();
+        expect(three.end_source).toBeTruthy();
       });
 
-      it("never fires without BOTH slots filled", () => {
+      // §3-90: the forward chain is a PLAIN chain in the three places 逆順
+      // Chained changed — the seam-blend default, the multi-clip quality
+      // warning, and (asserted in `ChainedScreen.endSource.test.tsx`) the 遡り
+      // 生成 hint. `isReverseEndSource` is the single flag all three read.
+      it("is NOT the reverse chain when a start source is attached: default のりしろ, no multi-clip warning", async () => {
         const { result } = setupEnd();
-        expect(result.current.validityReasons).not.toContain("endSourceWithSourceVideoMultiClip");
+        act(() => {
+          void result.current.sourceVideo.pick();
+        });
+        await waitFor(() => expect(result.current.sourceVideo.state.status).toBe("ready"));
+        await attachEndVideo(result);
+
+        expect(result.current.clips.length).toBeGreaterThan(1);
+        expect(result.current.isReverseEndSource).toBe(false);
+        expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
+        expect(result.current.endSourceMultiClipQualityWarning).toBe(false);
+        // The single-clip ceiling is not standing in for it either — that one
+        // is `clips.length === 1` only.
+        expect(result.current.endSourceQualityLimitFrames).toBeNull();
       });
     });
 
@@ -3518,7 +3601,6 @@ describe("useChainForm", () => {
         "endSourceTrimFailed",
         "endSourceConflictsWithAudio",
         "endSourceConflictsWithReference",
-        "endSourceWithSourceVideoMultiClip",
         "endSourceTooShort",
         "endSourceLengthUnknown",
         "endSourceNeedsOverlap",
@@ -3537,6 +3619,9 @@ describe("useChainForm", () => {
       expect(messages.endContextFramesTooLongForWindow).toBeUndefined();
       expect(messages.endContextFramesTooLongForClip).toBeUndefined();
       expect(messages.endSourceTooShortForContext).toBeUndefined();
+      // §3-90: and so is the start+end multi-clip block — the server accepts
+      // that pair now, so the code, both its sentences and its wiring are gone.
+      expect(messages.endSourceWithSourceVideoMultiClip).toBeUndefined();
     });
 
     // §4-4: Batch i2v-long must never send end material.

@@ -297,9 +297,13 @@ export interface RetakeSpec {
  *   のプライマとして消費される。つまり出力末尾に現れるのは素材の 2 フレーム目
  *   以降で、素材には最低 9 フレーム必要（`END_SOURCE_MIN_FRAMES`）。
  * - `retake` / `source_audio` / `reference_video_id` とは**排他**。
- *   `source_video`（冒頭素材）とは**クリップ1本のときのみ併用可**（2本以上は422 —
- *   `useChainForm` の `endSourceWithSourceVideoMultiClip`）。`clips[0].conditioning_images`
- *   とは併用可。
+ *   `clips[0].conditioning_images` とは併用可。
+ * - `source_video`（冒頭素材）とは**クリップ本数を問わず併用可**（§3-90）。本数で
+ *   サーバー側のモードが決まる: 1本なら窓内モード（`in_window`）＝クリップの内側で
+ *   冒頭と末尾の両方を凍結する補間、2本以上なら `bridge`＝**全クリップを正順に
+ *   生成し、最終クリップだけを頭（前クリップののりしろ）と尾（末尾素材の凍結
+ *   フレーム）の両側で条件付けする**。冒頭素材が無く2本以上のときだけが従来の
+ *   逆順生成（`reverse`）。
  */
 export interface EndSourceSpec {
   /** `POST /upload/video` の `video_id`。`image_id` とはどちらか一方のみ。 */

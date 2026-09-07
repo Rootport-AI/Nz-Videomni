@@ -112,13 +112,11 @@ export function buildChainReasonMessages(
     referenceDimensionsOffGrid: strings.chained.generateReasons.referenceDimensionsOffGrid,
     depthChainUnsupported: strings.chained.generateReasons.depthChainUnsupported,
     // 素材（末尾）: one line per end-source code, in the same order
-    // `useChainForm` pushes them (the three conflicts first — with a second
-    // slot/source filled nothing else about the end source matters until it's
+    // `useChainForm` pushes them (the two conflicts first — with a second
+    // slot filled nothing else about the end source matters until it's
     // removed — then the upload's own state, then the geometry rules).
     endSourceConflictsWithAudio: strings.chained.generateReasons.endSourceConflictsWithAudio,
     endSourceConflictsWithReference: strings.chained.generateReasons.endSourceConflictsWithReference,
-    // 逆順Chained (2026-08-18, second stage): the V2V + 2+-clip exclusion.
-    endSourceWithSourceVideoMultiClip: strings.chained.generateReasons.endSourceWithSourceVideoMultiClip,
     endSourceUploading: strings.chained.generateReasons.endSourceUploading,
     endSourceNotReady: strings.chained.generateReasons.endSourceNotReady,
     endSourceTrimFailed: strings.chained.generateReasons.endSourceTrimFailed,
@@ -198,20 +196,15 @@ export const CHAIN_AUDIO_REASON_CODES: readonly string[] = [
  * end-source gates underneath that would ask the user to fix material the batch
  * is not going to send.
  *
- * `endSourceNeedsOverlap`, `endSourceAudioOverlapBudget` and (逆順Chained,
- * 2026-08-18) `endSourceWithSourceVideoMultiClip` ARE in the set, unlike the
- * reference block's `referenceDimensionsOffGrid`: all three fire only while an
- * end source is attached (a 1-frame seam blend, a particular clip layout, and
- * a V2V source video are all perfectly ordinary on their own), so removing the
- * material really does clear them. (`endSourceWithSourceVideoMultiClip` also
- * needs a source video, but `endSourceAttached` alone is enough to clear it —
- * `CHAIN_SOURCE_REASON_CODES`'s own filter, applied independently, does not
- * need to know about this code too.)
+ * `endSourceNeedsOverlap` and `endSourceAudioOverlapBudget` ARE in the set,
+ * unlike the reference block's `referenceDimensionsOffGrid`: both fire only
+ * while an end source is attached (a 1-frame seam blend and a particular clip
+ * layout are perfectly ordinary on their own), so removing the material really
+ * does clear them.
  */
 export const CHAIN_END_SOURCE_REASON_CODES: readonly string[] = [
   "endSourceConflictsWithAudio",
   "endSourceConflictsWithReference",
-  "endSourceWithSourceVideoMultiClip",
   "endSourceUploading",
   "endSourceNotReady",
   "endSourceTrimFailed",

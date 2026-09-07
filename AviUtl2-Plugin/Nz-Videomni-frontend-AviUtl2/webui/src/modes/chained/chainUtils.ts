@@ -534,8 +534,8 @@ export function audioSegmentWindows(
   return windows;
 }
 
-/** 素材（末尾）reverse mode (2+ clips, 2.6(f)): mirrors `chain_math.py`'s
- * degenerate-audio-overlap guard (`Nz-Videomni/chain_math.py:1120-1122`)
+/** 素材（末尾）multi-clip modes (2+ clips, 2.6(f)): mirrors `chain_math.py`'s
+ * degenerate-audio-overlap guard (`Nz-Videomni/chain_math.py:1276-1288`)
  * that {@link chainLayoutError}'s `"degenerateAudioOverlap"` already covers,
  * but WITHOUT that function's `audioReady` precondition — `end_source` and
  * `source_audio` are mutually exclusive server-side, so a chain ending on
@@ -548,14 +548,19 @@ export function audioSegmentWindows(
  * ok     = sum_ka >= n_join
  * ```
  *
- * `reverse` mode appends no internal-segment band, so `seg_frames ==
+ * Neither multi-clip mode appends an internal-segment band, so `seg_frames ==
  * clipFrames` and this is exactly {@link audioSegmentWindows}'s own internal
  * `sumKa`/`nJoin` — this just isolates the ONE boolean that function's `null`
  * return conflates with the separate `kv >= clip latent` failure (already
  * `clipTooShortForOverlap`'s job, not this gate's — hence `true`, not a
  * block, whenever that other failure applies). Also `true` for `n < 2`
  * (nothing to join — the 窓内モード single-clip case never reaches this
- * check server-side either). */
+ * check server-side either).
+ *
+ * §3-90: applies unchanged to the FORWARD `bridge` chain (a 素材（冒頭）on a
+ * 2+-clip end-source chain) — that mode appends no band either, so its joins
+ * are the clips' own and the arithmetic is identical. Keyed on the clip count
+ * alone, so no caller has to know which of the two modes it is in. */
 export function endSourceAudioOverlapOk(clipFrames: number[], fps: number, kv: number): boolean {
   const n = clipFrames.length;
   if (n < 2) return true;
@@ -740,15 +745,21 @@ export function snapContextFrames(raw: number, min: number, max: number): number
 // chain), never a block, and the right-click route rounds its seed below it
 // (`timeline/prefillSeed.ts`'s `END_SOURCE_SEED_MAX_FRAMES`).
 
-/** 素材（末尾）reverse mode (2+ clips, 2.6(f)): mirrors `chain_math.py`'s
- * reverse-mode reception check (`Nz-Videomni/chain_math.py:1076-1088`:
+/** 素材（末尾）multi-clip modes (2+ clips, 2.6(f)): mirrors `chain_math.py`'s
+ * free-latent reception check (`Nz-Videomni/chain_math.py:1234-1245`:
  * rejects when `kv + n_end_v >= clip_latent[-1]`). The LAST clip's tail holds
  * the end-source band (`nEndV` latents, {@link vTailLatents}) and its HEAD is
- * what the PREVIOUS clip's carried-forward のりしろ freezes (`kv` latents), so
- * if those two together already fill the clip there is nothing left for it to
- * generate — the reverse carry would just be crossfading the upload into its
- * own middle. `true` (ok) whenever the clip has MORE video-latent frames than
- * `kv + nEndV`. */
+ * spoken for by the のりしろ it shares with the clip next to it (`kv` latents),
+ * so if those two together already fill the clip there is nothing left for it
+ * to generate — the reverse carry would just be crossfading the upload into
+ * its own middle. `true` (ok) whenever the clip has MORE video-latent frames
+ * than `kv + nEndV`.
+ *
+ * §3-90: applies unchanged to the FORWARD `bridge` chain (a 素材（冒頭）on a
+ * 2+-clip end-source chain) — the same geometry, only the direction of that
+ * head のりしろ differs (frozen FROM the previous clip rather than handed back
+ * TO it), and the server runs the same check for it. Keyed on the clip count
+ * alone, so no caller has to know which of the two modes it is in. */
 export function endSourceLastClipHasFreeLatents(lastClipFrames: number, kv: number, nEndV: number): boolean {
   return kv + nEndV < vLatentFrames(lastClipFrames);
 }

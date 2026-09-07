@@ -429,19 +429,6 @@ export type ChainValidityReason =
    * server's other end-source exclusion (per-segment IC-LoRA injection and the
    * tail freeze both claim the same latents). */
   | "endSourceConflictsWithReference"
-  /** 逆順Chained (2026-08-18, second stage): a V2V source video AND an end
-   * source on a chain of 2+ clips — mirrors `chain_math.py`'s reverse-mode
-   * exclusion (`:1097-1105`, `end_source_mode == "reverse" and
-   * source_context_px is not None`). On a SINGLE clip the two combine fine
-   * (the start+end interpolation case, unaffected — see
-   * `endSourceConflictsWithAudio`'s sibling test); with 2+ clips the chain is
-   * generated last-to-first, so clip 0 would be frozen at BOTH ends (its head
-   * by the start source, its tail by the reverse carry) — a combination the
-   * server has never run and refuses outright. `buildRequest` additionally
-   * drops the end source defensively, exactly like the audio/reference slots
-   * above. Next increment's scope (Start+End on a middle clip) may lift this;
-   * until then it stays a flat block. */
-  | "endSourceWithSourceVideoMultiClip"
   /** The end-source VIDEO is shorter than `timeline/tailAlign.ts`'s
    * `END_SOURCE_MIN_FRAMES` (9 frames at the generation rate: the 8-frame anchor
    * plus the causal VAE's keyframe primer), so it cannot supply the anchor at
@@ -962,13 +949,26 @@ export interface UseChainFormResult {
    * window puts the anchor and the frames that have to blend into it in
    * DIFFERENT stage-2 tiles. Advisory only: never a `validityReason`. */
   endSourceQualityLimitFrames: number | null;
-  /** §1-22 素材（末尾）複数クリップ品質警告: `true` while material is attached
-   * AND the chain has 2+ clips (逆順Chained). Mutually exclusive with
+  /** §1-22 素材（末尾）複数クリップ品質警告: `true` on the REVERSE chain —
+   * exactly {@link isReverseEndSource} (§3-90: the forward `bridge` chain is
+   * not warned about; see the flag's own doc). Mutually exclusive with
    * {@link endSourceQualityLimitFrames} being non-null by construction — that
    * ceiling only ever fires at `clips.length === 1`, this one only at
    * `clips.length >= 2` — so the two never compete for the same banner slot.
    * Advisory only: never a `validityReason`. */
   endSourceMultiClipQualityWarning: boolean;
+  /** §3-90: `true` while the chain is the REVERSE-order one — material in the
+   * end slot, 2+ clips, and NO start source. The server's own rule, mirrored
+   * (`chain_math.py`'s "the one place the mode is decided"): 1 clip is
+   * `in_window`, 2+ clips WITH a start source is `bridge` (generated forwards,
+   * only the last clip conditioned on both sides), and only 2+ clips WITHOUT
+   * one is `reverse` (generated last-to-first).
+   *
+   * The single source of the three client-side consequences of being in
+   * reverse mode: the のりしろ default nudge to 1, the multi-clip quality
+   * warning, and `ChainedScreen`'s 遡り生成 hint. A `bridge` chain is an
+   * ordinary forward chain in all three respects. */
+  isReverseEndSource: boolean;
   /** Opens the unified "choose image or video" dialog and routes the result by
    * extension into this slot. Mirror of {@link pickSource}, including the
    * silent `CANCELLED` and the `endSourceError` failure surface. */
@@ -2220,26 +2220,39 @@ export function useChainForm(
     // `ready`/`uploading`/`error` transitions intentionally do nothing here.
   }, [endSourceStatus, hasSourceVideo, defaultClipNumFrames]);
 
+  /** §3-90: the REVERSE-order chain — end material, 2+ clips, and NO start
+   * source. Mirrors the server's own mode decision (`chain_math.py`'s "THE ONE
+   * PLACE THE MODE IS DECIDED"): 1 clip is `in_window`, 2+ clips WITH a start
+   * source is `bridge`, and only 2+ clips WITHOUT one is `reverse`.
+   *
+   * Defined ONCE, here, above every consumer — the のりしろ nudge below (BOTH
+   * its ref BASELINE and the effect that compares against it: two copies of
+   * the rule could disagree about the very first render and fire a one-shot
+   * nudge nothing asked for), the multi-clip quality warning, and — via the
+   * hook's result — `ChainedScreen`'s 遡り生成 hint. A `bridge` chain is a
+   * plain forward chain to all three. */
+  const isReverseEndSource = hasEndSource && clips.length > 1 && !hasSourceVideo;
+
   // のりしろ既定値1 (2.6(e), 逆順Chained second stage): a SYMMETRIC one-shot
-  // nudge on the "素材（末尾）× 2+ clips" transition. Reverse mode's own
-  // narrowest legal seam-blend width (§2.2's worked example uses kv=1) is a
-  // very different comfortable default from a plain chain's kv=3, so ENTERING
-  // that state drops `overlapFrames` to 1, and LEAVING it (back down to 1
-  // clip, or the material removed) restores the plain-chain default —
-  // otherwise a user who goes 2 clips -> 1 clip would find themselves stuck at
-  // the very value `endSourceNeedsOverlap` (窓内モード's own `kv >= 2` floor)
-  // then refuses. `useRef` tracks only the PREVIOUS edge, so this fires
-  // exactly once per transition rather than fighting the user every render —
-  // a value dialed in mid-state (`overlapFrames` is deliberately NOT a dep
-  // here) survives untouched.
-  const wasReverseEndSource = useRef(hasEndSource && clips.length > 1);
+  // nudge on the "素材（末尾）× 2+ clips × no 素材（冒頭）" transition. Reverse
+  // mode's own narrowest legal seam-blend width (§2.2's worked example uses
+  // kv=1) is a very different comfortable default from a plain chain's kv=3,
+  // so ENTERING that state drops `overlapFrames` to 1, and LEAVING it (back
+  // down to 1 clip, the material removed, or — §3-90 — a start source
+  // attached, which makes it the forward `bridge` chain) restores the
+  // plain-chain default — otherwise a user who goes 2 clips -> 1 clip would
+  // find themselves stuck at the very value `endSourceNeedsOverlap` (窓内モード's
+  // own `kv >= 2` floor) then refuses. `useRef` tracks only the PREVIOUS edge,
+  // so this fires exactly once per transition rather than fighting the user
+  // every render — a value dialed in mid-state (`overlapFrames` is
+  // deliberately NOT a dep here) survives untouched.
+  const wasReverseEndSource = useRef(isReverseEndSource);
   useEffect(() => {
-    const isReverse = hasEndSource && clips.length > 1;
-    if (isReverse !== wasReverseEndSource.current) {
-      wasReverseEndSource.current = isReverse;
-      setOverlapFrames(isReverse ? 1 : DEFAULT_OVERLAP_FRAMES);
+    if (isReverseEndSource !== wasReverseEndSource.current) {
+      wasReverseEndSource.current = isReverseEndSource;
+      setOverlapFrames(isReverseEndSource ? 1 : DEFAULT_OVERLAP_FRAMES);
     }
-  }, [hasEndSource, clips.length, setOverlapFrames]);
+  }, [isReverseEndSource, setOverlapFrames]);
 
   const firstClipNumFrames = clips[0]?.numFrames ?? 0;
   const contextFramesValid = isContextFramesValid(
@@ -2285,15 +2298,21 @@ export function useChainForm(
       : null;
 
   /** §1-22 素材（末尾）複数クリップ品質警告: connecting 2+ clips while material
-   * is attached (逆順Chained) degrades quality, independent of any single
-   * clip's length. Advisory: NOT a `validityReason`.
+   * is attached degrades quality, independent of any single clip's length.
+   * Advisory: NOT a `validityReason`.
    *
-   * Deliberately the plain complement of the ceiling above rather than a
-   * shared derivation — `endSourceQualityLimitFrames` is single-clip-only
-   * (see its own doc comment) and this is multi-clip-only, so the two
-   * conditions are exhaustive and mutually exclusive over `clips.length`
-   * and never render into the same banner slot at once. */
-  const endSourceMultiClipQualityWarning = hasEndSource && clips.length >= 2;
+   * §3-90: scoped to the REVERSE chain ({@link isReverseEndSource}) — the
+   * study behind this warning is about generating last-to-first, and a
+   * `bridge` chain (a start source present) generates forwards like any other
+   * chain, so it says nothing about that shape. `bridge`'s own known artefact
+   * — a crossfade in the LAST clip when the two materials are far apart — is
+   * accepted as specified (owner decision 2026-09-07) and carries no warning.
+   *
+   * Still mutually exclusive with the ceiling above rather than a shared
+   * derivation: `endSourceQualityLimitFrames` is single-clip-only (see its own
+   * doc comment) and this can only be true at 2+ clips, so the two never
+   * render into the same banner slot at once. */
+  const endSourceMultiClipQualityWarning = isReverseEndSource;
 
   // `<lora:name:strength>` tags found in the shared prompt — parsed once here
   // and reused by `buildRequest` below instead of re-running `parseLoraPrompt`.
@@ -2519,16 +2538,14 @@ export function useChainForm(
   const depthChainUnsupported = mergedLoras.some((lora) => depthLoraNames.has(lora.name));
 
   // ── 素材（末尾）: the gates ────────────────────────────────────────────────
-  // Two LENGTH gates about the material, and four SHAPE gates about the chain
+  // Two LENGTH gates about the material, and three SHAPE gates about the chain
   // it is attached to. All of them stay silent while nothing is attached.
+  //
+  // §3-90: the "a start source needs a single clip" gate is GONE — the server
+  // now accepts that pair on 2+ clips as the forward `bridge` chain, so there
+  // is nothing left for the client to mirror.
   const endSourceTooShort = hasEndSource && endSourceLengthIssue === "tooShort";
   const endSourceLengthUnknown = hasEndSource && endSourceLengthIssue === "unknown";
-  // 逆順Chained (2026-08-18, second stage): a V2V source video combined with an
-  // end source on 2+ clips — mirrors `chain_math.py:1097-1105`'s reverse-mode
-  // exclusion. A SINGLE clip is unaffected (the start+end interpolation case,
-  // implemented and tested); this only fires once `addClip` (2.6(a), no longer
-  // capped by the end source) has taken the chain to 2 or more.
-  const endSourceWithSourceVideoMultiClip = hasSourceVideo && hasEndSource && clips.length >= 2;
   // のりしろ1 × 素材（末尾）on a SINGLE-clip chain (窓内モード) is a hard server
   // rejection: the anchor arrives as one MORE internal segment, and at
   // `kv === 1` the audio-overlap budget (`sum_ka`) is exhausted, which
@@ -2540,22 +2557,27 @@ export function useChainForm(
   // user is at the bottom of the seam-blend slider".
   //
   // 逆順Chained (2026-08-18, second stage): `clips.length === 1` is new — the
-  // server exempts `reverse` mode (2+ clips) from this `kv >= 2` floor
-  // entirely (`chain_math.py`'s `end_source_mode != "reverse"` guard on the
-  // rejection), because `reverse` appends no internal segment and therefore
-  // spends the SAME audio-overlap budget a plain chain does. What replaces
-  // this gate on 2+ clips is {@link endSourceAudioOverlapBudget} below.
+  // server exempts the MULTI-CLIP modes from this `kv >= 2` floor entirely
+  // (`chain_math.py`'s `end_source_mode not in ("reverse", "bridge")` guard on
+  // the rejection), because neither appends an internal segment and both
+  // therefore spend the SAME audio-overlap budget a plain chain does. What
+  // replaces this gate on 2+ clips is {@link endSourceAudioOverlapBudget}
+  // below. §3-90 widened the server's exemption to `bridge`; the client
+  // condition was already `clips.length === 1` and needed no change.
   const endSourceNeedsOverlap = hasEndSource && clips.length === 1 && overlapFrames < 2;
 
   // 逆順Chained (2026-08-18, second stage): the two acceptance checks the
-  // server ONLY runs in `reverse` mode (2+ clips) — mirrors of
-  // `chain_math.py`'s own reverse-mode guards, both silent with 0 or 1 clips
-  // (`chainUtils`'s helper functions are already no-ops there).
+  // server ONLY runs on a MULTI-CLIP chain — mirrors of `chain_math.py`'s own
+  // guards, both silent with 0 or 1 clips (`chainUtils`'s helper functions are
+  // already no-ops there). §3-90: the server applies both to `bridge` as well
+  // as `reverse` (the geometry is identical — the last clip's head is spoken
+  // for by a のりしろ either way, only its direction differs), so these stay
+  // keyed on the clip count alone and cover the start-source chain too.
   const lastClip = clips[clips.length - 1];
   const nEndV = vTailLatents(END_SOURCE_CONTEXT_FRAMES);
   // The end band is the LAST clip's own tail and that clip's HEAD is the
   // previous clip's carried-forward のりしろ — if the two together already fill
-  // it, there is nothing left to generate (chain_math.py:1076-1088). Only
+  // it, there is nothing left to generate (chain_math.py:1234-1245). Only
   // meaningful once the material can actually supply the anchor
   // (`endContextFrames !== null`): otherwise no `end_source` is sent at all
   // (see `buildRequest`), so there is nothing for the server to reject.
@@ -2565,9 +2587,9 @@ export function useChainForm(
     endContextFrames !== null &&
     lastClip !== undefined &&
     !endSourceLastClipHasFreeLatents(lastClip.numFrames, overlapFrames, nEndV);
-  // The audio-overlap budget `reverse` mode spends is the plain chain's own
-  // (chain_math.py:1107-1134) — no `kv >= 2` floor protects it the way
-  // `endSourceNeedsOverlap` protects 窓内モード, so this is the mirror that
+  // The audio-overlap budget a multi-clip end-source chain spends is the plain
+  // chain's own (chain_math.py:1276-1288) — no `kv >= 2` floor protects it
+  // the way `endSourceNeedsOverlap` protects 窓内モード, so this is the mirror that
   // takes over once there are 2+ clips. Same "only once an end_source would
   // actually be sent" guard as the check above.
   const endSourceAudioOverlapBudget =
@@ -2646,7 +2668,6 @@ export function useChainForm(
   // state, then the material's length, then the chain's shape.
   if (hasEndSource && hasSourceAudio) validityReasons.push("endSourceConflictsWithAudio");
   if (hasEndSource && hasReferenceVideo) validityReasons.push("endSourceConflictsWithReference");
-  if (endSourceWithSourceVideoMultiClip) validityReasons.push("endSourceWithSourceVideoMultiClip");
   if (endSourceStatus === "uploading") validityReasons.push("endSourceUploading");
   if (endSourceStatus === "error") validityReasons.push("endSourceNotReady");
   if (endSourceVideo.state.trimFailed) validityReasons.push("endSourceTrimFailed");
@@ -2741,12 +2762,11 @@ export function useChainForm(
     // already blocks Generate on that pair, this is the defensive second line,
     // exactly like `sourceAudio` below.
     const sendReference = referenceVideoId !== null && !hasSourceVideo && loras.length > 0;
-    // 素材（末尾）: the defensive second line for this slot's three exclusions —
+    // 素材（末尾）: the defensive second line for this slot's two exclusions —
     // Generate is already blocked on each (`endSourceConflictsWithAudio`/
-    // `endSourceConflictsWithReference`/`endSourceWithSourceVideoMultiClip`),
-    // so a request built anyway drops the END source rather than sending a
-    // body the server would 422. Which side gives way is fixed (the end
-    // source), so the outcome is deterministic.
+    // `endSourceConflictsWithReference`), so a request built anyway drops the
+    // END source rather than sending a body the server would 422. Which side
+    // gives way is fixed (the end source), so the outcome is deterministic.
     const endSourceId =
       endSourceKind === "video"
         ? endSourceVideo.state.id
@@ -2760,19 +2780,17 @@ export function useChainForm(
     // out of the request entirely rather than sending it hopefully. When the slot
     // IS sent, `contextFrames` is always the constant 8 — the UI states the
     // anchor explicitly rather than relying on the server's default.
-    // 逆順Chained (2026-08-18): the third exclusion — a V2V source video is
-    // fine alongside an end source ONLY while the chain is still a single
-    // clip (the interpolation case); `clips.length >= 1` in the request body
-    // is exactly `clipInputs.length` below, computed one line down, so this
-    // reads it directly off `clips` instead (identical count, since
-    // `clipInputs` only ever re-shapes clip 0, never adds/removes entries).
+    // §3-90: a V2V source video is NOT a third exclusion any more — a start
+    // source and an end source ride together on any clip count (1 clip is the
+    // interpolation case, 2+ is the forward `bridge` chain), so the request
+    // carries `source_video` and `end_source` at the same time and the server
+    // picks the mode from the pair.
     const endSource: EndSourceInput | null =
       endSourceId !== null &&
       endSourceKind !== null &&
       endContextFrames !== null &&
       !hasSourceAudio &&
-      !hasReferenceVideo &&
-      !(hasSourceVideo && clips.length >= 2)
+      !hasReferenceVideo
         ? { kind: endSourceKind, id: endSourceId, contextFrames: endContextFrames, strength: endSourceStrength }
         : null;
     // The single start frame only goes onto clip 0 in scratch mode — a V2V
@@ -2942,6 +2960,7 @@ export function useChainForm(
     endSourceLengthIssue,
     endSourceQualityLimitFrames,
     endSourceMultiClipQualityWarning,
+    isReverseEndSource,
     pickEndSource,
     attachEndSourceByPath,
     clearEndSource,

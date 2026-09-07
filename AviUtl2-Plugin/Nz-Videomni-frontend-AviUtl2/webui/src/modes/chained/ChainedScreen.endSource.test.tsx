@@ -110,8 +110,14 @@ async function drainDefaultBridgeJobs(): Promise<void> {
   throw new Error("the app-wide mock bridge's job fixture never drained");
 }
 
-function renderChain(initialIntent?: GenerationPrefill) {
-  const nativeBridge = createMockBridge({ delayMs: 0 });
+function renderChain(
+  initialIntent?: GenerationPrefill,
+  /** Extra mock options. `pickFileName` is the only one used so far (§3-90's
+   * start-source test needs the 📁 dialog to answer with a VIDEO — the
+   * `imageOrVideo` kind otherwise defaults to a .png). */
+  mockOptions: Parameters<typeof createMockBridge>[0] = {},
+) {
+  const nativeBridge = createMockBridge({ delayMs: 0, ...mockOptions });
   /** Same capture, for the per-test bridge. */
   const nativeRequest = nativeBridge.request.bind(nativeBridge);
   const requestSpy = vi.spyOn(nativeBridge, "request");
@@ -309,6 +315,44 @@ describe("ChainedScreen — 素材（末尾）", () => {
       await waitFor(() => expect(screen.queryByText(en.chained.endSource.reverseOverlapHint)).not.toBeInTheDocument(), {
         timeout: 5_000,
       });
+    });
+
+    // §3-90 (2026-09-07): the hint belongs to the REVERSE chain only. Adding a
+    // 素材（冒頭）makes the same 2-clip chain the FORWARD `bridge` chain — every
+    // clip generated in order, only the last one conditioned on both sides —
+    // where nothing was nudged and there is nothing to explain. Asserted on the
+    // real screen because the hint's condition is the screen's own.
+    it("hides the 遡り生成 hint once a START source joins the same 2-clip chain", async () => {
+      const { container } = renderChain(
+        {
+          intent: "end-with-this",
+          targetMode: "chained",
+          selection: selectionWithFile("C:\\v\\ending.mp4"),
+        },
+        { pickFileName: "start.mp4" },
+      );
+      await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
+      await waitFor(() => expect(container.querySelectorAll(".clip-list > li")).toHaveLength(1), {
+        timeout: 5_000,
+      });
+
+      fireEvent.click(addClipButton());
+      await waitFor(() => expect(container.querySelectorAll(".clip-list > li")).toHaveLength(2), {
+        timeout: 5_000,
+      });
+      expect(screen.getByText(en.chained.endSource.reverseOverlapHint)).toBeInTheDocument();
+
+      // The START card's 📁 button — the mock dialog answers "start.mp4", so
+      // this really is a source VIDEO (an image would land on clip 0 as a
+      // keyframe and leave the chain in reverse mode).
+      fireEvent.click(container.querySelector(".source-input-pick")!);
+      await waitFor(() => expect(screen.getByAltText(en.chained.sourceInput.videoPlaceholderAlt)).toBeInTheDocument(), {
+        timeout: 5_000,
+      });
+
+      expect(screen.queryByText(en.chained.endSource.reverseOverlapHint)).not.toBeInTheDocument();
+      // The clip list is untouched: still the 2-clip chain, now a bridge one.
+      expect(container.querySelectorAll(".clip-list > li")).toHaveLength(2);
     });
 
     it("shows the quality warning once the clip outgrows one stage-2 window, and hides it again", async () => {

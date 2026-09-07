@@ -1075,8 +1075,11 @@ function ChainedScreenBody({
               width is nudged to 1 the moment 素材（末尾）meets a 2nd clip (and
               restored on the way back out) — this line is the ONLY signal that
               happened, so the user knows the slider above is still theirs to
-              move. */}
-          {form.hasEndSource && form.clips.length > 1 && (
+              move. §3-90: shown for the REVERSE chain only
+              (`isReverseEndSource`, the same flag the nudge itself keys on) —
+              attaching a 素材（冒頭）makes it the forward `bridge` chain, where
+              nothing was nudged and there is nothing to say. */}
+          {form.isReverseEndSource && (
             <p className="field-hint">{strings.chained.endSource.reverseOverlapHint}</p>
           )}
           <label className="field field-inline">

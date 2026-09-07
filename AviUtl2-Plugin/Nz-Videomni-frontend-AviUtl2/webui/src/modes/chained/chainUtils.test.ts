@@ -1103,7 +1103,7 @@ describe("chainUtils", () => {
     });
   });
 
-  describe("endSourceLastClipHasFreeLatents (mirrors chain_math.py:1076: kv + n_end_v >= clip_latent[-1] rejects)", () => {
+  describe("endSourceLastClipHasFreeLatents (mirrors chain_math.py:1234: kv + n_end_v >= clip_latent[-1] rejects)", () => {
     it("blocks exactly at the boundary and passes one latent frame above it", () => {
       // v_latent(25) = (25-1)/8 + 1 = 4. kv(3) + nEndV(1) = 4 -> NOT strictly
       // less than 4, so this clip has nothing left to generate.
@@ -1118,7 +1118,7 @@ describe("chainUtils", () => {
     });
   });
 
-  describe("endSourceAudioOverlapOk (mirrors chain_math.py:1120-1122's sum_ka >= n_join guard, freed of chainLayoutError's audioReady precondition)", () => {
+  describe("endSourceAudioOverlapOk (mirrors chain_math.py:1278-1280's sum_ka >= n_join guard, freed of chainLayoutError's audioReady precondition)", () => {
     it("is the plan's own headline failure: 30fps x 257f x 2 clips at kv=1", () => {
       // segLatent=[33,33]; segAudio=[214,214] (round(257/30*25)=214.1667->214);
       // fTotal=66-1=65; totalPx=513; aTotal=round(513/30*25)=427.5->428 (even);

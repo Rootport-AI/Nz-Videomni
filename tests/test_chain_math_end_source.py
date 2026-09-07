@@ -7,23 +7,32 @@ so if any expectation here moves the freeze band lands on the wrong latents — 
 silent quality failure, not a crash, exactly like retake (see
 tests/test_retake_math.py and VERIFICATION_LOG §55).
 
-THE MODE IS DECIDED BY THE CLIP COUNT ALONE, and there are two reachable
-answers. Almost every test below is therefore parametrised over one of the two
-clip-set constants rather than a mixed one:
+THE MODE IS DECIDED BY THE CLIP COUNT AND BY WHETHER A START SOURCE
+(``source_context_px``) CAME WITH IT, and there are three reachable answers.
+Almost every test below is therefore parametrised over one of the clip-set
+constants rather than a mixed one:
 
   * ``SINGLE_CLIP_SETS`` -> ``"in_window"``: the band is the one clip's own
     tail, so OUTPUT = THE CLIP, unchanged, and nothing is appended
     (``seg_frames == clip_frames``, ``end_segment_latent == 0``). Stage 1
     denoises that clip as a single window, so the band is inside the window the
-    generated latents attend over — the reason the mode exists.
-  * ``MULTI_CLIP_SETS`` -> ``"reverse"``: the SAME promise on a chain. The band
-    is the LAST clip's own tail, nothing is appended, and OUTPUT = THE CLIPS'
-    OWN TOTAL. What the mode adds is a stage-1 SCHEDULE — the three tables
-    ``seg_generation_order`` / ``seg_head_source`` / ``seg_tail_source`` — that
-    generates the clips last-to-first, each freezing the next one's head as its
-    own tail.
+    generated latents attend over — the reason the mode exists. A start source
+    may share that window: the two frozen bands sit at opposite ends of it.
+  * ``MULTI_CLIP_SETS`` with NO start source -> ``"reverse"``: the SAME promise
+    on a chain. The band is the LAST clip's own tail, nothing is appended, and
+    OUTPUT = THE CLIPS' OWN TOTAL. What the mode adds is a stage-1 SCHEDULE —
+    the three tables ``seg_generation_order`` / ``seg_head_source`` /
+    ``seg_tail_source`` — that generates the clips last-to-first, each freezing
+    the next one's head as its own tail.
+  * ``MULTI_CLIP_SETS`` WITH a start source -> ``"bridge"``: the chain fills the
+    span between two uploads. Geometry AND schedule are a PLAIN FORWARD CHAIN's
+    (that is the point — no seam is generated backwards), and the only thing
+    that differs from a chain with no end source is that the LAST segment is
+    frozen at both ends: のり代 at its head, band at its tail. OUTPUT = THE
+    CLIPS' OWN TOTAL, minus the trimmed start-source head as on any V2V.
+    (Before 2026-09-07 this combination was a 422; see §3-90.)
 
-A THIRD MODE, ``"internal_segment"``, IS THE HISTORICAL TWO-OR-MORE-CLIPS
+A FOURTH MODE, ``"internal_segment"``, IS THE HISTORICAL TWO-OR-MORE-CLIPS
 DESIGN: the band got a stage-1 segment of its own appended after the clips, so
 OUTPUT = CLIPS + BAND. It is no longer reachable from the API, and its tests are
 kept here — reached through ``end_source_mode_override``, which exists for
@@ -38,13 +47,15 @@ The pillars this file defends, across every mode:
   2. THE BAND MAY STRADDLE STAGE-2 TILES. ``end_tile_bands`` is the single
      source of truth for what each tile freezes, clamps included.
   3. THE THREE SCHEDULE TABLES ARE INERT OUTSIDE ``reverse``. On a plain chain,
-     V2V, retake and the legacy mode they are exactly what the engine's old
-     ``for i in range(n_seg)`` loop did, which is what makes their introduction a
-     no-op on every previously validated path.
+     V2V, retake, ``in_window``, ``bridge`` and the legacy mode they are exactly
+     what the engine's old ``for i in range(n_seg)`` loop did, which is what
+     makes their introduction a no-op on every previously validated path — and
+     what lets ``bridge`` reuse the forward schedule unchanged.
   4. WHAT EACH MODE REJECTS. ``in_window`` needs a clip with free latents left;
-     ``reverse`` needs a LAST clip that holds the band plus the のり代, and
-     refuses a start source outright; the legacy mode rejects neither but needs
-     ``kv >= 2``, which ``reverse`` is exempt from.
+     ``reverse`` and ``bridge`` need a LAST clip that holds the band plus the
+     のり代 (one rejection, one message, two modes); the legacy mode rejects
+     neither but needs ``kv >= 2``, which the two multi-clip modes are exempt
+     from.
 """
 
 from __future__ import annotations
@@ -128,11 +139,13 @@ KNOWN_AUDIO_TILING_MESSAGES = (
 # by the boundary test.
 NO_FREE_LATENTS_MESSAGE = "leaves the clip no free video latents"
 
-# ``reverse`` mode's own version of the same idea, one clip further along: the
-# LAST clip must hold the band AND the のり代 the clip before it takes from its
-# head. Tolerated in the sweeps for the same reason, pinned by its own boundary
-# test below.
-NOTHING_TO_CARRY_MESSAGE = "nothing to carry backwards"
+# The two MULTI-CLIP modes' version of the same idea, one clip further along:
+# the LAST clip must hold the band AND the のり代 it shares with the clip next to
+# it. ``reverse`` and ``bridge`` differ only in which direction that のり代 runs
+# (out of the head under ``reverse``, into it under ``bridge``), so they share
+# one rejection and one message. Tolerated in the sweeps for the same reason,
+# pinned by its own boundary test below — once per mode.
+NO_FREE_LAST_CLIP_MESSAGE = "leaves the LAST clip no free video latents"
 
 
 def _expected_tables(n_seg: int, *, reverse: bool):
@@ -297,7 +310,7 @@ def test_output_length_is_the_clips_total_in_reverse(clips, end_px):
             )
         except ValueError as exc:
             assert (
-                NOTHING_TO_CARRY_MESSAGE in str(exc)
+                NO_FREE_LAST_CLIP_MESSAGE in str(exc)
                 or "degenerate audio overlap" in str(exc)
                 or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
             ), exc
@@ -511,7 +524,7 @@ def test_end_tile_bands_match_a_naive_intersection_and_cover_the_band(
     except ValueError as exc:
         assert (
             NO_FREE_LATENTS_MESSAGE in str(exc)
-            or NOTHING_TO_CARRY_MESSAGE in str(exc)
+            or NO_FREE_LAST_CLIP_MESSAGE in str(exc)
             or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
         ), exc
         return
@@ -623,7 +636,7 @@ def test_junction_in_reverse_is_inside_the_last_clip_and_after_every_seam(
         layout = cm.compute_chain_layout(clips, FPS, end_context_px=end_px)
     except ValueError as exc:
         assert (
-            NOTHING_TO_CARRY_MESSAGE in str(exc)
+            NO_FREE_LAST_CLIP_MESSAGE in str(exc)
             or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
         ), exc
         return
@@ -837,7 +850,7 @@ def test_kv_sweep_never_degenerates_the_audio_overlap(end_px):
             )
             assert (
                 NO_FREE_LATENTS_MESSAGE in str(exc)
-                or NOTHING_TO_CARRY_MESSAGE in str(exc)
+                or NO_FREE_LAST_CLIP_MESSAGE in str(exc)
                 or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
             ), exc
             continue
@@ -857,7 +870,7 @@ def test_kv_sweep_never_degenerates_the_audio_overlap(end_px):
         except ValueError as exc:
             assert (
                 NO_FREE_LATENTS_MESSAGE in str(exc)
-                or NOTHING_TO_CARRY_MESSAGE in str(exc)
+                or NO_FREE_LAST_CLIP_MESSAGE in str(exc)
             ), exc
 
 
@@ -905,11 +918,11 @@ def test_multi_tile_and_multi_clip_chains_accept_an_end_source():
     assert layout.seg_generation_order == [2, 1, 0]
 
 
-# ── the two rejections "reverse" mode adds ───────────────────────────────────
+# ── the rejection the two multi-clip modes share ─────────────────────────────
 def test_a_last_clip_too_short_for_the_band_is_rejected_at_the_boundary():
-    """The band plus the のり代 the previous clip takes from this clip's head must
-    leave the LAST clip something to generate. With K_v=3 and a 72-frame band
-    (9 latents) that clip needs 13 latents == 97 pixel frames: 89 is refused."""
+    """The band plus the のり代 this clip shares with its neighbour must leave the
+    LAST clip something to generate. With K_v=3 and a 72-frame band (9 latents)
+    that clip needs 13 latents == 97 pixel frames: 89 is refused."""
     ok = cm.compute_chain_layout([49, 97], FPS, end_context_px=72)
     assert ok.seg_latent[-1] == 13 and ok.n_end_v == 9
     assert ok.total_px == ok.to_dict()["end_source"]["clips_total_px"]
@@ -918,7 +931,7 @@ def test_a_last_clip_too_short_for_the_band_is_rejected_at_the_boundary():
         cm.compute_chain_layout([49, 89], FPS, end_context_px=72)
     msg = str(exc.value)
     # (a) what ran out, in the layout's own terms
-    assert NOTHING_TO_CARRY_MESSAGE in msg
+    assert NO_FREE_LAST_CLIP_MESSAGE in msg
     assert "n_end_v=9" in msg and "K_v=3" in msg
     # (b) the concrete clip length that WOULD work
     assert "97 pixel frames" in msg
@@ -933,19 +946,91 @@ def test_a_last_clip_too_short_for_the_band_is_rejected_at_the_boundary():
     assert cm.compute_chain_layout([25, 25, 169], FPS, end_context_px=72).total_px > 0
 
 
-def test_a_start_source_is_rejected_with_two_or_more_clips():
-    """Start + end on ONE clip is the interpolation case and stays accepted. On a
-    chain it would freeze clip 0 at BOTH ends (head from the source video, tail
-    from the reverse のり代), which nothing has generated — refused rather than
-    shipped untested."""
+def test_the_same_last_clip_boundary_holds_in_bridge():
+    """The mirror of the test above under ``bridge``: the same clip lengths, the
+    same K_v, the same band and a start source added. The boundary must sit in
+    exactly the same place — the check is about the LAST clip's own latents, and
+    a start source is frozen into clip 0, nowhere near it."""
+    ok = cm.compute_chain_layout(
+        [49, 97], FPS, source_context_px=25, end_context_px=72
+    )
+    assert ok.end_source_mode == "bridge"
+    assert ok.seg_latent[-1] == 13 and ok.n_end_v == 9
+
     with pytest.raises(ValueError) as exc:
         cm.compute_chain_layout(
-            [169, 169], FPS, source_context_px=73, end_context_px=72
+            [49, 89], FPS, source_context_px=25, end_context_px=72
         )
     msg = str(exc.value)
-    assert "cannot be combined" in msg
-    assert "2 clips" in msg
-    assert "ONE clip" in msg
+    assert NO_FREE_LAST_CLIP_MESSAGE in msg
+    assert "n_end_v=9" in msg and "K_v=3" in msg
+    assert "97 pixel frames" in msg
+    # Lowering the のり代 is a way out here too, exactly as the message says.
+    assert cm.compute_chain_layout(
+        [49, 89], FPS, kv=2, source_context_px=25, end_context_px=72
+    ).end_source_mode == "bridge"
+
+
+def test_bridge_accepts_a_one_latent_overlap_like_reverse():
+    """``bridge`` is exempt from the ``kv >= 2`` floor for the same reason
+    ``reverse`` is: it appends no segment, so it spends exactly the audio overlap
+    budget a chain with no end source spends. The mirror of the ``reverse``
+    exemption test, with a start source added."""
+    layout = cm.compute_chain_layout(
+        [169] * 3, FPS, kv=1, source_context_px=73, end_context_px=8
+    )
+    assert layout.end_source_mode == "bridge"
+    assert layout.kv == 1
+    # The budget really is the plain chain's: same joins, same per-join K_a.
+    plain = cm.compute_chain_layout([169] * 3, FPS, kv=1)
+    assert layout.ka_list == plain.ka_list
+    assert layout.total_px == plain.total_px
+    # ``in_window`` keeps the floor, deliberately — the conservative choice.
+    with pytest.raises(ValueError, match="needs overlap_frames"):
+        cm.compute_chain_layout([169], FPS, kv=1, end_context_px=8)
+
+
+def test_a_start_source_with_two_or_more_clips_selects_bridge():
+    """Start + end on ONE clip is the interpolation case and stays ``in_window``.
+    On a CHAIN the same pair is now ``bridge`` (until 2026-09-07 it was a 422):
+    a plain FORWARD chain whose LAST clip alone is frozen at both ends. The
+    geometry — every table, the band, the tile plan — is what the same clips
+    produce without a start source; only the trim and the mode name differ."""
+    bridge = cm.compute_chain_layout(
+        [169, 169], FPS, source_context_px=73, end_context_px=72
+    )
+    assert bridge.end_source_mode == "bridge"
+    # (a) the schedule is a PLAIN FORWARD chain's — the whole point of the mode.
+    assert bridge.seg_generation_order == [0, 1]
+    assert bridge.seg_head_source == [None, 0]
+    assert bridge.seg_tail_source == [None, None]
+    # (b) nothing is appended and the delivered length is the clips', minus the
+    #     trimmed start-source head exactly as on any V2V.
+    assert bridge.seg_frames == [169, 169] == bridge.clip_frames
+    assert bridge.end_segment_px == 0 and bridge.end_segment_latent == 0
+    assert bridge.trim_px == 73
+    assert bridge.new_frames_px == bridge.total_px - 73
+    # (c) every band number is IDENTICAL to the same clips under ``reverse``,
+    #     which is the machine-checkable form of "the tables did not change".
+    rev = cm.compute_chain_layout([169, 169], FPS, end_context_px=72)
+    assert bridge.total_px == rev.total_px
+    assert bridge.f_total == rev.f_total
+    assert bridge.seg_latent == rev.seg_latent
+    assert bridge.seg_audio == rev.seg_audio
+    assert bridge.ka_list == rev.ka_list
+    assert bridge.n_end_v == rev.n_end_v
+    assert bridge.n_end_a == rev.n_end_a
+    assert bridge.end_tile_bands == rev.end_tile_bands
+    assert bridge.end_tile_bands_a == rev.end_tile_bands_a
+    assert bridge.v_tiles == rev.v_tiles
+    assert bridge.segment_seam_junctions == rev.segment_seam_junctions
+    assert bridge.end_source_junction_px == rev.end_source_junction_px
+    # ...and it publishes the forward order under the end-source key.
+    d = bridge.to_dict()
+    assert d["end_source"]["mode"] == "bridge"
+    assert d["end_source"]["generation_order"] == [0, 1]
+    assert d["end_source"]["clips_total_px"] == bridge.total_px
+    assert d["v2v"]["trim_px"] == 73
 
     # The one-clip pair is untouched...
     ok = cm.compute_chain_layout([169], FPS, source_context_px=73, end_context_px=72)
@@ -962,6 +1047,34 @@ def test_a_start_source_is_rejected_with_two_or_more_clips():
     )
     assert legacy.n_ctx_v == 14 and legacy.n_end_v == 9
     assert legacy.seg_frames == [169, 169, 89]
+
+
+def test_forcing_reverse_with_a_start_source_trips_the_assert():
+    """The natural rule can no longer produce ``reverse`` + a start source, so
+    the old 422 is an assert now — reachable only through the override, and kept
+    because what it describes (clip 0 frozen at BOTH ends, its head by the source
+    and its tail by the reverse のり代) is still a shape nothing has generated."""
+    with pytest.raises(AssertionError) as exc:
+        cm.compute_chain_layout(
+            [169, 169], FPS, source_context_px=73, end_context_px=72,
+            end_source_mode_override="reverse",
+        )
+    msg = str(exc.value)
+    assert "frozen at" in msg and "BOTH ends" in msg
+    assert "bridge" in msg
+    # The same override WITHOUT a start source is the natural mode, so it is
+    # simply a no-op rather than a trip.
+    forced = cm.compute_chain_layout(
+        [169, 169], FPS, end_context_px=72, end_source_mode_override="reverse",
+    )
+    assert forced.end_source_mode == "reverse"
+    assert forced.seg_generation_order == [1, 0]
+    # ...and "bridge" is deliberately NOT an accepted override value: it is
+    # reachable by the natural rule, so there is nothing for one to add.
+    with pytest.raises(ValueError, match="unknown end_source_mode_override"):
+        cm.compute_chain_layout(
+            [169, 169], FPS, end_context_px=72, end_source_mode_override="bridge",
+        )
 
 
 def test_start_and_end_source_that_meet_in_the_middle_are_rejected_in_window():
@@ -1011,18 +1124,22 @@ def test_new_frames_px_still_matches_the_one_clip_continuation():
 @pytest.mark.parametrize(
     "clips,ctx,end_px",
     [
-        # A start source and an end source may share a timeline only on ONE clip
-        # (that pairing has its own rejection test above), so the multi-clip rows
-        # carry one or the other, never both. The single-clip rows are 169 rather
-        # than 49 frames: with one clip the band is frozen INSIDE the clip, and a
-        # 49-frame clip is 7 stage-1 latents — too few to hold a 72-frame band at
-        # all (pinned by its own boundary test).
+        # A start source and an end source may share a timeline on ONE clip
+        # (``in_window``) and on a chain (``bridge``), so both kinds of row carry
+        # both. The single-clip rows are 169 rather than 49 frames: with one clip
+        # the band is frozen INSIDE the clip, and a 49-frame clip is 7 stage-1
+        # latents — too few to hold a 72-frame band at all (pinned by its own
+        # boundary test).
         ([169], None, None), ([169], 25, None),
         ([169], None, 72), ([169], 25, 72),
         ([49, 49], None, None), ([49, 49], 25, None),
         ([257, 257], None, None), ([257, 257], 73, None), ([257, 257], 145, None),
         ([257, 257], None, 72), ([169, 257, 257], None, 72),
         ([169, 257, 257], 73, None),
+        # ``bridge`` rows: the identity ``new_frames_px == total_px - trim_px``
+        # must hold with BOTH ends frozen on a chain, which is the one shape
+        # where the trim and the band are on different clips.
+        ([257, 257], 73, 72), ([169, 257, 257], 73, 72),
     ],
 )
 def test_new_frames_px_identity_holds_everywhere(clips, ctx, end_px):
@@ -1063,9 +1180,10 @@ def test_total_length_cap_geometry_is_pinned():
 
 
 # ── the mode switch itself ───────────────────────────────────────────────────
-def test_the_clip_count_alone_picks_the_mode_and_the_segment_list():
-    """One clip -> ``in_window``, two or more -> ``reverse``, and NOTHING is
-    appended either way. Nothing else about the request participates, and a chain
+def test_the_clip_count_and_the_start_source_pick_the_mode_and_the_segment_list():
+    """One clip -> ``in_window``; two or more -> ``reverse`` without a start
+    source and ``bridge`` with one; and NOTHING is appended in any of them. Those
+    TWO inputs are the whole rule — no other field participates — and a chain
     without an end source has no mode at all."""
     one = cm.compute_chain_layout([169], FPS, end_context_px=72)
     assert one.end_source_mode == "in_window"
@@ -1083,8 +1201,23 @@ def test_the_clip_count_alone_picks_the_mode_and_the_segment_list():
     assert three.end_source_mode == "reverse"
     assert three.seg_generation_order == [2, 1, 0]
 
-    # Both modes must be seg_frames-identical to the same clips with no end
-    # source — i.e. neither appends anything.
+    # The SAME clip counts with a start source added -> ``bridge``, and it too
+    # appends nothing.
+    two_b = cm.compute_chain_layout(
+        [169, 169], FPS, source_context_px=73, end_context_px=72
+    )
+    assert two_b.end_source_mode == "bridge"
+    assert two_b.seg_frames == [169, 169] == two_b.clip_frames
+    assert two_b.end_segment_px == 0 and two_b.end_segment_latent == 0
+
+    three_b = cm.compute_chain_layout(
+        [169] * 3, FPS, source_context_px=73, end_context_px=72
+    )
+    assert three_b.end_source_mode == "bridge"
+    assert three_b.seg_generation_order == [0, 1, 2]
+
+    # Every mode must be seg_frames-identical to the same clips with no end
+    # source — i.e. none of them appends anything.
     for clips in ([169], [169, 169]):
         plain = cm.compute_chain_layout(clips, FPS)
         withes = cm.compute_chain_layout(clips, FPS, end_context_px=72)
@@ -1093,7 +1226,7 @@ def test_the_clip_count_alone_picks_the_mode_and_the_segment_list():
         assert plain.v_tiles == withes.v_tiles
         assert plain.end_source_mode is None
 
-    # ...and the switch is insensitive to everything but the clip count.
+    # ...and the switch is insensitive to everything but those two inputs.
     for kwargs in ({"kv": 4}, {"source_context_px": 25}, {"fps": 30.0}):
         fps = kwargs.pop("fps", FPS)
         assert cm.compute_chain_layout(
@@ -1104,6 +1237,14 @@ def test_the_clip_count_alone_picks_the_mode_and_the_segment_list():
         assert cm.compute_chain_layout(
             [169, 169], fps, end_context_px=72, **kwargs
         ).end_source_mode == "reverse"
+        assert cm.compute_chain_layout(
+            [169, 169], fps, end_context_px=72, source_context_px=73, **kwargs
+        ).end_source_mode == "bridge"
+    # A start source WITHOUT an end source still has no mode at all: the pair is
+    # what selects ``bridge``, not the start source on its own.
+    assert cm.compute_chain_layout(
+        [169, 169], FPS, source_context_px=73
+    ).end_source_mode is None
 
 
 def test_the_mode_override_is_the_only_way_to_reach_the_legacy_geometry():
@@ -1124,11 +1265,15 @@ def test_the_mode_override_is_the_only_way_to_reach_the_legacy_geometry():
 @pytest.mark.parametrize(
     "kwargs,reverse",
     [
-        # plain chain / V2V / retake / in-window / the legacy mode -> the plain
-        # ascending schedule the engine's loop has always run.
+        # plain chain / V2V / retake / in-window / bridge / the legacy mode ->
+        # the plain ascending schedule the engine's loop has always run.
         ({}, False),
         ({"source_context_px": 73}, False),
         ({"end_context_px": 72, "end_source_mode_override": "internal_segment"}, False),
+        # ``bridge``: a start source AND an end source on a chain. It is in this
+        # list rather than in the reverse row because its tables are literally a
+        # forward chain's — that equivalence IS the mode.
+        ({"source_context_px": 73, "end_context_px": 72}, False),
         # ...and only the reverse mode changes it.
         ({"end_context_px": 72}, True),
     ],
@@ -1180,9 +1325,21 @@ def test_the_reverse_schedule_carries_every_seam_exactly_once():
     assert sum(x is not None for x in rev.seg_head_source) == 0
     assert sum(x is not None for x in fwd.seg_head_source) == n_join
     assert sum(x is not None for x in fwd.seg_tail_source) == 0
-    # ...and both spend the SAME audio overlap budget, since neither appends a
-    # segment. That equality is the whole justification for the kv >= 2 exemption.
-    assert rev.ka_list == fwd.ka_list
+    # ``bridge`` carries its seams the FORWARD way, so it counts with ``fwd``
+    # rather than with ``rev`` — the single clearest statement of what the mode
+    # is.
+    bridge = cm.compute_chain_layout(
+        clips, FPS, kv=1, source_context_px=73, end_context_px=8
+    )
+    assert bridge.end_source_mode == "bridge"
+    assert sum(x is not None for x in bridge.seg_head_source) == n_join
+    assert sum(x is not None for x in bridge.seg_tail_source) == 0
+    assert bridge.seg_head_source == fwd.seg_head_source
+    assert bridge.seg_tail_source == fwd.seg_tail_source
+    # ...and all three spend the SAME audio overlap budget, since none of them
+    # appends a segment. That equality is the whole justification for the
+    # kv >= 2 exemption, in ``bridge`` exactly as in ``reverse``.
+    assert rev.ka_list == fwd.ka_list == bridge.ka_list
     assert sum(rev.ka_list) == sum(fwd.ka_list) == len(rev.ka_list)
 
 
@@ -1223,13 +1380,22 @@ def test_in_window_band_that_fills_the_clip_is_rejected_at_the_boundary():
 
 
 def test_each_mode_rejects_on_its_own_terms_not_the_others():
-    # ``in_window``'s check is scoped to one clip and ``reverse``'s to the LAST
-    # clip; the legacy mode has neither. The same short-clip request therefore
-    # gets three different answers, which is what stops one rule leaking.
+    # ``in_window``'s check is scoped to the WHOLE one-clip timeline (a start
+    # source's head counts against it) while ``reverse`` and ``bridge`` scope
+    # theirs to the LAST clip; the legacy mode has neither. The same short-clip
+    # request therefore gets different answers per mode, which is what stops one
+    # rule leaking into another.
     with pytest.raises(ValueError, match=NO_FREE_LATENTS_MESSAGE):
         cm.compute_chain_layout([49], FPS, end_context_px=136)
-    with pytest.raises(ValueError, match=NOTHING_TO_CARRY_MESSAGE):
+    with pytest.raises(ValueError, match=NO_FREE_LAST_CLIP_MESSAGE):
         cm.compute_chain_layout([49, 49], FPS, end_context_px=136)
+    # ``bridge`` shares ``reverse``'s rejection verbatim — same message, same
+    # boundary — because the question ("is the LAST clip's middle free?") is the
+    # same one.
+    with pytest.raises(ValueError, match=NO_FREE_LAST_CLIP_MESSAGE):
+        cm.compute_chain_layout(
+            [49, 49], FPS, source_context_px=25, end_context_px=136
+        )
     legacy = cm.compute_chain_layout(
         [49, 49], FPS, end_context_px=136,
         end_source_mode_override="internal_segment",
@@ -1305,6 +1471,52 @@ def test_the_reverse_worked_example_is_pinned():
     assert layout.seg_generation_order == [2, 1, 0]
     assert layout.seg_tail_source == [1, 2, None]
     assert layout.to_dict()["end_source"]["clips_total_px"] == 505
+
+
+def test_the_bridge_worked_example_is_pinned():
+    """The same three-clip example with a start source added — the shape the
+    real-hardware gate runs. Every number the gate reads out of metadata.json is
+    here, and every geometric one is IDENTICAL to the reverse example above:
+    ``bridge`` changes the schedule and the trim, never the geometry."""
+    layout = cm.compute_chain_layout(
+        [169] * 3, FPS, kv=1, source_context_px=73, end_context_px=8
+    )
+    rev = cm.compute_chain_layout([169] * 3, FPS, kv=1, end_context_px=8)
+    assert layout.end_source_mode == "bridge"
+    # (a) geometry: byte-for-byte the reverse example's.
+    assert layout.seg_latent == [22, 22, 22] == rev.seg_latent
+    assert layout.f_total == 64 == rev.f_total
+    assert layout.total_px == 505 == rev.total_px
+    assert layout.a_total == 526 == rev.a_total
+    assert layout.ka_list == [1, 1] == rev.ka_list
+    assert layout.n_end_v == 1 == rev.n_end_v
+    assert layout.n_end_a == rev.n_end_a
+    assert layout.v_tiles == [(0, 22), (18, 22), (36, 22), (54, 10)] == rev.v_tiles
+    assert layout.end_tile_bands == rev.end_tile_bands
+    assert layout.segment_seam_junctions == [168, 336] == rev.segment_seam_junctions
+    assert layout.end_source_junction_px == 496 == rev.end_source_junction_px
+    # (b) schedule: FORWARD, not reversed.
+    assert layout.seg_generation_order == [0, 1, 2]
+    assert layout.seg_head_source == [None, 0, 1]
+    assert layout.seg_tail_source == [None, None, None]
+    # (c) the start source's own numbers, and the trim it causes.
+    assert layout.n_ctx_v == 10
+    assert layout.trim_px == 73
+    assert layout.v2v_context_junction_px == 72
+    assert layout.new_frames_px == 505 - 73 == 432
+    # (d) the band is still inside the LAST clip, past the final seam — and now
+    #     also after the trim, the one statement that relates the two sources.
+    assert 336 < 496 < 504
+    assert layout.end_source_junction_px >= layout.trim_px
+    # (e) the LAST segment is the one frozen at BOTH ends: the engine freezes
+    #     ka_list[-1] audio latents at its head and n_end_a at its tail, and
+    #     they must leave something between them.
+    assert layout.n_end_a + layout.ka_list[-1] < layout.seg_audio[-1]
+    d = layout.to_dict()
+    assert d["end_source"]["mode"] == "bridge"
+    assert d["end_source"]["generation_order"] == [0, 1, 2]
+    assert d["end_source"]["clips_total_px"] == 505
+    assert d["v2v"]["new_frames_px"] == 432
 
 
 # ── both ends frozen in the same window ──────────────────────────────────────
@@ -1446,7 +1658,7 @@ def test_n_end_a_boundaries_hold_across_the_grid(clips, end_px):
         except ValueError as exc:
             assert (
                 NO_FREE_LATENTS_MESSAGE in str(exc)
-                or NOTHING_TO_CARRY_MESSAGE in str(exc)
+                or NO_FREE_LAST_CLIP_MESSAGE in str(exc)
                 or "degenerate audio overlap" in str(exc)
                 or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
             ), exc
@@ -1471,6 +1683,62 @@ def test_n_end_a_boundaries_hold_across_the_grid(clips, end_px):
     assert checked or end_px >= min(clips)
 
 
+@pytest.mark.parametrize("clips", MULTI_CLIP_SETS)
+@pytest.mark.parametrize("end_px", [8, 40, 72, 136])
+def test_bridge_audio_boundaries_hold_across_the_grid(clips, end_px):
+    """``bridge``'s own sweep of the audio invariants, because it is the ONE mode
+    where they are operative rather than descriptive: its last segment really is
+    frozen at both ends at once, and a start source really does put a frozen
+    audio head on the timeline that a multi-clip layout never had before.
+
+    Both are asserts inside ``compute_chain_layout`` — i.e. a 500 if they ever
+    fail — so what this pins is that NO REACHABLE REQUEST TRIPS ONE: everything
+    refused here must be refused with a ValueError (a 422) and a known message."""
+    checked = 0
+    # v2v_context_frames is bounded [25, 145] by config and must be 8n+1.
+    for fps, kv, window, ctx in itertools.product(
+        ALL_FPS, (1, 2, 3, 5), BOTH_WINDOWS, (25, 73, 145)
+    ):
+        if any(kv >= cm.v_latent_frames(c) for c in clips):
+            continue
+        if ctx >= clips[0]:
+            continue
+        v_tile, v_adv = cm.resolve_stage2_window(window)
+        try:
+            layout = cm.compute_chain_layout(
+                clips, fps, kv=kv, v_tile=v_tile, v_adv=v_adv,
+                source_context_px=ctx, end_context_px=end_px,
+            )
+        except ValueError as exc:
+            # A 422 with a message the app can quote — never an AssertionError,
+            # which pytest would surface here as an error rather than catch.
+            assert (
+                NO_FREE_LAST_CLIP_MESSAGE in str(exc)
+                or "degenerate audio overlap" in str(exc)
+                or "exceeds stage-2 tile size" in str(exc)
+                or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
+            ), exc
+            continue
+        assert layout.end_source_mode == "bridge"
+        checked += 1
+        # (1) the two frozen bands inside the LAST segment. Measured minimum
+        #     slack over the reachable bridge grid is 4 latents; pinning the
+        #     bound rather than "they do not overlap" is what would catch the
+        #     geometry drifting towards the degenerate case.
+        ka_last = layout.ka_list[-1] if layout.ka_list else 0
+        assert layout.n_end_a + ka_last + 4 <= layout.seg_audio[-1]
+        # (2) the START source's frozen audio head against the band, on the
+        #     WHOLE timeline. This is the statement ``reverse`` never had to
+        #     make (its n_ctx_a is always 0). Measured minimum slack: 11.
+        assert layout.n_ctx_a > 0
+        assert layout.n_ctx_a + layout.n_end_a + 11 <= layout.a_total
+        # (3) ...and the band still lands after the trim, the video-side
+        #     statement that relates the two sources.
+        assert layout.end_source_junction_px >= layout.trim_px
+    # A parametrisation where NOTHING was accepted proves nothing.
+    assert checked or end_px >= min(clips)
+
+
 @pytest.mark.parametrize("clips", MULTI_CLIP_SETS + SINGLE_CLIP_SETS)
 @pytest.mark.parametrize("end_px", [8, 40, 72, 136])
 @pytest.mark.parametrize("window", BOTH_WINDOWS)
@@ -1488,7 +1756,7 @@ def test_end_tile_bands_a_match_a_naive_intersection_and_cover_the_band(
     except ValueError as exc:
         assert (
             NO_FREE_LATENTS_MESSAGE in str(exc)
-            or NOTHING_TO_CARRY_MESSAGE in str(exc)
+            or NO_FREE_LAST_CLIP_MESSAGE in str(exc)
             or any(m in str(exc) for m in KNOWN_AUDIO_TILING_MESSAGES)
         ), exc
         return

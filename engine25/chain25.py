@@ -429,18 +429,23 @@ class EndSourceSpec:
     :func:`_encode_end_source_video` is the contract check between the app's
     cutter and this encode.
 
-    WHERE THE BAND LIVES depends on the clip count, and ``chain_math``
-    decides it once as ``layout.end_source_mode``: ``"in_window"`` on ONE
-    clip (the band is that clip's own tail) and ``"reverse"`` on two or more
+    WHERE THE BAND LIVES depends on the clip count and on whether a start
+    source came with it, and ``chain_math`` decides it once as
+    ``layout.end_source_mode``: ``"in_window"`` on ONE clip (the band is that
+    clip's own tail), ``"reverse"`` on two or more WITHOUT a start source
     (stage 1 generates the clips LAST TO FIRST, each freezing the next one's
-    opening as its own ending). Nothing in this module re-derives either --
-    :func:`run_chain` reads the schedule off the layout's three tables.
+    opening as its own ending), and ``"bridge"`` on two or more WITH one (an
+    ordinary FORWARD schedule; only the last clip is frozen at both ends, its
+    head by the のり代 and its tail by this band). Nothing in this module
+    re-derives any of them -- :func:`run_chain` reads the schedule off the
+    layout's three tables, which under ``bridge`` are a plain forward chain's.
 
     Mutually exclusive with :class:`RetakeSpec` and :class:`AudioSourceSpec`,
     and COMBINABLE with :class:`SourceSpec` -- the one-clip interpolation the
-    API explicitly allows (start material, end material, generated middle).
-    That last one is not a detail: it is why the audio anchor below is an
-    independent branch rather than another ``elif``.
+    API explicitly allows (start material, end material, generated middle) and
+    its multi-clip form, ``bridge``. That combination is not a detail: it is
+    why the audio anchor below is an independent branch rather than another
+    ``elif``.
     """
 
     path: str
@@ -1882,8 +1887,9 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     )
     # ``internal_segment`` is the end source's LEGACY geometry -- an extra band
     # segment appended after the user's clips. It is unreachable from the API
-    # (``compute_chain_layout`` derives the mode from the clip count and only an
-    # explicit ``end_source_mode_override`` can force this one), and this engine
+    # (``compute_chain_layout`` derives the mode from the clip count and the
+    # presence of a start source, and only an explicit
+    # ``end_source_mode_override`` can force this one), and this engine
     # deliberately does not implement it: the appended segment would make
     # ``n_seg == n + 1``, which every shape assertion below is written against.
     # NAMED rather than left to fail somewhere downstream, because a silent
@@ -1891,9 +1897,9 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
     if layout.end_source_mode == "internal_segment":
         raise ChainError(
             "end_source_mode='internal_segment' is not implemented on this engine "
-            "(engine25 runs the in_window and reverse geometries only); it is "
-            "unreachable from the API and reaching it here means a caller passed "
-            "chain_math's end_source_mode_override."
+            "(engine25 runs the in_window, reverse and bridge geometries only); "
+            "it is unreachable from the API and reaching it here means a caller "
+            "passed chain_math's end_source_mode_override."
         )
     seg_frames = layout.seg_frames
     n_seg = len(seg_frames)
@@ -2637,7 +2643,17 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
             # still has to be written somewhere -- hence the zeros arm. Under
             # ``reverse`` it is the user's LAST clip, whose head is free and
             # whose tail is this band, so it too arrives with ``init_v`` None.
-            # (``internal_segment`` is refused at the top of this function.)
+            # Under ``bridge`` (2+ clips WITH a start source) it is the user's
+            # LAST clip on a FORWARD schedule, so it has already taken the
+            # forward-carry branch above and ``init_v`` is REAL -- the zeros arm
+            # is unreachable there, and this is the one segment whose head AND
+            # tail are both frozen (のり代 at ``v_head_strength``, band at
+            # ``v_tail_strength``). It is also the first shipping caller that
+            # asks ``_band_conditionings`` for a keyframe-mask clear, a frozen
+            # head and a frozen tail in ONE call; that function adds the three
+            # independently, and ``tests/test_ltx25_band.py`` pins the
+            # combination. (``internal_segment`` is refused at the top of this
+            # function.)
             if end_source is not None and i == n_seg - 1:
                 # The band and a reverse のり代 would write the SAME latents; the
                 # layout guarantees they never both apply, and this is where

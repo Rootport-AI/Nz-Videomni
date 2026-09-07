@@ -86,9 +86,11 @@ Protocol (one JSON object per line; parent -> worker):
    # image here). Its latents are frozen as the TAIL of the last stage-1 segment
    # and the last stage-2 tile. UNLIKE ``source`` nothing is trimmed: the output
    # length is the clips' own total whether there is one clip (the band is that
-   # clip's tail) or several (the chain is generated last-to-first towards it).
-   # ``strength`` (0..1, default 1.0) softens the STAGE-1 tail freeze only.
-   # Combines with ``source`` (start+end = interpolation) on ONE clip only:
+   # clip's tail) or several (the chain is generated last-to-first towards it,
+   # or — with a ``source`` — forwards, with only the last clip frozen at both
+   # ends). ``strength`` (0..1, default 1.0) softens the STAGE-1 tail freeze
+   # only. Combines with ``source`` at any clip count (start+end = an
+   # interpolation on one clip, a bridge between the two uploads on a chain):
    end_source:{path, context_frames, strength}|null}
   {"op": "shutdown"}
 

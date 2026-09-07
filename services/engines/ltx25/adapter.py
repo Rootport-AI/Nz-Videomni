@@ -355,7 +355,8 @@ GOVERNED_FIELDS: dict[str, str] = {}
 #: the mode has a code path and moved to :data:`CHAIN_HONOURED_FIELDS`.
 #: ``end_source`` LEFT WITH THE END-SOURCE INCREMENT, the LAST chain MODE to do
 #: so: engine25 runs the layout's own stage-1 SCHEDULE now
-#: (``chain25.run_chain(end_source=...)`` — reverse order on 2+ clips) and
+#: (``chain25.run_chain(end_source=...)`` — reverse order on 2+ clips without a
+#: start source, plain forward order under ``bridge`` when one is present) and
 #: freezes the material's band at the timeline's tail in both stages. With it
 #: gone, every chain mode the schema can express has a code path here.
 #: ``nag_enabled`` LEFT WITH THE NAG/VSF INCREMENT, the chain twin of the

@@ -394,12 +394,16 @@ class LimitsConfig(BaseModel):
     # groups and never touches the causal VAE's lone keyframe latent (see
     # chain_math.v_tail_latents).
     #
-    # THE CLIP COUNT PICKS THE GEOMETRY, AND THE OUTPUT LENGTH DOES NOT CHANGE
-    # EITHER WAY. ONE clip -> "in_window": the band is the clip's OWN tail. TWO
-    # OR MORE -> "reverse": the band is the LAST clip's own tail and the clips
-    # are generated last-to-first towards it. (The historical "internal_segment"
-    # geometry, which appended the band and grew the output by it, is no longer
-    # reachable from the API.)
+    # THE CLIP COUNT AND THE PRESENCE OF A START SOURCE PICK THE GEOMETRY, AND
+    # THE OUTPUT LENGTH DOES NOT CHANGE IN ANY OF THEM. ONE clip -> "in_window":
+    # the band is the clip's OWN tail. TWO OR MORE without a source_video ->
+    # "reverse": the band is the LAST clip's own tail and the clips are generated
+    # last-to-first towards it. TWO OR MORE *with* a source_video -> "bridge":
+    # the clips are generated forwards as usual and only the LAST one is
+    # conditioned at both ends (のり代 at its head, the band at its tail), so the
+    # chain fills the span between the two uploads. (The historical
+    # "internal_segment" geometry, which appended the band and grew the output by
+    # it, is no longer reachable from the API.)
     #
     # THE DEFAULT 72 IS THE CONTRACT'S DEFAULT, NOT A RECOMMENDED VALUE. The
     # real-run comparison settled on an 8-frame anchor (a longer band spends the

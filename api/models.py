@@ -644,11 +644,11 @@ class EndSourceSpec(BaseModel):
     pixel frames of the whole chain, exactly the way a retake freezes its glue
     bands.
 
-    THE CLIP COUNT SELECTS THE GEOMETRY. ``chain_math`` decides it in one place
-    and publishes it as the layout's (and the metadata's) ``end_source.mode``;
-    nothing about the request says which. EITHER WAY THE OUTPUT LENGTH IS THE
-    CLIPS' OWN TOTAL — the band is always the LAST clip's own tail, never an
-    addition to the timeline.
+    THE CLIP COUNT AND ``source_video`` SELECT THE GEOMETRY. ``chain_math``
+    decides it in one place and publishes it as the layout's (and the
+    metadata's) ``end_source.mode``; no field of the request names it. IN EVERY
+    CASE THE OUTPUT LENGTH IS THE CLIPS' OWN TOTAL — the band is always the LAST
+    clip's own tail, never an addition to the timeline.
 
     ONE CLIP -> ``"in_window"``. The band is the clip's OWN last
     ``context_frames`` pixel frames, so THE OUTPUT LENGTH IS THE CLIP LENGTH,
@@ -662,23 +662,41 @@ class EndSourceSpec(BaseModel):
     ``chain_math.compute_chain_layout`` with a 422 naming the clip length that
     would work. The upload must still hold ``context_frames + 1`` frames.
 
-    TWO OR MORE CLIPS -> ``"reverse"``. THE SAME OUTPUT-LENGTH PROMISE, ON A
-    CHAIN: ``num_frames`` still means what it says, the band is the LAST clip's
-    own tail, and the delivered length is ``sum(clip frames) - overlaps`` exactly
-    as it is without an end source. What changes is invisible from the request —
-    stage 1 generates the clips LAST TO FIRST, each one freezing the next one's
-    opening as its own ending, so the whole chain is generated towards the
-    material instead of being crossfaded onto it at the end. ``overlap_strength``
-    governs those reverse seams exactly as it governs forward ones. Two
-    combinations are refused in this mode; see the 422 list below.
+    TWO OR MORE CLIPS, NO ``source_video`` -> ``"reverse"``. THE SAME
+    OUTPUT-LENGTH PROMISE, ON A CHAIN: ``num_frames`` still means what it says,
+    the band is the LAST clip's own tail, and the delivered length is
+    ``sum(clip frames) - overlaps`` exactly as it is without an end source. What
+    changes is invisible from the request — stage 1 generates the clips LAST TO
+    FIRST, each one freezing the next one's opening as its own ending, so the
+    whole chain is generated towards the material instead of being crossfaded
+    onto it at the end. ``overlap_strength`` governs those reverse seams exactly
+    as it governs forward ones. One combination is refused in this mode; see the
+    422 list below.
 
-    ONE CLIP IS THE RECOMMENDED USAGE (owner ruling, 2026-08-18). ``reverse``
-    (two or more clips) IS ACCEPTED BUT NOT RECOMMENDED: real-run gates showed a
-    systematic morph at clip seams and at the tail (just before the anchor),
-    which is accepted as a spec-level trade-off rather than treated as a defect.
-    See Docs/VERIFICATION_LOG.md §64.7 / §65.8.
+    TWO OR MORE CLIPS *WITH* A ``source_video`` -> ``"bridge"``. The chain fills
+    the span between two uploads: it begins on the start source's tail (trimmed
+    off the delivery, as on any V2V continuation) and ends on the end source's
+    head. THE SCHEDULE IS AN ORDINARY FORWARD CHAIN'S — nothing is generated
+    backwards — and the only segment that differs from a plain chain is the LAST
+    one, which is conditioned at BOTH ends at once: its head by the ordinary
+    ``overlap_frames`` のり代, its tail by the band. The output-length promise is
+    unchanged (the clips' own total, minus the trimmed start-source head).
 
-    (A third mode, ``"internal_segment"``, is the historical two-or-more-clips
+    WHAT ``bridge`` COSTS is inside that last clip: when the two uploads are far
+    apart in content, the transition between them shows there as a crossfade or
+    a morph. THAT IS ACCEPTED BEHAVIOUR (owner ruling 2026-09-07), not a defect —
+    the mode is for material that is already similar, e.g. two takes of the same
+    scene with the span between them missing. The one guarantee is the 422 below:
+    the last clip must have free latents BETWEEN its two frozen ends.
+
+    ONE CLIP IS THE RECOMMENDED USAGE FOR ``end_source`` ALONE (owner ruling,
+    2026-08-18). ``reverse`` (two or more clips, no start source) IS ACCEPTED BUT
+    NOT RECOMMENDED: real-run gates showed a systematic morph at clip seams and
+    at the tail (just before the anchor), which is accepted as a spec-level
+    trade-off rather than treated as a defect. See Docs/VERIFICATION_LOG.md
+    §64.7 / §65.8.
+
+    (A fourth mode, ``"internal_segment"``, is the historical two-or-more-clips
     design in which the band was APPENDED and the delivered length grew by
     ``context_frames``. IT IS NO LONGER REACHABLE: a request that would have got
     it now gets ``"reverse"``, and its delivered length is correspondingly
@@ -709,15 +727,16 @@ class EndSourceSpec(BaseModel):
     cross-check on the request any more (the v1 "88 under high_resolution" rule
     is gone with the geometry that produced it).
 
-    OVERLAP >= 2 IS REQUIRED IN ``in_window`` MODE, AND NOT IN ``reverse``. The
-    rule was written for the ``internal_segment`` geometry, whose extra segment
-    cost one more audio crossfade and made ``overlap_frames == 1`` marginal — an
-    exhaustive sweep found every degenerate case confined to kv=1. ``reverse``
-    appends no segment, so it spends exactly the audio budget an end-source-less
-    chain spends, and kv=1 is in fact its intended value: one shared latent per
-    reverse seam. ``in_window`` keeps the rule as a conservative choice (widening
-    the accepted range is a behaviour change nothing needs). The rejections live
-    in ``chain_math.compute_chain_layout`` and surface as 422s with a message
+    OVERLAP >= 2 IS REQUIRED IN ``in_window`` MODE, AND NOT IN ``reverse`` OR
+    ``bridge``. The rule was written for the ``internal_segment`` geometry, whose
+    extra segment cost one more audio crossfade and made ``overlap_frames == 1``
+    marginal — an exhaustive sweep found every degenerate case confined to kv=1.
+    Neither ``reverse`` nor ``bridge`` appends a segment, so both spend exactly
+    the audio budget an end-source-less chain spends; kv=1 is in fact
+    ``reverse``'s intended value (one shared latent per reverse seam).
+    ``in_window`` keeps the rule as a conservative choice (widening the accepted
+    range is a behaviour change nothing needs). The rejections live in
+    ``chain_math.compute_chain_layout`` and surface as 422s with a message
     telling the caller what to change; they are not re-checked here.
 
     ``strength`` (0.0..1.0, default 1.0) SOFTENS ONLY STAGE 1, AND ONLY THE
@@ -763,25 +782,24 @@ class EndSourceSpec(BaseModel):
     ``reference_video_id`` (a control adapter's per-segment conditioning
     competes with the frozen band).
 
-    THE TWO 422s THAT BELONG TO ``reverse`` MODE ALONE (both from
-    ``chain_math.compute_chain_layout``):
+    THE 422 THAT BELONGS TO THE TWO MULTI-CLIP MODES (``reverse`` and
+    ``bridge``, from ``chain_math.compute_chain_layout``): A LAST CLIP too short
+    to hold ``overlap_frames + the band`` is refused, naming the clip length that
+    would work. Below that there is nothing free between the clip's two spoken-
+    for ends — under ``reverse`` the latents handed backwards would be the frozen
+    material rather than newly generated content; under ``bridge`` the denoiser
+    would have no latent of its own to make the transition in.
 
-      * ``source_video`` + ``end_source`` + TWO OR MORE CLIPS is refused. On ONE
-        clip the pair is the interpolation case and stays accepted — it is the
-        intended headline use — but on a chain it would leave clip 0 frozen at
-        both ends (head from the source video, tail from the reverse carry), a
-        shape nothing has generated. It is the next increment's scope.
-      * A LAST CLIP too short to hold ``overlap_frames + the band`` is refused,
-        naming the clip length that would work. Below that, the latents the
-        reverse carry hands backwards would be the frozen material rather than
-        newly generated content.
+    ``source_video`` + ``end_source`` + TWO OR MORE CLIPS IS NO LONGER REFUSED —
+    it is what selects ``bridge`` (until 2026-09-07 it was a 422; see §3-90).
+    On ONE clip the same pair is still the interpolation case, ``in_window``.
 
     It may also be combined with ``clips[0].conditioning_images`` — those
     keyframes condition the TIMELINE's first clip, which in ``reverse`` mode is
     the one generated LAST — and there is deliberately NO collision check between
-    a keyframe and the band. In ``reverse`` mode the band is in the LAST clip and
-    the keyframes are in the FIRST, so with two or more clips they cannot meet at
-    all. In ``in_window`` mode a keyframe COULD
+    a keyframe and the band. In ``reverse`` and ``bridge`` modes the band is in
+    the LAST clip and the keyframes are in the FIRST, so with two or more clips
+    they cannot meet at all. In ``in_window`` mode a keyframe COULD
     land inside the band, where the freeze would simply overwrite it — an
     accepted gap, recorded as a follow-up in the frontend's PENDING_TASKS §3
     rather than fixed here, because adding the rejection means reversing three
@@ -1256,13 +1274,16 @@ class GenerateChainRequest(BaseModel):
                     None if self.retake is None
                     else (self.retake.head_px, self.retake.tail_px)
                 ),
-                # The frozen tail band's own geometry (multiple of 8, >= 8, free
-                # stage-1 latents left in the FINAL clip, and in ``reverse`` mode
-                # the no-start-source rule) is validated THERE, so the validator,
-                # the engine and the mock cannot disagree. Its ValueError —
-                # which names the concrete frame count the final clip would need
-                # — surfaces as 422. NO MODE IS PASSED: the clip count already in
-                # ``clip_frames`` is the whole input to that decision.
+                # The frozen tail band's own geometry (multiple of 8, >= 8, and
+                # free stage-1 latents left in the FINAL clip) is validated
+                # THERE, so the validator, the engine and the mock cannot
+                # disagree. Its ValueError — which names the concrete frame count
+                # the final clip would need — surfaces as 422. NO MODE IS PASSED:
+                # the clip count already in ``clip_frames`` plus the
+                # ``source_context_px`` passed just above are the whole input to
+                # that decision, and passing a mode is what would let this
+                # validator and the engine disagree about which one a request is
+                # in.
                 end_context_px=(
                     None if self.end_source is None
                     else self.end_source.context_frames
@@ -1279,9 +1300,9 @@ class GenerateChainRequest(BaseModel):
         # is the SINGLE definition of that subtraction — the same property
         # ``to_dict`` publishes, so the validator and the metadata can never
         # disagree — and it is simply ``total_px`` on a chain without an end
-        # source and in the two reachable modes alike (``in_window`` and
-        # ``reverse``, where the band is part of a clip and must NOT be
-        # subtracted a second time).
+        # source and in the three reachable modes alike (``in_window``,
+        # ``reverse`` and ``bridge``, where the band is part of a clip and must
+        # NOT be subtracted a second time).
         clips_total_px = layout.clips_total_px
         if clips_total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
             raise ValueError(
@@ -1290,9 +1311,12 @@ class GenerateChainRequest(BaseModel):
             )
 
         # NO end-source x clip-0-keyframe collision check here. In the
-        # ``reverse`` mode the band is the LAST clip's tail while the keyframes
-        # belong to the FIRST, so with two or more clips they cannot reach each
-        # other and the test would be identically false. In the ``in_window``
+        # ``reverse`` and ``bridge`` modes the band is the LAST clip's tail while
+        # the keyframes belong to the FIRST, so with two or more clips they
+        # cannot reach each other and the test would be identically false. (Under
+        # ``bridge`` a start source occupies clip 0's head as well, but that pair
+        # is mutually exclusive with keyframes at the request level.) In the
+        # ``in_window``
         # mode a keyframe CAN land inside the band (it is the clip's own tail)
         # and the freeze would overwrite it; that gap is knowingly left open for
         # now — see EndSourceSpec's docstring and the frontend PENDING_TASKS §3.

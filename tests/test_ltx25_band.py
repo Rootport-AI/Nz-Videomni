@@ -497,22 +497,45 @@ def test_the_carry_predicate_is_the_pre_c3_value_on_every_forward_schedule() -> 
     assert rev.end_source_mode == "reverse"
     assert all(h is None for h in rev.seg_head_source), rev.seg_head_source
 
+    # ``bridge`` (an end source WITH a start source, 2+ clips) is a FORWARD
+    # schedule, so it belongs to the first half of this test rather than to the
+    # reverse arm: its table is the plain chain's, element for element, and the
+    # predicate therefore keeps its pre-C3 meaning there too.
+    bridge = compute_chain_layout(
+        [169, 169], 24.0, kv=1, v_tile=v_tile, v_adv=v_adv,
+        source_context_px=73, end_context_px=8,
+    )
+    assert bridge.end_source_mode == "bridge"
+    plain = compute_chain_layout(
+        [169, 169], 24.0, kv=1, v_tile=v_tile, v_adv=v_adv
+    )
+    assert bridge.seg_head_source == plain.seg_head_source == [None, 0]
+    assert bridge.seg_tail_source == plain.seg_tail_source == [None, None]
+    # The LAST segment is the one that now asks the builder for all three things
+    # at once: a carried head (so the marker clears), a frozen head band and a
+    # frozen tail band. The next test is what pins the builder's answer.
+    assert bridge.seg_head_source[-1] is not None
+    assert bridge.n_end_v > 0
+
 
 def test_a_marker_clear_beside_a_tail_band_builds_both_in_order() -> None:
-    """The builder's capability, NOT a shipped path -- and the difference is
-    stated because it changed under this theme.
+    """A marker clear on a segment whose ONLY band is a tail: still not a
+    shipped shape, and the difference is stated because it changed twice.
 
     C1 separated the marker clear from the head-freeze branch so §3-102 C3's
     reverse schedule could clear the marker on a free-headed segment. Gate M8
     then measured that such a segment should KEEP its marker, and the owner
-    ruled accordingly, so no caller asks for this combination today: the
-    shipped predicate clears only on a carried head, which always brings a head
-    band with it.
+    ruled accordingly, so the shipped predicate clears only on a CARRIED head --
+    which always brings a head band with it. This exact call (clear + tail, no
+    head) therefore has no caller.
 
-    The test stays because the SEPARATION stays -- the two questions are
-    independent whatever the predicate is -- and because a builder that quietly
-    re-coupled them would be found here rather than by the next feature that
-    needs them apart. ``clear_keyframes=True`` is passed directly for that."""
+    Its NEIGHBOUR does, since §3-90: ``bridge``'s last segment asks for a marker
+    clear, a frozen head AND a frozen tail in one call, which the test below
+    pins. The two are the same statement about the builder from opposite sides --
+    the three questions are independent whatever the predicate is -- and a
+    builder that quietly re-coupled them would be found here rather than by the
+    next feature that needs them apart. ``clear_keyframes=True`` is passed
+    directly for that."""
     video, audio = _latents()
     band_v, _ = _band_conditionings(
         video_latent=video, video_frames_frozen=0,
@@ -526,3 +549,31 @@ def test_a_marker_clear_beside_a_tail_band_builds_both_in_order() -> None:
     # construction and this is where that is checked.
     assert isinstance(band_v[0], ClearKeyframesMask)
     assert len(band_v) == 2
+
+
+def test_a_marker_clear_with_both_a_head_and_a_tail_band_builds_all_three() -> None:
+    """``bridge``'s LAST segment, which is the first SHIPPING caller to ask for
+    all three at once (§3-90): its head is an ordinary forward のり代 (so the
+    marker clears, by the carry predicate) and its tail is the end source's
+    band. Nothing before this combined a marker clear with two frozen ends.
+
+    The three are added independently and in order -- marker, head, tail -- and
+    each gets its OWN strength, which is the part a re-coupling would break:
+    the head rides the seam blend while the tail is hard-frozen by default."""
+    video, audio = _latents()
+    band_v, band_a = _band_conditionings(
+        video_latent=video, video_frames_frozen=2,
+        audio_latent=audio, audio_frames_frozen=3,
+        video_tail_frozen=2, audio_tail_frozen=2,
+        strength=0.5,
+        tail_strength=1.0,
+        clear_keyframes=True,
+    )
+    assert isinstance(band_v[0], ClearKeyframesMask)
+    assert len(band_v) == 3          # marker, head band, tail band
+    assert len(band_a) == 2          # audio has no marker of its own
+    # The head keeps the seam blend, the tail its own (hard) strength.
+    assert band_v[1].strength == 0.5
+    assert band_v[2].strength == 1.0
+    assert band_a[0].strength == 0.5
+    assert band_a[1].strength == 1.0

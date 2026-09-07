@@ -187,8 +187,9 @@ class EndSourceSpec:
       whole groups of 8 and never reaches the lone keyframe latent, so the head
       grid's 8n+1 does not apply.
 
-    WHERE THE BAND LIVES DEPENDS ON THE CLIP COUNT — ``compute_chain_layout``
-    decides it once and reports it as ``layout.end_source_mode``:
+    WHERE THE BAND LIVES DEPENDS ON THE CLIP COUNT AND ON WHETHER A START SOURCE
+    CAME WITH IT — ``compute_chain_layout`` decides it once and reports it as
+    ``layout.end_source_mode``:
 
       * ONE CLIP -> ``"in_window"``. The band is that clip's OWN last ``n_end_v``
         latents; nothing is appended and the delivered length is the clip length,
@@ -197,14 +198,23 @@ class EndSourceSpec:
         clip can steer towards the material rather than being crossfaded onto it.
         The band therefore eats into the clip's own free latents, and chain_math
         rejects (422) a clip that has none left once a V2V head is also frozen.
-      * TWO OR MORE CLIPS -> ``"reverse"``. The same promise on a chain: the band
-        is the LAST clip's own tail, nothing is appended and the delivered length
-        is the clips' own total. What differs is the stage-1 SCHEDULE — the
-        segments are generated last-to-first and each freezes the next one's head
-        as its own tail, so the chain is generated TOWARDS the material. The
-        three tables ``layout.seg_generation_order`` / ``seg_head_source`` /
-        ``seg_tail_source`` are what the stage-1 loop reads; it never tests the
-        mode name.
+      * TWO OR MORE CLIPS, NO START SOURCE -> ``"reverse"``. The same promise on
+        a chain: the band is the LAST clip's own tail, nothing is appended and
+        the delivered length is the clips' own total. What differs is the stage-1
+        SCHEDULE — the segments are generated last-to-first and each freezes the
+        next one's head as its own tail, so the chain is generated TOWARDS the
+        material. The three tables ``layout.seg_generation_order`` /
+        ``seg_head_source`` / ``seg_tail_source`` are what the stage-1 loop reads;
+        it never tests the mode name.
+      * TWO OR MORE CLIPS *WITH* A START SOURCE -> ``"bridge"``. The chain fills
+        the span between two uploads: it starts on the start source's tail and
+        ends on the end source's head. The three tables are an ORDINARY FORWARD
+        CHAIN's — ascending order, forward head carry, no tail carry — so no seam
+        is ever generated backwards; the only segment that differs from a plain
+        chain is the LAST one, which is frozen at BOTH ends at once (head = the
+        ordinary のり代, tail = this band). If the two uploads are far apart in
+        content, that last clip is where the transition shows; that is accepted
+        behaviour, not a defect.
       * ``"internal_segment"`` is the historical two-or-more-clips design, in
         which THE BAND WAS APPENDED as a segment of its own and the delivered
         length grew by the band. Nothing attends across that segment boundary,
@@ -982,22 +992,35 @@ def run_chain(
 
     ``end_source`` (end source, additive — ``None`` keeps every other path
     byte-identical) freezes app-cut material as the TAIL of the timeline, so the
-    chain ENDS on it. TWO MODES, chosen by chain_math from the clip count and
-    reported as ``layout.end_source_mode`` (see :class:`EndSourceSpec`):
+    chain ENDS on it. THREE REACHABLE MODES, chosen by chain_math from the clip
+    count and the presence of a start source, reported as
+    ``layout.end_source_mode`` (see :class:`EndSourceSpec`):
 
       * ONE clip -> ``"in_window"``: no extra segment, ``n_seg == len(clips) == 1``
         and the band is that one segment's own tail, so it sits inside the single
         stage-1 denoise window. The output length is the clip length, unchanged.
-      * TWO OR MORE clips -> ``"internal_segment"``: chain_math APPENDS a segment
-        for the band, so stage 1 runs ``n_seg == len(clips) + 1`` and the band is
-        the appended segment's tail. The output is longer than the clips by
-        exactly the band.
+      * TWO OR MORE clips, no ``source`` -> ``"reverse"``: nothing is appended
+        either; the band is the LAST clip's own tail and the segments are
+        generated last-to-first, so every clip is produced in the material's
+        world. Output length is the clips' own total.
+      * TWO OR MORE clips WITH a ``source`` -> ``"bridge"``: nothing is appended,
+        the schedule is an ordinary FORWARD chain's, and the last clip alone is
+        frozen at both ends (forward のり代 at its head, this band at its tail).
+        Output length is the clips' own total, minus the trimmed start-source
+        head as on any V2V.
 
-    Either way stage 2 then re-writes and re-freezes the band in EVERY tile it
-    reaches, driven by ``layout.end_tile_bands``, and the output is NOT trimmed
+    In every mode stage 2 then re-writes and re-freezes the band in EVERY tile it
+    reaches, driven by ``layout.end_tile_bands``, and the band is NOT trimmed
     (unlike ``source``, whose frozen head is cut off). Mutually exclusive with
     ``retake`` and ``audio_source``, combinable with ``source`` — start + end is an
-    interpolation between two given ends.
+    interpolation between two given ends (``in_window``) or a bridge across them
+    (``bridge``).
+
+    A fourth mode, ``"internal_segment"``, is the historical two-or-more-clips
+    design (chain_math APPENDED a segment for the band, so the output grew by
+    exactly the band). It is no longer reachable from the API; the engine code
+    that serves it is kept whole and stays under test through
+    ``compute_chain_layout``'s ``end_source_mode_override``.
 
     ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
     audio_strength)`` adapters applied via the forward-time weight patch across
@@ -1606,12 +1629,25 @@ def run_chain(
         #     leave a real ``init_v``; the plain t2v one leaves it None, and the
         #     band still has to be written somewhere. Hence the zeros arm below,
         #     which the internal-segment design had made unreachable.
-        #   * ``reverse`` (2+ clips) — it is the user's LAST clip, whose head is
-        #     free and whose tail is this band, so it too arrives with ``init_v``
-        #     None and takes the same zeros arm. A start source cannot reach it
-        #     (chain_math 422s that combination) and the reverse carry cannot have
-        #     claimed the same tail (``seg_tail_source[-1] is None``, asserted in
-        #     chain_math and again here).
+        #   * ``reverse`` (2+ clips, no start source) — it is the user's LAST
+        #     clip, whose head is free and whose tail is this band, so it too
+        #     arrives with ``init_v`` None and takes the same zeros arm. A start
+        #     source cannot reach it (that pair selects ``bridge``) and the
+        #     reverse carry cannot have claimed the same tail
+        #     (``seg_tail_source[-1] is None``, asserted in chain_math and again
+        #     here).
+        #   * ``bridge`` (2+ clips WITH a start source) — it is the user's LAST
+        #     clip again, but on a FORWARD schedule, so it arrives having already
+        #     taken the ``seg_head_source[i] is not None`` carry branch above:
+        #     ``init_v`` is REAL (kv latents of the previous segment's tail frozen
+        #     at its head) and the zeros arm is unreachable. This segment is
+        #     therefore the one place both ends are frozen at once — head at
+        #     ``1 - overlap_strength`` (the ordinary seam blend, ``fkv == kv``),
+        #     tail at ``1 - end_source.strength`` (hard by default) — which is the
+        #     shape ``internal_segment``'s band segment used to run and which
+        #     ``_denoise_av_with_carry`` masks independently at each end. Its
+        #     audio is the same story: head ``fka == ka_list[i-1]``, tail
+        #     ``fta == n_end_a_eff`` hard-frozen.
         if end_source is not None and i == n_seg - 1:
             # The band and a reverse carry would write the SAME latents; the
             # layout guarantees they never both apply, and this is where that
@@ -1642,7 +1678,7 @@ def run_chain(
             seg_L = init_v.shape[2]
             if layout.end_source_mode == "in_window":
                 assert seg_L == layout.f_total, (seg_L, layout.f_total)
-            elif layout.end_source_mode == "reverse":
+            elif layout.end_source_mode in ("reverse", "bridge"):
                 assert seg_L == layout.seg_latent[-1], (seg_L, layout.seg_latent)
             else:
                 assert seg_L == layout.end_segment_latent, (

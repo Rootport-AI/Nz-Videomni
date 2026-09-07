@@ -1174,9 +1174,11 @@ class _MockBackend:
         #   (a retake's deliverable is its whole window);
         # * V2V — the frozen source head is trimmed off the FRONT, which is
         #   exactly trim_px;
-        # * end source, "in_window" mode (ONE clip) and "reverse" mode (2+ clips)
-        #   — the band is the LAST clip's own tail, so total_px IS the clips'
-        #   total and the mp4 is exactly as long as the user asked for;
+        # * end source, "in_window" (ONE clip), "reverse" (2+ clips) and
+        #   "bridge" (2+ clips with a start source) — the band is the LAST clip's
+        #   own tail, so total_px IS the clips' total and the mp4 is exactly as
+        #   long as the user asked for (under "bridge" the start source's head is
+        #   trimmed by the same trim_px as any V2V, which the term above covers);
         # * end source, "internal_segment" mode (API-unreachable) — the band is a
         #   segment APPENDED after the user's clips, so total_px is already clips
         #   + band and the mp4 is correspondingly LONGER than the clips asked for.

@@ -10,16 +10,19 @@ end_source block) is pinned without weights.
 
 Two things this file guards that are easy to get wrong:
 
-  * OUTPUT LENGTH IS THE CLIPS' OWN TOTAL, whichever mode the clip count picks:
+  * OUTPUT LENGTH IS THE CLIPS' OWN TOTAL, whichever mode the request picks:
       - ONE clip -> ``"in_window"``: the band is the clip's OWN tail, so the
         delivered mp4 is exactly ``num_frames`` frames, of which the last
         ``context_frames`` are the material.
-      - TWO OR MORE clips -> ``"reverse"``: the band is the LAST clip's own
-        tail and the clips are generated last-to-first towards it, so the mp4
-        holds ``clips_total_px`` frames — the same length those clips would
-        deliver with no end source at all.
+      - TWO OR MORE clips, NO start source -> ``"reverse"``: the band is the
+        LAST clip's own tail and the clips are generated last-to-first towards
+        it, so the mp4 holds ``clips_total_px`` frames — the same length those
+        clips would deliver with no end source at all.
+      - TWO OR MORE clips WITH a start source -> ``"bridge"``: the same
+        geometry, generated FORWARDS, with only the last clip frozen at both
+        ends. Same ``clips_total_px``, minus the trim below.
     (V2V still trims its own frozen head off the FRONT, so a chain with both is
-    ``total_px - trim_px``; that pair is single-clip only now.)
+    ``total_px - trim_px`` — on one clip and on a bridge alike.)
   * THE +1 PRIMER. The app always cuts/synthesises ``context_frames + 1``
     frames because the causal video VAE spends the first one on its lone
     keyframe latent. Mode-independent.
@@ -31,8 +34,11 @@ multi-clip tests below assert it for exactly that reason.
 Two v1 REJECTIONS stay gone (the band may span as many stage-2 tiles as it
 needs, and it cannot collide with a clip-0 keyframe), and their INVERTED tests
 are kept below so the old rules cannot be reintroduced by accident. A third —
-"the band must fit inside the final clip" — is back in ``reverse`` mode for a
-different reason, and has a boundary test of its own.
+"the band must fit inside the final clip" — is back in ``reverse`` and
+``bridge`` for a different reason, and has a boundary test of its own. A FOURTH
+rejection was retired on 2026-09-07 (§3-90): "a start source and an end source
+need a single clip" is now the ``bridge`` mode, and its test below is inverted
+in the same way.
 
 Frozen-API discipline: a request omitting end_source is byte-shape identical to
 before (regression test below).
@@ -509,7 +515,7 @@ def test_last_clip_too_short_for_the_band_is_rejected_at_the_boundary(client, tm
     r = _run_chain(client, [{"num_frames": 33}, {"num_frames": 33}], end_source=end_source)
     assert r.status_code == 422
     assert "41 pixel frames" in r.text
-    assert "nothing to carry backwards" in r.text
+    assert "leaves the LAST clip no free video latents" in r.text
 
     r = _run_chain(client, [{"num_frames": 41}, {"num_frames": 41}], end_source=end_source)
     job_id = _completed(client, r)
@@ -523,11 +529,13 @@ def test_last_clip_too_short_for_the_band_is_rejected_at_the_boundary(client, tm
     assert meta["chain"]["clip_num_frames"] == [41, 41]
 
 
-def test_start_and_end_source_together_need_a_single_clip(client, tmp_path):
-    """A start source and an end source interpolate BETWEEN two materials, which
-    stays accepted on ONE clip. On a chain it would leave clip 0 frozen at both
-    ends (head from the source video, tail from the reverse のり代) — refused
-    rather than shipped untested."""
+def test_start_and_end_source_together_bridge_two_or_more_clips(client, tmp_path):
+    """INVERTED (§3-90, 2026-09-07). A start source and an end source interpolate
+    BETWEEN two materials. On ONE clip that is ``in_window``; on a chain it used
+    to be a 422 and is now ``bridge`` — the clips are generated FORWARDS and only
+    the last one is frozen at both ends, so no seam is ever produced backwards.
+    The delivered length is the clips' own total minus the V2V trim, exactly as
+    on a chain with a start source and no end source."""
     src = _make_source_mp4(tmp_path / "src.mp4", n_frames=120, fps=24.0)
     start_id = _upload_video(client, src)
     end_id = _upload_video(client, src)
@@ -538,8 +546,24 @@ def test_start_and_end_source_together_need_a_single_clip(client, tmp_path):
         client, [{"num_frames": 169}, {"num_frames": 169}],
         source_video=source_video, end_source=end_source,
     )
-    assert r.status_code == 422
-    assert "cannot be combined" in r.text
+    job_id = _completed(client, r)
+    meta = _metadata(client, job_id)
+    assert meta["end_source"]["mode"] == "bridge"
+    # The forward schedule, published so a finished job can be checked.
+    assert meta["end_source"]["generation_order"] == [0, 1]
+    layout = chain_math.compute_chain_layout(
+        [169, 169], 24.0, kv=2, source_context_px=25, end_context_px=24
+    )
+    assert meta["end_source"]["clips_total_px"] == layout.total_px
+    # Delivered = the clips' own total minus the trimmed start-source head.
+    ctx = client.app_context
+    out = ctx.config.output_dir / job_id / "output.mp4"
+    assert video_io.frame_count(out) == layout.total_px - layout.trim_px
+    # ...and that IS the same length as the same chain with no end source: the
+    # band takes nothing off the delivery.
+    assert layout.total_px == chain_math.compute_chain_layout(
+        [169, 169], 24.0, kv=2, source_context_px=25
+    ).total_px
 
     # The same pair on ONE clip is the interpolation case and is unchanged.
     r = _run_chain(

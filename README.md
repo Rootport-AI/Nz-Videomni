@@ -505,7 +505,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 - 幅・高さは **64の倍数**（two-stage distilled が stage1 を半解像度で生成し x2 アップサンプルするための帰結。由来の解説は [`Docs/LTX23_REFERENCE.md`](Docs/LTX23_REFERENCE.md) §3、検証は [`api/models.py`](api/models.py) の `GenerateRequest` validator）。
 - フレーム数は **8n+1**（9, 17, 25, … 121）。尺 cap は **20s（481f=8×60+1）@24fps** まで許容。溢れ/低速/非実用は**クライアント UI 警告に委ねる**方針で、解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames` に露出します（**値の正本は `config.yaml` の `limits.spill_free_frames` と [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md)**。閾値の考え方は同書 §付記、実測の経緯は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6）。これを超えると shared へ溢れ ~2-4x 低速化します（OOM はしません）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨です。
 - Distilled は **8 steps / CFG=1.0** 固定。
-- I2V のキーフレーム画像は **最大5枚**（画像なし=T2V、1枚以上=I2V）。`frame_idx` は `0`（開始フレーム）か 8n+1 で、それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。
+- I2V のキーフレーム画像は **最大10枚**（画像なし=T2V、1枚以上=I2V）。`frame_idx` は `0`（開始フレーム）か 8n+1 で、それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。ただし**丸めた先が他の1枚と同じフレームになったときだけは 422 で断ります**（同じ位置に2枚あると条件付けが二重になり、出来上がりが定まらないためです）。上限の10枚を実際に置けるのは `num_frames` が 73 以上のときです（置ける位置が `(num_frames-9)//8+2` 個しかないため、それより短い尺では途中で必ずぶつかります）。
 - `crop_output` を指定すると、任意の非64サイズ（例 960×540, 1280×720）を中央クロップで得ます。
 
 ---
@@ -534,7 +534,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 `/ui` を開き、画像なしで「生成」→ T2V、画像1枚を指定して「生成」→ 最小I2V です。
 
-**A2V（音声から動画生成）**: Generate タブの「A2V（音声から動画生成）」アコーディオンに音声ファイルを添付します。`.wav` 推奨で、添付すると音声長に収まる最大フレーム数が自動で Frames に入ります（他形式は自動調整の対象外でサーバー側チェックに委ねます）。画像でキャラクター等を固定したい場合は「キーフレーム画像」アコーディオン（5スロットとも A2V と併用可）を使います。**スタイル LoRA とも、参照動画を必要とする control 系 IC-LoRA とも併用できます。** Clip Chain タブでの連結生成では、**長い参照動画を1本だけ添付すると各クリップが担当する区間をサーバーが自動で切り出して stage-1 にのみ注入する「長尺 IC-LoRA」**として働きます（参照が生成の尺より短ければ、足りない分は参照なしで生成されます）。ただし `depth-control` だけは前処理（Video-Depth-Anything）が全編一括設計でメモリに載らないため、2クリップ以上のチェーンでは `422 LORA_DEPTH_CHAIN_UNSUPPORTED` で断ります（クリップ1本のチェーンと単発生成は使えます）。
+**A2V（音声から動画生成）**: Generate タブの「A2V（音声から動画生成）」アコーディオンに音声ファイルを添付します。`.wav` 推奨で、添付すると音声長に収まる最大フレーム数が自動で Frames に入ります（他形式は自動調整の対象外でサーバー側チェックに委ねます）。画像でキャラクター等を固定したい場合は「キーフレーム画像」アコーディオン（10スロットとも A2V と併用可）を使います。**スタイル LoRA とも、参照動画を必要とする control 系 IC-LoRA とも併用できます。** Clip Chain タブでの連結生成では、**長い参照動画を1本だけ添付すると各クリップが担当する区間をサーバーが自動で切り出して stage-1 にのみ注入する「長尺 IC-LoRA」**として働きます（参照が生成の尺より短ければ、足りない分は参照なしで生成されます）。ただし `depth-control` だけは前処理（Video-Depth-Anything）が全編一括設計でメモリに載らないため、2クリップ以上のチェーンでは `422 LORA_DEPTH_CHAIN_UNSUPPORTED` で断ります（クリップ1本のチェーンと単発生成は使えます）。
 
 **Batch A2V（就寝中の一括生成）**: A2V の下にある「Batch A2V」アコーディオンの Enable をオンにすると、ゆっくり実況・VOICEROID実況（音声合成ソフトによるキャラクター実況動画）向けに、音声フォルダの中身をまとめて一括生成できます。音声フォルダ・画像フォルダ・出力先を入力して「Set audios」を押すと音声ファイルごとの行を持つ表ができ、行ごとにプロンプトや使用画像を編集して「Start a2v batch」で開始します。Generate タブの現在の設定がその時点のスナップショットとして全行に適用され、1件ずつ順番に生成されます。実処理は**サーバー側のバックグラウンドスレッド**で回るので、ブラウザを閉じても止まりません。進行は音声フォルダ直下の CSV マニフェスト（`batch_a2v_manifest.csv`）へ逐次記録され、電源断やアプリ再起動のあとも「Set audios」→「Start a2v batch」で続きから再開できます（Done/Skip 済みの行は再実行されません）。開始前には入力忘れの検査が走り、問題があれば理由を表示してバッチ自体を開始しません。詳しい仕様・設計上の決定事項は [`Docs/BATCH_A2V_WORKORDER.md`](Docs/BATCH_A2V_WORKORDER.md)、CSV の列定義・文字コードなど相互運用の共通仕様は [`Docs/BATCH_A2V_CSV_SPEC.md`](Docs/BATCH_A2V_CSV_SPEC.md) が正本です。
 
@@ -683,7 +683,7 @@ GGUF ファイルの中で圧縮された形で持っている重みを計算に
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`tests/conftest.py` が `model.backend="mock"` を強制するため、GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・キーフレーム画像の上限5枚・`frame_idx` の丸め）とモックランナーによる生成疎通、`GET /status` の `vram_optimization` 契約を検証します。
+pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`tests/conftest.py` が `model.backend="mock"` を強制するため、GPU/モデル無しで T2V/I2V のバリデーション（64倍数・8n+1・キーフレーム画像の上限10枚・`frame_idx` の丸めと、同じ位置へ丸められた重複の拒否）とモックランナーによる生成疎通、`GET /status` の `vram_optimization` 契約を検証します。
 
 `setup.bat` で作った環境には、インストーラが常に `uv sync --extra dev` で同期するため pytest などの開発用依存が最初から入っています。素の `uv sync` を単体で実行するとそれらは取り除かれるので、その場合は `uv sync --extra dev` で入れ直してください。
 

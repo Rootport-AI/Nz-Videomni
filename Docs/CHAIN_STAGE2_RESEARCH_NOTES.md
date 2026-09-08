@@ -289,7 +289,7 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 | 入力 | 現状 | 根拠 |
 | --- | --- | --- |
 | プロンプト | クリップごとに指定可。ただしstage-2はクリップ0の1本のみ | `chain_pipeline.py` 548・788行 |
-| キーフレーム画像（`conditioning_images`） | **クリップ0のみ**・最大5枚。frame>0もクリップ0の中でなら可（UIは1枚・frame 0固定） | [`api/models.py`](../api/models.py) 624〜633行 |
+| キーフレーム画像（`conditioning_images`） | **クリップ0のみ**・最大10枚（上限の正本は`config.py`の`MAX_CONDITIONING_IMAGES`）。frame>0もクリップ0の中でなら可（UIは1枚・frame 0固定）。スナップ後に同じフレームへ落ちた2枚は422 | [`api/models.py`](../api/models.py)の`_normalize_conditioning_images` |
 | 参照音声（A2V＝音声から動画を作る機能） | **1〜24クリップ**（2026-08-10・長尺A2Vで「クリップが1本のときだけ」を撤廃）。連結タイムライン全体に音声を1本添付し、各クリップが担当する音声潜在窓を`chain_math.audio_segment_windows`がサーバー側で自動割り当てる | [`api/models.py`](../api/models.py)、`PENDING_TASKS_CLOSED.md` §3-74 |
 | 参照動画（IC-LoRA control系＝参照動画から輪郭線や骨格を読み取って条件付けするアダプタ） | **1〜24クリップ**（2026-08-11・長尺IC-LoRAで「クリップが1本のときだけ」を撤廃）。長い参照動画を1本添付すると、各クリップが担当する区間を`chain_math.video_segment_windows`がサーバー側で自動的に切り出す。参照はstage-1にのみ注入する（単発生成も同じ意味論）。**`depth-control`のみ例外で2本以上は引き続き422 `LORA_DEPTH_CHAIN_UNSUPPORTED`**（深度前処理が全編一括設計でメモリに載らないため。旧`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`はこの改修で削除済み） | [`api/models.py`](../api/models.py)、[`api/generate_chain.py`](../api/generate_chain.py)、[`api/errors.py`](../api/errors.py)、`chain_pipeline.py`、`chain_math.py`の`video_segment_windows`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57 |
 | スタイルLoRA | チェーン全体に一律。クリップごとの強度指定はv1では採らないというオーナー裁定 | — |

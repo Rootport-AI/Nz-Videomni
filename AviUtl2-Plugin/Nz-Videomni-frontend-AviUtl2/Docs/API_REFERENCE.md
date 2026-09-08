@@ -132,7 +132,7 @@
 
 - `generation_presets`(`config.yaml`のトップレベル同名キー): `smoke_test`/`minimal`/`small`/`standard_720p`/`FHD_1080p`/`WQHD_1440p` の6種。各 `width/height/crop_output/num_frames`。
 - `generation_defaults`(`config.yaml`のトップレベル同名キー): UI初期値(width 512, height 320, num_frames 49, frame_rate 24.0, steps 8, guidance 1.0, seed -1)。
-- `limits`(`config.yaml`のトップレベル同名キー、`config.py::LimitsConfig`): `max_width 1920`, `max_height 1088`（いずれも`config.py`のPydantic既定値。同梱`config.yaml`/`config.yaml.example`は4096）, `max_num_frames 481`, `max_conditioning_images 5`, `conditioning_frame_idx_multiple 8`, `conditioning_keyframe_grid_offset 1`, `phase1_max_concurrent_jobs 1`, `spill_free_frames`(解像度別の快適上限フレーム数), `v2v_context_frames_default/min/max`(73/25/145), `retake_window_min_frames`(73)/`retake_window_max_frames`(169、2026-08-10追加)、`comfort_budgets`(快適上限マーカーのエンジン系統別の配信テーブル、2026-08-31追加。下記参照)、`chain_comfort_token_budget`(40000、2026-08-12追加。下記参照)、`single_comfort_token_budget`(44880、2026-08-18追加。下記参照)、`end_context_frames_default/min/max`(72/8/136、2026-08-16追加。§5.2参照)。**上限169は`stage2_window="standard"`時の値**——`high_resolution`(潜在19)ではサーバーが`chain_math.retake_max_window_px(v_tile)`で実上限145まで検証する(公開値の169より狭い側に効く)。
+- `limits`(`config.yaml`のトップレベル同名キー、`config.py::LimitsConfig`): `max_width 1920`, `max_height 1088`（いずれも`config.py`のPydantic既定値。同梱`config.yaml`/`config.yaml.example`は4096）, `max_num_frames 481`, `max_conditioning_images 10`（**サーバー側の読み取り専用の算出値**。`config.yaml`に書いても変わらないので、フロントはこの配信値をそのまま信じてよい）, `conditioning_frame_idx_multiple 8`, `conditioning_keyframe_grid_offset 1`, `phase1_max_concurrent_jobs 1`, `spill_free_frames`(解像度別の快適上限フレーム数), `v2v_context_frames_default/min/max`(73/25/145), `retake_window_min_frames`(73)/`retake_window_max_frames`(169、2026-08-10追加)、`comfort_budgets`(快適上限マーカーのエンジン系統別の配信テーブル、2026-08-31追加。下記参照)、`chain_comfort_token_budget`(40000、2026-08-12追加。下記参照)、`single_comfort_token_budget`(44880、2026-08-18追加。下記参照)、`end_context_frames_default/min/max`(72/8/136、2026-08-16追加。§5.2参照)。**上限169は`stage2_window="standard"`時の値**——`high_resolution`(潜在19)ではサーバーが`chain_math.retake_max_window_px(v_tile)`で実上限145まで検証する(公開値の169より狭い側に効く)。
 - `upload`(`config.yaml`のトップレベル同名キー): 各種サイズ上限・許可拡張子。
 - **`spill_free_frames`**(生成サイズの文字列 → 快適上限フレーム数の対応表)は「これを超えると2-4倍遅くなる(OOMせず)」の警告閾値。フロントで警告表示に使う。**`comfort_budgets`に一致する行が無いときのフォールバックがこれである**(下記)。**値そのものはここへ書かない**——実体は`config.yaml`の`limits.spill_free_frames`（`config.yaml`はgit追跡外なので、リポジトリで確認するときは配布元の`config.yaml.example`を見ること。`config.py`側の既定は空の辞書で、鍵が無ければ配信されない）、説明の正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §付記(2026-08-31に再測定)。フロントは`webui/src/modes/single/spillUtils.ts`の`resolveSpillFreeFrames`(面積が最も近い鍵への丸め込み)を通して読む。
 - **`comfort_budgets`**(2026-08-31追加)は「快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとに配信する表」。**この鍵が来ているなら、`single_comfort_token_budget`／`chain_comfort_token_budget`ではなくこちらが正である。** **下の例に出てくる値は例示であり、正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §1.1である。**
@@ -387,7 +387,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 | `guidance_scale` | float `1.0` | **§8参照: distilledは1.0固定・変更不可** |
 | `seed` | int `-1` | -1=ランダム |
 | `pipeline` | `"distilled"` \| `"two_stage_hq"` | **§8参照: 既定distilled(実質distilledのみ)** |
-| `conditioning_images` | list `[]` | **最大5枚**。空=T2V、1件以上=I2V |
+| `conditioning_images` | list `[]` | **最大10枚**（正本は`GET /config`の`limits.max_conditioning_images`）。空=T2V、1件以上=I2V。`frame_idx`は8n+1グリッドへ丸められるが、**丸めた先が他の1件と同じフレームになると422**（同じ位置に2件は置けない。文言は英語で、どの値とどの値がぶつかったかを名指しする） |
 | `loras` | list `[]` | 登録済みLoRA名参照(§5.3)。**2026-08-02、`LoraSpec`へ`audio_strength`(音声軸の適用強度)追加**(詳細は§5.3) |
 | `reference_video_id` | str \| null | 制御LoRA用。単独指定不可(loras必須) |
 | `conditioning_attention_strength` | float \| null | 0.0-1.0、loras必須 |
@@ -516,7 +516,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 | モード | エンドポイント | 判定 |
 |---|---|---|
 | T2V | `/generate` | conditioning_images空 |
-| I2V(最大5キーフレーム) | `/generate` | conditioning_images 1-5件 |
+| I2V(最大10キーフレーム) | `/generate` | conditioning_images 1-10件（スナップ後の位置が重複しないこと） |
 | クリップ連結 | `/generate/chain` | clips 2-24本(source系フィールドが無い場合の最低本数は2本) |
 | V2V継続 | `/generate/chain` | source_video指定 |
 | End source（素材（末尾）） | `/generate/chain` | end_source指定（1本＝窓内モード〔推奨〕／2本以上でsource_videoなし＝逆順Chained〔受理されるが推奨外、境目に品質劣化あり。LTX 2.5では音声の継ぎ目がさらに悪い。§5.2参照〕／2本以上でsource_videoあり＝ブリッジモード〔2026-09-07から受理。全クリップ正順で、最終クリップだけ両側条件付け。実験的な機能という位置づけ〕。いずれも出力尺はクリップ合計のまま変わらない。source_videoとの併用はクリップ本数を問わず可能で、冒頭と末尾を与えた補間になる。旧方式`internal_segment`は通常のAPIリクエストからは到達不能。**LTX 2.5でも2026-08-26から使える**） |

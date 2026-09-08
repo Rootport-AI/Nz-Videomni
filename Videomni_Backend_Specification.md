@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.57**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-09-07**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.58**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-09-08**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -106,6 +106,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.55 | 2026-09-03 | **前版 v0.5.54 の記述の訂正と、§6.10 に残っていた失効した件数の掃除（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。**【v0.5.54 の訂正】前版は「§6.10(d)・(f) の 4 分類表は当時から 422 系 2 で正しく、食い違っていたのは §6.1 の 1 箇所だけだった」と書いたが、これは誤りである**——**(f) の 422 系のセルの本文には「残る 3 つ」という失効した断定が残っており、食い違っていたのは 2 箇所だった**（(f) の件数欄と導入段落は当時から 2 件で正しかったので、前版が見落としたのはセル本文の 1 文である）。本版で **§6.10(f) の 422 系セル**を「残る 2 つ」へ訂正し、(d) 側の `nag_enabled` 離脱と同じ様式で日付つきの一文を添えた。あわせて **§6.10(a) の 2026-08-29 の段落**の「残る 3 つの 422」へ、同節で確立している「これは○○時点の記述である」という形の日付つきの括弧を補った（`nag_enabled` が 2026-08-30 に開通したので、現在残るのは `pipeline` / `vae_mode` の 2 つである）。**§0.1 の版メタ**（本欄）も本行に合わせて更新した。**§6.10(f) 末尾の「埋め込み処理器の常駐だけはオーナーの確認を経ていない」という但し書きは、目視 3 点が未実施のため引き続き据え置きである**（`Docs/PENDING_TASKS.md` §2-3）。 |
 | v0.5.56 | 2026-09-06 | README全面改修に伴い§16.1へ手動API実例4本を受け入れ（文書のみ・凍結API契約§6への変更なし）。 |
 | v0.5.57 | 2026-09-07 | **素材（冒頭）（`source_video`）と素材（末尾）（`end_source`）を同時に指定した2クリップ以上を、422での拒否から受理へ転じたことを反映（受理範囲が広がる加算方向の変更で、これまで通っていた構成が新たに落ちることは無い。フィールド・型・既定・応答形・エラーコードの増減も無い）**。新しいモード `"bridge"` は全クリップを正順に生成し、最終クリップだけを両側（頭＝1つ前のクリップからののりしろ、尾＝素材（末尾）の末尾の凍結フレーム）で条件付けする。**§6.2 の `end_source` 補足段落**（モードの分岐を3つから4つへ改め、`"bridge"` の項を新設し、`"reverse"` の「新たに422になる構成」から `source_video` 併用禁止の項を落とした）を更新した。あわせて**本モードを「実験的な機能」と位置づける一文を同項へ添えた**（オーナー裁定。最終クリップを長くすると早期収束による静止が出ることがあり、これも仕様として受け入れている）。実装・機械検証・実機ゲートの正本は `Docs/VERIFICATION_LOG.md` §102、設計の理由は `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §11の【2026-09-07】の項、**オーナーは同日の裁定で確認項目を一括受容し、台帳のクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-90である**。 |
+| v0.5.58 | 2026-09-08 | **キーフレーム画像（`conditioning_images`）の上限を 5 枚から 10 枚へ引き上げ、上限の正本を `config.py` の定数 `MAX_CONDITIONING_IMAGES` ただ 1 箇所へ集約し、スナップ後に同じフレームへ落ちた 2 枚を 422 で拒否するようにしたことを反映（台帳 `Docs/PENDING_TASKS.md` §1-28）**。**受理範囲は広がる方向と狭まる方向の両方へ動いている**——枚数の上限は 5 → 10 へ広がったが、**これまで黙って受理していた「スナップ後に同じ位置へ落ちる 2 枚」は 422 になった**（従来はそのままエンジンへ流れ、位置 1 以降では二重の条件付けとなって結果が定まらなかった）。**§6.2 の凍結制約 6・7**（枚数の上限を定数名で書き直し、制約 7 へ重複の拒否と 422 の文言、および上限 10 に届くのは `num_frames >= 73` からという到達条件を追記）／**§6.7**（`limits` の表の `max_conditioning_images` を、設定項目ではなく**読み取り専用の computed field〔pydantic の算出項目〕**として書き直し、`config.yaml` に書いても効かないこと・廃止キーの警告機構を広げない理由を明記）／**§11.7**（同じ値の写しを更新）／**§12**（Gradio 検証UI のキーフレーム画像アコーディオンを 10 スロットへ。`gradio_ui` がサーバーモジュールを import しない規律の例外としたことと、キーフレーム部品を `inputs` の末尾へ寄せた理由を追記）／**§18.2**（検証観点の枚数と、新設したテストの名前）／**付録A・付録B.1**（早見表と用語集の枚数）。**凍結 API 契約（§6）のフィールド・型・既定・応答形はいずれも変わっていない**——`GET /config` の `limits.max_conditioning_images` は JSON の形も変わらず、知らせる値だけが 10 になる（古い `config.yaml` に `5` が残っていても `extra='ignore'` で無視される）。**オーナーの実機ゲートは本版の時点では未実施である**。実装と設計判断の記録は台帳 `Docs/PENDING_TASKS.md` §1-28（実機ゲート合格後に `Docs/VERIFICATION_LOG.md` の新節へ移す）。 |
 
 ### 0.2 スコープ
 
@@ -647,8 +648,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 3. `(num_frames - 1) % 8 != 0` → `ValueError("num_frames must be 8n+1")`
 4. `crop_output` 指定時: `crop_output.width > width` / `crop_output.height > height` はそれぞれ ValueError（クロップは生成サイズ以下）
 5. `pipeline == "distilled"` のとき: `num_inference_steps != 8` → ValueError、`guidance_scale != 1.0` → ValueError（Phase 1 の distilled は 8 step / CFG=1.0 固定）
-6. `len(conditioning_images) > 5` → `ValueError("at most 5 conditioning images are supported")`（**Phase 3 で 1 枚→5 枚へ拡張**。旧「Phase 1 supports at most one conditioning image」は撤去済み）
-7. `conditioning_images` の各要素の `frame_idx` を**その場で書き換える**（**Phase 3 で「0 固定」を解除**。旧「Phase 1 supports only frame_idx=0 for I2V」は撤去済み）。`frame_idx == 0` は開始フレーム（潜在置換経路）としてそのまま通す。`frame_idx > 0` は潜在フレームの開始画素＝8n+1 グリッドへスナップし（`(f-1)//8*8+1`。ComfyUI `LTXVAddGuide` と同じ規約）、`[1, num_frames-8]` へクランプする。**格子外・範囲外でも 422 にはせず、受理して丸める**（UI が自然な値を送ってきても壊れないための安全網。÷64 は空間方向の別の話で無関係）
+6. `len(conditioning_images) > MAX_CONDITIONING_IMAGES` → `ValueError("at most 10 conditioning images are supported")`（**Phase 3 で 1 枚→5 枚へ拡張し、2026-09-08 に 5 枚→10 枚へ引き上げた**。公式 LTX Desktop のローカル実行の上限〔`LOCAL_MULTI_KEYFRAME_MAX_COUNT = 10`〕へ、LTX 2.3 ／ LTX 2.5 共通の 1 値として揃えたもの。旧「Phase 1 supports at most one conditioning image」は撤去済み）。**枚数の正本は `config.py` の定数 `MAX_CONDITIONING_IMAGES` ただ 1 箇所である**——この検証も、`GET /config` が知らせる `limits.max_conditioning_images` も、Gradio 検証UI のスロット数も、そこだけを読む（§6.7・§12）
+7. `conditioning_images` の各要素の `frame_idx` を**その場で書き換える**（**Phase 3 で「0 固定」を解除**。旧「Phase 1 supports only frame_idx=0 for I2V」は撤去済み）。`frame_idx == 0` は開始フレーム（潜在置換経路）としてそのまま通す。`frame_idx > 0` は潜在フレームの開始画素＝8n+1 グリッドへスナップし（`(f-1)//8*8+1`。ComfyUI `LTXVAddGuide` と同じ規約）、`[1, num_frames-8]` へクランプする。**格子外・範囲外でも 422 にはせず、受理して丸める**（UI が自然な値を送ってきても壊れないための安全網。÷64 は空間方向の別の話で無関係）。**ただし、丸めた先が他の 1 枚とぶつかったときだけは 422 で断る（2026-09-08追加）**——文言は `conditioning_images: frame_idx A and B both snap to frame N (positions must be distinct)`、両方が `0` のときだけ `two conditioning images at frame_idx 0 (the start frame can only be set once)` である（連結生成では `clips[0]: ` を前置する。文言は英語のみで、これはサーバー検証の全文言と同じ扱いである）。同じ位置に 2 枚あると 2 枚分の条件付けが両方エンジンへ流れ、結果が定まらないためで、**従来はこれを黙って通していた**。**判定の順序は「枚数 → スナップ → 重複」**で、枚数超過は丸める前に断る。**この 3 段は単発生成と連結生成が同じヘルパー `_normalize_conditioning_images`（`api/models.py`）を共有する**（丸めの式とクランプは以前と一字も変えていない）。なお**上限の 10 枚に届くのは `num_frames >= 73` からである**——置ける格子点は `(num_frames - 9) // 8 + 2` 個しかなく（`num_frames = 9` なら `0` と `1` の 2 つだけ）、それより多い枚数は必ずどこかで重複して 422 になる。**短い尺では、これまで黙って通っていた入力が新たに 422 になる**（プラグインの操作画面は置ける格子点の数で上限を自動的に縮めるのでここへは到達しないが、Gradio 検証UI と MCP 経由では到達しうる）
 8. `reference_video_id` があって `loras` が空 → `ValueError("reference_video_id requires at least one lora ...")`（参照動画は IC-LoRA を条件付けるためだけに存在するため）。**逆向き（`loras` があれば参照動画が必須か）はここでは判定しない**——CONTROL 系アダプタは必須・STYLE/キャラクター系は不要という**種別依存**の規則なので、登録簿を読めるエンドポイント層（`api/generate.py`）が受け持つ
 9. `conditioning_attention_strength` が指定されていて `loras` が空 → ValueError
 10. `reference_video_strength` が指定されていて `loras` が空 → ValueError
@@ -1022,12 +1023,14 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `max_width` | `1920` | 生成幅の運用上限（Pydantic の `le=4096` とは別の運用リミット） |
 | `max_height` | `1088` | 生成高の運用上限 |
 | `max_num_frames` | `481` | 20s@24fps（481=8×60+1） |
-| `max_conditioning_images` | `5` | I2V キーフレーム画像は最大5枚（Phase 3 で 1→5 に拡張） |
+| `max_conditioning_images` | `10` | I2V キーフレーム画像は最大10枚（Phase 3 で 1→5、2026-09-08 に 5→10）。**`limits` の中でただ 1 つ `config.yaml` から設定できない項目である。下記参照** |
 | `phase1_max_concurrent_jobs` | `1` | 単一ジョブ |
 | `low_vram_disabled_required` | `false` | status に反映 |
 | `spill_free_frames` | 生成サイズ文字列 → フレーム数のマップ | 解像度別「溢れない」フレーム数（クライアント UI 警告用）。**値は書き写さない**——実体は `config.yaml`、説明の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記 |
 | `comfort_budgets` | エンジン系統ごとの表 | **快適上限マーカーの線の配信テーブル（2026-08-31追加）。下記参照** |
 | `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。**表を持たない古いサーバー向けの互換値**。下記参照 |
+
+**`max_conditioning_images`**（2026-09-08 改）は、`limits` の中でただ 1 つ **`config.yaml` から設定できない項目**である。`LimitsConfig` はこの名前を入力フィールドとしては持たず、`config.py` の定数 `MAX_CONDITIONING_IMAGES`（現在 10）をそのまま返す **computed field（pydantic の読み取り専用の算出項目）**として持つ。`GET /config` が返す JSON の形は従来と変わらない（`model_dump()` に含まれる）。変わったのは **`config.yaml` に書いても効かない**ことだけで、古い `config.yaml` に `max_conditioning_images: 5` が残っていても `extra='ignore'` で捨てられ、**クライアントへ知らせる値と、サーバーが実際に弾く値とが原理的にズレない**。以前はこの 2 つが別々の場所にあり、`config.yaml` を書き換えても上限は変わらないのに知らせる値だけが変わる、という罠になっていた。ひな型 `config.yaml.example` からはこのキーの行を削除してある。**廃止キーの警告機構（`DEPRECATED_MODEL_KEYS`）はここへ広げていない**——無視した結果が正しい値になるので実害が無く、規則を 1 つ増やすだけになるためである。
 
 `spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）は、API が 481f まで受理する一方でこの値を超えると shared メモリへ溢れて低速化する（OOM はしない）という境界を、クライアント UI の警告用に配る。**マップの中身は 2026-08-31 に判定規則 v3 で再測定してあり、数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記（実体は `config.yaml` の `limits.spill_free_frames`）である**——本書へは写さない。当初の実測経緯は `Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6（同 §8.4 末尾に再測定の追記あり）。
 
@@ -1635,7 +1638,7 @@ Gradio / API の初期値。
 | `normalize_to_png` | `true` | PNG 正規化（EXIF orientation 反映・RGB 変換） |
 
 ### 11.7 limits
-§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=5`, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
+§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=10`（**`config.yaml` からは設定できない算出値。§6.7 参照**）, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
 
 ### 11.8 output
 | キー | 実値 | 説明 |
@@ -1692,7 +1695,9 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - **num_frames / Duration / frame_rate は1つのパネルに統合**（`gr.Group` で横3カラム）。中央カラムは入力欄を持たず、num_frames と frame_rate から算出した **Duration（"N.NNs"）をアクセントカラーで常時表示**する読み取り専用の要約。
 - **preset** ドロップダウン（`GET /config` の `generation_presets`＝§11.4 の6種を解像度・フレーム数のラベル付きで列挙。選択で width/height/num_frames/crop を一括反映）。
 - **crop width / height**（0=none。両方 >0 のとき `crop_output` を送る）/ **seed**（-1=random）。
-- **キーフレーム画像アコーディオン**: 固定5スロット（I2Vの多段誘導）。**A2V（音声から動画生成）と併用時も5枚すべて配線済み**で、`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内にクランプされる（`frame_idx=0` は開始フレーム扱い）。
+- **キーフレーム画像アコーディオン**: 10スロット（I2Vの多段誘導。**2026-09-08 に固定5スロットから拡張した**）。スロット数は `config.py` の `MAX_CONDITIONING_IMAGES` に自動で追随し、「＋」「−」ボタンで開閉して見出しの右に「n / 10」のカウンタが出る。**A2V（音声から動画生成）と併用時も全スロットが配線済み**で、`frame_idx>0` はサーバー側で 8n+1 グリッドへスナップ＋動画尺内にクランプされる（`frame_idx=0` は開始フレーム扱い）。**複数のスロットを frame 0 のまま有効化すると 422 になる**（§6.2 の凍結制約 7。従来は黙って通っていた）。Gradio 側には重複の事前検査を置かず、サーバーの 422 文言をそのまま `progress_box` へ出す運用である——上限の判定と同じく、**正本を 2 箇所に持たない**ための選択である。
+
+> **キーフレームのスロットまわりの実装上の約束（2026-09-08追加）**: ①`gradio_ui/presets.py` は `KF_MAX_SLOTS = MAX_CONDITIONING_IMAGES` として **`config` をモジュールレベルで import する**。`gradio_ui` は HTTP 越しのクライアントなのでサーバーモジュールを import せずミラーの定数を持つ、という規律（`api/models.py` のモジュール冒頭のコメントが正本）の**例外**である。理由は 3 つで、(a) `gradio_ui/validation.py` が既に `chain_math` を import している前例がある、(b) この規律が守ろうとしているのは「ペイロードに載る既定値のミラー」であって UI の物理的な形ではない、(c) 上限の正本を 1 箇所にするには import しかない。②キーフレームの部品は、生成イベントの `inputs` の**末尾**へまとめて置き、ハンドラは `dispatch(..., *kf_flat)` で受けてから 4 つずつ `(有効, 画像, frame_idx, strength)` のタプルへ束ね直す。Gradio の `inputs` は位置引数でしか渡せず、**可変長で受けられるのは末尾だけ**だからである。負のインデックスで途中を切り出す配線は誤配線の温床として避ける、という既存の規律にも沿う。
 - **A2V（音声から動画生成）アコーディオン**: 音声ファイルを添付すると、内部的には 1 クリップのチェーン生成（`POST /generate/chain` + `source_audio`）として送信する。**スタイルLoRA（画風・キャラクター系。`<lora:...>` 記法）とは併用できる**（2026-07-11 に解禁。`GenerateChainRequest.loras` の加算＝VERIFICATION_LOG §32。それ以前は排他だった）。**参照動画を要する control 系 IC-LoRA（canny／pose 等）も、`clips` がちょうど1つのチェーン（A2V を含む）に限り併用できる**（α版・2026-07-11 に解禁＝VERIFICATION_LOG §34。詳細は §13.4b の追記を参照）。`clips` が2つ以上のチェーン（Clip Chain タブでの複数クリップ連結）についても、2026-08-11に長尺IC-LoRAとして多クリップ解禁した（`chain_math.video_segment_windows` による自動区間切り出し・stage-1のみ注入・§6.2／§6.8／VERIFICATION_LOG §57）。深度前処理（Video-Depth-Anything）がメモリに載らない `depth-control` アダプタのみ、2クリップ以上で `422 LORA_DEPTH_CHAIN_UNSUPPORTED` で拒否される（他の制御系・参照系アダプタは多クリップで受理される）。
   - **音声長の事前チェック**: 添付が `.wav` の場合、送信前にクライアント側で長さを測定し、その設定（フレーム数・fps）が必要とする秒数に足りなければ、必要秒数を明示して送信を拒否する（API 呼び出しゼロ）。`.wav` 以外（mp3/m4a等）はクライアント側で測定できないためこのチェックをスキップし、サーバーの `422 SOURCE_AUDIO_TOO_SHORT` に委ねる（このエラーもヒント付きで表示される）。
   - **Frames の自動調整**: `.wav` を添付すると、その音声長に収まる最大の 8n+1 値を自動計算して num_frames へ入力し、トースト通知で知らせる（既存の値は上書きされる）。計算式は `((floor(音声秒数×fps)-1)//8)*8+1` を起点に、音声側の latent フレーム数（`chain_math.audio_latents_required`）で検算しながら 8 刻みで縮小し、最終的に `[9, 481]` へクランプする。`.wav` 以外の添付・クリア時は何もしない。
@@ -1963,7 +1968,9 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 - **÷64**: width/height が 64 の倍数でないと 422（例 544=÷32 だが÷64 でない → reject）。
 - **8n+1**: num_frames が 8n+1 でないと 422。**cap=481**（=8×60+1=20s@24fps）を超えると 422。481 は許容、480（8n+1 でない）は 422。
-- **conditioning ≤ 5**: `conditioning_images` が **6 枚以上**で 422（5 枚は受理。`tests/test_validation.py::test_too_many_conditioning_images` / `::test_five_conditioning_images_accepted`）。
+- **conditioning ≤ 10**: `conditioning_images` が **11 枚以上**で 422（10 枚は受理。`tests/test_validation.py::test_too_many_conditioning_images` / `::test_five_conditioning_images_accepted` / `::test_ten_conditioning_images_accepted`。連結生成側は `tests/test_chain.py::test_chain_rejects_too_many_conditioning_images` / `::test_chain_accepts_ten_conditioning_images_on_clip0`）。
+- **スナップ後の重複**: 丸めた先が同じフレームになる 2 枚は 422（`tests/test_validation.py::test_conditioning_images_snapping_into_the_same_frame_rejected` / `::test_two_conditioning_images_at_frame_zero_rejected`。丸め先が違えば受理されることの偽陽性ガードが `::test_distinct_snapped_positions_still_accepted`、連結生成の接頭辞つき文言が `tests/test_chain.py::test_chain_rejects_conditioning_images_snapping_into_the_same_frame`）。
+- **上限の配信と古い config の無視**: `GET /api/v1/config` の `limits.max_conditioning_images` が定数と一致すること、および `config.yaml` に残った古い値が無視されること（`tests/test_validation.py::test_config_publishes_the_keyframe_cap` / `::test_stale_config_max_conditioning_images_is_ignored`）。
 - **frame_idx のスナップ**: `frame_idx` が 0 以外でも **422 にはならず**、8n+1 グリッドへ丸めて `[1, num_frames-8]` にクランプされることを検査する（同 `::test_frame_idx_nonzero_accepted_and_snapped` / `::test_frame_idx_snap_and_clamp_math`）。
 - **distilled 固定値**: `num_inference_steps=8` 以外で 422。
 - **生成疎通**: mock runner で T2V/I2V が完了し、`metadata.json` の `generation_mode` / `seed_used` / `vram_optimization.low_vram_mode` / `peak_vram_mb` が入る。
@@ -1987,7 +1994,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | 生成サイズ（width/height） | **64 の倍数** | two-stage distilled が Stage1 を半解像度で生成し x2 アップサンプルするため÷64（÷32 由来は `Docs/LTX23_REFERENCE.md` §3）。検証は §6.7・`api/models.py` |
 | フレーム数 | **8n+1**（9, 17, 25, … 481） | 上限 cap=**481=20s@24fps**（旧 257 から緩和）。§6.7 |
 | distilled ステップ / CFG | **8 steps / CFG=1.0** 固定 | §6.7 |
-| I2V のキーフレーム画像 | **最大5枚**・`frame_idx` は 0 または 8n+1（画像なし=T2V）。`0` は開始フレーム、`> 0` は 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプ（**422 にはせず丸める**）。Phase 3 で「1枚・`frame_idx=0` 固定」から拡張 | §6.2 の凍結制約 6・7、§6.7 の `max_conditioning_images` |
+| I2V のキーフレーム画像 | **最大10枚**・`frame_idx` は 0 または 8n+1（画像なし=T2V）。`0` は開始フレーム、`> 0` は 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプ（**422 にはせず丸める**）。ただし**丸めた先が他の1枚とぶつかったときだけは 422**。上限10に届くのは `num_frames >= 73` から（置ける格子点は `(num_frames-9)//8+2` 個） | §6.2 の凍結制約 6・7、§6.7 の `max_conditioning_images` |
 | 非64 表示サイズ | **`crop_output` で中央クロップ**（例 1280×768→720, 960×576→540） | §8.2 |
 | 解像度別 spill-free フレーム（16GB 実測） | **数値はここへ書き写さない**——実体は `config.yaml` の `limits.spill_free_frames`（`GET /api/v1/config` で配信） | 超えると shared へ溢れ ~2-4x 低速（OOM せず）。**説明と現行値の正本＝`Docs/COMFORT_LIMIT_TABLE.md` §付記**（2026-08-31 に判定規則 v3 で再測定）。当初の実測経緯＝`Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6 |
 | 解像度×尺の実用上限 | 解像度別に §10 / §6.7 を参照 | 1080p 長尺は非実用（~40分・commit リスク）→ **720p 生成 + 外部 upscale 推奨** |
@@ -2001,7 +2008,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | 用語 | 1行定義 |
 |------|---------|
 | **T2V** | Text-to-Video。プロンプトのみから動画生成（画像なし）。 |
-| **I2V（最小I2V）** | Image-to-Video。開始フレーム1枚（`frame_idx=0`）を条件に動画生成。「最小I2V」は Phase 1 当時の 1 枚・開始フレーム限定の呼び名で、**現在はキーフレーム画像を最大5枚・任意位置（8n+1 へ丸め）で指定できる**（付録A・§6.2 の凍結制約 6・7）。 |
+| **I2V（最小I2V）** | Image-to-Video。開始フレーム1枚（`frame_idx=0`）を条件に動画生成。「最小I2V」は Phase 1 当時の 1 枚・開始フレーム限定の呼び名で、**現在はキーフレーム画像を最大10枚・任意位置（8n+1 へ丸め）で指定できる**（付録A・§6.2 の凍結制約 6・7）。 |
 | **distilled** | LTX-2.3 の蒸留パイプライン。8 steps / CFG=1.0 固定、内部 two-stage（Stage1 半解像度8step → x2 upscale → Stage2 4step）。 |
 | **two-stage / spatial upsampler** | distilled が最終解像度を作るための内部2段。x2 spatial upscaler（別チェックポイント）を使う。この二段目は生成の仕組みであり「1080p 機能」とは別（§13.5）。 |
 | **block-swap** | transformer のブロックを GPU 常駐（既定 8）とし残りを退避、重み VRAM を削る手法。 |

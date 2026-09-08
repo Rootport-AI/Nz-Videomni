@@ -4,7 +4,7 @@
 |------|----|
 | 版 | 1.0 |
 | 日付 | 2026-07-12 |
-| 更新 | 2026-09-01（スキップ理由コードを`over-cap`へ一本化・実効上限を両GUI共通の規約として明記・再スキャンでのSkip復帰をマージ規則へ追記／**同日追記**: 「CSVを読み書きするのはGradio GUIだけで、WebView2フロントエンドは語彙と規約のみに従う」という実態に合わせて§0・§5・§10を書き改めた） |
+| 更新 | 2026-09-01（スキップ理由コードを`over-cap`へ一本化・実効上限を両GUI共通の規約として明記・再スキャンでのSkip復帰をマージ規則へ追記／**同日追記**: 「CSVを読み書きするのはGradio GUIだけで、WebView2フロントエンドは語彙と規約のみに従う」という実態に合わせて§0・§5・§10を書き改めた）／2026-09-08（§3.1の`Shared`の説明から共通キーフレームの枚数を外し、サーバーが`GET /config`で知らせる`limits.max_conditioning_images`への参照に改めた。上限が5枚から10枚になり、値を書き写す形が失効を生むため） |
 | 正本実装（Python） | [`gradio_ui/manifest.py`](../gradio_ui/manifest.py) |
 | 併読 | [`BATCH_A2V_WORKORDER.md`](BATCH_A2V_WORKORDER.md)（機能の設計経緯・§4.5でこの仕様への切り出しを決定）／[`PENDING_TASKS.md`](PENDING_TASKS.md)（残課題）／[`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md)・[`chain_math.py`](../chain_math.py)（フレーム数算出の根拠。本書はCSVの列契約のみを扱い、算出式そのものはそちらが正本） |
 
@@ -52,7 +52,7 @@ Gradio GUIの表には**先頭7列（queue〜output）のみ**を表示する。
 
 ### 3.1 `image`列の規約
 
-- 既定値・特別値 **`Shared`**: Generate タブで設定する**共通のi2vキーフレーム画像**（最大5枚・frame_idx/strength付き）を使うことを意味する。
+- 既定値・特別値 **`Shared`**: Generate タブで設定する**共通のi2vキーフレーム画像**（frame_idx/strength付き）を使うことを意味する。枚数の上限は本書の管轄外で、サーバーが`GET /config`の`limits.max_conditioning_images`で知らせる値が正本である（この値は`api/models.py`のバリデータが実際に弾く枚数と必ず一致する）。
 - それ以外の非空文字列: 画像フォルダ（wavフォルダとは別に指定される、任意設定のフォルダ）内のファイル名（拡張子つき・ディレクトリ部分なし）として解決する。画像フォルダが未設定の場合は音声フォルダを画像フォルダの代わりとして解決する（後方互換のフォールバック）。
 - 読み取り時、この列が**空文字列**の場合は `Shared` として正規化する（空=共通画像、という扱い）。相互運用実装はこの正規化ルールを踏襲すること。
 

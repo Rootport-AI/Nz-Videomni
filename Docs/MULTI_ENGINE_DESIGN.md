@@ -451,6 +451,8 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
 
 **規約**: **`engine25` に新しい経路を足すときは `torch.no_grad()` で書く。** **LTX 2.3 の経路を移植するときは、デコレータを一緒に持ってこないこと**——これが再発の最も安い経路である。
 
+**この規約に触れる改修（画角拡張、推論モードの切替、常駐ワーカーの状態に関わるもの）は、「1腕1プロセス」の直接ドライバだけでは回帰を確かめきれない。** **同じ常駐ワーカーで後続のジョブを流したときに出る不具合**（画角拡張の直後の普通の生成が落ちる類）は単発実行では捕まえられないため、**3腕（通常→画角拡張→通常／→連結／→画角拡張→通常）の連続投入ドライバを必ず回す。** **腕が「有効」だったか**（ページ固定プールが実際に成長したか）を、合否とは別に検査するのがこのゲートの要点である。道具は `outputs/ltx25-opmode-gate/scripts/`（`op_gate.py`＝連続投入ドライバ、`README.md`＝依存チェーンと合格条件、`SHA_ARMS.md`＝バイト同一性の手順書。git管理外）で、`README.md`・`SHA_ARMS.md` の複写は [`Docs/Outputs-archive/ltx25-opmode-gate-scripts/`](Outputs-archive/ltx25-opmode-gate-scripts/) にある。**正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §81.6・§81.9。**
+
 ---
 
 ## 6. 利用者から見た振る舞い（UX仕様）【オーナー裁定】

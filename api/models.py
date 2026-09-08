@@ -1,8 +1,9 @@
 """Pydantic schemas — the external API contract (spec ch.6).
 
-Conditioning is now Phase-3 UNFROZEN: multiple keyframes (cap 5), arbitrary
-``frame_idx`` (snapped server-side to the official ``0``-or-``8n+1`` latent grid
-and clamped into range), and per-item ``strength``. ``num_pixel_frames`` and reference-video conditioning
+Conditioning is now Phase-3 UNFROZEN: multiple keyframes (cap
+``MAX_CONDITIONING_IMAGES``), arbitrary ``frame_idx`` (snapped server-side to
+the official ``0``-or-``8n+1`` latent grid and clamped into range), and
+per-item ``strength``. ``num_pixel_frames`` and reference-video conditioning
 remain out of scope. The OTHER constraints stay FROZEN as the final-form API so
 that future frontends (AviUtl2, DaVinci Resolve) and later phases do not break:
 ÷64 generation resolution, 8n+1 frame counts, and the distilled 8-step / CFG=1.0
@@ -23,7 +24,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from config import LimitsConfig
+from config import LimitsConfig, MAX_CONDITIONING_IMAGES
 
 # Pydantic-declared DEFAULTS only (no config.yaml file I/O) — the single place
 # api/models.py sources the V2V context_frames bounds from, so they can never
@@ -104,6 +105,59 @@ class ConditioningImage(BaseModel):
     frame_idx: int = Field(0, ge=0)
     strength: float = Field(0.8, ge=0.0, le=1.0)
     crf: int | None = None
+
+
+def _normalize_conditioning_images(
+    images: list[ConditioningImage], num_frames: int, *, where: str = ""
+) -> None:
+    """Validate one request's keyframe list and snap it onto the latent grid, in place.
+
+    frame_idx is fed to the engine's guide path (VideoConditionByKeyframeIndex)
+    as a RAW PIXEL RoPE offset (positions[:,0] += frame_idx, no ÷8), so it must
+    be a latent-aligned pixel. Two on-grid cases, per the official LTX-2 /
+    ComfyUI (LTXVAddGuide) convention:
+
+      * frame_idx == 0  -> start frame, routed to the latent-replace path;
+        left byte-identical (the engine also special-cases idx==0 causal_fix).
+      * frame_idx  > 0  -> a keyframe/guide that must sit on a latent-frame
+        START pixel = the 8n+1 grid. Snap via (f-1)//8*8+1 (ComfyUI
+        get_latent_index) and clamp to [1, num_frames-8] — for num_frames=8m+1
+        the last latent-frame start is num_frames-8 (e.g. 49 -> 41).
+
+    Snapping is a safety net — the UI may still send natural values. The ÷64
+    rule is spatial-only and unrelated.
+
+    門番は3段: 枚数（``MAX_CONDITIONING_IMAGES`` まで）→ スナップ（上のグリッド）
+    → 重複（スナップ後に同じ位置へ落ちた2枚を弾く）。``where`` は連結リクエストが
+    ``clips[i]: `` を前置するための接頭辞。
+    """
+    if len(images) > MAX_CONDITIONING_IMAGES:
+        raise ValueError(
+            f"{where}at most {MAX_CONDITIONING_IMAGES} conditioning images are supported"
+        )
+
+    claimed_by: dict[int, int] = {}  # スナップ後の位置 -> それを先に取った入力 frame_idx
+    for image in images:
+        raw = image.frame_idx
+        if raw == 0:
+            snapped = 0
+        else:
+            snapped = max(1, min((raw - 1) // 8 * 8 + 1, num_frames - 8))
+
+        if snapped in claimed_by:
+            if snapped == 0:
+                raise ValueError(
+                    f"{where}two conditioning images at frame_idx 0 "
+                    "(the start frame can only be set once)"
+                )
+            raise ValueError(
+                f"{where}conditioning_images: frame_idx {claimed_by[snapped]} and "
+                f"{raw} both snap to frame {snapped} (positions must be distinct)"
+            )
+
+        claimed_by[snapped] = raw
+        if raw != 0:
+            image.frame_idx = snapped
 
 
 class LoraSpec(BaseModel):
@@ -336,7 +390,7 @@ class GenerateRequest(BaseModel):
     seed: int = -1
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
 
-    # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap 5）。
+    # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap ``MAX_CONDITIONING_IMAGES``）。
     # 各 frame_idx は validator で 0-or-8n+1 グリッドへスナップ＋範囲クランプされる。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
@@ -396,26 +450,8 @@ class GenerateRequest(BaseModel):
                     "distilled pipeline requires guidance_scale=1.0 in Phase 1"
                 )
 
-        # Conditioning (Phase 3): multi-keyframe I2V, cap 5.
-        if len(self.conditioning_images) > 5:
-            raise ValueError("at most 5 conditioning images are supported")
-        # frame_idx is fed to the engine's guide path (VideoConditionByKeyframeIndex)
-        # as a RAW PIXEL RoPE offset (positions[:,0] += frame_idx, no ÷8), so it must
-        # be a latent-aligned pixel. Two on-grid cases, per the official LTX-2 /
-        # ComfyUI (LTXVAddGuide) convention:
-        #   * frame_idx == 0  -> start frame, routed to the latent-replace path;
-        #     left byte-identical (the engine also special-cases idx==0 causal_fix).
-        #   * frame_idx  > 0  -> a keyframe/guide that must sit on a latent-frame
-        #     START pixel = the 8n+1 grid. Snap via (f-1)//8*8+1 (ComfyUI
-        #     get_latent_index) and clamp to [1, num_frames-8] — for num_frames=8m+1
-        #     the last latent-frame start is num_frames-8 (e.g. 49 -> 41).
-        # Snapping is a safety net — the UI may still send natural values. The ÷64
-        # rule is spatial-only and unrelated.
-        for image in self.conditioning_images:
-            if image.frame_idx == 0:
-                continue  # latent-replace path (start frame); byte-identical to today
-            snapped = (image.frame_idx - 1) // 8 * 8 + 1
-            image.frame_idx = max(1, min(snapped, self.num_frames - 8))
+        # Conditioning (Phase 3): multi-keyframe I2V — 枚数 / スナップ / 重複の3段。
+        _normalize_conditioning_images(self.conditioning_images, self.num_frames)
 
         # IC-LoRA reference requirement is now KIND-dependent (S1) and enforced at
         # the endpoint layer (api/generate.py), not here: a CONTROL adapter
@@ -1161,15 +1197,9 @@ class GenerateChainRequest(BaseModel):
                     "only clip 0 may carry conditioning_images (later clips are "
                     "later segments of one continuous timeline)"
                 )
-            if len(clip.conditioning_images) > 5:
-                raise ValueError(
-                    f"clips[{i}]: at most 5 conditioning images are supported"
-                )
-            for image in clip.conditioning_images:
-                if image.frame_idx == 0:
-                    continue
-                snapped = (image.frame_idx - 1) // 8 * 8 + 1
-                image.frame_idx = max(1, min(snapped, clip.num_frames - 8))
+            _normalize_conditioning_images(
+                clip.conditioning_images, clip.num_frames, where=f"clips[{i}]: "
+            )
 
         # Total-timeline geometry: sum of pixel frames minus the shared overlaps.
         # Delegated to the shared pure-Python chain_math so the validator, the

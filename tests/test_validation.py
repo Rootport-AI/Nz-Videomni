@@ -51,7 +51,7 @@ def test_num_frames_within_cap_but_not_8n_plus_1_rejected(client):
 
 
 def test_too_many_conditioning_images(client):
-    # SIX images (all otherwise valid) exceeds the cap of 5 -> rejected.
+    # ELEVEN images (all otherwise valid) exceeds the cap of 10 -> rejected.
     r = client.post(
         "/api/v1/generate",
         json={
@@ -61,12 +61,12 @@ def test_too_many_conditioning_images(client):
             "num_frames": 49,
             "conditioning_images": [
                 {"image_id": f"image-{i}", "frame_idx": i * 8, "strength": 0.8}
-                for i in range(6)
+                for i in range(11)
             ],
         },
     )
     assert r.status_code == 422
-    assert "at most 5" in r.text
+    assert "at most 10" in r.text
 
 
 def _upload(client, png_bytes) -> str:
@@ -92,6 +92,87 @@ def test_five_conditioning_images_accepted(client, png_bytes):
         },
     )
     assert r.status_code == 202
+
+
+def test_ten_conditioning_images_accepted(client, png_bytes):
+    # The cap itself: 10 keyframes at 0,8,16,...,72 (real uploaded images).
+    # They snap to 0,1,9,...,65 -- all distinct, all inside num_frames=121.
+    ids = [_upload(client, png_bytes) for _ in range(10)]
+    r = client.post(
+        "/api/v1/generate",
+        json={
+            **BASE,
+            "width": 512,
+            "height": 320,
+            "num_frames": 121,
+            "conditioning_images": [
+                {"image_id": iid, "frame_idx": i * 8, "strength": 0.8}
+                for i, iid in enumerate(ids)
+            ],
+        },
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_conditioning_images_snapping_into_the_same_frame_rejected(client):
+    # 10 and 12 both snap to frame 9 -> two keyframes would land on one latent
+    # position. Rejected structurally, BEFORE the image ids are looked up (so
+    # dummy ids are enough here).
+    r = client.post(
+        "/api/v1/generate",
+        json={
+            **BASE,
+            "width": 512,
+            "height": 320,
+            "num_frames": 49,
+            "conditioning_images": [
+                {"image_id": "image-a", "frame_idx": 10, "strength": 0.8},
+                {"image_id": "image-b", "frame_idx": 12, "strength": 0.8},
+            ],
+        },
+    )
+    assert r.status_code == 422
+    assert "frame_idx 10 and 12 both snap to frame 9" in r.text
+
+
+def test_two_conditioning_images_at_frame_zero_rejected(client):
+    # frame_idx 0 is the start frame (latent-replace path); it can only be
+    # claimed once, so a second 0 is its own message.
+    r = client.post(
+        "/api/v1/generate",
+        json={
+            **BASE,
+            "width": 512,
+            "height": 320,
+            "num_frames": 49,
+            "conditioning_images": [
+                {"image_id": "image-a", "frame_idx": 0, "strength": 0.8},
+                {"image_id": "image-b", "frame_idx": 0, "strength": 0.8},
+            ],
+        },
+    )
+    assert r.status_code == 422
+    assert "two conditioning images at frame_idx 0" in r.text
+
+
+def test_distinct_snapped_positions_still_accepted(client, png_bytes):
+    # False-positive guard for the duplicate check: 9 and 17 are already on the
+    # grid and stay distinct after snapping -> accepted.
+    ids = [_upload(client, png_bytes) for _ in range(2)]
+    r = client.post(
+        "/api/v1/generate",
+        json={
+            **BASE,
+            "width": 512,
+            "height": 320,
+            "num_frames": 49,
+            "conditioning_images": [
+                {"image_id": ids[0], "frame_idx": 9, "strength": 0.8},
+                {"image_id": ids[1], "frame_idx": 17, "strength": 0.8},
+            ],
+        },
+    )
+    assert r.status_code == 202, r.text
 
 
 def test_multi_keyframe_accepted(client, png_bytes):
@@ -715,3 +796,24 @@ def test_chain_to_clip_request_does_not_transcribe_end_source():
     })
     assert model.end_source is not None
     assert not hasattr(model.to_clip_request(0), "end_source")
+
+
+def test_config_publishes_the_keyframe_cap(client):
+    # GET /config is what the clients build their keyframe UI from, so the cap
+    # they see must BE the contract constant.
+    from config import MAX_CONDITIONING_IMAGES
+
+    r = client.get("/api/v1/config")
+    assert r.status_code == 200
+    published = r.json()["limits"]["max_conditioning_images"]
+    assert published == MAX_CONDITIONING_IMAGES == 10
+
+
+def test_stale_config_max_conditioning_images_is_ignored():
+    """利用者の config.yaml は git 管理外で git pull しても更新されないため、
+    そこに残った古い 5 が読まれない（computed_field が常に勝つ）ことを確かめる。
+    """
+    from config import LimitsConfig, MAX_CONDITIONING_IMAGES
+
+    limits = LimitsConfig.model_validate({"max_conditioning_images": 5})
+    assert limits.max_conditioning_images == MAX_CONDITIONING_IMAGES

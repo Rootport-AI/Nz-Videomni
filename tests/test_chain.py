@@ -340,6 +340,61 @@ def test_chain_clip0_conditioning_image_missing_404(client):
     assert r.json()["error"]["code"] == "IMAGE_NOT_FOUND"
 
 
+# Keyframe cap / grid on the chain path. Same _normalize_conditioning_images
+# gate as the single-shot endpoint, but prefixed with "clips[i]: ".
+
+
+def _upload(client, png_bytes) -> str:
+    up = client.post("/api/v1/upload/image", files={"file": ("k.png", png_bytes, "image/png")})
+    assert up.status_code == 200, up.text
+    return up.json()["image_id"]
+
+
+def test_chain_rejects_too_many_conditioning_images(client):
+    # ELEVEN images on clip 0 exceeds the cap of 10. The count is checked before
+    # the ids are looked up, so dummy ids are enough.
+    clips = [
+        {"num_frames": 49, "conditioning_images": [
+            {"image_id": f"image-{i}", "frame_idx": i * 8, "strength": 0.8}
+            for i in range(11)
+        ]},
+        {"num_frames": 25},
+    ]
+    r = _run_chain(client, clips)
+    assert r.status_code == 422
+    assert "clips[0]: at most 10" in r.text
+
+
+def test_chain_rejects_conditioning_images_snapping_into_the_same_frame(client):
+    # 10 and 12 both snap to frame 9 -> rejected, and the message says which clip.
+    clips = [
+        {"num_frames": 49, "conditioning_images": [
+            {"image_id": "image-a", "frame_idx": 10, "strength": 0.8},
+            {"image_id": "image-b", "frame_idx": 12, "strength": 0.8},
+        ]},
+        {"num_frames": 25},
+    ]
+    r = _run_chain(client, clips)
+    assert r.status_code == 422
+    assert "clips[0]:" in r.text
+    assert "both snap to frame 9" in r.text
+
+
+def test_chain_accepts_ten_conditioning_images_on_clip0(client, png_bytes):
+    # The cap itself, on the chain path: 10 real keyframes at 0,8,...,72 inside
+    # a 121-frame clip 0 (snapping to 0,1,9,...,65).
+    ids = [_upload(client, png_bytes) for _ in range(10)]
+    clips = [
+        {"num_frames": 121, "conditioning_images": [
+            {"image_id": iid, "frame_idx": i * 8, "strength": 0.8}
+            for i, iid in enumerate(ids)
+        ]},
+        {"num_frames": 25},
+    ]
+    r = _run_chain(client, clips)
+    assert r.status_code == 202, r.text
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Unequal-length chains (regression for the stage-1 carry init-shape bug).
 #

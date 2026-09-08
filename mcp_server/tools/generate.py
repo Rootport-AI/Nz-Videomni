@@ -284,7 +284,7 @@ async def submit_generate(
             ``_snap_frame_rate`` 参照）。範囲外の値は丸めずそのまま送るので
             サーバーが422で弾く。
         seed: 乱数シード（-1でランダム）。
-        conditioning_images: I2V用のキーフレーム画像（最大5件、``upload_image``
+        conditioning_images: I2V用のキーフレーム画像（最大10件、``upload_image``
             で得た ``image_id`` を使う）。
         loras: 適用するIC-LoRAアダプタのリスト。各要素の ``audio_strength``
             は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、

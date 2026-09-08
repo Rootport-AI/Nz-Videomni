@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from chain_math import CHAIN_COMFORT_TOKEN_BUDGET
 
@@ -362,11 +362,22 @@ def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
     }
 
 
+# キーフレーム画像（conditioning_images）の枚数上限。設定項目ではなく契約定数で、
+# 公式 LTX Desktop の LOCAL_MULTI_KEYFRAME_MAX_COUNT = 10 に LTX 2.3 / 2.5 共通で揃える。
+MAX_CONDITIONING_IMAGES = 10
+
+
 class LimitsConfig(BaseModel):
     max_width: int = 1920
     max_height: int = 1088
     max_num_frames: int = 481
-    max_conditioning_images: int = 5
+
+    @computed_field
+    @property
+    def max_conditioning_images(self) -> int:
+        """入力項目ではない（config.yaml に書かれていても extra='ignore' で無視される）。"""
+        return MAX_CONDITIONING_IMAGES
+
     # frame_idx grid advertised via /config so clients can build the UI grid.
     # Keyframes snap to the latent-frame-START grid: frame_idx 0 is the start-frame
     # (latent-replace path); every OTHER keyframe sits on offset + multiple*n, i.e.

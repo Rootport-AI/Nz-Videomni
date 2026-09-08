@@ -529,20 +529,22 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
                         seed = reg(gr.Number(value=-1, label=L("lbl_seed"), precision=0), "lbl_seed")
 
-                        # accordion: up to 5 fixed keyframe slots (I2V multi-keyframe
-                        # conditioning). Slot 1 suggests "start frame (0)"; slots 2-5
-                        # are plain "frame position" slots, all defaulting to 0 (the
-                        # server snaps any non-zero value to the 8n+1 grid).
+                        # accordion: KF_MAX_SLOTS fixed keyframe slots (I2V
+                        # multi-keyframe conditioning; the ceiling is the server's
+                        # MAX_CONDITIONING_IMAGES, re-exported by presets.py). Slot 1
+                        # suggests "start frame (0)"; the remaining slots are plain
+                        # "frame position" slots, all defaulting to 0 (the server snaps
+                        # any non-zero value to the 8n+1 grid).
                         kf_slots: list[tuple[object, object, object, object]] = []
                         kf_extra_rows: list[object] = []
                         # Collapsible keyframe grid: slot 1 always visible (the
-                        # start frame / batch-A2V required reference), slots 2-5
+                        # start frame / batch-A2V required reference), the rest
                         # start hidden and the ± buttons grow/shrink the count.
                         # State is server-side (Gradio has no live-visibility read).
                         kf_open_count = gr.State(KF_MIN_OPEN)
                         with gr.Accordion(L("lbl_kf_accordion"), open=False) as kf_accordion:
                             reg(kf_accordion, "lbl_kf_accordion", "label")
-                            for _slot_i in range(1, 6):
+                            for _slot_i in range(1, KF_MAX_SLOTS + 1):
                                 frame_key = "lbl_kf_frame_pos0" if _slot_i == 1 else "lbl_kf_frame_pos"
                                 with gr.Row(visible=(_slot_i == 1)) as kf_row:
                                     kf_enabled = reg(gr.Checkbox(value=False, label=L("lbl_kf_use")),
@@ -558,13 +560,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 if _slot_i > 1:
                                     kf_extra_rows.append(kf_row)
                             # ± buttons (symbols only, i18n non-registered) grow /
-                            # shrink the visible keyframe rows (min 1, max 5). "−"
-                            # also unchecks a hidden row's Use box and greys out at
-                            # the 1-slot floor (the startup state, hence
-                            # interactive=False here); "＋" greys out at the 5-slot
-                            # ceiling. Owner-requested order: ＋ left, − right,
-                            # plus a language-independent "n/5" counter (digits
-                            # only -> not i18n-registered) on the same row.
+                            # shrink the visible keyframe rows (min KF_MIN_OPEN, max
+                            # KF_MAX_SLOTS). "−" also unchecks a hidden row's Use box
+                            # and greys out at the floor (the startup state, hence
+                            # interactive=False here); "＋" greys out at the
+                            # KF_MAX_SLOTS ceiling. Owner-requested order: ＋ left,
+                            # − right, plus a language-independent "n/KF_MAX_SLOTS"
+                            # counter (digits only -> not i18n-registered) on the
+                            # same row.
                             with gr.Row():
                                 kf_plus_btn = gr.Button("＋", scale=0)
                                 kf_minus_btn = gr.Button("−", scale=0,
@@ -1274,18 +1277,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ---- Generate button dispatch (single vs. batch A2V) ----
         # The middle stage of the Generate button's click chain. When batch A2V
         # is OFF it delegates verbatim to the frozen ``generate`` handler (same
-        # 40 inputs, same 3 outputs). When ON it instead snapshots the whole
+        # values, same 3 outputs). When ON it instead snapshots the whole
         # Generate tab into a BatchSnapshot and hands it to the in-process
         # BatchRunner, then returns immediately (the run proceeds on a daemon
         # thread; the batch_timer below reflects its progress). The 6 batch
-        # inputs are APPENDED after the existing 40 so every pre-existing
-        # positional maps to the exact same generate() argument as before.
+        # inputs are APPENDED after the pre-existing scalar positionals so every
+        # one of those maps to the exact same generate() argument as before.
+        # *kf_flat: the keyframe quads, wired as the TAIL of inputs (see generate_btn.click below).
         def dispatch(prompt_v, negative_v,
-                     kf1_en, kf1_img, kf1_fr, kf1_st,
-                     kf2_en, kf2_img, kf2_fr, kf2_st,
-                     kf3_en, kf3_img, kf3_fr, kf3_st,
-                     kf4_en, kf4_img, kf4_fr, kf4_st,
-                     kf5_en, kf5_img, kf5_fr, kf5_st,
                      width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
                      num_frames_v, frame_rate_v, seed_v,
                      adapter_v, adapter_strength_v, control_adherence_v,
@@ -1296,19 +1295,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_img_dir_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
-                     accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v):
+                     accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
+                     *kf_flat):
+            kf_slot_values = [tuple(kf_flat[i:i + 4])
+                              for i in range(0, len(kf_flat), 4)]
             if not batch_enable_v:
-                # Single-generation path: byte-identical delegation (first 40
-                # positionals ARE the generate() signature); nag_*/neg_method/
-                # vsf_* are passed as keywords since they sit at the very end
-                # of generate()'s signature.
+                # Single-generation path: byte-identical delegation (these
+                # positionals ARE the generate() signature, with the whole
+                # keyframe grid handed over as the single ``kf_slots`` list in
+                # third position); nag_*/neg_method/vsf_* are passed as keywords
+                # since they sit at the very end of generate()'s signature.
                 yield from generate(
-                    prompt_v, negative_v,
-                    kf1_en, kf1_img, kf1_fr, kf1_st,
-                    kf2_en, kf2_img, kf2_fr, kf2_st,
-                    kf3_en, kf3_img, kf3_fr, kf3_st,
-                    kf4_en, kf4_img, kf4_fr, kf4_st,
-                    kf5_en, kf5_img, kf5_fr, kf5_st,
+                    prompt_v, negative_v, kf_slot_values,
                     width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
                     num_frames_v, frame_rate_v, seed_v,
                     adapter_v, adapter_strength_v, control_adherence_v,
@@ -1370,13 +1368,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # shared keyframe images (common i2v slots) -> (path, frame, strength),
             # collected the same way the frozen path builds ``to_upload``.
             shared_images: list[tuple] = []
-            for en, img, fr, st in (
-                (kf1_en, kf1_img, kf1_fr, kf1_st),
-                (kf2_en, kf2_img, kf2_fr, kf2_st),
-                (kf3_en, kf3_img, kf3_fr, kf3_st),
-                (kf4_en, kf4_img, kf4_fr, kf4_st),
-                (kf5_en, kf5_img, kf5_fr, kf5_st),
-            ):
+            for en, img, fr, st in kf_slot_values:
                 if en and img:
                     try:
                         shared_images.append((img, int(fr or 0), float(st)))
@@ -1468,10 +1460,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # block-swap prefetch checkbox, the keep-resident checkbox, the
             # fused-dequant checkbox AND the VAE radio (PrunaVAED,
             # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time),
-            # are APPENDED at the very end, after every pre-existing positional
-            # (matching dispatch()'s signature order, which appends them after
+            # are APPENDED after every pre-existing scalar positional (matching
+            # dispatch()'s signature order, which appends them after
             # batch_img_dir_v).
-            inputs=[prompt, negative, *kf_inputs, width, height,
+            inputs=[prompt, negative, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
                     reference_strength_slider, ref_video, config_state,
@@ -1481,7 +1473,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_img_dir,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident, accel_fused_dequant, accel_vae],
+                    accel_keep_resident, accel_fused_dequant, accel_vae,
+                    # Nothing may be appended after this: dispatch()'s *kf_flat
+                    # swallows everything from here to the end of the list.
+                    *kf_inputs],
             outputs=[progress_box, job_box, video_out],
         ).then(
             _restore, inputs=[batch_enable, lang_state], outputs=generate_btn,
@@ -1893,7 +1888,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # slot_step_state (pure, presets.py, shared with the Clip Chain) carries
         # the whole semantic transition: row visibility + Use-off for hidden rows
         # (NO auto-enable — owner asked for that on the Clip Chain only), the
-        # −/＋ buttons' grey-out-at-floor/-ceiling flags, and the "n/5" counter
+        # −/＋ buttons' grey-out-at-floor/-ceiling flags, and the "n/KF_MAX_SLOTS" counter
         # text. Everything is returned in ONE handler so the update is atomic.
         kf_extra_use = [_slot[0] for _slot in kf_slots[1:]]
 

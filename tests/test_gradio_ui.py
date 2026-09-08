@@ -102,7 +102,7 @@ import gradio as gr  # noqa: E402
 
 from gradio_ui import build_ui  # noqa: E402
 from gradio_ui.i18n import LABELS  # noqa: E402
-from gradio_ui.presets import format_duration_label  # noqa: E402
+from gradio_ui.presets import KF_MAX_SLOTS, format_duration_label  # noqa: E402
 from gradio_ui.styles import CUSTOM_CSS  # noqa: E402
 
 _BASE = "http://127.0.0.1:8000"
@@ -768,6 +768,23 @@ def test_acceleration_labels_switch_language():
         assert updates[idx][attr] == LABELS["ja"][key]
 
 
+def _wiring_inputs(dep):
+    """``dep.inputs`` with the Generate flow's TRAILING keyframe components
+    (4 x KF_MAX_SLOTS of them) removed.
+
+    Gradio can only hand ``inputs`` to a function as positionals, so the one
+    place a variable-length group can live is the very end -- ui.py's
+    ``dispatch(..., *kf_flat)``. That makes the Generate flow's raw negative
+    indices point at keyframe components instead of the Acceleration block, so
+    the canaries below strip that trailing run first and keep the same negative
+    index meaning the same thing on the Generate and Chain deps alike.
+    """
+    ins = list(dep.inputs)
+    if getattr(dep.fn, "__name__", "") == "dispatch":
+        ins = ins[:-4 * KF_MAX_SLOTS]
+    return ins
+
+
 def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     # The selector must be an INPUT of both generate flows -- a section that
     # renders but is not wired is exactly the "displayed only" trap.
@@ -786,7 +803,7 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     # time) after that. This index is the canary for a wiring list and a
     # handler signature drifting apart.
     for dep in deps_with_radio:
-        assert dep.inputs[-5] is radio
+        assert _wiring_inputs(dep)[-5] is radio
 
 
 # --------------------------------------------------------------------------- #
@@ -856,7 +873,7 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
     # and PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
     # time) appended the VAE radio after that.
     for dep in deps:
-        assert dep.inputs[-3] is box
+        assert _wiring_inputs(dep)[-3] is box
 
 
 def test_keep_resident_labels_switch_language():
@@ -886,7 +903,7 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time) were
     # appended after IT.
     for dep in deps_with_box:
-        assert dep.inputs[-4] is box
+        assert _wiring_inputs(dep)[-4] is box
 
 
 # --------------------------------------------------------------------------- #
@@ -937,7 +954,7 @@ def test_fused_dequant_checkbox_is_wired_into_generate_and_chain():
     # SECOND-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
     # filed as §3-50 at the time) appended the VAE radio after it.
     for dep in deps:
-        assert dep.inputs[-2] is box
+        assert _wiring_inputs(dep)[-2] is box
 
 
 def test_vae_radio_is_wired_into_generate_and_chain():
@@ -951,7 +968,7 @@ def test_vae_radio_is_wired_into_generate_and_chain():
     deps = [d for d in demo.fns.values() if radio in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "VAE radio not wired into 2 flows"
     for dep in deps:
-        assert dep.inputs[-1] is radio
+        assert _wiring_inputs(dep)[-1] is radio
 
 
 def test_generate_and_chain_trailing_inputs_order_is_locked():
@@ -964,6 +981,14 @@ def test_generate_and_chain_trailing_inputs_order_is_locked():
     nothing raises. ``vsf_scale`` is included as the boundary element -- it is
     the last POSITIONAL argument the handler receives, i.e. exactly where the
     ``args[:-5]`` slice must stop.
+
+    The keyframe components are the ONE exception to "everything new is
+    appended at the end": Gradio passes ``inputs`` positionally, so the
+    variable-length keyframe run (4 x KF_MAX_SLOTS components, collected by
+    ``dispatch(*kf_flat)``) has to sit after every scalar input on the Generate
+    flow. ``_wiring_inputs`` strips that trailing run so the order asserted
+    here is the order both flows really share -- and nothing may be appended to
+    the Generate click's ``inputs`` after the keyframes.
     """
     demo = _demo()
     en = LABELS["en"]
@@ -986,7 +1011,39 @@ def test_generate_and_chain_trailing_inputs_order_is_locked():
             if expected[-1] in getattr(d, "inputs", [])]
     assert len(deps) == 2, "expected exactly the generate + chain flows"
     for dep in deps:
-        assert list(dep.inputs[-6:]) == expected
+        assert _wiring_inputs(dep)[-6:] == expected
+
+
+# --------------------------------------------------------------------------- #
+# Keyframe grid size + trailing wiring shape. The slot ceiling has ONE source
+# of truth (config.MAX_CONDITIONING_IMAGES, re-exported as presets.KF_MAX_SLOTS),
+# so these two canaries fail the moment the rendered grid or the click wiring
+# stops tracking it.
+# --------------------------------------------------------------------------- #
+def test_generate_tab_renders_kf_max_slots_keyframe_images():
+    demo = _demo()
+    en = LABELS["en"]
+    images = [c for c in demo.blocks.values()
+              if isinstance(c, gr.Image) and c.label == en["lbl_kf_image"]]
+    assert len(images) == KF_MAX_SLOTS
+
+
+def test_generate_click_trailing_inputs_are_the_keyframe_slot_quads():
+    # dispatch() rebundles its trailing *kf_flat into 4-tuples, so the wiring's
+    # last 4 x KF_MAX_SLOTS components must be exactly the repeating
+    # (Use checkbox, Image, frame Number, strength Slider) pattern -- in that
+    # order, or the tuples would be scrambled.
+    demo = _demo()
+    dep = next(d for d in demo.fns.values()
+               if getattr(d.fn, "__name__", "") == "dispatch")
+    tail = list(dep.inputs)[-4 * KF_MAX_SLOTS:]
+    assert len(tail) == 4 * KF_MAX_SLOTS
+    for i in range(0, len(tail), 4):
+        enabled, image, frame, strength = tail[i:i + 4]
+        assert isinstance(enabled, gr.Checkbox)
+        assert isinstance(image, gr.Image)
+        assert isinstance(frame, gr.Number)
+        assert isinstance(strength, gr.Slider)
 
 
 # --------------------------------------------------------------------------- #
@@ -1006,9 +1063,10 @@ def _make_client(handler, *, api_key: str | None = "secret"):
 
 
 def _kf_args():
-    """20 flat (enabled, image, frame_idx, strength) args, all 5 slots empty --
+    """generate()'s single ``kf_slots`` argument with every slot empty: a
+    KF_MAX_SLOTS-long list of (enabled, image, frame_idx, strength) tuples --
     matches tests/test_gradio_handlers.py's helper of the same purpose."""
-    return [False, None, 0, 0.8] * 5
+    return [(False, None, 0, 0.8)] * KF_MAX_SLOTS
 
 
 def _run_until_job_started(gen):
@@ -1029,7 +1087,7 @@ def test_vae_mode_reaches_single_generate_payload_when_pruned():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         vae_mode="prune_vaed",
     )
@@ -1051,7 +1109,7 @@ def test_vae_mode_default_omitted_from_single_generate_payload():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)

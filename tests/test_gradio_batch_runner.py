@@ -43,6 +43,7 @@ from gradio_ui.manifest import (
     read_manifest,
     write_manifest_atomic,
 )
+from gradio_ui.presets import KF_MAX_SLOTS
 
 
 # --------------------------------------------------------------------------- #
@@ -1137,9 +1138,11 @@ def test_fused_dequant_reaches_the_wire_on_all_three_backend_paths(tmp_path):
 
     api = _make_client(handler)
 
-    # 1) single generate (T2V): 5 disabled keyframe slots -> 20 flat positionals.
+    # 1) single generate (T2V): the whole keyframe grid as ONE argument -- a
+    # KF_MAX_SLOTS-long list of disabled (enabled, image, frame_idx, strength)
+    # slots.
     gen = make_generate_handler(api)(
-        "a calm river", "", *([False, None, 0, 0.8] * 5),
+        "a calm river", "", [(False, None, 0, 0.8)] * KF_MAX_SLOTS,
         512, 320, False, 0, 0, 49, 24.0, -1,
         fused_gguf_dequant_kernel=False,
     )

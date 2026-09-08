@@ -247,9 +247,10 @@ def test_clamp_open_count_clamps_to_bounds():
     assert clamp_open_count(24, +1, CHAIN_MIN_OPEN, CHAIN_MAX_CLIPS) == 24  # ceiling
     assert clamp_open_count(3, +1, CHAIN_MIN_OPEN, CHAIN_MAX_CLIPS) == 4
     assert clamp_open_count(5, -1, CHAIN_MIN_OPEN, CHAIN_MAX_CLIPS) == 4
-    # Keyframe: floor 1, ceiling 5.
+    # Keyframe: floor KF_MIN_OPEN, ceiling KF_MAX_SLOTS.
     assert clamp_open_count(1, -1, KF_MIN_OPEN, KF_MAX_SLOTS) == 1  # KF 1 never closes
-    assert clamp_open_count(5, +1, KF_MIN_OPEN, KF_MAX_SLOTS) == 5
+    assert clamp_open_count(KF_MAX_SLOTS, +1, KF_MIN_OPEN,
+                            KF_MAX_SLOTS) == KF_MAX_SLOTS
     # Garbage count falls back to the floor before the delta is applied
     # (None -> floor 2, then a no-op step stays at the floor).
     assert clamp_open_count(None, 0, CHAIN_MIN_OPEN, CHAIN_MAX_CLIPS) == CHAIN_MIN_OPEN
@@ -298,9 +299,10 @@ def test_collapsible_slot_transition_keyframe_grid_no_auto_enable():
 
 
 # --------------------------------------------------------------------------- #
-# slot_step_state (± semantic state, shared by the keyframe grid — min 1/max 5 —
-# and the Clip Chain clip list — min 2/max 24: slot visibility/Use directives +
-# −/＋ grey-out flags + the "n/max" counter text)
+# slot_step_state (± semantic state, shared by the keyframe grid — min
+# KF_MIN_OPEN/max KF_MAX_SLOTS — and the Clip Chain clip list — min 2/max 24):
+# slot visibility/Use directives + −/＋ grey-out flags + the "n/max" counter
+# text.
 # --------------------------------------------------------------------------- #
 def _kf_step(count, delta):
     return slot_step_state(count, delta, KF_MIN_OPEN, KF_MAX_SLOTS)
@@ -319,8 +321,8 @@ def test_slot_step_state_kf_plus_from_default():
     assert states[0][0] is True          # slot 2 now visible
     assert states[0][1] is None          # ...but its Use box untouched
     assert minus_on is True              # above the floor again
-    assert plus_on is True               # still below the 5-slot ceiling
-    assert counter == "2/5"
+    assert plus_on is True               # still below the KF_MAX_SLOTS ceiling
+    assert counter == f"2/{KF_MAX_SLOTS}"
 
 
 def test_slot_step_state_kf_minus_greys_out_at_floor():
@@ -332,29 +334,31 @@ def test_slot_step_state_kf_minus_greys_out_at_floor():
     assert states[0] == (False, False)   # slot 2 hidden + Use forced off
     assert minus_on is False
     assert plus_on is True
-    assert counter == "1/5"
+    assert counter == f"1/{KF_MAX_SLOTS}"
     # A further − is a clamped no-op that stays greyed out.
     new_count2, _s, minus_on2, plus_on2, counter2 = _kf_step(1, -1)
-    assert (new_count2, minus_on2, plus_on2, counter2) == (1, False, True, "1/5")
+    assert (new_count2, minus_on2, plus_on2, counter2) == (
+        1, False, True, f"1/{KF_MAX_SLOTS}")
 
 
 def test_slot_step_state_kf_plus_greys_out_at_ceiling():
     # Reaching the ceiling disables ＋ (grey-out, not hidden); − stays usable.
-    new_count, states, minus_on, plus_on, counter = _kf_step(4, +1)
-    assert new_count == 5
-    assert all(vis for vis, _use in states)  # all 5 rows open
+    new_count, states, minus_on, plus_on, counter = _kf_step(KF_MAX_SLOTS - 1, +1)
+    assert new_count == KF_MAX_SLOTS
+    assert all(vis for vis, _use in states)  # every row open
     assert (minus_on, plus_on) == (True, False)
-    assert counter == "5/5"
+    assert counter == f"{KF_MAX_SLOTS}/{KF_MAX_SLOTS}"
     # ...and a further ＋ is a clamped no-op that stays greyed out.
-    new_count2, _s, minus_on2, plus_on2, counter2 = _kf_step(5, +1)
-    assert (new_count2, minus_on2, plus_on2, counter2) == (5, True, False, "5/5")
+    new_count2, _s, minus_on2, plus_on2, counter2 = _kf_step(KF_MAX_SLOTS, +1)
+    assert (new_count2, minus_on2, plus_on2, counter2) == (
+        KF_MAX_SLOTS, True, False, f"{KF_MAX_SLOTS}/{KF_MAX_SLOTS}")
 
 
 def test_slot_step_state_kf_mid_range_both_enabled():
     new_count, _states, minus_on, plus_on, counter = _kf_step(2, +1)
     assert new_count == 3
     assert (minus_on, plus_on) == (True, True)
-    assert counter == "3/5"
+    assert counter == f"3/{KF_MAX_SLOTS}"
 
 
 def test_slot_step_state_chain_minus_greys_out_at_floor():

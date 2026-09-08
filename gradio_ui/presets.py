@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import gradio as gr
 
+from config import MAX_CONDITIONING_IMAGES
+
 from .i18n import L, _DEFAULT_LANG
 from .validation import MAX_CHAIN_TOTAL_PIXEL_FRAMES
 
@@ -137,7 +139,7 @@ def format_duration_label(num_frames, fps) -> str:
 CHAIN_MIN_OPEN = 2
 CHAIN_MAX_CLIPS = 24
 KF_MIN_OPEN = 1
-KF_MAX_SLOTS = 5
+KF_MAX_SLOTS = MAX_CONDITIONING_IMAGES
 
 
 def clamp_open_count(count, delta, lo, hi) -> int:
@@ -189,7 +191,7 @@ def slot_step_state(count, delta, min_open, max_slots,
                     enable_new: bool = False):
     """Full semantic state of a ± step over a collapsible slot list (pure,
     unit-testable; the UI handlers only wrap this into ``gr.update`` calls).
-    Shared by the Generate tab's keyframe grid (min 1 / max 5) and the Clip
+    Shared by the Generate tab's keyframe grid (min 1 / max KF_MAX_SLOTS) and the Clip
     Chain tab's clip list (min 2 / max 24, ``enable_new=True``).
 
     Returns ``(new_count, slot_states, minus_interactive, plus_interactive,

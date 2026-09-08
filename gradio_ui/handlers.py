@@ -615,12 +615,7 @@ def build_a2v_chain_payload(
 def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
     default_lang = lang
 
-    def generate(prompt, negative_prompt,
-                 kf1_enabled, kf1_image, kf1_frame_idx, kf1_strength,
-                 kf2_enabled, kf2_image, kf2_frame_idx, kf2_strength,
-                 kf3_enabled, kf3_image, kf3_frame_idx, kf3_strength,
-                 kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength,
-                 kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength,
+    def generate(prompt, negative_prompt, kf_slots,
                  width, height, crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                  adapter=ADAPTER_NONE, adapter_strength=1.0,
                  control_adherence=1.0, reference_strength=1.0,
@@ -732,19 +727,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                         need=need_s, have=float(audio_dur))), "", None
                     return
 
-        # 1) keyframe slots (up to 5, I2V multi-keyframe conditioning). Each
-        # FIXED slot is (enabled, image_path, frame_idx, strength); disabled or
-        # empty slots are skipped. Pre-validate ALL enabled slots before any
-        # upload starts, so a bad slot never leaves earlier slots uploaded.
-        slots = [
-            (kf1_enabled, kf1_image, kf1_frame_idx, kf1_strength),
-            (kf2_enabled, kf2_image, kf2_frame_idx, kf2_strength),
-            (kf3_enabled, kf3_image, kf3_frame_idx, kf3_strength),
-            (kf4_enabled, kf4_image, kf4_frame_idx, kf4_strength),
-            (kf5_enabled, kf5_image, kf5_frame_idx, kf5_strength),
-        ]
+        # 1) keyframe slots (I2V multi-keyframe conditioning). ``kf_slots`` is a
+        # list of (enabled, image_path, frame_idx, strength) tuples in slot
+        # order -- how many the caller sends is the UI's business, not this
+        # handler's; disabled or empty slots are skipped. Pre-validate ALL
+        # enabled slots before any upload starts, so a bad slot never leaves
+        # earlier slots uploaded.
         to_upload: list[tuple[str, int, float]] = []
-        for slot_n, (enabled, image_path, frame_idx, strength) in enumerate(slots, start=1):
+        for slot_n, (enabled, image_path, frame_idx, strength) in enumerate(kf_slots or [], start=1):
             if not enabled:
                 continue
             if frame_idx is None or int(frame_idx) < 0:

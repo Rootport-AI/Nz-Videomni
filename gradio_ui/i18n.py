@@ -129,7 +129,7 @@ LABELS: dict[str, dict[str, str]] = {
         "warn_spill_limit": ("Exceeds the comfortable limit for {res} ({limit} frames): "
                               "generation still works but is much slower."),
         # --- generate: keyframe accordion (S3) ---
-        "lbl_kf_accordion": "Keyframe images (I2V conditioning, up to 5)",
+        "lbl_kf_accordion": "Keyframe images (I2V conditioning, up to 10)",
         "lbl_kf_use": "Use",
         "lbl_kf_image": "Keyframe image",
         "lbl_kf_frame_pos0": "Frame position (0 = start frame)",
@@ -668,7 +668,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_seed": "シード (-1 = ランダム)",
         "warn_spill_limit": "解像度 {res} の快適上限 ({limit} フレーム) を超えています: 生成は可能ですが大幅に低速化します。",
         # --- generate: keyframe accordion (S3) ---
-        "lbl_kf_accordion": "キーフレーム画像 (I2V条件付け・最大5枚)",
+        "lbl_kf_accordion": "キーフレーム画像 (I2V条件付け・最大10枚)",
         "lbl_kf_use": "使用",
         "lbl_kf_image": "キーフレーム画像",
         "lbl_kf_frame_pos0": "フレーム位置 (0 = 開始フレーム)",

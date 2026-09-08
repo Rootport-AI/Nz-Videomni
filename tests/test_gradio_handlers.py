@@ -30,6 +30,7 @@ from gradio_ui import (
     make_generate_handler,
     pick_default_preset,
 )
+from gradio_ui.presets import KF_MAX_SLOTS
 
 
 def _make_client(handler, *, api_key: str | None = "secret") -> ApiClient:
@@ -192,17 +193,14 @@ def _run_until_job_started(gen):
 
 
 # --------------------------------------------------------------------------- #
-# S3: the 5 fixed keyframe slots are flattened into 20 positional args
-# (enabled, image_path, frame_idx, strength) x 5. This helper builds that flat
-# list from as few slots as a test cares about; the rest default to
-# disabled/empty (pure T2V when all 5 are left out).
+# generate() takes the whole keyframe grid as ONE argument: a list of
+# (enabled, image_path, frame_idx, strength) tuples, KF_MAX_SLOTS long. This
+# helper builds that list from as few slots as a test cares about; the rest
+# default to disabled/empty (pure T2V when every slot is left out).
 # --------------------------------------------------------------------------- #
 def _kf_args(*slots):
-    filled = list(slots) + [(False, None, 0, 0.8)] * (5 - len(slots))
-    args = []
-    for enabled, image, frame_idx, strength in filled[:5]:
-        args.extend([enabled, image, frame_idx, strength])
-    return args
+    filled = list(slots) + [(False, None, 0, 0.8)] * (KF_MAX_SLOTS - len(slots))
+    return filled[:KF_MAX_SLOTS]
 
 
 def test_generate_t2v_payload():
@@ -217,7 +215,7 @@ def test_generate_t2v_payload():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "blurry", *_kf_args(),
+        "A calm river", "blurry", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     progress, job_id, video = _run_until_job_started(gen)
@@ -247,7 +245,7 @@ def test_generate_crop_output_when_enabled():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, True, 1280, 720, 257, 24.0, 7,
     )
     _run_until_job_started(gen)
@@ -264,7 +262,7 @@ def test_generate_empty_prompt_short_circuits():
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
-    out = list(generate("   ", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1))
+    out = list(generate("   ", "", _kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1))
     assert calls["n"] == 0  # no HTTP performed
     assert len(out) == 1
     progress, job_id, video = out[0]
@@ -277,7 +275,7 @@ def test_generate_409_reports_busy():
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
-    out = list(generate("prompt", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1))
+    out = list(generate("prompt", "", _kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1))
     progress, job_id, video = out[-1]
     assert "409" in progress
     assert job_id == ""
@@ -298,7 +296,7 @@ def test_generate_i2v_uploads_then_generates(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args((True, str(img), 0, 0.65)),
+        "prompt", "", _kf_args((True, str(img), 0, 0.65)),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     # first yield = "uploading keyframe 1/1"; advance again to trigger the
@@ -314,7 +312,7 @@ def test_generate_i2v_uploads_then_generates(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# S3: multi-keyframe conditioning (5 fixed slots).
+# S3: multi-keyframe conditioning (KF_MAX_SLOTS fixed slots).
 # --------------------------------------------------------------------------- #
 def test_generate_multi_keyframe_uploads_in_slot_order(tmp_path):
     img1 = tmp_path / "a.png"
@@ -338,7 +336,7 @@ def test_generate_multi_keyframe_uploads_in_slot_order(tmp_path):
     generate = make_generate_handler(api)
     gen = generate(
         "prompt", "",
-        *_kf_args(
+        _kf_args(
             (True, str(img1), 0, 0.8),
             (True, str(img2), 32, 0.6),
             (True, str(img3), 64, 0.4),
@@ -381,7 +379,7 @@ def test_generate_disabled_slot_with_image_is_skipped(tmp_path):
     generate = make_generate_handler(api)
     gen = generate(
         "prompt", "",
-        *_kf_args((False, str(img), 0, 0.8)),  # slot 1 filled but disabled
+        _kf_args((False, str(img), 0, 0.8)),  # slot 1 filled but disabled
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -400,7 +398,7 @@ def test_generate_enabled_slot_missing_image_errors():
     generate = make_generate_handler(api)
     out = list(generate(
         "prompt", "",
-        *_kf_args((True, None, 0, 0.8)),  # slot 1 enabled but no image
+        _kf_args((True, None, 0, 0.8)),  # slot 1 enabled but no image
         512, 320, False, 0, 0, 49, 24.0, -1,
     ))
     assert calls["n"] == 0  # no HTTP performed at all
@@ -421,7 +419,7 @@ def test_generate_all_slots_disabled_is_pure_t2v():
 
     api = _make_client(handler)
     generate = make_generate_handler(api)
-    gen = generate("prompt", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1)
+    gen = generate("prompt", "", _kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1)
     _run_until_job_started(gen)
     assert captured["conditioning_images"] == []
 
@@ -439,7 +437,7 @@ def test_generate_negative_frame_idx_errors_before_any_api_call(tmp_path):
     generate = make_generate_handler(api)
     out = list(generate(
         "prompt", "",
-        *_kf_args((True, str(img), -1, 0.8)),
+        _kf_args((True, str(img), -1, 0.8)),
         512, 320, False, 0, 0, 49, 24.0, -1,
     ))
     assert calls["n"] == 0  # neither upload nor generate performed
@@ -628,7 +626,7 @@ def test_generate_adapter_none_omits_lora_and_reference():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         *_adapter_args(),  # adapter = ADAPTER_NONE
     )
@@ -654,7 +652,7 @@ def test_generate_adapter_uploads_video_and_correct_payload(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.5, str(vid), {}),
     )
@@ -680,7 +678,7 @@ def test_generate_adapter_missing_video_errors_zero_calls():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.0, None, {}),
     ))
@@ -702,7 +700,7 @@ def test_generate_adapter_bad_extension_errors_zero_calls(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.0, str(bad), {}),
     ))
@@ -724,7 +722,7 @@ def test_generate_adapter_resolution_not_128_errors_zero_calls(tmp_path):
     generate = make_generate_handler(api)
     # 1280 % 128 == 0 but 720 % 128 == 80 -> the ÷128 precheck fires.
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 720, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.0, str(vid), {}),
     ))
@@ -747,7 +745,7 @@ def test_generate_adapter_resolution_128_passes_precheck(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("pose-control", 1.0, str(vid), {}),
     )
@@ -772,7 +770,7 @@ def test_generate_adapter_too_large_errors_zero_calls(tmp_path):
     # A tiny configured limit (0 MB) makes the 2KB file "too large".
     cfg = {"upload": {"max_video_size_mb": 0, "allowed_video_extensions": [".mp4"]}}
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.0, str(vid), cfg),
     ))
@@ -801,7 +799,7 @@ def test_generate_adapter_strengths_default_omits_keys(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.0, str(vid), {}),  # both sliders 1.0
     )
@@ -828,7 +826,7 @@ def test_generate_adapter_strengths_below_one_included(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.0, str(vid), {},
                        control_adherence=0.6, reference_strength=0.8),
@@ -855,7 +853,7 @@ def test_generate_non_adapter_ignores_strength_sliders():
     # adapter = ADAPTER_NONE but sliders below 1.0 -> keys must stay absent
     # (no adapter flow, so no reference-conditioning strengths apply).
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         *_adapter_args(control_adherence=0.5, reference_strength=0.5),
     )
@@ -878,7 +876,7 @@ def test_generate_bad_width_precheck_zero_calls():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     # 500 is not a multiple of 64.
-    out = list(generate("prompt", "", *_kf_args(), 500, 320, False, 0, 0, 49, 24.0, -1))
+    out = list(generate("prompt", "", _kf_args(), 500, 320, False, 0, 0, 49, 24.0, -1))
     assert calls["n"] == 0
     assert len(out) == 1
     assert out[0][1] == "" and out[0][2] is None
@@ -894,7 +892,7 @@ def test_generate_bad_num_frames_precheck_zero_calls():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     # 50 is not 8n+1 (49 or 57 would be).
-    out = list(generate("prompt", "", *_kf_args(), 512, 320, False, 0, 0, 50, 24.0, -1))
+    out = list(generate("prompt", "", _kf_args(), 512, 320, False, 0, 0, 50, 24.0, -1))
     assert calls["n"] == 0
     assert len(out) == 1
     assert out[0][1] == "" and out[0][2] is None
@@ -924,7 +922,7 @@ def test_generate_a2v_conflict_with_adapter_without_reference_zero_calls(tmp_pat
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         adapter="canny-control", src_audio=str(aud),
     ))
@@ -962,7 +960,7 @@ def test_generate_a2v_with_adapter_and_reference_wires_chain_payload(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 384, False, 0, 0, 49, 24.0, -1,
         *_adapter_args("canny-control", 1.0, str(vid), {}),
         src_audio=str(aud),
@@ -1009,7 +1007,7 @@ def test_generate_a2v_with_style_lora_token_wires_chain_loras(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "a singer <lora:neon-city:0.7> performing", "", *_kf_args(),
+        "a singer <lora:neon-city:0.7> performing", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud),
     )
@@ -1047,7 +1045,7 @@ def test_generate_a2v_unknown_style_token_aborts_zero_calls(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "hero <lora:does-not-exist:1.0> walking", "", *_kf_args(),
+        "hero <lora:does-not-exist:1.0> walking", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud),
     ))
@@ -1073,7 +1071,7 @@ def test_generate_a2v_audio_only_uses_generate_chain(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "a singer performing", "", *_kf_args(),
+        "a singer performing", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud),
     )
@@ -1110,7 +1108,7 @@ def test_generate_a2v_upload_failure_reports_error_zero_generate_chain(tmp_path)
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud),
     ))
@@ -1138,7 +1136,7 @@ def test_generate_a2v_with_keyframe_builds_clip_conditioning(tmp_path):
     generate = make_generate_handler(api)
     gen = generate(
         "prompt", "",
-        *_kf_args((True, str(img), 0, 0.7)),
+        _kf_args((True, str(img), 0, 0.7)),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud),
     )
@@ -1182,7 +1180,7 @@ def test_generate_a2v_short_wav_rejected_zero_calls(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 121, 24.0, -1,
         src_audio=aud,
     ))
@@ -1209,7 +1207,7 @@ def test_generate_a2v_long_wav_passes_precheck_and_uploads(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 121, 24.0, -1,
         src_audio=aud,
     )
@@ -1240,7 +1238,7 @@ def test_generate_a2v_non_wav_defers_to_server(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 121, 24.0, -1,
         src_audio=str(aud),
     )
@@ -1264,7 +1262,7 @@ def test_generate_no_audio_uses_plain_generate_endpoint_unchanged():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "prompt", "", *_kf_args(),
+        "prompt", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=None,
     )
@@ -1986,7 +1984,7 @@ def test_generate_runtime_lang_localizes_messages():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "   ", "", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
+        "   ", "", _kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
         *_adapter_args(),  # adapter none + default strengths
         "ja",  # ui_lang
     ))
@@ -2818,7 +2816,7 @@ def test_generate_handler_nag_enabled_adds_body_fields():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "blurry", *_kf_args(),
+        "A calm river", "blurry", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         nag_enabled=True, nag_scale=9.0, nag_tau=3.0, nag_alpha=0.4,
     )
@@ -2843,7 +2841,7 @@ def test_generate_handler_vsf_enabled_adds_body_fields():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "blurry", *_kf_args(),
+        "A calm river", "blurry", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         nag_enabled=True, neg_method="vsf", vsf_scale=2.5,
     )
@@ -2863,7 +2861,7 @@ def test_generate_handler_nag_default_omits_body_fields():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -2882,7 +2880,7 @@ def test_generate_nag_enabled_empty_negative_precheck_zero_calls():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "prompt", "   ", *_kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
+        "prompt", "   ", _kf_args(), 512, 320, False, 0, 0, 49, 24.0, -1,
         nag_enabled=True,
     ))
     assert calls["n"] == 0
@@ -3086,7 +3084,7 @@ def test_generate_handler_sage_adds_attention_backend():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         attention_backend="sage",
     )
@@ -3107,7 +3105,7 @@ def test_generate_handler_default_omits_attention_backend():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -3131,7 +3129,7 @@ def test_generate_handler_a2v_forwards_attention_backend(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "a singer", "", *_kf_args(),
+        "a singer", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud), attention_backend="sage",
     )
@@ -3315,7 +3313,7 @@ def test_generate_handler_prefetch_off_adds_block_swap_prefetch():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         block_swap_prefetch=False,
     )
@@ -3336,7 +3334,7 @@ def test_generate_handler_default_omits_block_swap_prefetch():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -3360,7 +3358,7 @@ def test_generate_handler_a2v_forwards_block_swap_prefetch(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "a singer", "", *_kf_args(),
+        "a singer", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud), block_swap_prefetch=False,
     )
@@ -3514,7 +3512,7 @@ def test_generate_handler_keep_resident_on_adds_key():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         keep_resident=True,
     )
@@ -3534,7 +3532,7 @@ def test_generate_handler_default_omits_keep_resident():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -3558,7 +3556,7 @@ def test_generate_handler_a2v_forwards_keep_resident(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "a singer", "", *_kf_args(),
+        "a singer", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud), keep_resident=True,
     )
@@ -3724,7 +3722,7 @@ def test_generate_handler_fused_dequant_off_adds_key():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         fused_gguf_dequant_kernel=False,
     )
@@ -3744,7 +3742,7 @@ def test_generate_handler_default_omits_fused_dequant():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -3768,7 +3766,7 @@ def test_generate_handler_a2v_forwards_fused_dequant(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "a singer", "", *_kf_args(),
+        "a singer", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
         src_audio=str(aud), fused_gguf_dequant_kernel=False,
     )
@@ -3872,7 +3870,7 @@ def test_generate_payload_snaps_non_integer_frame_rate():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 29.97, -1,
     )
     _run_until_job_started(gen)
@@ -3895,7 +3893,7 @@ def test_generate_payload_passes_out_of_range_frame_rate_through_to_the_server()
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "", *_kf_args(),
+        "A calm river", "", _kf_args(),
         512, 320, False, 0, 0, 49, 120.0, -1,
     )
     _run_until_job_started(gen)

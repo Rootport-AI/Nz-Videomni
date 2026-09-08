@@ -25,6 +25,7 @@ from gradio_ui.handlers import (
     parse_prompt_loras,
 )
 from gradio_ui.api_client import ApiClient
+from gradio_ui.presets import KF_MAX_SLOTS
 
 KNOWN = ["neon-city", "AnimeStyle", "portrait"]
 
@@ -36,11 +37,11 @@ def _make_client(handler, *, api_key: str | None = "secret") -> ApiClient:
 
 
 def _kf_args(*slots):
-    filled = list(slots) + [(False, None, 0, 0.8)] * (5 - len(slots))
-    args = []
-    for enabled, image, frame_idx, strength in filled[:5]:
-        args.extend([enabled, image, frame_idx, strength])
-    return args
+    """The whole keyframe grid as generate()'s single ``kf_slots`` argument:
+    a KF_MAX_SLOTS-long list of (enabled, image, frame_idx, strength) tuples,
+    padded with empty slots (same helper as tests/test_gradio_handlers.py)."""
+    filled = list(slots) + [(False, None, 0, 0.8)] * (KF_MAX_SLOTS - len(slots))
+    return filled[:KF_MAX_SLOTS]
 
 
 def _adapter_args(adapter=ADAPTER_NONE, strength=1.0, ref_path=None, config=None,
@@ -210,7 +211,7 @@ def test_token_free_payload_is_identical_and_makes_no_loras_call():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "A calm river", "blurry", *_kf_args(),
+        "A calm river", "blurry", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -235,7 +236,7 @@ def test_style_lora_only_payload_no_reference_video():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "cat <lora:neon-city:0.7>", "", *_kf_args(),
+        "cat <lora:neon-city:0.7>", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     )
     _run_until_job_started(gen)
@@ -260,7 +261,7 @@ def test_unknown_prompt_lora_aborts_with_zero_generate_calls():
     api = _make_client(handler)
     generate = make_generate_handler(api)
     out = list(generate(
-        "<lora:missing-one>", "", *_kf_args(),
+        "<lora:missing-one>", "", _kf_args(),
         512, 320, False, 0, 0, 49, 24.0, -1,
     ))
     assert posts["n"] == 0  # no generate, no upload
@@ -287,7 +288,7 @@ def test_adapter_and_prompt_loras_merge(tmp_path):
     api = _make_client(handler)
     generate = make_generate_handler(api)
     gen = generate(
-        "sky <lora:neon-city:0.6>", "", *_kf_args(),
+        "sky <lora:neon-city:0.6>", "", _kf_args(),
         1280, 768, False, 0, 0, 257, 24.0, -1,
         *_adapter_args("canny-control", 1.5, str(vid), {}),
     )

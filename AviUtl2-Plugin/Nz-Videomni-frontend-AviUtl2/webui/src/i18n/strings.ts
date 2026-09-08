@@ -581,10 +581,12 @@ export const en = {
       qualityWarning: (maxFrames: number): string =>
         `Past ${maxFrames} frames, the generated video loses quality.`,
       /** §1-22 (owner wording, 2026-08-18): the multi-clip counterpart of
-       * `qualityWarning` above — shown while material is attached to a 2+ clip
-       * chain (逆順Chained), regardless of any single clip's length. Mutually
-       * exclusive with `qualityWarning`'s own trigger (`endSourceQualityLimitFrames`
-       * only ever fires at `clips.length === 1`) — see
+       * `qualityWarning` above — shown on the REVERSE chain only
+       * (`useChainForm`'s `isReverseEndSource`: material in the end slot, 2+
+       * clips, and NO start source; a `bridge` chain carries no warning),
+       * regardless of any single clip's length. Mutually exclusive with
+       * `qualityWarning`'s own trigger (`endSourceQualityLimitFrames` only
+       * ever fires at `clips.length === 1`) — see
        * `useChainForm.endSourceMultiClipQualityWarning`'s doc comment. */
       multiClipQualityWarning:
         "Chaining multiple clips together with an end source attached lowers the quality of the generated result.",

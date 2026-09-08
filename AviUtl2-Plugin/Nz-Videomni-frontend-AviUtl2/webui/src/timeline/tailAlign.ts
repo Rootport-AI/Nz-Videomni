@@ -23,10 +23,11 @@
  * existed to answer "how many frames does THIS material contribute", a question
  * the window-internal mode does not ask.
  *
- * 逆順Chained (2026-08-18, second stage): a chain of 2+ clips ending on
- * material (`chain_math`'s `reverse` mode) freezes the SAME 8 frames onto the
- * SAME material, still carved out of the LAST clip's own tail rather than
- * appended — nothing here changes with the clip count. Every function below is
+ * 複数クリップ (逆順Chained 2026-08-18, ブリッジモード 2026-09-07): a chain of
+ * 2+ clips ending on material (`chain_math`'s `reverse` mode with no start
+ * source, `bridge` with one) freezes the SAME 8 frames onto the SAME material,
+ * still carved out of the LAST clip's own tail rather than appended — nothing
+ * here changes with the clip count or the mode. Every function below is
  * therefore verbatim-correct for a multi-clip chain too.
  *
  * ## Why "tail alignment" still needs its own module

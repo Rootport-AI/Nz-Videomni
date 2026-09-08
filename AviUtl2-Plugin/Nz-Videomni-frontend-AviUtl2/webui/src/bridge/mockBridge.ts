@@ -316,9 +316,11 @@ const MOCK_BASE_MODELS = [
  *
  * End source increment: `"end_source"` leaves as well, and it was the LAST
  * chain-family MODE name here — the engine runs the layout's own stage-1
- * schedule (reverse order on 2+ clips) and freezes the material's band at the
- * timeline's tail. What remains for LTX 2.5 is engine-level features only, and
- * `handleGenerateChain` refuses exactly those. */
+ * schedule (last-to-first only in `reverse`, i.e. 2+ clips with no start
+ * source; `in_window` and `bridge` generate forwards) and freezes the
+ * material's band at the timeline's tail. What remains for LTX 2.5 is
+ * engine-level features only, and `handleGenerateChain` refuses exactly
+ * those. */
 const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   LTX23: [
     // 台帳 §3-114 (2026-09-03): THE FIRST NAME THIS ARRAY HAS EVER HELD, and

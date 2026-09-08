@@ -197,9 +197,9 @@ export function vTailLatents(tailPx: number): number {
  * instead clamps to `0` so it stays a total function safe to call from a
  * live preview while the user is still mid-edit.
  *
- * 素材（末尾, `end_source`）は**この式に一切入らない**, and that is all a
- * caller needs to know whether the chain is one clip (窓内モード, 2026-08-17)
- * or several (reverse mode, 2026-08-18): the anchor freezes the last
+ * 素材（末尾, `end_source`）は**この式に一切入らない**, in every end-source
+ * mode (1 clip = `in_window`; 2+ clips = `bridge` when a start source is
+ * attached, `reverse` when it is not): the anchor freezes the last
  * `END_SOURCE_CONTEXT_FRAMES` (8) frames OF THE LAST CLIP ITSELF, INSIDE the
  * length this function returns, so the delivered file is exactly `total_px`
  * whether or not the end slot holds material and however many clips it has.
@@ -210,7 +210,7 @@ export function vTailLatents(tailPx: number): number {
  * clips instead: `出力長 = クリップ合計 + 帯`. That addition turned out to be
  * unnecessary here even once the UI's one-clip limit was lifted (2026-08-18,
  * Docs/PENDING_TASKS_CLOSED.md §3-84 second stage): reverse mode — 2 or
- * more clips with an end source —
+ * more clips with an end source and no start source —
  * freezes the band inside the LAST clip's own tail exactly like the
  * single-clip window-internal case, appending nothing, so `total_px ==
  * clips_total_px` holds for every clip count and this function needed no

@@ -108,7 +108,7 @@ describe("KeyframesPanel (integration)", () => {
 
     // Add one card and push it to the last placeable slot (41). From there the
     // grid has no free position after it, so `nextAddPosition` is null even
-    // though the item-count cap (5) isn't reached.
+    // though the item-count cap (10) isn't reached.
     fireEvent.click(addButton());
     const frameInput = cardFrameInputs(container)[0]!;
     fireEvent.change(frameInput, { target: { value: "41" } });
@@ -121,8 +121,8 @@ describe("KeyframesPanel (integration)", () => {
 
   it("counter clamps 'max' to the placeable slot count (numFrames=9 -> only {0,1} -> '0 / 2')", () => {
     renderPanel(9);
-    // maxItems is 5, but numFrames=9 leaves only positions {0, 1}, so the
-    // effective cap the counter shows is 2, not 5.
+    // maxItems is 10, but numFrames=9 leaves only positions {0, 1}, so the
+    // effective cap the counter shows is 2, not 10.
     expect(screen.getByText("0 / 2")).toBeInTheDocument();
   });
 

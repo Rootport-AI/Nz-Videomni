@@ -1685,18 +1685,41 @@ describe("App / right-click routing -> prefill", () => {
 
       await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
 
-      // Fill KEYFRAMES to the cap (mock config: max_conditioning_images 5) via
+      // Fill KEYFRAMES to the cap (mock config: max_conditioning_images 10) via
       // repeated #5 dispatches — the first lands at frame 0, #10's target slot.
-      for (let i = 0; i < 5; i++) {
+      //
+      // #5 lands every card on `nextAddPosition`, i.e. the midpoint between the
+      // rightmost pin and the last frame, so plain repeats halve the remaining
+      // tail each time and run out of grid room at 7 cards (numFrames=361 ->
+      // 0, 177, 265, 313, 337, 345, 353) — well before the 10-item cap. So after
+      // each append we pull the NEW card (always the rightmost, hence the last
+      // FRAME input in DOM order — the panel renders cards sorted ascending)
+      // back onto a low 8n+1 grid slot (1, 9, 17, ...). That frees the whole
+      // tail again and makes the item-count cap the thing that actually stops
+      // us, which is exactly the state this test needs. The frame-0 card that
+      // #10 targets is never moved.
+      const frameInputs = () =>
+        Array.from(panel().querySelectorAll<HTMLInputElement>('.kfc-card input[type="number"]'));
+      for (let i = 0; i < 10; i++) {
         act(() => {
           bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "addImageKeyframe", selection: imageSelection(2, 10, 130) });
         });
         await waitFor(() => expect(getPublishedKeyframeCount()).toBe(i + 1), { timeout: 5_000 });
+        // i=0 stays at frame 0 (#10's slot); the 10th needs no room after it.
+        if (i === 0 || i === 9) continue;
+        const inputs = frameInputs();
+        const newest = inputs[inputs.length - 1]!;
+        fireEvent.change(newest, { target: { value: String(8 * i - 7) } });
+        fireEvent.keyDown(newest, { key: "Enter" });
+        await waitFor(() => expect(frameInputs()[i]!.value).toBe(String(8 * i - 7)), { timeout: 5_000 });
       }
       await waitFor(
-        () => expect(within(panel()).getByText(/i2v \(5 keyframes\)/i)).toBeInTheDocument(),
+        () => expect(within(panel()).getByText(/i2v \(10 keyframes\)/i)).toBeInTheDocument(),
         { timeout: 5_000 },
       );
+      // The item-count cap (not the "no room left" hint) is what's blocking now.
+      expect(within(panel()).getByText(/maximum 10 keyframes reached/i)).toBeInTheDocument();
+      expect(within(panel()).queryByText(/no room left/i)).not.toBeInTheDocument();
 
       // At the cap, #10 must still succeed by REPLACING the frame-0 card — the
       // cap (canAdd) only guards the append path, never this in-place swap.
@@ -1714,11 +1737,11 @@ describe("App / right-click routing -> prefill", () => {
       // Not rejected by the cap (the failure note never appears), and the
       // count is still exactly the cap — a replace, not a blocked append.
       expect(screen.queryByText(/could not capture the current frame/i)).not.toBeInTheDocument();
-      expect(getPublishedKeyframeCount()).toBe(5);
-      expect(within(panel()).getByText(/i2v \(5 keyframes\)/i)).toBeInTheDocument();
-      expect(within(panel()).getAllByRole("img")).toHaveLength(5);
+      expect(getPublishedKeyframeCount()).toBe(10);
+      expect(within(panel()).getByText(/i2v \(10 keyframes\)/i)).toBeInTheDocument();
+      expect(within(panel()).getAllByRole("img")).toHaveLength(10);
     },
-    20_000,
+    30_000,
   );
 
   // --- I10: audio wiring (#7 audioToVideo / #3 videoAudioToVideo) -------------

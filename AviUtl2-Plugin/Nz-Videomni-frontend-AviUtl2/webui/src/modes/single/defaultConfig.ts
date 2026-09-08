@@ -48,7 +48,7 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     max_width: 4096,
     max_height: 4096,
     max_num_frames: 481,
-    max_conditioning_images: 5,
+    max_conditioning_images: 10,
     conditioning_frame_idx_multiple: 8,
     conditioning_keyframe_grid_offset: 1,
     phase1_max_concurrent_jobs: 1,

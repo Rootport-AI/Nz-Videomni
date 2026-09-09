@@ -114,12 +114,20 @@
   - **採否のゲート: コードにLICENSEファイルが無い**（形式上は全権利留保。**重みはApache-2.0**〔HuggingFace `kangben258/UETrack`〕とちぐはぐ）。組み込むなら著者への明示依頼（kangben@mail.dlut.edu.cn）が先決。
   - 実装メモ: リポジトリは事実上凍結（コミット2件・以後停止・未返信Issueあり）／推論経路に`.cuda()`決め打ち14箇所（3ファイル。device化は機械的）／動画1本＋初期ボックスのデモ無し（`lib/test/evaluation/tracker.py`の`run_video`部品はあるので薄いラッパー自作で済む）／CLIPパッケージが無条件importされるが、設定`MULTI_MODAL_LANGUAGE: False`でCLIP構築自体は回避可能（重み1.27GBの大半は使わないCLIP同梱分で、実質の追跡モデルは13M）。
   - 同居性: 公式環境はPython 3.10＋PyTorch 1.11.0＋torchvision 0.12.0（Windows用ホイールの実在をCPU版含め確認済み）。本項(a)の「別モジュール・別プロセス」要件どおり、**専用venvを1本足す**形で既存のマルチvenv運用に乗る。
+  - **先行事例調査（2026-09-09・WEB調査）**:
+    - **公式以外の実利用はあるが、1つのコンペ内に固まっている。** 「MTC-AIC4」というコンペのPhase 2（UAV・空撮の単一物体追跡、エッジ推論）で複数の独立チームがUETrackを土台に改造している。例: マルチモーダル部分を削いでRGB専用に軽量化し、Jetson Orin Nano上でTensorRT FP16化して約93 FPSと説明するもの（https://github.com/galaxythereal/MTC-AIC4_STAGE_II ）、ONNXを主経路にPyTorchを予備とする実行系を足したもの（https://github.com/MIA-AI-Team/aic4-phase2-uetrack ）。主催組織は特定できず、UETrackが公式ベースラインだったのか各チームの選定なのかは不明。
+    - **ライセンスの疑問を解いた事例は無い。** 公式リポジトリには今もLICENSEファイルが無く、追加のコミットも、ライセンスを尋ねたIssueも無い。重み側のApache-2.0は著者の自己申告タグで、コード側との不整合を指摘した議論も無い。上記の派生はいずれも自分のライセンスを明記せず、事実上そのまま使っている。**したがって先行事例は許諾の根拠にならず、着手順①（著者への確認）は変わらない。**
+    - **無かったもの**: ComfyUIノード、Blender・DaVinci・AviUtl系プラグイン、Hugging Face Spacesのデモ（Hugging Faceのスタッフが公式Issue #1でデモ作成を提案しているが未返信）、追跡ツールキット（MMTracking・PyTracking・BoxMOT・Ultralytics・OpenCV contrib）への取り込み。公式リポジトリの依存グラフは0件、フォーク5件は実質未改変。学術引用は1件だけで、比較表の評価対象に使っただけ（https://arxiv.org/abs/2607.00369 ）。
+    - **技術面の収穫**: 第三者がONNX出力とTensorRT化を実現しているので、CPU実行をONNX Runtimeで速める道筋は現実的。着手順②（開発機でのCPU実測スパイク）の設計に使える。
   - 着手順の目安: ①著者へライセンス確認 → ②開発機でのCPU実測スパイク（venv分離・device化・ラッパー） → ③本体設計。
   - 参考URL（そのまま記載）:
     - 公式GitHub: https://github.com/kangben258/UETrack
     - CVPR 2026論文ページ: https://openaccess.thecvf.com/content/CVPR2026/html/Kang_UETrack_A_Unified_and_Efficient_Framework_for_Single_Object_Tracking_CVPR_2026_paper.html
     - arXiv: https://arxiv.org/abs/2603.01412
     - 重み: https://huggingface.co/kangben258/UETrack
+    - MTC-AIC4_STAGE_II（Jetson Orin Nano向け軽量化フォーク）: https://github.com/galaxythereal/MTC-AIC4_STAGE_II
+    - aic4-phase2-uetrack（ONNX主経路フォーク）: https://github.com/MIA-AI-Team/aic4-phase2-uetrack
+    - 学術引用（比較表のみ）: https://arxiv.org/abs/2607.00369
 - **状態**: 将来の研究課題（着手時期未定・設計は確定済み）。
 - **出典**: オーナーの設計ディスカッション（確定事項は上記に転記済み）。
 

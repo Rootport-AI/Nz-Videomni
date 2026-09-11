@@ -1,6 +1,9 @@
 // test_bridge_core.cpp - unit tests for the RPC dispatch logic (contract v2).
 #include "doctest.h"
 
+#include <string>
+#include <vector>
+
 #include "json.hpp"
 
 #include "bridge_core.h"
@@ -2897,4 +2900,172 @@ TEST_CASE("InjectDroppedPathsIntoRequest preserves a non-object 'params' by repl
     REQUIRE(j["params"].is_object());
     REQUIRE(j["params"]["__droppedPaths"].size() == 1);
     CHECK(j["params"]["__droppedPaths"][0] == "C:\\a.png");
+}
+
+// --- timeline.trackObject / trackProgress (async: Parse + Make only, 3-54) --
+
+namespace {
+
+// A params object with every field valid; a case then overwrites or erases the
+// one field it is about, so a failure names exactly one cause.
+json ValidTrackParams() {
+    return json::parse(R"({"layer": 4, "frame": 120, "searchFactor": 4.5,
+                           "smoothing": 0.3, "followSize": true,
+                           "lostScoreThreshold": 0.35, "lostBehavior": "hold",
+                           "keyframeStride": 2})");
+}
+
+}  // namespace
+
+TEST_CASE("ParseTrackObject accepts a full request") {
+    nzvideomni::TrackObjectRequest out;
+    std::string err;
+    REQUIRE(nzvideomni::ParseTrackObject(ValidTrackParams(), &out, &err));
+    CHECK(out.layer == 4);
+    CHECK(out.frame == 120);
+    CHECK(out.search_factor == doctest::Approx(4.5));
+    CHECK(out.smoothing == doctest::Approx(0.3));
+    CHECK(out.follow_size == true);
+    CHECK(out.lost_score_threshold == doctest::Approx(0.35));
+    CHECK(out.lost_behavior == "hold");
+    CHECK(out.keyframe_stride == 2);
+
+    // The ends of every range are INSIDE it, and "continue" is the other legal
+    // behavior. Integer-valued sliders (smoothing 0, searchFactor 2) arrive as
+    // JSON integers, which must not be mistaken for a type error.
+    json edge = ValidTrackParams();
+    edge["searchFactor"] = 2;
+    edge["smoothing"] = 0;
+    edge["lostScoreThreshold"] = 1;
+    edge["keyframeStride"] = 1;
+    edge["layer"] = 0;
+    edge["frame"] = 0;
+    edge["followSize"] = false;
+    edge["lostBehavior"] = "continue";
+    REQUIRE(nzvideomni::ParseTrackObject(edge, &out, &err));
+    CHECK(out.search_factor == doctest::Approx(2.0));
+    CHECK(out.smoothing == doctest::Approx(0.0));
+    CHECK(out.lost_score_threshold == doctest::Approx(1.0));
+    CHECK(out.lost_behavior == "continue");
+    CHECK(out.follow_size == false);
+    edge["searchFactor"] = 6;
+    REQUIRE(nzvideomni::ParseTrackObject(edge, &out, &err));
+    CHECK(out.search_factor == doctest::Approx(6.0));
+}
+
+TEST_CASE("ParseTrackObject requires every field") {
+    nzvideomni::TrackObjectRequest out;
+    std::string err;
+    const char* keys[] = {"layer",         "frame",      "searchFactor",
+                          "smoothing",     "followSize", "lostScoreThreshold",
+                          "lostBehavior",  "keyframeStride"};
+    for (const char* key : keys) {
+        json p = ValidTrackParams();
+        p.erase(key);
+        CAPTURE(key);
+        CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+        CHECK(err.find(key) != std::string::npos);
+    }
+    // Not an object at all.
+    CHECK_FALSE(nzvideomni::ParseTrackObject(json::parse("[]"), &out, &err));
+}
+
+TEST_CASE("ParseTrackObject rejects out-of-range numbers") {
+    nzvideomni::TrackObjectRequest out;
+    std::string err;
+    struct Case {
+        const char* key;
+        double value;
+    };
+    // Just outside every boundary, on both sides where there are two.
+    const Case bad[] = {{"searchFactor", 1.9},       {"searchFactor", 6.1},
+                        {"smoothing", -0.01},        {"smoothing", 1.01},
+                        {"lostScoreThreshold", -0.01}, {"lostScoreThreshold", 1.01}};
+    for (const Case& c : bad) {
+        json p = ValidTrackParams();
+        p[c.key] = c.value;
+        CAPTURE(c.key);
+        CAPTURE(c.value);
+        CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    }
+    // Integer fields: negative positions and a stride below 1.
+    json p = ValidTrackParams();
+    p["layer"] = -1;
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    p = ValidTrackParams();
+    p["frame"] = -1;
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    p = ValidTrackParams();
+    p["keyframeStride"] = 0;
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    // A fractional frame is a caller bug, not something to round: it would aim
+    // the write-back at the wrong object.
+    p = ValidTrackParams();
+    p["frame"] = 12.5;
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    // Wrong types.
+    p = ValidTrackParams();
+    p["followSize"] = "yes";
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    p = ValidTrackParams();
+    p["searchFactor"] = "4.0";
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+}
+
+TEST_CASE("ParseTrackObject rejects an unknown lostBehavior") {
+    nzvideomni::TrackObjectRequest out;
+    std::string err;
+    json p = ValidTrackParams();
+    p["lostBehavior"] = "freeze";  // plausible, and still not one of the two
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    CHECK(err.find("lostBehavior") != std::string::npos);
+    p["lostBehavior"] = "";
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    p["lostBehavior"] = 0;
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+}
+
+TEST_CASE("MakeTrackObjectResult mirrors the contract result shape") {
+    std::vector<nzvideomni::TrackKeyframe> kfs;
+    kfs.push_back(nzvideomni::TrackKeyframe{0, 10.0, 20.0, 30.0, 40.0});
+    kfs.push_back(nzvideomni::TrackKeyframe{9, 11.0, 21.0, 30.0, 40.0});
+    std::vector<nzvideomni::TrackRange> lost;
+    lost.push_back(nzvideomni::TrackRange{3, 5});
+    const json r = nzvideomni::MakeTrackObjectResult(true, 10, kfs, lost, 1234.5, false);
+    CHECK(r["ok"] == true);
+    CHECK(r["frames"] == 10);
+    CHECK(r["keyframes"] == 2);  // a COUNT, not the boxes: the panel only shows a number
+    REQUIRE(r["lostRanges"].is_array());
+    REQUIRE(r["lostRanges"].size() == 1);
+    CHECK(r["lostRanges"][0]["start"] == 3);
+    CHECK(r["lostRanges"][0]["end"] == 5);
+    CHECK(r["elapsedMs"] == doctest::Approx(1234.5));
+    CHECK(r["cancelled"] == false);
+
+    // A cancelled run still reports ok - the partial result WAS written back.
+    const json c = nzvideomni::MakeTrackObjectResult(true, 4, kfs, {}, 12.0, true);
+    CHECK(c["ok"] == true);
+    CHECK(c["cancelled"] == true);
+    CHECK(c["lostRanges"].is_array());
+    CHECK(c["lostRanges"].empty());
+}
+
+TEST_CASE("MakeTrackProgressEvent emits an id-less event envelope") {
+    const json j =
+        json::parse(nzvideomni::MakeTrackProgressEvent(137, 18, 240, 0.82, false));
+    // No "id" is what routes this to the webui's event subscribers instead of
+    // to a pending call - the single most important property of this payload.
+    CHECK_FALSE(j.contains("id"));
+    CHECK(j["event"] == "timeline.trackProgress");
+    CHECK(j["data"]["frame"] == 137);
+    CHECK(j["data"]["index"] == 18);
+    CHECK(j["data"]["total"] == 240);
+    CHECK(j["data"]["score"] == doctest::Approx(0.82));
+    CHECK(j["data"]["lost"] == false);
+
+    const json lost =
+        json::parse(nzvideomni::MakeTrackProgressEvent(0, 1, 1, 0.04, true));
+    CHECK(lost["data"]["lost"] == true);
+    CHECK(lost["data"]["index"] == 1);
+    CHECK(lost["data"]["total"] == 1);
 }

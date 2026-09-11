@@ -112,8 +112,17 @@ public:
     void Post(std::function<void()> job);
 
     // Synchronous forms (run on the calling thread).
+    //
+    // `body` is sent verbatim and may hold ARBITRARY BYTES, not just text:
+    // std::string is a byte container, so a raw RGBA frame rides through it
+    // unchanged (object tracking, section 3-54). `content_type` names the
+    // Content-Type header sent with a non-empty body; it defaults to the JSON
+    // type every pre-3-54 caller relied on, so those call sites are unchanged.
+    // An empty body sends no Content-Type at all, exactly as before.
     HttpResponse RequestSync(const std::string& url, const std::string& method,
-                             const std::string& body_json, int timeout_ms);
+                             const std::string& body, int timeout_ms,
+                             const std::string& content_type =
+                                 "application/json; charset=utf-8");
     DownloadResult DownloadSync(const std::string& url, const std::wstring& dest_path,
                                 int timeout_ms);
     HttpResponse UploadFileSync(const std::string& url, const std::wstring& file_path,

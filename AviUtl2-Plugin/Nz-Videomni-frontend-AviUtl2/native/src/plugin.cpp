@@ -397,6 +397,11 @@ NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_AppendText,        "appendText")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InsertProvisionalResult, "insertProvisionalResult")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_OutpaintVideo,     "outpaintVideo")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_RetakeRange,       "retakeRange")
+// Object tracking (section 3-54, SPEC #21): the first object item that targets
+// something other than a generation - it makes a partial filter's box follow a
+// subject. Enabled only when the selection IS a partial filter (the WebUI's
+// menuSelection.ts holds that rule, as for every other item here).
+NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_TrackObject,       "trackObject")
 
 // Layer right-click menu actions (5 items; see SPEC 3-6). The final item (W3,
 // insertLatestResultHere) inserts the latest completed generation result at the
@@ -468,6 +473,7 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3B5 Audio: long a2v from this audio",                              "audioToLongA2v",    &OnMenu_AudioToLongA2v },
     { L"Nz-Videomni\\\U0001F4DD Text: append to the main prompt",                              "appendText",        &OnMenu_AppendText },
     { L"Nz-Videomni\\\U00002B07 Insert this generated result now",                             "insertProvisionalResult", &OnMenu_InsertProvisionalResult },
+    { L"Nz-Videomni\\\U0001F3AF Track: follow this partial filter's box",                      "trackObject",       &OnMenu_TrackObject },
 };
 
 const TimelineMenuItem kLayerMenuItems[] = {

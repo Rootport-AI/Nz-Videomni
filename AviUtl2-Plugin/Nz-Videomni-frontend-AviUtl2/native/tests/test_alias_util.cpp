@@ -4,6 +4,7 @@
 #include "doctest.h"
 
 #include <string>
+#include <vector>
 
 #include "alias_util.h"
 
@@ -32,6 +33,11 @@ const char* kPlaySpeed =
 const char* kTrack = "\xe3\x83\x88\xe3\x83\xa9\xe3\x83\x83\xe3\x82\xaf";  // track (omitted)
 const char* kLoopPlay =
     "\xe3\x83\xab\xe3\x83\xbc\xe3\x83\x97\xe5\x86\x8d\xe7\x94\x9f";  // loop playback (omitted)
+// Section 3-54 (object tracking). Independent copies again, for the same
+// reason: the test has to fail if alias_util.cpp's bytes ever drift.
+const char* kPartialFilter =
+    "\xe9\x83\xa8\xe5\x88\x86\xe3\x83\x95\xe3\x82\xa3\xe3\x83\xab\xe3\x82\xbf";  // partial filter
+const char* kAspect = "\xe7\xb8\xa6\xe6\xa8\xaa\xe6\xaf\x94";  // aspect ratio item
 
 bool Contains(const std::string& hay, const std::string& needle) {
     return hay.find(needle) != std::string::npos;
@@ -319,4 +325,292 @@ TEST_CASE("ParseAliasItemValue reads effect items and reports misses") {
     CHECK(Contains(value, "[#job-9]"));
     // The standard-draw effect has no size item.
     CHECK_FALSE(ParseAliasItemValue(p.alias, kStd, kSize, &value));
+}
+
+// ---------------------------------------------------------------------------
+// Object tracking (section 3-54): RectToPartialFilter / PartialFilterToRect /
+// ParsePartialFilterValues / FirstEffectName.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A partial-filter alias in the normal layout: the "[Object]" meta section
+// first, then the effect blocks. `x`/`y`/`size`/`aspect` are inserted verbatim
+// so a case can feed a keyframed list or deliberate junk. An EMPTY string omits
+// that line entirely.
+std::string MakePartialFilterAlias(const std::string& x, const std::string& y,
+                                   const std::string& size,
+                                   const std::string& aspect,
+                                   const std::string& eol = "\n") {
+    std::string a;
+    a += "[Object]";
+    a += eol;
+    a += "frame=0,120";
+    a += eol;
+    a += "[Object.0]";
+    a += eol;
+    a += "effect.name=";
+    a += kPartialFilter;
+    a += eol;
+    if (!x.empty()) {
+        a += "X=" + x + eol;
+    }
+    if (!y.empty()) {
+        a += "Y=" + y + eol;
+    }
+    if (!size.empty()) {
+        a += std::string(kSize) + "=" + size + eol;
+    }
+    if (!aspect.empty()) {
+        a += std::string(kAspect) + "=" + aspect + eol;
+    }
+    a += "[Object.1]";
+    a += eol;
+    a += "effect.name=";
+    a += kStd;
+    a += eol;
+    return a;
+}
+
+// Round-trip helper: rect -> AviUtl2 values -> rect, all four numbers back.
+void RoundTrip(double rx, double ry, double rw, double rh, int sw, int sh) {
+    const PartialFilterValues v = RectToPartialFilter(rx, ry, rw, rh, sw, sh);
+    double ox = 0.0, oy = 0.0, ow = 0.0, oh = 0.0;
+    REQUIRE(PartialFilterToRect(v, sw, sh, &ox, &oy, &ow, &oh));
+    CHECK(ox == doctest::Approx(rx));
+    CHECK(oy == doctest::Approx(ry));
+    CHECK(ow == doctest::Approx(rw));
+    CHECK(oh == doctest::Approx(rh));
+}
+
+}  // namespace
+
+TEST_CASE("a landscape rectangle converts to a negative aspect and back") {
+    const PartialFilterValues v = RectToPartialFilter(100, 200, 200, 100, 1920, 1080);
+    CHECK(v.x == doctest::Approx(100 + 100 - 960));  // centre 200 -> -760
+    CHECK(v.y == doctest::Approx(200 + 50 - 540));   // centre 250 -> -290
+    CHECK(v.size == doctest::Approx(200.0));         // the LONGER side
+    CHECK(v.aspect == doctest::Approx(-50.0));       // height is half the width
+    RoundTrip(100, 200, 200, 100, 1920, 1080);
+}
+
+TEST_CASE("a portrait rectangle converts to a positive aspect and back") {
+    const PartialFilterValues v = RectToPartialFilter(0, 0, 100, 200, 1920, 1080);
+    CHECK(v.size == doctest::Approx(200.0));
+    CHECK(v.aspect == doctest::Approx(50.0));
+    RoundTrip(0, 0, 100, 200, 1920, 1080);
+}
+
+TEST_CASE("a square centred on the screen is the origin with aspect 0") {
+    const PartialFilterValues v = RectToPartialFilter(910, 490, 100, 100, 1920, 1080);
+    CHECK(v.x == doctest::Approx(0.0));
+    CHECK(v.y == doctest::Approx(0.0));
+    CHECK(v.size == doctest::Approx(100.0));
+    CHECK(v.aspect == doctest::Approx(0.0));
+    RoundTrip(910, 490, 100, 100, 1920, 1080);
+}
+
+TEST_CASE("a rectangle at the top-left corner is negative on both axes") {
+    // AviUtl2's Y grows DOWNWARDS, so the top-left corner is the most negative
+    // corner on both axes - the sign convention that would silently flip the
+    // whole track if it were wrong.
+    const PartialFilterValues v = RectToPartialFilter(0, 0, 100, 100, 1920, 1080);
+    CHECK(v.x == doctest::Approx(50 - 960));
+    CHECK(v.y == doctest::Approx(50 - 540));
+    RoundTrip(0, 0, 100, 100, 1920, 1080);
+    // ... and the bottom-right corner is positive on both.
+    const PartialFilterValues br =
+        RectToPartialFilter(1820, 980, 100, 100, 1920, 1080);
+    CHECK(br.x == doctest::Approx(910.0));
+    CHECK(br.y == doctest::Approx(490.0));
+}
+
+TEST_CASE("an extreme aspect clamps at +/-99.99") {
+    // 0.5 x 10000 would be +/-99.995; at +/-100 the short side would vanish.
+    const PartialFilterValues wide = RectToPartialFilter(0, 0, 10000, 0.5, 1920, 1080);
+    CHECK(wide.aspect == doctest::Approx(-99.99));
+    const PartialFilterValues tall = RectToPartialFilter(0, 0, 0.5, 10000, 1920, 1080);
+    CHECK(tall.aspect == doctest::Approx(99.99));
+    // Just inside the clamp the round trip is still exact.
+    RoundTrip(0, 0, 1000, 10, 1920, 1080);
+    RoundTrip(0, 0, 10, 1000, 1920, 1080);
+}
+
+TEST_CASE("a degenerate rectangle yields aspect 0 rather than a NaN") {
+    // The caller rejects these; the guard only keeps a NaN out of the alias.
+    const PartialFilterValues v = RectToPartialFilter(10, 20, 0, 50, 1920, 1080);
+    CHECK(v.aspect == doctest::Approx(0.0));
+    CHECK(v.size == doctest::Approx(50.0));
+}
+
+TEST_CASE("PartialFilterToRect rejects a non-positive size") {
+    PartialFilterValues v;
+    v.x = 1.0;
+    v.y = 2.0;
+    v.size = 0.0;
+    v.aspect = 0.0;
+    double rx = -1.0, ry = -1.0, rw = -1.0, rh = -1.0;
+    CHECK_FALSE(PartialFilterToRect(v, 1920, 1080, &rx, &ry, &rw, &rh));
+    CHECK(rx == -1.0);  // outputs untouched
+    v.size = -10.0;
+    CHECK_FALSE(PartialFilterToRect(v, 1920, 1080, &rx, &ry, &rw, &rh));
+}
+
+TEST_CASE("PartialFilterToRect accepts null output pointers") {
+    PartialFilterValues v;
+    v.x = 0.0;
+    v.y = 0.0;
+    v.size = 100.0;
+    v.aspect = 0.0;
+    double rw = 0.0;
+    CHECK(PartialFilterToRect(v, 1920, 1080, nullptr, nullptr, &rw, nullptr));
+    CHECK(rw == doctest::Approx(100.0));
+}
+
+TEST_CASE("ParsePartialFilterValues reads a plain, keyframe-less box") {
+    const std::string a = MakePartialFilterAlias("-760", "-290", "200", "-50");
+    PartialFilterValues v;
+    REQUIRE(ParsePartialFilterValues(a, &v));
+    CHECK(v.x == doctest::Approx(-760.0));
+    CHECK(v.y == doctest::Approx(-290.0));
+    CHECK(v.size == doctest::Approx(200.0));
+    CHECK(v.aspect == doctest::Approx(-50.0));
+}
+
+TEST_CASE("ParsePartialFilterValues takes the FIRST token of a keyframed value") {
+    // The seed is the box at the object's first frame, so only the head of the
+    // comma-separated list matters. The tail shapes below are deliberately
+    // different from each other: until the real keyframed format is captured on
+    // the device (design section 5.7), the contract is "first token, whatever
+    // follows".
+    const std::string a =
+        MakePartialFilterAlias("-760,120,480", "-290,-100,PLACEHOLDER,0",
+                               "200,340", "-50,0,X,0");
+    PartialFilterValues v;
+    REQUIRE(ParsePartialFilterValues(a, &v));
+    CHECK(v.x == doctest::Approx(-760.0));
+    CHECK(v.y == doctest::Approx(-290.0));
+    CHECK(v.size == doctest::Approx(200.0));
+    CHECK(v.aspect == doctest::Approx(-50.0));
+}
+
+TEST_CASE("ParsePartialFilterValues needs all four lines") {
+    PartialFilterValues v;
+    v.size = 4242.0;  // sentinel: a failed parse must not touch the output
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("", "-290", "200", "-50"), &v));
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", "", "200", "-50"), &v));
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", "-290", "", "-50"), &v));
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", "-290", "200", ""), &v));
+    CHECK(v.size == doctest::Approx(4242.0));
+}
+
+TEST_CASE("ParsePartialFilterValues ignores a different effect's items") {
+    // Same four item names, wrong effect: the X/Y/size/aspect of some other
+    // effect must never be mistaken for the partial filter's box.
+    std::string a = "[Object]\nframe=0,120\n[Object.0]\neffect.name=";
+    a += kStd;
+    a += "\nX=1\nY=2\n";
+    a += std::string(kSize) + "=3\n";
+    a += std::string(kAspect) + "=4\n";
+    PartialFilterValues v;
+    CHECK_FALSE(ParsePartialFilterValues(a, &v));
+}
+
+TEST_CASE("ParsePartialFilterValues rejects a value it cannot fully read") {
+    PartialFilterValues v;
+    // Trailing junk inside the first token, not a separate token.
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760px", "-290", "200", "-50"), &v));
+    // An empty first token.
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", ",-290", "200", "-50"), &v));
+}
+
+TEST_CASE("ParsePartialFilterValues survives a BOM and CRLF line endings") {
+    const std::string a =
+        "\xEF\xBB\xBF" + MakePartialFilterAlias("10", "20", "30", "0", "\r\n");
+    PartialFilterValues v;
+    REQUIRE(ParsePartialFilterValues(a, &v));
+    CHECK(v.x == doctest::Approx(10.0));
+    CHECK(v.size == doctest::Approx(30.0));
+}
+
+TEST_CASE("the seed pipeline reads an alias straight back into a rectangle") {
+    // The production path: alias -> four values -> top-left-origin rectangle.
+    const PartialFilterValues seed =
+        RectToPartialFilter(640, 360, 320, 180, 1920, 1080);
+    const std::string a = MakePartialFilterAlias(
+        std::to_string(seed.x), std::to_string(seed.y),
+        std::to_string(seed.size), std::to_string(seed.aspect));
+    PartialFilterValues read;
+    REQUIRE(ParsePartialFilterValues(a, &read));
+    double rx = 0.0, ry = 0.0, rw = 0.0, rh = 0.0;
+    REQUIRE(PartialFilterToRect(read, 1920, 1080, &rx, &ry, &rw, &rh));
+    CHECK(rx == doctest::Approx(640.0).epsilon(0.001));
+    CHECK(ry == doctest::Approx(360.0).epsilon(0.001));
+    CHECK(rw == doctest::Approx(320.0).epsilon(0.001));
+    CHECK(rh == doctest::Approx(180.0).epsilon(0.001));
+}
+
+TEST_CASE("FirstEffectName returns the first effect block's name") {
+    const std::string a = MakePartialFilterAlias("1", "2", "3", "0");
+    CHECK(FirstEffectName(a) == kPartialFilter);
+}
+
+TEST_CASE("FirstEffectName skips the [Object] meta section") {
+    // Pathological but decisive: a meta section carrying an effect.name-shaped
+    // line must not be mistaken for effect 0.
+    std::string a = "[Object]\neffect.name=NOT_AN_EFFECT\nframe=0,10\n[Object.0]\n";
+    a += "effect.name=";
+    a += kPartialFilter;
+    a += "\n";
+    CHECK(FirstEffectName(a) == kPartialFilter);
+}
+
+TEST_CASE("FirstEffectName handles a BOM, CRLF and surrounding spaces") {
+    std::string a = "\xEF\xBB\xBF[Object]\r\nframe=0,10\r\n[Object.0]\r\n";
+    a += "effect.name=  ";
+    a += kPartialFilter;
+    a += "  \r\n";
+    CHECK(FirstEffectName(a) == kPartialFilter);
+}
+
+TEST_CASE("FirstEffectName returns empty when there is nothing to name") {
+    CHECK(FirstEffectName("") == "");
+    CHECK(FirstEffectName("[Object]\nframe=0,10\n") == "");  // no effect section
+    // A first effect block with no effect.name: the answer is "unknown", not
+    // the name of the SECOND block.
+    std::string a = "[Object.0]\nX=1\n[Object.1]\neffect.name=";
+    a += kStd;
+    a += "\n";
+    CHECK(FirstEffectName(a) == "");
+}
+
+TEST_CASE("FirstEffectName names whatever effect actually comes first") {
+    // Not every alias starts with a partial filter; the caller compares the
+    // returned name itself, so a non-matching name must come back verbatim.
+    const std::string a = BuildProvisionalTextAlias("Hello", "job-1").alias;
+    CHECK(FirstEffectName(a) == kTxt);
+}
+
+// Section 3-54: the multi-keyframe write-back is deliberately provisional until
+// the owner's real .object capture lands (see alias_util.h). This case PINS
+// that provisional behaviour rather than a guessed format: an empty result is
+// what makes the tracking worker stop before it touches the timeline. When the
+// real implementation arrives, this case is expected to be replaced - not
+// merely extended - by cases built on the captured file.
+TEST_CASE("PatchAliasPartialFilterKeyframes is provisional and returns an empty string") {
+    const std::string a = MakePartialFilterAlias("0", "0", "100", "0");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(TrackKeyframe{0, 100.0, 50.0, 40.0, 40.0});
+    kfs.push_back(TrackKeyframe{9, 140.0, 60.0, 40.0, 40.0});
+    CHECK(PatchAliasPartialFilterKeyframes(a, kfs, 1920, 1080, 10) == "");
+    // Also empty for the degenerate inputs, so the caller has exactly one
+    // "nothing to write" answer to test against.
+    CHECK(PatchAliasPartialFilterKeyframes(a, {}, 1920, 1080, 10) == "");
+    CHECK(PatchAliasPartialFilterKeyframes("", kfs, 1920, 1080, 10) == "");
 }

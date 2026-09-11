@@ -34,6 +34,7 @@
 #include "settings.h"
 #include "strconv.h"
 #include "timeline_math.h"  // ProjectFramesForSeconds (Insert: media real length)
+#include "track_postprocess.h"  // PostProcessTrack (timeline.trackObject, 3-54)
 #include "wav_probe.h"  // ProbeWavFile (contract v6: fs.listFiles / fs.probeAudioDuration)
 #include "wic_png.h"
 
@@ -927,6 +928,16 @@ void GetSelectionEditProc(void* param, EDIT_SECTION* edit) {
                 item.effect_name = kEffectTextJp;
                 item.has_text_content = true;
                 item.text_content = text;
+            } else {
+                // Section 3-54: neither media nor text - report the alias' FIRST
+                // effect name so the webui can recognise a partial filter (and,
+                // as a side effect, name any other effect object instead of
+                // reporting nothing). This has to live in THIS else, not one
+                // level up: the outer `else if (!alias.empty())` branch is only
+                // entered when there is an alias, so an outer else would be
+                // unreachable. classifySelectionKind still drops every name
+                // outside its known set to "unknown", so nothing else moves.
+                item.effect_name = FirstEffectName(alias);
             }
         }
         if (edit->get_object_name != nullptr) {
@@ -1660,6 +1671,561 @@ void ExtractAudioWorker(EDIT_HANDLE* handle, ExtractAudioRequest req, int sample
     poster(MakeSuccessResponse(id, MakeExtractAudioResult(dest_utf8, duration, sr, true)));
 }
 
+// ---------------------------------------------------------------------------
+// Object tracking (timeline.trackObject / timeline.cancelTracking, 3-54).
+// Docs\OBJECT_TRACKING_DESIGN.md sections 5.4-5.7 are the canonical procedure;
+// the comments below only record what is specific to this translation unit.
+// ---------------------------------------------------------------------------
+
+// One tracking run at a time (design 5.2). g_track_running is claimed by the
+// dispatcher with exchange(true) and released by TrackRunningGuard on every
+// worker exit path; g_track_cancel is the stop button's cooperative flag,
+// cleared at the start of each run and read at the top of every loop iteration.
+std::atomic<bool> g_track_running{false};
+std::atomic<bool> g_track_cancel{false};
+
+// RAII release of g_track_running - the same shape as SoloGuard, for the same
+// reason: the worker has a dozen early returns and every one of them must leave
+// the feature usable again.
+struct TrackRunningGuard {
+    ~TrackRunningGuard() { g_track_running.store(false); }
+};
+
+// The object that OWNS `frame` on `layer`, or nullptr. find_object searches
+// "from this frame ONWARDS" (SDK plugin2.h line 170), so on its own it would
+// happily return a LATER object when the requested frame is empty. The
+// trackObject contract guarantees `frame` is the selection snapshot's
+// frameStart, i.e. the target's own first frame - so the containment check
+// below is an assertion that the contract held, and a refusal to edit a
+// stranger's object when it did not (plan risk 7).
+OBJECT_HANDLE FindObjectAt(EDIT_SECTION* edit, int layer, int frame,
+                           OBJECT_LAYER_FRAME* out_lf) {
+    if (edit->find_object == nullptr || edit->get_object_layer_frame == nullptr) {
+        return nullptr;
+    }
+    OBJECT_HANDLE o = edit->find_object(layer, frame);
+    if (o == nullptr) {
+        return nullptr;
+    }
+    const OBJECT_LAYER_FRAME lf = edit->get_object_layer_frame(o);
+    if (frame < lf.start || frame > lf.end) {
+        return nullptr;  // the hit starts LATER - not the object we were told about
+    }
+    if (out_lf != nullptr) {
+        *out_lf = lf;
+    }
+    return o;
+}
+
+// Step 1: read the seed object's alias, span and name. The alias is copied
+// IMMEDIATELY because get_object_alias' buffer only survives until the next
+// string-returning SDK call on this thread - which get_object_name, called
+// right after, is (SDK plugin2.h lines 192 and 329).
+struct ReadObjectAliasCtx {
+    int layer = 0;
+    int frame = 0;
+    bool ok = false;
+    std::string alias;     // UTF-8, owned copy
+    bool has_name = false;
+    std::string name;      // UTF-8 object name (empty when the host uses its default)
+    int start = 0;
+    int end = 0;
+};
+void ReadObjectAliasEditProc(void* param, EDIT_SECTION* edit) {
+    auto* c = static_cast<ReadObjectAliasCtx*>(param);
+    OBJECT_LAYER_FRAME lf{};
+    OBJECT_HANDLE o = FindObjectAt(edit, c->layer, c->frame, &lf);
+    if (o == nullptr || edit->get_object_alias == nullptr) {
+        return;
+    }
+    const char* a = edit->get_object_alias(o);
+    if (a == nullptr) {
+        return;
+    }
+    c->alias.assign(a);  // copy BEFORE any other string-returning SDK call
+    c->start = lf.start;
+    c->end = lf.end;
+    if (edit->get_object_name != nullptr) {
+        const wchar_t* nm = edit->get_object_name(o);
+        if (nm != nullptr && nm[0] != L'\0') {
+            c->has_name = true;
+            c->name = WideToUtf8(nm);
+        }
+    }
+    c->ok = true;
+}
+
+// Step 3: hide the ONE layer the partial filter sits on while the frames are
+// rendered, so effects the user already attached to it are not baked into the
+// pixels the tracker sees (design 5.4 step 3). This is the opposite selection
+// from SoloDisableEditProc, which disables everything EXCEPT a keep list; the
+// RAII shape is borrowed from SoloGuard unchanged.
+struct LayerDisableOneCtx {
+    int layer = 0;
+    bool saved_enabled = true;  // out: the state to restore
+    bool ran = false;
+};
+void LayerDisableOneEditProc(void* param, EDIT_SECTION* edit) {
+    auto* c = static_cast<LayerDisableOneCtx*>(param);
+    if (edit->set_layer_enable == nullptr) {
+        return;  // host cannot toggle layers - run without the isolation
+    }
+    c->saved_enabled =
+        edit->get_layer_enable != nullptr ? edit->get_layer_enable(c->layer) : true;
+    edit->set_layer_enable(c->layer, false);
+    c->ran = true;
+}
+struct LayerRestoreOneCtx {
+    int layer = 0;
+    bool enabled = true;
+};
+void LayerRestoreOneEditProc(void* param, EDIT_SECTION* edit) {
+    auto* c = static_cast<LayerRestoreOneCtx*>(param);
+    if (edit->set_layer_enable == nullptr) {
+        return;
+    }
+    edit->set_layer_enable(c->layer, c->enabled);
+}
+// RAII: re-enables the layer on an early return, an exception, or a cancel.
+struct LayerEnableGuard {
+    EDIT_HANDLE* handle = nullptr;
+    int layer = 0;
+    bool* saved_enabled = nullptr;
+    bool* applied = nullptr;
+    ~LayerEnableGuard() {
+        if (applied != nullptr && *applied && handle != nullptr &&
+            handle->call_edit_section_param != nullptr) {
+            LayerRestoreOneCtx rc;
+            rc.layer = layer;
+            rc.enabled = saved_enabled != nullptr ? *saved_enabled : true;
+            handle->call_edit_section_param(&rc, &LayerRestoreOneEditProc);
+            *applied = false;
+        }
+    }
+};
+
+// Step 8: delete the seed object and recreate it from the keyframed alias, in
+// ONE edit section so a single undo takes the user back (design 5.7). The SDK
+// has no "add a keyframe" call and no way to change an existing object's
+// sections, so delete + create is the only route. No layer_max+1 fallback: the
+// object has to end up exactly where it was, and the slot it vacated a moment
+// ago is by definition free. If the new alias will not create, the ORIGINAL
+// alias is put back immediately so the worst case is "nothing changed".
+struct ReplacePartialFilterCtx {
+    int layer = 0;
+    int frame = 0;
+    int length = 0;
+    const std::string* new_alias = nullptr;
+    const std::string* orig_alias = nullptr;
+    const wchar_t* name_w = nullptr;  // nullptr when the object had no custom name
+    bool ok = false;
+    bool restored = false;  // create failed but the original came back
+};
+void ReplacePartialFilterEditProc(void* param, EDIT_SECTION* edit) {
+    auto* c = static_cast<ReplacePartialFilterCtx*>(param);
+    if (edit->delete_object == nullptr || edit->create_object_from_alias == nullptr) {
+        return;
+    }
+    OBJECT_HANDLE target = FindObjectAt(edit, c->layer, c->frame, nullptr);
+    if (target == nullptr) {
+        return;  // moved or deleted while we were tracking - do nothing
+    }
+    edit->delete_object(target);
+    OBJECT_HANDLE created = edit->create_object_from_alias(c->new_alias->c_str(),
+                                                           c->layer, c->frame, c->length);
+    if (created == nullptr) {
+        // Put the user's object back exactly as it was. The alias' own frame
+        // header decides the length either way (SDK line 161), so the length
+        // argument here is the same redundant second pin as above.
+        created = edit->create_object_from_alias(c->orig_alias->c_str(), c->layer,
+                                                 c->frame, c->length);
+        c->restored = (created != nullptr);
+    } else {
+        c->ok = true;
+    }
+    // The object name is NOT part of the alias, so it is reapplied to whichever
+    // object now stands in the slot (UpdateProvisionalReservationEditProc does
+    // the same after its create).
+    if (created != nullptr && edit->set_object_name != nullptr && c->name_w != nullptr) {
+        edit->set_object_name(created, c->name_w);
+    }
+}
+
+// A session id only ever comes from our own backend, but it is pasted straight
+// into a URL path, so refuse anything that is not plainly URL-safe rather than
+// building a request out of a surprise.
+bool IsSafeSessionId(const std::string& sid) {
+    if (sid.empty() || sid.size() > 128) {
+        return false;
+    }
+    for (char ch : sid) {
+        const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                        (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' ||
+                        ch == '.' || ch == '~';
+        if (!ok) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Lift the backend's error envelope ({"error":{"code","message","detail"}},
+// api/errors.py) out of a non-2xx body. Any TRACK_* code is forwarded verbatim
+// so the webui can tell "not installed" (TRACK_UNAVAILABLE) from "the worker
+// died" (TRACK_FAILED); anything else collapses to TRACK_FAILED.
+std::string BackendTrackError(const HttpResponse& resp, std::string* message) {
+    std::string code = "TRACK_FAILED";
+    const json j = json::parse(resp.body, nullptr, /*allow_exceptions=*/false);
+    if (!j.is_discarded() && j.is_object() && j.contains("error") &&
+        j["error"].is_object()) {
+        const json& e = j["error"];
+        if (e.contains("message") && e["message"].is_string()) {
+            *message = e["message"].get<std::string>();
+        }
+        if (e.contains("detail") && e["detail"].is_string()) {
+            const std::string detail = e["detail"].get<std::string>();
+            if (!detail.empty()) {
+                *message += (message->empty() ? "" : ": ") + detail;
+            }
+        }
+        if (e.contains("code") && e["code"].is_string()) {
+            const std::string c = e["code"].get<std::string>();
+            if (c.rfind("TRACK_", 0) == 0) {
+                code = c;
+            }
+        }
+    }
+    if (message->empty()) {
+        *message = "tracking backend returned HTTP " + std::to_string(resp.status);
+    }
+    return code;
+}
+
+// Closes a tracking session on EVERY exit from the scope that owns it. A failed
+// DELETE is logged and otherwise ignored: the backend expires an idle session
+// by itself, and there is nothing useful the user could do about it.
+struct TrackSessionGuard {
+    HttpClient* http;
+    std::string url;
+    ~TrackSessionGuard() {
+        const HttpResponse r =
+            http->RequestSync(url, "DELETE", std::string(), kDefaultRequestTimeoutMs);
+        if (r.transport != TransportError::kNone || r.status < 200 || r.status >= 300) {
+            LogWarn(L"timeline.trackObject: closing the tracking session failed");
+        }
+    }
+};
+
+// Runs on an HTTP worker thread. Renders the seed object's span frame by frame,
+// posts each frame to the tracking session, post-processes the raw boxes and
+// writes the result back as keyframes. See design 5.4 for the nine steps; the
+// numbered comments below line up with it one to one.
+void TrackObjectWorker(EDIT_HANDLE* handle, HttpClient* http, TrackObjectRequest req,
+                       std::string base_url, json_t id, Bridge::ResponsePoster poster) {
+    TrackRunningGuard running_guard;
+    const auto started_at = std::chrono::steady_clock::now();
+    auto elapsed_ms = [&started_at]() -> double {
+        return std::chrono::duration<double, std::milli>(
+                   std::chrono::steady_clock::now() - started_at)
+            .count();
+    };
+    auto post_error = [&poster, &id](const char* code, const std::string& msg) {
+        LogWarn(std::wstring(L"timeline.trackObject: ") + Utf8ToWide(code) + L" - " +
+                Utf8ToWide(msg));
+        poster(MakeErrorResponse(id, code, msg));
+    };
+    if (handle == nullptr || handle->call_edit_section_param == nullptr ||
+        handle->rendering_scene_video == nullptr) {
+        post_error("NO_EDIT_HANDLE", "Edit handle is not available");
+        return;
+    }
+
+    // --- 1. read the seed object -------------------------------------------
+    ReadObjectAliasCtx seed;
+    seed.layer = req.layer;
+    seed.frame = req.frame;
+    if (!handle->call_edit_section_param(&seed, &ReadObjectAliasEditProc) || !seed.ok) {
+        post_error("TRACK_FAILED", "No object found at layer " +
+                                       std::to_string(req.layer) + ", frame " +
+                                       std::to_string(req.frame));
+        return;
+    }
+    const int length = seed.end - seed.start + 1;
+    if (length <= 0) {
+        post_error("TRACK_FAILED", "The object at layer " + std::to_string(req.layer) +
+                                       " has no frames");
+        return;
+    }
+
+    // --- 2. read the seed box's four values (the rectangle needs the rendered
+    //        frame's size, so the conversion waits for step 4) ---------------
+    PartialFilterValues seed_values;
+    if (!ParsePartialFilterValues(seed.alias, &seed_values)) {
+        post_error("TRACK_SEED_INVALID",
+                   "The selected object is not a partial filter with a readable box");
+        return;
+    }
+
+    std::vector<TrackSample> samples;
+    bool cancelled = false;
+    int scene_w = 0;
+    int scene_h = 0;
+    {
+        // --- 3. hide the partial filter's own layer while rendering ---------
+        bool layer_disabled = false;
+        bool saved_enabled = true;
+        LayerEnableGuard layer_guard{handle, req.layer, &saved_enabled, &layer_disabled};
+        {
+            LayerDisableOneCtx dc;
+            dc.layer = req.layer;
+            if (handle->call_edit_section_param(&dc, &LayerDisableOneEditProc) && dc.ran) {
+                saved_enabled = dc.saved_enabled;
+                layer_disabled = true;
+            }
+        }
+
+        // --- 4. render the first frame, open the session with ITS size ------
+        std::vector<unsigned char> rgba;
+        if (!RenderSceneVideoFrame(handle, seed.start, &scene_w, &scene_h, &rgba)) {
+            post_error("TRACK_FAILED",
+                       "Scene render failed at frame " + std::to_string(seed.start));
+            return;
+        }
+        const size_t frame_bytes =
+            static_cast<size_t>(scene_w) * static_cast<size_t>(scene_h) * 4u;
+
+        double sx = 0.0;
+        double sy = 0.0;
+        double sw = 0.0;
+        double sh = 0.0;
+        if (!PartialFilterToRect(seed_values, scene_w, scene_h, &sx, &sy, &sw, &sh) ||
+            !(sw > 0.0) || !(sh > 0.0)) {
+            post_error("TRACK_SEED_INVALID",
+                       "The partial filter's box has no positive size");
+            return;
+        }
+
+        json open_body;
+        open_body["width"] = scene_w;
+        open_body["height"] = scene_h;
+        open_body["box"] = json{{"x", sx}, {"y", sy}, {"w", sw}, {"h", sh}};
+        open_body["search_factor"] = req.search_factor;
+        const std::string sessions_url =
+            base_url + kBackendApiPrefix + "/utils/track/sessions";
+        const HttpResponse open_resp = http->RequestSync(
+            sessions_url, "POST", open_body.dump(), kDefaultRequestTimeoutMs);
+        if (open_resp.transport != TransportError::kNone) {
+            post_error(TransportCode(open_resp.transport), open_resp.transport_message);
+            return;
+        }
+        if (open_resp.status < 200 || open_resp.status >= 300) {
+            std::string msg;
+            const std::string code = BackendTrackError(open_resp, &msg);
+            post_error(code.c_str(), msg);
+            return;
+        }
+        std::string session_id;
+        long long declared_bytes = 0;
+        {
+            const json j = json::parse(open_resp.body, nullptr, false);
+            if (j.is_object() && j.contains("session_id") && j["session_id"].is_string()) {
+                session_id = j["session_id"].get<std::string>();
+            }
+            if (j.is_object() && j.contains("frame_bytes") &&
+                j["frame_bytes"].is_number_integer()) {
+                declared_bytes = j["frame_bytes"].get<long long>();
+            }
+        }
+        if (!IsSafeSessionId(session_id)) {
+            post_error("TRACK_FAILED",
+                       "The tracking backend returned no usable session id");
+            return;
+        }
+        const std::string session_url =
+            sessions_url + "/" + session_id;
+        TrackSessionGuard session_guard{http, session_url};
+        if (declared_bytes > 0 && static_cast<size_t>(declared_bytes) != frame_bytes) {
+            post_error("TRACK_FRAME_INVALID",
+                       "Session expects " + std::to_string(declared_bytes) +
+                           " bytes per frame, the scene renders " +
+                           std::to_string(frame_bytes));
+            return;
+        }
+        const std::string frame_url_base = session_url + "/frame?frame=";
+
+        // Progress throttling (design 5.3): one event per 200 ms, but the first
+        // and the last frame always go out. last_index lets the forced final
+        // event skip itself when the throttle happened to fire on it anyway.
+        std::chrono::steady_clock::time_point last_emit{};
+        bool have_emitted = false;
+        int last_index = 0;
+        auto emit_progress = [&](int abs_frame, int index, double score, bool force) {
+            const auto now = std::chrono::steady_clock::now();
+            if (!force && have_emitted &&
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - last_emit)
+                        .count() < 200) {
+                return;
+            }
+            last_emit = now;
+            have_emitted = true;
+            last_index = index;
+            poster(MakeTrackProgressEvent(abs_frame, index, length, score,
+                                          score < req.lost_score_threshold));
+        };
+
+        // One frame out, one box back. The pixel buffer is trimmed to exactly
+        // width*height*4 - CaptureRenderCb already repacks each row to that
+        // stride, so this only drops a trailing slack the vector may carry.
+        auto send_frame = [&](int abs_frame, const std::vector<unsigned char>& pixels,
+                              TrackSample* out, std::string* code,
+                              std::string* msg) -> bool {
+            if (pixels.size() < frame_bytes) {
+                *code = "TRACK_FAILED";
+                *msg = "Scene render produced a short frame at " +
+                       std::to_string(abs_frame);
+                return false;
+            }
+            const std::string body(reinterpret_cast<const char*>(pixels.data()),
+                                   frame_bytes);
+            const HttpResponse resp = http->RequestSync(
+                frame_url_base + std::to_string(abs_frame), "POST", body,
+                kDefaultRequestTimeoutMs, "application/octet-stream");
+            if (resp.transport != TransportError::kNone) {
+                *code = TransportCode(resp.transport);
+                *msg = resp.transport_message;
+                return false;
+            }
+            if (resp.status < 200 || resp.status >= 300) {
+                *code = BackendTrackError(resp, msg);
+                return false;
+            }
+            const json j = json::parse(resp.body, nullptr, false);
+            if (!j.is_object() || !j.contains("box") || !j["box"].is_object()) {
+                *code = "TRACK_FAILED";
+                *msg = "The tracking backend returned no box for frame " +
+                       std::to_string(abs_frame);
+                return false;
+            }
+            const json& b = j["box"];
+            if (!b.contains("x") || !b["x"].is_number() || !b.contains("y") ||
+                !b["y"].is_number() || !b.contains("w") || !b["w"].is_number() ||
+                !b.contains("h") || !b["h"].is_number()) {
+                *code = "TRACK_FAILED";
+                *msg = "The tracking backend returned an incomplete box for frame " +
+                       std::to_string(abs_frame);
+                return false;
+            }
+            out->frame = abs_frame - seed.start;  // 0-based, relative to the object
+            out->x = b["x"].get<double>();
+            out->y = b["y"].get<double>();
+            out->w = b["w"].get<double>();
+            out->h = b["h"].get<double>();
+            out->score = (j.contains("score") && j["score"].is_number())
+                             ? j["score"].get<double>()
+                             : 0.0;
+            return true;
+        };
+
+        {
+            TrackSample first;
+            std::string code;
+            std::string msg;
+            if (!send_frame(seed.start, rgba, &first, &code, &msg)) {
+                post_error(code.c_str(), msg);
+                return;
+            }
+            samples.push_back(first);
+            emit_progress(seed.start, 1, first.score, /*force=*/true);
+        }
+
+        // --- 5. the loop ----------------------------------------------------
+        // A render or transport failure mid-run is NOT fatal to the samples
+        // already collected: the run stops there and the frames that did work
+        // are still post-processed and written back, which is exactly what the
+        // stop button does. The user sees a short result rather than nothing.
+        for (int f = seed.start + 1; f <= seed.end; ++f) {
+            if (g_track_cancel.load()) {
+                cancelled = true;
+                break;
+            }
+            int w = 0;
+            int h = 0;
+            std::vector<unsigned char> pixels;
+            if (!RenderSceneVideoFrame(handle, f, &w, &h, &pixels) || w != scene_w ||
+                h != scene_h) {
+                LogWarn(std::wstring(L"timeline.trackObject: render stopped at frame ") +
+                        std::to_wstring(f));
+                break;
+            }
+            TrackSample s;
+            std::string code;
+            std::string msg;
+            if (!send_frame(f, pixels, &s, &code, &msg)) {
+                LogWarn(std::wstring(L"timeline.trackObject: tracking stopped at frame ") +
+                        std::to_wstring(f) + L" (" + Utf8ToWide(code) + L")");
+                break;
+            }
+            samples.push_back(s);
+            emit_progress(f, static_cast<int>(samples.size()), s.score, /*force=*/false);
+        }
+        if (!samples.empty() && last_index != static_cast<int>(samples.size())) {
+            const TrackSample& last = samples.back();
+            emit_progress(last.frame + seed.start, static_cast<int>(samples.size()),
+                          last.score, /*force=*/true);
+        }
+        // --- 6. the session closes and the layer comes back as this scope ends
+    }
+
+    if (samples.empty()) {
+        post_error("TRACK_FAILED", "No frames were tracked");
+        return;
+    }
+
+    // --- 7. post-process (pure) --------------------------------------------
+    TrackPostOptions opt;
+    opt.lost_score_threshold = req.lost_score_threshold;
+    opt.hold_on_lost = (req.lost_behavior == "hold");
+    opt.smoothing = req.smoothing;
+    opt.follow_size = req.follow_size;
+    opt.keyframe_stride = req.keyframe_stride;
+    const TrackPostResult processed = PostProcessTrack(samples, opt);
+
+    // --- 8. write back ------------------------------------------------------
+    // The alias is built and checked FIRST: an empty result means the timeline
+    // is never touched, so a failure here costs the user nothing but the wait.
+    const std::string new_alias = PatchAliasPartialFilterKeyframes(
+        seed.alias, processed.keyframes, scene_w, scene_h, length);
+    if (new_alias.empty()) {
+        post_error("TRACK_WRITEBACK_FAILED",
+                   "Could not build the keyframed alias; the object was left untouched");
+        return;
+    }
+    const std::wstring name_w = seed.has_name ? Utf8ToWide(seed.name) : std::wstring();
+    ReplacePartialFilterCtx rep;
+    rep.layer = req.layer;
+    rep.frame = seed.start;
+    rep.length = length;
+    rep.new_alias = &new_alias;
+    rep.orig_alias = &seed.alias;
+    rep.name_w = seed.has_name ? name_w.c_str() : nullptr;
+    if (!handle->call_edit_section_param(&rep, &ReplacePartialFilterEditProc) || !rep.ok) {
+        post_error("TRACK_WRITEBACK_FAILED",
+                   rep.restored
+                       ? "Writing the keyframes failed; the original object was restored"
+                       : "Writing the keyframes failed");
+        return;
+    }
+
+    // --- 9. reply -----------------------------------------------------------
+    LogInfo(std::wstring(L"timeline.trackObject: ") + std::to_wstring(samples.size()) +
+            L" frame(s), " + std::to_wstring(processed.keyframes.size()) +
+            L" keyframe(s)" + (cancelled ? L" (cancelled)" : L""));
+    poster(MakeSuccessResponse(
+        id, MakeTrackObjectResult(true, static_cast<int>(samples.size()),
+                                  processed.keyframes, processed.lost_ranges,
+                                  elapsed_ms(), cancelled)));
+}
+
 }  // namespace
 
 Bridge::Bridge() = default;
@@ -2240,6 +2806,60 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             ExtractAudioWorker(handle, ereq, sr, lm, dest, id, poster);
         });
         return std::string();  // response delivered asynchronously
+    }
+
+    // --- timeline.trackObject (async object tracking, section 3-54) ----------
+    if (method == "timeline.trackObject") {
+        const json id = ExtractId(req);
+        const json params =
+            (req.contains("params") && req["params"].is_object()) ? req["params"]
+                                                                   : json::object();
+        if (http_ == nullptr || !poster_) {
+            return MakeErrorResponse(id, "BACKEND_UNREACHABLE",
+                                     "HTTP worker pool is not initialized");
+        }
+        TrackObjectRequest treq;
+        std::string err;
+        if (!ParseTrackObject(params, &treq, &err)) {
+            return MakeErrorResponse(id, "BAD_REQUEST", err);
+        }
+        EDIT_HANDLE* handle = edit_handle_;
+        if (handle == nullptr || handle->rendering_scene_video == nullptr ||
+            handle->call_edit_section_param == nullptr) {
+            return MakeErrorResponse(id, "NO_EDIT_HANDLE",
+                                     "Edit handle is not available");
+        }
+        // Claim the single tracking slot LAST, so every validation failure above
+        // returns without having to hand the flag back. From here on the flag is
+        // owned by TrackObjectWorker's TrackRunningGuard.
+        if (g_track_running.exchange(true)) {
+            return MakeErrorResponse(id, "TRACK_BUSY",
+                                     "A tracking run is already in progress");
+        }
+        g_track_cancel.store(false);
+        HttpClient* http = http_.get();
+        const std::string base = CurrentBaseUrl();
+        ResponsePoster poster = poster_;
+        http_->Post([handle, http, treq, base, id, poster]() {
+            TrackObjectWorker(handle, http, treq, base, id, poster);
+        });
+        return std::string();  // response delivered asynchronously
+    }
+
+    // --- timeline.cancelTracking (synchronous flag raise, section 5.4) -------
+    // Raising the flag is all this does: the worker checks it at the top of each
+    // loop iteration and then finishes the run normally - post-processing and
+    // writing back whatever it collected (design 3.2), so a stop is a short
+    // result, not a discarded one. "cancelled": false means there was nothing
+    // running to stop, which the webui treats as success, not as an error.
+    if (method == "timeline.cancelTracking") {
+        const json id = ExtractId(req);
+        if (!g_track_running.load()) {
+            return MakeSuccessResponse(id, json{{"cancelled", false}});
+        }
+        g_track_cancel.store(true);
+        LogInfo(L"timeline.cancelTracking: stop requested");
+        return MakeSuccessResponse(id, json{{"cancelled", true}});
     }
 
     // --- Synchronous methods handled by the pure core ------------------------

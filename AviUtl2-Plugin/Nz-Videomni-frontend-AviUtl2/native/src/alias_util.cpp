@@ -3,6 +3,8 @@
 // effect / item names are UTF-8 byte escapes so no /utf-8 flag is required.
 #include "alias_util.h"
 
+#include <charconv>  // std::from_chars (locale-independent number parsing)
+#include <cmath>
 #include <vector>
 
 namespace nzvideomni {
@@ -35,6 +37,13 @@ const char kItemHasAudioJp[] =
     "\xe9\x9f\xb3\xe5\xa3\xb0\xe4\xbb\x98\xe3\x81\x8d";  // "audio present" item
 const char kPlaybackRangeJp[] =
     "\xe5\x86\x8d\xe7\x94\x9f\xe7\xaf\x84\xe5\x9b\xb2";  // "playback range" (3rd value)
+// Section 3-54 (object tracking): the partial filter's effect name and the one
+// item name it does not share with the text effect. Its X / Y items are ASCII
+// and its size item is the SAME "size" string as kItemSize above, reused here.
+const char kEffectPartialFilterJp[] =
+    "\xe9\x83\xa8\xe5\x88\x86\xe3\x83\x95\xe3\x82\xa3\xe3\x83\xab\xe3\x82\xbf";  // "partial filter"
+const char kItemAspectJp[] =
+    "\xe7\xb8\xa6\xe6\xa8\xaa\xe6\xaf\x94";  // "aspect ratio" item
 // ASCII fallback prefix. The webui always passes an explicit, localized prefix
 // (spec 5-5's 4-stage labels), so this default is only reached on an off-nominal
 // path with no caller prefix; keep it ASCII so no tofu box can ever appear.
@@ -132,6 +141,74 @@ bool IsFileKey(const std::string& key) {
 bool IsPlaybackKey(const std::string& key) {
     return key == kItemPlaybackJp || key == "Playback";
 }
+
+// True for "[Object.<digits>]" - an EFFECT section - and false for the
+// "[Object]" meta section that normally precedes them. Used by FirstEffectName
+// and ParsePartialFilterValues to walk effect blocks without mistaking the meta
+// section for effect 0.
+bool IsEffectSectionHeader(const std::string& line) {
+    const std::string t = Trim(line);
+    const std::string kPrefix = "[Object.";
+    if (t.size() <= kPrefix.size() || t.back() != ']') {
+        return false;
+    }
+    if (t.compare(0, kPrefix.size(), kPrefix) != 0) {
+        return false;
+    }
+    const size_t digits_end = t.size() - 1;  // index of ']'
+    if (digits_end <= kPrefix.size()) {
+        return false;  // "[Object.]" - no index
+    }
+    for (size_t i = kPrefix.size(); i < digits_end; ++i) {
+        if (t[i] < '0' || t[i] > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Read the FIRST comma-separated token of an alias value line as a double,
+// locale-independently. Keyframed values look like "100,250,<move>,0", so the
+// first token is the value at the object's first frame; a value with no
+// keyframes is just the single number. Surrounding spaces/tabs (and a stray CR)
+// are stripped, but trailing junk inside the token is rejected, so a value whose
+// shape we do not fully understand can never be silently truncated into a
+// plausible-looking number. Mirrors ParseWholeDoubleField in bridge_core.cpp -
+// duplicated rather than shared because that one lives in its own translation
+// unit's anonymous namespace, the same way Trim is duplicated here.
+bool ParseFirstValueToken(const std::string& raw, double* out) {
+    const size_t comma = raw.find(',');
+    const std::string field =
+        comma == std::string::npos ? raw : raw.substr(0, comma);
+    size_t b = 0;
+    size_t e = field.size();
+    while (b < e && (field[b] == ' ' || field[b] == '\t')) {
+        ++b;
+    }
+    while (e > b && (field[e - 1] == ' ' || field[e - 1] == '\t' ||
+                     field[e - 1] == '\r')) {
+        --e;
+    }
+    if (b >= e) {
+        return false;
+    }
+    double value = 0.0;
+    const char* first = field.data() + b;
+    const char* last = field.data() + e;
+    const std::from_chars_result r = std::from_chars(first, last, value);
+    if (r.ec != std::errc() || r.ptr != last) {
+        return false;
+    }
+    if (!std::isfinite(value)) {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+// The aspect percentage is clamped just short of +/-100, where the short side
+// would collapse to zero (see RectToPartialFilter's contract).
+constexpr double kAspectLimit = 99.99;
 
 // Format a double with EXACTLY three decimals, e.g. 10.0416666 -> "10.042",
 // 10.0 -> "10.000", 0.5 -> "0.500". Deliberately NOT snprintf("%.3f"): that
@@ -483,6 +560,168 @@ bool ParseAliasItemValue(const std::string& alias, const std::string& effect,
         }
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// Object tracking (section 3-54). Docs\OBJECT_TRACKING_DESIGN.md 5.6 / 5.7.
+// ---------------------------------------------------------------------------
+
+PartialFilterValues RectToPartialFilter(double rx, double ry, double rw, double rh,
+                                        int scene_w, int scene_h) {
+    PartialFilterValues v;
+    v.x = (rx + rw / 2.0) - static_cast<double>(scene_w) / 2.0;
+    v.y = (ry + rh / 2.0) - static_cast<double>(scene_h) / 2.0;
+    v.size = rw >= rh ? rw : rh;
+    if (rw > 0.0 && rh > 0.0) {
+        // A landscape box keeps its width and squashes its height, so the
+        // percentage is reported negative; a portrait box is the mirror image.
+        v.aspect = rw >= rh ? -100.0 * (1.0 - rh / rw) : 100.0 * (1.0 - rw / rh);
+        if (v.aspect > kAspectLimit) {
+            v.aspect = kAspectLimit;
+        } else if (v.aspect < -kAspectLimit) {
+            v.aspect = -kAspectLimit;
+        }
+    } else {
+        // Degenerate input: the caller rejects these (see the header). Emitting
+        // 0 rather than dividing by zero keeps a NaN out of the written alias.
+        v.aspect = 0.0;
+    }
+    return v;
+}
+
+bool PartialFilterToRect(const PartialFilterValues& v, int scene_w, int scene_h,
+                         double* rx, double* ry, double* rw, double* rh) {
+    if (!(v.size > 0.0)) {  // also catches NaN
+        return false;
+    }
+    double w = v.size;
+    double h = v.size;
+    if (v.aspect < 0.0) {
+        h = v.size * (1.0 + v.aspect / 100.0);
+    } else if (v.aspect > 0.0) {
+        w = v.size * (1.0 - v.aspect / 100.0);
+    }
+    if (rw != nullptr) {
+        *rw = w;
+    }
+    if (rh != nullptr) {
+        *rh = h;
+    }
+    if (rx != nullptr) {
+        *rx = v.x + static_cast<double>(scene_w) / 2.0 - w / 2.0;
+    }
+    if (ry != nullptr) {
+        *ry = v.y + static_cast<double>(scene_h) / 2.0 - h / 2.0;
+    }
+    return true;
+}
+
+bool ParsePartialFilterValues(const std::string& alias, PartialFilterValues* out) {
+    const std::string src = StripUtf8Bom(alias);
+    bool trailing = false;
+    const std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    bool in_partial_filter = false;
+    bool seen_partial_filter = false;
+    double x = 0.0;
+    double y = 0.0;
+    double size = 0.0;
+    double aspect = 0.0;
+    bool have_x = false;
+    bool have_y = false;
+    bool have_size = false;
+    bool have_aspect = false;
+
+    for (const std::string& line : lines) {
+        if (IsSectionHeader(line)) {
+            // The first partial-filter block is the one that owns the box; stop
+            // at its end rather than letting a later block overwrite the values.
+            if (seen_partial_filter) {
+                break;
+            }
+            in_partial_filter = false;
+            continue;
+        }
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) {
+            continue;
+        }
+        const std::string key = Trim(line.substr(0, eq));
+        const std::string raw = line.substr(eq + 1);
+        if (key == "effect.name") {
+            in_partial_filter = Trim(raw) == kEffectPartialFilterJp;
+            if (in_partial_filter) {
+                seen_partial_filter = true;
+            }
+            continue;
+        }
+        if (!in_partial_filter) {
+            continue;
+        }
+        if (key == "X") {
+            have_x = ParseFirstValueToken(raw, &x);
+        } else if (key == "Y") {
+            have_y = ParseFirstValueToken(raw, &y);
+        } else if (key == kItemSize) {
+            have_size = ParseFirstValueToken(raw, &size);
+        } else if (key == kItemAspectJp) {
+            have_aspect = ParseFirstValueToken(raw, &aspect);
+        }
+    }
+
+    if (!have_x || !have_y || !have_size || !have_aspect) {
+        return false;
+    }
+    out->x = x;
+    out->y = y;
+    out->size = size;
+    out->aspect = aspect;
+    return true;
+}
+
+std::string FirstEffectName(const std::string& alias) {
+    const std::string src = StripUtf8Bom(alias);
+    bool trailing = false;
+    const std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    bool in_effect = false;
+    for (const std::string& line : lines) {
+        if (IsSectionHeader(line)) {
+            if (in_effect) {
+                return std::string();  // first effect block had no effect.name
+            }
+            in_effect = IsEffectSectionHeader(line);
+            continue;
+        }
+        if (!in_effect) {
+            continue;
+        }
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) {
+            continue;
+        }
+        if (Trim(line.substr(0, eq)) == "effect.name") {
+            return Trim(line.substr(eq + 1));
+        }
+    }
+    return std::string();
+}
+
+std::string PatchAliasPartialFilterKeyframes(const std::string& alias,
+                                             const std::vector<TrackKeyframe>& kfs,
+                                             int scene_w, int scene_h, int length) {
+    // PROVISIONAL - see the long note on the declaration in alias_util.h. The
+    // multi-keyframe on-disk format is being captured from a real AviUtl2
+    // project (plan M0); until that capture is transcribed into
+    // Docs\SDK_REFERENCE.md section 16 this returns an empty string, which the
+    // tracking worker reads as "do not touch the timeline" and reports as
+    // TRACK_WRITEBACK_FAILED. Every argument is intentionally unused.
+    (void)alias;
+    (void)kfs;
+    (void)scene_w;
+    (void)scene_h;
+    (void)length;
+    return std::string();
 }
 
 }  // namespace nzvideomni

@@ -26,6 +26,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
+
+#include "track_postprocess.h"  // TrackKeyframe (section 3-54 write-back)
 
 namespace nzvideomni {
 
@@ -114,5 +117,108 @@ std::string BuildMediaObjectAlias(const std::string& file_path_utf8,
 // is not present. A leading BOM is stripped first.
 bool ParseAliasItemValue(const std::string& alias, const std::string& effect,
                          const std::string& item, std::string* out_value);
+
+// ---------------------------------------------------------------------------
+// Object tracking (section 3-54): the partial-filter box <-> alias conversions.
+// Docs\OBJECT_TRACKING_DESIGN.md sections 5.6 and 5.7 are the canonical text.
+// ---------------------------------------------------------------------------
+
+// AviUtl2's own four numbers for a partial filter's box, in the units the alias
+// stores them in:
+//   x, y   - offset of the box's CENTRE from the SCREEN's centre, in pixels,
+//            with Y growing DOWNWARDS (AviUtl2's coordinate convention)
+//   size   - the box's longer side, in pixels
+//   aspect - signed percentage: negative squashes the height (a landscape box),
+//            positive squashes the width (a portrait box), 0 is a square
+// The tracker instead speaks in top-left-origin (x, y, w, h) rectangles, so the
+// two functions below are the only place those two conventions meet.
+struct PartialFilterValues {
+    double x = 0.0;
+    double y = 0.0;
+    double size = 0.0;
+    double aspect = 0.0;
+};
+
+// Rectangle (top-left origin, pixels) -> AviUtl2's four values, against a frame
+// of scene_w x scene_h:
+//   x      = (rx + rw / 2) - scene_w / 2
+//   y      = (ry + rh / 2) - scene_h / 2
+//   size   = max(rw, rh)
+//   aspect = rw >= rh ? -100 * (1 - rh / rw) : +100 * (1 - rw / rh)
+// aspect is CLAMPED to +/-99.99: at +/-100 the short side would be zero, which
+// is not a box AviUtl2 can show. A degenerate input (rw <= 0 or rh <= 0) is the
+// caller's job to reject - it never reaches here from the tracking worker, whose
+// seed box comes from PartialFilterToRect and whose per-frame boxes come from a
+// tracker that only emits positive extents. The guard below exists solely so a
+// stray zero yields 0 rather than a NaN that would poison the written alias.
+PartialFilterValues RectToPartialFilter(double rx, double ry, double rw, double rh,
+                                        int scene_w, int scene_h);
+
+// The exact inverse, for reading the user's seed box out of the alias. Returns
+// false (leaving the outputs untouched) when v.size <= 0, i.e. when there is no
+// box to speak of. Any of the four out-pointers may be null.
+//   aspect < 0 -> rw = size,                 rh = size * (1 + aspect / 100)
+//   aspect > 0 -> rh = size,                 rw = size * (1 - aspect / 100)
+//   aspect = 0 -> rw = rh = size
+//   rx = v.x + scene_w / 2 - rw / 2, ry = v.y + scene_h / 2 - rh / 2
+// Round-trips with RectToPartialFilter exactly for any rectangle whose aspect
+// lands inside the +/-99.99 clamp.
+bool PartialFilterToRect(const PartialFilterValues& v, int scene_w, int scene_h,
+                         double* rx, double* ry, double* rw, double* rh);
+
+// Read the four values out of the first "partial filter" effect block of an
+// alias. Each value line may already carry keyframes, in which case the value is
+// a comma-separated list ("100,250,<interpolation>,0"); THE FIRST NUMERIC TOKEN
+// is taken, because that is the value at the object's first frame - the frame
+// whose box seeds the tracker. Returns false unless all four lines (X, Y, the
+// Japanese "size" and "aspect ratio" items) are present and each one's first
+// token parses as a finite number; *out is then untouched. A leading BOM is
+// stripped and both CRLF and LF inputs are accepted.
+//
+// Parsing is locale-independent (std::from_chars), like ParsePlaybackRange in
+// bridge_core: the host process may have called setlocale, and a comma decimal
+// point would silently mis-read every value.
+bool ParsePartialFilterValues(const std::string& alias, PartialFilterValues* out);
+
+// The effect name of an alias' FIRST "[Object.N]" section, trimmed; an empty
+// string when the alias has no such section or the section has no effect.name.
+// This is how a selection is recognised as a partial filter (design section
+// 5.1): the webui's classifySelectionKind compares the returned name against
+// the Japanese "partial filter" string. A leading BOM is stripped, CRLF and LF
+// are both accepted, and a "[Object]" meta section ahead of the effects (the
+// normal layout) is skipped rather than mistaken for effect 0.
+std::string FirstEffectName(const std::string& alias);
+
+// Rewrite a partial filter's alias so its box follows `kfs`: the four value
+// lines (X / Y / the Japanese "size" and "aspect ratio") become keyframed
+// lists, and the "[Object]" section's "frame=" line becomes the matching list
+// of 0-based inclusive keyframe boundaries. `length` is the object's frame
+// count, so the last boundary is length - 1. Everything else in the alias -
+// effects the user added, the mask kind, item order, line endings - is
+// preserved byte for byte (design section 5.7). Returns an EMPTY string when
+// the alias cannot be rewritten safely; the caller then abandons the write-back
+// with the timeline untouched.
+//
+// *** PROVISIONAL: this function ALWAYS RETURNS AN EMPTY STRING. ***
+//
+// The real body is deliberately not written yet. The on-disk format of a
+// partial filter that carries SEVERAL keyframes - the separator and trailing
+// fields of a value line, how many boundaries "frame=" lists as the count grows
+// from 2 to 3 to N, and whether the value count matches the boundary count or
+// the interval count - has no primary source anywhere in this repository. The
+// owner is capturing a real .object file from AviUtl2 for exactly this (plan
+// M0); until that capture lands in Docs\SDK_REFERENCE.md section 16, writing an
+// implementation would mean encoding a guess and then unit-testing the guess,
+// which costs two rounds of rework instead of one when the capture disagrees.
+//
+// Returning empty is the SAFE provisional behaviour, not a stub that silently
+// breaks the feature: the tracking worker builds the new alias BEFORE it
+// touches the timeline (design section 5.7 step 1), so an empty result stops
+// the run at TRACK_WRITEBACK_FAILED with the user's object untouched. The
+// render loop, the progress events, the layer disable/restore and the whole
+// session round-trip are still exercised end to end on real hardware.
+std::string PatchAliasPartialFilterKeyframes(const std::string& alias,
+                                             const std::vector<TrackKeyframe>& kfs,
+                                             int scene_w, int scene_h, int length);
 
 }  // namespace nzvideomni

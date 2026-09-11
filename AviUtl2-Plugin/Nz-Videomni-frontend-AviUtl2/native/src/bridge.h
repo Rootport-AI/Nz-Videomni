@@ -47,6 +47,9 @@ public:
     // Delivers a finished async response (UTF-8 JSON) back to the web page.
     // Invoked from an HTTP worker thread; the implementation must be thread-safe
     // and marshal onto the UI thread before touching WebView2.
+    // It carries EVENTS as well as responses: a JSON object with an "event" key
+    // and NO "id" is routed to the page's event subscribers instead of to a
+    // pending call (timeline.trackProgress, section 3-54).
     using ResponsePoster = std::function<void(const std::string&)>;
 
     Bridge();

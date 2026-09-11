@@ -162,7 +162,7 @@
 
 ### 5.2 呼び出しは2本
 
-- **`timeline.trackObject`**（非同期）— 引数は `{layer, frame, searchFactor, smoothing, followSize, lostScoreThreshold, lostBehavior, keyframeStride}`。戻り値は `{ok, frames, keyframes, lostRanges, elapsedMs, cancelled}` です。`lostRanges` は `{start, end}` の並びです。
+- **`timeline.trackObject`**（非同期）— 引数は `{layer, frame, searchFactor, smoothing, followSize, lostScoreThreshold, lostBehavior, keyframeStride}`。戻り値は `{ok, frames, keyframes, lostRanges, elapsedMs, cancelled}` です。`frames` と `keyframes` は件数、`lostRanges` は `{start, end}` の並びで、**フレーム番号はAviUtl2の絶対番号**（進捗の通知と同じ規則。§5.3）です。
   - **不変条件: `frame` には必ず選択スナップショットの `frameStart`（対象オブジェクトの開始フレーム）を渡します。** 再生カーソルの位置ではありません。理由は §5.4 の手順1にあります。
 - **`timeline.cancelTracking`**（同期）— 中止の合図を立てるだけです。追尾のループが先頭で協調的に確認します。
 

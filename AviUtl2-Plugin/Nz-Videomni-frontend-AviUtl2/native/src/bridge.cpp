@@ -10,7 +10,6 @@
 #include <commdlg.h>   // GetOpenFileNameW / OPENFILENAMEW (ui.pickFile)
 #include <shobjidl.h>  // IFileOpenDialog / FOS_PICKFOLDERS (ui.pickFolder, contract v6)
 
-#include <algorithm>  // std::sort (the trackObject score-distribution log)
 #include <atomic>
 #include <chrono>
 #include <climits>
@@ -1966,58 +1965,6 @@ struct TrackSessionGuard {
     }
 };
 
-// Nearest-rank quantile of an ALREADY SORTED, non-empty sample: the value at the
-// rounded rank q*(n-1), clamped to both ends. Pure, and deliberately without
-// interpolation - this only feeds a log line, and a value some frame really
-// scored reads better than an average of two. A short sample therefore just
-// yields an end value (n == 1 gives that one value for every q).
-double SortedQuantile(const std::vector<double>& sorted, double q) {
-    if (sorted.empty()) {
-        return 0.0;
-    }
-    const size_t n = sorted.size();
-    if (q <= 0.0) {
-        return sorted.front();
-    }
-    if (q >= 1.0) {
-        return sorted.back();
-    }
-    size_t index = static_cast<size_t>(q * static_cast<double>(n - 1) + 0.5);
-    if (index >= n) {
-        index = n - 1;
-    }
-    return sorted[index];
-}
-
-// A score as exactly three decimals, without going through the C locale's
-// decimal point: the host process may have called setlocale, and "%.3f" would
-// then log "0,412" (alias_util.cpp's FixedDecimals avoids snprintf for the same
-// reason). Scores live in [0, 1], so the magnitude guard only has to catch a
-// value that is not finite.
-std::wstring FormatScore(double value) {
-    if (!std::isfinite(value)) {
-        return L"nan";
-    }
-    const bool negative = value < 0.0;
-    double magnitude = negative ? -value : value;
-    if (!(magnitude < 1.0e9)) {
-        magnitude = 1.0e9;
-    }
-    const long long scaled = static_cast<long long>(magnitude * 1000.0 + 0.5);
-    std::wstring frac = std::to_wstring(scaled % 1000);
-    while (frac.size() < 3) {
-        frac.insert(frac.begin(), L'0');
-    }
-    std::wstring out;
-    if (negative && scaled != 0) {
-        out += L'-';
-    }
-    out += std::to_wstring(scaled / 1000);
-    out += L'.';
-    out += frac;
-    return out;
-}
-
 // Runs on an HTTP worker thread. Renders the seed object's span frame by frame,
 // posts each frame to the tracking session, post-processes the raw boxes and
 // writes the result back as keyframes. See design 5.4 for the nine steps; the
@@ -2281,31 +2228,6 @@ void TrackObjectWorker(EDIT_HANDLE* handle, HttpClient* http, TrackObjectRequest
     if (samples.empty()) {
         post_error("TRACK_FAILED", "No frames were tracked");
         return;
-    }
-
-    // The run's score distribution, so the lost-score threshold's default can be
-    // picked from measured numbers instead of a guess. Every ending that collected
-    // at least one sample logs it - a clean finish, the stop button, or a render or
-    // transport failure part way through - which is why it sits here, ahead of the
-    // post-processing and the write-back (both of which can still bail out).
-    {
-        std::vector<double> scores;
-        scores.reserve(samples.size());
-        int below = 0;
-        for (const TrackSample& s : samples) {
-            scores.push_back(s.score);
-            if (s.score < req.lost_score_threshold) {  // PostProcessTrack's own test
-                ++below;
-            }
-        }
-        std::sort(scores.begin(), scores.end());
-        LogInfo(std::wstring(L"timeline.trackObject: scores n=") +
-                std::to_wstring(scores.size()) + L" min=" + FormatScore(scores.front()) +
-                L" p10=" + FormatScore(SortedQuantile(scores, 0.10)) +
-                L" median=" + FormatScore(SortedQuantile(scores, 0.50)) +
-                L" max=" + FormatScore(scores.back()) +
-                L" below_threshold=" + std::to_wstring(below) +
-                L" (threshold=" + FormatScore(req.lost_score_threshold) + L")");
     }
 
     // --- 7. post-process (pure) --------------------------------------------

@@ -640,20 +640,238 @@ TEST_CASE("FirstEffectName names whatever effect actually comes first") {
     CHECK(FirstEffectName(a) == kTxt);
 }
 
-// Section 3-54: the multi-keyframe write-back is deliberately provisional until
-// the owner's real .object capture lands (see alias_util.h). This case PINS
-// that provisional behaviour rather than a guessed format: an empty result is
-// what makes the tracking worker stop before it touches the timeline. When the
-// real implementation arrives, this case is expected to be replaced - not
-// merely extended - by cases built on the captured file.
-TEST_CASE("PatchAliasPartialFilterKeyframes is provisional and returns an empty string") {
-    const std::string a = MakePartialFilterAlias("0", "0", "100", "0");
+// ---------------------------------------------------------------------------
+// PatchAliasPartialFilterKeyframes (section 3-54). Every case below is built on
+// the two .object files the owner saved from AviUtl2 v2.0.54 on 2026-09-11 -
+// one partial filter left at its defaults, one carrying two midpoints - which
+// are the only primary source for the keyframed format. The expected outputs
+// are spelled out BYTE FOR BYTE (same helper, same CRLF) so an untouched line
+// that drifts fails the case just as loudly as a wrong value.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Item names the capture carries that no other case needs. Independent copies
+// of the bytes, like the constants at the top of this file: the test has to
+// fail if alias_util.cpp's own escapes ever drift.
+const char* kRotate = "\xe5\x9b\x9e\xe8\xbb\xa2";                  // rotation
+const char* kBlur = "\xe3\x81\xbc\xe3\x81\x8b\xe3\x81\x97";        // blur
+const char* kMaskKind =
+    "\xe3\x83\x9e\xe3\x82\xb9\xe3\x82\xaf\xe3\x81\xae\xe7\xa8\xae\xe9\xa1\x9e";  // mask kind
+const char* kCircle = "\xe5\x86\x86";                              // circle
+const char* kMatchScene =
+    "\xe3\x82\xb7\xe3\x83\xbc\xe3\x83\xb3\xe3\x81\xae\xe9\x95\xb7\xe3\x81\x95"
+    "\xe3\x82\x92\xe5\x90\x88\xe3\x82\x8f\xe3\x81\x9b\xe3\x82\x8b";  // match scene length
+const char* kInvertMask =
+    "\xe3\x83\x9e\xe3\x82\xb9\xe3\x82\xaf\xe3\x81\xae\xe5\x8f\x8d\xe8\xbb\xa2";  // invert mask
+const char* kMoveLinear =
+    "\xe7\x9b\xb4\xe7\xb7\x9a\xe7\xa7\xbb\xe5\x8b\x95";            // linear move
+const char* kMosaic = "\xe3\x83\xa2\xe3\x82\xb6\xe3\x82\xa4\xe3\x82\xaf";  // mosaic
+
+// The captured partial-filter object, line for line, with the values that vary
+// substituted. Called with the capture's own strings it reproduces the file;
+// called with the expected strings it spells out the expected output.
+std::string CapturedPartialFilter(const std::string& frame, const std::string& x,
+                                  const std::string& y, const std::string& size,
+                                  const std::string& aspect,
+                                  const std::string& rotate = "0.00",
+                                  const std::string& eol = "\r\n") {
+    std::string a;
+    a += "[Object]";
+    a += eol;
+    a += "frame=" + frame;
+    a += eol;
+    a += "[Object.0]";
+    a += eol;
+    a += "effect.name=";
+    a += kPartialFilter;
+    a += eol;
+    a += "X=" + x;
+    a += eol;
+    a += "Y=" + y;
+    a += eol;
+    a += "Group=1";
+    a += eol;
+    a += std::string(kRotate) + "=" + rotate;
+    a += eol;
+    a += std::string(kSize) + "=" + size;
+    a += eol;
+    a += std::string(kAspect) + "=" + aspect;
+    a += eol;
+    a += std::string(kBlur) + "=0";
+    a += eol;
+    a += std::string(kMaskKind) + "=" + kCircle;
+    a += eol;
+    a += std::string(kMatchScene) + "=0";
+    a += eol;
+    a += std::string(kInvertMask) + "=0";
+    a += eol;
+    return a;
+}
+
+// "<values>,<linear move>,0" - the capture's keyframed value line.
+std::string Kf(const std::string& values) {
+    return values + "," + kMoveLinear + ",0";
+}
+
+// The three boxes case 1 walks through, in scene coordinates of 1920x1080:
+//   (860,470,200x140) -> X=0  Y=0  size=200 aspect=-30.00
+//   (900,500,200x140) -> X=40 Y=30 size=200 aspect=-30.00
+//   (960,540,100x100) -> X=50 Y=50 size=100 aspect=  0.00
+TrackKeyframe BoxA(int at) { return TrackKeyframe{at, 860.0, 470.0, 200.0, 140.0}; }
+TrackKeyframe BoxB(int at) { return TrackKeyframe{at, 900.0, 500.0, 200.0, 140.0}; }
+TrackKeyframe BoxC(int at) { return TrackKeyframe{at, 960.0, 540.0, 100.0, 100.0}; }
+
+}  // namespace
+
+TEST_CASE("PatchAliasPartialFilterKeyframes keyframes the captured defaults object") {
+    // Case 1: the "dropped in and left alone" capture, three tracked boxes,
+    // an 11-frame object. Boundaries become the keyframe offsets, the four
+    // value lines take the "<values>,<linear move>,0" form, and every other
+    // line - Group, rotation, blur, mask kind, the CRLF endings - is untouched.
+    const std::string in = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
     std::vector<TrackKeyframe> kfs;
-    kfs.push_back(TrackKeyframe{0, 100.0, 50.0, 40.0, 40.0});
-    kfs.push_back(TrackKeyframe{9, 140.0, 60.0, 40.0, 40.0});
-    CHECK(PatchAliasPartialFilterKeyframes(a, kfs, 1920, 1080, 10) == "");
-    // Also empty for the degenerate inputs, so the caller has exactly one
-    // "nothing to write" answer to test against.
-    CHECK(PatchAliasPartialFilterKeyframes(a, {}, 1920, 1080, 10) == "");
-    CHECK(PatchAliasPartialFilterKeyframes("", kfs, 1920, 1080, 10) == "");
+    kfs.push_back(BoxA(0));
+    kfs.push_back(BoxB(5));
+    kfs.push_back(BoxC(10));
+    const std::string want =
+        CapturedPartialFilter("0,5,10", Kf("0,40,50"), Kf("0,30,50"),
+                              Kf("200,200,100"), Kf("-30.00,-30.00,0.00"));
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes rewrites the captured midpoints object") {
+    // Case 2: the capture with two midpoints (four boundaries) tracked again
+    // with only two keyframes - the boundary list SHRINKS to two, and the four
+    // value lines shrink with it. Everything else still matches byte for byte.
+    const std::string in = CapturedPartialFilter(
+        "24,54,80,119", Kf("76,89,89,89"), Kf("-169,-153,-153,-153"),
+        Kf("77,231,207,207"), "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    kfs.push_back(BoxB(95));
+    const std::string want = CapturedPartialFilter(
+        "0,95", Kf("0,40"), Kf("0,30"), Kf("200,200"), Kf("-30.00,-30.00"));
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 96) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes holds the last box to the object's end") {
+    // Case 3: a stopped run - the last keyframe is at 4 but the object runs to
+    // frame 10. An extra boundary at 10 REPEATS the last value, so the box
+    // stands still from 4 to the end instead of the object losing its tail.
+    const std::string in = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    kfs.push_back(BoxB(4));
+    const std::string want = CapturedPartialFilter(
+        "0,4,10", Kf("0,40,40"), Kf("0,30,30"), Kf("200,200,200"),
+        Kf("-30.00,-30.00,-30.00"));
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes writes a single keyframe as a constant") {
+    // Case 4: one keyframe is a box that never moves, so the values are SINGLE
+    // - no move method, no trailing 0 - exactly the shape the defaults capture
+    // has, and the frame line is the plain start/end pair.
+    const std::string in = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    const std::string want =
+        CapturedPartialFilter("0,10", "0", "0", "200", "-30.00");
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes collapses another item's keyframes") {
+    // Case 5: the boundary count is changing, so an item the user had keyframed
+    // himself - here the rotation - would be left with a list that no longer
+    // matches. It is frozen at its FIRST value instead.
+    const std::string in = CapturedPartialFilter("23,33,60,90", "0", "0", "100",
+                                                 "0.00", Kf("1,2,3,4"));
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    const std::string want =
+        CapturedPartialFilter("0,10", "0", "0", "200", "-30.00", "1");
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes leaves a following effect block alone") {
+    // Case 6: a mosaic effect after the partial filter has a "size" item of its
+    // own. Only the partial filter's is rewritten - the two must not be
+    // confused - and the whole second block survives byte for byte.
+    std::string mosaic;
+    mosaic += "[Object.1]\r\n";
+    mosaic += "effect.name=" + std::string(kMosaic) + "\r\n";
+    mosaic += std::string(kSize) + "=12\r\n";
+    const std::string in =
+        CapturedPartialFilter("23,33", "0", "0", "100", "0.00") + mosaic;
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    kfs.push_back(BoxC(10));
+    const std::string want =
+        CapturedPartialFilter("0,10", Kf("0,50"), Kf("0,50"), Kf("200,100"),
+                              Kf("-30.00,0.00")) +
+        mosaic;
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes returns empty when there is nothing to write") {
+    // Case 7 and the rest of the "leave the timeline alone" answers: the caller
+    // has exactly ONE result to test against.
+    const std::string ok = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    kfs.push_back(BoxC(10));
+    // No partial-filter block at all.
+    std::string other = "[Object]\r\nframe=0,10\r\n[Object.0]\r\neffect.name=";
+    other += kStd;
+    other += "\r\n";
+    CHECK(PatchAliasPartialFilterKeyframes(other, kfs, 1920, 1080, 11) == "");
+    // No "[Object]" meta section to own the frame line.
+    std::string headless = "[Object.0]\r\neffect.name=";
+    headless += kPartialFilter;
+    headless += "\r\nX=0\r\n";
+    CHECK(PatchAliasPartialFilterKeyframes(headless, kfs, 1920, 1080, 11) == "");
+    CHECK(PatchAliasPartialFilterKeyframes("", kfs, 1920, 1080, 11) == "");
+    CHECK(PatchAliasPartialFilterKeyframes(ok, {}, 1920, 1080, 11) == "");
+    CHECK(PatchAliasPartialFilterKeyframes(ok, kfs, 1920, 1080, 0) == "");
+    CHECK(PatchAliasPartialFilterKeyframes(ok, kfs, 0, 1080, 11) == "");
+    CHECK(PatchAliasPartialFilterKeyframes(ok, kfs, 1920, 0, 11) == "");
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes keeps a BOM") {
+    // Case 8: an alias that arrived with a BOM goes back out with it.
+    const std::string in =
+        "\xEF\xBB\xBF" + CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(BoxA(0));
+    const std::string want =
+        "\xEF\xBB\xBF" + CapturedPartialFilter("0,10", "0", "0", "200", "-30.00");
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes clamps the aspect to two decimals") {
+    // Case 9: a box that is all but flat would want +/-100, where the short
+    // side collapses to nothing. RectToPartialFilter clamps at +/-99.99 and the
+    // line carries two decimals, the way the capture writes the aspect.
+    const std::string in = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(TrackKeyframe{0, 0.0, 0.0, 200.0, 0.001});   // landscape
+    kfs.push_back(TrackKeyframe{10, 0.0, 0.0, 0.001, 200.0});  // portrait
+    const std::string want = CapturedPartialFilter(
+        "0,10", Kf("-860,-960"), Kf("-540,-440"), Kf("200,200"),
+        Kf("-99.99,99.99"));
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+TEST_CASE("PatchAliasPartialFilterKeyframes rounds X, Y and size to whole numbers") {
+    // Case 10: the capture has no decimals on X / Y / size, so they are rounded
+    // half-away-from-zero. -479.5 -> -480 and -59.5 -> -60 pin the direction.
+    const std::string in = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    std::vector<TrackKeyframe> kfs;
+    kfs.push_back(TrackKeyframe{0, 100.2, 200.7, 50.4, 50.4});   // -834.6, -314.1, 50.4
+    kfs.push_back(TrackKeyframe{10, 0.0, 0.0, 961.0, 961.0});    // -479.5,  -59.5, 961
+    const std::string want =
+        CapturedPartialFilter("0,10", Kf("-835,-480"), Kf("-314,-60"),
+                              Kf("50,961"), Kf("0.00,0.00"));
+    CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
 }

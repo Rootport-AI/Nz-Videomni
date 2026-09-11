@@ -44,6 +44,10 @@ const char kEffectPartialFilterJp[] =
     "\xe9\x83\xa8\xe5\x88\x86\xe3\x83\x95\xe3\x82\xa3\xe3\x83\xab\xe3\x82\xbf";  // "partial filter"
 const char kItemAspectJp[] =
     "\xe7\xb8\xa6\xe6\xa8\xaa\xe6\xaf\x94";  // "aspect ratio" item
+// The move method written into every keyframed line (the capture's own choice;
+// see PatchAliasPartialFilterKeyframes in alias_util.h).
+const char kMoveLinearJp[] =
+    "\xe7\x9b\xb4\xe7\xb7\x9a\xe7\xa7\xbb\xe5\x8b\x95";  // "linear move"
 // ASCII fallback prefix. The webui always passes an explicit, localized prefix
 // (spec 5-5's 4-stage labels), so this default is only reached on an off-nominal
 // path with no caller prefix; keep it ASCII so no tofu box can ever appear.
@@ -210,13 +214,18 @@ bool ParseFirstValueToken(const std::string& raw, double* out) {
 // would collapse to zero (see RectToPartialFilter's contract).
 constexpr double kAspectLimit = 99.99;
 
-// Format a double with EXACTLY three decimals, e.g. 10.0416666 -> "10.042",
-// 10.0 -> "10.000", 0.5 -> "0.500". Deliberately NOT snprintf("%.3f"): that
-// honours the C locale's decimal point, and the host process may have called
-// setlocale, which would emit "10,042" and corrupt the comma-separated
-// "playback position" value. Integer arithmetic has no such dependency.
-// Rounding is half-away-from-zero, matching AviUtl2's own 3-decimal output.
-std::string Fixed3(double value) {
+// Format a double with EXACTLY `digits` decimals (0 to 3), e.g. 10.0416666 ->
+// "10.042" / "10.04" / "10". Deliberately NOT snprintf("%.*f"): that honours the
+// C locale's decimal point, and the host process may have called setlocale,
+// which would emit "10,042" and corrupt every comma-separated value this file
+// writes. Integer arithmetic has no such dependency. Rounding is
+// half-away-from-zero, matching AviUtl2's own output; a value that rounds to
+// zero loses its sign, so a box a hair left of centre is "0", never "-0".
+std::string FixedDecimals(double value, int digits) {
+    long long scale = 1;
+    for (int i = 0; i < digits; ++i) {
+        scale *= 10;
+    }
     const bool negative = value < 0.0;
     double magnitude = negative ? -value : value;
     // Keep the scaled value far inside the 64-bit range (an out-of-range
@@ -226,23 +235,101 @@ std::string Fixed3(double value) {
     if (!(magnitude < kMaxMagnitude)) {
         magnitude = magnitude > kMaxMagnitude ? kMaxMagnitude : 0.0;
     }
-    const long long scaled = static_cast<long long>(magnitude * 1000.0 + 0.5);
-    const long long whole = scaled / 1000;
-    const long long frac = scaled % 1000;
+    const long long scaled =
+        static_cast<long long>(magnitude * static_cast<double>(scale) + 0.5);
+    const long long whole = scaled / scale;
+    const long long frac = scaled % scale;
     std::string out;
-    if (negative) {
+    if (negative && scaled != 0) {
         out += '-';
     }
     out += std::to_string(whole);
-    out += '.';
-    if (frac < 100) {
-        out += '0';
+    if (digits > 0) {
+        out += '.';
+        std::string f = std::to_string(frac);
+        while (static_cast<int>(f.size()) < digits) {
+            f.insert(f.begin(), '0');
+        }
+        out += f;
     }
-    if (frac < 10) {
-        out += '0';
-    }
-    out += std::to_string(frac);
     return out;
+}
+
+// The three-decimal form the "playback position" item wants.
+std::string Fixed3(double value) { return FixedDecimals(value, 3); }
+
+// Split a value on commas WITHOUT trimming - the callers trim the pieces they
+// actually inspect, and a collapsed value is handed back with its original
+// spelling intact.
+std::vector<std::string> SplitCommas(const std::string& s) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (char c : s) {
+        if (c == ',') {
+            out.push_back(cur);
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    out.push_back(cur);
+    return out;
+}
+
+// True when the whole token (spaces, tabs and a stray CR aside) is a finite
+// number, read locale-independently like ParseFirstValueToken above.
+bool IsNumericToken(const std::string& tok) {
+    size_t b = 0;
+    size_t e = tok.size();
+    while (b < e && (tok[b] == ' ' || tok[b] == '\t')) {
+        ++b;
+    }
+    while (e > b && (tok[e - 1] == ' ' || tok[e - 1] == '\t' || tok[e - 1] == '\r')) {
+        --e;
+    }
+    if (b >= e) {
+        return false;
+    }
+    double value = 0.0;
+    const char* first = tok.data() + b;
+    const char* last = tok.data() + e;
+    const std::from_chars_result r = std::from_chars(first, last, value);
+    return r.ec == std::errc() && r.ptr == last && std::isfinite(value);
+}
+
+// Recognise a keyframed item value - "<v0>,...,<vN-1>,<move method>,<0>" - and
+// hand back its FIRST value. Shape is the only signal the alias format offers:
+// one or more leading numbers, then a non-numeric token (the move method's
+// name), then a number. See PatchAliasPartialFilterKeyframes in alias_util.h
+// for why these lines have to be collapsed and what that costs.
+bool CollapseKeyframedValue(const std::string& raw, std::string* out) {
+    const std::vector<std::string> toks = SplitCommas(raw);
+    if (toks.size() < 3) {
+        return false;  // too short to hold values + method + trailing number
+    }
+    const size_t method = toks.size() - 2;
+    if (!IsNumericToken(toks.back()) || IsNumericToken(toks[method]) ||
+        Trim(toks[method]).empty()) {
+        return false;
+    }
+    for (size_t i = 0; i < method; ++i) {
+        if (!IsNumericToken(toks[i])) {
+            return false;
+        }
+    }
+    *out = toks[0];
+    return true;
+}
+
+// Index one past the section that starts at `header_idx`, i.e. the next section
+// header or the end of the document.
+size_t SectionEnd(const std::vector<std::string>& lines, size_t header_idx) {
+    for (size_t j = header_idx + 1; j < lines.size(); ++j) {
+        if (IsSectionHeader(lines[j])) {
+            return j;
+        }
+    }
+    return lines.size();
 }
 
 // First codepoints of a UTF-8 string (<= max_cp). *truncated is set when bytes
@@ -679,12 +766,12 @@ bool ParsePartialFilterValues(const std::string& alias, PartialFilterValues* out
         }
     }
 
-    // X, Y and the aspect ratio all default to 0, and AviUtl2 may well leave an
-    // item out of the alias when it still sits on its default - a square box
-    // the user never touched would then have no aspect line. Treating that as
-    // "not a partial filter" would refuse to track it, so an absent line takes
-    // the default and only an unreadable one fails. The size has no useful
-    // default (0 is no box at all), so its line stays mandatory.
+    // X, Y and the aspect ratio all default to 0. The 2026-09-11 capture shows
+    // AviUtl2 writing every item out, defaults included, so all four lines are
+    // in practice always present - but treating an absent one as "not a partial
+    // filter" would refuse to track a perfectly good box, so an absent line
+    // takes its default and only an unreadable one fails. The size has no
+    // useful default (0 is no box at all), so its line stays mandatory.
     if ((seen_x && !have_x) || (seen_y && !have_y) ||
         (seen_aspect && !have_aspect) || !have_size) {
         return false;
@@ -727,18 +814,230 @@ std::string FirstEffectName(const std::string& alias) {
 std::string PatchAliasPartialFilterKeyframes(const std::string& alias,
                                              const std::vector<TrackKeyframe>& kfs,
                                              int scene_w, int scene_h, int length) {
-    // PROVISIONAL - see the long note on the declaration in alias_util.h. The
-    // multi-keyframe on-disk format is being captured from a real AviUtl2
-    // project (plan M0); until that capture is transcribed into
-    // Docs\SDK_REFERENCE.md section 16 this returns an empty string, which the
-    // tracking worker reads as "do not touch the timeline" and reports as
-    // TRACK_WRITEBACK_FAILED. Every argument is intentionally unused.
-    (void)alias;
-    (void)kfs;
-    (void)scene_w;
-    (void)scene_h;
-    (void)length;
-    return std::string();
+    // Every one of these means "there is nothing safe to write"; the caller
+    // reads the empty string as "leave the timeline alone".
+    if (kfs.empty() || length < 1 || scene_w <= 0 || scene_h <= 0) {
+        return std::string();
+    }
+    const std::string src = StripUtf8Bom(alias);
+    const bool had_bom = src.size() != alias.size();
+    const std::string eol = DetectEol(src);
+    bool trailing = false;
+    const std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    // --- 1. locate the "[Object]" meta section ------------------------------
+    int obj_idx = -1;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (Trim(lines[i]) == "[Object]") {
+            obj_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    if (obj_idx < 0) {
+        return std::string();  // no "frame=" to own: not an object alias
+    }
+    const size_t obj_end = SectionEnd(lines, static_cast<size_t>(obj_idx));
+
+    // --- 2. locate the FIRST partial-filter effect block --------------------
+    // Only "[Object.<n>]" sections are considered, so a "[Object]" meta section
+    // carrying an effect.name-shaped line cannot be mistaken for effect 0 (the
+    // same rule FirstEffectName follows).
+    int pf_start = -1;
+    size_t pf_end = lines.size();
+    size_t i = 0;
+    while (i < lines.size()) {
+        if (!IsEffectSectionHeader(lines[i])) {
+            ++i;
+            continue;
+        }
+        const size_t e = SectionEnd(lines, i);
+        for (size_t k = i + 1; k < e; ++k) {
+            const size_t eq = lines[k].find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            if (Trim(lines[k].substr(0, eq)) == "effect.name" &&
+                Trim(lines[k].substr(eq + 1)) == kEffectPartialFilterJp) {
+                pf_start = static_cast<int>(i);
+                pf_end = e;
+                break;
+            }
+        }
+        if (pf_start >= 0) {
+            break;
+        }
+        i = e;
+    }
+    if (pf_start < 0) {
+        return std::string();  // nothing to keyframe
+    }
+
+    // --- 3. boundaries and the value at each one ----------------------------
+    // `kfs` arrives ascending, 0-based and inside [0, length - 1] (the worker
+    // builds it that way from its own sample offsets). The two skips below are
+    // guards, not code paths: a boundary outside the object or a repeat of the
+    // one before it cannot be written as a frame list.
+    std::vector<int> bounds;
+    std::vector<PartialFilterValues> vals;
+    for (const TrackKeyframe& k : kfs) {
+        if (k.frame_offset < 0 || k.frame_offset > length - 1) {
+            continue;
+        }
+        if (!bounds.empty() && k.frame_offset <= bounds.back()) {
+            continue;
+        }
+        bounds.push_back(k.frame_offset);
+        vals.push_back(RectToPartialFilter(k.x, k.y, k.w, k.h, scene_w, scene_h));
+    }
+    if (bounds.empty()) {
+        return std::string();
+    }
+    const bool keyframed = bounds.size() >= 2;
+    if (keyframed) {
+        if (bounds.front() != 0) {
+            // Cannot happen from the worker (its first sample is the seed box
+            // at offset 0); a run that somehow started late holds its first box
+            // from the object's start rather than leaving the head unpinned.
+            const PartialFilterValues first = vals.front();  // copy: vals grows
+            bounds.insert(bounds.begin(), 0);
+            vals.insert(vals.begin(), first);
+        }
+        if (bounds.back() != length - 1) {
+            // A stopped or truncated run: hold the last box to the very end.
+            const PartialFilterValues last = vals.back();  // copy: vals grows
+            bounds.push_back(length - 1);
+            vals.push_back(last);
+        }
+    } else {
+        // One keyframe is a constant box: single values, and the plain
+        // start/end pair the "left alone" capture writes.
+        bounds.assign(1, 0);
+        bounds.push_back(length - 1);
+    }
+
+    // --- 4. the replacement lines -------------------------------------------
+    std::string frame_val;
+    for (size_t n = 0; n < bounds.size(); ++n) {
+        if (n != 0) {
+            frame_val += ',';
+        }
+        frame_val += std::to_string(bounds[n]);
+    }
+    std::string x_val;
+    std::string y_val;
+    std::string size_val;
+    std::string aspect_val;
+    for (size_t n = 0; n < vals.size(); ++n) {
+        if (n != 0) {
+            x_val += ',';
+            y_val += ',';
+            size_val += ',';
+            aspect_val += ',';
+        }
+        // X / Y / size are whole numbers and the aspect carries two decimals,
+        // exactly as the capture spells them.
+        x_val += FixedDecimals(vals[n].x, 0);
+        y_val += FixedDecimals(vals[n].y, 0);
+        size_val += FixedDecimals(vals[n].size, 0);
+        aspect_val += FixedDecimals(vals[n].aspect, 2);
+    }
+    if (keyframed) {
+        const std::string tail = std::string(",") + kMoveLinearJp + ",0";
+        x_val += tail;
+        y_val += tail;
+        size_val += tail;
+        aspect_val += tail;
+    }
+
+    // --- 5. which of the four lines are already there? ----------------------
+    bool have_frame = false;
+    for (size_t j = static_cast<size_t>(obj_idx) + 1; j < obj_end; ++j) {
+        if (KeyOf(lines[j]) == "frame") {
+            have_frame = true;
+            break;
+        }
+    }
+    bool have_x = false;
+    bool have_y = false;
+    bool have_size = false;
+    bool have_aspect = false;
+    for (size_t j = static_cast<size_t>(pf_start) + 1; j < pf_end; ++j) {
+        const std::string key = KeyOf(lines[j]);
+        if (key == "X") {
+            have_x = true;
+        } else if (key == "Y") {
+            have_y = true;
+        } else if (key == kItemSize) {
+            have_size = true;
+        } else if (key == kItemAspectJp) {
+            have_aspect = true;
+        }
+    }
+
+    // --- 6. rebuild the document in one pass --------------------------------
+    std::vector<std::string> out;
+    out.reserve(lines.size() + 5);
+    // The capture writes all four, so this only ever fires for an alias built
+    // by something other than AviUtl2.
+    const auto append_missing = [&]() {
+        if (!have_x) {
+            out.push_back("X=" + x_val);
+        }
+        if (!have_y) {
+            out.push_back("Y=" + y_val);
+        }
+        if (!have_size) {
+            out.push_back(std::string(kItemSize) + "=" + size_val);
+        }
+        if (!have_aspect) {
+            out.push_back(std::string(kItemAspectJp) + "=" + aspect_val);
+        }
+    };
+    for (size_t j = 0; j < lines.size(); ++j) {
+        if (j == pf_end) {
+            append_missing();  // end of the block: just before the next header
+        }
+        const std::string& line = lines[j];
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos || IsSectionHeader(line)) {
+            out.push_back(line);
+        } else {
+            const std::string key = Trim(line.substr(0, eq));
+            const bool in_obj = j > static_cast<size_t>(obj_idx) && j < obj_end;
+            const bool in_pf = j > static_cast<size_t>(pf_start) && j < pf_end;
+            std::string collapsed;
+            if (in_obj && key == "frame") {
+                out.push_back("frame=" + frame_val);
+            } else if (in_pf && key == "X") {
+                out.push_back("X=" + x_val);
+            } else if (in_pf && key == "Y") {
+                out.push_back("Y=" + y_val);
+            } else if (in_pf && key == kItemSize) {
+                out.push_back(std::string(kItemSize) + "=" + size_val);
+            } else if (in_pf && key == kItemAspectJp) {
+                out.push_back(std::string(kItemAspectJp) + "=" + aspect_val);
+            } else if (j > static_cast<size_t>(pf_start) && key != "effect.name" &&
+                       CollapseKeyframedValue(line.substr(eq + 1), &collapsed)) {
+                // Another item still keyframed against the OLD boundaries: it
+                // is frozen at its first value (see alias_util.h).
+                out.push_back(line.substr(0, eq + 1) + collapsed);
+            } else {
+                out.push_back(line);
+            }
+        }
+        if (j == static_cast<size_t>(obj_idx) && !have_frame) {
+            out.push_back("frame=" + frame_val);
+        }
+    }
+    if (pf_end >= lines.size()) {
+        append_missing();  // the partial filter was the last block
+    }
+
+    std::string text = Join(out, eol, trailing);
+    if (had_bom) {
+        text.insert(0, "\xEF\xBB\xBF");
+    }
+    return text;
 }
 
 }  // namespace nzvideomni

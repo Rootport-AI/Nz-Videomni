@@ -1214,7 +1214,10 @@ bool ParseTrackObject(const json_t& params, TrackObjectRequest* out,
 // Build the JSON result object for timeline.trackObject. 'frames' is how many
 // frames were actually tracked (which is less than the object's length when the
 // user stopped early), 'keyframes' how many were written back, and
-// 'lostRanges' the inclusive 0-based-relative runs the panel lists. 'cancelled'
+// 'lostRanges' the inclusive runs the panel lists, in ABSOLUTE AviUtl2 frame
+// numbers - the same rule as the progress event's 'frame' (the bridge adds the
+// object's start frame back before calling; PostProcessTrack itself works in
+// object-relative offsets). 'cancelled'
 // is true when the stop button ended the run - the write-back still happened,
 // so 'ok' and 'cancelled' are both true on a successful early stop (design
 // section 3.2).

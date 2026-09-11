@@ -57,25 +57,20 @@ TrackPostResult PostProcessTrack(const std::vector<TrackSample>& samples,
     // "Keep following" (hold_on_lost == false) leaves the raw boxes alone, which
     // is the whole point of that setting: the user wants to see where the
     // tracker drifted to, not a frozen box.
+    // One rule, no special cases: a lost sample takes the last good box SEEN SO
+    // FAR, and a lost sample with no good box before it keeps its raw one. The
+    // leading run therefore stays raw - which in practice never happens, since
+    // the first sample is the seed the caller handed the tracker and the backend
+    // answers it with score 1.0.
     if (opt.hold_on_lost) {
-        // A leading lost run has no PRECEDING good box, so it borrows the first
-        // good one that appears later. With no good sample at all there is
-        // nothing to hold and the raw boxes pass through.
-        size_t first_good = n;
+        bool have_held = false;
+        WorkBox held;
         for (size_t i = 0; i < n; ++i) {
             if (!lost[i]) {
-                first_good = i;
-                break;
-            }
-        }
-        if (first_good < n) {
-            WorkBox held = box[first_good];
-            for (size_t i = 0; i < n; ++i) {
-                if (lost[i]) {
-                    box[i] = held;
-                } else {
-                    held = box[i];
-                }
+                held = box[i];
+                have_held = true;
+            } else if (have_held) {
+                box[i] = held;
             }
         }
     }

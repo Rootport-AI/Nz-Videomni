@@ -457,6 +457,9 @@ struct TimelineMenuItem {
 // restored, sitting right after the Image block as before, now that the
 // windowed-mode implementation resolves the crossfade issue that had it
 // pulled from the user's reach.
+//
+// Object tracking (section 3-54, 16 items): trackObject is appended at the end
+// - it is the only entry that acts on a partial filter rather than on media.
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: generate using this video as reference (IC-LoRA)",      "referenceVideo",    &OnMenu_ReferenceVideo },

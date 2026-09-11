@@ -627,6 +627,13 @@ bool ParsePartialFilterValues(const std::string& alias, PartialFilterValues* out
     double y = 0.0;
     double size = 0.0;
     double aspect = 0.0;
+    // "seen" is "the line was there at all"; "have" is "and its first token
+    // parsed". A line that is present but unreadable is a malformed alias and
+    // fails; a line that is simply absent falls back to its default (see the
+    // header).
+    bool seen_x = false;
+    bool seen_y = false;
+    bool seen_aspect = false;
     bool have_x = false;
     bool have_y = false;
     bool have_size = false;
@@ -659,17 +666,27 @@ bool ParsePartialFilterValues(const std::string& alias, PartialFilterValues* out
             continue;
         }
         if (key == "X") {
+            seen_x = true;
             have_x = ParseFirstValueToken(raw, &x);
         } else if (key == "Y") {
+            seen_y = true;
             have_y = ParseFirstValueToken(raw, &y);
         } else if (key == kItemSize) {
             have_size = ParseFirstValueToken(raw, &size);
         } else if (key == kItemAspectJp) {
+            seen_aspect = true;
             have_aspect = ParseFirstValueToken(raw, &aspect);
         }
     }
 
-    if (!have_x || !have_y || !have_size || !have_aspect) {
+    // X, Y and the aspect ratio all default to 0, and AviUtl2 may well leave an
+    // item out of the alias when it still sits on its default - a square box
+    // the user never touched would then have no aspect line. Treating that as
+    // "not a partial filter" would refuse to track it, so an absent line takes
+    // the default and only an unreadable one fails. The size has no useful
+    // default (0 is no box at all), so its line stays mandatory.
+    if ((seen_x && !have_x) || (seen_y && !have_y) ||
+        (seen_aspect && !have_aspect) || !have_size) {
         return false;
     }
     out->x = x;

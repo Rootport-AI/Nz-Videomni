@@ -86,10 +86,12 @@ struct TrackPostResult {
 // no ranges) - the caller treats that as "nothing to write back".
 //
 // Notes that the stage list alone does not pin down:
-//   * Stage 2 needs a box to hold: when the FIRST samples are lost there is no
-//     "last good" one yet, so they borrow the first good box that appears later.
-//     When EVERY sample is lost there is no good box at all and the raw boxes
-//     pass through unchanged.
+//   * Stage 2 needs a box to hold, and only ever looks BACKWARDS: a lost sample
+//     with no good sample before it - a leading lost run, or an all-lost run -
+//     keeps its raw box. A leading lost run cannot actually occur, because the
+//     first sample is the seed box the caller handed the tracker and the backend
+//     answers it with a score of 1.0; the rule is stated this way so there is no
+//     second case to reason about.
 //   * Stage 4's "seed" is the first RAW sample's w/h, captured before any other
 //     stage runs - it is the box the user aimed in AviUtl2's preview, which is
 //     also what was sent to the tracker as the initialisation box.

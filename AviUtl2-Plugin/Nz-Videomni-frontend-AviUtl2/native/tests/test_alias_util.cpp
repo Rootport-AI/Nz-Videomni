@@ -494,17 +494,34 @@ TEST_CASE("ParsePartialFilterValues takes the FIRST token of a keyframed value")
     CHECK(v.aspect == doctest::Approx(-50.0));
 }
 
-TEST_CASE("ParsePartialFilterValues needs all four lines") {
+TEST_CASE("ParsePartialFilterValues needs the size line and nothing else") {
+    // A missing X / Y / aspect line means "still on its default", which is 0 -
+    // a square box whose aspect ratio the user never touched is the case this
+    // exists for. Only the size has no usable default.
     PartialFilterValues v;
+    REQUIRE(ParsePartialFilterValues(
+        MakePartialFilterAlias("", "-290", "200", "-50"), &v));
+    CHECK(v.x == doctest::Approx(0.0));
+    CHECK(v.y == doctest::Approx(-290.0));
+    REQUIRE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", "", "200", "-50"), &v));
+    CHECK(v.y == doctest::Approx(0.0));
+    REQUIRE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", "-290", "200", ""), &v));
+    CHECK(v.aspect == doctest::Approx(0.0));
+    CHECK(v.size == doctest::Approx(200.0));
+    // All three at once: the bare square box.
+    REQUIRE(ParsePartialFilterValues(
+        MakePartialFilterAlias("", "", "200", ""), &v));
+    CHECK(v.x == doctest::Approx(0.0));
+    CHECK(v.y == doctest::Approx(0.0));
+    CHECK(v.aspect == doctest::Approx(0.0));
+    CHECK(v.size == doctest::Approx(200.0));
+
+    // No size line: there is no box, and the output is left alone.
     v.size = 4242.0;  // sentinel: a failed parse must not touch the output
     CHECK_FALSE(ParsePartialFilterValues(
-        MakePartialFilterAlias("", "-290", "200", "-50"), &v));
-    CHECK_FALSE(ParsePartialFilterValues(
-        MakePartialFilterAlias("-760", "", "200", "-50"), &v));
-    CHECK_FALSE(ParsePartialFilterValues(
         MakePartialFilterAlias("-760", "-290", "", "-50"), &v));
-    CHECK_FALSE(ParsePartialFilterValues(
-        MakePartialFilterAlias("-760", "-290", "200", ""), &v));
     CHECK(v.size == doctest::Approx(4242.0));
 }
 
@@ -522,12 +539,38 @@ TEST_CASE("ParsePartialFilterValues ignores a different effect's items") {
 
 TEST_CASE("ParsePartialFilterValues rejects a value it cannot fully read") {
     PartialFilterValues v;
-    // Trailing junk inside the first token, not a separate token.
+    // Trailing junk inside the first token, not a separate token. A line that
+    // IS there and does not parse is a malformed alias - it does not fall back
+    // to the default the way an absent line does.
     CHECK_FALSE(ParsePartialFilterValues(
         MakePartialFilterAlias("-760px", "-290", "200", "-50"), &v));
     // An empty first token.
     CHECK_FALSE(ParsePartialFilterValues(
         MakePartialFilterAlias("-760", ",-290", "200", "-50"), &v));
+    // Same for the aspect ratio, which is otherwise the most defaultable item.
+    CHECK_FALSE(ParsePartialFilterValues(
+        MakePartialFilterAlias("-760", "-290", "200", "zero"), &v));
+}
+
+TEST_CASE("ParsePartialFilterValues ignores value lines ahead of effect.name") {
+    // The parser only starts collecting once it has seen the effect.name that
+    // says which effect the block belongs to, so anything above that line is
+    // not attributed to the partial filter. This case pins that behaviour:
+    // the X above effect.name is dropped (X falls back to its default 0) and
+    // the one below it is the value that counts.
+    std::string a = "[Object]\nframe=0,120\n[Object.0]\nX=777\n";
+    a += std::string(kSize) + "=999\n";
+    a += "effect.name=";
+    a += kPartialFilter;
+    a += "\nY=-290\n";
+    a += std::string(kSize) + "=200\n";
+    a += std::string(kAspect) + "=-50\n";
+    PartialFilterValues v;
+    REQUIRE(ParsePartialFilterValues(a, &v));
+    CHECK(v.x == doctest::Approx(0.0));
+    CHECK(v.y == doctest::Approx(-290.0));
+    CHECK(v.size == doctest::Approx(200.0));
+    CHECK(v.aspect == doctest::Approx(-50.0));
 }
 
 TEST_CASE("ParsePartialFilterValues survives a BOM and CRLF line endings") {

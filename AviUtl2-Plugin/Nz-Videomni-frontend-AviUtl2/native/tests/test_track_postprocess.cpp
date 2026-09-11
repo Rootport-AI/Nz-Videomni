@@ -121,16 +121,21 @@ TEST_CASE("keep-following leaves the raw boxes of a lost stretch alone") {
     CHECK(r.lost_ranges[0].start == 1);
 }
 
-TEST_CASE("a lost run at the head borrows the first good box") {
-    // There is no preceding good box, so the earliest good one is projected
-    // backwards rather than leaving a wild box at frame 0.
+TEST_CASE("a lost run at the head keeps its raw boxes") {
+    // Holding only ever looks backwards, and there is no good box before these,
+    // so they pass through. In a real run this cannot happen: sample 0 is the
+    // seed box the caller handed the tracker, which scores 1.0.
     std::vector<TrackSample> in{S(0, 900, 0, 10, 10, 0.1),
                                 S(1, 950, 0, 10, 10, 0.1),
                                 S(2, 300, 0, 10, 10, 0.9)};
     const TrackPostResult r = PostProcessTrack(in, Opt());
     REQUIRE(r.keyframes.size() == 3);
-    CHECK(r.keyframes[0].x == doctest::Approx(300.0));
-    CHECK(r.keyframes[1].x == doctest::Approx(300.0));
+    CHECK(r.keyframes[0].x == doctest::Approx(900.0));
+    CHECK(r.keyframes[1].x == doctest::Approx(950.0));
+    CHECK(r.keyframes[2].x == doctest::Approx(300.0));
+    REQUIRE(r.lost_ranges.size() == 1);
+    CHECK(r.lost_ranges[0].start == 0);
+    CHECK(r.lost_ranges[0].end == 1);
 }
 
 TEST_CASE("a lost run at the tail holds the last good box") {
@@ -257,9 +262,11 @@ TEST_CASE("follow_size off pins w and h to the seed for every keyframe") {
     CHECK(r.keyframes[2].x == doctest::Approx(20.0));
 }
 
-TEST_CASE("the pinned size is the RAW first sample, not the held one") {
-    // Frame 0 is lost and gets refilled from frame 1 by stage 2; stage 4 must
-    // still use the seed the user aimed in the preview, captured beforehand.
+TEST_CASE("the pinned size is the first sample's, even when it is lost") {
+    // Frame 0 is lost, and holding leaves it alone because nothing good comes
+    // before it; stage 4 pins every box to that same first sample, which is the
+    // seed the user aimed in the preview. Frame 1's much larger box, good score
+    // and all, must not become the pinned size.
     std::vector<TrackSample> in{S(0, 0, 0, 11, 22, 0.1), S(1, 0, 0, 500, 600, 0.9)};
     TrackPostOptions o = Opt();
     o.follow_size = false;

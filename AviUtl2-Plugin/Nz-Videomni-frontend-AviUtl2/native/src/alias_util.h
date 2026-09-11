@@ -170,10 +170,16 @@ bool PartialFilterToRect(const PartialFilterValues& v, int scene_w, int scene_h,
 // alias. Each value line may already carry keyframes, in which case the value is
 // a comma-separated list ("100,250,<interpolation>,0"); THE FIRST NUMERIC TOKEN
 // is taken, because that is the value at the object's first frame - the frame
-// whose box seeds the tracker. Returns false unless all four lines (X, Y, the
-// Japanese "size" and "aspect ratio" items) are present and each one's first
-// token parses as a finite number; *out is then untouched. A leading BOM is
+// whose box seeds the tracker. The Japanese "size" line MUST be there and MUST
+// parse; X, Y and the Japanese "aspect ratio" line fall back to their default
+// of 0 when the line is absent, and fail when the line is there but its first
+// token is not a finite number. On failure *out is untouched. A leading BOM is
 // stripped and both CRLF and LF inputs are accepted.
+//
+// REALDEVICE-VERIFY: the lenient default is the safe side of a guess - it is
+// not yet captured whether AviUtl2 writes out an item that still sits on its
+// default value. Once a real alias has been collected, revisit this: if every
+// item is always written, all four lines can go back to being mandatory.
 //
 // Parsing is locale-independent (std::from_chars), like ParsePlaybackRange in
 // bridge_core: the host process may have called setlocale, and a comma decimal

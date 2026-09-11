@@ -3003,6 +3003,12 @@ TEST_CASE("ParseTrackObject rejects out-of-range numbers") {
     p = ValidTrackParams();
     p["frame"] = 12.5;
     CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    // The stride is the same kind of field: 2.5 is not "keep every other one
+    // and a bit", it is a caller that computed the wrong thing.
+    p = ValidTrackParams();
+    p["keyframeStride"] = 2.5;
+    CHECK_FALSE(nzvideomni::ParseTrackObject(p, &out, &err));
+    CHECK(err.find("keyframeStride") != std::string::npos);
     // Wrong types.
     p = ValidTrackParams();
     p["followSize"] = "yes";

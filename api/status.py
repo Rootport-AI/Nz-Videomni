@@ -40,6 +40,13 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
         # non-default one can actually run here. See
         # PipelineManager.acceleration_status_block for the truth table.
         "acceleration": pm.acceleration_status_block(),
+        # Object tracking (§3-54), ADDITIVE and deliberately its own block:
+        # {"available": true} or {"available": false, "reason": ...} with
+        # exactly two reasons ("not installed" / "worker failed"). It is NOT
+        # folded into ``queue`` or ``state`` because tracking takes no queue
+        # slot and has no bearing on the pipeline's lifecycle — the frontend
+        # reads it to grey out the Toolbox panel, nothing more.
+        "tracking": context.tracking_manager.status_block(),
         "queue": {
             "mode": "single_job_in_memory",
             **context.job_store.counts(),

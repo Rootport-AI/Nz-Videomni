@@ -50,6 +50,7 @@
 // re-discovery / resolve / orphan logic + ScannedObject POD (provisional).
 #include "alias_util.h"
 #include "provisional.h"
+#include "track_postprocess.h"  // TrackKeyframe / TrackRange (section 3-54)
 
 namespace nzvideomni {
 
@@ -1174,5 +1175,67 @@ json_t MakeResolveDroppedFilesResult(const ResolveDroppedFilesRequest& req);
 // called, regardless of `paths` being empty).
 std::string InjectDroppedPathsIntoRequest(const std::string& request_json,
                                           const std::vector<std::string>& paths);
+
+// ---------------------------------------------------------------------------
+// timeline.trackObject / timeline.cancelTracking (async, section 3-54) - pure
+// parsing / result and event formatting.
+//
+// Dispatch stays in the bridge (mirrors timeline.cutoutRange): the bridge
+// validates with ParseTrackObject, runs the render / POST / post-process /
+// write-back loop off the UI thread (TrackObjectWorker in bridge.cpp), streams
+// MakeTrackProgressEvent payloads through the ResponsePoster as it goes, and
+// formats the final reply with MakeTrackObjectResult. HandleRequestJson does
+// NOT handle either method. Docs\OBJECT_TRACKING_DESIGN.md sections 5.2 / 5.3
+// are the canonical contract.
+// ---------------------------------------------------------------------------
+
+struct TrackObjectRequest {
+    int layer = 0;
+    int frame = 0;  // MUST be the selection snapshot's frameStart (design 5.2)
+    double search_factor = 4.0;
+    double smoothing = 0.0;
+    bool follow_size = true;
+    double lost_score_threshold = 0.0;
+    std::string lost_behavior;  // "hold" | "continue"
+    int keyframe_stride = 1;
+};
+
+// Validate params of timeline.trackObject. EVERY field is required (the webui
+// always sends its full, persisted settings block; there is no "native picks a
+// default" path - design section 2 puts the defaults in the panel). Ranges:
+// 'layer' / 'frame' integers >= 0, 'searchFactor' in [2, 6], 'smoothing' and
+// 'lostScoreThreshold' in [0, 1], 'followSize' boolean, 'lostBehavior' one of
+// "hold" | "continue", 'keyframeStride' an integer >= 1. Numeric fields accept
+// an integer or a real (JSON has one number type; the webui's sliders emit
+// both). Returns false + *err_message (BAD_REQUEST) on any failure.
+bool ParseTrackObject(const json_t& params, TrackObjectRequest* out,
+                      std::string* err_message);
+
+// Build the JSON result object for timeline.trackObject. 'frames' is how many
+// frames were actually tracked (which is less than the object's length when the
+// user stopped early), 'keyframes' how many were written back, and
+// 'lostRanges' the inclusive runs the panel lists, in ABSOLUTE AviUtl2 frame
+// numbers - the same rule as the progress event's 'frame' (the bridge adds the
+// object's start frame back before calling; PostProcessTrack itself works in
+// object-relative offsets). 'cancelled'
+// is true when the stop button ended the run - the write-back still happened,
+// so 'ok' and 'cancelled' are both true on a successful early stop (design
+// section 3.2).
+json_t MakeTrackObjectResult(bool ok, int frames,
+                             const std::vector<TrackKeyframe>& keyframes,
+                             const std::vector<TrackRange>& lost_ranges,
+                             double elapsed_ms, bool cancelled);
+
+// Serialize one timeline.trackProgress event:
+//   {"event":"timeline.trackProgress",
+//    "data":{"frame":..,"index":..,"total":..,"score":..,"lost":..}}
+// An object carrying 'event' and NO 'id' is routed to the webui's event
+// subscribers rather than to a pending RPC (bridge/types.ts isBridgeEvent), so
+// this string goes straight through Bridge::ResponsePoster. 'frame' is the
+// AviUtl2 frame number; 'index' / 'total' are 1-based progress counters. The
+// bridge throttles emission to one per 200 ms, always including the first and
+// last frame (design section 5.3); nothing about that lives here.
+std::string MakeTrackProgressEvent(int frame, int index, int total, double score,
+                                   bool lost);
 
 }  // namespace nzvideomni

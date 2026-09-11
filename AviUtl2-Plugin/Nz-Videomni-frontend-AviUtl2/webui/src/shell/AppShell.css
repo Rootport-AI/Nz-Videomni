@@ -57,10 +57,11 @@
 }
 
 /* X6: a disabled policy toggle (currently the fps axis's "materials" button —
- * material fps detection is deferred, X1 — and the mock mode tab, which is a
- * visual-only placeholder with no panel behind it). Phase 6 introduced two
- * such mock tabs (Toolbox / Edit); since 2026-08-09 **Edit is a real tab with
- * its own panel, so Toolbox is the only mock left**. Dimmed and
+ * material fps detection is deferred, X1) and a mode tab the LOADED base
+ * model's engine cannot run (§3-98 P5). Phase 6 introduced two mock tabs
+ * (Toolbox / Edit) that shared this look; Edit became a real tab on 2026-08-09
+ * and Toolbox on 2026-09-11 (§3-54), so **no mock tabs are left** and the
+ * base-model case is the only one reaching this rule. Dimmed and
  * non-interactive, with the hover highlight suppressed (see `:not(:disabled)`
  * above). Reuses the existing muted palette rather than a new colour. The
  * Edit tab's own sub-tab row copies this rule for its Inpainting mock — see

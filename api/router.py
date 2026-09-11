@@ -12,6 +12,7 @@ from api import (
     models_registry,
     pipeline,
     status,
+    tracking,
     uploads,
 )
 
@@ -24,3 +25,6 @@ api_router.include_router(uploads.router, tags=["upload"])
 api_router.include_router(generate.router, tags=["generate"])
 api_router.include_router(generate_chain.router, tags=["generate"])
 api_router.include_router(jobs.router, tags=["jobs"])
+# Object tracking (§3-54). Its own tag and its own namespace: it creates no job
+# and shares nothing with the generation endpoints above.
+api_router.include_router(tracking.router, tags=["tracking"])

@@ -1917,4 +1917,124 @@ std::string InjectDroppedPathsIntoRequest(const std::string& request_json,
     return req.dump();
 }
 
+
+// ---------------------------------------------------------------------------
+// timeline.trackObject / timeline.cancelTracking (section 3-54)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Read a required JSON number into *out and range-check it. JSON has a single
+// number type, so an integer literal (a slider that happens to sit on 1) and a
+// real are both accepted here - only 'layer' / 'frame' / 'keyframeStride' below
+// insist on integrality, and they use ReadTrackInt instead.
+bool ReadTrackNumber(const json& params, const char* key, double lo, double hi,
+                     double* out, std::string* err_message) {
+    if (!params.contains(key) || !params[key].is_number()) {
+        *err_message = std::string("timeline.trackObject requires a number '") + key +
+                       "'";
+        return false;
+    }
+    const double v = params[key].get<double>();
+    if (!(v >= lo && v <= hi)) {  // negated so a NaN also fails
+        *err_message = std::string("timeline.trackObject '") + key + "' must be in [" +
+                       std::to_string(lo) + ", " + std::to_string(hi) + "]";
+        return false;
+    }
+    *out = v;
+    return true;
+}
+
+// Read a required JSON integer into *out and enforce a lower bound. A real
+// (1.5) is rejected outright rather than truncated: a frame or a layer that
+// arrived fractional means the caller computed it wrong, and silently rounding
+// would place the write-back on the wrong object.
+bool ReadTrackInt(const json& params, const char* key, int lo, int* out,
+                  std::string* err_message) {
+    if (!params.contains(key) || !params[key].is_number_integer()) {
+        *err_message = std::string("timeline.trackObject requires an integer '") + key +
+                       "'";
+        return false;
+    }
+    const int v = params[key].get<int>();
+    if (v < lo) {
+        *err_message = std::string("timeline.trackObject '") + key +
+                       "' must be >= " + std::to_string(lo);
+        return false;
+    }
+    *out = v;
+    return true;
+}
+
+}  // namespace
+
+bool ParseTrackObject(const json& params, TrackObjectRequest* out,
+                      std::string* err_message) {
+    if (!params.is_object()) {
+        *err_message = "timeline.trackObject requires a params object";
+        return false;
+    }
+    TrackObjectRequest req;
+    if (!ReadTrackInt(params, "layer", 0, &req.layer, err_message) ||
+        !ReadTrackInt(params, "frame", 0, &req.frame, err_message) ||
+        !ReadTrackInt(params, "keyframeStride", 1, &req.keyframe_stride, err_message) ||
+        !ReadTrackNumber(params, "searchFactor", 2.0, 6.0, &req.search_factor,
+                         err_message) ||
+        !ReadTrackNumber(params, "smoothing", 0.0, 1.0, &req.smoothing, err_message) ||
+        !ReadTrackNumber(params, "lostScoreThreshold", 0.0, 1.0,
+                         &req.lost_score_threshold, err_message)) {
+        return false;
+    }
+    if (!params.contains("followSize") || !params["followSize"].is_boolean()) {
+        *err_message = "timeline.trackObject requires a boolean 'followSize'";
+        return false;
+    }
+    req.follow_size = params["followSize"].get<bool>();
+
+    if (!params.contains("lostBehavior") || !params["lostBehavior"].is_string()) {
+        *err_message = "timeline.trackObject requires a string 'lostBehavior'";
+        return false;
+    }
+    const std::string behavior = params["lostBehavior"].get<std::string>();
+    if (behavior != "hold" && behavior != "continue") {
+        *err_message =
+            "timeline.trackObject 'lostBehavior' must be \"hold\" or \"continue\"";
+        return false;
+    }
+    req.lost_behavior = behavior;
+
+    *out = std::move(req);
+    return true;
+}
+
+json MakeTrackObjectResult(bool ok, int frames,
+                           const std::vector<TrackKeyframe>& keyframes,
+                           const std::vector<TrackRange>& lost_ranges,
+                           double elapsed_ms, bool cancelled) {
+    json ranges = json::array();
+    for (const TrackRange& r : lost_ranges) {
+        ranges.push_back(json{{"start", r.start}, {"end", r.end}});
+    }
+    json result;
+    result["ok"] = ok;
+    result["frames"] = frames;
+    result["keyframes"] = static_cast<int>(keyframes.size());
+    result["lostRanges"] = std::move(ranges);
+    result["elapsedMs"] = elapsed_ms;
+    result["cancelled"] = cancelled;
+    return result;
+}
+
+std::string MakeTrackProgressEvent(int frame, int index, int total, double score,
+                                   bool lost) {
+    json out;
+    out["event"] = "timeline.trackProgress";
+    out["data"] = json{{"frame", frame},
+                       {"index", index},
+                       {"total", total},
+                       {"score", score},
+                       {"lost", lost}};
+    return out.dump();
+}
+
 }  // namespace nzvideomni

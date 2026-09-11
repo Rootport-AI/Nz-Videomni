@@ -26,6 +26,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
+
+#include "track_postprocess.h"  // TrackKeyframe (section 3-54 write-back)
 
 namespace nzvideomni {
 
@@ -114,5 +117,167 @@ std::string BuildMediaObjectAlias(const std::string& file_path_utf8,
 // is not present. A leading BOM is stripped first.
 bool ParseAliasItemValue(const std::string& alias, const std::string& effect,
                          const std::string& item, std::string* out_value);
+
+// ---------------------------------------------------------------------------
+// Object tracking (section 3-54): the partial-filter box <-> alias conversions.
+// Docs\OBJECT_TRACKING_DESIGN.md sections 5.6 and 5.7 are the canonical text.
+// ---------------------------------------------------------------------------
+
+// AviUtl2's own four numbers for a partial filter's box, in the units the alias
+// stores them in:
+//   x, y   - offset of the box's CENTRE from the SCREEN's centre, in pixels,
+//            with Y growing DOWNWARDS (AviUtl2's coordinate convention)
+//   size   - the box's longer side, in pixels
+//   aspect - signed percentage: negative squashes the height (a landscape box),
+//            positive squashes the width (a portrait box), 0 is a square
+// The tracker instead speaks in top-left-origin (x, y, w, h) rectangles, so the
+// two functions below are the only place those two conventions meet.
+struct PartialFilterValues {
+    double x = 0.0;
+    double y = 0.0;
+    double size = 0.0;
+    double aspect = 0.0;
+};
+
+// Rectangle (top-left origin, pixels) -> AviUtl2's four values, against a frame
+// of scene_w x scene_h:
+//   x      = (rx + rw / 2) - scene_w / 2
+//   y      = (ry + rh / 2) - scene_h / 2
+//   size   = max(rw, rh)
+//   aspect = rw >= rh ? -100 * (1 - rh / rw) : +100 * (1 - rw / rh)
+// aspect is CLAMPED to +/-99.99: at +/-100 the short side would be zero, which
+// is not a box AviUtl2 can show. A degenerate input (rw <= 0 or rh <= 0) is the
+// caller's job to reject - it never reaches here from the tracking worker, whose
+// seed box comes from PartialFilterToRect and whose per-frame boxes come from a
+// tracker that only emits positive extents. The guard below exists solely so a
+// stray zero yields 0 rather than a NaN that would poison the written alias.
+PartialFilterValues RectToPartialFilter(double rx, double ry, double rw, double rh,
+                                        int scene_w, int scene_h);
+
+// The exact inverse, for reading the user's seed box out of the alias. Returns
+// false (leaving the outputs untouched) when v.size <= 0, i.e. when there is no
+// box to speak of. Any of the four out-pointers may be null.
+//   aspect < 0 -> rw = size,                 rh = size * (1 + aspect / 100)
+//   aspect > 0 -> rh = size,                 rw = size * (1 - aspect / 100)
+//   aspect = 0 -> rw = rh = size
+//   rx = v.x + scene_w / 2 - rw / 2, ry = v.y + scene_h / 2 - rh / 2
+// Round-trips with RectToPartialFilter exactly for any rectangle whose aspect
+// lands inside the +/-99.99 clamp.
+bool PartialFilterToRect(const PartialFilterValues& v, int scene_w, int scene_h,
+                         double* rx, double* ry, double* rw, double* rh);
+
+// Read the four values out of the first "partial filter" effect block of an
+// alias. Each value line may already carry keyframes, in which case the value is
+// a comma-separated list ("100,250,<interpolation>,0"); THE FIRST NUMERIC TOKEN
+// is taken, because that is the value at the object's first frame - the frame
+// whose box seeds the tracker. The Japanese "size" line MUST be there and MUST
+// parse; X, Y and the Japanese "aspect ratio" line fall back to their default
+// of 0 when the line is absent, and fail when the line is there but its first
+// token is not a finite number. On failure *out is untouched. A leading BOM is
+// stripped and both CRLF and LF inputs are accepted.
+//
+// REALDEVICE-VERIFY: confirmed by capture (2026-09-11). AviUtl2 writes EVERY
+// item out, defaults included, so in practice all four lines are always there
+// and the lenient default is never reached. It is kept anyway: reading a
+// missing line as its default costs nothing, while refusing to track the box
+// over it would be the worse failure. The same capture confirms the "first
+// token" rule - a keyframed line reads "<v0>,...,<vN-1>,<move method>,0", so
+// the head is still the value at the object's first frame (the whole format is
+// written out above PatchAliasPartialFilterKeyframes).
+//
+// Parsing is locale-independent (std::from_chars), like ParsePlaybackRange in
+// bridge_core: the host process may have called setlocale, and a comma decimal
+// point would silently mis-read every value.
+bool ParsePartialFilterValues(const std::string& alias, PartialFilterValues* out);
+
+// The effect name of an alias' FIRST "[Object.N]" section, trimmed; an empty
+// string when the alias has no such section or the section has no effect.name.
+// This is how a selection is recognised as a partial filter (design section
+// 5.1): the webui's classifySelectionKind compares the returned name against
+// the Japanese "partial filter" string. A leading BOM is stripped, CRLF and LF
+// are both accepted, and a "[Object]" meta section ahead of the effects (the
+// normal layout) is skipped rather than mistaken for effect 0.
+std::string FirstEffectName(const std::string& alias);
+
+// Rewrite a partial filter's alias so its box follows `kfs`: the four value
+// lines (X / Y / the Japanese "size" and "aspect ratio") become keyframed
+// lists, and the "[Object]" section's "frame=" line becomes the matching list
+// of 0-based inclusive keyframe boundaries. `length` is the object's frame
+// count, so the last boundary is length - 1. Everything else in the alias -
+// effects the user added, the mask kind, item order, line endings, a BOM - is
+// preserved byte for byte (design section 5.7). Returns an EMPTY string when
+// the alias cannot be rewritten safely; the caller then abandons the write-back
+// with the timeline untouched.
+//
+// THE FORMAT comes from two .object files the owner saved on the real device
+// (AviUtl2 v2.0.54, 2026-09-11): one partial filter dropped in and left alone,
+// one carrying two midpoints whose position and size differ per interval.
+// Side by side, with the Japanese item names spelled out in <angle brackets>:
+//
+//   [Object]                       [Object]
+//   frame=23,33                    frame=24,54,80,119
+//   [Object.0]                     [Object.0]
+//   effect.name=<partial filter>   effect.name=<partial filter>
+//   X=0                            X=76,89,89,89,<linear move>,0
+//   Y=0                            Y=-169,-153,-153,-153,<linear move>,0
+//   Group=1                        Group=1
+//   <rotation>=0.00                <rotation>=0.00
+//   <size>=100                     <size>=77,231,207,207,<linear move>,0
+//   <aspect>=0.00                  <aspect>=0.00
+//   <blur>=0                       <blur>=0
+//   <mask kind>=<circle>           <mask kind>=<circle>
+//   <match scene length>=0         <match scene length>=0
+//   <invert mask>=0                <invert mask>=0
+//
+// Four rules fall straight out of that pair:
+//   1. "frame=" lists the BOUNDARY frames, not the intervals: the first is the
+//      start, the last is the end, both inclusive. Two midpoints -> four
+//      boundaries.
+//   2. A keyframed item line is "<v0>,...,<vN-1>,<move method>,0" - exactly as
+//      many values as there are boundaries, then the move method's NAME, then a
+//      trailing 0. An item the user never keyframed stays a SINGLE value even
+//      when the object has four boundaries (the <aspect> column above), so the
+//      single form always reads as "constant for the whole object".
+//   3. Every item is written out, defaults included. X / Y / <size> are whole
+//      numbers; <rotation> and <aspect> carry two decimals.
+//   4. The capture holds ABSOLUTE timeline numbers because that is what a save
+//      produces. This function writes 0-BASED RELATIVE ones instead
+//      ("frame=0,...,<length-1>"), which is what create_object_from_alias
+//      wants - the same convention NormalizeAliasObjectFrameHeader relies on.
+// The trailing 0 of a keyframed line has no documented meaning; it is written
+// verbatim, the way the capture has it.
+//
+// WHAT IS REWRITTEN, and nothing else:
+//   * the "[Object]" section's "frame=" line (inserted after the header when
+//     absent, like NormalizeAliasObjectFrameHeader does);
+//   * the X / Y / <size> / <aspect> lines of the FIRST partial-filter block. A
+//     missing one - rule 3 says that never happens, this is the safe side - is
+//     appended at the END of that block, just before the next section header.
+// Every other line, the BOM and the CRLF/LF style survive byte for byte, with
+// ONE deliberate exception:
+//   * any OTHER item line that still carries a keyframe list is COLLAPSED to
+//     its first value ("<rotation>=1,2,3,4,<linear move>,0" -> "<rotation>=1"),
+//     across the partial-filter block and every block after it. The boundary
+//     count is changing, so a list sized for the OLD boundaries would no longer
+//     match it; keeping the first value freezes that item at the value it had
+//     on the object's first frame. The collapse is decided by SHAPE - one or
+//     more leading numbers, then a non-numeric token, then a number - because
+//     that is the only signal the format offers: an item whose value happens to
+//     have that shape without being keyframed would be collapsed too.
+//
+// BOUNDARIES are built from `kfs` (ascending, 0-based, object-relative):
+//   * two or more keyframes -> "frame=0,<k1>,...,<length-1>", and the four
+//     lines take the keyframed form. A last keyframe EARLIER than length - 1 (a
+//     stopped or truncated run) gets one extra boundary at length - 1 repeating
+//     the last value, so the box holds its final position to the object's end.
+//   * exactly one keyframe -> "frame=0,<length-1>" and four SINGLE values: a
+//     constant box, written the way the defaults capture writes it.
+//
+// Returns an EMPTY string - the caller's "do not touch the timeline" - when
+// `kfs` is empty, `length` < 1, scene_w or scene_h is <= 0, the alias has no
+// "[Object]" section, or it has no partial-filter effect block.
+std::string PatchAliasPartialFilterKeyframes(const std::string& alias,
+                                             const std::vector<TrackKeyframe>& kfs,
+                                             int scene_w, int scene_h, int length);
 
 }  // namespace nzvideomni

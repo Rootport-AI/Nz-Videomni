@@ -102,7 +102,13 @@ function Get-BaseModelPlan {
         # 一緒に入れるもので、ヘッダーの一覧にも出ない。ここで受け付けると
         # 「一覧から Preprocessors を選んでください」という、実行できない案内を
         # 出してしまう（Docs/MULTI_ENGINE_DESIGN.md §4.2）。
-        if (-not $data.engine_family) { continue }
+        #
+        # ただし 'opt_in' が真の記述子は例外として受け付ける。これは
+        # 「ベースモデルではないが、setup.bat にも同梱せず、専用の
+        # install-<ID>.bat で足すもの」の印で、30-uetrack.json（物体追尾）が
+        # 最初の例（Docs/OBJECT_TRACKING_DESIGN.md）。この一行が無いと
+        # install-UETrack.bat は「そのようなものはありません」で止まる。
+        if ((-not $data.engine_family) -and (-not $data.opt_in)) { continue }
         $known += [string] $data.id
         if (([string] $data.id) -eq $Id) { $found = $data }
     }
@@ -135,6 +141,10 @@ function Get-BaseModelPlan {
     return [pscustomobject]@{
         Id          = [string] $found.id
         DisplayName = $displayName
+        # 'opt_in' が真の記述子は、ベースモデルではないもの（物体追尾など）。
+        # ヘッダーのベースモデルの一覧には現れないため、完了案内の文面を
+        # 切り替える必要がある（Docs/OBJECT_TRACKING_DESIGN.md §7）。
+        OptIn       = [bool] $found.opt_in
         FileCount   = $count
         MinBytes    = $bytes
         # 実物は記述子の min（公式サイズの 4〜10%下）より必ず大きい。1.15 倍は
@@ -385,10 +395,21 @@ try {
             Write-Host ''
             Write-Host ('   ' + $plan.DisplayName + ' の追加が完了しました') -ForegroundColor Green
             Write-Host ''
-            Write-Info ('次: ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリックし、画面上部のベースモデルの一覧から')
-            Write-Info ('    「' + $plan.DisplayName + '」を選んでください。')
-            Write-Info 'すでに画面を開いている場合は、いったん閉じて開き直してください。'
-            Write-Info '（一覧は画面を開いたときにしか読み直さないため、開いたままでは「未導入」のままに見えます。）'
+            if ($plan.OptIn) {
+                # ベースモデルではないものは、画面上部の一覧に現れない（追尾は
+                # ベースモデルと無関係。Docs/OBJECT_TRACKING_DESIGN.md §7）。
+                # 共通の文面のままだと、存在しない項目を一覧から探させてしまう。
+                Write-Info ('次: ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリックしてアプリを起動し、AviUtl2 の操作パネルの')
+                Write-Info '    Toolbox タブで「物体追尾」が使えることを確認してください。'
+                Write-Info 'すでに画面を開いている場合は、いったん閉じて開き直してください。'
+                Write-Info '（導入の有無は画面を開いたときにしか読み直しません。）'
+                Write-Info '使い方: 部分フィルタを置いて枠を合わせ、タイムラインで右クリック →「物体追尾（部分フィルタを使用）」'
+            } else {
+                Write-Info ('次: ' + (Join-Path $ProjectRoot 'run.bat') + ' をダブルクリックし、画面上部のベースモデルの一覧から')
+                Write-Info ('    「' + $plan.DisplayName + '」を選んでください。')
+                Write-Info 'すでに画面を開いている場合は、いったん閉じて開き直してください。'
+                Write-Info '（一覧は画面を開いたときにしか読み直さないため、開いたままでは「未導入」のままに見えます。）'
+            }
         }
     }
 } catch {

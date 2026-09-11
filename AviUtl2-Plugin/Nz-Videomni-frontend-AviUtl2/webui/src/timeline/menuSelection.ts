@@ -106,11 +106,25 @@ export const EFFECT_NAME_AUDIO = "音声ファイル";
 export const EFFECT_NAME_TEXT = "テキスト";
 
 /**
+ * §3-54 物体追尾 (2026-09-11): the 部分フィルタ (partial filter) object — the
+ * one 追尾 operates on. Native started filling this name on the same day: before
+ * §3-54, `GetSelectionEditProc` only resolved the four素材 effects above and
+ * left everything else's `effectName` empty; it now falls back to the alias's
+ * FIRST effect name (`alias_util.cpp`'s `FirstEffectName`), so a 部分フィルタ —
+ * and any other unlisted effect — arrives with its real AviUtl2 name.
+ *
+ * That widening cannot change any existing behaviour: every name outside the
+ * five listed here still classifies as `"unknown"`, which is exactly what an
+ * empty string did before.
+ */
+export const EFFECT_NAME_PARTIAL_FILTER = "部分フィルタ";
+
+/**
  * Pure: classify a selected object by its `effectName` (§4-1). Returns
- * `"unknown"` for any name that is not one of the four supported effects
- * (including the empty string native leaves for objects it could not resolve),
- * which the caller surfaces as the "対応していない種類" note rather than a
- * template mismatch (§4-3).
+ * `"unknown"` for any name that is not one of the supported effects (including
+ * the empty string native leaves for objects it could not resolve), which the
+ * caller surfaces as the "対応していない種類" note rather than a template
+ * mismatch (§4-3).
  */
 export function classifySelectionKind(item: SelectionItem): SelectionKind {
   switch (item.effectName) {
@@ -122,6 +136,8 @@ export function classifySelectionKind(item: SelectionItem): SelectionKind {
       return "audio";
     case EFFECT_NAME_TEXT:
       return "text";
+    case EFFECT_NAME_PARTIAL_FILTER:
+      return "partialFilter";
     default:
       return "unknown";
   }

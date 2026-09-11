@@ -1483,6 +1483,102 @@ export const en = {
      * button is disabled, not queued (reservation removed 2026-07-17). */
     busyButton: "Busy…",
   },
+  /** §3-54 物体追尾 (2026-09-11): the Toolbox tab — a disabled mock until this
+   * day, promoted to a real mode exactly the way Edit was on 2026-08-09 — and
+   * the object-tracking section that is its first occupant.
+   *
+   * The tab's own LABEL is not here: it is `modes.toolbox`, alongside the other
+   * four main-tab labels (and, like them, identical in en/ja). What this
+   * namespace holds is the panel's own copy. */
+  toolbox: {
+    tracking: {
+      heading: "Object tracking",
+      /** The one sentence that explains where the box comes from: the user
+       * fits it in AviUtl2's preview, not here (§1 / §11 of the design doc). */
+      intro:
+        'Put a partial filter on a layer below the video, fit its box in the preview to what you want followed, then right-click that object on the timeline and choose "🎯 Object tracking (uses a partial filter)".',
+      model: {
+        label: "Model",
+        uetrack: "UETrack",
+        other: "Other",
+      },
+      searchFactor: {
+        label: "Search area",
+        hint: "Wider keeps up better with fast movement, but takes more time to process.",
+      },
+      lostThreshold: {
+        label: "Lost threshold",
+        hint: 'When what is drawn inside the filter’s box changes too much from how it looked when tracking started, it is treated as "lost". This is that threshold.',
+      },
+      lostBehavior: {
+        label: "When lost",
+        hold: "Stay at the last position",
+        continueOn: "Keep following anyway",
+      },
+      smoothing: {
+        label: "Smoothness",
+        hint: "0 uses the tracker's boxes as they come. Higher values pull each box toward the previous frame's.",
+      },
+      followSize: {
+        label: "Follow the box size too",
+      },
+      keyframeStride: {
+        label: "Keyframe interval",
+        hint: "The first and last are always written whatever this says.",
+      },
+      progressHeading: "Progress",
+      /** Shown before anything has been tracked in this session. */
+      progressIdle: "Nothing is being tracked.",
+      /** "123 / 240 frames". */
+      progressFrames: (index: number, total: number): string => `${index} / ${total} frames`,
+      /** "18.4 fps", computed by the panel from the progress events' arrival
+       * times — the plugin does not send a rate. */
+      progressFps: (fps: number): string => `${fps.toFixed(1)} fps`,
+      /** Stand-in until a second progress event gives something to measure. */
+      progressFpsUnknown: "—",
+      stop: "🚫 Stop",
+      lostHeading: "Lost ranges",
+      lostNone: "No lost frames.",
+      /** One row per span, in AviUtl2 frame numbers (native adds the object's
+       * head frame; the panel shows the value verbatim). */
+      lostRange: (start: number, end: number): string => `${start}–${end}`,
+      resultDone: (frames: number, keyframes: number, seconds: number): string =>
+        `Tracked ${frames} frames and wrote ${keyframes} keyframes in ${seconds.toFixed(1)}s.`,
+      /** A stopped run still writes back what it tracked, so it reports the
+       * same three numbers — the wording only says where it ended. */
+      resultCancelled: (frames: number, keyframes: number, seconds: number): string =>
+        `Stopped. ${frames} frames were tracked and ${keyframes} keyframes were written in ${seconds.toFixed(1)}s.`,
+      /** Shown above the sentence below for every code EXCEPT `TRACK_BUSY`
+       * (2026-09-11 owner gate): a run that is merely refused because another
+       * one is going has not failed, and heading it "Tracking failed" beside a
+       * progress readout that is still moving reads as a contradiction. */
+      errorHeading: "Tracking failed",
+      /** Error code -> sentence. Shown INSIDE this section rather than in the
+       * shared note area: the note area is the right-click flow's channel, and
+       * a failure that happens minutes into a run belongs next to the run.
+       *
+       * A code with no row here is shown verbatim — the backend's own codes can
+       * reach this method too, and a bare code the user can search for beats a
+       * wrong guess at what it meant. */
+      errors: {
+        TRACK_BUSY: "Another tracking run is already going. Wait for it to finish, or stop it first.",
+        TRACK_SEED_INVALID: "The selected object is not a usable partial filter, so its box could not be read.",
+        TRACK_WRITEBACK_FAILED: "Tracking finished, but the keyframes could not be written to the object.",
+        TRACK_FAILED: "Tracking stopped partway.",
+        TRACK_UNAVAILABLE: "Object tracking is not usable on this server (not installed, or its worker failed to start). Run install-UETrack.bat in the backend folder and restart the server.",
+        TRACK_SESSION_NOT_FOUND: "The tracking session was not found.",
+        TRACK_FRAME_INVALID: "A frame sent to the server had an invalid format.",
+        BAD_REQUEST: "The tracking settings were rejected.",
+        NO_EDIT_HANDLE: "No AviUtl2 project is open.",
+        BACKEND_UNREACHABLE: "The server could not be reached.",
+      },
+      unavailableHeading: "Object tracking is not available",
+      /** `/status.tracking.reason === "not installed"`. */
+      unavailableNotInstalled: "Run install-UETrack.bat in the backend folder, then restart the server.",
+      /** `/status.tracking.reason === "worker failed"`. */
+      unavailableWorkerFailed: "The tracking worker could not start. Check logs/utils_worker.log.",
+    },
+  },
   /** Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): persistent, single-seat
    * right-click feedback shown above the operation panel. I5 seeds only the
    * fallback-insert note; the mismatch guidance (I6) and receipt notes (I7)
@@ -1506,6 +1602,9 @@ export const en = {
           return "audio";
         case "text":
           return "text";
+        // §3-54: not a 素材 kind at all — the AviUtl2 object 追尾 follows.
+        case "partialFilter":
+          return "partial filter";
       }
     },
     /** I6 §4-2: more than one object is selected (single-selection only in α). */
@@ -1618,6 +1717,20 @@ export const en = {
      * feedback; this reinforces it). */
     appendedImageToKeyframe: (fileName: string): string =>
       `Appended the image to a keyframe: ${fileName}`,
+    /** §3-54 物体追尾: the 追尾 right-click arrived on a server that cannot run
+     * tracking (`/status.tracking.available !== true`). Refused in the §4 guard
+     * shape — guidance only, no tab switch — because opening a panel whose
+     * every control is greyed would answer nothing this note does not. */
+    trackingUnavailable:
+      "Object tracking is not available on this server. Run install-UETrack.bat in the backend folder, restart the server, and try again.",
+    /** §3-54 物体追尾 (owner gate 2026-09-11): the 追尾 right-click arrived while
+     * a run is still going. Refused HERE, in the shell, rather than by letting
+     * native answer `TRACK_BUSY` — the second right-click used to remount the
+     * Toolbox screen, which threw away the running run's subscription and its
+     * promise, so the live progress froze and the fresh panel reported the
+     * refusal as a failure. The run itself was never affected; only the panel
+     * watching it was. Native's `TRACK_BUSY` stays as the safety net. */
+    trackingBusy: "Object tracking is already running. Stop it with 🚫 Stop, then try again.",
   },
   /** I12 §5-5 (revised I13, owner decision 2026-07-19): the 4-stage provisional
    * placeholder labels burned onto the timeline text object. Stages 1/2 are built
@@ -2728,6 +2841,71 @@ export const ja: Strings = {
     generatingButton: "生成中…",
     busyButton: "処理中…",
   },
+  toolbox: {
+    tracking: {
+      heading: "物体追尾",
+      intro:
+        "動画より下のレイヤーに部分フィルタを置き、プレビューで追わせたいものに枠を合わせてから、タイムラインでそのオブジェクトを右クリックして「🎯 物体追尾（部分フィルタを使用）」を選んでください。",
+      model: {
+        label: "モデル",
+        uetrack: "UETrack",
+        other: "Other",
+      },
+      searchFactor: {
+        label: "探索範囲の広さ",
+        hint: "広いほど速い動きの追従性が上がるが、処理時間も増える。",
+      },
+      lostThreshold: {
+        label: "見失いのしきい値",
+        hint: "追跡中のフィルタ内に描かれたものが追跡開始時から変化しすぎると「見失い」として扱う。その閾値。",
+      },
+      lostBehavior: {
+        label: "見失ったときの扱い",
+        hold: "直前の位置で止める",
+        continueOn: "そのまま追い続ける",
+      },
+      smoothing: {
+        label: "動きの滑らかさ",
+        hint: "0なら追跡AIが返した枠をそのまま使います。上げるほど、前のフレームの枠に引きずられて滑らかになります。",
+      },
+      followSize: {
+        label: "枠の大きさも追従させる",
+      },
+      keyframeStride: {
+        label: "中間点を打つ間隔",
+        hint: "先頭と末尾は、この設定にかかわらず必ず打ちます。",
+      },
+      progressHeading: "進み具合",
+      progressIdle: "追尾は動いていません。",
+      progressFrames: (index: number, total: number): string => `${index} / ${total} フレーム`,
+      progressFps: (fps: number): string => `${fps.toFixed(1)} fps`,
+      progressFpsUnknown: "—",
+      stop: "🚫停止",
+      lostHeading: "見失い区間",
+      lostNone: "見失いなし",
+      lostRange: (start: number, end: number): string => `${start}–${end}`,
+      resultDone: (frames: number, keyframes: number, seconds: number): string =>
+        `${frames}フレームを追尾し、中間点を${keyframes}個打ちました（${seconds.toFixed(1)}秒）。`,
+      resultCancelled: (frames: number, keyframes: number, seconds: number): string =>
+        `停止しました。${frames}フレームまでを追尾し、中間点を${keyframes}個打ちました（${seconds.toFixed(1)}秒）。`,
+      errorHeading: "追尾に失敗しました",
+      errors: {
+        TRACK_BUSY: "すでに別の追尾が動いています。終わるのを待つか、先に停止してください。",
+        TRACK_SEED_INVALID: "選択されているオブジェクトが部分フィルタではないため、枠を読み取れませんでした。",
+        TRACK_WRITEBACK_FAILED: "追尾は終わりましたが、中間点をオブジェクトに書き込めませんでした。",
+        TRACK_FAILED: "追尾が途中で止まりました。",
+        TRACK_UNAVAILABLE: "追尾の仕組みが使えない状態です（未導入か、ワーカーの起動失敗）。バックエンドのフォルダで install-UETrack.bat を実行し、サーバーを再起動してください。",
+        TRACK_SESSION_NOT_FOUND: "追尾のセッションが見つかりません。",
+        TRACK_FRAME_INVALID: "送信したフレームの形式が不正です。",
+        BAD_REQUEST: "追尾の設定が受け付けられませんでした。",
+        NO_EDIT_HANDLE: "AviUtl2のプロジェクトが開かれていません。",
+        BACKEND_UNREACHABLE: "サーバーに接続できませんでした。",
+      },
+      unavailableHeading: "物体追尾を使えません",
+      unavailableNotInstalled: "バックエンドのフォルダで install-UETrack.bat を実行し、サーバーを再起動してください。",
+      unavailableWorkerFailed: "追尾のワーカーが起動できませんでした。logs/utils_worker.log を確認してください。",
+    },
+  },
   notes: {
     insertedOnFrontmostLayer: (layerNumber: number): string =>
       `カーソル位置に既存オブジェクトがあったため、最前面のレイヤー${layerNumber}に挿入しました。`,
@@ -2741,6 +2919,8 @@ export const ja: Strings = {
           return "音声";
         case "text":
           return "テキスト";
+        case "partialFilter":
+          return "部分フィルタ";
       }
     },
     multipleSelection: "対象のオブジェクトを1つだけ選んでください。",
@@ -2780,6 +2960,9 @@ export const ja: Strings = {
     keyframeLimitReached: "キーフレームの上限に達しました。",
     appendedImageToKeyframe: (fileName: string): string =>
       `画像をキーフレームに追記しました: ${fileName}`,
+    trackingUnavailable:
+      "このサーバーでは物体追尾を使えません。バックエンドのフォルダで install-UETrack.bat を実行し、サーバーを再起動してから、もう一度お試しください。",
+    trackingBusy: "追尾が進行中です。🚫停止で止めてからやり直してください。",
   },
   /** タイムラインの仮オブジェクトに焼き込む文言は、UI言語設定に関わらず常に英語
    * （ASCII）で固定する（オーナー決定 2026-07-19）。AviUtl2の既定フォントには絵文字

@@ -1,0 +1,154 @@
+/* Toolbox モード（2026-09-11 新設・§3-54 物体追尾）。
+ *
+ * 見た目は既存の画面から借用している。新しい色は 1 つも定義せず、
+ * `index.css` のテーマ変数だけを参照する（ダーク/ライト両対応がそれだけで
+ * 成立する）。借用元は次のとおり:
+ *   - `.field` / `.field-inline` / `.field-label` / `.field-hint` /
+ *     `.field-hint-error` … `modes/single/SingleScreen.css`（グローバル）
+ *   - 区画の枠（背景・境界・角丸・余白） … `modes/edit/EditScreen.css` の
+ *     `.edit-panel`
+ *   - 操作できない見本の薄さ … `shell/AppShell.css` の `.mode-tab:disabled`
+ * これらは再定義しない —— 同じ見た目を 2 か所で持たないため。 */
+
+.toolbox-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* 1 つの道具＝1 区画。2 つ目の道具が増えたときも、この区画をもう 1 枚
+ * 並べるだけで済むようにしてある。 */
+.toolbox-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.toolbox-section-heading {
+  font-size: 15px;
+  margin: 0;
+}
+
+/* 設定 1 項目＝ラベル付きの操作部＋補足。`.field` 自体は縦並びなので、
+ * 補足文を同じ列に足すためだけの器。 */
+.toolbox-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ラジオのまとまり。`<fieldset>` の既定の枠と余白だけを外し、中身は
+ * `.field-inline` の並びに任せる（新しい間隔は作らない）。 */
+.toolbox-group {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 2択のラジオは横並びにする（オーナー実機ゲート 2026-09-11）。`<legend>` は
+ * flex の子にならないので、見出しは従来どおり上の行に出たまま、選択肢だけが
+ * 1 行に並ぶ。狭いときに潰れないよう `wrap` だけ許し、間隔は `.field-inline`
+ * と同じ 8px を使う（新しい寸法は作らない）。 */
+.toolbox-group-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbox-group-row > legend {
+  width: 100%;
+}
+
+/* 縦並びのときは揃えの役に立っていた `.field-inline .field-label` の
+ * 最小幅 80px が、横並びでは選択肢の間に無用な空きを作るので、この行の中だけ
+ * 素の幅へ戻す。 */
+.toolbox-group-row .field-inline .field-label {
+  min-width: auto;
+}
+
+/* モデルのラジオは操作できない見本なので、`.mode-tab:disabled` と同じ
+ * 薄さ＋🚫カーソルにする。`:has()` ではなく `input:disabled` に直接当てて
+ * いるのは、同じ区画の「実行中だから一時的に触れない」設定まで同じ薄さに
+ * してしまわないため —— そちらは既定の disabled 表示のままでよい。 */
+.toolbox-group input[type="radio"]:disabled,
+.toolbox-group input[type="radio"]:disabled + .field-label {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 進み具合の 1 行。数字が伸び縮みしても行が跳ねないよう、桁の詰まった
+ * 数字書体を使う（新しいフォントは読み込まない）。 */
+.toolbox-progress {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbox-stop {
+  appearance: none;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbox-stop:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.toolbox-stop:disabled {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbox-result {
+  margin: 0;
+}
+
+/* 見失い区間の一覧。`<ul>` の字下げと点だけを外して、周りの `.field-hint`
+ * と同じ見え方に揃える（`modes/edit/EditScreen.css` の `.retake-notices`
+ * と同じ手口）。 */
+.toolbox-lost-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 未導入の案内と失敗の知らせ。枠の作りは `styles/formAccordion.css` の
+ * エラー行と同型で、色だけが違う（案内は目立たせない・失敗は `--danger`）。 */
+.toolbox-unavailable,
+.toolbox-error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.toolbox-unavailable p,
+.toolbox-error p {
+  margin: 0;
+}
+
+.toolbox-error {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}

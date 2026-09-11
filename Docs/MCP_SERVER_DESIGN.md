@@ -114,6 +114,7 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 ## 11. 参照
 
+- **物体追尾はMCPツールにしない**（AviUtl2のタイムラインの上でしか意味を持たない操作のため）。詳細は [`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) を参照。
 - 利用者向けの使い方: [`README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節
 - 機械検証の実行記録: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)（本パッケージの節）
 - セッションの入口（課題台帳）: [`PENDING_TASKS.md`](PENDING_TASKS.md)

@@ -1,0 +1,26 @@
+﻿{
+  "schema": 1,
+  "id": "UETrack",
+  "opt_in": true,
+  "_opt_in": "ベースモデルではないが setup.bat にも同梱しない、install-UETrack.bat 専用の記述子であることの印。scripts/install_model.ps1 の Get-BaseModelPlan がこの印だけを見て受け付ける（Docs/OBJECT_TRACKING_DESIGN.md）",
+  "downloads": [
+    {
+      "name": "UETrack Base tracker weights (1 file)",
+      "repo": "Rootport/Nz-UETrack",
+      "include": ["uetrack/*"],
+      "map": [
+        { "from": "uetrack", "to": "UETrack" }
+      ],
+      "files": [
+        {
+          "path": "UETrack/uetrack_base.safetensors",
+          "min": 98000000,
+          "label": "uetrack base tracker",
+          "_min": "実測107,164,976Bの1ファイル(約8.6%下)。scripts/trim_uetrack_checkpoint.py が公式tar(1,267,204,495B)から抜いた257テンソル"
+        }
+      ]
+    }
+  ],
+  "_migrate": "空配列でも必ず書く。install_ltx.ps1 の検証は @($Manifest.migrate) を回すが、キーが無いと PowerShell の @($null) が「要素1つの配列」になり、$mg.from が空文字で例外になる（実測2026-09-11）。移行対象の旧フォルダはそもそも無い。",
+  "migrate": []
+}

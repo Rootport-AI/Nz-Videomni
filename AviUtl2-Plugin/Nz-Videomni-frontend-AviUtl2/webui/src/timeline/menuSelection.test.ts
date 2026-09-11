@@ -3,6 +3,7 @@ import { createMockBridge } from "../bridge/mockBridge";
 import {
   EFFECT_NAME_AUDIO,
   EFFECT_NAME_IMAGE,
+  EFFECT_NAME_PARTIAL_FILTER,
   EFFECT_NAME_TEXT,
   EFFECT_NAME_VIDEO,
   END_SOURCE_MIN_DURATION_SEC,
@@ -139,6 +140,9 @@ const EFFECT_BY_KIND: Record<MaterialKind, string> = {
   image: EFFECT_NAME_IMAGE,
   audio: EFFECT_NAME_AUDIO,
   text: EFFECT_NAME_TEXT,
+  // §3-54 (2026-09-11): not a 素材 kind — the 部分フィルタ object 追尾
+  // follows. `Record<MaterialKind, …>` is what forces this line to exist.
+  partialFilter: EFFECT_NAME_PARTIAL_FILTER,
 };
 
 /** A single selected object with a given effectName and duration; other fields
@@ -170,8 +174,13 @@ const OBJECT_ACTIONS = [
   // the (e) range guard never fires in the shared kind/multi-select matrices
   // below — exactly right: those exercise (a)-(c), and (e) has its own describe.
   "outpaintVideo", "retakeRange",
+  // §3-54 物体追尾 (2026-09-11). The only action requiring `partialFilter`,
+  // so the matrix below proves both halves at once: it passes on a 部分フィルタ
+  // and is refused on all four 素材 kinds, while every OTHER action is refused
+  // on a 部分フィルタ.
+  "trackObject",
 ] as const;
-const ALL_KINDS: MaterialKind[] = ["video", "image", "audio", "text"];
+const ALL_KINDS: MaterialKind[] = ["video", "image", "audio", "text", "partialFilter"];
 
 /** §4-3 近傍アクション: audio-required action -> the note a mis-selected VIDEO
  * gets instead of the bare `typeMismatch`. Mirrors the production table
@@ -188,6 +197,8 @@ describe("classifySelectionKind", () => {
     expect(classifySelectionKind(makeItem(EFFECT_NAME_IMAGE))).toBe("image");
     expect(classifySelectionKind(makeItem(EFFECT_NAME_AUDIO))).toBe("audio");
     expect(classifySelectionKind(makeItem(EFFECT_NAME_TEXT))).toBe("text");
+    // §3-54: the fifth name, filled by native's first-effect fallback.
+    expect(classifySelectionKind(makeItem(EFFECT_NAME_PARTIAL_FILTER))).toBe("partialFilter");
   });
 
   it("returns 'unknown' for an empty or unrecognized effectName", () => {

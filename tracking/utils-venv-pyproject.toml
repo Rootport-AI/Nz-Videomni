@@ -1,0 +1,62 @@
+[project]
+name = "nz-videomni-utils"
+version = "1.0.0"
+description = "Utility-AI worker interpreter (.venv-utils): CPU-only object tracking (UETrack)"
+requires-python = ">=3.12"
+# WHY A THIRD VENV: torch-CPU and torch-cu128 are the same distribution name at
+# the same version, so this stack cannot share an interpreter with either engine
+# venv. It is also deliberately tiny -- it holds a ~27M-parameter tracker, no
+# diffusion stack at all -- and it is OPTIONAL: only install-UETrack.bat builds
+# it (scripts/install_ltx.ps1, the `-BaseModel UETrack` branch).
+#
+# WHAT IS *NOT* HERE, and why (the vendored tracker under tracking/vendor/uetrack
+# is the only consumer, so this list is exactly what that code imports):
+#   timm         upstream uses it for `to_2tuple`, `drop_path`, `trunc_normal_`
+#                and the `register_model` decorator only. All four are either
+#                three-line helpers or no-ops at inference time, so they are
+#                vendored into tracking/vendor/uetrack/timm_compat.py instead of
+#                dragging in timm and its dependency tail.
+#   torchvision  upstream's lib/utils/box_ops.py imports `box_area` for the IoU /
+#                GIoU TRAINING losses. The two helpers inference needs
+#                (`clip_box`, `box_xyxy_to_cxcywh`) are pure torch, so the import
+#                is dropped with the losses.
+#   clip         the OpenAI CLIP text encoder is only reachable through
+#                MULTI_MODAL_LANGUAGE, which this port pins to False.
+#
+# NOTHING READS THIS FILE AUTOMATICALLY -- exactly like
+# engine/engine-venv-pyproject.toml. scripts/install_ltx.ps1 applies
+# tracking/venv-utils.freeze.txt and only the freeze. This file is the
+# dependency SPEC the freeze was resolved from, to be re-applied BY HAND when
+# the pins are next updated:
+#   1. copy this file into an empty scratch directory, renamed `pyproject.toml`,
+#   2. uv venv --python 3.12 <repo>\.venv-utils
+#   3. uv pip install --python <repo>\.venv-utils\Scripts\python.exe
+#          --index https://download.pytorch.org/whl/cpu
+#          --index-strategy unsafe-best-match <that scratch directory>
+#   4. validate, then regenerate tracking/venv-utils.freeze.txt
+#      (its own header documents the method).
+dependencies = [
+    # CPU build. The version matches what both engine venvs pin (2.9.1), so the
+    # three stacks stay on one validated torch generation even though only this
+    # one is CPU.
+    "torch==2.9.1",
+    "numpy>=1.26",
+    # cv2.resize / cv2.copyMakeBorder inside the vendored `sample_target`. The
+    # headless build for the same reason engine/ uses it: no GUI, no Qt.
+    "opencv-python-headless>=4.8.0",
+    # The distributed weight format (models/UETrack/uetrack_base.safetensors).
+    "safetensors>=0.4.0",
+    # One `Rearrange` in the encoder's mixture-of-experts layer. Pure Python, no
+    # dependencies of its own.
+    "einops>=0.7.0",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]

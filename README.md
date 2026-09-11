@@ -150,15 +150,15 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ## 0. 環境分離ポリシー（最重要）
 
 **このプロジェクトは PC のシステム Python 環境を一切汚しません。** Python 本体を含め、必要なものはすべて
-プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.python/`, `.uv_cache/`, `tools/`）に閉じ込めます（仕様書 2.5）。
+プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.venv-utils/`（任意導入）, `.python/`, `.uv_cache/`, `tools/`）に閉じ込めます（仕様書 2.5）。
 
 - グローバル/システムの `pip install` は **禁止**。必ず `uv` + プロジェクトローカル venv。
 - 環境変数（`UV_PYTHON_INSTALL_DIR` など）は **そのプロセス内のみ**。永続化しない。
 - 前提ツール（`uv` / `ffmpeg` / `ffprobe`）も `tools/` に取り込み、`PATH` への追加は **そのプロセス内のみ**。
   Windows の環境変数設定は書き換えません。
 - パッケージのダウンロードキャッシュも `.uv_cache/` としてプロジェクト内に置きます（システムのユーザープロファイル配下は使いません）。
-  3つの venv は、実体をここに置いてハードリンク（同じ実体を指す別名）で共有します。
-- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.venv-engine-ltx25` / `.python` / `.uv_cache` / `tools` 含む）を
+  各 venv は、実体をここに置いてハードリンク（同じ実体を指す別名）で共有します。
+- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.venv-engine-ltx25` / `.venv-utils` / `.python` / `.uv_cache` / `tools` 含む）を
   削除するだけで完全に元に戻ります。
 
 ### venv の構成（重要）
@@ -170,8 +170,11 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 | `./.venv` | FastAPI アプリ（`main.py`・API・ジョブ・Gradio・モック backend） | FastAPI / Pydantic / Pillow / ffmpeg 呼び出し。**torch は入れない** |
 | `./.venv-engine` | LTX 2.3 用のエンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines`@`00dc53d` + `gguf`） |
 | `./.venv-engine-ltx25` | LTX 2.5 用のエンジン worker（`engine25/worker.py`） | **torch 2.9.1+cu128** + 公式 v1.2.0 の推論スタック + `transformers` 5.x |
+| `./.venv-utils` | 物体追尾のワーカー（`tracking/worker.py`）。**任意導入**で、`install-UETrack.bat` を実行した人だけに作られます | **CPU 版の torch**（GPU は使いません） |
 
 エンジン系統ごとに venv を分けているのは、LTX 2.3 と LTX 2.5 が要求するパッケージのバージョンが同居できないためです。**worker は同時に1つだけ動き**、モデルを切り替えると古い worker を終了させてから新しい worker を起こします。
+
+`./.venv-utils` だけは性格が違い、**動画生成のエンジンではありません**。物体追尾（タイムラインに置いた部分フィルタの枠を、被写体に合わせて自動で動かす機能）のためのもので、CPU 版の torch を使うため既存の3つとは同居できず、生成用の worker の入れ替えにも巻き込まれません。**`setup.bat` はこの venv を作りません**——必要な人だけが `install-UETrack.bat` をダブルクリックします（§1「物体追尾を追加する」）。機能の詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) を参照してください。
 
 アプリ（`./.venv`）は torch も LTX も import しません。実生成は、選ばれているモデルに対応する python で worker を **subprocess** として起動し、JSON-lines プロトコルで駆動します（§3「アーキテクチャ」）。`.venv-engine` の依存スナップショットは [`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt) に凍結してあります。
 
@@ -409,6 +412,22 @@ models/
 
 > **`install-LTX25.bat` を実行するまで、LTX 2.5 は「選べるが未導入」として画面に出ます。** LTX 2.3 だけを使うぶんには何の影響もありません。テキストエンコーダのトークナイザは GGUF の中に入っているので別途置く必要はありません。**隣にできる `*.assets.safetensors` は、バックエンドが初回のモデル読み込み時に GGUF の中身から自動で作るもの**なので、ダウンロードする必要はありませんし、消しても次回に作り直されます。
 
+### 物体追尾を追加する（`install-UETrack.bat`）
+
+**先に `setup.bat` を済ませてください。** `install-UETrack.bat` は追尾用の環境と重みを足すだけのもので、Python 環境とダウンロード道具は `setup.bat` が用意します（済んでいないときは、その場でそう案内して止まります）。
+
+**物体追尾は、タイムラインに置いた部分フィルタ（画面の一部だけに効果を掛けるフィルタ）の枠を、被写体に合わせて自動で動かす機能です。** モザイクやぼかしを人物や物体に追従させたいときに使います。**これは動画を作る機能ではなく、既にタイムラインにあるオブジェクトの値を書き換える機能**なので、ベースモデル（LTX 2.3 / LTX 2.5）の選択とは関係がありません。
+
+準備ができたら、**リポジトリ直下の `install-UETrack.bat` をダブルクリックしてください。** 追尾専用の Python 環境（`./.venv-utils`、CPU 版の torch）が作られ、追跡AIの重み 1 ファイルが [`Rootport/Nz-UETrack`](https://huggingface.co/Rootport/Nz-UETrack) から `models/UETrack/` へ置かれます。
+
+- **ダウンロードの量はおよそ 107MB** です（重みの本体だけを抜き出したファイルで、公開元の配布物より小さくなっています）。
+- **任意導入です。** 入れなくても動画生成には何の影響もありません。既存の3つの Python 環境には一切触れないので、動いているインストールを壊すこともありません。
+- **入れていないときは、操作パネルの追尾の設定が灰色になり、その場で `install-UETrack.bat` の実行を案内します。**
+
+**使い方**: AviUtl2 のタイムラインで、追いかけたい映像の**下の段**に部分フィルタを置き、プレビューを見ながら枠を被写体に合わせます。その部分フィルタを右クリックして「🎯 追尾: この部分フィルタの枠を追わせる」を選ぶと、操作パネルが Toolbox タブに切り替わって追尾が始まります。終わると部分フィルタの先頭から末尾まで枠に中間点が打たれているので、あとはモザイクでもぼかしでも好きな効果を足してください。**追尾は枠を動かすだけで、効果の種類には関与しません。**
+
+**設計・設定項目・制限の詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) が正本です。**
+
 ---
 
 ## 2. 起動
@@ -477,12 +496,20 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
    │  python -m engine.worker    │  python -m engine25.worker   │
    │  ログ: logs/ltx_worker.log   │  ログ: logs/ltx25_worker.log  │
    └─────────────────────────────┴─────────────────────────────┘
+
+   ┌──────────────────────────────────────────────────────────┐
+   │ ユーティリティワーカー（物体追尾・任意導入）               │
+   │  ./.venv-utils ／ python -m tracking.worker               │
+   │  CPU のみ・生成とは独立に常駐（GPU も outputs も使わない） │
+   │  ログ: logs/utils_worker.log                              │
+   └──────────────────────────────────────────────────────────┘
 ```
 
 - **`engine/`（LTX 2.3）と `engine25/`（LTX 2.5）はどちらも first-party**（project root 直下・git 追跡）で、由来と provenance は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) にあります。上流参照用の `vendor/LTX-2` は温存しています。
 - **プロトコル**: アプリは real backend でも torch/LTX を import しません。`_RealBackend` がそのエンジンの python で worker を常駐起動し、`{"op":"load",...}` → `@@LTX@@{"event":"ready"}` → `{"op":"generate",...}` → `@@LTX@@{"event":"done",...}` と往復します。worker がモデルを **1度だけ**構築してジョブを使い回し、mp4 は worker が直接ディスクへ書きます（制御 JSON のみパイプを渡る）。**この受け答えの作法は2系統で共通**で、違うのは起動する python とモジュール、ロードペイロードの項目名、そしてワーカーログの名前だけです。
 - **16GB 技術**: GGUF Q4_K_M transformer + block-swap（GPU 常駐 8 ブロック）+ GGUF Gemma の逐次 per-layer CPU オフロード（`--te-offload`）+ DiT の CPU 構築（`--dit-cpu-load`）+ VAE タイリング + component-file 経路。512×320 で peak_vram ~9.2GB、720p（1280×768→crop）実証済みです（内部の詳細は仕様書 §9「低VRAM戦略」）。
 - **モック backend** は `./.venv` のみで動く合成クリップ生成で、テストと GPU 無し開発に使います（`GenerationOutcome.backend` だけが real と異なり、API/スキーマ/出力構造は同一）。
+- **ユーティリティワーカー（物体追尾）は、上の「同時に1つ」の数に入りません。** エンジン worker とは別の第4のプロセスで、CPU だけを使い、生成ジョブを止めず、生成に止められもしません。起動するのは最初の追尾が始まったときで、以後はセッションをまたいで常駐します（重みの読み込みは1度だけ）。**任意導入**なので、`install-UETrack.bat` を実行していない環境ではそもそも存在しません。詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) §6 を参照してください。
 
 ---
 
@@ -500,6 +527,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | GET | `/jobs` / `/jobs/{id}` | ジョブ一覧 / 状態 |
 | GET | `/jobs/{id}/video` | 完了動画(mp4)を取得 |
 | DELETE | `/jobs/{id}` | 実行中ジョブのキャンセル(best-effort) / 完了ジョブの削除 |
+| POST / DELETE | `/utils/track/*` | 物体追尾のセッション（開く / フレームを1枚送る / 閉じる）。**生成とは別の名前空間**で、ジョブもキューの枠も保存物も作りません（[`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) §4） |
 
 ### 凍結 API 契約（付録A・変更しない）
 - 幅・高さは **64の倍数**（two-stage distilled が stage1 を半解像度で生成し x2 アップサンプルするための帰結。由来の解説は [`Docs/LTX23_REFERENCE.md`](Docs/LTX23_REFERENCE.md) §3、検証は [`api/models.py`](api/models.py) の `GenerateRequest` validator）。
@@ -729,6 +757,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 - **同時実行は 1 ジョブのみ**。実行中に新しい `POST /generate`（および `POST /generate/chain`）を投げると **409 Conflict**（`JOB_BUSY`）が返ります。**ジョブキューはありません（同時に走る生成は1本だけです）**——単一ユーザー向けのローカルツールという前提で、「1ジョブ＋busy 409」を正式な仕様にしてあります（仕様書 §13.5）。
 - **実行中ジョブのキャンセルは best-effort**。PyTorch 推論を安全に中断できないため、`running` のジョブは推論完了後に `cancelled` へ遷移します。まだ実行に移っていない `queued` のジョブは、`DELETE /jobs/{id}` で**即座に** `cancelled` になり単一ジョブガードが解放されます。
 - **MCP サーバー（§8）経由でも同じ制約です。** 複数エージェント・複数セッションからの並行操作は非対応です。
+- **物体追尾はこの制約の外です（任意導入）。** 追尾は CPU だけを使う別プロセスなので、生成ジョブを止めませんし、生成中でも始められます。ただし**追尾そのものは同時1本で、追える向きは前向きだけ**（部分フィルタの先頭から末尾へ）です。**見失ったあとの自動的な再検出はありません**——枠が被写体からずれたら、その位置で部分フィルタを分割し、後ろ側の枠を合わせ直してもう一度追尾させてください（[`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) §1・§10）。
 
 <a id="limit-hardware"></a>
 ### 7.3 動作確認済みのハードウェア

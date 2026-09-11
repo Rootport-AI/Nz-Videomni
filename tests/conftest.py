@@ -164,6 +164,12 @@ def _build_app(tmp_path):
         # the next run's startup. Points at tmp_path like every other writable
         # location the app owns.
         "state_file": (tmp_path / "state.json").as_posix(),
+        # Object tracking (§3-54) on the in-process fake. Left at its default
+        # ("uetrack"), every test would carry a TrackingManager pointed at the
+        # DEVELOPER's .venv-utils and models/ -- so /status would answer
+        # "available" or "not installed" depending on whose machine ran the
+        # suite. Same hermetic reasoning as the model layout above.
+        "tracking": {"backend": "mock"},
     }
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
@@ -240,6 +246,7 @@ def two_family_client(tmp_path):
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
         "state_file": (tmp_path / "state.json").as_posix(),
+        "tracking": {"backend": "mock"},  # hermetic, as in _build_app above
     }
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")

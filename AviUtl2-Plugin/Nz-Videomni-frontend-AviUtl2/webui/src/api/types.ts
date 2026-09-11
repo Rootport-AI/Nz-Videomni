@@ -630,6 +630,26 @@ export interface StatusResponse {
      * same as a missing `sage_available`. */
     block_swap_prefetch_available?: boolean;
   };
+  /** Optional (defensive): the object-tracking capability block (§3-54,
+   * 2026-09-11). Absent from every backend older than that change — and, unlike
+   * `acceleration`, absent is the EXPECTED state on most installs, because the
+   * tracking module is an opt-in install (`install-UETrack.bat`) rather than
+   * part of `setup.bat`.
+   *
+   * Only two fields, deliberately (`Docs/OBJECT_TRACKING_DESIGN.md` §4.5): the
+   * panel has exactly two things to do — run, or explain why it cannot — so a
+   * richer block would only be diagnostics nobody reads. `reason` is present
+   * ONLY when `available` is false, and takes one of two values:
+   *  - `"not installed"` — the `.venv-utils` python or the weights are missing;
+   *  - `"worker failed"` — both are there but the worker would not start.
+   * Typed as a bare `string` for the same forward-compat reason
+   * {@link StatusResponse.state} is: an unknown future reason must not become a
+   * type error. `AppShell` derives the panel's availability off this in one
+   * line (the `sage_available` arrangement — one poll, read where it is used). */
+  tracking?: {
+    available: boolean;
+    reason?: string;
+  };
 }
 
 export interface GenerationPreset {

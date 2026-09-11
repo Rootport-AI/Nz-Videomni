@@ -64,6 +64,11 @@ const EXPECTED: Array<{
   // W3 ⬇ layer quick-insert here: position-based, no provisional (plain insert
   // at the cursor), so requiredKind and placement are both null.
   { action: "insertLatestResultHere", targetMode: "single", intent: "insert-latest-result", needsSelection: false, requiredKind: null, placement: null },
+  // §3-54 物体追尾 (2026-09-11): the first row targeting the Toolbox tab, the
+  // only one requiring `partialFilter`, and the only object command that is not
+  // a generation origin — hence `placement: null` with nothing downstream of it
+  // (the route early-returns in `AppShell.handleRoute`).
+  { action: "trackObject", targetMode: "toolbox", intent: "track-object", needsSelection: true, requiredKind: "partialFilter", placement: null },
 ];
 
 describe("routeMenuAction", () => {
@@ -94,15 +99,16 @@ describe("routeMenuAction", () => {
     expect(knownMenuActions().sort()).toEqual(EXPECTED.map((e) => e.action).sort());
   });
 
-  it("exposes exactly the twenty redesign actions (15 object + 5 layer)", () => {
-    // 素材（末尾）(2026-08-15) added the 15th object item, `endWithThis`.
-    expect(knownMenuActions()).toHaveLength(20);
+  it("exposes exactly the twenty-one actions (16 object + 5 layer)", () => {
+    // 素材（末尾）(2026-08-15) added the 15th object item, `endWithThis`;
+    // §3-54 (2026-09-11) added the 16th, `trackObject` (右クリック #21).
+    expect(knownMenuActions()).toHaveLength(21);
   });
 });
 
 describe("MENU_ROUTING_TABLE invariants", () => {
   it("only ever targets one of the known modes", () => {
-    const allowed: MenuTargetMode[] = ["single", "chained", "edit", "inventory"];
+    const allowed: MenuTargetMode[] = ["single", "chained", "edit", "inventory", "toolbox"];
     for (const info of Object.values(MENU_ROUTING_TABLE)) {
       expect(allowed).toContain(info.targetMode);
     }
@@ -143,9 +149,17 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       "retakeRange",
       // 素材（末尾）: also an object command (it acts on the selected material).
       "endWithThis",
+      // §3-54: acts on the selected 部分フィルタ.
+      "trackObject",
     ]) {
       expect(MENU_ROUTING_TABLE[action]?.needsSelection).toBe(true);
     }
+  });
+
+  it("routes the §3-54 追尾 item to the Toolbox tab, alone", () => {
+    expect(MENU_ROUTING_TABLE.trackObject?.targetMode).toBe("toolbox");
+    const toolboxRows = Object.values(MENU_ROUTING_TABLE).filter((i) => i.targetMode === "toolbox");
+    expect(toolboxRows).toHaveLength(1);
   });
 
   it("keeps the Chain-routed items (extendVideo, imageToClipChain, currentFrameToClipChain) on chain and A2V on create", () => {
@@ -173,6 +187,8 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       // W0 Edit-系: both operate on a video object.
       outpaintVideo: "video",
       retakeRange: "video",
+      // §3-54: the one row using the fifth kind.
+      trackObject: "partialFilter",
     };
     for (const [action, kind] of Object.entries(objectKinds)) {
       expect(MENU_ROUTING_TABLE[action]?.requiredKind).toBe(kind);
@@ -212,6 +228,8 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       // `provisionalReservation.placementParams` が B へ写像し、呼び出し側が
       // シフト済みの開始フレームを入れる（系統D と同じ規律）。
       endWithThis: "E",
+      // §3-54: reserves nothing — it edits an object that already exists.
+      trackObject: null,
     };
     for (const [action, placement] of Object.entries(placements)) {
       expect(MENU_ROUTING_TABLE[action]?.placement).toBe(placement);

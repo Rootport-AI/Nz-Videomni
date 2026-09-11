@@ -20,6 +20,7 @@ from services.lora_registry import LoraRegistry
 from services.model_registry import DEFAULT_NAME, ModelRegistry
 from services.pipeline_manager import PipelineManager
 from services.runtime_state import RuntimeState
+from services.tracking_manager import TrackingManager
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
 
@@ -54,6 +55,11 @@ class AppContext:
     model_registry: ModelRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
     join_manager: JoinManager = field(init=False)
+    #: Object tracking (§3-54). Built unconditionally and STARTS NOTHING — the
+    #: utility worker is spawned by the first tracking session, never at boot,
+    #: so a server nobody tracks on pays nothing and a machine without
+    #: ``.venv-utils`` still starts normally (``/status`` then says why).
+    tracking_manager: TrackingManager = field(init=False)
 
     def __post_init__(self) -> None:
         self.base_models = load_base_models(self.config.manifest_dir)
@@ -99,6 +105,9 @@ class AppContext:
             # TO, and to publish the new active base back (P6).
             model_registry=self.model_registry,
         )
+        # Last, and independent of everything above: tracking shares no state
+        # with the pipeline (no base model, no selection, no queue).
+        self.tracking_manager = TrackingManager(self.config)
 
     def _restore_selection(self, base_model: str) -> tuple[dict[str, str], dict[str, str]]:
         """The remembered selection of ``base_model``, as NAMES *and* PATHS.

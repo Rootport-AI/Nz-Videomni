@@ -117,6 +117,11 @@ param(
     [switch] $CloneUpstreamReference,
     # Convenience skips.
     [switch] $SkipModels,
+    # -SkipVenv means "leave the venvs setup.bat built alone" (.venv, .venv-engine,
+    # .venv-engine-ltx25). It does NOT cover .venv-utils, which setup.bat never
+    # builds: that one is created only when this run's -BaseModel selects a
+    # descriptor that needs it (UETrack), so install-UETrack.bat can pass
+    # -SkipVenv and still get its interpreter.
     [switch] $SkipVenv,
     # Print the models/ migration plan (and the config.yaml lines that would be
     # rewritten) and exit 0 WITHOUT touching a single byte on disk.
@@ -1248,15 +1253,36 @@ $ltx25UvArgs = @(
     "--index-strategy", "unsafe-best-match"
 )
 
+# ---------------------------------------------------------------------------
+# Utility-AI venv (.venv-utils). NOT an engine: it runs the object-tracking
+# worker (UETrack, CPU only), which is why it must not share an interpreter with
+# either cu128 stack -- a CPU torch and a cu128 torch are the same distribution
+# name at the same version, so one venv cannot hold both.
+#
+# There is no $utilsDirectPins array on purpose: every dependency is an ordinary
+# PyPI/pytorch-index wheel, so the freeze alone is a complete description and
+# stage (a) of Invoke-EngineFreezeApply is skipped (see its $DirectPins default).
+# The spec this freeze was resolved from is tracking/utils-venv-pyproject.toml.
+# ---------------------------------------------------------------------------
+$utilsVenv = "$ProjectRoot\.venv-utils"
+$utilsPy = "$ProjectRoot\.venv-utils\Scripts\python.exe"
+$utilsFreezeSrc = "$ProjectRoot\tracking\venv-utils.freeze.txt"
+$utilsStateFile = "$ProjectRoot\.venv-utils\.nz-engine-state"
+
 # SHA-256 over the freeze body PLUS the direct pins. The freeze file alone is
 # NOT a sufficient input: the pinned revs/URLs are hardcoded in this script, so
 # a bump would otherwise leave the hash unchanged and never re-apply. Line
 # endings are normalised first so a CRLF/LF checkout flip does not masquerade
 # as a change.
+# $DirectPins is OPTIONAL (default @()) for the pin-less .venv-utils stack, whose
+# whole dependency set lives in its freeze file. An empty array joins to the empty
+# string, so the payload stays deterministic ("<body>`n`n") and a venv with no pins
+# still gets a stable marker. Passing a non-empty array reproduces the old
+# behaviour byte for byte.
 function Get-EngineStateHash {
     param(
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $DirectPins
+        [string[]] $DirectPins = @()
     )
     $body = [System.IO.File]::ReadAllText($FreezeFile).Replace("`r`n", "`n")
     $payload = $body + "`n" + ($DirectPins -join "`n") + "`n"
@@ -1285,36 +1311,51 @@ function Get-EngineStateHash {
 # needs the cu128 index and --no-sources (see $ltx25UvArgs). Their DEFAULTS
 # reproduce the 2.3 call byte for byte, so the 2.3 path is unchanged by their
 # existence.
+#
+# $DirectPins is OPTIONAL (default @()): the .venv-utils stack has no git pins and
+# no direct-URL wheels at all, so stage (a) -- and with it the freeze filter that
+# only exists to undo stage (a) -- is skipped entirely for it. $IndexUrl replaces
+# what used to be a hardcoded cu128 URL on stage (b); .venv-utils needs the CPU
+# index instead. Both defaults reproduce the previous behaviour byte for byte,
+# message text included (the index LABEL is the URL's last segment, which is
+# "cu128" for the default and "cpu" for the utility venv).
 function Invoke-EngineFreezeApply {
     param(
         [Parameter(Mandatory)] [string]   $EnginePython,
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $DirectPins,
+        [string[]] $DirectPins = @(),
         [string[]] $DirectPinArgs = @(),
-        [string]   $DirectPinsLabel = "3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention"
+        [string]   $DirectPinsLabel = "3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention",
+        [string]   $IndexUrl = "https://download.pytorch.org/whl/cu128"
     )
-    Write-Do "install direct-reference packages ($DirectPinsLabel)"
-    $directArgs = @("pip", "install", "--python", $EnginePython) + $DirectPinArgs + $DirectPins
-    uv @directArgs
-    if ($LASTEXITCODE -ne 0) { throw "engine direct-pin install failed." }
+    $gitLineRe = ""
+    if (@($DirectPins).Count -gt 0) {
+        Write-Do "install direct-reference packages ($DirectPinsLabel)"
+        $directArgs = @("pip", "install", "--python", $EnginePython) + $DirectPinArgs + $DirectPins
+        uv @directArgs
+        if ($LASTEXITCODE -ne 0) { throw "engine direct-pin install failed." }
 
-    # Distribution names taken from the pins themselves, so this filter cannot
-    # drift out of sync with the list above. The split covers BOTH pin shapes:
-    # "name @ <url>" (all four 2.3 pins) and a bare "name==version" (the 2.5
-    # torch/torchaudio pins) -- taking only the leading distribution name in
-    # either case. For the 2.3 pins the result is the same string it always was.
-    $directNames = $DirectPins | ForEach-Object { [regex]::Escape((($_ -split '[\s=<>~!;\[]')[0])) }
-    $gitLineRe = "^(" + ($directNames -join "|") + ")=="
+        # Distribution names taken from the pins themselves, so this filter cannot
+        # drift out of sync with the list above. The split covers BOTH pin shapes:
+        # "name @ <url>" (all four 2.3 pins) and a bare "name==version" (the 2.5
+        # torch/torchaudio pins) -- taking only the leading distribution name in
+        # either case. For the 2.3 pins the result is the same string it always was.
+        $directNames = $DirectPins | ForEach-Object { [regex]::Escape((($_ -split '[\s=<>~!;\[]')[0])) }
+        $gitLineRe = "^(" + ($directNames -join "|") + ")=="
+    }
 
+    $indexLabel = ($IndexUrl -split '/')[-1]
     $tmpFreeze = Join-Path ([System.IO.Path]::GetTempPath()) ("venv-engine.freeze.nogit.{0}.txt" -f ([guid]::NewGuid().ToString("N")))
     try {
-        Get-Content $FreezeFile |
-            Where-Object { $_ -notmatch $gitLineRe } |
-            Set-Content -Path $tmpFreeze -Encoding utf8
+        # With no direct pins there is nothing to filter out, so the freeze is
+        # copied whole (an empty $gitLineRe would be a match-everything regex).
+        $freezeLines = Get-Content $FreezeFile
+        if ($gitLineRe) { $freezeLines = @($freezeLines | Where-Object { $_ -notmatch $gitLineRe }) }
+        $freezeLines | Set-Content -Path $tmpFreeze -Encoding utf8
 
-        Write-Do "install pinned wheels from freeze (cu128 index)"
+        Write-Do "install pinned wheels from freeze ($indexLabel index)"
         uv pip install --python $EnginePython `
-            --index https://download.pytorch.org/whl/cu128 `
+            --index $IndexUrl `
             --index-strategy unsafe-best-match `
             -r $tmpFreeze
         if ($LASTEXITCODE -ne 0) { throw "engine freeze install failed." }
@@ -1336,24 +1377,38 @@ function Invoke-EngineFreezeApply {
 #
 # $DirectPinArgs carries the per-engine uv flag differences (see $ltx25UvArgs);
 # its default reproduces the 2.3 behaviour exactly.
+#
+# Three more optional knobs, all defaulting to the previous behaviour:
+#   $DirectPins    now optional (the .venv-utils stack has none -- see
+#                  Invoke-EngineFreezeApply).
+#   $IndexUrl      the wheel index stage (b) resolves from (cu128 / cpu).
+#   $IgnoreSkipVenv lifts the -SkipVenv early return for a venv that setup.bat
+#                  never builds. -SkipVenv means "do not touch the venvs
+#                  setup.bat made"; .venv-utils is not one of them, and
+#                  install-UETrack.bat passes -SkipVenv precisely to protect the
+#                  other three.
+# $StackLabel names the stack in the step heading, for the same reason.
 function Ensure-EngineVenv {
     param(
         [Parameter(Mandatory)] [string]   $VenvPath,
         [Parameter(Mandatory)] [string]   $PythonPath,
         [Parameter(Mandatory)] [string]   $StateFile,
         [Parameter(Mandatory)] [string]   $FreezeFile,
-        [Parameter(Mandatory)] [string[]] $DirectPins,
         [Parameter(Mandatory)] [string]   $Label,
+        [string[]] $DirectPins = @(),
         [string[]] $DirectPinArgs = @(),
-        [string]   $DirectPinsLabel = "3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention"
+        [string]   $DirectPinsLabel = "3 git pins + 1 wheel URL: diffusers / ltx-core / ltx-pipelines / sageattention",
+        [string]   $IndexUrl = "https://download.pytorch.org/whl/cu128",
+        [string]   $StackLabel = "torch cu128 stack",
+        [switch]   $IgnoreSkipVenv
     )
-    if ($SkipVenv) {
+    if ($SkipVenv -and -not $IgnoreSkipVenv) {
         Write-Step "Engine venv $Label"
         Write-Skip "-SkipVenv given"
         return
     }
 
-    Write-Step "Engine venv $Label  (torch cu128 stack, deterministic freeze)"
+    Write-Step "Engine venv $Label  ($StackLabel, deterministic freeze)"
     if (-not (Test-Path $FreezeFile)) { throw "Engine freeze file not found: $FreezeFile" }
 
     $wantState = Get-EngineStateHash -FreezeFile $FreezeFile -DirectPins $DirectPins
@@ -1367,7 +1422,7 @@ function Ensure-EngineVenv {
         uv venv --python 3.12 $VenvPath
         if ($LASTEXITCODE -ne 0) { throw "uv venv $Label failed." }
         Invoke-EngineFreezeApply -EnginePython $PythonPath -FreezeFile $FreezeFile -DirectPins $DirectPins `
-            -DirectPinArgs $DirectPinArgs -DirectPinsLabel $DirectPinsLabel
+            -DirectPinArgs $DirectPinArgs -DirectPinsLabel $DirectPinsLabel -IndexUrl $IndexUrl
         Set-Content -Path $StateFile -Value $wantState -Encoding ascii
         Write-Ok "$Label ready"
     } elseif ($haveState -eq $wantState) {
@@ -1383,7 +1438,7 @@ function Ensure-EngineVenv {
             Write-Do "no completion marker found (interrupted install, or built before re-sync existed) -- re-applying the freeze"
         }
         Invoke-EngineFreezeApply -EnginePython $PythonPath -FreezeFile $FreezeFile -DirectPins $DirectPins `
-            -DirectPinArgs $DirectPinArgs -DirectPinsLabel $DirectPinsLabel
+            -DirectPinArgs $DirectPinArgs -DirectPinsLabel $DirectPinsLabel -IndexUrl $IndexUrl
         Set-Content -Path $StateFile -Value $wantState -Encoding ascii
         Write-Ok "$Label re-synced"
     }
@@ -1401,6 +1456,34 @@ Ensure-EngineVenv -VenvPath $ltx25Venv -PythonPath $ltx25Py `
     -DirectPins $ltx25DirectPins -Label ".venv-engine-ltx25" `
     -DirectPinArgs $ltx25UvArgs `
     -DirectPinsLabel "2 torch pins + 2 git pins + 1 wheel pin: torch / torchaudio / ltx-core / ltx-pipelines / sageattention"
+
+# ----------------------------------------------------------------------------
+# Utility-AI venv .venv-utils  (CPU torch, object tracking / UETrack)
+#
+# Deliberately NOT symmetric with the two engine venvs above, in two ways:
+#
+#  (1) It is built only when THIS RUN's -BaseModel selects a descriptor that
+#      needs it. setup.bat never asks for UETrack, so a normal install never
+#      pays for a second torch download; install-UETrack.bat is the only caller
+#      that turns this on (owner's ruling 2026-09-11: opt-in, so the whole
+#      feature can be withdrawn by deleting one HuggingFace repo).
+#  (2) It ignores -SkipVenv (-IgnoreSkipVenv). -SkipVenv means "do not disturb
+#      the venvs setup.bat built", and install-UETrack.bat passes it for exactly
+#      that reason -- but .venv-utils is not one of those venvs, and refusing to
+#      build it here would leave the opt-in installer with no way to build it at
+#      all.
+#
+# The stack is CPU-only torch from the /whl/cpu index and has no direct pins,
+# so both uv stages collapse into the single freeze apply.
+# ----------------------------------------------------------------------------
+if ($foundIds -contains 'UETrack') {
+    Ensure-EngineVenv -VenvPath $utilsVenv -PythonPath $utilsPy `
+        -StateFile $utilsStateFile -FreezeFile $utilsFreezeSrc `
+        -Label ".venv-utils" `
+        -IndexUrl "https://download.pytorch.org/whl/cpu" `
+        -StackLabel "torch CPU stack" `
+        -IgnoreSkipVenv
+}
 
 # hf.exe (used by the model downloads below) must exist in the engine venv.
 $hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
@@ -1682,6 +1765,13 @@ $required = @(
     @{ Label = "app_python";       Rel = ".venv/Scripts/python.exe";        IsDir = $false; Min = [long]0 }
     @{ Label = "engine worker.py"; Rel = "engine/worker.py";                IsDir = $false; Min = [long]0 }
 )
+# The object-tracking worker's own two prerequisites, added only when THIS run
+# is the one that builds them (-BaseModel UETrack). Same reason as the model
+# rows below: setup.bat must not report a venv it was never asked to build.
+if ($foundIds -contains 'UETrack') {
+    $required += @{ Label = "utils_python";       Rel = ".venv-utils/Scripts/python.exe"; IsDir = $false; Min = [long]0 }
+    $required += @{ Label = "tracking worker.py"; Rel = "tracking/worker.py";             IsDir = $false; Min = [long]0 }
+}
 # Model rows come from the manifests THIS run is responsible for (-BaseModel):
 # install-LTX25.bat must not report LTX 2.3 as MISSING, and setup.bat must not
 # report LTX 2.5 as MISSING. The three fixed rows above stay unconditional --

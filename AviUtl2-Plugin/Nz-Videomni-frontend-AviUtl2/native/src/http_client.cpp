@@ -274,7 +274,8 @@ HttpClient::~HttpClient() {
 }
 
 HttpResponse HttpClient::RequestSync(const std::string& url, const std::string& method,
-                                     const std::string& body_json, int timeout_ms) {
+                                     const std::string& body_json, int timeout_ms,
+                                     const std::string& content_type) {
     HttpResponse resp;
     if (impl_ == nullptr || impl_->session == nullptr) {
         resp.transport = TransportError::kUnreachable;
@@ -301,10 +302,13 @@ HttpResponse HttpClient::RequestSync(const std::string& url, const std::string& 
 
     LPCWSTR headers = WINHTTP_NO_ADDITIONAL_HEADERS;
     DWORD header_len = 0;
-    const std::wstring json_header = L"Content-Type: application/json; charset=utf-8\r\n";
-    if (!body_json.empty()) {
-        headers = json_header.c_str();
-        header_len = static_cast<DWORD>(json_header.size());
+    // Content-Type comes from the caller (default: JSON - see http_client.h).
+    // Section 3-54 sends "application/octet-stream" here for a raw RGBA frame.
+    const std::wstring ct_header =
+        L"Content-Type: " + Utf8ToWide(content_type) + L"\r\n";
+    if (!body_json.empty() && !content_type.empty()) {
+        headers = ct_header.c_str();
+        header_len = static_cast<DWORD>(ct_header.size());
     }
 
     if (!::WinHttpSendRequest(request.get(), headers, header_len,

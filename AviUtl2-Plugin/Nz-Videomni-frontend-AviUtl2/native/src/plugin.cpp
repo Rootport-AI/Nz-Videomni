@@ -476,7 +476,7 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3B5 Audio: long a2v from this audio",                              "audioToLongA2v",    &OnMenu_AudioToLongA2v },
     { L"Nz-Videomni\\\U0001F4DD Text: append to the main prompt",                              "appendText",        &OnMenu_AppendText },
     { L"Nz-Videomni\\\U00002B07 Insert this generated result now",                             "insertProvisionalResult", &OnMenu_InsertProvisionalResult },
-    { L"Nz-Videomni\\\U0001F3AF Track: follow this partial filter's box",                      "trackObject",       &OnMenu_TrackObject },
+    { L"Nz-Videomni\\\U0001F3AF Object tracking (uses a partial filter)",                      "trackObject",       &OnMenu_TrackObject },
 };
 
 const TimelineMenuItem kLayerMenuItems[] = {

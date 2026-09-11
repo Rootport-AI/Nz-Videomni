@@ -314,6 +314,16 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // would reset a screen-local copy and send the RPC out with defaults the user
   // never chose.
   const objectTracking = useObjectTrackingSettings();
+  // Whether the Toolbox panel's tracking run is in flight (owner gate
+  // 2026-09-11). A REF, written by the panel through `onRunningChange` and read
+  // only inside `handleRoute` — the route callback must see the current value
+  // without being re-created (and without re-rendering the shell) every time a
+  // run starts or ends, which is the same arrangement `serverBusyRef` (declared
+  // near the top of this component) uses. Nothing renders off it.
+  const trackingRunningRef = useRef(false);
+  const handleTrackingRunningChange = useCallback((running: boolean) => {
+    trackingRunningRef.current = running;
+  }, []);
 
   // Acceleration (2026-07-31, backend §43): same single-owner arrangement as
   // `nagControls` right above — one call, one object, handed to the Settings
@@ -585,6 +595,22 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         // a panel whose every control is greyed would tell the user nothing
         // the note does not, and would strand them on a tab they cannot use.
         showNote("warning", strings.notes.trackingUnavailable);
+        return;
+      }
+      // A run is already going (owner gate 2026-09-11). Everything below would
+      // remount the Toolbox screen, and a remount THROWS AWAY the running run's
+      // progress subscription and its pending promise: the panel froze mid-run
+      // and the fresh one reported native's `TRACK_BUSY` as a failure, while the
+      // run itself quietly finished. So the second right-click is refused HERE,
+      // in the §4 guard's shape — guidance only, nothing touched.
+      //
+      // The tab switch is the one thing still done: it puts the user in front
+      // of the run the note is talking about, and it changes nothing about the
+      // run (no `trackRequest`, no remount token). Native's own `TRACK_BUSY`
+      // stays as the safety net for anything that gets past this ref.
+      if (trackingRunningRef.current) {
+        showNote("warning", strings.notes.trackingBusy);
+        setMode("toolbox");
         return;
       }
       // The selection alone — nothing is added to make a repeat right-click on
@@ -1431,6 +1457,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               onSmoothingChange={objectTracking.setSmoothing}
               onFollowSizeChange={objectTracking.setFollowSize}
               onKeyframeStrideChange={objectTracking.setKeyframeStride}
+              onRunningChange={handleTrackingRunningChange}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "single"}>

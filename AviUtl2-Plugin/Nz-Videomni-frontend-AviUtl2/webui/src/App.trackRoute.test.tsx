@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "./bridge/mockBridge";
 import type { MockBridgeOptions } from "./bridge/mockBridge";
-import { BridgeError, TIMELINE_MENU_INVOKED_EVENT, TIMELINE_TRACK_PROGRESS_EVENT } from "./bridge";
+import { TIMELINE_MENU_INVOKED_EVENT, TIMELINE_TRACK_PROGRESS_EVENT } from "./bridge";
 import type { ResultOf } from "./bridge";
 import { apiClient as defaultApiClient } from "./api/client";
 import type { StatusResponse } from "./api/types";
@@ -319,21 +319,24 @@ describe("App / §3-54 物体追尾 right-click routing", () => {
   );
 
   it(
-    "keeps a second 追尾 right-click's refusal usable: TRACK_BUSY, with Stop still pressable",
+    "does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone",
     async () => {
+      // Owner gate 2026-09-11. Before this rule the second right-click bumped
+      // the remount token: the running run's progress subscription and its
+      // pending promise went with the old screen, so the readout froze at
+      // whatever number it had reached and the fresh panel showed native's
+      // `TRACK_BUSY` under a "Tracking failed" heading — while the run itself
+      // ran to completion, unaffected. Now the shell refuses the second click
+      // before any of that, and the FIRST panel keeps watching its own run.
       const bridge = await renderShell();
       const original = bridge.request.bind(bridge);
       let trackCalls = 0;
-      // Native holds ONE tracking session. Run #1 is modelled as a call that
-      // never settles (it is still going when the second right-click lands);
-      // run #2 meets the refusal native would send.
+      // Run #1 is modelled as a call that never settles: it is still going when
+      // the second right-click lands.
       const spy = vi.spyOn(bridge, "request").mockImplementation((method, params) => {
         if (method === "timeline.trackObject") {
           trackCalls += 1;
-          if (trackCalls === 1) return new Promise(() => {}) as ReturnType<typeof original>;
-          return Promise.reject(
-            new BridgeError("TRACK_BUSY", "A tracking run is already in progress"),
-          ) as ReturnType<typeof original>;
+          return new Promise(() => {}) as ReturnType<typeof original>;
         }
         return original(method, params);
       });
@@ -354,13 +357,31 @@ describe("App / §3-54 物体追尾 right-click routing", () => {
 
       // The second right-click, while that run is still going.
       emit(bridge, "trackObject", partialFilterSelection());
-      await screen.findByText(/another tracking run is already going/i, undefined, {
+      await screen.findByText(/object tracking is already running/i, undefined, {
         timeout: 5_000,
       });
 
-      // The whole point of the refusal: its own sentence says "stop it first",
-      // so the button that does must be pressable even though THIS panel is not
-      // the one running.
+      // Nothing was re-fired: one RPC for one run.
+      expect(trackCalls).toBe(1);
+      // The first run's subscription is still attached — a LATER push (one that
+      // a remount would have orphaned) still reaches the readout.
+      act(() => {
+        bridge.emit(TIMELINE_TRACK_PROGRESS_EVENT, {
+          frame: 200,
+          index: 101,
+          total: 241,
+          score: 0.9,
+          lost: false,
+        });
+      });
+      await screen.findByText(/101 \/ 241 frames/, undefined, { timeout: 5_000 });
+      // And the panel reports no failure: the refusal is guidance, not an error
+      // (`NoteArea` is `role="status"`, so an alert here could only be the
+      // panel's own error box).
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      // Stop is what the note tells the user to press, so it must still reach
+      // the run that is going.
       const stop = screen.getByRole("button", { name: /stop/i });
       expect(stop).toBeEnabled();
       await act(async () => {

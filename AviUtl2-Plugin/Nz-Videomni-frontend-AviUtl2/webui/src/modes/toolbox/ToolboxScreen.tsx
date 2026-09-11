@@ -39,6 +39,10 @@ export interface ToolboxScreenProps {
   onSmoothingChange: (value: number) => void;
   onFollowSizeChange: (value: boolean) => void;
   onKeyframeStrideChange: (value: number) => void;
+  /** Passed straight through to the section: it raises this while its run is
+   * going so `AppShell` can refuse a second 追尾 right-click instead of
+   * remounting this screen out from under the run (owner gate 2026-09-11). */
+  onRunningChange?: ((running: boolean) => void) | undefined;
 }
 
 export function ToolboxScreen({
@@ -53,6 +57,7 @@ export function ToolboxScreen({
   onSmoothingChange,
   onFollowSizeChange,
   onKeyframeStrideChange,
+  onRunningChange,
 }: ToolboxScreenProps) {
   return (
     <div className="toolbox-screen">
@@ -68,6 +73,7 @@ export function ToolboxScreen({
         onSmoothingChange={onSmoothingChange}
         onFollowSizeChange={onFollowSizeChange}
         onKeyframeStrideChange={onKeyframeStrideChange}
+        onRunningChange={onRunningChange}
       />
     </div>
   );

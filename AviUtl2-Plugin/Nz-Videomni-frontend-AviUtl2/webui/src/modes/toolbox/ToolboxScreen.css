@@ -53,6 +53,28 @@
   gap: 4px;
 }
 
+/* 2択のラジオは横並びにする（オーナー実機ゲート 2026-09-11）。`<legend>` は
+ * flex の子にならないので、見出しは従来どおり上の行に出たまま、選択肢だけが
+ * 1 行に並ぶ。狭いときに潰れないよう `wrap` だけ許し、間隔は `.field-inline`
+ * と同じ 8px を使う（新しい寸法は作らない）。 */
+.toolbox-group-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbox-group-row > legend {
+  width: 100%;
+}
+
+/* 縦並びのときは揃えの役に立っていた `.field-inline .field-label` の
+ * 最小幅 80px が、横並びでは選択肢の間に無用な空きを作るので、この行の中だけ
+ * 素の幅へ戻す。 */
+.toolbox-group-row .field-inline .field-label {
+  min-width: auto;
+}
+
 /* モデルのラジオは操作できない見本なので、`.mode-tab:disabled` と同じ
  * 薄さ＋🚫カーソルにする。`:has()` ではなく `input:disabled` に直接当てて
  * いるのは、同じ区画の「実行中だから一時的に触れない」設定まで同じ薄さに

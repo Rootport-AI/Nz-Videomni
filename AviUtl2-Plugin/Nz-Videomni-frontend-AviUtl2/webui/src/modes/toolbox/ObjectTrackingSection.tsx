@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useStrings } from "../../i18n/LanguageContext";
 import type { NativeBridge } from "../../bridge";
 import {
@@ -35,8 +36,10 @@ import type { ObjectTrackRequest } from "./useObjectTracking";
  * reads this. Tracking runs on the CPU in a separate worker, so it never waits
  * for a generation to finish and never stops the user from starting one
  * (design doc §18). Every other long operation in this app is GPU work under a
- * one-at-a-time discipline; this one is the deliberate exception, so the panel
- * says so in as many words rather than leaving the user to wonder.
+ * one-at-a-time discipline; this one is the deliberate exception. The panel
+ * used to say so in a sentence of its own; that sentence was removed at the
+ * owner's gate on 2026-09-11 (it explained an invariant the user never has to
+ * act on), so THIS COMMENT is now where the arrangement is written down.
  *
  * ## Parts are copies, on purpose
  *
@@ -77,6 +80,16 @@ export interface ObjectTrackingSectionProps {
   onSmoothingChange: (value: number) => void;
   onFollowSizeChange: (value: boolean) => void;
   onKeyframeStrideChange: (value: number) => void;
+  /** Raised/lowered as this panel's run starts and settles, so `AppShell` can
+   * refuse a SECOND 追尾 right-click while one is going (owner gate
+   * 2026-09-11). Deliberately a callback into a shell-held ref rather than a
+   * new context or store: one boolean travels up, nothing re-renders, and the
+   * panel keeps owning the run.
+   *
+   * There is no unmount reset on purpose — while this is true the shell does
+   * not remount the Toolbox screen, so the only way the flag can go stale is
+   * the whole app going away with it. */
+  onRunningChange?: ((running: boolean) => void) | undefined;
   /** Test seam for the rate measurement, passed straight to
    * `useObjectTracking`. */
   now?: (() => number) | undefined;
@@ -163,6 +176,7 @@ export function ObjectTrackingSection({
   onSmoothingChange,
   onFollowSizeChange,
   onKeyframeStrideChange,
+  onRunningChange,
   now,
 }: ObjectTrackingSectionProps) {
   const strings = useStrings();
@@ -175,6 +189,13 @@ export function ObjectTrackingSection({
   });
 
   const running = run.phase === "running";
+  // Report the transitions, not every render — the listener is a ref write in
+  // `AppShell`, so an effect (after paint, once per change) is all it needs.
+  const notifyRunning = useRef(onRunningChange);
+  notifyRunning.current = onRunningChange;
+  useEffect(() => {
+    notifyRunning.current?.(running);
+  }, [running]);
   // Two reasons a control is dead, one treatment: the server cannot track, or
   // a run is already using these values. Combining them keeps the panel from
   // growing a second greyed-out look for what the user reads as the same fact
@@ -195,7 +216,6 @@ export function ObjectTrackingSection({
     <section className="toolbox-section">
       <h2 className="toolbox-section-heading">{t.heading}</h2>
       <p className="field-hint">{t.intro}</p>
-      <p className="field-hint">{t.independenceHint}</p>
 
       {!trackingAvailable && (
         <div className="toolbox-unavailable">
@@ -211,7 +231,7 @@ export function ObjectTrackingSection({
           nothing reacts. Greyed with the SAME treatment a disabled mode tab
           gets (`.mode-tab:disabled`), so "not a real option" looks the same
           everywhere in the app. */}
-      <fieldset className="toolbox-group">
+      <fieldset className="toolbox-group toolbox-group-row">
         <legend className="field-label">{t.model.label}</legend>
         <label className="field field-inline">
           <input type="radio" name="track-model" checked readOnly disabled />
@@ -221,7 +241,6 @@ export function ObjectTrackingSection({
           <input type="radio" name="track-model" checked={false} readOnly disabled />
           <span className="field-label">{t.model.other}</span>
         </label>
-        <p className="field-hint">{t.model.hint}</p>
       </fieldset>
 
       <TrackNumberField
@@ -246,7 +265,7 @@ export function ObjectTrackingSection({
         onChange={onLostScoreThresholdChange}
       />
 
-      <fieldset className="toolbox-group">
+      <fieldset className="toolbox-group toolbox-group-row">
         <legend className="field-label">{t.lostBehavior.label}</legend>
         {(
           [
@@ -288,7 +307,6 @@ export function ObjectTrackingSection({
           />
           <span className="field-label">{t.followSize.label}</span>
         </label>
-        <p className="field-hint">{t.followSize.hint}</p>
       </div>
 
       <TrackNumberField
@@ -348,7 +366,12 @@ export function ObjectTrackingSection({
 
       {run.phase === "error" && (
         <div className="toolbox-error" role="alert">
-          <p className="field-label">{t.errorHeading}</p>
+          {/* No heading for `TRACK_BUSY` (owner gate 2026-09-11): that code is
+              a refusal, not a failure — the run it names is still going, and
+              "Tracking failed" above a live progress readout contradicts it.
+              Only that one code is special-cased; every other code keeps the
+              heading, so this stays one exception rather than a table. */}
+          {run.errorCode !== "TRACK_BUSY" && <p className="field-label">{t.errorHeading}</p>}
           <p className="field-hint field-hint-error">{errorText}</p>
         </div>
       )}

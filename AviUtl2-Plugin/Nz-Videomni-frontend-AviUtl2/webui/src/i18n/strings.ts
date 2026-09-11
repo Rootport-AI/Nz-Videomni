@@ -1496,27 +1496,19 @@ export const en = {
       /** The one sentence that explains where the box comes from: the user
        * fits it in AviUtl2's preview, not here (§1 / §11 of the design doc). */
       intro:
-        "Put a partial filter on a layer below the video, fit its box in the preview to what you want followed, then right-click that object on the timeline and choose Track.",
-      /** Tracking runs on the CPU, so it neither waits for a generation job nor
-       * blocks one (design doc §18). Said once, in the panel, because the rest
-       * of this app's long operations DO share the GPU. */
-      independenceHint:
-        "Tracking runs on the CPU. It does not wait for a generation to finish, and it does not stop you from generating.",
+        'Put a partial filter on a layer below the video, fit its box in the preview to what you want followed, then right-click that object on the timeline and choose "🎯 Object tracking (uses a partial filter)".',
       model: {
         label: "Model",
         uetrack: "UETrack",
         other: "Other",
-        /** Both buttons are disabled: this is a seat kept for a second tracker,
-         * not a choice. Nothing about it is saved. */
-        hint: "UETrack is the only tracker in this build.",
       },
       searchFactor: {
         label: "Search area",
-        hint: "How far around the current box the tracker looks in the next frame, as a multiple of the box. Larger keeps up with faster movement and costs more time per frame.",
+        hint: "Wider keeps up better with fast movement, but takes more time to process.",
       },
       lostThreshold: {
         label: "Lost threshold",
-        hint: "A frame whose tracker score falls below this is treated as lost.",
+        hint: 'When what is drawn inside the filter’s box changes too much from how it looked when tracking started, it is treated as "lost". This is that threshold.',
       },
       lostBehavior: {
         label: "When lost",
@@ -1529,11 +1521,10 @@ export const en = {
       },
       followSize: {
         label: "Follow the box size too",
-        hint: "Off follows the position only and keeps the box at its starting size.",
       },
       keyframeStride: {
         label: "Keyframe interval",
-        hint: "1 writes a keyframe on every frame, 2 on every other one. The first and last are always written whatever this says.",
+        hint: "The first and last are always written whatever this says.",
       },
       progressHeading: "Progress",
       /** Shown before anything has been tracked in this session. */
@@ -1545,7 +1536,7 @@ export const en = {
       progressFps: (fps: number): string => `${fps.toFixed(1)} fps`,
       /** Stand-in until a second progress event gives something to measure. */
       progressFpsUnknown: "—",
-      stop: "Stop",
+      stop: "🚫 Stop",
       lostHeading: "Lost ranges",
       lostNone: "No lost frames.",
       /** One row per span, in AviUtl2 frame numbers (native adds the object's
@@ -1557,6 +1548,10 @@ export const en = {
        * same three numbers — the wording only says where it ended. */
       resultCancelled: (frames: number, keyframes: number, seconds: number): string =>
         `Stopped. ${frames} frames were tracked and ${keyframes} keyframes were written in ${seconds.toFixed(1)}s.`,
+      /** Shown above the sentence below for every code EXCEPT `TRACK_BUSY`
+       * (2026-09-11 owner gate): a run that is merely refused because another
+       * one is going has not failed, and heading it "Tracking failed" beside a
+       * progress readout that is still moving reads as a contradiction. */
       errorHeading: "Tracking failed",
       /** Error code -> sentence. Shown INSIDE this section rather than in the
        * shared note area: the note area is the right-click flow's channel, and
@@ -1728,6 +1723,14 @@ export const en = {
      * every control is greyed would answer nothing this note does not. */
     trackingUnavailable:
       "Object tracking is not available on this server. Run install-UETrack.bat in the backend folder, restart the server, and try again.",
+    /** §3-54 物体追尾 (owner gate 2026-09-11): the 追尾 right-click arrived while
+     * a run is still going. Refused HERE, in the shell, rather than by letting
+     * native answer `TRACK_BUSY` — the second right-click used to remount the
+     * Toolbox screen, which threw away the running run's subscription and its
+     * promise, so the live progress froze and the fresh panel reported the
+     * refusal as a failure. The run itself was never affected; only the panel
+     * watching it was. Native's `TRACK_BUSY` stays as the safety net. */
+    trackingBusy: "Object tracking is already running. Stop it with 🚫 Stop, then try again.",
   },
   /** I12 §5-5 (revised I13, owner decision 2026-07-19): the 4-stage provisional
    * placeholder labels burned onto the timeline text object. Stages 1/2 are built
@@ -2842,22 +2845,19 @@ export const ja: Strings = {
     tracking: {
       heading: "物体追尾",
       intro:
-        "動画より下のレイヤーに部分フィルタを置き、プレビューで追わせたいものに枠を合わせてから、タイムラインでそのオブジェクトを右クリックして「追尾」を選んでください。",
-      independenceHint:
-        "追尾はCPUで動きます。生成の終了を待つこともなければ、生成を止めることもありません。",
+        "動画より下のレイヤーに部分フィルタを置き、プレビューで追わせたいものに枠を合わせてから、タイムラインでそのオブジェクトを右クリックして「🎯 物体追尾（部分フィルタを使用）」を選んでください。",
       model: {
         label: "モデル",
         uetrack: "UETrack",
         other: "Other",
-        hint: "このビルドで使える追跡AIはUETrackだけです。",
       },
       searchFactor: {
         label: "探索範囲の広さ",
-        hint: "次のフレームで、いまの枠の何倍の広さを探すかです。大きいほど速い動きに追随できますが、1フレームあたりの時間が増えます。",
+        hint: "広いほど速い動きの追従性が上がるが、処理時間も増える。",
       },
       lostThreshold: {
         label: "見失いのしきい値",
-        hint: "追跡AIが返すスコアがこれを下回ったフレームを「見失い」として扱います。",
+        hint: "追跡中のフィルタ内に描かれたものが追跡開始時から変化しすぎると「見失い」として扱う。その閾値。",
       },
       lostBehavior: {
         label: "見失ったときの扱い",
@@ -2870,18 +2870,17 @@ export const ja: Strings = {
       },
       followSize: {
         label: "枠の大きさも追従させる",
-        hint: "オフにすると位置だけを追いかけ、枠の大きさは最初のまま固定します。",
       },
       keyframeStride: {
         label: "中間点を打つ間隔",
-        hint: "1なら全フレームに、2なら1フレームおきに中間点を打ちます。先頭と末尾は、この設定にかかわらず必ず打ちます。",
+        hint: "先頭と末尾は、この設定にかかわらず必ず打ちます。",
       },
       progressHeading: "進み具合",
       progressIdle: "追尾は動いていません。",
       progressFrames: (index: number, total: number): string => `${index} / ${total} フレーム`,
       progressFps: (fps: number): string => `${fps.toFixed(1)} fps`,
       progressFpsUnknown: "—",
-      stop: "停止",
+      stop: "🚫停止",
       lostHeading: "見失い区間",
       lostNone: "見失いなし",
       lostRange: (start: number, end: number): string => `${start}–${end}`,
@@ -2963,6 +2962,7 @@ export const ja: Strings = {
       `画像をキーフレームに追記しました: ${fileName}`,
     trackingUnavailable:
       "このサーバーでは物体追尾を使えません。バックエンドのフォルダで install-UETrack.bat を実行し、サーバーを再起動してから、もう一度お試しください。",
+    trackingBusy: "追尾が進行中です。🚫停止で止めてからやり直してください。",
   },
   /** タイムラインの仮オブジェクトに焼き込む文言は、UI言語設定に関わらず常に英語
    * （ASCII）で固定する（オーナー決定 2026-07-19）。AviUtl2の既定フォントには絵文字

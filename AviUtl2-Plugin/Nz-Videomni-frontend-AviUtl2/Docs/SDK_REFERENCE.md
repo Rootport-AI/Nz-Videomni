@@ -370,6 +370,8 @@ struct LOG_HANDLE {
     - **`WARN`（`create_object_from_alias`のnull・実尺不足によるdelete＋作り直し）はこの区間に1件も出ていない。** ただしこれは安全網2・3が不要だったことの証明ではなく、**衝突シナリオ（R7）自体が成立しなかった**ためである（5件とも要求どおりの`layer`/`frame`へ一発で成功している）。**したがって本項冒頭のとおり、明示尺を渡したときの衝突時挙動は未実測のままである。**
     - **この包含確定により、ブリッジ契約の`frameEnd`を「包含」と読み、リボン長を`frameEnd − frameStart + 1`で算出してきた既存記述は正しかったことが確認された**（`frameEnd`は本構造体の`end`の素通しである）。[`DEVLOG.md`](DEVLOG.md) §44.4の「`frameEnd`はinclusive」という記録も復権する。決着の記述は [`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13（`timeline.getSelection`）の`selected[]`の項にある。台帳クローズはバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-140。
 
+- **(i) 中間点を複数持つエイリアスの実書式は、まだ実機採取待ちである。** 値の行の区切り方・`frame=`の中間点境界の並び・両者の対応関係のいずれも、このリポジトリ内に一次資料が無い。採取物を正本とする方針と、採取するまで想定で実装しないという規律はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md) §5.7が正本であり、採取後の転記先も同節である。
+
 ## 参照ファイル(モノレポルート基準の相対パス)
 
 - `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/aviutl2_sdk/aviutl2_plugin_sdk.txt`(SDK総論・更新履歴全文)

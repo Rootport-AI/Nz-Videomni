@@ -3,6 +3,7 @@ import {
   OBJECT_TRACKING_DEFAULTS,
   OBJECT_TRACKING_STORAGE_KEY,
   readStoredObjectTracking,
+  resolveTrackingStatus,
   writeStoredObjectTracking,
 } from "./objectTrackingSettings";
 
@@ -190,5 +191,28 @@ describe("writeStoredObjectTracking", () => {
       throw new Error("quota exceeded");
     });
     expect(() => writeStoredObjectTracking({ ...OBJECT_TRACKING_DEFAULTS })).not.toThrow();
+  });
+});
+
+describe("resolveTrackingStatus", () => {
+  it("keeps the last observed tracking block while no status body is in hand", () => {
+    // Threaded exactly as `AppShell` threads it: every answer becomes the next
+    // call's `lastSeen`, which is what its ref holds between renders. The
+    // sequence below is one real session — the first poll has not landed yet,
+    // then it does, then the user switches base model and the status parks at
+    // `loading-models` with no body of its own (`status: null`).
+    let last = resolveTrackingStatus(undefined, undefined);
+    expect(last?.available ?? false).toBe(false);
+    last = resolveTrackingStatus({ tracking: { available: true } }, last);
+    last = resolveTrackingStatus(null, last);
+    last = resolveTrackingStatus(null, last);
+    // Still true minutes later: greying the panel out here would tell a user
+    // whose tracking works to go and run `install-UETrack.bat`.
+    expect(last?.available).toBe(true);
+    // A body that HAS arrived always wins, including one carrying no block at
+    // all (a server too old to report it) — that is an observation, not a gap.
+    last = resolveTrackingStatus({ tracking: { available: false, reason: "worker failed" } }, last);
+    expect(last).toEqual({ available: false, reason: "worker failed" });
+    expect(resolveTrackingStatus({}, last)).toBeUndefined();
   });
 });

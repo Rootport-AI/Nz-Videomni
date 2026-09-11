@@ -1,8 +1,8 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "./bridge/mockBridge";
 import type { MockBridgeOptions } from "./bridge/mockBridge";
-import { TIMELINE_MENU_INVOKED_EVENT } from "./bridge";
+import { BridgeError, TIMELINE_MENU_INVOKED_EVENT, TIMELINE_TRACK_PROGRESS_EVENT } from "./bridge";
 import type { ResultOf } from "./bridge";
 import { apiClient as defaultApiClient } from "./api/client";
 import type { StatusResponse } from "./api/types";
@@ -314,6 +314,83 @@ describe("App / §3-54 物体追尾 right-click routing", () => {
       expect(screen.getByRole("button", { name: /^generate$/i })).toBeInTheDocument();
       expect(screen.queryByRole("heading", { name: /object tracking/i })).not.toBeInTheDocument();
       expect(spy.mock.calls.find(([m]) => m === "timeline.trackObject")).toBeUndefined();
+    },
+    20_000,
+  );
+
+  it(
+    "keeps a second 追尾 right-click's refusal usable: TRACK_BUSY, with Stop still pressable",
+    async () => {
+      const bridge = await renderShell();
+      const original = bridge.request.bind(bridge);
+      let trackCalls = 0;
+      // Native holds ONE tracking session. Run #1 is modelled as a call that
+      // never settles (it is still going when the second right-click lands);
+      // run #2 meets the refusal native would send.
+      const spy = vi.spyOn(bridge, "request").mockImplementation((method, params) => {
+        if (method === "timeline.trackObject") {
+          trackCalls += 1;
+          if (trackCalls === 1) return new Promise(() => {}) as ReturnType<typeof original>;
+          return Promise.reject(
+            new BridgeError("TRACK_BUSY", "A tracking run is already in progress"),
+          ) as ReturnType<typeof original>;
+        }
+        return original(method, params);
+      });
+
+      emit(bridge, "trackObject", partialFilterSelection());
+      await waitForToolboxPanel();
+      // Run #1 is genuinely mid-flight: a progress push lands and is shown.
+      act(() => {
+        bridge.emit(TIMELINE_TRACK_PROGRESS_EVENT, {
+          frame: 160,
+          index: 61,
+          total: 241,
+          score: 0.9,
+          lost: false,
+        });
+      });
+      await screen.findByText(/61 \/ 241 frames/, undefined, { timeout: 5_000 });
+
+      // The second right-click, while that run is still going.
+      emit(bridge, "trackObject", partialFilterSelection());
+      await screen.findByText(/another tracking run is already going/i, undefined, {
+        timeout: 5_000,
+      });
+
+      // The whole point of the refusal: its own sentence says "stop it first",
+      // so the button that does must be pressable even though THIS panel is not
+      // the one running.
+      const stop = screen.getByRole("button", { name: /stop/i });
+      expect(stop).toBeEnabled();
+      await act(async () => {
+        stop.click();
+      });
+      await waitFor(() => {
+        expect(spy.mock.calls.some(([m]) => m === "timeline.cancelTracking")).toBe(true);
+      });
+    },
+    20_000,
+  );
+
+  it(
+    "rounds a fractional keyframe interval — native rejects a fractional stride outright",
+    async () => {
+      const bridge = await renderShell();
+      await act(async () => {
+        screen.getByRole("tab", { name: "Toolbox" }).click();
+      });
+      await waitForToolboxPanel();
+      // The pair is [slider, number box]; only the box can be typed to a value
+      // its `step` does not allow.
+      const box = screen.getAllByLabelText(/keyframe interval/i)[1] as HTMLInputElement;
+      fireEvent.change(box, { target: { value: "1.5" } });
+      // The shell owns the settings, so the rounded value comes back down as
+      // the box's own displayed value.
+      await waitFor(() => {
+        expect(box).toHaveValue(2);
+      });
+      expect(bridge).toBeDefined();
     },
     20_000,
   );

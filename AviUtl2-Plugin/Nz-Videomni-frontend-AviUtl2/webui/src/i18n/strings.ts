@@ -1548,8 +1548,8 @@ export const en = {
       stop: "Stop",
       lostHeading: "Lost ranges",
       lostNone: "No lost frames.",
-      /** One row per span, in AviUtl2 frame numbers (the panel has already
-       * added the object's head frame to the plugin's relative offsets). */
+      /** One row per span, in AviUtl2 frame numbers (native adds the object's
+       * head frame; the panel shows the value verbatim). */
       lostRange: (start: number, end: number): string => `${start}–${end}`,
       resultDone: (frames: number, keyframes: number, seconds: number): string =>
         `Tracked ${frames} frames and wrote ${keyframes} keyframes in ${seconds.toFixed(1)}s.`,
@@ -1576,7 +1576,6 @@ export const en = {
         BAD_REQUEST: "The tracking settings were rejected.",
         NO_EDIT_HANDLE: "No AviUtl2 project is open.",
         BACKEND_UNREACHABLE: "The server could not be reached.",
-        BACKEND_TIMEOUT: "The server did not answer in time.",
       },
       unavailableHeading: "Object tracking is not available",
       /** `/status.tracking.reason === "not installed"`. */
@@ -2902,7 +2901,6 @@ export const ja: Strings = {
         BAD_REQUEST: "追尾の設定が受け付けられませんでした。",
         NO_EDIT_HANDLE: "AviUtl2のプロジェクトが開かれていません。",
         BACKEND_UNREACHABLE: "サーバーに接続できませんでした。",
-        BACKEND_TIMEOUT: "サーバーからの応答がありませんでした。",
       },
       unavailableHeading: "物体追尾を使えません",
       unavailableNotInstalled: "バックエンドのフォルダで install-UETrack.bat を実行し、サーバーを再起動してください。",

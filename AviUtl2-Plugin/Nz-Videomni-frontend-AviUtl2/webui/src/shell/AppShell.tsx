@@ -24,7 +24,7 @@ import { JobsProvider, useJobsContext } from "../jobs/JobsContext";
 import { downloadAndInsertVideo } from "../jobs/downloadAndInsert";
 import { createApiClient } from "../api/client";
 import type { ApiClient } from "../api/client";
-import type { JobResponse } from "../api/types";
+import type { JobResponse, StatusResponse } from "../api/types";
 import type { ControlLoraSelection } from "../lora/controlLoras";
 import { parseLoraPrompt, stripLoraTagsByName } from "../lora/loraTags";
 import { ChainedScreen } from "../modes/chained/ChainedScreen";
@@ -66,6 +66,7 @@ import { useAccelerationSettings } from "./useAccelerationSettings";
 import { baseModelInstaller, useBaseModels } from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
+import { resolveTrackingStatus } from "./objectTrackingSettings";
 import { useObjectTrackingSettings } from "./useObjectTrackingSettings";
 import "./AppShell.css";
 
@@ -347,12 +348,23 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // Falling back to `false` for that window would put "run install-UETrack.bat"
   // in front of a user whose tracking is installed and working.
   //
+  // Some of those windows carry NO `/status` body at all to read it off —
+  // `checking` before the first poll lands, `offline`/`error` while the backend
+  // restarts, and a `loading-models` this WebUI raised itself (`status: null`)
+  // — so the last observed block is kept in a ref and fed back in. That is what
+  // makes the paragraph above true rather than merely intended.
+  //
   // Two-valued, NOT three-valued like sage. Sage is three-valued because the
   // server degrades gracefully when it is asked for something it lacks, so
   // "unknown" must not disable anything; tracking has no such fallback — the
   // module is installed or it is not — and "unknown" leaves the panel nothing
   // better to say than "not available".
-  const trackingStatus = "status" in serverStatus ? serverStatus.status?.tracking : undefined;
+  const lastTrackingRef = useRef<StatusResponse["tracking"]>(undefined);
+  const trackingStatus = resolveTrackingStatus(
+    "status" in serverStatus ? serverStatus.status : null,
+    lastTrackingRef.current,
+  );
+  lastTrackingRef.current = trackingStatus;
   const trackingAvailable = trackingStatus?.available ?? false;
 
   const toasts = useToasts();
@@ -575,7 +587,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         showNote("warning", strings.notes.trackingUnavailable);
         return;
       }
-      setTrackRequest({ selection: command.selection, at: Date.now() });
+      // The selection alone — nothing is added to make a repeat right-click on
+      // the same object "look different", because nothing downstream watches
+      // this object for changes.
+      setTrackRequest({ selection: command.selection });
       // The bump is what starts the run: `ToolboxScreen` remounts, and
       // `useObjectTracking` fires on mount (the one-shot arrangement every
       // other screen's `initialIntent` uses). Bumped explicitly here because
@@ -1197,8 +1212,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     disabledModes,
     // §3-54: the 追尾 early return refuses on a server that cannot track, so a
     // callback frozen with a stale flag would either refuse a working install
-    // or open a dead panel. A plain boolean, so the 2-second poll's fresh
-    // status object never re-creates this callback.
+    // or open a dead panel. A plain boolean, so the `/status` poll's fresh
+    // status object (every 10s — `useServerStatus`'s `DEFAULT_INTERVAL_MS`)
+    // never re-creates this callback.
     trackingAvailable,
   ]);
 

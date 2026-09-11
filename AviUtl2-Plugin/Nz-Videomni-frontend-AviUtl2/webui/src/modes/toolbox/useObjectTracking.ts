@@ -27,12 +27,15 @@ import type { ObjectTrackingSettings } from "../../shell/objectTrackingSettings"
  */
 
 /** What `AppShell` hands the screen when a 追尾 right-click routes here: the
- * guarded selection snapshot, plus the timestamp that makes each request a
- * fresh object (so a second right-click on the same object is still a new
- * request). */
+ * guarded selection snapshot, and nothing besides.
+ *
+ * Deliberately carries no discriminator (a timestamp, a counter) to make a
+ * second right-click on the same object "look different". Nothing here watches
+ * this object for changes: the run is fired ON MOUNT, and `AppShell` bumps
+ * `remountTokens.toolbox` for every routed 追尾, so the remount IS the second
+ * run's signal. */
 export interface ObjectTrackRequest {
   selection: ResultOf<"timeline.getSelection">;
-  at: number;
 }
 
 /** idle -> running -> (done | cancelled | error). There is no path back to
@@ -125,6 +128,17 @@ export function useObjectTracking({
   // a last-two-events rate would read as noise.)
   const baselineRef = useRef<{ at: number; index: number } | null>(null);
 
+  // `phase` for the progress handler to read. The subscription below is made
+  // ONCE per mount, so it would otherwise close over the phase its first
+  // render saw ("idle") forever. Written at the transition rather than mirrored
+  // during render so it is already `"running"` when the first push lands, with
+  // no dependence on React having re-rendered in between.
+  const phaseRef = useRef<ObjectTrackingPhase>("idle");
+  const enterPhase = useCallback((next: ObjectTrackingPhase) => {
+    phaseRef.current = next;
+    setPhase(next);
+  }, []);
+
   // Subscribing FIRST (this effect is declared before the fire effect below,
   // and effects run in declaration order) so no push can land between the RPC
   // going out and the handler being attached.
@@ -133,6 +147,14 @@ export function useObjectTracking({
     return bridge.on(TIMELINE_TRACK_PROGRESS_EVENT, (data) => {
       const push = data as TimelineTrackProgressData | null;
       if (!push || typeof push.index !== "number") return;
+      // Only a RUNNING panel takes progress. A push that arrives after the run
+      // has settled — native's stream and the RPC's answer are two channels,
+      // and a stop in particular lands its last push around the result — would
+      // otherwise overwrite the final readout with a count from mid-run, and
+      // one that arrives before the run starts would show a stranger's numbers
+      // (the subscription is live from mount, tracking is one session per
+      // host, and this panel may be a second one opened while the first runs).
+      if (phaseRef.current !== "running") return;
       const at = nowRef.current();
       const baseline = baselineRef.current;
       let fps: number | null = null;
@@ -177,7 +199,7 @@ export function useObjectTracking({
 
     const bridge = nativeBridge ?? defaultBridge;
     const stored = settingsRef.current;
-    setPhase("running");
+    enterPhase("running");
     void (async () => {
       try {
         const run = await bridge.request("timeline.trackObject", {
@@ -203,14 +225,14 @@ export function useObjectTracking({
           // the same axis the progress event's `frame` uses (contract v12).
           lostRanges: run.lostRanges,
         });
-        setPhase(run.cancelled ? "cancelled" : "done");
+        enterPhase(run.cancelled ? "cancelled" : "done");
       } catch (err) {
         setErrorCode(err instanceof BridgeError ? String(err.code) : "");
         setErrorMessage(err instanceof Error ? err.message : String(err));
-        setPhase("error");
+        enterPhase("error");
       }
     })();
-  }, [nativeBridge, trackRequest]);
+  }, [enterPhase, nativeBridge, trackRequest]);
 
   const cancel = useCallback(() => {
     const bridge = nativeBridge ?? defaultBridge;

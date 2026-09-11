@@ -87,9 +87,17 @@ export function useObjectTrackingSettings(): UseObjectTrackingSettingsResult {
     // A range `<input>` can only ever hand back a number, but an empty number
     // box yields `NaN` — which native rejects. Fall back to the default rather
     // than letting it through, the same posture the stored-value reader takes.
+    //
+    // Rounded because native rejects a FRACTIONAL stride outright rather than
+    // rounding it (`bridge_core.cpp`'s `ParseTrackObject`), and the number box
+    // will happily accept `1.5` whatever its `step` says. Rounding here rather
+    // than refusing keeps the typed value close to what was meant; the panel's
+    // own clamp still holds the range, so this only ever moves it within it.
     setTracking((prev) => ({
       ...prev,
-      keyframeStride: Number.isFinite(value) ? value : OBJECT_TRACKING_DEFAULTS.keyframeStride,
+      keyframeStride: Number.isFinite(value)
+        ? Math.round(value)
+        : OBJECT_TRACKING_DEFAULTS.keyframeStride,
     }));
   }, []);
 

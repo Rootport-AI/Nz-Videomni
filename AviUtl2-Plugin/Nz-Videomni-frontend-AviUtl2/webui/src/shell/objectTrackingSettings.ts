@@ -25,6 +25,8 @@
  * user cannot actually express.
  */
 
+import type { StatusResponse } from "../api/types";
+
 /** What a lost frame does to the written path. Mirrors native's
  * `lostBehavior` literal (`bridge/types.ts`'s `timeline.trackObject` params):
  *  - `"hold"` freezes the last good box until the tracker recovers, so the
@@ -189,4 +191,29 @@ export function writeStoredObjectTracking(value: ObjectTrackingSettings): void {
   } catch {
     // Ignore — localStorage unavailable (e.g. private mode).
   }
+}
+
+/** The `tracking` block to believe right now, given the `/status` body in hand
+ * (`null` when the current server state carries none) and the last block that
+ * was observed.
+ *
+ * Pure and last-value-carrying, because the states that carry no body are
+ * ordinary and long: `checking` before the first poll lands, `offline` and
+ * `error` while the backend is restarting, and a `loading-models` raised by
+ * this WebUI's own `POST /pipeline/load` (`status: null` — there is no body
+ * behind that claim). Tracking is installed or it is not; none of those
+ * windows is news about it, so the last observation stands. Falling back to
+ * "unavailable" for them would put "run install-UETrack.bat" in front of a
+ * user whose tracking is installed and working, and refuse the 追尾 right-click
+ * for the duration.
+ *
+ * A body that HAS arrived always wins, including when its `tracking` is
+ * absent: that is a real observation (a server too old to report the block, or
+ * one that stopped reporting it), not a gap. The caller keeps the last value
+ * in a ref and feeds it back in — see `AppShell`'s `lastTrackingRef`. */
+export function resolveTrackingStatus(
+  status: Pick<StatusResponse, "tracking"> | null | undefined,
+  lastSeen: StatusResponse["tracking"],
+): StatusResponse["tracking"] {
+  return status ? status.tracking : lastSeen;
 }

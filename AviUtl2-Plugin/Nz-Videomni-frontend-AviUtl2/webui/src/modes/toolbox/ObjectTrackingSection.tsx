@@ -312,7 +312,17 @@ export function ObjectTrackingSection({
             }`
           : t.progressIdle}
       </p>
-      <button type="button" className="toolbox-stop" disabled={!running} onClick={run.cancel}>
+      {/* Pressable in one case where THIS panel is not running: `TRACK_BUSY`,
+          which means a run started by an earlier right-click is still going —
+          native holds one tracking session at a time, so the stop this button
+          sends reaches that run. Leaving it greyed would show the user the
+          sentence "stop it first" beside the only control that could. */}
+      <button
+        type="button"
+        className="toolbox-stop"
+        disabled={!running && run.errorCode !== "TRACK_BUSY"}
+        onClick={run.cancel}
+      >
         {t.stop}
       </button>
 

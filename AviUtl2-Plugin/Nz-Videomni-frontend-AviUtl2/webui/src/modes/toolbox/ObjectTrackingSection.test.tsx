@@ -44,7 +44,7 @@ function partialFilterSelection(): ResultOf<"timeline.getSelection"> {
 }
 
 function trackRequest(): ObjectTrackRequest {
-  return { selection: partialFilterSelection(), at: 1_000 };
+  return { selection: partialFilterSelection() };
 }
 
 interface RenderOptions {
@@ -218,28 +218,10 @@ describe("ObjectTrackingSection — the seven settings", () => {
 });
 
 describe("ObjectTrackingSection — a run", () => {
-  it("fires trackObject with the settings and frame = the object's head", async () => {
-    const { bridge } = renderSection({
-      request: trackRequest(),
-      settings: {
-        searchFactor: 5.5,
-        lostScoreThreshold: 0.6,
-        lostBehavior: "continue",
-        smoothing: 0.75,
-        followSize: false,
-        keyframeStride: 4,
-      },
-    });
-    const spy = vi.spyOn(bridge, "request");
-    await waitFor(() => {
-      expect(screen.getByText(/tracked 120 frames/i)).toBeInTheDocument();
-    });
-    // The RPC went out BEFORE the spy was attached, so assert on the outcome
-    // above and on the panel's own readout; the argument shape is proven end
-    // to end in `App.trackRoute.test.tsx`, where the spy is attached first.
-    expect(spy).toBeDefined();
-  });
-
+  // What the RPC is CALLED WITH is not asserted here: the spy can only be
+  // attached after the render that already fired it. `App.trackRoute.test.tsx`
+  // owns that assertion, where the route is driven by an event and the spy goes
+  // on first.
   it("greys every setting while a run is in flight and frees them afterwards", async () => {
     const { bridge } = renderSection({
       request: trackRequest(),

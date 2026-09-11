@@ -1972,3 +1972,19 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **§4-40の記述の訂正**: 同項は上限5を「**凍結API契約の一部**」と書いていたが、これは不正確だった（`api/models.py`のモジュール冒頭は、Phase-3で凍結が解除されている旨を明記している）。一方、**同項が着手時の最重要注意として警告していた「`config.yaml`を書き換えても上限は変わらない」という罠は、本改修で構造ごと解消した**。
 - **状態**: クローズ（2026-09-08。自動ゲート全緑、オーナー実機ゲートG1〜G8全合格。G7は単独の再実行を省略し、G3との同時確認と自動テストで充足と判定した——理由は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §103.6）。
 - **後継**: [`PENDING_TASKS.md`](PENDING_TASKS.md) **§3-146**（webuiの「キーフレームを追加」規則の見直し。既定の尺では追加ボタンだけで上限へ届かないという性質の受け皿で、本テーマでは規則を変えていない）。
+
+### 3-54-02. 物体追尾（部分フィルタの枠をUETrackに追わせる）＝軽量ユーティリティAIモジュールの新設と、その第1弾（起票：2026-08-05〔当時 §3-54「軽量ユーティリティAIモジュール新設＋座標追尾→マスク作成（第一弾）」〕、着手：2026-09-11〔同書 §1-29〕、実装・自動ゲート全緑・オーナー実機ゲート全合格・クローズ：2026-09-11）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-29からクローズ。起票時は同書 §3-54。**本書には§3-54〔NAGアコーディオンUIリファインの目視確認・2026-07-29〕が既にあるため、冒頭の採番規定に従って`-02`**）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-54 → 同書§1-29（**同書側はどちらの番号も欠番**）。着手にあたって設計を書き起こした時点で、マスクの受け渡し契約は同書§3-55へ切り離してある。
+- **何が完了したか**: 重量級の動画生成AIとは別の**軽量ユーティリティAIモジュール**（専用の仮想環境`.venv-utils`・別プロセスのワーカー・`/api/v1/utils/`の名前空間）を新設し、その第1弾として**物体追尾**を作った。利用者はAviUtl2のプレビューで**部分フィルタ**の枠を被写体に合わせ、タイムラインの右クリックから追尾を呼ぶ。成果物は部分フィルタへの**中間点の書き戻しだけ**で、サーバーには保存物を残さない。効果（モザイク等）は利用者があとから自由に足す。重みは任意導入で、`install-UETrack.bat`が新設のHuggingFaceリポジトリから絞った safetensors を取得する。
+- **設計の正本は[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md)（生きた文書）であり、設計判断・実測値・ゲート結果の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104である。本書には数値を書き写さない。**
+- **どの物差しで通ったか**: 自動ゲートはバックエンドpytest全件・`.venv-utils`側の実行時テスト・MCPの登録本数・ネイティブdoctest・webuiの型検査とvitestとlint・配布`.aux2`の3値一致（実数はいずれも[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104.5）。**オーナーの実機ゲート1〜8は2026-09-11に全項目合格した**（§104.7）。計画・M1・M2・M3の各段階で敵対的レビューを通しており、指摘の載荷点は独立に検算してから採否を決めている（§104.6）。
+- **状態**: **クローズ（2026-09-11。自動ゲート全緑、オーナー実機ゲート1〜8全合格。1日で着手から完結まで到達した。）** 実機ゲート7（追尾中の再右クリック）だけは初回が不合格で、「追尾中は画面を作り直さず案内を出すだけにする」形へ直して再確認で合格している。UIの文言と配置のフィードバックも同日に反映済みである。
+- **残件**:
+  - **見失いのしきい値の既定0.35は「実測に基づく暫定値」である**（スコア分布から置いた値をオーナーが受容した）。以後はユーザーの反応を見て調整する。
+  - **第1弾に入れないと決めたもの**は、小型・極小バリアントを選ぶ画面、見失ったあとの再検出、テンプレートの自動更新、探索窓だけを送る通信の軽量化、逆方向の追尾、MCPの道具としての追加である（[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) §10）。必要になったときに別の課題として足す。
+  - **マスクの受け渡しは[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55が正本である**（本テーマからは意図的に切り離した）。
+  - **ベンダリングしたUETrackのライセンスは未解決のまま**で、オーナーが著者へ照会中である。正本は`tracking/VENDOR_NOTICE.md`（同書に、未許諾のまま封じ込めるための手当て——重みを独立したリポジトリに置くこと、`tracking/`を丸ごと削除しても他へ波及しないこと——が書いてある）。
+  - **導入スクリプトの`hf.exe`の件**は[`PENDING_TASKS.md`](PENDING_TASKS.md) **§3-148**へ新規起票した（本テーマの導入確認で詰まった事象。原因は特定していない）。
+- **後継**: [`PENDING_TASKS.md`](PENDING_TASKS.md) **§3-55**（Inpaintingとマスク受け渡し契約。前提だった本テーマの第1弾が完成したので、着手を止めているものは無くなった）・**§3-148**（`hf.exe`の薄皮）。
+- **正本・出典**: 設計＝[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md)、実装・設計判断・ゲート実数・実測値の全体＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§104**、フロントエンド側の実装記録＝[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§115**、ブリッジ契約（v12）＝同[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.23、部分フィルタのエイリアス実書式（オーナーの実機採取）＝同[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (j)、右クリック項目＝同[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) #21、取り込んだ第三者コードの出所＝`tracking/VENDOR_NOTICE.md`、実装そのもの＝作業ブランチ`feature/object-tracking`の15コミット（一覧は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104.2）。

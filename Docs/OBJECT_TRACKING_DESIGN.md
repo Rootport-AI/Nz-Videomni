@@ -5,7 +5,7 @@
 **生きた文書（物体追尾機能の設計正本）。** AviUtl2のタイムラインに置いた**部分フィルタ**（AviUtl2のメディアオブジェクトの一種。枠の内側だけに、後から足した効果を掛ける）の枠を、**UETrack**（単一物体追跡AI。1フレームにつき矩形をひとつ返す）に追わせて、結果を部分フィルタの**中間点**（値の時間変化を指定する点）として書き戻す機能を記述します。
 
 - 作成: 2026-09-11
-- 対象の台帳項目: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-29（着手中の本体）。マスクの受け渡しは同書 §3-55 が正本で、本書は扱いません。
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02（完結の記録。起票時は台帳 §3-54、着手時は §1-29）。マスクの受け渡しは台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55 が正本で、本書は扱いません。
 - ブランチ: `feature/object-tracking`
 
 **本書には現在の設計だけを現在形で書きます。** 第1部「決まったこと」は、実装を担当する人が**第1部だけを読めば着手できる**ことを目標に書いてあります。第2部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
@@ -14,7 +14,7 @@
 
 | 文書 | 関係 |
 |------|------|
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能の段取りは §1-29、マスク契約は §3-55 |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済み（記録は `PENDING_TASKS_CLOSED.md` §3-54-02）、マスク契約は §3-55 |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 仮想環境をエンジン系統ごとに1つ持つ方針の正本（§5.3）。本機能はその並びに**推論エンジンではない**仮想環境を1つ足す最初の例 |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能は保存物を作らないので、この原則の適用対象外である |
 | [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 | AviUtl2本体の実機確定知見。エイリアスの `frame=` が両端を含むこと、エイリアスのヘッダが `length` 引数に勝つことの正本 |
@@ -524,7 +524,7 @@ UETrackを推論の別形式（ONNX）へ変換して速くする改造は、あ
 
 ## 参照
 
-- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-29（本機能）・§3-55（マスク契約）・§4-25（AviUtl2側で作ったマスクの受け口）・§4-8(C)（参照条件のマスクの露出）
+- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) `PENDING_TASKS_CLOSED.md` §3-54-02（本機能の完結記録）・§3-55（マスク契約）・§4-25（AviUtl2側で作ったマスクの受け口）・§4-8(C)（参照条件のマスクの露出）
 - UETrack 公式リポジトリ: <https://github.com/kangben258/UETrack>
 - UETrack 論文（CVPR 2026）: <https://openaccess.thecvf.com/content/CVPR2026/html/Kang_UETrack_A_Unified_and_Efficient_Framework_for_Single_Object_Tracking_CVPR_2026_paper.html>
 - UETrack arXiv: <https://arxiv.org/abs/2603.01412>

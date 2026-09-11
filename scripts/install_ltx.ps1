@@ -1765,6 +1765,13 @@ $required = @(
     @{ Label = "app_python";       Rel = ".venv/Scripts/python.exe";        IsDir = $false; Min = [long]0 }
     @{ Label = "engine worker.py"; Rel = "engine/worker.py";                IsDir = $false; Min = [long]0 }
 )
+# The object-tracking worker's own two prerequisites, added only when THIS run
+# is the one that builds them (-BaseModel UETrack). Same reason as the model
+# rows below: setup.bat must not report a venv it was never asked to build.
+if ($foundIds -contains 'UETrack') {
+    $required += @{ Label = "utils_python";       Rel = ".venv-utils/Scripts/python.exe"; IsDir = $false; Min = [long]0 }
+    $required += @{ Label = "tracking worker.py"; Rel = "tracking/worker.py";             IsDir = $false; Min = [long]0 }
+}
 # Model rows come from the manifests THIS run is responsible for (-BaseModel):
 # install-LTX25.bat must not report LTX 2.3 as MISSING, and setup.bat must not
 # report LTX 2.5 as MISSING. The three fixed rows above stay unconditional --

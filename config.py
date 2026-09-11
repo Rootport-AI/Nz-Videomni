@@ -516,6 +516,42 @@ class OutputConfig(BaseModel):
     keep_raw_frames: bool = False
 
 
+class TrackingConfig(BaseModel):
+    """Object tracking (§3-54) — the utility-AI module, NOT a base model.
+
+    FOUR KEYS, AND THAT IS THE WHOLE SECTION. Everything else about tracking is
+    a module constant in ``services/tracking_manager.py`` (the 60s idle expiry,
+    the 64 MB frame ceiling) or a plugin-side setting the server never sees (the
+    lost threshold, smoothing, keyframe stride). A knob here would be a promise
+    to support every value of it.
+
+    This section is deliberately ABSENT from ``config.yaml.example``: tracking is
+    an opt-in install (``install-UETrack.bat``) whose defaults are correct for
+    every machine that ran it, so an operator has nothing to fill in.
+
+    See Docs/OBJECT_TRACKING_DESIGN.md §6.4.
+    """
+
+    # "uetrack" (the real CPU worker) or "mock" (in-process fake, used by the
+    # test suite and for wiring checks on a machine with no weights). Any other
+    # value takes the real path — same loose typing as ``ModelConfig.backend``,
+    # and a typo lands on the worker, which then reports itself as not
+    # installed rather than failing the whole server at boot.
+    backend: str = "uetrack"
+    # Interpreter that runs `python -m tracking.worker`: the dedicated CPU-only
+    # ./.venv-utils. A THIRD venv next to the two engine ones, for the same
+    # reason they are separate from each other — CPU torch cannot share an
+    # environment with the cu128 builds. Same shape as
+    # ``ModelConfig.engine_python``; dependency snapshot:
+    # tracking/venv-utils.freeze.txt.
+    utils_python: str = "./.venv-utils/Scripts/python.exe"
+    # Weight location, relative to ``model.models_dir`` — alongside
+    # Preprocessors/, i.e. in the part of the model store that belongs to no
+    # base model, because the tracker is not one.
+    model_dir: str = "UETrack"
+    checkpoint: str = "uetrack_base.safetensors"
+
+
 class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
@@ -525,6 +561,7 @@ class AppConfig(BaseModel):
     upload: UploadConfig = Field(default_factory=UploadConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    tracking: TrackingConfig = Field(default_factory=TrackingConfig)
 
     # Server RUNTIME STATE file (§3-97 P5, services/runtime_state.py): the last
     # active base model + per-base category selection, so a restart resumes the

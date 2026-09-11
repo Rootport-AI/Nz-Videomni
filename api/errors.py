@@ -453,3 +453,80 @@ def gpu_oom(job_id: str | None = None, detail: str | None = None) -> APIError:
 
 def generation_failed(job_id: str | None = None, detail: str | None = None) -> APIError:
     return APIError("GENERATION_FAILED", "Generation failed", 503, job_id=job_id, detail=detail)
+
+
+# --- object tracking (§3-54, Docs/OBJECT_TRACKING_DESIGN.md §4.3) -----------
+#
+# Five codes, one per state the plugin has to tell apart. They are their own
+# family rather than reuses of the generation codes because tracking shares
+# nothing with a job: no queue, no GPU, no stored artefact.
+
+
+def track_busy(detail: str | None = None) -> APIError:
+    """A second tracking session was requested while one is open.
+
+    409, the ``job_busy`` family: nothing is wrong with the request, it just
+    arrived at the wrong moment. One session at a time is the design (one
+    resident tracker, one object), and the plugin's own re-entry guard should
+    have caught this first — reaching here means two callers, or a session the
+    previous run failed to close.
+    """
+    return APIError(
+        "TRACK_BUSY",
+        "A tracking session is already open (one at a time)",
+        409,
+        detail=detail,
+    )
+
+
+def track_unavailable(detail: str | None = None) -> APIError:
+    """Tracking is not installed, or its worker will not start.
+
+    503, like :func:`pipeline_load_failed`, and for the same reason: the request
+    is valid and will succeed once the server side is in order. NOT 422
+    ``feature_unsupported`` — that code means "the selected base model cannot do
+    this", and tracking has nothing to do with the selected base model.
+    """
+    return APIError(
+        "TRACK_UNAVAILABLE",
+        "Object tracking is not available (install-UETrack.bat)",
+        503,
+        detail=detail,
+    )
+
+
+def track_session_not_found(session_id: str) -> APIError:
+    """No open session with that id. 404, exactly like :func:`job_not_found`.
+
+    Also what a caller sees after the 60-second idle expiry, and on a second
+    DELETE of the same session — the id genuinely does not exist any more, and
+    inventing a softer answer for those two cases would hide a plugin that lost
+    track of its own session.
+    """
+    return APIError(
+        "TRACK_SESSION_NOT_FOUND", f"tracking session not found: {session_id}", 404
+    )
+
+
+def track_frame_invalid(detail: str | None = None) -> APIError:
+    """The frame body is not the size this session was opened for.
+
+    400: the body is malformed, and no retry of the SAME bytes can succeed. The
+    byte length is the only thing checked about a frame — raw RGBA carries no
+    header to disagree with — so this is also what an impossible width x height
+    at session open produces.
+    """
+    return APIError(
+        "TRACK_FRAME_INVALID", "Frame body length does not match the session", 400, detail=detail
+    )
+
+
+def track_failed(detail: str | None = None) -> APIError:
+    """The worker died or raised while tracking. The session is gone.
+
+    503 rather than 500: the fault is a subprocess this server supervises, in
+    the same bucket as :func:`generation_failed`. The plugin's recovery is to
+    open a new session — which is why the session is dropped server-side before
+    this is raised.
+    """
+    return APIError("TRACK_FAILED", "Object tracking failed", 503, detail=detail)

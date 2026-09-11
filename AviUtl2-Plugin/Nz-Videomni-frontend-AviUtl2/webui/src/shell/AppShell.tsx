@@ -36,6 +36,8 @@ import { useBaseUrl } from "../modes/single/useBaseUrl";
 import { useConfig } from "../modes/single/useConfig";
 import { useServerStatus } from "../modes/single/useServerStatus";
 import { InventoryScreen } from "../modes/inventory/InventoryScreen";
+import { ToolboxScreen } from "../modes/toolbox/ToolboxScreen";
+import type { ObjectTrackRequest } from "../modes/toolbox/useObjectTracking";
 import { useLoras } from "../modes/inventory/useLoras";
 import type { GenerationPrefill } from "../timeline/generationPrefill";
 import { useMenuRouter } from "../timeline/useMenuRouter";
@@ -64,9 +66,20 @@ import { useAccelerationSettings } from "./useAccelerationSettings";
 import { baseModelInstaller, useBaseModels } from "./useBaseModels";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
+import { useObjectTrackingSettings } from "./useObjectTrackingSettings";
 import "./AppShell.css";
 
-export type AppMode = "single" | "chained" | "edit" | "inventory";
+/** The mounted modes. `"toolbox"` joined on 2026-09-11 (§3-54 物体追尾),
+ * promoted from the last disabled mock tab exactly the way `"edit"` was on
+ * 2026-08-09: an entry here, a `remountTokens` counter, a `MenuTargetMode`
+ * value, and a panel in the always-mounted body below.
+ *
+ * Note what did NOT change with it: `shell/featureScope.ts` gets no `toolbox`
+ * row (the `inventory` precedent — no engine limitation can reach a tool that
+ * issues no generation). That matters because `handleRoute`'s Step 0 refuses
+ * any route whose target is in `disabledModes`, so a row added there later
+ * would silently kill the 追尾 right-click. */
+export type AppMode = "single" | "chained" | "edit" | "inventory" | "toolbox";
 
 /** W3 (⬇ "insert the latest generation result here"): pick the most recently
  * completed job from the ledger. Sorts `completed_at` DESCENDING (latest first);
@@ -233,6 +246,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // the user was editing (adversarial review M-1). The counter fixes that: it
   // never decreases, so nothing an expiring `pendingIntent` does can change it.
   const [pendingIntent, setPendingIntent] = useState<GenerationPrefill | null>(null);
+  // §3-54: the routed 追尾 request. Deliberately NOT a `GenerationPrefill` —
+  // this route seeds no form and generates nothing; it carries the guarded
+  // selection to a screen that immediately turns it into one RPC. The `at`
+  // timestamp is what makes a second right-click on the SAME object a new
+  // object (and so a new run) rather than a no-op re-render.
+  const [trackRequest, setTrackRequest] = useState<ObjectTrackRequest | null>(null);
   const [remountTokens, setRemountTokens] = useState<Record<AppMode, number>>({
     single: 0,
     chained: 0,
@@ -242,6 +261,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // target === "edit" のときそのまま加算するので、専用の分岐は無い。
     edit: 0,
     inventory: 0,
+    // §3-54 (2026-09-11): Toolbox joined the same way Edit did. Its bump does
+    // NOT ride Step 6's shared `[target]` increment though — the 追尾 route
+    // early-returns long before that line — so it is bumped explicitly in that
+    // early return, and that is the only place it moves.
+    toolbox: 0,
   });
 
   // IC-LoRA UI redesign (2026-07-17, 第5波): the control-LoRA panel selection
@@ -282,6 +306,14 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // of each mode screen silently resetting its own copy.
   const nagControls = useNagSettings();
 
+  // 物体追尾 (§3-54, 2026-09-11): the same single-owner arrangement as
+  // `nagControls` right above — one call, one object, handed to the Toolbox
+  // screen. Called HERE rather than inside that screen because the screen is
+  // REMOUNTED on every routed 追尾 (the `remountTokens.toolbox` bump), which
+  // would reset a screen-local copy and send the RPC out with defaults the user
+  // never chose.
+  const objectTracking = useObjectTrackingSettings();
+
   // Acceleration (2026-07-31, backend §43): same single-owner arrangement as
   // `nagControls` right above — one call, one object, handed to the Settings
   // panel (the only editor) and to Create/Chain/Batch (readers, via each
@@ -304,6 +336,24 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // itself, so the route callback's dependency list stays keyed on the flag
   // that actually matters rather than on every poll's fresh object.
   const sageAvail = sageAvailability(statusBody);
+  // §3-54 (2026-09-11): whether this server can run object tracking at all,
+  // off the SAME `/status` poll `sageAvail` above reads — one poll feeding both
+  // capability flags, no fetch of its own (the arrangement
+  // `shell/accelerationSettings.ts`'s `sageAvailability` documents).
+  //
+  // Read off `serverStatus` rather than `statusBody`, which is the online/busy
+  // pair ONLY: a base-model switch parks the status at `loading-models` for
+  // minutes, and the tracking block is still there and still true throughout.
+  // Falling back to `false` for that window would put "run install-UETrack.bat"
+  // in front of a user whose tracking is installed and working.
+  //
+  // Two-valued, NOT three-valued like sage. Sage is three-valued because the
+  // server degrades gracefully when it is asked for something it lacks, so
+  // "unknown" must not disable anything; tracking has no such fallback — the
+  // module is installed or it is not — and "unknown" leaves the panel nothing
+  // better to say than "not available".
+  const trackingStatus = "status" in serverStatus ? serverStatus.status?.tracking : undefined;
+  const trackingAvailable = trackingStatus?.available ?? false;
 
   const toasts = useToasts();
   // Header base-model switch (§3-97 P7). One toast per user action, raised from
@@ -498,6 +548,40 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     const guard = guardMenuSelection(route, command.selection);
     if (!guard.ok) {
       showNote("warning", formatMenuGuardNote(guard.note, strings.notes));
+      return;
+    }
+
+    // ── §3-54 物体追尾 (trackObject): the Toolbox tab's tracking panel. An
+    // early-return channel, and the FIRST route that is not a generation origin
+    // at all — it edits the object the user already has (keyframes onto the
+    // selected 部分フィルタ) and produces no clip, so everything below this
+    // point is irrelevant to it:
+    //  - no reconcile and no reservation seat (Steps 2/5/8): there is nothing
+    //    to place, so there is no seat to take or to be blocked by;
+    //  - no `serverBusyRef` check (Step 4c's shape): tracking runs on the CPU
+    //    in a separate worker, so it neither waits for a generation nor blocks
+    //    one (design doc §18). This is the one long operation in the app that
+    //    is deliberately outside the one-job-at-a-time discipline;
+    //  - no `pendingIntent`: the payload is a selection, not a form seed.
+    //
+    // Placed right after Step 1 so the §4 guard still runs first — the
+    // required-kind check is what refuses "追尾 on a video" with the ordinary
+    // mismatch note before any of this.
+    if (action === "trackObject") {
+      if (!trackingAvailable) {
+        // Refused in the §4 guard shape: guidance only, no tab switch. Opening
+        // a panel whose every control is greyed would tell the user nothing
+        // the note does not, and would strand them on a tab they cannot use.
+        showNote("warning", strings.notes.trackingUnavailable);
+        return;
+      }
+      setTrackRequest({ selection: command.selection, at: Date.now() });
+      // The bump is what starts the run: `ToolboxScreen` remounts, and
+      // `useObjectTracking` fires on mount (the one-shot arrangement every
+      // other screen's `initialIntent` uses). Bumped explicitly here because
+      // this return is long before Step 6's shared `[target]` increment.
+      setRemountTokens((prev) => ({ ...prev, toolbox: prev.toolbox + 1 }));
+      setMode("toolbox");
       return;
     }
 
@@ -1111,6 +1195,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // for exactly that reason), and taking it as one is what keeps a refused
     // route from being decided by a stale list.
     disabledModes,
+    // §3-54: the 追尾 early return refuses on a server that cannot track, so a
+    // callback frozen with a stale flag would either refuse a working install
+    // or open a dead panel. A plain boolean, so the 2-second poll's fresh
+    // status object never re-creates this callback.
+    trackingAvailable,
   ]);
 
   // Reload/startup re-sync (§2): rebuild the single reservation seat from any
@@ -1303,6 +1392,31 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               (`getByRole` skips hidden subtrees) to disambiguate the now
               double-mounted UI. See `remountTokens` above for how right-click
               prefills still force a targeted remount via `key`. */}
+          {/* Toolbox (§3-54, 2026-09-11): promoted from the last disabled mock
+              tab to a real mode, and a right-click destination in the same
+              change (`trackObject`). First in the row, matching the tab order.
+              Unlike Create/Chain/Edit it takes no `initialIntent`: the 追尾
+              route carries a SELECTION to act on, not a form to seed, so the
+              one-shot payload is `trackRequest` + the same remount-token
+              arrangement. The settings come from this shell's single
+              `useObjectTrackingSettings` call, so a remount cannot reset
+              them. */}
+          <div role="tabpanel" hidden={mode !== "toolbox"}>
+            <ToolboxScreen
+              key={`toolbox-${remountTokens.toolbox}`}
+              trackingAvailable={trackingAvailable}
+              trackingReason={trackingStatus?.reason}
+              trackRequest={trackRequest ?? undefined}
+              nativeBridge={nativeBridge}
+              settings={objectTracking.tracking}
+              onSearchFactorChange={objectTracking.setSearchFactor}
+              onLostScoreThresholdChange={objectTracking.setLostScoreThreshold}
+              onLostBehaviorChange={objectTracking.setLostBehavior}
+              onSmoothingChange={objectTracking.setSmoothing}
+              onFollowSizeChange={objectTracking.setFollowSize}
+              onKeyframeStrideChange={objectTracking.setKeyframeStride}
+            />
+          </div>
           <div role="tabpanel" hidden={mode !== "single"}>
             <SingleScreen
               key={`single-${remountTokens.single}`}

@@ -22,7 +22,8 @@
  * `audioToLongA2v`, `appendText`, `insertProvisionalResult`, `outpaintVideo`,
  * `retakeRange` for the object menu;
  * `textToVideoHere`, `imageFromCurrentFrame`, `addCurrentFrameAsKeyframe`,
- * `currentFrameToClipChain`, `insertLatestResultHere` for the layer menu)
+ * `currentFrameToClipChain`, `insertLatestResultHere` for the layer menu),
+ * plus `trackObject` (§3-54 物体追尾, 2026-09-11 — the object menu's #21)
  * directly from its context-menu items (`kObjectMenuItems`/`kLayerMenuItems`),
  * so this table's job is routing exactly those. An action with no table entry
  * routes to `null` (the hook no-ops), so an unknown/new native identifier can
@@ -38,13 +39,20 @@
 /** The top-level WebUI modes an action can target. `"edit"` joined on
  * 2026-08-09 (W0 共通スパイン) when the Edit tab — promoted to a real mode the
  * same day — became a right-click destination for the two Edit-系 commands
- * (`outpaintVideo`/`retakeRange`). Kept a SUBSET of `AppShell`'s `AppMode`, so
- * `GenerationPrefill.targetMode` (typed `AppMode`) accepts every value here. */
-export type MenuTargetMode = "single" | "chained" | "edit" | "inventory";
+ * (`outpaintVideo`/`retakeRange`). `"toolbox"` joined on 2026-09-11 (§3-54 物体
+ * 追尾) on exactly the same promotion path: the Toolbox tab stopped being a
+ * disabled mock and became the destination of `trackObject`. Kept a SUBSET of
+ * `AppShell`'s `AppMode`, so `GenerationPrefill.targetMode` (typed `AppMode`)
+ * accepts every value here. */
+export type MenuTargetMode = "single" | "chained" | "edit" | "inventory" | "toolbox";
 
-/** The four selectable timeline object kinds the type check distinguishes
- * (Docs/RIGHTCLICK_REDESIGN_SPEC.md §4-1). */
-export type MaterialKind = "video" | "image" | "audio" | "text";
+/** The selectable timeline object kinds the type check distinguishes
+ * (Docs/RIGHTCLICK_REDESIGN_SPEC.md §4-1). Four of them are the 素材 kinds the
+ * generation flows take; `"partialFilter"` (§3-54, 2026-09-11) is not a素材 at
+ * all — it is the AviUtl2 部分フィルタ object whose BOX the tracker follows, and
+ * it exists here only so the same `requiredKind` guard that refuses "an audio
+ * for an image action" also refuses "a video for 追尾". */
+export type MaterialKind = "video" | "image" | "audio" | "text" | "partialFilter";
 
 /** The object kind an action requires to run correctly (§3-4/§3-6 "必須種別"),
  * or `null` for the two layer-menu commands (#9/#10) which generate at a
@@ -366,6 +374,27 @@ export const MENU_ROUTING_TABLE: Readonly<Record<string, MenuRouteInfo>> = {
   insertLatestResultHere: {
     targetMode: "single", intent: "insert-latest-result", needsSelection: false,
     requiredKind: null, placement: null,
+  },
+  /** §3-54 物体追尾 (2026-09-11): Toolbox画面. Follow the selected 部分フィルタ's
+   * box forward and write the path back onto that same object as keyframes.
+   *
+   * The first row that is NOT a generation origin at all, and every field says
+   * so:
+   *  - `targetMode: "toolbox"` — the tab promoted from a disabled mock the same
+   *    day, exactly as Edit was on 2026-08-09.
+   *  - `requiredKind: "partialFilter"` — the one row using the kind added
+   *    beside it (see `MaterialKind`). The guard refuses everything else with
+   *    the ordinary mismatch note, so right-clicking a video and asking for 追尾
+   *    costs nothing.
+   *  - `placement: null`, meaning 3 of {@link MenuPlacement}'s three meanings
+   *    but in its purest form: this route reserves NO seat and produces no
+   *    generated clip at all. The result is an edit to the object the user
+   *    already has, so there is nothing to place — and `AppShell.handleRoute`
+   *    early-returns well before Step 5 anyway, so it never reaches the
+   *    reservation machinery. */
+  trackObject: {
+    targetMode: "toolbox", intent: "track-object", needsSelection: true,
+    requiredKind: "partialFilter", placement: null,
   },
 };
 

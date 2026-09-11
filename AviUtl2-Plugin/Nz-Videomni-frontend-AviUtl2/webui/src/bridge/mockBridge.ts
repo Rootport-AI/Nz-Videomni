@@ -1,4 +1,12 @@
-import { BridgeError, type BridgeMethod, type NativeBridge, type ParamsOf, type ResultOf } from "./types";
+import {
+  BridgeError,
+  TIMELINE_TRACK_PROGRESS_EVENT,
+  type BridgeMethod,
+  type NativeBridge,
+  type ParamsOf,
+  type ResultOf,
+  type TimelineTrackProgressData,
+} from "./types";
 
 /** Default `getEditInfo` payload, matching the values noted in the M1 spec. */
 const DEFAULT_EDIT_INFO: ResultOf<"getEditInfo"> = {
@@ -893,6 +901,25 @@ export interface MockBridgeOptions {
    * world after §3-98 ships; that is also the one-line change this fixture's
    * default will take then. */
   supportedBaseModels?: readonly string[];
+  /** Contract v12 (§3-54 物体追尾): the summary `timeline.trackObject`
+   * resolves with, merged over the default (120 frames, 120 keyframes, no lost
+   * ranges, 5s, not cancelled). `lostRanges` are AviUtl2 ABSOLUTE frame
+   * numbers, exactly as native sends them (contract v12) — the WebUI displays
+   * them verbatim. */
+  trackObjectResult?: Partial<ResultOf<"timeline.trackObject">>;
+  /** Contract v12: the `timeline.trackProgress` pushes `timeline.trackObject`
+   * emits, in order, BEFORE it resolves. Emitting them from inside the handler
+   * (rather than leaving the test to `emit()` them by hand) is what makes the
+   * ordering real: in production the pushes always arrive while the promise is
+   * still pending, and a panel that only worked when they arrived afterwards
+   * would pass a hand-driven test and fail on the real bridge. Defaults to
+   * none. */
+  trackProgressFrames?: readonly TimelineTrackProgressData[];
+  /** Contract v12: when set, `timeline.trackObject` rejects with this code
+   * instead of resolving. Any string is allowed on purpose — the backend's own
+   * codes (`TRACK_UNAVAILABLE`, …) reach this method too, and the panel's
+   * "unknown code shown verbatim" path needs to be reachable from a test. */
+  trackObjectError?: string;
 }
 
 /** Contract v5 default `timeline.getSelection` snapshot — a single selected
@@ -1112,6 +1139,17 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           attention_backends: ["sdpa", "sage"],
           sage_available: true,
         },
+        // Object-tracking capability block (§3-54, 2026-09-11). Reported as
+        // AVAILABLE for the same reason `sage_available` is: that is the state
+        // the UI actually does something in, and a fixture that always said
+        // "not installed" would leave the Toolbox panel permanently greyed in
+        // every test that renders the shell. There is no knob for the other
+        // states here because nothing can reach one: `AppShell` polls `/status`
+        // through the app-wide singleton client, not through an injected bridge
+        // (`useServerStatus` takes neither), so a test that needs an
+        // unavailable server stubs that singleton instead — see
+        // `App.trackRoute.test.tsx`.
+        tracking: { available: true },
       },
     };
   }
@@ -2301,6 +2339,54 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
    * can drive native-initiated events like `timeline.menuInvoked`. */
   const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
 
+  function emitEvent(event: string, data: unknown): void {
+    const handlers = eventHandlers.get(event);
+    if (!handlers) return;
+    // Copy before iterating so a handler that unsubscribes mid-dispatch
+    // doesn't disturb the walk.
+    for (const handler of [...handlers]) handler(data);
+  }
+
+  /** Contract v12 (§3-54): whether a tracking run is in flight, so
+   * `timeline.cancelTracking` can answer the truth (`false` = nothing was
+   * running, which is an ordinary answer and not an error). */
+  let trackRunning = false;
+
+  async function handleTrackObject(): Promise<ResultOf<"timeline.trackObject">> {
+    if (options.trackObjectError) {
+      throw new BridgeError(
+        options.trackObjectError,
+        `Mock bridge: timeline.trackObject forced to fail (${options.trackObjectError})`,
+      );
+    }
+    trackRunning = true;
+    try {
+      for (const push of options.trackProgressFrames ?? []) {
+        emitEvent(TIMELINE_TRACK_PROGRESS_EVENT, push);
+      }
+      return {
+        ok: true,
+        frames: 120,
+        keyframes: 120,
+        lostRanges: [],
+        elapsedMs: 5_000,
+        cancelled: false,
+        ...options.trackObjectResult,
+      };
+    } finally {
+      trackRunning = false;
+    }
+  }
+
+  async function handleCancelTracking(): Promise<ResultOf<"timeline.cancelTracking">> {
+    // Mirrors native: raising the flag is all this does. The mock's run is not
+    // actually interruptible — a test that wants a cancelled OUTCOME says so
+    // with `trackObjectResult: { cancelled: true }`, which is the same split
+    // the real contract has (the stop signal and the run's own result are two
+    // different answers).
+    return { cancelled: trackRunning };
+  }
+
   return {
     async request<M extends BridgeMethod>(
       method: M,
@@ -2371,6 +2457,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           return (await handleProbeAudioDuration(params as ParamsOf<"fs.probeAudioDuration">)) as ResultOf<M>;
         case "fs.probeMediaInfo":
           return (await handleProbeMediaInfo(params as ParamsOf<"fs.probeMediaInfo">)) as ResultOf<M>;
+        case "timeline.trackObject":
+          return (await handleTrackObject()) as ResultOf<M>;
+        case "timeline.cancelTracking":
+          return (await handleCancelTracking()) as ResultOf<M>;
         case "ui.resolveDroppedFiles":
           // Reached only if a caller uses plain `request()` instead of
           // `requestWithFiles()` — `params` carries no `__droppedPaths` key
@@ -2424,13 +2514,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     },
 
     emit(event, data) {
-      const handlers = eventHandlers.get(event);
-      if (!handlers) return;
-      // Copy before iterating so a handler that unsubscribes mid-dispatch
-      // doesn't disturb the walk.
-      for (const handler of [...handlers]) {
-        handler(data);
-      }
+      emitEvent(event, data);
     },
 
     releaseUploads() {

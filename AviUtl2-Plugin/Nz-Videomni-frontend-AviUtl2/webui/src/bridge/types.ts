@@ -141,6 +141,41 @@
  * so the raw value stays available unrounded here.
  * `mediaFps` is declared OPTIONAL for the same single reason the six v10
  * fields are: an older native build simply does not emit it yet.
+ *
+ * v12 (§3-54 物体追尾 / object tracking) adds the two RPCs and the one event the
+ * Toolbox tab's tracking panel drives, plus the four native-side error codes
+ * they can fail with:
+ *  - `timeline.trackObject` (ASYNC, minutes-long): tracks the box of the
+ *    selected 部分フィルタ (partial filter) object forward from its head frame
+ *    and writes the result back as keyframes on that same object. EVERY param
+ *    is REQUIRED — native holds no defaults of its own, and rejects a
+ *    fractional `layer`/`frame`/`keyframeStride` outright rather than rounding
+ *    (`bridge_core.cpp`'s `ParseTrackObject`). The `frame` field is pinned by a
+ *    contract INVARIANT: it must be the selection snapshot's `frameStart` (the
+ *    object's own head), never the playback cursor — native's `find_object`
+ *    searches "this frame and onward", so a cursor-derived frame could bind the
+ *    write-back to a different object.
+ *  - `timeline.cancelTracking` (synchronous): raises a cooperative stop flag
+ *    the tracking loop checks at the top of each frame. `{cancelled: false}`
+ *    means nothing was running — an ordinary answer, NOT an error. A cancelled
+ *    run still post-processes and writes back what it has, and resolves the
+ *    ORIGINAL `timeline.trackObject` promise with `cancelled: true`.
+ *  - the result's `lostRanges` and the event's `frame` agree on ONE axis:
+ *    AviUtl2 absolute frame numbers. The plugin's own post-processing works
+ *    head-relative (that is the axis the alias it writes uses), but that stops
+ *    at the RPC boundary — nothing the WebUI receives needs converting.
+ *  - `timeline.trackProgress` (event, see {@link TIMELINE_TRACK_PROGRESS_EVENT}):
+ *    one push per tracked frame, thinned to at most one per 200ms — except the
+ *    FIRST and LAST frames, which are always sent. It deliberately carries NO
+ *    fps: the WebUI computes that from the events' own arrival times
+ *    (`modes/toolbox/useObjectTracking.ts`).
+ *
+ * v12 also puts `timeline.trackObject` in {@link NO_LOCAL_TIMEOUT_METHODS}: a
+ * track of a few hundred frames runs for tens of seconds to minutes, so the
+ * dispatcher's 10s local ceiling would reject the promise while native is still
+ * working — and the user would be left with a "timed out" panel in front of a
+ * tracking run that goes on to finish and rewrite their object. The same
+ * "there is no too long here" reasoning `ui.pickFile` is in that set for.
  */
 
 /** All RPC methods defined as of contract v6. */
@@ -449,6 +484,45 @@ export interface BridgeParamsMap {
    * AdditionalObjects (see the v7 note in this file's header comment); a
    * caller has no field to set here. */
   "ui.resolveDroppedFiles": Record<string, never>;
+  /** Contract v12 (§3-54 物体追尾). Tracks the selected 部分フィルタ's box from
+   * its head frame to its tail and writes the path back onto the same object as
+   * keyframes. ASYNC and long-running (see this file's v12 note and
+   * {@link NO_LOCAL_TIMEOUT_METHODS}); progress arrives as
+   * {@link TIMELINE_TRACK_PROGRESS_EVENT} pushes meanwhile.
+   *
+   * EVERY field is required — native carries no defaults (`bridge_core.cpp`'s
+   * `ParseTrackObject`), and the WebUI's own defaults live in
+   * `shell/objectTrackingSettings.ts`. Ranges are enforced on BOTH sides; a
+   * value outside them comes back as `BAD_REQUEST`.
+   *
+   * INVARIANT: `frame` is the selection snapshot's `frameStart` — the target
+   * object's own head frame — never the playback cursor. */
+  "timeline.trackObject": {
+    /** The 部分フィルタ object's layer (integer, `>= 0`). */
+    layer: number;
+    /** The object's HEAD frame (integer, `>= 0`). See the invariant above. */
+    frame: number;
+    /** How many times the current box's size the tracker searches in the next
+     * frame. `2.0`–`6.0`. */
+    searchFactor: number;
+    /** Exponential smoothing of the returned path. `0`–`1`; `0` passes the
+     * tracker's raw boxes straight through. */
+    smoothing: number;
+    /** When false, only the box's POSITION follows — its size stays the seed's. */
+    followSize: boolean;
+    /** Frames whose tracker score falls below this are treated as "lost".
+     * `0`–`1`. */
+    lostScoreThreshold: number;
+    /** What a lost frame does: `"hold"` freezes the last good box, `"continue"`
+     * keeps the tracker's raw guess. */
+    lostBehavior: "hold" | "continue";
+    /** Keep one keyframe every N frames (integer, `>= 1`). The first and last
+     * are always kept whatever this says. */
+    keyframeStride: number;
+  };
+  /** Contract v12 (§3-54). Raises the cooperative stop flag; takes no params.
+   * Synchronous and cheap — it does not wait for the tracking loop to notice. */
+  "timeline.cancelTracking": Record<string, never>;
 }
 
 /** Result shape for each method's successful response. */
@@ -700,6 +774,38 @@ export interface BridgeResultMap {
   "ui.resolveDroppedFiles": {
     files: Array<{ filePath: string; fileName: string }>;
   };
+  /** Contract v12 (§3-54 物体追尾). The finished run's summary.
+   *
+   * `frames` / `keyframes` are COUNTS, not indices: how many frames were
+   * tracked and how many keyframes were written.
+   *
+   * `lostRanges` are AviUtl2 ABSOLUTE frame numbers, both ends INCLUSIVE — the
+   * same axis `timeline.trackProgress`'s `frame` uses. Native adds the tracked
+   * object's head itself (its internal post-processing works head-relative,
+   * like the alias it writes, but that axis stops at the RPC boundary), so the
+   * WebUI displays these verbatim and adds nothing.
+   *
+   * `cancelled` is `true` when the user stopped the run — and it still carries
+   * a real `frames`/`keyframes`/`lostRanges`, because a cancelled run still
+   * writes back: everything tracked up to the stop is post-processed and saved
+   * (`Docs/OBJECT_TRACKING_DESIGN.md` §3.2), which is what lets the user stop
+   * where the box drifted, split the object, and re-track the tail. */
+  "timeline.trackObject": {
+    ok: boolean;
+    /** COUNT of tracked frames. */
+    frames: number;
+    /** COUNT of keyframes written back. */
+    keyframes: number;
+    /** Lost spans as AviUtl2 absolute frame numbers, both ends inclusive. */
+    lostRanges: Array<{ start: number; end: number }>;
+    elapsedMs: number;
+    cancelled: boolean;
+  };
+  /** Contract v12 (§3-54). `false` means no run was in flight — an ordinary
+   * answer (the user pressed 停止 just as the run finished), not an error. */
+  "timeline.cancelTracking": {
+    cancelled: boolean;
+  };
 }
 
 /**
@@ -769,6 +875,35 @@ export const TIMELINE_PROJECT_LOADED_EVENT = "timeline.projectLoaded";
  * `timeline.scanProvisionals` itself in response). */
 export type TimelineProjectLoadedData = Record<string, never>;
 
+/** Contract v12 native->WebUI event name (§3-54 物体追尾): one push per tracked
+ * frame while `timeline.trackObject` runs. Thinned to at most one per 200ms,
+ * except the first and last frames, which native always sends — so a panel that
+ * only ever reacts to this event still ends on `index === total`. */
+export const TIMELINE_TRACK_PROGRESS_EVENT = "timeline.trackProgress";
+
+/** Payload of the `timeline.trackProgress` event.
+ *
+ * Note the two different axes in here: `frame` is the AviUtl2 ABSOLUTE frame
+ * number, while `index`/`total` count the tracking run itself. The result's
+ * `lostRanges` share `frame`'s axis — everything native sends the WebUI is
+ * absolute.
+ *
+ * There is no `fps` field on purpose: the WebUI derives the rate from these
+ * events' arrival times, so native never has to define what window it would
+ * average over (`modes/toolbox/useObjectTracking.ts`). */
+export interface TimelineTrackProgressData {
+  /** AviUtl2 absolute frame number of the frame just tracked. */
+  frame: number;
+  /** 1-based position within this run. */
+  index: number;
+  /** Total frames this run will track. */
+  total: number;
+  /** The tracker's confidence for this frame, `0`–`1`. */
+  score: number;
+  /** Whether this frame was below the lost threshold. */
+  lost: boolean;
+}
+
 export type ParamsOf<M extends BridgeMethod> = BridgeParamsMap[M];
 export type ResultOf<M extends BridgeMethod> = BridgeResultMap[M];
 
@@ -804,7 +939,34 @@ export type KnownBridgeErrorCode =
   | "EXTRACT_FAILED"
   /** `timeline.insertProvisional`/`resolveProvisional`/`updateProvisionalText`
    * (contract v5): the placeholder insert/replace/update operation failed. */
-  | "PROVISIONAL_FAILED";
+  | "PROVISIONAL_FAILED"
+  /** `timeline.trackObject` (contract v12): a tracking run is already in
+   * flight. One object at a time — the second caller is refused, not queued. */
+  | "TRACK_BUSY"
+  /** `timeline.trackObject` (contract v12): the target is not a usable seed —
+   * the object at `layer`/`frame` is not a 部分フィルタ, or its box values could
+   * not be read out of the alias. Nothing on the timeline was touched. */
+  | "TRACK_SEED_INVALID"
+  /** `timeline.trackObject` (contract v12): tracking finished but the keyframed
+   * object could not be written back. Native restores the original alias when
+   * it can, and says so in the message. */
+  | "TRACK_WRITEBACK_FAILED"
+  /** `timeline.trackObject` (contract v12): the catch-all tracking failure —
+   * the object could not be found, a frame could not be rendered, or the
+   * plugin could not classify what went wrong. */
+  | "TRACK_FAILED"
+  /** `timeline.trackObject` (contract v12), BACKEND-origin: the server has no
+   * working tracking module — not installed, or its worker would not start.
+   * Listed here (rather than left to the opaque-string path) because the panel
+   * has a specific remedy for it: run `install-UETrack.bat`. */
+  | "TRACK_UNAVAILABLE"
+  /** `timeline.trackObject` (contract v12), BACKEND-origin: the tracking
+   * session the plugin was feeding is gone (the server's idle eviction closed
+   * it, or it was never opened). */
+  | "TRACK_SESSION_NOT_FOUND"
+  /** `timeline.trackObject` (contract v12), BACKEND-origin: a frame the plugin
+   * sent did not match the session's declared byte length. */
+  | "TRACK_FRAME_INVALID";
 
 /** Local-only error code used when a request never receives a response. */
 export type LocalBridgeErrorCode = "TIMEOUT" | "DISPOSED";
@@ -883,10 +1045,19 @@ export const DEFAULT_TIMEOUT_MS = 10_000;
  * it, so there is no "too long" — a still-open dialog is expected, correct
  * behavior, not a hang. `dispose()` still rejects these with `DISPOSED` if
  * the bridge itself is torn down while one is pending.
+ *
+ * Contract v12 adds `timeline.trackObject` for the same reason in a different
+ * shape: a tracking run is bounded by the object's own length, not by a network
+ * round trip, so tens of seconds to minutes is the NORMAL case. Leaving the 10s
+ * ceiling armed would reject the promise while native keeps tracking — the
+ * panel would say "timed out" and the object would be rewritten anyway. The
+ * user's own 停止 button (`timeline.cancelTracking`) is the stop control here,
+ * not a timer.
  */
 export const NO_LOCAL_TIMEOUT_METHODS: ReadonlySet<BridgeMethod> = new Set([
   "ui.pickFile",
   "ui.pickFolder",
+  "timeline.trackObject",
 ]);
 
 /** Abstraction implemented by both the production WebView2 bridge and the

@@ -5,6 +5,10 @@
 # stacks need incompatible transformers majors (4.57 vs 5.x), so they cannot
 # share one interpreter. Built by scripts/install_ltx.ps1 (Ensure-EngineVenv).
 .venv-engine-ltx25/
+# Utility-AI interpreter (object tracking / UETrack). A THIRD venv, built only
+# when someone runs install-UETrack.bat: CPU-only torch, so it must not share
+# an interpreter with either cu128 engine stack.
+.venv-utils/
 .python/
 
 # Python

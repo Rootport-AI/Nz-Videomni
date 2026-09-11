@@ -102,7 +102,13 @@ function Get-BaseModelPlan {
         # 一緒に入れるもので、ヘッダーの一覧にも出ない。ここで受け付けると
         # 「一覧から Preprocessors を選んでください」という、実行できない案内を
         # 出してしまう（Docs/MULTI_ENGINE_DESIGN.md §4.2）。
-        if (-not $data.engine_family) { continue }
+        #
+        # ただし 'opt_in' が真の記述子は例外として受け付ける。これは
+        # 「ベースモデルではないが、setup.bat にも同梱せず、専用の
+        # install-<ID>.bat で足すもの」の印で、30-uetrack.json（物体追尾）が
+        # 最初の例（Docs/OBJECT_TRACKING_DESIGN.md）。この一行が無いと
+        # install-UETrack.bat は「そのようなものはありません」で止まる。
+        if ((-not $data.engine_family) -and (-not $data.opt_in)) { continue }
         $known += [string] $data.id
         if (([string] $data.id) -eq $Id) { $found = $data }
     }

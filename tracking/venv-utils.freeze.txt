@@ -1,0 +1,43 @@
+# Dependency snapshot of .venv-utils (utility-AI worker interpreter: object
+# tracking / UETrack, CPU only).
+#
+# WHY: this file -- not the pyproject -- is what scripts/install_ltx.ps1 actually
+# applies, exactly like engine/venv-engine.freeze.txt and
+# engine25/venv-engine-ltx25.freeze.txt. Rebuild reference (the dependency SPEC
+# this was resolved from): tracking/utils-venv-pyproject.toml.
+#
+# METHOD: `uv pip freeze --python .venv-utils/Scripts/python.exe`, verbatim, with
+# this header prepended. (`uv pip freeze` works on a uv-built venv that has no
+# pip installed, which is why the two engine freezes had to enumerate dist-info
+# by hand back in 2026-07 -- uv has grown the command since.)
+# Interpreter: CPython 3.12.9  (.venv-utils/Scripts/python.exe)
+# Resolved from: https://download.pytorch.org/whl/cpu  (--index-strategy unsafe-best-match)
+# Captured: 2026-09-11
+#
+# NOTE: unlike both engine freezes, EVERY line here is an ordinary wheel from
+# PyPI or the pytorch CPU index. There are no git pins and no direct wheel URLs,
+# so scripts/install_ltx.ps1 builds this venv with no $DirectPins array at all
+# and the freeze below is a complete description of the environment.
+#
+# `torch==2.9.1+cpu` keeps its local version segment on purpose: dropping it
+# would let a plain PyPI resolve hand back the CUDA build, which is ~2.5 GB of
+# wheels this stack must never pull (the tracker is CPU-fixed by design -- it
+# has to run while the GPU is busy generating).
+#
+# The transitive tail (filelock / fsspec / jinja2 / markupsafe / mpmath /
+# networkx / setuptools / sympy / typing-extensions) is torch's own; nothing in
+# tracking/ imports any of it directly.
+einops==0.8.2
+filelock==3.32.6
+fsspec==2026.7.0
+jinja2==3.1.6
+markupsafe==3.0.3
+mpmath==1.3.0
+networkx==3.6.1
+numpy==2.5.3
+opencv-python-headless==5.0.0.93
+safetensors==0.8.0
+setuptools==84.0.0
+sympy==1.14.0
+torch==2.9.1+cpu
+typing-extensions==4.16.0

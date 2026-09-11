@@ -346,7 +346,7 @@ struct LOG_HANDLE {
 4. I2Vは`get_edit_info().frame` + `rendering_scene_video`。
 5. サイズ取得は`get_edit_info().width/height`。多言語は`translate`+`.aul2`。設定は`app_data_path`。
 
-## 16. 実機確定知見(2026-07-19〜20 タイムライン右クリック再設計 Phase A / G1・G2・G3実機ゲート)
+## 16. 実機確定知見(2026-07-19〜20 タイムライン右クリック再設計 Phase A / G1・G2・G3実機ゲートに始まり、以後の実機確認を追記していく節)
 
 本節は、右クリック再設計の第1段階でオーナーが**v2.0.54ポータブル実機**で実際に呼び出して確定させたSDK挙動をまとめる。従来の§10は「API追加日 ≦ 本体公開日なら使える」という状況証拠ベースの可否判定だったが、以下は実挙動そのものの一次確認である。一次記録は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第8節（実機チェックリスト）・[`DEVLOG.md`](DEVLOG.md) §33〜§40。
 

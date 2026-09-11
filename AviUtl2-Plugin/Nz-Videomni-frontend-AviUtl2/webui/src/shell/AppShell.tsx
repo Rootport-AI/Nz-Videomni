@@ -249,9 +249,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const [pendingIntent, setPendingIntent] = useState<GenerationPrefill | null>(null);
   // §3-54: the routed 追尾 request. Deliberately NOT a `GenerationPrefill` —
   // this route seeds no form and generates nothing; it carries the guarded
-  // selection to a screen that immediately turns it into one RPC. The `at`
-  // timestamp is what makes a second right-click on the SAME object a new
-  // object (and so a new run) rather than a no-op re-render.
+  // selection to a screen that immediately turns it into one RPC. It carries
+  // no discriminator of its own: what makes a second right-click on the SAME
+  // object a new run is the bumped remount token below, not a field in this
+  // payload.
   const [trackRequest, setTrackRequest] = useState<ObjectTrackRequest | null>(null);
   const [remountTokens, setRemountTokens] = useState<Record<AppMode, number>>({
     single: 0,

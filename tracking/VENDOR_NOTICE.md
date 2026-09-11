@@ -17,7 +17,10 @@ changes, and each one is marked with an `NZ:` comment at the site.
   <https://huggingface.co/kangben258/UETrack>. This project does **not**
   redistribute that file. `scripts/trim_uetrack_checkpoint.py` reduces it to the
   257 tensors a forward pass actually reads (107,164,976 B, safetensors), and
-  that is what `install-UETrack.bat` fetches. See
+  that is what `install-UETrack.bat` fetches — from
+  <https://huggingface.co/Rootport/Nz-UETrack>, a repository of its own that
+  holds nothing else, so it can be withdrawn without touching any other
+  distribution (see the licence note below). See
   `scripts/manifests/30-uetrack.json`.
 
 - **License: NOT YET SETTLED — the owner is asking the authors.** The upstream
@@ -57,7 +60,8 @@ changes, and each one is marked with an `NZ:` comment at the site.
   `load_state_dict(strict=False)` reports **0 missing keys** and 455 unexpected
   ones — 452 `text_encoder.*`, 2 `interface_text_proj.*` (the CLIP seam) and 1
   `adjust_layers.0.weight` (the distillation adapter). Nothing the tracker needs
-  is absent.
+  is absent. (The canonical record of these numbers is
+  `Docs/VERIFICATION_LOG.md` §104.3.)
 - **`lib/config/uetrack/config.py` + `experiments/uetrack/uetrack_base.yaml`**
   (and with them yacs / easydict / PyYAML) — the resolved Base values are folded
   into `_BASE_CFG` in `tracking/uetrack_runtime.py`, one commented line each,
@@ -108,4 +112,6 @@ Everything else — the network geometry, the normalisation constants, the crop
 maths, the Hanning penalty, the box decoding — is upstream's, unchanged. That the
 port is faithful is checked by construction: the trimmed safetensors and the
 official `.tar` were driven over the same 176-frame clip and returned **bit-identical
-boxes and scores** (`outputs/uetrack-spike-2026-09-11/RESULTS.md`).
+boxes and scores** (recorded in `Docs/VERIFICATION_LOG.md` §104.3; the raw
+spike output lives outside the repository, under the gitignored
+`outputs/uetrack-spike-2026-09-11/`).

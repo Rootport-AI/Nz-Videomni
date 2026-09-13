@@ -1988,3 +1988,19 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   - **導入スクリプトの`hf.exe`の件**は[`PENDING_TASKS.md`](PENDING_TASKS.md) **§3-148**へ新規起票した（本テーマの導入確認で詰まった事象。原因は特定していない）。
 - **後継**: [`PENDING_TASKS.md`](PENDING_TASKS.md) **§3-55**（Inpaintingとマスク受け渡し契約。前提だった本テーマの第1弾が完成したので、着手を止めているものは無くなった）・**§3-148**（`hf.exe`の薄皮）。
 - **正本・出典**: 設計＝[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md)、実装・設計判断・ゲート実数・実測値の全体＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§104**、フロントエンド側の実装記録＝[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§115**、ブリッジ契約（v12）＝同[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.23、部分フィルタのエイリアス実書式（オーナーの実機採取）＝同[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (j)、右クリック項目＝同[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) #21、取り込んだ第三者コードの出所＝`tracking/VENDOR_NOTICE.md`、実装そのもの＝作業ブランチ`feature/object-tracking`の15コミット（一覧は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104.2）。
+
+### 3-48-02. ジョブ一覧（JobLedger）の多数件描画（50件級バッチ完走後）（起票：2026-07-31、オーナー実機観測でクローズ：2026-09-13）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-48からクローズ。**本書には§3-48〔Chain V2VのcutoutRange併用の実GPU検証項目・未配線につき検証不能でクローズ・2026-07-27〕が既にあるため、冒頭の採番規定に従って`-02`**）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3「将来の研究課題」の改修項目グループ§3-48（実運用で50枚級バッチを回したときにもたつく・崩れると感じたら対応する、というトリガー待ちの項目。起票2026-07-31）。
+- **何を確認し、何を根拠に閉じたか**: 2026-09-13、オーナーが実機で約50件の動画生成を連続して回し、**レイアウト崩れもCPU由来のもたつきも感じられなかった**と報告し、クローズを裁定した。同日のディスカッションでコードから確定した以下の事実を、裁定の判断材料として添える。
+- **判断材料**:
+  - ジョブ一覧は全件を描画し、仮想化・表示上限のいずれも無い（`webui/src/jobs/JobLedger.tsx:41-74`）。
+  - `JobCard`はメモ化されていない（`React.memo`はリポジトリに0件）。
+  - 2秒ごとの`GET /jobs`は全件を返し、一覧を丸ごと置換する（`webui/src/jobs/useJobsPoll.ts:10,85`・`api/jobs.py:19-23`・`services/job_store.py:189-191`）。
+  - `JobStore`は削除しない限り溜まり続け、再起動で空になる（`services/job_store.py:1-7,98`）。
+  - Inventoryの履歴も同じジョブ群を全件描画するので、全タブ常時マウント設計では実質2倍の描画になる（`webui/src/modes/inventory/HistorySection.tsx:32-67`）。
+  - `<video>`要素はプレビューを開いたカードだけに生成され、件数には比例しない（`webui/src/jobs/JobCard.tsx:103,130-136,384-398`。開いた分は`preload="auto"`で全体を先読みする）。
+  - **結論**: 件数に比例して増えるのは操作パネル（WebView2）のメインスレッドCPU・メインメモリ・通信量・サーバー側メモリであり、**VRAMは関与しない**。50件は体感に出ない規模で、効いてくるのは数百件以上と見積もった。
+- **再発時の対処順と見方**: 症状が出た場合は引き算を優先し、①カードのメモ化と参照の安定化 → ②表示上限と「もっと見る」 → ③`GET /jobs`の件数上限、の順に対応する。見方はタスクマネージャーで`msedgewebview2.exe`のCPU・メモリ・GPUメモリの各列を確認する。
+- **状態**: **クローズ（2026-09-13。オーナー実機観測で症状なしと確認・専用の実装は行わない）。**
+- **参照**: [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.13、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §54。

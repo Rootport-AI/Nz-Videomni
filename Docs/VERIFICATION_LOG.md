@@ -12095,3 +12095,35 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 **副産物**: この機体の ffmpeg（`2025-02-02-git-957eb2323a-full_build`）の `maskedmerge` は `planes` 以外の設定（`shortest`／`repeatlast`）を受け付けない。マスクが短いときの枚数保証は、書き出し枚数の実測照合で行う（製品の `fill_mask_green_mp4` はこの前提で作る）。緑は `split`＋`lutrgb` の緑板で厳密に (102,255,0) になり、矩形の外は元画素と最大差 0 だった。
 
 **判定（2026-09-14）**: 画角拡張経路の流用を採用し、第二候補（撮り直しの凍結マスクの空間化）は走らせない。オーナーの目視は未実施（就寝中の自律進行）で、`runs/replace_full/restored.mp4`・`runs/remove_full/restored.mp4` を最初に見てもらう。
+
+### 105.5 バックエンドの実装（2026-09-14）— 機械検証は3つの仮想環境で全緑・モック通し合格。実GPUでの `run_inpaint` は未実行
+
+**何を作ったか（機能の言葉で）**: `POST /generate` に `inpaint` ブロック（`mask_video_id`・`window_start_sec`・膨張2値）を足した。サーバーは対象動画（`reference_video_id`）の実寸を読んで128倍数のキャンバスと余白を導き、窓を `cut_window_mp4` で切り出し（撮り直しと同じ設定）、マスクの白い領域を緑で塗った可逆のキャンバスを ffmpeg の1本のフィルタグラフで作り（`services/video_io.fill_mask_green_mp4`）、それを IC-LoRA の参照として画角拡張と同じ二段経路で生成する（`engine/pipeline/inpaint_pipeline.run_inpaint`）。仕上げのブレンドはフレームごとのマスクで行い、最後に膨張マスクが0の画素を元へ戻し、余白を8ビット整数の段階で切り落として、元の音声を付け直す。出力の解像度は対象動画と一致する。LTX 2.5 は `REJECT_TABLE` の1行で 422 `FEATURE_UNSUPPORTED` を返す。
+
+**設計の要所**
+
+- **既存の画角拡張はビット同一のまま**: `run_outpaint` への変更は、音声凍結・音声の初期潜在・mux の3塊を私的関数（`_freeze_source_audio`・`_audio_init`・`_mux_audio`、運び手は `NamedTuple`）へ純粋に切り出しただけ。`engine/outpaint/pyramid_blend.py` は `(1,1,H,W)` のマスクでは従来の経路をそのまま通り（`_plan` の戻り型不変）、複数フレームのマスクのときだけ `blend_video_u8` の中でチャンクごとにマスクピラミッドを作る。LTX 2.5 の画角拡張（`engine25/outpaint25.py`）は公開関数 `blend_video_u8` しか使っておらず署名は不変。敵対的レビューがこの3点を独立に確認した。
+- **正本1つ**: 余白は請求に載せず、素材ファイルの実寸から導く。エンジン側の `InpaintGeometry`（`engine/inpaint/canvas.py`）とアプリ側の `round_up_128` は仮想環境の壁で二重定義だが、全サイズで一致することをテストで固定している。
+- **マスクの枚数**: この機体の ffmpeg の `maskedmerge` は `shortest`／`repeatlast` を受け付けず、**短い入力があっても最終フレームの反復で枚数が揃ってしまう**（4対9で9枚書かれることを実測）。そのため `fill_mask_green_mp4` はマスクと素材の両方を事前に ffprobe して枚数不足を `FFmpegError` にし、書き出し後の実測照合も残す。二値化のしきい値128は ffmpeg 側（`format=gray`＋`lut`）と復号側（`decode_mask_video`、赤成分）で同じ値を使い、両経路の値差は最大1階調であることを実測した。
+- **メモリ**: 半解像マスクの導出も復元の膨張もチャンク単位（8フレーム）で行い、全長の float32 化（1920×1088×481 で4.0GB）を避ける。復元の膨張はブレンドと同じ装置・同じ関数（`apply_low_res_mask_dilation`）で計算し、bool だけを CPU へ戻す。
+- **モック**: マスクのヘッダから素材寸を読み、`round_up_128` で導いたキャンバスが要求と一致しなければ失敗にする（通しの主張が自己参照にならないため）。
+
+**機械検証（GPU不使用）**
+
+| 項目 | 基準 | 実測 |
+|---|---|---|
+| アプリ venv `python -m pytest tests` | 2,319 passed / 26 skipped | **2,396 passed / 45 skipped** |
+| LTX 2.3 `.venv-engine`（既定14本＋`test_inpaint_geometry`・`test_inpaint_mask_decode`） | 247 passed | **319 passed** |
+| LTX 2.5 `.venv-engine-ltx25`（既定7本＋`test_inpaint_geometry`。pytest が無いのでランナー経由） | 172 passed | **221 passed** |
+
+新設テスト: `tests/test_inpaint_api.py`・`test_inpaint_green_fill.py`・`test_inpaint_geometry.py`・`test_inpaint_mask_decode.py`・`test_worker_inpaint_dispatch.py`。追記: `test_outpaint_pyramid_blend.py`（F枚の同一マスク==単一マスクが `torch.equal` でビット一致・フレーム別≡各フレーム単独・uint8受理）・`test_ltx25_adapter.py`／`test_ltx25_api_guard.py`（`inpaint` の拒否と分類監査）・`test_ltx_runner_payload.py`（素のジョブの payload に `inpaint` キーが現れない）。
+
+**モック通しゲート**（一時 config・隔離ディレクトリ `%TEMP%\inpaint_e2e`・ポート18699・実 uvicorn）: inpaint ジョブ完走。`_inpaint_window.mp4`＝512×320・17枚、`inpaint_canvas.mp4`＝512×384（128倍数キャンバス）・17枚、`output.mp4`＝**512×320（素材解像度）**・17枚、`metadata.json` の `inpaint` に幾何・膨張・`mask_fps`・窓の開始・書き出し枚数。素のジョブは `inpaint` キー無し、画角拡張ジョブは従来どおり完走。リポジトリの `outputs/`・`uploads/` は不変。
+
+**敵対的レビュー**: Critical 0・Major 4（半解像マスクの全長 float32 化／worker の inpaint 分岐にテスト無し／2.5 venv の実行方法の記録漏れ／モック通しの自己参照）＋ Minor 12 を、すべて反映した（実行方法は「pytest 不在のためランナー経由」と確定）。
+
+**残っているもの**: 実 GPU での `run_inpaint`（二段生成・ブレンド・復元・切り落とし）は**一度も走らせていない**。実機ゲート G1〜G10（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-10、手順は [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16）と、G10 の改修前 SHA（`outputs/inpaint_regression/`）はオーナーの実機作業。
+
+### 105.6 プラグインと操作パネル（2026-09-14）— 記録の正本はフロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §116
+
+バックエンドから見て関係する事実だけを書く。マスク動画はプラグインが `timeline.renderMaskVideo` で描き（部分フィルタの複製＋白化効果と黒い PNG 背景の一時オブジェクト2つ・ソロ表示・`Mp4Writer`）、既存の `POST /upload/video` にトリム無しで上げる。操作パネルは `reference_video_id`（対象動画）と `inpaint.mask_video_id` を送り、`width`／`height` は素材寸の128倍数切り上げ、`num_frames` はフレーム数欄の値（既定＝部分フィルタ長の 8n+1 切り上げ）、`frame_rate` はプロジェクトの値、`loras` は `in-outpainting` を先頭に載せる。契約は v13（[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.24）。機械検証: native doctest 358→382件、webui vitest 2,830→2,915件、typecheck 0、lint 警告31本不変。デプロイ済み（実機＋配布コピー、`deploy.ps1`）。白化効果の効果名・項目名と描画順は**実機採取待ち**（[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (k)〜(m)）。

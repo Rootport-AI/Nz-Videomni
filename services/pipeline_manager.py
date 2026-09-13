@@ -19,6 +19,7 @@ from api.errors import (
     end_source_too_short,
     gpu_oom,
     generation_failed,
+    inpaint_window_out_of_range,
     pipeline_load_failed,
     pipeline_loading,
     retake_window_out_of_range,
@@ -27,6 +28,7 @@ from api.errors import (
 )
 from api.models import (
     EndSourceSpec,
+    InpaintSpec,
     JobResult,
     JobStatus,
     RetakeSpec,
@@ -708,6 +710,89 @@ class PipelineManager:
                     canvas_path.name,
                 )
 
+            # Inpainting (台帳 §3-55): cut the window out of the source, paint
+            # the mask's white region green, pad to the canvas, and hand THAT to
+            # the runner as the reference video. Substituting the path here is
+            # what keeps the whole IC-LoRA chain below untouched, exactly as the
+            # outpaint block above does — and for the same reason both
+            # intermediates land next to the output rather than in uploads/,
+            # which STORAGE_POLICY.md reserves for material the user may delete
+            # at any time. The window and the canvas are kept deliberately: they
+            # are the record of what went in to produce what came out.
+            inpaint_source_path = None
+            inpaint_mask_path = None
+            inpaint_source_size = None
+            inpaint_provenance = None
+            if job.request.inpaint is not None:
+                ipx = job.request.inpaint
+                upload_path = reference_video_path
+                mask_upload = self.video_upload_store.path_for(ipx.mask_video_id)
+                source_size = video_io.probe_resolution(upload_path)
+                if source_size is None:
+                    raise generation_failed(
+                        job_id=job.job_id,
+                        detail=f"could not probe the resolution of {upload_path}",
+                    )
+                inpaint_source_size = source_size
+
+                window_path = output_dir / "_inpaint_window.mp4"
+                cut = video_io.cut_window_mp4(
+                    upload_path,
+                    window_path,
+                    float(ipx.window_start_sec),
+                    job.request.num_frames,
+                    job.request.frame_rate,
+                )
+                canvas_path = output_dir / "inpaint_canvas.mp4"
+                fill = video_io.fill_mask_green_mp4(
+                    window_path,
+                    mask_upload,
+                    canvas_path,
+                    canvas_width=job.request.width,
+                    canvas_height=job.request.height,
+                    frame_rate=job.request.frame_rate,
+                    num_frames=job.request.num_frames,
+                )
+                # The ENGINE reads audio from the cut window, not from the whole
+                # upload: the window is what the delivered clip covers, and the
+                # canvas is written video-only on purpose.
+                inpaint_source_path = window_path
+                inpaint_mask_path = mask_upload
+                reference_video_path = canvas_path
+                # WHAT THE APP KNOWS AND THE ENGINE DOES NOT: which uploads this
+                # job came from, what the material's own cadence was, where the
+                # window was cut and how many frames each step actually wrote.
+                #
+                # DELIBERATELY NOT HERE: the source's width and height. They are
+                # in the engine's ``geometry.as_dict()``, and ``_write_metadata``
+                # merges the two dicts with the provenance LAST — so repeating
+                # them here would let the app's copy silently overwrite the
+                # engine's on every real job, and a disagreement between the two
+                # (the one thing worth knowing) would become invisible. One fact,
+                # one writer.
+                inpaint_provenance = {
+                    "source_video_id": job.request.reference_video_id,
+                    "mask_video_id": ipx.mask_video_id,
+                    "source_fps": cut["source_fps"],
+                    "mask_fps": video_io.probe_fps(mask_upload),
+                    "resampled": cut["resampled"],
+                    "window_start_sec": float(ipx.window_start_sec),
+                    "window_start_frame": cut["start_frame"],
+                    "window_written_frames": cut["written_frames"],
+                    "window_has_audio": cut["has_audio"],
+                    "canvas_frames": fill["written_frames"],
+                    "canvas_codec": fill["codec"],
+                }
+                logger.info(
+                    "Job %s inpaint window %.3fs +%df (start_frame=%d, resampled=%s) "
+                    "source %dx%d -> canvas %dx%d (%s, %d frames)",
+                    job.job_id, float(ipx.window_start_sec), job.request.num_frames,
+                    cut["start_frame"], cut["resampled"],
+                    source_size[0], source_size[1],
+                    job.request.width, job.request.height,
+                    fill["codec"], fill["written_frames"],
+                )
+
             # Console job-info line (owner requirement): base weight file + LoRAs
             # (name/requested/effective strength) + prompt, so LoRA application is
             # visible from the uvicorn console (the worker's per-adapter attach
@@ -739,10 +824,19 @@ class PipelineManager:
                 reference_video_path=reference_video_path,
                 seed=seed,
                 outpaint_source_path=outpaint_source_path,
+                inpaint_source_path=inpaint_source_path,
+                inpaint_mask_path=inpaint_mask_path,
             )
 
             elapsed = time.time() - started
-            result = self._finalize(job, outcome, output_dir, elapsed)
+            result = self._finalize(
+                job,
+                outcome,
+                output_dir,
+                elapsed,
+                inpaint_source_size=inpaint_source_size,
+                inpaint_provenance=inpaint_provenance,
+            )
 
             if job.cancel_requested:
                 job.status = JobStatus.cancelled
@@ -901,6 +995,51 @@ class PipelineManager:
                 detail=(
                     "regenerate_audio=false keeps the window's ORIGINAL audio, "
                     f"but upload {retake.video_id} has no audio stream"
+                )
+            )
+
+    # ------------------------------------------------ inpaint window preflight
+
+    def preflight_inpaint_window(
+        self,
+        inpaint: InpaintSpec,
+        source_video_id: str,
+        window_frames: int,
+        request_frame_rate: float,
+    ) -> None:
+        """Validate an inpaint window against the uploaded source BEFORE a job
+        is created (台帳 §3-55).
+
+        THE MIRROR OF :meth:`preflight_retake_window`, minus its second check:
+        inpainting never regenerates audio (the source window's own waveform is
+        muxed back unconditionally), so there is no "you asked to keep audio
+        this upload does not have" case. What is left is the window fitting the
+        material once resampled to ``request_frame_rate`` — the same effective-
+        frame estimate :meth:`preflight_source_video` uses, with
+        ``video_io.cut_window_mp4``'s MEASURED frame count as the frame-exact
+        backstop when the job actually runs.
+
+        ``source_video_id`` is the request's ``reference_video_id`` — unlike
+        retake, whose spec carries its own upload id, inpainting's source IS the
+        reference video (the app substitutes the green canvas for it later), so
+        the caller hands it in rather than the spec carrying it twice. It is
+        assumed already resolved (the endpoint 404s first), and so is the mask
+        (the endpoint checks its resolution and frame count before calling this).
+        """
+        src_path = self.video_upload_store.path_for(source_video_id)
+        n_src = video_io.frame_count(src_path)
+        src_fps = video_io.probe_fps(src_path)
+        if src_fps and abs(src_fps - float(request_frame_rate)) > 1e-3:
+            effective = int(round(n_src * float(request_frame_rate) / src_fps))
+        else:
+            effective = n_src
+        start_frame = round(float(inpaint.window_start_sec) * float(request_frame_rate))
+        if start_frame + window_frames > effective:
+            raise inpaint_window_out_of_range(
+                detail=(
+                    f"window starts at frame {start_frame} and needs "
+                    f"{window_frames} frames, but the source has {n_src} frames "
+                    f"@ {src_fps} fps (~{effective} @ {request_frame_rate} fps)"
                 )
             )
 
@@ -1458,9 +1597,25 @@ class PipelineManager:
 
     # ------------------------------------------------------------ finalize
 
-    def _finalize(self, job: JobRecord, outcome, output_dir: Path, elapsed: float) -> JobResult:
+    def _finalize(
+        self,
+        job: JobRecord,
+        outcome,
+        output_dir: Path,
+        elapsed: float,
+        *,
+        inpaint_source_size: tuple[int, int] | None = None,
+        inpaint_provenance: dict | None = None,
+    ) -> JobResult:
         req = job.request
-        if req.crop_output is not None:
+        if inpaint_source_size is not None:
+            # Inpainting (台帳 §3-55): ``width``/``height`` are the CANVAS, and
+            # the engine crops the green pad bands off again before the encode,
+            # so the delivered mp4 is at the SOURCE's own resolution. Reporting
+            # the canvas here would put a size in the job result and in
+            # metadata.json that no file on disk actually has.
+            res_w, res_h = inpaint_source_size
+        elif req.crop_output is not None:
             res_w, res_h = req.crop_output.width, req.crop_output.height
         else:
             res_w, res_h = req.width, req.height
@@ -1478,6 +1633,7 @@ class PipelineManager:
                 duration=duration,
                 file_size=file_size,
                 elapsed=elapsed,
+                inpaint_provenance=inpaint_provenance,
             )
 
         return JobResult(
@@ -1491,7 +1647,10 @@ class PipelineManager:
             metadata_path=f"outputs/{job.job_id}/metadata.json",
         )
 
-    def _write_metadata(self, *, job, outcome, metadata_path, resolution, duration, file_size, elapsed) -> None:
+    def _write_metadata(
+        self, *, job, outcome, metadata_path, resolution, duration, file_size, elapsed,
+        inpaint_provenance=None,
+    ) -> None:
         req = job.request
         metadata = {
             "job_id": job.job_id,
@@ -1584,6 +1743,19 @@ class PipelineManager:
         # byte-unchanged.
         if outcome.ltx25 is not None:
             metadata["ltx25"] = outcome.ltx25
+        # Inpainting (台帳 §3-55, additive): only present when an inpaint was
+        # requested, so every other job's metadata key set is byte-unchanged.
+        # The ENGINE's own block (geometry, blend settings, VRAM peaks, the
+        # audio record and ``mask_proof``) merged with the APP's provenance
+        # (which upload, which mask, which frames, was the source resampled) —
+        # the same two-source shape ``_write_chain_metadata`` uses for retake.
+        # The mock backend reports no engine block, so a mock job's ``inpaint``
+        # is the provenance alone, which is exactly the honest answer.
+        if inpaint_provenance is not None or outcome.inpaint is not None:
+            metadata["inpaint"] = {
+                **(outcome.inpaint or {}),
+                **(inpaint_provenance or {}),
+            }
         video_io.save_metadata(metadata_path, metadata)
 
     def _environment_block(self) -> dict:

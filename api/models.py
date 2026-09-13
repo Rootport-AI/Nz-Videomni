@@ -49,6 +49,47 @@ _LIMITS_DEFAULTS = LimitsConfig()
 # a loud ValueError, never a silently wrong result.
 OUTPAINT_MIN_KEEP_SIDE = 256
 
+# Inpainting (台帳 §3-55, ``Docs/INPAINTING_DESIGN.md`` §6.2): the smallest side
+# we accept for the SOURCE video.
+#
+# Numerically the same 256 as ``OUTPAINT_MIN_KEEP_SIDE`` above, and deliberately
+# a DIFFERENT NAME with a different reason, because the two rules protect
+# different things and could legitimately move apart. Outpainting's floor
+# protects the KEPT rectangle from a mask dilation that eats inwards from the
+# canvas edge. This one protects the CANVAS ITSELF: the canvas is the source
+# rounded UP to a multiple of 128, and stage 1 runs at half of it through a VAE
+# with a 32px patch stride — below 256 the stage-1 frame is 128px or less and
+# the model has no context around the mask to work from at all.
+#
+# ``engine/inpaint/canvas.py`` carries the same number as a defence-in-depth
+# check, duplicated rather than shared for the reason stated above: the app venv
+# and the engine venv never import each other.
+INPAINT_MIN_SOURCE_SIDE = 256
+
+# The canvas grid. The VAE / patchifier stride chain needs both canvas sides on
+# a multiple of 128 (64px VAE stride x 2 for the two-stage upscale), which is
+# also the rule ``reference_resolution_invalid`` already enforces for every
+# reference-video job.
+INPAINT_CANVAS_MULTIPLE = 128
+
+
+def round_up_128(value: int) -> int:
+    """Smallest multiple of :data:`INPAINT_CANVAS_MULTIPLE` that is >= ``value``.
+
+    The app-side twin of ``engine.inpaint.canvas.round_up_128``. Duplicated for
+    the reason ``INPAINT_MIN_SOURCE_SIDE`` is: the app venv and the engine venv
+    never import each other. The API is the enforcing layer — it ffprobes the
+    source and refuses a request whose canvas does not match — so drift could
+    only ever make the engine stricter, where it surfaces as a loud ValueError
+    rather than a silently wrong picture.
+
+    >>> round_up_128(1280), round_up_128(1920), round_up_128(1080)
+    (1280, 1920, 1152)
+    """
+    if value <= 0:
+        raise ValueError(f"round_up_128 needs a positive size, got {value}")
+    return -(-int(value) // INPAINT_CANVAS_MULTIPLE) * INPAINT_CANVAS_MULTIPLE
+
 # block_swap_prefetch's own default (S4, 2026-08-01: real-device gate G1-G7
 # passed, owner confirmed "gate green -> default on"). Named (unlike most
 # Field defaults in this file) because it is the SINGLE SOURCE this module's
@@ -242,6 +283,53 @@ class OutpaintSpec(BaseModel):
         return self.pad_left + self.pad_right + self.pad_top + self.pad_bottom
 
 
+class InpaintSpec(BaseModel):
+    """Masked partial regeneration (inpainting), 台帳 §3-55. Design canon:
+    ``Docs/INPAINTING_DESIGN.md`` §6.
+
+    Repaints the white region of a mask video inside an existing clip, using the
+    same In-Outpainting IC-LoRA and the same two-stage green-canvas machinery
+    outpainting uses — the geometry is what differs.
+
+    GEOMETRY CONTRACT. ``GenerateRequest.width`` / ``height`` are the CANVAS:
+    the source video's own resolution rounded UP to a multiple of 128. The
+    source sits at the canvas' top-left (0, 0) and the right/bottom bands are
+    sentinel green, cut off again losslessly at the end of the job.
+
+    **The pads are NOT fields here, deliberately.** The server derives them by
+    ffprobing the reference video (``canvas − source``), which means the source
+    file is the single source of truth for its own size. A pad field would be a
+    second one, checkable against nothing, and a client that computed it wrong
+    would get a silently mis-framed canvas instead of a 422. The same reasoning
+    is why the delivered resolution is the source's rather than a request field:
+    there is nothing for a caller to get wrong.
+
+    THE WINDOW IS TWO VALUES, exactly as retake's is: ``window_start_sec`` plus
+    ``GenerateRequest.num_frames``. Length is not defined twice. The start is on
+    the MATERIAL's timeline (an AviUtl2 ribbon trimmed off the front has already
+    had its offset subtracted by the caller), and the server cuts the window out
+    of the upload before anything else happens.
+    """
+
+    # The mask video from POST /upload/video. White (>= 128) marks the pixels to
+    # repaint; the binarisation happens on the receiving side, twice — once in
+    # the ffmpeg filtergraph that paints the canvas and once when the engine
+    # decodes the mask for the blend — at the same threshold both times.
+    mask_video_id: str = Field(..., min_length=1)
+
+    # Where the window starts on the SOURCE MATERIAL's own timeline.
+    window_start_sec: float = Field(0.0, ge=0.0)
+
+    # Laplacian-pyramid blend dilation for the two blends, the same knob and the
+    # same 0-15 range outpainting exposes (``OutpaintSpec``). The frontend does
+    # NOT send either: inpainting's panel has no mask-blur control, so both keys
+    # are omitted from every real request and the server's defaults stand. They
+    # exist as fields because the GPU gate has to be able to sweep them without
+    # a code change — which is how the defaults were chosen in the first place.
+    blend_dilation_stage1: int = Field(5, ge=0, le=15)
+    blend_dilation_stage2: int = Field(2, ge=0, le=15)
+
+
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
     negative_prompt: str = Field("", max_length=2000)
@@ -427,6 +515,10 @@ class GenerateRequest(BaseModel):
     # byte-identical to before. See OutpaintSpec for the geometry contract.
     outpaint: OutpaintSpec | None = None
 
+    # Inpainting (台帳 §3-55; ADDITIVE/optional). ``None`` ⇒ the request is
+    # byte-identical to before. See InpaintSpec for the geometry contract.
+    inpaint: InpaintSpec | None = None
+
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
         if self.width % 64 != 0:
@@ -512,6 +604,43 @@ class GenerateRequest(BaseModel):
                     f"than {OUTPAINT_MIN_KEEP_SIDE}px on a side; the blend's mask "
                     "dilation reaches roughly a tenth of the canvas's long side "
                     "inward and would consume it entirely"
+                )
+
+        # ── Inpainting (台帳 §3-55) ────────────────────────────────────────
+        # One flat check per rule, same discipline as the outpaint block above.
+        # Everything that needs the file on disk (the source's real resolution,
+        # the mask's resolution and frame count, the window fitting) lives at
+        # the endpoint instead — see api/generate.py.
+        if self.inpaint is not None:
+            if not self.reference_video_id:
+                raise ValueError(
+                    "inpaint requires reference_video_id (the video whose masked "
+                    "region is being repainted)"
+                )
+            if self.outpaint is not None:
+                raise ValueError(
+                    "inpaint and outpaint are mutually exclusive (one repaints "
+                    "inside the frame, the other invents a band around it)"
+                )
+            if self.conditioning_images:
+                raise ValueError(
+                    "inpaint and conditioning_images are mutually exclusive "
+                    "(the source video already fixes the frame content)"
+                )
+            if self.crop_output is not None:
+                raise ValueError(
+                    "inpaint and crop_output are mutually exclusive (the result "
+                    "is already cropped back to the source's own resolution)"
+                )
+            if self.width % INPAINT_CANVAS_MULTIPLE != 0:
+                raise ValueError(
+                    f"inpaint width must be a multiple of {INPAINT_CANVAS_MULTIPLE} "
+                    "(it is the canvas: the source's width rounded up)"
+                )
+            if self.height % INPAINT_CANVAS_MULTIPLE != 0:
+                raise ValueError(
+                    f"inpaint height must be a multiple of {INPAINT_CANVAS_MULTIPLE} "
+                    "(it is the canvas: the source's height rounded up)"
                 )
         return self
 

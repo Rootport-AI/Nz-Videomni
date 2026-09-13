@@ -355,12 +355,130 @@ def test_pyramid_reconstructs_the_input():
     assert torch.allclose(out, x, atol=1e-5)
 
 
+# ── 9b. per-frame masks (Inpainting, 台帳 §3-55) ─────────────────────────────
+#
+# The blend is SHARED: LTX 2.3's outpainting, LTX 2.5's outpainting and
+# inpainting all come through here, so the load-bearing property of this section
+# is not that the per-frame path works but that adding it left the single-plane
+# path alone. The golden fixture above already pins the numbers; these pin the
+# equivalence.
+
+
+def _u8_video(frames: int, h: int, w: int, seed: int):
+    g = torch.Generator().manual_seed(seed)
+    return (torch.rand(frames, h, w, 3, generator=g) * 255).round().clamp(0, 255).to(torch.uint8)
+
+
+def test_f_identical_mask_planes_equal_the_single_plane_mask():
+    """A per-frame mask whose planes are all the same must produce EXACTLY the
+    single-plane result — bit for bit, not approximately. This is the regression
+    guard for both engines' outpainting: if the new branch changed the
+    arithmetic, this is where it shows up."""
+    frames = 10  # deliberately not a multiple of the chunk size (8)
+    gen = _u8_video(frames, 32, 48, seed=11)
+    orig = _u8_video(frames, 32, 48, seed=12)
+    one = _rect_mask(32, 48, 8, 24, 12, 36)
+    many = one.expand(frames, 1, 32, 48).contiguous()
+
+    single = blend_video_u8(gen, orig, one, mask_low_res_dilation=3)
+    per_frame = blend_video_u8(gen, orig, many, mask_low_res_dilation=3)
+    assert torch.equal(single, per_frame)
+
+
+def test_per_frame_masks_equal_blending_each_frame_on_its_own():
+    """The real thing a moving mask has to satisfy: frame i must be blended with
+    mask i and with nothing else. Blending the clip in one call is compared
+    against F separate single-frame calls."""
+    frames = 5
+    gen = _u8_video(frames, 32, 32, seed=21)
+    orig = _u8_video(frames, 32, 32, seed=22)
+    masks = torch.cat(
+        [_rect_mask(32, 32, 4 + i, 20 + i, 6 + 2 * i, 22 + 2 * i) for i in range(frames)],
+        dim=0,
+    )
+
+    together = blend_video_u8(gen, orig, masks, mask_low_res_dilation=2, chunk_size=2)
+    for i in range(frames):
+        alone = blend_video_u8(
+            gen[i : i + 1], orig[i : i + 1], masks[i : i + 1], mask_low_res_dilation=2
+        )
+        assert torch.equal(together[i : i + 1], alone), f"frame {i} differs"
+
+
+def test_the_chunk_size_does_not_change_a_per_frame_blend():
+    """Per-chunk mask pyramids are the whole point of the new branch (a
+    whole-timeline one would be gigabytes), so the chunk boundary must not be
+    visible in the result."""
+    frames = 9
+    gen = _u8_video(frames, 32, 32, seed=31)
+    orig = _u8_video(frames, 32, 32, seed=32)
+    masks = torch.cat(
+        [_rect_mask(32, 32, 4, 20, 4 + i, 20 + i) for i in range(frames)], dim=0
+    )
+    a = blend_video_u8(gen, orig, masks, mask_low_res_dilation=2, chunk_size=1)
+    b = blend_video_u8(gen, orig, masks, mask_low_res_dilation=2, chunk_size=4)
+    c = blend_video_u8(gen, orig, masks, mask_low_res_dilation=2, chunk_size=frames)
+    assert torch.equal(a, b) and torch.equal(b, c)
+
+
+def test_a_uint8_mask_is_accepted_and_equals_its_float_twin():
+    """``decode_mask_video`` and ``half_res_mask`` both hand back uint8 0/255,
+    so the blend has to read that convention rather than making every caller
+    convert (and risk one of them dividing by the wrong number)."""
+    frames = 4
+    gen = _u8_video(frames, 32, 32, seed=41)
+    orig = _u8_video(frames, 32, 32, seed=42)
+    float_mask = torch.cat(
+        [_rect_mask(32, 32, 6, 24, 6 + i, 24 + i) for i in range(frames)], dim=0
+    )
+    u8_mask = (float_mask * 255).to(torch.uint8)
+
+    assert torch.equal(
+        blend_video_u8(gen, orig, float_mask, mask_low_res_dilation=2),
+        blend_video_u8(gen, orig, u8_mask, mask_low_res_dilation=2),
+    )
+
+
+def test_a_single_uint8_plane_is_accepted_too():
+    """The uint8 convention must not be a per-frame-only affordance."""
+    gen = _u8_video(3, 32, 32, seed=51)
+    orig = _u8_video(3, 32, 32, seed=52)
+    float_mask = _rect_mask(32, 32, 8, 24, 8, 24)
+    assert torch.equal(
+        blend_video_u8(gen, orig, float_mask, mask_low_res_dilation=2),
+        blend_video_u8(gen, orig, (float_mask * 255).to(torch.uint8), mask_low_res_dilation=2),
+    )
+
+
+def test_laplacian_pyramid_blend_accepts_a_per_frame_mask():
+    """The float entry point takes the same widening, so a caller that already
+    holds float tensors does not have to route through the uint8 front end."""
+    image_a = torch.rand(4, 3, 32, 32)
+    image_b = torch.rand(4, 3, 32, 32)
+    masks = torch.cat([_rect_mask(32, 32, 4, 20, 4 + i, 20 + i) for i in range(4)], dim=0)
+    out = laplacian_pyramid_blend(image_a, image_b, masks, mask_low_res_dilation=2, chunk_size=2)
+    assert out.shape == image_a.shape
+    for i in range(4):
+        alone = laplacian_pyramid_blend(
+            image_a[i : i + 1], image_b[i : i + 1], masks[i : i + 1], mask_low_res_dilation=2
+        )
+        assert torch.equal(out[i : i + 1], alone), f"frame {i} differs"
+
+
 # ── 10. input validation ────────────────────────────────────────────────────
-def test_multi_frame_mask_is_rejected():
-    image_a = torch.rand(2, 3, 32, 32)
-    image_b = torch.rand(2, 3, 32, 32)
-    with pytest.raises(ValueError, match="exactly one frame"):
+def test_a_mask_frame_count_that_is_neither_one_nor_b_is_rejected():
+    """Widened from "exactly one frame" when inpainting arrived (台帳 §3-55): F
+    is now legal, but 2-of-3 is still a geometry bug and must not be broadcast
+    from the wrong axis."""
+    image_a = torch.rand(3, 3, 32, 32)
+    image_b = torch.rand(3, 3, 32, 32)
+    with pytest.raises(ValueError, match="one plane per blended frame"):
         laplacian_pyramid_blend(image_a, image_b, torch.ones(2, 1, 32, 32))
+
+    gen = _u8_video(3, 32, 32, seed=61)
+    orig = _u8_video(3, 32, 32, seed=62)
+    with pytest.raises(ValueError, match="one plane per blended frame"):
+        blend_video_u8(gen, orig, torch.ones(2, 1, 32, 32))
 
 
 def test_mismatched_image_shapes_are_rejected():

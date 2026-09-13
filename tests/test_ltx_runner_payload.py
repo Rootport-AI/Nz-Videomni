@@ -383,6 +383,28 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     assert captured_chain[0]["fused_gguf_dequant_kernel"] is True
 
 
+def test_the_frozen_key_set_has_no_room_for_inpaint(tmp_path):
+    """Inpainting (台帳 §3-55) is additive like every block before it, and this
+    is where "additive" is a FACT rather than an intention: the key set above is
+    frozen, so an ``inpaint`` key that rode on a default job would fail that test
+    — and this one says out loud what that failure would mean.
+
+    The positive half (what the block contains when it IS requested) lives in
+    tests/test_inpaint_api.py, next to the endpoint that fills it in.
+    """
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_nag_request(), tmp_path / "single")
+    assert "inpaint" not in captured[0]
+
+    captured_chain: list[dict] = []
+    be2 = _capturing_backend(captured_chain)
+    be2.generate_chain(_chain_request(), tmp_path / "chain")
+    # ...and the chain path never learns about it at all: inpainting's entry
+    # point is the single generate only (Docs/INPAINTING_DESIGN.md §8).
+    assert "inpaint" not in captured_chain[0]
+
+
 def test_attention_used_is_relayed_from_the_done_event(tmp_path):
     # The engine's ACTUAL attention backend rides the terminal done event on the
     # same route as seed_used, so a sage->sdpa degrade is visible downstream

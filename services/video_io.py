@@ -228,6 +228,153 @@ def pad_green_mp4(
     return output_path
 
 
+def fill_mask_green_mp4(
+    source: Path,
+    mask: Path,
+    out: Path,
+    *,
+    canvas_width: int,
+    canvas_height: int,
+    pad_left: int = 0,
+    pad_top: int = 0,
+    frame_rate: float,
+    num_frames: int,
+) -> dict:
+    """Paint ``mask``'s white region of ``source`` sentinel green, pad to the
+    canvas, and write a LOSSLESS, video-only MP4 — frame count MEASURED.
+
+    The inpainting counterpart of :func:`pad_green_mp4` (台帳 §3-55,
+    ``Docs/INPAINTING_DESIGN.md`` §7.2). Where that one fills a rectangular band
+    AROUND the footage with the sentinel, this one fills an ARBITRARY, per-frame
+    region INSIDE it — and then still pads the right/bottom bands out to the
+    128-multiple canvas, because the source resolution is the user's project
+    resolution and is rarely a multiple of 128.
+
+    Returns ``{"written_frames", "codec", "filtergraph"}``; ``written_frames``
+    is re-probed from the finished file, never predicted.
+
+    ONE filtergraph does both jobs, and every piece of it is load-bearing
+    (measured, see Docs/VERIFICATION_LOG.md — these are not guesses):
+
+    * ``setpts=N/(fr*TB)`` on BOTH inputs pairs the two streams by frame NUMBER
+      rather than by timestamp, so a mask written at a slightly different
+      cadence still lines up frame for frame;
+    * the green plate is a ``split`` of the source run through ``lutrgb``, not a
+      separate ``lavfi color`` input. A colour input travels through yuv420p and
+      lands on (101, 253, 0) instead of (102, 255, 0). The In-Outpainting
+      IC-LoRA was trained on the exact triple, and the engine's de-green step
+      replaces pixels by value, so a two-unit drift would leave a green haze in
+      the delivered video;
+    * ``format=gray`` plus a binarising ``lut`` at 128 BEFORE the merge.
+      ``maskedmerge`` is a LINEAR blend, so H.264's soft mask edge (the plugin
+      writes the mask through Media Foundation, and 4:2:0 chroma plus deblocking
+      always leave a grey ring) would otherwise produce a ring of HALF-green
+      pixels — exactly the values that survive both the sentinel test and the
+      de-green. 128 is the same threshold ``engine.pipeline.common.
+      decode_mask_video`` applies on the other side of the pipe;
+    * the encode is lossless RGB (``libx264rgb -crf 0``, ``ffv1`` for builds
+      without it), for the reason :func:`pad_green_mp4` documents at length;
+    * ``-an``: the audio never travels through this file. The engine reads the
+      cut window for the frozen-audio guidance and for the mux.
+
+    **The frame count is enforced by measurement, not by a framesync option.**
+    The obvious defence against a short mask — ``maskedmerge=shortest=1:
+    repeatlast=0``, so the merge stops when either input ends — is NOT available:
+    this ffmpeg's ``maskedmerge`` declares only ``planes``, and passing the
+    other two fails the command outright (measured on
+    ``2025-02-02-git-957eb2323a-full_build-www.gyan.dev``). With the default
+    framesync behaviour a short mask has its LAST FRAME REPEATED, so the file
+    comes out with the full ``num_frames`` and the tail silently unmasked. The
+    endpoint therefore checks the mask's frame count against ``num_frames``
+    before a job exists, and this function re-probes what it actually wrote —
+    the same belt-and-braces discipline :func:`cut_window_mp4` uses.
+
+    The source is NOT resized and the mask is NOT resized: the caller has
+    already verified that both are exactly the source resolution.
+    """
+    exe = ffmpeg_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    if num_frames <= 0:
+        raise FFmpegError(f"fill_mask_green_mp4: num_frames must be >= 1 (got {num_frames})")
+
+    # BOTH INPUTS' LENGTHS, CHECKED BEFORE THE MERGE. The measured count after
+    # the write (below) cannot catch a short input on its own: framesync's
+    # default ``eof_action=repeat`` keeps handing the LAST frame of whichever
+    # stream ended to ``maskedmerge`` forever, so the output still reaches
+    # ``num_frames`` — with a tail that is either masked by a stale mask frame or
+    # frozen on a stale picture. Measured on this build: a 4-frame mask against a
+    # 9-frame source writes 9 frames, and so does a 4-frame source against a
+    # 9-frame mask. The option that would stop it (``shortest=1``) does not exist
+    # here. So both lengths are enforced up front, by ffprobe, and the post-write
+    # count stays as the backstop for everything else (a filter that dropped a
+    # frame, a codec that refused one).
+    for label, path in (("source", source), ("mask", mask)):
+        available = frame_count(path)
+        if available < num_frames:
+            raise FFmpegError(
+                f"fill_mask_green_mp4: the {label} has {available} frames but "
+                f"{num_frames} are needed ({label}={path.name}); a short input "
+                "would have its last frame repeated and the tail of the window "
+                "would be wrong rather than missing"
+            )
+
+    r, g, b = 102, 255, 0  # OUTPAINT_GREEN_HEX as three integers
+    graph = (
+        f"[0:v]setpts=N/({frame_rate}*TB),format=rgb24,split[src][t];"
+        f"[t]lutrgb=r={r}:g={g}:b={b}[grn];"
+        f"[1:v]setpts=N/({frame_rate}*TB),format=gray,"
+        f"lut=y='if(gte(val,128),255,0)',format=rgb24[mk];"
+        f"[src][grn][mk]maskedmerge,"
+        f"pad={canvas_width}:{canvas_height}:{pad_left}:{pad_top}"
+        f":color={OUTPAINT_GREEN_HEX}[out]"
+    )
+
+    base = [
+        exe, "-y",
+        "-i", str(source),
+        "-i", str(mask),
+        "-filter_complex", graph,
+        "-map", "[out]",
+        "-an",
+        # ``-fps_mode passthrough``: write exactly the frames the graph produced,
+        # one for one. The default (``cfr``) is free to DUPLICATE or DROP frames
+        # to hit a target rate, which would break the pairing the whole feature
+        # rests on — frame i of the canvas must be frame i of the mask and frame
+        # i of the generation. The ``setpts=N/(fr*TB)`` in the graph already
+        # rewrites the timestamps onto the requested cadence, so there is nothing
+        # for a rate converter to fix and everything for it to spoil. (Accepted
+        # by this build; ``-vsync 0`` is the older spelling if a future one
+        # regresses.)
+        "-fps_mode", "passthrough",
+        "-frames:v", str(int(num_frames)),
+    ]
+
+    def _run(vcodec: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(base + vcodec + [str(out)], capture_output=True, text=True)
+
+    codec = "libx264rgb"
+    proc = _run(["-c:v", "libx264rgb", "-pix_fmt", "rgb24", "-crf", "0"])
+    if proc.returncode != 0:
+        # Second lossless-RGB option for builds compiled without libx264rgb.
+        codec = "ffv1"
+        fallback = _run(["-c:v", "ffv1", "-pix_fmt", "rgb24"])
+        if fallback.returncode != 0:
+            raise FFmpegError(
+                f"ffmpeg mask-green-fill failed (libx264rgb code {proc.returncode}, "
+                f"ffv1 code {fallback.returncode}): {fallback.stderr[-2000:]}"
+            )
+
+    written = frame_count(out)
+    if written != num_frames:
+        raise FFmpegError(
+            f"fill_mask_green_mp4 wrote {written} frames but {num_frames} were "
+            f"requested (source={source.name}, mask={mask.name}); the mask and the "
+            "source must both cover the whole window"
+        )
+    return {"written_frames": written, "codec": codec, "filtergraph": graph}
+
+
 def has_audio_stream(path: Path) -> bool:
     """True if ``path`` has at least one audio stream (via ffprobe)."""
     exe = shutil.which("ffprobe")

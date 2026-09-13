@@ -901,12 +901,23 @@ def _do_generate(msg: dict) -> None:
     vae_mode = _resolve_vae_mode(msg)
 
     outpaint = msg.get("outpaint")
+    # Inpainting (台帳 §3-55): the same additive contract outpaint uses — absent
+    # on every other job, and its PRESENCE is what routes this call to the
+    # masked two-stage driver. The two are mutually exclusive at the schema
+    # layer (api/models.py), which the assert below restates where it would
+    # actually bite.
+    inpaint = msg.get("inpaint")
+    assert not (outpaint is not None and inpaint is not None), (
+        "outpaint and inpaint are mutually exclusive; the API schema rejects the "
+        "combination before a job is created"
+    )
 
     _log(
         f"generating {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"/ {msg['num_steps']} steps seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
         f"outpaint={'yes' if outpaint else 'no'} "
+        f"inpaint={'yes' if inpaint else 'no'} "
         f"neg={_neg_label(nag)} attn={attention} bsprefetch={bs_prefetch} "
         f"keepresident={keep_res} fuseddequant={fused_dequant} vae={vae_mode}"
     )
@@ -936,7 +947,37 @@ def _do_generate(msg: dict) -> None:
     )
 
     meta = None
-    if outpaint is not None:
+    meta_key = "inpaint" if inpaint is not None else "outpaint"
+    if inpaint is not None:
+        # Inpainting (台帳 §3-55). ``reference_video.path`` is already the
+        # green-FILLED canvas the app built (the mask's white region painted
+        # #66FF00, padded out to the 128-multiple canvas), so ic_reference above
+        # points at it and this branch only has to hand run_inpaint the geometry
+        # and the mask video it needs. Like outpaint, run_inpaint drives its two
+        # stages itself and tags them explicitly, so the shim's loop-counting
+        # inference (begin_single_op) must NOT be used here.
+        from engine.inpaint.canvas import InpaintGeometry
+
+        geometry = InpaintGeometry(
+            canvas_width=int(inpaint["canvas_width"]),
+            canvas_height=int(inpaint["canvas_height"]),
+            source_width=int(inpaint["source_width"]),
+            source_height=int(inpaint["source_height"]),
+        )
+        assert ic_reference is not None, (
+            "inpaint requires a reference video (the green canvas); the API "
+            "layer enforces this before the job is created"
+        )
+        meta = _PIPE.generate_inpaint(
+            canvas_path=ic_reference[0],
+            source_path=inpaint.get("source_path"),
+            mask_path=inpaint["mask_path"],
+            geometry=geometry,
+            blend_dilation_stage1=int(inpaint.get("blend_dilation_stage1", 5)),
+            blend_dilation_stage2=int(inpaint.get("blend_dilation_stage2", 2)),
+            **common,
+        )
+    elif outpaint is not None:
         # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the
         # time). ``reference_video.path`` is already the green
         # canvas the app built, so ic_reference above points at it and this
@@ -1011,10 +1052,12 @@ def _do_generate(msg: dict) -> None:
         fused_gguf_dequant_kernel_used=fused_dequant_used,
         vae_mode_used=vae_mode_used,
         peak_vram_reserved_mb=peak_reserved,
-        # Outpainting geometry/blend/audio record, mirroring how the chain path
-        # relays its own ``chain=meta``. Absent on every other job, so a plain
-        # generate's done event stays byte-identical.
-        **({} if meta is None else {"outpaint": meta["outpaint"]}),
+        # Outpainting (or inpainting) geometry/blend/audio record, mirroring how
+        # the chain path relays its own ``chain=meta``. Absent on every other
+        # job, so a plain generate's done event stays byte-identical — and so
+        # does an outpaint one, since ``meta_key`` is "outpaint" unless an
+        # inpaint block routed the call above.
+        **({} if meta is None else {meta_key: meta[meta_key]}),
     )
 
     # Resident-reuse: free the just-finished job's transient allocations before

@@ -143,9 +143,21 @@ DEFAULT_BLOCKS_ON_GPU = 8
 #: 96 text cross-attention forwards). So the field is honoured now, and with it
 #: the six knobs that were only ever inert because this row refused them.
 #: What is left is TWO engine-level features, neither of them a mode.
+#: ``inpaint`` JOINED THIS TABLE with the Inpainting increment (台帳 §3-55), and
+#: it is the FIRST WHOLE MODE TO ARRIVE rather than leave — every other row this
+#: table has ever carried was a feature this engine grew into. The ruling is
+#: LTX 2.3-only by owner decision, not by discovered limitation: inpainting is
+#: built on the In-Outpainting IC-LoRA shipped with 2.3, and 2.5's own
+#: outpainting reaches that adapter through a different two-stage driver
+#: (``engine25/outpaint25.py``) whose mask handling would have to be widened
+#: separately. Declaring the refusal here is what greys the Edit tab's
+#: Inpainting sub-tab out while 2.5 is loaded, through
+#: :data:`UNSUPPORTED_FEATURES` -> ``GET /models`` -> the frontend's
+#: ``FEATURE_UI`` — one row, three consequences, no second place to update.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
+    ("inpaint", "inpaint", lambda r: r.inpaint is not None),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -830,6 +842,8 @@ class _RealBackend25(_RealBackend):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
         """One two-stage T2V/I2V generation, with Style / IC-LoRA (§3-102).
 
@@ -849,6 +863,14 @@ class _RealBackend25(_RealBackend):
         purpose, and the clip's own waveform is what the finished mp4 carries.
         It rides the ``outpaint`` block below, whose mere PRESENCE is what
         routes the worker to the two-stage outpaint driver.
+
+        ``inpaint_source_path`` / ``inpaint_mask_path`` (台帳 §3-55) are ACCEPTED
+        AND ALWAYS ``None`` here. They are the orchestrator's two extra paths for
+        an inpaint job, and this engine refuses that job — ``inpaint`` sits in
+        :data:`REJECT_TABLE`, so ``reject_unsupported`` below raises 422 before
+        anything reads them. The parameters exist because the orchestrator calls
+        ONE signature for both engines; dropping them would turn every 2.5 job
+        into a TypeError, which is the opposite of a feature ruling.
 
         ``crop_output`` IS honoured, and is the one v1-scope decision worth
         naming: it is an ffmpeg centre-crop the app performs on the finished

@@ -2101,6 +2101,91 @@ class LTXFastVideoPipeline:
             self._reset_fused_dequant_job()
 
     @torch.inference_mode()
+    def generate_inpaint(
+        self,
+        *,
+        prompt: str,
+        canvas_path: str,
+        source_path: str | None,
+        mask_path: str,
+        geometry,
+        num_frames: int,
+        frame_rate: float,
+        num_steps: int,
+        seed: int,
+        output_path: str,
+        ic_loras: list[IcLoraEntry] | None = None,
+        ic_reference: tuple[str, float] | None = None,
+        ic_attention_strength: float | None = None,
+        blend_dilation_stage1: int = 5,
+        blend_dilation_stage2: int = 2,
+        freeze_source_audio: bool = True,
+        progress=None,
+        nag: NagParams | VsfParams | None = None,
+        attention_backend: str = "sdpa",
+        block_swap_prefetch: bool = False,
+        keep_resident: bool | None = None,
+        fused_gguf_dequant_kernel: bool = False,
+        vae_mode: str = "default",
+    ) -> dict:
+        """Masked partial regeneration (inpainting, 台帳 §3-55) -> ONE mp4.
+
+        Delegates to :func:`engine.pipeline.inpaint_pipeline.run_inpaint`, the
+        sibling of ``run_outpaint``: same two-stage driver, same IC-LoRA, same
+        blend, with the geometry inverted and a per-frame mask.
+        ``canvas_path`` is the green-filled canvas the app built from the cut
+        window; ``ic_reference`` already points at it, ``source_path`` is the cut
+        window itself (read for its audio) and ``mask_path`` is the uploaded
+        mask video.
+
+        THE ACCELERATION SPLIT IS ``generate_outpaint``'s, verbatim: ``nag`` is
+        armed INSIDE run_inpaint (whoever encodes the negative prompt must also
+        set it, or NagService.install() rejects the job), everything else is
+        armed here at the outermost entry point where its ``finally`` reset also
+        lives, and ``keep_resident`` deliberately has no reset — surviving the
+        job is what the CPU-skeleton cache is for.
+        """
+        from engine.pipeline.inpaint_pipeline import run_inpaint
+
+        self._set_sage_job(attention_backend)
+        self._set_block_swap_prefetch_job(block_swap_prefetch)
+        self._set_fused_dequant_job(fused_gguf_dequant_kernel)
+        if keep_resident is not None:
+            self._set_keep_resident_job(keep_resident)
+        self._set_vae_mode_job(vae_mode)
+
+        try:
+            return run_inpaint(
+                self,
+                prompt=prompt,
+                canvas_path=canvas_path,
+                source_path=source_path,
+                mask_path=mask_path,
+                geometry=geometry,
+                num_frames=num_frames,
+                frame_rate=frame_rate,
+                num_steps=num_steps,
+                seed=seed,
+                output_path=output_path,
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=(
+                    1.0 if ic_attention_strength is None else ic_attention_strength
+                ),
+                blend_dilation_stage1=blend_dilation_stage1,
+                blend_dilation_stage2=blend_dilation_stage2,
+                freeze_source_audio=freeze_source_audio,
+                nag=nag,
+                progress=progress,
+            )
+        finally:
+            self._nag.reset()
+            self._sage.reset()
+            self._reset_block_swap_prefetch_job()
+            self._release_block_swap_transformer()
+            self._reset_fused_dequant_job()
+
+    @torch.inference_mode()
     def warmup(self, output_path: str) -> None:
         warmup_frames = 9
         tiling_config = default_tiling_config()

@@ -70,6 +70,7 @@ import gc
 import logging
 import os
 import time
+from typing import NamedTuple
 
 import torch
 
@@ -156,6 +157,136 @@ def _load_canvas_pixels_u8(
     if not frames:
         raise ValueError(f"outpaint canvas decoded to 0 frames: {video_path}")
     return torch.stack(frames, dim=0)
+
+
+class FrozenSourceAudio(NamedTuple):
+    """What :func:`_freeze_source_audio` found, carried as one value.
+
+    Four things that always travel together and are meaningless apart — the
+    encoded latent head, the untouched waveform for the mux, its sample rate,
+    and how many latent frames the freeze actually covers. ``latent is None``
+    is the "no usable audio" case, which every reader tests for.
+    """
+
+    latent: torch.Tensor | None
+    waveform: torch.Tensor | None
+    sampling_rate: int
+    frozen_frames: int
+
+
+def _freeze_source_audio(
+    *,
+    ledger,
+    device,
+    source_path: str | None,
+    enabled: bool,
+    a_total: int,
+    label: str = "outpaint",
+) -> FrozenSourceAudio:
+    """Encode the SOURCE video's audio once and keep its head frozen.
+
+    Lifted VERBATIM out of :func:`run_outpaint` so :func:`run_inpaint` can call
+    the same code instead of owning a second copy of it — a pure extraction,
+    with ``label`` (log text only) as the sole addition. The three blocks that
+    moved (this one, :func:`_audio_init` and :func:`_mux_audio`) are the whole
+    of what the two pipelines share; everything else differs in geometry and
+    lives in its own module.
+
+    The official note (node 5392): "Frozen audio helps guiding outpainting to be
+    consistent with the sounds in the video." Same shape as run_chain's A2V path
+    — encode once with the small audio encoder before the big models are built,
+    keep the ORIGINAL waveform on the CPU for the mux, skip the vocoder.
+
+    Underrun is NOT fatal here. run_chain's A2V path errors out because there
+    the audio IS the subject; here it is guidance for a video that is already
+    fully specified, so a source whose audio ends early freezes what it has and
+    generates the rest (the same min() run_chain's V2V head does).
+    """
+    from ltx_pipelines.utils.helpers import cleanup_memory
+
+    if not (enabled and source_path):
+        return FrozenSourceAudio(None, None, 0, 0)
+
+    from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
+    from ltx_core.types import Audio
+    from ltx_pipelines.utils.media_io import decode_audio_from_file
+
+    src_audio = decode_audio_from_file(str(source_path), device)
+    if src_audio is None:
+        logger.warning(
+            "%s: %s has no decodable audio stream; the model will "
+            "generate audio for the widened frame instead of following it",
+            label,
+            source_path,
+        )
+        return FrozenSourceAudio(None, None, 0, 0)
+
+    wf = src_audio.waveform
+    if wf.dim() == 2:
+        wf = wf.unsqueeze(0)
+    # The audio VAE's conv_in expects stereo (weight [128, 2, 3, 3]), and
+    # the mux writer is stereo-only, so a mono source is duplicated.
+    if wf.shape[1] == 1:
+        wf = wf.repeat(1, 2, 1)
+    audio_sr = int(src_audio.sampling_rate)
+    source_waveform = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+
+    audio_encoder = ledger.audio_encoder()
+    enc = vae_encode_audio(
+        Audio(waveform=wf.to(DTYPE), sampling_rate=audio_sr), audio_encoder, None
+    )
+    audio_frozen_frames = min(a_total, int(enc.shape[2]))
+    frozen_audio = enc[:, :, :audio_frozen_frames, :].detach().clone()
+    if audio_frozen_frames < a_total:
+        logger.warning(
+            "%s: source audio covers %d of %d audio latent frames; "
+            "the tail will be generated",
+            label, audio_frozen_frames, a_total,
+        )
+    del audio_encoder, enc, src_audio, wf
+    cleanup_memory()
+    return FrozenSourceAudio(frozen_audio, source_waveform, audio_sr, audio_frozen_frames)
+
+
+def _audio_init(
+    audio: FrozenSourceAudio, *, full_shape, device
+) -> torch.Tensor | None:
+    """A fresh a_total-length audio latent with the frozen head copied in.
+
+    Lifted verbatim out of :func:`run_outpaint` (where it was a closure over the
+    three names now carried by ``audio``) so both two-stage drivers call one
+    implementation. Called once per stage — a FRESH tensor each time, because
+    the denoiser writes into the initial latent it is handed.
+    """
+    from ltx_core.types import AudioLatentShape
+
+    if audio.latent is None:
+        return None
+    shape = AudioLatentShape.from_video_pixel_shape(full_shape).to_torch_shape()
+    init = torch.zeros(tuple(shape), dtype=DTYPE, device=device)
+    init[:, :, : audio.frozen_frames] = audio.latent.to(DTYPE)
+    return init
+
+
+def _mux_audio(audio: FrozenSourceAudio, *, decoded_audio, num_frames: int, frame_rate: float):
+    """``(audio_for_the_mux, muxed_sample_count)`` for the final encode.
+
+    Lifted verbatim out of :func:`run_outpaint`. When the source's audio was
+    frozen, the ORIGINAL waveform is muxed, trimmed to the video duration — the
+    vocoder is skipped entirely, exactly as run_chain's A2V path does, so the
+    delivered audio track is bit-for-bit the source's. Otherwise the caller's
+    decoded audio (which it produced with the vocoder) rides through unchanged.
+    """
+    if audio.latent is None:
+        return decoded_audio, 0
+
+    from ltx_core.types import Audio
+
+    assert audio.waveform is not None
+    n_mux = int(round(num_frames / float(frame_rate) * audio.sampling_rate))
+    mux_wf = audio.waveform[:, :n_mux].contiguous()
+    mux_audio = Audio(waveform=mux_wf.to(torch.float32), sampling_rate=audio.sampling_rate)
+    return mux_audio, int(mux_wf.shape[-1])
 
 
 def _decoded_to_u8(decoded) -> torch.Tensor:
@@ -259,65 +390,20 @@ def run_outpaint(
     cleanup_memory()
 
     # ── Freeze the source video's audio. ─────────────────────────────────────
-    # The official note (node 5392): "Frozen audio helps guiding outpainting to
-    # be consistent with the sounds in the video." Same shape as run_chain's A2V
-    # path — encode once with the small audio encoder before the big models are
-    # built, keep the ORIGINAL waveform on the CPU for the mux, skip the vocoder.
-    #
-    # Underrun is NOT fatal here. run_chain's A2V path errors out because there
-    # the audio IS the subject; here it is guidance for a video that is already
-    # fully specified, so a source whose audio ends early freezes what it has and
-    # generates the rest (the same min() run_chain's V2V head does).
-    frozen_audio = None
-    source_waveform = None
-    audio_sr = 0
-    audio_frozen_frames = 0
-    if freeze_source_audio and source_path:
-        from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
-        from ltx_core.types import Audio
-        from ltx_pipelines.utils.media_io import decode_audio_from_file
-
-        src_audio = decode_audio_from_file(str(source_path), device)
-        if src_audio is None:
-            logger.warning(
-                "outpaint: %s has no decodable audio stream; the model will "
-                "generate audio for the widened frame instead of following it",
-                source_path,
-            )
-        else:
-            wf = src_audio.waveform
-            if wf.dim() == 2:
-                wf = wf.unsqueeze(0)
-            # The audio VAE's conv_in expects stereo (weight [128, 2, 3, 3]), and
-            # the mux writer is stereo-only, so a mono source is duplicated.
-            if wf.shape[1] == 1:
-                wf = wf.repeat(1, 2, 1)
-            audio_sr = int(src_audio.sampling_rate)
-            source_waveform = wf.squeeze(0).detach().to(torch.float32).cpu().contiguous()
-
-            audio_encoder = ledger.audio_encoder()
-            enc = vae_encode_audio(
-                Audio(waveform=wf.to(DTYPE), sampling_rate=audio_sr), audio_encoder, None
-            )
-            audio_frozen_frames = min(a_total, int(enc.shape[2]))
-            frozen_audio = enc[:, :, :audio_frozen_frames, :].detach().clone()
-            if audio_frozen_frames < a_total:
-                logger.warning(
-                    "outpaint: source audio covers %d of %d audio latent frames; "
-                    "the tail will be generated",
-                    audio_frozen_frames, a_total,
-                )
-            del audio_encoder, enc, src_audio, wf
-            cleanup_memory()
-
-    def _audio_init() -> torch.Tensor | None:
-        """A fresh a_total-length audio latent with the frozen head copied in."""
-        if frozen_audio is None:
-            return None
-        shape = AudioLatentShape.from_video_pixel_shape(full_shape).to_torch_shape()
-        init = torch.zeros(tuple(shape), dtype=DTYPE, device=device)
-        init[:, :, :audio_frozen_frames] = frozen_audio.to(DTYPE)
-        return init
+    # Extracted into ``_freeze_source_audio`` so ``run_inpaint`` calls the same
+    # code rather than a second copy; the semantics are the block that used to
+    # stand here, unchanged.
+    audio = _freeze_source_audio(
+        ledger=ledger,
+        device=device,
+        source_path=source_path,
+        enabled=freeze_source_audio,
+        a_total=a_total,
+        label="outpaint",
+    )
+    frozen_audio = audio.latent
+    audio_sr = audio.sampling_rate
+    audio_frozen_frames = audio.frozen_frames
 
     # ── IC-LoRA state MUST be set before the transformer is built. ───────────
     # The forward-time weight patch reads pipe._ic_loras through a provider wired
@@ -372,7 +458,7 @@ def run_outpaint(
         sigmas=stage1_sigmas,
         noise_scale=1.0,
         initial_video_latent=None,
-        initial_audio_latent=_audio_init(),
+        initial_audio_latent=_audio_init(audio, full_shape=full_shape, device=device),
         freeze_kv=0,
         freeze_ka=audio_frozen_frames,
         mask_value=0.0,
@@ -494,7 +580,7 @@ def run_outpaint(
         sigmas=stage2_sigma_tensor,
         noise_scale=float(stage2_sigma_tensor[0]),
         initial_video_latent=stage2_init.to(DTYPE),
-        initial_audio_latent=_audio_init(),
+        initial_audio_latent=_audio_init(audio, full_shape=full_shape, device=device),
         freeze_kv=0,
         freeze_ka=audio_frozen_frames,
         mask_value=0.0,
@@ -551,19 +637,11 @@ def run_outpaint(
     del stage2_pixels, canvas_full, mask_full
     cleanup_memory()
 
-    if frozen_audio is not None:
-        # Mux the ORIGINAL waveform, trimmed to the video duration — the vocoder
-        # is skipped entirely, exactly as run_chain's A2V path does, so the
-        # delivered audio track is bit-for-bit the source's.
-        from ltx_core.types import Audio
-
-        n_mux = int(round(num_frames / float(frame_rate) * audio_sr))
-        mux_wf = source_waveform[:, :n_mux].contiguous()
-        mux_audio = Audio(waveform=mux_wf.to(torch.float32), sampling_rate=audio_sr)
-        muxed_samples = int(mux_wf.shape[-1])
-    else:
-        mux_audio = decoded_audio
-        muxed_samples = 0
+    # Extracted into ``_mux_audio`` so ``run_inpaint`` calls the same code; the
+    # semantics are the block that used to stand here, unchanged.
+    mux_audio, muxed_samples = _mux_audio(
+        audio, decoded_audio=decoded_audio, num_frames=num_frames, frame_rate=frame_rate
+    )
 
     encode_video_output(
         video=final_pixels,

@@ -12,6 +12,12 @@ import {
   reconcileFromTimeline,
   reservePlacement,
 } from "../timeline/provisionalReservation";
+import {
+  getInpaintSlots,
+  midpointsFromSectionCount,
+  publishInpaintPartialFilter,
+  publishInpaintTarget,
+} from "../timeline/inpaintSlots";
 import { recordSourceLocation } from "../timeline/sourceLocationMap";
 import { formatMenuGuardNote, guardMenuSelection } from "../timeline/menuSelection";
 import { END_SOURCE_CONTEXT_FRAMES, tailAlignedStartFrame } from "../timeline/tailAlign";
@@ -614,6 +620,16 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         setMode("toolbox");
         return;
       }
+      // 台帳 §3-55 (m1): native's timeline-job slot is SHARED between 追尾 and
+      // the Inpainting mask render, so starting a track while a mask is being
+      // drawn would only earn a `TRACK_BUSY` from native — after this app had
+      // already switched tabs and remounted the Toolbox screen. Refused here in
+      // the same guidance-only shape, with the Inpainting wording (it is the
+      // Inpainting run that is in the way).
+      if (getInpaintSlots().busy) {
+        showNote("warning", strings.edit.inpainting.busyRightClick);
+        return;
+      }
       // The selection alone — nothing is added to make a repeat right-click on
       // the same object "look different", because nothing downstream watches
       // this object for changes.
@@ -624,6 +640,63 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       // this return is long before Step 6's shared `[target]` increment.
       setRemountTokens((prev) => ({ ...prev, toolbox: prev.toolbox + 1 }));
       setMode("toolbox");
+      return;
+    }
+
+    // ── 台帳 §3-55 Inpainting (`inpaintPartialFilter` / `inpaintVideo`): the
+    // Edit tab's Inpainting sub-tab. The app's FIRST flow fed by two separate
+    // right-clicks (owner decision D6), which is what makes it an early-return
+    // channel of its own rather than an ordinary Step 6 prefill:
+    //  - the payload goes into the MODULE-level store
+    //    (`timeline/inpaintSlots.ts`), not into `pendingIntent`, because the
+    //    SECOND right-click must not wipe what the first one delivered. The
+    //    store is what makes either order work (実機ゲート G2);
+    //  - **NO REMOUNT, and no `pendingIntent` at all** (敵対的レビュー M2/M3).
+    //    Every other route bumps `remountTokens` so the target screen re-reads
+    //    a one-shot payload; this one must not, because this flow takes TWO
+    //    right-clicks and a remount between them throws away everything the
+    //    screen itself holds — the frames field, the seed, the upload in
+    //    flight, the mask progress. Tabs are always mounted, so switching mode
+    //    is enough to show the panel, and the store's `subTabRequest` counter
+    //    is what tells `EditScreen` to select the Inpainting sub-tab;
+    //  - no reservation seat and no busy-guard (Steps 5/8): the seat is taken
+    //    at GENERATE time (owner decision D8, where the mask is rendered too),
+    //    so taking one here would reserve it twice over for one generation —
+    //    both table rows carry `placement: null` accordingly.
+    //
+    // Placed after Step 1 so the §4 guard runs first — the required-kind check
+    // is what refuses "a video as the mask" and "a 部分フィルタ as the target"
+    // with the ordinary mismatch note, before anything is stored.
+    if (action === "inpaintPartialFilter" || action === "inpaintVideo") {
+      const item = command.selection.selected[0];
+      if (!item) return; // `guardMenuSelection` already refused this; belt and braces.
+      // 敵対的レビュー m1: a mask render / upload / submit is in flight. Swapping
+      // either input underneath a run in progress would make the mask and the
+      // request disagree about what is being repainted, so the right-click is
+      // refused in the §4 guard's shape — guidance only, nothing stored, no tab
+      // switch (the user is already looking at the run if they are on Edit).
+      if (getInpaintSlots().busy) {
+        showNote("warning", strings.edit.inpainting.busyRightClick);
+        return;
+      }
+      if (action === "inpaintPartialFilter") {
+        publishInpaintPartialFilter({
+          layer: item.layer,
+          frameStart: item.frameStart,
+          frameEnd: item.frameEnd,
+          // The project's own fps, carried so the panel can place the window
+          // without waiting for its `getEditInfo`.
+          rate: command.selection.rate,
+          scale: command.selection.scale,
+          // 中間点の枚数 — the third value the design doc's card shows. Derived
+          // here (not in the panel) so the selection snapshot's own field name
+          // stops at this boundary.
+          midpoints: midpointsFromSectionCount(item.sectionCount),
+        });
+      } else {
+        publishInpaintTarget({ item, selection: command.selection });
+      }
+      setMode("edit");
       return;
     }
 

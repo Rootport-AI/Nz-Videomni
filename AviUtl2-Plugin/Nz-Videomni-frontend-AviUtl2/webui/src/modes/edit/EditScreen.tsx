@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, createApiClient } from "../../api/client";
 import type { ApiClient } from "../../api/client";
 import { EditSubTabs } from "./EditSubTabs";
 import type { EditSubMode } from "./EditSubTabs";
 import type { EditSubTabsDisabled } from "../../shell/featureScope";
+import { InpaintingPanel } from "./InpaintingPanel";
 import { OutpaintingPanel } from "./OutpaintingPanel";
 import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
@@ -14,13 +15,19 @@ import { JobLedger } from "../../jobs/JobLedger";
 import { useJobsContext } from "../../jobs/JobsContext";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { bindToJob, reservePlacement, rollbackReservedPlacement } from "../../timeline/provisionalReservation";
+import { useInpaintSlots } from "../../timeline/inpaintSlots";
 import { GenerateButtonBar } from "../single/GenerateButtonBar";
 import { GenerateReasonsNote } from "../single/GenerateReasonsNote";
 import { useConfig } from "../single/useConfig";
 import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { useGenerationSubmit } from "../single/useGeneration";
-import { buildOutpaintReasonMessages, buildRetakeReasonMessages } from "./editReasonMessages";
+import {
+  buildInpaintReasonMessages,
+  buildOutpaintReasonMessages,
+  buildRetakeReasonMessages,
+} from "./editReasonMessages";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
+import { useInpaintForm } from "./useInpaintForm";
 import { useOutpaintForm } from "./useOutpaintForm";
 import { useRetakeForm } from "./useRetakeForm";
 import "./EditScreen.css";
@@ -112,6 +119,26 @@ export interface EditScreenProps {
  * OUTSIDE the sub-tab switch, so it is there whichever sub-tab is showing;
  * only the Generate group above it belongs to Outpainting and is dropped on the
  * Retake sub-tab (there is nothing to generate there yet). */
+/** サブタブの並び順（画面の並びと同じ）。{@link fallbackSubMode} が
+ * 「最初に生きているタブ」を選ぶときの唯一の順序表。 */
+const SUB_TAB_ORDER: readonly EditSubMode[] = ["retake", "outpainting", "inpainting"];
+
+/**
+ * 行き先のサブタブが灰色だったときの逃げ先 —— **並び順で最初に生きているもの**。
+ *
+ * §3-98 P5 / §3-102 で 2 つだったころは三項 1 本で済んでいたが、§3-55 で
+ * Inpainting が実体化して 3 つになったので、「もう片方」では答えが決まらない。
+ * ここを 1 本の純関数にしておけば、4 つ目が来ても規則は増えない。
+ *
+ * 全部が灰色ならこの関数へは到達しない: 3 つ**すべて**が閉じたときだけ
+ * `disabledModesFor` が Edit タブごと落とすので、この画面はマウントされて
+ * いない（`shell/featureScope.ts` の `CONTAINER_TARGETS`）。それでも最後の
+ * 保険として、見つからなければ要求されたタブをそのまま返す。
+ */
+function fallbackSubMode(disabled: EditSubTabsDisabled, requested: EditSubMode): EditSubMode {
+  return SUB_TAB_ORDER.find((id) => !disabled[id]) ?? requested;
+}
+
 export function EditScreen({
   initialIntent,
   prompt,
@@ -119,7 +146,7 @@ export function EditScreen({
   highlightedJobId = null,
   nativeBridge,
   onJobSubmitted,
-  subTabsDisabled = { retake: false, outpainting: false },
+  subTabsDisabled = { retake: false, outpainting: false, inpainting: false },
   engineFamily,
   acceleration,
 }: EditScreenProps = {}) {
@@ -140,9 +167,15 @@ export function EditScreen({
   // なので下の2本の三項は「片方は必ず有効」を前提にしてよい。
   const [subMode, setSubMode] = useState<EditSubMode>(() => {
     if (initialIntent?.intent === "outpaint") {
-      return subTabsDisabled.outpainting ? "retake" : "outpainting";
+      return subTabsDisabled.outpainting ? fallbackSubMode(subTabsDisabled, "outpainting") : "outpainting";
     }
-    return subTabsDisabled.retake ? "outpainting" : "retake";
+    // 台帳 §3-55: Inpainting は右クリック**2 種**（部分フィルタ／対象動画）が
+    // 同じサブタブへ来る。どちらの intent も行き先は同じなので、1 本の条件で
+    // まとめてある。
+    if (initialIntent?.intent === "inpaint-mask" || initialIntent?.intent === "inpaint-target") {
+      return subTabsDisabled.inpainting ? fallbackSubMode(subTabsDisabled, "inpainting") : "inpainting";
+    }
+    return subTabsDisabled.retake ? fallbackSubMode(subTabsDisabled, "retake") : "retake";
   });
 
   // One client for everything the Outpainting flow does (`GET /loras` inside
@@ -255,6 +288,131 @@ export function EditScreen({
    * 予約の打ち直しに失敗しても送信は続ける —— リボンの長さが少しずれるだけで、
    * 生成そのものは正しいため。
    */
+  // ── 台帳 §3-55 Inpainting ────────────────────────────────────────────────
+  // 右クリック由来の値は `timeline/inpaintSlots.ts` の保管庫にあるので、この
+  // フックは `initialIntent` を受け取らない（2 回の右クリックを 1 回きりの
+  // ペイロードでは運べない）。
+  //
+  // 送信インスタンスを**フックより先に**作るのは、`submitting` をフックへ
+  // 渡すため（敵対的レビュー m1）—— 保管庫の `busy` を書くのは
+  // `useInpaintForm` の 1 本だけにしたいので、マスクの進み具合と送信の
+  // 進み具合が合流する場所をそこに揃える。下の 3 つは `inpaintForm` を
+  // 参照しない（`inpaintBindRef` は ref 越しに読む）ので、この順序で作れる。
+  const inpaintBindRef = useRef({ numFrames: 0, genFps: 0, displayText: "", textPrefix: "" });
+  const onInpaintSubmitted = useCallback(
+    async (jobId: string) => {
+      onJobSubmitted?.(jobId);
+      try {
+        await bindToJob(nativeBridge ?? defaultBridge, { jobId, ...inpaintBindRef.current });
+      } catch {
+        // 席はそのまま残る。ユーザーはタイムライン側からやり直せる。
+      }
+    },
+    [onJobSubmitted, nativeBridge],
+  );
+  const onInpaintFailed = useCallback(async () => {
+    await rollbackReservedPlacement(nativeBridge ?? defaultBridge);
+  }, [nativeBridge]);
+  // Retake と同じ 2 本立て（`bindToJob` / `rollbackReservedPlacement`）。
+  // Inpainting も席を取る流れなので、席を取らない Outpainting の送信
+  // インスタンスとは分ける。
+  const { submitState: inpaintSubmitState, submit: submitInpaint } = useGenerationSubmit({
+    apiClient: client,
+    onSubmitted: onInpaintSubmitted,
+    onFailed: onInpaintFailed,
+  });
+  const inpaintSubmitting = inpaintSubmitState.phase === "submitting";
+
+  const inpaintForm = useInpaintForm({
+    prompt,
+    config,
+    nativeBridge,
+    engineFamily,
+    acceleration,
+    submitting: inpaintSubmitting,
+  });
+  inpaintBindRef.current = {
+    numFrames: inpaintForm.placement?.numFrames ?? 0,
+    genFps: inpaintForm.placement?.genFps ?? 0,
+    displayText: prompt ?? "",
+    textPrefix: strings.provisional.generatingPrefix,
+  };
+  const inpaintReasonMessages = useMemo(
+    () =>
+      buildInpaintReasonMessages(strings, {
+        filterWidth: inpaintForm.projectWidth,
+        filterHeight: inpaintForm.projectHeight,
+        targetWidth: inpaintForm.slots.target?.item.mediaWidth ?? 0,
+        targetHeight: inpaintForm.slots.target?.item.mediaHeight ?? 0,
+      }),
+    [
+      strings,
+      inpaintForm.projectWidth,
+      inpaintForm.projectHeight,
+      inpaintForm.slots.target?.item.mediaWidth,
+      inpaintForm.slots.target?.item.mediaHeight,
+    ],
+  );
+  const ti = strings.edit.inpainting;
+
+  /**
+   * 右クリックが来たらサブタブを Inpainting へ寄せる（敵対的レビュー M2/M3）。
+   *
+   * **画面は作り直さない。** タブは常時マウントなので、`AppShell` は保管庫へ
+   * publish して `setMode("edit")` するだけで、`remountTokens.edit` を進めない
+   * ——進めるとフォームの状態（フレーム数・シード・アップロードの進み具合・
+   * マスクの進捗）が右クリックのたびに消え、保管庫を置いた意味が半分無くなる。
+   *
+   * 代わりに保管庫の `subTabRequest` が増えたことを見る。**増分だけ**に反応する
+   * ので、他の変更（アップロードの完了など）ではタブは動かない。灰色のときは
+   * 何もしない: 押せないタブへ寄せると、押し戻せないタブの下に生成群が出る。
+   */
+  const inpaintSubTabRequest = useInpaintSlots().subTabRequest;
+  const seenSubTabRequestRef = useRef(inpaintSubTabRequest);
+  useEffect(() => {
+    if (inpaintSubTabRequest === seenSubTabRequestRef.current) return;
+    seenSubTabRequestRef.current = inpaintSubTabRequest;
+    if (subTabsDisabled.inpainting) return;
+    setSubMode("inpainting");
+  }, [inpaintSubTabRequest, subTabsDisabled.inpainting]);
+
+  /**
+   * Generate 押下時の順序（実装計画 §7.5-12）:
+   *  1. `renderAndUploadMask()` —— マスクを描いて上げる。**失敗したらここで
+   *     止める**（マスクが無ければ描き替える場所が決まらない）。理由は
+   *     パネルの注意文が言う
+   *  2. 予約を打つ（系統 D・対象レイヤー × 窓）。**失敗しても続行** ——
+   *     リボンが出ないだけで、生成そのものは正しい
+   *  3. 送信
+   *
+   * 順序が load-bearing: マスクを先に作るので、`MASK_SEED_INVALID`（部分
+   * フィルタが消えていた）のときに席も仮オブジェクトも残らない。
+   */
+  const handleInpaintGenerate = useCallback(async () => {
+    const maskVideoId = await inpaintForm.renderAndUploadMask();
+    if (!maskVideoId) return;
+    const placement = inpaintForm.placement;
+    if (placement) {
+      try {
+        await reservePlacement(nativeBridge ?? defaultBridge, {
+          placement: "D",
+          material: {
+            layer: placement.layer,
+            frameStart: placement.frameStart,
+            frameEnd: placement.frameEnd,
+          },
+          numFrames: placement.numFrames,
+          genFps: placement.genFps,
+          textPrefix: strings.provisional.reservedPrefix,
+          displayText: strings.provisional.reservedBody,
+        });
+      } catch {
+        // 打てなくても送信は続ける（上の doc 参照）。
+      }
+    }
+    submitInpaint(inpaintForm.buildRequest(maskVideoId));
+  }, [inpaintForm, nativeBridge, strings, submitInpaint]);
+
   const handleRetakeGenerate = useCallback(async () => {
     await retakeForm.checkStale();
     const placement = retakeForm.placement;
@@ -289,6 +447,9 @@ export function EditScreen({
           </div>
           <div className="edit-subpanel" hidden={subMode !== "outpainting"}>
             <OutpaintingPanel form={outpaintForm} disabled={submitting} nativeBridge={nativeBridge} />
+          </div>
+          <div className="edit-subpanel" hidden={subMode !== "inpainting"}>
+            <InpaintingPanel form={inpaintForm} disabled={inpaintSubmitting} />
           </div>
         </div>
         <div className="generation-column">
@@ -332,6 +493,32 @@ export function EditScreen({
                 </div>
               )}
               <GenerateReasonsNote reasons={outpaintForm.validityReasons} messages={outpaintReasonMessages} />
+            </>
+          )}
+          {/* Inpainting は Retake と違って**常に**生成群を出す —— 右クリックが
+              まだ 1 つも来ていない状態そのものが理由コード
+              （`partialFilterMissing`/`targetMissing`）で説明されるので、
+              「何をすれば押せるのか」がボタンの真下に出る。 */}
+          {subMode === "inpainting" && (
+            <>
+              <GenerateButtonBar
+                label={
+                  inpaintSubmitting
+                    ? ti.generatingButton
+                    : serverBusy
+                      ? strings.single.busyButton
+                      : ti.generateButton
+                }
+                disabled={inpaintSubmitting || serverBusy || !inpaintForm.isValid}
+                onGenerate={() => void handleInpaintGenerate()}
+              />
+              {inpaintSubmitState.phase === "error" && (
+                <div className="card card-error">
+                  <p className="error-code">{inpaintSubmitState.code}</p>
+                  <p>{inpaintSubmitState.message}</p>
+                </div>
+              )}
+              <GenerateReasonsNote reasons={inpaintForm.validityReasons} messages={inpaintReasonMessages} />
             </>
           )}
           <JobLedger baseUrl={baseUrl} highlightedJobId={highlightedJobId} nativeBridge={nativeBridge} />

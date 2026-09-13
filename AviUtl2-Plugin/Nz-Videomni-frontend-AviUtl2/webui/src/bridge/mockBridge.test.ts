@@ -687,6 +687,11 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       expect.arrayContaining([
         "two_stage_hq",
         "prune_vaed",
+        // 台帳 §3-55 (2026-09-14): `inpaint` is the FIRST mode name to come back
+        // onto this list since `outpaint` left it. Inpainting is LTX 2.3-only in
+        // its first increment (owner decision D11), so publishing the name here
+        // is what greys the Edit tab's Inpainting sub-tab on a 2.5 base model.
+        "inpaint",
       ]),
     );
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine

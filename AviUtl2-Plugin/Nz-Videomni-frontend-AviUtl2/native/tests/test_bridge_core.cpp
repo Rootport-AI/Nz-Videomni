@@ -3075,3 +3075,206 @@ TEST_CASE("MakeTrackProgressEvent emits an id-less event envelope") {
     CHECK(lost["data"]["index"] == 1);
     CHECK(lost["data"]["total"] == 1);
 }
+
+// ---------------------------------------------------------------------------
+// timeline.renderMaskVideo (section 3-55 Inpainting)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A well-formed request: a partial filter on layer 3 running frames 100..180,
+// with a 121-frame window that starts where the filter does.
+json ValidMaskParams() {
+    json p;
+    p["layer"] = 3;
+    p["frameStart"] = 100;
+    p["frameEnd"] = 180;
+    p["windowStart"] = 100;
+    p["windowEnd"] = 220;
+    return p;
+}
+
+}  // namespace
+
+TEST_CASE("ParseRenderMaskVideo accepts a well-formed request") {
+    nzvideomni::RenderMaskVideoRequest out;
+    std::string err;
+    REQUIRE(nzvideomni::ParseRenderMaskVideo(ValidMaskParams(), &out, &err));
+    CHECK(out.layer == 3);
+    CHECK(out.frame_start == 100);
+    CHECK(out.frame_end == 180);
+    CHECK(out.window_start == 100);
+    CHECK(out.window_end == 220);
+
+    // The edges of every rule are INSIDE it: layer 0, window at frame 0, a
+    // single-frame filter and a single-frame window on the same frame.
+    json edge;
+    edge["layer"] = 0;
+    edge["frameStart"] = 0;
+    edge["frameEnd"] = 0;
+    edge["windowStart"] = 0;
+    edge["windowEnd"] = 0;
+    REQUIRE(nzvideomni::ParseRenderMaskVideo(edge, &out, &err));
+    CHECK(out.layer == 0);
+    CHECK(out.window_end == 0);
+
+    // Owner decision D3: a window SHORTER than the partial filter is legal -
+    // the webui warns that the frames outside it keep their old pixels.
+    json shorter = ValidMaskParams();
+    shorter["windowEnd"] = 140;  // filter runs to 180
+    REQUIRE(nzvideomni::ParseRenderMaskVideo(shorter, &out, &err));
+    CHECK(out.window_end == 140);
+
+    // And a window shifted towards the head (the ribbon's tail was too close)
+    // is legal too, as long as it still overlaps.
+    json shifted = ValidMaskParams();
+    shifted["windowStart"] = 60;
+    shifted["windowEnd"] = 180;
+    REQUIRE(nzvideomni::ParseRenderMaskVideo(shifted, &out, &err));
+    CHECK(out.window_start == 60);
+}
+
+TEST_CASE("ParseRenderMaskVideo requires every field") {
+    nzvideomni::RenderMaskVideoRequest out;
+    std::string err;
+    const char* keys[] = {"layer", "frameStart", "frameEnd", "windowStart",
+                          "windowEnd"};
+    for (const char* key : keys) {
+        json p = ValidMaskParams();
+        p.erase(key);
+        CAPTURE(key);
+        CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+        CHECK(err.find(key) != std::string::npos);
+    }
+    // Not an object at all.
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(json::parse("[]"), &out, &err));
+    // A fractional frame is a caller bug, not something to round: it would aim
+    // the seed lookup at the wrong object.
+    json p = ValidMaskParams();
+    p["frameStart"] = 100.5;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    p = ValidMaskParams();
+    p["layer"] = "3";
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+}
+
+TEST_CASE("ParseRenderMaskVideo rejects negative positions and reversed ranges") {
+    nzvideomni::RenderMaskVideoRequest out;
+    std::string err;
+    json p = ValidMaskParams();
+    p["layer"] = -1;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find("layer") != std::string::npos);
+
+    p = ValidMaskParams();
+    p["windowStart"] = -1;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find("windowStart") != std::string::npos);
+
+    // The filter's own frames have the same floor: AviUtl2 has no frame below
+    // 0, so a negative one is a caller bug and must not reach the worker (where
+    // it would look like a missing object instead of a bad request).
+    p = ValidMaskParams();
+    p["frameStart"] = -1;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find("frameStart") != std::string::npos);
+    p = ValidMaskParams();
+    p["frameStart"] = -50;
+    p["frameEnd"] = -1;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+
+    // Both ranges are CLOSED, so end == start is one frame and legal, while
+    // end < start is not a range at all.
+    p = ValidMaskParams();
+    p["frameEnd"] = 99;  // frameStart is 100
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find("frameEnd") != std::string::npos);
+
+    p = ValidMaskParams();
+    p["windowEnd"] = 99;  // windowStart is 100
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find("windowEnd") != std::string::npos);
+}
+
+TEST_CASE("ParseRenderMaskVideo rejects a window that misses the partial filter") {
+    nzvideomni::RenderMaskVideoRequest out;
+    std::string err;
+    // Entirely after the filter.
+    json p = ValidMaskParams();
+    p["windowStart"] = 181;
+    p["windowEnd"] = 300;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find("overlap") != std::string::npos);
+    // Entirely before it.
+    p = ValidMaskParams();
+    p["windowStart"] = 0;
+    p["windowEnd"] = 99;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    // Touching by exactly one frame is an overlap, and legal on both sides.
+    p = ValidMaskParams();
+    p["windowStart"] = 180;
+    p["windowEnd"] = 300;
+    CHECK(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    p = ValidMaskParams();
+    p["windowStart"] = 0;
+    p["windowEnd"] = 100;
+    CHECK(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+}
+
+TEST_CASE("ParseRenderMaskVideo rejects a window longer than the cap") {
+    nzvideomni::RenderMaskVideoRequest out;
+    std::string err;
+    // The cap counts FRAMES in a closed range, so the last legal windowEnd is
+    // windowStart + kMaskMaxWindowFrames - 1.
+    json p = ValidMaskParams();
+    p["windowStart"] = 0;
+    p["windowEnd"] = nzvideomni::kMaskMaxWindowFrames - 1;
+    CHECK(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    p["windowEnd"] = nzvideomni::kMaskMaxWindowFrames;
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find(std::to_string(nzvideomni::kMaskMaxWindowFrames)) !=
+          std::string::npos);
+
+    // The cap is computed in 64-bit arithmetic, so the one request that would
+    // slip past an int subtraction - a window whose length overflows to a
+    // NEGATIVE int - is refused like any other oversized one.
+    p = ValidMaskParams();
+    p["windowStart"] = 0;
+    p["windowEnd"] = 2147483647;  // INT_MAX: end - start + 1 overflows in int
+    CHECK_FALSE(nzvideomni::ParseRenderMaskVideo(p, &out, &err));
+    CHECK(err.find(std::to_string(nzvideomni::kMaskMaxWindowFrames)) !=
+          std::string::npos);
+}
+
+TEST_CASE("MakeRenderMaskResult mirrors the contract result shape") {
+    const json r = nzvideomni::MakeRenderMaskResult(
+        "C:\\Users\\x\\AppData\\Local\\NzVideomni\\masks\\mask_100_121_a.mp4", 1920,
+        1088, 121);
+    CHECK(r["filePath"] ==
+          "C:\\Users\\x\\AppData\\Local\\NzVideomni\\masks\\mask_100_121_a.mp4");
+    CHECK(r["width"] == 1920);
+    CHECK(r["height"] == 1088);
+    CHECK(r["frameCount"] == 121);
+    // A mask has no sound, so - unlike cutoutRange's result - there is no
+    // hasAudio key for the webui to read.
+    CHECK_FALSE(r.contains("hasAudio"));
+}
+
+TEST_CASE("MakeMaskProgressEvent emits an id-less event envelope") {
+    const json j = json::parse(nzvideomni::MakeMaskProgressEvent(137, 18, 240));
+    // No "id" is what routes this to the webui's event subscribers instead of
+    // to a pending call - the single most important property of this payload.
+    CHECK_FALSE(j.contains("id"));
+    CHECK(j["event"] == "timeline.maskProgress");
+    CHECK(j["data"]["frame"] == 137);
+    CHECK(j["data"]["index"] == 18);
+    CHECK(j["data"]["total"] == 240);
+    // A mask carries no per-frame score, so the tracking event's two extra
+    // fields are deliberately absent.
+    CHECK_FALSE(j["data"].contains("score"));
+    CHECK_FALSE(j["data"].contains("lost"));
+
+    const json one = json::parse(nzvideomni::MakeMaskProgressEvent(0, 1, 1));
+    CHECK(one["data"]["index"] == 1);
+    CHECK(one["data"]["total"] == 1);
+}

@@ -25,6 +25,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "a2v",
         "chain",
         "end_source",
+        "inpaint",
         "keep_resident_embeddings",
         "outpaint",
         "prune_vaed",
@@ -64,11 +65,18 @@ describe("disabledUiTargets", () => {
     expect(disabledUiTargets(["chain"]).has("mode.edit")).toBe(false);
   });
 
-  it("closes the Edit tab only once BOTH of its sub-tabs have", () => {
+  it("closes the Edit tab only once ALL THREE of its sub-tabs have", () => {
+    // §3-55 (2026-09-14): Inpainting joined the container's `whenAll` the day
+    // it stopped being a mock. A mock closes nothing — a real sub-tab keeps the
+    // tab alive on its own — so `retake` + `outpaint` alone no longer settle
+    // the tab, which is exactly the LTX 2.5-shaped case this guards.
     expect(disabledUiTargets(["retake"]).has("mode.edit")).toBe(false);
     expect(disabledUiTargets(["outpaint"]).has("mode.edit")).toBe(false);
-    expect(disabledUiTargets(["retake", "outpaint"]).has("mode.edit")).toBe(true);
-    expect(targets(["retake", "outpaint"])).toEqual([
+    expect(disabledUiTargets(["inpaint"]).has("mode.edit")).toBe(false);
+    expect(disabledUiTargets(["retake", "outpaint"]).has("mode.edit")).toBe(false);
+    expect(disabledUiTargets(["retake", "outpaint", "inpaint"]).has("mode.edit")).toBe(true);
+    expect(targets(["retake", "outpaint", "inpaint"])).toEqual([
+      "editSubTab.inpainting",
       "editSubTab.outpainting",
       "editSubTab.retake",
       "mode.edit",
@@ -137,15 +145,18 @@ describe("disabledModesFor", () => {
   });
 
   it("Edit survives while ONE of its panels is runnable", () => {
-    // The tab hosts Retake and Outpainting; losing one is not losing the tab.
+    // The tab hosts Retake, Outpainting and (since §3-55) Inpainting; losing
+    // one — or two — is not losing the tab.
     expect(disabledModesFor(["retake"])).toEqual([]);
     expect(disabledModesFor(["outpaint"])).toEqual([]);
-    expect(disabledModesFor(["retake", "outpaint"])).toEqual(["edit"]);
+    expect(disabledModesFor(["inpaint"])).toEqual([]);
+    expect(disabledModesFor(["retake", "outpaint"])).toEqual([]);
+    expect(disabledModesFor(["retake", "outpaint", "inpaint"])).toEqual(["edit"]);
   });
 
   it("never disables Single or Inventory, whatever the server sends", () => {
     const everything = [
-      "chain", "retake", "end_source", "v2v", "a2v", "two_stage_hq", "outpaint",
+      "chain", "retake", "end_source", "v2v", "a2v", "two_stage_hq", "outpaint", "inpaint",
       "loras", "reference_video", "nag", "prune_vaed", "sage_attention", "keep_resident",
     ];
     expect(disabledModesFor(everything)).toEqual(["chained", "edit"]);
@@ -198,7 +209,9 @@ describe("chainPanelsDisabledFor", () => {
   });
 
   it("greys all four for LTX 2.5's v1 chain scope", () => {
-    expect(chainPanelsDisabledFor(["retake", "end_source", "v2v", "a2v", "reference_video", "outpaint"])).toEqual({
+    expect(
+      chainPanelsDisabledFor(["retake", "end_source", "v2v", "a2v", "reference_video", "outpaint", "inpaint"]),
+    ).toEqual({
       v2v: true,
       a2v: true,
       endSource: true,
@@ -229,36 +242,53 @@ describe("editSubTabsDisabledFor", () => {
   // is the single most likely thing to get wrong here.
   const TABLE: ReadonlyArray<{
     unsupported: readonly string[];
-    expected: { retake: boolean; outpainting: boolean };
+    expected: { retake: boolean; outpainting: boolean; inpainting: boolean };
     why: string;
   }> = [
-    { unsupported: [], expected: { retake: false, outpainting: false }, why: "LTX 2.3 / an older backend" },
-    { unsupported: ["retake"], expected: { retake: true, outpainting: false }, why: "Retake only" },
-    { unsupported: ["outpaint"], expected: { retake: false, outpainting: true }, why: "Outpainting only" },
     {
-      unsupported: ["retake", "outpaint"],
-      expected: { retake: true, outpainting: true },
-      why: "both — the Edit tab itself is gone at this point",
+      unsupported: [],
+      expected: { retake: false, outpainting: false, inpainting: false },
+      why: "LTX 2.3 / an older backend",
+    },
+    {
+      unsupported: ["retake"],
+      expected: { retake: true, outpainting: false, inpainting: false },
+      why: "Retake only",
+    },
+    {
+      unsupported: ["outpaint"],
+      expected: { retake: false, outpainting: true, inpainting: false },
+      why: "Outpainting only",
+    },
+    {
+      unsupported: ["inpaint"],
+      expected: { retake: false, outpainting: false, inpainting: true },
+      why: "Inpainting only — §3-55's own name",
+    },
+    {
+      unsupported: ["retake", "outpaint", "inpaint"],
+      expected: { retake: true, outpainting: true, inpainting: true },
+      why: "all three — the Edit tab itself is gone at this point",
     },
     {
       unsupported: ["retake", "end_source", "two_stage_hq", "outpaint", "nag", "prune_vaed"],
-      expected: { retake: true, outpainting: true },
+      expected: { retake: true, outpainting: true, inpainting: false },
       why: "LTX 2.5's list as it stood before the Retake/End source 開通",
     },
     {
       unsupported: ["two_stage_hq", "outpaint", "nag", "prune_vaed"],
-      expected: { retake: false, outpainting: true },
+      expected: { retake: false, outpainting: true, inpainting: false },
       why: "…and after it: `retake` and `end_source` had left, `outpaint` had not",
     },
     {
-      unsupported: ["two_stage_hq", "nag", "prune_vaed"],
-      expected: { retake: false, outpainting: false },
-      why: "LTX 2.5's list TODAY — Outpainting 開通 took the last MODE name off it, so this engine greys neither sub-tab",
+      unsupported: ["two_stage_hq", "prune_vaed", "inpaint"],
+      expected: { retake: false, outpainting: false, inpainting: true },
+      why: "LTX 2.5's list TODAY — §3-55 put ONE mode name back on it, and it is the only sub-tab this engine greys",
     },
   ];
 
   for (const { unsupported, expected, why } of TABLE) {
-    it(`[${unsupported.join(", ")}] -> retake:${expected.retake} outpainting:${expected.outpainting} (${why})`, () => {
+    it(`[${unsupported.join(", ")}] -> retake:${expected.retake} outpainting:${expected.outpainting} inpainting:${expected.inpainting} (${why})`, () => {
       expect(editSubTabsDisabledFor(unsupported)).toEqual(expected);
     });
   }
@@ -267,13 +297,24 @@ describe("editSubTabsDisabledFor", () => {
     // The negative half of the row above: a build that matched the sub-tab's own
     // name would pass every positive assertion in a fixture that happened to
     // publish both spellings. The server publishes `outpaint`.
-    expect(editSubTabsDisabledFor(["outpainting"])).toEqual({ retake: false, outpainting: false });
+    expect(editSubTabsDisabledFor(["outpainting"])).toEqual({
+      retake: false,
+      outpainting: false,
+      inpainting: false,
+    });
+    // §3-55: the same trap one row down — the server publishes `inpaint`.
+    expect(editSubTabsDisabledFor(["inpainting"])).toEqual({
+      retake: false,
+      outpainting: false,
+      inpainting: false,
+    });
   });
 
   it("ignores names it has never heard of", () => {
     expect(editSubTabsDisabledFor(["quantum_upscale", "retake"])).toEqual({
       retake: true,
       outpainting: false,
+      inpainting: false,
     });
   });
 
@@ -285,6 +326,7 @@ describe("editSubTabsDisabledFor", () => {
     expect(editSubTabsDisabledFor(["chain", "v2v", "a2v", "reference_video"])).toEqual({
       retake: false,
       outpainting: false,
+      inpainting: false,
     });
   });
 });

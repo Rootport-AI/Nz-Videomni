@@ -69,6 +69,12 @@ const EXPECTED: Array<{
   // a generation origin — hence `placement: null` with nothing downstream of it
   // (the route early-returns in `AppShell.handleRoute`).
   { action: "trackObject", targetMode: "toolbox", intent: "track-object", needsSelection: true, requiredKind: "partialFilter", placement: null },
+  // 台帳 §3-55 Inpainting (2026-09-14): the first PAIR of rows feeding one panel,
+  // one per right-click (owner decision D6). Two different required kinds, two
+  // different intents, and `placement: null` on both — the seat is taken at
+  // Generate time, not at right-click time (D8).
+  { action: "inpaintPartialFilter", targetMode: "edit", intent: "inpaint-mask", needsSelection: true, requiredKind: "partialFilter", placement: null },
+  { action: "inpaintVideo", targetMode: "edit", intent: "inpaint-target", needsSelection: true, requiredKind: "video", placement: null },
 ];
 
 describe("routeMenuAction", () => {
@@ -99,10 +105,12 @@ describe("routeMenuAction", () => {
     expect(knownMenuActions().sort()).toEqual(EXPECTED.map((e) => e.action).sort());
   });
 
-  it("exposes exactly the twenty-one actions (16 object + 5 layer)", () => {
+  it("exposes exactly the twenty-three actions (18 object + 5 layer)", () => {
     // 素材（末尾）(2026-08-15) added the 15th object item, `endWithThis`;
-    // §3-54 (2026-09-11) added the 16th, `trackObject` (右クリック #21).
-    expect(knownMenuActions()).toHaveLength(21);
+    // §3-54 (2026-09-11) added the 16th, `trackObject` (右クリック #21);
+    // §3-55 (2026-09-14) added the 17th and 18th together,
+    // `inpaintPartialFilter`/`inpaintVideo` (右クリック #22/#23).
+    expect(knownMenuActions()).toHaveLength(23);
   });
 });
 
@@ -151,6 +159,10 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       "endWithThis",
       // §3-54: acts on the selected 部分フィルタ.
       "trackObject",
+      // §3-55: one acts on the selected 部分フィルタ, the other on the
+      // selected video — both are object commands.
+      "inpaintPartialFilter",
+      "inpaintVideo",
     ]) {
       expect(MENU_ROUTING_TABLE[action]?.needsSelection).toBe(true);
     }
@@ -160,6 +172,18 @@ describe("MENU_ROUTING_TABLE invariants", () => {
     expect(MENU_ROUTING_TABLE.trackObject?.targetMode).toBe("toolbox");
     const toolboxRows = Object.values(MENU_ROUTING_TABLE).filter((i) => i.targetMode === "toolbox");
     expect(toolboxRows).toHaveLength(1);
+  });
+
+  it("routes BOTH §3-55 Inpainting items to Edit, with distinct intents", () => {
+    // The pair is only useful if the two rows stay distinguishable: AppShell
+    // branches on the ACTION to pick which slot to fill, and EditScreen reads
+    // the INTENT to pick the sub-tab. A copy-paste that left both intents equal
+    // would still route correctly and silently fill the wrong slot.
+    expect(MENU_ROUTING_TABLE.inpaintPartialFilter?.targetMode).toBe("edit");
+    expect(MENU_ROUTING_TABLE.inpaintVideo?.targetMode).toBe("edit");
+    expect(MENU_ROUTING_TABLE.inpaintPartialFilter?.intent).not.toBe(
+      MENU_ROUTING_TABLE.inpaintVideo?.intent,
+    );
   });
 
   it("keeps the Chain-routed items (extendVideo, imageToClipChain, currentFrameToClipChain) on chain and A2V on create", () => {
@@ -187,8 +211,13 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       // W0 Edit-系: both operate on a video object.
       outpaintVideo: "video",
       retakeRange: "video",
-      // §3-54: the one row using the fifth kind.
+      // §3-54: the FIRST row using the fifth kind…
       trackObject: "partialFilter",
+      // …and §3-55's mask row is the second. Its sibling takes a video, which is
+      // what makes the pair's type guard meaningful: right-clicking the wrong
+      // one of the two objects earns the ordinary mismatch note.
+      inpaintPartialFilter: "partialFilter",
+      inpaintVideo: "video",
     };
     for (const [action, kind] of Object.entries(objectKinds)) {
       expect(MENU_ROUTING_TABLE[action]?.requiredKind).toBe(kind);
@@ -230,6 +259,11 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       endWithThis: "E",
       // §3-54: reserves nothing — it edits an object that already exists.
       trackObject: null,
+      // §3-55: reserves nothing AT RIGHT-CLICK TIME. The Inpainting panel takes
+      // the seat itself when Generate is pressed (系統 D, the window × the
+      // target's layer), which is why two right-clicks cannot reserve twice.
+      inpaintPartialFilter: null,
+      inpaintVideo: null,
     };
     for (const [action, placement] of Object.entries(placements)) {
       expect(MENU_ROUTING_TABLE[action]?.placement).toBe(placement);

@@ -1,10 +1,12 @@
 import {
   BridgeError,
+  TIMELINE_MASK_PROGRESS_EVENT,
   TIMELINE_TRACK_PROGRESS_EVENT,
   type BridgeMethod,
   type NativeBridge,
   type ParamsOf,
   type ResultOf,
+  type TimelineMaskProgressData,
   type TimelineTrackProgressData,
 } from "./types";
 
@@ -378,6 +380,15 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // which is why the two rows below it were added in the same commit.
     "two_stage_hq",
     "prune_vaed",
+    // 台帳 §3-55 Inpainting (2026-09-14): `inpaint` JOINS the list, and it is
+    // the first MODE name to come BACK to it since `outpaint` left. The
+    // Inpainting flow is LTX 2.3-only in its first increment (owner decision
+    // D11), so the 2.5 adapter's `REJECT_TABLE` grows one row and
+    // `UNSUPPORTED_FEATURES` publishes the name — which is what greys the Edit
+    // tab's Inpainting sub-tab while a 2.5 base model is loaded. Like `retake`
+    // and `outpaint`, the single `/generate` path has no per-field refusal loop
+    // in this fixture, so this is the only place the fixture needed editing.
+    "inpaint",
     // 高速化第2弾: `keep_resident` LEFT THIS LIST. The 2.5 engine keeps its
     // Gemma 4 text encoder resident between jobs now (opt-in, default off), so
     // the server no longer 422s the field — and publishing it here would grey
@@ -920,6 +931,22 @@ export interface MockBridgeOptions {
    * codes (`TRACK_UNAVAILABLE`, …) reach this method too, and the panel's
    * "unknown code shown verbatim" path needs to be reachable from a test. */
   trackObjectError?: string;
+  /** Contract v13 (台帳 §3-55 Inpainting): the summary
+   * `timeline.renderMaskVideo` resolves with, merged over the default (a path
+   * under the fixture's `masks\` folder at the project's own 1920×1080 and 121
+   * frames). */
+  renderMaskVideoResult?: Partial<ResultOf<"timeline.renderMaskVideo">>;
+  /** Contract v13: the `timeline.maskProgress` pushes
+   * `timeline.renderMaskVideo` emits, in order, BEFORE it resolves — emitted
+   * from inside the handler for the same "the ordering is real" reason
+   * {@link MockBridgeOptions.trackProgressFrames} is. Defaults to none. */
+  maskProgressFrames?: readonly TimelineMaskProgressData[];
+  /** Contract v13: when set, `timeline.renderMaskVideo` rejects with this code
+   * instead of resolving. Any string is allowed, like
+   * {@link MockBridgeOptions.trackObjectError} — the three native codes
+   * (`MASK_BUSY`/`MASK_SEED_INVALID`/`MASK_FAILED`) each have their own
+   * sentence in the panel, and everything else has to reach the generic one. */
+  renderMaskVideoError?: string;
 }
 
 /** Contract v5 default `timeline.getSelection` snapshot — a single selected
@@ -2378,6 +2405,44 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     }
   }
 
+  /** Contract v13 (台帳 §3-55). The mirror of {@link handleTrackObject}, down
+   * to emitting its progress pushes from INSIDE the handler so they land while
+   * the promise is still pending — which is the only ordering production ever
+   * produces.
+   *
+   * It shares `trackRunning`, and that is the point: native's slot is shared
+   * (`MASK_BUSY` and `TRACK_BUSY` guard the same one), so the fixture must not
+   * model two independent runs. */
+  async function handleRenderMaskVideo(): Promise<ResultOf<"timeline.renderMaskVideo">> {
+    if (options.renderMaskVideoError) {
+      throw new BridgeError(
+        options.renderMaskVideoError,
+        `Mock bridge: timeline.renderMaskVideo forced to fail (${options.renderMaskVideoError})`,
+      );
+    }
+    trackRunning = true;
+    try {
+      for (const push of options.maskProgressFrames ?? []) {
+        emitEvent(TIMELINE_MASK_PROGRESS_EVENT, push);
+      }
+      return {
+        // The real path shape (`%LOCALAPPDATA%\NzVideomni\masks\mask_….mp4`),
+        // reproduced rather than invented: the WebUI hands it straight to
+        // `backend.uploadFile`, so a test that asserts the upload call is
+        // asserting this string.
+        filePath: joinMockPath("C:\\Users\\mock\\AppData\\Local\\NzVideomni\\masks", "mask_0_121_0001.mp4"),
+        // The PROJECT's resolution — the mask is a render of the scene, so it
+        // matches `DEFAULT_EDIT_INFO` rather than any material's size.
+        width: DEFAULT_EDIT_INFO.width,
+        height: DEFAULT_EDIT_INFO.height,
+        frameCount: 121,
+        ...options.renderMaskVideoResult,
+      };
+    } finally {
+      trackRunning = false;
+    }
+  }
+
   async function handleCancelTracking(): Promise<ResultOf<"timeline.cancelTracking">> {
     // Mirrors native: raising the flag is all this does. The mock's run is not
     // actually interruptible — a test that wants a cancelled OUTCOME says so
@@ -2461,6 +2526,8 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           return (await handleTrackObject()) as ResultOf<M>;
         case "timeline.cancelTracking":
           return (await handleCancelTracking()) as ResultOf<M>;
+        case "timeline.renderMaskVideo":
+          return (await handleRenderMaskVideo()) as ResultOf<M>;
         case "ui.resolveDroppedFiles":
           // Reached only if a caller uses plain `request()` instead of
           // `requestWithFiles()` — `params` carries no `__droppedPaths` key

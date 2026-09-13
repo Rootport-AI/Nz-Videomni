@@ -176,6 +176,31 @@
  * working — and the user would be left with a "timed out" panel in front of a
  * tracking run that goes on to finish and rewrite their object. The same
  * "there is no too long here" reasoning `ui.pickFile` is in that set for.
+ *
+ * v13 (台帳 §3-55 Inpainting) adds ONE RPC and ONE event, the pair the Edit
+ * tab's Inpainting sub-tab drives:
+ *  - `timeline.renderMaskVideo` (ASYNC, seconds to a minute): renders the
+ *    selected 部分フィルタ as a BLACK-AND-WHITE mask video over the generation
+ *    window and answers with the mp4's path. Native does the whole job —
+ *    it places two temporary objects (a black full-screen background and a
+ *    copy of the 部分フィルタ with a whiten effect), renders the window frame
+ *    by frame, and removes them again — so the WebUI never sees, and never
+ *    shows, the mask (owner decision D7). Every param is REQUIRED and every
+ *    one of them is an ABSOLUTE AviUtl2 frame number on a CLOSED interval,
+ *    the same axis `timeline.trackObject` works on.
+ *  - `timeline.maskProgress` (event, see {@link TIMELINE_MASK_PROGRESS_EVENT}):
+ *    one push per rendered frame, thinned exactly like
+ *    `timeline.trackProgress` (at most one per 200ms, first and last always
+ *    sent). It carries NO score/lost pair — rendering either works or fails.
+ *
+ * v13 puts `timeline.renderMaskVideo` in {@link NO_LOCAL_TIMEOUT_METHODS} for
+ * the reason v12 put tracking there: the run is bounded by the window's own
+ * length, not by a round trip, so the 10s ceiling would reject the promise
+ * while native kept rendering.
+ *
+ * The three v13 error codes (`MASK_BUSY`, `MASK_SEED_INVALID`, `MASK_FAILED`)
+ * mirror tracking's own trio. `MASK_BUSY` in particular is the SHARED slot
+ * tracking's `TRACK_BUSY` guards: one timeline job at a time, whichever kind.
  */
 
 /** All RPC methods defined as of contract v6. */
@@ -523,6 +548,34 @@ export interface BridgeParamsMap {
   /** Contract v12 (§3-54). Raises the cooperative stop flag; takes no params.
    * Synchronous and cheap — it does not wait for the tracking loop to notice. */
   "timeline.cancelTracking": Record<string, never>;
+  /** Contract v13 (台帳 §3-55 Inpainting). Renders the 部分フィルタ at
+   * `layer`/`frameStart` as a black-and-white mask video covering
+   * `windowStart`..`windowEnd`, and answers with the written mp4.
+   *
+   * EVERY field is required, every one is an ABSOLUTE AviUtl2 frame number,
+   * and both intervals are CLOSED (`frameEnd`/`windowEnd` are rendered). The
+   * 部分フィルタ's own span (`frameStart`..`frameEnd`) has to lie inside the
+   * window: outside it there is nothing for native to draw, and the WebUI's
+   * own window placement (`modes/edit/inpaintWindow.ts`) already guarantees it.
+   *
+   * ASYNC and long-running — see this file's v13 note and
+   * {@link NO_LOCAL_TIMEOUT_METHODS}; progress arrives as
+   * {@link TIMELINE_MASK_PROGRESS_EVENT} pushes meanwhile. There is
+   * deliberately NO cancel RPC to pair with it (unlike tracking): the panel
+   * offers no stop button, because a half-written mask is of no use to
+   * anyone. */
+  "timeline.renderMaskVideo": {
+    /** The 部分フィルタ object's layer (integer, `>= 0`). */
+    layer: number;
+    /** The 部分フィルタ's HEAD frame (absolute, integer, `>= 0`). */
+    frameStart: number;
+    /** The 部分フィルタ's TAIL frame (absolute, inclusive). */
+    frameEnd: number;
+    /** The generation window's head frame (absolute). */
+    windowStart: number;
+    /** The generation window's tail frame (absolute, inclusive). */
+    windowEnd: number;
+  };
 }
 
 /** Result shape for each method's successful response. */
@@ -806,6 +859,23 @@ export interface BridgeResultMap {
   "timeline.cancelTracking": {
     cancelled: boolean;
   };
+  /** Contract v13 (台帳 §3-55). The written mask mp4.
+   *
+   * `filePath` is a LOCAL path under `%LOCALAPPDATA%\NzVideomni\masks\`, ready
+   * to hand straight to `backend.uploadFile` — the WebUI never opens it and
+   * never shows it (owner decision D7: the mask is not a material the user
+   * manages).
+   *
+   * `width`/`height` are the PROJECT's resolution (the mask is a render of the
+   * scene), and `frameCount` is how many frames were actually written, which
+   * is the window's own length. All three are reported so the caller can check
+   * them against what it asked for rather than assuming. */
+  "timeline.renderMaskVideo": {
+    filePath: string;
+    width: number;
+    height: number;
+    frameCount: number;
+  };
 }
 
 /**
@@ -904,6 +974,27 @@ export interface TimelineTrackProgressData {
   lost: boolean;
 }
 
+/** Contract v13 native->WebUI event name (台帳 §3-55 Inpainting): one push per
+ * rendered mask frame while `timeline.renderMaskVideo` runs. Thinned exactly
+ * like {@link TIMELINE_TRACK_PROGRESS_EVENT} — at most one per 200ms, except
+ * the first and last frames, which native always sends. */
+export const TIMELINE_MASK_PROGRESS_EVENT = "timeline.maskProgress";
+
+/** Payload of the `timeline.maskProgress` event.
+ *
+ * The same two axes {@link TimelineTrackProgressData} carries and nothing
+ * else: `frame` is the AviUtl2 ABSOLUTE frame number just rendered, while
+ * `index`/`total` count this render run. There is no score/lost pair here —
+ * a frame either rendered or the whole run failed with `MASK_FAILED`. */
+export interface TimelineMaskProgressData {
+  /** AviUtl2 absolute frame number of the frame just rendered. */
+  frame: number;
+  /** 1-based position within this run. */
+  index: number;
+  /** Total frames this run will render (the window's length). */
+  total: number;
+}
+
 export type ParamsOf<M extends BridgeMethod> = BridgeParamsMap[M];
 export type ResultOf<M extends BridgeMethod> = BridgeResultMap[M];
 
@@ -966,7 +1057,22 @@ export type KnownBridgeErrorCode =
   | "TRACK_SESSION_NOT_FOUND"
   /** `timeline.trackObject` (contract v12), BACKEND-origin: a frame the plugin
    * sent did not match the session's declared byte length. */
-  | "TRACK_FRAME_INVALID";
+  | "TRACK_FRAME_INVALID"
+  /** `timeline.renderMaskVideo` (contract v13): the ONE timeline job slot is
+   * taken. It is SHARED with tracking — a 追尾 run in flight answers a mask
+   * render with this, and a mask render in flight answers 追尾 with
+   * `TRACK_BUSY`. Nothing on the timeline was touched. */
+  | "MASK_BUSY"
+  /** `timeline.renderMaskVideo` (contract v13): there is no usable 部分フィルタ
+   * at `layer`/`frameStart` any more — it was deleted, moved, or is a different
+   * kind of object. The remedy is to right-click the filter again, which is
+   * what the panel's note says. Nothing on the timeline was touched. */
+  | "MASK_SEED_INVALID"
+  /** `timeline.renderMaskVideo` (contract v13): the catch-all render failure —
+   * a temporary object could not be created, a frame could not be rendered, or
+   * the mp4 could not be written. Native removes whatever it created before
+   * answering (except while shutting down). */
+  | "MASK_FAILED";
 
 /** Local-only error code used when a request never receives a response. */
 export type LocalBridgeErrorCode = "TIMEOUT" | "DISPOSED";
@@ -1053,11 +1159,17 @@ export const DEFAULT_TIMEOUT_MS = 10_000;
  * panel would say "timed out" and the object would be rewritten anyway. The
  * user's own 停止 button (`timeline.cancelTracking`) is the stop control here,
  * not a timer.
+ *
+ * Contract v13 adds `timeline.renderMaskVideo` for the identical reason: the
+ * render is bounded by the generation window's own length (up to 481 frames),
+ * not by a round trip. Unlike tracking it has no stop control at all, so the
+ * only thing the 10s ceiling could achieve here is a false failure.
  */
 export const NO_LOCAL_TIMEOUT_METHODS: ReadonlySet<BridgeMethod> = new Set([
   "ui.pickFile",
   "ui.pickFolder",
   "timeline.trackObject",
+  "timeline.renderMaskVideo",
 ]);
 
 /** Abstraction implemented by both the production WebView2 bridge and the

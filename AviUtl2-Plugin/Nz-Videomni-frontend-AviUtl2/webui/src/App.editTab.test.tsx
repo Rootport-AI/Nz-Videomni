@@ -30,7 +30,9 @@ describe("App / Edit tab", () => {
       const visible = panel();
       expect(within(visible).getByRole("tab", { name: "Retake" })).toBeInTheDocument();
       expect(within(visible).getByRole("tab", { name: "Outpainting" })).toBeInTheDocument();
-      expect(within(visible).getByRole("tab", { name: "Inpainting" })).toBeDisabled();
+      // §3-55 (2026-09-14): Inpainting stopped being a disabled mock the day it
+      // grew a panel, so all three Edit sub-tabs are live on LTX 2.3.
+      expect(within(visible).getByRole("tab", { name: "Inpainting" })).not.toBeDisabled();
       // Create's Generate button is now hidden along with its panel.
       expect(screen.queryByRole("button", { name: /^generate$/i })).not.toBeInTheDocument();
     },

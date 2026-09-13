@@ -142,10 +142,13 @@ describe("AppShell — base-model feature scope", () => {
     // fill in a form whose every submission comes back 422.
     //
     // THE BASE MODEL HERE IS SYNTHETIC, and since the Outpainting increment
-    // BOTH halves of it are. Edit greys only when BOTH of its sub-modes are
-    // refused; the Retake increment gave the engine 撮り直し and the Outpainting
-    // increment gave it 画角拡張, so the fixture's LTX 2.5 refuses neither now.
-    // The two names are added to the published list rather than the test being
+    // TWO of its three halves are. Edit greys only when ALL THREE of its
+    // sub-modes are refused; the Retake increment gave the engine 撮り直し and
+    // the Outpainting increment gave it 画角拡張, so the fixture's LTX 2.5
+    // refuses neither now — §3-55's `inpaint` is the one name it really does
+    // publish, and it is left out of the synthetic pair for exactly that
+    // reason (adding it twice would be a no-op that hid a stale fixture).
+    // The names are added to the published list rather than the test being
     // re-pointed at a different tab every time the engine grows. What is under
     // test is the BOUNCE, not today's feature list (that is
     // `bridge/mockBridge.test.ts`'s job).

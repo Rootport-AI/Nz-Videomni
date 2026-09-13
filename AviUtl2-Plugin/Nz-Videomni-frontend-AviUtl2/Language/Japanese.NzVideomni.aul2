@@ -30,3 +30,5 @@ Nz-Videomni\📷 Generate a video from the current frame (i2v)=Nz-Videomni\📷 
 Nz-Videomni\📷 Add the current frame as a keyframe=Nz-Videomni\📷 現在フレームをキーフレームに追加
 Nz-Videomni\📷 Generate a long video from the current frame (i2v Clip Chain)=Nz-Videomni\📷 現在フレームから長尺動画を生成 (i2v Clip Chain)
 Nz-Videomni\⬇ Insert the latest generation result here=Nz-Videomni\⬇ 最新の生成結果をここに挿入
+Nz-Videomni\🖌 Inpainting: use this partial filter as the mask=Nz-Videomni\🖌 Inpainting: この部分フィルタをマスクに使う
+Nz-Videomni\🎬 Video: inpaint this video=Nz-Videomni\🎬 Video: この動画をInpaintingする

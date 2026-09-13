@@ -48,6 +48,28 @@ const char kItemAspectJp[] =
 // see PatchAliasPartialFilterKeyframes in alias_util.h).
 const char kMoveLinearJp[] =
     "\xe7\x9b\xb4\xe7\xb7\x9a\xe7\xa7\xbb\xe5\x8b\x95";  // "linear move"
+// ===========================================================================
+// PROVISIONAL - NOT YET CAPTURED ON THE REAL DEVICE (section 3-55 Inpainting)
+// (ledger wording: "jikki saishu machi (kari)" - awaiting an on-device capture)
+//
+// The whitening effect the mask copy carries: AviUtl2's "invert" effect with
+// its "luma invert" checkbox switched on. Everything the two names below are
+// based on is second-hand until the owner saves one .object carrying this
+// effect, so they live in THIS ONE BLOCK and nothing else in the file reads
+// them except WhiteningEffectBlockLines() at the bottom - swapping them for the
+// capture touches no logic and no test expectation outside the two cases that
+// are named "provisional".
+// Neither escape below is followed by a hex digit (see the note above), so
+// neither can swallow a neighbouring character.
+const char kEffectInvertJp[] =
+    "\xe5\x8f\x8d\xe8\xbb\xa2";  // "invert" effect (base effects)
+const char kItemLumaInvertJp[] =
+    "\xe8\xbc\x9d\xe5\xba\xa6\xe5\x8f\x8d\xe8\xbb\xa2";  // "luma invert" checkbox
+// A checkbox serializes as "<name>=0" / "<name>=1" - the shape the captured
+// partial filter's own "invert mask" line has.
+const char kItemLumaInvertOn[] = "1";
+// ===========================================================================
+
 // ASCII fallback prefix. The webui always passes an explicit, localized prefix
 // (spec 5-5's 4-stage labels), so this default is only reached on an off-nominal
 // path with no caller prefix; keep it ASCII so no tofu box can ever appear.
@@ -1040,4 +1062,303 @@ std::string PatchAliasPartialFilterKeyframes(const std::string& alias,
     return text;
 }
 
+
+// ---------------------------------------------------------------------------
+// Inpainting (section 3-55): the mask-copy alias transforms. See alias_util.h
+// for the contract of each function and for the order the bridge runs them in.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+const char kEffectSectionPrefix[] = "[Object.";
+
+// Whole-token integer parse, locale-independent like ParseFirstValueToken /
+// IsNumericToken above. Spaces, tabs and a stray CR around the token are
+// ignored; anything else in it is a rejection, so "12x" or "1.5" can never be
+// mistaken for a boundary.
+bool ParseWholeInt(const std::string& tok, long long* out) {
+    size_t b = 0;
+    size_t e = tok.size();
+    while (b < e && (tok[b] == ' ' || tok[b] == '\t')) {
+        ++b;
+    }
+    while (e > b && (tok[e - 1] == ' ' || tok[e - 1] == '\t' || tok[e - 1] == '\r')) {
+        --e;
+    }
+    if (b >= e) {
+        return false;
+    }
+    long long value = 0;
+    const char* first = tok.data() + b;
+    const char* last = tok.data() + e;
+    const std::from_chars_result r = std::from_chars(first, last, value);
+    if (r.ec != std::errc() || r.ptr != last) {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+// Locate and parse the "[Object]" section's "frame=" boundary list. Fills
+// *frame_idx (the line index of the "frame=" line) and *out (one entry per
+// boundary). Returns false when there is no "[Object]" section, no "frame="
+// line inside it, or any token is not a plain integer - in every one of those
+// cases the caller hands its input straight back.
+bool ReadFrameBoundaries(const std::vector<std::string>& lines, size_t* frame_idx,
+                         std::vector<long long>* out) {
+    int obj_idx = -1;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (Trim(lines[i]) == "[Object]") {
+            obj_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    if (obj_idx < 0) {
+        return false;
+    }
+    const size_t obj_end = SectionEnd(lines, static_cast<size_t>(obj_idx));
+    for (size_t j = static_cast<size_t>(obj_idx) + 1; j < obj_end; ++j) {
+        if (KeyOf(lines[j]) != "frame") {
+            continue;
+        }
+        const size_t eq = lines[j].find('=');
+        const std::vector<std::string> toks = SplitCommas(lines[j].substr(eq + 1));
+        std::vector<long long> values;
+        for (const std::string& t : toks) {
+            long long v = 0;
+            if (!ParseWholeInt(t, &v)) {
+                return false;
+            }
+            values.push_back(v);
+        }
+        if (values.empty()) {
+            return false;
+        }
+        *frame_idx = j;
+        *out = values;
+        return true;
+    }
+    return false;
+}
+
+// Join boundaries back into a "frame=" line's value.
+std::string JoinBoundaries(const std::vector<long long>& values) {
+    std::string out;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i != 0) {
+            out += ',';
+        }
+        out += std::to_string(values[i]);
+    }
+    return out;
+}
+
+// Split a keyframed item value - "<v0>,...,<vN-1>,<move method>,<0>" - into its
+// per-boundary values and the ",<move method>,<0>" tail that is copied through
+// verbatim. Recognition is by SHAPE, exactly as CollapseKeyframedValue does it
+// (that is the only signal the alias format offers), so the two stay in step.
+bool SplitKeyframedValue(const std::string& raw, std::vector<std::string>* values,
+                         std::string* tail) {
+    const std::vector<std::string> toks = SplitCommas(raw);
+    if (toks.size() < 3) {
+        return false;
+    }
+    const size_t method = toks.size() - 2;
+    if (!IsNumericToken(toks.back()) || IsNumericToken(toks[method]) ||
+        Trim(toks[method]).empty()) {
+        return false;
+    }
+    for (size_t i = 0; i < method; ++i) {
+        if (!IsNumericToken(toks[i])) {
+            return false;
+        }
+    }
+    values->assign(toks.begin(), toks.begin() + method);
+    *tail = "," + toks[method] + "," + toks.back();
+    return true;
+}
+
+}  // namespace
+
+std::string KeepOnlyFirstEffectBlock(const std::string& alias) {
+    const std::string src = StripUtf8Bom(alias);
+    const bool had_bom = src.size() != alias.size();
+    const std::string eol = DetectEol(src);
+    bool trailing = false;
+    const std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    size_t first = lines.size();
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (IsEffectSectionHeader(lines[i])) {
+            first = i;
+            break;
+        }
+    }
+    if (first == lines.size()) {
+        return std::string();  // no effect block: nothing the caller can copy
+    }
+    const size_t end = SectionEnd(lines, first);
+    if (end >= lines.size()) {
+        return alias;  // the first block is the only one - byte-identical
+    }
+    const std::vector<std::string> kept(lines.begin(), lines.begin() + end);
+    // A line followed the ones that are kept, so the document did end that line
+    // with a newline; keeping it is what makes the result a well-formed alias.
+    std::string text = Join(kept, eol, true);
+    if (had_bom) {
+        text.insert(0, "\xEF\xBB\xBF");
+    }
+    return text;
+}
+
+std::string AppendEffectBlock(const std::string& alias,
+                              const std::vector<std::string>& block_lines) {
+    if (block_lines.empty()) {
+        return alias;
+    }
+    const std::string src = StripUtf8Bom(alias);
+    if (src.empty()) {
+        return alias;  // nothing to append to (KeepOnlyFirstEffectBlock's "no")
+    }
+    const bool had_bom = src.size() != alias.size();
+    const std::string eol = DetectEol(src);
+    bool trailing = false;
+    std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    long long max_index = -1;
+    const size_t prefix = sizeof(kEffectSectionPrefix) - 1;
+    for (const std::string& line : lines) {
+        if (!IsEffectSectionHeader(line)) {
+            continue;
+        }
+        // IsEffectSectionHeader has already proved the shape "[Object.<digits>]".
+        const std::string t = Trim(line);
+        long long n = 0;
+        if (ParseWholeInt(t.substr(prefix, t.size() - prefix - 1), &n) &&
+            n > max_index) {
+            max_index = n;
+        }
+    }
+    lines.push_back(std::string(kEffectSectionPrefix) +
+                    std::to_string(max_index + 1) + "]");
+    for (const std::string& line : block_lines) {
+        lines.push_back(line);
+    }
+    std::string text = Join(lines, eol, trailing);
+    if (had_bom) {
+        text.insert(0, "\xEF\xBB\xBF");
+    }
+    return text;
+}
+
+std::string NormalizeAliasFrameBoundariesToRelative(const std::string& alias) {
+    const std::string src = StripUtf8Bom(alias);
+    const bool had_bom = src.size() != alias.size();
+    const std::string eol = DetectEol(src);
+    bool trailing = false;
+    std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    size_t frame_idx = 0;
+    std::vector<long long> bounds;
+    if (!ReadFrameBoundaries(lines, &frame_idx, &bounds)) {
+        return alias;
+    }
+    const long long head = bounds.front();
+    if (head == 0) {
+        return alias;  // already relative - byte-identical
+    }
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        bounds[i] -= head;
+    }
+    lines[frame_idx] = "frame=" + JoinBoundaries(bounds);
+    std::string text = Join(lines, eol, trailing);
+    if (had_bom) {
+        text.insert(0, "\xEF\xBB\xBF");
+    }
+    return text;
+}
+
+std::string ClipAliasFrameBoundaries(const std::string& alias, int max_length) {
+    if (max_length < 1) {
+        return alias;
+    }
+    const std::string src = StripUtf8Bom(alias);
+    const bool had_bom = src.size() != alias.size();
+    const std::string eol = DetectEol(src);
+    bool trailing = false;
+    std::vector<std::string> lines = SplitLines(src, &trailing);
+
+    size_t frame_idx = 0;
+    std::vector<long long> bounds;
+    if (!ReadFrameBoundaries(lines, &frame_idx, &bounds)) {
+        return alias;
+    }
+    const long long last_allowed = static_cast<long long>(max_length) - 1;
+    if (bounds.back() <= last_allowed) {
+        return alias;  // already inside the window - nothing to clip
+    }
+    size_t keep = 0;
+    while (keep < bounds.size() && bounds[keep] <= last_allowed) {
+        ++keep;
+    }
+    if (keep == 0) {
+        // Even the FIRST boundary is past the window. That cannot come from an
+        // alias this file normalised (its head is 0), and there is no sensible
+        // way to shorten it, so the caller gets its input back untouched.
+        return alias;
+    }
+    std::vector<long long> kept(bounds.begin(), bounds.begin() + keep);
+    if (kept.back() != last_allowed) {
+        kept.push_back(last_allowed);  // hold the last in-window value to the end
+    }
+    if (kept.size() < 2) {
+        kept.push_back(kept.back());  // a one-frame copy: the minimal "0,0" pair
+    }
+    // How many copies of the LAST kept value the shortened value lists need.
+    const size_t repeats = kept.size() - keep;
+
+    for (size_t j = 0; j < lines.size(); ++j) {
+        if (j == frame_idx) {
+            lines[j] = "frame=" + JoinBoundaries(kept);
+            continue;
+        }
+        const size_t eq = lines[j].find('=');
+        if (eq == std::string::npos || IsSectionHeader(lines[j]) ||
+            Trim(lines[j].substr(0, eq)) == "effect.name") {
+            continue;
+        }
+        std::vector<std::string> values;
+        std::string tail;
+        if (!SplitKeyframedValue(lines[j].substr(eq + 1), &values, &tail)) {
+            continue;  // a single value: constant for the whole object already
+        }
+        if (values.size() != bounds.size()) {
+            continue;  // not keyframed against THESE boundaries - leave it alone
+        }
+        std::string value;
+        for (size_t n = 0; n < keep; ++n) {
+            if (n != 0) {
+                value += ',';
+            }
+            value += values[n];
+        }
+        for (size_t n = 0; n < repeats; ++n) {
+            value += ',';
+            value += values[keep - 1];
+        }
+        lines[j] = lines[j].substr(0, eq + 1) + value + tail;
+    }
+    std::string text = Join(lines, eol, trailing);
+    if (had_bom) {
+        text.insert(0, "\xEF\xBB\xBF");
+    }
+    return text;
+}
+
+std::vector<std::string> WhiteningEffectBlockLines() {
+    std::vector<std::string> lines;
+    lines.push_back(std::string("effect.name=") + kEffectInvertJp);
+    lines.push_back(std::string(kItemLumaInvertJp) + "=" + kItemLumaInvertOn);
+    return lines;
+}
 }  // namespace nzvideomni

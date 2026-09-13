@@ -402,6 +402,12 @@ NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_RetakeRange,       "retakeRange")
 // subject. Enabled only when the selection IS a partial filter (the WebUI's
 // menuSelection.ts holds that rule, as for every other item here).
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_TrackObject,       "trackObject")
+// Inpainting (section 3-55, SPEC #22 / #23): the feature needs TWO right-click
+// items because it needs two different things - the partial filter that becomes
+// the mask, and the video that gets re-generated inside it (owner decision D6).
+// Either order works; the WebUI keeps both in its own store until Generate.
+NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InpaintPartialFilter, "inpaintPartialFilter")
+NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InpaintVideo,      "inpaintVideo")
 
 // Layer right-click menu actions (5 items; see SPEC 3-6). The final item (W3,
 // insertLatestResultHere) inserts the latest completed generation result at the
@@ -460,6 +466,13 @@ struct TimelineMenuItem {
 //
 // Object tracking (section 3-54, 16 items): trackObject is appended at the end
 // - it is the only entry that acts on a partial filter rather than on media.
+//
+// Inpainting (section 3-55, 18 items): the two entries are appended after it,
+// in the pair order the user meets them in - the partial filter that becomes
+// the mask first, the video that is re-generated inside it second. The first
+// one shares trackObject's "acts on a partial filter" nature; the second is an
+// ordinary Video entry, deliberately NOT moved up into the Video block, so the
+// pair reads as one feature (owner decision D6, two items).
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: generate using this video as reference (IC-LoRA)",      "referenceVideo",    &OnMenu_ReferenceVideo },
@@ -477,6 +490,8 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F4DD Text: append to the main prompt",                              "appendText",        &OnMenu_AppendText },
     { L"Nz-Videomni\\\U00002B07 Insert this generated result now",                             "insertProvisionalResult", &OnMenu_InsertProvisionalResult },
     { L"Nz-Videomni\\\U0001F3AF Object tracking (uses a partial filter)",                      "trackObject",       &OnMenu_TrackObject },
+    { L"Nz-Videomni\\\U0001F58C Inpainting: use this partial filter as the mask",              "inpaintPartialFilter", &OnMenu_InpaintPartialFilter },
+    { L"Nz-Videomni\\\U0001F3AC Video: inpaint this video",                                    "inpaintVideo",      &OnMenu_InpaintVideo },
 };
 
 const TimelineMenuItem kLayerMenuItems[] = {

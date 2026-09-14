@@ -1,0 +1,33 @@
+﻿# git / working-tree state at phase P8 (just before the swap back to the official Q4_K transformer)
+# recorded read-only; compared against git_state_start.txt (phase P0) -- X-2 check
+recorded_at: 2026-09-14 14:55:59 +09:00
+
+## git rev-parse HEAD
+5052293e370a19a339a4116815a6341392161fea
+
+## git rev-parse --abbrev-ref HEAD
+feature/inpainting
+
+## git status --porcelain   (empty == clean)
+## end of git status (lines above: 0)
+
+## mtime listing: engine25/  (every file, recursive, __pycache__ excluded)
+2026-08-21 16:36:57.8811742000 0 engine25/__init__.py
+2026-08-22 14:53:53.6157593000 16412 engine25/assets_export.py
+2026-09-07 21:19:30.7724370000 196377 engine25/chain25.py
+2026-09-02 10:53:34.0556325000 6665 engine25/engine25-venv-pyproject.toml
+2026-08-22 15:24:32.5852509000 50436 engine25/gguf_gemma4.py
+2026-08-30 05:03:28.2199145000 68288 engine25/gguf_transformer.py
+2026-09-03 12:26:41.7444018000 66592 engine25/ltxcore_compat.py
+2026-08-30 04:56:08.5750664000 28632 engine25/neg_prompt25.py
+2026-08-30 04:58:20.9899827000 24508 engine25/neg_selfcheck25.py
+2026-09-02 00:23:04.2781485000 71029 engine25/outpaint25.py
+2026-09-03 12:26:41.7449033000 96899 engine25/pipeline25.py
+2026-09-05 19:00:39.0800253000 25605 engine25/reference25.py
+2026-08-25 14:54:14.2271159000 20802 engine25/sage_selfcheck25.py
+2026-08-25 13:39:04.0608288000 5231 engine25/venv-engine-ltx25.freeze.txt
+2026-09-03 12:26:41.7454058000 115550 engine25/worker.py
+
+## mtime listing: services/engines/ltx25/  (every file, recursive, __pycache__ excluded)
+2026-08-22 16:44:02.3741543000 91 services/engines/ltx25/__init__.py
+2026-09-14 02:31:50.0917873000 81819 services/engines/ltx25/adapter.py

@@ -1,0 +1,460 @@
+# harness_diff.txt -- every change made to the copied calibration harness (2026-09-14, Q6_K campaign)
+# baseline = outputs/comfort-calib-2026-09-05/   (READ-ONLY history; not modified)
+# generated: 2026-09-14 09:37:29
+#
+# The plan (2 of the campaign plan) allows EIGHT changes to calib.py -- T1..T8 -- and nothing else.
+# Which hunk is which:
+#   T1  active_transformer() + cmd_load          -- --transformer in the body, DOUBLE confirmation
+#   T2  main()                                   -- --transformer on load / restore-state
+#   T3  record_original_state()                  -- state.json's selections block saved too
+#   T4  cmd_restore_state()                      -- restore the transformer, then re-read and verify
+#   T5a cmd_run()                                -- skipped_wrong_transformer guard
+#   T5b check_point()                            -- transformer in the row; undeclared is an error
+#   T6  used_check / analyse / cmd_report        -- transformer_used collected, expected, reported
+#   T7  cmd_idle_calib()                         -- per-transformer idle directory + calib field
+#   T8  MAX_CHAIN_TOTAL_PIXEL_FRAMES + check_point -- chain rules; frame rules moved to the else side
+#
+# NOT diffed below because they were REWRITTEN rather than patched (the plan says so):
+#   mkplan.py                        -- rewritten for Tier B / Tier C of this campaign
+#   selftest/parser_selftest.py      -- section H rewritten against this campaign's plan files
+# Unchanged copies: vram_sampler2.ps1, selftest/analyse_selftest.py,
+#                   selftest/plans_fixture/, selftest/fake_runs/
+
+==================== calib.py ====================
+--- ../comfort-calib-2026-09-05/calib.py	2026-09-05 01:40:29.069417800 +0900
++++ calib.py	2026-09-14 09:30:46.867184700 +0900
+@@ -121,6 +121,10 @@
+ DECODE_CHUNK_FRAMES = 40
+ # chain stage-2 window presets (chain_math.STAGE2_WINDOW_PRESETS), v_tile only.
+ STAGE2_V_TILE = {"standard": 22, "high_resolution": 19, "full_length": 61}
++# T8 (2026-09-14): the product's ceiling on what a chain's CLIPS may assemble to
++# -- api/models.py:664 ``MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481``.  Quoted, not
++# invented, so preflight and the API agree on where 422 begins.
++MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544
+ 
+ ACCEL_KEYS = ("attention_backend", "block_swap_prefetch", "keep_resident",
+               "fused_gguf_dequant_kernel", "vae_mode",
+@@ -354,16 +358,25 @@
+     `restore-state` can put it back at the very end."""
+     if ORIG_STATE.exists():
+         return
++    selections = None
+     try:
+-        original = json.loads((ROOT / "state.json").read_text(
+-            encoding="utf-8")).get("active_base_model")
++        state = json.loads((ROOT / "state.json").read_text(encoding="utf-8"))
++        original = state.get("active_base_model")
++        # T3 (2026-09-14): the campaign SWAPS THE TRANSFORMER, so the base model
++        # alone is no longer the whole of "what it was before".  state.json's
++        # per-base-model ``selections`` block is remembered verbatim -- including
++        # the LTX23 side this campaign never touches -- so restore-state can put
++        # the exact selection back instead of guessing "default".
++        selections = state.get("selections")
+     except Exception:
+         original = status.get("base_model") if status else None
+     ORIG_STATE.write_text(json.dumps(
+         {"captured_at": now_iso(), "active_base_model": original,
++         "selections": selections,
+          "server_shell_pid": shell_pid, "server_python_pids": python_pids}, indent=2),
+         encoding="utf-8")
+-    say("recorded original active_base_model = %r -> %s" % (original, ORIG_STATE.name))
++    say("recorded original active_base_model = %r selections = %s -> %s"
++        % (original, json.dumps(selections, ensure_ascii=False), ORIG_STATE.name))
+ 
+ 
+ def cmd_server_start(args) -> int:
+@@ -459,13 +472,34 @@
+     return last
+ 
+ 
++def active_transformer():
++    """The transformer the server says is ACTIVE right now (GET /models).
++
++    T1 (2026-09-14, Q6_K campaign).  ``GET /models`` publishes the legacy
++    two-layer block ``categories.<category>.active`` for the active base model
++    (``api/models_registry.py:_category_block``), and "default" is a real
++    registered name there, not a null.  Returns None only when the call itself
++    failed, which the callers treat as "could not confirm".
++    """
++    code, body = api("GET", "/models", timeout=120)
++    if code != 200 or not body:
++        return None
++    return ((body.get("categories") or {}).get("transformer") or {}).get("active")
++
++
+ def cmd_load(args) -> int:
+     if not port_open():
+         say("server is not running")
+         return 1
+     t0 = time.time()
+-    say("POST /pipeline/load base_model=%s" % args.base_model)
+-    code, body = api("POST", "/pipeline/load", {"base_model": args.base_model}, timeout=3600)
++    # T1: a transformer swap rebuilds the WORKER subprocess; the base model is
++    # unchanged.  "default" is a legal value and means the official GGUF.
++    want_tf = getattr(args, "transformer", None)
++    body_sent = {"base_model": args.base_model}
++    if want_tf:
++        body_sent["models"] = {"transformer": want_tf}
++    say("POST /pipeline/load base_model=%s transformer=%s" % (args.base_model, want_tf))
++    code, body = api("POST", "/pipeline/load", body_sent, timeout=3600)
+     say("  -> %s %s" % (code, json.dumps(body, ensure_ascii=False)))
+     if code >= 400:
+         return 1
+@@ -475,19 +509,60 @@
+            status and status.get("state"), status and status.get("base_model"),
+            status and status.get("pipeline_loaded"),
+            json.dumps(status.get("acceleration")) if status else None))
++    if want_tf:
++        # BOTH sides have to agree, and they are two different readers: the load
++        # RESPONSE is what the pipeline manager thinks it just selected, the
++        # GET /models ACTIVE is what the registry publishes to every other
++        # client (and what cmd_run's T5a guard reads before each point).  A
++        # campaign that measured the wrong transformer is worthless, so a
++        # disagreement stops here rather than being written into a manifest.
++        responded = ((body or {}).get("models") or {}).get("transformer")
++        published = active_transformer()
++        say("  transformer check: load response=%r GET /models active=%r want=%r"
++            % (responded, published, want_tf))
++        if responded != want_tf or published != want_tf:
++            say("ERROR: transformer NOT confirmed (response=%r, GET /models=%r, "
++                "wanted %r) -- refusing to continue" % (responded, published, want_tf))
++            return 1
+     return 0 if (status and status.get("state") in ("ready", "running")) else 1
+ 
+ 
+ def cmd_restore_state(args) -> int:
+-    """END OF CAMPAIGN ONLY: put the original base model back."""
++    """END OF CAMPAIGN ONLY: put the original base model back.
++
++    T4 (2026-09-14): also puts the original TRANSFORMER back.  The restore is
++    done by REPLAYING A LOAD -- never by writing state.json -- because the file
++    is the server's own record of what it did (``_remember()``), and a hand-made
++    file would say one thing while the live pipeline held another.  The verify
++    step afterwards re-reads the file the server wrote.
++    """
++    original = {}
++    if ORIG_STATE.exists():
++        original = json.loads(ORIG_STATE.read_text(encoding="utf-8"))
+     target = args.base_model
+     if target is None:
+-        if ORIG_STATE.exists():
+-            target = json.loads(ORIG_STATE.read_text(encoding="utf-8")).get("active_base_model")
+-        target = target or "LTX23"
+-    say("restoring original base model %r" % target)
++        target = original.get("active_base_model") or "LTX23"
++    want_tf = getattr(args, "transformer", None)
++    if want_tf is None:
++        want_tf = ((original.get("selections") or {}).get(target)
++                   or {}).get("transformer") or "default"
++    say("restoring original base model %r transformer %r" % (target, want_tf))
+     args.base_model = target
+-    return cmd_load(args)
++    args.transformer = want_tf
++    rc = cmd_load(args)
++    try:
++        state = json.loads((ROOT / "state.json").read_text(encoding="utf-8"))
++    except Exception as exc:
++        say("ERROR: cannot re-read state.json after the restore: %s" % exc)
++        return 1
++    say("state.json after restore: %s" % json.dumps(state, ensure_ascii=False))
++    ltx25_tf = ((state.get("selections") or {}).get("LTX25") or {}).get("transformer")
++    if ltx25_tf != "default":
++        say("ERROR: state.json still carries selections.LTX25.transformer=%r "
++            "(expected 'default') -- the campaign's swap was NOT undone" % ltx25_tf)
++        return 1
++    say("state.json verified: selections.LTX25.transformer = 'default'")
++    return rc
+ 
+ 
+ # === LUID discovery =========================================================
+@@ -1374,6 +1449,14 @@
+                                                 accel["vae_mode"]),
+         "keep_resident_embeddings_used":
+             onoff[bool(accel["keep_resident_embeddings"])],
++        # T6b (2026-09-14): which GGUF actually ran.  A point that does not
++        # declare a transformer is held to "default" -- the OFFICIAL weights --
++        # because that is the safe side: if the campaign's swap is still live
++        # when an undeclared point runs, this fires instead of quietly
++        # attributing the reading to the official model.  Declaring it is
++        # mandatory in the plan files (preflight, T5b); this fallback only
++        # covers a point that got past preflight.
++        "transformer_used": point.get("transformer") or "default",
+     }
+     mismatches = {}
+     for key, value in want.items():
+@@ -1799,6 +1882,14 @@
+             ("attention_used", "block_swap_prefetch_used", "keep_resident_used",
+              "fused_gguf_dequant_kernel_used", "vae_mode_used",
+              "keep_resident_embeddings_used")}
++    # T6a (2026-09-14): the transformer joins the *_used cross-check.  It is the
++    # ONLY one of these that does not live at the top level of metadata.json --
++    # the engine writes it under models.selection.transformer -- so it has to be
++    # collected here rather than by the loop above.  Forgetting this line is
++    # silent: used_check skips every key whose actual value is None.
++    models_selection = (meta.get("models") or {}).get("selection")
++    used["transformer_used"] = ((models_selection or {}).get("transformer")
++                                or {}).get("name")
+     result = job.get("result") or {}
+     return {
+         "label": point["label"], "kind": point.get("kind", "single"),
+@@ -1836,6 +1927,11 @@
+             "seed_used": meta.get("seed_used"),
+             "backend": meta.get("backend"),
+             "base_model": (meta.get("models") or {}).get("base_model"),
++            # T6c (2026-09-14): metadata.json's models.selection block, verbatim
++            # -- all four categories with their registered name AND file name.
++            # The *_used cross-check only judges the transformer; this is the
++            # untouched evidence that the other three were the stock files.
++            "models_selection": models_selection,
+             "output_path": (meta.get("output") or {}).get("path") or result.get("output_path"),
+             "metadata_path": str(meta_path) if meta_path else None,
+         },
+@@ -2016,6 +2112,23 @@
+                              "server_base_model": status.get("base_model")})
+             continue
+ 
++        # T5a (2026-09-14): the same guard, one level down.  A transformer swap
++        # is invisible in GET /status, so a plan run against the wrong GGUF
++        # would look perfectly healthy and produce numbers for the other model.
++        # A point that does not name a transformer is held to "default" -- the
++        # same safe-side rule analyse() uses (T6b); preflight (T5b) refuses such
++        # a point outright, so this branch only ever fires for a plan that
++        # skipped preflight.
++        want_tf = point.get("transformer") or "default"
++        active_tf = active_transformer()
++        if active_tf != want_tf:
++            say("  SKIP: server has transformer=%r, point wants %r (run `load "
++                "--transformer %s` first)" % (active_tf, want_tf, want_tf))
++            append_manifest({"label": label, "status": "skipped_wrong_transformer",
++                             "server_transformer": active_tf,
++                             "point_transformer": want_tf})
++            continue
++
+         video_id = None
+         if point.get("kind") in ("single_ref", "outpaint"):
+             try:
+@@ -2157,13 +2270,45 @@
+         errors.append("width %d is not a multiple of %d" % (width, grid))
+     if height % grid:
+         errors.append("height %d is not a multiple of %d" % (height, grid))
+-    if frames < 9:
+-        errors.append("num_frames %d is below the product floor of 9" % frames)
+-    if (frames - 1) % 8:
+-        errors.append("num_frames %d is not 8n+1" % frames)
+-    if frames > SOURCE_MAX_FRAMES:
+-        errors.append("num_frames %d exceeds the source clip's %d frames"
+-                      % (frames, SOURCE_MAX_FRAMES))
++    # T8 (2026-09-14): a CHAIN point carries ``clips``, not ``num_frames``, so the
++    # single-shot frame rules below used to fail it on ``num_frames 0`` and every
++    # chain point in the plan came out red.  The rules that actually apply to a
++    # chain are the PRODUCT's own, re-derived here from api/models.py:
++    #   * 2..24 clips           (GenerateChainRequest.clips min_length/max_length
++    #                            is 1..24, and the two-clip floor is the validator
++    #                            at :1289-1291 for a chain with no source video --
++    #                            which is this campaign's shape)
++    #   * each clip 8n+1 and inside [9, 481]        (ChainClip.num_frames, :678)
++    #   * the clips' total <= MAX_CHAIN_TOTAL_PIXEL_FRAMES == 24 x 481 == 11544
++    #                                                        (api/models.py:664)
++    if kind == "chain":
++        clips = point.get("clips") or []
++        if point.get("num_frames") is not None:
++            errors.append("a chain point declares clips, not num_frames")
++        if not 2 <= len(clips) <= 24:
++            errors.append("chain has %d clip(s); the product takes 2..24"
++                          % len(clips))
++        total = 0
++        for i, clip in enumerate(clips):
++            n = int(clip.get("num_frames") or 0)
++            total += n
++            if not 9 <= n <= 481:
++                errors.append("clips[%d].num_frames %d is outside [9, 481]" % (i, n))
++            if (n - 1) % 8:
++                errors.append("clips[%d].num_frames %d is not 8n+1" % (i, n))
++        if total > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
++            errors.append("chain total %d pixel frames exceeds the product cap %d"
++                          % (total, MAX_CHAIN_TOTAL_PIXEL_FRAMES))
++        # so the row's geometry string reads as the timeline, not as "0f"
++        frames = total
++    else:
++        if frames < 9:
++            errors.append("num_frames %d is below the product floor of 9" % frames)
++        if (frames - 1) % 8:
++            errors.append("num_frames %d is not 8n+1" % frames)
++        if frames > SOURCE_MAX_FRAMES:
++            errors.append("num_frames %d exceeds the source clip's %d frames"
++                          % (frames, SOURCE_MAX_FRAMES))
+ 
+     if kind == "outpaint":
+         op = point.get("outpaint") or {}
+@@ -2219,12 +2364,21 @@
+         warnings.append("prompt not pinned; the engine-default prompt will be used")
+     if point.get("base_model") not in ("LTX23", "LTX25"):
+         errors.append("base_model %r is not LTX23/LTX25" % point.get("base_model"))
++    # T5b (2026-09-14): on a campaign that swaps the transformer, "which GGUF was
++    # this point measured on" is part of the point, not of the session.  An
++    # undeclared point is an ERROR and not a warning: it would run against
++    # whatever happens to be loaded and its reading could not be attributed
++    # afterwards.  ("default" is the explicit way to name the official weights.)
++    if not point.get("transformer"):
++        errors.append("transformer is not declared (name the registered GGUF, or "
++                      "'default' for the official weights)")
+ 
+     counts = token_counts(point)
+     accel = dict(DEFAULT_ACCEL)
+     accel.update(point.get("accel") or {})
+     row = {
+         "label": label, "kind": kind, "base_model": point.get("base_model"),
++        "transformer": point.get("transformer"),          # T5b
+         "geometry": "%dx%d/%df" % (width, height, frames),
+         "stage2_tokens": counts["stage2_tokens"],
+         "stage2_latent_frames": counts["stage2_latent_frames"],
+@@ -2328,11 +2482,21 @@
+         say("WARNING: pipeline_loaded=%s -- the idle baseline should be taken WITH "
+             "the model loaded" % (status and status.get("pipeline_loaded")))
+     luid = discover_luid(refresh=args.refresh_luid)["chosen_luid"]
+-    idle_dir = CALIB_DIR / "idle"
++    # T7 (2026-09-14): the idle floor is a property of WHAT IS RESIDENT, and a
++    # 19.6 GB Q6_K transformer does not rest where a 14.7 GB Q4_K one does.  The
++    # raw samples therefore go into a directory named after the base model AND
++    # the transformer, so the Q6_K floor and the Q4_K control floor of phase P8
++    # cannot overwrite each other.  (calibration.json itself stays at one path:
++    # it is "the floor in force right now", which is why P8's idle-calib is the
++    # point after which no Q6_K run may be reanalysed.)
++    base_model = status and status.get("base_model")
++    transformer = active_transformer()
++    transformer_tag = re.sub(r"[^0-9A-Za-z]", "_", transformer or "unknown")
++    idle_dir = CALIB_DIR / ("idle_%s_%s" % (base_model, transformer_tag))
+     idle_dir.mkdir(parents=True, exist_ok=True)
+     monitors = Monitors(idle_dir, luid, tail_logs=False)
+-    say("idle calibration: %s min, LUID %s, base_model=%s"
+-        % (args.minutes, luid, status and status.get("base_model")))
++    say("idle calibration: %s min, LUID %s, base_model=%s transformer=%s"
++        % (args.minutes, luid, base_model, transformer))
+     monitors.start()
+     time.sleep(float(args.minutes) * 60.0)
+     monitors.stop(grace=0.5)
+@@ -2343,7 +2507,8 @@
+         "source_dir": str(idle_dir),
+         "generated_at": now_iso(),
+         "minutes": float(args.minutes),
+-        "base_model": status and status.get("base_model"),
++        "base_model": base_model,
++        "transformer": transformer,
+         "pipeline_loaded": status and status.get("pipeline_loaded"),
+         "luid": luid,
+         "wddm_samples": len(wddm),
+@@ -2389,7 +2554,11 @@
+         except Exception:
+             continue
+         latest[rec.get("label")] = rec
+-    cols = ["label", "base", "geometry", "status", "stage2 s", "sec/token", "decode s",
++    # T6d (2026-09-14): "transformer" sits next to "base" -- this campaign's
++    # whole point is that two rows can share a base model and still be two
++    # different models.
++    cols = ["label", "base", "transformer", "geometry", "status", "stage2 s",
++            "sec/token", "decode s",
+             "chunks", "sec/chunk", "ded peak MB", "shr peak s2 MB", "rx med s2",
+             "a1", "a2", "a3", "a4", "verdict",
+             # judgement protocol v2
+@@ -2417,6 +2586,7 @@
+         residual = (round(observed - predicted, 1)
+                     if (observed is not None and predicted is not None) else None)
+         cells = [label, rec.get("base_model"),
++                 (rec.get("used") or {}).get("transformer_used"),
+                  "%sx%s/%sf" % (geo.get("width"), geo.get("height"), frames),
+                  rec.get("status"), s2.get("seconds"), s2.get("sec_per_token"),
+                  dec.get("seconds"), dec.get("chunks"), dec.get("sec_per_chunk"),
+@@ -2455,11 +2625,18 @@
+ 
+     p = sub.add_parser("load")
+     p.add_argument("--base-model", required=True, choices=["LTX23", "LTX25"])
++    p.add_argument("--transformer", default=None,
++                   help="registered transformer NAME to select (T2, 2026-09-14); "
++                        "omit to leave the current selection alone, pass "
++                        "'default' for the official GGUF")
+     p.add_argument("--timeout", default=1800)
+     p.set_defaults(func=cmd_load)
+ 
+     p = sub.add_parser("restore-state")
+     p.add_argument("--base-model", default=None, choices=["LTX23", "LTX25"])
++    p.add_argument("--transformer", default=None,
++                   help="override the transformer to restore; the default is "
++                        "whatever original_state.json remembered (T2/T4)")
+     p.add_argument("--timeout", default=1800)
+     p.set_defaults(func=cmd_restore_state)
+ 
+
+==================== batch_table.py  (T8 display fallback only) ====================
+--- ../comfort-calib-2026-09-05/batch_table.py	2026-09-04 12:17:34.060075900 +0900
++++ batch_table.py	2026-09-14 09:31:20.443797800 +0900
+@@ -31,6 +31,18 @@
+             return None
+     return d
+ 
++def frames_of(r):
++    """T8 (2026-09-14): a chain point's run.json has geometry.num_frames = null
++    (it carries ``clips``), so the geometry cell read "1280x768/Nonef".  Fall
++    back to the clips' total -- the same number cmd_report already derives."""
++    n = g(r, "geometry", "num_frames")
++    if n is None:
++        clips = g(r, "geometry", "clips") or []
++        if clips:
++            n = sum(c["num_frames"] for c in clips)
++    return n
++
++
+ def ratio(a, b):
+     return None if (a is None or not b) else round(a / b, 3)
+ 
+@@ -49,7 +61,7 @@
+     b = recs.get(g(r, "baseline", "label"))
+     row = {
+         "label": L,
+-        "geom": "%sx%s/%sf" % (g(r,"geometry","width"), g(r,"geometry","height"), g(r,"geometry","num_frames")),
++        "geom": "%sx%s/%sf" % (g(r,"geometry","width"), g(r,"geometry","height"), frames_of(r)),
+         "stage2_tokens": g(r,"tokens","stage2_tokens"),
+         "latent_frames": g(r,"tokens","stage2_latent_frames"),
+         "status": r.get("status"), "error": r.get("error"),
+
+==================== make_results.py  (T6d column, T8 display fallback) ====================
+--- ../comfort-calib-2026-09-05/make_results.py	2026-09-05 02:01:34.562566900 +0900
++++ make_results.py	2026-09-14 09:31:16.147881500 +0900
+@@ -87,6 +87,17 @@
+ 
+ 
+ # --------------------------------------------------------------------------
++def frames_of(r):
++    """T8 (2026-09-14): a chain point has geometry.num_frames = null and carries
++    ``clips`` instead; show the clips' total rather than "None"."""
++    n = g(r, "geometry", "num_frames")
++    if n is None:
++        clips = g(r, "geometry", "clips") or []
++        if clips:
++            n = sum(c["num_frames"] for c in clips)
++    return n
++
++
+ def section_points(recs):
+     print("### 全計測点\n")
+     print("| ラベル | 系統 | 幾何 | トークン | 状態 | v1 | v2 | **v3′** | 加速照合 |")
+@@ -95,7 +106,7 @@
+         print("| `%s` | %s | %s | %s | %s | %s | %s | **%s** | %s |" % (
+             L, r.get("base_model"),
+             "%sx%s/%sf" % (g(r, "geometry", "width"), g(r, "geometry", "height"),
+-                           g(r, "geometry", "num_frames")),
++                           frames_of(r)),
+             fmt(g(r, "tokens", "stage2_tokens")),
+             r.get("status"), r.get("verdict"), r.get("verdict_v2"),
+             r.get("verdict_v3prime"),
+@@ -107,7 +118,10 @@
+ 
+ def section_accel(recs):
+     print("### 加速が実際に効いたか（`metadata.json` の `*_used`）\n")
+-    keys = ["attention_used", "block_swap_prefetch_used", "keep_resident_used",
++    # T6d (2026-09-14): "transformer" leads the row -- on this campaign it is
++    # the variable under test, and the accel knobs are the constants.
++    keys = ["transformer_used",
++            "attention_used", "block_swap_prefetch_used", "keep_resident_used",
+             "fused_gguf_dequant_kernel_used", "vae_mode_used",
+             "keep_resident_embeddings_used"]
+     print("| ラベル | " + " | ".join(k.replace("_used", "") for k in keys) + " | ok |")

@@ -49,16 +49,21 @@ const char kItemAspectJp[] =
 const char kMoveLinearJp[] =
     "\xe7\x9b\xb4\xe7\xb7\x9a\xe7\xa7\xbb\xe5\x8b\x95";  // "linear move"
 // ===========================================================================
-// PROVISIONAL - NOT YET CAPTURED ON THE REAL DEVICE (section 3-55 Inpainting)
-// (ledger wording: "jikki saishu machi (kari)" - awaiting an on-device capture)
+// CONFIRMED BY AN ON-DEVICE CAPTURE, 2026-09-14 (section 3-55 Inpainting)
 //
 // The whitening effect the mask copy carries: AviUtl2's "invert" effect with
-// its "luma invert" checkbox switched on. Everything the two names below are
-// based on is second-hand until the owner saves one .object carrying this
-// effect, so they live in THIS ONE BLOCK and nothing else in the file reads
-// them except WhiteningEffectBlockLines() at the bottom - swapping them for the
-// capture touches no logic and no test expectation outside the two cases that
-// are named "provisional".
+// its "luma invert" checkbox switched on. The owner saved two .object files
+// carrying it on the real device and the two names below are byte-for-byte
+// what the host wrote; they are no longer provisional. The capture is
+// transcribed verbatim in Docs/SDK_REFERENCE.md section 16 (k), and
+// native/tests/test_alias_util.cpp keeps a record-style case built from the
+// same bytes.
+//
+// The capture also shows the four sibling items the host writes beside the one
+// that matters ("vertical flip" / "horizontal flip" / "hue invert" / "alpha
+// invert", all "=0"). We still write ONLY the two meaningful lines and leave
+// every default to the host, exactly as BuildMediaObjectAlias does - the
+// capture confirms that is enough, so the two-line shape does not change.
 // Neither escape below is followed by a hex digit (see the note above), so
 // neither can swallow a neighbouring character.
 const char kEffectInvertJp[] =

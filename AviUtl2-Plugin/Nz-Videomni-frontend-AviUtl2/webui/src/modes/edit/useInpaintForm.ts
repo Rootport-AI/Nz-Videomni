@@ -98,6 +98,17 @@ export interface UseInpaintFormDeps {
    * 送信は画面が持つので、両方を知っているのはここしかない。
    */
   submitting?: boolean | undefined;
+  /**
+   * マスクの描画・送信が失敗したときに、そのコードを 1 回だけ知らせる（F3）。
+   *
+   * 文言への写像はしない —— 受け取った `EditScreen` がトースト
+   * （`shell/ToastContext`）へ流す。**コールバックにしてある理由**は、失敗が
+   * `await` の向こう側で起きるため: 画面が `renderAndUploadMask()` の戻り値を
+   * 待ってからフックの `maskErrorCode` を読むと、その時点のクロージャは古い
+   * 描画のもので、まだ空文字のことがある。押し出す側（ここ）から知らせれば、
+   * その取り違えが構造的に起きない。
+   */
+  onMaskError?: ((code: string) => void) | undefined;
 }
 
 export interface UseInpaintFormResult {
@@ -155,7 +166,8 @@ export interface UseInpaintFormResult {
   maskPhase: InpaintMaskPhase;
   maskProgress: { index: number; total: number } | null;
   /** 直近のマスク失敗のエラーコード（`""` ＝ 失敗していない）。文言への写像は
-   * パネルの仕事（`useObjectTracking` と同じ分担）。 */
+   * `EditScreen` の仕事（`useObjectTracking` と同じ分担）。F3 以降、パネルは
+   * これを描かない —— 案内はトーストで出る。 */
   maskErrorCode: string;
 
   validityReasons: InpaintReasonCode[];
@@ -373,6 +385,17 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   const [maskProgress, setMaskProgress] = useState<{ index: number; total: number } | null>(null);
   const [maskErrorCode, setMaskErrorCode] = useState("");
 
+  // 最新のコールバックを ref で持つ（`useGenerationSubmit` と同じ作法）。呼び手が
+  // 毎描画あたらしい関数を渡しても `renderAndUploadMask` の同一性が揺れない。
+  const onMaskErrorRef = useRef(deps.onMaskError);
+  onMaskErrorRef.current = deps.onMaskError;
+  /** 失敗を 1 か所から書く: 状態（パネルは読まないが通しテストが見る）と、
+   * 画面のトースト（F3）。片方だけ書き忘れる余地を残さない。 */
+  const failMask = useCallback((code: string) => {
+    setMaskErrorCode(code);
+    onMaskErrorRef.current?.(code);
+  }, []);
+
   const renderAndUploadMask = useCallback(async (): Promise<string | null> => {
     if (!partialFilter || !placedWindow) return null;
     setMaskErrorCode("");
@@ -405,21 +428,21 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
           ? ((body as Record<string, unknown>).video_id as string)
           : null;
       if (!id) {
-        setMaskErrorCode("MASK_UPLOAD_FAILED");
+        failMask("MASK_UPLOAD_FAILED");
         return null;
       }
       return id;
     } catch (err) {
       // 3 つの native コード（`MASK_SEED_INVALID`/`MASK_BUSY`/`MASK_FAILED`）は
-      // パネルがそれぞれの文言へ写す。ここは運ぶだけ。
-      setMaskErrorCode(err instanceof BridgeError ? String(err.code) : "MASK_FAILED");
+      // 画面がそれぞれの文言へ写してトーストに出す。ここは運ぶだけ。
+      failMask(err instanceof BridgeError ? String(err.code) : "MASK_FAILED");
       return null;
     } finally {
       unsubscribe();
       setMaskPhase("idle");
       setMaskProgress(null);
     }
-  }, [bridge, partialFilter, placedWindow]);
+  }, [bridge, failMask, partialFilter, placedWindow]);
 
   // 保管庫へ「動いている最中」を知らせる。`AppShell` はこれを読んで、途中に
   // 飛び込んできた右クリックを断る（敵対的レビュー m1）。書き手はこの 1 本だけ。
@@ -438,11 +461,16 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     if (uploadStatus === "uploading") validityReasons.push("sourceUploading");
     else if (uploadStatus === "error") validityReasons.push("sourceUploadFailed");
     if (trimFailed) validityReasons.push("sourceTrimFailed");
-    if (projectWidth <= 0 || projectHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
-      validityReasons.push("mediaInfoUnknown");
-    } else if (projectWidth !== targetWidth || projectHeight !== targetHeight) {
-      // D5: サーバーも同じ検査をして 422 を返す。伸縮は**どちらの側でも**しない。
-      validityReasons.push("resolutionMismatch");
+    // 解像度の突き合わせは**部分フィルタも届いてから**（F2・実機ゲート G3）。
+    // 部分フィルタが無い間は「まず右クリックしてください」だけが要るのであって、
+    // そこに解像度の話を重ねると、まだ何もしていない人に 2 行の説教が出る。
+    if (partialFilter) {
+      if (projectWidth <= 0 || projectHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+        validityReasons.push("mediaInfoUnknown");
+      } else if (projectWidth !== targetWidth || projectHeight !== targetHeight) {
+        // D5: サーバーも同じ検査をして 422 を返す。伸縮は**どちらの側でも**しない。
+        validityReasons.push("resolutionMismatch");
+      }
     }
   }
   if (partialFilter && target && (!placedWindow || !mapping?.ok || mapping.frameCount !== numFrames)) {

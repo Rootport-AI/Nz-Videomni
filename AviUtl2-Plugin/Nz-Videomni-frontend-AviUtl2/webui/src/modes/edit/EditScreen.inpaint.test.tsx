@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { ToastProvider } from "../../shell/ToastContext";
+import { Toasts } from "../../shell/Toasts";
 import { en } from "../../i18n/strings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import {
@@ -183,16 +185,22 @@ function renderInpaint(
 ) {
   const nativeBridge = createBridge(options);
   const onJobSubmitted = vi.fn();
+  // F3: マスクの失敗はパネルの 1 行ではなくトーストで出る。本番の入れ子
+  // （`AppShell`）と同じく `ToastProvider` で包み、スタックそのもの
+  // （`shell/Toasts.tsx`）も一緒に出して、実際に読める文字列として確かめる。
   const view = render(
     <LanguageProvider>
-      <EditScreen
-        {...(intent ? { initialIntent: intent } : {})}
-        prompt="a quiet street"
-        nativeBridge={nativeBridge}
-        onJobSubmitted={onJobSubmitted}
-        engineFamily="ltx"
-        {...(subTabsDisabled ? { subTabsDisabled } : {})}
-      />
+      <ToastProvider>
+        <EditScreen
+          {...(intent ? { initialIntent: intent } : {})}
+          prompt="a quiet street"
+          nativeBridge={nativeBridge}
+          onJobSubmitted={onJobSubmitted}
+          engineFamily="ltx"
+          {...(subTabsDisabled ? { subTabsDisabled } : {})}
+        />
+        <Toasts />
+      </ToastProvider>
     </LanguageProvider>,
   );
   const request = nativeBridge.request as ReturnType<typeof vi.fn>;
@@ -392,8 +400,14 @@ describe("EditScreen — Inpainting の Generate", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: en.edit.inpainting.generateButton }));
 
-    // 「もう一度右クリックしてください」が出て、そこで止まる。
-    await waitFor(() => expect(within(panelEl()).getByText(en.edit.inpainting.seedGone)).toBeTruthy());
+    // 「もう一度右クリックしてください」が**トースト**で出て、そこで止まる
+    // （F3。実機ゲート G9 でパネルの 1 行は見落とされた）。
+    await waitFor(() =>
+      expect(within(document.querySelector<HTMLElement>(".toast-stack")!).getByText(en.edit.inpainting.seedGone))
+        .toBeTruthy(),
+    );
+    // パネル側には残っていない（案内は 1 か所だけ）。
+    expect(within(panelEl()).queryByText(en.edit.inpainting.seedGone)).toBeNull();
     expect(request.mock.calls.some(([m]) => m === "timeline.insertProvisional")).toBe(false);
     expect(generateBody(request)).toBeUndefined();
     expect(onJobSubmitted).not.toHaveBeenCalled();
@@ -443,14 +457,15 @@ describe("EditScreen — Inpainting の Generate", () => {
     expect(slider.getAttribute("list")).toBe(panel.querySelector("datalist")!.id);
   });
 
-  it("shows the four prompt notes the spike settled on, in order", () => {
+  it("shows the three prompt notes the spike settled on, in order", () => {
+    // F4: 「マスクの外に既にある物を書くと複製される恐れ」の 1 本は、実機ゲート
+    // 後のオーナー裁定で落とした（en/ja 両方の文言ごと削除）。
     seedBothSlots();
     renderInpaint();
     const notes = within(panelEl()).getByRole("list");
     expect(within(notes).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       en.edit.inpainting.promptNotes.coverWholeSubject,
       en.edit.inpainting.promptNotes.writePositively,
-      en.edit.inpainting.promptNotes.duplication,
       en.edit.inpainting.promptNotes.blurIgnored,
     ]);
   });

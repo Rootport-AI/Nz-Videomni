@@ -48,18 +48,6 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
     ? t.windowReadout(form.window.windowStart + 1, form.window.windowEnd + 1)
     : null;
 
-  /** native の 3 コードを 1 行の文言へ。`useObjectTracking` と同じ分担で、
-   * フックはコードを運ぶだけ・写像はここ。知らないコードは総称の 1 行へ落ちる
-   * （黙って消さない）。 */
-  const maskNote =
-    form.maskErrorCode === ""
-      ? null
-      : form.maskErrorCode === "MASK_SEED_INVALID"
-        ? t.seedGone
-        : form.maskErrorCode === "MASK_BUSY"
-          ? t.maskBusy
-          : t.maskFailed;
-
   return (
     <section className="edit-panel inpaint-panel">
       <h2>{t.heading}</h2>
@@ -200,17 +188,14 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
           {t.maskUploading}
         </p>
       )}
-      {maskNote && <p className="warning-banner warning-banner-mild">{maskNote}</p>}
-
-      {/* 生成前の注意。4 本とも常に出す —— どれも「押したあとで気づく」類の話
+      {/* 生成前の注意。3 本とも常に出す —— どれも「押したあとで気づく」類の話
           （`RetakePanel` と同じ判断・同じ並びの位置）。上 2 本は段0のスパイクで
-          分かった事実で、残り 2 本は元からの注意。 */}
+          分かった事実で、最後の 1 本は元からの注意。 */}
       <div className="field">
         <span className="field-label">{t.noticesHeading}</span>
         <ul className="retake-notices">
           <li className="field-hint">{t.promptNotes.coverWholeSubject}</li>
           <li className="field-hint">{t.promptNotes.writePositively}</li>
-          <li className="field-hint">{t.promptNotes.duplication}</li>
           <li className="field-hint">{t.promptNotes.blurIgnored}</li>
         </ul>
       </div>

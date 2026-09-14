@@ -439,16 +439,16 @@ struct TimelineMenuItem {
 // clapper, U+1F5BC framed picture, U+1F3B5 musical note, U+1F4DD memo,
 // U+2728 sparkles, U+1F4F7 camera, U+2B07 down arrow (W2/W3 quick-insert).
 //
-// ORDER (owner, 2026-08-09): the host renders the submenu in exactly this array
-// order, so the array IS the menu order. The seven Video entries come first as
-// one block - Outpainting and Retake were appended at the end when they were
-// added, and have now been moved up into it - then the three Image entries,
-// then the two audio entries, text, and the quick-insert. ONLY the order was
-// changed: every name_key / action / fallback triple is byte-identical to
-// before, so the WebUI's routing table (timeline/menuRouting.ts) and the
-// translation keys in Language/*.NzVideomni.aul2 are untouched. (Keep this comment
-// ASCII - see the file header; a non-ASCII byte anywhere here raises MSVC
-// C4819.)
+// ORDER (owner, 2026-08-09): the host renders the submenu in exactly this
+// array order, so the array IS the menu order. The eight Video entries come
+// first as one block - Outpainting, Retake and (2026-09-14) Inpainting's video
+// entry were appended at the end when they were added and have since been
+// moved up into it - then the three Image entries, then the two audio entries,
+// text, and the quick-insert. ONLY the order was changed: every name_key /
+// action / fallback triple is byte-identical to before, so the WebUI's routing
+// table (timeline/menuRouting.ts) and the translation keys in
+// Language/*.NzVideomni.aul2 are untouched. (Keep this comment ASCII - see the
+// file header; a non-ASCII byte anywhere here raises MSVC C4819.)
 //
 // Ledger 1-16 (long a2v): the two entries sit directly beside the
 // single-shot a2v items they mirror - videoAudioToLongA2v right after
@@ -467,12 +467,17 @@ struct TimelineMenuItem {
 // Object tracking (section 3-54, 16 items): trackObject is appended at the end
 // - it is the only entry that acts on a partial filter rather than on media.
 //
-// Inpainting (section 3-55, 18 items): the two entries are appended after it,
-// in the pair order the user meets them in - the partial filter that becomes
-// the mask first, the video that is re-generated inside it second. The first
-// one shares trackObject's "acts on a partial filter" nature; the second is an
-// ordinary Video entry, deliberately NOT moved up into the Video block, so the
-// pair reads as one feature (owner decision D6, two items).
+// Inpainting (section 3-55, 18 items): the feature needs TWO entries (owner
+// decision D6), and after the 2026-09-14 real-device gate the owner asked for
+// them to be split BY KIND rather than kept side by side as a pair. So
+// inpaintVideo, an ordinary Video entry, sits inside the Video block directly
+// under retakeRange, and inpaintPartialFilter stays at the end next to
+// trackObject - the only other entry that acts on a partial filter. (This
+// supersedes the earlier note here that inpaintVideo was deliberately NOT
+// moved up into the Video block.) ONLY the order changed: every name_key /
+// action / fallback triple is byte-identical, so the WebUI's routing table
+// (timeline/menuRouting.ts) and the translation keys in
+// Language/*.NzVideomni.aul2 are untouched.
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: generate using this video as reference (IC-LoRA)",      "referenceVideo",    &OnMenu_ReferenceVideo },
@@ -481,6 +486,7 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: long a2v from this video's sound",                      "videoAudioToLongA2v", &OnMenu_VideoAudioToLongA2v },
     { L"Nz-Videomni\\\U0001F3AC Video: expand this video's canvas (Outpainting)",              "outpaintVideo",     &OnMenu_OutpaintVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: redo the selected range (Retake)",                      "retakeRange",       &OnMenu_RetakeRange },
+    { L"Nz-Videomni\\\U0001F3AC Video: inpaint this video",                                    "inpaintVideo",      &OnMenu_InpaintVideo },
     { L"Nz-Videomni\\\U0001F5BC Image: generate a video from this image (i2v)",                "imageToVideo",      &OnMenu_ImageToVideo },
     { L"Nz-Videomni\\\U0001F5BC Image: add this image as a keyframe",                          "addImageKeyframe",  &OnMenu_AddImageKeyframe },
     { L"Nz-Videomni\\\U0001F5BC Image: generate a long video from this image (i2v Clip Chain)", "imageToClipChain", &OnMenu_ImageToClipChain },
@@ -491,7 +497,6 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U00002B07 Insert this generated result now",                             "insertProvisionalResult", &OnMenu_InsertProvisionalResult },
     { L"Nz-Videomni\\\U0001F3AF Object tracking (uses a partial filter)",                      "trackObject",       &OnMenu_TrackObject },
     { L"Nz-Videomni\\\U0001F58C Inpainting: use this partial filter as the mask",              "inpaintPartialFilter", &OnMenu_InpaintPartialFilter },
-    { L"Nz-Videomni\\\U0001F3AC Video: inpaint this video",                                    "inpaintVideo",      &OnMenu_InpaintVideo },
 };
 
 const TimelineMenuItem kLayerMenuItems[] = {

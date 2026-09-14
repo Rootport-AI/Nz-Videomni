@@ -357,16 +357,14 @@ std::string ClipAliasFrameBoundaries(const std::string& alias, int max_length);
 // underneath comes out white INSIDE the filter's shape and stays black outside.
 // The returned lines are ready for AppendEffectBlock.
 //
-// PROVISIONAL - PENDING AN ON-DEVICE CAPTURE by the owner. The effect and the
-// item are known to exist (AviUtl2's base-effects group has an "invert" effect
-// carrying a "luma invert" and a "hue invert" checkbox), and a checkbox is
-// known to serialize as "<name>=0" / "<name>=1" from the captured partial
-// filter's own "invert mask" line - but no .object carrying this effect has
-// been captured yet, so the item ORDER and any further default lines AviUtl2
-// may write are unknown. Only the two lines that carry meaning are written and
+// CONFIRMED BY AN ON-DEVICE CAPTURE (2026-09-14, transcribed in
+// Docs/SDK_REFERENCE.md section 16 (k)): the host writes the effect as six
+// lines - the effect name, "luma invert", and four sibling checkboxes
+// ("vertical flip" / "horizontal flip" / "hue invert" / "alpha invert") that
+// all sit at 0. Only the two lines that carry meaning are written here and
 // everything else is left to the host's defaults, exactly as
-// BuildMediaObjectAlias does. The bytes live in ONE marked block in
-// alias_util.cpp so swapping them for the capture touches no logic.
+// BuildMediaObjectAlias does; the capture is what confirms those defaults are
+// the ones we want. The bytes live in ONE marked block in alias_util.cpp.
 std::vector<std::string> WhiteningEffectBlockLines();
 
 }  // namespace nzvideomni

@@ -98,7 +98,7 @@ TEST_CASE("the pinned header matches what the host itself serializes") {
     // value is an INCLUSIVE end frame, so a 121-frame clip must read
     // "frame=0,120" - byte-identical to what AviUtl2 writes for the SAME 121-frame
     // material dropped onto the timeline (real-device capture
-    // data\Alias\R4_d_and_d.object; Docs\SDK_REFERENCE.md section 16 (h)).
+    // dataAlias\R4_d_and_d.object; Docs\SDK_REFERENCE.md section 16 (h)).
     // Writing "frame=0,121" - the old behaviour, captured in R4_insert.object -
     // produced a 122-frame object, one frame longer than the video.
     const std::string in = "[Object]\n[Object.0]\neffect.name=x\n";
@@ -898,9 +898,11 @@ std::string MosaicBlock(const std::string& eol = "\r\n") {
     return a;
 }
 
-// The PROVISIONAL whitening block, spelled out with ITS OWN copies of the
-// bytes - like every other name in this file, so a drift in alias_util.cpp's
-// escapes fails the case instead of hiding behind a shared constant.
+// The two-line whitening block the plugin writes, spelled out with ITS OWN
+// copies of the bytes - like every other name in this file, so a drift in
+// alias_util.cpp's escapes fails the case instead of hiding behind a shared
+// constant. Both names are the owner's 2026-09-14 on-device capture
+// (Docs/SDK_REFERENCE.md section 16 (k)); they are no longer provisional.
 const char* kInvertJp = "\xe5\x8f\x8d\xe8\xbb\xa2";  // "invert" effect
 const char* kLumaInvertJp =
     "\xe8\xbc\x9d\xe5\xba\xa6\xe5\x8f\x8d\xe8\xbb\xa2";  // "luma invert" item
@@ -913,6 +915,39 @@ std::string WhiteningBlock(const std::string& eol = "\r\n") {
     a += kInvertJp;
     a += eol;
     a += std::string(kLumaInvertJp) + "=1";
+    a += eol;
+    return a;
+}
+
+// The same effect EXACTLY as the real device saved it: six lines, of which the
+// plugin writes two (the effect name and the checkbox) and lets the host fill
+// in the other four. The four sibling names live only here, with their own
+// copies of the bytes, for the same reason as every other name in this file.
+const char* kFlipVJp =
+    "\xe4\xb8\x8a\xe4\xb8\x8b\xe5\x8f\x8d\xe8\xbb\xa2";  // "vertical flip"
+const char* kFlipHJp =
+    "\xe5\xb7\xa6\xe5\x8f\xb3\xe5\x8f\x8d\xe8\xbb\xa2";  // "horizontal flip"
+const char* kHueInvertJp =
+    "\xe8\x89\xb2\xe7\x9b\xb8\xe5\x8f\x8d\xe8\xbb\xa2";  // "hue invert"
+const char* kAlphaInvertJp =
+    "\xe9\x80\x8f\xe6\x98\x8e\xe5\xba\xa6\xe5\x8f\x8d\xe8\xbb\xa2";  // "alpha invert"
+
+std::string CapturedWhiteningBlock(const std::string& eol = "\r\n") {
+    std::string a;
+    a += "[Object.1]";
+    a += eol;
+    a += "effect.name=";
+    a += kInvertJp;
+    a += eol;
+    a += std::string(kFlipVJp) + "=0";
+    a += eol;
+    a += std::string(kFlipHJp) + "=0";
+    a += eol;
+    a += std::string(kLumaInvertJp) + "=1";
+    a += eol;
+    a += std::string(kHueInvertJp) + "=0";
+    a += eol;
+    a += std::string(kAlphaInvertJp) + "=0";
     a += eol;
     return a;
 }
@@ -1067,11 +1102,11 @@ TEST_CASE("ClipAliasFrameBoundaries preserves a BOM and the line-ending style") 
 }
 
 TEST_CASE("the whitening chain turns the captured partial filter into a mask copy "
-          "(provisional constants)") {
+          "(captured constants)") {
     // The whole transform the bridge runs, on the capture with two midpoints and
-    // a mosaic the user stacked on top. PROVISIONAL: the two whitening bytes are
-    // the only part of this expectation that is not backed by a capture - when
-    // the owner saves one, THIS case and its sibling below are what change.
+    // a mosaic the user stacked on top. The two whitening bytes are the owner's
+    // 2026-09-14 capture (Docs/SDK_REFERENCE.md section 16 (k)); the plugin still
+    // writes only those two lines, so this expectation is what it always was.
     const std::string seed =
         CapturedPartialFilter("24,54,80,119", Kf("76,89,89,89"),
                               Kf("-169,-153,-153,-153"), Kf("77,231,207,207"),
@@ -1095,7 +1130,7 @@ TEST_CASE("the whitening chain turns the captured partial filter into a mask cop
 }
 
 TEST_CASE("the whitening chain clips the copy to a short window "
-          "(provisional constants)") {
+          "(captured constants)") {
     // Owner decision D3: a window shorter than the partial filter. The copy has
     // to end with the window, and its keyframes have to end with it too.
     const std::string seed = CapturedPartialFilter(
@@ -1111,11 +1146,67 @@ TEST_CASE("the whitening chain clips the copy to a short window "
     CHECK(alias == clipped + WhiteningBlock());
 }
 
-TEST_CASE("WhiteningEffectBlockLines is the two-line provisional block") {
+TEST_CASE("WhiteningEffectBlockLines is the two-line captured block") {
     const std::vector<std::string> lines = WhiteningEffectBlockLines();
     REQUIRE(lines.size() == 2);
     CHECK(lines[0] == std::string("effect.name=") + kInvertJp);
     CHECK(lines[1] == std::string(kLumaInvertJp) + "=1");
+}
+
+TEST_CASE("the captured whitening effect holds the two lines the plugin writes") {
+    // Record of the on-device capture (2026-09-14): the owner saved two .object
+    // files under data\Alias carrying a partial filter whitened by hand, both
+    // CRLF with no BOM, transcribed in Docs/SDK_REFERENCE.md section 16 (k).
+    // This is the effect block they carry, and it is why the plugin goes on
+    // writing just two lines.
+    const std::string block = CapturedWhiteningBlock();
+
+    // (a) both lines the plugin writes are in the capture, byte for byte and as
+    // WHOLE lines.
+    const std::vector<std::string> written = WhiteningEffectBlockLines();
+    REQUIRE(written.size() == 2);
+    CHECK(Contains(block, "\r\n" + written[0] + "\r\n"));
+    CHECK(Contains(block, "\r\n" + written[1] + "\r\n"));
+    // (b) the other four items are the host's own defaults - all four at 0 -
+    // which is exactly why the plugin leaves them out.
+    CHECK(Contains(block, "\r\n" + std::string(kFlipVJp) + "=0\r\n"));
+    CHECK(Contains(block, "\r\n" + std::string(kFlipHJp) + "=0\r\n"));
+    CHECK(Contains(block, "\r\n" + std::string(kHueInvertJp) + "=0\r\n"));
+    CHECK(Contains(block, "\r\n" + std::string(kAlphaInvertJp) + "=0\r\n"));
+    // Six item lines after the section header, and nothing else.
+    size_t line_count = 0;
+    for (size_t at = block.find("\r\n"); at != std::string::npos;
+         at = block.find("\r\n", at + 2)) {
+        ++line_count;
+    }
+    CHECK(line_count == 7);
+    // The first capture in full - 341 bytes on disk, no BOM.
+    CHECK((CapturedPartialFilter("0,224", "0", "0", "100", "0.00") + block).size() ==
+          341u);
+}
+
+TEST_CASE("the captured whitened partial filter feeds the mask-copy chain") {
+    // The second capture of 2026-09-14 ("frame= absolute or relative", 348 bytes
+    // on disk): the same partial filter with TWO midpoints, whitened by hand.
+    const std::string filter_only =
+        CapturedPartialFilter("0,75,146,224", "0", "0", "100", "0.00");
+    const std::string captured = filter_only + CapturedWhiteningBlock();
+    CHECK(captured.size() == 348u);
+
+    // KeepOnlyFirstEffectBlock drops the owner's hand-added whitening block, the
+    // way it drops any effect stacked on the partial filter.
+    CHECK(KeepOnlyFirstEffectBlock(captured) == filter_only);
+    // The boundaries the host SAVED start at 0, so normalising is a no-op here.
+    // A saved file cannot say which form get_object_alias returns at runtime,
+    // which is the whole reason the plugin normalises either way.
+    CHECK(NormalizeAliasFrameBoundariesToRelative(captured) == captured);
+    // The whole chain on the real capture: the hand-added block goes, the
+    // plugin's own two-line one takes its place, the midpoints survive.
+    const std::string out = AppendEffectBlock(
+        KeepOnlyFirstEffectBlock(NormalizeAliasFrameBoundariesToRelative(captured)),
+        WhiteningEffectBlockLines());
+    CHECK(out == filter_only + WhiteningBlock());
+    CHECK(Contains(out, "frame=0,75,146,224"));
 }
 
 TEST_CASE("ClipAliasFrameBoundaries leaves a mismatched value row alone") {

@@ -10,6 +10,7 @@ import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { useToasts } from "../../shell/ToastContext";
 import { useStrings } from "../../i18n/LanguageContext";
 import { JobLedger } from "../../jobs/JobLedger";
 import { useJobsContext } from "../../jobs/JobsContext";
@@ -298,6 +299,33 @@ export function EditScreen({
   // `useInpaintForm` の 1 本だけにしたいので、マスクの進み具合と送信の
   // 進み具合が合流する場所をそこに揃える。下の 3 つは `inpaintForm` を
   // 参照しない（`inpaintBindRef` は ref 越しに読む）ので、この順序で作れる。
+  const ti = strings.edit.inpainting;
+  /**
+   * マスクの失敗はトーストで出す（F3・実機ゲート G9）。
+   *
+   * パネルの中の 1 行ではなく**アプリ共通のトースト**にしたのは、Generate を
+   * 押した人の目がそのとき生成列（右）にあるため —— 左のパネルの下の方に出た
+   * 注意文は、実機で素通りされた。文言は既存のまま動かさない。
+   *
+   * `MASK_SEED_INVALID`（部分フィルタが消えていた）と `MASK_BUSY`（追尾と
+   * 同じスロットが埋まっている）は、やり直せば済む話なので `warning`。
+   * 残り（`MASK_UPLOAD_FAILED`／`MASK_FAILED`、および知らないコード）は
+   * `error` で、文言は総称の 1 行へ落ちる（黙って消さない）。
+   */
+  const toasts = useToasts();
+  const onInpaintMaskError = useCallback(
+    (code: string) => {
+      if (code === "MASK_SEED_INVALID") {
+        toasts.push({ kind: "warning", message: ti.seedGone });
+      } else if (code === "MASK_BUSY") {
+        toasts.push({ kind: "warning", message: ti.maskBusy });
+      } else {
+        toasts.push({ kind: "error", message: ti.maskFailed });
+      }
+    },
+    [toasts, ti],
+  );
+
   const inpaintBindRef = useRef({ numFrames: 0, genFps: 0, displayText: "", textPrefix: "" });
   const onInpaintSubmitted = useCallback(
     async (jobId: string) => {
@@ -330,6 +358,7 @@ export function EditScreen({
     engineFamily,
     acceleration,
     submitting: inpaintSubmitting,
+    onMaskError: onInpaintMaskError,
   });
   inpaintBindRef.current = {
     numFrames: inpaintForm.placement?.numFrames ?? 0,
@@ -353,7 +382,6 @@ export function EditScreen({
       inpaintForm.slots.target?.item.mediaHeight,
     ],
   );
-  const ti = strings.edit.inpainting;
 
   /**
    * 右クリックが来たらサブタブを Inpainting へ寄せる（敵対的レビュー M2/M3）。

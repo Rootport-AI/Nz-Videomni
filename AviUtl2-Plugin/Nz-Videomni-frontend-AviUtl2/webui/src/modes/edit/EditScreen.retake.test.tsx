@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { ToastProvider } from "../../shell/ToastContext";
 import { en } from "../../i18n/strings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
@@ -154,12 +155,14 @@ function renderRetake(intent: GenerationPrefill | null = RETAKE_INTENT, options:
   const onJobSubmitted = vi.fn();
   const view = render(
     <LanguageProvider>
-      <EditScreen
-        {...(intent ? { initialIntent: intent } : {})}
-        prompt="a cat"
-        nativeBridge={nativeBridge}
-        onJobSubmitted={onJobSubmitted}
-      />
+      <ToastProvider>
+        <EditScreen
+          {...(intent ? { initialIntent: intent } : {})}
+          prompt="a cat"
+          nativeBridge={nativeBridge}
+          onJobSubmitted={onJobSubmitted}
+        />
+      </ToastProvider>
     </LanguageProvider>,
   );
   const request = nativeBridge.request as ReturnType<typeof vi.fn>;

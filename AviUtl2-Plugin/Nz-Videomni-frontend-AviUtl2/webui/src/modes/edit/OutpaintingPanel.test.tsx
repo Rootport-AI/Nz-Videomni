@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { ToastProvider } from "../../shell/ToastContext";
 import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
@@ -135,15 +136,17 @@ const OUTPAINT_TAB_INTENT: GenerationPrefill = {
 function renderPanel(bridge: NativeBridge, options: RenderOptions = {}) {
   render(
     <LanguageProvider>
-      <div role="tabpanel">
-        <EditScreen
-          nativeBridge={bridge}
-          initialIntent={options.initialIntent ?? OUTPAINT_TAB_INTENT}
-          prompt={options.prompt}
-          onJobSubmitted={options.onJobSubmitted}
-          {...(options.acceleration ? { acceleration: options.acceleration } : {})}
-        />
-      </div>
+      <ToastProvider>
+        <div role="tabpanel">
+          <EditScreen
+            nativeBridge={bridge}
+            initialIntent={options.initialIntent ?? OUTPAINT_TAB_INTENT}
+            prompt={options.prompt}
+            onJobSubmitted={options.onJobSubmitted}
+            {...(options.acceleration ? { acceleration: options.acceleration } : {})}
+          />
+        </div>
+      </ToastProvider>
     </LanguageProvider>,
   );
   return within(screen.getByRole("tabpanel"));

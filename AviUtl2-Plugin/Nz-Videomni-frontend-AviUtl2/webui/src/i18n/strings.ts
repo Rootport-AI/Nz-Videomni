@@ -354,13 +354,14 @@ export const en = {
     inpainting: {
       heading: "Inpainting",
       summary:
-        "Repaints only what is inside a 部分フィルタ (partial filter) box, leaving the rest of the picture untouched. Right-click the partial filter and the video on the timeline — either order — to send them here.",
+        "Repaints only what is inside a 部分フィルタ (partial filter) box, leaving the rest of the picture untouched. Right-click the partial filter and the video to repaint on the timeline and send each of them to this screen. (To place a partial filter: right-click the timeline → Add media object → Screen effects → Partial filter.)",
       /** The manual-tab-switch state: nothing has been right-clicked yet. */
       idle: "Right-click the partial filter on the timeline and choose “Use this partial filter as the mask”, then right-click the video and choose “Inpaint this video”. Either order works.",
       clearButton: "Clear this inpainting and reset the settings",
 
       partialFilterHeading: "Partial filter (the mask)",
-      partialFilterNone: "No partial filter yet. Right-click one on the timeline.",
+      partialFilterNone:
+        "Supply the partial filter to use as the mask from the timeline's right-click menu.",
       /** The three values the design doc (`Docs/INPAINTING_DESIGN.md` §3.1)
        * settles on: layer, frame range, and the number of 中間点 (midpoints) on
        * the filter. Layer and frame numbers are 1-origin, matching AviUtl2's own
@@ -393,7 +394,7 @@ export const en = {
        * the partial filter is allowed — it just cannot repaint the whole of it.
        * A note, never a block. */
       windowNotCoveredNote:
-        "This window is shorter than the partial filter. The mask outside the window will not be regenerated.",
+        "The number of frames given is shorter than the partial filter. The tail end of the video will not be inpainted.",
 
       /** のりしろ (glue) — a DISABLED mock in this increment (owner decision
        * D4). The controls are placed now so the shape of the finished feature is
@@ -421,19 +422,19 @@ export const en = {
       maskFailed: "The mask could not be created. Please try again.",
 
       noticesHeading: "Before you press Generate",
-      /** The four lines the 段0 spike turned up, in the order they matter while
+      /** The three lines the 段0 spike turned up, in the order they matter while
        * writing a prompt. Lines 1-2 are the spike's own findings (a subject left
        * half outside the box is repainted back INTO the frame from the context
-       * that stayed; a negative instruction does not remove anything), and 3-4
-       * are the standing cautions. Kept as ONE group so the panel renders them
-       * as a list and nothing can drift out of order. */
+       * that stayed; a negative instruction does not remove anything), and the
+       * third is the standing caution about the filter's own blur. Kept as ONE
+       * group so the panel renders them as a list and nothing can drift out of
+       * order. (A fourth line, about naming something visible outside the mask,
+       * was dropped on the owner's call after the 2026-09-14 real-device gate.) */
       promptNotes: {
         coverWholeSubject:
           "Cover the WHOLE subject with the partial filter — down to the legs and the tips of the feet — and take in its shadow, its reflection and where it meets the ground. Anything left outside the box drags the repaint back towards it.",
         writePositively:
           "To remove something, say what should be there INSTEAD, in the positive — “an empty lawn”, not “no people”. Negative instructions have no effect.",
-        duplication:
-          "Naming something that is already visible OUTSIDE the mask in the prompt risks it being duplicated inside.",
         blurIgnored:
           "The partial filter's own “blur” has no effect on the mask (the server puts the edge blending in).",
       },
@@ -2377,12 +2378,12 @@ export const ja: Strings = {
     inpainting: {
       heading: "Inpainting（マスクによる部分再生成）",
       summary:
-        "部分フィルタの枠の内側だけを描き替えます。タイムラインで部分フィルタと対象の動画をそれぞれ右クリックして、この画面へ送ってください（順番はどちらからでも構いません）。",
+        "部分フィルタの枠の内側だけを描き替えます。タイムラインで部分フィルタと対象の動画をそれぞれ右クリックして、この画面へ送ってください。（※部分フィルタの設置方法：タイムラインを右クリック→メディアオブジェクトを追加→画面効果→部分フィルタ）",
       idle: "タイムライン上で部分フィルタを右クリックして「この部分フィルタをマスクに使う」を、動画を右クリックして「この動画をInpaintingする」を選んでください。順番はどちらからでも構いません。",
       clearButton: "Inpaintingを取りやめて設定を戻す",
 
       partialFilterHeading: "マスクに使う部分フィルタ",
-      partialFilterNone: "部分フィルタがまだ届いていません。タイムラインで部分フィルタを右クリックしてください。",
+      partialFilterNone: "マスクに使う部分フィルタを、タイムラインの右クリックメニューから入力してください。",
       partialFilterReadout: (layer: number, startFrame: number, endFrame: number, midpoints: number): string =>
         `レイヤー${layer}／${startFrame}〜${endFrame}フレーム目／中間点${midpoints}個`,
 
@@ -2403,7 +2404,7 @@ export const ja: Strings = {
         `タイムラインの ${startFrame}〜${endFrame} フレーム目を描き替えます。`,
       windowShifted: "部分フィルタが動画の終わりに近いため、窓を頭側へずらしました。",
       windowNotCoveredNote:
-        "この窓は部分フィルタよりも短いため、窓の外にあるマスクは描き替えられません。",
+        "部分フィルタよりも短いフレーム数が指定されています。動画の末尾側はInpaintされません。",
 
       glueHeading: "時間軸の「のりしろ」の有無",
       glueYes: "あり",
@@ -2427,7 +2428,6 @@ export const ja: Strings = {
           "部分フィルタは被写体の全体（脚や足の先まで）を、影・反射・接地面も含めて広めに覆ってください。一部が枠の外に残ると、その文脈に引きずられて描き替わります。",
         writePositively:
           "消したいときは「空の芝生」のように、代わりに描くものを肯定形で書いてください（「人はいない」のような否定の指示は効きません）。",
-        duplication: "マスクの外に既にある物をプロンプトに書くと、複製される恐れがあります。",
         blurIgnored:
           "部分フィルタの「ぼかし」はマスクには効きません（境界のなじみはサーバー側が付けます）。",
       },

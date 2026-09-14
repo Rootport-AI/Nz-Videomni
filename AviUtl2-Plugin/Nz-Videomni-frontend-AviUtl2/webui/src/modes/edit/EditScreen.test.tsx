@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { ToastProvider } from "../../shell/ToastContext";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { EditScreen } from "./EditScreen";
 
@@ -54,9 +55,14 @@ function renderEdit(
   prompt?: string,
   subTabsDisabled?: { retake: boolean; outpainting: boolean; inpainting: boolean },
 ) {
+  // `EditScreen` は Inpainting のマスク失敗をトーストで出すので、`useToasts`
+  // が本番と同じく `ToastProvider` の内側で呼ばれている必要がある（外だと
+  // `ToastContext.tsx` が throw する）。本番の入れ子は `AppShell` と同じ。
   return render(
     <LanguageProvider>
-      <EditScreen initialIntent={initialIntent} prompt={prompt} subTabsDisabled={subTabsDisabled} />
+      <ToastProvider>
+        <EditScreen initialIntent={initialIntent} prompt={prompt} subTabsDisabled={subTabsDisabled} />
+      </ToastProvider>
     </LanguageProvider>,
   );
 }

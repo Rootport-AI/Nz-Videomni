@@ -283,6 +283,39 @@ describe("useInpaintForm — 解像度ゲート（オーナー裁定 D5）", () 
     await waitFor(() => expect(result.current.validityReasons).toContain("mediaInfoUnknown"));
     expect(result.current.validityReasons).not.toContain("resolutionMismatch");
   });
+
+  it("部分フィルタがまだ無いうちは解像度の話をしない（F2・実機ゲート G3）", async () => {
+    // 比べる相手（＝部分フィルタの解像度＝プロジェクト解像度）が揃っていない
+    // 段階で「一致させてください」と言うのは早すぎる。まず言うべきは
+    // `partialFilterMissing` の 1 行だけ。
+    const mismatched = makeItem({ mediaWidth: 1280, mediaHeight: 768 });
+    act(() => {
+      publishInpaintTarget({ item: mismatched, selection: makeSelection(mismatched) });
+    });
+    const first = renderForm();
+    await waitFor(() => expect(first.result.current.validityReasons).toContain("partialFilterMissing"));
+    expect(first.result.current.validityReasons).not.toContain("resolutionMismatch");
+    expect(first.result.current.validityReasons).not.toContain("mediaInfoUnknown");
+    // 対象は届いているので、その理由は立たない。
+    expect(first.result.current.validityReasons).not.toContain("targetMissing");
+    first.unmount();
+
+    // 寸法が読めない対象でも同じ —— 部分フィルタが来るまでは黙っている。
+    resetInpaintSlots();
+    const unknown = makeItem({ mediaWidth: 0, mediaHeight: 0 });
+    act(() => {
+      publishInpaintTarget({ item: unknown, selection: makeSelection(unknown) });
+    });
+    const second = renderForm();
+    await waitFor(() => expect(second.result.current.validityReasons).toContain("partialFilterMissing"));
+    expect(second.result.current.validityReasons).not.toContain("mediaInfoUnknown");
+
+    // 部分フィルタが届いた瞬間に、はじめて解像度の理由が立つ。
+    act(() => {
+      publishInpaintPartialFilter({ layer: 5, frameStart: 100, frameEnd: 340, rate: 30, scale: 1, midpoints: 3 });
+    });
+    await waitFor(() => expect(second.result.current.validityReasons).toContain("mediaInfoUnknown"));
+  });
 });
 
 describe("useInpaintForm — マスク", () => {

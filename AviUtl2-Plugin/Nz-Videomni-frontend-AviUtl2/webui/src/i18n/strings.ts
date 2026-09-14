@@ -414,7 +414,7 @@ export const en = {
       maskUploading: "Sending the mask…",
 
       /** `MASK_SEED_INVALID`: the partial filter is gone from where it was. */
-      seedGone: "The partial filter could not be found. Please right-click it again.",
+      seedGone: "The partial filter could not be found.",
       /** `MASK_BUSY`: the ONE timeline job slot is taken — it is shared with
        * object tracking. */
       maskBusy: "Object tracking or a mask render is already running.",
@@ -450,7 +450,7 @@ export const en = {
       /** Gate messages, rendered by the shared `GenerateReasonsNote`. */
       generateReasons: {
         partialFilterMissing: "Right-click the partial filter you want to use as the mask.",
-        targetMissing: "Right-click the video you want to repaint.",
+        targetMissing: "Send the video to inpaint from the timeline's right-click menu.",
         sourceUploading: "Waiting for the video to finish loading.",
         sourceUploadFailed: "The video could not be loaded.",
         sourceTrimFailed: "The video could not be cut to the part used on the timeline.",
@@ -2418,7 +2418,7 @@ export const ja: Strings = {
         `マスクを描画しています… ${index} / ${total} フレーム`,
       maskUploading: "マスクを送信しています…",
 
-      seedGone: "部分フィルタが見つかりません。もう一度右クリックしてください。",
+      seedGone: "部分フィルタが見つかりません。",
       maskBusy: "追尾かマスクの描画が実行中です。",
       maskFailed: "マスクを作れませんでした。もう一度お試しください。",
 
@@ -2438,7 +2438,7 @@ export const ja: Strings = {
 
       generateReasons: {
         partialFilterMissing: "マスクに使う部分フィルタを右クリックしてください。",
-        targetMissing: "描き替える動画を右クリックしてください。",
+        targetMissing: "Inpaintする動画をタイムラインの右クリックから入力してください。",
         sourceUploading: "動画の読み込みが終わるのを待っています。",
         sourceUploadFailed: "動画を読み込めませんでした。",
         sourceTrimFailed: "タイムラインで使っている部分を切り出せませんでした。",

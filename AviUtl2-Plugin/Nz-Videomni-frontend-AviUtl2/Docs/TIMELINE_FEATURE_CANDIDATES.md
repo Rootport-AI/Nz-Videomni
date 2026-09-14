@@ -180,6 +180,8 @@ LTX Desktop の「Fill With Video」に相当します。前後の静止画を�
 
 **追記（2026-07-27）**: ここに挙げた将来項目の追跡は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ一本化しました。**以後の管理は同書で行います**（生成のキャンセル＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-27-02、失敗仮オブジェクトの自動片付け＝同書§3-28-02、孤児仮オブジェクトの自動掃除＝同書§3-29-02〔いずれも2026-09-02にオーナー裁定「実用上不要」でクローズ済み〕、Retake・Inpaint＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §4-12〔2026-08-30に統合クローズ済み〕）。本書は候補の検討記録として残します。
 
+**追記（2026-09-15）**: 上の「将来の研究課題」に置いていた**Retakeは2026-08-10に、Inpaintingは2026-09-15に、どちらも実装済みです**（本文の「バックエンドに処理の窓口がない」という当時の制約は、その後バックエンドが窓口を持ったことで解消しました）。Inpaintingの設計正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02です。
+
 ### どの候補にも共通で大事にしたいこと
 
 個々の機能とは別に、他社の不満点を裏返した「守るべき方針」が四つあります。これらは特定の候補ではなく、全体の作り込みとして反映していきたい点です。

@@ -188,6 +188,8 @@ Chained タブの v2v（動画から動画を生成する機能）と同じ二�
 
 将来の Inpainting（§3-55）も、時変マスクを緑塗りとブレンドに渡すだけで同じ骨格に乗る。この見立て自体は変わらない。
 
+**【2026-09-15 追記】この見立てはそのとおりに実現した**——Inpainting は 2026-09-14〜15 に実装・クローズされ、実際に時変マスクを緑塗りとブレンドへ渡すだけでこの骨格に乗った（設計の正本はバックエンド [`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)、完了記録は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02）。
+
 ### 訂正2: 緑参照が効くのは stage-1 だけ（`LTXVCropGuides` の実装で確定）
 
 公式グラフの `LTXVCropGuides`（ノード 5013）は ComfyUI 本体の組み込みノードで、実装は `latent[:, :, :-num_keyframes]` によりガイド用の潜在フレームを**末尾から物理的に削除**し、conditioning からも `keyframe_idxs` / `guide_attention_entries` を消す。挿入位置は stage-1 のサンプリング直後・VAE デコードの直前である。

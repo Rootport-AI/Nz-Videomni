@@ -247,7 +247,7 @@
 **(C) `conditioning_attention_mask`のAPI露出 ＝ 未着手**
 
 - **概要**: 参照条件の効かせ方を画面の場所ごとに絞るマスク。IC-LoRA Phase Cのスコープ外項目として唯一未着手のまま残っている。
-- **何が塞いでいるか**: **マスクの受け渡し契約が未確定であること。契約の正本は[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6**（ピクセル精度1本・1chグレースケール動画・uploadsレール・受信側の二値化）で、**本項はその応用先の1つである**——契約を本項で作り直さないこと。受け口の入口設計は§4-25と同じ話である。
+- **何が塞いでいるか**: **`conditioning_attention_mask`のAPI露出の設計が未着手であること**（マスクの受け渡し契約そのものは[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6で**確定・実装済み**である）。**契約の正本は同§6**（ピクセル精度1本・1chグレースケール動画・uploadsレール・受信側の二値化）で、**本項はその応用先の1つである**——契約を本項で作り直さないこと。受け口の入口設計は§4-25と同じ話である。
 - **出典**: [`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)「スコープ外」（着手時の入口）、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)。
 
 ### 4-9. A2V API層の残5点

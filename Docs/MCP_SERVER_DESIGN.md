@@ -115,6 +115,7 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 ## 11. 参照
 
 - **物体追尾はMCPツールにしない**（AviUtl2のタイムラインの上でしか意味を持たない操作のため）。詳細は [`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) を参照。
+- **Inpainting（マスクによる部分再生成）もMCPツールにしない**（物体追尾と同じ理由）。描き替える領域を決めるマスクは**AviUtl2のタイムラインに置いた部分フィルタの枠**から作られるので、タイムラインの外にいるエージェントには、そもそも指定するものが無い。したがって **`submit_generate` は `POST /generate` の `inpaint` ブロックを中継しない**——このツールは既知のフィールドだけを1つずつ組み立ててボディを作る方式なので、`inpaint` は**足していないかぎり載らない**（`mcp_server/tools/generate.py`。撮り直しと画角拡張がそれぞれ `retake` / `outpaint` のネストを明示的に組み立てているのと同じ構造である）。設計の正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §8・§10。
 - 利用者向けの使い方: [`README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節
 - 機械検証の実行記録: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)（本パッケージの節）
 - セッションの入口（課題台帳）: [`PENDING_TASKS.md`](PENDING_TASKS.md)

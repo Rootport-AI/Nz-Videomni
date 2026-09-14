@@ -564,7 +564,10 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {}
 #: tab's 画角拡張 sub-tab — the LAST MODE of any kind this engine published.
 #: ``"nag"`` LEFT WITH THE NAG/VSF INCREMENT, which un-greys the negative-prompt
 #: panel on the Single and Chained tabs (and with it the method switch and the
-#: three NAG knobs behind it). What is left is TWO engine-level feature names.
+#: three NAG knobs behind it). What is left is THREE engine-level feature
+#: names: ``two_stage_hq`` / ``prune_vaed`` / ``inpaint``. ``inpaint`` ARRIVED
+#: WITH THE INPAINTING INCREMENT (2026-09-14) and is the FIRST MODE name to
+#: enter this tuple since the ruling above emptied it of modes.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )

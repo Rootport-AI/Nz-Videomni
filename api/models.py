@@ -284,7 +284,8 @@ class OutpaintSpec(BaseModel):
 
 
 class InpaintSpec(BaseModel):
-    """Masked partial regeneration (inpainting), 台帳 §3-55. Design canon:
+    """Masked partial regeneration (inpainting), ``Docs/PENDING_TASKS_CLOSED.md``
+    §3-55-02. Design canon:
     ``Docs/INPAINTING_DESIGN.md`` §6.
 
     Repaints the white region of a mask video inside an existing clip, using the

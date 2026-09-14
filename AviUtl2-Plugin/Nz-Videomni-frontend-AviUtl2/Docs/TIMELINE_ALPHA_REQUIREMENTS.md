@@ -129,6 +129,8 @@
 
 **追記（2026-07-27）**: この5項目の追跡は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ一本化しました。**以後の管理は同書で行います**（改修項目の3件＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-27-02・§3-28-02・§3-29-02〔2026-09-02にオーナー裁定「実用上不要」でクローズ済み〕、Retake・Inpaint＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §4-12〔2026-08-30に統合クローズ済み〕）。本書は設計記録として残します。
 
+**追記（2026-09-15）**: 上の「将来の研究課題（優先度：低）」の2件は、どちらも実装済みです——**Retakeは2026-08-10、Inpaintingは2026-09-15**。Inpaintingの設計正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02です。
+
 ---
 
 ## (2) バックエンド制約（凍結・変更不可）

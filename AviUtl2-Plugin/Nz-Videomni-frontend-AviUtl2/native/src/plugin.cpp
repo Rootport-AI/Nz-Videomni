@@ -467,7 +467,8 @@ struct TimelineMenuItem {
 // Object tracking (section 3-54, 16 items): trackObject is appended at the end
 // - it is the only entry that acts on a partial filter rather than on media.
 //
-// Inpainting (section 3-55, 18 items): the feature needs TWO entries (owner
+// Inpainting (PENDING_TASKS_CLOSED.md section 3-55-02, 18 items): the feature
+// needs TWO entries (owner
 // decision D6), and after the 2026-09-14 real-device gate the owner asked for
 // them to be split BY KIND rather than kept side by side as a pair. So
 // inpaintVideo, an ordinary Video entry, sits inside the Video block directly

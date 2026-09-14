@@ -7,9 +7,13 @@ single-shot audio-to-video, plus keyframes and style/control LoRA selection),
 **Chained** (multi-clip chains with presets, per-clip LoRAs, and optional
 chunked upsampling), **Edit** (video-editing tools, with its own sub-tab row —
 **Retake** (regenerates a selected span of an existing video; shipped
-2026-08-10, see `../../../Docs/PENDING_TASKS.md` §1-17), **Outpainting** (shipped
-2026-08-09, `../../../Docs/PENDING_TASKS_CLOSED.md` §3-70) and a disabled
-**Inpainting** placeholder (`../../../Docs/PENDING_TASKS.md` §3-55)), and **Inventory**
+2026-08-10, see `../../../Docs/PENDING_TASKS_CLOSED.md` §3-73), **Outpainting**
+(shipped 2026-08-09, `../../../Docs/PENDING_TASKS_CLOSED.md` §3-70) and
+**Inpainting** (repaints only the inside of a mask that AviUtl2 renders from a
+timeline **partial filter**; LTX 2.3 only — the sub-tab greys out while LTX 2.5
+is loaded; shipped 2026-09-15, design canon
+`../../../Docs/INPAINTING_DESIGN.md`, completion record
+`../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus a batch-A2V section (stateless folder-scan-driven bulk
@@ -17,8 +21,9 @@ generation, no CSV manifest) and a job ledger (a table of all jobs shown
 next to the Generate button; there
 is no separate job lane or reservation queue — the backend runs one job at a
 time, so the Generate button just disables itself while one is running). The
-tab bar also has a **Toolbox** tab, the one remaining disabled placeholder
-with no panel behind it yet. It
+tab bar also has a live **Toolbox** tab (object tracking: it makes a timeline
+partial filter's box follow a moving subject — see
+`../../../Docs/OBJECT_TRACKING_DESIGN.md`). It
 runs inside AviUtl2's WebView2 control and
 talks to the AviUtl2 host and the Nz-Videomni backend entirely through the
 native JSON-RPC bridge described below (no direct network calls from the page).
@@ -221,7 +226,8 @@ native through it:
   app-level smoke tests wired to the real mock bridge (through
   `bridge/index.ts`'s automatic selection, since jsdom has no
   `window.chrome.webview`), covering the Single/Chained/Edit/Inventory shell
-  (Toolbox is a disabled placeholder tab, not covered here) and
+  (the Toolbox tab is live, but it carries its own tests under
+  `src/modes/toolbox/` rather than being covered here) and
   right-click-menu prefill routing end to end. Note that these files scope
   ambiguous queries with a *singular* `getByRole("tabpanel")` — the one
   visible mode screen — so Edit's own sub-panels deliberately carry no

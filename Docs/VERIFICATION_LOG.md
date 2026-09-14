@@ -12096,7 +12096,7 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 
 **判定（2026-09-14）**: 画角拡張経路の流用を採用し、第二候補（撮り直しの凍結マスクの空間化）は走らせない。オーナーの目視は未実施（就寝中の自律進行）で、`runs/replace_full/restored.mp4`・`runs/remove_full/restored.mp4` を最初に見てもらう。
 
-### 105.5 バックエンドの実装（2026-09-14）— 機械検証は3つの仮想環境で全緑・モック通し合格。実GPUでの `run_inpaint` は未実行
+### 105.5 バックエンドの実装（2026-09-14）— 機械検証は3つの仮想環境で全緑・モック通し合格。実GPUでの `run_inpaint` は未実行（当時。§105.7 の G6 で完走）
 
 **何を作ったか（機能の言葉で）**: `POST /generate` に `inpaint` ブロック（`mask_video_id`・`window_start_sec`・膨張2値）を足した。サーバーは対象動画（`reference_video_id`）の実寸を読んで128倍数のキャンバスと余白を導き、窓を `cut_window_mp4` で切り出し（撮り直しと同じ設定）、マスクの白い領域を緑で塗った可逆のキャンバスを ffmpeg の1本のフィルタグラフで作り（`services/video_io.fill_mask_green_mp4`）、それを IC-LoRA の参照として画角拡張と同じ二段経路で生成する（`engine/pipeline/inpaint_pipeline.run_inpaint`）。仕上げのブレンドはフレームごとのマスクで行い、最後に膨張マスクが0の画素を元へ戻し、余白を8ビット整数の段階で切り落として、元の音声を付け直す。出力の解像度は対象動画と一致する。LTX 2.5 は `REJECT_TABLE` の1行で 422 `FEATURE_UNSUPPORTED` を返す。
 
@@ -12122,11 +12122,11 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 
 **敵対的レビュー**: Critical 0・Major 4（半解像マスクの全長 float32 化／worker の inpaint 分岐にテスト無し／2.5 venv の実行方法の記録漏れ／モック通しの自己参照）＋ Minor 12 を、すべて反映した（実行方法は「pytest 不在のためランナー経由」と確定）。
 
-**残っているもの**: 実 GPU での `run_inpaint`（二段生成・ブレンド・復元・切り落とし）は**一度も走らせていない**。実機ゲート G1〜G10（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-10、手順は [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16）と、G10 の改修前 SHA（`outputs/inpaint_regression/`）はオーナーの実機作業。
+**残っているもの（この時点）**: 実 GPU での `run_inpaint`（二段生成・ブレンド・復元・切り落とし）は**一度も走らせていない**（→ §105.7 の G6 で初めて完走・合格）。実機ゲート G1〜G10（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-10、手順は [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16）と、G10 の改修前 SHA（`outputs/inpaint_regression/`）はオーナーの実機作業。
 
 ### 105.6 プラグインと操作パネル（2026-09-14）— 記録の正本はフロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §116
 
-バックエンドから見て関係する事実だけを書く。マスク動画はプラグインが `timeline.renderMaskVideo` で描き（部分フィルタの複製＋白化効果と黒い PNG 背景の一時オブジェクト2つ・ソロ表示・`Mp4Writer`）、既存の `POST /upload/video` にトリム無しで上げる。操作パネルは `reference_video_id`（対象動画）と `inpaint.mask_video_id` を送り、`width`／`height` は素材寸の128倍数切り上げ、`num_frames` はフレーム数欄の値（既定＝部分フィルタ長の 8n+1 切り上げ）、`frame_rate` はプロジェクトの値、`loras` は `in-outpainting` を先頭に載せる。契約は v13（[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.24）。機械検証: native doctest 358→382件、webui vitest 2,830→2,915件、typecheck 0、lint 警告31本不変。デプロイ済み（実機＋配布コピー、`deploy.ps1`）。白化効果の効果名・項目名と描画順は**実機採取待ち**（[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (k)〜(m)）。
+バックエンドから見て関係する事実だけを書く。マスク動画はプラグインが `timeline.renderMaskVideo` で描き（部分フィルタの複製＋白化効果と黒い PNG 背景の一時オブジェクト2つ・ソロ表示・`Mp4Writer`）、既存の `POST /upload/video` にトリム無しで上げる。操作パネルは `reference_video_id`（対象動画）と `inpaint.mask_video_id` を送り、`width`／`height` は素材寸の128倍数切り上げ、`num_frames` はフレーム数欄の値（既定＝部分フィルタ長の 8n+1 切り上げ）、`frame_rate` はプロジェクトの値、`loras` は `in-outpainting` を先頭に載せる。契約は v13（[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.24）。機械検証: native doctest 358→382件、webui vitest 2,830→2,915件、typecheck 0、lint 警告31本不変。デプロイ済み（実機＋配布コピー、`deploy.ps1`）。白化効果の効果名・項目名と描画順は、この時点では実機採取待ちだった（→ §105.7 で決着。採取原文は [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (k)）。
 
 ### 105.7 オーナーの実機採取と実機ゲート（2026-09-14 夜）
 
@@ -12155,6 +12155,8 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 | G9 部分フィルタの消失 | 不具合を検出（案内文が一瞬で消えて読めなかった）→ トースト表示へ変更した。再確認待ち。 |
 | G10 回帰 | 監督がHTTP API経由で実行中（LTX 2.3・LTX 2.5の両エンジンで改修前後のフィンガープリントを比較）。結果は§105.8へ記録する。 |
 
+上表で「再確認待ち」「未報告」だった G1・G3・G4・G5・G9 は 2026-09-15 にすべて合格した（§105.9・[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16）。
+
 ### 105.8 G10 回帰指紋 — 画角拡張の出力は LTX 2.3・LTX 2.5 とも改修前後でビット一致（2026-09-14 夜）
 
 **何を確かめたか**: Inpainting の実装が `engine/outpaint/pyramid_blend.py`（フレーム別マスクの受理）と `engine/pipeline/outpaint_pipeline.py`（音声凍結・音声初期潜在・mux の3塊の切り出し）に触れたため、既存の画角拡張の出力が1バイトも変わっていないことを、固定シードの実ジョブで両エンジンについて確かめた。
@@ -12169,6 +12171,53 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 `cmp` でもバイト一致（ltx 5,233,856 バイト／ltx25 8,802,775 バイト）。`metadata.json` の要求の反響は、アップロードごとに変わる `reference_video_id` 以外すべて一致。ジョブ ID: after ltx `affa1930…`／after ltx25 `211142cd…`／before ltx `a6713840…`／before ltx25 `5424aed8…`。成果物は `outputs/inpaint_regression/runs/` と `fingerprints.json`。
 
 **判定**: G10 合格。§105.5 で「ビット同一」と述べた3塊の切り出しとブレンドの拡張は、実出力でも裏づけられた。
+
+### 105.9 追修と完結（2026-09-15）
+
+§105.7 で残っていたゲートを全部閉じ、オーナーの追加の注文を1件実装して本テーマを完結させた。**バックエンドの振る舞いは1行も変わっていない**——下の「のりしろ」欄も含めて、ここで入った変更はすべて操作パネル（webui）と文言だけである。
+
+**残っていた5つのゲート**
+
+| ゲート | §105.7 時点 | 2026-09-15 の結果 |
+|---|---|---|
+| G1 右クリック | 再確認待ち | **合格**。メニューの並びを種別ごとに分けた出荷形（動画側は「選択範囲を撮り直す (Retake)」のすぐ下、部分フィルタ側はオブジェクトメニューの最後）で再確認した |
+| G3 解像度不一致 | 再確認待ち | **合格**。注意文が対象動画カードと部分フィルタカードの**両方が揃ってからだけ**出ることを確認した |
+| G4 窓とフレーム数 | 未報告 | **合格** |
+| G5 マスク描画 | 未報告 | **合格** |
+| G9 部分フィルタの消失 | 再確認待ち | **合格**。マスクを作れなかったときの断りをトーストへ移した後の形で再確認した |
+
+これで**実機ゲート G1〜G10 は全合格**である（G7 はコードの読み合わせによる合格扱いのオーナー裁定、G10 は§105.8）。手順と合格条件の正本は [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16 である。
+
+**文言の変更2件**（`webui/src/i18n/strings.ts`。英日両方）
+
+- **対象動画が未入力のときの Generate の断り文**（`generateReasons.targetMissing`）——「描き替える動画を右クリックしてください。」→「**Inpaintする動画をタイムラインの右クリックから入力してください。**」
+- **部分フィルタが見つからないときの文**（`seedGone`。`MASK_SEED_INVALID`）——「部分フィルタが見つかりません。もう一度右クリックしてください。」→「**部分フィルタが見つかりません。**」（この文はトーストで出るので、指示を重ねない）
+
+**追加の注文——「マスク周囲の「のりしろ」」欄の新設**
+
+ブレンドの膨張段数を利用者が指定できるようにした。Stage-1・Stage-2 の**整数欄が2つ**で、範囲はどちらも **0〜15**、既定は **5／2** である（画角拡張の `OutpaintSpec` と同じ範囲・同じ既定）。欄の下の注記は「※マスク周囲の約N px が「のりしろ」になります。」の形で、**N は Stage-2 × キャンバス（素材寸を128の倍数へ切り上げた値）の長辺 ÷ 64 ＋ 18 px** である（実測の根拠は §105.3）。
+
+- **バックエンドは無改修である**——`InpaintSpec.blend_dilation_stage1` ／ `blend_dilation_stage2` は 2026-09-14 の実装時点で**すでに存在していた**フィールドで、画面からの指定経路が無かっただけである。したがって API の形もエンジンも変わっていない（契約の記述は [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.1 の **InpaintSpec**）。
+- **既定のままでも常に送る**——画面に出ている数字と送る値が食い違う経路を作らないためで、加速系フィールドの「既定なら鍵ごと出さない」規約とは逆向きである。
+- **対象動画がまだ届いていないあいだは数字を出さない**（長辺が分からないため。そのあいだはオーナー指定の説明文へ切り替わる）。その下の「時間軸の「のりしろ」の有無」の区画は**引き続きモック**である。
+- **用語を Stage-1／Stage-2 へ揃えた**——画面・文書のどちらも、ブレンドの2段を Stage-1／Stage-2 と呼ぶ（API のフィールド名 `blend_dilation_stage1` ／ `stage2` と同じ語である）。
+
+**最終の機械検証**
+
+| 項目 | 値 |
+|---|---|
+| アプリ venv `python -m pytest tests` | 2,396 passed / 45 skipped |
+| LTX 2.3 `.venv-engine` | 319 passed |
+| LTX 2.5 `.venv-engine-ltx25` | 221 passed |
+| native doctest | 384 passed / 6 skipped・アサーション1,952件 |
+| webui vitest | 146ファイル・2,924件（`npm run typecheck` エラー0） |
+| webui lint | 警告31本（不変） |
+
+バックエンドの3つの仮想環境の値は §105.5 から変わっていない（バックエンドを触っていないためである）。
+
+**完結**
+
+台帳は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-55-02** へ移してクローズした（台帳 `PENDING_TASKS.md` の §3-55・§2-10 はいずれも欠番。「2. 実装済み・ユーザーのテスト待ち」は運用規則どおり見出しごと削除してある）。作業ブランチ `feature/inpainting` は main へ **`a039ffb`** で merge 済みで、ブランチは削除してある。フロントエンド側の記録の正本は [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §116.5 である。
 
 ## 106. ★別GGUF（Q6_K transformer）での快適上限を実機で較正した（REDGraft LTX 2.5・48点）＝結論は「解像度ごとに割れた。単一のトークン線では表せない」・**配信値は未変更**（2026-09-14）
 

@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.59**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-09-11**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.60**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-09-15**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -108,6 +108,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.57 | 2026-09-07 | **素材（冒頭）（`source_video`）と素材（末尾）（`end_source`）を同時に指定した2クリップ以上を、422での拒否から受理へ転じたことを反映（受理範囲が広がる加算方向の変更で、これまで通っていた構成が新たに落ちることは無い。フィールド・型・既定・応答形・エラーコードの増減も無い）**。新しいモード `"bridge"` は全クリップを正順に生成し、最終クリップだけを両側（頭＝1つ前のクリップからののりしろ、尾＝素材（末尾）の末尾の凍結フレーム）で条件付けする。**§6.2 の `end_source` 補足段落**（モードの分岐を3つから4つへ改め、`"bridge"` の項を新設し、`"reverse"` の「新たに422になる構成」から `source_video` 併用禁止の項を落とした）を更新した。あわせて**本モードを「実験的な機能」と位置づける一文を同項へ添えた**（オーナー裁定。最終クリップを長くすると早期収束による静止が出ることがあり、これも仕様として受け入れている）。実装・機械検証・実機ゲートの正本は `Docs/VERIFICATION_LOG.md` §102、設計の理由は `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §11の【2026-09-07】の項、**オーナーは同日の裁定で確認項目を一括受容し、台帳のクローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-90である**。 |
 | v0.5.58 | 2026-09-08 | **キーフレーム画像（`conditioning_images`）の上限を 5 枚から 10 枚へ引き上げ、上限の正本を `config.py` の定数 `MAX_CONDITIONING_IMAGES` ただ 1 箇所へ集約し、スナップ後に同じフレームへ落ちた 2 枚を 422 で拒否するようにしたことを反映（台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-147）**。**受理範囲は広がる方向と狭まる方向の両方へ動いている**——枚数の上限は 5 → 10 へ広がったが、**これまで黙って受理していた「スナップ後に同じ位置へ落ちる 2 枚」は 422 になった**（従来はそのままエンジンへ流れ、位置 1 以降では二重の条件付けとなって結果が定まらなかった）。**§6.2 の凍結制約 6・7**（枚数の上限を定数名で書き直し、制約 7 へ重複の拒否と 422 の文言、および上限 10 に届くのは `num_frames >= 73` からという到達条件を追記）／**§6.7**（`limits` の表の `max_conditioning_images` を、設定項目ではなく**読み取り専用の computed field〔pydantic の算出項目〕**として書き直し、`config.yaml` に書いても効かないこと・廃止キーの警告機構を広げない理由を明記）／**§11.7**（同じ値の写しを更新）／**§12**（Gradio 検証UI のキーフレーム画像アコーディオンを 10 スロットへ。`gradio_ui` がサーバーモジュールを import しない規律の例外としたことと、キーフレーム部品を `inputs` の末尾へ寄せた理由を追記）／**§18.2**（検証観点の枚数と、新設したテストの名前）／**付録A・付録B.1**（早見表と用語集の枚数）。**凍結 API 契約（§6）のフィールド・型・既定・応答形はいずれも変わっていない**——`GET /config` の `limits.max_conditioning_images` は JSON の形も変わらず、知らせる値だけが 10 になる（古い `config.yaml` に `5` が残っていても `extra='ignore'` で無視される）。**オーナーの実機ゲートは 2026-09-08 に G1〜G8 全項目が合格した**（正本は `Docs/VERIFICATION_LOG.md` §103）。実装・設計判断・裏取り・ゲート結果の記録も同 §103 で、クローズ記録は `Docs/PENDING_TASKS_CLOSED.md` §3-147 である。 |
 | v0.5.59 | 2026-09-11 | **物体追尾（部分フィルタの枠を追跡AIに追わせるユーティリティAIモジュール）の新設を反映**。**凍結 API 契約（§6）には一切の変更が無い**——`GenerateRequest` にも `GenerateChainRequest` にも `JobResponse` にもフィールドは増えておらず、既存フィールドの意味も変わっていない。加算されたのは**別名前空間のエンドポイント 3 本**（`/api/v1/utils/track/*`）と、`GET /status` の**非凍結ブロック** `tracking`、および専用のエラーコード 5 つだけである。**§4.7＝完全新設**（プロセス構成・`@@TRK@@` プロトコル・API の位置づけ・エラー・設定 `tracking:`・保存物が無いこと・任意導入であること。いずれも位置づけの記述で、契約と設定の中身の正本は `Docs/OBJECT_TRACKING_DESIGN.md`）／**§4.1**（venv の表へ `./.venv-utils` を 1 行追加。**エンジンではない**ので「worker は同時に 1 つ」の数には入らない）／**§0.3 の SSOT 地図**（`Docs/OBJECT_TRACKING_DESIGN.md` を追加）を更新した。**追尾はサーバーに保存物を 1 つも残さない**ので §8「出力ファイル」への追加は無く、**GPU を使わない**ので §9「低VRAM戦略」にも関係しない。利用者向けの説明は `README.md` §1「物体追尾を追加する（`install-UETrack.bat`）」・§3・§7.2、フロントエンド側の契約は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` §3.20〜§3.22 と同 `Docs/BRIDGE_CONTRACT.md`（契約 v12）である。 |
+| v0.5.60 | 2026-09-15 | **Inpainting（マスクによる部分再生成＝部分フィルタの枠をマスク動画へ焼き、その白い領域の内側だけを描き替える機能）の新設を反映（加算のみ。既存フィールドの意味・型・既定・応答形はいずれも変わらず、`inpaint` を含まない要求の扱いは1バイトも変わらない）**。**§6.2**（`GenerateRequest` に `inpaint` を加算し、凍結制約へ「`inpaint` が指定されているときだけの6検査」を 13 番として追加）／**§6.3＝`InpaintSpec` を新設**（4フィールド。キャンバス寸は要求側、余白はサーバーが素材の実寸から導く）／**§6.6**（`metadata.json` に `inpaint` ブロックを加算。エンジンの幾何・膨張・`mask_proof` とアプリ側の来歴の合成）／**§6.8**（エラーコード 7 本を追加＝`INPAINT_PREPROCESS_CONFLICT` / `INPAINT_SOURCE_MISMATCH` / `INPAINT_MASK_NOT_FOUND` / `INPAINT_MASK_RESOLUTION_MISMATCH` / `INPAINT_MASK_FRAME_MISMATCH` / `INPAINT_WINDOW_OUT_OF_RANGE` / `INPAINT_LORA_INVALID`。ファクトリの総数も実装と突き合わせて訂正）／**§6.10**（LTX 2.5 は本機能を持たない——`unsupported_features` は 2 件 → **3 件**、4 分類は 422 系 3・無視 2・動作 25・従属 0 の全 30 件へ）／**§8.1**（ジョブの置き場に残る中間物 `_inpaint_window.mp4` / `inpaint_canvas.mp4` を明記）。設計の正本は `Docs/INPAINTING_DESIGN.md`、実測と実機ゲートの記録は `Docs/VERIFICATION_LOG.md` §105、台帳の記録は `Docs/PENDING_TASKS_CLOSED.md` §3-55-02。 |
 
 ### 0.2 スコープ
 
@@ -139,6 +140,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`）は §1.1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
 | `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
+| `Docs/INPAINTING_DESIGN.md` | **Inpainting（マスクによる部分再生成）の設計正本**（利用の流れ・責務の分担・マスク受け渡し契約〔§6〕・窓の規則・ブレンドと脱緑の仕組み・LTX 2.5 が断る理由）。**マスク受け渡し契約の正本は同書 §6 である**——台帳の応用先（`PENDING_TASKS.md` §4-8(C)・§4-25）はそちらを参照するだけで契約を作り直さない |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
 | `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` | クリップ連結（Clip Chain）の内部構造と Stage-2 固定窓アーキテクチャの設計正本 |
@@ -666,6 +668,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `conditioning_attention_strength` | float \| null | `null` | `ge=0.0, le=1.0` | **Phase C で追加**。IC-LoRA の制御信号への追従の強さ（輪郭線・骨格・深度マップにどれだけ厳密に従うか）。`null`（省略）ならエンジンは注意ラッパーを組み立てず、従来とバイト単位で同一。**`loras` が空だと 422** |
 | `reference_video_strength` | float \| null | `null` | `ge=0.0, le=1.0` | **Phase C で追加**。参照条件そのものの強さ（`denoise_mask = 1 − s`）。公式は 1.0 のままを推奨しており、1.0 未満では参照映像が出力へ滲み出ることがある（承知のうえで露出）。`null` のときランナーは従来どおり `strength=1.0` を送る。**`loras` が空だと 422** |
 | `outpaint` | OutpaintSpec \| null | `null` | — | **2026-08-08追加（§1-13）**。動画のキャンバス拡張（Outpainting）の幾何指定。`null` なら従来リクエストとバイト単位で同一。`reference_video_id` が必須で、`conditioning_images` および `crop_output` とは排他（下記凍結制約）。詳細は §6.3 の OutpaintSpec。**エンジン系統 `ltx25`（LTX 2.5）でも 2026-08-29 から使える**（それ以前は 422 `FEATURE_UNSUPPORTED` だった。§6.10(a)・(d)） |
+| `inpaint` | InpaintSpec \| null | `null` | — | **2026-09-15追加（Inpainting）**。マスク動画の白い領域の内側だけを描き替える指定。`null` なら従来リクエストとバイト単位で同一。`reference_video_id`（描き替える対象の動画）が必須で、`outpaint`・`conditioning_images`・`crop_output` とは排他（下記凍結制約 13）。**`width`/`height` は「キャンバス」**——素材の実寸を 128 の倍数へ切り上げた値で、余白（右と下）はサーバーが素材の実寸から導く。配信される解像度は素材の実寸、音声は窓で切り出した元の音声である。詳細は §6.3 の InpaintSpec。**エンジン系統 `ltx25`（LTX 2.5）は本機能を持たない**（422 `FEATURE_UNSUPPORTED`。§6.10(a)・(b)・(d)） |
 
 凍結制約（`model_validator(mode="after") validate_ltx_constraints`、順序どおり）:
 
@@ -686,6 +689,15 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
     - `conditioning_images` との併用 → ValueError（元動画がすでに絵を固定しているため排他）
     - `crop_output` との併用 → ValueError（せっかく広げた領域を切り落とすことになるため排他）
     - 保持領域（`width - pad_left - pad_right` × `height - pad_top - pad_bottom`）のいずれかの辺が `OUTPAINT_MIN_KEEP_SIDE`（**256 画素**）未満 → ValueError（ブレンドのマスク膨張がキャンバス長辺の約1/10 まで内側へ届くため、保持領域が丸ごと飲み込まれる）
+13. 以降は `inpaint` が指定されているときだけの6検査（**2026-09-15追加・Inpainting**。画角拡張と同じ「1規則1検査」の並べ方で、**形だけで判定できるものをここに置き、ファイルやレジストリを見る検査は受付時＝§6.8 の `INPAINT_*` に置く**）:
+    - `reference_video_id` が無い → ValueError（描き替える対象の動画が要る）
+    - `outpaint` との併用 → ValueError（一方はキャンバスの外へ描き足し、他方は内側を描き替えるため排他）
+    - `conditioning_images` との併用 → ValueError（元動画がすでに絵を固定しているため排他）
+    - `crop_output` との併用 → ValueError（配信の解像度は素材の実寸に固定されるため排他）
+    - `width % 128 != 0` → ValueError（キャンバスは 128 の倍数。**この 128 という値の正本は `api/models.py` の定数 `INPAINT_CANVAS_MULTIPLE` であり、エラーコード名ではない**）
+    - `height % 128 != 0` → ValueError（同上）
+
+    フレーム数の 8n+1 と上限 481 は上記 3 の既存規則がそのまま効き、**本機能のための新しい上限は作っていない**。
 
 > **NAGフィールドの補足（2026-07-28追加）**: 上記4フィールドは `GenerateRequest` に加えて `GenerateChainRequest`（`POST /generate/chain`。本書は§6ではPhase 1の単発生成のみを扱うため独立のスキーマ表は持たない）にも同一の名前・型・デフォルト・制約で存在し、`to_clip_request` 経由で `ClipGenerateRequest` へ転記される。詳細な設計判断（式の規約・非対称設計の根拠・実装箇所一覧・実機ゲート）は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §38 を正本とする。
 
@@ -760,6 +772,20 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 > 注: `align_h` / `align_v`（寄せ方）は**意図的に契約に入れていない**。寄せ方は pad を配分するための UI の都合であり、pad の4数値のほうが正確かつ十分だからである。
 
 > **エンジン系統による違い（2026-08-29追加）**: 上の表の内容は**エンジン系統に依存しない**。`outpaint` は 2026-08-29 に **LTX 2.5（系統 `ltx25`）でも動くようになり**、7つのフィールドの意味・既定・制約も、エンドポイントの5検査（下記 §6.2 の凍結制約 12）も、キャンバスが 128 の倍数であるという制約も、保持領域の 256 画素下限も、LTX 2.3 と同一である（緑のキャンバスを作るのはエンジンではなくアプリ層の `services/video_io.py` の `pad_green_mp4` で、これも両系統の共有である）。**それ以前は LTX 2.5 で 422 `FEATURE_UNSUPPORTED` になっていたが、その制限はもう無い**（§6.10(a)・(d)）。**ただし LTX 2.5 では、画角拡張に固有のメタデータ（音声の凍結の証明・音声の分岐・意図的差分）が `metadata.json` に載らない**——ワーカーのログと内部の完了イベントにだけ残る（`Docs/VERIFICATION_LOG.md` §79.7）。
+
+**InpaintSpec**（`GenerateRequest.inpaint`。2026-09-15追加・Inpainting）
+| フィールド | 型 | デフォルト | 制約 |
+|-----------|----|-----------|------|
+| `mask_video_id` | str | （必須） | `min_length=1`。`POST /upload/video` が返す ID。**白（明るさ 128 以上）が描き替える領域**で、二値化は受信側で 2 回（キャンバスを塗る ffmpeg のフィルタグラフと、エンジンがブレンド用にマスクを復号するとき）同じしきい値で行う。**マスクは引き伸ばさない**——解像度は素材の実寸と完全一致でなければならず、枚数も `num_frames` と完全一致でなければならない（違反は 422。§6.8） |
+| `window_start_sec` | float | `0.0` | `ge=0.0`。**素材自身の時間軸**での窓の開始秒（AviUtl2 のリボンが素材の途中から始まる場合、その切り出し起点はクライアントが差し引いてから渡す）。窓の長さは `GenerateRequest.num_frames` で、**長さの定義を二重に持たない**（撮り直しと同じ 2 値の規約） |
+| `blend_dilation_stage1` | int | `5` | `ge=0, le=15`。ラプラシアンピラミッドのブレンド膨張（stage-1・半解像度後）。`OutpaintSpec` と同じ範囲・同じ既定 |
+| `blend_dilation_stage2` | int | `2` | `ge=0, le=15`。同（stage-2・フル解像度後）。**最終的に「マスクの外側で描き替わる帯の幅」を決めるのはこちらだけ**である（stage-1 の膨張は stage-2 のブレンドが上書きする）。操作パネルは 2 つとも整数欄として見せ、常に両方を送る |
+
+> **余白（pad）は契約に入れていない。** 余白はキャンバス（`width`/`height`）と素材の実寸の差として**一意に決まる**ので、要求にも書くと同じ事実の置き場が 2 つになる。サーバーは参照動画を ffprobe して自分で導き、要求のキャンバス寸と辻褄が合わなければ 422 `INPAINT_SOURCE_MISMATCH` で断る。素材は常にキャンバスの左上（0,0）に置き、右と下の帯だけがセンチネル緑になる。
+
+> **制御アダプタはちょうど 1 本・前処理なし。** 緑で塗ったキャンバスは In-Outpainting IC-LoRA を通してモデルへ届くため、参照を前処理（輪郭抽出・姿勢推定・深度）する制御アダプタとは併用できない（422 `INPAINT_PREPROCESS_CONFLICT`）。本数が 1 本でなければ 422 `INPAINT_LORA_INVALID`。判定の理由は画角拡張の同名の検査と同じである。
+
+> **エンジン系統による違い（2026-09-15）**: 上の表は**エンジン系統 `ltx`（LTX 2.3）だけで効く**。`inpaint` は LTX 2.5 のアダプタの拒否表に載っており、系統 `ltx25` を選んでいるあいだは 422 `FEATURE_UNSUPPORTED` で断られる（§6.10(a)・(b)・(d)）。**LTX 2.5 への対応は予定だが、時期は決まっていない。**
 
 **UploadImageResponse**
 | フィールド | 型 |
@@ -995,6 +1021,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `vram_optimization` | `LowVramSettings.metadata_block(peak_vram_mb=...)`（6 キー、下記） |
 | `models` | dict（**2026-08-20追加**。どのベースモデルの、どの重みファイルで生成したかの記録＝`{"base_model": "<記述子id>", "selection": {カテゴリ: {"name": 登録名, "file": 実ファイル名}}}`。`_write_metadata`（単発）と `_write_chain_metadata`（チェーン）の**両方**に出る。`selection` の 4 カテゴリは常に揃い、`"default"` のままのカテゴリも記述子の `default_file` の実ファイル名を記録するため、既定が将来差し替わっても過去の出力を再現できる。詳細は §6.9(e)） |
 | `ltx25` | dict（**2026-09-02追加（台帳 §3-131）。エンジン系統 `ltx25`（LTX 2.5）の単発生成・画角拡張ジョブにのみ加算で出現**——LTX 2.3・mock backend ではキーごと現れない。共通コアは5キー＝`encode_fps` / `video_chunks` / `tiling` / `size_bytes` / `phases`。**単発生成**はこの5キーのみ。**画角拡張**は同じ5キーに `stage1_sampler` / `stage1_eta` / `stage2_sampler` / `stage2_noise_scale` / `stage2_seed` / `stage2_audio_init_policy` / `reference_frames` / `reference_downscale_factor` / `reference_attention_strength` / `pixel_chunk_frames` / `vram` / `intentional_differences` を加えた計17キー（ワーカーの `outpaint.ltx25` と同一の dict オブジェクトを最上位へそのまま再送したもの——2つのコピーではない）。**連結生成はこのキーを持たない**——同じ情報は代わりに `chain.ltx25`（12キー＝`stage1_sampler` / `stage1_eta` / `stage2_sampler` / `clear_keyframes_on_carry` / `chunked_upsample` / `stage2_window` / `encode_fps` / `video_chunks` / `tiling` / `size_bytes` / `vram` / `phases`）に出る（`chain` ブロックが既に運ぶため、最上位へ二重には積まない）。**意図的に含めないもの**: 単発の `sampler`（モジュール定数で `ready.sampler` / `LOAD_OK` に既出のため情報量ゼロ）、セグメント単位の `keyframes_mask` 実効値（ジョブ全体で1つの `clear_keyframes_on_carry` の中継のみ）。**単位注記**: `ltx25.vram`（画角拡張・連結とも）のサブキーは GiB 建て（`peak_allocated_gib` 等）——上表の `vram_optimization.peak_vram_mb` / `peak_vram_reserved_mb` は MiB 建て（`_gib_to_mb` = ×1024）、連結メタの内部 `vram_peak_mb`（ログのみ）は十進 MB 建てで、3つとも別の単位である（`Docs/VERIFICATION_LOG.md` §72.8(3)・§87）。詳細は台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-131） |
+| `inpaint` | dict（**2026-09-15追加（Inpainting）。`inpaint` を指定したジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。**2 つの出どころの合成**で、エンジン側＝キャンバスと素材の幾何・`blend_dilation_stage1`/`stage2`・音声の記録・`mask_proof`〔復号したマスクの枚数・白い画素の割合・膨張後の割合の 3 つ。**モックは動画ファイルを開かないので書けない値**＝実エンジンが実際にマスクを読んだ証拠である〕、アプリ側＝来歴〔`source_video_id` / `mask_video_id` / `source_fps` / `mask_fps` / `resampled` / `window_start_sec` / `window_start_frame` / `window_written_frames` / `window_has_audio` / `canvas_frames` / `canvas_codec`〕。**合成はアプリ側の来歴が後勝ち**だが、素材の幅・高さはアプリ側が持たない——同じ事実を 2 人が書くと食い違いが見えなくなるためである。撮り直しの `retake` ブロックと同じ二源の形） |
 | `environment` | `{python, torch, cuda, gpu, platform}` |
 
 `vram_optimization`（metadata 版、`metadata_block`）の 6 キー — status 版とは**別集合**である点に注意:
@@ -1072,7 +1099,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 ```
 （`job_id`・`detail` は非 None のときだけ含まれる。）
 
-実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 37 件**あり、本表はそのうち 32 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 5 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE` と Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT` は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正した）:
+実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 49 件**あり、本表はそのうち 39 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 10 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE`、Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT`、物体追尾の `TRACK_*` 5 本〔§4.7(d)〕は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正し、**2026-09-15 に Inpainting と物体追尾の分を反映して再訂正した**）:
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
@@ -1101,6 +1128,13 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `LORA_THUMBNAIL_NOT_FOUND` | 404 | サムネイル（`<stem>.png`）を持たないアダプタ、または未知のアダプタ名 |
 | `LORA_PREPROCESS_CONFLICT` | 400 | 1本の参照動画に対して2種類以上の制御前処理を要求した（canny と pose の同時指定など） |
 | `REFERENCE_RESOLUTION_INVALID` | 422 | 参照動画を使うジョブで `width`/`height` が 128 の倍数でない |
+| `INPAINT_PREPROCESS_CONFLICT` | 422 | Inpainting（**2026-09-15 新設**、以下の 7 本とも）。参照を前処理する制御アダプタ（canny / pose / depth）と併用した。緑で塗ったキャンバスは**生の画素のまま**モデルへ届かなければならない |
+| `INPAINT_SOURCE_MISMATCH` | 422 | 要求の `width`/`height` が、素材の実寸を 128 の倍数へ切り上げた値と違う。**素材の寸法を読めなかったとき**（ffprobe 不在・失敗）と、**素材の辺が `INPAINT_MIN_SOURCE_SIDE`（256 画素）未満のとき**も同じコードで断る——どれも「この素材ではキャンバスを作れない」という同じ結論で、利用者が直す先も同じだからである |
+| `INPAINT_MASK_NOT_FOUND` | 404 | `inpaint.mask_video_id` が保管庫に無い（アップロード失敗、または保存期間切れ） |
+| `INPAINT_MASK_RESOLUTION_MISMATCH` | 422 | マスク動画の解像度が素材の実寸と違う。**マスクは決して引き伸ばさない**——拡大縮小すれば境界が利用者の見ていない量だけ動くためである |
+| `INPAINT_MASK_FRAME_MISMATCH` | 422 | マスク動画の枚数が `num_frames` と違う。**足りない場合を ffmpeg に任せると最終フレームが繰り返されて枚数だけ揃い**、窓の後半が「何も描き替えない」まま静かに通るため、GPU 作業の前に拒否する |
+| `INPAINT_WINDOW_OUT_OF_RANGE` | 422 | 要求された窓（`window_start_sec` ＋ `num_frames`）が素材に収まらない（撮り直しの `RETAKE_WINDOW_OUT_OF_RANGE` の鏡） |
+| `INPAINT_LORA_INVALID` | 422 | 制御アダプタが 1 本ではない。**実際に出るのは 2 本以上のときだけ**である——0 本の要求は既存の `REFERENCE_REQUIRES_CONTROL_LORA` が先に断る |
 | `JOB_NOT_FOUND` | 404 | ジョブ未存在 / video 実体なし |
 | `VIDEO_NOT_READY` | 409 | ジョブが completed 前に video 要求 |
 | `PIPELINE_LOAD_FAILED` | 503 | パイプラインロード失敗 |
@@ -1218,13 +1252,15 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 最後に使ったベースモデルと、ベースモデル別の最後の選択の組み合わせは、リポジトリ直下の `state.json`（git 追跡外・§11.9）に保存され、サーバーを再起動しても復元される。**API 契約の一部ではない**（どのエンドポイントにも現れない）が、`GET /status` の `base_model` と `GET /models` の `active_base_model` が再起動後に既定へ戻らない理由がこれである。
 
-### 6.10 LTX 2.5（エンジン系統 `ltx25`）の対応範囲（2026-08-22。連結生成の対応範囲＝下記 (f) を 2026-08-23 に加筆、LoRA と参照動画・高速化 2 つを 2026-08-24 に加筆、モデル骨格の常駐〔`keep_resident`〕と SageAttention〔`attention_backend`〕を 2026-08-25 に加筆、**撮り直し〔Retake〕と素材（末尾）〔End source〕を 2026-08-26 に、画角拡張〔Outpainting〕を 2026-08-29 に、非CFGネガティブプロンプト〔NAG／VSF〕を 2026-08-30 に加筆**、**埋め込み処理器の常駐〔`keep_resident_embeddings`〕を 2026-09-03 に加筆**）
+### 6.10 LTX 2.5（エンジン系統 `ltx25`）の対応範囲（2026-08-22。連結生成の対応範囲＝下記 (f) を 2026-08-23 に加筆、LoRA と参照動画・高速化 2 つを 2026-08-24 に加筆、モデル骨格の常駐〔`keep_resident`〕と SageAttention〔`attention_backend`〕を 2026-08-25 に加筆、**撮り直し〔Retake〕と素材（末尾）〔End source〕を 2026-08-26 に、画角拡張〔Outpainting〕を 2026-08-29 に、非CFGネガティブプロンプト〔NAG／VSF〕を 2026-08-30 に加筆**、**埋め込み処理器の常駐〔`keep_resident_embeddings`〕を 2026-09-03 に、Inpainting〔本エンジンが持たない機能として〕を 2026-09-15 に加筆**）
 
 **結論から言うと、ここでも凍結 API 契約は壊れていない。** 加算されたのは `GET /models` の 1 フィールドと、エラーコード 1 つだけである。
 
 > **【2026-09-03 訂正】** 本節はもともと、上の段落に続けて「LTX 2.3 だけを使うクライアントから見た応答は 1 バイトも変わらない——LTX 2.3 は『使えない機能』を 1 つも宣言していないため、加算されたフィールドは空配列になり、新しいエラーコードも出ない」と書いていた。**この主張が真だったのは 2026-09-03 より前についてだけである。** 同日に加わった `keep_resident_embeddings`（§6.2）は **LTX 2.5 にしか無い部品を名指しするフィールド**なので、**非対応を宣言するのは LTX 2.3 の側**になった——`GET /models` の `unsupported_features` は LTX 2.3 でも 1 件を返すようになり、そのフィールドを既定以外にしたリクエストは LTX 2.3 でも 422 `FEATURE_UNSUPPORTED` になる。**変わったのは応答の中身であって、契約の形ではない**——フィールドもエラーコードも増えていないので、**「省略は制限なし」という規約（下記 (b)）に従って書かれたクライアントは、そのまま正しく動く。**
 
 #### (a) v1 の対応範囲
+
+**2026-09-15、Inpainting（マスクによる部分再生成）が加わった——ただし「持たない機能」の側へである。** **`GET /models` の `unsupported_features` は 2 件 → 3 件**（`two_stage_hq` / `prune_vaed` / `inpaint`）になり、**この配列が「モード」を受け取ったのは初めてである**——これまでこの表に載った名前はすべて、このエンジンが後から持てるようになって出ていった機能だった。**これは発見された制約ではなく、オーナーの裁定による範囲の線引きである**——Inpainting は LTX 2.3 が配布する In-Outpainting IC-LoRA の上に作られており、LTX 2.5 側の画角拡張は別の二段ドライバ（`engine25/outpaint25.py`）からその同じアダプタへ届くため、マスクの扱いを広げる作業がそのまま必要になる。**対応は予定しているが時期は決めていない。** 画面では **Edit タブの「Inpainting」サブタブが、LTX 2.5 を読み込んでいるあいだ灰色になる**（設計の正本は `Docs/INPAINTING_DESIGN.md` §6.3、UI 側の対応表は `Docs/MULTI_ENGINE_DESIGN.md` §5.6）。
 
 LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連結（Chained）＋V2V 継続（素材（冒頭）に動画を使って続きを作る）＋A2V（音声から動画。Single・長尺・バッチのいずれも）＋撮り直し（Retake）＋素材（末尾）（End source）＋画角拡張（Outpainting）＋スタイル LoRA と IC-LoRA（参照動画による制御。クリップ別の参照窓＝長尺 IC-LoRA を含む）＋高速化 5 つ（fused GGUF 逆量子化カーネルと先読み block swap〔いずれも既定 on〕・モデル骨格の常駐〔`keep_resident`。既定 off のオプトイン〕・SageAttention〔`attention_backend`。既定は `"sdpa"` のまま〕・**埋め込み処理器の常駐〔`keep_resident_embeddings`。既定 off のオプトイン。このエンジン専用〕**）＋**非CFGネガティブプロンプト（NAG／VSF）**＋畳み込みデコーダ版の映像 VAE ＋ VRAM 16GB 運用** である。非蒸留モデル（`two_stage_hq`）・PrunaVAED といった機能は**まだ無い**。無いものを黙って無視するのではなく、**ジョブを作る前に 422 で断る**。
 
@@ -1258,8 +1294,8 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
     "id": "LTX25",
     "display_name": "LTX 2.5",
     "engine_family": "ltx25",
-    "unsupported_features": [        // 加算。このエンジンが扱えない機能の名前（現在 2 件）
-      "two_stage_hq", "prune_vaed"
+    "unsupported_features": [        // 加算。このエンジンが扱えない機能の名前（現在 3 件）
+      "two_stage_hq", "prune_vaed", "inpaint"
     ],
     "...": "id / display_name / active / installed / present / categories は §6.9(c) のまま"
   }
@@ -1271,6 +1307,7 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 - **`"chain"` / `"v2v"` / `"a2v"` は 2026-08-23 に、`"loras"` / `"reference_video"` は 2026-08-24 にこの配列から消えた。** いずれも LTX 2.5 で走るようになったためで、宣言を残すと**動くタブやパネルを灰色にしてしまう**（`"a2v"` は Chained タブの音声カードだけでなく、Single タブの A2V とバッチ A2V の灰色化にも使われている。`"reference_video"` は Single・Chained 両方の参照動画パネルを灰色にしていた）。**`"keep_resident"` と `"sage_attention"` は 2026-08-25 にこの配列から消えた**（それぞれ高速化第 2 弾・第 3 弾。下記の注記を参照）。**`"retake"` と `"end_source"` は 2026-08-26 に消えた**（撮り直しの開通で Edit タブの「撮り直し」サブタブと、そこへ入るタイムラインの右クリック導線の灰色が解け、素材（末尾）の開通で Chained タブの「素材（末尾）」カードの灰色が解けた）。**`"outpaint"` は 2026-08-29 に消えた**（画角拡張の開通で Edit タブの「画角拡張」サブタブの灰色が解け、**Edit タブの 2 つのサブタブが両方とも生きた**）。**`"nag"` は 2026-08-30 に消えた**（非CFGネガティブプロンプトの開通。**ただしこれで画面のグレーアウトは 1 つも変わらない**——`"nag"` はフロントエンドが灰色化に使う 3 つの表のどこにも現れない語で、NAG のトグルは `unsupported_features` を見ずに描かれていた〔押せば 422 が返る、という関係だった〕。**この配列が減ってもグレーアウトが変わらない項目がある**という区別の 2 例目である）。**現在値は 2 件**で、**モード名はもう 1 つも残っていない**——連結生成の側は 2026-08-26 に、単発生成の側は 2026-08-29 にそうなった。したがってこの配列は、いまや (d) の 422 系（単発生成の拒否表）を**そのまま並べた式**であり、2 つの表が食い違いようがない形になっている。**そして 2026-08-30 以降、残る 2 件はどちらも「外部要因が揃わないと着手できないもの」だけである。**
 - **2026-08-24 の高速化第 1 弾では、この配列は動いていない。** `fused_gguf_dequant_kernel` と `block_swap_prefetch` は**「無視＋ログ」の側にあった項目**であって、`unsupported_features` で断っていた機能ではないためである。動いたのは (d)・(f) の 4 分類の対応表だけで、**画面のグレーアウトは 1 つも変わらず、フロントエンドのコードも無改修**である。
 - **2026-08-25 の高速化第 2 弾・第 3 弾では、この配列が動いた（8 件 → 7 件 → 6 件）。高速化 3 弾の中で動いたのはこの 2 つで、第 2 弾が最初である**（**配列そのものは上の行のとおり 2026-08-23・2026-08-24 にも動いている**）。 `keep_resident` は**もともと 422 で断っていた機能**なので、開通させると `unsupported_features` から名前が 1 つ消える——**「断っていた機能を開ける」ときと「無視していた項目を効かせる」ときとで、動く表が違う**という区別に注意すること。前者では (d)・(f) の 4 分類の対応表に加えてこの配列も動き、**画面のグレーアウトが 1 つ解ける**。後者（第 1 弾）では 4 分類の対応表しか動かない。**同日の第 3 弾（SageAttention）も前者の側で、`sage_attention` が抜けたぶん設定画面の attention の選択が LTX 2.5 でも押せるようになった**（`Docs/VERIFICATION_LOG.md` §77.4）。
+- **2026-09-15 の Inpainting で、この配列は 2 件 → 3 件になった（`inpaint` を追加）。** **この配列に名前が増えるのは 2 回目、モードが増えるのは初めてである**（1 回目は 2026-09-03 の `keep_resident_embeddings` で、そちらは LTX 2.3 の側の配列だった）。**画面では Edit タブの「Inpainting」サブタブが灰色になる**——2026-08-26 に作ったサブタブ単位のグレーアウトの仕組みが、2026-08-29 に画角拡張で空になって以来、再び実際に使われている。
 - **これは先回りであって強制ではない。** クライアントがこのフィールドを無視して要求を出しても、下記 (c) のとおりサーバー側が断る。
 
 #### (c) `FEATURE_UNSUPPORTED`（422）
@@ -1282,13 +1319,13 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 
 メッセージは `"'{feature}' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)"`。**判定はジョブを作る前・他のどの検証よりも先**に行う（素材の有無より先に答えないと、利用者は直しようのないものを直しに行くことになるため）。**拒否されたリクエストではジョブが 1 件も作られない。**
 
-#### (d) `GenerateRequest` の各フィールドの扱い（4 分類・全 29 件。**2026-09-03 に 422 系 2・無視 2・動作 25・従属 0 へ改訂**）
+#### (d) `GenerateRequest` の各フィールドの扱い（4 分類・全 30 件。**2026-09-15 に 422 系 3・無視 2・動作 25・従属 0 へ改訂**〔`inpaint` の新設で 422 系が 1 つ増え、総数が 29 → 30 になった。それ以前は 2026-09-03 の 422 系 2・無視 2・動作 25・従属 0〕）
 
 **`GenerateRequest` のフィールドは、必ず次の 4 分類のいずれか 1 つに属する。** この網羅性は pytest が `GenerateRequest.model_fields` と突き合わせて機械検証しており、将来フィールドが増えたらそのテストが落ちて対応表の更新が強制される。
 
 | 分類 | 件数 | フィールド | 扱い |
 |---|---:|---|---|
-| **422 系** | 2 | `pipeline`（`"distilled"` 以外）／`vae_mode`（`"default"` 以外） | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**——クライアントは毎回スキーマ全体を送るため、既定値のまま届いたフィールドは利用者が求めたものではない。**`loras` / `reference_video_id` は 2026-08-24 に、`keep_resident` と `attention_backend` は 2026-08-25 にこの分類を抜けて「動作」へ移った。この 2 つの移動にともなって `unsupported_features` も 8 件 → 7 件 → 6 件になった**（**この分類から出たのは `keep_resident` が最初ではない**——前日の `loras` / `reference_video_id` が先である。「初めて」と言えるのは**高速化 3 弾の中では初めて**という限定形だけである。**前日〔2026-08-24〕の高速化第 1 弾ではこの分類は 1 件も動いていない**）。**`outpaint` は 2026-08-29 にこの分類を抜けて「動作」へ移り、`unsupported_features` も 4 件 → 3 件になった**——**単発生成の側で「モード」を名指ししていた最後の行がこれである**。残る 3 つはいずれもモードではなく、このエンジンが持たない機能を指すフィールドである。**`nag_enabled` は 2026-08-30 にこの分類を抜けて「動作」へ移り、`unsupported_features` も 3 件 → 2 件になった**——**残る 2 つはどちらも外部要因待ちで、いま着手できるものは 1 つも無い** |
+| **422 系** | 3 | `pipeline`（`"distilled"` 以外）／`vae_mode`（`"default"` 以外）／**`inpaint`（`null` 以外）** | `FEATURE_UNSUPPORTED`。**判定は常に「既定値と違うか」であって「フィールドが有るか」ではない**——クライアントは毎回スキーマ全体を送るため、既定値のまま届いたフィールドは利用者が求めたものではない。**`loras` / `reference_video_id` は 2026-08-24 に、`keep_resident` と `attention_backend` は 2026-08-25 にこの分類を抜けて「動作」へ移った。この 2 つの移動にともなって `unsupported_features` も 8 件 → 7 件 → 6 件になった**（**この分類から出たのは `keep_resident` が最初ではない**——前日の `loras` / `reference_video_id` が先である。「初めて」と言えるのは**高速化 3 弾の中では初めて**という限定形だけである。**前日〔2026-08-24〕の高速化第 1 弾ではこの分類は 1 件も動いていない**）。**`outpaint` は 2026-08-29 にこの分類を抜けて「動作」へ移り、`unsupported_features` も 4 件 → 3 件になった**——**単発生成の側で「モード」を名指ししていた行は、2026-09-15 に `inpaint` が入るまで、これが最後だった**。そのとき残った 3 つはいずれもモードではなく、このエンジンが持たない機能を指すフィールドだった。**`nag_enabled` は 2026-08-30 にこの分類を抜けて「動作」へ移り、`unsupported_features` も 3 件 → 2 件になった**——**そのとき残った 2 つはどちらも外部要因待ちで、当方から着手できるものは 1 つも無かった。** **そして 2026-09-15 の Inpainting で、この分類は初めて「入る側」へ動いた**——`inpaint` は最初から LTX 2.3 専用の機能として作られており、`unsupported_features` は 2 件 → 3 件になった（上記 (a)・(b)）。 |
 | **無視＋ログ** | 2 | `guidance_scale`／`num_inference_steps` | ジョブは通常どおり走る。値は効かず、**アプリ側のロガー**（`ltx25.runner`＝`logs/server.log`）に理由が 1 行残る（ワーカーのログ `logs/ltx25_worker.log` ではない——判定も記録もアプリ側で完結し、無視するフィールドはワーカーへ送られないため）。**既定値のまま届いたフィールドは名指ししない**（利用者が選んでいないものを毎回並べると、その行自体が読み飛ばされるようになるため）。**`fused_gguf_dequant_kernel` / `block_swap_prefetch` は 2026-08-24 に、`negative_prompt` / `neg_method` / `vsf_scale` は 2026-08-30 にこの分類を抜けて「動作」へ移った**——後者の 3 つは非CFGネガティブプロンプトそのものを構成するフィールドなので、「無視した」と記録するのは嘘になる。**残る理由はこれで 1 つに揃った**——蒸留版 2.5 の日程は固定で、CFG（プロンプトへの従い具合の制御）もステップ数の概念も無い。**ただし実運用ではこの 2 件のログ行は出ない**: スキーマは `pipeline` が `"distilled"` のときこの 2 つを既定値に固定する（§6.2）ので、**LTX 2.5 が受理しうるリクエストでは既定値以外になりようがない。分類としては正しい（黙って落としてはいない、という宣言である）が、読まれるメッセージではない** |
 | **動作** | 25 | `prompt`／`width`／`height`／`num_frames`／`frame_rate`／`seed`／`conditioning_images`／`crop_output`／**`loras`**／**`reference_video_id`**／**`conditioning_attention_strength`**／**`reference_video_strength`**／**`fused_gguf_dequant_kernel`**／**`block_swap_prefetch`**／**`keep_resident`**／**`attention_backend`**／**`outpaint`**／**`nag_enabled`**／**`negative_prompt`**／**`nag_scale`**／**`nag_tau`**／**`nag_alpha`**／**`neg_method`**／**`vsf_scale`**／**`keep_resident_embeddings`** | そのまま効く。`crop_output` は完成した mp4 への ffmpeg 後処理（中央クロップ）で、エンジンに依存しないため**動作させる**（黙って消さない）。`loras` と `reference_video_id`（2026-08-24 追加）の効き方は**間接的**である——リクエストが運ぶのは登録名とアップロード id で、アプリ側がそれをファイルのパスへ解決してからワーカーへ渡す。2 つの強度はリクエストから直接読まれ、参照条件の作り方を変える。**末尾 2 つの高速化つまみ（同じく 2026-08-24 追加）はリクエストから直接読まれ、LTX 2.3 と同じ加算方式でペイロードへ載る**（要求されたときだけ鍵が載るので、明示的に off にしたジョブのペイロードは以前とバイト単位で同じである）。実際に効いたかどうかは `metadata.json` の `fused_gguf_dequant_kernel_used` / `block_swap_prefetch_used`（`"off"` / `"on"` / `"on->off"`）に出る——**「動作」と宣言した以上、降格したかどうかが見えることまでが約束である**。**`keep_resident`（2026-08-25 追加・既定 off）も同じ加算方式で載る**が、**契約が同じだけで実装は LTX 2.3 とは別物**である——2.5 が常駐させるのは Gemma 4 テキストエンコーダの state dict ただ 1 つ（実測 7.68GiB）で、**キーが無いこと自体が「解放してよい」という指示**（これは 2.3 の契約の逐語再掲である）。エコー `keep_resident_used` は 2.5 では `"on"` / `"off"` の 2 値しか出ない（§6.6）。**`attention_backend`（2026-08-25 追加・既定 `"sdpa"`）も同じ加算方式で載る**が、**この 1 つだけは「効かせると出来上がる絵が変わる」種類のつまみである**——同じシードでもビット単位では一致しない。降格の規律は LTX 2.3 と逐語で同じで、エコー `attention_used` は `"sdpa"` / `"sage"` / `"sage->sdpa"` の 3 値がそのまま出る（LTX 2.5 でも `"sage->sdpa"` が実際に出ることを実機で確認済み。`Docs/VERIFICATION_LOG.md` §77.5 の R7）。**`outpaint`（2026-08-29 追加）もリクエストから直接読まれ、LTX 2.3 と同一のキー順のブロックとしてワーカーのペイロードへ載る**（`outpaint` を送らないリクエストのペイロードは以前とバイト単位で同じである）。**効き方は間接的である**——リクエストが運ぶのはキャンバスの幾何（4 辺のパディングとブレンドの膨張幅と音声凍結の可否）だけで、**外周を緑で塗ったキャンバス動画はアプリ層が作って `reference_video` へ差し替える**（`services/video_io.py` の `pad_green_mp4`。エンジン系統に依存しない）。**このブロックが有ることそのものが、ワーカーを二段の画角拡張ドライバへ振り分けるスイッチである**（`engine25/outpaint25.py`）。詳細は §6.10(a) と `Docs/VERIFICATION_LOG.md` §79。**末尾 7 つ（2026-08-30 追加）は非CFGネガティブプロンプトの一式で、3 つの分類から同時に移ってきた**——`nag_enabled` は 422 系から、`negative_prompt` / `neg_method` / `vsf_scale` は「無視＋ログ」から、`nag_scale` / `nag_tau` / `nag_alpha` は「従属」から、である（**これで「従属」は空になった**）。**7 つともリクエストから直接読まれ、LTX 2.3 と同一のキー順・同一の加算方式でワーカーのペイロードへ載る**（`nag_enabled` が `false` のジョブは鍵が 1 つも増えないので、ペイロードは以前とバイト単位で同じである。**ワイヤ上の鍵は `neg_method` ではなく `method` で、これも 2.3 の逐語である**）。**この 7 つは「効かせると出来上がる絵が変わる」種類のフィールドである**——`attention_backend` と同じ側で、同じシードでもビット単位では一致しない。詳細は §6.10(a) と `Docs/VERIFICATION_LOG.md` §80。**末尾の `keep_resident_embeddings`（2026-09-03 追加・既定 off）は、この分類に「他の分類から移ってきたのではなく、この分類で生まれた」初めてのフィールドである**——ここまでの全員は 422 系・無視＋ログ・従属のいずれかから移ってきたが、これは LTX 2.5 にしか無い部品を名指しするので、存在した日から動作である。**加算方式も `keep_resident` の逐語再掲**で、要求されたときだけ鍵が載り、**キーが無いこと自体が「解放してよい」という指示**である。エコー `keep_resident_embeddings_used` は `"on"` / `"off"` の 2 値だけ（§6.6）。**このフィールドの 422 は、このエンジンではなく LTX 2.3 のものである**（上記 (c)） |
 | **従属** | 0 | （空） | 上位のフィールドが既定のままなら意味を持たない、という分類である。**上位が 422 系にあるため、これらが意味を持つリクエストは上位の時点で既に断られている**（＝走るジョブに到達できない。だから「無視」とは別扱いにしてある）。**2 つの参照強度は 2026-08-24 に、最後に残っていた `nag_scale` / `nag_tau` / `nag_alpha` は 2026-08-30 に、この分類を抜けて「動作」へ移った**——上位（`loras` / `nag_enabled`）が動くようになった以上、つまみは本当にジョブを変えるので「動作」が正しい。**従属のまま置くと「指定しても黙って消える」と宣言することになる。** **この分類は空になったが、名前は残してある**——網羅監査がこの表を名前で読むこと・「すべての従属フィールドの上位が 422 であること」を確かめるテストのループが正直に空になること・**将来また 422 の背後に副パラメータができたときの置き場になること**、の 3 点が理由である |
@@ -1444,10 +1481,16 @@ generate(
 ```text
 outputs/
 └── {job_id}/
-    ├── output.mp4       # H.264 / yuv420p。音声ありジョブは AAC を mux
-    └── metadata.json    # 生成メタデータ（save_metadata_json: true のとき）
+    ├── output.mp4               # H.264 / yuv420p。音声ありジョブは AAC を mux
+    ├── metadata.json            # 生成メタデータ（save_metadata_json: true のとき）
+    ├── joined.mp4               # V2V 継続ジョブを POST /jobs/{id}/join で結合したとき
+    ├── _retake_window.mp4       # 撮り直しジョブ: 素材から切り出した窓
+    ├── outpaint_canvas.mp4      # 画角拡張ジョブ: 緑で塗ったキャンバス（可逆符号化）
+    ├── _inpaint_window.mp4      # Inpainting ジョブ: 素材から切り出した窓（crf 12）
+    └── inpaint_canvas.mp4       # Inpainting ジョブ: マスクの白い領域を緑で塗ったキャンバス（可逆符号化）
 ```
 
+- **窓とキャンバスの中間物は、そのジョブの置き場に意図的に残す**（撮り直し・画角拡張・Inpainting の 4 ファイル。**`uploads/` へは書かない**——あちらは利用者がいつ消してもよいキャッシュだからである。`Docs/STORAGE_POLICY.md` §0・§1）。「何を入れたらこれが出たか」を後から確かめるための証拠であり、`DELETE /jobs/{job_id}` でジョブごと消える。
 - ジョブ履歴は in-memory（サーバー再起動で消える）。一方 `outputs/{job_id}/metadata.json` はディスクに残る。
 - `metadata.json` のスキーマ自体は **§6.6** を正本とする（本章では重複させない）。`peak_vram_mb` は `metadata.json` の `vram_optimization` ブロック、または `logs/ltx_worker.log` の `GENERATED_OK peak_vram_mb=` から取得できる（jobs API 応答には含まれない）。
 

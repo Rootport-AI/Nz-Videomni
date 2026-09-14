@@ -5,7 +5,7 @@
 **生きた文書（物体追尾機能の設計正本）。** AviUtl2のタイムラインに置いた**部分フィルタ**（AviUtl2のメディアオブジェクトの一種。枠の内側だけに、後から足した効果を掛ける）の枠を、**UETrack**（単一物体追跡AI。1フレームにつき矩形をひとつ返す）に追わせて、結果を部分フィルタの**中間点**（値の時間変化を指定する点）として書き戻す機能を記述します。
 
 - 作成: 2026-09-11
-- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02（完結の記録。起票時は台帳 §3-54、着手時は §1-29）。マスクの受け渡しは台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55 が正本で、本書は扱いません。
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02（完結の記録。起票時は台帳 §3-54、着手時は §1-29）。マスクの受け渡しは [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6 が正本で、本書は扱いません。
 - 状態: 完結。main へ merge 済みです（完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104。作業ブランチは削除してあり、その名前とコミットの一覧は §104.2 にあります）。
 
 **本書には現在の設計だけを現在形で書きます。** 第1部「決まったこと」は、実装を担当する人が**第1部だけを読めば着手できる**ことを目標に書いてあります。第2部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
@@ -14,7 +14,7 @@
 
 | 文書 | 関係 |
 |------|------|
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済み（記録は `PENDING_TASKS_CLOSED.md` §3-54-02）、マスク契約は §3-55 |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済み（記録は `PENDING_TASKS_CLOSED.md` §3-54-02）。マスク受け渡し契約の正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6 で、台帳側では §4-25 が外部プラグイン由来のマスクの入口を扱う |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 仮想環境をエンジン系統ごとに1つ持つ方針の正本（§5.3）。本機能はその並びに**推論エンジンではない**仮想環境を1つ足す最初の例 |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能は保存物を作らないので、この原則の適用対象外である |
 | [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 | AviUtl2本体の実機確定知見。エイリアスの `frame=` が両端を含むこと、エイリアスのヘッダが `length` 引数に勝つことの正本 |
@@ -334,7 +334,7 @@ UETrackは動画生成とは別の依存関係（CPU版のPyTorchなど）で動
 - アップロード置き場も出力置き場も使いません。一時ファイルも作りません。したがって [`STORAGE_POLICY.md`](STORAGE_POLICY.md) の適用対象外です。
 - **動画生成のジョブとは完全に独立です。** 追尾は生成ボタンを止めませんし、サーバーが生成で忙しいかどうかを追尾は見ません。追尾はCPUだけを使い、生成はGPUを使うので、取り合いになりません。
 - **MCPサーバーの道具にはしません。** AviUtl2のタイムラインの上でしか意味を持たない操作だからです。
-- **マスク動画の作成は本機能の外です。** マスクはAviUtl2側のオブジェクトから作る話で、契約の正本は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55、入口の接続は同書 §4-25 です。追尾で動かした部分フィルタも、手で作ったオブジェクトも、そちらから見れば同じ「AviUtl2側のオブジェクト」です。
+- **マスク動画の作成は本機能の外です。** マスクはAviUtl2側のオブジェクトから作る話で、契約の正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6、外部プラグイン由来のマスクの入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-25 です。追尾で動かした部分フィルタも、手で作ったオブジェクトも、そちらから見れば同じ「AviUtl2側のオブジェクト」です。
 
 ## 9. 検証の関門
 
@@ -374,7 +374,7 @@ UETrackは動画生成とは別の依存関係（CPU版のPyTorchなど）で動
 - 見失ったあとの再検出、テンプレートの自動更新
 - 推論の別形式への変換（ONNX化）
 - MCPサーバーの道具としての追加
-- マスク動画の生成（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55）
+- マスク動画の生成（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §5・§6）
 - 探索窓だけを切り出して送る通信の軽量化
 - 逆方向の追尾
 - UETrackの小型・極小バリアントを選ぶ画面
@@ -411,11 +411,11 @@ UETrackは動画生成とは別の依存関係（CPU版のPyTorchなど）で動
 
 **追跡結果から直接マスク動画を作る案を否決しました。**
 
-**UETrackは矩形しか返しません**（領域を画素単位で切り分ける機能は持っていません）。マスクを作るなら矩形を白く塗るだけになりますが、それは**AviUtl2側のオブジェクトから作れること**で（作り方は §3-55 で決めます）、サーバーが作る必然性がありません。しかも一度サーバーにマスクを作らせると、「どの形式で」「どこへ置いて」「誰が消すのか」という保存物の議論が追尾に流れ込みます。
+**UETrackは矩形しか返しません**（領域を画素単位で切り分ける機能は持っていません）。マスクを作るなら矩形を白く塗るだけになりますが、それは**AviUtl2側のオブジェクトから作れること**で（作り方の正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §5）、サーバーが作る必然性がありません。しかも一度サーバーにマスクを作らせると、「どの形式で」「どこへ置いて」「誰が消すのか」という保存物の議論が追尾に流れ込みます。
 
-矩形しか返さないこと自体は、部分再生成の用途では問題になりません。潜在空間の都合でマスクは32画素角のブロック精度に丸まるので、矩形で足ります（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55）。
+矩形しか返さないこと自体は、部分再生成の用途では問題になりません。マスクの形を決めるのは**部分フィルタの枠そのもの**（矩形か楕円か・角の丸め・回転）であって、追尾はその枠を動かすだけだからです（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §12）。
 
-マスクの受け渡しは、追尾に限らず「AviUtl2側で作ったオブジェクトから白黒の動画を作って渡す」という共通の話です。したがって契約は §3-55 に一本化し、**追尾はその入力元の1つに過ぎない**という位置づけにしました。手で作ったマスクも、他者のプラグインが作ったマスクも、同じ入口を通ります。
+マスクの受け渡しは、追尾に限らず「AviUtl2側で作ったオブジェクトから白黒の動画を作って渡す」という共通の話です。したがって契約は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6 に一本化し、**追尾はその入力元の1つに過ぎない**という位置づけにしました。手で作ったマスクも、他者のプラグインが作ったマスクも、同じ入口を通ります。
 
 ## 14. 生のRGBAで送る理由
 
@@ -526,7 +526,8 @@ UETrackを推論の別形式（ONNX）へ変換して速くする改造は、あ
 
 ## 参照
 
-- 台帳: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02（本機能の完結記録）／[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-55（マスク契約）・§4-25（AviUtl2側で作ったマスクの受け口）・§4-8(C)（参照条件のマスクの露出）
+- 台帳: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02（本機能の完結記録）／[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-25（AviUtl2側で作ったマスクの受け口）・§4-8(C)（参照条件のマスクの露出）
+- マスク受け渡し契約: [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6（正本）
 - UETrack 公式リポジトリ: <https://github.com/kangben258/UETrack>
 - UETrack 論文（CVPR 2026）: <https://openaccess.thecvf.com/content/CVPR2026/html/Kang_UETrack_A_Unified_and_Efficient_Framework_for_Single_Object_Tracking_CVPR_2026_paper.html>
 - UETrack arXiv: <https://arxiv.org/abs/2603.01412>

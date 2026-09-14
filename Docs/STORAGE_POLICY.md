@@ -21,12 +21,14 @@
 | 動画 | `uploads/videos/{video_id}/input{ext}`（リボン範囲トリム指定時はffmpegで切り出し`input.mp4`へ置換） | UUID | `services/video_upload_store.py` |
 | 音声 | `uploads/audios/{audio_id}/input{ext}` | UUID | `services/audio_upload_store.py` |
 
+- **Inpaintingのマスク動画も、ほかの動画と同じく`uploads/videos/`を通る**（`POST /upload/video`で預ける一時的な入力素材である。マスクの受け渡し契約の正本は[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6）。
 - TTL・自動削除・一覧/削除APIは**存在しない**（`api/uploads.py`にはPOST3本のみ）。
 - 実測（2026-08-01）: 画像243件/約281MB・動画137件/710MB・音声154件/127MB、合計534件・約1.1GB（最古は約1ヶ月前）。
 
 ### outputs/（成果物）
 
 - `outputs/{job_id}/` に `output.mp4`・`metadata.json`（設定で有効時）・V2V結合後は`joined.mp4`。job_idはジョブ作成時に発行されるUUID。
+- **撮り直し・画角拡張・Inpaintingは、途中で作った窓とキャンバスをそのジョブのディレクトリに残す**（`_retake_window.mp4`／`outpaint_canvas.mp4`／`_inpaint_window.mp4`／`inpaint_canvas.mp4`）。「何を入れたらこれが出たか」を後から確かめるための証拠であり、**uploads/へは書かない**——あちらは利用者がいつ消してもよい領域だからである（§0）。ジョブを消せば一緒に消える。
 - `DELETE /jobs/{job_id}`（終了済みジョブのみ）が`outputs/{job_id}`を削除する。これが唯一のディスク削除API。
 - 実測（2026-08-01）: 433件・約1.5GB。
 - `outputs/`内のMarkdownのうち、生きている文書が正本として参照するものは`Docs/Outputs-archive/`へスナップショット複写する。運用規則は同フォルダの[`README.md`](Outputs-archive/README.md)。

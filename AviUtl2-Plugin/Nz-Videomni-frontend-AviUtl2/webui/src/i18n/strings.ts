@@ -396,6 +396,20 @@ export const en = {
       windowNotCoveredNote:
         "The number of frames given is shorter than the partial filter. The tail end of the video will not be inpainted.",
 
+      /** マスク周囲の「のりしろ」 — the two blend dilation steps (0-15, default
+       * 5 / 2) the panel now sends on every request. The note's pixel figure
+       * comes from STAGE 2 (`VERIFICATION_LOG.md` §105.3: `r2 × long side ÷ 64
+       * + 18px`); with no target video measured there is no long side to
+       * multiply, so the number drops out of the sentence. */
+      blend: {
+        heading: "Blend margin around the mask",
+        stage1Label: "Stage-1",
+        stage2Label: "Stage-2",
+        note: (px: number): string => `About ${px}px around the mask becomes the blend margin.`,
+        noteUnknown:
+          "A band around the mask becomes the blend margin (the width appears once a target video is set).",
+      },
+
       /** のりしろ (glue) — a DISABLED mock in this increment (owner decision
        * D4). The controls are placed now so the shape of the finished feature is
        * visible; none of them does anything. */
@@ -2405,6 +2419,14 @@ export const ja: Strings = {
       windowShifted: "部分フィルタが動画の終わりに近いため、窓を頭側へずらしました。",
       windowNotCoveredNote:
         "部分フィルタよりも短いフレーム数が指定されています。動画の末尾側はInpaintされません。",
+
+      blend: {
+        heading: "マスク周囲の「のりしろ」",
+        stage1Label: "Stage-1",
+        stage2Label: "Stage-2",
+        note: (px: number): string => `※マスク周囲の約${px}pxが「のりしろ」になります。`,
+        noteUnknown: "※マスク周囲の帯が「のりしろ」になります（対象動画を入れると幅が分かります）。",
+      },
 
       glueHeading: "時間軸の「のりしろ」の有無",
       glueYes: "あり",

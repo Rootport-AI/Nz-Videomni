@@ -4,6 +4,7 @@ import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { DurationField } from "../single/CommonGenerationFields";
 import { formatDurationHint } from "../single/paramUtils";
+import { BLEND_DILATION_MAX, BLEND_DILATION_MIN, featherWidthPx } from "./outpaintGeometry";
 import type { UseInpaintFormResult } from "./useInpaintForm";
 
 export interface InpaintingPanelProps {
@@ -20,7 +21,8 @@ export interface InpaintingPanelProps {
  *
  * **表示専用**（状態は `useInpaintForm` が持ち、`EditScreen` が所有する）。
  * 上から順に: 見出し → 対象動画カード → 部分フィルタカード → フレーム数 →
- * 窓の読み出し → シード → のりしろ（モック）→ 進捗 → 生成前の注意
+ * 窓の読み出し → シード → マスク周囲ののりしろ → 時間軸ののりしろ（モック）
+ * → 進捗 → 生成前の注意
  * （カード 2 枚の並びは設計正本 §3.1「上が対象動画、下が部分フィルタ」）。
  *
  * ## 無いもの（すべて裁定の結果で、作り忘れではない）
@@ -32,8 +34,6 @@ export interface InpaintingPanelProps {
  *   一致しない素材は生成させる前に止める（伸縮しない）。
  * - **マスクを作るボタンが無い**（D8）。Generate 押下時に描画→アップロード→
  *   送信を一続きで行う。
- * - **マスクの膨張つまみが無い**。注意文（「部分フィルタは対象より広めに」）と
- *   画角拡張と同じ既定値で足りる、という監督の既定。
  * - **プロンプト欄が無い**。他タブと同じ共有バーを読む。空欄のままでも生成できる。
  */
 export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
@@ -47,6 +47,13 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
   const windowLine = form.window
     ? t.windowReadout(form.window.windowStart + 1, form.window.windowEnd + 1)
     : null;
+
+  /** のりしろの実寸（px）。膨張段数はキャンバスに対する相対量なので、
+   * `OutpaintingPanel` と同じく「いまのキャンバス」から毎回導く（保存しない）。
+   * 定数項 18px と「Stage-2 で決まる」は実測の正本 `VERIFICATION_LOG.md`
+   * §105.3 のとおり。 */
+  const featherPx =
+    featherWidthPx(form.blendStage2, Math.max(form.canvasWidth, form.canvasHeight)) + 18;
 
   return (
     <section className="edit-panel inpaint-panel">
@@ -154,6 +161,41 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
       </div>
 
       <SeedField seed={form.seed} disabled={busy} onChange={form.setSeed} />
+
+      {/* マスク周囲ののりしろ（ブレンドの膨張段数）。見た目は下のモックと同じ
+          `outpaint-align-group` だが、こちらは**有効**で、値はそのまま
+          `inpaint.blend_dilation_stage1/2` として送られる。注記の px は
+          Stage-2 から導く —— Inpainting の帯幅を決めているのは仕上げ段の膨張で
+          （`VERIFICATION_LOG.md` §105.3）、画角拡張（stage 1 が決める）とは
+          事情が違う。18px は同節の実測にある定数項。 */}
+      <fieldset className="outpaint-align-group">
+        <legend className="field-label">{t.blend.heading}</legend>
+        <label className="field field-inline">
+          <span className="field-label">{t.blend.stage1Label}</span>
+          <input
+            type="number"
+            min={BLEND_DILATION_MIN}
+            max={BLEND_DILATION_MAX}
+            step={1}
+            value={form.blendStage1}
+            disabled={busy}
+            onChange={(e) => form.setBlendStage1(Number(e.target.value))}
+          />
+        </label>
+        <label className="field field-inline">
+          <span className="field-label">{t.blend.stage2Label}</span>
+          <input
+            type="number"
+            min={BLEND_DILATION_MIN}
+            max={BLEND_DILATION_MAX}
+            step={1}
+            value={form.blendStage2}
+            disabled={busy}
+            onChange={(e) => form.setBlendStage2(Number(e.target.value))}
+          />
+        </label>
+        <p className="field-hint">{form.canvasKnown ? t.blend.note(featherPx) : t.blend.noteUnknown}</p>
+      </fieldset>
 
       {/* のりしろ（モック・D4）。`<fieldset disabled>` なので中の入力は**全部**
           押せない —— 個々の `disabled` を並べるより、「この塊はまだ動かない」が

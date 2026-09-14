@@ -120,7 +120,7 @@ export interface OutpaintSpec {
  * Inpainting)。{@link OutpaintSpec} の隣に置かれた**加算的**なフィールドで、
  * 送らなければ従来のリクエストと1バイトも変わらない。
  *
- * 送る値は2つだけ（長さの二重定義を置かないため）:
+ * 送る値（長さの二重定義を置かないため、窓の長さは `num_frames` だけが正本）:
  *
  *  - `mask_video_id` —— `POST /upload/video` で得たID。白＝描き替える領域で、
  *    しきい値128の二値化は**受信側**が行う（H.264の縁に出る中間輝度を、送り手が
@@ -136,12 +136,23 @@ export interface OutpaintSpec {
  * 128の倍数へ切り上げたもの）で、余白はサーバーが素材の実寸から導出する
  * ——請求に余白は載せない。出力解像度は素材の実寸に戻される。
  *
- * 膨張段数（`blend_dilation_stage1`/`stage2`）は契約上は存在するが WebUI からは
- * **送らない**: つまみを置かない裁定なので、サーバー側の既定に追随させる。
  */
 export interface InpaintSpec {
   mask_video_id: string;
   window_start_sec: number;
+  /**
+   * マスク周囲の「のりしろ」＝ブレンドの膨張段数。パネルの数値欄がそのまま
+   * 載る値で、既定は 5 / 2（{@link OutpaintSpec} と同じ範囲 `0..15`）。
+   *
+   * 画角拡張と違い、**常に送る**（オーナー裁定 2026-09-15、台帳 §2-10 ①）——
+   * ユーザーが 1 刻みで指定できる欄なので、省略してサーバー既定に落ちる経路を
+   * 残すと「画面の数字と送った値が違う」状態が作れてしまう。
+   *
+   * 見えるなじみ幅は Inpainting では **stage 2** の値で決まる
+   * （`VERIFICATION_LOG.md` §105.3 の実測: `r2 × 長辺 ÷ 64 ＋ 18px`）。
+   */
+  blend_dilation_stage1: number;
+  blend_dilation_stage2: number;
 }
 
 /** Fields the WebUI is allowed to submit for a `/generate` call (M2 T2V scope,

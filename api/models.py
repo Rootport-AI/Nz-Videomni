@@ -321,9 +321,9 @@ class InpaintSpec(BaseModel):
     window_start_sec: float = Field(0.0, ge=0.0)
 
     # Laplacian-pyramid blend dilation for the two blends, the same knob and the
-    # same 0-15 range outpainting exposes (``OutpaintSpec``). The frontend does
-    # NOT send either: inpainting's panel has no mask-blur control, so both keys
-    # are omitted from every real request and the server's defaults stand. They
+    # same 0-15 range outpainting exposes (``OutpaintSpec``). The AviUtl2 panel
+    # exposes both as integer fields ("Stage-1" / "Stage-2", defaults 5 / 2) and
+    # always sends them; the defaults here stand for any other client. They
     # exist as fields because the GPU gate has to be able to sweep them without
     # a code change — which is how the defaults were chosen in the first place.
     blend_dilation_stage1: int = Field(5, ge=0, le=15)

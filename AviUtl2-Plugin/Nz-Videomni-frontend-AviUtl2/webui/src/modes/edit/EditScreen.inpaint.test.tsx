@@ -295,6 +295,44 @@ describe("EditScreen — Inpainting パネルの中身", () => {
     ]);
   });
 
+  it("マスク周囲ののりしろは有効な欄で、シードの後・時間軸のモックの前に出る", () => {
+    seedBothSlots();
+    renderInpaint();
+    const panel = panelEl();
+    const blend = within(panel).getByRole("group", { name: en.edit.inpainting.blend.heading });
+
+    // 下のモックと同じ見た目でも、こちらは押せる（既定は 5 / 2）。
+    const inputs = within(blend).getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) expect(input).not.toBeDisabled();
+    expect(inputs[0]?.value).toBe("5");
+    expect(inputs[1]?.value).toBe("2");
+
+    // 並びはオーナー指定どおり「シード → マスク周囲ののりしろ → 時間軸の
+    // のりしろ（モック）」。索引ではなく DOM の前後で見る。
+    const seedButton = within(panel).getByRole("button", { name: en.single.seed.randomTooltip });
+    const glue = within(panel).getByRole("group", { name: en.edit.inpainting.glueHeading });
+    expect(seedButton.compareDocumentPosition(blend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(blend.compareDocumentPosition(glue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("対象動画があれば注記に実寸が出る（1280×768・Stage-2＝2 なら 58px）", () => {
+    // 帯幅は Stage-2 で決まる（`VERIFICATION_LOG.md` §105.3 の実測）:
+    // 2 × 1280 ÷ 64 ＝ 40、＋18px ＝ 58px。
+    seedBothSlots(makeItem({ mediaWidth: 1280, mediaHeight: 768 }));
+    renderInpaint();
+    const blend = within(panelEl()).getByRole("group", { name: en.edit.inpainting.blend.heading });
+    const note = within(blend).getByText(en.edit.inpainting.blend.note(58));
+    expect(note.textContent).toContain("58px");
+  });
+
+  it("対象動画が無ければ数字抜きの注記を出す", () => {
+    // 長辺が測れていないのに px を出すと、0px という嘘の数字になる。
+    renderInpaint();
+    const blend = within(panelEl()).getByRole("group", { name: en.edit.inpainting.blend.heading });
+    expect(within(blend).getByText(en.edit.inpainting.blend.noteUnknown)).toBeTruthy();
+  });
+
   it("のりしろのモックは全部 disabled で、既定は「なし」", () => {
     seedBothSlots();
     renderInpaint();

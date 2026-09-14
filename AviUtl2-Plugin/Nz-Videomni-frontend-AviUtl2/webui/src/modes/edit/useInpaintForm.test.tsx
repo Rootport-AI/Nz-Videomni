@@ -456,7 +456,14 @@ describe("useInpaintForm — buildRequest", () => {
     // **アップロード後ファイルの時間軸**。窓はプロジェクトの 100 フレーム目
     // ＝素材の 2.0 + 100/30 秒だが、トリムで 2.0 秒を切り落としているので
     // 送る値は 100/30 = 3.333 秒。
-    expect(body.inpaint).toEqual({ mask_video_id: "mask-1", window_start_sec: 3.333 });
+    // のりしろは既定のままでも**常に**載る（省略してサーバー既定に落ちる経路は
+    // 作らない）。完全一致で見ているので、余計なキーが増えればここで落ちる。
+    expect(body.inpaint).toEqual({
+      mask_video_id: "mask-1",
+      window_start_sec: 3.333,
+      blend_dilation_stage1: 5,
+      blend_dilation_stage2: 2,
+    });
   });
 
   it("プロンプト空欄でも生成でき、空文字で送る", async () => {
@@ -473,6 +480,64 @@ describe("useInpaintForm — buildRequest", () => {
     const body = result.current.buildRequest("mask-1");
     expect(body).not.toHaveProperty("attention_backend");
     expect(body).not.toHaveProperty("keep_resident");
+  });
+});
+
+describe("useInpaintForm — マスク周囲ののりしろ", () => {
+  it("既定は 5 / 2（公式ワークフローと同じ値）", () => {
+    const { result } = renderForm();
+    expect(result.current.blendStage1).toBe(5);
+    expect(result.current.blendStage2).toBe(2);
+  });
+
+  it("整数へ丸めて 0〜15 へクランプする（サーバーの ge=0, le=15 と同じ）", () => {
+    const { result } = renderForm();
+    act(() => result.current.setBlendStage1(-1));
+    expect(result.current.blendStage1).toBe(0);
+    act(() => result.current.setBlendStage1(16));
+    expect(result.current.blendStage1).toBe(15);
+    act(() => result.current.setBlendStage1(2.6));
+    expect(result.current.blendStage1).toBe(3);
+
+    act(() => result.current.setBlendStage2(-1));
+    expect(result.current.blendStage2).toBe(0);
+    act(() => result.current.setBlendStage2(16));
+    expect(result.current.blendStage2).toBe(15);
+    act(() => result.current.setBlendStage2(2.6));
+    expect(result.current.blendStage2).toBe(3);
+  });
+
+  it("空欄などの数値でない入力は値を動かさない", () => {
+    // `Number("")` は 0 だが `Number("abc")` は NaN。丸めの前に弾かないと
+    // 画面の数字が NaN になる。
+    const { result } = renderForm();
+    act(() => result.current.setBlendStage1(Number.NaN));
+    expect(result.current.blendStage1).toBe(5);
+  });
+
+  it("動かした値が `buildRequest` に載る", async () => {
+    seedBothSlots();
+    const { result } = renderForm();
+    await waitFor(() => expect(result.current.isValid).toBe(true));
+    act(() => {
+      result.current.setBlendStage1(0);
+      result.current.setBlendStage2(7);
+    });
+    const body = result.current.buildRequest("mask-1");
+    expect(body.inpaint).toMatchObject({ blend_dilation_stage1: 0, blend_dilation_stage2: 7 });
+  });
+
+  it("❌ で既定へ戻る（シードと同じ扱い）", async () => {
+    seedBothSlots();
+    const { result } = renderForm();
+    await waitFor(() => expect(result.current.isValid).toBe(true));
+    act(() => {
+      result.current.setBlendStage1(12);
+      result.current.setBlendStage2(9);
+    });
+    act(() => result.current.clearAll());
+    expect(result.current.blendStage1).toBe(5);
+    expect(result.current.blendStage2).toBe(2);
   });
 });
 

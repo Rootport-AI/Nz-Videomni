@@ -27,7 +27,14 @@ import { FRAME_RATE_FALLBACK, snapFrameRate, snapNumFrames } from "../single/par
 // —— `useOutpaintForm` / `useRetakeForm` が同じ理由（chained/ は別ワークストリーム
 // の占有領域）でここから直接 import しており、本ファイルはその先例に倣っている。
 import { useSourceUpload } from "../chained/useSourceUpload";
-import { comfortTokenEstimate, isOverComfortBudget } from "./outpaintGeometry";
+import {
+  BLEND_DILATION_MAX,
+  BLEND_DILATION_MIN,
+  DEFAULT_BLEND_DILATION_STAGE1,
+  DEFAULT_BLEND_DILATION_STAGE2,
+  comfortTokenEstimate,
+  isOverComfortBudget,
+} from "./outpaintGeometry";
 import {
   INPAINT_FRAMES_MAX,
   INPAINT_FRAMES_MIN,
@@ -133,6 +140,9 @@ export interface UseInpaintFormResult {
   /** 送信する解像度＝素材の実寸を 128 の倍数へ切り上げたキャンバス。 */
   canvasWidth: number;
   canvasHeight: number;
+  /** キャンバス寸が測れているか（＝対象動画が入っているか）。なじみ幅の実寸を
+   * 出すかどうかの判断に使う。 */
+  canvasKnown: boolean;
 
   numFrames: number;
   /** `snap` の意味は Create/Chain の同名 setter と同じ: スライダー・ステッパーは
@@ -146,6 +156,17 @@ export interface UseInpaintFormResult {
 
   seed: number;
   setSeed: (value: number) => void;
+
+  /**
+   * マスク周囲の「のりしろ」＝ブレンドの膨張段数（Stage-1 / Stage-2）。既定は
+   * 5 / 2 で、setter は整数へ丸めて 0〜15 へクランプする（サーバーの
+   * `ge=0, le=15` と同じ）。シードと同じくフックの状態なので、右クリックを
+   * またいでも保持され、❌ で既定へ戻る。
+   */
+  blendStage1: number;
+  blendStage2: number;
+  setBlendStage1: (value: number) => void;
+  setBlendStage2: (value: number) => void;
 
   /** 確定した窓（毎描画導出。置けなければ `null`）。 */
   window: InpaintWindow | null;
@@ -243,6 +264,21 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   }, []);
 
   const [seed, setSeed] = useState(config.generation_defaults.seed);
+
+  // --- マスク周囲の「のりしろ」（ブレンドの膨張段数） -----------------------
+  // 既定 5 / 2 は公式ワークフロー（node 5266 / 5226）と同じ値。丸めとクランプの
+  // 式は `useOutpaintForm.setBlendDilation` と同じもの ——「受け付ける値」の
+  // 定義が 2 か所に割れないよう、定数も関数の形もそちらへ揃えてある。
+  const [blendStage1, setBlendStage1State] = useState(DEFAULT_BLEND_DILATION_STAGE1);
+  const [blendStage2, setBlendStage2State] = useState(DEFAULT_BLEND_DILATION_STAGE2);
+  const setBlendStage1 = useCallback((value: number) => {
+    if (!Number.isFinite(value)) return;
+    setBlendStage1State(Math.min(BLEND_DILATION_MAX, Math.max(BLEND_DILATION_MIN, Math.round(value))));
+  }, []);
+  const setBlendStage2 = useCallback((value: number) => {
+    if (!Number.isFinite(value)) return;
+    setBlendStage2State(Math.min(BLEND_DILATION_MAX, Math.max(BLEND_DILATION_MIN, Math.round(value))));
+  }, []);
 
   // --- 対象動画のアップロード（対象 1 つにつき 1 回） ------------------------
   const source = useSourceUpload("video", nativeBridge ? { nativeBridge } : {});
@@ -519,18 +555,36 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
         inpaint: {
           mask_video_id: maskVideoId,
           window_start_sec: Math.max(0, windowStartSec),
+          // のりしろは**常に**載せる（既定のままでも）。画面の数字と送った値が
+          // 食い違う経路を作らないため（台帳 §2-10 ①）。
+          blend_dilation_stage1: blendStage1,
+          blend_dilation_stage2: blendStage2,
         },
         // 既定から動かしていなければキーごと出ない（リクエストは従来と同形）。
         ...accelerationRequestFields(acceleration),
       };
     },
-    [mapping, prompt, canvasWidth, canvasHeight, numFrames, frameRate, seed, targetVideoId, acceleration],
+    [
+      mapping,
+      prompt,
+      canvasWidth,
+      canvasHeight,
+      numFrames,
+      frameRate,
+      seed,
+      blendStage1,
+      blendStage2,
+      targetVideoId,
+      acceleration,
+    ],
   );
 
   const clearAll = useCallback(() => {
     clearInpaintSlots();
     source.clear();
     setSeed(config.generation_defaults.seed);
+    setBlendStage1State(DEFAULT_BLEND_DILATION_STAGE1);
+    setBlendStage2State(DEFAULT_BLEND_DILATION_STAGE2);
     setMaskErrorCode("");
     setMaskProgress(null);
     setMaskPhase("idle");
@@ -549,6 +603,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     frameRate,
     canvasWidth,
     canvasHeight,
+    canvasKnown,
     numFrames,
     setNumFrames,
     commitNumFrames,
@@ -556,6 +611,10 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     maxFrames: INPAINT_FRAMES_MAX,
     seed,
     setSeed,
+    blendStage1,
+    blendStage2,
+    setBlendStage1,
+    setBlendStage2,
     window: placedWindow,
     mapping,
     isOverComfortBudget: overComfort,

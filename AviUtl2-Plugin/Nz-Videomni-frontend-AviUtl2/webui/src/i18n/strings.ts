@@ -407,7 +407,7 @@ export const en = {
         stage2Label: "Stage-2",
         note: (px: number): string => `About ${px}px around the mask becomes the blend margin.`,
         noteUnknown:
-          "A band around the mask becomes the blend margin (the width appears once a target video is set).",
+          "Strength of the blend margin that eases the mask into the surrounding video. Its width is derived from the target video's longer side in pixels.",
       },
 
       /** のりしろ (glue) — a DISABLED mock in this increment (owner decision
@@ -2425,7 +2425,7 @@ export const ja: Strings = {
         stage1Label: "Stage-1",
         stage2Label: "Stage-2",
         note: (px: number): string => `※マスク周囲の約${px}pxが「のりしろ」になります。`,
-        noteUnknown: "※マスク周囲の帯が「のりしろ」になります（対象動画を入れると幅が分かります）。",
+        noteUnknown: "※マスクを周囲の動画と馴染ませる「のりしろ」の強度。のりしろの幅は、対象動画の長辺のピクセル数に基づいて算出される。",
       },
 
       glueHeading: "時間軸の「のりしろ」の有無",

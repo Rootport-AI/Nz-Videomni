@@ -98,7 +98,7 @@ TEST_CASE("the pinned header matches what the host itself serializes") {
     // value is an INCLUSIVE end frame, so a 121-frame clip must read
     // "frame=0,120" - byte-identical to what AviUtl2 writes for the SAME 121-frame
     // material dropped onto the timeline (real-device capture
-    // data\Alias\R4_d_and_d.object; Docs\SDK_REFERENCE.md section 16 (h)).
+    // dataAlias\R4_d_and_d.object; Docs\SDK_REFERENCE.md section 16 (h)).
     // Writing "frame=0,121" - the old behaviour, captured in R4_insert.object -
     // produced a 122-frame object, one frame longer than the video.
     const std::string in = "[Object]\n[Object.0]\neffect.name=x\n";
@@ -874,4 +874,404 @@ TEST_CASE("PatchAliasPartialFilterKeyframes rounds X, Y and size to whole number
         CapturedPartialFilter("0,10", Kf("-835,-480"), Kf("-314,-60"),
                               Kf("50,961"), Kf("0.00,0.00"));
     CHECK(PatchAliasPartialFilterKeyframes(in, kfs, 1920, 1080, 11) == want);
+}
+
+// ---------------------------------------------------------------------------
+// Inpainting (section 3-55): the mask-copy alias transforms. The captured
+// partial filter above is reused as the input, so what these cases prove is
+// what the real device actually hands the bridge.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A second effect block, to be stacked on the captured partial filter: this is
+// the "the user added a mosaic on top" case KeepOnlyFirstEffectBlock exists for.
+std::string MosaicBlock(const std::string& eol = "\r\n") {
+    std::string a;
+    a += "[Object.1]";
+    a += eol;
+    a += "effect.name=";
+    a += kMosaic;
+    a += eol;
+    a += std::string(kSize) + "=20";
+    a += eol;
+    return a;
+}
+
+// The two-line whitening block the plugin writes, spelled out with ITS OWN
+// copies of the bytes - like every other name in this file, so a drift in
+// alias_util.cpp's escapes fails the case instead of hiding behind a shared
+// constant. Both names are the owner's 2026-09-14 on-device capture
+// (Docs/SDK_REFERENCE.md section 16 (k)); they are no longer provisional.
+const char* kInvertJp = "\xe5\x8f\x8d\xe8\xbb\xa2";  // "invert" effect
+const char* kLumaInvertJp =
+    "\xe8\xbc\x9d\xe5\xba\xa6\xe5\x8f\x8d\xe8\xbb\xa2";  // "luma invert" item
+
+std::string WhiteningBlock(const std::string& eol = "\r\n") {
+    std::string a;
+    a += "[Object.1]";
+    a += eol;
+    a += "effect.name=";
+    a += kInvertJp;
+    a += eol;
+    a += std::string(kLumaInvertJp) + "=1";
+    a += eol;
+    return a;
+}
+
+// The same effect EXACTLY as the real device saved it: six lines, of which the
+// plugin writes two (the effect name and the checkbox) and lets the host fill
+// in the other four. The four sibling names live only here, with their own
+// copies of the bytes, for the same reason as every other name in this file.
+const char* kFlipVJp =
+    "\xe4\xb8\x8a\xe4\xb8\x8b\xe5\x8f\x8d\xe8\xbb\xa2";  // "vertical flip"
+const char* kFlipHJp =
+    "\xe5\xb7\xa6\xe5\x8f\xb3\xe5\x8f\x8d\xe8\xbb\xa2";  // "horizontal flip"
+const char* kHueInvertJp =
+    "\xe8\x89\xb2\xe7\x9b\xb8\xe5\x8f\x8d\xe8\xbb\xa2";  // "hue invert"
+const char* kAlphaInvertJp =
+    "\xe9\x80\x8f\xe6\x98\x8e\xe5\xba\xa6\xe5\x8f\x8d\xe8\xbb\xa2";  // "alpha invert"
+
+std::string CapturedWhiteningBlock(const std::string& eol = "\r\n") {
+    std::string a;
+    a += "[Object.1]";
+    a += eol;
+    a += "effect.name=";
+    a += kInvertJp;
+    a += eol;
+    a += std::string(kFlipVJp) + "=0";
+    a += eol;
+    a += std::string(kFlipHJp) + "=0";
+    a += eol;
+    a += std::string(kLumaInvertJp) + "=1";
+    a += eol;
+    a += std::string(kHueInvertJp) + "=0";
+    a += eol;
+    a += std::string(kAlphaInvertJp) + "=0";
+    a += eol;
+    return a;
+}
+
+}  // namespace
+
+TEST_CASE("KeepOnlyFirstEffectBlock drops every effect block after the first") {
+    const std::string base = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    CHECK(KeepOnlyFirstEffectBlock(base + MosaicBlock()) == base);
+    // Two extra blocks, not just one.
+    CHECK(KeepOnlyFirstEffectBlock(base + MosaicBlock() + MosaicBlock()) == base);
+    // Nothing to drop: the input comes back byte for byte.
+    CHECK(KeepOnlyFirstEffectBlock(base) == base);
+}
+
+TEST_CASE("KeepOnlyFirstEffectBlock keeps a keyframed frame= line untouched") {
+    // The whole point of not using NormalizeAliasObjectFrameHeader here: the
+    // midpoint boundaries and the keyframed value lines have to survive.
+    const std::string base = CapturedPartialFilter(
+        "0,30,56,95", Kf("0,40,50,60"), Kf("0,30,50,60"), Kf("200,200,100,100"),
+        Kf("-30.00,-30.00,0.00,0.00"));
+    const std::string out = KeepOnlyFirstEffectBlock(base + MosaicBlock());
+    CHECK(out == base);
+    CHECK(Contains(out, "frame=0,30,56,95"));
+}
+
+TEST_CASE("KeepOnlyFirstEffectBlock preserves a BOM and the line-ending style") {
+    const std::string crlf = CapturedPartialFilter("23,33", "0", "0", "100", "0.00");
+    const std::string bom = "\xEF\xBB\xBF" + crlf;
+    CHECK(KeepOnlyFirstEffectBlock(bom + MosaicBlock()) == bom);
+
+    const std::string lf =
+        CapturedPartialFilter("23,33", "0", "0", "100", "0.00", "0.00", "\n");
+    const std::string out = KeepOnlyFirstEffectBlock(lf + MosaicBlock("\n"));
+    CHECK(out == lf);
+    CHECK(out.find("\r\n") == std::string::npos);
+}
+
+TEST_CASE("KeepOnlyFirstEffectBlock yields an empty string with no effect block") {
+    CHECK(KeepOnlyFirstEffectBlock("[Object]\r\nframe=0,10\r\n") == "");
+    CHECK(KeepOnlyFirstEffectBlock("") == "");
+    // "[Object]" is the META section, not effect 0 - even with an effect.name
+    // line inside it, which is the trap IsEffectSectionHeader exists for.
+    CHECK(KeepOnlyFirstEffectBlock("[Object]\r\neffect.name=x\r\n") == "");
+}
+
+TEST_CASE("AppendEffectBlock numbers the new block after the highest index") {
+    const std::string base = CapturedPartialFilter("0,10", "0", "0", "100", "0.00");
+    std::vector<std::string> lines;
+    lines.push_back("effect.name=x");
+    lines.push_back("y=1");
+    CHECK(AppendEffectBlock(base, lines) ==
+          base + "[Object.1]\r\neffect.name=x\r\ny=1\r\n");
+    // The highest index wins, not the count and not the last one seen.
+    const std::string many = base + "[Object.7]\r\neffect.name=a\r\n" +
+                             "[Object.3]\r\neffect.name=b\r\n";
+    CHECK(Contains(AppendEffectBlock(many, lines), "[Object.8]\r\neffect.name=x"));
+    // No effect block at all: the appended one is effect 0.
+    CHECK(AppendEffectBlock("[Object]\r\nframe=0,10\r\n", lines) ==
+          "[Object]\r\nframe=0,10\r\n[Object.0]\r\neffect.name=x\r\ny=1\r\n");
+    // Nothing to append, and nothing to append TO.
+    CHECK(AppendEffectBlock(base, std::vector<std::string>()) == base);
+    CHECK(AppendEffectBlock("", lines) == "");
+}
+
+TEST_CASE("AppendEffectBlock preserves a BOM and the line-ending style") {
+    std::vector<std::string> lines;
+    lines.push_back("effect.name=x");
+    const std::string crlf = CapturedPartialFilter("0,10", "0", "0", "100", "0.00");
+    CHECK(AppendEffectBlock("\xEF\xBB\xBF" + crlf, lines) ==
+          "\xEF\xBB\xBF" + crlf + "[Object.1]\r\neffect.name=x\r\n");
+    const std::string lf =
+        CapturedPartialFilter("0,10", "0", "0", "100", "0.00", "0.00", "\n");
+    const std::string out = AppendEffectBlock(lf, lines);
+    CHECK(out == lf + "[Object.1]\neffect.name=x\n");
+    CHECK(out.find("\r\n") == std::string::npos);
+}
+
+TEST_CASE("NormalizeAliasFrameBoundariesToRelative subtracts the first boundary") {
+    // The captured midpoints object, exactly as a save writes it.
+    const std::string in = CapturedPartialFilter(
+        "24,54,80,119", Kf("76,89,89,89"), Kf("-169,-153,-153,-153"),
+        Kf("77,231,207,207"), "0.00");
+    const std::string want = CapturedPartialFilter(
+        "0,30,56,95", Kf("76,89,89,89"), Kf("-169,-153,-153,-153"),
+        Kf("77,231,207,207"), "0.00");
+    CHECK(NormalizeAliasFrameBoundariesToRelative(in) == want);
+}
+
+TEST_CASE("NormalizeAliasFrameBoundariesToRelative leaves a relative alias alone") {
+    // Byte-identical, BOM included - the head is already 0, so there is nothing
+    // to do and nothing to risk.
+    const std::string rel = CapturedPartialFilter("0,120", "0", "0", "100", "0.00");
+    CHECK(NormalizeAliasFrameBoundariesToRelative(rel) == rel);
+    CHECK(NormalizeAliasFrameBoundariesToRelative("\xEF\xBB\xBF" + rel) ==
+          "\xEF\xBB\xBF" + rel);
+    // A single boundary still normalises (and a relative one still does not).
+    CHECK(Contains(NormalizeAliasFrameBoundariesToRelative(
+                       "[Object]\r\nframe=42\r\n[Object.0]\r\neffect.name=x\r\n"),
+                   "frame=0\r\n"));
+    // Nothing parsable: the input comes back untouched.
+    const std::string odd = "[Object]\r\nframe=a,b\r\n[Object.0]\r\neffect.name=x\r\n";
+    CHECK(NormalizeAliasFrameBoundariesToRelative(odd) == odd);
+    CHECK(NormalizeAliasFrameBoundariesToRelative("[Object.0]\r\neffect.name=x\r\n") ==
+          "[Object.0]\r\neffect.name=x\r\n");
+}
+
+TEST_CASE("ClipAliasFrameBoundaries shortens a constant box to the window") {
+    const std::string in = CapturedPartialFilter("0,120", "0", "0", "100", "0.00");
+    const std::string want = CapturedPartialFilter("0,40", "0", "0", "100", "0.00");
+    CHECK(ClipAliasFrameBoundaries(in, 41) == want);
+    // Already inside the window, or no window to speak of: untouched.
+    CHECK(ClipAliasFrameBoundaries(in, 121) == in);
+    CHECK(ClipAliasFrameBoundaries(in, 500) == in);
+    CHECK(ClipAliasFrameBoundaries(in, 0) == in);
+    CHECK(ClipAliasFrameBoundaries(in, -3) == in);
+}
+
+TEST_CASE("ClipAliasFrameBoundaries shortens the value lists with the boundaries") {
+    // Four boundaries, four values per keyframed line. Clipped to 41 frames the
+    // last two boundaries fall outside, so the box keeps the value it had at
+    // boundary 30 and holds it to the new end at 40 - never a value list that
+    // no longer matches the boundary list.
+    const std::string in = CapturedPartialFilter(
+        "0,30,56,95", Kf("0,40,50,60"), Kf("0,30,50,60"), Kf("200,200,100,100"),
+        Kf("-30.00,-30.00,0.00,0.00"));
+    const std::string want = CapturedPartialFilter(
+        "0,30,40", Kf("0,40,40"), Kf("0,30,30"), Kf("200,200,200"),
+        Kf("-30.00,-30.00,-30.00"));
+    CHECK(ClipAliasFrameBoundaries(in, 41) == want);
+
+    // A window that ends exactly on a boundary needs no repeated value.
+    const std::string want31 = CapturedPartialFilter(
+        "0,30", Kf("0,40"), Kf("0,30"), Kf("200,200"), Kf("-30.00,-30.00"));
+    CHECK(ClipAliasFrameBoundaries(in, 31) == want31);
+
+    // One frame: the minimal pair, with the head value repeated.
+    const std::string want1 = CapturedPartialFilter(
+        "0,0", Kf("0,0"), Kf("0,0"), Kf("200,200"), Kf("-30.00,-30.00"));
+    CHECK(ClipAliasFrameBoundaries(in, 1) == want1);
+}
+
+TEST_CASE("ClipAliasFrameBoundaries preserves a BOM and the line-ending style") {
+    const std::string in = CapturedPartialFilter("0,120", "0", "0", "100", "0.00");
+    const std::string want = CapturedPartialFilter("0,40", "0", "0", "100", "0.00");
+    CHECK(ClipAliasFrameBoundaries("\xEF\xBB\xBF" + in, 41) == "\xEF\xBB\xBF" + want);
+    const std::string lf =
+        CapturedPartialFilter("0,120", "0", "0", "100", "0.00", "0.00", "\n");
+    const std::string lf_want =
+        CapturedPartialFilter("0,40", "0", "0", "100", "0.00", "0.00", "\n");
+    CHECK(ClipAliasFrameBoundaries(lf, 41) == lf_want);
+}
+
+TEST_CASE("the whitening chain turns the captured partial filter into a mask copy "
+          "(captured constants)") {
+    // The whole transform the bridge runs, on the capture with two midpoints and
+    // a mosaic the user stacked on top. The two whitening bytes are the owner's
+    // 2026-09-14 capture (Docs/SDK_REFERENCE.md section 16 (k)); the plugin still
+    // writes only those two lines, so this expectation is what it always was.
+    const std::string seed =
+        CapturedPartialFilter("24,54,80,119", Kf("76,89,89,89"),
+                              Kf("-169,-153,-153,-153"), Kf("77,231,207,207"),
+                              "0.00") +
+        MosaicBlock();
+    const std::string relative = CapturedPartialFilter(
+        "0,30,56,95", Kf("76,89,89,89"), Kf("-169,-153,-153,-153"),
+        Kf("77,231,207,207"), "0.00");
+
+    const std::string out = AppendEffectBlock(
+        KeepOnlyFirstEffectBlock(NormalizeAliasFrameBoundariesToRelative(seed)),
+        WhiteningEffectBlockLines());
+    CHECK(out == relative + WhiteningBlock());
+    // The mosaic is gone, the midpoints are intact, and the whitening block is
+    // numbered after the ONE block that was kept - not after the one that was
+    // dropped.
+    CHECK_FALSE(Contains(out, kMosaic));
+    CHECK(Contains(out, "frame=0,30,56,95"));
+    CHECK(Contains(out, "[Object.1]"));
+    CHECK_FALSE(Contains(out, "[Object.2]"));
+}
+
+TEST_CASE("the whitening chain clips the copy to a short window "
+          "(captured constants)") {
+    // Owner decision D3: a window shorter than the partial filter. The copy has
+    // to end with the window, and its keyframes have to end with it too.
+    const std::string seed = CapturedPartialFilter(
+        "24,54,80,119", Kf("76,89,89,89"), Kf("-169,-153,-153,-153"),
+        Kf("77,231,207,207"), "0.00");
+    const std::string clipped = CapturedPartialFilter(
+        "0,30,40", Kf("76,89,89"), Kf("-169,-153,-153"), Kf("77,231,231"), "0.00");
+
+    std::string alias =
+        KeepOnlyFirstEffectBlock(NormalizeAliasFrameBoundariesToRelative(seed));
+    alias = ClipAliasFrameBoundaries(alias, 41);
+    alias = AppendEffectBlock(alias, WhiteningEffectBlockLines());
+    CHECK(alias == clipped + WhiteningBlock());
+}
+
+TEST_CASE("WhiteningEffectBlockLines is the two-line captured block") {
+    const std::vector<std::string> lines = WhiteningEffectBlockLines();
+    REQUIRE(lines.size() == 2);
+    CHECK(lines[0] == std::string("effect.name=") + kInvertJp);
+    CHECK(lines[1] == std::string(kLumaInvertJp) + "=1");
+}
+
+TEST_CASE("the captured whitening effect holds the two lines the plugin writes") {
+    // Record of the on-device capture (2026-09-14): the owner saved two .object
+    // files under data\Alias carrying a partial filter whitened by hand, both
+    // CRLF with no BOM, transcribed in Docs/SDK_REFERENCE.md section 16 (k).
+    // This is the effect block they carry, and it is why the plugin goes on
+    // writing just two lines.
+    const std::string block = CapturedWhiteningBlock();
+
+    // (a) both lines the plugin writes are in the capture, byte for byte and as
+    // WHOLE lines.
+    const std::vector<std::string> written = WhiteningEffectBlockLines();
+    REQUIRE(written.size() == 2);
+    CHECK(Contains(block, "\r\n" + written[0] + "\r\n"));
+    CHECK(Contains(block, "\r\n" + written[1] + "\r\n"));
+    // (b) the other four items are the host's own defaults - all four at 0 -
+    // which is exactly why the plugin leaves them out.
+    CHECK(Contains(block, "\r\n" + std::string(kFlipVJp) + "=0\r\n"));
+    CHECK(Contains(block, "\r\n" + std::string(kFlipHJp) + "=0\r\n"));
+    CHECK(Contains(block, "\r\n" + std::string(kHueInvertJp) + "=0\r\n"));
+    CHECK(Contains(block, "\r\n" + std::string(kAlphaInvertJp) + "=0\r\n"));
+    // Six item lines after the section header, and nothing else.
+    size_t line_count = 0;
+    for (size_t at = block.find("\r\n"); at != std::string::npos;
+         at = block.find("\r\n", at + 2)) {
+        ++line_count;
+    }
+    CHECK(line_count == 7);
+    // The first capture in full - 341 bytes on disk, no BOM.
+    CHECK((CapturedPartialFilter("0,224", "0", "0", "100", "0.00") + block).size() ==
+          341u);
+}
+
+TEST_CASE("the captured whitened partial filter feeds the mask-copy chain") {
+    // The second capture of 2026-09-14 ("frame= absolute or relative", 348 bytes
+    // on disk): the same partial filter with TWO midpoints, whitened by hand.
+    const std::string filter_only =
+        CapturedPartialFilter("0,75,146,224", "0", "0", "100", "0.00");
+    const std::string captured = filter_only + CapturedWhiteningBlock();
+    CHECK(captured.size() == 348u);
+
+    // KeepOnlyFirstEffectBlock drops the owner's hand-added whitening block, the
+    // way it drops any effect stacked on the partial filter.
+    CHECK(KeepOnlyFirstEffectBlock(captured) == filter_only);
+    // The boundaries the host SAVED start at 0, so normalising is a no-op here.
+    // A saved file cannot say which form get_object_alias returns at runtime,
+    // which is the whole reason the plugin normalises either way.
+    CHECK(NormalizeAliasFrameBoundariesToRelative(captured) == captured);
+    // The whole chain on the real capture: the hand-added block goes, the
+    // plugin's own two-line one takes its place, the midpoints survive.
+    const std::string out = AppendEffectBlock(
+        KeepOnlyFirstEffectBlock(NormalizeAliasFrameBoundariesToRelative(captured)),
+        WhiteningEffectBlockLines());
+    CHECK(out == filter_only + WhiteningBlock());
+    CHECK(Contains(out, "frame=0,75,146,224"));
+}
+
+TEST_CASE("ClipAliasFrameBoundaries leaves a mismatched value row alone") {
+    // A keyframed line whose value count does not match the boundary count was
+    // not keyframed against THESE boundaries (an effect the user added with its
+    // own history, say). Truncating it to the new count would be guesswork, so
+    // it is passed through untouched while the boundaries and the lines that DO
+    // match are shortened around it.
+    std::string in = CapturedPartialFilter("0,30,56,95", Kf("0,40,50,60"),
+                                           Kf("0,30,50,60"), Kf("200,200,100,100"),
+                                           Kf("-30.00,-30.00,0.00,0.00"));
+    in += "[Object.1]\r\n";
+    in += "effect.name=";
+    in += kMosaic;
+    in += "\r\n";
+    in += std::string(kSize) + "=" + Kf("10,20") + "\r\n";      // 2 values, not 4
+    in += std::string(kBlur) + "=" + Kf("1,2,3,4,5") + "\r\n";  // 5 values, not 4
+
+    std::string want = CapturedPartialFilter("0,30,40", Kf("0,40,40"), Kf("0,30,30"),
+                                             Kf("200,200,200"),
+                                             Kf("-30.00,-30.00,-30.00"));
+    want += "[Object.1]\r\n";
+    want += "effect.name=";
+    want += kMosaic;
+    want += "\r\n";
+    want += std::string(kSize) + "=" + Kf("10,20") + "\r\n";
+    want += std::string(kBlur) + "=" + Kf("1,2,3,4,5") + "\r\n";
+    CHECK(ClipAliasFrameBoundaries(in, 41) == want);
+}
+
+TEST_CASE("ClipAliasFrameBoundaries handles a head past the window and a one-frame "
+          "copy") {
+    // keep == 0: even the FIRST boundary is outside the window. That cannot
+    // come out of NormalizeAliasFrameBoundariesToRelative (whose head is always
+    // 0), and there is no honest way to shorten it, so the input is handed
+    // straight back rather than rewritten into a decreasing boundary list.
+    const std::string late =
+        CapturedPartialFilter("10,120", "0", "0", "100", "0.00");
+    CHECK(ClipAliasFrameBoundaries(late, 5) == late);
+    CHECK(ClipAliasFrameBoundaries(late, 1) == late);
+
+    // max_length <= 1 on a normal (head-at-0) alias is the minimal pair, and
+    // max_length < 1 is not a window at all.
+    const std::string in = CapturedPartialFilter("0,120", "0", "0", "100", "0.00");
+    CHECK(ClipAliasFrameBoundaries(in, 1) ==
+          CapturedPartialFilter("0,0", "0", "0", "100", "0.00"));
+    CHECK(ClipAliasFrameBoundaries(in, 0) == in);
+    CHECK(ClipAliasFrameBoundaries(in, -1) == in);
+}
+
+TEST_CASE("AppendEffectBlock works on an alias with no trailing newline") {
+    // get_object_alias is not contractually obliged to end its text with a
+    // newline. If the appended header were simply concatenated, a document that
+    // does not would come back with "<last item>[Object.1]" on one line - an
+    // alias AviUtl2 cannot read.
+    std::vector<std::string> lines;
+    lines.push_back("effect.name=x");
+    lines.push_back("y=1");
+    const std::string in = "[Object]\r\nframe=0,10\r\n[Object.0]\r\neffect.name=a";
+    CHECK(AppendEffectBlock(in, lines) ==
+          "[Object]\r\nframe=0,10\r\n[Object.0]\r\neffect.name=a\r\n"
+          "[Object.1]\r\neffect.name=x\r\ny=1");
+    // LF-only, no trailing newline either.
+    const std::string lf = "[Object]\nframe=0,10\n[Object.0]\neffect.name=a";
+    CHECK(AppendEffectBlock(lf, lines) ==
+          "[Object]\nframe=0,10\n[Object.0]\neffect.name=a\n"
+          "[Object.1]\neffect.name=x\ny=1");
 }

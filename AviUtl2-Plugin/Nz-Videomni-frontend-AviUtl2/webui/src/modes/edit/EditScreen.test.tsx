@@ -2,17 +2,20 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { ToastProvider } from "../../shell/ToastContext";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { EditScreen } from "./EditScreen";
 
 // 2026-08-09: the Edit tab was promoted from a disabled mock to a real mode,
 // and gained a sub-tab row of its own (Retake / Outpainting / Inpainting).
-// Inpainting is the mock here — `<button disabled>` with no `onClick` at all,
-// exactly like `shell/ModeTabs.tsx`'s Toolbox. These tests cover the SKELETON
-// only: order, the disabled one, the switch, and the deliberate ABSENCE of
-// `role="tabpanel"` (7 existing app-level test files take
+// Inpainting was the mock here until 2026-09-14 (台帳 §3-55), when it grew a
+// panel of its own and the mock arm left `EditSubTabs`' types altogether — so
+// ALL THREE sub-tabs are live on a base model with no restrictions now. These
+// tests cover the SKELETON only: order, the switch, and the deliberate ABSENCE
+// of `role="tabpanel"` (7 existing app-level test files take
 // `getByRole("tabpanel")` in the singular). The Outpainting panel's own
-// behaviour lives in `OutpaintingPanel.test.tsx`.
+// behaviour lives in `OutpaintingPanel.test.tsx`, Inpainting's in
+// `EditScreen.inpaint.test.tsx`.
 //
 // Outpainting (2026-08-09) turned that panel from a placeholder into a real
 // form, which brought two of its dependencies into this file's render tree:
@@ -50,11 +53,16 @@ afterEach(() => {
 function renderEdit(
   initialIntent?: GenerationPrefill,
   prompt?: string,
-  subTabsDisabled?: { retake: boolean; outpainting: boolean },
+  subTabsDisabled?: { retake: boolean; outpainting: boolean; inpainting: boolean },
 ) {
+  // `EditScreen` は Inpainting のマスク失敗をトーストで出すので、`useToasts`
+  // が本番と同じく `ToastProvider` の内側で呼ばれている必要がある（外だと
+  // `ToastContext.tsx` が throw する）。本番の入れ子は `AppShell` と同じ。
   return render(
     <LanguageProvider>
-      <EditScreen initialIntent={initialIntent} prompt={prompt} subTabsDisabled={subTabsDisabled} />
+      <ToastProvider>
+        <EditScreen initialIntent={initialIntent} prompt={prompt} subTabsDisabled={subTabsDisabled} />
+      </ToastProvider>
     </LanguageProvider>,
   );
 }
@@ -94,9 +102,13 @@ describe("EditScreen sub-tabs", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Retake", "Outpainting", "Inpainting"]);
   });
 
-  it("disables the Inpainting sub-tab only", () => {
+  it("leaves all three sub-tabs live when nothing is restricted", () => {
+    // §3-55 (2026-09-14): this used to be "disables the Inpainting sub-tab
+    // only" — the mock. There is no mock under Edit any more, so the ordinary
+    // case is three live tabs, and the ONLY thing that can grey one is the
+    // loaded base model's feature scope (asserted further down).
     renderEdit();
-    expect(screen.getByRole("tab", { name: "Inpainting" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Inpainting" })).not.toBeDisabled();
     expect(screen.getByRole("tab", { name: "Retake" })).not.toBeDisabled();
     expect(screen.getByRole("tab", { name: "Outpainting" })).not.toBeDisabled();
   });
@@ -122,14 +134,15 @@ describe("EditScreen sub-tabs", () => {
     expect(screen.getByRole("tab", { name: "Outpainting" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("does nothing when the disabled Inpainting sub-tab is clicked", async () => {
+  it("switches to the Inpainting panel when its sub-tab is clicked", async () => {
+    // §3-55: the mirror of the Outpainting case above. Until 2026-09-14 this
+    // asserted the opposite — a disabled mock that revealed nothing.
     const user = userEvent.setup();
     renderEdit();
     await user.click(screen.getByRole("tab", { name: "Inpainting" }));
-    // Still on Retake — no panel of its own was revealed, and no sub-tab moved.
-    expect(heading(/^retake/i)).toBeVisible();
-    expect(screen.getByRole("tab", { name: "Retake" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("heading", { name: /^inpainting/i, hidden: true })).not.toBeInTheDocument();
+    expect(heading(/^inpainting/i)).toBeVisible();
+    expect(heading(/^retake/i)).not.toBeVisible();
+    expect(screen.getByRole("tab", { name: "Inpainting" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("does NOT mark its sub-panels with role=tabpanel", () => {
@@ -276,40 +289,54 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
   const subTab = (name: string) => screen.getByRole("tab", { name });
   const heading = (name: RegExp) => screen.getByRole("heading", { name, hidden: true });
 
-  it("leaves both real sub-tabs live when the prop is omitted", () => {
+  it("leaves all three sub-tabs live when the prop is omitted", () => {
     // The regression that matters most: a build with this feature must look
     // exactly like the build before it on a base model with no restrictions.
     renderEdit();
     expect(subTab("Retake")).not.toBeDisabled();
     expect(subTab("Outpainting")).not.toBeDisabled();
-    expect(subTab("Inpainting")).toBeDisabled();
+    expect(subTab("Inpainting")).not.toBeDisabled();
   });
 
   it("greys the Outpainting sub-tab — and only it — when the engine cannot outpaint", () => {
-    renderEdit(undefined, undefined, { retake: false, outpainting: true });
+    renderEdit(undefined, undefined, { retake: false, outpainting: true, inpainting: false });
     expect(subTab("Outpainting")).toBeDisabled();
     expect(subTab("Retake")).not.toBeDisabled();
+    expect(subTab("Inpainting")).not.toBeDisabled();
   });
 
   it("greys the Retake sub-tab — and only it — when the engine cannot retake", () => {
-    renderEdit(undefined, undefined, { retake: true, outpainting: false });
+    renderEdit(undefined, undefined, { retake: true, outpainting: false, inpainting: false });
     expect(subTab("Retake")).toBeDisabled();
+    expect(subTab("Outpainting")).not.toBeDisabled();
+    expect(subTab("Inpainting")).not.toBeDisabled();
+  });
+
+  it("greys the Inpainting sub-tab — and only it — when the engine cannot inpaint", () => {
+    // §3-55 / owner decision D11: LTX 2.5 cannot run Inpainting in the first
+    // increment, so this is the state a 2.5 base model actually produces.
+    renderEdit(undefined, undefined, { retake: false, outpainting: false, inpainting: true });
+    expect(subTab("Inpainting")).toBeDisabled();
+    expect(subTab("Retake")).not.toBeDisabled();
     expect(subTab("Outpainting")).not.toBeDisabled();
   });
 
-  it("gives a greyed sub-tab its OWN reason, and the Inpainting mock none", () => {
-    // One greyed treatment, two reasons — the tooltip is what tells them apart
-    // (`shell/ModeTabs.tsx` makes the same call for its Toolbox mock). A greyed
-    // control with no stated reason is what this line exists to prevent; a mock
-    // that grew one would be telling the user to switch base models for
-    // something no base model has.
-    renderEdit(undefined, undefined, { retake: false, outpainting: true });
+  it("gives every greyed sub-tab its OWN reason, and a live one none", () => {
+    // §3-55: there is exactly ONE reason a sub-tab can grey now (the loaded
+    // base model cannot run it), so every greyed tab states it and every live
+    // tab says nothing. Until 2026-09-14 the Inpainting mock was the exception
+    // — greyed with no tooltip, because "not built yet" was true of it on
+    // every base model.
+    renderEdit(undefined, undefined, { retake: false, outpainting: true, inpainting: true });
     expect(subTab("Outpainting")).toHaveAttribute(
       "title",
       expect.stringMatching(/Outpainting is not available/i),
     );
+    expect(subTab("Inpainting")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Inpainting is not available/i),
+    );
     expect(subTab("Retake")).not.toHaveAttribute("title");
-    expect(subTab("Inpainting")).not.toHaveAttribute("title");
   });
 
   it("does nothing when a greyed real sub-tab is clicked", async () => {
@@ -317,7 +344,7 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
     // with no `onClick` attached at all, so there is no handler to reach even if
     // the disabled attribute were somehow bypassed.
     const user = userEvent.setup();
-    renderEdit(undefined, undefined, { retake: false, outpainting: true });
+    renderEdit(undefined, undefined, { retake: false, outpainting: true, inpainting: false });
     await user.click(subTab("Outpainting"));
     expect(subTab("Retake")).toHaveAttribute("aria-selected", "true");
     expect(heading(/^retake/i)).toBeVisible();
@@ -329,7 +356,7 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
     // and a right-click 画角拡張 lands here anyway (the timeline's context menu is
     // outside this app's greying entirely). Landing ON the greyed sub-tab would
     // show a panel behind a tab the user cannot click back to.
-    renderEdit(prefill("outpaint"), undefined, { retake: false, outpainting: true });
+    renderEdit(prefill("outpaint"), undefined, { retake: false, outpainting: true, inpainting: false });
     expect(subTab("Retake")).toHaveAttribute("aria-selected", "true");
     expect(heading(/^retake/i)).toBeVisible();
     expect(heading(/^outpainting/i)).not.toBeVisible();
@@ -338,7 +365,7 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
   it("falls back to Outpainting for the default/'retake' route when Retake is greyed", () => {
     // The mirror. Both greyed at once cannot reach this screen: `disabledModesFor`
     // takes the whole Edit tab in that case, so it is never mounted.
-    renderEdit(prefill("retake"), undefined, { retake: true, outpainting: false });
+    renderEdit(prefill("retake"), undefined, { retake: true, outpainting: false, inpainting: true });
     expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");
     expect(heading(/^outpainting/i)).toBeVisible();
     expect(heading(/^retake/i)).not.toBeVisible();
@@ -348,7 +375,7 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
     // The corollary: the fallback must be caused by the RESTRICTION, not by the
     // prop merely being present. An 'outpaint' route on an engine that CAN
     // outpaint lands on Outpainting exactly as it always did.
-    renderEdit(prefill("outpaint"), undefined, { retake: true, outpainting: false });
+    renderEdit(prefill("outpaint"), undefined, { retake: true, outpainting: false, inpainting: false });
     expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");
   });
 
@@ -374,6 +401,7 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
     const { container } = renderEdit(undefined, "a wide city street", {
       retake: false,
       outpainting: true,
+      inpainting: true,
     });
 
     // 入口の入口: 灰色のサブタブは選べない。
@@ -395,7 +423,11 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
 
   it("leaves no Retake-side mutation — the 予約系 3 included — reachable while it is greyed (R7)", async () => {
     const user = userEvent.setup();
-    renderEdit(prefill("retake"), "a wide city street", { retake: true, outpainting: false });
+    renderEdit(prefill("retake"), "a wide city street", {
+      retake: true,
+      outpainting: false,
+      inpainting: true,
+    });
 
     // ルートは Retake 行きだったが、灰色なので Outpainting へ逃げている。
     expect(subTab("Outpainting")).toHaveAttribute("aria-selected", "true");

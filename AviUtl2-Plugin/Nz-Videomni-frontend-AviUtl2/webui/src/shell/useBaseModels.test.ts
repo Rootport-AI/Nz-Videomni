@@ -359,9 +359,14 @@ describe("useBaseModels", () => {
     // to keep the tab. NO WHOLE TAB is greyed for this engine any more, which
     // is why the restriction has to be read one level down.
     expect(result.current.disabledModes).toEqual([]);
+    // 台帳 §3-55 (2026-09-14): `inpaint` is now on LTX 2.5's REAL list (the
+    // engine cannot inpaint in the first increment, owner decision D11), so it
+    // travels with the switch alongside the synthetic `retake`. Still no whole
+    // tab greyed — Edit keeps 画角拡張, which is the container rule.
     expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
       retake: true,
       outpainting: false,
+      inpainting: true,
     });
 
     // …and back. A restriction that never lifts is not a restriction, it is a
@@ -373,6 +378,7 @@ describe("useBaseModels", () => {
     expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
       retake: false,
       outpainting: false,
+      inpainting: false,
     });
   });
 

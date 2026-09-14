@@ -1,0 +1,73 @@
+# git / working-tree state at the START of the 2026-09-14 Q6_K calibration campaign (phase P0)
+# recorded read-only; nothing in Nz-Videomni outside outputs/comfort-calib-2026-09-14/ was touched
+recorded_at: 2026-09-14 09:27:25 +0900
+
+## git rev-parse HEAD
+5052293e370a19a339a4116815a6341392161fea
+
+## git rev-parse --abbrev-ref HEAD
+feature/inpainting
+
+## git status --porcelain   (empty == clean)
+## end of git status (lines above: 0)
+
+## mtime listing: engine25/  (every file, recursive, __pycache__ excluded)
+2026-08-21 16:36:57.8811742000 0 engine25/__init__.py
+2026-08-22 14:53:53.6157593000 16412 engine25/assets_export.py
+2026-09-07 21:19:30.7724370000 196377 engine25/chain25.py
+2026-09-02 10:53:34.0556325000 6665 engine25/engine25-venv-pyproject.toml
+2026-08-22 15:24:32.5852509000 50436 engine25/gguf_gemma4.py
+2026-08-30 05:03:28.2199145000 68288 engine25/gguf_transformer.py
+2026-09-03 12:26:41.7444018000 66592 engine25/ltxcore_compat.py
+2026-08-30 04:56:08.5750664000 28632 engine25/neg_prompt25.py
+2026-08-30 04:58:20.9899827000 24508 engine25/neg_selfcheck25.py
+2026-09-02 00:23:04.2781485000 71029 engine25/outpaint25.py
+2026-09-03 12:26:41.7449033000 96899 engine25/pipeline25.py
+2026-09-05 19:00:39.0800253000 25605 engine25/reference25.py
+2026-08-25 14:54:14.2271159000 20802 engine25/sage_selfcheck25.py
+2026-08-25 13:39:04.0608288000 5231 engine25/venv-engine-ltx25.freeze.txt
+2026-09-03 12:26:41.7454058000 115550 engine25/worker.py
+
+## mtime listing: services/engines/ltx25/  (every file, recursive, __pycache__ excluded)
+2026-08-22 16:44:02.3741543000 91 services/engines/ltx25/__init__.py
+2026-09-14 02:31:50.0917873000 81819 services/engines/ltx25/adapter.py
+
+## GPU state (nvidia-smi, one shot only -- X-9: no further polling outside the harness)
+name, memory.total [MiB], memory.used [MiB], utilization.gpu [%]
+NVIDIA GeForce RTX 4070 Ti SUPER, 16376 MiB, 601 MiB, 0 %
+
+### compute processes
+pid, process_name, used_gpu_memory [MiB]
+2108, [Insufficient Permissions], [N/A]
+12572, C:\Windows\System32\ShellHost.exe, [N/A]
+13160, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe, [N/A]
+9740, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
+5100, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
+17084, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\152.0.4191.66\msedgewebview2.exe, [N/A]
+18980, C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe, [N/A]
+13676, C:\Program Files\LogiOptionsPlus\logioptionsplus_agent.exe, [N/A]
+20420, C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA Overlay.exe, [N/A]
+19584, C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA Overlay.exe, [N/A]
+22864, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
+11768, C:\Users\phenotype nezu\AppData\Local\Discord\app-1.0.9257\Discord.exe, [N/A]
+26776, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\152.0.4191.66\msedgewebview2.exe, [N/A]
+28524, C:\Program Files\WindowsApps\MSTeams_26213.1006.5014.9784_x64__8wekyb3d8bbwe\ms-teams.exe, [N/A]
+22316, C:\Users\phenotype nezu\AppData\Local\slack\app-4.51.180\slack.exe, [N/A]
+23936, C:\Users\phenotype nezu\AppData\Local\slack\app-4.51.180\slack.exe, [N/A]
+31328, C:\Program Files\WindowsApps\9426MICRO-STARINTERNATION.MSICenter_2.0.71.0_x64__kzh8wxbdkxb8p\DCv2\DCv2.exe, [N/A]
+27232, C:\Program Files (x86)\Razer\Synapse3\WPFUI\Framework\Razer Synapse 3 Host\Razer Synapse 3.exe, [N/A]
+16804, [Insufficient Permissions], [N/A]
+9372, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
+27372, C:\Users\phenotype nezu\AppData\Local\Programs\Notion\Notion.exe, [N/A]
+31620, C:\Program Files\WindowsApps\Microsoft.MicrosoftOfficeHub_19.2609.37021.0_x64__8wekyb3d8bbwe\M365Copilot.exe, [N/A]
+17420, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\152.0.4191.66\msedgewebview2.exe, [N/A]
+33232, C:\Windows\System32\ApplicationFrameHost.exe, [N/A]
+42416, C:\Users\phenotype nezu\AppData\Local\Programs\Microsoft VS Code\Code.exe, [N/A]
+4940, C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26071.164.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe, [N/A]
+
+## port 18620 (backend): CLOSED  (Test-NetConnection TcpTestSucceeded=False) -- no server running
+## disk S: free 194.98 GB / used 736.51 GB   (P0 floor is 20 GB -- met)
+## host RAM: total 63.78 GiB, free 47.22 GiB at P0   (X-6 anchor: Tier C is expected around 42 GiB RSS)
+## GPU dedicated in use at P0: 601 MiB of 16376 MiB (< 1 GB -- met). The listed processes are
+##   desktop/graphics clients (Slack, VS Code, Razer, ...) with no compute memory attributed;
+##   no CUDA compute application is resident.

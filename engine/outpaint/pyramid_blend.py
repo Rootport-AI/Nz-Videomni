@@ -225,6 +225,7 @@ def _pad_for_laplacian(x: Tensor) -> tuple[Tensor, tuple[int, int]]:
 def _prepare_mask_pyramid(
     mask: Tensor,
     *,
+    frames: int,
     height: int,
     width: int,
     padding: tuple[int, int],
@@ -233,25 +234,44 @@ def _prepare_mask_pyramid(
     device: torch.device | None,
     dtype: torch.dtype,
 ) -> list[Tensor]:
-    """Dilate, pad and pyramid-decompose the single-frame mask, once.
+    """Dilate, pad and pyramid-decompose the mask for ``frames`` frames.
 
-    **Deliberate deviation from the official node.** Upstream carries a mask of
-    ``B`` frames and dilates / pads / decomposes all ``B`` of them. Our
-    outpainting mask is a *static rectangular frame*, identical for every frame,
-    so we do the whole thing on a single ``(1, 1, H, W)`` plane and let the
-    per-chunk arithmetic broadcast it across the batch. Mathematically this is
-    exactly equivalent (every op involved -- ``interpolate``, ``max_pool2d``,
-    ``pad``, grouped ``conv2d`` -- is independent per sample), and it avoids a
-    2.0GB float32 allocation at 1920x1088x241: ``F.pad`` and ``F.interpolate``
-    cannot preserve the stride-0 of an ``expand``ed view and would materialise
-    the full batch.
+    ``mask`` carries either ONE plane or ``frames`` of them, and the difference
+    is the difference between the two features that share this blender:
+
+    * **outpainting** hands in ``(1, 1, H, W)``. Its mask is a *static
+      rectangular frame*, identical for every frame of the clip, so the whole
+      dilate/pad/decompose runs once on a single plane and the per-chunk
+      arithmetic broadcasts it across the batch. Mathematically that is exactly
+      equivalent to doing it per frame (every op involved -- ``interpolate``,
+      ``max_pool2d``, ``pad``, grouped ``conv2d`` -- is independent per sample),
+      and it avoids a 2.0GB float32 allocation at 1920x1088x241: ``F.pad`` and
+      ``F.interpolate`` cannot preserve the stride-0 of an ``expand``ed view and
+      would materialise the full batch.
+    * **inpainting** hands in ``(F, 1, H, W)``, because the region it repaints
+      follows a moving object and really is a different picture every frame.
+      ``blend_video_u8`` therefore calls this once PER CHUNK with that chunk's
+      slice, which is what keeps the whole-timeline allocation above from coming
+      back (see its own docstring).
+
+    Anything other than 1 or ``frames`` is rejected rather than broadcast: a
+    mask with the wrong frame count is a geometry bug, and silently pairing
+    frame 0 of the mask with frame 7 of the video would show up as a picture,
+    not as an exception.
+
+    A ``uint8`` mask is accepted as 0/255 and scaled here, which is the
+    convention ``engine.pipeline.common.decode_mask_video`` and
+    ``engine.inpaint.canvas.half_res_mask`` produce. A float mask goes through
+    untouched, so the outpaint path is bit-identical to before this branch
+    existed.
     """
     if mask.ndim != 4 or mask.shape[1] != 1:
         raise ValueError(f"mask must have shape (1, 1, H, W), got {tuple(mask.shape)}")
-    if mask.shape[0] != 1:
+    if mask.shape[0] not in (1, frames):
         raise ValueError(
             "mask must carry exactly one frame with shape (1, 1, H, W) -- the "
-            f"outpaint mask is static across the clip, got {tuple(mask.shape)}"
+            "outpaint mask is static across the clip -- or one plane per blended "
+            f"frame ({frames}, 1, H, W), got {tuple(mask.shape)}"
         )
     if tuple(mask.shape[-2:]) != (height, width):
         raise ValueError(
@@ -261,7 +281,12 @@ def _prepare_mask_pyramid(
 
     if device is not None:
         mask = mask.to(device)
-    mask = mask.to(dtype)
+    if mask.dtype == torch.uint8:
+        # ``.to(dtype)`` on uint8 always copies, so the in-place divide cannot
+        # reach the caller's tensor.
+        mask = mask.to(dtype).div_(255.0)
+    else:
+        mask = mask.to(dtype)
     mask = apply_low_res_mask_dilation(mask, mask_low_res_dilation).to(dtype)
 
     pad_right, pad_down = padding
@@ -283,7 +308,10 @@ def _blend_chunk(
 
     ``chunk_a`` / ``chunk_b`` are ``(n, C, H, W)`` float tensors that have NOT
     yet been power-of-two padded; ``mask_pyramid`` holds ``(1, 1, h, w)`` levels
-    that broadcast over the batch and channel axes.
+    that broadcast over the batch and channel axes, or ``(n, 1, h, w)`` levels
+    for this chunk when the caller carries a mask per frame. Nothing here
+    changes between the two: the arithmetic is written as a broadcast either
+    way.
     """
     padded_a, _ = _pad_for_laplacian(chunk_a)
     padded_b, _ = _pad_for_laplacian(chunk_b)
@@ -301,23 +329,37 @@ def _blend_chunk(
     return out[..., :orig_h, :orig_w].clamp(0, 1)
 
 
+def _effective_level(
+    height: int, width: int, max_level: int
+) -> tuple[int, tuple[int, int]]:
+    """``(depth, padding)``: the pyramid depth this frame size supports.
+
+    Split out of :func:`_plan` so the per-chunk mask path in
+    :func:`blend_video_u8` resolves the depth with the SAME three lines rather
+    than a copy of them. Pure arithmetic, no tensors.
+    """
+    padding = _power_of_two_padding(height, width)
+    padded_min = min(height + padding[1], width + padding[0])
+    return min(max_level, int(math.log2(padded_min))), padding
+
+
 def _plan(
     height: int,
     width: int,
     mask: Tensor,
     *,
+    frames: int,
     max_level: int,
     mask_low_res_dilation: int,
     device: torch.device | None,
     dtype: torch.dtype,
 ) -> tuple[int, list[Tensor]]:
     """Resolve the effective pyramid depth and build the mask pyramid."""
-    padding = _power_of_two_padding(height, width)
-    padded_min = min(height + padding[1], width + padding[0])
-    effective_level = min(max_level, int(math.log2(padded_min)))
+    effective_level, padding = _effective_level(height, width, max_level)
 
     mask_pyramid = _prepare_mask_pyramid(
         mask,
+        frames=frames,
         height=height,
         width=width,
         padding=padding,
@@ -348,9 +390,11 @@ def laplacian_pyramid_blend(
     Args:
         image_a: ``(B, 3, H, W)`` float32 in ``[0, 1]`` -- taken where mask == 1.
         image_b: ``(B, 3, H, W)`` float32 in ``[0, 1]`` -- taken where mask == 0.
-        mask: ``(1, 1, H, W)`` float32 in ``[0, 1]``. Exactly one frame; the
-            outpaint mask is static, so a per-frame mask is rejected rather
-            than silently broadcast from the wrong axis.
+        mask: ``(1, 1, H, W)`` or ``(B, 1, H, W)`` float32 in ``[0, 1]`` (uint8
+            0/255 is accepted too). One plane means the outpaint case — a static
+            mask broadcast across the batch; ``B`` planes means the inpaint case
+            — one mask per frame. Any other frame count is rejected rather than
+            silently broadcast from the wrong axis.
         max_level: requested pyramid depth; clamped to ``log2`` of the padded
             short side.
         mask_low_res_dilation: dilation radius applied at the 64px working
@@ -375,11 +419,13 @@ def laplacian_pyramid_blend(
         orig_h,
         orig_w,
         mask,
+        frames=int(image_a.shape[0]),
         max_level=max_level,
         mask_low_res_dilation=mask_low_res_dilation,
         device=device,
         dtype=image_a.dtype,
     )
+    per_frame_mask = mask.shape[0] != 1
 
     step = _CHUNK_SIZE if chunk_size is None else chunk_size
     if step <= 0:
@@ -394,7 +440,17 @@ def laplacian_pyramid_blend(
             chunk_a = chunk_a.to(device)
             chunk_b = chunk_b.to(device)
 
-        blended = _blend_chunk(chunk_a, chunk_b, mask_pyramid, effective_level, orig_h, orig_w)
+        # A per-frame mask pyramid covers the WHOLE batch here (this entry point
+        # is for small tensors -- the big uint8 one below builds it per chunk
+        # instead), so each chunk takes its own slice of every level. A
+        # single-plane pyramid is passed through untouched and broadcasts, which
+        # is what keeps the outpaint path bit-identical.
+        chunk_mask_pyramid = (
+            [level[start:end] for level in mask_pyramid] if per_frame_mask else mask_pyramid
+        )
+        blended = _blend_chunk(
+            chunk_a, chunk_b, chunk_mask_pyramid, effective_level, orig_h, orig_w
+        )
         results.append(blended.to(output_device) if output_device is not None else blended)
 
     return torch.cat(results, dim=0)
@@ -416,7 +472,9 @@ def blend_video_u8(
         generated: ``(F, H, W, 3)`` uint8 -- the generated video (mask == 1).
         original: ``(F, H, W, 3)`` uint8 -- the green-composited canvas
             (mask == 0).
-        mask: ``(1, 1, H, W)`` float32.
+        mask: ``(1, 1, H, W)`` or ``(F, 1, H, W)``, float32 in [0, 1] or uint8
+            0/255. One plane is outpainting's static rectangle; ``F`` planes is
+            inpainting's per-frame region.
 
     Returns:
         ``(F, H, W, 3)`` uint8 on the CPU.
@@ -448,15 +506,36 @@ def blend_video_u8(
         )
 
     frames, orig_h, orig_w, _ = generated.shape
-    effective_level, mask_pyramid = _plan(
-        orig_h,
-        orig_w,
-        mask,
-        max_level=max_level,
-        mask_low_res_dilation=mask_low_res_dilation,
-        device=device,
-        dtype=torch.float32,
-    )
+
+    # THE ONE BRANCH THIS FUNCTION HAS, and the reason it is here rather than in
+    # ``_plan``: a per-frame mask is decomposed PER CHUNK, never once for the
+    # whole timeline. A full-timeline pyramid of a 1920x1088x481 mask is 4.0GB
+    # of float32 at level 0 alone (plus a third again for the levels above it),
+    # which is the allocation ``_prepare_mask_pyramid``'s docstring exists to
+    # avoid; a chunk of 8 is 65MB. ``_plan``'s signature and return type are
+    # deliberately untouched -- ``laplacian_pyramid_blend`` still calls it, and
+    # the single-plane path below is the same call it always was.
+    if mask.ndim == 4 and mask.shape[0] != 1:
+        effective_level, padding = _effective_level(orig_h, orig_w, max_level)
+        mask_pyramid = None
+        if mask.shape[1] != 1 or mask.shape[0] != frames:
+            raise ValueError(
+                "mask must carry exactly one frame with shape (1, 1, H, W) -- the "
+                "outpaint mask is static across the clip -- or one plane per blended "
+                f"frame ({frames}, 1, H, W), got {tuple(mask.shape)}"
+            )
+    else:
+        effective_level, mask_pyramid = _plan(
+            orig_h,
+            orig_w,
+            mask,
+            frames=frames,
+            max_level=max_level,
+            mask_low_res_dilation=mask_low_res_dilation,
+            device=device,
+            dtype=torch.float32,
+        )
+        padding = None
 
     step = _CHUNK_SIZE if chunk_size is None else chunk_size
     if step <= 0:
@@ -473,7 +552,24 @@ def blend_video_u8(
         chunk_a = chunk_a.to(torch.float32).div_(255.0)
         chunk_b = chunk_b.to(torch.float32).div_(255.0)
 
-        blended = _blend_chunk(chunk_a, chunk_b, mask_pyramid, effective_level, orig_h, orig_w)
+        chunk_mask_pyramid = mask_pyramid
+        if chunk_mask_pyramid is None:
+            assert padding is not None
+            chunk_mask_pyramid = _prepare_mask_pyramid(
+                mask[start:end],
+                frames=end - start,
+                height=orig_h,
+                width=orig_w,
+                padding=padding,
+                max_level=effective_level,
+                mask_low_res_dilation=mask_low_res_dilation,
+                device=device,
+                dtype=torch.float32,
+            )
+
+        blended = _blend_chunk(
+            chunk_a, chunk_b, chunk_mask_pyramid, effective_level, orig_h, orig_w
+        )
         quantised = blended.mul(255.0).round().clamp(0, 255).to(torch.uint8)
         out[start:end] = quantised.permute(0, 2, 3, 1).cpu()
 

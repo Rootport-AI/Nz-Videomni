@@ -9,6 +9,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import (
+    APIError,
+    inpaint_lora_invalid,
+    inpaint_mask_frame_mismatch,
+    inpaint_mask_not_found,
+    inpaint_mask_resolution_mismatch,
+    inpaint_preprocess_conflict,
+    inpaint_source_mismatch,
     job_busy,
     lora_preprocess_conflict,
     lora_requires_reference,
@@ -18,7 +25,13 @@ from api.errors import (
     reference_requires_control_lora,
     reference_resolution_invalid,
 )
-from api.models import GenerateRequest, GenerateResponse, JobStatus
+from api.models import (
+    INPAINT_MIN_SOURCE_SIDE,
+    GenerateRequest,
+    GenerateResponse,
+    JobStatus,
+    round_up_128,
+)
 from services import engines
 from services.job_store import JobRecord, now_iso
 
@@ -133,6 +146,75 @@ def generate(
         available = video_io.frame_count(ref_path)
         if available < request.num_frames:
             raise outpaint_source_too_short(available, request.num_frames)
+
+    # ── Inpainting (台帳 §3-55) ─────────────────────────────────────────────
+    # The same split the outpaint block above uses: the shape-only rules
+    # (exclusivity, the 128 grid, the window's 8n+1) are in the pydantic
+    # validator; everything that needs the registry or a file on disk is here.
+    # Five checks, in the order a user can act on them — what is wrong with the
+    # adapters, then with the source, then with the mask, then with the window.
+    if request.inpaint is not None:
+        ip = request.inpaint
+        from services import video_io
+
+        # (a) A control adapter that PREPROCESSES its reference would hand the
+        # model an edge map of sentinel green. Same ruling as outpainting's.
+        if preprocess_kinds:
+            raise inpaint_preprocess_conflict(sorted(preprocess_kinds))
+        # (b) ...and there must be exactly one control adapter to consume the
+        # canvas through. The name is deliberately NOT fixed here (outpainting
+        # does not fix it either): which adapter does in/out-painting is a
+        # registry fact, not an API constant.
+        if len(control_names) != 1:
+            raise inpaint_lora_invalid([spec.name for spec in request.loras])
+
+        # (c) The canvas must be the SOURCE rounded up. The source file is the
+        # single source of truth for its own size (InpaintSpec's docstring), so
+        # this is the check that makes the geometry safe end to end.
+        ref_path = context.video_upload_store.path_for(request.reference_video_id)
+        source_size = video_io.probe_resolution(ref_path)
+        if source_size is None:
+            # ``expected`` is the REQUESTED canvas here, not a canvas derived
+            # from the source: there is no source size to derive one from, and
+            # the message must not imply otherwise (see the factory's docstring).
+            raise inpaint_source_mismatch((request.width, request.height), None)
+        src_w, src_h = source_size
+        if src_w < INPAINT_MIN_SOURCE_SIDE or src_h < INPAINT_MIN_SOURCE_SIDE:
+            raise inpaint_source_mismatch(
+                (request.width, request.height),
+                source_size,
+                reason=(
+                    f"each source side must be at least {INPAINT_MIN_SOURCE_SIDE}px"
+                ),
+            )
+        canvas = (round_up_128(src_w), round_up_128(src_h))
+        if canvas != (request.width, request.height):
+            raise inpaint_source_mismatch(canvas, source_size)
+
+        # (d) The mask: it must exist, be exactly the source's resolution (it is
+        # never resized), and carry exactly num_frames frames. The frame count is
+        # checked HERE rather than left to ffmpeg because this build's
+        # ``maskedmerge`` has no ``shortest`` option — a short mask would have its
+        # last frame repeated and the tail of the window would go silently
+        # unrepainted (services/video_io.fill_mask_green_mp4).
+        try:
+            mask_path = context.video_upload_store.path_for(ip.mask_video_id)
+        except APIError as exc:  # the store raises REFERENCE_VIDEO_NOT_FOUND
+            raise inpaint_mask_not_found(ip.mask_video_id) from exc
+        mask_size = video_io.probe_resolution(mask_path)
+        if mask_size != source_size:
+            raise inpaint_mask_resolution_mismatch(source_size, mask_size)
+        mask_frames = video_io.frame_count(mask_path)
+        if mask_frames != request.num_frames:
+            raise inpaint_mask_frame_mismatch(mask_frames, request.num_frames)
+
+        # (e) The window has to fit the material. Delegated to the pipeline
+        # manager exactly as retake's is — it owns the upload store and the
+        # fps/frame-count arithmetic, and putting the rule anywhere else would
+        # give it two homes.
+        context.pipeline_manager.preflight_inpaint_window(
+            ip, request.reference_video_id, request.num_frames, request.frame_rate
+        )
 
     # Loading guard: without this, a load in flight would still return 202 and
     # the job would only die later, inside the job thread, as GENERATION_FAILED.

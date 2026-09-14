@@ -183,6 +183,82 @@ def load_video_conditioning_cpu(
     )
 
 
+def decode_mask_video(
+    path: str,
+    *,
+    num_frames: int,
+    height: int,
+    width: int,
+    device: torch.device,
+    threshold: int = 128,
+) -> torch.Tensor:
+    """Decode an inpainting mask video to ``(F, 1, height, width)`` uint8 (0/255).
+
+    The mask-only sibling of :func:`load_video_conditioning_cpu`, and the list of
+    things it deliberately does NOT do is the whole specification:
+
+    * **it does not resize.** A mask is a statement about which pixels of a
+      SPECIFIC picture get repainted; rescaling it would move the boundary by a
+      sub-pixel amount that the caller cannot see and cannot correct. The
+      contract (``Docs/INPAINTING_DESIGN.md`` §6.2) is that the mask arrives at
+      the source's own resolution or the request is refused with a 422, so a
+      size mismatch here means the API guard was bypassed and this raises;
+    * **it does not normalise.** ``load_video_conditioning_cpu`` maps pixels to
+      [-1, 1] for the VAE; there is no VAE in this path. The values that come
+      out are 0 and 255 and nothing else;
+    * **it does not interpolate between the two levels.** The plugin writes the
+      mask through Media Foundation and the app re-encodes nothing, but H.264's
+      4:2:0 chroma and its deblocking filter still leave a soft grey ring around
+      every edge. ``threshold`` (128, the same value the green-fill filtergraph's
+      ``lut`` uses — one binarisation rule, spelt twice because ffmpeg and torch
+      cannot share a constant) is what turns that ring back into a decision.
+
+    ``decode_video_from_file`` hands back one ``(1, H, W, C)`` uint8 tensor per
+    frame, with C == 3 even for a grey source (it goes through
+    ``frame.to_rgb()``), so the RED channel is taken and the other two are
+    dropped: for a genuinely grey mask all three are equal, and for a mask that
+    somehow is not grey, red is the channel the ``lut`` in
+    ``video_io.fill_mask_green_mp4`` reads too. The frames are NOT put through
+    ``resize_and_center_crop`` the way ``_load_canvas_pixels_u8`` puts the canvas
+    — that helper's whole job is to make a video fit a target size, which is
+    exactly what must not happen here.
+
+    ``num_frames`` is both the decode cap and an assertion: a mask that runs
+    short would silently leave the tail of the clip unrepainted, so a shortfall
+    raises rather than being padded.
+    """
+    from ltx_pipelines.utils.media_io import decode_video_from_file
+
+    if num_frames <= 0:
+        raise ValueError(f"num_frames must be >= 1, got {num_frames}")
+
+    planes: list[torch.Tensor] = []
+    for f in decode_video_from_file(path=path, frame_cap=num_frames, device=device):
+        if f.ndim != 4 or f.shape[0] != 1:
+            raise ValueError(
+                f"mask video {path}: expected one (1, H, W, C) frame per step, "
+                f"got {tuple(f.shape)}"
+            )
+        got_h, got_w = int(f.shape[1]), int(f.shape[2])
+        if (got_h, got_w) != (height, width):
+            raise ValueError(
+                f"mask video {path} is {got_w}x{got_h} but the source is "
+                f"{width}x{height}; the mask is never resized "
+                "(Docs/INPAINTING_DESIGN.md §6.2)"
+            )
+        # (1, H, W, C) -> (H, W), red channel only, thresholded to 0/255.
+        red = f[0, :, :, 0]
+        planes.append((red >= threshold).to(torch.uint8).mul_(255).cpu())
+        del f, red
+
+    if len(planes) != num_frames:
+        raise ValueError(
+            f"mask video {path} decoded {len(planes)} frames but the job needs "
+            f"{num_frames}"
+        )
+    return torch.stack(planes, dim=0).unsqueeze(1)
+
+
 class DistilledNativePipeline:
     """Fast native pipeline implementation moved from ltx2_server.py."""
 

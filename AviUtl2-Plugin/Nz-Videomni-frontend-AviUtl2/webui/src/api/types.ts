@@ -111,6 +111,50 @@ export interface OutpaintSpec {
   freeze_source_audio?: boolean;
 }
 
+/**
+ * Inpainting（マスクによる部分再生成）の指定 —— 対象動画のどこを、いつから
+ * 描き替えるか（台帳 `Docs/PENDING_TASKS.md` §3-55、設計正本は
+ * `Docs/INPAINTING_DESIGN.md`）。
+ *
+ * The masked-region regeneration spec for `POST /generate` (Edit タブ /
+ * Inpainting)。{@link OutpaintSpec} の隣に置かれた**加算的**なフィールドで、
+ * 送らなければ従来のリクエストと1バイトも変わらない。
+ *
+ * 送る値（長さの二重定義を置かないため、窓の長さは `num_frames` だけが正本）:
+ *
+ *  - `mask_video_id` —— `POST /upload/video` で得たID。白＝描き替える領域で、
+ *    しきい値128の二値化は**受信側**が行う（H.264の縁に出る中間輝度を、送り手が
+ *    先回りして解釈しない）。この動画はプラグインが部分フィルタから自動で作る
+ *    もので、利用者には見せない（オーナー裁定 D7）。
+ *  - `window_start_sec` —— **アップロード後ファイルの時間軸**での窓の開始秒。
+ *    リボンのトリム分は差し引き済み（`useRetakeForm` の `retake.window_start_sec`
+ *    とまったく同じ規約）。窓の長さは `num_frames` が唯一の正本。
+ *
+ * サーバー側の相方: `inpaint` は `reference_video_id` と制御系 LoRA
+ * （`"in-outpainting"`）を要求し、`outpaint`・`conditioning_images`・
+ * `crop_output` とは排他。`width`/`height` は**キャンバス**（＝素材の実寸を
+ * 128の倍数へ切り上げたもの）で、余白はサーバーが素材の実寸から導出する
+ * ——請求に余白は載せない。出力解像度は素材の実寸に戻される。
+ *
+ */
+export interface InpaintSpec {
+  mask_video_id: string;
+  window_start_sec: number;
+  /**
+   * マスク周囲の「のりしろ」＝ブレンドの膨張段数。パネルの数値欄がそのまま
+   * 載る値で、既定は 5 / 2（{@link OutpaintSpec} と同じ範囲 `0..15`）。
+   *
+   * 画角拡張と違い、**常に送る**（オーナー裁定 2026-09-15、台帳 §2-10 ①）——
+   * ユーザーが 1 刻みで指定できる欄なので、省略してサーバー既定に落ちる経路を
+   * 残すと「画面の数字と送った値が違う」状態が作れてしまう。
+   *
+   * 見えるなじみ幅は Inpainting では **stage 2** の値で決まる
+   * （`VERIFICATION_LOG.md` §105.3 の実測: `r2 × 長辺 ÷ 64 ＋ 18px`）。
+   */
+  blend_dilation_stage1: number;
+  blend_dilation_stage2: number;
+}
+
 /** Fields the WebUI is allowed to submit for a `/generate` call (M2 T2V scope,
  * extended by M4 for I2V, M5 for style LoRAs). Omitting `conditioning_images`
  * (or passing `[]`) is T2V; 1-5 entries is I2V (Docs/API_REFERENCE.md §5.1). */
@@ -208,6 +252,13 @@ export interface GenerateRequest {
    * to before. See {@link OutpaintSpec} for the constraints the WebUI must
    * satisfy before sending one. */
   outpaint?: OutpaintSpec | null;
+  /** Inpainting (2026-09-14, 台帳 `Docs/PENDING_TASKS.md` §3-55): the masked-
+   * region regeneration spec. Built exclusively by
+   * `modes/edit/useInpaintForm.ts` and omitted entirely by every other caller,
+   * so an ordinary Create/Chain/Outpainting request stays byte-identical to
+   * before. See {@link InpaintSpec} for what the WebUI sends and what it
+   * deliberately leaves to the server. */
+  inpaint?: InpaintSpec | null;
 }
 
 export interface GenerateAcceptedResponse {

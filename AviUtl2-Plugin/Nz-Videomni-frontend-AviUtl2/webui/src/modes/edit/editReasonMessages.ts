@@ -102,3 +102,45 @@ export function buildRetakeReasonMessages(strings: Strings): Record<string, stri
     dimensionsOffGrid: strings.single.generateReasons.dimensionsOffGrid,
   };
 }
+
+/** {@link buildInpaintReasonMessages} が `resolutionMismatch` の 1 行へ差し込む
+ * 実測値（オーナー裁定 D5 の文面には 4 つの数字が入る）。
+ *
+ * 引数オブジェクトで受けるのは `buildOutpaintReasonMessages` と同じ理由 ——
+ * このモジュールが `useInpaintForm` の型に依存しないようにするため。素材寸が
+ * 読めていないときは `0` が来るが、そのときは `mediaInfoUnknown` が先に立つので
+ * この行は出ない（`GenerateReasonsNote` は理由コードに載った行しか描かない）。 */
+export interface InpaintReasonMessageParams {
+  /** 部分フィルタの解像度＝プロジェクトの解像度（`getEditInfo`）。 */
+  filterWidth: number;
+  filterHeight: number;
+  /** 対象動画の実寸（選択スナップショットの `mediaWidth`/`mediaHeight`）。 */
+  targetWidth: number;
+  targetHeight: number;
+}
+
+/**
+ * 台帳 §3-55 Inpainting 版。上の 2 つとまったく同じ形（strings と実測値を受けて
+ * `code -> 一文` の表を返すだけ）で、同じ `GenerateReasonsNote` が描く。
+ *
+ * `promptEmpty` は入っていない —— プロンプト空欄は正当な使い方（物体を消すだけ
+ * なら書くことが無い）で、監督が置いた既定のとおりブロック理由にしない。
+ * `useInpaintForm` の `validityReasons` にもそのコードは存在しない。
+ */
+export function buildInpaintReasonMessages(
+  strings: Strings,
+  { filterWidth, filterHeight, targetWidth, targetHeight }: InpaintReasonMessageParams,
+): Record<string, string> {
+  const t = strings.edit.inpainting.generateReasons;
+  return {
+    partialFilterMissing: t.partialFilterMissing,
+    targetMissing: t.targetMissing,
+    sourceUploading: t.sourceUploading,
+    sourceUploadFailed: t.sourceUploadFailed,
+    sourceTrimFailed: t.sourceTrimFailed,
+    mediaInfoUnknown: t.mediaInfoUnknown,
+    resolutionMismatch: t.resolutionMismatch(filterWidth, filterHeight, targetWidth, targetHeight),
+    windowNotCovered: t.windowNotCovered,
+    maskRendering: t.maskRendering,
+  };
+}

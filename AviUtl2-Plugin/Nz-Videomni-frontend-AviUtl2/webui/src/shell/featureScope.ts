@@ -37,6 +37,7 @@ export type UiTarget =
   | "chainPanel.reference"
   | "editSubTab.retake"
   | "editSubTab.outpainting"
+  | "editSubTab.inpainting"
   | "createSection.batchA2v"
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings";
@@ -73,10 +74,14 @@ interface FeatureUiEntry {
  *    `reference_video_id` (§3-102, LTX 2.5 Chained's first stage — once an
  *    engine can chain, the tab is live and the panels it still cannot feed have
  *    to grey on their own).
- *  - **retake / outpaint** are the two Edit sub-tabs. Note the SERVER's feature
- *    is `outpaint` (that is what a request field and a 422 say) while the
- *    sub-tab is `outpainting`; this table is exactly where that translation
- *    lives, and nothing downstream has to know either name.
+ *  - **retake / outpaint / inpaint** are the three Edit sub-tabs. Note the
+ *    SERVER's features are `outpaint`/`inpaint` (that is what a request field
+ *    and a 422 say) while the sub-tabs are `outpainting`/`inpainting`; this
+ *    table is exactly where that translation lives, and nothing downstream has
+ *    to know either name. `inpaint` joined on 2026-09-14 (§3-55), when
+ *    Inpainting stopped being a disabled mock: LTX 2.5 cannot run it in the
+ *    first increment (owner decision D11), so it is the one feature name that
+ *    closes that sub-tab.
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
  *    persisted in `localStorage`. Their SCOPES point in opposite directions:
@@ -99,6 +104,7 @@ export const FEATURE_UI = {
   chain: { disables: ["mode.chained", "createSection.batchA2v"] },
   retake: { disables: ["editSubTab.retake"] },
   outpaint: { disables: ["editSubTab.outpainting"] },
+  inpaint: { disables: ["editSubTab.inpainting"] },
   v2v: { disables: ["chainPanel.v2v"] },
   a2v: { disables: ["chainPanel.a2v", "createSection.batchA2v"] },
   end_source: { disables: ["chainPanel.endSource"] },
@@ -125,18 +131,22 @@ const FEATURE_UI_BY_NAME: ReadonlyMap<string, FeatureUiEntry> = new Map(Object.e
 /** Targets no feature names directly — they close only once everything they
  * CONTAIN is closed.
  *
- * The Edit tab is the only one today: it hosts Retake and Outpainting
- * (Inpainting is still a disabled mock with no panel behind it), so it survives
- * as long as ONE of those two is runnable — a base model that could outpaint but
- * not retake would still have a use for the tab. Chained needs no entry here
- * because `chain` names it directly.
+ * The Edit tab is the only one today: it hosts Retake, Outpainting and — since
+ * §3-55 (2026-09-14) — Inpainting, so it survives as long as ONE of the three is
+ * runnable; a base model that could outpaint but not retake would still have a
+ * use for the tab. Inpainting joined this list on the day it stopped being a
+ * disabled mock: a mock closes nothing, but a real sub-tab keeps the tab alive
+ * on its own. Chained needs no entry here because `chain` names it directly.
  *
  * Invariant: SINGLE-PASS evaluation — a `whenAll` must never name another
  * container target, or the answer would depend on the order of this array.
  * Should a nested case ever arise, revisit the design then rather than
  * quietly ordering the list. */
 const CONTAINER_TARGETS: ReadonlyArray<{ target: UiTarget; whenAll: readonly UiTarget[] }> = [
-  { target: "mode.edit", whenAll: ["editSubTab.retake", "editSubTab.outpainting"] },
+  {
+    target: "mode.edit",
+    whenAll: ["editSubTab.retake", "editSubTab.outpainting", "editSubTab.inpainting"],
+  },
 ];
 
 /**
@@ -239,31 +249,36 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
   };
 }
 
-/** The two Edit-screen sub-tabs an engine's feature scope can take down
+/** The three Edit-screen sub-tabs an engine's feature scope can take down
  * individually, keyed the way `EditScreen`'s `subTabsDisabled` prop is.
- * (Inpainting is not here: it is a mock sub-tab with no panel behind it, so it
- * is disabled on EVERY base model and needs no feature name.) */
+ *
+ * `inpainting` joined on 2026-09-14 (§3-55): until that day Inpainting was a
+ * mock with no panel behind it, disabled on EVERY base model and therefore
+ * needing no feature name at all. */
 export interface EditSubTabsDisabled {
   /** `RetakePanel` — 撮り直し (`retake`). */
   retake: boolean;
   /** `OutpaintingPanel` — 画角拡張 (`outpaint`). */
   outpainting: boolean;
+  /** `InpaintingPanel` — マスクによる部分再生成 (`inpaint`). */
+  inpainting: boolean;
 }
 
 /**
  * Which of {@link EditSubTabsDisabled}'s sub-tabs `unsupportedFeatures` makes
- * unusable — two `false`s for the ordinary case.
+ * unusable — three `false`s for the ordinary case.
  *
- * Both `true` at once is possible here, but the caller never sees it: that is
- * exactly the condition {@link CONTAINER_TARGETS} closes `mode.edit` on, so the
- * screen this feeds is not mounted at all. Answering honestly anyway keeps this
- * a plain reading of the table rather than a special case.
+ * All three `true` at once is possible here, but the caller never sees it: that
+ * is exactly the condition {@link CONTAINER_TARGETS} closes `mode.edit` on, so
+ * the screen this feeds is not mounted at all. Answering honestly anyway keeps
+ * this a plain reading of the table rather than a special case.
  */
 export function editSubTabsDisabledFor(unsupportedFeatures: readonly string[]): EditSubTabsDisabled {
   const disabled = disabledUiTargets(unsupportedFeatures);
   return {
     retake: disabled.has("editSubTab.retake"),
     outpainting: disabled.has("editSubTab.outpainting"),
+    inpainting: disabled.has("editSubTab.inpainting"),
   };
 }
 

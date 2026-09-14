@@ -2037,4 +2037,113 @@ std::string MakeTrackProgressEvent(int frame, int index, int total, double score
     return out.dump();
 }
 
+// ---------------------------------------------------------------------------
+// timeline.renderMaskVideo (section 3-55 Inpainting)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Read a required JSON integer into *out. A real (1.5) is rejected outright
+// rather than truncated, for the same reason ReadTrackInt does it: a frame or a
+// layer that arrived fractional means the caller computed it wrong, and
+// silently rounding would build the mask out of the wrong object.
+bool ReadMaskInt(const json& params, const char* key, int* out,
+                 std::string* err_message) {
+    if (!params.contains(key) || !params[key].is_number_integer()) {
+        *err_message =
+            std::string("timeline.renderMaskVideo requires an integer '") + key + "'";
+        return false;
+    }
+    *out = params[key].get<int>();
+    return true;
+}
+
+}  // namespace
+
+bool ParseRenderMaskVideo(const json& params, RenderMaskVideoRequest* out,
+                          std::string* err_message) {
+    if (!params.is_object()) {
+        *err_message = "timeline.renderMaskVideo requires a params object";
+        return false;
+    }
+    RenderMaskVideoRequest req;
+    if (!ReadMaskInt(params, "layer", &req.layer, err_message) ||
+        !ReadMaskInt(params, "frameStart", &req.frame_start, err_message) ||
+        !ReadMaskInt(params, "frameEnd", &req.frame_end, err_message) ||
+        !ReadMaskInt(params, "windowStart", &req.window_start, err_message) ||
+        !ReadMaskInt(params, "windowEnd", &req.window_end, err_message)) {
+        return false;
+    }
+    if (req.layer < 0) {
+        *err_message = "timeline.renderMaskVideo 'layer' must be >= 0";
+        return false;
+    }
+    if (req.window_start < 0) {
+        *err_message = "timeline.renderMaskVideo 'windowStart' must be >= 0";
+        return false;
+    }
+    // The filter's own frames get the same floor. AviUtl2 has no frame before
+    // 0, so a negative one means the caller computed it wrong - and left
+    // unchecked it would reach the worker, whose seed lookup would simply find
+    // nothing and report MASK_SEED_INVALID, blaming the object instead of the
+    // request.
+    if (req.frame_start < 0) {
+        *err_message = "timeline.renderMaskVideo 'frameStart' must be >= 0";
+        return false;
+    }
+    if (req.frame_end < 0) {
+        *err_message = "timeline.renderMaskVideo 'frameEnd' must be >= 0";
+        return false;
+    }
+    if (req.frame_end < req.frame_start) {
+        *err_message =
+            "timeline.renderMaskVideo 'frameEnd' must be >= 'frameStart'";
+        return false;
+    }
+    if (req.window_end < req.window_start) {
+        *err_message =
+            "timeline.renderMaskVideo 'windowEnd' must be >= 'windowStart'";
+        return false;
+    }
+    // Owner decision D3: the window may be SHORTER than the partial filter, so
+    // containment is not required - but a window that shares no frame with the
+    // filter would render nothing but black, so the two must at least overlap.
+    if (req.window_start > req.frame_end || req.frame_start > req.window_end) {
+        *err_message =
+            "timeline.renderMaskVideo window does not overlap the partial filter";
+        return false;
+    }
+    // Widened to 64 bits on purpose: windowEnd is an arbitrary caller-supplied
+    // int, so "end - start + 1" in int arithmetic can overflow to a NEGATIVE
+    // number and sail straight past the cap that exists to stop exactly that
+    // request (windowStart 0, windowEnd INT_MAX). long long cannot overflow
+    // for any pair of ints.
+    const long long window_frames =
+        static_cast<long long>(req.window_end) - req.window_start + 1;
+    if (window_frames > kMaskMaxWindowFrames) {
+        *err_message = "timeline.renderMaskVideo window is longer than " +
+                       std::to_string(kMaskMaxWindowFrames) + " frames";
+        return false;
+    }
+    *out = req;
+    return true;
+}
+
+json MakeRenderMaskResult(const std::string& file_path, int width, int height,
+                          int frame_count) {
+    json result;
+    result["filePath"] = file_path;
+    result["width"] = width;
+    result["height"] = height;
+    result["frameCount"] = frame_count;
+    return result;
+}
+
+std::string MakeMaskProgressEvent(int frame, int index, int total) {
+    json out;
+    out["event"] = "timeline.maskProgress";
+    out["data"] = json{{"frame", frame}, {"index", index}, {"total", total}};
+    return out.dump();
+}
+
 }  // namespace nzvideomni

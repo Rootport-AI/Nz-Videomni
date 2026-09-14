@@ -263,9 +263,26 @@ _LORAS = [{"name": "style-a", "strength": 1.0}]
 #: negative prompt). Its mirror image is :data:`REQUEST_ACCEPTED_NAG`, which
 #: inherits the coupling — this engine's ruling has to survive it, not dodge it.
 #: Every row that remains is a bare one-field override.
+#: ``inpaint`` ARRIVED IN THIS TABLE with the Inpainting increment (台帳 §3-55)
+#: — the first row to arrive rather than leave, and the first MODE the table has
+#: carried since ``outpaint`` left it. The companions travel with it for the
+#: same reason ``outpaint``'s did: the schema couples an inpaint block to a
+#: reference video (the clip being repainted) and a reference video to a LoRA,
+#: so a bare block is not a valid request at all. ``width``/``height`` are
+#: overridden because this feature's canvas must be a multiple of 128 and
+#: ``_request``'s default 512x320 is not (320 = 2.5 x 128) — a body that tripped
+#: THAT rule would raise ValidationError before this engine's ruling was ever
+#: consulted, and would prove nothing.
 REQUEST_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
+    "inpaint": {
+        "inpaint": {"mask_video_id": "mask-123", "window_start_sec": 0.0},
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "width": 512,
+        "height": 384,
+    },
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -540,11 +557,11 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
     # Six when this increment shipped; FIVE since Retake, FOUR since the End
     # source, THREE since Outpainting and TWO since NAG/VSF, each of which took
-    # the next name off the list. The count is asserted rather than only the
-    # absence because it is what catches a name being ADDED back by accident. At
-    # two, every name left is an ENGINE-LEVEL feature -- no MODE of any kind is
-    # published any more, chain or single.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 2
+    # the next name off the list. THREE AGAIN since Inpainting (台帳 §3-55) --
+    # the first name to be ADDED rather than removed, and the reason the count
+    # is asserted at all rather than only the absences: a name coming back is
+    # exactly what this catches, and here one deliberately did.
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -634,6 +651,30 @@ def test_nag_no_longer_names_a_published_limitation():
     assert "nag" not in ltx25.UNSUPPORTED_FEATURES
 
 
+def test_inpaint_is_refused_and_says_so_in_every_table():
+    """The Inpainting increment's headline, stated four ways (台帳 §3-55).
+
+    A row in :data:`REJECT_TABLE` is not a detail here — it is the WHOLE
+    mechanism. The 422, the ``unsupported_features`` entry on GET /models and
+    the greyed-out Edit sub-tab are all derived from this one line, so the line
+    is asserted BY NAME rather than only through the table-driven tests above:
+    those would still pass if the row's FEATURE name were changed, and the
+    frontend greys controls by that name.
+    """
+    rows = [(f, feat) for f, feat, _p in ltx25.REJECT_TABLE if f == "inpaint"]
+    assert rows == [("inpaint", "inpaint")]
+    # ...and the predicate really answers the question it claims to.
+    predicate = next(p for f, _feat, p in ltx25.REJECT_TABLE if f == "inpaint")
+    assert predicate(_request(**REQUEST_OVERRIDES["inpaint"]))
+    assert not predicate(_request())
+    # Exactly one home: refused, therefore not honoured / ignored / governed.
+    assert "inpaint" not in ltx25.HONOURED_FIELDS
+    assert "inpaint" not in ltx25.IGNORED_FIELDS
+    assert "inpaint" not in ltx25.GOVERNED_FIELDS
+    # ...and published, or the sub-tab stays lit for a mode that 422s.
+    assert "inpaint" in ltx25.UNSUPPORTED_FEATURES
+
+
 def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     """Every feature name either table refuses must be published, or a control
     the server 422s stays lit in the frontend."""
@@ -657,6 +698,10 @@ def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     # accordion and the Batch tab's A2V rows, all of which now work.
     assert "chain" not in features
     assert "v2v" not in features and "a2v" not in features
+    # ...and ``inpaint`` IS published (台帳 §3-55): LTX 2.3 only, by owner
+    # decision. Without the name the Edit tab's Inpainting sub-tab would stay lit
+    # while 2.5 is loaded and every Generate would come back 422.
+    assert "inpaint" in features
     assert len(ltx25.UNSUPPORTED_FEATURES) == len(features), "no duplicates"
 
 

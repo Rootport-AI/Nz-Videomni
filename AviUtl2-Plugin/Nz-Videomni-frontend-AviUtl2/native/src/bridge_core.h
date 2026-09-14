@@ -1238,4 +1238,68 @@ json_t MakeTrackObjectResult(bool ok, int frames,
 std::string MakeTrackProgressEvent(int frame, int index, int total, double score,
                                    bool lost);
 
+// ---------------------------------------------------------------------------
+// timeline.renderMaskVideo (async, section 3-55 Inpainting) - pure parsing /
+// result and event formatting.
+//
+// Dispatch stays in the bridge (mirrors timeline.trackObject): the bridge
+// validates with ParseRenderMaskVideo, builds the two temporary objects and
+// renders the window off the UI thread (RenderMaskVideoWorker in bridge.cpp),
+// streams MakeMaskProgressEvent payloads through the ResponsePoster as it goes,
+// and formats the final reply with MakeRenderMaskResult. HandleRequestJson does
+// NOT handle this method.
+//
+// Frame numbers are ABSOLUTE AviUtl2 frames and both ranges are CLOSED
+// (inclusive at both ends), the same convention OBJECT_LAYER_FRAME uses:
+//   [frameStart, frameEnd]   - the partial filter the mask is derived from
+//   [windowStart, windowEnd] - the frames actually rendered into the mask mp4
+// The window is NOT required to contain the filter (owner decision D3: the user
+// may choose a frame count shorter than the partial filter, in which case only
+// the overlapping part of the mask can be re-generated and the webui says so).
+// The two ranges only have to OVERLAP - a window with no frame in common with
+// the filter would render a mask that is black everywhere, which is a caller
+// bug rather than a job worth running.
+// ---------------------------------------------------------------------------
+
+struct RenderMaskVideoRequest {
+    int layer = 0;         // >= 0; the layer the partial filter sits on
+    int frame_start = 0;   // the partial filter's first frame (inclusive)
+    int frame_end = 0;     // the partial filter's last frame (inclusive)
+    int window_start = 0;  // >= 0; first frame of the rendered window
+    int window_end = 0;    // last frame of the rendered window (inclusive)
+};
+
+// Upper bound on the rendered window, in frames. Every frame is one full scene
+// render plus one mp4 sample, so a caller that sends a nonsense range must be
+// stopped before it locks the host up for hours rather than minutes. 4096 is
+// far above the API's own 481-frame ceiling for a generation, so it can only
+// ever fire on a bug.
+constexpr int kMaskMaxWindowFrames = 4096;
+
+// Validate params of timeline.renderMaskVideo. All five integers are required
+// ('layer', 'frameStart', 'frameEnd', 'windowStart', 'windowEnd'); a real
+// (1.5) is rejected rather than truncated, like ParseTrackObject's integers.
+// Beyond the types: 'layer' >= 0, 'windowStart' >= 0, both ranges must run
+// forwards (end >= start), the two ranges must overlap, and the window may not
+// be longer than kMaskMaxWindowFrames. Returns false + *err_message
+// (BAD_REQUEST) on any failure.
+bool ParseRenderMaskVideo(const json_t& params, RenderMaskVideoRequest* out,
+                          std::string* err_message);
+
+// Build the JSON result object for timeline.renderMaskVideo. 'frameCount' is
+// the number of frames written to the mp4, i.e. the window's length.
+json_t MakeRenderMaskResult(const std::string& file_path, int width, int height,
+                            int frame_count);
+
+// Serialize one timeline.maskProgress event:
+//   {"event":"timeline.maskProgress","data":{"frame":..,"index":..,"total":..}}
+// An object carrying 'event' and NO 'id' is routed to the webui's event
+// subscribers rather than to a pending RPC (bridge/types.ts isBridgeEvent), so
+// this string goes straight through Bridge::ResponsePoster. 'frame' is the
+// AviUtl2 frame number; 'index' / 'total' are 1-based progress counters. The
+// bridge throttles emission to one per 200 ms, always including the first and
+// last frame (the same rule as timeline.trackProgress); nothing about that
+// lives here.
+std::string MakeMaskProgressEvent(int frame, int index, int total);
+
 }  // namespace nzvideomni

@@ -368,6 +368,133 @@ def outpaint_source_too_short(available: int, required: int) -> APIError:
     )
 
 
+def inpaint_preprocess_conflict(kinds: list[str]) -> APIError:
+    """Inpainting（マスクによる部分再生成）: 台帳 §3-55。塗り潰したキャンバスを
+    参照動画として渡す方式なので、参照を前処理（輪郭抽出・姿勢推定・深度）へ
+    通す制御アダプタとは併用できない——センチネル緑の輪郭線には意味が無く、
+    In-Outpainting用のアダプタは生の画素を受け取る前提で学習されている。
+    画角拡張の :func:`outpaint_preprocess_conflict` と同じ理由・同じ判定。"""
+    return APIError(
+        "INPAINT_PREPROCESS_CONFLICT",
+        "inpaint requires a control lora with no reference preprocessing "
+        "(the green-filled canvas must reach the model as raw pixels)",
+        422,
+        detail=f"requested preprocess kinds: {sorted(kinds)}",
+    )
+
+
+def inpaint_source_mismatch(
+    expected: tuple[int, int], actual: tuple[int, int] | None, *, reason: str | None = None
+) -> APIError:
+    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を128の
+    倍数へ切り上げた値）でなければならない。素材の実寸から導いた値と違えば、
+    余白の位置が実際とずれたまま生成され、最後の切り落としが別の場所を切る。
+    素材の辺が ``INPAINT_MIN_SOURCE_SIDE``（256画素）未満のときも同じ符号で断る
+    ——理由は違うが、どちらも「この素材ではキャンバスを作れない」という同じ
+    結論で、利用者が直す先も同じ（素材を差し替える）。
+
+    ``actual`` が ``None``（素材の寸法を読めなかった）ときは、**比較そのものが
+    成立していない**。この場合 ``expected`` には**要求された**キャンバス寸を
+    渡すこと——「素材から導いたキャンバスは○○です」と書くと、読めなかった値
+    から導いた数字が実在するかのように読めてしまう。"""
+    if actual is None:
+        detail = (
+            f"the source video's resolution could not be probed "
+            f"(ffprobe unavailable or failed); the request asked for a "
+            f"{expected[0]}x{expected[1]} canvas"
+        )
+    else:
+        detail = (
+            f"canvas from the source would be {expected[0]}x{expected[1]}, "
+            f"source {actual[0]}x{actual[1]}"
+        )
+    if reason:
+        detail = f"{detail} ({reason})"
+    return APIError(
+        "INPAINT_SOURCE_MISMATCH",
+        "width/height must equal the source video's resolution rounded up to a "
+        "multiple of 128",
+        422,
+        detail=detail,
+    )
+
+
+def inpaint_mask_not_found(mask_video_id: str) -> APIError:
+    """Inpainting: ``inpaint.mask_video_id`` が保管庫に無い。アップロードが
+    失敗していたか、保存期間を過ぎて消えている。"""
+    return APIError(
+        "INPAINT_MASK_NOT_FOUND",
+        f"mask video not found: {mask_video_id}",
+        404,
+        detail="upload the mask with POST /upload/video first",
+    )
+
+
+def inpaint_mask_resolution_mismatch(
+    expected: tuple[int, int], actual: tuple[int, int] | None
+) -> APIError:
+    """Inpainting: マスク動画の解像度は素材の実寸と**完全に一致**していなければ
+    ならない。**引き伸ばしは行わない**——マスクは「この絵のこの画素を描き替える」
+    という指定であって、拡大縮小すれば境界が利用者の見ていない量だけ動く
+    （``Docs/INPAINTING_DESIGN.md`` §14）。"""
+    got = (
+        "unreadable (ffprobe unavailable or failed)"
+        if actual is None
+        else f"{actual[0]}x{actual[1]}"
+    )
+    return APIError(
+        "INPAINT_MASK_RESOLUTION_MISMATCH",
+        "the mask video's resolution must equal the source video's resolution "
+        "(the mask is never resized)",
+        422,
+        detail=f"source {expected[0]}x{expected[1]}, mask {got}",
+    )
+
+
+def inpaint_mask_frame_mismatch(available: int, required: int) -> APIError:
+    """Inpainting: マスクの枚数は ``num_frames`` と一致していなければならない。
+    足りない場合、ffmpegの既定の同期規則では**最終フレームが繰り返されて**
+    枚数だけ揃ってしまい、窓の後半が「何も描き替えない」まま静かに通る
+    （このffmpegの ``maskedmerge`` は ``shortest`` を受け付けない——実測。
+    ``services/video_io.py`` の :func:`fill_mask_green_mp4` 参照）。多い場合も
+    余りの意味が決まらないので断る。"""
+    return APIError(
+        "INPAINT_MASK_FRAME_MISMATCH",
+        "the mask video must have exactly num_frames frames",
+        422,
+        detail=f"mask has {available} frames, request needs {required}",
+    )
+
+
+def inpaint_window_out_of_range(detail: str | None = None) -> APIError:
+    """Inpainting: 要求された窓が素材に収まらない。撮り直しの
+    :func:`retake_window_out_of_range` の鏡で、GPUを使う前（422）に断る。"""
+    return APIError(
+        "INPAINT_WINDOW_OUT_OF_RANGE",
+        "the requested inpaint window does not fit the uploaded video",
+        422,
+        detail=detail,
+    )
+
+
+def inpaint_lora_invalid(names: list[str]) -> APIError:
+    """Inpainting: 制御アダプタ（control LoRA）は**ちょうど1本**でなければ
+    ならない。緑で塗ったキャンバスは制御アダプタ1本を通してモデルへ届き、
+    参照動画から作れる制御信号は1つだけだからである。
+
+    **この符号が実際に出るのは「制御アダプタが2本以上」のときだけ**である。
+    0本の場合はここへ来ない——参照動画が必須で、参照動画があって制御アダプタが
+    無い要求は既存の :func:`reference_requires_control_lora` が先に断る。
+    重複した検査を置かず、到達する場合だけをこの文面が説明する。"""
+    return APIError(
+        "INPAINT_LORA_INVALID",
+        "inpaint accepts exactly one control lora (the one that consumes the "
+        "green canvas)",
+        422,
+        detail=f"requested loras: {sorted(names)}",
+    )
+
+
 def reference_resolution_invalid(width: int, height: int) -> APIError:
     """Phase C: the reference video is consumed on the VAE's 64-grid. The
     downscale factor is 2 (union-control family) or 1 (deblur); the divisible-by-128

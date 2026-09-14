@@ -98,9 +98,10 @@ export const en = {
   /** Edit mode (2026-08-09): the tab was promoted from a disabled mock to a
    * real one, and now hosts its own sub-tab row (Retake / Outpainting /
    * Inpainting). Outpainting is a real panel (`Docs/PENDING_TASKS_CLOSED.md`
-   * §3-70, filed as §1-13 at the time);
-   * Retake is still a placeholder and Inpainting is a disabled mock sub-tab.
-   * The Outpainting panel has NO prompt field of its own — it reads the shared
+   * §3-70, filed as §1-13 at the time); Retake became one with §1-17, and
+   * Inpainting — the last disabled mock under this tab — became one with
+   * §3-55 (2026-09-14). All three are real panels now.
+   * None of the three has a prompt field of its own — they read the shared
    * `promptBar` above the tabs, exactly as Create/Chain do. The sub-tab LABELS are
    * deliberately identical in en/ja, matching the `modes.*` main-tab labels
    * (owner decision, 2026-08 tab rename); only the prose below is translated.
@@ -119,14 +120,18 @@ export const en = {
      * here (the engine can run the OTHER sub-tab), so a generic "unsupported"
      * would leave the user guessing which half is out of scope.
      *
-     * The Inpainting mock deliberately gets NO tooltip — it is "not built yet"
-     * on every base model, which its own absence of a panel already says
-     * (`shell/ModeTabs.tsx` treats the Toolbox mock exactly this way). */
+     * 2026-09-14 (§3-55): Inpainting has a line of its own now. It used to be
+     * the one sub-tab with NO tooltip, because "not built yet" was true of it
+     * on every base model and its own absence of a panel already said so; with
+     * the panel built, the only reason it can grey is the same one the other
+     * two grey for, so it gets the same treatment. */
     unavailableOnBaseModel: {
       retake:
         "Retake is not available on the selected base model. Switch the base model in the header to use it.",
       outpainting:
         "Outpainting is not available on the selected base model. Switch the base model in the header to use it.",
+      inpainting:
+        "Inpainting is not available on the selected base model. Switch the base model in the header to use it.",
     },
     retake: {
       heading: "Retake",
@@ -337,6 +342,149 @@ export const en = {
           `The original video must be at least ${minSide} pixels on both sides. Use a larger video.`,
         loraMissing: (loraName: string): string =>
           `The "${loraName}" control adapter is not installed on the server. Install it, then reload the list on the Inventory screen.`,
+      },
+    },
+    /** 台帳 §3-55 Inpainting (2026-09-14): the sub-tab's own copy. It is the
+     * FIRST panel in the app fed by two separate right-clicks (a 部分フィルタ
+     * for the mask, a video to repaint), so a good half of these lines exist to
+     * say which of the two is still missing and what to right-click to supply
+     * it. The mask video itself is never named to the user: the plugin makes it
+     * out of the 部分フィルタ and neither the timeline nor this panel ever shows
+     * it (owner decision D7). */
+    inpainting: {
+      heading: "Inpainting",
+      summary:
+        "Repaints only what is inside a 部分フィルタ (partial filter) box, leaving the rest of the picture untouched. Right-click the partial filter and the video to repaint on the timeline and send each of them to this screen. (To place a partial filter: right-click the timeline → Add media object → Screen effects → Partial filter.)",
+      /** The manual-tab-switch state: nothing has been right-clicked yet. */
+      idle: "Right-click the partial filter on the timeline and choose “Use this partial filter as the mask”, then right-click the video and choose “Inpaint this video”. Either order works.",
+      clearButton: "Clear this inpainting and reset the settings",
+
+      partialFilterHeading: "Partial filter (the mask)",
+      partialFilterNone:
+        "Supply the partial filter to use as the mask from the timeline's right-click menu.",
+      /** The three values the design doc (`Docs/INPAINTING_DESIGN.md` §3.1)
+       * settles on: layer, frame range, and the number of 中間点 (midpoints) on
+       * the filter. Layer and frame numbers are 1-origin, matching AviUtl2's own
+       * UI (`Docs/RIGHTCLICK_REDESIGN_SPEC.md` §6-3) — the caller adds the +1.
+       * No file name and no thumbnail: a partial filter is not a material. */
+      partialFilterReadout: (layer: number, startFrame: number, endFrame: number, midpoints: number): string =>
+        `Layer ${layer}, frames ${startFrame}-${endFrame}, ${midpoints} midpoint(s)`,
+
+      targetHeading: "Video to repaint",
+      targetNone: "No video yet. Right-click one on the timeline.",
+      targetThumbAlt: "Video attached",
+      uploading: "Loading the video…",
+      targetReadout: (width: number, height: number, seconds: string): string =>
+        `${width} x ${height} · ${seconds}s`,
+      loadFailed: "The video could not be loaded. Please try the right-click again.",
+      trimFailed:
+        "Only part of this object is used on the timeline, but the video could not be cut to that part. Repainting it would work on the wrong section, so this cannot continue.",
+
+      /** The frames field (the shared `DurationField`, 9-481 on the 8n+1 grid).
+       * Its comfort marker is advisory and never blocks — owner decision D12. */
+      framesLabel: "Frames",
+      comfortWarning: (tokens: number): string =>
+        `At this size and length the generation comes to roughly ${tokens} units of work, which is past the point where this machine usually starts running short of video memory. It will still run, but it may be slow. Shorten the length, or use a smaller video.`,
+      /** The window readout, 1-origin like every other frame number on screen. */
+      windowReadout: (startFrame: number, endFrame: number): string =>
+        `Repainting frames ${startFrame} to ${endFrame} of the timeline.`,
+      windowShifted:
+        "The partial filter sits near the end of the video, so the window has been moved earlier to fit.",
+      /** Owner decision D3: the frames field is FREE, so a window shorter than
+       * the partial filter is allowed — it just cannot repaint the whole of it.
+       * A note, never a block. */
+      windowNotCoveredNote:
+        "The number of frames given is shorter than the partial filter. The tail end of the video will not be inpainted.",
+
+      /** マスク周囲の「のりしろ」 — the two blend dilation steps (0-15, default
+       * 5 / 2) the panel now sends on every request. The note's pixel figure
+       * comes from STAGE 2 (`VERIFICATION_LOG.md` §105.3: `r2 × long side ÷ 64
+       * + 18px`); with no target video measured there is no long side to
+       * multiply, so the number drops out of the sentence. */
+      blend: {
+        heading: "Blend margin around the mask",
+        stage1Label: "Stage-1",
+        stage2Label: "Stage-2",
+        note: (px: number): string => `About ${px}px around the mask becomes the blend margin.`,
+        noteUnknown:
+          "Strength of the blend margin that eases the mask into the surrounding video. Its width is derived from the target video's longer side in pixels.",
+      },
+
+      /** のりしろ (glue) — a DISABLED mock in this increment (owner decision
+       * D4). The controls are placed now so the shape of the finished feature is
+       * visible; none of them does anything. */
+      glueHeading: "Whether to use a temporal “glue” margin",
+      glueYes: "Yes",
+      glueNo: "No",
+      glueFramesLabel: "Glue length in frames",
+      glueNote:
+        "“No” is recommended for removing an object; “Yes” for changing an object's colour. With the glue on, the result joins smoothly onto the video before the inpainted section (at the cost of making the object harder to remove).",
+
+      /** The three progress lines of the Generate press (owner decision D8: the
+       * mask is rendered and uploaded there, with no button of its own). */
+      maskRendering: "Rendering the mask…",
+      maskRenderingProgress: (index: number, total: number): string =>
+        `Rendering the mask… ${index} / ${total} frames`,
+      maskUploading: "Sending the mask…",
+
+      /** `MASK_SEED_INVALID`: the partial filter is gone from where it was. */
+      seedGone: "The partial filter could not be found.",
+      /** `MASK_BUSY`: the ONE timeline job slot is taken — it is shared with
+       * object tracking. */
+      maskBusy: "Object tracking or a mask render is already running.",
+      /** Every other mask failure, native's own `MASK_FAILED` included. */
+      maskFailed: "The mask could not be created. Please try again.",
+
+      noticesHeading: "Before you press Generate",
+      /** The three lines the 段0 spike turned up, in the order they matter while
+       * writing a prompt. Lines 1-2 are the spike's own findings (a subject left
+       * half outside the box is repainted back INTO the frame from the context
+       * that stayed; a negative instruction does not remove anything), and the
+       * third is the standing caution about the filter's own blur. Kept as ONE
+       * group so the panel renders them as a list and nothing can drift out of
+       * order. (A fourth line, about naming something visible outside the mask,
+       * was dropped on the owner's call after the 2026-09-14 real-device gate.) */
+      promptNotes: {
+        coverWholeSubject:
+          "Cover the WHOLE subject with the partial filter — down to the legs and the tips of the feet — and take in its shadow, its reflection and where it meets the ground. Anything left outside the box drags the repaint back towards it.",
+        writePositively:
+          "To remove something, say what should be there INSTEAD, in the positive — “an empty lawn”, not “no people”. Negative instructions have no effect.",
+        blurIgnored:
+          "The partial filter's own “blur” has no effect on the mask (the server puts the edge blending in).",
+      },
+      /** 右クリックが中途に飛び込んだときの断り文 (m1). Also used when a 追尾
+       * right-click arrives while a mask render holds native's shared timeline
+       * slot — the run in the way is the same one either way. */
+      busyRightClick:
+        "A mask render or a submission is in progress. Please wait for it to finish and try again.",
+
+      generateButton: "Inpaint",
+      generatingButton: "Submitting…",
+
+      /** Gate messages, rendered by the shared `GenerateReasonsNote`. */
+      generateReasons: {
+        partialFilterMissing: "Right-click the partial filter you want to use as the mask.",
+        targetMissing: "Send the video to inpaint from the timeline's right-click menu.",
+        sourceUploading: "Waiting for the video to finish loading.",
+        sourceUploadFailed: "The video could not be loaded.",
+        sourceTrimFailed: "The video could not be cut to the part used on the timeline.",
+        mediaInfoUnknown:
+          "The video's size could not be read. Try the right-click again, or use a video in a different format.",
+        /** Owner decision D5, with the real numbers substituted. The server runs
+         * the very same check and answers 422, so this is the WebUI's half of a
+         * rule that holds on both sides — it never stretches anything to fit. */
+        resolutionMismatch: (
+          filterWidth: number,
+          filterHeight: number,
+          targetWidth: number,
+          targetHeight: number,
+        ): string =>
+          `The partial filter's resolution (= the project's resolution) and the video's resolution must match. (partial filter = ${filterWidth}*${filterHeight}px, video = ${targetWidth}*${targetHeight}px, which do not match)`,
+        /** NOT the same thing as `windowNotCoveredNote` above, which is a note:
+         * this one fires when the window cannot be PLACED inside the video's
+         * ribbon at all (owner decision D3: 収まらなければ生成不可). */
+        windowNotCovered: "This window does not fit inside the video. Reduce the number of frames.",
+        maskRendering: "Waiting for the mask render to finish.",
       },
     },
     /** Shared by every placeholder panel under Edit. */
@@ -1493,10 +1641,13 @@ export const en = {
   toolbox: {
     tracking: {
       heading: "Object tracking",
-      /** The one sentence that explains where the box comes from: the user
-       * fits it in AviUtl2's preview, not here (§1 / §11 of the design doc). */
+      /** The one sentence that says where to start: right-click a partial
+       * filter already placed on the timeline. Fitting its box still happens in
+       * AviUtl2's preview, not here (§1 / §11 of the design doc); the
+       * parenthetical gives the menu path for placing one (owner wording,
+       * 2026-09-13). */
       intro:
-        'Put a partial filter on a layer below the video, fit its box in the preview to what you want followed, then right-click that object on the timeline and choose "🎯 Object tracking (uses a partial filter)".',
+        'Right-click a partial filter placed on the timeline and choose "🎯 Object tracking (uses a partial filter)". (To place one: right-click the timeline → Add media object → Screen effects → Partial filter.)',
       model: {
         label: "Model",
         uetrack: "UETrack",
@@ -2108,6 +2259,8 @@ export const ja: Strings = {
         "Retake（撮り直し）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
       outpainting:
         "Outpainting（画角拡張）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
+      inpainting:
+        "Inpainting（マスクによる部分再生成）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
     },
     retake: {
       heading: "Retake（リテイク：撮り直し）",
@@ -2234,6 +2387,94 @@ export const ja: Strings = {
           `元の動画は縦横とも${minSide}ピクセル以上が必要です。もっと大きい動画を使ってください。`,
         loraMissing: (loraName: string): string =>
           `制御用の追加学習データ「${loraName}」がサーバーに入っていません。導入したうえで、Inventory（在庫）の画面で一覧を読み込み直してください。`,
+      },
+    },
+    inpainting: {
+      heading: "Inpainting（マスクによる部分再生成）",
+      summary:
+        "部分フィルタの枠の内側だけを描き替えます。タイムラインで部分フィルタと対象の動画をそれぞれ右クリックして、この画面へ送ってください。（※部分フィルタの設置方法：タイムラインを右クリック→メディアオブジェクトを追加→画面効果→部分フィルタ）",
+      idle: "タイムライン上で部分フィルタを右クリックして「この部分フィルタをマスクに使う」を、動画を右クリックして「この動画をInpaintingする」を選んでください。順番はどちらからでも構いません。",
+      clearButton: "Inpaintingを取りやめて設定を戻す",
+
+      partialFilterHeading: "マスクに使う部分フィルタ",
+      partialFilterNone: "マスクに使う部分フィルタを、タイムラインの右クリックメニューから入力してください。",
+      partialFilterReadout: (layer: number, startFrame: number, endFrame: number, midpoints: number): string =>
+        `レイヤー${layer}／${startFrame}〜${endFrame}フレーム目／中間点${midpoints}個`,
+
+      targetHeading: "描き替える動画",
+      targetNone: "対象の動画がまだ届いていません。タイムラインで動画を右クリックしてください。",
+      targetThumbAlt: "動画を設定済み",
+      uploading: "動画を読み込んでいます…",
+      targetReadout: (width: number, height: number, seconds: string): string =>
+        `${width}×${height} · ${seconds}秒`,
+      loadFailed: "動画を読み込めませんでした。もう一度右クリックからやり直してください。",
+      trimFailed:
+        "この動画はタイムライン上で一部だけを使っていますが、その部分を切り出せませんでした。このまま進むと違う場所を描き替えてしまうため、続行できません。",
+
+      framesLabel: "フレーム数",
+      comfortWarning: (tokens: number): string =>
+        `この大きさと長さでは、処理量がおよそ${tokens}単位になります。これは、このパソコンで映像用メモリー（VRAM）が足りなくなり始める目安を超えています。実行はできますが遅くなることがあります。フレーム数を減らすか、もっと小さい動画を使ってください。`,
+      windowReadout: (startFrame: number, endFrame: number): string =>
+        `タイムラインの ${startFrame}〜${endFrame} フレーム目を描き替えます。`,
+      windowShifted: "部分フィルタが動画の終わりに近いため、窓を頭側へずらしました。",
+      windowNotCoveredNote:
+        "部分フィルタよりも短いフレーム数が指定されています。動画の末尾側はInpaintされません。",
+
+      blend: {
+        heading: "マスク周囲の「のりしろ」",
+        stage1Label: "Stage-1",
+        stage2Label: "Stage-2",
+        note: (px: number): string => `※マスク周囲の約${px}pxが「のりしろ」になります。`,
+        noteUnknown: "※マスクを周囲の動画と馴染ませる「のりしろ」の強度。のりしろの幅は、対象動画の長辺のピクセル数に基づいて算出される。",
+      },
+
+      glueHeading: "時間軸の「のりしろ」の有無",
+      glueYes: "あり",
+      glueNo: "なし",
+      glueFramesLabel: "のりしろのフレーム数",
+      glueNote:
+        "物体除去などの用途では「なし」、物体の色変えなどの用途では「あり」を推奨します。のりしろ「あり」の場合、Inpaintする区間よりも前の動画と自然に繋がります（その代わり、物体が消えづらくなります）",
+
+      maskRendering: "マスクを描画しています…",
+      maskRenderingProgress: (index: number, total: number): string =>
+        `マスクを描画しています… ${index} / ${total} フレーム`,
+      maskUploading: "マスクを送信しています…",
+
+      seedGone: "部分フィルタが見つかりません。",
+      maskBusy: "追尾かマスクの描画が実行中です。",
+      maskFailed: "マスクを作れませんでした。もう一度お試しください。",
+
+      noticesHeading: "生成する前に",
+      promptNotes: {
+        coverWholeSubject:
+          "部分フィルタは被写体の全体（脚や足の先まで）を、影・反射・接地面も含めて広めに覆ってください。一部が枠の外に残ると、その文脈に引きずられて描き替わります。",
+        writePositively:
+          "消したいときは「空の芝生」のように、代わりに描くものを肯定形で書いてください（「人はいない」のような否定の指示は効きません）。",
+        blurIgnored:
+          "部分フィルタの「ぼかし」はマスクには効きません（境界のなじみはサーバー側が付けます）。",
+      },
+      busyRightClick: "マスクの描画か送信が進行中です。終わってからやり直してください。",
+
+      generateButton: "Inpaintingを実行",
+      generatingButton: "送信中…",
+
+      generateReasons: {
+        partialFilterMissing: "マスクに使う部分フィルタを右クリックしてください。",
+        targetMissing: "Inpaintする動画をタイムラインの右クリックから入力してください。",
+        sourceUploading: "動画の読み込みが終わるのを待っています。",
+        sourceUploadFailed: "動画を読み込めませんでした。",
+        sourceTrimFailed: "タイムラインで使っている部分を切り出せませんでした。",
+        mediaInfoUnknown:
+          "対象の動画の解像度を読み取れませんでした。右クリックからやり直すか、別の形式の動画を使ってください。",
+        resolutionMismatch: (
+          filterWidth: number,
+          filterHeight: number,
+          targetWidth: number,
+          targetHeight: number,
+        ): string =>
+          `部分フィルタの解像度（＝プロジェクトの解像度）と対象動画の解像度を一致させてください。（※部分フィルタ＝${filterWidth}*${filterHeight}px、対象動画＝${targetWidth}*${targetHeight}pxで不一致）`,
+        windowNotCovered: "この長さの窓は対象の動画に収まりません。フレーム数を減らしてください。",
+        maskRendering: "マスクの描画が終わるのを待っています。",
       },
     },
     comingSoon: "この機能はまだ準備中です。ここは画面の枠だけを先に用意したもので、操作できる項目はまだありません。",
@@ -2845,7 +3086,7 @@ export const ja: Strings = {
     tracking: {
       heading: "物体追尾",
       intro:
-        "動画より下のレイヤーに部分フィルタを置き、プレビューで追わせたいものに枠を合わせてから、タイムラインでそのオブジェクトを右クリックして「🎯 物体追尾（部分フィルタを使用）」を選んでください。",
+        "タイムラインに配置した部分フィルタを右クリックして、「🎯 物体追尾（部分フィルタを使用）」を選んでください。（※部分フィルタの配置方法：タイムラインを右クリック → メディアオブジェクトを追加 → 画面効果 → 部分フィルタ）",
       model: {
         label: "モデル",
         uetrack: "UETrack",

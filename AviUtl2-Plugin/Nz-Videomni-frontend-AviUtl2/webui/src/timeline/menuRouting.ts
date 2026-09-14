@@ -23,7 +23,9 @@
  * `retakeRange` for the object menu;
  * `textToVideoHere`, `imageFromCurrentFrame`, `addCurrentFrameAsKeyframe`,
  * `currentFrameToClipChain`, `insertLatestResultHere` for the layer menu),
- * plus `trackObject` (§3-54 物体追尾, 2026-09-11 — the object menu's #21)
+ * plus `trackObject` (§3-54 物体追尾, 2026-09-11 — the object menu's #21) and
+ * the pair `inpaintPartialFilter`/`inpaintVideo` (§3-55 Inpainting,
+ * 2026-09-14 — the object menu's #22/#23)
  * directly from its context-menu items (`kObjectMenuItems`/`kLayerMenuItems`),
  * so this table's job is routing exactly those. An action with no table entry
  * routes to `null` (the hook no-ops), so an unknown/new native identifier can
@@ -395,6 +397,35 @@ export const MENU_ROUTING_TABLE: Readonly<Record<string, MenuRouteInfo>> = {
   trackObject: {
     targetMode: "toolbox", intent: "track-object", needsSelection: true,
     requiredKind: "partialFilter", placement: null,
+  },
+  /** 台帳 §3-55 Inpainting (2026-09-14), 右クリック #22: Edit画面 Inpainting
+   * サブタブ. Hand the selected 部分フィルタ over as the MASK source.
+   *
+   * The FIRST pair of rows that feed ONE panel from TWO right-clicks (owner
+   * decision D6). Everything about both rows follows from that:
+   *  - `requiredKind: "partialFilter"` here and `"video"` on its sibling below,
+   *    so the ordinary §4 mismatch note refuses "a video as the mask" and "a
+   *    部分フィルタ as the target" without either of them costing anything.
+   *  - Two DIFFERENT intents (`inpaint-mask` / `inpaint-target`) rather than
+   *    one shared one: `AppShell.handleRoute` branches on the action to decide
+   *    WHICH slot to fill, and `EditScreen` reads the intent to pick the
+   *    sub-tab — a single intent would make the second question unanswerable.
+   *  - `placement: null` in its SECOND sense (`MenuPlacement`'s meaning 2, the
+   *    early-return that places nothing by itself): the seat is taken at
+   *    GENERATE time, not at right-click time (owner decision D8 — the mask is
+   *    rendered then too), and the route early-returns in
+   *    `AppShell.handleRoute` well before Step 5. Taking a seat here would
+   *    reserve it twice over, once per right-click, for one generation. */
+  inpaintPartialFilter: {
+    targetMode: "edit", intent: "inpaint-mask", needsSelection: true,
+    requiredKind: "partialFilter", placement: null,
+  },
+  /** 台帳 §3-55 Inpainting (2026-09-14), 右クリック #23: Edit画面 Inpainting
+   * サブタブ. Hand the selected video over as the object being repainted. See
+   * the sibling row above for why the pair is shaped this way. */
+  inpaintVideo: {
+    targetMode: "edit", intent: "inpaint-target", needsSelection: true,
+    requiredKind: "video", placement: null,
   },
 };
 

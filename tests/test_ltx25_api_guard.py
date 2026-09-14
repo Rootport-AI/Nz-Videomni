@@ -1587,7 +1587,12 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # 機能のために灰色のままになる。いま2.5が公開するのはエンジン側の機能名
     # 2つだけである。
     assert "nag" not in features
-    assert len(features) == 2
+    # そしてInpainting段で ``inpaint`` が**入った**——この一覧で初めて
+    # 「外れた」ではなく「増えた」名前である(台帳 §3-55)。LTX 2.3専用と
+    # オーナーが裁定した機能なので、2.5を読み込んでいるあいだは
+    # Editタブの「Inpainting」サブタブが灰色になる。
+    assert "inpaint" in features
+    assert len(features) == 3
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

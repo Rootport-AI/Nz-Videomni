@@ -280,4 +280,91 @@ std::string PatchAliasPartialFilterKeyframes(const std::string& alias,
                                              const std::vector<TrackKeyframe>& kfs,
                                              int scene_w, int scene_h, int length);
 
+// ---------------------------------------------------------------------------
+// Inpainting (section 3-55): the mask-copy alias transforms.
+//
+// The mask AviUtl2 renders for an Inpainting job is a copy of the user's
+// partial filter with ONE whitening effect bolted on, laid over a black
+// backdrop. These four pure functions build that copy out of the alias
+// get_object_alias handed back. bridge.cpp's RenderMaskVideoWorker is the only
+// caller and runs them in this order:
+//
+//   NormalizeAliasFrameBoundariesToRelative  (absolute -> object-relative)
+//   KeepOnlyFirstEffectBlock                 (drop the user's other effects)
+//   ClipAliasFrameBoundaries                 (only when the window is shorter)
+//   AppendEffectBlock(..., WhiteningEffectBlockLines())
+//
+// NormalizeAliasObjectFrameHeader is deliberately NOT in that chain: it
+// collapses the whole boundary list to a single "frame=0,length-1" pair, which
+// would throw away every midpoint the user (or the tracker) put on the box.
+// ---------------------------------------------------------------------------
+
+// Keep the "[Object]" meta section and the FIRST "[Object.N]" effect block,
+// dropping every effect block after it. The kept lines - the "frame=" boundary
+// list included - are copied byte for byte; a leading BOM and the CRLF/LF style
+// survive. Returns an EMPTY string when the alias has no effect block at all
+// (the caller reads that as "this is not an object we can copy").
+//
+// Why: the mask must show the partial filter's SHAPE and nothing else. Effects
+// the user stacked on top of the same object (a blur, a colour correction)
+// would be baked into the white area and corrupt the mask.
+std::string KeepOnlyFirstEffectBlock(const std::string& alias);
+
+// Append one more effect block at the end of the alias: an "[Object.N]" header
+// whose N is one past the highest "[Object.<digits>]" index already present (0
+// when there is none), followed by `block_lines` verbatim. A leading BOM and
+// the CRLF/LF style survive. An empty alias, or an empty `block_lines`, returns
+// the input unchanged (an empty alias stays empty).
+std::string AppendEffectBlock(const std::string& alias,
+                              const std::vector<std::string>& block_lines);
+
+// Rewrite the "[Object]" section's "frame=a,b,c,..." boundary list so it starts
+// at 0, by subtracting the FIRST value from every value. An alias that is
+// already relative ("frame=0,...") comes back unchanged; one saved with
+// absolute timeline numbers ("frame=24,54,80,119") becomes "frame=0,30,56,95".
+// A leading BOM and the CRLF/LF style survive.
+//
+// Why both: create_object_from_alias wants 0-based boundaries, and there is no
+// record of whether get_object_alias returns absolute (what a SAVED .object
+// carries) or relative numbers - subtracting the head is correct either way
+// (plan risk R10).
+//
+// The input is returned unchanged when there is no "[Object]" section, no
+// "frame=" line inside it, or any value in the list is not a plain integer.
+std::string NormalizeAliasFrameBoundariesToRelative(const std::string& alias);
+
+// Shorten an already-relative alias to at most `max_length` frames - the case
+// where the user asked for fewer frames than the partial filter is long (owner
+// decision D3). Boundaries at or past `max_length` are dropped and a final
+// boundary at max_length - 1 is appended, REPEATING the last kept value, so the
+// box holds its last in-window position instead of racing towards a keyframe
+// that is no longer there (the same "hold the last box" rule
+// PatchAliasPartialFilterKeyframes uses when it extends one).
+//
+// Every keyframed item line in the alias ("<v0>,...,<vN-1>,<move method>,0") is
+// truncated alongside the boundary list, so the two can never disagree on how
+// many values there are. A line whose value count does not match the ORIGINAL
+// boundary count is left alone (it was not keyframed against these boundaries).
+//
+// A copy of one frame or less keeps the minimal "frame=0,0" pair with a single
+// repeated value. The input is returned unchanged when max_length < 1, when
+// there is nothing to clip (the last boundary already fits), or when the
+// "frame=" line is missing / unparsable.
+std::string ClipAliasFrameBoundaries(const std::string& alias, int max_length);
+
+// The effect block that turns the partial filter's area white: AviUtl2's
+// "invert" effect with its "luma invert" checkbox on, so the black backdrop
+// underneath comes out white INSIDE the filter's shape and stays black outside.
+// The returned lines are ready for AppendEffectBlock.
+//
+// CONFIRMED BY AN ON-DEVICE CAPTURE (2026-09-14, transcribed in
+// Docs/SDK_REFERENCE.md section 16 (k)): the host writes the effect as six
+// lines - the effect name, "luma invert", and four sibling checkboxes
+// ("vertical flip" / "horizontal flip" / "hue invert" / "alpha invert") that
+// all sit at 0. Only the two lines that carry meaning are written here and
+// everything else is left to the host's defaults, exactly as
+// BuildMediaObjectAlias does; the capture is what confirms those defaults are
+// the ones we want. The bytes live in ONE marked block in alias_util.cpp.
+std::vector<std::string> WhiteningEffectBlockLines();
+
 }  // namespace nzvideomni

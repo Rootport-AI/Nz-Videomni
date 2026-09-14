@@ -656,6 +656,10 @@ const char kItemPlaybackSpeedJp[] =
     "\xe5\x86\x8d\xe7\x94\x9f\xe9\x80\x9f\xe5\xba\xa6";  // "playback speed"
 const char kItemLoopPlayJp[] =
     "\xe3\x83\xab\xe3\x83\xbc\xe3\x83\x97\xe5\x86\x8d\xe7\x94\x9f";  // "loop playback"
+// Section 3-55 (Inpainting): the effect name the mask's seed object must carry.
+// Byte-for-byte the same escape alias_util.cpp holds, per the note above.
+const char kEffectPartialFilterJp[] =
+    "\xe9\x83\xa8\xe5\x88\x86\xe3\x83\x95\xe3\x82\xa3\xe3\x83\xab\xe3\x82\xbf";  // "partial filter"
 
 // Read one item of the "video file" effect for a selected object (contract v10).
 //
@@ -1403,20 +1407,102 @@ bool RenderSceneAudioFrame(EDIT_HANDLE* handle, int frame, std::vector<float>* l
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// The long-running timeline jobs (object tracking 3-54, mask rendering 3-55)
+// share one slot and one shutdown flag. Both live HERE, above the layer-
+// visibility helpers, because SoloGuard below needs the shutdown flag too.
+// ---------------------------------------------------------------------------
+
+// Raised by Bridge::Shutdown BEFORE the HTTP worker pool is torn down, and
+// never cleared - once the host is taking the plugin down there is nothing to
+// go back to, so the start of a run does not reset it (nor could there be one).
+// Why it exists: Shutdown runs on the UI thread and waits for the worker to
+// finish, while every call_edit_section_param the worker still wants to make
+// has to run ON that same UI thread - so the two would wait for each other for
+// ever. A worker therefore SKIPS its remaining edit-section calls once this is
+// set.
+// The price, deliberately paid: an exit in the middle of a run can leave the
+// tracked object's layer switched off in the project (the user switches it back
+// on by hand), a write-back that had not started yet is dropped, and a mask
+// render leaves its two temporary objects on the timeline (plan risk R5).
+// NOT covered: a worker already INSIDE call_edit_section_param when the flag
+// goes up. No flag can close that window; it is known and accepted.
+std::atomic<bool> g_shutting_down{false};
+
+// ONE timeline job at a time (tracking design 5.2; section 3-55 widened the
+// slot from "one tracking run" to "one job"). Tracking and the mask render both
+// drive the host's renderer from a worker thread AND toggle layer visibility
+// while they do it, so letting them overlap would mean one restoring the
+// other's layer snapshot. A single slot is the cheapest guarantee that they
+// cannot.
+// g_timeline_job_running is claimed by the dispatcher with exchange(true) and
+// released by TimelineJobGuard on every worker exit path. The error CODE for a
+// refusal follows the CALLER (trackObject answers TRACK_BUSY, renderMaskVideo
+// answers MASK_BUSY) so the webui's existing contract for TRACK_BUSY does not
+// move, and both messages are fixed strings.
+// g_timeline_job_kind records WHICH job holds the slot, and exists for exactly
+// ONE reader: timeline.cancelTracking, which must not stop a mask render with
+// the tracker's stop button. It is deliberately NOT used to word a busy
+// message - the kind is stored a moment AFTER the claim, so a refusal that
+// raced the claim would read the previous run's kind and name the wrong job.
+// Both are only ever written from the UI thread (HandleMessage).
+// g_track_cancel is the stop button's cooperative flag, cleared at the start of
+// each tracking run and read at the top of every loop iteration; g_mask_cancel
+// is the mask render's equivalent, but this stage ships no stop button for the
+// mask, so only Bridge::Shutdown ever raises it.
+enum TimelineJobKind {
+    kTimelineJobNone = 0,
+    kTimelineJobTrack = 1,
+    kTimelineJobMask = 2,
+};
+std::atomic<bool> g_timeline_job_running{false};
+std::atomic<int> g_timeline_job_kind{kTimelineJobNone};
+std::atomic<bool> g_track_cancel{false};
+std::atomic<bool> g_mask_cancel{false};
+
+// RAII release of the job slot - the same shape as SoloGuard, for the same
+// reason: the workers have a dozen early returns and every one of them must
+// leave the feature usable again. The kind is cleared FIRST so a dispatcher
+// that has just seen running == false can never read a stale kind.
+struct TimelineJobGuard {
+    ~TimelineJobGuard() {
+        g_timeline_job_kind.store(kTimelineJobNone);
+        g_timeline_job_running.store(false);
+    }
+};
+
 // --- audioMode == "solo": disable every layer not in solo_keep_layers, render,
 // then ALWAYS restore (I9). REALDEVICE-VERIFY: solo isolation has no community
 // reference implementation; the "mix" path works with solo disabled.
 struct SoloDisableCtx {
-    const std::vector<int>* keep;
-    int layer_max;
-    std::vector<char>* saved;  // out: original enable state per layer index
-    bool ran;
+    const std::vector<int>* keep = nullptr;
+    int layer_max = 0;
+    // Section 3-55: how far up the scan runs. -1 keeps the pre-3-55 behaviour
+    // (stop at layer_max), which is what cutoutRange's audio solo passes. The
+    // mask render has to go two layers FURTHER, because the two temporary
+    // objects it renders live on layer_max+1 and layer_max+2 - layers that are,
+    // by definition, above the highest layer holding an object.
+    int scan_max = -1;
+    // Section 3-55: switch the kept layers explicitly ON instead of only leaving
+    // them alone. A layer that has never held an object can still carry a
+    // "hidden" setting, and the mask render would then be a black video with no
+    // hint as to why.
+    bool force_enable_keep = false;
+    std::vector<char>* saved = nullptr;  // out: original enable state per layer index
+    bool ran = false;
+    // Section 3-55, out: true when set_layer_enable was actually called at
+    // least once. `ran` only says the edit section executed - a host without
+    // set_layer_enable runs the whole loop and changes NOTHING, which for the
+    // audio solo is a tolerable degradation but for a mask render is a silent
+    // wrong answer (a picture of the user's project instead of a mask).
+    bool toggled = false;
 };
 void SoloDisableEditProc(void* param, EDIT_SECTION* edit) {
     auto* c = static_cast<SoloDisableCtx*>(param);
     c->ran = true;
-    c->saved->assign(static_cast<size_t>(c->layer_max) + 1, 1);
-    for (int layer = 0; layer <= c->layer_max; ++layer) {
+    const int scan_max = c->scan_max >= 0 ? c->scan_max : c->layer_max;
+    c->saved->assign(static_cast<size_t>(scan_max) + 1, 1);
+    for (int layer = 0; layer <= scan_max; ++layer) {
         const bool enabled =
             edit->get_layer_enable != nullptr ? edit->get_layer_enable(layer) : true;
         (*c->saved)[static_cast<size_t>(layer)] = enabled ? 1 : 0;
@@ -1427,8 +1513,15 @@ void SoloDisableEditProc(void* param, EDIT_SECTION* edit) {
                 break;
             }
         }
-        if (!keep && edit->set_layer_enable != nullptr) {
+        if (edit->set_layer_enable == nullptr) {
+            continue;
+        }
+        if (!keep) {
             edit->set_layer_enable(layer, false);
+            c->toggled = true;
+        } else if (c->force_enable_keep && !enabled) {
+            edit->set_layer_enable(layer, true);
+            c->toggled = true;
         }
     }
 }
@@ -1450,30 +1543,56 @@ struct SoloGuard {
     std::vector<char>* saved;
     bool* applied;
     ~SoloGuard() {
-        if (applied != nullptr && *applied && handle != nullptr &&
-            handle->call_edit_section_param != nullptr) {
-            SoloRestoreCtx rc{saved};
-            handle->call_edit_section_param(&rc, &SoloRestoreEditProc);
-            *applied = false;
+        if (applied == nullptr || !*applied || handle == nullptr ||
+            handle->call_edit_section_param == nullptr) {
+            return;
         }
+        if (g_shutting_down.load()) {
+            // See g_shutting_down: calling into the edit section here would
+            // deadlock against the UI thread that is shutting us down. The
+            // layers stay as they are - the user switches them back on.
+            // (Section 3-55 added this arm; before it, a shutdown during
+            // cutoutRange's audio solo could deadlock the same way.)
+            LogWarn(L"solo isolation: shutting down - the hidden layers are left "
+                    L"as they are");
+            *applied = false;
+            return;
+        }
+        SoloRestoreCtx rc{saved};
+        handle->call_edit_section_param(&rc, &SoloRestoreEditProc);
+        *applied = false;
     }
 };
 
 // Apply solo isolation if requested; records whether it took effect so the
-// SoloGuard restores it. Returns via *applied.
+// SoloGuard restores it. Returns via *applied. `scan_max` / `force_enable_keep`
+// are the section 3-55 additions documented on SoloDisableCtx; the defaults
+// reproduce the pre-3-55 behaviour byte for byte, so cutoutRange's call is
+// unchanged.
+// `toggled` (optional, section 3-55) reports whether any layer's visibility was
+// actually changed; a caller that passes nullptr behaves exactly as before.
 void MaybeApplySolo(EDIT_HANDLE* handle, const std::vector<int>& keep, int layer_max,
-                    std::vector<char>* saved, bool* applied) {
+                    std::vector<char>* saved, bool* applied, int scan_max = -1,
+                    bool force_enable_keep = false, bool* toggled = nullptr) {
     *applied = false;
+    if (toggled != nullptr) {
+        *toggled = false;
+    }
     if (handle->call_edit_section_param == nullptr) {
         return;
     }
     SoloDisableCtx sc;
     sc.keep = &keep;
     sc.layer_max = layer_max;
+    sc.scan_max = scan_max;
+    sc.force_enable_keep = force_enable_keep;
     sc.saved = saved;
     sc.ran = false;
     if (handle->call_edit_section_param(&sc, &SoloDisableEditProc) && sc.ran) {
         *applied = true;
+        if (toggled != nullptr) {
+            *toggled = sc.toggled;
+        }
     }
 }
 
@@ -1682,41 +1801,12 @@ void ExtractAudioWorker(EDIT_HANDLE* handle, ExtractAudioRequest req, int sample
 // the comments below only record what is specific to this translation unit.
 // ---------------------------------------------------------------------------
 
-// One tracking run at a time (design 5.2). g_track_running is claimed by the
-// dispatcher with exchange(true) and released by TrackRunningGuard on every
-// worker exit path; g_track_cancel is the stop button's cooperative flag,
-// cleared at the start of each run and read at the top of every loop iteration.
-std::atomic<bool> g_track_running{false};
-std::atomic<bool> g_track_cancel{false};
-
-// Raised by Bridge::Shutdown BEFORE the HTTP worker pool is torn down, and
-// never cleared - once the host is taking the plugin down there is nothing to
-// go back to, so the start of a run does not reset it (nor could there be one).
-// Why it exists: Shutdown runs on the UI thread and waits for the worker to
-// finish, while every call_edit_section_param the worker still wants to make
-// has to run ON that same UI thread - so the two would wait for each other for
-// ever. The tracking worker therefore SKIPS its remaining edit-section calls
-// once this is set.
-// The price, deliberately paid: an exit in the middle of a run can leave the
-// tracked object's layer switched off in the project (the user switches it back
-// on by hand), and a write-back that had not started yet is dropped.
-// NOT covered: a worker already INSIDE call_edit_section_param when the flag
-// goes up. No flag can close that window; it is known and accepted.
-std::atomic<bool> g_shutting_down{false};
-
 // Opening a tracking session is the only request that may have to wait for the
 // backend to load the tracker model, for which the utility worker allows itself
 // 180 s (Docs\OBJECT_TRACKING_DESIGN.md section 9). This has to expire AFTER
 // that budget, or a cold start would always look like a timeout here; every
 // other request in the run keeps kDefaultRequestTimeoutMs.
 constexpr int kTrackSessionOpenTimeoutMs = 190000;
-
-// RAII release of g_track_running - the same shape as SoloGuard, for the same
-// reason: the worker has a dozen early returns and every one of them must leave
-// the feature usable again.
-struct TrackRunningGuard {
-    ~TrackRunningGuard() { g_track_running.store(false); }
-};
 
 // The object that OWNS `frame` on `layer`, or nullptr. find_object searches
 // "from this frame ONWARDS" (SDK plugin2.h line 170), so on its own it would
@@ -1971,7 +2061,7 @@ struct TrackSessionGuard {
 // numbered comments below line up with it one to one.
 void TrackObjectWorker(EDIT_HANDLE* handle, HttpClient* http, TrackObjectRequest req,
                        std::string base_url, json_t id, Bridge::ResponsePoster poster) {
-    TrackRunningGuard running_guard;
+    TimelineJobGuard running_guard;
     const auto started_at = std::chrono::steady_clock::now();
     auto elapsed_ms = [&started_at]() -> double {
         return std::chrono::duration<double, std::milli>(
@@ -2300,6 +2390,584 @@ void TrackObjectWorker(EDIT_HANDLE* handle, HttpClient* http, TrackObjectRequest
                                   cancelled)));
 }
 
+// ---------------------------------------------------------------------------
+// Inpainting mask rendering (timeline.renderMaskVideo, section 3-55).
+//
+// The mask is not computed - it is RENDERED by AviUtl2 itself, which is the
+// only way the partial filter's shape, its blur and its midpoints all come out
+// exactly as the user sees them in the preview. Two temporary objects are
+// dropped onto the two layers above everything the project uses:
+//
+//   layer_max+1  a full-screen opaque BLACK png, spanning the whole window
+//   layer_max+2  a COPY of the user's partial filter carrying one whitening
+//                effect, spanning the part of the window the filter covers
+//
+// Every other layer is switched off for the duration, so what the renderer
+// produces is white inside the filter's shape and black outside it. The frames
+// go straight into an mp4 and both objects are deleted again.
+//
+// Two undo steps (the create and the delete) are left on the user's stack -
+// owner decision D1 accepts that. Docs\INPAINTING_DESIGN.md is the canonical
+// procedure; the comments below record what is specific to this file.
+// ---------------------------------------------------------------------------
+
+// Step (c): create the backdrop and the filter copy in ONE edit section, so the
+// pair is a single undo step and a half-made pair can never survive.
+//
+// ORDER IS LOAD-BEARING: layer_max+1 is the layer the SDK is known to
+// auto-provision (SDK_REFERENCE.md section 16 (d)); layer_max+2 is one further
+// than anything that has been measured, so the backdrop is created FIRST and
+// the copy second - if the host refuses to provision the second layer, the
+// failure happens with only the backdrop to clean up, inside this same section.
+struct CreateMaskTempCtx {
+    const wchar_t* png_path = nullptr;   // backdrop image (valid for the call)
+    const std::string* alias = nullptr;  // the filter copy's alias (UTF-8)
+    int backdrop_layer = 0;
+    int backdrop_frame = 0;
+    int backdrop_length = 0;
+    int copy_layer = 0;
+    int copy_frame = 0;
+    int copy_length = 0;
+    bool ok = false;
+    // Out: the copy's measured LAST frame (-1 when the host cannot report a
+    // span) and the alias the HOST wrote for it. Its layer and start frame are
+    // NOT reported back, because a create that did not land exactly where it
+    // was asked to is treated as a failure below - so the requested numbers
+    // are the actual ones, and the solo list and the cleanup can both use them
+    // without wondering which is which.
+    int copy_end = -1;
+    std::string copy_actual_alias;
+    std::string failure;  // ASCII detail for the MASK_FAILED message
+};
+void CreateMaskTempObjectsEditProc(void* param, EDIT_SECTION* edit) {
+    auto* c = static_cast<CreateMaskTempCtx*>(param);
+    if (edit->create_object_from_media_file == nullptr ||
+        edit->create_object_from_alias == nullptr) {
+        c->failure = "the host cannot create objects";
+        return;
+    }
+    OBJECT_HANDLE backdrop = edit->create_object_from_media_file(
+        c->png_path, c->backdrop_layer, c->backdrop_frame, c->backdrop_length);
+    if (backdrop == nullptr) {
+        c->failure = "the black backdrop could not be created on layer " +
+                     std::to_string(c->backdrop_layer);
+        return;
+    }
+    OBJECT_HANDLE copy = edit->create_object_from_alias(
+        c->alias->c_str(), c->copy_layer, c->copy_frame, c->copy_length);
+    if (copy == nullptr) {
+        c->failure = "the partial filter copy could not be created on layer " +
+                     std::to_string(c->copy_layer);
+        if (edit->delete_object != nullptr) {
+            edit->delete_object(backdrop);
+        }
+        return;
+    }
+    // Measure both objects. OBJECT_LAYER_FRAME.end is INCLUSIVE
+    // (SDK_REFERENCE.md section 16 (h)), so "end - start + 1" is the frame
+    // count. Three things have to hold, and all three are fatal:
+    //   * the LAYER is the one we asked for - the host is known to re-home a
+    //     colliding create, and a backdrop that landed on the user's layer
+    //     would be both a wrong mask and a deletion aimed at the wrong place;
+    //   * the START frame is the one we asked for - same reason;
+    //   * the span is not SHORTER than requested (one-sided, like
+    //     CreateMediaObject's: a longer one is harmless because nothing outside
+    //     the window is ever rendered).
+    if (edit->get_object_layer_frame != nullptr) {
+        const OBJECT_LAYER_FRAME bl = edit->get_object_layer_frame(backdrop);
+        const OBJECT_LAYER_FRAME cl = edit->get_object_layer_frame(copy);
+        const int backdrop_span = bl.end - bl.start + 1;
+        const int copy_span = cl.end - cl.start + 1;
+        if (bl.layer != c->backdrop_layer || bl.start != c->backdrop_frame ||
+            cl.layer != c->copy_layer || cl.start != c->copy_frame) {
+            c->failure =
+                "a temporary object did not land where it was asked to (backdrop "
+                "layer " + std::to_string(bl.layer) + " frame " +
+                std::to_string(bl.start) + " for layer " +
+                std::to_string(c->backdrop_layer) + " frame " +
+                std::to_string(c->backdrop_frame) + ", copy layer " +
+                std::to_string(cl.layer) + " frame " + std::to_string(cl.start) +
+                " for layer " + std::to_string(c->copy_layer) + " frame " +
+                std::to_string(c->copy_frame) + ")";
+            if (edit->delete_object != nullptr) {
+                edit->delete_object(copy);
+                edit->delete_object(backdrop);
+            }
+            return;
+        }
+        if (backdrop_span < c->backdrop_length || copy_span < c->copy_length) {
+            c->failure = "a temporary object came out shorter than requested "
+                         "(backdrop " + std::to_string(backdrop_span) + "/" +
+                         std::to_string(c->backdrop_length) + ", copy " +
+                         std::to_string(copy_span) + "/" +
+                         std::to_string(c->copy_length) + ")";
+            if (edit->delete_object != nullptr) {
+                edit->delete_object(copy);
+                edit->delete_object(backdrop);
+            }
+            return;
+        }
+        c->copy_end = cl.end;
+    }
+    // The alias the HOST serialized for the copy, copied immediately (the
+    // buffer only survives until the next string-returning SDK call). This is
+    // the fingerprint the cleanup compares against; the alias we asked for is
+    // NOT usable for that, because AviUtl2 re-serializes an object with every
+    // item spelled out and its own frame numbering.
+    if (edit->get_object_alias != nullptr) {
+        const char* a = edit->get_object_alias(copy);
+        if (a != nullptr) {
+            c->copy_actual_alias.assign(a);
+        }
+    }
+    c->ok = true;
+}
+
+// Step (f): delete both temporary objects in ONE edit section (one undo step).
+//
+// A mask render takes a while, and nothing stops the user from dropping their
+// own object onto the layers we used while it runs - delete_object would then
+// destroy their work. So each object is re-found by (layer, frame) and checked
+// before it is deleted:
+//   * the copy     - its alias must still be byte-for-byte the one the host
+//                    wrote when we created it. If the host gave us no alias
+//                    then, the fallback needs the object to BE a partial filter
+//                    AND to occupy exactly the span we created (start and end
+//                    both) - a weaker test, so it is made as narrow as the
+//                    information allows;
+//   * the backdrop - it must be an IMAGE object whose media file is named
+//                    black_<W>x<H>.png. Only the file NAME is compared, not the
+//                    whole path: the host is free to write the path back in its
+//                    own spelling (short names, a different drive letter case,
+//                    forward slashes), and the name alone is already ours - no
+//                    user drops a file of that name onto layer_max+1 by chance.
+// An object that fails its check is LEFT ALONE and logged; the user deletes the
+// leftover by hand, which is strictly better than deleting theirs.
+struct DeleteMaskTempCtx {
+    int backdrop_layer = 0;
+    int backdrop_frame = 0;
+    int copy_layer = 0;
+    int copy_frame = 0;
+    int copy_end = -1;  // the copy's measured last frame, or -1 if unknown
+    bool backdrop_created = false;
+    bool copy_created = false;
+    // Held BY VALUE, not as pointers into the create context: this struct has
+    // to stay readable from MaskTempObjectsGuard's destructor, and tying its
+    // contents to the lifetime of another local is exactly the kind of ordering
+    // trap an RAII cleanup must not have.
+    std::string copy_alias;      // the host's own alias text, or empty
+    std::string png_file_name;   // "black_<W>x<H>.png", no directory
+    bool backdrop_deleted = false;
+    bool copy_deleted = false;
+};
+// ASCII-only lower-casing, for the Windows file-name compare below. Bytes
+// >= 0x80 are left alone, so a UTF-8 name with Japanese in it can never be
+// corrupted (a continuation byte is never in the A-Z range).
+std::string AsciiLower(const std::string& s) {
+    std::string out = s;
+    for (char& ch : out) {
+        if (ch >= 'A' && ch <= 'Z') {
+            ch = static_cast<char>(ch - 'A' + 'a');
+        }
+    }
+    return out;
+}
+void DeleteMaskTempObjectsEditProc(void* param, EDIT_SECTION* edit) {
+    auto* c = static_cast<DeleteMaskTempCtx*>(param);
+    if (edit->delete_object == nullptr || edit->get_object_alias == nullptr) {
+        return;
+    }
+    if (c->copy_created) {
+        OBJECT_LAYER_FRAME lf{};
+        OBJECT_HANDLE o = FindObjectAt(edit, c->copy_layer, c->copy_frame, &lf);
+        if (o != nullptr) {
+            const char* a = edit->get_object_alias(o);
+            const std::string current = a != nullptr ? std::string(a) : std::string();
+            if (!c->copy_alias.empty() && current == c->copy_alias) {
+                edit->delete_object(o);
+                c->copy_deleted = true;
+            } else if (c->copy_alias.empty()) {
+                // The host would not hand back an alias at create time, so the
+                // strong check is not available. The fallback asks for
+                // everything that IS still known: the object has to BE a
+                // partial filter AND to occupy exactly the span we created.
+                // Without a recorded span (copy_end < 0) there is nothing left
+                // to check with, and a leftover object is a better outcome than
+                // deleting a stranger's.
+                if (c->copy_end >= 0 && lf.start == c->copy_frame &&
+                    lf.end == c->copy_end &&
+                    FirstEffectName(current) == kEffectPartialFilterJp) {
+                    edit->delete_object(o);
+                    c->copy_deleted = true;
+                }
+            }
+        }
+    }
+    if (c->backdrop_created) {
+        OBJECT_HANDLE o =
+            FindObjectAt(edit, c->backdrop_layer, c->backdrop_frame, nullptr);
+        if (o != nullptr) {
+            const char* a = edit->get_object_alias(o);
+            const std::string current = a != nullptr ? std::string(a) : std::string();
+            std::string effect;
+            std::string path;
+            // An IMAGE object whose file is named black_<W>x<H>.png. Comparing
+            // the file NAME rather than the whole path is deliberate: the host
+            // may write the path back in its own spelling, and the name alone
+            // is already unmistakably ours.
+            if (FirstEffectName(current) == kEffectImageFileJp &&
+                ExtractMediaFilePath(current, &effect, &path) &&
+                !c->png_file_name.empty() &&
+                AsciiLower(FileNameFromPath(path)) == AsciiLower(c->png_file_name)) {
+                edit->delete_object(o);
+                c->backdrop_deleted = true;
+            }
+        }
+    }
+}
+
+// RAII: the two temporary objects go away on every exit path. Declared AFTER
+// the SoloGuard so it runs FIRST (destructors run in reverse) - the objects are
+// deleted while the layers are still isolated, then the layers come back.
+struct MaskTempObjectsGuard {
+    EDIT_HANDLE* handle = nullptr;
+    DeleteMaskTempCtx* ctx = nullptr;
+    ~MaskTempObjectsGuard() {
+        if (handle == nullptr || ctx == nullptr ||
+            handle->call_edit_section_param == nullptr ||
+            (!ctx->backdrop_created && !ctx->copy_created)) {
+            return;
+        }
+        if (g_shutting_down.load()) {
+            // See g_shutting_down: the edit section runs on the UI thread that
+            // is waiting for this worker, so asking for one now would deadlock.
+            // The two temporary objects stay on the timeline; the user deletes
+            // them by hand (plan risk R5, documented behaviour).
+            LogWarn(L"timeline.renderMaskVideo: shutting down - the temporary mask "
+                    L"objects are left on the timeline");
+            return;
+        }
+        if (!handle->call_edit_section_param(ctx, &DeleteMaskTempObjectsEditProc)) {
+            LogWarn(L"timeline.renderMaskVideo: the temporary mask objects could not "
+                    L"be deleted (the edit section did not run)");
+            return;
+        }
+        if ((ctx->copy_created && !ctx->copy_deleted) ||
+            (ctx->backdrop_created && !ctx->backdrop_deleted)) {
+            LogWarn(L"timeline.renderMaskVideo: a temporary mask object was left in "
+                    L"place because it is no longer the object we created");
+        }
+    }
+};
+
+// Write the full-screen opaque black png the backdrop object shows, once per
+// scene size (it is reused for every later run at the same resolution, plan
+// section 7.4-10). Returns false + *err on an encode failure.
+bool EnsureBlackBackdropPng(const std::wstring& path, int width, int height,
+                            std::string* err) {
+    // "Already there" has to mean READABLE and NON-EMPTY, not merely present:
+    // a run killed mid-encode (or a full disk) leaves a 0-byte file behind, and
+    // an existence-only test would then hand that stub to AviUtl2 every time
+    // and render a mask with no backdrop at all. Opening it settles both
+    // questions at once - if it cannot be read, it is treated as absent and
+    // written again.
+    {
+        HANDLE h = ::CreateFileW(path.c_str(), GENERIC_READ,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            LARGE_INTEGER size;
+            size.QuadPart = 0;
+            const BOOL got = ::GetFileSizeEx(h, &size);
+            ::CloseHandle(h);
+            if (got && size.QuadPart > 0) {
+                return true;  // written by an earlier run and still usable
+            }
+            LogWarn(std::wstring(L"timeline.renderMaskVideo: the cached backdrop ") +
+                    path + L" is empty - writing it again");
+        }
+    }
+    // RGBA, opaque black: the alpha matters - a transparent backdrop would let
+    // the host's own checkerboard / background through and the mask would not
+    // be black where it has to be.
+    std::vector<unsigned char> rgba(static_cast<size_t>(width) *
+                                        static_cast<size_t>(height) * 4u,
+                                    0);
+    for (size_t i = 3; i < rgba.size(); i += 4) {
+        rgba[i] = 255;
+    }
+    return EncodeRgbaToPngFile(path, rgba.data(), width, height, err);
+}
+
+// Runs on an HTTP worker thread. See the block comment above for the shape of
+// the job; the lettered steps below line up with plan section 7.4-6.
+void RenderMaskVideoWorker(EDIT_HANDLE* handle, RenderMaskVideoRequest req, int width,
+                           int height, int rate, int scale, int layer_max,
+                           std::string dest_utf8, json_t id,
+                           Bridge::ResponsePoster poster) {
+    TimelineJobGuard running_guard;
+    auto post_error = [&poster, &id](const char* code, const std::string& msg) {
+        LogWarn(std::wstring(L"timeline.renderMaskVideo: ") + Utf8ToWide(code) + L" - " +
+                Utf8ToWide(msg));
+        poster(MakeErrorResponse(id, code, msg));
+    };
+    if (handle == nullptr || handle->call_edit_section_param == nullptr ||
+        handle->rendering_scene_video == nullptr) {
+        post_error("NO_EDIT_HANDLE", "Edit handle is not available");
+        return;
+    }
+
+    // --- (a) read the seed partial filter ----------------------------------
+    ReadObjectAliasCtx seed;
+    seed.layer = req.layer;
+    seed.frame = req.frame_start;
+    if (!handle->call_edit_section_param(&seed, &ReadObjectAliasEditProc) || !seed.ok) {
+        post_error("MASK_SEED_INVALID",
+                   "No object found at layer " + std::to_string(req.layer) +
+                       ", frame " + std::to_string(req.frame_start));
+        return;
+    }
+    if (seed.start != req.frame_start) {
+        post_error("MASK_SEED_INVALID",
+                   "The object at layer " + std::to_string(req.layer) +
+                       " starts at frame " + std::to_string(seed.start) + ", not " +
+                       std::to_string(req.frame_start));
+        return;
+    }
+    if (FirstEffectName(seed.alias) != kEffectPartialFilterJp) {
+        post_error("MASK_SEED_INVALID",
+                   "The object at layer " + std::to_string(req.layer) + ", frame " +
+                       std::to_string(req.frame_start) + " is not a partial filter");
+        return;
+    }
+    const int filter_length = seed.end - seed.start + 1;
+    if (filter_length <= 0) {
+        post_error("MASK_SEED_INVALID", "The partial filter has no frames");
+        return;
+    }
+    if (seed.end != req.frame_end) {
+        // Not fatal: the object's OWN span is what the copy has to reproduce,
+        // and the request's frameEnd is only the webui's snapshot of it. Worth
+        // a line, because it means the panel is showing a stale range.
+        LogWarn(std::wstring(L"timeline.renderMaskVideo: the partial filter ends at ") +
+                std::to_wstring(seed.end) + L", the request said " +
+                std::to_wstring(req.frame_end));
+    }
+
+    const int window_length = req.window_end - req.window_start + 1;
+    // Plan 7.4-6(c): the copy starts at max(frameStart, windowStart). In
+    // practice the window is placed FROM the filter's start and only ever
+    // shifts towards the head, so this is the filter's own start; the max() is
+    // the guard for a window that somehow begins later.
+    const int copy_start =
+        req.window_start > req.frame_start ? req.window_start : req.frame_start;
+    int copy_length = filter_length - (copy_start - seed.start);
+    if (copy_length > req.window_end - copy_start + 1) {
+        copy_length = req.window_end - copy_start + 1;  // owner decision D3
+    }
+    if (copy_length < 1) {
+        post_error("MASK_FAILED",
+                   "The window and the partial filter do not overlap");
+        return;
+    }
+
+    // --- (b) build the mask copy's alias -----------------------------------
+    std::string mask_alias =
+        KeepOnlyFirstEffectBlock(NormalizeAliasFrameBoundariesToRelative(seed.alias));
+    if (mask_alias.empty()) {
+        post_error("MASK_SEED_INVALID",
+                   "The partial filter's alias has no effect block to copy");
+        return;
+    }
+    if (copy_length < filter_length) {
+        mask_alias = ClipAliasFrameBoundaries(mask_alias, copy_length);
+    }
+    mask_alias = AppendEffectBlock(mask_alias, WhiteningEffectBlockLines());
+    if (mask_alias.empty()) {
+        post_error("MASK_FAILED", "The mask alias could not be built");
+        return;
+    }
+
+    // --- (c) the black backdrop png and the two temporary objects ----------
+    const std::wstring png_path = AppDataDir() + L"\\masks\\black_" +
+                                  std::to_wstring(width) + L"x" +
+                                  std::to_wstring(height) + L".png";
+    std::string enc_err;
+    if (!EnsureBlackBackdropPng(png_path, width, height, &enc_err)) {
+        post_error("MASK_FAILED", "the black backdrop could not be written: " + enc_err);
+        return;
+    }
+    const std::string png_file_name = FileNameFromPath(WideToUtf8(png_path));
+
+    // The two layers the temporary objects live on. They are named here (and
+    // nowhere else) so swapping which one carries the backdrop - the draw-order
+    // question the owner settles on the real device - is a one-line change.
+    const int backdrop_layer = layer_max + 1;
+    const int copy_layer = layer_max + 2;
+
+    // Both guards are declared BEFORE the objects exist, so every exit path
+    // below is covered. Declaration order matters: SoloGuard first means it is
+    // destroyed LAST, i.e. the objects are deleted while the layers are still
+    // isolated and the layer states come back afterwards.
+    std::vector<char> saved_enable;
+    bool solo_applied = false;
+    SoloGuard solo_guard{handle, &saved_enable, &solo_applied};
+
+    DeleteMaskTempCtx cleanup;
+    cleanup.png_file_name = png_file_name;
+    MaskTempObjectsGuard temp_guard{handle, &cleanup};
+
+    CreateMaskTempCtx create;
+    create.png_path = png_path.c_str();
+    create.alias = &mask_alias;
+    create.backdrop_layer = backdrop_layer;
+    create.backdrop_frame = req.window_start;
+    create.backdrop_length = window_length;
+    create.copy_layer = copy_layer;
+    create.copy_frame = copy_start;
+    create.copy_length = copy_length;
+    if (!handle->call_edit_section_param(&create, &CreateMaskTempObjectsEditProc) ||
+        !create.ok) {
+        post_error("MASK_FAILED",
+                   create.failure.empty()
+                       ? std::string("the temporary mask objects could not be created")
+                       : create.failure);
+        return;
+    }
+    // The create proc has PROVED that both objects sit on exactly the layer and
+    // frame they were asked for (anything else is a failure above), so the
+    // requested numbers are the actual ones and the cleanup can use them.
+    cleanup.backdrop_created = true;
+    cleanup.copy_created = true;
+    cleanup.backdrop_layer = backdrop_layer;
+    cleanup.backdrop_frame = req.window_start;
+    cleanup.copy_layer = copy_layer;
+    cleanup.copy_frame = copy_start;
+    cleanup.copy_end = create.copy_end;
+    cleanup.copy_alias = create.copy_actual_alias;
+
+    // --- (d) show ONLY those two layers ------------------------------------
+    {
+        std::vector<int> keep;
+        keep.push_back(backdrop_layer);
+        keep.push_back(copy_layer);
+        bool solo_toggled = false;
+        MaybeApplySolo(handle, keep, layer_max, &saved_enable, &solo_applied,
+                       /*scan_max=*/copy_layer, /*force_enable_keep=*/true,
+                       &solo_toggled);
+        // `solo_applied` alone only says the edit section ran. A host without
+        // set_layer_enable runs it and changes nothing, and the render would
+        // then be a picture of the user's project rather than a mask - so the
+        // proof that at least one layer was actually switched is required too.
+        if (!solo_applied || !solo_toggled) {
+            post_error("MASK_FAILED",
+                       "the other layers could not be hidden, so the mask would not "
+                       "be a mask");
+            return;
+        }
+    }
+
+    // --- (e) render the window and mux it -----------------------------------
+    Mp4WriterConfig cfg;
+    cfg.output_path = Utf8ToWide(dest_utf8);
+    cfg.width = width;
+    cfg.height = height;
+    cfg.fps_num = static_cast<uint32_t>(rate > 0 ? rate : 30);
+    cfg.fps_den = static_cast<uint32_t>(scale > 0 ? scale : 1);
+    cfg.pixel_order = PixelOrder::kRGBA;
+    cfg.has_audio = false;  // a mask has no sound
+
+    Mp4Writer writer;
+    if (!writer.Initialize(cfg, &enc_err)) {
+        post_error("MASK_FAILED", "mp4 init failed: " + enc_err);
+        return;
+    }
+    // From here on the mp4 EXISTS on disk. Every failure below therefore has to
+    // take it away again: a truncated mask left in masks\ is a file the webui
+    // could still upload (it never hears about the failure until the RPC's
+    // error arrives, and a later run or the user could pick the stray file up),
+    // and a mask that is short is not a shorter mask - it is a wrong one. The
+    // writer is closed first so the delete cannot lose a sharing race with it.
+    bool finalized = false;
+    auto fail_render = [&](const std::string& msg) {
+        if (!finalized) {
+            std::string ignored;
+            writer.Finalize(&ignored);
+            finalized = true;
+        }
+        if (::DeleteFileW(cfg.output_path.c_str()) == 0) {
+            LogWarn(std::wstring(L"timeline.renderMaskVideo: the partial mask file "
+                                 L"could not be deleted: ") +
+                    cfg.output_path);
+        }
+        post_error("MASK_FAILED", msg);
+    };
+
+    // Progress throttling, the same rule as the tracking worker's: one event per
+    // 200 ms, but the first and the last frame always go out.
+    std::chrono::steady_clock::time_point last_emit{};
+    bool have_emitted = false;
+    int last_index = 0;
+    auto emit_progress = [&](int abs_frame, int index, bool force) {
+        const auto now = std::chrono::steady_clock::now();
+        if (!force && have_emitted &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - last_emit)
+                    .count() < 200) {
+            return;
+        }
+        last_emit = now;
+        have_emitted = true;
+        last_index = index;
+        poster(MakeMaskProgressEvent(abs_frame, index, window_length));
+    };
+
+    for (int i = 0; i < window_length; ++i) {
+        const int frame = req.window_start + i;
+        if (g_mask_cancel.load()) {
+            // Half a mask is not a shorter mask, it is a wrong one: the frames
+            // that were never rendered would read as "do not touch" and the
+            // generation would silently skip them. So a cancel is a failure.
+            fail_render("cancelled");
+            return;
+        }
+        int fw = 0;
+        int fh = 0;
+        std::vector<unsigned char> rgba;
+        if (!RenderSceneVideoFrame(handle, frame, &fw, &fh, &rgba,
+                                   L"timeline.renderMaskVideo")) {
+            fail_render("video render failed at frame " + std::to_string(frame));
+            return;
+        }
+        if (fw != width || fh != height) {
+            fail_render("the render came back " + std::to_string(fw) + "x" +
+                        std::to_string(fh) + " instead of " + std::to_string(width) +
+                        "x" + std::to_string(height));
+            return;
+        }
+        if (!writer.WriteVideoFrame(rgba.data(), fw * 4, &enc_err)) {
+            fail_render("WriteVideoFrame failed: " + enc_err);
+            return;
+        }
+        emit_progress(frame, i + 1, /*force=*/i == 0);
+    }
+    if (last_index != window_length) {
+        emit_progress(req.window_end, window_length, /*force=*/true);
+    }
+    if (!writer.Finalize(&enc_err)) {
+        finalized = true;  // it ran and failed; do not ask it to run again
+        fail_render("mp4 finalize failed: " + enc_err);
+        return;
+    }
+    finalized = true;
+
+    // --- (f) the two guards clean up as this function returns ---------------
+    // --- (g) reply ----------------------------------------------------------
+    LogInfo(std::wstring(L"timeline.renderMaskVideo: wrote ") +
+            std::to_wstring(window_length) + L" frames -> " + Utf8ToWide(dest_utf8));
+    poster(MakeSuccessResponse(
+        id, MakeRenderMaskResult(dest_utf8, width, height, window_length)));
+}
+
 }  // namespace
 
 Bridge::Bridge() = default;
@@ -2343,10 +3011,12 @@ void Bridge::SetPluginHwnd(void* hwnd) {
 
 void Bridge::Shutdown() {
     // Order matters: ~HttpClient waits for the worker threads, and a tracking
-    // worker still inside its loop would want the UI thread that is running
-    // this. Both flags go up FIRST so the worker stops at its next check and
-    // skips the edit-section calls it has left (see g_shutting_down).
+    // or mask-rendering worker still inside its loop would want the UI thread
+    // that is running this. Every flag goes up FIRST so the worker stops at its
+    // next check and skips the edit-section calls it has left (see
+    // g_shutting_down).
     g_track_cancel.store(true);
+    g_mask_cancel.store(true);
     g_shutting_down.store(true);
     http_.reset();
     poster_ = nullptr;
@@ -2909,13 +3579,18 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             return MakeErrorResponse(id, "NO_EDIT_HANDLE",
                                      "Edit handle is not available");
         }
-        // Claim the single tracking slot LAST, so every validation failure above
-        // returns without having to hand the flag back. From here on the flag is
-        // owned by TrackObjectWorker's TrackRunningGuard.
-        if (g_track_running.exchange(true)) {
+        // Claim the single timeline-job slot LAST, so every validation failure
+        // above returns without having to hand the flag back. From here on the
+        // flag is owned by TrackObjectWorker's TimelineJobGuard.
+        // The message is FIXED, not read off g_timeline_job_kind: the kind is
+        // written a moment after the slot is claimed, so a refusal that raced
+        // the claim would read the previous run's kind and name the wrong job.
+        // (The webui shows its own wording for TRACK_BUSY anyway.)
+        if (g_timeline_job_running.exchange(true)) {
             return MakeErrorResponse(id, "TRACK_BUSY",
                                      "A tracking run is already in progress");
         }
+        g_timeline_job_kind.store(kTimelineJobTrack);
         g_track_cancel.store(false);
         HttpClient* http = http_.get();
         const std::string base = CurrentBaseUrl();
@@ -2926,15 +3601,78 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
         return std::string();  // response delivered asynchronously
     }
 
+    // --- timeline.renderMaskVideo (async mask render -> mp4, section 3-55) ---
+    if (method == "timeline.renderMaskVideo") {
+        const json id = ExtractId(req);
+        const json params =
+            (req.contains("params") && req["params"].is_object()) ? req["params"]
+                                                                   : json::object();
+        if (http_ == nullptr || !poster_) {
+            return MakeErrorResponse(id, "BACKEND_UNREACHABLE",
+                                     "HTTP worker pool is not initialized");
+        }
+        RenderMaskVideoRequest mreq;
+        std::string err;
+        if (!ParseRenderMaskVideo(params, &mreq, &err)) {
+            return MakeErrorResponse(id, "BAD_REQUEST", err);
+        }
+        EDIT_HANDLE* handle = edit_handle_;
+        if (handle == nullptr || handle->rendering_scene_video == nullptr ||
+            handle->call_edit_section_param == nullptr ||
+            handle->get_edit_info == nullptr) {
+            return MakeErrorResponse(id, "NO_EDIT_HANDLE",
+                                     "Edit handle is not available");
+        }
+        // Resolve the scene's geometry on the UI thread and pass it by value
+        // (get_edit_info takes a reference lock; we are not under an edit lock
+        // here, so this is safe) - exactly as timeline.cutoutRange does it.
+        EDIT_INFO info = {};
+        handle->get_edit_info(&info, sizeof(info));
+        if (info.width <= 0 || info.height <= 0) {
+            return MakeErrorResponse(id, "MASK_FAILED",
+                                     "Scene has no valid resolution");
+        }
+        const int window_frames = mreq.window_end - mreq.window_start + 1;
+        const std::wstring dir = AppDataDir() + L"\\masks";
+        const std::string name = "mask_" + std::to_string(mreq.window_start) + "_" +
+                                 std::to_string(window_frames) + "_" + UniqueStamp() +
+                                 ".mp4";
+        const std::string dest = WideToUtf8(dir + L"\\" + Utf8ToWide(name));
+        const int w = info.width;
+        const int h = info.height;
+        const int rate = info.rate;
+        const int scale = info.scale;
+        const int lm = info.layer_max;
+        // Claim the slot LAST, for the same reason trackObject does. The
+        // message names BOTH jobs rather than reading g_timeline_job_kind -
+        // see the note there.
+        if (g_timeline_job_running.exchange(true)) {
+            return MakeErrorResponse(
+                id, "MASK_BUSY",
+                "A tracking run or a mask render is already in progress");
+        }
+        g_timeline_job_kind.store(kTimelineJobMask);
+        g_mask_cancel.store(false);
+        ResponsePoster poster = poster_;
+        http_->Post([handle, mreq, w, h, rate, scale, lm, dest, id, poster]() {
+            RenderMaskVideoWorker(handle, mreq, w, h, rate, scale, lm, dest, id,
+                                  poster);
+        });
+        return std::string();  // response delivered asynchronously
+    }
+
     // --- timeline.cancelTracking (synchronous flag raise, section 5.4) -------
     // Raising the flag is all this does: the worker checks it at the top of each
     // loop iteration and then finishes the run normally - post-processing and
     // writing back whatever it collected (design 3.2), so a stop is a short
     // result, not a discarded one. "cancelled": false means there was nothing
-    // running to stop, which the webui treats as success, not as an error.
+    // running to stop, which the webui treats as success, not as an error - and
+    // that now includes "the job in the slot is a MASK render", which has no
+    // stop button in this stage and must not be stopped by the tracker's.
     if (method == "timeline.cancelTracking") {
         const json id = ExtractId(req);
-        if (!g_track_running.load()) {
+        if (!g_timeline_job_running.load() ||
+            g_timeline_job_kind.load() != kTimelineJobTrack) {
             return MakeSuccessResponse(id, json{{"cancelled", false}});
         }
         g_track_cancel.store(true);

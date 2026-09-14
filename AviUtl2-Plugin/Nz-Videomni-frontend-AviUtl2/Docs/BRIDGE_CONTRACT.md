@@ -1,6 +1,6 @@
-# Nz-Videomni ブリッジ契約リファレンス(WebUI ⇔ ネイティブ JSON-RPC, v4.1 + v5抜粋 + v6 + v7 + v8 + v9 + v10 + v11 + v12)
+# Nz-Videomni ブリッジ契約リファレンス(WebUI ⇔ ネイティブ JSON-RPC, v4.1 + v5抜粋 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13)
 
-最終更新: 2026-09-11(**契約v12＝物体追尾**——`timeline.trackObject`〔非同期〕と`timeline.cancelTracking`〔同期〕の2メソッド、イベント`timeline.trackProgress`、エラーコード4つ〔`TRACK_BUSY`／`TRACK_SEED_INVALID`／`TRACK_WRITEBACK_FAILED`／`TRACK_FAILED`〕を新設し、`timeline.getSelection`の`effectName`にメディア4種・テキストのどれでもないオブジェクトの先頭効果名が入るようになった。§3・§4.13・§4.23・§5・§6・§8・§10を更新。機能全体の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md)〔プラグイン側は§5〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§4.13の`frameStart`/`frameEnd`の端点解釈を**未決から「包含」で解決**へ書き換えた〔同日いったん「排他」と書いた判断の撤回。webui側の`frameEnd - frameStart + 1`は元から正しく、直したのはネイティブの`frame=`ヘッダ1箇所だけである。§3-140追補〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§3-140〔🎞挿入をエイリアス方式へ差し替え〕に伴う注記を§4.5・§4.7・§4.14.1・§5へ足し、あわせて§4.13へ`frameStart`/`frameEnd`の端点解釈が未決である旨を1箇所だけ記した。ワイヤ形式・RPCの引数・応答はいずれも1文字も変わっていない) / その前は 2026-09-01(contract v11＝素材fps——`timeline.getSelection`の`selected[]`へ`mediaFps`を追加した。素材そのもののフレームレートをMedia Foundationで読み、右クリックプリフィルのfps軸「素材に合わせる」へ流し込むためのもので、新規モジュール`native/src/media_fps_probe.{h,cpp}`が担う。§4.13・§8・§10を更新) / 出典: `webui/src/bridge/types.ts` と `native/src/bridge_core.h` / `bridge_core.cpp` / `bridge.h` / `bridge.cpp` / `native/src/webview_host.cpp` を突き合わせて作成(コード一次)。
+最終更新: 2026-09-14(**契約v13＝Inpainting**——`timeline.renderMaskVideo`〔非同期〕メソッドと、イベント`timeline.maskProgress`、エラーコード3つ〔`MASK_BUSY`／`MASK_SEED_INVALID`／`MASK_FAILED`〕を新設した。v12で新設した単一のタイムラインジョブ枠(それまでは物体追尾専用)を、マスク描画にも広げた初めての機能でもある。§3・§4.24・§5・§6・§7・§8・§10を更新。機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)〔プラグイン側の処理手順は§5〕) / その前は 2026-09-11(**契約v12＝物体追尾**——`timeline.trackObject`〔非同期〕と`timeline.cancelTracking`〔同期〕の2メソッド、イベント`timeline.trackProgress`、エラーコード4つ〔`TRACK_BUSY`／`TRACK_SEED_INVALID`／`TRACK_WRITEBACK_FAILED`／`TRACK_FAILED`〕を新設し、`timeline.getSelection`の`effectName`にメディア4種・テキストのどれでもないオブジェクトの先頭効果名が入るようになった。§3・§4.13・§4.23・§5・§6・§8・§10を更新。機能全体の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md)〔プラグイン側は§5〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§4.13の`frameStart`/`frameEnd`の端点解釈を**未決から「包含」で解決**へ書き換えた〔同日いったん「排他」と書いた判断の撤回。webui側の`frameEnd - frameStart + 1`は元から正しく、直したのはネイティブの`frame=`ヘッダ1箇所だけである。§3-140追補〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§3-140〔🎞挿入をエイリアス方式へ差し替え〕に伴う注記を§4.5・§4.7・§4.14.1・§5へ足し、あわせて§4.13へ`frameStart`/`frameEnd`の端点解釈が未決である旨を1箇所だけ記した。ワイヤ形式・RPCの引数・応答はいずれも1文字も変わっていない) / その前は 2026-09-01(contract v11＝素材fps——`timeline.getSelection`の`selected[]`へ`mediaFps`を追加した。素材そのもののフレームレートをMedia Foundationで読み、右クリックプリフィルのfps軸「素材に合わせる」へ流し込むためのもので、新規モジュール`native/src/media_fps_probe.{h,cpp}`が担う。§4.13・§8・§10を更新) / 出典: `webui/src/bridge/types.ts` と `native/src/bridge_core.h` / `bridge_core.cpp` / `bridge.h` / `bridge.cpp` / `native/src/webview_host.cpp` を突き合わせて作成(コード一次)。
 
 > **注記(2026-07-17追記)**: ネイティブ側のJSON型を`nlohmann::json`から`nlohmann::ordered_json`(`bridge_core.h`)へ変更した。ワイヤ形式(送受信されるJSON文字列そのもの)には影響しない。変わったのはC++側でのオブジェクトのキー順が挿入順で保持されるようになった点のみ(従来はキーのアルファベット順)で、契約上の意味は無い。
 
@@ -25,7 +25,7 @@
 
 ## 0. 全体像
 
-- バージョン: ネイティブ実装(`native/src/bridge_core.cpp`・`bridge.cpp`・`webview_host.cpp`)は**v5(タイムライン生成AI、7メソッド`timeline.getSelection`／`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`を全て実装済み)＋v6(バッチA2V + fsブリッジ、起票時6項目のうち現存4項目——`fs.readTextFile`／`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化。§4.17/§4.18・DEVLOG §26参照——を実装済み)＋v7(ドラッグ&ドロップ、`ui.resolveDroppedFiles`実装済み)＋v8(右クリック再設計群、`timeline.insertMediaForJob`／`timeline.updateProvisionalReservation`／`timeline.deleteProvisionalByJob`実装済み)＋v9(IC-LoRA／A2Vカードの尺表示、`fs.probeMediaInfo`実装済み)まで到達している**。プラグインの配布バージョン文字列(`bridge_core.h`の`kPluginVersion = "1.0.0"`)はビルド識別用の文字列であり、本書がここで扱う契約バージョン番号(v1〜v12)とは別体系なので混同しないこと(旧版の本書はこの2つを混同し「ネイティブ実装はv4.1まで」と誤記していたため訂正した)。`types.ts`(WebUI側の契約定義)もv12まで到達しており、実装(C++側)との差は無い。ただし本書がドキュメントとして収録しているのはこのうち§4.13/§4.14(`timeline.getSelection`／`timeline.menuInvoked`のみ)と§4.14.1(v8: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`／`genFps`／配置系統／`textPrefix`契約、`getSelection`の`textContent`／`mediaDurationSec`拡張、`projectLoaded`購読の要点のみ)と§4.15〜§4.21(v6全項目＋v7)と§4.22(v9: `fs.probeMediaInfo`)であり、v5の残り(`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`、イベント`timeline.projectLoaded`)は実装済みだが本書には未収録のまま(既知のドキュメント債務、§0冒頭の2026-07-08注記参照)。v1(M1)→v2(M2: backend proxy)→v3(M4: capture/upload/pickFile/thumbnail)→v4(M7a: settings)→v4.1(M7c: `backend.request`の`timeoutMs`)→v5(タイムライン生成AI)→v6(バッチA2V + fsブリッジ)→v7(ドラッグ&ドロップ)→v8(右クリック再設計群: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`/`genFps`/配置系統/`textPrefix`契約、`getSelection`の`textContent`/`mediaDurationSec`拡張、`projectLoaded`購読)→v9(IC-LoRA／A2Vカードの尺表示: `fs.probeMediaInfo`)→v10(V2Vリボン範囲トリム: `backend.uploadFile`の`query`と応答`trimmed`)の順に追加専用で拡張されてきた。**v10は2026-07-30に到達済み**(native・`types.ts`とも実装済み)で、本書は§4.5と§8で収録している。v10として計画されていた**`timeline.getSelection`への再生位置系6フィールドの追加も2026-08-01に完了した**(実機調査で`再生位置`の単位が「素材時間軸の秒」と確定したため。§4.13の拡張注記を参照)。**さらに2026-09-01、`timeline.getSelection`の`selected[]`へ素材そのもののフレームレート`mediaFps`を足したv11へ到達した**(native・`types.ts`とも実装済み。§4.13の拡張注記と§8を参照)。**2026-09-11には物体追尾のためのv12へ到達した**——**この版で初めて、ネイティブ側がバックエンドのRESTを長時間にわたって往復し続けるメソッドが加わった**(`timeline.trackObject`。§4.23・§8を参照)。
+- バージョン: ネイティブ実装(`native/src/bridge_core.cpp`・`bridge.cpp`・`webview_host.cpp`)は**v5(タイムライン生成AI、7メソッド`timeline.getSelection`／`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`を全て実装済み)＋v6(バッチA2V + fsブリッジ、起票時6項目のうち現存4項目——`fs.readTextFile`／`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化。§4.17/§4.18・DEVLOG §26参照——を実装済み)＋v7(ドラッグ&ドロップ、`ui.resolveDroppedFiles`実装済み)＋v8(右クリック再設計群、`timeline.insertMediaForJob`／`timeline.updateProvisionalReservation`／`timeline.deleteProvisionalByJob`実装済み)＋v9(IC-LoRA／A2Vカードの尺表示、`fs.probeMediaInfo`実装済み)まで到達している**。プラグインの配布バージョン文字列(`bridge_core.h`の`kPluginVersion = "1.0.0"`)はビルド識別用の文字列であり、本書がここで扱う契約バージョン番号(v1〜v13)とは別体系なので混同しないこと(旧版の本書はこの2つを混同し「ネイティブ実装はv4.1まで」と誤記していたため訂正した)。`types.ts`(WebUI側の契約定義)もv13まで到達しており、実装(C++側)との差は無い。ただし本書がドキュメントとして収録しているのはこのうち§4.13/§4.14(`timeline.getSelection`／`timeline.menuInvoked`のみ)と§4.14.1(v8: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`／`genFps`／配置系統／`textPrefix`契約、`getSelection`の`textContent`／`mediaDurationSec`拡張、`projectLoaded`購読の要点のみ)と§4.15〜§4.21(v6全項目＋v7)と§4.22(v9: `fs.probeMediaInfo`)であり、v5の残り(`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`、イベント`timeline.projectLoaded`)は実装済みだが本書には未収録のまま(既知のドキュメント債務、§0冒頭の2026-07-08注記参照)。v1(M1)→v2(M2: backend proxy)→v3(M4: capture/upload/pickFile/thumbnail)→v4(M7a: settings)→v4.1(M7c: `backend.request`の`timeoutMs`)→v5(タイムライン生成AI)→v6(バッチA2V + fsブリッジ)→v7(ドラッグ&ドロップ)→v8(右クリック再設計群: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`/`genFps`/配置系統/`textPrefix`契約、`getSelection`の`textContent`/`mediaDurationSec`拡張、`projectLoaded`購読)→v9(IC-LoRA／A2Vカードの尺表示: `fs.probeMediaInfo`)→v10(V2Vリボン範囲トリム: `backend.uploadFile`の`query`と応答`trimmed`)の順に追加専用で拡張されてきた。**v10は2026-07-30に到達済み**(native・`types.ts`とも実装済み)で、本書は§4.5と§8で収録している。v10として計画されていた**`timeline.getSelection`への再生位置系6フィールドの追加も2026-08-01に完了した**(実機調査で`再生位置`の単位が「素材時間軸の秒」と確定したため。§4.13の拡張注記を参照)。**さらに2026-09-01、`timeline.getSelection`の`selected[]`へ素材そのもののフレームレート`mediaFps`を足したv11へ到達した**(native・`types.ts`とも実装済み。§4.13の拡張注記と§8を参照)。**2026-09-11には物体追尾のためのv12へ到達した**——**この版で初めて、ネイティブ側がバックエンドのRESTを長時間にわたって往復し続けるメソッドが加わった**(`timeline.trackObject`。§4.23・§8を参照)。**2026-09-14にはInpainting(マスクによる部分再生成)のためのv13へ到達した**——`timeline.renderMaskVideo`(非同期)とイベント`timeline.maskProgress`が加わり、**v12が新設した単一のタイムラインジョブ枠が、物体追尾以外の用途(マスク描画)にも広がった初めての版でもある**(§4.24・§8を参照)。
 - トランスポート: WebView2の`postMessage`チャネル1本(**v7**の`ui.resolveDroppedFiles`だけは`postMessageWithAdditionalObjects`でファイルを追加添付する、§4.21参照)。JSON-RPC風だが**バッチ不可・双方向とも単一メッセージ**。
 - 全12メソッド(v4.1時点): `ping` / `getEditInfo` / `backend.request` / `backend.downloadVideo` / `backend.uploadFile` / `backend.getBaseUrl` / `timeline.insertMedia` / `timeline.captureFrame` / `ui.pickFile` / `ui.makeThumbnail` / `settings.get` / `settings.set`。(**contract v5**でさらに`timeline.getSelection`ほか7メソッドが追加されているが、本書がv1〜v4.1時点の初版のため未反映だった。§4.13/§4.14で`timeline.getSelection`と`timeline.menuInvoked`イベントのみ追補ずみ。**contract v6**でさらに`ui.pickFolder` / `fs.listFiles` / `fs.readTextFile` / `fs.writeTextFileAtomic` / `fs.probeAudioDuration`の5メソッドが追加され(このうち`fs.readTextFile`/`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化、§4.17/§4.18・DEVLOG §26参照。現存するv6メソッドは`ui.pickFolder`/`fs.listFiles`/`fs.probeAudioDuration`の3つ)、`backend.downloadVideo`のparamsが拡張された(`destDir`/`fileName`/`noClobber`に加え、2026-07-18に`reuseIfPresent`も追加。§4.20参照)。こちらは§4.15〜§4.20に全て収録済み。**contract v7**でさらに`ui.resolveDroppedFiles`が追加され(§4.21)、`ui.pickFile`に`"imageOrVideo"` kindが追補された(§4.9)。)
 - 一次ソース: `webui/src/bridge/types.ts`(契約の型定義+ JSDoc)、`native/src/bridge_core.h/.cpp`(純粋なパース/ディスパッチ実装、WebView2非依存でdoctest可能)、`native/src/bridge.h/.cpp`(WebView2/WinHTTP/SDKへの実配線、非同期メソッドのワーカー投入)、`native/src/webview_host.cpp`(WebView2のホスティングと`WebMessageReceived`ハンドラ — v7の`__droppedPaths`注入はここで行われる)。
@@ -112,6 +112,8 @@
 | `timeline.trackObject` | 非同期(通信用ワーカースレッド。内部でレンダリング→REST往復をフレーム数だけ繰り返す) | UI起点→ワーカー→レンダリング | v12(§4.23) |
 | `timeline.cancelTracking` | 同期(中止の合図を立てるだけ) | UI | v12(§4.23) |
 | `timeline.trackProgress`(イベント、ネイティブ発) | — | ワーカー→UIへマーシャリング | v12(§4.23) |
+| `timeline.renderMaskVideo` | 非同期(HTTPワーカースレッドへ投入。内部でUIスレッドの`call_edit_section_param`を繰り返し呼び、窓の1フレームごとにレンダリング→mp4書き込みを行う) | UI起点→ワーカー→レンダリング | v13(§4.24) |
+| `timeline.maskProgress`(イベント、ネイティブ発) | — | ワーカー→UIへマーシャリング | v13(§4.24) |
 
 v6行の「実行スレッド」列は、2026-07-15のnative実装完了により実装コードで確認済みの値である。`ui.pickFolder`は`ui.pickFile`と同じくUIスレッド上でモーダルダイアログ(`IFileOpenDialog`、`shobjidl.h`)をポンプする。`fs.listFiles`/`fs.probeAudioDuration`はいずれも`backend.uploadFile`等と同様にHTTPワーカースレッドで実行される(`bridge_core.cpp`のコメントに明記)。`ui.resolveDroppedFiles`は`ping`/`getEditInfo`と同じ「`HandleRequestJson`内で完結する同期メソッド」に分類される — ディスク I/O もSDK呼び出しも無い純粋なJSONの読み替えだからである(実際のドロップファイル解決=`AdditionalObjects`の取得自体は、`HandleMessage`が`HandleRequestJson`を呼ぶ**前**に`webview_host.cpp`のWebMessageReceivedハンドラ側で完了している。§4.21参照)。
 
@@ -448,6 +450,46 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - **1秒あたりのフレーム数はここに入れない。** 操作パネルがイベントの到着時刻から自分で計算する。
 - イベント機構そのものは§1.4のとおりで、ワーカースレッドからの投稿はUIスレッドへマーシャリングされる(§2)。
 
+### 4.24 `timeline.renderMaskVideo` / `timeline.maskProgress`(contract v13)
+
+Inpainting(マスクによる部分再生成。部分フィルタの枠の内側だけを描き替える機能)のためのマスク動画を、**AviUtl2本体に描かせる**。部分フィルタの位置・大きさ・角の丸め・ぼかし・マスクの種類・回転・中間点による動きをネイティブ側で再現計算する代わりに、黒背景の上に「枠の内側を白くする効果」を1つだけ足した部分フィルタの複製を重ねて実際に合成描画させ、その結果をそのままmp4へ書き出す。**機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)で、一時オブジェクトの作り方・ソロ表示・後片付けの手順は同書§5が正本**である。本節はブリッジ契約として交わす形だけを書く。
+
+**責務の位置**: マスクの意味づけ・アップロード・生成要求の組み立ては操作パネル、マスクの画素そのものを作るのはプラグイン。**操作パネルはマスクの画素に一切触れない**——プラグインが渡すのは書き出し済みのmp4のパスだけである。
+
+#### `timeline.renderMaskVideo`(非同期)
+
+- params(**全項目必須**。1つでも欠けるか型が違えば`BAD_REQUEST`。すべてAviUtl2の絶対フレーム番号で、両端を含む閉区間):
+
+  | 項目 | 型 | 意味 |
+  | --- | --- | --- |
+  | `layer` | `number` | マスクの種にする部分フィルタが載っているレイヤー(0以上)。 |
+  | `frameStart` | `number` | 部分フィルタの開始フレーム(0以上)。 |
+  | `frameEnd` | `number` | 部分フィルタの終了フレーム(包含、`frameStart`以上)。 |
+  | `windowStart` | `number` | 描画する窓の開始フレーム(0以上)。 |
+  | `windowEnd` | `number` | 描画する窓の終了フレーム(包含、`windowStart`以上)。 |
+
+  - **窓は部分フィルタの範囲を包含している必要はなく、重なってさえいればよい**(オーナー裁定D3。窓が部分フィルタより短くても長くても受け付ける——設計の正本は[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §4)。2つの区間が一切重ならないときは`BAD_REQUEST`。
+  - **窓の長さの上限は4096フレーム**(`kMaskMaxWindowFrames`)。単発生成のAPI上限(481フレーム)より大幅に大きい値で、バグでしかありえない要求だけを止める安全弁である。長さの計算はint型のオーバーフローを避けるため64bit演算で行う。
+
+- result: `{ filePath: string, width: number, height: number, frameCount: number }`。`width`/`height`は**プロジェクトの解像度**(マスクはシーンの合成結果そのものの描画のため)、`frameCount`は実際に書き出した枚数(＝窓の長さ)。`filePath`はそのまま`backend.uploadFile`へ渡せるローカルパスで、**操作パネルはこのファイルを開かず、画面にも出さない**(オーナー裁定。マスクは部分フィルタの枠そのものであり、プレビューに既に映っているため——[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §13)。
+- 内部の処理(要約。手順の正本は[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §5): `layer_max+1`に黒背景のPNG、`layer_max+2`に部分フィルタの複製(最初の効果ブロックだけを残し、末尾に白化効果を1つ足したもの)を、**1回の編集区間の中で**作成する。作成後に両方の実際の位置・尺を読み直して検証し、片方でも要求どおりでなければ同じ編集区間の中で後始末して`MASK_FAILED`にする。この2つ**以外**のレイヤーをすべて一時的に無効化(ソロ表示)してから窓の各フレームを合成描画し、mp4へ書き出す。**削除とソロ解除は、削除を先に行う**。
+- **受け入れる代償**: 「元に戻す」の履歴が、一時オブジェクトの作成と削除でそれぞれ1件ずつ、**合計2件増える**(利用者のオブジェクトは壊れない)。**AviUtl2の終了処理中だけは後片付けを諦め**、一時オブジェクトがタイムラインに残ることがある(追尾の`g_shutting_down`と同じ判断——UIスレッドを待つ`Bridge::Shutdown`と、そのUIスレッドを必要とする後片付けが、そのままでは互いを待ち合ってしまうため)。
+- **マスクmp4は誰も消さない**——切り抜き(cutouts)と同じ扱いである。置き場所は§7を参照。
+- エラー: `BAD_REQUEST` / `NO_EDIT_HANDLE` / `MASK_BUSY` / `MASK_SEED_INVALID` / `MASK_FAILED`(§5)。
+- **単一のタイムラインジョブ枠を物体追尾(§4.23)と共有する**。v12で新設したこの枠は、v13でマスク描画にも広がった——追尾中に呼ぶと`MASK_BUSY`、逆にマスク描画中に`timeline.trackObject`を呼ぶと`TRACK_BUSY`で断られる。**エラーの符号は呼び出し側で決まる**(枠を握っているのがどちらであっても、`trackObject`は常に`TRACK_BUSY`、`renderMaskVideo`は常に`MASK_BUSY`を返す)。メッセージはどちらも固定文字列。
+- **このバージョンには停止用のRPCが無い**。マスクは窓の全フレームが揃って初めて使えるため、途中で止めることは常に「失敗として捨てる」ことと同義であり、追尾の`timeline.cancelTracking`(そこまでの結果を書き戻す)とは性格が異なる(設計の理由は[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §18)。**マスク描画がジョブ枠を握っているあいだに`timeline.cancelTracking`を呼んでも**、握っているのが追尾でなければ何もせず`{cancelled:false}`を返す(§4.23の記述のとおり、これは失敗ではない)。
+
+#### `timeline.maskProgress`(イベント、ネイティブ→WebUI)
+
+```json
+{ "event": "timeline.maskProgress", "data": { "frame": 0, "index": 1, "total": 240 } }
+```
+
+- `frame`は**絶対フレーム番号**(AviUtl2のもの)、`index`は**1始まり**の通し番号、`total`は窓の総フレーム数。
+- **間引きの規則は`timeline.trackProgress`(§4.23)と同じ**: 直前に送ってから200ミリ秒以上が経ったときだけ送るが、**最初のフレームと最後のフレームは必ず送る**。
+- **`score`/`lost`に相当するフィールドは無い**——マスク描画はフレームごとに描けるか描けないかのどちらかで、追尾のような評価値を持たない。
+- **1秒あたりのフレーム数はここに入れない**。操作パネルがイベントの到着時刻から自分で計算する(`timeline.trackProgress`と同じ規約)。
+
 ## 5. エラーコード一覧
 
 `KnownBridgeErrorCode`(`types.ts`)と`bridge_core.h`冒頭コメントは、**v4.1の範囲では**完全一致(§9参照、相違なし)。v6で追加された`WRITE_LOCKED`は`fs.writeTextFileAtomic`とともに2026-07-18に撤去された(§4.17/§4.18の撤去注記参照)。v5で追加されたコード(`CUTOUT_FAILED`/`EXTRACT_FAILED`/`PROVISIONAL_FAILED`等)は、v5の該当メソッド自体が本書に未収録のままのため(§0冒頭注記)、引き続きnative側との突き合わせが済んでいない。
@@ -470,6 +512,9 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 | `TRACK_SEED_INVALID` | 種にする部分フィルタの枠が読めない・矩形として成立しない(v12・§4.23) | `timeline.trackObject` |
 | `TRACK_WRITEBACK_FAILED` | 追尾そのものは終わったが、エイリアスの書き戻しに失敗した(v12・§4.23。**元のエイリアスでの復元も失敗した場合にだけ出る**) | `timeline.trackObject` |
 | `TRACK_FAILED` | 対象が見つからない・描画や通信が失敗した・バックエンドのエラーを分類できない(v12・§4.23) | `timeline.trackObject` |
+| `MASK_BUSY` | 単一のタイムラインジョブ枠が塞がっている——追尾が走っているか、他のマスク描画が既に1本走っている(v13・§4.24) | `timeline.renderMaskVideo` |
+| `MASK_SEED_INVALID` | 種にする部分フィルタが`layer`/`frameStart`に見つからない・部分フィルタでない(v13・§4.24) | `timeline.renderMaskVideo` |
+| `MASK_FAILED` | 一時オブジェクトの作成・レイヤーの隔離・フレームの描画・mp4の書き出しのいずれかに失敗した(v13・§4.24。ネイティブは応答前に作成済みの一時オブジェクトと不完全なmp4を片付ける) | `timeline.renderMaskVideo` |
 | `TIMEOUT`(ローカルのみ) | WebUI側でレスポンスを一定時間受信できなかった | 任意のメソッド(WebUI側`RequestDispatcher`が生成、ネイティブは関与しない) |
 | `DISPOSED`(ローカルのみ) | ブリッジ破棄時に未解決のリクエストを一括reject | 同上 |
 
@@ -480,7 +525,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 | 項目 | 既定値 | 上書き | 出典 |
 |---|---|---|---|
 | WebUI `RequestDispatcher`のローカル待機上限 | **10,000ms**(`DEFAULT_TIMEOUT_MS`) | `params.timeoutMs`が数値であればそれを採用(現状`backend.request`のみ`timeoutMs`を持つ)。`ui.pickFile`/`ui.pickFolder`は下記の通り対象外 | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
-| `ui.pickFile`/`ui.pickFolder`のWebUI側ローカル待機上限 | **無し**(`NO_LOCAL_TIMEOUT_METHODS`に列挙されたメソッドはタイマー自体を張らない) | ネイティブのファイルダイアログはユーザーが閉じるまで無期限に待つモーダルで「長すぎる」という概念が無いため。ユーザーが選択に10秒以上かけてもWebUI側が先にTIMEOUTで諦めることはない(ブリッジ破棄時は`DISPOSED`で解決)。同メソッドの集合には§4.23の`timeline.trackObject`も含む | `webui/src/bridge/types.ts`(`NO_LOCAL_TIMEOUT_METHODS`), `requestDispatcher.ts` |
+| `ui.pickFile`/`ui.pickFolder`のWebUI側ローカル待機上限 | **無し**(`NO_LOCAL_TIMEOUT_METHODS`に列挙されたメソッドはタイマー自体を張らない) | ネイティブのファイルダイアログはユーザーが閉じるまで無期限に待つモーダルで「長すぎる」という概念が無いため。ユーザーが選択に10秒以上かけてもWebUI側が先にTIMEOUTで諦めることはない(ブリッジ破棄時は`DISPOSED`で解決)。同メソッドの集合には§4.23の`timeline.trackObject`と§4.24の`timeline.renderMaskVideo`も含む | `webui/src/bridge/types.ts`(`NO_LOCAL_TIMEOUT_METHODS`), `requestDispatcher.ts` |
 | ネイティブ`backend.request`のWinHTTPタイムアウト | **30,000ms**(`kDefaultBackendTimeoutMs`) | `params.timeoutMs`を`[1000, 600000]`にクランプして適用 | `bridge_core.h` |
 | `backend.downloadVideo`のダウンロードタイムアウト | **300,000ms**(`kDefaultDownloadTimeoutMs`) | 無し | `http_client.h` |
 | `backend.uploadFile`のアップロードタイムアウト | **120,000ms**(`kUploadTimeoutMs`) | 無し | `http_client.h` |
@@ -489,6 +534,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 | `ui.resolveDroppedFiles`のWebUI側ローカル待機上限(**contract v7**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
 | `fs.probeMediaInfo`のWebUI側ローカル待機上限(**contract v9**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
 | `timeline.trackObject`のWebUI側ローカル待機上限(**contract v12**) | **無し**(`NO_LOCAL_TIMEOUT_METHODS`に追加済み) | 数百フレームの追尾は数十秒〜数分かかるため。10,000msで諦めると、完走する追尾の前で「タイムアウト」の表示が残る | `webui/src/bridge/types.ts`(`NO_LOCAL_TIMEOUT_METHODS`), `requestDispatcher.ts` |
+| `timeline.renderMaskVideo`のWebUI側ローカル待機上限(**contract v13**) | **無し**(`NO_LOCAL_TIMEOUT_METHODS`に追加済み) | 描画は往復のやり取りではなく窓自身の長さ(最大4096フレーム)に束縛されるうえ、このバージョンには止める手段が無い。10,000msの上限は誤った失敗を作るだけで何も守らない | `webui/src/bridge/types.ts`(`NO_LOCAL_TIMEOUT_METHODS`), `requestDispatcher.ts` |
 
 **重要**: v4.1の`timeoutMs`は「ネイティブのWinHTTPタイムアウト」と「WebUI側のローカル待機上限」の**両方**に同じ値を伝播させる設計。バックエンド処理が長時間かかり得る呼び出し(例: chain join)でWebUI側が先に諦めてネイティブの応答を握りつぶさないようにするため。
 
@@ -499,6 +545,8 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 | `logs\plugin.log` | UTF-8・タイムスタンプ付きファイルログ。AviUtl2はログをディスクに永続化しないため、自動検証が読める唯一のチャネルとして自前実装。ホストの`LOG_HANDLE`(1024文字/行制限)にも同時出力。 | `native/src/log.cpp` |
 | `downloads\<jobId>.mp4` / `<jobId>_joined.mp4` | `backend.downloadVideo`の保存先 | `bridge.cpp` |
 | `captures\frame_<frame>_<stamp>.png` | `timeline.captureFrame`の保存先。`<stamp>` = `yyyymmdd_HHMMSS_fff_nnn`(並列キャプチャでも一意) | `bridge.cpp` |
+| `masks\mask_<開始>_<枚数>_<時刻印>.mp4` | `timeline.renderMaskVideo`(v13・§4.24)が書き出すマスク動画。**誰も消さない**——切り抜き(cutouts)と同じ扱い(設計の正本は[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §5.5) | `bridge.cpp` |
+| `masks\black_<W>x<H>.png` | マスク描画の黒背景。シーンの解像度ごとに1枚だけ書き出し、以後の`timeline.renderMaskVideo`が使い回す(既に読めるファイルがあれば書き直さない) | `bridge.cpp` |
 | `settings.json` | `settings.get`/`settings.set`が読み書きする永続設定(現状`baseUrl`のみ)。ファイル欠落/JSON破損/値不正は既定値へ自己修復し、書き込みは行わない(次回`settings.set`成功まで) | `native/src/settings.cpp` |
 | `webview2\` | WebView2の`UserDataFolder`(Cookie/キャッシュ等、WebView2 SDKが管理) | `native/src/webview_host.cpp` |
 | `buildtools\`(開発環境のみ、配布物には含まれない) | VS2026にC++ CMakeツールが未同梱のため、ビルドスクリプトが自動取得するポータブルCMake+Ninja(per-userキャッシュ、PATH非変更) | `scripts/build.ps1` |
@@ -522,6 +570,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 | v10 | V2Vリボン範囲トリム(2026-07-30) | `backend.uploadFile`への任意`query`(`Record<string,string>`)加算と、応答`body`に加わる任意`trimmed`(bool)(§4.5)。タイムライン上のリボンが元動画の一部しか占めていないとき、`POST /upload/video?trim_start_sec=…&trim_duration_sec=…`でその範囲だけを切り出してアップロードするために追加。**省略時のURLはv10以前と完全に同一**(`AppendQueryToUrl`が空クエリでURLを変えないことで構造的に保証)。新規メソッド・新規エラーコードは無し。**本書は§4.5で収録済み。native実装(`bridge_core.h/.cpp`の共有純関数`BuildQueryString`/`AppendQueryToUrl`、`bridge.cpp`の`UploadFileWorker`でのURL連結)は完了、doctest`test_bridge_core.cpp`に9ケース追加(258→267 pass/6 skip)。もう半分の`timeline.getSelection`への再生位置系6フィールド(`playbackStartSec`/`playbackEndSec`/`hasPlaybackRange`/`playbackSpeed`/`loopPlay`/`sectionCount`)は2026-08-01の実機調査完了をもって実装・収録済み(§4.13、単位は素材時間軸の秒。doctestはさらに7ケース増えて274 pass/6 skip)**。 |
 | v11 | 素材fpsの取得と操作パネルへの流し込み(2026-09-01) | `timeline.getSelection`の`selected[]`への`mediaFps`(素材そのもののフレームレート、非nullable・`0`＝不明)追加(§4.13)。右クリックプリフィルのfps軸「素材に合わせる」を実際に機能させるために追加した。新規メソッド・新規エラーコードは無く、**追加は1フィールドだけ**である。**取得はMedia Foundation**(`MF_MT_FRAME_RATE`)で、native実装は新規モジュール`native/src/media_fps_probe.h/.cpp`(`FpsFromRatio`／`ProbeMediaFps`)と`bridge.cpp`の`GetSelectionEditProc`からの呼び出し、`bridge_core.h`の`SelectionItem::media_fps`と`MakeSelectionResult`のJSON化からなる。**nativeは生値を返し、整数へのスナップ(29.97→30)はwebuiの`prefillSeed.ts`が行う**。**mkv/webmでの取得失敗は正常系**(webuiがプロジェクトfpsへ落ちる)。doctestは新設`native/tests/test_media_fps_probe.cpp`ほかで**278→282ケース・アサーション1416→1452**(いずれも0失敗。実測値は`build.ps1 -Config Release -RunTests`で確認)。**MFのプローブが実ファイルを開く経路は実機でのみ確認可能**で、オーナーの実機ゲートG1〜G8待ちである(項目は台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md)「2. 実装済み・ユーザーのテスト待ち」)。 |
 | v12 | 物体追尾(2026-09-11) | `timeline.trackObject`(非同期)と`timeline.cancelTracking`(同期)の2メソッド新設、イベント`timeline.trackProgress`新設、エラーコード4つ(`TRACK_BUSY`／`TRACK_SEED_INVALID`／`TRACK_WRITEBACK_FAILED`／`TRACK_FAILED`)新設、`timeline.getSelection`の`effectName`へ先頭効果名のフォールバック追加(§4.13・§4.23・§5)。**既存メソッドの引数・応答は1つも変えていない**——`effectName`はこれまで空文字だった枠が埋まるだけで、フィールドの増減は無い。右クリックのアクションIDも`trackObject`が1つ増えただけである([`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §3-4 #21)。**この版で初めて、ネイティブがバックエンドのRESTを長時間往復し続けるメソッドが加わった**(1フレームごとに描画→送信→応答を繰り返す)ため、サーバー側のドメインエラーが包み直されずそのまま届く経路も新しい(§5)。機能全体の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md)、REST側の契約は[`API_REFERENCE.md`](API_REFERENCE.md) §3.20〜§3.22である。 |
+| v13 | Inpainting(マスクによる部分再生成、2026-09-14) | `timeline.renderMaskVideo`(非同期)メソッド新設、イベント`timeline.maskProgress`新設、エラーコード3つ(`MASK_BUSY`／`MASK_SEED_INVALID`／`MASK_FAILED`)新設(§4.24・§5・§7)。**既存メソッドの引数・応答は1つも変えていない。** v12が新設した単一のタイムラインジョブ枠を、物体追尾以外の用途(マスク描画)にも広げた初めての版で、`timeline.cancelTracking`(§4.23)は枠をマスク描画が握っているときに呼ばれても`{cancelled:false}`を返すことを本書へ明記した(挙動自体はv12から不変)。**このバージョンには停止用のRPCが無い**——半分だけ描けたマスクには使い道が無いため(理由は[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §18)。右クリックのアクションIDは`inpaintPartialFilter`・`inpaintVideo`の2つが増えた([`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §3-4 #22・#23)。機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)である。 |
 
 ## 9. `types.ts` と `bridge_core.h`/`.cpp` の相違点
 
@@ -555,5 +604,6 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/tests/test_media_fps_probe.cpp`(contract v11のnative実装doctest。純関数`FpsFromRatio`とMF往復)
 - `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/track_postprocess.h` / `track_postprocess.cpp`(contract v12、追尾の後処理6段〔見失いの印つけ・埋め・平滑化・大きさの固定・間引き・区間まとめ〕を担う純関数群。2026-09-11新規。**順序が固定であることと、入力が相対位置・出力の見失い区間が呼び出し側で絶対フレームへ直されること**は[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md) §5.5が正本)
 - `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/tests/test_track_postprocess.cpp`(contract v12の後処理doctest)
-- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/alias_util.h` / `alias_util.cpp`(contract v12、部分フィルタの値と矩形の換算・エイリアスの5行だけの差し替え・書き戻しの復元。`NormalizeAliasObjectFrameHeader`もここ)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/src/alias_util.h` / `alias_util.cpp`(contract v12、部分フィルタの値と矩形の換算・エイリアスの5行だけの差し替え・書き戻しの復元。`NormalizeAliasObjectFrameHeader`もここ。**contract v13でマスク複製専用の純関数4つ(`KeepOnlyFirstEffectBlock`／`AppendEffectBlock`／`NormalizeAliasFrameBoundariesToRelative`／`ClipAliasFrameBoundaries`)と、白化効果の行を返す`WhiteningEffectBlockLines`が追加された**。後者は実機未採取につき暫定値——[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §5.2参照)
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/native/tests/test_alias_util.cpp`(contract v13、マスク複製の純関数群のdoctest)
 - `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/timeline/prefillSeed.ts`(contract v11、`mediaFps`の唯一の消費者。fpsの3段フォールバックを実装。整数スナップと`[1, 60]`クランプ自体の正本は`modes/single/paramUtils.ts`の`snapFrameRate`——台帳§3-71/§3-72対策で全入口共通化)

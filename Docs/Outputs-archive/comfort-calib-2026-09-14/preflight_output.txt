@@ -1,0 +1,108 @@
+# preflight_output.txt -- offline re-derivation of every plan point (no server, no GPU)
+# run: 2026-09-14 09:35:57
+# --online is deliberately NOT passed: GET /loras probes the two control adapters,
+# which this campaign does not use (plan 7' mid-5).
+
+---- calib.py preflight --plan plans/plan_A1a_single_720_q6.json ----
+[2026-09-14 09:35:57.808] plan_A1a_single_720_q6.json   4 point(s), 0 failed
+[2026-09-14 09:35:57.808] wrote preflight.json -- 4 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A1b_single_720_q6.json ----
+[2026-09-14 09:35:57.927] plan_A1b_single_720_q6.json   1 point(s), 0 failed
+[2026-09-14 09:35:57.927] wrote preflight.json -- 1 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A2a_single_1080_q6.json ----
+[2026-09-14 09:35:58.048] plan_A2a_single_1080_q6.json  4 point(s), 0 failed
+[2026-09-14 09:35:58.048] wrote preflight.json -- 4 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A2b_single_1080_q6.json ----
+[2026-09-14 09:35:58.163] plan_A2b_single_1080_q6.json  1 point(s), 0 failed
+[2026-09-14 09:35:58.163] wrote preflight.json -- 1 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A3a_single_896_q6.json ----
+[2026-09-14 09:35:58.276] plan_A3a_single_896_q6.json   4 point(s), 0 failed
+[2026-09-14 09:35:58.276] wrote preflight.json -- 4 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A3b_single_896_q6.json ----
+[2026-09-14 09:35:58.391] plan_A3b_single_896_q6.json   1 point(s), 0 failed
+[2026-09-14 09:35:58.392] wrote preflight.json -- 1 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A4a_chain_q6.json ----
+[2026-09-14 09:35:58.506] plan_A4a_chain_q6.json        5 point(s), 0 failed
+[2026-09-14 09:35:58.506] wrote preflight.json -- 5 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_A4b_chain_q6.json ----
+[2026-09-14 09:35:58.623] plan_A4b_chain_q6.json        1 point(s), 0 failed
+[2026-09-14 09:35:58.623] wrote preflight.json -- 1 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_Q_control_q4.json ----
+[2026-09-14 09:35:58.735] plan_Q_control_q4.json        4 point(s), 0 failed
+[2026-09-14 09:35:58.735] wrote preflight.json -- 4 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_W_warm_q4.json ----
+[2026-09-14 09:35:58.848] plan_W_warm_q4.json           1 point(s), 0 failed
+[2026-09-14 09:35:58.848] wrote preflight.json -- 1 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight --plan plans/plan_W_warm_q6.json ----
+[2026-09-14 09:35:58.964] plan_W_warm_q6.json           1 point(s), 0 failed
+[2026-09-14 09:35:58.964] wrote preflight.json -- 1 point(s), 0 failed, ok=True
+exit=0
+
+---- calib.py preflight   (all plans at once; this is the preflight.json left on disk) ----
+[2026-09-14 09:35:59.077] plan_A1a_single_720_q6.json   4 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A1b_single_720_q6.json   1 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A2a_single_1080_q6.json  4 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A2b_single_1080_q6.json  1 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A3a_single_896_q6.json   4 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A3b_single_896_q6.json   1 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A4a_chain_q6.json        5 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_A4b_chain_q6.json        1 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_Q_control_q4.json        4 point(s), 0 failed
+[2026-09-14 09:35:59.077] plan_W_warm_q4.json           1 point(s), 0 failed
+[2026-09-14 09:35:59.078] plan_W_warm_q6.json           1 point(s), 0 failed
+[2026-09-14 09:35:59.078] wrote preflight.json -- 27 point(s), 0 failed, ok=True
+exit=0
+
+---- token summary read back out of preflight.json (all 27 points; matches plan 3) ----
+plan                           label                    geometry   tokens    transformer            baseline
+plan_A1a_single_720_q6.json    q6_s_720_b169            1280x768      21,120 Q6_K                   BASELINE
+plan_A1a_single_720_q6.json    q6_s_720_289             1280x768      35,520 Q6_K                   q6_s_720_b169
+plan_A1a_single_720_q6.json    q6_s_720_321             1280x768      39,360 Q6_K                   q6_s_720_b169
+plan_A1a_single_720_q6.json    q6_s_720_353             1280x768      43,200 Q6_K                   q6_s_720_b169
+plan_A1b_single_720_q6.json    q6_s_720_385             1280x768      47,040 Q6_K                   q6_s_720_b169
+plan_A2a_single_1080_q6.json   q6_s_1080_b89            1920x1088     24,480 Q6_K                   BASELINE
+plan_A2a_single_1080_q6.json   q6_s_1080_137            1920x1088     36,720 Q6_K                   q6_s_1080_b89
+plan_A2a_single_1080_q6.json   q6_s_1080_153            1920x1088     40,800 Q6_K                   q6_s_1080_b89
+plan_A2a_single_1080_q6.json   q6_s_1080_169            1920x1088     44,880 Q6_K                   q6_s_1080_b89
+plan_A2b_single_1080_q6.json   q6_s_1080_177            1920x1088     46,920 Q6_K                   q6_s_1080_b89
+plan_A3a_single_896_q6.json    q6_s_896_b161            896x1152      21,168 Q6_K                   BASELINE
+plan_A3a_single_896_q6.json    q6_s_896_281             896x1152      36,288 Q6_K                   q6_s_896_b161
+plan_A3a_single_896_q6.json    q6_s_896_313             896x1152      40,320 Q6_K                   q6_s_896_b161
+plan_A3a_single_896_q6.json    q6_s_896_345             896x1152      44,352 Q6_K                   q6_s_896_b161
+plan_A3b_single_896_q6.json    q6_s_896_377             896x1152      48,384 Q6_K                   q6_s_896_b161
+plan_A4a_chain_q6.json         q6_c_1280x768            1280x768      21,120 Q6_K                   BASELINE
+plan_A4a_chain_q6.json         q6_c_896x1152            896x1152      22,176 Q6_K                   q6_c_1280x768
+plan_A4a_chain_q6.json         q6_c_1792x1024           1792x1024     39,424 Q6_K                   q6_c_1280x768
+plan_A4a_chain_q6.json         q6_c_1856x1024           1856x1024     40,832 Q6_K                   q6_c_1280x768
+plan_A4a_chain_q6.json         q6_c_1920x1024           1920x1024     42,240 Q6_K                   q6_c_1280x768
+plan_A4b_chain_q6.json         q6_c_1920x1088           1920x1088     44,880 Q6_K                   q6_c_1280x768
+plan_Q_control_q4.json         q4_s_720_b169            1280x768      21,120 default                BASELINE
+plan_Q_control_q4.json         q4_s_720_369             1280x768      45,120 default                q4_s_720_b169
+plan_Q_control_q4.json         q4_s_1080_b89            1920x1088     24,480 default                BASELINE
+plan_Q_control_q4.json         q4_s_1080_169            1920x1088     44,880 default                q4_s_1080_b89
+plan_W_warm_q4.json            q4_warm_768x512_121      768x512        6,144 default                smoke
+plan_W_warm_q6.json            q6_warm_768x512_121      768x512        6,144 Q6_K                   smoke
+total points: 27  failed: 0  ok: True
+
+T8 confirmed: the six CHAIN points (plan_A4a / plan_A4b) are green. On the 09-05 harness
+they would every one have failed on 'num_frames 0 is below the product floor of 9'.

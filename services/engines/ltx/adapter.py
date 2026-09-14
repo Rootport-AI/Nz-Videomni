@@ -48,7 +48,12 @@ from PIL import Image, ImageDraw
 
 import chain_math
 from api.errors import feature_unsupported, lora_preprocess_conflict, model_incompatible
-from api.models import GenerateChainRequest, GenerateRequest
+from api.models import (
+    INPAINT_MIN_SOURCE_SIDE,
+    GenerateChainRequest,
+    GenerateRequest,
+    round_up_128,
+)
 from config import AppConfig
 from services import gpu_info, video_io
 from services.base_models import BaseModelDescriptor, load_base_models
@@ -509,6 +514,20 @@ class GenerationOutcome:
     # A chain rides the same facts inside chain_metadata["ltx25"] instead, so
     # this field stays None there too. None on the mock backend and on LTX 2.3.
     ltx25: dict | None = None
+    # Inpainting (台帳 §3-55): the engine's own ``inpaint`` block — geometry,
+    # blend settings, VRAM peaks, the audio record and ``mask_proof``. Relayed
+    # verbatim from the worker's terminal ``done`` event and merged with the
+    # app's provenance in ``pipeline_manager._write_metadata``.
+    #
+    # WHY THIS FIELD EXISTS WHEN OUTPAINTING HAS NO TWIN. Outpainting's engine
+    # meta is deliberately not carried here: everything it says can also be
+    # derived from the request, so the app writes its own record and the
+    # relay would be redundant. Inpainting's cannot — ``mask_proof`` (how many
+    # mask frames were decoded, what fraction of the canvas was white, what
+    # fraction the dilation reached) is a measurement of a FILE, and it is the
+    # only evidence that the mask reached the model at all. The mock backend
+    # cannot fabricate it, which is the point.
+    inpaint: dict | None = None
 
 
 class LTXRunner:
@@ -641,6 +660,8 @@ class LTXRunner:
         reference_video_path: Path | None = None,
         seed: int | None = None,
         outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
         """``outpaint_source_path`` (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as
         §1-13 at the time; additive): the ORIGINAL uploaded video
@@ -648,7 +669,13 @@ class LTXRunner:
         green-padded canvas pipeline_manager built from it; this second path is
         what the engine reads the frozen-guidance AUDIO from, because the canvas
         is deliberately written video-only (see ``video_io.pad_green_mp4``).
-        ``None`` for every non-outpaint job."""
+        ``None`` for every non-outpaint job.
+
+        ``inpaint_source_path`` / ``inpaint_mask_path`` (台帳 §3-55; additive)
+        are the same idea one feature over: the CUT WINDOW (its audio, and the
+        picture the restore falls back to) and the uploaded MASK video.
+        ``reference_video_path`` already points at the green-FILLED canvas
+        built from the two. Both are ``None`` for every non-inpaint job."""
         if self._backend is None or not self._backend.loaded:
             self.load()
         assert self._backend is not None
@@ -661,6 +688,8 @@ class LTXRunner:
             reference_video_path=reference_video_path,
             seed=seed,
             outpaint_source_path=outpaint_source_path,
+            inpaint_source_path=inpaint_source_path,
+            inpaint_mask_path=inpaint_mask_path,
         )
 
     def generate_chain(
@@ -1008,6 +1037,8 @@ class _MockBackend:
         reference_video_path: Path | None = None,
         seed: int | None = None,
         outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
 
@@ -1027,6 +1058,16 @@ class _MockBackend:
         GEOMETRY though — ``request.width``/``height`` are already the canvas, so
         the placeholder comes out at the extended size and ``_render_frames``
         outlines where the source footage would have gone.
+
+        ``inpaint_source_path`` / ``inpaint_mask_path`` (台帳 §3-55) are accepted
+        and ignored for the same reason, and the geometry is honoured the same
+        way — but INVERTED. An inpaint job's delivered mp4 is at the SOURCE's
+        resolution (the engine crops the green pad bands off before the encode),
+        so the placeholder is rendered at the source size rather than the
+        canvas size. That is what makes a mock run able to catch a geometry
+        mistake before a real one does: if the app ever handed the canvas size
+        down as the output size, the mock's output.mp4 would be the wrong shape
+        and the end-to-end test would say so.
         """
         if not self._loaded:
             self.load()
@@ -1039,16 +1080,63 @@ class _MockBackend:
         if progress_callback:
             progress_callback(0, request.num_inference_steps, 0.05)
 
+        # Inpainting (台帳 §3-55): the mock renders at the DELIVERED size, which
+        # for an inpaint job is the source's own resolution rather than the
+        # canvas ``request.width``/``height`` names.
+        #
+        # THE SIZE IS RECONCILED, not read straight off a file. The mask
+        # upload's header supplies the source side (ffprobe only, never a decode
+        # — the mock's standing rule), the request supplies the canvas side, and
+        # the two are checked against each other with the SAME rule the engine's
+        # ``InpaintGeometry`` applies: the canvas is the source rounded up to the
+        # 128 grid. That is what makes a mock run able to catch a geometry
+        # mistake — rendering at whatever the mask happens to be and then
+        # asserting the output equals the mask would prove nothing.
+        #
+        # ``api.models.round_up_128`` rather than the engine's own: this module
+        # is app-side, and the app venv and the engine venv never import each
+        # other (see the note on ``OUTPAINT_MIN_KEEP_SIDE`` in api/models.py).
+        # The two implementations are held against each other, over every size
+        # this feature can see, in tests/test_inpaint_geometry.py.
+        render_size: tuple[int, int] | None = None
+        if request.inpaint is not None:
+            if inpaint_mask_path is None:
+                raise RuntimeError(
+                    "inpaint: the mask video path never reached the backend; the "
+                    "orchestrator must resolve inpaint.mask_video_id before the job"
+                )
+            probed = video_io.probe_resolution(Path(inpaint_mask_path))
+            if probed is None:
+                raise RuntimeError(
+                    f"inpaint: could not probe the mask video's resolution "
+                    f"({inpaint_mask_path}); the source size cannot be derived"
+                )
+            src_w, src_h = probed
+            if src_w < INPAINT_MIN_SOURCE_SIDE or src_h < INPAINT_MIN_SOURCE_SIDE:
+                raise RuntimeError(
+                    f"inpaint: the source is {src_w}x{src_h}, below the "
+                    f"{INPAINT_MIN_SOURCE_SIDE}px floor"
+                )
+            canvas = (round_up_128(src_w), round_up_128(src_h))
+            if canvas != (request.width, request.height):
+                raise RuntimeError(
+                    f"inpaint geometry mismatch: the source is {src_w}x{src_h}, "
+                    f"whose canvas is {canvas[0]}x{canvas[1]}, but the job asks "
+                    f"for {request.width}x{request.height}"
+                )
+            render_size = probed
+
         start_image: Image.Image | None = None
         if mode == "i2v" and conditioning_image_paths:
             start_image = Image.open(conditioning_image_paths[0]).convert("RGB")
-            start_image = start_image.resize((request.width, request.height))
+            start_image = start_image.resize(render_size or (request.width, request.height))
 
         frames = self._render_frames(
             request=request,
             seed=seed,
             start_image=start_image,
             progress_callback=progress_callback,
+            render_size=render_size,
         )
 
         if progress_callback:
@@ -1405,10 +1493,18 @@ class _MockBackend:
         seed: int,
         start_image: Image.Image | None,
         progress_callback: ProgressCallback | None,
+        render_size: tuple[int, int] | None = None,
     ) -> list[Image.Image]:
-        """Render a synthetic clip."""
+        """Render a synthetic clip.
+
+        ``render_size`` overrides ``request.width``/``height`` for the one case
+        where the delivered mp4 is NOT the requested size: an inpaint job, whose
+        width/height are the canvas and whose output is the source (台帳 §3-55).
+        ``None`` — every other job — keeps the request's own size, so nothing
+        about the existing paths changes.
+        """
         rng = random.Random(seed)
-        w, h = request.width, request.height
+        w, h = render_size or (request.width, request.height)
         n = request.num_frames
         steps = max(1, request.num_inference_steps)
 
@@ -1453,6 +1549,15 @@ class _MockBackend:
                     outline=(102, 255, 0),
                     width=3,
                 )
+            # Inpainting (台帳 §3-55): the same marker for the same reason, with
+            # the geometry inverted. The frame IS the source rectangle here, so
+            # the outline runs around the whole placeholder — it says "this clip
+            # came out at the source size, not the canvas size", which is the
+            # one geometric claim a mock CAN make. It deliberately does not draw
+            # the mask's shape: the mock never opens a video, and inventing a
+            # shape would be a lie that looks like evidence.
+            if request.inpaint is not None:
+                draw.rectangle([0, 0, w - 1, h - 1], outline=(102, 255, 0), width=3)
             frames.append(frame)
 
             # emulate diffusion step progress (0.10 -> 0.90 across steps)
@@ -1938,6 +2043,8 @@ class _RealBackend:
         reference_video_path: Path | None = None,
         seed: int | None = None,
         outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
         if not self.loaded:
             self.load()
@@ -2099,6 +2206,52 @@ class _RealBackend:
                 "blend_dilation_stage2": op.blend_dilation_stage2,
                 "freeze_source_audio": op.freeze_source_audio,
             }
+        # Inpainting (台帳 §3-55): the same additive contract, key for key — the
+        # block is absent from every non-inpaint job, so their payloads stay
+        # byte-identical, and its PRESENCE is what routes the worker to
+        # ``generate_inpaint``. It carries the geometry because the engine has
+        # to rebuild the canvas arithmetic, and the two FILE PATHS the canvas
+        # cannot supply: the cut window (audio + the restore's fallback picture)
+        # and the mask video itself. ``reference_video.path`` above is already
+        # the green-filled canvas.
+        #
+        # Note what is NOT here: pads. The engine derives them from
+        # ``canvas − source``, which is the same single-source-of-truth rule the
+        # API enforces (see ``api.models.InpaintSpec``).
+        if request.inpaint is not None:
+            ip = request.inpaint
+            # The source size is READ FROM THE FILE, not taken from the request,
+            # for exactly the reason the request does not carry it: the file is
+            # the only thing that can be checked. The cut window preserves the
+            # upload's resolution (``cut_window_mp4`` never rescales), so this
+            # is the same number the endpoint validated the canvas against.
+            if inpaint_mask_path is None:
+                raise RuntimeError(
+                    "inpaint: the mask video path never reached the backend; "
+                    "run_inpaint cannot decode a mask it was not given"
+                )
+            if inpaint_source_path is None:
+                raise RuntimeError(
+                    "inpaint: the cut window's path never reached the backend; "
+                    "the source size and the frozen audio both come from it"
+                )
+            source_size = video_io.probe_resolution(Path(inpaint_source_path))
+            if source_size is None:
+                raise RuntimeError(
+                    "inpaint: could not probe the cut window's resolution "
+                    f"({inpaint_source_path})"
+                )
+            source_width, source_height = source_size
+            payload["inpaint"] = {
+                "source_path": str(inpaint_source_path) if inpaint_source_path else None,
+                "mask_path": str(inpaint_mask_path) if inpaint_mask_path else None,
+                "canvas_width": request.width,
+                "canvas_height": request.height,
+                "source_width": source_width,
+                "source_height": source_height,
+                "blend_dilation_stage1": ip.blend_dilation_stage1,
+                "blend_dilation_stage2": ip.blend_dilation_stage2,
+            }
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
         # F2: the worker now streams per-step ``progress`` events during a
@@ -2153,6 +2306,10 @@ class _RealBackend:
             ),
             vae_mode_used=event.get("vae_mode_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
+            # Inpainting (台帳 §3-55): the engine's own block, relayed verbatim.
+            # Absent on every other job, so ``None`` there — the same shape as
+            # every relay above.
+            inpaint=event.get("inpaint"),
         )
 
     def generate_chain(

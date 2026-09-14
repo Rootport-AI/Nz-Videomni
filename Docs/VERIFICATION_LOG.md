@@ -12155,6 +12155,21 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 | G9 部分フィルタの消失 | 不具合を検出（案内文が一瞬で消えて読めなかった）→ トースト表示へ変更した。再確認待ち。 |
 | G10 回帰 | 監督がHTTP API経由で実行中（LTX 2.3・LTX 2.5の両エンジンで改修前後のフィンガープリントを比較）。結果は§105.8へ記録する。 |
 
+### 105.8 G10 回帰指紋 — 画角拡張の出力は LTX 2.3・LTX 2.5 とも改修前後でビット一致（2026-09-14 夜）
+
+**何を確かめたか**: Inpainting の実装が `engine/outpaint/pyramid_blend.py`（フレーム別マスクの受理）と `engine/pipeline/outpaint_pipeline.py`（音声凍結・音声初期潜在・mux の3塊の切り出し）に触れたため、既存の画角拡張の出力が1バイトも変わっていないことを、固定シードの実ジョブで両エンジンについて確かめた。
+
+**方法**: `outputs/inpaint_regression/fingerprint_outpaint.py`（git 追跡外。HTTP API 直叩き。`--label before/after`・`--port`・`--output-dir` を持つ）で、素材 `outputs/dac94de5-3922-4550-a6de-ea8df3bd75e6/output.mp4`（1280×768・121f）に対し、キャンバス 1536×896・余白 128/128/64/64・膨張 5/2・`in-outpainting` 1.0・seed 1234 の画角拡張を各系統1本ずつ走らせ、`output.mp4` の SHA-256 を比べた。「改修後」は本リポジトリ（`feature/inpainting`、バックエンドは `5052293`）を一時設定（ポート18622・uploads/outputs/state/log は `%TEMP%` 配下）で起動。「改修前」は `git worktree` で main（`7fed7f1`）を別ディレクトリへ出し、`models`・`vendor` をジャンクションで本リポジトリへ張り、仮想環境3本を絶対パスで指す一時設定（ポート18621）で起動した（ワーカーが worktree の `engine.*` を読むことを `engine.__file__` と `inpaint_pipeline` 不在のプローブで確認）。GPU は常に1サーバー・1ジョブ。オーナーの `config.yaml`・`state.json`・`uploads/`・`outputs/`（`inpaint_regression/` 以外）は無改変。
+
+| 系統 | 改修前（main `7fed7f1`） | 改修後（`5052293`） | 一致 | 所要 | VRAM ピーク |
+|---|---|---|---|---|---|
+| ltx（LTX 2.3） | `6baa2c77fe835316…` | 同一 | **PASS** | 243.0 s／255.9 s | 16,798 MB |
+| ltx25（LTX 2.5） | `7c731a03bafdc41a…` | 同一 | **PASS** | 190.9 s／190.9 s | 9,070 MB |
+
+`cmp` でもバイト一致（ltx 5,233,856 バイト／ltx25 8,802,775 バイト）。`metadata.json` の要求の反響は、アップロードごとに変わる `reference_video_id` 以外すべて一致。ジョブ ID: after ltx `affa1930…`／after ltx25 `211142cd…`／before ltx `a6713840…`／before ltx25 `5424aed8…`。成果物は `outputs/inpaint_regression/runs/` と `fingerprints.json`。
+
+**判定**: G10 合格。§105.5 で「ビット同一」と述べた3塊の切り出しとブレンドの拡張は、実出力でも裏づけられた。
+
 ## 106. ★別GGUF（Q6_K transformer）での快適上限を実機で較正した（REDGraft LTX 2.5・48点）＝結論は「解像度ごとに割れた。単一のトークン線では表せない」・**配信値は未変更**（2026-09-14）
 
 **要約**: 公式以外の変換器（transformer）のGGUFを載せると快適上限の線がどこへ来るかを、48点の実測で求めた。**結論は「解像度ごとに割れた」**——単発生成の快適側の最大は 1280×768＝44,160／1920×1088＝42,840／896×1152＝40,320、連結生成（第2段階の窓が22潜在コマ固定）＝43,648 で、幅が3,840トークンある。**現行の配信値 44,880 は、このGGUFでは成り立たない**（1080pの単発生成と連結生成が、どちらも44,880ちょうどで2回とも退避した）。**配信値（`config.py`の`_default_comfort_budgets()`）は変更していない。反映するかどうかはオーナー判断である。**

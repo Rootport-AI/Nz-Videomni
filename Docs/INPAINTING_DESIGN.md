@@ -5,8 +5,8 @@
 **生きた文書（Inpainting機能の設計正本）。** AviUtl2のタイムラインに置いた**部分フィルタ**（AviUtl2のメディアオブジェクトの一種。枠の内側だけに、後から足した効果を掛ける）の枠を白黒のマスク動画へ焼き、その白い領域の内側だけを動画生成モデルに描き替えさせる機能を記述します。**Inpainting**（インペインティング）とは、絵の一部を塗り潰して、その部分だけを作り直すことです。
 
 - 作成: 2026-09-14
-- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（完結の記録。起票時は台帳 §3-55、実装後は §2-10）。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 §4-8(C)・§4-25 は本書を参照する）
-- 状態: 完結。main へ merge 済みです（完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105。作業ブランチ `feature/inpainting` は削除してあります）
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150（LTX 2.5 への対応）。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 §4-8(C)・§4-25 は本書を参照する）
+- 状態: 第1弾は完結し、main へ merge 済みです（完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105。作業ブランチ `feature/inpainting` は削除してあります）。**その後、LTX 2.5 への対応を台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150 で足しました**（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107。本書 §6.3 がその現在の姿です）
 
 **本書には現在の設計だけを現在形で書きます。** 第1部「決まったこと」は、実装を担当する人が**第1部だけを読めば着手できる**ことを目標に書いてあります。第2部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
 
@@ -19,12 +19,12 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済みで、記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02 にある。**マスク受け渡し契約の正本は本書 §6** であり、台帳側の応用先（§4-8(C)・§4-25）は本書を参照するだけで契約を作り直さない |
 | [`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) | 部分フィルタの枠を追跡AIに追わせる機能の設計正本。本機能はその結果を**入力元の1つとして受けるだけ**で、依存はしない（§11） |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) §0 | 保存領域の設計原則。追尾と違い、本機能は `uploads/` と `outputs/` の両方に書くので**適用対象**である（§8） |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 | エンジンごとの機能スコープの正本。LTX 2.5 が本機能を断る仕組みはここに従う |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105 | **実測値の正本。** スパイクの数値・ffmpegの契約の実測・回帰の指紋・実機ゲートの結果はすべてここにあり、本書には書き写さない |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 | エンジンごとの機能スコープの正本。本機能は両エンジンで動くので、いまはどちらもここで断らない（§6.3） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105・§107 | **実測値の正本。** スパイクの数値・ffmpegの契約の実測・回帰の指紋・実機ゲートの結果はすべてここにあり、本書には書き写さない（§105＝第1弾、§107＝LTX 2.5 への対応） |
 | [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 | AviUtl2本体の実機確定知見。空きレイヤーの自動確保、エイリアスの `frame=` が両端を含むこと、中間点つきの実書式の正本 |
 | [`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) | 右クリックメニューの項目一覧と種別ガードの正本。本機能は通し番号 **#22・#23** を使い、オブジェクト右クリックは16→18項目になる |
 | [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | プラグインと操作パネルのあいだの契約の正本。応答の封筒（`{ id, ok, error: { code, message } }`）と一時ファイルの所在の表 |
-| [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16 | 実機ゲートの手順と合格条件の正本（§9） |
+| [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16・§4.17 | 実機ゲートの手順と合格条件の正本（§9）。§4.16＝第1弾、§4.17＝LTX 2.5 への対応 |
 
 ---
 
@@ -270,13 +270,18 @@ inpaint:
 
 ### 6.3 LTX 2.5 での扱い
 
-**LTX 2.5 は本機能を持ちません。** 断り方は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 の仕組みにそのまま乗せます——LTX 2.5 のエンジンアダプタの拒否表に `inpaint` を1行足すだけで、次の3つが自動的に成立します。
+**LTX 2.3 でも LTX 2.5 でも使えます。** 上の契約（§6.1・§6.2）はエンジン系統に依存しません——要求の形も、ブロックの4つのフィールドも、検証の規則も、エラーの符号も同じです。LTX 2.5 側の駆動部は `engine25/inpaint25.py` で、使う制御アダプタは **LTX 2.3 が配布している In-Outpainting IC-LoRA そのもの**です（公式の手引きも公式のワークフローもこの組み合わせです。裏づけは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107.1）。
 
-1. LTX 2.5 で `inpaint` を送ると 422 `FEATURE_UNSUPPORTED` で断られる。
-2. `GET /models` の `unsupported_features` に `inpaint` が並ぶ。
-3. 操作パネルがそれを読み、**LTX 2.5 を読み込んでいるあいだ Inpainting サブタブを灰色にする。**
+**LTX 2.5 側だけの違いは4点あります。どれもエンジンの内側の話で、契約には現れません。**
 
-**LTX 2.3 側には何も足しません。** 宣言していない系統は「制限なし」として素通りする、という既定の向きのままです。
+- Stage-1 のサンプラ（ノイズを取り除く手順）が ancestral 型である。
+- Stage-2 は Stage-1 の音声を持ち越して、もう一度凍結する。
+- 推論の囲みが `torch.no_grad` である（系統ごとの規約は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.8）。
+- ブレンドと外側の復元を刻む塊の大きさが、`pixel_step` で決まる。
+
+**`metadata.json` の `inpaint` ブロックは、LTX 2.5 のほうが厚くなります。** §7.6 のキーに加えて、LTX 2.5 の画角拡張が持っている事実（音声の凍結の証明・音声の分岐・元の素材に音声があったかどうかなど）と、外側の復元の VRAM の峰 `restore_peak_vram_mb` が載ります。**`mask_proof` は両方のエンジンが同じ形で書きます。**
+
+**エンジンごとに機能を断る仕組みそのものは残してあります**（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6）。いまはどちらのエンジンも `inpaint` を断らないので、**Inpainting サブタブを灰色にするエンジンはありません。**
 
 ## 7. バックエンドの仕組み
 
@@ -359,7 +364,7 @@ inpaint:
 | G5 | マスクの描画。一時オブジェクトが残らず、レイヤーの表示が元どおり。元に戻すが2段で、利用者のオブジェクトが壊れない。書き出したmp4の白黒が正しく、ぼかしは灰色の勾配になり、中間点の動きに追従している |
 | G6 | **枠が動く部分フィルタでの生成。** 仮オブジェクトが窓の位置に出て、完成動画が素材と同じ解像度・同じ長さで、マスクの外が元のまま、内側が描き替わり、描き替えが枠の動きに追従している。音声は元のまま |
 | G7 | 追尾中のGenerateが断られ、追尾は壊れない（逆も） |
-| G8 | LTX 2.5 を読み込んでいるあいだ Inpainting サブタブが灰色 |
+| G8 | LTX 2.5 を読み込んでいるあいだ Inpainting サブタブが生きていて、生成が完走する（**第1弾では逆向きで、灰色になることが合格条件だった**——LTX 2.5 への対応が入った時点で反転した。§6.3・[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.17） |
 | G9 | 部分フィルタを消してからGenerateすると「もう一度右クリックしてください」で止まる |
 | G10 | **回帰**——既存の画角拡張ジョブの出力が改修前と同一（**LTX 2.3 と LTX 2.5 の両方**）。撮り直し・追尾・切り抜きが従来どおり動く |
 
@@ -367,11 +372,10 @@ inpaint:
 
 ## 10. 第1弾に入れないもの
 
-次は**意図的に入れません。** 必要になったときに、別の課題として足します。
+次は**意図的に入れません。** 必要になったときに、別の課題として足します。**この一覧にあった「LTX 2.5 への対応」は、2026-09-15 に足しました**（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150。現在の姿は §6.3）。
 
 - **時間軸ののりしろ**（§17）。画面には灰色の見本だけを置きます。
 - **マスク描画の停止ボタンと、停止用の呼び出し**（§18）。
-- **LTX 2.5 への対応**（§6.3）。
 - **マスク動画そのものをファイルとして受け取る導線。** マスクは常にAviUtl2が作ります。
 - **マスクの可視化**（§13）。タイムラインにも操作パネルにも出しません。
 - **チェーン（クリップ連結）への展開。**
@@ -436,6 +440,8 @@ inpaint:
 したがって**まず画角拡張経路を試し、成立すれば第二の候補は走らせません。** 成立の判定は最初の実験の数値とオーナーの目視で行い、判定の基準と結果は §105 が正本です。
 
 なお**新しいモジュールを1つ足す形**にし、画角拡張の本体を作り替える形は採りませんでした。共通化すると差し替え点が6か所以上に散り、切り替えのための引数だらけの関数になります。**画角拡張への変更を「音声まわり3か所の純粋な切り出し」に限定すれば、既存の出力が1バイトも変わらないことを機械で確かめられます**（§9のG10）。
+
+**LTX 2.5 への対応も、まったく同じ形で足しました。** 新しいモジュールをもう1つ（`engine25/inpaint25.py`）足し、LTX 2.5 の画角拡張への変更は**6区間の純粋な切り出し**に限り、同じG10をもう一度両エンジンで走らせて出力が変わっていないことを確かめています。**共有するのは幾何と外側復元とブレンドだけ**で、2つの駆動部は別々のファイルに置いたままです——2つのエンジンは推論の囲みもサンプラも音声の扱いも違うので、1本にまとめると結局そこが引数になります（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107、現在の姿は §6.3）。
 
 ## 16. 余白を請求に載せない理由
 
@@ -522,9 +528,9 @@ inpaint:
 ## 参照
 
 - マスク受け渡し契約の正本: **本書 §6**（応用先は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-25〔AviUtl2側で作ったマスクの受け口〕・§4-8(C)〔参照条件のマスクの露出〕で、どちらも本書 §6 を参照する）
-- 台帳の記録: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（完結の記録）
-- 実測値と検証の記録: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105（**本書は数値を持ちません**）
-- 実機ゲートの手順: [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16
+- 台帳の記録: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾の完結の記録）・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150（LTX 2.5 への対応）
+- 実測値と検証の記録: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105・§107（**本書は数値を持ちません**）
+- 実機ゲートの手順: [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16・§4.17
 - LTX-2 公式リポジトリ: <https://github.com/Lightricks/LTX-Video>
 - ComfyUI-LTXVideo（公式のノード実装。領域インペイントの参照実装）: <https://github.com/Lightricks/ComfyUI-LTXVideo>
 - In-Outpainting LoRA のモデルカード: <https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting>

@@ -12279,3 +12279,126 @@ Inpainting は「AviUtl2 の部分フィルタから作ったマスク動画の�
 - **加速を全onにすると、境界のすぐ内側で判定が線上へせり上がる。** 1280×768 の 44,160 は既定構成で2回とも快適（+223.5／+223.4）だが、全onでは+304.1／+289.1で割れた。**「この系統の線は加速設定によらない」という現行の前提は、おおむね保たれるが境界のすぐ内側では余裕が無い。**
 - **反映の判断はオーナーである。** 単一の線を引くとすれば安全側は40,320、896×1152 の割れた点を線の上と読むなら3つの最小は42,840になる。**どちらを採るか、そもそも変換器別に線を配る仕組みを作るかは決めていない。**
 - **一次記録のフォルダには48本ぶんのジョブの出力が残っている**（削除の判断用に、ラベルとジョブIDの一覧を一次記録の第8.2節に置いた）。
+
+## 107. ★Inpainting（マスクによる部分再生成）を LTX 2.5 でも使えるようにした（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150）＝機械ゲート全緑・G10の回帰指紋は両系統でビット一致・実GPUゲート合格。**残るはオーナーの目視だけ**（2026-09-15。設計正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md)）
+
+> **本節の読み方**: §105 が Inpainting 第1弾（LTX 2.3 専用）の記録で、本節はその続きである。**LTX 2.3 側で触ったのは「関数を1つ別のファイルへ移した」1点だけ**である（§107.2）。ブランチは `feature/inpainting-ltx25`、対象のコミットは `192e536`（台帳への起票）・`657225a`（切り出しと移動）・`17ee3ed`（本体）・`e1512b7`（敵対的レビューの反映）である。
+
+### 107.1 リサーチの結論 — 2.5 専用の道具は要らず、新しく書くのは駆動部だけ
+
+着手前の論点は「LTX 2.5 で Inpainting を動かすのに、2.5 専用の制御アダプタ（In-Outpainting IC-LoRA）や別の仕組みが要るか」だった。**要らない、というのが結論である。**
+
+- **公式の手引き**（docs.ltx.io の「Inpainting and Outpainting」）は、**LTX 2.5 の蒸留本体に LTX 2.3 の In-Outpainting IC-LoRA をそのまま載せる**と明記している。
+- **公式の ComfyUI 用ノード集**（ComfyUI-LTXVideo）の `example_workflows/2.5/` には、`LTX-2.5_ICLoRA_Inpaint_Two_Stage_Distilled.json` と、同じ形の画角拡張用のワークフローの2本が入っている。緑の目印・二段構成・ラプラシアンピラミッドのブレンドまで、当方の実装と同じ筋である。
+- **2.5 専用の In-Outpainting LoRA は存在しない。** モデルカードも「2.3 の LoRA の大半は 2.5 でそのまま動く」と述べている。
+- **否定的なコミュニティ報告は1件だけ**だった（別実装 Wan2GP の課題票。2026-08-14。「2.3 の LoRA は 2.5 でうまく動かない」とあるだけで、詳細も再現手順も無い）。当方が 2026-08-29 に採った画角拡張の実測（同じ LoRA で緑の残り 0.000000、LoRA を外した対照は 0.999817。§79.2）と、公式ワークフローの存在に反する。
+
+**オーナーの裁定（2026-09-15）は「スパイクを挟まない」ことである。** 代わりに、実装後の実GPU判定を合格条件つきの関門にした（§107.5）。
+
+### 107.2 何を変えたか — ファイルと関数
+
+| 変えた場所 | 内容 |
+|---|---|
+| `engine25/inpaint25.py`（**新設**） | LTX 2.5 用の駆動部 `run_inpaint`。`outpaint25.run_outpaint` と同じ骨格で、囲みは `torch.no_grad`（2.5 の家法。[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.8）、Stage-1 は ancestral サンプラ、Stage-2 は Stage-1 の音声を持ち越して再凍結、マスクは**貼ってから半分に**落とし、脱緑を2回、新しい計測フェーズ `31_restore` で外側の復元と `mask_proof`、最後に右と下の余白を切り落として**納品寸（素材の寸法）**で報告する。幾何と外側復元は `engine/inpaint/canvas.py` を、ブレンドは `engine/outpaint/pyramid_blend.py` を素の import で共有する（写した関数はゼロ） |
+| `engine25/outpaint25.py` | `run_outpaint` の本文の順序を変えずに、6区間を関数へ切り出した（`_freeze_source_audio`・`_audio_init`・`_mux_audio`・`_encode_reference_conditionings`・`_reencode_stage2`・`_ltx25_block`）。ほかに `_require_frames` と `_canvas_u8` への `label` 引数（既定は `"outpaint"` で、変わるのはログの接頭辞だけ）と `OutpaintResult._JOB_KEY` |
+| `engine25/worker.py` | `inpaint` の分岐（画角拡張とは相互排他）。**完了イベントは副辞書**（`{"inpaint": result.metadata["inpaint"]}`）で送る——辞書の全体を送るとアプリ側の合成で入れ子になり、`metadata.json` のブロックの契約が壊れるためである。画角拡張の完了イベントの形は不変 |
+| `services/engines/ltx25/adapter.py` | 拒否表から `inpaint` の行を削除、`HONOURED_FIELDS` へ追加、ワーカーへ渡すブロックは LTX 2.3 と**同じキー順**で防護3つつき、結果は `inpaint=event.get("inpaint")` で中継する（`mask_proof` が `metadata.json` へ届くかどうかは、この1行で決まる） |
+| `engine/inpaint/canvas.py`／`engine/pipeline/inpaint_pipeline.py` | **LTX 2.3 側で触ったのはここだけである。** `_restore_and_measure_` を `engine/inpaint/canvas.py::restore_and_measure_` へ移し、2.3 はそこから別名で import する。**純粋な移動**で、本文は1文字も変えていない |
+| 操作パネル（webui） | **本体のコードは0行。** モックの固定値 `MOCK_UNSUPPORTED_FEATURES.LTX25` から `inpaint` を外したほかは、テストと注釈だけである（記録の正本はフロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §117） |
+| **無改修** | `api/`・`services/pipeline_manager.py`・`services/engines/__init__.py`・`engine/outpaint/*`・操作パネル本体・`.aux2`（サブタブの灰色はサーバーの `unsupported_features` だけで決まるので、再ビルドも配備も要らない） |
+
+### 107.3 機械検証 — 4つの環境で全緑
+
+| 項目 | 値 |
+|---|---|
+| アプリ venv `python -m pytest tests` | **2,403 passed / 49 skipped** |
+| LTX 2.3 `.venv-engine` | **321 passed**（`657225a` の移動で 319 → 321。`17ee3ed` 以降は不変＝2.3 のコードが動いていないことの裏づけの1つ） |
+| LTX 2.5 `.venv-engine-ltx25` | **270 passed**（`657225a` で 221 → 227、`17ee3ed` で 271、`e1512b7` で空振りのテスト1件を削って 270） |
+| webui `npm run typecheck` | エラー **0** |
+| webui vitest（`npx vitest run --exclude src/api/backend.integration.test.ts`） | **146ファイル・2,925件** |
+| webui lint | 警告 **31本**（不変） |
+
+**LTX 2.5 の仮想環境には pytest が入っていない**ので、対象ファイルを引数で受けるランナー `outputs/start-end-bridge-2026-09-07/implA_engine_runner/run_ltx25_pytest.py` を `--noconftest` つきで使う。**着手前の 221 件を再現する一覧は次の8ファイルである**（Inpainting で新設した2ファイル `test_ltx25_inpaint.py`〔31件〕と `test_worker_ltx25_inpaint_dispatch.py`〔12件〕は、これに加える）。
+
+```
+test_ltx25_band, test_ltx25_outpaint, test_ltx25_reference_encode,
+test_ltx25_keep_resident_registry, test_retake_math,
+test_outpaint_canvas, test_outpaint_pyramid_blend, test_inpaint_geometry
+```
+
+`e1512b7` でアダプタ側のテストを monkeypatch 方式へ直したので、アプリ venv で `test_ltx25_adapter`・`test_ltx25_api_guard`・`test_inpaint_geometry` の3ファイルだけを走らせた確認も採ってある（**291 passed / 19 skipped**）。
+
+### 107.4 G10 回帰指紋 — 画角拡張の出力は LTX 2.3・LTX 2.5 とも改修前とビット一致
+
+**何を確かめたか**: 本テーマは `engine25/outpaint25.py` の6区間を切り出しているので、**既存の画角拡張の出力が1バイトも変わっていないこと**を、固定シードの実ジョブで確かめた。道具と標本は §105.8 と同じである（`outputs/inpaint_regression/fingerprint_outpaint.py`。素材 1280×768・121フレーム、キャンバス 1536×896、余白 128/128/64/64、のりしろ 5／2、`in-outpainting` 1.0、シード 1234）。
+
+| 回 | 対象 | 系統 | ジョブ | 記録 | SHA-256 | 判定 |
+|---|---|---|---|---|---|---|
+| 1回目 | `657225a`（切り出しだけ・呼び出し元ゼロ） | ltx25 | `7eb96d92` | `runs/20260915T005217Z-ltx25` | `7c731a03bafdc41a…` | **PASS** |
+| 2回目 | `17ee3ed` | ltx | `176bbf5d` | `runs/20260915T014320Z-ltx` | `6baa2c77fe835316…` | **PASS** |
+| 2回目 | `17ee3ed` | ltx25 | `842a25f5` | `runs/20260915T014632Z-ltx25` | `7c731a03bafdc41a…` | **PASS** |
+| 3回目 | `e1512b7` | ltx25 | `13d13221` | `runs/20260915T020440Z-ltx25` | `7c731a03bafdc41a…` | **PASS** |
+
+**1回目を切り出しのコミット単独で走らせたのは、退行が出たときに「6か所の移動」と「新しい駆動部」を切り分けられるようにするためである**（退行が無かったので、この切り分けは使わずに済んだ）。
+
+**「改修前」の脚は走らせていない。** 2026-09-14 に**同じ機体**で採って `outputs/inpaint_regression/fingerprints.json` に残っている指紋（`ltx` ＝ `6baa2c77…`／`ltx25` ＝ `7c731a03…`。§105.8）を、そのまま改修前の値として使った。作業ツリーを立てて改修前の脚を起こす手順は、**食い違いが出たときにそのまま打てる命令列**として `outputs/inpaint_regression/RUNBOOK.md` の「G10 の再現手順」に書いてある。
+
+### 107.5 実GPUゲート — 製品のHTTP経路で LTX 2.5 の Inpainting が完走し、全項目が合格側
+
+**判定は全項目で合格側である。** 標本は §105.3 のスパイクと同じ長方形のマスク（素材 1280×768・121フレーム・24fps、マスク 480×608、アーム `remove_full`、シード 1234、のりしろ 5／2、In-Outpainting LoRA 1.0）。投入は `outputs/inpaint_regression/submit_inpaint.py` による**製品のHTTP経路**（アップロード → `POST /generate` の `inpaint` ブロック → `GET /jobs` の監視 → `outputs/<ジョブ>/metadata.json`）で、**同じ入力を LTX 2.3 でも走らせて対照にした。**
+
+| 見るもの | LTX 2.5（ジョブ `843c2d64`） | LTX 2.3 対照（ジョブ `9fe5245a`） |
+|---|---|---|
+| 生成時間 | **157.95 秒** | 192.25 秒 |
+| VRAM の峰（`peak_vram_reserved`） | **7,328 MB** | 16,840 MB |
+| `vram_optimization.peak` | 6,952 MB | 8,569 MB |
+| ブレンド1／ブレンド2の峰 | 572 ／ 2,216 MB | 8,452 ／ 8,986 MB |
+| 復元（`31_restore`）の峰 | 164 MB | —（この計測フェーズは 2.5 の駆動部で新設したものである） |
+| `mask_proof` | `decoded_frames` 121・`white_ratio` 0.296875・`dilated_ratio` 0.411235 | **同一** |
+| `freeze_proof` | 合格 | — |
+| 音声 | 48kHz・240,640 サンプルを付け直した | — |
+
+**判定の数値**（`outputs/inpaint_regression/facts_from_job.py` が、製品のジョブの置き場をスパイクの解析器 `outputs/inpaint_spike/analyze_inpaint.py` が読む形へ橋渡しする）
+
+| 指標 | 合格線 | LTX 2.5 | LTX 2.3 対照 |
+|---|---|---|---|
+| 継ぎ目比 `P3_seam.seam_ratio_n` | ≤ 2.0 | **0.9854** | 0.9849 |
+| 時間軸比 `P4_temporal.ratio` | ≤ 2.0 | **0.5425** | 0.5376 |
+| 緑の残り（マスクの内側で (102,255,0) から各 ±8 以内にある画素） | 0 | **0.0**（35,312,640 画素中 0） | 0.0 |
+| P1 外側の同一性（解析器が独立に復元した絵との最大差） | 0 | **0** | — |
+| P2 マスクの内側の PSNR | 低いほど描き替わっている | 14.8 dB（合格） | — |
+| P5 | 合格 | 合格 | — |
+
+**外側が元のままであることは、数値ではなく作りで保証されている。** 両エンジンが**同じ `restore_and_measure_`** を呼び、単体テストがバイト一致を固定している（§107.2）。**`mask_proof` には外側の同一性を表す数値は入っていない**——中身は `decoded_frames`・`white_ratio`・`dilated_ratio` の3つだけである。
+
+**参考値（判定には使わない）**: 出力と窓 `_inpaint_window.mp4` の「マスクを58画素ぶん膨らませた外側」の PSNR は **35.75 dB（2.5）／34.51 dB（2.3）**だった。**両エンジンで同じ桁なので、これは駆動部の差ではなく標本の符号化の話である**（比べている2本がどちらも非可逆の mp4 だからである）。オーナーが 2026-09-14 の G6 で走らせたジョブを同じ道具で測ると 41.6／41.8 dB になる。
+
+**再実行で同じバイト列が出た（決定性の確認）。** 敵対的レビューの反映（§107.7、`e1512b7`）の後に同じ入力で LTX 2.5 をもう一度走らせたところ（ジョブ `6706fa72`、145.56 秒）、`output.mp4` の SHA-256 は最初のジョブ `843c2d64` と**完全に一致**した（`9a8826b5d8c864f7…`）。半解像度のマスク縮小に渡す塊サイズを 2.3 と同じ既定へ戻した変更が画素に影響しないことと、2.5 の Inpainting が同じシードで同じ絵を返すことの両方が、この1本で確かめられている。
+
+### 107.6 モック通し — 2.5 のモックでも Inpainting のジョブが完走する
+
+一時設定でモックのバックエンドを起動して（ポート18623）確かめた。
+
+- `GET /api/v1/models` の LTX25 の `unsupported_features` が **`["two_stage_hq", "prune_vaed"]` の2語**になった。
+- LTX25 を選んだ状態で Inpainting のジョブが受理され、完走した（ジョブ `8be7e31f`、バックエンドの名乗りは `mock-ltx25`）。`metadata.json` の `inpaint` ブロックは**アプリ側の来歴11キー**である——**モックはエンジンのブロックを持たないので、これが期待どおりの形である。**
+- `two_stage_hq` と `prune_vaed` は従来どおり 422 `FEATURE_UNSUPPORTED` で断られる。
+
+### 107.7 敵対的レビューと指摘の採否
+
+`657225a`＋`17ee3ed` の差分を、読み取り専用の別エージェント（Opus）が見た。**必ず直すべき指摘は0件**である。
+
+| 重さ | 指摘 | 採否 |
+|---|---|---|
+| should-fix | `half_res_mask` へ渡す塊の大きさが LTX 2.3 と違う既定になりうる | **採用**（`e1512b7` で 2.3 と同じ既定へ） |
+| nit | `_canvas_u8` にも `label` を通す／空振りのテスト1件／アダプタのテストの monkeypatch 化 | **3件とも採用**（同じコミット） |
+
+レビューはあわせて、**`657225a` が純粋な移動であること**・計画の手順1〜14 がすべて実装されていること・**アプリ側の来歴のキーが両エンジンのブロックのキーと1つも重なっていないこと**を、独立に確かめた。
+
+### 107.8 残っているもの — オーナーの目視だけ
+
+**機械で確かめられるものは全部終わっている。** 残るのは次の2点で、手順の正本は [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) **§4.17** である。
+
+1. **LTX 2.5 を読み込んだ状態で Edit タブの Inpainting サブタブが生きていて、Generate が1本完走すること。**
+2. **枠が動く部分フィルタ**（2026-09-14 に LTX 2.3 で行った G6 に相当するもの）での生成を、LTX 2.5 で1本。
+
+**`.aux2` の再ビルドと配備は要らない**——操作パネル本体は無改修で、サブタブの灰色はサーバーが配る `unsupported_features` だけで決まるためである。

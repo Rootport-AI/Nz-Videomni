@@ -12,6 +12,7 @@ import type { BatchRunnerSettings } from "./batchRunner";
 import { IMAGE_SHARED } from "./manifestMerge";
 import type { BatchRow, BatchStat } from "./manifestMerge";
 import { __resetBatchRuntimeForTests, getBatchA2vRuntime } from "./runtime";
+import type { RunBatchA2vParams } from "./runtime";
 
 const POLL_MS = 4;
 const BACKOFF_MS = 4;
@@ -71,6 +72,7 @@ describe("batch A2V runtime", () => {
     const runtime = getBatchA2vRuntime();
     expect(runtime.getSnapshot()).toEqual({
       state: "idle",
+      mode: null,
       rows: [],
       wavDir: null,
       imgDir: null,
@@ -91,6 +93,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       imgDir: IMG_DIR,
       outDir: OUT_DIR,
@@ -123,6 +126,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       imgDir: IMG_DIR,
       outDir: OUT_DIR,
@@ -163,6 +167,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -190,6 +195,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -212,6 +218,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -236,8 +243,9 @@ describe("batch A2V runtime", () => {
     const fs = createMockFs();
     const bridge = createMockBridge({ delayMs: 0, runningPollCount: 3, fs });
     const runtime = getBatchA2vRuntime();
-    const params = {
+    const params: RunBatchA2vParams = {
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -271,6 +279,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       imgDir: IMG_DIR,
       outDir: OUT_DIR,
@@ -320,6 +329,7 @@ describe("batch A2V runtime", () => {
     const unsubscribeFirst = runtime.subscribe(vi.fn());
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -356,6 +366,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -383,6 +394,7 @@ describe("batch A2V runtime", () => {
 
     runtime.run({
       bridge,
+      mode: "a2v",
       wavDir: WAV_DIR,
       outDir: OUT_DIR,
       settings: SETTINGS,
@@ -396,6 +408,7 @@ describe("batch A2V runtime", () => {
     __resetBatchRuntimeForTests();
     expect(runtime.getSnapshot()).toEqual({
       state: "idle",
+      mode: null,
       rows: [],
       wavDir: null,
       imgDir: null,

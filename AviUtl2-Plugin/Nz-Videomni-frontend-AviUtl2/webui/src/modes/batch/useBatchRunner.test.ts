@@ -66,6 +66,7 @@ describe("useBatchRunner", () => {
     act(() => {
       result.current.run(
         {
+          mode: "a2v",
           wavDir: WAV_DIR,
           outDir: OUT_DIR,
           settings: BASE_SETTINGS,
@@ -102,6 +103,7 @@ describe("useBatchRunner", () => {
 
     act(() => {
       result.current.run({
+        mode: "a2v",
         wavDir: WAV_DIR,
         outDir: OUT_DIR,
         settings: BASE_SETTINGS,
@@ -123,6 +125,7 @@ describe("useBatchRunner", () => {
 
     act(() => {
       result.current.run({
+        mode: "a2v",
         wavDir: WAV_DIR,
         outDir: OUT_DIR,
         settings: BASE_SETTINGS,
@@ -149,6 +152,7 @@ describe("useBatchRunner", () => {
 
     act(() => {
       first.result.current.run({
+        mode: "a2v",
         wavDir: WAV_DIR,
         outDir: OUT_DIR,
         settings: BASE_SETTINGS,

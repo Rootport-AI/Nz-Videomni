@@ -42,7 +42,7 @@ import {
 import type { RunLockToken } from "../../shell/runLock";
 import { BatchRunner } from "./batchRunner";
 import type { BatchRunnerSettings, BatchRunnerState, BatchRunnerStartResult } from "./batchRunner";
-import type { BatchRow } from "./manifestMerge";
+import type { BatchMode, BatchRow } from "./manifestMerge";
 
 /** Everything a (re)mounted section needs to render — and keep driving — the
  * current run. Replaced wholesale on every change so it can be a
@@ -50,12 +50,17 @@ import type { BatchRow } from "./manifestMerge";
  * never build it on the fly). */
 export interface BatchA2vRuntimeSnapshot {
   state: BatchRunnerState;
+  /** Which kind of batch the current/most recent run is (D1), `null` before
+   * the first run — a remounted section restores its own scan mode from this
+   * rather than re-deriving it from folders the user may already have edited. */
+  mode: BatchMode | null;
   /** The live row list of the current/most recent run, or `[]` before the
    * first one. This is what makes a remount re-attach to a running batch. */
   rows: BatchRow[];
   /** The folders the current/most recent run was started with (`null` before
-   * the first run) — a remounted section can show what is actually running,
-   * not what its freshly-initialized form state happens to hold. */
+   * the first run; `wavDir` is also `null` for an i2v run, which has no audio
+   * folder) — a remounted section can show what is actually running, not what
+   * its freshly-initialized form state happens to hold. */
   wavDir: string | null;
   imgDir: string | null;
   outDir: string | null;
@@ -78,7 +83,9 @@ export interface BatchA2vRuntimeSnapshot {
  * so production keeps injecting the same default bridge every other hook uses. */
 export interface RunBatchA2vParams {
   bridge: NativeBridge;
-  wavDir: string;
+  /** Frozen scan mode (D1) — required, with no default. */
+  mode: BatchMode;
+  wavDir: string | null;
   imgDir?: string;
   outDir: string;
   settings: BatchRunnerSettings;
@@ -112,6 +119,7 @@ export interface BatchA2vRuntime {
 
 const IDLE_SNAPSHOT: BatchA2vRuntimeSnapshot = {
   state: "idle",
+  mode: null,
   rows: [],
   wavDir: null,
   imgDir: null,
@@ -189,6 +197,7 @@ const runtime: BatchA2vRuntime = {
     // finished and then jump straight to `Done` (owner-reported on the
     // i2v-long twin of this file, 2026-07-30).
     setSnapshot({
+      mode: params.mode,
       wavDir: params.wavDir,
       imgDir: params.imgDir ?? null,
       outDir: params.outDir,
@@ -200,6 +209,7 @@ const runtime: BatchA2vRuntime = {
 
     void instance
       .start({
+        mode: params.mode,
         wavDir: params.wavDir,
         outDir: params.outDir,
         settings: params.settings,

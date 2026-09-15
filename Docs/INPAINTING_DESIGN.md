@@ -5,8 +5,8 @@
 **生きた文書（Inpainting機能の設計正本）。** AviUtl2のタイムラインに置いた**部分フィルタ**（AviUtl2のメディアオブジェクトの一種。枠の内側だけに、後から足した効果を掛ける）の枠を白黒のマスク動画へ焼き、その白い領域の内側だけを動画生成モデルに描き替えさせる機能を記述します。**Inpainting**（インペインティング）とは、絵の一部を塗り潰して、その部分だけを作り直すことです。
 
 - 作成: 2026-09-14
-- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150（LTX 2.5 への対応）。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 §4-8(C)・§4-25 は本書を参照する）
-- 状態: 第1弾は完結し、main へ merge 済みです（完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105。作業ブランチ `feature/inpainting` は削除してあります）。**その後、LTX 2.5 への対応を台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150 で足しました**（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107。本書 §6.3 がその現在の姿です）
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾＝LTX 2.3 の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、同書 §3-150（LTX 2.5 への対応の完結の記録）。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-8(C)・§4-25 は本書を参照する）
+- 状態: **完結（LTX 2.3・LTX 2.5 の両方で提供しています）。** どちらも main へ merge 済みです。第1弾の完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105 です。LTX 2.5 への対応の完結の記録は同じく [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-150、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107 で、LTX 2.5 での姿は本書 §6.3 です
 
 **本書には現在の設計だけを現在形で書きます。** 第1部「決まったこと」は、実装を担当する人が**第1部だけを読めば着手できる**ことを目標に書いてあります。第2部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
 
@@ -16,7 +16,7 @@
 
 | 文書 | 関係 |
 |------|------|
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済みで、記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02 にある。**マスク受け渡し契約の正本は本書 §6** であり、台帳側の応用先（§4-8(C)・§4-25）は本書を参照するだけで契約を作り直さない |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済みで、記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾）・§3-150（LTX 2.5 への対応）にある。**マスク受け渡し契約の正本は本書 §6** であり、台帳側の応用先（§4-8(C)・§4-25）は本書を参照するだけで契約を作り直さない |
 | [`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) | 部分フィルタの枠を追跡AIに追わせる機能の設計正本。本機能はその結果を**入力元の1つとして受けるだけ**で、依存はしない（§11） |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) §0 | 保存領域の設計原則。追尾と違い、本機能は `uploads/` と `outputs/` の両方に書くので**適用対象**である（§8） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 | エンジンごとの機能スコープの正本。本機能は両エンジンで動くので、いまはどちらもここで断らない（§6.3） |
@@ -372,7 +372,7 @@ inpaint:
 
 ## 10. 第1弾に入れないもの
 
-次は**意図的に入れません。** 必要になったときに、別の課題として足します。**この一覧にあった「LTX 2.5 への対応」は、2026-09-15 に足しました**（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150。現在の姿は §6.3）。
+次は**意図的に入れません。** 必要になったときに、別の課題として足します。**この一覧にあった「LTX 2.5 への対応」は、2026-09-15 に足して完結しました**（記録は台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-150。現在の姿は §6.3）。
 
 - **時間軸ののりしろ**（§17）。画面には灰色の見本だけを置きます。
 - **マスク描画の停止ボタンと、停止用の呼び出し**（§18）。
@@ -528,7 +528,7 @@ inpaint:
 ## 参照
 
 - マスク受け渡し契約の正本: **本書 §6**（応用先は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-25〔AviUtl2側で作ったマスクの受け口〕・§4-8(C)〔参照条件のマスクの露出〕で、どちらも本書 §6 を参照する）
-- 台帳の記録: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾の完結の記録）・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150（LTX 2.5 への対応）
+- 台帳の記録: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾の完結の記録）・同書 §3-150（LTX 2.5 への対応の完結の記録）
 - 実測値と検証の記録: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105・§107（**本書は数値を持ちません**）
 - 実機ゲートの手順: [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.16・§4.17
 - LTX-2 公式リポジトリ: <https://github.com/Lightricks/LTX-Video>

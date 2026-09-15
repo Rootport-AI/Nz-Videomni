@@ -42,12 +42,6 @@
 - **出典**: オーナー発案（Inpainting実機ゲート中の観察）。
 - **状態**: 将来の研究課題（着手時期未定）。
 
-#### 3-150. InpaintingをLTX 2.5でも使えるようにする（起票：2026-09-15）
-
-- **概要**: Inpainting（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md)）は第1弾がLTX 2.3専用で、LTX 2.5のアダプタは`inpaint`を拒否表で断っていた（対応後の姿は同§6.3）。公式のLTX 2.5向けInpaintingワークフローは「LTX 2.5の蒸留本体＋LTX 2.3のIn-Outpainting IC-LoRA」という当方の画角拡張と同じ組み合わせで、緑の目印・二段構成・ピラミッドブレンドも同じ。当方で新しく要るのはLTX 2.5エンジン側の駆動部（`engine25/inpaint25.py`）とマスク動画のデコード、ワーカーの分岐、アダプタの拒否行削除と結果の中継だけで、API・アップロード・ffmpegの窓とマスク作成・操作パネル本体は無改修（サブタブの灰色は`unsupported_features`から`inpaint`が消えれば自動的に解ける）。
-- **出典**: オーナー発案（2026-09-15）。CLOSED §3-55-02の「後継: LTX 2.5への対応は別途」の引き取り。
-- **状態**: 実装完了・実機ゲート合格・オーナー目視待ち（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107）。ブランチは`dev`（2026-09-15の運用変更で`feature/inpainting-ltx25`から改名）。目視の2項目は[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.17。
-
 ### 研究課題（上の改修項目より優先度が下）
 
 #### 3-1. バッチA2Vのα版で意図的に省略した機能

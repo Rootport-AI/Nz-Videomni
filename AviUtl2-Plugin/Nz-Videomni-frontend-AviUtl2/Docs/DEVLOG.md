@@ -4458,3 +4458,7 @@ vitest **146ファイル・2,925件**（`npx vitest run --exclude src/api/backen
 ### 117.4 残っているもの
 
 **オーナーの目視2点だけである**——①LTX 2.5を読み込んだ状態でInpaintingサブタブが生きていてGenerateが完走すること、②枠が動く部分フィルタでの生成をLTX 2.5で1本。手順は[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) **§4.17**にある。**§4.16のG8は合否が反転した**——「LTX 2.5では灰色のまま」が合格条件だった項目が、「灰色が解ける」が合格条件になった。
+
+### 117.5 完結（オーナー目視合格・2026-09-15）
+
+上の目視2点は同日2026-09-15にオーナーが実施して両方とも合格し（LTX 2.5を読み込んだ状態でInpaintingサブタブが生きてGenerateが完走し、描き替えの結果も正しかった）、本テーマはクローズした（台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-150、記録の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §107.8）。

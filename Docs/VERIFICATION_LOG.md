@@ -12406,3 +12406,70 @@ test_outpaint_canvas, test_outpaint_pyramid_blend, test_inpaint_geometry
 **`.aux2` の再ビルドと配備は要らなかった**——操作パネル本体は無改修で、サブタブの灰色はサーバーが配る `unsupported_features` だけで決まるためである。
 
 **これで本テーマは完結である。** 台帳の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) **§3-150**（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-150 は欠番になった）。`dev` は main へ merge 済みである。
+
+## 108. ★バッチパネル（Create画面）へ、音声フォルダ不要のi2vモードを追加した（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-30）＝機械ゲート全緑・**実機ゲートG1〜G12合格（LTX 2.3）・クローズ待ち**（2026-09-15。設計正本は [`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md)）
+
+> **本節の読み方**: 対象は Create 画面のバッチパネル（従来「バッチA2V」と呼んでいた節）である。音声フォルダを指定せず画像フォルダだけを指定したときに、画像1枚につき動画を1本作る **i2v モード**を追加した。あわせて、行画像の生成強度の規則を a2v・i2v 共通の1つへ揃えた（それまで a2v の行画像だけ強度 1.0 固定だった）。スコープは**フロントエンドのみ**で、バックエンド（`api/`・`engine/`・`engine25/`）は1行も触っていない。ブランチは `dev`、対象のコミットは `ab79e64`（1/3 純ロジック）・`7c00993`（2/3 配線）・`d6f0298`（3/3 UIとi18n）である。
+
+### 108.1 リサーチの結論 — 422根拠と画像の扱い
+
+**i2v行が`POST /generate/chain`ではなく`POST /generate`へ行く理由（実地確認済み）**:
+
+- `api/models.py`のバリデータは、`source_video`／`source_audio`／`reference_video_id`／`retake`／`end_source`のいずれも指定しないチェーンについて、`clips`が2本未満だと422（「チェーンには最低2クリップが必要」）で拒否する。
+- 既存のバッチa2vビルダー（`buildA2vChainPayload`）は`stage2_window: "full_length"`を必ず送る作りだが、このフィールドは`source_audio`が無いと422になる。
+
+i2v行は音声を持たない1クリップの生成なので、この2つの理由のどちらからも`/generate/chain`には乗れない。単発生成と同じ`POST /generate`（`GenerateRequest`）へ送るのが、バックエンドを一切変えずに済む唯一の経路である。
+
+**画像の扱い（本書で初めて文書化する事実）**: バッチパネルの行画像は、フロントエンド（webui・ネイティブブリッジ・アップロードストア）のどこでもリサイズ・クロップされない。生成サイズと縦横比が違う画像は、両エンジン（LTX 2.3・LTX 2.5）の`ltx_pipelines`が持つ共通の関数（覆うように拡縮してから中央で切り出す）にそのまま委ねられる。これは単発i2v・チェーンi2v・今回のバッチi2vのすべてで共通の既存挙動であり、今回新しく変えた事実ではなく、初めて文書に書き起こしたものである。
+
+**バッチパネルはLTX 2.5でも動作する（訂正）**: ゲート`unavailable`（`featureScope.ts`の`batchA2vDisabledFor`）は、読み込んでいるエンジンの`unsupported_features`に`chain`または`a2v`が含まれるときだけ真になる。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2v・バッチi2vのどちらも、今回の改修より前から既にLTX 2.5で動作する。** §108.5の実機ゲートをLTX 2.3だけで実施したのは、コードがLTX 2.5を塞いでいるからではなく、**検証の範囲をひとまずLTX 2.3に絞った**というスコープの判断である。LTX 2.5での実機確認は台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-151に別項目として起票してある。
+
+### 108.2 変更 — 3コミットの要約
+
+| コミット | 内容 |
+|---|---|
+| `ab79e64`（1/3 純ロジック） | `manifestMerge.ts`へ`BatchMode`・`scanModeFor`・`scanImagesToBatchRows`・`rejudgeI2vRows`を追加。`buildI2vGeneratePayload.ts`を新設（`useGenerationForm`の`toGenerateRequest`とバイト等価であることをテストで固定）。`buildA2vChainPayload.ts`の行画像`strength`を固定`1.0`から必須引数`rowStrength`へ変更。`batch-i2v-long/imageRows.ts`の`compareByName`をexport化し、両バッチ機能で自然順ソートを共用する |
+| `7c00993`（2/3 配線） | `useBatchForm.ts`でスキャン時にモードを決定（音声フォルダ無し＋画像フォルダ→i2v）、画像拡張子を`/config`の`upload.allowed_image_extensions`へ一本化、出力先自動導出を1関数（`_a2v_out`／`_i2v_out`）へ統一、入力フォルダ変更時に行を一律クリアする規則を新設。`batchRunner.ts`にi2v経路（音声アップロード無し・`POST /generate`・出力名は画像名の語幹）を追加。`runtime.ts`／`useBatchRunner.ts`は`mode`（必須）と`wavDir: string \| null`をスナップショット・走行パラメータへ通す |
+| `d6f0298`（3/3 UIとi18n） | `BatchTable.tsx`がi2vモードで音声セルを固定ラベル「i2vモード」に置き換え。`BatchSection.tsx`が`chunked_upsample`をi2vで無効化し、DURATIONが8n+1グリッドを外れたときの警告を追加。`i18n/strings.ts`の`batch`ブロックの案内文3件を言い換え |
+
+### 108.3 機械検証
+
+| 項目 | 変更前（2026-09-15ベースライン） | 変更後 |
+|---|---|---|
+| webui vitest（`npx vitest run --exclude '**/backend.integration.test.ts'`） | 146ファイル・2,925件 | **147ファイル・2,974件**（+49＝新規機能テスト48件＋レビュー後追加1件） |
+| webui `npm run typecheck` | エラー0 | エラー0（不変） |
+| webui lint | 警告31本 | 警告31本（不変） |
+
+### 108.4 レビュー — 計画と実装、それぞれ敵対的レビュー1回
+
+**計画の敵対的レビュー（Opus）**: 指摘13件のうち11件を採用、2件を不採用とした。不採用の2件は、列見出し「音声ファイル」をi2vでも据え置く判断（D2どおり）と、`outDirIsAuto`の走行中リマウント復元を今回のスコープへ持ち込む提案（既存裁定に反する過剰設計と判断）である。
+
+**実装の敵対的レビュー（Opus）**: Critical・Majorは0件、Minorが12件。うち10件を採用（stale化したdocコメントの現在形への訂正7件、テストの補強3件）、2件を不採用とした。不採用の2件は、同一フォルダの選び直しで行をクリアする挙動（既存の`pickWavDir`と同じ作法で一貫している）と、画像フォルダ変更時に`scanError`もクリアする挙動（「スキャン由来の状態は落とす」という既存規則と一貫している）である。
+
+### 108.5 実機ゲート G1〜G12 — 全項目合格（2026-09-15、LTX 2.3）
+
+手順と合格条件は[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.18が正本で、本節には結果だけを記録する。テストフォルダは`D:\For_Downloads\rename`（1280×768が3枚＋別サイズ1枚。Create画面の生成サイズは1280×768）。**LTX 2.3だけで実施したのは108.1のとおりスコープの判断であり、コードの制約ではない。**
+
+| # | 操作 | 合格条件 | 結果 |
+|---|---|---|---|
+| G1 | 音声フォルダ空欄・画像フォルダに`rename` | 「フォルダをスキャン」が押せる | 合格 |
+| G2 | スキャン | 4行。自然なファイル名順 | 合格 |
+| G3 | 表 | 音声列が全行「i2vモード」／長さ列がCreateの尺（秒）／画像列が各行のファイル名 | 合格 |
+| G4 | 出力フォルダ欄 | `…\rename_i2v_out`が自動で入る | 合格 |
+| G5 | チェックボックス | `chunked_upsample`が灰色 | 合格 |
+| G6 | 開始→完走 | 4本。`{画像名}.mp4`。同名既存なら付番 | 合格 |
+| G7 | 別サイズ画像の出力 | 歪まず、はみ出しが切れている（バックエンドの中央クロップ） | 合格 |
+| G8 | 1行をSharedにして再実行 | KEYFRAMES先頭画像で生成。空なら開始不可＋既存警告 | 合格 |
+| G9 | 強度の機械確認 | 出力metadata JSONの`conditioning_images[0].strength`が、カード有りならカード値・カード無しなら0.8 | 合格（詳細は下記） |
+| G10 | a2v退行（音声フォルダ指定） | 音声ごとに行、出力`{音声名}.mp4`、出力先`_a2v_out`。行画像のstrengthがmetadataで案Aの値（1.0ではない） | 合格 |
+| G11 | a2vの目視（案Aの代償確認） | 行画像を使ったa2v出力の顔の追従が実用上問題ないか（オーナー判断） | 合格 |
+| G12 | （任意）走行中リマウント | i2vバッチが生き残り進捗が出続ける | 未実施だが合格扱い（オーナー裁定） |
+
+**G9の詳細（監督が読み取り専用で確認、2026-09-15 23:18〜23:41 JST）**: バッチ起源のジョブ14件の`outputs/{job_id}/metadata.json`を読んだ——i2v行12件（4枚の画像フォルダを、1280×768/121フレーム・960×576/73フレーム・1280×768/73フレームの3条件で計3回投入）と、a2vのチェーン行2件。**全件で`conditioning_images[0].strength`が0.8であり、旧来の固定1.0は1件も無かった。** i2vのリクエストはいずれも`conditioning_images`が1枚（`frame_idx: 0`）だけで`source_audio`欄を持たず、a2vのリクエストはいずれも`source_audio`と`clips[0].conditioning_images`を持つチェーンだった——両モードの弁別もこの標本で一致している。a2vの2行とi2vの1行は同じ`image_id`を共有しており、Sharedカードが使われたこと（G8）と整合する。**カードが既定値0.8のままだったため、この標本だけでは「カードの値」と「フォールバックの0.8」を判別できない**——カードの値を動かした場合の経路（strength 0.55のケース）は単体テストで別途固定済みである（§108.4）。
+
+### 108.6 申し送り
+
+- **`outDirIsAuto`が走行中リマウントで復元されない設計に、2つ目の発火条件が増えた。** 既存の裁定（音声フォルダ変更が契機）に加え、今回から画像フォルダの変更も出力先自動導出を再計算する契機になった。根治はリマウント復元方針の変更で、今回のスコープ外のまま残っている。
+- **`ALLOWED_AUDIO_EXTENSIONS`（`manifestMerge.ts`）は今回もハードコードのまま。** 画像側の拡張子だけが`/config`の`upload.allowed_image_extensions`へ寄ったため、音声側とのあいだで正典の持ち方が二重管理のまま残っている。
+- **Gradio側i18n（`gradio_ui/i18n.py`）の「参照動画はリサイズされるので歪む」という文言は、コードの実際の挙動（中央クロップ）と食い違ったままの文書バグである。** 108.1の画像の扱いの事実（拡縮して中央クロップ・歪みは生じない）と関連するテーマだが、Gradio側の文言修正は今回のスコープに含めていない。
+- **本節の一次調査は当初、バッチパネルがLTX 2.5で灰色になるという誤った前提で記述していた。** 発生源はコード側に残っていた古いdocコメント（§3-102クローズ前の「LTX 2.5がチェーン系列を丸ごと422で拒否する」という記述が、その後の変更に追随せず残っていたもの）と、それに沿ったi18nの案内文だった。文書レビューの過程でこの前提が実際のゲート判定（`featureScope.ts`の`batchA2vDisabledFor`）と食い違うことが判明し、本節・設計正本・台帳§3-151を訂正した（コード自体は今回変更していない）。

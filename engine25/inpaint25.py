@@ -439,11 +439,13 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
     stage2_values = _resolve_stage2_sigmas(stage2_sigmas)
     chunk_size = _blend_chunk_size()
     # THE INTEGER, not ``chunk_size``. ``_blend_chunk_size()`` returns None for
-    # "the default", which ``blend_video_u8`` understands and the four SHARED
-    # helpers below do NOT -- ``half_res_mask`` / ``fill_mask_with_generated_``
-    # / ``restore_and_measure_`` and the pixel chunking all take a plain int and
-    # would raise ``TypeError`` on None. 2.3 spells the same resolution
-    # ``blend_chunk = chunk_size or 8``; here the default already has a name.
+    # "the default", which ``blend_video_u8`` understands and the SHARED helpers
+    # below do NOT -- ``fill_mask_with_generated_`` / ``restore_and_measure_``
+    # and the pixel chunking all take a plain int and would raise ``TypeError``
+    # on None. 2.3 spells the same resolution ``blend_chunk = chunk_size or 8``;
+    # here the default already has a name. ``half_res_mask`` is NOT in that
+    # list: 2.3 calls it with its own default and so does this driver, so the
+    # two engines halve the mask in identically-sized steps.
     pixel_step = chunk_size or _PIXEL_CHUNK_FRAMES
 
     full_shape = VideoPixelShape(1, int(num_frames), height, width, float(frame_rate))
@@ -602,6 +604,7 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
             width=half_w,
             frame_cap=int(num_frames),
             device=device,
+            label=_LABEL,
         )
         _require_frames(
             "the stage-1 decode", int(stage1_pixels.shape[0]), int(num_frames),
@@ -629,7 +632,6 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
             ),
             half_h,
             half_w,
-            chunk_size=pixel_step,
         )
         # DE-GREEN, TWICE. The coarse pyramid levels mix the canvas' DC
         # component into the generated area whatever the mask says, so what
@@ -763,6 +765,7 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
             width=width,
             frame_cap=int(num_frames),
             device=device,
+            label=_LABEL,
         )[: int(num_frames)]
         _require_frames(
             "the stage-2 decode", int(stage2_pixels.shape[0]), int(num_frames),
@@ -822,6 +825,7 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
             width=width,
             frame_cap=int(num_frames),
             device=device,
+            label=_LABEL,
         )[: int(num_frames)]
         mask_proof = restore_and_measure_(
             blended=final_pixels,

@@ -2701,7 +2701,7 @@ def test_generate_payload_is_untouched_when_inpaint_is_absent_or_None(tmp_path):
     assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
 
 
-def _inpaint_generate(tmp_path, captured: list[dict], **over):
+def _inpaint_generate(tmp_path, monkeypatch, captured: list[dict], **over):
     """Run one accepted inpaint request through a capturing 2.5 backend.
 
     ``probe_resolution`` is stubbed rather than given a real mp4: the SIZE is
@@ -2711,23 +2711,19 @@ def _inpaint_generate(tmp_path, captured: list[dict], **over):
     the shipped call and not a second spelling of it."""
     be = _capturing_backend(captured)
     probe = over.pop("probe", None) or (lambda _p: (512, 384))
-    original = ltx25.video_io.probe_resolution
-    ltx25.video_io.probe_resolution = probe
-    try:
-        return be.generate(
-            _request(**REQUEST_ACCEPTED_INPAINT["inpaint"], seed=123),
-            tmp_path / "out",
-            lora_paths=[],
-            reference_video_path=over.pop("canvas", tmp_path / "inpaint_canvas.mp4"),
-            inpaint_source_path=over.pop("window", tmp_path / "_inpaint_window.mp4"),
-            inpaint_mask_path=over.pop("mask", tmp_path / "mask.mp4"),
-            **over,
-        )
-    finally:
-        ltx25.video_io.probe_resolution = original
+    monkeypatch.setattr(ltx25.video_io, "probe_resolution", probe)
+    return be.generate(
+        _request(**REQUEST_ACCEPTED_INPAINT["inpaint"], seed=123),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=over.pop("canvas", tmp_path / "inpaint_canvas.mp4"),
+        inpaint_source_path=over.pop("window", tmp_path / "_inpaint_window.mp4"),
+        inpaint_mask_path=over.pop("mask", tmp_path / "mask.mp4"),
+        **over,
+    )
 
 
-def test_generate_payload_carries_the_inpaint_block_when_asked(tmp_path):
+def test_generate_payload_carries_the_inpaint_block_when_asked(tmp_path, monkeypatch):
     """THE AFTER PICTURE (台帳 §3-150). The test above pins that a plain job is
     untouched; this one pins that the block really rides, in 2.3's key order,
     appended after ``outpaint``'s place.
@@ -2745,7 +2741,7 @@ def test_generate_payload_carries_the_inpaint_block_when_asked(tmp_path):
     the engine decodes for the blend. A build that conflated any two of them
     would still produce a payload -- and a silently wrong video."""
     captured: list[dict] = []
-    _inpaint_generate(tmp_path, captured)
+    _inpaint_generate(tmp_path, monkeypatch, captured)
 
     payload = captured[0]
     assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["inpaint"]
@@ -2786,37 +2782,35 @@ def test_generate_payload_carries_the_inpaint_block_when_asked(tmp_path):
     assert "outpaint" not in payload
 
 
-def test_generate_relays_the_dilation_sweep_rather_than_defaulting_it(tmp_path):
+def test_generate_relays_the_dilation_sweep_rather_than_defaulting_it(
+    tmp_path, monkeypatch
+):
     """The two knobs exist as fields because the GPU gate has to sweep them
     without a code change. A block that sent the schema defaults regardless
     would pass every assertion in the test above."""
     captured: list[dict] = []
     be = _capturing_backend(captured)
-    original = ltx25.video_io.probe_resolution
-    ltx25.video_io.probe_resolution = lambda _p: (512, 384)
-    try:
-        be.generate(
-            _request(
-                inpaint={
-                    "mask_video_id": "mask-123",
-                    "window_start_sec": 0.0,
-                    "blend_dilation_stage1": 12,
-                    "blend_dilation_stage2": 0,
-                },
-                reference_video_id="vid-123",
-                loras=_LORAS,
-                width=512,
-                height=384,
-                seed=123,
-            ),
-            tmp_path / "out",
-            lora_paths=[],
-            reference_video_path=tmp_path / "canvas.mp4",
-            inpaint_source_path=tmp_path / "window.mp4",
-            inpaint_mask_path=tmp_path / "mask.mp4",
-        )
-    finally:
-        ltx25.video_io.probe_resolution = original
+    monkeypatch.setattr(ltx25.video_io, "probe_resolution", lambda _p: (512, 384))
+    be.generate(
+        _request(
+            inpaint={
+                "mask_video_id": "mask-123",
+                "window_start_sec": 0.0,
+                "blend_dilation_stage1": 12,
+                "blend_dilation_stage2": 0,
+            },
+            reference_video_id="vid-123",
+            loras=_LORAS,
+            width=512,
+            height=384,
+            seed=123,
+        ),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=tmp_path / "canvas.mp4",
+        inpaint_source_path=tmp_path / "window.mp4",
+        inpaint_mask_path=tmp_path / "mask.mp4",
+    )
     assert captured[0]["inpaint"]["blend_dilation_stage1"] == 12
     assert captured[0]["inpaint"]["blend_dilation_stage2"] == 0
 
@@ -2829,7 +2823,7 @@ def test_generate_relays_the_dilation_sweep_rather_than_defaulting_it(tmp_path):
     ],
 )
 def test_generate_refuses_an_inpaint_job_missing_one_of_its_two_paths(
-    tmp_path, missing, needle
+    tmp_path, monkeypatch, missing, needle
 ):
     """THE TWO PATH GUARDS, 2.3's verbatim. Neither file can be recovered from
     anything else the payload carries -- the canvas has the mask baked in as
@@ -2838,22 +2832,24 @@ def test_generate_refuses_an_inpaint_job_missing_one_of_its_two_paths(
     cheaper than an engine that decodes nothing several minutes later."""
     captured: list[dict] = []
     with pytest.raises(RuntimeError, match=needle):
-        _inpaint_generate(tmp_path, captured, **{missing: None})
+        _inpaint_generate(tmp_path, monkeypatch, captured, **{missing: None})
     assert not captured, "no payload may be sent for a job missing a path"
 
 
-def test_generate_refuses_an_inpaint_job_whose_window_cannot_be_probed(tmp_path):
+def test_generate_refuses_an_inpaint_job_whose_window_cannot_be_probed(
+    tmp_path, monkeypatch
+):
     """THE THIRD GUARD. The source size is the ONE number in the block that is
     read from a file rather than from the request, which is exactly why a failed
     probe cannot be defaulted: a guessed size would hand the engine a geometry
     whose pads do not match the canvas, and the mask would land offset."""
     captured: list[dict] = []
     with pytest.raises(RuntimeError, match="could not probe the cut window"):
-        _inpaint_generate(tmp_path, captured, probe=lambda _p: None)
+        _inpaint_generate(tmp_path, monkeypatch, captured, probe=lambda _p: None)
     assert not captured
 
 
-def test_generate_outcome_relays_the_inpaint_block(tmp_path):
+def test_generate_outcome_relays_the_inpaint_block(tmp_path, monkeypatch):
     """台帳 §3-150's LAST HOP, and the only one that decides whether
     ``mask_proof`` reaches metadata.json.
 
@@ -2875,19 +2871,15 @@ def test_generate_outcome_relays_the_inpaint_block(tmp_path):
         **base,
         "inpaint": block,
     }
-    original = ltx25.video_io.probe_resolution
-    ltx25.video_io.probe_resolution = lambda _p: (512, 384)
-    try:
-        outcome = be.generate(
-            _request(**REQUEST_ACCEPTED_INPAINT["inpaint"], seed=123),
-            tmp_path / "out",
-            lora_paths=[],
-            reference_video_path=tmp_path / "canvas.mp4",
-            inpaint_source_path=tmp_path / "window.mp4",
-            inpaint_mask_path=tmp_path / "mask.mp4",
-        )
-    finally:
-        ltx25.video_io.probe_resolution = original
+    monkeypatch.setattr(ltx25.video_io, "probe_resolution", lambda _p: (512, 384))
+    outcome = be.generate(
+        _request(**REQUEST_ACCEPTED_INPAINT["inpaint"], seed=123),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=tmp_path / "canvas.mp4",
+        inpaint_source_path=tmp_path / "window.mp4",
+        inpaint_mask_path=tmp_path / "mask.mp4",
+    )
     # VERBATIM, and the SAME object: the adapter relays, it does not rebuild.
     assert outcome.inpaint is block
 

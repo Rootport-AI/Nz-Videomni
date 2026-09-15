@@ -478,9 +478,15 @@ def _require_frames(
 
 
 def _canvas_u8(
-    *, video_path: str, height: int, width: int, frame_cap: int, device: torch.device
+    *, video_path: str, height: int, width: int, frame_cap: int, device: torch.device,
+    label: str = "outpaint",
 ) -> torch.Tensor:
     """Decode ``video_path`` to ``(F, H, W, 3)`` uint8 on the CPU. Boundary (4).
+
+    ``label`` names the job kind in this function's two failure messages and
+    nothing else, exactly as it does in :func:`_require_frames`; its default
+    keeps every existing caller's text byte for byte, and the inpaint driver
+    passes its own.
 
     A uint8 twin of :func:`engine25.chain25._load_video_frames_cpu`, running the
     SAME per-frame op on the same device (``resize_and_center_crop`` on float32)
@@ -502,9 +508,10 @@ def _canvas_u8(
         frames.append(frame[0].permute(1, 2, 3, 0)[0].cpu())
         del raw, frame
     if not frames:
-        raise ValueError(f"outpaint canvas decoded to 0 frames: {video_path}")
+        raise ValueError(f"{label} canvas decoded to 0 frames: {video_path}")
     _require_frames(
-        "the green canvas", len(frames), int(frame_cap), source=str(video_path)
+        "the green canvas", len(frames), int(frame_cap),
+        source=str(video_path), label=label,
     )
     return torch.stack(frames, dim=0)
 

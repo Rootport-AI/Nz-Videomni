@@ -583,33 +583,16 @@ def test_the_half_res_mask_is_pasted_then_halved() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_crop_takes_the_top_left_rectangle_and_nothing_else() -> None:
-    """The source is anchored at (0, 0), so the delivered frame is a slice of
-    the right and bottom bands and nothing else -- lossless, at uint8, before
-    the encode. A crop that centred instead would shift every frame by a few
-    pixels: invisible in one still, obvious the moment the clip is cut back into
-    the timeline next to its own material."""
-    geom = _geometry()
-    canvas = torch.arange(
-        2 * geom.canvas_height * geom.canvas_width * 3, dtype=torch.int32
-    ).remainder(251).to(torch.uint8).reshape(2, geom.canvas_height, geom.canvas_width, 3)
-
-    cropped = canvas[:, : geom.source_height, : geom.source_width, :].contiguous()
-
-    assert tuple(cropped.shape) == (2, geom.source_height, geom.source_width, 3)
-    assert (geom.source_height, geom.source_width) == (H, W)
-    assert torch.equal(cropped, canvas[:, :H, :W, :])
-    # The first delivered pixel is the canvas' first pixel: the origin did not
-    # move, which is the half a centring bug would break.
-    assert torch.equal(cropped[:, 0, 0, :], canvas[:, 0, 0, :])
-
-
 def test_the_driver_crops_with_the_geometrys_own_source_dimensions() -> None:
-    """The behaviour test above is arithmetic anyone could write; this is what
-    ties it to the shipped code. The slice has to read the GEOMETRY, because
-    that is the object the API validated -- a crop that used ``msg['width']`` or
-    a re-derived number would be a second source of truth for the delivered
-    size."""
+    """The source is anchored at (0, 0), so the delivered frame is the top-left
+    rectangle -- a slice of the right and bottom bands and nothing else. What is
+    worth pinning is not the arithmetic but its TIE to the shipped code: the
+    slice has to read the GEOMETRY, because that is the object the API
+    validated -- a crop that used ``msg['width']`` or a re-derived number would
+    be a second source of truth for the delivered size, and a crop that centred
+    instead would shift every frame by a few pixels: invisible in one still,
+    obvious the moment the clip is cut back into the timeline next to its own
+    material."""
     source = inspect.getsource(inpaint25.run_inpaint)
     assert ": int(geometry.source_height), : int(geometry.source_width)" in source
     # ...and the restore happens BEFORE it: cropping first would leave the pad

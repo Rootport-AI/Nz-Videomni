@@ -56,6 +56,7 @@ __all__ = [
     "fill_pad_bands_with_generated_",
     "half_res_mask",
     "place_mask_on_canvas",
+    "restore_and_measure_",
     "restore_outside_mask_",
     "round_up_128",
 ]
@@ -505,3 +506,66 @@ def restore_outside_mask_(
             outside, source[start:end], blended[start:end]
         )
     return blended
+
+
+def restore_and_measure_(
+    *,
+    blended: "torch.Tensor",
+    source: "torch.Tensor",
+    mask: "torch.Tensor",
+    dilation: int,
+    chunk_size: int,
+    device: "torch.device | None",
+) -> dict:
+    """Restore outside the dilated mask and report what was touched.
+
+    The dilation runs ON ``device`` — the same device the blend just dilated the
+    same mask on. That is a correctness requirement, not a speed one:
+    ``apply_low_res_mask_dilation`` is two bilinear resamples around a max-pool,
+    and CPU and CUDA do not produce bit-identical floats for those. Running the
+    restore's dilation on the CPU while the blend ran its own on the GPU would
+    make the restore's ramp edge disagree with the blend's by a pixel here and
+    there, and the restored band would cut into the seam the blend had just
+    built. Only the BOOLEAN outcome comes back to the CPU, where the uint8 video
+    buffers live.
+
+    Chunked for the same reason ``blend_video_u8`` is: a float32 dilated mask at
+    1920x1088x481 is 4.0GB and the restore never needs two chunks at once. The
+    ratios that come back are the honest by-product of a pass that had to look at
+    every pixel anyway — see ``mask_proof`` in :func:`run_inpaint`.
+    """
+    import torch
+
+    from engine.outpaint.pyramid_blend import apply_low_res_mask_dilation
+
+    frames = int(blended.shape[0])
+    pixels_per_frame = int(blended.shape[1]) * int(blended.shape[2])
+    white = 0
+    dilated_support = 0
+    for start in range(0, frames, chunk_size):
+        end = min(start + chunk_size, frames)
+        plane = mask[start:end] if mask.shape[0] != 1 else mask[0:1]
+        if device is not None:
+            plane = plane.to(device)
+        chunk = plane.to(torch.float32)
+        if plane.dtype == torch.uint8:
+            chunk = chunk.div_(255.0)
+        white += int((chunk > 0.5).sum())
+        dilated = apply_low_res_mask_dilation(chunk, dilation)
+        # One comparison, on the compute device, and only the verdict travels.
+        support = dilated >= 1e-6
+        dilated_support += int(support.sum())
+        restore_outside_mask_(
+            blended[start:end],
+            source=source[start:end],
+            dilated_mask=support.to("cpu"),
+            chunk_size=chunk_size,
+        )
+        del plane, chunk, dilated, support
+
+    total = float(frames * pixels_per_frame) or 1.0
+    return {
+        "decoded_frames": frames,
+        "white_ratio": round(white / total, 6),
+        "dilated_ratio": round(dilated_support / total, 6),
+    }

@@ -150,6 +150,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` | API 利用者（フロントエンド実装者）向けの解説と全ルート一覧。**契約そのものの正本は本書 §6** |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md` | AviUtl2 プラグインの native ↔ Web UI 間 JSON-RPC 契約 |
+| `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md` | 操作パネルのバッチパネルのi2vモードと行画像強度の規則の設計正本（音声フォルダ不要のi2vモード・強度の統一規則・出力先導出。凍結 API 契約〔§6〕への変更は無い——フロントエンドのみの改修） |
 | `engine/VENDOR_NOTICE.md` | `engine/` の由来・provenance・依存再現手順・ライセンス帰属 |
 
 > **文書の3分類とセッションの入口（2026-09-01 追加。`Docs/NEXT_SESSION_HANDOFF.md` の廃止にともない、同書§2から移設）**: 文書は3つに分ける。**①生きた文書**（現状を現在形で書き、随時更新する。上表に並ぶ正本はすべてこれ）／**②追記専用の記録簿**（過去の記述は書き換えず、新しい記録を追記する。`Docs/VERIFICATION_LOG.md`・`Docs/PENDING_TASKS_CLOSED.md`・`Docs/HANDOFF_ARCHIVE.md`・フロントエンド `Docs/DEVLOG.md`）／**③凍結文書**（一切触らない。各 `*_WORKORDER.md` / `*_STATUS.md`、完了済みの設計書、当時のまま収蔵する下調べ（`Docs/LTX25_RESEARCH_NOTES.md` など））。**歴史は②・③側へ書き、①には現在の姿だけを現在形で書く。** 上表にも本注記にも挙がっていない `Docs/` の文書は原則②または③である（例外は上表に載るアーカイブ形式の正本＝`Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。**セッションの入口は `Docs/PENDING_TASKS.md` ただ 1 つである**（役割が重複する文書を置かないため、2026-09-01 に `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/NEXT_SESSION_WORKORDER.md` を廃止した。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` に残る）。

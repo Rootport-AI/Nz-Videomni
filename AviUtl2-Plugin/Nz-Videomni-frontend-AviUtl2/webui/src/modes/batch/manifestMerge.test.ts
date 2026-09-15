@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { IMAGE_SHARED, rejudgeRows, scanToRows, type BatchRow, type ScannedFile } from "./manifestMerge";
+import {
+  IMAGE_SHARED,
+  rejudgeI2vRows,
+  rejudgeRows,
+  scanImagesToBatchRows,
+  scanModeFor,
+  scanToRows,
+  type BatchRow,
+  type ScannedFile,
+} from "./manifestMerge";
 
 const FPS = 24;
 
@@ -245,5 +254,123 @@ describe("rejudgeRows", () => {
     expect(out[0]?.stat).toBe("Skip");
     expect(out[0]?.skipReason).toBe("over-cap");
     expect(out[0]?.frames).toBe(0);
+  });
+});
+
+// --- i2vモード（D1/D4、2026-09-15） -----------------------------------------
+
+/** `/config`の`upload.allowed_image_extensions`に相当する既定リスト。 */
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"];
+
+function imageFile(name: string, mtimeMs = 1000): ScannedFile {
+  return { name, path: `C:\\img\\${name}`, sizeBytes: 1000, mtimeMs, durationSec: 0 };
+}
+
+describe("scanModeFor", () => {
+  it("両方未設定ならnull（スキャンできない）", () => {
+    expect(scanModeFor(null, null)).toBeNull();
+  });
+
+  it("音声フォルダのみならa2v", () => {
+    expect(scanModeFor("C:\\wav", null)).toBe("a2v");
+  });
+
+  it("画像フォルダのみならi2v", () => {
+    expect(scanModeFor(null, "C:\\img")).toBe("i2v");
+  });
+
+  it("両方あれば音声が勝ってa2v（画像は行の生成元にならない）", () => {
+    expect(scanModeFor("C:\\wav", "C:\\img")).toBe("a2v");
+  });
+});
+
+describe("scanImagesToBatchRows", () => {
+  const OPTS = { numFrames: 121, frameRate: 24, allowedExtensions: IMAGE_EXTENSIONS };
+
+  it("設定の拡張子だけを拾い、.tmpは除外し、自然名順でqueueを1から振る", () => {
+    const files = [
+      imageFile("img10.png"),
+      imageFile("img2.png"),
+      imageFile("note.bmp"),
+      imageFile("half.png.tmp"),
+      imageFile("cover.JPG"),
+    ];
+    const rows = scanImagesToBatchRows(files, OPTS);
+    // .bmp は /config のリストに無いので行にならない（D8）。img2 が img10 より前（数値
+    // 認識の自然順）。大文字拡張子も拾う。
+    expect(rows.map((r) => r.wav)).toEqual(["cover.JPG", "img2.png", "img10.png"]);
+    expect(rows.map((r) => r.queue)).toEqual([1, 2, 3]);
+  });
+
+  it("wavとimageの両方がスキャン元の画像名になり、framesとdurationはCreateの値から決まる", () => {
+    const rows = scanImagesToBatchRows([imageFile("cat01.png")], OPTS);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({
+      queue: 1,
+      wav: "cat01.png",
+      duration: 121 / 24,
+      image: "cat01.png",
+      prompt: "",
+      stat: "Waiting",
+      output: "",
+      frames: 121,
+      skipReason: "",
+      error: "",
+    });
+  });
+
+  it("全行がWaiting（i2v行にSkipは存在しない）", () => {
+    const rows = scanImagesToBatchRows([imageFile("a.png"), imageFile("b.webp")], OPTS);
+    expect(rows.every((r) => r.stat === "Waiting")).toBe(true);
+  });
+
+  it("空フォルダは空配列", () => {
+    expect(scanImagesToBatchRows([], OPTS)).toEqual([]);
+  });
+
+  it("拡張子設定が空/未設定でも既定の4種へフォールバックする（設定事故で0行にならない）", () => {
+    const files = [imageFile("a.png"), imageFile("b.bmp")];
+    expect(scanImagesToBatchRows(files, { ...OPTS, allowedExtensions: [] }).map((r) => r.wav)).toEqual(["a.png"]);
+    expect(scanImagesToBatchRows(files, { ...OPTS, allowedExtensions: null }).map((r) => r.wav)).toEqual(["a.png"]);
+  });
+});
+
+describe("rejudgeI2vRows", () => {
+  const OPTS = { numFrames: 121, frameRate: 24 };
+
+  it("Waiting/Failed行だけを現在のDURATION/FPSへ直す", () => {
+    const rows = [
+      row({ queue: 1, stat: "Waiting", frames: 49, duration: 2.0 }),
+      row({ queue: 2, stat: "Failed", frames: 49, duration: 2.0, error: "previous failure" }),
+    ];
+    const out = rejudgeI2vRows(rows, OPTS);
+    expect(out[0]).toMatchObject({ stat: "Waiting", frames: 121, duration: 121 / 24, skipReason: "" });
+    expect(out[1]).toMatchObject({ stat: "Failed", frames: 121, duration: 121 / 24, error: "previous failure" });
+  });
+
+  it("Done/Generating/Skipは同一参照でそのまま返る", () => {
+    const rows = [
+      row({ queue: 1, stat: "Done", output: "a.mp4" }),
+      row({ queue: 2, stat: "Generating" }),
+      row({ queue: 3, stat: "Skip", skipReason: "over-cap" }),
+    ];
+    const out = rejudgeI2vRows(rows, OPTS);
+    expect(out[0]).toBe(rows[0]);
+    expect(out[1]).toBe(rows[1]);
+    expect(out[2]).toBe(rows[2]);
+  });
+
+  it("スキャン後にDURATIONを変えても開始時の値に追従する", () => {
+    const rows = [row({ queue: 1, stat: "Waiting", frames: 121, duration: 121 / 24 })];
+    const out = rejudgeI2vRows(rows, { numFrames: 217, frameRate: 24 });
+    expect(out[0]?.frames).toBe(217);
+    expect(out[0]?.duration).toBe(217 / 24);
+  });
+
+  it("Skipへは決して落ちない（i2v行に対象外は無い）", () => {
+    const rows = [row({ queue: 1, stat: "Waiting", duration: 0, skipReason: "wav-only-alpha" })];
+    const out = rejudgeI2vRows(rows, OPTS);
+    expect(out[0]?.stat).toBe("Waiting");
+    expect(out[0]?.skipReason).toBe("");
   });
 });

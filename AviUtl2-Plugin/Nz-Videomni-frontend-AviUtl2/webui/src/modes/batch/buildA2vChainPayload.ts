@@ -69,14 +69,26 @@ export interface ConditioningResolutionInput {
    * caller (this module does no I/O) — used when `image` names a specific
    * file. `null`/`undefined` when not yet resolved. */
   rowImageId?: string | null;
+  /** The `strength` a row's own image is conditioned at (D5 案A, 2026-09-15):
+   * the Create screen's leading KEYFRAMES card's slider value, i.e. exactly
+   * the value a `Shared` row would use, or `DEFAULT_STRENGTH` when that panel
+   * has no ready card. Required, with no default — the previous fixed `1.0`
+   * was an implicit default that made a row image behave unlike every other
+   * keyframe in the app. Ignored when `image` is `IMAGE_SHARED` (those rows
+   * carry the card's own strength already). */
+  rowStrength: number;
 }
 
 /**
  * Resolves a row's `conditioning_images` list. Mirrors
- * `gradio_ui.batch.BatchRunner._build_conditioning`:
+ * `gradio_ui.batch.BatchRunner._build_conditioning` in every respect but one
+ * (D5 案A, 2026-09-15): a row image's `strength` is the caller-supplied
+ * {@link ConditioningResolutionInput.rowStrength} rather than the Python
+ * reference's fixed `1.0`, so a row image and a `Shared` image are
+ * conditioned at the same value.
  * - `image === IMAGE_SHARED` -> the shared keyframes, as-is;
- * - a non-empty, non-Shared `image` -> a single frame-0/strength-1.0
- *   keyframe using the row's own (caller-resolved) `image_id` — `[]` if
+ * - a non-empty, non-Shared `image` -> a single frame-0 keyframe at
+ *   `rowStrength` using the row's own (caller-resolved) `image_id` — `[]` if
  *   that id isn't available yet;
  * - an empty `image` -> `[]` (matches the Python function's own literal
  *   `elif row.image:` guard; in practice `image` is never empty by the time
@@ -90,7 +102,7 @@ export function resolveConditioningImages(input: ConditioningResolutionInput): C
     return input.sharedImages;
   }
   if (input.image) {
-    return input.rowImageId ? [{ image_id: input.rowImageId, frame_idx: 0, strength: 1.0 }] : [];
+    return input.rowImageId ? [{ image_id: input.rowImageId, frame_idx: 0, strength: input.rowStrength }] : [];
   }
   return [];
 }

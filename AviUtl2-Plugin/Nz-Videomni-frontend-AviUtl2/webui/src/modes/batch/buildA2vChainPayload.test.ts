@@ -27,23 +27,33 @@ describe("resolveConditioningImages", () => {
     { image_id: "img-shared-2", frame_idx: 40, strength: 0.7 },
   ];
 
-  it("image=Shared: 共通キーフレームをそのまま使う", () => {
-    const result = resolveConditioningImages({ image: IMAGE_SHARED, sharedImages: shared });
+  it("image=Shared: 共通キーフレームをそのまま使う（rowStrengthは見ない）", () => {
+    const result = resolveConditioningImages({ image: IMAGE_SHARED, sharedImages: shared, rowStrength: 0.55 });
     expect(result).toBe(shared);
   });
 
-  it("個別画像: frame_idx=0, strength=1.0の単一エントリになる", () => {
-    const result = resolveConditioningImages({ image: "row.png", sharedImages: shared, rowImageId: "img-row-1" });
-    expect(result).toEqual([{ image_id: "img-row-1", frame_idx: 0, strength: 1.0 }]);
+  it("個別画像: frame_idx=0, strengthは呼び出し側が渡した値の単一エントリになる（D5案A）", () => {
+    const result = resolveConditioningImages({
+      image: "row.png",
+      sharedImages: shared,
+      rowImageId: "img-row-1",
+      rowStrength: 0.55,
+    });
+    expect(result).toEqual([{ image_id: "img-row-1", frame_idx: 0, strength: 0.55 }]);
   });
 
   it("個別画像だがimage_id未解決なら空配列", () => {
-    const result = resolveConditioningImages({ image: "row.png", sharedImages: shared });
+    const result = resolveConditioningImages({ image: "row.png", sharedImages: shared, rowStrength: 0.8 });
     expect(result).toEqual([]);
   });
 
   it("image=空文字は空配列（Shared既定はscanToRows側の責務でここでは行わない）", () => {
-    const result = resolveConditioningImages({ image: "", sharedImages: shared, rowImageId: "img-row-1" });
+    const result = resolveConditioningImages({
+      image: "",
+      sharedImages: shared,
+      rowImageId: "img-row-1",
+      rowStrength: 0.8,
+    });
     expect(result).toEqual([]);
   });
 });
@@ -183,6 +193,7 @@ describe("buildA2vChainPayload", () => {
     const conditioning = resolveConditioningImages({
       image: IMAGE_SHARED,
       sharedImages: [{ image_id: "kf-1", frame_idx: 0, strength: 1.0 }],
+      rowStrength: 0.8,
     });
     const payload = buildA2vChainPayload({ ...base, prompt, conditioningImages: conditioning });
     expect(payload.prompt).toBe("cinematic style waving hello");
@@ -195,10 +206,11 @@ describe("buildA2vChainPayload", () => {
       image: "row01.png",
       sharedImages: [{ image_id: "kf-1", frame_idx: 0, strength: 1.0 }],
       rowImageId: "img-row01",
+      rowStrength: 0.8,
     });
     const payload = buildA2vChainPayload({ ...base, prompt, conditioningImages: conditioning });
     expect(payload.prompt).toBe("waving hello");
-    expect(payload.clips[0].conditioning_images).toEqual([{ image_id: "img-row01", frame_idx: 0, strength: 1.0 }]);
+    expect(payload.clips[0].conditioning_images).toEqual([{ image_id: "img-row01", frame_idx: 0, strength: 0.8 }]);
   });
 
   // NAG (2026-07-28): the additive `nagRequestFields(params.nag)` spread,

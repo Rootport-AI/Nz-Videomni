@@ -1,0 +1,227 @@
+import { act, renderHook } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import type { ConditioningImage, LoraSpec } from "../../api/types";
+import { parseLoraPrompt } from "../../lora/loraTags";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import type { NagSettings } from "../../shell/nagSettings";
+import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
+import { useGenerationForm } from "../single/useGenerationForm";
+import { buildI2vGeneratePayload } from "./buildI2vGeneratePayload";
+import type { BuildI2vGeneratePayloadParams } from "./buildI2vGeneratePayload";
+
+// Deliberately NOT `FALLBACK_APP_CONFIG.generation_defaults`: the byte-equality
+// block below drives `useGenerationForm` to exactly these values, so a future
+// change to the Create defaults can neither break the comparison nor make it
+// pass for the wrong reason. 768/512 are on the 64 grid and 121 is 8n+1, so the
+// hook's initializer stores them verbatim.
+const WIDTH = 768;
+const HEIGHT = 512;
+const NUM_FRAMES = 121;
+const FRAME_RATE = 30;
+const SEED = 42;
+
+const BASE: BuildI2vGeneratePayloadParams = {
+  prompt: "a cat riding a skateboard",
+  width: WIDTH,
+  height: HEIGHT,
+  numFrames: NUM_FRAMES,
+  frameRate: FRAME_RATE,
+  seed: SEED,
+};
+
+const ENABLED_NAG: NagSettings = {
+  text: "blurry, low quality, distorted, watermark, text",
+  enabled: true,
+  scale: 11.0,
+  tau: 2.5,
+  alpha: 0.25,
+  method: "nag",
+  vsfScale: 1.5,
+};
+
+const SAGE: AccelerationSettings = { ...ACCELERATION_DEFAULTS, attentionBackend: "sage" };
+
+const KEYFRAME: ConditioningImage = { image_id: "img-1", frame_idx: 0, strength: 0.8 };
+const LORAS: LoraSpec[] = [{ name: "Pixar_Toon", strength: 1.5 }];
+
+describe("buildI2vGeneratePayload", () => {
+  it("最小構成: 6欄をこの順で送り、チェーン専用欄もcrop_outputも送らない", () => {
+    const payload = buildI2vGeneratePayload(BASE);
+    expect(Object.keys(payload)).toEqual(["prompt", "width", "height", "num_frames", "frame_rate", "seed"]);
+    expect(payload).toEqual({
+      prompt: "a cat riding a skateboard",
+      width: WIDTH,
+      height: HEIGHT,
+      num_frames: NUM_FRAMES,
+      frame_rate: FRAME_RATE,
+      seed: SEED,
+    });
+    for (const banned of [
+      "crop_output",
+      "clips",
+      "source_audio",
+      "stage2_window",
+      "chunked_upsample",
+      "pipeline",
+      "num_inference_steps",
+      "guidance_scale",
+      "overlap_frames",
+      "overlap_strength",
+    ]) {
+      expect(payload).not.toHaveProperty(banned);
+    }
+  });
+
+  it("seedは切り捨てない（toGenerateRequestと同じ。a2vビルダーのMath.truncとは違う）", () => {
+    expect(buildI2vGeneratePayload({ ...BASE, seed: 12.7 }).seed).toBe(12.7);
+  });
+
+  it("NAG off（未指定・無効の両方）は1欄も足さず、キー順も変わらない", () => {
+    const baseline = buildI2vGeneratePayload(BASE);
+    const disabled = buildI2vGeneratePayload({ ...BASE, nag: { ...ENABLED_NAG, enabled: false } });
+    expect(JSON.stringify(disabled)).toBe(JSON.stringify(baseline));
+    expect(disabled).not.toHaveProperty("negative_prompt");
+    expect(disabled).not.toHaveProperty("nag_enabled");
+  });
+
+  it("NAG on: 加算7欄がseedの直後に並ぶ", () => {
+    const payload = buildI2vGeneratePayload({ ...BASE, nag: ENABLED_NAG });
+    expect(Object.keys(payload)).toEqual([
+      "prompt",
+      "width",
+      "height",
+      "num_frames",
+      "frame_rate",
+      "seed",
+      "negative_prompt",
+      "nag_enabled",
+      "nag_scale",
+      "nag_tau",
+      "nag_alpha",
+      "neg_method",
+      "vsf_scale",
+    ]);
+    expect(payload.negative_prompt).toBe(ENABLED_NAG.text);
+  });
+
+  it("acceleration既定は1欄も足さず、非既定(sage)はちょうど1欄増える", () => {
+    const baseline = buildI2vGeneratePayload(BASE);
+    const withDefaults = buildI2vGeneratePayload({ ...BASE, acceleration: ACCELERATION_DEFAULTS });
+    expect(JSON.stringify(withDefaults)).toBe(JSON.stringify(baseline));
+
+    const sage = buildI2vGeneratePayload({ ...BASE, acceleration: SAGE });
+    expect(sage.attention_backend).toBe("sage");
+    expect(Object.keys(sage)).toEqual([...Object.keys(baseline), "attention_backend"]);
+  });
+
+  it("loras: 空配列/未指定ならキーごと省略、1件以上なら末尾寄りに1欄", () => {
+    expect(buildI2vGeneratePayload(BASE)).not.toHaveProperty("loras");
+    expect(buildI2vGeneratePayload({ ...BASE, loras: [] })).not.toHaveProperty("loras");
+    const withLoras = buildI2vGeneratePayload({ ...BASE, loras: LORAS });
+    expect(withLoras.loras).toEqual(LORAS);
+    expect(Object.keys(withLoras)).toEqual([...Object.keys(buildI2vGeneratePayload(BASE)), "loras"]);
+  });
+
+  it("conditioning_images: 空配列/未指定ならキーごと省略、1件以上なら最後のキー", () => {
+    expect(buildI2vGeneratePayload(BASE)).not.toHaveProperty("conditioning_images");
+    expect(buildI2vGeneratePayload({ ...BASE, conditioningImages: [] })).not.toHaveProperty("conditioning_images");
+    const withImage = buildI2vGeneratePayload({
+      ...BASE,
+      acceleration: SAGE,
+      loras: LORAS,
+      conditioningImages: [KEYFRAME],
+    });
+    expect(withImage.conditioning_images).toEqual([KEYFRAME]);
+    expect(Object.keys(withImage).at(-1)).toBe("conditioning_images");
+  });
+
+  // D11: 共通欄はCreate画面の単発i2vとバイト等価でなければならない。参照は
+  // `useGenerationForm.toGenerateRequest()` ＋ `SingleScreen`のconditioning付与
+  // （クロップ無し・参照動画無し・制御LoRA無しが前提）。
+  describe("Single（toGenerateRequest）とのバイト等価", () => {
+    function singleRequest(
+      prompt: string,
+      deps: { nag?: NagSettings; acceleration?: AccelerationSettings } = {},
+      conditioningImages: ConditioningImage[] = [],
+    ): string {
+      // width/height/numFrames/frameRate are seeded through
+      // `GenerationFormInitial`; `seed` has no initial field, so it is driven
+      // through the hook's own `setSeed`.
+      const { result } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, prompt, deps, {
+          width: WIDTH,
+          height: HEIGHT,
+          numFrames: NUM_FRAMES,
+          frameRate: FRAME_RATE,
+        }),
+      );
+      act(() => {
+        result.current.setSeed(SEED);
+      });
+      // The comparison is only meaningful if the hook really holds the values
+      // this test compares against.
+      expect(result.current.values).toMatchObject({
+        width: WIDTH,
+        height: HEIGHT,
+        numFrames: NUM_FRAMES,
+        frameRate: FRAME_RATE,
+        seed: SEED,
+      });
+      const request = result.current.toGenerateRequest();
+      return JSON.stringify(
+        conditioningImages.length > 0 ? { ...request, conditioning_images: conditioningImages } : request,
+      );
+    }
+
+    /** `useBatchForm.start()`と同じ前処理: 共通プロンプトから`<lora:>`タグを
+     * 切り出してから、残りの本文だけをビルダーへ渡す。 */
+    function batchRequest(
+      prompt: string,
+      extra: Partial<BuildI2vGeneratePayloadParams> = {},
+      conditioningImages: ConditioningImage[] = [],
+    ): string {
+      const { strippedPrompt, loras } = parseLoraPrompt(prompt);
+      return JSON.stringify(
+        buildI2vGeneratePayload({
+          ...BASE,
+          prompt: strippedPrompt,
+          ...(loras.length > 0 ? { loras } : {}),
+          ...extra,
+          ...(conditioningImages.length > 0 ? { conditioningImages } : {}),
+        }),
+      );
+    }
+
+    it("素のt2v要求（Createの既定値そのまま）", () => {
+      const prompt = "a cat riding a skateboard";
+      expect(batchRequest(prompt)).toBe(singleRequest(prompt));
+    });
+
+    it("conditioning_images付き（i2v）", () => {
+      const prompt = "a cat riding a skateboard";
+      expect(batchRequest(prompt, {}, [KEYFRAME])).toBe(singleRequest(prompt, {}, [KEYFRAME]));
+    });
+
+    it("NAG on", () => {
+      const prompt = "a cat riding a skateboard";
+      expect(batchRequest(prompt, { nag: ENABLED_NAG })).toBe(singleRequest(prompt, { nag: ENABLED_NAG }));
+    });
+
+    it("acceleration非既定(sage)", () => {
+      const prompt = "a cat riding a skateboard";
+      expect(batchRequest(prompt, { acceleration: SAGE })).toBe(singleRequest(prompt, { acceleration: SAGE }));
+    });
+
+    it("<lora:>タグ入りプロンプト（本文の切り出しとloras欄の位置）", () => {
+      const prompt = "a cat <lora:Pixar_Toon:1.5> riding a skateboard";
+      expect(batchRequest(prompt)).toBe(singleRequest(prompt));
+    });
+
+    it("全部乗せ（NAG on・sage・LoRA・conditioning_images）", () => {
+      const prompt = "a cat <lora:Pixar_Toon:1.5> riding a skateboard";
+      const deps = { nag: ENABLED_NAG, acceleration: SAGE };
+      expect(batchRequest(prompt, deps, [KEYFRAME])).toBe(singleRequest(prompt, deps, [KEYFRAME]));
+    });
+  });
+});

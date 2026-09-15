@@ -580,6 +580,36 @@ _EXTRACTED = (
 )
 
 
+def test_the_extracted_blocks_are_the_SAME_objects_the_inpaint_driver_calls() -> None:
+    """The OTHER half of the extraction, and the half that only became checkable
+    when the second driver landed (台帳 §3-150): ``engine25/inpaint25.py`` calls
+    THESE SIX OBJECTS rather than carrying copies of them.
+
+    Identity, not equality, and for a different reason in each case. The two
+    ``ImageConditioner`` calls are MEASURED paths -- the stage-2 re-encode's
+    ``channels_last_3d`` re-layout was 27188 MB -> 6174 MB reserved, and its
+    ``finally`` restore is a correctness requirement rather than hygiene -- so a
+    copy would be an unmeasured second path that no gate covers. ``_ltx25_block``
+    is a USER-VISIBLE CONTRACT: the worker re-sends its dict verbatim as the
+    ``done`` event's top-level ``ltx25`` key and the app writes it into
+    metadata.json, so two copies would be two answers to "what did 2.5 do". The
+    three audio functions carry the "underrun is not fatal" ruling, the
+    ``round(px / fps * sr)`` mux trim and the ``12_audio_conditioning`` VRAM
+    record -- one fact each, and each one a second chance to be subtly wrong.
+
+    A THIRD driver appearing is fine; one of these six being re-inlined into
+    either driver is the regression."""
+    from engine25 import inpaint25
+
+    for name in _EXTRACTED:
+        assert getattr(inpaint25, name) is getattr(outpaint25, name), name
+    # ...and the inpaint driver's own body really calls them, rather than
+    # importing them and then doing the work inline.
+    source = inspect.getsource(inpaint25.run_inpaint)
+    for name in _EXTRACTED:
+        assert f"{name}(" in source, f"run_inpaint does not call {name}"
+
+
 def test_the_extracted_blocks_are_module_level_and_run_outpaint_calls_them() -> None:
     """A pure extraction has two halves, and both are checkable without a GPU:
     the function exists AT MODULE LEVEL (so another driver can import it), and

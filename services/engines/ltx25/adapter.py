@@ -143,21 +143,23 @@ DEFAULT_BLOCKS_ON_GPU = 8
 #: 96 text cross-attention forwards). So the field is honoured now, and with it
 #: the six knobs that were only ever inert because this row refused them.
 #: What is left is TWO engine-level features, neither of them a mode.
-#: ``inpaint`` JOINED THIS TABLE with the Inpainting increment (台帳 §3-55), and
-#: it is the FIRST WHOLE MODE TO ARRIVE rather than leave — every other row this
-#: table has ever carried was a feature this engine grew into. The ruling is
-#: LTX 2.3-only by owner decision, not by discovered limitation: inpainting is
-#: built on the In-Outpainting IC-LoRA shipped with 2.3, and 2.5's own
-#: outpainting reaches that adapter through a different two-stage driver
-#: (``engine25/outpaint25.py``) whose mask handling would have to be widened
-#: separately. Declaring the refusal here is what greys the Edit tab's
-#: Inpainting sub-tab out while 2.5 is loaded, through
-#: :data:`UNSUPPORTED_FEATURES` -> ``GET /models`` -> the frontend's
-#: ``FEATURE_UI`` — one row, three consequences, no second place to update.
+#:
+#: ``inpaint`` JOINED THIS TABLE with the Inpainting increment (台帳 §3-55) and
+#: LEFT IT AGAIN with 台帳 §3-150 — the only row in this table's history to do
+#: both, and it was here for one day short of a fortnight. Its arrival was a
+#: staging decision rather than a discovered limitation ("LTX 2.3 first, by
+#: owner ruling"), and what §3-150 built is the missing half: ``engine25/
+#: inpaint25.py`` drives the masked two-stage workflow on 2.5 — the same
+#: 2.3-shipped In-Outpainting IC-LoRA over the app's green-FILLED canvas, the
+#: same Laplacian pyramid blend, plus the mask decode, the two de-greens, the
+#: restore and the crop. Lightricks' own documentation says the 2.3 adapter is
+#: what 2.5 inpaints with, and ships an Inpaint workflow for 2.5 to prove it.
+#: So the field is HONOURED (see :data:`HONOURED_FIELDS`), the sub-tab is lit
+#: while 2.5 is loaded, and this table is back to the two ENGINE-LEVEL features
+#: it held before — neither of them a mode.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
-    ("inpaint", "inpaint", lambda r: r.inpaint is not None),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -294,6 +296,12 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "keep_resident_embeddings",
         "attention_backend",
         "outpaint",
+        # 台帳 §3-150. It rode :data:`REJECT_TABLE` for a fortnight while the
+        # 2.5 driver did not exist; ``engine25/inpaint25.py`` exists now, so
+        # "honoured" is the only classification that is true. Listed next to
+        # ``outpaint`` because the two are one mechanism seen from two sides —
+        # the same IC-LoRA, the same canvas, the same blend.
+        "inpaint",
         # The non-CFG negative prompt (NAG / VSF), seven fields that travel as
         # one feature: the switch, the prompt, the method, and the two methods'
         # knobs. They are listed together rather than sorted in because that is
@@ -564,10 +572,14 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {}
 #: tab's 画角拡張 sub-tab — the LAST MODE of any kind this engine published.
 #: ``"nag"`` LEFT WITH THE NAG/VSF INCREMENT, which un-greys the negative-prompt
 #: panel on the Single and Chained tabs (and with it the method switch and the
-#: three NAG knobs behind it). What is left is THREE engine-level feature
-#: names: ``two_stage_hq`` / ``prune_vaed`` / ``inpaint``. ``inpaint`` ARRIVED
-#: WITH THE INPAINTING INCREMENT (2026-09-14) and is the FIRST MODE name to
-#: enter this tuple since the ruling above emptied it of modes.
+#: three NAG knobs behind it).
+#: ``"inpaint"`` ARRIVED WITH THE INPAINTING INCREMENT (2026-09-14) — the only
+#: name ever to enter this tuple — and LEFT AGAIN WITH 台帳 §3-150
+#: (2026-09-15), which un-greys the Edit tab's Inpainting sub-tab: the engine
+#: runs the masked two-stage workflow now (``engine25/inpaint25.py``), so
+#: publishing the name would grey a sub-tab that works. What is left is TWO
+#: engine-level feature names, and no mode of any kind:
+#: ``two_stage_hq`` / ``prune_vaed``.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
@@ -867,13 +879,18 @@ class _RealBackend25(_RealBackend):
         It rides the ``outpaint`` block below, whose mere PRESENCE is what
         routes the worker to the two-stage outpaint driver.
 
-        ``inpaint_source_path`` / ``inpaint_mask_path`` (台帳 §3-55) are ACCEPTED
-        AND ALWAYS ``None`` here. They are the orchestrator's two extra paths for
-        an inpaint job, and this engine refuses that job — ``inpaint`` sits in
-        :data:`REJECT_TABLE`, so ``reject_unsupported`` below raises 422 before
-        anything reads them. The parameters exist because the orchestrator calls
-        ONE signature for both engines; dropping them would turn every 2.5 job
-        into a TypeError, which is the opposite of a feature ruling.
+        ``inpaint_source_path`` / ``inpaint_mask_path`` ARE ACTED ON since 台帳
+        §3-150, where they stopped being the two arguments this engine accepted
+        and never read. They are the orchestrator's two extra paths for an
+        inpaint job and the canvas cannot supply either: the CUT WINDOW
+        (``_inpaint_window.mp4`` — the source size is ffprobed from it and its
+        waveform is what the finished mp4 carries, because the canvas is written
+        without an audio stream on purpose) and the MASK VIDEO the engine
+        decodes for the blend. Both ride the ``inpaint`` block below, whose mere
+        PRESENCE routes the worker to ``engine25.inpaint25.run_inpaint``. The
+        canvas itself rides where it always did — ``reference_video_path``, which
+        the orchestrator has already substituted — so the IC-LoRA plumbing needs
+        no notion of inpainting at all.
 
         ``crop_output`` IS honoured, and is the one v1-scope decision worth
         naming: it is an ffmpeg centre-crop the app performs on the finished
@@ -1025,6 +1042,62 @@ class _RealBackend25(_RealBackend):
                 "blend_dilation_stage2": op.blend_dilation_stage2,
                 "freeze_source_audio": op.freeze_source_audio,
             }
+        # Inpainting (台帳 §3-150), immediately after its sibling because the two
+        # are one mechanism seen from two sides — and MUTUALLY EXCLUSIVE, which
+        # the schema enforces and the worker asserts, so the two blocks can
+        # never both be present. Additive like every block before it: absent
+        # from every non-inpaint job, so their payloads stay byte-identical.
+        #
+        # It carries the geometry because the engine has to rebuild the canvas
+        # arithmetic, and the two FILE PATHS the canvas cannot supply: the cut
+        # window (audio + the restore's original picture) and the mask video
+        # itself. ``reference_video.path`` above is already the green-filled
+        # canvas.
+        #
+        # Note what is NOT here: pads. The engine derives them from
+        # ``canvas − source``, which is the same single-source-of-truth rule the
+        # API enforces (see ``api.models.InpaintSpec``).
+        #
+        # KEY FOR KEY 2.3's block (services/engines/ltx/adapter.py), same order
+        # and the same three guards: one app-side contract per feature, not one
+        # per engine. Written out rather than shared with 2.3 for the reason the
+        # outpaint block above is — this theme does not touch the 2.3 adapter,
+        # and a common helper would be a change to a shipped engine's code path
+        # bought for nothing but line count.
+        if request.inpaint is not None:
+            ip = request.inpaint
+            # The source size is READ FROM THE FILE, not taken from the request,
+            # for exactly the reason the request does not carry it: the file is
+            # the only thing that can be checked. The cut window preserves the
+            # upload's resolution (``cut_window_mp4`` never rescales), so this
+            # is the same number the endpoint validated the canvas against.
+            if inpaint_mask_path is None:
+                raise RuntimeError(
+                    "inpaint: the mask video path never reached the backend; "
+                    "run_inpaint cannot decode a mask it was not given"
+                )
+            if inpaint_source_path is None:
+                raise RuntimeError(
+                    "inpaint: the cut window's path never reached the backend; "
+                    "the source size and the frozen audio both come from it"
+                )
+            source_size = video_io.probe_resolution(Path(inpaint_source_path))
+            if source_size is None:
+                raise RuntimeError(
+                    "inpaint: could not probe the cut window's resolution "
+                    f"({inpaint_source_path})"
+                )
+            source_width, source_height = source_size
+            payload["inpaint"] = {
+                "source_path": str(inpaint_source_path) if inpaint_source_path else None,
+                "mask_path": str(inpaint_mask_path) if inpaint_mask_path else None,
+                "canvas_width": request.width,
+                "canvas_height": request.height,
+                "source_width": source_width,
+                "source_height": source_height,
+                "blend_dilation_stage1": ip.blend_dilation_stage1,
+                "blend_dilation_stage2": ip.blend_dilation_stage2,
+            }
         # The non-CFG negative prompt (NAG / VSF), appended LAST for the reason
         # every block before it was: the newest key goes at the end, so no
         # existing key order moves and every earlier increment's frozen-SHA
@@ -1129,6 +1202,16 @@ class _RealBackend25(_RealBackend):
             # never spoke leaves None.
             vae_mode_used=event.get("vae_mode_used"),
             ltx25=event.get("ltx25"),
+            # 台帳 §3-150: the inpaint job's own facts, relayed verbatim. THIS
+            # LINE IS THE ONLY ROUTE ``mask_proof`` TAKES TO metadata.json —
+            # ``services/pipeline_manager.py`` writes ``metadata["inpaint"] =
+            # {**outcome.inpaint, **provenance}``, and without the relay the
+            # block would carry the app's provenance and none of the engine's
+            # evidence. The worker sends the SUB-DICT (not the whole metadata
+            # dict), which is what keeps that merge flat. ``None`` on every
+            # other job, including outpaint: ``.get`` is the honest answer for a
+            # key that is absent by design.
+            inpaint=event.get("inpaint"),
             # 高速化第3弾: attention_used is no longer the hard-coded "sdpa" it
             # was while this engine's scope excluded sage. It is the worker's
             # own echo now — "sdpa", "sage", or "sage->sdpa" for a build that

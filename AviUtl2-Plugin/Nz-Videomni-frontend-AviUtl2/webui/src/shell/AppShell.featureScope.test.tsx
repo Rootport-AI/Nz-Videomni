@@ -141,18 +141,16 @@ describe("AppShell — base-model feature scope", () => {
     // they switch. Leaving that panel open behind a disabled tab would let them
     // fill in a form whose every submission comes back 422.
     //
-    // THE BASE MODEL HERE IS SYNTHETIC, and since the Outpainting increment
-    // TWO of its three halves are. Edit greys only when ALL THREE of its
-    // sub-modes are refused; the Retake increment gave the engine 撮り直し and
-    // the Outpainting increment gave it 画角拡張, so the fixture's LTX 2.5
-    // refuses neither now — §3-55's `inpaint` is the one name it really does
-    // publish, and it is left out of the synthetic pair for exactly that
-    // reason (adding it twice would be a no-op that hid a stale fixture).
-    // The names are added to the published list rather than the test being
-    // re-pointed at a different tab every time the engine grows. What is under
-    // test is the BOUNCE, not today's feature list (that is
+    // THE BASE MODEL HERE IS SYNTHETIC, and since 台帳 §3-150 ALL THREE of its
+    // halves are. Edit greys only when all three of its sub-modes are refused;
+    // the Retake increment gave the engine 撮り直し, the Outpainting increment
+    // gave it 画角拡張, and §3-150 gave it Inpainting — so the fixture's
+    // LTX 2.5 refuses none of the three now and every name here has to be
+    // injected. The names are added to the published list rather than the test
+    // being re-pointed at a different tab every time the engine grows. What is
+    // under test is the BOUNCE, not today's feature list (that is
     // `bridge/mockBridge.test.ts`'s job).
-    const { select } = await renderApp(AS_LTX25, ["retake", "outpaint"]);
+    const { select } = await renderApp(AS_LTX25, ["retake", "outpaint", "inpaint"]);
     const user = userEvent.setup();
 
     await user.click(tab("Edit"));

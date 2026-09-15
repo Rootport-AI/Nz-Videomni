@@ -250,7 +250,10 @@ describe("EditScreen — Inpainting サブタブの昇格と振り分け", () =>
   });
 
   it("灰色なら並び順で最初に生きているサブタブへ逃げる", () => {
-    // D11: LTX 2.5 では Inpainting が灰色。押せないタブの下に生成群を出さない。
+    // D11: §3-55 の時点では LTX 2.5 で Inpainting が灰色だった。§3-150 で
+    // 2.5 用の駆動部ができたので、いまこの状態を作る実機は無い——残してあるのは
+    // 仕組み(灰色のサブタブへは入らず、並び順で最初に生きているタブへ逃げる)の
+    // 固定であり、次のエンジンで必要になる。
     seedBothSlots();
     renderInpaint(intentFor("inpaint-mask"), {}, { retake: false, outpainting: false, inpainting: true });
     expect(screen.getByRole("tab", { name: "Retake" })).toHaveAttribute("aria-selected", "true");

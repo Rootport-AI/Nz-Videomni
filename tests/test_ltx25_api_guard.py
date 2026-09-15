@@ -61,6 +61,7 @@ from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_SAGE,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
+    REQUEST_ACCEPTED_INPAINT,
     REQUEST_ACCEPTED_KEEP_RESIDENT,
     REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS,
     REQUEST_ACCEPTED_LORAS,
@@ -449,6 +450,25 @@ def test_ltx25_no_longer_refuses_outpaint(two_family_client, case):
     _activate(two_family_client, "LTX25")
     r = two_family_client.post(
         "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_OUTPAINT[case]}
+    )
+    if r.status_code >= 400:
+        assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+
+
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_INPAINT))
+def test_ltx25_no_longer_refuses_inpaint(two_family_client, case):
+    """Inpaintingの逆転(台帳 §3-150)。**入って出た唯一の名前**がここで外れる。
+
+    このフィクスチャには素材もマスクもアダプタも登録が無いので404で構わない
+    ——ここで見るのは「機能が無いから拒否された」で落ちていないことだけである。
+
+    直前まで、この本文はFEATURE_UNSUPPORTEDだった。しかも``inpaint``の行は表の
+    中でLoRAの2行より**後ろ**に居たので、道連れ(参照動画+IC-LoRA)の規則を先に
+    通り抜けていた。行ごと外れたいま、同じ本文はその2つの規則の下も、
+    ``two_stage_hq``/``prune_vaed``の2行の下も通り抜けなければならない。"""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_INPAINT[case]}
     )
     if r.status_code >= 400:
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
@@ -1587,12 +1607,14 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # 機能のために灰色のままになる。いま2.5が公開するのはエンジン側の機能名
     # 2つだけである。
     assert "nag" not in features
-    # そしてInpainting段で ``inpaint`` が**入った**——この一覧で初めて
-    # 「外れた」ではなく「増えた」名前である(台帳 §3-55)。LTX 2.3専用と
-    # オーナーが裁定した機能なので、2.5を読み込んでいるあいだは
-    # Editタブの「Inpainting」サブタブが灰色になる。
-    assert "inpaint" in features
-    assert len(features) == 3
+    # Inpainting段で ``inpaint`` が**入った**——この一覧で初めて「外れた」では
+    # なく「増えた」名前である(台帳 §3-55)。そして§3-150で**また外れた**——
+    # 2.5用の駆動部(``engine25/inpaint25.py``)ができた以上、名前を載せ続ければ
+    # Editタブの「Inpainting」サブタブが、動くモードのために灰色のままになる。
+    # 入って出た唯一の名前であり、いま2.5が公開するのはエンジン側の機能名
+    # 2つだけ——モード名は種類を問わず1つも無い。
+    assert "inpaint" not in features
+    assert len(features) == 2
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

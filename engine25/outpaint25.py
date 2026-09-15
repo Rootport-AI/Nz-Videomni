@@ -334,10 +334,10 @@ class OutpaintResult:
     """
 
     #: The one ADDITIVE key :meth:`as_dict` ends on, named for the job kind. A
-    #: ``ClassVar`` rather than a field, so a subclass (the coming inpaint
-    #: result) renames the key without redeclaring the dataclass -- and so the
-    #: field-derivation test keeps seeing exactly the generation contract plus
-    #: ``metadata``.
+    #: ``ClassVar`` rather than a field, so a subclass
+    #: (:class:`engine25.inpaint25.InpaintResult`) renames the key without
+    #: redeclaring the dataclass -- and so the field-derivation test keeps
+    #: seeing exactly the generation contract plus ``metadata``.
     _JOB_KEY: ClassVar[str] = "outpaint"
 
     output_path: str
@@ -459,8 +459,8 @@ def _require_frames(
     """The frame-shortfall detector, said once for both operands.
 
     ``label`` names the job kind in the message and nothing else; its default
-    keeps every existing caller's text byte for byte, and the coming inpaint
-    driver passes its own.
+    keeps every existing caller's text byte for byte, and the inpaint driver
+    passes its own.
 
     NAMED AND LOUD on purpose. The app layer already rejects a source shorter
     than ``num_frames`` and ``services.video_io.pad_green_mp4`` clone-pads the
@@ -696,14 +696,21 @@ def _freeze_source_audio(
     source_path: str | None,
     enabled: bool,
     a_total: int,
+    label: str = "outpaint",
 ) -> FrozenSourceAudio:
     """Encode the SOURCE video's audio once and keep its head frozen.
 
-    Lifted verbatim out of :func:`run_outpaint` so the coming inpaint driver
-    calls this code instead of owning a second copy -- 2.3's outpaint pipeline
-    made the same three extractions for the same reason. It carries the
-    "underrun is not fatal" ruling AND the ``12_audio_conditioning`` VRAM
-    record, so both live in one place rather than one per driver.
+    Lifted verbatim out of :func:`run_outpaint` so the inpaint driver calls this
+    code instead of owning a second copy -- 2.3's outpaint pipeline made the same
+    three extractions for the same reason. It carries the "underrun is not
+    fatal" ruling AND the ``12_audio_conditioning`` VRAM record, so both live in
+    one place rather than one per driver.
+
+    ``label`` names the job kind in the two warnings and nothing else; its
+    default keeps every existing line byte for byte, and
+    :func:`engine25.inpaint25.run_inpaint` passes its own so an operator reading
+    one log can tell which driver spoke. Exactly the device
+    :func:`_require_frames` already uses.
     """
     frozen_audio: torch.Tensor | None = None
     source_waveform: torch.Tensor | None = None
@@ -716,8 +723,9 @@ def _freeze_source_audio(
         source_had_audio = loaded is not None
         if loaded is None:
             logger.warning(
-                "outpaint: %s has no decodable audio stream; the model will generate "
+                "%s: %s has no decodable audio stream; the model will generate "
                 "audio for the widened frame instead of following it",
+                label,
                 source_path,
             )
         else:
@@ -738,9 +746,9 @@ def _freeze_source_audio(
             frozen_audio = encoded_a[:, :, :n_frozen].detach().clone().to(DTYPE)
             if n_frozen < a_total:
                 logger.warning(
-                    "outpaint: source audio covers %d of %d audio latent frames; "
+                    "%s: source audio covers %d of %d audio latent frames; "
                     "the tail will be generated",
-                    n_frozen, a_total,
+                    label, n_frozen, a_total,
                 )
             del encoded_a, waveform
             cleanup_memory()
@@ -861,13 +869,18 @@ def _mux_audio(
     num_frames: int,
     frame_rate: float,
     audio_sr: int,
+    label: str = "outpaint",
 ) -> tuple[Any, int]:
     """``(audio_for_the_mux, muxed_sample_count)`` for the final encode.
 
-    Lifted verbatim out of :func:`run_outpaint` so the coming inpaint driver
-    calls this code rather than restating it. The ``round(px / fps * sr)``
-    trim is ONE fact about how many samples a frame count is, and a second
-    spelling of it is a second chance to truncate a track by a frame.
+    Lifted verbatim out of :func:`run_outpaint` so the inpaint driver calls this
+    code rather than restating it. The ``round(px / fps * sr)`` trim is ONE fact
+    about how many samples a frame count is, and a second spelling of it is a
+    second chance to truncate a track by a frame.
+
+    ``label`` names the job kind in the log line and nothing else -- the same
+    pass-through :func:`_freeze_source_audio` and :func:`_require_frames` take,
+    with the same default, so no existing text moves.
 
     The caller keeps the ``del``/``cleanup_memory`` that follows: the audio
     latent is ITS local, and freeing a parameter here would only drop an alias.
@@ -886,9 +899,9 @@ def _mux_audio(
         )
         muxed_samples = int(mux_wf.shape[-1])
         logger.info(
-            "outpaint: muxing the source's ORIGINAL waveform (%d samples, %d channels "
+            "%s: muxing the source's ORIGINAL waveform (%d samples, %d channels "
             "@ %d Hz); the vocoder is NOT run",
-            muxed_samples, int(mux_wf.shape[0]), int(audio_sr),
+            label, muxed_samples, int(mux_wf.shape[0]), int(audio_sr),
         )
         del mux_wf
     else:
@@ -917,8 +930,8 @@ def _phase_peak_mb(phases: dict[str, dict[str, Any]], name: str) -> float | None
 # The two ImageConditioner calls, and the engine-facts sub-dict
 # ---------------------------------------------------------------------------
 #
-# All three are lifted verbatim out of :func:`run_outpaint` so the coming
-# inpaint driver calls them rather than carrying a second copy of a measured
+# All three are lifted verbatim out of :func:`run_outpaint` so the inpaint
+# driver calls them rather than carrying a second copy of a measured
 # path or of a user-visible contract. Every ``vram.reset()`` / ``vram.record()``
 # that surrounded them at the call site STAYED there.
 
@@ -1002,8 +1015,8 @@ def _reencode_stage2(
     -0.002 dB, G0-d), and the restore is a correctness requirement rather than
     hygiene: torch's bf16 Conv3d produces different latents under the two
     layouts and this same encoder object is reachable again within the process.
-    A second copy would be an unmeasured second path, which is why the coming
-    inpaint driver calls this one.
+    A second copy would be an unmeasured second path, which is why the inpaint
+    driver calls this one.
     """
 
     def _reencode(encoder: Any) -> torch.Tensor:

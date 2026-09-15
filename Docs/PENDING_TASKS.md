@@ -42,6 +42,12 @@
 - **出典**: オーナー発案（Inpainting実機ゲート中の観察）。
 - **状態**: 将来の研究課題（着手時期未定）。
 
+#### 3-150. InpaintingをLTX 2.5でも使えるようにする（起票：2026-09-15）
+
+- **概要**: Inpainting（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md)）はLTX 2.3専用で、LTX 2.5のアダプタは`inpaint`を拒否表で断っている（同§6.3）。公式のLTX 2.5向けInpaintingワークフローは「LTX 2.5の蒸留本体＋LTX 2.3のIn-Outpainting IC-LoRA」という当方の画角拡張と同じ組み合わせで、緑の目印・二段構成・ピラミッドブレンドも同じ。当方で新しく要るのはLTX 2.5エンジン側の駆動部（`engine25/inpaint25.py`）とマスク動画のデコード、ワーカーの分岐、アダプタの拒否行削除と結果の中継だけで、API・アップロード・ffmpegの窓とマスク作成・操作パネル本体は無改修（サブタブの灰色は`unsupported_features`から`inpaint`が消えれば自動的に解ける）。
+- **出典**: オーナー発案（2026-09-15）。CLOSED §3-55-02の「後継: LTX 2.5への対応は別途」の引き取り。
+- **状態**: 着手中（ブランチ`feature/inpainting-ltx25`）。関門は画角拡張の指紋G10（両系統）と、LTX 2.5での実GPU生成（外側のビット一致・緑の残り0・継ぎ目比≤2.0）。
+
 ### 研究課題（上の改修項目より優先度が下）
 
 #### 3-1. バッチA2Vのα版で意図的に省略した機能
@@ -248,6 +254,7 @@
 
 - **概要**: 参照条件の効かせ方を画面の場所ごとに絞るマスク。IC-LoRA Phase Cのスコープ外項目として唯一未着手のまま残っている。
 - **何が塞いでいるか**: **`conditioning_attention_mask`のAPI露出の設計が未着手であること**（マスクの受け渡し契約そのものは[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6で**確定・実装済み**である）。**契約の正本は同§6**（ピクセル精度1本・1chグレースケール動画・uploadsレール・受信側の二値化）で、**本項はその応用先の1つである**——契約を本項で作り直さないこと。受け口の入口設計は§4-25と同じ話である。
+- **参考（2026-09-15）**: 公式のComfyUIノード`LTXAddVideoICLoRAGuideAdvanced`（Lightricks/ComfyUI-LTXVideoの`iclora.py`）は、参照の効き方を領域ごとに変える`attention_mask`（F×H×W、0〜1）と`attention_strength`を持つ。本項の露出設計を始めるときは、この公式実装が先例になる。
 - **出典**: [`Nz-Videomni/Docs/IC_LORA_PHASE_C_STATUS.md`](IC_LORA_PHASE_C_STATUS.md)「スコープ外」（着手時の入口）、[`Nz-Videomni/Docs/IC_LORA_PHASE_C_RESEARCH.md`](IC_LORA_PHASE_C_RESEARCH.md)。
 
 ### 4-9. A2V API層の残5点

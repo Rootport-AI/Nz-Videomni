@@ -1016,7 +1016,9 @@ export const en = {
     wavDir: {
       label: "Audio folder",
       button: "Choose audio folder…",
-      none: "No audio folder selected.",
+      /** D1: the only place the panel tells the user that an image folder on
+       * its own is a valid input, and what it then does. */
+      none: "No audio folder selected. (Choosing only an image folder switches to i2v mode, which makes one video per image.)",
     },
     imgDir: {
       label: "Image folder (optional)",
@@ -1027,7 +1029,7 @@ export const en = {
       label: "Output folder",
       button: "Choose output folder…",
       auto: (path: string): string => `Auto: ${path}`,
-      none: "No output folder yet — choose an audio folder first.",
+      none: "No output folder yet — choose an audio folder or an image folder first.",
     },
     promptMode: {
       label: "Row prompt mode",
@@ -1057,7 +1059,10 @@ export const en = {
       stat: "Status",
       output: "Output",
       resetButton: "Reset to Waiting",
-      empty: "No rows yet — choose an audio folder and scan it.",
+      empty: "No rows yet — choose an audio folder or an image folder and scan it.",
+      /** D2: an i2v row has no audio file at all, so its audio cell states the
+       * mode instead. The column heading stays "Audio file". */
+      i2vRowLabel: "i2v mode",
       /** N5 "A1: プロンプト直接編集" — the row prompt `<input>`'s aria-label. */
       promptInputLabel: "Row prompt",
       /** N5 "A2: 共通プロンプト流し込み" — button that overwrites a row's
@@ -2700,7 +2705,7 @@ export const ja: Strings = {
     wavDir: {
       label: "音声フォルダ",
       button: "音声フォルダを選択…",
-      none: "音声フォルダが選択されていません。",
+      none: "音声フォルダが選択されていません。（画像フォルダだけを選ぶと、画像1枚につき1本を作るi2vモードになります）",
     },
     imgDir: {
       label: "画像フォルダ（任意）",
@@ -2711,7 +2716,7 @@ export const ja: Strings = {
       label: "出力フォルダ",
       button: "出力フォルダを選択…",
       auto: (path: string): string => `自動: ${path}`,
-      none: "出力フォルダは未設定です — まず音声フォルダを選択してください。",
+      none: "出力フォルダは未設定です — まず音声フォルダか画像フォルダを選択してください。",
     },
     promptMode: {
       label: "行プロンプトの合成方法",
@@ -2738,7 +2743,8 @@ export const ja: Strings = {
       stat: "状態",
       output: "出力",
       resetButton: "待機に戻す",
-      empty: "行がまだありません — 音声フォルダを選んでスキャンしてください。",
+      empty: "行がまだありません — 音声フォルダか画像フォルダを選んでスキャンしてください。",
+      i2vRowLabel: "i2vモード",
       promptInputLabel: "行のプロンプト",
       copyCommonPromptButton: "共通プロンプトを流し込む",
       imageSelectLabel: "行の画像",

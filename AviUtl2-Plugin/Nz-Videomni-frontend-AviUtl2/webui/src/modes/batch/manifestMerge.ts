@@ -3,21 +3,35 @@
  * persistence anymore (owner decision, 2026-07-18): the batch is stateless —
  * a folder scan produces a plain in-memory row list that lives only as long
  * as the window stays open. This module owns the row shape (`BatchRow`/
- * `BatchStat`/`IMAGE_SHARED`) and the pure `scanToRows` folder-listing -> rows
- * mapping; assembling a generation request lives in `./buildA2vChainPayload`.
+ * `BatchStat`/`IMAGE_SHARED`), the scan mode (`BatchMode`/`scanModeFor`) and
+ * the pure folder-listing -> rows mappings for both modes (`scanToRows` +
+ * `rejudgeRows` for a2v, `scanImagesToBatchRows` + `rejudgeI2vRows` for i2v);
+ * assembling a generation request lives in `./buildA2vChainPayload` and
+ * `./buildI2vGeneratePayload`.
  *
- * `scanToRows` accepts the array shape the WebView2 bridge's `fs.listFiles`
- * resolves with (`{name, path, sizeBytes, mtimeMs, durationSec}[]`, see
- * `webui/src/bridge/types.ts` `BridgeResultMap["fs.listFiles"]`)
- * structurally — this module does not import the bridge itself, so it stays
- * dependency-free; any object with that shape works. The frame-count
+ * Both scan functions accept the array shape the WebView2 bridge's
+ * `fs.listFiles` resolves with (`{name, path, sizeBytes, mtimeMs,
+ * durationSec}[]`, see `webui/src/bridge/types.ts`
+ * `BridgeResultMap["fs.listFiles"]`)
+ * structurally — this module never imports the bridge, so any object with that
+ * shape works; its only imports are two pure helpers
+ * (`normalizeImageExtensions`/`compareByName`) from
+ * `modes/batch-i2v-long/imageRows.ts`, shared so both batch panels filter and
+ * order an image folder identically. The frame-count
  * arithmetic itself is injected as two callbacks (`framesFor`/
  * `rawFramesFor`) rather than imported from `modes/chained/chainUtils.ts`, per
  * this sprint's parallel-edit rule (that file's frame-count helpers are
  * being actively changed by another agent working the Chain screen).
  */
+import { compareByName, normalizeImageExtensions } from "../batch-i2v-long/imageRows";
 
 export type BatchStat = "Waiting" | "Generating" | "Done" | "Failed" | "Skip";
+
+/** Which kind of batch a scan produces (D1, 2026-09-15). Decided once per
+ * scan from the two input folders (see {@link scanModeFor}), frozen into the
+ * run snapshot, and never mixed within one row list: `"a2v"` is one row per
+ * audio file, `"i2v"` is one row per image file. */
+export type BatchMode = "a2v" | "i2v";
 
 /** One batch queue row (the 10 fields the batch runner reads/writes in
  * memory). `wav`/`image`/`output` are filenames only (no directory
@@ -25,6 +39,10 @@ export type BatchStat = "Waiting" | "Generating" | "Done" | "Failed" | "Skip";
  * caller. */
 export interface BatchRow {
   queue: number;
+  /** The file this row was scanned from: the audio file name in `"a2v"` mode,
+   * the image file name in `"i2v"` mode. The output file is always
+   * `{this name's stem}.mp4`, which is why an i2v row keeps its own source
+   * name here even after the user points its `image` column at `Shared`. */
   wav: string;
   duration: number;
   image: string;
@@ -140,6 +158,63 @@ export function scanToRows(files: ScannedFile[], opts: ScanToRowsOptions): Batch
   });
 }
 
+/** What the scan button would produce right now (D1): an audio folder makes
+ * an a2v batch whether or not an image folder is also set, an image folder
+ * alone makes an i2v batch, and neither folder means there is nothing to
+ * scan. `canScan` and `scan()` both go through this one function, so the
+ * button and the scan can never disagree about the mode. */
+export function scanModeFor(wavDir: string | null, imgDir: string | null): BatchMode | null {
+  if (wavDir !== null) return "a2v";
+  if (imgDir !== null) return "i2v";
+  return null;
+}
+
+export interface ScanImagesToBatchRowsOptions {
+  /** The Create form's DURATION, used verbatim as every row's frame count —
+   * an i2v row has no audio to derive a length from. */
+  numFrames: number;
+  /** The Create form's FPS, used only to render `numFrames` as the seconds
+   * the table's `duration` column shows. */
+  frameRate: number;
+  /** `/config`'s `upload.allowed_image_extensions` (`normalizeImageExtensions`
+   * fills in a fallback list when it is missing or empty). */
+  allowedExtensions: readonly string[] | null | undefined;
+}
+
+/** Scans an image-folder listing into fresh i2v `BatchRow`s: drop `.tmp`
+ * scratch files, keep the allowed extensions, sort by file name (natural
+ * order, `compareByName`), number `queue` from 1. Every row starts `Waiting`
+ * — unlike audio, an image has nothing that can be judged unrunnable at scan
+ * time (an oversized file is rejected by `POST /upload/image` at run time and
+ * fails that one row).
+ *
+ * `wav` and `image` both start as the image's own file name: `wav` is the
+ * row's source (and therefore its output name), `image` is the dropdown's
+ * initial selection, which the user may switch to `Shared`. */
+export function scanImagesToBatchRows(files: readonly ScannedFile[], opts: ScanImagesToBatchRowsOptions): BatchRow[] {
+  const allowed = new Set(normalizeImageExtensions(opts.allowedExtensions));
+  const candidates = files
+    .filter((f) => !f.name.endsWith(".tmp"))
+    .filter((f) => allowed.has(extOf(f.name)))
+    .slice()
+    .sort(compareByName);
+
+  return candidates.map((f, idx): BatchRow => {
+    return {
+      queue: idx + 1,
+      wav: f.name,
+      duration: opts.numFrames / opts.frameRate,
+      image: f.name,
+      prompt: "",
+      stat: "Waiting",
+      output: "",
+      frames: opts.numFrames,
+      skipReason: "",
+      error: "",
+    };
+  });
+}
+
 /** Start-time re-judgment (frames / 481-frame Skip), recomputed at the
  * snapshot's current frame rate. Mirrors `gradio_ui.batch._plan_rejudgement`
  * + `_apply_plan` (`batch.py:594-641`) — those two are a plan/apply split
@@ -195,5 +270,25 @@ export function rejudgeRows(rows: BatchRow[], opts: ScanToRowsOptions): BatchRow
       return { ...row, stat: "Skip", skipReason: "over-cap", frames: 0 };
     }
     return { ...row, frames: Math.trunc(opts.framesFor(row.duration, opts.fps)), skipReason: "" };
+  });
+}
+
+/** Start-time re-judgment for an i2v batch: every `Waiting`/`Failed` row is
+ * reset to the Create form's CURRENT DURATION and FPS, so a scan made at one
+ * DURATION but started at another submits the value on screen rather than the
+ * one that was in effect at scan time. Same contract as {@link rejudgeRows}:
+ * every other row comes back as the exact same object reference, and
+ * `error`/`output` are never touched.
+ *
+ * There is no Skip branch, because an i2v row has nothing to judge — its
+ * length comes from the form, not from the file — so `skipReason` is only
+ * ever cleared here.
+ */
+export function rejudgeI2vRows(rows: BatchRow[], opts: { numFrames: number; frameRate: number }): BatchRow[] {
+  return rows.map((row) => {
+    if (row.stat !== "Waiting" && row.stat !== "Failed") {
+      return row;
+    }
+    return { ...row, duration: opts.numFrames / opts.frameRate, frames: opts.numFrames, skipReason: "" };
   });
 }

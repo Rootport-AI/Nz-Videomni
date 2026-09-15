@@ -4,6 +4,7 @@ import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
 import type { MockFsFileEntry } from "../../bridge/mockBridge";
 import { BridgeError } from "../../bridge";
 import type { BridgeMethod, NativeBridge, ParamsOf, ResultOf } from "../../bridge";
+import type { AppConfig } from "../../api/types";
 import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { suggestFramesForAudio } from "../chained/chainUtils";
 import { useKeyframes } from "../single/useKeyframes";
@@ -19,7 +20,7 @@ import {
   isRunLockHeld,
   releaseRunLock,
 } from "../../shell/runLock";
-import { __resetBatchRuntimeForTests } from "./runtime";
+import { __resetBatchRuntimeForTests, getBatchA2vRuntime } from "./runtime";
 import { useBatchForm } from "./useBatchForm";
 import type { BatchGenerationValues } from "./useBatchForm";
 
@@ -56,13 +57,18 @@ function renderBatchForm(
     nag?: NagSettings;
     acceleration?: AccelerationSettings;
     serverBusy?: boolean;
+    /** D8: the image extension allowlist now comes from `/config`, so a test
+     * has to be able to serve a different one. Defaults to the fallback
+     * config every pre-existing test uses. */
+    config?: AppConfig;
   } = {},
 ) {
   const prompt = opts.prompt ?? "a prompt";
   const gen = opts.gen ?? GEN_VALUES;
+  const config = opts.config ?? FALLBACK_APP_CONFIG;
   return renderHook(() => {
-    const keyframes = useKeyframes(FALLBACK_APP_CONFIG, { nativeBridge: bridge });
-    return useBatchForm(FALLBACK_APP_CONFIG, prompt, gen, keyframes, {
+    const keyframes = useKeyframes(config, { nativeBridge: bridge });
+    return useBatchForm(config, prompt, gen, keyframes, {
       nativeBridge: bridge,
       nag: opts.nag,
       acceleration: opts.acceleration,
@@ -731,6 +737,33 @@ describe("useBatchForm", () => {
     // The image files never leak into the audio-row scan (extension allowlist).
     expect(result.current.rows.map((r) => r.wav)).toEqual(["a.wav"]);
     expect(result.current.imageOptions).toEqual(["Shared", "a.png", "m.jpg", "z.png"]);
+  });
+
+  // D8 (2026-09-15): the row-image dropdown's extension allowlist is now
+  // `/config`'s `upload.allowed_image_extensions` — the same list the upload
+  // endpoint enforces — instead of a hard-coded one that also offered `.bmp`
+  // and `.gif`. A `.bmp` the server would refuse is no longer selectable.
+  it("a2v: 行画像ドロップダウンの拡張子は/config由来で、.bmpは選べない（D8）", async () => {
+    const fs = wavFolder([
+      { name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 },
+      { name: "a.png", sizeBytes: 10, mtimeMs: 1 },
+      { name: "b.bmp", sizeBytes: 10, mtimeMs: 1 },
+    ]);
+    const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
+    const { result } = renderBatchForm(bridge);
+
+    await act(async () => {
+      await result.current.pickWavDir();
+    });
+    await act(async () => {
+      await result.current.pickImgDir();
+    });
+    await act(async () => {
+      await result.current.scan();
+    });
+
+    expect(result.current.mode).toBe("a2v");
+    expect(result.current.imageOptions).toEqual(["Shared", "a.png"]);
   });
 
   it("switching the image folder (pickImgDir) immediately collapses imageOptions to just Shared, discarding the previous folder's stale file names (M1 remediation)", async () => {
@@ -1597,6 +1630,326 @@ describe("useBatchForm", () => {
         await remounted.current.setWavDir(WAV_DIR);
       });
       expect(remounted.current.outDir).toBe(AUTO_OUT_DIR);
+    }, 15_000);
+  });
+
+  // --- i2vモード（D1〜D9、2026-09-15） ---------------------------------------
+  //
+  // 音声フォルダ未指定＋画像フォルダ指定のスキャンは、画像1枚＝1行のi2vバッチに
+  // なる。モードはスキャン時に確定し、走行スナップショットへ凍結される。
+  describe("i2vモード", () => {
+    const I2V_IMG_DIR = "C:\\pics\\rename";
+    const I2V_OUT_DIR = "C:\\pics\\rename_i2v_out";
+
+    /** 自然名順の確認用に、わざと並びを崩した画像フォルダ。`.bmp`は`/config`の
+     * 許可リストに無いので行にもドロップダウンにも出ない（D8）。 */
+    function imageFolder(names: string[] = ["img10.png", "img2.png", "cover.jpg", "note.bmp"]) {
+      return createMockFs({
+        folders: { [I2V_IMG_DIR]: names.map((name, i) => ({ name, sizeBytes: 10, mtimeMs: 1000 - i })) },
+      });
+    }
+
+    /** i2vの投入先は `/api/v1/generate`。`captureChainBridge`はチェーンしか
+     * 見ないので、こちらは両方のPOSTを500で弾いてジョブのポーリング待ちを
+     * 無くす（行はFailedで終わる）。 */
+    function captureSubmitBridge(base: NativeBridge): NativeBridge {
+      return {
+        async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+          if (method === "backend.request") {
+            const p = params as { method?: string; path?: string };
+            if (p.method === "POST" && (p.path === "/api/v1/generate" || p.path === "/api/v1/generate/chain")) {
+              return {
+                status: 500,
+                body: { error: { code: "MOCK_STOP", message: "captured by test" } },
+              } as unknown as ResultOf<M>;
+            }
+          }
+          return base.request(method, params);
+        },
+        requestWithFiles: (method, params, files) => base.requestWithFiles(method, params, files),
+        on: (event, handler) => base.on(event, handler),
+      };
+    }
+
+    /** 画像フォルダだけを手入力で確定し、スキャンする（＝i2vモードの最小状態）。 */
+    async function scanImagesOnly(bridge: NativeBridge, opts: { config?: AppConfig } = {}) {
+      const rendered = renderBatchForm(bridge, opts);
+      await act(async () => {
+        await rendered.result.current.setImgDir(I2V_IMG_DIR);
+      });
+      await act(async () => {
+        await rendered.result.current.scan();
+      });
+      return rendered;
+    }
+
+    it("canScan: どちらかの入力フォルダがあれば押せる（両方未設定のときだけ押せない）", async () => {
+      const fs = createMockFs({
+        folders: {
+          [WAV_DIR]: [{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }],
+          [I2V_IMG_DIR]: [{ name: "cover.jpg", sizeBytes: 10, mtimeMs: 1 }],
+        },
+      });
+      const bridge = createMockBridge({ delayMs: 0, fs });
+      const { result } = renderBatchForm(bridge);
+
+      expect(result.current.canScan).toBe(false);
+
+      await act(async () => {
+        await result.current.setImgDir(I2V_IMG_DIR);
+      });
+      expect(result.current.canScan).toBe(true);
+
+      await act(async () => {
+        await result.current.setImgDir("");
+      });
+      await act(async () => {
+        await result.current.setWavDir(WAV_DIR);
+      });
+      expect(result.current.canScan).toBe(true);
+
+      await act(async () => {
+        await result.current.setImgDir(I2V_IMG_DIR);
+      });
+      expect(result.current.canScan).toBe(true);
+    });
+
+    it("画像フォルダだけ: 画像1枚1行・自然名順・mode==='i2v'", async () => {
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = await scanImagesOnly(bridge);
+
+      expect(result.current.mode).toBe("i2v");
+      // 自然名順（img2 が img10 より前）。`.bmp`は落ちる。
+      expect(result.current.rows.map((r) => r.wav)).toEqual(["cover.jpg", "img2.png", "img10.png"]);
+      expect(result.current.rows.map((r) => r.queue)).toEqual([1, 2, 3]);
+      // 行の画像列の初期値は自分自身のファイル名（D6）。
+      expect(result.current.rows.map((r) => r.image)).toEqual(["cover.jpg", "img2.png", "img10.png"]);
+      // 尺・フレーム数はCreateの値（GEN_VALUES: 481f / 24fps）。
+      expect(result.current.rows.every((r) => r.frames === 481)).toBe(true);
+      expect(result.current.rows.every((r) => r.duration === 481 / 24)).toBe(true);
+      expect(result.current.rows.every((r) => r.stat === "Waiting")).toBe(true);
+      // ドロップダウンも同じ列挙結果から作られる。
+      expect(result.current.imageOptions).toEqual(["Shared", "cover.jpg", "img2.png", "img10.png"]);
+    });
+
+    it("音声フォルダがあれば画像フォルダの有無によらず従来のa2v行になる", async () => {
+      const fs = createMockFs({
+        folders: {
+          [WAV_DIR]: [{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }],
+          [I2V_IMG_DIR]: [{ name: "cover.jpg", sizeBytes: 10, mtimeMs: 1 }],
+        },
+      });
+      const bridge = createMockBridge({ delayMs: 0, fs });
+      const { result } = renderBatchForm(bridge);
+
+      await act(async () => {
+        await result.current.setWavDir(WAV_DIR);
+      });
+      await act(async () => {
+        await result.current.setImgDir(I2V_IMG_DIR);
+      });
+      await act(async () => {
+        await result.current.scan();
+      });
+
+      expect(result.current.mode).toBe("a2v");
+      expect(result.current.rows.map((r) => r.wav)).toEqual(["a.wav"]);
+      expect(result.current.rows[0]?.image).toBe("Shared");
+      expect(result.current.imageOptions).toEqual(["Shared", "cover.jpg"]);
+    });
+
+    it("拡張子の出どころは/config: allowed_image_extensions=['.png'] なら .jpg は行にもドロップダウンにも出ない（D8）", async () => {
+      const config: AppConfig = {
+        ...FALLBACK_APP_CONFIG,
+        upload: { ...FALLBACK_APP_CONFIG.upload, allowed_image_extensions: [".png"] },
+      };
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = await scanImagesOnly(bridge, { config });
+
+      expect(result.current.rows.map((r) => r.wav)).toEqual(["img2.png", "img10.png"]);
+      expect(result.current.imageOptions).toEqual(["Shared", "img2.png", "img10.png"]);
+    });
+
+    it("出力先の自動導出は「音声があればそれ、無ければ画像」の1規則（D3）", async () => {
+      const fs = createMockFs({
+        folders: {
+          [WAV_DIR]: [{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }],
+          [I2V_IMG_DIR]: [{ name: "cover.jpg", sizeBytes: 10, mtimeMs: 1 }],
+        },
+      });
+      const bridge = createMockBridge({ delayMs: 0, fs });
+      const { result } = renderBatchForm(bridge);
+
+      await act(async () => {
+        await result.current.setImgDir(I2V_IMG_DIR);
+      });
+      expect(result.current.outDir).toBe(I2V_OUT_DIR);
+
+      // あとから音声フォルダを足すと、そちらが勝つ。
+      await act(async () => {
+        await result.current.setWavDir(WAV_DIR);
+      });
+      expect(result.current.outDir).toBe(AUTO_OUT_DIR);
+
+      // 音声フォルダがある状態で画像フォルダを変えても `_a2v_out` のまま。
+      await act(async () => {
+        await result.current.setImgDir("C:\\pics\\other");
+      });
+      expect(result.current.outDir).toBe(AUTO_OUT_DIR);
+
+      // 音声フォルダを外すと画像フォルダ由来へ戻る。
+      await act(async () => {
+        await result.current.setWavDir("");
+      });
+      expect(result.current.outDir).toBe("C:\\pics\\other_i2v_out");
+    });
+
+    it("手動で出力先を指定した後（outDirIsAuto=false）はどちらのフォルダを変えても再導出しない", async () => {
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = renderBatchForm(bridge);
+
+      await act(async () => {
+        await result.current.setOutDir("D:\\my\\own\\out");
+      });
+      expect(result.current.outDirIsAuto).toBe(false);
+
+      await act(async () => {
+        await result.current.setImgDir(I2V_IMG_DIR);
+      });
+      expect(result.current.outDir).toBe("D:\\my\\own\\out");
+
+      await act(async () => {
+        await result.current.setWavDir(WAV_DIR);
+      });
+      expect(result.current.outDir).toBe("D:\\my\\own\\out");
+    });
+
+    it("入力フォルダを変えると、音声・画像のどちらでも行とモードが消える（§2.6）", async () => {
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = await scanImagesOnly(bridge);
+      expect(result.current.rows).toHaveLength(3);
+
+      // 画像フォルダの変更。
+      await act(async () => {
+        await result.current.setImgDir("C:\\pics\\other");
+      });
+      expect(result.current.rows).toEqual([]);
+      expect(result.current.mode).toBeNull();
+
+      // 音声フォルダの変更でも同じ（a2vスキャン後）。
+      const fs2 = createMockFs({
+        folders: { [WAV_DIR]: [{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }] },
+      });
+      const bridge2 = createMockBridge({ delayMs: 0, fs: fs2 });
+      const { result: r2 } = renderBatchForm(bridge2);
+      await act(async () => {
+        await r2.current.setWavDir(WAV_DIR);
+      });
+      await act(async () => {
+        await r2.current.scan();
+      });
+      expect(r2.current.mode).toBe("a2v");
+      expect(r2.current.rows).toHaveLength(1);
+
+      await act(async () => {
+        await r2.current.setWavDir("C:\\voice\\ep02");
+      });
+      expect(r2.current.rows).toEqual([]);
+      expect(r2.current.mode).toBeNull();
+    });
+
+    it("canStart: 画像フォルダ＋出力先＋行 でtrue、画像フォルダを外すとfalse", async () => {
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = await scanImagesOnly(bridge);
+
+      expect(result.current.outDir).toBe(I2V_OUT_DIR);
+      expect(result.current.canStart).toBe(true);
+
+      await act(async () => {
+        await result.current.setImgDir("");
+      });
+      expect(result.current.canStart).toBe(false);
+    });
+
+    it("canStart: DURATIONが8n+1から外れるとi2vだけ止まる（a2vは自前で刻むので止まらない）", async () => {
+      const offGrid: BatchGenerationValues = { ...GEN_VALUES, numFrames: 100 };
+
+      const i2vBridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result: i2v } = await scanImagesOnly(i2vBridge, {});
+      expect(i2v.current.canStart).toBe(true);
+      expect(i2v.current.numFramesOffGrid).toBe(false);
+
+      const i2vOff = renderBatchForm(createMockBridge({ delayMs: 0, fs: imageFolder() }), { gen: offGrid });
+      await act(async () => {
+        await i2vOff.result.current.setImgDir(I2V_IMG_DIR);
+      });
+      await act(async () => {
+        await i2vOff.result.current.scan();
+      });
+      expect(i2vOff.result.current.rows).toHaveLength(3);
+      expect(i2vOff.result.current.numFramesOffGrid).toBe(true);
+      expect(i2vOff.result.current.canStart).toBe(false);
+
+      // 同じDURATIONでもa2vは素通り（行のフレーム数はscanToRowsが8n+1で決める）。
+      // 行には自前の画像を割り当てて、Sharedのキーフレーム要求で落ちないようにする。
+      const wavFs = createMockFs({
+        folders: {
+          [WAV_DIR]: [{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }],
+          [I2V_IMG_DIR]: [{ name: "cover.jpg", sizeBytes: 10, mtimeMs: 1 }],
+        },
+      });
+      const a2v = renderBatchForm(createMockBridge({ delayMs: 0, fs: wavFs }), { gen: offGrid });
+      await act(async () => {
+        await a2v.result.current.setWavDir(WAV_DIR);
+      });
+      await act(async () => {
+        await a2v.result.current.setImgDir(I2V_IMG_DIR);
+      });
+      await act(async () => {
+        await a2v.result.current.scan();
+      });
+      act(() => {
+        a2v.result.current.updateRowImage(0, "cover.jpg");
+      });
+      expect(a2v.result.current.numFramesOffGrid).toBe(false);
+      expect(a2v.result.current.canStart).toBe(true);
+    });
+
+    it("i2vでもSharedのKEYFRAMES未設定ゲートはそのまま効く（D6）", async () => {
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = await scanImagesOnly(bridge);
+
+      expect(result.current.sharedKeyframeMissing).toBe(false);
+      act(() => {
+        result.current.updateRowImage(0, "Shared");
+      });
+      expect(result.current.sharedKeyframeMissing).toBe(true);
+      expect(result.current.canStart).toBe(false);
+    });
+
+    it("start()はmodeを走行スナップショットへ凍結し、走行中のリマウントで復元される", async () => {
+      const base = createMockBridge({ delayMs: 0, fs: imageFolder(["cover.jpg"]), holdUploads: true });
+      const wrapped = captureSubmitBridge(base);
+      const { result, unmount } = await scanImagesOnly(wrapped);
+
+      expect(result.current.canStart).toBe(true);
+      act(() => {
+        result.current.start();
+      });
+      expect(result.current.runnerState).toBe("running");
+      expect(getBatchA2vRuntime().getSnapshot().mode).toBe("i2v");
+      // i2vではwavDirを走行へ渡さない。
+      expect(getBatchA2vRuntime().getSnapshot().wavDir).toBeNull();
+
+      unmount();
+      const { result: remounted } = renderBatchForm(wrapped);
+      expect(remounted.current.runnerState).toBe("running");
+      expect(remounted.current.mode).toBe("i2v");
+      expect(remounted.current.imgDir).toBe(I2V_IMG_DIR);
+      expect(remounted.current.wavDir).toBeNull();
+
+      base.releaseUploads();
+      await waitFor(() => expect(remounted.current.runnerState).toBe("idle"));
     }, 15_000);
   });
 });

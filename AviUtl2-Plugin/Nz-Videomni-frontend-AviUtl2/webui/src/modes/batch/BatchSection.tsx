@@ -52,9 +52,13 @@ export interface BatchSectionProps {
   serverBusy?: boolean;
   /** §3-98 P5: the loaded base model's engine cannot run this panel at all.
    *
-   * Batch A2V is a `POST /generate/chain` driver, and LTX 2.5 (v1) refuses the
-   * whole chain family with 422 `FEATURE_UNSUPPORTED` — so every row this panel
-   * could queue would fail. Rides the SAME `disabled` flag the runner state
+   * True exactly when the active engine's `unsupported_features` (GET /models)
+   * contains `chain` or `a2v` — `shell/featureScope.ts`'s `FEATURE_UI` table,
+   * read through `batchA2vDisabledFor`. No engine the app ships with lists
+   * either, so the panel is not greyed for anyone today: a2v rows reach
+   * `POST /generate/chain` and i2v rows reach `POST /generate` on every engine.
+   *
+   * Rides the SAME `disabled` flag the runner state
    * already sets (no new mechanism, no new control), plus one explanation line
    * in the same place `lockedByOther`/`jobActive` put theirs; a greyed panel
    * with no stated reason is the thing those two lines exist to prevent.
@@ -66,10 +70,13 @@ export interface BatchSectionProps {
 
 /**
  * The "Batch A2V" panel (webui-B): a collapsed-by-default `<details>` section
- * on the Create screen (task brief: "既定閉") that scans a folder of audio
- * files into an in-memory queue (no CSV — owner decision, 2026-07-18: the
- * frontend's batch is stateless; see `manifestMerge.ts`) and drives them through
- * `POST /generate/chain` one at a time via {@link useBatchForm}. All state
+ * on the Create screen (task brief: "既定閉") that scans a folder into an
+ * in-memory queue (no CSV — owner decision, 2026-07-18: the frontend's batch
+ * is stateless; see `manifestMerge.ts`) and drives it one row at a time via
+ * {@link useBatchForm}. The scan decides which of two modes the queue is (D1,
+ * 2026-09-15): an audio folder gives one row per audio file, driven through
+ * `POST /generate/chain`; an image folder ALONE gives one row per image,
+ * driven through `POST /generate`. All state
  * ownership lives in `useBatchForm`/`useBatchRunner`; this component is pure
  * rendering + event wiring, matching the `*Screen.tsx` convention elsewhere in
  * this codebase (`ChainedScreen.tsx`/`SingleScreen.tsx`).
@@ -171,11 +178,14 @@ export function BatchSection({
           </div>
         </div>
 
+        {/* D9: an i2v row is a single `POST /generate` clip, which has no
+            temporal-chunk upsample pass at all — the checkbox would silently
+            do nothing, so it is greyed out in that mode. */}
         <label className="field field-inline">
           <input
             type="checkbox"
             checked={form.values.chunkedUpsample}
-            disabled={disabled}
+            disabled={disabled || form.mode === "i2v"}
             onChange={(e) => form.setChunkedUpsample(e.target.checked)}
           />
           <span className="field-label">{strings.chained.chunkedUpsampleLabel}</span>
@@ -198,6 +208,7 @@ export function BatchSection({
 
         <BatchTable
           rows={form.rows}
+          mode={form.mode}
           disabled={disabled}
           imageOptions={form.imageOptions}
           onResetRow={(queue) => form.resetRowToWaiting(queue)}
@@ -213,6 +224,11 @@ export function BatchSection({
             fpsMismatch and IC-LoRA-active notes are informational only
             (fpsMismatch is auto-corrected by the start-time re-judgment). */}
         {!form.resolutionValid && <p className="warning-banner">{t.resolutionOffGrid}</p>}
+        {/* i2v guard: DURATION is sent verbatim as every row's `num_frames`,
+            so an off-grid hand-typed value would 422 the whole run. Reuses
+            Create's own wording, the same way `nagNegativeEmpty` is borrowed
+            below. */}
+        {form.numFramesOffGrid && <p className="warning-banner">{strings.single.generateReasons.numFramesOffGrid}</p>}
         {form.fpsMismatch && <p className="field-hint">{t.fpsMismatch}</p>}
         {icLoraActive && <p className="warning-banner warning-banner-mild">{t.icLoraActiveWarning}</p>}
         {/* NAG (2026-07-28, D7): Batch has no `GenerateReasonsNote` (that's

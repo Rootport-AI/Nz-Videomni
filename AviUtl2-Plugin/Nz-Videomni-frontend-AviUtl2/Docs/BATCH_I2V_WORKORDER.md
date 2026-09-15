@@ -23,6 +23,7 @@
 - **改訂版（2026-07-30、本書）**: 機能名を「簡易バッチi2v」から**「バッチi2v-long」**へ改め、土台を`POST /generate/chain`に差し替えた。設置場所もCreate画面からChain画面へ移した（借用する設定がChain画面のものになるため）。**同日、本書に沿って実装完了**。実装記録は[`DEVLOG.md`](DEVLOG.md) §54、実機ゲートの手順は[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.13。
 - **2026-07-30（実機フィードバック反映）**: オーナーの実機確認で基本フロー（フォルダ指定／出力フォルダ自動作成／Scan／バッチ生成／Status遷移）は**合格**。そのうえで次の4点を改修した。①**プロンプトを画像（行）ごとの指定へ再設計し、バッチ全体プロンプトの入力欄は撤去**——「全画像に同じ文を足す」欄は上の共通プロンプトを書き換えるのと同じで無意味であり、実際に欲しいのは画像ごとの文だったため（バッチA2Vの行プロンプトと同じ作法に揃えた。add/replaceラジオはバッチ全体で1個のまま）。②アコーディオンのタイトルを**「バッチi2v-long（プロトタイプ）」／"Batch i2v-long (prototype)"** へ変更。③パネル冒頭の長い説明文（`notice`・`chainSettingsNote`）を**削除**（内容は本書に記載済み。設定の実効値が見える`chainSummary`の1行だけ残す）。④共通プロンプト欄の下にあった「つなげるモードでも画風LoRAタグは適用されます」の注記（`promptBar.chainNote`）を削除。
 - **2026-09-02（派生課題の解消を反映）**: 派生して残っていた将来課題2件のうち、バッチA2Vランナーの孤児化（バックエンド台帳§3-47）が解消したため、§0の残課題の記述と§6.5の「既知の残問題」を現行化した。**本書の仕様そのものは変えていない**（バッチi2v-long側の実装・挙動に変更は無い）。
+- **2026-09-15/16（画面の呼び名の統一）**: 画面の呼び名を「追加プロンプト」「プロンプト」へ変更した（バッチパネル側の同種の変更に合わせたもの。コミット`4502e8d`）。本書の本文（§3〜§7）はこの呼び名で書き改めてあり、仕様そのものの変更は無い。
 
 ## 1. 目的とオーナー確定方針
 
@@ -64,7 +65,7 @@
 4. **`clips[1..]`は完全に無改変で通す**（クリップ別プロンプト・`num_frames`とも）。
 5. **その他の全フィールドはそのまま透過**（width/height/crop/fps/seed/overlap/loras/chunked_upsample/NAG/VSF…）。
 
-行ごとの差し替え（同ファイルの`buildRowPayload`）は、テンプレートのコピーに対して**2点だけ**を変える。①clip 0へ`conditioning_images: [{ image_id, frame_idx: 0, strength: 1.0 }]`を載せる。②chain全体の`prompt`を`composeBatchPrompt(テンプレートのprompt, その行のprompt, mode)`へ差し替える（合成規則はバッチA2Vと同一。空白のみの行プロンプトは無視、`replace`は置き換え、`add`は`` `${共通} ${行}` ``をtrim）。**すべてコピーオンライトで、テンプレートも共有部分（`loras`・`crop_output`・clips 1..n）も一切変更しない**——だから同じテンプレートを全行で使い回せる。
+行ごとの差し替え（同ファイルの`buildRowPayload`）は、テンプレートのコピーに対して**2点だけ**を変える。①clip 0へ`conditioning_images: [{ image_id, frame_idx: 0, strength: 1.0 }]`を載せる。②chain全体の`prompt`を`composeBatchPrompt(テンプレートのprompt, その行のprompt, mode)`へ差し替える（合成規則はバッチA2Vと同一。空白のみの追加プロンプトは無視、`replace`は置き換え、`add`は`` `${プロンプト} ${行}` ``をtrim）。**すべてコピーオンライトで、テンプレートも共有部分（`loras`・`crop_output`・clips 1..n）も一切変更しない**——だから同じテンプレートを全行で使い回せる。
 
 **プロンプト合成は「案A（驚き最小）」**: 行のプロンプトはchain全体のプロンプトにだけ適用し、**クリップ個別のプロンプト上書きには触れない**。Chain画面でクリップ別プロンプトを打ったユーザーには、それがそのまま尊重されて見える（`replace`を全クリップへ及ばせると、画面に見えているテキストが無言で消える）。案B（全クリップへ合成）へ移す場合の切替点は`clips.map`内の3行だけであり、コメントで明示してある。
 
@@ -75,8 +76,8 @@
 1. 画像ディレクトリ指定（テキスト入力＋📁ピッカー、手打ちはフォーカス外し＝onBlurで確定）と出力ディレクトリ（自動導出は`{画像フォルダ名}_i2vlong_out`。自分で選んだ／打ち込んだ時点で自動追従は止まり、以後戻らない）
 2. Scan → `fs.listFiles`で列挙 → **ファイル名昇順**で行生成（A2Vのmtime昇順は踏襲しない。連番画像が自然な想定のため。数値を意識した自然順で`img2.png`が`img10.png`より前に来る。大文字小文字・アクセントは無視し、同順のときはコード単位で決定的に並べる）
 3. 対応拡張子は**バックエンドの許可リストに一致**（`GET /config`の`upload.allowed_image_extensions`を使う。配信が壊れていた場合の保険として`.png/.jpg/.jpeg/.webp`のみのフォールバックを持つが、これは第2の正本ではない）。`*.tmp`は許可リストに関わらず常に除外する。**サイズ超過の画像はスキャン時点で`Failed`＋説明文にする**（実行の何十分後に`POST /upload/image`が4xxを返すのを待たない）
-4. 台帳テーブル（列は`#`／画像ファイル名／**プロンプト（行ごとに編集可能な入力欄＋📝で共通プロンプトを流し込むボタン）**／stat（絵文字付き）／output＋🔁ボタン列。**失敗理由はstatセルのツールチップ**にして、長いサーバーメッセージでも1行1行を保つ。🔁は`Done`/`Failed`の行だけ有効で、押すと`Waiting`へ戻る。サムネイルは省略＝最低限方針）
-5. プロンプトadd/replaceラジオ1個（**モードはバッチ全体で1つ・文面は行ごと**。バッチA2Vとまったく同じ配置。2026-07-30の実機フィードバックにより、旧「バッチ全体プロンプトのtextarea」は撤去した）。行プロンプトは**再スキャンで消える**（ステートレス設計のため。行の入力欄は走行中・スキャン中は無効）
+4. 台帳テーブル（列は`#`／画像ファイル名／**プロンプト（行ごとに編集可能な入力欄＋📝でプロンプトを流し込むボタン）**／stat（絵文字付き）／output＋🔁ボタン列。**失敗理由はstatセルのツールチップ**にして、長いサーバーメッセージでも1行1行を保つ。🔁は`Done`/`Failed`の行だけ有効で、押すと`Waiting`へ戻る。サムネイルは省略＝最低限方針）
+5. プロンプトadd/replaceラジオ1個（**モードはバッチ全体で1つ・文面は行ごと**。バッチA2Vとまったく同じ配置。2026-07-30の実機フィードバックにより、旧「バッチ全体プロンプトのtextarea」は撤去した）。追加プロンプトは**再スキャンで消える**（ステートレス設計のため。行の入力欄は走行中・スキャン中は無効）
 6. Chain設定の無言借用（§3のテンプレート方式。この節自身はサイズ・尺・seedの欄を一切持たない）
 7. 開始/中止・進捗（現在行）・失敗行スキップ継続・未完了行のみの再実行
 8. 1行＝1画像＝`upload_image`→`POST /generate/chain`→ポーリング→`backend.downloadVideo`、の直列実行
@@ -93,13 +94,13 @@
 |---|---|
 | `chainSnapshot.ts` | Chainフォームから読む最小面の**構造型** `ChainSnapshotSource`（`buildRequest`／`mode`／`clips`／`isValid`／`validityReasons`／`outputFrames`／`outputSeconds`／`minClips`／`minFramesForOverlap`）。`modes/chain/`への`import`をこの型1本で回避しており、Chain画面側は**完全に無改変でこの形を満たす**。`UseChainFormResult`が構造的に代入可能であることは`buildI2vLongPayload.test.ts`のコンパイル時アサーションで固定してあり、将来Chainがフィールド名を変えたら実行時ではなく型検査で落ちる |
 | `imageRows.ts` | 行モデル（`I2vLongRow`＝`queue`/`image`/**`prompt`**/`stat`/`output`/`error`、`I2vLongStat`＝`Waiting`/`Generating`/`Done`/`Failed`。A2Vにある`Skip`は無い）＋`scanImagesToRows`（拡張子フィルタ→ファイル名昇順→`queue`採番、`prompt`は常に空、サイズ超過の事前`Failed`化）＋`normalizeImageExtensions`＋`deriveI2vLongOutDir`。**I/Oは一切しない純関数群** |
-| `buildI2vLongPayload.ts` | `composeBatchPrompt`（共通プロンプト×行プロンプトのadd/replace合成）＋`buildI2vLongTemplate`（§3の1〜5）＋`buildRowPayload`（clip 0への画像刻印＋行プロンプトの合成）。すべて純粋・コピーオンライト |
+| `buildI2vLongPayload.ts` | `composeBatchPrompt`（プロンプト×追加プロンプトのadd/replace合成）＋`buildI2vLongTemplate`（§3の1〜5）＋`buildRowPayload`（clip 0への画像刻印＋追加プロンプトの合成）。すべて純粋・コピーオンライト |
 | `batchI2vLongRunner.ts` | 実行エンジン`BatchI2vLongRunner`。`modes/batch/batchRunner.ts`からの意図的な複製（A2Vは本改修の編集対象外であり、行モデルとペイロード組み立てが根本的に違うため一本化しない）。1行ずつtry/catch・409（JOB_BUSY）は**最大3回試行**（あいだに3秒バックオフ＝計約6秒で諦め、その行だけ`Failed`）・`GET /jobs/{id}`は1秒間隔で**期限なし**ポーリング（24クリップのchainは数十分走って正常）・アップロードした`image_id`は解決済みパスをキーに走行中キャッシュ |
 | `runtime.ts` | **モジュールレベルのシングルトン**。ランナー実体・最新の行・入出力フォルダ・購読機構を持つ（§6の「なぜシングルトンか」参照） |
 | `useBatchI2vLongRunner.ts` | `runtime.ts`を`useSyncExternalStore`でReactへ橋渡しする薄いフック |
-| `useBatchI2vLongForm.ts` | フォーム状態一式（フォルダ・スキャン・行プロンプトの編集（`setRowPromptLocal`／`copyChainPromptToRow`）・add/replaceモード・テンプレート・ガード・実行制御） |
+| `useBatchI2vLongForm.ts` | フォーム状態一式（フォルダ・スキャン・追加プロンプトの編集（`setRowPromptLocal`／`copyChainPromptToRow`）・add/replaceモード・テンプレート・ガード・実行制御） |
 | `BatchI2vLongSection.tsx` | 表示層（既定は折りたたみ）。`<details>`の外枠・フォルダ行・台帳テーブルの見た目は`modes/batch/BatchSection.css`を**そのまま流用**（このCSSがA2Vから取っている唯一のもの） |
-| `BatchI2vLongTable.tsx` | 台帳テーブル（行プロンプト入力欄＋📝・絵文字stat・🔁行リセット） |
+| `BatchI2vLongTable.tsx` | 台帳テーブル（追加プロンプト入力欄＋📝・絵文字stat・🔁行リセット） |
 
 **改修した既存ファイル**:
 
@@ -123,8 +124,8 @@
 | `noRunnableRows` | 行はあるが全部`Done`（`Waiting`/`Failed`/`Generating`が1件もない） |
 | `sourceVideoAttached` | Chain画面がV2Vモード（§2-3の排他。テンプレート側でも`source_video`を落とすが二重で止める） |
 | `clipsTooFew` | クリップが2本未満（素のchainの下限） |
-| `promptEmpty` | **合成後のプロンプトが空白のみの実行対象行がある**（＝共通プロンプトが空で、その行のプロンプトも空）。スキャン前は行が無いので共通プロンプトだけで判定する。理由の文言は、行が判明していれば`#1, #2`のように**行番号を並べる**（10件超は`…(+N)`で省略） |
-| `promptTooLong` | **合成後のプロンプトが2000字超の実行対象行がある**（サーバー側の`max_length=2000`。Chain画面のPromptBar自身は`maxLength`で守っているが、行プロンプトはその外側で文字を足すので**行ごとに合成後を再検査する**）。こちらも行番号を出す |
+| `promptEmpty` | **合成後のプロンプトが空白のみの実行対象行がある**（＝プロンプトが空で、その行のプロンプトも空）。スキャン前は行が無いのでプロンプトだけで判定する。理由の文言は、行が判明していれば`#1, #2`のように**行番号を並べる**（10件超は`…(+N)`で省略） |
+| `promptTooLong` | **合成後のプロンプトが2000字超の実行対象行がある**（サーバー側の`max_length=2000`。Chain画面のPromptBar自身は`maxLength`で守っているが、追加プロンプトはその外側で文字を足すので**行ごとに合成後を再検査する**）。こちらも行番号を出す |
 | `unknownLoraTag` | テンプレートの`loras[]`に、サーバーに登録の無い名前がある（`<lora:typo>`は全行を404にするので事前に止める。**LoRA一覧が読み込み中／取得失敗のときはこのガードを通す**——一時的な`GET /loras`失敗で夜間バッチ全体を止めるほうが害が大きい） |
 | `jobActive` | 単発生成など別のジョブが走っている |
 | `lockedByOther` | もう一方のバッチ（Create画面のバッチA2V）が共有ロックを握っている（§6.3） |
@@ -135,7 +136,7 @@
 
 「そうなりますが、意図していますか？」という助言であり、Startは止めない。
 
-- `clip0PromptOverride`（**最も強い注意なので警告バナー表示**）: clip 0に個別プロンプトがある。行の画像は必ずclip 0に載るので、`replace`にしても共通プロンプト・行プロンプトが画像の効く区間に届かない。
+- `clip0PromptOverride`（**最も強い注意なので警告バナー表示**）: clip 0に個別プロンプトがある。行の画像は必ずclip 0に載るので、`replace`にしてもプロンプト・追加プロンプトが画像の効く区間に届かない。
 - `seedFixed`: `seed >= 0`なので全行が同じseedになる。
 - `otherClipPromptOverride`: clip 1以降に個別プロンプトがある（案Aにより書き換えない）。
 - `startFrameIgnored`: Chain画面のclip 0に冒頭キーフレーム画像がある（行の画像で置き換わる）。
@@ -174,7 +175,7 @@ Chain画面は右クリックのintentルーティングで`remountTokens`によ
 2. `buildI2vLongPayload`純関数（promptMode合成の3分岐・**テンプレートがpromptに触らないこと**・**`buildRowPayload`が行ごとに別のpromptを作ること**・`source_video`の除去・clip 0の`conditioning_images`置き換え・clips 1..nの無改変・テンプレートと共有部分の非破壊性・`ChainSnapshotSource`への構造的代入可能性のコンパイル時アサーション）
 3. `batchI2vLongRunner`クラス（`batchRunner.test.ts`と同型: 未完了行のみ・同時start拒否・アップロードのキャッシュ・失敗行スキップ継続・409リトライ・stopで現在行が完走・**DELETEを投げないこと**・noClobberで実際に書かれた名前を記録すること・**行ごとに別のpromptが送信ボディへ載ること**）
 4. `runtime`シングルトン（リマウント後の再接続・ロックの取得と解放・`{started:false}`時の即時解放）
-5. `useBatchI2vLongForm`フック（フォルダ選択/scan/11種のガード/**行プロンプトの編集・📝流し込み・再スキャンでの消去・空/長すぎ行の検出**/非ブロック注意/start再判定/**開始時にモードが凍結されること**）
+5. `useBatchI2vLongForm`フック（フォルダ選択/scan/11種のガード/**追加プロンプトの編集・📝流し込み・再スキャンでの消去・空/長すぎ行の検出**/非ブロック注意/start再判定/**開始時にモードが凍結されること**）
 6. `BatchI2vLongSection`/テーブルのUIテスト（**プロンプト列の編集可否・6列構成・長い説明文が無いこと**を含む）
 - 検証は`npm run typecheck`（**`tsc -b`**。`npx tsc --noEmit -p .`は偽合格）＋vitest＋oxlint。
 

@@ -16,13 +16,14 @@ import {
 import { RUN_LOCK_OWNER_BATCH_A2V, getRunLockOwner, subscribeRunLock } from "../../shell/runLock";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { compareByName, normalizeImageExtensions } from "../batch-i2v-long/imageRows";
 import { rawFramesForAudio, suggestFramesForAudio } from "../chained/chainUtils";
-import { MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
-import { isDimensionOnGrid } from "../single/paramUtils";
+import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../single/defaultConfig";
+import { isDimensionOnGrid, isNumFramesOnGrid } from "../single/paramUtils";
 import type { UseKeyframesResult } from "../single/useKeyframes";
 import type { BatchRunnerSettings, BatchRunnerState } from "./batchRunner";
-import { IMAGE_SHARED, rejudgeRows, scanToRows } from "./manifestMerge";
-import type { BatchRow, ScannedFile } from "./manifestMerge";
+import { IMAGE_SHARED, rejudgeI2vRows, rejudgeRows, scanImagesToBatchRows, scanModeFor, scanToRows } from "./manifestMerge";
+import type { BatchMode, BatchRow, ScannedFile } from "./manifestMerge";
 import type { RunBatchParams } from "./useBatchRunner";
 import { useBatchRunner } from "./useBatchRunner";
 
@@ -102,14 +103,22 @@ export interface UseBatchFormDeps {
 }
 
 export interface UseBatchFormResult {
+  /** The kind of batch the last successful `scan()` produced (D1,
+   * 2026-09-15): `"a2v"` (one row per audio file) or `"i2v"` (one row per
+   * image file). `null` until a scan has succeeded, and reset to `null`
+   * whenever either input folder changes. Shared lifetime with
+   * `scannedFps`/`scannedMaxFrames`, restored from the run snapshot on a
+   * mid-run remount. */
+  mode: BatchMode | null;
   // Folders (spec §1/§7.1).
   wavDir: string | null;
   imgDir: string | null;
   outDir: string | null;
-  /** True while `outDir` is still the auto-derived
-   * `{wavDir's own name}_a2v_out` sibling (spec §7.1) — flips to false the
-   * moment the user explicitly picks their own output folder, and never
-   * flips back until the audio folder itself changes again. */
+  /** True while `outDir` is still the auto-derived sibling of the input
+   * folder (spec §7.1; `{wavDir's own name}_a2v_out`, or
+   * `{imgDir's own name}_i2v_out` when only an image folder is set) — flips to
+   * false the moment the user explicitly picks their own output folder, and
+   * never flips back. While true, changing EITHER input folder re-derives it. */
   outDirIsAuto: boolean;
   pickWavDir: (title?: string) => Promise<void>;
   pickImgDir: (title?: string) => Promise<void>;
@@ -175,6 +184,14 @@ export interface UseBatchFormResult {
    * warning banner (D7: Batch uses a plain warning banner, not
    * `GenerateReasonsNote`). */
   nagInvalid: boolean;
+  /** i2v guard: the Create form's DURATION is sent verbatim as every i2v
+   * row's `num_frames`, and Create lets a hand-typed value off the 8n+1 grid
+   * through unsnapped — which would 422 every row of an unattended run, the
+   * same way an off-grid width/height would (`resolutionValid`). Only ever
+   * true in `"i2v"` mode: an a2v row's frame count is computed by
+   * `scanToRows`/`rejudgeRows`, which always land on the grid. Blocks
+   * `canStart`; surfaced standalone so `BatchSection` can show the reason. */
+  numFramesOffGrid: boolean;
 
   // Rows / scan (spec §6).
   rows: BatchRow[];
@@ -199,7 +216,9 @@ export interface UseBatchFormResult {
   copyCommonPromptToRow: (index: number, commonPrompt: string) => void;
   /** N5 "A3: 行別画像割当" — the per-row `<select>`'s option list:
    * `IMAGE_SHARED` first, then the image folder's file names as of the last
-   * `scan()`, sorted by name. Just `[IMAGE_SHARED]` while `imgDir` is unset. */
+   * `scan()`, in natural name order (`compareByName`, shared with batch
+   * i2v-long: `img2.png` before `img10.png`). Just `[IMAGE_SHARED]` while
+   * `imgDir` is unset. */
   imageOptions: string[];
   /** N5 "A3: 行別画像割当" — assigns row `index`'s `image` column (an empty
    * string normalizes to `IMAGE_SHARED`) in memory, unless the resolved value
@@ -251,26 +270,53 @@ function splitDir(path: string): { parent: string; base: string } {
   return { parent: trimmed.slice(0, idx), base: trimmed.slice(idx + 1) };
 }
 
-/** Auto-derives the batch output folder (spec §7.1's "既定（自動）" mode):
- * a sibling of `wavDir` named `{wavDir's own folder name}_a2v_out`. */
-function deriveOutDir(wavDir: string): string {
-  const { parent, base } = splitDir(wavDir);
-  const name = `${base}_a2v_out`;
+/** A sibling folder of `dir`, named `{dir's own folder name}{suffix}`. */
+function siblingOf(dir: string, suffix: string): string {
+  const { parent, base } = splitDir(dir);
+  const name = `${base}${suffix}`;
   return parent ? joinPath(parent, name) : name;
+}
+
+/** Auto-derives the batch output folder (spec §7.1's "既定（自動）" mode, D3):
+ * the audio folder's `_a2v_out` sibling if there is an audio folder, else the
+ * image folder's `_i2v_out` sibling. One function for both modes, so the
+ * output folder always follows whichever folder the batch is actually reading
+ * from. */
+function deriveOutDir(wavDir: string | null, imgDir: string | null): string | null {
+  if (wavDir) return siblingOf(wavDir, "_a2v_out");
+  if (imgDir) return siblingOf(imgDir, "_i2v_out");
+  return null;
 }
 
 const ROWS_ELIGIBLE_FOR_RESET: ReadonlySet<BatchRow["stat"]> = new Set(["Done", "Failed", "Skip"]);
 
-/** Image file extensions considered valid choices for a row's `image` column
- * (N5 "A3: 行別画像割当") — passed as `fs.listFiles`'s `extensions` filter
- * when populating the per-row image `<select>`'s option list at scan time. */
-const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"];
+/** `canStart` leaf: does the mode the rows were scanned in still have the
+ * folder it reads from? */
+function foldersReady(mode: BatchMode | null, wavDir: string | null, imgDir: string | null): boolean {
+  if (mode === "a2v") return wavDir !== null;
+  if (mode === "i2v") return imgDir !== null;
+  return false;
+}
+
+/** `canStart` leaf: is the frame count every row will be submitted with
+ * valid? An a2v row's is computed on the 8n+1 grid by
+ * `scanToRows`/`rejudgeRows`; an i2v row's is the Create form's raw DURATION,
+ * which can be hand-typed off the grid. */
+function framesReady(mode: BatchMode | null, numFramesOnGrid: boolean): boolean {
+  if (mode === "a2v") return true;
+  if (mode === "i2v") return numFramesOnGrid;
+  return false;
+}
 
 /**
- * Owns the batch A2V panel's whole browser-side state: folder selection
- * (spec §1/§7.1), the folder-scan -> in-memory row list (spec §6; stateless —
+ * Owns the batch panel's whole browser-side state: folder selection
+ * (spec §1/§7.1), the scan mode the folders decide (`scannedMode`, D1
+ * 2026-09-15 — surfaced as `mode`, frozen into the run and restored from it),
+ * the folder-scan -> in-memory row list (spec §6; stateless —
  * no CSV persistence, owner decision 2026-07-18), the batch's own minimal
- * generation settings, and the run/stop controls (via
+ * generation settings, the mode-dependent start gates (`foldersReady`/
+ * `framesReady`, the latter surfaced as `numFramesOffGrid`), and the run/stop
+ * controls (via
  * {@link useBatchRunner}). Mirrors `gradio_ui/ui.py`'s batch accordion
  * wiring, adapted to this app's hook-per-screen-section convention (see
  * `useChainForm`/`useGenerationForm` for the sibling patterns this follows).
@@ -400,7 +446,9 @@ export function useBatchForm(
   const [rows, setRows] = useState<BatchRow[]>(() => (restoring ? batchRunner.rows : []));
   const [scanError, setScanError] = useState<string | null>(null);
   // N5 A3: the image folder's file names, fetched once per `scan()` call and
-  // sorted here (contract: "native's result order is unspecified — callers
+  // sorted there in natural name order with `compareByName` — the same
+  // comparator batch i2v-long uses, and the same sorted listing the i2v rows
+  // are built from (contract: "native's result order is unspecified — callers
   // must sort `files` themselves"). `imageOptions` below derives the actual
   // per-row `<select>` option list, always leading with `IMAGE_SHARED` and
   // collapsing to just that sentinel whenever `imgDir` is unset — so clearing
@@ -418,6 +466,22 @@ export function useBatchForm(
   const [scannedMaxFrames, setScannedMaxFrames] = useState<number | null>(() =>
     restoring ? batchRunner.scannedMaxFrames : null,
   );
+  // D1: the mode the current row list was scanned in. Same lifecycle as
+  // `scannedFps`/`scannedMaxFrames` — set by a successful `scan()`, dropped
+  // whenever either input folder changes, restored from the run snapshot on a
+  // mid-run remount.
+  const [scannedMode, setScannedMode] = useState<BatchMode | null>(() => (restoring ? batchRunner.mode : null));
+
+  /** Everything a scan produced, dropped in one go — called whenever either
+   * INPUT folder changes, because both of them are now row sources (D1) and a
+   * row list from the previous folder pair is meaningless against the new one. */
+  const clearScanResults = useCallback(() => {
+    setRows([]);
+    setScanError(null);
+    setScannedMode(null);
+    setScannedFps(null);
+    setScannedMaxFrames(null);
+  }, []);
 
   // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02: 走行中に「再接続した」マウントへ行の更新を流し続けるための経路。
   // `runtime.ts`は変化のたびにスナップショットを丸ごと差し替えるので、この効果は
@@ -444,16 +508,13 @@ export function useBatchForm(
         const folderPath = await pickFolder(title);
         if (!folderPath) return;
         setWavDirState(folderPath);
-        setRows([]);
-        setScanError(null);
-        setScannedFps(null);
-        setScannedMaxFrames(null);
-        if (outDirIsAuto) setOutDirState(deriveOutDir(folderPath));
+        clearScanResults();
+        if (outDirIsAuto) setOutDirState(deriveOutDir(folderPath, imgDir));
       } catch (err) {
         setScanError(err instanceof BridgeError ? `${err.code}: ${err.message}` : String(err));
       }
     },
-    [pickFolder, outDirIsAuto],
+    [pickFolder, outDirIsAuto, imgDir, clearScanResults],
   );
 
   const pickImgDir = useCallback(
@@ -469,12 +530,14 @@ export function useBatchForm(
           // user can never commit) a file name that only existed in the
           // folder that was just replaced.
           setImageFileNames([]);
+          clearScanResults();
+          if (outDirIsAuto) setOutDirState(deriveOutDir(wavDir, folderPath));
         }
       } catch (err) {
         setScanError(err instanceof BridgeError ? `${err.code}: ${err.message}` : String(err));
       }
     },
-    [pickFolder],
+    [pickFolder, outDirIsAuto, wavDir, clearScanResults],
   );
 
   const pickOutDir = useCallback(
@@ -516,14 +579,11 @@ export function useBatchForm(
       const next = trimmed === "" ? null : trimmed;
       if (next === wavDir) return;
       setWavDirState(next);
-      setRows([]);
-      setScanError(null);
-      setScannedFps(null);
-      setScannedMaxFrames(null);
-      if (outDirIsAuto) setOutDirState(next ? deriveOutDir(next) : null);
+      clearScanResults();
+      if (outDirIsAuto) setOutDirState(deriveOutDir(next, imgDir));
       if (next) await probeFolder(next);
     },
-    [wavDir, outDirIsAuto, probeFolder],
+    [wavDir, imgDir, outDirIsAuto, probeFolder, clearScanResults],
   );
 
   const setImgDir = useCallback(
@@ -533,9 +593,11 @@ export function useBatchForm(
       if (next === imgDir) return;
       setImgDirState(next);
       setImageFileNames([]);
+      clearScanResults();
+      if (outDirIsAuto) setOutDirState(deriveOutDir(wavDir, next));
       if (next) await probeFolder(next);
     },
-    [imgDir, probeFolder],
+    [imgDir, wavDir, outDirIsAuto, probeFolder, clearScanResults],
   );
 
   // The output folder is NOT probed — it may legitimately not exist yet
@@ -555,30 +617,51 @@ export function useBatchForm(
   const [isScanning, setIsScanning] = useState(false);
 
   const scan = useCallback(async () => {
-    if (!wavDir) return;
+    // D1: the folders decide what this scan produces, through the SAME pure
+    // function `canScan` uses — so the button and the scan can never disagree.
+    const mode = scanModeFor(wavDir, imgDir);
+    if (mode === null) return;
     setIsScanning(true);
     setScanError(null);
     try {
-      const listing = await nativeBridge.request("fs.listFiles", { folderPath: wavDir, withAudioDuration: true });
-      const scannedFiles: ScannedFile[] = listing.files;
       const fps = generationValues.frameRate;
       const maxFrames = generationValues.numFrames;
-      const fresh = scanToRows(scannedFiles, {
-        fps,
-        framesFor: suggestFramesForAudio,
-        rawFramesFor: rawFramesForAudio,
-        maxFrames,
-      });
 
-      if (imgDir) {
+      // Audio first, images second — the order the a2v path has always used.
+      let audioRows: BatchRow[] = [];
+      if (wavDir !== null) {
+        const listing = await nativeBridge.request("fs.listFiles", { folderPath: wavDir, withAudioDuration: true });
+        const scannedFiles: ScannedFile[] = listing.files;
+        audioRows = scanToRows(scannedFiles, {
+          fps,
+          framesFor: suggestFramesForAudio,
+          rawFramesFor: rawFramesForAudio,
+          maxFrames,
+        });
+      }
+
+      // The image folder is listed ONCE and feeds both the per-row `<select>`
+      // options and (in i2v mode) the rows themselves, so the two can never
+      // disagree about which files exist. D8: the allowed extensions come from
+      // `/config` — the same list the upload endpoint enforces — for both modes.
+      let imageFiles: ScannedFile[] = [];
+      if (imgDir !== null) {
         const imgListing = await nativeBridge.request("fs.listFiles", {
           folderPath: imgDir,
-          extensions: IMAGE_EXTENSIONS,
+          extensions: normalizeImageExtensions(config.upload.allowed_image_extensions),
         });
-        setImageFileNames(imgListing.files.map((f) => f.name).sort());
-      } else {
-        setImageFileNames([]);
+        imageFiles = [...imgListing.files].sort(compareByName);
       }
+      setImageFileNames(imageFiles.map((f) => f.name));
+
+      const fresh =
+        mode === "a2v"
+          ? audioRows
+          : scanImagesToBatchRows(imageFiles, {
+              numFrames: maxFrames,
+              frameRate: fps,
+              allowedExtensions: config.upload.allowed_image_extensions,
+            });
 
       // Stateless batch (owner decision 2026-07-18): a scan simply replaces
       // the in-memory row list with a fresh listing — there is no manifest CSV
@@ -586,6 +669,7 @@ export function useBatchForm(
       // from scratch. (Existing output files are never overwritten: the runner
       // downloads with `noClobber`, so a re-run writes a numbered sibling.)
       setRows(fresh);
+      setScannedMode(mode);
       // U4 guard 2: remember the FPS and DURATION cap baked into these rows'
       // frame counts / over-cap Skips so a later Create-side FPS or DURATION
       // change can be detected before `start()`.
@@ -599,7 +683,14 @@ export function useBatchForm(
     // M1 (adversarial review): `generationValues.numFrames` MUST be in the dep
     // list — without it `scan` would close over a stale DURATION cap and keep
     // scanning against the old `maxFrames` after the Create form changed it.
-  }, [wavDir, imgDir, generationValues.frameRate, generationValues.numFrames, nativeBridge]);
+  }, [
+    wavDir,
+    imgDir,
+    generationValues.frameRate,
+    generationValues.numFrames,
+    config.upload.allowed_image_extensions,
+    nativeBridge,
+  ]);
 
   const resetRowToWaiting = useCallback(
     (queue: number) => {
@@ -677,7 +768,13 @@ export function useBatchForm(
   const lockedByOther = lockOwner !== null && lockOwner !== RUN_LOCK_OWNER_BATCH_A2V;
 
   const start = useCallback(() => {
-    if (!wavDir || !outDir) return;
+    // D1: the run is whatever the last scan produced — never re-derived from
+    // the folders here, so editing a folder after a scan can only invalidate
+    // the rows (see `clearScanResults`), never silently switch the mode.
+    const mode = scannedMode;
+    if (mode === null || !outDir) return;
+    if (mode === "a2v" && !wavDir) return;
+    if (mode === "i2v" && !imgDir) return;
     // M-1 start-time re-judgment (mirrors `batch.py`'s `_plan_rejudgement`):
     // recompute every runnable row's frame count / 481-frame Skip at the
     // CURRENT Create-form fps, so a row scanned at one fps but started at
@@ -689,12 +786,21 @@ export function useBatchForm(
     // the run itself MUST be handed `rejudged`, never the closure's stale
     // `rows` (passing `rows` would re-introduce the original over-cap bug the
     // re-judgment exists to fix).
-    const rejudged = rejudgeRows(rows, {
-      fps: generationValues.frameRate,
-      framesFor: suggestFramesForAudio,
-      rawFramesFor: rawFramesForAudio,
-      maxFrames: generationValues.numFrames,
-    });
+    // An i2v row has no audio to derive a length from, so its re-judgment is
+    // simply "take the DURATION and FPS on screen right now" — `rejudgeRows`
+    // would read its `duration` column back as an audio length and destroy it.
+    const rejudged =
+      mode === "a2v"
+        ? rejudgeRows(rows, {
+            fps: generationValues.frameRate,
+            framesFor: suggestFramesForAudio,
+            rawFramesFor: rawFramesForAudio,
+            maxFrames: generationValues.numFrames,
+          })
+        : rejudgeI2vRows(rows, {
+            numFrames: generationValues.numFrames,
+            frameRate: generationValues.frameRate,
+          });
     setRows(rejudged);
     // §1-7 相互ロック 第2段: never submit into a busy job slot, even if this is
     // reached with a stale closure or by a direct call — the run lock cannot
@@ -746,7 +852,8 @@ export function useBatchForm(
     const [firstReady] = [...keyframes.conditioningImages].sort((a, b) => a.frame_idx - b.frame_idx);
     const sharedConditioningImages = firstReady ? [{ ...firstReady, frame_idx: 0 }] : [];
     const params: RunBatchParams = {
-      wavDir,
+      mode,
+      wavDir: mode === "a2v" ? wavDir : null,
       outDir,
       settings,
       rows: rejudged,
@@ -783,6 +890,7 @@ export function useBatchForm(
   // `acceleration` is in this dependency list for the same reason `nag` is:
   // without it an overnight batch could run against a stale attention choice.
   }, [
+    scannedMode,
     wavDir,
     outDir,
     imgDir,
@@ -862,8 +970,20 @@ export function useBatchForm(
     (scannedFps !== null && scannedFps !== generationValues.frameRate) ||
     (scannedMaxFrames !== null && scannedMaxFrames !== generationValues.numFrames);
 
+  // i2v guard: the Create form's DURATION is submitted verbatim as every i2v
+  // row's `num_frames`, and Create passes a hand-typed value through unsnapped
+  // — off the 8n+1 grid it would 422 every row of an unattended overnight run,
+  // exactly like an off-grid width/height would.
+  const numFramesOnGrid = isNumFramesOnGrid(
+    generationValues.numFrames,
+    MIN_NUM_FRAMES,
+    config.limits.max_num_frames,
+  );
+  const numFramesOffGrid = scannedMode === "i2v" && !numFramesOnGrid;
+
   const canStart =
-    wavDir !== null &&
+    foldersReady(scannedMode, wavDir, imgDir) &&
+    framesReady(scannedMode, numFramesOnGrid) &&
     outDir !== null &&
     !lockedByOther &&
     // §1-7 相互ロック 第2段: the backend is occupied (a job, or a model load).
@@ -879,6 +999,7 @@ export function useBatchForm(
     runnableRows.length > 0;
 
   return {
+    mode: scannedMode,
     wavDir,
     imgDir,
     outDir,
@@ -898,10 +1019,11 @@ export function useBatchForm(
     keyframes,
     sharedKeyframeMissing,
     nagInvalid,
+    numFramesOffGrid,
     rows,
     isScanning,
     scanError,
-    canScan: wavDir !== null && !isScanning && batchRunner.state === "idle",
+    canScan: scanModeFor(wavDir, imgDir) !== null && !isScanning && batchRunner.state === "idle",
     scan,
     resetRowToWaiting,
     setRowPromptLocal,

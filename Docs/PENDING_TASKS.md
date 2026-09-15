@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-15（Inpaintingがオーナーの実機ゲートに全項目合格してクローズしたため、§2を見出しごと削除した。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1〔近日中の改修項目〕と§2〔実装済み・ユーザーのテスト待ち〕はどちらも該当項目が無いため、運用規則どおり見出しごと削除してある）
+- 作成: 2026-07-15／最終更新: 2026-09-16（バッチパネルのi2vモード追加〔§1-30〕が実機ゲートG1〜G12全合格・オーナー受容でクローズし〔CLOSED §3-152〕、§1に残っていた最後の項目だったため見出しごと削除した。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1〔近日中の改修項目〕と§2〔実装済み・ユーザーのテスト待ち〕はどちらも該当項目が無いため、運用規則どおり見出しごと削除してある（LTX 2.5での実機確認は§3-151として§3に置いてある））
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -42,16 +42,23 @@
 - **出典**: オーナー発案（Inpainting実機ゲート中の観察）。
 - **状態**: 将来の研究課題（着手時期未定）。
 
+#### 3-151. バッチパネル（a2v＋i2vモード）のLTX 2.5での実機確認（起票：2026-09-15）
+
+- **概要**: バッチパネルのゲート`unavailable`は、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるときだけ真になる（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5で動作しており、i2vモード（`POST /generate`を使う）も同じゲートに乗るぶん既に動作する**。今回の実機ゲート（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §108）はLTX 2.3だけで実施したため、残っているのは**LTX 2.5でも同じ実機確認（[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.18の項目一式とa2vの退行確認）を走らせること**だけである。
+- **何が塞いでいるか**: 技術的な障害は無い。オーナーの実機確認の時間だけである。
+- **出典**: [`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §1の7。
+- **状態**: 未着手。
+
 ### 研究課題（上の改修項目より優先度が下）
 
 #### 3-1. バッチA2Vのα版で意図的に省略した機能
 
-バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能）にα版として実装していない機能のうち、現在も残っているのは次の4点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
+バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。2026-09-15からi2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の4点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
 
 - **バッチでの参照動画**: IC-LoRA用の参照動画系フィールド（Gradio原典`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`）に相当する設定がバッチ経路に無い（`webui/src/modes/batch/batchRunner.ts`の実装ノートに「No reference-video (control IC-LoRA) adapter support」と明記）。
 - **開始前の一括妥当性検証（preflight）**: Gradio原典の`_validate`相当にあたる、画像/プロンプトのfoolproof preflightは未実装。
-- **行ごとの`<lora:>`タグ非対応**: 各行のプロンプト欄に書いた`<lora:名:強度>`は、タグとして解釈されず**ただの文字列**として送られる。LoRAは共通プロンプト側からしか効かない仕様（`composeRowPrompt`と`setRowPromptLocal`のいずれも`parseLoraPrompt`を通していない）。着手条件は**ユーザーからの要望があったとき**。
-- **行ごとのAdd／Replace切替**: 共通プロンプトと行プロンプトの合成方式（Add＝連結／Replace＝行で置き換え）は、現状バッチ全体で1つの設定（`promptMode`）であり、行ごとには切り替えられない。
+- **行ごとの`<lora:>`タグ非対応**: 各行の追加プロンプト欄に書いた`<lora:名:強度>`は、タグとして解釈されず**ただの文字列**として送られる。LoRAはプロンプト側からしか効かない仕様（`composeRowPrompt`と`setRowPromptLocal`のいずれも`parseLoraPrompt`を通していない）。着手条件は**ユーザーからの要望があったとき**。
+- **行ごとのAdd／Replace切替**: プロンプトと追加プロンプトの合成方式（Add＝連結／Replace＝行で置き換え）は、現状バッチ全体で1つの設定（`promptMode`）であり、行ごとには切り替えられない。
 
 なお本節の項目は、オーナー方針（Gradio同梱UIとのパリティは最終的に全項目を実装対象とする）のもとでは、いずれ実装側へ戻る前提である（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。
 
@@ -287,6 +294,7 @@
 - **概要**: バックエンド同梱Gradioのバッチ実行経路は、チェーンリクエストに`chunked_upsample`（省メモリ経路）を明示送信していない。フロントエンドのバッチA2Vは常に明示送信しており、**この点だけはフロントのほうが進んでいる**（逆方向の差分）。
 - **何が塞いでいるか**: バックエンド側の凍結方針。製品の入口はフロントエンドなので実害が小さい。
 - **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.9-1、[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.9。
+- **追記（2026-09-15）**: 行画像の生成強度についても同種の逆方向差分が生まれた——バッチa2vの行画像はCreate画面冒頭のキーフレームカードの値／既定0.8を使うようになったが、Gradioバッチは引き続き固定1.0のままである（詳細は[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §2.5を参照）。
 
 ### 4-16. Join（V2V結合）の既知の縮退3ケース
 

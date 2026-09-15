@@ -20,11 +20,15 @@ import type { ConditioningImage } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import type { BatchRunnerSettings, BatchRunnerState, BatchRunnerStartResult } from "./batchRunner";
-import type { BatchRow } from "./manifestMerge";
+import type { BatchMode, BatchRow } from "./manifestMerge";
 import { getBatchA2vRuntime } from "./runtime";
 
 export interface RunBatchParams {
-  wavDir: string;
+  /** Which kind of batch this run is (D1), decided at scan time and frozen
+   * here. Required, with no default — see `BatchRunnerStartParams.mode`. */
+  mode: BatchMode;
+  /** `null` for an i2v run, which has no audio folder. */
+  wavDir: string | null;
   imgDir?: string;
   outDir: string;
   settings: BatchRunnerSettings;
@@ -56,10 +60,14 @@ export interface UseBatchRunnerDeps {
 
 export interface UseBatchRunnerResult {
   state: BatchRunnerState;
+  /** The running (or most recent) batch's frozen scan mode; `null` before the
+   * first run. */
+  mode: BatchMode | null;
   /** The running (or most recent) batch's live rows — served from the runtime
    * singleton, so this is already correct on a remount's first render. */
   rows: BatchRow[];
-  /** The folders the running (or most recent) batch was started against. */
+  /** The folders the running (or most recent) batch was started against
+   * (`wavDir` is `null` for an i2v run). */
   wavDir: string | null;
   imgDir: string | null;
   outDir: string | null;
@@ -97,6 +105,7 @@ export function useBatchRunner(deps: UseBatchRunnerDeps = {}): UseBatchRunnerRes
     (params: RunBatchParams, onRowsChanged?: (rows: BatchRow[]) => void) => {
       runtime.run({
         bridge: nativeBridge,
+        mode: params.mode,
         wavDir: params.wavDir,
         outDir: params.outDir,
         settings: params.settings,
@@ -122,6 +131,7 @@ export function useBatchRunner(deps: UseBatchRunnerDeps = {}): UseBatchRunnerRes
 
   return {
     state: snapshot.state,
+    mode: snapshot.mode,
     rows: snapshot.rows,
     wavDir: snapshot.wavDir,
     imgDir: snapshot.imgDir,

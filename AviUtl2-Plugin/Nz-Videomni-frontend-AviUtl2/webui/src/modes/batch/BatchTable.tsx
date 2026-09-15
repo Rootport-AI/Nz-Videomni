@@ -1,5 +1,5 @@
 import { useStrings } from "../../i18n/LanguageContext";
-import type { BatchRow, BatchStat } from "./manifestMerge";
+import type { BatchMode, BatchRow, BatchStat } from "./manifestMerge";
 
 /** Stat icon, mirroring `gradio_ui/ui.py`'s `_STAT_ICON` mapping
  * (⚪Waiting/⏳Generating/✅Done/❌Failed/⛔Skip) so a user who has also seen
@@ -16,6 +16,11 @@ const RESETTABLE_STATS: ReadonlySet<BatchStat> = new Set(["Done", "Failed", "Ski
 
 export interface BatchTableProps {
   rows: BatchRow[];
+  /** Which kind of batch these rows were scanned as (D1), `null` before the
+   * first scan. An i2v row has no audio file, so the audio column shows a
+   * fixed label instead of `row.wav` (which holds the row's source IMAGE name
+   * in that mode — see `BatchRow.wav`). */
+  mode: BatchMode | null;
   /** True while a run is in flight — disables every row's reset button, the
    * prompt/image editors, and the "copy common prompt" button alike (the
    * in-memory row list is the only copy there is, so it is only safe to
@@ -55,6 +60,7 @@ function optionsForRow(imageOptions: string[], current: string): string[] {
  */
 export function BatchTable({
   rows,
+  mode,
   disabled,
   imageOptions,
   onResetRow,
@@ -88,7 +94,7 @@ export function BatchTable({
           {rows.map((row, index) => (
             <tr key={row.queue}>
               <td>{row.queue}</td>
-              <td className="batch-table-wav">{row.wav}</td>
+              <td className="batch-table-wav">{mode === "i2v" ? t.i2vRowLabel : row.wav}</td>
               <td>{row.duration.toFixed(1)}s</td>
               <td className="batch-table-image-cell">
                 <select

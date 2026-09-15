@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
 import type { BridgeMethod, NativeBridge, ParamsOf, ResultOf } from "../../bridge";
+import type { ConditioningImage } from "../../api/types";
 import type { NagSettings } from "../../shell/nagSettings";
 import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import { BatchRunner } from "./batchRunner";
 import type { BatchRunnerSettings } from "./batchRunner";
 import { IMAGE_SHARED } from "./manifestMerge";
-import type { BatchRow, BatchStat } from "./manifestMerge";
+import type { BatchMode, BatchRow, BatchStat } from "./manifestMerge";
 
 // Real timers throughout, like `useGeneration.test.ts` — `pollIntervalMs`/
 // `jobBusyBackoffMs` are overridden to a few ms per test so the whole suite
@@ -96,6 +97,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     const result = await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -130,6 +132,7 @@ describe("BatchRunner", () => {
     const rows: BatchRow[] = [makeRow(1, "a.wav", "Done", { output: "a.mp4" }), makeRow(2, "b.wav", "Skip")];
 
     const result = await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -147,6 +150,7 @@ describe("BatchRunner", () => {
     const rows: BatchRow[] = [makeRow(1, "a.wav", "Waiting")];
 
     const first = runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -155,6 +159,7 @@ describe("BatchRunner", () => {
       jobBusyBackoffMs: BACKOFF_MS,
     });
     const second = await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -173,6 +178,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -199,6 +205,7 @@ describe("BatchRunner", () => {
     ];
 
     await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       imgDir: "C:\\batch\\img",
       outDir: "C:\\batch\\out",
@@ -221,6 +228,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: { ...BASE_SETTINGS, promptCommon: "" },
@@ -250,6 +258,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -275,6 +284,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     const startPromise = runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -317,6 +327,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -338,6 +349,7 @@ describe("BatchRunner", () => {
     let latest: BatchRow[] = rows;
 
     await runner.start({
+      mode: "a2v",
       wavDir: "C:\\batch\\in",
       outDir: "C:\\batch\\out",
       settings: BASE_SETTINGS,
@@ -403,6 +415,7 @@ describe("BatchRunner", () => {
       const rows: BatchRow[] = [makeRow(1, "a.wav", "Waiting")];
 
       await runner.start({
+        mode: "a2v",
         wavDir: "C:\\batch\\in",
         outDir: "C:\\batch\\out",
         settings: { ...BASE_SETTINGS, nag: ENABLED_NAG },
@@ -428,6 +441,7 @@ describe("BatchRunner", () => {
       const rows: BatchRow[] = [makeRow(1, "a.wav", "Waiting")];
 
       await runner.start({
+        mode: "a2v",
         wavDir: "C:\\batch\\in",
         outDir: "C:\\batch\\out",
         settings: BASE_SETTINGS,
@@ -461,6 +475,7 @@ describe("BatchRunner", () => {
       const { wrapped, chainBodies } = captureChainBridge(base);
       const runner = new BatchRunner(wrapped);
       await runner.start({
+        mode: "a2v",
         wavDir: "C:\\batch\\in",
         outDir: "C:\\batch\\out",
         settings,
@@ -549,6 +564,7 @@ describe("BatchRunner", () => {
       const rows: BatchRow[] = [makeRow(1, "a.wav", "Waiting")];
 
       await runner.start({
+        mode: "a2v",
         wavDir: "C:\\batch\\in",
         outDir: "C:\\batch\\out",
         settings: BASE_SETTINGS,
@@ -557,6 +573,251 @@ describe("BatchRunner", () => {
 
       expect(chainBodies).toHaveLength(1);
       expect(chainBodies[0]!.stage2_window).toBe("full_length");
+    });
+  });
+
+  // i2vモード（D1/D11、2026-09-15）: 音声の無い行は `POST /api/v1/generate` へ。
+  describe("i2vモード", () => {
+    const IMG_DIR = "C:\\batch\\img";
+
+    /** 1枚の画像から1行。`wav`にはスキャン元の画像名が入る（出力名の由来）。 */
+    function imageRow(queue: number, image: string, overrides: Partial<BatchRow> = {}): BatchRow {
+      return makeRow(queue, image, "Waiting", { image, frames: 121, duration: 121 / 24, ...overrides });
+    }
+
+    /** 投入(POST)されたパスとbodyを記録し、500で弾いて行を即Failedにする
+     * ——`captureChainBridge`のチェーン/単発 両対応版。 */
+    function captureSubmitBridge(base: NativeBridge): {
+      wrapped: NativeBridge;
+      submits: Array<{ path: string; body: Record<string, unknown> }>;
+    } {
+      const submits: Array<{ path: string; body: Record<string, unknown> }> = [];
+      const wrapped: NativeBridge = {
+        async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+          if (method === "backend.request") {
+            const p = params as { method?: string; path?: string; body?: Record<string, unknown> };
+            if (p.method === "POST" && (p.path === "/api/v1/generate" || p.path === "/api/v1/generate/chain")) {
+              submits.push({ path: p.path, body: p.body ?? {} });
+              return {
+                status: 500,
+                body: { error: { code: "MOCK_STOP", message: "captured by test" } },
+              } as unknown as ResultOf<M>;
+            }
+          }
+          return base.request(method, params);
+        },
+        requestWithFiles: (method, params, files) => base.requestWithFiles(method, params, files),
+        on: (event, handler) => base.on(event, handler),
+      };
+      return { wrapped, submits };
+    }
+
+    it("音声アップロードを一度も行わず、/api/v1/generate へチェーン専用欄なしのbodyを投げる", async () => {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped: captured, submits } = captureSubmitBridge(base);
+      const { wrapped, calls } = spyBridge(captured);
+      const runner = new BatchRunner(wrapped);
+
+      await runner.start({
+        mode: "i2v",
+        wavDir: null,
+        imgDir: IMG_DIR,
+        outDir: "C:\\batch\\out",
+        settings: BASE_SETTINGS,
+        rows: [imageRow(1, "cat01.png")],
+        sharedConditioningImages: [],
+      });
+
+      const audioUploads = calls.filter(
+        (c) => c.method === "backend.uploadFile" && (c.params as { kind: string }).kind === "audio",
+      );
+      expect(audioUploads).toHaveLength(0);
+
+      expect(submits).toHaveLength(1);
+      expect(submits[0]!.path).toBe("/api/v1/generate");
+      const body = submits[0]!.body;
+      expect(body.num_frames).toBe(121);
+      expect(body.width).toBe(512);
+      expect(body.height).toBe(320);
+      for (const banned of ["clips", "source_audio", "stage2_window", "chunked_upsample", "crop_output", "pipeline"]) {
+        expect(body).not.toHaveProperty(banned);
+      }
+      // 行画像はアップロードされ、frame 0 の単一キーフレームとして載る。カードが
+      // 無いのでstrengthはDEFAULT_STRENGTH(0.8)。
+      expect(body.conditioning_images).toEqual([
+        { image_id: expect.stringMatching(/^mock-image-\d+$/), frame_idx: 0, strength: 0.8 },
+      ]);
+    });
+
+    it("出力名はスキャン元の画像名の語幹 + .mp4（noClobber付き）", async () => {
+      const fs = createMockFs();
+      const bridge = createMockBridge({ delayMs: 0, runningPollCount: 1, fs });
+      const { wrapped, calls } = spyBridge(bridge);
+      const runner = new BatchRunner(wrapped);
+      let latest: BatchRow[] = [];
+
+      await runner.start({
+        mode: "i2v",
+        wavDir: null,
+        imgDir: IMG_DIR,
+        outDir: "C:\\batch\\out",
+        settings: BASE_SETTINGS,
+        rows: [imageRow(1, "cat01.png")],
+        sharedConditioningImages: [],
+        onRowsChanged: (r) => {
+          latest = r;
+        },
+        pollIntervalMs: POLL_MS,
+        jobBusyBackoffMs: BACKOFF_MS,
+      });
+
+      expect(latest[0]).toMatchObject({ stat: "Done", output: "cat01.mp4", error: "" });
+      const download = calls.find((c) => c.method === "backend.downloadVideo");
+      expect(download?.params).toMatchObject({ fileName: "cat01.mp4", noClobber: true });
+      expect(fs.folders.get("C:\\batch\\out")?.some((e) => e.name === "cat01.mp4")).toBe(true);
+    });
+
+    it("409は3回まで再試行してから行をFailedにする", async () => {
+      const bridge = createMockBridge({ delayMs: 0, runningPollCount: 50 });
+      // 単一ジョブ枠を埋めて、以後の /api/v1/generate をすべて409にする。
+      await bridge.request("backend.request", {
+        method: "POST",
+        path: "/api/v1/generate",
+        body: { prompt: "occupying the slot" },
+      });
+      const { wrapped, calls } = spyBridge(bridge);
+      const runner = new BatchRunner(wrapped);
+      let latest: BatchRow[] = [];
+
+      await runner.start({
+        mode: "i2v",
+        wavDir: null,
+        imgDir: IMG_DIR,
+        outDir: "C:\\batch\\out",
+        settings: BASE_SETTINGS,
+        rows: [imageRow(1, "cat01.png")],
+        sharedConditioningImages: [],
+        onRowsChanged: (r) => {
+          latest = r;
+        },
+        pollIntervalMs: POLL_MS,
+        jobBusyBackoffMs: BACKOFF_MS,
+      });
+
+      const submits = calls.filter(
+        (c) =>
+          c.method === "backend.request" &&
+          (c.params as { method?: string; path?: string }).method === "POST" &&
+          (c.params as { path?: string }).path === "/api/v1/generate",
+      );
+      expect(submits).toHaveLength(3);
+      expect(latest[0]).toMatchObject({ stat: "Failed", error: "server busy (409) after retries" });
+    }, 10_000);
+
+    it("Shared行は画像をアップロードせず、共通キーフレームをそのまま載せる", async () => {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped: captured, submits } = captureSubmitBridge(base);
+      const { wrapped, calls } = spyBridge(captured);
+      const runner = new BatchRunner(wrapped);
+      const shared = [{ image_id: "kf-1", frame_idx: 0, strength: 0.35 }];
+
+      await runner.start({
+        mode: "i2v",
+        wavDir: null,
+        imgDir: IMG_DIR,
+        outDir: "C:\\batch\\out",
+        settings: BASE_SETTINGS,
+        rows: [imageRow(1, "cat01.png", { image: IMAGE_SHARED })],
+        sharedConditioningImages: shared,
+      });
+
+      const imageUploads = calls.filter(
+        (c) => c.method === "backend.uploadFile" && (c.params as { kind: string }).kind === "image",
+      );
+      expect(imageUploads).toHaveLength(0);
+      expect(submits[0]!.body.conditioning_images).toEqual(shared);
+    });
+  });
+
+  // D5 案A（2026-09-15）: 行画像のstrengthは「Sharedが参照するのと同じカード」の
+  // 値。readyなカードが無ければ DEFAULT_STRENGTH(0.8)。a2vの1.0固定はここで廃止。
+  describe("行画像のstrength（D5 案A）", () => {
+    const IMG_DIR = "C:\\batch\\img";
+
+    /** 1行だけ走らせて、投入されたbodyの`conditioning_images`を返す。
+     * a2vはチェーンのclips[0]、i2vはトップレベル。 */
+    async function conditioningFor(
+      mode: BatchMode,
+      sharedConditioningImages: ConditioningImage[],
+      image = "face.png",
+    ): Promise<Array<Record<string, unknown>>> {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const submits: Array<{ path: string; body: Record<string, unknown> }> = [];
+      const bridge: NativeBridge = {
+        async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+          if (method === "backend.request") {
+            const p = params as { method?: string; path?: string; body?: Record<string, unknown> };
+            if (p.method === "POST" && (p.path === "/api/v1/generate" || p.path === "/api/v1/generate/chain")) {
+              submits.push({ path: p.path, body: p.body ?? {} });
+              return {
+                status: 500,
+                body: { error: { code: "MOCK_STOP", message: "captured by test" } },
+              } as unknown as ResultOf<M>;
+            }
+          }
+          return base.request(method, params);
+        },
+        requestWithFiles: (method, params, files) => base.requestWithFiles(method, params, files),
+        on: (event, handler) => base.on(event, handler),
+      };
+      const runner = new BatchRunner(bridge);
+
+      await runner.start({
+        mode,
+        wavDir: mode === "a2v" ? "C:\\batch\\in" : null,
+        imgDir: IMG_DIR,
+        outDir: "C:\\batch\\out",
+        settings: BASE_SETTINGS,
+        rows: [makeRow(1, mode === "a2v" ? "a.wav" : image, "Waiting", { image })],
+        sharedConditioningImages,
+      });
+
+      expect(submits).toHaveLength(1);
+      const body = submits[0]!.body;
+      if (mode === "a2v") {
+        const clips = body.clips as Array<{ conditioning_images?: Array<Record<string, unknown>> }>;
+        return clips[0]?.conditioning_images ?? [];
+      }
+      return (body.conditioning_images as Array<Record<string, unknown>> | undefined) ?? [];
+    }
+
+    const CARD: ConditioningImage[] = [{ image_id: "kf-1", frame_idx: 0, strength: 0.55 }];
+
+    /** 行画像の`image_id`はモックの採番（a2vは音声アップロードが先に1つ消費する）
+     * 次第なので、値ではなく形で照合する。 */
+    function rowImageAt(strength: number) {
+      return [{ image_id: expect.stringMatching(/^mock-image-\d+$/) as unknown as string, frame_idx: 0, strength }];
+    }
+
+    it("a2vの行画像はカードの値を使う（1.0固定ではない）", async () => {
+      expect(await conditioningFor("a2v", CARD)).toEqual(rowImageAt(0.55));
+    });
+
+    it("i2vの行画像も同じカードの値を使う", async () => {
+      expect(await conditioningFor("i2v", CARD)).toEqual(rowImageAt(0.55));
+    });
+
+    it("readyなカードが無ければ両モードとも0.8", async () => {
+      expect(await conditioningFor("a2v", [])).toEqual(rowImageAt(0.8));
+      expect(await conditioningFor("i2v", [])).toEqual(rowImageAt(0.8));
+    });
+
+    it("Shared行はカードの値がそのまま載る（frame_idxもstrengthも加工しない）", async () => {
+      expect(await conditioningFor("a2v", CARD, IMAGE_SHARED)).toEqual(CARD);
+      expect(await conditioningFor("i2v", CARD, IMAGE_SHARED)).toEqual(CARD);
     });
   });
 });

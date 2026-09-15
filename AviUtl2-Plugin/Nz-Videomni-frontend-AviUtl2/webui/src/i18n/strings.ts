@@ -552,7 +552,7 @@ export const en = {
     removeClipButton: "Remove clip",
     clipLabel: (index: number): string => `Clip ${index + 1}`,
     clipPromptLabel: "Prompt override",
-    clipPromptPlaceholder: "Leave empty to use the shared prompt above",
+    clipPromptPlaceholder: "Leave empty to use the prompt above",
     clipNumFramesLabel: "Duration",
     /** §1-16 長尺A2V: the "🎵 which part of the track does this clip cover?"
      * badge in a clip card's header, shown only while an audio file is attached
@@ -1016,7 +1016,9 @@ export const en = {
     wavDir: {
       label: "Audio folder",
       button: "Choose audio folder…",
-      none: "No audio folder selected.",
+      /** D1: the only place the panel tells the user that an image folder on
+       * its own is a valid input, and what it then does. */
+      none: "No audio folder selected. (Choosing only an image folder switches to i2v mode, which makes one video per image.)",
     },
     imgDir: {
       label: "Image folder (optional)",
@@ -1027,12 +1029,12 @@ export const en = {
       label: "Output folder",
       button: "Choose output folder…",
       auto: (path: string): string => `Auto: ${path}`,
-      none: "No output folder yet — choose an audio folder first.",
+      none: "No output folder yet — choose an audio folder or an image folder first.",
     },
     promptMode: {
-      label: "Row prompt mode",
-      add: "Add to the shared prompt",
-      replace: "Replace the shared prompt",
+      label: "How the additional prompt is used",
+      add: "Add to the prompt",
+      replace: "Replace the prompt",
     },
     /** N7 (PENDING §6): shared keyframe(s) backing `Shared`-image rows —
      * mirrors Create/Chain's `create.keyframes` panel, reused verbatim via
@@ -1053,16 +1055,20 @@ export const en = {
       wav: "Audio file",
       duration: "Duration",
       image: "Image",
-      prompt: "Prompt",
+      prompt: "Additional prompt",
       stat: "Status",
       output: "Output",
       resetButton: "Reset to Waiting",
-      empty: "No rows yet — choose an audio folder and scan it.",
-      /** N5 "A1: プロンプト直接編集" — the row prompt `<input>`'s aria-label. */
-      promptInputLabel: "Row prompt",
+      empty: "No rows yet — choose an audio folder or an image folder and scan it.",
+      /** D2: an i2v row has no audio file at all, so its audio cell states the
+       * mode instead. The column heading stays "Audio file". */
+      i2vRowLabel: "i2v mode",
+      /** N5 "A1: プロンプト直接編集" — the per-row additional prompt
+       * `<input>`'s aria-label. */
+      promptInputLabel: "Additional prompt",
       /** N5 "A2: 共通プロンプト流し込み" — button that overwrites a row's
-       * prompt with the Create screen's shared prompt verbatim. */
-      copyCommonPromptButton: "Use shared prompt",
+       * additional prompt with the panel's own prompt verbatim. */
+      copyCommonPromptButton: "Use the prompt",
       /** N5 "A3: 行別画像割当" — the row image `<select>`'s aria-label. */
       imageSelectLabel: "Row image",
     },
@@ -1097,9 +1103,10 @@ export const en = {
      * `blockReasons.jobActive` states. The KEY keeps its original name (it is
      * the block-reason code the form pushes); only the copy covers both. */
     jobActive: "The server is busy: another job is running, or a model is being loaded. Only one runs at a time — wait for it to finish before starting the batch.",
-    /** §3-98 P5: the loaded base model's engine cannot run chained generation,
-     * which is what every batch row is. Disables the whole panel. */
-    unavailableOnBaseModel: "Batch A2V is not available on the selected base model (it uses chained generation). Switch the base model in the header to use it.",
+    /** §3-98 P5: the loaded base model's engine declares a feature the panel
+     * needs as unsupported. Disables the whole panel; engine-neutral wording,
+     * since which feature is missing is not something the user can act on. */
+    unavailableOnBaseModel: "The batch panel is not available for this base model. Switch the base model in the header to use it.",
     /** Skip badge tooltips (owner decision 2026-07-19), keyed by
      * `BatchRow.skipReason` (`manifestMerge.ts`). Skip rows are excluded from
      * re-judging on Start, so raising DURATION/lowering FPS alone does not
@@ -1139,14 +1146,14 @@ export const en = {
       none: "No output folder yet — choose an image folder first.",
     },
     /** 2026-07-30 owner feedback: there is no batch-wide extra prompt any more
-     * (writing one was no different from editing the shared prompt itself) —
-     * each ROW has its own prompt column, and this one radio pair says how that
-     * row prompt combines with the Clip Chain's shared prompt. Same wording
-     * shape as Batch A2V's `batch.promptMode`. */
+     * (writing one was no different from editing the prompt itself) —
+     * each ROW has its own additional prompt column, and this one radio pair
+     * says how that additional prompt combines with the Clip Chain's prompt.
+     * Same wording shape as Batch A2V's `batch.promptMode`. */
     promptMode: {
-      label: "Row prompt mode",
-      add: "Add to the Clip Chain prompt",
-      replace: "Replace the Clip Chain prompt",
+      label: "How the additional prompt is used",
+      add: "Add to the prompt",
+      replace: "Replace the prompt",
     },
     scanButton: "Scan folder",
     scanningButton: "Scanning…",
@@ -1154,17 +1161,18 @@ export const en = {
     table: {
       queue: "#",
       image: "Image",
-      prompt: "Prompt",
+      prompt: "Additional prompt",
       stat: "Status",
       output: "Output",
       resetButton: "Reset to Waiting",
       empty: "No rows yet — choose an image folder and scan it.",
-      /** The row prompt `<input>`'s aria-label (Batch A2V's
+      /** The per-row additional prompt `<input>`'s aria-label (Batch A2V's
        * `batch.table.promptInputLabel` equivalent). */
-      promptInputLabel: "Row prompt",
-      /** 📝: overwrites a row's prompt with the Clip Chain's shared prompt
-       * verbatim — the counterpart of Batch A2V's "Use shared prompt" button. */
-      copyChainPromptButton: "Use the Clip Chain prompt",
+      promptInputLabel: "Additional prompt",
+      /** 📝: overwrites a row's additional prompt with the Clip Chain's own
+       * prompt verbatim — the counterpart of Batch A2V's
+       * `batch.table.copyCommonPromptButton`. */
+      copyChainPromptButton: "Use the prompt",
     },
     stat: {
       waiting: "Waiting",
@@ -1207,7 +1215,7 @@ export const en = {
       endSourceAttached:
         "Remove the end source — this batch generates from images only, and does not send the end material.",
       clipsTooFew: "The Clip Chain needs at least 2 clips when no source video is attached. Add a clip.",
-      promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's own Prompt column.",
+      promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's own Additional prompt column.",
       promptTooLong: "The combined prompt is too long. Shorten it to 2000 characters or less.",
       unknownLoraTag: "The prompt has a LoRA name that does not exist. Fix or remove the tag.",
       jobActive: "The server is busy: another job is running, or a model is being loaded. Wait for it to finish.",
@@ -1222,16 +1230,16 @@ export const en = {
      * consumed by `GenerateReasonsNote`) because these are functions. */
     promptRowIssues: {
       empty: (queues: string): string =>
-        `These rows would be sent with an empty prompt: ${queues}. Write a prompt on the Clip Chain form, or in each row's Prompt column.`,
+        `These rows would be sent with an empty prompt: ${queues}. Write a prompt on the Clip Chain form, or in each row's Additional prompt column.`,
       tooLong: (queues: string): string =>
-        `The combined prompt is over 2000 characters on these rows: ${queues}. Shorten the Clip Chain prompt, or those rows' own prompts.`,
+        `The combined prompt is over 2000 characters on these rows: ${queues}. Shorten the Clip Chain prompt, or those rows' additional prompts.`,
     },
     /** Advisory notes — none of these blocks Start. */
     notes: {
       seedFixed: "The seed is fixed, so every image is generated with the same seed. Set the seed to -1 on the Clip Chain form to vary it per image.",
       clip0PromptOverride:
-        "The first clip has a prompt of its own. Each image goes on that first clip, so the shared and row prompts never reach the part of the video the image controls.",
-      clipPromptOverride: "Some clips have a prompt of their own. The shared and row prompts do not change those.",
+        "The first clip has a prompt of its own. Each image goes on that first clip, so the prompt and the additional prompts never reach the part of the video the image controls.",
+      clipPromptOverride: "Some clips have a prompt of their own. The prompt and the additional prompts do not change those.",
       startFrameIgnored: "The start frame on the Clip Chain form is not used — each row's own image takes its place.",
       concurrency: "Only one batch runs at a time, and Generate on the Clip Chain form is unavailable while this batch is running.",
     },
@@ -2525,7 +2533,7 @@ export const ja: Strings = {
     removeClipButton: "クリップを削除",
     clipLabel: (index: number): string => `クリップ ${index + 1}`,
     clipPromptLabel: "プロンプトの上書き",
-    clipPromptPlaceholder: "空欄の場合は上の共通プロンプトを使用します",
+    clipPromptPlaceholder: "空欄の場合は上のプロンプトを使用します",
     clipNumFramesLabel: "尺",
     clipAudioWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当時間帯 ${startSec}〜${endSec}秒`,
@@ -2700,7 +2708,7 @@ export const ja: Strings = {
     wavDir: {
       label: "音声フォルダ",
       button: "音声フォルダを選択…",
-      none: "音声フォルダが選択されていません。",
+      none: "音声フォルダが選択されていません。（画像フォルダだけを選ぶと、画像1枚につき1本を作るi2vモードになります）",
     },
     imgDir: {
       label: "画像フォルダ（任意）",
@@ -2711,12 +2719,12 @@ export const ja: Strings = {
       label: "出力フォルダ",
       button: "出力フォルダを選択…",
       auto: (path: string): string => `自動: ${path}`,
-      none: "出力フォルダは未設定です — まず音声フォルダを選択してください。",
+      none: "出力フォルダは未設定です — まず音声フォルダか画像フォルダを選択してください。",
     },
     promptMode: {
-      label: "行プロンプトの合成方法",
-      add: "共通プロンプトに追記",
-      replace: "共通プロンプトを置き換え",
+      label: "追加プロンプトの扱い",
+      add: "プロンプトに追加する",
+      replace: "プロンプトを置き換える",
     },
     sharedKeyframes: {
       /** バッチA2VのShared仕様変更（2026-07-18）：画像列が「Shared」の行は、
@@ -2734,13 +2742,14 @@ export const ja: Strings = {
       wav: "音声ファイル",
       duration: "長さ",
       image: "画像",
-      prompt: "プロンプト",
+      prompt: "追加プロンプト",
       stat: "状態",
       output: "出力",
       resetButton: "待機に戻す",
-      empty: "行がまだありません — 音声フォルダを選んでスキャンしてください。",
-      promptInputLabel: "行のプロンプト",
-      copyCommonPromptButton: "共通プロンプトを流し込む",
+      empty: "行がまだありません — 音声フォルダか画像フォルダを選んでスキャンしてください。",
+      i2vRowLabel: "i2vモード",
+      promptInputLabel: "追加プロンプト",
+      copyCommonPromptButton: "プロンプトを流し込む",
       imageSelectLabel: "行の画像",
     },
     stat: {
@@ -2761,7 +2770,7 @@ export const ja: Strings = {
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",
     jobActive: "サーバーが処理中です（ほかの生成が実行中か、モデルを読み込み中です）。同時に1つしか動かせないため、終わるまで待ってから開始してください。",
-    unavailableOnBaseModel: "バッチA2Vは選択中のベースモデルでは使えません（連結生成を使うため）。使うには、上のベースモデルを切り替えてください。",
+    unavailableOnBaseModel: "このベースモデルではバッチパネルを使えません。使うには、上のベースモデルを切り替えてください。",
     skipReasons: {
       "wav-only-alpha": "wav形式でないか、長さを読み取れませんでした",
       "over-cap":
@@ -2784,9 +2793,9 @@ export const ja: Strings = {
       none: "出力フォルダは未設定です — まず画像フォルダを選択してください。",
     },
     promptMode: {
-      label: "行プロンプトの合成方法",
-      add: "クリップチェーンのプロンプトに追記",
-      replace: "クリップチェーンのプロンプトを置き換え",
+      label: "追加プロンプトの扱い",
+      add: "プロンプトに追加する",
+      replace: "プロンプトを置き換える",
     },
     scanButton: "フォルダをスキャン",
     scanningButton: "スキャン中…",
@@ -2794,13 +2803,13 @@ export const ja: Strings = {
     table: {
       queue: "#",
       image: "画像",
-      prompt: "プロンプト",
+      prompt: "追加プロンプト",
       stat: "状態",
       output: "出力",
       resetButton: "待機に戻す",
       empty: "行がまだありません — 画像フォルダを選んでスキャンしてください。",
-      promptInputLabel: "行のプロンプト",
-      copyChainPromptButton: "クリップチェーンのプロンプトを流し込む",
+      promptInputLabel: "追加プロンプト",
+      copyChainPromptButton: "プロンプトを流し込む",
     },
     stat: {
       waiting: "待機中",
@@ -2828,7 +2837,7 @@ export const ja: Strings = {
       endSourceAttached:
         "素材（末尾）を外してください。このバッチは画像だけから生成し、末尾の素材は送信しません。",
       clipsTooFew: "元動画を使わない場合、クリップチェーンにはクリップが2本以上必要です。クリップを追加してください。",
-      promptEmpty: "プロンプトを入力してください（クリップチェーンの共通プロンプトか、行ごとのプロンプト欄のどちらかで）。",
+      promptEmpty: "プロンプトを入力してください（クリップチェーンのプロンプトか、行ごとの追加プロンプト欄のどちらかで）。",
       promptTooLong: "合成後のプロンプトが長すぎます。2000文字以内にしてください。",
       unknownLoraTag: "プロンプトに存在しないLoRA名が含まれています。タグを修正するか削除してください。",
       jobActive: "サーバーが処理中です（他のジョブが実行中か、モデルを読み込み中です）。終わるまで待ってください。",
@@ -2836,15 +2845,15 @@ export const ja: Strings = {
     },
     promptRowIssues: {
       empty: (queues: string): string =>
-        `プロンプトが空のまま送信される行があります: ${queues}。クリップチェーンの共通プロンプトか、その行のプロンプト欄に入力してください。`,
+        `プロンプトが空のまま送信される行があります: ${queues}。クリップチェーンのプロンプトか、その行の追加プロンプト欄に入力してください。`,
       tooLong: (queues: string): string =>
-        `合成後のプロンプトが2000文字を超えている行があります: ${queues}。クリップチェーンの共通プロンプトか、その行のプロンプトを短くしてください。`,
+        `合成後のプロンプトが2000文字を超えている行があります: ${queues}。クリップチェーンのプロンプトか、その行の追加プロンプトを短くしてください。`,
     },
     notes: {
       seedFixed: "シードが固定されているため、すべての画像が同じシードで生成されます。画像ごとに変えたい場合は、クリップチェーンのシードを-1にしてください。",
       clip0PromptOverride:
-        "1本目のクリップに個別のプロンプトが入力されています。画像は必ず1本目のクリップに乗るため、共通プロンプトも行ごとのプロンプトも、画像が効く部分にはまったく反映されません。",
-      clipPromptOverride: "個別のプロンプトが入力されたクリップがあります。共通プロンプトも行ごとのプロンプトも、それらを書き換えません。",
+        "1本目のクリップに個別のプロンプトが入力されています。画像は必ず1本目のクリップに乗るため、プロンプトも行ごとの追加プロンプトも、画像が効く部分にはまったく反映されません。",
+      clipPromptOverride: "個別のプロンプトが入力されたクリップがあります。プロンプトも行ごとの追加プロンプトも、それらを書き換えません。",
       startFrameIgnored: "クリップチェーンの開始フレーム画像は使われません。各行の画像がその位置に入ります。",
       concurrency: "バッチは同時に1つしか実行できません。実行中はクリップチェーンの生成ボタンも使えなくなります。",
     },

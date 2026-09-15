@@ -1,6 +1,9 @@
 /**
- * Batch A2V — the in-browser execution engine, a mirror of
- * `Nz-Videomni/gradio_ui/batch.py`'s `BatchRunner` adapted to run
+ * The batch panel's in-browser execution engine, for both of its modes
+ * (`BatchRunnerStartParams.mode`). The a2v path is a mirror of
+ * `Nz-Videomni/gradio_ui/batch.py`'s `BatchRunner`; the i2v path (one image ->
+ * one `POST /generate` clip, D1 2026-09-15) has no Gradio counterpart at all
+ * and is described here only. Both are adapted to run
  * entirely inside the WebUI (no daemon thread — the Gradio version needed one
  * because a Gradio event handler dies when the SSE stream drops; here the
  * "thread" is simply an `async` method the caller doesn't have to await, and
@@ -45,10 +48,12 @@ import { BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { DEFAULT_STRENGTH } from "../single/keyframeUtils";
 import { buildA2vChainPayload, composeRowPrompt, resolveConditioningImages } from "./buildA2vChainPayload";
 import type { PromptMode } from "./buildA2vChainPayload";
+import { buildI2vGeneratePayload } from "./buildI2vGeneratePayload";
 import { IMAGE_SHARED } from "./manifestMerge";
-import type { BatchRow, BatchStat } from "./manifestMerge";
+import type { BatchMode, BatchRow, BatchStat } from "./manifestMerge";
 
 /** Rows in one of these `stat`s are "unfinished" and get (re)processed on the
  * next `start()` — spec §4. `Generating` is included so a crash/close-tab
@@ -56,8 +61,9 @@ import type { BatchRow, BatchStat } from "./manifestMerge";
  * the next run, matching the required on-screen notice. */
 const UNFINISHED_STATS: ReadonlySet<BatchStat> = new Set<BatchStat>(["Waiting", "Failed", "Generating"]);
 
-/** `POST /generate/chain` 409 (JOB_BUSY) retry policy — mirrors
- * `batch.py`'s `_JOB_BUSY_MAX_ATTEMPTS`/`_JOB_BUSY_BACKOFF_S`. Overridable per
+/** Submit 409 (JOB_BUSY) retry policy, applied to both endpoints this runner
+ * posts to (`/api/v1/generate/chain` for a2v, `/api/v1/generate` for i2v) —
+ * mirrors `batch.py`'s `_JOB_BUSY_MAX_ATTEMPTS`/`_JOB_BUSY_BACKOFF_S`. Overridable per
  * `start()` call (see {@link BatchRunnerStartParams.jobBusyBackoffMs}) purely
  * for test speed — production call sites should leave it at the default. */
 const JOB_BUSY_MAX_ATTEMPTS = 3;
@@ -104,11 +110,18 @@ export interface BatchRunnerSettings {
 }
 
 export interface BatchRunnerStartParams {
+  /** Which kind of batch this run is (D1, 2026-09-15), frozen by the caller at
+   * `start()` time. `"a2v"` uploads each row's audio and submits
+   * `POST /generate/chain`; `"i2v"` has no audio at all and submits
+   * `POST /generate`. Required, with no default: an omitted mode silently
+   * falling back to a2v would mean every i2v row looking for an audio file
+   * that does not exist. */
+  mode: BatchMode;
   /** Absolute path to the audio folder. Each row's `wav` is resolved against
    * this. (Gradio's own manifest CSV lives directly under this folder too —
    * spec §1 — but this frontend never reads or writes it; see
-   * `manifestMerge.ts`.) */
-  wavDir: string;
+   * `manifestMerge.ts`.) `null` in `"i2v"` mode, which has no audio folder. */
+  wavDir: string | null;
   /** Absolute path to the image folder a row's own (non-`Shared`) `image`
    * column is resolved against. Empty/omitted falls back to `wavDir`
    * (spec §3.1's backwards-compat rule). */
@@ -310,38 +323,60 @@ export class BatchRunner {
       this.updateRow(queue, { stat: "Generating", error: "" });
       await this.flush();
 
-      const wavPath = joinPath(params.wavDir, row.wav);
-      const audioUpload = await this.bridge.request("backend.uploadFile", { kind: "audio", filePath: wavPath });
-      if (audioUpload.status >= 400) {
-        throw new Error(`upload audio ${audioUpload.status}: ${summarizeBody(audioUpload.body)}`);
-      }
-      const audioId = (audioUpload.body as { audio_id?: string } | null)?.audio_id;
-      if (!audioId) throw new Error("upload audio: response missing audio_id");
+      // a2v uploads the row's audio FIRST, before anything else touches the
+      // network — the order this path has always had. An i2v row has no audio
+      // at all and skips straight to the images.
+      const audioId = params.mode === "a2v" ? await this.uploadRowAudio(params.wavDir, row.wav) : "";
 
-      const conditioningImages = await this.resolveConditioning(row, params);
+      // D5 案A (2026-09-15): a row's own image is conditioned at the same
+      // strength a `Shared` row would use — the Create screen's leading
+      // KEYFRAMES card — falling back to `DEFAULT_STRENGTH` when that panel has
+      // no ready card. Both modes, one rule.
+      const rowStrength = params.sharedConditioningImages?.[0]?.strength ?? DEFAULT_STRENGTH;
+      const conditioningImages = await this.resolveConditioning(row, params, rowStrength);
 
       const { settings } = params;
       const prompt = composeRowPrompt(settings.promptCommon, row.prompt, settings.promptMode);
-      const payload = buildA2vChainPayload({
-        audioId,
-        numFrames: row.frames,
-        prompt,
-        width: settings.width,
-        height: settings.height,
-        ...(settings.cropOutput !== undefined ? { cropOutput: settings.cropOutput } : {}),
-        frameRate: settings.frameRate,
-        seed: settings.seed,
-        conditioningImages,
-        ...(settings.loras !== undefined ? { loras: settings.loras } : {}),
-        chunkedUpsample: settings.chunkedUpsample,
-        // NAG (2026-07-28): omitted entirely (not even as `undefined`) while
-        // unset, matching every other optional field on this call.
-        ...(settings.nag ? { nag: settings.nag } : {}),
-        // Acceleration (2026-07-31): same omit-while-unset shape as `nag`.
-        ...(settings.acceleration ? { acceleration: settings.acceleration } : {}),
-      });
+      const { payload, path } =
+        params.mode === "a2v"
+          ? {
+              payload: buildA2vChainPayload({
+                audioId,
+                numFrames: row.frames,
+                prompt,
+                width: settings.width,
+                height: settings.height,
+                ...(settings.cropOutput !== undefined ? { cropOutput: settings.cropOutput } : {}),
+                frameRate: settings.frameRate,
+                seed: settings.seed,
+                conditioningImages,
+                ...(settings.loras !== undefined ? { loras: settings.loras } : {}),
+                chunkedUpsample: settings.chunkedUpsample,
+                // NAG (2026-07-28): omitted entirely (not even as `undefined`)
+                // while unset, matching every other optional field on this call.
+                ...(settings.nag ? { nag: settings.nag } : {}),
+                // Acceleration (2026-07-31): same omit-while-unset shape as `nag`.
+                ...(settings.acceleration ? { acceleration: settings.acceleration } : {}),
+              }) as unknown as object,
+              path: "/api/v1/generate/chain",
+            }
+          : {
+              payload: buildI2vGeneratePayload({
+                prompt,
+                width: settings.width,
+                height: settings.height,
+                numFrames: row.frames,
+                frameRate: settings.frameRate,
+                seed: settings.seed,
+                ...(settings.nag ? { nag: settings.nag } : {}),
+                ...(settings.acceleration ? { acceleration: settings.acceleration } : {}),
+                ...(settings.loras !== undefined ? { loras: settings.loras } : {}),
+                conditioningImages,
+              }) as unknown as object,
+              path: "/api/v1/generate",
+            };
 
-      const jobId = await this.submitWithRetry(payload as unknown as object, params.jobBusyBackoffMs ?? DEFAULT_JOB_BUSY_BACKOFF_MS);
+      const jobId = await this.submitWithRetry(payload, path, params.jobBusyBackoffMs ?? DEFAULT_JOB_BUSY_BACKOFF_MS);
       if (jobId === null) {
         this.updateRow(queue, { stat: "Failed", error: "server busy (409) after retries" });
         await this.flush();
@@ -358,6 +393,19 @@ export class BatchRunner {
     }
   }
 
+  /** Uploads one a2v row's audio file and returns its `audio_id`. */
+  private async uploadRowAudio(wavDir: string | null, name: string): Promise<string> {
+    if (wavDir === null) throw new Error("upload audio: audio folder is not set");
+    const wavPath = joinPath(wavDir, name);
+    const audioUpload = await this.bridge.request("backend.uploadFile", { kind: "audio", filePath: wavPath });
+    if (audioUpload.status >= 400) {
+      throw new Error(`upload audio ${audioUpload.status}: ${summarizeBody(audioUpload.body)}`);
+    }
+    const audioId = (audioUpload.body as { audio_id?: string } | null)?.audio_id;
+    if (!audioId) throw new Error("upload audio: response missing audio_id");
+    return audioId;
+  }
+
   /** Resolves a row's `conditioning_images` (spec §3.1, N7-extended per
    * PENDING §6). Guard order matters — `Shared`/empty must never trigger an
    * upload:
@@ -366,22 +414,27 @@ export class BatchRunner {
    *   `[]` when the caller omitted it), no upload — the sentinel itself is
    *   never handed to `joinPath`/`uploadImageCached`;
    * - anything else (a row naming its own image file) -> uploads it (cached
-   *   per absolute-ish path for the run) and resolves a single
-   *   frame-0/strength-1.0 keyframe.
+   *   per absolute-ish path for the run) and resolves a single frame-0
+   *   keyframe at `rowStrength`.
    * The actual `conditioning_images` shape for each case is delegated to the
    * pure `resolveConditioningImages` (`buildA2vChainPayload.ts`) so this stays
    * in sync with its documented contract instead of re-deriving the shape
    * here. */
-  private async resolveConditioning(row: BatchRow, params: BatchRunnerStartParams): Promise<ConditioningImage[]> {
+  private async resolveConditioning(
+    row: BatchRow,
+    params: BatchRunnerStartParams,
+    rowStrength: number,
+  ): Promise<ConditioningImage[]> {
     const sharedImages = params.sharedConditioningImages ?? [];
     if (!row.image) return [];
     if (row.image === IMAGE_SHARED) {
-      return resolveConditioningImages({ image: row.image, sharedImages });
+      return resolveConditioningImages({ image: row.image, sharedImages, rowStrength });
     }
     const imgDir = params.imgDir || params.wavDir;
+    if (!imgDir) throw new Error("row image: image folder is not set");
     const imagePath = joinPath(imgDir, row.image);
     const rowImageId = await this.uploadImageCached(imagePath);
-    return resolveConditioningImages({ image: row.image, sharedImages, rowImageId });
+    return resolveConditioningImages({ image: row.image, sharedImages, rowImageId, rowStrength });
   }
 
   private async uploadImageCached(imagePath: string): Promise<string> {
@@ -397,16 +450,18 @@ export class BatchRunner {
     return imageId;
   }
 
-  /** `POST /generate/chain`, retrying a 409 (JOB_BUSY) up to
+  /** `POST`s one row's payload to `path` (`/api/v1/generate/chain` for a2v,
+   * `/api/v1/generate` for i2v), retrying a 409 (JOB_BUSY) up to
    * {@link JOB_BUSY_MAX_ATTEMPTS} times with a fixed backoff — mirrors
    * `batch.py`'s `_submit_with_retry`. Returns the `job_id` on success,
    * `null` if 409 persisted through every retry; any other >=400 status
    * throws (caught by {@link processRow} -> `Failed`). */
-  private async submitWithRetry(payload: object, backoffMs: number): Promise<string | null> {
+  private async submitWithRetry(payload: object, path: string, backoffMs: number): Promise<string | null> {
+    const label = path.replace("/api/v1/", "");
     for (let attempt = 0; attempt < JOB_BUSY_MAX_ATTEMPTS; attempt += 1) {
       const resp = await this.bridge.request("backend.request", {
         method: "POST",
-        path: "/api/v1/generate/chain",
+        path,
         body: payload,
       });
       if (resp.status === 409) {
@@ -414,10 +469,10 @@ export class BatchRunner {
         continue;
       }
       if (resp.status >= 400) {
-        throw new Error(`generate/chain ${resp.status}: ${summarizeBody(resp.body)}`);
+        throw new Error(`${label} ${resp.status}: ${summarizeBody(resp.body)}`);
       }
       const jobId = (resp.body as { job_id?: string } | null)?.job_id;
-      if (!jobId) throw new Error("generate/chain: response missing job_id");
+      if (!jobId) throw new Error(`${label}: response missing job_id`);
       return jobId;
     }
     return null;

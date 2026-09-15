@@ -130,7 +130,7 @@ export function formatOversizeError(sizeBytes: number, maxImageBytes: number): s
  * `fs.listFiles`'s order is not guaranteed (and in practice is filesystem
  * order, not name order), so this is what makes a scan reproducible.
  */
-function compareByName(a: ScannedImageFile, b: ScannedImageFile): number {
+export function compareByName(a: ScannedImageFile, b: ScannedImageFile): number {
   const collated = a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" });
   if (collated !== 0) return collated;
   if (a.name < b.name) return -1;

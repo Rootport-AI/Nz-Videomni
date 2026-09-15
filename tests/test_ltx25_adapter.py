@@ -263,26 +263,15 @@ _LORAS = [{"name": "style-a", "strength": 1.0}]
 #: negative prompt). Its mirror image is :data:`REQUEST_ACCEPTED_NAG`, which
 #: inherits the coupling — this engine's ruling has to survive it, not dodge it.
 #: Every row that remains is a bare one-field override.
+#:
 #: ``inpaint`` ARRIVED IN THIS TABLE with the Inpainting increment (台帳 §3-55)
-#: — the first row to arrive rather than leave, and the first MODE the table has
-#: carried since ``outpaint`` left it. The companions travel with it for the
-#: same reason ``outpaint``'s did: the schema couples an inpaint block to a
-#: reference video (the clip being repainted) and a reference video to a LoRA,
-#: so a bare block is not a valid request at all. ``width``/``height`` are
-#: overridden because this feature's canvas must be a multiple of 128 and
-#: ``_request``'s default 512x320 is not (320 = 2.5 x 128) — a body that tripped
-#: THAT rule would raise ValidationError before this engine's ruling was ever
-#: consulted, and would prove nothing.
+#: and LEFT IT AGAIN with 台帳 §3-150 — the only row ever to do both. Its mirror
+#: image is :data:`REQUEST_ACCEPTED_INPAINT` below, which inherits the
+#: companions and the canvas override unchanged: what moved is the VERDICT, not
+#: the body, so the two tables are a genuine before/after of one request.
 REQUEST_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
-    "inpaint": {
-        "inpaint": {"mask_video_id": "mask-123", "window_start_sec": 0.0},
-        "reference_video_id": "vid-123",
-        "loras": _LORAS,
-        "width": 512,
-        "height": 384,
-    },
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -406,6 +395,31 @@ REQUEST_ACCEPTED_OUTPAINT: dict[str, dict] = {
         "outpaint": {"pad_left": 64, "pad_right": 0, "pad_top": 0, "pad_bottom": 0},
         "reference_video_id": "vid-123",
         "loras": _LORAS,
+    },
+}
+
+#: What 台帳 §3-150 turned on: ``inpaint``, the ONLY field ever to sit in
+#: :data:`REQUEST_OVERRIDES` and then leave it. The body is the one that table
+#: carried, character for character, which is what makes the pair a real
+#: before/after rather than two tests written against two different requests.
+#:
+#: THE COMPANIONS TRAVEL WITH IT, unchanged: the schema couples an inpaint block
+#: to a reference video (the clip being repainted) and a reference video to a
+#: LoRA, so a bare block is not a valid request at all. Both are honoured on
+#: this engine, which is what makes the coupling harmless — the point of the row
+#: is that the ruling lets the WHOLE combination through.
+#:
+#: ``width``/``height`` are overridden because this feature's canvas must be a
+#: multiple of 128 and ``_request``'s default 512x320 is not (320 = 2.5 x 128).
+#: A body that tripped THAT rule would raise ValidationError before this
+#: engine's ruling was ever consulted, and would prove nothing.
+REQUEST_ACCEPTED_INPAINT: dict[str, dict] = {
+    "inpaint": {
+        "inpaint": {"mask_video_id": "mask-123", "window_start_sec": 0.0},
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "width": 512,
+        "height": 384,
     },
 }
 
@@ -557,11 +571,13 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     assert "sage_attention" not in ltx25.UNSUPPORTED_FEATURES
     # Six when this increment shipped; FIVE since Retake, FOUR since the End
     # source, THREE since Outpainting and TWO since NAG/VSF, each of which took
-    # the next name off the list. THREE AGAIN since Inpainting (台帳 §3-55) --
-    # the first name to be ADDED rather than removed, and the reason the count
-    # is asserted at all rather than only the absences: a name coming back is
-    # exactly what this catches, and here one deliberately did.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
+    # the next name off the list. THREE AGAIN for a fortnight, while Inpainting
+    # was 2.3-only (台帳 §3-55) -- the first and only name ever ADDED, and the
+    # reason the count is asserted at all rather than only the absences: a name
+    # coming back is exactly what this catches, and there one deliberately did.
+    # BACK TO TWO with 台帳 §3-150, which built the 2.5 driver and took it off
+    # again.
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 2
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -651,28 +667,46 @@ def test_nag_no_longer_names_a_published_limitation():
     assert "nag" not in ltx25.UNSUPPORTED_FEATURES
 
 
-def test_inpaint_is_refused_and_says_so_in_every_table():
-    """The Inpainting increment's headline, stated four ways (台帳 §3-55).
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_INPAINT))
+def test_inpaint_is_no_longer_refused(case):
+    """台帳 §3-150's headline: the body that used to 422 passes the ruling.
 
-    A row in :data:`REJECT_TABLE` is not a detail here — it is the WHOLE
-    mechanism. The 422, the ``unsupported_features`` entry on GET /models and
-    the greyed-out Edit sub-tab are all derived from this one line, so the line
-    is asserted BY NAME rather than only through the table-driven tests above:
-    those would still pass if the row's FEATURE name were changed, and the
-    frontend greys controls by that name.
-    """
-    rows = [(f, feat) for f, feat, _p in ltx25.REJECT_TABLE if f == "inpaint"]
-    assert rows == [("inpaint", "inpaint")]
-    # ...and the predicate really answers the question it claims to.
-    predicate = next(p for f, _feat, p in ltx25.REJECT_TABLE if f == "inpaint")
-    assert predicate(_request(**REQUEST_OVERRIDES["inpaint"]))
-    assert not predicate(_request())
-    # Exactly one home: refused, therefore not honoured / ignored / governed.
-    assert "inpaint" not in ltx25.HONOURED_FIELDS
+    THE COMBINATION IS THE TEST, as it was for outpainting. Until this increment
+    ``inpaint`` sat in :data:`REJECT_TABLE` alongside a request that also
+    carries ``loras`` and ``reference_video_id``; a change that removed only the
+    ``inpaint`` row but re-refused the job through one of its companions would
+    fail here."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_INPAINT[case]))  # no raise
+
+
+def test_inpaint_is_honoured_and_says_so_in_every_table():
+    """The Inpainting-on-2.5 increment, stated four ways (台帳 §3-150).
+
+    The absence of a :data:`REJECT_TABLE` row is not a detail here — it is the
+    WHOLE mechanism, in reverse. The 422, the ``unsupported_features`` entry on
+    GET /models and the greyed-out Edit sub-tab were all derived from that one
+    line, so its removal is asserted BY NAME rather than only through the
+    table-driven tests above: those would still pass if the row's FEATURE name
+    were merely misspelt, and the frontend greys controls by that name.
+
+    Unlisted and honoured are different promises, and the difference is the
+    point here: ``inpaint`` is not a knob whose loss degrades a picture, it is
+    the whole job. A field dropped from every table would also stop raising —
+    and would then be silently ignored, producing a plain T2V where the user
+    asked for a repaint."""
+    assert "inpaint" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    # Exactly one home: honoured, therefore not refused / ignored / governed.
+    assert "inpaint" in ltx25.HONOURED_FIELDS
     assert "inpaint" not in ltx25.IGNORED_FIELDS
     assert "inpaint" not in ltx25.GOVERNED_FIELDS
-    # ...and published, or the sub-tab stays lit for a mode that 422s.
-    assert "inpaint" in ltx25.UNSUPPORTED_FEATURES
+    # ...and NOT published, or the sub-tab stays grey for a mode that runs.
+    assert "inpaint" not in ltx25.UNSUPPORTED_FEATURES
+    # The table is back to the two engine-level features and no mode of any
+    # kind — the state it was in before 2026-09-14.
+    assert {feat for _f, feat, _p in ltx25.REJECT_TABLE} == {
+        "two_stage_hq",
+        "prune_vaed",
+    }
 
 
 def test_unsupported_features_is_both_reject_tables_without_chain_itself():
@@ -698,10 +732,12 @@ def test_unsupported_features_is_both_reject_tables_without_chain_itself():
     # accordion and the Batch tab's A2V rows, all of which now work.
     assert "chain" not in features
     assert "v2v" not in features and "a2v" not in features
-    # ...and ``inpaint`` IS published (台帳 §3-55): LTX 2.3 only, by owner
-    # decision. Without the name the Edit tab's Inpainting sub-tab would stay lit
-    # while 2.5 is loaded and every Generate would come back 422.
-    assert "inpaint" in features
+    # ...and ``inpaint`` LEFT AGAIN with 台帳 §3-150, one day short of a
+    # fortnight after it arrived. ``engine25/inpaint25.py`` runs the masked
+    # two-stage workflow now, so publishing the name would grey the Edit tab's
+    # Inpainting sub-tab for a mode that works. NO MODE OF ANY KIND is published
+    # by this engine again.
+    assert "inpaint" not in features
     assert len(ltx25.UNSUPPORTED_FEATURES) == len(features), "no duplicates"
 
 
@@ -2635,6 +2671,227 @@ def test_generate_payload_carries_the_outpaint_block_when_asked(tmp_path):
     # The canvas rides where it always did — the reference block — so the
     # engine's IC-LoRA plumbing needs no notion of outpainting at all.
     assert payload["reference_video"]["path"] == str(canvas)
+
+
+def test_generate_payload_is_untouched_when_inpaint_is_absent_or_None(tmp_path):
+    """THE BEFORE PICTURE for 台帳 §3-150, the inpaint twin of the outpaint pair
+    above.
+
+    The risk the new ``if request.inpaint is not None:`` guard carries is not
+    that it fails to fire -- a gate that generated a plain T2V instead of a
+    repaint would be obvious -- but that it fires when it should not, or that
+    adding it disturbs the key ORDER every other job's payload sends. Either
+    would change the bytes of a plain T2V's worker message, and with them every
+    frozen-SHA piece of evidence the earlier increments left behind.
+
+    ``inpaint=None`` is named EXPLICITLY rather than merely omitted, because the
+    frontend sends the whole schema on every request: "absent" and "explicitly
+    None" must produce the same bytes."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    # A pinned seed, because the two payloads are compared to EACH OTHER.
+    fixed = {"width": 512, "height": 320, "num_frames": 25, "seed": 123}
+
+    be.generate(_request(**fixed), tmp_path / "absent")
+    be.generate(_request(inpaint=None, **fixed), tmp_path / "explicit_none")
+
+    for payload in captured:
+        assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
+        assert "inpaint" not in payload
+    assert captured[1] == captured[0] | {"output_path": captured[1]["output_path"]}
+
+
+def _inpaint_generate(tmp_path, monkeypatch, captured: list[dict], **over):
+    """Run one accepted inpaint request through a capturing 2.5 backend.
+
+    ``probe_resolution`` is stubbed rather than given a real mp4: the SIZE is
+    what the block carries, and an ffmpeg fixture would make every test here
+    depend on a codec to prove a dict. The guard tests below drive this same
+    helper with a path -- or the probe -- taken away, so what they exercise is
+    the shipped call and not a second spelling of it."""
+    be = _capturing_backend(captured)
+    probe = over.pop("probe", None) or (lambda _p: (512, 384))
+    monkeypatch.setattr(ltx25.video_io, "probe_resolution", probe)
+    return be.generate(
+        _request(**REQUEST_ACCEPTED_INPAINT["inpaint"], seed=123),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=over.pop("canvas", tmp_path / "inpaint_canvas.mp4"),
+        inpaint_source_path=over.pop("window", tmp_path / "_inpaint_window.mp4"),
+        inpaint_mask_path=over.pop("mask", tmp_path / "mask.mp4"),
+        **over,
+    )
+
+
+def test_generate_payload_carries_the_inpaint_block_when_asked(tmp_path, monkeypatch):
+    """THE AFTER PICTURE (台帳 §3-150). The test above pins that a plain job is
+    untouched; this one pins that the block really rides, in 2.3's key order,
+    appended after ``outpaint``'s place.
+
+    The ORDER is the load-bearing half twice over. Payload-wide, ``inpaint`` is
+    a newer key than every golden one, so no existing key moves. Within the
+    block, the order is 2.3's verbatim (services/engines/ltx/adapter.py),
+    because the two engines answer to ONE app-side contract per feature: an
+    operator comparing two worker logs is then comparing the same eight names in
+    the same places.
+
+    THE THREE PATHS ARE THREE DIFFERENT FILES on purpose: the canvas rides in
+    the reference block (the orchestrator substituted it), the CUT WINDOW is
+    what the audio and the probed source size come from, and the MASK is what
+    the engine decodes for the blend. A build that conflated any two of them
+    would still produce a payload -- and a silently wrong video."""
+    captured: list[dict] = []
+    _inpaint_generate(tmp_path, monkeypatch, captured)
+
+    payload = captured[0]
+    assert list(payload) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["inpaint"]
+    assert payload["inpaint"] == {
+        "source_path": str(tmp_path / "_inpaint_window.mp4"),
+        "mask_path": str(tmp_path / "mask.mp4"),
+        # The CANVAS, from the request -- the app rounded the source up to the
+        # next multiple of 128 before it asked.
+        "canvas_width": 512,
+        "canvas_height": 384,
+        # The SOURCE, from the FILE. Not a request field, because the file is
+        # the only thing that can be checked (``api.models.InpaintSpec``).
+        "source_width": 512,
+        "source_height": 384,
+        # The panel's own defaults, sent verbatim rather than defaulted
+        # worker-side: the engine must not have a second opinion about the
+        # parameter the official note calls "the most important" one.
+        "blend_dilation_stage1": 5,
+        "blend_dilation_stage2": 2,
+    }
+    # 2.3's key ORDER, not just its key set.
+    assert list(payload["inpaint"]) == [
+        "source_path", "mask_path",
+        "canvas_width", "canvas_height",
+        "source_width", "source_height",
+        "blend_dilation_stage1", "blend_dilation_stage2",
+    ]
+    # NO PADS. The engine derives them from ``canvas - source``, which is the
+    # same single-source-of-truth rule the API enforces; a pad field would be a
+    # second one, checkable against nothing.
+    assert "pad_right" not in payload["inpaint"]
+    assert "pad_bottom" not in payload["inpaint"]
+    # The canvas rides where it always did -- the reference block -- so the
+    # engine's IC-LoRA plumbing needs no notion of inpainting at all.
+    assert payload["reference_video"]["path"] == str(tmp_path / "inpaint_canvas.mp4")
+    # ...and ``outpaint`` is absent: the two are mutually exclusive, and the
+    # block that did NOT ride must leave no trace.
+    assert "outpaint" not in payload
+
+
+def test_generate_relays_the_dilation_sweep_rather_than_defaulting_it(
+    tmp_path, monkeypatch
+):
+    """The two knobs exist as fields because the GPU gate has to sweep them
+    without a code change. A block that sent the schema defaults regardless
+    would pass every assertion in the test above."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    monkeypatch.setattr(ltx25.video_io, "probe_resolution", lambda _p: (512, 384))
+    be.generate(
+        _request(
+            inpaint={
+                "mask_video_id": "mask-123",
+                "window_start_sec": 0.0,
+                "blend_dilation_stage1": 12,
+                "blend_dilation_stage2": 0,
+            },
+            reference_video_id="vid-123",
+            loras=_LORAS,
+            width=512,
+            height=384,
+            seed=123,
+        ),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=tmp_path / "canvas.mp4",
+        inpaint_source_path=tmp_path / "window.mp4",
+        inpaint_mask_path=tmp_path / "mask.mp4",
+    )
+    assert captured[0]["inpaint"]["blend_dilation_stage1"] == 12
+    assert captured[0]["inpaint"]["blend_dilation_stage2"] == 0
+
+
+@pytest.mark.parametrize(
+    "missing,needle",
+    [
+        ("mask", "mask video path never reached"),
+        ("window", "cut window's path never reached"),
+    ],
+)
+def test_generate_refuses_an_inpaint_job_missing_one_of_its_two_paths(
+    tmp_path, monkeypatch, missing, needle
+):
+    """THE TWO PATH GUARDS, 2.3's verbatim. Neither file can be recovered from
+    anything else the payload carries -- the canvas has the mask baked in as
+    green (unreadable as numbers) and carries no audio at all -- so a job that
+    reached the backend without one is a plumbing fault, and saying so here is
+    cheaper than an engine that decodes nothing several minutes later."""
+    captured: list[dict] = []
+    with pytest.raises(RuntimeError, match=needle):
+        _inpaint_generate(tmp_path, monkeypatch, captured, **{missing: None})
+    assert not captured, "no payload may be sent for a job missing a path"
+
+
+def test_generate_refuses_an_inpaint_job_whose_window_cannot_be_probed(
+    tmp_path, monkeypatch
+):
+    """THE THIRD GUARD. The source size is the ONE number in the block that is
+    read from a file rather than from the request, which is exactly why a failed
+    probe cannot be defaulted: a guessed size would hand the engine a geometry
+    whose pads do not match the canvas, and the mask would land offset."""
+    captured: list[dict] = []
+    with pytest.raises(RuntimeError, match="could not probe the cut window"):
+        _inpaint_generate(tmp_path, monkeypatch, captured, probe=lambda _p: None)
+    assert not captured
+
+
+def test_generate_outcome_relays_the_inpaint_block(tmp_path, monkeypatch):
+    """台帳 §3-150's LAST HOP, and the only one that decides whether
+    ``mask_proof`` reaches metadata.json.
+
+    ``services/pipeline_manager.py`` writes ``metadata["inpaint"] =
+    {**outcome.inpaint, **provenance}``. Without this relay the block would
+    carry the app's provenance and none of the engine's evidence -- and a
+    metadata.json that looks complete while proving nothing is worse than an
+    absent key, because the whole point of ``mask_proof`` is that the mock
+    backend cannot fabricate it."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    base = be._read_worker_events(None, False, "generate")  # type: ignore[attr-defined]
+    block = {
+        "canvas_width": 512,
+        "canvas_height": 384,
+        "mask_proof": {"decoded_frames": 25, "white_ratio": 0.04, "dilated_ratio": 0.09},
+    }
+    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+        **base,
+        "inpaint": block,
+    }
+    monkeypatch.setattr(ltx25.video_io, "probe_resolution", lambda _p: (512, 384))
+    outcome = be.generate(
+        _request(**REQUEST_ACCEPTED_INPAINT["inpaint"], seed=123),
+        tmp_path / "out",
+        lora_paths=[],
+        reference_video_path=tmp_path / "canvas.mp4",
+        inpaint_source_path=tmp_path / "window.mp4",
+        inpaint_mask_path=tmp_path / "mask.mp4",
+    )
+    # VERBATIM, and the SAME object: the adapter relays, it does not rebuild.
+    assert outcome.inpaint is block
+
+
+def test_generate_outcome_leaves_inpaint_none_on_a_plain_job(tmp_path):
+    """The additive contract at its last hop. A worker that sent no ``inpaint``
+    key leaves None, which metadata.json shows as an absent block rather than an
+    invented empty one -- and that is every job but an inpaint one, outpaint
+    included."""
+    captured: list[dict] = []
+    outcome = _capturing_backend(captured).generate(_request(), tmp_path / "out")
+    assert outcome.inpaint is None
 
 
 def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):

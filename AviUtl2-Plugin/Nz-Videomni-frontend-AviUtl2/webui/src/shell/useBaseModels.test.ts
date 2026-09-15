@@ -359,14 +359,18 @@ describe("useBaseModels", () => {
     // to keep the tab. NO WHOLE TAB is greyed for this engine any more, which
     // is why the restriction has to be read one level down.
     expect(result.current.disabledModes).toEqual([]);
-    // 台帳 §3-55 (2026-09-14): `inpaint` is now on LTX 2.5's REAL list (the
-    // engine cannot inpaint in the first increment, owner decision D11), so it
-    // travels with the switch alongside the synthetic `retake`. Still no whole
-    // tab greyed — Edit keeps 画角拡張, which is the container rule.
+    // 台帳 §3-55 (2026-09-14) put `inpaint` on LTX 2.5's REAL list and 台帳
+    // §3-150 (2026-09-15) took it off again — `engine25/inpaint25.py` runs the
+    // masked two-stage workflow now — so the only name greying a sub-tab here
+    // is the SYNTHETIC `retake` this fixture injects. Asserted explicitly
+    // false rather than dropped, because the whole point of the switch is that
+    // the engine's own list travels with it: a fixture that quietly kept
+    // publishing `inpaint` would show up here and nowhere else.
+    expect(result.current.unsupportedFeatures).not.toContain("inpaint");
     expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
       retake: true,
       outpainting: false,
-      inpainting: true,
+      inpainting: false,
     });
 
     // …and back. A restriction that never lifts is not a restriction, it is a

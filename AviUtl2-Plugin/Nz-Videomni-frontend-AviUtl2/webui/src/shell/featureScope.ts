@@ -79,9 +79,11 @@ interface FeatureUiEntry {
  *    and a 422 say) while the sub-tabs are `outpainting`/`inpainting`; this
  *    table is exactly where that translation lives, and nothing downstream has
  *    to know either name. `inpaint` joined on 2026-09-14 (§3-55), when
- *    Inpainting stopped being a disabled mock: LTX 2.5 cannot run it in the
- *    first increment (owner decision D11), so it is the one feature name that
- *    closes that sub-tab.
+ *    Inpainting stopped being a disabled mock and shipped LTX 2.3-only. NO
+ *    ENGINE PUBLISHES IT TODAY: §3-150 (2026-09-15) built the LTX 2.5 driver,
+ *    so all three rows are currently dormant. THE ROWS STAY REGARDLESS — this
+ *    table is a translation, not a list of today's limitations, and a name
+ *    nobody publishes closes nothing (see `disabledUiTargets`).
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
  *    persisted in `localStorage`. Their SCOPES point in opposite directions:
@@ -254,7 +256,9 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
  *
  * `inpainting` joined on 2026-09-14 (§3-55): until that day Inpainting was a
  * mock with no panel behind it, disabled on EVERY base model and therefore
- * needing no feature name at all. */
+ * needing no feature name at all. Since §3-150 (2026-09-15) both shipped
+ * engines run it, so no live backend closes this sub-tab — the mechanism is
+ * kept for the next engine, and `featureScope.test.ts` keeps exercising it. */
 export interface EditSubTabsDisabled {
   /** `RetakePanel` — 撮り直し (`retake`). */
   retake: boolean;

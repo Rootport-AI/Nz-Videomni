@@ -164,7 +164,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, ClassVar, NamedTuple
 
 import torch
 
@@ -333,6 +333,13 @@ class OutpaintResult:
     of scope -- see the module docstring).
     """
 
+    #: The one ADDITIVE key :meth:`as_dict` ends on, named for the job kind. A
+    #: ``ClassVar`` rather than a field, so a subclass
+    #: (:class:`engine25.inpaint25.InpaintResult`) renames the key without
+    #: redeclaring the dataclass -- and so the field-derivation test keeps
+    #: seeing exactly the generation contract plus ``metadata``.
+    _JOB_KEY: ClassVar[str] = "outpaint"
+
     output_path: str
     seed: int
     width: int
@@ -379,7 +386,7 @@ class OutpaintResult:
             # The one ADDITIVE key. Named for the feature rather than folded in
             # flat, so a reader (and a JSON schema) can tell the generation
             # contract from this job kind's own facts.
-            "outpaint": self.metadata,
+            self._JOB_KEY: self.metadata,
         }
 
 
@@ -446,8 +453,14 @@ def _blend_chunk_size() -> int | None:
     return value if value > 0 else None
 
 
-def _require_frames(what: str, got: int, need: int, *, source: str) -> None:
+def _require_frames(
+    what: str, got: int, need: int, *, source: str, label: str = "outpaint"
+) -> None:
     """The frame-shortfall detector, said once for both operands.
+
+    ``label`` names the job kind in the message and nothing else; its default
+    keeps every existing caller's text byte for byte, and the inpaint driver
+    passes its own.
 
     NAMED AND LOUD on purpose. The app layer already rejects a source shorter
     than ``num_frames`` and ``services.video_io.pad_green_mp4`` clone-pads the
@@ -458,16 +471,22 @@ def _require_frames(what: str, got: int, need: int, *, source: str) -> None:
     """
     if int(got) < int(need):
         raise ValueError(
-            f"outpaint frame shortfall: {what} yielded {int(got)} frames but the job needs "
+            f"{label} frame shortfall: {what} yielded {int(got)} frames but the job needs "
             f"{int(need)} ({source}). The canvas must be built with pad_green_mp4's "
             f"exact-frame-count guarantee."
         )
 
 
 def _canvas_u8(
-    *, video_path: str, height: int, width: int, frame_cap: int, device: torch.device
+    *, video_path: str, height: int, width: int, frame_cap: int, device: torch.device,
+    label: str = "outpaint",
 ) -> torch.Tensor:
     """Decode ``video_path`` to ``(F, H, W, 3)`` uint8 on the CPU. Boundary (4).
+
+    ``label`` names the job kind in this function's two failure messages and
+    nothing else, exactly as it does in :func:`_require_frames`; its default
+    keeps every existing caller's text byte for byte, and the inpaint driver
+    passes its own.
 
     A uint8 twin of :func:`engine25.chain25._load_video_frames_cpu`, running the
     SAME per-frame op on the same device (``resize_and_center_crop`` on float32)
@@ -489,9 +508,10 @@ def _canvas_u8(
         frames.append(frame[0].permute(1, 2, 3, 0)[0].cpu())
         del raw, frame
     if not frames:
-        raise ValueError(f"outpaint canvas decoded to 0 frames: {video_path}")
+        raise ValueError(f"{label} canvas decoded to 0 frames: {video_path}")
     _require_frames(
-        "the green canvas", len(frames), int(frame_cap), source=str(video_path)
+        "the green canvas", len(frames), int(frame_cap),
+        source=str(video_path), label=label,
     )
     return torch.stack(frames, dim=0)
 
@@ -657,6 +677,118 @@ def _audio_freeze(
     return [AudioBandMask(latent=audio_latent, mask=mask, strength=float(strength))]
 
 
+class FrozenSourceAudio(NamedTuple):
+    """What :func:`_freeze_source_audio` found, carried as one value.
+
+    Six things that always travel together and are meaningless apart -- the
+    encoded latent head, the untouched waveform for the mux, its sample rate,
+    how many latent frames the encode produced, how many the freeze covers, and
+    whether the source had a decodable track at all. ``latent is None`` is the
+    "no usable audio" case, which every reader tests for.
+    """
+
+    latent: torch.Tensor | None
+    waveform: torch.Tensor | None
+    sampling_rate: int
+    available_frames: int
+    frozen_frames: int
+    source_had_audio: bool
+
+
+def _freeze_source_audio(
+    *,
+    audio_conditioner: Any,
+    device: torch.device,
+    vram: Any,
+    source_path: str | None,
+    enabled: bool,
+    a_total: int,
+    label: str = "outpaint",
+) -> FrozenSourceAudio:
+    """Encode the SOURCE video's audio once and keep its head frozen.
+
+    Lifted verbatim out of :func:`run_outpaint` so the inpaint driver calls this
+    code instead of owning a second copy -- 2.3's outpaint pipeline made the same
+    three extractions for the same reason. It carries the "underrun is not
+    fatal" ruling AND the ``12_audio_conditioning`` VRAM record, so both live in
+    one place rather than one per driver.
+
+    ``label`` names the job kind in the two warnings and nothing else; its
+    default keeps every existing line byte for byte, and
+    :func:`engine25.inpaint25.run_inpaint` passes its own so an operator reading
+    one log can tell which driver spoke. Exactly the device
+    :func:`_require_frames` already uses.
+    """
+    frozen_audio: torch.Tensor | None = None
+    source_waveform: torch.Tensor | None = None
+    audio_sr = 0
+    audio_available = 0
+    n_frozen = 0
+    source_had_audio = False
+    if enabled and source_path:
+        loaded = _load_audio_stereo(str(source_path), device)
+        source_had_audio = loaded is not None
+        if loaded is None:
+            logger.warning(
+                "%s: %s has no decodable audio stream; the model will generate "
+                "audio for the widened frame instead of following it",
+                label,
+                source_path,
+            )
+        else:
+            waveform, audio_sr = loaded
+            # The ORIGINAL waveform, kept on the CPU for the mux. Never a
+            # vocoder render: the delivered track has to BE the source's.
+            source_waveform = (
+                waveform.squeeze(0).detach().to(torch.float32).cpu().contiguous()
+            )
+            vram.reset()
+            audio_started = time.perf_counter()
+            encoded_a = audio_conditioner(
+                lambda enc: _encode_audio_latent(enc, waveform, audio_sr)
+            )
+            vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
+            audio_available = int(encoded_a.shape[2])
+            n_frozen = min(a_total, audio_available)
+            frozen_audio = encoded_a[:, :, :n_frozen].detach().clone().to(DTYPE)
+            if n_frozen < a_total:
+                logger.warning(
+                    "%s: source audio covers %d of %d audio latent frames; "
+                    "the tail will be generated",
+                    label, n_frozen, a_total,
+                )
+            del encoded_a, waveform
+            cleanup_memory()
+        del loaded
+    return FrozenSourceAudio(
+        frozen_audio, source_waveform, audio_sr, audio_available, n_frozen, source_had_audio
+    )
+
+
+def _audio_init(
+    frozen_audio: torch.Tensor | None,
+    *,
+    frames_frozen: int,
+    full_shape: Any,
+    device: torch.device,
+) -> torch.Tensor | None:
+    """A fresh full-length audio latent with the frozen head copied in.
+
+    Lifted verbatim out of :func:`run_outpaint` so both two-stage drivers call
+    one implementation. A FRESH tensor per call, because the denoiser writes
+    into the initial latent it is handed.
+    """
+    if frozen_audio is None:
+        return None
+    init = torch.zeros(
+        tuple(AudioLatentShape.from_video_pixel_shape(full_shape).to_torch_shape()),
+        dtype=DTYPE,
+        device=device,
+    )
+    init[:, :, :frames_frozen] = frozen_audio
+    return init
+
+
 def _mad(a: torch.Tensor, b: torch.Tensor) -> float:
     """Max absolute difference, in float32, as a plain float."""
     return float((a.float() - b.float()).abs().max().item())
@@ -735,6 +867,55 @@ def _mux_plan(
     }
 
 
+def _mux_audio(
+    *,
+    mux_meta: dict[str, Any],
+    source_waveform: torch.Tensor | None,
+    audio_latent: torch.Tensor,
+    audio_decoder: Any,
+    num_frames: int,
+    frame_rate: float,
+    audio_sr: int,
+    label: str = "outpaint",
+) -> tuple[Any, int]:
+    """``(audio_for_the_mux, muxed_sample_count)`` for the final encode.
+
+    Lifted verbatim out of :func:`run_outpaint` so the inpaint driver calls this
+    code rather than restating it. The ``round(px / fps * sr)`` trim is ONE fact
+    about how many samples a frame count is, and a second spelling of it is a
+    second chance to truncate a track by a frame.
+
+    ``label`` names the job kind in the log line and nothing else -- the same
+    pass-through :func:`_freeze_source_audio` and :func:`_require_frames` take,
+    with the same default, so no existing text moves.
+
+    The caller keeps the ``del``/``cleanup_memory`` that follows: the audio
+    latent is ITS local, and freeing a parameter here would only drop an alias.
+    """
+    muxed_samples = 0
+    if mux_meta["muxed_original_waveform"]:
+        assert source_waveform is not None  # the branch's own precondition
+        # The ORIGINAL waveform, trimmed to the VIDEO's duration. The same
+        # ``round(px / fps * sr)`` the chain's A2V and retake mux paths use,
+        # because it answers the same question: how many samples is this
+        # many frames.
+        n_mux = int(round(int(num_frames) / float(frame_rate) * audio_sr))
+        mux_wf = source_waveform[:, :n_mux].contiguous()
+        mux_audio: Any = Audio(
+            waveform=mux_wf.to(torch.float32), sampling_rate=int(audio_sr)
+        )
+        muxed_samples = int(mux_wf.shape[-1])
+        logger.info(
+            "%s: muxing the source's ORIGINAL waveform (%d samples, %d channels "
+            "@ %d Hz); the vocoder is NOT run",
+            label, muxed_samples, int(mux_wf.shape[0]), int(audio_sr),
+        )
+        del mux_wf
+    else:
+        mux_audio = audio_decoder(audio_latent)
+    return mux_audio, muxed_samples
+
+
 def _phase_peak_mb(phases: dict[str, dict[str, Any]], name: str) -> float | None:
     """One phase's peak allocation in decimal MB, or ``None`` if it was not recorded.
 
@@ -753,11 +934,183 @@ def _phase_peak_mb(phases: dict[str, dict[str, Any]], name: str) -> float | None
 
 
 # ---------------------------------------------------------------------------
+# The two ImageConditioner calls, and the engine-facts sub-dict
+# ---------------------------------------------------------------------------
+#
+# All three are lifted verbatim out of :func:`run_outpaint` so the inpaint
+# driver calls them rather than carrying a second copy of a measured
+# path or of a user-visible contract. Every ``vram.reset()`` / ``vram.record()``
+# that surrounded them at the call site STAYED there.
+
+
+def _encode_reference_conditionings(
+    *,
+    image_conditioner: Any,
+    ic_reference: tuple[str, float] | None,
+    reference_factor: Any,
+    height: int,
+    width: int,
+    num_frames: int,
+    tiling_config: Any,
+    ic_attention_strength: float,
+    device: torch.device,
+    vram: Any,
+) -> tuple[list[ConditioningItem], int]:
+    """``(conditioning_items, reference_frames)`` for the IC-LoRA reference.
+
+    ``height`` / ``width`` are the CANVAS dimensions; the reference is read at
+    half of them divided by the adapter's declared factor, which is the stage-1
+    frame. Extracted so "a missing reference means generate without one, never
+    an error" is stated once for both drivers.
+    """
+    conds_ref: list[ConditioningItem] = []
+    reference_frames = 0
+    if ic_reference is not None:
+        ref_path, ref_strength = ic_reference
+        # The reference is read at the STAGE-1 dimensions divided by the
+        # adapter's declared factor. The in/outpainting IC-LoRA declares 1,
+        # so the green canvas is read at exactly half the canvas -- which is
+        # what makes the model see the pad bands where it will generate them.
+        scale, ref_h, ref_w = reference_pixel_dims(
+            reference_factor, height // 2, width // 2
+        )
+
+        def _encode_reference(encoder: Any) -> tuple[list[ConditioningItem], int]:
+            pixels = load_reference_pixels_cpu(
+                str(ref_path), height=ref_h, width=ref_w,
+                frame_cap=int(num_frames), device=device,
+            )
+            if pixels is None:
+                # "A missing reference means generate without one", never an
+                # error -- the owner's standing rule. It would be a very bad
+                # outpaint, and the metadata says so rather than the job
+                # failing at the end of the encode.
+                logger.warning(
+                    "outpaint: the canvas reference %s yielded no frames; "
+                    "generating without a reference", ref_path,
+                )
+                return [], 0
+            frames = int(pixels.shape[2])
+            items = reference_conditioning_from_pixels(
+                pixels,
+                video_encoder=encoder,
+                device=device,
+                tiling_config=tiling_config,
+                scale=scale,
+                strength=float(ref_strength),
+                attention_strength=float(ic_attention_strength),
+                vram=vram,
+                phase=REFERENCE_ENCODE_PHASE,
+            )
+            return items, frames
+
+        conds_ref, reference_frames = image_conditioner(_encode_reference)
+        cleanup_memory()
+    return conds_ref, reference_frames
+
+
+def _reencode_stage2(
+    image_conditioner: Any,
+    pixels: torch.Tensor,
+    tiling_config: Any,
+    device: torch.device,
+) -> torch.Tensor:
+    """Re-encode the blended full-resolution pixels as stage 2's initial latent.
+
+    Extracted verbatim -- the ``channels_last_3d`` re-layout and its ``finally``
+    restore are a MEASURED requirement (27188 MB -> 6174 MB reserved for
+    -0.002 dB, G0-d), and the restore is a correctness requirement rather than
+    hygiene: torch's bf16 Conv3d produces different latents under the two
+    layouts and this same encoder object is reachable again within the process.
+    A second copy would be an unmeasured second path, which is why the inpaint
+    driver calls this one.
+    """
+
+    def _reencode(encoder: Any) -> torch.Tensor:
+        relayout = torch.device(device).type == "cuda"
+        converted = 0
+        if relayout:
+            converted = set_conv3d_memory_format(encoder, torch.channels_last_3d)
+        try:
+            # cleanup AFTER the switch, so the contiguous weight storages it
+            # just dropped are reclaimed by this same pass.
+            cleanup_memory()
+            encode_input = _encode_input_from_u8(pixels)
+            latent = encoder.tiled_encode(encode_input, tiling_config)
+            del encode_input
+            logger.info(
+                "outpaint stage-2 re-encode (channels_last_3d convs=%d): latent %s",
+                converted, tuple(latent.shape),
+            )
+            return latent.detach().clone()
+        finally:
+            if relayout:
+                try:
+                    set_conv3d_memory_format(encoder, torch.contiguous_format)
+                    cleanup_memory()
+                except Exception:  # noqa: BLE001 -- must never mask an in-flight failure
+                    logger.exception(
+                        "outpaint: failed to restore the video encoder's contiguous layout"
+                    )
+
+    return image_conditioner(_reencode)
+
+
+def _ltx25_block(
+    *,
+    seed: int,
+    noise_scale2: float,
+    reference_frames: int,
+    reference_factor: Any,
+    ic_attention_strength: float,
+    encode_fps: int,
+    chunks: int,
+    pixel_step: int,
+    tiling_config: Any,
+    out_path: Path,
+    summary: dict[str, Any],
+    phases: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """The ``ltx25`` sub-dict of a job's metadata, for either 2.5 driver.
+
+    USER-VISIBLE CONTRACT: the worker re-sends this SAME dict as a top-level
+    ``ltx25`` key on ``done`` and the app writes it into ``metadata.json``
+    verbatim, so two copies of it would be two answers to "what did 2.5 do".
+    """
+    return {
+        "stage1_sampler": STAGE1_SAMPLER,
+        "stage1_eta": STAGE1_ANCESTRAL_ETA if STAGE1_SAMPLER == "ancestral" else None,
+        "stage2_sampler": "euler",
+        "stage2_noise_scale": noise_scale2,
+        "stage2_seed": int(seed) + STAGE2_SEED_OFFSET,
+        "stage2_audio_init_policy": STAGE2_AUDIO_INIT_POLICY,
+        "reference_frames": int(reference_frames),
+        "reference_downscale_factor": reference_factor,
+        "reference_attention_strength": float(ic_attention_strength),
+        "encode_fps": encode_fps,
+        "video_chunks": chunks,
+        "pixel_chunk_frames": int(pixel_step),
+        "tiling": None if tiling_config is None else repr(tiling_config),
+        "size_bytes": out_path.stat().st_size,
+        "vram": summary,
+        "phases": dict(phases),
+        # WRITTEN DOWN RATHER THAN INFERRED, because a gate that compares
+        # this engine's numbers with 2.3's must know which differences are
+        # decisions. See the module docstring for each one's reasoning.
+        "intentional_differences": {
+            "stage1_sampler": "2.3 runs euler in both stages; 2.5 runs ancestral in stage 1",
+            "stage2_audio_init": STAGE2_AUDIO_INIT_POLICY,
+            "stage2_encode_tiling": "decode config + channels_last_3d (no tile-area budget)",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # The job
 # ---------------------------------------------------------------------------
 
 
-# No decorator: the mode is :877's ``with torch.no_grad():``, as on every engine25 path -- the inference-mode one that stood here is VERIFICATION_LOG §81.
+# No decorator: the mode is :1219's ``with torch.no_grad():``, as on every engine25 path -- the inference-mode one that stood here is VERIFICATION_LOG §81.
 def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it would hide the order
     pipeline: Any,
     *,
@@ -903,46 +1256,20 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         # the audio IS the subject; here it is guidance for a video that is
         # already fully specified, so a source whose audio ends early freezes
         # what it has and generates the rest. 2.3 ruled the same way.
-        frozen_audio: torch.Tensor | None = None
-        source_waveform: torch.Tensor | None = None
-        audio_sr = 0
-        audio_available = 0
-        n_frozen = 0
-        source_had_audio = False
-        if freeze_source_audio and source_path:
-            loaded = _load_audio_stereo(str(source_path), device)
-            source_had_audio = loaded is not None
-            if loaded is None:
-                logger.warning(
-                    "outpaint: %s has no decodable audio stream; the model will generate "
-                    "audio for the widened frame instead of following it",
-                    source_path,
-                )
-            else:
-                waveform, audio_sr = loaded
-                # The ORIGINAL waveform, kept on the CPU for the mux. Never a
-                # vocoder render: the delivered track has to BE the source's.
-                source_waveform = (
-                    waveform.squeeze(0).detach().to(torch.float32).cpu().contiguous()
-                )
-                vram.reset()
-                audio_started = time.perf_counter()
-                encoded_a = pipeline.audio_conditioner(
-                    lambda enc: _encode_audio_latent(enc, waveform, audio_sr)
-                )
-                vram.record("12_audio_conditioning", time.perf_counter() - audio_started)
-                audio_available = int(encoded_a.shape[2])
-                n_frozen = min(a_total, audio_available)
-                frozen_audio = encoded_a[:, :, :n_frozen].detach().clone().to(DTYPE)
-                if n_frozen < a_total:
-                    logger.warning(
-                        "outpaint: source audio covers %d of %d audio latent frames; "
-                        "the tail will be generated",
-                        n_frozen, a_total,
-                    )
-                del encoded_a, waveform
-                cleanup_memory()
-            del loaded
+        audio = _freeze_source_audio(
+            audio_conditioner=pipeline.audio_conditioner,
+            device=device,
+            vram=vram,
+            source_path=source_path,
+            enabled=freeze_source_audio,
+            a_total=a_total,
+        )
+        frozen_audio = audio.latent
+        source_waveform = audio.waveform
+        audio_sr = audio.sampling_rate
+        audio_available = audio.available_frames
+        n_frozen = audio.frozen_frames
+        source_had_audio = audio.source_had_audio
 
         # ── 11_reference_encode: the green canvas, at HALF resolution ─────────
         # ``ImageConditioner.__call__(fn)`` builds the video encoder, calls
@@ -965,49 +1292,18 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
             device=device,
         )
 
-        conds_ref: list[ConditioningItem] = []
-        reference_frames = 0
-        if ic_reference is not None:
-            ref_path, ref_strength = ic_reference
-            # The reference is read at the STAGE-1 dimensions divided by the
-            # adapter's declared factor. The in/outpainting IC-LoRA declares 1,
-            # so the green canvas is read at exactly half the canvas -- which is
-            # what makes the model see the pad bands where it will generate them.
-            scale, ref_h, ref_w = reference_pixel_dims(
-                reference_factor, height // 2, width // 2
-            )
-
-            def _encode_reference(encoder: Any) -> tuple[list[ConditioningItem], int]:
-                pixels = load_reference_pixels_cpu(
-                    str(ref_path), height=ref_h, width=ref_w,
-                    frame_cap=int(num_frames), device=device,
-                )
-                if pixels is None:
-                    # "A missing reference means generate without one", never an
-                    # error -- the owner's standing rule. It would be a very bad
-                    # outpaint, and the metadata says so rather than the job
-                    # failing at the end of the encode.
-                    logger.warning(
-                        "outpaint: the canvas reference %s yielded no frames; "
-                        "generating without a reference", ref_path,
-                    )
-                    return [], 0
-                frames = int(pixels.shape[2])
-                items = reference_conditioning_from_pixels(
-                    pixels,
-                    video_encoder=encoder,
-                    device=device,
-                    tiling_config=tiling_config,
-                    scale=scale,
-                    strength=float(ref_strength),
-                    attention_strength=float(ic_attention_strength),
-                    vram=vram,
-                    phase=REFERENCE_ENCODE_PHASE,
-                )
-                return items, frames
-
-            conds_ref, reference_frames = dp.image_conditioner(_encode_reference)
-            cleanup_memory()
+        conds_ref, reference_frames = _encode_reference_conditionings(
+            image_conditioner=dp.image_conditioner,
+            ic_reference=ic_reference,
+            reference_factor=reference_factor,
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            tiling_config=tiling_config,
+            ic_attention_strength=ic_attention_strength,
+            device=device,
+            vram=vram,
+        )
 
         # ── 21_stage1_denoise: half resolution, green canvas attached ─────────
         # NO INITIAL VIDEO LATENT and no video band: stage 1 generates the whole
@@ -1015,14 +1311,9 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         # modality with anything frozen, which is why ``freeze_kv`` has no
         # counterpart here at all.
         stage_1_sigmas = DISTILLED_SIGMAS.to(dtype=torch.float32, device=device)
-        init_a1: torch.Tensor | None = None
-        if frozen_audio is not None:
-            init_a1 = torch.zeros(
-                tuple(AudioLatentShape.from_video_pixel_shape(full_shape).to_torch_shape()),
-                dtype=DTYPE,
-                device=device,
-            )
-            init_a1[:, :, :n_frozen] = frozen_audio
+        init_a1 = _audio_init(
+            frozen_audio, frames_frozen=n_frozen, full_shape=full_shape, device=device
+        )
         band_a1 = _audio_freeze(init_a1, n_frozen)
 
         # NO ``outer_index`` / ``outer_total``: outpainting is one clip, so the
@@ -1133,34 +1424,9 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         vram.reset()
         encode2_started = time.perf_counter()
 
-        def _reencode(encoder: Any) -> torch.Tensor:
-            relayout = torch.device(device).type == "cuda"
-            converted = 0
-            if relayout:
-                converted = set_conv3d_memory_format(encoder, torch.channels_last_3d)
-            try:
-                # cleanup AFTER the switch, so the contiguous weight storages it
-                # just dropped are reclaimed by this same pass.
-                cleanup_memory()
-                encode_input = _encode_input_from_u8(upscaled)
-                latent = encoder.tiled_encode(encode_input, tiling_config)
-                del encode_input
-                logger.info(
-                    "outpaint stage-2 re-encode (channels_last_3d convs=%d): latent %s",
-                    converted, tuple(latent.shape),
-                )
-                return latent.detach().clone()
-            finally:
-                if relayout:
-                    try:
-                        set_conv3d_memory_format(encoder, torch.contiguous_format)
-                        cleanup_memory()
-                    except Exception:  # noqa: BLE001 -- must never mask an in-flight failure
-                        logger.exception(
-                            "outpaint: failed to restore the video encoder's contiguous layout"
-                        )
-
-        stage2_init = dp.image_conditioner(_reencode)
+        stage2_init = _reencode_stage2(
+            dp.image_conditioner, upscaled, tiling_config, device
+        )
         vram.record("27_stage2_encode", time.perf_counter() - encode2_started)
         del upscaled
         cleanup_memory()
@@ -1292,27 +1558,15 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         )
         vram.reset()
         encode_started = time.perf_counter()
-        muxed_samples = 0
-        if mux_meta["muxed_original_waveform"]:
-            assert source_waveform is not None  # the branch's own precondition
-            # The ORIGINAL waveform, trimmed to the VIDEO's duration. The same
-            # ``round(px / fps * sr)`` the chain's A2V and retake mux paths use,
-            # because it answers the same question: how many samples is this
-            # many frames.
-            n_mux = int(round(int(num_frames) / float(frame_rate) * audio_sr))
-            mux_wf = source_waveform[:, :n_mux].contiguous()
-            mux_audio: Any = Audio(
-                waveform=mux_wf.to(torch.float32), sampling_rate=int(audio_sr)
-            )
-            muxed_samples = int(mux_wf.shape[-1])
-            logger.info(
-                "outpaint: muxing the source's ORIGINAL waveform (%d samples, %d channels "
-                "@ %d Hz); the vocoder is NOT run",
-                muxed_samples, int(mux_wf.shape[0]), int(audio_sr),
-            )
-            del mux_wf
-        else:
-            mux_audio = dp.audio_decoder(final_a)
+        mux_audio, muxed_samples = _mux_audio(
+            mux_meta=mux_meta,
+            source_waveform=source_waveform,
+            audio_latent=final_a,
+            audio_decoder=dp.audio_decoder,
+            num_frames=num_frames,
+            frame_rate=frame_rate,
+            audio_sr=audio_sr,
+        )
         del final_a
         cleanup_memory()
 
@@ -1387,32 +1641,20 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         "output_mp4": str(out_path),
         # engine25-only facts, in their own sub-dict so the 2.3-shaped keys
         # above stay exactly the 2.3 set a client already parses.
-        "ltx25": {
-            "stage1_sampler": STAGE1_SAMPLER,
-            "stage1_eta": STAGE1_ANCESTRAL_ETA if STAGE1_SAMPLER == "ancestral" else None,
-            "stage2_sampler": "euler",
-            "stage2_noise_scale": noise_scale2,
-            "stage2_seed": int(seed) + STAGE2_SEED_OFFSET,
-            "stage2_audio_init_policy": STAGE2_AUDIO_INIT_POLICY,
-            "reference_frames": int(reference_frames),
-            "reference_downscale_factor": reference_factor,
-            "reference_attention_strength": float(ic_attention_strength),
-            "encode_fps": encode_fps,
-            "video_chunks": chunks,
-            "pixel_chunk_frames": int(pixel_step),
-            "tiling": None if tiling_config is None else repr(tiling_config),
-            "size_bytes": out_path.stat().st_size,
-            "vram": summary,
-            "phases": dict(vram.phases),
-            # WRITTEN DOWN RATHER THAN INFERRED, because a gate that compares
-            # this engine's numbers with 2.3's must know which differences are
-            # decisions. See the module docstring for each one's reasoning.
-            "intentional_differences": {
-                "stage1_sampler": "2.3 runs euler in both stages; 2.5 runs ancestral in stage 1",
-                "stage2_audio_init": STAGE2_AUDIO_INIT_POLICY,
-                "stage2_encode_tiling": "decode config + channels_last_3d (no tile-area budget)",
-            },
-        },
+        "ltx25": _ltx25_block(
+            seed=seed,
+            noise_scale2=noise_scale2,
+            reference_frames=reference_frames,
+            reference_factor=reference_factor,
+            ic_attention_strength=ic_attention_strength,
+            encode_fps=encode_fps,
+            chunks=chunks,
+            pixel_step=pixel_step,
+            tiling_config=tiling_config,
+            out_path=out_path,
+            summary=summary,
+            phases=vram.phases,
+        ),
     }
 
     result = OutpaintResult(

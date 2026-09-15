@@ -761,6 +761,23 @@ def _do_generate(msg: dict) -> None:
     # validated is the one thing this feature must never do.
     outpaint = msg.get("outpaint")
 
+    # Inpainting (台帳 §3-150). The SAME additive contract outpaint uses, on the
+    # same two engines: the adapter puts this key on the payload only for an
+    # inpaint job, so its presence routes the whole op to the masked two-stage
+    # driver below. It carries the canvas GEOMETRY and the two FILE PATHS the
+    # canvas cannot supply -- the cut window (audio, and the restore's original
+    # picture) and the mask video itself.
+    #
+    # The two are mutually exclusive at the schema layer (api/models.py), which
+    # the assert restates where it would actually bite: by this point the two
+    # would be fighting over one reference video and one output file. 2.3's
+    # worker says it in the same words at the same place.
+    inpaint = msg.get("inpaint")
+    assert not (outpaint is not None and inpaint is not None), (
+        "outpaint and inpaint are mutually exclusive; the API schema rejects the "
+        "combination before a job is created"
+    )
+
     # The five acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
     # written before they existed resolves to today's behaviour, and all are
     # armed below rather than passed to ``generate``: they are per-job state on a
@@ -792,6 +809,13 @@ def _do_generate(msg: dict) -> None:
         f"generate {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
+        # 台帳 §3-150, in 2.3's spelling and 2.3's place on the line (right
+        # after the reference), because the two engines' worker logs are read
+        # side by side when a result is compared. Outpainting has no such token
+        # here and does not gain one: this line is what a reader consults to
+        # tell a MASKED job from a plain one, and the canvas both features send
+        # arrives as ``ic_reference=yes`` either way.
+        f"inpaint={'yes' if inpaint else 'no'} "
         f"preprocess={_preprocess_kind(msg)} attn={attn_strength:.3f} "
         # What was ASKED for. What was GOT is the pair of echo keys on the done
         # event below, which can differ ("on->off").
@@ -828,7 +852,75 @@ def _do_generate(msg: dict) -> None:
     # job's negative prompt on a resident worker rather than inheriting it.
     _PIPE.set_nag_job(nag)
     try:
-        if outpaint is not None:
+        if inpaint is not None:
+            # Inpainting (台帳 §3-150). ``reference_video.path`` is ALREADY the
+            # green-FILLED canvas the app built (the mask's white region painted
+            # #66FF00, padded out to the 128-multiple canvas), so
+            # ``ic_reference`` above points at it and this branch only has to
+            # hand ``run_inpaint`` the geometry, the cut window and the mask
+            # video it needs. Imported HERE rather than at module scope for the
+            # same reason every other engine import in this file is: a worker
+            # that only ever loads a model must not pay for torch-heavy modules
+            # a job kind it is not running would need.
+            #
+            # FIRST in the chain, above outpaint, exactly as on 2.3 -- and the
+            # assert above is what makes the order irrelevant rather than a
+            # silent precedence rule.
+            from engine.inpaint.canvas import InpaintGeometry  # noqa: PLC0415
+            from engine25.inpaint25 import run_inpaint  # noqa: PLC0415
+
+            # THE GEOMETRY IS THE ONLY SOURCE OF BOTH SIZES. ``msg`` also
+            # carries ``width``/``height`` and they agree -- the adapter fills
+            # ``canvas_width``/``canvas_height`` from exactly those two fields
+            # -- but ``run_inpaint`` takes no width/height argument at all, so
+            # there is no second place for them to be read from and disagree.
+            # The SOURCE size is the adapter's ffprobe of the cut window, which
+            # is the only number that can be checked against a file.
+            geometry = InpaintGeometry(
+                canvas_width=int(inpaint["canvas_width"]),
+                canvas_height=int(inpaint["canvas_height"]),
+                source_width=int(inpaint["source_width"]),
+                source_height=int(inpaint["source_height"]),
+            )
+            assert ic_reference is not None, (
+                "inpaint requires a reference video (the green canvas); the API "
+                "layer enforces this before the job is created"
+            )
+            result = run_inpaint(
+                _PIPE,
+                prompt=str(msg["prompt"]),
+                canvas_path=ic_reference[0],
+                source_path=inpaint.get("source_path"),
+                mask_path=inpaint["mask_path"],
+                geometry=geometry,
+                num_frames=int(msg["num_frames"]),
+                frame_rate=float(msg["frame_rate"]),
+                # Carried and reported, never acted on -- see the outpaint
+                # branch below for why 0 is the honest "not stated".
+                num_steps=int(msg.get("num_steps", 0)),
+                seed=seed,
+                output_path=str(msg["output_path"]),
+                # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=attn_strength,
+                # The workflow's own defaults, and the app always sends both.
+                # Defaulted here as well because the worker is reachable from a
+                # payload written before the panel exposed them.
+                blend_dilation_stage1=int(inpaint.get("blend_dilation_stage1", 5)),
+                blend_dilation_stage2=int(inpaint.get("blend_dilation_stage2", 2)),
+                # NO ``freeze_source_audio``: the app's inpaint block does not
+                # carry the field (2.3's does not either), so the driver's own
+                # default -- freeze the cut window's track -- stands. Passing
+                # ``inpaint.get(...)`` would invent a switch the API has not got.
+                #
+                # Reported through pipeline25's own ``_log_ignored``, so an
+                # inpaint job's log names the dropped knobs in the same words a
+                # plain one's does.
+                ignored=ignored,
+                progress=_emit_progress,
+            )
+        elif outpaint is not None:
             # Outpainting (§3-102). ``reference_video.path`` is ALREADY the
             # green canvas the app built, so ``ic_reference`` above points at
             # it and this branch only has to hand ``run_outpaint`` the geometry
@@ -931,6 +1023,21 @@ def _do_generate(msg: dict) -> None:
     # line above. That is where the gates collect them from.
     extra: dict = {} if outpaint is None else {"outpaint": result.metadata}
 
+    # 台帳 §3-150: the inpaint twin of the line above, and DELIBERATELY NOT the
+    # same shape. Outpainting sends the WHOLE metadata dict because nothing
+    # app-side reads it (only the nested ``ltx25`` below reaches metadata.json);
+    # inpainting sends only the SUB-DICT, because the app DOES read this one --
+    # ``services/pipeline_manager.py`` writes ``metadata["inpaint"] =
+    # {**outcome.inpaint, **provenance}``, so handing it the whole dict would
+    # nest ``inpaint``/``ltx25``/``seed``/``width`` INSIDE the block and break
+    # the §6/§7 contract that ``mask_proof`` rides on. 2.3's worker sends the
+    # sub-dict for exactly this reason (``engine/worker.py``'s ``meta[meta_key]``).
+    #
+    # Written as its own statement rather than folded into the conditional
+    # above, so the outpaint line stays byte for byte what it was.
+    if inpaint is not None:
+        extra = {"inpaint": result.metadata["inpaint"]}
+
     # 台帳 §3-131: ``ltx25``, a SECOND and SEPARATE ``done`` key, present on
     # EVERY generate job (plain or outpaint), unlike ``extra`` above. Its
     # content DOES reach metadata.json -- ``services/engines/ltx25/adapter.py``
@@ -946,7 +1053,15 @@ def _do_generate(msg: dict) -> None:
     # constant already on ``ready.sampler``/LOAD_OK -- and no
     # ``stage1_eta``/``stage2_sampler``/``vram``, which only a two-stage
     # outpaint/chain build has).
-    ltx25: dict = result.metadata["ltx25"] if outpaint is not None else {
+    # 台帳 §3-150 adds the second two-stage driver to the left-hand arm:
+    # ``run_inpaint`` builds its ``ltx25`` sub-dict with the SAME
+    # ``outpaint25._ltx25_block``, so both masked/widened job kinds reuse the
+    # dict they already have rather than a second, possibly-drifting copy. Note
+    # that for an inpaint job this is the ONLY route the sub-dict takes to the
+    # app: ``extra`` above carries the ``inpaint`` block, not the whole dict.
+    ltx25: dict = result.metadata["ltx25"] if (
+        outpaint is not None or inpaint is not None
+    ) else {
         "encode_fps": result.encode_fps,
         "video_chunks": result.video_chunks,
         "tiling": result.tiling,

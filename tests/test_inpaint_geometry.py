@@ -31,6 +31,7 @@ try:  # torch lives only in the engine venvs; the integer half below never needs
         fill_pad_bands_with_generated_,
         half_res_mask,
         place_mask_on_canvas,
+        restore_and_measure_,
         restore_outside_mask_,
     )
 except ImportError:  # pragma: no cover - the app venv has no torch
@@ -395,3 +396,44 @@ def test_restore_is_chunk_size_independent():
         return blended
 
     assert torch.equal(run(1), run(5))
+
+
+# ── 7. restore_and_measure_ — one definition, both engines ──────────────────
+def test_the_2_3_pipeline_calls_THIS_modules_restore_and_measure_():
+    """The restore-and-measure pass lives here, next to the mask helpers it is
+    made of, because the LTX 2.5 inpaint driver cannot import
+    ``engine.pipeline.inpaint_pipeline`` (that module is bound to the 2.3
+    wheel). 2.3 now imports it back under its old private name, so this
+    identity is what says the move was a move and not a fork — two copies of a
+    ramp rule would let the two engines restore different pixels."""
+    pipeline = pytest.importorskip(
+        "engine.pipeline.inpaint_pipeline",
+        reason="the 2.3 pipeline needs an engine venv",
+    )
+    from engine.inpaint import canvas
+
+    assert pipeline._restore_and_measure_ is canvas.restore_and_measure_
+
+
+@needs_torch
+def test_restore_and_measure_puts_the_outside_back_and_reports_honest_ratios():
+    """``dilation=0`` makes the dilation the identity, so the two ratios have to
+    agree and both are a quarter of the frame — which is also what makes the
+    ratios checkable without pinning the dilation's resampling."""
+    blended = _video(4, 32, 32, 200)
+    source = _video(4, 32, 32, 10)
+    mask = _mask(4, 32, 32, 0)
+    mask[:, :, 8:24, 8:24] = 255
+
+    proof = restore_and_measure_(
+        blended=blended,
+        source=source,
+        mask=mask,
+        dilation=0,
+        chunk_size=2,
+        device=None,
+    )
+
+    assert proof == {"decoded_frames": 4, "white_ratio": 0.25, "dilated_ratio": 0.25}
+    assert int(blended[:, 8:24, 8:24, :].min()) == 200, "inside the mask stays generated"
+    assert int(blended[:, 0:8, 0:8, :].max()) == 10, "outside is the source, byte for byte"

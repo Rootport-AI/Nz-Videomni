@@ -4432,3 +4432,33 @@ return {
 
 実機採取(k)〜(m)は決着し（白化効果の定数は採取原文と一致、描画順は採取不要、`frame=`の絶対／相対はG6で裏づけ）、実機ゲートG1〜G10は全合格した（G7はコードの排他で合格扱いのオーナー裁定、G10は改修前後でLTX 2.3・2.5ともビット一致）。ゲートで見つかった修正（右クリックの並び・解像度判定は両カードが揃ってから・マスク失敗の案内はトースト・文言）と、追加の注文「マスク周囲の「のりしろ」欄（Stage-1／Stage-2、0〜15、既定5／2）」を同日に実装した（doctest 384件・vitest 2,924件）。記録の正本はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §105.7〜§105.8、台帳は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02。
 
+
+## 117. InpaintingがLTX 2.5でも動くようになった — 操作パネル本体の変更は0行（バックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-150）（2026-09-15）
+
+### 117.1 結論
+
+**§116で実タブに昇格したEditタブの「Inpainting」サブタブが、ベースモデルにLTX 2.5を選んでいるときにも生きるようになった。** 工事はすべてバックエンド側（LTX 2.5用の駆動部`engine25/inpaint25.py`・ワーカーの分岐・エンジンアダプタ）で、**フロントエンド本体のコードは0行である。**
+
+**なぜ0行で済むのか。** サブタブの灰色は、サーバーが`GET /models`で配る`unsupported_features`に`inpaint`という語が載っているかどうかだけで決まる（`shell/featureScope.ts`の宣言表が翻訳を担う）。LTX 2.5のアダプタが拒否表からその行を落とした瞬間に、**画面側は何も知らないまま灰色が解ける。** §116.4で足した`FEATURE_UI.inpaint`と`editSubTab.inpainting`の配線は、そのまま正しく働いている。
+
+**したがって`.aux2`の再ビルドと配備も要らない。** モックの固定値だけは次回の通常のdeployに同梱される。
+
+### 117.2 触ったファイル
+
+- **`bridge/mockBridge.ts`** — `MOCK_UNSUPPORTED_FEATURES.LTX25`から`"inpaint"`を外した。**この固定値は、この配列の歴史で唯一「入ってから出ていった」語である**（2026-09-14に§3-55で入り、翌日を待たず同じ2026-09-15に出ていった）。LTX 2.5がここで宣言するのは、ふたたびエンジン水準の2語（`two_stage_hq` / `prune_vaed`）だけで、モード名は1つも無い。
+- **`shell/featureScope.ts`・`api/types.ts`** — **注釈だけ**である。**`FEATURE_UI`の`inpaint`の行は残した**——この表は「機能名→どのUI部品を閉じるか」の翻訳であって今日の制限の一覧ではなく、**誰も宣言しない語は何も閉じない**。次のエンジンが断ったときにそのまま効く形で生きている。
+- **テスト** — `featureScope.test.ts`・`AppShell.featureScope.test.tsx`・`App.editRoute.test.tsx`・`EditScreen.test.tsx`・`EditScreen.inpaint.test.tsx`・`mockBridge.test.ts`・`useBaseModels.test.ts`。「今日のLTX 2.5の一覧」を固定している行を2語へ直し、**サブタブを灰色にできる仕組みそのものを主張する行は残した**（仕組みの固定であって、今日の値の固定ではないためである）。
+
+### 117.3 機械検証
+
+vitest **146ファイル・2,925件**（`npx vitest run --exclude src/api/backend.integration.test.ts`）、`npm run typecheck`エラー0、lint警告31本（不変）。**nativeは1行も触っていないのでdoctestは384件のまま**である。
+
+**バックエンド側の機械ゲート・G10の回帰指紋・実GPUゲート・モック通しの結果の正本は、バックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §107である**（本節には書き写さない）。
+
+### 117.4 残っているもの
+
+**オーナーの目視2点だけである**——①LTX 2.5を読み込んだ状態でInpaintingサブタブが生きていてGenerateが完走すること、②枠が動く部分フィルタでの生成をLTX 2.5で1本。手順は[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) **§4.17**にある。**§4.16のG8は合否が反転した**——「LTX 2.5では灰色のまま」が合格条件だった項目が、「灰色が解ける」が合格条件になった。
+
+### 117.5 完結（オーナー目視合格・2026-09-15）
+
+上の目視2点は同日2026-09-15にオーナーが実施して両方とも合格し（LTX 2.5を読み込んだ状態でInpaintingサブタブが生きてGenerateが完走し、描き替えの結果も正しかった）、本テーマはクローズした（台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-150、記録の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §107.8）。

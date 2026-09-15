@@ -313,8 +313,11 @@ describe("EditScreen sub-tabs — base-model feature scope", () => {
   });
 
   it("greys the Inpainting sub-tab — and only it — when the engine cannot inpaint", () => {
-    // §3-55 / owner decision D11: LTX 2.5 cannot run Inpainting in the first
-    // increment, so this is the state a 2.5 base model actually produces.
+    // §3-55 / owner decision D11: for a fortnight LTX 2.5 could not run
+    // Inpainting, and this was the state a 2.5 base model produced. §3-150
+    // built that driver, so NO shipped engine produces it today — the case is
+    // kept because it is the mechanism (one feature name closes one sub-tab
+    // and leaves the other two alone), which the next engine will need.
     renderEdit(undefined, undefined, { retake: false, outpainting: false, inpainting: true });
     expect(subTab("Inpainting")).toBeDisabled();
     expect(subTab("Retake")).not.toBeDisabled();

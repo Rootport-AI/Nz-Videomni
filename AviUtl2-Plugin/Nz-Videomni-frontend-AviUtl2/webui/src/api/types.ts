@@ -1032,15 +1032,17 @@ export interface BaseModelBlock {
    * "omitted" must read as "no restrictions", never as "everything is off".
    *
    * Known names at the time of writing: `chain`, `retake`, `end_source`,
-   * `v2v`, `a2v`, `two_stage_hq`, `outpaint`, `loras`, `reference_video`,
-   * `nag`, `prune_vaed`, `sage_attention`. That list is a history, not a
+   * `v2v`, `a2v`, `two_stage_hq`, `outpaint`, `inpaint`, `loras`,
+   * `reference_video`, `nag`, `prune_vaed`, `sage_attention`,
+   * `keep_resident`, `keep_resident_embeddings`. That list is a history, not a
    * contract: a name leaves it as soon as an engine gains the feature
    * (`chain`/`v2v`/`a2v` on 2026-08-23, `loras`/`reference_video` on
    * 2026-08-24, `keep_resident` on 2026-08-25 -- LTX 2.5 opened the
-   * text-encoder form of it -- and `sage_attention` on 2026-08-25 as well,
-   * once LTX 2.5 started running LTX 2.3's sage attention kernels). Read the
-   * live array, never this comment; the canonical list is the backend spec's
-   * 6.10(b), 6 names for LTX 2.5. */
+   * text-encoder form of it -- `sage_attention` on 2026-08-25 as well, once
+   * LTX 2.5 started running LTX 2.3's sage attention kernels, and `inpaint` on
+   * 2026-09-15, the only name ever to arrive (2026-09-14, LTX 2.3-only) and
+   * then leave). Read the live array, never this comment; the canonical list is
+   * the backend spec's 6.10(b). */
   unsupported_features?: string[];
   categories: Record<string, ModelCategoryBlock>;
 }

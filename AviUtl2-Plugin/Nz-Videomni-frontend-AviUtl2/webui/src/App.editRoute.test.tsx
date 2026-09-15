@@ -404,9 +404,9 @@ describe("App / Edit screens receive Settings' acceleration (§1-27)", () => {
 // nothing to ever clean it up.
 //
 // The fixture reaches this state through `withExtraUnsupportedFeatures`, which
-// declares BOTH `retake` and `outpaint` for LTX 2.5 so `disabledModesFor`'s
-// `needsAnyOf` takes the whole Edit tab. Both names are synthetic now — the
-// engine runs both modes.
+// declares ALL THREE of `retake`, `outpaint` and `inpaint` for LTX 2.5 so
+// `disabledModesFor`'s `needsAnyOf` takes the whole Edit tab. All three names
+// are synthetic since 台帳 §3-150 — the engine runs all three modes.
 /** Wraps a fixture bridge so a base model declares extra `unsupported_features`
  * — see the helper's own note for why these tests need it. */
 const AS_LTX25: MockBridgeOptions = {
@@ -428,21 +428,22 @@ describe("App / Edit-系 right-click on a base model that cannot run Edit", () =
    * `unsupported_features` list has landed, so nothing below can pass merely by
    * out-running the switch.
    *
-   * THE FIXTURE'S OWN LTX 2.5 NO LONGER QUALIFIES — and since the Outpainting
-   * increment it does not supply EITHER half. Edit greys only when BOTH of its
-   * sub-modes are refused; the Retake increment gave the engine 撮り直し and the
-   * Outpainting increment gave it 画角拡張, so LTX 2.5 now greys neither the tab
-   * nor a sub-tab. What these tests are about is the ROUTE GATE, which keys on
-   * `disabledModes`, so the base model is given BOTH names
-   * (`withExtraUnsupportedFeatures`) rather than the tests being re-pointed at
-   * whatever LTX 2.5 happens to refuse this month. That is the whole bargain of
-   * the helper: the MECHANISM is under test here, and the real list is asserted
-   * where it belongs — `bridge/mockBridge.test.ts`, against the server's own. */
+   * THE FIXTURE'S OWN LTX 2.5 NO LONGER QUALIFIES — and since 台帳 §3-150 it
+   * does not supply ANY of the three halves. Edit greys only when all three of
+   * its sub-modes are refused; the Retake increment gave the engine 撮り直し,
+   * the Outpainting increment gave it 画角拡張 and §3-150 gave it Inpainting,
+   * so LTX 2.5 now greys neither the tab nor a sub-tab. What these tests are
+   * about is the ROUTE GATE, which keys on `disabledModes`, so the base model
+   * is given all three names (`withExtraUnsupportedFeatures`) rather than the
+   * tests being re-pointed at whatever LTX 2.5 happens to refuse this month.
+   * That is the whole bargain of the helper: the MECHANISM is under test here,
+   * and the real list is asserted where it belongs —
+   * `bridge/mockBridge.test.ts`, against the server's own. */
   async function renderOnLtx25() {
     const bridge = withExtraUnsupportedFeatures(
       createMockBridge({ delayMs: 0, ...AS_LTX25 }),
       "LTX25",
-      ["retake", "outpaint"],
+      ["retake", "outpaint", "inpaint"],
     );
     render(<AppShell nativeBridge={bridge} />);
     await screen.findByRole("button", { name: /^(generate|busy…)$/i }, { timeout: 5_000 });

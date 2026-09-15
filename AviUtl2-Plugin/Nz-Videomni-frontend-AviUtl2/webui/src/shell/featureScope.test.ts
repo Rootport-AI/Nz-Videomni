@@ -69,7 +69,10 @@ describe("disabledUiTargets", () => {
     // §3-55 (2026-09-14): Inpainting joined the container's `whenAll` the day
     // it stopped being a mock. A mock closes nothing — a real sub-tab keeps the
     // tab alive on its own — so `retake` + `outpaint` alone no longer settle
-    // the tab, which is exactly the LTX 2.5-shaped case this guards.
+    // the tab. Since §3-150 (2026-09-15) no shipped engine publishes any of the
+    // three, so the names below are a MECHANISM fixture rather than any
+    // engine's list: what is pinned is the rule, which the next engine will
+    // need.
     expect(disabledUiTargets(["retake"]).has("mode.edit")).toBe(false);
     expect(disabledUiTargets(["outpaint"]).has("mode.edit")).toBe(false);
     expect(disabledUiTargets(["inpaint"]).has("mode.edit")).toBe(false);
@@ -283,7 +286,12 @@ describe("editSubTabsDisabledFor", () => {
     {
       unsupported: ["two_stage_hq", "prune_vaed", "inpaint"],
       expected: { retake: false, outpainting: false, inpainting: true },
-      why: "LTX 2.5's list TODAY — §3-55 put ONE mode name back on it, and it is the only sub-tab this engine greys",
+      why: "LTX 2.5's list for the fortnight §3-55 put ONE mode name on it — kept as the MECHANISM case now that no engine publishes it",
+    },
+    {
+      unsupported: ["two_stage_hq", "prune_vaed"],
+      expected: { retake: false, outpainting: false, inpainting: false },
+      why: "LTX 2.5's list TODAY — §3-150 built the 2.5 inpaint driver and took `inpaint` off again, so NO sub-tab greys on either engine",
     },
   ];
 

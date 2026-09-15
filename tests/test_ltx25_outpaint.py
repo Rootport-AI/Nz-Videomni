@@ -561,6 +561,106 @@ def test_as_dict_is_generation_results_dict_in_its_order_plus_outpaint() -> None
 
 
 # ---------------------------------------------------------------------------
+# 8. The blocks lifted out of run_outpaint for the coming inpaint driver
+# ---------------------------------------------------------------------------
+
+
+#: The six inline stretches of ``run_outpaint`` that became module-level
+#: functions so a second 2.5 driver calls them instead of copying them. Named
+#: here rather than discovered, because the point of the extraction is that
+#: these SIX exist; a seventh appearing is fine, one of these vanishing back
+#: into the driver is the regression.
+_EXTRACTED = (
+    "_freeze_source_audio",
+    "_audio_init",
+    "_encode_reference_conditionings",
+    "_reencode_stage2",
+    "_mux_audio",
+    "_ltx25_block",
+)
+
+
+def test_the_extracted_blocks_are_the_SAME_objects_the_inpaint_driver_calls() -> None:
+    """The OTHER half of the extraction, and the half that only became checkable
+    when the second driver landed (台帳 §3-150): ``engine25/inpaint25.py`` calls
+    THESE SIX OBJECTS rather than carrying copies of them.
+
+    Identity, not equality, and for a different reason in each case. The two
+    ``ImageConditioner`` calls are MEASURED paths -- the stage-2 re-encode's
+    ``channels_last_3d`` re-layout was 27188 MB -> 6174 MB reserved, and its
+    ``finally`` restore is a correctness requirement rather than hygiene -- so a
+    copy would be an unmeasured second path that no gate covers. ``_ltx25_block``
+    is a USER-VISIBLE CONTRACT: the worker re-sends its dict verbatim as the
+    ``done`` event's top-level ``ltx25`` key and the app writes it into
+    metadata.json, so two copies would be two answers to "what did 2.5 do". The
+    three audio functions carry the "underrun is not fatal" ruling, the
+    ``round(px / fps * sr)`` mux trim and the ``12_audio_conditioning`` VRAM
+    record -- one fact each, and each one a second chance to be subtly wrong.
+
+    A THIRD driver appearing is fine; one of these six being re-inlined into
+    either driver is the regression."""
+    from engine25 import inpaint25
+
+    for name in _EXTRACTED:
+        assert getattr(inpaint25, name) is getattr(outpaint25, name), name
+    # ...and the inpaint driver's own body really calls them, rather than
+    # importing them and then doing the work inline.
+    source = inspect.getsource(inpaint25.run_inpaint)
+    for name in _EXTRACTED:
+        assert f"{name}(" in source, f"run_inpaint does not call {name}"
+
+
+def test_the_extracted_blocks_are_module_level_and_run_outpaint_calls_them() -> None:
+    """A pure extraction has two halves, and both are checkable without a GPU:
+    the function exists AT MODULE LEVEL (so another driver can import it), and
+    the driver CALLS it rather than keeping a copy alongside. The closures the
+    two ``ImageConditioner`` calls used to be defined with are named as well --
+    a re-inlined block would leave those ``def``s behind in the driver."""
+    source = inspect.getsource(outpaint25.run_outpaint)
+    for name in _EXTRACTED:
+        fn = getattr(outpaint25, name, None)
+        assert callable(fn), f"{name} is not a module-level function of engine25.outpaint25"
+        assert fn.__module__ == outpaint25.__name__, name
+        assert f"{name}(" in source, f"run_outpaint does not call {name}"
+    assert "def _encode_reference(" not in source
+    assert "def _reencode(" not in source
+
+
+def test_the_frozen_audio_carrier_names_all_six_of_its_facts() -> None:
+    """The six values the freeze produces travel together and are meaningless
+    apart, so they ride as one named tuple rather than six parallel locals a
+    second driver could unpack in the wrong order."""
+    assert outpaint25.FrozenSourceAudio._fields == (
+        "latent",
+        "waveform",
+        "sampling_rate",
+        "available_frames",
+        "frozen_frames",
+        "source_had_audio",
+    )
+
+
+def test_the_frame_shortfall_message_still_names_outpaint_by_default() -> None:
+    """``_require_frames`` gained a ``label``; its DEFAULT has to leave the
+    existing text alone, because that text is what an operator greps for and
+    what the short-canvas test above matches on."""
+    with pytest.raises(ValueError, match="^outpaint frame shortfall: the green canvas"):
+        outpaint25._require_frames("the green canvas", 5, 9, source="canvas.mp4")
+    with pytest.raises(ValueError, match="^inpaint frame shortfall: the window"):
+        outpaint25._require_frames("the window", 5, 9, source="w.mp4", label="inpaint")
+
+
+def test_the_job_key_of_as_dict_is_a_class_var_and_not_a_field() -> None:
+    """``as_dict``'s one additive key comes from ``_JOB_KEY`` so a subclass can
+    rename it -- and a ``ClassVar`` is NOT a dataclass field, which is what
+    keeps the field-derivation test above seeing exactly the generation
+    contract plus ``metadata``."""
+    assert OutpaintResult._JOB_KEY == "outpaint"
+    assert "_JOB_KEY" not in {f.name for f in fields(OutpaintResult)}
+    assert list(_result().as_dict())[-1] == "outpaint"
+
+
+# ---------------------------------------------------------------------------
 # 9. One inference mode across engine25 (§3-124)
 # ---------------------------------------------------------------------------
 

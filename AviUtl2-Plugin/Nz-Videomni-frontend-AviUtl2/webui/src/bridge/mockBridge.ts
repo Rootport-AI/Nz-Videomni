@@ -380,15 +380,22 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // which is why the two rows below it were added in the same commit.
     "two_stage_hq",
     "prune_vaed",
-    // 台帳 §3-55 Inpainting (2026-09-14): `inpaint` JOINS the list, and it is
-    // the first MODE name to come BACK to it since `outpaint` left. The
-    // Inpainting flow is LTX 2.3-only in its first increment (owner decision
-    // D11), so the 2.5 adapter's `REJECT_TABLE` grows one row and
-    // `UNSUPPORTED_FEATURES` publishes the name — which is what greys the Edit
-    // tab's Inpainting sub-tab while a 2.5 base model is loaded. Like `retake`
-    // and `outpaint`, the single `/generate` path has no per-field refusal loop
-    // in this fixture, so this is the only place the fixture needed editing.
-    "inpaint",
+    // 台帳 §3-55 Inpainting (2026-09-14): `inpaint` JOINED this list, and it
+    // was the first MODE name to come BACK to it since `outpaint` left —
+    // Inpainting shipped LTX 2.3-only in its first increment (owner decision
+    // D11).
+    //
+    // 台帳 §3-150 (2026-09-15): and LEFT AGAIN, the only name in this
+    // fixture's history to do both. `engine25/inpaint25.py` drives the masked
+    // two-stage workflow on 2.5 now (the same 2.3-shipped In-Outpainting
+    // IC-LoRA, over the same green canvas), so the adapter's `REJECT_TABLE`
+    // dropped the row and `UNSUPPORTED_FEATURES` stopped publishing the name —
+    // which is what re-lights the Edit tab's Inpainting sub-tab while a 2.5
+    // base model is loaded. Like `retake` and `outpaint`, the single
+    // `/generate` path has no per-field refusal loop in this fixture, so this
+    // was the only place the fixture needed editing in either direction. What
+    // LTX 2.5 publishes here is back to two ENGINE-LEVEL feature names and no
+    // mode of any kind.
     // 高速化第2弾: `keep_resident` LEFT THIS LIST. The 2.5 engine keeps its
     // Gemma 4 text encoder resident between jobs now (opt-in, default off), so
     // the server no longer 422s the field — and publishing it here would grey

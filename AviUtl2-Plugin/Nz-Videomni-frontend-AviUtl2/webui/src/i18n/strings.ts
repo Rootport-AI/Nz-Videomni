@@ -1032,9 +1032,9 @@ export const en = {
       none: "No output folder yet — choose an audio folder or an image folder first.",
     },
     promptMode: {
-      label: "Row prompt mode",
-      add: "Add to the shared prompt",
-      replace: "Replace the shared prompt",
+      label: "How the additional prompt is used",
+      add: "Add to the prompt",
+      replace: "Replace the prompt",
     },
     /** N7 (PENDING §6): shared keyframe(s) backing `Shared`-image rows —
      * mirrors Create/Chain's `create.keyframes` panel, reused verbatim via
@@ -1055,7 +1055,7 @@ export const en = {
       wav: "Audio file",
       duration: "Duration",
       image: "Image",
-      prompt: "Prompt",
+      prompt: "Additional prompt",
       stat: "Status",
       output: "Output",
       resetButton: "Reset to Waiting",
@@ -1063,11 +1063,12 @@ export const en = {
       /** D2: an i2v row has no audio file at all, so its audio cell states the
        * mode instead. The column heading stays "Audio file". */
       i2vRowLabel: "i2v mode",
-      /** N5 "A1: プロンプト直接編集" — the row prompt `<input>`'s aria-label. */
-      promptInputLabel: "Row prompt",
+      /** N5 "A1: プロンプト直接編集" — the per-row additional prompt
+       * `<input>`'s aria-label. */
+      promptInputLabel: "Additional prompt",
       /** N5 "A2: 共通プロンプト流し込み" — button that overwrites a row's
-       * prompt with the Create screen's shared prompt verbatim. */
-      copyCommonPromptButton: "Use shared prompt",
+       * additional prompt with the panel's own prompt verbatim. */
+      copyCommonPromptButton: "Use the prompt",
       /** N5 "A3: 行別画像割当" — the row image `<select>`'s aria-label. */
       imageSelectLabel: "Row image",
     },
@@ -1102,9 +1103,10 @@ export const en = {
      * `blockReasons.jobActive` states. The KEY keeps its original name (it is
      * the block-reason code the form pushes); only the copy covers both. */
     jobActive: "The server is busy: another job is running, or a model is being loaded. Only one runs at a time — wait for it to finish before starting the batch.",
-    /** §3-98 P5: the loaded base model's engine cannot run chained generation,
-     * which is what every batch row is. Disables the whole panel. */
-    unavailableOnBaseModel: "Batch A2V is not available on the selected base model (it uses chained generation). Switch the base model in the header to use it.",
+    /** §3-98 P5: the loaded base model's engine declares a feature the panel
+     * needs as unsupported. Disables the whole panel; engine-neutral wording,
+     * since which feature is missing is not something the user can act on. */
+    unavailableOnBaseModel: "The batch panel is not available for this base model. Switch the base model in the header to use it.",
     /** Skip badge tooltips (owner decision 2026-07-19), keyed by
      * `BatchRow.skipReason` (`manifestMerge.ts`). Skip rows are excluded from
      * re-judging on Start, so raising DURATION/lowering FPS alone does not
@@ -2719,9 +2721,9 @@ export const ja: Strings = {
       none: "出力フォルダは未設定です — まず音声フォルダか画像フォルダを選択してください。",
     },
     promptMode: {
-      label: "行プロンプトの合成方法",
-      add: "共通プロンプトに追記",
-      replace: "共通プロンプトを置き換え",
+      label: "追加プロンプトの扱い",
+      add: "プロンプトに追加する",
+      replace: "プロンプトを置き換える",
     },
     sharedKeyframes: {
       /** バッチA2VのShared仕様変更（2026-07-18）：画像列が「Shared」の行は、
@@ -2739,14 +2741,14 @@ export const ja: Strings = {
       wav: "音声ファイル",
       duration: "長さ",
       image: "画像",
-      prompt: "プロンプト",
+      prompt: "追加プロンプト",
       stat: "状態",
       output: "出力",
       resetButton: "待機に戻す",
       empty: "行がまだありません — 音声フォルダか画像フォルダを選んでスキャンしてください。",
       i2vRowLabel: "i2vモード",
-      promptInputLabel: "行のプロンプト",
-      copyCommonPromptButton: "共通プロンプトを流し込む",
+      promptInputLabel: "追加プロンプト",
+      copyCommonPromptButton: "プロンプトを流し込む",
       imageSelectLabel: "行の画像",
     },
     stat: {
@@ -2767,7 +2769,7 @@ export const ja: Strings = {
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",
     jobActive: "サーバーが処理中です（ほかの生成が実行中か、モデルを読み込み中です）。同時に1つしか動かせないため、終わるまで待ってから開始してください。",
-    unavailableOnBaseModel: "バッチA2Vは選択中のベースモデルでは使えません（連結生成を使うため）。使うには、上のベースモデルを切り替えてください。",
+    unavailableOnBaseModel: "このベースモデルではバッチパネルを使えません。使うには、上のベースモデルを切り替えてください。",
     skipReasons: {
       "wav-only-alpha": "wav形式でないか、長さを読み取れませんでした",
       "over-cap":

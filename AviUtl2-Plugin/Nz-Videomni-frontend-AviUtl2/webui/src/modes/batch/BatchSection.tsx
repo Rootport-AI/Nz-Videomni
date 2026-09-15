@@ -52,12 +52,13 @@ export interface BatchSectionProps {
   serverBusy?: boolean;
   /** §3-98 P5: the loaded base model's engine cannot run this panel at all.
    *
-   * An a2v row is a `POST /generate/chain` submit, and LTX 2.5 (v1) refuses the
-   * whole chain family with 422 `FEATURE_UNSUPPORTED` — so every a2v row this
-   * panel could queue would fail. An i2v row would not (it posts to
-   * `/generate`), but the block stays at PANEL level for both modes for now;
-   * lifting it is its own ledger item, not a side effect of adding i2v. Rides
-   * the SAME `disabled` flag the runner state
+   * True exactly when the active engine's `unsupported_features` (GET /models)
+   * contains `chain` or `a2v` — `shell/featureScope.ts`'s `FEATURE_UI` table,
+   * read through `batchA2vDisabledFor`. No engine the app ships with lists
+   * either, so the panel is not greyed for anyone today: a2v rows reach
+   * `POST /generate/chain` and i2v rows reach `POST /generate` on every engine.
+   *
+   * Rides the SAME `disabled` flag the runner state
    * already sets (no new mechanism, no new control), plus one explanation line
    * in the same place `lockedByOther`/`jobActive` put theirs; a greyed panel
    * with no stated reason is the thing those two lines exist to prevent.

@@ -46,7 +46,7 @@
 
 - **概要**: Inpainting（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md)）は第1弾がLTX 2.3専用で、LTX 2.5のアダプタは`inpaint`を拒否表で断っていた（対応後の姿は同§6.3）。公式のLTX 2.5向けInpaintingワークフローは「LTX 2.5の蒸留本体＋LTX 2.3のIn-Outpainting IC-LoRA」という当方の画角拡張と同じ組み合わせで、緑の目印・二段構成・ピラミッドブレンドも同じ。当方で新しく要るのはLTX 2.5エンジン側の駆動部（`engine25/inpaint25.py`）とマスク動画のデコード、ワーカーの分岐、アダプタの拒否行削除と結果の中継だけで、API・アップロード・ffmpegの窓とマスク作成・操作パネル本体は無改修（サブタブの灰色は`unsupported_features`から`inpaint`が消えれば自動的に解ける）。
 - **出典**: オーナー発案（2026-09-15）。CLOSED §3-55-02の「後継: LTX 2.5への対応は別途」の引き取り。
-- **状態**: 実装完了・実機ゲート合格・オーナー目視待ち（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107）。ブランチは`feature/inpainting-ltx25`。目視の2項目は[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.17。
+- **状態**: 実装完了・実機ゲート合格・オーナー目視待ち（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107）。ブランチは`dev`（2026-09-15の運用変更で`feature/inpainting-ltx25`から改名）。目視の2項目は[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.17。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -503,7 +503,7 @@
 - **クローズした項目の跡地に説明文は残さない**（記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)および`DEVLOG.md`等の出典へ移す）。**例外は各節の冒頭に置く「欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照」という総括の1行だけ**——番号ごとの個別の欠番説明・移動の説明は置かない（同書冒頭が正本）。
 - 項目の実装が完了したら「2. 実装済み・ユーザーのテスト待ち」へ移す（書式は冒頭の位置づけ2番を参照）。**該当する節が無い場合は、冒頭の「位置づけ」の書式で節を立て直してから移す。** オーナーのテスト（実機・目視・実GPU）に合格したら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移すか、本書から除去する。正本側の更新にも合わせること。
 - **例外（オーナー裁定2026-09-01）: 実機で確認できる要素が原理的に無い項目——MCPサーバーやフロントエンドのモックに閉じた改修のように、GPUもAviUtl2本体も関与しないもの——は、自動ゲートが全部緑になった記録を根拠に、§2を経ず直接[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移してよい。** 根拠記録（どの物差しで何件通ったか）は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ必ず残し、クローズ記録からそこを指すこと。
-- **改修はテーマごとに`feature/<slug>`ブランチで行い、実機ゲートの合格とオーナー裁定を経てからmainへmergeする**（2026-09-07合意・初適用は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-90）。**ユーザーはmainを`git clone`／`git pull`する**ので、検証の済んでいないものをmainへ置いてはならない。検証前のpushはブランチへ行うこと。
+- **ブランチは`main`（利用者に配る）と`dev`（開発中。その日の改修を全部載せる）の2本だけで、テーマごとの`feature/<slug>`ブランチは作らない**（オーナー裁定2026-09-15。2026-09-07の運用を置き換え）。理由は、機能ごとに枝を分けると機能どうしの相互作用をmainへ入れる前に見つけられないから——開発中の1本に丸ごと載せていれば、実機ゲート・目視・指紋比較が常に組み合わさった状態に対して走る。各セッションは`dev`へコミット＆プッシュし（コミットはテーマごとに分け、明示パスで足す——1件が落ちたときに`git revert`で切り離して残りをmergeするため）、機械検証とその日のオーナー目視が済んだら`git merge --no-ff dev`でmainへ入れる。mergeの合図は暦ではなく検証である。**ユーザーはmainを`git clone`／`git pull`する**ので、検証の済んでいないものをmainへ置いてはならない。
 - **全項目が合格して空になった節は、見出しごと削除する**（オーナー決定）。合格記録は本書に残さず[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ一本化し、他文書からの参照もそちらへ付け替える。**節番号の再採番はしない**——過去の文書・記憶が番号で参照しているため、削除した節の番号は欠番のままにする。
 - **本書に断りなく現れる略号の凡例**（初めて読む人向け）:
   - **W1〜W9／X1〜X6／Y1〜Y3**＝フロントエンド微調整バッチの第1〜第3波（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §46〜§48）。

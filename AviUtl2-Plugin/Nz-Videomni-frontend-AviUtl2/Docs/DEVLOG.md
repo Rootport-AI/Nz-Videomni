@@ -4540,3 +4540,29 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 実装レビュー: Minor 1（説明文5か所）を`12d8d75`で反映。Minor 2「成功時はrefを下ろさない」は不採用——共有関数が断って区画が作り直されない経路でボタンが死ぬ。
 - 文言調整: 区画見出し`progressHeading`（ja）を「進捗」へ（`5cb2b0b`）。
 - バックエンド台帳 CLOSED §3-154 として記録。
+
+## 121. 出力クロップ欄が自由入力になった — 打鍵ごとの丸めを撤去し、判定はGenerateゲートと422へ一本化（オーナー依頼。2026-09-16、実機ゲート待ち）
+
+### 121.1 結論
+
+- Create画面・Chain画面の「出力をクロップ」の幅・高さ欄から、打鍵ごとの`clampCropOutput`（入力欄と両フックのsetterの二重）を撤去した。**利用者が打った値は変えない。プログラムが入れる値（チェックON時の初期値・`applyPreset`）だけは`clampCropOutput`で範囲内に収める。判定は既存の`isCropOutputValid`1か所。** 不正なら既存の理由文＋Generateのグレーアウト（Create・Chain）、バッチの開始ゲート、サーバーの422が受ける。この流儀は生成サイズ欄や尺の欄と同じで、クロップ欄だけが外れていた。
+- Create/Chainの`setCropOutput`は`useCallback`ラッパを外して`useState`のsetterをそのまま公開（引き算）。`min/max/step`属性は維持（スピナーは範囲を守る）。`isStepEvent`も非有限ガードも`start()`の再チェックも足していない。
+- 理由文を1本に統合: 「クロップサイズが生成サイズよりも大きいか、もしくは空欄です。／The crop size is larger than the generation size, or it is blank.」（1〜31の極小値や小数も同文言。実用上の頻度は極めて低いとのオーナー裁定）。ja補足文に上限を追記。
+- コミットは`60a4847`。
+
+### 121.2 空欄は`NaN`で持つ — Reactの数値入力は「0」でも「1024」でも書き戻す
+
+- `<input type="number">`を空にすると`Number("")`は0になる。0をstateに持つと、Reactは空の箱へ「0」を書き戻し（`react-dom-client`の`("number"===type)`分岐: `(0===value && ""===element.value) || element.value != value`なら`element.value`を代入）、続けて1024と打つと表示が**「01024」**になる（比較が緩い`!=`なのでReactは書き戻さない。stateは1024で正しい）。「前の値を保つ」方式でも空の箱へ前の値が書き戻され、箱を消せない。つまり**どの数値をstateに持っても箱を空のままにはできない**。
+- 唯一の手段は非数値のセンチネルで、空欄は`NaN`として持ち、表示側で`Number.isNaN(v) ? "" : v`と描く。`isCropOutputValid`の`Number.isInteger(NaN)===false`が即座に`cropInvalid`を立てるので受け皿は無改修。型`CropOutput{width:number}`も無改修（ワイヤ型そのものなので`number|null`化は足し算）。`NaN`が送信本文に混ざる経路はゲートで塞がれ、仮に漏れても`JSON.stringify(NaN)`は`null`でサーバーの`int`検証が422を返す。
+- `cropOutput`を表示・算術に使う箇所は無い。比較はChainの`cropOutputEquals`→`isDirty`の1件だけで、`NaN`は「変更あり」になるがクロップONの時点で既定`null`と不一致＝元々trueなので無害。Chainの`buildRequest()`はバッチi2v-longの`useMemo`から毎レンダー呼ばれるため、空欄中も`crop_output:{width:NaN}`を含む本文オブジェクトが作られるが、読まれるのはprompt/loras/clips/seedだけで、開始は`chainBlockReasons`が塞ぐ。
+
+### 121.3 機械検証
+
+- `npm run typecheck` 全緑／`npx vitest run --exclude "**/backend.integration.test.ts"` 146ファイル・2,993件（+6＝`CropOutputField`の欄テスト4・両フック各1）／lint 警告31本（不変）。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §111。
+
+### 121.4 引っかかりやすい点（次に触る人向け）
+
+- **§119.4の「欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない」は本節で失効した。** 今は大きい値を直接打っても、空欄でも、同じゲートに掛かる。§4.19 G4の手順は当時の合格記録としてそのまま。
+- チェックON時の初期値は`clampCropOutput`で「範囲に収める」だけなので、生成サイズ自体が非整数（自由入力で例100.5）なら結果も非整数になりうる。その場合も`isCropOutputValid`が拾う。
+- `useBatchForm.start()`に`cropInvalid`の再チェックを足さないこと。本番は開始ボタンの`disabled={unavailable || !form.canStart}`で到達不能で、§119.4の「バッチi2v-longにゲートを足してはいけない」と同型の罠。
+- 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、後続コミットで直す。

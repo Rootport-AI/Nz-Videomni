@@ -12571,3 +12571,44 @@ Opusによる敵対的レビュー1回と裏取り14項目（§109.4と同じ回
 ### 110.6 文言調整（実機ゲート後・オーナー指示）
 
 追尾区画の見出し`toolbox.tracking.progressHeading`（ja）を「進み具合」から「進捗」へ変更した（`5cb2b0b`）。enは不変。
+
+## 111. ★出力クロップ欄を自由入力にした（オーナー依頼。合格後はPENDING_TASKS_CLOSED.md §3-155）＝機械ゲート全緑・実機ゲート未実施（2026-09-16）
+
+### 111.1 前提と設計判断
+
+Create画面・Chain画面の「出力をクロップ」の幅・高さ欄は、入力欄と両フックのsetterの二重で1打鍵ごとに`clampCropOutput`（`[32, 現在の生成サイズ]`）を掛けていたため、Deleteで消すと32に飛び、大きい数を先に打つと生成サイズで頭打ちになっていた（オーナーの実使用での報告）。本プロジェクトの数値入力の多数派は「スピナー操作だけスナップ、手入力は素通し、送信時ゲートで判定」で、クロップ欄だけが外れていた（`isCropOutputValid`のdoc自身がその流儀を自称していた）。受け皿は全部既存——`isCropOutputValid`→`cropInvalid`→Generateのグレーアウト（Create・Chain）／バッチの開始ゲート／サーバーの422（`ge=32`・「≤生成サイズ」）——なので、丸めを外すだけで足りる。**空欄は`NaN`で持つ**（Reactは`<input type="number">`に対し0でも1024でも空の箱へ書き戻すため、箱を空に保つ唯一の手段。`isCropOutputValid`の`Number.isInteger(NaN)===false`が受け皿。詳細はフロントエンド`DEVLOG.md` §121.2）。プログラムが入れる値（チェックON初期値・`applyPreset`）だけは`clampCropOutput`を維持。
+
+**本節の記述で、§109.4と§109.6にある「クロップ欄は入力時に丸められる」「到達しうる不正状態は『クロップ設定後に生成サイズを縮めた』の1種だけ」は更新された。** 今は範囲外や空欄を直接打った場合も同じゲートに掛かる（§109は当時の記録としてそのまま）。
+
+### 111.2 変更 — コミット1本（`60a4847`、webuiのみ12ファイル）
+
+- `CommonGenerationFields.tsx` `CropOutputField`: 幅・高さの`onChange`から`clampCropOutput`を撤去し、空欄は`NaN`・それ以外は`Number(s)`をそのまま渡す。表示は`Number.isNaN(v) ? "" : v`。チェックON初期値のクランプは維持。`min/max/step`属性は維持。
+- `useGenerationForm.ts`／`useChainForm.ts`: `setCropOutput`の`useCallback`ラッパを外し`useState`のsetterを公開。`applyPreset`の再クランプは維持。失効していた「32-pixel-grid」docを訂正。
+- `chainUtils.ts`: `clampCropOutput`のdocを「プログラムが入れる値専用」へ。関数本体・`isCropOutputValid`は無改修。
+- `useBatchForm.ts`: `cropInvalid`のdocのみ更新（`start()`に再チェックは足さない）。
+- `strings.ts`: `generateReasons.cropInvalid`を「クロップサイズが生成サイズよりも大きいか、もしくは空欄です。／The crop size is larger than the generation size, or it is blank.」へ統合、ja補足文に上限を追記。
+- バックエンド・ネイティブ・`api/types.ts`は無改修。
+
+### 111.3 機械検証
+
+| 物差し | 直前基準（`5cb2b0b`） | 今回（`60a4847`） |
+|---|---|---|
+| `npm run typecheck` | 全緑 | 全緑 |
+| webui vitest（`--exclude "**/backend.integration.test.ts"`） | 146ファイル・2,987件 | **146ファイル・2,993件**（+6＝`CropOutputField`の欄テスト4〔空欄→`NaN`・5000素通し・チェックON初期値・OFF〕、両フックの「素通し＋`cropInvalid`」各1） |
+| webui lint | 警告31本 | 警告31本（不変） |
+
+### 111.4 レビュー — 計画段階の敵対的レビュー1回
+
+Opusによる敵対的レビュー1回（Critical 0・Major 4・Minor 8）とSonnetによる裏取り7項目。**コード変更を要する指摘はゼロ**。主な採用: `cropOutput`の比較箇所（`cropOutputEquals`→`isDirty`）とChainの`buildRequest()`がレンダー中にも呼ばれる事実の追記（いずれも`NaN`で無害）／両フックの「32-pixel-grid」失効docの訂正／小数（例512.5）も統合文言で扱う前提の明記／`start()`に再チェックを足さないことの明記／React本体のコードで「どの数値を持っても書き戻す」ことの証明を添える。実装レビューは後段で実施し、本節に追記する。
+
+### 111.5 実機ゲート G1〜G5 — 未実施
+
+手順と合格条件はフロントエンド`REAL_BACKEND_CHECKLIST.md` §4.21が正本。結果はオーナーの実施後に本節へ追記する。
+
+| ゲート | 結果 |
+|---|---|
+| G1 削除で空欄のまま・理由文・Generate灰色 | 未報告 |
+| G2 5000が切り詰められない | 未報告 |
+| G3 打ち直しで「01024」にならず復帰 | 未報告 |
+| G4 Chain画面で同じ | 未報告 |
+| G5 バッチの帯と開始不可が追随 | 未報告 |

@@ -95,9 +95,10 @@ export const CROP_OUTPUT_MIN = 32;
  * `[CROP_OUTPUT_MIN, maxWidth/maxHeight]` (the current generation
  * width/height, passed in by the caller — see {@link CROP_OUTPUT_MIN}'s doc
  * comment). No grid-snapping — any integer in range is valid
- * (Gradio-faithful). Shared by Create's `useGenerationForm`/Chain's
- * `useChainForm` (state setters) and `CommonGenerationFields.tsx`'s
- * `CropOutputField` (live input clamping while the user types). */
+ * (Gradio-faithful). For PROGRAM-supplied values only: both hooks'
+ * `applyPreset` and `CropOutputField`'s enable-checkbox seed. What the user
+ * types never passes through here — it is judged by {@link isCropOutputValid}
+ * instead (free entry, 2026-09-16). */
 export function clampCropOutput(raw: CropOutput, maxWidth: number, maxHeight: number): CropOutput {
   return {
     width: clamp(Math.round(raw.width), CROP_OUTPUT_MIN, Math.max(CROP_OUTPUT_MIN, maxWidth)),

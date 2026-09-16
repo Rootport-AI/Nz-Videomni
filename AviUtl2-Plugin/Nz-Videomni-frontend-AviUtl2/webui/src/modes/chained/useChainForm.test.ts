@@ -1238,6 +1238,25 @@ describe("useChainForm", () => {
       expect(result.current.isValid).toBe(false);
     });
 
+    // 件D 自由入力化 (2026-09-16): same contract as Create's
+    // `useGenerationForm` — the setter stores what it is handed (including the
+    // `NaN` an emptied input produces) and `isValid` is the single gate.
+    it("keeps a hand-typed crop verbatim: over the generation size, then blank", () => {
+      const { result } = setup();
+      act(() => result.current.setCropOutput({ width: 5000, height: 768 }));
+      expect(result.current.cropOutput).toEqual({ width: 5000, height: 768 });
+      expect(result.current.validityReasons).toContain("cropInvalid");
+      expect(result.current.isValid).toBe(false);
+
+      act(() => result.current.setCropOutput({ width: NaN, height: 768 }));
+      const crop = result.current.cropOutput;
+      if (crop === null) throw new Error("expected a crop");
+      expect(Number.isNaN(crop.width)).toBe(true);
+      expect(crop.height).toBe(768);
+      expect(result.current.validityReasons).toContain("cropInvalid");
+      expect(result.current.isValid).toBe(false);
+    });
+
     // NAG (2026-07-28): `deps.nag` propagates into both `validityReasons` and
     // `buildRequest` via the shared `nagRequestFields`/`isNagNegativeEmpty`
     // contract (`shell/nagSettings.ts`).

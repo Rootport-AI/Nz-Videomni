@@ -44,7 +44,8 @@ const ENABLED_NAG: NagSettings = {
 const SAGE: AccelerationSettings = { ...ACCELERATION_DEFAULTS, attentionBackend: "sage" };
 
 /** §3-153: WIDTH×HEIGHT (768×512) に対して妥当なクロップ。`setCropOutput` は
- * 現在の幅高でクランプするので、この値はそのまま保持される。 */
+ * 与えられた値をそのまま保持する（件D 自由入力化 2026-09-16）ので、この定数が
+ * 範囲内であること自体が fixture の番人。 */
 const CROP: CropOutput = { width: 640, height: 384 };
 
 const KEYFRAME: ConditioningImage = { image_id: "img-1", frame_idx: 0, strength: 0.8 };
@@ -193,8 +194,9 @@ describe("buildI2vGeneratePayload", () => {
         act(() => {
           result.current.setCropOutput(cropOutput);
         });
-        // `setCropOutput` clamps to the CURRENT width/height, so the
-        // comparison is only meaningful once the hook really holds this value.
+        // `setCropOutput` stores the value verbatim (free entry, 2026-09-16),
+        // so the comparison is only meaningful once the hook really holds it —
+        // this line is what guards the fixture against drifting out of range.
         expect(result.current.cropOutput).toEqual(cropOutput);
       }
       // The comparison is only meaningful if the hook really holds the values

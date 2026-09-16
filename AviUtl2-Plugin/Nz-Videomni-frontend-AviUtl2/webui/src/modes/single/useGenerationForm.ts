@@ -286,15 +286,17 @@ export interface UseGenerationFormResult {
    * (idle/uploading/error) or the probe returned `0`/failed. */
   referenceVideoDurationSec: number | null;
   /** N1: opt-in output crop (`GenerateRequest.crop_output`). `null` = "not
-   * set" (omitted from the request). See `CommonGenerationFields.CropOutputField`
-   * and `chainUtils.clampCropOutput`/`isCropOutputValid` for the 32-pixel-grid
-   * constraint (LTX's VAE space-compression factor) folded into `isValid`
-   * below. Mirrors Chain's `useChainForm.cropOutput`. */
+   * set" (omitted from the request). See `CommonGenerationFields.CropOutputField`:
+   * any integer at least 32 and no larger than the CURRENT generation
+   * width/height — there is no grid. The judgement lives in exactly one
+   * place, `chainUtils.isCropOutputValid`, folded into `isValid` below.
+   * Mirrors Chain's `useChainForm.cropOutput`. */
   cropOutput: CropOutput | null;
-  /** Sets `cropOutput`, snapping onto the 32-pixel grid and clamping to
-   * `[32, values.width/values.height]` — never the config max — via
-   * `chainUtils.clampCropOutput`. `null` clears it (omitted from the
-   * request). */
+  /** Stores `cropOutput` verbatim — what the user typed is never altered
+   * (free entry, 2026-09-16), so an emptied input arrives here as `NaN`. The
+   * range is judged by `chainUtils.isCropOutputValid` (folded into `isValid`),
+   * not by this setter; the only surviving clamp is `applyPreset`'s, for the
+   * value the PROGRAM supplies. `null` clears it (omitted from the request). */
   setCropOutput: (value: CropOutput | null) => void;
   /** 0.0-1.0 or `null` ("not set" — the field is omitted from the request).
    * Only ever sent alongside a ready reference video AND a non-empty
@@ -711,16 +713,13 @@ export function useGenerationForm(
   const [getSizeError, setGetSizeError] = useState<string | null>(null);
 
   // N1: opt-in output crop — `null` ("not set") until the user opts in via
-  // the UI's enable checkbox. The setter re-clamps to the CURRENT
-  // width/height every call (not just at the moment the checkbox was
-  // ticked), since `values.width`/`values.height` can change independently
-  // afterward; a crop left stale by a later width/height shrink is instead
-  // caught by `isValid` (see `chainUtils.isCropOutputValid`'s doc comment).
-  const [cropOutput, setCropOutputState] = useState<CropOutput | null>(config.generation_defaults.crop_output ?? null);
-  const setCropOutput = useCallback(
-    (raw: CropOutput | null) => setCropOutputState(raw === null ? null : clampCropOutput(raw, values.width, values.height)),
-    [values.width, values.height],
-  );
+  // the UI's enable checkbox. Free entry (2026-09-16): the setter stores what
+  // it is handed, unchanged (an emptied input arrives as `NaN`). Out-of-range,
+  // blank or non-integer crops — including one left stale by a later
+  // width/height shrink — are caught by `isValid` (see
+  // `chainUtils.isCropOutputValid`'s doc comment), the single judgement point.
+  // The only clamp left is `applyPreset`'s, which supplies a PROGRAM value.
+  const [cropOutput, setCropOutput] = useState<CropOutput | null>(config.generation_defaults.crop_output ?? null);
 
   const setWidth = useCallback(
     (raw: number, snap = true) =>
@@ -794,7 +793,7 @@ export function useGenerationForm(
       // N1: mirror the preset's own crop_output (Gradio-faithful) — reflect
       // it when present, or turn crop OFF (back to `null`) when the preset
       // doesn't define one, rather than leaving a stale prior crop in place.
-      setCropOutputState(preset.crop_output ? clampCropOutput(preset.crop_output, newWidth, newHeight) : null);
+      setCropOutput(preset.crop_output ? clampCropOutput(preset.crop_output, newWidth, newHeight) : null);
     },
     [config.generation_presets, active, limits.minNumFrames, limits.maxNumFrames],
   );

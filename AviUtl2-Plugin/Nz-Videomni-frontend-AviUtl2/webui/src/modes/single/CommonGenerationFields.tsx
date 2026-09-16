@@ -262,17 +262,27 @@ export interface CropOutputFieldProps {
  * fixed-grid snapping, matching Gradio) shown only while enabled. Mirrors
  * `ReferenceStrengthField`'s null<->value toggle shape. Shared by Create
  * (`GenerationForm.tsx`) and Chain (`ChainedScreen.tsx`), both placed directly
- * after `SizeFields`. Every input passes through `chainUtils.clampCropOutput`
- * so a stored crop can never itself be out of range or over the *current*
- * width/height ceiling — but if the user later shrinks width/height below a
- * previously-set crop, this field does NOT reactively re-clamp;
- * `useGenerationForm`/`useChainForm`'s `isValid` (via
- * `chainUtils.isCropOutputValid`) catches that stale combination instead,
- * mirroring how width/height's own free-typed grid violations are only
- * ever caught at submit time, not silently corrected mid-edit. */
+ * after `SizeFields`. Free entry (2026-09-16): what the USER types is never
+ * altered — both number inputs hand their raw value straight to `onChange`,
+ * and an emptied box travels as `NaN` (rendered back as an empty box). Only
+ * values the PROGRAM supplies are pulled into range with
+ * `chainUtils.clampCropOutput`: the enable checkbox's seed below, and
+ * `applyPreset` in `useGenerationForm`/`useChainForm`. Every bad combination
+ * — out of range, blank, non-integer, or one left stale by a later
+ * width/height shrink — is judged in exactly ONE place,
+ * `chainUtils.isCropOutputValid`, folded into those hooks' `isValid` (reason
+ * `cropInvalid`); this mirrors how width/height's own free-typed values are
+ * gated at submit time rather than silently corrected mid-edit. `min`/`max`/
+ * `step` stay on the inputs purely for the spinner arrows (same as
+ * `SizeFields`). */
 export function CropOutputField({ value, onChange, maxWidth, maxHeight, disabled }: CropOutputFieldProps) {
   const strings = useStrings();
   const t = strings.single.crop;
+  // An emptied number box reports `""`, and `Number("")` is 0 — spell the
+  // empty case out so it survives as `NaN` (drawn back as an empty box by
+  // `value` below, and refused by `isCropOutputValid`) instead of silently
+  // turning into a valid-looking 0.
+  const read = (s: string) => (s === "" ? NaN : Number(s));
   return (
     <div className="field">
       <label className="field field-inline">
@@ -281,6 +291,11 @@ export function CropOutputField({ value, onChange, maxWidth, maxHeight, disabled
           checked={value !== null}
           disabled={disabled}
           onChange={(e) =>
+            // The seed is a PROGRAM-supplied value, so it is clamped. Not a
+            // no-op: the generation size is itself free-typed, so
+            // `maxWidth`/`maxHeight` can sit below 32. Clamping only pulls the
+            // value into range — a non-integer generation size still yields a
+            // non-integer crop, which `isCropOutputValid` picks up all the same.
             onChange(e.target.checked ? clampCropOutput({ width: maxWidth, height: maxHeight }, maxWidth, maxHeight) : null)
           }
         />
@@ -296,9 +311,9 @@ export function CropOutputField({ value, onChange, maxWidth, maxHeight, disabled
               min={CROP_OUTPUT_MIN}
               max={maxWidth}
               step={1}
-              value={value.width}
+              value={Number.isNaN(value.width) ? "" : value.width}
               disabled={disabled}
-              onChange={(e) => onChange(clampCropOutput({ width: Number(e.target.value), height: value.height }, maxWidth, maxHeight))}
+              onChange={(e) => onChange({ width: read(e.target.value), height: value.height })}
             />
           </label>
           <label className="field">
@@ -308,9 +323,9 @@ export function CropOutputField({ value, onChange, maxWidth, maxHeight, disabled
               min={CROP_OUTPUT_MIN}
               max={maxHeight}
               step={1}
-              value={value.height}
+              value={Number.isNaN(value.height) ? "" : value.height}
               disabled={disabled}
-              onChange={(e) => onChange(clampCropOutput({ width: value.width, height: Number(e.target.value) }, maxWidth, maxHeight))}
+              onChange={(e) => onChange({ width: value.width, height: read(e.target.value) })}
             />
           </label>
         </div>

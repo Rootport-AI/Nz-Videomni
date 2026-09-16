@@ -194,9 +194,10 @@ export interface UseBatchFormResult {
   nagInvalid: boolean;
   /** §3-153 出力クロップの継承 (2026-09-16): true when the (silently-inherited)
    * crop setting no longer fits the current generation size — the same
-   * `isCropOutputValid` gate Create/Chain apply. The crop inputs clamp to the
-   * generation size on every keystroke, so the only way here is "set a crop,
-   * then shrink width/height"; left unblocked every row would 422. Blocks
+   * `isCropOutputValid` gate Create/Chain apply. The crop inputs take free
+   * entry (2026-09-16), so there are two ways here: type an out-of-range or
+   * blank crop directly, or set a valid crop and then shrink width/height.
+   * Left unblocked every row would 422. Blocks
    * `canStart`; surfaced standalone so `BatchSection` can render the specific
    * warning banner (same plain `warning-banner` style as `nagInvalid` — the
    * batch panel does not use `GenerateReasonsNote`). */

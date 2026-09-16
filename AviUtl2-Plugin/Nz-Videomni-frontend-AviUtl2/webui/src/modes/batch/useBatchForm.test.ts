@@ -1380,8 +1380,9 @@ describe("useBatchForm", () => {
       expect(result.current.cropInvalid).toBe(false);
       expect(result.current.canStart).toBe(true);
 
-      // 到達の仕方は「クロップを決めてから生成サイズを縮める」だが、ここでは
-      // その結果の状態（GEN_VALUESは512×320）を直接与える。判定はモード非依存。
+      // 到達の仕方は2つあり、範囲外や空欄を直接打っても到達する（件D 自由
+      // 入力化 2026-09-16）し、クロップを決めてから生成サイズを縮めても到達する。
+      // ここではその結果の状態（GEN_VALUESは512×320）を直接与える。判定はモード非依存。
       rerender({ gen: { ...GEN_VALUES, cropOutput: { width: 9999, height: 9999 } } });
       expect(result.current.cropInvalid).toBe(true);
       expect(result.current.canStart).toBe(false);

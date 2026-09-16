@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobResponse } from "../../api/types";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import { en as strings } from "../../i18n/strings";
-import { DurationField, FrameRateSeedFields, ReservedFields, SizeFields } from "./CommonGenerationFields";
-import type { DurationFieldProps, SizeFieldsProps } from "./CommonGenerationFields";
+import { CropOutputField, DurationField, FrameRateSeedFields, ReservedFields, SizeFields } from "./CommonGenerationFields";
+import type { CropOutputFieldProps, DurationFieldProps, SizeFieldsProps } from "./CommonGenerationFields";
 
 // FrameRateSeedFields reads the job ledger via useJobsContext for the ♻ button;
 // stub it so these unit tests don't need a full JobsProvider.
@@ -320,5 +320,68 @@ describe("ReservedFields (D9: negative-prompt textarea removed by NAG, 2026-07-2
     expect(cfgSlider).toBeDisabled();
     expect(cfgSlider.valueAsNumber).toBe(1);
     expect(screen.getByText("1.0")).toBeInTheDocument();
+  });
+});
+
+// 件D 自由入力化 (2026-09-16): the two crop boxes hand what the user typed
+// to `onChange` untouched — no clamping, no rounding — and an emptied box
+// travels as `NaN` so it can be drawn back as an empty box. The only clamp
+// left in this component is the enable checkbox's seed, a value the PROGRAM
+// supplies. Anything out of range is judged once, by
+// `chainUtils.isCropOutputValid` inside `useGenerationForm`/`useChainForm`.
+describe("CropOutputField free entry (2026-09-16)", () => {
+  function renderCrop(overrides: Partial<CropOutputFieldProps> = {}) {
+    const onChange = vi.fn();
+    const props: CropOutputFieldProps = {
+      value: { width: 1280, height: 768 },
+      onChange,
+      maxWidth: 1280,
+      maxHeight: 768,
+      disabled: false,
+      ...overrides,
+    };
+    render(
+      <LanguageProvider>
+        <CropOutputField {...props} />
+      </LanguageProvider>,
+    );
+    // The rest of this file uses the singular `getByRole("spinbutton")`; the
+    // crop field renders TWO number inputs, in [width, height] order (and none
+    // at all while the checkbox is off, hence `queryAllByRole`).
+    const boxes = screen.queryAllByRole("spinbutton") as HTMLInputElement[];
+    return {
+      onChange,
+      width: boxes[0],
+      height: boxes[1],
+      checkbox: screen.getByRole("checkbox") as HTMLInputElement,
+    };
+  }
+
+  it("hands an emptied width over as NaN (no snap to 32, no silent 0)", () => {
+    const { onChange, width } = renderCrop();
+    fireEvent.change(width!, { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith({ width: NaN, height: 768 });
+  });
+
+  it("keeps a value bigger than the generation size verbatim (the hook's isValid gates it)", () => {
+    const { onChange, width, height } = renderCrop();
+    fireEvent.change(width!, { target: { value: "5000" } });
+    expect(onChange).toHaveBeenCalledWith({ width: 5000, height: 768 });
+    fireEvent.change(height!, { target: { value: "4000" } });
+    expect(onChange).toHaveBeenCalledWith({ width: 1280, height: 4000 });
+  });
+
+  it("seeds a clamped crop from the generation size when the checkbox is ticked", () => {
+    const { onChange, checkbox } = renderCrop({ value: null });
+    expect(checkbox.checked).toBe(false);
+    fireEvent.click(checkbox);
+    expect(onChange).toHaveBeenCalledWith({ width: 1280, height: 768 });
+  });
+
+  it("clears back to null when the checkbox is unticked", () => {
+    const { onChange, checkbox } = renderCrop();
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    expect(onChange).toHaveBeenCalledWith(null);
   });
 });

@@ -140,7 +140,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/VSF_README_NOTES.md` | 非CFGネガティブプロンプト（NAG／VSF）の**使い分けの正本**（どちらを選ぶか・つまみの目安・LTX 2.5 での実測）。README §5 と §7.1 はここを指している |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`）は §1.1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
-| `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・操作パネルの2つの入口（右クリックと開始ボタン）・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
+| `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・操作パネルの2つの入口〔右クリックと開始ボタン〕・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
 | `Docs/INPAINTING_DESIGN.md` | **Inpainting（マスクによる部分再生成）の設計正本**（利用の流れ・責務の分担・マスク受け渡し契約〔§6〕・窓の規則・ブレンドと脱緑の仕組み・LTX 2.5 が断る理由）。**マスク受け渡し契約の正本は同書 §6 である**——台帳の応用先（`PENDING_TASKS.md` §4-8(C)・§4-25）はそちらを参照するだけで契約を作り直さない |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |

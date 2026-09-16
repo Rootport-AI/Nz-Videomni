@@ -18,7 +18,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済み（記録は `PENDING_TASKS_CLOSED.md` §3-54-02）。マスク受け渡し契約の正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6 で、台帳側では §4-25 が外部プラグイン由来のマスクの入口を扱う |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 仮想環境をエンジン系統ごとに1つ持つ方針の正本（§5.3）。本機能はその並びに**推論エンジンではない**仮想環境を1つ足す最初の例 |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能は保存物を作らないので、この原則の適用対象外である |
-| [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 | AviUtl2本体の実機確定知見。エイリアスの `frame=` が両端を含むこと、エイリアスのヘッダが `length` 引数に勝つことの正本 |
+| [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 | AviUtl2本体の実機確定知見。エイリアスの `frame=` が両端を含むこと、エイリアスのヘッダが `length` 引数に勝つことの正本、および (n) WebView2 をクリックしても作業中オブジェクトは外れないこと |
 | [`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) | 右クリックメニューの項目一覧と種別ガードの正本 |
 | [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) | プラグインと操作パネルのあいだの契約の正本 |
 
@@ -33,7 +33,7 @@
 1. 追尾させたい動画の**下の段**に部分フィルタを置きます（AviUtl2では下の段のフィルタが上の映像に掛かります）。置き場所は**右クリック→メディアオブジェクトを追加→画面効果→部分フィルタ**です（2026-09-11にオーナーが実機で確認）。「フィルタオブジェクトの追加」の11のカテゴリの中にはありません。旧AviUtl1とは置き場所が違います。
 2. AviUtl2のプレビュー画面を見ながら、部分フィルタの枠の位置と大きさを、追いかけたい被写体に合わせます。このとき効果はまだ何も付けなくて構いません。
 3. タイムラインでその部分フィルタを右クリックし、「🎯 物体追尾（部分フィルタを使用）」を選びます。部分フィルタを選択した状態で、操作パネルのToolboxタブにある「🎯 追尾を開始」を押しても同じです（§3.4）。
-4. 操作パネルがToolboxタブに切り替わり、追尾が始まります。進み具合と、見失った区間が画面に出ます。途中で止めることもできます。
+4. 操作パネルがToolboxタブに切り替わり、追尾が始まります。進捗と、見失った区間が画面に出ます。途中で止めることもできます。
 5. 終わると、部分フィルタの先頭から末尾まで、枠の位置と大きさに中間点が打たれています。
 6. あとは利用者が自由に効果を足します。モザイクでも、ぼかしでも、色調整でも構いません。**追尾は枠を動かすだけで、効果の種類には関与しません。**
 7. 途中で枠が被写体からずれてきたら、利用者がAviUtl2で部分フィルタをその位置で分割し、後ろ側の枠を合わせ直して、もう一度追尾させます。
@@ -377,7 +377,7 @@ UETrackは動画生成とは別の依存関係（CPU版のPyTorchなど）で動
 - 最初から非表示にしてあるレイヤーの部分フィルタを追尾しても、終了後に非表示のままであること。
 - 停止ボタンを押してから実際に止まるまでの待ち時間が気にならない長さであること（確認は1フレームごとです）。
 - 部分フィルタの中で効果の順序を入れ替えても、右クリックの項目が出ること。
-- 開始ボタン（§3.4）の6項目——部分フィルタを選んで押すと右クリックと同じに始まる／未選択で文言A／動画を選んで文言B／追尾中は押せない／**パネルのスライダー等を触った後に押しても始まる（WebView2をクリックしてもAviUtl2の選択が外れないことの確認。唯一の未検証仮説）**／英語でも同じ場所に出る。手順はフロントエンドの [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.20、結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110（2026-09-16追加）。
+- 開始ボタン（§3.4）の6項目——部分フィルタを選んで押すと右クリックと同じに始まる／未選択で文言A／動画を選んで文言B／追尾中は押せない／**パネルのスライダー等を触った後に押しても始まる（WebView2をクリックしてもAviUtl2の選択が外れないことの確認。2026-09-16 の G5 で確定済み）**／英語でも同じ場所に出る。手順はフロントエンドの [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.20、結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110（2026-09-16追加）。
 
 **測るもの**（実測値はいずれも [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104 が正本です）
 
@@ -548,7 +548,7 @@ UETrackを推論の別形式（ONNX）へ変換して速くする改造は、あ
 
 同じ理由で、「部分フィルタが1つも無い」と「あるが選ばれていない」の区別もしません。区別するにはタイムラインを走査する新しい呼び出しが要りますが（SDKに全件列挙の関数は無く、レイヤーごとに `find_object` で拾うしかありません）、どちらの文言を読んでも利用者の次の一手は同じです。
 
-なお、ボタンの前提「操作パネル（WebView2）をクリックしてもAviUtl2の作業中オブジェクトは外れない」は、SDKの説明（`get_focus_object` は「オブジェクト設定ウィンドウで選択されているオブジェクト」で、ウィンドウのフォーカスとは別物）と、Retake のGenerate押下時に同じ経路で選択を取り直して注意を出す作りがあるのにオーナーにその注意を見た記憶が無いことで支持されています。確定は実機ゲートで取ります（結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110）。
+なお、ボタンの前提「操作パネル（WebView2）をクリックしてもAviUtl2の作業中オブジェクトは外れない」は、SDKの説明（`get_focus_object` は「オブジェクト設定ウィンドウで選択されているオブジェクト」で、ウィンドウのフォーカスとは別物）と、Retake のGenerate押下時に同じ経路で選択を取り直して注意を出す作りがあるのにオーナーにその注意を見た記憶が無いことで支持されています。この前提は実機ゲートG5で確定しました（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110.5・[`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 (n)）。
 
 ---
 

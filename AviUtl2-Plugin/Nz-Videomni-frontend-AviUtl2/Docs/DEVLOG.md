@@ -4565,7 +4565,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **§119.4の「欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない」は本節で失効した。** 今は大きい値を直接打っても、空欄でも、同じゲートに掛かる。§4.19 G4の手順は当時の合格記録としてそのまま。
 - チェックON時の初期値は`clampCropOutput`で「範囲に収める」だけなので、生成サイズ自体が非整数（自由入力で例100.5）なら結果も非整数になりうる。その場合も`isCropOutputValid`が拾う。
 - `useBatchForm.start()`に`cropInvalid`の再チェックを足さないこと。本番は開始ボタンの`disabled={unavailable || !form.canStart}`で到達不能で、§119.4の「バッチi2v-longにゲートを足してはいけない」と同型の罠。
-- 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、後続コミットで直す。
+- 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、`a29de34`で直した（§121.5）。
 
 ### 121.5 完結（オーナー受容・2026-09-16）
 

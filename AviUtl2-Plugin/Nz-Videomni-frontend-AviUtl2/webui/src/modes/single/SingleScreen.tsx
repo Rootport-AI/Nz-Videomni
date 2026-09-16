@@ -1041,6 +1041,9 @@ function SingleScreenBody({
       frameRate: form.values.frameRate,
       seed: form.values.seed,
       numFrames: form.values.numFrames,
+      // §3-153 出力クロップの継承 (2026-09-16): Batch has no crop field of its
+      // own and inherits this one silently, exactly like NAG/Acceleration.
+      cropOutput: form.cropOutput,
     }),
     [
       form.values.width,
@@ -1048,6 +1051,7 @@ function SingleScreenBody({
       form.values.frameRate,
       form.values.seed,
       form.values.numFrames,
+      form.cropOutput,
     ],
   );
 

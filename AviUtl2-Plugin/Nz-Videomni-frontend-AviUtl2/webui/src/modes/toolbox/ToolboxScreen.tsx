@@ -1,5 +1,6 @@
 import type { NativeBridge } from "../../bridge";
 import type { LostBehavior, ObjectTrackingSettings } from "../../shell/objectTrackingSettings";
+import type { TimelineSelection } from "../../timeline/menuSelection";
 import { ObjectTrackingSection } from "./ObjectTrackingSection";
 import type { ObjectTrackRequest } from "./useObjectTracking";
 import "./ToolboxScreen.css";
@@ -40,9 +41,15 @@ export interface ToolboxScreenProps {
   onFollowSizeChange: (value: boolean) => void;
   onKeyframeStrideChange: (value: number) => void;
   /** Passed straight through to the section: it raises this while its run is
-   * going so `AppShell` can refuse a second 追尾 right-click instead of
-   * remounting this screen out from under the run (owner gate 2026-09-11). */
+   * going so `AppShell` can refuse a SECOND 追尾 right-click (or button press)
+   * instead of remounting this screen out from under the run (owner gate
+   * 2026-09-11). */
   onRunningChange?: ((running: boolean) => void) | undefined;
+  /** `AppShell`'s `startTrackingFromSelection` — the one road a 追尾 run starts
+   * down, shared with the timeline right-click (2026-09-16). Passed straight
+   * through: this screen decides nothing about it, and the section below calls
+   * it only after it has read the selection and found a single 部分フィルタ. */
+  onStartTracking: (selection: TimelineSelection) => void;
 }
 
 export function ToolboxScreen({
@@ -58,6 +65,7 @@ export function ToolboxScreen({
   onFollowSizeChange,
   onKeyframeStrideChange,
   onRunningChange,
+  onStartTracking,
 }: ToolboxScreenProps) {
   return (
     <div className="toolbox-screen">
@@ -74,6 +82,7 @@ export function ToolboxScreen({
         onFollowSizeChange={onFollowSizeChange}
         onKeyframeStrideChange={onKeyframeStrideChange}
         onRunningChange={onRunningChange}
+        onStartTracking={onStartTracking}
       />
     </div>
   );

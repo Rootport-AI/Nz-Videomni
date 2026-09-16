@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { ConditioningImage, LoraSpec } from "../../api/types";
+import type { ConditioningImage, CropOutput, LoraSpec } from "../../api/types";
 import { parseLoraPrompt } from "../../lora/loraTags";
 import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
@@ -25,6 +25,7 @@ const BASE: BuildI2vGeneratePayloadParams = {
   prompt: "a cat riding a skateboard",
   width: WIDTH,
   height: HEIGHT,
+  cropOutput: null,
   numFrames: NUM_FRAMES,
   frameRate: FRAME_RATE,
   seed: SEED,
@@ -42,11 +43,16 @@ const ENABLED_NAG: NagSettings = {
 
 const SAGE: AccelerationSettings = { ...ACCELERATION_DEFAULTS, attentionBackend: "sage" };
 
+/** §3-153: WIDTH×HEIGHT (768×512) に対して妥当なクロップ。`setCropOutput` は
+ * 与えられた値をそのまま保持する（件D 自由入力化 2026-09-16）ので、この定数が
+ * 範囲内であること自体が fixture の番人。 */
+const CROP: CropOutput = { width: 640, height: 384 };
+
 const KEYFRAME: ConditioningImage = { image_id: "img-1", frame_idx: 0, strength: 0.8 };
 const LORAS: LoraSpec[] = [{ name: "Pixar_Toon", strength: 1.5 }];
 
 describe("buildI2vGeneratePayload", () => {
-  it("最小構成: 6欄をこの順で送り、チェーン専用欄もcrop_outputも送らない", () => {
+  it("最小構成: 6欄をこの順で送り、チェーン専用欄は送らない。クロップOFFならcrop_outputも送らない", () => {
     const payload = buildI2vGeneratePayload(BASE);
     expect(Object.keys(payload)).toEqual(["prompt", "width", "height", "num_frames", "frame_rate", "seed"]);
     expect(payload).toEqual({
@@ -57,8 +63,11 @@ describe("buildI2vGeneratePayload", () => {
       frame_rate: FRAME_RATE,
       seed: SEED,
     });
+    // §3-153 (2026-09-16): `crop_output` は「決して送らない欄」ではなくなった
+    // ので、恒久的な禁止キー一覧から外して条件つきの独立断言にする。ここは
+    // BASE がクロップOFF（`cropOutput: null`）だから無い、という意味。
+    expect(payload).not.toHaveProperty("crop_output");
     for (const banned of [
-      "crop_output",
       "clips",
       "source_audio",
       "stage2_window",
@@ -71,6 +80,27 @@ describe("buildI2vGeneratePayload", () => {
     ]) {
       expect(payload).not.toHaveProperty(banned);
     }
+  });
+
+  it("クロップON: crop_outputがheightの直後に1欄だけ増える（toGenerateRequestと同じ位置）", () => {
+    const payload = buildI2vGeneratePayload({ ...BASE, cropOutput: CROP });
+    expect(Object.keys(payload)).toEqual([
+      "prompt",
+      "width",
+      "height",
+      "crop_output",
+      "num_frames",
+      "frame_rate",
+      "seed",
+    ]);
+    expect(payload.crop_output).toEqual(CROP);
+  });
+
+  it("クロップOFF(null)は1欄も足さず、キー順も変わらない", () => {
+    const baseline = buildI2vGeneratePayload(BASE);
+    const off = buildI2vGeneratePayload({ ...BASE, cropOutput: null });
+    expect(JSON.stringify(off)).toBe(JSON.stringify(baseline));
+    expect(off).not.toHaveProperty("crop_output");
   });
 
   it("seedは切り捨てない（toGenerateRequestと同じ。a2vビルダーのMath.truncとは違う）", () => {
@@ -138,12 +168,13 @@ describe("buildI2vGeneratePayload", () => {
 
   // D11: 共通欄はCreate画面の単発i2vとバイト等価でなければならない。参照は
   // `useGenerationForm.toGenerateRequest()` ＋ `SingleScreen`のconditioning付与
-  // （クロップ無し・参照動画無し・制御LoRA無しが前提）。
+  // （参照動画無し・制御LoRA無しが前提。§3-153 でクロップは等価対象に入った）。
   describe("Single（toGenerateRequest）とのバイト等価", () => {
     function singleRequest(
       prompt: string,
       deps: { nag?: NagSettings; acceleration?: AccelerationSettings } = {},
       conditioningImages: ConditioningImage[] = [],
+      cropOutput: CropOutput | null = null,
     ): string {
       // width/height/numFrames/frameRate are seeded through
       // `GenerationFormInitial`; `seed` has no initial field, so it is driven
@@ -159,6 +190,15 @@ describe("buildI2vGeneratePayload", () => {
       act(() => {
         result.current.setSeed(SEED);
       });
+      if (cropOutput !== null) {
+        act(() => {
+          result.current.setCropOutput(cropOutput);
+        });
+        // `setCropOutput` stores the value verbatim (free entry, 2026-09-16),
+        // so the comparison is only meaningful once the hook really holds it —
+        // this line is what guards the fixture against drifting out of range.
+        expect(result.current.cropOutput).toEqual(cropOutput);
+      }
       // The comparison is only meaningful if the hook really holds the values
       // this test compares against.
       expect(result.current.values).toMatchObject({
@@ -216,6 +256,11 @@ describe("buildI2vGeneratePayload", () => {
     it("<lora:>タグ入りプロンプト（本文の切り出しとloras欄の位置）", () => {
       const prompt = "a cat <lora:Pixar_Toon:1.5> riding a skateboard";
       expect(batchRequest(prompt)).toBe(singleRequest(prompt));
+    });
+
+    it("出力クロップON（§3-153: Createの継承値がSingleと同じ位置・同じ値で載る）", () => {
+      const prompt = "a cat riding a skateboard";
+      expect(batchRequest(prompt, { cropOutput: CROP })).toBe(singleRequest(prompt, {}, [], CROP));
     });
 
     it("全部乗せ（NAG on・sage・LoRA・conditioning_images）", () => {

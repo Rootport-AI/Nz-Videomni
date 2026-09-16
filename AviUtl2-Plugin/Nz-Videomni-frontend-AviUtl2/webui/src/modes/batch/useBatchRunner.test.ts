@@ -16,6 +16,7 @@ const BASE_SETTINGS: BatchRunnerSettings = {
   promptMode: "add",
   width: 512,
   height: 320,
+  cropOutput: null,
   frameRate: 24,
   seed: -1,
   chunkedUpsample: true,

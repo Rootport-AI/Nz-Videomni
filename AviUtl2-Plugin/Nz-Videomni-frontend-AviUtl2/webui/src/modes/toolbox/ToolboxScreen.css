@@ -92,9 +92,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 開始と停止を横に並べる器（2026-09-16「🎯 追尾を開始」の追加）。左寄せの
+ * 指定は個々のボタンからこの器へ移した —— 揃え方を持つのは 1 か所でよい。
+ * 間隔は `.toolbox-group-row` と同じ 8px（新しい寸法は作らない）。 */
+.toolbox-actions {
+  display: flex;
+  align-self: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .toolbox-stop {
   appearance: none;
-  align-self: flex-start;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);

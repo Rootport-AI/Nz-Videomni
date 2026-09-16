@@ -20,6 +20,7 @@ import {
 } from "../timeline/inpaintSlots";
 import { recordSourceLocation } from "../timeline/sourceLocationMap";
 import { formatMenuGuardNote, guardMenuSelection } from "../timeline/menuSelection";
+import type { TimelineSelection } from "../timeline/menuSelection";
 import { END_SOURCE_CONTEXT_FRAMES, tailAlignedStartFrame } from "../timeline/tailAlign";
 import { computeTargetNumFrames } from "../timeline/deriveDuration";
 import { resolvePrefillSeed } from "../timeline/prefillSeed";
@@ -518,6 +519,67 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     resolve?.(ok);
   }, []);
 
+  // §3-54 物体追尾: THE way a 追尾 run is started — one road, two doors. The
+  // timeline right-click (`handleRoute`'s `trackObject` branch below) and the
+  // Toolbox panel's own 「🎯 追尾を開始」 button (2026-09-16) both end here, so
+  // the three refusals and the remount that IS the start signal cannot drift
+  // apart between the two entrances.
+  //
+  // The refusals speak through the shared note area whichever door was used.
+  // That is a consequence of keeping one road, accepted at the owner's gate
+  // (2026-09-16): the first two are unreachable from the button (it is greyed
+  // both when the server cannot track and while this panel's own run is going),
+  // and only the mask-drawing refusal can actually arrive from a button press
+  // and land outside the panel that was clicked.
+  const startTrackingFromSelection = useCallback(
+    (selection: TimelineSelection) => {
+      if (!trackingAvailable) {
+        // Refused in the §4 guard shape: guidance only, no tab switch. Opening
+        // a panel whose every control is greyed would tell the user nothing
+        // the note does not, and would strand them on a tab they cannot use.
+        showNote("warning", strings.notes.trackingUnavailable);
+        return;
+      }
+      // A run is already going (owner gate 2026-09-11). Everything below would
+      // remount the Toolbox screen, and a remount THROWS AWAY the running run's
+      // progress subscription and its pending promise: the panel froze mid-run
+      // and the fresh one reported native's `TRACK_BUSY` as a failure, while the
+      // run itself quietly finished. So the second right-click is refused HERE,
+      // in the §4 guard's shape — guidance only, nothing touched.
+      //
+      // The tab switch is the one thing still done: it puts the user in front
+      // of the run the note is talking about, and it changes nothing about the
+      // run (no `trackRequest`, no remount token). Native's own `TRACK_BUSY`
+      // stays as the safety net for anything that gets past this ref.
+      if (trackingRunningRef.current) {
+        showNote("warning", strings.notes.trackingBusy);
+        setMode("toolbox");
+        return;
+      }
+      // 台帳 §3-55 (m1): native's timeline-job slot is SHARED between 追尾 and
+      // the Inpainting mask render, so starting a track while a mask is being
+      // drawn would only earn a `TRACK_BUSY` from native — after this app had
+      // already switched tabs and remounted the Toolbox screen. Refused here in
+      // the same guidance-only shape, with the Inpainting wording (it is the
+      // Inpainting run that is in the way).
+      if (getInpaintSlots().busy) {
+        showNote("warning", strings.edit.inpainting.busyRightClick);
+        return;
+      }
+      // The selection alone — nothing is added to make a repeat right-click on
+      // the same object "look different", because nothing downstream watches
+      // this object for changes.
+      setTrackRequest({ selection });
+      // The bump is what starts the run: `ToolboxScreen` remounts, and
+      // `useObjectTracking` fires on mount (the one-shot arrangement every
+      // other screen's `initialIntent` uses). Bumped explicitly here because
+      // this return is long before Step 6's shared `[target]` increment.
+      setRemountTokens((prev) => ({ ...prev, toolbox: prev.toolbox + 1 }));
+      setMode("toolbox");
+    },
+    [showNote, strings, trackingAvailable],
+  );
+
   // Unified right-click handler (I7/I11, RIGHTCLICK_REDESIGN_SPEC.md §4/§5-6/§5-9).
   // A single fixed order runs for EVERY routed command:
   //   1. selection guard (§4)  2. on-demand reconcile (§6-b)  3. #8 appendText
@@ -597,49 +659,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // required-kind check is what refuses "追尾 on a video" with the ordinary
     // mismatch note before any of this.
     if (action === "trackObject") {
-      if (!trackingAvailable) {
-        // Refused in the §4 guard shape: guidance only, no tab switch. Opening
-        // a panel whose every control is greyed would tell the user nothing
-        // the note does not, and would strand them on a tab they cannot use.
-        showNote("warning", strings.notes.trackingUnavailable);
-        return;
-      }
-      // A run is already going (owner gate 2026-09-11). Everything below would
-      // remount the Toolbox screen, and a remount THROWS AWAY the running run's
-      // progress subscription and its pending promise: the panel froze mid-run
-      // and the fresh one reported native's `TRACK_BUSY` as a failure, while the
-      // run itself quietly finished. So the second right-click is refused HERE,
-      // in the §4 guard's shape — guidance only, nothing touched.
-      //
-      // The tab switch is the one thing still done: it puts the user in front
-      // of the run the note is talking about, and it changes nothing about the
-      // run (no `trackRequest`, no remount token). Native's own `TRACK_BUSY`
-      // stays as the safety net for anything that gets past this ref.
-      if (trackingRunningRef.current) {
-        showNote("warning", strings.notes.trackingBusy);
-        setMode("toolbox");
-        return;
-      }
-      // 台帳 §3-55 (m1): native's timeline-job slot is SHARED between 追尾 and
-      // the Inpainting mask render, so starting a track while a mask is being
-      // drawn would only earn a `TRACK_BUSY` from native — after this app had
-      // already switched tabs and remounted the Toolbox screen. Refused here in
-      // the same guidance-only shape, with the Inpainting wording (it is the
-      // Inpainting run that is in the way).
-      if (getInpaintSlots().busy) {
-        showNote("warning", strings.edit.inpainting.busyRightClick);
-        return;
-      }
-      // The selection alone — nothing is added to make a repeat right-click on
-      // the same object "look different", because nothing downstream watches
-      // this object for changes.
-      setTrackRequest({ selection: command.selection });
-      // The bump is what starts the run: `ToolboxScreen` remounts, and
-      // `useObjectTracking` fires on mount (the one-shot arrangement every
-      // other screen's `initialIntent` uses). Bumped explicitly here because
-      // this return is long before Step 6's shared `[target]` increment.
-      setRemountTokens((prev) => ({ ...prev, toolbox: prev.toolbox + 1 }));
-      setMode("toolbox");
+      startTrackingFromSelection(command.selection);
       return;
     }
 
@@ -1310,12 +1330,13 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // for exactly that reason), and taking it as one is what keeps a refused
     // route from being decided by a stale list.
     disabledModes,
-    // §3-54: the 追尾 early return refuses on a server that cannot track, so a
-    // callback frozen with a stale flag would either refuse a working install
-    // or open a dead panel. A plain boolean, so the `/status` poll's fresh
-    // status object (every 10s — `useServerStatus`'s `DEFAULT_INTERVAL_MS`)
-    // never re-creates this callback.
-    trackingAvailable,
+    // §3-54: the 追尾 early return delegates to the shared start function, so
+    // the whole function is taken as the dependency rather than the flags it
+    // reads. It is itself a `useCallback` over `trackingAvailable`, so a route
+    // decided from a stale "the server cannot track" answer — which would
+    // either refuse a working install or open a dead panel — is still what this
+    // line prevents; it now does so one level up.
+    startTrackingFromSelection,
   ]);
 
   // Reload/startup re-sync (§2): rebuild the single reservation seat from any
@@ -1532,6 +1553,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               onFollowSizeChange={objectTracking.setFollowSize}
               onKeyframeStrideChange={objectTracking.setKeyframeStride}
               onRunningChange={handleTrackingRunningChange}
+              onStartTracking={startTrackingFromSelection}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "single"}>

@@ -545,14 +545,16 @@ export interface UseChainFormResult {
   setSeed: (value: number) => void;
   /** N1: opt-in output crop (`GenerateChainRequest.crop_output`). `null` =
    * "not set" (omitted from the request). Mirrors Create's
-   * `useGenerationForm.cropOutput`; see
-   * `chainUtils.clampCropOutput`/`isCropOutputValid` for the 32-pixel-grid
-   * constraint (LTX's VAE space-compression factor) folded into `isValid`
-   * below. */
+   * `useGenerationForm.cropOutput`: any integer at least 32 and no larger
+   * than the CURRENT common width/height — there is no grid. The judgement
+   * lives in exactly one place, `chainUtils.isCropOutputValid`, folded into
+   * `isValid` below. */
   cropOutput: CropOutput | null;
-  /** Sets `cropOutput`, snapping onto the 32-pixel grid and clamping to
-   * `[32, common.width/common.height]` — never the config max — via
-   * `chainUtils.clampCropOutput`. `null` clears it. */
+  /** Stores `cropOutput` verbatim — what the user typed is never altered
+   * (free entry, 2026-09-16), so an emptied input arrives here as `NaN`. The
+   * range is judged by `chainUtils.isCropOutputValid` (folded into `isValid`),
+   * not by this setter; the only surviving clamp is `applyPreset`'s, for the
+   * value the PROGRAM supplies. `null` clears it. */
   setCropOutput: (value: CropOutput | null) => void;
   gettingSize: boolean;
   getSizeError: string | null;
@@ -1248,14 +1250,13 @@ export function useChainForm(
   const setSeed = useCallback((raw: number) => setCommon((prev) => ({ ...prev, seed: Math.trunc(raw) })), []);
 
   // N1: opt-in output crop — `null` ("not set") until the user opts in via
-  // the UI's enable checkbox. Re-clamps to the CURRENT common width/height on
-  // every call; a crop left stale by a later width/height shrink is instead
-  // caught by `isValid` (see `chainUtils.isCropOutputValid`'s doc comment).
-  const [cropOutput, setCropOutputState] = useState<CropOutput | null>(config.generation_defaults.crop_output ?? null);
-  const setCropOutput = useCallback(
-    (raw: CropOutput | null) => setCropOutputState(raw === null ? null : clampCropOutput(raw, common.width, common.height)),
-    [common.width, common.height],
-  );
+  // the UI's enable checkbox. Free entry (2026-09-16): the setter stores what
+  // it is handed, unchanged (an emptied input arrives as `NaN`). Out-of-range,
+  // blank or non-integer crops — including one left stale by a later
+  // width/height shrink — are caught by `isValid` (see
+  // `chainUtils.isCropOutputValid`'s doc comment), the single judgement point.
+  // The only clamp left is `applyPreset`'s, which supplies a PROGRAM value.
+  const [cropOutput, setCropOutput] = useState<CropOutput | null>(config.generation_defaults.crop_output ?? null);
 
   const getSizeFromAviUtl2 = useCallback(async () => {
     setGettingSize(true);
@@ -1408,7 +1409,7 @@ export function useChainForm(
       // N1: mirror the preset's own crop_output (Gradio-faithful) — reflect
       // it when present, or turn crop OFF (back to `null`) when the preset
       // doesn't define one, rather than leaving a stale prior crop in place.
-      setCropOutputState(preset.crop_output ? clampCropOutput(preset.crop_output, newWidth, newHeight) : null);
+      setCropOutput(preset.crop_output ? clampCropOutput(preset.crop_output, newWidth, newHeight) : null);
       // `recommendedClipFrames` looks up `spill_free_frames` by the preset's
       // OWN (unclamped) width/height (matching `gradio_ui/presets.py`'s
       // `_chain_preset_clip_recommendation`, which keys off `width_v`/
@@ -2598,7 +2599,7 @@ export function useChainForm(
     endContextFrames !== null &&
     !endSourceAudioOverlapOk(clipNumFramesList, common.frameRate, overlapFrames);
 
-  // N1: a crop, if enabled, must still be a valid 32-pixel-grid crop of the
+  // N1: a crop, if enabled, must still be a valid in-range crop of the
   // CURRENT common width/height (see `chainUtils.isCropOutputValid`'s doc
   // comment — this is what catches a crop left stale by a later width/height
   // shrink).

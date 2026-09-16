@@ -1618,6 +1618,26 @@ describe("useGenerationForm — validityReasons (W7)", () => {
     expect(result.current.isValid).toBe(false);
   });
 
+  // 件D 自由入力化 (2026-09-16): `setCropOutput` stores what it is handed,
+  // unchanged. The two ways an invalid crop can arrive are covered here — a
+  // value above the generation size, and an emptied input (`NaN`) — and both
+  // survive in state while `isValid` refuses to submit them.
+  it("keeps a hand-typed crop verbatim: over the generation size, then blank", () => {
+    const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "a cat"));
+    act(() => result.current.setCropOutput({ width: 5000, height: 768 }));
+    expect(result.current.cropOutput).toEqual({ width: 5000, height: 768 });
+    expect(result.current.validityReasons).toContain("cropInvalid");
+    expect(result.current.isValid).toBe(false);
+
+    act(() => result.current.setCropOutput({ width: NaN, height: 768 }));
+    const crop = result.current.cropOutput;
+    if (crop === null) throw new Error("expected a crop");
+    expect(Number.isNaN(crop.width)).toBe(true);
+    expect(crop.height).toBe(768);
+    expect(result.current.validityReasons).toContain("cropInvalid");
+    expect(result.current.isValid).toBe(false);
+  });
+
   it("reports controlNeedsReference when a control LoRA is selected with no reference video", () => {
     const { result } = renderFormWithControlLora("a cat");
     act(() => result.current.setControlLora({ name: "canny-control", strength: 1.0 }));

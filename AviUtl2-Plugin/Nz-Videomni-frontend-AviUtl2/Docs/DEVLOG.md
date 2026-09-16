@@ -4483,3 +4483,92 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 118.4 完結（オーナー受容・2026-09-16）
 
 実機ゲートG1〜G12が2026-09-15に全項目合格し、オーナーが受容して本テーマはクローズした（台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) **§3-152**、記録の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108）。あわせて、プロンプト欄の呼び名（「共通プロンプト」→「プロンプト」・「行プロンプト」→「追加プロンプト」）を、バッチパネル（`b5c3f24`）とChain画面／バッチi2v-longパネル（`4502e8d`）の両方で揃えた。呼び名の対応関係は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md)を参照。
+
+## 119. バッチパネルがCreate画面の出力クロップ設定を継承するようになった（バックエンド台帳 §4-14→CLOSED §3-153。2026-09-16、クローズ済み）
+
+### 119.1 結論
+
+- Create画面の「出力をクロップ」の値を、バッチパネルが黙って継承する（欄は作らない。NAG・Accelerationと同じ）。`BatchGenerationValues`と`BatchRunnerSettings`に`cropOutput`を**必須欄**で足し、`SingleScreen`→`useBatchForm`（`start()`で凍結）→`batchRunner`→両ビルダーへ配線した。a2vはOFFで従来どおり`crop_output: null`を明示送信、i2vはONのときだけ`height`の直後に載せOFFはキー省略（Singleの`/generate`とバイト等価）。設計判断D7（i2vは`crop_output`を送らない）は撤回（D13）。
+- 開始ゲート`cropInvalid`をCreate側と同じ`isCropOutputValid`で追加し、文言は`strings.single.generateReasons.cropInvalid`を借用（新文字列なし）。
+- `batchRunner.ts`の条件付き展開（`cropOutput !== undefined ? … : {}`）は必須化で不要になり削除した。
+- 設計の正本は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md) §2.11。コミットは`1804624`。
+
+### 119.2 訂正
+
+- 本書§83（CROP OUTPUT既定OFF化の節、`:3099`付近）の「バッチ系2画面（バッチA2V・バッチi2v-long）は親フォームの値を継承する設計であること」は、**バッチA2Vについては事実に反していた**。`useBatchForm`の設定に`cropOutput`が無く、`buildA2vChainPayload`は常に`null`を送っていた。継承が事実だったのはChain画面のバッチi2v-long（テンプレート方式）だけである。バックエンド台帳§4-14の「Create側の値をそのまま使う」も同じ誤りで、今回の改修で初めて記述どおりになった。
+
+### 119.3 機械検証
+
+- `npm run typecheck` 全緑／`npx vitest run --exclude "**/backend.integration.test.ts"` 146ファイル・2,979件（+9。fixture 6件は型追従）／lint 警告31本（不変）。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §109。
+
+### 119.4 引っかかりやすい点（次に触る人向け）
+
+- **バッチi2v-longに開始ゲートを足してはいけない。** 計画段階のレビューは「`useBatchI2vLongForm.ts`に`crop`の参照が0件」を根拠に同じゲートの追加を求めたが、実装者が手を止めて確認したところ、Chain画面の`validityReasons`（`cropInvalid`を含む）を`chainBlockReasons`としてそのまま出す作りで既に効いていた。1行足すと同じ理由が二重に表示され、同ファイルの不変条件「Chain画面自身の失敗は共用体に入れず逐語的に出す」を破る。文字列grepで「無い」と結論しない例がもう1つ増えた。
+- モックブリッジ（`bridge/mockBridge.ts`）はチェーンジョブの反響を要求内容に関わらず`crop_output: null`で返す。a2vのクロップをテストするときは投入bodyを捕まえる（ジョブ応答を読むと偽の不合格になる）。
+- 実機で開始ゲートに到達する手順は「クロップ設定後に生成サイズを縮める」だけ。欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない。
+
+### 119.5 完結（オーナー受容・2026-09-16）
+
+- 実機ゲートG1〜G4（LTX 2.5）全合格。G1〜G3の12本は`metadata.json`と動画実寸（ffprobe）で裏取り済み（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §109.5）。
+- 実装レビュー（Critical 0・Major 0・Minor 5）。本件のMinorは説明文1件を`12d8d75`で反映。
+- 文言調整: `generateReasons.cropInvalid`を「生成サイズよりも大きなクロップサイズが指定されています。」へ（`5cb2b0b`。Create・Chain・バッチで共有）。
+- 台帳§4-14はCLOSED §3-153へ移送（起票時§4-14。裸の`4-14`は`3-39. 旧§4-14`と衝突するため）。
+
+## 120. Toolboxタブに「🎯 追尾を開始」ボタン — 入口は2つ、開始の道は1本（オーナー依頼。バックエンド台帳 CLOSED §3-154。2026-09-16、クローズ済み）
+
+### 120.1 結論
+
+- 物体追尾の第2の入口として、Toolboxタブの追尾の区画に「🎯 追尾を開始」ボタンを置いた。押すと`timeline.getSelection`を1回叩き、未選択なら文言A、部分フィルタ以外なら文言Bを区画内の失敗表示欄に見出し無しで出す。部分フィルタが1つ選ばれていれば、`AppShell`から抽出した`startTrackingFromSelection`（右クリックの`trackObject`分岐そのもの）を通る。**開始の道は1本のまま**で、`useObjectTracking`に開始関数は足していない。ネイティブ・ブリッジ契約は無改修。
+- 文言3キーと`intro`の1文を`en`/`ja`同位置に追加。ボタンは全域クラス`.primary-button`、器`.toolbox-actions`を1規則追加。新しい色・寸法なし。設計の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md) §3.4。コミットは`f800613`。
+- 先行して、2026-07-07の新設以来本番から一度も配線されていなかった`useTimelineSelection.ts`（とテスト4件）を`64fe73a`で撤去した。凍結文書`TIMELINE_ALPHA_REQUIREMENTS.md`の言及は歴史記録なので手を入れていない。
+
+### 120.2 機械検証
+
+- `npm run typecheck` 全緑／`npx vitest run --exclude "**/backend.integration.test.ts"` 146ファイル・2,987件（+8＝区画6・ルート2）／lint 警告31本（不変）。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §110。
+
+### 120.3 引っかかりやすい点（次に触る人向け）
+
+- **`bridge.request`はPromiseを返す。** 「ネイティブRPCは同期で一瞬」という前提は誤りで、`await`中もボタンは押せる。2回目が通ると`setRemountTokens`が別イベントで2回進み、走り出した追尾の購読が再マウントで捨てられる（`AppShell`の断りコメントに記録済みの既知の害）。連打止めは`useRef`1本で、stateは増やしていない。
+- **セレクタはroleスコープ必須。** `intro`にも「🎯 追尾を開始／Start tracking」の語が入るので、`getByText`では説明文に当たる。`getByRole("button", { name: /start tracking/i })`を使う。
+- 失敗表示は`precheck`（押下前の判定）と`run.phase === "error"`（走った追尾の失敗）を1つの派生値`failure`に畳んで表示器は1つのまま。`precheck`が優先、見出しは`precheck`では常に無し、走行失敗では`TRACK_BUSY`以外で有り（従来どおり）。
+- `guardMenuSelection`は呼ばない（`MenuRoute`を要求する右クリック用の関門）。種別判定は`classifySelectionKind`だけを共有する。
+- スクリプトでファイルを書くときは改行コード（CRLF）を維持すること。`io.open(..., newline="")`と挿入テキスト側の`\r\n`が要る。
+
+### 120.4 完結（オーナー受容・2026-09-16）
+
+- 実機ゲートG1〜G6全合格。G5で「操作パネルをクリックしてもAviUtl2の作業中オブジェクトは外れない」が実機で確定した（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §110.5）。
+- 実装レビュー: Minor 1（説明文5か所）を`12d8d75`で反映。Minor 2「成功時はrefを下ろさない」は不採用——共有関数が断って区画が作り直されない経路でボタンが死ぬ。
+- 文言調整: 区画見出し`progressHeading`（ja）を「進捗」へ（`5cb2b0b`）。
+- バックエンド台帳 CLOSED §3-154 として記録。
+
+## 121. 出力クロップ欄が自由入力になった — 打鍵ごとの丸めを撤去し、判定はGenerateゲートと422へ一本化（オーナー依頼。バックエンド台帳 CLOSED §3-155。2026-09-16、クローズ済み）
+
+### 121.1 結論
+
+- Create画面・Chain画面の「出力をクロップ」の幅・高さ欄から、打鍵ごとの`clampCropOutput`（入力欄と両フックのsetterの二重）を撤去した。**利用者が打った値は変えない。プログラムが入れる値（チェックON時の初期値・`applyPreset`）だけは`clampCropOutput`で範囲内に収める。判定は既存の`isCropOutputValid`1か所。** 不正なら既存の理由文＋Generateのグレーアウト（Create・Chain）、バッチの開始ゲート、サーバーの422が受ける。この流儀は生成サイズ欄や尺の欄と同じで、クロップ欄だけが外れていた。
+- Create/Chainの`setCropOutput`は`useCallback`ラッパを外して`useState`のsetterをそのまま公開（引き算）。`min/max/step`属性は維持（スピナーは範囲を守る）。`isStepEvent`も非有限ガードも`start()`の再チェックも足していない。
+- 理由文を1本に統合: 「クロップサイズが生成サイズよりも大きいか、もしくは空欄です。／The crop size is larger than the generation size, or it is blank.」（1〜31の極小値や小数も同文言。実用上の頻度は極めて低いとのオーナー裁定）。ja補足文に上限を追記。
+- コミットは`60a4847`。
+
+### 121.2 空欄は`NaN`で持つ — Reactの数値入力は「0」でも「1024」でも書き戻す
+
+- `<input type="number">`を空にすると`Number("")`は0になる。0をstateに持つと、Reactは空の箱へ「0」を書き戻し（`react-dom-client`の`("number"===type)`分岐: `(0===value && ""===element.value) || element.value != value`なら`element.value`を代入）、続けて1024と打つと表示が**「01024」**になる（比較が緩い`!=`なのでReactは書き戻さない。stateは1024で正しい）。「前の値を保つ」方式でも空の箱へ前の値が書き戻され、箱を消せない。つまり**どの数値をstateに持っても箱を空のままにはできない**。
+- 唯一の手段は非数値のセンチネルで、空欄は`NaN`として持ち、表示側で`Number.isNaN(v) ? "" : v`と描く。`isCropOutputValid`の`Number.isInteger(NaN)===false`が即座に`cropInvalid`を立てるので受け皿は無改修。型`CropOutput{width:number}`も無改修（ワイヤ型そのものなので`number|null`化は足し算）。`NaN`が送信本文に混ざる経路はゲートで塞がれ、仮に漏れても`JSON.stringify(NaN)`は`null`でサーバーの`int`検証が422を返す。
+- `cropOutput`を表示・算術に使う箇所は無い。比較はChainの`cropOutputEquals`→`isDirty`の1件だけで、`NaN`は「変更あり」になるがクロップONの時点で既定`null`と不一致＝元々trueなので無害。Chainの`buildRequest()`はバッチi2v-longの`useMemo`から毎レンダー呼ばれるため、空欄中も`crop_output:{width:NaN}`を含む本文オブジェクトが作られるが、読まれるのはprompt/loras/clips/seedだけで、開始は`chainBlockReasons`が塞ぐ。
+
+### 121.3 機械検証
+
+- `npm run typecheck` 全緑／`npx vitest run --exclude "**/backend.integration.test.ts"` 146ファイル・2,993件（+6＝`CropOutputField`の欄テスト4・両フック各1）／lint 警告31本（不変）。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §111。
+
+### 121.4 引っかかりやすい点（次に触る人向け）
+
+- **§119.4の「欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない」は本節で失効した。** 今は大きい値を直接打っても、空欄でも、同じゲートに掛かる。§4.19 G4の手順は当時の合格記録としてそのまま。
+- チェックON時の初期値は`clampCropOutput`で「範囲に収める」だけなので、生成サイズ自体が非整数（自由入力で例100.5）なら結果も非整数になりうる。その場合も`isCropOutputValid`が拾う。
+- `useBatchForm.start()`に`cropInvalid`の再チェックを足さないこと。本番は開始ボタンの`disabled={unavailable || !form.canStart}`で到達不能で、§119.4の「バッチi2v-longにゲートを足してはいけない」と同型の罠。
+- 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、後続コミットで直す。
+
+### 121.5 完結（オーナー受容・2026-09-16）
+
+- 実機ゲートG1〜G5全合格（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §111.5）。G1で「欄が空欄のまま」、G3で「01024にならない」を実機で確認した＝`NaN`センチネルの狙いどおり。
+- 実装レビュー（Critical 0・Major 0・Minor 3）を`a29de34`で全反映: 失効「32-pixel-grid」コメント3件の訂正と、チェックON初期値テストのfixtureを10×10へ（クランプの有無を実際に検出する形へ）。
+- バックエンド台帳 CLOSED §3-155 として記録。

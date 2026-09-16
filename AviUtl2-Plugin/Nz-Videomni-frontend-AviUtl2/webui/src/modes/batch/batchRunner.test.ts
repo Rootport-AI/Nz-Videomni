@@ -21,6 +21,7 @@ const BASE_SETTINGS: BatchRunnerSettings = {
   promptMode: "add",
   width: 512,
   height: 320,
+  cropOutput: null,
   frameRate: 24,
   seed: -1,
   chunkedUpsample: true,
@@ -576,6 +577,51 @@ describe("BatchRunner", () => {
     });
   });
 
+  // §3-153 出力クロップの継承 (2026-09-16): `settings.cropOutput` は Create画面
+  // から凍結された値。a2v側は `buildA2vChainPayload` を素通りして、ONならobject・
+  // OFFなら `crop_output: null` を明示送信する（従来からの形）。
+  //
+  // 断言は必ず「投入されたbody」に対して行う: `mockBridge` のチェーンジョブは
+  // 要求に関わらず `crop_output: null` を反響するので、ジョブ応答を読むと
+  // ONでも偽の不合格になる。
+  describe("settings.cropOutput（§3-153）", () => {
+    it("a2v ON: チェーンbodyの crop_output に指定した矩形が載る", async () => {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped, chainBodies } = captureChainBridge(base);
+      const runner = new BatchRunner(wrapped);
+
+      await runner.start({
+        mode: "a2v",
+        wavDir: "C:\\batch\\in",
+        outDir: "C:\\batch\\out",
+        settings: { ...BASE_SETTINGS, cropOutput: { width: 384, height: 256 } },
+        rows: [makeRow(1, "a.wav", "Waiting")],
+      });
+
+      expect(chainBodies).toHaveLength(1);
+      expect(chainBodies[0]!.crop_output).toEqual({ width: 384, height: 256 });
+    });
+
+    it("a2v OFF(null): 従来どおり crop_output: null を明示送信する（退行なし）", async () => {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped, chainBodies } = captureChainBridge(base);
+      const runner = new BatchRunner(wrapped);
+
+      await runner.start({
+        mode: "a2v",
+        wavDir: "C:\\batch\\in",
+        outDir: "C:\\batch\\out",
+        settings: BASE_SETTINGS,
+        rows: [makeRow(1, "a.wav", "Waiting")],
+      });
+
+      expect(chainBodies).toHaveLength(1);
+      expect(chainBodies[0]).toHaveProperty("crop_output", null);
+    });
+  });
+
   // i2vモード（D1/D11、2026-09-15）: 音声の無い行は `POST /api/v1/generate` へ。
   describe("i2vモード", () => {
     const IMG_DIR = "C:\\batch\\img";
@@ -612,7 +658,7 @@ describe("BatchRunner", () => {
       return { wrapped, submits };
     }
 
-    it("音声アップロードを一度も行わず、/api/v1/generate へチェーン専用欄なしのbodyを投げる", async () => {
+    it("音声アップロードを一度も行わず、/api/v1/generate へチェーン専用欄なしのbodyを投げる（クロップOFFならcrop_outputも無い）", async () => {
       const fs = createMockFs();
       const base = createMockBridge({ delayMs: 0, fs });
       const { wrapped: captured, submits } = captureSubmitBridge(base);
@@ -640,14 +686,42 @@ describe("BatchRunner", () => {
       expect(body.num_frames).toBe(121);
       expect(body.width).toBe(512);
       expect(body.height).toBe(320);
-      for (const banned of ["clips", "source_audio", "stage2_window", "chunked_upsample", "crop_output", "pipeline"]) {
+      for (const banned of ["clips", "source_audio", "stage2_window", "chunked_upsample", "pipeline"]) {
         expect(body).not.toHaveProperty(banned);
       }
+      // §3-153 (2026-09-16): `crop_output` は恒久的な禁止キーではなくなった。
+      // ここで無いのは BASE_SETTINGS がクロップOFF（`cropOutput: null`）だから。
+      expect(body).not.toHaveProperty("crop_output");
       // 行画像はアップロードされ、frame 0 の単一キーフレームとして載る。カードが
       // 無いのでstrengthはDEFAULT_STRENGTH(0.8)。
       expect(body.conditioning_images).toEqual([
         { image_id: expect.stringMatching(/^mock-image-\d+$/), frame_idx: 0, strength: 0.8 },
       ]);
+    });
+
+    // §3-153 出力クロップの継承 (2026-09-16): i2v側は `buildI2vGeneratePayload`
+    // 経由で、ONのときだけ `height` の直後に `crop_output` が載る。
+    it("クロップON: /api/v1/generate のbodyに crop_output が矩形として載る", async () => {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped, submits } = captureSubmitBridge(base);
+      const runner = new BatchRunner(wrapped);
+
+      await runner.start({
+        mode: "i2v",
+        wavDir: null,
+        imgDir: IMG_DIR,
+        outDir: "C:\\batch\\out",
+        settings: { ...BASE_SETTINGS, cropOutput: { width: 384, height: 256 } },
+        rows: [imageRow(1, "cat01.png")],
+        sharedConditioningImages: [],
+      });
+
+      expect(submits).toHaveLength(1);
+      expect(submits[0]!.path).toBe("/api/v1/generate");
+      expect(submits[0]!.body.crop_output).toEqual({ width: 384, height: 256 });
+      // Createの `toGenerateRequest` と同じ位置 —— `height` の直後。
+      expect(Object.keys(submits[0]!.body).slice(0, 4)).toEqual(["prompt", "width", "height", "crop_output"]);
     });
 
     it("出力名はスキャン元の画像名の語幹 + .mp4（noClobber付き）", async () => {

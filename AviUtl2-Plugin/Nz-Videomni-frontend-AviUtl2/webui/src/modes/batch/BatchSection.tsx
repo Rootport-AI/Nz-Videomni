@@ -235,6 +235,11 @@ export function BatchSection({
             Create/Chain's own convention) — just a `canStart` gate plus this
             one-line warning, mirroring the resolution/IC-LoRA guards above. */}
         {form.nagInvalid && <p className="warning-banner">{strings.single.generateReasons.nagNegativeEmpty}</p>}
+        {/* §3-153 出力クロップの継承 (2026-09-16): Batch has no crop field of its
+            own — it inherits Create's silently, so when that setting no longer
+            fits the current generation size the explanation has to be Create's
+            own wording, borrowed exactly like `nagNegativeEmpty` above. */}
+        {form.cropInvalid && <p className="warning-banner">{strings.single.generateReasons.cropInvalid}</p>}
         {/* §1-7 相互ロック: the Chain screen's Batch i2v-long is running, so the
             shared run lock (`shell/runLock.ts`) is held by it. Blocks Start —
             shown as its own line so the disabled button is explained. */}

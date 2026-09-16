@@ -416,6 +416,79 @@ describe("App / §3-54 物体追尾 right-click routing", () => {
     20_000,
   );
 
+  // 🎯 追尾を開始 (2026-09-16): the SECOND door to the same road. The two
+  // cases below are the ones only the whole app can prove — that the button
+  // reaches the very same `startTrackingFromSelection` the right-click does (so
+  // the RPC carries the stored settings and `frame = frameStart`), and that a
+  // refused press changes nothing outside the panel.
+  it(
+    "starts the same run from the Toolbox button: trackObject with the STORED settings and frame = frameStart",
+    async () => {
+      writeStoredObjectTracking({
+        searchFactor: 5.5,
+        lostScoreThreshold: 0.6,
+        lostBehavior: "continue",
+        smoothing: 0.75,
+        followSize: false,
+        keyframeStride: 4,
+      });
+      const bridge = await renderShell();
+      await act(async () => {
+        screen.getByRole("tab", { name: "Toolbox" }).click();
+      });
+      await waitForToolboxPanel();
+      const spy = vi.spyOn(bridge, "request");
+
+      // Role-scoped on purpose: the panel's intro sentence names the button.
+      await act(async () => {
+        screen.getByRole("button", { name: /start tracking/i }).click();
+      });
+
+      await waitFor(() => {
+        expect(spy.mock.calls.some(([m]) => m === "timeline.trackObject")).toBe(true);
+      });
+      const call = spy.mock.calls.find(([m]) => m === "timeline.trackObject");
+      expect(call?.[1]).toEqual({
+        layer: 4,
+        // The same invariant the right-click has: the object's own head (100),
+        // never the playback cursor (250).
+        frame: 100,
+        searchFactor: 5.5,
+        smoothing: 0.75,
+        followSize: false,
+        lostScoreThreshold: 0.6,
+        lostBehavior: "continue",
+        keyframeStride: 4,
+      });
+    },
+    20_000,
+  );
+
+  it(
+    "refuses the Toolbox button on a video selection — inside the panel, with no tab change",
+    async () => {
+      const bridge = await renderShell({ selection: videoSelection() });
+      await act(async () => {
+        screen.getByRole("tab", { name: "Toolbox" }).click();
+      });
+      const visible = await waitForToolboxPanel();
+      const spy = vi.spyOn(bridge, "request");
+
+      await act(async () => {
+        screen.getByRole("button", { name: /start tracking/i }).click();
+      });
+
+      await within(visible).findByText(/an object of the wrong kind is selected/i, undefined, {
+        timeout: 5_000,
+      });
+      expect(spy.mock.calls.find(([m]) => m === "timeline.trackObject")).toBeUndefined();
+      // Still on Toolbox, and the refusal did not travel to the shared note area
+      // (`NoteArea` is `role="status"`; this one is the panel's own box).
+      expect(within(visible).getByRole("heading", { name: /object tracking/i })).toBeInTheDocument();
+    },
+    20_000,
+  );
+
   it(
     "starts nothing when the Toolbox tab is opened by hand",
     async () => {

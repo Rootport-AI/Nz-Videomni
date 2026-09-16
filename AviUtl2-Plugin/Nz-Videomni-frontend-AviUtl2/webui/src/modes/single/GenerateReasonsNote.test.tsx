@@ -8,7 +8,7 @@ import { GenerateReasonsNote } from "./GenerateReasonsNote";
 
 const MESSAGES = {
   promptEmpty: "Fill the main prompt.",
-  cropInvalid: "Fix the output crop size.",
+  cropInvalid: "The crop size is larger than the generation size, or it is blank.",
   controlNeedsReference: "Attach a reference video.",
   referenceNotReady: "Attach a reference video.", // same line as controlNeedsReference
 };
@@ -22,7 +22,10 @@ describe("GenerateReasonsNote", () => {
   it("renders one line per reason, in order, as a mild warning banner", () => {
     render(<GenerateReasonsNote reasons={["promptEmpty", "cropInvalid"]} messages={MESSAGES} />);
     const items = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(items).toEqual(["Fill the main prompt.", "Fix the output crop size."]);
+    expect(items).toEqual([
+      "Fill the main prompt.",
+      "The crop size is larger than the generation size, or it is blank.",
+    ]);
     expect(screen.getByRole("note")).toHaveClass("warning-banner", "warning-banner-mild");
   });
 

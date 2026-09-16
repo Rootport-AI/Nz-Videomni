@@ -1617,7 +1617,7 @@ export const en = {
       audioTooShort: "Use a longer audio clip, or lower the frame count.",
       referenceNeedsLoras: "Choose CONTROL LORA.",
       attachReferenceVideo: "Attach a reference video.",
-      cropInvalid: "Fix the output crop size.",
+      cropInvalid: "The crop size is larger than the generation size, or it is blank.",
       keyframeUploading: "Wait for the keyframe upload to finish.",
       audioUploading: "Wait for the audio upload to finish.",
       referenceUploading: "Wait for the reference video upload to finish.",
@@ -1649,13 +1649,14 @@ export const en = {
   toolbox: {
     tracking: {
       heading: "Object tracking",
-      /** The one sentence that says where to start: right-click a partial
-       * filter already placed on the timeline. Fitting its box still happens in
-       * AviUtl2's preview, not here (§1 / §11 of the design doc); the
+      /** Where to start: right-click a partial filter already placed on the
+       * timeline, or press this panel's own button (the second entrance, added
+       * 2026-09-16 — both go down the same road). Fitting the box still happens
+       * in AviUtl2's preview, not here (§1 / §11 of the design doc); the
        * parenthetical gives the menu path for placing one (owner wording,
        * 2026-09-13). */
       intro:
-        'Right-click a partial filter placed on the timeline and choose "🎯 Object tracking (uses a partial filter)". (To place one: right-click the timeline → Add media object → Screen effects → Partial filter.)',
+        'Right-click a partial filter placed on the timeline and choose "🎯 Object tracking (uses a partial filter)". You can also start from "🎯 Start tracking" on the Toolbox tab. (To place one: right-click the timeline → Add media object → Screen effects → Partial filter.)',
       model: {
         label: "Model",
         uetrack: "UETrack",
@@ -1695,6 +1696,25 @@ export const en = {
       progressFps: (fps: number): string => `${fps.toFixed(1)} fps`,
       /** Stand-in until a second progress event gives something to measure. */
       progressFpsUnknown: "—",
+      /** §3-54 (2026-09-16): the Toolbox tab's own entrance to a run. The
+       * SECOND door to the one road — the right-click is the first — so the
+       * wording says "start", not "track": the box is still fitted in
+       * AviUtl2's preview, and this button only stands in for the right
+       * click. */
+      start: "🎯 Start tracking",
+      /** Nothing is selected. Deliberately does NOT distinguish "you have no
+       * partial filter at all" from "you have one but did not select it":
+       * the SDK offers no way to enumerate the objects on the timeline, so
+       * the sentence covers both and the parenthetical gives the menu path
+       * for placing one (owner wording, 2026-09-16). */
+      startNoSelection:
+        "Select a partial filter. (If you do not have one yet: right-click → Add media object → Screen effects → Partial filter.)",
+      /** Something is selected, but it is not a single partial filter — a
+       * video, a text object, two objects at once, or a kind this app cannot
+       * name. One sentence for all of them (owner wording, 2026-09-16): what
+       * the user has to DO is the same in every case. */
+      startWrongKind:
+        "An object of the wrong kind is selected. Select a partial filter. (If you do not have one yet: right-click → Add media object → Screen effects → Partial filter.)",
       stop: "🚫 Stop",
       lostHeading: "Lost ranges",
       lostNone: "No lost frames.",
@@ -2956,7 +2976,7 @@ export const ja: Strings = {
     },
     crop: {
       label: "出力をクロップ",
-      hint: "生成後の映像を指定サイズにクロップします（※最小32px）",
+      hint: "生成後の映像を指定サイズにクロップします（※32以上、生成サイズ以下）",
       width: "クロップ幅",
       height: "クロップ高さ",
     },
@@ -3079,7 +3099,7 @@ export const ja: Strings = {
       audioTooShort: "音声が短すぎます。音声を長くするかフレーム数を減らしてください。",
       referenceNeedsLoras: "制御LoRAを選んでください。",
       attachReferenceVideo: "参照動画を設定してください。",
-      cropInvalid: "出力クロップのサイズを直してください。",
+      cropInvalid: "クロップサイズが生成サイズよりも大きいか、もしくは空欄です。",
       keyframeUploading: "キーフレームのアップロード完了を待ってください。",
       audioUploading: "音声のアップロード完了を待ってください。",
       referenceUploading: "参照動画のアップロード完了を待ってください。",
@@ -3095,7 +3115,7 @@ export const ja: Strings = {
     tracking: {
       heading: "物体追尾",
       intro:
-        "タイムラインに配置した部分フィルタを右クリックして、「🎯 物体追尾（部分フィルタを使用）」を選んでください。（※部分フィルタの配置方法：タイムラインを右クリック → メディアオブジェクトを追加 → 画面効果 → 部分フィルタ）",
+        "タイムラインに配置した部分フィルタを右クリックして、「🎯 物体追尾（部分フィルタを使用）」を選んでください。Toolboxタブの「🎯 追尾を開始」からも始められます。（※部分フィルタの配置方法：タイムラインを右クリック → メディアオブジェクトを追加 → 画面効果 → 部分フィルタ）",
       model: {
         label: "モデル",
         uetrack: "UETrack",
@@ -3125,11 +3145,16 @@ export const ja: Strings = {
         label: "中間点を打つ間隔",
         hint: "先頭と末尾は、この設定にかかわらず必ず打ちます。",
       },
-      progressHeading: "進み具合",
+      progressHeading: "進捗",
       progressIdle: "追尾は動いていません。",
       progressFrames: (index: number, total: number): string => `${index} / ${total} フレーム`,
       progressFps: (fps: number): string => `${fps.toFixed(1)} fps`,
       progressFpsUnknown: "—",
+      start: "🎯 追尾を開始",
+      startNoSelection:
+        "部分フィルタを選択してください。（※部分フィルタがまだ無い場合：右クリック → メディアオブジェクトを追加 → 画面効果 → 部分フィルタ）",
+      startWrongKind:
+        "不適切な種類のオブジェクトが選択されています。部分フィルタを選択してください。（※部分フィルタがまだ無い場合：右クリック → メディアオブジェクトを追加 → 画面効果 → 部分フィルタ）",
       stop: "🚫停止",
       lostHeading: "見失い区間",
       lostNone: "見失いなし",

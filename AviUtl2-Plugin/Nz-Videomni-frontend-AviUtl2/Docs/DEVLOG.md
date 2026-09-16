@@ -4505,7 +4505,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - **バッチi2v-longに開始ゲートを足してはいけない。** 計画段階のレビューは「`useBatchI2vLongForm.ts`に`crop`の参照が0件」を根拠に同じゲートの追加を求めたが、実装者が手を止めて確認したところ、Chain画面の`validityReasons`（`cropInvalid`を含む）を`chainBlockReasons`としてそのまま出す作りで既に効いていた。1行足すと同じ理由が二重に表示され、同ファイルの不変条件「Chain画面自身の失敗は共用体に入れず逐語的に出す」を破る。文字列grepで「無い」と結論しない例がもう1つ増えた。
 - モックブリッジ（`bridge/mockBridge.ts`）はチェーンジョブの反響を要求内容に関わらず`crop_output: null`で返す。a2vのクロップをテストするときは投入bodyを捕まえる（ジョブ応答を読むと偽の不合格になる）。
-- 実機で開始ゲートに到達する手順は「クロップ設定後に生成サイズを縮める」だけ。欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない。
+- 実機で開始ゲートに到達する手順は「クロップ設定後に生成サイズを縮める」だけ。欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない。（→§121.4で失効。2026-09-16の自由入力化以降は、大きい値を直接打っても空欄でも同じゲートに掛かる。）
 
 ### 119.5 完結（オーナー受容・2026-09-16）
 
@@ -4565,7 +4565,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **§119.4の「欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない」は本節で失効した。** 今は大きい値を直接打っても、空欄でも、同じゲートに掛かる。§4.19 G4の手順は当時の合格記録としてそのまま。
 - チェックON時の初期値は`clampCropOutput`で「範囲に収める」だけなので、生成サイズ自体が非整数（自由入力で例100.5）なら結果も非整数になりうる。その場合も`isCropOutputValid`が拾う。
 - `useBatchForm.start()`に`cropInvalid`の再チェックを足さないこと。本番は開始ボタンの`disabled={unavailable || !form.canStart}`で到達不能で、§119.4の「バッチi2v-longにゲートを足してはいけない」と同型の罠。
-- 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、後続コミットで直す。
+- 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、`a29de34`で直した（§121.5）。
 
 ### 121.5 完結（オーナー受容・2026-09-16）
 

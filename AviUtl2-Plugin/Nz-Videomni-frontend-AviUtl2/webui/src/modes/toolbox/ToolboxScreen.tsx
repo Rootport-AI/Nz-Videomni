@@ -41,8 +41,9 @@ export interface ToolboxScreenProps {
   onFollowSizeChange: (value: boolean) => void;
   onKeyframeStrideChange: (value: number) => void;
   /** Passed straight through to the section: it raises this while its run is
-   * going so `AppShell` can refuse a second 追尾 right-click instead of
-   * remounting this screen out from under the run (owner gate 2026-09-11). */
+   * going so `AppShell` can refuse a SECOND 追尾 right-click (or button press)
+   * instead of remounting this screen out from under the run (owner gate
+   * 2026-09-11). */
   onRunningChange?: ((running: boolean) => void) | undefined;
   /** `AppShell`'s `startTrackingFromSelection` — the one road a 追尾 run starts
    * down, shared with the timeline right-click (2026-09-16). Passed straight

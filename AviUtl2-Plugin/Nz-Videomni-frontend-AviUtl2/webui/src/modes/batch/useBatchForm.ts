@@ -198,8 +198,8 @@ export interface UseBatchFormResult {
    * generation size on every keystroke, so the only way here is "set a crop,
    * then shrink width/height"; left unblocked every row would 422. Blocks
    * `canStart`; surfaced standalone so `BatchSection` can render the specific
-   * warning banner (D7: Batch uses a plain warning banner, not
-   * `GenerateReasonsNote`). */
+   * warning banner (same plain `warning-banner` style as `nagInvalid` — the
+   * batch panel does not use `GenerateReasonsNote`). */
   cropInvalid: boolean;
   /** i2v guard: the Create form's DURATION is sent verbatim as every i2v
    * row's `num_frames`, and Create lets a hand-typed value off the 8n+1 grid

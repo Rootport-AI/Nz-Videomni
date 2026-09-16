@@ -26,21 +26,22 @@ import type { ObjectTrackingSettings } from "../../shell/objectTrackingSettings"
  * one-job-at-a-time discipline, and that is deliberate, not an oversight.
  */
 
-/** What `AppShell` hands the screen when a 追尾 right-click routes here: the
- * guarded selection snapshot, and nothing besides.
+/** What `AppShell` hands the screen when a 追尾 right-click or the 🎯
+ * Start-tracking button routes here: the guarded selection snapshot, and
+ * nothing besides.
  *
  * Deliberately carries no discriminator (a timestamp, a counter) to make a
- * second right-click on the same object "look different". Nothing here watches
- * this object for changes: the run is fired ON MOUNT, and `AppShell` bumps
- * `remountTokens.toolbox` for every routed 追尾, so the remount IS the second
- * run's signal. */
+ * second right-click (or button press) on the same object "look different".
+ * Nothing here watches this object for changes: the run is fired ON MOUNT,
+ * and `AppShell` bumps `remountTokens.toolbox` for every routed 追尾, so the
+ * remount IS the second run's signal. */
 export interface ObjectTrackRequest {
   selection: ResultOf<"timeline.getSelection">;
 }
 
 /** idle -> running -> (done | cancelled | error). There is no path back to
  * `idle`: the panel keeps the last run's numbers on screen until the next
- * right-click remounts the screen with a new request. */
+ * right-click or button press remounts the screen with a new request. */
 export type ObjectTrackingPhase = "idle" | "running" | "done" | "cancelled" | "error";
 
 export interface ObjectTrackingProgress {
@@ -190,7 +191,8 @@ export function useObjectTracking({
     if (startedRef.current) return;
     if (!trackRequest) return;
     const item = trackRequest.selection.selected[0];
-    // `guardMenuSelection` already refused an empty/multiple/wrong-kind
+    // Either `guardMenuSelection` (right-click) or the section's own
+    // pre-check (button) already refused an empty/multiple/wrong-kind
     // selection before `AppShell` set this request, so this is a belt-and-
     // braces check rather than a live path — but firing with no object would
     // mean sending `frame: undefined`, which is worth never doing.

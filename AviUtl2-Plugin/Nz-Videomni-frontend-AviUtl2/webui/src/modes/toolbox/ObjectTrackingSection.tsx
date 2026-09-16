@@ -457,10 +457,11 @@ export function ObjectTrackingSection({
           {t.start}
         </button>
         {/* Pressable in one case where THIS panel is not running: `TRACK_BUSY`,
-            which means a run started by an earlier right-click is still going —
-            native holds one tracking session at a time, so the stop this button
-            sends reaches that run. Leaving it greyed would show the user the
-            sentence "stop it first" beside the only control that could. */}
+            which means a run started by an earlier right-click or button press
+            is still going — native holds one tracking session at a time, so
+            the stop this button sends reaches that run. Leaving it greyed
+            would show the user the sentence "stop it first" beside the only
+            control that could. */}
         <button
           type="button"
           className="toolbox-stop"

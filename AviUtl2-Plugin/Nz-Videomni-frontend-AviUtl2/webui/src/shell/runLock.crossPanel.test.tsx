@@ -43,7 +43,7 @@ import { __resetRunLockForTests, getRunLockOwner } from "./runLock";
 const WAV_DIR = "C:\\voice\\ep01";
 const IMG_DIR = "C:\\shots\\ep01";
 
-const GEN_VALUES: BatchGenerationValues = { width: 512, height: 320, frameRate: 24, seed: -1, numFrames: 481 };
+const GEN_VALUES: BatchGenerationValues = { width: 512, height: 320, cropOutput: null, frameRate: 24, seed: -1, numFrames: 481 };
 
 function makeChain(): ChainSnapshotSource {
   return {

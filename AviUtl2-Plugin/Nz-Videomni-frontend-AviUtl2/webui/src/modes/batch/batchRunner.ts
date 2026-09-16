@@ -89,7 +89,18 @@ export interface BatchRunnerSettings {
   promptMode: PromptMode;
   width: number;
   height: number;
-  cropOutput?: CropOutput | null;
+  /** §3-153 出力クロップの継承 (2026-09-16): the Create screen's "出力をクロップ"
+   * setting, frozen by `useBatchForm`'s `start()` with the rest of this
+   * object. `null` = OFF. REQUIRED (not optional) on purpose: this is the one
+   * hand-off point where forgetting the field silently disables the whole
+   * feature, so the type has to demand it — the same class of defect the
+   * `acceleration` warning below names.
+   *
+   * The two modes differ on what OFF looks like on the wire: a2v sends an
+   * explicit `crop_output: null`, i2v omits the key entirely. The server
+   * treats those as equivalent; the difference exists only because the i2v
+   * body is pinned byte-for-byte against Create's own `toGenerateRequest`. */
+  cropOutput: CropOutput | null;
   frameRate: number;
   seed: number;
   loras?: LoraSpec[];
@@ -346,7 +357,7 @@ export class BatchRunner {
                 prompt,
                 width: settings.width,
                 height: settings.height,
-                ...(settings.cropOutput !== undefined ? { cropOutput: settings.cropOutput } : {}),
+                cropOutput: settings.cropOutput,
                 frameRate: settings.frameRate,
                 seed: settings.seed,
                 conditioningImages,
@@ -365,6 +376,7 @@ export class BatchRunner {
                 prompt,
                 width: settings.width,
                 height: settings.height,
+                cropOutput: settings.cropOutput,
                 numFrames: row.frames,
                 frameRate: settings.frameRate,
                 seed: settings.seed,

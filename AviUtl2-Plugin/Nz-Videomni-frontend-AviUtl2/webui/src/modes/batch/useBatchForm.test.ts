@@ -34,7 +34,7 @@ const AUTO_OUT_DIR = "C:\\voice\\ep01_a2v_out";
 // server hard cap (the pre-DURATION-wiring semantics), so every existing
 // over-cap/fps regression test still trips on the 481-frame boundary exactly
 // as before (adversarial review M4).
-const GEN_VALUES: BatchGenerationValues = { width: 512, height: 320, frameRate: 24, seed: -1, numFrames: 481 };
+const GEN_VALUES: BatchGenerationValues = { width: 512, height: 320, cropOutput: null, frameRate: 24, seed: -1, numFrames: 481 };
 
 function wavFolder(entries: MockFsFileEntry[]) {
   return createMockFs({ folders: { [WAV_DIR]: entries } });
@@ -1321,6 +1321,77 @@ describe("useBatchForm", () => {
     });
   });
 
+  // §3-153 出力クロップの継承 (2026-09-16): Batchにクロップ欄は無く、Create画面の
+  // 「出力をクロップ」を NAG/Acceleration と同じように黙って継承する。
+  describe("generationValues.cropOutput（§3-153）", () => {
+    it("a2v: ONのまま開始すると、チェーンbodyの crop_output に継承値が載る", async () => {
+      const fs = wavFolder([{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }]);
+      const base = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
+      // 投入bodyで断言する: モックのチェーンジョブ反響は要求に関わらず
+      // `crop_output: null` を返すので、ジョブ応答を読むと偽の不合格になる。
+      const { wrapped, chainBodies } = captureChainBridge(base);
+      const { result } = renderBatchForm(wrapped, {
+        gen: { ...GEN_VALUES, cropOutput: { width: 384, height: 256 } },
+      });
+
+      await act(async () => {
+        await result.current.pickWavDir();
+      });
+      await act(async () => {
+        await result.current.scan();
+      });
+      act(() => {
+        void result.current.keyframes.addFromCapture();
+      });
+      await waitFor(() => expect(result.current.keyframes.items[0]?.status).toBe("ready"));
+
+      expect(result.current.cropInvalid).toBe(false);
+      act(() => {
+        result.current.start();
+      });
+      await waitFor(() => expect(chainBodies).toHaveLength(1));
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
+
+      expect(chainBodies[0]!.crop_output).toEqual({ width: 384, height: 256 });
+    });
+
+    it("開始ゲート: クロップが生成サイズを超えていると開始できず、直せば即復帰する", async () => {
+      const fs = wavFolder([{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }]);
+      const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
+      const { result, rerender } = renderHook(
+        ({ gen }: { gen: BatchGenerationValues }) => {
+          const keyframes = useKeyframes(FALLBACK_APP_CONFIG, { nativeBridge: bridge });
+          return useBatchForm(FALLBACK_APP_CONFIG, "a prompt", gen, keyframes, { nativeBridge: bridge });
+        },
+        { initialProps: { gen: GEN_VALUES } },
+      );
+
+      await act(async () => {
+        await result.current.pickWavDir();
+      });
+      await act(async () => {
+        await result.current.scan();
+      });
+      act(() => {
+        void result.current.keyframes.addFromCapture();
+      });
+      await waitFor(() => expect(result.current.keyframes.items[0]?.status).toBe("ready"));
+
+      expect(result.current.cropInvalid).toBe(false);
+      expect(result.current.canStart).toBe(true);
+
+      // 到達の仕方は「クロップを決めてから生成サイズを縮める」だが、ここでは
+      // その結果の状態（GEN_VALUESは512×320）を直接与える。判定はモード非依存。
+      rerender({ gen: { ...GEN_VALUES, cropOutput: { width: 9999, height: 9999 } } });
+      expect(result.current.cropInvalid).toBe(true);
+      expect(result.current.canStart).toBe(false);
+
+      rerender({ gen: { ...GEN_VALUES, cropOutput: { width: 384, height: 256 } } });
+      expect(result.current.cropInvalid).toBe(false);
+      expect(result.current.canStart).toBe(true);
+    });
+  });
+
   // §1-7 相互ロック（`shell/runLock.ts`）: Batch A2V and Batch i2v-long share
   // the backend's single job slot, so only one of them may run at a time. This
   // panel takes the lock at `start()` and gives it back on its runner's
@@ -1651,13 +1722,19 @@ describe("useBatchForm", () => {
 
     /** i2vの投入先は `/api/v1/generate`。`captureChainBridge`はチェーンしか
      * 見ないので、こちらは両方のPOSTを500で弾いてジョブのポーリング待ちを
-     * 無くす（行はFailedで終わる）。 */
-    function captureSubmitBridge(base: NativeBridge): NativeBridge {
-      return {
+     * 無くす（行はFailedで終わる）。§3-153 で投入bodyも記録するようにした
+     * （`captureChainBridge`と同じ `{wrapped, submits}` 形）。 */
+    function captureSubmitBridge(base: NativeBridge): {
+      wrapped: NativeBridge;
+      submits: Array<{ path: string; body: Record<string, unknown> }>;
+    } {
+      const submits: Array<{ path: string; body: Record<string, unknown> }> = [];
+      const wrapped: NativeBridge = {
         async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
           if (method === "backend.request") {
-            const p = params as { method?: string; path?: string };
+            const p = params as { method?: string; path?: string; body?: Record<string, unknown> };
             if (p.method === "POST" && (p.path === "/api/v1/generate" || p.path === "/api/v1/generate/chain")) {
+              submits.push({ path: p.path, body: p.body ?? {} });
               return {
                 status: 500,
                 body: { error: { code: "MOCK_STOP", message: "captured by test" } },
@@ -1669,10 +1746,11 @@ describe("useBatchForm", () => {
         requestWithFiles: (method, params, files) => base.requestWithFiles(method, params, files),
         on: (event, handler) => base.on(event, handler),
       };
+      return { wrapped, submits };
     }
 
     /** 画像フォルダだけを手入力で確定し、スキャンする（＝i2vモードの最小状態）。 */
-    async function scanImagesOnly(bridge: NativeBridge, opts: { config?: AppConfig } = {}) {
+    async function scanImagesOnly(bridge: NativeBridge, opts: { config?: AppConfig; gen?: BatchGenerationValues } = {}) {
       const rendered = renderBatchForm(bridge, opts);
       await act(async () => {
         await rendered.result.current.setImgDir(I2V_IMG_DIR);
@@ -1927,9 +2005,29 @@ describe("useBatchForm", () => {
       expect(result.current.canStart).toBe(false);
     });
 
+    // §3-153 出力クロップの継承 (2026-09-16): i2v側も同じ黙った継承。
+    it("クロップONのまま開始すると、/api/v1/generate の投入bodyに crop_output が載る", async () => {
+      const base = createMockBridge({ delayMs: 0, fs: imageFolder(["cover.jpg"]) });
+      const { wrapped, submits } = captureSubmitBridge(base);
+      const { result } = await scanImagesOnly(wrapped, {
+        gen: { ...GEN_VALUES, cropOutput: { width: 384, height: 256 } },
+      });
+
+      expect(result.current.cropInvalid).toBe(false);
+      expect(result.current.canStart).toBe(true);
+      act(() => {
+        result.current.start();
+      });
+      await waitFor(() => expect(submits).toHaveLength(1));
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
+
+      expect(submits[0]!.path).toBe("/api/v1/generate");
+      expect(submits[0]!.body.crop_output).toEqual({ width: 384, height: 256 });
+    });
+
     it("start()はmodeを走行スナップショットへ凍結し、走行中のリマウントで復元される", async () => {
       const base = createMockBridge({ delayMs: 0, fs: imageFolder(["cover.jpg"]), holdUploads: true });
-      const wrapped = captureSubmitBridge(base);
+      const { wrapped } = captureSubmitBridge(base);
       const { result, unmount } = await scanImagesOnly(wrapped);
 
       expect(result.current.canStart).toBe(true);

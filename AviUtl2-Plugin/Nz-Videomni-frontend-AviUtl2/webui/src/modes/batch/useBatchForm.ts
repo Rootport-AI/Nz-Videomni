@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { AppConfig } from "../../api/types";
+import type { AppConfig, CropOutput } from "../../api/types";
 import { bridge as defaultBridge, BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { parseLoraPrompt } from "../../lora/loraTags";
@@ -17,7 +17,7 @@ import { RUN_LOCK_OWNER_BATCH_A2V, getRunLockOwner, subscribeRunLock } from "../
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { compareByName, normalizeImageExtensions } from "../batch-i2v-long/imageRows";
-import { rawFramesForAudio, suggestFramesForAudio } from "../chained/chainUtils";
+import { isCropOutputValid, rawFramesForAudio, suggestFramesForAudio } from "../chained/chainUtils";
 import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../single/defaultConfig";
 import { isDimensionOnGrid, isNumFramesOnGrid } from "../single/paramUtils";
 import type { UseKeyframesResult } from "../single/useKeyframes";
@@ -54,6 +54,14 @@ export interface BatchGenerationValues {
   frameRate: number;
   seed: number;
   numFrames: number;
+  /** §3-153 出力クロップの継承 (2026-09-16): the Create form's "出力をクロップ"
+   * setting, inherited silently exactly like NAG/Acceleration are — Batch has
+   * no crop field of its own. `null` = OFF. REQUIRED (not optional) on this
+   * shape on purpose: the value is only meaningful together with the
+   * `width`/`height` right above it (`isCropOutputValid`), and a required
+   * field makes forgetting to thread it through a type error rather than a
+   * silently-disabled feature. */
+  cropOutput: CropOutput | null;
 }
 
 export interface BatchFormLimits {
@@ -184,6 +192,15 @@ export interface UseBatchFormResult {
    * warning banner (D7: Batch uses a plain warning banner, not
    * `GenerateReasonsNote`). */
   nagInvalid: boolean;
+  /** §3-153 出力クロップの継承 (2026-09-16): true when the (silently-inherited)
+   * crop setting no longer fits the current generation size — the same
+   * `isCropOutputValid` gate Create/Chain apply. The crop inputs clamp to the
+   * generation size on every keystroke, so the only way here is "set a crop,
+   * then shrink width/height"; left unblocked every row would 422. Blocks
+   * `canStart`; surfaced standalone so `BatchSection` can render the specific
+   * warning banner (D7: Batch uses a plain warning banner, not
+   * `GenerateReasonsNote`). */
+  cropInvalid: boolean;
   /** i2v guard: the Create form's DURATION is sent verbatim as every i2v
    * row's `num_frames`, and Create lets a hand-typed value off the 8n+1 grid
    * through unsnapped — which would 422 every row of an unattended run, the
@@ -812,6 +829,13 @@ export function useBatchForm(
       promptMode: own.promptMode,
       width: generationValues.width,
       height: generationValues.height,
+      // §3-153 出力クロップの継承 (2026-09-16): frozen here with the rest of the
+      // run's settings — later Create-screen edits cannot reach a batch in
+      // flight. `null` (OFF) is threaded through as-is rather than omitted:
+      // the two builders differ on what OFF looks like on the wire (a2v sends
+      // `crop_output: null`, i2v omits the key), and that is the builders'
+      // business, not this snapshot's.
+      cropOutput: generationValues.cropOutput,
       frameRate: generationValues.frameRate,
       seed: generationValues.seed,
       chunkedUpsample: own.chunkedUpsample,
@@ -981,6 +1005,15 @@ export function useBatchForm(
   );
   const numFramesOffGrid = scannedMode === "i2v" && !numFramesOnGrid;
 
+  // §3-153 出力クロップの継承 (2026-09-16): the same gate Create/Chain apply,
+  // against the (silently-inherited) crop setting. `isCropOutputValid(null, …)`
+  // is `true`, so an OFF crop never blocks.
+  const cropInvalid = !isCropOutputValid(
+    generationValues.cropOutput,
+    generationValues.width,
+    generationValues.height,
+  );
+
   const canStart =
     foldersReady(scannedMode, wavDir, imgDir) &&
     framesReady(scannedMode, numFramesOnGrid) &&
@@ -995,6 +1028,7 @@ export function useBatchForm(
     !keyframes.isUploading &&
     !sharedKeyframeMissing &&
     !nagInvalid &&
+    !cropInvalid &&
     resolutionValid &&
     runnableRows.length > 0;
 
@@ -1019,6 +1053,7 @@ export function useBatchForm(
     keyframes,
     sharedKeyframeMissing,
     nagInvalid,
+    cropInvalid,
     numFramesOffGrid,
     rows,
     isScanning,

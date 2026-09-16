@@ -47,6 +47,29 @@ function trackRequest(): ObjectTrackRequest {
   return { selection: partialFilterSelection() };
 }
 
+/** A selected VIDEO — the "wrong kind" case for the 🎯 button's pre-check.
+ * Kept local (the same shape `App.trackRoute.test.tsx` holds for the right-click
+ * spine) so this file stays readable on its own. */
+function videoSelection(): ResultOf<"timeline.getSelection"> {
+  return {
+    ...partialFilterSelection(),
+    selected: [
+      {
+        layer: 3,
+        frameStart: 10,
+        frameEnd: 130,
+        effectName: "動画ファイル",
+        filePath: "C:\\v\\a.mp4",
+        objectName: "a",
+        textContent: null,
+        mediaWidth: 1920,
+        mediaHeight: 1080,
+        mediaDurationSec: 5,
+      },
+    ],
+  };
+}
+
 interface RenderOptions {
   trackingAvailable?: boolean;
   trackingReason?: string;
@@ -66,6 +89,7 @@ function renderSection(options: RenderOptions = {}) {
     onSmoothingChange: vi.fn(),
     onFollowSizeChange: vi.fn(),
     onKeyframeStrideChange: vi.fn(),
+    onStartTracking: vi.fn(),
   };
   render(
     <LanguageProvider>
@@ -376,6 +400,95 @@ describe("ObjectTrackingSection — failures", () => {
     await waitFor(() => {
       expect(screen.getByText(/tracking failed/i)).toBeInTheDocument();
     });
+  });
+});
+
+// 🎯 追尾を開始 (2026-09-16): the panel's own entrance to a run. Everything
+// past the pre-check belongs to `AppShell` — which is why the assertions below are
+// about `onStartTracking` and about `timeline.trackObject` NOT being fired from
+// here. `App.trackRoute.test.tsx` owns the other end of that road.
+describe("ObjectTrackingSection — the start button", () => {
+  const startButton = () => screen.getByRole("button", { name: /start tracking/i });
+
+  it("is greyed when the server cannot track at all", () => {
+    renderSection({ trackingAvailable: false, trackingReason: "not installed" });
+    expect(startButton()).toBeDisabled();
+  });
+
+  it("is greyed while a run is in flight and comes back once it settles", async () => {
+    renderSection({ request: trackRequest(), bridgeOptions: { holdUploads: false, delayMs: 30 } });
+    await waitFor(() => {
+      expect(startButton()).toBeDisabled();
+    });
+    await waitFor(() => {
+      expect(startButton()).toBeEnabled();
+    });
+  });
+
+  it("asks for a partial filter when nothing is selected, and starts nothing", async () => {
+    const { bridge, handlers } = renderSection({ bridgeOptions: { selection: { selected: [] } } });
+    const spy = vi.spyOn(bridge, "request");
+    await userEvent.click(startButton());
+    await screen.findByText(/select a partial filter/i);
+    expect(handlers.onStartTracking).not.toHaveBeenCalled();
+    expect(spy.mock.calls.find(([m]) => m === "timeline.trackObject")).toBeUndefined();
+    // A refusal, not a failure: no "Tracking failed" above it.
+    expect(screen.queryByText(/tracking failed/i)).not.toBeInTheDocument();
+  });
+
+  it("names the wrong kind when a video is selected, and starts nothing", async () => {
+    const { bridge, handlers } = renderSection({
+      bridgeOptions: { selection: videoSelection() },
+    });
+    const spy = vi.spyOn(bridge, "request");
+    await userEvent.click(startButton());
+    await screen.findByText(/an object of the wrong kind is selected/i);
+    expect(handlers.onStartTracking).not.toHaveBeenCalled();
+    expect(spy.mock.calls.find(([m]) => m === "timeline.trackObject")).toBeUndefined();
+    expect(screen.queryByText(/tracking failed/i)).not.toBeInTheDocument();
+  });
+
+  it("hands a single partial filter to the shell — and clears the previous answer", async () => {
+    // Nothing selected on the first press, the partial filter on the second:
+    // proves both that the answer is re-read every time and that the box the
+    // first press put up is gone by the time the second one is decided.
+    let answer: ResultOf<"timeline.getSelection"> = {
+      ...partialFilterSelection(),
+      selected: [],
+    };
+    const { bridge, handlers } = renderSection();
+    const original = bridge.request.bind(bridge);
+    const spy = vi.spyOn(bridge, "request").mockImplementation((method, params) => {
+      if (method === "timeline.getSelection") {
+        return Promise.resolve(answer) as ReturnType<typeof original>;
+      }
+      return original(method, params);
+    });
+
+    await userEvent.click(startButton());
+    await screen.findByText(/select a partial filter/i);
+
+    answer = partialFilterSelection();
+    await userEvent.click(startButton());
+    await waitFor(() => {
+      expect(handlers.onStartTracking).toHaveBeenCalledTimes(1);
+    });
+    const handed = handlers.onStartTracking.mock.calls[0]?.[0] as ResultOf<"timeline.getSelection">;
+    expect(handed.selected[0]?.layer).toBe(4);
+    expect(handed.selected[0]?.frameStart).toBe(100);
+    // The road is ONE road: this panel hands the selection up and fires no RPC
+    // of its own — the run is started by the shell's remount.
+    expect(spy.mock.calls.find(([m]) => m === "timeline.trackObject")).toBeUndefined();
+    expect(screen.queryByText(/select a partial filter/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tracking failed/i)).not.toBeInTheDocument();
+  });
+
+  it("words a refused getSelection by its code", async () => {
+    const { handlers } = renderSection({ bridgeOptions: { failGetSelection: true } });
+    await userEvent.click(startButton());
+    await screen.findByText(/no aviutl2 project is open/i);
+    expect(handlers.onStartTracking).not.toHaveBeenCalled();
+    expect(screen.queryByText(/tracking failed/i)).not.toBeInTheDocument();
   });
 });
 

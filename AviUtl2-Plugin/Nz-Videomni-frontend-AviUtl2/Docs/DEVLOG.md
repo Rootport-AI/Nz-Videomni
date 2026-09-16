@@ -4541,7 +4541,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 文言調整: 区画見出し`progressHeading`（ja）を「進捗」へ（`5cb2b0b`）。
 - バックエンド台帳 CLOSED §3-154 として記録。
 
-## 121. 出力クロップ欄が自由入力になった — 打鍵ごとの丸めを撤去し、判定はGenerateゲートと422へ一本化（オーナー依頼。2026-09-16、実機ゲート待ち）
+## 121. 出力クロップ欄が自由入力になった — 打鍵ごとの丸めを撤去し、判定はGenerateゲートと422へ一本化（オーナー依頼。バックエンド台帳 CLOSED §3-155。2026-09-16、クローズ済み）
 
 ### 121.1 結論
 
@@ -4566,3 +4566,9 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - チェックON時の初期値は`clampCropOutput`で「範囲に収める」だけなので、生成サイズ自体が非整数（自由入力で例100.5）なら結果も非整数になりうる。その場合も`isCropOutputValid`が拾う。
 - `useBatchForm.start()`に`cropInvalid`の再チェックを足さないこと。本番は開始ボタンの`disabled={unavailable || !form.canStart}`で到達不能で、§119.4の「バッチi2v-longにゲートを足してはいけない」と同型の罠。
 - 「32-pixel-grid constraint」という失効記述（32刻みは2026-07-17に撤廃済み）が両フックの`cropOutput`docに残っていたので訂正した。同種の記述が他にも3件見つかり（`chainUtils.ts`の`BuildChainRequestParams.cropOutput`doc、`useChainForm.ts`／`useGenerationForm.ts`の`validityReasons`直前）、後続コミットで直す。
+
+### 121.5 完結（オーナー受容・2026-09-16）
+
+- 実機ゲートG1〜G5全合格（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §111.5）。G1で「欄が空欄のまま」、G3で「01024にならない」を実機で確認した＝`NaN`センチネルの狙いどおり。
+- 実装レビュー（Critical 0・Major 0・Minor 3）を`a29de34`で全反映: 失効「32-pixel-grid」コメント3件の訂正と、チェックON初期値テストのfixtureを10×10へ（クランプの有無を実際に検出する形へ）。
+- バックエンド台帳 CLOSED §3-155 として記録。

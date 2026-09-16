@@ -2076,3 +2076,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **クローズ理由**: 実機ゲート全合格・オーナー受容。
 - **状態**: **クローズ（2026-09-16）。** ブランチは`dev`（mainへのmergeは本クローズ時点で未実施）。実機と配布コピーの`.aux2`は更新済み。
 - **正本・出典**: 設計＝[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) §3.4・第2部§23、実測＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110、手順＝[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.20、実装記録＝[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §120、コミット＝`64fe73a`（死蔵撤去）・`f800613`（実装）・`e941e12`（文書前半）・`12d8d75`（説明文）・`5cb2b0b`（文言調整）。
+
+### 3-155. 出力クロップ欄の自由入力化（オーナー依頼・起票：2026-09-16、実装・機械ゲート全緑・実機ゲートG1〜G5全合格・クローズ：2026-09-16）（§1／§2を経ず直接クローズ・出自番号なし）
+
+- **出自**: 台帳外のオーナー注文（2026-09-16）。本書§3-153のクロップ継承を実使用した際、Create画面・Chain画面の「出力をクロップ」の幅・高さ欄が1打鍵ごとに`[32, 現在の生成サイズ]`へ丸めるため、Deleteで消すと32に飛び、大きい数を先に打つと頭打ちになり、自然な入力ができないと報告された。
+- **何が完了したか**: 入力欄と両フックのsetterに二重に掛かっていた打鍵ごとの`clampCropOutput`を撤去し、**利用者が打った値は変えない。プログラムが入れる値（チェックON時の初期値・`applyPreset`）だけは`clampCropOutput`で範囲内に収める。判定は既存の`isCropOutputValid`1か所**、という1ルールに揃えた（本プロジェクトの数値入力の多数派の流儀と同じ）。不正なら既存の理由文とGenerateのグレーアウト（Create・Chain）、バッチの開始ゲート、サーバーの422が受ける。**空欄は`NaN`で持ち表示は空文字**——Reactは`<input type="number">`に対し0でも1024でも空の箱へ値を書き戻すため、箱を空に保つ唯一の手段（理由の正本はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §121.2）。理由文は1本に統合「クロップサイズが生成サイズよりも大きいか、もしくは空欄です。／The crop size is larger than the generation size, or it is blank.」（1〜31や小数の稀な入力も同文言＝オーナー裁定）。ja補足文に上限を追記。失効していた「32-pixel-grid」コメント5件を訂正。バックエンド・ネイティブ・`api/types.ts`は無改修。
+- **どう進めたか**: 読み取り専用調査1本＋Planエージェント1本→プランモード→敵対的レビュー（計画：Critical 0・Major 4・Minor 8、コード変更を要する指摘ゼロ／実装：Critical 0・Major 0・Minor 3、全採用）→実装（Opus）→文書（Sonnet）。計画レビューで「空欄を0で持つと表示が『01024』になる」問題が見つかり`NaN`センチネルへ改めた。
+- **どの物差しで通ったか**: 機械ゲート全緑（実数は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §111.3）。実機ゲートG1〜G5は2026-09-16にオーナーが実施し全項目合格（同§111.5）。
+- **クローズ理由**: 実機ゲート全合格・オーナー受容。
+- **状態**: **クローズ（2026-09-16）。** ブランチは`dev`（mainへのmergeは本クローズ時点で未実施）。実機と配布コピーの`.aux2`は更新済み。
+- **正本・出典**: 設計の記録＝フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §121（クロップ欄に専用の設計正本は無く、N1の記録は[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md) N1）、実測＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §111、手順＝[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.21、コミット＝`60a4847`（実装）・`9d5c0da`（文書前半）・`a29de34`（レビュー反映）。

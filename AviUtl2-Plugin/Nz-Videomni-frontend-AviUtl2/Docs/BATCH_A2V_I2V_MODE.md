@@ -5,7 +5,7 @@
 **生きた文書（バッチパネルのi2vモードとその周辺の設計正本）。** Create画面のバッチパネル（従来「バッチA2V」と呼んでいた節）に、**音声フォルダを指定せず画像フォルダだけを指定したときの動き（i2vモード）**を追加した設計と、それに伴って変えた既存a2v側の2点（行画像の生成強度の規則・画像拡張子の正典の一本化）を記述します。
 
 - 作成: 2026-09-15
-- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152（起票時は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-30）。LTX 2.5での実機確認は別項目として[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-151に起票してあります（本書の対象外）。
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152（起票時は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-30）。LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
 - 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。
 
 **用語**: 本書では「**i2v**（画像1枚から動画を作るモード）」「**a2v**（音声から口パク動画を作るモード）」という略称をそのまま使います。どちらもこのアプリが以前から持っている生成モードの呼び名で、i2vはImage-to-Video、a2vはAudio-to-Videoの略です。
@@ -18,7 +18,7 @@
 
 | 文書 | 関係 |
 |------|------|
-| [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) / [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) | 作業の入口。本項目はCLOSED §3-152（起票時は§1-30）。LTX 2.5での実機確認は§3-151（別項目として起票のみ、現在も開いている） |
+| [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) / [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) | 作業の入口。本項目はCLOSED §3-152（起票時は§1-30）。LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済み（CLOSED §3-151） |
 | [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108 | 機械検証・レビュー・実機ゲートの実測値の正本 |
 | [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.18 | 実機ゲートの手順（本書には手順を書き写しません） |
 | [`DEVLOG.md`](DEVLOG.md) §118 | 実装の引っかかり点の記録 |
@@ -42,7 +42,7 @@
 4. **行画像の生成強度**は、a2v・i2vのどちらのモードでも同じ規則になりました。**Create画面冒頭のキーフレームカード**（「Shared」を選んだ行が参照するのと同じカード）にスライダー値があればその値を、無ければ既定の0.8を使います。**この規則は今回、バッチa2vの行画像にも及びました**——これまでバッチa2vの行画像は強度1.0で固定でしたが、今回からSharedと同じ値を使うように変わっています（詳しくは§2.5）。
 5. **「Shared」の意味は変わりません。** 画像ドロップダウンの先頭は常に「Shared」で、これを選んだ行はCreate画面のKEYFRAMESカードをそのまま使います。KEYFRAMESが空の状態でSharedの行がある場合、開始できずに既存の警告が出るのも従来どおりです。
 6. **`chunked_upsample`（省メモリの時間分割アップサンプル）チェックボックスは、i2vモードでは灰色になります。** i2vの1行は単発の`POST /generate`で、そもそも時間分割アップサンプルの工程を持たないためです。
-7. **バッチパネルは、仕組みのうえでは両方のベースモデルで動きます（D10）。** パネルが灰色になるかどうかは、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるかどうかだけで決まります（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5でも動作し、今回追加したi2vモードも同じゲートに乗るぶん理屈のうえでは動作します。** ただし**今回の実機ゲートG1〜G12はLTX 2.3だけで実施しました**——LTX 2.5での実機確認は別項目です（詳しくは台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-151）。
+7. **バッチパネルは、仕組みのうえでは両方のベースモデルで動きます（D10）。** パネルが灰色になるかどうかは、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるかどうかだけで決まります（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5でも動作し、今回追加したi2vモードも同じゲートに乗るぶん理屈のうえでは動作します。** ただし**今回の実機ゲートG1〜G12はLTX 2.3だけで実施しました**——LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
 
 ## 2. 決まったこと
 
@@ -153,7 +153,7 @@ i2v行は`POST /api/v1/generate`（単発生成と同じエンドポイント）
 - **画像サイズの事前チェック**: 大きすぎる画像をスキャン時点で弾く仕組みは入れていません。上限超過はアップロード時にサーバーがエラーを返し、その行だけが失敗になります。
 - **行ごとの解像度・尺の指定**: すべての行はCreate画面の設定（幅・高さ・DURATION・FPSなど）を共有します。行ごとに違うサイズや尺を指定する仕組みはありません。
 - **バッチ側でのクロップ・リサイズ**: フロントエンド（webui・ネイティブブリッジ・アップロードストア）は、画像に対して一切のリサイズ・クロップを行いません。生成サイズと縦横比が違う画像は、**単発生成・チェーン生成と同じように**、バックエンド側（LTX 2.3・LTX 2.5どちらの`ltx_pipelines`も同じ関数）が「覆うように拡縮してから中央で切り出す」処理に委ねます。この事実は今回のために新しく調べて確定したものではなく、既存の挙動を本書で初めて文書に書き起こしたものです。
-- **LTX 2.5での実機確認**: バッチパネルは仕組みのうえでは既にLTX 2.5でも動作します（上記§1の7）。今回の実機ゲートG1〜G12はLTX 2.3だけで実施しており、**LTX 2.5側の実機確認は行っていません**。台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-151に別項目として起票してあります。
+- **LTX 2.5での実機確認**: バッチパネルは仕組みのうえでは既にLTX 2.5でも動作します（上記§1の7）。今回の実機ゲートG1〜G12はLTX 2.3だけで実施しましたが、**LTX 2.5側の実機確認は2026-09-15にオーナーが実施し、クローズ済みです**（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
 
 ---
 

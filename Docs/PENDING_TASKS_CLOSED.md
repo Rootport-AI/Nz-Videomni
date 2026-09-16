@@ -2054,3 +2054,25 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: **クローズ（2026-09-16。オーナー実機確認 2026-09-15、i2v はオーナー裁定で合格扱い）。** ブランチは `dev`。
 - **正本・出典**: 実測＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §108.7、設計＝[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md)、手順＝[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.18、前身＝本書 §3-152。
 - **正本・出典**: 設計＝[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md)（生きた文書）、実装・設計判断・ゲート実数・実測値の全体＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§108**、フロントエンド側の実装記録＝[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§118**、実機ゲートの手順と合格条件＝同[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.18、実装そのもの＝`dev`ブランチのコミット`ab79e64`・`7c00993`・`d6f0298`（実装3本）・`b5c3f24`（用語調整）・`cfd3dc9`（文書）・`4502e8d`（用語調整のChained画面ぶん）・`4fedde1`／`d9f9fb5`（配布`.aux2`の更新）。
+
+### 3-153. バッチパネルがCreate画面の出力クロップ設定を継承する（起票：2026-07-15〔当時 §4-14「バッチA2VパネルのCrop欄が未露出」〕、着手・実装・機械ゲート全緑・実機ゲートG1〜G4全合格・クローズ：2026-09-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-14からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-14（**同書側は欠番**）。§4〔スコープ外〕に置かれていた項目をオーナーが2026-09-16に直接着手し、§1・§2を経由せずクローズした（実機ゲートはフロントエンド[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.19と本書系列[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §109で管理した）。**番号は3-153を採り、裸の`4-14`は立てない**——本書には`3-39. 旧§4-14: V2V結合（Join）…`が既にあり、`4-14`で検索すると2件に当たるため。§4起源の項目を3-xxへ振り直す運用（本書3-138・3-147）に倣った。
+- **事実の訂正**: 台帳§4-14の「送信側が常に`crop_output`を組み立てているため、バッチはCreate側の値をそのまま使う」は誤りだった。送信側が常にキーを組み立てていたのは事実だが値は常に`null`で、Create側の値は継承されていなかった（a2vは`crop_output: null`を常時明示送信、i2vは設計判断D7で不送出）。誤記の出典と訂正はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §119.2。
+- **何が完了したか**: Create画面の「出力をクロップ」の設定（チェックと幅・高さ）を、バッチパネルがNAG・Accelerationと同じく黙って継承するようにした——欄も表示も足さない・a2v／i2v両モード・`start()`で凍結。Create・Chainと同じ`isCropOutputValid`で開始ゲート`cropInvalid`を追加し、文言は3画面共有の`generateReasons.cropInvalid`を借用（実機ゲート後のオーナー指示で「生成サイズよりも大きなクロップサイズが指定されています。」へ変更。Create・Chainにも同じ文言が出る）。i2vの設計判断D7は撤回（D13）。バッチi2v-longはChain画面の判定を素通しする作りで既に同じゲートが効いており無改修。バックエンド・ネイティブは無改修。
+- **どう進めたか**: プランモードで計画→敵対的レビュー（計画・実装 各1回、Opus）→実装（Opus・「疑問があれば手を止める」権限つき）→文書（Sonnet）。計画レビューの指摘M3「バッチi2v-longにも同じゲートを足せ」は、実装者のエスカレーションで取り下げた（既存機構の棚卸し。詳細は同DEVLOG §119.4）。
+- **どの物差しで通ったか**: 機械ゲート全緑（実数は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §109.3）。実機ゲートG1〜G4は2026-09-16にオーナーがLTX 2.5で実施し全項目合格——G1〜G3は12本の`metadata.json`と動画実寸（ffprobe）で監督が裏取りした（同§109.5）。
+- **クローズ理由**: 実機ゲート全合格・オーナー受容。
+- **状態**: **クローズ（2026-09-16）。** ブランチは`dev`（mainへのmergeは本クローズ時点で未実施）。実機と配布コピーの`.aux2`は更新済み。
+- **正本・出典**: 設計＝[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §2.11、実測＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §109、手順＝[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.19、実装記録＝[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §119、コミット＝`1804624`（実装）・`c09271e`（文書前半）・`5cb2b0b`（文言調整）。
+
+### 3-154. Toolboxタブに「🎯 追尾を開始」ボタンを追加（オーナー依頼・起票：2026-09-16、実装・機械ゲート全緑・実機ゲートG1〜G6全合格・クローズ：2026-09-16）（§1／§2を経ず直接クローズ・出自番号なし）
+
+- **出自**: 台帳外のオーナー注文（2026-09-16）。物体追尾（本書§3-54-02）の開始方法が右クリック項目だけで分かりにくいため、操作パネルのToolboxタブに第2の入口を置く。
+- **鍵となった判定**: 「ボタン押下時に、選択中のオブジェクトが部分フィルタかを操作パネル側で判定できるか」は、既存のブリッジ呼び出し`timeline.getSelection`で可能と決着した（ネイティブ・ブリッジ契約は無改修。前例はRetakeの`checkStale`）。唯一の未検証仮説「WebView2をクリックしてもAviUtl2の作業中オブジェクトは外れない」は、実機ゲートG5で確定した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110.1・§110.5）。
+- **何が完了したか**: 追尾の区画に「🎯 追尾を開始」ボタン（導入済みかつ追尾中でないときだけ押せる）。押すと選択を1回読み、未選択なら文言A、部分フィルタ以外なら文言Bを区画内の失敗表示欄に見出し無しで出す。部分フィルタが1つ選ばれていれば、`AppShell`から抽出した`startTrackingFromSelection`（右クリックの分岐そのもの）を通る——**入口は2つ、開始の道は1本**。連打は`useRef`1本で止める。「部分フィルタが無い」と「未選択」は区別しない・最前面の部分フィルタへの自動追尾はしない（いずれもオーナー裁定。理由は設計正本 第2部§23）。先行して死蔵フック`useTimelineSelection`を撤去。実機ゲート後のオーナー指示で区画の見出し「進み具合」を「進捗」へ変更。
+- **どう進めたか**: 読み取り専用調査3本＋追加確認2回で前提を固め、プランモード→敵対的レビュー（計画・実装 各1回）→実装（Opus）→文書（Sonnet）。実装レビューの「成功時は連打止めのrefを下ろさない」案は、共有関数が断って区画が作り直されない経路でボタンが死ぬため不採用（同§110.4）。
+- **どの物差しで通ったか**: 機械ゲート全緑（同§110.3）。実機ゲートG1〜G6は2026-09-16にオーナーが実施し全項目合格（同§110.5）。
+- **クローズ理由**: 実機ゲート全合格・オーナー受容。
+- **状態**: **クローズ（2026-09-16）。** ブランチは`dev`（mainへのmergeは本クローズ時点で未実施）。実機と配布コピーの`.aux2`は更新済み。
+- **正本・出典**: 設計＝[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) §3.4・第2部§23、実測＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §110、手順＝[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.20、実装記録＝[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §120、コミット＝`64fe73a`（死蔵撤去）・`f800613`（実装）・`e941e12`（文書前半）・`12d8d75`（説明文）・`5cb2b0b`（文言調整）。

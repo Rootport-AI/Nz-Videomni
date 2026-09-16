@@ -140,7 +140,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/VSF_README_NOTES.md` | 非CFGネガティブプロンプト（NAG／VSF）の**使い分けの正本**（どちらを選ぶか・つまみの目安・LTX 2.5 での実測）。README §5 と §7.1 はここを指している |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
 | `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`）は §1.1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
-| `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
+| `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・操作パネルの2つの入口（右クリックと開始ボタン）・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
 | `Docs/INPAINTING_DESIGN.md` | **Inpainting（マスクによる部分再生成）の設計正本**（利用の流れ・責務の分担・マスク受け渡し契約〔§6〕・窓の規則・ブレンドと脱緑の仕組み・LTX 2.5 が断る理由）。**マスク受け渡し契約の正本は同書 §6 である**——台帳の応用先（`PENDING_TASKS.md` §4-8(C)・§4-25）はそちらを参照するだけで契約を作り直さない |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
@@ -150,7 +150,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/LTX23_REFERENCE.md` | LTX-2/2.3 の一般知識（VAE 32×圧縮・2段パイプライン・÷64 の由来・VRAM スケーリング） |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` | API 利用者（フロントエンド実装者）向けの解説と全ルート一覧。**契約そのものの正本は本書 §6** |
 | `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md` | AviUtl2 プラグインの native ↔ Web UI 間 JSON-RPC 契約 |
-| `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md` | 操作パネルのバッチパネルのi2vモードと行画像強度の規則の設計正本（音声フォルダ不要のi2vモード・強度の統一規則・出力先導出。凍結 API 契約〔§6〕への変更は無い——フロントエンドのみの改修） |
+| `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md` | 操作パネルのバッチパネルのi2vモードと行画像強度の規則の設計正本（音声フォルダ不要のi2vモード・強度の統一規則・出力クロップ設定の継承・出力先導出。凍結 API 契約〔§6〕への変更は無い——フロントエンドのみの改修） |
 | `engine/VENDOR_NOTICE.md` | `engine/` の由来・provenance・依存再現手順・ライセンス帰属 |
 
 > **文書の3分類とセッションの入口（2026-09-01 追加。`Docs/NEXT_SESSION_HANDOFF.md` の廃止にともない、同書§2から移設）**: 文書は3つに分ける。**①生きた文書**（現状を現在形で書き、随時更新する。上表に並ぶ正本はすべてこれ）／**②追記専用の記録簿**（過去の記述は書き換えず、新しい記録を追記する。`Docs/VERIFICATION_LOG.md`・`Docs/PENDING_TASKS_CLOSED.md`・`Docs/HANDOFF_ARCHIVE.md`・フロントエンド `Docs/DEVLOG.md`）／**③凍結文書**（一切触らない。各 `*_WORKORDER.md` / `*_STATUS.md`、完了済みの設計書、当時のまま収蔵する下調べ（`Docs/LTX25_RESEARCH_NOTES.md` など））。**歴史は②・③側へ書き、①には現在の姿だけを現在形で書く。** 上表にも本注記にも挙がっていない `Docs/` の文書は原則②または③である（例外は上表に載るアーカイブ形式の正本＝`Docs/ICLORA_DEPTH_DEBLUR_WORKORDER.md`）。**セッションの入口は `Docs/PENDING_TASKS.md` ただ 1 つである**（役割が重複する文書を置かないため、2026-09-01 に `Docs/NEXT_SESSION_HANDOFF.md` と `Docs/NEXT_SESSION_WORKORDER.md` を廃止した。過去の引き継ぎは `Docs/HANDOFF_ARCHIVE.md` に残る）。

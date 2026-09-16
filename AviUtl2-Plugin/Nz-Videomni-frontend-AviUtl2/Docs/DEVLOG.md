@@ -4506,3 +4506,23 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **バッチi2v-longに開始ゲートを足してはいけない。** 計画段階のレビューは「`useBatchI2vLongForm.ts`に`crop`の参照が0件」を根拠に同じゲートの追加を求めたが、実装者が手を止めて確認したところ、Chain画面の`validityReasons`（`cropInvalid`を含む）を`chainBlockReasons`としてそのまま出す作りで既に効いていた。1行足すと同じ理由が二重に表示され、同ファイルの不変条件「Chain画面自身の失敗は共用体に入れず逐語的に出す」を破る。文字列grepで「無い」と結論しない例がもう1つ増えた。
 - モックブリッジ（`bridge/mockBridge.ts`）はチェーンジョブの反響を要求内容に関わらず`crop_output: null`で返す。a2vのクロップをテストするときは投入bodyを捕まえる（ジョブ応答を読むと偽の不合格になる）。
 - 実機で開始ゲートに到達する手順は「クロップ設定後に生成サイズを縮める」だけ。欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない。
+
+## 120. Toolboxタブに「🎯 追尾を開始」ボタン — 入口は2つ、開始の道は1本（オーナー依頼。2026-09-16、実機ゲート待ち）
+
+### 120.1 結論
+
+- 物体追尾の第2の入口として、Toolboxタブの追尾の区画に「🎯 追尾を開始」ボタンを置いた。押すと`timeline.getSelection`を1回叩き、未選択なら文言A、部分フィルタ以外なら文言Bを区画内の失敗表示欄に見出し無しで出す。部分フィルタが1つ選ばれていれば、`AppShell`から抽出した`startTrackingFromSelection`（右クリックの`trackObject`分岐そのもの）を通る。**開始の道は1本のまま**で、`useObjectTracking`に開始関数は足していない。ネイティブ・ブリッジ契約は無改修。
+- 文言3キーと`intro`の1文を`en`/`ja`同位置に追加。ボタンは全域クラス`.primary-button`、器`.toolbox-actions`を1規則追加。新しい色・寸法なし。設計の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md) §3.4。コミットは`f800613`。
+- 先行して、2026-07-07の新設以来本番から一度も配線されていなかった`useTimelineSelection.ts`（とテスト4件）を`64fe73a`で撤去した。凍結文書`TIMELINE_ALPHA_REQUIREMENTS.md`の言及は歴史記録なので手を入れていない。
+
+### 120.2 機械検証
+
+- `npm run typecheck` 全緑／`npx vitest run --exclude "**/backend.integration.test.ts"` 146ファイル・2,987件（+8＝区画6・ルート2）／lint 警告31本（不変）。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §110。
+
+### 120.3 引っかかりやすい点（次に触る人向け）
+
+- **`bridge.request`はPromiseを返す。** 「ネイティブRPCは同期で一瞬」という前提は誤りで、`await`中もボタンは押せる。2回目が通ると`setRemountTokens`が別イベントで2回進み、走り出した追尾の購読が再マウントで捨てられる（`AppShell`の断りコメントに記録済みの既知の害）。連打止めは`useRef`1本で、stateは増やしていない。
+- **セレクタはroleスコープ必須。** `intro`にも「🎯 追尾を開始／Start tracking」の語が入るので、`getByText`では説明文に当たる。`getByRole("button", { name: /start tracking/i })`を使う。
+- 失敗表示は`precheck`（押下前の判定）と`run.phase === "error"`（走った追尾の失敗）を1つの派生値`failure`に畳んで表示器は1つのまま。`precheck`が優先、見出しは`precheck`では常に無し、走行失敗では`TRACK_BUSY`以外で有り（従来どおり）。
+- `guardMenuSelection`は呼ばない（`MenuRoute`を要求する右クリック用の関門）。種別判定は`classifySelectionKind`だけを共有する。
+- スクリプトでファイルを書くときは改行コード（CRLF）を維持すること。`io.open(..., newline="")`と挿入テキスト側の`\r\n`が要る。

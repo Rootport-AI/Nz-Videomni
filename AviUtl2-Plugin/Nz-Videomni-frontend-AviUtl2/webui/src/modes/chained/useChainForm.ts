@@ -2599,7 +2599,7 @@ export function useChainForm(
     endContextFrames !== null &&
     !endSourceAudioOverlapOk(clipNumFramesList, common.frameRate, overlapFrames);
 
-  // N1: a crop, if enabled, must still be a valid 32-pixel-grid crop of the
+  // N1: a crop, if enabled, must still be a valid in-range crop of the
   // CURRENT common width/height (see `chainUtils.isCropOutputValid`'s doc
   // comment — this is what catches a crop left stale by a later width/height
   // shrink).

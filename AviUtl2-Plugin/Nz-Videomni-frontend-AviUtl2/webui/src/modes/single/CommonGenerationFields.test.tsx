@@ -371,11 +371,11 @@ describe("CropOutputField free entry (2026-09-16)", () => {
     expect(onChange).toHaveBeenCalledWith({ width: 1280, height: 4000 });
   });
 
-  it("seeds a clamped crop from the generation size when the checkbox is ticked", () => {
-    const { onChange, checkbox } = renderCrop({ value: null });
+  it("clamps the checkbox-on seed up to the 32 floor when the generation size is below it", () => {
+    const { onChange, checkbox } = renderCrop({ value: null, maxWidth: 10, maxHeight: 10 });
     expect(checkbox.checked).toBe(false);
     fireEvent.click(checkbox);
-    expect(onChange).toHaveBeenCalledWith({ width: 1280, height: 768 });
+    expect(onChange).toHaveBeenCalledWith({ width: 32, height: 32 });
   });
 
   it("clears back to null when the checkbox is unticked", () => {

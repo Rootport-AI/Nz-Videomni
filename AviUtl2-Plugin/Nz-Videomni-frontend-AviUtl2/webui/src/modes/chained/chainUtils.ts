@@ -849,8 +849,9 @@ export interface BuildChainRequestParams {
   height: number;
   /** N1: opt-in output crop (`GenerateChainRequest.crop_output`). `null`/
    * `undefined` omits the field entirely, matching every other optional field
-   * on this params object. See `clampCropOutput`/`isCropOutputValid` above
-   * for the 32-pixel-grid constraint this is expected to already satisfy. */
+   * on this params object. See `isCropOutputValid` above for the range
+   * constraint (an integer from 32 up to the current generation size; no
+   * grid) this is expected to already satisfy. */
   cropOutput?: CropOutput | null;
   frameRate: number;
   seed: number;

@@ -1046,7 +1046,7 @@ export function useGenerationForm(
   //  - `isReferenceValid` is split back into its two constituent gates
   //    (`referenceVideoNeedsLoras` / `controlLoraNeedsReferenceVideo`) so each
   //    gets its own specific instruction.
-  // N1: a crop, if enabled, must still be a valid 32-pixel-grid crop of the
+  // N1: a crop, if enabled, must still be a valid in-range crop of the
   // CURRENT width/height (see `chainUtils.isCropOutputValid`'s doc comment —
   // this is what catches a crop left stale by a later width/height shrink).
   const validityReasons: GenerationValidityReason[] = [];

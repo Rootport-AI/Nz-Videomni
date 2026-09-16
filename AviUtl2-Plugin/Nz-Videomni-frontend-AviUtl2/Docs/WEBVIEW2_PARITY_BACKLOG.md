@@ -109,6 +109,8 @@
 
 **2026-07-17追記（32刻みスナップを撤廃）**: オーナーの実機フィードバックを受け、32刻みスナップは撤廃した。現在は「32以上・生成サイズ以下の任意整数」を自由入力でき、丸め込みは行わない（プリセット適用時は各プリセットの`crop_output`値をそのまま反映し、`crop_output`を持たないプリセットを適用した場合はクロップをオフへ戻す）。詳細は`DEVLOG.md`§14.3を参照。
 
+- **2026-09-16追記（関連ギャップの解消）**: バッチパネルにCrop**欄**は引き続き作らないが、Create画面の「出力をクロップ」の値を黙って継承し（a2v・i2v両モード、開始時に凍結）、Create側と同じ開始ゲート（クロップが生成サイズ超なら開始不可）を入れた。これでN1の「関連ギャップ」は閉じた。なお本項の以前の記述「バッチA2V経路では既に`crop_output`を常時送出済み」は「キーを常に送る（値は常に`null`）」の意味で、Create側の値を継承していたわけではない。設計正本は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md) §2.11。実機ゲートは[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.19（合格後にバックエンド台帳§4-14をCLOSED §3-153へ移送する）。
+
 #### IC-LoRAコントロールLoRAの選択ドロップダウン
 
 **バックエンドGradioの現状**: `adapter`ドロップダウン（`config.model.ic_loras`＝canny/pose/upscaler等から生成、`ui.py:530-533`）＋`adapter_strength`スライダー（`ui.py:534-537`）があり、選択されたLoRAは`_combine_generate_loras`（`handlers.py:319`、呼び出しは`handlers.py:672-673`）が自動で`loras[]`へ付与する。

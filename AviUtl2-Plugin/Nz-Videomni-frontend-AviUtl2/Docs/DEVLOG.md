@@ -4483,3 +4483,26 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 118.4 完結（オーナー受容・2026-09-16）
 
 実機ゲートG1〜G12が2026-09-15に全項目合格し、オーナーが受容して本テーマはクローズした（台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) **§3-152**、記録の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108）。あわせて、プロンプト欄の呼び名（「共通プロンプト」→「プロンプト」・「行プロンプト」→「追加プロンプト」）を、バッチパネル（`b5c3f24`）とChain画面／バッチi2v-longパネル（`4502e8d`）の両方で揃えた。呼び名の対応関係は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md)を参照。
+
+## 119. バッチパネルがCreate画面の出力クロップ設定を継承するようになった（バックエンド台帳 §4-14。2026-09-16、実機ゲート待ち）
+
+### 119.1 結論
+
+- Create画面の「出力をクロップ」の値を、バッチパネルが黙って継承する（欄は作らない。NAG・Accelerationと同じ）。`BatchGenerationValues`と`BatchRunnerSettings`に`cropOutput`を**必須欄**で足し、`SingleScreen`→`useBatchForm`（`start()`で凍結）→`batchRunner`→両ビルダーへ配線した。a2vはOFFで従来どおり`crop_output: null`を明示送信、i2vはONのときだけ`height`の直後に載せOFFはキー省略（Singleの`/generate`とバイト等価）。設計判断D7（i2vは`crop_output`を送らない）は撤回（D13）。
+- 開始ゲート`cropInvalid`をCreate側と同じ`isCropOutputValid`で追加し、文言は`strings.single.generateReasons.cropInvalid`を借用（新文字列なし）。
+- `batchRunner.ts`の条件付き展開（`cropOutput !== undefined ? … : {}`）は必須化で不要になり削除した。
+- 設計の正本は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md) §2.11。コミットは`1804624`。
+
+### 119.2 訂正
+
+- 本書§83（CROP OUTPUT既定OFF化の節、`:3099`付近）の「バッチ系2画面（バッチA2V・バッチi2v-long）は親フォームの値を継承する設計であること」は、**バッチA2Vについては事実に反していた**。`useBatchForm`の設定に`cropOutput`が無く、`buildA2vChainPayload`は常に`null`を送っていた。継承が事実だったのはChain画面のバッチi2v-long（テンプレート方式）だけである。バックエンド台帳§4-14の「Create側の値をそのまま使う」も同じ誤りで、今回の改修で初めて記述どおりになった。
+
+### 119.3 機械検証
+
+- `npm run typecheck` 全緑／`npx vitest run --exclude "**/backend.integration.test.ts"` 146ファイル・2,979件（+9。fixture 6件は型追従）／lint 警告31本（不変）。実測の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §109。
+
+### 119.4 引っかかりやすい点（次に触る人向け）
+
+- **バッチi2v-longに開始ゲートを足してはいけない。** 計画段階のレビューは「`useBatchI2vLongForm.ts`に`crop`の参照が0件」を根拠に同じゲートの追加を求めたが、実装者が手を止めて確認したところ、Chain画面の`validityReasons`（`cropInvalid`を含む）を`chainBlockReasons`としてそのまま出す作りで既に効いていた。1行足すと同じ理由が二重に表示され、同ファイルの不変条件「Chain画面自身の失敗は共用体に入れず逐語的に出す」を破る。文字列grepで「無い」と結論しない例がもう1つ増えた。
+- モックブリッジ（`bridge/mockBridge.ts`）はチェーンジョブの反響を要求内容に関わらず`crop_output: null`で返す。a2vのクロップをテストするときは投入bodyを捕まえる（ジョブ応答を読むと偽の不合格になる）。
+- 実機で開始ゲートに到達する手順は「クロップ設定後に生成サイズを縮める」だけ。欄への入力は打鍵ごとに生成サイズへ丸められるので、大きい値を打っても不正にはならない。

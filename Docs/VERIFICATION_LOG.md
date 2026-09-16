@@ -12483,3 +12483,39 @@ i2v行は音声を持たない1クリップの生成なので、この2つの理
 - **実施内容**: ベースモデルを LTX 2.5 に切り替え、バッチパネルの a2v モードで 3 行を走らせた。うち 1 行は音声の長さが対象外となりスキップされ、実生成は 2 本。生成サイズは 896×1152。2 本とも完走し、異常は無かった。
 - **i2v モードは実施していない。** a2v が LTX 2.3 と同じように完走したにもかかわらず i2v 側だけが壊れる機序は無い——両モードは同じゲート（`featureScope.ts` の `batchA2vDisabledFor`）に乗り、i2v は単発の `POST /generate` を使うだけで、その単発生成は LTX 2.5 で日常的に使われている——というオーナー裁定により、合格扱いとした。
 - **結論**: §108.1 の訂正どおり、バッチパネルは両ベースモデルで動作する。§3-151 は残件ゼロでクローズ。
+
+## 109. ★バッチパネルがCreate画面の出力クロップ設定を継承する（台帳PENDING_TASKS.md §4-14。合格後はPENDING_TASKS_CLOSED.md §3-153）＝機械ゲート全緑・実機ゲート未実施（2026-09-16。設計正本はBATCH_A2V_I2V_MODE.md §2.11）
+
+### 109.1 事実の訂正 — 台帳§4-14の記述は誤りだった
+
+台帳§4-14は「送信側が常に`crop_output`を組み立てているため、バッチはCreate側の値をそのまま使う」と書いていたが、実際はa2vが`crop_output: null`を常時明示送信（`useBatchForm.ts`の設定リテラルに`cropOutput`の行が無かった）、i2vは設計判断D7で意図的にキー不送出だった。どちらのモードでもCreate画面のクロップは効いていなかった（オーナーの実機認識どおり）。誤記の出典はフロントエンド`DEVLOG.md`の「バッチ系2画面は親フォームの値を継承する設計」という一文で、これはChain画面のバッチi2v-longについてだけ正しかった。
+
+### 109.2 変更 — コミット1本（`1804624`）
+
+- `BatchGenerationValues`（`useBatchForm.ts`）と`BatchRunnerSettings`（`batchRunner.ts`）に`cropOutput: CropOutput | null`を**必須欄**で追加。配線は`SingleScreen`→`useBatchForm`（`start()`で凍結）→`batchRunner`→`buildA2vChainPayload`（無改修）／`buildI2vGeneratePayload`（新引数。ONのときだけ`height`の直後に載せ、OFFはキー省略＝Singleの`toGenerateRequest`とバイト等価）。
+- 開始ゲート`cropInvalid`をCreate・Chainと同じ`isCropOutputValid`で追加。文言は`strings.single.generateReasons.cropInvalid`を借用。新文字列・新UI・バックエンド変更なし。
+- `batchRunner.ts`の条件付き展開1つを削除（必須化で不要）。
+- **バッチi2v-longは無改修。** Chain画面の`validityReasons`を`chainBlockReasons`として素通しする作りで同じゲートが既に効いていた（計画レビューのM3は実装者のエスカレーションで取り下げ。詳細はフロントエンド`DEVLOG.md` §119.4）。
+
+### 109.3 機械検証
+
+| 物差し | 直前基準（`64fe73a`後） | 今回（`1804624`） |
+|---|---|---|
+| `npm run typecheck` | 全緑 | 全緑 |
+| webui vitest（`--exclude "**/backend.integration.test.ts"`） | 146ファイル・2,970件 | **146ファイル・2,979件**（+9＝ビルダー3・ランナー3・フック3。fixture 6件は型追従） |
+| webui lint | 警告31本 | 警告31本（不変） |
+
+### 109.4 レビュー — 計画段階の敵対的レビュー1回
+
+Opusによる敵対的レビュー1回（Critical 2・Major 6・Minor 12）と、Sonnetによる裏取り14項目。採否は「過剰設計・複雑化の危険」「調査サブエージェントによる裏付け」の2フィルタで決めた。主な採用: 実機ゲートの到達手順の訂正（クロップ欄は入力時に丸められるため「設定後に生成サイズを縮める」手順へ）、`BatchRunnerSettings.cropOutput`の必須化（配管点の書き忘れを型で落とす）、CLOSED採番は裸の`4-14`ではなく`3-153`（`3-39. 旧§4-14`との検索衝突を避ける）。取り下げ: M3（上記109.2）。実装レビューは後段で実施し、本節に追記する。
+
+### 109.5 実機ゲート G1〜G4 — 未実施
+
+手順と合格条件はフロントエンド`REAL_BACKEND_CHECKLIST.md` §4.19が正本。結果はオーナーの実施後に本節へ追記する。
+
+| ゲート | 結果 |
+|---|---|
+| G1 i2v・クロップON（4行） | 未報告 |
+| G2 i2v・クロップOFF | 未報告 |
+| G3 a2v・クロップON→OFF | 未報告 |
+| G4 開始ゲート | 未報告 |

@@ -165,31 +165,31 @@ function Test-SetupDone {
         'uv（道具）'             = Join-Path $ProjectRoot 'tools\uv\uv.exe'
         'アプリ用 Python 環境'   = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
         'エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine\Scripts\python.exe'
-        'ダウンロード道具（hf）' = Join-Path $ProjectRoot '.venv-engine\Scripts\hf.exe'
     }
     $missing = @()
     foreach ($k in $needed.Keys) {
         if (-not (Test-Path -LiteralPath $needed[$k])) { $missing += ($k + '  … ' + $needed[$k]) }
     }
 
-    # 存在するだけでは足りない。フォルダごと移動・改名すると、この hf.exe は
-    # 自分の Python を見失って起動しなくなる（ファイルは残っているので、
-    # 存在確認だけでは見抜けない）。実際に起動して終了コードを見るしかない。
+    # 存在するだけでは足りない。ダウンロード道具（huggingface_hub）はエンジン用
+    # Python 環境の中のライブラリなので、python.exe があっても中身が揃っていない
+    # ことがある（前回の導入が途中で止まった場合など）。実際に起動して終了コードを
+    # 見るしかない。
     #
     # ここで 2>&1 を付けてはいけない。$ErrorActionPreference = 'Stop' のもとでは、
     # 外部プログラムが標準エラーへ書いた1行が NativeCommandError という例外に
     # 化けてしまい、「壊れている」ではなく「予期しない失敗」として扱われる。
     if ($missing.Count -eq 0) {
-        $hfExe = $needed['ダウンロード道具（hf）']
+        $enginePython = $needed['エンジン用 Python 環境']
         $hfOk = $false
         try {
-            & $hfExe --help | Out-Null
+            & $enginePython -P -m huggingface_hub.cli.hf version | Out-Null
             $hfOk = ($LASTEXITCODE -eq 0)
         } catch {
             $hfOk = $false
         }
         if (-not $hfOk) {
-            $missing += ('ダウンロード道具（hf）が起動しません  … ' + $hfExe)
+            $missing += ('ダウンロード道具（huggingface_hub）が起動しません  … ' + $enginePython + ' -P -m huggingface_hub.cli.hf')
         }
     }
 
@@ -206,7 +206,7 @@ function Test-SetupDone {
     Write-Host ''
     Write-Info ('setup.bat の場所: ' + (Join-Path $ProjectRoot 'setup.bat'))
     Write-Info 'setup.bat をダブルクリックして、終わるのを待ってから、もう一度このバッチを実行してください。'
-    Write-Info '（フォルダごと移動したり名前を変えたりした直後にも、この案内が出ます。その場合も setup.bat をもう一度実行すれば直ります。）'
+    Write-Info '（フォルダごと移動したり名前を変えたりした直後にこの案内が出た場合は、.venv と .venv-engine のフォルダを削除してから setup.bat を実行してください。setup.bat は環境が揃っていると見なすと作り直さないためです。）'
     Write-Host ''
     return $false
 }

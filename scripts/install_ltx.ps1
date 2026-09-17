@@ -30,8 +30,9 @@
          verification ran on). Re-applied automatically whenever a pinned
          dependency set changes, so "git pull, then re-run this" actually
          updates the venvs.
-      6. Model downloads (~31GB) via .venv-engine's hf.exe, driven entirely by
-         the manifests: staged into models\.dl\ and then remapped into place.
+      6. Model downloads (~31GB) via .venv-engine's huggingface_hub (run as a
+         module, never the hf.exe trampoline), driven entirely by the
+         manifests: staged into models\.dl\ and then remapped into place.
       7. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt,
          both generated from the manifests' `files` arrays.
       8. Optional -RunSmoke.
@@ -1146,9 +1147,10 @@ if ($SkipVenv) {
 #    torch is updated (see that file's header comment), not something this
 #    script ever applies.
 #
-#    hf.exe lives in the 2.3 venv, so that one must be created BEFORE the model
-#    downloads. The 2.5 venv has no such ordering constraint -- it is built right
-#    after, for symmetry and so one installer run leaves both engines runnable.
+#    The downloader (huggingface_hub, run as a module) lives in the 2.3 venv, so
+#    that one must be created BEFORE the model downloads. The 2.5 venv has no
+#    such ordering constraint -- it is built right after, for symmetry and so one
+#    installer run leaves both engines runnable.
 #
 #    RE-SYNC (2026-07): this step no longer skips merely because a venv exists.
 #    A `git pull` can move a freeze file or the pinned revs below, and the
@@ -1444,7 +1446,8 @@ function Ensure-EngineVenv {
     }
 }
 
-# LTX 2.3 -- FIRST, because hf.exe (used by the model downloads below) lives here.
+# LTX 2.3 -- FIRST, because the downloader (the engine venv's huggingface_hub,
+# run as a module) used by the model downloads below lives here.
 Ensure-EngineVenv -VenvPath "$ProjectRoot\.venv-engine" -PythonPath $enginePy `
     -StateFile $engineStateFile -FreezeFile $freezeSrc `
     -DirectPins $engineDirectPins -Label ".venv-engine"
@@ -1485,8 +1488,15 @@ if ($foundIds -contains 'UETrack') {
         -IgnoreSkipVenv
 }
 
-# hf.exe (used by the model downloads below) must exist in the engine venv.
-$hfExe = "$ProjectRoot\.venv-engine\Scripts\hf.exe"
+# The downloader is the engine venv's huggingface_hub run as a MODULE
+# (& $enginePy -P -m huggingface_hub.cli.hf ...; $enginePy is defined at the
+# top of step 5), never the uv trampoline hf.exe: that .exe bakes in an
+# absolute path and breaks when the project folder is moved or renamed, and
+# setup.bat does not regenerate it. -P keeps the working directory off
+# sys.path so the module resolves exactly as the trampoline did.
+# .venv-engine ONLY -- no other venv: their huggingface_hub versions break the
+# single "--include + many patterns" form built below.
+# Why, and the measurements: PENDING_TASKS_CLOSED.md §3-156 / VERIFICATION_LOG.md §112.
 
 # ----------------------------------------------------------------------------
 # Attention backend: nothing EXTRA to install here, on any GPU.
@@ -1546,9 +1556,10 @@ if ($CloneUpstreamReference) {
 }
 
 # ----------------------------------------------------------------------------
-# 6) Model downloads (~31GB) via the engine venv's hf.exe, driven by the
-#    manifests. Everything comes from self-hosted repos that are PUBLIC and
-#    NON-GATED, so no HuggingFace account, login or token is involved anywhere.
+# 6) Model downloads (~31GB) via the engine venv's huggingface_hub (run as a
+#    module, never the hf.exe trampoline), driven by the manifests. Everything
+#    comes from self-hosted repos that are PUBLIC and NON-GATED, so no
+#    HuggingFace account, login or token is involved anywhere.
 #
 #    Per download entry:
 #      guard  -- every `files[]` row must exist and be at least its own `min`.
@@ -1644,8 +1655,8 @@ if ($SkipModels) {
                 Write-Skip "$($dl.name)  ($(Format-Size $total) already present)"
                 continue
             }
-            if (-not (Test-Path $hfExe)) {
-                throw "hf.exe not found at $hfExe. The engine venv must be created first (do not pass -SkipVenv)."
+            if (-not (Test-Path $enginePy)) {
+                throw "Engine venv python not found at $enginePy. The engine venv must be created first (do not pass -SkipVenv)."
             }
 
             $stage = Join-Path $StagingRoot ("{0}-{1}" -f $mf.Data.id, $idx)
@@ -1671,7 +1682,7 @@ if ($SkipModels) {
             $code = 0
             for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
                 $global:LASTEXITCODE = 0
-                & $hfExe @argv
+                & $enginePy -P -m huggingface_hub.cli.hf @argv
                 $code = $LASTEXITCODE
                 if ($code -eq 0) { break }
                 if ($attempt -lt $maxAttempts) {
@@ -1878,7 +1889,7 @@ if ($anyMissing) {
     # Only worth saying when the venv is actually missing: install-<ID>.bat
     # passes -SkipVenv on purpose (it must not re-sync the working engine venv),
     # so an unconditional "re-run without it" would send that user the wrong way.
-    if ($SkipVenv -and -not (Test-Path $hfExe)) { Write-Warning "You passed -SkipVenv; re-run without it to build the venvs." }
+    if ($SkipVenv -and -not (Test-Path $enginePy)) { Write-Warning "You passed -SkipVenv; re-run without it to build the venvs." }
     exit 1
 }
 Write-Ok "All required artifacts present."

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { ConditioningImage, CropOutput, LoraSpec } from "../../api/types";
+import { dedupeLoraSpecs } from "../../lora/controlLoras";
 import { parseLoraPrompt } from "../../lora/loraTags";
 import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
@@ -222,7 +223,8 @@ describe("buildI2vGeneratePayload", () => {
       extra: Partial<BuildI2vGeneratePayloadParams> = {},
       conditioningImages: ConditioningImage[] = [],
     ): string {
-      const { strippedPrompt, loras } = parseLoraPrompt(prompt);
+      const { strippedPrompt, loras: parsedLoras } = parseLoraPrompt(prompt);
+      const loras = dedupeLoraSpecs(parsedLoras);
       return JSON.stringify(
         buildI2vGeneratePayload({
           ...BASE,

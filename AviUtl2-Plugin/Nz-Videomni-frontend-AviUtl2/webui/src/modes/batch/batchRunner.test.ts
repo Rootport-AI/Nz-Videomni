@@ -896,7 +896,7 @@ describe("BatchRunner", () => {
     });
   });
 
-  // 行ごとの`<lora:>`タグ（§3-1）: 各行は Add/Replace で合成してから、Create と
+  // 行ごとの`<lora:>`タグ（§3-1 の1箇条 → CLOSED §3-159）: 各行は Add/Replace で合成してから、Create と
   // 同じ `parseLoraPrompt` に通す——行セルは生のまま、解析は送信時の1回だけ。
   // `parseLoraPrompt` は同名を解消しないので `dedupeLoraSpecs`（位置＝先勝ち・
   // 強度＝後勝ち）を重ねる。i2v行も同じ経路なので、両モードで同じ結論を見る。
@@ -924,6 +924,7 @@ describe("BatchRunner", () => {
       });
 
       expect(submits).toHaveLength(1);
+      expect(submits[0]!.path).toBe(mode === "a2v" ? "/api/v1/generate/chain" : "/api/v1/generate");
       return submits[0]!.body;
     }
 

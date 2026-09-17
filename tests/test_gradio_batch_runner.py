@@ -1256,6 +1256,50 @@ def test_batch_default_snapshot_omits_fused_dequant(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# keep-resident embeddings (LTX 2.5): same snapshot-is-the-only-path reasoning
+# once more. Default OFF, so it is the CHECKED case that appends the key -- and
+# it is appended LAST, after vae_mode.
+# --------------------------------------------------------------------------- #
+def test_batch_keep_resident_embeddings_snapshot_adds_key_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, keep_resident_embeddings=True)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = _start(runner, snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["keep_resident_embeddings"] is True
+    assert list(p.keys())[-1] == "keep_resident_embeddings"
+
+
+def test_batch_default_snapshot_omits_keep_resident_embeddings(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = _start(runner, snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "keep_resident_embeddings" not in p
+
+
+# --------------------------------------------------------------------------- #
 # chunked_upsample: the batch accordion's own checkbox. Unlike every toggle
 # above it is sent EXPLICITLY either way (the plugin's batch does the same) --
 # omitting it would silently fall back to the slow one-pass upsample.

@@ -33,6 +33,7 @@ from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
+    KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     a2v_audio_change_handler,
     delete_finished_jobs,
     fetch_config_safe,
@@ -1111,6 +1112,28 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_keep_resident"),
                 ), "accel_lbl_keep_resident")
                 reg(accel_keep_resident, "accel_info_keep_resident", "info")
+                # keep-resident embeddings (LTX 2.5): an INDEPENDENT switch —
+                # it has no precondition on the keep-resident checkbox above or
+                # on the prefetch one, so nothing here greys it out. Created
+                # INVISIBLE on purpose: LTX 2.3 has no embeddings processor and
+                # names the field in its ``unsupported_features``, and the
+                # default base model is 2.3, so the row must not flash into
+                # view before the first /models pull — refresh_model_dropdowns
+                # below shows it once the ACTIVE base model says it is
+                # supported (and hides + resets it again when it is not, via
+                # gradio_ui/feature_scope.py). Screen position and wiring
+                # position are deliberately different: it sits here, under the
+                # skeleton-residency checkbox and above the VAE radio to match
+                # the AviUtl2 panel, while the Acceleration INPUT lists append
+                # it at their very end (see dispatch()/chain_dispatch()).
+                accel_keep_resident_embeddings = reg(gr.Checkbox(
+                    value=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+                    label=L("accel_lbl_keep_resident_embeddings"),
+                    info=L("accel_info_keep_resident_embeddings"),
+                    visible=False,
+                ), "accel_lbl_keep_resident_embeddings")
+                reg(accel_keep_resident_embeddings,
+                    "accel_info_keep_resident_embeddings", "info")
                 # Display name: "PruneVAED" -> "PrunaVAED" (correct product name
                 # per PRUNAVAED_WORKORDER.md §6.1). The API literal value
                 # "prune_vaed" is an external contract and is unchanged.
@@ -1313,6 +1336,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
+                     accel_keep_resident_embeddings_v,
                      *kf_flat):
             kf_slot_values = [tuple(kf_flat[i:i + 4])
                               for i in range(0, len(kf_flat), 4)]
@@ -1336,7 +1360,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     block_swap_prefetch=accel_prefetch_v,
                     keep_resident=accel_keep_resident_v,
                     fused_gguf_dequant_kernel=accel_fused_dequant_v,
-                    vae_mode=accel_vae_v)
+                    vae_mode=accel_vae_v,
+                    keep_resident_embeddings=bool(
+                        accel_keep_resident_embeddings_v))
                 return
 
             rows = batch_rows_v or []
@@ -1444,6 +1470,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # Generate tab's single a2v send is untouched by this).
                 chunked_upsample=bool(batch_chunked_upsample_v),
                 vae_mode=accel_vae_v or "default",
+                keep_resident_embeddings=bool(accel_keep_resident_embeddings_v),
                 # Skip ceiling for the start-time re-judgment — the SAME value
                 # the Set audios scan used, so a Start never re-judges against
                 # a different cap than the table the user is looking at.
@@ -1481,11 +1508,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
             # vsf_scale, then the Acceleration attention selector, the
             # block-swap prefetch checkbox, the keep-resident checkbox, the
-            # fused-dequant checkbox AND the VAE radio (PrunaVAED,
-            # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time),
-            # are APPENDED after every pre-existing scalar positional (matching
-            # dispatch()'s signature order, which appends them after
-            # batch_img_dir_v).
+            # fused-dequant checkbox, the VAE radio (PrunaVAED,
+            # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time)
+            # AND the keep-resident-embeddings checkbox, are APPENDED after
+            # every pre-existing scalar positional (matching dispatch()'s
+            # signature order, which appends them after batch_img_dir_v).
             inputs=[prompt, negative, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1497,6 +1524,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
+                    accel_keep_resident_embeddings,
                     # Nothing may be appended after this: dispatch()'s *kf_flat
                     # swallows everything from here to the end of the list.
                     *kf_inputs],
@@ -1939,15 +1967,16 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             chain_clip_inputs.extend(_slot)
 
         # Acceleration: the attention selector, the block-swap prefetch
-        # checkbox, the keep-resident checkbox, the fused-dequant checkbox AND
-        # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
-        # as §3-50 at the time) are APPENDED at the very end of the chain
-        # inputs list below, in that order (attention_backend,
-        # accel_prefetch, accel_keep_resident, accel_fused_dequant,
-        # accel_vae). generate_chain keeps
+        # checkbox, the keep-resident checkbox, the fused-dequant checkbox, the
+        # VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
+        # as §3-50 at the time) AND the keep-resident-embeddings checkbox are
+        # APPENDED at the very end of the chain inputs list below, in that
+        # order (attention_backend, accel_prefetch, accel_keep_resident,
+        # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings).
+        # generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
-        # _chain_args), so the five trailing values cannot be delivered
+        # _chain_args), so these trailing values cannot be delivered
         # positionally -- this thin wrapper peels them off and forwards them as
         # KEYWORDS, the same discipline the Generate tab's dispatch() uses.
         # NOTE: every negative index below is tied to the LENGTH of that
@@ -1955,12 +1984,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
         # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-5],
-                                      attention_backend=args[-5],
-                                      block_swap_prefetch=args[-4],
-                                      keep_resident=args[-3],
-                                      fused_gguf_dequant_kernel=args[-2],
-                                      vae_mode=args[-1])
+            yield from chain_generate(*args[:-6],
+                                      attention_backend=args[-6],
+                                      block_swap_prefetch=args[-5],
+                                      keep_resident=args[-4],
+                                      fused_gguf_dequant_kernel=args[-3],
+                                      vae_mode=args[-2],
+                                      keep_resident_embeddings=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -1976,9 +2006,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
             # The Acceleration attention selector, the block-swap prefetch
-            # checkbox, the keep-resident checkbox, the fused-dequant checkbox
-            # AND the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
-            # §3-66, filed as §3-50 at the time) are APPENDED last (in that
+            # checkbox, the keep-resident checkbox, the fused-dequant checkbox,
+            # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
+            # §3-66, filed as §3-50 at the time) AND the
+            # keep-resident-embeddings checkbox are APPENDED last (in that
             # order) and reach the handler as keywords via chain_dispatch
             # above.
             inputs=[prompt, negative, chain_width, chain_height,
@@ -1989,7 +2020,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident, accel_fused_dequant, accel_vae],
+                    accel_keep_resident, accel_fused_dequant, accel_vae,
+                    accel_keep_resident_embeddings],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
@@ -2211,7 +2243,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # out of the refresh. ONE constant then feeds all three wirings of
         # refresh_model_dropdowns (the Refresh button, the page load and the
         # post-Load re-pull) plus its own error path.
-        _gated_components = {"accel_vae": accel_vae}
+        _gated_components = {
+            "accel_vae": accel_vae,
+            "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
+        }
         model_refresh_outputs = [
             *model_all_dds,
             *(_gated_components[control] for control in GATED_CONTROLS),

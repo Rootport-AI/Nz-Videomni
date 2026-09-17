@@ -14,9 +14,9 @@ feature would keep riding along after a switch and 422 every job. Hence
 default.
 
 A feature with no control here is simply absent from the table rather than
-listed with an empty tuple — ``keep_resident_embeddings`` (no Gradio control)
-and ``two_stage_hq`` (the quality radio already falls back to distilled) are
-names a live backend publishes today that this UI has nothing to close.
+listed with an empty tuple — ``two_stage_hq`` (the quality radio already falls
+back to distilled) is a name a live backend publishes today that this UI has
+nothing to close.
 Unknown names are ignored for the same reason the frontend ignores
 them: a build of this UI is older than the server it talks to more often than
 the reverse, so an unrecognised name is the ordinary case, not an error.
@@ -30,13 +30,17 @@ from typing import Iterable
 #: and nowhere else; ``ui.py`` maps them to components.
 FEATURE_UI: dict[str, tuple[str, ...]] = {
     "prune_vaed": ("accel_vae",),
+    "keep_resident_embeddings": ("accel_keep_resident_embeddings",),
 }
 
 #: The value a hidden control is reset to — the server's own default for the
 #: field it feeds, so an invisible control cannot keep a rejected value on the
-#: wire. Every id named in :data:`FEATURE_UI` must appear here.
-RESET_VALUES: dict[str, str] = {
+#: wire. Every id named in :data:`FEATURE_UI` must appear here. The type is as
+#: wide as the controls are: a radio resets to a string literal, a checkbox to
+#: a bool.
+RESET_VALUES: dict[str, str | bool] = {
     "accel_vae": "default",
+    "accel_keep_resident_embeddings": False,
 }
 
 #: Every gated control id, in :data:`FEATURE_UI` order and deduplicated. This

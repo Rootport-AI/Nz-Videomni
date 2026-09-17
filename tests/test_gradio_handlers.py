@@ -3856,6 +3856,213 @@ def test_chain_handler_default_omits_fused_dequant():
 
 
 # --------------------------------------------------------------------------- #
+# keep-resident embeddings (keep_resident_embeddings): the LTX 2.5-only
+# Settings-tab checkbox, appended after the VAE radio. Same "only when it
+# differs from the mirrored server default" rule and the same direction as
+# keep_resident (default OFF -> the key rides only on a CHECKED box), and it is
+# now the LAST key of every payload. Independent of every other acceleration
+# switch: nothing here reads the prefetch or keep-resident values.
+# --------------------------------------------------------------------------- #
+def test_keep_resident_embeddings_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_keep_resident_embeddings",
+                "accel_info_keep_resident_embeddings"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    # The label names the engine in BOTH languages -- that is what tells a
+    # reader who cannot find the row why it is not there (it is hidden on the
+    # other engine).
+    assert "LTX 2.5" in LABELS["en"]["accel_lbl_keep_resident_embeddings"]
+    assert "LTX 2.5" in LABELS["ja"]["accel_lbl_keep_resident_embeddings"]
+
+
+def test_keep_resident_embeddings_default_constant_mirrors_the_api():
+    from api.models import KEEP_RESIDENT_EMBEDDINGS_DEFAULT as API_DEFAULT
+    from gradio_ui.handlers import KEEP_RESIDENT_EMBEDDINGS_DEFAULT
+
+    # gradio_ui talks to the backend over HTTP and keeps its own mirror, so the
+    # canary is that the two constants agree -- a server-side flip that forgets
+    # this mirror inverts the "send only when it differs" discipline.
+    assert KEEP_RESIDENT_EMBEDDINGS_DEFAULT is API_DEFAULT
+    assert KEEP_RESIDENT_EMBEDDINGS_DEFAULT is False
+
+
+def test_build_a2v_chain_payload_keep_resident_embeddings_on_appends_key_last():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-kre-1",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        keep_resident_embeddings=True,
+    )
+    assert payload["keep_resident_embeddings"] is True
+    assert list(payload.keys())[-1] == "keep_resident_embeddings"
+
+
+def test_build_a2v_chain_payload_keep_resident_embeddings_sits_after_vae_mode():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    payload = build_a2v_chain_payload(
+        audio_id="aud-kre-2",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="blurry",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+        attention_backend="sage",
+        block_swap_prefetch=False,
+        keep_resident=True,
+        fused_gguf_dequant_kernel=False,
+        vae_mode="prune_vaed",
+        keep_resident_embeddings=True,
+    )
+    assert list(payload.keys())[-6:] == [
+        "attention_backend", "block_swap_prefetch", "keep_resident",
+        "fused_gguf_dequant_kernel", "vae_mode", "keep_resident_embeddings",
+    ]
+
+
+def test_build_a2v_chain_payload_default_omits_keep_resident_embeddings():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kw = dict(
+        audio_id="aud-kre-3",
+        num_frames=113,
+        prompt="p",
+        negative_prompt="",
+        width=512,
+        height=512,
+        crop_output=None,
+        frame_rate=24.0,
+        seed=1,
+    )
+    payload = build_a2v_chain_payload(**kw)
+    assert "keep_resident_embeddings" not in payload
+    # Explicitly passing the default (False) is indistinguishable from omitting
+    # it -- the wire shape of "off" IS "absent", which is also what tells the
+    # worker to release the cache.
+    assert payload == build_a2v_chain_payload(**kw, keep_resident_embeddings=False)
+
+
+def test_generate_handler_keep_resident_embeddings_on_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-kre"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", _kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        keep_resident_embeddings=True,
+    )
+    _run_until_job_started(gen)
+    assert captured["keep_resident_embeddings"] is True
+    assert list(captured.keys())[-1] == "keep_resident_embeddings"
+
+
+def test_generate_handler_default_omits_keep_resident_embeddings():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-nokre"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "A calm river", "", _kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+    )
+    _run_until_job_started(gen)
+    assert "keep_resident_embeddings" not in captured
+
+
+def test_generate_handler_a2v_forwards_keep_resident_embeddings(tmp_path):
+    # The Generate tab's A2V branch leaves this handler through
+    # build_a2v_chain_payload instead of the single-generate payload, so the
+    # flag needs its own relay line there -- without it the Generate tab's
+    # single A2V would silently never send the key.
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-kre"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-kre"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    gen = generate(
+        "a singer", "", _kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), keep_resident_embeddings=True,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["keep_resident_embeddings"] is True
+    assert list(captured.keys())[-1] == "keep_resident_embeddings"
+
+
+def test_chain_handler_keep_resident_embeddings_on_adds_key():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-kre"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), keep_resident_embeddings=True)
+    _run_chain_until_started(gen)
+    assert captured["keep_resident_embeddings"] is True
+    assert list(captured.keys())[-1] == "keep_resident_embeddings"
+
+
+def test_chain_handler_default_omits_keep_resident_embeddings():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-nokre"})
+
+    api = _make_client(handler)
+    chain = make_chain_handler(api)
+    gen = chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]))
+    _run_chain_until_started(gen)
+    assert "keep_resident_embeddings" not in captured
+
+
+# --------------------------------------------------------------------------- #
 # Frame-rate snapping (台帳 §3-71 / §3-72). The rounding rule floor(x + 0.5) is
 # shared with webui's modes/single/paramUtils.ts::snapFrameRate and
 # mcp_server/tools/generate.py::_snap_frame_rate, but the OUT-OF-RANGE behaviour

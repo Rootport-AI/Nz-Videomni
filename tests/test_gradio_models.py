@@ -380,10 +380,16 @@ def test_build_ui_smoke_with_models_section():
 
 def test_hidden_controls_maps_known_names_and_ignores_the_rest():
     assert hidden_controls(["prune_vaed"]) == {"accel_vae"}
+    assert hidden_controls(["keep_resident_embeddings"]) == {
+        "accel_keep_resident_embeddings"}
+    # A mixed list closes the names this build knows and skips the rest --
+    # two_stage_hq has no control of its own (the quality radio already falls
+    # back to distilled).
+    assert hidden_controls(["two_stage_hq", "keep_resident_embeddings",
+                            "something_new"]) == {"accel_keep_resident_embeddings"}
     # A backend newer than this build names things it has never heard of; that
     # is the ordinary case, not an error.
-    assert hidden_controls(["two_stage_hq", "keep_resident_embeddings",
-                            "something_new"]) == frozenset()
+    assert hidden_controls(["two_stage_hq", "something_new"]) == frozenset()
     assert hidden_controls([]) == frozenset()
     # Every gated control has a reset value, or hiding it would leave a
     # rejected value riding along on every request.
@@ -427,24 +433,62 @@ def _refresh_with(models_json: dict):
     return demo.refresh_model_dropdowns("en", warn=False)
 
 
+def _gated_update(updates, control: str):
+    """The one update in ``refresh_model_dropdowns``'s return that belongs to
+    ``control``.
+
+    The gated updates are the TAIL of that tuple, in GATED_CONTROLS order (the
+    same order ui.py appends the components to its output list), so the
+    position is derived from the table rather than written down here -- adding
+    a control to gradio_ui/feature_scope.py must not silently re-point these
+    assertions at a neighbour."""
+    tail = updates[-len(GATED_CONTROLS):]
+    return tail[GATED_CONTROLS.index(control)]
+
+
 def test_refresh_hides_and_resets_the_vae_radio_for_an_engine_without_it():
     updates = _refresh_with(_models_json_with("LTX25",
                                               ["two_stage_hq", "prune_vaed"]))
     # base dropdown + one per category + one per gated control.
     assert len(updates) == 1 + len(MODEL_CATEGORIES) + len(GATED_CONTROLS)
-    vae_update = updates[-1]
+    vae_update = _gated_update(updates, "accel_vae")
     assert vae_update["visible"] is False
     # Hiding alone is not enough: an invisible component still SENDS its value.
     assert vae_update["value"] == RESET_VALUES["accel_vae"] == "default"
+    # The engine that lacks the VAE is the one that HAS the embeddings
+    # processor, so the other gated control goes the other way in the same pull.
+    kre_update = _gated_update(updates, "accel_keep_resident_embeddings")
+    assert kre_update["visible"] is True
+    assert "value" not in kre_update
 
 
 def test_refresh_shows_the_vae_radio_for_an_engine_that_supports_it():
     updates = _refresh_with(_models_json_with("LTX23",
                                               ["keep_resident_embeddings"]))
-    vae_update = updates[-1]
+    vae_update = _gated_update(updates, "accel_vae")
     assert vae_update["visible"] is True
     # A shown control keeps whatever the user picked -- no value is written.
     assert "value" not in vae_update
+
+
+def test_refresh_hides_and_resets_keep_resident_embeddings_on_an_engine_without_it():
+    # The engine with no embeddings processor names the field in
+    # unsupported_features; sending true there is a 422, so the checkbox is
+    # hidden AND written back to the server default in the same update.
+    updates = _refresh_with(_models_json_with("LTX23",
+                                              ["keep_resident_embeddings"]))
+    update = _gated_update(updates, "accel_keep_resident_embeddings")
+    assert update["visible"] is False
+    assert update["value"] == RESET_VALUES["accel_keep_resident_embeddings"] is False
+
+
+def test_refresh_shows_keep_resident_embeddings_on_an_engine_that_supports_it():
+    updates = _refresh_with(_models_json_with("LTX25",
+                                              ["two_stage_hq", "prune_vaed"]))
+    update = _gated_update(updates, "accel_keep_resident_embeddings")
+    assert update["visible"] is True
+    # Shown, and the user's own choice is left alone.
+    assert "value" not in update
 
 
 def test_refresh_failure_leaves_every_output_untouched():

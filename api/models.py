@@ -116,11 +116,11 @@ KEEP_RESIDENT_DEFAULT = False
 
 # keep_resident_embeddings（LTX 2.5 の埋め込み処理器のジョブ間常駐）の既定値。
 # **off** — keep_resident と同じ向き（既定 False なので「ON のときだけ送る」）。
-# 名前付き定数にしている理由は上の2つと同じだが、集約先は**2点だけ**である：
-# このファイルの2つの Field 既定と、mcp_server/tools/generate.py の import 元。
-# gradio_ui/handlers.py のミラーは**持たない**——Gradio 側にこのトグルを追加
-# しないため、ミラーすべき相手がそもそも存在しないからである（将来 Gradio に
-# 出すなら、そのときにミラーを1つ増やすこと）。
+# 名前付き定数にしている理由は上の2つと同じ：このファイルの2つの Field 既定と、
+# mcp_server/tools/generate.py の import 元、そして gradio_ui/handlers.py の
+# ミラー定数（Gradio は HTTP 越しのクライアントなので import せず自前で持つ）を
+# 1箇所に集約するため——**変えるときは正本（ここ）＋gradio_ui のミラー＋MCP の
+# import 元の3点を同じ変更で動かすこと**。
 KEEP_RESIDENT_EMBEDDINGS_DEFAULT = False
 
 # fused_gguf_dequant_kernel（GGUF 逆量子化の Triton 1カーネル化）の既定値。

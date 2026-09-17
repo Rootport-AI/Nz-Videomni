@@ -55,6 +55,7 @@ from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
+    KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     _LORA_TOKEN_RE,
     _combine_generate_loras,
     build_a2v_chain_payload,
@@ -201,6 +202,11 @@ class BatchSnapshot:
                      time), same reasoning again. The default is "default"
                      and never flips (owner ruling 0-11), so this one reaches
                      the payload only when "prune_vaed" is selected.
+        keep_resident_embeddings  Snapshotted from the Settings-tab checkbox
+                     (LTX 2.5), same reasoning again. The API default is OFF,
+                     so this one reaches the payload only when True. On a base
+                     model that does not support it the checkbox is hidden and
+                     reset, so the snapshot can only ever carry False there.
 
     Skip cap
         num_frames  The Generate tab's own frame count, snapshotted so the
@@ -242,6 +248,7 @@ class BatchSnapshot:
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
     chunked_upsample: bool = True
     vae_mode: str = "default"
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
     num_frames: int = MAX_FRAMES
 
 
@@ -593,6 +600,7 @@ class BatchRunner:
                 keep_resident=snap.keep_resident,
                 fused_gguf_dequant_kernel=snap.fused_gguf_dequant_kernel,
                 vae_mode=snap.vae_mode,
+                keep_resident_embeddings=snap.keep_resident_embeddings,
                 chunked_upsample=snap.chunked_upsample,
             )
             job_id = self._submit_with_retry(payload)

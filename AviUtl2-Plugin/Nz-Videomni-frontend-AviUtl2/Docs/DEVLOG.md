@@ -4650,3 +4650,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - **機械ゲート（型検査・vitest・lint）の実数の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114である。** 本書には書き写さない。
 - 実機での観測点は、バッチのAdd／Replaceで流したジョブの`metadata.json`にある`request.loras`と、Settingsの新しい表の見え方（横スクロールできること・他の行が崩れないこと）である。結果の正本も同じく§114である。
+
+  > **追記（2026-09-18）**: **実機ゲートはオーナーが同日に実施し、全項目合格した**（手順は[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.22）——行のタグはAdd・Replaceのどちらも`request.loras`が規則どおりで、Settingsの表も形で合格である。**その場でオーナーの裁定が2つ出た**: ①**表の下の注記はすべて撤去する**（§123.3の追記）／②**バックエンド同梱のGradio検証UIにも埋め込み処理器の常駐の切替を足す**（バックエンド側の改修なので本書の範囲外。記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114）。撤去したあとの再確認も同日に合格し、**台帳はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-159（行ごとのタグ）・§3-163（Settingsの表）としてクローズした**。機械ゲートと実機ゲートの実数の正本は、引き続き同[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114である。**本文は追記専用の規律どおり不変**である。

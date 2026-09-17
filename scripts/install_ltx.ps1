@@ -1496,7 +1496,7 @@ if ($foundIds -contains 'UETrack') {
 # sys.path so the module resolves exactly as the trampoline did.
 # .venv-engine ONLY -- no other venv: their huggingface_hub versions break the
 # single "--include + many patterns" form built below.
-# Why, and the measurements: PENDING_TASKS_CLOSED.md §3-156 / VERIFICATION_LOG.md §112.
+# Why, and the measurements: PENDING_TASKS_CLOSED.md §3-148 / VERIFICATION_LOG.md §112.
 
 # ----------------------------------------------------------------------------
 # Attention backend: nothing EXTRA to install here, on any GPU.

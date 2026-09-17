@@ -43,9 +43,11 @@
  *   "必要最小限" scope for the batch generation-settings panel doesn't call
  *   for them.
  */
-import type { ConditioningImage, CropOutput, LoraSpec } from "../../api/types";
+import type { ConditioningImage, CropOutput } from "../../api/types";
 import { BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
+import { dedupeLoraSpecs } from "../../lora/controlLoras";
+import { parseLoraPrompt } from "../../lora/loraTags";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { DEFAULT_STRENGTH } from "../single/keyframeUtils";
@@ -85,6 +87,10 @@ export type BatchRunnerState = "idle" | "running" | "stopping";
  * `prompt` column. Frozen for the whole run at `start()` time (mirrors
  * `batch.py`'s `BatchSnapshot` — "immune to later UI edits"). */
 export interface BatchRunnerSettings {
+  /** The Create screen's card prompt, RAW — `<lora:>` tags included. There is
+   * no frozen `loras[]` beside it: a row's tags and the card's have to meet in
+   * one parse, so this class's `processRow` composes first and parses the
+   * result. */
   promptCommon: string;
   promptMode: PromptMode;
   width: number;
@@ -103,7 +109,6 @@ export interface BatchRunnerSettings {
   cropOutput: CropOutput | null;
   frameRate: number;
   seed: number;
-  loras?: LoraSpec[];
   chunkedUpsample: boolean;
   /** NAG (2026-07-28)/VSF (2026-07-29): the shared Negative Prompt accordion's
    * settings — Batch has no NAG UI of its own (owner decision: it silently
@@ -347,21 +352,28 @@ export class BatchRunner {
       const conditioningImages = await this.resolveConditioning(row, params, rowStrength);
 
       const { settings } = params;
-      const prompt = composeRowPrompt(settings.promptCommon, row.prompt, settings.promptMode);
+      // 行ごとの `<lora:>` タグ: 行は Add/Replace で合成してから、Create と同じ
+      // `parseLoraPrompt` に通す。行セルは生のまま保たれ、解析は送信時の1回だけ
+      // （i2v行も同じ経路）。`parseLoraPrompt` は同名タグを解消しないので
+      // `dedupeLoraSpecs`（位置＝先勝ち・強度＝後勝ち）を重ねる。タグを1つでも
+      // 剥がしたときの空白畳み込みは、カード側だけでなく合成後の文字列全体に及ぶ。
+      const composed = composeRowPrompt(settings.promptCommon, row.prompt, settings.promptMode);
+      const parsed = parseLoraPrompt(composed);
+      const loras = dedupeLoraSpecs(parsed.loras);
       const { payload, path } =
         params.mode === "a2v"
           ? {
               payload: buildA2vChainPayload({
                 audioId,
                 numFrames: row.frames,
-                prompt,
+                prompt: parsed.strippedPrompt,
                 width: settings.width,
                 height: settings.height,
                 cropOutput: settings.cropOutput,
                 frameRate: settings.frameRate,
                 seed: settings.seed,
                 conditioningImages,
-                ...(settings.loras !== undefined ? { loras: settings.loras } : {}),
+                ...(loras.length > 0 ? { loras } : {}),
                 chunkedUpsample: settings.chunkedUpsample,
                 // NAG (2026-07-28): omitted entirely (not even as `undefined`)
                 // while unset, matching every other optional field on this call.
@@ -373,7 +385,7 @@ export class BatchRunner {
             }
           : {
               payload: buildI2vGeneratePayload({
-                prompt,
+                prompt: parsed.strippedPrompt,
                 width: settings.width,
                 height: settings.height,
                 cropOutput: settings.cropOutput,
@@ -382,7 +394,7 @@ export class BatchRunner {
                 seed: settings.seed,
                 ...(settings.nag ? { nag: settings.nag } : {}),
                 ...(settings.acceleration ? { acceleration: settings.acceleration } : {}),
-                ...(settings.loras !== undefined ? { loras: settings.loras } : {}),
+                ...(loras.length > 0 ? { loras } : {}),
                 conditioningImages,
               }) as unknown as object,
               path: "/api/v1/generate",

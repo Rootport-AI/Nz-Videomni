@@ -214,8 +214,9 @@ describe("buildI2vGeneratePayload", () => {
       );
     }
 
-    /** `useBatchForm.start()`と同じ前処理: 共通プロンプトから`<lora:>`タグを
-     * 切り出してから、残りの本文だけをビルダーへ渡す。 */
+    /** `batchRunner.processRow`と同じ前処理: 行を合成した文字列から`<lora:>`
+     * タグを切り出し、残りの本文だけをビルダーへ渡す（ここでは行が空なので、
+     * 合成結果＝共通プロンプトそのもの）。 */
     function batchRequest(
       prompt: string,
       extra: Partial<BuildI2vGeneratePayloadParams> = {},

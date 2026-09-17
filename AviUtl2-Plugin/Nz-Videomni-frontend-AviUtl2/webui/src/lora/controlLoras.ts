@@ -140,25 +140,20 @@ export function resolveReferenceDownscaleFactors(lorasState: LorasState): Readon
   return result;
 }
 
-/** Assembles the final `loras[]` sent to the backend from the panel's
- * `controlLora` selection plus the prompt's own STYLE `<lora:...>` tags —
- * pure mirror of Gradio's own merge (`gradio_ui/handlers.py`'s
- * `_combine_generate_loras`): the control LoRA goes first (the engine reads
- * `reference_downscale_factor`/preprocess config off `loras[0]`, so its
- * position is a hard requirement, not cosmetic), the prompt's tags follow in
- * their existing order, and any name collision is resolved by keeping the
- * FIRST occurrence's position but the LAST occurrence's strength (a
- * `Map`-based dedupe, not a filter) — so a style tag that happens to share a
- * name with the selected control LoRA doesn't produce two `loras[]` entries
- * for the same name, which the backend would also reject. */
-export function combineLoras(controlLora: ControlLoraSelection | null, promptLoras: readonly LoraSpec[]): LoraSpec[] {
-  const ordered: LoraSpec[] = controlLora
-    ? [{ name: controlLora.name, strength: controlLora.strength }, ...promptLoras]
-    : [...promptLoras];
-
+/** Resolves duplicate names inside a `loras[]` array: the FIRST occurrence
+ * keeps its POSITION, the LAST occurrence's strength/`audio_strength` wins (a
+ * `Map`-based dedupe, not a filter). The backend rejects two entries carrying
+ * the same name, and `lora/loraTags.ts`'s `parseLoraPrompt` deliberately does
+ * NOT dedupe (it pushes every valid tag it finds), so every path that can
+ * assemble one array out of more than one source of tags has to end here:
+ * {@link combineLoras} for the Create/Chain control-LoRA merge, and the batch
+ * panel's per-row compose-then-parse (`modes/batch/batchRunner.ts`'s
+ * `processRow`, where the common prompt's tags and the row's own can collide).
+ * Never mutates its input. */
+export function dedupeLoraSpecs(specs: readonly LoraSpec[]): LoraSpec[] {
   const indexByName = new Map<string, number>();
   const result: LoraSpec[] = [];
-  for (const spec of ordered) {
+  for (const spec of specs) {
     const existingIndex = indexByName.get(spec.name);
     if (existingIndex === undefined) {
       indexByName.set(spec.name, result.length);
@@ -168,4 +163,22 @@ export function combineLoras(controlLora: ControlLoraSelection | null, promptLor
     }
   }
   return result;
+}
+
+/** Assembles the final `loras[]` sent to the backend from the panel's
+ * `controlLora` selection plus the prompt's own STYLE `<lora:...>` tags —
+ * pure mirror of Gradio's own merge (`gradio_ui/handlers.py`'s
+ * `_combine_generate_loras`): the control LoRA goes first (the engine reads
+ * `reference_downscale_factor`/preprocess config off `loras[0]`, so its
+ * position is a hard requirement, not cosmetic), the prompt's tags follow in
+ * their existing order, and any name collision is resolved by
+ * {@link dedupeLoraSpecs} — so a style tag that happens to share a name with
+ * the selected control LoRA doesn't produce two `loras[]` entries for the same
+ * name, which the backend would also reject. */
+export function combineLoras(controlLora: ControlLoraSelection | null, promptLoras: readonly LoraSpec[]): LoraSpec[] {
+  const ordered: LoraSpec[] = controlLora
+    ? [{ name: controlLora.name, strength: controlLora.strength }, ...promptLoras]
+    : [...promptLoras];
+
+  return dedupeLoraSpecs(ordered);
 }

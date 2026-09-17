@@ -69,11 +69,13 @@ function Harness({
   onSaved,
   onClose,
   serverStatus,
+  engineFamily,
 }: {
   bridge: ReturnType<typeof createMockBridge>;
   onSaved: () => void;
   onClose: () => void;
   serverStatus: ServerStatusState;
+  engineFamily: string;
 }) {
   const accelerationControls = useAccelerationSettings();
   return (
@@ -101,18 +103,23 @@ function Harness({
       // ordinary "supported" case, and the hiding itself is covered end-to-end
       // through the fixture server in `AppShell.featureScope.test.tsx`.
       keepResidentEmbeddingsUnsupported={false}
+      engineFamily={engineFamily}
       serverStatus={serverStatus}
     />
   );
 }
 
+/** `engineFamily` defaults to `""` — the "no base model loaded yet" value —
+ * so the comfort-limit section stays out of every test that is not about it
+ * (§3-163). */
 function renderPanel(
   bridge: ReturnType<typeof createMockBridge>,
   onSaved = vi.fn(),
   onClose = vi.fn(),
   serverStatus: ServerStatusState = { kind: "online", status: statusWithSage(true) },
+  engineFamily = "",
 ) {
-  render(
+  const rendered = render(
     // N8: `SettingsPanel` now also calls `useTheme()` (theme toggle, next to
     // the language toggle) — `ThemeProvider` must wrap it here since this
     // test renders `SettingsPanel` directly instead of through `AppShell`.
@@ -128,14 +135,22 @@ function renderPanel(
               `ToastProvider` above it for the job-settled toasts. */}
           <ToastProvider>
             <JobsProvider nativeBridge={bridge}>
-              <Harness bridge={bridge} onSaved={onSaved} onClose={onClose} serverStatus={serverStatus} />
+              <Harness
+                bridge={bridge}
+                onSaved={onSaved}
+                onClose={onClose}
+                serverStatus={serverStatus}
+                engineFamily={engineFamily}
+              />
             </JobsProvider>
           </ToastProvider>
         </PrefillPolicyProvider>
       </LanguageProvider>
     </ThemeProvider>,
   );
-  return { onSaved, onClose };
+  // `container` is handed back for the one assertion that has no accessible
+  // handle: the table's scroll WRAPPER is a presentational div (§3-163).
+  return { onSaved, onClose, container: rendered.container };
 }
 
 describe("SettingsPanel", () => {
@@ -684,6 +699,27 @@ describe("SettingsPanel", () => {
     await waitFor(() => {
       expect(fused.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
     });
+  });
+
+  it("shows no comfort-limit section while no base model's engine is known", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    // The raw /config viewer below it IS there, so this is "the section is
+    // absent", not "the config never arrived".
+    await screen.findByText("Raw /config");
+    expect(screen.queryByText("Comfort-limit guide")).not.toBeInTheDocument();
+  });
+
+  it("shows the comfort-limit table, its scroll wrapper and the 2.5 Q6 column for an engine that has one", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const { container } = renderPanel(bridge, vi.fn(), vi.fn(), undefined, "ltx25");
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    expect(await screen.findByText("Comfort-limit guide")).toBeInTheDocument();
+    expect(container.querySelector(".comfort-table-scroll")).not.toBeNull();
+    expect(screen.getByRole("columnheader", { name: "2.5 Q6" })).toBeInTheDocument();
   });
 
   it("closing calls onClose", async () => {

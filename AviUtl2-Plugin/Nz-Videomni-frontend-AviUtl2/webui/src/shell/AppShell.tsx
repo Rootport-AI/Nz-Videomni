@@ -1665,6 +1665,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           vaeUnsupported={settingsRowsHidden.vae}
           onKeepResidentEmbeddingsChange={accelerationControls.setKeepResidentEmbeddings}
           keepResidentEmbeddingsUnsupported={settingsRowsHidden.keepResidentEmbeddings}
+          // §3-163: the same `activeEngineFamily` the three screens already
+          // take — the comfort-limit table in the panel is chosen by the
+          // LOADED engine, exactly like the comfort marker is.
+          engineFamily={baseModels.activeEngineFamily}
           // The panel reads sage availability straight off this existing
           // shared /status poll — no capability fetch of its own.
           serverStatus={serverStatus}

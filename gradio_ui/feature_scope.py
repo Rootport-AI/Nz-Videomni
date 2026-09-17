@@ -16,8 +16,8 @@ default.
 A feature with no control here is simply absent from the table rather than
 listed with an empty tuple — ``keep_resident_embeddings`` (no Gradio control)
 and ``two_stage_hq`` (the quality radio already falls back to distilled) are
-the two names a live backend publishes today that this UI has nothing to
-close. Unknown names are ignored for the same reason the frontend ignores
+names a live backend publishes today that this UI has nothing to close.
+Unknown names are ignored for the same reason the frontend ignores
 them: a build of this UI is older than the server it talks to more often than
 the reverse, so an unrecognised name is the ordinary case, not an error.
 """

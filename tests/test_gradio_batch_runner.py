@@ -895,6 +895,87 @@ def test_start_blocks_replace_empty_common_with_some_empty_rows(tmp_path):
     assert server.chain_calls == 0
 
 
+def test_start_blocks_a_tag_only_common_prompt_in_add_mode(tmp_path):
+    # A card prompt of nothing but <lora:...> tokens is EMPTY once the parser
+    # has had it: the freeze leaves send_prompt "", and every row would then
+    # 422 on GenerateChainRequest.prompt (min_length=1). The preflight has to
+    # judge the tag-stripped text, not the raw cell it is handed verbatim.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="<lora:A:0.8>",
+                     prompt_mode="add")
+    rows = [BatchRow(queue=1, wav="a.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="", frames=25)]
+    # The real dispatch freezes first, with the known-name list to hand.
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              ("A",)) is None
+    assert rows[0].send_prompt == ""          # nothing left to send
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is False
+    assert reason == "prompt-empty-add"
+    assert server.chain_calls == 0
+
+
+def test_start_blocks_a_tag_only_row_prompt_in_replace_mode(tmp_path):
+    # Same rule one level down: in "replace" mode with a tag-only card prompt,
+    # a row whose own prompt is tags alone counts toward the empty-row tally.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    for n in ("a.wav", "b.wav"):
+        _write_wav(wav_dir / n)
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="<lora:A:0.8>",
+                     prompt_mode="replace")
+    rows = [BatchRow(queue=1, wav="a.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="a cat", frames=25),
+            BatchRow(queue=2, wav="b.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="<lora:B:0.5>", frames=25)]  # tags only
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              ("A", "B")) is None
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is False
+    assert reason == "prompt-rows-empty:1"
+    assert server.chain_calls == 0
+
+
+def test_start_allows_a_common_prompt_with_a_tag_beside_real_text(tmp_path):
+    # The other side of the same rule: a token NEXT TO real text still leaves a
+    # body, so the batch starts and the stripped text is what goes on the wire.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="a cat <lora:A:0.8>",
+                     prompt_mode="add")
+    rows = [BatchRow(queue=1, wav="a.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="", frames=25)]
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              ("A",)) is None
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+    assert server.chain_calls == 1
+    _jid, p = server.payloads[0]
+    assert p["prompt"] == "a cat"
+    assert p["loras"] == [{"name": "A", "strength": 0.8}]
+
+
 def test_start_allows_no_shared_image_when_all_rows_have_own_image(tmp_path):
     # Regression: with no shared keyframe but every target carrying its own
     # per-row image, the image foolproof passes and the batch starts.
@@ -1298,6 +1379,35 @@ def test_rows_have_lora_tokens_reads_the_composed_text():
     row_only = [BatchRow(queue=1, wav="a.wav", prompt="<lora:B>", image="")]
     assert rows_have_lora_tokens(row_only, "card", "replace") is True
     assert rows_have_lora_tokens(card_only, "card", "add") is False
+
+
+def test_a_finished_row_with_an_unknown_tag_does_not_block_the_dispatch():
+    # Resume case: a Done row is never submitted, so a stale (or since-deleted)
+    # LoRA name left in its cell must not abort the whole run -- and the row's
+    # own freeze fields stay exactly as they were.
+    rows = [BatchRow(queue=1, wav="a.wav", prompt="<lora:gone:1>", image="",
+                     stat=STAT_DONE, frames=49),
+            BatchRow(queue=2, wav="b.wav", prompt="row <lora:A:0.4>", image="",
+                     stat=STAT_WAITING, frames=49)]
+    assert prepare_batch_rows(rows, "card", "add", _KNOWN_LORAS) is None
+    assert rows[0].send_prompt == ""
+    assert rows[0].loras == []
+    assert rows[1].send_prompt == "card row"
+    assert rows[1].loras == [{"name": "A", "strength": 0.4}]
+
+
+def test_rows_have_lora_tokens_ignores_finished_rows():
+    # A token that only a Done / Skip row carries must not cost a GET /loras.
+    done = [BatchRow(queue=1, wav="a.wav", prompt="<lora:A>", image="",
+                     stat=STAT_DONE)]
+    assert rows_have_lora_tokens(done, "card", "add") is False
+    skipped = [BatchRow(queue=1, wav="a.wav", prompt="<lora:A>", image="",
+                        stat=STAT_SKIP)]
+    assert rows_have_lora_tokens(skipped, "card", "add") is False
+    # ...while a Waiting row alongside it still answers True.
+    waiting = BatchRow(queue=2, wav="b.wav", prompt="<lora:B>", image="",
+                       stat=STAT_WAITING)
+    assert rows_have_lora_tokens(done + [waiting], "card", "add") is True
 
 
 def test_row_loras_reach_the_payload(tmp_path):

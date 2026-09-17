@@ -84,13 +84,13 @@ class BatchRow:
     directory component) — the wav folder / output folder are resolved
     separately (see :func:`resolve_output_dir`).
 
-    The first ten fields ARE the CSV (:data:`CSV_FIELDS`, in that order). The
-    two below them are NOT: they are the send-time freeze the UI thread writes
-    onto a row just before a run (:func:`gradio_ui.batch.prepare_batch_rows`)
-    and the worker reads back. Keeping them off the CSV is deliberate —
-    ``prompt`` is the user's own cell and has to survive a run byte-for-byte,
-    or a rescan would feed the composed text back in and compose it a second
-    time."""
+    The fields above ``send_prompt`` ARE the CSV (:data:`CSV_FIELDS`, in that
+    order). ``send_prompt`` and ``loras`` are NOT: they are the send-time
+    freeze the UI thread writes onto a row just before a run
+    (:func:`gradio_ui.batch.prepare_batch_rows`) and the worker reads back.
+    Keeping them off the CSV is deliberate — ``prompt`` is the user's own cell
+    and has to survive a run byte-for-byte, or a rescan would feed the composed
+    text back in and compose it a second time."""
 
     queue: int
     wav: str

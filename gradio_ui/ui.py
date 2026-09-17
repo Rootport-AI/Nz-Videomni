@@ -2202,13 +2202,20 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # four category dropdowns follow in MODEL_CATEGORIES order.
         model_all_dds = [model_base_dd, *model_dds]
         # ...and after them, the controls the active base model's
-        # ``unsupported_features`` can close, in GATED_CONTROLS order. ONE
-        # constant for all three wirings of refresh_model_dropdowns (the
-        # Refresh button, the page load and the post-Load re-pull) plus its own
-        # error path: Gradio lists outputs component by component, so gating a
-        # new control means one row in gradio_ui/feature_scope.py and one
-        # component here -- and nothing else can drift out of step.
-        model_refresh_outputs = [*model_all_dds, accel_vae]
+        # ``unsupported_features`` can close. Gradio lists outputs component by
+        # component, so gating a control needs its component here as well as
+        # its row in gradio_ui/feature_scope.py -- hence a REGISTRY keyed by
+        # control id, with the output list derived from GATED_CONTROLS: a
+        # control named in the table with no component registered here raises
+        # a KeyError while the UI is being built, instead of quietly dropping
+        # out of the refresh. ONE constant then feeds all three wirings of
+        # refresh_model_dropdowns (the Refresh button, the page load and the
+        # post-Load re-pull) plus its own error path.
+        _gated_components = {"accel_vae": accel_vae}
+        model_refresh_outputs = [
+            *model_all_dds,
+            *(_gated_components[control] for control in GATED_CONTROLS),
+        ]
 
         def _base_model_update(models_json):
             """gr.update for the base-model dropdown: its choices plus the

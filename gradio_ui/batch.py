@@ -271,16 +271,30 @@ def compose_prompt(common: str, row_prompt: str, mode: str) -> str:
     return f"{common} {row_prompt}".strip()
 
 
+def _prompt_body(text: str) -> str:
+    """What is left of a prompt once its ``<lora:...>`` tokens are taken out,
+    whitespace-trimmed — i.e. the text that actually reaches the wire, since
+    that is what the parser hands back (see :func:`prepare_batch_rows`).
+
+    A prompt made of nothing but tokens therefore reads as EMPTY here, which is
+    exactly how the server sees it: ``GenerateChainRequest.prompt`` carries
+    ``min_length=1``, so such a row is a 422."""
+    return _LORA_TOKEN_RE.sub("", text or "").strip()
+
+
 def rows_have_lora_tokens(rows: List[BatchRow], common: str, mode: str) -> bool:
-    """Whether any row's COMPOSED text carries a ``<lora:...>`` token.
+    """Whether any row the run would SEND carries a ``<lora:...>`` token in its
+    COMPOSED text.
 
     The caller uses this to decide whether the batch needs a GET /loras at all,
     so a batch without a single token still starts with zero extra API calls.
     It asks about the composed text rather than the two sources separately
     because that is what gets parsed: in "replace" mode a row with its own
-    prompt never sees the common one's tokens."""
+    prompt never sees the common one's tokens. Finished rows (Done / Skip) are
+    left out for the same reason the runner never submits them — a token in an
+    already-finished row must not cost a resume an extra API call."""
     return any(_LORA_TOKEN_RE.search(compose_prompt(common, r.prompt, mode) or "")
-               for r in rows)
+               for r in rows if r.stat in _UNFINISHED)
 
 
 def prepare_batch_rows(rows: List[BatchRow], common: str, mode: str,
@@ -303,8 +317,15 @@ def prepare_batch_rows(rows: List[BatchRow], common: str, mode: str,
     ``reference_video_id`` with an empty ``loras`` is a 422, so a row must
     never lose it just because it has no tokens of its own.
 
+    Only the rows the run would actually SEND are frozen (``stat`` in
+    :data:`_UNFINISHED`): a Done / Skip row keeps its ``send_prompt`` /
+    ``loras`` exactly as they were, so a stale token left in an already
+    finished row can neither reach the parser nor abort a resume.
+
     ``BatchRow.prompt`` is left untouched — it is the user's own CSV cell."""
     for row in rows:
+        if row.stat not in _UNFINISHED:
+            continue  # Done / Skip -> never sent; leave the freeze alone
         composed = compose_prompt(common, row.prompt, mode)
         row_loras: list = []
         if _LORA_TOKEN_RE.search(composed or ""):
@@ -426,7 +447,11 @@ class BatchRunner:
 
         Start-time preflight (see :func:`_plan_rejudgement` / :func:`_validate`),
         run in this order so a rejected start leaves ``rows`` *and* the CSV
-        completely untouched (only a start that actually proceeds mutates them):
+        completely untouched (only a start that actually proceeds mutates them).
+        "Untouched" is about the CSV-facing fields: ``send_prompt`` / ``loras``
+        are the UI thread's send-time freeze, written by ui.py's ``dispatch()``
+        through :func:`prepare_batch_rows` BEFORE ``start()`` is ever called,
+        and they are not CSV columns. The order is:
           1. re-judge every unfinished row's frame count / 481-frame Skip at the
              snapshot's ``frame_rate`` (PROJECTED only — nothing mutated yet);
           2. validate against that projection: ``wav_dir`` must exist, at least
@@ -843,15 +868,20 @@ def _validate(snapshot: BatchSnapshot, rows: List[BatchRow],
             )
 
     # --- Prompt foolproof (blanket -> branch) ---
-    # 1. common prompt is non-empty                                  -> OK
-    # 2. empty + mode="add"     -> nothing to send                   -> fail
-    # 3. empty + mode="replace" -> every target row prompt must be
-    #    non-empty; else fail (reason carries the empty-row count).
-    if not (snapshot.prompt_common or "").strip():
+    # Judged on the TAG-STRIPPED text (:func:`_prompt_body`), never the raw
+    # cell: since the prompts arrive here VERBATIM (the parsing happens per row
+    # in :func:`prepare_batch_rows`), a prompt of nothing but ``<lora:...>``
+    # tokens looks non-empty while leaving nothing to send — every row would
+    # then 422 on the server's ``min_length=1``.
+    # 1. common prompt has a body                                    -> OK
+    # 2. no body + mode="add"     -> nothing to send                 -> fail
+    # 3. no body + mode="replace" -> every target row prompt must
+    #    have a body; else fail (reason carries the empty-row count).
+    if not _prompt_body(snapshot.prompt_common):
         mode = snapshot.prompt_mode or "add"
         if mode == "add":
             return False, "prompt-empty-add"
-        empty = [r for r in targets if not (r.prompt or "").strip()]
+        empty = [r for r in targets if not _prompt_body(r.prompt)]
         if empty:
             return False, f"prompt-rows-empty:{len(empty)}"
 

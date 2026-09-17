@@ -19,7 +19,8 @@
 import type { AppLimits } from "../api/types";
 import type { Strings } from "../i18n/strings";
 import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
-import { comfortFramesForBudget } from "./comfortTable";
+import type { AccelerationSettings } from "./accelerationSettings";
+import { comfortFramesForBudget, resolveComfortRow } from "./comfortTable";
 
 /** `strings.settings` のうち**素のテキスト**の鍵。列見出しも注記も差し込みの無い
  * 1行なので、テンプレート関数の鍵をうっかり並べられないよう値の型で絞る。 */
@@ -30,8 +31,8 @@ type ComfortTextKey = {
 /** 1列ぶんの数字がどこから来るか。
  *
  *  - `legacy` ＝ レガシー表 `limits.spill_free_frames` の実測値そのまま。
- *  - `budget` ＝ その系統の配信行（`limits.comfort_budgets[系統].rows[0]`）の
- *    トークン予算から換算した線。
+ *  - `budget` ＝ その系統の「全on」条件に一致する配信行（{@link resolveComfortRow}
+ *    が選ぶ）のトークン予算から換算した線。
  *  - `static` ＝ 較正済みだが配信されていない実測点（{@link LTX25_Q6_FRAMES}）。
  *
  * どれも「その解像度の答えが無い」を `null`（表示は「—」）で返す。無い理由は列に
@@ -74,6 +75,8 @@ const LTX25_Q6_FRAMES: Readonly<Record<string, number>> = {
  * ことがそのまま見える並び）。 */
 const LTX_TABLE: ComfortDisplayTable = {
   id: "LTX",
+  // rows は表自体の形の一部——配信される `spill_free_frames` のキーであっても
+  // ここに無ければ表示されない。
   rows: ["512x320", "960x576", "896x1152", "1280x768", "1920x1088", "2560x1472"],
   columns: [
     { id: "ltx-default", labelKey: "comfortColumnLtxDefault", source: { kind: "legacy" } },
@@ -112,13 +115,28 @@ export function comfortDisplayTableFor(engineFamily: string): ComfortDisplayTabl
   return COMFORT_DISPLAY_TABLES[id] ?? null;
 }
 
+/** 「全on」列の条件——5つの高速化トグルすべてが on の構成。`ltx` はその全on行に、
+ * `ltx25` は無条件行に一致する。選定は必ず {@link resolveComfortRow} を通す
+ * （`api/types.ts` が生の `rows` を自前で走査することを禁じており、正規化は
+ * そこに1箇所だけある）。`keepResidentEmbeddings` はどの行の `requires` にも
+ * 現れない鍵なので一致判定に関与せず、サーバ既定のままでよい。 */
+const ALL_ON_ACCELERATION: AccelerationSettings = {
+  attentionBackend: "sage",
+  blockSwapPrefetch: true,
+  keepResident: true,
+  fusedGgufDequantKernel: true,
+  vaeMode: "prune_vaed",
+  keepResidentEmbeddings: false,
+};
+
 /**
  * 1セットの数字。`null` は「この列にこの解像度の答えは無い」＝画面では「—」。
  *
  * `budget` 列の下限・上限は Create の快適上限マーカーと同じものを渡す
  * （`MIN_NUM_FRAMES` と配信の `limits.max_num_frames`——`modes/single/
  * useGenerationForm.ts` の `limits.minNumFrames`/`maxNumFrames` の出どころ）。
- * 係数は配信プロファイルの `spatial_factor`/`temporal_factor` をそのまま使う。
+ * 係数は {@link resolveComfortRow} が正規化した `spatialFactor`/`temporalFactor`
+ * を使う。
  *
  * 行は必ず `"<w>x<h>"` なので分解は1回で済ませ、3分岐が同じ幅・高さを見る。
  */
@@ -135,17 +153,16 @@ export function resolveComfortCell(
     case "legacy":
       return limits.spill_free_frames[resolutionKey] ?? null;
     case "budget": {
-      const profile = limits.comfort_budgets?.[column.source.engineFamily];
-      const row = profile?.rows?.[0];
-      if (!profile || !row) return null;
+      const resolved = resolveComfortRow(limits, column.source.engineFamily, ALL_ON_ACCELERATION, true);
+      if (!resolved) return null;
       return comfortFramesForBudget(
         width,
         height,
-        row.single_budget,
+        resolved.singleBudget,
         MIN_NUM_FRAMES,
         limits.max_num_frames,
-        profile.spatial_factor,
-        profile.temporal_factor,
+        resolved.spatialFactor,
+        resolved.temporalFactor,
       );
     }
     case "static":

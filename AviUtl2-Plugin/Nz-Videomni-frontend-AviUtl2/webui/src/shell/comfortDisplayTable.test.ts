@@ -50,9 +50,11 @@ describe("comfortDisplayTableFor", () => {
 
 describe("resolveComfortCell", () => {
   it("reads the legacy table for a `legacy` column, and gives `null` where it has no entry", () => {
-    // 273 is the served `spill_free_frames` value; 896x1152 is deliberately
-    // absent from that table, which is the column's own "—".
-    expect(resolveComfortCell(limitsWith(), "1280x768", LEGACY_COLUMN)).toBe(273);
+    // The served `spill_free_frames` value; 896x1152 is deliberately absent
+    // from that table, which is the column's own "—".
+    expect(resolveComfortCell(limitsWith(), "1280x768", LEGACY_COLUMN)).toBe(
+      FALLBACK_APP_CONFIG.limits.spill_free_frames["1280x768"],
+    );
     expect(resolveComfortCell(limitsWith(), "896x1152", LEGACY_COLUMN)).toBeNull();
   });
 
@@ -66,6 +68,36 @@ describe("resolveComfortCell", () => {
     expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBe(361);
     expect(resolveComfortCell(limits, "1920x1088", BUDGET_COLUMN)).toBe(169);
     expect(resolveComfortCell(limits, "2560x1472", BUDGET_COLUMN)).toBe(89);
+    expect(resolveComfortCell(limits, "896x1152", BUDGET_COLUMN)).toBe(345);
+  });
+
+  it("selects the row by its `requires` condition, not by position", () => {
+    // A first row under a DIFFERENT condition (sdpa, not the all-on one the
+    // column resolves against) must not win just because it is rows[0] — the
+    // all-on row further down the list is the one that has to match.
+    const limits = limitsWith({
+      comfort_budgets: {
+        ltx: {
+          spatial_factor: 32,
+          temporal_factor: 8,
+          rows: [
+            { requires: { attention_backend: "sdpa" }, single_budget: 10000, chain_budget: 10000 },
+            {
+              requires: {
+                attention_backend: "sage",
+                block_swap_prefetch: true,
+                keep_resident: true,
+                fused_gguf_dequant_kernel: true,
+                vae_mode: "prune_vaed",
+              },
+              single_budget: 44880,
+              chain_budget: 40000,
+            },
+          ],
+        },
+      },
+    });
+    expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBe(361);
   });
 
   it("clamps a `budget` column to the served frame ceiling", () => {

@@ -4023,6 +4023,9 @@ def test_generate_handler_a2v_forwards_keep_resident_embeddings(tmp_path):
             break
     assert captured["keep_resident_embeddings"] is True
     assert list(captured.keys())[-1] == "keep_resident_embeddings"
+    # Confirms this request actually went through the A2V chain branch
+    # (build_a2v_chain_payload), not the single-generate payload.
+    assert "source_audio" in captured
 
 
 def test_chain_handler_keep_resident_embeddings_on_adds_key():

@@ -524,7 +524,7 @@ def build_a2v_chain_payload(
     ``reference_video_strength`` keys, each only below 1.0) only when an adapter is
     used -- so a token-free, adapter-free request stays byte-identical to before.
     NAG (non-CFG Negative) keys are ADDITIVE too: only added when ``nag_enabled``
-    is true, appended last, so the default (NAG off) payload stays byte-identical
+    is true, appended after the base keys, so the default (NAG off) payload stays byte-identical
     to the pre-NAG contract the key-order tests lock in. ``neg_method``/
     ``vsf_scale`` are appended right after the four nag_* keys
     (still inside the same ``if nag_enabled:`` block, regardless of which
@@ -546,9 +546,10 @@ def build_a2v_chain_payload(
     default" rule -- but since its default is off, that rule emits the key only
     when the box is CHECKED (the mirror image of block_swap_prefetch; do not
     read the two tests as one pattern).
-    ``fused_gguf_dequant_kernel`` is appended LAST under the same rule, with
-    the same direction as block_swap_prefetch since 2026-08-04 (§51 flipped the
-    server default to on -> the key rides only on an UNCHECKED box).
+    ``fused_gguf_dequant_kernel`` is appended after ``keep_resident`` under
+    the same rule, with the same direction as block_swap_prefetch since
+    2026-08-04 (§51 flipped the server default to on -> the key rides only
+    on an UNCHECKED box).
     ``vae_mode`` (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
     §3-50 at the time) is appended after it, same "differs from
     the default" rule. Its default ("default") never changes (owner ruling
@@ -634,13 +635,13 @@ def build_a2v_chain_payload(
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         chain_payload["keep_resident"] = bool(keep_resident)
     # fused GGUF dequantization kernel (additive, conditional): same rule,
-    # appended last. Default ON since 2026-08-04 -> the key rides only on an
-    # UNCHECKED box.
+    # appended after keep_resident. Default ON since 2026-08-04 -> the key
+    # rides only on an UNCHECKED box.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         chain_payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
-    # vae_mode (additive, conditional): appended last, same rule. Default
-    # "default" never changes (owner ruling 0-11), so the key rides only when
-    # the pruned decoder is selected.
+    # vae_mode (additive, conditional): appended after fused_gguf_dequant_kernel,
+    # same rule. Default "default" never changes (owner ruling 0-11), so the
+    # key rides only when the pruned decoder is selected.
     if vae_mode != "default":
         chain_payload["vae_mode"] = vae_mode
     # keep-resident embeddings (additive, conditional): appended last, same
@@ -1013,13 +1014,15 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         if keep_resident != KEEP_RESIDENT_DEFAULT:
             payload["keep_resident"] = bool(keep_resident)
         # fused GGUF dequantization kernel (additive, conditional): appended
-        # last, same rule; its default is ON since 2026-08-04, so the key rides
-        # only on an UNCHECKED box (the same direction as block_swap_prefetch).
+        # after keep_resident, same rule; its default is ON since 2026-08-04,
+        # so the key rides only on an UNCHECKED box (the same direction as
+        # block_swap_prefetch).
         if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
             payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
-        # vae_mode (additive, conditional): appended last, same rule. Default
-        # "default" never changes (owner ruling 0-11), so the key rides only
-        # when the pruned decoder (PrunaVAED, "prune_vaed") is selected.
+        # vae_mode (additive, conditional): appended after
+        # fused_gguf_dequant_kernel, same rule. Default "default" never
+        # changes (owner ruling 0-11), so the key rides only when the pruned
+        # decoder (PrunaVAED, "prune_vaed") is selected.
         if vae_mode != "default":
             payload["vae_mode"] = vae_mode
         # keep-resident embeddings (additive, conditional): appended last, same
@@ -1489,13 +1492,15 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         if keep_resident != KEEP_RESIDENT_DEFAULT:
             payload["keep_resident"] = bool(keep_resident)
         # fused GGUF dequantization kernel (additive, conditional): appended
-        # last, same rule but the OPPOSITE direction from keep_resident since
-        # 2026-08-04 (default on -> emitted only when unchecked).
+        # after keep_resident, same rule but the OPPOSITE direction from
+        # keep_resident since 2026-08-04 (default on -> emitted only when
+        # unchecked).
         if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
             payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
-        # vae_mode (additive, conditional): appended last, same rule. Default
-        # "default" never changes (owner ruling 0-11), so the key rides only
-        # when the pruned decoder (PrunaVAED, "prune_vaed") is selected.
+        # vae_mode (additive, conditional): appended after
+        # fused_gguf_dequant_kernel, same rule. Default "default" never
+        # changes (owner ruling 0-11), so the key rides only when the pruned
+        # decoder (PrunaVAED, "prune_vaed") is selected.
         if vae_mode != "default":
             payload["vae_mode"] = vae_mode
         # keep-resident embeddings (additive, conditional): appended last, same

@@ -240,7 +240,7 @@ Chain画面に、`config.generation_presets`(バックエンドの`/config`か�
 
 1. **GradioのバッチランナーはchunkedUpsampleを送っていない。** バックエンド側のGradioバッチ実行経路(`services`配下のバッチ処理)は、チェーンリクエストに`chunked_upsample`を明示送信していない既存のギャップがある。フロントエンドのバッチA2Vは常に明示送信する実装で先行しており、この点ではフロントエンドの方がバックエンドの既存実装より進んだ状態になっている。バックエンド側の残課題として`FRONTEND_CATCHUP_WORKORDER.md`にも記録した。
 
-   > **追記（2026-09-17）**: このギャップは**解消した**——Gradio同梱のバッチはアコーディオン自身のチェックボックス「Chunked upsample mode (for VRAM 16GB)」（既定オン・Clip Chainタブと同じ文言）の値を、真偽どちらでも`chunked_upsample`としてチェーンリクエストへ明示送信するようになった（Generateタブの単発A2Vはキーごと送らない従来のままである）。記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §113。**本文は追記専用の規律どおり不変**である。
+   > **追記（2026-09-17）**: このギャップは**解消した**——Gradio同梱のバッチはアコーディオン自身のチェックボックス「Chunked upsample mode (for VRAM 16GB)」（既定オン・Clip Chainタブと同じ文言）の値を、真偽どちらでも`chunked_upsample`としてチェーンリクエストへ明示送信するようになった（Generateタブの単発A2Vはキーごと送らない従来のままである）。記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114。**本文は追記専用の規律どおり不変**である。
 
 2. **webuiの`npx tsc --noEmit -p .`は偽合格になる。** プロジェクト参照(project references)構成のためこのコマンドは実際にはほとんど何も型検査せずに成功してしまう。正しい型検査ゲートは`npm run typecheck`(内部で`tsc -b`を実行する)である。今後の検証手順はすべて後者を使うこと。
 3. **`scripts/deploy.ps1`・`scripts/run-aviutl.ps1`の既定パスが旧環境のまま。** 両スクリプトの既定パスは`beta52`/`C:\ProgramData`を指しており、現行の実機構成(AviUtl2 v2.0.54、`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\`)と一致していない。本セッションでは手動でパスを読み替えて実機ゲートを実施したが、スクリプト自体の恒久修正は残課題である。
@@ -4616,7 +4616,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - バッチパネルの各行に書いた`<lora:名前:強度>`タグが、**Create画面のプロンプト欄に書いたときとまったく同じように効く**ようになった。規則は1つだけ——**Add／Replaceで合成したあとのプロンプト文字列を、Createと同じ解析器に1回だけ通す**。a2v行もi2v行も同じ経路を通る。仕様の正本はバックエンド[`BATCH_A2V_CSV_SPEC.md`](../../../Docs/BATCH_A2V_CSV_SPEC.md) §8で、本書には規則を書き写さない。
 - Settingsの快適フレーム上限の一覧表を、レガシー表1列から**「2.3 既定」「2.3 全on」「2.5」「2.5 Q6」の4列**にした。**この表が持っているのは「形」（どの解像度を行に並べ、どの出典を列にするか）だけで、数字はサーバーが配る`limits`から描く。**
-- **同じバッチのGradio側の改修はバックエンド側の変更なので本書の範囲外**で、記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §113である。
+- **同じバッチのGradio側の改修はバックエンド側の変更なので本書の範囲外**で、記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114である。
 
 ### 123.2 行ごとの`<lora:>`タグ — 「合成してから解析する」がCreateと同じ答えを出す
 
@@ -4641,5 +4641,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 ### 123.4 状態
 
-- **機械ゲート（型検査・vitest・lint）の実数の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §113である。** 本書には書き写さない。
-- 実機での観測点は、バッチのAdd／Replaceで流したジョブの`metadata.json`にある`request.loras`と、Settingsの新しい表の見え方（横スクロールできること・他の行が崩れないこと）である。結果の正本も同じく§113である。
+- **機械ゲート（型検査・vitest・lint）の実数の正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114である。** 本書には書き写さない。
+- 実機での観測点は、バッチのAdd／Replaceで流したジョブの`metadata.json`にある`request.loras`と、Settingsの新しい表の見え方（横スクロールできること・他の行が崩れないこと）である。結果の正本も同じく§114である。

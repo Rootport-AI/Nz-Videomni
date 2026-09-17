@@ -1317,6 +1317,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **何を作ったか**: Gradio同梱WebUIのSettings＞Modelsの見出し直下に、ベースモデル（LTX 2.3↔2.5の系統）を選ぶドロップダウンを新設した。選択肢と初期値は`GET /models`の`base_models[]`・`active_base_model`から作り、選択を変えると4カテゴリ（transformer／text_encoder／video_vae／audio）をその系統の一覧で埋め直す。読み込みボタンは`base_model`を常に送る。あわせて古い説明文とハードコードのパス表示カードを削除した。
 - **既知の制約（対策は作らないというオーナー判断・2026-09-01）**: Gradio側でベースモデルを切り替えても、AviUtl2側フロントエンドは次に起動するまでその変化に追随しない。両方のUIを同時に開いて使ったときだけ現れる理論上の穴で、フロントエンドは次回起動時の正規化で回復する。
 - **既知の制約（2026-09-01の敵対的レビューで判明・本項では直していない）**: 本項でベース切替を露出したことにより、**Gradio単独で「2.5へ切替→SettingsのPrunaVAEDを選ぶ→生成→422」という経路が到達可能になった**。Gradio側は`unsupported_features`を1箇所も読んでいないためである（AviUtl2側の対処は本書§3-139）。**管理は台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-6の⑤であり、本項では扱わない。**
+- **追記（2026-09-17）**: ⑤はGradio側も`unsupported_features`を読んでVAEのラジオを隠すようになり解決した（記録は本書§3-161／[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §113）。
 - **ゲート**: **オーナー実機目視ゲートG-O2が全項目合格（2026-09-01）**——初期値がアクティブな系統であること、選択を変えると4カテゴリの選択肢が入れ替わること、読み込みが成功すること、説明文とパス表示カードが消えていること、言語を切り替えても選択肢が消えないこと。
 - **状態**: **クローズ（2026-09-01、オーナー実機目視ゲート合格）。**
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §85（ゲート結果）・§83（起票のきっかけとなったG8の裁定）、本書§3-129、`gradio_ui/ui.py`・`gradio_ui/handlers.py`・`gradio_ui/adapters.py`（現物）、[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-6（Gradio同梱UIの残件。件数はそちらが正本）。
@@ -1341,6 +1342,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: **クローズ（2026-09-01、オーナー実機目視ゲート合格）。**
 - **正本・出典**: フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §100.3（実装記録）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77.7(f)（罠の発見時の記録）・§85（ゲート結果）、本書§3-125（統合元）、`webui/src/shell/SettingsPanel.tsx`・`webui/src/shell/AppShell.tsx`（現物）。
 - **本項が塞いだのはAviUtl2側だけである（2026-09-01の敵対的レビューで確認）**: バックエンド同梱Gradio UIのPrunaVAEDのラジオは未対応のまま無条件に表示され、本書§3-137のベース切替新設によりGradio単独でも到達可能になった。**この残件は本書ではなく台帳[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-6で管理する。**
+- **追記（2026-09-17）**: その⑤はGradio側も`unsupported_features`を読んでVAEのラジオを隠すようになり解決した（記録は本書§3-161／[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §113）。
 
 ### 3-115. MCPの`submit_chain`に撮り直し（Retake）の引数が無い（起票：2026-08-26、実装・自動ゲート全緑・クローズ：2026-09-01）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-115からクローズ）
 

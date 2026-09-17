@@ -239,6 +239,9 @@ Chain画面に、`config.generation_presets`(バックエンドの`/config`か�
 ### 9.9 開発中の重要な発見
 
 1. **GradioのバッチランナーはchunkedUpsampleを送っていない。** バックエンド側のGradioバッチ実行経路(`services`配下のバッチ処理)は、チェーンリクエストに`chunked_upsample`を明示送信していない既存のギャップがある。フロントエンドのバッチA2Vは常に明示送信する実装で先行しており、この点ではフロントエンドの方がバックエンドの既存実装より進んだ状態になっている。バックエンド側の残課題として`FRONTEND_CATCHUP_WORKORDER.md`にも記録した。
+
+   > **追記（2026-09-17）**: このギャップは**解消した**——Gradio同梱のバッチはアコーディオン自身のチェックボックス「Chunked upsample mode (for VRAM 16GB)」（既定オン・Clip Chainタブと同じ文言）の値を、真偽どちらでも`chunked_upsample`としてチェーンリクエストへ明示送信するようになった（Generateタブの単発A2Vはキーごと送らない従来のままである）。記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §113。**本文は追記専用の規律どおり不変**である。
+
 2. **webuiの`npx tsc --noEmit -p .`は偽合格になる。** プロジェクト参照(project references)構成のためこのコマンドは実際にはほとんど何も型検査せずに成功してしまう。正しい型検査ゲートは`npm run typecheck`(内部で`tsc -b`を実行する)である。今後の検証手順はすべて後者を使うこと。
 3. **`scripts/deploy.ps1`・`scripts/run-aviutl.ps1`の既定パスが旧環境のまま。** 両スクリプトの既定パスは`beta52`/`C:\ProgramData`を指しており、現行の実機構成(AviUtl2 v2.0.54、`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\`)と一致していない。本セッションでは手動でパスを読み替えて実機ゲートを実施したが、スクリプト自体の恒久修正は残課題である。
 

@@ -12051,6 +12051,8 @@ AviUtl2のタイムラインに置いた**部分フィルタ**の枠を、単一
 
 **フロントエンド側の実装記録**は[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§115**、契約の正本は同[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.23（v12）、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02である。
 
+**追記（2026-09-18）**: 上の「残件」と「後継」がどちらも指している台帳§3-148（導入スクリプトの`hf.exe`の薄皮）は、**[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-148としてクローズした**（台帳側は欠番。実装・機械ゲート・オーナーの実機ゲートの記録は本書**§112**である）。**本文は追記専用の規律どおり不変**である。
+
 ## 105. ★Inpainting（マスクによる部分再生成）— 段0スパイクで「画角拡張経路の流用」の成立を実証し、同日にバックエンド・プラグイン・操作パネルまで実装（2026-09-14）。オーナーの実機採取と実機ゲートG1〜G10が全合格し、追修（メニュー順・解像度判定・トースト・のりしろ欄）を経て**完結**（2026-09-15。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02。設計正本は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md)）
 
 > **本節の読み方**: §105.1〜§105.4 はスパイク段階の記録で、**製品コードは1文字も変えていない**（`outputs/inpaint_spike/` は git 追跡外）。製品への実装は §105.5 以降。

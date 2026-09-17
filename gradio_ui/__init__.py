@@ -23,14 +23,29 @@ cohesive concern per module):
   * ``adapters``   — IC-LoRA control-adapter dropdown choices
                       (``ADAPTER_NONE``, ``ADAPTER_FRIENDLY``,
                       ``build_adapter_choices``).
+  * ``feature_scope`` — server feature name -> Gradio control ids: the only
+                      module allowed to know a server feature name. Hides (and
+                      resets to the server default) every control the active
+                      base model cannot use. Mirrors the WebView2 frontend's
+                      ``webui/src/shell/featureScope.ts``.
   * ``formatting`` — pure formatters: ``format_status()`` for the top status
                       line, ``format_api_error()`` for the REST error
                       envelope.
   * ``validation`` — ``check_chain_total()``, the clip-chain total-timeline
                       precheck that mirrors the server's chain_math validator.
+  * ``manifest``   — Batch A2V CSV manifest, the pure-Python data layer: scan
+                      a wav folder into rows, read/write/merge the CSV that
+                      lives next to the audio files, resolve output paths. No
+                      gradio / threading / HTTP imports.
+  * ``batch``      — ``BatchRunner``, the Batch A2V execution body: a daemon
+                      thread inside the server process feeds one row at a time
+                      into the REST API, so an unattended overnight run
+                      survives the browser's SSE stream dropping.
   * ``handlers``   — ``make_generate_handler()`` / ``make_chain_handler()``,
                       the yield-based generate/chain flows factored out so
                       they are unit-testable with a mock transport.
+  * ``styles``     — ``CUSTOM_CSS``, the stylesheet for the Blocks UI; it is
+                      wired in (``gr.Blocks(css=...)``) by ``ui`` alone.
   * ``ui``         — ``build_ui()``, assembling the top common bar + gr.Tabs
                       (Generate / Clip Chain / Jobs / Settings).
 

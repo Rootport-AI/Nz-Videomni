@@ -75,7 +75,11 @@ name and `package.ini`).
   background service. The table supports in-memory inline editing while
   idle: per-row prompt text, a per-row "copy the shared prompt" button, and
   a per-row image assignment dropdown (`Shared` plus whatever the image
-  folder's last scan found via `fs.listFiles`).
+  folder's last scan found via `fs.listFiles`). Since the i2v mode was added,
+  the section can also run from an image folder alone — leave the audio folder
+  empty and every image becomes one row, sent as a single clip through
+  `POST /generate` instead of the chain endpoint (design source of truth:
+  `Docs/BATCH_A2V_I2V_MODE.md`).
 - **Right-click generation**: invoking generation from the AviUtl2 timeline's
   right-click menu routes to the appropriate panel (Create/Chain/Library) with
   the mode, intent and a derived resolution pre-filled; the user still

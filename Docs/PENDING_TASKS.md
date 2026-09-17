@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-16（§3-151・§4-14 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-151／§3-153 へ移し、台帳外のオーナー注文2件を同書 §3-154・§3-155 として記録。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1・§2 は該当項目が無いため見出しごと削除してある）
+- 作成: 2026-07-15／最終更新: 2026-09-17（§4-17 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-157 へ移送、§4-36 の「(beta52)」の1箇条を削除。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1・§2 は該当項目が無いため見出しごと削除してある）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -289,12 +289,6 @@
 - **何が塞いでいるか**: 実装時に**でっち上げの位置を使うより素挿入のほうが安全**と判断して受容した設計。直すには位置マップの永続化が要る。
 - **出典**: [`JOIN_FEATURE_RESEARCH.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/JOIN_FEATURE_RESEARCH.md) 第4部、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §44.2・§44.4。
 
-### 4-17. ブリッジ契約v5の6メソッド＋イベントが契約書に未収録（文書債務）
-
-- **概要**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)は契約v5のうち`timeline.getSelection`と`timeline.menuInvoked`しか収録しておらず、残る6メソッド（`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`）とイベント`timeline.projectLoaded`が未収録のまま。**実装はC++側・`types.ts`側とも揃っている**ので機能の欠落ではなく、文書だけの債務である。
-- **何が塞いでいるか**: 収録には各メソッドの引数・応答形式を実装から起こす手間がかかる一方、当面の正本は`webui/src/bridge/types.ts`と[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §5で足りている。
-- **出典**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §0冒頭の2026-07-08注記および§4.14.1。
-
 ### 4-18. 図形オブジェクトのエイリアス実書式
 
 - **概要**: AviUtl2の図形オブジェクトを`create_object_from_alias`で作るための正確な書式が未取得（同梱プリセットが空で、実機ダンプが要る）。effect名が`図形`で項目が`図形の種類`・`色`・`ライン幅`等であることまでは判明している。
@@ -439,7 +433,7 @@
   - `ReplaceObjectEditProc`のアンドゥ挙動（delete+createが1ステップにまとまるか）。
   - `UpdateObjectTextEditProc`のカーソル依存書込の実機挙動。
   - `ExtractAudioWorker`の残検証（音声抽出のsolo分離は本書§4-21を参照）。※`CutoutRangeWorker`（範囲選択切り抜き）は製品UIから呼ぶ配線が無いため実機検証の対象外（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48。配線を再検討するときの入口は本書§3-34）。
-- **`register_project_load_handler`の発火は検証済みである**（手動での「ファイル→開く」でも発火する。実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §97、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-35-02、仕様書側の実機チェックリスト#9も確認済み＝フロントエンド[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節）。**この経路について本節に残るのは文言の修正1点だけで、その管理は本節へ一元化する**——`native/src/plugin.cpp`は登録前に関数ポインタのnull検査を行い、未提供なら警告を出して孤児スキャンをユーザー操作起点へ縮退させる作りだが、**この警告文言だけが`(beta52)`のまま古い。着手時に直すこと。** なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計なので、縮退しても実害は小さい。
+- **`register_project_load_handler`の発火は検証済みである**（手動での「ファイル→開く」でも発火する。実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §97、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-35-02、仕様書側の実機チェックリスト#9も確認済み＝フロントエンド[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節）。なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計なので、縮退しても実害は小さい。
 - **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §7.6、§7.7、§33.1、§33.3、35.2、`native/src/plugin.cpp`・`native/src/bridge.cpp`の`REALDEVICE-VERIFY`注記。
 
 ### 4-37. 操作パネルの状態復帰（起票：2026-07-20）

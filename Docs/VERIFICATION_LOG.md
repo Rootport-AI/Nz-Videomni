@@ -12614,3 +12614,84 @@ Opusによる敵対的レビュー1回（Critical 0・Major 4・Minor 8）とSon
 | G3 打ち直しで「01024」にならず復帰 | 合格。途中で数字が変わらず「01024」にもならず、打ち終えると理由文が消えGenerateが押せる |
 | G4 Chain画面で同じ | 合格。ChainのGenerateと理由文がCreateと同じに動く |
 | G5 バッチの帯と開始不可が追随 | 合格。開始ボタンの上に同じ文言の帯が出て開始不可、1024に直すと即復帰 |
+
+## 112. ★小改修3件（導入スクリプトの薄皮`hf.exe`離れ・縮退時の警告文からの版名除去・ブリッジ契約書の文書債務）＝機械ゲート全緑・件Gは敵対的突き合わせレビュー全採用（2026-09-17。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-148・§4-36と[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-157）
+
+### 112.1 背景と3件の範囲
+
+台帳を通読して「簡単そうなのに未着手」に見えた3件を、`dev`でまとめて片づけた（オーナー指示・2026-09-17）。いずれもバックエンドのPython・API・推論エンジンには触れていない。
+
+| 件 | 内容 | 触った層 | 台帳 |
+|---|---|---|---|
+| E | 導入スクリプトがuvの薄皮（トランポリン）`hf.exe`に依存するのをやめ、エンジンvenvの`huggingface_hub`をモジュールとして起動する | PowerShell（`scripts/install_ltx.ps1`・`scripts/install_model.ps1`） | [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-148 |
+| F | 縮退時の警告文2本からホストの版名「(beta52)」を外す | ネイティブC++（`native/src/plugin.cpp`） | 同書 §4-36 の1箇条 |
+| G | ブリッジ契約書の文書債務（v5・v8のタイムラインRPC群が未収録） | 文書のみ（`BRIDGE_CONTRACT.md`・`RIGHTCLICK_REDESIGN_SPEC.md`） | [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-157 |
+
+コミットは`c258333`（件E）・`d19e242`＋`94fd1b6`（件F）・`0e3f544`（件G）。
+
+### 112.2 件E — 薄皮の実体と、venv別の現況
+
+uvが作る`<venv>\Scripts\*.exe`は、そのvenvの`python.exe`の**絶対パス**を実行ファイルへ埋め込む薄皮である。2026-08-19のフォルダ改名（`Nz-LTX23-backend`→`Nz-Videomni`）で埋め込み先が実在しなくなり、起動すると「Failed to canonicalize script path」を出して終了コード1で落ちる。`.venv\Scripts\hf.exe --help`で今も再現する。
+
+| venv | 壊れている本数 | 備考 |
+|---|---|---|
+| `.venv` | 26本中26本 | 全滅 |
+| `.venv-engine` | 28本中25本 | 健全なのは`hf.exe`・`huggingface-cli.exe`・`tiny-agents.exe`の3本だけで、いずれも2026-09-11に再生成したもの |
+| `.venv-engine-ltx25` | 30本中0本 | 改名より後に作ったvenvのため |
+| `.venv-utils` | 8本中0本 | 同上 |
+
+これで§82.3・§102.11が「改名が原因」と断定していた因果は裏づけられた（§104.9は原因を断定しない書き方で残っている）。残る壊れた薄皮（`accelerate.exe`・`pytest.exe`等）は開発者が手で叩く用途にしか使わないため、掃除も再生成もしていない。
+
+### 112.3 `python.exe`が生き残った理由と、`setup.bat`の再実行で直らない機構
+
+`python.exe`が動き続けたのは、それが薄皮でないからではない。venvの`pyvenv.cfg`の`home`がプロジェクト内の絶対パス（`…\Nz-Videomni\.python\cpython-3.12.9-…`）を指しており、**改名当日に書き直されていた**からである（`.venv`・`.venv-engine`とも`pyvenv.cfg`の更新時刻は2026-08-19 16:24:10）。書き直されなければ`python.exe`も道連れになりうる。
+
+`install_ltx.ps1`の`Ensure-EngineVenv`は、`python.exe`が在ってfreezeのハッシュが一致すれば`uv venv`を走らせない。薄皮の健全性はこのハッシュに含まれないので、`setup.bat`を何度実行しても壊れた薄皮は作り直されない——台帳§3-148の「setup.batの再実行では直らない」という観察は、この機構で説明がつく。`install_model.ps1`が出していた「移動・改名の直後は setup.bat の再実行で直る」という案内は当たらない助言だったので、「`.venv`と`.venv-engine`を削除してから setup.bat」へ差し替えた。
+
+### 112.4 件E — `-m`と`-P`の実測
+
+`huggingface_hub`のエントリポイントは`hf = huggingface_hub.cli.hf:main`で、薄皮と`python -m huggingface_hub.cli.hf`は同じ到達点である。argparseの`prog`は`"hf"`にハードコードされているのでusage表示も変わらず、終了コードは子プロセスから素通しする。**差分は1つだけで、`-m`は作業ディレクトリを`sys.path`の先頭に載せる**。`.venv-engine`のpythonでリポジトリ直下から測った応答は次のとおり。
+
+| 実行 | 応答 |
+|---|---|
+| `python -m logs` | `'logs' is a package and cannot be directly executed` |
+| `python -P -m logs` | `No module named logs` |
+
+`-P`（Python 3.11以降で使える。エンジンvenvは3.12.9）を付けると作業ディレクトリが探索路から外れ、薄皮と同じ隔離になる。乾式プローブは`.venv-engine\Scripts\python.exe -P -m huggingface_hub.cli.hf version` → `huggingface_hub version: 0.36.2`・終了コード0。
+
+**使ってよいのは`.venv-engine`だけである。** `.venv`のhuggingface_hubは1.20.1、`.venv-engine-ltx25`は1.28.0で、`install_ltx.ps1`が使う「単一の`--include`に複数パターンを続ける」記法が黙って壊れる（何も落とさない・別物を落とす）。
+
+### 112.5 件E — argvの写し・静的検査・pytest
+
+argvの写し（オフライン）: `install_ltx.ps1`と同じ形の`$argv = @("download","Rootport/Nz-LTX23-weights") + @("--include") + @("ltx-2.3-components/*","ltx-2.3-gguf/*") + @("--local-dir","C:\tmp\stage dir")`を`& $enginePy -P -c "import sys,json;print(json.dumps(sys.argv[1:],ensure_ascii=False))" @argv`へ渡したところ、グロブは展開されず、空白入りのパスは1要素のまま、`--include`には2つのパターンがそのまま続いた。実機ゲートで使うUETrackの記述は単一パターンなので、複数パターンの経路はここで押さえている。
+
+- 構文検査: `[System.Management.Automation.Language.Parser]::ParseFile`が両スクリプトともエラー0。
+- 消し残し: `grep hfExe scripts/*.ps1`が0件。両スクリプトとも`Set-StrictMode`が無く、変数の消し残しは構文検査では捕まらないため、この検査を別に置いた。
+- 文字コード: `install_ltx.ps1`はUTF-8 BOM無し・CRLF、`install_model.ps1`はUTF-8 BOM付き・CRLFのまま（後者はBOMを落とすとPowerShell 5.1で日本語が化ける）。
+- 自動テスト: `pytest tests/test_base_model_contract.py` 9件成功。
+
+### 112.6 件E — 故障注入器の代替（§82.7への申し送り）
+
+§82.7は「壊れた`hf.exe`をそのまま故障注入器に使い、5回リトライの経路を通信なしで通す」という手法を記録しているが、**本改修でインストーラが`hf.exe`を一度も実行しなくなったため、この手法はもう使えない**。代替は`.venv-engine\Lib\site-packages\huggingface_hub`を一時的に改名することで、`No module named huggingface_hub`で即座に終了コード1となり、通信を一切せずに同じ5試行・75秒の経路を通せる。
+
+### 112.7 件F — ビルド・doctest・配置
+
+`scripts/build.ps1 -Config Release -RunTests`（起動形は`--test-suite-exclude=integration`）: ビルド成功、doctestは **384 passed / 6 skipped / 1,952 assertions**。`plugin.cpp`はテストターゲットに含まれない（プラグインターゲット専用のソース）ので、**件数が動かないことが期待値**である。
+
+`scripts/deploy.ps1`で実機へ配置し、配布コピー`AviUtl2-Plugin/NzVideomni.aux2`も更新した。ビルド成果物・実機配置先・配布コピーの3つはSHA-256が一致する（先頭`1119922a`）。埋め込まれた文字列はワイド文字列のgrepで確認し、新しい文言が在ることと「(beta52)」が無いことを確かめた。実機ゲートは置いていない——現行ホストでは到達しないデッドパスの文言であり、設計は変わらないためである（`register_project_load_handler`の発火そのものは§97が正本）。
+
+### 112.8 件G — 契約書の突き合わせとレビュー
+
+債務の実体は**9メソッド＋1イベント**で、台帳§4-17の「6メソッド＋イベント」より広かった。台帳が数えていたv5の6メソッドに加え、v8で新設された3メソッド（`insertMediaForJob`／`updateProvisionalReservation`／`deleteProvisionalByJob`）の引数・応答も無く、v5からある`insertProvisional`はv8で契約そのものが変わっていたためである。
+
+- 契約書に§4.25を新設し、9メソッド（§4.25.1〜§4.25.9）とイベント`timeline.projectLoaded`（§4.25.10）を`types.ts`とネイティブ実装から起こして収録した。**契約バージョンはv13のまま**で、ワイヤ形式・メソッド・イベント・エラー符号は1つも変えていない。
+- 機械照合: §3の要約表へ足した9つのメソッド名が`types.ts`の`BridgeParamsMap`のキーに全件実在する。文書のCRLFは維持し、行番号の記載は置いていない。
+- 実装から分かった配線の非対称（**記録のみで挙動は不変**）: `timeline.extractAudio`はCreate画面・Chain画面から本番配線済み／`timeline.cutoutRange`は本番の呼び出し元が無い（死蔵）／`timeline.resolveProvisional`もモックブリッジとその自テストしか呼んでおらず、`FILE_NOT_FOUND`・`NO_EDIT_HANDLE`まで返す実装だけが現役で残っている／`useProjectOrphans`フックは定義とテストだけで本番にマウントされておらず、イベントを実際に購読しているのは`AppShell`である／`timeline.cutoutRange`・`timeline.extractAudio`の`layer`は検証されるがワーカーが使わない／`timeline.updateProvisionalReservation`の`oldJobId`は実装では省略できるが`types.ts`では必須と宣言されている。
+- 待機上限の観察（**記録のみで挙動は不変**）: `timeline.cutoutRange`・`timeline.extractAudio`は`NO_LOCAL_TIMEOUT_METHODS`に含まれず、WebUI側の既定10,000 msで走る。長い範囲では、ネイティブがまだ書き出していてもWebUIが先に`TIMEOUT`を作りうる。
+- `types.ts`のJSDocとの相違: `PROVISIONAL_FAILED`を実際に返すのは`insertProvisional`・`resolveProvisional`・`updateProvisionalReservation`で、JSDocが挙げる`updateProvisionalText`は返さない（失敗しても成功応答になる）。符号の集合そのものは実装と一致しているため、コードは触らず契約書§9へ記録した。
+- レビュー: 敵対的突き合わせレビュー（Opus）1回で **Critical 0・Major 5・Minor 9**。独立の裏取り（10項目）で全件が支持されたため、全指摘を採用した。
+- あわせてフロントエンド`RIGHTCLICK_REDESIGN_SPEC.md` §5の冒頭に、RPCの引数・応答・エラー符号は契約書§4.25を見よという相互参照を1文足した。
+
+### 112.9 件E — 実機ゲート
+
+オーナーの実機ゲート（`install-UETrack.bat`、重み1ファイルを欠かせて通す）の結果をここに追記する。

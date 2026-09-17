@@ -4572,3 +4572,35 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 実機ゲートG1〜G5全合格（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §111.5）。G1で「欄が空欄のまま」、G3で「01024にならない」を実機で確認した＝`NaN`センチネルの狙いどおり。
 - 実装レビュー（Critical 0・Major 0・Minor 3）を`a29de34`で全反映: 失効「32-pixel-grid」コメント3件の訂正と、チェックON初期値テストのfixtureを10×10へ（クランプの有無を実際に検出する形へ）。
 - バックエンド台帳 CLOSED §3-155 として記録。
+
+## 122. 縮退時の警告文からホストの版名を外し、ブリッジ契約書へv5・v8のタイムラインRPC群を収録した — 版名は必ず古くなる・契約書は実装から起こす（バックエンド台帳 §4-36の1箇条、CLOSED §3-157。2026-09-17）
+
+### 122.1 結論
+
+- ネイティブの縮退時の警告文2本から、ホストの版名「(beta52)」を外して「unavailable on this host」にした。`REALDEVICE-VERIFY`のコメントも版名をやめ、確認した日付と実測の正本への参照に改めた。**規則は「実行時の警告文にもコメントにもホストの版名を書かない」**で、記録が要るときは日付と正本の節を書く。コミットは`d19e242`、配布コピー`NzVideomni.aux2`の更新は`94fd1b6`。
+- ブリッジ契約書に **§4.25「v5・v8のタイムラインRPC群」** を新設し、長く「未収録」と自認していたタイムラインRPC群とイベント`timeline.projectLoaded`を収録した。**契約バージョンはv13のまま**（文書だけの更新で、ワイヤ形式・メソッド・イベント・エラー符号は1つも変えていない）。[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5の冒頭には、RPCの引数・応答・エラー符号は契約書§4.25を見よという相互参照を1文足した。コミットは`0e3f544`。
+- もう1件（導入スクリプトが uv の薄皮`hf.exe`に依存するのをやめた件）はバックエンド側の改修で本書の範囲外であり、記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §112である。
+
+### 122.2 なぜ版名を外したのか（警告文とコメント）
+
+- 直したのは`native/src/plugin.cpp`の2本のLogWarn——`register_project_load_handler`が未提供のときの警告（孤児スキャンをユーザー操作起点へ縮退させる）と、オブジェクトメニュー登録が未提供のときの警告（WebView2パネル＋`timeline.getSelection`へ縮退する）である。どちらも英語のログ出力だけで、UIには出ない。
+- **版名を埋め込んだことが失効の原因だった。** 文言は「そのホストでは使えない」という事実を述べたいだけなのに、特定のホストの版名を名指ししたために、ホストが新しくなった時点で文言のほうが古くなった。差し替えではなく外すのが正しい引き算で、`unavailable on this host`ならホストが変わっても真のままである。
+- 同じ理由で`REALDEVICE-VERIFY`のコメントからも版名を外し、「beta52で2026-07に確認、現行ホストで2026-09-04に再確認」という**日付**と、実測の正本であるバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §97への参照に置き換えた。§97の本文にも版名は書かれておらず、記録は「現行の実機で観測した」という形になっている。
+- 実機ゲートは置いていない。現行ホストでは`register_project_load_handler`が実在して発火が確定済み（§97）なので、直した文言は到達しないデッドパスにあり、設計は何も変わらないためである。ビルドと配置の記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §112.7が正本（`plugin.cpp`はテストターゲットに含まれないので、doctestは構造的に不変が期待値である）。
+
+### 122.3 契約書 §4.25 — 実装から起こし、相違はコードではなく文書へ記録した
+
+- §4.25.1〜§4.25.9が`timeline.cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`／`insertMediaForJob`／`updateProvisionalReservation`／`deleteProvisionalByJob`、§4.25.10がイベント`timeline.projectLoaded`である。内容は`webui/src/bridge/types.ts`と`native/src/bridge_core.cpp`／`native/src/bridge.cpp`から起こしたもので、推測では書いていない。債務は台帳が書いていたv5のメソッド群にとどまらず、v8で新設されたメソッドと`insertProvisional`の契約変更にまで及んでいた（実数と内訳はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §112.8）。
+- 事実は各正本の表に置き、§4.25からは参照する形にした——エラー符号は§5、待機上限は§6、保存場所は§7である。§5の「発生メソッド」欄と、§7の`cutouts\`・`audio\`の行、§6の`timeline.cutoutRange`／`extractAudio`の行は、この収録で初めて埋まった。§3の要約表・§0の注記と本文・§4.14.1・§8の版遷移表にあった「未収録」の自認も、その場で解消してある。
+- **実装との食い違いは、コードを触らず文書に記録した。** `PROVISIONAL_FAILED`を実際に返すのは`insertProvisional`・`resolveProvisional`・`updateProvisionalReservation`で、`types.ts`のJSDocが挙げる`updateProvisionalText`は返さない（失敗しても成功応答になる）。符号の集合そのものは実装と一致しているので型の不整合は無く、契約書§9へ相違点として書いた。`updateProvisionalReservation`の`oldJobId`が実装では省略できるのに`types.ts`では必須である点など、型が実装を受け入れられる向きの差は各項の備考に留めてある。
+- **配線の非対称も同じ扱い**（記録のみ・挙動は不変）: `timeline.extractAudio`はSingleScreen・ChainedScreenから本番配線済みだが、`timeline.cutoutRange`は本番の呼び出し元が無く、`timeline.resolveProvisional`もモックブリッジとその自テストしか呼んでいない（完成動画の差し替えは今日ではv8の`timeline.insertMediaForJob`が担う）。`useProjectOrphans.ts`は`timeline.projectLoaded`の購読と`scanProvisionals`の呼び出しを持つが**本番でマウントされていない**——実際に購読しているのは`AppShell.tsx`である。
+- 敵対的突き合わせレビュー（Opus）の指摘は、独立の裏取りを経て全採用した（内訳はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §112.8）。主なものは、§5の`BAD_REQUEST`欄と§4.25.6の記述の矛盾、`NO_EDIT_HANDLE`／`BACKEND_UNREACHABLE`欄で新しい版のメソッドが落ちていたこと、`layer`をワーカーが使わない理由づけの誤り、そして「未収録」宣言の消し残しである。
+- バックエンド台帳は CLOSED §3-157 として記録した。
+
+### 122.4 引っかかりやすい点（次に触る人向け）
+
+- **`timeline.cutoutRange`と`timeline.extractAudio`は`NO_LOCAL_TIMEOUT_METHODS`に入っていない。** つまりWebUI側の既定の待機上限で走るので、長い範囲ではネイティブがまだ書き出しているのにWebUIが先に`TIMEOUT`を作りうる。今回は**記録しただけで挙動は変えていない**（契約書§6）。ここへ手を入れるなら、`timeline.trackObject`や`timeline.renderMaskVideo`と同じく上限を外すのが既存の流儀である。
+- **`timeline.scanProvisionals`が返すのは孤児の「候補」である。** ネイティブは空の稼働中ジョブ集合で判定するため、NzVideomniの仮オブジェクトが全件返る。台帳が把握しているジョブの分を落とすのはWebUIの責任で、これは契約に稼働中ジョブを渡す引数を置かなかったことの帰結である（契約書§4.25.6）。
+- **`timeline.resolveProvisional`だけが`lengthFrames`（換算済みのフレーム数）を受け取り続けている。** 予約系のほかの2メソッドは`numFrames`＋`genFps`へ移り換算をネイティブが引き受けたが、このRPCは旧来のままで、換算の責任が呼び出し側に残る。本番から呼ばれていないので実害は出ていない（契約書§4.25.4）。
+- 文書だけの更新でも、契約書の最終更新連鎖には「文書のみの更新で、契約バージョンはv…のまま」と書く。§8の版遷移表は版のliteralだけを並べる表なので、**文書同期の行は足さない**（前例どおり）。
+- スクリプトで契約書や本書を書くときは改行コード（CRLF）を維持すること。§120.3と同じ注意である。

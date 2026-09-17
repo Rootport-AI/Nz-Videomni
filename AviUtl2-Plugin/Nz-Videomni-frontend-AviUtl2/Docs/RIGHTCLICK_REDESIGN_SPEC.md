@@ -397,6 +397,8 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 
 ## 5. ✨ここにAI生成を挿入の詳細仕様（最重要節）
 
+本節は UX の流れの正本である。各 RPC の引数・応答・エラー符号は [`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.25 を参照。
+
 出典: [`TIMELINE_FEATURE_CANDIDATES.md`](TIMELINE_FEATURE_CANDIDATES.md)「生成待ちの仕組み（仮オブジェクト方式）」、[`DEVLOG.md`](DEVLOG.md) §33.3・§33.4、[`PENDING_TASKS.md`](PENDING_TASKS.md) §4-36、現行`webui/src/timeline/provisionalFlow.ts`および`webui/src/bridge/types.ts`の仮オブジェクト系RPC定義。
 
 この項目は、位置・範囲というタイムライン固有の文脈を扱う、右クリックの最も本領を発揮する機能です。ゆえに設計もいちばん込み入っています。

@@ -150,16 +150,20 @@ def test_chain_preset_dropdown_present_with_valid_default():
     assert dd.value in [v for _l, v in dd.choices]
 
 
-def test_chain_chunked_upsample_checkbox_defaults_on():
+def test_chunked_upsample_checkboxes_default_on():
     # Owner decision 2026-07-14 (real-GPU 4-clip gate passed): the chunked-
     # upsample checkbox starts ON. UI default only — the API model default
     # stays False for flag-omitting clients.
+    #
+    # There are TWO of them: the Clip Chain tab's, and the batch accordion's
+    # (§4-15 — the Gradio batch sends the field the plugin's batch always
+    # sent). They share the i18n key, so this finds both, and BOTH start ON.
     demo = _demo()
     boxes = [c for c in demo.blocks.values()
              if isinstance(c, gr.Checkbox)
              and c.label == LABELS["en"]["chk_chunked_upsample"]]
-    assert len(boxes) == 1, "chunked-upsample checkbox not found"
-    assert boxes[0].value is True
+    assert len(boxes) == 2, "chunked-upsample checkboxes not found"
+    assert all(b.value is True for b in boxes)
 
 
 def test_generate_tab_a2v_audio_file_present():
@@ -1192,7 +1196,7 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
     # wiring dispatch()'s BatchSnapshot(...) construction in ui.py relies on.
     import wave
 
-    from gradio_ui.batch import BatchRunner, BatchSnapshot
+    from gradio_ui.batch import BatchRunner, BatchSnapshot, prepare_batch_rows
     from gradio_ui.manifest import STAT_WAITING, BatchRow
 
     wav_dir = tmp_path / "wavs"
@@ -1223,7 +1227,7 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
         wav_dir=str(wav_dir), out_dir=str(out_dir),
         prompt_common="base", negative="", prompt_mode="add",
         width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
-        loras=[], shared_images=[], use_adapter=False, ref_video_path=None,
+        shared_images=[], use_adapter=False, ref_video_path=None,
         control_adherence=1.0, reference_strength=1.0,
         poll_interval=0.0, poll_timeout_s=30.0,
         vae_mode="prune_vaed",
@@ -1231,6 +1235,8 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
 
     runner = BatchRunner()
+    # The UI-thread freeze dispatch() performs before handing rows over (§3-1).
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ()) is None
     started, _ = runner.start(snap, rows, api, sync=True)
     assert started is True
     assert captured["vae_mode"] == "prune_vaed"
@@ -1239,7 +1245,7 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
 def test_vae_mode_default_omitted_from_batch_payload(tmp_path):
     import wave
 
-    from gradio_ui.batch import BatchRunner, BatchSnapshot
+    from gradio_ui.batch import BatchRunner, BatchSnapshot, prepare_batch_rows
     from gradio_ui.manifest import STAT_WAITING, BatchRow
 
     wav_dir = tmp_path / "wavs"
@@ -1270,13 +1276,15 @@ def test_vae_mode_default_omitted_from_batch_payload(tmp_path):
         wav_dir=str(wav_dir), out_dir=str(out_dir),
         prompt_common="base", negative="", prompt_mode="add",
         width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
-        loras=[], shared_images=[], use_adapter=False, ref_video_path=None,
+        shared_images=[], use_adapter=False, ref_video_path=None,
         control_adherence=1.0, reference_strength=1.0,
         poll_interval=0.0, poll_timeout_s=30.0,
     )
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
 
     runner = BatchRunner()
+    # The UI-thread freeze dispatch() performs before handing rows over (§3-1).
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ()) is None
     started, _ = runner.start(snap, rows, api, sync=True)
     assert started is True
     assert "vae_mode" not in captured

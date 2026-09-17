@@ -28,7 +28,7 @@ import csv
 import os
 import time
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import floor
 from pathlib import Path
 from typing import Callable
@@ -82,7 +82,15 @@ _WRITE_RETRY_BASE_DELAY_S = 0.05
 class BatchRow:
     """One manifest row. ``wav``/``image``/``output`` are filenames only (no
     directory component) — the wav folder / output folder are resolved
-    separately (see :func:`resolve_output_dir`)."""
+    separately (see :func:`resolve_output_dir`).
+
+    The first ten fields ARE the CSV (:data:`CSV_FIELDS`, in that order). The
+    two below them are NOT: they are the send-time freeze the UI thread writes
+    onto a row just before a run (:func:`gradio_ui.batch.prepare_batch_rows`)
+    and the worker reads back. Keeping them off the CSV is deliberate —
+    ``prompt`` is the user's own cell and has to survive a run byte-for-byte,
+    or a rescan would feed the composed text back in and compose it a second
+    time."""
 
     queue: int
     wav: str
@@ -94,6 +102,13 @@ class BatchRow:
     frames: int = 0
     skip_reason: str = ""
     error: str = ""
+    #: The text this row actually sends: the common prompt and ``prompt``
+    #: composed per the batch's add/replace mode, with any ``<lora:...>`` token
+    #: removed by the parser that produced ``loras``.
+    send_prompt: str = ""
+    #: The final ``loras`` list for this row: the reference-video CONTROL
+    #: adapter first, then the tokens parsed out of ``send_prompt``.
+    loras: list = field(default_factory=list)
 
 
 @dataclass

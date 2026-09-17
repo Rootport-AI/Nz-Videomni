@@ -15,6 +15,7 @@ from .adapters import (
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
     active_base_model,
+    active_unsupported_features,
     build_base_model_choices,
     build_model_choices,
     build_style_gallery,
@@ -42,15 +43,19 @@ from .handlers import (
 )
 from .handlers import fetch_models_safe, load_selected_models
 from .handlers import (
-    _LORA_TOKEN_RE,
-    _combine_generate_loras,
     _resolve_fps,
     _resolve_poll,
-    parse_prompt_loras,
     suggest_frames_for_audio,
 )
 from . import manifest as batch_manifest
-from .batch import BatchSnapshot, STATE_IDLE, get_runner
+from .batch import (
+    BatchSnapshot,
+    STATE_IDLE,
+    get_runner,
+    prepare_batch_rows,
+    rows_have_lora_tokens,
+)
+from .feature_scope import GATED_CONTROLS, RESET_VALUES, hidden_controls
 from .manifest import (
     IMAGE_SHARED,
     MAX_FRAMES,
@@ -688,6 +693,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                          (L("batch_mode_replace"), "replace")],
                                 value="add", label=L("batch_add_replace"),
                             ), "batch_add_replace")
+                            # The batch's own chunked-upsample switch, default
+                            # ON like the plugin's. The Clip Chain tab has its
+                            # own checkbox for the same request field, so the
+                            # i18n key is REUSED here -- reg() is a list, so a
+                            # key may be registered more than once (lbl_qmode
+                            # is the precedent).
+                            batch_chunked_upsample = reg(gr.Checkbox(
+                                value=True, label=L("chk_chunked_upsample")),
+                                "chk_chunked_upsample")
                             batch_set_btn = reg(gr.Button(L("batch_set_audios")),
                                                 "batch_set_audios", "value")
                             # Info readouts sit between "Set audios" and the
@@ -1280,9 +1294,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # values, same 3 outputs). When ON it instead snapshots the whole
         # Generate tab into a BatchSnapshot and hands it to the in-process
         # BatchRunner, then returns immediately (the run proceeds on a daemon
-        # thread; the batch_timer below reflects its progress). The 6 batch
+        # thread; the batch_timer below reflects its progress). The batch
         # inputs are APPENDED after the pre-existing scalar positionals so every
-        # one of those maps to the exact same generate() argument as before.
+        # one of those maps to the exact same generate() argument as before,
+        # and a NEW batch input goes at the end of that batch run rather than
+        # after the Acceleration block (whose trailing order is pinned by
+        # tests/test_gradio_ui.py).
         # *kf_flat: the keyframe quads, wired as the TAIL of inputs (see generate_btn.click below).
         def dispatch(prompt_v, negative_v,
                      width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
@@ -1292,7 +1309,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
                      batch_enable_v, batch_rows_v, batch_wav_dir_v,
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
-                     batch_img_dir_v,
+                     batch_img_dir_v, batch_chunked_upsample_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
@@ -1335,13 +1352,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 yield L("nag_msg_negative_required", lang_v), "", None
                 return
 
-            # --- common prompt: strip <lora:...> tokens exactly as the frozen
-            # generate path does, so the runner's compose_prompt gets the clean
-            # base text and the extracted tokens flow into ``loras``. ---
+            # --- <lora:...> tokens: parsed PER ROW, here on the UI thread.
+            # The text a row sends is the card prompt and the row prompt
+            # composed per the add/replace mode, so that composed string is
+            # what goes through the same parser the Generate tab uses (see
+            # batch.prepare_batch_rows). Doing it here rather than in the
+            # runner is what keeps the known-name list, the UI language and
+            # gr.Warning reachable; the runner only forwards the result. ---
+            prompt_mode_v = batch_add_replace_v or "add"
             use_adapter_v = bool(adapter_v) and adapter_v != ADAPTER_NONE
-            send_prompt = prompt_v
-            prompt_loras: list[dict] = []
-            if _LORA_TOKEN_RE.search(prompt_v or ""):
+            known: list = []
+            if rows_have_lora_tokens(rows, prompt_v, prompt_mode_v):
                 try:
                     lora_list = api.list_loras()
                 except Exception as exc:
@@ -1349,13 +1370,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     return
                 known = [e.get("name") for e in (lora_list or [])
                          if isinstance(e, dict) and e.get("name")]
-                send_prompt, prompt_loras, lora_err = parse_prompt_loras(
-                    prompt_v, known, lang_v)
-                if lora_err is not None:
-                    yield lora_err, "", None
-                    return
-            combined_loras = _combine_generate_loras(
-                use_adapter_v, adapter_v, adapter_strength_v, prompt_loras)
+            lora_err = prepare_batch_rows(
+                rows, prompt_v, prompt_mode_v, known, lang_v,
+                use_adapter=use_adapter_v, adapter=adapter_v,
+                adapter_strength=adapter_strength_v)
+            if lora_err is not None:
+                yield lora_err, "", None
+                return
 
             # crop_output — identical arithmetic to the frozen generate path.
             crop_output = None
@@ -1391,15 +1412,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 wav_dir=batch_wav_dir_v,
                 out_dir=out_dir,
                 img_dir=batch_img_dir_v or "",
-                prompt_common=send_prompt,
+                prompt_common=prompt_v,
                 negative=negative_v or "",
-                prompt_mode=batch_add_replace_v or "add",
+                prompt_mode=prompt_mode_v,
                 width=width_i,
                 height=height_i,
                 crop_output=crop_output,
                 frame_rate=fps_f,
                 seed=seed_i,
-                loras=combined_loras,
                 shared_images=shared_images,
                 use_adapter=use_adapter_v,
                 ref_video_path=ref_video_v,
@@ -1420,6 +1440,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 block_swap_prefetch=bool(accel_prefetch_v),
                 keep_resident=bool(accel_keep_resident_v),
                 fused_gguf_dequant_kernel=bool(accel_fused_dequant_v),
+                # The batch's own checkbox, sent explicitly either way (the
+                # Generate tab's single a2v send is untouched by this).
+                chunked_upsample=bool(batch_chunked_upsample_v),
                 vae_mode=accel_vae_v or "default",
                 # Skip ceiling for the start-time re-judgment — the SAME value
                 # the Set audios scan used, so a Start never re-judges against
@@ -1470,7 +1493,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     lang_state, poll_interval, poll_timeout, gen_a2v_audio,
                     batch_enable, batch_rows_state, batch_wav_dir,
                     batch_out_mode, batch_out_dir, batch_add_replace,
-                    batch_img_dir,
+                    batch_img_dir, batch_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
@@ -2178,6 +2201,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # The base dropdown is the FIRST output of refresh_model_dropdowns; the
         # four category dropdowns follow in MODEL_CATEGORIES order.
         model_all_dds = [model_base_dd, *model_dds]
+        # ...and after them, the controls the active base model's
+        # ``unsupported_features`` can close, in GATED_CONTROLS order. ONE
+        # constant for all three wirings of refresh_model_dropdowns (the
+        # Refresh button, the page load and the post-Load re-pull) plus its own
+        # error path: Gradio lists outputs component by component, so gating a
+        # new control means one row in gradio_ui/feature_scope.py and one
+        # component here -- and nothing else can drift out of step.
+        model_refresh_outputs = [*model_all_dds, accel_vae]
 
         def _base_model_update(models_json):
             """gr.update for the base-model dropdown: its choices plus the
@@ -2198,22 +2229,33 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # /config path); the explicit Refresh button does warn.
                 if warn:
                     gr.Warning(err)
-                return tuple(gr.update() for _ in model_all_dds)
+                return tuple(gr.update() for _ in model_refresh_outputs)
             # The legacy top-level ``categories`` block always describes the
             # ACTIVE base model, so the four category dropdowns keep reading it
             # verbatim (no base_model argument) — a refresh always shows what
             # the pipeline is actually on.
+            #
+            # Feature scope: the LOADED base model's unsupported_features hide
+            # the controls that would 422 on it. Hiding alone is not enough —
+            # an invisible Gradio component still sends its value — so a hidden
+            # control is reset to the server default at the same time.
+            hidden = hidden_controls(active_unsupported_features(models_json))
             return (_base_model_update(models_json),) + tuple(
                 gr.update(choices=build_model_choices(models_json, cat, lang),
                           value=model_active_value(models_json, cat))
                 for cat in MODEL_CATEGORIES
+            ) + tuple(
+                gr.update(visible=False, value=RESET_VALUES[control])
+                if control in hidden else gr.update(visible=True)
+                for control in GATED_CONTROLS
             )
 
         model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
-                                outputs=model_all_dds)
+                                outputs=model_refresh_outputs)
         # show_progress="hidden": same rationale as on_page_load's show_progress.
         demo.load(lambda lang: refresh_model_dropdowns(lang, warn=False),
-                  inputs=lang_state, outputs=model_all_dds, show_progress="hidden")
+                  inputs=lang_state, outputs=model_refresh_outputs,
+                  show_progress="hidden")
 
         def on_base_model_change(base_id, lang):
             """Re-fill the four category dropdowns from the SELECTED base
@@ -2263,9 +2305,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         ).then(
             lambda: gr.update(interactive=True), outputs=model_load_btn,
         ).then(
-            # Re-pull /models so the dropdowns reflect the new active marks.
+            # Re-pull /models so the dropdowns reflect the new active marks —
+            # and so the newly loaded base model's feature scope reaches the
+            # gated controls (this is the event that actually changes it).
             lambda lang: refresh_model_dropdowns(lang, warn=False),
-            inputs=lang_state, outputs=model_all_dds,
+            inputs=lang_state, outputs=model_refresh_outputs,
         )
 
         # ---- Style LoRA tab events (INDEPENDENT listeners) ----

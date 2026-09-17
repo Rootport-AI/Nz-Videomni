@@ -2749,6 +2749,47 @@ def test_build_a2v_chain_payload_always_requests_the_full_length_window():
 
 
 # --------------------------------------------------------------------------- #
+# chunked_upsample: the one TRI-STATE key on this builder. The Gradio batch
+# sends it explicitly (true OR false) exactly like the plugin's batch, in the
+# plugin's position -- between source_audio and stage2_window. Omitting the
+# argument emits nothing, which is what keeps the Generate tab's a2v branch and
+# every exact-match test above byte-identical.
+# --------------------------------------------------------------------------- #
+def _a2v_payload(**overrides):
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kwargs = dict(audio_id="aud-cu", num_frames=113, prompt="p",
+                  negative_prompt="", width=512, height=320, crop_output=None,
+                  frame_rate=24.0, seed=5)
+    kwargs.update(overrides)
+    return build_a2v_chain_payload(**kwargs)
+
+
+def test_build_a2v_chain_payload_chunked_upsample_true_sits_after_source_audio():
+    payload = _a2v_payload(chunked_upsample=True)
+    assert payload["chunked_upsample"] is True
+    keys = list(payload.keys())
+    assert keys[keys.index("source_audio") + 1] == "chunked_upsample"
+    assert keys[keys.index("chunked_upsample") + 1] == "stage2_window"
+
+
+def test_build_a2v_chain_payload_chunked_upsample_false_is_still_sent():
+    # An UNCHECKED box must reach the wire: the server default is False today,
+    # but a caller that only ever sends "true" would silently stop expressing
+    # "off" the day that default flips.
+    payload = _a2v_payload(chunked_upsample=False)
+    assert payload["chunked_upsample"] is False
+    keys = list(payload.keys())
+    assert keys[keys.index("source_audio") + 1] == "chunked_upsample"
+
+
+def test_build_a2v_chain_payload_omitted_chunked_upsample_adds_no_key():
+    payload = _a2v_payload()
+    assert "chunked_upsample" not in payload
+    assert payload == _a2v_payload(chunked_upsample=None)
+
+
+# --------------------------------------------------------------------------- #
 # NAG (Normalized Attention Guidance / non-CFG Negative) -- additive keys on
 # build_a2v_chain_payload, the single/chain handlers' request bodies, and the
 # precheck that rejects an enabled-but-empty negative prompt with zero API

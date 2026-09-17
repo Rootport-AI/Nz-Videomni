@@ -484,6 +484,7 @@ def build_a2v_chain_payload(
     keep_resident=KEEP_RESIDENT_DEFAULT,
     fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     vae_mode="default",
+    chunked_upsample: bool | None = None,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -537,7 +538,18 @@ def build_a2v_chain_payload(
     §3-50 at the time) is appended after it, same "differs from
     the default" rule. Its default ("default") never changes (owner ruling
     0-11: no later default-flip step for this one, unlike the toggles above),
-    so the key rides only when the pruned decoder ("prune_vaed") is chosen."""
+    so the key rides only when the pruned decoder ("prune_vaed") is chosen.
+
+    ``chunked_upsample`` is the ONE key here that is neither unconditional nor
+    "differs from the default": it is TRI-STATE. ``None`` (the default) emits
+    nothing at all, so the Generate tab's a2v branch — which does not offer the
+    option — and every caller that predates it stay byte-identical; a real
+    bool emits the key explicitly with that value, mirroring the plugin's
+    ``buildA2vChainPayload.ts``, which always sends it because omitting it
+    silently reverts to the slow one-pass upsample. The key's POSITION is fixed
+    to the plugin's: immediately after ``source_audio`` and before
+    ``stage2_window``, i.e. inside the base dict rather than appended with the
+    conditional block above."""
     import chain_math   # same function-local import style as the helpers above
 
     clip_entry: dict = {"num_frames": int(num_frames)}
@@ -561,8 +573,13 @@ def build_a2v_chain_payload(
         "overlap_strength": 0.5,
         "clips": [clip_entry],
         "source_audio": {"audio_id": audio_id},
-        "stage2_window": chain_math.STAGE2_WINDOW_FULL_LENGTH,
     }
+    # chunked_upsample (tri-state, see the docstring): the key sits between
+    # source_audio and stage2_window to match the plugin's builder, so the two
+    # GUIs put the same bytes on the wire for the same batch.
+    if chunked_upsample is not None:
+        chain_payload["chunked_upsample"] = bool(chunked_upsample)
+    chain_payload["stage2_window"] = chain_math.STAGE2_WINDOW_FULL_LENGTH
     if loras:
         chain_payload["loras"] = loras
     if use_adapter:

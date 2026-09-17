@@ -44,7 +44,13 @@ from PIL import Image
 import main
 from gradio_ui import manifest as batch_manifest
 from gradio_ui.api_client import ApiClient
-from gradio_ui.batch import STATE_IDLE, BatchRunner, BatchSnapshot, compose_prompt
+from gradio_ui.batch import (
+    STATE_IDLE,
+    BatchRunner,
+    BatchSnapshot,
+    compose_prompt,
+    prepare_batch_rows,
+)
 from gradio_ui.handlers import suggest_frames_for_audio
 from gradio_ui.manifest import (
     IMAGE_SHARED,
@@ -130,7 +136,6 @@ def _snapshot(wav_dir: Path, out_dir: Path, **overrides) -> BatchSnapshot:
         crop_output=None,
         frame_rate=FPS,
         seed=123,
-        loras=[],
         shared_images=[],
         use_adapter=False,
         ref_video_path=None,
@@ -141,6 +146,18 @@ def _snapshot(wav_dir: Path, out_dir: Path, **overrides) -> BatchSnapshot:
     )
     kw.update(overrides)
     return BatchSnapshot(**kw)
+
+
+def _start(runner: BatchRunner, snap: BatchSnapshot, rows, api, **kwargs):
+    """``BatchRunner.start`` preceded by the UI-thread freeze ui.py's
+    ``dispatch()`` always performs first (§3-1): the runner sends
+    ``BatchRow.send_prompt`` / ``BatchRow.loras`` verbatim, so raw rows would
+    submit an empty prompt — a real 422 here, since this module talks to the
+    REAL API. Mirrors the helper of the same name in
+    tests/test_gradio_batch_runner.py."""
+    err = prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ())
+    assert err is None, err
+    return runner.start(snap, rows, api, **kwargs)
 
 
 def _by_wav(rows) -> dict:
@@ -170,7 +187,7 @@ def test_happy_path_all_rows_done_fullstack(tmp_path):
     snap = _snapshot(wav_dir, out_dir, shared_images=[(str(img), 0, 0.8)])
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
     assert runner.state == STATE_IDLE
 
@@ -213,7 +230,7 @@ def test_individual_image_from_separate_folder_fullstack(tmp_path):
     snap = _snapshot(wav_dir, out_dir, img_dir=str(img_dir))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     assert rows[0].stat == STAT_DONE, rows[0].error
@@ -256,7 +273,7 @@ def test_middle_row_image_missing_then_resume_retries_only_failed(tmp_path):
     snap = _snapshot(wav_dir, out_dir, shared_images=[(str(img), 0, 0.8)])
 
     runner1 = BatchRunner()
-    started, reason = runner1.start(snap, rows, api, sync=True)
+    started, reason = _start(runner1, snap, rows, api, sync=True)
     assert started is True, reason
 
     assert by_wav["a.wav"].stat == STAT_DONE
@@ -279,7 +296,7 @@ def test_middle_row_image_missing_then_resume_retries_only_failed(tmp_path):
     persisted["b.wav"].image = IMAGE_SHARED  # undo the sabotage for the retry
 
     runner2 = BatchRunner()
-    started2, reason2 = runner2.start(snap, list(persisted.values()), api, sync=True)
+    started2, reason2 = _start(runner2, snap, list(persisted.values()), api, sync=True)
     assert started2 is True, reason2
 
     assert persisted["a.wav"].stat == STAT_DONE
@@ -313,7 +330,7 @@ def test_gacha_numbering_on_rerun_of_done_row(tmp_path):
     snap = _snapshot(wav_dir, out_dir, shared_images=[(str(img), 0, 0.8)])
 
     runner1 = BatchRunner()
-    started, reason = runner1.start(snap, rows, api, sync=True)
+    started, reason = _start(runner1, snap, rows, api, sync=True)
     assert started is True, reason
     assert rows[0].stat == STAT_DONE
     assert rows[0].output == "solo.mp4"
@@ -326,7 +343,7 @@ def test_gacha_numbering_on_rerun_of_done_row(tmp_path):
     rows[0].stat = STAT_WAITING
 
     runner2 = BatchRunner()
-    started2, reason2 = runner2.start(snap, rows, api, sync=True)
+    started2, reason2 = _start(runner2, snap, rows, api, sync=True)
     assert started2 is True, reason2
 
     assert rows[0].stat == STAT_DONE
@@ -366,7 +383,7 @@ def test_prompt_composition_reaches_server_job_request(tmp_path, mode):
                       shared_images=[(str(img), 0, 0.8)])
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
     assert rows[0].stat == STAT_DONE
 
@@ -397,7 +414,7 @@ def test_batch_nag_enabled_reaches_server_job_request(tmp_path):
                      nag_enabled=True, nag_scale=9.0, nag_tau=3.0, nag_alpha=0.4)
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
     assert rows[0].stat == STAT_DONE
 
@@ -431,7 +448,7 @@ def test_batch_vsf_enabled_reaches_server_job_request(tmp_path):
                      nag_enabled=True, neg_method="vsf", vsf_scale=2.0)
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
     assert rows[0].stat == STAT_DONE
 

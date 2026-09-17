@@ -525,6 +525,18 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 - **モック backend** は `./.venv` のみで動く合成クリップ生成で、テストと GPU 無し開発に使います（`GenerationOutcome.backend` だけが real と異なり、API/スキーマ/出力構造は同一）。
 - **ユーティリティワーカー（物体追尾）は、上の「同時に1つ」の数に入りません。** エンジン worker とは別の第4のプロセスで、CPU だけを使い、生成ジョブを止めず、生成に止められもしません。起動するのは最初の追尾が始まったときで、以後はセッションをまたいで常駐します（重みの読み込みは1度だけ）。**任意導入**なので、`install-UETrack.bat` を実行していない環境ではそもそも存在しません。詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) §6 を参照してください。
 
+### AviUtl2 操作パネルのタブ
+
+**操作パネルの上端には、左から Toolbox・Single・Chained・Edit・Inventory の5つのタブが並びます。** どのタブも常に読み込まれたままなので、切り替えても入力した内容は消えません。
+
+- **Toolbox**: 動画を生成しない道具箱で、いまは**物体追尾**が入っています。入口は2つあり、タイムラインで部分フィルタを右クリックする方法と、部分フィルタを選んだままこのタブの「🎯 追尾を開始」を押す方法です（§1「物体追尾を追加する」。設計の正本は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md)）。
+- **Single**: 動画を1本ずつ作るタブです。テキスト・画像・音声から作る基本の生成に加えて、途中の絵を指定するキーフレームと、フォルダの中身をまとめて流すバッチ（音声フォルダから作る a2v モードと、画像フォルダから作る i2v モード）がここにあります。
+- **Chained**: クリップをつないで長い動画を作るタブです。素材（冒頭）に動画を置いて続きを作る V2V と、素材（末尾）もここにあります。
+- **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）の3つのサブタブに分かれます。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md)）。
+- **Inventory**: 上がスタイル LoRA の棚、下が生成済みジョブの一覧です。棚のカードを押すとプロンプト欄へその LoRA のタグが入り、一覧の `🎞` ボタンで完成した動画をタイムラインへ送れます。
+
+右クリックメニューの項目と、それぞれがどのタブのどの欄へ着地するかは、フロントエンドの `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md` が正本です。
+
 ---
 
 ## 4. API 概要（`/api/v1`）

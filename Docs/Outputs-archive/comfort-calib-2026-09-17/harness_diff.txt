@@ -1,0 +1,217 @@
+# harness_diff.txt -- every change made to the copied calibration harness (2026-09-17, Sulphur-2 Q6_K campaign)
+# baseline = outputs/comfort-calib-2026-09-14/   (READ-ONLY history; not modified).  Generated: 2026-09-17 16:40:30
+# THREE changes and nothing else:  T9  calib.py cmd_restore_state -- verify selections[target].transformer == want_tf (was: selections.LTX25 == "default")  |  T10  mkplan.py -- ACCEL_ALLON_LTX23 plus a base-model-conditional accel dict and prompt key (the LTX25 path is byte-identical; verified by regenerating 09-14 plan files with both versions)  |  T11  selftest/parser_selftest.py section H rewritten for THIS campaign (the 09-14 README says section H is rewritten per campaign; sections A-G untouched)
+#
+--- comfort-calib-2026-09-14/calib.py	2026-09-14 09:30:46.867184700 +0900
++++ comfort-calib-2026-09-17/calib.py	2026-09-17 16:25:21.129832800 +0900
+@@ -556,12 +556,20 @@
+         say("ERROR: cannot re-read state.json after the restore: %s" % exc)
+         return 1
+     say("state.json after restore: %s" % json.dumps(state, ensure_ascii=False))
+-    ltx25_tf = ((state.get("selections") or {}).get("LTX25") or {}).get("transformer")
+-    if ltx25_tf != "default":
+-        say("ERROR: state.json still carries selections.LTX25.transformer=%r "
+-            "(expected 'default') -- the campaign's swap was NOT undone" % ltx25_tf)
++    # T9 (2026-09-17): the check used to be nailed to selections.LTX25 ==
++    # "default", which is only true of the campaign that swapped the LTX 2.5
++    # transformer.  This campaign swaps the LTX 2.3 one and the LTX25 side
++    # still carries an earlier campaign's pick, so the fixed pair would fail
++    # a perfectly good restore.  Look at the base model that was actually
++    # restored (``target``) and compare against what was actually asked for
++    # (``want_tf``).
++    restored_tf = ((state.get("selections") or {}).get(target) or {}).get("transformer")
++    if restored_tf != want_tf:
++        say("ERROR: state.json still carries selections.%s.transformer=%r "
++            "(expected %r) -- the campaign's swap was NOT undone"
++            % (target, restored_tf, want_tf))
+         return 1
+-    say("state.json verified: selections.LTX25.transformer = 'default'")
++    say("state.json verified: selections.%s.transformer = %r" % (target, want_tf))
+     return rc
+ 
+ 
+--- comfort-calib-2026-09-14/mkplan.py	2026-09-14 09:36:56.443765000 +0900
++++ comfort-calib-2026-09-17/mkplan.py	2026-09-17 16:28:39.376469100 +0900
+@@ -69,6 +69,25 @@
+     ("keep_resident_embeddings", True),
+ ])
+ 
++# T10 (2026-09-17): "all on" for LTX 2.3, quoted from the product rather than
++# invented.  The first FIVE keys are verbatim the ``requires`` block of the
++# ``ltx`` row in config.py's ``_default_comfort_budgets`` (config.py:344-354) --
++# the 44,880 single-shot line is declared to hold for THAT set and no other.
++# ``keep_resident_embeddings`` is NOT in ``requires``; it is written out as
++# False because LTX 2.3 answers 422 to true (services/engines/ltx/adapter.py:126
++# REJECT_TABLE), which is also calib.DEFAULT_ACCEL's value -- so the point is
++# self-describing rather than relying on a default.  Two keys differ from the
++# 2.5 set above: vae_mode is ``prune_vaed`` (2.3 takes it; 2.5 answers 422) and
++# keep_resident_embeddings is False rather than True.
++ACCEL_ALLON_LTX23 = OrderedDict([
++    ("attention_backend", "sage"),
++    ("block_swap_prefetch", True),
++    ("keep_resident", True),
++    ("fused_gguf_dequant_kernel", True),
++    ("vae_mode", "prune_vaed"),
++    ("keep_resident_embeddings", False),
++])
++
+ 
+ def taken() -> set:
+     """Every label this campaign has already spent GPU time on."""
+@@ -106,13 +125,21 @@
+         p["stage2_window"] = args.stage2_window
+         p["chunked_upsample"] = args.chunked_upsample
+     p["seed"] = args.seed
+-    p["prompt"] = PROMPT_25
++    # T10 (2026-09-17): PROMPT_25 used to be written unconditionally.  The 2.3
++    # arm has its own pinned prompt (``calib.PROMPT_23``), and ``build_request``
++    # already picks it for a point whose base_model is LTX23 and that carries no
++    # ``prompt`` key -- so the key is simply left out there.  (``check_point``
++    # only warns about an unpinned prompt; it does not require the key.)  The
++    # LTX25 path is unchanged, byte for byte.
++    if args.base_model == "LTX25":
++        p["prompt"] = PROMPT_25
+     if args.accel == "allon":
+         # Written out ONLY for an all-on point.  A point that leaves this key
+         # out is measured at the server's own defaults, which is what every
+         # Tier A and Tier B point does -- and what "the plan point carries no
+         # accel block" means in the primary record.
+-        p["accel"] = OrderedDict(ACCEL_ALLON_LTX25)
++        p["accel"] = OrderedDict(ACCEL_ALLON_LTX25 if args.base_model == "LTX25"
++                                 else ACCEL_ALLON_LTX23)
+     p["purpose"] = args.purpose
+     p["tier"] = args.tier
+     if is_baseline:
+--- comfort-calib-2026-09-14/selftest/parser_selftest.py	2026-09-14 09:35:32.815750700 +0900
++++ comfort-calib-2026-09-17/selftest/parser_selftest.py	2026-09-17 16:40:08.644329000 +0900
+@@ -298,13 +298,15 @@
+                             "num_frames"] + list(calib.ACCEL_KEYS)))
+ 
+ # ===========================================================================
+-# H -- THIS campaign's own arms (2026-09-14, the Q6_K transformer).  The offline
+-# half of the transformer gate: a transformer is chosen by POST /pipeline/load
+-# and must NEVER leak into a /generate body, while the *_used cross-check has to
+-# expect the registered NAME the plan point declares.  The online half -- does
+-# the server actually report that name back in metadata.json -- is what the
+-# warm-up point buys in phase P4.
+-print("\nH. this campaign's transformer arms (Q6_K vs the official weights)")
++# H -- THIS campaign's own arms (T11, 2026-09-17: the Sulphur-2 Q6_K transformer
++# on LTX 2.3).  Rewritten against THIS campaign's plan files, exactly as the
++# 09-14 section H was rewritten against its own: the expected values below are
++# read off the points this campaign will actually run, never refitted from
++# another campaign's ladder.  The offline half of the transformer gate -- a
++# transformer is chosen by POST /pipeline/load and must NEVER leak into a
++# /generate body, while the *_used cross-check has to expect the registered NAME
++# the plan point declares.
++print("\nH. this campaign's arms (Sulphur-2 Q6_K on LTX 2.3, all-on)")
+ 
+ 
+ def campaign_point(plan_name, label):
+@@ -313,54 +315,62 @@
+             if p["label"] == label][0]
+ 
+ 
+-Q6 = "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K"
++Q6 = "Sulphur-2-base-distil-Q6_K"
++# The control arm (Tier C / Tier D-2) declares "Sulphur-2-base-distil-Q4_K_M" --
++# a REGISTERED NAME, not "default" -- and its plan file does not exist yet at P0;
++# add one of its points here once it does.
++ALLON_23 = {"attention_backend": "sage", "block_swap_prefetch": True,
++            "keep_resident": True, "fused_gguf_dequant_kernel": True,
++            "vae_mode": "prune_vaed", "keep_resident_embeddings": False}
++
++# (1) the point declares the whole measurement condition itself (T10): base
++# model, transformer and the 2.3 all-on set -- prune_vaed, and
++# keep_resident_embeddings FALSE, because 2.3 answers 422 to true.
++p_q6 = campaign_point("plan_A1_single_720_1080_q6.json", "q6_s_720_361")
++check("H: the Tier A point is an LTX 2.3 point", p_q6.get("base_model"), "LTX23")
++check("H: the Tier A point declares the transformer", p_q6.get("transformer"), Q6)
++check("H: the Tier A point carries the 2.3 all-on set", p_q6.get("accel"), ALLON_23)
++check("H: the Tier A point pins NO prompt (T10)", "prompt" in p_q6, False)
+ 
+-# (1) the transformer must NOT reach the request body.  /generate has no such
+-# field; a body carrying one would be silently ignored at best, and would make
+-# the plan file look as if it were selecting the model per job.
+-p_q6 = campaign_point("plan_A1a_single_720_q6.json", "q6_s_720_b169")
++# (2) build_request turns that into the 2.3 body: PROMPT_23 chosen by base model,
++# the same six accel values, and no transformer field (/generate has none).
+ path_q6, body_q6 = calib.build_request(p_q6)
+ check("H: single endpoint", path_q6, "/generate")
++check("H: a point with no prompt gets PROMPT_23", body_q6["prompt"], calib.PROMPT_23)
++check("H: the body carries the all-on values",
++      {k: body_q6[k] for k in calib.ACCEL_KEYS}, ALLON_23)
+ check("H: transformer is NOT in the request body", "transformer" in body_q6, False)
+ check("H: body keys are the campaign-1 single-shot set",
+       sorted(body_q6), sorted(["prompt", "width", "height", "frame_rate", "seed",
+                                "num_frames"] + list(calib.ACCEL_KEYS)))
+-check("H: the plan point still declares the transformer",
+-      p_q6.get("transformer"), Q6)
+-# same for a chain point -- the endpoint changes, the rule does not
+-p_chain = campaign_point("plan_A4a_chain_q6.json", "q6_c_1280x768")
++
++# (3) the chain baseline -- the endpoint changes, the rules do not.
++p_chain = campaign_point("plan_D1_chain_q6.json", "q6_c_base")
+ path_chain, body_chain = calib.build_request(p_chain)
+ check("H: chain endpoint", path_chain, "/generate/chain")
++check("H: the chain point declares the transformer", p_chain.get("transformer"), Q6)
++check("H: the chain point carries the 2.3 all-on set", p_chain.get("accel"), ALLON_23)
+ check("H: chain body carries no transformer", "transformer" in body_chain, False)
++check("H: chain body gets PROMPT_23 too", body_chain["prompt"], calib.PROMPT_23)
+ check("H: chain body carries the clips",
+       body_chain["clips"], [{"num_frames": 25}, {"num_frames": 161}])
+ 
+-# (2) used_check expects the REGISTERED NAME the point declared.
+-check("H: Q6_K point expects its registered name",
++# (4) used_check expects the REGISTERED NAME the point declared; a point that
++# declares NOTHING is held to "default" (preflight refuses it outright -- T5b),
++# and a disagreement is flagged.
++check("H: the Q6_K point expects its registered name",
+       calib.used_check(p_q6, {})["expected"]["transformer_used"], Q6)
+-p_q4 = campaign_point("plan_Q_control_q4.json", "q4_s_720_b169")
+-check("H: the control point expects 'default'",
+-      calib.used_check(p_q4, {})["expected"]["transformer_used"], "default")
+-
+-# (3) a point that declares NOTHING is held to "default" -- the official
+-# weights, i.e. the safe side: if the swap were still live it would be caught.
+-# preflight refuses such a point outright (T5b), so this is the second net.
+ p_bare = {k: v for k, v in p_q6.items() if k != "transformer"}
+ check("H: an undeclared point is held to 'default'",
+       calib.used_check(p_bare, {})["expected"]["transformer_used"], "default")
+ check("H: preflight makes an undeclared point an ERROR",
+-      [e for e in calib.check_point(p_bare, {"q6_s_720_b169"})["errors"]
++      [e for e in calib.check_point(p_bare, {"q6_s_720_b185"})["errors"]
+        if "transformer" in e],
+       ["transformer is not declared (name the registered GGUF, or 'default' "
+        "for the official weights)"])
+-
+-# (4) a disagreement is actually flagged -- both directions.
+-check("H: Q6_K point that ran on the official weights is flagged",
++check("H: a Q6_K point that ran on the official weights is flagged",
+       sorted(calib.used_check(p_q6, {"transformer_used": "default"})["mismatches"]),
+       ["transformer_used"])
+-check("H: control point that ran on Q6_K is flagged",
+-      sorted(calib.used_check(p_q4, {"transformer_used": Q6})["mismatches"]),
+-      ["transformer_used"])
+ check("H: the matching case is clean",
+       calib.used_check(p_q6, {"transformer_used": Q6})["ok"], True)
+ # metadata that carries no models block at all leaves the value None, and
+@@ -370,11 +380,11 @@
+       calib.used_check(p_q6, {"transformer_used": None})["ok"], True)
+ # ...and the OTHER half of that same rule: metadata.json really does carry the
+ # registered name where analyse() (T6a) reaches for it.  Read verbatim out of a
+-# real Q6_K job -- the 2026-09-13 backend gate BE-5, Converter VERIFICATION
+-# §8-5-3 -- so a change to the product's metadata layout fails here instead of
+-# sliding past ``if actual is not None`` as a silent None.
++# REAL Sulphur-2 Q6_K job on LTX 2.3 (2026-09-17 01:30 UTC, today's G7 gate), so
++# a change to the product's metadata layout fails here instead of sliding past
++# ``if actual is not None`` as a silent None.
+ real_meta = json.loads(
+-    (calib.OUTPUTS / "e972eef3-a4c5-48c1-af04-14760de533c5" / "metadata.json")
++    (calib.OUTPUTS / "9754fc09-317d-4c47-ae76-91b0e315bc3d" / "metadata.json")
+     .read_text(encoding="utf-8"))
+ check("H: metadata.json carries the name where analyse() looks for it",
+       ((real_meta.get("models") or {}).get("selection") or {})
+#
+# Unchanged copies (md5 identical to the 09-14 originals): batch_table.py, make_results.py, vram_sampler2.ps1,
+# selftest/analyse_selftest.py, selftest/plans_fixture/, selftest/fake_runs/.
+# README.md was rewritten for this campaign and is therefore not diffed.

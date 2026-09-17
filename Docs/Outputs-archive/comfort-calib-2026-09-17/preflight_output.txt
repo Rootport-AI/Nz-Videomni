@@ -1,0 +1,123 @@
+preflight (offline; no --online) -- comfort-calib-2026-09-17, regenerated after the campaign
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_A1_single_720_1080_q6.json
+[2026-09-17 20:44:25.321] plan_A1_single_720_1080_q6.json  7 point(s), 0 failed
+[2026-09-17 20:44:25.321]    warn q6_s_720_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.321]    warn q6_s_720_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.321]    warn q6_s_720_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.321]    warn q6_s_720_377: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.321]    warn q6_s_1080_b89: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.321]    warn q6_s_1080_169: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.321]    warn q6_s_1080_177: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.322] wrote preflight.json -- 7 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_A2_single_p1280_q6.json
+[2026-09-17 20:44:25.432] plan_A2_single_p1280_q6.json  3 point(s), 0 failed
+[2026-09-17 20:44:25.432]    warn q6_s_p1280_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.432]    warn q6_s_p1280_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.432]    warn q6_s_p1280_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.432] wrote preflight.json -- 3 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_B2_single_q6.json
+[2026-09-17 20:44:25.542] plan_B2_single_q6.json        4 point(s), 0 failed
+[2026-09-17 20:44:25.542]    warn q6_s_1080_169_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.542]    warn q6_s_720_369_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.542]    warn q6_s_720_385_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.542]    warn q6_s_1080_185_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.542] wrote preflight.json -- 4 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_B_single_q6.json
+[2026-09-17 20:44:25.649] plan_B_single_q6.json         8 point(s), 0 failed
+[2026-09-17 20:44:25.649]    warn q6_s_720_377_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_720_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_720_385: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_1080_185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_1080_177_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_p1280_377: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_p1280_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.649]    warn q6_s_p1280_369_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.650] wrote preflight.json -- 8 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_C2_single_q4.json
+[2026-09-17 20:44:25.758] plan_C2_single_q4.json        3 point(s), 0 failed
+[2026-09-17 20:44:25.758]    warn q4_s_1080_169_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.758]    warn q4_s_720_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.758]    warn q4_s_p1280_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.759] wrote preflight.json -- 3 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_C_single_q4.json
+[2026-09-17 20:44:25.864] plan_C_single_q4.json         9 point(s), 0 failed
+[2026-09-17 20:44:25.864]    warn q4_s_720_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_720_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_720_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_1080_b89: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_1080_169: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_1080_177: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_p1280_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_p1280_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864]    warn q4_s_p1280_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.864] wrote preflight.json -- 9 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight --plan plans\plan_D1_chain_q6.json
+[2026-09-17 20:44:25.972] plan_D1_chain_q6.json         3 point(s), 0 failed
+[2026-09-17 20:44:25.972]    warn q6_c_base: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.972]    warn q6_c_1856x1024: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.972]    warn q6_c_1920x1088: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:25.972] wrote preflight.json -- 3 point(s), 0 failed, ok=True
+rc=0
+==============================================================
+total: 37 point(s), 0 failed (7 + 3 + 4 + 8 + 3 + 9 + 3)
+==============================================================
+$ .venv\Scripts\python.exe calib.py preflight      (no --plan: every file directly under plans\, so preflight.json ends up holding all seven)
+[2026-09-17 20:44:26.078] plan_A1_single_720_1080_q6.json  7 point(s), 0 failed
+[2026-09-17 20:44:26.078]    warn q6_s_720_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_720_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_720_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_720_377: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_1080_b89: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_1080_169: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_1080_177: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078] plan_A2_single_p1280_q6.json  3 point(s), 0 failed
+[2026-09-17 20:44:26.078]    warn q6_s_p1280_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_p1280_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.078]    warn q6_s_p1280_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079] plan_B2_single_q6.json        4 point(s), 0 failed
+[2026-09-17 20:44:26.079]    warn q6_s_1080_169_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_720_369_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_720_385_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_1080_185_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079] plan_B_single_q6.json         8 point(s), 0 failed
+[2026-09-17 20:44:26.079]    warn q6_s_720_377_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_720_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_720_385: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_1080_185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_1080_177_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_p1280_377: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_p1280_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_s_p1280_369_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079] plan_C2_single_q4.json        3 point(s), 0 failed
+[2026-09-17 20:44:26.079]    warn q4_s_1080_169_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_720_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_p1280_361_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079] plan_C_single_q4.json         9 point(s), 0 failed
+[2026-09-17 20:44:26.079]    warn q4_s_720_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_720_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_720_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_1080_b89: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_1080_169: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_1080_177: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_p1280_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_p1280_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q4_s_p1280_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079] plan_D1_chain_q6.json         3 point(s), 0 failed
+[2026-09-17 20:44:26.079]    warn q6_c_base: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_c_1856x1024: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.079]    warn q6_c_1920x1088: prompt not pinned; the engine-default prompt will be used
+[2026-09-17 20:44:26.080] wrote preflight.json -- 37 point(s), 0 failed, ok=True
+rc=0

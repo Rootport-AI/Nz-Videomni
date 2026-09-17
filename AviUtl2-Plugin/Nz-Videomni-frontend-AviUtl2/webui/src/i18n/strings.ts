@@ -2141,10 +2141,9 @@ export const en = {
     configLoading: "Loading configuration…",
     /** The comfort-limit guide (§3-163). Column headers are model names, so
      * they read the same in both dictionaries — this also covers the
-     * quantisation suffix on the 2.3 all-on header; the notes below the
-     * table are ordinary copy. The SHAPE of the table (which rows, which
-     * columns) is `shell/comfortDisplayTable.ts` — these are only its
-     * labels. */
+     * quantisation suffix on the 2.3 all-on header. The SHAPE of the table
+     * (which rows, which columns) is `shell/comfortDisplayTable.ts` — these
+     * are only its labels. */
     comfortSectionTitle: "Comfort-limit guide",
     comfortHint:
       "A guide to the frame count per resolution that avoids VRAM overflow and keeps generation from slowing down 2-4x (single generation).",
@@ -2153,13 +2152,6 @@ export const en = {
     comfortColumnLtxAllOn: "2.3 all-on (Q4, Q6)",
     comfortColumnLtx25: "2.5",
     comfortColumnLtx25Q6: "2.5 Q6",
-    comfortNoteSingle:
-      "These figures are for a single generation. Chained clips have a limit of their own, shown on the Chained tab.",
-    comfortNoteAllOn:
-      "\"All-on\" means all five items under Acceleration above are on: Attention = sage attention, Block-swap prefetch = ON, Keep the model skeleton resident = ON, Fused GGUF Dequantization Kernel = ON, VAE = PrunaVAED. The (Q4, Q6) in the header means the limit line did not move when measured with one derived model using a Q6_K transformer. In that measurement, only 361 frames at 1280×768 spilled (369 frames, one step higher, was comfortable).",
-    comfortNoteQ6:
-      "\"2.5 Q6\" was measured on a single derived model built with a Q6_K transformer. It is not a figure this product ships.",
-    comfortNoteDash: "\"—\" means that combination has not been measured.",
     /** The empty cell. A dedicated key rather than a literal in the panel:
      * the em dash is copy, and a font that renders it badly is a translation
      * problem, not a code change. */
@@ -3367,12 +3359,6 @@ export const ja: Strings = {
     comfortColumnLtxAllOn: "2.3 全on(Q4, Q6)",
     comfortColumnLtx25: "2.5",
     comfortColumnLtx25Q6: "2.5 Q6",
-    comfortNoteSingle: "ここの数値は単発生成のものです。クリップ連結には別の目安があり、Chainedタブに表示されます。",
-    comfortNoteAllOn:
-      "「全on」は、上の「生成の高速化」の5項目をすべて有効にした構成です（Attention機構の実装＝sage attention／Block swapの先読み＝ON／モデル骨格の常駐＝ON／GGUF脱量子化カーネルの1本化＝ON／VAE＝PrunaVAED）。見出しの(Q4, Q6)は、Q6_K版の派生モデル1本で測っても上限の線が動かなかったことを表します。ただしその実測では、1280×768の361フレームだけ退避が出ました（1段上の369フレームは快適でした）。",
-    comfortNoteQ6:
-      "「2.5 Q6」は、Q6_K版のtransformerを組み込んだ派生モデル1本で測った値です。この製品が配っている値ではありません。",
-    comfortNoteDash: "「—」は、その組み合わせを測っていないことを表します。",
     comfortDash: "—",
     rawConfigSectionTitle: "生の /config",
     rawConfigFallbackNote: "サーバーに接続できなかったため、内蔵のフォールバック設定を表示しています。",

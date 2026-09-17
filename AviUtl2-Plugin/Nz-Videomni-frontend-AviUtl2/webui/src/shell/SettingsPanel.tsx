@@ -598,11 +598,6 @@ export function SettingsPanel({
                     </tbody>
                   </table>
                 </div>
-                {comfortTable.noteKeys.map((noteKey) => (
-                  <p key={noteKey} className="field-hint">
-                    {strings.settings[noteKey]}
-                  </p>
-                ))}
               </div>
             )}
 

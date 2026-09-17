@@ -22,7 +22,7 @@ import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
 import type { AccelerationSettings } from "./accelerationSettings";
 import { comfortFramesForBudget, resolveComfortRow } from "./comfortTable";
 
-/** `strings.settings` のうち**素のテキスト**の鍵。列見出しも注記も差し込みの無い
+/** `strings.settings` のうち**素のテキスト**の鍵。列見出しが差し込みの無い
  * 1行なので、テンプレート関数の鍵をうっかり並べられないよう値の型で絞る。 */
 type ComfortTextKey = {
   [K in keyof Strings["settings"]]: Strings["settings"][K] extends string ? K : never;
@@ -56,8 +56,6 @@ export interface ComfortDisplayTable {
    * 列がこの文字列でそのまま引けることが、行の綴りを1つに保つ理由。 */
   readonly rows: readonly string[];
   readonly columns: readonly ComfortDisplayColumn[];
-  /** 表の下に1行ずつ並べる注記の鍵。 */
-  readonly noteKeys: readonly ComfortTextKey[];
 }
 
 /** 「2.5 Q6」列の実測点。出典はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §10。
@@ -84,7 +82,6 @@ const LTX_TABLE: ComfortDisplayTable = {
     { id: "ltx25", labelKey: "comfortColumnLtx25", source: { kind: "budget", engineFamily: "ltx25" } },
     { id: "ltx25-q6", labelKey: "comfortColumnLtx25Q6", source: { kind: "static", frames: LTX25_Q6_FRAMES } },
   ],
-  noteKeys: ["comfortNoteSingle", "comfortNoteAllOn", "comfortNoteQ6", "comfortNoteDash"],
 };
 
 export const COMFORT_DISPLAY_TABLES: Readonly<Record<string, ComfortDisplayTable>> = {
